@@ -4,6 +4,7 @@
 #' @param round
 #'
 #' @return
+#' @importFrom magrittr %>%
 #' @export
 #'
 #' @examples
