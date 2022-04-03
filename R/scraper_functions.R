@@ -4,14 +4,13 @@
 #' @param round
 #'
 #' @return
-#' @importFrom magrittr %>%
 #' @export
 #'
 #' @examples
 #' \dontrun{
 #' get_match_chains()
 #' }
-get_match_chains <- function(season = lubridate::year(Sys.Date()), round = NA) {
+get_match_chains <- function(season = lubridate::year(Sys.Date()) , round = NA) {
   if (season < 2021) {
     stop("Match chain data is not available for seasons prior to 2021.")
   }
@@ -99,7 +98,7 @@ get_round_games <- function(season, round) {
   games <- games[[5]]
 
   if (length(games) > 0) {
-    games <- games %>% filter(status == "CONCLUDED")
+    games <- games %>% dplyr::filter(status == "CONCLUDED")
     if (nrow(games) > 0) {
       games <- games #%>%
       #   select(
@@ -121,7 +120,7 @@ get_round_games <- function(season, round) {
 #'
 #' @export
 get_season_games <- function(season) {
-  games <- purrr::map_df(1:30, ~ get_round_games(season, .))
+  games <- purrr::map_df(1:35, ~ get_round_games(season, .))
 
   return(games)
 }
@@ -149,12 +148,12 @@ get_players <- function() {
 get_many_game_chains <- function(games_vector) {
   p <- progressr::progressor(steps = length(games_vector))
 
-  chains <- furrr::future_map_dfr(games_vector,
+  chains <- purrr::map_df(games_vector,
                                   ~ {
                                     p()
                                     get_game_chains(.)
                                   },
-                                  .progress = FALSE
+                                  .progress = TRUE
   )
 
   return(chains)
