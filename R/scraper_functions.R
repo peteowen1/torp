@@ -10,7 +10,7 @@
 #' \dontrun{
 #' get_match_chains()
 #' }
-get_match_chains <- function(season = lubridate::year(Sys.Date()) , round = NA) {
+get_match_chains <- function(season = lubridate::year(Sys.Date()), round = NA) {
   if (season < 2021) {
     stop("Match chain data is not available for seasons prior to 2021.")
   }
@@ -98,7 +98,7 @@ get_round_games <- function(season, round) {
   games <- games[[5]]
 
   if (length(games) > 0) {
-    games <- games %>% dplyr::filter(status == "CONCLUDED")
+    games <- games %>% filter(status == "CONCLUDED")
     if (nrow(games) > 0) {
       games <- games #%>%
       #   select(
@@ -120,7 +120,7 @@ get_round_games <- function(season, round) {
 #'
 #' @export
 get_season_games <- function(season) {
-  games <- purrr::map_df(1:35, ~ get_round_games(season, .))
+  games <- purrr::map_df(1:30, ~ get_round_games(season, .))
 
   return(games)
 }
@@ -148,12 +148,12 @@ get_players <- function() {
 get_many_game_chains <- function(games_vector) {
   p <- progressr::progressor(steps = length(games_vector))
 
-  chains <- purrr::map_df(games_vector,
+  chains <- furrr::future_map_dfr(games_vector,
                                   ~ {
                                     p()
                                     get_game_chains(.)
                                   },
-                                  .progress = TRUE
+                                  .progress = FALSE
   )
 
   return(chains)
@@ -164,13 +164,13 @@ get_many_game_chains <- function(games_vector) {
 #'
 #' @export
 get_game_chains <- function(match_id) {
-  url <- paste0("https://api.afl.com.au/cfs/afl/matchChains/", match_id)
+  url <- paste0("https://sapi.afl.com.au/afl/matchPlays/",match_id)
   chains_t1 <- access_api(url)
   chains_t2 <- chains_t1[[8]]
 
   if (!is.null(dim(chains_t2))) {
     if (nrow(chains_t2) > 0) {
-      chains <- purrr::map_df(1:nrow(chains_t2), ~ get_single_chain(chains_t2, .))
+      chains <- furrr::future_map_dfr(1:nrow(chains_t2), ~ get_single_chain(chains_t2, .))
 
       chains$matchId <- chains_t1$matchId
       chains$venueWidth <- chains_t1$venueWidth

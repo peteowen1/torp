@@ -9,14 +9,11 @@
 #' load_chains()
 #' }
 #'
-load_chains <- function(seasons = lubridate::year(Sys.Date()), weeks = 1:35, file_type = "rds") {
+load_chains <- function(seasons = lubridate::year(Sys.Date()),rounds = 1:27, file_type = "rds") {
   urls <- paste0(
-    "https://github.com/DataByJosh/AFL-Data/raw/main/AFLM_Match_Chains/csvs/match_chains_",
-    seasons, "_", ifelse(weeks < 10, paste0(0, weeks), weeks), ".", file_type
+    "https://github.com/peteowen1/torp/blob/main/data/chains_",seasons,"_",rounds,".",file_type,"?raw=true"
   )
 
-  out <- furrr::future_map(urls, purrr::possibly(data.table::fread, otherwise = data.table::data.table()))
-  out <- data.table::rbindlist(out, use.names = TRUE)
-  class(out) <- c("tbl_df", "tbl", "data.table", "data.frame")
-  out
+ df <- purrr::map_df(urls,~readRDS(url(.)))
+ return(df)
 }

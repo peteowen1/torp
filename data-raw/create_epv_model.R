@@ -1,0 +1,10 @@
+######################## takes 3 mins to build model, 1 min for rest
+# library(devtools)
+# devtools::install_github("peteowen1/buddy")
+# library(buddy)
+library(tidyverse)
+library(zoo)
+library(tidymodels)
+source("./R/scraper_functions.R")
+source("./R/shot_mdl.R")
+# load_all()
