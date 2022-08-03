@@ -1,20 +1,22 @@
 ######################## takes 3 mins to build model, 1 min for rest
 # library(devtools)
-# devtools::install_github("peteowen1/buddy")
-# library(buddy)
-library(tidyverse)
-library(zoo)
-library(tidymodels)
-source("./R/load_chains.R")
-source("./R/helper_functions.R")
-source("./R/clean_model_data.R")
+library('tidyverse')
+library('zoo')
+library('tidymodels')
+library('janitor')
+library('lubridate')
+devtools::load_all()
+# source("./R/load_chains.R")
+# source("./R/helper_functions.R")
+# source("./R/clean_model_data.R")
+# source("./R/add_model_variables.R")
 
 chains <- load_chains(2021:lubridate::year(Sys.Date())) %>%
   janitor::clean_names()
 
 pbp <- clean_pbp(chains)
 
-model_data <- clean_model_data(pbp)
+model_data_epv <- clean_model_data_epv(pbp)
 #######################################
 ##################
 nrounds <- 87
@@ -38,8 +40,8 @@ params <-
 
 ###
 full_train <- xgboost::xgb.DMatrix(stats::model.matrix(~ . + 0,
-                                                data = model_data %>% select_epv_model_vars()),
-                                                label = model_data$label
+                                                data = model_data_epv %>% select_epv_model_vars()),
+                                                label = model_data_epv$label_ep
 )
 
 ##################################################### UNCOMMENT TO REBUILD THE MODEL
@@ -48,16 +50,32 @@ ep_model <- xgboost::xgboost(
   params = params, data = full_train, nrounds = nrounds, print_every_n = 10
 )
 
-saveRDS(ep_model, "./data/ep_model.rds")
-
+#saveRDS(ep_model, "./data/ep_model.rds")
+usethis::use_data(ep_model,overwrite = TRUE)
 ###########
 ### TESTING
 #######
 df <- load_chains(2021, 27) %>%
   janitor::clean_names() %>%
   clean_pbp() %>%
-  clean_model_data() %>%
-  add_epv_vars()
+  clean_model_data_epv() %>%
+  add_epv_vars() %>%
+  select(
+    rn = display_order, chain = chain_number, period, secs = period_seconds, x, y, desc = description, jumper = jumper_number,
+    player_id, player_name, team, team_id_mdl,
+    lead_player, lead_team, delta_epv, pos_team, exp_pts, Opp_Goal, Opp_Behind, Behind, Goal, No_Score, player_position,
+    goal_x,play_type,phase_of_play
+  )
 
+df2 <- load_chains(2021, 27) %>%
+  clean_pbp() %>%
+  # clean_model_data() %>%
+  # add_epv_vars() %>%
+  select(
+    rn = display_order, chain = chain_number, period, secs = period_seconds, x, y, desc = description, jumper = jumper_number,
+    player_id, player_name, team, team_id_mdl,
+    #, lead_team, delta_epv, pos_team, exp_pts, Opp_Goal, Opp_Behind, Behind, Goal, No_Score, player_position,
+    goal_x,play_type,phase_of_play,points_row_na,tot_goals,throw_in
+  )
 ###################
 

@@ -148,7 +148,7 @@ get_players <- function() {
 get_many_game_chains <- function(games_vector) {
   p <- progressr::progressor(steps = length(games_vector))
 
-  chains <- furrr::future_map_dfr(games_vector,
+  chains <- purrr::map_df(games_vector,
                                   ~ {
                                     p()
                                     get_game_chains(.)
@@ -170,7 +170,7 @@ get_game_chains <- function(match_id) {
 
   if (!is.null(dim(chains_t2))) {
     if (nrow(chains_t2) > 0) {
-      chains <- furrr::future_map_dfr(1:nrow(chains_t2), ~ get_single_chain(chains_t2, .))
+      chains <- purrr::map_df(1:nrow(chains_t2), ~ get_single_chain(chains_t2, .))
 
       chains$matchId <- chains_t1$matchId
       chains$venueWidth <- chains_t1$venueWidth
