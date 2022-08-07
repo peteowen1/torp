@@ -31,13 +31,7 @@ clean_pbp <- function(df) {
       ),
       shot_row = dplyr::if_else(is.na(shot_at_goal), 0, 1),
       player_position_fac = forcats::fct_explicit_na(player_position),
-      player_name = forcats::fct_explicit_na(paste(player_name_given_name, player_name_surname)),
-      model_desc = forcats::fct_lump_min(description, 100),
-      points_shot = ifelse(shot_at_goal == T,
-        ifelse(disposal == "effective", 6,
-          ifelse(disposal == "ineffective", 1, NA)
-        ), NA
-      )
+      player_name = forcats::fct_explicit_na(paste(player_name_given_name, player_name_surname))
     )
 
   ### GAME VARIABLE CHANGE
@@ -50,7 +44,7 @@ clean_pbp <- function(df) {
         throw_in == 1 ~ dplyr::lead(team_id, default = dplyr::last(team_id)),
         TRUE ~ team_id
       ),
-      team_id_mdl = zoo::na.locf0(team_id_mdl,fromLast = TRUE),
+      team_id_mdl = zoo::na.locf0(team_id_mdl, fromLast = TRUE),
       team_id_mdl = zoo::na.locf0(team_id_mdl),
       home = ifelse(team_id_mdl == home_team_id, 1, 0),
       total_seconds = cumsum(period_seconds),
@@ -84,10 +78,15 @@ clean_pbp <- function(df) {
           TRUE ~ "Reception"
         ), 1
       ),
-      lag_goal_x = (dplyr::lag(goal_x)),
-      lag_x = (dplyr::lag(x)),
-      lag_y = (dplyr::lag(y)),
-      ### not sure about top 3 decide later
+      lag_x_tot = (dplyr::lag(x)),
+      lag_goal_x_tot = (dplyr::lag(goal_x)),
+      lag_y_tot = (dplyr::lag(y)),
+      lag_desc_tot = dplyr::lead(description),
+      lead_x_tot = (dplyr::lead(x)),
+      led_goal_x_tot = (dplyr::lead(goal_x)),
+      lead_y_tot = (dplyr::lead(y)),
+      lead_desc_tot = dplyr::lead(description),
+      ### not sure about top 4 decide later
       points_row = dplyr::case_when(
         chain_number != dplyr::lead(chain_number, default = (dplyr::last(chain_number) + 1)) &
           final_state == "rushed" ~ 1,
@@ -117,7 +116,15 @@ clean_pbp <- function(df) {
       away_points = cumsum(away_points_row),
       pos_points = dplyr::if_else(home == 1, home_points, away_points),
       opp_points = dplyr::if_else(home == 1, away_points, home_points),
-      points_diff = pos_points - opp_points
+      points_diff = pos_points - opp_points,
+      points_shot = dplyr::case_when(
+        shot_at_goal == TRUE & lead_desc_tot == "Goal" ~ 6,
+        shot_at_goal == TRUE & lead_desc_tot == "Behind" ~ 1,
+        shot_at_goal == TRUE & dplyr::lead(lead_desc_tot) == "Spoil" ~ 1,
+        shot_at_goal == TRUE & dplyr::lead(description, 3) == "Goal" & chain_number == dplyr::lead(chain_number, 3) ~ 6,
+        shot_at_goal == TRUE & dplyr::lead(description, 3) == "Behind" & chain_number == dplyr::lead(chain_number, 3) ~ 1,
+        TRUE ~ NA_real_
+      )
     ) %>%
     dplyr::ungroup()
 
@@ -142,7 +149,7 @@ clean_pbp <- function(df) {
         TRUE ~ 4
       ),
       label_ep = as.numeric(next_score)
-      ) %>%
+    ) %>%
     dplyr::ungroup()
 
 
@@ -158,11 +165,34 @@ clean_pbp <- function(df) {
         home_team_score < away_team_score & home == 1 ~ 0,
         home_team_score > away_team_score & home == 0 ~ 0,
         home_team_score == away_team_score & home == 0 ~ 0.5,
-        home_team_score < away_team_score & home == 0 ~ 1),
+        home_team_score < away_team_score & home == 0 ~ 1
+      ),
       lead_x_tot = dplyr::lead(x, default = dplyr::last(x)),
       lead_y_tot = dplyr::lead(y, default = dplyr::last(y))
       # lead_goal_x = venue_length / 2 - lead_x,
       # lag_model_desc = dplyr::lag(model_desc, default = "Centre Bounce")
+    ) %>%
+    dplyr::ungroup()
+
+
+  ### CHAIN NUMBER VARIABLE CHANGE
+  df <-
+    df %>%
+    dplyr::group_by(match_id, chain_number) %>%
+    dplyr::mutate(
+      shot_display = dplyr::if_else(is.na(shot_at_goal),
+                                    dplyr::if_else(description == "Kick" | description == "Ground Kick" ,display_order, 1L),
+                                    display_order),
+      max_shot_display = max(shot_display),
+      points_shot = dplyr::if_else(shot_display == max_shot_display,
+                                   dplyr::case_when(
+          final_state == "rushed" ~ 1,
+          final_state == "behind" ~ 1,
+          final_state == "goal" ~ 6,
+          TRUE ~ NA_real_
+        ),
+        NA_real_
+      )
     ) %>%
     dplyr::ungroup()
 

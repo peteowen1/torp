@@ -153,12 +153,14 @@ clean_shots_data <- function(df){
                     (dplyr::case_when(
                       shot_at_goal == TRUE & disposal == "clanger" ~ 0,
                       shot_at_goal == TRUE & disposal == "ineffective" ~ 1,
-                      shot_at_goal == TRUE & disposal == "effective" ~ 2
+                      shot_at_goal == TRUE & disposal == "effective" ~ 2,
+                      TRUE ~ NA_real_
                     )),
                   shot_result =
                     as.numeric(dplyr::case_when(
-                      shot_at_goal == TRUE & disposal == "ineffective" ~ 0,
-                      shot_at_goal == TRUE & disposal == "effective" ~ 1
+                      points_shot == 1 ~ 0,
+                      points_shot == 6 ~ 1,
+                      TRUE ~ NA_real_
                     )))
 
 
