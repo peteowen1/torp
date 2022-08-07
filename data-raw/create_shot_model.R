@@ -1,54 +1,63 @@
 library(dplyr)
 library(forcats)
 library(mgcv)
-source('./R/load_chains.R')
-source('./R/helper_functions.R')
+source("./R/load_chains.R")
+source("./R/helper_functions.R")
+source("./R/match_xg_functions.R")
 
-chains <- load_chains(2021:lubridate::year(Sys.Date())) %>%
-  janitor::clean_names()
+chains <- load_chains(2021:lubridate::year(Sys.Date()))
 
 # chains <- bind_rows(chains_2021,chains_2022) %>% janitor::clean_names()
 
 shots <- chains %>%
   clean_pbp() %>%
-  filter(shot_at_goal == T, goal_x < 65) %>% droplevels()
+  clean_shots_data() %>%
+  clean_model_data_epv() %>%
+  filter(shot_at_goal == TRUE,disposal != "clanger", goal_x < 65)
 
-###
-shots$clanger <- ifelse(shots$disposal == "clanger",1,0)
-shots$effective <- ifelse(shots$disposal == "effective",1,0)
-shots$player_position_fac <- forcats::fct_explicit_na(shots$player_position)
-shots$player_name <- forcats::fct_lump_min(shots$player_name , 1)
-shots$venue_name_fac <- forcats::fct_lump_min(shots$venue_name , 5)
+################
+shots$player_name_shot <- forcats::fct_lump_min(shots$player_name,10)
 
-##### Direction Variales
-goal_width <- 6.4
+shot_player_df <- tibble::tibble(player_name_shot = shots$player_name_shot %>% levels())
+usethis::use_data(shot_player_df,overwrite = TRUE)
 
-shots$abs_y <- abs(shots$y)
-shots$side_b <- sqrt((shots$goal_x)^2 + (shots$y + goal_width/2 )^2)
-shots$side_c <- sqrt((shots$goal_x)^2 + (shots$y - goal_width/2)^2)
-shots$angle <-  acos((shots$side_b^2 + shots$side_c^2 - goal_width^2)/(2*shots$side_b*shots$side_c))
-shots$distance <- ifelse(shots$y >= -goal_width/2 & shots$y <= goal_width/2,
-                         shots$goal_x, pmin(shots$side_b ,shots$side_c ))
+####################
+# ###
+# # shot result multi
+# shot_result_mdl <-
+#   gam(
+#     list(
+#       shot_result ~ s(goal_x, y, by = phase_of_play) + s(goal_x, y)
+#         + s(goal_x, bs = "ts") + s(y, bs = "ts")
+#         # + ti(lag_goal_x, y) + s(lag_goal_x, bs = "ts") + s(lag_y, bs = "ts")
+#         # + s(play_type, bs = "re") + s(phase_of_play, bs = "re")
+#         # + s(player_position_fac, bs = "re")
+#       ,
+#        ~ s(goal_x, y, by = phase_of_play) + s(goal_x, y)
+#       + s(goal_x, bs = "ts") + s(y, bs = "ts")
+#       # + ti(lag_goal_x, y) + s(lag_goal_x, bs = "ts") + s(lag_y, bs = "ts")
+#       # + s(play_type, bs = "re") + s(phase_of_play, bs = "re")
+#       # + s(player_position_fac, bs = "re")
+#     ),
+#       data = shots, family = multinom(K=2) #, nthreads = 4, select = T, discrete = T
+#   )
 
-# clanger
-shot_clanger_mdl <- bam(clanger ~ ti(goal_x,y,by = play_type) + ti(goal_x,y)
-                        + offset(log(goal_x)) + s(y, bs="ts")
-                        + ti(lag_goal_x,y) + s(lag_goal_x, bs="ts") + s(lag_y, bs="ts")
-                        + s(play_type, bs="re")
-                        + s(player_position_fac, bs="re"),
-                        data = shots, family = "binomial"  , nthreads = 4 ,select = T, discrete = T )
-
-# goal
-shot_goal_mdl <- bam(effective ~ ti(goal_x,y,by = play_type) + ti(goal_x,y)
-                     + s(goal_x, bs="ts") + s(y, bs="ts")
-                     + ti(lag_goal_x,y) + s(lag_goal_x, bs="ts") + s(lag_y, bs="ts")
-                     + s(play_type, bs="re")
-                     + s(player_position_fac, bs="re")
-                     ,
-                     data = shots, family = "binomial"  , nthreads = 4 ,select = T, discrete = T )
+###################
+shot_result_mdl <-
+  mgcv::bam(
+      shot_result ~ ti(goal_x, y, by = phase_of_play) + ti(goal_x, y)
+        + s(goal_x, bs = "ts") + s(y, bs = "ts")
+        + ti(lag_goal_x, y) + s(lag_goal_x, bs = "ts") + s(lag_y, bs = "ts")
+        + s(play_type, bs = "re") + s(phase_of_play, bs = "re")
+        + s(player_position_fac, bs = "re")
+        + s(player_name_shot, bs = "re")
+            ,data = shots, family =  stats::binomial() , nthreads = 4, select = TRUE, discrete = TRUE, drop.unused.levels = FALSE
+        )
 
 
+# ModelMetrics::logLoss(shots$shot_result,predict.bam(shot_result_mdl,shots,type="response"))
 ### save data
-usethis::use_data(shot_clanger_mdl, overwrite = TRUE)
-usethis::use_data(shot_goal_mdl, overwrite = TRUE)
-
+usethis::use_data(shot_result_mdl, overwrite = TRUE)
+####
+player_shot_score <- mixedup::extract_ranef(shot_result_mdl) %>% dplyr::filter(group_var == 'player_name_shot') %>% dplyr::arrange(-value) #%>% tibble::view()
+usethis::use_data(player_shot_score, overwrite = TRUE)

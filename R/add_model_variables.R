@@ -50,6 +50,20 @@ add_epv_vars <- function(df) {
   return(pbp_final)
 }
 
+add_shot_preds <- function(df) {
+  base_shot_preds <- get_shot_preds(df)
+  colnames(base_shot_preds) <- c('clanger_prob','behind_prob','goal_prob')
+
+  pbp_final <- cbind(df, base_shot_preds)
+  pbp_final <- pbp_final %>%
+    mutate(clanger_prob = ifelse(!is.na(shot_at_goal),clanger_prob,NA),
+           behind_prob = ifelse(!is.na(shot_at_goal),behind_prob,NA),
+           goal_prob = ifelse(!is.na(shot_at_goal),goal_prob,NA),
+           xg = 6*goal_prob + behind_prob)
+
+  return(pbp_final)
+}
+
 
 add_wp_vars <- function(df) {
   base_wp_preds <- get_wp_preds(df)
@@ -70,6 +84,24 @@ add_wp_vars <- function(df) {
         lead(team_id_mdl, default = last(team_id_mdl)) == team_id_mdl ~ dplyr::lead(wp2, default = last(wp2)) - wp2,
         lead(team_id_mdl, default = last(team_id_mdl)) != team_id_mdl ~ (1 - dplyr::lead(wp2, default = last(wp2))) - wp2
       ),5)
+    ) %>%
+    ungroup()
+
+  return(pbp_final)
+}
+
+
+add_shot_vars <- function(df) {
+  base_shot_preds <- tibble::tibble(goal_prob = get_shot_preds(df))
+  pbp_final <- cbind(df, base_shot_preds)
+
+  pbp_final <- pbp_final %>%
+    dplyr::mutate(
+      goal_prob = round(
+        ifelse(
+        shot_at_goal == TRUE & disposal != "clanger", goal_prob, NA),
+        5),
+      xscore = goal_prob*6 + (1-goal_prob)
     ) %>%
     ungroup()
 
@@ -96,5 +128,11 @@ get_wp_preds <- function(df) {
     )
   )
 
+  return(preds)
+}
+
+# for predict stage
+get_shot_preds <- function(df) {
+  preds <- stats::predict(shot_result_mdl, df, type = "response")
   return(preds)
 }

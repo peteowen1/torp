@@ -38,8 +38,8 @@ write_chains <- function(season,roundnum){
   }
 }
 
-### map through 2021
-furrr::future_map(1:27,~write_chains(2021,.))
+# ### map through 2021
+# furrr::future_map(1:27,~write_chains(2021,.))
 
 ### map through 2022
 furrr::future_map(1:27,~write_chains(2022,.))

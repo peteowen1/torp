@@ -18,8 +18,10 @@ clean_pbp <- function(df) {
       match_chain_id = paste0(match_id, chain_number),
       y = -y,
       x = ifelse(description == "Spoil", -x, x),
+      x = ifelse(!is.na(shot_at_goal) & x < 0, -x, x),
       y = ifelse(description == "Spoil", -y, y),
-      home_away = as.factor(if_else(team_id == home_team_id, "Home", "Away")),
+      y = ifelse(!is.na(shot_at_goal) & x < 0, -y, y),
+      home_away = as.factor(dplyr::if_else(team_id == home_team_id, "Home", "Away")),
       goal_x = venue_length / 2 - x,
       throw_in = dplyr::case_when(
         description == "Centre Bounce" ~ 1,
@@ -43,7 +45,7 @@ clean_pbp <- function(df) {
     df %>%
     dplyr::group_by(match_id) %>%
     dplyr::mutate(
-      rn = row_number(),
+      rn = dplyr::row_number(),
       team_id_mdl = dplyr::case_when(
         throw_in == 1 ~ dplyr::lead(team_id, default = dplyr::last(team_id)),
         TRUE ~ team_id
@@ -54,7 +56,7 @@ clean_pbp <- function(df) {
       total_seconds = cumsum(period_seconds),
       lag_desc_tot = dplyr::lag(description, default = "First Bounce"),
       phase_of_play =
-        case_when(
+        dplyr::case_when(
           stringr::str_starts(lag_desc_tot, "Free") ~ "Set Shot",
           stringr::str_starts(lag_desc_tot, "OOF") ~ "Set Shot",
           stringr::str_starts(lag_desc_tot, "Out on") ~ "Set Shot",
@@ -75,9 +77,10 @@ clean_pbp <- function(df) {
         ),
       phase_of_play = forcats::fct_lump_min(ifelse(lag_desc_tot == "Bounce", dplyr::lag(phase_of_play), phase_of_play), 1),
       play_type = forcats::fct_lump_min(
-        case_when(
+        dplyr::case_when(
           description == "Handball" ~ "Handball",
           description == "Kick" ~ "Kick",
+          description == "Ground Kick" ~ "Ground Kick",
           TRUE ~ "Reception"
         ), 1
       ),
@@ -86,7 +89,7 @@ clean_pbp <- function(df) {
       lag_y = (dplyr::lag(y)),
       ### not sure about top 3 decide later
       points_row = dplyr::case_when(
-        chain_number != dplyr::lead(chain_number, default = (last(chain_number) + 1)) &
+        chain_number != dplyr::lead(chain_number, default = (dplyr::last(chain_number) + 1)) &
           final_state == "rushed" ~ 1,
         description == "Behind" ~ 1,
         description == "Goal" ~ 6,

@@ -28,7 +28,7 @@ load_chains <- function(seasons = NULL, rounds = NULL, file_type = "rds") {
   ########################
 
 
-  df <- purrr::map_df(urls, ~rds_from_url(.))
+  df <- furrr::future_map_dfr(urls, ~rds_from_url(.)) ### maybe change to purrr::
   return(df)
 }
 
@@ -55,6 +55,6 @@ rds_from_url <- function(url) {
     return(data.table::data.table())
   }
 
-  data.table::setDT(load)
+  #data.table::setDT(load)
   return(load)
 }

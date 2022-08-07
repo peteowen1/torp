@@ -63,7 +63,7 @@ df <- load_chains(2021, 27) %>%
   select(
     rn = display_order, chain = chain_number, period, secs = period_seconds, x, y, desc = description, jumper = jumper_number,
     player_id, player_name, team, team_id_mdl,
-    lead_player, lead_team, delta_epv, pos_team, exp_pts, Opp_Goal, Opp_Behind, Behind, Goal, No_Score, player_position,
+    lead_player, lead_team, delta_epv, pos_team, exp_pts, opp_goal, opp_behind, behind, goal, no_score, player_position,
     goal_x,play_type,phase_of_play
   )
 

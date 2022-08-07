@@ -54,7 +54,7 @@ clean_model_data_epv <- function(df) {
       ### description != "Out On Full After Kick",
       ### lead_desc != "Out of Bounds",
       ### lead_desc != "Out On Full After Kick",
-      !(x == -lead_x_tot & y == -lead_y_tot & description != "Centre Bounce")
+     # !(x == -lead_x_tot & y == -lead_y_tot & description != "Centre Bounce")
     ) %>%
     dplyr::group_by(match_id, period, tot_goals) %>%
     dplyr::mutate(
@@ -141,5 +141,42 @@ select_wp_model_vars <- function(df) {
       phase_of_play_hard_ball,phase_of_play_loose_ball,phase_of_play_set_shot
     )
 
+  return(df)
+}
+
+clean_shots_data <- function(df){
+  ##### Direction Variales
+  goal_width <- 6.4
+
+  df <- df %>%
+    dplyr::mutate(shot_result_multi =
+                    (dplyr::case_when(
+                      shot_at_goal == TRUE & disposal == "clanger" ~ 0,
+                      shot_at_goal == TRUE & disposal == "ineffective" ~ 1,
+                      shot_at_goal == TRUE & disposal == "effective" ~ 2
+                    )),
+                  shot_result =
+                    as.numeric(dplyr::case_when(
+                      shot_at_goal == TRUE & disposal == "ineffective" ~ 0,
+                      shot_at_goal == TRUE & disposal == "effective" ~ 1
+                    )))
+
+
+  df$abs_y <- abs(df$y)
+  df$side_b <- sqrt((df$goal_x)^2 + (df$y + goal_width/2 )^2)
+  df$side_c <- sqrt((df$goal_x)^2 + (df$y - goal_width/2)^2)
+  df$angle <-  acos((df$side_b^2 + df$side_c^2 - goal_width^2)/(2*df$side_b*df$side_c))
+  df$distance <- ifelse(df$y >= -goal_width/2 & df$y <= goal_width/2,
+                        df$goal_x, pmin(df$side_b ,df$side_c ))
+  df$shot_clanger <- ifelse(df$shot_at_goal == TRUE & df$disposal == "clanger",1,0)
+  df$shot_effective <- ifelse(df$shot_at_goal == TRUE & df$disposal == "effective",1,0)
+  df$shot_ineffective <- ifelse(df$shot_at_goal == TRUE & df$disposal == "ineffective",1,0)
+
+  df <- df %>%
+    left_join(shot_player_df,by = c('player_name'='player_name_shot'),keep = TRUE)
+
+  df$player_name_shot <-  as.factor(tidyr::replace_na(df$player_name_shot,'Other'))
+
+  df <- df %>% dplyr::select(-side_b,-side_c)
   return(df)
 }
