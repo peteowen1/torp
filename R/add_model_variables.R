@@ -33,7 +33,7 @@ add_epv_vars <- function(df) {
         is.na(dplyr::lead(team_id_mdl)) ~ 1,
         TRUE ~ -1
       ),
-      lead_points = ifelse(is.na(shot_at_goal), dplyr::lead(exp_pts, default = 0), (kick_points - lead(exp_pts, default = 0))), ### maybe? (kick_points - lead_exp_pts) e.g. for behinds
+      lead_points = ifelse(is.na(kick_points), dplyr::lead(exp_pts, default = 0), (kick_points - lead(exp_pts, default = 0))), ### maybe? (kick_points - lead_exp_pts) e.g. for behinds
       lead_player = ifelse(!is.na(shot_at_goal) | lead_desc == "Out of Bounds" | description == "Out On Full After Kick",
         player_name, dplyr::lead(player_name)
       ),
@@ -70,8 +70,6 @@ add_wp_vars <- function(df) {
   colnames(base_wp_preds) <- "wp"
   pbp_final <- cbind(df, base_wp_preds)
 
-  pbp_final$wp2 <- round(mgcv::predict.bam(wp_model_gam,pbp_final,type="response"),5)
-
   pbp_final <- pbp_final %>%
     group_by(match_id) %>%
     dplyr::mutate(
@@ -79,10 +77,6 @@ add_wp_vars <- function(df) {
       wpa = round(case_when(
         lead(team_id_mdl, default = last(team_id_mdl)) == team_id_mdl ~ dplyr::lead(wp, default = last(wp)) - wp,
         lead(team_id_mdl, default = last(team_id_mdl)) != team_id_mdl ~ (1 - dplyr::lead(wp, default = last(wp))) - wp
-      ),5),
-      wpa2 = round(case_when(
-        lead(team_id_mdl, default = last(team_id_mdl)) == team_id_mdl ~ dplyr::lead(wp2, default = last(wp2)) - wp2,
-        lead(team_id_mdl, default = last(team_id_mdl)) != team_id_mdl ~ (1 - dplyr::lead(wp2, default = last(wp2))) - wp2
       ),5)
     ) %>%
     ungroup()

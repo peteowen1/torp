@@ -69,7 +69,7 @@ plyr_gm_df <-
                 tot_p = recv_pts + disp_pts + spoil_pts,
                 tot_p_wt = recv_pts_wt + disp_pts_wt + spoil_pts_wt,
                 tot_wpa = recv_wpa + disp_wpa) %>%
-  relocate(tot_p) %>% ungroup()
+  relocate(tot_p,disp) %>% ungroup()
 
 
 ###### need to change 'max(as.Date(utc_start_time))' as it doesn't account for regression that should happen between seasons
@@ -117,4 +117,4 @@ plyr_ratings <- function(player_df, team_df, season_val, round_val) {
 }
 
 ###############
-this_week <- plyr_ratings(plyr_gm_df,teams,2022,20)
+this_week <- plyr_ratings(plyr_gm_df,teams,2022,22)

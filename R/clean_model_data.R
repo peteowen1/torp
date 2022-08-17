@@ -54,7 +54,7 @@ clean_model_data_epv <- function(df) {
       ### description != "Out On Full After Kick",
       ### lead_desc != "Out of Bounds",
       ### lead_desc != "Out On Full After Kick",
-     # !(x == -lead_x_tot & y == -lead_y_tot & description != "Centre Bounce")
+      !(x == -lead_x_tot & y == -lead_y_tot & description != "Centre Bounce")
     ) %>%
     dplyr::group_by(match_id, period, tot_goals) %>%
     dplyr::mutate(
