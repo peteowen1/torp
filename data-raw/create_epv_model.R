@@ -6,12 +6,15 @@ library('tidymodels')
 library('janitor')
 library('lubridate')
 # devtools::load_all()
+source('./R/scraper_functions.R')
 source("./R/load_chains.R")
 source("./R/helper_functions.R")
 source("./R/clean_model_data.R")
 source("./R/add_model_variables.R")
 
-chains <- load_chains(2021:lubridate::year(Sys.Date()))
+chains <- load_chains(2021:lubridate::year(Sys.Date())) %>%
+  bind_rows(get_week_chains(2022, 24)) %>%
+  bind_rows(get_week_chains(2022, 25))
 
 pbp <- clean_pbp(chains)
 
@@ -54,7 +57,7 @@ usethis::use_data(ep_model,overwrite = TRUE)
 ###########
 ### TESTING
 #######
-df <- load_chains(2021, 27) %>%
+df <- load_chains(2022, 23) %>% filter(match_id == "CD_M20220142309") %>%
   clean_pbp() %>%
   clean_model_data_epv() %>%
   add_epv_vars() %>%
@@ -62,10 +65,10 @@ df <- load_chains(2021, 27) %>%
     rn = display_order, chain = chain_number, period, secs = period_seconds, x, y, desc = description, jumper = jumper_number,
     player_id, player_name, team, team_id_mdl,
     lead_player, lead_team, delta_epv, pos_team, exp_pts,lead_points, opp_goal, opp_behind, behind, goal, no_score, player_position,
-    goal_x,play_type,phase_of_play
+    goal_x,play_type,phase_of_play,lead_desc, points_shot, kick_points
   )
 
-df2 <- load_chains(2021, 27) %>%
+df2 <- load_chains(2022, 23) %>% filter(match_id == "CD_M20220142309") %>%
   clean_pbp() %>%
   # clean_model_data() %>%
   # add_epv_vars() %>%
@@ -73,7 +76,7 @@ df2 <- load_chains(2021, 27) %>%
     rn = display_order, chain = chain_number, period, secs = period_seconds, x, y, desc = description, jumper = jumper_number,
     player_id, player_name, team, team_id_mdl,
     #, lead_team, delta_epv, pos_team, exp_pts, Opp_Goal, Opp_Behind, Behind, Goal, No_Score, player_position,
-    goal_x,play_type,phase_of_play,points_row_na,tot_goals,throw_in
+    goal_x,play_type,phase_of_play,lead_desc_tot, points_shot,points_row_na,tot_goals,throw_in
   )
 ###################
 

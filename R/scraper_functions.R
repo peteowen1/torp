@@ -48,6 +48,32 @@ get_match_chains <- function(season = lubridate::year(Sys.Date()), round = NA) {
   return(chains)
 }
 
+###
+get_week_chains <- function(season,roundnum) {
+  #cache_message()
+
+  load <- try(get_match_chains(season, round = roundnum), silent = TRUE)
+
+  if (inherits(load, "try-error")) {
+    cli::cli_warn("Failed to match chains from {.val {season}} round {.val {roundnum}}")
+    return(data.table::data.table())
+  }
+
+  load <- load %>% janitor::clean_names()
+  if ("team_team_name" %in% colnames(load)) {
+    load <-
+      load %>%
+      dplyr::rename(
+        team = team_team_name,
+        home_team = home_team_team_name,
+        away_team = away_team_team_name,
+        home_team_score = home_team_score_total_score,
+        away_team_score = away_team_score_total_score,
+        home_team_direction = home_team_direction_qtr1
+      )
+  }
+  return(load)
+}
 ### API SCRAPING FUNCTIONS
 #' Title
 #'
@@ -100,7 +126,7 @@ get_round_games <- function(season, round) {
   if (length(games) > 0) {
     games <- games %>% filter(status == "CONCLUDED")
     if (nrow(games) > 0) {
-      games <- games #%>%
+      games <- games # %>%
       #   select(
       #   matchId, utcStartTime, roundNumber, roundId ,venue.name, venue.location, venue.state,venue.venueId,
       #   homeTeam.teamName, awayTeam.teamName,homeTeamId ,awayTeamId ,
@@ -136,7 +162,7 @@ get_players <- function() {
   url <- paste0("https://api.afl.com.au/cfs/afl/players")
   players <- access_api(url)
   players <- players[[5]]
-  players <- players #%>% select(playerId, playerName.givenName, playerName.surname, team.teamName)
+  players <- players # %>% select(playerId, playerName.givenName, playerName.surname, team.teamName)
 
   return(players)
 }
@@ -148,12 +174,12 @@ get_players <- function() {
 get_many_game_chains <- function(games_vector) {
   p <- progressr::progressor(steps = length(games_vector))
 
-  chains <- purrr::map_df(games_vector,
-                                  ~ {
-                                    p()
-                                    get_game_chains(.)
-                                  },
-                                  .progress = FALSE
+  chains <- furrr::future_map_dfr(games_vector,
+    ~ {
+      p()
+      get_game_chains(.)
+    },
+    .progress = FALSE
   )
 
   return(chains)
@@ -164,7 +190,7 @@ get_many_game_chains <- function(games_vector) {
 #'
 #' @export
 get_game_chains <- function(match_id) {
-  url <- paste0("https://sapi.afl.com.au/afl/matchPlays/",match_id)
+  url <- paste0("https://sapi.afl.com.au/afl/matchPlays/", match_id)
   chains_t1 <- access_api(url)
   chains_t2 <- chains_t1[[8]]
 

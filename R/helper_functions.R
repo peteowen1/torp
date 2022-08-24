@@ -41,7 +41,7 @@ clean_pbp <- function(df) {
     dplyr::mutate(
       rn = dplyr::row_number(),
       team_id_mdl = dplyr::case_when(
-        throw_in == 1 ~ dplyr::lead(team_id, default = dplyr::last(team_id)),
+        throw_in == 1 ~ dplyr::lead(team_id),
         TRUE ~ team_id
       ),
       team_id_mdl = zoo::na.locf0(team_id_mdl, fromLast = TRUE),

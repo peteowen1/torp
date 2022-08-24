@@ -57,10 +57,27 @@ clean_model_data_epv <- function(df) {
       !(x == -lead_x_tot & y == -lead_y_tot & description != "Centre Bounce")
     ) %>%
     dplyr::group_by(match_id, period, tot_goals) %>%
+    filter(lag(throw_in) == 0 | lead(throw_in) == 0) %>%
     dplyr::mutate(
+      lag_desc = dplyr::lag(description, default = dplyr::first(description)),
+      lead_desc = dplyr::lead(description, default = dplyr::last(description)),
+      team_id_mdl = dplyr::case_when(
+        throw_in == 1 ~ dplyr::lead(team_id),
+        TRUE ~ team_id
+      ),
+      team_id_mdl = zoo::na.locf0(team_id_mdl, fromLast = TRUE),
+      team_id_mdl = zoo::na.locf0(team_id_mdl),
       x = dplyr::case_when(
-        (throw_in == 1 & dplyr::lag(team_id_mdl, default = dplyr::first(team_id_mdl)) == team_id_mdl) ~ x,
-        (throw_in == 1 & dplyr::lag(team_id_mdl, default = dplyr::first(team_id_mdl)) != team_id_mdl) ~ -x,
+        #(throw_in == 1 & lag(throw_in) != 1 & dplyr::lag(team_id_mdl) == team_id_mdl) ~ x,
+        (throw_in == 1 & lag(throw_in) != 1 & dplyr::lag(team_id_mdl) != team_id_mdl) ~ -x,
+        #(throw_in == 1 & lag(throw_in) == 1 & dplyr::lag(team_id_mdl,n=2L) == team_id_mdl) ~ x,
+        (throw_in == 1 & lag(throw_in) == 1 & dplyr::lag(team_id_mdl,n=2L) != team_id_mdl) & sign(dplyr::lag(x)) == sign(x) ~ -x,
+        (throw_in == 1 & lag(throw_in) == 1  & dplyr::lag(team_id_mdl,n=2L) == team_id_mdl & sign(dplyr::lag(x)) != sign(x)) ~ -x,
+        (dplyr::lag(throw_in) == 1 & sign(dplyr::lag(x)) == sign(x) & dplyr::lag(team_id_mdl) == team_id_mdl & dplyr::lag(team_id_mdl,n=2L) != team_id_mdl) ~ -x,
+        (dplyr::lag(throw_in, n = 2L) == 1 & sign(dplyr::lag(x,n=2L)) == sign(x) & dplyr::lag(team_id_mdl,n=2L) == team_id_mdl & dplyr::lag(team_id_mdl,n=3L) != team_id_mdl) ~ -x,
+        #(dplyr::lag(throw_in, n = 3L) == 1 & sign(dplyr::lag(x,n=3L)) == sign(x) & dplyr::lag(team_id_mdl,n=3L) == team_id_mdl & dplyr::lag(team_id_mdl,n=4L) != team_id_mdl) ~ -x,
+        (dplyr::lag(throw_in) == 1 & sign(dplyr::lead(x,n=2L)) == sign(x) & dplyr::lead(team_id_mdl,n=2L) != team_id_mdl) ~ -x,
+        (dplyr::lag(throw_in,n=2L) == 1 & sign(dplyr::lead(x)) == sign(x) & dplyr::lead(team_id_mdl) != team_id_mdl) ~ -x,
         # (description == "Mark Dropped" & dplyr::lag(team_id_mdl, default = dplyr::first(team_id_mdl)) != team_id_mdl) ~ -x,
         TRUE ~ x
       ),
@@ -78,9 +95,7 @@ clean_model_data_epv <- function(df) {
       speed1 = tidyr::replace_na(speed1, 0),
       speed5 = (lag_goal_x5 - goal_x) / pmax((period_seconds - lag_time5), 1),
       speed5 = tidyr::replace_na(speed5, 0),
-      lag_desc = dplyr::lag(description, default = dplyr::first(description)),
       lag_player = dplyr::lag(player_name, default = dplyr::first(description)),
-      lead_desc = dplyr::lead(description, default = dplyr::last(description)),
       lead_player = dplyr::lead(player_name, default = dplyr::last(player_name)),
       lead_x = dplyr::lead(x, default = dplyr::last(x)),
       lead_y = dplyr::lead(y, default = dplyr::last(y)),

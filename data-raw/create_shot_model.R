@@ -14,7 +14,7 @@ shots_prep <- chains %>% # filter(match_id == "CD_M20210142701") %>%
   clean_shots_data() %>%
   clean_model_data_epv()
 
-shots <- shots_prep %>% filter(shot_at_goal == TRUE, !is.na(points_shot), goal_x < 65)
+shots <- shots_prep %>% filter(!is.na(points_shot))
 
 ################
 shots$player_name_shot <- forcats::fct_lump_min(shots$player_name, 10)

@@ -74,7 +74,9 @@ usethis::use_data(wp_model,overwrite = TRUE)
 # ###########
 # ### TESTING
 # #######
-df <- load_chains(2021, 27) %>%
+df <- #load_chains(2021, 27) %>%
+  get_week_chains(2022,24) %>%
+  filter(match_id == "CD_M20220142402") %>%
   janitor::clean_names() %>%
   clean_pbp() %>%
   clean_model_data_epv() %>%
@@ -82,10 +84,11 @@ df <- load_chains(2021, 27) %>%
   clean_model_data_wp() %>%
   add_wp_vars() %>%
   select(
-    rn = display_order, chain = chain_number, period, secs = period_seconds, x, y, desc = description, jumper = jumper_number,
+    rn = display_order, chain = chain_number, period, secs = period_seconds, x,#x2,
+    y, desc = description, jumper = jumper_number,
     player_id, player_name, team, team_id_mdl,
-    lead_player, lead_team, delta_epv, pos_team, exp_pts,xpoints_diff,wp,wp2,wpa,wpa2, opp_goal, opp_behind, behind, goal, no_score, player_position,
-    goal_x,play_type,phase_of_play,kick_points
+    lead_player, lead_team, delta_epv, pos_team, exp_pts,xpoints_diff,wp,wpa, opp_goal, opp_behind, behind, goal, no_score, player_position,
+    goal_x,play_type,phase_of_play,kick_points,speed5,lag_goal_x5,throw_in,team_id
   )
 
 #
