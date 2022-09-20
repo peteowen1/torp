@@ -35,10 +35,10 @@ add_epv_vars <- function(df) {
         TRUE ~ -1
       ),
       lead_points = ifelse(is.na(points_shot), dplyr::lead(exp_pts, default = 0), (points_shot - lead(exp_pts, default = 0))), ### maybe? (kick_points - lead_exp_pts) e.g. for behinds
-      lead_player = ifelse(!is.na(shot_at_goal) | lead_desc == "Out of Bounds" | description == "Out On Full After Kick",
+      lead_player = ifelse(!is.na(points_shot) | lead_desc == "Out of Bounds" | description == "Out On Full After Kick",
         player_name, dplyr::lead(player_name)
       ),
-      lead_player_id = ifelse(!is.na(shot_at_goal) | lead_desc == "Out of Bounds" | description == "Out On Full After Kick",
+      lead_player_id = ifelse(!is.na(points_shot) | lead_desc == "Out of Bounds" | description == "Out On Full After Kick",
         player_id, dplyr::lead(player_id)
       ),
       lead_team = ifelse(is.na(points_shot), dplyr::lead(team), team),

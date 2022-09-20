@@ -5,6 +5,9 @@ teams <-
   dplyr::bind_rows(fitzRoy::fetch_lineup(season = 2022, comp = "AFLM")) %>%
   dplyr::mutate(season = as.numeric(substr(providerId, 5, 8)))
 }
+
+######################################### REMEMBER TO UNCOMMENT ADD_WP_VARS ON ROW 30 AND 52
+
 ######
 # chains_test <- load_chains(2021:2022)
 #
@@ -24,7 +27,7 @@ teams <-
 decay <- 500
 
 plyr_gm_df <-
-  model_data_wp %>% add_wp_vars() %>%
+  model_data_wp %>% #add_wp_vars() %>%
   dplyr::select(player_name, player_id, match_id,utc_start_time,home_away,away_team,home_team,
                      delta_epv,team,player_position,round_week,wpa) %>%
   dplyr::mutate(weight_gm = exp(as.numeric(-(max(as.Date(utc_start_time)) - as.Date(utc_start_time))) / decay),
@@ -38,7 +41,7 @@ plyr_gm_df <-
     disp_pts = sum((delta_epv) / 2),
     disp_pts_wt = sum(delta_epv * max(weight_gm)) / 2,
     disp_wpa = sum((wpa) / 2),
-    disp = n(),
+    disp = floor(n()/2),
     tm = last(team),
     opp = last(opp_tm),
     pos = last(player_position),
@@ -46,7 +49,7 @@ plyr_gm_df <-
     season = last(lubridate::year(utc_start_time))
   ) %>%
   dplyr::left_join(
-    model_data_wp %>% add_wp_vars() %>%
+    model_data_wp %>% #add_wp_vars() %>%
       dplyr::select(lead_player, lead_player_id, match_id,utc_start_time,home_away,away_team,home_team,
                        delta_epv,team,player_position,round_week,pos_team,wpa) %>%
       dplyr::mutate(weight_gm = exp(as.numeric(-(max(as.Date(utc_start_time)) - as.Date(utc_start_time))) / decay)) %>%
@@ -72,7 +75,7 @@ plyr_gm_df <-
                 tot_p = recv_pts + disp_pts + spoil_pts,
                 tot_p_wt = recv_pts_wt + disp_pts_wt + spoil_pts_wt,
                 tot_wpa = recv_wpa + disp_wpa) %>%
-  relocate(tot_p,disp) %>% ungroup()
+  relocate(tot_p,disp) %>% ungroup() %>% filter(!is.na(tm))
 
 
 ###### need to change 'max(as.Date(utc_start_time))' as it doesn't account for regression that should happen between seasons
@@ -120,11 +123,10 @@ plyr_ratings <- function(player_df, team_df, season_val, round_val,decay = 500,p
 }
 
 ###############
-this_week <- plyr_ratings(plyr_gm_df,teams,2022,25) %>%
-  left_join(fitzRoy::fetch_player_details(),by = c("player.playerId" = "providerId"))
+this_week <- plyr_ratings(plyr_gm_df,teams,2022,27) #%>% left_join(fitzRoy::fetch_player_details(),by = c("player.playerId" = "providerId"))
 
 plyr_gm_df %>%
-  filter(season==2022, round >= 1) %>%
+  filter(season==2022, round <= 23) %>%
   group_by(player_name,player_id,tm,pos) %>%
   summarise(tot_points = sum(tot_p), g = n(),p_g = tot_points/g) %>%
   arrange(-tot_points) %>% view()

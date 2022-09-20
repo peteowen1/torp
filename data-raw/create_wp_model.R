@@ -16,7 +16,13 @@ chains <- load_chains(2021:lubridate::year(Sys.Date())) %>%
 
 pbp <- clean_pbp(chains)
 
-model_data_wp <- model_data_epv %>% add_epv_vars() %>% clean_model_data_wp()
+###########################
+devtools::load_all()
+
+model_data_wp <- readRDS("model_data_wp.rds")
+model_data_wp <- model_data_epv %>% add_epv_vars() %>% clean_model_data_wp() %>% bind_rows(model_data_wp)
+saveRDS(model_data_wp,"model_data_wp.rds")
+
 #######################################
 ##################
 nrounds = 75
@@ -75,20 +81,23 @@ usethis::use_data(wp_model,overwrite = TRUE)
 # ### TESTING
 # #######
 df <- #load_chains(2021, 27) %>%
-  get_week_chains(2022,24) %>%
-  filter(match_id == "CD_M20220142402") %>%
-  janitor::clean_names() %>%
-  clean_pbp() %>%
-  clean_model_data_epv() %>%
-  add_epv_vars() %>%
-  clean_model_data_wp() %>%
-  add_wp_vars() %>%
+  #get_week_chains(2022,26) %>%
+  model_data_wp %>% #select(-opp_goal,-opp_behind,-behind,-goal,-no_score)%>%
+  filter(match_id == "CD_M20220142602") %>%
+  # # janitor::clean_names() %>%
+  # # clean_pbp() %>%
+  # clean_model_data_epv() %>%
+  # add_epv_vars() %>%
+  # clean_model_data_wp() %>%
+  # add_wp_vars() #%>%
   select(
     rn = display_order, chain = chain_number, period, secs = period_seconds, x,#x2,
     y, desc = description, jumper = jumper_number,
     player_id, player_name, team, team_id_mdl,
-    lead_player, lead_team, delta_epv, pos_team, exp_pts,xpoints_diff,wp,wpa, opp_goal, opp_behind, behind, goal, no_score, player_position,
-    goal_x,play_type,phase_of_play,kick_points,speed5,lag_goal_x5,throw_in,team_id
+    lead_player, lead_team, delta_epv, pos_team,
+    exp_pts,xpoints_diff,wp,wpa, opp_goal, opp_behind, behind, goal, no_score, player_position,
+    goal_x,play_type,phase_of_play,
+    kick_points,speed5,lag_goal_x5,throw_in,team_id
   )
 
 #
