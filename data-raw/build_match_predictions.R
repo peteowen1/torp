@@ -209,6 +209,7 @@ team_mdl_df <- team_rt_df %>% # filter(!is.na(bayes_g)) %>%
     weightz = weightz / mean(weightz, na.rm = T)
   )
 
+
 #### MODEL
 library(mgcViz)
 # set.seed("1234")
@@ -295,10 +296,20 @@ sum(test_df$bits)
 mean(test_df$bits)
 mean(test_df$tips)
 
+#################################### GF
+team_mdl_df$team_type_fac <- as.factor(ifelse(team_mdl_df$providerId == "CD_M20220142701",
+                                    ifelse(team_mdl_df$teamType.x == "home","home","away"),
+                                    team_mdl_df$teamType.x))
+
+team_mdl_df$pred_totshots <- predict(afl_totshots_mdl, newdata = team_mdl_df, type = "response")
+team_mdl_df$pred_shot_diff <- predict(afl_shot_mdl, newdata = team_mdl_df, type = "response")
+team_mdl_df$pred_conv <- predict(afl_conv_mdl, newdata = team_mdl_df, type = "response")
+team_mdl_df$pred_score_diff <- predict(afl_score_mdl, newdata = team_mdl_df, type = "response")
+team_mdl_df$pred_win <- predict(afl_win_mdl, newdata = team_mdl_df, type = "response")
 ###
 week_gms <- team_mdl_df %>%
   dplyr::mutate(totscore = sum(team_mdl_df$total_score, na.rm = T) / sum(team_mdl_df$total_shots, na.rm = T) * pred_totshots) %>%
-  dplyr::filter(season.x == lubridate::year(Sys.Date()), round.roundNumber.x.x == (n-1), teamType.x == "home") %>%
+  dplyr::filter(season.x == lubridate::year(Sys.Date()), round.roundNumber.x.x == (n-6), teamType.x == "home") %>%
   dplyr::select(
     count.x, providerId, teamName.x.x, bayes_g.x, teamName.x.y, bayes_g.y,
     totscore, pred_shot_diff, pred_score_diff, pred_win, bits, score_diff

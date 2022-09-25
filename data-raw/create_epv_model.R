@@ -12,7 +12,7 @@ source("./R/helper_functions.R")
 source("./R/clean_model_data.R")
 source("./R/add_model_variables.R")
 
-chains <- get_week_chains(2022, 26) #load_chains(2021:lubridate::year(Sys.Date())) #%>%
+chains <- load_chains(2021:lubridate::year(Sys.Date())) #%>%
   # bind_rows(get_week_chains(2022, 26)) %>%
   # bind_rows(get_week_chains(2022, 25))
 

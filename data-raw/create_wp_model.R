@@ -19,9 +19,9 @@ pbp <- clean_pbp(chains)
 ###########################
 devtools::load_all()
 
-model_data_wp <- readRDS("model_data_wp.rds")
-model_data_wp <- model_data_epv %>% add_epv_vars() %>% clean_model_data_wp() %>% bind_rows(model_data_wp)
-saveRDS(model_data_wp,"model_data_wp.rds")
+#model_data_wp <- readRDS("model_data_wp.rds")
+model_data_wp <- model_data_epv %>% add_epv_vars() %>% clean_model_data_wp() #%>% bind_rows(model_data_wp)
+#saveRDS(model_data_wp,"model_data_wp.rds")
 
 #######################################
 ##################

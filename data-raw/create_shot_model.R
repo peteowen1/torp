@@ -5,7 +5,9 @@ source("./R/load_chains.R")
 source("./R/helper_functions.R")
 source("./R/match_xg_functions.R")
 
+if (exists("chains") == FALSE) {
 chains <- load_chains(2021:lubridate::year(Sys.Date()))
+}
 
 # chains <- bind_rows(chains_2021,chains_2022) %>% janitor::clean_names()
 
@@ -63,4 +65,7 @@ usethis::use_data(shot_result_mdl, overwrite = TRUE)
 player_shot_score <- mixedup::extract_ranef(shot_result_mdl) %>%
   dplyr::filter(group_var == "player_name_shot") %>%
   dplyr::arrange(-value) # %>% tibble::view()
+
 usethis::use_data(player_shot_score, overwrite = TRUE)
+
+# shots$pred <- predict.bam(shot_result_mdl,shots,type="response")

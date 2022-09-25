@@ -27,7 +27,7 @@ teams <-
 decay <- 500
 
 plyr_gm_df <-
-  model_data_wp %>% #add_wp_vars() %>%
+  model_data_wp %>% add_wp_vars() %>%
   dplyr::select(player_name, player_id, match_id,utc_start_time,home_away,away_team,home_team,
                      delta_epv,team,player_position,round_week,wpa) %>%
   dplyr::mutate(weight_gm = exp(as.numeric(-(max(as.Date(utc_start_time)) - as.Date(utc_start_time))) / decay),
@@ -49,7 +49,7 @@ plyr_gm_df <-
     season = last(lubridate::year(utc_start_time))
   ) %>%
   dplyr::left_join(
-    model_data_wp %>% #add_wp_vars() %>%
+    model_data_wp %>% add_wp_vars() %>%
       dplyr::select(lead_player, lead_player_id, match_id,utc_start_time,home_away,away_team,home_team,
                        delta_epv,team,player_position,round_week,pos_team,wpa) %>%
       dplyr::mutate(weight_gm = exp(as.numeric(-(max(as.Date(utc_start_time)) - as.Date(utc_start_time))) / decay)) %>%
@@ -75,31 +75,36 @@ plyr_gm_df <-
                 tot_p = recv_pts + disp_pts + spoil_pts,
                 tot_p_wt = recv_pts_wt + disp_pts_wt + spoil_pts_wt,
                 tot_wpa = recv_wpa + disp_wpa) %>%
-  relocate(tot_p,disp) %>% ungroup() %>% filter(!is.na(tm))
+  ungroup() %>%
+  mutate(rep_p = quantile(tot_p,0.2),
+         tot_p_adj = tot_p - rep_p) %>%
+  relocate(tot_p_adj,disp) %>%
+  filter(!is.na(tm))
 
 
 ###### need to change 'max(as.Date(utc_start_time))' as it doesn't account for regression that should happen between seasons
 ###### as round 1 filters for all games before gwk1 and therefore no regression happens
-plyr_ratings <- function(player_df, team_df, season_val, round_val,decay = 500,prior_games = 3) {
+plyr_ratings <- function(player_df, team_df, season_val, round_val,decay = 500,prior_games = 4) {
   gwk <- sprintf("%02d", round_val) # keep this in case you change to round -1 or round +1
   match_ref <- paste0("CD_M", season_val, "014", gwk)
+  date_val <- team_df %>% filter(season == season_val, round.roundNumber == round_val) %>% summarise(max(utcStartTime)) %>% pull()
 
   plyr_df <- player_df %>% ungroup() %>%
     dplyr::filter(match_id <= match_ref) %>%
     dplyr::mutate(
-      weight_gm = exp(as.numeric(-(max(as.Date(utc_start_time)) - as.Date(utc_start_time))) / decay)
+      weight_gm = exp(as.numeric(-(as.Date(date_val) - as.Date(utc_start_time))) / decay)
     ) %>%
     group_by(player_name,player_id) %>%
     dplyr::summarise(
       gms = n_distinct(match_id),
       wt_gms = sum(unique(weight_gm), na.rm = TRUE),
-      tot_p_sum = sum(tot_p * weight_gm),
+      tot_p_sum = sum(tot_p_adj * weight_gm),
       tot_wpa_sum = sum(tot_wpa * weight_gm),
-      tot_p_g = sum(tot_p * weight_gm) / wt_gms,
+      tot_p_g = sum(tot_p_adj * weight_gm) / wt_gms,
       tot_wpa_g = sum(tot_wpa * weight_gm) / wt_gms,
       recv_g = sum(recv_pts * weight_gm) / wt_gms,
       disp_g = sum(disp_pts * weight_gm) / wt_gms,
-      bayes_g = sum(tot_p * weight_gm) / (wt_gms + prior_games),
+      bayes_g = sum(tot_p_adj * weight_gm) / (wt_gms + prior_games),
       bayes_recv_g = sum(recv_pts * weight_gm) / (wt_gms + prior_games),
       bayes_disp_g = sum(disp_pts * weight_gm) / (wt_gms + prior_games),
       posn = last(pos),
@@ -123,10 +128,17 @@ plyr_ratings <- function(player_df, team_df, season_val, round_val,decay = 500,p
 }
 
 ###############
-this_week <- plyr_ratings(plyr_gm_df,teams,2022,27) #%>% left_join(fitzRoy::fetch_player_details(),by = c("player.playerId" = "providerId"))
+this_week <- plyr_ratings(plyr_gm_df,teams,2022,27) %>% left_join(fitzRoy::fetch_player_details(),by = c("player.playerId" = "providerId"))
 
-plyr_gm_df %>%
-  filter(season==2022, round <= 23) %>%
+season_table <- plyr_gm_df %>%
+  filter(season==2022, round >= 1, round <= 23) %>%
   group_by(player_name,player_id,tm,pos) %>%
-  summarise(tot_points = sum(tot_p), g = n(),p_g = tot_points/g) %>%
-  arrange(-tot_points) %>% view()
+  summarise(tot_points = sum(tot_p_adj), g = n(),p_g = tot_points/g) %>%
+  left_join(fitzRoy::fetch_player_details(),by = c("player_id" = "providerId")) %>%
+  #filter(year(dateOfBirth)>=2001) %>%
+  arrange(-tot_points) #%>% view()
+
+# final_22 %>% filter(round.roundNumber==2) %>%
+#   left_join(final_22 %>% filter(round.roundNumber==23),by = c('player.playerId'='player.playerId')) %>%
+#   mutate(delta = bayes_g.y - bayes_g.x) %>%
+#   relocate(delta,player_name.x,bayes_g.y,gms.x,gms.y) %>% view()
