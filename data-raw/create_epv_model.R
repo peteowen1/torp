@@ -16,9 +16,13 @@ chains <- load_chains(2021:lubridate::year(Sys.Date())) #%>%
   # bind_rows(get_week_chains(2022, 26)) %>%
   # bind_rows(get_week_chains(2022, 25))
 
+tictoc::tic()
 pbp <- clean_pbp(chains)
+tictoc::toc()
 
+tictoc::tic()
 model_data_epv <- clean_model_data_epv(pbp)
+tictoc::toc()
 #######################################
 ##################
 nrounds <- 87

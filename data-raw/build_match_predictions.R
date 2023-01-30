@@ -23,6 +23,7 @@ final_21 <- readRDS("./data/plyr_df_2021.rds")
 n <- max(teams %>% dplyr::filter(season == lubridate::year(Sys.Date()), utcStartTime < Sys.time() + 350000) %>%
   dplyr::select(round.roundNumber)) + 1
 
+n <- 28
 ### 2022
 final_22 <- furrr::future_map_dfr(1:n, ~ plyr_ratings(plyr_gm_df, teams, 2022, .))
 saveRDS(final_22, "./data/plyr_df_2022.rds")
@@ -309,7 +310,7 @@ team_mdl_df$pred_win <- predict(afl_win_mdl, newdata = team_mdl_df, type = "resp
 ###
 week_gms <- team_mdl_df %>%
   dplyr::mutate(totscore = sum(team_mdl_df$total_score, na.rm = T) / sum(team_mdl_df$total_shots, na.rm = T) * pred_totshots) %>%
-  dplyr::filter(season.x == lubridate::year(Sys.Date()), round.roundNumber.x.x == (n-6), teamType.x == "home") %>%
+  dplyr::filter(season.x == lubridate::year(Sys.Date()), round.roundNumber.x.x == (n-1), teamType.x == "home") %>%
   dplyr::select(
     count.x, providerId, teamName.x.x, bayes_g.x, teamName.x.y, bayes_g.y,
     totscore, pred_shot_diff, pred_score_diff, pred_win, bits, score_diff

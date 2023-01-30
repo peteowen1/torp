@@ -7,7 +7,11 @@ teams <-
 }
 
 ######################################### REMEMBER TO UNCOMMENT ADD_WP_VARS ON ROW 30 AND 52
-
+### player value rule of thumb:
+### APY = bayes_g * 135k + 100k
+### so a replacement player is worth 100k, and someone with a bayes_g of 7 is worth 7*150k+100k = 1.15m
+### calculation is (teams cap ($13m) - team players (35) * min-salary (100k)) divided by mean "team bayes_g rating" (70)
+### (14m - 35*100k)/70 = 150,000
 ######
 # chains_test <- load_chains(2021:2022)
 #
@@ -54,7 +58,7 @@ plyr_gm_df <-
                        delta_epv,team,player_position,round_week,pos_team,wpa) %>%
       dplyr::mutate(weight_gm = exp(as.numeric(-(max(as.Date(utc_start_time)) - as.Date(utc_start_time))) / decay)) %>%
       dplyr::group_by(lead_player, lead_player_id,match_id) %>%
-      dplyr::summarise(
+      dplyr::summarise( #### CHANGE TO IF_ELSE PLZ
         recv_pts = sum((ifelse(pos_team == -1, 1.5 * delta_epv * pos_team ,delta_epv * pos_team)) / 2),
         recv_pts_wt = sum(delta_epv * pos_team * max(weight_gm)) / 2,
         recv_wpa = sum((wpa) / 2),
@@ -76,7 +80,7 @@ plyr_gm_df <-
                 tot_p_wt = recv_pts_wt + disp_pts_wt + spoil_pts_wt,
                 tot_wpa = recv_wpa + disp_wpa) %>%
   ungroup() %>%
-  mutate(rep_p = quantile(tot_p,0.2),
+  mutate(rep_p = 2, #quantile(tot_p,0.2),
          tot_p_adj = tot_p - rep_p) %>%
   relocate(tot_p_adj,disp) %>%
   filter(!is.na(tm))
@@ -88,6 +92,10 @@ plyr_ratings <- function(player_df, team_df, season_val, round_val,decay = 500,p
   gwk <- sprintf("%02d", round_val) # keep this in case you change to round -1 or round +1
   match_ref <- paste0("CD_M", season_val, "014", gwk)
   date_val <- team_df %>% filter(season == season_val, round.roundNumber == round_val) %>% summarise(max(utcStartTime)) %>% pull()
+
+  if (is.na(date_val)) {
+    date_val <- Sys.Date()  #max(team_df$utcStartTime)
+  }
 
   plyr_df <- player_df %>% ungroup() %>%
     dplyr::filter(match_id <= match_ref) %>%
@@ -128,10 +136,10 @@ plyr_ratings <- function(player_df, team_df, season_val, round_val,decay = 500,p
 }
 
 ###############
-this_week <- plyr_ratings(plyr_gm_df,teams,2022,27) %>% left_join(fitzRoy::fetch_player_details(),by = c("player.playerId" = "providerId"))
+this_week <- plyr_ratings(plyr_gm_df,teams,2022,28) %>% left_join(fitzRoy::fetch_player_details(),by = c("player.playerId" = "providerId"))
 
 season_table <- plyr_gm_df %>%
-  filter(season==2022, round >= 1, round <= 23) %>%
+  filter(season==2022, round >= 1, round <= 28) %>%
   group_by(player_name,player_id,tm,pos) %>%
   summarise(tot_points = sum(tot_p_adj), g = n(),p_g = tot_points/g) %>%
   left_join(fitzRoy::fetch_player_details(),by = c("player_id" = "providerId")) %>%

@@ -17,10 +17,10 @@ clean_pbp <- function(df) {
       row_id = paste0(match_id, sprintf("%04d", display_order)),
       match_chain_id = paste0(match_id, chain_number),
       y = -y,
-      x = ifelse(description == "Spoil", -x, x),
-      x = ifelse(!is.na(shot_at_goal) & x < 0, -x, x),
-      y = ifelse(description == "Spoil", -y, y),
-      y = ifelse(!is.na(shot_at_goal) & x < 0, -y, y),
+      x = dplyr::if_else(description == "Spoil", -x, x),
+      x = dplyr::if_else(!is.na(shot_at_goal) & x < 0, -x, x),
+      y = dplyr::if_else(description == "Spoil", -y, y),
+      y = dplyr::if_else(!is.na(shot_at_goal) & x < 0, -y, y),
       home_away = as.factor(dplyr::if_else(team_id == home_team_id, "Home", "Away")),
       goal_x = venue_length / 2 - x,
       throw_in = dplyr::case_when(
@@ -46,9 +46,10 @@ clean_pbp <- function(df) {
       ),
       team_id_mdl = zoo::na.locf0(team_id_mdl, fromLast = TRUE),
       team_id_mdl = zoo::na.locf0(team_id_mdl),
-      home = ifelse(team_id_mdl == home_team_id, 1, 0),
+      home = dplyr::if_else(team_id_mdl == home_team_id, 1, 0),
       total_seconds = cumsum(period_seconds),
       lag_desc_tot = dplyr::lag(description, default = "First Bounce"),
+      ################## MAYBE CHANGE PHASE OF PLAY TO BE A LOOKUP
       phase_of_play =
         dplyr::case_when(
           stringr::str_starts(lag_desc_tot, "Free") ~ "Set Shot",
@@ -69,22 +70,25 @@ clean_pbp <- function(df) {
           stringr::str_detect(lag_desc_tot, "Handball") ~ "Handball Received",
           TRUE ~ "Hard Ball"
         ),
-      phase_of_play = forcats::fct_lump_min(ifelse(lag_desc_tot == "Bounce", dplyr::lag(phase_of_play), phase_of_play), 1),
-      play_type = forcats::fct_lump_min(
+      phase_of_play = forcats::fct_lump_min(dplyr::if_else(lag_desc_tot == "Bounce", dplyr::lag(phase_of_play), phase_of_play), 1),
+      ### DO I NEED THIS TO BE A FACTOR MAYBE NOT
+      play_type = as.factor(
         dplyr::case_when(
           description == "Handball" ~ "Handball",
           description == "Kick" ~ "Kick",
           description == "Ground Kick" ~ "Ground Kick",
           TRUE ~ "Reception"
-        ), 1
+        )
       ),
+      ### CHECK WHERE I NEED ALL THE LAGS AND LEADS
       lag_x_tot = (dplyr::lag(x)),
       lag_goal_x_tot = (dplyr::lag(goal_x)),
       lag_y_tot = (dplyr::lag(y)),
       lag_desc_tot = dplyr::lead(description),
-      lead_x_tot = (dplyr::lead(x)),
+      ######### DO LEAD LATER
+      # lead_x_tot = (dplyr::lead(x)),
       led_goal_x_tot = (dplyr::lead(goal_x)),
-      lead_y_tot = (dplyr::lead(y)),
+      # lead_y_tot = (dplyr::lead(y)),
       lead_desc_tot = dplyr::lead(description),
       ### not sure about top 4 decide later
       points_row = dplyr::case_when(
@@ -95,7 +99,7 @@ clean_pbp <- function(df) {
         TRUE ~ 0
       ),
       points_row = tidyr::replace_na(points_row, 0),
-      points_row_na = ifelse(points_row == 0, NA, points_row),
+      points_row_na = dplyr::if_else(points_row == 0, NA_real_, points_row),
       home_points_row = dplyr::case_when(
         home == 0 & final_state == "rushed" ~ points_row,
         home == 1 & final_state != "rushed" ~ points_row,
@@ -111,7 +115,7 @@ clean_pbp <- function(df) {
       is_goal_row = dplyr::if_else(description == "Goal", 1, 0),
       is_behind_row = dplyr::if_else(home_points_row == 1 | away_points_row == 1, 1, 0),
       tot_goals = cumsum(is_goal_row),
-      scoring_team_id = ifelse(points_row != 0, team_id, NA),
+      scoring_team_id = dplyr::if_else(points_row != 0, team_id, NA_character_),
       home_points = cumsum(home_points_row),
       away_points = cumsum(away_points_row),
       pos_points = dplyr::if_else(home == 1, home_points, away_points),
@@ -167,7 +171,7 @@ clean_pbp <- function(df) {
         home_team_score == away_team_score & home == 0 ~ 0.5,
         home_team_score < away_team_score & home == 0 ~ 1
       ),
-      lead_x_tot = dplyr::lead(x, default = dplyr::last(x)),
+      lead_x_tot = dplyr::lead(x, default = dplyr::last(x)), ##### THINK DEFUALT LAST/FIRST IS SLOW, CHECK THIS
       lead_y_tot = dplyr::lead(y, default = dplyr::last(y))
       # lead_goal_x = venue_length / 2 - lead_x,
       # lag_model_desc = dplyr::lag(model_desc, default = "Centre Bounce")
@@ -181,11 +185,12 @@ clean_pbp <- function(df) {
     dplyr::group_by(match_id, chain_number) %>%
     dplyr::mutate(
       shot_display = dplyr::if_else(is.na(shot_at_goal),
-                                    dplyr::if_else(description == "Kick" | description == "Ground Kick" ,display_order, 1L),
-                                    display_order),
+        dplyr::if_else(description == "Kick" | description == "Ground Kick", display_order, 1L),
+        display_order
+      ),
       max_shot_display = max(shot_display),
       points_shot = dplyr::if_else(shot_display == max_shot_display,
-                                   dplyr::case_when(
+        dplyr::case_when(
           final_state == "rushed" ~ 1,
           final_state == "behind" ~ 1,
           final_state == "goal" ~ 6,

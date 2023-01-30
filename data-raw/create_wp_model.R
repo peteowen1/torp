@@ -20,8 +20,10 @@ pbp <- clean_pbp(chains)
 devtools::load_all()
 
 #model_data_wp <- readRDS("model_data_wp.rds")
+tictoc::tic()
 model_data_wp <- model_data_epv %>% add_epv_vars() %>% clean_model_data_wp() #%>% bind_rows(model_data_wp)
-#saveRDS(model_data_wp,"model_data_wp.rds")
+tictoc::toc()
+#saveRDS(model_data_wp,"./data/model_data_wp.rds")
 
 #######################################
 ##################
@@ -44,6 +46,7 @@ params <-
     min_child_weight = 1
   )
 
+
 ###
 full_train <- xgboost::xgb.DMatrix(stats::model.matrix(~ . + 0,
                                                        data = model_data_wp %>% select_wp_model_vars()),
@@ -56,46 +59,73 @@ wp_model <- xgboost::xgboost(
   params = params, data = full_train, nrounds = nrounds, print_every_n = 10
 )
 
+###
+folds <- splitTools::create_folds(
+  y = model_data_wp$match_id,
+  k = 5,
+  type = "grouped",
+  invert = TRUE
+)
+
+wp_cv_model <- xgboost::xgb.cv(
+  data = full_train,
+  label = model_data_wp$label_wp,
+  params = params,
+  # this doesn't matter with early stopping in xgb.cv, just set a big number
+  # the actual optimal rounds will be found in this tuning process
+  nrounds = 1000,
+  # created above
+  folds = folds,
+  metrics = list("logloss"),
+  early_stopping_rounds = 50,
+  print_every_n = 50
+)
+###
+
 #saveRDS(wp_model, "./data/wp_model.rds")
-usethis::use_data(wp_model,overwrite = TRUE)
+### usethis::use_data(wp_model,overwrite = TRUE)
 # #####
-# library(mgcv)
-# wp_model_gam <- mgcv::bam(label_wp ~
-#                       ti(goal_x,y, bs=c("ts","ts"),k=4)
-#                     + s(goal_x, bs="ts",k=5) + s(y, bs="ts",k=5)
-#                     + ti(total_seconds,xpoints_diff, bs=c("ts","ts"),k=4) +
-#                     + ti(total_seconds,pos_lead_prob, bs=c("ts","ts"),k=4)
-#                     + s(xpoints_diff, bs="ts",k=5) + s(pos_lead_prob, bs="ts",k=5) + s(points_diff, bs="ts",k=5)
-#                     + s(diff_time_ratio, bs="ts",k=5)
-#                     + s(home, bs="re")
-#                     + s(play_type, bs="re") +  + s(phase_of_play, bs="re")
-#                     ,
-#                     data = model_data_wp, family = "binomial"  , nthreads = 4 ,select = T, discrete = T)
-#
-# # summary(wp_model_gam)
-# usethis::use_data(wp_model_gam,overwrite = TRUE)
-#
-# # plot(mgcViz::getViz(wp_model_gam))
-# ModelMetrics::logLoss(model_data_wp$label_wp,predict.bam(wp_model_gam,model_data_wp,type="response"))
+library(mgcv)
+wp_model_gam <- mgcv::bam(label_wp ~
+                      ti(goal_x,y, bs=c("ts","ts"),k=4)
+                    + s(goal_x, bs="ts",k=5) + s(y, bs="ts",k=5)
+                    + ti(total_seconds,xpoints_diff, bs=c("ts","ts"),k=4) +
+                    + ti(total_seconds,pos_lead_prob, bs=c("ts","ts"),k=4)
+                    + s(xpoints_diff, bs="ts",k=5) + s(pos_lead_prob, bs="ts",k=5) + s(points_diff, bs="ts",k=5)
+                    + s(diff_time_ratio, bs="ts",k=5)
+                    + s(home, bs="re")
+                    + s(play_type, bs="re") +  + s(phase_of_play, bs="re")
+                    ,
+                    data = model_data_wp, family = "binomial"  , nthreads = 4 ,select = T, discrete = T)
+
+# summary(wp_model_gam)
+### usethis::use_data(wp_model_gam,overwrite = TRUE)
+
+# plot(mgcViz::getViz(wp_model_gam))
+ModelMetrics::logLoss(model_data_wp$label_wp,predict.bam(wp_model_gam,model_data_wp,type="response"))
+ModelMetrics::logLoss(model_data_wp$label_wp,model_data_wp %>% add_wp_vars() %>% pull(wp))
+ModelMetrics::logLoss(model_data_wp$label_wp,rep(0.5,nrow(model_data_wp)))
+
 # ###########
 # ### TESTING
 # #######
 df <- #load_chains(2021, 27) %>%
   #get_week_chains(2022,26) %>%
   model_data_wp %>% #select(-opp_goal,-opp_behind,-behind,-goal,-no_score)%>%
-  filter(match_id == "CD_M20220142602") %>%
+  filter(match_id == "CD_M20220142701") %>%
   # # janitor::clean_names() %>%
   # # clean_pbp() %>%
-  # clean_model_data_epv() %>%
-  # add_epv_vars() %>%
-  # clean_model_data_wp() %>%
-  # add_wp_vars() #%>%
+  #clean_model_data_epv() %>%
+  #add_epv_vars() %>%
+  #clean_model_data_wp() %>%
+  add_wp_vars() %>%
   select(
     rn = display_order, chain = chain_number, period, secs = period_seconds, x,#x2,
     y, desc = description, jumper = jumper_number,
     player_id, player_name, team, team_id_mdl,
     lead_player, lead_team, delta_epv, pos_team,
-    exp_pts,xpoints_diff,wp,wpa, opp_goal, opp_behind, behind, goal, no_score, player_position,
+    exp_pts,xpoints_diff,wp,wpa,
+    opp_goal, opp_behind, behind, goal, no_score, player_position,
     goal_x,play_type,phase_of_play,
     kick_points,speed5,lag_goal_x5,throw_in,team_id
   )

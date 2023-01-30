@@ -18,7 +18,7 @@ load_chains <- function(seasons = NULL, rounds = NULL, file_type = "rds") {
 
   if (is.null(rounds)) {
     cli::cli_alert_info("No rounds specified - returning results for all rounds in {.val {seasons}}")
-    rounds <- 1:30
+    rounds <- 1:27
   }
 
   urls <- purrr::map(seasons,~paste0(

@@ -34,14 +34,14 @@ add_epv_vars <- function(df) {
         is.na(dplyr::lead(team_id_mdl)) ~ 1,
         TRUE ~ -1
       ),
-      lead_points = ifelse(is.na(points_shot), dplyr::lead(exp_pts, default = 0), (points_shot - lead(exp_pts, default = 0))), ### maybe? (kick_points - lead_exp_pts) e.g. for behinds
-      lead_player = ifelse(!is.na(points_shot) | lead_desc == "Out of Bounds" | description == "Out On Full After Kick",
+      lead_points = dplyr::if_else(is.na(points_shot), dplyr::lead(exp_pts, default = 0), (points_shot - lead(exp_pts, default = 0))), ### maybe? (kick_points - lead_exp_pts) e.g. for behinds
+      lead_player = dplyr::if_else(!is.na(points_shot) | lead_desc == "Out of Bounds" | description == "Out On Full After Kick",
         player_name, dplyr::lead(player_name)
       ),
-      lead_player_id = ifelse(!is.na(points_shot) | lead_desc == "Out of Bounds" | description == "Out On Full After Kick",
+      lead_player_id = dplyr::if_else(!is.na(points_shot) | lead_desc == "Out of Bounds" | description == "Out On Full After Kick",
         player_id, dplyr::lead(player_id)
       ),
-      lead_team = ifelse(is.na(points_shot), dplyr::lead(team), team),
+      lead_team = dplyr::if_else(is.na(points_shot), dplyr::lead(team), team),
       delta_epv = round(lead_points * pos_team - exp_pts, 5),
       weight_gm = exp(as.numeric(-(Sys.Date() - as.Date(utc_start_time))) / 365),
       round_week = sprintf("%02d", round_number)
@@ -57,9 +57,9 @@ add_shot_preds <- function(df) {
 
   pbp_final <- cbind(df, base_shot_preds)
   pbp_final <- pbp_final %>%
-    mutate(clanger_prob = ifelse(!is.na(shot_at_goal),clanger_prob,NA),
-           behind_prob = ifelse(!is.na(shot_at_goal),behind_prob,NA),
-           goal_prob = ifelse(!is.na(shot_at_goal),goal_prob,NA),
+    mutate(clanger_prob = dplyr::if_else(!is.na(shot_at_goal),clanger_prob,NA),
+           behind_prob = dplyr::if_else(!is.na(shot_at_goal),behind_prob,NA),
+           goal_prob = dplyr::if_else(!is.na(shot_at_goal),goal_prob,NA),
            xg = 6*goal_prob + behind_prob)
 
   return(pbp_final)
@@ -93,8 +93,8 @@ add_shot_vars <- function(df) {
   pbp_final <- pbp_final %>%
     dplyr::mutate(
       goal_prob = round(
-        ifelse(
-        !is.na(points_shot), goal_prob, NA),
+        dplyr::if_else(
+        !is.na(points_shot), goal_prob, NA_real_),
         5),
       xscore = goal_prob*6 + (1-goal_prob)
     ) %>%

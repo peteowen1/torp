@@ -68,27 +68,27 @@ clean_model_data_epv <- function(df) {
       team_id_mdl = zoo::na.locf0(team_id_mdl, fromLast = TRUE),
       team_id_mdl = zoo::na.locf0(team_id_mdl),
       x = dplyr::case_when(
-        #(throw_in == 1 & lag(throw_in) != 1 & dplyr::lag(team_id_mdl) == team_id_mdl) ~ x,
+        # not needed for now #(throw_in == 1 & lag(throw_in) != 1 & dplyr::lag(team_id_mdl) == team_id_mdl) ~ x,
         (throw_in == 1 & lag(throw_in) != 1 & dplyr::lag(team_id_mdl) != team_id_mdl) ~ -x,
-        #(throw_in == 1 & lag(throw_in) == 1 & dplyr::lag(team_id_mdl,n=2L) == team_id_mdl) ~ x,
+        # not needed for now  #(throw_in == 1 & lag(throw_in) == 1 & dplyr::lag(team_id_mdl,n=2L) == team_id_mdl) ~ x,
         (throw_in == 1 & lag(throw_in) == 1 & dplyr::lag(team_id_mdl,n=2L) != team_id_mdl) & sign(dplyr::lag(x)) == sign(x) ~ -x,
         (throw_in == 1 & lag(throw_in) == 1  & dplyr::lag(team_id_mdl,n=2L) == team_id_mdl & sign(dplyr::lag(x)) != sign(x)) ~ -x,
         (dplyr::lag(throw_in) == 1 & sign(dplyr::lag(x)) == sign(x) & dplyr::lag(team_id_mdl) == team_id_mdl & dplyr::lag(team_id_mdl,n=2L) != team_id_mdl) ~ -x,
         (dplyr::lag(throw_in, n = 2L) == 1 & sign(dplyr::lag(x,n=2L)) == sign(x) & dplyr::lag(team_id_mdl,n=2L) == team_id_mdl & dplyr::lag(team_id_mdl,n=3L) != team_id_mdl) ~ -x,
-        #(dplyr::lag(throw_in, n = 3L) == 1 & sign(dplyr::lag(x,n=3L)) == sign(x) & dplyr::lag(team_id_mdl,n=3L) == team_id_mdl & dplyr::lag(team_id_mdl,n=4L) != team_id_mdl) ~ -x,
+        # not needed for now  #(dplyr::lag(throw_in, n = 3L) == 1 & sign(dplyr::lag(x,n=3L)) == sign(x) & dplyr::lag(team_id_mdl,n=3L) == team_id_mdl & dplyr::lag(team_id_mdl,n=4L) != team_id_mdl) ~ -x,
         (dplyr::lag(throw_in) == 1 & sign(dplyr::lead(x,n=2L)) == sign(x) & dplyr::lead(team_id_mdl,n=2L) != team_id_mdl) ~ -x,
         (dplyr::lag(throw_in,n=2L) == 1 & sign(dplyr::lead(x)) == sign(x) & dplyr::lead(team_id_mdl) != team_id_mdl) ~ -x,
-        # (description == "Mark Dropped" & dplyr::lag(team_id_mdl, default = dplyr::first(team_id_mdl)) != team_id_mdl) ~ -x,
+        # not needed for now  # (description == "Mark Dropped" & dplyr::lag(team_id_mdl, default = dplyr::first(team_id_mdl)) != team_id_mdl) ~ -x,
         TRUE ~ x
       ),
       goal_x = venue_length / 2 - x,
-      lag_x = ifelse(dplyr::lag(team_id_mdl) == team_id_mdl, dplyr::lag(x), -dplyr::lag(x)),
+      lag_x = dplyr::if_else(dplyr::lag(team_id_mdl) == team_id_mdl, dplyr::lag(x,default = dplyr::first(x)), -dplyr::lag(x,default = dplyr::first(x))),
       lag_x = tidyr::replace_na(lag_x, dplyr::first(x)),
-      lag_y = ifelse(dplyr::lag(team_id_mdl) == team_id_mdl, dplyr::lag(y), -dplyr::lag(y)),
-      lag_y = tidyr::replace_na(lag_y, first(y)),
-      lag_goal_x = dplyr::if_else(lag(team_id_mdl, 1) == team_id_mdl, dplyr::lag(goal_x, 1), venue_length - dplyr::lag(goal_x, 1)),
+      lag_y = dplyr::if_else(dplyr::lag(team_id_mdl) == team_id_mdl, dplyr::lag(y,default = dplyr::first(y)), -dplyr::lag(y,default = dplyr::first(y))),
+      lag_y = tidyr::replace_na(lag_y, dplyr::first(y)),
+      lag_goal_x = dplyr::if_else(lag(team_id_mdl, 1) == team_id_mdl, dplyr::lag(goal_x,default = dplyr::first(goal_x)), venue_length - dplyr::lag(goal_x,default = dplyr::first(goal_x))),
       lag_goal_x = tidyr::replace_na(lag_goal_x, dplyr::first(goal_x)),
-      lag_goal_x5 = dplyr::if_else(lag(team_id_mdl, 5) == team_id_mdl, dplyr::lag(goal_x, 5), venue_length - dplyr::lag(goal_x, 5)),
+      lag_goal_x5 = dplyr::if_else(lag(team_id_mdl, 5) == team_id_mdl, dplyr::lag(goal_x, 5, default = dplyr::first(goal_x)), venue_length - dplyr::lag(goal_x, 5, default = dplyr::first(goal_x))),
       lag_goal_x5 = tidyr::replace_na(lag_goal_x5, dplyr::first(goal_x)),
       lag_time5 = dplyr::lag(period_seconds, 5, default = dplyr::first(period_seconds)),
       speed1 = (lag_goal_x - goal_x) / pmax((period_seconds - lag(period_seconds)), 1),
@@ -183,11 +183,11 @@ clean_shots_data <- function(df){
   df$side_b <- sqrt((df$goal_x)^2 + (df$y + goal_width/2 )^2)
   df$side_c <- sqrt((df$goal_x)^2 + (df$y - goal_width/2)^2)
   df$angle <-  acos((df$side_b^2 + df$side_c^2 - goal_width^2)/(2*df$side_b*df$side_c))
-  df$distance <- ifelse(df$y >= -goal_width/2 & df$y <= goal_width/2,
+  df$distance <- dplyr::if_else(df$y >= -goal_width/2 & df$y <= goal_width/2,
                         df$goal_x, pmin(df$side_b ,df$side_c ))
-  df$shot_clanger <- ifelse(df$shot_at_goal == TRUE & df$disposal == "clanger",1,0)
-  df$shot_effective <- ifelse(df$shot_at_goal == TRUE & df$disposal == "effective",1,0)
-  df$shot_ineffective <- ifelse(df$shot_at_goal == TRUE & df$disposal == "ineffective",1,0)
+  df$shot_clanger <- dplyr::if_else(df$shot_at_goal == TRUE & df$disposal == "clanger",1,0)
+  df$shot_effective <- dplyr::if_else(df$shot_at_goal == TRUE & df$disposal == "effective",1,0)
+  df$shot_ineffective <- dplyr::if_else(df$shot_at_goal == TRUE & df$disposal == "ineffective",1,0)
 
   df <- df %>%
     left_join(shot_player_df,by = c('player_name'='player_name_shot'),keep = TRUE)

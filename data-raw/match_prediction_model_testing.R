@@ -267,3 +267,12 @@ for (i in 51:56) {
   x <- (bind_cols(pos = colnames(team_rt_df[, i]), sdz = (sqrt(var(team_rt_df[, i] %>% pull()))), avg = (mean(team_rt_df[, i] %>% pull(), na.rm = T))))
   tot_x <- bind_rows(tot_x, x)
 }
+
+# ###
+# xg_df <- furrr::future_map_dfr(1:27,~match_xgs(2022,.))
+#
+# xg_df2 <- xg_df %>%
+#   mutate(score_diff = home_shots_score - away_shots_score,
+#          xscore_diff = home_xscore - away_xscore)
+#
+# ModelMetrics::mae(xg_df2$score_diff,xg_df2$xscore_diff)
