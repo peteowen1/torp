@@ -16,5 +16,5 @@ write_chains <- function(season,roundnum){
 # furrr::future_map(1:27,~write_chains(2021,.))
 
 ### map through 2022
-furrr::future_map(27:27,~write_chains(2022,.))
+purrr::map(27:27,~write_chains(2022,.))
 

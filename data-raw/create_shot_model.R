@@ -54,18 +54,19 @@ shot_result_mdl <-
       + s(play_type, bs = "re") + s(phase_of_play, bs = "re")
       + s(player_position_fac, bs = "re")
       + s(player_name_shot, bs = "re"),
-    data = shots, family = stats::binomial(), nthreads = 4, select = TRUE, discrete = TRUE, drop.unused.levels = FALSE
+    data = shots, family = stats::binomial(), nthreads = 4,
+    select = TRUE, discrete = TRUE, drop.unused.levels = FALSE
   )
 
 
 # ModelMetrics::logLoss(shots$shot_result,predict.bam(shot_result_mdl,shots,type="response"))
 ### save data
-usethis::use_data(shot_result_mdl, overwrite = TRUE)
+# usethis::use_data(shot_result_mdl, overwrite = TRUE)
 ####
 player_shot_score <- mixedup::extract_ranef(shot_result_mdl) %>%
   dplyr::filter(group_var == "player_name_shot") %>%
   dplyr::arrange(-value) # %>% tibble::view()
 
-usethis::use_data(player_shot_score, overwrite = TRUE)
+# usethis::use_data(player_shot_score, overwrite = TRUE)
 
 # shots$pred <- predict.bam(shot_result_mdl,shots,type="response")

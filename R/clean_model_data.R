@@ -95,7 +95,7 @@ clean_model_data_epv <- function(df) {
       speed1 = tidyr::replace_na(speed1, 0),
       speed5 = (lag_goal_x5 - goal_x) / pmax((period_seconds - lag_time5), 1),
       speed5 = tidyr::replace_na(speed5, 0),
-      lag_player = dplyr::lag(player_name, default = dplyr::first(description)),
+      lag_player = dplyr::lag(player_name, default = dplyr::first(player_name)),
       lead_player = dplyr::lead(player_name, default = dplyr::last(player_name)),
       lead_x = dplyr::lead(x, default = dplyr::last(x)),
       lead_y = dplyr::lead(y, default = dplyr::last(y)),

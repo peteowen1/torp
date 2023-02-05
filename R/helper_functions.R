@@ -10,12 +10,16 @@
 #' clean_pbp(df)
 #' }
 clean_pbp <- function(df) {
+  ### JANITOR CLEAN
+  df <- janitor::clean_names(df)
+
   ### TOTAL VARIABLE CHANGE
   df <-
     df %>%
     dplyr::mutate(
-      row_id = paste0(match_id, sprintf("%04d", display_order)),
-      match_chain_id = paste0(match_id, chain_number),
+      torp_match_id = glue::glue('{season}_{round_number}_{home_team_team_abbr}_{away_team_team_abbr}'),
+      torp_row_id = paste0(torp_match_id, sprintf("%04d", display_order)),
+      torp_match_chain_id = paste0(torp_row_id, chain_number),
       y = -y,
       x = dplyr::if_else(description == "Spoil", -x, x),
       x = dplyr::if_else(!is.na(shot_at_goal) & x < 0, -x, x),
@@ -47,7 +51,11 @@ clean_pbp <- function(df) {
       team_id_mdl = zoo::na.locf0(team_id_mdl, fromLast = TRUE),
       team_id_mdl = zoo::na.locf0(team_id_mdl),
       home = dplyr::if_else(team_id_mdl == home_team_id, 1, 0),
-      total_seconds = cumsum(period_seconds),
+      total_seconds = ifelse(period == 1, period_seconds,
+                        ifelse(period == 2, 1800 + period_seconds,
+                          ifelse(period == 3, 3600 + period_seconds,
+                            ifelse(period == 4, 5400 + period_seconds, NA_integer_
+                                    )))),
       lag_desc_tot = dplyr::lag(description, default = "First Bounce"),
       ################## MAYBE CHANGE PHASE OF PLAY TO BE A LOOKUP
       phase_of_play =
@@ -164,15 +172,15 @@ clean_pbp <- function(df) {
     dplyr::group_by(match_id, period, tot_goals) %>%
     dplyr::mutate(
       label_wp = dplyr::case_when(
-        home_team_score > away_team_score & home == 1 ~ 1,
-        home_team_score == away_team_score & home == 1 ~ 0.5,
-        home_team_score < away_team_score & home == 1 ~ 0,
-        home_team_score > away_team_score & home == 0 ~ 0,
-        home_team_score == away_team_score & home == 0 ~ 0.5,
-        home_team_score < away_team_score & home == 0 ~ 1
+        home_team_score_total_score > away_team_score_total_score & home == 1 ~ 1,
+        home_team_score_total_score == away_team_score_total_score & home == 1 ~ 0.5,
+        home_team_score_total_score < away_team_score_total_score & home == 1 ~ 0,
+        home_team_score_total_score > away_team_score_total_score & home == 0 ~ 0,
+        home_team_score_total_score == away_team_score_total_score & home == 0 ~ 0.5,
+        home_team_score_total_score < away_team_score_total_score & home == 0 ~ 1
       ),
       lead_x_tot = dplyr::lead(x, default = dplyr::last(x)), ##### THINK DEFUALT LAST/FIRST IS SLOW, CHECK THIS
-      lead_y_tot = dplyr::lead(y, default = dplyr::last(y))
+      lead_y_tot = dplyr::lead(y, default = dplyr::last(y)) ##### THINK DEFUALT LAST/FIRST IS SLOW, CHECK THIS
       # lead_goal_x = venue_length / 2 - lead_x,
       # lag_model_desc = dplyr::lag(model_desc, default = "Centre Bounce")
     ) %>%

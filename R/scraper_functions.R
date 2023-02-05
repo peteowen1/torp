@@ -59,17 +59,13 @@ get_week_chains <- function(season,roundnum) {
     return(data.table::data.table())
   }
 
-  load <- load %>% janitor::clean_names()
-  if ("team_team_name" %in% colnames(load)) {
+  if ("team.teamName" %in% colnames(load)) {
     load <-
       load %>%
       dplyr::rename(
-        team = team_team_name,
-        home_team = home_team_team_name,
-        away_team = away_team_team_name,
-        home_team_score = home_team_score_total_score,
-        away_team_score = away_team_score_total_score,
-        home_team_direction = home_team_direction_qtr1
+        team = team.teamName,
+        home_team = homeTeam.teamName,
+        away_team = awayTeam.teamName,
       )
   }
   return(load)
@@ -174,7 +170,7 @@ get_players <- function() {
 get_many_game_chains <- function(games_vector) {
   p <- progressr::progressor(steps = length(games_vector))
 
-  chains <- furrr::future_map_dfr(games_vector,
+  chains <- purrr::map_df(games_vector,
     ~ {
       p()
       get_game_chains(.)

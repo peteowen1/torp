@@ -16,6 +16,8 @@ chains <- load_chains(2021:lubridate::year(Sys.Date())) %>%
 
 pbp <- clean_pbp(chains)
 
+model_data_epv <- clean_model_data_epv(pbp)
+
 ###########################
 devtools::load_all()
 
@@ -27,7 +29,7 @@ tictoc::toc()
 
 #######################################
 ##################
-nrounds = 75
+nrounds = 100
 params <-
   list(
     booster = "gbtree",
@@ -60,30 +62,31 @@ wp_model <- xgboost::xgboost(
 )
 
 ###
-folds <- splitTools::create_folds(
-  y = model_data_wp$match_id,
-  k = 5,
-  type = "grouped",
-  invert = TRUE
-)
-
-wp_cv_model <- xgboost::xgb.cv(
-  data = full_train,
-  label = model_data_wp$label_wp,
-  params = params,
-  # this doesn't matter with early stopping in xgb.cv, just set a big number
-  # the actual optimal rounds will be found in this tuning process
-  nrounds = 1000,
-  # created above
-  folds = folds,
-  metrics = list("logloss"),
-  early_stopping_rounds = 50,
-  print_every_n = 50
-)
+# folds <- splitTools::create_folds(
+#   y = model_data_wp$match_id,
+#   k = 5,
+#   type = "grouped",
+#   invert = TRUE
+# )
+#
+# wp_cv_model <- xgboost::xgb.cv(
+#   data = full_train,
+#   label = model_data_wp$label_wp,
+#   params = params,
+#   # this doesn't matter with early stopping in xgb.cv, just set a big number
+#   # the actual optimal rounds will be found in this tuning process
+#   nrounds = 1000,
+#   # created above
+#   folds = folds,
+#   metrics = list("logloss"),
+#   early_stopping_rounds = 50,
+#   print_every_n = 50
+# )
 ###
 
 #saveRDS(wp_model, "./data/wp_model.rds")
-### usethis::use_data(wp_model,overwrite = TRUE)
+usethis::use_data(wp_model,overwrite = TRUE)
+
 # #####
 library(mgcv)
 wp_model_gam <- mgcv::bam(label_wp ~
@@ -94,9 +97,10 @@ wp_model_gam <- mgcv::bam(label_wp ~
                     + s(xpoints_diff, bs="ts",k=5) + s(pos_lead_prob, bs="ts",k=5) + s(points_diff, bs="ts",k=5)
                     + s(diff_time_ratio, bs="ts",k=5)
                     + s(home, bs="re")
-                    + s(play_type, bs="re") +  + s(phase_of_play, bs="re")
+                    + s(play_type, bs="re") + s(phase_of_play, bs="re")
                     ,
-                    data = model_data_wp, family = "binomial"  , nthreads = 4 ,select = T, discrete = T)
+                    data = model_data_wp, family = "binomial",
+                    nthreads = 4, select = T, discrete = T)
 
 # summary(wp_model_gam)
 ### usethis::use_data(wp_model_gam,overwrite = TRUE)
@@ -127,7 +131,7 @@ df <- #load_chains(2021, 27) %>%
     exp_pts,xpoints_diff,wp,wpa,
     opp_goal, opp_behind, behind, goal, no_score, player_position,
     goal_x,play_type,phase_of_play,
-    kick_points,speed5,lag_goal_x5,throw_in,team_id
+    kick_points,speed5,lag_goal_x5,throw_in,team_id,total_seconds
   )
 
 #
