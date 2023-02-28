@@ -15,20 +15,22 @@ results <-
 
 ############# 2021
 ##############################
+if (exists("final_21") == FALSE) {
 final_21 <- furrr::future_map_dfr(2:28, ~ plyr_ratings(plyr_gm_df, teams, 2021, .))
 saveRDS(final_21, "./data/plyr_df_2021.rds")
 final_21 <- readRDS("./data/plyr_df_2021.rds")
-
+}
 ### 2022
 n <- max(teams %>% dplyr::filter(season == lubridate::year(Sys.Date()), utcStartTime < Sys.time() + 350000) %>%
   dplyr::select(round.roundNumber)) + 1
 
 n <- 28
 ### 2022
+if (exists("final_22") == FALSE) {
 final_22 <- furrr::future_map_dfr(1:n, ~ plyr_ratings(plyr_gm_df, teams, 2022, .))
 saveRDS(final_22, "./data/plyr_df_2022.rds")
 final_22 <- readRDS("./data/plyr_df_2022.rds")
-
+}
 ### final
 final <- dplyr::bind_rows(final_21, final_22)
 
@@ -143,23 +145,24 @@ team_rt_df <-
     key_fwd = sum(key_fwd, na.rm = T),
     rucks = sum(rucks, na.rm = T),
     other_pos = sum(other_pos, na.rm = T),
-    count = n()
+    count = dplyr::n()
   ) %>%
   dplyr::ungroup() %>%
   dplyr::group_by(teamName.x) %>%
   tidyr::fill(bayes_g, bayes_recv_g, bayes_disp_g) %>%
-  mutate(
-    def = ifelse(def == 0, lag(def), def),
-    mid = ifelse(mid == 0, lag(mid), mid),
-    fwd = ifelse(fwd == 0, lag(fwd), fwd),
-    int = ifelse(int == 0, lag(int), int)
+  dplyr::mutate(
+    def = ifelse(def == 0, dplyr::lag(def), def),
+    mid = ifelse(mid == 0, dplyr::lag(mid), mid),
+    fwd = ifelse(fwd == 0, dplyr::lag(fwd), fwd),
+    int = ifelse(int == 0, dplyr::lag(int), int)
   ) %>%
   tidyr::fill(def, mid, fwd, int) %>%
   dplyr::ungroup()
 
 ####
 team_mdl_df <- team_rt_df %>% # filter(!is.na(bayes_g)) %>%
-  dplyr::left_join(team_rt_df %>% mutate(typ2 = ifelse(teamType.x == "home", "away", "home")),
+  dplyr::left_join(team_rt_df %>%
+                     dplyr::mutate(typ2 = dplyr::if_else(teamType.x == "home", "away", "home")),
     by = c("providerId" = "providerId", "teamType.x" = "typ2")
   ) %>%
   dplyr::mutate(
@@ -212,11 +215,11 @@ team_mdl_df <- team_rt_df %>% # filter(!is.na(bayes_g)) %>%
 
 
 #### MODEL
-library(mgcViz)
+# library(mgcViz)
 # set.seed("1234")
 
 ###
-afl_totshots_mdl <- bam(total_shots ~
+afl_totshots_mdl <- mgcv::bam(total_shots ~
   s(team_type_fac, bs = "re")
   + s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
   + s(abs(bayes_g_diff), bs = "ts", k = 5),
@@ -227,7 +230,7 @@ team_mdl_df$pred_totshots <- predict(afl_totshots_mdl, newdata = team_mdl_df, ty
 # Deviance explained =   22%
 
 ###
-afl_shot_mdl <- bam(shot_diff ~
+afl_shot_mdl <- mgcv::bam(shot_diff ~
   s(team_type_fac, bs = "re")
   + s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
   + ti(bayes_g_diff, pred_totshots, bs = c("ts", "ts"), k = 4)
@@ -240,7 +243,7 @@ team_mdl_df$pred_shot_diff <- predict(afl_shot_mdl, newdata = team_mdl_df, type 
 # Deviance explained = 44.5%
 
 ###
-afl_conv_mdl <- bam(shot_conv ~
+afl_conv_mdl <- mgcv::bam(shot_conv ~
   s(team_type_fac, bs = "re")
   #+ s(team_name.x, bs = "re")+ s(team_name.y, bs = "re")
   + ti(bayes_g_diff, pred_totshots, bs = c("ts", "ts"), k = 4)
@@ -256,7 +259,7 @@ team_mdl_df$pred_conv <- predict(afl_conv_mdl, newdata = team_mdl_df, type = "re
 
 ###
 
-afl_score_mdl <- bam(score_diff ~
+afl_score_mdl <- mgcv::bam(score_diff ~
   s(team_type_fac, bs = "re")
   + s(pred_totshots, bs = "ts", k = 5)
   + ti(pred_shot_diff, pred_conv, bs = c("ts", "ts"), k = 4)
@@ -273,7 +276,7 @@ team_mdl_df$pred_score_diff <- predict(afl_score_mdl, newdata = team_mdl_df, typ
 
 ###
 afl_win_mdl <-
-  bam(win ~
+  mgcv::bam(win ~
     s(team_type_fac, bs = "re")
     + ti(pred_totshots, pred_score_diff, bs = c("ts", "ts"), k = 4)
     + s(pred_score_diff, bs = "ts", k = 5),
@@ -289,8 +292,8 @@ team_mdl_df$bits <- ifelse(team_mdl_df$win == 1,
 team_mdl_df$tips <- ifelse(round(team_mdl_df$pred_win) == team_mdl_df$win, 1, 0)
 team_mdl_df$mae <- abs(team_mdl_df$score_diff - team_mdl_df$pred_score_diff)
 #########
-test_df <- team_mdl_df %>% filter(!is.na(win), win != 0.5, teamType.x == "home", season.x >= 2022)
-library(MLmetrics)
+test_df <- team_mdl_df %>% dplyr::filter(!is.na(win), win != 0.5, teamType.x == "home", season.x >= 2022)
+#library(MLmetrics)
 MLmetrics::LogLoss(test_df$pred_win, test_df$win)
 MLmetrics::MAE(test_df$pred_score_diff, test_df$score_diff)
 sum(test_df$bits)

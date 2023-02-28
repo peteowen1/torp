@@ -4,7 +4,7 @@ set.seed(1234)
 
 mdl_wk <- function(df, season, weeknum) {
   val <- paste0("CD_M", season, "014", sprintf("%02d", weeknum))
-  team_func_df <- df %>% filter(providerId < val)
+  team_func_df <- df %>% dplyr::filter(providerId < val)
   if (!is.na(max(team_func_df$homeTeamScore.matchScore.totalScore))) {
     weightz_func <- exp(as.numeric(-(max(as.Date(team_func_df$match.utcStartTime)) - as.Date(team_func_df$match.utcStartTime))) / 250)
     weightz_func <- weightz_func / mean(weightz_func, na.rm = T)
@@ -120,7 +120,7 @@ mdl_wk <- function(df, season, weeknum) {
     df$pred_win <- predict(afl_win_mdl, newdata = df, type = "response")
 
     #########
-    test_df <- df %>% filter(season.x == season, round.roundNumber.x.x == weeknum, team_type_fac == "home")
+    test_df <- df %>% dplyr::filter(season.x == season, round.roundNumber.x.x == weeknum, team_type_fac == "home")
     test_df$max_wp <- pmax(test_df$pred_win, 1 - test_df$pred_win)
     test_df$bits <- ifelse(test_df$win == 1,
       1 + log2(test_df$pred_win),
@@ -143,7 +143,7 @@ mdl_wk <- function(df, season, weeknum) {
     return(test_df)
   }
 
-  test_df <- df %>% filter(season.x == season, round.roundNumber.x.x == weeknum, team_type_fac == "home")
+  test_df <- df %>% dplyr::filter(season.x == season, round.roundNumber.x.x == weeknum, team_type_fac == "home")
   print(weeknum)
   return(test_df)
 }
@@ -151,11 +151,11 @@ mdl_wk <- function(df, season, weeknum) {
 #########################################################
 season <- 2022
 resultz <- furrr::future_map_dfr(1:30, ~ mdl_wk(team_mdl_df, season, .), .options = furrr_options(seed = TRUE))
-rez <- resultz %>% filter(!is.na(bits))
+rez <- resultz %>% dplyr::filter(!is.na(bits))
 ####
-library(MLmetrics)
-LogLoss(rez$pred_win, rez$win)
-MAE(rez$pred_score_diff, rez$score_diff)
+# library(MLmetrics)
+MLmetrics::LogLoss(rez$pred_win, rez$win)
+MLmetrics::MAE(rez$pred_score_diff, rez$score_diff)
 sum(rez$bits)
 mean(rez$bits)
 sum(rez$tips)
@@ -233,39 +233,39 @@ summary(coef(afl_score_mdl)[2:7])
 # plot(mgcViz::getViz(afl_score_mdl))
 
 team_rt_df <- team_rt_df %>%
-  mutate(
-    backs_adj = replace_na(backs*backs_ind , 0),
-    half_backs_adj = replace_na(half_backs*half_backs_ind , 0),
-    midfielders_adj = replace_na(midfielders*midfielders_ind , 0),
-    followers_adj = replace_na(followers*followers_ind , 0),
-    half_forwards_adj = replace_na(half_forwards*half_forwards_ind , 0),
-    forwards_adj = replace_na(forwards*forwards_ind , 0),
+  dplyr::mutate(
+    backs_adj = tidyr::replace_na(backs*backs_ind , 0),
+    half_backs_adj = tidyr::replace_na(half_backs*half_backs_ind , 0),
+    midfielders_adj = tidyr::replace_na(midfielders*midfielders_ind , 0),
+    followers_adj = tidyr::replace_na(followers*followers_ind , 0),
+    half_forwards_adj = tidyr::replace_na(half_forwards*half_forwards_ind , 0),
+    forwards_adj = tidyr::replace_na(forwards*forwards_ind , 0),
     ### ind pos
-    BPL2 = replace_na(BPL^BP_ind, 0),
-    BPR2 = replace_na(BPR^BP_ind, 0),
-    FB2 = replace_na(FB^FB_ind, 0),
-    HBFL2 = replace_na(HBFL^HBF_ind, 0),
-    HBFR2 = replace_na(HBFR^HBF_ind, 0),
-    CHB2 = replace_na(CHB^CHB_ind, 0),
-    WL2 = replace_na(WL^W_ind, 0),
-    WR2 = replace_na(WR^W_ind, 0),
-    C2 = replace_na(C^C_ind, 0),
-    R2 = replace_na(R^R_ind, 0),
-    RR2 = replace_na(RR^RR_ind, 0),
-    RK2 = replace_na(RK^RK_ind, 0),
-    HFFL2 = replace_na(HFFL^HFF_ind, 0),
-    HFFR2 = replace_na(HFFR^HFF_ind, 0),
-    CHF2 = replace_na(CHF^CHF_ind, 0),
-    FPL2 = replace_na(FPL^FP_ind, 0),
-    FPR2 = replace_na(FPR^FP_ind, 0),
-    FF2 = replace_na(FF^FF_ind, 0)
+    BPL2 = tidyr::replace_na(BPL^BP_ind, 0),
+    BPR2 = tidyr::replace_na(BPR^BP_ind, 0),
+    FB2 = tidyr::replace_na(FB^FB_ind, 0),
+    HBFL2 = tidyr::replace_na(HBFL^HBF_ind, 0),
+    HBFR2 = tidyr::replace_na(HBFR^HBF_ind, 0),
+    CHB2 = tidyr::replace_na(CHB^CHB_ind, 0),
+    WL2 = tidyr::replace_na(WL^W_ind, 0),
+    WR2 = tidyr::replace_na(WR^W_ind, 0),
+    C2 = tidyr::replace_na(C^C_ind, 0),
+    R2 = tidyr::replace_na(R^R_ind, 0),
+    RR2 = tidyr::replace_na(RR^RR_ind, 0),
+    RK2 = tidyr::replace_na(RK^RK_ind, 0),
+    HFFL2 = tidyr::replace_na(HFFL^HFF_ind, 0),
+    HFFR2 = tidyr::replace_na(HFFR^HFF_ind, 0),
+    CHF2 = tidyr::replace_na(CHF^CHF_ind, 0),
+    FPL2 = tidyr::replace_na(FPL^FP_ind, 0),
+    FPR2 = tidyr::replace_na(FPR^FP_ind, 0),
+    FF2 = tidyr::replace_na(FF^FF_ind, 0)
   )
 
-tot_x <- tibble()
+tot_x <- tibble::tibble()
 
 for (i in 51:56) {
-  x <- (bind_cols(pos = colnames(team_rt_df[, i]), sdz = (sqrt(var(team_rt_df[, i] %>% pull()))), avg = (mean(team_rt_df[, i] %>% pull(), na.rm = T))))
-  tot_x <- bind_rows(tot_x, x)
+  x <- (dplyr::bind_cols(pos = colnames(team_rt_df[, i]), sdz = (sqrt(var(team_rt_df[, i] %>% dplyr::pull()))), avg = (mean(team_rt_df[, i] %>% dplyr::pull(), na.rm = T))))
+  tot_x <- dplyr::bind_rows(tot_x, x)
 }
 
 # ###

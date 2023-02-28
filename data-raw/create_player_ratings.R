@@ -6,6 +6,19 @@ teams <-
   dplyr::mutate(season = as.numeric(substr(providerId, 5, 8)))
 }
 
+if (exists("chains") == FALSE) {
+  chains_21 <- purrr::map_df(1:27 ,~readRDS(glue::glue("./chain-data/chain_data_2021_{.}.rds")))
+  chains_22 <- purrr::map_df(1:27 ,~readRDS(glue::glue("./chain-data/chain_data_2022_{.}.rds")))
+  chains <- dplyr::bind_rows(chains_21,chains_22)
+  rm(chains_21,chains_22)
+}
+
+if (exists("model_data_wp") == FALSE) {
+model_data_wp_21 <- purrr::map_df(1:27 ,~readRDS(glue::glue("./pbp-data/pbp_data_2021_{.}.rds")))
+model_data_wp_22 <- purrr::map_df(1:27 ,~readRDS(glue::glue("./pbp-data/pbp_data_2022_{.}.rds")))
+model_data_wp <- dplyr::bind_rows(model_data_wp_21,model_data_wp_22)
+rm(model_data_wp_21,model_data_wp_22)
+}
 ######################################### REMEMBER TO UNCOMMENT ADD_WP_VARS ON ROW 30 AND 52
 ### player value rule of thumb:
 ### APY = bayes_g * 135k + 100k
@@ -31,29 +44,29 @@ teams <-
 decay <- 500
 
 plyr_gm_df <-
-  model_data_wp %>% add_wp_vars() %>%
+  model_data_wp %>% #add_wp_vars() %>%
   dplyr::select(player_name, player_id, match_id,utc_start_time,home_away,away_team,home_team,
                      delta_epv,team,player_position,round_week,wpa) %>%
   dplyr::mutate(weight_gm = exp(as.numeric(-(max(as.Date(utc_start_time)) - as.Date(utc_start_time))) / decay),
                 opp_tm = ifelse(home_away=="Home",away_team,home_team)) %>%
   dplyr::group_by(player_name, player_id, match_id) %>%
   dplyr::summarise(
-    gms = n_distinct(match_id),
+    gms = dplyr::n_distinct(match_id),
     #wt_gms = sum(unique(weight_gm), na.rm = TRUE),
     utc_start_time = max(utc_start_time),
     weight_gm = max(weight_gm),
     disp_pts = sum((delta_epv) / 2),
     disp_pts_wt = sum(delta_epv * max(weight_gm)) / 2,
     disp_wpa = sum((wpa) / 2),
-    disp = floor(n()/2),
-    tm = last(team),
-    opp = last(opp_tm),
-    pos = last(player_position),
-    round = as.numeric(last(round_week)),
-    season = last(lubridate::year(utc_start_time))
+    disp = floor(dplyr::n()/2),
+    tm = dplyr::last(team),
+    opp = dplyr::last(opp_tm),
+    pos = dplyr::last(player_position),
+    round = as.numeric(dplyr::last(round_week)),
+    season = dplyr::last(lubridate::year(utc_start_time))
   ) %>%
   dplyr::left_join(
-    model_data_wp %>% add_wp_vars() %>%
+    model_data_wp %>% #add_wp_vars() %>%
       dplyr::select(lead_player, lead_player_id, match_id,utc_start_time,home_away,away_team,home_team,
                        delta_epv,team,player_position,round_week,pos_team,wpa) %>%
       dplyr::mutate(weight_gm = exp(as.numeric(-(max(as.Date(utc_start_time)) - as.Date(utc_start_time))) / decay)) %>%
@@ -62,28 +75,29 @@ plyr_gm_df <-
         recv_pts = sum((ifelse(pos_team == -1, 1.5 * delta_epv * pos_team ,delta_epv * pos_team)) / 2),
         recv_pts_wt = sum(delta_epv * pos_team * max(weight_gm)) / 2,
         recv_wpa = sum((wpa) / 2),
-        recvs = n()
+        recvs = dplyr::n()
       ),
     by = c("player_name" = "lead_player", "player_id" = "lead_player_id","match_id"="match_id")
   ) %>%
-  dplyr::left_join(pbp %>%
+  dplyr::left_join(chains %>%
               dplyr::filter(description == "Spoil") %>%
-                dplyr::mutate(weight_gm = exp(as.numeric(-(max(as.Date(utc_start_time)) - as.Date(utc_start_time))) / decay)) %>%
-                group_by(player_name, player_id, match_id) %>%
-                summarise(spoils = n(),
+                dplyr::mutate(weight_gm = exp(as.numeric(-(max(as.Date(utcStartTime)) - as.Date(utcStartTime))) / decay)) %>%
+                dplyr::group_by(playerId, matchId) %>%
+                dplyr::mutate() %>%
+                dplyr::summarise(spoils = dplyr::n(),
                           spoil_pts = spoils * 0.25,
                           spoil_pts_wt = spoil_pts * max(weight_gm)),
-              by = c("player_name" = "player_name", "player_id" = "player_id","match_id"="match_id")) %>%
+              by = c("player_id" = "playerId","match_id"="matchId")) %>%
   dplyr::mutate(spoil_pts = tidyr::replace_na(spoil_pts,0) ,
                 spoil_pts_wt = tidyr::replace_na(spoil_pts_wt,0) ,
                 tot_p = recv_pts + disp_pts + spoil_pts,
                 tot_p_wt = recv_pts_wt + disp_pts_wt + spoil_pts_wt,
                 tot_wpa = recv_wpa + disp_wpa) %>%
-  ungroup() %>%
-  mutate(rep_p = 2, #quantile(tot_p,0.2),
+  dplyr::ungroup() %>%
+  dplyr::mutate(rep_p = 2, #quantile(tot_p,0.2),
          tot_p_adj = tot_p - rep_p) %>%
-  relocate(tot_p_adj,disp) %>%
-  filter(!is.na(tm))
+  dplyr::relocate(tot_p_adj,disp) %>%
+  dplyr::filter(!is.na(tm))
 
 
 ###### need to change 'max(as.Date(utc_start_time))' as it doesn't account for regression that should happen between seasons
@@ -91,20 +105,24 @@ plyr_gm_df <-
 plyr_ratings <- function(player_df, team_df, season_val, round_val,decay = 500,prior_games = 4) {
   gwk <- sprintf("%02d", round_val) # keep this in case you change to round -1 or round +1
   match_ref <- paste0("CD_M", season_val, "014", gwk)
-  date_val <- team_df %>% filter(season == season_val, round.roundNumber == round_val) %>% summarise(max(utcStartTime)) %>% pull()
+  date_val <- team_df %>%
+    dplyr::filter(season == season_val, round.roundNumber == round_val) %>%
+    dplyr::summarise(max(utcStartTime)) %>%
+    dplyr::pull()
 
   if (is.na(date_val)) {
     date_val <- Sys.Date()  #max(team_df$utcStartTime)
   }
 
-  plyr_df <- player_df %>% ungroup() %>%
+  plyr_df <- player_df %>%
+    dplyr::ungroup() %>%
     dplyr::filter(match_id <= match_ref) %>%
     dplyr::mutate(
       weight_gm = exp(as.numeric(-(as.Date(date_val) - as.Date(utc_start_time))) / decay)
     ) %>%
-    group_by(player_name,player_id) %>%
+    dplyr::group_by(player_name,player_id) %>%
     dplyr::summarise(
-      gms = n_distinct(match_id),
+      gms = dplyr::n_distinct(match_id),
       wt_gms = sum(unique(weight_gm), na.rm = TRUE),
       tot_p_sum = sum(tot_p_adj * weight_gm),
       tot_wpa_sum = sum(tot_wpa * weight_gm),
@@ -115,7 +133,7 @@ plyr_ratings <- function(player_df, team_df, season_val, round_val,decay = 500,p
       bayes_g = sum(tot_p_adj * weight_gm) / (wt_gms + prior_games),
       bayes_recv_g = sum(recv_pts * weight_gm) / (wt_gms + prior_games),
       bayes_disp_g = sum(disp_pts * weight_gm) / (wt_gms + prior_games),
-      posn = last(pos),
+      posn = dplyr::last(pos),
       round = max(round_val),
       season = max(season_val)
     ) # %>% view()
@@ -128,7 +146,7 @@ plyr_ratings <- function(player_df, team_df, season_val, round_val,decay = 500,p
   final_df <- team_df %>%
     dplyr::filter(season == season_val, round.roundNumber == round_val) %>%
     dplyr::right_join(plyr_df, by = c("player.playerId" = "player_id")) %>%
-    ungroup()
+    dplyr::ungroup()
 
   # final <- bind_rows(final, teams2)
   print(round_val)
@@ -136,15 +154,16 @@ plyr_ratings <- function(player_df, team_df, season_val, round_val,decay = 500,p
 }
 
 ###############
-this_week <- plyr_ratings(plyr_gm_df,teams,2022,28) %>% left_join(fitzRoy::fetch_player_details(),by = c("player.playerId" = "providerId"))
+this_week <- plyr_ratings(plyr_gm_df,teams,2022,28) %>%
+  dplyr::left_join(fitzRoy::fetch_player_details(),by = c("player.playerId" = "providerId"))
 
 season_table <- plyr_gm_df %>%
-  filter(season==2022, round >= 1, round <= 28) %>%
-  group_by(player_name,player_id,tm,pos) %>%
-  summarise(tot_points = sum(tot_p_adj), g = n(),p_g = tot_points/g) %>%
-  left_join(fitzRoy::fetch_player_details(),by = c("player_id" = "providerId")) %>%
-  #filter(year(dateOfBirth)>=2001) %>%
-  arrange(-tot_points) #%>% view()
+  dplyr::filter(season==2022, round >= 1, round <= 28) %>%
+  dplyr::group_by(player_name,player_id,tm,pos) %>%
+  dplyr::summarise(tot_points = sum(tot_p_adj), g = dplyr::n(),p_g = tot_points/g) %>%
+  dplyr::left_join(fitzRoy::fetch_player_details(),by = c("player_id" = "providerId")) %>%
+  #dplyr::filter(year(dateOfBirth)>=2001) %>%
+  dplyr::arrange(-tot_points) #%>% view()
 
 # final_22 %>% filter(round.roundNumber==2) %>%
 #   left_join(final_22 %>% filter(round.roundNumber==23),by = c('player.playerId'='player.playerId')) %>%

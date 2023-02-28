@@ -14,7 +14,7 @@ add_epv_vars <- function(df) {
   pbp_final <- cbind(df, base_ep_preds)
 
   pbp_final <- pbp_final %>%
-    group_by(match_id) %>%
+    group_by(match_id,period) %>%
     dplyr::mutate(
       exp_pts = round(dplyr::case_when(
         description == "Centre Bounce" ~ 0,
@@ -34,6 +34,11 @@ add_epv_vars <- function(df) {
         is.na(dplyr::lead(team_id_mdl)) ~ 1,
         TRUE ~ -1
       ),
+      team_change = dplyr::case_when(
+        dplyr::lead(team_id_mdl) == team_id_mdl ~ 1,
+        is.na(dplyr::lead(team_id_mdl)) ~ 1,
+        TRUE ~ -1
+      ),
       lead_points = dplyr::if_else(is.na(points_shot), dplyr::lead(exp_pts, default = 0), (points_shot - lead(exp_pts, default = 0))), ### maybe? (kick_points - lead_exp_pts) e.g. for behinds
       lead_player = dplyr::if_else(!is.na(points_shot) | lead_desc == "Out of Bounds" | description == "Out On Full After Kick",
         player_name, dplyr::lead(player_name)
@@ -42,7 +47,8 @@ add_epv_vars <- function(df) {
         player_id, dplyr::lead(player_id)
       ),
       lead_team = dplyr::if_else(is.na(points_shot), dplyr::lead(team), team),
-      delta_epv = round(lead_points * pos_team - exp_pts, 5),
+      xpoints_diff = points_diff + exp_pts,
+      delta_epv = lead(xpoints_diff,default = last(points_diff))*team_change - xpoints_diff, #round(lead_points * pos_team - exp_pts, 5),
       weight_gm = exp(as.numeric(-(Sys.Date() - as.Date(utc_start_time))) / 365),
       round_week = sprintf("%02d", round_number)
     ) %>%

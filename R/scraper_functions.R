@@ -59,15 +59,16 @@ get_week_chains <- function(season,roundnum) {
     return(data.table::data.table())
   }
 
-  if ("team.teamName" %in% colnames(load)) {
-    load <-
-      load %>%
-      dplyr::rename(
-        team = team.teamName,
-        home_team = homeTeam.teamName,
-        away_team = awayTeam.teamName,
-      )
-  }
+  # if ("team.teamName" %in% colnames(load)) {
+  #   load <-
+  #     load %>%
+  #     dplyr::rename(
+  #       team = team.teamName,
+  #       home_team = homeTeam.teamName,
+  #       away_team = awayTeam.teamName,
+  #     )
+  #}
+
   return(load)
 }
 ### API SCRAPING FUNCTIONS

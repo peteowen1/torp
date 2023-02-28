@@ -57,7 +57,7 @@ clean_model_data_epv <- function(df) {
       !(x == -lead_x_tot & y == -lead_y_tot & description != "Centre Bounce")
     ) %>%
     dplyr::group_by(match_id, period, tot_goals) %>%
-    filter(lag(throw_in) == 0 | lead(throw_in) == 0) %>%
+    filter(lag(throw_in) == 0 | lead(throw_in) == 0 | throw_in == 0) %>%
     dplyr::mutate(
       lag_desc = dplyr::lag(description, default = dplyr::first(description)),
       lead_desc = dplyr::lead(description, default = dplyr::last(description)),
@@ -67,20 +67,29 @@ clean_model_data_epv <- function(df) {
       ),
       team_id_mdl = zoo::na.locf0(team_id_mdl, fromLast = TRUE),
       team_id_mdl = zoo::na.locf0(team_id_mdl),
-      x = dplyr::case_when(
+      home = dplyr::if_else(team_id_mdl == home_team_id, 1, 0),
+      # scoring_team_id = dplyr::if_else(points_row != 0, team_id, NA_character_),
+      # home_points = cumsum(home_points_row),
+      # away_points = cumsum(away_points_row),
+      pos_points = dplyr::if_else(home == 1, home_points, away_points),
+      opp_points = dplyr::if_else(home == 1, away_points, home_points),
+      points_diff = pos_points - opp_points,
+      mirror = dplyr::case_when(
         # not needed for now #(throw_in == 1 & lag(throw_in) != 1 & dplyr::lag(team_id_mdl) == team_id_mdl) ~ x,
-        (throw_in == 1 & lag(throw_in) != 1 & dplyr::lag(team_id_mdl) != team_id_mdl) ~ -x,
+        (throw_in == 1 & lag(throw_in) != 1 & dplyr::lag(team_id_mdl) != team_id_mdl) ~ -1,
         # not needed for now  #(throw_in == 1 & lag(throw_in) == 1 & dplyr::lag(team_id_mdl,n=2L) == team_id_mdl) ~ x,
-        (throw_in == 1 & lag(throw_in) == 1 & dplyr::lag(team_id_mdl,n=2L) != team_id_mdl) & sign(dplyr::lag(x)) == sign(x) ~ -x,
-        (throw_in == 1 & lag(throw_in) == 1  & dplyr::lag(team_id_mdl,n=2L) == team_id_mdl & sign(dplyr::lag(x)) != sign(x)) ~ -x,
-        (dplyr::lag(throw_in) == 1 & sign(dplyr::lag(x)) == sign(x) & dplyr::lag(team_id_mdl) == team_id_mdl & dplyr::lag(team_id_mdl,n=2L) != team_id_mdl) ~ -x,
-        (dplyr::lag(throw_in, n = 2L) == 1 & sign(dplyr::lag(x,n=2L)) == sign(x) & dplyr::lag(team_id_mdl,n=2L) == team_id_mdl & dplyr::lag(team_id_mdl,n=3L) != team_id_mdl) ~ -x,
+        (throw_in == 1 & lag(throw_in) == 1 & dplyr::lag(team_id_mdl,n=2L) != team_id_mdl) & sign(dplyr::lag(x)) == sign(x) ~ -1,
+        (throw_in == 1 & lag(throw_in) == 1  & dplyr::lag(team_id_mdl,n=2L) == team_id_mdl & sign(dplyr::lag(x)) != sign(x)) ~ -1,
+        (dplyr::lag(throw_in) == 1 & sign(dplyr::lag(x)) == sign(x) & dplyr::lag(team_id_mdl) == team_id_mdl & dplyr::lag(team_id_mdl,n=2L) != team_id_mdl) ~ -1,
+        (dplyr::lag(throw_in, n = 2L) == 1 & sign(dplyr::lag(x,n=2L)) == sign(x) & dplyr::lag(team_id_mdl,n=2L) == team_id_mdl & dplyr::lag(team_id_mdl,n=3L) != team_id_mdl) ~ -1,
         # not needed for now  #(dplyr::lag(throw_in, n = 3L) == 1 & sign(dplyr::lag(x,n=3L)) == sign(x) & dplyr::lag(team_id_mdl,n=3L) == team_id_mdl & dplyr::lag(team_id_mdl,n=4L) != team_id_mdl) ~ -x,
-        (dplyr::lag(throw_in) == 1 & sign(dplyr::lead(x,n=2L)) == sign(x) & dplyr::lead(team_id_mdl,n=2L) != team_id_mdl) ~ -x,
-        (dplyr::lag(throw_in,n=2L) == 1 & sign(dplyr::lead(x)) == sign(x) & dplyr::lead(team_id_mdl) != team_id_mdl) ~ -x,
+        (dplyr::lag(throw_in) == 1 & sign(dplyr::lead(x,n=2L)) == sign(x) & dplyr::lead(team_id_mdl,n=2L) != team_id_mdl) ~ -1,
+        (dplyr::lag(throw_in,n=2L) == 1 & sign(dplyr::lead(x)) == sign(x) & dplyr::lead(team_id_mdl) != team_id_mdl) ~ -1,
         # not needed for now  # (description == "Mark Dropped" & dplyr::lag(team_id_mdl, default = dplyr::first(team_id_mdl)) != team_id_mdl) ~ -x,
-        TRUE ~ x
+        TRUE ~ 1
       ),
+      x = mirror * x,
+      y = mirror * y,
       goal_x = venue_length / 2 - x,
       lag_x = dplyr::if_else(dplyr::lag(team_id_mdl) == team_id_mdl, dplyr::lag(x,default = dplyr::first(x)), -dplyr::lag(x,default = dplyr::first(x))),
       lag_x = tidyr::replace_na(lag_x, dplyr::first(x)),

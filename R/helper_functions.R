@@ -11,7 +11,19 @@
 #' }
 clean_pbp <- function(df) {
   ### JANITOR CLEAN
+
+  if ("team.teamName" %in% colnames(df)) {
+    df <-
+      df %>%
+      dplyr::rename(
+        team = team.teamName,
+        home_team = homeTeam.teamName,
+        away_team = awayTeam.teamName,
+      )
+  }
+
   df <- janitor::clean_names(df)
+
 
   ### TOTAL VARIABLE CHANGE
   df <-
@@ -60,6 +72,7 @@ clean_pbp <- function(df) {
       ################## MAYBE CHANGE PHASE OF PLAY TO BE A LOOKUP
       phase_of_play =
         dplyr::case_when(
+          throw_in == 1 ~ "Hard Ball",
           stringr::str_starts(lag_desc_tot, "Free") ~ "Set Shot",
           stringr::str_starts(lag_desc_tot, "OOF") ~ "Set Shot",
           stringr::str_starts(lag_desc_tot, "Out on") ~ "Set Shot",
@@ -101,24 +114,22 @@ clean_pbp <- function(df) {
       ### not sure about top 4 decide later
       points_row = dplyr::case_when(
         chain_number != dplyr::lead(chain_number, default = (dplyr::last(chain_number) + 1)) &
-          final_state == "rushed" ~ 1,
+          (final_state == "rushed" | final_state == "rushedOpp") ~ 1,
         description == "Behind" ~ 1,
         description == "Goal" ~ 6,
         TRUE ~ 0
       ),
       points_row = tidyr::replace_na(points_row, 0),
       points_row_na = dplyr::if_else(points_row == 0, NA_real_, points_row),
+      #points_row_lead = lead(points_row, default = ?points_shot? ),
       home_points_row = dplyr::case_when(
-        home == 0 & final_state == "rushed" ~ points_row,
-        home == 1 & final_state != "rushed" ~ points_row,
+        home == 0 & (final_state == "rushed" | final_state == "rushedOpp") & description =="Spoil" ~ points_row,
+        lead(home)==0  & (final_state == "rushed" | final_state == "rushedOpp") & lead(description)=="Kickin play on" ~ points_row,
+        home == 1 & (final_state != "rushed" & final_state != "rushedOpp" ) ~ points_row,
         TRUE ~ 0
       ),
       home_points_row = tidyr::replace_na(home_points_row, 0),
-      away_points_row = dplyr::case_when(
-        home == 1 & final_state == "rushed" ~ points_row,
-        home == 0 & final_state != "rushed" ~ points_row,
-        TRUE ~ 0
-      ),
+      away_points_row = points_row-home_points_row,
       away_points_row = tidyr::replace_na(away_points_row, 0),
       is_goal_row = dplyr::if_else(description == "Goal", 1, 0),
       is_behind_row = dplyr::if_else(home_points_row == 1 | away_points_row == 1, 1, 0),
@@ -193,13 +204,14 @@ clean_pbp <- function(df) {
     dplyr::group_by(match_id, chain_number) %>%
     dplyr::mutate(
       shot_display = dplyr::if_else(is.na(shot_at_goal),
-        dplyr::if_else(description == "Kick" | description == "Ground Kick", display_order, 1L),
-        display_order
+        dplyr::if_else(description == "Kick" | description == "Ground Kick", as.numeric(display_order), display_order/2),
+        as.numeric(display_order)
       ),
       max_shot_display = max(shot_display),
       points_shot = dplyr::if_else(shot_display == max_shot_display,
         dplyr::case_when(
           final_state == "rushed" ~ 1,
+          final_state == "rushedOpp" ~ 1,
           final_state == "behind" ~ 1,
           final_state == "goal" ~ 6,
           TRUE ~ NA_real_
