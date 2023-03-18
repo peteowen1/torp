@@ -11,7 +11,7 @@
 #' }
 clean_model_data_epv <- function(df) {
   model_data <- df %>%
-    filter(
+    dplyr::filter(
       description == "Ball Up Call" |
         description == "Bounce" |
         description == "Centre Bounce" |
@@ -57,7 +57,7 @@ clean_model_data_epv <- function(df) {
       !(x == -lead_x_tot & y == -lead_y_tot & description != "Centre Bounce")
     ) %>%
     dplyr::group_by(match_id, period, tot_goals) %>%
-    filter(lag(throw_in) == 0 | lead(throw_in) == 0 | throw_in == 0) %>%
+    dplyr::filter(dplyr::lag(throw_in) == 0 | lead(throw_in) == 0 | throw_in == 0) %>%
     dplyr::mutate(
       lag_desc = dplyr::lag(description, default = dplyr::first(description)),
       lead_desc = dplyr::lead(description, default = dplyr::last(description)),
@@ -76,10 +76,10 @@ clean_model_data_epv <- function(df) {
       points_diff = pos_points - opp_points,
       mirror = dplyr::case_when(
         # not needed for now #(throw_in == 1 & lag(throw_in) != 1 & dplyr::lag(team_id_mdl) == team_id_mdl) ~ x,
-        (throw_in == 1 & lag(throw_in) != 1 & dplyr::lag(team_id_mdl) != team_id_mdl) ~ -1,
+        (throw_in == 1 & dplyr::lag(throw_in) != 1 & dplyr::lag(team_id_mdl) != team_id_mdl) ~ -1,
         # not needed for now  #(throw_in == 1 & lag(throw_in) == 1 & dplyr::lag(team_id_mdl,n=2L) == team_id_mdl) ~ x,
-        (throw_in == 1 & lag(throw_in) == 1 & dplyr::lag(team_id_mdl,n=2L) != team_id_mdl) & sign(dplyr::lag(x)) == sign(x) ~ -1,
-        (throw_in == 1 & lag(throw_in) == 1  & dplyr::lag(team_id_mdl,n=2L) == team_id_mdl & sign(dplyr::lag(x)) != sign(x)) ~ -1,
+        (throw_in == 1 & dplyr::lag(throw_in) == 1 & dplyr::lag(team_id_mdl,n=2L) != team_id_mdl) & sign(dplyr::lag(x)) == sign(x) ~ -1,
+        (throw_in == 1 & dplyr::lag(throw_in) == 1  & dplyr::lag(team_id_mdl,n=2L) == team_id_mdl & sign(dplyr::lag(x)) != sign(x)) ~ -1,
         (dplyr::lag(throw_in) == 1 & sign(dplyr::lag(x)) == sign(x) & dplyr::lag(team_id_mdl) == team_id_mdl & dplyr::lag(team_id_mdl,n=2L) != team_id_mdl) ~ -1,
         (dplyr::lag(throw_in, n = 2L) == 1 & sign(dplyr::lag(x,n=2L)) == sign(x) & dplyr::lag(team_id_mdl,n=2L) == team_id_mdl & dplyr::lag(team_id_mdl,n=3L) != team_id_mdl) ~ -1,
         # not needed for now  #(dplyr::lag(throw_in, n = 3L) == 1 & sign(dplyr::lag(x,n=3L)) == sign(x) & dplyr::lag(team_id_mdl,n=3L) == team_id_mdl & dplyr::lag(team_id_mdl,n=4L) != team_id_mdl) ~ -x,
@@ -119,7 +119,7 @@ clean_model_data_epv <- function(df) {
 
 clean_model_data_wp <- function(df) {
   model_data <- df %>%
-    filter(!is.na(label_wp)) %>%
+    dplyr::filter(!is.na(label_wp)) %>%
     dplyr::mutate(
       xpoints_diff = points_diff + exp_pts,
       pos_lead_prob = case_when(
@@ -199,10 +199,13 @@ clean_shots_data <- function(df){
   df$shot_ineffective <- dplyr::if_else(df$shot_at_goal == TRUE & df$disposal == "ineffective",1,0)
 
   df <- df %>%
-    left_join(shot_player_df,by = c('player_name'='player_name_shot'),keep = TRUE)
+    dplyr::left_join(shot_player_df,by = c('player_id'='player_id_shot'),keep = TRUE)
 
+  df$player_id_shot <-  as.factor(tidyr::replace_na(df$player_id_shot,'Other'))
   df$player_name_shot <-  as.factor(tidyr::replace_na(df$player_name_shot,'Other'))
 
   df <- df %>% dplyr::select(-side_b,-side_c)
+
   return(df)
 }
+

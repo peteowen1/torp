@@ -12,15 +12,15 @@
 clean_pbp <- function(df) {
   ### JANITOR CLEAN
 
-  if ("team.teamName" %in% colnames(df)) {
-    df <-
-      df %>%
-      dplyr::rename(
-        team = team.teamName,
-        home_team = homeTeam.teamName,
-        away_team = awayTeam.teamName,
-      )
-  }
+  # if ("team.teamName" %in% colnames(df)) {
+  #   df <-
+  #     df %>%
+  #     dplyr::rename(
+  #       team = team.teamName,
+  #       home_team = homeTeam.teamName,
+  #       away_team = awayTeam.teamName,
+  #     )
+  # }
 
   df <- janitor::clean_names(df)
 
@@ -32,11 +32,11 @@ clean_pbp <- function(df) {
       torp_match_id = glue::glue('{season}_{round_number}_{home_team_team_abbr}_{away_team_team_abbr}'),
       torp_row_id = paste0(torp_match_id, sprintf("%04d", display_order)),
       torp_match_chain_id = paste0(torp_row_id, chain_number),
+      team = dplyr::if_else(team_id == home_team_id, home_team_team_name, away_team_team_name),
       y = -y,
-      x = dplyr::if_else(description == "Spoil", -x, x),
-      x = dplyr::if_else(!is.na(shot_at_goal) & x < 0, -x, x),
-      y = dplyr::if_else(description == "Spoil", -y, y),
-      y = dplyr::if_else(!is.na(shot_at_goal) & x < 0, -y, y),
+      mirror = dplyr::case_when(description == "Spoil" ~ -1,
+                                !is.na(shot_at_goal) & x < 0 ~ -1,
+                                TRUE ~ 1),
       home_away = as.factor(dplyr::if_else(team_id == home_team_id, "Home", "Away")),
       goal_x = venue_length / 2 - x,
       throw_in = dplyr::case_when(
@@ -46,8 +46,8 @@ clean_pbp <- function(df) {
         TRUE ~ 0,
       ),
       shot_row = dplyr::if_else(is.na(shot_at_goal), 0, 1),
-      player_position_fac = forcats::fct_explicit_na(player_position),
-      player_name = forcats::fct_explicit_na(paste(player_name_given_name, player_name_surname))
+      player_position_fac = forcats::fct_na_value_to_level (player_position, level = 'Other'),
+      player_name = forcats::fct_na_value_to_level (paste(player_name_given_name, player_name_surname), level = 'Other')
     )
 
   ### GAME VARIABLE CHANGE
@@ -68,10 +68,55 @@ clean_pbp <- function(df) {
                           ifelse(period == 3, 3600 + period_seconds,
                             ifelse(period == 4, 5400 + period_seconds, NA_integer_
                                     )))),
-      lag_desc_tot = dplyr::lag(description, default = "First Bounce"),
+      ### not sure about top 4 decide later
+      points_row = dplyr::case_when(
+        chain_number != dplyr::lead(chain_number, default = (dplyr::last(chain_number) + 1)) &
+          (final_state == "rushed" | final_state == "rushedOpp") ~ 1,
+        description == "Behind" ~ 1,
+        description == "Goal" ~ 6,
+        TRUE ~ 0
+      ),
+      points_row = tidyr::replace_na(points_row, 0),
+      points_row_na = dplyr::if_else(points_row == 0, NA_real_, points_row),
+      #points_row_lead = lead(points_row, default = ?points_shot? ),
+      home_points_row = dplyr::case_when(
+        home == 0 & (final_state == "rushed" | final_state == "rushedOpp") & description =="Spoil" ~ points_row,
+        dplyr::lead(home)==0  & (final_state == "rushed" | final_state == "rushedOpp") & dplyr::lead(description)=="Kickin play on" ~ points_row,
+        home == 1 & (final_state != "rushed" & final_state != "rushedOpp" ) ~ points_row,
+        TRUE ~ 0
+      ),
+      home_points_row = tidyr::replace_na(home_points_row, 0),
+      away_points_row = points_row-home_points_row,
+      away_points_row = tidyr::replace_na(away_points_row, 0),
+      is_goal_row = dplyr::if_else(description == "Goal", 1, 0),
+      is_behind_row = dplyr::if_else(home_points_row == 1 | away_points_row == 1, 1, 0),
+      tot_goals = cumsum(is_goal_row),
+      scoring_team_id = dplyr::if_else(points_row != 0, team_id, NA_character_),
+      home_points = cumsum(home_points_row),
+      away_points = cumsum(away_points_row),
+      pos_points = dplyr::if_else(home == 1, home_points, away_points),
+      opp_points = dplyr::if_else(home == 1, away_points, home_points),
+      points_diff = pos_points - opp_points,
+      # points_shot = dplyr::case_when(
+      #   shot_at_goal == TRUE & lead_desc_tot == "Goal" ~ 6,
+      #   shot_at_goal == TRUE & lead_desc_tot == "Behind" ~ 1,
+      #   shot_at_goal == TRUE & dplyr::lead(lead_desc_tot) == "Spoil" ~ 1,
+      #   shot_at_goal == TRUE & dplyr::lead(description, 3) == "Goal" & chain_number == dplyr::lead(chain_number, 3) ~ 6,
+      #   shot_at_goal == TRUE & dplyr::lead(description, 3) == "Behind" & chain_number == dplyr::lead(chain_number, 3) ~ 1,
+      #   TRUE ~ NA_real_
+      # )
+    ) %>%
+    dplyr::ungroup()
+
+  ### QUARTER VARIABLE CHANGE
+  df <-
+    df %>%
+    dplyr::group_by(match_id, period) %>%
+    dplyr::mutate(
+      lag_desc_tot = dplyr::lag(description, default = "Start of Quarter"),
       ################## MAYBE CHANGE PHASE OF PLAY TO BE A LOOKUP
       phase_of_play =
-        dplyr::case_when(
+        as.factor(dplyr::case_when(
           throw_in == 1 ~ "Hard Ball",
           stringr::str_starts(lag_desc_tot, "Free") ~ "Set Shot",
           stringr::str_starts(lag_desc_tot, "OOF") ~ "Set Shot",
@@ -90,8 +135,7 @@ clean_pbp <- function(df) {
           stringr::str_detect(description, "Hard Ball") ~ "Hard Ball",
           stringr::str_detect(lag_desc_tot, "Handball") ~ "Handball Received",
           TRUE ~ "Hard Ball"
-        ),
-      phase_of_play = forcats::fct_lump_min(dplyr::if_else(lag_desc_tot == "Bounce", dplyr::lag(phase_of_play), phase_of_play), 1),
+        )),
       ### DO I NEED THIS TO BE A FACTOR MAYBE NOT
       play_type = as.factor(
         dplyr::case_when(
@@ -108,59 +152,13 @@ clean_pbp <- function(df) {
       lag_desc_tot = dplyr::lead(description),
       ######### DO LEAD LATER
       # lead_x_tot = (dplyr::lead(x)),
-      led_goal_x_tot = (dplyr::lead(goal_x)),
+      lead_goal_x_tot = (dplyr::lead(goal_x)),
       # lead_y_tot = (dplyr::lead(y)),
       lead_desc_tot = dplyr::lead(description),
-      ### not sure about top 4 decide later
-      points_row = dplyr::case_when(
-        chain_number != dplyr::lead(chain_number, default = (dplyr::last(chain_number) + 1)) &
-          (final_state == "rushed" | final_state == "rushedOpp") ~ 1,
-        description == "Behind" ~ 1,
-        description == "Goal" ~ 6,
-        TRUE ~ 0
-      ),
-      points_row = tidyr::replace_na(points_row, 0),
-      points_row_na = dplyr::if_else(points_row == 0, NA_real_, points_row),
-      #points_row_lead = lead(points_row, default = ?points_shot? ),
-      home_points_row = dplyr::case_when(
-        home == 0 & (final_state == "rushed" | final_state == "rushedOpp") & description =="Spoil" ~ points_row,
-        lead(home)==0  & (final_state == "rushed" | final_state == "rushedOpp") & lead(description)=="Kickin play on" ~ points_row,
-        home == 1 & (final_state != "rushed" & final_state != "rushedOpp" ) ~ points_row,
-        TRUE ~ 0
-      ),
-      home_points_row = tidyr::replace_na(home_points_row, 0),
-      away_points_row = points_row-home_points_row,
-      away_points_row = tidyr::replace_na(away_points_row, 0),
-      is_goal_row = dplyr::if_else(description == "Goal", 1, 0),
-      is_behind_row = dplyr::if_else(home_points_row == 1 | away_points_row == 1, 1, 0),
-      tot_goals = cumsum(is_goal_row),
-      scoring_team_id = dplyr::if_else(points_row != 0, team_id, NA_character_),
-      home_points = cumsum(home_points_row),
-      away_points = cumsum(away_points_row),
-      pos_points = dplyr::if_else(home == 1, home_points, away_points),
-      opp_points = dplyr::if_else(home == 1, away_points, home_points),
-      points_diff = pos_points - opp_points,
-      points_shot = dplyr::case_when(
-        shot_at_goal == TRUE & lead_desc_tot == "Goal" ~ 6,
-        shot_at_goal == TRUE & lead_desc_tot == "Behind" ~ 1,
-        shot_at_goal == TRUE & dplyr::lead(lead_desc_tot) == "Spoil" ~ 1,
-        shot_at_goal == TRUE & dplyr::lead(description, 3) == "Goal" & chain_number == dplyr::lead(chain_number, 3) ~ 6,
-        shot_at_goal == TRUE & dplyr::lead(description, 3) == "Behind" & chain_number == dplyr::lead(chain_number, 3) ~ 1,
-        TRUE ~ NA_real_
-      )
-    ) %>%
-    dplyr::ungroup()
-
-  ### QUARTER VARIABLE CHANGE
-  df <-
-    df %>%
-    dplyr::group_by(match_id, period) %>%
-    dplyr::mutate(
       rn_qtr = dplyr::row_number(),
       pos_points = zoo::na.locf0(points_row_na, fromLast = TRUE),
       pos_points_team_id = zoo::na.locf0(scoring_team_id, fromLast = TRUE),
-      team_id2 = zoo::na.locf0(team_id),
-      model_points = dplyr::if_else(pos_points_team_id == team_id2, pos_points, -pos_points),
+      model_points = dplyr::if_else(pos_points_team_id == team_id_mdl, pos_points, -pos_points),
       pos_is_goal = dplyr::if_else(pos_points == 6, 1, 0),
       pos_team_shot = dplyr::if_else(model_points > 0, 1, 0),
       is_shot = dplyr::if_else(!is.na(model_points), 1, 0),
@@ -190,8 +188,8 @@ clean_pbp <- function(df) {
         home_team_score_total_score == away_team_score_total_score & home == 0 ~ 0.5,
         home_team_score_total_score < away_team_score_total_score & home == 0 ~ 1
       ),
-      lead_x_tot = dplyr::lead(x, default = dplyr::last(x)), ##### THINK DEFUALT LAST/FIRST IS SLOW, CHECK THIS
-      lead_y_tot = dplyr::lead(y, default = dplyr::last(y)) ##### THINK DEFUALT LAST/FIRST IS SLOW, CHECK THIS
+      lead_x_tot = dplyr::lead(x, default = dplyr::last(x)), ##### THINK DEFAULT LAST/FIRST IS SLOW, CHECK THIS
+      lead_y_tot = dplyr::lead(y, default = dplyr::last(y)) ##### THINK DEFAULT LAST/FIRST IS SLOW, CHECK THIS
       # lead_goal_x = venue_length / 2 - lead_x,
       # lag_model_desc = dplyr::lag(model_desc, default = "Centre Bounce")
     ) %>%

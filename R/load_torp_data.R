@@ -1,25 +1,16 @@
-#' Load Play By Play
+#' Load Chains
 #'
-#' @description Loads play by play seasons from the [torpdata repository](https://github.com/peteowen1/torpdata)
+#' @description Loads chains data from the [torpdata repository](https://github.com/peteowen1/torpdata)
 #'
-#' @param seasons A numeric vector of 4-digit years associated with given NFL seasons - defaults to latest season. If set to `TRUE`, returns all available data since 1999.
-#' @param file_type One of `c("rds", "qs", "csv", "parquet")`. Can also be set globally with
-#' `options(nflreadr.prefer)`
-#'
-#' @return The complete nflfastR dataset as returned by `nflfastR::build_nflfastR_pbp()`
-#' (see below) for all given `seasons`
+#' @param seasons A numeric vector of 4-digit years associated with given AFL seasons - defaults to latest season. If set to `TRUE`, returns all available data since 2021.
+#' @param rounds A numeric vector associated with given AFL round - defaults to latest round. If set to `TRUE`, returns all available rounds in the given season range.
 #'
 #' @examples
 #' \donttest{
 #' try({ # prevents cran errors
-#'   load_pbp(2019:2020)
+#'   load_chains(2021:2022)
 #' })
 #' }
-#' @seealso <https://nflreadr.peteowen1.com/articles/dictionary_pbp.html> for a web version of the data dictionary
-#' @seealso [`dictionary_pbp`] for the data dictionary bundled as a package dataframe
-#' @seealso <https://www.nflfastr.com/reference/build_nflfastR_pbp.html> for the nflfastR function `nflfastR::build_nflfastR_pbp()`
-#' @seealso Issues with this data should be filed here: <https://github.com/peteowen1/peteowen1-pbp>
-#'
 #' @export
 load_chains <- function(seasons = most_recent_season(), rounds = get_current_week()) {
 
@@ -52,23 +43,16 @@ load_chains <- function(seasons = most_recent_season(), rounds = get_current_wee
 #'
 #' @description Loads play by play seasons from the [torpdata repository](https://github.com/peteowen1/torpdata)
 #'
-#' @param seasons A numeric vector of 4-digit years associated with given NFL seasons - defaults to latest season. If set to `TRUE`, returns all available data since 1999.
-#' @param file_type One of `c("rds", "qs", "csv", "parquet")`. Can also be set globally with
-#' `options(nflreadr.prefer)`
+#' @param seasons A numeric vector of 4-digit years associated with given AFL seasons - defaults to latest season. If set to `TRUE`, returns all available data since 2021.
+#' @param rounds A numeric vector associated with given AFL round - defaults to latest round. If set to `TRUE`, returns all available rounds in the given season range.
 #'
-#' @return The complete nflfastR dataset as returned by `nflfastR::build_nflfastR_pbp()`
-#' (see below) for all given `seasons`
 #'
 #' @examples
 #' \donttest{
 #' try({ # prevents cran errors
-#'   load_pbp(2019:2020)
+#'   load_pbp(2021:2022)
 #' })
 #' }
-#' @seealso <https://nflreadr.peteowen1.com/articles/dictionary_pbp.html> for a web version of the data dictionary
-#' @seealso [`dictionary_pbp`] for the data dictionary bundled as a package dataframe
-#' @seealso <https://www.nflfastr.com/reference/build_nflfastR_pbp.html> for the nflfastR function `nflfastR::build_nflfastR_pbp()`
-#' @seealso Issues with this data should be filed here: <https://github.com/peteowen1/peteowen1-pbp>
 #'
 #' @export
 load_pbp <- function(seasons = most_recent_season(), rounds = get_current_week()) {
@@ -124,14 +108,14 @@ load_from_url <- function(url, ..., seasons = TRUE, rounds = TRUE){
   if(length(url) == 1) {
     out <- rds_from_url(url)
     if(!isTRUE(seasons)) stopifnot(is.numeric(seasons))
-    if(!isTRUE(seasons) && "season" %in% names(out)) out <- out[out$season %in% seasons]
+    # if(!isTRUE(seasons) && "season" %in% names(out)) out <- out[out$season %in% seasons]
   }
 
   if(length(url) > 1) {
     p <- NULL
     if (is_installed("progressr")) p <- progressr::progressor(along = url)
     out <- lapply(url, progressively(rds_from_url, p))
-    out <- data.table::rbindlist(out)
+    out <- data.table::rbindlist(out, use.names=TRUE)
   }
 
   return(out)
@@ -149,7 +133,7 @@ load_from_url <- function(url, ..., seasons = TRUE, rounds = TRUE){
 #' @examples
 #' \donttest{
 #' try({ # prevents cran errors
-#'   rds_from_url("https://github.com/peteowen1/torpdata/releases/download/test/combines.rds")
+#'   rds_from_url("https://github.com/peteowen1/torp/tree/main/data/results.rda")
 #' })
 #' }
 rds_from_url <- function(url) {

@@ -12,10 +12,12 @@
 most_recent_season <- function(roster = FALSE) {
   today <- Sys.Date()
   current_year <- as.integer(format(today, format = "%Y"))
-  current_month <- as.integer(format(today, format = "%m"))
+  #day_of_year <- lubridate::yday(today)
 
-  if ((isFALSE(roster) && current_month >= 9) ||
-      (isTRUE(roster) && current_month >= 3)) {
+  fixtures <- torp::fixtures %>% dplyr::filter(compSeason.year == current_year)
+  start_date <- as.Date(min(fixtures$utcStartTime))
+
+  if (today >= start_date) {
 
     return(current_year)
   }
@@ -62,31 +64,27 @@ get_current_week <- function(use_date = TRUE) {
 
   if(!use_date){
     season <- NULL
-    week <- NULL
+    round.roundNumber <- NULL
     result <- NULL
-    current_season <- data.table::as.data.table(load_schedules())[season == most_recent_season()]
+    current_season <- data.table::as.data.table(torp::fixtures)[compSeason.year == most_recent_season()]
 
-    if(all(!is.na(current_season$result))) return(max(current_season$week, na.rm = TRUE))
+    if(all(current_season$status=="SCHEDULED")) return(max(current_season$round.roundNumber, na.rm = TRUE))
 
-    current_week <- current_season[is.na(result), week]
+    current_week <- current_season[is.na(result), round.roundNumber]
     return(min(current_week, na.rm = TRUE))
   }
 
   if(use_date){
-    # Find first Monday of September in current season
-    week1_sep <- as.POSIXlt(paste0(most_recent_season(),"-09-0",1:7), tz = "GMT")
-    monday1_sep <- week1_sep[week1_sep$wday == 1]
-
-    # NFL season starts 3 days later
-    first_game <- monday1_sep
-    first_game$mday <- first_game$mday + 3
+    # Find third Thursday of current season
+    week3_mar <- as.POSIXlt(paste0(most_recent_season(),"-03-",15:21), tz = "Australia/Brisbane")
+    thursday3_mar <- week3_mar[week3_mar$wday == 3]
 
     # current week number of nfl season is 1 + how many weeks have elapsed since first game
-    current_week <- as.numeric(Sys.Date() - as.Date(first_game)) %/% 7 + 1
+    current_week <- as.numeric(Sys.Date() - as.Date(thursday3_mar)) %/% 7 + 1
 
     # hardcoded week bounds because this whole date based thing has assumptions anyway
     if(current_week < 1) current_week <- 1
-    if(current_week > 22) current_week <- 22
+    if(current_week > 27) current_week <- 27
 
     return(current_week)
   }
@@ -94,15 +92,6 @@ get_current_week <- function(use_date = TRUE) {
 
 is_installed <- function(pkg) requireNamespace(pkg, quietly = TRUE)
 
-#' @keywords internal
-"_PACKAGE"
-
-#' @importFrom data.table `:=`
-NULL
-
-`%c%` <- function(x,y){
-  ifelse(!is.na(x),x,y)
-}
 
 #' Progressively
 #'
