@@ -1,38 +1,32 @@
 ###
-if (exists("teams") == FALSE) {
-  teams <-
-    dplyr::bind_rows(fitzRoy::fetch_lineup(season = 2021, comp = "AFLM")) %>%
-    dplyr::bind_rows(fitzRoy::fetch_lineup(season = 2022, comp = "AFLM")) %>%
-    dplyr::mutate(season = as.numeric(substr(providerId, 5, 8)))
-}
+devtools::load_all()
 
-if (exists("results") == FALSE) {
-results <-
-  dplyr::bind_rows(fitzRoy::fetch_results(season = 2021, comp = "AFLM")) %>%
-  dplyr::bind_rows(fitzRoy::fetch_results(season = 2022, comp = "AFLM")) %>%
-  dplyr::mutate(season = as.numeric(substr(match.matchId, 5, 8)))
-}
+teams <- torp::teams
+
+results <- torp::results
 
 ############# 2021
 ##############################
 if (exists("final_21") == FALSE) {
-final_21 <- furrr::future_map_dfr(2:28, ~ plyr_ratings(plyr_gm_df, teams, 2021, .))
-saveRDS(final_21, "./data/plyr_df_2021.rds")
-final_21 <- readRDS("./data/plyr_df_2021.rds")
+final_21 <- purrr::map_df(2:28, ~ plyr_ratings(plyr_gm_df, teams, 2021, .))
 }
 ### 2022
-n <- max(teams %>% dplyr::filter(season == lubridate::year(Sys.Date()), utcStartTime < Sys.time() + 350000) %>%
-  dplyr::select(round.roundNumber)) + 1
+# n <- max(teams %>% dplyr::filter(season == lubridate::year(Sys.Date()), utcStartTime < Sys.time() + 350000) %>%
+#   dplyr::select(round.roundNumber)) + 1
 
 n <- 28
 ### 2022
 if (exists("final_22") == FALSE) {
-final_22 <- furrr::future_map_dfr(1:n, ~ plyr_ratings(plyr_gm_df, teams, 2022, .))
-saveRDS(final_22, "./data/plyr_df_2022.rds")
-final_22 <- readRDS("./data/plyr_df_2022.rds")
+final_22 <- purrr::map_df(1:28, ~ plyr_ratings(plyr_gm_df, teams, 2022, .))
 }
+
+### 2023
+n <- get_current_week()
+
+final_23 <- purrr::map_df(1:n, ~ plyr_ratings(plyr_gm_df, teams, 2023, .))
+
 ### final
-final <- dplyr::bind_rows(final_21, final_22)
+final <- dplyr::bind_rows(final_21, final_22, final_23)
 
 final$weight <- exp(as.numeric(-(Sys.Date() - as.Date(final$utcStartTime))) / 250)
 final$weight <- final$weight / mean(final$weight, na.rm = T)
@@ -40,8 +34,8 @@ final$weight <- final$weight / mean(final$weight, na.rm = T)
 
 team_rt_df <-
   teams %>%
-  dplyr::left_join(final %>% dplyr::filter(player_name != "NA NA"), by = c("providerId" = "providerId", "player.playerId" = "player.playerId")) %>%
-  dplyr::filter((!is.na(bayes_g) | utcStartTime.x > Sys.time())) %>%
+  dplyr::left_join(final , by = c("providerId" = "providerId", "player.playerId" = "player.playerId")) %>%
+  dplyr::filter(!is.na(bayes_g) | (most_recent_season() >= season &  get_current_week() >= round.roundNumber.x)) %>% #as.Date(utcStartTime.x) >= lubridate::with_tz(Sys.Date(),"UTC")
   dplyr::filter((position.x != "EMERG" & position.x != "SUB") | is.na(position.x)) %>%
   dplyr::mutate(
     bayes_g = pmax(bayes_g,0),
@@ -310,13 +304,38 @@ team_mdl_df$pred_shot_diff <- predict(afl_shot_mdl, newdata = team_mdl_df, type 
 team_mdl_df$pred_conv <- predict(afl_conv_mdl, newdata = team_mdl_df, type = "response")
 team_mdl_df$pred_score_diff <- predict(afl_score_mdl, newdata = team_mdl_df, type = "response")
 team_mdl_df$pred_win <- predict(afl_win_mdl, newdata = team_mdl_df, type = "response")
-###
-week_gms <- team_mdl_df %>%
+
+######
+week_gms_home <- team_mdl_df %>%
   dplyr::mutate(totscore = sum(team_mdl_df$total_score, na.rm = T) / sum(team_mdl_df$total_shots, na.rm = T) * pred_totshots) %>%
-  dplyr::filter(season.x == lubridate::year(Sys.Date()), round.roundNumber.x.x == (n-1), teamType.x == "home") %>%
+  dplyr::filter(season.x == lubridate::year(Sys.Date()), round.roundNumber.x.x == get_current_week(), teamType.x == "home") %>%
   dplyr::select(
-    count.x, providerId, teamName.x.x, bayes_g.x, teamName.x.y, bayes_g.y,
+    players = count.x, providerId,
+    home_team = teamName.x.x, home_rating = bayes_g.x,
+    away_team = teamName.x.y, away_rating = bayes_g.y,
     totscore, pred_shot_diff, pred_score_diff, pred_win, bits, score_diff
   )
 
+week_gms_away <- team_mdl_df %>%
+  dplyr::mutate(totscore = sum(team_mdl_df$total_score, na.rm = T) / sum(team_mdl_df$total_shots, na.rm = T) * pred_totshots,
+                pred_shot_diff = -pred_shot_diff,
+                pred_score_diff = - pred_score_diff,
+                pred_win = 1- pred_win,
+                ) %>%
+  dplyr::filter(season.x == lubridate::year(Sys.Date()), round.roundNumber.x.x == get_current_week(), teamType.x == "away") %>%
+  dplyr::select(
+    players = count.x, providerId,
+    home_team = teamName.x.y, home_rating = bayes_g.y,
+    away_team = teamName.x.x, away_rating = bayes_g.x,
+    totscore, pred_shot_diff, pred_score_diff, pred_win, bits, score_diff
+  )
+
+week_gms <- dplyr::bind_rows(week_gms_home,week_gms_away) %>%
+  dplyr::group_by(providerId,home_team,home_rating,away_team,away_rating) %>%
+  dplyr::summarise(players = mean(players),
+                   total = mean(totscore),
+                   pred_shot_diff = mean(pred_shot_diff),
+                   pred_score_diff = mean(pred_score_diff),
+                   pred_win = mean(pred_win))
 week_gms
+

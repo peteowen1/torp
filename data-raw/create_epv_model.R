@@ -1,18 +1,13 @@
 ######################## takes 3 mins to build model, 1 min for rest
 # library(devtools)
-library('tidyverse')
-library('zoo')
-library('tidymodels')
-library('janitor')
-library('lubridate')
-# devtools::load_all()
-source('./R/scraper_functions.R')
-source("./R/load_chains.R")
-source("./R/helper_functions.R")
-source("./R/clean_model_data.R")
-source("./R/add_model_variables.R")
+# library('tidyverse')
+# library('zoo')
+# library('tidymodels')
+# library('janitor')
+# library('lubridate')
+devtools::load_all()
 
-chains <- load_chains(2022) #%>%
+chains <- load_chains(TRUE,TRUE) #%>%
   # bind_rows(get_week_chains(2022, 26)) %>%
   # bind_rows(get_week_chains(2022, 25))
 
@@ -58,29 +53,30 @@ ep_model <- xgboost::xgboost(
 
 #saveRDS(ep_model, "./data/ep_model.rds")
 usethis::use_data(ep_model,overwrite = TRUE)
+
 ###########
 ### TESTING
 #######
-df <- load_chains(2022, 23) %>% filter(match_id == "CD_M20220142309") %>%
-  clean_pbp() %>%
-  clean_model_data_epv() %>%
-  add_epv_vars() %>%
-  select(
-    rn = display_order, chain = chain_number, period, secs = period_seconds, x, y, desc = description, jumper = jumper_number,
-    player_id, player_name, team, team_id_mdl,
-    lead_player, lead_team, delta_epv, pos_team, exp_pts,lead_points, opp_goal, opp_behind, behind, goal, no_score, player_position,
-    goal_x,play_type,phase_of_play,lead_desc, points_shot, kick_points
-  )
-
-df2 <- load_chains(2022, 23) %>% filter(match_id == "CD_M20220142309") %>%
-  clean_pbp() %>%
-  # clean_model_data() %>%
-  # add_epv_vars() %>%
-  select(
-    rn = display_order, chain = chain_number, period, secs = period_seconds, x, y, desc = description, jumper = jumper_number,
-    player_id, player_name, team, team_id_mdl,
-    #, lead_team, delta_epv, pos_team, exp_pts, Opp_Goal, Opp_Behind, Behind, Goal, No_Score, player_position,
-    goal_x,play_type,phase_of_play,lead_desc_tot, points_shot,points_row_na,tot_goals,throw_in
-  )
-###################
+# df <- load_chains(2022, 23) %>% filter(match_id == "CD_M20220142309") %>%
+#   clean_pbp() %>%
+#   clean_model_data_epv() %>%
+#   add_epv_vars() %>%
+#   select(
+#     rn = display_order, chain = chain_number, period, secs = period_seconds, x, y, desc = description, jumper = jumper_number,
+#     player_id, player_name, team, team_id_mdl,
+#     lead_player, lead_team, delta_epv, pos_team, exp_pts,lead_points, opp_goal, opp_behind, behind, goal, no_score, player_position,
+#     goal_x,play_type,phase_of_play,lead_desc, points_shot, kick_points
+#   )
+#
+# df2 <- load_chains(2022, 23) %>% filter(match_id == "CD_M20220142309") %>%
+#   clean_pbp() %>%
+#   # clean_model_data() %>%
+#   # add_epv_vars() %>%
+#   select(
+#     rn = display_order, chain = chain_number, period, secs = period_seconds, x, y, desc = description, jumper = jumper_number,
+#     player_id, player_name, team, team_id_mdl,
+#     #, lead_team, delta_epv, pos_team, exp_pts, Opp_Goal, Opp_Behind, Behind, Goal, No_Score, player_position,
+#     goal_x,play_type,phase_of_play,lead_desc_tot, points_shot,points_row_na,tot_goals,throw_in
+#   )
+# ###################
 

@@ -1,32 +1,27 @@
 library(dplyr)
 library(forcats)
 library(mgcv)
-source("./R/load_chains.R")
-source("./R/helper_functions.R")
-source("./R/match_xg_functions.R")
+devtools::load_all()
 
-if (exists("chains") == FALSE) {
-chains <- load_chains(2021:lubridate::year(Sys.Date()))
-}
+shots_prep <- load_pbp(seasons = T,rounds = T)
 
-# chains <- bind_rows(chains_2021,chains_2022) %>% janitor::clean_names()
-
-shots_prep <- chains %>% # filter(match_id == "CD_M20210142701") %>%
-  clean_pbp() %>%
-  clean_shots_data() %>%
-  clean_model_data_epv()
-
-shots <- shots_prep %>% filter(!is.na(points_shot))
+shots <- shots_prep %>% dplyr::filter(!is.na(points_shot))
 
 ################
-shots$player_name_shot <- forcats::fct_lump_min(shots$player_name, 10)
+shots$player_id_shot <- forcats::fct_lump_min(shots$player_id, 10, other_level = "Other")
+player_name_mapping <- shots %>%
+  dplyr::group_by(player_id_shot = player_id) %>%
+  dplyr::summarise(player_name_shot = dplyr::last(player_name))
 
-shot_player_df <- tibble::tibble(player_name_shot = shots$player_name_shot %>% levels())
+shot_player_df <-
+  tibble::tibble(player_id_shot = shots$player_id_shot %>% levels()) %>%
+  dplyr::left_join(player_name_mapping)
+
 usethis::use_data(shot_player_df, overwrite = TRUE)
 
 ####################
 # ###
-# # shot result multi
+# # shot result multinomial
 # shot_result_mdl <-
 #   gam(
 #     list(
@@ -45,7 +40,7 @@ usethis::use_data(shot_player_df, overwrite = TRUE)
 #       data = shots, family = multinom(K=2) #, nthreads = 4, select = T, discrete = T
 #   )
 
-###################
+################### shot result binomialS
 shot_result_mdl <-
   mgcv::bam(
     shot_result ~ ti(goal_x, y, by = phase_of_play) + ti(goal_x, y)
@@ -53,20 +48,21 @@ shot_result_mdl <-
       + ti(lag_goal_x, y) + s(lag_goal_x, bs = "ts") + s(lag_y, bs = "ts")
       + s(play_type, bs = "re") + s(phase_of_play, bs = "re")
       + s(player_position_fac, bs = "re")
-      + s(player_name_shot, bs = "re"),
+      + s(player_id_shot, bs = "re"),
     data = shots, family = stats::binomial(), nthreads = 4,
     select = TRUE, discrete = TRUE, drop.unused.levels = FALSE
   )
 
-
 # ModelMetrics::logLoss(shots$shot_result,predict.bam(shot_result_mdl,shots,type="response"))
+
 ### save data
-# usethis::use_data(shot_result_mdl, overwrite = TRUE)
+usethis::use_data(shot_result_mdl, overwrite = TRUE)
 ####
 player_shot_score <- mixedup::extract_ranef(shot_result_mdl) %>%
-  dplyr::filter(group_var == "player_name_shot") %>%
+  dplyr::filter(group_var == "player_id_shot") %>%
+  dplyr::left_join(shot_player_df, by = c("group"="player_id_shot")) %>%
   dplyr::arrange(-value) # %>% tibble::view()
 
-# usethis::use_data(player_shot_score, overwrite = TRUE)
+usethis::use_data(player_shot_score, overwrite = TRUE)
 
-# shots$pred <- predict.bam(shot_result_mdl,shots,type="response")
+### shots$pred <- predict.bam(shot_result_mdl,shots,type="response")

@@ -1,3 +1,24 @@
+###############
+this_week <- plyr_ratings(plyr_gm_df,teams,2022,28) %>%
+  dplyr::left_join(fitzRoy::fetch_player_details(),by = c("player.playerId" = "providerId"))
+
+season_table <- plyr_gm_df %>%
+  dplyr::filter(season==2023, round >= 1, round <= 28) %>%
+  dplyr::group_by(plyr_nm,player_id,tm,pos) %>%
+  dplyr::summarise(tot_points = sum(tot_p_adj), g = dplyr::n(),p_g = tot_points/g) %>%
+  dplyr::left_join(fitzRoy::fetch_player_details(),by = c("player_id" = "providerId")) %>%
+  #dplyr::filter(year(dateOfBirth)>=2001) %>%
+  dplyr::arrange(-tot_points) #%>% view()
+
+season_table %>% tibble::view()
+
+# final_22 %>% filter(round.roundNumber==2) %>%
+#   left_join(final_22 %>% filter(round.roundNumber==23),by = c('player.playerId'='player.playerId')) %>%
+#   mutate(delta = bayes_g.y - bayes_g.x) %>%
+#   relocate(delta,player_name.x,bayes_g.y,gms.x,gms.y) %>% view()
+
+
+
 ##############################
 tictoc::tic()
 results <- fetch_results(season = 2021, comp = "AFLM") %>%

@@ -1,27 +1,23 @@
 ######################## takes 3 mins to build model, 1 min for rest
 # library(devtools)
-library('tidyverse')
-library('zoo')
-library('tidymodels')
-library('janitor')
-library('lubridate')
+# library('tidyverse')
+# library('zoo')
+# library('tidymodels')
+# library('janitor')
+# library('lubridate')
 devtools::load_all()
-# source("./R/load_chains.R")
-# source("./R/helper_functions.R")
-# source("./R/clean_model_data.R")
-# source("./R/add_model_variables.R")
 
-tictoc::tic()
-chains <- load_chains(2021:lubridate::year(Sys.Date())) #%>% janitor::clean_names()
-tictoc::toc()
-
-tictoc::tic()
-pbp <- clean_pbp(chains)
-tictoc::toc()
-
-tictoc::tic()
-model_data_epv <- clean_model_data_epv(pbp)
-tictoc::toc()
+# tictoc::tic()
+# chains <- load_chains(T,T) #%>% janitor::clean_names()
+# tictoc::toc()
+#
+# tictoc::tic()
+# pbp <- clean_pbp(chains)
+# tictoc::toc()
+#
+# tictoc::tic()
+# model_data_epv <- clean_model_data_epv(pbp)
+# tictoc::toc()
 ###########################
 #devtools::load_all()
 
@@ -91,8 +87,10 @@ wp_model <- xgboost::xgboost(
 ###
 
 #saveRDS(wp_model, "./data/wp_model.rds")
+
 usethis::use_data(wp_model,overwrite = TRUE)
 
+#########################################################
 # # #####
 # library(mgcv)
 # wp_model_gam <- mgcv::bam(label_wp ~
@@ -119,35 +117,35 @@ usethis::use_data(wp_model,overwrite = TRUE)
 # ###########
 # ### TESTING
 # #######
-match_choice <- "CD_M20220142601"
-
-df <- #load_chains(2021, 27) %>% # row 280 is messed up
-  #get_week_chains(2022,26) %>%
-  chains %>% #select(-opp_goal,-opp_behind,-behind,-goal,-no_score)%>%
-  filter(matchId == match_choice) %>%
-  #filter(season == 2022, roundNumber == 26) %>%
-  clean_pbp() %>% clean_model_data_epv() %>% add_epv_vars() %>% clean_model_data_wp() %>%
-  # # janitor::clean_names() %>%
-  # # clean_pbp() %>%
-  #clean_model_data_epv() %>%
-  #add_epv_vars() %>%
-  #clean_model_data_wp() %>%
-  add_wp_vars() %>%
-  select(
-    match_id,rn = display_order, chain = chain_number, period, secs = period_seconds, x,#x2,
-    y, desc = description, jumper = jumper_number,
-    player_id, player_name, team, team_id_mdl,
-    lead_player, lead_team, delta_epv, pos_team,
-    exp_pts,xpoints_diff,wp,wpa,
-    opp_goal, opp_behind, behind, goal, no_score, player_position,
-    goal_x,play_type,phase_of_play,
-    kick_points,speed5,lag_goal_x5,throw_in,team_id,total_seconds,
-    home,scoring_team_id,home_points,away_points,pos_points,opp_points,points_diff,
-    points_row,points_shot
-  )
-
-pbps <- chains  %>% filter(matchId == match_choice) %>% clean_pbp()
-chain <- chains %>% filter(matchId == match_choice)
+# match_choice <- "CD_M20220142601"
+#
+# df <- #load_chains(2021, 27) %>% # row 280 is messed up
+#   #get_week_chains(2022,26) %>%
+#   chains %>% #select(-opp_goal,-opp_behind,-behind,-goal,-no_score)%>%
+#   filter(matchId == match_choice) %>%
+#   #filter(season == 2022, roundNumber == 26) %>%
+#   clean_pbp() %>% clean_model_data_epv() %>% add_epv_vars() %>% clean_model_data_wp() %>%
+#   # # janitor::clean_names() %>%
+#   # # clean_pbp() %>%
+#   #clean_model_data_epv() %>%
+#   #add_epv_vars() %>%
+#   #clean_model_data_wp() %>%
+#   add_wp_vars() %>%
+#   select(
+#     match_id,rn = display_order, chain = chain_number, period, secs = period_seconds, x,#x2,
+#     y, desc = description, jumper = jumper_number,
+#     player_id, player_name, team, team_id_mdl,
+#     lead_player, lead_team, delta_epv, pos_team,
+#     exp_pts,xpoints_diff,wp,wpa,
+#     opp_goal, opp_behind, behind, goal, no_score, player_position,
+#     goal_x,play_type,phase_of_play,
+#     kick_points,speed5,lag_goal_x5,throw_in,team_id,total_seconds,
+#     home,scoring_team_id,home_points,away_points,pos_points,opp_points,points_diff,
+#     points_row,points_shot
+#   )
+#
+# pbps <- chains  %>% filter(matchId == match_choice) %>% clean_pbp()
+# chain <- chains %>% filter(matchId == match_choice)
 
 #
 #
