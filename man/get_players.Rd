@@ -6,9 +6,6 @@
 \usage{
 get_players()
 }
-\value{
-
-}
 \description{
 Title
 }

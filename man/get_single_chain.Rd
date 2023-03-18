@@ -9,9 +9,6 @@ get_single_chain(chains_t2, chain_number)
 \arguments{
 \item{chain_number}{}
 }
-\value{
-
-}
 \description{
 Title
 }

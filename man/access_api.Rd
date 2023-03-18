@@ -9,9 +9,6 @@ access_api(url)
 \arguments{
 \item{url}{}
 }
-\value{
-
-}
 \description{
 Title
 }

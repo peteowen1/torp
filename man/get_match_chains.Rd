@@ -9,9 +9,6 @@ get_match_chains(season = lubridate::year(Sys.Date()), round = NA)
 \arguments{
 \item{round}{}
 }
-\value{
-
-}
 \description{
 Title
 }

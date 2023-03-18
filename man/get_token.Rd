@@ -6,9 +6,6 @@
 \usage{
 get_token()
 }
-\value{
-
-}
 \description{
 Title
 }
