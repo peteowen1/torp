@@ -7,11 +7,28 @@ Authors@R:
 Description: What the package does (one paragraph).
 License: MIT + file LICENSE
 Imports: 
+    cli,
+    data.table,
     dplyr,
-    magrittr 
+    fastDummies,
+    fitzRoy,
+    forcats,
+    glue,
+    httr,
+    janitor,
+    jsonlite,
+    lubridate,
+    magrittr,
+    progressr,
+    purrr,
+    rlang,
+    stringr,
+    tibble,
+    tidyr,
+    zoo
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
-RoxygenNote: 7.1.2
+RoxygenNote: 7.2.3
 Suggests: 
     testthat (>= 3.0.0)
 Config/testthat/edition: 3

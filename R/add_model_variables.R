@@ -48,7 +48,7 @@ add_epv_vars <- function(df) {
       ),
       lead_team = dplyr::if_else(is.na(points_shot), dplyr::lead(team), team),
       xpoints_diff = points_diff + exp_pts,
-      delta_epv = lead(xpoints_diff,default = last(points_diff))*team_change - xpoints_diff, #round(lead_points * pos_team - exp_pts, 5),
+      delta_epv = lead(xpoints_diff,default = dplyr::last(points_diff))*team_change - xpoints_diff, #round(lead_points * pos_team - exp_pts, 5),
       weight_gm = exp(as.numeric(-(Sys.Date() - as.Date(utc_start_time))) / 365),
       round_week = sprintf("%02d", round_number)
     ) %>%
@@ -78,15 +78,15 @@ add_wp_vars <- function(df) {
   pbp_final <- cbind(df, base_wp_preds)
 
   pbp_final <- pbp_final %>%
-    group_by(match_id) %>%
+    dplyr::group_by(match_id) %>%
     dplyr::mutate(
       wp = round(wp, 5),
-      wpa = round(case_when(
-        lead(team_id_mdl, default = last(team_id_mdl)) == team_id_mdl ~ dplyr::lead(wp, default = last(wp)) - wp,
-        lead(team_id_mdl, default = last(team_id_mdl)) != team_id_mdl ~ (1 - dplyr::lead(wp, default = last(wp))) - wp
+      wpa = round(dplyr::case_when(
+        dplyr::lead(team_id_mdl, default = dplyr::last(team_id_mdl)) == team_id_mdl ~ dplyr::lead(wp, default = dplyr::last(wp)) - wp,
+        dplyr::lead(team_id_mdl, default = dplyr::last(team_id_mdl)) != team_id_mdl ~ (1 - dplyr::lead(wp, default = dplyr::last(wp))) - wp
       ),5)
     ) %>%
-    ungroup()
+    dplyr::ungroup()
 
   return(pbp_final)
 }
@@ -104,7 +104,7 @@ add_shot_vars <- function(df) {
         5),
       xscore = goal_prob*6 + (1-goal_prob)
     ) %>%
-    ungroup()
+    dplyr::ungroup()
 
   return(pbp_final)
 }
