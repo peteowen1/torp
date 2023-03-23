@@ -5,30 +5,16 @@ chains <- load_chains(seasons = T, rounds = T)
 
 model_data_wp <- load_pbp(seasons = T,rounds = T)
 
+decay <- 500
+
 ######################################### REMEMBER TO UNCOMMENT ADD_WP_VARS ON ROW 30 AND 52
 ### player value rule of thumb:
-### APY = bayes_g * 135k + 100k
-### so a replacement player is worth 100k, and someone with a bayes_g of 7 is worth 7*150k+100k = 1.15m
-### calculation is (teams cap ($13m) - team players (35) * min-salary (100k)) divided by mean "team bayes_g rating" (70)
+### APY = torp * 135k + 100k
+### so a replacement player is worth 100k, and someone with a torp of 7 is worth 7*150k+100k = 1.15m
+### calculation is (teams cap ($13m) - team players (35) * min-salary (100k)) divided by mean "team torp rating" (70)
 ### (14m - 35*100k)/70 = 150,000
 ######
-
-# chains_test <- load_chains(2021:2022)
-#
-# chains_clean <- chains_test %>%
-#   janitor::clean_names() %>%
-#   clean_pbp()
-#
-# df_test <- chains_clean %>%
-#   clean_model_data_epv() %>%
-#   add_epv_vars()
-#
-# df_test <- df_test %>%
-#   clean_model_data_wp() %>%
-#   add_wp_vars()
-
 ################### create player game df
-decay <- 500
 
 plyr_gm_df <-
   model_data_wp %>% #add_wp_vars() %>%
@@ -60,8 +46,8 @@ plyr_gm_df <-
                        delta_epv,team,player_position,round_week,pos_team,wpa) %>%
       dplyr::mutate(weight_gm = exp(as.numeric(-(max(as.Date(utc_start_time)) - as.Date(utc_start_time))) / decay)) %>%
       dplyr::group_by(lead_player, lead_player_id,match_id) %>%
-      dplyr::summarise( #### CHANGE TO IF_ELSE PLZ
-        recv_pts = sum((ifelse(pos_team == -1, 1.5 * delta_epv * pos_team ,delta_epv * pos_team)) / 2),
+      dplyr::summarise(
+        recv_pts = sum((dplyr::if_else(pos_team == -1, 1.5 * delta_epv * pos_team ,delta_epv * pos_team)) / 2),
         recv_pts_wt = sum(delta_epv * pos_team * max(weight_gm)) / 2,
         recv_wpa = sum((wpa) / 2),
         recvs = dplyr::n()
@@ -72,7 +58,7 @@ plyr_gm_df <-
               dplyr::filter(description == "Spoil") %>%
                 dplyr::mutate(weight_gm = exp(as.numeric(-(max(as.Date(utcStartTime)) - as.Date(utcStartTime))) / decay)) %>%
                 dplyr::group_by(playerId, matchId) %>%
-                dplyr::mutate() %>%
+                #dplyr::mutate() %>%
                 dplyr::summarise(spoils = dplyr::n(),
                           spoil_pts = spoils * 0.25,
                           spoil_pts_wt = spoil_pts * max(weight_gm)),
@@ -83,8 +69,10 @@ plyr_gm_df <-
                 tot_p_wt = recv_pts_wt + disp_pts_wt + spoil_pts_wt,
                 tot_wpa = recv_wpa + disp_wpa) %>%
   dplyr::ungroup() %>%
-  dplyr::mutate(rep_p = 2, #quantile(tot_p,0.2),
-         tot_p_adj = tot_p - rep_p) %>%
+  dplyr::mutate(tot_p_adj = tot_p - quantile(tot_p,0.3, na.rm = T),
+                recv_pts_adj = recv_pts - quantile(recv_pts,0.3, na.rm = T),
+                disp_pts_adj = disp_pts - quantile(disp_pts,0.3, na.rm = T),
+                spoil_pts_adj = spoil_pts - quantile(spoil_pts,0.3, na.rm = T)) %>%
   dplyr::relocate(tot_p_adj,disp) %>%
   dplyr::filter(!is.na(tm))
 

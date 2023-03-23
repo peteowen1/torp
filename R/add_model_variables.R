@@ -2,8 +2,6 @@
 #'
 #' @param df
 #'
-#' @return
-#' @export
 #'
 #' @examples
 #' \dontrun{

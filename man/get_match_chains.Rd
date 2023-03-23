@@ -4,7 +4,7 @@
 \alias{get_match_chains}
 \title{Title}
 \usage{
-get_match_chains(season = lubridate::year(Sys.Date()), round = NA)
+get_match_chains(season = most_recent_season(), round = NA)
 }
 \arguments{
 \item{round}{}

@@ -1,15 +1,12 @@
 ######################## takes 3 mins to build model, 1 min for rest
-# library(devtools)
-# library('tidyverse')
-# library('zoo')
-# library('tidymodels')
-# library('janitor')
-# library('lubridate')
+library('devtools')
+library('tidyverse')
+library('zoo')
+library('janitor')
+library('lubridate')
 devtools::load_all()
 
-chains <- load_chains(TRUE,TRUE) #%>%
-  # bind_rows(get_week_chains(2022, 26)) %>%
-  # bind_rows(get_week_chains(2022, 25))
+chains <- load_chains(TRUE,TRUE)
 
 tictoc::tic()
 pbp <- clean_pbp(chains)

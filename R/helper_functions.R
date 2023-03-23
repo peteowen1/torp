@@ -2,7 +2,6 @@
 #'
 #' @param df
 #'
-#' @return
 #' @export
 #'
 #' @examples

@@ -2,18 +2,17 @@
 % Please edit documentation in R/match_xg_functions.R
 \name{match_xgs}
 \alias{match_xgs}
-\title{add ep vars}
+\title{match_xgs}
 \usage{
-match_xgs(season, round, match_id = NA)
+match_xgs(season = get_afl_season(), round = get_afl_week(), match_id = NA)
 }
 \arguments{
-\item{df}{}
+\item{season}{AFL season}
+
+\item{round}{AFL round}
+
+\item{match_id}{AFL match ID}
 }
 \description{
-add ep vars
-}
-\examples{
-\dontrun{
-add_epv_vars(df)
-}
+match_xgs
 }

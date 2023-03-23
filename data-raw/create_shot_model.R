@@ -64,5 +64,3 @@ player_shot_score <- mixedup::extract_ranef(shot_result_mdl) %>%
   dplyr::arrange(-value) # %>% tibble::view()
 
 usethis::use_data(player_shot_score, overwrite = TRUE)
-
-### shots$pred <- predict.bam(shot_result_mdl,shots,type="response")

@@ -4,7 +4,7 @@
 \alias{get_players}
 \title{Title}
 \usage{
-get_players()
+get_players(use_api = FALSE)
 }
 \description{
 Title

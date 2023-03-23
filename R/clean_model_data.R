@@ -2,12 +2,10 @@
 #'
 #' @param df
 #'
-#' @return
-#' @export
 #'
 #' @examples
 #' \dontrun{
-#' clean_model_data(df)
+#' clean_model_data_epv(df)
 #' }
 clean_model_data_epv <- function(df) {
   model_data <- df %>%

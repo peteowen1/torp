@@ -12,14 +12,14 @@
 #' })
 #' }
 #' @export
-load_chains <- function(seasons = most_recent_season(), rounds = get_current_week()) {
+load_chains <- function(seasons = get_afl_season(), rounds = get_afl_week()) {
 
 
-  if(isTRUE(seasons)) seasons <- 2021:most_recent_season()
+  if(isTRUE(seasons)) seasons <- 2021:get_afl_season()
 
   stopifnot(is.numeric(seasons),
             seasons >=2021,
-            seasons <= most_recent_season())
+            seasons <= get_afl_season())
 
   if(isTRUE(rounds)) rounds <- 1:27
 
@@ -31,7 +31,7 @@ load_chains <- function(seasons = most_recent_season(), rounds = get_current_wee
 
   urls <- paste0("https://github.com/peteowen1/torpdata/releases/download/chain-data/chain_data_",seasons,"_",rep(rounds_02d,each = length(seasons)), ".rds")
 
-  urls <- urls[which(urls <= glue::glue("https://github.com/peteowen1/torpdata/releases/download/chain-data/chain_data_{most_recent_season()}_{get_current_week()}.rds"))]
+  urls <- urls[which(urls <= glue::glue("https://github.com/peteowen1/torpdata/releases/download/chain-data/chain_data_{get_afl_season()}_{get_afl_week()}.rds"))]
 
   out <- load_from_url(urls, seasons = T, rounds = T)
 
@@ -55,13 +55,13 @@ load_chains <- function(seasons = most_recent_season(), rounds = get_current_wee
 #' }
 #'
 #' @export
-load_pbp <- function(seasons = most_recent_season(), rounds = get_current_week()) {
+load_pbp <- function(seasons = get_afl_season(), rounds = get_afl_week()) {
 
-  if(isTRUE(seasons)) seasons <- 2021:most_recent_season()
+  if(isTRUE(seasons)) seasons <- 2021:get_afl_season()
 
   stopifnot(is.numeric(seasons),
             seasons >=2021,
-            seasons <= most_recent_season())
+            seasons <= get_afl_season())
 
   if(isTRUE(rounds)) rounds <- 1:27
 
@@ -73,7 +73,7 @@ load_pbp <- function(seasons = most_recent_season(), rounds = get_current_week()
 
   urls <- paste0("https://github.com/peteowen1/torpdata/releases/download/pbp-data/pbp_data_",seasons,"_",rep(rounds_02d,each = length(seasons)), ".rds") %>% sort()
 
-  urls <- urls[which(urls <= glue::glue("https://github.com/peteowen1/torpdata/releases/download/pbp-data/pbp_data_{most_recent_season()}_{get_current_week()}.rds"))]
+  urls <- urls[which(urls <= glue::glue("https://github.com/peteowen1/torpdata/releases/download/pbp-data/pbp_data_{get_afl_season()}_{get_afl_week()}.rds"))]
 
   out <- load_from_url(urls, seasons = seasons, rounds = rounds)
 

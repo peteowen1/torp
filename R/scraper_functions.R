@@ -10,7 +10,7 @@
 #' \dontrun{
 #' get_match_chains()
 #' }
-get_match_chains <- function(season = lubridate::year(Sys.Date()), round = NA) {
+get_match_chains <- function(season = most_recent_season(), round = NA) {
   if (season < 2021) {
     stop("Match chain data is not available for seasons prior to 2021.")
   }
@@ -33,8 +33,9 @@ get_match_chains <- function(season = lubridate::year(Sys.Date()), round = NA) {
     get_many_game_chains(games_vector)
   })
   players <- get_players()
-  chains <- dplyr::inner_join(chains, games, by = "matchId")
-  chains <- dplyr::left_join(chains, players, by = "playerId")
+  chains <- chains %>% dplyr::inner_join(games, by = "matchId")
+  chains <- chains %>% dplyr::left_join(players, by = c("playerId","season"))
+
   # chains <- chains %>% dplyr::select(
   #   matchId, season, roundNumber, utcStartTime,homeTeamId:providerMatchId, homeTeam.teamName:date, venue.name:venue.state,
   #   venueWidth:homeTeamDirectionQtr1, displayOrder, chain_number,
@@ -131,7 +132,7 @@ get_round_games <- function(season, round) {
       # )
       games$date <- substr(games$utcStartTime, 1, 10)
       games$date <- as.Date(games$utcStartTime)
-      games$season <- lubridate::year(games$utcStartTime)
+      games$season <- season
 
       return(games)
     }
@@ -142,8 +143,8 @@ get_round_games <- function(season, round) {
 #' @param season
 #'
 #' @export
-get_season_games <- function(season) {
-  games <- purrr::map_df(1:30, ~ get_round_games(season, .))
+get_season_games <- function(season, rounds = 27) {
+  games <- purrr::map_df(1:rounds, ~ get_round_games(season, .))
 
   return(games)
 }
@@ -155,12 +156,24 @@ get_season_games <- function(season) {
 #' @export
 #'
 #' @examples
-get_players <- function() {
-  url <- paste0("https://api.afl.com.au/cfs/afl/players")
-  players <- access_api(url)
-  players <- players[[5]]
-  players <- players # %>% select(playerId, playerName.givenName, playerName.surname, team.teamName)
+get_players <- function(use_api = FALSE) {
+  if (use_api == TRUE) {
+    url <- paste0("https://api.afl.com.au/cfs/afl/players")
+    players <- access_api(url)
+    players <- players[[5]]
+    players <- players %>%
+      dplyr::mutate(season = most_recent_season())# %>% select(playerId, playerName.givenName, playerName.surname, team.teamName)
+  }
 
+  if (use_api == FALSE) {
+  players <- torp::plyr_tm_db %>%
+    dplyr::mutate(photoURL = NA,
+                  team.teamId = NA,
+                  team.teamAbbr = NA) %>%
+    dplyr::select(playerId = providerId,jumperNumber,playerPosition = position,photoURL, playerName.givenName = firstName,
+                  playerName.surname = surname,team.teamId,team.teamAbbr,team.teamName = team, season)
+
+  }
   return(players)
 }
 
@@ -211,10 +224,8 @@ get_game_chains <- function(match_id) {
 #' @param chains_t2
 #' @param chain_number
 #'
-#' @return
 #' @export
 #'
-#' @examples
 get_single_chain <- function(chains_t2, chain_number) {
   if (length(chains_t2) > 5) {
     chains_t3 <- chains_t2[[chain_number, 6]]

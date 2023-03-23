@@ -4,7 +4,7 @@
 \alias{load_chains}
 \title{Load Chains}
 \usage{
-load_chains(seasons = most_recent_season(), rounds = get_current_week())
+load_chains(seasons = get_afl_season(), rounds = get_afl_week())
 }
 \arguments{
 \item{seasons}{A numeric vector of 4-digit years associated with given AFL seasons - defaults to latest season. If set to \code{TRUE}, returns all available data since 2021.}

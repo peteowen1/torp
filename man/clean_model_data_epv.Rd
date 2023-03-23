@@ -14,6 +14,6 @@ Clean model data
 }
 \examples{
 \dontrun{
-clean_model_data(df)
+clean_model_data_epv(df)
 }
 }

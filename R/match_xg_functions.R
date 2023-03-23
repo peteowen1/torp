@@ -1,15 +1,12 @@
-#' add ep vars
+#' match_xgs
 #'
-#' @param df
+#' @param season AFL season
+#' @param round AFL round
+#' @param match_id AFL match ID
 #'
-#' @return
 #' @export
 #'
-#' @examples
-#' \dontrun{
-#' add_epv_vars(df)
-#' }
-match_xgs <- function(season,round,match_id = NA){
+match_xgs <- function(season = get_afl_season(),round = get_afl_week(),match_id = NA){
 
   df <- load_pbp(seasons = season,rounds = round)
 
@@ -36,6 +33,3 @@ match_xgs <- function(season,round,match_id = NA){
   return(shots_df)
 }
 
-# xg_21 <- purrr::map_df(1:27,~match_xgs(2021,.))
-# xg_22 <- purrr::map_df(1:27,~match_xgs(2022,.))
-# xg_tot <- bind_rows(xg_21,xg_22)
