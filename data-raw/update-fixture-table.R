@@ -9,7 +9,7 @@ usethis::use_data(fixtures,overwrite = TRUE)
 # teams <- purrr::map_df(2021:get_afl_season(),~fitzRoy::fetch_lineup_afl(., comp = "AFLM")) %>%
 #   dplyr::mutate(season = as.numeric(substr(providerId, 5, 8)),
 #                 row_id = paste0(providerId,teamId,player.playerId)) %>%
-#   dplyr::filter(!is.na(player.playerId))
+##   dplyr::filter(!is.na(player.playerId))
 
 ####
 team_wk <- fitzRoy::fetch_lineup_afl(season = get_afl_season(type="next"),
