@@ -183,7 +183,9 @@ clean_shots_data <- function(df){
                       points_shot == 1 ~ 0,
                       points_shot == 6 ~ 1,
                       TRUE ~ NA_real_
-                    )))
+                    )),
+                  scored_shot = dplyr::if_else(!is.na(shot_at_goal),dplyr::if_else(!is.na(points_shot),1,0),NA_real_)
+                  )
 
 
   df$abs_y <- abs(df$y)
@@ -197,7 +199,7 @@ clean_shots_data <- function(df){
   df$shot_ineffective <- dplyr::if_else(df$shot_at_goal == TRUE & df$disposal == "ineffective",1,0)
 
   df <- df %>%
-    dplyr::left_join(shot_player_df,by = c('player_id'='player_id_shot'),keep = TRUE)
+    dplyr::left_join(torp::shot_player_df,by = c('player_id'='player_id_shot'),keep = TRUE)
 
   df$player_id_shot <-  as.factor(tidyr::replace_na(df$player_id_shot,'Other'))
   df$player_name_shot <-  as.factor(tidyr::replace_na(df$player_name_shot,'Other'))

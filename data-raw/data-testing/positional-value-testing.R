@@ -1,56 +1,90 @@
 ##### BASIC TESTING
-afl_score_mdl <- glm(score_diff ~ team_type_fac + torp_diff,
+afl_torp_diff_mdl <- mgcv::bam(score_diff ~ team_type_fac
+                               + torp_diff
+                         + key_def.x + med_def.x + midfield.x + mid_fwd.x
+                         + med_fwd.x + key_fwd.x + rucks.x
+                         + key_def.y + med_def.y + midfield.y + mid_fwd.y
+                         + med_fwd.y + key_fwd.y + rucks.y
+                         + int.x +int.y
+                         ,
                      data = team_mdl_df %>% dplyr::filter(),
                      family = "gaussian")
 
-summary(afl_score_mdl)
+summary(afl_torp_diff_mdl)
 
+team_mdl_df$pred_score_difference <- predict(afl_torp_diff_mdl,team_mdl_df, type='response')
 
+##### BASIC TESTING
+afl_torp_diff_win_mdl <- mgcv::bam(win ~ team_type_fac
+                             + torp_diff
+                             + key_def.x + med_def.x + midfield.x + mid_fwd.x
+                             + med_fwd.x + key_fwd.x + rucks.x
+                             + key_def.y + med_def.y + midfield.y + mid_fwd.y
+                             + med_fwd.y + key_fwd.y + rucks.y
+                             + int.x +int.y
+                             + pred_score_difference
+                             ,
+                        data = team_mdl_df %>% dplyr::filter(),
+                        family = "binomial")
+
+summary(afl_torp_diff_win_mdl)
+
+adf <- team_mdl_df %>%
+  dplyr::filter(season.x == get_afl_season('next'),
+                round.roundNumber.x == get_afl_week('next'),
+                team_type_fac == "home") %>%
+  dplyr::mutate(pred_score_difference = predict(afl_torp_diff_mdl,.),
+                pred_win = predict(afl_torp_diff_win_mdl,.,type = 'response'))
+
+adf %>% dplyr::select(providerId,count.x,venue.name.x, team_name.x,torp.x,team_name.y,torp.y,torp_diff,int.x,int.y,pred_score_difference,pred_win)
 #################### Positional value testing
-
-BP_ind <- 1
-FB_ind <- 1.4
-HBF_ind <- 1.05
-CHB_ind <- 1.4
-W_ind <- 0.65
-C_ind <- 0.95
-R_ind <- 0.8
-RR_ind <- 1
-RK_ind <- 1
-HFF_ind <- 0.85
-CHF_ind <- 1
-FP_ind <- 1.2
-FF_ind <- 1
-###
-backs_ind <- 1.5
-half_backs_ind <- 1.3
-midfielders_ind <- 0.8
-followers_ind <- 0.7
-half_forwards_ind <- 1
-forwards_ind <- 1.4
-
 ###
 # team_mdl_df[,13:18] <- scale(team_mdl_df[,13:18])
 # team_mdl_df[,62:67] <- scale(team_mdl_df[,62:67])
 
 afl_score_mdl <- mgcv::bam(score_diff ~
+                             0 +
                              s(team_type_fac, bs = "re")
-                           # # + s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
-                           # + s(bayes_g_diff, bs = "ts", k = 5)
-                           # + s(bayes_recv_g_diff, bs = "ts", k = 5)
-                           # + s(bayes_disp_g_diff, bs = "ts", k = 5)
+                           ### standard variables
+                           # + s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
+                           # + s(torp_diff, bs = "ts", k = 5)
+                           # + s(torp_recv_g_diff, bs = "ts", k = 5)
+                           # + s(torp_disp_g_diff, bs = "ts", k = 5)
                            # # + s(hoff_adef,bs="ts") + s(hmid_amid,bs="ts")+ s(hdef_afwd,bs="ts")+ s(hint_aint,bs="ts")
                            ### positional phase
-                           # + fwd.x + mid.x + def.x + int.x
-                           # + fwd.y + mid.y + def.y + int.y
+                           + fwd.x + mid.x + def.x + int.x
+                           + fwd.y + mid.y + def.y + int.y
                            ### champion position
-                           # + key_def.x + med_def.x + midfield.x + mid_fwd.x + med_fwd.x + key_fwd.x + rucks.x
-                           # + key_def.y + med_def.y + midfield.y + mid_fwd.y + med_fwd.y + key_fwd.y + rucks.y
+                           + key_def.x + med_def.x + midfield.x + mid_fwd.x + med_fwd.x + key_fwd.x + rucks.x
+                           + key_def.y + med_def.y + midfield.y + mid_fwd.y + med_fwd.y + key_fwd.y + rucks.y
                            ### positional line
                            + I(backs.x) + I(half_backs.x ) + I(midfielders.x )
                            + I(followers.x ) + I(half_forwards.x ) + I(forwards.x )
                            + I(backs.y) + I(half_backs.y ) + I(midfielders.y )
                            + I(followers.y ) + I(half_forwards.y ) + I(forwards.y )
+                           ### grouped position
+                           # + I((FB.x))
+                           # + I((CHB.x))
+                           # + I((BPL.x + BPR.x))
+                           # + I((HBFL.x + HBFR.x))
+                           # + I((WL.x + WR.x))
+                           # + I(C.x)
+                           # + I(R.x) + I(RR.x) + I(RK.x)
+                           # + I((HFFL.x + HFFR.x))
+                           # + I((FPL.x + FPR.x))
+                           # + I((CHF.x))
+                           # + I((FF.x))
+                           # + I((FB.y))
+                           # + I((CHB.y))
+                           # + I((BPL.y + BPR.y))
+                           # + I((HBFL.y + HBFR.y))
+                           # + I((WL.y + WR.y))
+                           # + I(C.y)
+                           # + I(R.y) + I(RR.y) + I(RK.y)
+                           # + I((HFFL.y + HFFR.y))
+                           # + I((FPL.y + FPR.y))
+                           # + I((CHF.y))
+                           # + I((FF.y))
                            ### individual position
                            # + I(BPL.x)+ I(BPR.x) + I(FB.x)
                            # + I(HBFL.x) + I(HBFR.x) + I(CHB.x)

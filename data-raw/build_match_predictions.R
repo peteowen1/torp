@@ -1,22 +1,25 @@
 ###
 devtools::load_all()
 
-teams <- torp::teams
+data(teams, envir = environment())
 
-results <- torp::results
+data(results, envir = environment())
 
-torp_df_total <- torp::torp_df_total
+data(torp_df_total, envir = environment())
 
-decay <- 250
+xg_df <- match_xgs(T,T)
+
+decay <- 1500
 
 #############
 
-team_rt_df <-
+team_lineup_df <-
   teams %>% #dplyr::filter(providerId != 'CD_M20230140105' | player.playerId != 'CD_I297373') %>% #tibble::view()
   dplyr::left_join(torp_df_total , by = c("player.playerId" = "player_id","season"="season","round.roundNumber"="round")) %>%
   #dplyr::filter(!is.na(torp) | (get_afl_season(type = 'next') >= season &  get_afl_week(type = 'next') >= round.roundNumber)) %>% #as.Date(utcStartTime.x) >= lubridate::with_tz(Sys.Date(),"UTC")
   dplyr::filter((position.x != "EMERG" & position.x != "SUB") | is.na(position.x)) %>% #tibble::view()
   dplyr::mutate(
+    ###### CHECK
     torp = tidyr::replace_na(torp,0),
     torp_recv = tidyr::replace_na(torp_recv,0),
     torp_disp = tidyr::replace_na(torp_disp,0),
@@ -71,8 +74,10 @@ team_rt_df <-
     key_fwd = ifelse(position.y == "KEY_FORWARD", torp, NA),
     rucks = ifelse(position.y == "RUCK", torp, NA),
     other_pos = ifelse(is.na(position.y), torp, NA)
-  ) %>%
-  dplyr::group_by(providerId, teamName, season, round.roundNumber, teamType) %>%
+  )
+
+team_rt_df <- team_lineup_df %>%
+  dplyr::group_by(providerId,venue.name, teamName, season, round.roundNumber, teamType) %>%
   dplyr::summarise(
     torp = sum(torp), # , na.rm = T),
     torp_recv = sum(torp_recv), # , na.rm = T),
@@ -155,6 +160,8 @@ team_mdl_df <- team_rt_df %>% # filter(!is.na(torp)) %>%
     ),
   by = c("providerId" = "match.matchId")
   ) %>%
+  dplyr::left_join(xg_df,
+                   by = c("providerId" = "match_id")) %>%
   dplyr::mutate(
     home_shots = homeTeamScore.matchScore.goals + homeTeamScore.matchScore.behinds,
     away_shots = awayTeamScore.matchScore.goals + awayTeamScore.matchScore.behinds,
@@ -173,6 +180,14 @@ team_mdl_df <- team_rt_df %>% # filter(!is.na(torp)) %>%
     shot_conv = ifelse(teamType == "home",
       homeTeamScore.matchScore.goals / home_shots,
       awayTeamScore.matchScore.goals / away_shots
+    ),
+    xscore_diff = ifelse(teamType == "home",
+                         xscore_diff ,
+                         - xscore_diff
+    ),
+    team_xscore = ifelse(teamType == "home",
+                         home_xscore,
+                         away_xscore
     ),
     win = ifelse(score_diff > 0, 1, ifelse(score_diff == 0, 0.5, 0)),
     hoff_adef = pmax(pmin((fwd.x - def.y), 20), -5),
@@ -222,46 +237,92 @@ team_mdl_df$pred_shot_diff <- predict(afl_shot_mdl, newdata = team_mdl_df, type 
 # Deviance explained = 44.5%
 
 ###
+afl_total_xpoints_mdl <- mgcv::bam(total_xpoints ~
+  s(team_type_fac, bs = "re")
+  #+ s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
+  + s(abs(torp_diff), bs = "ts", k = 5)
+  + s(abs(torp_recv_diff), bs = "ts", k = 5)
+  + s(abs(torp_disp_diff), bs = "ts", k = 5)
+  + s(torp.x, bs = "ts", k = 5) + s(torp.y, bs = "ts", k = 5)
+  + s(fwd.x, bs = "ts", k = 5) + s(mid.x, bs = "ts", k = 5) + s(def.x, bs = "ts", k = 5) + s(int.x, bs = "ts", k = 5)
+  + s(fwd.y, bs = "ts", k = 5) + s(mid.y, bs = "ts", k = 5) + s(def.y, bs = "ts", k = 5) + s(int.y, bs = "ts", k = 5)
+  ,
+data = team_mdl_df, weights = weightz,
+family = gaussian(), nthreads = 4, select = T, discrete = T
+)
+
+team_mdl_df$pred_tot_xscore <- predict(afl_total_xpoints_mdl, newdata = team_mdl_df, type = "response")
+
+# summary(afl_total_xpoints_mdl)
+# Deviance explained =   22%
+
+###
+afl_xscore_diff_mdl <- mgcv::bam(xscore_diff ~
+  s(team_type_fac, bs = "re")
+  #+ s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
+  + ti(torp_diff, pred_tot_xscore, bs = c("ts", "ts"), k = 4)
+  + s(pred_tot_xscore, bs = "ts", k = 5)
+  + s(torp_diff, bs = "ts", k = 5),
+data = team_mdl_df, weights = weightz,
+family = gaussian(), nthreads = 4, select = T, discrete = T
+)
+team_mdl_df$pred_xscore_diff <- predict(afl_xscore_diff_mdl, newdata = team_mdl_df, type = "response")
+
+# summary(afl_xscore_diff_mdl)
+# mixedup::extract_ranef(afl_xscore_diff_mdl) %>% tibble::view()
+# plot(mgcViz::getViz(afl_xscore_diff_mdl))
+# Deviance explained = 44.5%
+
+
+###
 afl_conv_mdl <- mgcv::bam(shot_conv ~
   s(team_type_fac, bs = "re")
   #+ s(team_name.x, bs = "re")+ s(team_name.y, bs = "re")
-  + ti(torp_diff, pred_totshots, bs = c("ts", "ts"), k = 4)
-  + s(pred_totshots, bs = "ts", k = 5)
-  + s(pred_shot_diff, bs = "ts", k = 5)
+  + ti(torp_diff, pred_tot_xscore, bs = c("ts", "ts"), k = 4)
+  + s(pred_tot_xscore, bs = "ts", k = 5)
+  + s(pred_xscore_diff, bs = "ts", k = 5)
   + s(torp_diff, bs = "ts", k = 5)
   + s(fwd.x, bs = "ts", k = 5) + s(mid.x, bs = "ts", k = 5) + s(def.x, bs = "ts", k = 5) + s(int.x, bs = "ts", k = 5)
   + s(fwd.y, bs = "ts", k = 5) + s(mid.y, bs = "ts", k = 5) + s(def.y, bs = "ts", k = 5) + s(int.y, bs = "ts", k = 5),
 data = team_mdl_df, weights = team_shots * weightz,
 family = "binomial", nthreads = 4, select = T, discrete = T
 )
-team_mdl_df$pred_conv <- predict(afl_conv_mdl, newdata = team_mdl_df, type = "response")
 
+team_mdl_df$pred_conv <- predict(afl_conv_mdl, newdata = team_mdl_df, type = "response")
+# summary(afl_conv_mdl)
 ###
 
 afl_score_mdl <- mgcv::bam(score_diff ~
   s(team_type_fac, bs = "re")
-  + s(pred_totshots, bs = "ts", k = 5)
-  + ti(pred_shot_diff, pred_conv, bs = c("ts", "ts"), k = 4)
+  + s(pred_tot_xscore, bs = "ts", k = 5)
+  + ti(pred_xscore_diff, pred_conv, bs = c("ts", "ts"), k = 4)
   + s(pred_conv, bs = "ts", k = 5)
   + s(torp_diff, bs = "ts", k = 5)
   + s(torp_recv_diff, bs = "ts", k = 5)
   + s(torp_disp_diff, bs = "ts", k = 5)
-  + s(pred_shot_diff, bs = "ts", k = 5),
+  + s(pred_xscore_diff, bs = "ts", k = 5),
 data = team_mdl_df, weights = weightz,
 family = "gaussian", nthreads = 4, select = T, discrete = T
 )
 team_mdl_df$pred_score_diff <- predict(afl_score_mdl, newdata = team_mdl_df, type = "response")
+
+# summary(afl_score_mdl)
 # Deviance explained = 42.2%
 
 ###
 afl_win_mdl <-
   mgcv::bam(win ~
     s(team_type_fac, bs = "re")
-    + ti(pred_totshots, pred_score_diff, bs = c("ts", "ts"), k = 4)
-    + s(pred_score_diff, bs = "ts", k = 5),
+    #+ ti(pred_tot_xscore, pred_score_diff, bs = c("ts", "ts"), k = 4)
+    + ti(pred_tot_xscore, pred_xscore_diff, bs = c("ts", "ts"), k = 4)
+    + s(pred_score_diff, bs = "ts", k = 5)
+    #+ s(pred_xscore_diff, bs = "ts", k = 5)
+    ,
   data = team_mdl_df, weights = weightz,
   family = "binomial", nthreads = 4, select = T, discrete = T
   )
+
+# summary(afl_win_mdl)
 
 team_mdl_df$pred_win <- predict(afl_win_mdl, newdata = team_mdl_df, type = "response")
 team_mdl_df$bits <- ifelse(team_mdl_df$win == 1,

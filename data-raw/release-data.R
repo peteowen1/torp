@@ -52,26 +52,27 @@ get_chains_data <- function(season,round) {
 # extract and save
 # purrr::walk(1:27,~get_chains_data(2021,.))
 # purrr::walk(1:27,~get_chains_data(2022,.))
-purrr::walk(1:get_afl_week(),~get_chains_data(2023,.))
+# purrr::walk(1:get_afl_week(),~get_chains_data(2023,.))
+get_chains_data(2023,get_afl_week())
 
 # Get pbp data  -------------------------------------------------------------
 get_pbp_data <- function(season,round) {
 
   chains <- get_week_chains(season, round)
 
-  ### clean chains (1.5 secs per game)
+  ### clean chains (1.5 secs per round)
   pbp <- clean_pbp(chains)
 
-  ### filter and prep data for epv model (7.5 secs per game)
+  ### filter and prep data for epv model (7.5 secs per round)
   model_data_epv <- clean_model_data_epv(pbp)
 
-  ### add epv and wp variables  (0.5 secs per game)
+  ### add epv and wp variables  (0.5 secs per round)
   model_data_wp <- model_data_epv %>%
+    clean_shots_data() %>%
+    add_shot_vars() %>%
     add_epv_vars() %>%
     clean_model_data_wp() %>%
-    add_wp_vars() %>%
-    clean_shots_data() %>%
-    add_shot_vars()
+    add_wp_vars()
 
 
   round_02d <- sprintf("%02d", round)
@@ -86,5 +87,5 @@ get_pbp_data <- function(season,round) {
 # extract and save
 # purrr::walk(1:27,~get_pbp_data(2021,.))
 # purrr::walk(1:27,~get_pbp_data(2022,.))
-purrr::walk(1:get_afl_week(),~get_pbp_data(2023,.))
-
+# purrr::walk(1:get_afl_week(),~get_pbp_data(2023,.))
+get_pbp_data(2023,get_afl_week())

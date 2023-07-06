@@ -55,19 +55,20 @@ add_epv_vars <- function(df) {
   return(pbp_final)
 }
 
-add_shot_preds <- function(df) {
-  base_shot_preds <- get_shot_preds(df)
-  colnames(base_shot_preds) <- c('clanger_prob','behind_prob','goal_prob')
-
-  pbp_final <- cbind(df, base_shot_preds)
-  pbp_final <- pbp_final %>%
-    mutate(clanger_prob = dplyr::if_else(!is.na(shot_at_goal),clanger_prob,NA),
-           behind_prob = dplyr::if_else(!is.na(shot_at_goal),behind_prob,NA),
-           goal_prob = dplyr::if_else(!is.na(shot_at_goal),goal_prob,NA),
-           xg = 6*goal_prob + behind_prob)
-
-  return(pbp_final)
-}
+######## multinomial
+# add_shot_preds <- function(df) {
+#   base_shot_preds <- get_shot_preds(df)
+#   colnames(base_shot_preds) <- c('clanger_prob','behind_prob','goal_prob')
+#
+#   pbp_final <- cbind(df, base_shot_preds)
+#   pbp_final <- pbp_final %>%
+#     mutate(clanger_prob = dplyr::if_else(!is.na(shot_at_goal),clanger_prob,NA),
+#            behind_prob = dplyr::if_else(!is.na(shot_at_goal),behind_prob,NA),
+#            goal_prob = dplyr::if_else(!is.na(shot_at_goal),goal_prob,NA),
+#            xg = 6*goal_prob + behind_prob)
+#
+#   return(pbp_final)
+# }
 
 
 add_wp_vars <- function(df) {
@@ -91,16 +92,15 @@ add_wp_vars <- function(df) {
 
 
 add_shot_vars <- function(df) {
-  base_shot_preds <- tibble::tibble(goal_prob = get_shot_preds(df))
-  pbp_final <- cbind(df, base_shot_preds)
+  base_shot_on_target_preds <- tibble::tibble(on_target_prob = get_shot_on_target_preds(df))
+  base_shot_result_preds <- tibble::tibble(goal_prob = get_shot_result_preds(df))
+  pbp_final <- cbind(df, base_shot_result_preds,base_shot_on_target_preds)
 
   pbp_final <- pbp_final %>%
     dplyr::mutate(
-      goal_prob = round(
-        dplyr::if_else(
-        !is.na(points_shot), goal_prob, NA_real_),
-        5),
-      xscore = goal_prob*6 + (1-goal_prob)
+      on_target_prob = round(dplyr::if_else(!is.na(shot_at_goal) & x > 0, on_target_prob, NA_real_),5),
+      goal_prob = round(dplyr::if_else(!is.na(shot_at_goal) & x > 0, goal_prob, NA_real_),5),
+      xscore = on_target_prob * (goal_prob*6 + (1-goal_prob))
     ) %>%
     dplyr::ungroup()
 
@@ -131,7 +131,13 @@ get_wp_preds <- function(df) {
 }
 
 # for predict stage
-get_shot_preds <- function(df) {
+get_shot_on_target_preds <- function(df) {
+  preds <- stats::predict(shot_on_target_mdl, df, type = "response")
+  return(preds)
+}
+
+# for predict stage
+get_shot_result_preds <- function(df) {
   preds <- stats::predict(shot_result_mdl, df, type = "response")
   return(preds)
 }

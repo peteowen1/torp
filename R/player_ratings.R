@@ -9,7 +9,7 @@
 #' @param prior_games
 #'
 #' @export
-torp_ratings <- function(season_val = get_afl_season(type = 'next'), round_val = get_afl_week(type = 'next'), decay = 500, loading = 1.5, prior_games = 4) {
+torp_ratings <- function(season_val = get_afl_season(type = "next"), round_val = get_afl_week(type = "next"), decay = 500, loading = 1.5, prior_games = 4) {
   gwk <- sprintf("%02d", round_val) # keep this in case you change to round -1 or round +1
   match_ref <- paste0("CD_M", season_val, "014", gwk)
   date_val <- torp::fixtures %>%
@@ -45,9 +45,9 @@ torp_ratings <- function(season_val = get_afl_season(type = 'next'), round_val =
       torp_recv_adj1 = torp_recv * torp_ratio,
       torp_disp_adj1 = torp_disp * torp_ratio,
       torp_diff = torp - (torp_recv_adj1 + torp_disp_adj1),
-      torp_recv_adj = round((torp_recv_adj1 + torp_diff / 2)*loading, 2),
-      torp_disp_adj = round((torp_disp_adj1 + torp_diff / 2)*loading, 2),
-      torp = round(torp*loading, 2),
+      torp_recv_adj = round((torp_recv_adj1 + torp_diff / 2) * loading, 2),
+      torp_disp_adj = round((torp_disp_adj1 + torp_diff / 2) * loading, 2),
+      torp = round(torp * loading, 2),
       posn = dplyr::last(pos)
     )
 
@@ -61,12 +61,13 @@ torp_ratings <- function(season_val = get_afl_season(type = 'next'), round_val =
       season = season_val
     ) %>%
     dplyr::left_join(torp::fixtures %>%
-                       dplyr::group_by(season = compSeason.year,round= round.roundNumber) %>%
-                       dplyr::summarise(ref_date = lubridate::as_date(min(utcStartTime)))
-                     ) %>%
-    dplyr::mutate(age =
-                    lubridate::decimal_date(lubridate::as_date(ref_date))-
-                    lubridate::decimal_date(lubridate::as_date(dateOfBirth))) %>%
+      dplyr::group_by(season = compSeason.year, round = round.roundNumber) %>%
+      dplyr::summarise(ref_date = lubridate::as_date(min(utcStartTime)))) %>%
+    dplyr::mutate(
+      age =
+        lubridate::decimal_date(lubridate::as_date(ref_date)) -
+          lubridate::decimal_date(lubridate::as_date(dateOfBirth))
+    ) %>%
     dplyr::select(
       player_id = providerId, player_name = player_name.x, age, team, torp,
       torp_recv = torp_recv_adj, torp_disp = torp_disp_adj,
@@ -89,10 +90,10 @@ torp_ratings <- function(season_val = get_afl_season(type = 'next'), round_val =
 #'
 #' @export
 
-team_player_game_ratings <- function(season_val = get_afl_season(),
-                                     round_num = get_afl_week(),
-                                     matchid = FALSE,
-                                     team = FALSE) {
+player_game_ratings <- function(season_val = get_afl_season(),
+                                round_num = get_afl_week(),
+                                matchid = FALSE,
+                                team = FALSE) {
   if (matchid != FALSE) {
     df <- torp::plyr_gm_df %>%
       dplyr::filter(match_id %in% matchid)
@@ -120,20 +121,83 @@ team_player_game_ratings <- function(season_val = get_afl_season(),
         cli::cli_abort("Team not found please use one of: Adelaide Crows, Brisbane Lions, Carlton, Collingwood,
                        Essendon, Fremantle, Geelong Cats, Gold Coast Suns, GWS Giants, Hawthorn, Melbourne,
                        North Melbourne, Port Adelaide, Richmond, St Kilda, Sydney Swans, West Coast Eagles, Western Bulldogs")
-
       }
     }
   }
 
   final <- df %>%
     dplyr::arrange(-tot_p_adj) %>%
-    dplyr::mutate(total_points = round(tot_p_adj,1),
-           recv_points = round(recv_pts_adj,1),
-           disp_points = round(disp_pts_adj,1),
-           spoil_points = round(spoil_pts_adj,1)
-           ) %>%
-    dplyr::select(season, round, player_name = plyr_nm,position = pos,team = tm, opp,
-                  total_points,recv_points,disp_points, spoil_points, player_id, match_id)
+    dplyr::mutate(
+      total_points = round(tot_p_adj, 1),
+      recv_points = round(recv_pts_adj, 1),
+      disp_points = round(disp_pts_adj, 1),
+      spoil_points = round(spoil_pts_adj, 1)
+    ) %>%
+    dplyr::select(season, round,
+      player_name = plyr_nm, position = pos, team = tm, opp,
+      total_points, recv_points, disp_points, spoil_points, player_id, match_id
+    )
 
   return(final)
+}
+
+
+#' Get season total ratings
+#'
+#'
+#' @param season_val
+#'
+#' @export
+
+player_season_ratings <- function(season_val = get_afl_season(),round_num = NA) {
+
+  df <- dplyr::tibble()
+
+  if(season_val < get_afl_season()){
+    if(any(is.na(round_num))){
+    df <- player_game_ratings(season_val, 1:99) %>%
+      dplyr::group_by(season, player_name, player_id, team, position) %>%
+      dplyr::summarise(season_points = sum(total_points),
+                       season_recv = sum(recv_points),
+                       season_disp = sum(disp_points),
+                       season_spoil = sum(spoil_points),
+                       games = dplyr::n()) %>%
+      dplyr::arrange(-season_points)
+    }
+    if(!any(is.na(round_num))){
+      df <- player_game_ratings(season_val, round_num) %>%
+        dplyr::group_by(season, player_name, player_id, team, position) %>%
+        dplyr::summarise(season_points = sum(total_points),
+                         season_recv = sum(recv_points),
+                         season_disp = sum(disp_points),
+                         season_spoil = sum(spoil_points),
+                         games = dplyr::n()) %>%
+        dplyr::arrange(-season_points)
+    }
+  }
+
+  if(season_val == get_afl_season()){
+    if(any(is.na(round_num))){
+      df <- player_game_ratings(season_val, 1:get_afl_week()) %>%
+        dplyr::group_by(season, player_name, player_id, team, position) %>%
+        dplyr::summarise(season_points = sum(total_points),
+                         season_recv = sum(recv_points),
+                         season_disp = sum(disp_points),
+                         season_spoil = sum(spoil_points),
+                         games = dplyr::n()) %>%
+        dplyr::arrange(-season_points)
+    }
+    if(!any(is.na(round_num))){
+      df <- player_game_ratings(season_val, round_num) %>%
+        dplyr::group_by(season, player_name, player_id, team, position) %>%
+        dplyr::summarise(season_points = sum(total_points),
+                         season_recv = sum(recv_points),
+                         season_disp = sum(disp_points),
+                         season_spoil = sum(spoil_points),
+                         games = dplyr::n()) %>%
+        dplyr::arrange(-season_points)
+    }
+}
+
+  return(df)
 }

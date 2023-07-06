@@ -8,11 +8,16 @@ usethis::use_data(fixtures,overwrite = TRUE)
 ### update teams file
 # teams <- purrr::map_df(2021:get_afl_season(),~fitzRoy::fetch_lineup_afl(., comp = "AFLM")) %>%
 #   dplyr::mutate(season = as.numeric(substr(providerId, 5, 8)),
-#                 row_id = paste0(providerId,player.playerId))
+#                 row_id = paste0(providerId,teamId,player.playerId)) %>%
+#   dplyr::filter(!is.na(player.playerId))
 
+####
 team_wk <- fitzRoy::fetch_lineup_afl(season = get_afl_season(type="next"),
                                      round_number = get_afl_week(type="next"),
                                      comp = "AFLM")
+
+if (!is.null(team_wk)) {
+
 
 if ("player.playerId" %in% colnames(team_wk)) {
 
@@ -22,7 +27,7 @@ if ("player.playerId" %in% colnames(team_wk)) {
                   row_id = paste0(providerId,teamId,player.playerId)
                   )
 
-  teams <- dplyr::rows_insert(x = torp::teams,y = team_wk,by = "row_id", conflict = "ignore")
+  teams <- dplyr::rows_insert(x = torp::teams %>% dplyr::filter(!is.na(player.playerId)),y = team_wk,by = "row_id", conflict = "ignore")
   teams <- dplyr::rows_update(x = teams,y = team_wk,by = "row_id", unmatched = "ignore" )
 
   usethis::use_data(teams,overwrite = TRUE)
@@ -38,14 +43,15 @@ team_wk <-
                 row_id = paste0(providerId,teamId,player.playerId)
   )
 
-teams <- dplyr::rows_insert(x = torp::teams,y = team_wk,by = "row_id", conflict = "ignore")
+teams <- dplyr::rows_insert(x = torp::teams %>% dplyr::filter(!is.na(player.playerId)),y = team_wk,by = "row_id", conflict = "ignore")
 teams <- dplyr::rows_update(x = teams,y = team_wk,by = "row_id", unmatched = "ignore" )
 
 usethis::use_data(teams,overwrite = TRUE)
 }
 
 ##### update results file
-## results <- purrr::map_df(2021:most_recent_season(),~fitzRoy::fetch_results_afl(., comp = "AFLM"))
+
+# results <- purrr::map_df(2021:get_afl_season(),~fitzRoy::fetch_results_afl(., comp = "AFLM"))
 
 results_wk <- fitzRoy::fetch_results_afl(get_afl_season(),get_afl_week())
 
@@ -54,7 +60,9 @@ results <- dplyr::rows_update(x = results,y = results_wk,by = "match.matchId", u
 
 usethis::use_data(results,overwrite = TRUE)
 
-### update players data
+}
+######## update players data
+
 # plyr_tm_db <- fitzRoy::fetch_player_details(current = FALSE, comp = "AFLM",source = "AFL") %>%
 #   dplyr::mutate(player_name = paste(firstName,surname),
 #                 age = lubridate::decimal_date(lubridate::as_date(glue::glue('{season}-07-01')))-

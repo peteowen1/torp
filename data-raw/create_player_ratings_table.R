@@ -1,4 +1,6 @@
 ###########
+devtools::load_all()
+
 teams <- torp::teams
 
 chains <- load_chains(seasons = T, rounds = T)
