@@ -28,14 +28,16 @@ clean_pbp <- function(df) {
   df <-
     df %>%
     dplyr::mutate(
-      torp_match_id = glue::glue('{season}_{round_number}_{home_team_team_abbr}_{away_team_team_abbr}'),
+      torp_match_id = glue::glue("{season}_{round_number}_{home_team_team_abbr}_{away_team_team_abbr}"),
       torp_row_id = paste0(torp_match_id, sprintf("%04d", display_order)),
       torp_match_chain_id = paste0(torp_row_id, chain_number),
       team = dplyr::if_else(team_id == home_team_id, home_team_team_name, away_team_team_name),
       y = -y,
-      mirror = dplyr::case_when(description == "Spoil" ~ -1,
-                                !is.na(shot_at_goal) & x < 0 ~ -1,
-                                TRUE ~ 1),
+      mirror = dplyr::case_when(
+        description == "Spoil" ~ -1,
+        !is.na(shot_at_goal) & x < 0 ~ -1,
+        TRUE ~ 1
+      ),
       home_away = as.factor(dplyr::if_else(team_id == home_team_id, "Home", "Away")),
       goal_x = venue_length / 2 - x,
       throw_in = dplyr::case_when(
@@ -45,8 +47,8 @@ clean_pbp <- function(df) {
         TRUE ~ 0,
       ),
       shot_row = dplyr::if_else(is.na(shot_at_goal), 0, 1),
-      player_position_fac = forcats::fct_na_value_to_level (player_position, level = 'Other'),
-      player_name = forcats::fct_na_value_to_level (paste(player_name_given_name, player_name_surname), level = 'Other')
+      player_position_fac = forcats::fct_na_value_to_level(player_position, level = "Other"),
+      player_name = forcats::fct_na_value_to_level(paste(player_name_given_name, player_name_surname), level = "Other")
     )
 
   ### GAME VARIABLE CHANGE
@@ -63,10 +65,12 @@ clean_pbp <- function(df) {
       team_id_mdl = zoo::na.locf0(team_id_mdl),
       home = dplyr::if_else(team_id_mdl == home_team_id, 1, 0),
       total_seconds = ifelse(period == 1, period_seconds,
-                        ifelse(period == 2, 1800 + period_seconds,
-                          ifelse(period == 3, 3600 + period_seconds,
-                            ifelse(period == 4, 5400 + period_seconds, NA_integer_
-                                    )))),
+        ifelse(period == 2, 1800 + period_seconds,
+          ifelse(period == 3, 3600 + period_seconds,
+            ifelse(period == 4, 5400 + period_seconds, NA_integer_)
+          )
+        )
+      ),
       ### not sure about top 4 decide later
       points_row = dplyr::case_when(
         chain_number != dplyr::lead(chain_number, default = (dplyr::last(chain_number) + 1)) &
@@ -77,15 +81,15 @@ clean_pbp <- function(df) {
       ),
       points_row = tidyr::replace_na(points_row, 0),
       points_row_na = dplyr::if_else(points_row == 0, NA_real_, points_row),
-      #points_row_lead = lead(points_row, default = ?points_shot? ),
+      # points_row_lead = lead(points_row, default = ?points_shot? ),
       home_points_row = dplyr::case_when(
-        home == 0 & (final_state == "rushed" | final_state == "rushedOpp") & description =="Spoil" ~ points_row,
-        dplyr::lead(home)==0  & (final_state == "rushed" | final_state == "rushedOpp") & dplyr::lead(description)=="Kickin play on" ~ points_row,
-        home == 1 & (final_state != "rushed" & final_state != "rushedOpp" ) ~ points_row,
+        home == 0 & (final_state == "rushed" | final_state == "rushedOpp") & description == "Spoil" ~ points_row,
+        dplyr::lead(home) == 0 & (final_state == "rushed" | final_state == "rushedOpp") & dplyr::lead(description) == "Kickin play on" ~ points_row,
+        home == 1 & (final_state != "rushed" & final_state != "rushedOpp") ~ points_row,
         TRUE ~ 0
       ),
       home_points_row = tidyr::replace_na(home_points_row, 0),
-      away_points_row = points_row-home_points_row,
+      away_points_row = points_row - home_points_row,
       away_points_row = tidyr::replace_na(away_points_row, 0),
       is_goal_row = dplyr::if_else(description == "Goal", 1, 0),
       is_behind_row = dplyr::if_else(home_points_row == 1 | away_points_row == 1, 1, 0),
@@ -201,7 +205,7 @@ clean_pbp <- function(df) {
     dplyr::group_by(match_id, chain_number) %>%
     dplyr::mutate(
       shot_display = dplyr::if_else(is.na(shot_at_goal),
-        dplyr::if_else(description == "Kick" | description == "Ground Kick", as.numeric(display_order), display_order/2),
+        dplyr::if_else(description == "Kick" | description == "Ground Kick", as.numeric(display_order), display_order / 2),
         as.numeric(display_order)
       ),
       max_shot_display = max(shot_display),

@@ -12,13 +12,13 @@ add_epv_vars <- function(df) {
   pbp_final <- cbind(df, base_ep_preds)
 
   pbp_final <- pbp_final %>%
-    group_by(match_id,period) %>%
+    group_by(match_id, period) %>%
     dplyr::mutate(
       exp_pts = round(dplyr::case_when(
         description == "Centre Bounce" ~ 0,
         TRUE ~ -6 * opp_goal - opp_behind + behind + 6 * goal
       ), 5),
-      exp_pts = dplyr::if_else(description == "Out On Full After Kick",-dplyr::lead(exp_pts,default = 0),exp_pts),
+      exp_pts = dplyr::if_else(description == "Out On Full After Kick", -dplyr::lead(exp_pts, default = 0), exp_pts),
       kick_points = dplyr::case_when(
         (shot_at_goal == T & disposal == "clanger") ~ 0,
         TRUE ~ points_shot
@@ -26,8 +26,8 @@ add_epv_vars <- function(df) {
       player_name = (paste(player_name_given_name, player_name_surname)),
       pos_team = dplyr::case_when(
         !is.na(points_shot) ~ 1,
-        #dplyr::lead(throw_in) == 1 ~ 1,
-        #throw_in == 1 & dplyr::lag(team_id_mdl) != team_id_mdl ~ -1,
+        # dplyr::lead(throw_in) == 1 ~ 1,
+        # throw_in == 1 & dplyr::lag(team_id_mdl) != team_id_mdl ~ -1,
         dplyr::lead(team_id_mdl) == team_id_mdl ~ 1,
         is.na(dplyr::lead(team_id_mdl)) ~ 1,
         TRUE ~ -1
@@ -46,7 +46,7 @@ add_epv_vars <- function(df) {
       ),
       lead_team = dplyr::if_else(is.na(points_shot), dplyr::lead(team), team),
       xpoints_diff = points_diff + exp_pts,
-      delta_epv = lead(xpoints_diff,default = dplyr::last(points_diff))*team_change - xpoints_diff, #round(lead_points * pos_team - exp_pts, 5),
+      delta_epv = lead(xpoints_diff, default = dplyr::last(points_diff)) * team_change - xpoints_diff, # round(lead_points * pos_team - exp_pts, 5),
       weight_gm = exp(as.numeric(-(Sys.Date() - as.Date(utc_start_time))) / 365),
       round_week = sprintf("%02d", round_number)
     ) %>%
@@ -83,7 +83,7 @@ add_wp_vars <- function(df) {
       wpa = round(dplyr::case_when(
         dplyr::lead(team_id_mdl, default = dplyr::last(team_id_mdl)) == team_id_mdl ~ dplyr::lead(wp, default = dplyr::last(wp)) - wp,
         dplyr::lead(team_id_mdl, default = dplyr::last(team_id_mdl)) != team_id_mdl ~ (1 - dplyr::lead(wp, default = dplyr::last(wp))) - wp
-      ),5)
+      ), 5)
     ) %>%
     dplyr::ungroup()
 
@@ -94,13 +94,13 @@ add_wp_vars <- function(df) {
 add_shot_vars <- function(df) {
   base_shot_on_target_preds <- tibble::tibble(on_target_prob = get_shot_on_target_preds(df))
   base_shot_result_preds <- tibble::tibble(goal_prob = get_shot_result_preds(df))
-  pbp_final <- cbind(df, base_shot_result_preds,base_shot_on_target_preds)
+  pbp_final <- cbind(df, base_shot_result_preds, base_shot_on_target_preds)
 
   pbp_final <- pbp_final %>%
     dplyr::mutate(
-      on_target_prob = round(dplyr::if_else(!is.na(shot_at_goal) & x > 0, on_target_prob, NA_real_),5),
-      goal_prob = round(dplyr::if_else(!is.na(shot_at_goal) & x > 0, goal_prob, NA_real_),5),
-      xscore = on_target_prob * (goal_prob*6 + (1-goal_prob))
+      on_target_prob = round(dplyr::if_else(!is.na(shot_at_goal) & x > 0, on_target_prob, NA_real_), 5),
+      goal_prob = round(dplyr::if_else(!is.na(shot_at_goal) & x > 0, goal_prob, NA_real_), 5),
+      xscore = on_target_prob * (goal_prob * 6 + (1 - goal_prob))
     ) %>%
     dplyr::ungroup()
 

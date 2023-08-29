@@ -19,32 +19,34 @@ devtools::load_all()
 # model_data_epv <- clean_model_data_epv(pbp)
 # tictoc::toc()
 ###########################
-#devtools::load_all()
+# devtools::load_all()
 
-#model_data_wp <- readRDS("model_data_wp.rds")
+# model_data_wp <- readRDS("model_data_wp.rds")
 tictoc::tic()
-model_data_wp <- model_data_epv %>% add_epv_vars() %>% clean_model_data_wp() #%>% bind_rows(model_data_wp)
+model_data_wp <- model_data_epv %>%
+  add_epv_vars() %>%
+  clean_model_data_wp() # %>% bind_rows(model_data_wp)
 tictoc::toc()
-#saveRDS(model_data_wp,"./data/model_data_wp.rds")
+# saveRDS(model_data_wp,"./data/model_data_wp.rds")
 
 
 
 #######################################
 ##################
-nrounds = 100
+nrounds <- 100
 params <-
   list(
     booster = "gbtree",
     objective = "binary:logistic",
     eval_metric = c("logloss"),
     tree_method = "hist",
-    #early_stopping_rounds = 10,
-    #num_class = 5,
-    eta = 0.1, #0.0685
+    # early_stopping_rounds = 10,
+    # num_class = 5,
+    eta = 0.1, # 0.0685
     gamma = 0,
-    #subsample=0.9,
-    #colsample_bylevel=0.8,
-    #colsample_bytree=0.9,
+    # subsample=0.9,
+    # colsample_bylevel=0.8,
+    # colsample_bytree=0.9,
     monotone_constraints = "(0,0,0,1,1,1,0,1,0,0,0,0,0,0,0)",
     max_depth = 6,
     min_child_weight = 1
@@ -52,9 +54,11 @@ params <-
 
 
 ###
-full_train <- xgboost::xgb.DMatrix(stats::model.matrix(~ . + 0,
-                                                       data = model_data_wp %>% select_wp_model_vars()),
-                                   label = model_data_wp$label_wp
+full_train <- xgboost::xgb.DMatrix(
+  stats::model.matrix(~ . + 0,
+    data = model_data_wp %>% select_wp_model_vars()
+  ),
+  label = model_data_wp$label_wp
 )
 
 ##################################################### BUILD THE MODEL
@@ -86,9 +90,9 @@ wp_model <- xgboost::xgboost(
 # )
 ###
 
-#saveRDS(wp_model, "./data/wp_model.rds")
+# saveRDS(wp_model, "./data/wp_model.rds")
 
-usethis::use_data(wp_model,overwrite = TRUE)
+usethis::use_data(wp_model, overwrite = TRUE)
 
 #########################################################
 # # #####

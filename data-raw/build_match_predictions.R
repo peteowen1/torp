@@ -7,22 +7,22 @@ data(results, envir = environment())
 
 data(torp_df_total, envir = environment())
 
-xg_df <- match_xgs(T,T)
+xg_df <- match_xgs(T, T)
 
 decay <- 1500
 
 #############
 
 team_lineup_df <-
-  teams %>% #dplyr::filter(providerId != 'CD_M20230140105' | player.playerId != 'CD_I297373') %>% #tibble::view()
-  dplyr::left_join(torp_df_total , by = c("player.playerId" = "player_id","season"="season","round.roundNumber"="round")) %>%
-  #dplyr::filter(!is.na(torp) | (get_afl_season(type = 'next') >= season &  get_afl_week(type = 'next') >= round.roundNumber)) %>% #as.Date(utcStartTime.x) >= lubridate::with_tz(Sys.Date(),"UTC")
-  dplyr::filter((position.x != "EMERG" & position.x != "SUB") | is.na(position.x)) %>% #tibble::view()
+  teams %>% # dplyr::filter(providerId != 'CD_M20230140105' | player.playerId != 'CD_I297373') %>% #tibble::view()
+  dplyr::left_join(torp_df_total, by = c("player.playerId" = "player_id", "season" = "season", "round.roundNumber" = "round")) %>%
+  # dplyr::filter(!is.na(torp) | (get_afl_season(type = 'next') >= season &  get_afl_week(type = 'next') >= round.roundNumber)) %>% #as.Date(utcStartTime.x) >= lubridate::with_tz(Sys.Date(),"UTC")
+  dplyr::filter((position.x != "EMERG" & position.x != "SUB") | is.na(position.x)) %>% # tibble::view()
   dplyr::mutate(
     ###### CHECK
-    torp = tidyr::replace_na(torp,0),
-    torp_recv = tidyr::replace_na(torp_recv,0),
-    torp_disp = tidyr::replace_na(torp_disp,0),
+    torp = tidyr::replace_na(torp, 0),
+    torp_recv = tidyr::replace_na(torp_recv, 0),
+    torp_disp = tidyr::replace_na(torp_disp, 0),
     phase = dplyr::case_when(
       position.x %in% c("BPL", "BPR", "FB", "CHB", "HBFL", "HBFR") ~ "def",
       position.x %in% c("C", "WL", "WR", "R", "RR", "RK") ~ "mid",
@@ -35,14 +35,14 @@ team_lineup_df <-
     fwd = ifelse(phase == "fwd", torp, NA),
     int = ifelse(phase == "int", torp, NA),
     # positional lines
-    backs = ifelse(position.x == "BPL" | position.x == "BPR"| position.x == "FB" , torp, NA),
-    half_backs = ifelse(position.x == "HBFL"|position.x == "HBFR"|position.x == "CHB", torp, NA),
-    midfielders = ifelse(position.x == "WL"|position.x == "WR"|position.x == "C", torp, NA),
-    followers = ifelse(position.x == "R"|position.x == "RR"|position.x == "RK", torp, NA),
-    half_forwards = ifelse(position.x == "HFFL" | position.x == "HFFR" |position.x == "CHF", torp, NA),
-    forwards = ifelse(position.x == "FPL" | position.x == "FPR"|position.x == "FF" , torp, NA),
+    backs = ifelse(position.x == "BPL" | position.x == "BPR" | position.x == "FB", torp, NA),
+    half_backs = ifelse(position.x == "HBFL" | position.x == "HBFR" | position.x == "CHB", torp, NA),
+    midfielders = ifelse(position.x == "WL" | position.x == "WR" | position.x == "C", torp, NA),
+    followers = ifelse(position.x == "R" | position.x == "RR" | position.x == "RK", torp, NA),
+    half_forwards = ifelse(position.x == "HFFL" | position.x == "HFFR" | position.x == "CHF", torp, NA),
+    forwards = ifelse(position.x == "FPL" | position.x == "FPR" | position.x == "FF", torp, NA),
     # individual positions
-    BP = ifelse(position.x == "BPL"| position.x == "BPR", torp, NA),
+    BP = ifelse(position.x == "BPL" | position.x == "BPR", torp, NA),
     BPL = ifelse(position.x == "BPL", torp, NA),
     BPR = ifelse(position.x == "BPR", torp, NA),
     FB = ifelse(position.x == "FB", torp, NA),
@@ -77,7 +77,7 @@ team_lineup_df <-
   )
 
 team_rt_df <- team_lineup_df %>%
-  dplyr::group_by(providerId,venue.name, teamName, season, round.roundNumber, teamType) %>%
+  dplyr::group_by(providerId, venue.name, teamName, season, round.roundNumber, teamType) %>%
   dplyr::summarise(
     torp = sum(torp), # , na.rm = T),
     torp_recv = sum(torp_recv), # , na.rm = T),
@@ -141,8 +141,9 @@ team_rt_df <- team_lineup_df %>%
 
 ####
 team_mdl_df <- team_rt_df %>% # filter(!is.na(torp)) %>%
-  dplyr::left_join(team_rt_df %>%
-                     dplyr::mutate(typ2 = dplyr::if_else(teamType == "home", "away", "home")),
+  dplyr::left_join(
+    team_rt_df %>%
+      dplyr::mutate(typ2 = dplyr::if_else(teamType == "home", "away", "home")),
     by = c("providerId" = "providerId", "teamType" = "typ2")
   ) %>%
   dplyr::mutate(
@@ -151,17 +152,19 @@ team_mdl_df <- team_rt_df %>% # filter(!is.na(torp)) %>%
     torp_recv_diff = torp_recv.x - torp_recv.y,
     torp_disp_diff = torp_disp.x - torp_disp.y
   ) %>%
-  dplyr::left_join(results %>%
-    dplyr::select(
-      match.matchId,
-      homeTeamScore.matchScore.totalScore, homeTeamScore.matchScore.goals, homeTeamScore.matchScore.behinds,
-      awayTeamScore.matchScore.totalScore, awayTeamScore.matchScore.goals, awayTeamScore.matchScore.behinds,
-      match.utcStartTime
-    ),
-  by = c("providerId" = "match.matchId")
+  dplyr::left_join(
+    results %>%
+      dplyr::select(
+        match.matchId,
+        homeTeamScore.matchScore.totalScore, homeTeamScore.matchScore.goals, homeTeamScore.matchScore.behinds,
+        awayTeamScore.matchScore.totalScore, awayTeamScore.matchScore.goals, awayTeamScore.matchScore.behinds,
+        match.utcStartTime
+      ),
+    by = c("providerId" = "match.matchId")
   ) %>%
   dplyr::left_join(xg_df,
-                   by = c("providerId" = "match_id")) %>%
+    by = c("providerId" = "match_id")
+  ) %>%
   dplyr::mutate(
     home_shots = homeTeamScore.matchScore.goals + homeTeamScore.matchScore.behinds,
     away_shots = awayTeamScore.matchScore.goals + awayTeamScore.matchScore.behinds,
@@ -182,12 +185,12 @@ team_mdl_df <- team_rt_df %>% # filter(!is.na(torp)) %>%
       awayTeamScore.matchScore.goals / away_shots
     ),
     xscore_diff = ifelse(teamType == "home",
-                         xscore_diff ,
-                         - xscore_diff
+      xscore_diff,
+      -xscore_diff
     ),
     team_xscore = ifelse(teamType == "home",
-                         home_xscore,
-                         away_xscore
+      home_xscore,
+      away_xscore
     ),
     win = ifelse(score_diff > 0, 1, ifelse(score_diff == 0, 0.5, 0)),
     hoff_adef = pmax(pmin((fwd.x - def.y), 20), -5),
@@ -209,26 +212,28 @@ team_mdl_df <- team_rt_df %>% # filter(!is.na(torp)) %>%
 # set.seed("1234")
 
 ###
-afl_totshots_mdl <- mgcv::bam(total_shots ~
-  s(team_type_fac, bs = "re")
-  + s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
-  + s(abs(torp_diff), bs = "ts", k = 5),
-data = team_mdl_df, weights = weightz,
-family = quasipoisson(), nthreads = 4, select = T, discrete = T
+afl_totshots_mdl <- mgcv::bam(
+  total_shots ~
+    s(team_type_fac, bs = "re")
+    + s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
+    + s(abs(torp_diff), bs = "ts", k = 5),
+  data = team_mdl_df, weights = weightz,
+  family = quasipoisson(), nthreads = 4, select = T, discrete = T
 )
 team_mdl_df$pred_totshots <- predict(afl_totshots_mdl, newdata = team_mdl_df, type = "response")
 
 # Deviance explained =   22%
 
 ###
-afl_shot_mdl <- mgcv::bam(shot_diff ~
-  s(team_type_fac, bs = "re")
-  + s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
-  + ti(torp_diff, pred_totshots, bs = c("ts", "ts"), k = 4)
-  + s(pred_totshots, bs = "ts", k = 5)
-  + s(torp_diff, bs = "ts", k = 5),
-data = team_mdl_df, weights = weightz,
-family = gaussian(), nthreads = 4, select = T, discrete = T
+afl_shot_mdl <- mgcv::bam(
+  shot_diff ~
+    s(team_type_fac, bs = "re")
+    + s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
+    + ti(torp_diff, pred_totshots, bs = c("ts", "ts"), k = 4)
+    + s(pred_totshots, bs = "ts", k = 5)
+    + s(torp_diff, bs = "ts", k = 5),
+  data = team_mdl_df, weights = weightz,
+  family = gaussian(), nthreads = 4, select = T, discrete = T
 )
 team_mdl_df$pred_shot_diff <- predict(afl_shot_mdl, newdata = team_mdl_df, type = "response")
 
@@ -237,18 +242,18 @@ team_mdl_df$pred_shot_diff <- predict(afl_shot_mdl, newdata = team_mdl_df, type 
 # Deviance explained = 44.5%
 
 ###
-afl_total_xpoints_mdl <- mgcv::bam(total_xpoints ~
-  s(team_type_fac, bs = "re")
-  #+ s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
-  + s(abs(torp_diff), bs = "ts", k = 5)
-  + s(abs(torp_recv_diff), bs = "ts", k = 5)
-  + s(abs(torp_disp_diff), bs = "ts", k = 5)
-  + s(torp.x, bs = "ts", k = 5) + s(torp.y, bs = "ts", k = 5)
-  + s(fwd.x, bs = "ts", k = 5) + s(mid.x, bs = "ts", k = 5) + s(def.x, bs = "ts", k = 5) + s(int.x, bs = "ts", k = 5)
-  + s(fwd.y, bs = "ts", k = 5) + s(mid.y, bs = "ts", k = 5) + s(def.y, bs = "ts", k = 5) + s(int.y, bs = "ts", k = 5)
-  ,
-data = team_mdl_df, weights = weightz,
-family = gaussian(), nthreads = 4, select = T, discrete = T
+afl_total_xpoints_mdl <- mgcv::bam(
+  total_xpoints ~
+    s(team_type_fac, bs = "re")
+    #+ s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
+    + s(abs(torp_diff), bs = "ts", k = 5)
+    + s(abs(torp_recv_diff), bs = "ts", k = 5)
+    + s(abs(torp_disp_diff), bs = "ts", k = 5)
+    + s(torp.x, bs = "ts", k = 5) + s(torp.y, bs = "ts", k = 5)
+    + s(fwd.x, bs = "ts", k = 5) + s(mid.x, bs = "ts", k = 5) + s(def.x, bs = "ts", k = 5) + s(int.x, bs = "ts", k = 5)
+    + s(fwd.y, bs = "ts", k = 5) + s(mid.y, bs = "ts", k = 5) + s(def.y, bs = "ts", k = 5) + s(int.y, bs = "ts", k = 5),
+  data = team_mdl_df, weights = weightz,
+  family = gaussian(), nthreads = 4, select = T, discrete = T
 )
 
 team_mdl_df$pred_tot_xscore <- predict(afl_total_xpoints_mdl, newdata = team_mdl_df, type = "response")
@@ -257,14 +262,15 @@ team_mdl_df$pred_tot_xscore <- predict(afl_total_xpoints_mdl, newdata = team_mdl
 # Deviance explained =   22%
 
 ###
-afl_xscore_diff_mdl <- mgcv::bam(xscore_diff ~
-  s(team_type_fac, bs = "re")
-  #+ s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
-  + ti(torp_diff, pred_tot_xscore, bs = c("ts", "ts"), k = 4)
-  + s(pred_tot_xscore, bs = "ts", k = 5)
-  + s(torp_diff, bs = "ts", k = 5),
-data = team_mdl_df, weights = weightz,
-family = gaussian(), nthreads = 4, select = T, discrete = T
+afl_xscore_diff_mdl <- mgcv::bam(
+  xscore_diff ~
+    s(team_type_fac, bs = "re")
+    #+ s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
+    + ti(torp_diff, pred_tot_xscore, bs = c("ts", "ts"), k = 4)
+    + s(pred_tot_xscore, bs = "ts", k = 5)
+    + s(torp_diff, bs = "ts", k = 5),
+  data = team_mdl_df, weights = weightz,
+  family = gaussian(), nthreads = 4, select = T, discrete = T
 )
 team_mdl_df$pred_xscore_diff <- predict(afl_xscore_diff_mdl, newdata = team_mdl_df, type = "response")
 
@@ -275,34 +281,36 @@ team_mdl_df$pred_xscore_diff <- predict(afl_xscore_diff_mdl, newdata = team_mdl_
 
 
 ###
-afl_conv_mdl <- mgcv::bam(shot_conv ~
-  s(team_type_fac, bs = "re")
-  #+ s(team_name.x, bs = "re")+ s(team_name.y, bs = "re")
-  + ti(torp_diff, pred_tot_xscore, bs = c("ts", "ts"), k = 4)
-  + s(pred_tot_xscore, bs = "ts", k = 5)
-  + s(pred_xscore_diff, bs = "ts", k = 5)
-  + s(torp_diff, bs = "ts", k = 5)
-  + s(fwd.x, bs = "ts", k = 5) + s(mid.x, bs = "ts", k = 5) + s(def.x, bs = "ts", k = 5) + s(int.x, bs = "ts", k = 5)
-  + s(fwd.y, bs = "ts", k = 5) + s(mid.y, bs = "ts", k = 5) + s(def.y, bs = "ts", k = 5) + s(int.y, bs = "ts", k = 5),
-data = team_mdl_df, weights = team_shots * weightz,
-family = "binomial", nthreads = 4, select = T, discrete = T
+afl_conv_mdl <- mgcv::bam(
+  shot_conv ~
+    s(team_type_fac, bs = "re")
+    #+ s(team_name.x, bs = "re")+ s(team_name.y, bs = "re")
+    + ti(torp_diff, pred_tot_xscore, bs = c("ts", "ts"), k = 4)
+    + s(pred_tot_xscore, bs = "ts", k = 5)
+    + s(pred_xscore_diff, bs = "ts", k = 5)
+    + s(torp_diff, bs = "ts", k = 5)
+    + s(fwd.x, bs = "ts", k = 5) + s(mid.x, bs = "ts", k = 5) + s(def.x, bs = "ts", k = 5) + s(int.x, bs = "ts", k = 5)
+    + s(fwd.y, bs = "ts", k = 5) + s(mid.y, bs = "ts", k = 5) + s(def.y, bs = "ts", k = 5) + s(int.y, bs = "ts", k = 5),
+  data = team_mdl_df, weights = team_shots * weightz,
+  family = "binomial", nthreads = 4, select = T, discrete = T
 )
 
 team_mdl_df$pred_conv <- predict(afl_conv_mdl, newdata = team_mdl_df, type = "response")
 # summary(afl_conv_mdl)
 ###
 
-afl_score_mdl <- mgcv::bam(score_diff ~
-  s(team_type_fac, bs = "re")
-  + s(pred_tot_xscore, bs = "ts", k = 5)
-  + ti(pred_xscore_diff, pred_conv, bs = c("ts", "ts"), k = 4)
-  + s(pred_conv, bs = "ts", k = 5)
-  + s(torp_diff, bs = "ts", k = 5)
-  + s(torp_recv_diff, bs = "ts", k = 5)
-  + s(torp_disp_diff, bs = "ts", k = 5)
-  + s(pred_xscore_diff, bs = "ts", k = 5),
-data = team_mdl_df, weights = weightz,
-family = "gaussian", nthreads = 4, select = T, discrete = T
+afl_score_mdl <- mgcv::bam(
+  score_diff ~
+    s(team_type_fac, bs = "re")
+    + s(pred_tot_xscore, bs = "ts", k = 5)
+    + ti(pred_xscore_diff, pred_conv, bs = c("ts", "ts"), k = 4)
+    + s(pred_conv, bs = "ts", k = 5)
+    + s(torp_diff, bs = "ts", k = 5)
+    + s(torp_recv_diff, bs = "ts", k = 5)
+    + s(torp_disp_diff, bs = "ts", k = 5)
+    + s(pred_xscore_diff, bs = "ts", k = 5),
+  data = team_mdl_df, weights = weightz,
+  family = "gaussian", nthreads = 4, select = T, discrete = T
 )
 team_mdl_df$pred_score_diff <- predict(afl_score_mdl, newdata = team_mdl_df, type = "response")
 
@@ -311,15 +319,16 @@ team_mdl_df$pred_score_diff <- predict(afl_score_mdl, newdata = team_mdl_df, typ
 
 ###
 afl_win_mdl <-
-  mgcv::bam(win ~
-    s(team_type_fac, bs = "re")
-    #+ ti(pred_tot_xscore, pred_score_diff, bs = c("ts", "ts"), k = 4)
-    + ti(pred_tot_xscore, pred_xscore_diff, bs = c("ts", "ts"), k = 4)
-    + s(pred_score_diff, bs = "ts", k = 5)
+  mgcv::bam(
+    win ~
+      s(team_type_fac, bs = "re")
+      #+ ti(pred_tot_xscore, pred_score_diff, bs = c("ts", "ts"), k = 4)
+      + ti(pred_tot_xscore, pred_xscore_diff, bs = c("ts", "ts"), k = 4)
+      + s(pred_score_diff, bs = "ts", k = 5)
     #+ s(pred_xscore_diff, bs = "ts", k = 5)
     ,
-  data = team_mdl_df, weights = weightz,
-  family = "binomial", nthreads = 4, select = T, discrete = T
+    data = team_mdl_df, weights = weightz,
+    family = "binomial", nthreads = 4, select = T, discrete = T
   )
 
 # summary(afl_win_mdl)
@@ -333,7 +342,7 @@ team_mdl_df$tips <- ifelse(round(team_mdl_df$pred_win) == team_mdl_df$win, 1, 0)
 team_mdl_df$mae <- abs(team_mdl_df$score_diff - team_mdl_df$pred_score_diff)
 #########
 test_df <- team_mdl_df %>% dplyr::filter(!is.na(win), win != 0.5, teamType == "home", season.x >= 2022)
-#library(MLmetrics)
+# library(MLmetrics)
 MLmetrics::LogLoss(test_df$pred_win, test_df$win)
 MLmetrics::MAE(test_df$pred_score_diff, test_df$score_diff)
 sum(test_df$bits)
@@ -342,8 +351,9 @@ mean(test_df$tips)
 
 #################################### GF
 team_mdl_df$team_type_fac <- as.factor(ifelse(team_mdl_df$providerId == "CD_M20220142701",
-                                    ifelse(team_mdl_df$teamType == "home","home","away"),
-                                    team_mdl_df$teamType))
+  ifelse(team_mdl_df$teamType == "home", "home", "away"),
+  team_mdl_df$teamType
+))
 
 team_mdl_df$pred_totshots <- predict(afl_totshots_mdl, newdata = team_mdl_df, type = "response")
 team_mdl_df$pred_shot_diff <- predict(afl_shot_mdl, newdata = team_mdl_df, type = "response")
@@ -352,7 +362,7 @@ team_mdl_df$pred_score_diff <- predict(afl_score_mdl, newdata = team_mdl_df, typ
 team_mdl_df$pred_win <- predict(afl_win_mdl, newdata = team_mdl_df, type = "response")
 
 ######
-n <- get_afl_week(type = 'next')
+n <- get_afl_week(type = "next")
 
 week_gms_home <- team_mdl_df %>%
   dplyr::mutate(totscore = sum(team_mdl_df$total_score, na.rm = T) / sum(team_mdl_df$total_shots, na.rm = T) * pred_totshots) %>%
@@ -365,12 +375,13 @@ week_gms_home <- team_mdl_df %>%
   )
 
 week_gms_away <- team_mdl_df %>%
-  dplyr::mutate(totscore = sum(team_mdl_df$total_score, na.rm = T) / sum(team_mdl_df$total_shots, na.rm = T) * pred_totshots,
-                pred_shot_diff = -pred_shot_diff,
-                pred_score_diff = - pred_score_diff,
-                pred_win = 1- pred_win,
-                score_diff = - score_diff
-                ) %>%
+  dplyr::mutate(
+    totscore = sum(team_mdl_df$total_score, na.rm = T) / sum(team_mdl_df$total_shots, na.rm = T) * pred_totshots,
+    pred_shot_diff = -pred_shot_diff,
+    pred_score_diff = -pred_score_diff,
+    pred_win = 1 - pred_win,
+    score_diff = -score_diff
+  ) %>%
   dplyr::filter(season.x == lubridate::year(Sys.Date()), round.roundNumber.x == n, teamType == "away") %>%
   dplyr::select(
     players = count.x, providerId,
@@ -379,13 +390,14 @@ week_gms_away <- team_mdl_df %>%
     totscore, pred_shot_diff, pred_score_diff, pred_win, bits, score_diff
   )
 
-week_gms <- dplyr::bind_rows(week_gms_home,week_gms_away) %>%
-  dplyr::group_by(providerId,home_team,home_rating,away_team,away_rating) %>%
-  dplyr::summarise(players = mean(players),
-                   total = mean(totscore),
-                   pred_shot_diff = mean(pred_shot_diff),
-                   pred_score_diff = mean(pred_score_diff),
-                   pred_win = mean(pred_win),
-                   score_diff = mean(score_diff))
+week_gms <- dplyr::bind_rows(week_gms_home, week_gms_away) %>%
+  dplyr::group_by(providerId, home_team, home_rating, away_team, away_rating) %>%
+  dplyr::summarise(
+    players = mean(players),
+    total = mean(totscore),
+    pred_shot_diff = mean(pred_shot_diff),
+    pred_score_diff = mean(pred_score_diff),
+    pred_win = mean(pred_win),
+    score_diff = mean(score_diff)
+  )
 week_gms
-

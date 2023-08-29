@@ -1,14 +1,14 @@
 ###############
-this_week <- plyr_ratings(2023,1) %>%
-  dplyr::left_join(fitzRoy::fetch_player_details(),by = c("player.playerId" = "providerId"))
+this_week <- plyr_ratings(2023, 1) %>%
+  dplyr::left_join(fitzRoy::fetch_player_details(), by = c("player.playerId" = "providerId"))
 
 season_table <- plyr_gm_df %>%
-  dplyr::filter(season==2023, round >= 1, round <= 28) %>%
-  dplyr::group_by(plyr_nm,player_id,tm,pos) %>%
-  dplyr::summarise(tot_points = sum(tot_p_adj), g = dplyr::n(),p_g = tot_points/g) %>%
-  dplyr::left_join(fitzRoy::fetch_player_details(),by = c("player_id" = "providerId")) %>%
-  #dplyr::filter(year(dateOfBirth)>=2001) %>%
-  dplyr::arrange(-tot_points) #%>% view()
+  dplyr::filter(season == 2023, round >= 1, round <= 28) %>%
+  dplyr::group_by(plyr_nm, player_id, tm, pos) %>%
+  dplyr::summarise(tot_points = sum(tot_p_adj), g = dplyr::n(), p_g = tot_points / g) %>%
+  dplyr::left_join(fitzRoy::fetch_player_details(), by = c("player_id" = "providerId")) %>%
+  # dplyr::filter(year(dateOfBirth)>=2001) %>%
+  dplyr::arrange(-tot_points) # %>% view()
 
 season_table %>% tibble::view()
 

@@ -34,7 +34,7 @@ get_match_chains <- function(season = most_recent_season(), round = NA) {
   })
   players <- get_players()
   chains <- chains %>% dplyr::inner_join(games, by = "matchId")
-  chains <- chains %>% dplyr::left_join(players, by = c("playerId","season"))
+  chains <- chains %>% dplyr::left_join(players, by = c("playerId", "season"))
 
   # chains <- chains %>% dplyr::select(
   #   matchId, season, roundNumber, utcStartTime,homeTeamId:providerMatchId, homeTeam.teamName:date, venue.name:venue.state,
@@ -50,8 +50,8 @@ get_match_chains <- function(season = most_recent_season(), round = NA) {
 }
 
 ###
-get_week_chains <- function(season,roundnum) {
-  #cache_message()
+get_week_chains <- function(season, roundnum) {
+  # cache_message()
 
   load <- try(get_match_chains(season, round = roundnum), silent = TRUE)
 
@@ -68,7 +68,7 @@ get_week_chains <- function(season,roundnum) {
   #       home_team = homeTeam.teamName,
   #       away_team = awayTeam.teamName,
   #     )
-  #}
+  # }
 
   return(load)
 }
@@ -162,17 +162,20 @@ get_players <- function(use_api = FALSE) {
     players <- access_api(url)
     players <- players[[5]]
     players <- players %>%
-      dplyr::mutate(season = most_recent_season())# %>% select(playerId, playerName.givenName, playerName.surname, team.teamName)
+      dplyr::mutate(season = most_recent_season()) # %>% select(playerId, playerName.givenName, playerName.surname, team.teamName)
   }
 
   if (use_api == FALSE) {
-  players <- torp::plyr_tm_db %>%
-    dplyr::mutate(photoURL = NA,
-                  team.teamId = NA,
-                  team.teamAbbr = NA) %>%
-    dplyr::select(playerId = providerId,jumperNumber,playerPosition = position,photoURL, playerName.givenName = firstName,
-                  playerName.surname = surname,team.teamId,team.teamAbbr,team.teamName = team, season)
-
+    players <- torp::plyr_tm_db %>%
+      dplyr::mutate(
+        photoURL = NA,
+        team.teamId = NA,
+        team.teamAbbr = NA
+      ) %>%
+      dplyr::select(
+        playerId = providerId, jumperNumber, playerPosition = position, photoURL, playerName.givenName = firstName,
+        playerName.surname = surname, team.teamId, team.teamAbbr, team.teamName = team, season
+      )
   }
   return(players)
 }

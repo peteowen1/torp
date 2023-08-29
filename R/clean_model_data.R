@@ -76,24 +76,24 @@ clean_model_data_epv <- function(df) {
         # not needed for now #(throw_in == 1 & lag(throw_in) != 1 & dplyr::lag(team_id_mdl) == team_id_mdl) ~ x,
         (throw_in == 1 & dplyr::lag(throw_in) != 1 & dplyr::lag(team_id_mdl) != team_id_mdl) ~ -1,
         # not needed for now  #(throw_in == 1 & lag(throw_in) == 1 & dplyr::lag(team_id_mdl,n=2L) == team_id_mdl) ~ x,
-        (throw_in == 1 & dplyr::lag(throw_in) == 1 & dplyr::lag(team_id_mdl,n=2L) != team_id_mdl) & sign(dplyr::lag(x)) == sign(x) ~ -1,
-        (throw_in == 1 & dplyr::lag(throw_in) == 1  & dplyr::lag(team_id_mdl,n=2L) == team_id_mdl & sign(dplyr::lag(x)) != sign(x)) ~ -1,
-        (dplyr::lag(throw_in) == 1 & sign(dplyr::lag(x)) == sign(x) & dplyr::lag(team_id_mdl) == team_id_mdl & dplyr::lag(team_id_mdl,n=2L) != team_id_mdl) ~ -1,
-        (dplyr::lag(throw_in, n = 2L) == 1 & sign(dplyr::lag(x,n=2L)) == sign(x) & dplyr::lag(team_id_mdl,n=2L) == team_id_mdl & dplyr::lag(team_id_mdl,n=3L) != team_id_mdl) ~ -1,
+        (throw_in == 1 & dplyr::lag(throw_in) == 1 & dplyr::lag(team_id_mdl, n = 2L) != team_id_mdl) & sign(dplyr::lag(x)) == sign(x) ~ -1,
+        (throw_in == 1 & dplyr::lag(throw_in) == 1 & dplyr::lag(team_id_mdl, n = 2L) == team_id_mdl & sign(dplyr::lag(x)) != sign(x)) ~ -1,
+        (dplyr::lag(throw_in) == 1 & sign(dplyr::lag(x)) == sign(x) & dplyr::lag(team_id_mdl) == team_id_mdl & dplyr::lag(team_id_mdl, n = 2L) != team_id_mdl) ~ -1,
+        (dplyr::lag(throw_in, n = 2L) == 1 & sign(dplyr::lag(x, n = 2L)) == sign(x) & dplyr::lag(team_id_mdl, n = 2L) == team_id_mdl & dplyr::lag(team_id_mdl, n = 3L) != team_id_mdl) ~ -1,
         # not needed for now  #(dplyr::lag(throw_in, n = 3L) == 1 & sign(dplyr::lag(x,n=3L)) == sign(x) & dplyr::lag(team_id_mdl,n=3L) == team_id_mdl & dplyr::lag(team_id_mdl,n=4L) != team_id_mdl) ~ -x,
-        (dplyr::lag(throw_in) == 1 & sign(dplyr::lead(x,n=2L)) == sign(x) & dplyr::lead(team_id_mdl,n=2L) != team_id_mdl) ~ -1,
-        (dplyr::lag(throw_in,n=2L) == 1 & sign(dplyr::lead(x)) == sign(x) & dplyr::lead(team_id_mdl) != team_id_mdl) ~ -1,
+        (dplyr::lag(throw_in) == 1 & sign(dplyr::lead(x, n = 2L)) == sign(x) & dplyr::lead(team_id_mdl, n = 2L) != team_id_mdl) ~ -1,
+        (dplyr::lag(throw_in, n = 2L) == 1 & sign(dplyr::lead(x)) == sign(x) & dplyr::lead(team_id_mdl) != team_id_mdl) ~ -1,
         # not needed for now  # (description == "Mark Dropped" & dplyr::lag(team_id_mdl, default = dplyr::first(team_id_mdl)) != team_id_mdl) ~ -x,
         TRUE ~ 1
       ),
       x = mirror * x,
       y = mirror * y,
       goal_x = venue_length / 2 - x,
-      lag_x = dplyr::if_else(dplyr::lag(team_id_mdl) == team_id_mdl, dplyr::lag(x,default = dplyr::first(x)), -dplyr::lag(x,default = dplyr::first(x))),
+      lag_x = dplyr::if_else(dplyr::lag(team_id_mdl) == team_id_mdl, dplyr::lag(x, default = dplyr::first(x)), -dplyr::lag(x, default = dplyr::first(x))),
       lag_x = tidyr::replace_na(lag_x, dplyr::first(x)),
-      lag_y = dplyr::if_else(dplyr::lag(team_id_mdl) == team_id_mdl, dplyr::lag(y,default = dplyr::first(y)), -dplyr::lag(y,default = dplyr::first(y))),
+      lag_y = dplyr::if_else(dplyr::lag(team_id_mdl) == team_id_mdl, dplyr::lag(y, default = dplyr::first(y)), -dplyr::lag(y, default = dplyr::first(y))),
       lag_y = tidyr::replace_na(lag_y, dplyr::first(y)),
-      lag_goal_x = dplyr::if_else(lag(team_id_mdl, 1) == team_id_mdl, dplyr::lag(goal_x,default = dplyr::first(goal_x)), venue_length - dplyr::lag(goal_x,default = dplyr::first(goal_x))),
+      lag_goal_x = dplyr::if_else(lag(team_id_mdl, 1) == team_id_mdl, dplyr::lag(goal_x, default = dplyr::first(goal_x)), venue_length - dplyr::lag(goal_x, default = dplyr::first(goal_x))),
       lag_goal_x = tidyr::replace_na(lag_goal_x, dplyr::first(goal_x)),
       lag_goal_x5 = dplyr::if_else(lag(team_id_mdl, 5) == team_id_mdl, dplyr::lag(goal_x, 5, default = dplyr::first(goal_x)), venue_length - dplyr::lag(goal_x, 5, default = dplyr::first(goal_x))),
       lag_goal_x5 = tidyr::replace_na(lag_goal_x5, dplyr::first(goal_x)),
@@ -109,7 +109,7 @@ clean_model_data_epv <- function(df) {
       lead_goal_x = venue_length / 2 - lead_x
     ) %>%
     dplyr::ungroup() %>%
-    fastDummies::dummy_cols(select_columns = c("play_type", "phase_of_play")) %>% #,remove_selected_columns = TRUE
+    fastDummies::dummy_cols(select_columns = c("play_type", "phase_of_play")) %>% # ,remove_selected_columns = TRUE
     janitor::clean_names()
 
   return(model_data)
@@ -145,8 +145,8 @@ select_epv_model_vars <- function(df) {
     df %>%
     dplyr::select(
       goal_x, y, lag_goal_x, lag_goal_x5, lag_y, period_seconds, period,
-      play_type_handball,play_type_kick,play_type_reception,phase_of_play_handball_received,
-      phase_of_play_hard_ball,phase_of_play_loose_ball,phase_of_play_set_shot,
+      play_type_handball, play_type_kick, play_type_reception, phase_of_play_handball_received,
+      phase_of_play_hard_ball, phase_of_play_loose_ball, phase_of_play_set_shot,
       shot_row, speed5, home
     )
 
@@ -159,53 +159,54 @@ select_wp_model_vars <- function(df) {
     dplyr::select(
       total_seconds, shot_row, home, points_diff,
       xpoints_diff, pos_lead_prob, time_left_scaler, diff_time_ratio,
-      play_type_handball,play_type_kick,play_type_reception,phase_of_play_handball_received,
-      phase_of_play_hard_ball,phase_of_play_loose_ball,phase_of_play_set_shot
+      play_type_handball, play_type_kick, play_type_reception, phase_of_play_handball_received,
+      phase_of_play_hard_ball, phase_of_play_loose_ball, phase_of_play_set_shot
     )
 
   return(df)
 }
 
-clean_shots_data <- function(df){
+clean_shots_data <- function(df) {
   ##### Direction Variales
   goal_width <- 6.4
 
   df <- df %>%
-    dplyr::mutate(shot_result_multi =
-                    (dplyr::case_when(
-                      shot_at_goal == TRUE & disposal == "clanger" ~ 0,
-                      shot_at_goal == TRUE & disposal == "ineffective" ~ 1,
-                      shot_at_goal == TRUE & disposal == "effective" ~ 2,
-                      TRUE ~ NA_real_
-                    )),
-                  shot_result =
-                    as.numeric(dplyr::case_when(
-                      points_shot == 1 ~ 0,
-                      points_shot == 6 ~ 1,
-                      TRUE ~ NA_real_
-                    )),
-                  scored_shot = dplyr::if_else(!is.na(shot_at_goal),dplyr::if_else(!is.na(points_shot),1,0),NA_real_)
-                  )
+    dplyr::mutate(
+      shot_result_multi =
+        (dplyr::case_when(
+          shot_at_goal == TRUE & disposal == "clanger" ~ 0,
+          shot_at_goal == TRUE & disposal == "ineffective" ~ 1,
+          shot_at_goal == TRUE & disposal == "effective" ~ 2,
+          TRUE ~ NA_real_
+        )),
+      shot_result =
+        as.numeric(dplyr::case_when(
+          points_shot == 1 ~ 0,
+          points_shot == 6 ~ 1,
+          TRUE ~ NA_real_
+        )),
+      scored_shot = dplyr::if_else(!is.na(shot_at_goal), dplyr::if_else(!is.na(points_shot), 1, 0), NA_real_)
+    )
 
 
   df$abs_y <- abs(df$y)
-  df$side_b <- sqrt((df$goal_x)^2 + (df$y + goal_width/2 )^2)
-  df$side_c <- sqrt((df$goal_x)^2 + (df$y - goal_width/2)^2)
-  df$angle <-  acos((df$side_b^2 + df$side_c^2 - goal_width^2)/(2*df$side_b*df$side_c))
-  df$distance <- dplyr::if_else(df$y >= -goal_width/2 & df$y <= goal_width/2,
-                        df$goal_x, pmin(df$side_b ,df$side_c ))
-  df$shot_clanger <- dplyr::if_else(df$shot_at_goal == TRUE & df$disposal == "clanger",1,0)
-  df$shot_effective <- dplyr::if_else(df$shot_at_goal == TRUE & df$disposal == "effective",1,0)
-  df$shot_ineffective <- dplyr::if_else(df$shot_at_goal == TRUE & df$disposal == "ineffective",1,0)
+  df$side_b <- sqrt((df$goal_x)^2 + (df$y + goal_width / 2)^2)
+  df$side_c <- sqrt((df$goal_x)^2 + (df$y - goal_width / 2)^2)
+  df$angle <- acos((df$side_b^2 + df$side_c^2 - goal_width^2) / (2 * df$side_b * df$side_c))
+  df$distance <- dplyr::if_else(df$y >= -goal_width / 2 & df$y <= goal_width / 2,
+    df$goal_x, pmin(df$side_b, df$side_c)
+  )
+  df$shot_clanger <- dplyr::if_else(df$shot_at_goal == TRUE & df$disposal == "clanger", 1, 0)
+  df$shot_effective <- dplyr::if_else(df$shot_at_goal == TRUE & df$disposal == "effective", 1, 0)
+  df$shot_ineffective <- dplyr::if_else(df$shot_at_goal == TRUE & df$disposal == "ineffective", 1, 0)
 
   df <- df %>%
-    dplyr::left_join(torp::shot_player_df,by = c('player_id'='player_id_shot'),keep = TRUE)
+    dplyr::left_join(torp::shot_player_df, by = c("player_id" = "player_id_shot"), keep = TRUE)
 
-  df$player_id_shot <-  as.factor(tidyr::replace_na(df$player_id_shot,'Other'))
-  df$player_name_shot <-  as.factor(tidyr::replace_na(df$player_name_shot,'Other'))
+  df$player_id_shot <- as.factor(tidyr::replace_na(df$player_id_shot, "Other"))
+  df$player_name_shot <- as.factor(tidyr::replace_na(df$player_name_shot, "Other"))
 
-  df <- df %>% dplyr::select(-side_b,-side_c)
+  df <- df %>% dplyr::select(-side_b, -side_c)
 
   return(df)
 }
-

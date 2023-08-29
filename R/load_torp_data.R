@@ -13,23 +13,25 @@
 #' }
 #' @export
 load_chains <- function(seasons = get_afl_season(), rounds = get_afl_week()) {
+  if (isTRUE(seasons)) seasons <- 2021:get_afl_season()
 
+  stopifnot(
+    is.numeric(seasons),
+    seasons >= 2021,
+    seasons <= get_afl_season()
+  )
 
-  if(isTRUE(seasons)) seasons <- 2021:get_afl_season()
+  if (isTRUE(rounds)) rounds <- 1:27
 
-  stopifnot(is.numeric(seasons),
-            seasons >=2021,
-            seasons <= get_afl_season())
-
-  if(isTRUE(rounds)) rounds <- 1:27
-
-  stopifnot(is.numeric(rounds),
-            rounds >=1,
-            rounds <= 27)
+  stopifnot(
+    is.numeric(rounds),
+    rounds >= 1,
+    rounds <= 27
+  )
 
   rounds_02d <- sprintf("%02d", rounds)
 
-  urls <- paste0("https://github.com/peteowen1/torpdata/releases/download/chain-data/chain_data_",seasons,"_",rep(rounds_02d,each = length(seasons)), ".rds")
+  urls <- paste0("https://github.com/peteowen1/torpdata/releases/download/chain-data/chain_data_", seasons, "_", rep(rounds_02d, each = length(seasons)), ".rds")
 
   urls <- urls[which(urls <= glue::glue("https://github.com/peteowen1/torpdata/releases/download/chain-data/chain_data_{get_afl_season()}_{get_afl_week()}.rds"))]
 
@@ -56,22 +58,25 @@ load_chains <- function(seasons = get_afl_season(), rounds = get_afl_week()) {
 #'
 #' @export
 load_pbp <- function(seasons = get_afl_season(), rounds = get_afl_week()) {
+  if (isTRUE(seasons)) seasons <- 2021:get_afl_season()
 
-  if(isTRUE(seasons)) seasons <- 2021:get_afl_season()
+  stopifnot(
+    is.numeric(seasons),
+    seasons >= 2021,
+    seasons <= get_afl_season()
+  )
 
-  stopifnot(is.numeric(seasons),
-            seasons >=2021,
-            seasons <= get_afl_season())
+  if (isTRUE(rounds)) rounds <- 1:27
 
-  if(isTRUE(rounds)) rounds <- 1:27
-
-  stopifnot(is.numeric(rounds),
-            rounds >=1,
-            rounds <= 27)
+  stopifnot(
+    is.numeric(rounds),
+    rounds >= 1,
+    rounds <= 27
+  )
 
   rounds_02d <- sprintf("%02d", rounds)
 
-  urls <- paste0("https://github.com/peteowen1/torpdata/releases/download/pbp-data/pbp_data_",seasons,"_",rep(rounds_02d,each = length(seasons)), ".rds") %>% sort()
+  urls <- paste0("https://github.com/peteowen1/torpdata/releases/download/pbp-data/pbp_data_", seasons, "_", rep(rounds_02d, each = length(seasons)), ".rds") %>% sort()
 
   urls <- urls[which(urls <= glue::glue("https://github.com/peteowen1/torpdata/releases/download/pbp-data/pbp_data_{get_afl_season()}_{get_afl_week()}.rds"))]
 
@@ -96,26 +101,27 @@ load_pbp <- function(seasons = get_afl_season(), rounds = get_afl_week()) {
 #' @examples
 #' \donttest{
 #' try({ # prevents cran errors
-#'   urls <- c("https://github.com/peteowen1/torpdata/releases/download/rosters/roster_2020.csv",
-#'             "https://github.com/peteowen1/torpdata-data/releases/download/rosters/roster_2021.csv")
-#'  load_from_url(urls, peteowen1 = TRUE, peteowen1_type = "rosters for 2020 & 2021")
+#'   urls <- c(
+#'     "https://github.com/peteowen1/torpdata/releases/download/rosters/roster_2020.csv",
+#'     "https://github.com/peteowen1/torpdata-data/releases/download/rosters/roster_2021.csv"
+#'   )
+#'   load_from_url(urls, peteowen1 = TRUE, peteowen1_type = "rosters for 2020 & 2021")
 #' })
 #' }
-load_from_url <- function(url, ..., seasons = TRUE, rounds = TRUE){
-
+load_from_url <- function(url, ..., seasons = TRUE, rounds = TRUE) {
   url <- as.character(url)
 
-  if(length(url) == 1) {
+  if (length(url) == 1) {
     out <- rds_from_url(url)
-    if(!isTRUE(seasons)) stopifnot(is.numeric(seasons))
+    if (!isTRUE(seasons)) stopifnot(is.numeric(seasons))
     # if(!isTRUE(seasons) && "season" %in% names(out)) out <- out[out$season %in% seasons]
   }
 
-  if(length(url) > 1) {
+  if (length(url) > 1) {
     p <- NULL
     if (is_installed("progressr")) p <- progressr::progressor(along = url)
     out <- lapply(url, progressively(rds_from_url, p))
-    out <- data.table::rbindlist(out, use.names=TRUE)
+    out <- data.table::rbindlist(out, use.names = TRUE)
   }
 
   return(out)
@@ -147,6 +153,5 @@ rds_from_url <- function(url) {
   }
 
   data.table::setDT(load)
-  load
+  return(load)
 }
-

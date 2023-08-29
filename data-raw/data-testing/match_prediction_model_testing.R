@@ -127,9 +127,9 @@ mdl_wk <- function(df, season, weeknum) {
         s(team_type_fac, bs = "re")
         # + s(team_name.x, bs = "re")
         # + s(team_name.y, bs = "re")
-      ###
+        ###
         + s(torp_diff, bs = "ts")
-      ###
+        ###
         + s(key_def.x, bs = "ts")
         + s(med_def.y, bs = "ts")
         + s(midfield.x, bs = "ts")
@@ -137,7 +137,7 @@ mdl_wk <- function(df, season, weeknum) {
         + s(med_fwd.x, bs = "ts")
         + s(key_fwd.x, bs = "ts")
         + s(rucks.x, bs = "ts")
-      ###
+        ###
         + s(key_def.y, bs = "ts")
         + s(med_def.y, bs = "ts")
         + s(midfield.y, bs = "ts")
@@ -149,7 +149,7 @@ mdl_wk <- function(df, season, weeknum) {
       ,
       data = team_func_df,
       select = TRUE,
-      #weights = weightz_func,
+      # weights = weightz_func,
       family = "gaussian"
     )
 
@@ -162,9 +162,9 @@ mdl_wk <- function(df, season, weeknum) {
         s(team_type_fac, bs = "re")
         # + s(team_name.x, bs = "re")
         # + s(team_name.y, bs = "re")
-      ###
+        ###
         + s(torp_diff, bs = "ts")
-      ###
+        ###
         + s(key_def.x, bs = "ts")
         + s(med_def.y, bs = "ts")
         + s(midfield.x, bs = "ts")
@@ -172,7 +172,7 @@ mdl_wk <- function(df, season, weeknum) {
         + s(med_fwd.x, bs = "ts")
         + s(key_fwd.x, bs = "ts")
         + s(rucks.x, bs = "ts")
-      ###
+        ###
         + s(key_def.y, bs = "ts")
         + s(med_def.y, bs = "ts")
         + s(midfield.y, bs = "ts")
@@ -180,13 +180,13 @@ mdl_wk <- function(df, season, weeknum) {
         + s(med_fwd.y, bs = "ts")
         + s(key_fwd.y, bs = "ts")
         + s(rucks.y, bs = "ts")
-      ###
+        ###
         + s(pred_score_diff, bs = "ts")
       #+ pred_conv + pred_totshots
       ,
       data = team_func_df,
       select = TRUE,
-      #weights = weightz_func,
+      # weights = weightz_func,
       family = "binomial"
     )
 
@@ -242,9 +242,9 @@ rez <- resultz %>%
 ####
 # library(MLmetrics)
 MLmetrics::LogLoss(rez$pred_win, rez$win)
-MLmetrics::MAE(rez$pred_score_diff, rez$score_diff) #26.28663
+MLmetrics::MAE(rez$pred_score_diff, rez$score_diff) # 26.28663
 sum(rez$bits)
-mean(rez$bits) #0.1407061
+mean(rez$bits) # 0.1407061
 sum(rez$tips)
 mean(rez$tips)
 

@@ -7,14 +7,14 @@
 #'
 #' @rdname get_afl_season
 #' @export
-get_afl_season <- function(type="current") {
-  time_aest <- lubridate::with_tz(Sys.time(),tzone = "Australia/Brisbane")
+get_afl_season <- function(type = "current") {
+  time_aest <- lubridate::with_tz(Sys.time(), tzone = "Australia/Brisbane")
   current_day <- lubridate::as_date(time_aest)
 
   past_fixtures <- torp::fixtures %>% dplyr::filter(utcStartTime < current_day)
   future_fixtures <- torp::fixtures %>% dplyr::filter(utcStartTime >= current_day)
 
-  if (!type %in% c('current','next')) {
+  if (!type %in% c("current", "next")) {
     cli::cli_abort('type must be one of: "current" or "next"')
   }
   if (type == "current") {
@@ -38,17 +38,16 @@ get_afl_season <- function(type="current") {
 #' determine current week, default TRUE
 #'
 #' @export
-get_afl_week <- function(type="current") {
-
+get_afl_week <- function(type = "current") {
   season <- get_afl_season(type)
 
-  time_aest <- lubridate::with_tz(Sys.time(),tzone = "Australia/Brisbane")
+  time_aest <- lubridate::with_tz(Sys.time(), tzone = "Australia/Brisbane")
   current_day <- lubridate::as_date(time_aest)
 
   past_fixtures <- torp::fixtures %>% dplyr::filter(utcStartTime < current_day, compSeason.year == season)
   future_fixtures <- torp::fixtures %>% dplyr::filter(utcStartTime >= current_day, compSeason.year == season)
 
-  if (!type %in% c('current','next')) {
+  if (!type %in% c("current", "next")) {
     cli::cli_abort('type must be one of: "current" or "next"')
   }
   if (type == "current") {
@@ -59,7 +58,7 @@ get_afl_week <- function(type="current") {
   }
 
   return(round)
-  }
+}
 
 
 is_installed <- function(pkg) requireNamespace(pkg, quietly = TRUE)
@@ -78,14 +77,13 @@ is_installed <- function(pkg) requireNamespace(pkg, quietly = TRUE)
 #' @return a function that does the same as `f` but it calls `p()` after iteration.
 #'
 #' @export
-progressively <- function(f, p = NULL){
-  if(is.null(p)) p <- function(...) NULL
+progressively <- function(f, p = NULL) {
+  if (is.null(p)) p <- function(...) NULL
   p <- rlang::as_function(p)
   f <- rlang::as_function(f)
 
-  function(...){
+  function(...) {
     on.exit(p())
     f(...)
   }
-
 }

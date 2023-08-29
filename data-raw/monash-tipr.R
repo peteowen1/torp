@@ -59,10 +59,12 @@ games <- monashtipr::get_games(user, pass, comp = comp)
 
 games <-
   games %>%
-  left_join(week_gms %>%
-              left_join(mapping, by = c('home_team'='afl'))
-            ,by = c('Home'='monash')) %>%
-  select(Game,Ground,Home,Away,Margin = pred_score_diff)
+  left_join(
+    week_gms %>%
+      left_join(mapping, by = c("home_team" = "afl")),
+    by = c("Home" = "monash")
+  ) %>%
+  select(Game, Ground, Home, Away, Margin = pred_score_diff)
 
 games
 
@@ -75,10 +77,12 @@ games <- monashtipr::get_games(user, pass, comp = comp)
 
 games <-
   games %>%
-  left_join(week_gms %>%
-              left_join(mapping, by = c('home_team'='afl'))
-            ,by = c('Home'='monash')) %>%
-  select(Game,Ground,Home,Away,Probability = pred_win)
+  left_join(
+    week_gms %>%
+      left_join(mapping, by = c("home_team" = "afl")),
+    by = c("Home" = "monash")
+  ) %>%
+  select(Game, Ground, Home, Away, Probability = pred_win)
 
 games
 

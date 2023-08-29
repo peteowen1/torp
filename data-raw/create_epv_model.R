@@ -1,12 +1,12 @@
 ######################## takes 3 mins to build model, 1 min for rest
-library('devtools')
-library('tidyverse')
-library('zoo')
-library('janitor')
-library('lubridate')
+library("devtools")
+library("tidyverse")
+library("zoo")
+library("janitor")
+library("lubridate")
 devtools::load_all()
 
-chains <- load_chains(TRUE,TRUE)
+chains <- load_chains(TRUE, TRUE)
 
 tictoc::tic()
 pbp <- clean_pbp(chains)
@@ -37,9 +37,11 @@ params <-
   )
 
 ###
-full_train <- xgboost::xgb.DMatrix(stats::model.matrix(~ . + 0,
-                                                data = model_data_epv %>% select_epv_model_vars()),
-                                                label = model_data_epv$label_ep
+full_train <- xgboost::xgb.DMatrix(
+  stats::model.matrix(~ . + 0,
+    data = model_data_epv %>% select_epv_model_vars()
+  ),
+  label = model_data_epv$label_ep
 )
 
 ##################################################### UNCOMMENT TO REBUILD THE MODEL
@@ -48,8 +50,8 @@ ep_model <- xgboost::xgboost(
   params = params, data = full_train, nrounds = nrounds, print_every_n = 10
 )
 
-#saveRDS(ep_model, "./data/ep_model.rds")
-usethis::use_data(ep_model,overwrite = TRUE)
+# saveRDS(ep_model, "./data/ep_model.rds")
+usethis::use_data(ep_model, overwrite = TRUE)
 
 ###########
 ### TESTING
@@ -76,4 +78,3 @@ usethis::use_data(ep_model,overwrite = TRUE)
 #     goal_x,play_type,phase_of_play,lead_desc_tot, points_shot,points_row_na,tot_goals,throw_in
 #   )
 # ###################
-
