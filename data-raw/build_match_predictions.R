@@ -1,4 +1,6 @@
 ###
+skip <- 'yes'
+
 devtools::load_all()
 
 data(teams, envir = environment())
@@ -7,7 +9,12 @@ data(results, envir = environment())
 
 data(torp_df_total, envir = environment())
 
+
 xg_df <- match_xgs(T, T)
+
+if(skip == 'no'){
+xg_df <- match_xgs(T,T)
+}
 
 decay <- 1500
 
@@ -46,25 +53,30 @@ team_lineup_df <-
     BPL = ifelse(position.x == "BPL", torp, NA),
     BPR = ifelse(position.x == "BPR", torp, NA),
     FB = ifelse(position.x == "FB", torp, NA),
-    HBF = ifelse(position.x == "HBFL" | position.x == "HBFR", torp, NA),
     HBFL = ifelse(position.x == "HBFL", torp, NA),
     HBFR = ifelse(position.x == "HBFR", torp, NA),
     CHB = ifelse(position.x == "CHB", torp, NA),
-    W = ifelse(position.x == "WL" | position.x == "WR", torp, NA),
     WL = ifelse(position.x == "WL", torp, NA),
     WR = ifelse(position.x == "WR", torp, NA),
     C = ifelse(position.x == "C", torp, NA),
     R = ifelse(position.x == "R", torp, NA),
     RR = ifelse(position.x == "RR", torp, NA),
     RK = ifelse(position.x == "RK", torp, NA),
-    HFF = ifelse(position.x == "HFFL" | position.x == "HFFR", torp, NA),
     HFFL = ifelse(position.x == "HFFL", torp, NA),
     HFFR = ifelse(position.x == "HFFR", torp, NA),
     CHF = ifelse(position.x == "CHF", torp, NA),
-    FP = ifelse(position.x == "FPL" | position.x == "FPR", torp, NA),
     FPL = ifelse(position.x == "FPL", torp, NA),
     FPR = ifelse(position.x == "FPR", torp, NA),
     FF = ifelse(position.x == "FF", torp, NA),
+    # grouped positioins
+    CB = ifelse(position.x == "CHB" | position.x == "FB", torp, NA),
+    BP = ifelse(position.x == "BPL"| position.x == "BPR", torp, NA),
+    HBF = ifelse(position.x == "HBFL" | position.x == "HBFR", torp, NA),
+    W = ifelse(position.x == "WL" | position.x == "WR", torp, NA),
+    MIDS = ifelse(position.x == "C" | position.x == "R" | position.x == "RR", torp, NA),
+    HFF = ifelse(position.x == "HFFL" | position.x == "HFFR", torp, NA),
+    FP = ifelse(position.x == "FPL" | position.x == "FPR", torp, NA),
+    CF = ifelse(position.x == "FF" | position.x == "CHF", torp, NA),
     # champion data specific
     key_def = ifelse(position.y == "KEY_DEFENDER", torp, NA),
     med_def = ifelse(position.y == "MEDIUM_DEFENDER", torp, NA),
@@ -112,11 +124,16 @@ team_rt_df <- team_lineup_df %>%
     FPL = sum(FPL, na.rm = T),
     FPR = sum(FPR, na.rm = T),
     FF = sum(FF, na.rm = T),
-    BP = mean(BP, na.rm = T),
-    W = mean(W, na.rm = T),
-    HBF = mean(HBF, na.rm = T),
-    HFF = mean(HFF, na.rm = T),
-    FP = mean(FP, na.rm = T),
+    ###
+    CB = sum(CB, na.rm = T),
+    BP = sum(BP, na.rm = T),
+    HBF = sum(HBF, na.rm = T),
+    W = sum(W, na.rm = T),
+    MIDS = sum(MIDS, na.rm = T),
+    HFF = sum(HFF, na.rm = T),
+    FP = sum(FP, na.rm = T),
+    CF = sum(CF, na.rm = T),
+    ###
     key_def = sum(key_def, na.rm = T),
     med_def = sum(med_def, na.rm = T),
     midfield = sum(midfield, na.rm = T),
@@ -197,6 +214,27 @@ team_mdl_df <- team_rt_df %>% # filter(!is.na(torp)) %>%
     hmid_amid = pmax(pmin((mid.x - mid.y), 12), -12),
     hdef_afwd = pmax(pmin((def.x - fwd.y), 5), -20),
     hint_aint = pmax(pmin((int.x - int.y), 10), -10),
+    # individual positions diff
+    BPL_diff = BPL.x - BPL.y,
+    BPR_diff = BPR.x - BPR.y,
+    FB_diff = FB.x - FB.y,
+    HBFL_diff = HBFL.x - HBFL.y,
+    HBFR_diff = HBFR.x - HBFR.y,
+    CHB_diff = CHB.x - CHB.y,
+    WL_diff = WL.x - WL.y,
+    WR_diff = WR.x - WR.y,
+    C_diff = C.x - C.y,
+    R_diff = R.x - R.y,
+    RR_diff = RR.x - RR.y,
+    RK_diff = RK.x - RK.y,
+    HFFL_diff = HFFL.x - HFFL.y,
+    HFFR_diff = HFFR.x - HFFR.y,
+    CHF_diff = CHF.x - CHF.y,
+    FPL_diff = FPL.x - FPL.y,
+    FPR_diff = FPR.x - FPR.y,
+    FF_diff = FF.x - FF.y,
+    int_diff = int.x - int.y,
+    ####
     team_type_fac = as.factor(teamType),
     total_score = homeTeamScore.matchScore.totalScore + awayTeamScore.matchScore.totalScore,
     total_shots = home_shots + away_shots,
