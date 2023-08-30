@@ -62,7 +62,7 @@ plyr_gm_df <-
                 dplyr::group_by(playerId, matchId) %>%
                 #dplyr::mutate() %>%
                 dplyr::summarise(spoils = dplyr::n(),
-                          spoil_pts = spoils * 0.25,
+                          spoil_pts = spoils * 0.35,
                           spoil_pts_wt = spoil_pts * max(weight_gm)),
               by = c("player_id" = "playerId","match_id"="matchId")) %>%
   dplyr::mutate(spoil_pts = tidyr::replace_na(spoil_pts,0) ,

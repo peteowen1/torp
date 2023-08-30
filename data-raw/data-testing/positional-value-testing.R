@@ -1,11 +1,18 @@
 ##### BASIC TESTING
-afl_torp_diff_mdl <- mgcv::bam(score_diff ~ team_type_fac
-                               + torp_diff
-                         + key_def.x + med_def.x + midfield.x + mid_fwd.x
-                         + med_fwd.x + key_fwd.x + rucks.x
-                         + key_def.y + med_def.y + midfield.y + mid_fwd.y
-                         + med_fwd.y + key_fwd.y + rucks.y
-                         + int.x +int.y
+afl_torp_diff_mdl <- mgcv::bam(score_diff ~
+                                  team_type_fac
+                               + I(torp_diff*1.1)
+                               + CB.x
+                               + BP.x
+                               + HBF.x
+                               + W.x
+                               + MIDS.x
+                               + RK.x
+                               + HFF.x
+                               + FP.x
+                               + CF.x
+                               + int.x
+                         #+ def.y + mid.y + fwd.y #+ int.y
                          ,
                      data = team_mdl_df %>% dplyr::filter(),
                      family = "gaussian")
