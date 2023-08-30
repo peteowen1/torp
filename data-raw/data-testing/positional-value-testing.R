@@ -1,4 +1,5 @@
 ##### BASIC TESTING
+<<<<<<< HEAD
 afl_torp_diff_mdl <- stats::glm(
   score_diff ~
     team_type_fac
@@ -9,6 +10,25 @@ afl_torp_diff_mdl <- stats::glm(
   data = team_mdl_df %>% dplyr::filter(),
   family = "gaussian"
 )
+=======
+afl_torp_diff_mdl <- mgcv::bam(score_diff ~
+                                  team_type_fac
+                               + I(torp_diff*1.1)
+                               + CB.x
+                               + BP.x
+                               + HBF.x
+                               + W.x
+                               + MIDS.x
+                               + RK.x
+                               + HFF.x
+                               + FP.x
+                               + CF.x
+                               + int.x
+                         #+ def.y + mid.y + fwd.y #+ int.y
+                         ,
+                     data = team_mdl_df %>% dplyr::filter(),
+                     family = "gaussian")
+>>>>>>> 9d3782651a5c754bb6f224263eb91fb4882ea7f9
 
 summary(afl_torp_diff_mdl)
 

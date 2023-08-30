@@ -82,6 +82,23 @@ plyr_gm_df <-
     tot_p_wt = recv_pts_wt + disp_pts_wt + spoil_pts_wt,
     tot_wpa = recv_wpa + disp_wpa
   ) %>%
+<<<<<<< HEAD
+=======
+  dplyr::left_join(chains %>%
+              dplyr::filter(description == "Spoil") %>%
+                dplyr::mutate(weight_gm = exp(as.numeric(-(max(as.Date(utcStartTime)) - as.Date(utcStartTime))) / decay)) %>%
+                dplyr::group_by(playerId, matchId) %>%
+                #dplyr::mutate() %>%
+                dplyr::summarise(spoils = dplyr::n(),
+                          spoil_pts = spoils * 0.35,
+                          spoil_pts_wt = spoil_pts * max(weight_gm)),
+              by = c("player_id" = "playerId","match_id"="matchId")) %>%
+  dplyr::mutate(spoil_pts = tidyr::replace_na(spoil_pts,0) ,
+                spoil_pts_wt = tidyr::replace_na(spoil_pts_wt,0) ,
+                tot_p = recv_pts + disp_pts + spoil_pts,
+                tot_p_wt = recv_pts_wt + disp_pts_wt + spoil_pts_wt,
+                tot_wpa = recv_wpa + disp_wpa) %>%
+>>>>>>> 9d3782651a5c754bb6f224263eb91fb4882ea7f9
   dplyr::ungroup() %>%
   dplyr::mutate(
     tot_p_adj = tot_p - quantile(tot_p, 0.3, na.rm = T),
