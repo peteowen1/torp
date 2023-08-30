@@ -9,13 +9,12 @@ data(results, envir = environment())
 
 data(torp_df_total, envir = environment())
 
-<<<<<<< HEAD
+
 xg_df <- match_xgs(T, T)
-=======
+
 if(skip == 'no'){
 xg_df <- match_xgs(T,T)
 }
->>>>>>> 9d3782651a5c754bb6f224263eb91fb4882ea7f9
 
 decay <- 1500
 
@@ -50,10 +49,7 @@ team_lineup_df <-
     half_forwards = ifelse(position.x == "HFFL" | position.x == "HFFR" | position.x == "CHF", torp, NA),
     forwards = ifelse(position.x == "FPL" | position.x == "FPR" | position.x == "FF", torp, NA),
     # individual positions
-<<<<<<< HEAD
     BP = ifelse(position.x == "BPL" | position.x == "BPR", torp, NA),
-=======
->>>>>>> 9d3782651a5c754bb6f224263eb91fb4882ea7f9
     BPL = ifelse(position.x == "BPL", torp, NA),
     BPR = ifelse(position.x == "BPR", torp, NA),
     FB = ifelse(position.x == "FB", torp, NA),

@@ -82,8 +82,6 @@ plyr_gm_df <-
     tot_p_wt = recv_pts_wt + disp_pts_wt + spoil_pts_wt,
     tot_wpa = recv_wpa + disp_wpa
   ) %>%
-<<<<<<< HEAD
-=======
   dplyr::left_join(chains %>%
               dplyr::filter(description == "Spoil") %>%
                 dplyr::mutate(weight_gm = exp(as.numeric(-(max(as.Date(utcStartTime)) - as.Date(utcStartTime))) / decay)) %>%
@@ -98,7 +96,6 @@ plyr_gm_df <-
                 tot_p = recv_pts + disp_pts + spoil_pts,
                 tot_p_wt = recv_pts_wt + disp_pts_wt + spoil_pts_wt,
                 tot_wpa = recv_wpa + disp_wpa) %>%
->>>>>>> 9d3782651a5c754bb6f224263eb91fb4882ea7f9
   dplyr::ungroup() %>%
   dplyr::mutate(
     tot_p_adj = tot_p - quantile(tot_p, 0.3, na.rm = T),
