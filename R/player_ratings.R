@@ -11,7 +11,7 @@
 #' @export
 torp_ratings <- function(season_val = get_afl_season(type = "next"),
                          round_val = get_afl_week(type = "next"),
-                         decay = 500,
+                         decay = 365,
                          loading = 1.5,
                          prior_games = 4) {
   gwk <- sprintf("%02d", round_val) # keep this in case you change to round -1 or round +1
@@ -40,20 +40,38 @@ torp_ratings <- function(season_val = get_afl_season(type = "next"),
       # tot_wpa_sum = sum(tot_wpa * weight_gm),
       tot_p_g = sum(tot_p_adj * weight_gm) / wt_gms,
       # tot_wpa_g = sum(tot_wpa * weight_gm) / wt_gms,
-      recv_g = sum(recv_pts * weight_gm) / wt_gms,
-      disp_g = sum(disp_pts * weight_gm) / wt_gms,
+      recv_g = sum(recv_pts_adj * weight_gm) / wt_gms,
+      disp_g = sum(disp_pts_adj * weight_gm) / wt_gms,
+      spoil_g = sum(spoil_pts_adj * weight_gm) / wt_gms,
+      hitout_g = sum(hitout_pts_adj * weight_gm) / wt_gms,
       torp = sum(tot_p_adj * weight_gm) / (wt_gms + prior_games),
-      torp_recv = sum(recv_pts * weight_gm) / (wt_gms + prior_games),
-      torp_disp = sum(disp_pts * weight_gm) / (wt_gms + prior_games),
-      torp_ratio = pmax(pmin(torp / (torp_recv + torp_disp), 1), -1),
+      torp_recv = sum(recv_pts_adj * weight_gm) / (wt_gms + prior_games),
+      torp_disp = sum(disp_pts_adj * weight_gm) / (wt_gms + prior_games),
+      torp_spoil = sum(spoil_pts_adj * weight_gm) / (wt_gms + prior_games),
+      torp_hitout = sum(hitout_pts_adj * weight_gm) / (wt_gms + prior_games),
+      torp_ratio = pmax(pmin(torp / (torp_recv + torp_disp + torp_spoil + torp_hitout), 1), -1),
       torp_recv_adj1 = torp_recv * torp_ratio,
       torp_disp_adj1 = torp_disp * torp_ratio,
-      torp_diff = torp - (torp_recv_adj1 + torp_disp_adj1),
-      torp_recv_adj = round((torp_recv_adj1 + torp_diff / 2) * loading, 2),
-      torp_disp_adj = round((torp_disp_adj1 + torp_diff / 2) * loading, 2),
+      torp_spoil_adj1 = torp_spoil * torp_ratio,
+      torp_hitout_adj1 = torp_hitout * torp_ratio,
+      torp_diff = torp - (torp_recv_adj1 + torp_disp_adj1 + torp_spoil_adj1 + torp_hitout_adj1),
+      torp_recv_adj = round((torp_recv_adj1 + torp_diff / 4) * loading, 2),
+      torp_disp_adj = round((torp_disp_adj1 + torp_diff / 4) * loading, 2),
+      torp_spoil_adj = round((torp_spoil_adj1 + torp_diff / 4) * loading, 2),
+      torp_hitout_adj = round((torp_hitout_adj1 + torp_diff / 4) * loading, 2),
       torp = round(torp * loading, 2),
       posn = dplyr::last(pos)
-    )
+    ) #%>%
+    # mutate(torp = case_when(
+    #   posn == "KEY_DEFENDER" ~ torp * 1.4,
+    #   posn == "KEY_FORWARD" ~ torp * 0.9,
+    #   posn == "MEDIUM_DEFENDER" ~ torp * 0.9,
+    #   posn == "MEDIUM_FORWARD" ~ torp * 0.7,
+    #   posn == "MIDFIELDER" ~ torp * 1.1,
+    #   posn == "MIDFIELDER_FORWARD" ~ torp * 0.7,
+    #   posn == "RUCK" ~ torp * 1.8,
+    #   TRUE ~ NA_real_
+    # ))
 
 
   final_df <- torp::plyr_tm_db %>%
@@ -73,9 +91,12 @@ torp_ratings <- function(season_val = get_afl_season(type = "next"),
           lubridate::decimal_date(lubridate::as_date(dateOfBirth))
     ) %>%
     dplyr::select(
-      player_id = providerId, player_name = player_name.x, age, team, torp,
+      player_id = providerId, player_name = player_name.x, age, team,
+      torp,
       torp_recv = torp_recv_adj,
       torp_disp = torp_disp_adj,
+      torp_spoil = torp_spoil_adj,
+      torp_hitout = torp_hitout_adj,
       position = position, season, round
     ) %>%
     dplyr::arrange(-torp)
@@ -136,11 +157,12 @@ player_game_ratings <- function(season_val = get_afl_season(),
       total_points = round(tot_p_adj, 1),
       recv_points = round(recv_pts_adj, 1),
       disp_points = round(disp_pts_adj, 1),
-      spoil_points = round(spoil_pts_adj, 1)
+      spoil_points = round(spoil_pts_adj, 1),
+      hitout_points = round(hitout_pts_adj, 1)
     ) %>%
     dplyr::select(season, round,
       player_name = plyr_nm, position = pos, team = tm, opp,
-      total_points, recv_points, disp_points, spoil_points, player_id, match_id
+      total_points, recv_points, disp_points, spoil_points,hitout_points, player_id, match_id
     )
 
   return(final)
@@ -167,7 +189,8 @@ player_season_ratings <- function(season_val = get_afl_season(), round_num = NA)
           season_points = sum(total_points),
           season_recv = sum(recv_points),
           season_disp = sum(disp_points),
-          season_spoil = sum(spoil_points)
+          season_spoil = sum(spoil_points),
+          season_hitout = sum(hitout_points)
         ) %>%
         dplyr::arrange(-season_points)
     }
@@ -180,7 +203,8 @@ player_season_ratings <- function(season_val = get_afl_season(), round_num = NA)
           season_points = sum(total_points),
           season_recv = sum(recv_points),
           season_disp = sum(disp_points),
-          season_spoil = sum(spoil_points)
+          season_spoil = sum(spoil_points),
+          season_hitout = sum(hitout_points)
         ) %>%
         dplyr::arrange(-season_points)
     }
@@ -196,7 +220,8 @@ player_season_ratings <- function(season_val = get_afl_season(), round_num = NA)
           season_points = sum(total_points),
           season_recv = sum(recv_points),
           season_disp = sum(disp_points),
-          season_spoil = sum(spoil_points)
+          season_spoil = sum(spoil_points),
+          season_hitout = sum(hitout_points)
         ) %>%
         dplyr::arrange(-season_points)
     }
@@ -210,6 +235,7 @@ player_season_ratings <- function(season_val = get_afl_season(), round_num = NA)
           season_recv = sum(recv_points),
           season_disp = sum(disp_points),
           season_spoil = sum(spoil_points),
+          season_hitout = sum(hitout_points)
         ) %>%
         dplyr::arrange(-season_points)
     }

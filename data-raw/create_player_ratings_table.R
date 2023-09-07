@@ -1,11 +1,32 @@
 ###########
 devtools::load_all()
+skip_em <- "yes"
 
 teams <- torp::teams
 
-chains <- load_chains(seasons = T, rounds = T)
+if (skip_em == "no") {
+  chains <- load_chains(seasons = T, rounds = T)
 
-model_data_wp <- load_pbp(seasons = T, rounds = T)
+  model_data_wp <- load_pbp(seasons = T, rounds = T)
+
+  pl_details <- fetch_player_details_afl(2023)
+
+  ps23 <- fetch_player_stats_afl(2023) %>%
+    janitor::remove_constant() %>%
+    janitor::clean_names()
+  ps22 <- fetch_player_stats_afl(2022) %>%
+    janitor::remove_constant() %>%
+    janitor::clean_names()
+  ps21 <- fetch_player_stats_afl(2021) %>%
+    janitor::remove_constant() %>%
+    janitor::clean_names()
+  ps20 <- fetch_player_stats_afl(2020) %>%
+    janitor::remove_constant() %>%
+    janitor::clean_names()
+  pstot <- bind_rows(ps20, ps21, ps22, ps23) ### columns 22 to 88
+}
+
+
 
 decay <- 500
 
@@ -36,8 +57,8 @@ plyr_gm_df <-
     # wt_gms = sum(unique(weight_gm), na.rm = TRUE),
     utc_start_time = max(utc_start_time),
     weight_gm = max(weight_gm),
-    disp_pts = sum((delta_epv) / 2),
-    disp_pts_wt = sum(delta_epv * max(weight_gm)) / 2,
+    disp_pts = sum(delta_epv * 1 / 2),
+    disp_pts_wt = sum(delta_epv * 1 * max(weight_gm)) / 2,
     disp_wpa = sum((wpa) / 2),
     disp = floor(dplyr::n() / 2),
     tm = dplyr::last(team),
@@ -55,55 +76,59 @@ plyr_gm_df <-
       dplyr::mutate(weight_gm = exp(as.numeric(-(max(as.Date(utc_start_time)) - as.Date(utc_start_time))) / decay)) %>%
       dplyr::group_by(lead_player, lead_player_id, match_id) %>%
       dplyr::summarise(
-        recv_pts = sum((dplyr::if_else(pos_team == -1, 1.5 * delta_epv * pos_team, delta_epv * pos_team)) / 2),
-        recv_pts_wt = sum(delta_epv * pos_team * max(weight_gm)) / 2,
+        recv_pts = sum((dplyr::if_else(pos_team == -1, 1.5 * delta_epv * pos_team, 1 * delta_epv * pos_team)) / 2),
+        recv_pts_wt = sum(dplyr::if_else(pos_team == -1, 1.5 * delta_epv * pos_team, 1 * delta_epv * pos_team) * max(weight_gm)) / 2,
         recv_wpa = sum((wpa) / 2),
         recvs = dplyr::n()
       ),
     by = c("player_id" = "lead_player_id", "match_id" = "match_id")
   ) %>%
+  # ##### SPOILS
+  # dplyr::left_join(chains %>%
+  #             dplyr::filter(description == "Spoil") %>%
+  #               dplyr::mutate(weight_gm = exp(as.numeric(-(max(as.Date(utcStartTime)) - as.Date(utcStartTime))) / decay)) %>%
+  #               dplyr::group_by(playerId, matchId) %>%
+  #               #dplyr::mutate() %>%
+  #               dplyr::summarise(spoils = dplyr::n(),
+  #                         spoil_pts = spoils * 0.5,
+  #                         spoil_pts_wt = spoil_pts * max(weight_gm)),
+  #             by = c("player_id" = "playerId","match_id"="matchId")) %>%
+  ##### HITOUTS + SPOILS
   dplyr::left_join(
-    chains %>%
-      dplyr::filter(description == "Spoil") %>%
-      dplyr::mutate(weight_gm = exp(as.numeric(-(max(as.Date(utcStartTime)) - as.Date(utcStartTime))) / decay)) %>%
-      dplyr::group_by(playerId, matchId) %>%
-      # dplyr::mutate() %>%
-      dplyr::summarise(
-        spoils = dplyr::n(),
-        spoil_pts = spoils * 0.25,
-        spoil_pts_wt = spoil_pts * max(weight_gm)
-      ),
-    by = c("player_id" = "playerId", "match_id" = "matchId")
+    pstot %>%
+      dplyr::mutate(
+        weight_gm = exp(as.numeric(-(max(as.Date(utc_start_time)) - as.Date(utc_start_time))) / decay),
+        spoil_pts = one_percenters * 0.5,# - extended_stats_pressure_acts * 0.05,
+        spoil_pts_wt = spoil_pts * max(weight_gm),
+        hitout_pts = hitouts * 0.15 + extended_stats_hitouts_to_advantage * 0.15 - extended_stats_ruck_contests * 0.05,
+        hitout_pts_wt = hitout_pts * max(weight_gm)
+      ) %>%
+      dplyr::select(-utc_start_time),
+    by = c("player_id" = "player_player_player_player_id", "match_id" = "provider_id")
   ) %>%
   dplyr::mutate(
+    recv_pts = tidyr::replace_na(recv_pts, 0),# + 0.15 * extended_stats_effective_disposals - bounces * 0.5,
+    recv_pts_wt = tidyr::replace_na(recv_pts_wt, 0),
+    disp_pts = tidyr::replace_na(disp_pts, 0),
+    disp_pts_wt = tidyr::replace_na(disp_pts_wt, 0),
     spoil_pts = tidyr::replace_na(spoil_pts, 0),
     spoil_pts_wt = tidyr::replace_na(spoil_pts_wt, 0),
-    tot_p = recv_pts + disp_pts + spoil_pts,
-    tot_p_wt = recv_pts_wt + disp_pts_wt + spoil_pts_wt,
+    hitout_pts = tidyr::replace_na(hitout_pts, 0),
+    hitout_pts_wt = tidyr::replace_na(hitout_pts_wt, 0),
+    tot_p = recv_pts + disp_pts + spoil_pts + hitout_pts,
+    tot_p_wt = recv_pts_wt + disp_pts_wt + spoil_pts_wt + hitout_pts_wt,
     tot_wpa = recv_wpa + disp_wpa
   ) %>%
-  dplyr::left_join(chains %>%
-              dplyr::filter(description == "Spoil") %>%
-                dplyr::mutate(weight_gm = exp(as.numeric(-(max(as.Date(utcStartTime)) - as.Date(utcStartTime))) / decay)) %>%
-                dplyr::group_by(playerId, matchId) %>%
-                #dplyr::mutate() %>%
-                dplyr::summarise(spoils = dplyr::n(),
-                          spoil_pts = spoils * 0.35,
-                          spoil_pts_wt = spoil_pts * max(weight_gm)),
-              by = c("player_id" = "playerId","match_id"="matchId")) %>%
-  dplyr::mutate(spoil_pts = tidyr::replace_na(spoil_pts,0) ,
-                spoil_pts_wt = tidyr::replace_na(spoil_pts_wt,0) ,
-                tot_p = recv_pts + disp_pts + spoil_pts,
-                tot_p_wt = recv_pts_wt + disp_pts_wt + spoil_pts_wt,
-                tot_wpa = recv_wpa + disp_wpa) %>%
   dplyr::ungroup() %>%
   dplyr::mutate(
-    tot_p_adj = tot_p - quantile(tot_p, 0.3, na.rm = T),
-    recv_pts_adj = recv_pts - quantile(recv_pts, 0.3, na.rm = T),
-    disp_pts_adj = disp_pts - quantile(disp_pts, 0.3, na.rm = T),
-    spoil_pts_adj = spoil_pts - quantile(spoil_pts, 0.3, na.rm = T)
+    # tot_p_adj = tot_p - quantile(tot_p, 0.3, na.rm = T),
+    recv_pts_adj = recv_pts - quantile(recv_pts, 0.35, na.rm = T),
+    disp_pts_adj = disp_pts - quantile(disp_pts, 0.35, na.rm = T),
+    spoil_pts_adj = spoil_pts - quantile(spoil_pts, 0.35, na.rm = T),
+    hitout_pts_adj = hitout_pts - quantile(hitout_pts, 0.35, na.rm = T),
+    tot_p_adj = recv_pts_adj + disp_pts_adj + spoil_pts_adj + hitout_pts_adj
   ) %>%
-  dplyr::relocate(tot_p_adj, disp) %>%
+  dplyr::relocate(tot_p_adj, disp,recv_pts_adj,disp_pts_adj,spoil_pts_adj,hitout_pts_adj) %>%
   dplyr::filter(!is.na(tm))
 
 ###

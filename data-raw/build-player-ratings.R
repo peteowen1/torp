@@ -1,4 +1,5 @@
 ##
+library(devtools)
 devtools::load_all()
 
 tictoc::tic()
@@ -17,3 +18,4 @@ torp_df_total <- dplyr::bind_rows(torp_df_21, torp_df_22, torp_df_23)
 
 tictoc::toc()
 
+use_data(torp_df_total, overwrite = TRUE)

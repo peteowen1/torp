@@ -9,12 +9,15 @@ data(results, envir = environment())
 
 data(torp_df_total, envir = environment())
 
-
-xg_df <- match_xgs(T, T)
-
 if(skip == 'no'){
 xg_df <- match_xgs(T,T)
 }
+
+pred_df <- readRDS("./data-raw/stat_pred_df.rds")
+
+team_preds <- pred_df %>%
+  group_by(provider_id, team_name, opp_name) %>%
+  summarise_if(is.numeric, sum, na.rm = TRUE) # %>% View()
 
 decay <- 1500
 
@@ -242,7 +245,8 @@ team_mdl_df <- team_rt_df %>% # filter(!is.na(torp)) %>%
     team_name.y = as.factor(teamName.y),
     weightz = exp(as.numeric(-(Sys.Date() - as.Date(match.utcStartTime))) / decay),
     weightz = weightz / mean(weightz, na.rm = T)
-  )
+  ) %>%
+  left_join(team_preds, by = c("providerId" = "provider_id", "teamName.x" = "team_name"))
 
 
 #### MODEL
