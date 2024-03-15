@@ -121,6 +121,42 @@ mdl_wk <- function(df, season, weeknum) {
     #
     # team_func_df$pred_win <- predict(afl_win_mdl, newdata = team_func_df, type = "response")
     # df$pred_win <- predict(afl_win_mdl, newdata = df, type = "response")
+
+
+    ###
+    afl_xscore_diff_mdl <- mgcv::bam(
+      xscore_diff ~
+        s(team_type_fac, bs = "re")
+      # + s(team_name.x, bs = "re")
+      # + s(team_name.y, bs = "re")
+      ###
+      + s(torp_diff, bs = "ts")
+      ###
+      + s(key_def.x, bs = "ts")
+      + s(med_def.y, bs = "ts")
+      + s(midfield.x, bs = "ts")
+      + s(mid_fwd.x, bs = "ts")
+      + s(med_fwd.x, bs = "ts")
+      + s(key_fwd.x, bs = "ts")
+      + s(rucks.x, bs = "ts")
+      ###
+      + s(key_def.y, bs = "ts")
+      + s(med_def.y, bs = "ts")
+      + s(midfield.y, bs = "ts")
+      + s(mid_fwd.y, bs = "ts")
+      + s(med_fwd.y, bs = "ts")
+      + s(key_fwd.y, bs = "ts")
+      + s(rucks.y, bs = "ts")
+      ,
+      data = team_func_df,
+      select = TRUE,
+      # weights = weightz_func,
+      family = "gaussian"
+    )
+    team_mdl_df$pred_xscore_diff <- predict(afl_xscore_diff_mdl, newdata = team_mdl_df, type = "response")
+
+
+
     ########################  TRY THIS
     afl_torp_diff_mdl <- mgcv::bam(
       score_diff ~
@@ -129,6 +165,7 @@ mdl_wk <- function(df, season, weeknum) {
         # + s(team_name.y, bs = "re")
         ###
         + s(torp_diff, bs = "ts")
+        + s(pred_xscore_diff, bs='ts')
         ###
         + s(key_def.x, bs = "ts")
         + s(med_def.y, bs = "ts")
@@ -182,6 +219,7 @@ mdl_wk <- function(df, season, weeknum) {
         + s(rucks.y, bs = "ts")
         ###
         + s(pred_score_diff, bs = "ts")
+        + s(pred_xscore_diff, bs = "ts")
       #+ pred_conv + pred_totshots
       ,
       data = team_func_df,

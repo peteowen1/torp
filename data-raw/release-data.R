@@ -49,8 +49,9 @@ get_chains_data <- function(season, round) {
 # extract and save
 # purrr::walk(1:27,~get_chains_data(2021,.))
 # purrr::walk(1:27,~get_chains_data(2022,.))
-# purrr::walk(1:get_afl_week(),~get_chains_data(2023,.))
-get_chains_data(2023, get_afl_week())
+# purrr::walk(1:27,~get_chains_data(2023,.))
+purrr::walk(0:get_afl_week(),~get_chains_data(2024,.))
+# get_chains_data(2024, get_afl_week())
 
 # Get pbp data  -------------------------------------------------------------
 get_pbp_data <- function(season, round) {
@@ -82,5 +83,6 @@ get_pbp_data <- function(season, round) {
 # extract and save
 # purrr::walk(1:27,~get_pbp_data(2021,.))
 # purrr::walk(1:27,~get_pbp_data(2022,.))
-# purrr::walk(1:get_afl_week(),~get_pbp_data(2023,.))
-get_pbp_data(2023, get_afl_week())
+# purrr::walk(1:27,~get_pbp_data(2023,.))
+purrr::walk(0:get_afl_week(),~get_pbp_data(2024,.))
+# get_pbp_data(2024, get_afl_week())

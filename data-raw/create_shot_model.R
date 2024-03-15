@@ -8,7 +8,11 @@ shots_prep <- load_pbp(seasons = T, rounds = T)
 
 ###############################
 shots_all <- shots_prep %>% dplyr::filter(!is.na(points_shot) | !is.na(shot_at_goal))
-shots <- shots_all %>% dplyr::filter(!is.na(shot_at_goal), x > 0)
+shots <- shots_all %>% dplyr::filter(!is.na(shot_at_goal),
+                                     x > 0,
+                                     goal_x < 65,
+                                     abs_y < 45
+                                     )
 
 ################
 # shots$scored_shot <- ifelse(!is.na(shots$points_shot), 1, 0)
@@ -99,10 +103,11 @@ shot_result_mdl <-
 shot_ocat_mdl <-
   mgcv::bam(
     shot_cat ~
-      ti(goal_x, y, by = phase_of_play, bs = "ts")
-    + ti(goal_x, y, bs = "ts")
-    + s(goal_x, bs = "ts") + s(y, bs = "ts")
-    + ti(lag_goal_x, y) + s(lag_goal_x, bs = "ts") + s(lag_y, bs = "ts")
+      ti(goal_x, abs_y, by = phase_of_play, bs = "ts")
+    + ti(goal_x, abs_y, bs = "ts")
+    + s(goal_x, bs = "ts")
+    + s(abs_y, bs = "ts")
+    + ti(lag_goal_x, abs_y) + s(lag_goal_x, bs = "ts") + s(lag_y, bs = "ts")
     + s(play_type, bs = "re") + s(phase_of_play, bs = "re")
     + s(player_position_fac, bs = "re")
     + s(player_id_shot, bs = "re")

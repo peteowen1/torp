@@ -7,7 +7,7 @@
 torp_ratings(
   season_val = get_afl_season(type = "next"),
   round_val = get_afl_week(type = "next"),
-  decay = 500,
+  decay = 365,
   loading = 1.5,
   prior_games = 4
 )

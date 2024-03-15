@@ -121,32 +121,32 @@ usethis::use_data(wp_model, overwrite = TRUE)
 # ###########
 # ### TESTING
 # #######
-# match_choice <- "CD_M20220142601"
-#
-# df <- #load_chains(2021, 27) %>% # row 280 is messed up
-#   #get_week_chains(2022,26) %>%
-#   chains %>% #select(-opp_goal,-opp_behind,-behind,-goal,-no_score)%>%
-#   filter(matchId == match_choice) %>%
-#   #filter(season == 2022, roundNumber == 26) %>%
-#   clean_pbp() %>% clean_model_data_epv() %>% add_epv_vars() %>% clean_model_data_wp() %>%
-#   # # janitor::clean_names() %>%
-#   # # clean_pbp() %>%
-#   #clean_model_data_epv() %>%
-#   #add_epv_vars() %>%
-#   #clean_model_data_wp() %>%
-#   add_wp_vars() %>%
-#   select(
-#     match_id,rn = display_order, chain = chain_number, period, secs = period_seconds, x,#x2,
-#     y, desc = description, jumper = jumper_number,
-#     player_id, player_name, team, team_id_mdl,
-#     lead_player, lead_team, delta_epv, pos_team,
-#     exp_pts,xpoints_diff,wp,wpa,
-#     opp_goal, opp_behind, behind, goal, no_score, player_position,
-#     goal_x,play_type,phase_of_play,
-#     kick_points,speed5,lag_goal_x5,throw_in,team_id,total_seconds,
-#     home,scoring_team_id,home_points,away_points,pos_points,opp_points,points_diff,
-#     points_row,points_shot
-#   )
+match_choice <- "CD_M20220142601"
+
+df <- #load_chains(2021, 27) %>% # row 280 is messed up
+  #get_week_chains(2022,26) %>%
+  chains %>% #select(-opp_goal,-opp_behind,-behind,-goal,-no_score)%>%
+  filter(matchId == match_choice) %>%
+  #filter(season == 2022, roundNumber == 26) %>%
+  clean_pbp() %>% clean_model_data_epv() %>% add_epv_vars() %>% clean_model_data_wp() %>%
+  # # janitor::clean_names() %>%
+  # # clean_pbp() %>%
+  #clean_model_data_epv() %>%
+  #add_epv_vars() %>%
+  #clean_model_data_wp() %>%
+  add_wp_vars() %>%
+  select(
+    match_id,rn = display_order, chain = chain_number, period, secs = period_seconds, x,#x2,
+    y, desc = description, jumper = jumper_number,
+    player_id, player_name, team, team_id_mdl,
+    lead_player, lead_team, delta_epv, pos_team,
+    exp_pts,xpoints_diff,wp,wpa,
+    opp_goal, opp_behind, behind, goal, no_score, player_position,
+    goal_x,play_type,phase_of_play,
+    kick_points,speed5,lag_goal_x5,throw_in,team_id,total_seconds,
+    home,scoring_team_id,home_points,away_points,pos_points,opp_points,points_diff,
+    points_row,points_shot
+  )
 #
 # pbps <- chains  %>% filter(matchId == match_choice) %>% clean_pbp()
 # chain <- chains %>% filter(matchId == match_choice)
@@ -155,7 +155,7 @@ usethis::use_data(wp_model, overwrite = TRUE)
 #
 # ###
 # ###################
-# #####################
+#####################
 # library(EIX)
 # library(pdp)
 # dataX_train <- # xgboost::xgb.DMatrix(
@@ -163,8 +163,8 @@ usethis::use_data(wp_model, overwrite = TRUE)
 #                    select_wp_model_vars() %>%
 #                    slice_head(n = 5000))
 #
-# # xgboost::xgb.plot.shap(dataX_train, model = wp_model, top_n = 12, #target class 3 is goal
-# #                          n_col = 3)#, pch = 16, pch_NA = 17)
+# xgboost::xgb.plot.shap(dataX_train, model = wp_model, top_n = 12, #target class 3 is goal
+#                          n_col = 3)#, pch = 16, pch_NA = 17)
 #
 # wp_model %>% # the %>% operator is read as "and then"
 #   partial(pred.var = "diff_time_ratio", train = dataX_train) %>%

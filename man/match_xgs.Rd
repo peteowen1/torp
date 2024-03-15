@@ -4,7 +4,12 @@
 \alias{match_xgs}
 \title{match_xgs}
 \usage{
-match_xgs(season = get_afl_season(), round = get_afl_week(), match_id = NA)
+match_xgs(
+  season = get_afl_season(),
+  round = get_afl_week(),
+  match_id = NA,
+  quarter = 1:4
+)
 }
 \arguments{
 \item{season}{AFL season}

@@ -4,7 +4,7 @@ library(fitzRoy)
 devtools::load_all()
 
 ### update fixtures file
-fixtures <- purrr::map_df(2021:2023, ~ fitzRoy::fetch_fixture_afl(., comp = "AFLM"))
+fixtures <- purrr::map_df(2021:2024, ~ fitzRoy::fetch_fixture_afl(., comp = "AFLM"))
 
 usethis::use_data(fixtures, overwrite = TRUE)
 

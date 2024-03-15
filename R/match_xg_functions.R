@@ -6,11 +6,12 @@
 #'
 #' @export
 #'
-match_xgs <- function(season = get_afl_season(), round = get_afl_week(), match_id = NA) {
+match_xgs <- function(season = get_afl_season(), round = get_afl_week(), match_id = NA, quarter = 1:4) {
   df <- load_pbp(seasons = season, rounds = round)
 
   shots_df <- df %>%
     dplyr::group_by(match_id) %>%
+    filter(period %in% quarter) %>%
     dplyr::summarise(
       home_team = max(home_team_team_name),
       # home_score = max(home_team_score),
