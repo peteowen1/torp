@@ -21,21 +21,22 @@ load_chains <- function(seasons = get_afl_season(), rounds = get_afl_week()) {
     seasons <= get_afl_season()
   )
 
-  if (isTRUE(rounds)) rounds <- 1:27
+  if (isTRUE(rounds)) rounds <- 0:28
 
   stopifnot(
     is.numeric(rounds),
-    rounds >= 1,
-    rounds <= 27
+    rounds >= 0,
+    rounds <= 28
   )
 
   rounds_02d <- sprintf("%02d", rounds)
+  current_rounds_02d <- sprintf("%02d", get_afl_week())
 
   urls <- paste0("https://github.com/peteowen1/torpdata/releases/download/chain-data/chain_data_", seasons, "_", rep(rounds_02d, each = length(seasons)), ".rds")
 
-  urls <- urls[which(urls <= glue::glue("https://github.com/peteowen1/torpdata/releases/download/chain-data/chain_data_{get_afl_season()}_{get_afl_week()}.rds"))]
+  urls <- urls[which(urls <= glue::glue("https://github.com/peteowen1/torpdata/releases/download/chain-data/chain_data_{get_afl_season()}_{current_rounds_02d}.rds"))]
 
-  out <- load_from_url(urls, seasons = T, rounds = T)
+  out <- load_from_url(urls, seasons = seasons, rounds = rounds)
 
   return(out)
 }
@@ -66,19 +67,20 @@ load_pbp <- function(seasons = get_afl_season(), rounds = get_afl_week()) {
     seasons <= get_afl_season()
   )
 
-  if (isTRUE(rounds)) rounds <- 1:27
+  if (isTRUE(rounds)) rounds <- 0:28
 
   stopifnot(
     is.numeric(rounds),
-    rounds >= 1,
-    rounds <= 27
+    rounds >= 0,
+    rounds <= 28
   )
 
   rounds_02d <- sprintf("%02d", rounds)
+  current_rounds_02d <- sprintf("%02d", get_afl_week())
 
   urls <- paste0("https://github.com/peteowen1/torpdata/releases/download/pbp-data/pbp_data_", seasons, "_", rep(rounds_02d, each = length(seasons)), ".rds") %>% sort()
 
-  urls <- urls[which(urls <= glue::glue("https://github.com/peteowen1/torpdata/releases/download/pbp-data/pbp_data_{get_afl_season()}_{get_afl_week()}.rds"))]
+  urls <- urls[which(urls <= glue::glue("https://github.com/peteowen1/torpdata/releases/download/pbp-data/pbp_data_{get_afl_season()}_{current_rounds_02d}.rds"))]
 
   out <- load_from_url(urls, seasons = seasons, rounds = rounds)
 
