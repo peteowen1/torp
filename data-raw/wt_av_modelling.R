@@ -12,8 +12,11 @@ decay <- 365
 
 tictoc::tic()
 
-pl_details <- fetch_player_details_afl(2023)
+pl_details <- fetch_player_details_afl(2024)
 
+ps24 <- fetch_player_stats_afl(2024) %>%
+  janitor::remove_constant() %>%
+  janitor::clean_names()
 ps23 <- fetch_player_stats_afl(2023) %>%
   janitor::remove_constant() %>%
   janitor::clean_names()
@@ -26,7 +29,7 @@ ps21 <- fetch_player_stats_afl(2021) %>%
 ps20 <- fetch_player_stats_afl(2020) %>%
   janitor::remove_constant() %>%
   janitor::clean_names()
-pstot <- bind_rows(ps20, ps21, ps22, ps23)
+pstot <- bind_rows(ps20, ps21, ps22, ps23, ps24)
 
 ### columns 22 to 88
 
@@ -234,7 +237,7 @@ tictoc::toc()
 pred_df <- readRDS("./data-raw/stat_pred_df.rds")
 
 ##############################
-model_val <- "disposals"
+model_val <- "turnovers"
 pred_model_val <- paste0("pred_", model_val)
 wt_avg_model_val <- paste0("wt_avg_", model_val)
 

@@ -1,4 +1,6 @@
 ###
+library(tidyverse)
+
 skip <- 'yes'
 
 devtools::load_all()
@@ -257,7 +259,7 @@ team_mdl_df <- team_rt_df %>% # filter(!is.na(torp)) %>%
 afl_totshots_mdl <- mgcv::bam(
   total_shots ~
     s(team_type_fac, bs = "re")
-    + s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
+    # + s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
     + s(abs(torp_diff), bs = "ts", k = 5),
   data = team_mdl_df, weights = weightz,
   family = quasipoisson(), nthreads = 4, select = T, discrete = T
@@ -270,7 +272,7 @@ team_mdl_df$pred_totshots <- predict(afl_totshots_mdl, newdata = team_mdl_df, ty
 afl_shot_mdl <- mgcv::bam(
   shot_diff ~
     s(team_type_fac, bs = "re")
-    + s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
+    # + s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
     + ti(torp_diff, pred_totshots, bs = c("ts", "ts"), k = 4)
     + s(pred_totshots, bs = "ts", k = 5)
     + s(torp_diff, bs = "ts", k = 5),

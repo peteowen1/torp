@@ -24,9 +24,11 @@ Load any rds/csv/csv.gz/parquet/qs file from a remote URL
 \examples{
 \donttest{
 try({ # prevents cran errors
-  urls <- c("https://github.com/peteowen1/torpdata/releases/download/rosters/roster_2020.csv",
-            "https://github.com/peteowen1/torpdata-data/releases/download/rosters/roster_2021.csv")
- load_from_url(urls, peteowen1 = TRUE, peteowen1_type = "rosters for 2020 & 2021")
+  urls <- c(
+    "https://github.com/peteowen1/torpdata/releases/download/rosters/roster_2020.csv",
+    "https://github.com/peteowen1/torpdata-data/releases/download/rosters/roster_2021.csv"
+  )
+  load_from_url(urls, peteowen1 = TRUE, peteowen1_type = "rosters for 2020 & 2021")
 })
 }
 }

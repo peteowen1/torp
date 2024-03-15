@@ -1,6 +1,6 @@
 ###########
 devtools::load_all()
-skip_em <- "yes"
+skip_em <- "no"
 
 teams <- torp::teams
 
@@ -9,8 +9,11 @@ if (skip_em == "no") {
 
   model_data_wp <- load_pbp(seasons = T, rounds = T)
 
-  pl_details <- fetch_player_details_afl(2023)
+  pl_details <- fetch_player_details_afl(2024)
 
+  ps24 <- fetch_player_stats_afl(2024) %>%
+    janitor::remove_constant() %>%
+    janitor::clean_names()
   ps23 <- fetch_player_stats_afl(2023) %>%
     janitor::remove_constant() %>%
     janitor::clean_names()
@@ -23,7 +26,7 @@ if (skip_em == "no") {
   ps20 <- fetch_player_stats_afl(2020) %>%
     janitor::remove_constant() %>%
     janitor::clean_names()
-  pstot <- bind_rows(ps20, ps21, ps22, ps23) ### columns 22 to 88
+  pstot <- bind_rows(ps20, ps21, ps22, ps23, ps24) ### columns 22 to 88
 }
 
 

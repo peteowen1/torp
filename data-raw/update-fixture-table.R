@@ -4,11 +4,13 @@ library(fitzRoy)
 devtools::load_all()
 
 ### update fixtures file
-fixtures <- purrr::map_df(2021:2023, ~ fitzRoy::fetch_fixture_afl(., comp = "AFLM"))
+fixtures <- purrr::map_df(2021:lubridate::year(Sys.Date()), ~ fitzRoy::fetch_fixture_afl(., comp = "AFLM"))
 
 usethis::use_data(fixtures, overwrite = TRUE)
 
 ### update teams file
+devtools::load_all()
+
 teams <- purrr::map_df(2021:get_afl_season(), ~ fitzRoy::fetch_lineup_afl(., comp = "AFLM")) %>%
   dplyr::mutate(
     season = as.numeric(substr(providerId, 5, 8)),
