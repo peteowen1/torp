@@ -1,8 +1,10 @@
 ##
 library(devtools)
+library(fitzRoy)
+library(tidyverse)
 devtools::load_all()
 
-tictoc::tic()
+tictoc::tic() # 1 min per year
 # ############ 2021
 # #############################
 torp_df_21 <- purrr::map_df(1:27, ~torp_ratings(2021, .)) %>% dplyr::mutate(row_id = paste0(player_id,season,sprintf('%02d',round)))
@@ -13,7 +15,7 @@ torp_df_22 <- purrr::map_df(1:27, ~ torp_ratings(2022, .)) %>% dplyr::mutate(row
 ########### 2023
 torp_df_23 <- purrr::map_df(1:28, ~ torp_ratings(2023, .)) %>% dplyr::mutate(row_id = paste0(player_id,season,sprintf('%02d',round)))
 
-########### 2023
+########### 2024
 torp_df_24 <- purrr::map_df(0:get_afl_week(type = 'next'), ~ torp_ratings(2024, .)) %>% dplyr::mutate(row_id = paste0(player_id,season,sprintf('%02d',round)))
 
 ## final

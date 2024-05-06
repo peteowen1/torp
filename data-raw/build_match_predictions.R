@@ -1,7 +1,7 @@
 ###
 library(tidyverse)
 
-skip <- 'no'
+skip <- 'yes'
 
 devtools::load_all()
 
@@ -11,6 +11,7 @@ data(results, envir = environment())
 
 data(torp_df_total, envir = environment())
 
+### this seems to take forever
 if(skip == 'no'){
 xg_df <- match_xgs(T,T)
 }

@@ -1,4 +1,6 @@
 ###########
+library(fitzRoy)
+library(tidyverse)
 devtools::load_all()
 skip_em <- "no"
 
@@ -7,7 +9,7 @@ teams <- torp::teams
 if (skip_em == "no") {
   chains <- load_chains(seasons = T, rounds = T)
 
-  model_data_wp <- load_pbp(seasons = T, rounds = T)
+  model_data_wp <- load_pbp(seasons = T, rounds = T) # (3 mins)
 
   pl_details <- fetch_player_details_afl(2024)
 
@@ -41,13 +43,14 @@ decay <- 500
 ### (14m - 35*100k)/70 = 150,000
 ######
 ################### create player game df
+tictoc::tic()
 
 plyr_gm_df <-
   model_data_wp %>% # add_wp_vars() %>%
   dplyr::arrange(match_id, display_order) %>%
   dplyr::select(
     player_name, player_id, match_id, utc_start_time, home_away, away_team_team_name, home_team_team_name,
-    delta_epv, team, player_position, round_week, wpa
+    delta_epv, team, player_position, round_week,pos_team, wpa
   ) %>%
   dplyr::mutate(
     weight_gm = exp(as.numeric(-(max(as.Date(utc_start_time)) - as.Date(utc_start_time))) / decay),
@@ -60,8 +63,8 @@ plyr_gm_df <-
     # wt_gms = sum(unique(weight_gm), na.rm = TRUE),
     utc_start_time = max(utc_start_time),
     weight_gm = max(weight_gm),
-    disp_pts = sum(delta_epv * 1 / 2),
-    disp_pts_wt = sum(delta_epv * 1 * max(weight_gm)) / 2,
+    disp_pts = sum(dplyr::if_else(pos_team == -1, delta_epv, delta_epv + 0.01) / 2),
+    disp_pts_wt = sum((dplyr::if_else(pos_team == -1, delta_epv, delta_epv + 0.01) * max(weight_gm))/ 2),
     disp_wpa = sum((wpa) / 2),
     disp = floor(dplyr::n() / 2),
     tm = dplyr::last(team),
@@ -101,9 +104,9 @@ plyr_gm_df <-
     pstot %>%
       dplyr::mutate(
         weight_gm = exp(as.numeric(-(max(as.Date(utc_start_time)) - as.Date(utc_start_time))) / decay),
-        spoil_pts = one_percenters * 0.5,# - extended_stats_pressure_acts * 0.05,
+        spoil_pts = one_percenters * 0.4, + extended_stats_pressure_acts * 0.01 - extended_stats_def_half_pressure_acts * 0.02, #HMMMMMMMMM
         spoil_pts_wt = spoil_pts * max(weight_gm),
-        hitout_pts = hitouts * 0.15 + extended_stats_hitouts_to_advantage * 0.15 - extended_stats_ruck_contests * 0.05,
+        hitout_pts = hitouts * 0.15 + extended_stats_hitouts_to_advantage * 0.3 - extended_stats_ruck_contests * 0.05,
         hitout_pts_wt = hitout_pts * max(weight_gm)
       ) %>%
       dplyr::select(-utc_start_time),
@@ -125,14 +128,15 @@ plyr_gm_df <-
   dplyr::ungroup() %>%
   dplyr::mutate(
     # tot_p_adj = tot_p - quantile(tot_p, 0.3, na.rm = T),
-    recv_pts_adj = recv_pts - quantile(recv_pts, 0.35, na.rm = T),
-    disp_pts_adj = disp_pts - quantile(disp_pts, 0.35, na.rm = T),
-    spoil_pts_adj = spoil_pts - quantile(spoil_pts, 0.35, na.rm = T),
-    hitout_pts_adj = hitout_pts - quantile(hitout_pts, 0.35, na.rm = T),
+    recv_pts_adj = recv_pts - quantile(recv_pts, 0.4, na.rm = T),
+    disp_pts_adj = disp_pts - quantile(disp_pts, 0.4, na.rm = T),
+    spoil_pts_adj = spoil_pts - quantile(spoil_pts, 0.4, na.rm = T),
+    hitout_pts_adj = hitout_pts - quantile(hitout_pts, 0.4, na.rm = T),
     tot_p_adj = recv_pts_adj + disp_pts_adj + spoil_pts_adj + hitout_pts_adj
   ) %>%
   dplyr::relocate(tot_p_adj, disp,recv_pts_adj,disp_pts_adj,spoil_pts_adj,hitout_pts_adj) %>%
   dplyr::filter(!is.na(tm))
 
+tictoc::toc()
 ###
 usethis::use_data(plyr_gm_df, overwrite = TRUE)

@@ -181,7 +181,7 @@ player_season_ratings <- function(season_val = get_afl_season(), round_num = NA)
 
   if (season_val < get_afl_season()) {
     if (any(is.na(round_num))) {
-      df <- player_game_ratings(season_val, 1:99) %>%
+      df <- player_game_ratings(season_val, 0:99) %>%
         dplyr::group_by(season, player_name, player_id, team) %>%
         dplyr::summarise(
           position = max(position),
@@ -212,7 +212,7 @@ player_season_ratings <- function(season_val = get_afl_season(), round_num = NA)
 
   if (season_val == get_afl_season()) {
     if (any(is.na(round_num))) {
-      df <- player_game_ratings(season_val, 1:get_afl_week()) %>%
+      df <- player_game_ratings(season_val, 0:get_afl_week()) %>%
         dplyr::group_by(season, player_name, player_id, team) %>%
         dplyr::summarise(
           position = max(position),

@@ -3,6 +3,8 @@ library(tidyverse)
 library(fitzRoy)
 devtools::load_all()
 
+szns <- 2021:get_afl_season()
+
 minmax <- function(x, na.rm = TRUE) {
   return((x - min(x, na.rm = TRUE)) / (max(x, na.rm = TRUE) - min(x, na.rm = TRUE)))
 }
@@ -116,18 +118,21 @@ wav_data <- function(df, fil_val, model_col, decay = 365) {
       home_away = as.factor(team_status),
       player_name = paste(player_player_player_given_name, player_player_player_surname)
     ) %>%
+    filter(position != "EM",
+           !is.na(position)) %>%
     relocate(any_of(model_col), position)
 
   return(df_tot)
 }
 
+
 ############ POIS
 stat_list <- list()
 
 tictoc::tic()
-for (i in cols_pois) {
-  df_mdl <- furrr::future_map(
-    paste0(rep(2021:2023, each = 27), rep(sprintf("%02d", 1:27), times = 3)),
+for (i in cols_pois[1:length(cols_pois)]) {  ############### DO 30 LATER!!!!!!!
+  df_mdl <- purrr::map(
+    paste0(rep(szns, each = 29), rep(sprintf("%02d", 0:28), times = length(szns))),
     ~ wav_data(pstot,
       fil_val = .,
       model_col = i
@@ -176,9 +181,9 @@ tictoc::toc()
 # stat_list_binom <- list()
 
 tictoc::tic()
-for (i in cols_binom) {
-  df_mdl <- furrr::future_map(
-    paste0(rep(2021:2023, each = 27), rep(sprintf("%02d", 1:27), times = 3)),
+for (i in cols_binom[1:length(cols_binom)]) {
+  df_mdl <- purrr::map(
+    paste0(rep(szns, each = 29), rep(sprintf("%02d", 0:28), times = length(szns))),
     ~ wav_data(pstot %>%
                  mutate("{i}" := .data[[i]] / 100),
       fil_val = .,
@@ -237,13 +242,13 @@ tictoc::toc()
 pred_df <- readRDS("./data-raw/stat_pred_df.rds")
 
 ##############################
-model_val <- "turnovers"
+model_val <- "goals"
 pred_model_val <- paste0("pred_", model_val)
 wt_avg_model_val <- paste0("wt_avg_", model_val)
 
 mdl <- readRDS(paste0("./data-raw/stat-models/", model_val, ".rds"))
 summary(mdl)
-mixedup::extract_random_effects(mdl) %>% arrange(-value) #%>% View()
+mixedup::extract_random_effects(mdl) %>% arrange(-value) %>% View()
 # plot(mgcViz::getViz(mdl))
 
 

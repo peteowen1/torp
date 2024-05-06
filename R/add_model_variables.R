@@ -92,15 +92,18 @@ add_wp_vars <- function(df) {
 
 
 add_shot_vars <- function(df) {
-  base_shot_on_target_preds <- tibble::tibble(on_target_prob = get_shot_on_target_preds(df))
-  base_shot_result_preds <- tibble::tibble(goal_prob = get_shot_result_preds(df))
-  pbp_final <- cbind(df, base_shot_result_preds, base_shot_on_target_preds)
+  # base_shot_on_target_preds <- tibble::tibble(on_target_prob = get_shot_on_target_preds(df))
+  # base_shot_result_preds <- tibble::tibble(goal_prob = get_shot_result_preds(df))
+  ocat_shot_result_preds <- as.data.frame(get_shot_result_preds(df))
+  colnames(ocat_shot_result_preds) <- c('clanger_prob','behind_prob','goal_prob')
+
+  pbp_final <- cbind(df, ocat_shot_result_preds)
 
   pbp_final <- pbp_final %>%
     dplyr::mutate(
-      on_target_prob = round(dplyr::if_else(!is.na(shot_at_goal) & x > 0, on_target_prob, NA_real_), 5),
-      goal_prob = round(dplyr::if_else(!is.na(shot_at_goal) & x > 0, goal_prob, NA_real_), 5),
-      xscore = on_target_prob * (goal_prob * 6 + (1 - goal_prob))
+      on_target_prob = goal_prob + behind_prob, #round(dplyr::if_else(!is.na(shot_at_goal) & x > 0, on_target_prob, NA_real_), 5),
+      # goal_prob = round(dplyr::if_else(!is.na(shot_at_goal) & x > 0, goal_prob, NA_real_), 5),
+      xscore =  goal_prob * 6 + behind_prob #on_target_prob * (goal_prob * 6 + (1 - goal_prob))
     ) %>%
     dplyr::ungroup()
 
@@ -138,6 +141,6 @@ get_shot_on_target_preds <- function(df) {
 
 # for predict stage
 get_shot_result_preds <- function(df) {
-  preds <- stats::predict(shot_result_mdl, df, type = "response")
+  preds <- stats::predict(shot_ocat_mdl, df, type = "response")
   return(preds)
 }

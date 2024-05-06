@@ -122,7 +122,7 @@ shot_ocat_mdl <-
 usethis::use_data(shot_ocat_mdl, overwrite = TRUE)
 
 ####
-player_shot_on_target_score <- mixedup::extract_ranef(shot_on_target_mdl) %>%
+player_shot_on_target_score <- mixedup::extract_ranef(shot_on_target_mdl, add_group_N = TRUE) %>%
   dplyr::filter(group_var == "player_id_shot") %>%
   dplyr::left_join(shot_player_df, by = c("group" = "player_id_shot")) %>%
   dplyr::arrange(-value) # %>% tibble::view()
@@ -130,7 +130,7 @@ player_shot_on_target_score <- mixedup::extract_ranef(shot_on_target_mdl) %>%
 usethis::use_data(player_shot_on_target_score, overwrite = TRUE)
 
 ####
-player_shot_result_score <- mixedup::extract_ranef(shot_result_mdl) %>%
+player_shot_result_score <- mixedup::extract_ranef(shot_result_mdl, add_group_N = TRUE) %>%
   dplyr::filter(group_var == "player_id_shot") %>%
   dplyr::left_join(shot_player_df, by = c("group" = "player_id_shot")) %>%
   dplyr::arrange(-value) # %>% tibble::view()
@@ -138,7 +138,7 @@ player_shot_result_score <- mixedup::extract_ranef(shot_result_mdl) %>%
 usethis::use_data(player_shot_result_score, overwrite = TRUE)
 
 ####
-player_shot_score <- mixedup::extract_ranef(shot_ocat_mdl) %>%
+player_shot_score <- mixedup::extract_ranef(shot_ocat_mdl, add_group_N = TRUE) %>%
   dplyr::filter(group_var == "player_id_shot") %>%
   dplyr::left_join(shot_player_df, by = c("group" = "player_id_shot")) %>%
   dplyr::arrange(-value) # %>% tibble::view()
