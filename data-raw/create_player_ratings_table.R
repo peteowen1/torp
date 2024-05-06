@@ -2,7 +2,7 @@
 library(fitzRoy)
 library(tidyverse)
 devtools::load_all()
-skip_em <- "no"
+skip_em <- "yes"
 
 teams <- torp::teams
 
@@ -104,9 +104,9 @@ plyr_gm_df <-
     pstot %>%
       dplyr::mutate(
         weight_gm = exp(as.numeric(-(max(as.Date(utc_start_time)) - as.Date(utc_start_time))) / decay),
-        spoil_pts = one_percenters * 0.4, + extended_stats_pressure_acts * 0.01 - extended_stats_def_half_pressure_acts * 0.02, #HMMMMMMMMM
+        spoil_pts = one_percenters * 0.4, + extended_stats_pressure_acts * 0.02 - extended_stats_def_half_pressure_acts * 0.04, #HMMMMMMMMM
         spoil_pts_wt = spoil_pts * max(weight_gm),
-        hitout_pts = hitouts * 0.15 + extended_stats_hitouts_to_advantage * 0.3 - extended_stats_ruck_contests * 0.05,
+        hitout_pts = hitouts * 0.15 + extended_stats_hitouts_to_advantage * 0.2 - extended_stats_ruck_contests * 0.05,
         hitout_pts_wt = hitout_pts * max(weight_gm)
       ) %>%
       dplyr::select(-utc_start_time),

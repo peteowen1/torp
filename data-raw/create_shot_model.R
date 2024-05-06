@@ -59,45 +59,47 @@ usethis::use_data(shot_player_df, overwrite = TRUE)
 #   )
 
 ################################
-shot_on_target_mdl <-
-  mgcv::bam(
-    scored_shot ~ ti(goal_x, y, by = phase_of_play) + ti(goal_x, y)
-      + s(goal_x, bs = "ts") + s(y, bs = "ts")
-      + ti(lag_goal_x, y) + s(lag_goal_x, bs = "ts") + s(lag_y, bs = "ts")
-      + s(play_type, bs = "re") + s(phase_of_play, bs = "re")
-      + s(player_position_fac, bs = "re")
-      + s(player_id_shot, bs = "re"),
-    data = shots, family = stats::binomial(), nthreads = 4,
-    select = TRUE, discrete = TRUE, drop.unused.levels = FALSE
-  )
+# shot_on_target_mdl <-
+#   mgcv::bam(
+#     scored_shot ~ ti(goal_x, y, by = phase_of_play) + ti(goal_x, y)
+#       + s(goal_x, bs = "ts") + s(y, bs = "ts")
+#       + ti(lag_goal_x, y) + s(lag_goal_x, bs = "ts") + s(lag_y, bs = "ts")
+#       + s(play_type, bs = "re") + s(phase_of_play, bs = "re")
+#       + s(player_position_fac, bs = "re")
+#       + s(player_id_shot, bs = "re"),
+#     data = shots, family = stats::binomial(), nthreads = 4,
+#     select = TRUE, discrete = TRUE, drop.unused.levels = FALSE
+#   )
 
 # summary(shot_on_target_mdl)
 # mixedup::extract_ranef(shot_on_target_mdl) %>% tibble::view()
 # plot(mgcViz::getViz(shot_on_target_mdl))
 
 ### save data
-usethis::use_data(shot_on_target_mdl, overwrite = TRUE)
+# usethis::use_data(shot_on_target_mdl, overwrite = TRUE)
 
-################### shot result binomialS
-shot_result_mdl <-
-  mgcv::bam(
-    shot_result ~ ti(goal_x, y, by = phase_of_play) + ti(goal_x, y)
-      + s(goal_x, bs = "ts") + s(y, bs = "ts")
-      + ti(lag_goal_x, y) + s(lag_goal_x, bs = "ts") + s(lag_y, bs = "ts")
-      + s(play_type, bs = "re") + s(phase_of_play, bs = "re")
-      + s(player_position_fac, bs = "re")
-      + s(player_id_shot, bs = "re"),
-    data = shots %>% dplyr::filter(!is.na(shot_result)),
-    family = stats::binomial(),
-    nthreads = 4,
-    select = TRUE, discrete = TRUE, drop.unused.levels = FALSE
-  )
+# ################### shot result binomialS
+# shot_result_mdl <-
+#   mgcv::bam(
+#     shot_result ~ ti(goal_x, y, by = phase_of_play) + ti(goal_x, y)
+#       + s(goal_x, bs = "ts") + s(y, bs = "ts")
+#       + ti(lag_goal_x, y) + s(lag_goal_x, bs = "ts") + s(lag_y, bs = "ts")
+#       + s(play_type, bs = "re") + s(phase_of_play, bs = "re")
+#       + s(player_position_fac, bs = "re")
+#       + s(player_id_shot, bs = "re"),
+#     data = shots %>% dplyr::filter(!is.na(shot_result)),
+#     family = stats::binomial(),
+#     nthreads = 4,
+#     select = TRUE, discrete = TRUE, drop.unused.levels = FALSE
+#   )
 
 # summary(shot_result_mdl)
 # mixedup::extract_ranef(shot_result_mdl) %>% tibble::view()
 # plot(mgcViz::getViz(shot_result_mdl))
 
 # ModelMetrics::logLoss(shots$shot_result,predict.bam(shot_result_mdl,shots,type="response"))
+### save data
+# usethis::use_data(shot_result_mdl, overwrite = TRUE)
 
 #####################
 shot_ocat_mdl <-
