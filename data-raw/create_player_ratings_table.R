@@ -2,7 +2,7 @@
 library(fitzRoy)
 library(tidyverse)
 devtools::load_all()
-skip_em <- "no"
+skip_em <- "yes"
 
 teams <- torp::teams
 
@@ -64,8 +64,8 @@ plyr_gm_df <-
     # wt_gms = sum(unique(weight_gm), na.rm = TRUE),
     utc_start_time = max(utc_start_time),
     weight_gm = max(weight_gm),
-    disp_pts = sum(dplyr::if_else(pos_team == -1, delta_epv, delta_epv + 0.01) / 2),
-    disp_pts_wt = sum((dplyr::if_else(pos_team == -1, delta_epv, delta_epv + 0.01) * max(weight_gm))/ 2),
+    disp_pts = sum(dplyr::if_else(pos_team == -1, delta_epv, delta_epv + 0.05) / 2),
+    disp_pts_wt = sum((dplyr::if_else(pos_team == -1, delta_epv, delta_epv + 0.05) * max(weight_gm))/ 2),
     disp_wpa = sum((wpa) / 2),
     disp = floor(dplyr::n() / 2),
     tm = dplyr::last(team),
@@ -106,7 +106,7 @@ plyr_gm_df <-
     pstot %>%
       dplyr::mutate(
         weight_gm = exp(as.numeric(-(max(as.Date(utc_start_time)) - as.Date(utc_start_time))) / decay),
-        spoil_pts = one_percenters * 0.4 + extended_stats_pressure_acts * 0.1 - extended_stats_def_half_pressure_acts * 0.2, #HMMMMMMMMM
+        spoil_pts = one_percenters * 0.45 + extended_stats_pressure_acts * 0.15 - extended_stats_def_half_pressure_acts * 0.3, #HMMMMMMMMM
         spoil_pts_wt = spoil_pts * max(weight_gm),
         hitout_pts = hitouts * 0.15 + extended_stats_hitouts_to_advantage * 0.2 - extended_stats_ruck_contests * 0.05,
         hitout_pts_wt = hitout_pts * max(weight_gm)
@@ -117,7 +117,7 @@ plyr_gm_df <-
   dplyr::mutate(
     recv_pts = tidyr::replace_na(recv_pts, 0),# + 0.15 * extended_stats_effective_disposals - bounces * 0.5,
     recv_pts_wt = tidyr::replace_na(recv_pts_wt, 0),
-    disp_pts = tidyr::replace_na(disp_pts, 0),
+    disp_pts = tidyr::replace_na(disp_pts, 0) - bounces * 0.25,
     disp_pts_wt = tidyr::replace_na(disp_pts_wt, 0),
     spoil_pts = tidyr::replace_na(spoil_pts, 0),
     spoil_pts_wt = tidyr::replace_na(spoil_pts_wt, 0),
