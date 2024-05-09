@@ -24,3 +24,5 @@ torp_df_total <- dplyr::bind_rows(torp_df_21, torp_df_22, torp_df_23, torp_df_24
 tictoc::toc()
 
 use_data(torp_df_total, overwrite = TRUE)
+
+###### GIT PUSH AFTER CHANGE
