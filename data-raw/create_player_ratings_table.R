@@ -47,6 +47,7 @@ tictoc::tic()
 
 plyr_gm_df <-
   model_data_wp %>% # add_wp_vars() %>%
+  # filter(match_id == 'CD_M20230142107') %>%
   dplyr::arrange(match_id, display_order) %>%
   dplyr::select(
     player_name, player_id, match_id, utc_start_time, home_away, away_team_team_name, home_team_team_name,
@@ -75,6 +76,7 @@ plyr_gm_df <-
   ) %>%
   dplyr::left_join(
     model_data_wp %>% # add_wp_vars() %>%
+      # filter(match_id == 'CD_M20230142107') %>%
       dplyr::select(
         lead_player, lead_player_id, match_id, utc_start_time, home_away, away_team_team_name, home_team_team_name,
         delta_epv, team, player_position, round_week, pos_team, wpa
@@ -104,7 +106,7 @@ plyr_gm_df <-
     pstot %>%
       dplyr::mutate(
         weight_gm = exp(as.numeric(-(max(as.Date(utc_start_time)) - as.Date(utc_start_time))) / decay),
-        spoil_pts = one_percenters * 0.4, + extended_stats_pressure_acts * 0.1 - extended_stats_def_half_pressure_acts * 0.2, #HMMMMMMMMM
+        spoil_pts = one_percenters * 0.4 + extended_stats_pressure_acts * 0.1 - extended_stats_def_half_pressure_acts * 0.2, #HMMMMMMMMM
         spoil_pts_wt = spoil_pts * max(weight_gm),
         hitout_pts = hitouts * 0.15 + extended_stats_hitouts_to_advantage * 0.2 - extended_stats_ruck_contests * 0.05,
         hitout_pts_wt = hitout_pts * max(weight_gm)
