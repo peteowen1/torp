@@ -1,7 +1,7 @@
 ###
 library(tidyverse)
 
-skip <- 'yes'
+skip <- 'no'
 
 devtools::load_all()
 

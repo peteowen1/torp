@@ -50,11 +50,19 @@ plyr_mdl_df <-
     torp_df_total, by = c('row_id'='row_id')
     )
 
+
+#
+# plyr_mdl_df %>%
+#   group_by(player_position) %>%
+#   select(starts_with('pred')) %>%
+#   summarise(across(everything(), list(mean = ~mean(., na.rm=T), sd = ~sd(., na.rm=T)))) %>%
+#   view()
+
 ##########################################
 plyr_torp_diff_mdl <- mgcv::bam(
   score_diff ~
     team_type_fac
-  + I(torp)
+  + offset(torp)
   + scale((pred_goals))#, bs = "ts")
    + scale((pred_behinds))#, bs = "ts")
    + scale((pred_kicks))#, bs = "ts")
@@ -130,10 +138,12 @@ summary(plyr_torp_diff_mdl)
 plyr_mdl_df %>%
   select(player_name.x,
          player_position,
+         team_name,
          pred_handballs, # good
          pred_extended_stats_effective_disposals, #nosey
          pred_bounces, #bad
          pred_extended_stats_def_half_pressure_acts, #bad
+         pred_extended_stats_pressure_acts, #bad
          pred_clearances_centre_clearances, #badish
          pred_clearances_stoppage_clearances, #goodish
          pred_inside50s, #good
@@ -186,10 +196,10 @@ afl_torp_diff_mdl <- mgcv::bam(
     + s(scale(pred_extended_stats_ground_ball_gets), bs = "ts")
     + s(scale(pred_extended_stats_f50ground_ball_gets), bs = "ts")
     ### + s(scale(pred_extended_stats_score_launches), bs='ts') # .
-    + s(scale(pred_extended_stats_pressure_acts), bs = "ts")
-    + s(scale(pred_extended_stats_def_half_pressure_acts), bs = "ts") # *** -
+    # + s(scale(pred_extended_stats_pressure_acts), bs = "ts")
+    # + s(scale(pred_extended_stats_def_half_pressure_acts), bs = "ts") # *** -
     + s(scale(pred_extended_stats_spoils), bs = "ts") # * +
-    + s(scale(pred_extended_stats_ruck_contests), bs = "ts")
+    + s(scale(pred_extended_stats_ruck_contests), bs = "ts") #+
     + s(scale(pred_extended_stats_contest_def_one_on_ones), bs = "ts")
     + s(scale(pred_extended_stats_contest_def_losses), bs = "ts")
     + s(scale(pred_extended_stats_contest_off_one_on_ones), bs = "ts")
@@ -220,14 +230,55 @@ afl_torp_diff_mdl <- mgcv::bam(
     # + I(int.x)
   # #+ def.y + mid.y + fwd.y #+ int.y
   ,
-  data = team_mdl_df %>% dplyr::filter(count.x == 22, count.y == 22)
+  data = team_mdl_df %>% dplyr::filter(count.x == count.y )
   ,select = T, nthreads = 4
   # ,discrete = T
   ,family = "gaussian"
 )
 
-
 summary(afl_torp_diff_mdl)
+
+#
+afl_torp_offset_mdl <- mgcv::bam(
+  score_diff ~
+    team_type_fac
+  + offset(torp_diff)
+  ,
+  data = team_mdl_df %>% dplyr::filter(count.x == count.y)
+  ,select = T, nthreads = 4
+  # ,discrete = T
+  ,family = "gaussian"
+)
+
+summary(afl_torp_offset_mdl)
+
+
+#######
+
+afl_torp_posn_mdl <- mgcv::bam(
+  score_diff ~
+    team_type_fac
+  + offset(torp_diff)
+  ### positions
++ I(CB.x)
++ I(BP.x)
++ I(HBF.x)
++ I(W.x)
++ I(MIDS.x)
++ I(RK.x)
++ I(HFF.x)
++ I(FP.x)
++ I(CF.x)
++ I(int.x)
+,
+data = team_mdl_df %>% dplyr::filter(count.x == count.y )
+,select = T, nthreads = 4
+# ,discrete = T
+,family = "gaussian"
+)
+
+summary(afl_torp_posn_mdl)
+
 
 # ####
 # # plot(mgcViz::getViz(afl_torp_diff_mdl))
@@ -244,10 +295,10 @@ summary(afl_torp_diff_mdl)
 # ###################################
 # ##### BASIC TESTING
 #
-# afl_torp_diff_basic <- mgcv::bam(
-#   score_diff ~
-#     team_type_fac
-#     + I(torp_diff)
+afl_torp_diff_basic <- mgcv::bam(
+  score_diff ~
+    team_type_fac
+    + I(torp_diff)
 #   ### LINEUP DATA
 #     # + CB.x
 #     # + BP.x
@@ -260,23 +311,23 @@ summary(afl_torp_diff_mdl)
 #     # + CF.x
 #     # + int.x
 #   ### CHAMP DATA
-#   + key_def.x
-#   + med_def.x
-#   + midfield.x
-#   + mid_fwd.x
-#   + med_fwd.x
-#   + key_fwd.x
-#   + rucks.x
-#   #+ def.y + mid.y + fwd.y #+ int.y
-#   ,
-#   data = team_mdl_df %>% dplyr::filter(),
-#   select = T, # discrete = T,
-#   nthreads = 4,
-#   family = "gaussian"
-# )
+  + key_def.x
+  + med_def.x
+  + midfield.x
+  + mid_fwd.x
+  + med_fwd.x
+  + key_fwd.x
+  + rucks.x
+  #+ def.y + mid.y + fwd.y #+ int.y
+  ,
+  data = team_mdl_df %>% dplyr::filter(count.x == count.y ),
+  select = T, # discrete = T,
+  nthreads = 4,
+  family = "gaussian"
+)
 #
 #
-# summary(afl_torp_diff_basic)
+summary(afl_torp_diff_basic)
 #
 #
 # ##### BASIC TESTING
