@@ -3,13 +3,13 @@ library(tidyverse)
 
 skip <- 'no'
 
-devtools::load_all()
+# devtools::load_all()
 
-data(teams, envir = environment())
-
-data(results, envir = environment())
-
-data(torp_df_total, envir = environment())
+# data(teams, envir = environment())
+#
+# data(results, envir = environment())
+#
+# data(torp_df_total, envir = environment())
 
 ### this seems to take forever
 if(skip == 'no'){
@@ -259,21 +259,32 @@ team_mdl_df <- team_rt_df %>% # filter(!is.na(torp)) %>%
 ###
 afl_totshots_mdl <- mgcv::bam(
   total_shots ~
-    s(team_type_fac, bs = "re")
-    + s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
-    + s(abs(torp_diff), bs = "ts", k = 5),
+    s(team_type_fac, bs = "re") +
+  s(hoff_adef, bs='ts') + # = pmax(pmin((fwd.x - def.y), 20), -5),
+  s(hmid_amid, bs='ts') + # = pmax(pmin((mid.x - mid.y), 12), -12),
+  s(hdef_afwd, bs='ts') + # = pmax(pmin((def.x - fwd.y), 5), -20),
+  s(hint_aint, bs='ts') + # = pmax(pmin((int.x - int.y), 10), -10),
+  + s(def.x, bs='ts')
+  + s(mid.x, bs='ts')
+  + s(fwd.x, bs='ts')
+  + s(int.x, bs='ts')
+    #+ s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
+    + s(abs(torp_diff), bs = "ts", k = 5)
+
+  ,
   data = team_mdl_df, weights = weightz,
   family = quasipoisson(), nthreads = 4, select = T, discrete = T
 )
 team_mdl_df$pred_totshots <- predict(afl_totshots_mdl, newdata = team_mdl_df, type = "response")
 
+# summary(afl_totshots_mdl)
 # Deviance explained =   22%
 
 ###
 afl_shot_mdl <- mgcv::bam(
   shot_diff ~
     s(team_type_fac, bs = "re")
-    + s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
+    #+ s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
     + ti(torp_diff, pred_totshots, bs = c("ts", "ts"), k = 4)
     + s(pred_totshots, bs = "ts", k = 5)
     + s(torp_diff, bs = "ts", k = 5),
@@ -282,6 +293,7 @@ afl_shot_mdl <- mgcv::bam(
 )
 team_mdl_df$pred_shot_diff <- predict(afl_shot_mdl, newdata = team_mdl_df, type = "response")
 
+# summary(afl_shot_mdl)
 # mixedup::extract_ranef(afl_shot_mdl) %>% tibble::view()
 # plot(mgcViz::getViz(afl_shot_mdl))
 # Deviance explained = 44.5%
@@ -410,7 +422,10 @@ team_mdl_df$pred_win <- predict(afl_win_mdl, newdata = team_mdl_df, type = "resp
 n <- get_afl_week(type = "next")
 
 week_gms_home <- team_mdl_df %>%
-  dplyr::mutate(totscore = sum(team_mdl_df$total_score, na.rm = T) / sum(team_mdl_df$total_shots, na.rm = T) * pred_totshots) %>%
+  dplyr::mutate(
+    totscore = pred_tot_xscore
+    # totscore = sum(team_mdl_df$total_score, na.rm = T) / sum(team_mdl_df$total_shots, na.rm = T) * pred_totshots
+                ) %>%
   dplyr::filter(season.x == lubridate::year(Sys.Date()), round.roundNumber.x == n, teamType == "home") %>%
   dplyr::select(
     players = count.x, providerId,
@@ -421,7 +436,8 @@ week_gms_home <- team_mdl_df %>%
 
 week_gms_away <- team_mdl_df %>%
   dplyr::mutate(
-    totscore = sum(team_mdl_df$total_score, na.rm = T) / sum(team_mdl_df$total_shots, na.rm = T) * pred_totshots,
+    totscore = pred_tot_xscore,
+    # totscore = sum(team_mdl_df$total_score, na.rm = T) / sum(team_mdl_df$total_shots, na.rm = T) * pred_totshots,
     pred_shot_diff = -pred_shot_diff,
     pred_score_diff = -pred_score_diff,
     pred_win = 1 - pred_win,
@@ -445,4 +461,5 @@ week_gms <- dplyr::bind_rows(week_gms_home, week_gms_away) %>%
     pred_win = mean(pred_win),
     score_diff = mean(score_diff)
   )
+
 week_gms

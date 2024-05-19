@@ -123,7 +123,7 @@ plyr_torp_diff_mdl <- mgcv::bam(
   # + s((pred_extended_stats_contest_def_loss_percentage), bs = "ts")
   # + s((pred_extended_stats_contest_off_wins_percentage), bs = "ts")
   ,
-  data = plyr_mdl_df #%>% dplyr::filter(time_on_ground_percentage > 0.5)
+  data = plyr_mdl_df %>% dplyr::filter(season > 2022)
   ,select = T, discrete = T, nthreads = 4,
   weights = time_on_ground_percentage,
   family = "gaussian"
@@ -230,7 +230,7 @@ afl_torp_diff_mdl <- mgcv::bam(
     # + I(int.x)
   # #+ def.y + mid.y + fwd.y #+ int.y
   ,
-  data = team_mdl_df %>% dplyr::filter(count.x == count.y )
+  data = team_mdl_df %>% dplyr::filter(count.x == count.y, season.x>2022 )
   ,select = T, nthreads = 4
   # ,discrete = T
   ,family = "gaussian"
@@ -244,7 +244,7 @@ afl_torp_offset_mdl <- mgcv::bam(
     team_type_fac
   + offset(torp_diff)
   ,
-  data = team_mdl_df %>% dplyr::filter(count.x == count.y)
+  data = team_mdl_df %>% dplyr::filter(count.x == count.y, season.x>2022)
   ,select = T, nthreads = 4
   # ,discrete = T
   ,family = "gaussian"
@@ -271,7 +271,7 @@ afl_torp_posn_mdl <- mgcv::bam(
 + I(CF.x)
 + I(int.x)
 ,
-data = team_mdl_df %>% dplyr::filter(count.x == count.y )
+data = team_mdl_df %>% dplyr::filter(count.x == count.y, season.x>2022 )
 ,select = T, nthreads = 4
 # ,discrete = T
 ,family = "gaussian"
@@ -320,7 +320,7 @@ afl_torp_diff_basic <- mgcv::bam(
   + rucks.x
   #+ def.y + mid.y + fwd.y #+ int.y
   ,
-  data = team_mdl_df %>% dplyr::filter(count.x == count.y ),
+  data = team_mdl_df %>% dplyr::filter(count.x == count.y , season.x>2022),
   select = T, # discrete = T,
   nthreads = 4,
   family = "gaussian"
