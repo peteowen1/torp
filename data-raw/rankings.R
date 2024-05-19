@@ -1,4 +1,5 @@
 library(tidyverse)
+library(devtools)
 devtools::load_all()
 
 tr <- torp_ratings(2024, get_afl_week("next"))

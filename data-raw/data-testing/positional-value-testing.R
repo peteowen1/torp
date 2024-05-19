@@ -119,7 +119,7 @@ plyr_torp_diff_mdl <- mgcv::bam(
   # + s((pred_extended_stats_kick_efficiency), bs = "ts")
   # + s((pred_extended_stats_contested_possession_rate), bs = "ts")
   # + s((pred_extended_stats_hitout_win_percentage), bs = "ts")
-  + scale(pred_extended_stats_hitout_to_advantage_rate)
+  # + scale(pred_extended_stats_hitout_to_advantage_rate)
   # + s((pred_extended_stats_contest_def_loss_percentage), bs = "ts")
   # + s((pred_extended_stats_contest_off_wins_percentage), bs = "ts")
   ,
@@ -164,12 +164,12 @@ afl_torp_diff_mdl <- mgcv::bam(
     + s(scale(pred_handballs), bs = "ts") # +
     + s(scale(pred_disposals), bs = "ts") # +
     + s(scale(pred_marks), bs = "ts")
-    + s(scale(pred_bounces), bs = "ts") # * -
+    # + s(scale(pred_bounces), bs = "ts") # * -
     + s(scale(pred_tackles), bs = "ts") # +
     + s(scale(pred_contested_possessions), bs = "ts") # ** +
-    + s(scale(pred_uncontested_possessions), bs = "ts") # ** +
+    # + s(scale(pred_uncontested_possessions), bs = "ts") # ** +
     + s(scale(pred_total_possessions), bs = "ts")
-    + s(scale(pred_inside50s), bs = "ts") # *** +
+    # + s(scale(pred_inside50s), bs = "ts") # *** +
     + s(scale(pred_marks_inside50), bs = "ts")
     + s(scale(pred_contested_marks), bs = "ts")
     + s(scale(pred_hitouts), bs = "ts")
