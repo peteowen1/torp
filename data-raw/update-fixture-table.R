@@ -10,7 +10,7 @@ fixtures <- purrr::map_df(2021:lubridate::year(Sys.Date()), ~ fitzRoy::fetch_fix
 tictoc::toc()
 usethis::use_data(fixtures, overwrite = TRUE)
 
-### update teams file (6 mins)
+### update teams file (90 secs per season)
 # rows_upsert()
 tictoc::tic()
 teams_upd <- purrr::map_df(get_afl_season(), ~ fitzRoy::fetch_lineup_afl(., comp = "AFLM")) %>%
@@ -20,15 +20,18 @@ teams_upd <- purrr::map_df(get_afl_season(), ~ fitzRoy::fetch_lineup_afl(., comp
   ) # %>% dplyr::filter(!is.na(player.playerId))
 tictoc::toc()
 
-teams <- torp::teams %>% rows_upsert(teams_upd, by = "row_id")
+teams <- torp::teams %>%
+  rows_upsert(teams_upd, by = "row_id") %>%
+  filter(!is.na(teamId))
+
 usethis::use_data(teams, overwrite = TRUE)
 
-##### update results file (20 secs)
+##### update results file (5 secs per season)
 tictoc::tic()
-results_upd <- purrr::map_df(get_afl_season(), ~ fitzRoy::fetch_results_afl(., comp = "AFLM"))
+results_upd <- purrr::map_df(2020:get_afl_season(), ~ fitzRoy::fetch_results_afl(., comp = "AFLM"))
 tictoc::toc()
 
-teams <- torp::results %>% rows_upsert(results_upd, by = "match.matchId")
+results <- torp::results %>% rows_upsert(results_upd, by = "match.matchId")
 usethis::use_data(results, overwrite = TRUE)
 
 ######## update players data (3 mins)
@@ -41,7 +44,7 @@ usethis::use_data(results, overwrite = TRUE)
 # tictoc::toc()
 # usethis::use_data(plyr_tm_db, overwrite = TRUE)
 
-##### update results file (20 secs)
+##### update players file (20 secs per season)
 tictoc::tic()
 plyr_tm_db_upd <-
   fitzRoy::fetch_player_details_afl(season = get_afl_season(), comp = "AFLM") %>%

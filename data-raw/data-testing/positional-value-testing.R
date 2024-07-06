@@ -119,11 +119,11 @@ plyr_torp_diff_mdl <- mgcv::bam(
   # + s((pred_extended_stats_kick_efficiency), bs = "ts")
   # + s((pred_extended_stats_contested_possession_rate), bs = "ts")
   # + s((pred_extended_stats_hitout_win_percentage), bs = "ts")
-  # + scale(pred_extended_stats_hitout_to_advantage_rate)
+  + scale(pred_extended_stats_hitout_to_advantage_rate)
   # + s((pred_extended_stats_contest_def_loss_percentage), bs = "ts")
   # + s((pred_extended_stats_contest_off_wins_percentage), bs = "ts")
   ,
-  data = plyr_mdl_df %>% dplyr::filter(season > 2022)
+  data = plyr_mdl_df %>% dplyr::filter(season > 2021)
   ,select = T, discrete = T, nthreads = 4,
   weights = time_on_ground_percentage,
   family = "gaussian"
@@ -138,7 +138,10 @@ summary(plyr_torp_diff_mdl)
 plyr_mdl_df %>%
   select(player_name.x,
          player_position,
+         provider_id,
          team_name,
+         pred_one_percenters,
+         pred_extended_stats_spoils,
          pred_handballs, # good
          pred_extended_stats_effective_disposals, #nosey
          pred_bounces, #bad
@@ -164,12 +167,12 @@ afl_torp_diff_mdl <- mgcv::bam(
     + s(scale(pred_handballs), bs = "ts") # +
     + s(scale(pred_disposals), bs = "ts") # +
     + s(scale(pred_marks), bs = "ts")
-    # + s(scale(pred_bounces), bs = "ts") # * -
+    + s(scale(pred_bounces), bs = "ts") # * -
     + s(scale(pred_tackles), bs = "ts") # +
     + s(scale(pred_contested_possessions), bs = "ts") # ** +
-    # + s(scale(pred_uncontested_possessions), bs = "ts") # ** +
+    + s(scale(pred_uncontested_possessions), bs = "ts") # ** +
     + s(scale(pred_total_possessions), bs = "ts")
-    # + s(scale(pred_inside50s), bs = "ts") # *** +
+    + s(scale(pred_inside50s), bs = "ts") # *** +
     + s(scale(pred_marks_inside50), bs = "ts")
     + s(scale(pred_contested_marks), bs = "ts")
     + s(scale(pred_hitouts), bs = "ts")
@@ -196,27 +199,27 @@ afl_torp_diff_mdl <- mgcv::bam(
     + s(scale(pred_extended_stats_ground_ball_gets), bs = "ts")
     + s(scale(pred_extended_stats_f50ground_ball_gets), bs = "ts")
     ### + s(scale(pred_extended_stats_score_launches), bs='ts') # .
-    # + s(scale(pred_extended_stats_pressure_acts), bs = "ts")
-    # + s(scale(pred_extended_stats_def_half_pressure_acts), bs = "ts") # *** -
+    + s(scale(pred_extended_stats_pressure_acts), bs = "ts")
+    + s(scale(pred_extended_stats_def_half_pressure_acts), bs = "ts") # *** -
     + s(scale(pred_extended_stats_spoils), bs = "ts") # * +
     + s(scale(pred_extended_stats_ruck_contests), bs = "ts") #+
     + s(scale(pred_extended_stats_contest_def_one_on_ones), bs = "ts")
     + s(scale(pred_extended_stats_contest_def_losses), bs = "ts")
     + s(scale(pred_extended_stats_contest_off_one_on_ones), bs = "ts")
     + s(scale(pred_extended_stats_contest_off_wins), bs = "ts")
-    #### + s(scale(pred_extended_stats_centre_bounce_attendances), bs='ts')
-    #### + s(scale(pred_extended_stats_kickins), bs='ts')
-    #### + s(scale(pred_extended_stats_kickins_playon), bs='ts')
+    ### + s(scale(pred_extended_stats_centre_bounce_attendances), bs='ts')
+    ### + s(scale(pred_extended_stats_kickins), bs='ts')
+    ### + s(scale(pred_extended_stats_kickins_playon), bs='ts')
     ############# BINOM
     # + s(scale(pred_time_on_ground_percentage), bs = "ts")
-    # + s(scale(pred_disposal_efficiency), bs = "ts")
-    # + s(scale(pred_goal_accuracy), bs = "ts")
-    # + s(scale(pred_extended_stats_kick_efficiency), bs = "ts")
-    # + s(scale(pred_extended_stats_contested_possession_rate), bs = "ts")
-    # + s(scale(pred_extended_stats_hitout_win_percentage), bs = "ts")
-    # + s(scale(pred_extended_stats_hitout_to_advantage_rate), bs = "ts")
-    # + s(scale(pred_extended_stats_contest_def_loss_percentage), bs = "ts")
-    # + s(scale(pred_extended_stats_contest_off_wins_percentage), bs = "ts")
+    + s(scale(pred_disposal_efficiency), bs = "ts")
+    + s(scale(pred_goal_accuracy), bs = "ts")
+    + s(scale(pred_extended_stats_kick_efficiency), bs = "ts")
+    + s(scale(pred_extended_stats_contested_possession_rate), bs = "ts")
+    + s(scale(pred_extended_stats_hitout_win_percentage), bs = "ts")
+    + s(scale(pred_extended_stats_hitout_to_advantage_rate), bs = "ts")
+    + s(scale(pred_extended_stats_contest_def_loss_percentage), bs = "ts")
+    + s(scale(pred_extended_stats_contest_off_wins_percentage), bs = "ts")
   #   ### positions
     # + I(CB.x)
     # + I(BP.x)
@@ -230,21 +233,26 @@ afl_torp_diff_mdl <- mgcv::bam(
     # + I(int.x)
   # #+ def.y + mid.y + fwd.y #+ int.y
   ,
-  data = team_mdl_df %>% dplyr::filter(count.x == count.y, season.x>2022 )
+  data = team_mdl_df %>% dplyr::filter(count.x == count.y, season.x>2021 )
   ,select = T, nthreads = 4
   # ,discrete = T
   ,family = "gaussian"
 )
 
 summary(afl_torp_diff_mdl)
+# plot(mgcViz::getViz(afl_torp_diff_mdl))
 
 #
 afl_torp_offset_mdl <- mgcv::bam(
   score_diff ~
     team_type_fac
   + offset(torp_diff)
+  + torp_recv_diff
+  + torp_disp_diff
+  + torp_spoil_diff
+  + torp_hitout_diff
   ,
-  data = team_mdl_df %>% dplyr::filter(count.x == count.y, season.x>2022)
+  data = team_mdl_df %>% dplyr::filter(count.x == count.y, season.x>2021)
   ,select = T, nthreads = 4
   # ,discrete = T
   ,family = "gaussian"
@@ -271,7 +279,7 @@ afl_torp_posn_mdl <- mgcv::bam(
 + I(CF.x)
 + I(int.x)
 ,
-data = team_mdl_df %>% dplyr::filter(count.x == count.y, season.x>2022 )
+data = team_mdl_df %>% dplyr::filter(count.x == count.y, season.x>2021 )
 ,select = T, nthreads = 4
 # ,discrete = T
 ,family = "gaussian"
@@ -320,7 +328,7 @@ afl_torp_diff_basic <- mgcv::bam(
   + rucks.x
   #+ def.y + mid.y + fwd.y #+ int.y
   ,
-  data = team_mdl_df %>% dplyr::filter(count.x == count.y , season.x>2022),
+  data = team_mdl_df %>% dplyr::filter(count.x == count.y , season.x>2021),
   select = T, # discrete = T,
   nthreads = 4,
   family = "gaussian"
@@ -470,7 +478,7 @@ summary(afl_torp_diff_basic)
 # # }
 #
 # # ###
-# # xg_df <- furrr::future_map_dfr(1:27,~match_xgs(2022,.))
+# # xg_df <- furrr::future_map_dfr(1:27,~match_xgs(2021,.))
 # #
 # # xg_df2 <- xg_df %>%
 # #   mutate(score_diff = home_shots_score - away_shots_score,

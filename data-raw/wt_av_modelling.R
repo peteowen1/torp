@@ -16,22 +16,24 @@ tictoc::tic()
 
 pl_details <- fetch_player_details_afl(2024)
 
-ps24 <- fetch_player_stats_afl(2024) %>%
-  janitor::remove_constant() %>%
-  janitor::clean_names()
-ps23 <- fetch_player_stats_afl(2023) %>%
-  janitor::remove_constant() %>%
-  janitor::clean_names()
-ps22 <- fetch_player_stats_afl(2022) %>%
-  janitor::remove_constant() %>%
-  janitor::clean_names()
-ps21 <- fetch_player_stats_afl(2021) %>%
-  janitor::remove_constant() %>%
-  janitor::clean_names()
-ps20 <- fetch_player_stats_afl(2020) %>%
-  janitor::remove_constant() %>%
-  janitor::clean_names()
-pstot <- bind_rows(ps20, ps21, ps22, ps23, ps24)
+# ps24 <- fetch_player_stats_afl(2024) %>%
+#   janitor::remove_constant() %>%
+#   janitor::clean_names()
+# ps23 <- fetch_player_stats_afl(2023) %>%
+#   janitor::remove_constant() %>%
+#   janitor::clean_names()
+# ps22 <- fetch_player_stats_afl(2022) %>%
+#   janitor::remove_constant() %>%
+#   janitor::clean_names()
+# ps21 <- fetch_player_stats_afl(2021) %>%
+#   janitor::remove_constant() %>%
+#   janitor::clean_names()
+# ps20 <- fetch_player_stats_afl(2020) %>%
+#   janitor::remove_constant() %>%
+#   janitor::clean_names()
+# pstot <- bind_rows(ps20, ps21, ps22, ps23, ps24)
+
+pstot <- load_ps(TRUE)
 
 ### columns 22 to 88
 
@@ -197,7 +199,7 @@ for (i in cols_binom[1:length(cols_binom)]) {
     as.formula(paste0(
       i,
       " ~ ti(log_wt_avg,wt_gms, bs = 'ts') + s(log_wt_avg, bs='ts') + s(wt_gms, bs='ts')",
-      "+ s(position,bs='re') + s(log_wt_avg_team, bs='ts') + s(log_wt_avg_opp, bs='ts') + s(home_away, bs='re')",
+      "+ s(position,bs='re') + s(log_wt_avg_team, bs='ts', k=4) + s(log_wt_avg_opp, bs='ts', k=4) + s(home_away, bs='re')",
       "+ s(venue, bs='re') + s(round, bs='ts') + s(date_numeric, bs='ts', m=1) + s(aest_day, bs='re') + s(aest_hour, bs='ts')"
     )),
     data = df_mdl, family = binomial(),
@@ -282,7 +284,9 @@ team_preds <- pred_df %>%
   summarise_if(is.numeric, sum, na.rm = TRUE) # %>% View()
 
 team_mdl_df <- team_mdl_df %>%
-  left_join(team_preds, by = c("providerId" = "provider_id", "teamName.x" = "team_name")) # %>% View()
+  # mutate(team_name_adj = fitzRoy::replace_teams(team_name)) %>%
+  left_join(team_preds %>% mutate(team_name_adj = fitzRoy::replace_teams(team_name)),
+            by = c("providerId" = "provider_id", "team_name_adj.x" = "team_name")) # %>% View()
 
 ###
 colnames(team_mdl_df)[str_detect(colnames(team_mdl_df), "pred")]

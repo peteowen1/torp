@@ -86,3 +86,33 @@ get_pbp_data <- function(season, round) {
 # purrr::walk(1:28,~get_pbp_data(2023,.))
 purrr::walk((get_afl_week()-1):get_afl_week(),~get_pbp_data(2024,.))
 # get_pbp_data(2024, get_afl_week())
+
+# Get xg data  -------------------------------------------------------------
+get_xg_data <- function(season) {
+
+  xg_df <- match_xgs(season, TRUE)
+
+  # round_02d <- sprintf("%02d", round)
+
+  file_name <- glue::glue("xg_data_{season}")
+
+  # return(futures)
+  save_to_release(df = xg_df, file_name = file_name, release_tag = "xg-data")
+}
+
+purrr::walk(get_afl_season(),~get_xg_data(.))
+
+# Get ps data  -------------------------------------------------------------
+get_ps_data <- function(season) {
+
+  ps <- fitzRoy::fetch_player_stats_afl(season) %>%
+    janitor::remove_constant() %>%
+    janitor::clean_names()
+
+  file_name <- glue::glue("ps_data_{season}")
+
+  # return(futures)
+  save_to_release(df = ps, file_name = file_name, release_tag = "ps-data")
+}
+
+purrr::walk(get_afl_season(),~get_ps_data(.))

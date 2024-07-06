@@ -1,12 +1,29 @@
 library(tidyverse)
 library(devtools)
 devtools::load_all()
+library(rvest)
 
-tr <- torp_ratings(2024, get_afl_week("next"))
+url <- 'https://www.afl.com.au/matches/injury-list'
+
+inj_df <- read_html(url) %>% html_table() %>% list_rbind() %>% janitor::clean_names()
+
+#
+tr <- torp_ratings(2024, get_afl_week("next")) %>%
+  left_join(inj_df, by = c('player_name'='player')) %>%
+  mutate(estimated_return = replace_na(estimated_return, 'None'))
+
 view(tr)
+
+tr %>% anti_join(teams %>% filter( season == 2024 , round.roundNumber == 17), by = c('player_id'='player.playerId')) %>% view()
 
 this_week <- player_game_ratings()
 view(this_week)
+
+this_season <- player_game_ratings(round_num = 0:get_afl_week())
+view(this_season)
+
+tot_season <- player_game_ratings(season = 2021:2024, round_num = 0:get_afl_week())
+view(tot_season)
 
 ssn_24 <- player_season_ratings(2024)
 view(ssn_24)
@@ -29,10 +46,31 @@ tr %>%
   )
 
 tr %>%
-  filter(!is.na(torp)) %>%
+  filter(
+    # !is.na(torp),
+    torp > 1,
+    # is.na(injury),
+    estimated_return != "Season"
+  ) %>%
   group_by(team) %>%
   summarise(
-    val = sum(pmax(torp, 0), na.rm = T),
+    val = sum(pmax(torp-1, 0), na.rm = T),
+    ply = n(),
+    age = sum(age * torp) / sum(torp)
+  ) %>%
+  arrange(-val)
+
+
+tr %>%
+  filter(
+    # !is.na(torp),
+    torp > 1,
+    is.na(injury),
+    #estimated_return != "Season"
+         ) %>%
+  group_by(team) %>%
+  summarise(
+    val = sum(pmax(torp-1, 0), na.rm = T),
     ply = n(),
     age = sum(age * torp) / sum(torp)
   ) %>%

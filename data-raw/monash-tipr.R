@@ -18,6 +18,7 @@ mapping <- dplyr::bind_cols(
     "Carlton",
     "Collingwood",
     "Essendon",
+    "W_Bulldogs",
     "Fremantle",
     "Geelong",
     "Gold_Coast",
@@ -29,28 +30,27 @@ mapping <- dplyr::bind_cols(
     "Richmond",
     "St_Kilda",
     "Sydney",
-    "W_Coast",
-    "W_Bulldogs"
+    "W_Coast"
   ),
   afl = c(
-    "Adelaide Crows",
+    "Adelaide",
     "Brisbane Lions",
     "Carlton",
     "Collingwood",
     "Essendon",
+    "Footscray",
     "Fremantle",
-    "Geelong Cats",
-    "Gold Coast SUNS",
-    "GWS GIANTS",
+    "Geelong",
+    "Gold Coast",
+    "GWS",
     "Hawthorn",
     "Melbourne",
     "North Melbourne",
     "Port Adelaide",
     "Richmond",
     "St Kilda",
-    "Sydney Swans",
-    "West Coast Eagles",
-    "Western Bulldogs"
+    "Sydney",
+    "West Coast"
   )
 )
 ### normal

@@ -6,231 +6,175 @@ mdl_wk <- function(df, season, weeknum) {
   val <- paste0("CD_M", season, "014", sprintf("%02d", weeknum))
   team_func_df <- df %>% dplyr::filter(providerId < val)
   if (!is.na(max(team_func_df$homeTeamScore.matchScore.totalScore))) {
-    decay <- 1500
+    decay <- 1000
     weightz_func <- exp(as.numeric(-(max(as.Date(team_func_df$match.utcStartTime)) - as.Date(team_func_df$match.utcStartTime))) / decay)
     weightz_func <- weightz_func / mean(weightz_func, na.rm = T)
-    # ##
-    # ##
-    # afl_totshots_mdl <- mgcv::bam(total_shots ~
-    #   s(team_type_fac, bs = "re")
-    #   #+ s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
-    #   # s(torp_diff,bs="ts") + s(torp_recv_diff,bs="ts") + s(torp_disp_diff,bs="ts")
+    team_func_df$weightz = weightz_func
+    #### MODEL
+    # library(mgcViz)
+    # set.seed("1234")
+
+    # ###
+    # afl_totshots_mdl <- mgcv::bam(
+    #   total_shots ~
+    #     s(team_type_fac, bs = "re") +
+    #     s(hoff_adef, bs='ts') + # = pmax(pmin((fwd.x - def.y), 20), -5),
+    #     s(hmid_amid, bs='ts') + # = pmax(pmin((mid.x - mid.y), 12), -12),
+    #     s(hdef_afwd, bs='ts') + # = pmax(pmin((def.x - fwd.y), 5), -20),
+    #     s(hint_aint, bs='ts') + # = pmax(pmin((int.x - int.y), 10), -10),
+    #     + s(def.x, bs='ts')
+    #   + s(mid.x, bs='ts')
+    #   + s(fwd.x, bs='ts')
+    #   + s(int.x, bs='ts')
+    #   + s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
+    #   + s(team_name_season.x, bs = "re") + s(team_name_season.y, bs = "re")
     #   + s(abs(torp_diff), bs = "ts", k = 5)
-    # #+ s(abs(torp_recv_diff), bs = "ts", k = 5)
-    # #+ s(abs(torp_disp_diff), bs = "ts", k = 5)
-    # # + s(hoff_adef,bs="ts") + s(hmid_amid,bs="ts")+ s(hdef_afwd,bs="ts") + s(hint_aint,bs="ts")
-    # #+ s((hoff_adef), bs = "ts", k = 5) + s(abs(hmid_amid), bs = "ts", k = 5)
-    # #+ s((hdef_afwd), bs = "ts", k = 5) + s(abs(hint_aint), bs = "ts", k = 5)
-    # + s(fwd.x, bs = "ts", k = 5) + s(mid.x, bs = "ts", k = 5) + s(def.x, bs = "ts", k = 5) + s(int.x, bs = "ts", k = 5)
-    # + s(fwd.y, bs = "ts", k = 5) + s(mid.y, bs = "ts", k = 5) + s(def.y, bs = "ts", k = 5) + s(int.y, bs = "ts", k = 5)
-    # ,
-    # data = team_func_df, weights = weightz_func,
-    # family = quasipoisson(), nthreads = 4, select = T, discrete = T
+    #
+    #   ,
+    #   data = team_func_df, weights = weightz,
+    #   family = quasipoisson(), nthreads = 4, select = T, discrete = T
+    #   , drop.unused.levels = FALSE
     # )
-    # team_func_df$pred_totshots <- predict(afl_totshots_mdl, newdata = team_func_df, type = "response")
+    #
     # df$pred_totshots <- predict(afl_totshots_mdl, newdata = df, type = "response")
     #
-    # # mixedup::extract_ranef(afl_totshots_mdl) %>% view()
-    # # plot(mgcViz::getViz(afl_totshots_mdl))
+    # # summary(afl_totshots_mdl)
+    # # Deviance explained =   22%
+    #
     # ###
-    # afl_shot_mdl <- mgcv::bam(shot_diff ~
-    #   s(team_type_fac, bs = "re")
-    #   #+ s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
+    # afl_shot_mdl <- mgcv::bam(
+    #   shot_diff ~
+    #     s(team_type_fac, bs = "re")
+    #   + s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
+    #   + s(team_name_season.x, bs = "re") + s(team_name_season.y, bs = "re")
     #   + ti(torp_diff, pred_totshots, bs = c("ts", "ts"), k = 4)
     #   + s(pred_totshots, bs = "ts", k = 5)
-    #   + s(torp_diff, bs = "ts", k = 5) #+ s(torp_recv_diff, bs = "ts") + s(torp_disp_diff, bs = "ts")
-    # #+ s(hoff_adef, bs = "ts", k = 5)
-    # #+ s(hmid_amid, bs = "ts", k = 5)
-    # #+ s(hdef_afwd, bs = "ts", k = 5) + s(hint_aint, bs = "ts", k = 5)
-    # + s(fwd.x, bs = "ts", k = 5) + s(mid.x, bs = "ts", k = 5) + s(def.x, bs = "ts", k = 5) + s(int.x, bs = "ts", k = 5)
-    # + s(fwd.y, bs = "ts", k = 5) + s(mid.y, bs = "ts", k = 5) + s(def.y, bs = "ts", k = 5) + s(int.y, bs = "ts", k = 5)
-    # ,
-    # data = team_func_df, weights = weightz_func,
-    # family = gaussian(), nthreads = 4, select = T, discrete = T
+    #   + s(torp_diff, bs = "ts", k = 5),
+    #   data = team_func_df, weights = weightz,
+    #   family = gaussian(), nthreads = 4, select = T, discrete = T
+    #   , drop.unused.levels = FALSE
     # )
     #
-    # team_func_df$pred_shot_diff <- predict(afl_shot_mdl, newdata = team_func_df, type = "response")
     # df$pred_shot_diff <- predict(afl_shot_mdl, newdata = df, type = "response")
     #
     # # summary(afl_shot_mdl)
+    # # mixedup::extract_ranef(afl_shot_mdl) %>% tibble::view()
     # # plot(mgcViz::getViz(afl_shot_mdl))
-    # # mixedup::extract_ranef(afl_shot_mdl) %>% view()
-    #
-    # ###
-    # afl_conv_mdl <- mgcv::bam(shot_conv ~
-    #   s(team_type_fac, bs = "re")
-    #   #+ s(team_name.x, bs = "re")+ s(team_name.y, bs = "re")
-    #   + ti(torp_diff, pred_totshots, bs = c("ts", "ts"), k = 4)
-    #   + s(pred_totshots, bs = "ts", k = 5)
-    #   + s(pred_shot_diff, bs = "ts", k = 5)
-    #   + s(torp_diff, bs = "ts", k = 5) #+ s(torp_recv_diff, bs = "ts") + s(torp_disp_diff, bs = "ts")
-    #   # + s(hoff_adef, bs = "ts", k = 5) + s(hmid_amid, bs = "ts", k = 5)
-    #   # + s(hdef_afwd, bs = "ts", k = 5) + s(hint_aint, bs = "ts", k = 5)
-    #   + s(fwd.x, bs = "ts", k = 5) + s(mid.x, bs = "ts", k = 5) + s(def.x, bs = "ts", k = 5) + s(int.x, bs = "ts", k = 5)
-    #   + s(fwd.y, bs = "ts", k = 5) + s(mid.y, bs = "ts", k = 5) + s(def.y, bs = "ts", k = 5) + s(int.y, bs = "ts", k = 5),
-    # data = team_func_df, weights = team_shots * weightz_func,
-    # family = "binomial", nthreads = 4, select = T, discrete = T
-    # )
-    #
-    # team_func_df$pred_conv <- predict(afl_conv_mdl, newdata = team_func_df, type = "response")
-    # df$pred_conv <- predict(afl_conv_mdl, newdata = df, type = "response")
-    #
-    # # summary(afl_conv_mdl)
-    # # plot(mgcViz::getViz(afl_conv_mdl))
-    # ###
-    #
-    # afl_score_mdl <- mgcv::bam(score_diff ~
-    #   s(team_type_fac, bs = "re")
-    #   #+ s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
-    #   + ti(pred_shot_diff, pred_totshots, bs = c("ts", "ts"), k = 5)
-    #   + s(pred_totshots, bs = "ts", k = 5)
-    #   + ti(pred_shot_diff, pred_conv, bs = c("ts", "ts"), k = 4)
-    #   + s(pred_conv, bs = "ts", k = 5)
-    #   + s(torp_diff, bs = "ts", k = 5) #+ s(torp_recv_diff, bs = "ts", k = 5) + s(torp_disp_diff, bs = "ts", k = 5)
-    #   + s(pred_shot_diff, bs = "ts", k = 5)
-    # # + s(hoff_adef,bs="ts") + s(hmid_amid,bs="ts")+ s(hdef_afwd,bs="ts")+ s(hint_aint,bs="ts")
-    # + s(fwd.x, bs = "ts", k = 5) + s(mid.x, bs = "ts", k = 5) + s(def.x, bs = "ts", k = 5) + s(int.x, bs = "ts", k = 5)
-    # + s(fwd.y, bs = "ts", k = 5) + s(mid.y, bs = "ts", k = 5) + s(def.y, bs = "ts", k = 5) + s(int.y, bs = "ts", k = 5)
-    # ,
-    # data = team_func_df, weights = weightz_func,
-    # family = "gaussian", nthreads = 4, select = T, discrete = T
-    # )
-    # # summary(afl_score_mdl)
-    # # plot(mgcViz::getViz(afl_score_mdl))
-    #
-    # team_func_df$pred_score_diff <- predict(afl_score_mdl, newdata = team_func_df, type = "response")
-    # df$pred_score_diff <- predict(afl_score_mdl, newdata = df, type = "response")
-    #
-    # ###
-    # afl_win_mdl <-
-    #   mgcv::bam(win ~
-    #     s(team_type_fac, bs = "re")
-    #     # + s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
-    #     + ti(pred_totshots, pred_score_diff, bs = c("ts", "ts"), k = 4)
-    #     # + s(pred_totshots, bs = "ts")
-    #     + s(pred_score_diff, bs = "ts", k = 5) #+ s(pred_shot_diff,bs="ts")
-    #   + s(torp_diff,bs="ts")  #+ s(torp_recv_diff,bs="ts") + s(torp_disp_diff,bs="ts")
-    #   #+ s(hoff_adef,bs="ts") + s(hmid_amid,bs="ts")+ s(hdef_afwd,bs="ts")+ s(hint_aint,bs="ts")
-    #   #+ s(fwd.x,bs="ts") + s(mid.x,bs="ts") + s(def.x,bs="ts") + s(int.x,bs="ts")
-    #   #+ s(fwd.y,bs="ts") + s(mid.y,bs="ts") + s(def.y,bs="ts") + s(int.y,bs="ts")
-    #   #+ ti(pred_score_diff,pred_shot_diff),
-    #   ,
-    #   data = team_func_df, weights = weightz_func,
-    #   family = "binomial", nthreads = 4, select = T, discrete = T
-    #   )
-    #
-    # team_func_df$pred_win <- predict(afl_win_mdl, newdata = team_func_df, type = "response")
-    # df$pred_win <- predict(afl_win_mdl, newdata = df, type = "response")
+    # # Deviance explained = 44.5%
 
+    ###
+    afl_total_xpoints_mdl <- mgcv::bam(
+      total_xpoints ~
+        s(team_type_fac, bs = "re")
+      + s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
+      + s(team_name_season.x, bs = "re") + s(team_name_season.y, bs = "re")
+      + s(abs(torp_diff), bs = "ts", k = 5)
+      + s(abs(torp_recv_diff), bs = "ts", k = 5)
+      + s(abs(torp_disp_diff), bs = "ts", k = 5)
+      + s(torp.x, bs = "ts", k = 5) + s(torp.y, bs = "ts", k = 5)
+      + s(fwd.x, bs = "ts", k = 5) + s(mid.x, bs = "ts", k = 5) + s(def.x, bs = "ts", k = 5) + s(int.x, bs = "ts", k = 5)
+      + s(fwd.y, bs = "ts", k = 5) + s(mid.y, bs = "ts", k = 5) + s(def.y, bs = "ts", k = 5) + s(int.y, bs = "ts", k = 5),
+      data = team_func_df, weights = weightz,
+      family = gaussian(), nthreads = 4, select = T, discrete = T
+      , drop.unused.levels = FALSE
+    )
+
+    df$pred_tot_xscore <- predict(afl_total_xpoints_mdl, newdata = df, type = "response")
+
+    # summary(afl_total_xpoints_mdl)
+    # Deviance explained =   22%
 
     ###
     afl_xscore_diff_mdl <- mgcv::bam(
       xscore_diff ~
         s(team_type_fac, bs = "re")
-      # + s(team_name.x, bs = "re")
-      # + s(team_name.y, bs = "re")
-      ###
-      + s(torp_diff, bs = "ts")
-      ###
-      + s(key_def.x, bs = "ts")
-      + s(med_def.y, bs = "ts")
-      + s(midfield.x, bs = "ts")
-      + s(mid_fwd.x, bs = "ts")
-      + s(med_fwd.x, bs = "ts")
-      + s(key_fwd.x, bs = "ts")
-      + s(rucks.x, bs = "ts")
-      ###
-      + s(key_def.y, bs = "ts")
-      + s(med_def.y, bs = "ts")
-      + s(midfield.y, bs = "ts")
-      + s(mid_fwd.y, bs = "ts")
-      + s(med_fwd.y, bs = "ts")
-      + s(key_fwd.y, bs = "ts")
-      + s(rucks.y, bs = "ts")
+      + s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
+      + s(team_name_season.x, bs = "re") + s(team_name_season.y, bs = "re")
+      + ti(torp_diff, pred_tot_xscore, bs = c("ts", "ts"), k = 4)
+      + s(pred_tot_xscore, bs = "ts", k = 5)
+      # + s(torp_diff, bs = "ts", k = 5)
+      + offset(torp_diff)
+      + s(fwd.x, bs = "ts", k = 5) + s(mid.x, bs = "ts", k = 5) + s(def.x, bs = "ts", k = 5) + s(int.x, bs = "ts", k = 5)
+      + s(fwd.y, bs = "ts", k = 5) + s(mid.y, bs = "ts", k = 5) + s(def.y, bs = "ts", k = 5) + s(int.y, bs = "ts", k = 5)
       ,
-      data = team_func_df,
-      select = TRUE,
-      # weights = weightz_func,
-      family = "gaussian"
+      data = team_func_df, weights = weightz,
+      family = gaussian(), nthreads = 4, select = T, discrete = T
+      , drop.unused.levels = FALSE
     )
-    team_mdl_df$pred_xscore_diff <- predict(afl_xscore_diff_mdl, newdata = team_mdl_df, type = "response")
+
+    df$pred_xscore_diff <- predict(afl_xscore_diff_mdl, newdata = df, type = "response")
+
+    # summary(afl_xscore_diff_mdl)
+    # mixedup::extract_ranef(afl_xscore_diff_mdl) %>% tibble::view()
+    # plot(mgcViz::getViz(afl_xscore_diff_mdl))
+    # Deviance explained = 44.5%
 
 
+    ###
+    afl_conv_mdl <- mgcv::bam(
+      shot_conv ~
+        s(team_type_fac, bs = "re")
+      + s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
+      + s(team_name_season.x, bs = "re") + s(team_name_season.y, bs = "re")
+      + ti(torp_diff, pred_tot_xscore, bs = c("ts", "ts"), k = 4)
+      + s(pred_tot_xscore, bs = "ts", k = 5)
+      + s(pred_xscore_diff, bs = "ts", k = 5)
+      + s(torp_diff, bs = "ts", k = 5)
+      + s(fwd.x, bs = "ts", k = 5) + s(mid.x, bs = "ts", k = 5) + s(def.x, bs = "ts", k = 5) + s(int.x, bs = "ts", k = 5)
+      + s(fwd.y, bs = "ts", k = 5) + s(mid.y, bs = "ts", k = 5) + s(def.y, bs = "ts", k = 5) + s(int.y, bs = "ts", k = 5),
+      data = team_func_df, weights = team_shots * weightz,
+      family = "binomial", nthreads = 4, select = T, discrete = T
+      , drop.unused.levels = FALSE
+    )
 
-    ########################  TRY THIS
-    afl_torp_diff_mdl <- mgcv::bam(
+    df$pred_conv <- predict(afl_conv_mdl, newdata = df, type = "response")
+    # summary(afl_conv_mdl)
+    ###
+
+    afl_score_mdl <- mgcv::bam(
       score_diff ~
         s(team_type_fac, bs = "re")
-        # + s(team_name.x, bs = "re")
-        # + s(team_name.y, bs = "re")
-        ###
-        + s(torp_diff, bs = "ts")
-        + s(pred_xscore_diff, bs='ts')
-        ###
-        + s(key_def.x, bs = "ts")
-        + s(med_def.y, bs = "ts")
-        + s(midfield.x, bs = "ts")
-        + s(mid_fwd.x, bs = "ts")
-        + s(med_fwd.x, bs = "ts")
-        + s(key_fwd.x, bs = "ts")
-        + s(rucks.x, bs = "ts")
-        ###
-        + s(key_def.y, bs = "ts")
-        + s(med_def.y, bs = "ts")
-        + s(midfield.y, bs = "ts")
-        + s(mid_fwd.y, bs = "ts")
-        + s(med_fwd.y, bs = "ts")
-        + s(key_fwd.y, bs = "ts")
-        + s(rucks.y, bs = "ts")
-      #+ pred_conv + pred_totshots
-      ,
-      data = team_func_df,
-      select = TRUE,
-      # weights = weightz_func,
-      family = "gaussian"
+      + s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
+      + s(team_name_season.x, bs = "re") + s(team_name_season.y, bs = "re")
+      + s(pred_tot_xscore, bs = "ts", k = 5)
+      + ti(pred_xscore_diff, pred_conv, bs = c("ts", "ts"), k = 4)
+      + s(pred_conv, bs = "ts", k = 5)
+      + s(torp_diff, bs = "ts", k = 5)
+      + s(torp_recv_diff, bs = "ts", k = 5)
+      + s(torp_disp_diff, bs = "ts", k = 5)
+      + s(pred_xscore_diff, bs = "ts", k = 5),
+      data = team_func_df, weights = weightz,
+      family = "gaussian", nthreads = 4, select = T, discrete = T
+      , drop.unused.levels = FALSE
     )
 
-    # summary(afl_torp_diff_mdl)
-    team_func_df$pred_score_diff <- predict(afl_torp_diff_mdl, newdata = team_func_df, type = "response")
-    df$pred_score_diff <- predict(afl_torp_diff_mdl, newdata = df, type = "response")
+    df$pred_score_diff <- predict(afl_score_mdl, newdata = df, type = "response")
 
-    afl_torp_win_mdl <- mgcv::bam(
-      win ~
-        s(team_type_fac, bs = "re")
-        # + s(team_name.x, bs = "re")
-        # + s(team_name.y, bs = "re")
-        ###
-        + s(torp_diff, bs = "ts")
-        ###
-        + s(key_def.x, bs = "ts")
-        + s(med_def.y, bs = "ts")
-        + s(midfield.x, bs = "ts")
-        + s(mid_fwd.x, bs = "ts")
-        + s(med_fwd.x, bs = "ts")
-        + s(key_fwd.x, bs = "ts")
-        + s(rucks.x, bs = "ts")
-        ###
-        + s(key_def.y, bs = "ts")
-        + s(med_def.y, bs = "ts")
-        + s(midfield.y, bs = "ts")
-        + s(mid_fwd.y, bs = "ts")
-        + s(med_fwd.y, bs = "ts")
-        + s(key_fwd.y, bs = "ts")
-        + s(rucks.y, bs = "ts")
-        ###
-        + s(pred_score_diff, bs = "ts")
-        + s(pred_xscore_diff, bs = "ts")
-      #+ pred_conv + pred_totshots
-      ,
-      data = team_func_df,
-      select = TRUE,
-      # weights = weightz_func,
-      family = "binomial"
-    )
+    # summary(afl_score_mdl)
+    # Deviance explained = 42.2%
 
-    # summary(afl_torp_win_mdl)
-    team_func_df$pred_win <- predict(afl_torp_win_mdl, newdata = team_func_df, type = "response")
-    df$pred_win <- predict(afl_torp_win_mdl, newdata = df, type = "response")
+    ###
+    afl_win_mdl <-
+      mgcv::bam(
+        win ~
+          s(team_type_fac, bs = "re")
+        + s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
+        + s(team_name_season.x, bs = "re") + s(team_name_season.y, bs = "re")
+        #+ ti(pred_tot_xscore, pred_score_diff, bs = c("ts", "ts"), k = 4)
+        + ti(pred_tot_xscore, pred_xscore_diff, bs = c("ts", "ts"), k = 4)
+        + s(pred_score_diff, bs = "ts", k = 5)
+        #+ s(pred_xscore_diff, bs = "ts", k = 5)
+        ,
+        data = team_func_df, weights = weightz,
+        family = "binomial", nthreads = 4, select = T, discrete = T
+        , drop.unused.levels = FALSE
+      )
+
+    # summary(afl_win_mdl)
+
+    ###
+    df$pred_win <- predict(afl_win_mdl, newdata = df, type = "response")
+
     #########
     test_df <- df %>% dplyr::filter(season.x == season, round.roundNumber.x == weeknum) # , team_type_fac == "home")
     test_df$max_wp <- pmax(test_df$pred_win, 1 - test_df$pred_win)
@@ -241,7 +185,8 @@ mdl_wk <- function(df, season, weeknum) {
         1 + 0.5 * log2(test_df$pred_win * (1 - test_df$pred_win))
       )
     )
-    test_df$tips <- ifelse(round(test_df$pred_win) == test_df$win, 1, 0)
+    test_df$tips <- ifelse(round(test_df$pred_win) == test_df$win, 1,
+                           ifelse(test_df$win == 0.5,1,0))
     test_df$mae <- abs(test_df$score_diff - test_df$pred_score_diff)
 
     # library(MLmetrics)
@@ -264,19 +209,29 @@ mdl_wk <- function(df, season, weeknum) {
 
 resultz <- bind_rows(
   purrr::map_dfr(1:27, ~ mdl_wk(team_mdl_df, 2022, .)),
-  purrr::map_dfr(1:27, ~ mdl_wk(team_mdl_df, 2023, .))
+  purrr::map_dfr(1:28, ~ mdl_wk(team_mdl_df, 2023, .)),
+  purrr::map_dfr(0:28, ~ mdl_wk(team_mdl_df, 2024, .))
 )
 
+resultz <-
+  resultz %>%
+  mutate(tips = ifelse(win == 0.5 , 1, tips))
 ###
-season <- 2023
+season <- 2024
+
+#targets (MAE - bits)
+# 22: 25 - 40
+# 23: 26 - 30
+# 24: ???
 
 rez <- resultz %>%
-  dplyr::filter(!is.na(bits), team_type_fac == "home", season.x == season) %>%
+  dplyr::filter(!is.na(bits), team_type_fac == "home", season.x %in% season) %>%
   dplyr::select(providerId, season.x,
     round = round.roundNumber.x,
-    teamName.x, torp.x, teamName.y, torp.y,
-    torp_diff, pred_score_diff, pred_win, score_diff, win, bits, tips
+    team_name_adj.x, torp.x, team_name_adj.y, torp.y,
+    torp_diff, pred_tot_xscore, pred_score_diff, pred_win, score_diff, win, bits, tips
   )
+
 ####
 # library(MLmetrics)
 MLmetrics::LogLoss(rez$pred_win, rez$win)
@@ -285,7 +240,7 @@ sum(rez$bits)
 mean(rez$bits) # 0.1407061
 sum(rez$tips)
 mean(rez$tips)
-
+nrow(rez)
 ### rez %>% select(30:38,41:55,57:59,61:62,torp_diff,shot_diff,score_diff) %>% view()
 ### view(df %>% filter(providerId == "CD_M20220140306"))
 

@@ -9,7 +9,8 @@ torp_ratings(
   round_val = get_afl_week(type = "next"),
   decay = 365,
   loading = 1.5,
-  prior_games = 4
+  prior_games_recv = 3,
+  prior_games_disp = 6
 )
 }
 \arguments{

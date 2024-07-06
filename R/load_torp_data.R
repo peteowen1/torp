@@ -87,7 +87,69 @@ load_pbp <- function(seasons = get_afl_season(), rounds = get_afl_week()) {
   return(out)
 }
 
+#' Load xg
+#'
+#' @description Loads xg data from the [torpdata repository](https://github.com/peteowen1/torpdata)
+#'
+#' @param seasons A numeric vector of 4-digit years associated with given AFL seasons - defaults to latest season. If set to `TRUE`, returns all available data since 2021.
+#'
+#' @examples
+#' \donttest{
+#' try({ # prevents cran errors
+#'   load_xg(2021:2022)
+#' })
+#' }
+#' @export
+load_xg <- function(seasons = get_afl_season()) {
+  if (isTRUE(seasons)) seasons <- 2021:get_afl_season()
 
+  stopifnot(
+    is.numeric(seasons),
+    seasons >= 2021,
+    seasons <= get_afl_season()
+  )
+
+
+  urls <- paste0("https://github.com/peteowen1/torpdata/releases/download/xg-data/xg_data_", seasons, ".rds")
+
+  urls <- urls[which(urls <= glue::glue("https://github.com/peteowen1/torpdata/releases/download/xg-data/xg_data_{get_afl_season()}.rds"))]
+
+  out <- load_from_url(urls, seasons = seasons)
+
+  return(out)
+}
+
+#' Load ps
+#'
+#' @description Loads player stats data from the [torpdata repository](https://github.com/peteowen1/torpdata)
+#'
+#' @param seasons A numeric vector of 4-digit years associated with given AFL seasons - defaults to latest season. If set to `TRUE`, returns all available data since 2021.
+#'
+#' @examples
+#' \donttest{
+#' try({ # prevents cran errors
+#'   load_ps(2021:2022)
+#' })
+#' }
+#' @export
+load_ps <- function(seasons = get_afl_season()) {
+  if (isTRUE(seasons)) seasons <- 2021:get_afl_season()
+
+  stopifnot(
+    is.numeric(seasons),
+    seasons >= 2021,
+    seasons <= get_afl_season()
+  )
+
+
+  urls <- paste0("https://github.com/peteowen1/torpdata/releases/download/ps-data/ps_data_", seasons, ".rds")
+
+  urls <- urls[which(urls <= glue::glue("https://github.com/peteowen1/torpdata/releases/download/ps-data/ps_data_{get_afl_season()}.rds"))]
+
+  out <- load_from_url(urls, seasons = seasons)
+
+  return(out)
+}
 
 #' Load any rds/csv/csv.gz/parquet/qs file from a remote URL
 #'
@@ -123,7 +185,7 @@ load_from_url <- function(url, ..., seasons = TRUE, rounds = TRUE) {
     p <- NULL
     if (is_installed("progressr")) p <- progressr::progressor(along = url)
     out <- lapply(url, progressively(rds_from_url, p))
-    out <- data.table::rbindlist(out, use.names = TRUE)
+    out <- data.table::rbindlist(out, use.names = TRUE, fill=TRUE)
   }
 
   return(out)

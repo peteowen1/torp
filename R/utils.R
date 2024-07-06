@@ -87,3 +87,21 @@ progressively <- function(f, p = NULL) {
     f(...)
   }
 }
+
+#' get_mode
+#'
+#' This function helps add progress-reporting to any function - given function `f()` and progressor `p()`,
+#' it will return a new function that calls `f()` and then (on exiting) will call `p()` after every iteration.
+#' This is inspired by purrr's `safely`, `quietly`, and `possibly` function decorators.
+#'
+#' @param v a vector
+#'
+#' @return a function that does the same as `f` but it calls `p()` after iteration.
+#'
+#' @export
+get_mode <- function(x) {
+  t <- table(x)
+  out <- names(t)[which.max(t)]
+  return(out)
+}
+
