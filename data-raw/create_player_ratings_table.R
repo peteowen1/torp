@@ -44,7 +44,7 @@ decay <- 500
     ) %>%
     dplyr::group_by(player_id, match_id) %>%
     dplyr::summarise(
-      plyr_nm = max(player_name),
+      plyr_nm = max(player_name, na.rm=T),
       gms = dplyr::n_distinct(match_id),
       # wt_gms = sum(unique(weight_gm), na.rm = TRUE),
       utc_start_time = max(utc_start_time),
@@ -95,7 +95,7 @@ decay <- 500
       # ) %>%
         dplyr::mutate(
           weight_gm = exp(as.numeric(-(max(as.Date(utc_start_time)) - as.Date(utc_start_time))) / decay),
-          spoil_pts = extended_stats_spoils * 0.6 + extended_stats_pressure_acts * 0.125 - extended_stats_def_half_pressure_acts * 0.25, #HMMMMMMMMM
+          spoil_pts = extended_stats_spoils * 0.6 + extended_stats_pressure_acts * 0.1 - extended_stats_def_half_pressure_acts * 0.2, #HMMMMMMMMM
           spoil_pts_wt = spoil_pts * max(weight_gm),
           hitout_pts = hitouts * 0.15 + extended_stats_hitouts_to_advantage * 0.25 - extended_stats_ruck_contests * 0.06,
           hitout_pts_wt = hitout_pts * max(weight_gm)
@@ -106,7 +106,7 @@ decay <- 500
     dplyr::mutate(
       recv_pts = tidyr::replace_na(recv_pts, 0),# + 0.15 * extended_stats_effective_disposals - bounces * 0.5,
       recv_pts_wt = tidyr::replace_na(recv_pts_wt, 0),
-      disp_pts = tidyr::replace_na(disp_pts, 0) - (bounces * 0.3),
+      disp_pts = tidyr::replace_na(disp_pts, 0) - (bounces * 0.2),
       disp_pts_wt = tidyr::replace_na(disp_pts_wt, 0),
       spoil_pts = tidyr::replace_na(spoil_pts, 0),
       spoil_pts_wt = tidyr::replace_na(spoil_pts_wt, 0),

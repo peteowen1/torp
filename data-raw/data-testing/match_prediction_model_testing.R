@@ -1,15 +1,18 @@
+library(tidyverse)
 #### library(furrr)
 ### testing
 set.seed(1234)
 
 mdl_wk <- function(df, season, weeknum) {
   val <- paste0("CD_M", season, "014", sprintf("%02d", weeknum))
-  team_func_df <- df %>% dplyr::filter(providerId < val)
+  # team_func_df <- df %>% dplyr::filter(providerId < val, providerId > "CD_M202101409")
+  team_func_df <- df %>% dplyr::filter(season.x != season | round.roundNumber.x < weeknum )
   if (!is.na(max(team_func_df$homeTeamScore.matchScore.totalScore))) {
     decay <- 1000
-    weightz_func <- exp(as.numeric(-(max(as.Date(team_func_df$match.utcStartTime)) - as.Date(team_func_df$match.utcStartTime))) / decay)
-    weightz_func <- weightz_func / mean(weightz_func, na.rm = T)
-    team_func_df$weightz = weightz_func
+    # weightz_func <- exp(as.numeric(-(max(as.Date(team_func_df$match.utcStartTime)) - as.Date(team_func_df$match.utcStartTime))) / decay)
+    # weightz_func <- weightz_func / mean(weightz_func, na.rm = T)
+    # team_func_df$weightz = weightz_func
+    team_func_df$weightz = 1
     #### MODEL
     # library(mgcViz)
     # set.seed("1234")
@@ -63,7 +66,7 @@ mdl_wk <- function(df, season, weeknum) {
     # # Deviance explained = 44.5%
 
     ###
-    afl_total_xpoints_mdl <- mgcv::bam(
+    afl_total_xpoints_mdl_test <- mgcv::bam(
       total_xpoints ~
         s(team_type_fac, bs = "re")
       + s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
@@ -71,21 +74,27 @@ mdl_wk <- function(df, season, weeknum) {
       + s(abs(torp_diff), bs = "ts", k = 5)
       + s(abs(torp_recv_diff), bs = "ts", k = 5)
       + s(abs(torp_disp_diff), bs = "ts", k = 5)
+      + s(abs(torp_spoil_diff), bs = "ts", k = 5)
+      + s(abs(torp_hitout_diff), bs = "ts", k = 5)
       + s(torp.x, bs = "ts", k = 5) + s(torp.y, bs = "ts", k = 5)
-      + s(fwd.x, bs = "ts", k = 5) + s(mid.x, bs = "ts", k = 5) + s(def.x, bs = "ts", k = 5) + s(int.x, bs = "ts", k = 5)
-      + s(fwd.y, bs = "ts", k = 5) + s(mid.y, bs = "ts", k = 5) + s(def.y, bs = "ts", k = 5) + s(int.y, bs = "ts", k = 5),
+      # + s(fwd.x, bs = "ts", k = 5) + s(mid.x, bs = "ts", k = 5) + s(def.x, bs = "ts", k = 5) + s(int.x, bs = "ts", k = 5)
+      # + s(fwd.y, bs = "ts", k = 5) + s(mid.y, bs = "ts", k = 5) + s(def.y, bs = "ts", k = 5) + s(int.y, bs = "ts", k = 5)
+      + s(log_dist.x, bs = "ts", k = 5) + s(log_dist.y, bs = "ts", k = 5)
+      + s(familiarity.x, bs = "ts", k = 5) + s(familiarity.y, bs = "ts", k = 5)
+      + s(log_dist_diff, bs = "ts", k = 5) + s(familiarity_diff, bs = "ts", k = 5) + s(days_rest_diff_fac, bs = "re")
+      ,
       data = team_func_df, weights = weightz,
       family = gaussian(), nthreads = 4, select = T, discrete = T
       , drop.unused.levels = FALSE
     )
 
-    df$pred_tot_xscore <- predict(afl_total_xpoints_mdl, newdata = df, type = "response")
+    df$pred_tot_xscore <- predict(afl_total_xpoints_mdl_test, newdata = df, type = "response")
 
-    # summary(afl_total_xpoints_mdl)
+    # summary(afl_total_xpoints_mdl_test)
     # Deviance explained =   22%
 
     ###
-    afl_xscore_diff_mdl <- mgcv::bam(
+    afl_xscore_diff_mdl_test <- mgcv::bam(
       xscore_diff ~
         s(team_type_fac, bs = "re")
       + s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
@@ -93,27 +102,28 @@ mdl_wk <- function(df, season, weeknum) {
       + ti(torp_diff, pred_tot_xscore, bs = c("ts", "ts"), k = 4)
       + s(pred_tot_xscore, bs = "ts", k = 5)
       # + s(torp_diff, bs = "ts", k = 5)
-      + offset(torp_diff)
-      + s(fwd.x, bs = "ts", k = 5) + s(mid.x, bs = "ts", k = 5) + s(def.x, bs = "ts", k = 5) + s(int.x, bs = "ts", k = 5)
-      + s(fwd.y, bs = "ts", k = 5) + s(mid.y, bs = "ts", k = 5) + s(def.y, bs = "ts", k = 5) + s(int.y, bs = "ts", k = 5)
+      + s(torp_diff)
+      # + s(fwd.x, bs = "ts", k = 5) + s(mid.x, bs = "ts", k = 5) + s(def.x, bs = "ts", k = 5) + s(int.x, bs = "ts", k = 5)
+      # + s(fwd.y, bs = "ts", k = 5) + s(mid.y, bs = "ts", k = 5) + s(def.y, bs = "ts", k = 5) + s(int.y, bs = "ts", k = 5)
+      + s(log_dist_diff, bs = "ts", k = 5) + s(familiarity_diff, bs = "ts", k = 5) + s(days_rest_diff_fac, bs = "re")
       ,
       data = team_func_df, weights = weightz,
       family = gaussian(), nthreads = 4, select = T, discrete = T
       , drop.unused.levels = FALSE
     )
 
-    df$pred_xscore_diff <- predict(afl_xscore_diff_mdl, newdata = df, type = "response")
+    df$pred_xscore_diff <- predict(afl_xscore_diff_mdl_test, newdata = df, type = "response")
 
-    # summary(afl_xscore_diff_mdl)
-    # mixedup::extract_ranef(afl_xscore_diff_mdl) %>% tibble::view()
-    # plot(mgcViz::getViz(afl_xscore_diff_mdl))
+    # summary(afl_xscore_diff_mdl_test)
+    # mixedup::extract_ranef(afl_xscore_diff_mdl_test) %>% tibble::view()
+    # plot(mgcViz::getViz(afl_xscore_diff_mdl_test))
     # Deviance explained = 44.5%
 
 
     ###
-    afl_conv_mdl <- mgcv::bam(
+    afl_conv_mdl_test <- mgcv::bam(
       shot_conv ~
-        s(team_type_fac, bs = "re")
+        s(team_type_fac.x, bs = "re")
       + s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
       + s(team_name_season.x, bs = "re") + s(team_name_season.y, bs = "re")
       + ti(torp_diff, pred_tot_xscore, bs = c("ts", "ts"), k = 4)
@@ -121,17 +131,19 @@ mdl_wk <- function(df, season, weeknum) {
       + s(pred_xscore_diff, bs = "ts", k = 5)
       + s(torp_diff, bs = "ts", k = 5)
       + s(fwd.x, bs = "ts", k = 5) + s(mid.x, bs = "ts", k = 5) + s(def.x, bs = "ts", k = 5) + s(int.x, bs = "ts", k = 5)
-      + s(fwd.y, bs = "ts", k = 5) + s(mid.y, bs = "ts", k = 5) + s(def.y, bs = "ts", k = 5) + s(int.y, bs = "ts", k = 5),
+      + s(fwd.y, bs = "ts", k = 5) + s(mid.y, bs = "ts", k = 5) + s(def.y, bs = "ts", k = 5) + s(int.y, bs = "ts", k = 5)
+      + s(log_dist_diff, bs = "ts", k = 5) + s(familiarity_diff, bs = "ts", k = 5) + s(days_rest_diff_fac, bs = "re")
+      ,
       data = team_func_df, weights = team_shots * weightz,
       family = "binomial", nthreads = 4, select = T, discrete = T
       , drop.unused.levels = FALSE
     )
 
-    df$pred_conv <- predict(afl_conv_mdl, newdata = df, type = "response")
-    # summary(afl_conv_mdl)
+    df$pred_conv <- predict(afl_conv_mdl_test, newdata = df, type = "response")
+    # summary(afl_conv_mdl_test)
     ###
 
-    afl_score_mdl <- mgcv::bam(
+    afl_score_mdl_test <- mgcv::bam(
       score_diff ~
         s(team_type_fac, bs = "re")
       + s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
@@ -142,19 +154,23 @@ mdl_wk <- function(df, season, weeknum) {
       + s(torp_diff, bs = "ts", k = 5)
       + s(torp_recv_diff, bs = "ts", k = 5)
       + s(torp_disp_diff, bs = "ts", k = 5)
-      + s(pred_xscore_diff, bs = "ts", k = 5),
+      + s(torp_spoil_diff, bs = "ts", k = 5)
+      + s(torp_hitout_diff, bs = "ts", k = 5)
+      + s(pred_xscore_diff)
+      + s(log_dist_diff, bs = "ts", k = 5) + s(familiarity_diff, bs = "ts", k = 5) + s(days_rest_diff_fac, bs = "re")
+      ,
       data = team_func_df, weights = weightz,
       family = "gaussian", nthreads = 4, select = T, discrete = T
       , drop.unused.levels = FALSE
     )
 
-    df$pred_score_diff <- predict(afl_score_mdl, newdata = df, type = "response")
+    df$pred_score_diff <- predict(afl_score_mdl_test, newdata = df, type = "response")
 
-    # summary(afl_score_mdl)
+    # summary(afl_score_mdl_test)
     # Deviance explained = 42.2%
 
     ###
-    afl_win_mdl <-
+    afl_win_mdl_test <-
       mgcv::bam(
         win ~
           s(team_type_fac, bs = "re")
@@ -164,16 +180,17 @@ mdl_wk <- function(df, season, weeknum) {
         + ti(pred_tot_xscore, pred_xscore_diff, bs = c("ts", "ts"), k = 4)
         + s(pred_score_diff, bs = "ts", k = 5)
         #+ s(pred_xscore_diff, bs = "ts", k = 5)
+        + s(log_dist_diff, bs = "ts", k = 5) + s(familiarity_diff, bs = "ts", k = 5) + s(days_rest_diff_fac, bs = "re")
         ,
         data = team_func_df, weights = weightz,
         family = "binomial", nthreads = 4, select = T, discrete = T
         , drop.unused.levels = FALSE
       )
 
-    # summary(afl_win_mdl)
+    # summary(afl_win_mdl_test)
 
     ###
-    df$pred_win <- predict(afl_win_mdl, newdata = df, type = "response")
+    df$pred_win <- predict(afl_win_mdl_test, newdata = df, type = "response")
 
     #########
     test_df <- df %>% dplyr::filter(season.x == season, round.roundNumber.x == weeknum) # , team_type_fac == "home")
@@ -201,17 +218,22 @@ mdl_wk <- function(df, season, weeknum) {
   }
 
   test_df <- df %>% dplyr::filter(season.x == season, round.roundNumber.x == weeknum) # , team_type_fac == "home")
-  print(weeknum)
+  # print(weeknum)
   return(test_df)
 }
 
 #########################################################
+library(furrr) #415 secs
+library(purrr) #1055 secs
+plan('multisession',workers = (parallelly::availableCores()-2))
 
+tictoc::tic()
 resultz <- bind_rows(
-  purrr::map_dfr(1:27, ~ mdl_wk(team_mdl_df, 2022, .)),
-  purrr::map_dfr(1:28, ~ mdl_wk(team_mdl_df, 2023, .)),
-  purrr::map_dfr(0:28, ~ mdl_wk(team_mdl_df, 2024, .))
+  # furrr::future_map(1:27, ~ mdl_wk(team_mdl_df, 2022, .), .progress=T),
+  # furrr::future_map(1:28, ~ mdl_wk(team_mdl_df, 2023, .), .progress=T),
+  furrr::future_map(0:28, ~ mdl_wk(team_mdl_df, 2024, .), .progress=T)
 )
+tictoc::toc()
 
 resultz <-
   resultz %>%

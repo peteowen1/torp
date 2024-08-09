@@ -14,8 +14,16 @@ tr <- torp_ratings(2024, get_afl_week("next")) %>%
 
 view(tr)
 
-tr %>% anti_join(teams %>% filter( season == 2024 , round.roundNumber == 17), by = c('player_id'='player.playerId')) %>% view()
+### coming week
+missing<- tr %>% anti_join(teams %>% filter( season == get_afl_season() , round.roundNumber == get_afl_week("next")), by = c('player_id'='player.playerId'))
 
+View(missing)
+
+starting <- tr %>% inner_join(teams %>% filter( season == get_afl_season() , round.roundNumber == get_afl_week("next")), by = c('player_id'='player.playerId'))
+
+View(starting)
+
+###
 this_week <- player_game_ratings()
 view(this_week)
 
@@ -48,30 +56,41 @@ tr %>%
 tr %>%
   filter(
     # !is.na(torp),
-    torp > 1,
+    torp > 0,
     # is.na(injury),
     estimated_return != "Season"
   ) %>%
   group_by(team) %>%
+  mutate(tm_rnk = rank(-torp)) %>%
+  filter(tm_rnk <= 23) %>%
   summarise(
-    val = sum(pmax(torp-1, 0), na.rm = T),
+    val = sum(pmax(torp, 0), na.rm = T),
     ply = n(),
     age = sum(age * torp) / sum(torp)
   ) %>%
-  arrange(-val)
+  arrange(-val) #%>% summarise(sum(val)) #1361
 
 
 tr %>%
   filter(
     # !is.na(torp),
-    torp > 1,
+    torp > 0,
     is.na(injury),
     #estimated_return != "Season"
          ) %>%
   group_by(team) %>%
+  mutate(tm_rnk = rank(-torp)) %>%
+  filter(tm_rnk <= 23) %>%
   summarise(
-    val = sum(pmax(torp-1, 0), na.rm = T),
+    val = sum(pmax(torp, 0), na.rm = T),
     ply = n(),
     age = sum(age * torp) / sum(torp)
   ) %>%
-  arrange(-val)
+  arrange(-val) #%>% summarise(sum(val)) #1234
+
+
+tr %>%
+  left_join(teams %>%
+              filter(season == get_afl_season(),round.roundNumber == get_afl_week('next')),
+            by = c('player_id'='player.playerId')
+            ) %>% View()

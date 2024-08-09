@@ -1,9 +1,9 @@
 ###
 library(tidyverse)
+library(fitzRoy)
+devtools::load_all()
 
-skip <- 'no'
-
-# devtools::load_all()
+all_grounds <- readRDS("./data-raw/stadium-data.rds")
 
 # data(teams, envir = environment())
 #
@@ -19,16 +19,17 @@ pred_df <- readRDS("./data-raw/stat_pred_df.rds")
 team_preds <- pred_df %>%
   group_by(provider_id, team_name, opp_name) %>%
   summarise_if(is.numeric, sum, na.rm = TRUE) %>%
-  mutate(pred_disposal_efficiency = pred_extended_stats_effective_disposals/pred_disposals,
-         pred_goal_accuracy = pred_goal_accuracy/pred_shots_at_goal,
-         pred_extended_stats_kick_efficiency = pred_extended_stats_effective_kicks/pred_kicks,
-         pred_extended_stats_contested_possession_rate = pred_contested_possessions/pred_total_possessions,
-         pred_extended_stats_hitout_win_percentage = pred_hitouts/pred_extended_stats_ruck_contests,
-         pred_extended_stats_hitout_to_advantage_rate = pred_extended_stats_hitouts_to_advantage/pred_hitouts,
-         pred_extended_stats_contest_def_loss_percentage = pred_extended_stats_contest_def_losses/pred_extended_stats_contest_def_one_on_ones,
-         pred_extended_stats_contest_off_wins_percentage = pred_extended_stats_contest_off_wins/pred_extended_stats_contest_off_one_on_ones
-         )
-  # %>% View()
+  mutate(
+    pred_disposal_efficiency = pred_extended_stats_effective_disposals / pred_disposals,
+    pred_goal_accuracy = pred_goal_accuracy / pred_shots_at_goal,
+    pred_extended_stats_kick_efficiency = pred_extended_stats_effective_kicks / pred_kicks,
+    pred_extended_stats_contested_possession_rate = pred_contested_possessions / pred_total_possessions,
+    pred_extended_stats_hitout_win_percentage = pred_hitouts / pred_extended_stats_ruck_contests,
+    pred_extended_stats_hitout_to_advantage_rate = pred_extended_stats_hitouts_to_advantage / pred_hitouts,
+    pred_extended_stats_contest_def_loss_percentage = pred_extended_stats_contest_def_losses / pred_extended_stats_contest_def_one_on_ones,
+    pred_extended_stats_contest_off_wins_percentage = pred_extended_stats_contest_off_wins / pred_extended_stats_contest_off_one_on_ones
+  )
+# %>% View()
 
 
 # + s(scale(pred_disposal_efficiency), bs = "ts")
@@ -40,15 +41,34 @@ team_preds <- pred_df %>%
 # + s(scale(pred_extended_stats_contest_def_loss_percentage), bs = "ts")
 # + s(scale(pred_extended_stats_contest_off_wins_percentage), bs = "ts")
 
-decay <- 1000
+decay <- 10000
+
+team_map <-
+  fixtures %>%
+  group_by(teamId = home.team.providerId) %>%
+  summarise(team_name = get_mode(home.team.name)) %>%
+  mutate(team_name = replace_teams(team_name))
 
 fix_df <-
   fixtures %>%
-  select(providerId, compSeason.year, round.roundNumber ,home.team.providerId, away.team.providerId) %>%
-  pivot_longer(cols = ends_with("team.providerId"),
-               names_to = "team_type",
-               values_to = "team.providerId") %>%
-  select(providerId, season = compSeason.year, round.roundNumber, teamId = team.providerId)
+  mutate(result = home.score.totalScore - away.score.totalScore) %>%
+  select(providerId, compSeason.year, round.roundNumber, home.team.providerId, away.team.providerId, utcStartTime, venue.name,
+         result) %>%
+  pivot_longer(
+    cols = ends_with("team.providerId"),
+    names_to = "team_type",
+    values_to = "team.providerId"
+  ) %>%
+  mutate(
+    venue = replace_venues(venue.name),
+    team_type = substr(team_type, 1, 4),
+    result = ifelse(team_type  == "away", -result, result)
+  ) %>%
+  select(providerId, season = compSeason.year, round.roundNumber, team_type, teamId = team.providerId, utcStartTime, venue,
+         result) %>%
+  dplyr::left_join(team_map) %>%
+  dplyr::mutate(team_name_season = as.factor(paste(team_name, season)))
+
 
 #############
 
@@ -104,7 +124,7 @@ team_lineup_df <-
     FF = ifelse(position.x == "FF", torp, NA),
     # grouped positioins
     CB = ifelse(position.x == "CHB" | position.x == "FB", torp, NA),
-    BP = ifelse(position.x == "BPL"| position.x == "BPR", torp, NA),
+    BP = ifelse(position.x == "BPL" | position.x == "BPR", torp, NA),
     HBF = ifelse(position.x == "HBFL" | position.x == "HBFR", torp, NA),
     W = ifelse(position.x == "WL" | position.x == "WR", torp, NA),
     MIDS = ifelse(position.x == "C" | position.x == "R" | position.x == "RR", torp, NA),
@@ -128,13 +148,13 @@ team_rt_df <- team_lineup_df %>%
   mutate(team_name_adj = fitzRoy::replace_teams(teamName)) %>%
   dplyr::group_by(providerId, teamId, season, round.roundNumber, teamType) %>%
   dplyr::summarise(
-    venue = max(venue.name),
+    venue = replace_venues(max(venue.name)),
     team_name_adj = max(team_name_adj),
     torp = sum(torp, na.rm = T),
-    torp_recv = sum(torp_recv , na.rm = T),
-    torp_disp = sum(torp_disp , na.rm = T),
+    torp_recv = sum(torp_recv, na.rm = T),
+    torp_disp = sum(torp_disp, na.rm = T),
     torp_spoil = sum(torp_spoil, na.rm = T),
-    torp_hitout = sum(torp_hitout , na.rm = T),
+    torp_hitout = sum(torp_hitout, na.rm = T),
     def = sum(def, na.rm = T),
     mid = sum(mid, na.rm = T),
     fwd = sum(fwd, na.rm = T),
@@ -185,46 +205,118 @@ team_rt_df <- team_lineup_df %>%
     other_pos = sum(other_pos, na.rm = T),
     count = dplyr::n()
   ) %>%
-  dplyr::ungroup() %>%
-  mutate(team_name_season = as.factor(paste(team_name_adj, season)))
+  dplyr::ungroup()
 
 ###
-
 home_ground <-
   team_rt_df %>%
-  group_by(teamId) %>%
-  summarise(get_mode(venue))
+  group_by(teamId, team_name_adj) %>%
+  summarise(home_ground = get_mode(venue), .groups = "drop") %>%
+  mutate(venue_adj = replace_venues(as.character(home_ground))) %>%
+  left_join(
+    all_grounds %>%
+      mutate(venue_adj = replace_venues(as.character(Ground))),
+    by = c("venue_adj" = "venue_adj")
+  )
 
 
+# home_ground
+############################
+
+# Helper function to calculate proportions
+calculate_proportions <- function(data, team, current_season, current_round) {
+  filtered_data <- data %>%
+    filter(teamId == team & ((season < current_season) | (season == current_season & round.roundNumber < current_round)))
+
+  if (nrow(filtered_data) == 0) {
+    return(data.frame(teamId = team, season = current_season, round.roundNumber = current_round, venue = unique(data$venue), familiarity = 0))
+  }
+
+  proportions <- filtered_data %>%
+    group_by(venue) %>%
+    summarise(games_played = n(), .groups = "drop") %>%
+    mutate(total_games = sum(games_played)) %>%
+    mutate(familiarity = games_played / total_games) %>%
+    mutate(teamId = team, season = current_season, round.roundNumber = current_round) %>%
+    select(teamId, season, round.roundNumber, venue, familiarity)
+
+  return(proportions)
+}
+
+# Get all unique teams, seasons, and rounds
+unique_teams <- unique(team_rt_df$teamId)
+unique_seasons <- unique(team_rt_df$season)
+unique_rounds <- unique(team_rt_df$round.roundNumber)
 
 
+tictoc::tic()
+# Set up parallel plan
+library(furrr)
+plan(multisession, workers = (parallel::detectCores() - 2))
 
+# Calculate proportions for each combination of team, season, and round in parallel
+all_proportions <- future_map(unique_teams, function(team) {
+  future_map(unique_seasons, function(season) {
+    future_map(unique_rounds, function(round) {
+      calculate_proportions(team_rt_df, team, season, round)
+    })
+  })
+})
+tictoc::toc()
+
+# Combine all proportions into a single data frame
+ground_prop <- do.call(rbind, lapply(all_proportions, function(x) do.call(rbind, lapply(x, function(y) do.call(rbind, y)))))
+
+#####
+team_dist_df <-
+  fix_df %>%
+  dplyr::mutate(
+    venue = replace_venues(venue),
+    venue = ifelse(venue == "Adelaide Arena at Jiangwan Stadium", "Jiangwan Stadium", venue)
+  ) %>%
+  dplyr::left_join(all_grounds %>% dplyr::select(venue, venue_lat = Latitude, venue_lon = Longitude), by = "venue") %>%
+  dplyr::left_join(home_ground %>% dplyr::select(teamId, team_lat = Latitude, team_lon = Longitude), by = "teamId") %>%
+  dplyr::mutate(distance = purrr::pmap_dbl(
+    list(venue_lon, venue_lat, team_lon, team_lat),
+    ~ geosphere::distHaversine(c(..1, ..2), c(..3, ..4))
+  )) %>%
+  dplyr::mutate(log_dist = log(distance + 1000)) %>%
+  dplyr::left_join(ground_prop) %>%
+  dplyr::mutate(familiarity = replace_na(familiarity, 0))
+
+####
+days_rest <- fix_df %>%
+  arrange(teamId, utcStartTime) %>%
+  group_by(teamId, season) %>%
+  mutate(days_rest = as.numeric(difftime(utcStartTime, lag(utcStartTime), units = "days"))) %>%
+  ungroup() %>%
+  dplyr::mutate(days_rest = replace_na(days_rest, 21))
 
 ######
 team_rt_fix_df <-
   fix_df %>%
+  left_join(team_dist_df) %>%
+  left_join(days_rest) %>%
   left_join(team_rt_df) %>%
   dplyr::group_by(teamId) %>%
-  tidyr::fill(torp, torp_recv, torp_disp, torp_spoil,torp_hitout) %>%
+  tidyr::fill(torp, torp_recv, torp_disp, torp_spoil, torp_hitout) %>%
   dplyr::mutate(
     def = ifelse(def == 0, dplyr::lag(def), def),
     mid = ifelse(mid == 0, dplyr::lag(mid), mid),
     fwd = ifelse(fwd == 0, dplyr::lag(fwd), fwd),
     int = ifelse(int == 0, dplyr::lag(int), int),
+    team_type_fac = as.factor(team_type)
   ) %>%
   tidyr::fill(def, mid, fwd, int) %>%
   dplyr::ungroup()
 
 
-
-
-
 ####
-team_mdl_df <- team_rt_df %>% # filter(!is.na(torp)) %>%
+team_mdl_df_tot <- team_rt_fix_df %>% # filter(!is.na(torp)) %>%
   dplyr::left_join(
-    team_rt_df %>%
-      dplyr::mutate(typ2 = dplyr::if_else(teamType == "home", "away", "home")),
-    by = c("providerId" = "providerId", "teamType" = "typ2")
+    team_rt_fix_df %>%
+      dplyr::mutate(type_anti = dplyr::if_else(team_type == "home", "away", "home")),
+    by = c("providerId" = "providerId", "team_type" = "type_anti")
   ) %>%
   dplyr::mutate(
     torp_diff = torp.x - torp.y,
@@ -250,27 +342,27 @@ team_mdl_df <- team_rt_df %>% # filter(!is.na(torp)) %>%
   dplyr::mutate(
     home_shots = homeTeamScore.matchScore.goals + homeTeamScore.matchScore.behinds,
     away_shots = awayTeamScore.matchScore.goals + awayTeamScore.matchScore.behinds,
-    score_diff = ifelse(teamType == "home",
+    score_diff = ifelse(team_type == "home",
       homeTeamScore.matchScore.totalScore - awayTeamScore.matchScore.totalScore,
       awayTeamScore.matchScore.totalScore - homeTeamScore.matchScore.totalScore
     ),
-    shot_diff = ifelse(teamType == "home",
+    shot_diff = ifelse(team_type == "home",
       home_shots - away_shots,
       away_shots - home_shots
     ),
-    team_shots = ifelse(teamType == "home",
+    team_shots = ifelse(team_type == "home",
       home_shots,
       away_shots
     ),
-    shot_conv = ifelse(teamType == "home",
+    shot_conv = ifelse(team_type == "home",
       homeTeamScore.matchScore.goals / home_shots,
       awayTeamScore.matchScore.goals / away_shots
     ),
-    xscore_diff = ifelse(teamType == "home",
+    xscore_diff = ifelse(team_type == "home",
       xscore_diff,
       -xscore_diff
     ),
-    team_xscore = ifelse(teamType == "home",
+    team_xscore = ifelse(team_type == "home",
       home_xscore,
       away_xscore
     ),
@@ -300,16 +392,28 @@ team_mdl_df <- team_rt_df %>% # filter(!is.na(torp)) %>%
     FF_diff = FF.x - FF.y,
     int_diff = int.x - int.y,
     ####
-    team_type_fac = as.factor(teamType),
+    team_type_fac = team_type_fac.x,
     total_score = homeTeamScore.matchScore.totalScore + awayTeamScore.matchScore.totalScore,
     total_shots = home_shots + away_shots,
-    team_name.x = as.factor(team_name_adj.x),
-    team_name.y = as.factor(team_name_adj.y),
+    team_name.x = as.factor(team_name.x),
+    team_name.y = as.factor(team_name.y),
+    log_dist_diff = log_dist.x - log_dist.y,
+    familiarity_diff = familiarity.x - familiarity.y,
+    days_rest_diff = days_rest.x - days_rest.y,
+    days_rest_diff_fac = as.factor(round(ifelse(days_rest_diff > 3, 4, ifelse(days_rest_diff < -3, -4, days_rest_diff)))),
     weightz = exp(as.numeric(-(Sys.Date() - as.Date(match.utcStartTime))) / decay),
     weightz = weightz / mean(weightz, na.rm = T)
-  ) %>%
-  left_join(team_preds %>% mutate(team_name_adj = fitzRoy::replace_teams(team_name)),
-            by = c("providerId" = "provider_id", "team_name_adj.x" = "team_name_adj"))
+  )
+  # left_join(team_preds %>% mutate(team_name_adj = fitzRoy::replace_teams(team_name)),
+  #   by = c("providerId" = "provider_id", "team_name_adj.x" = "team_name_adj")
+  # )
+
+###
+team_mdl_df <-
+  team_mdl_df_tot %>%
+  filter(providerId > "CD_M202101409",
+         # providerId <= glue::glue("CD_M{get_afl_season()}014{get_afl_week('next')+1}")
+         )
 
 
 #### MODEL
@@ -365,18 +469,24 @@ team_mdl_df <- team_rt_df %>% # filter(!is.na(torp)) %>%
 ###
 afl_total_xpoints_mdl <- mgcv::bam(
   total_xpoints ~
-    s(team_type_fac, bs = "re")
-  + s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
-  + s(team_name_season.x, bs = "re") + s(team_name_season.y, bs = "re")
+    s(team_type_fac.x, bs = "re")
+    + s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
+    + s(team_name_season.x, bs = "re") + s(team_name_season.y, bs = "re")
     + s(abs(torp_diff), bs = "ts", k = 5)
     + s(abs(torp_recv_diff), bs = "ts", k = 5)
     + s(abs(torp_disp_diff), bs = "ts", k = 5)
+  + s(abs(torp_spoil_diff), bs = "ts", k = 5)
+  + s(abs(torp_hitout_diff), bs = "ts", k = 5)
     + s(torp.x, bs = "ts", k = 5) + s(torp.y, bs = "ts", k = 5)
-    + s(fwd.x, bs = "ts", k = 5) + s(mid.x, bs = "ts", k = 5) + s(def.x, bs = "ts", k = 5) + s(int.x, bs = "ts", k = 5)
-    + s(fwd.y, bs = "ts", k = 5) + s(mid.y, bs = "ts", k = 5) + s(def.y, bs = "ts", k = 5) + s(int.y, bs = "ts", k = 5),
+    # + s(fwd.x, bs = "ts", k = 5) + s(mid.x, bs = "ts", k = 5) + s(def.x, bs = "ts", k = 5) + s(int.x, bs = "ts", k = 5)
+    # + s(fwd.y, bs = "ts", k = 5) + s(mid.y, bs = "ts", k = 5) + s(def.y, bs = "ts", k = 5) + s(int.y, bs = "ts", k = 5)
+  + s(log_dist.x, bs = "ts", k = 5) + s(log_dist.y, bs = "ts", k = 5)
+  + s(familiarity.x, bs = "ts", k = 5) + s(familiarity.y, bs = "ts", k = 5)
+  + s(log_dist_diff, bs = "ts", k = 5) + s(familiarity_diff, bs = "ts", k = 5) + s(days_rest_diff_fac, bs = "re")
+  ,
   data = team_mdl_df, weights = weightz,
-  family = gaussian(), nthreads = 4, select = T, discrete = T
-  , drop.unused.levels = FALSE
+  family = gaussian(), nthreads = 4, select = T, discrete = T,
+  drop.unused.levels = FALSE
 )
 
 team_mdl_df$pred_tot_xscore <- predict(afl_total_xpoints_mdl, newdata = team_mdl_df, type = "response")
@@ -390,19 +500,22 @@ afl_xscore_diff_mdl <- mgcv::bam(
     s(team_type_fac, bs = "re")
   + s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
   + s(team_name_season.x, bs = "re") + s(team_name_season.y, bs = "re")
-    + ti(torp_diff, pred_tot_xscore, bs = c("ts", "ts"), k = 4)
-    + s(pred_tot_xscore, bs = "ts", k = 5)
-    # + s(torp_diff, bs = "ts", k = 5)
-  + offset(torp_diff)
+  + ti(torp_diff, pred_tot_xscore, bs = c("ts", "ts"), k = 4)
+  + s(pred_tot_xscore, bs = "ts", k = 5)
+  # + s(torp_diff, bs = "ts", k = 5)
+  + s(torp_diff)
+  # + s(fwd.x, bs = "ts", k = 5) + s(mid.x, bs = "ts", k = 5) + s(def.x, bs = "ts", k = 5) + s(int.x, bs = "ts", k = 5)
+  # + s(fwd.y, bs = "ts", k = 5) + s(mid.y, bs = "ts", k = 5) + s(def.y, bs = "ts", k = 5) + s(int.y, bs = "ts", k = 5)
+  + s(log_dist_diff, bs = "ts", k = 5) + s(familiarity_diff, bs = "ts", k = 5) + s(days_rest_diff_fac, bs = "re")
   ,
   data = team_mdl_df, weights = weightz,
-  family = gaussian(), nthreads = 4, select = T, discrete = T
-  , drop.unused.levels = FALSE
+  family = gaussian(), nthreads = 4, select = T, discrete = T,
+  drop.unused.levels = FALSE
 )
 team_mdl_df$pred_xscore_diff <- predict(afl_xscore_diff_mdl, newdata = team_mdl_df, type = "response")
 
 # summary(afl_xscore_diff_mdl)
-# mixedup::extract_ranef(afl_xscore_diff_mdl) %>% tibble::view()
+# mixedup::extract_ranef(afl_xscore_diff_mdl, add_group_N = T) %>% tibble::view()
 # plot(mgcViz::getViz(afl_xscore_diff_mdl))
 # Deviance explained = 44.5%
 
@@ -410,21 +523,24 @@ team_mdl_df$pred_xscore_diff <- predict(afl_xscore_diff_mdl, newdata = team_mdl_
 ###
 afl_conv_mdl <- mgcv::bam(
   shot_conv ~
-    s(team_type_fac, bs = "re")
-  + s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
-  + s(team_name_season.x, bs = "re") + s(team_name_season.y, bs = "re")
+    s(team_type_fac.x, bs = "re")
+    + s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
+    + s(team_name_season.x, bs = "re") + s(team_name_season.y, bs = "re")
     + ti(torp_diff, pred_tot_xscore, bs = c("ts", "ts"), k = 4)
     + s(pred_tot_xscore, bs = "ts", k = 5)
     + s(pred_xscore_diff, bs = "ts", k = 5)
     + s(torp_diff, bs = "ts", k = 5)
     + s(fwd.x, bs = "ts", k = 5) + s(mid.x, bs = "ts", k = 5) + s(def.x, bs = "ts", k = 5) + s(int.x, bs = "ts", k = 5)
-    + s(fwd.y, bs = "ts", k = 5) + s(mid.y, bs = "ts", k = 5) + s(def.y, bs = "ts", k = 5) + s(int.y, bs = "ts", k = 5),
+    + s(fwd.y, bs = "ts", k = 5) + s(mid.y, bs = "ts", k = 5) + s(def.y, bs = "ts", k = 5) + s(int.y, bs = "ts", k = 5)
+    + s(log_dist_diff, bs = "ts", k = 5) + s(familiarity_diff, bs = "ts", k = 5) + s(days_rest_diff_fac, bs = "re")
+  ,
   data = team_mdl_df, weights = team_shots * weightz,
-  family = "binomial", nthreads = 4, select = T, discrete = T
-  , drop.unused.levels = FALSE
+  family = "binomial", nthreads = 4, select = T, discrete = T,
+  drop.unused.levels = FALSE
 )
 
 team_mdl_df$pred_conv <- predict(afl_conv_mdl, newdata = team_mdl_df, type = "response")
+# mixedup::extract_random_effects(afl_conv_mdl, add_group_N = T) %>% view()
 # summary(afl_conv_mdl)
 ###
 
@@ -433,18 +549,20 @@ afl_score_mdl <- mgcv::bam(
     s(team_type_fac, bs = "re")
   + s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
   + s(team_name_season.x, bs = "re") + s(team_name_season.y, bs = "re")
-    + s(pred_tot_xscore, bs = "ts", k = 5)
-    + ti(pred_xscore_diff, pred_conv, bs = c("ts", "ts"), k = 4)
-    + s(pred_conv, bs = "ts", k = 5)
-    + s(torp_diff, bs = "ts", k = 5)
-    + s(torp_recv_diff, bs = "ts", k = 5)
-    + s(torp_disp_diff, bs = "ts", k = 5)
-    # + s(pred_xscore_diff, bs = "ts", k = 5)
-  + offset(pred_xscore_diff)
+  + s(pred_tot_xscore, bs = "ts", k = 5)
+  + ti(pred_xscore_diff, pred_conv, bs = c("ts", "ts"), k = 4)
+  + s(pred_conv, bs = "ts", k = 5)
+  + s(torp_diff, bs = "ts", k = 5)
+  + s(torp_recv_diff, bs = "ts", k = 5)
+  + s(torp_disp_diff, bs = "ts", k = 5)
+  + s(torp_spoil_diff, bs = "ts", k = 5)
+  + s(torp_hitout_diff, bs = "ts", k = 5)
+  + s(pred_xscore_diff)
+  + s(log_dist_diff, bs = "ts", k = 5) + s(familiarity_diff, bs = "ts", k = 5) + s(days_rest_diff_fac, bs = "re")
   ,
   data = team_mdl_df, weights = weightz,
-  family = "gaussian", nthreads = 4, select = T, discrete = T
-  , drop.unused.levels = FALSE
+  family = "gaussian", nthreads = 4, select = T, discrete = T,
+  drop.unused.levels = FALSE
 )
 team_mdl_df$pred_score_diff <- predict(afl_score_mdl, newdata = team_mdl_df, type = "response")
 
@@ -458,14 +576,15 @@ afl_win_mdl <-
       s(team_type_fac, bs = "re")
     + s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
     + s(team_name_season.x, bs = "re") + s(team_name_season.y, bs = "re")
-      #+ ti(pred_tot_xscore, pred_score_diff, bs = c("ts", "ts"), k = 4)
-      + ti(pred_tot_xscore, pred_xscore_diff, bs = c("ts", "ts"), k = 4)
-      + s(pred_score_diff, bs = "ts", k = 5)
+    #+ ti(pred_tot_xscore, pred_score_diff, bs = c("ts", "ts"), k = 4)
+    + ti(pred_tot_xscore, pred_xscore_diff, bs = c("ts", "ts"), k = 4)
+    + s(pred_score_diff, bs = "ts", k = 5)
     #+ s(pred_xscore_diff, bs = "ts", k = 5)
+    + s(log_dist_diff, bs = "ts", k = 5) + s(familiarity_diff, bs = "ts", k = 5) + s(days_rest_diff_fac, bs = "re")
     ,
     data = team_mdl_df, weights = weightz,
-    family = "binomial", nthreads = 4, select = T, discrete = T
-    , drop.unused.levels = FALSE
+    family = "binomial", nthreads = 4, select = T, discrete = T,
+    drop.unused.levels = FALSE
   )
 
 # summary(afl_win_mdl)
@@ -473,17 +592,18 @@ afl_win_mdl <-
 ###
 team_mdl_df$pred_win <- predict(afl_win_mdl, newdata = team_mdl_df, type = "response")
 team_mdl_df$bits <- ifelse(team_mdl_df$win == 1,
-                       1 + log2(team_mdl_df$pred_win),
-                       ifelse(team_mdl_df$win == 0,
-                              1 + log2(1 - team_mdl_df$pred_win),
-                              1 + 0.5 * log2(team_mdl_df$pred_win * (1 - team_mdl_df$pred_win))
-                       )
+  1 + log2(team_mdl_df$pred_win),
+  ifelse(team_mdl_df$win == 0,
+    1 + log2(1 - team_mdl_df$pred_win),
+    1 + 0.5 * log2(team_mdl_df$pred_win * (1 - team_mdl_df$pred_win))
+  )
 )
 team_mdl_df$tips <- ifelse(round(team_mdl_df$pred_win) == team_mdl_df$win, 1,
-                       ifelse(team_mdl_df$win == 0.5,1,0))
+  ifelse(team_mdl_df$win == 0.5, 1, 0)
+)
 team_mdl_df$mae <- abs(team_mdl_df$score_diff - team_mdl_df$pred_score_diff)
 #########
-test_df <- team_mdl_df %>% dplyr::filter(!is.na(win), teamType == "home", season.x >= get_afl_season())
+test_df <- team_mdl_df %>% dplyr::filter(!is.na(win), team_type == "home", season.x == get_afl_season())
 # library(MLmetrics)
 MLmetrics::LogLoss(test_df$pred_win, test_df$win)
 MLmetrics::MAE(test_df$pred_score_diff, test_df$score_diff)
@@ -494,10 +614,10 @@ mean(test_df$tips)
 nrow(test_df)
 
 #################################### GF
-team_mdl_df$team_type_fac <- as.factor(ifelse(team_mdl_df$providerId == "CD_M20220142701",
-  ifelse(team_mdl_df$teamType == "home", "home", "away"),
-  team_mdl_df$teamType
-))
+# team_mdl_df$team_type_fac <- as.factor(ifelse(team_mdl_df$providerId == "CD_M20220142701",
+#   ifelse(team_mdl_df$team_type == "home", "home", "away"),
+#   team_mdl_df$team_type
+# ))
 
 # team_mdl_df$pred_totshots <- predict(afl_totshots_mdl, newdata = team_mdl_df, type = "response")
 # team_mdl_df$pred_shot_diff <- predict(afl_shot_mdl, newdata = team_mdl_df, type = "response")
@@ -512,13 +632,13 @@ week_gms_home <- team_mdl_df %>%
   dplyr::mutate(
     totscore = pred_tot_xscore
     # totscore = sum(team_mdl_df$total_score, na.rm = T) / sum(team_mdl_df$total_shots, na.rm = T) * pred_totshots
-                ) %>%
-  dplyr::filter(season.x == lubridate::year(Sys.Date()), round.roundNumber.x == n, teamType == "home") %>%
+  ) %>%
+  dplyr::filter(season.x == lubridate::year(Sys.Date()), round.roundNumber.x == n, team_type_fac.x == "home") %>%
   dplyr::select(
     players = count.x, providerId,
-    home_team = team_name_adj.x, home_rating = torp.x,
-    away_team = team_name_adj.y, away_rating = torp.y,
-    totscore, pred_tot_xscore, pred_score_diff, pred_win, bits, score_diff
+    home_team = team_name.x, home_rating = torp.x,
+    away_team = team_name.y, away_rating = torp.y,
+    pred_tot_xscore, pred_score_diff, pred_win, bits, score_diff
   )
 
 week_gms_away <- team_mdl_df %>%
@@ -530,19 +650,19 @@ week_gms_away <- team_mdl_df %>%
     pred_win = 1 - pred_win,
     score_diff = -score_diff
   ) %>%
-  dplyr::filter(season.x == lubridate::year(Sys.Date()), round.roundNumber.x == n, teamType == "away") %>%
+  dplyr::filter(season.x == lubridate::year(Sys.Date()), round.roundNumber.x == n, team_type_fac.x == "away") %>%
   dplyr::select(
     players = count.x, providerId,
-    home_team = team_name_adj.y, home_rating = torp.y,
-    away_team = team_name_adj.x, away_rating = torp.x,
-    totscore, pred_tot_xscore, pred_score_diff, pred_win, bits, score_diff
+    home_team = team_name.y, home_rating = torp.y,
+    away_team = team_name.x, away_rating = torp.x,
+    pred_tot_xscore, pred_score_diff, pred_win, bits, score_diff
   )
 
 week_gms <- dplyr::bind_rows(week_gms_home, week_gms_away) %>%
   dplyr::group_by(providerId, home_team, home_rating, away_team, away_rating) %>%
   dplyr::summarise(
     players = mean(players),
-    total = mean(totscore),
+    # total = mean(totscore),
     pred_total = mean(pred_tot_xscore),
     pred_score_diff = mean(pred_score_diff),
     pred_win = mean(pred_win),
@@ -550,3 +670,5 @@ week_gms <- dplyr::bind_rows(week_gms_home, week_gms_away) %>%
   )
 
 week_gms
+
+####

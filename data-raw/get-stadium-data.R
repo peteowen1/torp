@@ -3,6 +3,7 @@ library(dplyr)
 library(tidyr)
 library(osmdata)
 library(stringr)
+library(fitzRoy)
 
 # URL of the Wikipedia page
 url <- "https://en.wikipedia.org/wiki/List_of_Australian_Football_League_grounds"
@@ -24,33 +25,42 @@ process_current_table <- function(table) {
       Current_Tenants = `Current tenant(s)`
     ) %>%
     mutate(across(everything(), ~str_replace_all(., "\\[.*?\\]", ""))) %>%
-    mutate(Latitude = NA, Longitude = NA)
+    mutate(
+      Capacity = as.integer(gsub("[ ,]", "", Capacity)),
+      Table = "Current"
+    )
 }
 
 process_former_table <- function(table) {
   df <- table %>% html_table(fill = TRUE) %>% .[[1]]
   df %>%
-    select(Ground, City, State, Capacity, `First used`, Games, `Current tenant(s)` = `Tenant(s)`) %>%
+    select(Ground, City, State, Capacity, `First used`, Games, `Tenant(s)`) %>%
     rename(
       State_Territory = State,
       First_Used = `First used`,
-      Current_Tenants = `Current tenant(s)`
+      Current_Tenants = `Tenant(s)`
     ) %>%
     mutate(across(everything(), ~str_replace_all(., "\\[.*?\\]", ""))) %>%
-    mutate(Latitude = NA, Longitude = NA)
+    mutate(
+      Capacity = as.integer(gsub("[ ,]", "", Capacity)),
+      Table = "Former"
+    )
 }
 
 process_other_table <- function(table) {
   df <- table %>% html_table(fill = TRUE) %>% .[[1]]
   df %>%
-    select(Ground, City, State = `State/Country`, Capacity, Games, `First used` = `Last used`, `Current tenant(s)` = Uses) %>%
+    select(Ground, City, `State/Country`, Capacity, Games, `Last used`, Uses) %>%
     rename(
-      State_Territory = State,
-      First_Used = `First used`,
-      Current_Tenants = `Current tenant(s)`
+      State_Territory = `State/Country`,
+      First_Used = `Last used`,
+      Current_Tenants = Uses
     ) %>%
     mutate(across(everything(), ~str_replace_all(., "\\[.*?\\]", ""))) %>%
-    mutate(Latitude = NA, Longitude = NA)
+    mutate(
+      Capacity = as.integer(gsub("[ ,]", "", Capacity)),
+      Table = "Other"
+    )
 }
 
 # Process each table
@@ -94,6 +104,34 @@ for (i in 1:nrow(all_grounds)) {
   # Print progress
   print(paste("Processed:", all_grounds$Ground[i], "- Row", i, "of", nrow(all_grounds)))
 }
+
+all_grounds <-
+  all_grounds %>%
+  mutate(venue = replace_venues(Ground))
+
+all_grounds <-
+  all_grounds %>%
+  mutate(
+    Latitude = case_when(
+      Ground == "Cazalys Stadium" ~ -16.93557,
+      Ground == "Jiangwan Stadium" ~ 31.3076026,
+      Ground == "Marrara Oval" ~ -12.4010941,
+      Ground == "Riverway Stadium" ~ -19.317617,
+      Ground == "Summit Sport and Recreation Park" ~ -35.0783354,
+        TRUE ~ Latitude
+      ),
+    Longitude = case_when(
+      Ground == "Cazalys Stadium" ~ 145.74899,
+      Ground == "Jiangwan Stadium" ~ 121.5160351,
+      Ground == "Marrara Oval" ~ 130.8811236,
+      Ground == "Riverway Stadium" ~ 146.7293007,
+      Ground == "Summit Sport and Recreation Park" ~ 138.891488,
+        TRUE ~ Longitude
+    ),
+  )
+
+# Save the cleaned data to an RDS file
+saveRDS(all_grounds, './data-raw/stadium-data.rds')
 
 # Display the cleaned data
 print(all_grounds)
