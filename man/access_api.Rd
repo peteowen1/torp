@@ -2,13 +2,16 @@
 % Please edit documentation in R/scraper_functions.R
 \name{access_api}
 \alias{access_api}
-\title{Title}
+\title{Access API}
 \usage{
 access_api(url)
 }
 \arguments{
-\item{url}{}
+\item{url}{The API endpoint URL.}
+}
+\value{
+The parsed JSON content of the API response.
 }
 \description{
-Title
+Makes an authenticated request to the AFL API.
 }

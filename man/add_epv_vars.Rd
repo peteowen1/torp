@@ -2,18 +2,16 @@
 % Please edit documentation in R/add_model_variables.R
 \name{add_epv_vars}
 \alias{add_epv_vars}
-\title{add ep vars}
+\title{Add Expected Points Value (EPV) Variables}
 \usage{
 add_epv_vars(df)
 }
 \arguments{
-\item{df}{}
+\item{df}{A dataframe containing play-by-play data.}
+}
+\value{
+A dataframe with additional EPV-related variables.
 }
 \description{
-add ep vars
-}
-\examples{
-\dontrun{
-add_epv_vars(df)
-}
+This function adds EPV-related variables to the input dataframe.
 }
