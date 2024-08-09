@@ -2,10 +2,16 @@
 % Please edit documentation in R/scraper_functions.R
 \name{get_players}
 \alias{get_players}
-\title{Title}
+\title{Get Players}
 \usage{
 get_players(use_api = FALSE)
 }
+\arguments{
+\item{use_api}{Logical, whether to use the API (TRUE) or local database (FALSE, default).}
+}
+\value{
+A dataframe containing player data.
+}
 \description{
-Title
+Retrieves player data either from the API or from a local database.
 }

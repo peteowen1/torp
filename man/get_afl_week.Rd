@@ -7,11 +7,11 @@
 get_afl_week(type = "current")
 }
 \arguments{
-\item{type}{a logical to determine whether to use date-based heuristics to
-determine current week, default TRUE}
+\item{type}{A character string: "current" returns the current week, "next" returns the upcoming week.}
+}
+\value{
+An integer representing the AFL week (round) number.
 }
 \description{
-Note that the date heuristic will count a new week starting on Thursdays, while
-the schedule-based method will count a new week after the last game of the previous
-week.
+Determine the current or next AFL week (round) based on fixtures.
 }

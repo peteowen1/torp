@@ -2,18 +2,16 @@
 % Please edit documentation in R/utils.R
 \name{get_mode}
 \alias{get_mode}
-\title{get_mode}
+\title{Get mode of a vector}
 \usage{
 get_mode(x)
 }
 \arguments{
-\item{v}{a vector}
+\item{x}{A vector of values.}
 }
 \value{
-a function that does the same as \code{f} but it calls \code{p()} after iteration.
+The mode (most frequent value) of the input vector.
 }
 \description{
-This function helps add progress-reporting to any function - given function \code{f()} and progressor \code{p()},
-it will return a new function that calls \code{f()} and then (on exiting) will call \code{p()} after every iteration.
-This is inspired by purrr's \code{safely}, \code{quietly}, and \code{possibly} function decorators.
+This function returns the mode (most frequent value) of a vector.
 }

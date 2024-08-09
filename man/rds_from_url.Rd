@@ -7,18 +7,11 @@
 rds_from_url(url)
 }
 \arguments{
-\item{url}{a character url}
+\item{url}{A character URL}
 }
 \value{
-a dataframe as created by \code{\link[=readRDS]{readRDS()}}
+A data frame as created by \code{\link[=readRDS]{readRDS()}}
 }
 \description{
 Load .rds file from a remote connection
-}
-\examples{
-\donttest{
-try({ # prevents cran errors
-  rds_from_url("https://github.com/peteowen1/torp/tree/main/data/results.rda")
-})
-}
 }

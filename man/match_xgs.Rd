@@ -2,7 +2,7 @@
 % Please edit documentation in R/match_xg_functions.R
 \name{match_xgs}
 \alias{match_xgs}
-\title{match_xgs}
+\title{Calculate xGs for AFL Matches}
 \usage{
 match_xgs(
   season = get_afl_season(),
@@ -16,8 +16,13 @@ match_xgs(
 
 \item{round}{AFL round}
 
-\item{match_id}{AFL match ID}
+\item{match_id}{AFL match ID (not used in the current implementation)}
+
+\item{quarter}{AFL match quarter}
+}
+\value{
+A data frame with xG statistics for the specified matches
 }
 \description{
-match_xgs
+Calculate xGs for AFL Matches
 }

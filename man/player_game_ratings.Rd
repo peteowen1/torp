@@ -12,8 +12,17 @@ player_game_ratings(
 )
 }
 \arguments{
-\item{team}{}
+\item{season_val}{The season to get ratings for. Default is the current season.}
+
+\item{round_num}{The round number to get ratings for. Default is the current round.}
+
+\item{matchid}{The match ID to filter by. Default is FALSE (no filtering).}
+
+\item{team}{The team to filter by. Default is FALSE (no filtering).}
+}
+\value{
+A data frame containing player game ratings.
 }
 \description{
-Get game ratings
+This function retrieves game ratings for players based on specified criteria.
 }

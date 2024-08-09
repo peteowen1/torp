@@ -2,10 +2,14 @@
 % Please edit documentation in R/scraper_functions.R
 \name{get_token}
 \alias{get_token}
-\title{Title}
+\title{Get API Token}
 \usage{
 get_token()
 }
-\description{
-Title
+\value{
+A character string containing the API token.
 }
+\description{
+Retrieves an authentication token for the AFL API.
+}
+\keyword{internal}

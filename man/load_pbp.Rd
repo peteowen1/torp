@@ -2,7 +2,7 @@
 % Please edit documentation in R/load_torp_data.R
 \name{load_pbp}
 \alias{load_pbp}
-\title{Load Play By Play}
+\title{Load Play By Play Data}
 \usage{
 load_pbp(seasons = get_afl_season(), rounds = get_afl_week())
 }
@@ -10,6 +10,9 @@ load_pbp(seasons = get_afl_season(), rounds = get_afl_week())
 \item{seasons}{A numeric vector of 4-digit years associated with given AFL seasons - defaults to latest season. If set to \code{TRUE}, returns all available data since 2021.}
 
 \item{rounds}{A numeric vector associated with given AFL round - defaults to latest round. If set to \code{TRUE}, returns all available rounds in the given season range.}
+}
+\value{
+A data frame containing play by play data.
 }
 \description{
 Loads play by play seasons from the \href{https://github.com/peteowen1/torpdata}{torpdata repository}
@@ -20,5 +23,4 @@ try({ # prevents cran errors
   load_pbp(2021:2022)
 })
 }
-
 }

@@ -2,12 +2,15 @@
 % Please edit documentation in R/load_torp_data.R
 \name{load_xg}
 \alias{load_xg}
-\title{Load xg}
+\title{Load Expected Goals (xG) Data}
 \usage{
 load_xg(seasons = get_afl_season())
 }
 \arguments{
 \item{seasons}{A numeric vector of 4-digit years associated with given AFL seasons - defaults to latest season. If set to \code{TRUE}, returns all available data since 2021.}
+}
+\value{
+A data frame containing xG data.
 }
 \description{
 Loads xg data from the \href{https://github.com/peteowen1/torpdata}{torpdata repository}

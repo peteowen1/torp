@@ -2,20 +2,19 @@
 % Please edit documentation in R/utils.R
 \name{progressively}
 \alias{progressively}
-\title{Progressively}
+\title{Progressively apply a function}
 \usage{
 progressively(f, p = NULL)
 }
 \arguments{
-\item{f}{a function to add progressor functionality to.}
+\item{f}{A function to add progressor functionality to.}
 
-\item{p}{a function such as one created by \code{progressr::progressor()} - also accepts purrr-style lambda functions.}
+\item{p}{A function such as one created by \code{progressr::progressor()} - also accepts purrr-style lambda functions.}
 }
 \value{
-a function that does the same as \code{f} but it calls \code{p()} after iteration.
+A function that does the same as \code{f} but calls \code{p()} after each iteration.
 }
 \description{
-This function helps add progress-reporting to any function - given function \code{f()} and progressor \code{p()},
-it will return a new function that calls \code{f()} and then (on exiting) will call \code{p()} after every iteration.
-This is inspired by purrr's \code{safely}, \code{quietly}, and \code{possibly} function decorators.
+This function helps add progress-reporting to any function. Given function \code{f()} and progressor \code{p()},
+it will return a new function that calls \code{f()} and then calls \code{p()} after every iteration.
 }

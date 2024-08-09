@@ -2,18 +2,23 @@
 % Please edit documentation in R/scraper_functions.R
 \name{get_match_chains}
 \alias{get_match_chains}
-\title{Title}
+\title{Get Match Chains}
 \usage{
-get_match_chains(season = most_recent_season(), round = NA)
+get_match_chains(season = get_afl_season(), round = NA)
 }
 \arguments{
-\item{round}{}
+\item{season}{The AFL season year (numeric).}
+
+\item{round}{The round number (numeric). If NA, retrieves data for all rounds in the season.}
+}
+\value{
+A dataframe containing match chain data.
 }
 \description{
-Title
+Retrieves match chain data for a given season and round.
 }
 \examples{
 \dontrun{
-get_match_chains()
+chains <- get_match_chains(2022, 1)
 }
 }

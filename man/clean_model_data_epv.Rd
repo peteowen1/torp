@@ -2,18 +2,16 @@
 % Please edit documentation in R/clean_model_data.R
 \name{clean_model_data_epv}
 \alias{clean_model_data_epv}
-\title{Clean model data}
+\title{Clean Model Data for Expected Points Value (EPV)}
 \usage{
 clean_model_data_epv(df)
 }
 \arguments{
-\item{df}{}
+\item{df}{A dataframe containing raw play-by-play data.}
+}
+\value{
+A cleaned dataframe ready for EPV modeling.
 }
 \description{
-Clean model data
-}
-\examples{
-\dontrun{
-clean_model_data_epv(df)
-}
+Clean Model Data for Expected Points Value (EPV)
 }

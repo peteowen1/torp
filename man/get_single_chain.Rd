@@ -2,13 +2,18 @@
 % Please edit documentation in R/scraper_functions.R
 \name{get_single_chain}
 \alias{get_single_chain}
-\title{Title}
+\title{Get Single Chain}
 \usage{
 get_single_chain(chains_t2, chain_number)
 }
 \arguments{
-\item{chain_number}{}
+\item{chains_t2}{The chain data for a game.}
+
+\item{chain_number}{The number of the chain to process.}
+}
+\value{
+A dataframe containing data for the specified chain.
 }
 \description{
-Title
+Processes a single chain from the game data.
 }

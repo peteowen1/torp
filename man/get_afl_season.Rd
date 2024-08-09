@@ -7,7 +7,10 @@
 get_afl_season(type = "current")
 }
 \arguments{
-\item{type}{a TRUE/FALSE flag: if TRUE, returns the current year if March 1st or later. if FALSE, returns the current year if September 1st or later. Otherwise returns current year minus 1.}
+\item{type}{A character string: "current" returns the current season, "next" returns the upcoming season.}
+}
+\value{
+An integer representing the AFL season year.
 }
 \description{
 A helper function to choose the most recent season available for a given dataset

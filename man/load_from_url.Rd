@@ -4,31 +4,22 @@
 \alias{load_from_url}
 \title{Load any rds/csv/csv.gz/parquet/qs file from a remote URL}
 \usage{
-load_from_url(url, ..., seasons = TRUE, rounds = TRUE)
+load_from_url(url, ..., seasons = TRUE, rounds = TRUE, peteowen1 = FALSE)
 }
 \arguments{
-\item{url}{a vector of URLs to load into memory. If more than one URL provided, will row-bind them.}
+\item{url}{A vector of URLs to load into memory. If more than one URL provided, will row-bind them.}
 
-\item{...}{named arguments that will be added as attributes to the data, e.g. \code{peteowen1_type} = "pbp"}
+\item{...}{Named arguments that will be added as attributes to the data, e.g. \code{peteowen1_type} = "pbp"}
 
-\item{seasons}{a numeric vector of years that will be used to filter the dataframe's \code{season} column. If \code{TRUE} (default), does not filter.}
+\item{seasons}{A numeric vector of years that will be used to filter the dataframe's \code{season} column. If \code{TRUE} (default), does not filter.}
+
+\item{rounds}{A numeric vector of rounds that will be used to filter the dataframe's \code{round} column. If \code{TRUE} (default), does not filter.}
 
 \item{peteowen1}{TRUE to add peteowen1_data classing and attributes.}
 }
 \value{
-a dataframe, possibly of type \code{peteowen1_data}
+A data frame, possibly of type \code{peteowen1_data}
 }
 \description{
 Load any rds/csv/csv.gz/parquet/qs file from a remote URL
-}
-\examples{
-\donttest{
-try({ # prevents cran errors
-  urls <- c(
-    "https://github.com/peteowen1/torpdata/releases/download/rosters/roster_2020.csv",
-    "https://github.com/peteowen1/torpdata-data/releases/download/rosters/roster_2021.csv"
-  )
-  load_from_url(urls, peteowen1 = TRUE, peteowen1_type = "rosters for 2020 & 2021")
-})
-}
 }

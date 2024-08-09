@@ -2,18 +2,22 @@
 % Please edit documentation in R/helper_functions.R
 \name{clean_pbp}
 \alias{clean_pbp}
-\title{Clean PBP}
+\title{Clean Play-by-Play Data}
 \usage{
 clean_pbp(df)
 }
 \arguments{
-\item{df}{}
+\item{df}{A dataframe containing raw play-by-play data.}
+}
+\value{
+A cleaned and processed dataframe with additional variables.
 }
 \description{
-Clean PBP
+This function cleans and processes play-by-play data for AFL matches.
 }
 \examples{
 \dontrun{
-clean_pbp(df)
+cleaned_data <- clean_pbp(raw_pbp_data)
 }
+
 }
