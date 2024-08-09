@@ -1,212 +1,373 @@
-#' Clean model data
+#' Clean Model Data for Expected Points Value (EPV)
 #'
-#' @param df
-#'
-#'
-#' @examples
-#' \dontrun{
-#' clean_model_data_epv(df)
-#' }
+#' @param df A dataframe containing raw play-by-play data.
+#' @return A cleaned dataframe ready for EPV modeling.
+#' @export
 clean_model_data_epv <- function(df) {
-  model_data <- df %>%
-    dplyr::filter(
-      description == "Ball Up Call" |
-        description == "Bounce" |
-        description == "Centre Bounce" |
-        description == "Contested Knock On" |
-        description == "Contested Mark" |
-        description == "Free Advantage" |
-        description == "Free For" |
-        description == "Free For: Before the Bounce" |
-        description == "Free For: In Possession" |
-        description == "Free For: Off The Ball" |
-        description == "Gather" |
-        description == "Gather From Hitout" |
-        description == "Gather from Opposition" |
-        description == "Ground Kick" |
-        description == "Handball" |
-        description == "Handball Received" |
-        description == "Hard Ball Get" |
-        description == "Hard Ball Get Crumb" |
-        description == "Kick" |
-        description == "Knock On" |
-        description == "Loose Ball Get" |
-        description == "Loose Ball Get Crumb" |
-        description == "Mark On Lead" |
-        description == "Out of Bounds" |
-        description == "Out On Full After Kick" |
-        description == "Ruck Hard Ball Get" |
-        description == "Uncontested Mark",
-      # description != "Kick Into F50",
-      # description != "Kick Inside 50 Result",
-      # description != "Shot At Goal",
-      # description != "Spoil",
-      # description != "Behind",
-      # description != "Goal",
-      # description != "Kickin play on",
-      # description != "OOF Kick In",
-      # description != "Contest Target",
-      # description != "Mark Fumbled",
-      # description != "Mark Dropped",
-      ### description != "Out of Bounds",
-      ### description != "Out On Full After Kick",
-      ### lead_desc != "Out of Bounds",
-      ### lead_desc != "Out On Full After Kick",
-      !(x == -lead_x_tot & y == -lead_y_tot & description != "Centre Bounce")
-    ) %>%
-    dplyr::group_by(match_id, period, tot_goals) %>%
-    dplyr::filter(dplyr::lag(throw_in) == 0 | lead(throw_in) == 0 | throw_in == 0) %>%
-    dplyr::mutate(
-      lag_desc = dplyr::lag(description, default = dplyr::first(description)),
-      lead_desc = dplyr::lead(description, default = dplyr::last(description)),
-      team_id_mdl = dplyr::case_when(
-        throw_in == 1 ~ dplyr::lead(team_id),
-        TRUE ~ team_id
-      ),
-      team_id_mdl = zoo::na.locf0(team_id_mdl, fromLast = TRUE),
-      team_id_mdl = zoo::na.locf0(team_id_mdl),
-      home = dplyr::if_else(team_id_mdl == home_team_id, 1, 0),
-      # scoring_team_id = dplyr::if_else(points_row != 0, team_id, NA_character_),
-      # home_points = cumsum(home_points_row),
-      # away_points = cumsum(away_points_row),
-      pos_points = dplyr::if_else(home == 1, home_points, away_points),
-      opp_points = dplyr::if_else(home == 1, away_points, home_points),
-      points_diff = pos_points - opp_points,
-      mirror = dplyr::case_when(
-        # not needed for now #(throw_in == 1 & lag(throw_in) != 1 & dplyr::lag(team_id_mdl) == team_id_mdl) ~ x,
-        (throw_in == 1 & dplyr::lag(throw_in) != 1 & dplyr::lag(team_id_mdl) != team_id_mdl) ~ -1,
-        # not needed for now  #(throw_in == 1 & lag(throw_in) == 1 & dplyr::lag(team_id_mdl,n=2L) == team_id_mdl) ~ x,
-        (throw_in == 1 & dplyr::lag(throw_in) == 1 & dplyr::lag(team_id_mdl, n = 2L) != team_id_mdl) & sign(dplyr::lag(x)) == sign(x) ~ -1,
-        (throw_in == 1 & dplyr::lag(throw_in) == 1 & dplyr::lag(team_id_mdl, n = 2L) == team_id_mdl & sign(dplyr::lag(x)) != sign(x)) ~ -1,
-        (dplyr::lag(throw_in) == 1 & sign(dplyr::lag(x)) == sign(x) & dplyr::lag(team_id_mdl) == team_id_mdl & dplyr::lag(team_id_mdl, n = 2L) != team_id_mdl) ~ -1,
-        (dplyr::lag(throw_in, n = 2L) == 1 & sign(dplyr::lag(x, n = 2L)) == sign(x) & dplyr::lag(team_id_mdl, n = 2L) == team_id_mdl & dplyr::lag(team_id_mdl, n = 3L) != team_id_mdl) ~ -1,
-        # not needed for now  #(dplyr::lag(throw_in, n = 3L) == 1 & sign(dplyr::lag(x,n=3L)) == sign(x) & dplyr::lag(team_id_mdl,n=3L) == team_id_mdl & dplyr::lag(team_id_mdl,n=4L) != team_id_mdl) ~ -x,
-        (dplyr::lag(throw_in) == 1 & sign(dplyr::lead(x, n = 2L)) == sign(x) & dplyr::lead(team_id_mdl, n = 2L) != team_id_mdl) ~ -1,
-        (dplyr::lag(throw_in, n = 2L) == 1 & sign(dplyr::lead(x)) == sign(x) & dplyr::lead(team_id_mdl) != team_id_mdl) ~ -1,
-        # not needed for now  # (description == "Mark Dropped" & dplyr::lag(team_id_mdl, default = dplyr::first(team_id_mdl)) != team_id_mdl) ~ -x,
-        TRUE ~ 1
-      ),
-      x = mirror * x,
-      y = mirror * y,
-      goal_x = venue_length / 2 - x,
-      lag_x = dplyr::if_else(dplyr::lag(team_id_mdl) == team_id_mdl, dplyr::lag(x, default = dplyr::first(x)), -dplyr::lag(x, default = dplyr::first(x))),
-      lag_x = tidyr::replace_na(lag_x, dplyr::first(x)),
-      lag_y = dplyr::if_else(dplyr::lag(team_id_mdl) == team_id_mdl, dplyr::lag(y, default = dplyr::first(y)), -dplyr::lag(y, default = dplyr::first(y))),
-      lag_y = tidyr::replace_na(lag_y, dplyr::first(y)),
-      lag_goal_x = dplyr::if_else(lag(team_id_mdl, 1) == team_id_mdl, dplyr::lag(goal_x, default = dplyr::first(goal_x)), venue_length - dplyr::lag(goal_x, default = dplyr::first(goal_x))),
-      lag_goal_x = tidyr::replace_na(lag_goal_x, dplyr::first(goal_x)),
-      lag_goal_x5 = dplyr::if_else(lag(team_id_mdl, 5) == team_id_mdl, dplyr::lag(goal_x, 5, default = dplyr::first(goal_x)), venue_length - dplyr::lag(goal_x, 5, default = dplyr::first(goal_x))),
-      lag_goal_x5 = tidyr::replace_na(lag_goal_x5, dplyr::first(goal_x)),
-      lag_time5 = dplyr::lag(period_seconds, 5, default = dplyr::first(period_seconds)),
-      speed1 = (lag_goal_x - goal_x) / pmax((period_seconds - lag(period_seconds)), 1),
-      speed1 = tidyr::replace_na(speed1, 0),
-      speed5 = (lag_goal_x5 - goal_x) / pmax((period_seconds - lag_time5), 1),
-      speed5 = tidyr::replace_na(speed5, 0),
-      lag_player = dplyr::lag(player_name, default = dplyr::first(player_name)),
-      lead_player = dplyr::lead(player_name, default = dplyr::last(player_name)),
-      lead_x = dplyr::lead(x, default = dplyr::last(x)),
-      lead_y = dplyr::lead(y, default = dplyr::last(y)),
-      lead_goal_x = venue_length / 2 - lead_x
-    ) %>%
+  df %>%
+    filter_relevant_descriptions() %>%
+    dplyr::group_by(.data$match_id, .data$period, .data$tot_goals) %>%
+    dplyr::filter(dplyr::lag(.data$throw_in) == 0 | dplyr::lead(.data$throw_in) == 0 | .data$throw_in == 0) %>%
+    add_epv_variables() %>%
     dplyr::ungroup() %>%
-    fastDummies::dummy_cols(select_columns = c("play_type", "phase_of_play")) %>% # ,remove_selected_columns = TRUE
+    fastDummies::dummy_cols(select_columns = c("play_type", "phase_of_play")) %>%
     janitor::clean_names()
-
-  return(model_data)
 }
 
+#' Clean Model Data for Win Probability (WP)
+#'
+#' @param df A dataframe containing raw play-by-play data.
+#' @return A cleaned dataframe ready for WP modeling.
+#' @export
 clean_model_data_wp <- function(df) {
-  model_data <- df %>%
-    dplyr::filter(!is.na(label_wp)) %>%
+  df %>%
+    dplyr::filter(!is.na(.data$label_wp)) %>%
     dplyr::mutate(
-      xpoints_diff = points_diff + exp_pts,
-      pos_lead_prob = case_when(
-        points_diff > 6 ~ 1,
-        points_diff == 6 ~ (opp_goal * 0.5) + opp_behind + no_score + behind + goal,
-        points_diff > 1 ~ (opp_behind * 0.5) + no_score + behind + goal,
-        points_diff == 0 ~ (no_score * 0.5) + behind + goal,
-        points_diff == -1 ~ (behind * 0.5) + goal,
-        points_diff > -6 ~ goal,
-        points_diff == -6 ~ (0.5 * goal),
-        points_diff < -6 ~ 0
-      ),
-      time_left_scaler = exp(pmin(((period - 1) * 2000 + period_seconds) / 2000, 4)),
-      diff_time_ratio = xpoints_diff * time_left_scaler
+      xpoints_diff = .data$points_diff + .data$exp_pts,
+      pos_lead_prob = calculate_pos_lead_prob(.data$points_diff, .data$opp_goal, .data$opp_behind, .data$no_score, .data$behind, .data$goal),
+      time_left_scaler = exp(pmin(((.data$period - 1) * 2000 + .data$period_seconds) / 2000, 4)),
+      diff_time_ratio = .data$xpoints_diff * .data$time_left_scaler
     ) %>%
     fastDummies::dummy_cols(select_columns = c("play_type", "phase_of_play")) %>%
     janitor::clean_names()
-
-  return(model_data)
 }
 
-
+#' Select EPV Model Variables
+#'
+#' @param df A dataframe containing cleaned play-by-play data.
+#' @return A dataframe with selected variables for EPV modeling.
+#' @export
 select_epv_model_vars <- function(df) {
-  df <-
-    df %>%
+  df %>%
     dplyr::select(
-      goal_x, y, lag_goal_x, lag_goal_x5, lag_y, period_seconds, period,
-      play_type_handball, play_type_kick, play_type_reception, phase_of_play_handball_received,
-      phase_of_play_hard_ball, phase_of_play_loose_ball, phase_of_play_set_shot,
-      shot_row, speed5, home
+      .data$goal_x, .data$y, .data$lag_goal_x, .data$lag_goal_x5, .data$lag_y, .data$period_seconds, .data$period,
+      .data$play_type_handball, .data$play_type_kick, .data$play_type_reception, .data$phase_of_play_handball_received,
+      .data$phase_of_play_hard_ball, .data$phase_of_play_loose_ball, .data$phase_of_play_set_shot,
+      .data$shot_row, .data$speed5, .data$home
     )
-
-  return(df)
 }
 
+#' Select WP Model Variables
+#'
+#' @param df A dataframe containing cleaned play-by-play data.
+#' @return A dataframe with selected variables for WP modeling.
+#' @export
 select_wp_model_vars <- function(df) {
-  df <-
-    df %>%
+  df %>%
     dplyr::select(
-      total_seconds, shot_row, home, points_diff,
-      xpoints_diff, pos_lead_prob, time_left_scaler, diff_time_ratio,
-      play_type_handball, play_type_kick, play_type_reception, phase_of_play_handball_received,
-      phase_of_play_hard_ball, phase_of_play_loose_ball, phase_of_play_set_shot
+      .data$total_seconds, .data$shot_row, .data$home, .data$points_diff,
+      .data$xpoints_diff, .data$pos_lead_prob, .data$time_left_scaler, .data$diff_time_ratio,
+      .data$play_type_handball, .data$play_type_kick, .data$play_type_reception, .data$phase_of_play_handball_received,
+      .data$phase_of_play_hard_ball, .data$phase_of_play_loose_ball, .data$phase_of_play_set_shot
     )
-
-  return(df)
 }
 
+#' Clean Shots Data
+#'
+#' @param df A dataframe containing raw shot data.
+#' @return A cleaned dataframe with additional shot-related variables.
+#' @export
 clean_shots_data <- function(df) {
-  ##### Direction Variales
   goal_width <- 6.4
 
-  df <- df %>%
+  df %>%
+    add_shot_result_variables() %>%
+    add_shot_geometry_variables(goal_width) %>%
+    add_shot_type_variables() %>%
+    dplyr::left_join(torp::shot_player_df, by = c("player_id" = "player_id_shot"), keep = TRUE) %>%
     dplyr::mutate(
-      shot_result_multi =
-        (dplyr::case_when(
-          shot_at_goal == TRUE & disposal == "clanger" ~ 0,
-          shot_at_goal == TRUE & disposal == "ineffective" ~ 1,
-          shot_at_goal == TRUE & disposal == "effective" ~ 2,
-          TRUE ~ NA_real_
-        )),
-      shot_result =
-        as.numeric(dplyr::case_when(
-          points_shot == 1 ~ 0,
-          points_shot == 6 ~ 1,
-          TRUE ~ NA_real_
-        )),
-      scored_shot = dplyr::if_else(!is.na(shot_at_goal), dplyr::if_else(!is.na(points_shot), 1, 0), NA_real_)
+      player_id_shot = as.factor(tidyr::replace_na(.data$player_id_shot, "Other")),
+      player_name_shot = as.factor(tidyr::replace_na(.data$player_name_shot, "Other"))
+    ) %>%
+    dplyr::select(-.data$side_b, -.data$side_c)
+}
+
+#' Select Shot Model Variables
+#'
+#' @param df A dataframe containing cleaned shot data.
+#' @return A dataframe with selected variables for shot modeling.
+#' @export
+select_shot_model_vars <- function(df) {
+  df %>%
+    dplyr::select(
+      .data$goal_x, .data$abs_y, .data$angle, .data$distance,
+      .data$play_type, .data$phase_of_play,
+      .data$player_id_shot, .data$player_name_shot
     )
+}
 
+#' Prepare Shot Data for Modeling
+#'
+#' @param df A dataframe containing raw shot data.
+#' @return A dataframe ready for shot modeling.
+#' @export
+prepare_shot_model_data <- function(df) {
+  df %>%
+    clean_shots_data() %>%
+    select_shot_model_vars()
+}
 
-  df$abs_y <- abs(df$y)
-  df$side_b <- sqrt((df$goal_x)^2 + (df$y + goal_width / 2)^2)
-  df$side_c <- sqrt((df$goal_x)^2 + (df$y - goal_width / 2)^2)
-  df$angle <- acos((df$side_b^2 + df$side_c^2 - goal_width^2) / (2 * df$side_b * df$side_c))
-  df$distance <- dplyr::if_else(df$y >= -goal_width / 2 & df$y <= goal_width / 2,
-    df$goal_x, pmin(df$side_b, df$side_c)
+#' Create Shot Model Matrix
+#'
+#' @param df A dataframe containing prepared shot data.
+#' @return A model matrix ready for shot modeling.
+#' @export
+create_shot_model_matrix <- function(df) {
+  stats::model.matrix(~ . - 1, data = df)
+}
+
+#' Predict Shot Probabilities
+#'
+#' @param model A fitted shot model.
+#' @param new_data A dataframe or model matrix containing new shot data.
+#' @return A vector of predicted probabilities.
+#' @export
+predict_shot_probabilities <- function(model, new_data) {
+  stats::predict(model, newdata = new_data, type = "response")
+}
+
+#' Filter Relevant Descriptions
+#'
+#' This function filters the dataframe to include only relevant play descriptions.
+#'
+#' @param df A dataframe containing play-by-play data.
+#' @return A filtered dataframe.
+#' @keywords internal
+#' @importFrom dplyr filter
+filter_relevant_descriptions <- function(df) {
+  relevant_descriptions <- c(
+    "Ball Up Call", "Bounce", "Centre Bounce", "Contested Knock On", "Contested Mark",
+    "Free Advantage", "Free For", "Free For: Before the Bounce", "Free For: In Possession",
+    "Free For: Off The Ball", "Gather", "Gather From Hitout", "Gather from Opposition",
+    "Ground Kick", "Handball", "Handball Received", "Hard Ball Get", "Hard Ball Get Crumb",
+    "Kick", "Knock On", "Loose Ball Get", "Loose Ball Get Crumb", "Mark On Lead",
+    "Out of Bounds", "Out On Full After Kick", "Ruck Hard Ball Get", "Uncontested Mark"
   )
-  df$shot_clanger <- dplyr::if_else(df$shot_at_goal == TRUE & df$disposal == "clanger", 1, 0)
-  df$shot_effective <- dplyr::if_else(df$shot_at_goal == TRUE & df$disposal == "effective", 1, 0)
-  df$shot_ineffective <- dplyr::if_else(df$shot_at_goal == TRUE & df$disposal == "ineffective", 1, 0)
 
-  df <- df %>%
-    dplyr::left_join(torp::shot_player_df, by = c("player_id" = "player_id_shot"), keep = TRUE)
+  df %>%
+    dplyr::filter(.data$description %in% relevant_descriptions) %>%
+    dplyr::filter(!(.data$x == -.data$lead_x_tot & .data$y == -.data$lead_y_tot & .data$description != "Centre Bounce"))
+}
 
-  df$player_id_shot <- as.factor(tidyr::replace_na(df$player_id_shot, "Other"))
-  df$player_name_shot <- as.factor(tidyr::replace_na(df$player_name_shot, "Other"))
+#' Add Expected Points Value (EPV) Variables
+#'
+#' This function adds EPV-related variables to the dataframe.
+#'
+#' @param df A dataframe containing play-by-play data.
+#' @return A dataframe with additional EPV variables.
+#' @keywords internal
+#' @importFrom dplyr mutate lag lead if_else
+add_epv_variables <- function(df) {
+  df %>%
+    dplyr::mutate(
+      lag_desc = dplyr::lag(.data$description, default = dplyr::first(.data$description)),
+      lead_desc = dplyr::lead(.data$description, default = dplyr::last(.data$description)),
+      team_id_mdl = determine_team_id_mdl(.data$throw_in, .data$team_id),
+      home = dplyr::if_else(.data$team_id_mdl == .data$home_team_id, 1, 0),
+      pos_points = dplyr::if_else(.data$home == 1, .data$home_points, .data$away_points),
+      opp_points = dplyr::if_else(.data$home == 1, .data$away_points, .data$home_points),
+      points_diff = .data$pos_points - .data$opp_points,
+      mirror = calculate_mirror(.data$throw_in, .data$team_id_mdl, .data$x),
+      x = .data$mirror * .data$x,
+      y = .data$mirror * .data$y,
+      goal_x = .data$venue_length / 2 - .data$x
+    ) %>%
+    add_lagged_variables() %>%
+    add_speed_variables()
+}
 
-  df <- df %>% dplyr::select(-side_b, -side_c)
+#' Determine Team ID Model
+#'
+#' @param throw_in A vector indicating if the play is a throw-in.
+#' @param team_id A vector of team IDs.
+#' @return A vector of determined team IDs.
+#' @keywords internal
+#' @importFrom dplyr case_when lead
+#' @importFrom zoo na.locf0
+determine_team_id_mdl <- function(throw_in, team_id) {
+  result <- dplyr::case_when(
+    throw_in == 1 ~ dplyr::lead(team_id),
+    TRUE ~ team_id
+  )
+  result <- zoo::na.locf0(result, fromLast = TRUE)
+  zoo::na.locf0(result)
+}
 
-  return(df)
+#' Calculate Mirror
+#'
+#' @param throw_in A vector indicating if the play is a throw-in.
+#' @param team_id_mdl A vector of team IDs for modeling.
+#' @param x A vector of x-coordinates.
+#' @return A vector of mirror values (-1 or 1).
+#' @keywords internal
+#' @importFrom dplyr case_when lag lead
+calculate_mirror <- function(throw_in, team_id_mdl, x) {
+  dplyr::case_when(
+    (throw_in == 1 & dplyr::lag(throw_in) != 1 & dplyr::lag(team_id_mdl) != team_id_mdl) ~ -1,
+    (throw_in == 1 & dplyr::lag(throw_in) == 1 & dplyr::lag(team_id_mdl, n = 2L) != team_id_mdl) & sign(dplyr::lag(x)) == sign(x) ~ -1,
+    (throw_in == 1 & dplyr::lag(throw_in) == 1 & dplyr::lag(team_id_mdl, n = 2L) == team_id_mdl & sign(dplyr::lag(x)) != sign(x)) ~ -1,
+    (dplyr::lag(throw_in) == 1 & sign(dplyr::lag(x)) == sign(x) & dplyr::lag(team_id_mdl) == team_id_mdl & dplyr::lag(team_id_mdl, n = 2L) != team_id_mdl) ~ -1,
+    (dplyr::lag(throw_in, n = 2L) == 1 & sign(dplyr::lag(x, n = 2L)) == sign(x) & dplyr::lag(team_id_mdl, n = 2L) == team_id_mdl & dplyr::lag(team_id_mdl, n = 3L) != team_id_mdl) ~ -1,
+    (dplyr::lag(throw_in) == 1 & sign(dplyr::lead(x, n = 2L)) == sign(x) & dplyr::lead(team_id_mdl, n = 2L) != team_id_mdl) ~ -1,
+    (dplyr::lag(throw_in, n = 2L) == 1 & sign(dplyr::lead(x)) == sign(x) & dplyr::lead(team_id_mdl) != team_id_mdl) ~ -1,
+    TRUE ~ 1
+  )
+}
+
+#' Add Lagged Variables
+#'
+#' @param df A dataframe containing play-by-play data.
+#' @return A dataframe with additional lagged variables.
+#' @keywords internal
+#' @importFrom dplyr mutate lag lead
+add_lagged_variables <- function(df) {
+  df %>%
+    dplyr::mutate(
+      lag_x = calculate_lagged_coordinate(.data$x, .data$team_id_mdl),
+      lag_y = calculate_lagged_coordinate(.data$y, .data$team_id_mdl),
+      lag_goal_x = calculate_lagged_goal_x(.data$goal_x, .data$team_id_mdl, .data$venue_length),
+      lag_goal_x5 = calculate_lagged_goal_x(.data$goal_x, .data$team_id_mdl, .data$venue_length, lag = 5),
+      lag_time5 = dplyr::lag(.data$period_seconds, 5, default = dplyr::first(.data$period_seconds)),
+      lag_player = dplyr::lag(.data$player_name, default = dplyr::first(.data$player_name)),
+      lead_player = dplyr::lead(.data$player_name, default = dplyr::last(.data$player_name)),
+      lead_x = dplyr::lead(.data$x, default = dplyr::last(.data$x)),
+      lead_y = dplyr::lead(.data$y, default = dplyr::last(.data$y)),
+      lead_goal_x = .data$venue_length / 2 - .data$lead_x
+    )
+}
+
+#' Calculate Lagged Coordinate
+#'
+#' @param coord A vector of coordinates.
+#' @param team_id_mdl A vector of team IDs for modeling.
+#' @return A vector of lagged coordinates.
+#' @keywords internal
+#' @importFrom dplyr if_else lag
+#' @importFrom tidyr replace_na
+calculate_lagged_coordinate <- function(coord, team_id_mdl) {
+  result <- dplyr::if_else(
+    dplyr::lag(team_id_mdl) == team_id_mdl,
+    dplyr::lag(coord, default = dplyr::first(coord)),
+    -dplyr::lag(coord, default = dplyr::first(coord))
+  )
+  tidyr::replace_na(result, dplyr::first(coord))
+}
+
+#' Calculate Lagged Goal X
+#'
+#' @param goal_x A vector of goal x-coordinates.
+#' @param team_id_mdl A vector of team IDs for modeling.
+#' @param venue_length The length of the venue.
+#' @param lag The number of positions to lag (default is 1).
+#' @return A vector of lagged goal x-coordinates.
+#' @keywords internal
+#' @importFrom dplyr if_else lag
+#' @importFrom tidyr replace_na
+calculate_lagged_goal_x <- function(goal_x, team_id_mdl, venue_length, lag = 1) {
+  result <- dplyr::if_else(
+    dplyr::lag(team_id_mdl, lag) == team_id_mdl,
+    dplyr::lag(goal_x, lag, default = dplyr::first(goal_x)),
+    venue_length - dplyr::lag(goal_x, lag, default = dplyr::first(goal_x))
+  )
+  tidyr::replace_na(result, dplyr::first(goal_x))
+}
+
+#' Add Speed Variables
+#'
+#' @param df A dataframe containing play-by-play data.
+#' @return A dataframe with additional speed variables.
+#' @keywords internal
+#' @importFrom dplyr mutate lag
+#' @importFrom tidyr replace_na
+add_speed_variables <- function(df) {
+  df %>%
+    dplyr::mutate(
+      speed1 = (.data$lag_goal_x - .data$goal_x) / pmax((.data$period_seconds - dplyr::lag(.data$period_seconds)), 1),
+      speed1 = tidyr::replace_na(.data$speed1, 0),
+      speed5 = (.data$lag_goal_x5 - .data$goal_x) / pmax((.data$period_seconds - .data$lag_time5), 1),
+      speed5 = tidyr::replace_na(.data$speed5, 0)
+    )
+}
+
+#' Calculate Positive Lead Probability
+#'
+#' @param points_diff The points difference.
+#' @param opp_goal Opponent's goal probability.
+#' @param opp_behind Opponent's behind probability.
+#' @param no_score No score probability.
+#' @param behind Behind probability.
+#' @param goal Goal probability.
+#' @return A numeric value representing the positive lead probability.
+#' @keywords internal
+#' @importFrom dplyr case_when
+calculate_pos_lead_prob <- function(points_diff, opp_goal, opp_behind, no_score, behind, goal) {
+  dplyr::case_when(
+    points_diff > 6 ~ 1,
+    points_diff == 6 ~ (opp_goal * 0.5) + opp_behind + no_score + behind + goal,
+    points_diff > 1 ~ (opp_behind * 0.5) + no_score + behind + goal,
+    points_diff == 0 ~ (no_score * 0.5) + behind + goal,
+    points_diff == -1 ~ (behind * 0.5) + goal,
+    points_diff > -6 ~ goal,
+    points_diff == -6 ~ (0.5 * goal),
+    points_diff < -6 ~ 0
+  )
+}
+
+#' Add Shot Result Variables
+#'
+#' @param df A dataframe containing shot data.
+#' @return A dataframe with additional shot result variables.
+#' @keywords internal
+#' @importFrom dplyr mutate case_when if_else
+add_shot_result_variables <- function(df) {
+  df %>%
+    dplyr::mutate(
+      shot_result_multi = dplyr::case_when(
+        .data$shot_at_goal == TRUE & .data$disposal == "clanger" ~ 0,
+        .data$shot_at_goal == TRUE & .data$disposal == "ineffective" ~ 1,
+        .data$shot_at_goal == TRUE & .data$disposal == "effective" ~ 2,
+        TRUE ~ NA_real_
+      ),
+      shot_result = as.numeric(dplyr::case_when(
+        .data$points_shot == 1 ~ 0,
+        .data$points_shot == 6 ~ 1,
+        TRUE ~ NA_real_
+      )),
+      scored_shot = dplyr::if_else(!is.na(.data$shot_at_goal), dplyr::if_else(!is.na(.data$points_shot), 1, 0), NA_real_)
+    )
+}
+
+#' Add Shot Geometry Variables
+#'
+#' @param df A dataframe containing shot data.
+#' @param goal_width The width of the goal.
+#' @return A dataframe with additional shot geometry variables.
+#' @keywords internal
+#' @importFrom dplyr mutate if_else
+add_shot_geometry_variables <- function(df, goal_width) {
+  df %>%
+    dplyr::mutate(
+      abs_y = abs(.data$y),
+      side_b = sqrt((.data$goal_x)^2 + (.data$y + goal_width / 2)^2),
+      side_c = sqrt((.data$goal_x)^2 + (.data$y - goal_width / 2)^2),
+      angle = acos((.data$side_b^2 + .data$side_c^2 - goal_width^2) / (2 * .data$side_b * .data$side_c)),
+      distance = dplyr::if_else(.data$y >= -goal_width / 2 & .data$y <= goal_width / 2,
+                                .data$goal_x, pmin(.data$side_b, .data$side_c)
+      )
+    )
+}
+
+#' Add Shot Type Variables
+#'
+#' @param df A dataframe containing shot data.
+#' @return A dataframe with additional shot type variables.
+#' @keywords internal
+#' @importFrom dplyr mutate if_else
+add_shot_type_variables <- function(df) {
+  df %>%
+    dplyr::mutate(
+      shot_clanger = dplyr::if_else(.data$shot_at_goal == TRUE & .data$disposal == "clanger", 1, 0),
+      shot_effective = dplyr::if_else(.data$shot_at_goal == TRUE & .data$disposal == "effective", 1, 0),
+      shot_ineffective = dplyr::if_else(.data$shot_at_goal == TRUE & .data$disposal == "ineffective", 1, 0)
+    )
 }

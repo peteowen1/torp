@@ -1,245 +1,249 @@
-#' Title
+#' Get Match Chains
 #'
-#' @param season
-#' @param round
+#' Retrieves match chain data for a given season and round.
 #'
-#' @return
+#' @param season The AFL season year (numeric).
+#' @param round The round number (numeric). If NA, retrieves data for all rounds in the season.
+#'
+#' @return A dataframe containing match chain data.
 #' @export
 #'
 #' @examples
 #' \dontrun{
-#' get_match_chains()
+#' chains <- get_match_chains(2022, 1)
 #' }
-get_match_chains <- function(season = most_recent_season(), round = NA) {
+#' @importFrom dplyr inner_join left_join
+#' @importFrom progressr with_progress
+get_match_chains <- function(season = get_afl_season(), round = NA) {
   if (season < 2021) {
     stop("Match chain data is not available for seasons prior to 2021.")
   }
 
-  if (is.na(round)) {
-    cat("No round value supplied.\nFunction will scrape all rounds in the season.\nThis may take some time.\n")
-    games <- get_season_games(season)
-    games_vector <- games[, "matchId"]
+  games <- if (is.na(round)) {
+    message("No round value supplied. Scraping all rounds in the season. This may take some time.")
+    get_season_games(season)
   } else {
-    games <- get_round_games(season, round)
-    games_vector <- games[, "matchId"]
+    get_round_games(season, round)
   }
 
-  if (length(games) == 0) {
-    stop("No data available for the season or round selected.")
+  if (nrow(games) == 0) {
+    stop("No data available for the selected season or round.")
   }
 
-  cat("\nScraping match chains...\n\n")
+  games_vector <- games$matchId
+
+  message("Scraping match chains...")
   chains <- progressr::with_progress({
     get_many_game_chains(games_vector)
   })
+
   players <- get_players()
-  chains <- chains %>% dplyr::inner_join(games, by = "matchId")
-  chains <- chains %>% dplyr::left_join(players, by = c("playerId", "season"))
+  chains <- chains %>%
+    dplyr::inner_join(games, by = "matchId") %>%
+    dplyr::left_join(players, by = c("playerId", "season"))
 
-  # chains <- chains %>% dplyr::select(
-  #   matchId, season, roundNumber, utcStartTime,homeTeamId:providerMatchId, homeTeam.teamName:date, venue.name:venue.state,
-  #   venueWidth:homeTeamDirectionQtr1, displayOrder, chain_number,
-  #   initialState, finalState, period, periodSeconds,
-  #   playerId, playerName.givenName, playerName.surname, teamId, team.teamName, description,
-  #   disposal:y
-  # )
-
-  cat("\n\nSuccess!\n\n")
-
+  message("Success!")
   return(chains)
 }
 
-###
+#' Get Week Chains
+#'
+#' Retrieves chain data for a specific week (round) in a season.
+#'
+#' @param season The AFL season year (numeric).
+#' @param roundnum The round number (numeric).
+#'
+#' @return A dataframe containing chain data for the specified week.
+#' @export
+#'
+#' @importFrom cli cli_warn
+#' @importFrom data.table data.table
 get_week_chains <- function(season, roundnum) {
-  # cache_message()
-
-  load <- try(get_match_chains(season, round = roundnum), silent = TRUE)
-
-  if (inherits(load, "try-error")) {
-    cli::cli_warn("Failed to match chains from {.val {season}} round {.val {roundnum}}")
-    return(data.table::data.table())
-  }
-
-  # if ("team.teamName" %in% colnames(load)) {
-  #   load <-
-  #     load %>%
-  #     dplyr::rename(
-  #       team = team.teamName,
-  #       home_team = homeTeam.teamName,
-  #       away_team = awayTeam.teamName,
-  #     )
-  # }
+  load <- tryCatch(
+    get_match_chains(season, round = roundnum),
+    error = function(e) {
+      cli::cli_warn("Failed to get match chains from {.val {season}} round {.val {roundnum}}")
+      return(data.table::data.table())
+    }
+  )
 
   return(load)
 }
-### API SCRAPING FUNCTIONS
-#' Title
+
+#' Get API Token
 #'
-#' @return
+#' Retrieves an authentication token for the AFL API.
 #'
-#' @examples
+#' @return A character string containing the API token.
+#' @keywords internal
+#'
+#' @importFrom httr POST content
 get_token <- function() {
   response <- httr::POST("https://api.afl.com.au/cfs/afl/WMCTok")
-  token <- httr::content(response)$token
-
-  return(token)
+  httr::content(response)$token
 }
 
-#### function to access api
-#' Title
+#' Access API
 #'
-#' @param url
+#' Makes an authenticated request to the AFL API.
 #'
-#' @return
+#' @param url The API endpoint URL.
+#'
+#' @return The parsed JSON content of the API response.
 #' @export
 #'
-#' @examples
+#' @importFrom httr GET add_headers content
+#' @importFrom jsonlite fromJSON
 access_api <- function(url) {
   token <- get_token()
-
   response <- httr::GET(
     url = url,
     httr::add_headers("x-media-mis-token" = token)
   )
-
-  content <- response %>%
-    httr::content(as = "text", encoding = "UTF-8") %>%
+  httr::content(response, as = "text", encoding = "UTF-8") %>%
     jsonlite::fromJSON(flatten = TRUE)
-
-  return(content)
 }
 
-### MATCH DATA FUNCTIONS
-#' @param season
+#' Get Round Games
 #'
-#' @param round
+#' Retrieves game data for a specific round in a season.
 #'
+#' @param season The AFL season year (numeric).
+#' @param round The round number (numeric).
+#'
+#' @return A dataframe containing game data for the specified round.
 #' @export
+#'
+#' @importFrom dplyr filter mutate
 get_round_games <- function(season, round) {
-  round <- ifelse(round < 10, paste0("0", round), round)
+  round <- sprintf("%02d", round)
   url <- paste0("https://api.afl.com.au/cfs/afl/fixturesAndResults/season/CD_S", season, "014/round/CD_R", season, "014", round)
-  games <- access_api(url)
-  games <- games[[5]]
+  games <- access_api(url)[[5]]
 
   if (length(games) > 0) {
-    games <- games %>% filter(status == "CONCLUDED")
-    if (nrow(games) > 0) {
-      games <- games # %>%
-      #   select(
-      #   matchId, utcStartTime, roundNumber, roundId ,venue.name, venue.location, venue.state,venue.venueId,
-      #   homeTeam.teamName, awayTeam.teamName,homeTeamId ,awayTeamId ,
-      #   homeTeamScore.totalScore, awayTeamScore.totalScore
-      # )
-      games$date <- substr(games$utcStartTime, 1, 10)
-      games$date <- as.Date(games$utcStartTime)
-      games$season <- season
-
-      return(games)
-    }
+    games <- games %>%
+      dplyr::filter(.data$status == "CONCLUDED") %>%
+      dplyr::mutate(
+        date = as.Date(substr(.data$utcStartTime, 1, 10)),
+        season = season
+      )
+    return(games)
   }
+  data.frame() # Return empty dataframe if no games found
 }
 
-### getting season games
-#' @param season
+#' Get Season Games
 #'
+#' Retrieves game data for an entire season.
+#'
+#' @param season The AFL season year (numeric).
+#' @param rounds The number of rounds in the season (default: 27).
+#'
+#' @return A dataframe containing game data for the entire season.
 #' @export
+#'
+#' @importFrom purrr map_df
 get_season_games <- function(season, rounds = 27) {
-  games <- purrr::map_df(1:rounds, ~ get_round_games(season, .))
-
-  return(games)
+  purrr::map_df(1:rounds, ~ get_round_games(season, .))
 }
 
-### PLAYER DATA FUNCTIONS
-#' Title
+#' Get Players
 #'
-#' @return
+#' Retrieves player data either from the API or from a local database.
+#'
+#' @param use_api Logical, whether to use the API (TRUE) or local database (FALSE, default).
+#'
+#' @return A dataframe containing player data.
 #' @export
 #'
-#' @examples
+#' @importFrom dplyr mutate select
 get_players <- function(use_api = FALSE) {
-  if (use_api == TRUE) {
-    url <- paste0("https://api.afl.com.au/cfs/afl/players")
-    players <- access_api(url)
-    players <- players[[5]]
-    players <- players %>%
-      dplyr::mutate(season = most_recent_season()) # %>% select(playerId, playerName.givenName, playerName.surname, team.teamName)
-  }
-
-  if (use_api == FALSE) {
-    players <- torp::plyr_tm_db %>%
+  if (use_api) {
+    url <- "https://api.afl.com.au/cfs/afl/players"
+    players <- access_api(url)[[5]] %>%
+      dplyr::mutate(season = get_afl_season())
+  } else {
+    players <- torp::plyr_tm_df %>%
       dplyr::mutate(
         photoURL = NA,
         team.teamId = NA,
         team.teamAbbr = NA
       ) %>%
       dplyr::select(
-        playerId = providerId, jumperNumber, playerPosition = position, photoURL, playerName.givenName = firstName,
-        playerName.surname = surname, team.teamId, team.teamAbbr, team.teamName = team, season
+        playerId = .data$providerId, jumperNumber = .data$jumperNumber,
+        playerPosition = .data$position, photoURL = .data$photoURL,
+        playerName.givenName = .data$firstName, playerName.surname = .data$surname,
+        team.teamId = .data$team.teamId, team.teamAbbr = .data$team.teamAbbr,
+        team.teamName = .data$team, season = .data$season
       )
   }
   return(players)
 }
 
-### CHAIN DATA FUNCTIONS
-#' @param games_vector
+#' Get Many Game Chains
 #'
+#' Retrieves chain data for multiple games.
+#'
+#' @param games_vector A vector of game IDs.
+#'
+#' @return A dataframe containing chain data for all specified games.
 #' @export
+#'
+#' @importFrom purrr map_df
+#' @importFrom progressr progressor
 get_many_game_chains <- function(games_vector) {
   p <- progressr::progressor(steps = length(games_vector))
-
-  chains <- purrr::map_df(games_vector,
-    ~ {
-      p()
-      get_game_chains(.)
-    },
-    .progress = FALSE
-  )
-
-  return(chains)
+  purrr::map_df(games_vector, ~ {
+    p()
+    get_game_chains(.)
+  })
 }
 
-#### get individual game chains
-#' @param match_id
+#' Get Game Chains
 #'
+#' Retrieves chain data for a single game.
+#'
+#' @param match_id The ID of the match.
+#'
+#' @return A dataframe containing chain data for the specified game.
 #' @export
+#'
+#' @importFrom purrr map_df
 get_game_chains <- function(match_id) {
   url <- paste0("https://sapi.afl.com.au/afl/matchPlays/", match_id)
   chains_t1 <- access_api(url)
   chains_t2 <- chains_t1[[8]]
 
-  if (!is.null(dim(chains_t2))) {
-    if (nrow(chains_t2) > 0) {
-      chains <- purrr::map_df(1:nrow(chains_t2), ~ get_single_chain(chains_t2, .))
-
-      chains$matchId <- chains_t1$matchId
-      chains$venueWidth <- chains_t1$venueWidth
-      chains$venueLength <- chains_t1$venueLength
-      chains$homeTeamDirectionQtr1 <- chains_t1$homeTeamDirectionQtr1
-
-      return(chains)
-    }
+  if (!is.null(dim(chains_t2)) && nrow(chains_t2) > 0) {
+    chains <- purrr::map_df(1:nrow(chains_t2), ~ get_single_chain(chains_t2, .))
+    chains$matchId <- chains_t1$matchId
+    chains$venueWidth <- chains_t1$venueWidth
+    chains$venueLength <- chains_t1$venueLength
+    chains$homeTeamDirectionQtr1 <- chains_t1$homeTeamDirectionQtr1
+    return(chains)
   }
+  data.frame() # Return empty dataframe if no chains found
 }
 
-### get single game chain
-#' Title
+#' Get Single Chain
 #'
-#' @param chains_t2
-#' @param chain_number
+#' Processes a single chain from the game data.
 #'
+#' @param chains_t2 The chain data for a game.
+#' @param chain_number The number of the chain to process.
+#'
+#' @return A dataframe containing data for the specified chain.
 #' @export
-#'
 get_single_chain <- function(chains_t2, chain_number) {
   if (length(chains_t2) > 5) {
     chains_t3 <- chains_t2[[chain_number, 6]]
-
-    if (length(chains_t3 > 0)) {
+    if (length(chains_t3) > 0) {
       chains_t3$finalState <- chains_t2$finalState[chain_number]
       chains_t3$initialState <- chains_t2$initialState[chain_number]
       chains_t3$period <- chains_t2$period[chain_number]
       chains_t3$chain_number <- chain_number
-
       return(chains_t3)
     }
   }
+  data.frame() # Return empty dataframe if chain processing fails
 }

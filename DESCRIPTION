@@ -23,7 +23,6 @@ Imports:
     purrr,
     rlang,
     stringr,
-    tibble,
     tidyr,
     zoo
 Encoding: UTF-8

@@ -1,241 +1,264 @@
-###### need to change 'max(as.Date(utc_start_time))' as it doesn't account for regression that should happen between seasons
-###### as round 1 filters for all games before gwk1 and therefore no regression happens
-
 #' Get TORP ratings
 #'
-#' @param season_val
-#' @param round_num
-#' @param decay
-#' @param prior_games
+#' This function calculates TORP (Total Overall Rating Points) for players based on their performance.
 #'
+#' @param season_val The season to calculate ratings for. Default is the next season.
+#' @param round_val The round to calculate ratings for. Default is the next round.
+#' @param decay The decay factor for weighting games. Default is 365.
+#' @param loading The loading factor for TORP calculations. Default is 1.5.
+#' @param prior_games_recv The number of prior games to consider for receiving. Default is 4.
+#' @param prior_games_disp The number of prior games to consider for disposal. Default is 6.
+#'
+#' @return A data frame containing player TORP ratings.
 #' @export
+#'
+#' @importFrom dplyr filter summarise pull ungroup mutate group_by n_distinct last arrange left_join select
+#' @importFrom lubridate as_date decimal_date
+#' @importFrom glue glue
+#' @importFrom cli cli_abort
 torp_ratings <- function(season_val = get_afl_season(type = "next"),
                          round_val = get_afl_week(type = "next"),
                          decay = 365,
                          loading = 1.5,
-                         prior_games_recv = 3,
-                         prior_games_disp = 6
-                         ) {
-  gwk <- sprintf("%02d", round_val) # keep this in case you change to round -1 or round +1
+                         prior_games_recv = 4,
+                         prior_games_disp = 6) {
+
+
+  if(is.null(plyr_tm_df)){
+    plyr_tm_df <- torp::plyr_tm_df
+  }
+
+  if(is.null(plyr_gm_df)){
+    plyr_gm_df <- torp::plyr_gm_df
+  }
+
+  gwk <- sprintf("%02d", round_val)
   match_ref <- paste0("CD_M", season_val, "014", gwk)
-  date_val <- fixtures %>%
-    dplyr::filter(compSeason.year == season_val, round.roundNumber == round_val) %>%
-    dplyr::summarise(lubridate::as_date(min(utcStartTime))) %>%
+
+  date_val <- torp::fixtures %>%
+    dplyr::filter(.data$compSeason.year == season_val, .data$round.roundNumber == round_val) %>%
+    dplyr::summarise(lubridate::as_date(min(.data$utcStartTime))) %>%
     dplyr::pull()
 
   if (is.na(date_val)) {
-    cli::cli_abort("fixtures for this date not available yet") # max(team_df$utcStartTime)
+    cli::cli_abort("Fixtures for this date not available yet")
   }
 
-  plyr_df <- plyr_gm_df %>%
+  plyr_gm_df <- calculate_player_stats(plyr_gm_df, match_ref, date_val, decay, loading, prior_games_recv, prior_games_disp)
+
+  final_df <- prepare_final_dataframe(plyr_tm_df, plyr_gm_df, season_val, round_val)
+
+  message(glue::glue("TORP ratings as at {season_val} round {round_val}"))
+  return(final_df)
+}
+
+#' Calculate player statistics
+#'
+#' @param plyr_gm_df Player game data frame
+#' @param match_ref Match reference
+#' @param date_val Date value
+#' @param decay Decay factor
+#' @param loading Loading factor
+#' @param prior_games_recv Prior games for receiving
+#' @param prior_games_disp Prior games for disposal
+#'
+#' @return A data frame with calculated player statistics
+#'
+#' @importFrom dplyr filter mutate group_by summarise n_distinct last ungroup
+calculate_player_stats <- function(plyr_gm_df = NULL, match_ref, date_val, decay, loading, prior_games_recv, prior_games_disp) {
+  if(is.null(plyr_gm_df)){
+    plyr_gm_df <- torp::plyr_gm_df
+  }
+  plyr_gm_df %>%
     dplyr::ungroup() %>%
-    dplyr::filter(match_id <= match_ref) %>%
+    dplyr::filter(.data$match_id <= match_ref) %>%
     dplyr::mutate(
-      weight_gm = exp(as.numeric(-(as.Date(date_val) - as.Date(utc_start_time))) / decay)
+      weight_gm = exp(as.numeric(-(lubridate::as_date(date_val) - lubridate::as_date(.data$utc_start_time))) / decay)
     ) %>%
-    dplyr::group_by(player_id) %>%
+    dplyr::group_by(.data$player_id) %>%
     dplyr::summarise(
-      player_name = max(plyr_nm),
-      gms = dplyr::n_distinct(match_id),
-      wt_gms = sum(unique(weight_gm), na.rm = TRUE),
-      tot_p_sum = sum(tot_p_adj * weight_gm),
-      # tot_wpa_sum = sum(tot_wpa * weight_gm),
-      tot_p_g = sum(tot_p_adj * weight_gm) / wt_gms,
-      # tot_wpa_g = sum(tot_wpa * weight_gm) / wt_gms,
-      recv_g = sum(recv_pts_adj * weight_gm) / wt_gms,
-      disp_g = sum(disp_pts_adj * weight_gm) / wt_gms,
-      spoil_g = sum(spoil_pts_adj * weight_gm) / wt_gms,
-      hitout_g = sum(hitout_pts_adj * weight_gm) / wt_gms,
-      torp_recv = loading * (sum(recv_pts_adj * weight_gm) / (wt_gms + prior_games_recv)),
-      torp_disp = loading * (sum(disp_pts_adj * weight_gm) / (wt_gms + prior_games_disp)),
-      torp_spoil = loading * (1.2) * (sum(spoil_pts_adj * weight_gm) / (wt_gms + prior_games_recv)),
-      torp_hitout = loading *(sum(hitout_pts_adj * weight_gm) / (wt_gms + prior_games_recv)),
-      # torp_recv_old = sum(recv_pts_adj * weight_gm) / (wt_gms + 4),
-      # torp_disp_old = sum(disp_pts_adj * weight_gm) / (wt_gms + 4),
-      # torp_spoil_old = sum(spoil_pts_adj * weight_gm) / (wt_gms + 4),
-      # torp_hitout_old = sum(hitout_pts_adj * weight_gm) / (wt_gms + 4),
-      torp = round(torp_recv + torp_disp + torp_spoil + torp_hitout,2),
-      torp_recv_adj = round(torp_recv, 2),
-      torp_disp_adj = round(torp_disp, 2),
-      torp_spoil_adj = round(torp_spoil, 2),
-      torp_hitout_adj = round(torp_hitout, 2),
-      # torp_old = sum(tot_p_adj * weight_gm) / (wt_gms + 4),
-      # torp_ratio = pmax(pmin(torp_old / (torp_recv_old + torp_disp_old + torp_spoil_old + torp_hitout_old), 1), -1),
-      # torp_recv_adj1 = torp_recv_old * torp_ratio,
-      # torp_disp_adj1 = torp_disp_old * torp_ratio,
-      # torp_spoil_adj1 = torp_spoil_old * torp_ratio,
-      # torp_hitout_adj1 = torp_hitout_old * torp_ratio,
-      # torp_diff = torp_old - (torp_recv_adj1 + torp_disp_adj1 + torp_spoil_adj1 + torp_hitout_adj1),
-      # torp_recv_adj = round((torp_recv_adj1 + torp_diff / 4) * loading, 2),
-      # torp_disp_adj = round((torp_disp_adj1 + torp_diff / 4) * loading, 2),
-      # torp_spoil_adj = round((torp_spoil_adj1 + torp_diff / 4) * loading, 2),
-      # torp_hitout_adj = round((torp_hitout_adj1 + torp_diff / 4) * loading, 2),
-      torp = round(torp, 2),
-      # torp_old = round(torp_old * loading, 2),
-      posn = dplyr::last(pos)
-    ) #%>%
-    # mutate(torp = case_when(
-    #   posn == "KEY_DEFENDER" ~ torp * 1.4,
-    #   posn == "KEY_FORWARD" ~ torp * 0.9,
-    #   posn == "MEDIUM_DEFENDER" ~ torp * 0.9,
-    #   posn == "MEDIUM_FORWARD" ~ torp * 0.7,
-    #   posn == "MIDFIELDER" ~ torp * 1.1,
-    #   posn == "MIDFIELDER_FORWARD" ~ torp * 0.7,
-    #   posn == "RUCK" ~ torp * 1.8,
-    #   TRUE ~ NA_real_
-    # ))
+      player_name = max(.data$plyr_nm),
+      gms = dplyr::n_distinct(.data$match_id),
+      wt_gms = sum(unique(.data$weight_gm), na.rm = TRUE),
+      tot_p_sum = sum(.data$tot_p_adj * .data$weight_gm),
+      tot_p_g = sum(.data$tot_p_adj * .data$weight_gm) / .data$wt_gms,
+      recv_g = sum(.data$recv_pts_adj * .data$weight_gm) / .data$wt_gms,
+      disp_g = sum(.data$disp_pts_adj * .data$weight_gm) / .data$wt_gms,
+      spoil_g = sum(.data$spoil_pts_adj * .data$weight_gm) / .data$wt_gms,
+      hitout_g = sum(.data$hitout_pts_adj * .data$weight_gm) / .data$wt_gms,
+      torp_recv = loading * (sum(.data$recv_pts_adj * .data$weight_gm) / (.data$wt_gms + prior_games_recv)),
+      torp_disp = loading * (sum(.data$disp_pts_adj * .data$weight_gm) / (.data$wt_gms + prior_games_disp)),
+      torp_spoil = loading * (1.2) * (sum(.data$spoil_pts_adj * .data$weight_gm) / (.data$wt_gms + prior_games_recv)),
+      torp_hitout = loading * (sum(.data$hitout_pts_adj * .data$weight_gm) / (.data$wt_gms + prior_games_recv)),
+      torp = round(.data$torp_recv + .data$torp_disp + .data$torp_spoil + .data$torp_hitout, 2),
+      torp_recv_adj = round(.data$torp_recv, 2),
+      torp_disp_adj = round(.data$torp_disp, 2),
+      torp_spoil_adj = round(.data$torp_spoil, 2),
+      torp_hitout_adj = round(.data$torp_hitout, 2),
+      posn = dplyr::last(.data$pos),
+      .groups = "drop"
+    )
+}
 
+#' Prepare final dataframe
+#'
+#' @param plyr_tm_df Player team database
+#' @param plyr_gm_df Player statistics dataframe
+#' @param season_val Season value
+#' @param round_val Round value
+#'
+#' @return A final dataframe with player ratings
+#'
+#' @importFrom dplyr filter left_join ungroup mutate select arrange
+prepare_final_dataframe <- function(plyr_tm_df = NULL, plyr_gm_df = NULL, season_val, round_val) {
 
-  final_df <- plyr_tm_db %>%
-    dplyr::filter(season == season_val) %>%
-    dplyr::left_join(plyr_df, by = c("providerId" = "player_id")) %>%
+  if(is.null(plyr_tm_df)){
+  plyr_tm_df <- torp::plyr_tm_df
+  }
+
+  if(is.null(plyr_gm_df)){
+    plyr_gm_df <- torp::plyr_gm_df
+  }
+
+  plyr_tm_df %>%
+    dplyr::filter(.data$season == season_val) %>%
+    dplyr::left_join(plyr_gm_df, by = c("providerId" = "player_id")) %>%
     dplyr::ungroup() %>%
     dplyr::mutate(
       round = round_val,
       season = season_val
     ) %>%
-    dplyr::left_join(fixtures %>%
-      dplyr::group_by(season = compSeason.year, round = round.roundNumber) %>%
-      dplyr::summarise(ref_date = lubridate::as_date(min(utcStartTime)))) %>%
+    dplyr::left_join(torp::fixtures %>%
+                       dplyr::group_by(season = .data$compSeason.year, round = .data$round.roundNumber) %>%
+                       dplyr::summarise(ref_date = lubridate::as_date(min(.data$utcStartTime)), .groups = "drop")) %>%
     dplyr::mutate(
-      age =
-        lubridate::decimal_date(lubridate::as_date(ref_date)) -
-          lubridate::decimal_date(lubridate::as_date(dateOfBirth))
+      age = lubridate::decimal_date(lubridate::as_date(.data$ref_date)) -
+        lubridate::decimal_date(lubridate::as_date(.data$dateOfBirth))
     ) %>%
     dplyr::select(
-      player_id = providerId, player_name = player_name.x, age, team,
-      torp,
-      # torp_old,
-      torp_recv = torp_recv_adj,
-      torp_disp = torp_disp_adj,
-      torp_spoil = torp_spoil_adj,
-      torp_hitout = torp_hitout_adj,
-      position = position, season, round,
-      gms , wt_gms
+      player_id = .data$providerId, player_name = .data$player_name.x, age = .data$age, team = .data$team,
+      torp = .data$torp, torp_recv = .data$torp_recv_adj, torp_disp = .data$torp_disp_adj,
+      torp_spoil = .data$torp_spoil_adj, torp_hitout = .data$torp_hitout_adj,
+      position = .data$position, season = .data$season, round = .data$round, gms = .data$gms, wt_gms = .data$wt_gms
     ) %>%
-    dplyr::arrange(-torp)
-
-  # final <- bind_rows(final, teams2)
-  print(glue::glue("TORP ratings as at {season_val} round {round_val}"))
-  return(final_df)
+    dplyr::arrange(-.data$torp)
 }
 
 #' Get game ratings
 #'
+#' This function retrieves game ratings for players based on specified criteria.
 #'
-#' @param season_val
-#' @param round_num
-#' @param matchid
-#' @param team
+#' @param season_val The season to get ratings for. Default is the current season.
+#' @param round_num The round number to get ratings for. Default is the current round.
+#' @param matchid The match ID to filter by. Default is FALSE (no filtering).
+#' @param team The team to filter by. Default is FALSE (no filtering).
 #'
+#' @return A data frame containing player game ratings.
 #' @export
-
+#'
+#' @importFrom dplyr filter arrange mutate select
 player_game_ratings <- function(season_val = get_afl_season(),
                                 round_num = get_afl_week(),
                                 matchid = FALSE,
                                 team = FALSE) {
+  df <- filter_game_data(plyr_gm_df, season_val, round_num, matchid, team)
+
+  df %>%
+    dplyr::arrange(-.data$tot_p_adj) %>%
+    dplyr::mutate(
+      total_points = round(.data$tot_p_adj, 1),
+      recv_points = round(.data$recv_pts_adj, 1),
+      disp_points = round(.data$disp_pts_adj, 1),
+      spoil_points = round(.data$spoil_pts_adj, 1),
+      hitout_points = round(.data$hitout_pts_adj, 1)
+    ) %>%
+    dplyr::select(season = .data$season, round = .data$round,
+                  player_name = .data$plyr_nm, position = .data$pos, team_id = .data$team_id, team = .data$tm, opp = .data$opp,
+                  total_points = .data$total_points, recv_points = .data$recv_points, disp_points = .data$disp_points,
+                  spoil_points = .data$spoil_points, hitout_points = .data$hitout_points,
+                  player_id = .data$player_id, match_id = .data$match_id
+    )
+}
+
+#' Filter game data
+#'
+#' @param df Input data frame
+#' @param season_val Season value
+#' @param round_num Round number
+#' @param matchid Match ID
+#' @param team Team name
+#'
+#' @return Filtered data frame
+#'
+#' @importFrom dplyr filter
+#' @importFrom cli cli_abort
+filter_game_data <- function(df, season_val, round_num, matchid, team) {
   if (matchid != FALSE) {
-    df <- plyr_gm_df %>%
-      dplyr::filter(match_id %in% matchid)
+    df <- df %>% dplyr::filter(.data$match_id %in% matchid)
     if (nrow(df) == 0) {
       cli::cli_abort("Match ID not found")
     }
-  }
-
-  if (matchid == FALSE) {
-    if (team == FALSE) {
-      df <- plyr_gm_df %>%
-        dplyr::filter(
-          season %in% season_val,
-          round %in% round_num
-        )
-    }
-    if (team != FALSE) {
-      df <- plyr_gm_df %>%
-        dplyr::filter(
-          season %in% season_val,
-          round %in% round_num,
-          (tm == team | opp == team)
-        )
-      if (nrow(df) == 0) {
-        cli::cli_abort("Team not found please use one of: Adelaide Crows, Brisbane Lions, Carlton, Collingwood,
-                       Essendon, Fremantle, Geelong Cats, Gold Coast Suns, GWS Giants, Hawthorn, Melbourne,
-                       North Melbourne, Port Adelaide, Richmond, St Kilda, Sydney Swans, West Coast Eagles, Western Bulldogs")
-      }
-    }
-  }
-
-  final <- df %>%
-    dplyr::arrange(-tot_p_adj) %>%
-    dplyr::mutate(
-      total_points = round(tot_p_adj, 1),
-      recv_points = round(recv_pts_adj, 1),
-      disp_points = round(disp_pts_adj, 1),
-      spoil_points = round(spoil_pts_adj, 1),
-      hitout_points = round(hitout_pts_adj, 1)
-    ) %>%
-    dplyr::select(season, round,
-      player_name = plyr_nm, position = pos, team_id, team = tm, opp,
-      total_points, recv_points, disp_points, spoil_points,hitout_points, player_id, match_id
+  } else if (team != FALSE) {
+    df <- df %>% dplyr::filter(
+      .data$season %in% season_val,
+      .data$round %in% round_num,
+      (.data$tm == team | .data$opp == team)
     )
-
-  return(final)
+    if (nrow(df) == 0) {
+      cli::cli_abort("Team not found. Please use one of: Adelaide Crows, Brisbane Lions, Carlton, Collingwood, Essendon, Fremantle, Geelong Cats, Gold Coast Suns, GWS Giants, Hawthorn, Melbourne, North Melbourne, Port Adelaide, Richmond, St Kilda, Sydney Swans, West Coast Eagles, Western Bulldogs")
+    }
+  } else {
+    df <- df %>% dplyr::filter(
+      .data$season %in% season_val,
+      .data$round %in% round_num
+    )
+  }
+  return(df)
 }
-
 
 #' Get season total ratings
 #'
+#' This function calculates season total ratings for players.
 #'
-#' @param season_val
+#' @param season_val The season to calculate ratings for. Default is the current season.
+#' @param round_num The round number to calculate ratings for. Default is NA (all rounds).
 #'
+#' @return A data frame containing player season total ratings.
 #' @export
-
+#'
+#' @importFrom dplyr group_by summarise arrange n
 player_season_ratings <- function(season_val = get_afl_season(), round_num = NA) {
-  df <- dplyr::tibble()
+  df <- get_season_data(season_val, round_num)
 
-  summary_func <- function(x){
-    dplyr::summarise(x,
-    team = get_mode(team),
-    position = max(position),
-    games = dplyr::n(),
-    season_points = sum(total_points),
-    season_recv = sum(recv_points),
-    season_disp = sum(disp_points),
-    season_spoil = sum(spoil_points),
-    season_hitout = sum(hitout_points),
-    ppg = season_points/games
-    )
-  }
+  df %>%
+    dplyr::group_by(.data$season, .data$player_name, .data$player_id, .data$team_id) %>%
+    dplyr::summarise(
+      team = get_mode(.data$team),
+      position = max(.data$position),
+      games = dplyr::n(),
+      season_points = sum(.data$total_points),
+      season_recv = sum(.data$recv_points),
+      season_disp = sum(.data$disp_points),
+      season_spoil = sum(.data$spoil_points),
+      season_hitout = sum(.data$hitout_points),
+      ppg = .data$season_points / .data$games,
+      .groups = "drop"
+    ) %>%
+    dplyr::arrange(-.data$season_points)
+}
 
+#' Get season data
+#'
+#' @param season_val Season value
+#' @param round_num Round number
+#'
+#' @return Season data frame
+get_season_data <- function(season_val, round_num) {
   if (season_val < get_afl_season()) {
-    if (any(is.na(round_num))) {
-      df <- player_game_ratings(season_val, 0:99) %>%
-        dplyr::group_by(season, player_name, player_id, team_id) %>%
-        summary_func() %>%
-        dplyr::arrange(-season_points)
-    }
-    if (!any(is.na(round_num))) {
-      df <- player_game_ratings(season_val, round_num) %>%
-        dplyr::group_by(season, player_name, player_id, team_id) %>%
-        summary_func() %>%
-        dplyr::arrange(-season_points)
-    }
+    round_range <- if (any(is.na(round_num))) 0:99 else round_num
+  } else {
+    round_range <- if (any(is.na(round_num))) 0:get_afl_week() else round_num
   }
 
-  if (season_val == get_afl_season()) {
-    if (any(is.na(round_num))) {
-      df <- player_game_ratings(season_val, 0:get_afl_week()) %>%
-        dplyr::group_by(season, player_name, player_id, team_id) %>%
-        summary_func() %>%
-        dplyr::arrange(-season_points)
-    }
-    if (!any(is.na(round_num))) {
-      df <- player_game_ratings(season_val, round_num) %>%
-        dplyr::group_by(season, player_name, player_id, team_id) %>%
-        summary_func() %>%
-        dplyr::arrange(-season_points)
-    }
-  }
-
-  return(df)
+  player_game_ratings(season_val, round_range)
 }
