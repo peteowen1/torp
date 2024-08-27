@@ -22,13 +22,11 @@ torp_ratings <- function(season_val = get_afl_season(type = "next"),
                          loading = 1.5,
                          prior_games_recv = 4,
                          prior_games_disp = 6) {
-
-
-  if(is.null(plyr_tm_df)){
+  if (is.null(plyr_tm_df)) {
     plyr_tm_df <- torp::plyr_tm_df
   }
 
-  if(is.null(plyr_gm_df)){
+  if (is.null(plyr_gm_df)) {
     plyr_gm_df <- torp::plyr_gm_df
   }
 
@@ -41,15 +39,16 @@ torp_ratings <- function(season_val = get_afl_season(type = "next"),
     dplyr::pull()
 
   if (is.na(date_val)) {
-    cli::cli_abort("Fixtures for this date not available yet")
+    cli::cli_warn("Fixtures for this date not available yet")
+    return(data.frame())
+  } else {
+    plyr_gm_df <- calculate_player_stats(plyr_gm_df, match_ref, date_val, decay, loading, prior_games_recv, prior_games_disp)
+
+    final_df <- prepare_final_dataframe(plyr_tm_df, plyr_gm_df, season_val, round_val)
+
+    message(glue::glue("TORP ratings as at {season_val} round {round_val}"))
+    return(final_df)
   }
-
-  plyr_gm_df <- calculate_player_stats(plyr_gm_df, match_ref, date_val, decay, loading, prior_games_recv, prior_games_disp)
-
-  final_df <- prepare_final_dataframe(plyr_tm_df, plyr_gm_df, season_val, round_val)
-
-  message(glue::glue("TORP ratings as at {season_val} round {round_val}"))
-  return(final_df)
 }
 
 #' Calculate player statistics
@@ -66,7 +65,7 @@ torp_ratings <- function(season_val = get_afl_season(type = "next"),
 #'
 #' @importFrom dplyr filter mutate group_by summarise n_distinct last ungroup
 calculate_player_stats <- function(plyr_gm_df = NULL, match_ref, date_val, decay, loading, prior_games_recv, prior_games_disp) {
-  if(is.null(plyr_gm_df)){
+  if (is.null(plyr_gm_df)) {
     plyr_gm_df <- torp::plyr_gm_df
   }
   plyr_gm_df %>%
@@ -111,12 +110,11 @@ calculate_player_stats <- function(plyr_gm_df = NULL, match_ref, date_val, decay
 #'
 #' @importFrom dplyr filter left_join ungroup mutate select arrange
 prepare_final_dataframe <- function(plyr_tm_df = NULL, plyr_gm_df = NULL, season_val, round_val) {
-
-  if(is.null(plyr_tm_df)){
-  plyr_tm_df <- torp::plyr_tm_df
+  if (is.null(plyr_tm_df)) {
+    plyr_tm_df <- torp::plyr_tm_df
   }
 
-  if(is.null(plyr_gm_df)){
+  if (is.null(plyr_gm_df)) {
     plyr_gm_df <- torp::plyr_gm_df
   }
 
@@ -129,8 +127,8 @@ prepare_final_dataframe <- function(plyr_tm_df = NULL, plyr_gm_df = NULL, season
       season = season_val
     ) %>%
     dplyr::left_join(torp::fixtures %>%
-                       dplyr::group_by(season = .data$compSeason.year, round = .data$round.roundNumber) %>%
-                       dplyr::summarise(ref_date = lubridate::as_date(min(.data$utcStartTime)), .groups = "drop")) %>%
+      dplyr::group_by(season = .data$compSeason.year, round = .data$round.roundNumber) %>%
+      dplyr::summarise(ref_date = lubridate::as_date(min(.data$utcStartTime)), .groups = "drop")) %>%
     dplyr::mutate(
       age = lubridate::decimal_date(lubridate::as_date(.data$ref_date)) -
         lubridate::decimal_date(lubridate::as_date(.data$dateOfBirth))
@@ -172,11 +170,12 @@ player_game_ratings <- function(season_val = get_afl_season(),
       spoil_points = round(.data$spoil_pts_adj, 1),
       hitout_points = round(.data$hitout_pts_adj, 1)
     ) %>%
-    dplyr::select(season = .data$season, round = .data$round,
-                  player_name = .data$plyr_nm, position = .data$pos, team_id = .data$team_id, team = .data$tm, opp = .data$opp,
-                  total_points = .data$total_points, recv_points = .data$recv_points, disp_points = .data$disp_points,
-                  spoil_points = .data$spoil_points, hitout_points = .data$hitout_points,
-                  player_id = .data$player_id, match_id = .data$match_id
+    dplyr::select(
+      season = .data$season, round = .data$round,
+      player_name = .data$plyr_nm, position = .data$pos, team_id = .data$team_id, team = .data$tm, opp = .data$opp,
+      total_points = .data$total_points, recv_points = .data$recv_points, disp_points = .data$disp_points,
+      spoil_points = .data$spoil_points, hitout_points = .data$hitout_points,
+      player_id = .data$player_id, match_id = .data$match_id
     )
 }
 

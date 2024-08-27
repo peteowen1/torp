@@ -41,6 +41,15 @@ load_chains <- function(seasons = get_afl_season(), rounds = get_afl_week()) {
 #' @export
 #' @importFrom glue glue
 load_pbp <- function(seasons = get_afl_season(), rounds = get_afl_week()) {
+
+  if(seasons == TRUE){
+    seasons <- 2021:get_afl_season()
+  }
+
+  if(rounds == TRUE){
+    rounds <- 0:28
+  }
+
   validate_seasons_and_rounds(seasons, rounds)
 
   urls <- generate_urls("pbp-data", "pbp_data", seasons, rounds)
@@ -66,7 +75,7 @@ load_pbp <- function(seasons = get_afl_season(), rounds = get_afl_week()) {
 #' @export
 #' @importFrom glue glue
 load_xg <- function(seasons = get_afl_season()) {
-  validate_seasons(seasons)
+  seasons <- validate_seasons(seasons)
 
   urls <- generate_urls("xg-data", "xg_data", seasons)
 
@@ -91,7 +100,7 @@ load_xg <- function(seasons = get_afl_season()) {
 #' @export
 #' @importFrom glue glue
 load_ps <- function(seasons = get_afl_season()) {
-  validate_seasons(seasons)
+  seasons <- validate_seasons(seasons)
 
   urls <- generate_urls("ps-data", "ps_data", seasons)
 
@@ -197,6 +206,8 @@ validate_seasons <- function(seasons) {
     seasons >= 2021,
     seasons <= get_afl_season()
   )
+
+  return(seasons)
 }
 
 #' Generate URLs for data download
@@ -212,13 +223,20 @@ validate_seasons <- function(seasons) {
 generate_urls <- function(data_type, file_prefix, seasons, rounds = NULL) {
   base_url <- "https://github.com/peteowen1/torpdata/releases/download"
 
-  if (is.null(rounds)) {
-    urls <- glue::glue("{base_url}/{data_type}/{file_prefix}_{seasons}.rds")
-  } else {
-    rounds_02d <- sprintf("%02d", rounds)
-    urls <- glue::glue("{base_url}/{data_type}/{file_prefix}_{seasons}_{rounds_02d}.rds")
-    urls <- sort(urls)
-  }
+    if(is.null(rounds)){
+      combinations <- expand.grid(seasons = seasons)
+
+      urls <- glue::glue("{base_url}/{data_type}/{file_prefix}_{combinations$seasons}.rds")
+      urls <- sort(urls)
+    }
+
+    if(!is.null(rounds)){
+      rounds_02d <- sprintf("%02d", rounds)
+      combinations <- expand.grid(seasons = seasons, rounds = rounds_02d)
+
+      urls <- glue::glue("{base_url}/{data_type}/{file_prefix}_{combinations$seasons}_{combinations$rounds}.rds")
+      urls <- sort(urls)
+    }
 
   current_season <- get_afl_season()
   current_round <- sprintf("%02d", get_afl_week())
