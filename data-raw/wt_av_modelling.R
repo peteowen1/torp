@@ -33,7 +33,7 @@ pl_details <- fetch_player_details_afl(2024)
 #   janitor::clean_names()
 # pstot <- bind_rows(ps20, ps21, ps22, ps23, ps24)
 
-pstot <- load_ps(TRUE)
+pstot <- load_player_stats(TRUE)
 
 ### columns 22 to 88
 

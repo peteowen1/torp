@@ -5,7 +5,7 @@
 \title{Calculate player statistics}
 \usage{
 calculate_player_stats(
-  plyr_gm_df,
+  plyr_gm_df = NULL,
   match_ref,
   date_val,
   decay,

@@ -13,22 +13,23 @@ all_grounds <- readRDS("./data-raw/stadium-data.rds")
 
 ###
 xg_df <- load_xg(TRUE)
+fixtures <- load_fixtures(TRUE)
 
-pred_df <- readRDS("./data-raw/stat_pred_df.rds")
-
-team_preds <- pred_df %>%
-  group_by(provider_id, team_name, opp_name) %>%
-  summarise_if(is.numeric, sum, na.rm = TRUE) %>%
-  mutate(
-    pred_disposal_efficiency = pred_extended_stats_effective_disposals / pred_disposals,
-    pred_goal_accuracy = pred_goal_accuracy / pred_shots_at_goal,
-    pred_extended_stats_kick_efficiency = pred_extended_stats_effective_kicks / pred_kicks,
-    pred_extended_stats_contested_possession_rate = pred_contested_possessions / pred_total_possessions,
-    pred_extended_stats_hitout_win_percentage = pred_hitouts / pred_extended_stats_ruck_contests,
-    pred_extended_stats_hitout_to_advantage_rate = pred_extended_stats_hitouts_to_advantage / pred_hitouts,
-    pred_extended_stats_contest_def_loss_percentage = pred_extended_stats_contest_def_losses / pred_extended_stats_contest_def_one_on_ones,
-    pred_extended_stats_contest_off_wins_percentage = pred_extended_stats_contest_off_wins / pred_extended_stats_contest_off_one_on_ones
-  )
+# pred_df <- readRDS("./data-raw/stat_pred_df.rds")
+#
+# team_preds <- pred_df %>%
+#   group_by(provider_id, team_name, opp_name) %>%
+#   summarise_if(is.numeric, sum, na.rm = TRUE) %>%
+#   mutate(
+#     pred_disposal_efficiency = pred_extended_stats_effective_disposals / pred_disposals,
+#     pred_goal_accuracy = pred_goal_accuracy / pred_shots_at_goal,
+#     pred_extended_stats_kick_efficiency = pred_extended_stats_effective_kicks / pred_kicks,
+#     pred_extended_stats_contested_possession_rate = pred_contested_possessions / pred_total_possessions,
+#     pred_extended_stats_hitout_win_percentage = pred_hitouts / pred_extended_stats_ruck_contests,
+#     pred_extended_stats_hitout_to_advantage_rate = pred_extended_stats_hitouts_to_advantage / pred_hitouts,
+#     pred_extended_stats_contest_def_loss_percentage = pred_extended_stats_contest_def_losses / pred_extended_stats_contest_def_one_on_ones,
+#     pred_extended_stats_contest_off_wins_percentage = pred_extended_stats_contest_off_wins / pred_extended_stats_contest_off_one_on_ones
+#   )
 # %>% View()
 
 
@@ -573,11 +574,11 @@ team_mdl_df$pred_score_diff <- predict(afl_score_mdl, newdata = team_mdl_df, typ
 afl_win_mdl <-
   mgcv::bam(
     win ~
-      s(team_type_fac, bs = "re")
+      # s(team_type_fac, bs = "re")
     + s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
     + s(team_name_season.x, bs = "re") + s(team_name_season.y, bs = "re")
-    #+ ti(pred_tot_xscore, pred_score_diff, bs = c("ts", "ts"), k = 4)
-    + ti(pred_tot_xscore, pred_xscore_diff, bs = c("ts", "ts"), k = 4)
+    + ti(pred_tot_xscore, pred_score_diff, bs = c("ts", "ts"), k = 4)
+    # + ti(pred_tot_xscore, pred_xscore_diff, bs = c("ts", "ts"), k = 4)
     + s(pred_score_diff, bs = "ts", k = 5)
     #+ s(pred_xscore_diff, bs = "ts", k = 5)
     + s(log_dist_diff, bs = "ts", k = 5) + s(familiarity_diff, bs = "ts", k = 5) + s(days_rest_diff_fac, bs = "re")
@@ -588,6 +589,7 @@ afl_win_mdl <-
   )
 
 # summary(afl_win_mdl)
+# plot(mgcViz::getViz(afl_win_mdl))
 
 ###
 team_mdl_df$pred_win <- predict(afl_win_mdl, newdata = team_mdl_df, type = "response")

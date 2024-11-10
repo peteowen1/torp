@@ -69,7 +69,7 @@ mdl_wk <- function(df, season, weeknum) {
     afl_total_xpoints_mdl_test <- mgcv::bam(
       total_xpoints ~
         s(team_type_fac, bs = "re")
-      + s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
+      # + s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
       + s(team_name_season.x, bs = "re") + s(team_name_season.y, bs = "re")
       + s(abs(torp_diff), bs = "ts", k = 5)
       + s(abs(torp_recv_diff), bs = "ts", k = 5)
@@ -97,7 +97,7 @@ mdl_wk <- function(df, season, weeknum) {
     afl_xscore_diff_mdl_test <- mgcv::bam(
       xscore_diff ~
         s(team_type_fac, bs = "re")
-      + s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
+      # + s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
       + s(team_name_season.x, bs = "re") + s(team_name_season.y, bs = "re")
       + ti(torp_diff, pred_tot_xscore, bs = c("ts", "ts"), k = 4)
       + s(pred_tot_xscore, bs = "ts", k = 5)
@@ -124,7 +124,7 @@ mdl_wk <- function(df, season, weeknum) {
     afl_conv_mdl_test <- mgcv::bam(
       shot_conv ~
         s(team_type_fac.x, bs = "re")
-      + s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
+      # + s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
       + s(team_name_season.x, bs = "re") + s(team_name_season.y, bs = "re")
       + ti(torp_diff, pred_tot_xscore, bs = c("ts", "ts"), k = 4)
       + s(pred_tot_xscore, bs = "ts", k = 5)
@@ -146,7 +146,7 @@ mdl_wk <- function(df, season, weeknum) {
     afl_score_mdl_test <- mgcv::bam(
       score_diff ~
         s(team_type_fac, bs = "re")
-      + s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
+      # + s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
       + s(team_name_season.x, bs = "re") + s(team_name_season.y, bs = "re")
       + s(pred_tot_xscore, bs = "ts", k = 5)
       + ti(pred_xscore_diff, pred_conv, bs = c("ts", "ts"), k = 4)
@@ -174,7 +174,7 @@ mdl_wk <- function(df, season, weeknum) {
       mgcv::bam(
         win ~
           s(team_type_fac, bs = "re")
-        + s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
+        # + s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
         + s(team_name_season.x, bs = "re") + s(team_name_season.y, bs = "re")
         #+ ti(pred_tot_xscore, pred_score_diff, bs = c("ts", "ts"), k = 4)
         + ti(pred_tot_xscore, pred_xscore_diff, bs = c("ts", "ts"), k = 4)
@@ -229,8 +229,8 @@ plan('multisession',workers = (parallelly::availableCores()-2))
 
 tictoc::tic()
 resultz <- bind_rows(
-  # furrr::future_map(1:27, ~ mdl_wk(team_mdl_df, 2022, .), .progress=T),
-  # furrr::future_map(1:28, ~ mdl_wk(team_mdl_df, 2023, .), .progress=T),
+  furrr::future_map(1:27, ~ mdl_wk(team_mdl_df, 2022, .), .progress=T),
+  furrr::future_map(1:28, ~ mdl_wk(team_mdl_df, 2023, .), .progress=T),
   furrr::future_map(0:28, ~ mdl_wk(team_mdl_df, 2024, .), .progress=T)
 )
 tictoc::toc()

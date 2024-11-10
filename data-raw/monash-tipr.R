@@ -87,3 +87,5 @@ games <-
 games
 
 monashtipr::submit_tips(games, user, pass, comp = comp)
+
+week_gms

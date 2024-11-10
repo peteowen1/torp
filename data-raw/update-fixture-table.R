@@ -6,10 +6,10 @@ devtools::load_all()
 
 ### update fixtures file (17 secs)
 tictoc::tic()
-fixtures_upd <- fitzRoy::fetch_fixture_afl(lubridate::year(Sys.Date()), comp = "AFLM")
+fixtures_upd <- purrr::map(lubridate::year(Sys.Date()), ~fitzRoy::fetch_fixture_afl(.x, comp = "AFLM")) %>% purrr::list_rbind()
 tictoc::toc()
 
-fixtures <- torp::fixtures %>% rows_upsert(fixtures_upd, by = "providerId")
+fixtures <- fixtures_upd #torp::fixtures %>% rows_upsert(fixtures_upd, by = "providerId")
 usethis::use_data(fixtures, overwrite = TRUE)
 
 ### update teams file (90 secs per season)

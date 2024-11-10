@@ -23,17 +23,17 @@ torp_ratings <- function(season_val = get_afl_season(type = "next"),
                          prior_games_recv = 4,
                          prior_games_disp = 6) {
   if (is.null(plyr_tm_df)) {
-    plyr_tm_df <- torp::plyr_tm_df
+    plyr_tm_df <- load_player_details(season_val)
   }
 
   if (is.null(plyr_gm_df)) {
-    plyr_gm_df <- torp::plyr_gm_df
+    plyr_gm_df <- plyr_gm_df
   }
 
   gwk <- sprintf("%02d", round_val)
   match_ref <- paste0("CD_M", season_val, "014", gwk)
 
-  date_val <- torp::fixtures %>%
+  date_val <- load_fixtures(season_val) %>%
     dplyr::filter(.data$compSeason.year == season_val, .data$round.roundNumber == round_val) %>%
     dplyr::summarise(lubridate::as_date(min(.data$utcStartTime))) %>%
     dplyr::pull()
@@ -42,9 +42,9 @@ torp_ratings <- function(season_val = get_afl_season(type = "next"),
     cli::cli_warn("Fixtures for this date not available yet")
     return(data.frame())
   } else {
-    plyr_gm_df <- calculate_player_stats(plyr_gm_df, match_ref, date_val, decay, loading, prior_games_recv, prior_games_disp)
+    plyr_gm_df_rnd <- calculate_player_stats(plyr_gm_df, match_ref, date_val, decay, loading, prior_games_recv, prior_games_disp)
 
-    final_df <- prepare_final_dataframe(plyr_tm_df, plyr_gm_df, season_val, round_val)
+    final_df <- prepare_final_dataframe(plyr_tm_df, plyr_gm_df_rnd, season_val, round_val)
 
     message(glue::glue("TORP ratings as at {season_val} round {round_val}"))
     return(final_df)
@@ -66,7 +66,7 @@ torp_ratings <- function(season_val = get_afl_season(type = "next"),
 #' @importFrom dplyr filter mutate group_by summarise n_distinct last ungroup
 calculate_player_stats <- function(plyr_gm_df = NULL, match_ref, date_val, decay, loading, prior_games_recv, prior_games_disp) {
   if (is.null(plyr_gm_df)) {
-    plyr_gm_df <- torp::plyr_gm_df
+    plyr_gm_df <- plyr_gm_df
   }
   plyr_gm_df %>%
     dplyr::ungroup() %>%
@@ -111,11 +111,11 @@ calculate_player_stats <- function(plyr_gm_df = NULL, match_ref, date_val, decay
 #' @importFrom dplyr filter left_join ungroup mutate select arrange
 prepare_final_dataframe <- function(plyr_tm_df = NULL, plyr_gm_df = NULL, season_val, round_val) {
   if (is.null(plyr_tm_df)) {
-    plyr_tm_df <- torp::plyr_tm_df
+    plyr_tm_df <- load_player_details(season_val)
   }
 
   if (is.null(plyr_gm_df)) {
-    plyr_gm_df <- torp::plyr_gm_df
+    plyr_gm_df <- plyr_gm_df
   }
 
   plyr_tm_df %>%
@@ -126,7 +126,7 @@ prepare_final_dataframe <- function(plyr_tm_df = NULL, plyr_gm_df = NULL, season
       round = round_val,
       season = season_val
     ) %>%
-    dplyr::left_join(torp::fixtures %>%
+    dplyr::left_join(fixtures %>%
       dplyr::group_by(season = .data$compSeason.year, round = .data$round.roundNumber) %>%
       dplyr::summarise(ref_date = lubridate::as_date(min(.data$utcStartTime)), .groups = "drop")) %>%
     dplyr::mutate(

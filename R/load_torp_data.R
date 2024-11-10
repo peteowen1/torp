@@ -17,7 +17,7 @@
 load_chains <- function(seasons = get_afl_season(), rounds = get_afl_week()) {
   validate_seasons_and_rounds(seasons, rounds)
 
-  urls <- generate_urls("chain-data", "chain_data", seasons, rounds)
+  urls <- generate_urls("chains-data", "chains_data", seasons, rounds)
 
   out <- load_from_url(urls, seasons = seasons, rounds = rounds)
 
@@ -94,20 +94,121 @@ load_xg <- function(seasons = get_afl_season()) {
 #' @examples
 #' \donttest{
 #' try({ # prevents cran errors
-#'   load_ps(2021:2022)
+#'   load_player_stats(2021:2022)
 #' })
 #' }
 #' @export
 #' @importFrom glue glue
-load_ps <- function(seasons = get_afl_season()) {
+load_player_stats <- function(seasons = get_afl_season()) {
   seasons <- validate_seasons(seasons)
 
-  urls <- generate_urls("ps-data", "ps_data", seasons)
+  urls <- generate_urls("player_stats-data", "player_stats_data", seasons)
 
   out <- load_from_url(urls, seasons = seasons)
 
   return(out)
 }
+
+#' Load Player Stats Data
+#'
+#' @description Loads player stats data from the [torpdata repository](https://github.com/peteowen1/torpdata)
+#'
+#' @param seasons A numeric vector of 4-digit years associated with given AFL seasons - defaults to latest season. If set to `TRUE`, returns all available data since 2021.
+#'
+#' @return A data frame containing player stats data.
+#' @examples
+#' \donttest{
+#' try({ # prevents cran errors
+#'   load_fixtures(2021:2022)
+#' })
+#' }
+#' @export
+#' @importFrom glue glue
+load_fixtures <- function(seasons = get_afl_season()) {
+  seasons <- validate_seasons(seasons)
+
+  urls <- generate_urls("fixtures-data", "fixtures", seasons)
+
+  out <- load_from_url(urls, seasons = seasons)
+
+  return(out)
+}
+
+#' Load Player Stats Data
+#'
+#' @description Loads player stats data from the [torpdata repository](https://github.com/peteowen1/torpdata)
+#'
+#' @param seasons A numeric vector of 4-digit years associated with given AFL seasons - defaults to latest season. If set to `TRUE`, returns all available data since 2021.
+#'
+#' @return A data frame containing player stats data.
+#' @examples
+#' \donttest{
+#' try({ # prevents cran errors
+#'   load_teams(2021:2022)
+#' })
+#' }
+#' @export
+#' @importFrom glue glue
+load_teams <- function(seasons = get_afl_season()) {
+  seasons <- validate_seasons(seasons)
+
+  urls <- generate_urls("teams-data", "teams", seasons)
+
+  out <- load_from_url(urls, seasons = seasons)
+
+  return(out)
+}
+
+#' Load Player Stats Data
+#'
+#' @description Loads player stats data from the [torpdata repository](https://github.com/peteowen1/torpdata)
+#'
+#' @param seasons A numeric vector of 4-digit years associated with given AFL seasons - defaults to latest season. If set to `TRUE`, returns all available data since 2021.
+#'
+#' @return A data frame containing player stats data.
+#' @examples
+#' \donttest{
+#' try({ # prevents cran errors
+#'   load_results(2021:2022)
+#' })
+#' }
+#' @export
+#' @importFrom glue glue
+load_results <- function(seasons = get_afl_season()) {
+  seasons <- validate_seasons(seasons)
+
+  urls <- generate_urls("results-data", "results", seasons)
+
+  out <- load_from_url(urls, seasons = seasons)
+
+  return(out)
+}
+
+#' Load Player Stats Data
+#'
+#' @description Loads player stats data from the [torpdata repository](https://github.com/peteowen1/torpdata)
+#'
+#' @param seasons A numeric vector of 4-digit years associated with given AFL seasons - defaults to latest season. If set to `TRUE`, returns all available data since 2021.
+#'
+#' @return A data frame containing player stats data.
+#' @examples
+#' \donttest{
+#' try({ # prevents cran errors
+#'   load_player_details(2021:2022)
+#' })
+#' }
+#' @export
+#' @importFrom glue glue
+load_player_details <- function(seasons = get_afl_season()) {
+  seasons <- validate_seasons(seasons)
+
+  urls <- generate_urls("player_details-data", "player_details_data", seasons)
+
+  out <- load_from_url(urls, seasons = seasons)
+
+  return(out)
+}
+
 
 #' Load any rds/csv/csv.gz/parquet/qs file from a remote URL
 #'

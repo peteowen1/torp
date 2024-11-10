@@ -24,7 +24,7 @@ starting <- tr %>% inner_join(teams %>% filter( season == get_afl_season() , rou
 View(starting)
 
 ###
-this_week <- player_game_ratings()
+this_week <- player_game_ratings(2024,27)
 view(this_week)
 
 this_season <- player_game_ratings(round_num = 0:get_afl_week())
@@ -33,7 +33,7 @@ view(this_season)
 tot_season <- player_game_ratings(season = 2021:2024, round_num = 0:get_afl_week())
 view(tot_season)
 
-ssn_24 <- player_season_ratings(2024)
+ssn_24 <- player_season_ratings(2024, 0:24)
 view(ssn_24)
 ssn_23 <- player_season_ratings(2023)
 # view(ssn_23)

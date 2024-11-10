@@ -15,7 +15,7 @@ plan(multisession, workers = available_cores) # Dynamically set the number of wo
 
 # Fetch player statistics
 # player_stats <- fitzRoy::fetch_player_stats_afltables(2016:2024)
-player_stats <- fitzRoy::fetch_player_stats_fryzigg(2012:2024) %>% # 2012 for advanced stats, 2003 for basics
+player_stats <- fitzRoy::fetch_player_stats_fryzigg(2003:2024) %>% # 2012 for advanced stats, 2003 for basics
   mutate(
     season = as.factor(year(match_date)),
     tog_adj =
@@ -86,8 +86,8 @@ wide_data[is.na(wide_data)] <- 0
 return(wide_data)
 }
 
-wd_12_19 <- make_wide_data(player_game_stats_long, 2012:2019)
-wd_16_24 <- make_wide_data(player_game_stats_long, 2016:2024)
+wd_12_19 <- make_wide_data(player_game_stats_long, 2003:2024)
+# wd_16_24 <- make_wide_data(player_game_stats_long, 2012:2024)
 
 # # Prepare the design matrix and response variable
 # X <- as.matrix(wide_data %>% select(-any_of(c(
@@ -103,12 +103,12 @@ df_brms_12_19 <- wd_12_19 %>%
     "match_id", "match_home_team", "match_away_team"
   )))
 
-# Prepare the data frame for brms
-df_brms_16_24 <- wd_16_24 %>%
-  select(-any_of(c(
-    "season", "round", "home_team", "away_team", "score_diff", "score_type",
-    "match_id", "match_home_team", "match_away_team"
-  )))
+# # Prepare the data frame for brms
+# df_brms_16_24 <- wd_16_24 %>%
+#   select(-any_of(c(
+#     "season", "round", "home_team", "away_team", "score_diff", "score_type",
+#     "match_id", "match_home_team", "match_away_team"
+#   )))
 
 # Define the model formula
 formula <- bf(score ~ 0 + ., center = FALSE)
@@ -142,12 +142,12 @@ saveRDS(fit_od_12_19, "./data-raw/bayes_od_rapm_12_19.rds")
 fit_od_12_19 <- readRDS("./data-raw/bayes_od_rapm_12_19.rds")
 
 ### 2018 to 2024 ----
-# Fit the Bayesian ridge regression model with the specified priors
-fit_od_16_24 <- brm(formula, data = df_brms_16_24, prior = priors, family = gaussian(), chains = 2, iter = 1000, cores = available_cores, verbose = TRUE)
-# Save model
-saveRDS(fit_od_16_24, "./data-raw/bayes_od_rapm_16_24.rds")
-# Load model
-fit_od_16_24 <- readRDS("./data-raw/bayes_od_rapm_16_24.rds")
+# # Fit the Bayesian ridge regression model with the specified priors
+# fit_od_16_24 <- brm(formula, data = df_brms_16_24, prior = priors, family = gaussian(), chains = 2, iter = 1000, cores = available_cores, verbose = TRUE)
+# # Save model
+# saveRDS(fit_od_16_24, "./data-raw/bayes_od_rapm_16_24.rds")
+# # Load model
+# fit_od_16_24 <- readRDS("./data-raw/bayes_od_rapm_16_24.rds")
 
 get_rapm_df <- function(mdl) {
 # Extract posterior samples using as_draws
@@ -176,7 +176,8 @@ return(rapm_df)
 }
 
 rapm_df <- bind_rows(get_rapm_df(fit_od_12_19),
-                     get_rapm_df(fit_od_16_24))
+                     # get_rapm_df(fit_od_16_24)
+                     )
 
 View(rapm_df)
 
@@ -206,20 +207,20 @@ View(rapm_df)
 
 # Predict the point differentials
 pred_diff_12_19 <- predict(fit_od_12_19, newdata = df_brms_12_19, type = "response")
-pred_diff_16_24 <- predict(fit_od_16_24, newdata = df_brms_16_24, type = "response")
+# pred_diff_16_24 <- predict(fit_od_16_24, newdata = df_brms_16_24, type = "response")
 
 # Add predictions to wide_data
 wd_12_19$pred_diff <- pred_diff_12_19[, "Estimate"]
 MLmetrics::MAE(wd_12_19$pred_diff, wd_12_19$score)
 
 # Add predictions to wide_data
-wd_16_24$pred_diff <- pred_diff_16_24[, "Estimate"]
-MLmetrics::MAE(wd_16_24$pred_diff, wd_16_24$score)
+# wd_16_24$pred_diff <- pred_diff_16_24[, "Estimate"]
+# MLmetrics::MAE(wd_16_24$pred_diff, wd_16_24$score)
 
 
-# player_bpm_12_19
+# player_bpm_12_19 ----
 player_bpm_12_19 <- player_stats %>%
-  filter(season %in% 2012:2019) %>%
+  filter(season %in% 2003:2024) %>%
   mutate(ID = as.character(player_id)) %>%
   group_by(ID) %>%
   mutate(
@@ -254,62 +255,68 @@ player_bpm_12_19 <- player_stats %>%
   # mutate(across(Kicks:Goal.Assists, scale)) %>%
   relocate(colnames(rapm_df))
 
-# player_bpm_16_24
-player_bpm_16_24 <- player_stats %>%
-  filter(season %in% 2016:2024) %>%
-  mutate(ID = as.character(player_id)) %>%
-  group_by(ID) %>%
-  mutate(
-    tot_tog = sum(tog_adj, na.rm = TRUE),
-    ID = case_when(
-      tot_tog < 5 ~ "05lt",
-      tot_tog < 10 ~ "10lt",
-      tot_tog < 15 ~ "15lt",
-      tot_tog < 20 ~ "20lt",
-      TRUE ~ ID
-    )
-  ) %>%
-  ungroup() %>%
-  group_by(ID) %>%
-  summarise(
-    tot_tog = sum(tog_adj, na.rm = TRUE),
-    avg_tog = mean(tog_adj, na.rm = TRUE),
-    pos = get_mode(player_position),
-    across(
-      c(
-        kicks:effective_disposals,
-        goals:free_kicks_against,
-        contested_possessions:goal_assists,
-        centre_clearances:hitouts_to_advantage,
-        intercept_marks:pressure_acts,
-        ruck_contests:spoils
-      ),
-      ~ mean(.x, na.rm = TRUE)
-    )
-  ) %>%
-  left_join(rapm_df %>% filter(mdl == 'fit_od_16_24')) %>%
-  # mutate(across(Kicks:Goal.Assists, scale)) %>%
-  relocate(colnames(rapm_df))
+# # player_bpm_16_24
+# player_bpm_16_24 <- player_stats %>%
+#   filter(season %in% 2016:2024) %>%
+#   mutate(ID = as.character(player_id)) %>%
+#   group_by(ID) %>%
+#   mutate(
+#     tot_tog = sum(tog_adj, na.rm = TRUE),
+#     ID = case_when(
+#       tot_tog < 5 ~ "05lt",
+#       tot_tog < 10 ~ "10lt",
+#       tot_tog < 15 ~ "15lt",
+#       tot_tog < 20 ~ "20lt",
+#       TRUE ~ ID
+#     )
+#   ) %>%
+#   ungroup() %>%
+#   group_by(ID) %>%
+#   summarise(
+#     tot_tog = sum(tog_adj, na.rm = TRUE),
+#     avg_tog = mean(tog_adj, na.rm = TRUE),
+#     pos = get_mode(player_position),
+#     across(
+#       c(
+#         kicks:effective_disposals,
+#         goals:free_kicks_against,
+#         contested_possessions:goal_assists,
+#         centre_clearances:hitouts_to_advantage,
+#         intercept_marks:pressure_acts,
+#         ruck_contests:spoils
+#       ),
+#       ~ mean(.x, na.rm = TRUE)
+#     )
+#   ) %>%
+#   left_join(rapm_df %>% filter(mdl == 'fit_od_16_24')) %>%
+#   # mutate(across(Kicks:Goal.Assists, scale)) %>%
+#   relocate(colnames(rapm_df))
 
 # total df
-player_bpm <- bind_rows(player_bpm_12_19,player_bpm_16_24) %>%
+player_bpm <- bind_rows(player_bpm_12_19,
+                        # player_bpm_16_24
+                        ) %>%
   filter(!is.na(mdl))
 
-# Prepare the data for glmnet
+# Prepare the data for glmnet ----
 library(glmnet)
 
+model_df <- player_bpm %>% # %>% filter(!str_detect(ID,'lt'))
+  select(where(~ all(complete.cases(.))))
+
 # Assume the response variable is the point differential
-X <- as.matrix(player_bpm %>%
-                 mutate(across(kicks:spoils, ~ . / avg_tog)) %>%
+X <- as.matrix(model_df %>%
+                 mutate(across(kicks:goal_assists, ~ . / avg_tog)) %>% ### either spoils or goal_assists
   dplyr::select(-any_of(
     c(
       "player", "gmz", "pos", "ID", "RAPM", "Brownlow.Votes", "tot_tog","avg_tog", "pred_bpm",
       "orapm", "drapm", "tot_rapm", "mdl"
     )
   )))
-y1 <- player_bpm$orapm
-y2 <- player_bpm$drapm
-weights <- player_bpm$tot_tog
+y1 <- model_df$orapm
+y2 <- model_df$drapm
+weights <- sqrt(model_df$tot_tog)
+weights <- weights / mean(weights)
 
 # Standardize the data
 # X_scaled <- scale(X)
@@ -336,19 +343,19 @@ drapm_model <- glmnet(X, y2, alpha = 0, lambda = best_lambda_d, weights = weight
 
 # Get the coefficients (RAPM values)
 obpm_values <- coef(orapm_model)
-round(obpm_values, 3)
+round(obpm_values, 4)
 
 dbpm_values <- coef(drapm_model)
-round(dbpm_values, 3)
+round(dbpm_values, 4)
 
 #
 preds_o <- predict.glmnet(orapm_model, X, type = "response")
 preds_d <- predict.glmnet(drapm_model, X, type = "response")
 
 # Convert to a data frame for easy viewing
-player_bpm$pred_obpm <- preds_o[, "s0"]
-player_bpm$pred_dbpm <- preds_d[, "s0"]
-player_bpm <- player_bpm %>%
+model_df$pred_obpm <- preds_o[, "s0"]
+model_df$pred_dbpm <- preds_d[, "s0"]
+model_df <- model_df %>%
   mutate(
     tot_bpm = pred_obpm - pred_dbpm,
     tot_val_g = tot_bpm * avg_tog,
@@ -358,14 +365,15 @@ player_bpm <- player_bpm %>%
   relocate(tot_bpm, pred_obpm, pred_dbpm,tot_val_g,tot_val,tot_val_repl) %>%
   filter(!is.na(tot_bpm))
 
-View(player_bpm)
+View(model_df)
 
 ###
 # season df
 
-# Calculate tot_tog and add it to player_bpm
+# Calculate tot_tog and add it to model_df
 season_bpm <- player_stats %>%
-  mutate(ID = as.character(player_id)) %>%
+  mutate(ID = as.character(player_id),
+         player_position = replace_na(player_position,'missing')) %>%
   group_by(
     ID,
     player = paste(player_first_name, player_last_name),
@@ -382,9 +390,9 @@ season_bpm <- player_stats %>%
         kicks:effective_disposals,
         goals:free_kicks_against,
         contested_possessions:goal_assists,
-        centre_clearances:hitouts_to_advantage,
-        intercept_marks:pressure_acts,
-        ruck_contests:spoils
+        # centre_clearances:hitouts_to_advantage,
+        # intercept_marks:pressure_acts,
+        # ruck_contests:spoils
       ),
       ~ mean(.x, na.rm = TRUE)
     )
@@ -395,7 +403,8 @@ season_bpm <- player_stats %>%
   ungroup()
 
 Xseason <- as.matrix(season_bpm %>%
-  mutate(across(kicks:spoils, ~ . / avg_tog)) %>%
+                       select(where(~ all(complete.cases(.)))) %>%
+  mutate(across(kicks:goal_assists, ~ . / avg_tog)) %>% ### either spoils or goal_assists
   dplyr::select(-any_of(c(
     "player", "player_team", "season", "gmz", "pos", "ID", "RAPM",
     "Brownlow.Votes", "tot_tog", "avg_tog" ,"pred_bpm", "orapm", "drapm", "tot_rapm","mdl"
@@ -404,6 +413,9 @@ Xseason <- as.matrix(season_bpm %>%
 #
 pred_o_season <- predict.glmnet(orapm_model, Xseason, type = "response")
 pred_d_season <- predict.glmnet(drapm_model, Xseason, type = "response")
+
+# setdiff(rownames(coef(orapm_model)),colnames(Xseason))
+# setdiff(colnames(Xseason),rownames(coef(orapm_model)))
 
 # Convert to a data frame for easy viewing
 season_bpm$pred_obpm <- pred_o_season[, "s0"]
@@ -426,7 +438,7 @@ season_bpm %>%
   summarise(
     val = sum(tot_bpm * tot_tog),
     sum(is.na(tot_bpm))
-  )
+  ) %>% print(n=25)
 
 # best players in season
 season_bpm %>%

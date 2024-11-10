@@ -17,7 +17,7 @@ get_afl_season <- function(type = "current") {
   current_day <- lubridate::as_date(time_aest)
   past_fixtures <- torp::fixtures %>% dplyr::filter(.data$utcStartTime < current_day)
   future_fixtures <- torp::fixtures %>% dplyr::filter(.data$utcStartTime >= current_day)
-  if (type == "current") {
+  if (type == "current" | nrow(future_fixtures) == 0) {
     season <- as.numeric(max(past_fixtures$compSeason.year))
   } else {
     season <- as.numeric(min(future_fixtures$compSeason.year))
@@ -47,7 +47,7 @@ get_afl_week <- function(type = "current") {
     dplyr::filter(.data$utcStartTime < current_day, .data$compSeason.year == season)
   future_fixtures <- torp::fixtures %>%
     dplyr::filter(.data$utcStartTime >= current_day, .data$compSeason.year == season)
-  if (type == "current") {
+  if (type == "current" | nrow(future_fixtures) == 0) {
     round <- as.numeric(max(past_fixtures$round.roundNumber))
   } else {
     round <- as.numeric(min(future_fixtures$round.roundNumber))
