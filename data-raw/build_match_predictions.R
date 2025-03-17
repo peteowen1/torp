@@ -14,6 +14,8 @@ all_grounds <- readRDS("./data-raw/stadium-data.rds")
 ###
 xg_df <- load_xg(TRUE)
 fixtures <- load_fixtures(TRUE)
+results <- load_results(TRUE)
+teams <- load_teams(TRUE)
 
 # pred_df <- readRDS("./data-raw/stat_pred_df.rds")
 #
@@ -293,12 +295,47 @@ days_rest <- fix_df %>%
   ungroup() %>%
   dplyr::mutate(days_rest = replace_na(days_rest, 21))
 
+###
+library(rvest)
+url <- 'https://www.afl.com.au/matches/injury-list'
+inj_df <- read_html(url) %>% html_table() %>% list_rbind() %>% janitor::clean_names()
+
+tr <- torp_ratings(2025, get_afl_week("next")) %>%
+  left_join(inj_df, by = c('player_name'='player')) %>%
+  mutate(estimated_return = replace_na(estimated_return, 'None'))
+
+tr_week <-
+  tr %>%
+  filter(
+    torp > 0,
+    is.na(injury)) %>%
+  mutate(team_name = fitzRoy::replace_teams(team)) %>%
+  group_by(team_name, season,round) %>%
+  mutate(tm_rnk = rank(-torp)) %>%
+  filter(tm_rnk <= 21) %>%
+  summarise(
+    torp_week = sum(pmax(torp, 0), na.rm = T)*0.95,
+    torp_recv_week = sum(pmax(torp_recv, 0), na.rm = T)*0.95,
+    torp_disp_week = sum(pmax(torp_disp, 0), na.rm = T)*0.95,
+    torp_spoil_week = sum(pmax(torp_spoil, 0), na.rm = T)*0.95,
+    torp_hitout_week = sum(pmax(torp_hitout, 0), na.rm = T)*0.95
+  ) %>%
+  arrange(-torp_week) #%>% summarise(sum(val)) #1234
+
 ######
 team_rt_fix_df <-
-  fix_df %>%
+  fix_df %>% mutate(team_name = fitzRoy::replace_teams(team_name)) %>%
   left_join(team_dist_df) %>%
   left_join(days_rest) %>%
   left_join(team_rt_df) %>%
+  left_join(tr_week, by = c('team_name'='team_name',"season"="season","round.roundNumber"="round")) %>%
+  mutate(
+    torp = coalesce(torp,torp_week),
+    torp_recv = coalesce(torp_recv,torp_recv_week),
+    torp_disp = coalesce(torp_disp,torp_disp_week),
+    torp_spoil = coalesce(torp_spoil,torp_spoil_week),
+    torp_hitout = coalesce(torp_hitout,torp_hitout_week)
+  ) %>%
   dplyr::group_by(teamId) %>%
   tidyr::fill(torp, torp_recv, torp_disp, torp_spoil, torp_hitout) %>%
   dplyr::mutate(
@@ -481,9 +518,10 @@ afl_total_xpoints_mdl <- mgcv::bam(
     + s(torp.x, bs = "ts", k = 5) + s(torp.y, bs = "ts", k = 5)
     # + s(fwd.x, bs = "ts", k = 5) + s(mid.x, bs = "ts", k = 5) + s(def.x, bs = "ts", k = 5) + s(int.x, bs = "ts", k = 5)
     # + s(fwd.y, bs = "ts", k = 5) + s(mid.y, bs = "ts", k = 5) + s(def.y, bs = "ts", k = 5) + s(int.y, bs = "ts", k = 5)
-  + s(log_dist.x, bs = "ts", k = 5) + s(log_dist.y, bs = "ts", k = 5)
+  # + s(log_dist.x, bs = "ts", k = 5) + s(log_dist.y, bs = "ts", k = 5)
   + s(familiarity.x, bs = "ts", k = 5) + s(familiarity.y, bs = "ts", k = 5)
-  + s(log_dist_diff, bs = "ts", k = 5) + s(familiarity_diff, bs = "ts", k = 5) + s(days_rest_diff_fac, bs = "re")
+  # + s(log_dist_diff, bs = "ts", k = 5)
+  + s(familiarity_diff, bs = "ts", k = 5) + s(days_rest_diff_fac, bs = "re")
   ,
   data = team_mdl_df, weights = weightz,
   family = gaussian(), nthreads = 4, select = T, discrete = T,
@@ -531,8 +569,8 @@ afl_conv_mdl <- mgcv::bam(
     + s(pred_tot_xscore, bs = "ts", k = 5)
     + s(pred_xscore_diff, bs = "ts", k = 5)
     + s(torp_diff, bs = "ts", k = 5)
-    + s(fwd.x, bs = "ts", k = 5) + s(mid.x, bs = "ts", k = 5) + s(def.x, bs = "ts", k = 5) + s(int.x, bs = "ts", k = 5)
-    + s(fwd.y, bs = "ts", k = 5) + s(mid.y, bs = "ts", k = 5) + s(def.y, bs = "ts", k = 5) + s(int.y, bs = "ts", k = 5)
+    # + s(fwd.x, bs = "ts", k = 5) + s(mid.x, bs = "ts", k = 5) + s(def.x, bs = "ts", k = 5) + s(int.x, bs = "ts", k = 5)
+    # + s(fwd.y, bs = "ts", k = 5) + s(mid.y, bs = "ts", k = 5) + s(def.y, bs = "ts", k = 5) + s(int.y, bs = "ts", k = 5)
     + s(log_dist_diff, bs = "ts", k = 5) + s(familiarity_diff, bs = "ts", k = 5) + s(days_rest_diff_fac, bs = "re")
   ,
   data = team_mdl_df, weights = team_shots * weightz,

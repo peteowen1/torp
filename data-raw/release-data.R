@@ -50,11 +50,12 @@ get_chains_data <- function(season, round) {
 }
 
 # extract and save
-purrr::walk(1:27,~get_chains_data(2021,.))
-purrr::walk(1:27,~get_chains_data(2022,.))
-purrr::walk(1:28,~get_chains_data(2023,.))
-purrr::walk(0:28,~get_chains_data(2024,.))
-# get_chains_data(2024, get_afl_week())
+# purrr::walk(1:27,~get_chains_data(2021,.))
+# purrr::walk(1:27,~get_chains_data(2022,.))
+# purrr::walk(1:28,~get_chains_data(2023,.))
+# purrr::walk(0:28,~get_chains_data(2024,.))
+# purrr::walk(0:28,~get_chains_data(2025,.))
+get_chains_data(2025, get_afl_week())
 
 # Get pbp data  -------------------------------------------------------------
 get_pbp_data <- function(season, round) {
@@ -84,11 +85,12 @@ get_pbp_data <- function(season, round) {
 }
 
 # extract and save
-purrr::walk(1:27,~get_pbp_data(2021,.))
-purrr::walk(1:27,~get_pbp_data(2022,.))
-purrr::walk(1:28,~get_pbp_data(2023,.))
-purrr::walk(0:28,~get_pbp_data(2024,.))
-# get_pbp_data(2024, get_afl_week())
+# purrr::walk(1:27,~get_pbp_data(2021,.))
+# purrr::walk(1:27,~get_pbp_data(2022,.))
+# purrr::walk(1:28,~get_pbp_data(2023,.))
+# purrr::walk(0:28,~get_pbp_data(2024,.))
+# purrr::walk(0:28,~get_pbp_data(2025,.))
+get_pbp_data(2025, get_afl_week())
 
 # Get xg data  -------------------------------------------------------------
 get_xg_data <- function(season) {
@@ -103,22 +105,22 @@ get_xg_data <- function(season) {
   save_to_release(df = xg_df, file_name = file_name, release_tag = "xg-data")
 }
 
-purrr::walk(2021:get_afl_season(),~get_xg_data(.))
+purrr::walk(2025:get_afl_season(),~get_xg_data(.))
 
 # Get player stats data  -------------------------------------------------------------
-get_player_stats_data <- function(season) {
+get_player_stats <- function(season) {
 
   player_stats <- fitzRoy::fetch_player_stats_afl(season) %>%
     janitor::remove_constant() %>%
     janitor::clean_names()
 
-  file_name <- glue::glue("player_stats_data_{season}")
+  file_name <- glue::glue("player_stats_{season}")
 
   # return(futures)
   save_to_release(df = player_stats, file_name = file_name, release_tag = "player_stats-data")
 }
 
-purrr::walk(2021:get_afl_season(),~get_player_stats_data(.))
+purrr::walk(2025:get_afl_season(),~get_player_stats(.))
 
 # Get fixtures data  -------------------------------------------------------------
 get_fixtures <- function(season) {
@@ -132,7 +134,7 @@ get_fixtures <- function(season) {
   save_to_release(df = fixtures, file_name = file_name, release_tag = "fixtures-data")
 }
 
-purrr::walk(2021:get_afl_season(),~get_fixtures(.))
+purrr::walk(2025:lubridate::year(Sys.Date()),~get_fixtures(.))
 
 # Get team lineups data  -------------------------------------------------------------
 get_teams <- function(season) {
@@ -150,7 +152,7 @@ get_teams <- function(season) {
   save_to_release(df = teams, file_name = file_name, release_tag = "teams-data")
 }
 
-purrr::walk(2021:get_afl_season(),~get_teams(.))
+purrr::walk(2025:get_afl_season(),~get_teams(.))
 
 # Get results data  -------------------------------------------------------------
 get_results <- function(season) {
@@ -164,7 +166,7 @@ get_results <- function(season) {
   save_to_release(df = results, file_name = file_name, release_tag = "results-data")
 }
 
-purrr::walk(2021:get_afl_season(),~get_results(.))
+purrr::walk(2025:get_afl_season(),~get_results(.))
 
 # Get player details data  -------------------------------------------------------------
 get_player_details <- function(season) {
@@ -186,7 +188,7 @@ get_player_details <- function(season) {
   save_to_release(df = player_details, file_name = file_name, release_tag = "player_details-data")
 }
 
-purrr::walk(2021:get_afl_season(),~get_player_details(.))
+purrr::walk(2025:get_afl_season(),~get_player_details(.))
 
 tictoc::toc()
 

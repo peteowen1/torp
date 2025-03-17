@@ -102,7 +102,7 @@ load_xg <- function(seasons = get_afl_season()) {
 load_player_stats <- function(seasons = get_afl_season()) {
   seasons <- validate_seasons(seasons)
 
-  urls <- generate_urls("player_stats-data", "player_stats_data", seasons)
+  urls <- generate_urls("player_stats-data", "player_stats", seasons)
 
   out <- load_from_url(urls, seasons = seasons)
 
@@ -124,15 +124,23 @@ load_player_stats <- function(seasons = get_afl_season()) {
 #' }
 #' @export
 #' @importFrom glue glue
-load_fixtures <- function(seasons = get_afl_season()) {
-  seasons <- validate_seasons(seasons)
+load_fixtures <- function(seasons = NULL, all = FALSE) {
+  if (all) {
+    current_year <- as.numeric(format(Sys.Date(), "%Y"))
+    seasons <- 2018:current_year
+  } else if (is.null(seasons)) {
+    seasons <- get_afl_season()  # Use default season when no season is provided
+  } else {
+    seasons <- validate_seasons(seasons)
+  }
 
   urls <- generate_urls("fixtures-data", "fixtures", seasons)
-
   out <- load_from_url(urls, seasons = seasons)
 
   return(out)
 }
+
+
 
 #' Load Player Stats Data
 #'
@@ -152,7 +160,7 @@ load_fixtures <- function(seasons = get_afl_season()) {
 load_teams <- function(seasons = get_afl_season()) {
   seasons <- validate_seasons(seasons)
 
-  urls <- generate_urls("teams-data", "teams", seasons)
+  urls <- generate_urls(data_type = "teams-data", file_prefix = "teams", seasons = seasons)
 
   out <- load_from_url(urls, seasons = seasons)
 
@@ -202,7 +210,7 @@ load_results <- function(seasons = get_afl_season()) {
 load_player_details <- function(seasons = get_afl_season()) {
   seasons <- validate_seasons(seasons)
 
-  urls <- generate_urls("player_details-data", "player_details_data", seasons)
+  urls <- generate_urls("player_details-data", "player_details", seasons)
 
   out <- load_from_url(urls, seasons = seasons)
 
@@ -300,12 +308,12 @@ validate_seasons_and_rounds <- function(seasons, rounds) {
 #' @return NULL
 #' @keywords internal
 validate_seasons <- function(seasons) {
-  if (isTRUE(seasons)) seasons <- 2021:get_afl_season()
+  if (isTRUE(seasons)) seasons <- 2021:(get_afl_season())
 
   stopifnot(
     is.numeric(seasons),
     seasons >= 2021,
-    seasons <= get_afl_season()
+    seasons <= (get_afl_season())
   )
 
   return(seasons)
@@ -340,7 +348,12 @@ generate_urls <- function(data_type, file_prefix, seasons, rounds = NULL) {
     }
 
   current_season <- get_afl_season()
+  current_round <- 99
+
+  if(data_type != "fixtures-data"){
   current_round <- sprintf("%02d", get_afl_week())
+  }
+
   max_url <- glue::glue("{base_url}/{data_type}/{file_prefix}_{current_season}_{current_round}.rds")
 
   urls <- urls[urls <= max_url]

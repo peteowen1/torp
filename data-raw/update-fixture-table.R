@@ -62,5 +62,5 @@ plyr_tm_df_upd <-
     )
 tictoc::toc()
 
-plyr_tm_df <- torp::plyr_tm_df %>% rows_upsert(plyr_tm_df_upd, by = "row_id")
-usethis::use_data(plyr_tm_df, overwrite = TRUE)
+plyr_tm_df <- load_player_details(TRUE) %>% rows_upsert(plyr_tm_df_upd, by = "row_id")
+# usethis::use_data(plyr_tm_df, overwrite = TRUE)

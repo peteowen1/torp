@@ -10,18 +10,22 @@
 #' @importFrom dplyr filter
 #' @importFrom cli cli_abort
 get_afl_season <- function(type = "current") {
-  if (!type %in% c("current", "next")) {
-    cli::cli_abort('type must be one of: "current" or "next"')
-  }
-  time_aest <- lubridate::with_tz(Sys.time(), tzone = "Australia/Brisbane")
-  current_day <- lubridate::as_date(time_aest)
-  past_fixtures <- torp::fixtures %>% dplyr::filter(.data$utcStartTime < current_day)
-  future_fixtures <- torp::fixtures %>% dplyr::filter(.data$utcStartTime >= current_day)
-  if (type == "current" | nrow(future_fixtures) == 0) {
-    season <- as.numeric(max(past_fixtures$compSeason.year))
-  } else {
-    season <- as.numeric(min(future_fixtures$compSeason.year))
-  }
+  # if (!type %in% c("current", "next")) {
+  #   cli::cli_abort('type must be one of: "current" or "next"')
+  # }
+  # time_aest <- lubridate::with_tz(Sys.time(), tzone = "Australia/Brisbane")
+  # current_day <- lubridate::as_date(time_aest)
+  # past_fixtures <- load_fixtures(all = TRUE) %>% dplyr::filter(.data$utcStartTime < current_day)
+  # future_fixtures <- load_fixtures(all = TRUE) %>% dplyr::filter(.data$utcStartTime >= current_day)
+  # if (type == "current" | nrow(future_fixtures) == 0) {
+  #   season <- as.numeric(max(past_fixtures$compSeason.year))
+  # } else {
+  #   season <- as.numeric(min(future_fixtures$compSeason.year))
+  # }
+  # return(season)
+
+  season <- lubridate::year(Sys.Date())
+
   return(season)
 }
 
@@ -43,11 +47,11 @@ get_afl_week <- function(type = "current") {
   season <- get_afl_season(type)
   time_aest <- lubridate::with_tz(Sys.time(), tzone = "Australia/Brisbane")
   current_day <- lubridate::as_date(time_aest)
-  past_fixtures <- torp::fixtures %>%
+  past_fixtures <- load_fixtures() %>%
     dplyr::filter(.data$utcStartTime < current_day, .data$compSeason.year == season)
-  future_fixtures <- torp::fixtures %>%
+  future_fixtures <- load_fixtures() %>%
     dplyr::filter(.data$utcStartTime >= current_day, .data$compSeason.year == season)
-  if (type == "current" | nrow(future_fixtures) == 0) {
+  if ((type == "current" & nrow(past_fixtures)>0) | nrow(future_fixtures) == 0) {
     round <- as.numeric(max(past_fixtures$round.roundNumber))
   } else {
     round <- as.numeric(min(future_fixtures$round.roundNumber))

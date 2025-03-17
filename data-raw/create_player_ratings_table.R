@@ -1,17 +1,17 @@
 # ###########
-# library(fitzRoy)
-# library(tidyverse)
-# devtools::load_all()
-# skip_em <- "no"
+library(fitzRoy)
+library(tidyverse)
+devtools::load_all()
+skip_em <- "no"
 
-teams <- torp::teams
+teams <- load_teams(TRUE)
 
 if (skip_em == "no") {
   chains <- load_chains(seasons = T, rounds = T)
 
   model_data_wp <- load_pbp(seasons = T, rounds = T) # (3 mins)
 
-  pl_details <- load_player_details(2024)
+  pl_details <- load_player_details(get_afl_season())
 
   pstot <- load_player_stats(TRUE)
 }

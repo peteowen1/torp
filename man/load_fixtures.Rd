@@ -4,7 +4,7 @@
 \alias{load_fixtures}
 \title{Load Player Stats Data}
 \usage{
-load_fixtures(seasons = get_afl_season())
+load_fixtures(seasons = NULL, all = FALSE)
 }
 \arguments{
 \item{seasons}{A numeric vector of 4-digit years associated with given AFL seasons - defaults to latest season. If set to \code{TRUE}, returns all available data since 2021.}

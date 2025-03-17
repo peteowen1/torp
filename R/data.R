@@ -47,18 +47,6 @@
 #' @source \url{http://example.com}
 "plyr_gm_df"
 
-#' Player team database
-#'
-#' @format A data frame with X rows and Y variables:
-#' \describe{
-#'   \item{player_id}{Unique identifier for each player}
-#'   \item{team_id}{Unique identifier for each team}
-#'   \item{season}{Season of play}
-#'   ...
-#' }
-#' @source \url{http://example.com}
-"plyr_tm_df"
-
 #' Game results data
 #'
 #' @format A data frame with X rows and Y variables:
