@@ -15,7 +15,17 @@
 #' @export
 #' @importFrom glue glue
 load_chains <- function(seasons = get_afl_season(), rounds = get_afl_week()) {
-  validate_seasons_and_rounds(seasons, rounds)
+
+  seasons <- validate_seasons(seasons)
+  rounds <- validate_rounds(rounds)
+
+#   if(seasons == TRUE){
+#     seasons <- 2021:get_afl_season()
+#   }
+#
+#   if(rounds == TRUE){
+#     rounds <- 0:28
+#   }
 
   urls <- generate_urls("chains-data", "chains_data", seasons, rounds)
 
@@ -42,15 +52,8 @@ load_chains <- function(seasons = get_afl_season(), rounds = get_afl_week()) {
 #' @importFrom glue glue
 load_pbp <- function(seasons = get_afl_season(), rounds = get_afl_week()) {
 
-  if(seasons == TRUE){
-    seasons <- 2021:get_afl_season()
-  }
-
-  if(rounds == TRUE){
-    rounds <- 0:28
-  }
-
-  validate_seasons_and_rounds(seasons, rounds)
+  seasons <- validate_seasons(seasons)
+  rounds <- validate_rounds(rounds)
 
   urls <- generate_urls("pbp-data", "pbp_data", seasons, rounds)
 
@@ -244,9 +247,9 @@ load_from_url <- function(url, ..., seasons = TRUE, rounds = TRUE, peteowen1 = F
       if ("round" %in% names(out)) out <- out[out$round %in% rounds, ]
     }
   } else {
-    p <- NULL
-    if (is_installed("progressr")) p <- progressr::progressor(along = url)
-    out <- lapply(url, progressively(rds_from_url, p))
+    # p <- NULL
+    # if (is_installed("progressr")) p <- progressr::progressor(along = url)
+    out <- purrr::map(url, ~rds_from_url(.x), .progress = TRUE)  #lapply(url, progressively(rds_from_url, p))
     out <- data.table::rbindlist(out, use.names = TRUE, fill = TRUE)
   }
 
@@ -289,8 +292,7 @@ rds_from_url <- function(url) {
 #'
 #' @return NULL
 #' @keywords internal
-validate_seasons_and_rounds <- function(seasons, rounds) {
-  validate_seasons(seasons)
+validate_rounds <- function( rounds) {
 
   if (isTRUE(rounds)) rounds <- 0:28
 
@@ -299,6 +301,8 @@ validate_seasons_and_rounds <- function(seasons, rounds) {
     rounds >= 0,
     rounds <= 28
   )
+
+  return(rounds)
 }
 
 #' Validate seasons

@@ -17,14 +17,14 @@ view(tr)
 ### coming week
 missing<- tr %>% anti_join(week_teams, by = c('player_id'='player.playerId'))
 
-View(missing)
+# View(missing)
 
 starting <- tr %>% inner_join(week_teams, by = c('player_id'='player.playerId'))
 
-View(starting)
+# View(starting)
 
 ###
-this_week <- player_game_ratings(2025,get_afl_week())
+this_week <- player_game_ratings(get_afl_season(),get_afl_week())
 view(this_week)
 
 # this_season <- player_game_ratings(round_num = 0:get_afl_week())

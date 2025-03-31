@@ -91,7 +91,7 @@ add_game_variables <- function(df) {
       team_id_mdl = zoo::na.locf0(.data$team_id_mdl),
       home = dplyr::if_else(.data$team_id_mdl == .data$home_team_id, 1, 0),
       total_seconds = (.data$period - 1) * 1800 + .data$period_seconds,
-      points_row = calculate_points_row(.data$final_state, .data$description),
+      points_row = calculate_points_row(.data$final_state, .data$description, .data$chain_number),
       home_points_row = calculate_home_points_row(.data$home, .data$final_state, .data$description, .data$points_row),
       away_points_row = .data$points_row - .data$home_points_row,
       is_goal_row = dplyr::if_else(.data$description == "Goal", 1, 0),
@@ -191,9 +191,9 @@ add_chain_variables <- function(df) {
 #' @param description The description of the play.
 #' @return A numeric value representing the points for the row.
 #' @keywords internal
-calculate_points_row <- function(final_state, description) {
+calculate_points_row <- function(final_state, description, chain_number) {
   dplyr::case_when(
-    final_state %in% c("rushed", "rushedOpp") ~ 1,
+    final_state %in% c("rushed", "rushedOpp") & dplyr::lead(chain_number) != chain_number ~ 1,
     description == "Behind" ~ 1,
     description == "Goal" ~ 6,
     TRUE ~ 0

@@ -109,8 +109,9 @@ shot_ocat_mdl <-
     + ti(goal_x, abs_y, bs = "ts")
     + s(goal_x, bs = "ts")
     + s(abs_y, bs = "ts")
-    + ti(lag_goal_x, abs_y) + s(lag_goal_x, bs = "ts") + s(lag_y, bs = "ts")
-    + s(play_type, bs = "re") + s(phase_of_play, bs = "re")
+    + ti(lag_goal_x, lag_y) + s(lag_goal_x, bs = "ts") + s(lag_y, bs = "ts")
+    + s(play_type, bs = "re")
+    + s(phase_of_play, bs = "re")
     + s(player_position_fac, bs = "re")
     + s(player_id_shot, bs = "re")
     ,

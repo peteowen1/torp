@@ -147,6 +147,7 @@ team_lineup_df <-
 
 ###
 team_rt_df <- team_lineup_df %>%
+  filter(!is.na(player.playerId)) %>%
   # filter(!is.na(teamAbbr)) %>%
   mutate(team_name_adj = fitzRoy::replace_teams(teamName)) %>%
   dplyr::group_by(providerId, teamId, season, round.roundNumber, teamType) %>%
@@ -642,6 +643,7 @@ team_mdl_df$tips <- ifelse(round(team_mdl_df$pred_win) == team_mdl_df$win, 1,
   ifelse(team_mdl_df$win == 0.5, 1, 0)
 )
 team_mdl_df$mae <- abs(team_mdl_df$score_diff - team_mdl_df$pred_score_diff)
+
 #########
 test_df <- team_mdl_df %>% dplyr::filter(!is.na(win), team_type == "home", season.x == get_afl_season())
 # library(MLmetrics)
@@ -707,7 +709,11 @@ week_gms <- dplyr::bind_rows(week_gms_home, week_gms_away) %>%
     pred_score_diff = mean(pred_score_diff),
     pred_win = mean(pred_win),
     score_diff = mean(score_diff)
-  )
+  ) %>%
+  mutate(rating_diff = home_rating - away_rating + 4) %>%
+  select(providerId:away_rating,rating_diff,players:score_diff)
+
+inj_df %>% filter(str_starts(player,'Upd')) %>% unique()
 
 week_gms
 
