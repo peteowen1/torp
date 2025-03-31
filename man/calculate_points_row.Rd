@@ -4,7 +4,7 @@
 \alias{calculate_points_row}
 \title{Calculate Points Row}
 \usage{
-calculate_points_row(final_state, description)
+calculate_points_row(final_state, description, chain_number)
 }
 \arguments{
 \item{final_state}{The final state of the play.}
