@@ -105,7 +105,7 @@ get_xg_data <- function(season) {
   save_to_release(df = xg_df, file_name = file_name, release_tag = "xg-data")
 }
 
-purrr::walk(get_afl_season(),~get_xg_data(.))
+purrr::walk(2021:get_afl_season(),~get_xg_data(.))
 
 # Get player stats data  -------------------------------------------------------------
 get_player_stats <- function(season) {
