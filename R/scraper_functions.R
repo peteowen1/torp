@@ -163,7 +163,7 @@ get_players <- function(use_api = FALSE) {
     players <- access_api(url)[[5]] %>%
       dplyr::mutate(season = get_afl_season())
   } else {
-    players <- load_player_details() %>%
+    players <- load_player_details(seasons = TRUE) %>%
       dplyr::mutate(
         photoURL = NA,
         team.teamId = NA,

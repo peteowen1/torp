@@ -5,8 +5,8 @@ set.seed(1234)
 
 mdl_wk <- function(df, season, weeknum) {
   val <- paste0("CD_M", season, "014", sprintf("%02d", weeknum))
-  # team_func_df <- df %>% dplyr::filter(providerId < val, providerId > "CD_M202101409")
-  team_func_df <- df %>% dplyr::filter(season.x != season | round.roundNumber.x < weeknum )
+  team_func_df <- df %>% dplyr::filter(providerId < val, providerId > "CD_M202101409")
+  # team_func_df <- df %>% dplyr::filter(season.x != season | round.roundNumber.x < weeknum )
   if (!is.na(max(team_func_df$homeTeamScore.matchScore.totalScore))) {
     decay <- 1000
     # weightz_func <- exp(as.numeric(-(max(as.Date(team_func_df$match.utcStartTime)) - as.Date(team_func_df$match.utcStartTime))) / decay)
@@ -229,17 +229,20 @@ plan('multisession',workers = (parallelly::availableCores()-2))
 
 tictoc::tic()
 resultz <- bind_rows(
-  furrr::future_map(1:27, ~ mdl_wk(team_mdl_df, 2022, .), .progress=T),
-  furrr::future_map(1:28, ~ mdl_wk(team_mdl_df, 2023, .), .progress=T),
-  furrr::future_map(0:28, ~ mdl_wk(team_mdl_df, 2024, .), .progress=T)
+  # furrr::future_map(1:27, ~ mdl_wk(team_mdl_df, 2022, .), .progress=T, .options=furrr_options(seed = TRUE)),
+  # furrr::future_map(1:28, ~ mdl_wk(team_mdl_df, 2023, .), .progress=T, .options=furrr_options(seed = TRUE)),
+  furrr::future_map(0:28, ~ mdl_wk(team_mdl_df, 2024, .), .progress=T, .options=furrr_options(seed = TRUE)),
+  furrr::future_map(0:get_afl_week('next'), ~ mdl_wk(team_mdl_df, 2025, .), .progress=T, .options=furrr_options(seed = TRUE))
 )
 tictoc::toc()
 
 resultz <-
   resultz %>%
   mutate(tips = ifelse(win == 0.5 , 1, tips))
+
 ###
-season <- 2024
+
+season <- get_afl_season()
 
 #targets (MAE - bits)
 # 22: 25 - 40
