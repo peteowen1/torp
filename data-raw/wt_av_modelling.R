@@ -110,18 +110,20 @@ wav_data <- function(df, fil_val, model_col, decay = 365) {
     left_join(df_opp, by = c("opponent_name" = "opponent_name")) %>%
     mutate(
       round = round_round_number,
-      season = as.factor(substr(provider_id,5,8)),
+      season = as.factor(substr(provider_id, 5, 8)),
       venue = as.factor(venue_name),
-      aest_start = with_tz(as_datetime(utc_start_time),"Australia/Brisbane"),
+      aest_start = with_tz(as_datetime(utc_start_time), "Australia/Brisbane"),
       date_numeric = as.numeric(aest_start),
-      aest_hour = (hour(aest_start)*60+minute(aest_start))/60,
-      aest_day = wday(aest_start,label = TRUE),
+      aest_hour = (hour(aest_start) * 60 + minute(aest_start)) / 60,
+      aest_day = wday(aest_start, label = TRUE),
       position = as.factor(substr(player_player_position, 1, 2)),
       home_away = as.factor(team_status),
       player_name = paste(player_player_player_given_name, player_player_player_surname)
     ) %>%
-    filter(position != "EM",
-           !is.na(position)) %>%
+    filter(
+      position != "EM",
+      !is.na(position)
+    ) %>%
     relocate(any_of(model_col), position)
 
   return(df_tot)
@@ -132,7 +134,7 @@ wav_data <- function(df, fil_val, model_col, decay = 365) {
 stat_list <- list()
 
 tictoc::tic()
-for (i in cols_pois[1:length(cols_pois)]) {  ############### DO 30 LATER!!!!!!!
+for (i in cols_pois[1:length(cols_pois)]) { ############### DO 30 LATER!!!!!!!
   df_mdl <- purrr::map(
     paste0(rep(szns, each = 29), rep(sprintf("%02d", 0:28), times = length(szns))),
     ~ wav_data(pstot,
@@ -186,8 +188,9 @@ tictoc::tic()
 for (i in cols_binom[1:length(cols_binom)]) {
   df_mdl <- purrr::map(
     paste0(rep(szns, each = 29), rep(sprintf("%02d", 0:28), times = length(szns))),
-    ~ wav_data(pstot %>%
-                 mutate("{i}" := .data[[i]] / 100),
+    ~ wav_data(
+      pstot %>%
+        mutate("{i}" := .data[[i]] / 100),
       fil_val = .,
       model_col = i
     )
@@ -232,8 +235,10 @@ for (i in cols_binom[1:length(cols_binom)]) {
 tictoc::toc()
 
 ### combine
-pred_df <- stat_list %>% reduce(left_join, by = c("player_id", "player_name","player_position",
-                                                  "provider_id", "round", "home_away" ,"team_name", "opp_name"))
+pred_df <- stat_list %>% reduce(left_join, by = c(
+  "player_id", "player_name", "player_position",
+  "provider_id", "round", "home_away", "team_name", "opp_name"
+))
 pred_df
 
 saveRDS(pred_df, "./data-raw/stat_pred_df.rds")
@@ -250,7 +255,9 @@ wt_avg_model_val <- paste0("wt_avg_", model_val)
 
 mdl <- readRDS(paste0("./data-raw/stat-models/", model_val, ".rds"))
 summary(mdl)
-mixedup::extract_random_effects(mdl) %>% arrange(-value) %>% View()
+mixedup::extract_random_effects(mdl) %>%
+  arrange(-value) %>%
+  View()
 # plot(mgcViz::getViz(mdl))
 
 
@@ -276,7 +283,7 @@ stat_perf <- function(var) {
   return(df)
 }
 
-all_perf <- map(c(cols_pois,cols_binom), ~ stat_perf(.)) %>% list_rbind()
+all_perf <- map(c(cols_pois, cols_binom), ~ stat_perf(.)) %>% list_rbind()
 
 ##### add to match pred data frame
 team_preds <- pred_df %>%
@@ -286,7 +293,8 @@ team_preds <- pred_df %>%
 team_mdl_df <- team_mdl_df %>%
   # mutate(team_name_adj = fitzRoy::replace_teams(team_name)) %>%
   left_join(team_preds %>% mutate(team_name_adj = fitzRoy::replace_teams(team_name)),
-            by = c("providerId" = "provider_id", "team_name_adj.x" = "team_name")) # %>% View()
+    by = c("providerId" = "provider_id", "team_name_adj.x" = "team_name")
+  ) # %>% View()
 
 ###
 colnames(team_mdl_df)[str_detect(colnames(team_mdl_df), "pred")]
@@ -294,18 +302,20 @@ colnames(team_mdl_df)[str_detect(colnames(team_mdl_df), "pred")]
 ###
 pl_df_final <-
   pl_details %>%
-  select(providerId,position) %>%
-  left_join(pred_df %>% filter(substr(provider_id,1,13)=='CD_M202301423'),
-                               by = c("providerId" = "player_id")) #%>%
-  #filter(position == "RUCK") %>%
-  # arrange(-pred_val) %>%
-  # relocate(pred_val) #%>%
-  #select(1:10) %>%
-  # group_by(position) %>%
-  # summarise(sqrt(var(pred_val, na.rm=T))) %>%
-  #View()
+  select(providerId, position) %>%
+  left_join(pred_df %>% filter(substr(provider_id, 1, 13) == "CD_M202301423"),
+    by = c("providerId" = "player_id")
+  ) # %>%
+# filter(position == "RUCK") %>%
+# arrange(-pred_val) %>%
+# relocate(pred_val) #%>%
+# select(1:10) %>%
+# group_by(position) %>%
+# summarise(sqrt(var(pred_val, na.rm=T))) %>%
+# View()
 
 ########
 pl_df_final %>%
   group_by(position) %>%
-  summarise(across(starts_with("pred"),~mean(.x, na.rm=T))) %>% view()
+  summarise(across(starts_with("pred"), ~ mean(.x, na.rm = T))) %>%
+  view()

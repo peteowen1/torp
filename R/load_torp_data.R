@@ -15,17 +15,16 @@
 #' @export
 #' @importFrom glue glue
 load_chains <- function(seasons = get_afl_season(), rounds = get_afl_week()) {
-
   seasons <- validate_seasons(seasons)
   rounds <- validate_rounds(rounds)
 
-#   if(seasons == TRUE){
-#     seasons <- 2021:get_afl_season()
-#   }
-#
-#   if(rounds == TRUE){
-#     rounds <- 0:28
-#   }
+  #   if(seasons == TRUE){
+  #     seasons <- 2021:get_afl_season()
+  #   }
+  #
+  #   if(rounds == TRUE){
+  #     rounds <- 0:28
+  #   }
 
   urls <- generate_urls("chains-data", "chains_data", seasons, rounds)
 
@@ -51,7 +50,6 @@ load_chains <- function(seasons = get_afl_season(), rounds = get_afl_week()) {
 #' @export
 #' @importFrom glue glue
 load_pbp <- function(seasons = get_afl_season(), rounds = get_afl_week()) {
-
   seasons <- validate_seasons(seasons)
   rounds <- validate_rounds(rounds)
 
@@ -132,7 +130,7 @@ load_fixtures <- function(seasons = NULL, all = FALSE) {
     current_year <- as.numeric(format(Sys.Date(), "%Y"))
     seasons <- 2018:current_year
   } else if (is.null(seasons)) {
-    seasons <- get_afl_season()  # Use default season when no season is provided
+    seasons <- get_afl_season() # Use default season when no season is provided
   } else {
     seasons <- validate_seasons(seasons)
   }
@@ -249,7 +247,7 @@ load_from_url <- function(url, ..., seasons = TRUE, rounds = TRUE, peteowen1 = F
   } else {
     # p <- NULL
     # if (is_installed("progressr")) p <- progressr::progressor(along = url)
-    out <- purrr::map(url, ~rds_from_url(.x), .progress = TRUE)  #lapply(url, progressively(rds_from_url, p))
+    out <- purrr::map(url, ~ rds_from_url(.x), .progress = TRUE) # lapply(url, progressively(rds_from_url, p))
     out <- data.table::rbindlist(out, use.names = TRUE, fill = TRUE)
   }
 
@@ -292,8 +290,7 @@ rds_from_url <- function(url) {
 #'
 #' @return NULL
 #' @keywords internal
-validate_rounds <- function( rounds) {
-
+validate_rounds <- function(rounds) {
   if (isTRUE(rounds)) rounds <- 0:28
 
   stopifnot(
@@ -336,26 +333,26 @@ validate_seasons <- function(seasons) {
 generate_urls <- function(data_type, file_prefix, seasons, rounds = NULL) {
   base_url <- "https://github.com/peteowen1/torpdata/releases/download"
 
-    if(is.null(rounds)){
-      combinations <- expand.grid(seasons = seasons)
+  if (is.null(rounds)) {
+    combinations <- expand.grid(seasons = seasons)
 
-      urls <- glue::glue("{base_url}/{data_type}/{file_prefix}_{combinations$seasons}.rds")
-      urls <- sort(urls)
-    }
+    urls <- glue::glue("{base_url}/{data_type}/{file_prefix}_{combinations$seasons}.rds")
+    urls <- sort(urls)
+  }
 
-    if(!is.null(rounds)){
-      rounds_02d <- sprintf("%02d", rounds)
-      combinations <- expand.grid(seasons = seasons, rounds = rounds_02d)
+  if (!is.null(rounds)) {
+    rounds_02d <- sprintf("%02d", rounds)
+    combinations <- expand.grid(seasons = seasons, rounds = rounds_02d)
 
-      urls <- glue::glue("{base_url}/{data_type}/{file_prefix}_{combinations$seasons}_{combinations$rounds}.rds")
-      urls <- sort(urls)
-    }
+    urls <- glue::glue("{base_url}/{data_type}/{file_prefix}_{combinations$seasons}_{combinations$rounds}.rds")
+    urls <- sort(urls)
+  }
 
   current_season <- get_afl_season()
   current_round <- 99
 
-  if(data_type != "fixtures-data"){
-  current_round <- sprintf("%02d", get_afl_week())
+  if (data_type != "fixtures-data") {
+    current_round <- sprintf("%02d", get_afl_week())
   }
 
   max_url <- glue::glue("{base_url}/{data_type}/{file_prefix}_{current_season}_{current_round}.rds")

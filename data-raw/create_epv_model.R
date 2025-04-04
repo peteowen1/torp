@@ -58,11 +58,13 @@ usethis::use_data(ep_model, overwrite = TRUE)
 #######
 
 dataX_train <- # xgboost::xgb.DMatrix(
-    model.matrix(~ . + 0, data = model_data_epv %>% select_epv_model_vars() %>%
-                   slice_head(n = 5000))
+  model.matrix(~ . + 0, data = model_data_epv %>% select_epv_model_vars() %>%
+    slice_head(n = 5000))
 
-xgboost::xgb.plot.shap(dataX_train, model = ep_model, top_n = 12, #target class 3 is goal
-                         n_col = 3)#, pch = 16, pch_NA = 17)
+xgboost::xgb.plot.shap(dataX_train,
+  model = ep_model, top_n = 12, # target class 3 is goal
+  n_col = 3
+) # , pch = 16, pch_NA = 17)
 
 
 # df <- load_chains(2022, 23) %>% filter(match_id == "CD_M20220142309") %>%

@@ -2,10 +2,12 @@
 
 fix_df <-
   fixtures %>%
-  select(providerId ,home.team.providerId, away.team.providerId, team_type) %>%
-  pivot_longer(cols = ends_with("team.providerId"),
-               names_to = "team_type",
-               values_to = "team.providerId") %>%
+  select(providerId, home.team.providerId, away.team.providerId, team_type) %>%
+  pivot_longer(
+    cols = ends_with("team.providerId"),
+    names_to = "team_type",
+    values_to = "team.providerId"
+  ) %>%
   select(providerId, team.providerId)
 
 

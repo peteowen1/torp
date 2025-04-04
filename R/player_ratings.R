@@ -22,7 +22,6 @@ torp_ratings <- function(season_val = get_afl_season(type = "next"),
                          loading = 1.5,
                          prior_games_recv = 4,
                          prior_games_disp = 6) {
-
   if (!exists("plyr_tm_df") || is.null(plyr_tm_df)) {
     plyr_tm_df <- load_player_details(season_val)
   }
@@ -133,9 +132,9 @@ prepare_final_dataframe <- function(plyr_tm_df = NULL, plyr_gm_df = NULL, season
     dplyr::mutate(
       age = lubridate::decimal_date(lubridate::as_date(.data$ref_date)) -
         lubridate::decimal_date(lubridate::as_date(.data$dateOfBirth))
-    ) %>% #colnames()
+    ) %>% # colnames()
     dplyr::select(
-      player_id = .data$providerId, player_name = .data$player_name.x, age = .data$age, team = .data$team ,
+      player_id = .data$providerId, player_name = .data$player_name.x, age = .data$age, team = .data$team,
       torp = .data$torp, torp_recv = .data$torp_recv_adj, torp_disp = .data$torp_disp_adj,
       torp_spoil = .data$torp_spoil_adj, torp_hitout = .data$torp_hitout_adj,
       position = .data$position, season = .data$season, round = .data$round, gms = .data$gms, wt_gms = .data$wt_gms

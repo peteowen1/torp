@@ -68,22 +68,22 @@ player_game_stats_long <- player_game_stats_long %>%
   )
 
 make_wide_data <- function(df, seasons) {
-# Convert the data to a wide format where each row represents a game, and each column represents a player's performance
-wide_data <- df %>%
-  filter(season %in% seasons) %>%
-  select(match_id, season, match_home_team, match_away_team, score_type, ID, tog_adj, score) %>%
-  pivot_wider(names_from = ID, values_from = tog_adj, values_fn = sum) %>%
-  janitor::clean_names()
+  # Convert the data to a wide format where each row represents a game, and each column represents a player's performance
+  wide_data <- df %>%
+    filter(season %in% seasons) %>%
+    select(match_id, season, match_home_team, match_away_team, score_type, ID, tog_adj, score) %>%
+    pivot_wider(names_from = ID, values_from = tog_adj, values_fn = sum) %>%
+    janitor::clean_names()
 
-# Convert season column to multiple columns
-wide_data <- wide_data %>%
-  mutate(season = as.character(season)) %>% # Ensure season is character
-  pivot_wider(names_from = season, values_from = season, values_fill = list(season = 0), names_prefix = "season_", values_fn = list(season = ~1))
+  # Convert season column to multiple columns
+  wide_data <- wide_data %>%
+    mutate(season = as.character(season)) %>% # Ensure season is character
+    pivot_wider(names_from = season, values_from = season, values_fill = list(season = 0), names_prefix = "season_", values_fn = list(season = ~1))
 
-# Handle missing values
-wide_data[is.na(wide_data)] <- 0
+  # Handle missing values
+  wide_data[is.na(wide_data)] <- 0
 
-return(wide_data)
+  return(wide_data)
 }
 
 wd_12_19 <- make_wide_data(player_game_stats_long, 2003:2024)
@@ -150,34 +150,35 @@ fit_od_12_19 <- readRDS("./data-raw/bayes_od_rapm_12_19.rds")
 # fit_od_16_24 <- readRDS("./data-raw/bayes_od_rapm_16_24.rds")
 
 get_rapm_df <- function(mdl) {
-# Extract posterior samples using as_draws
-posterior_samples <- as_draws_df(mdl)
+  # Extract posterior samples using as_draws
+  posterior_samples <- as_draws_df(mdl)
 
-# Get the means of the coefficients and retain their names
-coef_means <- posterior_samples %>%
-  select(starts_with("b_")) %>%
-  summarise(across(everything(), mean))
+  # Get the means of the coefficients and retain their names
+  coef_means <- posterior_samples %>%
+    select(starts_with("b_")) %>%
+    summarise(across(everything(), mean))
 
-# Convert to a named numeric vector
-coef_means_vector <- as.numeric(coef_means)
-names(coef_means_vector) <- colnames(coef_means)
+  # Convert to a named numeric vector
+  coef_means_vector <- as.numeric(coef_means)
+  names(coef_means_vector) <- colnames(coef_means)
 
-# Get the name of the model object
-mdl_name <- deparse(substitute(mdl))
+  # Get the name of the model object
+  mdl_name <- deparse(substitute(mdl))
 
-# Create a data frame of coefficients
-rapm_df <- data.frame(
-  ID = names(coef_means_vector),
-  RAPM = coef_means_vector,
-  mdl = mdl_name
-)
+  # Create a data frame of coefficients
+  rapm_df <- data.frame(
+    ID = names(coef_means_vector),
+    RAPM = coef_means_vector,
+    mdl = mdl_name
+  )
 
-return(rapm_df)
+  return(rapm_df)
 }
 
-rapm_df <- bind_rows(get_rapm_df(fit_od_12_19),
-                     # get_rapm_df(fit_od_16_24)
-                     )
+rapm_df <- bind_rows(
+  get_rapm_df(fit_od_12_19),
+  # get_rapm_df(fit_od_16_24)
+)
 
 View(rapm_df)
 
@@ -196,8 +197,10 @@ rapm_wide <- rapm_df %>%
 # Merge with player information
 player_info <- player_game_stats %>%
   group_by(ID) %>%
-  summarize(player = max(paste(player_first_name, player_last_name)),
-            gmz = sum(abs(tog_adj), na.rm = TRUE))
+  summarize(
+    player = max(paste(player_first_name, player_last_name)),
+    gmz = sum(abs(tog_adj), na.rm = TRUE)
+  )
 
 rapm_df <- left_join(rapm_wide, player_info, by = "ID") %>%
   mutate(tot_rapm = orapm - drapm)
@@ -251,7 +254,7 @@ player_bpm_12_19 <- player_stats %>%
       ~ mean(.x, na.rm = TRUE)
     )
   ) %>%
-  left_join(rapm_df %>% filter(mdl == 'fit_od_12_19')) %>%
+  left_join(rapm_df %>% filter(mdl == "fit_od_12_19")) %>%
   # mutate(across(Kicks:Goal.Assists, scale)) %>%
   relocate(colnames(rapm_df))
 
@@ -293,9 +296,10 @@ player_bpm_12_19 <- player_stats %>%
 #   relocate(colnames(rapm_df))
 
 # total df
-player_bpm <- bind_rows(player_bpm_12_19,
-                        # player_bpm_16_24
-                        ) %>%
+player_bpm <- bind_rows(
+  player_bpm_12_19,
+  # player_bpm_16_24
+) %>%
   filter(!is.na(mdl))
 
 # Prepare the data for glmnet ----
@@ -306,10 +310,10 @@ model_df <- player_bpm %>% # %>% filter(!str_detect(ID,'lt'))
 
 # Assume the response variable is the point differential
 X <- as.matrix(model_df %>%
-                 mutate(across(kicks:goal_assists, ~ . / avg_tog)) %>% ### either spoils or goal_assists
+  mutate(across(kicks:goal_assists, ~ . / avg_tog)) %>% ### either spoils or goal_assists
   dplyr::select(-any_of(
     c(
-      "player", "gmz", "pos", "ID", "RAPM", "Brownlow.Votes", "tot_tog","avg_tog", "pred_bpm",
+      "player", "gmz", "pos", "ID", "RAPM", "Brownlow.Votes", "tot_tog", "avg_tog", "pred_bpm",
       "orapm", "drapm", "tot_rapm", "mdl"
     )
   )))
@@ -360,9 +364,9 @@ model_df <- model_df %>%
     tot_bpm = pred_obpm - pred_dbpm,
     tot_val_g = tot_bpm * avg_tog,
     tot_val = tot_bpm * tot_tog,
-    tot_val_repl = (tot_bpm+2) * tot_tog,
+    tot_val_repl = (tot_bpm + 2) * tot_tog,
   ) %>%
-  relocate(tot_bpm, pred_obpm, pred_dbpm,tot_val_g,tot_val,tot_val_repl) %>%
+  relocate(tot_bpm, pred_obpm, pred_dbpm, tot_val_g, tot_val, tot_val_repl) %>%
   filter(!is.na(tot_bpm))
 
 View(model_df)
@@ -372,8 +376,10 @@ View(model_df)
 
 # Calculate tot_tog and add it to model_df
 season_bpm <- player_stats %>%
-  mutate(ID = as.character(player_id),
-         player_position = replace_na(player_position,'missing')) %>%
+  mutate(
+    ID = as.character(player_id),
+    player_position = replace_na(player_position, "missing")
+  ) %>%
   group_by(
     ID,
     player = paste(player_first_name, player_last_name),
@@ -403,11 +409,11 @@ season_bpm <- player_stats %>%
   ungroup()
 
 Xseason <- as.matrix(season_bpm %>%
-                       select(where(~ all(complete.cases(.)))) %>%
+  select(where(~ all(complete.cases(.)))) %>%
   mutate(across(kicks:goal_assists, ~ . / avg_tog)) %>% ### either spoils or goal_assists
   dplyr::select(-any_of(c(
     "player", "player_team", "season", "gmz", "pos", "ID", "RAPM",
-    "Brownlow.Votes", "tot_tog", "avg_tog" ,"pred_bpm", "orapm", "drapm", "tot_rapm","mdl"
+    "Brownlow.Votes", "tot_tog", "avg_tog", "pred_bpm", "orapm", "drapm", "tot_rapm", "mdl"
   ))))
 
 #
@@ -425,9 +431,9 @@ season_bpm <- season_bpm %>%
     tot_bpm = pred_obpm - pred_dbpm,
     tot_val_g = tot_bpm * avg_tog,
     tot_val = tot_bpm * tot_tog,
-    tot_val_repl = (tot_bpm+2) * tot_tog,
-    ) %>%
-  relocate(tot_bpm, pred_obpm, pred_dbpm,tot_val_g,tot_val,tot_val_repl) %>%
+    tot_val_repl = (tot_bpm + 2) * tot_tog,
+  ) %>%
+  relocate(tot_bpm, pred_obpm, pred_dbpm, tot_val_g, tot_val, tot_val_repl) %>%
   filter(!is.na(tot_bpm))
 
 View(season_bpm %>% filter(tot_tog > 5))
@@ -438,7 +444,8 @@ season_bpm %>%
   summarise(
     val = sum(tot_bpm * tot_tog),
     sum(is.na(tot_bpm))
-  ) %>% print(n=25)
+  ) %>%
+  print(n = 25)
 
 # best players in season
 season_bpm %>%

@@ -50,7 +50,7 @@ You can also embed plots, for example:
 
 ```{r pressure, echo = FALSE}
 plot(pressure)
-2+2
+2 + 2
 ```
 
 In that case, don't forget to commit and push the resulting figure files, so they display on GitHub and CRAN.
