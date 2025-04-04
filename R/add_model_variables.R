@@ -38,10 +38,10 @@ add_epv_vars <- function(df) {
       ),
       lead_points = dplyr::if_else(is.na(.data$points_shot), dplyr::lead(.data$exp_pts, default = 0), (.data$points_shot - dplyr::lead(.data$exp_pts, default = 0))),
       lead_player = dplyr::if_else(!is.na(.data$points_shot) | .data$lead_desc == "Out of Bounds" | .data$description == "Out On Full After Kick",
-                                   .data$player_name, dplyr::lead(.data$player_name)
+        .data$player_name, dplyr::lead(.data$player_name)
       ),
       lead_player_id = dplyr::if_else(!is.na(.data$points_shot) | .data$lead_desc == "Out of Bounds" | .data$description == "Out On Full After Kick",
-                                      .data$player_id, dplyr::lead(.data$player_id)
+        .data$player_id, dplyr::lead(.data$player_id)
       ),
       lead_team = dplyr::if_else(is.na(.data$points_shot), dplyr::lead(.data$team), .data$team),
       xpoints_diff = .data$points_diff + .data$exp_pts,
@@ -93,7 +93,7 @@ add_wp_vars <- function(df) {
 #' @importFrom dplyr mutate
 add_shot_vars <- function(df) {
   ocat_shot_result_preds <- as.data.frame(get_shot_result_preds(df))
-  colnames(ocat_shot_result_preds) <- c('clanger_prob', 'behind_prob', 'goal_prob')
+  colnames(ocat_shot_result_preds) <- c("clanger_prob", "behind_prob", "goal_prob")
 
   pbp_final <- cbind(df, ocat_shot_result_preds)
 
@@ -119,7 +119,7 @@ add_shot_vars <- function(df) {
 get_epv_preds <- function(df) {
   preds <- as.data.frame(
     matrix(stats::predict(torp::ep_model, stats::model.matrix(~ . + 0, data = df %>% select_epv_model_vars())),
-           ncol = 5, byrow = TRUE
+      ncol = 5, byrow = TRUE
     )
   )
   colnames(preds) <- c("opp_goal", "opp_behind", "behind", "goal", "no_score")
@@ -139,7 +139,7 @@ get_epv_preds <- function(df) {
 get_wp_preds <- function(df) {
   preds <- as.data.frame(
     matrix(stats::predict(torp::wp_model, stats::model.matrix(~ . + 0, data = df %>% select_wp_model_vars())),
-           ncol = 1, byrow = TRUE
+      ncol = 1, byrow = TRUE
     )
   )
 

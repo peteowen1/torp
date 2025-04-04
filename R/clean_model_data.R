@@ -352,7 +352,7 @@ add_shot_geometry_variables <- function(df, goal_width) {
       side_c = sqrt((.data$goal_x)^2 + (.data$y - goal_width / 2)^2),
       angle = acos((.data$side_b^2 + .data$side_c^2 - goal_width^2) / (2 * .data$side_b * .data$side_c)),
       distance = dplyr::if_else(.data$y >= -goal_width / 2 & .data$y <= goal_width / 2,
-                                .data$goal_x, pmin(.data$side_b, .data$side_c)
+        .data$goal_x, pmin(.data$side_b, .data$side_c)
       )
     )
 }

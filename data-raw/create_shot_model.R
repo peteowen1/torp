@@ -8,23 +8,26 @@ shots_prep <- load_pbp(seasons = T, rounds = T)
 
 ###############################
 shots_all <- shots_prep %>% dplyr::filter(!is.na(points_shot) | !is.na(shot_at_goal))
-shots <- shots_all %>% dplyr::filter(!is.na(shot_at_goal),
-                                     x > 0,
-                                     goal_x < 65,
-                                     abs_y < 45
-                                     )
+shots <- shots_all %>% dplyr::filter(
+  !is.na(shot_at_goal),
+  x > 0,
+  goal_x < 65,
+  abs_y < 45
+)
 
 ################
 # shots$scored_shot <- ifelse(!is.na(shots$points_shot), 1, 0)
 # shots$shot_cat <- ceiling(tidyr::replace_na(shots$points_shot,0)/3)+1
 
 shots <- shots %>%
-  mutate(scored_shot = ifelse(!is.na(shots$points_shot), 1, 0),
-         shot_cat = case_when(is.na(points_shot) ~ 1,
-                              points_shot == 1 ~ 2,
-                              points_shot == 6 ~ 3,
-                              )
-         )
+  mutate(
+    scored_shot = ifelse(!is.na(shots$points_shot), 1, 0),
+    shot_cat = case_when(
+      is.na(points_shot) ~ 1,
+      points_shot == 1 ~ 2,
+      points_shot == 6 ~ 3,
+    )
+  )
 
 shots$player_id_shot <- forcats::fct_lump_min(shots$player_id, 10, other_level = "Other")
 player_name_mapping <- shots %>%
@@ -106,17 +109,16 @@ shot_ocat_mdl <-
   mgcv::bam(
     shot_cat ~
       ti(goal_x, abs_y, by = phase_of_play, bs = "ts")
-    + ti(goal_x, abs_y, bs = "ts")
-    + s(goal_x, bs = "ts")
-    + s(abs_y, bs = "ts")
-    + ti(lag_goal_x, lag_y) + s(lag_goal_x, bs = "ts") + s(lag_y, bs = "ts")
-    + s(play_type, bs = "re")
-    + s(phase_of_play, bs = "re")
-    + s(player_position_fac, bs = "re")
-    + s(player_id_shot, bs = "re")
-    ,
+      + ti(goal_x, abs_y, bs = "ts")
+      + s(goal_x, bs = "ts")
+      + s(abs_y, bs = "ts")
+      + ti(lag_goal_x, lag_y) + s(lag_goal_x, bs = "ts") + s(lag_y, bs = "ts")
+      + s(play_type, bs = "re")
+      + s(phase_of_play, bs = "re")
+      + s(player_position_fac, bs = "re")
+      + s(player_id_shot, bs = "re"),
     data = shots,
-    family = ocat(R = 3) ,#stats::binomial(),
+    family = ocat(R = 3), # stats::binomial(),
     nthreads = 4,
     select = TRUE, discrete = TRUE, drop.unused.levels = FALSE
   )
@@ -149,6 +151,6 @@ player_shot_score <- mixedup::extract_ranef(shot_ocat_mdl, add_group_N = TRUE) %
 usethis::use_data(player_shot_score, overwrite = TRUE)
 
 ###
-preds <- predict.bam(shot_ocat_mdl,shots,type = 'response')
-colnames(preds) <- c('pred_no_score','pred_behind','pred_goal')
-shots <- bind_cols(shots,preds)
+preds <- predict.bam(shot_ocat_mdl, shots, type = "response")
+colnames(preds) <- c("pred_no_score", "pred_behind", "pred_goal")
+shots <- bind_cols(shots, preds)

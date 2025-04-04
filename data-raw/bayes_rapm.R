@@ -76,7 +76,7 @@ priors <- c(
 fit <- brm(formula, data = df_brms, prior = priors, family = gaussian(), chains = 2, iter = 1000, cores = available_cores, verbose = TRUE)
 
 # Save model
-saveRDS(fit,'./data-raw/bayes_rapm')
+saveRDS(fit, "./data-raw/bayes_rapm")
 
 # Load model
 fit <- readRDS("./data-raw/bayes_rapm")
@@ -249,15 +249,16 @@ season_bpm %>%
 season_bpm %>%
   filter(season == 2024) %>%
   group_by(player_team) %>%
-  mutate(val = pred_bpm*tot_tog/(tot_tog + 3),
-         rnk = rank(-val)) %>%
+  mutate(
+    val = pred_bpm * tot_tog / (tot_tog + 3),
+    rnk = rank(-val)
+  ) %>%
   ungroup() %>%
   filter(rnk <= 22) %>%
   group_by(player_team) %>%
   summarise(
-    tot_p = sum(pred_bpm*tot_tog)/sum(tot_tog/18),
+    tot_p = sum(pred_bpm * tot_tog) / sum(tot_tog / 18),
     max_val = sum(pred_bpm),
-    plyrs = n()) %>%
+    plyrs = n()
+  ) %>%
   arrange(-max_val)
-
-

@@ -90,10 +90,10 @@ sim_games$away_team <- replace_teams(sim_games$away_team)
 sim_games_pivot$team_name <- replace_teams(sim_games_pivot$team_name)
 #
 library(furrr)
-source('R/sim-helpers.R')
+source("R/sim-helpers.R")
 
-plan('multisession', workers = (parallelly::availableCores()-2))
-tst_sims <- furrr::future_map(.x = 1:sims, .f = ~sim_season(sim_teams, sim_games), .progress = T, .options = furrr::furrr_options(seed = TRUE))
+plan("multisession", workers = (parallelly::availableCores() - 2))
+tst_sims <- furrr::future_map(.x = 1:sims, .f = ~ sim_season(sim_teams, sim_games), .progress = T, .options = furrr::furrr_options(seed = TRUE))
 
 tst_df <- tst_sims %>% list_rbind(., names_to = "sim")
 
@@ -144,14 +144,15 @@ results_list <- furrr::future_map(1:sims, ~ bind_rows(sim_games_pivot %>%
 
 combined_results_df <- results_list %>% list_rbind()
 
-combined_results_df %>% filter(team_name == "Brisbane Lions") %>%
+combined_results_df %>%
+  filter(team_name == "Brisbane Lions") %>%
   group_by(roundnum) %>%
   summarise(
     mest = mean(estimate),
     mwp = mean(wp),
     mres = mean(result),
     mout = mean(outcome)
-    ) %>%
+  ) %>%
   View()
 
 ###
@@ -170,7 +171,7 @@ create_ladder <- function(df) {
 ####
 # Define a function that checks if the data frame meets the condition
 check_condition <- function(df) {
-  any(df$providerId == 'CD_M20240141901' & df$team_name == 'Brisbane Lions' & df$outcome == 1)
+  any(df$providerId == "CD_M20240141901" & df$team_name == "Brisbane Lions" & df$outcome == 1)
   # TRUE
 }
 
@@ -180,8 +181,9 @@ filtered_dfs <- results_list %>%
   keep(~ check_condition(.x))
 
 ladders <- furrr::future_map(filtered_dfs,
-                             ~create_ladder(.x),
-                             .progress = T)
+  ~ create_ladder(.x),
+  .progress = T
+)
 
 ladders_df <- ladders %>% list_rbind()
 
@@ -198,7 +200,7 @@ ladders_df %>%
     top_8 = mean(rank <= 8),
     top_4 = mean(rank <= 4),
     rows = n()
-    ) %>%
+  ) %>%
   arrange(-top_8, -top_4) %>%
   # arrange(-winz) %>%
   arrange()

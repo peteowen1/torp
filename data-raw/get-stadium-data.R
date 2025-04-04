@@ -16,7 +16,9 @@ tables <- page %>% html_nodes("table.wikitable")
 
 # Function to clean and process each table
 process_current_table <- function(table) {
-  df <- table %>% html_table(fill = TRUE) %>% .[[1]]
+  df <- table %>%
+    html_table(fill = TRUE) %>%
+    .[[1]]
   df %>%
     select(Ground, City, `State/territory`, Capacity, `First used`, Games, `Current tenant(s)`) %>%
     rename(
@@ -24,7 +26,7 @@ process_current_table <- function(table) {
       First_Used = `First used`,
       Current_Tenants = `Current tenant(s)`
     ) %>%
-    mutate(across(everything(), ~str_replace_all(., "\\[.*?\\]", ""))) %>%
+    mutate(across(everything(), ~ str_replace_all(., "\\[.*?\\]", ""))) %>%
     mutate(
       Capacity = as.integer(gsub("[ ,]", "", Capacity)),
       Table = "Current"
@@ -32,7 +34,9 @@ process_current_table <- function(table) {
 }
 
 process_former_table <- function(table) {
-  df <- table %>% html_table(fill = TRUE) %>% .[[1]]
+  df <- table %>%
+    html_table(fill = TRUE) %>%
+    .[[1]]
   df %>%
     select(Ground, City, State, Capacity, `First used`, Games, `Tenant(s)`) %>%
     rename(
@@ -40,7 +44,7 @@ process_former_table <- function(table) {
       First_Used = `First used`,
       Current_Tenants = `Tenant(s)`
     ) %>%
-    mutate(across(everything(), ~str_replace_all(., "\\[.*?\\]", ""))) %>%
+    mutate(across(everything(), ~ str_replace_all(., "\\[.*?\\]", ""))) %>%
     mutate(
       Capacity = as.integer(gsub("[ ,]", "", Capacity)),
       Table = "Former"
@@ -48,7 +52,9 @@ process_former_table <- function(table) {
 }
 
 process_other_table <- function(table) {
-  df <- table %>% html_table(fill = TRUE) %>% .[[1]]
+  df <- table %>%
+    html_table(fill = TRUE) %>%
+    .[[1]]
   df %>%
     select(Ground, City, `State/Country`, Capacity, Games, `Last used`, Uses) %>%
     rename(
@@ -56,7 +62,7 @@ process_other_table <- function(table) {
       First_Used = `Last used`,
       Current_Tenants = Uses
     ) %>%
-    mutate(across(everything(), ~str_replace_all(., "\\[.*?\\]", ""))) %>%
+    mutate(across(everything(), ~ str_replace_all(., "\\[.*?\\]", ""))) %>%
     mutate(
       Capacity = as.integer(gsub("[ ,]", "", Capacity)),
       Table = "Other"
@@ -76,7 +82,7 @@ get_lat_lon <- function(place) {
   res <- tryCatch(
     {
       opq(place) %>%
-        add_osm_feature(key = 'place', value = 'square') %>%
+        add_osm_feature(key = "place", value = "square") %>%
         osmdata_sf()
     },
     error = function(e) {
@@ -96,7 +102,7 @@ get_lat_lon <- function(place) {
 
 # Loop through each ground to get the coordinates
 for (i in 1:nrow(all_grounds)) {
-  place <- paste(all_grounds$Ground[i], all_grounds$City[i], all_grounds$State_Territory[i], "Australia", sep=", ")
+  place <- paste(all_grounds$Ground[i], all_grounds$City[i], all_grounds$State_Territory[i], "Australia", sep = ", ")
   coords <- get_lat_lon(place)
   all_grounds$Latitude[i] <- coords[1]
   all_grounds$Longitude[i] <- coords[2]
@@ -118,20 +124,20 @@ all_grounds <-
       Ground == "Marrara Oval" ~ -12.4010941,
       Ground == "Riverway Stadium" ~ -19.317617,
       Ground == "Summit Sport and Recreation Park" ~ -35.0783354,
-        TRUE ~ Latitude
-      ),
+      TRUE ~ Latitude
+    ),
     Longitude = case_when(
       Ground == "Cazalys Stadium" ~ 145.74899,
       Ground == "Jiangwan Stadium" ~ 121.5160351,
       Ground == "Marrara Oval" ~ 130.8811236,
       Ground == "Riverway Stadium" ~ 146.7293007,
       Ground == "Summit Sport and Recreation Park" ~ 138.891488,
-        TRUE ~ Longitude
+      TRUE ~ Longitude
     ),
   )
 
 # Save the cleaned data to an RDS file
-saveRDS(all_grounds, './data-raw/stadium-data.rds')
+saveRDS(all_grounds, "./data-raw/stadium-data.rds")
 
 # Display the cleaned data
 print(all_grounds)

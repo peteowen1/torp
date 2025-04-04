@@ -51,7 +51,7 @@ get_afl_week <- function(type = "current") {
     dplyr::filter(.data$utcStartTime < current_day, .data$compSeason.year == season)
   future_fixtures <- load_fixtures() %>%
     dplyr::filter(.data$utcStartTime >= current_day, .data$compSeason.year == season)
-  if ((type == "current" & nrow(past_fixtures)>0) | nrow(future_fixtures) == 0) {
+  if ((type == "current" & nrow(past_fixtures) > 0) | nrow(future_fixtures) == 0) {
     round <- as.numeric(max(past_fixtures$round.roundNumber))
   } else {
     round <- as.numeric(min(future_fixtures$round.roundNumber))
@@ -89,6 +89,80 @@ progressively <- function(f, p = NULL) {
     f(...)
   }
 }
+
+#' Get mode of a vector
+#'
+#' This function returns the mode (most frequent value) of a vector.
+#'
+#' @param x A vector of values.
+#'
+#' @return The mode (most frequent value) of the input vector.
+#' @export
+get_proportion_through_day <- function(datetime) {
+  # Ensure datetime is POSIXct
+  if (!inherits(datetime, "POSIXct")) {
+    stop("Input must be a POSIXct datetime object.")
+  }
+
+  # Calculate seconds since midnight
+  midnight <- as.POSIXct(format(datetime, "%Y-%m-%d 00:00:00"), tz = tz(datetime))
+  seconds_since_midnight <- as.numeric(difftime(datetime, midnight, units = "secs"))
+
+  # Proportion through the day
+  proportion <- seconds_since_midnight / (24 * 60 * 60)
+  return(proportion)
+}
+
+#' Get mode of a vector
+#'
+#' This function returns the mode (most frequent value) of a vector.
+#'
+#' @param x A vector of values.
+#'
+#' @return The mode (most frequent value) of the input vector.
+#' @export
+get_proportion_through_year <- function(datetime) {
+  # Ensure datetime is POSIXct
+  if (!inherits(datetime, "POSIXct")) {
+    stop("Input must be a POSIXct datetime object.")
+  }
+
+  year <- year(datetime)
+
+  # Start and end of the year
+  start_of_year <- as.POSIXct(paste0(year, "-01-01 00:00:00"), tz = tz(datetime))
+  start_of_next_year <- as.POSIXct(paste0(year + 1, "-01-01 00:00:00"), tz = tz(datetime))
+
+  total_seconds <- as.numeric(difftime(start_of_next_year, start_of_year, units = "secs"))
+  seconds_elapsed <- as.numeric(difftime(datetime, start_of_year, units = "secs"))
+
+  proportion <- seconds_elapsed / total_seconds
+  return(proportion)
+}
+
+
+#' Get mode of a vector
+#'
+#' This function returns the mode (most frequent value) of a vector.
+#'
+#' @param x A vector of values.
+#'
+#' @return The mode (most frequent value) of the input vector.
+#' @export
+decimal_hour <- function(datetime) {
+  # Ensure datetime is POSIXct
+  if (!inherits(datetime, "POSIXct")) {
+    stop("Input must be a POSIXct datetime object.")
+  }
+
+  h <- hour(datetime)
+  m <- minute(datetime)
+  s <- second(datetime)
+
+  h + m / 60 + s / 3600
+}
+
+
 
 #' Get mode of a vector
 #'

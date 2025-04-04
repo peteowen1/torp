@@ -6,18 +6,18 @@ devtools::load_all()
 
 ### update fixtures file (17 secs)
 tictoc::tic()
-fixtures_upd <- purrr::map(lubridate::year(Sys.Date()), ~fitzRoy::fetch_fixture_afl(.x, comp = "AFLM")) %>% purrr::list_rbind()
+fixtures_upd <- purrr::map(lubridate::year(Sys.Date()), ~ fitzRoy::fetch_fixture_afl(.x, comp = "AFLM")) %>% purrr::list_rbind()
 tictoc::toc()
 
-fixtures <- fixtures_upd #torp::fixtures %>% rows_upsert(fixtures_upd, by = "providerId")
+fixtures <- fixtures_upd # torp::fixtures %>% rows_upsert(fixtures_upd, by = "providerId")
 usethis::use_data(fixtures, overwrite = TRUE)
 
 ### update teams file (90 secs per season)
 library(furrr)
-plan('multisession', workers = (parallelly::availableCores()-2))
+plan("multisession", workers = (parallelly::availableCores() - 2))
 # rows_upsert()
 tictoc::tic() #### CHANGE FITZROY FUNCTION TO FUTURE_MAP
-teams_upd <- purrr::map((get_afl_week()-1):(get_afl_week()+1), ~ fitzRoy::fetch_lineup_afl(get_afl_season(),.x, comp = "AFLM")) %>%
+teams_upd <- purrr::map((get_afl_week() - 1):(get_afl_week() + 1), ~ fitzRoy::fetch_lineup_afl(get_afl_season(), .x, comp = "AFLM")) %>%
   purrr::list_rbind() %>%
   dplyr::mutate(
     season = as.numeric(substr(providerId, 5, 8)),
@@ -55,11 +55,11 @@ tictoc::tic()
 plyr_tm_df_upd <-
   fitzRoy::fetch_player_details_afl(season = get_afl_season(), comp = "AFLM") %>%
   dplyr::mutate(
-    player_name = paste(firstName,surname),
-    age = lubridate::decimal_date(lubridate::as_date(glue::glue('{season}-07-01')))-
+    player_name = paste(firstName, surname),
+    age = lubridate::decimal_date(lubridate::as_date(glue::glue("{season}-07-01"))) -
       lubridate::decimal_date(lubridate::as_date(dateOfBirth)),
-    row_id = paste(providerId,season)
-    )
+    row_id = paste(providerId, season)
+  )
 tictoc::toc()
 
 plyr_tm_df <- load_player_details(TRUE) %>% rows_upsert(plyr_tm_df_upd, by = "row_id")

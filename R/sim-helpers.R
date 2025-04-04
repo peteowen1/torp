@@ -17,7 +17,7 @@ sim_season <- function(sim_teams, sim_games) {
     sort()
   simmed_games <- purrr::map_dfr(rounds_to_sim, function(round_num) {
     result <- process_games(sim_teams, sim_games, round_num)
-    sim_teams <<- result$sim_teams  # Note: This is a side effect
+    sim_teams <<- result$sim_teams # Note: This is a side effect
     result$sim_games
   })
   return(simmed_games)
