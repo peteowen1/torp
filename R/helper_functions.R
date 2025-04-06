@@ -42,7 +42,7 @@ add_torp_ids <- function(df) {
     dplyr::mutate(
       torp_match_id = glue::glue("{.data$season}_{.data$round_number}_{.data$home_team_team_abbr}_{.data$away_team_team_abbr}"),
       torp_row_id = paste0(.data$torp_match_id, sprintf("%04d", .data$display_order)),
-      torp_match_chain_id = paste0(.data$torp_row_id, .data$chain_number)
+      # torp_match_chain_id = paste0(.data$torp_row_id, .data$chain_number)
     )
 }
 
@@ -85,8 +85,13 @@ add_game_variables <- function(df) {
     dplyr::mutate(
       home_points = cumsum(.data$home_points_row),
       away_points = cumsum(.data$away_points_row),
+      pos_team_points = dplyr::if_else(.data$home == 1, .data$home_points, .data$away_points),
+      opp_team_points = dplyr::if_else(.data$home == 1, .data$away_points, .data$home_points),
+      # pos_points = zoo::na.locf0(.data$points_row, fromLast = TRUE),
+      points_diff = .data$pos_team_points - .data$opp_team_points,
       rn = dplyr::row_number(),
       total_seconds = (.data$period - 1) * 1800 + .data$period_seconds,
+      pos_team_points = dplyr::if_else(.data$home == 1, .data$home_points, .data$away_points),
       model_points = dplyr::if_else(.data$pos_points_team_id == .data$team_id_mdl, .data$pos_points, -.data$pos_points),
       pos_is_goal = dplyr::if_else(.data$pos_points == 6, 1, 0),
       pos_team_shot = dplyr::if_else(.data$model_points > 0, 1, 0),
@@ -114,6 +119,7 @@ add_quarter_variables <- function(df) {
     dplyr::mutate(
       end_of_qtr = ifelse(max(.data$display_order) == .data$display_order, 1, 0),
       points_row = calculate_points_row(.data$final_state, .data$description, .data$end_of_chain, .data$end_of_qtr),
+      points_row_na = tidyr::replace_na(points_row,0),
       team_id_mdl = dplyr::case_when(
         .data$throw_in == 1 ~ dplyr::lead(.data$team_id),
         TRUE ~ .data$team_id
@@ -214,7 +220,7 @@ calculate_points_row <- function(final_state, description, end_of_chain, end_of_
   dplyr::case_when(
     final_state %in% c("rushed", "rushedOpp", "behind") & end_of_chain == 1 ~ 1,
     final_state %in% c("goal") & end_of_chain == 1 ~ 6,
-    TRUE ~ 0
+    TRUE ~ NA_integer_
   )
 }
 
