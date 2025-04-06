@@ -32,8 +32,8 @@ tictoc::tic()
 
 plyr_gm_df <-
   model_data_wp %>% # add_wp_vars() %>%
-  # filter(match_id == 'CD_M20230142107') %>%
-  # dplyr::arrange(match_id, display_order) %>%
+  ###### filter(match_id == 'CD_M20230142107') %>%
+  dplyr::arrange(match_id, display_order) %>%
   dplyr::select(
     player_name, player_id, match_id, utc_start_time, home_away, away_team_team_name, home_team_team_name,
     delta_epv, team, player_position, round_week, pos_team, wpa

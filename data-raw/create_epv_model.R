@@ -15,6 +15,8 @@ tictoc::toc()
 tictoc::tic()
 model_data_epv <- clean_model_data_epv(pbp)
 tictoc::toc()
+
+model_data_epv %>% select_epv_model_vars()
 #######################################
 ##################
 nrounds <- 87

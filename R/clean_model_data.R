@@ -37,14 +37,28 @@ clean_model_data_wp <- function(df) {
 #' @param df A dataframe containing cleaned play-by-play data.
 #' @return A dataframe with selected variables for EPV modeling.
 #' @export
-select_epv_model_vars <- function(df) {
-  df %>%
-    dplyr::select(
-      .data$goal_x, .data$y, .data$lag_goal_x, .data$lag_goal_x5, .data$lag_y, .data$period_seconds, .data$period,
-      .data$play_type_handball, .data$play_type_kick, .data$play_type_reception, .data$phase_of_play_handball_received,
-      .data$phase_of_play_hard_ball, .data$phase_of_play_loose_ball, .data$phase_of_play_set_shot,
-      .data$shot_row, .data$speed5, .data$home
-    )
+select_epv_model_vars <- function(df, label = FALSE) {
+  if (label == FALSE) {
+    select_df <-
+      df %>%
+      dplyr::select(
+        .data$goal_x, .data$y, .data$lag_goal_x, .data$lag_goal_x5, .data$lag_y, .data$period_seconds, .data$period,
+        .data$play_type_handball, .data$play_type_kick, .data$play_type_reception, .data$phase_of_play_handball_received,
+        .data$phase_of_play_hard_ball, .data$phase_of_play_loose_ball, .data$phase_of_play_set_shot,
+        .data$shot_row, .data$speed5, .data$home
+      )
+  }
+  if (label == TRUE) {
+    select_df <-
+      df %>%
+      dplyr::select(
+        .data$goal_x, .data$y, .data$lag_goal_x, .data$lag_goal_x5, .data$lag_y, .data$period_seconds, .data$period,
+        .data$play_type_handball, .data$play_type_kick, .data$play_type_reception, .data$phase_of_play_handball_received,
+        .data$phase_of_play_hard_ball, .data$phase_of_play_loose_ball, .data$phase_of_play_set_shot,
+        .data$shot_row, .data$speed5, .data$home, .data$label_ep
+      )
+  }
+  return(select_df)
 }
 
 #' Select WP Model Variables
