@@ -256,15 +256,20 @@ rez <- resultz %>%
 ####
 # library(MLmetrics)
 MLmetrics::LogLoss(rez$pred_win, rez$win)
-MLmetrics::MAE(rez$pred_score_diff, rez$score_diff) # 26.28663
+MLmetrics::MAE(rez$pred_score_diff, rez$score_diff)
 sum(rez$bits)
-mean(rez$bits) # 0.1407061
 sum(rez$tips)
+mean(rez$bits)
 mean(rez$tips)
 nrow(rez)
+
 ### rez %>% select(30:38,41:55,57:59,61:62,torp_diff,shot_diff,score_diff) %>% view()
 ### view(df %>% filter(providerId == "CD_M20220140306"))
 
 # season <- 2023
 # resultz23 <- purrr::map_df(1:27, ~ mdl_wk(team_mdl_df, season, .))
 # rez23 <- resultz23 %>% dplyr::filter(!is.na(bits),team_type_fac == "home")
+
+
+library(fitzRoy)
+sq_df <- fitzRoy::fetch_squiggle_data()
