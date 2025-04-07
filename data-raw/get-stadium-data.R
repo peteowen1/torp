@@ -115,6 +115,7 @@ all_grounds <-
   all_grounds %>%
   mutate(venue = replace_venues(Ground))
 
+
 all_grounds <-
   all_grounds %>%
   mutate(
@@ -124,6 +125,7 @@ all_grounds <-
       Ground == "Marrara Oval" ~ -12.4010941,
       Ground == "Riverway Stadium" ~ -19.317617,
       Ground == "Summit Sport and Recreation Park" ~ -35.0783354,
+      Ground == "Barossa Park" ~ -34.5991418,
       TRUE ~ Latitude
     ),
     Longitude = case_when(
@@ -132,9 +134,20 @@ all_grounds <-
       Ground == "Marrara Oval" ~ 130.8811236,
       Ground == "Riverway Stadium" ~ 146.7293007,
       Ground == "Summit Sport and Recreation Park" ~ 138.891488,
+      Ground == "Barossa Park" ~ 138.8862646,
       TRUE ~ Longitude
     ),
   )
+
+# Find the row where Ground is "Bellerive Oval"
+bellerive_row <- all_grounds[all_grounds$Ground == "Bellerive Oval", ]
+
+# Modify the ground and venue names
+bellerive_row$Ground <- "Ninja Stadium"
+bellerive_row$venue <- "Ninja Stadium"
+
+# Add the modified row to the dataframe
+all_grounds <- dplyr::bind_rows(all_grounds, bellerive_row) %>% distinct()
 
 # Save the cleaned data to an RDS file
 saveRDS(all_grounds, "./data-raw/stadium-data.rds")
