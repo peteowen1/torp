@@ -2,7 +2,8 @@ library(tidyverse)
 options(digits = 3)
 
 ## iteration sims
-sims <- 1000
+sims <- 500
+season_val <- get_afl_season()
 # sims_per_round <- max(ceiling(simulations / future::availableCores() * 2), 100)
 # sim_round <- 1
 # iter_sims <- sims_per_round * (sim_round - 1) + seq_len(sims_per_round)
@@ -13,7 +14,7 @@ sims <- 1000
 sim_games <-
   fixtures %>%
   mutate(result = home.score.totalScore - away.score.totalScore) %>%
-  filter(compSeason.year == 2024) %>%
+  filter(compSeason.year == season_val) %>%
   select(providerId,
     season = compSeason.year,
     roundnum = round.roundNumber,
@@ -61,6 +62,9 @@ sim_teams <-
   filter(tm_rnk <= 23) %>%
   summarise(
     torp = sum(pmax(torp, 0), na.rm = T)
+  ) %>%
+  mutate(
+    torp = ifelse(team == 'Hawthorn',71,torp)
   )
 
 orig_ratings <- sim_teams %>%
@@ -92,8 +96,11 @@ sim_games_pivot$team_name <- replace_teams(sim_games_pivot$team_name)
 library(furrr)
 source("R/sim-helpers.R")
 
-plan("multisession", workers = (parallelly::availableCores() - 2))
+plan("multisession") #, workers = (parallelly::availableCores() - 2))
+
+tictoc::tic('Running Sim')
 tst_sims <- furrr::future_map(.x = 1:sims, .f = ~ sim_season(sim_teams, sim_games), .progress = T, .options = furrr::furrr_options(seed = TRUE))
+tictoc::toc()
 
 tst_df <- tst_sims %>% list_rbind(., names_to = "sim")
 
@@ -144,6 +151,68 @@ results_list <- furrr::future_map(1:sims, ~ bind_rows(sim_games_pivot %>%
 
 combined_results_df <- results_list %>% list_rbind()
 
+###
+team_record_df <- combined_results_df %>%
+  filter(team_name %in% c('Brisbane Lions','Gold Coast','Hawthorn')) %>%
+  group_by(sim,team_name) %>%
+  mutate(
+    wins = cumsum(outcome),
+    games = row_number(),
+    win_diff = games - wins,
+    win_prop = wins/games,
+    lost_record = case_when(
+      win_diff == 1 & lag(win_diff==0) ~ 1,
+      win_diff == 0 & roundnum == 24 ~ 1,
+      TRUE ~ 0
+    )
+  )
+
+betr_df <- team_record_df %>%
+  filter(lost_record == 1) %>%
+  ungroup() %>%
+  group_by(sim) %>%
+  mutate(max_round = max(roundnum)) %>%
+  filter(max_round==roundnum) %>%
+  ungroup() %>%
+  select(sim,team_name,roundnum) %>%
+  pivot_wider(
+    id_cols = sim,
+    names_from = team_name,
+    values_from = roundnum,
+    values_fn = ~mean(.x)
+  ) %>%
+  mutate(
+    teams_undefeated = rowSums(!is.na(across(-sim))),
+    max_round = do.call(pmax, c(across(-sim), na.rm = TRUE))
+  ) %>% janitor::clean_names()
+
+nrow(betr_df)
+# betr_df
+
+betr_df %>%
+  filter(
+    teams_undefeated == 1
+    # max_round == 5
+    ) %>%
+  summarise(
+    avg_teams = mean(teams_undefeated),
+    sims = sum(teams_undefeated)/avg_teams,
+    avg_round = mean(max_round),
+    gc = sum(!is.na(gold_coast), na.rm = TRUE)/sims,
+    bl = sum(!is.na(brisbane_lions), na.rm = TRUE)/sims,
+    hawk = sum(!is.na(hawthorn), na.rm = TRUE)/sims
+  )
+
+# betr_df %>%
+#   group_by(max_round) %>%
+#   summarise(count = n())
+
+###
+# team_record_df %>%
+#   group_by(roundnum) %>%
+#   summarise(mean(outcome), sd(estimate)) %>% print(n=25)
+
+###
 combined_results_df %>%
   filter(team_name == "Brisbane Lions") %>%
   group_by(roundnum) %>%
@@ -171,8 +240,8 @@ create_ladder <- function(df) {
 ####
 # Define a function that checks if the data frame meets the condition
 check_condition <- function(df) {
-  any(df$providerId == "CD_M20240141901" & df$team_name == "Brisbane Lions" & df$outcome == 1)
-  # TRUE
+  # any(df$providerId == "CD_M20240141901" & df$team_name == "Brisbane Lions" & df$outcome == 1)
+  TRUE
 }
 
 ###
@@ -205,38 +274,44 @@ ladders_df %>%
   # arrange(-winz) %>%
   arrange()
 
-### Finals
-quali_finals <-
-  tst_lad %>%
-  mutate(
-    opponent_rank = case_when(
-      rank == 1 ~ 4,
-      rank == 2 ~ 3,
-      TRUE ~ NA_real_
-    )
-  ) %>%
-  inner_join(tst_lad, by = c("opponent_rank" = "rank", "sim"), suffix = c(".home", ".away")) %>%
-  select(
-    home_team = team_name.home,
-    away_team = team_name.away
-  )
+tst_lad <-
+  ladders_df %>%
+  filter(sim ==1)
 
-quali_finals
+# ### Finals
+# quali_finals <-
+#   tst_lad %>%
+#   mutate(
+#     opponent_rank = case_when(
+#       rank == 1 ~ 4,
+#       rank == 2 ~ 3,
+#       TRUE ~ NA_real_
+#     )
+#   ) %>%
+#   inner_join(tst_lad, by = c("opponent_rank" = "rank", "sim"), suffix = c(".home", ".away")) %>%
+#   select(
+#     home_team = team_name.home,
+#     away_team = team_name.away
+#   )
+#
+# quali_finals
+#
+# # Display the matches
+# elim_finals <-
+#   tst_lad %>%
+#   mutate(
+#     opponent_rank = case_when(
+#       rank == 5 ~ 8,
+#       rank == 6 ~ 7,
+#       TRUE ~ NA_real_
+#     )
+#   ) %>%
+#   inner_join(tst_lad, by = c("opponent_rank" = "rank", "sim"), suffix = c(".home", ".away")) %>%
+#   select(
+#     home_team = team_name.home,
+#     away_team = team_name.away
+#   )
+#
+# elim_finals
 
-# Display the matches
-elim_finals <-
-  tst_lad %>%
-  mutate(
-    opponent_rank = case_when(
-      rank == 5 ~ 8,
-      rank == 6 ~ 7,
-      TRUE ~ NA_real_
-    )
-  ) %>%
-  inner_join(tst_lad, by = c("opponent_rank" = "rank", "sim"), suffix = c(".home", ".away")) %>%
-  select(
-    home_team = team_name.home,
-    away_team = team_name.away
-  )
 
-elim_finals

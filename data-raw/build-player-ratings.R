@@ -30,7 +30,7 @@ torp_df_25 <- get_torp_df(2025, 0:get_afl_week("next"))
 torp_df_total <- torp_df_total %>% rows_upsert(torp_df_25, by = "row_id")
 
 # Combine all years into a single data frame
-torp_df_total <- bind_rows(torp_df_21, torp_df_22, torp_df_23, torp_df_24, torp_df_25)
+# torp_df_total <- bind_rows(torp_df_21, torp_df_22, torp_df_23, torp_df_24, torp_df_25)
 
 tictoc::toc() # Stop timing
 

@@ -49,8 +49,8 @@ plyr_gm_df <-
     # wt_gms = sum(unique(weight_gm), na.rm = TRUE),
     utc_start_time = max(utc_start_time),
     weight_gm = max(weight_gm),
-    disp_pts = sum(dplyr::if_else(pos_team == -1, delta_epv - 0.03, delta_epv + 0.06) / 2),
-    disp_pts_wt = sum((dplyr::if_else(pos_team == -1, delta_epv - 0.03, delta_epv + 0.06) * max(weight_gm)) / 2),
+    disp_pts = sum(dplyr::if_else(pos_team == -1, delta_epv - 0.04, delta_epv + 0.08) / 2),
+    disp_pts_wt = sum((dplyr::if_else(pos_team == -1, delta_epv - 0.04, delta_epv + 0.08) * max(weight_gm)) / 2),
     disp_wpa = sum((wpa) / 2),
     disp = floor(dplyr::n() / 2),
     tm = dplyr::last(team),
@@ -95,7 +95,7 @@ plyr_gm_df <-
       # ) %>%
       dplyr::mutate(
         weight_gm = exp(as.numeric(-(max(as.Date(utc_start_time)) - as.Date(utc_start_time))) / decay),
-        spoil_pts = extended_stats_spoils * 0.6 + extended_stats_pressure_acts * 0.1 - extended_stats_def_half_pressure_acts * 0.2, # HMMMMMMMMM
+        spoil_pts = extended_stats_spoils * 0.6 + tackles * 0.1 + extended_stats_pressure_acts * 0.1 - extended_stats_def_half_pressure_acts * 0.2, # HMMMMMMMMM
         spoil_pts_wt = spoil_pts * max(weight_gm),
         hitout_pts = hitouts * 0.15 + extended_stats_hitouts_to_advantage * 0.25 - extended_stats_ruck_contests * 0.06,
         hitout_pts_wt = hitout_pts * max(weight_gm)

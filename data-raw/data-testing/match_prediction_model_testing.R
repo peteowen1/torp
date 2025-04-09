@@ -236,6 +236,22 @@ resultz <-
   resultz %>%
   mutate(tips = ifelse(win == 0.5, 1, tips))
 
+resultz <- saveRDS(resultz,'./shiny/resultz.rds')
+
+# Get chains data  -------------------------------------------------------------
+
+get_predictions_data <- function(season) {
+  # Sys.setenv(TZ = "Australia/Melbourne")
+  file_name <- glue::glue("predictions_{season}")
+
+  rdf  <- resultz %>% filter(season.x %in% season)
+
+  save_to_release(df = rdf, file_name = file_name, release_tag = "predictions")
+}
+
+# extract and save
+get_predictions_data(2025)
+
 ###
 
 season <- get_afl_season()
