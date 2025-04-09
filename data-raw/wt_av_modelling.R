@@ -14,7 +14,7 @@ decay <- 365
 
 tictoc::tic()
 
-pl_details <- fetch_player_details_afl(2024)
+pl_details <- fetch_player_details_afl(get_afl_season())
 
 # ps24 <- fetch_player_stats_afl(2024) %>%
 #   janitor::remove_constant() %>%

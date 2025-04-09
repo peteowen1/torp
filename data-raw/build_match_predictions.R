@@ -3,47 +3,14 @@ library(tidyverse)
 library(fitzRoy)
 devtools::load_all()
 
+# Load Tables ----
 all_grounds <- readRDS("./data-raw/stadium-data.rds")
-
-# data(teams, envir = environment())
-#
-# data(results, envir = environment())
-#
-# data(torp_df_total, envir = environment())
-
-###
 xg_df <- load_xg(TRUE)
 fixtures <- load_fixtures(TRUE)
 results <- load_results(TRUE)
 teams <- load_teams(TRUE)
 
-# pred_df <- readRDS("./data-raw/stat_pred_df.rds")
-#
-# team_preds <- pred_df %>%
-#   group_by(provider_id, team_name, opp_name) %>%
-#   summarise_if(is.numeric, sum, na.rm = TRUE) %>%
-#   mutate(
-#     pred_disposal_efficiency = pred_extended_stats_effective_disposals / pred_disposals,
-#     pred_goal_accuracy = pred_goal_accuracy / pred_shots_at_goal,
-#     pred_extended_stats_kick_efficiency = pred_extended_stats_effective_kicks / pred_kicks,
-#     pred_extended_stats_contested_possession_rate = pred_contested_possessions / pred_total_possessions,
-#     pred_extended_stats_hitout_win_percentage = pred_hitouts / pred_extended_stats_ruck_contests,
-#     pred_extended_stats_hitout_to_advantage_rate = pred_extended_stats_hitouts_to_advantage / pred_hitouts,
-#     pred_extended_stats_contest_def_loss_percentage = pred_extended_stats_contest_def_losses / pred_extended_stats_contest_def_one_on_ones,
-#     pred_extended_stats_contest_off_wins_percentage = pred_extended_stats_contest_off_wins / pred_extended_stats_contest_off_one_on_ones
-#   )
-# %>% View()
-
-
-# + s(scale(pred_disposal_efficiency), bs = "ts")
-# + s(scale(pred_goal_accuracy), bs = "ts")
-# + s(scale(pred_extended_stats_kick_efficiency), bs = "ts")
-# + s(scale(pred_extended_stats_contested_possession_rate), bs = "ts")
-# + s(scale(pred_extended_stats_hitout_win_percentage), bs = "ts")
-# + s(scale(pred_extended_stats_hitout_to_advantage_rate), bs = "ts")
-# + s(scale(pred_extended_stats_contest_def_loss_percentage), bs = "ts")
-# + s(scale(pred_extended_stats_contest_off_wins_percentage), bs = "ts")
-
+# Build Fixtures Tables ----
 decay <- 10000
 
 team_map <-
@@ -96,7 +63,7 @@ fix_df <- fix_df %>%
   # 4. Stop row-wise processing
   ungroup()
 
-#####
+## Add Date Variables  ----
 fix_df <- fix_df %>%
   # Ensure row-wise processing
   rowwise() %>%
@@ -132,7 +99,7 @@ fix_df <- fix_df %>%
   ungroup()
 
 
-#############
+# Lineups ----
 
 team_lineup_df <-
   teams %>% # dplyr::filter(providerId != 'CD_M20230140105' | player.playerId != 'CD_I297373') %>% #tibble::view()
@@ -204,7 +171,7 @@ team_lineup_df <-
     other_pos = ifelse(is.na(position.y), torp, NA)
   )
 
-###
+## Aggregate Lineups ----
 team_rt_df <- team_lineup_df %>%
   filter(!is.na(player.playerId)) %>%
   # filter(!is.na(teamAbbr)) %>%
@@ -270,7 +237,7 @@ team_rt_df <- team_lineup_df %>%
   ) %>%
   dplyr::ungroup()
 
-###
+# Find Home Ground ----
 home_ground <-
   team_rt_df %>%
   group_by(teamId, team_name_adj) %>%
@@ -282,11 +249,7 @@ home_ground <-
     by = c("venue_adj" = "venue_adj")
   )
 
-
-# home_ground
-############################
-
-# Helper function to calculate proportions
+## Calculate Familiarity ----
 calculate_proportions <- function(data, team, current_season, current_round) {
   filtered_data <- data %>%
     filter(teamId == team & ((season < current_season) | (season == current_season & round.roundNumber < current_round)))
@@ -330,7 +293,8 @@ tictoc::toc()
 # Combine all proportions into a single data frame
 ground_prop <- do.call(rbind, lapply(all_proportions, function(x) do.call(rbind, lapply(x, function(y) do.call(rbind, y)))))
 
-#####
+## Distance Traveled  ----
+
 team_dist_df <-
   fix_df %>%
   dplyr::mutate(
@@ -343,11 +307,11 @@ team_dist_df <-
     list(venue_lon, venue_lat, team_lon, team_lat),
     ~ geosphere::distHaversine(c(..1, ..2), c(..3, ..4))
   )) %>%
-  dplyr::mutate(log_dist = log(distance + 1000)) %>%
+  dplyr::mutate(log_dist = log(distance + 10000)) %>% # Add 10km as the minimum travel
   dplyr::left_join(ground_prop) %>%
   dplyr::mutate(familiarity = replace_na(familiarity, 0))
 
-####
+## Days Rest ----
 days_rest <- fix_df %>%
   arrange(teamId, utcStartTime) %>%
   group_by(teamId, season) %>%
@@ -386,7 +350,7 @@ tr_week <-
   ) %>%
   arrange(-torp_week) # %>% summarise(sum(val)) #1234
 
-######
+# Torp Ratings ----
 team_rt_fix_df <-
   fix_df %>%
   mutate(team_name = fitzRoy::replace_teams(team_name)) %>%
@@ -414,7 +378,7 @@ team_rt_fix_df <-
   dplyr::ungroup()
 
 
-####
+# Team mdl df ----
 team_mdl_df_tot <- team_rt_fix_df %>% # filter(!is.na(torp)) %>%
   dplyr::left_join(
     team_rt_fix_df %>%
@@ -511,7 +475,7 @@ team_mdl_df_tot <- team_rt_fix_df %>% # filter(!is.na(torp)) %>%
 #   by = c("providerId" = "provider_id", "team_name_adj.x" = "team_name_adj")
 # )
 
-###
+## Filter out early matches ----
 team_mdl_df <-
   team_mdl_df_tot %>%
   filter(
@@ -519,8 +483,14 @@ team_mdl_df <-
     # providerId <= glue::glue("CD_M{get_afl_season()}014{get_afl_week('next')+1}")
   )
 
+## Adjust total_xpoints ----
+team_mdl_df <-
+  team_mdl_df %>%
+  mutate(
+    total_xpoints_adj = total_xpoints * (mean(total_points, na.rm = TRUE)/mean(total_xpoints, na.rm = TRUE))
+  )
 
-#### MODEL
+#  Modelling ----
 # library(mgcViz)
 # set.seed("1234")
 
@@ -570,9 +540,10 @@ team_mdl_df <-
 # plot(mgcViz::getViz(afl_shot_mdl))
 # Deviance explained = 44.5%
 
-###
+
+## Total xPoints Model ----
 afl_total_xpoints_mdl <- mgcv::bam(
-  total_xpoints ~
+  total_xpoints_adj ~
     s(team_type_fac.x, bs = "re")
     + s(game_year_decimal.x, bs = "ts")
     + s(game_prop_through_year.x, bs = "cc")
@@ -606,7 +577,7 @@ team_mdl_df$pred_tot_xscore <- predict(afl_total_xpoints_mdl, newdata = team_mdl
 # plot(mgcViz::getViz(afl_total_xpoints_mdl))
 # Deviance explained =   16%
 
-###
+## xScore Diff Model ----
 afl_xscore_diff_mdl <- mgcv::bam(
   xscore_diff ~
     s(team_type_fac, bs = "re")
@@ -631,7 +602,7 @@ team_mdl_df$pred_xscore_diff <- predict(afl_xscore_diff_mdl, newdata = team_mdl_
 # Deviance explained = 44.5%
 
 
-###
+## Conversion Model ----
 afl_conv_mdl <- mgcv::bam(
   shot_conv ~
     s(team_type_fac.x, bs = "re")
@@ -661,7 +632,7 @@ team_mdl_df$pred_conv <- predict(afl_conv_mdl, newdata = team_mdl_df, type = "re
 # plot(mgcViz::getViz(afl_conv_mdl))
 # Deviance explained = 4.4%
 
-###
+## Score Diff Model ----
 afl_score_mdl <- mgcv::bam(
   score_diff ~
     s(team_type_fac, bs = "re")
@@ -684,11 +655,11 @@ afl_score_mdl <- mgcv::bam(
 team_mdl_df$pred_score_diff <- predict(afl_score_mdl, newdata = team_mdl_df, type = "response")
 
 # summary(afl_score_mdl)
-# mixedup::extract_ranef(afl_conv_mdl, add_group_N = T) %>% tibble::view()
-# plot(mgcViz::getViz(afl_conv_mdl))
+# mixedup::extract_ranef(afl_score_mdl, add_group_N = T) %>% tibble::view()
+# plot(mgcViz::getViz(afl_score_mdl))
 # Deviance explained = 40.4%
 
-###
+## Win Prob Model ----
 afl_win_mdl <-
   mgcv::bam(
     win ~
@@ -724,7 +695,7 @@ team_mdl_df$tips <- ifelse(round(team_mdl_df$pred_win) == team_mdl_df$win, 1,
 )
 team_mdl_df$mae <- abs(team_mdl_df$score_diff - team_mdl_df$pred_score_diff)
 
-#########
+# Model Metrics ----
 test_df <- team_mdl_df %>% dplyr::filter(!is.na(win), team_type == "home", season.x == get_afl_season())
 # library(MLmetrics)
 MLmetrics::LogLoss(test_df$pred_win, test_df$win)
@@ -747,7 +718,7 @@ team_mdl_df$pred_conv <- predict(afl_conv_mdl, newdata = team_mdl_df, type = "re
 team_mdl_df$pred_score_diff <- predict(afl_score_mdl, newdata = team_mdl_df, type = "response")
 team_mdl_df$pred_win <- predict(afl_win_mdl, newdata = team_mdl_df, type = "response")
 
-######
+# This Weeks Predictions ----
 n <- get_afl_week(type = "next")
 
 week_gms_home <- team_mdl_df %>%
@@ -797,6 +768,7 @@ inj_df %>%
   filter(str_starts(player, "Upd")) %>%
   unique()
 
+## Final Prediction Table ----
 week_gms
 
 ####

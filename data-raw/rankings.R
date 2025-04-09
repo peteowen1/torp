@@ -30,10 +30,10 @@ starting <- tr %>% inner_join(week_teams, by = c("player_id" = "player.playerId"
 this_week <- player_game_ratings(get_afl_season(), get_afl_week())
 view(this_week)
 
-# this_season <- player_game_ratings(round_num = 0:get_afl_week())
+this_season <- player_game_ratings(round_num = 0:get_afl_week())
 # view(this_season)
 
-# tot_season <- player_game_ratings(season = 2021:2025, round_num = 0:get_afl_week())
+tot_season <- player_game_ratings(season = 2021:2025, round_num = 0:get_afl_week())
 # view(tot_season)
 
 ssn_25 <- player_season_ratings(2025, 0:24)

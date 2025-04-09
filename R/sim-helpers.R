@@ -10,18 +10,36 @@
 #' @importFrom stats rnorm
 #' @export
 sim_season <- function(sim_teams, sim_games) {
+  # Identify rounds that still need simulation (i.e. missing results)
   rounds_to_sim <- sim_games %>%
-    dplyr::filter(is.na(.data$result)) %>%
-    dplyr::pull(.data$roundnum) %>%
+    dplyr::filter(is.na(result)) %>%
+    dplyr::pull(roundnum) %>%
     unique() %>%
     sort()
-  simmed_games <- purrr::map_dfr(rounds_to_sim, function(round_num) {
+
+  # Pre-allocate a list to store simulated game data for each round
+  simmed_games_list <- vector("list", length(rounds_to_sim))
+
+  # Loop over each round and simulate games
+  for (i in seq_along(rounds_to_sim)) {
+    round_num <- rounds_to_sim[i]
+    # Process games for this round
     result <- process_games(sim_teams, sim_games, round_num)
-    sim_teams <<- result$sim_teams # Note: This is a side effect
-    result$sim_games
-  })
+
+    # Update the team and game data frames for the next round.
+    # Note: sim_teams is updated as a side effect.
+    sim_teams <- result$sim_teams
+    #sim_games <- result$sim_games
+
+    # Store the results for the current round
+    simmed_games_list[[i]] <- result$sim_games
+  }
+
+  # Combine the list of rounds into a single data frame of simulated games
+  simmed_games <- dplyr::bind_rows(simmed_games_list)
   return(simmed_games)
 }
+
 
 #' Process games for a single round
 #'
@@ -35,8 +53,10 @@ sim_season <- function(sim_teams, sim_games) {
 #' @importFrom stats rnorm
 process_games <- function(sim_teams, sim_games, round_num) {
   sim_teams$roundnum <- round_num
+
   sim_ratings <- sim_teams %>%
     dplyr::select(.data$roundnum, .data$team, .data$torp)
+
   sim_games <- sim_games %>%
     dplyr::filter(is.na(.data$result)) %>%
     dplyr::inner_join(sim_ratings, by = c("roundnum" = "roundnum", "away_team" = "team")) %>%
@@ -59,6 +79,7 @@ process_games <- function(sim_teams, sim_games, round_num) {
       ),
       torp_shift = 0.1 * (.data$result - .data$estimate)
     )
+
   sim_teams <- sim_teams %>%
     dplyr::left_join(
       sim_games %>%
@@ -74,7 +95,7 @@ process_games <- function(sim_teams, sim_games, round_num) {
         dplyr::select(.data$roundnum, .data$home_team, .data$torp_shift),
       by = c("roundnum" = "roundnum", "team" = "home_team")
     ) %>%
-    dplyr::mutate(torp = .data$torp + ifelse(!is.na(.data$torp_shift), .data$torp_shift, 0)) %>%
+    dplyr::mutate(torp = torp - dplyr::coalesce(torp_shift, 0)) %>%
     dplyr::select(-.data$torp_shift)
 
   # Note: The following line is commented out as `max_ratings` is not defined in the provided code

@@ -3,6 +3,8 @@
 ###
 # where does pred_df come from?
 
+pred_df <- readRDS("./data-raw/stat_pred_df.rds")
+
 plyr_mdl_df <-
   pred_df %>%
   left_join(
@@ -49,7 +51,11 @@ plyr_mdl_df <-
   left_join(
     torp_df_total,
     by = c("row_id" = "row_id")
-  )
+  ) %>%
+  mutate(
+    torp = replace_na(torp,0)
+  ) %>%
+  filter(!is.na(pred_goals))
 
 
 #
@@ -64,16 +70,16 @@ plyr_torp_diff_mdl <- mgcv::bam(
   score_diff ~
     team_type_fac
     + offset(torp)
-    + scale((pred_goals)) # , bs = "ts")
+    + scale(pred_goals) # , bs = "ts")
     + scale((pred_behinds)) # , bs = "ts")
-    + scale((pred_kicks)) # , bs = "ts")
-    + scale((pred_handballs)) # , bs = "ts") # +
+    # + scale((pred_kicks)) # , bs = "ts")
+    # + scale((pred_handballs)) # , bs = "ts") # +
     # #+ s((pred_disposals), bs = "ts") # +
     + scale((pred_marks)) # , bs = "ts")
     + scale((pred_bounces)) # , bs = "ts") # * -
     + scale((pred_tackles)) # , bs = "ts") # +
-    # + scale((pred_contested_possessions))#, bs = "ts") # ** +
-    # + scale((pred_uncontested_possessions))#, bs = "ts") # ** +
+    + scale((pred_contested_possessions))#, bs = "ts") # ** +
+    + scale((pred_uncontested_possessions))#, bs = "ts") # ** +
     #+Is((pred_total_possessions), bs = "ts")
     # + scale((pred_inside50s))#, bs = "ts") # *** +
     # + scale((pred_marks_inside50))#, bs = "ts")
@@ -159,90 +165,90 @@ plyr_mdl_df %>%
   view()
 ####################################################
 ###########################
-afl_torp_diff_mdl <- mgcv::bam(
-  score_diff ~
-    team_type_fac
-    + offset(torp_diff)
-    + s(scale(pred_goals), bs = "ts")
-    + s(scale(pred_behinds), bs = "ts")
-    + s(scale(pred_kicks), bs = "ts")
-    + s(scale(pred_handballs), bs = "ts") # +
-    + s(scale(pred_disposals), bs = "ts") # +
-    + s(scale(pred_marks), bs = "ts")
-    + s(scale(pred_bounces), bs = "ts") # * -
-    + s(scale(pred_tackles), bs = "ts") # +
-    + s(scale(pred_contested_possessions), bs = "ts") # ** +
-    + s(scale(pred_uncontested_possessions), bs = "ts") # ** +
-    + s(scale(pred_total_possessions), bs = "ts")
-    + s(scale(pred_inside50s), bs = "ts") # *** +
-    + s(scale(pred_marks_inside50), bs = "ts")
-    + s(scale(pred_contested_marks), bs = "ts")
-    + s(scale(pred_hitouts), bs = "ts")
-    ### + s(scale(pred_one_percenters), bs='ts') # **
-    + s(scale(pred_clangers), bs = "ts")
-    + s(scale(pred_frees_for), bs = "ts") # ** -
-    + s(scale(pred_frees_against), bs = "ts") # * +
-    + s(scale(pred_rebound50s), bs = "ts")
-    + s(scale(pred_goal_assists), bs = "ts") # * +
-    + s(scale(pred_turnovers), bs = "ts") # * -
-    + s(scale(pred_intercepts), bs = "ts") # +
-    + s(scale(pred_tackles_inside50), bs = "ts")
-    + s(scale(pred_shots_at_goal), bs = "ts")
-    ### + s(scale(pred_score_involvements), bs='ts') # **
-    + s(scale(pred_clearances_centre_clearances), bs = "ts") # * -
-    + s(scale(pred_clearances_stoppage_clearances), bs = "ts")
-    # + s(scale(pred_clearances_total_clearances), bs = "ts")
-    + s(scale(pred_extended_stats_effective_kicks), bs = "ts")
-    #+ s(scale(pred_extended_stats_kick_to_handball_ratio), bs='ts')
-    + s(scale(pred_extended_stats_effective_disposals), bs = "ts")
-    + s(scale(pred_extended_stats_marks_on_lead), bs = "ts")
-    + s(scale(pred_extended_stats_intercept_marks), bs = "ts")
-    + s(scale(pred_extended_stats_hitouts_to_advantage), bs = "ts") # +
-    + s(scale(pred_extended_stats_ground_ball_gets), bs = "ts")
-    + s(scale(pred_extended_stats_f50ground_ball_gets), bs = "ts")
-    ### + s(scale(pred_extended_stats_score_launches), bs='ts') # .
-    + s(scale(pred_extended_stats_pressure_acts), bs = "ts")
-    + s(scale(pred_extended_stats_def_half_pressure_acts), bs = "ts") # *** -
-    + s(scale(pred_extended_stats_spoils), bs = "ts") # * +
-    + s(scale(pred_extended_stats_ruck_contests), bs = "ts") #+
-    + s(scale(pred_extended_stats_contest_def_one_on_ones), bs = "ts")
-    + s(scale(pred_extended_stats_contest_def_losses), bs = "ts")
-    + s(scale(pred_extended_stats_contest_off_one_on_ones), bs = "ts")
-    + s(scale(pred_extended_stats_contest_off_wins), bs = "ts")
-    ### + s(scale(pred_extended_stats_centre_bounce_attendances), bs='ts')
-    ### + s(scale(pred_extended_stats_kickins), bs='ts')
-    ### + s(scale(pred_extended_stats_kickins_playon), bs='ts')
-    ############# BINOM
-    # + s(scale(pred_time_on_ground_percentage), bs = "ts")
-    + s(scale(pred_disposal_efficiency), bs = "ts")
-    + s(scale(pred_goal_accuracy), bs = "ts")
-    + s(scale(pred_extended_stats_kick_efficiency), bs = "ts")
-    + s(scale(pred_extended_stats_contested_possession_rate), bs = "ts")
-    + s(scale(pred_extended_stats_hitout_win_percentage), bs = "ts")
-    + s(scale(pred_extended_stats_hitout_to_advantage_rate), bs = "ts")
-    + s(scale(pred_extended_stats_contest_def_loss_percentage), bs = "ts")
-    + s(scale(pred_extended_stats_contest_off_wins_percentage), bs = "ts")
-  #   ### positions
-  # + I(CB.x)
-  # + I(BP.x)
-  # + I(HBF.x)
-  # + I(W.x)
-  # + I(MIDS.x)
-  # + I(RK.x)
-  # + I(HFF.x)
-  # + I(FP.x)
-  # + I(CF.x)
-  # + I(int.x)
-  # #+ def.y + mid.y + fwd.y #+ int.y
-  ,
-  data = team_mdl_df %>% dplyr::filter(count.x == count.y, season.x > 2021),
-  select = T, nthreads = 4
-  # ,discrete = T
-  , family = "gaussian"
-)
-
-summary(afl_torp_diff_mdl)
-# plot(mgcViz::getViz(afl_torp_diff_mdl))
+# afl_torp_diff_mdl <- mgcv::bam(
+#   score_diff ~
+#     team_type_fac
+#     + offset(torp_diff)
+#     + s(scale(pred_goals), bs = "ts")
+#     + s(scale(pred_behinds), bs = "ts")
+#     + s(scale(pred_kicks), bs = "ts")
+#     + s(scale(pred_handballs), bs = "ts") # +
+#     + s(scale(pred_disposals), bs = "ts") # +
+#     + s(scale(pred_marks), bs = "ts")
+#     + s(scale(pred_bounces), bs = "ts") # * -
+#     + s(scale(pred_tackles), bs = "ts") # +
+#     + s(scale(pred_contested_possessions), bs = "ts") # ** +
+#     + s(scale(pred_uncontested_possessions), bs = "ts") # ** +
+#     + s(scale(pred_total_possessions), bs = "ts")
+#     + s(scale(pred_inside50s), bs = "ts") # *** +
+#     + s(scale(pred_marks_inside50), bs = "ts")
+#     + s(scale(pred_contested_marks), bs = "ts")
+#     + s(scale(pred_hitouts), bs = "ts")
+#     ### + s(scale(pred_one_percenters), bs='ts') # **
+#     + s(scale(pred_clangers), bs = "ts")
+#     + s(scale(pred_frees_for), bs = "ts") # ** -
+#     + s(scale(pred_frees_against), bs = "ts") # * +
+#     + s(scale(pred_rebound50s), bs = "ts")
+#     + s(scale(pred_goal_assists), bs = "ts") # * +
+#     + s(scale(pred_turnovers), bs = "ts") # * -
+#     + s(scale(pred_intercepts), bs = "ts") # +
+#     + s(scale(pred_tackles_inside50), bs = "ts")
+#     + s(scale(pred_shots_at_goal), bs = "ts")
+#     ### + s(scale(pred_score_involvements), bs='ts') # **
+#     + s(scale(pred_clearances_centre_clearances), bs = "ts") # * -
+#     + s(scale(pred_clearances_stoppage_clearances), bs = "ts")
+#     # + s(scale(pred_clearances_total_clearances), bs = "ts")
+#     + s(scale(pred_extended_stats_effective_kicks), bs = "ts")
+#     #+ s(scale(pred_extended_stats_kick_to_handball_ratio), bs='ts')
+#     + s(scale(pred_extended_stats_effective_disposals), bs = "ts")
+#     + s(scale(pred_extended_stats_marks_on_lead), bs = "ts")
+#     + s(scale(pred_extended_stats_intercept_marks), bs = "ts")
+#     + s(scale(pred_extended_stats_hitouts_to_advantage), bs = "ts") # +
+#     + s(scale(pred_extended_stats_ground_ball_gets), bs = "ts")
+#     + s(scale(pred_extended_stats_f50ground_ball_gets), bs = "ts")
+#     ### + s(scale(pred_extended_stats_score_launches), bs='ts') # .
+#     + s(scale(pred_extended_stats_pressure_acts), bs = "ts")
+#     + s(scale(pred_extended_stats_def_half_pressure_acts), bs = "ts") # *** -
+#     + s(scale(pred_extended_stats_spoils), bs = "ts") # * +
+#     + s(scale(pred_extended_stats_ruck_contests), bs = "ts") #+
+#     + s(scale(pred_extended_stats_contest_def_one_on_ones), bs = "ts")
+#     + s(scale(pred_extended_stats_contest_def_losses), bs = "ts")
+#     + s(scale(pred_extended_stats_contest_off_one_on_ones), bs = "ts")
+#     + s(scale(pred_extended_stats_contest_off_wins), bs = "ts")
+#     ### + s(scale(pred_extended_stats_centre_bounce_attendances), bs='ts')
+#     ### + s(scale(pred_extended_stats_kickins), bs='ts')
+#     ### + s(scale(pred_extended_stats_kickins_playon), bs='ts')
+#     ############# BINOM
+#     # + s(scale(pred_time_on_ground_percentage), bs = "ts")
+#     + s(scale(pred_disposal_efficiency), bs = "ts")
+#     + s(scale(pred_goal_accuracy), bs = "ts")
+#     + s(scale(pred_extended_stats_kick_efficiency), bs = "ts")
+#     + s(scale(pred_extended_stats_contested_possession_rate), bs = "ts")
+#     + s(scale(pred_extended_stats_hitout_win_percentage), bs = "ts")
+#     + s(scale(pred_extended_stats_hitout_to_advantage_rate), bs = "ts")
+#     + s(scale(pred_extended_stats_contest_def_loss_percentage), bs = "ts")
+#     + s(scale(pred_extended_stats_contest_off_wins_percentage), bs = "ts")
+#   #   ### positions
+#   # + I(CB.x)
+#   # + I(BP.x)
+#   # + I(HBF.x)
+#   # + I(W.x)
+#   # + I(MIDS.x)
+#   # + I(RK.x)
+#   # + I(HFF.x)
+#   # + I(FP.x)
+#   # + I(CF.x)
+#   # + I(int.x)
+#   # #+ def.y + mid.y + fwd.y #+ int.y
+#   ,
+#   data = team_mdl_df %>% dplyr::filter(count.x == count.y, season.x > 2021),
+#   select = T, nthreads = 4
+#   # ,discrete = T
+#   , family = "gaussian"
+# )
+#
+# summary(afl_torp_diff_mdl)
+# # plot(mgcViz::getViz(afl_torp_diff_mdl))
 
 #
 afl_torp_offset_mdl <- mgcv::bam(
