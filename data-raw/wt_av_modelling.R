@@ -319,3 +319,7 @@ pl_df_final %>%
   group_by(position) %>%
   summarise(across(starts_with("pred"), ~ mean(.x, na.rm = T))) %>%
   view()
+
+
+tst_df <- pred_df %>% filter(substr(provider_id,1,8)=='CD_M2025',round == 4) %>% select(1:50)
+View(tst_df)

@@ -163,7 +163,6 @@ decimal_hour <- function(datetime) {
 }
 
 
-
 #' Get mode of a vector
 #'
 #' This function returns the mode (most frequent value) of a vector.
@@ -177,4 +176,23 @@ get_mode <- function(x) {
   names(t)[which.max(t)]
 }
 
+#' Vectorized Harmonic Mean of Two Numeric Vectors
+#'
+#' Computes the row-wise harmonic mean of two numeric vectors.
+#'
+#' @param x Numeric vector (e.g. home_shots).
+#' @param y Numeric vector (e.g. away_shots).
+#' @return A numeric vector of harmonic means.
+#' @export
+harmonic_mean <- function(x, y) {
+  if (length(x) != length(y)) stop("Vectors x and y must be the same length.")
+
+  result <- ifelse(x == 0 | y == 0, NA_real_, 2 / (1 / x + 1 / y))
+  return(result)
+}
+
+# Add Globals Variables
 utils::globalVariables(c(".data"))
+
+
+

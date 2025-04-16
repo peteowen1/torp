@@ -8,13 +8,13 @@ library(fitzRoy)
 
 resultz <- readRDS(url('https://github.com/peteowen1/torpdata/releases/download/predictions/predictions_2025.rds'))
 
-resultz <- tryCatch(
-  readRDS("resultz.rds"),
-  error = function(e) {
-    message("Error reading resultz.rds: ", e$message)
-    resultz  # or some default value
-  }
-)
+# resultz <- tryCatch(
+#   # readRDS("resultz.rds"),
+#   error = function(e) {
+#     message("Error reading resultz.rds: ", e$message)
+#     resultz  # or some default value
+#   }
+# )
 
 # --- Data Processing Section ---
 # Fetch tips from Squiggle 2025

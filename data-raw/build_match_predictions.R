@@ -11,7 +11,7 @@ results <- load_results(TRUE)
 teams <- load_teams(TRUE)
 
 # Build Fixtures Tables ----
-decay <- 10000
+decay <- 1000
 
 team_map <-
   fixtures %>%
@@ -421,9 +421,15 @@ team_mdl_df_tot <- team_rt_fix_df %>% # filter(!is.na(torp)) %>%
       home_shots,
       away_shots
     ),
+    harmean_shots = harmonic_mean(home_shots,away_shots)
+    ,
     shot_conv = ifelse(team_type == "home",
       homeTeamScore.matchScore.goals / home_shots,
       awayTeamScore.matchScore.goals / away_shots
+    ),
+    shot_conv_diff = ifelse(team_type == "home",
+                       (homeTeamScore.matchScore.goals / home_shots) -(awayTeamScore.matchScore.goals / away_shots),
+                       (awayTeamScore.matchScore.goals / away_shots) - (homeTeamScore.matchScore.goals / home_shots)
     ),
     xscore_diff = ifelse(team_type == "home",
       xscore_diff,
@@ -469,7 +475,8 @@ team_mdl_df_tot <- team_rt_fix_df %>% # filter(!is.na(torp)) %>%
     days_rest_diff = days_rest.x - days_rest.y,
     days_rest_diff_fac = as.factor(round(ifelse(days_rest_diff > 3, 4, ifelse(days_rest_diff < -3, -4, days_rest_diff)))),
     weightz = exp(as.numeric(-(Sys.Date() - as.Date(match.utcStartTime))) / decay),
-    weightz = weightz / mean(weightz, na.rm = T)
+    weightz = weightz / mean(weightz, na.rm = T),
+    shot_weightz = (harmean_shots/mean(harmean_shots, na.rm = TRUE)) * weightz
   )
 # left_join(team_preds %>% mutate(team_name_adj = fitzRoy::replace_teams(team_name)),
 #   by = c("providerId" = "provider_id", "team_name_adj.x" = "team_name_adj")
@@ -487,7 +494,8 @@ team_mdl_df <-
 team_mdl_df <-
   team_mdl_df %>%
   mutate(
-    total_xpoints_adj = total_xpoints * (mean(total_points, na.rm = TRUE)/mean(total_xpoints, na.rm = TRUE))
+    total_xpoints_adj = total_xpoints * (mean(total_points, na.rm = TRUE)/mean(total_xpoints, na.rm = TRUE)),
+    venue_fac = as.factor(venue.x)
   )
 
 #  Modelling ----
@@ -560,11 +568,13 @@ afl_total_xpoints_mdl <- mgcv::bam(
     + s(torp.x, bs = "ts", k = 5) + s(torp.y, bs = "ts", k = 5)
     # + s(fwd.x, bs = "ts", k = 5) + s(mid.x, bs = "ts", k = 5) + s(def.x, bs = "ts", k = 5) + s(int.x, bs = "ts", k = 5)
     # + s(fwd.y, bs = "ts", k = 5) + s(mid.y, bs = "ts", k = 5) + s(def.y, bs = "ts", k = 5) + s(int.y, bs = "ts", k = 5)
+   + s(venue_fac, bs='re')
     + s(log_dist.x, bs = "ts", k = 5) + s(log_dist.y, bs = "ts", k = 5)
     + s(familiarity.x, bs = "ts", k = 5) + s(familiarity.y, bs = "ts", k = 5)
     + s(log_dist_diff, bs = "ts", k = 5)
     + s(familiarity_diff, bs = "ts", k = 5)
-    + s(days_rest_diff_fac, bs = "re"),
+    + s(days_rest_diff_fac, bs = "re")
+  ,
   data = team_mdl_df, weights = weightz,
   family = gaussian(), nthreads = 4, select = T, discrete = T,
   drop.unused.levels = FALSE
@@ -585,11 +595,15 @@ afl_xscore_diff_mdl <- mgcv::bam(
     + s(team_name_season.x, bs = "re") + s(team_name_season.y, bs = "re")
     + ti(torp_diff, pred_tot_xscore, bs = c("ts", "ts"), k = 4)
     + s(pred_tot_xscore, bs = "ts", k = 5)
-    # + s(torp_diff, bs = "ts", k = 5)
-    + s(torp_diff)
+    + s(torp_diff, bs = "ts", k = 5)
+  + s(torp_recv_diff, bs = "ts", k = 5)
+  + s(torp_disp_diff, bs = "ts", k = 5)
+  + s(torp_spoil_diff, bs = "ts", k = 5)
+  + s(torp_hitout_diff, bs = "ts", k = 5)
     # + s(fwd.x, bs = "ts", k = 5) + s(mid.x, bs = "ts", k = 5) + s(def.x, bs = "ts", k = 5) + s(int.x, bs = "ts", k = 5)
     # + s(fwd.y, bs = "ts", k = 5) + s(mid.y, bs = "ts", k = 5) + s(def.y, bs = "ts", k = 5) + s(int.y, bs = "ts", k = 5)
-    + s(log_dist_diff, bs = "ts", k = 5) + s(familiarity_diff, bs = "ts", k = 5) + s(days_rest_diff_fac, bs = "re"),
+    + s(log_dist_diff, bs = "ts", k = 5) + s(familiarity_diff, bs = "ts", k = 5) + s(days_rest_diff_fac, bs = "re")
+  ,
   data = team_mdl_df, weights = weightz,
   family = gaussian(), nthreads = 4, select = T, discrete = T,
   drop.unused.levels = FALSE
@@ -604,7 +618,7 @@ team_mdl_df$pred_xscore_diff <- predict(afl_xscore_diff_mdl, newdata = team_mdl_
 
 ## Conversion Model ----
 afl_conv_mdl <- mgcv::bam(
-  shot_conv ~
+  shot_conv_diff ~
     s(team_type_fac.x, bs = "re")
     + s(game_year_decimal.x, bs = "ts")
     + s(game_prop_through_year.x, bs = "cc")
@@ -614,18 +628,24 @@ afl_conv_mdl <- mgcv::bam(
     + s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
     + s(team_name_season.x, bs = "re") + s(team_name_season.y, bs = "re")
     + ti(torp_diff, pred_tot_xscore, bs = c("ts", "ts"), k = 4)
+    + s(torp_diff, bs = "ts", k = 5)
+  + s(torp_recv_diff, bs = "ts", k = 5)
+  + s(torp_disp_diff, bs = "ts", k = 5)
+  + s(torp_spoil_diff, bs = "ts", k = 5)
+  + s(torp_hitout_diff, bs = "ts", k = 5)
     + s(pred_tot_xscore, bs = "ts", k = 5)
     + s(pred_xscore_diff, bs = "ts", k = 5)
-    + s(torp_diff, bs = "ts", k = 5)
     # + s(fwd.x, bs = "ts", k = 5) + s(mid.x, bs = "ts", k = 5) + s(def.x, bs = "ts", k = 5) + s(int.x, bs = "ts", k = 5)
     # + s(fwd.y, bs = "ts", k = 5) + s(mid.y, bs = "ts", k = 5) + s(def.y, bs = "ts", k = 5) + s(int.y, bs = "ts", k = 5)
-    + s(log_dist_diff, bs = "ts", k = 5) + s(familiarity_diff, bs = "ts", k = 5) + s(days_rest_diff_fac, bs = "re"),
-  data = team_mdl_df, weights = team_shots * weightz,
-  family = "binomial", nthreads = 4, select = T, discrete = T,
+  + s(venue_fac, bs='re')
+    + s(log_dist_diff, bs = "ts", k = 5) + s(familiarity_diff, bs = "ts", k = 5) + s(days_rest_diff_fac, bs = "re")
+  ,
+  data = team_mdl_df, weights = shot_weightz,
+  family = gaussian(), nthreads = 4, select = T, discrete = T,
   drop.unused.levels = FALSE
 )
 
-team_mdl_df$pred_conv <- predict(afl_conv_mdl, newdata = team_mdl_df, type = "response")
+team_mdl_df$pred_conv_diff <- predict(afl_conv_mdl, newdata = team_mdl_df, type = "response")
 
 # summary(afl_conv_mdl)
 # mixedup::extract_ranef(afl_conv_mdl, add_group_N = T) %>% tibble::view()
@@ -638,20 +658,23 @@ afl_score_mdl <- mgcv::bam(
     s(team_type_fac, bs = "re")
     + s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
     + s(team_name_season.x, bs = "re") + s(team_name_season.y, bs = "re")
-    + s(pred_tot_xscore, bs = "ts", k = 5)
-    + ti(pred_xscore_diff, pred_conv, bs = c("ts", "ts"), k = 4)
-    + s(pred_conv, bs = "ts", k = 5)
+    + ti(pred_xscore_diff, pred_conv_diff, bs = 'ts', k = 5)
+    + ti(pred_tot_xscore, pred_conv_diff, bs = 'ts', k = 5)
+    # + s(pred_tot_xscore, bs = "ts", k = 5)
+    + s(pred_conv_diff, bs = "ts", k = 5)
+    + s(pred_xscore_diff, bs = "ts", k = 5)
     + s(torp_diff, bs = "ts", k = 5)
     + s(torp_recv_diff, bs = "ts", k = 5)
     + s(torp_disp_diff, bs = "ts", k = 5)
     + s(torp_spoil_diff, bs = "ts", k = 5)
     + s(torp_hitout_diff, bs = "ts", k = 5)
-    + s(pred_xscore_diff)
-    + s(log_dist_diff, bs = "ts", k = 5) + s(familiarity_diff, bs = "ts", k = 5) + s(days_rest_diff_fac, bs = "re"),
+    + s(log_dist_diff, bs = "ts", k = 5) + s(familiarity_diff, bs = "ts", k = 5) + s(days_rest_diff_fac, bs = "re")
+  ,
   data = team_mdl_df, weights = weightz,
   family = "gaussian", nthreads = 4, select = T, discrete = T,
   drop.unused.levels = FALSE
 )
+
 team_mdl_df$pred_score_diff <- predict(afl_score_mdl, newdata = team_mdl_df, type = "response")
 
 # summary(afl_score_mdl)
@@ -670,7 +693,8 @@ afl_win_mdl <-
       # + ti(pred_tot_xscore, pred_xscore_diff, bs = c("ts", "ts"), k = 4)
       + s(pred_score_diff, bs = "ts", k = 5)
       #+ s(pred_xscore_diff, bs = "ts", k = 5)
-      + s(log_dist_diff, bs = "ts", k = 5) + s(familiarity_diff, bs = "ts", k = 5) + s(days_rest_diff_fac, bs = "re"),
+      + s(log_dist_diff, bs = "ts", k = 5) + s(familiarity_diff, bs = "ts", k = 5) + s(days_rest_diff_fac, bs = "re")
+    ,
     data = team_mdl_df, weights = weightz,
     family = "binomial", nthreads = 4, select = T, discrete = T,
     drop.unused.levels = FALSE
@@ -714,7 +738,7 @@ nrow(test_df)
 
 # team_mdl_df$pred_totshots <- predict(afl_totshots_mdl, newdata = team_mdl_df, type = "response")
 # team_mdl_df$pred_shot_diff <- predict(afl_shot_mdl, newdata = team_mdl_df, type = "response")
-team_mdl_df$pred_conv <- predict(afl_conv_mdl, newdata = team_mdl_df, type = "response")
+team_mdl_df$pred_conv_diff <- predict(afl_conv_mdl, newdata = team_mdl_df, type = "response")
 team_mdl_df$pred_score_diff <- predict(afl_score_mdl, newdata = team_mdl_df, type = "response")
 team_mdl_df$pred_win <- predict(afl_win_mdl, newdata = team_mdl_df, type = "response")
 
@@ -731,7 +755,7 @@ week_gms_home <- team_mdl_df %>%
     players = count.x, providerId,
     home_team = team_name.x, home_rating = torp.x,
     away_team = team_name.y, away_rating = torp.y,
-    pred_tot_xscore, pred_score_diff, pred_win, bits, score_diff
+    pred_tot_xscore, pred_xscore_diff , pred_score_diff, pred_win, bits, score_diff
   )
 
 week_gms_away <- team_mdl_df %>%
@@ -740,6 +764,7 @@ week_gms_away <- team_mdl_df %>%
     # totscore = sum(team_mdl_df$total_score, na.rm = T) / sum(team_mdl_df$total_shots, na.rm = T) * pred_totshots,
     # pred_shot_diff = -pred_shot_diff,
     pred_score_diff = -pred_score_diff,
+    pred_xscore_diff = -pred_xscore_diff,
     pred_win = 1 - pred_win,
     score_diff = -score_diff
   ) %>%
@@ -748,12 +773,13 @@ week_gms_away <- team_mdl_df %>%
     players = count.x, providerId,
     home_team = team_name.y, home_rating = torp.y,
     away_team = team_name.x, away_rating = torp.x,
-    pred_tot_xscore, pred_score_diff, pred_win, bits, score_diff
+    pred_tot_xscore, pred_xscore_diff, pred_score_diff, pred_win, bits, score_diff
   )
 
 week_gms <- dplyr::bind_rows(week_gms_home, week_gms_away) %>%
   dplyr::group_by(providerId, home_team, home_rating, away_team, away_rating) %>%
   dplyr::summarise(
+    pred_xscore_diff = mean(pred_xscore_diff),
     players = mean(players),
     # total = mean(totscore),
     pred_total = mean(pred_tot_xscore),
@@ -762,7 +788,7 @@ week_gms <- dplyr::bind_rows(week_gms_home, week_gms_away) %>%
     score_diff = mean(score_diff)
   ) %>%
   mutate(rating_diff = home_rating - away_rating + 4) %>%
-  select(providerId:away_rating, rating_diff, players:score_diff)
+  select(providerId:away_rating, rating_diff, pred_xscore_diff:score_diff)
 
 inj_df %>%
   filter(str_starts(player, "Upd")) %>%

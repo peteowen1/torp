@@ -5,6 +5,6 @@ account: peteowen
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 14446846
-bundleId: 10068528
+bundleId: 10109299
 url: https://peteowen.shinyapps.io/squiggle-comparison/
 version: 1

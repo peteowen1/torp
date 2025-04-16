@@ -4,7 +4,7 @@
 \alias{select_epv_model_vars}
 \title{Select EPV Model Variables}
 \usage{
-select_epv_model_vars(df)
+select_epv_model_vars(df, label = FALSE)
 }
 \arguments{
 \item{df}{A dataframe containing cleaned play-by-play data.}

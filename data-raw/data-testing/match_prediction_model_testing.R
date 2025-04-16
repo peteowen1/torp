@@ -67,21 +67,30 @@ mdl_wk <- function(df, season, weeknum) {
 
     ###
     afl_total_xpoints_mdl_test <- mgcv::bam(
-      total_xpoints ~
-        s(team_type_fac, bs = "re")
-        # + s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
-        + s(team_name_season.x, bs = "re") + s(team_name_season.y, bs = "re")
-        + s(abs(torp_diff), bs = "ts", k = 5)
-        + s(abs(torp_recv_diff), bs = "ts", k = 5)
-        + s(abs(torp_disp_diff), bs = "ts", k = 5)
-        + s(abs(torp_spoil_diff), bs = "ts", k = 5)
-        + s(abs(torp_hitout_diff), bs = "ts", k = 5)
-        + s(torp.x, bs = "ts", k = 5) + s(torp.y, bs = "ts", k = 5)
-        # + s(fwd.x, bs = "ts", k = 5) + s(mid.x, bs = "ts", k = 5) + s(def.x, bs = "ts", k = 5) + s(int.x, bs = "ts", k = 5)
-        # + s(fwd.y, bs = "ts", k = 5) + s(mid.y, bs = "ts", k = 5) + s(def.y, bs = "ts", k = 5) + s(int.y, bs = "ts", k = 5)
-        + s(log_dist.x, bs = "ts", k = 5) + s(log_dist.y, bs = "ts", k = 5)
-        + s(familiarity.x, bs = "ts", k = 5) + s(familiarity.y, bs = "ts", k = 5)
-        + s(log_dist_diff, bs = "ts", k = 5) + s(familiarity_diff, bs = "ts", k = 5) + s(days_rest_diff_fac, bs = "re"),
+      total_xpoints_adj ~
+        s(team_type_fac.x, bs = "re")
+      + s(game_year_decimal.x, bs = "ts")
+      + s(game_prop_through_year.x, bs = "cc")
+      + s(game_prop_through_month.x, bs = "cc")
+      + s(game_wday_fac.x, bs = "re")
+      + s(game_prop_through_day.x, bs = "cc")
+      + s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
+      + s(team_name_season.x, bs = "re") + s(team_name_season.y, bs = "re")
+      + s(abs(torp_diff), bs = "ts", k = 5)
+      + s(abs(torp_recv_diff), bs = "ts", k = 5)
+      + s(abs(torp_disp_diff), bs = "ts", k = 5)
+      + s(abs(torp_spoil_diff), bs = "ts", k = 5)
+      + s(abs(torp_hitout_diff), bs = "ts", k = 5)
+      + s(torp.x, bs = "ts", k = 5) + s(torp.y, bs = "ts", k = 5)
+      # + s(fwd.x, bs = "ts", k = 5) + s(mid.x, bs = "ts", k = 5) + s(def.x, bs = "ts", k = 5) + s(int.x, bs = "ts", k = 5)
+      # + s(fwd.y, bs = "ts", k = 5) + s(mid.y, bs = "ts", k = 5) + s(def.y, bs = "ts", k = 5) + s(int.y, bs = "ts", k = 5)
+      + s(venue_fac, bs='re')
+      + s(log_dist.x, bs = "ts", k = 5) + s(log_dist.y, bs = "ts", k = 5)
+      + s(familiarity.x, bs = "ts", k = 5) + s(familiarity.y, bs = "ts", k = 5)
+      + s(log_dist_diff, bs = "ts", k = 5)
+      + s(familiarity_diff, bs = "ts", k = 5)
+      + s(days_rest_diff_fac, bs = "re")
+      ,
       data = team_func_df, weights = weightz,
       family = gaussian(), nthreads = 4, select = T, discrete = T,
       drop.unused.levels = FALSE
@@ -96,15 +105,19 @@ mdl_wk <- function(df, season, weeknum) {
     afl_xscore_diff_mdl_test <- mgcv::bam(
       xscore_diff ~
         s(team_type_fac, bs = "re")
-        # + s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
-        + s(team_name_season.x, bs = "re") + s(team_name_season.y, bs = "re")
-        + ti(torp_diff, pred_tot_xscore, bs = c("ts", "ts"), k = 4)
-        + s(pred_tot_xscore, bs = "ts", k = 5)
-        # + s(torp_diff, bs = "ts", k = 5)
-        + s(torp_diff)
-        # + s(fwd.x, bs = "ts", k = 5) + s(mid.x, bs = "ts", k = 5) + s(def.x, bs = "ts", k = 5) + s(int.x, bs = "ts", k = 5)
-        # + s(fwd.y, bs = "ts", k = 5) + s(mid.y, bs = "ts", k = 5) + s(def.y, bs = "ts", k = 5) + s(int.y, bs = "ts", k = 5)
-        + s(log_dist_diff, bs = "ts", k = 5) + s(familiarity_diff, bs = "ts", k = 5) + s(days_rest_diff_fac, bs = "re"),
+      + s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
+      + s(team_name_season.x, bs = "re") + s(team_name_season.y, bs = "re")
+      + ti(torp_diff, pred_tot_xscore, bs = c("ts", "ts"), k = 4)
+      + s(pred_tot_xscore, bs = "ts", k = 5)
+      + s(torp_diff, bs = "ts", k = 5)
+      + s(torp_recv_diff, bs = "ts", k = 5)
+      + s(torp_disp_diff, bs = "ts", k = 5)
+      + s(torp_spoil_diff, bs = "ts", k = 5)
+      + s(torp_hitout_diff, bs = "ts", k = 5)
+      # + s(fwd.x, bs = "ts", k = 5) + s(mid.x, bs = "ts", k = 5) + s(def.x, bs = "ts", k = 5) + s(int.x, bs = "ts", k = 5)
+      # + s(fwd.y, bs = "ts", k = 5) + s(mid.y, bs = "ts", k = 5) + s(def.y, bs = "ts", k = 5) + s(int.y, bs = "ts", k = 5)
+      + s(log_dist_diff, bs = "ts", k = 5) + s(familiarity_diff, bs = "ts", k = 5) + s(days_rest_diff_fac, bs = "re")
+      ,
       data = team_func_df, weights = weightz,
       family = gaussian(), nthreads = 4, select = T, discrete = T,
       drop.unused.levels = FALSE
@@ -120,41 +133,54 @@ mdl_wk <- function(df, season, weeknum) {
 
     ###
     afl_conv_mdl_test <- mgcv::bam(
-      shot_conv ~
+      shot_conv_diff ~
         s(team_type_fac.x, bs = "re")
-        # + s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
-        + s(team_name_season.x, bs = "re") + s(team_name_season.y, bs = "re")
-        + ti(torp_diff, pred_tot_xscore, bs = c("ts", "ts"), k = 4)
-        + s(pred_tot_xscore, bs = "ts", k = 5)
-        + s(pred_xscore_diff, bs = "ts", k = 5)
-        + s(torp_diff, bs = "ts", k = 5)
-        + s(fwd.x, bs = "ts", k = 5) + s(mid.x, bs = "ts", k = 5) + s(def.x, bs = "ts", k = 5) + s(int.x, bs = "ts", k = 5)
-        + s(fwd.y, bs = "ts", k = 5) + s(mid.y, bs = "ts", k = 5) + s(def.y, bs = "ts", k = 5) + s(int.y, bs = "ts", k = 5)
-        + s(log_dist_diff, bs = "ts", k = 5) + s(familiarity_diff, bs = "ts", k = 5) + s(days_rest_diff_fac, bs = "re"),
-      data = team_func_df, weights = team_shots * weightz,
-      family = "binomial", nthreads = 4, select = T, discrete = T,
+      + s(game_year_decimal.x, bs = "ts")
+      + s(game_prop_through_year.x, bs = "cc")
+      + s(game_prop_through_month.x, bs = "cc")
+      + s(game_wday_fac.x, bs = "re")
+      + s(game_prop_through_day.x, bs = "cc")
+      + s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
+      + s(team_name_season.x, bs = "re") + s(team_name_season.y, bs = "re")
+      + ti(torp_diff, pred_tot_xscore, bs = c("ts", "ts"), k = 4)
+      + s(torp_diff, bs = "ts", k = 5)
+      + s(torp_recv_diff, bs = "ts", k = 5)
+      + s(torp_disp_diff, bs = "ts", k = 5)
+      + s(torp_spoil_diff, bs = "ts", k = 5)
+      + s(torp_hitout_diff, bs = "ts", k = 5)
+      + s(pred_tot_xscore, bs = "ts", k = 5)
+      + s(pred_xscore_diff, bs = "ts", k = 5)
+      # + s(fwd.x, bs = "ts", k = 5) + s(mid.x, bs = "ts", k = 5) + s(def.x, bs = "ts", k = 5) + s(int.x, bs = "ts", k = 5)
+      # + s(fwd.y, bs = "ts", k = 5) + s(mid.y, bs = "ts", k = 5) + s(def.y, bs = "ts", k = 5) + s(int.y, bs = "ts", k = 5)
+      + s(venue_fac, bs='re')
+      + s(log_dist_diff, bs = "ts", k = 5) + s(familiarity_diff, bs = "ts", k = 5) + s(days_rest_diff_fac, bs = "re")
+      ,
+      data = team_func_df, weights = shot_weightz,
+      family = gaussian(), nthreads = 4, select = T, discrete = T,
       drop.unused.levels = FALSE
     )
 
-    df$pred_conv <- predict(afl_conv_mdl_test, newdata = df, type = "response")
+    df$pred_conv_diff <- predict(afl_conv_mdl_test, newdata = df, type = "response")
     # summary(afl_conv_mdl_test)
     ###
 
     afl_score_mdl_test <- mgcv::bam(
       score_diff ~
         s(team_type_fac, bs = "re")
-        # + s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
-        + s(team_name_season.x, bs = "re") + s(team_name_season.y, bs = "re")
-        + s(pred_tot_xscore, bs = "ts", k = 5)
-        + ti(pred_xscore_diff, pred_conv, bs = c("ts", "ts"), k = 4)
-        + s(pred_conv, bs = "ts", k = 5)
-        + s(torp_diff, bs = "ts", k = 5)
-        + s(torp_recv_diff, bs = "ts", k = 5)
-        + s(torp_disp_diff, bs = "ts", k = 5)
-        + s(torp_spoil_diff, bs = "ts", k = 5)
-        + s(torp_hitout_diff, bs = "ts", k = 5)
-        + s(pred_xscore_diff)
-        + s(log_dist_diff, bs = "ts", k = 5) + s(familiarity_diff, bs = "ts", k = 5) + s(days_rest_diff_fac, bs = "re"),
+      + s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
+      + s(team_name_season.x, bs = "re") + s(team_name_season.y, bs = "re")
+      + ti(pred_xscore_diff, pred_conv_diff, bs = 'ts', k = 5)
+      + ti(pred_tot_xscore, pred_conv_diff, bs = 'ts', k = 5)
+      # + s(pred_tot_xscore, bs = "ts", k = 5)
+      + s(pred_conv_diff, bs = "ts", k = 5)
+      + s(pred_xscore_diff)
+      + s(torp_diff, bs = "ts", k = 5)
+      + s(torp_recv_diff, bs = "ts", k = 5)
+      + s(torp_disp_diff, bs = "ts", k = 5)
+      + s(torp_spoil_diff, bs = "ts", k = 5)
+      + s(torp_hitout_diff, bs = "ts", k = 5)
+      + s(log_dist_diff, bs = "ts", k = 5) + s(familiarity_diff, bs = "ts", k = 5) + s(days_rest_diff_fac, bs = "re")
+      ,
       data = team_func_df, weights = weightz,
       family = "gaussian", nthreads = 4, select = T, discrete = T,
       drop.unused.levels = FALSE
@@ -169,14 +195,15 @@ mdl_wk <- function(df, season, weeknum) {
     afl_win_mdl_test <-
       mgcv::bam(
         win ~
-          s(team_type_fac, bs = "re")
-          # + s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
-          + s(team_name_season.x, bs = "re") + s(team_name_season.y, bs = "re")
-          #+ ti(pred_tot_xscore, pred_score_diff, bs = c("ts", "ts"), k = 4)
-          + ti(pred_tot_xscore, pred_xscore_diff, bs = c("ts", "ts"), k = 4)
-          + s(pred_score_diff, bs = "ts", k = 5)
-          #+ s(pred_xscore_diff, bs = "ts", k = 5)
-          + s(log_dist_diff, bs = "ts", k = 5) + s(familiarity_diff, bs = "ts", k = 5) + s(days_rest_diff_fac, bs = "re"),
+          # s(team_type_fac, bs = "re")
+          +s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
+        + s(team_name_season.x, bs = "re") + s(team_name_season.y, bs = "re")
+        + ti(pred_tot_xscore, pred_score_diff, bs = c("ts", "ts"), k = 4)
+        # + ti(pred_tot_xscore, pred_xscore_diff, bs = c("ts", "ts"), k = 4)
+        + s(pred_score_diff, bs = "ts", k = 5)
+        #+ s(pred_xscore_diff, bs = "ts", k = 5)
+        + s(log_dist_diff, bs = "ts", k = 5) + s(familiarity_diff, bs = "ts", k = 5) + s(days_rest_diff_fac, bs = "re")
+        ,
         data = team_func_df, weights = weightz,
         family = "binomial", nthreads = 4, select = T, discrete = T,
         drop.unused.levels = FALSE
@@ -236,26 +263,24 @@ resultz <-
   resultz %>%
   mutate(tips = ifelse(win == 0.5, 1, tips))
 
-resultz <- saveRDS(resultz,'./shiny/resultz.rds')
+saveRDS(resultz,'./shiny/resultz.rds')
 
 # Get chains data  -------------------------------------------------------------
+season <- get_afl_season()
 
 get_predictions_data <- function(season) {
   # Sys.setenv(TZ = "Australia/Melbourne")
   file_name <- glue::glue("predictions_{season}")
 
-  rdf  <- resultz %>% filter(season.x %in% season)
+  rdf  <- resultz %>% dplyr::filter(season.x %in% season)
 
   save_to_release(df = rdf, file_name = file_name, release_tag = "predictions")
 }
 
 # extract and save
-get_predictions_data(2025)
+get_predictions_data(season)
 
 ###
-
-season <- get_afl_season()
-
 # targets (MAE - bits)
 # 22: 25 - 40
 # 23: 26 - 30
@@ -279,13 +304,3 @@ mean(rez$bits)
 mean(rez$tips)
 nrow(rez)
 
-### rez %>% select(30:38,41:55,57:59,61:62,torp_diff,shot_diff,score_diff) %>% view()
-### view(df %>% filter(providerId == "CD_M20220140306"))
-
-# season <- 2023
-# resultz23 <- purrr::map_df(1:27, ~ mdl_wk(team_mdl_df, season, .))
-# rez23 <- resultz23 %>% dplyr::filter(!is.na(bits),team_type_fac == "home")
-
-
-library(fitzRoy)
-sq_df <- fitzRoy::fetch_squiggle_data()
