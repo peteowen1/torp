@@ -2,6 +2,7 @@
 ##### add to match pred data frame
 ###
 # where does pred_df come from?
+library(tidyverse)
 
 pred_df <- readRDS("./data-raw/stat_pred_df.rds")
 

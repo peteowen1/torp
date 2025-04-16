@@ -7,32 +7,6 @@ library(mgcv)
 tictoc::tic()
 
 devtools::load_all()
-# Save to and read from releases -------------------------------------------
-
-save_to_release <- function(df, file_name, release_tag) {
-  temp_dir <- tempdir(check = TRUE)
-  .f_name <- paste0(file_name, ".rds")
-  saveRDS(df, file.path(temp_dir, .f_name))
-
-  piggyback::pb_upload(file.path(temp_dir, .f_name),
-    repo = "peteowen1/torpdata",
-    tag = release_tag
-  )
-}
-
-
-file_reader <- function(file_name, release_tag) {
-  f_name <- paste0(file_name, ".rds")
-  piggyback::pb_download(f_name,
-    repo = "peteowen1/torpdata",
-    tag = release_tag,
-    dest = tempdir()
-  )
-  temp_dir <- tempdir(check = TRUE)
-
-  readRDS(file.path(temp_dir, f_name))
-}
-
 
 # Get chains data  -------------------------------------------------------------
 

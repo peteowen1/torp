@@ -1,3 +1,56 @@
+#' Save a Data Frame to a GitHub Release via Piggyback
+#'
+#' Saves a data frame as an `.rds` file and uploads it to a GitHub release using the `piggyback` package.
+#'
+#' @param df A data frame to save.
+#' @param file_name A string for the file name (without extension).
+#' @param release_tag The GitHub release tag to associate with the uploaded file.
+#'
+#' @return No return value. Used for side effects (file upload).
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' save_to_release(my_df, "latest_data", "v1.0.0")
+#' }
+save_to_release <- function(df, file_name, release_tag) {
+  temp_dir <- tempdir(check = TRUE)
+  .f_name <- paste0(file_name, ".rds")
+  saveRDS(df, file.path(temp_dir, .f_name))
+
+  piggyback::pb_upload(file.path(temp_dir, .f_name),
+                       repo = "peteowen1/torpdata",
+                       tag = release_tag
+  )
+}
+
+#' Read an RDS File from a GitHub Release via Piggyback
+#'
+#' Downloads and reads an `.rds` file from a GitHub release using the `piggyback` package.
+#'
+#' @param file_name The base name of the file (without `.rds` extension).
+#' @param release_tag The GitHub release tag the file is associated with.
+#'
+#' @return An R object read from the downloaded `.rds` file.
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' df <- file_reader("latest_data", "v1.0.0")
+#' }
+file_reader <- function(file_name, release_tag) {
+  f_name <- paste0(file_name, ".rds")
+  piggyback::pb_download(f_name,
+                         repo = "peteowen1/torpdata",
+                         tag = release_tag,
+                         dest = tempdir()
+  )
+  temp_dir <- tempdir(check = TRUE)
+
+  readRDS(file.path(temp_dir, f_name))
+}
+
+
 #' Load Chains Data
 #'
 #' @description Loads chains data from the [torpdata repository](https://github.com/peteowen1/torpdata)

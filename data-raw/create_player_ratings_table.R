@@ -16,16 +16,14 @@ if (skip_em == "no") {
   pstot <- load_player_stats(TRUE)
 }
 
-
-
 decay <- 500
 
 ######################################### REMEMBER TO UNCOMMENT ADD_WP_VARS ON ROW 30 AND 52
 ### player value rule of thumb:
-### APY = torp * 135k + 100k
-### so a replacement player is worth 100k, and someone with a torp of 7 is worth 7*150k+100k = 1.15m
-### calculation is (teams cap ($13m) - team players (35) * min-salary (100k)) divided by mean "team torp rating" (70)
-### (14m - 35*100k)/70 = 150,000
+### APY = torp * 175k + 100k
+### so a replacement player is worth 100k, and someone with a torp of 7 is worth 7*175k+100k = 1.325m
+### calculation is (teams cap ($14m) - team players (35) * min-salary (100k)) divided by mean "team torp rating" (60)
+### (14m - 35*100k)/60 = 175,000
 ######
 ################### create player game df ()
 tictoc::tic()
