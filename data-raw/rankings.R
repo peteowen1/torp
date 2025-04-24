@@ -114,3 +114,5 @@ cal_plot_logistic(team_mdl_df %>% filter(!is.na(win), !is.na(pred_win)),
   truth = win,
   estimate = pred_win
 )
+
+week_gms

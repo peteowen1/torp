@@ -656,19 +656,19 @@ team_mdl_df$pred_conv_diff <- predict(afl_conv_mdl, newdata = team_mdl_df, type 
 afl_score_mdl <- mgcv::bam(
   score_diff ~
     s(team_type_fac, bs = "re")
-    + s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
-    + s(team_name_season.x, bs = "re") + s(team_name_season.y, bs = "re")
-    + ti(pred_xscore_diff, pred_conv_diff, bs = 'ts', k = 5)
-    + ti(pred_tot_xscore, pred_conv_diff, bs = 'ts', k = 5)
-    # + s(pred_tot_xscore, bs = "ts", k = 5)
-    + s(pred_conv_diff, bs = "ts", k = 5)
-    + s(pred_xscore_diff, bs = "ts", k = 5)
-    + s(torp_diff, bs = "ts", k = 5)
-    + s(torp_recv_diff, bs = "ts", k = 5)
-    + s(torp_disp_diff, bs = "ts", k = 5)
-    + s(torp_spoil_diff, bs = "ts", k = 5)
-    + s(torp_hitout_diff, bs = "ts", k = 5)
-    + s(log_dist_diff, bs = "ts", k = 5) + s(familiarity_diff, bs = "ts", k = 5) + s(days_rest_diff_fac, bs = "re")
+  + s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
+  + s(team_name_season.x, bs = "re") + s(team_name_season.y, bs = "re")
+  + ti(pred_xscore_diff, pred_conv_diff, bs = 'ts', k = 5)
+  + ti(pred_tot_xscore, pred_conv_diff, bs = 'ts', k = 5)
+  # + s(pred_tot_xscore, bs = "ts", k = 5)
+  # + s(pred_conv_diff, bs = "ts", k = 5)
+  + s(pred_xscore_diff)
+  # + s(torp_diff, bs = "ts", k = 5)
+  # + s(torp_recv_diff, bs = "ts", k = 5)
+  # + s(torp_disp_diff, bs = "ts", k = 5)
+  # + s(torp_spoil_diff, bs = "ts", k = 5)
+  # + s(torp_hitout_diff, bs = "ts", k = 5)
+  + s(log_dist_diff, bs = "ts", k = 5) + s(familiarity_diff, bs = "ts", k = 5) + s(days_rest_diff_fac, bs = "re")
   ,
   data = team_mdl_df, weights = weightz,
   family = "gaussian", nthreads = 4, select = T, discrete = T,
@@ -755,16 +755,21 @@ week_gms_home <- team_mdl_df %>%
     players = count.x, providerId,
     home_team = team_name.x, home_rating = torp.x,
     away_team = team_name.y, away_rating = torp.y,
-    pred_tot_xscore, pred_xscore_diff , pred_score_diff, pred_win, bits, score_diff
+    pred_xtotal = pred_tot_xscore,
+    pred_xmargin = pred_xscore_diff ,
+    pred_margin = pred_score_diff,
+    pred_win,
+    bits,
+    margin = score_diff
   )
 
 week_gms_away <- team_mdl_df %>%
   dplyr::mutate(
-    totscore = pred_tot_xscore,
     # totscore = sum(team_mdl_df$total_score, na.rm = T) / sum(team_mdl_df$total_shots, na.rm = T) * pred_totshots,
     # pred_shot_diff = -pred_shot_diff,
-    pred_score_diff = -pred_score_diff,
+    pred_tot_xscore = pred_tot_xscore,
     pred_xscore_diff = -pred_xscore_diff,
+    pred_score_diff = -pred_score_diff,
     pred_win = 1 - pred_win,
     score_diff = -score_diff
   ) %>%
@@ -773,22 +778,27 @@ week_gms_away <- team_mdl_df %>%
     players = count.x, providerId,
     home_team = team_name.y, home_rating = torp.y,
     away_team = team_name.x, away_rating = torp.x,
-    pred_tot_xscore, pred_xscore_diff, pred_score_diff, pred_win, bits, score_diff
+    pred_xtotal = pred_tot_xscore,
+    pred_xmargin = pred_xscore_diff ,
+    pred_margin = pred_score_diff,
+    pred_win,
+    bits,
+    margin = score_diff
   )
 
 week_gms <- dplyr::bind_rows(week_gms_home, week_gms_away) %>%
   dplyr::group_by(providerId, home_team, home_rating, away_team, away_rating) %>%
   dplyr::summarise(
-    pred_xscore_diff = mean(pred_xscore_diff),
+    # pred_xmargin = mean(pred_xmargin),
     players = mean(players),
     # total = mean(totscore),
-    pred_total = mean(pred_tot_xscore),
-    pred_score_diff = mean(pred_score_diff),
+    pred_xtotal = mean(pred_xtotal),
+    pred_margin = mean(pred_margin),
     pred_win = mean(pred_win),
-    score_diff = mean(score_diff)
+    margin = mean(margin)
   ) %>%
   mutate(rating_diff = home_rating - away_rating + 4) %>%
-  select(providerId:away_rating, rating_diff, pred_xscore_diff:score_diff)
+  select(providerId:away_rating, rating_diff, players:margin)
 
 inj_df %>%
   filter(str_starts(player, "Upd")) %>%

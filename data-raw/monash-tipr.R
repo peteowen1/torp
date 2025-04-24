@@ -64,7 +64,7 @@ games <-
       left_join(mapping, by = c("home_team" = "afl")),
     by = c("Home" = "monash")
   ) %>%
-  select(Game, Ground, Home, Away, Margin = pred_score_diff)
+  select(Game, Ground, Home, Away, Margin = pred_margin)
 
 games
 
