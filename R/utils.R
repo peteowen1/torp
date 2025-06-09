@@ -141,13 +141,14 @@ get_proportion_through_year <- function(datetime) {
 }
 
 
-#' Get mode of a vector
+#' Convert datetime to decimal hours
 #'
-#' This function returns the mode (most frequent value) of a vector.
+#' Convert a POSIXct datetime to its decimal hour representation.
 #'
-#' @param x A vector of values.
+#' @param datetime A POSIXct datetime object.
 #'
-#' @return The mode (most frequent value) of the input vector.
+#' @return Numeric decimal hour.
+#' @importFrom lubridate hour minute second
 #' @export
 decimal_hour <- function(datetime) {
   # Ensure datetime is POSIXct
