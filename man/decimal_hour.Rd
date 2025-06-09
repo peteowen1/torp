@@ -2,16 +2,16 @@
 % Please edit documentation in R/utils.R
 \name{decimal_hour}
 \alias{decimal_hour}
-\title{Get mode of a vector}
+\title{Convert datetime to decimal hours}
 \usage{
 decimal_hour(datetime)
 }
 \arguments{
-\item{x}{A vector of values.}
+\item{datetime}{A POSIXct datetime object.}
 }
 \value{
-The mode (most frequent value) of the input vector.
+Numeric decimal hour.
 }
 \description{
-This function returns the mode (most frequent value) of a vector.
+Convert a POSIXct datetime to its decimal hour representation.
 }
