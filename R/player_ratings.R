@@ -27,7 +27,7 @@ torp_ratings <- function(season_val = get_afl_season(type = "next"),
   }
 
   if (!exists("plyr_gm_df") || is.null(plyr_gm_df)) {
-    plyr_gm_df <- plyr_gm_df
+    plyr_gm_df <- load_player_stats(season_val)
   }
 
   gwk <- sprintf("%02d", round_val)
@@ -66,7 +66,7 @@ torp_ratings <- function(season_val = get_afl_season(type = "next"),
 #' @importFrom dplyr filter mutate group_by summarise n_distinct last ungroup
 calculate_player_stats <- function(plyr_gm_df = NULL, match_ref, date_val, decay, loading, prior_games_recv, prior_games_disp) {
   if (is.null(plyr_gm_df)) {
-    plyr_gm_df <- plyr_gm_df
+    plyr_gm_df <- load_player_stats(lubridate::year(date_val))
   }
   plyr_gm_df %>%
     dplyr::ungroup() %>%
@@ -115,7 +115,7 @@ prepare_final_dataframe <- function(plyr_tm_df = NULL, plyr_gm_df = NULL, season
   }
 
   if (is.null(plyr_gm_df)) {
-    plyr_gm_df <- plyr_gm_df
+    plyr_gm_df <- load_player_stats(season_val)
   }
 
   plyr_tm_df %>%
