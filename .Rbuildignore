@@ -4,3 +4,8 @@
 ^README\.Rmd$
 ^data-raw$
 ^\.httr-oauth$
+^\.github$
+^IMPROVEMENTS_IMPLEMENTED\.md$
+^CLAUDE\.md$
+^\.claude$
+^inst/extdata/archive$

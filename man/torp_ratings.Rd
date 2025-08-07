@@ -10,7 +10,9 @@ torp_ratings(
   decay = 365,
   loading = 1.5,
   prior_games_recv = 4,
-  prior_games_disp = 6
+  prior_games_disp = 6,
+  plyr_tm_df = NULL,
+  plyr_gm_df = NULL
 )
 }
 \arguments{
@@ -25,6 +27,10 @@ torp_ratings(
 \item{prior_games_recv}{The number of prior games to consider for receiving. Default is 4.}
 
 \item{prior_games_disp}{The number of prior games to consider for disposal. Default is 6.}
+
+\item{plyr_tm_df}{Optional pre-loaded player team data. If NULL, will load automatically.}
+
+\item{plyr_gm_df}{Optional pre-loaded player game data. If NULL, will load automatically.}
 }
 \value{
 A data frame containing player TORP ratings.

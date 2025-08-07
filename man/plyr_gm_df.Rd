@@ -3,24 +3,32 @@
 \docType{data}
 \name{plyr_gm_df}
 \alias{plyr_gm_df}
-\title{Player game-level data}
+\title{Player Game-Level Statistics}
 \format{
-A data frame with X rows and Y variables:
+A data frame with player game statistics:
 \describe{
 \item{player_id}{Unique identifier for each player}
-\item{game_id}{Unique identifier for each game}
-\item{stat1}{Description of stat1}
-\item{stat2}{Description of stat2}
-...
+\item{player_name}{Player's full name}
+\item{match_id}{Unique identifier for each match}
+\item{team}{Team the player represented}
+\item{disposals}{Total disposals (kicks + handballs)}
+\item{kicks}{Number of kicks}
+\item{handballs}{Number of handballs}
+\item{marks}{Number of marks taken}
+\item{tackles}{Number of tackles made}
+\item{goals}{Goals scored}
+\item{behinds}{Behinds scored}
+\item{fantasy_points}{Fantasy football points scored}
 }
 }
 \source{
-\url{http://example.com}
+AFL player statistics via fitzRoy package
 }
 \usage{
 plyr_gm_df
 }
 \description{
-Player game-level data
+Comprehensive player statistics at the individual game level including
+traditional AFL statistics and advanced metrics.
 }
 \keyword{datasets}

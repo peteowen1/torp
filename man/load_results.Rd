@@ -2,7 +2,7 @@
 % Please edit documentation in R/load_torp_data.R
 \name{load_results}
 \alias{load_results}
-\title{Load Player Stats Data}
+\title{Load AFL Match Results Data}
 \usage{
 load_results(seasons = get_afl_season())
 }
@@ -10,10 +10,10 @@ load_results(seasons = get_afl_season())
 \item{seasons}{A numeric vector of 4-digit years associated with given AFL seasons - defaults to latest season. If set to \code{TRUE}, returns all available data since 2021.}
 }
 \value{
-A data frame containing player stats data.
+A data frame containing AFL match results and final scores.
 }
 \description{
-Loads player stats data from the \href{https://github.com/peteowen1/torpdata}{torpdata repository}
+Loads AFL match results and scores from the \href{https://github.com/peteowen1/torpdata}{torpdata repository}
 }
 \examples{
 \donttest{

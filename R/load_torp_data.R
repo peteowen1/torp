@@ -19,7 +19,7 @@ save_to_release <- function(df, file_name, release_tag) {
   saveRDS(df, file.path(temp_dir, .f_name))
 
   piggyback::pb_upload(file.path(temp_dir, .f_name),
-                       repo = "peteowen1/torpdata",
+                       repo = get_torp_data_repo(),
                        tag = release_tag
   )
 }
@@ -41,7 +41,7 @@ save_to_release <- function(df, file_name, release_tag) {
 file_reader <- function(file_name, release_tag) {
   f_name <- paste0(file_name, ".rds")
   piggyback::pb_download(f_name,
-                         repo = "peteowen1/torpdata",
+                         repo = get_torp_data_repo(),
                          tag = release_tag,
                          dest = tempdir()
   )
@@ -68,22 +68,27 @@ file_reader <- function(file_name, release_tag) {
 #' @export
 #' @importFrom glue glue
 load_chains <- function(seasons = get_afl_season(), rounds = get_afl_week()) {
-  seasons <- validate_seasons(seasons)
-  rounds <- validate_rounds(rounds)
+  tryCatch({
+    seasons <- validate_seasons(seasons)
+    rounds <- validate_rounds(rounds)
 
-  #   if(seasons == TRUE){
-  #     seasons <- 2021:get_afl_season()
-  #   }
-  #
-  #   if(rounds == TRUE){
-  #     rounds <- 0:28
-  #   }
+    urls <- generate_urls("chains-data", "chains_data", seasons, rounds)
+    
+    if (length(urls) == 0) {
+      cli::cli_warn("No data URLs generated for seasons {paste(seasons, collapse = ', ')} and rounds {paste(rounds, collapse = ', ')}")
+      return(data.table::data.table())
+    }
 
-  urls <- generate_urls("chains-data", "chains_data", seasons, rounds)
+    out <- load_from_url(urls, seasons = seasons, rounds = rounds)
+    
+    if (nrow(out) == 0) {
+      cli::cli_warn("No chains data found for the specified seasons and rounds")
+    }
 
-  out <- load_from_url(urls, seasons = seasons, rounds = rounds)
-
-  return(out)
+    return(out)
+  }, error = function(e) {
+    cli::cli_abort("Failed to load chains data: {conditionMessage(e)}")
+  })
 }
 
 #' Load Play By Play Data
@@ -163,13 +168,14 @@ load_player_stats <- function(seasons = get_afl_season()) {
   return(out)
 }
 
-#' Load Player Stats Data
+#' Load AFL Fixture Data
 #'
-#' @description Loads player stats data from the [torpdata repository](https://github.com/peteowen1/torpdata)
+#' @description Loads AFL fixture and schedule data from the [torpdata repository](https://github.com/peteowen1/torpdata)
 #'
 #' @param seasons A numeric vector of 4-digit years associated with given AFL seasons - defaults to latest season. If set to `TRUE`, returns all available data since 2021.
+#' @param all Logical. If TRUE, loads all available fixture data from 2018 onwards.
 #'
-#' @return A data frame containing player stats data.
+#' @return A data frame containing AFL fixture and schedule data.
 #' @examples
 #' \donttest{
 #' try({ # prevents cran errors
@@ -196,13 +202,13 @@ load_fixtures <- function(seasons = NULL, all = FALSE) {
 
 
 
-#' Load Player Stats Data
+#' Load AFL Team and Lineup Data
 #'
-#' @description Loads player stats data from the [torpdata repository](https://github.com/peteowen1/torpdata)
+#' @description Loads AFL team roster and lineup data from the [torpdata repository](https://github.com/peteowen1/torpdata)
 #'
 #' @param seasons A numeric vector of 4-digit years associated with given AFL seasons - defaults to latest season. If set to `TRUE`, returns all available data since 2021.
 #'
-#' @return A data frame containing player stats data.
+#' @return A data frame containing AFL team and player lineup data.
 #' @examples
 #' \donttest{
 #' try({ # prevents cran errors
@@ -221,13 +227,13 @@ load_teams <- function(seasons = get_afl_season()) {
   return(out)
 }
 
-#' Load Player Stats Data
+#' Load AFL Match Results Data
 #'
-#' @description Loads player stats data from the [torpdata repository](https://github.com/peteowen1/torpdata)
+#' @description Loads AFL match results and scores from the [torpdata repository](https://github.com/peteowen1/torpdata)
 #'
 #' @param seasons A numeric vector of 4-digit years associated with given AFL seasons - defaults to latest season. If set to `TRUE`, returns all available data since 2021.
 #'
-#' @return A data frame containing player stats data.
+#' @return A data frame containing AFL match results and final scores.
 #' @examples
 #' \donttest{
 #' try({ # prevents cran errors
@@ -246,13 +252,13 @@ load_results <- function(seasons = get_afl_season()) {
   return(out)
 }
 
-#' Load Player Stats Data
+#' Load AFL Player Details Data
 #'
-#' @description Loads player stats data from the [torpdata repository](https://github.com/peteowen1/torpdata)
+#' @description Loads AFL player biographical and details data from the [torpdata repository](https://github.com/peteowen1/torpdata)
 #'
 #' @param seasons A numeric vector of 4-digit years associated with given AFL seasons - defaults to latest season. If set to `TRUE`, returns all available data since 2021.
 #'
-#' @return A data frame containing player stats data.
+#' @return A data frame containing AFL player biographical details including names, ages, and team affiliations.
 #' @examples
 #' \donttest{
 #' try({ # prevents cran errors
@@ -271,17 +277,17 @@ load_player_details <- function(seasons = get_afl_season()) {
   return(out)
 }
 
-#' Load Player Stats Data
+#' Load AFL Match Predictions Data
 #'
-#' @description Loads player stats data from the [torpdata repository](https://github.com/peteowen1/torpdata)
+#' @description Loads AFL match predictions and probability data from the [torpdata repository](https://github.com/peteowen1/torpdata)
 #'
 #' @param seasons A numeric vector of 4-digit years associated with given AFL seasons - defaults to latest season. If set to `TRUE`, returns all available data since 2021.
 #'
-#' @return A data frame containing player stats data.
+#' @return A data frame containing AFL match predictions including win probabilities and expected scores.
 #' @examples
 #' \donttest{
 #' try({ # prevents cran errors
-#'   load_player_details(2021:2022)
+#'   load_predictions(2021:2022)
 #' })
 #' }
 #' @export
@@ -342,23 +348,120 @@ load_from_url <- function(url, ..., seasons = TRUE, rounds = TRUE, peteowen1 = F
 #'
 #' @return A data frame as created by [`readRDS()`]
 #' @export
-#' @importFrom cli cli_warn
+#' @importFrom cli cli_warn cli_abort
 #' @importFrom data.table data.table setDT
 rds_from_url <- function(url) {
-  con <- url(url)
-  on.exit(close(con))
-  load <- try(readRDS(con), silent = TRUE)
-
-  if (inherits(load, "try-error")) {
-    cli::cli_warn("Failed to readRDS from {.url {url}}")
-    return(data.table::data.table())
+  # Validate URL format
+  if (!is.character(url) || length(url) != 1 || nchar(url) == 0) {
+    cli::cli_abort("URL must be a single non-empty character string")
   }
+  
+  if (!grepl("^https?://", url)) {
+    cli::cli_abort("URL must start with http:// or https://")
+  }
+  
+  # Check internet connectivity
+  if (!check_internet_connection()) {
+    cli::cli_abort("No internet connection available")
+  }
+  
+  con <- NULL
+  tryCatch({
+    con <- url(url)
+    on.exit({
+      if (!is.null(con)) {
+        try(close(con), silent = TRUE)
+      }
+    })
+    
+    load <- readRDS(con)
+    
+    # Validate that we got actual data
+    if (is.null(load)) {
+      cli::cli_warn("No data returned from {.url {url}}")
+      return(data.table::data.table())
+    }
+    
+    data.table::setDT(load)
+    return(load)
+    
+  }, error = function(e) {
+    error_msg <- conditionMessage(e)
+    
+    if (grepl("404|Not Found", error_msg, ignore.case = TRUE)) {
+      cli::cli_warn("Data file not found at {.url {url}} - file may not exist for this season/round combination")
+    } else if (grepl("timeout|timed out", error_msg, ignore.case = TRUE)) {
+      cli::cli_warn("Connection timeout while downloading from {.url {url}} - please try again")
+    } else if (grepl("cannot open|connection", error_msg, ignore.case = TRUE)) {
+      cli::cli_warn("Failed to connect to {.url {url}} - check internet connection")
+    } else {
+      cli::cli_warn("Failed to load data from {.url {url}}: {error_msg}")
+    }
+    
+    return(data.table::data.table())
+  })
+}
 
-  data.table::setDT(load)
-  return(load)
+# Package Configuration
+
+#' Get TORP Data Repository
+#'
+#' Returns the repository used for TORP data downloads. Can be configured
+#' via the TORP_DATA_REPO environment variable or package options.
+#'
+#' @return Character string of the repository in format "owner/repo"
+#' @keywords internal
+get_torp_data_repo <- function() {
+  # Check environment variable first
+  env_repo <- Sys.getenv("TORP_DATA_REPO")
+  if (nchar(env_repo) > 0) {
+    return(env_repo)
+  }
+  
+  # Check package option
+  option_repo <- getOption("torp.data.repo")
+  if (!is.null(option_repo)) {
+    return(option_repo)
+  }
+  
+  # Default repository
+  return("peteowen1/torpdata")
+}
+
+#' Set TORP Data Repository
+#'
+#' Sets the repository used for TORP data downloads in the current session.
+#'
+#' @param repo Character string of the repository in format "owner/repo"
+#' @export
+set_torp_data_repo <- function(repo) {
+  if (!is.character(repo) || length(repo) != 1 || nchar(repo) == 0) {
+    cli::cli_abort("Repository must be a single non-empty character string")
+  }
+  
+  if (!grepl("^[^/]+/[^/]+$", repo)) {
+    cli::cli_abort("Repository must be in format 'owner/repo'")
+  }
+  
+  options(torp.data.repo = repo)
+  cli::cli_inform("TORP data repository set to: {repo}")
 }
 
 # Helper functions
+
+#' Check if internet connection is available
+#'
+#' @return Logical indicating if internet connection is available
+#' @keywords internal
+check_internet_connection <- function() {
+  tryCatch({
+    con <- url("https://www.google.com", open = "r")
+    close(con)
+    return(TRUE)
+  }, error = function(e) {
+    return(FALSE)
+  })
+}
 
 #' Validate seasons and rounds
 #'
@@ -370,11 +473,14 @@ rds_from_url <- function(url) {
 validate_rounds <- function(rounds) {
   if (isTRUE(rounds)) rounds <- 0:28
 
-  stopifnot(
-    is.numeric(rounds),
-    rounds >= 0,
-    rounds <= 28
-  )
+  if (!is.numeric(rounds)) {
+    cli::cli_abort("Rounds must be numeric values or TRUE")
+  }
+  
+  invalid_rounds <- rounds[rounds < 0 | rounds > 28]
+  if (length(invalid_rounds) > 0) {
+    cli::cli_abort("Invalid round numbers: {paste(invalid_rounds, collapse = ', ')}. Rounds must be between 0 and 28")
+  }
 
   return(rounds)
 }
@@ -388,11 +494,21 @@ validate_rounds <- function(rounds) {
 validate_seasons <- function(seasons) {
   if (isTRUE(seasons)) seasons <- 2021:(get_afl_season())
 
-  stopifnot(
-    is.numeric(seasons),
-    seasons >= 2021,
-    seasons <= (get_afl_season())
-  )
+  if (!is.numeric(seasons)) {
+    cli::cli_abort("Seasons must be numeric values or TRUE")
+  }
+  
+  current_season <- tryCatch({
+    get_afl_season()
+  }, error = function(e) {
+    cli::cli_warn("Could not determine current AFL season, using 2025 as default")
+    2025
+  })
+  
+  invalid_seasons <- seasons[seasons < 2021 | seasons > current_season]
+  if (length(invalid_seasons) > 0) {
+    cli::cli_abort("Invalid season years: {paste(invalid_seasons, collapse = ', ')}. Seasons must be between 2021 and {current_season}")
+  }
 
   return(seasons)
 }
@@ -408,7 +524,7 @@ validate_seasons <- function(seasons) {
 #' @keywords internal
 #' @importFrom glue glue
 generate_urls <- function(data_type, file_prefix, seasons, rounds = NULL) {
-  base_url <- "https://github.com/peteowen1/torpdata/releases/download"
+  base_url <- paste0("https://github.com/", get_torp_data_repo(), "/releases/download")
 
   if (is.null(rounds)) {
     combinations <- expand.grid(seasons = seasons)

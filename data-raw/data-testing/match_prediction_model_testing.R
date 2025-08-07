@@ -263,7 +263,7 @@ resultz <-
   resultz %>%
   mutate(tips = ifelse(win == 0.5, 1, tips))
 
-saveRDS(resultz,'./shiny/resultz.rds')
+# saveRDS(resultz,'./shiny/resultz.rds')
 
 # Get chains data  -------------------------------------------------------------
 season <- get_afl_season()
