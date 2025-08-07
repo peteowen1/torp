@@ -6,11 +6,21 @@
 #'
 #' @return A dataframe with additional EPV-related variables.
 #' @export
-#' @importFrom dplyr mutate case_when if_else lead lag group_by ungroup
+#' @importFrom dplyr mutate case_when if_else lead lag group_by ungroup bind_cols
 #' @importFrom lubridate as_date
+#' @importFrom cli cli_abort
 add_epv_vars <- function(df) {
+  # Input validation
+  if (!is.data.frame(df)) {
+    cli::cli_abort("Input 'df' must be a data frame.")
+  }
+  
+  if (nrow(df) == 0) {
+    cli::cli_abort("Input data frame cannot be empty.")
+  }
+  
   base_ep_preds <- get_epv_preds(df)
-  pbp_final <- cbind(df, base_ep_preds)
+  pbp_final <- dplyr::bind_cols(df, base_ep_preds)
 
   pbp_final <- pbp_final %>%
     dplyr::group_by(.data$match_id, .data$period) %>%
@@ -54,28 +64,107 @@ add_epv_vars <- function(df) {
   return(pbp_final)
 }
 
-#' Add Win Probability Variables
+#' Add Win Probability Variables (Enhanced)
 #'
-#' This function adds win probability-related variables to the input dataframe.
+#' This function adds enhanced win probability (WP) and win probability added (WPA) variables 
+#' using an ensemble model approach with sophisticated feature engineering.
 #'
 #' @param df A dataframe containing play-by-play data.
+#' @param use_enhanced Logical, whether to use the enhanced ensemble model (default TRUE).
 #'
 #' @return A dataframe with additional win probability-related variables.
 #' @export
-#' @importFrom dplyr mutate case_when lead group_by ungroup
-add_wp_vars <- function(df) {
-  base_wp_preds <- get_wp_preds(df)
-  colnames(base_wp_preds) <- "wp"
-  pbp_final <- cbind(df, base_wp_preds)
+#' @importFrom dplyr mutate case_when lead group_by ungroup bind_cols arrange
+#' @importFrom cli cli_abort cli_warn
+#' @importFrom zoo rollmean rollapply
+add_wp_vars <- function(df, use_enhanced = TRUE) {
+  # Input validation
+  if (!is.data.frame(df)) {
+    cli::cli_abort("Input 'df' must be a data frame.")
+  }
+  
+  if (nrow(df) == 0) {
+    cli::cli_abort("Input data frame cannot be empty.")
+  }
+  
+  # Check for required columns for enhanced model
+  required_cols <- c("match_id", "period", "period_seconds", "points_diff", 
+                    "exp_pts", "goal_x", "y", "home", "team_id_mdl")
+  
+  missing_cols <- setdiff(required_cols, names(df))
+  if (length(missing_cols) > 0 && use_enhanced) {
+    cli::cli_warn("Missing columns for enhanced model: {paste(missing_cols, collapse = ', ')}. Using basic model.")
+    use_enhanced <- FALSE
+  }
+  
+  # Choose prediction method with comprehensive error handling
+  if (use_enhanced) {
+    wp_preds <- tryCatch({
+      get_wp_preds_enhanced(df)
+    }, error = function(e) {
+      cli::cli_warn("Enhanced model failed: {e$message}. Falling back to basic model.")
+      basic_preds <- get_wp_preds(df)
+      colnames(basic_preds) <- "wp"
+      return(basic_preds)
+    })
+    
+    # Validate predictions
+    if (is.null(wp_preds) || !is.data.frame(wp_preds) || !"wp" %in% names(wp_preds)) {
+      cli::cli_warn("Invalid enhanced predictions. Using basic model.")
+      wp_preds <- get_wp_preds(df)
+      colnames(wp_preds) <- "wp"
+    }
+  } else {
+    wp_preds <- get_wp_preds(df)
+    colnames(wp_preds) <- "wp"
+  }
+  
+  # Final validation of predictions
+  if (nrow(wp_preds) != nrow(df)) {
+    cli::cli_abort("Prediction count mismatch: expected {nrow(df)}, got {nrow(wp_preds)}")
+  }
+  
+  # Bind predictions to original data
+  pbp_final <- dplyr::bind_cols(df, wp_preds)
 
+  # Calculate Win Probability Added (WPA) with improved logic
   pbp_final <- pbp_final %>%
     dplyr::group_by(.data$match_id) %>%
+    dplyr::arrange(.data$period, .data$period_seconds) %>%
     dplyr::mutate(
-      wp = round(.data$wp, 5),
+      # Round win probability to reasonable precision
+      wp = round(pmax(0.001, pmin(0.999, .data$wp)), 5),  # Bound between 0.001 and 0.999
+      
+      # Enhanced WPA calculation
+      wp_next = dplyr::lead(.data$wp, default = dplyr::last(.data$wp)),
+      team_id_next = dplyr::lead(.data$team_id_mdl, default = dplyr::last(.data$team_id_mdl)),
+      
+      # WPA calculation accounting for team changes
       wpa = round(dplyr::case_when(
-        dplyr::lead(.data$team_id_mdl, default = dplyr::last(.data$team_id_mdl)) == .data$team_id_mdl ~ dplyr::lead(.data$wp, default = dplyr::last(.data$wp)) - .data$wp,
-        dplyr::lead(.data$team_id_mdl, default = dplyr::last(.data$team_id_mdl)) != .data$team_id_mdl ~ (1 - dplyr::lead(.data$wp, default = dplyr::last(.data$wp))) - .data$wp
-      ), 5)
+        # Same team continues possession
+        .data$team_id_next == .data$team_id_mdl ~ .data$wp_next - .data$wp,
+        # Possession changes to other team
+        .data$team_id_next != .data$team_id_mdl ~ (1 - .data$wp_next) - .data$wp,
+        # Default case (shouldn't happen)
+        TRUE ~ 0
+      ), 5),
+      
+      # Add additional context variables if using enhanced model
+      wp_category = dplyr::case_when(
+        .data$wp >= 0.8 ~ "very_likely",
+        .data$wp >= 0.6 ~ "likely", 
+        .data$wp >= 0.4 ~ "toss_up",
+        .data$wp >= 0.2 ~ "unlikely",
+        TRUE ~ "very_unlikely"
+      ),
+      
+      # High leverage situations (where WPA swings are most impactful)
+      high_leverage = abs(.data$wpa) >= 0.05 | 
+                     (.data$wp >= 0.2 & .data$wp <= 0.8),
+      
+      # Remove helper columns
+      wp_next = NULL,
+      team_id_next = NULL
     ) %>%
     dplyr::ungroup()
 
@@ -90,12 +179,22 @@ add_wp_vars <- function(df) {
 #'
 #' @return A dataframe with additional shot-related variables.
 #' @export
-#' @importFrom dplyr mutate
+#' @importFrom dplyr mutate bind_cols
+#' @importFrom cli cli_abort
 add_shot_vars <- function(df) {
+  # Input validation
+  if (!is.data.frame(df)) {
+    cli::cli_abort("Input 'df' must be a data frame.")
+  }
+  
+  if (nrow(df) == 0) {
+    cli::cli_abort("Input data frame cannot be empty.")
+  }
+  
   ocat_shot_result_preds <- as.data.frame(get_shot_result_preds(df))
   colnames(ocat_shot_result_preds) <- c("clanger_prob", "behind_prob", "goal_prob")
 
-  pbp_final <- cbind(df, ocat_shot_result_preds)
+  pbp_final <- dplyr::bind_cols(df, ocat_shot_result_preds)
 
   pbp_final <- pbp_final %>%
     dplyr::mutate(
@@ -116,15 +215,41 @@ add_shot_vars <- function(df) {
 #' @return A dataframe with EPV predictions.
 #' @keywords internal
 #' @importFrom stats predict model.matrix
+#' @importFrom utils data
 get_epv_preds <- function(df) {
-  preds <- as.data.frame(
-    matrix(stats::predict(torp::ep_model, stats::model.matrix(~ . + 0, data = df %>% select_epv_model_vars())),
-      ncol = 5, byrow = TRUE
+  # Get model from centralized registry with fallback
+  ep_model <- get_model_safe("ep_model", fallback_to_data = TRUE)
+  
+  if (is.null(ep_model)) {
+    cli::cli_abort("EP model not available. Please ensure models are properly loaded.")
+  }
+  
+  # Log prediction event
+  input_hash <- digest::digest(df, algo = "md5")
+  log_prediction_event("ep_model", input_hash, nrow(df))
+  
+  tryCatch({
+    preds <- as.data.frame(
+      matrix(stats::predict(ep_model, stats::model.matrix(~ . + 0, data = df %>% select_epv_model_vars())),
+        ncol = 5, byrow = TRUE
+      )
     )
-  )
-  colnames(preds) <- c("opp_goal", "opp_behind", "behind", "goal", "no_score")
-
-  return(preds)
+    colnames(preds) <- c("opp_goal", "opp_behind", "behind", "goal", "no_score")
+    
+    # Log successful prediction
+    pred_summary <- list(
+      min = min(rowSums(preds)),
+      max = max(rowSums(preds)),
+      mean = mean(rowSums(preds))
+    )
+    log_prediction_event("ep_model", input_hash, nrow(df), pred_summary)
+    
+    return(preds)
+    
+  }, error = function(e) {
+    logger::log_error("EP model prediction failed", error = e$message, input_hash = input_hash)
+    cli::cli_abort("EP model prediction failed: {e$message}")
+  })
 }
 
 #' Get Win Probability Predictions
@@ -136,9 +261,14 @@ get_epv_preds <- function(df) {
 #' @return A dataframe with win probability predictions.
 #' @keywords internal
 #' @importFrom stats predict model.matrix
+#' @importFrom utils data
 get_wp_preds <- function(df) {
+  # Use utils::data to load the model in a safe way
+  wp_model <- NULL
+  utils::data("wp_model", package = "torp", envir = environment())
+  
   preds <- as.data.frame(
-    matrix(stats::predict(torp::wp_model, stats::model.matrix(~ . + 0, data = df %>% select_wp_model_vars())),
+    matrix(stats::predict(wp_model, stats::model.matrix(~ . + 0, data = df %>% select_wp_model_vars())),
       ncol = 1, byrow = TRUE
     )
   )
@@ -155,7 +285,12 @@ get_wp_preds <- function(df) {
 #' @return A dataframe with shot result predictions.
 #' @keywords internal
 #' @importFrom stats predict
+#' @importFrom utils data
 get_shot_result_preds <- function(df) {
-  preds <- stats::predict(torp::shot_ocat_mdl, df, type = "response")
+  # Use utils::data to load the model in a safe way
+  shot_ocat_mdl <- NULL
+  utils::data("shot_ocat_mdl", package = "torp", envir = environment())
+  
+  preds <- stats::predict(shot_ocat_mdl, df, type = "response")
   return(preds)
 }

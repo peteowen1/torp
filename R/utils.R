@@ -1,32 +1,38 @@
 #' Get AFL Season
 #'
-#' A helper function to choose the most recent season available for a given dataset
+#' A helper function to choose the most recent season available for a given dataset.
+#' Currently simplified to return the current calendar year - future enhancement
+#' should implement proper AFL season detection based on fixture data.
 #'
 #' @param type A character string: "current" returns the current season, "next" returns the upcoming season.
 #'
 #' @return An integer representing the AFL season year.
 #' @export
-#' @importFrom lubridate with_tz as_date
-#' @importFrom dplyr filter
+#' @importFrom lubridate year
 #' @importFrom cli cli_abort
+#' @examples
+#' # Get the current AFL season
+#' get_afl_season("current")
+#'
+#' # Get the next AFL season
+#' get_afl_season("next")
 get_afl_season <- function(type = "current") {
-  # if (!type %in% c("current", "next")) {
-  #   cli::cli_abort('type must be one of: "current" or "next"')
-  # }
-  # time_aest <- lubridate::with_tz(Sys.time(), tzone = "Australia/Brisbane")
-  # current_day <- lubridate::as_date(time_aest)
-  # past_fixtures <- load_fixtures(all = TRUE) %>% dplyr::filter(.data$utcStartTime < current_day)
-  # future_fixtures <- load_fixtures(all = TRUE) %>% dplyr::filter(.data$utcStartTime >= current_day)
-  # if (type == "current" | nrow(future_fixtures) == 0) {
-  #   season <- as.numeric(max(past_fixtures$compSeason.year))
-  # } else {
-  #   season <- as.numeric(min(future_fixtures$compSeason.year))
-  # }
-  # return(season)
+  if (!type %in% c("current", "next")) {
+    cli::cli_abort('type must be one of: "current" or "next"')
+  }
 
-  season <- lubridate::year(Sys.Date())
+  # TODO: Implement proper AFL season detection based on fixture data
+  # This would involve checking fixture dates to determine if we're in the
+  # current season, off-season, or upcoming season period
 
-  return(season)
+  current_year <- lubridate::year(Sys.Date())
+
+  # Simple implementation - assumes calendar year equals AFL season
+  if (type == "next") {
+    return(current_year + 1L)
+  }
+
+  return(current_year)
 }
 
 #' Get AFL Week
@@ -44,7 +50,7 @@ get_afl_week <- function(type = "current") {
   if (!type %in% c("current", "next")) {
     cli::cli_abort('type must be one of: "current" or "next"')
   }
-  season <- get_afl_season(type)
+  season <- get_afl_season('current')
   time_aest <- lubridate::with_tz(Sys.time(), tzone = "Australia/Brisbane")
   current_day <- lubridate::as_date(time_aest)
   past_fixtures <- load_fixtures() %>%
@@ -90,18 +96,18 @@ progressively <- function(f, p = NULL) {
   }
 }
 
-#' Get mode of a vector
+#' Get Proportion Through Day
 #'
-#' This function returns the mode (most frequent value) of a vector.
+#' Calculates what proportion of the day has elapsed for a given datetime.
 #'
-#' @param x A vector of values.
+#' @param datetime A POSIXct datetime object.
 #'
-#' @return The mode (most frequent value) of the input vector.
+#' @return A numeric value representing the proportion of the day elapsed (0-1).
 #' @export
 get_proportion_through_day <- function(datetime) {
   # Ensure datetime is POSIXct
   if (!inherits(datetime, "POSIXct")) {
-    stop("Input must be a POSIXct datetime object.")
+    cli::cli_abort("Input must be a POSIXct datetime object.")
   }
 
   # Calculate seconds since midnight
@@ -113,18 +119,18 @@ get_proportion_through_day <- function(datetime) {
   return(proportion)
 }
 
-#' Get mode of a vector
+#' Get Proportion Through Year
 #'
-#' This function returns the mode (most frequent value) of a vector.
+#' Calculates what proportion of the year has elapsed for a given datetime.
 #'
-#' @param x A vector of values.
+#' @param datetime A POSIXct datetime object.
 #'
-#' @return The mode (most frequent value) of the input vector.
+#' @return A numeric value representing the proportion of the year elapsed (0-1).
 #' @export
 get_proportion_through_year <- function(datetime) {
   # Ensure datetime is POSIXct
   if (!inherits(datetime, "POSIXct")) {
-    stop("Input must be a POSIXct datetime object.")
+    cli::cli_abort("Input must be a POSIXct datetime object.")
   }
 
   year <- year(datetime)
@@ -153,7 +159,7 @@ get_proportion_through_year <- function(datetime) {
 decimal_hour <- function(datetime) {
   # Ensure datetime is POSIXct
   if (!inherits(datetime, "POSIXct")) {
-    stop("Input must be a POSIXct datetime object.")
+    cli::cli_abort("Input must be a POSIXct datetime object.")
   }
 
   h <- hour(datetime)
@@ -179,14 +185,30 @@ get_mode <- function(x) {
 
 #' Vectorized Harmonic Mean of Two Numeric Vectors
 #'
-#' Computes the row-wise harmonic mean of two numeric vectors.
+#' Computes the row-wise harmonic mean of two numeric vectors. The harmonic mean
+#' is particularly useful in AFL analytics for averaging rates and proportions,
+#' giving less weight to extreme values than the arithmetic mean.
 #'
 #' @param x Numeric vector (e.g. home_shots).
 #' @param y Numeric vector (e.g. away_shots).
-#' @return A numeric vector of harmonic means.
+#' @return A numeric vector of harmonic means. Returns NA for pairs where either value is 0.
 #' @export
+#' @examples
+#' # Calculate harmonic mean of shot attempts
+#' home_shots <- c(10, 15, 20)
+#' away_shots <- c(12, 18, 25)
+#' harmonic_mean(home_shots, away_shots)
+#'
+#' # Returns NA when one value is zero
+#' harmonic_mean(c(10, 0, 20), c(15, 10, 25))
 harmonic_mean <- function(x, y) {
-  if (length(x) != length(y)) stop("Vectors x and y must be the same length.")
+  if (length(x) != length(y)) {
+    cli::cli_abort("Vectors x and y must be the same length.")
+  }
+
+  if (!is.numeric(x) || !is.numeric(y)) {
+    cli::cli_abort("Both x and y must be numeric vectors.")
+  }
 
   result <- ifelse(x == 0 | y == 0, NA_real_, 2 / (1 / x + 1 / y))
   return(result)

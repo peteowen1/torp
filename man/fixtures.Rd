@@ -3,24 +3,26 @@
 \docType{data}
 \name{fixtures}
 \alias{fixtures}
-\title{Match schedule or fixture information}
+\title{AFL Match Fixtures and Schedule Information}
 \format{
-A data frame with X rows and Y variables:
+A data frame with match fixture variables:
 \describe{
-\item{date}{Date of the match}
-\item{home_team}{Home team name}
-\item{away_team}{Away team name}
-\item{venue}{Venue of the match}
-...
+\item{providerId}{Unique identifier for the match}
+\item{date}{Date and time of the match}
+\item{home.team.name}{Home team name}
+\item{away.team.name}{Away team name}
+\item{venue.name}{Venue where the match is played}
+\item{round.name}{Round name/number}
+\item{status}{Match status (scheduled, completed, etc.)}
 }
 }
 \source{
-\url{http://example.com}
+AFL fixture data via fitzRoy package
 }
 \usage{
 fixtures
 }
 \description{
-Match schedule or fixture information
+Contains match fixture data including team matchups, venues, and scheduling information.
 }
 \keyword{datasets}

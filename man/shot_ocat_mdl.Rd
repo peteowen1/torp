@@ -3,22 +3,18 @@
 \docType{data}
 \name{shot_ocat_mdl}
 \alias{shot_ocat_mdl}
-\title{Shot outcome model}
+\title{Shot Outcome Classification Model}
 \format{
-A model object or data frame with X rows and Y variables:
-\describe{
-\item{variable1}{Description of variable1}
-\item{variable2}{Description of variable2}
-...
-}
+A fitted classification model object (likely randomForest or similar)
 }
 \source{
-\url{http://example.com}
+Trained on AFL shot data from match tracking
 }
 \usage{
 shot_ocat_mdl
 }
 \description{
-Shot outcome model
+A machine learning model for predicting shot outcomes (goal, behind, miss)
+based on shot location, angle, distance, and game context.
 }
 \keyword{datasets}

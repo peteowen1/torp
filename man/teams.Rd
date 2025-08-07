@@ -3,24 +3,28 @@
 \docType{data}
 \name{teams}
 \alias{teams}
-\title{Team information}
+\title{AFL Team Information and Lineup Data}
 \format{
-A data frame with X rows and Y variables:
+A data frame with team and player lineup information:
 \describe{
-\item{team_id}{Unique identifier for each team}
-\item{team_name}{Full name of the team}
-\item{abbreviation}{Team abbreviation}
-\item{conference}{Conference the team belongs to}
-...
+\item{teamId}{Unique identifier for each team}
+\item{teamName}{Full team name}
+\item{teamAbbr}{Team abbreviation (3-4 letters)}
+\item{player.playerId}{Unique identifier for each player}
+\item{player.playerName.givenName}{Player's first name}
+\item{player.playerName.surname}{Player's surname}
+\item{player.jumperNumber}{Player's jumper/jersey number}
+\item{season}{AFL season year}
+\item{round}{Round number}
 }
 }
 \source{
-\url{http://example.com}
+AFL team lineup data via fitzRoy package
 }
 \usage{
 teams
 }
 \description{
-Team information
+Contains team roster information including player lineups and team details.
 }
 \keyword{datasets}

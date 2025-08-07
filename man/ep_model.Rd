@@ -3,22 +3,18 @@
 \docType{data}
 \name{ep_model}
 \alias{ep_model}
-\title{Expected points model for game situations}
+\title{Expected Points Model for AFL Game Situations}
 \format{
-A data frame with X rows and Y variables:
-\describe{
-\item{variable1}{Description of variable1}
-\item{variable2}{Description of variable2}
-...
-}
+A GAM model object fitted using mgcv package
 }
 \source{
-\url{http://example.com}
+Created using data from AFL match tracking data via fitzRoy package
 }
 \usage{
 ep_model
 }
 \description{
-Expected points model for game situations
+A GAM (Generalized Additive Model) fitted model object for predicting expected points
+from various game situations based on field position, time, and game context.
 }
 \keyword{datasets}

@@ -8,6 +8,8 @@
 #' @param loading The loading factor for TORP calculations. Default is 1.5.
 #' @param prior_games_recv The number of prior games to consider for receiving. Default is 4.
 #' @param prior_games_disp The number of prior games to consider for disposal. Default is 6.
+#' @param plyr_tm_df Optional pre-loaded player team data. If NULL, will load automatically.
+#' @param plyr_gm_df Optional pre-loaded player game data. If NULL, will load automatically.
 #'
 #' @return A data frame containing player TORP ratings.
 #' @export
@@ -16,18 +18,23 @@
 #' @importFrom lubridate as_date decimal_date
 #' @importFrom glue glue
 #' @importFrom cli cli_abort
-torp_ratings <- function(season_val = get_afl_season(type = "next"),
+#' @importFrom utils data
+torp_ratings <- function(season_val = get_afl_season(type = "current"),
                          round_val = get_afl_week(type = "next"),
                          decay = 365,
                          loading = 1.5,
                          prior_games_recv = 4,
-                         prior_games_disp = 6) {
-  if (!exists("plyr_tm_df") || is.null(plyr_tm_df)) {
+                         prior_games_disp = 6,
+                         plyr_tm_df = NULL,
+                         plyr_gm_df = NULL) {
+  # Load player team details if not provided
+  if (is.null(plyr_tm_df)) {
     plyr_tm_df <- load_player_details(season_val)
   }
 
-  if (!exists("plyr_gm_df") || is.null(plyr_gm_df)) {
-    plyr_gm_df <- load_player_stats(season_val)
+  # Load player game statistics if not provided
+  if (is.null(plyr_gm_df)) {
+    plyr_gm_df <- torp::plyr_gm_df #load_player_stats(season_val)
   }
 
   gwk <- sprintf("%02d", round_val)
@@ -66,13 +73,14 @@ torp_ratings <- function(season_val = get_afl_season(type = "next"),
 #' @importFrom dplyr filter mutate group_by summarise n_distinct last ungroup
 calculate_player_stats <- function(plyr_gm_df = NULL, match_ref, date_val, decay, loading, prior_games_recv, prior_games_disp) {
   if (is.null(plyr_gm_df)) {
-    plyr_gm_df <- load_player_stats(lubridate::year(date_val))
+    plyr_gm_df <- torp::plyr_gm_df #load_player_stats(lubridate::year(date_val))
   }
   plyr_gm_df %>%
     dplyr::ungroup() %>%
     dplyr::filter(.data$match_id <= match_ref) %>%
     dplyr::mutate(
-      weight_gm = exp(as.numeric(-(lubridate::as_date(date_val) - lubridate::as_date(.data$utc_start_time))) / decay)
+      weight_gm = exp(as.numeric(-(lubridate::as_date(date_val) - lubridate::as_date(.data$utc_start_time))) / decay),
+      plyr_nm = paste(.data$player_given_name,.data$player_surname)
     ) %>%
     dplyr::group_by(.data$player_id) %>%
     dplyr::summarise(
@@ -109,6 +117,7 @@ calculate_player_stats <- function(plyr_gm_df = NULL, match_ref, date_val, decay
 #' @return A final dataframe with player ratings
 #'
 #' @importFrom dplyr filter left_join ungroup mutate select arrange
+#' @importFrom utils data
 prepare_final_dataframe <- function(plyr_tm_df = NULL, plyr_gm_df = NULL, season_val, round_val) {
   if (is.null(plyr_tm_df)) {
     plyr_tm_df <- load_player_details(season_val)
@@ -117,6 +126,11 @@ prepare_final_dataframe <- function(plyr_tm_df = NULL, plyr_gm_df = NULL, season
   if (is.null(plyr_gm_df)) {
     plyr_gm_df <- load_player_stats(season_val)
   }
+
+  # Load fixtures data safely
+  fixtures <- NULL
+  fixtures <- load_fixtures()
+  # utils::data("fixtures", package = "torp", envir = environment())
 
   plyr_tm_df %>%
     dplyr::filter(.data$season == season_val) %>%
@@ -159,6 +173,11 @@ player_game_ratings <- function(season_val = get_afl_season(),
                                 round_num = get_afl_week(),
                                 matchid = FALSE,
                                 team = FALSE) {
+
+  if (is.null(plyr_gm_df)) {
+    plyr_gm_df <- torp::plyr_gm_df #load_player_stats(lubridate::year(date_val))
+  }
+
   df <- filter_game_data(plyr_gm_df, season_val, round_num, matchid, team)
 
   df %>%
