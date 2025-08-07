@@ -74,7 +74,7 @@ fix_df <- fix_df %>%
     game_month = month(with_tz(utc_dt, venue.timezone)), # Need the month number
     game_yday = yday(with_tz(utc_dt, venue.timezone)), # Day of the YEAR
     game_mday = day(with_tz(utc_dt, venue.timezone)), # Day of the month
-    game_wday = wday(with_tz(utc_dt, venue.timezone), week_start = 1), # Day of the week
+    game_wday = lubridate::wday(with_tz(utc_dt, venue.timezone), week_start = 1), # Day of the week
     game_wday_fac = as.factor(game_wday), # Day of the week factor
     game_hour = hour(with_tz(utc_dt, venue.timezone)) +
       minute(with_tz(utc_dt, venue.timezone)) / 60 +

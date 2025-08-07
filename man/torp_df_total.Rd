@@ -3,22 +3,32 @@
 \docType{data}
 \name{torp_df_total}
 \alias{torp_df_total}
-\title{Total torpedo data frame}
+\title{Complete TORP Analysis Dataset}
 \format{
-A data frame with X rows and Y variables:
+A large data frame with processed AFL match data:
 \describe{
-\item{variable1}{Description of variable1}
-\item{variable2}{Description of variable2}
-...
+\item{match_id}{Unique identifier for each match}
+\item{period}{Quarter/period number (1-4)}
+\item{period_seconds}{Seconds elapsed in the period}
+\item{x}{X-coordinate on field (meters from goal)}
+\item{y}{Y-coordinate on field (meters from center)}
+\item{team}{Team in possession}
+\item{player_id}{Player identifier}
+\item{action_type}{Type of action (kick, handball, mark, etc.)}
+\item{ep_start}{Expected points at start of possession}
+\item{ep_end}{Expected points at end of possession}
+\item{ep_added}{Expected points added by the action}
+\item{wp}{Win probability for the team}
 }
 }
 \source{
-\url{http://example.com}
+Processed AFL tracking and event data
 }
 \usage{
 torp_df_total
 }
 \description{
-Total torpedo data frame
+The comprehensive dataset containing all processed AFL data including
+play-by-play events, expected points, win probabilities, and player metrics.
 }
 \keyword{datasets}

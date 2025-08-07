@@ -3,23 +3,27 @@
 \docType{data}
 \name{player_shot_score}
 \alias{player_shot_score}
-\title{Player-specific shot scoring data}
+\title{Player Shot Scoring Statistics}
 \format{
-A data frame with X rows and Y variables:
+A data frame with player shot statistics:
 \describe{
 \item{player_id}{Unique identifier for each player}
-\item{shot_type}{Type of shot taken}
-\item{score}{Score achieved}
-...
+\item{player_name}{Player's full name}
+\item{shots_attempted}{Total number of shots attempted}
+\item{goals_scored}{Number of goals scored}
+\item{behinds_scored}{Number of behinds scored}
+\item{shot_accuracy}{Percentage accuracy of shots}
+\item{avg_shot_distance}{Average distance of shots from goal}
 }
 }
 \source{
-\url{http://example.com}
+Derived from AFL match tracking data
 }
 \usage{
 player_shot_score
 }
 \description{
-Player-specific shot scoring data
+Contains aggregated shot scoring statistics for individual players including
+accuracy metrics and shot location data.
 }
 \keyword{datasets}

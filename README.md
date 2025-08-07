@@ -1,12 +1,32 @@
 
 <!-- README.md is generated from README.Rmd. Please edit that file -->
 
-# torp
+# torp <img src="man/figures/logo.png" align="right" height="138" />
 
 <!-- badges: start -->
+
+[![R-CMD-check](https://github.com/peteowen1/torp/workflows/R-CMD-check/badge.svg)](https://github.com/peteowen1/torp/actions)
+[![Codecov test
+coverage](https://codecov.io/gh/peteowen1/torp/branch/main/graph/badge.svg)](https://app.codecov.io/gh/peteowen1/torp?branch=main)
+[![R-CMD-check](https://github.com/peteowen1/torp/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/peteowen1/torp/actions/workflows/R-CMD-check.yaml)
 <!-- badges: end -->
 
-The goal of torp is to …
+**torp** (Team Offensive Rating Points) is an R package for Australian
+Football League (AFL) analytics, providing tools for player rating
+systems, match predictions, and advanced statistical modeling.
+
+## Features
+
+- **Player Ratings**: Calculate comprehensive player ratings using
+  advanced statistical models
+- **Match Predictions**: Predict match outcomes using XGBoost and GAM
+  models  
+- **Expected Points (EP)**: Calculate expected points for any game
+  situation
+- **Win Probability**: Real-time win probability calculations during
+  matches
+- **Data Access**: Easy access to AFL data including play-by-play,
+  player stats, and match results
 
 ## Installation
 
@@ -18,40 +38,83 @@ You can install the development version of torp from
 devtools::install_github("peteowen1/torp")
 ```
 
-## Example
+## Quick Start
 
-This is a basic example which shows you how to solve a common problem:
+### Loading AFL Data
 
 ``` r
 library(torp)
-## basic example code
+
+# Load the latest AFL player statistics
+player_stats <- load_player_stats()
+
+# Load match results for specific seasons
+results <- load_results(seasons = 2023:2024)
+
+# Load play-by-play data for analysis
+pbp_data <- load_pbp(seasons = 2024, rounds = 1:5)
 ```
 
-What is special about using `README.Rmd` instead of just `README.md`?
-You can include R chunks like so:
+### Player Ratings and Match Predictions
 
 ``` r
-summary(cars)
-#>      speed           dist       
-#>  Min.   : 4.0   Min.   :  2.00  
-#>  1st Qu.:12.0   1st Qu.: 26.00  
-#>  Median :15.0   Median : 36.00  
-#>  Mean   :15.4   Mean   : 42.98  
-#>  3rd Qu.:19.0   3rd Qu.: 56.00  
-#>  Max.   :25.0   Max.   :120.00
+# Calculate player ratings using built-in data
+data(plyr_gm_df)
+head(plyr_gm_df)
+
+# Access pre-trained models for predictions
+data(ep_model)   # Expected Points model
+data(wp_model)   # Win Probability model
+
+# Load match fixtures for predictions
+fixtures <- load_fixtures(seasons = 2024)
 ```
 
-You’ll still need to render `README.Rmd` regularly, to keep `README.md`
-up-to-date. `devtools::build_readme()` is handy for this. You could also
-use GitHub Actions to re-render `README.Rmd` every time you push. An
-example workflow can be found here:
-<https://github.com/r-lib/actions/tree/v1/examples>.
+### Data Processing and Analysis
 
-You can also embed plots, for example:
+``` r
+# Clean and prepare data for modeling
+# (requires raw play-by-play data)
+cleaned_data <- clean_model_data_epv
 
-<img src="man/figures/README-pressure-1.png" width="100%" />
+# Select variables for Expected Points modeling
+model_vars <- select_epv_model_vars(cleaned_data, label = TRUE)
 
-    #> [1] 4
+# Calculate advanced statistics
+harmonic_mean(c(10, 15, 20), c(12, 18, 25))
+```
 
-In that case, don’t forget to commit and push the resulting figure
-files, so they display on GitHub and CRAN.
+## Configuration
+
+You can configure the data repository used by torp:
+
+``` r
+# Set a custom data repository
+set_torp_data_repo("your_username/your_repo")
+
+# Or use environment variable
+Sys.setenv(TORP_DATA_REPO = "your_username/your_repo")
+```
+
+## Data Sources
+
+The package accesses data from the [torpdata
+repository](https://github.com/peteowen1/torpdata), which contains:
+
+- Play-by-play tracking data
+- Player statistics and biographical information  
+- Match results and fixtures
+- Team information and lineups
+- Pre-trained statistical models
+
+## Citation
+
+If you use torp in your research, please cite:
+
+    Owen, P. (2024). torp: AFL Analytics and Player Rating System. 
+    R package version 0.0.0.9001. https://github.com/peteowen1/torp
+
+## License
+
+This package is licensed under the MIT License. See [LICENSE](LICENSE)
+for details.
