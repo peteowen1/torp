@@ -307,9 +307,14 @@ team_dist_df <-
     list(venue_lon, venue_lat, team_lon, team_lat),
     ~ geosphere::distHaversine(c(..1, ..2), c(..3, ..4))
   )) %>%
-  dplyr::mutate(log_dist = log(distance + 10000)) %>% # Add 10km as the minimum travel
+  dplyr::mutate(
+    log_dist = log(distance + 10000),
+    log_dist = replace_na(log_dist, 16) ### FIX THIS LATER PLZ
+    ) %>% # Add 10km as the minimum travel
   dplyr::left_join(ground_prop) %>%
-  dplyr::mutate(familiarity = replace_na(familiarity, 0))
+  dplyr::mutate(
+    familiarity = replace_na(familiarity, 0)
+    )
 
 ## Days Rest ----
 days_rest <- fix_df %>%

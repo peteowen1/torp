@@ -3,12 +3,19 @@ library(stringr)
 library(httr)
 library(piggyback)
 library(mgcv)
+library(mirai)
 
-tictoc::tic()
+if (daemons()$connections != (parallel::detectCores()-2)) {
+  daemons(0)
+  daemons(parallel::detectCores()-2)
+}
+
+tictoc::tic('total')
 
 devtools::load_all()
 
 # Get chains data  -------------------------------------------------------------
+tictoc::tic('chains')
 
 get_chains_data <- function(season, round) {
   # Sys.setenv(TZ = "Australia/Melbourne")
@@ -31,7 +38,10 @@ get_chains_data <- function(season, round) {
 # purrr::walk(0:28,~get_chains_data(2025,.))
 get_chains_data(2025, get_afl_week())
 
+tictoc::toc(log= TRUE)
+
 # Get pbp data  -------------------------------------------------------------
+tictoc::tic('pbp')
 get_pbp_data <- function(season, round) {
   chains <- get_week_chains(season, round)
 
@@ -66,7 +76,10 @@ get_pbp_data <- function(season, round) {
 # purrr::walk(0:get_afl_week(),~get_pbp_data(2025,.))
 get_pbp_data(2025, get_afl_week())
 
+tictoc::toc(log= TRUE)
+
 # Get xg data  -------------------------------------------------------------
+tictoc::tic('xg')
 get_xg_data <- function(season) {
   xg_df <- match_xgs(season, TRUE)
 
@@ -81,7 +94,10 @@ get_xg_data <- function(season) {
 purrr::walk(2025:get_afl_season(),~get_xg_data(.))
 # purrr::walk(2025:get_afl_season(), ~ get_xg_data(.))
 
+tictoc::toc(log= TRUE)
+
 # Get player stats data  -------------------------------------------------------------
+tictoc::tic('player stats')
 get_player_stats <- function(season) {
   player_stats <- fitzRoy::fetch_player_stats_afl(season) %>%
     janitor::remove_constant() %>%
@@ -95,7 +111,10 @@ get_player_stats <- function(season) {
 
 purrr::walk(2025:get_afl_season(), ~ get_player_stats(.))
 
+tictoc::toc(log= TRUE)
+
 # Get fixtures data  -------------------------------------------------------------
+tictoc::tic('fixtures')
 get_fixtures <- function(season) {
   ### update fixtures file (17 secs)
   fixtures <- fitzRoy::fetch_fixture_afl(season, comp = "AFLM")
@@ -108,7 +127,10 @@ get_fixtures <- function(season) {
 
 purrr::walk(2025:lubridate::year(Sys.Date()), ~ get_fixtures(.))
 
+tictoc::toc(log= TRUE)
+
 # Get team lineups data  -------------------------------------------------------------
+tictoc::tic('lineups')
 get_teams <- function(season) {
   ### update teams file (90 secs per season)
   teams <- fitzRoy::fetch_lineup_afl(season, comp = "AFLM") %>%
@@ -125,7 +147,10 @@ get_teams <- function(season) {
 
 purrr::walk(2025:get_afl_season(), ~ get_teams(.))
 
+tictoc::toc(log= TRUE)
+
 # Get results data  -------------------------------------------------------------
+tictoc::tic('results')
 get_results <- function(season) {
   ##### update results file (5 secs per season)
   results <- fitzRoy::fetch_results_afl(season, comp = "AFLM")
@@ -138,7 +163,10 @@ get_results <- function(season) {
 
 purrr::walk(2025:get_afl_season(), ~ get_results(.))
 
+tictoc::toc(log= TRUE)
+
 # Get player details data  -------------------------------------------------------------
+tictoc::tic('player details')
 get_player_details <- function(season) {
   ##### update players file (20 secs per season)
   player_details <-
@@ -159,4 +187,9 @@ get_player_details <- function(season) {
 
 purrr::walk(2025:get_afl_season(), ~ get_player_details(.))
 
-tictoc::toc()
+tictoc::toc(log= TRUE)
+
+tictoc::toc(log= TRUE)
+
+# print a nicely formatted table of all timings
+tictoc::tic.log(format = TRUE) %>% unlist()
