@@ -2,16 +2,16 @@
 % Please edit documentation in R/utils.R
 \name{get_proportion_through_day}
 \alias{get_proportion_through_day}
-\title{Get mode of a vector}
+\title{Get Proportion Through Day}
 \usage{
 get_proportion_through_day(datetime)
 }
 \arguments{
-\item{x}{A vector of values.}
+\item{datetime}{A POSIXct datetime object.}
 }
 \value{
-The mode (most frequent value) of the input vector.
+A numeric value representing the proportion of the day elapsed (0-1).
 }
 \description{
-This function returns the mode (most frequent value) of a vector.
+Calculates what proportion of the day has elapsed for a given datetime.
 }

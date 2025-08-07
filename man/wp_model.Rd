@@ -3,22 +3,18 @@
 \docType{data}
 \name{wp_model}
 \alias{wp_model}
-\title{Win probability model}
+\title{Win Probability Model}
 \format{
-A model object or data frame with X rows and Y variables:
-\describe{
-\item{variable1}{Description of variable1}
-\item{variable2}{Description of variable2}
-...
-}
+A fitted regression model object (likely GAM or logistic regression)
 }
 \source{
-\url{http://example.com}
+Trained on historical AFL match data with score and time states
 }
 \usage{
 wp_model
 }
 \description{
-Win probability model
+A statistical model for calculating real-time win probabilities during AFL matches
+based on score differential, time remaining, and field position.
 }
 \keyword{datasets}

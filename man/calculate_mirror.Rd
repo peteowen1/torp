@@ -2,7 +2,7 @@
 % Please edit documentation in R/clean_model_data.R
 \name{calculate_mirror}
 \alias{calculate_mirror}
-\title{Calculate Mirror}
+\title{Calculate Mirror Values}
 \usage{
 calculate_mirror(throw_in, team_id_mdl, x)
 }
@@ -17,6 +17,8 @@ calculate_mirror(throw_in, team_id_mdl, x)
 A vector of mirror values (-1 or 1).
 }
 \description{
-Calculate Mirror
+Determines whether field coordinates should be mirrored based on throw-in patterns
+and team possession changes. This function handles complex field position adjustments
+for AFL analytics by breaking down the logic into understandable conditions.
 }
 \keyword{internal}

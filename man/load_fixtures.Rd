@@ -2,18 +2,20 @@
 % Please edit documentation in R/load_torp_data.R
 \name{load_fixtures}
 \alias{load_fixtures}
-\title{Load Player Stats Data}
+\title{Load AFL Fixture Data}
 \usage{
 load_fixtures(seasons = NULL, all = FALSE)
 }
 \arguments{
 \item{seasons}{A numeric vector of 4-digit years associated with given AFL seasons - defaults to latest season. If set to \code{TRUE}, returns all available data since 2021.}
+
+\item{all}{Logical. If TRUE, loads all available fixture data from 2018 onwards.}
 }
 \value{
-A data frame containing player stats data.
+A data frame containing AFL fixture and schedule data.
 }
 \description{
-Loads player stats data from the \href{https://github.com/peteowen1/torpdata}{torpdata repository}
+Loads AFL fixture and schedule data from the \href{https://github.com/peteowen1/torpdata}{torpdata repository}
 }
 \examples{
 \donttest{

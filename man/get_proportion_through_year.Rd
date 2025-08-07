@@ -2,16 +2,16 @@
 % Please edit documentation in R/utils.R
 \name{get_proportion_through_year}
 \alias{get_proportion_through_year}
-\title{Get mode of a vector}
+\title{Get Proportion Through Year}
 \usage{
 get_proportion_through_year(datetime)
 }
 \arguments{
-\item{x}{A vector of values.}
+\item{datetime}{A POSIXct datetime object.}
 }
 \value{
-The mode (most frequent value) of the input vector.
+A numeric value representing the proportion of the year elapsed (0-1).
 }
 \description{
-This function returns the mode (most frequent value) of a vector.
+Calculates what proportion of the year has elapsed for a given datetime.
 }

@@ -6,3 +6,19 @@
 .httr-oauth
 .DS_Store
 .quarto
+inst/doc
+
+# Archive data (old data files)
+inst/extdata/archive/
+
+# Temporary files
+*.tmp
+*.log
+
+# Development files
+.vscode/
+.idea/
+
+# Claude Code files
+.claude/
+CLAUDE.md

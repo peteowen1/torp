@@ -13,5 +13,14 @@ get_afl_season(type = "current")
 An integer representing the AFL season year.
 }
 \description{
-A helper function to choose the most recent season available for a given dataset
+A helper function to choose the most recent season available for a given dataset.
+Currently simplified to return the current calendar year - future enhancement
+should implement proper AFL season detection based on fixture data.
+}
+\examples{
+# Get the current AFL season
+get_afl_season("current")
+
+# Get the next AFL season  
+get_afl_season("next")
 }

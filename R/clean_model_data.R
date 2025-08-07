@@ -1,3 +1,9 @@
+# AFL Field and Game Constants
+AFL_GOAL_WIDTH <- 6.4  # Width of AFL goal posts in meters
+AFL_QUARTER_DURATION <- 2000  # Duration of AFL quarter in game seconds
+AFL_MAX_PERIODS <- 4  # Maximum number of periods/quarters in AFL
+AFL_TIME_SCALER_MAX <- 4  # Maximum value for time left scaler calculation
+
 #' Clean Model Data for Expected Points Value (EPV)
 #'
 #' @param df A dataframe containing raw play-by-play data.
@@ -25,7 +31,7 @@ clean_model_data_wp <- function(df) {
     dplyr::mutate(
       xpoints_diff = .data$points_diff + .data$exp_pts,
       pos_lead_prob = calculate_pos_lead_prob(.data$points_diff, .data$opp_goal, .data$opp_behind, .data$no_score, .data$behind, .data$goal),
-      time_left_scaler = exp(pmin(((.data$period - 1) * 2000 + .data$period_seconds) / 2000, 4)),
+      time_left_scaler = exp(pmin(((.data$period - 1) * AFL_QUARTER_DURATION + .data$period_seconds) / AFL_QUARTER_DURATION, AFL_TIME_SCALER_MAX)),
       diff_time_ratio = .data$xpoints_diff * .data$time_left_scaler
     ) %>%
     fastDummies::dummy_cols(select_columns = c("play_type", "phase_of_play")) %>%
@@ -38,27 +44,19 @@ clean_model_data_wp <- function(df) {
 #' @return A dataframe with selected variables for EPV modeling.
 #' @export
 select_epv_model_vars <- function(df, label = FALSE) {
-  if (label == FALSE) {
-    select_df <-
-      df %>%
-      dplyr::select(
-        .data$goal_x, .data$y, .data$lag_goal_x, .data$lag_goal_x5, .data$lag_y, .data$period_seconds, .data$period,
-        .data$play_type_handball, .data$play_type_kick, .data$play_type_reception, .data$phase_of_play_handball_received,
-        .data$phase_of_play_hard_ball, .data$phase_of_play_loose_ball, .data$phase_of_play_set_shot,
-        .data$shot_row, .data$speed5, .data$home
-      )
+  base_vars <- c(
+    "goal_x", "y", "lag_goal_x", "lag_goal_x5", "lag_y", 
+    "period_seconds", "period", "play_type_handball", "play_type_kick", 
+    "play_type_reception", "phase_of_play_handball_received", 
+    "phase_of_play_hard_ball", "phase_of_play_loose_ball", 
+    "phase_of_play_set_shot", "shot_row", "speed5", "home"
+  )
+  
+  if (label) {
+    base_vars <- c(base_vars, "label_ep")
   }
-  if (label == TRUE) {
-    select_df <-
-      df %>%
-      dplyr::select(
-        .data$goal_x, .data$y, .data$lag_goal_x, .data$lag_goal_x5, .data$lag_y, .data$period_seconds, .data$period,
-        .data$play_type_handball, .data$play_type_kick, .data$play_type_reception, .data$phase_of_play_handball_received,
-        .data$phase_of_play_hard_ball, .data$phase_of_play_loose_ball, .data$phase_of_play_set_shot,
-        .data$shot_row, .data$speed5, .data$home, .data$label_ep
-      )
-  }
-  return(select_df)
+  
+  df %>% dplyr::select(dplyr::all_of(base_vars))
 }
 
 #' Select WP Model Variables
@@ -76,19 +74,90 @@ select_wp_model_vars <- function(df) {
     )
 }
 
+#' Select AFL Match Prediction Model Variables
+#'
+#' @param df A dataframe containing AFL team model data
+#' @return A dataframe with selected variables for AFL modeling
+#' @export
+select_afl_model_vars <- function(df) {
+  df %>%
+    dplyr::select(
+      # Response variables
+      # .data$total_xpoints_adj,
+      # .data$xscore_diff,
+      # .data$shot_conv_diff,
+      # .data$score_diff,
+      .data$win,
+
+      # Bring Season through
+      .data$season.x,
+
+      # Team and game identifiers
+      .data$team_type_fac.x,
+      .data$team_name.x,
+      .data$team_name.y,
+      .data$team_name_season.x,
+      .data$team_name_season.y,
+      .data$team_type_fac,
+
+      # Time-based variables
+      .data$game_year_decimal.x,
+      .data$game_prop_through_year.x,
+      .data$game_prop_through_month.x,
+      .data$game_wday_fac.x,
+      .data$game_prop_through_day.x,
+
+      # Team rating variables (TORP - Team Overall Rating Points)
+      .data$torp_diff,
+      .data$torp_recv_diff,
+      .data$torp_disp_diff,
+      .data$torp_spoil_diff,
+      .data$torp_hitout_diff,
+      .data$torp.x,
+      .data$torp.y,
+
+      # Venue and travel variables
+      .data$venue_fac,
+      .data$log_dist.x,
+      .data$log_dist.y,
+      .data$log_dist_diff,
+      .data$familiarity.x,
+      .data$familiarity.y,
+      .data$familiarity_diff,
+      .data$days_rest_diff_fac,
+
+      # Model weights
+      .data$weightz,
+      .data$shot_weightz,
+
+      # Predicted values (generated during modeling process)
+      .data$pred_tot_xscore,
+      .data$pred_xscore_diff,
+      .data$pred_conv_diff,
+      .data$pred_score_diff,
+      .data$pred_win
+    )
+}
+
+
 #' Clean Shots Data
 #'
 #' @param df A dataframe containing raw shot data.
 #' @return A cleaned dataframe with additional shot-related variables.
 #' @export
+#' @importFrom utils data
 clean_shots_data <- function(df) {
-  goal_width <- 6.4
+  goal_width <- AFL_GOAL_WIDTH
+  
+  # Load shot player data safely
+  shot_player_df <- NULL
+  utils::data("shot_player_df", package = "torp", envir = environment())
 
   df %>%
     add_shot_result_variables() %>%
     add_shot_geometry_variables(goal_width) %>%
     add_shot_type_variables() %>%
-    dplyr::left_join(torp::shot_player_df, by = c("player_id" = "player_id_shot"), keep = TRUE) %>%
+    dplyr::left_join(shot_player_df, by = c("player_id" = "player_id_shot"), keep = TRUE) %>%
     dplyr::mutate(
       player_id_shot = as.factor(tidyr::replace_na(.data$player_id_shot, "Other")),
       player_name_shot = as.factor(tidyr::replace_na(.data$player_name_shot, "Other"))
@@ -207,7 +276,97 @@ determine_team_id_mdl <- function(throw_in, team_id) {
   zoo::na.locf0(result)
 }
 
-#' Calculate Mirror
+#' Check if current throw-in should be mirrored based on team change
+#'
+#' @param throw_in A vector indicating if the play is a throw-in.
+#' @param team_id_mdl A vector of team IDs for modeling.
+#' @return Logical vector indicating mirror condition
+#' @keywords internal
+is_current_throw_in_team_change <- function(throw_in, team_id_mdl) {
+  throw_in == 1 & dplyr::lag(throw_in) != 1 & dplyr::lag(team_id_mdl) != team_id_mdl
+}
+
+#' Check if consecutive throw-ins should be mirrored based on team and position
+#'
+#' @param throw_in A vector indicating if the play is a throw-in.
+#' @param team_id_mdl A vector of team IDs for modeling.
+#' @param x A vector of x-coordinates.
+#' @return Logical vector indicating mirror condition
+#' @keywords internal
+is_consecutive_throw_in_same_side <- function(throw_in, team_id_mdl, x) {
+  (throw_in == 1 & dplyr::lag(throw_in) == 1 & dplyr::lag(team_id_mdl, n = 2L) != team_id_mdl) & 
+  sign(dplyr::lag(x)) == sign(x)
+}
+
+#' Check if consecutive throw-ins should be mirrored based on position change
+#'
+#' @param throw_in A vector indicating if the play is a throw-in.
+#' @param team_id_mdl A vector of team IDs for modeling.
+#' @param x A vector of x-coordinates.
+#' @return Logical vector indicating mirror condition
+#' @keywords internal
+is_consecutive_throw_in_side_change <- function(throw_in, team_id_mdl, x) {
+  throw_in == 1 & dplyr::lag(throw_in) == 1 & dplyr::lag(team_id_mdl, n = 2L) == team_id_mdl & 
+  sign(dplyr::lag(x)) != sign(x)
+}
+
+#' Check if previous throw-in affects current play mirroring
+#'
+#' @param throw_in A vector indicating if the play is a throw-in.
+#' @param team_id_mdl A vector of team IDs for modeling.
+#' @param x A vector of x-coordinates.
+#' @return Logical vector indicating mirror condition
+#' @keywords internal
+is_previous_throw_in_affecting <- function(throw_in, team_id_mdl, x) {
+  dplyr::lag(throw_in) == 1 & sign(dplyr::lag(x)) == sign(x) & 
+  dplyr::lag(team_id_mdl) == team_id_mdl & dplyr::lag(team_id_mdl, n = 2L) != team_id_mdl
+}
+
+#' Check if throw-in two plays ago affects current play
+#'
+#' @param throw_in A vector indicating if the play is a throw-in.
+#' @param team_id_mdl A vector of team IDs for modeling.
+#' @param x A vector of x-coordinates.
+#' @return Logical vector indicating mirror condition
+#' @keywords internal
+is_throw_in_two_ago_affecting <- function(throw_in, team_id_mdl, x) {
+  dplyr::lag(throw_in, n = 2L) == 1 & 
+  sign(dplyr::lag(x, n = 2L)) == sign(x) & 
+  dplyr::lag(team_id_mdl, n = 2L) == team_id_mdl & 
+  dplyr::lag(team_id_mdl, n = 3L) != team_id_mdl
+}
+
+#' Check if throw-in affects future position
+#'
+#' @param throw_in A vector indicating if the play is a throw-in.
+#' @param team_id_mdl A vector of team IDs for modeling.
+#' @param x A vector of x-coordinates.
+#' @return Logical vector indicating mirror condition
+#' @keywords internal
+is_throw_in_affecting_future_position <- function(throw_in, team_id_mdl, x) {
+  dplyr::lag(throw_in) == 1 & 
+  sign(dplyr::lead(x, n = 2L)) == sign(x) & 
+  dplyr::lead(team_id_mdl, n = 2L) != team_id_mdl
+}
+
+#' Check if throw-in two plays ago affects future play
+#'
+#' @param throw_in A vector indicating if the play is a throw-in.
+#' @param team_id_mdl A vector of team IDs for modeling.
+#' @param x A vector of x-coordinates.
+#' @return Logical vector indicating mirror condition
+#' @keywords internal
+is_throw_in_two_ago_affecting_future <- function(throw_in, team_id_mdl, x) {
+  dplyr::lag(throw_in, n = 2L) == 1 & 
+  sign(dplyr::lead(x)) == sign(x) & 
+  dplyr::lead(team_id_mdl) != team_id_mdl
+}
+
+#' Calculate Mirror Values
+#'
+#' Determines whether field coordinates should be mirrored based on throw-in patterns
+#' and team possession changes. This function handles complex field position adjustments
+#' for AFL analytics by breaking down the logic into understandable conditions.
 #'
 #' @param throw_in A vector indicating if the play is a throw-in.
 #' @param team_id_mdl A vector of team IDs for modeling.
@@ -217,13 +376,28 @@ determine_team_id_mdl <- function(throw_in, team_id) {
 #' @importFrom dplyr case_when lag lead
 calculate_mirror <- function(throw_in, team_id_mdl, x) {
   dplyr::case_when(
-    (throw_in == 1 & dplyr::lag(throw_in) != 1 & dplyr::lag(team_id_mdl) != team_id_mdl) ~ -1,
-    (throw_in == 1 & dplyr::lag(throw_in) == 1 & dplyr::lag(team_id_mdl, n = 2L) != team_id_mdl) & sign(dplyr::lag(x)) == sign(x) ~ -1,
-    (throw_in == 1 & dplyr::lag(throw_in) == 1 & dplyr::lag(team_id_mdl, n = 2L) == team_id_mdl & sign(dplyr::lag(x)) != sign(x)) ~ -1,
-    (dplyr::lag(throw_in) == 1 & sign(dplyr::lag(x)) == sign(x) & dplyr::lag(team_id_mdl) == team_id_mdl & dplyr::lag(team_id_mdl, n = 2L) != team_id_mdl) ~ -1,
-    (dplyr::lag(throw_in, n = 2L) == 1 & sign(dplyr::lag(x, n = 2L)) == sign(x) & dplyr::lag(team_id_mdl, n = 2L) == team_id_mdl & dplyr::lag(team_id_mdl, n = 3L) != team_id_mdl) ~ -1,
-    (dplyr::lag(throw_in) == 1 & sign(dplyr::lead(x, n = 2L)) == sign(x) & dplyr::lead(team_id_mdl, n = 2L) != team_id_mdl) ~ -1,
-    (dplyr::lag(throw_in, n = 2L) == 1 & sign(dplyr::lead(x)) == sign(x) & dplyr::lead(team_id_mdl) != team_id_mdl) ~ -1,
+    # Current throw-in with team change
+    is_current_throw_in_team_change(throw_in, team_id_mdl) ~ -1,
+    
+    # Consecutive throw-ins on same side with different team
+    is_consecutive_throw_in_same_side(throw_in, team_id_mdl, x) ~ -1,
+    
+    # Consecutive throw-ins with same team but different side
+    is_consecutive_throw_in_side_change(throw_in, team_id_mdl, x) ~ -1,
+    
+    # Previous throw-in affecting current play
+    is_previous_throw_in_affecting(throw_in, team_id_mdl, x) ~ -1,
+    
+    # Throw-in two plays ago affecting current play
+    is_throw_in_two_ago_affecting(throw_in, team_id_mdl, x) ~ -1,
+    
+    # Previous throw-in with future position considerations
+    is_throw_in_affecting_future_position(throw_in, team_id_mdl, x) ~ -1,
+    
+    # Two plays ago throw-in with future considerations
+    is_throw_in_two_ago_affecting_future(throw_in, team_id_mdl, x) ~ -1,
+    
+    # Default case - no mirroring
     TRUE ~ 1
   )
 }

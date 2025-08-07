@@ -2,7 +2,7 @@
 % Please edit documentation in R/load_torp_data.R
 \name{load_predictions}
 \alias{load_predictions}
-\title{Load Player Stats Data}
+\title{Load AFL Match Predictions Data}
 \usage{
 load_predictions(seasons = get_afl_season())
 }
@@ -10,15 +10,15 @@ load_predictions(seasons = get_afl_season())
 \item{seasons}{A numeric vector of 4-digit years associated with given AFL seasons - defaults to latest season. If set to \code{TRUE}, returns all available data since 2021.}
 }
 \value{
-A data frame containing player stats data.
+A data frame containing AFL match predictions including win probabilities and expected scores.
 }
 \description{
-Loads player stats data from the \href{https://github.com/peteowen1/torpdata}{torpdata repository}
+Loads AFL match predictions and probability data from the \href{https://github.com/peteowen1/torpdata}{torpdata repository}
 }
 \examples{
 \donttest{
 try({ # prevents cran errors
-  load_player_details(2021:2022)
+  load_predictions(2021:2022)
 })
 }
 }
