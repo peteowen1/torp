@@ -9,8 +9,8 @@ tictoc::tic()
 fixtures_upd <- purrr::map(lubridate::year(Sys.Date()), ~ fitzRoy::fetch_fixture_afl(.x, comp = "AFLM")) %>% purrr::list_rbind()
 tictoc::toc()
 
-fixtures <- fixtures_upd # torp::fixtures %>% rows_upsert(fixtures_upd, by = "providerId")
-usethis::use_data(fixtures, overwrite = TRUE)
+# fixtures <- fixtures_upd # load_fixtures() %>% rows_upsert(fixtures_upd, by = "providerId")
+# usethis::use_data(fixtures, overwrite = TRUE)
 
 ### update teams file (90 secs per season)
 library(furrr)
@@ -25,20 +25,20 @@ teams_upd <- purrr::map((get_afl_week() - 1):(get_afl_week() + 1), ~ fitzRoy::fe
   ) # %>% dplyr::filter(!is.na(player.playerId))
 tictoc::toc()
 
-teams <- torp::teams %>%
-  rows_upsert(teams_upd, by = "row_id") %>%
-  filter(!is.na(teamId), !is.na(player.playerId)) %>%
-  arrange(providerId)
-
-usethis::use_data(teams, overwrite = TRUE)
+# teams <- load_teams(TRUE) %>%
+#   rows_upsert(teams_upd, by = "row_id") %>%
+#   filter(!is.na(teamId), !is.na(player.playerId)) %>%
+#   arrange(providerId)
+# 
+# usethis::use_data(teams, overwrite = TRUE)
 
 ##### update results file (5 secs per season)
 tictoc::tic()
 results_upd <- purrr::map_df(get_afl_season(), ~ fitzRoy::fetch_results_afl(., comp = "AFLM"))
 tictoc::toc()
 
-results <- torp::results %>% rows_upsert(results_upd, by = "match.matchId")
-usethis::use_data(results, overwrite = TRUE)
+# results <- load_results(TRUE) %>% rows_upsert(results_upd, by = "match.matchId")
+# usethis::use_data(results, overwrite = TRUE)
 
 ######## update players data (3 mins)
 # tictoc::tic()

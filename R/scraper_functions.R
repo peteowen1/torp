@@ -13,7 +13,6 @@
 #' chains <- get_match_chains(2022, 1)
 #' }
 #' @importFrom dplyr inner_join left_join
-#' @importFrom progressr with_progress
 get_match_chains <- function(season = get_afl_season(), round = NA) {
   if (season < 2021) {
     stop("Match chain data is not available for seasons prior to 2021.")
@@ -33,9 +32,7 @@ get_match_chains <- function(season = get_afl_season(), round = NA) {
   games_vector <- games$matchId
 
   message("Scraping match chains...")
-  chains <- progressr::with_progress({
-    get_many_game_chains(games_vector)
-  })
+  chains <- get_many_game_chains(games_vector)
 
   players <- get_players()
   chains <- chains %>%
@@ -190,11 +187,8 @@ get_players <- function(use_api = FALSE) {
 #' @export
 #'
 #' @importFrom purrr map_df
-#' @importFrom progressr progressor
 get_many_game_chains <- function(games_vector) {
-  p <- progressr::progressor(steps = length(games_vector))
   purrr::map_df(games_vector, ~ {
-    p()
     get_game_chains(.)
   })
 }

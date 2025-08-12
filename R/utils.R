@@ -53,9 +53,9 @@ get_afl_week <- function(type = "current") {
   season <- get_afl_season('current')
   time_aest <- lubridate::with_tz(Sys.time(), tzone = "Australia/Brisbane")
   current_day <- lubridate::as_date(time_aest)
-  past_fixtures <- load_fixtures() %>%
+  past_fixtures <- load_fixtures(TRUE) %>%
     dplyr::filter(.data$utcStartTime < current_day, .data$compSeason.year == season)
-  future_fixtures <- load_fixtures() %>%
+  future_fixtures <- load_fixtures(TRUE) %>%
     dplyr::filter(.data$utcStartTime >= current_day, .data$compSeason.year == season)
   if ((type == "current" & nrow(past_fixtures) > 0) | nrow(future_fixtures) == 0) {
     round <- as.numeric(max(past_fixtures$round.roundNumber))
@@ -75,26 +75,6 @@ is_installed <- function(pkg) {
   requireNamespace(pkg, quietly = TRUE)
 }
 
-#' Progressively apply a function
-#'
-#' This function helps add progress-reporting to any function. Given function `f()` and progressor `p()`,
-#' it will return a new function that calls `f()` and then calls `p()` after every iteration.
-#'
-#' @param f A function to add progressor functionality to.
-#' @param p A function such as one created by `progressr::progressor()` - also accepts purrr-style lambda functions.
-#'
-#' @return A function that does the same as `f` but calls `p()` after each iteration.
-#' @export
-#' @importFrom rlang as_function
-progressively <- function(f, p = NULL) {
-  if (is.null(p)) p <- function(...) NULL
-  p <- rlang::as_function(p)
-  f <- rlang::as_function(f)
-  function(...) {
-    on.exit(p())
-    f(...)
-  }
-}
 
 #' Get Proportion Through Day
 #'
@@ -210,7 +190,7 @@ harmonic_mean <- function(x, y) {
     cli::cli_abort("Both x and y must be numeric vectors.")
   }
 
-  result <- ifelse(x == 0 | y == 0, NA_real_, 2 / (1 / x + 1 / y))
+  result <- ifelse(x <= 0 | y <= 0, NA_real_, 2 / (1 / x + 1 / y))
   return(result)
 }
 
