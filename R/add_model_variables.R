@@ -217,22 +217,53 @@ add_shot_vars <- function(df) {
 #' @importFrom stats predict model.matrix
 #' @importFrom utils data
 get_epv_preds <- function(df) {
-  # Get model from centralized registry with fallback
-  ep_model <- get_model_safe("ep_model", fallback_to_data = TRUE)
+  # Try to get model from centralized registry, fall back to data loading
+  ep_model <- tryCatch({
+    if (exists("get_model_safe")) {
+      get_model_safe("ep_model", fallback_to_data = TRUE)
+    } else {
+      NULL
+    }
+  }, error = function(e) NULL)
+  
+  # Fall back to utils::data loading
+  if (is.null(ep_model)) {
+    ep_model <- NULL
+    tryCatch({
+      utils::data("ep_model", package = "torp", envir = environment())
+    }, error = function(e) {
+      cli::cli_abort("EP model not available. Please ensure models are properly loaded or run model training.")
+    })
+  }
   
   if (is.null(ep_model)) {
     cli::cli_abort("EP model not available. Please ensure models are properly loaded.")
   }
   
   # Log prediction event
-  input_hash <- digest::digest(df, algo = "md5")
+  input_hash <- paste0("ep_", nrow(df), "_", ncol(df), "_", as.integer(Sys.time()))
   log_prediction_event("ep_model", input_hash, nrow(df))
   
   tryCatch({
+    # Detect model type and use appropriate prediction method
+    model_data <- df %>% select_epv_model_vars()
+    
+    if (inherits(ep_model, "xgb.Booster")) {
+      # XGBoost model - use xgboost::predict
+      if (!requireNamespace("xgboost", quietly = TRUE)) {
+        stop("xgboost package required but not available")
+      }
+      model_matrix <- stats::model.matrix(~ . + 0, data = model_data)
+      preds_raw <- xgboost::predict.xgb.Booster(ep_model, model_matrix)
+    } else {
+      # GAM or other model types - use stats::predict
+      model_matrix <- stats::model.matrix(~ . + 0, data = model_data)
+      preds_raw <- stats::predict(ep_model, model_matrix)
+    }
+    
+    # Convert to proper format
     preds <- as.data.frame(
-      matrix(stats::predict(ep_model, stats::model.matrix(~ . + 0, data = df %>% select_epv_model_vars())),
-        ncol = 5, byrow = TRUE
-      )
+      matrix(preds_raw, ncol = 5, byrow = TRUE)
     )
     colnames(preds) <- c("opp_goal", "opp_behind", "behind", "goal", "no_score")
     
@@ -247,7 +278,7 @@ get_epv_preds <- function(df) {
     return(preds)
     
   }, error = function(e) {
-    logger::log_error("EP model prediction failed", error = e$message, input_hash = input_hash)
+    warning(paste("EP model prediction failed:", e$message, "- Input hash:", input_hash))
     cli::cli_abort("EP model prediction failed: {e$message}")
   })
 }
@@ -272,6 +303,7 @@ get_wp_preds <- function(df) {
       ncol = 1, byrow = TRUE
     )
   )
+  colnames(preds) <- "wp"
 
   return(preds)
 }

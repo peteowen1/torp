@@ -2,9 +2,6 @@
 # ========================
 # Comprehensive data validation and quality assurance for TORP models
 
-library(dplyr)
-library(assertthat)
-library(validate)
 
 #' AFL Data Schema Definitions
 #'
@@ -89,7 +86,7 @@ get_afl_data_schemas <- function() {
 #' @param strict Logical, whether to fail on schema violations (default: TRUE)
 #' @return List containing validation results
 #' @export
-#' @importFrom assertthat assert_that is.count
+#' @importFrom dplyr mutate_all group_by_all summarise arrange desc group_by filter
 validate_data_schema <- function(data, schema_name, strict = TRUE) {
   
   schemas <- get_afl_data_schemas()
@@ -159,7 +156,7 @@ validate_data_schema <- function(data, schema_name, strict = TRUE) {
                 paste(issues, collapse = "\n")))
     }
   } else {
-    logger::log_info("Data validation passed", schema = schema_name, n_rows = nrow(data))
+    message(paste("Data validation passed for schema", schema_name, "with", nrow(data), "rows"))
   }
   
   return(list(
@@ -211,6 +208,9 @@ validate_data_quality <- function(data, data_type = "unknown") {
     quality_issues <- c(quality_issues, validate_chains_quality(data))
   } else if (data_type == "model") {
     quality_issues <- c(quality_issues, validate_model_data_quality(data))
+  } else {
+    # Generic quality checks for other data types
+    quality_issues <- c(quality_issues, validate_generic_data_quality(data))
   }
   
   # Outlier detection for numeric columns
@@ -340,15 +340,15 @@ detect_outliers <- function(data) {
     z_outliers <- sum(z_scores > 3, na.rm = TRUE)
     
     outlier_results[[col_name]] <- list(
-      mild_outliers_iqr = mild_outliers,
-      extreme_outliers_iqr = extreme_outliers,
-      z_score_outliers = z_outliers,
-      outlier_rate = mild_outliers / length(col_data)
+      mild_outliers_iqr = as.numeric(mild_outliers),
+      extreme_outliers_iqr = as.numeric(extreme_outliers),
+      z_score_outliers = as.numeric(z_outliers),
+      outlier_rate = as.numeric(mild_outliers / length(col_data))
     )
   }
   
   # Summary statistics
-  total_extreme <- sum(sapply(outlier_results, function(x) x$extreme_outliers_iqr))
+  total_extreme <- sum(vapply(outlier_results, function(x) as.numeric(x$extreme_outliers_iqr), FUN.VALUE = numeric(1)))
   
   list(
     column_results = outlier_results,
@@ -458,6 +458,33 @@ validate_model_data_quality <- function(data) {
   return(issues)
 }
 
+#' Validate Generic Data Quality
+#'
+#' Generic quality validation for any data type
+#'
+#' @param data Generic dataframe
+#' @return List of generic data quality issues
+#' @keywords internal
+validate_generic_data_quality <- function(data) {
+  
+  issues <- list()
+  
+  # Check for constant columns (zero variance)
+  numeric_cols <- sapply(data, is.numeric)
+  if (any(numeric_cols)) {
+    constant_cols <- sapply(data[, numeric_cols, drop = FALSE], function(x) {
+      var(x, na.rm = TRUE) == 0 | all(is.na(x))
+    })
+    
+    if (any(constant_cols)) {
+      issues$constant_columns <- paste("Zero-variance columns:", 
+                                      paste(names(constant_cols)[constant_cols], collapse = ", "))
+    }
+  }
+  
+  return(issues)
+}
+
 #' Calculate Overall Data Quality Score
 #'
 #' Calculates a composite quality score based on various quality metrics
@@ -496,27 +523,40 @@ calculate_quality_score <- function(data, issues) {
 #'
 #' Checks if data is recent enough for reliable predictions
 #'
-#' @param data Dataframe with timestamp information
-#' @param timestamp_col Name of timestamp column
-#' @param max_age_days Maximum acceptable age in days
+#' @param data_timestamp Timestamp of the most recent data (can be dataframe with timestamp column or direct timestamp)
+#' @param timestamp_col Name of timestamp column if data_timestamp is a dataframe
+#' @param max_age_days Maximum acceptable age in days (default: 7, overrides hours if provided)
+#' @param max_age_hours Maximum acceptable age in hours (default: 24, used if max_age_days not provided)
 #' @return Logical indicating if data is fresh enough
 #' @export
-validate_data_freshness <- function(data, timestamp_col = "utc_start_time", max_age_days = 7) {
+validate_data_freshness <- function(data_timestamp, timestamp_col = "utc_start_time", max_age_days = NULL, max_age_hours = 24) {
   
-  if (!timestamp_col %in% names(data)) {
-    warning(paste("Timestamp column", timestamp_col, "not found"))
-    return(FALSE)
+  # Determine the time threshold - days takes precedence over hours
+  if (!is.null(max_age_days)) {
+    max_age_hours <- max_age_days * 24
   }
   
-  timestamps <- as.POSIXct(data[[timestamp_col]])
-  latest_data <- max(timestamps, na.rm = TRUE)
-  age_days <- as.numeric(difftime(Sys.time(), latest_data, units = "days"))
+  # Handle different input types
+  if (is.data.frame(data_timestamp)) {
+    # If data_timestamp is a dataframe, extract timestamp column
+    if (!timestamp_col %in% names(data_timestamp)) {
+      warning(paste("Timestamp column", timestamp_col, "not found"))
+      return(FALSE)
+    }
+    
+    timestamps <- as.POSIXct(data_timestamp[[timestamp_col]])
+    latest_data <- max(timestamps, na.rm = TRUE)
+  } else {
+    # If data_timestamp is already a timestamp
+    latest_data <- as.POSIXct(data_timestamp)
+  }
   
-  is_fresh <- age_days <= max_age_days
+  age_hours <- as.numeric(difftime(Sys.time(), latest_data, units = "hours"))
+  is_fresh <- age_hours <= max_age_hours
   
   if (!is_fresh) {
     log_data_quality("data_freshness", 
-                     paste("Data is", round(age_days, 1), "days old, exceeds maximum of", max_age_days),
+                     paste("Data is", round(age_hours, 1), "hours old, exceeds maximum of", max_age_hours),
                      "HIGH")
   }
   

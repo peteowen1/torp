@@ -2,9 +2,6 @@
 # ===============================================
 # Implementations of baseline models for proper model evaluation and comparison
 
-library(dplyr)
-library(mgcv)
-library(glm2)
 
 #' Naive Baseline Model for Win Probability
 #'
@@ -21,12 +18,28 @@ predict_wp_naive <- function(data) {
 #'
 #' Simple logistic regression using only score difference
 #'
-#' @param train_data Training data with 'points_diff' and 'label_wp'
-#' @param pred_data Data to make predictions on
+#' @param data Data with 'points_diff' column (if only one parameter provided, uses internal training)
+#' @param pred_data Optional - data to make predictions on
 #' @return Vector of win probability predictions
 #' @export
 #' @importFrom stats glm predict
-predict_wp_score_only <- function(train_data, pred_data) {
+predict_wp_score_only <- function(data, pred_data = NULL) {
+  
+  # If only one parameter provided, use simple heuristic
+  if (is.null(pred_data)) {
+    # Simple score-based prediction without training
+    if (!"points_diff" %in% names(data)) {
+      stop("Data must contain 'points_diff' column")
+    }
+    
+    # Simple logistic transformation of points difference
+    # Roughly: WP = 1 / (1 + exp(-points_diff/20))
+    predictions <- 1 / (1 + exp(-data$points_diff / 20))
+    return(pmax(0.001, pmin(0.999, predictions)))
+  }
+  
+  # Original two-parameter version for when training data is provided
+  train_data <- data
   
   # Fit simple logistic regression
   model <- stats::glm(
@@ -50,6 +63,7 @@ predict_wp_score_only <- function(train_data, pred_data) {
 #' @param pred_data Data to make predictions on
 #' @return Vector of win probability predictions
 #' @export
+#' @importFrom dplyr mutate
 predict_wp_time_score <- function(train_data, pred_data) {
   
   # Create time remaining feature if not present
@@ -113,12 +127,36 @@ predict_wp_expected_points <- function(train_data, pred_data) {
 #'
 #' Generalized Additive Model baseline with smooth terms
 #'
-#' @param train_data Training data
-#' @param pred_data Data to make predictions on
+#' @param data Data to make predictions on (if only one parameter provided)
+#' @param pred_data Optional - data to make predictions on
 #' @return Vector of win probability predictions  
 #' @export
 #' @importFrom mgcv gam
-predict_wp_gam_baseline <- function(train_data, pred_data) {
+#' @importFrom dplyr mutate
+predict_wp_gam_baseline <- function(data, pred_data = NULL) {
+  
+  # If only one parameter provided, use simple heuristic
+  if (is.null(pred_data)) {
+    # Simple GAM-like prediction without training
+    if (!all(c("points_diff", "period", "period_seconds") %in% names(data))) {
+      stop("Data must contain 'points_diff', 'period', and 'period_seconds' columns")
+    }
+    
+    # Calculate time remaining
+    time_remaining <- (4 - data$period) * 2000 + (2000 - data$period_seconds)
+    time_remaining_pct <- pmax(0, pmin(1, time_remaining / 8000))
+    
+    # Simple non-linear combination of score and time
+    score_effect <- 1 / (1 + exp(-data$points_diff / 15))
+    time_effect <- 0.5 + 0.2 * (0.5 - time_remaining_pct)
+    
+    # Combine effects
+    predictions <- 0.7 * score_effect + 0.3 * time_effect
+    return(pmax(0.001, pmin(0.999, predictions)))
+  }
+  
+  # Original two-parameter version
+  train_data <- data
   
   # Prepare time features if needed
   if (!"time_remaining_pct" %in% names(train_data)) {
@@ -162,6 +200,7 @@ predict_wp_gam_baseline <- function(train_data, pred_data) {
 #' @param include_gam Logical, whether to include GAM baseline (can be slow)
 #' @return Dataframe with comparison results
 #' @export
+#' @importFrom dplyr mutate row_number group_by summarise filter
 compare_baseline_models <- function(train_data, test_data, main_model_preds, include_gam = FALSE) {
   
   # Ensure we have the target variable
@@ -368,12 +407,15 @@ assess_model_calibration <- function(actual, predicted, n_bins = 10) {
   brier_decomp_check <- reliability - resolution + uncertainty
   
   # Calibration quality assessment
-  cal_quality <- case_when(
+  cal_quality <- dplyr::case_when(
     abs(cal_slope - 1) <= 0.05 & abs(cal_intercept) <= 0.05 ~ "Excellent",
     abs(cal_slope - 1) <= 0.1 & abs(cal_intercept) <= 0.1 ~ "Good", 
     abs(cal_slope - 1) <= 0.2 & abs(cal_intercept) <= 0.2 ~ "Fair",
     TRUE ~ "Poor"
   )
+  
+  # Calibration in the large (overall calibration)
+  calibration_in_large <- abs(mean(predicted) - mean(actual))
   
   return(list(
     # Basic calibration metrics
@@ -381,6 +423,7 @@ assess_model_calibration <- function(actual, predicted, n_bins = 10) {
     calibration_intercept = cal_intercept,
     calibration_r2 = cal_r2,
     calibration_quality = cal_quality,
+    calibration_in_large = calibration_in_large,
     
     # Statistical tests
     hosmer_lemeshow_stat = hl_stat,
@@ -410,6 +453,7 @@ assess_model_calibration <- function(actual, predicted, n_bins = 10) {
 #' @param calibration_results Results from assess_model_calibration
 #' @return ggplot2-ready dataframe for calibration plots
 #' @export
+#' @importFrom dplyr mutate
 prepare_calibration_plot <- function(calibration_results) {
   
   if (is.null(calibration_results$calibration_data)) {
@@ -497,4 +541,173 @@ create_model_comparison_report <- function(comparison_results, calibration_resul
   }
   
   return(report)
+}
+
+#' Simple Time-Only Win Probability Prediction
+#'
+#' Predicts win probability based only on time remaining in the game
+#'
+#' @param data Input data with period and period_seconds columns
+#' @return Vector of win probability predictions
+#' @export
+predict_wp_time_only <- function(data) {
+  # Calculate time remaining
+  time_remaining <- (4 - data$period) * 2000 + (2000 - data$period_seconds)
+  time_remaining_pct <- pmax(0, pmin(1, time_remaining / 8000))
+  
+  # Simple logistic model based on time remaining
+  # More time remaining = closer to 50% (more uncertain)
+  # Less time remaining = more extreme (closer to current state)
+  predictions <- 0.5 + 0.3 * (0.5 - time_remaining_pct)
+  
+  # Bound predictions
+  pmax(0.001, pmin(0.999, predictions))
+}
+
+#' Ensemble Baseline Win Probability Prediction
+#'
+#' Combines multiple baseline models using simple averaging
+#'
+#' @param data Input data 
+#' @return Vector of ensemble win probability predictions
+#' @export
+predict_wp_ensemble_baseline <- function(data) {
+  # Combine different baseline approaches
+  naive_pred <- predict_wp_naive(data)
+  
+  # If we have the required columns, use more sophisticated baselines
+  if (all(c("points_diff", "period", "period_seconds") %in% names(data))) {
+    time_pred <- predict_wp_time_only(data)
+    
+    # Simple ensemble: average of naive and time-based
+    ensemble_pred <- (naive_pred + time_pred) / 2
+  } else {
+    # Fall back to naive if columns missing
+    ensemble_pred <- naive_pred
+  }
+  
+  # Bound predictions
+  pmax(0.001, pmin(0.999, ensemble_pred))
+}
+
+#' Evaluate Multiple Baseline Models
+#'
+#' Comprehensive evaluation of baseline models against actual outcomes
+#'
+#' @param actual Vector of actual binary outcomes
+#' @param data Input data for making predictions
+#' @return Data frame with model evaluation results
+#' @export
+#' @importFrom dplyr arrange mutate
+evaluate_baseline_models <- function(actual, data) {
+  results <- data.frame()
+  
+  # Naive baseline
+  naive_preds <- predict_wp_naive(data)
+  naive_auc <- tryCatch({
+    calculate_auc_base(actual, naive_preds)
+  }, error = function(e) NA)
+  
+  results <- rbind(results, data.frame(
+    model_name = "Naive",
+    auc = naive_auc,
+    log_loss = calculate_log_loss(actual, naive_preds),
+    brier_score = calculate_brier_score(actual, naive_preds)
+  ))
+  
+  # Time-only baseline
+  if (all(c("period", "period_seconds") %in% names(data))) {
+    time_preds <- predict_wp_time_only(data)
+    time_auc <- tryCatch({
+      calculate_auc_base(actual, time_preds)
+    }, error = function(e) NA)
+    
+    results <- rbind(results, data.frame(
+      model_name = "Time Only",
+      auc = time_auc,
+      log_loss = calculate_log_loss(actual, time_preds),
+      brier_score = calculate_brier_score(actual, time_preds)
+    ))
+  }
+  
+  # Ensemble baseline
+  ensemble_preds <- predict_wp_ensemble_baseline(data)
+  ensemble_auc <- tryCatch({
+    calculate_auc_base(actual, ensemble_preds)
+  }, error = function(e) NA)
+  
+  results <- rbind(results, data.frame(
+    model_name = "Ensemble",
+    auc = ensemble_auc,
+    log_loss = calculate_log_loss(actual, ensemble_preds),
+    brier_score = calculate_brier_score(actual, ensemble_preds)
+  ))
+  
+  # Sort by AUC descending
+  results %>% dplyr::arrange(desc(auc))
+}
+
+#' Simple Log Loss Calculation
+#'
+#' @param actual Vector of actual binary outcomes
+#' @param predicted Vector of predicted probabilities
+#' @return Numeric log loss value
+#' @keywords internal
+calculate_log_loss <- function(actual, predicted) {
+  # Bound predictions to avoid log(0)
+  predicted <- pmax(1e-15, pmin(1 - 1e-15, predicted))
+  -mean(actual * log(predicted) + (1 - actual) * log(1 - predicted))
+}
+
+#' Simple Brier Score Calculation
+#'
+#' @param actual Vector of actual binary outcomes
+#' @param predicted Vector of predicted probabilities
+#' @return Numeric Brier score value
+#' @keywords internal
+calculate_brier_score <- function(actual, predicted) {
+  mean((predicted - actual)^2)
+}
+
+#' Create Calibration Plot Data
+#'
+#' Creates data structure for plotting model calibration
+#'
+#' @param actual Vector of actual binary outcomes
+#' @param predicted Vector of predicted probabilities  
+#' @param n_bins Number of bins for calibration plot
+#' @return List with plot data and statistics
+#' @export
+#' @importFrom dplyr group_by summarise filter
+create_calibration_plot <- function(actual, predicted, n_bins = 10) {
+  # Input validation
+  if (length(actual) != length(predicted)) {
+    stop("Actual and predicted vectors must have same length")
+  }
+  
+  # Create bins
+  pred_bins <- cut(predicted, 
+                   breaks = quantile(predicted, probs = seq(0, 1, length.out = n_bins + 1)),
+                   include.lowest = TRUE)
+  
+  # Calculate bin statistics
+  plot_data <- data.frame(
+    actual = actual,
+    predicted = predicted,
+    bin = pred_bins
+  ) %>%
+    dplyr::group_by(bin) %>%
+    dplyr::summarise(
+      n = dplyr::n(),
+      mean_predicted = mean(predicted),
+      mean_actual = mean(actual),
+      .groups = "drop"
+    ) %>%
+    dplyr::filter(n >= 5)  # Only use bins with sufficient data
+  
+  return(list(
+    plot_data = plot_data,
+    n_bins = nrow(plot_data),
+    total_n = length(actual)
+  ))
 }

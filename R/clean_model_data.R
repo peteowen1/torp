@@ -41,6 +41,7 @@ clean_model_data_wp <- function(df) {
 #' Select EPV Model Variables
 #'
 #' @param df A dataframe containing cleaned play-by-play data.
+#' @param label Logical, whether to include the label variable for training.
 #' @return A dataframe with selected variables for EPV modeling.
 #' @export
 select_epv_model_vars <- function(df, label = FALSE) {
@@ -67,10 +68,10 @@ select_epv_model_vars <- function(df, label = FALSE) {
 select_wp_model_vars <- function(df) {
   df %>%
     dplyr::select(
-      .data$total_seconds, .data$shot_row, .data$home, .data$points_diff,
-      .data$xpoints_diff, .data$pos_lead_prob, .data$time_left_scaler, .data$diff_time_ratio,
-      .data$play_type_handball, .data$play_type_kick, .data$play_type_reception, .data$phase_of_play_handball_received,
-      .data$phase_of_play_hard_ball, .data$phase_of_play_loose_ball, .data$phase_of_play_set_shot
+      "total_seconds", "shot_row", "home", "points_diff",
+      "xpoints_diff", "pos_lead_prob", "time_left_scaler", "diff_time_ratio",
+      "play_type_handball", "play_type_kick", "play_type_reception", "phase_of_play_handball_received",
+      "phase_of_play_hard_ball", "phase_of_play_loose_ball", "phase_of_play_set_shot"
     )
 }
 
@@ -162,7 +163,7 @@ clean_shots_data <- function(df) {
       player_id_shot = as.factor(tidyr::replace_na(.data$player_id_shot, "Other")),
       player_name_shot = as.factor(tidyr::replace_na(.data$player_name_shot, "Other"))
     ) %>%
-    dplyr::select(-.data$side_b, -.data$side_c)
+    dplyr::select(-"side_b", -"side_c")
 }
 
 #' Select Shot Model Variables
@@ -173,9 +174,9 @@ clean_shots_data <- function(df) {
 select_shot_model_vars <- function(df) {
   df %>%
     dplyr::select(
-      .data$goal_x, .data$abs_y, .data$angle, .data$distance,
-      .data$play_type, .data$phase_of_play,
-      .data$player_id_shot, .data$player_name_shot
+      "goal_x", "abs_y", "angle", "distance",
+      "play_type", "phase_of_play",
+      "player_id_shot", "player_name_shot"
     )
 }
 

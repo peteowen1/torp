@@ -14,7 +14,7 @@ if (!dir.exists(test_temp_dir)) {
 }
 
 # Mock data repository location for testing
-options(torp.data.repo = "test-repo")
+options(torp.data.repo = "torpdata")
 
 # Suppress specific warnings that are expected during testing
 suppressWarnings({
