@@ -73,14 +73,14 @@ load_chains <- function(seasons = get_afl_season(), rounds = get_afl_week()) {
     rounds <- validate_rounds(rounds)
 
     urls <- generate_urls("chains-data", "chains_data", seasons, rounds)
-    
+
     if (length(urls) == 0) {
       cli::cli_warn("No data URLs generated for seasons {paste(seasons, collapse = ', ')} and rounds {paste(rounds, collapse = ', ')}")
       return(data.table::data.table())
     }
 
     out <- load_from_url(urls, seasons = seasons, rounds = rounds)
-    
+
     if (nrow(out) == 0) {
       cli::cli_warn("No chains data found for the specified seasons and rounds")
     }
@@ -355,16 +355,16 @@ rds_from_url <- function(url) {
   if (!is.character(url) || length(url) != 1 || nchar(url) == 0) {
     cli::cli_abort("URL must be a single non-empty character string")
   }
-  
+
   if (!grepl("^https?://", url)) {
     cli::cli_abort("URL must start with http:// or https://")
   }
-  
+
   # Check internet connectivity
   if (!check_internet_connection()) {
     cli::cli_abort("No internet connection available")
   }
-  
+
   con <- NULL
   tryCatch({
     con <- url(url)
@@ -373,21 +373,21 @@ rds_from_url <- function(url) {
         try(close(con), silent = TRUE)
       }
     })
-    
+
     load <- readRDS(con)
-    
+
     # Validate that we got actual data
     if (is.null(load)) {
       cli::cli_warn("No data returned from {.url {url}}")
       return(data.table::data.table())
     }
-    
+
     data.table::setDT(load)
     return(load)
-    
+
   }, error = function(e) {
     error_msg <- conditionMessage(e)
-    
+
     if (grepl("404|Not Found", error_msg, ignore.case = TRUE)) {
       cli::cli_warn("Data file not found at {.url {url}} - file may not exist for this season/round combination")
     } else if (grepl("timeout|timed out", error_msg, ignore.case = TRUE)) {
@@ -397,7 +397,7 @@ rds_from_url <- function(url) {
     } else {
       cli::cli_warn("Failed to load data from {.url {url}}: {error_msg}")
     }
-    
+
     return(data.table::data.table())
   })
 }
@@ -412,18 +412,6 @@ rds_from_url <- function(url) {
 #' @return Character string of the repository in format "owner/repo"
 #' @keywords internal
 get_torp_data_repo <- function() {
-  # Check environment variable first
-  env_repo <- Sys.getenv("TORP_DATA_REPO")
-  if (nchar(env_repo) > 0) {
-    return(env_repo)
-  }
-  
-  # Check package option
-  option_repo <- getOption("torp.data.repo")
-  if (!is.null(option_repo)) {
-    return(option_repo)
-  }
-  
   # Default repository
   return("peteowen1/torpdata")
 }
@@ -438,11 +426,11 @@ set_torp_data_repo <- function(repo) {
   if (!is.character(repo) || length(repo) != 1 || nchar(repo) == 0) {
     cli::cli_abort("Repository must be a single non-empty character string")
   }
-  
+
   if (!grepl("^[^/]+/[^/]+$", repo)) {
     cli::cli_abort("Repository must be in format 'owner/repo'")
   }
-  
+
   options(torp.data.repo = repo)
   cli::cli_inform("TORP data repository set to: {repo}")
 }
@@ -476,7 +464,7 @@ validate_rounds <- function(rounds) {
   if (!is.numeric(rounds)) {
     cli::cli_abort("Rounds must be numeric values or TRUE")
   }
-  
+
   invalid_rounds <- rounds[rounds < 0 | rounds > 28]
   if (length(invalid_rounds) > 0) {
     cli::cli_abort("Invalid round numbers: {paste(invalid_rounds, collapse = ', ')}. Rounds must be between 0 and 28")
@@ -497,14 +485,14 @@ validate_seasons <- function(seasons) {
   if (!is.numeric(seasons)) {
     cli::cli_abort("Seasons must be numeric values or TRUE")
   }
-  
+
   current_season <- tryCatch({
     get_afl_season()
   }, error = function(e) {
     cli::cli_warn("Could not determine current AFL season, using 2025 as default")
     2025
   })
-  
+
   invalid_seasons <- seasons[seasons < 2021 | seasons > current_season]
   if (length(invalid_seasons) > 0) {
     cli::cli_abort("Invalid season years: {paste(invalid_seasons, collapse = ', ')}. Seasons must be between 2021 and {current_season}")

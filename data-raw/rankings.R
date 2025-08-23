@@ -7,7 +7,14 @@ url <- "https://www.afl.com.au/matches/injury-list"
 inj_df <- read_html(url) %>%
   html_table() %>%
   list_rbind() %>%
-  janitor::clean_names()
+  janitor::clean_names() %>%
+  mutate(
+    player = case_match(
+      player,
+      "Cam Zurhaar" ~ "Cameron Zurhaar",
+      .default = player
+    )
+  )
 
 week_teams <- load_teams() %>% filter(round.roundNumber == get_afl_week("next"))
 #
@@ -114,5 +121,9 @@ cal_plot_logistic(team_mdl_df %>% filter(!is.na(win), !is.na(pred_win)),
   truth = win,
   estimate = pred_win
 )
+
+inj_df %>%
+  filter(grepl("^Updated:", player)) %>%
+  distinct(player)
 
 week_gms

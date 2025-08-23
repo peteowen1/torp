@@ -1,7 +1,7 @@
 library(devtools)
 library(fitzRoy)
 library(tidyverse)
-library(furrr)
+# library(furrr)
 devtools::load_all()
 
 torp_ratings()
@@ -16,7 +16,7 @@ get_torp_df <- function(year, rounds) {
 }
 
 # Set up parallel processing
-plan(multisession, workers = parallelly::availableCores() - 2)
+# plan(multisession, workers = parallelly::availableCores() - 2)
 
 tictoc::tic() # Start timing
 

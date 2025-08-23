@@ -214,6 +214,38 @@ harmonic_mean <- function(x, y) {
   return(result)
 }
 
+
+#' Normalize Player Names
+#'
+#' Converts input character strings into a standardized format by:
+#' \itemize{
+#'   \item Converting accented characters to ASCII (e.g., "José" → "Jose")
+#'   \item Lowercasing all text
+#'   \item Removing non-alphabetic characters (keeping spaces)
+#'   \item Collapsing multiple spaces into a single space
+#' }
+#'
+#' Useful for preparing player names (or similar text fields) before
+#' joining tables where names may not match exactly due to case,
+#' punctuation, or diacritics.
+#'
+#' @param x A character vector of names (or other strings).
+#'
+#' @return A character vector with normalized names.
+#' @examples
+#' norm_name(c("Cam Zurhaar", "Cameron   Zúrhär", "  José López "))
+#' # Returns: "cam zurhaar" "cameron zurhar" "jose lopez"
+#'
+#' @seealso [stringi::stri_trans_general()], [stringr::str_to_lower()]
+#' @export
+norm_name <- function(x) {
+  x |>
+    stringi::stri_trans_general("Latin-ASCII") |>
+    stringr::str_to_lower() |>
+    stringr::str_replace_all("[^a-z ]", " ") |>
+    stringr::str_squish()
+}
+
 # Add Globals Variables
 utils::globalVariables(c(".data"))
 
