@@ -309,11 +309,16 @@ team_dist_df <-
     ~ geosphere::distHaversine(c(..1, ..2), c(..3, ..4))
   )) %>%
   dplyr::mutate(
+    
     log_dist = log(distance + 10000),
+    log_dist = replace_na(log_dist, 16) ### FIX THIS LATER PLZ
+    ,
     log_dist = replace_na(log_dist,16)
     ) %>% # Add 10km as the minimum travel
   dplyr::left_join(ground_prop) %>%
-  dplyr::mutate(familiarity = replace_na(familiarity, 0))
+  dplyr::mutate(
+    familiarity = replace_na(familiarity, 0)
+    )
 
 ## Days Rest ----
 days_rest <- fix_df %>%

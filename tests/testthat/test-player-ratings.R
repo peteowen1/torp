@@ -65,15 +65,20 @@ test_that("player_game_ratings function works", {
   expect_true(exists("player_game_ratings"))
   
   # Test parameter validation
-  expect_error(player_game_ratings(season_val = "invalid"))
-  expect_error(player_game_ratings(round_num = "invalid"))
+  expect_error(player_game_ratings(season_val = "invalid"), "season_val must be numeric")
+  expect_error(player_game_ratings(round_num = "invalid"), "round_num must be numeric")
+  expect_error(player_game_ratings(season_val = 1900), "season_val must be between 1990 and 2030")
+  expect_error(player_game_ratings(round_num = 50), "round_num must be between 0 and 30")
 })
 
 test_that("player_season_ratings function works", {
   expect_true(exists("player_season_ratings"))
   
   # Test parameter validation  
-  expect_error(player_season_ratings(season_val = "invalid"))
+  expect_error(player_season_ratings(season_val = "invalid"), "season_val must be numeric")
+  expect_error(player_season_ratings(season_val = 1900), "season_val must be between 1990 and 2030")
+  expect_error(player_season_ratings(round_num = "invalid"), "round_num must be numeric")
+  expect_error(player_season_ratings(round_num = 50), "round_num must be between 0 and 30")
 })
 
 test_that("filter_game_data helper function works", {

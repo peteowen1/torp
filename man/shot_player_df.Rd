@@ -3,30 +3,22 @@
 \docType{data}
 \name{shot_player_df}
 \alias{shot_player_df}
-\title{Individual Shot Event Data}
+\title{Shot Player Reference Data}
 \format{
-A data frame with individual shot events:
+A data frame with shot player references:
 \describe{
-\item{player_id}{Unique identifier for the shooting player}
-\item{player_name}{Name of the shooting player}
-\item{match_id}{Unique identifier for the match}
-\item{x}{X-coordinate of shot location (meters from goal line)}
-\item{y}{Y-coordinate of shot location (meters from center)}
-\item{shot_distance}{Distance from goal in meters}
-\item{shot_angle}{Angle to goal in degrees}
-\item{outcome}{Shot outcome: 'goal', 'behind', 'miss'}
-\item{period}{Quarter/period of the shot}
-\item{time_remaining}{Time remaining in period (seconds)}
+\item{player_id_shot}{Unique identifier for the shooting player}
+\item{player_name_shot}{Name of the shooting player}
 }
 }
 \source{
-AFL match tracking data with shot locations
+AFL player reference data for shot analysis
 }
 \usage{
 shot_player_df
 }
 \description{
-Detailed tracking data for individual shot attempts including location,
-context, and outcome information.
+Reference dataset containing player identifiers and names for
+linking shot events to specific players.
 }
 \keyword{datasets}

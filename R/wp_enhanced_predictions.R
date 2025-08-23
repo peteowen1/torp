@@ -233,7 +233,7 @@ get_wp_preds_enhanced <- function(df) {
     feature_matrix <- feature_matrix[, expected_features, drop = FALSE]
     
     # Generate predictions from ensemble components
-    pred_xgb <- predict(ensemble_model$xgb_model, feature_matrix)
+    pred_xgb <- xgboost::predict.xgb.Booster(ensemble_model$xgb_model, feature_matrix)
     
     # Handle other models if available
     if (!is.null(ensemble_model$lgb_model)) {

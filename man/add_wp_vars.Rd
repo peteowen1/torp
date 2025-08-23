@@ -2,16 +2,19 @@
 % Please edit documentation in R/add_model_variables.R
 \name{add_wp_vars}
 \alias{add_wp_vars}
-\title{Add Win Probability Variables}
+\title{Add Win Probability Variables (Enhanced)}
 \usage{
-add_wp_vars(df)
+add_wp_vars(df, use_enhanced = TRUE)
 }
 \arguments{
 \item{df}{A dataframe containing play-by-play data.}
+
+\item{use_enhanced}{Logical, whether to use the enhanced ensemble model (default TRUE).}
 }
 \value{
 A dataframe with additional win probability-related variables.
 }
 \description{
-This function adds win probability-related variables to the input dataframe.
+This function adds enhanced win probability (WP) and win probability added (WPA) variables
+using an ensemble model approach with sophisticated feature engineering.
 }

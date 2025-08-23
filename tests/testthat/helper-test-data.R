@@ -7,21 +7,54 @@ create_mock_pbp_data <- function(n_rows = 100) {
     match_id = rep(paste0("CD_M2024014", sprintf("%02d", 1:5)), length.out = n_rows),
     period = sample(1:4, n_rows, replace = TRUE),
     period_seconds = sample(1:1800, n_rows, replace = TRUE),
+    total_seconds = sample(1:7200, n_rows, replace = TRUE), # Add total_seconds
     team_id = sample(1:18, n_rows, replace = TRUE),
     home_team_id = sample(1:18, n_rows, replace = TRUE),
     away_team_id = sample(1:18, n_rows, replace = TRUE),
+    team = sample(c("Adelaide Crows", "Brisbane Lions", "Carlton", "Collingwood"), n_rows, replace = TRUE),
+    utc_start_time = as.Date("2024-04-01") + sample(0:100, n_rows, replace = TRUE),
+    round_number = sample(1:24, n_rows, replace = TRUE),
     home_points = sample(0:150, n_rows, replace = TRUE),
     away_points = sample(0:150, n_rows, replace = TRUE),
+    shot_row = sample(0:1, n_rows, replace = TRUE, prob = c(0.95, 0.05)), # Add shot_row
+    home = sample(0:1, n_rows, replace = TRUE), # Add home
+    points_diff = sample(-50:50, n_rows, replace = TRUE), # Add points_diff
+    xpoints_diff = runif(n_rows, -10, 10), # Add xpoints_diff
+    pos_lead_prob = runif(n_rows, 0, 1), # Add pos_lead_prob
+    time_left_scaler = runif(n_rows, 0.5, 4), # Add time_left_scaler
+    diff_time_ratio = runif(n_rows, -100, 100), # Add diff_time_ratio
     x = runif(n_rows, -80, 80),
     y = runif(n_rows, -60, 60),
+    goal_x = runif(n_rows, 10, 80), # Add goal_x for EPV
+    lag_goal_x = runif(n_rows, 10, 80), # Add lag_goal_x for EPV
+    lag_goal_x5 = runif(n_rows, 10, 80), # Add lag_goal_x5 for EPV
+    lag_y = runif(n_rows, -60, 60), # Add lag_y for EPV
+    speed5 = runif(n_rows, -5, 10), # Add speed5 for EPV
+    exp_pts = runif(n_rows, -2, 2), # Add exp_pts for enhanced predictions
+    team_id_mdl = sample(1:18, n_rows, replace = TRUE), # Add team_id_mdl for enhanced predictions
     venue_length = rep(c(160, 165, 170), length.out = n_rows),
     throw_in = sample(0:1, n_rows, replace = TRUE, prob = c(0.9, 0.1)),
     description = sample(c("Kick", "Handball", "Mark", "Free For", "Centre Bounce"), 
                         n_rows, replace = TRUE),
+    lag_desc = sample(c("Kick", "Handball", "Mark", "Free For", "Centre Bounce"), 
+                     n_rows, replace = TRUE),
+    lead_desc = sample(c("Kick", "Handball", "Mark", "Free For", "Centre Bounce", "Out of Bounds"), 
+                      n_rows, replace = TRUE),
     player_name = paste0("Player_", sample(1:500, n_rows, replace = TRUE)),
+    player_name_given_name = paste0("First", sample(1:500, n_rows, replace = TRUE)),
+    player_name_surname = paste0("Last", sample(1:500, n_rows, replace = TRUE)),
     play_type = sample(c("handball", "kick", "reception"), n_rows, replace = TRUE),
     phase_of_play = sample(c("handball_received", "hard_ball", "loose_ball", "set_shot"), 
                           n_rows, replace = TRUE),
+    # Add dummy variables for play_type
+    play_type_handball = ifelse(sample(c("handball", "kick", "reception"), n_rows, replace = TRUE) == "handball", 1, 0),
+    play_type_kick = ifelse(sample(c("handball", "kick", "reception"), n_rows, replace = TRUE) == "kick", 1, 0),
+    play_type_reception = ifelse(sample(c("handball", "kick", "reception"), n_rows, replace = TRUE) == "reception", 1, 0),
+    # Add dummy variables for phase_of_play
+    phase_of_play_handball_received = ifelse(sample(c("handball_received", "hard_ball", "loose_ball", "set_shot"), n_rows, replace = TRUE) == "handball_received", 1, 0),
+    phase_of_play_hard_ball = ifelse(sample(c("handball_received", "hard_ball", "loose_ball", "set_shot"), n_rows, replace = TRUE) == "hard_ball", 1, 0),
+    phase_of_play_loose_ball = ifelse(sample(c("handball_received", "hard_ball", "loose_ball", "set_shot"), n_rows, replace = TRUE) == "loose_ball", 1, 0),
+    phase_of_play_set_shot = ifelse(sample(c("handball_received", "hard_ball", "loose_ball", "set_shot"), n_rows, replace = TRUE) == "set_shot", 1, 0),
     shot_at_goal = sample(c(TRUE, FALSE), n_rows, replace = TRUE, prob = c(0.1, 0.9)),
     points_shot = ifelse(sample(c(TRUE, FALSE), n_rows, replace = TRUE, prob = c(0.6, 0.4)), 6, 1),
     disposal = sample(c("effective", "ineffective", "clanger"), n_rows, replace = TRUE),

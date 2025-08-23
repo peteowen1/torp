@@ -21,6 +21,6 @@ should implement proper AFL season detection based on fixture data.
 # Get the current AFL season
 get_afl_season("current")
 
-# Get the next AFL season  
+# Get the next AFL season
 get_afl_season("next")
 }
