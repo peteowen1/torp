@@ -254,7 +254,7 @@ get_epv_preds <- function(df) {
         stop("xgboost package required but not available")
       }
       model_matrix <- stats::model.matrix(~ . + 0, data = model_data)
-      preds_raw <- xgboost::predict.xgb.Booster(ep_model, model_matrix)
+      preds_raw <- predict(ep_model, model_matrix)
     } else {
       # GAM or other model types - use stats::predict
       model_matrix <- stats::model.matrix(~ . + 0, data = model_data)
