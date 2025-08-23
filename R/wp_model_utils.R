@@ -130,7 +130,7 @@ check_wp_model_health <- function() {
   # Check data objects
   tryCatch({
     data_objects <- data(package = "torp")$results[, "Item"]
-    required_data <- c("ep_model", "fixtures", "results")
+    required_data <- c("ep_model")
     available_data <- intersect(required_data, data_objects)
     
     if (length(available_data) == length(required_data)) {

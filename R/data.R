@@ -7,84 +7,42 @@
 #' @source Created using data from AFL match tracking data via fitzRoy package
 "ep_model"
 
-#' AFL Match Fixtures and Schedule Information
-#'
-#' Contains match fixture data including team matchups, venues, and scheduling information.
-#'
-#' @format A data frame with match fixture variables:
-#' \describe{
-#'   \item{providerId}{Unique identifier for the match}
-#'   \item{date}{Date and time of the match}
-#'   \item{home.team.name}{Home team name}
-#'   \item{away.team.name}{Away team name}
-#'   \item{venue.name}{Venue where the match is played}
-#'   \item{round.name}{Round name/number}
-#'   \item{status}{Match status (scheduled, completed, etc.)}
-#' }
-#' @source AFL fixture data via fitzRoy package
-"fixtures"
 
 #' Player Shot Scoring Statistics
 #'
-#' Contains aggregated shot scoring statistics for individual players including
-#' accuracy metrics and shot location data.
+#' Contains statistical analysis results for player shot performance
+#' including effect sizes, confidence intervals, and grouping variables.
 #'
-#' @format A data frame with player shot statistics:
+#' @format A data frame with player shot analysis:
 #' \describe{
-#'   \item{player_id}{Unique identifier for each player}
-#'   \item{player_name}{Player's full name}
-#'   \item{shots_attempted}{Total number of shots attempted}
-#'   \item{goals_scored}{Number of goals scored}
-#'   \item{behinds_scored}{Number of behinds scored}
-#'   \item{shot_accuracy}{Percentage accuracy of shots}
-#'   \item{avg_shot_distance}{Average distance of shots from goal}
+#'   \item{effect}{Statistical effect measure}
+#'   \item{group}{Grouping category}
+#'   \item{group_var}{Grouping variable identifier}
+#'   \item{lower_2.5}{Lower bound of 95% confidence interval}
+#'   \item{n}{Sample size}
+#'   \item{player_name_shot}{Name of the shooting player}
+#'   \item{se}{Standard error}
+#'   \item{upper_97.5}{Upper bound of 95% confidence interval}
+#'   \item{value}{Statistical value/estimate}
 #' }
-#' @source Derived from AFL match tracking data
+#' @source Derived from AFL match tracking data statistical analysis
 "player_shot_score"
 
 #' Player Game-Level Statistics
 #'
 #' Comprehensive player statistics at the individual game level including
-#' traditional AFL statistics and advanced metrics.
+#' traditional AFL statistics, advanced metrics, team performance data,
+#' and calculated ratings from the TORP system.
 #'
-#' @format A data frame with player game statistics:
-#' \describe{
-#'   \item{player_id}{Unique identifier for each player}
-#'   \item{player_name}{Player's full name}
-#'   \item{match_id}{Unique identifier for each match}
-#'   \item{team}{Team the player represented}
-#'   \item{disposals}{Total disposals (kicks + handballs)}
-#'   \item{kicks}{Number of kicks}
-#'   \item{handballs}{Number of handballs}
-#'   \item{marks}{Number of marks taken}
-#'   \item{tackles}{Number of tackles made}
-#'   \item{goals}{Goals scored}
-#'   \item{behinds}{Behinds scored}
-#'   \item{fantasy_points}{Fantasy football points scored}
-#' }
-#' @source AFL player statistics via fitzRoy package
+#' @format A data frame with extensive player game statistics including
+#'   traditional AFL stats (disposals, kicks, handballs, marks, goals, behinds, tackles),
+#'   advanced metrics (contested possessions, pressure acts, intercepts),
+#'   team context (home/away, opponent, venue), match details (season, round),
+#'   player information (position, experience), and calculated performance ratings
+#'   (TORP points for receiving, disposal, spoiling, hitouts).
+#' @source AFL player statistics via fitzRoy package with TORP enhancements
 "plyr_gm_df"
 
-#' AFL Match Results
-#'
-#' Contains final scores and match outcome information for AFL games.
-#'
-#' @format A data frame with match results:
-#' \describe{
-#'   \item{match_id}{Unique identifier for each match}
-#'   \item{home.team.name}{Name of the home team}
-#'   \item{away.team.name}{Name of the away team}
-#'   \item{home.score.total.goals}{Home team goals scored}
-#'   \item{home.score.total.behinds}{Home team behinds scored}
-#'   \item{home.score.total.points}{Home team total points}
-#'   \item{away.score.total.goals}{Away team goals scored}
-#'   \item{away.score.total.behinds}{Away team behinds scored}
-#'   \item{away.score.total.points}{Away team total points}
-#'   \item{margin}{Winning margin in points}
-#'   \item{venue.name}{Venue where match was played}
-#' }
-#' @source AFL match results via fitzRoy package
-"results"
 
 #' Shot Outcome Classification Model
 #'
@@ -95,45 +53,19 @@
 #' @source Trained on AFL shot data from match tracking
 "shot_ocat_mdl"
 
-#' Individual Shot Event Data
+#' Shot Player Reference Data
 #'
-#' Detailed tracking data for individual shot attempts including location,
-#' context, and outcome information.
+#' Reference dataset containing player identifiers and names for
+#' linking shot events to specific players.
 #'
-#' @format A data frame with individual shot events:
+#' @format A data frame with shot player references:
 #' \describe{
-#'   \item{player_id}{Unique identifier for the shooting player}
-#'   \item{player_name}{Name of the shooting player}
-#'   \item{match_id}{Unique identifier for the match}
-#'   \item{x}{X-coordinate of shot location (meters from goal line)}
-#'   \item{y}{Y-coordinate of shot location (meters from center)}
-#'   \item{shot_distance}{Distance from goal in meters}
-#'   \item{shot_angle}{Angle to goal in degrees}
-#'   \item{outcome}{Shot outcome: 'goal', 'behind', 'miss'}
-#'   \item{period}{Quarter/period of the shot}
-#'   \item{time_remaining}{Time remaining in period (seconds)}
+#'   \item{player_id_shot}{Unique identifier for the shooting player}
+#'   \item{player_name_shot}{Name of the shooting player}
 #' }
-#' @source AFL match tracking data with shot locations
+#' @source AFL player reference data for shot analysis
 "shot_player_df"
 
-#' AFL Team Information and Lineup Data
-#'
-#' Contains team roster information including player lineups and team details.
-#'
-#' @format A data frame with team and player lineup information:
-#' \describe{
-#'   \item{teamId}{Unique identifier for each team}
-#'   \item{teamName}{Full team name}
-#'   \item{teamAbbr}{Team abbreviation (3-4 letters)}
-#'   \item{player.playerId}{Unique identifier for each player}
-#'   \item{player.playerName.givenName}{Player's first name}
-#'   \item{player.playerName.surname}{Player's surname}
-#'   \item{player.jumperNumber}{Player's jumper/jersey number}
-#'   \item{season}{AFL season year}
-#'   \item{round}{Round number}
-#' }
-#' @source AFL team lineup data via fitzRoy package
-"teams"
 
 #' Complete TORP Analysis Dataset
 #'
@@ -166,3 +98,13 @@
 #' @format A fitted regression model object (likely GAM or logistic regression)
 #' @source Trained on historical AFL match data with score and time states
 "wp_model"
+
+#' XGBoost Win Prediction Model
+#'
+#' An XGBoost machine learning model for predicting AFL match winners
+#' based on team performance metrics, historical data, and game context.
+#'
+#' @format An XGBoost model object (xgb.Booster)
+#' @source Trained on historical AFL match results and team statistics
+"xgb_win_model"
+

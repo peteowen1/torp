@@ -8,6 +8,8 @@ select_epv_model_vars(df, label = FALSE)
 }
 \arguments{
 \item{df}{A dataframe containing cleaned play-by-play data.}
+
+\item{label}{Logical, whether to include the label variable for training.}
 }
 \value{
 A dataframe with selected variables for EPV modeling.

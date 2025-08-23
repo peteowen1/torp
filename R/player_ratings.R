@@ -40,7 +40,7 @@ torp_ratings <- function(season_val = get_afl_season(type = "current"),
   gwk <- sprintf("%02d", round_val)
   match_ref <- paste0("CD_M", season_val, "014", gwk)
 
-  date_val <- load_fixtures(season_val) %>%
+  date_val <- load_fixtures(TRUE) %>%
     dplyr::filter(.data$compSeason.year == season_val, .data$round.roundNumber == round_val) %>%
     dplyr::summarise(lubridate::as_date(min(.data$utcStartTime))) %>%
     dplyr::pull()
@@ -129,7 +129,7 @@ prepare_final_dataframe <- function(plyr_tm_df = NULL, plyr_gm_df = NULL, season
 
   # Load fixtures data safely
   fixtures <- NULL
-  fixtures <- load_fixtures()
+  fixtures <- load_fixtures(TRUE)
   # utils::data("fixtures", package = "torp", envir = environment())
 
   plyr_tm_df %>%
@@ -148,10 +148,10 @@ prepare_final_dataframe <- function(plyr_tm_df = NULL, plyr_gm_df = NULL, season
         lubridate::decimal_date(lubridate::as_date(.data$dateOfBirth))
     ) %>% # colnames()
     dplyr::select(
-      player_id = .data$providerId, player_name = .data$player_name.x, age = .data$age, team = .data$team,
-      torp = .data$torp, torp_recv = .data$torp_recv_adj, torp_disp = .data$torp_disp_adj,
-      torp_spoil = .data$torp_spoil_adj, torp_hitout = .data$torp_hitout_adj,
-      position = .data$position, season = .data$season, round = .data$round, gms = .data$gms, wt_gms = .data$wt_gms
+      player_id = "providerId", player_name = "player_name.x", age = "age", team = "team",
+      torp = "torp", torp_recv = "torp_recv_adj", torp_disp = "torp_disp_adj",
+      torp_spoil = "torp_spoil_adj", torp_hitout = "torp_hitout_adj",
+      position = "position", season = "season", round = "round", gms = "gms", wt_gms = "wt_gms"
     ) %>%
     dplyr::arrange(-.data$torp)
 }
@@ -173,6 +173,25 @@ player_game_ratings <- function(season_val = get_afl_season(),
                                 round_num = get_afl_week(),
                                 matchid = FALSE,
                                 team = FALSE) {
+  
+  # Input validation
+  if (!is.numeric(season_val) && !is.na(season_val)) {
+    cli::cli_abort("season_val must be numeric (e.g., 2024)")
+  }
+  
+  if (!is.numeric(round_num) && !is.na(round_num)) {
+    cli::cli_abort("round_num must be numeric (e.g., 1, 2, 3...)")
+  }
+  
+  # Validate reasonable season range
+  if (is.numeric(season_val) && (season_val < 1990 || season_val > 2030)) {
+    cli::cli_abort("season_val must be between 1990 and 2030")
+  }
+  
+  # Validate reasonable round range
+  if (is.numeric(round_num) && (any(round_num < 0) || any(round_num > 30))) {
+    cli::cli_abort("round_num must be between 0 and 30")
+  }
 
   if (is.null(plyr_gm_df)) {
     plyr_gm_df <- torp::plyr_gm_df #load_player_stats(lubridate::year(date_val))
@@ -190,11 +209,11 @@ player_game_ratings <- function(season_val = get_afl_season(),
       hitout_points = round(.data$hitout_pts_adj, 1)
     ) %>%
     dplyr::select(
-      season = .data$season, round = .data$round,
-      player_name = .data$plyr_nm, position = .data$pos, team_id = .data$team_id, team = .data$tm, opp = .data$opp,
-      total_points = .data$total_points, recv_points = .data$recv_points, disp_points = .data$disp_points,
-      spoil_points = .data$spoil_points, hitout_points = .data$hitout_points,
-      player_id = .data$player_id, match_id = .data$match_id
+      season = "season", round = "round",
+      player_name = "plyr_nm", position = "pos", team_id = "team_id", team = "tm", opp = "opp",
+      total_points = "total_points", recv_points = "recv_points", disp_points = "disp_points",
+      spoil_points = "spoil_points", hitout_points = "hitout_points",
+      player_id = "player_id", match_id = "match_id"
     )
 }
 
@@ -246,6 +265,26 @@ filter_game_data <- function(df, season_val, round_num, matchid, team) {
 #'
 #' @importFrom dplyr group_by summarise arrange n
 player_season_ratings <- function(season_val = get_afl_season(), round_num = NA) {
+  
+  # Input validation
+  if (!is.numeric(season_val) && !is.na(season_val)) {
+    cli::cli_abort("season_val must be numeric (e.g., 2024)")
+  }
+  
+  if (!is.numeric(round_num) && !is.na(round_num)) {
+    cli::cli_abort("round_num must be numeric (e.g., 1, 2, 3...)")
+  }
+  
+  # Validate reasonable season range
+  if (is.numeric(season_val) && (season_val < 1990 || season_val > 2030)) {
+    cli::cli_abort("season_val must be between 1990 and 2030")
+  }
+  
+  # Validate reasonable round range
+  if (is.numeric(round_num) && (any(round_num < 0) || any(round_num > 30))) {
+    cli::cli_abort("round_num must be between 0 and 30")
+  }
+  
   df <- get_season_data(season_val, round_num)
 
   df %>%

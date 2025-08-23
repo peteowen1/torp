@@ -5,25 +5,27 @@
 \alias{player_shot_score}
 \title{Player Shot Scoring Statistics}
 \format{
-A data frame with player shot statistics:
+A data frame with player shot analysis:
 \describe{
-\item{player_id}{Unique identifier for each player}
-\item{player_name}{Player's full name}
-\item{shots_attempted}{Total number of shots attempted}
-\item{goals_scored}{Number of goals scored}
-\item{behinds_scored}{Number of behinds scored}
-\item{shot_accuracy}{Percentage accuracy of shots}
-\item{avg_shot_distance}{Average distance of shots from goal}
+\item{effect}{Statistical effect measure}
+\item{group}{Grouping category}
+\item{group_var}{Grouping variable identifier}
+\item{lower_2.5}{Lower bound of 95\% confidence interval}
+\item{n}{Sample size}
+\item{player_name_shot}{Name of the shooting player}
+\item{se}{Standard error}
+\item{upper_97.5}{Upper bound of 95\% confidence interval}
+\item{value}{Statistical value/estimate}
 }
 }
 \source{
-Derived from AFL match tracking data
+Derived from AFL match tracking data statistical analysis
 }
 \usage{
 player_shot_score
 }
 \description{
-Contains aggregated shot scoring statistics for individual players including
-accuracy metrics and shot location data.
+Contains statistical analysis results for player shot performance
+including effect sizes, confidence intervals, and grouping variables.
 }
 \keyword{datasets}

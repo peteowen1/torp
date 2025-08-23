@@ -55,14 +55,14 @@ process_games <- function(sim_teams, sim_games, round_num) {
   sim_teams$roundnum <- round_num
 
   sim_ratings <- sim_teams %>%
-    dplyr::select(.data$roundnum, .data$team, .data$torp)
+    dplyr::select("roundnum", "team", "torp")
 
   sim_games <- sim_games %>%
     dplyr::filter(is.na(.data$result)) %>%
     dplyr::inner_join(sim_ratings, by = c("roundnum" = "roundnum", "away_team" = "team")) %>%
-    dplyr::rename(away_torp = .data$torp) %>%
+    dplyr::rename(away_torp = "torp") %>%
     dplyr::inner_join(sim_ratings, by = c("roundnum" = "roundnum", "home_team" = "team")) %>%
-    dplyr::rename(home_torp = .data$torp) %>%
+    dplyr::rename(home_torp = "torp") %>%
     dplyr::mutate(
       estimate = 6 + (.data$home_torp - .data$away_torp),
       wp = 1 / (10^(-.data$estimate / 50) + 1),
@@ -84,19 +84,19 @@ process_games <- function(sim_teams, sim_games, round_num) {
     dplyr::left_join(
       sim_games %>%
         dplyr::filter(.data$roundnum == round_num) %>%
-        dplyr::select(.data$roundnum, .data$away_team, .data$torp_shift),
+        dplyr::select("roundnum", "away_team", "torp_shift"),
       by = c("roundnum" = "roundnum", "team" = "away_team")
     ) %>%
     dplyr::mutate(torp = .data$torp - ifelse(!is.na(.data$torp_shift), .data$torp_shift, 0)) %>%
-    dplyr::select(-.data$torp_shift) %>%
+    dplyr::select(-"torp_shift") %>%
     dplyr::left_join(
       sim_games %>%
         dplyr::filter(.data$roundnum == round_num) %>%
-        dplyr::select(.data$roundnum, .data$home_team, .data$torp_shift),
+        dplyr::select("roundnum", "home_team", "torp_shift"),
       by = c("roundnum" = "roundnum", "team" = "home_team")
     ) %>%
     dplyr::mutate(torp = torp - dplyr::coalesce(torp_shift, 0)) %>%
-    dplyr::select(-.data$torp_shift)
+    dplyr::select(-"torp_shift")
 
   # Note: The following line is commented out as `max_ratings` is not defined in the provided code
   # %>% dplyr::left_join(max_ratings, by = c('team'='team')) %>%
@@ -114,6 +114,6 @@ process_games <- function(sim_teams, sim_games, round_num) {
         TRUE ~ .data$torp_away_round
       )
     ) %>%
-    dplyr::select(-.data$torp_shift, -.data$home_torp, -.data$away_torp)
+    dplyr::select(-"torp_shift", -"home_torp", -"away_torp")
   return(list(sim_teams = sim_teams, sim_games = sim_games))
 }
