@@ -1,6 +1,7 @@
 ###
 library(tidyverse)
 library(fitzRoy)
+library(fuzzyjoin)
 devtools::load_all()
 
 # Load Tables ----
@@ -307,7 +308,10 @@ team_dist_df <-
     list(venue_lon, venue_lat, team_lon, team_lat),
     ~ geosphere::distHaversine(c(..1, ..2), c(..3, ..4))
   )) %>%
-  dplyr::mutate(log_dist = log(distance + 10000)) %>% # Add 10km as the minimum travel
+  dplyr::mutate(
+    log_dist = log(distance + 10000),
+    log_dist = replace_na(log_dist,16)
+    ) %>% # Add 10km as the minimum travel
   dplyr::left_join(ground_prop) %>%
   dplyr::mutate(familiarity = replace_na(familiarity, 0))
 
@@ -325,7 +329,15 @@ url <- "https://www.afl.com.au/matches/injury-list"
 inj_df <- read_html(url) %>%
   html_table() %>%
   list_rbind() %>%
-  janitor::clean_names()
+  janitor::clean_names() %>%
+  mutate(
+    player = case_match(
+      player,
+      "Cam Zurhaar" ~ "Cameron Zurhaar",
+      .default = player
+    )
+  )
+
 
 tr <- torp_ratings(2025, get_afl_week("next")) %>%
   left_join(inj_df, by = c("player_name" = "player")) %>%
