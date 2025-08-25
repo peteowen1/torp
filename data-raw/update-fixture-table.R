@@ -13,8 +13,7 @@ tictoc::toc()
 # usethis::use_data(fixtures, overwrite = TRUE)
 
 ### update teams file (90 secs per season)
-library(furrr)
-plan("multisession", workers = (parallelly::availableCores() - 2))
+library(purrr)
 # rows_upsert()
 tictoc::tic() #### CHANGE FITZROY FUNCTION TO FUTURE_MAP
 teams_upd <- purrr::map((get_afl_week() - 1):(get_afl_week() + 1), ~ fitzRoy::fetch_lineup_afl(get_afl_season(), .x, comp = "AFLM")) %>%

@@ -7,7 +7,7 @@ library(mirai)
 
 if (daemons()$connections != (parallel::detectCores()-2)) {
   daemons(0)
-  daemons(parallel::detectCores()-2)
+  daemons(round(parallel::detectCores()/2))
 }
 
 tictoc::tic('total')
@@ -133,7 +133,7 @@ tictoc::toc(log= TRUE)
 tictoc::tic('lineups')
 get_teams <- function(season) {
   ### update teams file (90 secs per season)
-  teams <- fitzRoy::fetch_lineup_afl(season, comp = "AFLM") %>%
+  teams <- fitzRoy::fetch_lineup(season, comp = "AFLM") %>%
     dplyr::mutate(
       season = as.numeric(substr(providerId, 5, 8)),
       row_id = paste0(providerId, teamId, player.playerId)
@@ -193,3 +193,4 @@ tictoc::toc(log= TRUE)
 
 # print a nicely formatted table of all timings
 tictoc::tic.log(format = TRUE) %>% unlist()
+

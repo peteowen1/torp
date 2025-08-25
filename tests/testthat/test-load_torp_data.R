@@ -68,3 +68,31 @@ test_that("error handling improvements work", {
   expect_true(exists("load_player_details"))
   expect_true(exists("load_predictions"))
 })
+
+test_that("load_from_url uses parallel processing correctly", {
+  # Test that single URL case works (sequential)
+  single_url <- "https://github.com/peteowen1/torpdata/releases/download/test-data/test_file.rds"
+  
+  # Mock rds_from_url for testing
+  local_mocked_bindings(
+    rds_from_url = function(url) {
+      data.table::data.table(test_col = 1:3, url_source = basename(url))
+    }
+  )
+  
+  # Test single URL (should not use parallel processing)
+  result_single <- load_from_url(single_url)
+  expect_s3_class(result_single, "data.table")
+  expect_equal(nrow(result_single), 3)
+  
+  # Test multiple URLs (should use parallel processing)
+  multiple_urls <- c(
+    "https://github.com/peteowen1/torpdata/releases/download/test-data/test_file1.rds",
+    "https://github.com/peteowen1/torpdata/releases/download/test-data/test_file2.rds"
+  )
+  
+  result_multiple <- load_from_url(multiple_urls)
+  expect_s3_class(result_multiple, "data.table")
+  expect_equal(nrow(result_multiple), 6)  # 3 rows from each file
+  expect_true(all(c("test_file1.rds", "test_file2.rds") %in% result_multiple$url_source))
+})

@@ -1,4 +1,4 @@
-library(furrr)
+library(purrr)
 library(tidyverse)
 library(fitzRoy)
 devtools::load_all()

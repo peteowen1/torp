@@ -1,7 +1,7 @@
-###
+# ###
 library(tidyverse)
 library(fitzRoy)
-library(fuzzyjoin)
+# library(fuzzyjoin)
 devtools::load_all()
 
 # Load Tables ----
@@ -277,22 +277,35 @@ unique_rounds <- unique(team_rt_df$round.roundNumber)
 
 
 tictoc::tic()
-# Set up parallel plan
-library(furrr)
-plan(multisession, workers = (parallel::detectCores() - 2))
 
-# Calculate proportions for each combination of team, season, and round in parallel
-all_proportions <- future_map(unique_teams, function(team) {
-  future_map(unique_seasons, function(season) {
-    future_map(unique_rounds, function(round) {
-      calculate_proportions(team_rt_df, team, season, round)
+# Set up parallel processing with purrr
+library(purrr)
+
+grid <- tidyr::expand_grid(
+  team   = unique_teams,
+  season = unique_seasons,
+  round  = unique_rounds
+)
+
+f <- purrr::in_parallel(
+  \(team, season, round) {
+    # attach packages on the worker
+    suppressPackageStartupMessages({
+      library(magrittr)  # for %>%
+      library(dplyr)     # if you use bare filter/mutate/select/etc.
+      # library(lubridate) # add any others used inside calculate_proportions()
+      # library(stringr)
     })
-  })
-})
-tictoc::toc()
+    calculate_proportions(df, team, season, round)
+  },
+  df = team_rt_df,
+  calculate_proportions = calculate_proportions
+)
 
-# Combine all proportions into a single data frame
-ground_prop <- do.call(rbind, lapply(all_proportions, function(x) do.call(rbind, lapply(x, function(y) do.call(rbind, y)))))
+all_proportions <- purrr::pmap(grid, f, .progress = TRUE)
+
+# If you want one data frame:
+ground_prop <- dplyr::bind_rows(all_proportions)
 
 ## Distance Traveled  ----
 
