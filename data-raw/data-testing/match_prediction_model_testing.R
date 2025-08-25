@@ -1,5 +1,5 @@
 library(tidyverse)
-#### library(furrr)
+#### library(purrr)
 ### testing
 set.seed(1234)
 
@@ -246,16 +246,14 @@ mdl_wk <- function(df, season, weeknum) {
 }
 
 #########################################################
-library(furrr) # 415 secs
-library(purrr) # 1055 secs
-plan("multisession", workers = (parallelly::availableCores() - 2))
+library(purrr) # using in_parallel for parallel processing
 
 tictoc::tic()
 resultz <- bind_rows(
-  # furrr::future_map(1:27, ~ mdl_wk(team_mdl_df, 2022, .), .progress=T, .options=furrr_options(seed = TRUE)),
-  furrr::future_map(1:28, ~ mdl_wk(team_mdl_df, 2023, .), .progress=T, .options=furrr_options(seed = TRUE)),
-  furrr::future_map(0:28, ~ mdl_wk(team_mdl_df, 2024, .), .progress = T, .options = furrr_options(seed = TRUE)),
-  furrr::future_map(0:get_afl_week("next"), ~ mdl_wk(team_mdl_df, 2025, .), .progress = T, .options = furrr_options(seed = TRUE))
+  # map(1:27, ~ mdl_wk(team_mdl_df, 2022, .)) %>% in_parallel(),
+  map(1:28, ~ mdl_wk(team_mdl_df, 2023, .)) %>% in_parallel(),
+  map(0:28, ~ mdl_wk(team_mdl_df, 2024, .)) %>% in_parallel(),
+  map(0:get_afl_week("next"), ~ mdl_wk(team_mdl_df, 2025, .)) %>% in_parallel()
 )
 tictoc::toc()
 

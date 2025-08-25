@@ -41,7 +41,7 @@ season_table %>% tibble::view()
 # saveRDS(final, "plyr_df_2021.rds")
 # ############ 2021  UNCOMMENT THIS IF YOU CHANGE THE PLAYER_RATINGS FUNCTION AS ANY POINT!!!
 # tictoc::tic()
-# final_21 <- furrr::future_map_dfr(2:28, ~ plyr_ratings(plyr_gm_df, teams, 2021, .))
+# final_21 <- map(2:28, ~ plyr_ratings(plyr_gm_df, teams, 2021, .)) %>% in_parallel() %>% list_rbind()
 # tictoc::toc()
 # saveRDS(final_21, "plyr_df_2021.rds")
 # final_21 <- readRDS("plyr_df_2021.rds")
@@ -52,7 +52,7 @@ season_table %>% tibble::view()
 #
 # ### 2022
 # tictoc::tic()
-# final_22 <- furrr::future_map_dfr(1:n, ~ plyr_ratings(plyr_gm_df, teams, 2022, .))
+# final_22 <- map(1:n, ~ plyr_ratings(plyr_gm_df, teams, 2022, .)) %>% in_parallel() %>% list_rbind()
 # tictoc::toc()
 # saveRDS(final_22, "plyr_df_2022.rds")
 # final_22 <- readRDS("plyr_df_2022.rds")

@@ -485,7 +485,7 @@ summary(afl_torp_diff_basic)
 # # }
 #
 # # ###
-# # xg_df <- furrr::future_map_dfr(1:27,~match_xgs(2021,.))
+# # xg_df <- map(1:27, ~match_xgs(2021, .)) %>% in_parallel() %>% list_rbind()
 # #
 # # xg_df2 <- xg_df %>%
 # #   mutate(score_diff = home_shots_score - away_shots_score,

@@ -25,8 +25,8 @@ match_info
 data <- match_info$score$scoreWorm$scoringEvents
 
 # Extract periodSeconds and periodNumber
-period_info <- purrr::map_dfr(match_info$score$matchClock$periods, ~ {
-  tibble::tibble(
-    periodNumber = .x$periodNumber,
-    TotalPeriodSeconds = .x$periodSeconds
-  )
+# period_info <- purrr::map_dfr(match_info$score$matchClock$periods, ~ {
+#   tibble::tibble(
+#     periodNumber = .x$periodNumber,
+#     TotalPeriodSeconds = .x$periodSeconds
+#   )

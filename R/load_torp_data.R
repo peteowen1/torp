@@ -174,17 +174,27 @@ load_player_stats <- function(seasons = get_afl_season()) {
 #'
 #' @param seasons A numeric vector of 4-digit years associated with given AFL seasons - defaults to latest season. If set to `TRUE`, returns all available data since 2021.
 #' @param all Logical. If TRUE, loads all available fixture data from 2018 onwards.
+#' @param use_cache Logical. If TRUE (default), uses cached data when available to speed up repeated calls.
+#' @param cache_ttl Numeric. Time-to-live for cached data in seconds. Default is 3600 (1 hour).
+#' @param verbose Logical. If TRUE, prints cache hit/miss information.
 #'
 #' @return A data frame containing AFL fixture and schedule data.
 #' @examples
 #' \donttest{
 #' try({ # prevents cran errors
 #'   load_fixtures(2021:2022)
+#'   
+#'   # Load all fixtures with caching disabled
+#'   load_fixtures(all = TRUE, use_cache = FALSE)
+#'   
+#'   # Load with verbose cache information
+#'   load_fixtures(all = TRUE, verbose = TRUE)
 #' })
 #' }
 #' @export
 #' @importFrom glue glue
-load_fixtures <- function(seasons = NULL, all = FALSE) {
+load_fixtures <- function(seasons = NULL, all = FALSE, use_cache = TRUE, cache_ttl = 3600, verbose = FALSE) {
+  # Process parameters
   if (all) {
     current_year <- as.numeric(format(Sys.Date(), "%Y"))
     seasons <- 2018:current_year
@@ -193,9 +203,46 @@ load_fixtures <- function(seasons = NULL, all = FALSE) {
   } else {
     seasons <- validate_seasons(seasons)
   }
+  
+  # Check cache if enabled
+  if (use_cache) {
+    cache_key <- generate_fixture_cache_key(seasons, all)
+    
+    # Try to get from cache
+    if (exists(cache_key, envir = .torp_cache)) {
+      cache_entry <- get(cache_key, envir = .torp_cache)
+      
+      if (is_cache_valid(cache_entry, cache_ttl)) {
+        if (verbose) {
+          age_seconds <- as.numeric(difftime(Sys.time(), cache_entry$timestamp, units = "secs"))
+          cli::cli_inform("Cache HIT for fixtures (age: {round(age_seconds, 1)}s)")
+        }
+        return(cache_entry$data)
+      } else {
+        if (verbose) {
+          cli::cli_inform("Cache EXPIRED for fixtures, fetching fresh data")
+        }
+        # Remove expired cache entry
+        rm(list = cache_key, envir = .torp_cache)
+      }
+    } else {
+      if (verbose) {
+        cli::cli_inform("Cache MISS for fixtures, fetching data")
+      }
+    }
+  }
 
+  # Fetch data from URLs
   urls <- generate_urls("fixtures-data", "fixtures", seasons)
   out <- load_from_url(urls, seasons = seasons)
+  
+  # Store in cache if enabled
+  if (use_cache && nrow(out) > 0) {
+    store_in_cache(cache_key, out)
+    if (verbose) {
+      cli::cli_inform("Stored fixtures in cache ({nrow(out)} rows)")
+    }
+  }
 
   return(out)
 }
@@ -328,9 +375,82 @@ load_from_url <- function(url, ..., seasons = TRUE, rounds = TRUE, peteowen1 = F
       if ("round" %in% names(out)) out <- out[out$round %in% rounds, ]
     }
   } else {
-    # p <- NULL
-    # if (is_installed("progressr")) p <- progressr::progressor(along = url)
-    out <- purrr::map(url, ~ rds_from_url(.x), .progress = TRUE) # lapply(url, progressively(rds_from_url, p))
+    # Use parallel processing for multiple URLs
+    f <- purrr::in_parallel(
+      \(url_single) {
+        # Load required packages on worker
+        suppressPackageStartupMessages({
+          library(data.table)
+          library(cli)
+        })
+        
+        # Define rds_from_url functionality directly in worker
+        # Validate URL format
+        if (!is.character(url_single) || length(url_single) != 1 || nchar(url_single) == 0) {
+          cli::cli_abort("URL must be a single non-empty character string")
+        }
+        
+        if (!grepl("^https?://", url_single)) {
+          cli::cli_abort("URL must start with http:// or https://")
+        }
+        
+        # Check internet connectivity (simplified check)
+        internet_available <- tryCatch({
+          con <- url("https://www.google.com", open = "r")
+          close(con)
+          TRUE
+        }, error = function(e) {
+          FALSE
+        })
+        
+        if (!internet_available) {
+          cli::cli_abort("No internet connection available")
+        }
+        
+        # Load RDS data
+        con <- NULL
+        tryCatch({
+          con <- url(url_single)
+          on.exit({
+            if (!is.null(con)) {
+              try(close(con), silent = TRUE)
+            }
+          })
+          
+          load <- readRDS(con)
+          
+          # Validate that we got actual data
+          if (is.null(load)) {
+            cli::cli_warn("No data returned from {.url {url_single}}")
+            return(data.table::data.table())
+          }
+          
+          data.table::setDT(load)
+          return(load)
+          
+        }, error = function(e) {
+          error_msg <- conditionMessage(e)
+          
+          if (grepl("404|Not Found", error_msg, ignore.case = TRUE)) {
+            cli::cli_warn("Data file not found at {.url {url_single}} - file may not exist for this season/round combination")
+          } else if (grepl("timeout|timed out", error_msg, ignore.case = TRUE)) {
+            cli::cli_warn("Connection timeout while downloading from {.url {url_single}} - please try again")
+          } else if (grepl("cannot open|connection", error_msg, ignore.case = TRUE)) {
+            cli::cli_warn("Failed to connect to {.url {url_single}} - check internet connection")
+          } else {
+            cli::cli_warn("Failed to load data from {.url {url_single}}: {error_msg}")
+          }
+          
+          return(data.table::data.table())
+        })
+      }
+    )
+    
+    # Create data frame with URLs for pmap
+    url_grid <- data.frame(url_single = url, stringsAsFactors = FALSE)
+    
+    # Process URLs in parallel with progress
+    out <- purrr::pmap(url_grid, f, .progress = TRUE)
     out <- data.table::rbindlist(out, use.names = TRUE, fill = TRUE)
   }
 

@@ -93,13 +93,11 @@ sim_games$home_team <- replace_teams(sim_games$home_team)
 sim_games$away_team <- replace_teams(sim_games$away_team)
 sim_games_pivot$team_name <- replace_teams(sim_games_pivot$team_name)
 #
-library(furrr)
+library(purrr)
 source("R/sim-helpers.R")
 
-plan("multisession") #, workers = (parallelly::availableCores() - 2))
-
 tictoc::tic('Running Sim')
-tst_sims <- furrr::future_map(.x = 1:sims, .f = ~ sim_season(sim_teams, sim_games), .progress = T, .options = furrr::furrr_options(seed = TRUE))
+tst_sims <- map(1:sims, ~ sim_season(sim_teams, sim_games)) %>% in_parallel()
 tictoc::toc()
 
 tst_df <- tst_sims %>% list_rbind(., names_to = "sim")
@@ -135,7 +133,7 @@ pivoted_data %>%
 
 ###
 # Combine the original data frame with each simulation result
-results_list <- furrr::future_map(1:sims, ~ bind_rows(sim_games_pivot %>%
+results_list <- map(1:sims, ~ bind_rows(sim_games_pivot %>%
   filter(!is.na(result)), pivoted_data %>% filter(sim == .x)) %>%
   mutate(
     outcome = case_when(
@@ -145,9 +143,8 @@ results_list <- furrr::future_map(1:sims, ~ bind_rows(sim_games_pivot %>%
       TRUE ~ 0.5
     ),
     sim = .x
-  ),
-.progress = T
-)
+  )
+) %>% in_parallel()
 
 combined_results_df <- results_list %>% list_rbind()
 
@@ -249,10 +246,7 @@ check_condition <- function(df) {
 filtered_dfs <- results_list %>%
   keep(~ check_condition(.x))
 
-ladders <- furrr::future_map(filtered_dfs,
-  ~ create_ladder(.x),
-  .progress = T
-)
+ladders <- map(filtered_dfs, ~ create_ladder(.x)) %>% in_parallel()
 
 ladders_df <- ladders %>% list_rbind()
 

@@ -1,7 +1,7 @@
 library(tidyverse)
 library(devtools)
-devtools::load_all()
 library(rvest)
+devtools::load_all()
 
 url <- "https://www.afl.com.au/matches/injury-list"
 inj_df <- read_html(url) %>%
@@ -40,7 +40,7 @@ view(this_week)
 this_season <- player_game_ratings(round_num = 0:get_afl_week())
 # view(this_season)
 
-tot_season <- player_game_ratings(season = 2021:2025, round_num = 0:get_afl_week())
+# tot_season <- player_game_ratings(season = 2021:2025, round_num = 0:get_afl_week())
 # view(tot_season)
 
 ssn_25 <- player_season_ratings(2025, 0:24)
@@ -127,3 +127,4 @@ inj_df %>%
   distinct(player)
 
 week_gms
+
