@@ -173,29 +173,28 @@ player_game_ratings <- function(season_val = get_afl_season(),
                                 round_num = get_afl_week(),
                                 matchid = FALSE,
                                 team = FALSE) {
-  
+
   # Input validation
   if (!is.numeric(season_val) && !is.na(season_val)) {
     cli::cli_abort("season_val must be numeric (e.g., 2024)")
   }
-  
+
   if (!is.numeric(round_num) && !is.na(round_num)) {
     cli::cli_abort("round_num must be numeric (e.g., 1, 2, 3...)")
   }
-  
-  # Validate reasonable season range
-  if (is.numeric(season_val) && (season_val < 1990 || season_val > 2030)) {
-    cli::cli_abort("season_val must be between 1990 and 2030")
+
+  if (any(season_val < 1990 | season_val > 2030)) {
+    cli::cli_abort("All seasons must be between 1990 and 2030")
   }
-  
+
   # Validate reasonable round range
   if (is.numeric(round_num) && (any(round_num < 0) || any(round_num > 30))) {
     cli::cli_abort("round_num must be between 0 and 30")
   }
 
-  if (is.null(plyr_gm_df)) {
-    plyr_gm_df <- torp::plyr_gm_df #load_player_stats(lubridate::year(date_val))
-  }
+  # Load player game data from package
+
+  plyr_gm_df <- torp::plyr_gm_df
 
   df <- filter_game_data(plyr_gm_df, season_val, round_num, matchid, team)
 
@@ -265,26 +264,26 @@ filter_game_data <- function(df, season_val, round_num, matchid, team) {
 #'
 #' @importFrom dplyr group_by summarise arrange n
 player_season_ratings <- function(season_val = get_afl_season(), round_num = NA) {
-  
+
   # Input validation
   if (!is.numeric(season_val) && !is.na(season_val)) {
     cli::cli_abort("season_val must be numeric (e.g., 2024)")
   }
-  
-  if (!is.numeric(round_num) && !is.na(round_num)) {
+
+  if (!is.numeric(round_num) && !all(is.na(round_num))) {
     cli::cli_abort("round_num must be numeric (e.g., 1, 2, 3...)")
   }
-  
-  # Validate reasonable season range
-  if (is.numeric(season_val) && (season_val < 1990 || season_val > 2030)) {
-    cli::cli_abort("season_val must be between 1990 and 2030")
+
+  # Validate reasonable season range (handles vectors)
+  if (any(season_val < 1990 | season_val > 2030)) {
+    cli::cli_abort("All seasons must be between 1990 and 2030")
   }
-  
+
   # Validate reasonable round range
-  if (is.numeric(round_num) && (any(round_num < 0) || any(round_num > 30))) {
+  if (is.numeric(round_num) && any(round_num < 0 | round_num > 30, na.rm = TRUE)) {
     cli::cli_abort("round_num must be between 0 and 30")
   }
-  
+
   df <- get_season_data(season_val, round_num)
 
   df %>%
@@ -306,15 +305,23 @@ player_season_ratings <- function(season_val = get_afl_season(), round_num = NA)
 
 #' Get season data
 #'
-#' @param season_val Season value
+#' @param season_val Season value (can be a vector)
 #' @param round_num Round number
 #'
 #' @return Season data frame
 get_season_data <- function(season_val, round_num) {
-  if (season_val < get_afl_season()) {
+  current_season <- get_afl_season()
+
+  # Determine round range based on whether we're looking at past or current seasons
+  if (all(season_val < current_season)) {
+    # All historical seasons - use all rounds
     round_range <- if (any(is.na(round_num))) 0:99 else round_num
-  } else {
+  } else if (all(season_val == current_season)) {
+    # Current season only - limit to current week
     round_range <- if (any(is.na(round_num))) 0:get_afl_week() else round_num
+  } else {
+    # Mix of seasons - use provided rounds or all available
+    round_range <- if (any(is.na(round_num))) 0:99 else round_num
   }
 
   player_game_ratings(season_val, round_range)

@@ -3,12 +3,6 @@ library(stringr)
 library(httr)
 library(piggyback)
 library(mgcv)
-library(mirai)
-
-if (daemons()$connections != (parallel::detectCores()-2)) {
-  daemons(0)
-  daemons(round(parallel::detectCores()/2))
-}
 
 tictoc::tic('total')
 

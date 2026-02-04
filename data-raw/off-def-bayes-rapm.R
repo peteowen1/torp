@@ -11,7 +11,7 @@ tictoc::tic()
 
 # Set up parallel processing
 available_cores <- parallelly::availableCores() - 2
-plan(multisession, workers = available_cores) # Dynamically set the number of workers
+# plan(multisession, workers = available_cores) # Dynamically set the number of workers
 
 # Fetch player statistics
 # player_stats <- fitzRoy::fetch_player_stats_afltables(2016:2024)
