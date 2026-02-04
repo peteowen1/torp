@@ -2,14 +2,13 @@
 #'
 #' @param season AFL season
 #' @param round AFL round
-#' @param match_id AFL match ID (not used in the current implementation)
 #' @param quarter AFL match quarter
 #'
 #' @return A data frame with xG statistics for the specified matches
 #' @export
 #'
 #' @importFrom dplyr group_by filter summarise if_else
-match_xgs <- function(season = get_afl_season(), round = get_afl_week(), match_id = NA, quarter = 1:4) {
+match_xgs <- function(season = get_afl_season(), round = get_afl_week(), quarter = 1:4) {
   df <- load_pbp(seasons = season, rounds = round)
 
   shots_df <- df %>%

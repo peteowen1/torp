@@ -14,24 +14,23 @@
 #' @importFrom zoo rollmean rollapply
 create_wp_features_enhanced <- function(df, for_training = FALSE) {
   # Input validation
-  required_cols <- c("match_id", "period", "period_seconds", "points_diff", 
+  required_cols <- c("match_id", "period", "period_seconds", "points_diff",
                     "exp_pts", "goal_x", "y", "home", "team_id_mdl")
-  
+
   missing_cols <- setdiff(required_cols, names(df))
   if (length(missing_cols) > 0) {
     cli::cli_abort("Missing required columns: {paste(missing_cols, collapse = ', ')}")
   }
-  
-  # AFL constants
-  AFL_QUARTER_DURATION <- 2000
-  
+
+  # Use constants from R/constants.R (AFL_QUARTER_DURATION, AFL_TOTAL_GAME_SECONDS)
+
   df_enhanced <- df %>%
     dplyr::group_by(.data$match_id) %>%
     dplyr::arrange(.data$period, .data$period_seconds) %>%
     dplyr::mutate(
-      # Time-based features
-      time_remaining = (4 - .data$period) * AFL_QUARTER_DURATION + (AFL_QUARTER_DURATION - .data$period_seconds),
-      time_remaining_pct = .data$time_remaining / (AFL_QUARTER_DURATION * 4),
+      # Time-based features (using constants from R/constants.R)
+      time_remaining = (AFL_MAX_PERIODS - .data$period) * AFL_QUARTER_DURATION + (AFL_QUARTER_DURATION - .data$period_seconds),
+      time_remaining_pct = .data$time_remaining / AFL_TOTAL_GAME_SECONDS,
       quarter_progress = .data$period_seconds / AFL_QUARTER_DURATION,
       is_final_quarter = as.numeric(.data$period == 4),
       is_final_5_mins = as.numeric(.data$time_remaining <= 300),

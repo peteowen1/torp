@@ -21,7 +21,7 @@ Imports:
     jsonlite (>= 1.7.0),
     lubridate (>= 1.8.0),
     magrittr (>= 2.0.0),
-    mgcv,
+    mgcv (>= 1.8.0),
     purrr (>= 0.3.0),
     rlang (>= 1.0.0),
     stringr (>= 1.4.0),
@@ -30,7 +30,7 @@ Imports:
     zoo (>= 1.8.0)
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
-RoxygenNote: 7.3.2
+RoxygenNote: 7.3.3
 Suggests: 
     knitr,
     readr (>= 2.1.0),

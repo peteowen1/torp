@@ -1,7 +1,13 @@
 # Test helper functions and fixtures
 # This file is sourced before running tests
 
-# Create mock data for testing
+# -----------------------------------------------------------------------------
+# Mock Data Creation Functions
+# -----------------------------------------------------------------------------
+
+#' Create mock play-by-play data for testing
+#' @param n_rows Number of rows to generate
+#' @return A data frame with mock PBP data
 create_mock_pbp_data <- function(n_rows = 100) {
   data.frame(
     match_id = rep(paste0("CD_M2024014", sprintf("%02d", 1:5)), length.out = n_rows),
@@ -133,4 +139,117 @@ expect_reasonable_round <- function(round) {
   testthat::expect_type(round, "double")
   testthat::expect_gte(round, 0)
   testthat::expect_lte(round, 28)
+}
+
+# -----------------------------------------------------------------------------
+# Enhanced Test Data Creators
+# -----------------------------------------------------------------------------
+
+#' Create test model data suitable for WP/EP models
+#' @param n_rows Number of rows
+#' @return Data frame with model-ready features
+create_test_model_data <- function(n_rows = 100) {
+  data.frame(
+    match_id = rep(paste0("CD_M2024014", sprintf("%02d", 1:5)), length.out = n_rows),
+    period = sample(1:4, n_rows, replace = TRUE),
+    period_seconds = sample(0:2000, n_rows, replace = TRUE),
+    total_seconds = sample(0:8000, n_rows, replace = TRUE),
+    points_diff = sample(-100:100, n_rows, replace = TRUE),
+    xpoints_diff = runif(n_rows, -10, 10),
+    exp_pts = runif(n_rows, -3, 3),
+    goal_x = runif(n_rows, 5, 100),
+    y = runif(n_rows, -40, 40),
+    home = sample(0:1, n_rows, replace = TRUE),
+    shot_row = sample(0:1, n_rows, replace = TRUE, prob = c(0.9, 0.1)),
+    label_wp = sample(0:1, n_rows, replace = TRUE),
+    time_remaining_pct = runif(n_rows, 0, 1),
+    stringsAsFactors = FALSE
+  )
+}
+
+#' Create test player game data
+#' @param n_rows Number of rows
+#' @return Data frame with player game stats
+create_test_player_game_data <- function(n_rows = 200) {
+  data.frame(
+    match_id = rep(paste0("CD_M2024014", sprintf("%02d", 1:10)), length.out = n_rows),
+    player_id = sample(1:100, n_rows, replace = TRUE),
+    player_given_name = paste0("First", sample(1:100, n_rows, replace = TRUE)),
+    player_surname = paste0("Last", sample(1:100, n_rows, replace = TRUE)),
+    team_id = sample(1:18, n_rows, replace = TRUE),
+    season = rep(2024, n_rows),
+    round = sample(1:24, n_rows, replace = TRUE),
+    utc_start_time = as.Date("2024-04-01") + sample(0:100, n_rows, replace = TRUE),
+    pos = sample(c("FWD", "MID", "DEF", "RUC"), n_rows, replace = TRUE),
+    tm = sample(c("Adelaide Crows", "Brisbane Lions", "Carlton"), n_rows, replace = TRUE),
+    opp = sample(c("Collingwood", "Essendon", "Fremantle"), n_rows, replace = TRUE),
+    tot_p_adj = runif(n_rows, -5, 15),
+    recv_pts_adj = runif(n_rows, -2, 8),
+    disp_pts_adj = runif(n_rows, -2, 8),
+    spoil_pts_adj = runif(n_rows, -1, 3),
+    hitout_pts_adj = runif(n_rows, 0, 5),
+    stringsAsFactors = FALSE
+  )
+}
+
+#' Create test simulation data (teams)
+#' @param n_teams Number of teams
+#' @return Data frame with team ratings for simulation
+create_test_sim_teams <- function(n_teams = 18) {
+  data.frame(
+    team = c("Adelaide Crows", "Brisbane Lions", "Carlton", "Collingwood",
+             "Essendon", "Fremantle", "Geelong Cats", "Gold Coast Suns",
+             "GWS Giants", "Hawthorn", "Melbourne", "North Melbourne",
+             "Port Adelaide", "Richmond", "St Kilda", "Sydney Swans",
+             "West Coast Eagles", "Western Bulldogs")[1:n_teams],
+    torp = runif(n_teams, -20, 20),
+    stringsAsFactors = FALSE
+  )
+}
+
+#' Create test simulation data (games/fixtures)
+#' @param n_rounds Number of rounds to simulate
+#' @param teams Vector of team names
+#' @return Data frame with fixture data for simulation
+create_test_sim_games <- function(n_rounds = 3, teams = NULL) {
+  if (is.null(teams)) {
+    teams <- c("Adelaide Crows", "Brisbane Lions", "Carlton", "Collingwood",
+               "Essendon", "Fremantle", "Geelong Cats", "Gold Coast Suns",
+               "GWS Giants", "Hawthorn", "Melbourne", "North Melbourne",
+               "Port Adelaide", "Richmond", "St Kilda", "Sydney Swans",
+               "West Coast Eagles", "Western Bulldogs")
+  }
+
+  games_list <- list()
+  for (rnd in 1:n_rounds) {
+    shuffled <- sample(teams)
+    n_games <- length(shuffled) %/% 2
+    for (g in 1:n_games) {
+      games_list[[length(games_list) + 1]] <- data.frame(
+        roundnum = rnd,
+        home_team = shuffled[(g-1)*2 + 1],
+        away_team = shuffled[(g-1)*2 + 2],
+        result = NA_integer_,
+        torp_home_round = NA_real_,
+        torp_away_round = NA_real_,
+        stringsAsFactors = FALSE
+      )
+    }
+  }
+  do.call(rbind, games_list)
+}
+
+#' Create test fixture data
+#' @param n_fixtures Number of fixtures
+#' @return Data frame resembling AFL fixture data
+create_test_fixtures <- function(n_fixtures = 50) {
+  data.frame(
+    compSeason.year = rep(2024, n_fixtures),
+    round.roundNumber = rep(1:25, length.out = n_fixtures),
+    utcStartTime = as.POSIXct("2024-03-14") + (0:(n_fixtures-1)) * 86400 * 7,
+    home.team.name = sample(c("Adelaide Crows", "Brisbane Lions", "Carlton"), n_fixtures, replace = TRUE),
+    away.team.name = sample(c("Collingwood", "Essendon", "Fremantle"), n_fixtures, replace = TRUE),
+    venue.name = sample(c("MCG", "Adelaide Oval", "Gabba"), n_fixtures, replace = TRUE),
+    stringsAsFactors = FALSE
+  )
 }

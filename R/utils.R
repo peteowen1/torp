@@ -50,14 +50,20 @@ get_afl_week <- function(type = "current") {
   if (!type %in% c("current", "next")) {
     cli::cli_abort('type must be one of: "current" or "next"')
   }
-  season <- get_afl_season('current')
+  season <- get_afl_season("current")
   time_aest <- lubridate::with_tz(Sys.time(), tzone = "Australia/Brisbane")
   current_day <- lubridate::as_date(time_aest)
-  past_fixtures <- load_fixtures(TRUE) %>%
-    dplyr::filter(.data$utcStartTime < current_day, .data$compSeason.year == season)
-  future_fixtures <- load_fixtures(TRUE) %>%
-    dplyr::filter(.data$utcStartTime >= current_day, .data$compSeason.year == season)
-  if ((type == "current" & nrow(past_fixtures) > 0) | nrow(future_fixtures) == 0) {
+
+  # Load fixtures once and filter twice (avoid redundant data load)
+  all_fixtures <- load_fixtures(TRUE) %>%
+    dplyr::filter(.data$compSeason.year == season)
+
+  past_fixtures <- all_fixtures %>%
+    dplyr::filter(.data$utcStartTime < current_day)
+  future_fixtures <- all_fixtures %>%
+    dplyr::filter(.data$utcStartTime >= current_day)
+
+  if ((type == "current" && nrow(past_fixtures) > 0) || nrow(future_fixtures) == 0) {
     round <- as.numeric(max(past_fixtures$round.roundNumber))
   } else {
     round <- as.numeric(min(future_fixtures$round.roundNumber))

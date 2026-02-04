@@ -3,9 +3,11 @@
 # Comprehensive validation framework for TORP models with statistical rigor
 
 #' Calculate AUC using base R
-#' 
-#' Internal function to calculate Area Under the ROC Curve using trapezoidal rule
-#' 
+#'
+#' Internal function to calculate Area Under the ROC Curve using the
+#' Mann-Whitney U-statistic formula. This is O(n log n) vs O(n²) for
+#' the naive threshold-based approach.
+#'
 #' @param actual Vector of actual binary outcomes (0/1)
 #' @param predicted Vector of predicted probabilities
 #' @return Numeric AUC value
@@ -15,40 +17,36 @@ calculate_auc_base <- function(actual, predicted) {
   if (length(unique(actual)) == 1) {
     return(0.5)  # No discrimination possible
   }
-  
-  # Create all possible thresholds
-  thresholds <- sort(unique(c(0, predicted, 1)), decreasing = TRUE)
-  
-  # Calculate TPR and FPR for each threshold
-  tpr <- numeric(length(thresholds))
-  fpr <- numeric(length(thresholds))
-  
+
   n_pos <- sum(actual == 1)
   n_neg <- sum(actual == 0)
-  
-  for (i in seq_along(thresholds)) {
-    thresh <- thresholds[i]
-    predicted_binary <- as.numeric(predicted >= thresh)
-    
-    tp <- sum(predicted_binary == 1 & actual == 1)
-    fp <- sum(predicted_binary == 1 & actual == 0)
-    
-    tpr[i] <- tp / n_pos
-    fpr[i] <- fp / n_neg
+
+  if (n_pos == 0 || n_neg == 0) {
+    return(0.5)
   }
-  
-  # Calculate AUC using trapezoidal rule
-  # Sort by FPR to ensure proper ordering
-  ord <- order(fpr)
-  fpr <- fpr[ord]
-  tpr <- tpr[ord]
-  
-  # Trapezoidal integration
-  auc <- 0
-  for (i in 2:length(fpr)) {
-    auc <- auc + (fpr[i] - fpr[i-1]) * (tpr[i] + tpr[i-1]) / 2
-  }
-  
+
+  # Mann-Whitney U-statistic approach (O(n log n))
+  # AUC = P(score_positive > score_negative)
+  # This is equivalent to U / (n_pos * n_neg)
+
+  # Get predictions for each class
+  pos_preds <- predicted[actual == 1]
+  neg_preds <- predicted[actual == 0]
+
+  # Use rank-based calculation for efficiency
+  # Combine and rank all predictions
+  all_preds <- c(pos_preds, neg_preds)
+  ranks <- rank(all_preds, ties.method = "average")
+
+  # Sum of ranks for positive class
+  pos_rank_sum <- sum(ranks[seq_len(n_pos)])
+
+  # Mann-Whitney U statistic
+  u_stat <- pos_rank_sum - n_pos * (n_pos + 1) / 2
+
+  # AUC = U / (n_pos * n_neg)
+  auc <- u_stat / (n_pos * n_neg)
+
   return(auc)
 }
 

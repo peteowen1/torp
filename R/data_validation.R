@@ -250,26 +250,30 @@ validate_data_quality <- function(data, data_type = "unknown") {
 #' @param data Dataframe to analyze
 #' @return List with missing data analysis results
 #' @keywords internal
+#' @importFrom dplyr group_by_all summarise arrange desc n
 analyze_missing_data <- function(data) {
-  
-  # Calculate missing percentages by column
-  missing_pct <- sapply(data, function(x) sum(is.na(x)) / length(x))
-  
+
+  # Calculate missing percentages by column (vectorized, no full copy)
+  missing_pct <- vapply(data, function(x) sum(is.na(x)) / length(x), FUN.VALUE = numeric(1))
+
   # Identify columns with high missing rates
   high_missing_threshold <- 0.5
   high_missing_cols <- missing_pct > high_missing_threshold
-  
+
   # Pattern analysis for combinations of missing values
-  if (ncol(data) <= 20) {  # Only for manageable number of columns
-    missing_patterns <- data %>%
-      mutate_all(is.na) %>%
-      group_by_all() %>%
-      summarise(count = n(), .groups = "drop") %>%
-      arrange(desc(count))
+  if (ncol(data) <= 20) {
+    # Use vapply to create missing indicator matrix (more efficient than mutate_all)
+    missing_matrix <- as.data.frame(
+      lapply(data, is.na)
+    )
+    missing_patterns <- missing_matrix %>%
+      dplyr::group_by_all() %>%
+      dplyr::summarise(count = dplyr::n(), .groups = "drop") %>%
+      dplyr::arrange(dplyr::desc(count))
   } else {
     missing_patterns <- NULL
   }
-  
+
   list(
     overall_missing_rate = sum(is.na(data)) / (nrow(data) * ncol(data)),
     missing_by_column = missing_pct,

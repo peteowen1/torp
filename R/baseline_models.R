@@ -9,7 +9,7 @@
 #'
 #' @param data Input dataframe (not used, for consistency)
 #' @return Vector of 0.5 predictions
-#' @export
+#' @keywords internal
 predict_wp_naive <- function(data) {
   rep(0.5, nrow(data))
 }
@@ -195,128 +195,104 @@ predict_wp_gam_baseline <- function(data, pred_data = NULL) {
 #' Compares multiple baseline models against the main model
 #'
 #' @param train_data Training dataset
-#' @param test_data Test dataset  
+#' @param test_data Test dataset
 #' @param main_model_preds Predictions from the main model
 #' @param include_gam Logical, whether to include GAM baseline (can be slow)
 #' @return Dataframe with comparison results
 #' @export
-#' @importFrom dplyr mutate row_number group_by summarise filter
+#' @importFrom dplyr mutate row_number group_by summarise filter bind_rows arrange
 compare_baseline_models <- function(train_data, test_data, main_model_preds, include_gam = FALSE) {
-  
+
   # Ensure we have the target variable
   if (!"label_wp" %in% names(test_data)) {
     stop("Test data must contain 'label_wp' column")
   }
-  
+
   actual <- test_data$label_wp
-  results <- data.frame()
-  
+
+  # Pre-allocate list for results (more efficient than repeated rbind)
+  results_list <- list()
+
+  # Helper to create result row
+  make_result_row <- function(model_name, eval_result, n_params) {
+    data.frame(
+      model = model_name,
+      auc = eval_result$auc,
+      log_loss = eval_result$log_loss,
+      brier_score = eval_result$brier_score,
+      calibration_slope = eval_result$calibration_slope,
+      n_params = n_params,
+      stringsAsFactors = FALSE
+    )
+  }
+
   # Main model performance
-  main_eval <- evaluate_model_comprehensive(actual, main_model_preds, "Main Model", 
+  main_eval <- evaluate_model_comprehensive(actual, main_model_preds, "Main Model",
                                            bootstrap_ci = FALSE)
-  results <- rbind(results, data.frame(
-    model = "Main Model",
-    auc = main_eval$auc,
-    log_loss = main_eval$log_loss,
-    brier_score = main_eval$brier_score,
-    calibration_slope = main_eval$calibration_slope,
-    n_params = NA  # Unknown for main model
-  ))
-  
+  results_list[["main"]] <- make_result_row("Main Model", main_eval, NA)
+
   # Naive baseline
   naive_preds <- predict_wp_naive(test_data)
-  naive_eval <- evaluate_model_comprehensive(actual, naive_preds, "Naive (50%)", 
+  naive_eval <- evaluate_model_comprehensive(actual, naive_preds, "Naive (50%)",
                                            bootstrap_ci = FALSE)
-  results <- rbind(results, data.frame(
-    model = "Naive (50%)",
-    auc = naive_eval$auc,
-    log_loss = naive_eval$log_loss,
-    brier_score = naive_eval$brier_score,
-    calibration_slope = naive_eval$calibration_slope,
-    n_params = 0
-  ))
-  
+  results_list[["naive"]] <- make_result_row("Naive (50%)", naive_eval, 0)
+
   # Score-only baseline
   tryCatch({
     score_preds <- predict_wp_score_only(train_data, test_data)
-    score_eval <- evaluate_model_comprehensive(actual, score_preds, "Score Only", 
+    score_eval <- evaluate_model_comprehensive(actual, score_preds, "Score Only",
                                              bootstrap_ci = FALSE)
-    results <- rbind(results, data.frame(
-      model = "Score Only",
-      auc = score_eval$auc,
-      log_loss = score_eval$log_loss,
-      brier_score = score_eval$brier_score,
-      calibration_slope = score_eval$calibration_slope,
-      n_params = 2  # intercept + slope
-    ))
+    results_list[["score"]] <- make_result_row("Score Only", score_eval, 2)
   }, error = function(e) {
     warning(paste("Score-only baseline failed:", e$message))
   })
-  
+
   # Time + Score baseline
   tryCatch({
     time_score_preds <- predict_wp_time_score(train_data, test_data)
-    time_score_eval <- evaluate_model_comprehensive(actual, time_score_preds, "Time + Score", 
+    time_score_eval <- evaluate_model_comprehensive(actual, time_score_preds, "Time + Score",
                                                    bootstrap_ci = FALSE)
-    results <- rbind(results, data.frame(
-      model = "Time + Score",
-      auc = time_score_eval$auc,
-      log_loss = time_score_eval$log_loss,
-      brier_score = time_score_eval$brier_score,
-      calibration_slope = time_score_eval$calibration_slope,
-      n_params = 4  # intercept + 3 terms
-    ))
+    results_list[["time_score"]] <- make_result_row("Time + Score", time_score_eval, 4)
   }, error = function(e) {
     warning(paste("Time + Score baseline failed:", e$message))
   })
-  
+
   # Expected Points baseline (if available)
   if ("xpoints_diff" %in% names(train_data) && "xpoints_diff" %in% names(test_data)) {
     tryCatch({
       exp_preds <- predict_wp_expected_points(train_data, test_data)
-      exp_eval <- evaluate_model_comprehensive(actual, exp_preds, "Expected Points", 
+      exp_eval <- evaluate_model_comprehensive(actual, exp_preds, "Expected Points",
                                              bootstrap_ci = FALSE)
-      results <- rbind(results, data.frame(
-        model = "Expected Points",
-        auc = exp_eval$auc,
-        log_loss = exp_eval$log_loss,
-        brier_score = exp_eval$brier_score,
-        calibration_slope = exp_eval$calibration_slope,
-        n_params = 3
-      ))
+      results_list[["expected_pts"]] <- make_result_row("Expected Points", exp_eval, 3)
     }, error = function(e) {
       warning(paste("Expected Points baseline failed:", e$message))
     })
   }
-  
+
   # GAM baseline (optional, can be slow)
   if (include_gam) {
     tryCatch({
       gam_preds <- predict_wp_gam_baseline(train_data, test_data)
-      gam_eval <- evaluate_model_comprehensive(actual, gam_preds, "GAM Baseline", 
+      gam_eval <- evaluate_model_comprehensive(actual, gam_preds, "GAM Baseline",
                                              bootstrap_ci = FALSE)
-      results <- rbind(results, data.frame(
-        model = "GAM Baseline",
-        auc = gam_eval$auc,
-        log_loss = gam_eval$log_loss,
-        brier_score = gam_eval$brier_score,
-        calibration_slope = gam_eval$calibration_slope,
-        n_params = NA  # Variable for GAM
-      ))
+      results_list[["gam"]] <- make_result_row("GAM Baseline", gam_eval, NA)
     }, error = function(e) {
       warning(paste("GAM baseline failed:", e$message))
     })
   }
-  
+
+  # Combine results efficiently
+  results <- dplyr::bind_rows(results_list)
+
   # Calculate improvements over naive baseline
   naive_log_loss <- results[results$model == "Naive (50%)", "log_loss"]
   results$log_loss_improvement <- (naive_log_loss - results$log_loss) / naive_log_loss * 100
-  
+
   # Rank models
   results <- results %>%
-    arrange(log_loss) %>%
-    mutate(rank = row_number())
-  
+    dplyr::arrange(log_loss) %>%
+    dplyr::mutate(rank = dplyr::row_number())
+
   return(results)
 }
 
@@ -549,7 +525,7 @@ create_model_comparison_report <- function(comparison_results, calibration_resul
 #'
 #' @param data Input data with period and period_seconds columns
 #' @return Vector of win probability predictions
-#' @export
+#' @keywords internal
 predict_wp_time_only <- function(data) {
   # Calculate time remaining
   time_remaining <- (4 - data$period) * 2000 + (2000 - data$period_seconds)
@@ -598,53 +574,43 @@ predict_wp_ensemble_baseline <- function(data) {
 #' @param data Input data for making predictions
 #' @return Data frame with model evaluation results
 #' @export
-#' @importFrom dplyr arrange mutate
+#' @importFrom dplyr arrange bind_rows desc
 evaluate_baseline_models <- function(actual, data) {
-  results <- data.frame()
-  
+  # Pre-allocate list for results (more efficient than repeated rbind)
+  results_list <- list()
+
+  # Helper to create result row
+  make_result_row <- function(model_name, preds) {
+    auc_val <- tryCatch({
+      calculate_auc_base(actual, preds)
+    }, error = function(e) NA)
+
+    data.frame(
+      model_name = model_name,
+      auc = auc_val,
+      log_loss = calculate_log_loss(actual, preds),
+      brier_score = calculate_brier_score(actual, preds),
+      stringsAsFactors = FALSE
+    )
+  }
+
   # Naive baseline
   naive_preds <- predict_wp_naive(data)
-  naive_auc <- tryCatch({
-    calculate_auc_base(actual, naive_preds)
-  }, error = function(e) NA)
-  
-  results <- rbind(results, data.frame(
-    model_name = "Naive",
-    auc = naive_auc,
-    log_loss = calculate_log_loss(actual, naive_preds),
-    brier_score = calculate_brier_score(actual, naive_preds)
-  ))
-  
+  results_list[["naive"]] <- make_result_row("Naive", naive_preds)
+
   # Time-only baseline
   if (all(c("period", "period_seconds") %in% names(data))) {
     time_preds <- predict_wp_time_only(data)
-    time_auc <- tryCatch({
-      calculate_auc_base(actual, time_preds)
-    }, error = function(e) NA)
-    
-    results <- rbind(results, data.frame(
-      model_name = "Time Only",
-      auc = time_auc,
-      log_loss = calculate_log_loss(actual, time_preds),
-      brier_score = calculate_brier_score(actual, time_preds)
-    ))
+    results_list[["time"]] <- make_result_row("Time Only", time_preds)
   }
-  
+
   # Ensemble baseline
   ensemble_preds <- predict_wp_ensemble_baseline(data)
-  ensemble_auc <- tryCatch({
-    calculate_auc_base(actual, ensemble_preds)
-  }, error = function(e) NA)
-  
-  results <- rbind(results, data.frame(
-    model_name = "Ensemble",
-    auc = ensemble_auc,
-    log_loss = calculate_log_loss(actual, ensemble_preds),
-    brier_score = calculate_brier_score(actual, ensemble_preds)
-  ))
-  
-  # Sort by AUC descending
-  results %>% dplyr::arrange(desc(auc))
+  results_list[["ensemble"]] <- make_result_row("Ensemble", ensemble_preds)
+
+  # Combine and sort by AUC descending
+  dplyr::bind_rows(results_list) %>%
+    dplyr::arrange(dplyr::desc(auc))
 }
 
 #' Simple Log Loss Calculation
