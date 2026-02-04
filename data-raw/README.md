@@ -78,9 +78,13 @@ source("data-raw/_run-all.R")
 
 Large generated files are stored in `outputs/` and gitignored:
 
-- `bayes_od_rapm_*.rds` - RAPM model outputs
-- `stadium_data.rds` - Stadium information
-- `stat_pred_df.rds` - Statistical prediction data
+- `bayes_od_rapm_*.rds` - RAPM model outputs (RDS format required for R model objects that cannot be serialized to Parquet)
+- `stadium_data.parquet` - Stadium information
+- `stat_pred_df.parquet` - Statistical prediction data
+
+**Note on file formats:**
+- **Parquet** (`.parquet`): Used for all data frames and tabular data. This is the primary data format for the package, providing better compression and cross-language compatibility (Python, etc.).
+- **RDS** (`.rds`): Used only for R-specific model objects (GAM, brms, glmnet) that cannot be serialized to Parquet format. These are stored in `stat-models/` and `outputs/`.
 
 ## Archive
 
