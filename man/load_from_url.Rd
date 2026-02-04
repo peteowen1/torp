@@ -2,9 +2,9 @@
 % Please edit documentation in R/load_torp_data.R
 \name{load_from_url}
 \alias{load_from_url}
-\title{Load any rds/csv/csv.gz/parquet/qs file from a remote URL}
+\title{Load parquet files from remote URLs}
 \usage{
-load_from_url(url, ..., seasons = TRUE, rounds = TRUE, peteowen1 = FALSE)
+load_from_url(url, ..., seasons = TRUE, rounds = TRUE, peteowen1 = FALSE, use_disk_cache = TRUE)
 }
 \arguments{
 \item{url}{A vector of URLs to load into memory. If more than one URL provided, will row-bind them.}
@@ -21,5 +21,5 @@ load_from_url(url, ..., seasons = TRUE, rounds = TRUE, peteowen1 = FALSE)
 A data frame, possibly of type \code{peteowen1_data}
 }
 \description{
-Load any rds/csv/csv.gz/parquet/qs file from a remote URL
+Load parquet files from remote URLs
 }
