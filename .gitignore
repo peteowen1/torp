@@ -14,6 +14,9 @@ inst/extdata/archive/
 # Temporary files
 *.tmp
 *.log
+nul
+_ul
+data-raw/debug/
 
 # Development files
 .vscode/
