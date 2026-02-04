@@ -17,7 +17,7 @@ save_to_release(df, file_name, release_tag)
 No return value. Used for side effects (file upload).
 }
 \description{
-Saves a data frame as an \code{.rds} file and uploads it to a GitHub release using the \code{piggyback} package.
+Saves a data frame as a \code{.parquet} file and uploads it to a GitHub release using the \code{piggyback} package.
 }
 \examples{
 \dontrun{

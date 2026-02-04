@@ -2,20 +2,20 @@
 % Please edit documentation in R/load_torp_data.R
 \name{file_reader}
 \alias{file_reader}
-\title{Read an RDS File from a GitHub Release via Piggyback}
+\title{Read a Parquet File from a GitHub Release via Piggyback}
 \usage{
 file_reader(file_name, release_tag)
 }
 \arguments{
-\item{file_name}{The base name of the file (without \code{.rds} extension).}
+\item{file_name}{The base name of the file (without \code{.parquet} extension).}
 
 \item{release_tag}{The GitHub release tag the file is associated with.}
 }
 \value{
-An R object read from the downloaded \code{.rds} file.
+A data frame read from the downloaded \code{.parquet} file.
 }
 \description{
-Downloads and reads an \code{.rds} file from a GitHub release using the \code{piggyback} package.
+Downloads and reads a \code{.parquet} file from a GitHub release using the \code{piggyback} package.
 }
 \examples{
 \dontrun{
