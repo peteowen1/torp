@@ -1,3 +1,7 @@
+# Large generated data files
+outputs/*.rds
+
+# Legacy patterns (files now in outputs/)
 .bayes_od_rapm_16_24.rds
 .bayes_od_rapm_12_19.rds
 .bayes_od_rapm_18_24.rds

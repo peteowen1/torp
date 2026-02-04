@@ -150,7 +150,7 @@ bellerive_row$venue <- "Ninja Stadium"
 all_grounds <- dplyr::bind_rows(all_grounds, bellerive_row) %>% distinct()
 
 # Save the cleaned data to an RDS file
-saveRDS(all_grounds, "./data-raw/stadium-data.rds")
+saveRDS(all_grounds, "./data-raw/outputs/stadium_data.rds")
 
 # Display the cleaned data
 print(all_grounds)

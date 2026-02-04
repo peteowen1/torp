@@ -241,12 +241,12 @@ pred_df <- stat_list %>% reduce(left_join, by = c(
 ))
 pred_df
 
-saveRDS(pred_df, "./data-raw/stat_pred_df.rds")
+saveRDS(pred_df, "./data-raw/outputs/stat_pred_df.rds")
 tictoc::toc()
 
 #################################################################
 
-pred_df <- readRDS("./data-raw/stat_pred_df.rds")
+pred_df <- readRDS("./data-raw/outputs/stat_pred_df.rds")
 
 ##############################
 model_val <- "goals"

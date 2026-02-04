@@ -76,10 +76,10 @@ priors <- c(
 fit <- brm(formula, data = df_brms, prior = priors, family = gaussian(), chains = 2, iter = 1000, cores = available_cores, verbose = TRUE)
 
 # Save model
-saveRDS(fit, "./data-raw/bayes_rapm")
+saveRDS(fit, "./data-raw/outputs/bayes_rapm.rds")
 
 # Load model
-fit <- readRDS("./data-raw/bayes_rapm")
+fit <- readRDS("./data-raw/outputs/bayes_rapm.rds")
 
 # Extract posterior samples using as_draws
 posterior_samples <- as_draws_df(fit)

@@ -5,7 +5,7 @@ library(fitzRoy)
 devtools::load_all()
 
 # Load Tables ----
-all_grounds <- readRDS("./data-raw/stadium-data.rds")
+all_grounds <- readRDS("./data-raw/outputs/stadium_data.rds")
 xg_df <- load_xg(TRUE)
 fixtures <- load_fixtures(TRUE)
 results <- load_results(TRUE)
