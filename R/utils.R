@@ -54,16 +54,45 @@ get_afl_week <- function(type = "current") {
   time_aest <- lubridate::with_tz(Sys.time(), tzone = "Australia/Brisbane")
   current_day <- lubridate::as_date(time_aest)
 
-  # Load fixtures once and filter twice (avoid redundant data load)
-  all_fixtures <- load_fixtures(TRUE) %>%
-    dplyr::filter(.data$compSeason.year == season)
+  # Try to load fixtures for current season, handle missing data gracefully
+  all_fixtures <- tryCatch(
+    {
+      load_fixtures(season) %>%
+        dplyr::filter(.data$compSeason.year == season)
+    },
+    error = function(e) {
+      cli::cli_warn("Could not load fixtures for season {season}: {e$message}")
+      return(data.frame())
+    }
+  )
+
+  # Handle empty fixtures (pre-season or missing data)
+  if (nrow(all_fixtures) == 0) {
+    cli::cli_warn("No fixtures found for season {season}. Returning round 0.")
+    return(0)
+  }
 
   past_fixtures <- all_fixtures %>%
     dplyr::filter(.data$utcStartTime < current_day)
   future_fixtures <- all_fixtures %>%
     dplyr::filter(.data$utcStartTime >= current_day)
 
-  if ((type == "current" && nrow(past_fixtures) > 0) || nrow(future_fixtures) == 0) {
+  # Pre-season: no past fixtures yet
+  if (nrow(past_fixtures) == 0) {
+    round <- as.numeric(min(future_fixtures$round.roundNumber))
+    if (type == "current") {
+      return(0)
+    }
+    return(round)
+  }
+
+  # Post-season: no future fixtures
+  if (nrow(future_fixtures) == 0) {
+    return(as.numeric(max(past_fixtures$round.roundNumber)))
+  }
+
+  # Mid-season: both past and future fixtures exist
+  if (type == "current") {
     round <- as.numeric(max(past_fixtures$round.roundNumber))
   } else {
     round <- as.numeric(min(future_fixtures$round.roundNumber))
@@ -223,6 +252,7 @@ harmonic_mean <- function(x, y) {
 #' # Returns: "cam zurhaar" "cameron zurhar" "jose lopez"
 #'
 #' @seealso [stringi::stri_trans_general()], [stringr::str_to_lower()]
+#' @importFrom stringi stri_trans_general
 #' @export
 norm_name <- function(x) {
   x |>
