@@ -1,7 +1,7 @@
 # Create Historical Aggregated Files for torpdata
 #
 # One-time script to create aggregated files for all historical seasons.
-# These aggregated files (e.g., chains_data_2024_all.rds) significantly
+# These aggregated files (e.g., chains_data_2024_all.parquet) significantly
 # speed up bulk data loading (174 requests -> 6 requests).
 #
 # Run this once after implementing the daily release pipeline, then the
@@ -119,7 +119,7 @@ create_aggregated_file <- function(data_type, season, force = FALSE) {
   # Save aggregated file
   agg_file_name <- glue::glue("{file_prefix}_{season}_all")
   save_to_release(df = combined, file_name = agg_file_name, release_tag = release_tag)
-  cli::cli_alert_success("Saved {agg_file_name}.rds")
+  cli::cli_alert_success("Saved {agg_file_name}.parquet")
 
   return(invisible(TRUE))
 }

@@ -55,7 +55,7 @@ generate_disk_cache_key <- function(url) {
 get_disk_cache_path <- function(url) {
   cache_dir <- get_disk_cache_dir()
   cache_key <- generate_disk_cache_key(url)
-  file.path(cache_dir, paste0(cache_key, ".rds"))
+  file.path(cache_dir, paste0(cache_key, ".parquet"))
 }
 
 #' Check if URL is Cached on Disk
@@ -99,7 +99,7 @@ read_disk_cache <- function(url) {
   }
 
   tryCatch({
-    readRDS(cache_path)
+    arrow::read_parquet(cache_path)
   }, error = function(e) {
     cli::cli_warn("Failed to read cache file: {cache_path}")
     # Remove corrupted cache file
@@ -118,7 +118,7 @@ write_disk_cache <- function(url, data) {
   cache_path <- get_disk_cache_path(url)
 
   tryCatch({
-    saveRDS(data, cache_path)
+    arrow::write_parquet(data, cache_path)
   }, error = function(e) {
     cli::cli_warn("Failed to write cache file: {cache_path}")
   })
@@ -164,7 +164,7 @@ clear_disk_cache <- function(pattern = NULL, older_than_days = NULL, verbose = F
   }
 
   # List cache files
-  cache_files <- list.files(cache_dir, pattern = "\\.rds$", full.names = TRUE)
+  cache_files <- list.files(cache_dir, pattern = "\\.parquet$", full.names = TRUE)
 
   if (length(cache_files) == 0) {
     if (verbose) {
@@ -229,7 +229,7 @@ get_disk_cache_info <- function() {
     ))
   }
 
-  cache_files <- list.files(cache_dir, pattern = "\\.rds$", full.names = TRUE)
+  cache_files <- list.files(cache_dir, pattern = "\\.parquet$", full.names = TRUE)
 
   if (length(cache_files) == 0) {
     return(data.frame(
@@ -271,7 +271,7 @@ get_disk_cache_size <- function() {
     return(0)
   }
 
-  cache_files <- list.files(cache_dir, pattern = "\\.rds$", full.names = TRUE)
+  cache_files <- list.files(cache_dir, pattern = "\\.parquet$", full.names = TRUE)
 
   if (length(cache_files) == 0) {
     return(0)

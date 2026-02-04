@@ -1,23 +1,24 @@
-test_that("rds_from_url validates input correctly", {
+test_that("parquet_from_url validates input correctly", {
   # Test invalid URLs
-  expect_error(torp:::rds_from_url(""), "must be a single non-empty character string")
-  expect_error(torp:::rds_from_url(c("url1", "url2")), "must be a single non-empty character string")
-  expect_error(torp:::rds_from_url(123), "must be a single non-empty character string")
-  expect_error(torp:::rds_from_url("ftp://example.com"), "must start with http")
+  expect_error(torp:::parquet_from_url(""), "must be a single non-empty character string")
+  expect_error(torp:::parquet_from_url(c("url1", "url2")), "must be a single non-empty character string")
+  expect_error(torp:::parquet_from_url(123), "must be a single non-empty character string")
+  expect_error(torp:::parquet_from_url("ftp://example.com"), "must start with http")
 })
 
 test_that("generate_urls creates correct URLs", {
   urls <- torp:::generate_urls("test-data", "test_file", seasons = c(2021, 2022))
 
   expected_urls <- c(
-    "https://github.com/peteowen1/torpdata/releases/download/test-data/test_file_2021.rds",
-    "https://github.com/peteowen1/torpdata/releases/download/test-data/test_file_2022.rds"
+    "https://github.com/peteowen1/torpdata/releases/download/test-data/test_file_2021.parquet",
+    "https://github.com/peteowen1/torpdata/releases/download/test-data/test_file_2022.parquet"
   )
 
   expect_equal(length(urls), 2)
   expect_true(all(grepl("^https://github.com/peteowen1/torpdata", urls)))
   expect_true(all(grepl("test-data", urls)))
   expect_true(all(grepl("test_file", urls)))
+  expect_true(all(grepl("\\.parquet$", urls)))
 })
 
 test_that("generate_urls with rounds creates correct URLs", {
@@ -25,8 +26,8 @@ test_that("generate_urls with rounds creates correct URLs", {
 
   expect_equal(length(urls), 2)
   expect_true(all(grepl("2021", urls)))
-  expect_true(any(grepl("_01.rds", urls)))
-  expect_true(any(grepl("_15.rds", urls)))
+  expect_true(any(grepl("_01\\.parquet", urls)))
+  expect_true(any(grepl("_15\\.parquet", urls)))
 })
 
 # Mock test for load functions (these would need actual network mocking in practice)
@@ -71,28 +72,28 @@ test_that("error handling improvements work", {
 
 test_that("load_from_url uses parallel processing correctly", {
   # Test that single URL case works (sequential)
-  single_url <- "https://github.com/peteowen1/torpdata/releases/download/test-data/test_file.rds"
-  
-  # Mock rds_from_url for testing
+  single_url <- "https://github.com/peteowen1/torpdata/releases/download/test-data/test_file.parquet"
+
+  # Mock parquet_from_url for testing
   local_mocked_bindings(
-    rds_from_url = function(url) {
+    parquet_from_url = function(url) {
       data.table::data.table(test_col = 1:3, url_source = basename(url))
     }
   )
-  
+
   # Test single URL (should not use parallel processing)
   result_single <- load_from_url(single_url)
   expect_s3_class(result_single, "data.table")
   expect_equal(nrow(result_single), 3)
-  
+
   # Test multiple URLs (should use parallel processing)
   multiple_urls <- c(
-    "https://github.com/peteowen1/torpdata/releases/download/test-data/test_file1.rds",
-    "https://github.com/peteowen1/torpdata/releases/download/test-data/test_file2.rds"
+    "https://github.com/peteowen1/torpdata/releases/download/test-data/test_file1.parquet",
+    "https://github.com/peteowen1/torpdata/releases/download/test-data/test_file2.parquet"
   )
-  
+
   result_multiple <- load_from_url(multiple_urls)
   expect_s3_class(result_multiple, "data.table")
   expect_equal(nrow(result_multiple), 6)  # 3 rows from each file
-  expect_true(all(c("test_file1.rds", "test_file2.rds") %in% result_multiple$url_source))
+  expect_true(all(c("test_file1.parquet", "test_file2.parquet") %in% result_multiple$url_source))
 })

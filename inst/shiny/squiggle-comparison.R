@@ -6,7 +6,7 @@ library(DT)
 library(dplyr)
 library(fitzRoy)
 
-resultz <- readRDS(url('https://github.com/peteowen1/torpdata/releases/download/predictions/predictions_2025.rds'))
+resultz <- arrow::read_parquet('https://github.com/peteowen1/torpdata/releases/download/predictions/predictions_2025.parquet')
 
 # resultz <- tryCatch(
 #   # readRDS("resultz.rds"),
