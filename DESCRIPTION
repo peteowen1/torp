@@ -8,7 +8,8 @@ Description: Provides tools for Australian Football League (AFL) analytics inclu
     Features XGBoost and GAM models for predicting match outcomes, player performance 
     metrics, and comprehensive data processing pipelines for AFL match data.
 License: MIT + file LICENSE
-Imports: 
+Imports:
+    arrow (>= 14.0.0),
     cli (>= 3.0.0),
     data.table (>= 1.14.0),
     dplyr (>= 1.0.0),
@@ -24,6 +25,7 @@ Imports:
     mgcv (>= 1.8.0),
     purrr (>= 0.3.0),
     rlang (>= 1.0.0),
+    stringi (>= 1.7.0),
     stringr (>= 1.4.0),
     tidyr (>= 1.2.0),
     xgboost (>= 1.6.0),

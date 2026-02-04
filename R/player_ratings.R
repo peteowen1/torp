@@ -70,41 +70,62 @@ torp_ratings <- function(season_val = get_afl_season(type = "current"),
 #'
 #' @return A data frame with calculated player statistics
 #'
-#' @importFrom dplyr filter mutate group_by summarise n_distinct last ungroup
+#' @importFrom data.table as.data.table uniqueN last setDT
 calculate_player_stats <- function(plyr_gm_df = NULL, match_ref, date_val, decay, loading, prior_games_recv, prior_games_disp) {
   if (is.null(plyr_gm_df)) {
-    plyr_gm_df <- torp::plyr_gm_df #load_player_stats(lubridate::year(date_val))
+    plyr_gm_df <- torp::plyr_gm_df
   }
-  plyr_gm_df %>%
-    dplyr::ungroup() %>%
-    dplyr::filter(.data$match_id <= match_ref) %>%
-    dplyr::mutate(
-      weight_gm = exp(as.numeric(-(lubridate::as_date(date_val) - lubridate::as_date(.data$utc_start_time))) / decay),
-      plyr_nm = paste(.data$player_given_name,.data$player_surname)
-    ) %>%
-    dplyr::group_by(.data$player_id) %>%
-    dplyr::summarise(
-      player_name = max(.data$plyr_nm),
-      gms = dplyr::n_distinct(.data$match_id),
-      wt_gms = sum(unique(.data$weight_gm), na.rm = TRUE),
-      tot_p_sum = sum(.data$tot_p_adj * .data$weight_gm),
-      tot_p_g = sum(.data$tot_p_adj * .data$weight_gm) / .data$wt_gms,
-      recv_g = sum(.data$recv_pts_adj * .data$weight_gm) / .data$wt_gms,
-      disp_g = sum(.data$disp_pts_adj * .data$weight_gm) / .data$wt_gms,
-      spoil_g = sum(.data$spoil_pts_adj * .data$weight_gm) / .data$wt_gms,
-      hitout_g = sum(.data$hitout_pts_adj * .data$weight_gm) / .data$wt_gms,
-      torp_recv = loading * (sum(.data$recv_pts_adj * .data$weight_gm) / (.data$wt_gms + prior_games_recv)),
-      torp_disp = loading * (sum(.data$disp_pts_adj * .data$weight_gm) / (.data$wt_gms + prior_games_disp)),
-      torp_spoil = loading * (1.2) * (sum(.data$spoil_pts_adj * .data$weight_gm) / (.data$wt_gms + prior_games_recv)),
-      torp_hitout = loading * (sum(.data$hitout_pts_adj * .data$weight_gm) / (.data$wt_gms + prior_games_recv)),
-      torp = round(.data$torp_recv + .data$torp_disp + .data$torp_spoil + .data$torp_hitout, 2),
-      torp_recv_adj = round(.data$torp_recv, 2),
-      torp_disp_adj = round(.data$torp_disp, 2),
-      torp_spoil_adj = round(.data$torp_spoil, 2),
-      torp_hitout_adj = round(.data$torp_hitout, 2),
-      posn = dplyr::last(.data$pos),
-      .groups = "drop"
-    )
+
+  # Convert to data.table (makes a copy to avoid modifying original)
+  dt <- data.table::as.data.table(plyr_gm_df)
+
+  # Filter and add computed columns
+
+  dt <- dt[match_id <= match_ref]
+  dt[, weight_gm := exp(as.numeric(-(as.Date(date_val) - as.Date(utc_start_time))) / decay)]
+  dt[, plyr_nm := paste(player_given_name, player_surname)]
+
+  # Aggregate by player_id using data.table syntax
+
+  # First pass: compute base aggregations
+  result <- dt[, .(
+    player_name = max(plyr_nm),
+    gms = data.table::uniqueN(match_id),
+    wt_gms = sum(unique(weight_gm), na.rm = TRUE),
+    tot_p_sum = sum(tot_p_adj * weight_gm, na.rm = TRUE),
+    recv_sum = sum(recv_pts_adj * weight_gm, na.rm = TRUE),
+    disp_sum = sum(disp_pts_adj * weight_gm, na.rm = TRUE),
+    spoil_sum = sum(spoil_pts_adj * weight_gm, na.rm = TRUE),
+    hitout_sum = sum(hitout_pts_adj * weight_gm, na.rm = TRUE),
+    posn = data.table::last(pos)
+  ), by = player_id]
+
+  # Second pass: compute derived columns by reference (avoids repeated division)
+  result[, `:=`(
+    tot_p_g = tot_p_sum / wt_gms,
+    recv_g = recv_sum / wt_gms,
+    disp_g = disp_sum / wt_gms,
+    spoil_g = spoil_sum / wt_gms,
+    hitout_g = hitout_sum / wt_gms,
+    torp_recv = loading * recv_sum / (wt_gms + prior_games_recv),
+    torp_disp = loading * disp_sum / (wt_gms + prior_games_disp),
+    torp_spoil = loading * 1.2 * spoil_sum / (wt_gms + prior_games_recv),
+    torp_hitout = loading * hitout_sum / (wt_gms + prior_games_recv)
+  )]
+
+  # Third pass: compute final torp and rounded values
+  result[, `:=`(
+    torp = round(torp_recv + torp_disp + torp_spoil + torp_hitout, 2),
+    torp_recv_adj = round(torp_recv, 2),
+    torp_disp_adj = round(torp_disp, 2),
+    torp_spoil_adj = round(torp_spoil, 2),
+    torp_hitout_adj = round(torp_hitout, 2)
+  )]
+
+  # Remove intermediate columns
+  result[, c("tot_p_sum", "recv_sum", "disp_sum", "spoil_sum", "hitout_sum") := NULL]
+
+  return(result)
 }
 
 #' Prepare final dataframe
