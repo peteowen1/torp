@@ -1,6 +1,6 @@
 #' Save a Data Frame to a GitHub Release via Piggyback
 #'
-#' Saves a data frame as an `.rds` file and uploads it to a GitHub release using the `piggyback` package.
+#' Saves a data frame as a `.parquet` file and uploads it to a GitHub release using the `piggyback` package.
 #'
 #' @param df A data frame to save.
 #' @param file_name A string for the file name (without extension).
@@ -15,8 +15,8 @@
 #' }
 save_to_release <- function(df, file_name, release_tag) {
   temp_dir <- tempdir(check = TRUE)
-  .f_name <- paste0(file_name, ".rds")
-  saveRDS(df, file.path(temp_dir, .f_name))
+  .f_name <- paste0(file_name, ".parquet")
+  arrow::write_parquet(df, file.path(temp_dir, .f_name))
 
   piggyback::pb_upload(file.path(temp_dir, .f_name),
                        repo = get_torp_data_repo(),
@@ -24,14 +24,14 @@ save_to_release <- function(df, file_name, release_tag) {
   )
 }
 
-#' Read an RDS File from a GitHub Release via Piggyback
+#' Read a Parquet File from a GitHub Release via Piggyback
 #'
-#' Downloads and reads an `.rds` file from a GitHub release using the `piggyback` package.
+#' Downloads and reads a `.parquet` file from a GitHub release using the `piggyback` package.
 #'
-#' @param file_name The base name of the file (without `.rds` extension).
+#' @param file_name The base name of the file (without `.parquet` extension).
 #' @param release_tag The GitHub release tag the file is associated with.
 #'
-#' @return An R object read from the downloaded `.rds` file.
+#' @return A data frame read from the downloaded `.parquet` file.
 #' @keywords internal
 #'
 #' @examples
@@ -39,7 +39,7 @@ save_to_release <- function(df, file_name, release_tag) {
 #' df <- file_reader("latest_data", "v1.0.0")
 #' }
 file_reader <- function(file_name, release_tag) {
-  f_name <- paste0(file_name, ".rds")
+  f_name <- paste0(file_name, ".parquet")
   piggyback::pb_download(f_name,
                          repo = get_torp_data_repo(),
                          tag = release_tag,
@@ -47,7 +47,7 @@ file_reader <- function(file_name, release_tag) {
   )
   temp_dir <- tempdir(check = TRUE)
 
-  readRDS(file.path(temp_dir, f_name))
+  arrow::read_parquet(file.path(temp_dir, f_name))
 }
 
 
@@ -349,7 +349,7 @@ load_predictions <- function(seasons = get_afl_season()) {
   return(out)
 }
 
-#' Load any rds/csv/csv.gz/parquet/qs file from a remote URL
+#' Load parquet files from remote URLs
 #'
 #' @param url A vector of URLs to load into memory. If more than one URL provided, will row-bind them.
 #' @param seasons A numeric vector of years that will be used to filter the dataframe's `season` column. If `TRUE` (default), does not filter.
@@ -378,7 +378,7 @@ load_from_url <- function(url, ..., seasons = TRUE, rounds = TRUE, peteowen1 = F
   }
 
   if (length(url) == 1) {
-    out <- rds_from_url_cached(url, use_cache = use_cache, max_age_days = cache_opts$max_age_days)
+    out <- parquet_from_url_cached(url, use_cache = use_cache, max_age_days = cache_opts$max_age_days)
     if (!isTRUE(seasons)) {
       stopifnot(is.numeric(seasons))
       if ("season" %in% names(out)) out <- out[out$season %in% seasons, ]
@@ -408,7 +408,7 @@ load_from_url <- function(url, ..., seasons = TRUE, rounds = TRUE, peteowen1 = F
     max_age <- cache_opts$max_age_days
 
     f <- function(url_single) {
-      rds_from_url_cached(url_single, use_cache = use_cache, max_age_days = max_age)
+      parquet_from_url_cached(url_single, use_cache = use_cache, max_age_days = max_age)
     }
 
     # Process URLs with progress
@@ -431,17 +431,17 @@ load_from_url <- function(url, ..., seasons = TRUE, rounds = TRUE, peteowen1 = F
   return(out)
 }
 
-#' Load .rds file from a remote connection with disk caching
+#' Load parquet file from a remote connection with disk caching
 #'
 #' @param url A character URL
 #' @param use_cache Logical. If TRUE, use disk cache.
 #' @param max_age_days Maximum age for cached files in days.
 #'
-#' @return A data frame as created by [`readRDS()`]
+#' @return A data frame
 #' @keywords internal
 #' @importFrom cli cli_warn cli_abort
 #' @importFrom data.table data.table setDT
-rds_from_url_cached <- function(url, use_cache = TRUE, max_age_days = 7) {
+parquet_from_url_cached <- function(url, use_cache = TRUE, max_age_days = 7) {
   # Check disk cache first
   if (use_cache && is_disk_cached(url, max_age_days)) {
     cached_data <- read_disk_cache(url)
@@ -452,7 +452,7 @@ rds_from_url_cached <- function(url, use_cache = TRUE, max_age_days = 7) {
   }
 
   # Download from URL
-  result <- rds_from_url(url)
+  result <- parquet_from_url(url)
 
   # Cache successful downloads
   if (use_cache && nrow(result) > 0) {
@@ -462,15 +462,15 @@ rds_from_url_cached <- function(url, use_cache = TRUE, max_age_days = 7) {
   return(result)
 }
 
-#' Load .rds file from a remote connection
+#' Load parquet file from a remote connection
 #'
 #' @param url A character URL
 #'
-#' @return A data frame as created by [`readRDS()`]
-#' @keywords internal
+#' @return A data frame
+#' @export
 #' @importFrom cli cli_warn cli_abort
 #' @importFrom data.table data.table setDT
-rds_from_url <- function(url) {
+parquet_from_url <- function(url) {
   # Validate URL format
   if (!is.character(url) || length(url) != 1 || nchar(url) == 0) {
     cli::cli_abort("URL must be a single non-empty character string")
@@ -483,16 +483,9 @@ rds_from_url <- function(url) {
   # Note: Internet connectivity should be checked by caller (load_from_url)
   # to avoid redundant checks for each URL in batch operations
 
-  con <- NULL
   tryCatch({
-    con <- url(url)
-    on.exit({
-      if (!is.null(con)) {
-        try(close(con), silent = TRUE)
-      }
-    })
-
-    load <- readRDS(con)
+    # Arrow can read parquet directly from URL
+    load <- arrow::read_parquet(url)
 
     # Validate that we got actual data
     if (is.null(load)) {
@@ -645,7 +638,7 @@ generate_urls <- function(data_type, file_prefix, seasons, rounds = NULL, prefer
   if (is.null(rounds)) {
     combinations <- expand.grid(seasons = seasons)
 
-    urls <- glue::glue("{base_url}/{data_type}/{file_prefix}_{combinations$seasons}.rds")
+    urls <- glue::glue("{base_url}/{data_type}/{file_prefix}_{combinations$seasons}.parquet")
     urls <- sort(urls)
   }
 
@@ -665,11 +658,11 @@ generate_urls <- function(data_type, file_prefix, seasons, rounds = NULL, prefer
       for (season in seasons) {
         if (season < current_season) {
           # Past seasons: use aggregated file
-          url <- glue::glue("{base_url}/{data_type}/{file_prefix}_{season}_all.rds")
+          url <- glue::glue("{base_url}/{data_type}/{file_prefix}_{season}_all.parquet")
           urls <- c(urls, url)
         } else {
           # Current season: use aggregated file (updated daily)
-          url <- glue::glue("{base_url}/{data_type}/{file_prefix}_{season}_all.rds")
+          url <- glue::glue("{base_url}/{data_type}/{file_prefix}_{season}_all.parquet")
           urls <- c(urls, url)
         }
       }
@@ -681,7 +674,7 @@ generate_urls <- function(data_type, file_prefix, seasons, rounds = NULL, prefer
     rounds_02d <- sprintf("%02d", rounds)
     combinations <- expand.grid(seasons = seasons, rounds = rounds_02d)
 
-    urls <- glue::glue("{base_url}/{data_type}/{file_prefix}_{combinations$seasons}_{combinations$rounds}.rds")
+    urls <- glue::glue("{base_url}/{data_type}/{file_prefix}_{combinations$seasons}_{combinations$rounds}.parquet")
     urls <- sort(urls)
   }
 
@@ -692,7 +685,7 @@ generate_urls <- function(data_type, file_prefix, seasons, rounds = NULL, prefer
     current_round <- sprintf("%02d", get_afl_week())
   }
 
-  max_url <- glue::glue("{base_url}/{data_type}/{file_prefix}_{current_season}_{current_round}.rds")
+  max_url <- glue::glue("{base_url}/{data_type}/{file_prefix}_{current_season}_{current_round}.parquet")
 
   urls <- urls[urls <= max_url]
 
