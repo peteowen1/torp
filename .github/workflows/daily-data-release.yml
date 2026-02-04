@@ -1,0 +1,160 @@
+name: Daily Data Release
+
+on:
+  schedule:
+    # Run at 2:00 AM AEST (16:00 UTC previous day)
+    # This timing catches late Monday night games
+    - cron: '0 16 * * *'
+  workflow_dispatch:
+    inputs:
+      force_release:
+        description: 'Force release (skip new games check)'
+        type: boolean
+        default: false
+      rebuild_aggregates:
+        description: 'Rebuild all historical aggregated files (2021-2025)'
+        type: boolean
+        default: false
+
+env:
+  GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+  R_KEEP_PKG_SOURCE: yes
+
+jobs:
+  release-data:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+      issues: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup R
+        uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: '4.4.0'
+          use-public-rspm: true
+
+      - name: Setup R dependencies
+        uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          cache-version: 3
+          extra-packages: |
+            any::devtools
+            any::piggyback
+            any::fitzRoy
+            any::tictoc
+            any::mgcv
+            any::cli
+            any::glue
+            any::data.table
+            any::janitor
+            any::lubridate
+          needs: |
+            devtools
+
+      - name: Run daily release
+        run: |
+          echo "Starting daily data release..."
+          Rscript -e "
+            devtools::load_all()
+            source('data-raw/01-data/daily_release.R')
+            run_daily_release(force = ${{ inputs.force_release || false }})
+          "
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Rebuild historical aggregates (if requested)
+        if: ${{ inputs.rebuild_aggregates }}
+        run: |
+          echo "Rebuilding historical aggregated files..."
+          Rscript data-raw/01-data/create_aggregated_files.R
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get release info
+        id: release_info
+        run: |
+          AFL_SEASON=$(Rscript -e "devtools::load_all(); cat(get_afl_season())")
+          AFL_ROUND=$(Rscript -e "devtools::load_all(); cat(get_afl_week())")
+          echo "afl_season=$AFL_SEASON" >> $GITHUB_OUTPUT
+          echo "afl_round=$AFL_ROUND" >> $GITHUB_OUTPUT
+
+      - name: Create release summary
+        run: |
+          echo "## Daily Data Release Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Date:** $(date +'%Y-%m-%d %H:%M UTC')" >> $GITHUB_STEP_SUMMARY
+          echo "**AFL Season:** ${{ steps.release_info.outputs.afl_season }}" >> $GITHUB_STEP_SUMMARY
+          echo "**AFL Round:** ${{ steps.release_info.outputs.afl_round }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Data Updated" >> $GITHUB_STEP_SUMMARY
+          echo "- Chains data (per-round + aggregated)" >> $GITHUB_STEP_SUMMARY
+          echo "- Play-by-play data (per-round + aggregated)" >> $GITHUB_STEP_SUMMARY
+          echo "- Expected goals (xG) data" >> $GITHUB_STEP_SUMMARY
+          echo "- Player statistics" >> $GITHUB_STEP_SUMMARY
+          echo "- Fixtures" >> $GITHUB_STEP_SUMMARY
+          echo "- Results" >> $GITHUB_STEP_SUMMARY
+          echo "- Team lineups" >> $GITHUB_STEP_SUMMARY
+          echo "- Player details" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Force Flags" >> $GITHUB_STEP_SUMMARY
+          echo "- Force release: ${{ inputs.force_release || false }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Rebuild aggregates: ${{ inputs.rebuild_aggregates || false }}" >> $GITHUB_STEP_SUMMARY
+
+      - name: Notify on failure
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = 'Daily Data Release Failed';
+            const body = `The daily data release workflow failed on ${new Date().toISOString()}.
+
+            **Details:**
+            - Season: ${{ steps.release_info.outputs.afl_season || 'unknown' }}
+            - Round: ${{ steps.release_info.outputs.afl_round || 'unknown' }}
+
+            Please check the [workflow run](${context.payload.repository.html_url}/actions/runs/${context.runId}) for details.
+
+            **Troubleshooting:**
+            1. Check if fitzRoy API is accessible
+            2. Verify GITHUB_TOKEN has write permissions to torpdata
+            3. Review error logs for specific data type failures
+
+            **Manual Recovery:**
+            - Run workflow manually with "Force release" checked
+            - Or run: \`Rscript data-raw/01-data/daily_release.R --force\``;
+
+            // Check for existing open issue
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'automation,bug'
+            });
+
+            const existingIssue = issues.data.find(i => i.title === title);
+
+            if (existingIssue) {
+              // Update existing issue
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existingIssue.number,
+                body: `Workflow failed again on ${new Date().toISOString()}.\n\n[View run](${context.payload.repository.html_url}/actions/runs/${context.runId})`
+              });
+            } else {
+              // Create new issue
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: title,
+                body: body,
+                labels: ['bug', 'automation']
+              });
+            }

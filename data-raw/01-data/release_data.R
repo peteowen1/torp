@@ -1,3 +1,11 @@
+# Legacy Data Release Script
+#
+# NOTE: For automated daily releases, use daily_release.R instead.
+# This script is kept for manual/ad-hoc releases and historical reference.
+#
+# For daily automated releases: data-raw/01-data/daily_release.R
+# For creating historical aggregates: data-raw/01-data/create_aggregated_files.R
+
 library(dplyr)
 library(stringr)
 library(httr)
@@ -24,6 +32,47 @@ get_chains_data <- function(season, round) {
   save_to_release(df = chains, file_name = file_name, release_tag = "chains-data")
 }
 
+#' Create aggregated seasonal chains file
+#'
+#' Combines all per-round chains files for a season into a single file
+#' for faster bulk downloads.
+#'
+#' @param season Season year to aggregate
+create_aggregated_chains <- function(season) {
+  cli::cli_inform("Creating aggregated chains file for {season}...")
+
+  # Determine rounds to include
+  if (season == get_afl_season()) {
+    max_round <- get_afl_week()
+  } else {
+    max_round <- 28
+  }
+
+  # Load all rounds for the season
+  all_chains <- purrr::map(0:max_round, function(round) {
+    tryCatch({
+      round_02d <- sprintf("%02d", round)
+      file_name <- glue::glue("chains_data_{season}_{round_02d}")
+      file_reader(file_name, "chains-data")
+    }, error = function(e) {
+      NULL
+    })
+  })
+
+  # Combine and save
+  combined <- data.table::rbindlist(
+    purrr::compact(all_chains),
+    use.names = TRUE,
+    fill = TRUE
+  )
+
+  if (nrow(combined) > 0) {
+    file_name <- glue::glue("chains_data_{season}_all")
+    save_to_release(df = combined, file_name = file_name, release_tag = "chains-data")
+    cli::cli_inform("Saved aggregated chains file: {file_name} ({nrow(combined)} rows)")
+  }
+}
+
 # extract and save
 # purrr::walk(1:27,~get_chains_data(2021,.))
 # purrr::walk(1:27,~get_chains_data(2022,.))
@@ -31,6 +80,9 @@ get_chains_data <- function(season, round) {
 # purrr::walk(0:28,~get_chains_data(2024,.))
 # purrr::walk(0:28,~get_chains_data(2025,.))
 get_chains_data(2025, get_afl_week())
+
+# Create aggregated file for current season after uploading latest round
+create_aggregated_chains(2025)
 
 tictoc::toc(log= TRUE)
 
@@ -62,6 +114,47 @@ get_pbp_data <- function(season, round) {
   save_to_release(df = model_data_wp, file_name = file_name, release_tag = "pbp-data")
 }
 
+#' Create aggregated seasonal pbp file
+#'
+#' Combines all per-round pbp files for a season into a single file
+#' for faster bulk downloads.
+#'
+#' @param season Season year to aggregate
+create_aggregated_pbp <- function(season) {
+  cli::cli_inform("Creating aggregated pbp file for {season}...")
+
+  # Determine rounds to include
+  if (season == get_afl_season()) {
+    max_round <- get_afl_week()
+  } else {
+    max_round <- 28
+  }
+
+  # Load all rounds for the season
+  all_pbp <- purrr::map(0:max_round, function(round) {
+    tryCatch({
+      round_02d <- sprintf("%02d", round)
+      file_name <- glue::glue("pbp_data_{season}_{round_02d}")
+      file_reader(file_name, "pbp-data")
+    }, error = function(e) {
+      NULL
+    })
+  })
+
+  # Combine and save
+  combined <- data.table::rbindlist(
+    purrr::compact(all_pbp),
+    use.names = TRUE,
+    fill = TRUE
+  )
+
+  if (nrow(combined) > 0) {
+    file_name <- glue::glue("pbp_data_{season}_all")
+    save_to_release(df = combined, file_name = file_name, release_tag = "pbp-data")
+    cli::cli_inform("Saved aggregated pbp file: {file_name} ({nrow(combined)} rows)")
+  }
+}
+
 # extract and save
 # purrr::walk(1:27,~get_pbp_data(2021,.))
 # purrr::walk(1:27,~get_pbp_data(2022,.))
@@ -69,6 +162,9 @@ get_pbp_data <- function(season, round) {
 # purrr::walk(0:28,~get_pbp_data(2024,.))
 # purrr::walk(0:get_afl_week(),~get_pbp_data(2025,.))
 get_pbp_data(2025, get_afl_week())
+
+# Create aggregated file for current season after uploading latest round
+create_aggregated_pbp(2025)
 
 tictoc::toc(log= TRUE)
 
