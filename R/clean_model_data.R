@@ -1,8 +1,4 @@
-# AFL Field and Game Constants
-AFL_GOAL_WIDTH <- 6.4  # Width of AFL goal posts in meters
-AFL_QUARTER_DURATION <- 2000  # Duration of AFL quarter in game seconds
-AFL_MAX_PERIODS <- 4  # Maximum number of periods/quarters in AFL
-AFL_TIME_SCALER_MAX <- 4  # Maximum value for time left scaler calculation
+# Note: AFL constants are defined in R/constants.R
 
 #' Clean Model Data for Expected Points Value (EPV)
 #'

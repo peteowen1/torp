@@ -32,7 +32,7 @@ save_to_release <- function(df, file_name, release_tag) {
 #' @param release_tag The GitHub release tag the file is associated with.
 #'
 #' @return An R object read from the downloaded `.rds` file.
-#' @export
+#' @keywords internal
 #'
 #' @examples
 #' \dontrun{
@@ -467,7 +467,7 @@ load_from_url <- function(url, ..., seasons = TRUE, rounds = TRUE, peteowen1 = F
 #' @param url A character URL
 #'
 #' @return A data frame as created by [`readRDS()`]
-#' @export
+#' @keywords internal
 #' @importFrom cli cli_warn cli_abort
 #' @importFrom data.table data.table setDT
 rds_from_url <- function(url) {

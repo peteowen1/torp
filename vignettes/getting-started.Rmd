@@ -1,8 +1,8 @@
 ---
-title: "getting-started"
+title: "Getting Started with TORP"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{getting-started}
+  %\VignetteIndexEntry{Getting Started with TORP}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -10,10 +10,144 @@ vignette: >
 ```{r, include = FALSE}
 knitr::opts_chunk$set(
   collapse = TRUE,
-  comment = "#>"
+  comment = "#>",
+  eval = FALSE
 )
 ```
 
-```{r setup}
-library(torp)
+## Introduction
+
+The **torp** package provides tools for Australian Football League (AFL) analytics, including:
+
+- Player rating systems (TORP - Team Offensive Rating Points)
+- Match outcome predictions
+- Expected goals (xG) and expected points (xP) models
+- Win probability calculations
+- Comprehensive data loading functions
+
+## Installation
+
+Install the development version from GitHub:
+
+```{r install}
+# install.packages("devtools")
+devtools::install_github("peteowen1/torp")
 ```
+
+## Loading Data
+
+The package provides several functions to load AFL data from the [torpdata repository](https://github.com/peteowen1/torpdata).
+
+### Play-by-Play Data
+
+```{r pbp}
+library(torp)
+
+# Load play-by-play data for recent seasons
+pbp <- load_pbp(seasons = 2024)
+
+# Load specific rounds
+pbp_round1 <- load_pbp(seasons = 2024, rounds = 1)
+
+# Load all available data
+pbp_all <- load_pbp(seasons = TRUE, rounds = TRUE)
+```
+
+### Other Data Types
+
+```{r other-data}
+# Chains (possession sequences)
+chains <- load_chains(seasons = 2024)
+
+# Expected goals data
+xg <- load_xg(seasons = 2024)
+
+# Player statistics
+player_stats <- load_player_stats(seasons = 2024)
+
+# Match results
+results <- load_results(seasons = 2024)
+
+# Fixture/schedule data
+fixtures <- load_fixtures(seasons = 2024)
+
+# Player biographical details
+player_details <- load_player_details(seasons = 2024)
+```
+
+## Cleaning Play-by-Play Data
+
+The `clean_pbp()` function prepares raw play-by-play data for analysis:
+```{r clean}
+# Load and clean data
+pbp_raw <- load_pbp(seasons = 2024, rounds = 1:5)
+pbp_clean <- clean_pbp(pbp_raw)
+```
+
+This adds useful variables including:
+- Play type classification
+- Phase of play
+- Score differentials
+- Expected points values
+
+## Match Expected Goals
+
+Calculate expected goals (xG) summaries for matches:
+
+```{r xg-match}
+# Get xG summary for a specific round
+match_xg <- match_xgs(season = 2024, round = 1)
+```
+
+## Player Ratings
+
+The package includes functions for calculating player ratings:
+
+```{r ratings}
+# Load player game data
+player_game_data <- load_player_stats(seasons = 2024)
+
+# Calculate TORP ratings (requires additional setup)
+# See the player-ratings vignette for details
+```
+
+## Data Validation
+
+Validate your data before analysis:
+
+```{r validate}
+# Check data quality
+validation_result <- validate_data(pbp_clean)
+```
+
+## Configuration
+
+### Data Repository
+
+By default, data is loaded from `peteowen1/torpdata`. You can configure a different repository:
+
+```{r config}
+# Set a custom data repository
+set_torp_data_repo("your-username/your-repo")
+```
+
+### Caching
+
+Fixture data supports caching for improved performance:
+
+```{r cache}
+# Load fixtures with caching (default)
+fixtures <- load_fixtures(all = TRUE, use_cache = TRUE)
+
+# Disable caching
+fixtures <- load_fixtures(all = TRUE, use_cache = FALSE)
+
+# Verbose mode shows cache status
+fixtures <- load_fixtures(all = TRUE, verbose = TRUE)
+```
+
+## Next Steps
+
+- Explore the package documentation: `?torp`
+- Check available functions: `ls("package:torp")`
+- Report issues: https://github.com/peteowen1/torp/issues
