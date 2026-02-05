@@ -116,3 +116,30 @@
 #'   `devtools::install_github("peteowen1/torpmodels")`
 "xgb_win_model"
 
+#' AFL Season Fixtures
+#'
+#' Complete fixture list for the current AFL season including match scheduling,
+#' team matchups, venues, and round information. Useful as offline fallback
+#' when torpdata is unavailable.
+#'
+#' @format A data frame with fixture information:
+#' \describe{
+#'   \item{id}{Unique fixture identifier}
+#'   \item{providerId}{AFL API provider ID (e.g., CD_M20260140001)}
+#'   \item{utcStartTime}{Scheduled start time in UTC}
+#'   \item{status}{Match status (SCHEDULED, COMPLETED, etc.)}
+#'   \item{round.roundNumber}{Round number (0 for Opening Round)}
+#'   \item{round.name}{Round name}
+#'   \item{home.team.name}{Home team full name}
+#'   \item{home.team.abbreviation}{Home team abbreviation}
+#'   \item{away.team.name}{Away team full name}
+#'   \item{away.team.abbreviation}{Away team abbreviation}
+#'   \item{venue.name}{Venue name}
+#'   \item{venue.state}{Venue state}
+#'   \item{compSeason.year}{Season year}
+#' }
+#' @source AFL fixture data via fitzRoy package
+#' @note For live/current fixtures, use `load_fixtures()` from torpdata.
+#'   This bundled copy serves as offline fallback reference.
+"fixtures"
+
