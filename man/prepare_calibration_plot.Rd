@@ -15,3 +15,4 @@ ggplot2-ready dataframe for calibration plots
 \description{
 Prepares data for creating reliability/calibration plots
 }
+\keyword{internal}

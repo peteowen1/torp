@@ -15,3 +15,4 @@ Vector of 0.5 predictions
 \description{
 Simple baseline that always predicts 50\% win probability
 }
+\keyword{internal}

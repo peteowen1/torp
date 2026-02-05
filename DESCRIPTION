@@ -46,6 +46,7 @@ Config/testthat/edition: 3
 Depends: 
     R (>= 3.5)
 LazyData: true
+LazyDataCompression: xz
 URL: https://github.com/peteowen1/torp
 BugReports: https://github.com/peteowen1/torp/issues
 VignetteBuilder: knitr

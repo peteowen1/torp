@@ -4,7 +4,14 @@
 \alias{load_from_url}
 \title{Load parquet files from remote URLs}
 \usage{
-load_from_url(url, ..., seasons = TRUE, rounds = TRUE, peteowen1 = FALSE, use_disk_cache = TRUE)
+load_from_url(
+  url,
+  ...,
+  seasons = TRUE,
+  rounds = TRUE,
+  peteowen1 = FALSE,
+  use_disk_cache = TRUE
+)
 }
 \arguments{
 \item{url}{A vector of URLs to load into memory. If more than one URL provided, will row-bind them.}
@@ -16,6 +23,8 @@ load_from_url(url, ..., seasons = TRUE, rounds = TRUE, peteowen1 = FALSE, use_di
 \item{rounds}{A numeric vector of rounds that will be used to filter the dataframe's \code{round} column. If \code{TRUE} (default), does not filter.}
 
 \item{peteowen1}{TRUE to add peteowen1_data classing and attributes.}
+
+\item{use_disk_cache}{Logical. If TRUE (default), uses persistent disk cache for faster repeated loads.}
 }
 \value{
 A data frame, possibly of type \code{peteowen1_data}

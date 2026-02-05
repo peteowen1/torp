@@ -17,7 +17,8 @@ This function cleans and processes play-by-play data for AFL matches.
 }
 \examples{
 \dontrun{
-cleaned_data <- clean_pbp(raw_pbp_data)
+chains <- load_chains(2024, rounds = 1)
+cleaned_data <- clean_pbp(chains)
 }
 
 }

@@ -13,9 +13,9 @@ filter_game_data(df, season_val, round_num, matchid, team)
 
 \item{round_num}{Round number}
 
-\item{matchid}{Match ID}
+\item{matchid}{Match ID (NULL for no filtering)}
 
-\item{team}{Team name}
+\item{team}{Team name (NULL for no filtering)}
 }
 \value{
 Filtered data frame

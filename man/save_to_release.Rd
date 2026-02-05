@@ -20,7 +20,7 @@ No return value. Used for side effects (file upload).
 Saves a data frame as a \code{.parquet} file and uploads it to a GitHub release using the \code{piggyback} package.
 }
 \examples{
-\dontrun{
+\donttest{
 save_to_release(my_df, "latest_data", "v1.0.0")
 }
 }

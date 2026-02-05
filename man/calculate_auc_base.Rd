@@ -15,6 +15,8 @@ calculate_auc_base(actual, predicted)
 Numeric AUC value
 }
 \description{
-Internal function to calculate Area Under the ROC Curve using trapezoidal rule
+Internal function to calculate Area Under the ROC Curve using the
+Mann-Whitney U-statistic formula. This is O(n log n) vs O(n²) for
+the naive threshold-based approach.
 }
 \keyword{internal}

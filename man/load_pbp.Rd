@@ -24,3 +24,6 @@ try({ # prevents cran errors
 })
 }
 }
+\seealso{
+\code{\link[=load_chains]{load_chains()}}, \code{\link[=load_xg]{load_xg()}}, \code{\link[=load_fixtures]{load_fixtures()}}, \code{\link[=clean_pbp]{clean_pbp()}}
+}

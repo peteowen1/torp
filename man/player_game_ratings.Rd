@@ -7,8 +7,9 @@
 player_game_ratings(
   season_val = get_afl_season(),
   round_num = get_afl_week(),
-  matchid = FALSE,
-  team = FALSE
+  matchid = NULL,
+  team = NULL,
+  plyr_gm_df = NULL
 )
 }
 \arguments{
@@ -16,9 +17,11 @@ player_game_ratings(
 
 \item{round_num}{The round number to get ratings for. Default is the current round.}
 
-\item{matchid}{The match ID to filter by. Default is FALSE (no filtering).}
+\item{matchid}{The match ID to filter by. Default is NULL (no filtering).}
 
-\item{team}{The team to filter by. Default is FALSE (no filtering).}
+\item{team}{The team to filter by. Default is NULL (no filtering).}
+
+\item{plyr_gm_df}{Optional pre-loaded player game data. If NULL, will load automatically.}
 }
 \value{
 A data frame containing player game ratings.

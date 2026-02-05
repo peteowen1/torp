@@ -15,3 +15,4 @@ The mode (most frequent value) of the input vector.
 \description{
 This function returns the mode (most frequent value) of a vector.
 }
+\keyword{internal}

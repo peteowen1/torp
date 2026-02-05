@@ -15,3 +15,4 @@ Vector of win probability predictions
 \description{
 Predicts win probability based only on time remaining in the game
 }
+\keyword{internal}

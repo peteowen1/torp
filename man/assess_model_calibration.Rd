@@ -19,3 +19,4 @@ List with calibration assessment results
 \description{
 Comprehensive calibration analysis including reliability plots
 }
+\keyword{internal}
