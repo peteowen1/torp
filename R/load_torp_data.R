@@ -10,7 +10,7 @@
 #' @export
 #'
 #' @examples
-#' \dontrun{
+#' \donttest{
 #' save_to_release(my_df, "latest_data", "v1.0.0")
 #' }
 save_to_release <- function(df, file_name, release_tag) {
@@ -35,7 +35,7 @@ save_to_release <- function(df, file_name, release_tag) {
 #' @keywords internal
 #'
 #' @examples
-#' \dontrun{
+#' \donttest{
 #' df <- file_reader("latest_data", "v1.0.0")
 #' }
 file_reader <- function(file_name, release_tag) {
@@ -59,6 +59,7 @@ file_reader <- function(file_name, release_tag) {
 #' @param rounds A numeric vector associated with given AFL round - defaults to latest round. If set to `TRUE`, returns all available rounds in the given season range.
 #'
 #' @return A data frame containing chains data.
+#' @seealso [load_pbp()], [load_xg()], [load_fixtures()]
 #' @examples
 #' \donttest{
 #' try({ # prevents cran errors
@@ -99,6 +100,7 @@ load_chains <- function(seasons = get_afl_season(), rounds = get_afl_week()) {
 #' @param rounds A numeric vector associated with given AFL round - defaults to latest round. If set to `TRUE`, returns all available rounds in the given season range.
 #'
 #' @return A data frame containing play by play data.
+#' @seealso [load_chains()], [load_xg()], [load_fixtures()], [clean_pbp()]
 #' @examples
 #' \donttest{
 #' try({ # prevents cran errors
@@ -125,6 +127,7 @@ load_pbp <- function(seasons = get_afl_season(), rounds = get_afl_week()) {
 #' @param seasons A numeric vector of 4-digit years associated with given AFL seasons - defaults to latest season. If set to `TRUE`, returns all available data since 2021.
 #'
 #' @return A data frame containing xG data.
+#' @seealso [load_pbp()], [load_chains()], [calculate_match_xgs()]
 #' @examples
 #' \donttest{
 #' try({ # prevents cran errors
@@ -150,6 +153,7 @@ load_xg <- function(seasons = get_afl_season()) {
 #' @param seasons A numeric vector of 4-digit years associated with given AFL seasons - defaults to latest season. If set to `TRUE`, returns all available data since 2021.
 #'
 #' @return A data frame containing player stats data.
+#' @seealso [load_player_details()], [player_game_ratings()], [player_season_ratings()]
 #' @examples
 #' \donttest{
 #' try({ # prevents cran errors
@@ -179,14 +183,15 @@ load_player_stats <- function(seasons = get_afl_season()) {
 #' @param verbose Logical. If TRUE, prints cache hit/miss information.
 #'
 #' @return A data frame containing AFL fixture and schedule data.
+#' @seealso [load_results()], [load_teams()], [load_predictions()]
 #' @examples
 #' \donttest{
 #' try({ # prevents cran errors
 #'   load_fixtures(2021:2022)
-#'   
+#'
 #'   # Load all fixtures with caching disabled
 #'   load_fixtures(all = TRUE, use_cache = FALSE)
-#'   
+#'
 #'   # Load with verbose cache information
 #'   load_fixtures(all = TRUE, verbose = TRUE)
 #' })
@@ -256,6 +261,7 @@ load_fixtures <- function(seasons = NULL, all = FALSE, use_cache = TRUE, cache_t
 #' @param seasons A numeric vector of 4-digit years associated with given AFL seasons - defaults to latest season. If set to `TRUE`, returns all available data since 2021.
 #'
 #' @return A data frame containing AFL team and player lineup data.
+#' @seealso [load_fixtures()], [load_results()], [load_player_details()]
 #' @examples
 #' \donttest{
 #' try({ # prevents cran errors
@@ -281,6 +287,7 @@ load_teams <- function(seasons = get_afl_season()) {
 #' @param seasons A numeric vector of 4-digit years associated with given AFL seasons - defaults to latest season. If set to `TRUE`, returns all available data since 2021.
 #'
 #' @return A data frame containing AFL match results and final scores.
+#' @seealso [load_fixtures()], [load_predictions()], [load_teams()]
 #' @examples
 #' \donttest{
 #' try({ # prevents cran errors
@@ -306,6 +313,7 @@ load_results <- function(seasons = get_afl_season()) {
 #' @param seasons A numeric vector of 4-digit years associated with given AFL seasons - defaults to latest season. If set to `TRUE`, returns all available data since 2021.
 #'
 #' @return A data frame containing AFL player biographical details including names, ages, and team affiliations.
+#' @seealso [load_player_stats()], [calculate_torp_ratings()], [player_game_ratings()]
 #' @examples
 #' \donttest{
 #' try({ # prevents cran errors
@@ -331,6 +339,7 @@ load_player_details <- function(seasons = get_afl_season()) {
 #' @param seasons A numeric vector of 4-digit years associated with given AFL seasons - defaults to latest season. If set to `TRUE`, returns all available data since 2021.
 #'
 #' @return A data frame containing AFL match predictions including win probabilities and expected scores.
+#' @seealso [load_fixtures()], [load_results()], [simulate_season()]
 #' @examples
 #' \donttest{
 #' try({ # prevents cran errors
@@ -692,12 +701,3 @@ generate_urls <- function(data_type, file_prefix, seasons, rounds = NULL, prefer
   return(as.character(urls))
 }
 
-#' Check if a package is installed
-#'
-#' @param pkg Name of the package
-#'
-#' @return Logical indicating if the package is installed
-#' @keywords internal
-is_installed <- function(pkg) {
-  return(requireNamespace(pkg, quietly = TRUE))
-}

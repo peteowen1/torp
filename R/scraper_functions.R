@@ -9,13 +9,14 @@
 #' @export
 #'
 #' @examples
-#' \dontrun{
+#' \donttest{
 #' chains <- get_match_chains(2022, 1)
 #' }
 #' @importFrom dplyr inner_join left_join
+#' @importFrom cli cli_abort
 get_match_chains <- function(season = get_afl_season(), round = NA) {
   if (season < 2021) {
-    stop("Match chain data is not available for seasons prior to 2021.")
+    cli::cli_abort("Match chain data is not available for seasons prior to 2021.")
   }
 
   games <- if (is.na(round)) {
@@ -26,7 +27,7 @@ get_match_chains <- function(season = get_afl_season(), round = NA) {
   }
 
   if (nrow(games) == 0) {
-    stop("No data available for the selected season or round.")
+    cli::cli_abort("No data available for the selected season or round.")
   }
 
   games_vector <- games$matchId

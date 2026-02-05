@@ -29,7 +29,7 @@ predict_wp_score_only <- function(data, pred_data = NULL) {
   if (is.null(pred_data)) {
     # Simple score-based prediction without training
     if (!"points_diff" %in% names(data)) {
-      stop("Data must contain 'points_diff' column")
+      cli::cli_abort("Data must contain 'points_diff' column")
     }
     
     # Simple logistic transformation of points difference
@@ -109,7 +109,7 @@ predict_wp_expected_points <- function(train_data, pred_data) {
   missing_cols <- setdiff(required_cols, names(train_data))
   
   if (length(missing_cols) > 0) {
-    stop(paste("Missing required columns in training data:", paste(missing_cols, collapse = ", ")))
+    cli::cli_abort("Missing required columns in training data: {paste(missing_cols, collapse = ', ')}")
   }
   
   # Fit model with expected points
@@ -139,7 +139,7 @@ predict_wp_gam_baseline <- function(data, pred_data = NULL) {
   if (is.null(pred_data)) {
     # Simple GAM-like prediction without training
     if (!all(c("points_diff", "period", "period_seconds") %in% names(data))) {
-      stop("Data must contain 'points_diff', 'period', and 'period_seconds' columns")
+      cli::cli_abort("Data must contain 'points_diff', 'period', and 'period_seconds' columns")
     }
     
     # Calculate time remaining
@@ -199,13 +199,13 @@ predict_wp_gam_baseline <- function(data, pred_data = NULL) {
 #' @param main_model_preds Predictions from the main model
 #' @param include_gam Logical, whether to include GAM baseline (can be slow)
 #' @return Dataframe with comparison results
-#' @export
+#' @keywords internal
 #' @importFrom dplyr mutate row_number group_by summarise filter bind_rows arrange
 compare_baseline_models <- function(train_data, test_data, main_model_preds, include_gam = FALSE) {
 
   # Ensure we have the target variable
   if (!"label_wp" %in% names(test_data)) {
-    stop("Test data must contain 'label_wp' column")
+    cli::cli_abort("Test data must contain 'label_wp' column")
   }
 
   actual <- test_data$label_wp
@@ -304,12 +304,12 @@ compare_baseline_models <- function(train_data, test_data, main_model_preds, inc
 #' @param predicted Vector of predicted probabilities
 #' @param n_bins Number of bins for reliability analysis (default: 10)
 #' @return List with calibration assessment results
-#' @export
+#' @keywords internal
 assess_model_calibration <- function(actual, predicted, n_bins = 10) {
   
   # Input validation
   if (length(actual) != length(predicted)) {
-    stop("Actual and predicted vectors must have same length")
+    cli::cli_abort("Actual and predicted vectors must have same length")
   }
   
   # Remove missing values
@@ -428,12 +428,12 @@ assess_model_calibration <- function(actual, predicted, n_bins = 10) {
 #'
 #' @param calibration_results Results from assess_model_calibration
 #' @return ggplot2-ready dataframe for calibration plots
-#' @export
+#' @keywords internal
 #' @importFrom dplyr mutate
 prepare_calibration_plot <- function(calibration_results) {
   
   if (is.null(calibration_results$calibration_data)) {
-    stop("Calibration results must contain calibration_data")
+    cli::cli_abort("Calibration results must contain calibration_data")
   }
   
   plot_data <- calibration_results$calibration_data %>%
@@ -573,7 +573,7 @@ predict_wp_ensemble_baseline <- function(data) {
 #' @param actual Vector of actual binary outcomes
 #' @param data Input data for making predictions
 #' @return Data frame with model evaluation results
-#' @export
+#' @keywords internal
 #' @importFrom dplyr arrange bind_rows desc
 evaluate_baseline_models <- function(actual, data) {
   # Pre-allocate list for results (more efficient than repeated rbind)
@@ -639,41 +639,23 @@ calculate_brier_score <- function(actual, predicted) {
 #'
 #' Creates data structure for plotting model calibration
 #'
+#' A simplified wrapper around assess_model_calibration for creating calibration
+#' plot data. For more comprehensive calibration analysis, use assess_model_calibration
+#' directly followed by prepare_calibration_plot.
+#'
 #' @param actual Vector of actual binary outcomes
-#' @param predicted Vector of predicted probabilities  
+#' @param predicted Vector of predicted probabilities
 #' @param n_bins Number of bins for calibration plot
 #' @return List with plot data and statistics
 #' @export
-#' @importFrom dplyr group_by summarise filter
+#' @seealso \code{\link{assess_model_calibration}}, \code{\link{prepare_calibration_plot}}
 create_calibration_plot <- function(actual, predicted, n_bins = 10) {
-  # Input validation
-  if (length(actual) != length(predicted)) {
-    stop("Actual and predicted vectors must have same length")
-  }
-  
-  # Create bins
-  pred_bins <- cut(predicted, 
-                   breaks = quantile(predicted, probs = seq(0, 1, length.out = n_bins + 1)),
-                   include.lowest = TRUE)
-  
-  # Calculate bin statistics
-  plot_data <- data.frame(
-    actual = actual,
-    predicted = predicted,
-    bin = pred_bins
-  ) %>%
-    dplyr::group_by(bin) %>%
-    dplyr::summarise(
-      n = dplyr::n(),
-      mean_predicted = mean(predicted),
-      mean_actual = mean(actual),
-      .groups = "drop"
-    ) %>%
-    dplyr::filter(n >= 5)  # Only use bins with sufficient data
-  
+  # Use the comprehensive assess_model_calibration internally
+  calibration_results <- assess_model_calibration(actual, predicted, n_bins)
+
   return(list(
-    plot_data = plot_data,
-    n_bins = nrow(plot_data),
+    plot_data = calibration_results$calibration_data,
+    n_bins = calibration_results$n_bins_used,
     total_n = length(actual)
   ))
 }

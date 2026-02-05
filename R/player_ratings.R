@@ -19,7 +19,7 @@
 #' @importFrom glue glue
 #' @importFrom cli cli_abort
 #' @importFrom utils data
-torp_ratings <- function(season_val = get_afl_season(type = "current"),
+calculate_torp_ratings <- function(season_val = get_afl_season(type = "current"),
                          round_val = get_afl_week(type = "next"),
                          decay = 365,
                          loading = 1.5,
@@ -34,7 +34,7 @@ torp_ratings <- function(season_val = get_afl_season(type = "current"),
 
   # Load player game statistics if not provided
   if (is.null(plyr_gm_df)) {
-    plyr_gm_df <- torp::plyr_gm_df #load_player_stats(season_val)
+    plyr_gm_df <- load_player_stats(TRUE)
   }
 
   gwk <- sprintf("%02d", round_val)
@@ -73,14 +73,16 @@ torp_ratings <- function(season_val = get_afl_season(type = "current"),
 #' @importFrom data.table as.data.table uniqueN last setDT
 calculate_player_stats <- function(plyr_gm_df = NULL, match_ref, date_val, decay, loading, prior_games_recv, prior_games_disp) {
   if (is.null(plyr_gm_df)) {
-    plyr_gm_df <- torp::plyr_gm_df
+    plyr_gm_df <- load_player_stats(TRUE)
   }
 
   # Convert to data.table (makes a copy to avoid modifying original)
   dt <- data.table::as.data.table(plyr_gm_df)
 
-  # Filter and add computed columns
+  # Set key for efficient filtering and grouping
+  data.table::setkey(dt, match_id)
 
+  # Filter and add computed columns
   dt <- dt[match_id <= match_ref]
   dt[, weight_gm := exp(as.numeric(-(as.Date(date_val) - as.Date(utc_start_time))) / decay)]
   dt[, plyr_nm := paste(player_given_name, player_surname)]
@@ -109,7 +111,7 @@ calculate_player_stats <- function(plyr_gm_df = NULL, match_ref, date_val, decay
     hitout_g = hitout_sum / wt_gms,
     torp_recv = loading * recv_sum / (wt_gms + prior_games_recv),
     torp_disp = loading * disp_sum / (wt_gms + prior_games_disp),
-    torp_spoil = loading * 1.2 * spoil_sum / (wt_gms + prior_games_recv),
+    torp_spoil = loading * RATING_SPOIL_MULTIPLIER * spoil_sum / (wt_gms + prior_games_recv),
     torp_hitout = loading * hitout_sum / (wt_gms + prior_games_recv)
   )]
 
@@ -185,6 +187,7 @@ prepare_final_dataframe <- function(plyr_tm_df = NULL, plyr_gm_df = NULL, season
 #' @param round_num The round number to get ratings for. Default is the current round.
 #' @param matchid The match ID to filter by. Default is FALSE (no filtering).
 #' @param team The team to filter by. Default is FALSE (no filtering).
+#' @param plyr_gm_df Optional pre-loaded player game data. If NULL, will load automatically.
 #'
 #' @return A data frame containing player game ratings.
 #' @export
@@ -193,7 +196,8 @@ prepare_final_dataframe <- function(plyr_tm_df = NULL, plyr_gm_df = NULL, season
 player_game_ratings <- function(season_val = get_afl_season(),
                                 round_num = get_afl_week(),
                                 matchid = FALSE,
-                                team = FALSE) {
+                                team = FALSE,
+                                plyr_gm_df = NULL) {
 
   # Input validation
   if (!is.numeric(season_val) && !is.na(season_val)) {
@@ -213,9 +217,10 @@ player_game_ratings <- function(season_val = get_afl_season(),
     cli::cli_abort("round_num must be between 0 and 30")
   }
 
-  # Load player game data from package
-
-  plyr_gm_df <- torp::plyr_gm_df
+  # Load player game data if not provided
+  if (is.null(plyr_gm_df)) {
+    plyr_gm_df <- load_player_stats(TRUE)
+  }
 
   df <- filter_game_data(plyr_gm_df, season_val, round_num, matchid, team)
 
@@ -346,4 +351,28 @@ get_season_data <- function(season_val, round_num) {
   }
 
   player_game_ratings(season_val, round_range)
+}
+
+#' @rdname calculate_torp_ratings
+#' @description `torp_ratings()` is deprecated; use `calculate_torp_ratings()` instead.
+#' @export
+torp_ratings <- function(season_val = get_afl_season(type = "current"),
+                         round_val = get_afl_week(type = "next"),
+                         decay = 365,
+                         loading = 1.5,
+                         prior_games_recv = 4,
+                         prior_games_disp = 6,
+                         plyr_tm_df = NULL,
+                         plyr_gm_df = NULL) {
+  .Deprecated("calculate_torp_ratings")
+  calculate_torp_ratings(
+    season_val = season_val,
+    round_val = round_val,
+    decay = decay,
+    loading = loading,
+    prior_games_recv = prior_games_recv,
+    prior_games_disp = prior_games_disp,
+    plyr_tm_df = plyr_tm_df,
+    plyr_gm_df = plyr_gm_df
+  )
 }

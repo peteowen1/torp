@@ -1,0 +1,267 @@
+---
+title: "Data Architecture"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Data Architecture}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  eval = FALSE
+)
+```
+
+The torpverse consists of three interconnected packages that work together to provide AFL analytics:
+
+## Package Overview
+
+```
+torpverse/
+├── torp/        # Core analytics package
+├── torpdata/    # Data storage (GitHub releases)
+└── torpmodels/  # Model storage (GitHub releases)
+```
+
+### torp
+
+The main package providing:
+- Data loading functions (`load_pbp()`, `load_chains()`, etc.)
+- Data cleaning and processing (`clean_pbp()`)
+- Model predictions (`add_epv_vars()`, `add_wp_vars()`, `add_shot_vars()`)
+- Player ratings (`calculate_torp_ratings()`)
+- Season simulations (`simulate_season()`)
+
+### torpdata
+
+A data repository (not an R package) storing processed AFL data as parquet files in GitHub releases:
+- Play-by-play data
+- Possession chains
+- Player statistics
+- Fixtures and results
+- Expected goals (xG)
+
+### torpmodels
+
+A lightweight R package providing trained models via GitHub releases:
+- Core models: EP, WP, shot outcome
+- 58 stat-specific GAM models for player projections
+
+## Data Flow
+
+```
+fitzRoy API → torp (cleaning) → torpdata (storage)
+                    ↓
+              torpmodels (models)
+                    ↓
+              torp (predictions)
+```
+
+### 1. Data Collection
+
+Raw data comes from the AFL API via the fitzRoy package:
+
+```{r}
+# Internal data collection (not exported)
+# Uses fitzRoy::fetch_player_stats(), fitzRoy::fetch_fixture(), etc.
+```
+
+### 2. Data Processing
+
+The torp package cleans and enriches raw data:
+
+```{r}
+# Clean play-by-play data
+pbp_clean <- clean_pbp(raw_pbp)
+
+# Add model predictions
+pbp_enriched <- pbp_clean %>%
+  add_epv_vars() %>%
+  add_wp_vars() %>%
+  add_shot_vars()
+```
+
+### 3. Data Storage
+
+Processed data is stored in torpdata GitHub releases as parquet files:
+
+```
+torpdata releases:
+├── pbp-data/         # Play-by-play by season/round
+├── chains-data/      # Possession chains
+├── player_stats-data/# Player statistics
+├── fixtures-data/    # Match fixtures
+├── results-data/     # Match results
+├── xg-data/          # Expected goals
+└── predictions/      # Match predictions
+```
+
+### 4. Data Loading
+
+The torp package loads data from torpdata releases:
+
+```{r}
+library(torp)
+
+# Load play-by-play
+pbp <- load_pbp(2024, rounds = 1:10)
+
+# Load all chains
+chains <- load_chains(TRUE)
+
+# Load fixtures with caching
+fixtures <- load_fixtures(all = TRUE, use_cache = TRUE)
+```
+
+## Caching Strategy
+
+### In-Memory Cache
+
+Fixtures are cached in memory to speed up repeated calls:
+
+```{r}
+# First call fetches from GitHub
+fixtures <- load_fixtures(all = TRUE)
+
+# Second call uses cache (within same session)
+fixtures <- load_fixtures(all = TRUE)
+
+# Force refresh
+fixtures <- load_fixtures(all = TRUE, use_cache = FALSE)
+```
+
+### Disk Cache
+
+All data loading uses persistent disk caching:
+
+```{r}
+# Data is cached to disk by default
+pbp <- load_from_url(urls, use_disk_cache = TRUE)
+
+# Cache location: tools::R_user_dir("torp", "cache")
+```
+
+### Model Cache
+
+Loaded models are cached in memory:
+
+```{r}
+# First prediction loads model
+pbp_ep <- add_epv_vars(pbp)
+
+# Subsequent calls use cached model
+pbp_ep2 <- add_epv_vars(pbp2)
+
+# Clear model cache if needed
+clear_model_cache()
+```
+
+## Data Types
+
+### Play-by-Play (pbp)
+
+Row-level game events including:
+- Event descriptions and types
+- Player and team information
+- Field position (x, y coordinates)
+- Score state
+- Time information
+
+```{r}
+pbp <- load_pbp(2024)
+# Columns: match_id, period, period_seconds, description,
+#          player_id, team_id, x, y, ...
+```
+
+### Chains
+
+Possession sequences from stoppage to stoppage:
+
+```{r}
+chains <- load_chains(2024)
+# Columns: chain_id, match_id, team_id, start_x, end_x,
+#          chain_result, ...
+```
+### Player Statistics
+
+Aggregated player game statistics:
+
+```{r}
+stats <- load_player_stats(2024)
+# Columns: player_id, match_id, disposals, kicks, handballs,
+#          marks, goals, tackles, ...
+```
+
+### Fixtures
+
+Match schedule and metadata:
+
+```{r}
+fixtures <- load_fixtures(all = TRUE)
+# Columns: match_id, round, home_team, away_team, venue,
+#          utcStartTime, ...
+```
+
+## Model Architecture
+
+### Core Models
+
+| Model | Type | Output | Source |
+|-------|------|--------|--------|
+| EP | XGBoost | 5-class probabilities | torpmodels |
+| WP | XGBoost | Win probability | torpmodels |
+| Shot | GAM (mgcv) | 3-class probabilities | torpmodels |
+
+### Stat Models
+
+58 GAM models for player stat prediction, stored in `torpmodels` GitHub releases:
+
+```{r}
+# Load stat model
+goals_model <- torpmodels::load_stat_model("goals")
+
+# Available models: disposals, kicks, handballs, marks, goals,
+# tackles, hitouts, clearances, contested_possessions, ...
+```
+
+## GitHub Releases
+
+### torpdata Releases
+
+- `pbp-data` - Play-by-play files
+- `chains-data` - Chain files
+- `player_stats-data` - Player stat files
+- `fixtures-data` - Fixture files
+- `results-data` - Result files
+- `xg-data` - Expected goals files
+- `predictions` - Prediction files
+- `teams-data` - Team lineup files
+- `player_details-data` - Player detail files
+
+### torpmodels Releases
+
+- `core-models` - EP, WP, shot, xgb_win models
+- `stat-models` - 58 stat-specific GAM models
+
+## Automated Updates
+
+A GitHub Action runs daily to update data:
+
+```yaml
+# .github/workflows/daily-data-release.yml
+# Runs at 2:00 AM AEST (16:00 UTC)
+```
+
+This workflow:
+1. Fetches latest data from AFL API
+2. Processes through torp pipeline
+3. Uploads to torpdata releases
+
+## See Also
+
+- `vignette("getting-started")` - Package introduction
+- `vignette("model-usage")` - EP, WP, and shot models
+- `vignette("player-ratings")` - TORP methodology

@@ -1,0 +1,213 @@
+---
+title: "TORP Player Ratings"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{TORP Player Ratings}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  eval = FALSE
+)
+```
+
+TORP (Total Overall Rating Points) is a player rating system that evaluates AFL players based on their contributions across multiple skill categories.
+
+## Overview
+
+TORP ratings combine four key components:
+
+1. **Receiving (torp_recv)** - Value from receiving disposals
+2. **Disposal (torp_disp)** - Value from kicks and handballs
+3. **Spoils (torp_spoil)** - Defensive spoiling value
+4. **Hitouts (torp_hitout)** - Ruck hitout contribution
+
+## Getting TORP Ratings
+
+```{r}
+library(torp)
+
+# Get current TORP ratings for the next round
+ratings <- calculate_torp_ratings()
+
+# Specify season and round
+ratings <- calculate_torp_ratings(season_val = 2024, round_val = 10)
+
+# View top players
+head(ratings[order(-ratings$torp), ])
+```
+
+## Rating Components
+
+### Receiving Rating (torp_recv)
+
+Measures a player's value from receiving disposals, accounting for:
+- Location where possession was gained
+- Context of the reception (contested vs uncontested)
+- Game state impact
+
+### Disposal Rating (torp_disp)
+
+Evaluates the quality of a player's disposals:
+- Expected points added from kicks
+- Effective handball contribution
+- Turnover impact
+
+### Spoil Rating (torp_spoil)
+
+Captures defensive impact through:
+- Successful spoils
+- Defensive pressure acts
+- Negated opposition opportunities
+
+### Hitout Rating (torp_hitout)
+
+Quantifies ruck contribution:
+- Hitouts to advantage
+- Clearance setup value
+- Contested ball wins
+
+## Decay Weighting
+
+TORP uses exponential decay weighting to emphasize recent performance:
+
+```{r}
+# Default decay of 365 days (1 year half-life)
+ratings <- calculate_torp_ratings(decay = 365)
+
+# Shorter decay emphasizes recent form
+ratings_recent <- calculate_torp_ratings(decay = 180)
+
+# Longer decay for career perspective
+ratings_career <- calculate_torp_ratings(decay = 730)
+```
+
+The decay formula: `weight = exp(-days_ago / decay)`
+
+## Prior Games Adjustment
+
+To handle small sample sizes, TORP applies Bayesian shrinkage:
+
+```{r}
+# Default priors
+ratings <- calculate_torp_ratings(
+  prior_games_recv = 4,  # Prior games for receiving
+  prior_games_disp = 6   # Prior games for disposal
+)
+```
+
+Players with fewer games are shrunk toward the population mean, preventing extreme ratings from limited data.
+
+## Game-Level Ratings
+
+For individual game performance:
+
+```{r}
+# Get ratings for a specific round
+game_ratings <- player_game_ratings(
+  season_val = 2024,
+  round_num = 10
+)
+
+# Filter by team
+carlton_ratings <- player_game_ratings(
+  season_val = 2024,
+  round_num = 10,
+  team = "Carlton"
+)
+
+# Get ratings for a specific match
+match_ratings <- player_game_ratings(
+  matchid = "CD_M20240141001"
+)
+```
+
+## Season Totals
+
+For season-level aggregations:
+
+```{r}
+# Get season totals
+season_ratings <- player_season_ratings(2024)
+
+# Multiple seasons
+multi_season <- player_season_ratings(2022:2024)
+
+# Specific rounds
+partial_season <- player_season_ratings(2024, round_num = 1:10)
+```
+
+## Example Analysis
+
+```{r}
+library(torp)
+library(dplyr)
+
+# Get current ratings
+ratings <- calculate_torp_ratings(2024, 15)
+
+# Top 10 overall
+ratings %>%
+  arrange(desc(torp)) %>%
+  select(player_name, team, torp, torp_recv, torp_disp) %>%
+  head(10)
+
+# Best receivers
+ratings %>%
+  arrange(desc(torp_recv)) %>%
+  select(player_name, team, torp_recv) %>%
+  head(10)
+
+# Best disposers
+ratings %>%
+  arrange(desc(torp_disp)) %>%
+  select(player_name, team, torp_disp) %>%
+  head(10)
+
+# By position
+ratings %>%
+  group_by(position) %>%
+  summarise(
+    avg_torp = mean(torp, na.rm = TRUE),
+    n = n()
+  ) %>%
+  arrange(desc(avg_torp))
+```
+
+## Constants Used
+
+TORP calculations use several constants defined in `R/constants.R`:
+
+- `RATING_DECAY_DEFAULT_DAYS` (365) - Default decay period
+- `RATING_SPOIL_MULTIPLIER` (1.2) - Multiplier for spoil contributions
+
+## Data Requirements
+
+TORP ratings require:
+- Player statistics from `load_player_stats()`
+- Player details from `load_player_details()`
+- Fixtures from `load_fixtures()`
+
+```{r}
+# Pre-load data for faster repeated calls
+player_stats <- load_player_stats(TRUE)  # All seasons
+player_details <- load_player_details(2024)
+
+# Pass pre-loaded data
+ratings <- calculate_torp_ratings(
+  season_val = 2024,
+  round_val = 15,
+  plyr_tm_df = player_details,
+  plyr_gm_df = player_stats
+)
+```
+
+## See Also
+
+- `vignette("getting-started")` - Package introduction
+- `vignette("model-usage")` - EP, WP, and shot models
+- `vignette("data-architecture")` - Data pipeline overview

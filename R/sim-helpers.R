@@ -8,7 +8,7 @@
 #' @importFrom data.table as.data.table setkey rbindlist fifelse fcase
 #' @importFrom stats rnorm
 #' @export
-sim_season <- function(sim_teams, sim_games) {
+simulate_season <- function(sim_teams, sim_games) {
   # Convert to data.table for performance
   sim_teams_dt <- data.table::as.data.table(sim_teams)
   sim_games_dt <- data.table::as.data.table(sim_games)
@@ -114,13 +114,13 @@ process_games_dt <- function(sim_teams, sim_games, round_num) {
   # Calculate estimates and simulate results
   n_games <- nrow(sim_games)
   sim_games[, `:=`(
-    estimate = 6 + (home_torp - away_torp),
-    wp = 1 / (10^(-(6 + (home_torp - away_torp)) / 50) + 1)
+    estimate = SIM_HOME_ADVANTAGE + (home_torp - away_torp),
+    wp = 1 / (10^(-(SIM_HOME_ADVANTAGE + (home_torp - away_torp)) / SIM_WP_SCALING_FACTOR) + 1)
   )]
 
   # Simulate results for this round
   sim_games[roundnum == round_num & is.na(result), result := as.integer(
-    round(stats::rnorm(.N, estimate, 26 + (abs(estimate) / 3)))
+    round(stats::rnorm(.N, estimate, SIM_NOISE_SD + (abs(estimate) / 3)))
   )]
 
   sim_games[, `:=`(
@@ -188,11 +188,11 @@ process_games_dplyr <- function(sim_teams, sim_games, round_num) {
     dplyr::inner_join(sim_ratings, by = c("roundnum" = "roundnum", "home_team" = "team")) %>%
     dplyr::rename(home_torp = "torp") %>%
     dplyr::mutate(
-      estimate = 6 + (.data$home_torp - .data$away_torp),
-      wp = 1 / (10^(-.data$estimate / 50) + 1),
+      estimate = SIM_HOME_ADVANTAGE + (.data$home_torp - .data$away_torp),
+      wp = 1 / (10^(-.data$estimate / SIM_WP_SCALING_FACTOR) + 1),
       result = dplyr::case_when(
         is.na(.data$result) & .data$roundnum == round_num ~
-          as.integer(round(stats::rnorm(dplyr::n(), .data$estimate, 26 + (abs(.data$estimate) / 3)))),
+          as.integer(round(stats::rnorm(dplyr::n(), .data$estimate, SIM_NOISE_SD + (abs(.data$estimate) / 3)))),
         TRUE ~ as.integer(.data$result)
       ),
       outcome = dplyr::case_when(
@@ -235,4 +235,12 @@ process_games_dplyr <- function(sim_teams, sim_games, round_num) {
     ) %>%
     dplyr::select(-"torp_shift", -"home_torp", -"away_torp")
   return(list(sim_teams = sim_teams, sim_games = sim_games))
+}
+
+#' @rdname simulate_season
+#' @description `sim_season()` is deprecated; use `simulate_season()` instead.
+#' @export
+sim_season <- function(sim_teams, sim_games) {
+  .Deprecated("simulate_season")
+  simulate_season(sim_teams = sim_teams, sim_games = sim_games)
 }

@@ -1,3 +1,20 @@
+# Model cache environment - stores loaded models to avoid repeated loading
+.torp_model_cache <- new.env(parent = emptyenv())
+
+#' Clear Model Cache
+#'
+#' Clears all cached models from memory. Useful when you want to force
+#' reloading of models, for example after updating torpmodels.
+#'
+#' @return Invisible NULL
+#' @export
+#' @examples
+#' clear_model_cache()
+clear_model_cache <- function() {
+ rm(list = ls(envir = .torp_model_cache), envir = .torp_model_cache)
+ invisible(NULL)
+}
+
 #' Add Expected Points Value (EPV) Variables
 #'
 #' This function adds EPV-related variables to the input dataframe.
@@ -235,7 +252,7 @@ get_epv_preds <- function(df) {
     if (inherits(ep_model, "xgb.Booster")) {
       # XGBoost model - use xgboost::predict
       if (!requireNamespace("xgboost", quietly = TRUE)) {
-        stop("xgboost package required but not available")
+        cli::cli_abort("xgboost package required but not available")
       }
       model_matrix <- stats::model.matrix(~ . + 0, data = model_data)
       preds_raw <- predict(ep_model, model_matrix)
@@ -320,12 +337,18 @@ get_shot_result_preds <- function(df) {
 #' Load Model with Fallback
 #'
 #' Attempts to load a model from torpmodels package first, then falls back
-#' to package data if torpmodels is not available.
+#' to package data if torpmodels is not available. Models are cached in memory
+#' to avoid repeated loading.
 #'
 #' @param model_name Short model name: "ep", "wp", "shot", or "xgb_win"
 #' @return The loaded model object, or NULL if not available
 #' @keywords internal
 load_model_with_fallback <- function(model_name) {
+  # Check cache first
+  if (exists(model_name, envir = .torp_model_cache)) {
+    return(get(model_name, envir = .torp_model_cache))
+  }
+
   # Map short names to full names for package data
   model_map <- list(
     ep = "ep_model",
@@ -340,6 +363,8 @@ load_model_with_fallback <- function(model_name) {
     return(NULL)
   }
 
+  model <- NULL
+
   # Try torpmodels first if available
   if (requireNamespace("torpmodels", quietly = TRUE)) {
     model <- tryCatch({
@@ -348,20 +373,22 @@ load_model_with_fallback <- function(model_name) {
       cli::cli_warn("torpmodels load failed for {model_name}: {e$message}")
       NULL
     })
-
-    if (!is.null(model)) {
-      return(model)
-    }
   }
 
-  # Fall back to package data
-  model <- NULL
-  tryCatch({
-    utils::data(list = full_name, package = "torp", envir = environment())
-    model <- get(full_name, envir = environment())
-  }, error = function(e) {
-    cli::cli_warn("Package data load failed for {full_name}: {e$message}")
-  })
+  # Fall back to package data if torpmodels didn't work
+  if (is.null(model)) {
+    tryCatch({
+      utils::data(list = full_name, package = "torp", envir = environment())
+      model <- get(full_name, envir = environment())
+    }, error = function(e) {
+      cli::cli_warn("Package data load failed for {full_name}: {e$message}")
+    })
+  }
+
+  # Store in cache if successfully loaded
+  if (!is.null(model)) {
+    assign(model_name, model, envir = .torp_model_cache)
+  }
 
   return(model)
 }
