@@ -66,12 +66,16 @@ SIM_WP_SCALING_FACTOR <- 50
 SIM_HOME_ADVANTAGE <- 6
 
 
-# Model Validation Constants
-# --------------------------
+# Win Probability Constants
+# -------------------------
 
-#' Default number of bootstrap samples for confidence intervals
+#' Final 5 minutes threshold (seconds remaining)
 #' @keywords internal
-VALIDATION_BOOTSTRAP_N <- 1000
+WP_FINAL_5_MINS_SECONDS <- 300
+
+#' Final 2 minutes threshold (seconds remaining)
+#' @keywords internal
+WP_FINAL_2_MINS_SECONDS <- 120
 
 
 # Data Validation Constants

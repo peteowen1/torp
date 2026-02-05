@@ -33,8 +33,8 @@ create_wp_features_enhanced <- function(df, for_training = FALSE) {
       time_remaining_pct = .data$time_remaining / AFL_TOTAL_GAME_SECONDS,
       quarter_progress = .data$period_seconds / AFL_QUARTER_DURATION,
       is_final_quarter = as.numeric(.data$period == 4),
-      is_final_5_mins = as.numeric(.data$time_remaining <= 300),
-      is_final_2_mins = as.numeric(.data$time_remaining <= 120),
+      is_final_5_mins = as.numeric(.data$time_remaining <= WP_FINAL_5_MINS_SECONDS),
+      is_final_2_mins = as.numeric(.data$time_remaining <= WP_FINAL_2_MINS_SECONDS),
       
       # Enhanced scoring features
       points_diff_abs = abs(.data$points_diff),

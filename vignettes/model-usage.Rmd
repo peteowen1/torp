@@ -1,0 +1,167 @@
+---
+title: "Using Prediction Models"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Using Prediction Models}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  eval = FALSE
+)
+```
+
+The torp package provides three core prediction models for AFL analytics:
+
+1. **Expected Points (EP)** - Predicts the expected point outcome of a possession
+2. **Win Probability (WP)** - Estimates a team's probability of winning at any game state
+3. **Shot Model** - Predicts the probability of goal, behind, or miss for shots
+
+## Loading Models
+
+Models are automatically loaded when using `add_epv_vars()`, `add_wp_vars()`, or `add_shot_vars()`.
+They are cached in memory to avoid repeated loading:
+```{r}
+library(torp)
+
+# Clear cache if you need to reload (e.g., after updating torpmodels)
+clear_model_cache()
+```
+
+For direct model access, install the torpmodels package:
+
+```{r}
+# Install torpmodels for latest models
+devtools::install_github("peteowen1/torpmodels")
+
+# Load models directly
+ep_model <- torpmodels::load_torp_model("ep")
+wp_model <- torpmodels::load_torp_model("wp")
+shot_model <- torpmodels::load_torp_model("shot")
+```
+
+## Expected Points Model
+
+The EP model predicts the expected point outcome of a possession based on field position and game state.
+
+```{r}
+# Load and clean play-by-play data
+pbp <- load_pbp(2024, rounds = 1:5)
+pbp_clean <- clean_pbp(pbp)
+
+# Add expected points variables
+pbp_with_ep <- add_epv_vars(pbp_clean)
+
+# Key columns added:
+# - exp_pts: Expected point value of possession
+# - delta_epv: Change in expected points from the play
+```
+
+The EP model outputs probabilities for five outcomes:
+- Opposition goal
+- Opposition behind
+- Team behind
+- Team goal
+- No score (end of quarter)
+
+## Win Probability Model
+
+The WP model estimates a team's probability of winning based on score differential, time remaining, and other factors.
+
+```{r}
+# Add win probability variables (requires EP variables first)
+pbp_with_wp <- add_wp_vars(pbp_with_ep)
+
+# Key columns added:
+# - wp: Win probability for the team with possession
+# - wpa: Win probability added by the play
+# - wp_category: Categorical description (very_likely, likely, toss_up, etc.)
+# - high_leverage: Flag for high-impact situations
+```
+
+### Enhanced vs Basic Model
+
+By default, `add_wp_vars()` uses an enhanced ensemble model. You can fall back to the basic model:
+
+```{r}
+# Use basic model
+pbp_basic_wp <- add_wp_vars(pbp_with_ep, use_enhanced = FALSE)
+```
+
+## Shot Model
+
+The shot model predicts outcomes for shots at goal.
+
+```{r}
+# Filter to shots and add shot variables
+shots <- pbp_clean[!is.na(pbp_clean$shot_at_goal), ]
+shots_with_probs <- add_shot_vars(shots)
+
+# Key columns added:
+# - goal_prob: Probability of goal
+# - behind_prob: Probability of behind
+# - clanger_prob: Probability of miss/clanger
+# - xscore: Expected score (6 * goal_prob + behind_prob)
+# - on_target_prob: Probability of scoring (goal + behind)
+```
+
+## Complete Pipeline
+
+Here's a complete example processing play-by-play data through all models:
+
+```{r}
+library(torp)
+
+# 1. Load data
+pbp <- load_pbp(2024, rounds = 1:10)
+
+# 2. Clean data
+pbp_clean <- clean_pbp(pbp)
+
+# 3. Add EP variables
+pbp_ep <- add_epv_vars(pbp_clean)
+
+# 4. Add WP variables
+pbp_wp <- add_wp_vars(pbp_ep)
+
+# 5. For shots, add shot probabilities
+shots <- pbp_wp[!is.na(pbp_wp$shot_at_goal), ]
+shots_final <- add_shot_vars(shots)
+```
+
+## Model Features
+
+### EP Model Features
+
+The EP model uses:
+- Field position (x, y coordinates)
+- Time in quarter
+- Quarter number
+- Score differential
+
+### WP Model Features
+
+The enhanced WP model uses:
+- Score differential
+- Time remaining
+- Expected points from field position
+- Home/away status
+- Recent scoring momentum
+
+### Shot Model Features
+
+The shot model uses:
+- Shot distance and angle
+- Shot type (set shot, general play)
+- Pressure indicators
+- Time in quarter
+
+## See Also
+
+- `vignette("getting-started")` - Package introduction
+- `vignette("player-ratings")` - TORP player rating methodology
+- `vignette("data-architecture")` - Data pipeline overview

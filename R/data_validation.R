@@ -92,8 +92,7 @@ validate_data_schema <- function(data, schema_name, strict = TRUE) {
   schemas <- get_afl_data_schemas()
   
   if (!schema_name %in% names(schemas)) {
-    stop(paste("Unknown schema:", schema_name, ". Available schemas:", 
-               paste(names(schemas), collapse = ", ")))
+    cli::cli_abort("Unknown schema: {schema_name}. Available schemas: {paste(names(schemas), collapse = ', ')}")
   }
   
   schema <- schemas[[schema_name]]
@@ -152,8 +151,7 @@ validate_data_schema <- function(data, schema_name, strict = TRUE) {
     log_data_quality(schema_name, issues, severity)
     
     if (strict) {
-      stop(paste("Data validation failed for schema", schema_name, ":\n", 
-                paste(issues, collapse = "\n")))
+      cli::cli_abort("Data validation failed for schema {schema_name}:\n{paste(issues, collapse = '\n')}")
     }
   } else {
     message(paste("Data validation passed for schema", schema_name, "with", nrow(data), "rows"))
@@ -257,8 +255,7 @@ analyze_missing_data <- function(data) {
   missing_pct <- vapply(data, function(x) sum(is.na(x)) / length(x), FUN.VALUE = numeric(1))
 
   # Identify columns with high missing rates
-  high_missing_threshold <- 0.5
-  high_missing_cols <- missing_pct > high_missing_threshold
+  high_missing_cols <- missing_pct > VALIDATION_HIGH_MISSING_THRESHOLD
 
   # Pattern analysis for combinations of missing values
   if (ncol(data) <= 20) {

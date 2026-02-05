@@ -323,12 +323,3 @@ get_disk_cache_options <- function() {
   )
 }
 
-#' Null coalescing operator
-#'
-#' @param x Value to check
-#' @param y Default value if x is NULL
-#' @return x if not NULL, otherwise y
-#' @keywords internal
-`%||%` <- function(x, y) {
-  if (is.null(x)) y else x
-}

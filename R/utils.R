@@ -118,7 +118,7 @@ is_installed <- function(pkg) {
 #' @param datetime A POSIXct datetime object.
 #'
 #' @return A numeric value representing the proportion of the day elapsed (0-1).
-#' @export
+#' @keywords internal
 get_proportion_through_day <- function(datetime) {
   # Ensure datetime is POSIXct
   if (!inherits(datetime, "POSIXct")) {
@@ -141,7 +141,7 @@ get_proportion_through_day <- function(datetime) {
 #' @param datetime A POSIXct datetime object.
 #'
 #' @return A numeric value representing the proportion of the year elapsed (0-1).
-#' @export
+#' @keywords internal
 get_proportion_through_year <- function(datetime) {
   # Ensure datetime is POSIXct
   if (!inherits(datetime, "POSIXct")) {
@@ -170,7 +170,7 @@ get_proportion_through_year <- function(datetime) {
 #'
 #' @return Numeric decimal hour.
 #' @importFrom lubridate hour minute second
-#' @export
+#' @keywords internal
 decimal_hour <- function(datetime) {
   # Ensure datetime is POSIXct
   if (!inherits(datetime, "POSIXct")) {
@@ -192,7 +192,7 @@ decimal_hour <- function(datetime) {
 #' @param x A vector of values.
 #'
 #' @return The mode (most frequent value) of the input vector.
-#' @export
+#' @keywords internal
 get_mode <- function(x) {
   t <- table(x)
   names(t)[which.max(t)]

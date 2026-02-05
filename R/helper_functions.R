@@ -8,7 +8,7 @@
 #' @export
 #'
 #' @examples
-#' \dontrun{
+#' \donttest{
 #' cleaned_data <- clean_pbp(raw_pbp_data)
 #' }
 #'
@@ -32,7 +32,7 @@ clean_pbp <- function(df) {
 #' @param df A dataframe containing raw play-by-play data.
 #' @return A cleaned and processed data.table with additional variables.
 #' @keywords internal
-#' @importFrom data.table as.data.table setDT setorder fifelse fcase shift nafill copy
+#' @importFrom data.table as.data.table setDT setorder setkey fifelse fcase shift nafill copy
 #' @importFrom janitor clean_names
 #' @importFrom glue glue
 #' @importFrom forcats fct_na_value_to_level
@@ -42,9 +42,28 @@ clean_pbp_dt <- function(df) {
   df <- janitor::clean_names(df)
   dt <- data.table::copy(data.table::as.data.table(df))
 
-  # ============================================================================
-  # PASS 1: Add TORP IDs and basic variables (no grouping needed)
-  # ============================================================================
+  # Set key for efficient grouping operations
+  data.table::setkey(dt, match_id)
+
+  # Apply transformations in sequence (each modifies dt by reference)
+  add_torp_ids_dt(dt)
+  add_chain_vars_dt(dt)
+  add_quarter_vars_dt(dt)
+  add_game_vars_dt(dt)
+  add_score_vars_dt(dt)
+
+  return(dt)
+}
+
+#' Add TORP IDs and basic variables (Pass 1)
+#'
+#' Adds TORP identifiers and basic computed variables to the data.table.
+#' Modifies the data.table by reference.
+#'
+#' @param dt A data.table to modify
+#' @return Invisible NULL (modifies dt by reference)
+#' @keywords internal
+add_torp_ids_dt <- function(dt) {
   dt[, `:=`(
     # TORP IDs (use paste0 instead of glue for data.table compatibility)
     torp_match_id = paste0(season, "_", round_number, "_", home_team_team_abbr, "_", away_team_team_abbr),
@@ -53,68 +72,84 @@ clean_pbp_dt <- function(df) {
       sprintf("%04d", display_order)
     ),
     # Basic variables
-    team = fifelse(team_id == home_team_id, home_team_team_name, away_team_team_name),
-    opp_id = fifelse(team_id == home_team_id, away_team_id, home_team_id),
+    team = data.table::fifelse(team_id == home_team_id, home_team_team_name, away_team_team_name),
+    opp_id = data.table::fifelse(team_id == home_team_id, away_team_id, home_team_id),
     y = -y,
-    mirror = fcase(
+    mirror = data.table::fcase(
       description == "Spoil", -1L,
       !is.na(shot_at_goal) & x < 0, -1L,
       default = 1L
     ),
-    home_away = factor(fifelse(team_id == home_team_id, "Home", "Away")),
+    home_away = factor(data.table::fifelse(team_id == home_team_id, "Home", "Away")),
     goal_x = venue_length / 2 - x,
-    throw_in = fcase(
+    throw_in = data.table::fcase(
       description %in% c("Centre Bounce", "Out of Bounds", "Ball Up Call"), 1L,
       default = 0L
     ),
-    shot_row = fifelse(is.na(shot_at_goal), 0L, 1L),
+    shot_row = data.table::fifelse(is.na(shot_at_goal), 0L, 1L),
     player_position_fac = forcats::fct_na_value_to_level(player_position, level = "Other"),
     player_name = forcats::fct_na_value_to_level(
       paste(player_name_given_name, player_name_surname), level = "Other"
     )
   )]
+  invisible(NULL)
+}
 
-  # ============================================================================
-  # PASS 2: Chain variables (group by match_id, chain_number)
-  # ============================================================================
+#' Add chain variables (Pass 2)
+#'
+#' Adds chain-level variables grouped by match_id and chain_number.
+#' Modifies the data.table by reference.
+#'
+#' @param dt A data.table to modify
+#' @return Invisible NULL (modifies dt by reference)
+#' @keywords internal
+add_chain_vars_dt <- function(dt) {
   dt[, `:=`(
-    end_of_chain = fifelse(max(display_order) == display_order, 1L, 0L),
-    shot_display = fifelse(
+    end_of_chain = data.table::fifelse(max(display_order) == display_order, 1L, 0L),
+    shot_display = data.table::fifelse(
       is.na(shot_at_goal),
-      fifelse(description %in% c("Kick", "Ground Kick"), as.numeric(display_order), display_order / 2),
+      data.table::fifelse(description %in% c("Kick", "Ground Kick"), as.numeric(display_order), display_order / 2),
       as.numeric(display_order)
     )
   ), by = .(match_id, chain_number)]
 
   dt[, max_shot_display := max(shot_display), by = .(match_id, chain_number)]
 
-  dt[, points_shot := fifelse(
+  dt[, points_shot := data.table::fifelse(
     shot_display == max_shot_display,
-    fcase(
+    data.table::fcase(
       final_state %in% c("rushed", "rushedOpp", "behind"), 1,
       final_state == "goal", 6,
       default = NA_real_
     ),
     NA_real_
   )]
+  invisible(NULL)
+}
 
-  # ============================================================================
-  # PASS 3: Quarter variables (group by match_id, period)
-  # ============================================================================
-  dt[, end_of_qtr := fifelse(max(display_order) == display_order, 1L, 0L),
+#' Add quarter variables (Pass 3)
+#'
+#' Adds quarter-level variables grouped by match_id and period.
+#' Modifies the data.table by reference.
+#'
+#' @param dt A data.table to modify
+#' @return Invisible NULL (modifies dt by reference)
+#' @keywords internal
+add_quarter_vars_dt <- function(dt) {
+  dt[, end_of_qtr := data.table::fifelse(max(display_order) == display_order, 1L, 0L),
      by = .(match_id, period)]
 
-  dt[, points_row := fcase(
+  dt[, points_row := data.table::fcase(
     final_state %in% c("rushed", "rushedOpp", "behind") & end_of_chain == 1L, 1L,
     final_state == "goal" & end_of_chain == 1L, 6L,
     default = NA_integer_
   )]
 
-  dt[, points_row_na := fifelse(is.na(points_row), 0L, points_row)]
+  dt[, points_row_na := data.table::fifelse(is.na(points_row), 0L, points_row)]
 
   # team_id_mdl: use lead for throw_in, then fill NAs
-  dt[, team_id_mdl := fcase(
-    throw_in == 1L, shift(team_id, n = 1L, type = "lead"),
+  dt[, team_id_mdl := data.table::fcase(
+    throw_in == 1L, data.table::shift(team_id, n = 1L, type = "lead"),
     default = team_id
   ), by = .(match_id, period)]
 
@@ -123,16 +158,16 @@ clean_pbp_dt <- function(df) {
   dt[, team_id_mdl := nafill_char(team_id_mdl, type = "locf"), by = .(match_id, period)]
 
   dt[, `:=`(
-    home = fifelse(team_id_mdl == home_team_id, 1L, 0L),
-    is_goal_row = fifelse(description == "Goal", 1L, 0L)
+    home = data.table::fifelse(team_id_mdl == home_team_id, 1L, 0L),
+    is_goal_row = data.table::fifelse(description == "Goal", 1L, 0L)
   )]
 
   dt[, tot_goals := cumsum(is_goal_row), by = .(match_id, period)]
 
   # scoring_team_id
-  dt[, scoring_team_id := fifelse(
+  dt[, scoring_team_id := data.table::fifelse(
     end_of_chain == 1L,
-    fcase(
+    data.table::fcase(
       final_state == "behind", team_id,
       final_state == "goal", team_id,
       final_state == "rushed" & description == "", team_id,
@@ -144,10 +179,10 @@ clean_pbp_dt <- function(df) {
   )]
 
   # points_team_id calculation
-  dt[, lead_opp_id := shift(opp_id, n = 1L, type = "lead"), by = .(match_id, period)]
-  dt[, lag_opp_id := shift(opp_id, n = 1L, type = "lag"), by = .(match_id, period)]
+  dt[, lead_opp_id := data.table::shift(opp_id, n = 1L, type = "lead"), by = .(match_id, period)]
+  dt[, lag_opp_id := data.table::shift(opp_id, n = 1L, type = "lag"), by = .(match_id, period)]
 
-  dt[, points_team_id := fcase(
+  dt[, points_team_id := data.table::fcase(
     description == "Goal", team_id,
     description == "Behind", team_id,
     final_state %in% c("rushed", "rushedOpp") & end_of_qtr == 0L, lead_opp_id,
@@ -160,31 +195,31 @@ clean_pbp_dt <- function(df) {
   dt[, c("lead_opp_id", "lag_opp_id") := NULL]
 
   dt[, `:=`(
-    home_points_row = fifelse(
-      is.na(fifelse(points_team_id == home_team_id, points_row, NA_integer_)),
+    home_points_row = data.table::fifelse(
+      is.na(data.table::fifelse(points_team_id == home_team_id, points_row, NA_integer_)),
       0L,
-      fifelse(points_team_id == home_team_id, points_row, NA_integer_)
+      data.table::fifelse(points_team_id == home_team_id, points_row, NA_integer_)
     ),
-    away_points_row = fifelse(
-      is.na(points_row - fifelse(points_team_id == home_team_id, points_row, 0L)),
+    away_points_row = data.table::fifelse(
+      is.na(points_row - data.table::fifelse(points_team_id == home_team_id, points_row, 0L)),
       0L,
-      points_row - fifelse(points_team_id == home_team_id, points_row, 0L)
+      points_row - data.table::fifelse(points_team_id == home_team_id, points_row, 0L)
     )
   )]
 
   # Lag/lead descriptions and coordinates
   dt[, `:=`(
-    lag_desc_tot = shift(description, n = 1L, type = "lag", fill = "Start of Quarter"),
-    lag_x_tot = shift(x, n = 1L, type = "lag"),
-    lag_goal_x_tot = shift(goal_x, n = 1L, type = "lag"),
-    lag_y_tot = shift(y, n = 1L, type = "lag"),
-    lead_desc_tot = shift(description, n = 1L, type = "lead"),
-    lead_goal_x_tot = shift(goal_x, n = 1L, type = "lead"),
+    lag_desc_tot = data.table::shift(description, n = 1L, type = "lag", fill = "Start of Quarter"),
+    lag_x_tot = data.table::shift(x, n = 1L, type = "lag"),
+    lag_goal_x_tot = data.table::shift(goal_x, n = 1L, type = "lag"),
+    lag_y_tot = data.table::shift(y, n = 1L, type = "lag"),
+    lead_desc_tot = data.table::shift(description, n = 1L, type = "lead"),
+    lead_goal_x_tot = data.table::shift(goal_x, n = 1L, type = "lead"),
     rn_qtr = seq_len(.N)
   ), by = .(match_id, period)]
 
   # Phase of play and play type
-  dt[, phase_of_play := factor(fcase(
+  dt[, phase_of_play := factor(data.table::fcase(
     throw_in == 1L, "Hard Ball",
     stringr::str_starts(lag_desc_tot, "Free") | stringr::str_starts(lag_desc_tot, "OOF") |
       stringr::str_starts(lag_desc_tot, "Out on") | stringr::str_detect(lag_desc_tot, "ted Mark") |
@@ -198,7 +233,7 @@ clean_pbp_dt <- function(df) {
     default = "Hard Ball"
   ))]
 
-  dt[, play_type := factor(fcase(
+  dt[, play_type := factor(data.table::fcase(
     description == "Handball", "Handball",
     description == "Kick", "Kick",
     description == "Ground Kick", "Ground Kick",
@@ -209,9 +244,18 @@ clean_pbp_dt <- function(df) {
   dt[, pos_points := data.table::nafill(points_row, type = "nocb"), by = .(match_id, period)]
   dt[, pos_points_team_id := nafill_char(scoring_team_id, type = "nocb"), by = .(match_id, period)]
 
-  # ============================================================================
-  # PASS 4: Game variables (group by match_id)
-  # ============================================================================
+  invisible(NULL)
+}
+
+#' Add game variables (Pass 4)
+#'
+#' Adds game-level variables grouped by match_id.
+#' Modifies the data.table by reference.
+#'
+#' @param dt A data.table to modify
+#' @return Invisible NULL (modifies dt by reference)
+#' @keywords internal
+add_game_vars_dt <- function(dt) {
   dt[, `:=`(
     home_points = cumsum(home_points_row),
     away_points = cumsum(away_points_row),
@@ -219,20 +263,20 @@ clean_pbp_dt <- function(df) {
   ), by = match_id]
 
   dt[, `:=`(
-    pos_team_points = fifelse(home == 1L, home_points, away_points),
-    opp_team_points = fifelse(home == 1L, away_points, home_points),
+    pos_team_points = data.table::fifelse(home == 1L, home_points, away_points),
+    opp_team_points = data.table::fifelse(home == 1L, away_points, home_points),
     total_seconds = (period - 1L) * 1800L + period_seconds
   )]
 
   dt[, points_diff := pos_team_points - opp_team_points]
 
-  dt[, model_points := fifelse(pos_points_team_id == team_id_mdl, pos_points, -pos_points)]
+  dt[, model_points := data.table::fifelse(pos_points_team_id == team_id_mdl, pos_points, -pos_points)]
 
   dt[, `:=`(
-    pos_is_goal = fifelse(pos_points == 6L, 1L, 0L),
-    pos_team_shot = fifelse(model_points > 0, 1L, 0L),
-    is_shot = fifelse(!is.na(model_points), 1L, 0L),
-    next_score = fcase(
+    pos_is_goal = data.table::fifelse(pos_points == 6L, 1L, 0L),
+    pos_team_shot = data.table::fifelse(model_points > 0, 1L, 0L),
+    is_shot = data.table::fifelse(!is.na(model_points), 1L, 0L),
+    next_score = data.table::fcase(
       model_points == -6L, 0L,
       model_points == -1L, 1L,
       model_points == 1L, 2L,
@@ -243,10 +287,19 @@ clean_pbp_dt <- function(df) {
 
   dt[, label_ep := as.numeric(next_score)]
 
-  # ============================================================================
-  # PASS 5: Score variables (group by match_id, period, tot_goals)
-  # ============================================================================
-  dt[, label_wp := fcase(
+  invisible(NULL)
+}
+
+#' Add score variables (Pass 5)
+#'
+#' Adds final score-related variables grouped by match_id, period, and tot_goals.
+#' Modifies the data.table by reference.
+#'
+#' @param dt A data.table to modify
+#' @return Invisible NULL (modifies dt by reference)
+#' @keywords internal
+add_score_vars_dt <- function(dt) {
+  dt[, label_wp := data.table::fcase(
     home_team_score_total_score > away_team_score_total_score & home == 1L, 1,
     home_team_score_total_score == away_team_score_total_score & home == 1L, 0.5,
     home_team_score_total_score < away_team_score_total_score & home == 1L, 0,
@@ -258,19 +311,19 @@ clean_pbp_dt <- function(df) {
 
   # lead_x_tot and lead_y_tot with last value as default
   dt[, `:=`(
-    lead_x_tot = fifelse(
-      is.na(shift(x, n = 1L, type = "lead")),
+    lead_x_tot = data.table::fifelse(
+      is.na(data.table::shift(x, n = 1L, type = "lead")),
       x[.N],
-      shift(x, n = 1L, type = "lead")
+      data.table::shift(x, n = 1L, type = "lead")
     ),
-    lead_y_tot = fifelse(
-      is.na(shift(y, n = 1L, type = "lead")),
+    lead_y_tot = data.table::fifelse(
+      is.na(data.table::shift(y, n = 1L, type = "lead")),
       y[.N],
-      shift(y, n = 1L, type = "lead")
+      data.table::shift(y, n = 1L, type = "lead")
     )
   ), by = .(match_id, period, tot_goals)]
 
-  return(dt)
+  invisible(NULL)
 }
 
 #' Clean Play-by-Play Data (legacy dplyr version)
@@ -587,6 +640,6 @@ nafill_char <- function(x, type = "locf") {
     rev_idx[rev_idx == 0] <- NA_integer_
     rev(rev(x)[rev_idx])
   } else {
-    stop("type must be 'locf' or 'nocb'")
+    cli::cli_abort("type must be 'locf' or 'nocb'")
   }
 }
