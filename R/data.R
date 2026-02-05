@@ -1,10 +1,12 @@
 #' Expected Points Model for AFL Game Situations
 #'
-#' A GAM (Generalized Additive Model) fitted model object for predicting expected points
-#' from various game situations based on field position, time, and game context.
+#' An XGBoost model for predicting expected points from various game situations
+#' based on field position, time, and game context.
 #'
-#' @format A GAM model object fitted using mgcv package
+#' @format An XGBoost model object (xgb.Booster)
 #' @source Created using data from AFL match tracking data via fitzRoy package
+#' @note This is a fallback copy. For fresh models, install torpmodels:
+#'   `devtools::install_github("peteowen1/torpmodels")`
 "ep_model"
 
 
@@ -46,11 +48,13 @@
 
 #' Shot Outcome Classification Model
 #'
-#' A machine learning model for predicting shot outcomes (goal, behind, miss)
+#' An ordered categorical GAM model for predicting shot outcomes (goal, behind, miss)
 #' based on shot location, angle, distance, and game context.
 #'
-#' @format A fitted classification model object (likely randomForest or similar)
+#' @format A fitted GAM model object using mgcv::ocat()
 #' @source Trained on AFL shot data from match tracking
+#' @note This is a fallback copy. For fresh models, install torpmodels:
+#'   `devtools::install_github("peteowen1/torpmodels")`
 "shot_ocat_mdl"
 
 #' Shot Player Reference Data
@@ -92,11 +96,13 @@
 
 #' Win Probability Model
 #'
-#' A statistical model for calculating real-time win probabilities during AFL matches
+#' An XGBoost model for calculating real-time win probabilities during AFL matches
 #' based on score differential, time remaining, and field position.
 #'
-#' @format A fitted regression model object (likely GAM or logistic regression)
+#' @format An XGBoost model object (xgb.Booster)
 #' @source Trained on historical AFL match data with score and time states
+#' @note This is a fallback copy. For fresh models, install torpmodels:
+#'   `devtools::install_github("peteowen1/torpmodels")`
 "wp_model"
 
 #' XGBoost Win Prediction Model
@@ -106,5 +112,7 @@
 #'
 #' @format An XGBoost model object (xgb.Booster)
 #' @source Trained on historical AFL match results and team statistics
+#' @note This is a fallback copy. For fresh models, install torpmodels:
+#'   `devtools::install_github("peteowen1/torpmodels")`
 "xgb_win_model"
 
