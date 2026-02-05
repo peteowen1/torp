@@ -69,27 +69,14 @@ file_reader <- function(file_name, release_tag) {
 #' @export
 #' @importFrom glue glue
 load_chains <- function(seasons = get_afl_season(), rounds = get_afl_week()) {
-  tryCatch({
-    seasons <- validate_seasons(seasons)
-    rounds <- validate_rounds(rounds)
+  seasons <- validate_seasons(seasons)
+  rounds <- validate_rounds(rounds)
 
-    urls <- generate_urls("chains-data", "chains_data", seasons, rounds)
+  urls <- generate_urls("chains-data", "chains_data", seasons, rounds)
 
-    if (length(urls) == 0) {
-      cli::cli_warn("No data URLs generated for seasons {paste(seasons, collapse = ', ')} and rounds {paste(rounds, collapse = ', ')}")
-      return(data.table::data.table())
-    }
+  out <- load_from_url(urls, seasons = seasons, rounds = rounds)
 
-    out <- load_from_url(urls, seasons = seasons, rounds = rounds)
-
-    if (nrow(out) == 0) {
-      cli::cli_warn("No chains data found for the specified seasons and rounds")
-    }
-
-    return(out)
-  }, error = function(e) {
-    cli::cli_abort("Failed to load chains data: {conditionMessage(e)}")
-  })
+  return(out)
 }
 
 #' Load Play By Play Data

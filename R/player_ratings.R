@@ -21,7 +21,7 @@
 #' @importFrom utils data
 calculate_torp_ratings <- function(season_val = get_afl_season(type = "current"),
                          round_val = get_afl_week(type = "next"),
-                         decay = 365,
+                         decay = RATING_DECAY_DEFAULT_DAYS,
                          loading = 1.5,
                          prior_games_recv = 4,
                          prior_games_disp = 6,
@@ -185,8 +185,8 @@ prepare_final_dataframe <- function(plyr_tm_df = NULL, plyr_gm_df = NULL, season
 #'
 #' @param season_val The season to get ratings for. Default is the current season.
 #' @param round_num The round number to get ratings for. Default is the current round.
-#' @param matchid The match ID to filter by. Default is FALSE (no filtering).
-#' @param team The team to filter by. Default is FALSE (no filtering).
+#' @param matchid The match ID to filter by. Default is NULL (no filtering).
+#' @param team The team to filter by. Default is NULL (no filtering).
 #' @param plyr_gm_df Optional pre-loaded player game data. If NULL, will load automatically.
 #'
 #' @return A data frame containing player game ratings.
@@ -195,8 +195,8 @@ prepare_final_dataframe <- function(plyr_tm_df = NULL, plyr_gm_df = NULL, season
 #' @importFrom dplyr filter arrange mutate select
 player_game_ratings <- function(season_val = get_afl_season(),
                                 round_num = get_afl_week(),
-                                matchid = FALSE,
-                                team = FALSE,
+                                matchid = NULL,
+                                team = NULL,
                                 plyr_gm_df = NULL) {
 
   # Input validation
@@ -247,20 +247,20 @@ player_game_ratings <- function(season_val = get_afl_season(),
 #' @param df Input data frame
 #' @param season_val Season value
 #' @param round_num Round number
-#' @param matchid Match ID
-#' @param team Team name
+#' @param matchid Match ID (NULL for no filtering)
+#' @param team Team name (NULL for no filtering)
 #'
 #' @return Filtered data frame
 #'
 #' @importFrom dplyr filter
 #' @importFrom cli cli_abort
 filter_game_data <- function(df, season_val, round_num, matchid, team) {
-  if (matchid != FALSE) {
+  if (!is.null(matchid)) {
     df <- df %>% dplyr::filter(.data$match_id %in% matchid)
     if (nrow(df) == 0) {
       cli::cli_abort("Match ID not found")
     }
-  } else if (team != FALSE) {
+  } else if (!is.null(team)) {
     df <- df %>% dplyr::filter(
       .data$season %in% season_val,
       .data$round %in% round_num,
@@ -358,7 +358,7 @@ get_season_data <- function(season_val, round_num) {
 #' @export
 torp_ratings <- function(season_val = get_afl_season(type = "current"),
                          round_val = get_afl_week(type = "next"),
-                         decay = 365,
+                         decay = RATING_DECAY_DEFAULT_DAYS,
                          loading = 1.5,
                          prior_games_recv = 4,
                          prior_games_disp = 6,

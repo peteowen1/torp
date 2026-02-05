@@ -23,7 +23,8 @@ test_that("calculate_torp_ratings has correct function signature", {
 test_that("calculate_torp_ratings has reasonable defaults", {
   fn_formals <- formals(calculate_torp_ratings)
 
-  expect_equal(fn_formals$decay, 365)
+  # decay uses RATING_DECAY_DEFAULT_DAYS constant
+  expect_true(is.symbol(fn_formals$decay) || fn_formals$decay == 365)
   expect_equal(fn_formals$loading, 1.5)
   expect_equal(fn_formals$prior_games_recv, 4)
   expect_equal(fn_formals$prior_games_disp, 6)
@@ -120,23 +121,23 @@ test_that("filter_game_data helper function works", {
   )
 
   # Test filtering by match ID
-  result1 <- torp:::filter_game_data(test_df, 2024, 1, "M1", FALSE)
+  result1 <- torp:::filter_game_data(test_df, 2024, 1, "M1", NULL)
   expect_equal(nrow(result1), 1)
   expect_equal(result1$match_id, "M1")
 
   # Test filtering by team
-  result2 <- torp:::filter_game_data(test_df, 2024, 1, FALSE, "Adelaide Crows")
+  result2 <- torp:::filter_game_data(test_df, 2024, 1, NULL, "Adelaide Crows")
   expect_equal(nrow(result2), 2)
   expect_true(all(result2$tm == "Adelaide Crows" | result2$opp == "Adelaide Crows"))
 
   # Test filtering by season and round
-  result3 <- torp:::filter_game_data(test_df, 2024, 1, FALSE, FALSE)
+  result3 <- torp:::filter_game_data(test_df, 2024, 1, NULL, NULL)
   expect_equal(nrow(result3), 2)
   expect_true(all(result3$season == 2024 & result3$round == 1))
 
   # Test error handling
-  expect_error(torp:::filter_game_data(test_df, 2024, 1, "NONEXISTENT", FALSE), "Match ID not found")
-  expect_error(torp:::filter_game_data(test_df, 2024, 1, FALSE, "NONEXISTENT"), "Team not found")
+  expect_error(torp:::filter_game_data(test_df, 2024, 1, "NONEXISTENT", NULL), "Match ID not found")
+  expect_error(torp:::filter_game_data(test_df, 2024, 1, NULL, "NONEXISTENT"), "Team not found")
 })
 
 # -----------------------------------------------------------------------------

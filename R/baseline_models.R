@@ -33,8 +33,8 @@ predict_wp_score_only <- function(data, pred_data = NULL) {
     }
     
     # Simple logistic transformation of points difference
-    # Roughly: WP = 1 / (1 + exp(-points_diff/20))
-    predictions <- 1 / (1 + exp(-data$points_diff / 20))
+    # Roughly: WP = 1 / (1 + exp(-points_diff/WP_SCORE_SCALING))
+    predictions <- 1 / (1 + exp(-data$points_diff / WP_SCORE_SCALING))
     return(pmax(0.001, pmin(0.999, predictions)))
   }
   
@@ -143,11 +143,12 @@ predict_wp_gam_baseline <- function(data, pred_data = NULL) {
     }
     
     # Calculate time remaining
-    time_remaining <- (4 - data$period) * 2000 + (2000 - data$period_seconds)
-    time_remaining_pct <- pmax(0, pmin(1, time_remaining / 8000))
-    
+    time_remaining <- (AFL_MAX_PERIODS - data$period) * AFL_QUARTER_DURATION +
+                      (AFL_QUARTER_DURATION - data$period_seconds)
+    time_remaining_pct <- pmax(0, pmin(1, time_remaining / AFL_TOTAL_GAME_SECONDS))
+
     # Simple non-linear combination of score and time
-    score_effect <- 1 / (1 + exp(-data$points_diff / 15))
+    score_effect <- 1 / (1 + exp(-data$points_diff / WP_TIME_SCALING))
     time_effect <- 0.5 + 0.2 * (0.5 - time_remaining_pct)
     
     # Combine effects

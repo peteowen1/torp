@@ -1,19 +1,4 @@
-# Model cache environment - stores loaded models to avoid repeated loading
-.torp_model_cache <- new.env(parent = emptyenv())
-
-#' Clear Model Cache
-#'
-#' Clears all cached models from memory. Useful when you want to force
-#' reloading of models, for example after updating torpmodels.
-#'
-#' @return Invisible NULL
-#' @export
-#' @examples
-#' clear_model_cache()
-clear_model_cache <- function() {
- rm(list = ls(envir = .torp_model_cache), envir = .torp_model_cache)
- invisible(NULL)
-}
+# Note: Model cache (.torp_model_cache) is defined in R/cache.R
 
 #' Add Expected Points Value (EPV) Variables
 #'
