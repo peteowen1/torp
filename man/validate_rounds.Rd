@@ -2,16 +2,17 @@
 % Please edit documentation in R/load_torp_data.R
 \name{validate_rounds}
 \alias{validate_rounds}
-\title{Validate seasons and rounds}
+\title{Validate rounds}
 \usage{
 validate_rounds(rounds)
 }
 \arguments{
 \item{rounds}{A numeric vector or TRUE}
-
-\item{seasons}{A numeric vector or TRUE}
+}
+\value{
+Validated rounds vector
 }
 \description{
-Validate seasons and rounds
+Validate rounds
 }
 \keyword{internal}

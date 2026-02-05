@@ -22,3 +22,4 @@ Downloads and reads a \code{.parquet} file from a GitHub release using the \code
 df <- file_reader("latest_data", "v1.0.0")
 }
 }
+\keyword{internal}

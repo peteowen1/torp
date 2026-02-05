@@ -22,3 +22,6 @@ try({ # prevents cran errors
 })
 }
 }
+\seealso{
+\code{\link[=load_player_details]{load_player_details()}}, \code{\link[=player_game_ratings]{player_game_ratings()}}, \code{\link[=player_season_ratings]{player_season_ratings()}}
+}

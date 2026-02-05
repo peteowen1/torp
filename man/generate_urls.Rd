@@ -4,7 +4,13 @@
 \alias{generate_urls}
 \title{Generate URLs for data download}
 \usage{
-generate_urls(data_type, file_prefix, seasons, rounds = NULL)
+generate_urls(
+  data_type,
+  file_prefix,
+  seasons,
+  rounds = NULL,
+  prefer_aggregated = NULL
+)
 }
 \arguments{
 \item{data_type}{Type of data (e.g., "chain-data", "pbp-data")}
@@ -14,6 +20,10 @@ generate_urls(data_type, file_prefix, seasons, rounds = NULL)
 \item{seasons}{A numeric vector of seasons}
 
 \item{rounds}{A numeric vector of rounds (optional)}
+
+\item{prefer_aggregated}{Logical. If TRUE, prefer aggregated seasonal files
+when loading all rounds for a season. Default is TRUE (aggregated files
+are available on torpdata). Set via option \code{torp.use_aggregated_files}.}
 }
 \value{
 A character vector of URLs

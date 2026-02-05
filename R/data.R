@@ -1,15 +1,3 @@
-#' Expected Points Model for AFL Game Situations
-#'
-#' An XGBoost model for predicting expected points from various game situations
-#' based on field position, time, and game context.
-#'
-#' @format An XGBoost model object (xgb.Booster)
-#' @source Created using data from AFL match tracking data via fitzRoy package
-#' @note This is a fallback copy. For fresh models, install torpmodels:
-#'   `devtools::install_github("peteowen1/torpmodels")`
-"ep_model"
-
-
 #' Player Shot Scoring Statistics
 #'
 #' Contains statistical analysis results for player shot performance
@@ -45,17 +33,6 @@
 #' @source AFL player statistics via fitzRoy package with TORP enhancements
 "plyr_gm_df"
 
-
-#' Shot Outcome Classification Model
-#'
-#' An ordered categorical GAM model for predicting shot outcomes (goal, behind, miss)
-#' based on shot location, angle, distance, and game context.
-#'
-#' @format A fitted GAM model object using mgcv::ocat()
-#' @source Trained on AFL shot data from match tracking
-#' @note This is a fallback copy. For fresh models, install torpmodels:
-#'   `devtools::install_github("peteowen1/torpmodels")`
-"shot_ocat_mdl"
 
 #' Shot Player Reference Data
 #'
@@ -94,50 +71,17 @@
 #' @source Processed AFL tracking and event data
 "torp_df_total"
 
-#' Win Probability Model
-#'
-#' An XGBoost model for calculating real-time win probabilities during AFL matches
-#' based on score differential, time remaining, and field position.
-#'
-#' @format An XGBoost model object (xgb.Booster)
-#' @source Trained on historical AFL match data with score and time states
-#' @note This is a fallback copy. For fresh models, install torpmodels:
-#'   `devtools::install_github("peteowen1/torpmodels")`
-"wp_model"
-
-#' XGBoost Win Prediction Model
-#'
-#' An XGBoost machine learning model for predicting AFL match winners
-#' based on team performance metrics, historical data, and game context.
-#'
-#' @format An XGBoost model object (xgb.Booster)
-#' @source Trained on historical AFL match results and team statistics
-#' @note This is a fallback copy. For fresh models, install torpmodels:
-#'   `devtools::install_github("peteowen1/torpmodels")`
-"xgb_win_model"
-
 #' AFL Season Fixtures
 #'
 #' Complete fixture list for the current AFL season including match scheduling,
 #' team matchups, venues, and round information. Useful as offline fallback
 #' when torpdata is unavailable.
 #'
-#' @format A data frame with fixture information:
-#' \describe{
-#'   \item{id}{Unique fixture identifier}
-#'   \item{providerId}{AFL API provider ID (e.g., CD_M20260140001)}
-#'   \item{utcStartTime}{Scheduled start time in UTC}
-#'   \item{status}{Match status (SCHEDULED, COMPLETED, etc.)}
-#'   \item{round.roundNumber}{Round number (0 for Opening Round)}
-#'   \item{round.name}{Round name}
-#'   \item{home.team.name}{Home team full name}
-#'   \item{home.team.abbreviation}{Home team abbreviation}
-#'   \item{away.team.name}{Away team full name}
-#'   \item{away.team.abbreviation}{Away team abbreviation}
-#'   \item{venue.name}{Venue name}
-#'   \item{venue.state}{Venue state}
-#'   \item{compSeason.year}{Season year}
-#' }
+#' @format A data frame with fixture information including match IDs, start times,
+#'   round details, home/away team information, venue details, and season metadata.
+#'   Key columns include `id`, `providerId`, `utcStartTime`, `status`,
+#'   `round.roundNumber`, `home.team.name`, `away.team.name`, `venue.name`,
+#'   and `compSeason.year`.
 #' @source AFL fixture data via fitzRoy package
 #' @note For live/current fixtures, use `load_fixtures()` from torpdata.
 #'   This bundled copy serves as offline fallback reference.

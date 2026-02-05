@@ -35,7 +35,7 @@ save_to_release <- function(df, file_name, release_tag) {
 #' @keywords internal
 #'
 #' @examples
-#' \donttest{
+#' \dontrun{
 #' df <- file_reader("latest_data", "v1.0.0")
 #' }
 file_reader <- function(file_name, release_tag) {
@@ -558,12 +558,11 @@ check_internet_connection <- function() {
   })
 }
 
-#' Validate seasons and rounds
+#' Validate rounds
 #'
-#' @param seasons A numeric vector or TRUE
 #' @param rounds A numeric vector or TRUE
 #'
-#' @return NULL
+#' @return Validated rounds vector
 #' @keywords internal
 validate_rounds <- function(rounds) {
   if (isTRUE(rounds)) rounds <- 0:28

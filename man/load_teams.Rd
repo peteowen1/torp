@@ -22,3 +22,6 @@ try({ # prevents cran errors
 })
 }
 }
+\seealso{
+\code{\link[=load_fixtures]{load_fixtures()}}, \code{\link[=load_results]{load_results()}}, \code{\link[=load_player_details]{load_player_details()}}
+}

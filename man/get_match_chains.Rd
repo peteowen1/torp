@@ -18,7 +18,7 @@ A dataframe containing match chain data.
 Retrieves match chain data for a given season and round.
 }
 \examples{
-\dontrun{
+\donttest{
 chains <- get_match_chains(2022, 1)
 }
 }

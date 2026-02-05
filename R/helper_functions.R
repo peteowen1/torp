@@ -8,8 +8,9 @@
 #' @export
 #'
 #' @examples
-#' \donttest{
-#' cleaned_data <- clean_pbp(raw_pbp_data)
+#' \dontrun{
+#' chains <- load_chains(2024, rounds = 1)
+#' cleaned_data <- clean_pbp(chains)
 #' }
 #'
 #' @importFrom dplyr mutate group_by ungroup row_number case_when if_else lead lag

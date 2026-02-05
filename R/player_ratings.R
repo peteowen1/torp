@@ -14,7 +14,7 @@
 #' @return A data frame containing player TORP ratings.
 #' @export
 #'
-#' @importFrom dplyr filter summarise pull ungroup mutate group_by n_distinct last arrange left_join select
+#' @importFrom dplyr filter summarise pull ungroup mutate group_by n_distinct arrange left_join select
 #' @importFrom lubridate as_date decimal_date
 #' @importFrom glue glue
 #' @importFrom cli cli_abort
@@ -70,7 +70,7 @@ calculate_torp_ratings <- function(season_val = get_afl_season(type = "current")
 #'
 #' @return A data frame with calculated player statistics
 #'
-#' @importFrom data.table as.data.table uniqueN last setDT
+#' @importFrom data.table as.data.table uniqueN setDT
 calculate_player_stats <- function(plyr_gm_df = NULL, match_ref, date_val, decay, loading, prior_games_recv, prior_games_disp) {
   if (is.null(plyr_gm_df)) {
     plyr_gm_df <- load_player_stats(TRUE)

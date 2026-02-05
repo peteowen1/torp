@@ -15,3 +15,4 @@ Numeric decimal hour.
 \description{
 Convert a POSIXct datetime to its decimal hour representation.
 }
+\keyword{internal}

@@ -7,7 +7,7 @@
 get_season_data(season_val, round_num)
 }
 \arguments{
-\item{season_val}{Season value}
+\item{season_val}{Season value (can be a vector)}
 
 \item{round_num}{Round number}
 }

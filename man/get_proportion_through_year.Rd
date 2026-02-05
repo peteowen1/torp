@@ -15,3 +15,4 @@ A numeric value representing the proportion of the year elapsed (0-1).
 \description{
 Calculates what proportion of the year has elapsed for a given datetime.
 }
+\keyword{internal}

@@ -19,3 +19,11 @@ List with plot data and statistics
 \description{
 Creates data structure for plotting model calibration
 }
+\details{
+A simplified wrapper around assess_model_calibration for creating calibration
+plot data. For more comprehensive calibration analysis, use assess_model_calibration
+directly followed by prepare_calibration_plot.
+}
+\seealso{
+\code{\link{assess_model_calibration}}, \code{\link{prepare_calibration_plot}}
+}

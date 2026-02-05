@@ -22,3 +22,6 @@ try({ # prevents cran errors
 })
 }
 }
+\seealso{
+\code{\link[=load_pbp]{load_pbp()}}, \code{\link[=load_chains]{load_chains()}}, \code{\link[=calculate_match_xgs]{calculate_match_xgs()}}
+}
