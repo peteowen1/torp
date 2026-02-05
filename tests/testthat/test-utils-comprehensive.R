@@ -370,3 +370,16 @@ test_that("is_installed returns FALSE for non-existent packages", {
   expect_false(torp:::is_installed("definitelynotarealpackage123456"))
   expect_false(torp:::is_installed("anotherFakePackage"))
 })
+
+# -----------------------------------------------------------------------------
+# Data Loading Utility Functions Tests
+# -----------------------------------------------------------------------------
+
+test_that("data loading utility functions exist", {
+  # Test that save_to_release and file_reader functions exist
+  expect_true(exists("save_to_release"))
+  expect_true(exists("file_reader", envir = asNamespace("torp")))
+
+  # These functions interact with external services, so we just test they exist
+  # Full testing would require mocking piggyback functionality
+})

@@ -77,6 +77,30 @@ WP_FINAL_5_MINS_SECONDS <- 300
 #' @keywords internal
 WP_FINAL_2_MINS_SECONDS <- 120
 
+#' Score scaling factor for WP baseline model
+#' @keywords internal
+WP_SCORE_SCALING <- 20
+
+#' Time scaling factor for WP baseline model
+#' @keywords internal
+WP_TIME_SCALING <- 15
+
+
+# Field Position Constants
+# ------------------------
+
+#' Scoring zone boundary at 30m from goal
+#' @keywords internal
+FIELD_ZONE_SCORING_30 <- 30
+
+#' Scoring zone boundary at 50m from goal
+#' @keywords internal
+FIELD_ZONE_SCORING_50 <- 50
+
+#' Scoring zone boundary at 80m from goal
+#' @keywords internal
+FIELD_ZONE_SCORING_80 <- 80
+
 
 # Data Validation Constants
 # -------------------------

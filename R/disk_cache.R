@@ -31,6 +31,7 @@ get_disk_cache_dir <- function() {
 #' @param url Character URL to generate cache key for
 #' @return Character cache key (filename without extension)
 #' @keywords internal
+#' @importFrom tools file_path_sans_ext
 generate_disk_cache_key <- function(url) {
   # Use digest for consistent hashing
   hash <- digest::digest(url, algo = "md5")

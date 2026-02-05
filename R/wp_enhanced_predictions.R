@@ -46,11 +46,11 @@ create_wp_features_enhanced <- function(df, for_training = FALSE) {
       exp_pts_ma_3 = zoo::rollmean(.data$exp_pts, k = 3, fill = .data$exp_pts, align = "right"),
       exp_pts_ma_5 = zoo::rollmean(.data$exp_pts, k = 5, fill = .data$exp_pts, align = "right"),
       
-      # Positional features
+      # Positional features (using field zone constants from R/constants.R)
       field_pos_score = dplyr::case_when(
-        .data$goal_x <= 30 ~ 3,
-        .data$goal_x <= 50 ~ 2,
-        .data$goal_x <= 80 ~ 1,
+        .data$goal_x <= FIELD_ZONE_SCORING_30 ~ 3,
+        .data$goal_x <= FIELD_ZONE_SCORING_50 ~ 2,
+        .data$goal_x <= FIELD_ZONE_SCORING_80 ~ 1,
         TRUE ~ 0
       ),
       goal_distance = sqrt(.data$goal_x^2 + .data$y^2),

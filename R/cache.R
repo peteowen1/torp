@@ -1,7 +1,8 @@
 # Cache Management System for TORP Package
 
-# Create package-level cache environment
+# Create package-level cache environments
 .torp_cache <- new.env(parent = emptyenv())
+.torp_model_cache <- new.env(parent = emptyenv())
 
 #' Clear Fixture Cache
 #'
@@ -132,4 +133,47 @@ get_from_cache <- function(cache_key) {
     return(cache_entry$data)
   }
   return(NULL)
+}
+
+
+# Model Cache Functions
+# ---------------------
+
+#' Clear Model Cache
+#'
+#' Clears all cached models from memory.
+#'
+#' @param verbose Logical. If TRUE, prints cache clearing information.
+#' @return Invisible NULL
+#' @export
+#' @examples
+#' \donttest{
+#' # Clear all cached models
+#' clear_model_cache()
+#' }
+clear_model_cache <- function(verbose = FALSE) {
+  cache_keys <- ls(envir = .torp_model_cache)
+
+  if (length(cache_keys) > 0) {
+    rm(list = cache_keys, envir = .torp_model_cache)
+    if (verbose) {
+      cli::cli_inform("Cleared {length(cache_keys)} model cache entr{?y/ies}")
+    }
+  } else {
+    if (verbose) {
+      cli::cli_inform("No model cache entries to clear")
+    }
+  }
+
+  invisible(NULL)
+}
+
+#' Get Model Cache Info
+#'
+#' Returns information about cached models.
+#'
+#' @return Character vector of cached model names
+#' @export
+get_model_cache_info <- function() {
+  ls(envir = .torp_model_cache)
 }
