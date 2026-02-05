@@ -217,37 +217,21 @@ add_shot_vars <- function(df) {
 #' @importFrom stats predict model.matrix
 #' @importFrom utils data
 get_epv_preds <- function(df) {
-  # Try to get model from centralized registry, fall back to data loading
-  ep_model <- tryCatch({
-    if (exists("get_model_safe")) {
-      get_model_safe("ep_model", fallback_to_data = TRUE)
-    } else {
-      NULL
-    }
-  }, error = function(e) NULL)
-  
-  # Fall back to utils::data loading
+  # Try to load model from torpmodels first, then fall back to package data
+  ep_model <- load_model_with_fallback("ep")
+
   if (is.null(ep_model)) {
-    ep_model <- NULL
-    tryCatch({
-      utils::data("ep_model", package = "torp", envir = environment())
-    }, error = function(e) {
-      cli::cli_abort("EP model not available. Please ensure models are properly loaded or run model training.")
-    })
+    cli::cli_abort("EP model not available. Install torpmodels or ensure package data is available.")
   }
-  
-  if (is.null(ep_model)) {
-    cli::cli_abort("EP model not available. Please ensure models are properly loaded.")
-  }
-  
+
   # Log prediction event
   input_hash <- paste0("ep_", nrow(df), "_", ncol(df), "_", as.integer(Sys.time()))
   log_prediction_event("ep_model", input_hash, nrow(df))
-  
+
   tryCatch({
     # Detect model type and use appropriate prediction method
     model_data <- df %>% select_epv_model_vars()
-    
+
     if (inherits(ep_model, "xgb.Booster")) {
       # XGBoost model - use xgboost::predict
       if (!requireNamespace("xgboost", quietly = TRUE)) {
@@ -260,13 +244,13 @@ get_epv_preds <- function(df) {
       model_matrix <- stats::model.matrix(~ . + 0, data = model_data)
       preds_raw <- stats::predict(ep_model, model_matrix)
     }
-    
+
     # Convert to proper format
     preds <- as.data.frame(
       matrix(preds_raw, ncol = 5, byrow = TRUE)
     )
     colnames(preds) <- c("opp_goal", "opp_behind", "behind", "goal", "no_score")
-    
+
     # Log successful prediction
     pred_summary <- list(
       min = min(rowSums(preds)),
@@ -274,9 +258,9 @@ get_epv_preds <- function(df) {
       mean = mean(rowSums(preds))
     )
     log_prediction_event("ep_model", input_hash, nrow(df), pred_summary)
-    
+
     return(preds)
-    
+
   }, error = function(e) {
     warning(paste("EP model prediction failed:", e$message, "- Input hash:", input_hash))
     cli::cli_abort("EP model prediction failed: {e$message}")
@@ -294,10 +278,13 @@ get_epv_preds <- function(df) {
 #' @importFrom stats predict model.matrix
 #' @importFrom utils data
 get_wp_preds <- function(df) {
-  # Use utils::data to load the model in a safe way
-  wp_model <- NULL
-  utils::data("wp_model", package = "torp", envir = environment())
-  
+  # Try to load model from torpmodels first, then fall back to package data
+  wp_model <- load_model_with_fallback("wp")
+
+  if (is.null(wp_model)) {
+    cli::cli_abort("WP model not available. Install torpmodels or ensure package data is available.")
+  }
+
   preds <- as.data.frame(
     matrix(stats::predict(wp_model, stats::model.matrix(~ . + 0, data = df %>% select_wp_model_vars())),
       ncol = 1, byrow = TRUE
@@ -319,10 +306,62 @@ get_wp_preds <- function(df) {
 #' @importFrom stats predict
 #' @importFrom utils data
 get_shot_result_preds <- function(df) {
-  # Use utils::data to load the model in a safe way
-  shot_ocat_mdl <- NULL
-  utils::data("shot_ocat_mdl", package = "torp", envir = environment())
-  
+  # Try to load model from torpmodels first, then fall back to package data
+  shot_ocat_mdl <- load_model_with_fallback("shot")
+
+  if (is.null(shot_ocat_mdl)) {
+    cli::cli_abort("Shot model not available. Install torpmodels or ensure package data is available.")
+  }
+
   preds <- stats::predict(shot_ocat_mdl, df, type = "response")
   return(preds)
+}
+
+#' Load Model with Fallback
+#'
+#' Attempts to load a model from torpmodels package first, then falls back
+#' to package data if torpmodels is not available.
+#'
+#' @param model_name Short model name: "ep", "wp", "shot", or "xgb_win"
+#' @return The loaded model object, or NULL if not available
+#' @keywords internal
+load_model_with_fallback <- function(model_name) {
+  # Map short names to full names for package data
+  model_map <- list(
+    ep = "ep_model",
+    wp = "wp_model",
+    shot = "shot_ocat_mdl",
+    xgb_win = "xgb_win_model"
+  )
+
+  full_name <- model_map[[model_name]]
+  if (is.null(full_name)) {
+    cli::cli_warn("Unknown model name: {model_name}")
+    return(NULL)
+  }
+
+  # Try torpmodels first if available
+  if (requireNamespace("torpmodels", quietly = TRUE)) {
+    model <- tryCatch({
+      torpmodels::load_torp_model(model_name, verbose = FALSE)
+    }, error = function(e) {
+      cli::cli_warn("torpmodels load failed for {model_name}: {e$message}")
+      NULL
+    })
+
+    if (!is.null(model)) {
+      return(model)
+    }
+  }
+
+  # Fall back to package data
+  model <- NULL
+  tryCatch({
+    utils::data(list = full_name, package = "torp", envir = environment())
+    model <- get(full_name, envir = environment())
+  }, error = function(e) {
+    cli::cli_warn("Package data load failed for {full_name}: {e$message}")
+  })
+
+  return(model)
 }

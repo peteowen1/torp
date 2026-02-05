@@ -46,10 +46,10 @@ clean_pbp_dt <- function(df) {
   # PASS 1: Add TORP IDs and basic variables (no grouping needed)
   # ============================================================================
   dt[, `:=`(
-    # TORP IDs
-    torp_match_id = glue::glue("{season}_{round_number}_{home_team_team_abbr}_{away_team_team_abbr}"),
+    # TORP IDs (use paste0 instead of glue for data.table compatibility)
+    torp_match_id = paste0(season, "_", round_number, "_", home_team_team_abbr, "_", away_team_team_abbr),
     torp_row_id = paste0(
-      glue::glue("{season}_{round_number}_{home_team_team_abbr}_{away_team_team_abbr}"),
+      season, "_", round_number, "_", home_team_team_abbr, "_", away_team_team_abbr,
       sprintf("%04d", display_order)
     ),
     # Basic variables
