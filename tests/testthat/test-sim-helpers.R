@@ -1,22 +1,55 @@
 # Tests for sim-helpers.R
-# Tests for sim_season and process_games functions
+# Tests for simulate_season and process_games functions
 
-test_that("simulation functions exist and are exported", {
+# -----------------------------------------------------------------------------
+# simulate_season Tests
+# -----------------------------------------------------------------------------
+
+test_that("simulate_season function exists and is exported", {
+  expect_true(exists("simulate_season"))
+  expect_true("simulate_season" %in% getNamespaceExports("torp"))
+})
+
+test_that("sim_season deprecated alias exists", {
   expect_true(exists("sim_season"))
   expect_true("sim_season" %in% getNamespaceExports("torp"))
+})
+
+test_that("sim_season shows deprecation warning", {
+  sim_teams <- create_test_sim_teams(4)
+  sim_games <- data.frame(
+    roundnum = 1,
+    home_team = "Adelaide Crows",
+    away_team = "Brisbane Lions",
+    result = NA_integer_,
+    torp_home_round = NA_real_,
+    torp_away_round = NA_real_,
+    stringsAsFactors = FALSE
+  )
+
+  # Should warn about deprecation
+  set.seed(42)
+  expect_warning(
+    sim_season(sim_teams, sim_games),
+    "deprecated|Deprecated"
+  )
 })
 
 test_that("process_games is available as internal function", {
   expect_true(exists("process_games", envir = asNamespace("torp")))
 })
 
-test_that("sim_season has correct function signature", {
-  fn_args <- names(formals(sim_season))
+test_that("simulate_season has correct function signature", {
+  fn_args <- names(formals(simulate_season))
   expect_true("sim_teams" %in% fn_args)
   expect_true("sim_games" %in% fn_args)
 })
 
-test_that("sim_season returns correct structure with mock data", {
+# -----------------------------------------------------------------------------
+# simulate_season Return Structure Tests
+# -----------------------------------------------------------------------------
+
+test_that("simulate_season returns correct structure with mock data", {
   # Create mock team data
   sim_teams <- create_test_sim_teams(n_teams = 4)
 
@@ -33,7 +66,7 @@ test_that("sim_season returns correct structure with mock data", {
 
   # Run simulation
   set.seed(42)
-  result <- sim_season(sim_teams, sim_games)
+  result <- simulate_season(sim_teams, sim_games)
 
   # Check structure
   expect_s3_class(result, "data.frame")
@@ -50,6 +83,24 @@ test_that("sim_season returns correct structure with mock data", {
 
   # Check that TORP ratings were recorded
   expect_true("torp_home_round" %in% names(result) || "home_torp" %in% names(result))
+})
+
+# -----------------------------------------------------------------------------
+# Constants Usage Tests
+# -----------------------------------------------------------------------------
+
+test_that("simulation uses SIM_NOISE_SD constant", {
+  # Verify the constant exists and has expected value
+  expect_equal(torp:::SIM_NOISE_SD, 26)
+})
+
+test_that("simulation uses SIM_HOME_ADVANTAGE constant", {
+  # Verify the constant exists and has expected value
+  expect_equal(torp:::SIM_HOME_ADVANTAGE, 6)
+})
+
+test_that("simulation uses SIM_WP_SCALING_FACTOR constant", {
+  expect_equal(torp:::SIM_WP_SCALING_FACTOR, 50)
 })
 
 test_that("process_games handles single round correctly", {
