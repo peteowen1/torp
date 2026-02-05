@@ -9,3 +9,6 @@
 ^CLAUDE\.md$
 ^\.claude$
 ^inst/extdata/archive$
+^README\.html$
+^_ul$
+^temp_data$

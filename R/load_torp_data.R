@@ -10,8 +10,9 @@
 #' @export
 #'
 #' @examples
-#' \donttest{
-#' save_to_release(my_df, "latest_data", "v1.0.0")
+#' \dontrun{
+#' my_df <- data.frame(x = 1:3)
+#' save_to_release(my_df, "my_data", "v1.0.0")
 #' }
 save_to_release <- function(df, file_name, release_tag) {
   temp_dir <- tempdir(check = TRUE)

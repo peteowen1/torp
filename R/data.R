@@ -18,22 +18,6 @@
 #' @source Derived from AFL match tracking data statistical analysis
 "player_shot_score"
 
-#' Player Game-Level Statistics
-#'
-#' Comprehensive player statistics at the individual game level including
-#' traditional AFL statistics, advanced metrics, team performance data,
-#' and calculated ratings from the TORP system.
-#'
-#' @format A data frame with extensive player game statistics including
-#'   traditional AFL stats (disposals, kicks, handballs, marks, goals, behinds, tackles),
-#'   advanced metrics (contested possessions, pressure acts, intercepts),
-#'   team context (home/away, opponent, venue), match details (season, round),
-#'   player information (position, experience), and calculated performance ratings
-#'   (TORP points for receiving, disposal, spoiling, hitouts).
-#' @source AFL player statistics via fitzRoy package with TORP enhancements
-"plyr_gm_df"
-
-
 #' Shot Player Reference Data
 #'
 #' Reference dataset containing player identifiers and names for
