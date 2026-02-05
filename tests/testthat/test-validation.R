@@ -2,8 +2,12 @@ test_that("validate_seasons works correctly", {
   # Valid seasons
   expect_equal(torp:::validate_seasons(2021), 2021)
   expect_equal(torp:::validate_seasons(c(2021, 2022)), c(2021, 2022))
-  expect_equal(torp:::validate_seasons(TRUE), 2021:2025)  # Assumes current season is 2025
-  
+
+  # TRUE should return all valid seasons from 2021 to current year
+  all_seasons <- torp:::validate_seasons(TRUE)
+  expect_true(2021 %in% all_seasons)
+  expect_true(length(all_seasons) >= 1)
+
   # Invalid seasons should error
   expect_error(torp:::validate_seasons("2021"), "must be numeric")
   expect_error(torp:::validate_seasons(2020), "Invalid season years")

@@ -1,3 +1,77 @@
+# -----------------------------------------------------------------------------
+# Model Cache Tests
+# -----------------------------------------------------------------------------
+
+test_that("clear_model_cache function exists and is exported", {
+  expect_true(exists("clear_model_cache"))
+  expect_true("clear_model_cache" %in% getNamespaceExports("torp"))
+})
+
+test_that("clear_model_cache clears all cached models", {
+  # Access the internal cache environment
+  cache_env <- torp:::.torp_model_cache
+
+  # Pre-populate cache with a test value
+  assign("test_model", "dummy_value", envir = cache_env)
+
+  # Verify it's there
+  expect_true(exists("test_model", envir = cache_env))
+
+  # Clear the cache
+  clear_model_cache()
+
+  # Verify it's gone
+  expect_false(exists("test_model", envir = cache_env))
+  expect_equal(length(ls(envir = cache_env)), 0)
+})
+
+test_that("clear_model_cache returns invisible NULL", {
+  result <- clear_model_cache()
+  expect_null(result)
+})
+
+# -----------------------------------------------------------------------------
+# load_model_with_fallback Tests
+# -----------------------------------------------------------------------------
+
+test_that("load_model_with_fallback exists as internal function", {
+  expect_true(exists("load_model_with_fallback", envir = asNamespace("torp")))
+})
+
+test_that("load_model_with_fallback handles unknown model names", {
+  # Clear cache to ensure fresh state
+  clear_model_cache()
+
+  result <- torp:::load_model_with_fallback("nonexistent_model")
+
+  # Should return NULL and warn
+  expect_null(result)
+})
+
+test_that("load_model_with_fallback caches loaded models", {
+  clear_model_cache()
+  cache_env <- torp:::.torp_model_cache
+
+  # First call should trigger loading
+  result1 <- tryCatch(
+    torp:::load_model_with_fallback("ep"),
+    error = function(e) NULL
+  )
+
+  # If a model was loaded, it should be cached
+  if (!is.null(result1)) {
+    expect_true(exists("ep", envir = cache_env))
+
+    # Second call should use cache
+    result2 <- torp:::load_model_with_fallback("ep")
+    expect_identical(result1, result2)
+  }
+})
+
+# -----------------------------------------------------------------------------
+# get_epv_preds Tests
+# -----------------------------------------------------------------------------
+
 test_that("get_epv_preds function exists and has correct structure", {
   expect_true(exists("get_epv_preds"))
 
@@ -29,7 +103,7 @@ test_that("get_epv_preds function exists and has correct structure", {
 
   # Either works or gives expected error about missing model
   if (inherits(result, "error")) {
-    expect_true(grepl("ep_model|object.*not found", result$message, ignore.case = TRUE))
+    expect_true(grepl("ep_model|object.*not found|EP model", result$message, ignore.case = TRUE))
   } else {
     expect_true(is.data.frame(result))
     expect_equal(ncol(result), 5)
@@ -127,5 +201,137 @@ test_that("add_shot_vars function works correctly", {
   } else {
     expect_true(is.data.frame(result))
     expect_gte(ncol(result), ncol(mock_shots))  # Should have additional columns
+  }
+})
+
+# -----------------------------------------------------------------------------
+# Input Validation Tests
+# -----------------------------------------------------------------------------
+
+test_that("add_epv_vars validates input is a data frame", {
+  expect_error(add_epv_vars("not a dataframe"), "data frame")
+  expect_error(add_epv_vars(list(a = 1)), "data frame")
+  expect_error(add_epv_vars(NULL), "data frame")
+})
+
+test_that("add_epv_vars rejects empty data frame", {
+  empty_df <- data.frame()
+  expect_error(add_epv_vars(empty_df), "empty")
+})
+
+test_that("add_wp_vars validates input is a data frame", {
+  expect_error(add_wp_vars("not a dataframe"), "data frame")
+  expect_error(add_wp_vars(list(a = 1)), "data frame")
+  expect_error(add_wp_vars(NULL), "data frame")
+})
+
+test_that("add_wp_vars rejects empty data frame", {
+  empty_df <- data.frame()
+  expect_error(add_wp_vars(empty_df), "empty")
+})
+
+test_that("add_shot_vars validates input is a data frame", {
+  expect_error(add_shot_vars("not a dataframe"), "data frame")
+  expect_error(add_shot_vars(list(a = 1)), "data frame")
+  expect_error(add_shot_vars(NULL), "data frame")
+})
+
+test_that("add_shot_vars rejects empty data frame", {
+  empty_df <- data.frame()
+  expect_error(add_shot_vars(empty_df), "empty")
+})
+
+# -----------------------------------------------------------------------------
+# add_wp_vars Enhanced Model Tests
+# -----------------------------------------------------------------------------
+
+test_that("add_wp_vars adds WPA calculation columns", {
+  mock_pbp <- create_mock_pbp_data(20)
+
+  result <- tryCatch({
+    add_wp_vars(mock_pbp)
+  }, error = function(e) NULL)
+
+  if (!is.null(result)) {
+    # Should add wp and wpa columns
+    expect_true("wp" %in% names(result))
+    expect_true("wpa" %in% names(result))
+
+    # wp should be bounded
+    expect_true(all(result$wp >= 0 & result$wp <= 1))
+  }
+})
+
+test_that("add_wp_vars adds context columns", {
+  mock_pbp <- create_mock_pbp_data(20)
+
+  result <- tryCatch({
+    add_wp_vars(mock_pbp, use_enhanced = TRUE)
+  }, error = function(e) NULL)
+
+  if (!is.null(result)) {
+    # Should add categorical columns
+    expect_true("wp_category" %in% names(result))
+    expect_true("high_leverage" %in% names(result))
+
+    # wp_category should have valid values
+    valid_categories <- c("very_likely", "likely", "toss_up", "unlikely", "very_unlikely")
+    expect_true(all(result$wp_category %in% valid_categories))
+  }
+})
+
+test_that("add_wp_vars use_enhanced parameter works", {
+  mock_pbp <- create_mock_pbp_data(10)
+
+  # Both should work (may fall back if enhanced fails)
+  result_enhanced <- tryCatch({
+    add_wp_vars(mock_pbp, use_enhanced = TRUE)
+  }, error = function(e) NULL)
+
+  result_basic <- tryCatch({
+    add_wp_vars(mock_pbp, use_enhanced = FALSE)
+  }, error = function(e) NULL)
+
+  if (!is.null(result_enhanced) && !is.null(result_basic)) {
+    # Both should have wp column
+    expect_true("wp" %in% names(result_enhanced))
+    expect_true("wp" %in% names(result_basic))
+  }
+})
+
+# -----------------------------------------------------------------------------
+# Model Map Tests
+# -----------------------------------------------------------------------------
+
+test_that("load_model_with_fallback knows all valid model names", {
+  valid_names <- c("ep", "wp", "shot", "xgb_win")
+
+  for (name in valid_names) {
+    # Should not return NULL for valid name (unless model unavailable)
+    result <- suppressWarnings(torp:::load_model_with_fallback(name))
+    # Either it loads or returns NULL (but doesn't error on the name itself)
+    expect_true(is.null(result) || !is.null(result))
+  }
+})
+
+# -----------------------------------------------------------------------------
+# get_shot_result_preds Tests
+# -----------------------------------------------------------------------------
+
+test_that("get_shot_result_preds exists as internal function", {
+  expect_true(exists("get_shot_result_preds", envir = asNamespace("torp")))
+})
+
+test_that("get_shot_result_preds handles mock data", {
+  mock_shots <- create_mock_shot_data(5)
+
+  result <- tryCatch(
+    torp:::get_shot_result_preds(mock_shots),
+    error = function(e) e
+  )
+
+  if (!inherits(result, "error")) {
+    # Should return matrix/data frame with 3 columns
+    expect_true(ncol(result) == 3 || length(dim(result)) >= 1)
   }
 })

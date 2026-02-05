@@ -253,3 +253,149 @@ create_test_fixtures <- function(n_fixtures = 50) {
     stringsAsFactors = FALSE
   )
 }
+
+# -----------------------------------------------------------------------------
+# Mock Model Prediction Creators
+# -----------------------------------------------------------------------------
+
+#' Create mock EP model predictions
+#' Used to test EP variable addition without requiring actual model
+#' @param n_rows Number of rows to generate
+#' @return Data frame with EP prediction columns matching model output
+create_mock_ep_predictions <- function(n_rows = 100) {
+  # EP model outputs 5 probability columns that should sum to ~1
+  opp_goal <- runif(n_rows, 0.05, 0.25)
+  opp_behind <- runif(n_rows, 0.05, 0.20)
+  behind <- runif(n_rows, 0.05, 0.20)
+  goal <- runif(n_rows, 0.15, 0.45)
+  no_score <- 1 - (opp_goal + opp_behind + behind + goal)
+  # Ensure no_score is valid
+  no_score <- pmax(0.05, pmin(0.5, no_score))
+
+  data.frame(
+    opp_goal = opp_goal,
+    opp_behind = opp_behind,
+    behind = behind,
+    goal = goal,
+    no_score = no_score,
+    stringsAsFactors = FALSE
+  )
+}
+
+#' Create mock WP model predictions
+#' Used to test WP variable addition without requiring actual model
+#' @param n_rows Number of rows to generate
+#' @return Data frame with WP prediction column
+create_mock_wp_predictions <- function(n_rows = 100) {
+  data.frame(
+    wp = runif(n_rows, 0.15, 0.85),
+    stringsAsFactors = FALSE
+  )
+}
+
+#' Create mock shot model predictions
+#' Used to test shot variable addition without requiring actual model
+#' @param n_rows Number of rows to generate
+#' @return Data frame with shot outcome prediction columns
+create_mock_shot_predictions <- function(n_rows = 50) {
+  # Shot model outputs probabilities for clanger, behind, goal
+  clanger_prob <- runif(n_rows, 0.02, 0.25)
+  behind_prob <- runif(n_rows, 0.15, 0.40)
+  goal_prob <- 1 - (clanger_prob + behind_prob)
+
+  data.frame(
+    clanger_prob = clanger_prob,
+    behind_prob = behind_prob,
+    goal_prob = goal_prob,
+    stringsAsFactors = FALSE
+  )
+}
+
+#' Create minimal valid PBP data for pipeline tests
+#' Contains the minimum required columns for clean_pbp() to work
+#' @param n_rows Number of rows to generate
+#' @return Data frame with minimal valid PBP structure
+create_minimal_pbp <- function(n_rows = 20) {
+  # Ensure we have sorted data within matches
+  match_ids <- rep(paste0("CD_M2024014", sprintf("%02d", 1:2)), each = n_rows / 2)
+
+  data.frame(
+    match_id = match_ids,
+    period = rep(1:4, length.out = n_rows),
+    period_seconds = sort(sample(1:1800, n_rows, replace = TRUE)),
+    total_seconds = sort(sample(1:7200, n_rows, replace = TRUE)),
+    team_id = sample(1:18, n_rows, replace = TRUE),
+    home_team_id = rep(c(1L, 3L), each = n_rows / 2),
+    away_team_id = rep(c(2L, 4L), each = n_rows / 2),
+    team = sample(c("Carlton", "Collingwood"), n_rows, replace = TRUE),
+    utc_start_time = rep(as.POSIXct("2024-04-01 13:00:00"), n_rows),
+    round_number = rep(1L, n_rows),
+    home_points = cumsum(sample(c(0, 0, 0, 1, 6), n_rows, replace = TRUE)),
+    away_points = cumsum(sample(c(0, 0, 0, 1, 6), n_rows, replace = TRUE)),
+    x = runif(n_rows, -80, 80),
+    y = runif(n_rows, -60, 60),
+    description = sample(c("Kick", "Handball", "Mark", "Free For"), n_rows, replace = TRUE),
+    player_name = paste0("Player_", sample(1:50, n_rows, replace = TRUE)),
+    player_id = sample(1:800, n_rows, replace = TRUE),
+    venue_length = rep(160, n_rows),
+    stringsAsFactors = FALSE
+  )
+}
+
+#' Create mock XG data for match XG tests
+#' @param n_matches Number of matches
+#' @return Data frame with XG data structure
+create_mock_xg_data <- function(n_matches = 5) {
+  rows_per_match <- 40
+  n_rows <- n_matches * rows_per_match
+
+  match_ids <- rep(paste0("CD_M2024014", sprintf("%02d", 1:n_matches)), each = rows_per_match)
+  teams <- rep(c(rep("Carlton", rows_per_match/2), rep("Collingwood", rows_per_match/2)), n_matches)
+
+  data.frame(
+    match_id = match_ids,
+    team = teams,
+    period = rep(rep(1:4, each = rows_per_match/4), n_matches),
+    xscore = runif(n_rows, 0, 6),
+    points_shot = sample(c(0, 1, 6), n_rows, replace = TRUE, prob = c(0.5, 0.2, 0.3)),
+    shot_at_goal = TRUE,
+    stringsAsFactors = FALSE
+  )
+}
+
+#' Create mock API response for scraper tests
+#' @return List mimicking AFL API response structure
+create_mock_api_response <- function() {
+  list(
+    content = list(
+      matches = list(
+        list(
+          id = "CD_M20240141001",
+          homeTeam = list(
+            name = "Carlton",
+            teamId = 1
+          ),
+          awayTeam = list(
+            name = "Collingwood",
+            teamId = 2
+          ),
+          venue = list(name = "MCG"),
+          utcStartTime = "2024-03-14T03:20:00.000Z"
+        ),
+        list(
+          id = "CD_M20240141002",
+          homeTeam = list(
+            name = "Brisbane Lions",
+            teamId = 3
+          ),
+          awayTeam = list(
+            name = "Adelaide Crows",
+            teamId = 4
+          ),
+          venue = list(name = "Gabba"),
+          utcStartTime = "2024-03-14T06:45:00.000Z"
+        )
+      )
+    )
+  )
+}
