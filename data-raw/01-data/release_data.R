@@ -203,6 +203,23 @@ purrr::walk(2025:get_afl_season(), ~ get_player_stats(.))
 
 tictoc::toc(log= TRUE)
 
+# Get player game data  -----------------------------------------------------------
+tictoc::tic('player game data')
+get_player_game_data <- function(season) {
+  pbp <- load_pbp(season, rounds = TRUE)
+  pstats <- load_player_stats(season)
+  teams <- load_teams(season)
+  pgd <- create_player_game_data(pbp, pstats, teams)
+
+  file_name <- glue::glue("player_game_{season}")
+
+  save_to_release(df = pgd, file_name = file_name, release_tag = "player_game-data")
+}
+
+purrr::walk(2021:get_afl_season(), ~ get_player_game_data(.))
+
+tictoc::toc(log= TRUE)
+
 # Get fixtures data  -------------------------------------------------------------
 tictoc::tic('fixtures')
 get_fixtures <- function(season) {

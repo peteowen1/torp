@@ -408,6 +408,36 @@ update_teams <- function(season) {
   invisible(NULL)
 }
 
+#' Update Player Game Data
+#'
+#' Rebuilds processed player game data from PBP, player stats, and teams data.
+#'
+#' @param season Season year
+#' @return Invisible NULL
+update_player_game_data <- function(season) {
+  cli::cli_progress_step("Updating player game data for {season}")
+
+  pgd <- tryCatch({
+    pbp <- load_pbp(season, rounds = TRUE)
+    pstats <- load_player_stats(season)
+    teams_data <- load_teams(season)
+    create_player_game_data(pbp, pstats, teams_data)
+  }, error = function(e) {
+    cli::cli_warn("Failed to create player game data: {conditionMessage(e)}")
+    return(NULL)
+  })
+
+  if (is.null(pgd) || nrow(pgd) == 0) {
+    return(invisible(NULL))
+  }
+
+  file_name <- glue::glue("player_game_{season}")
+  save_to_release(df = pgd, file_name = file_name, release_tag = "player_game-data")
+
+  cli::cli_inform("Saved player game data: {file_name} ({nrow(pgd)} rows)")
+  invisible(NULL)
+}
+
 #' Update Player Details Data
 #'
 #' @param season Season year
@@ -503,6 +533,7 @@ run_daily_release <- function(force = FALSE, include_aggregates = TRUE) {
   update_player_stats(current_season)
   update_teams(current_season)
   update_player_details(current_season)
+  update_player_game_data(current_season)
 
   tictoc::toc(log = TRUE)
 

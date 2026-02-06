@@ -13,7 +13,7 @@ calculate_torp_ratings(
   prior_games_recv = 4,
   prior_games_disp = 6,
   plyr_tm_df = NULL,
-  plyr_gm_df = NULL
+  player_game_data = NULL
 )
 
 torp_ratings(
@@ -24,7 +24,7 @@ torp_ratings(
   prior_games_recv = 4,
   prior_games_disp = 6,
   plyr_tm_df = NULL,
-  plyr_gm_df = NULL
+  player_game_data = NULL
 )
 }
 \arguments{
@@ -42,7 +42,7 @@ torp_ratings(
 
 \item{plyr_tm_df}{Optional pre-loaded player team data. If NULL, will load automatically.}
 
-\item{plyr_gm_df}{Optional pre-loaded player game data. If NULL, will load automatically.}
+\item{player_game_data}{Optional pre-loaded player game data. If NULL, will load automatically.}
 }
 \value{
 A data frame containing player TORP ratings.

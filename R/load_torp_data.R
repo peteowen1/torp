@@ -160,6 +160,34 @@ load_player_stats <- function(seasons = get_afl_season()) {
   return(out)
 }
 
+#' Load Player Game Data
+#'
+#' @description Loads processed player game data from the [torpdata repository](https://github.com/peteowen1/torpdata).
+#' This data contains per-game performance metrics (disposal points, reception points,
+#' spoil points, hitout points) adjusted by position, as used by the TORP ratings pipeline.
+#'
+#' @param seasons A numeric vector of 4-digit years associated with given AFL seasons - defaults to latest season. If set to `TRUE`, returns all available data since 2021.
+#'
+#' @return A data frame containing player game performance data.
+#' @seealso [create_player_game_data()], [player_game_ratings()], [calculate_torp_ratings()]
+#' @examples
+#' \donttest{
+#' try({ # prevents cran errors
+#'   load_player_game_data(2024)
+#' })
+#' }
+#' @export
+#' @importFrom glue glue
+load_player_game_data <- function(seasons = get_afl_season()) {
+  seasons <- validate_seasons(seasons)
+
+  urls <- generate_urls("player_game-data", "player_game", seasons)
+
+  out <- load_from_url(urls, seasons = seasons)
+
+  return(out)
+}
+
 #' Load AFL Fixture Data
 #'
 #' @description Loads AFL fixture and schedule data from the [torpdata repository](https://github.com/peteowen1/torpdata)

@@ -5,7 +5,7 @@
 \title{Calculate player statistics}
 \usage{
 calculate_player_stats(
-  plyr_gm_df = NULL,
+  player_game_data = NULL,
   match_ref,
   date_val,
   decay,
@@ -15,7 +15,7 @@ calculate_player_stats(
 )
 }
 \arguments{
-\item{plyr_gm_df}{Player game data frame}
+\item{player_game_data}{Player game data frame}
 
 \item{match_ref}{Match reference}
 
