@@ -70,6 +70,7 @@ file_reader <- function(file_name, release_tag) {
 #' @export
 #' @importFrom glue glue
 load_chains <- function(seasons = get_afl_season(), rounds = get_afl_week()) {
+  if (isTRUE(seasons) && missing(rounds)) rounds <- TRUE
   seasons <- validate_seasons(seasons)
   rounds <- validate_rounds(rounds)
 
@@ -98,6 +99,7 @@ load_chains <- function(seasons = get_afl_season(), rounds = get_afl_week()) {
 #' @export
 #' @importFrom glue glue
 load_pbp <- function(seasons = get_afl_season(), rounds = get_afl_week()) {
+  if (isTRUE(seasons) && missing(rounds)) rounds <- TRUE
   seasons <- validate_seasons(seasons)
   rounds <- validate_rounds(rounds)
 
