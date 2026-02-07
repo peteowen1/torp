@@ -1,3 +1,32 @@
+#' Default credit assignment parameters
+#'
+#' Returns a named list of all credit assignment parameters with their default
+#' values. Used by \code{create_player_game_data()} when no custom params are provided.
+#'
+#' @return A named list of credit assignment parameters.
+#' @export
+default_credit_params <- function() {
+  list(
+    disp_neg_offset   = CREDIT_DISP_NEG_OFFSET,
+    disp_pos_offset   = CREDIT_DISP_POS_OFFSET,
+    disp_scale        = CREDIT_DISP_SCALE,
+    bounce_penalty    = CREDIT_BOUNCE_PENALTY,
+    recv_neg_mult     = CREDIT_RECV_NEG_MULT,
+    recv_neg_offset   = CREDIT_RECV_NEG_OFFSET,
+    recv_pos_mult     = CREDIT_RECV_POS_MULT,
+    recv_pos_offset   = CREDIT_RECV_POS_OFFSET,
+    recv_scale        = CREDIT_RECV_SCALE,
+    spoil_wt          = CREDIT_SPOIL_WT,
+    tackle_wt         = CREDIT_TACKLE_WT,
+    pressure_wt       = CREDIT_PRESSURE_WT,
+    def_pressure_wt   = CREDIT_DEF_PRESSURE_WT,
+    hitout_wt         = CREDIT_HITOUT_WT,
+    hitout_adv_wt     = CREDIT_HITOUT_ADV_WT,
+    ruck_contest_wt   = CREDIT_RUCK_CONTEST_WT,
+    pos_adj_quantile  = CREDIT_POS_ADJ_QUANTILE
+  )
+}
+
 #' Create Player Game Data
 #'
 #' Transforms raw play-by-play data and player stats into processed per-game
@@ -5,12 +34,14 @@
 #'
 #' Computes disposal points, reception points, spoil/tackle points, and
 #' hitout points for each player-game combination. Adjusts each component
-#' by subtracting the 40th percentile within each position group.
+#' by subtracting a position-group quantile.
 #'
 #' @param pbp_data Play-by-play data from \code{load_pbp()}. If NULL, loads all available.
 #' @param player_stats Raw player stats from \code{load_player_stats()}. If NULL, loads all available.
 #' @param teams Team lineup data from \code{load_teams()}. If NULL, loads all available.
 #' @param decay Decay factor for time-weighting games. Default is 500.
+#' @param credit_params Named list of credit assignment parameters. If NULL,
+#'   uses \code{default_credit_params()}.
 #'
 #' @return A data.table with one row per player per match, containing columns:
 #'   \code{player_id}, \code{match_id}, \code{plyr_nm}, \code{utc_start_time},
@@ -27,7 +58,10 @@
 create_player_game_data <- function(pbp_data = NULL,
                                     player_stats = NULL,
                                     teams = NULL,
-                                    decay = 500) {
+                                    decay = 500,
+                                    credit_params = NULL) {
+
+  p <- if (is.null(credit_params)) default_credit_params() else credit_params
 
   if (is.null(pbp_data)) pbp_data <- load_pbp(TRUE)
   if (is.null(player_stats)) player_stats <- load_player_stats(TRUE)
@@ -52,8 +86,8 @@ create_player_game_data <- function(pbp_data = NULL,
       gms = dplyr::n_distinct(match_id),
       utc_start_time = max(utc_start_time),
       weight_gm = max(weight_gm),
-      disp_pts = sum(dplyr::if_else(pos_team == -1, delta_epv - 0.04, delta_epv + 0.08) / 2),
-      disp_pts_wt = sum((dplyr::if_else(pos_team == -1, delta_epv - 0.04, delta_epv + 0.08) * max(weight_gm)) / 2),
+      disp_pts = sum(dplyr::if_else(pos_team == -1, delta_epv + p$disp_neg_offset, delta_epv + p$disp_pos_offset) * p$disp_scale),
+      disp_pts_wt = sum(dplyr::if_else(pos_team == -1, delta_epv + p$disp_neg_offset, delta_epv + p$disp_pos_offset) * p$disp_scale * max(weight_gm)),
       disp = floor(dplyr::n() / 2),
       tm = dplyr::last(team),
       opp = dplyr::last(opp_tm),
@@ -75,8 +109,8 @@ create_player_game_data <- function(pbp_data = NULL,
     ) %>%
     dplyr::group_by(lead_player, lead_player_id, match_id) %>%
     dplyr::summarise(
-      recv_pts = sum(dplyr::if_else(pos_team == -1, (1.5 * delta_epv * pos_team) + 0.1, (1 * delta_epv * pos_team) + 0.05) / 2),
-      recv_pts_wt = sum((dplyr::if_else(pos_team == -1, (1.5 * delta_epv * pos_team) + 0.1, ((1 * delta_epv * pos_team) + 0.05)) * max(weight_gm)) / 2),
+      recv_pts = sum(dplyr::if_else(pos_team == -1, (p$recv_neg_mult * delta_epv * pos_team) + p$recv_neg_offset, (p$recv_pos_mult * delta_epv * pos_team) + p$recv_pos_offset) * p$recv_scale),
+      recv_pts_wt = sum(dplyr::if_else(pos_team == -1, (p$recv_neg_mult * delta_epv * pos_team) + p$recv_neg_offset, (p$recv_pos_mult * delta_epv * pos_team) + p$recv_pos_offset) * p$recv_scale * max(weight_gm)),
       recvs = dplyr::n(),
       .groups = "drop"
     )
@@ -92,9 +126,9 @@ create_player_game_data <- function(pbp_data = NULL,
   spoil_hitout_df <- player_stats %>%
     dplyr::mutate(
       weight_gm = exp(as.numeric(-(max(as.Date(utc_start_time)) - as.Date(utc_start_time))) / decay),
-      spoil_pts = extended_stats_spoils * 0.6 + tackles * 0.1 + extended_stats_pressure_acts * 0.1 - extended_stats_def_half_pressure_acts * 0.2,
+      spoil_pts = extended_stats_spoils * p$spoil_wt + tackles * p$tackle_wt + extended_stats_pressure_acts * p$pressure_wt - extended_stats_def_half_pressure_acts * p$def_pressure_wt,
       spoil_pts_wt = spoil_pts * max(weight_gm),
-      hitout_pts = hitouts * 0.15 + extended_stats_hitouts_to_advantage * 0.25 - extended_stats_ruck_contests * 0.06,
+      hitout_pts = hitouts * p$hitout_wt + extended_stats_hitouts_to_advantage * p$hitout_adv_wt - extended_stats_ruck_contests * p$ruck_contest_wt,
       hitout_pts_wt = hitout_pts * max(weight_gm)
     ) %>%
     dplyr::select(-utc_start_time)
@@ -110,7 +144,7 @@ create_player_game_data <- function(pbp_data = NULL,
     dplyr::mutate(
       recv_pts = tidyr::replace_na(recv_pts, 0),
       recv_pts_wt = tidyr::replace_na(recv_pts_wt, 0),
-      disp_pts = tidyr::replace_na(disp_pts, 0) - (bounces * 0.2),
+      disp_pts = tidyr::replace_na(disp_pts, 0) - (bounces * p$bounce_penalty),
       disp_pts_wt = tidyr::replace_na(disp_pts_wt, 0),
       spoil_pts = tidyr::replace_na(spoil_pts, 0),
       spoil_pts_wt = tidyr::replace_na(spoil_pts_wt, 0),
@@ -132,10 +166,10 @@ create_player_game_data <- function(pbp_data = NULL,
     dplyr::ungroup() %>%
     dplyr::group_by(position) %>%
     dplyr::mutate(
-      recv_pts_adj = recv_pts - stats::quantile(recv_pts, 0.4, na.rm = TRUE),
-      disp_pts_adj = disp_pts - stats::quantile(disp_pts, 0.4, na.rm = TRUE),
-      spoil_pts_adj = spoil_pts - stats::quantile(spoil_pts, 0.4, na.rm = TRUE),
-      hitout_pts_adj = hitout_pts - stats::quantile(hitout_pts, 0.4, na.rm = TRUE),
+      recv_pts_adj = recv_pts - stats::quantile(recv_pts, p$pos_adj_quantile, na.rm = TRUE),
+      disp_pts_adj = disp_pts - stats::quantile(disp_pts, p$pos_adj_quantile, na.rm = TRUE),
+      spoil_pts_adj = spoil_pts - stats::quantile(spoil_pts, p$pos_adj_quantile, na.rm = TRUE),
+      hitout_pts_adj = hitout_pts - stats::quantile(hitout_pts, p$pos_adj_quantile, na.rm = TRUE),
       tot_p_adj = recv_pts_adj + disp_pts_adj + spoil_pts_adj + hitout_pts_adj
     ) %>%
     dplyr::ungroup()

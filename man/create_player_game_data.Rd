@@ -8,7 +8,8 @@ create_player_game_data(
   pbp_data = NULL,
   player_stats = NULL,
   teams = NULL,
-  decay = 500
+  decay = 500,
+  credit_params = NULL
 )
 }
 \arguments{
@@ -19,6 +20,9 @@ create_player_game_data(
 \item{teams}{Team lineup data from \code{load_teams()}. If NULL, loads all available.}
 
 \item{decay}{Decay factor for time-weighting games. Default is 500.}
+
+\item{credit_params}{Named list of credit assignment parameters. If NULL,
+uses \code{default_credit_params()}.}
 }
 \value{
 A data.table with one row per player per match, containing columns:
@@ -34,5 +38,5 @@ player performance data used by the TORP ratings pipeline.
 \details{
 Computes disposal points, reception points, spoil/tackle points, and
 hitout points for each player-game combination. Adjusts each component
-by subtracting the 40th percentile within each position group.
+by subtracting a position-group quantile.
 }

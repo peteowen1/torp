@@ -50,6 +50,78 @@ RATING_PRIOR_GAMES_DISP <- 6
 RATING_SPOIL_MULTIPLIER <- 1.2
 
 
+# Credit Assignment Constants
+# ----------------------------
+
+#' Disposal EPV offset when defending (pos_team == -1)
+#' @keywords internal
+CREDIT_DISP_NEG_OFFSET <- -0.04
+
+#' Disposal EPV offset when possessing (pos_team == 1)
+#' @keywords internal
+CREDIT_DISP_POS_OFFSET <- 0.08
+
+#' Disposal scaling factor
+#' @keywords internal
+CREDIT_DISP_SCALE <- 0.5
+
+#' Bounce penalty per bounce
+#' @keywords internal
+CREDIT_BOUNCE_PENALTY <- 0.2
+
+#' Reception multiplier when defending (pos_team == -1)
+#' @keywords internal
+CREDIT_RECV_NEG_MULT <- 1.5
+
+#' Reception offset when defending
+#' @keywords internal
+CREDIT_RECV_NEG_OFFSET <- 0.1
+
+#' Reception multiplier when possessing (pos_team == 1)
+#' @keywords internal
+CREDIT_RECV_POS_MULT <- 1.0
+
+#' Reception offset when possessing
+#' @keywords internal
+CREDIT_RECV_POS_OFFSET <- 0.05
+
+#' Reception scaling factor
+#' @keywords internal
+CREDIT_RECV_SCALE <- 0.5
+
+#' Spoil weight per spoil
+#' @keywords internal
+CREDIT_SPOIL_WT <- 0.6
+
+#' Tackle weight per tackle
+#' @keywords internal
+CREDIT_TACKLE_WT <- 0.1
+
+#' Pressure act weight
+#' @keywords internal
+CREDIT_PRESSURE_WT <- 0.1
+
+#' Defensive half pressure act weight (subtracted)
+#' @keywords internal
+CREDIT_DEF_PRESSURE_WT <- 0.2
+
+#' Hitout weight per hitout
+#' @keywords internal
+CREDIT_HITOUT_WT <- 0.15
+
+#' Hitout to advantage weight
+#' @keywords internal
+CREDIT_HITOUT_ADV_WT <- 0.25
+
+#' Ruck contest weight (subtracted)
+#' @keywords internal
+CREDIT_RUCK_CONTEST_WT <- 0.06
+
+#' Position adjustment quantile
+#' @keywords internal
+CREDIT_POS_ADJ_QUANTILE <- 0.4
+
+
 # Simulation Constants
 # --------------------
 

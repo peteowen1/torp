@@ -10,6 +10,7 @@
 #' @param prior_games_disp The number of prior games to consider for disposal. Default is 6.
 #' @param plyr_tm_df Optional pre-loaded player team data. If NULL, will load automatically.
 #' @param player_game_data Optional pre-loaded player game data. If NULL, will load automatically.
+#' @param spoil_multiplier Multiplier for spoil component. Default is \code{RATING_SPOIL_MULTIPLIER}.
 #'
 #' @return A data frame containing player TORP ratings.
 #' @export
@@ -26,7 +27,8 @@ calculate_torp_ratings <- function(season_val = get_afl_season(type = "current")
                          prior_games_recv = 4,
                          prior_games_disp = 6,
                          plyr_tm_df = NULL,
-                         player_game_data = NULL) {
+                         player_game_data = NULL,
+                         spoil_multiplier = RATING_SPOIL_MULTIPLIER) {
   # Load player team details if not provided
   if (is.null(plyr_tm_df)) {
     plyr_tm_df <- load_player_details(season_val)
@@ -49,7 +51,7 @@ calculate_torp_ratings <- function(season_val = get_afl_season(type = "current")
     cli::cli_warn("Fixtures for this date not available yet")
     return(data.frame())
   } else {
-    plyr_gm_df_rnd <- calculate_player_stats(player_game_data, match_ref, date_val, decay, loading, prior_games_recv, prior_games_disp)
+    plyr_gm_df_rnd <- calculate_player_stats(player_game_data, match_ref, date_val, decay, loading, prior_games_recv, prior_games_disp, spoil_multiplier = spoil_multiplier)
 
     final_df <- prepare_final_dataframe(plyr_tm_df, plyr_gm_df_rnd, season_val, round_val)
 
@@ -67,11 +69,12 @@ calculate_torp_ratings <- function(season_val = get_afl_season(type = "current")
 #' @param loading Loading factor
 #' @param prior_games_recv Prior games for receiving
 #' @param prior_games_disp Prior games for disposal
+#' @param spoil_multiplier Multiplier for spoil component. Default is \code{RATING_SPOIL_MULTIPLIER}.
 #'
 #' @return A data frame with calculated player statistics
 #'
 #' @importFrom data.table as.data.table uniqueN setDT
-calculate_player_stats <- function(player_game_data = NULL, match_ref, date_val, decay, loading, prior_games_recv, prior_games_disp) {
+calculate_player_stats <- function(player_game_data = NULL, match_ref, date_val, decay, loading, prior_games_recv, prior_games_disp, spoil_multiplier = RATING_SPOIL_MULTIPLIER) {
   if (is.null(player_game_data)) {
     player_game_data <- load_player_game_data(TRUE)
   }
@@ -115,7 +118,7 @@ calculate_player_stats <- function(player_game_data = NULL, match_ref, date_val,
     hitout_g = hitout_sum / wt_gms,
     torp_recv = loading * recv_sum / (wt_gms + prior_games_recv),
     torp_disp = loading * disp_sum / (wt_gms + prior_games_disp),
-    torp_spoil = loading * RATING_SPOIL_MULTIPLIER * spoil_sum / (wt_gms + prior_games_recv),
+    torp_spoil = loading * spoil_multiplier * spoil_sum / (wt_gms + prior_games_recv),
     torp_hitout = loading * hitout_sum / (wt_gms + prior_games_recv)
   )]
 
@@ -192,7 +195,8 @@ torp_ratings <- function(season_val = get_afl_season(type = "current"),
                          prior_games_recv = 4,
                          prior_games_disp = 6,
                          plyr_tm_df = NULL,
-                         player_game_data = NULL) {
+                         player_game_data = NULL,
+                         spoil_multiplier = RATING_SPOIL_MULTIPLIER) {
   .Deprecated("calculate_torp_ratings")
   calculate_torp_ratings(
     season_val = season_val,
@@ -202,6 +206,7 @@ torp_ratings <- function(season_val = get_afl_season(type = "current"),
     prior_games_recv = prior_games_recv,
     prior_games_disp = prior_games_disp,
     plyr_tm_df = plyr_tm_df,
-    player_game_data = player_game_data
+    player_game_data = player_game_data,
+    spoil_multiplier = spoil_multiplier
   )
 }

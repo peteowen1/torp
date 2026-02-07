@@ -11,7 +11,8 @@ calculate_player_stats(
   decay,
   loading,
   prior_games_recv,
-  prior_games_disp
+  prior_games_disp,
+  spoil_multiplier = RATING_SPOIL_MULTIPLIER
 )
 }
 \arguments{
@@ -28,6 +29,8 @@ calculate_player_stats(
 \item{prior_games_recv}{Prior games for receiving}
 
 \item{prior_games_disp}{Prior games for disposal}
+
+\item{spoil_multiplier}{Multiplier for spoil component. Default is \code{RATING_SPOIL_MULTIPLIER}.}
 }
 \value{
 A data frame with calculated player statistics

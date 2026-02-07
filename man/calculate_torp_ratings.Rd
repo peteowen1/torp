@@ -13,7 +13,8 @@ calculate_torp_ratings(
   prior_games_recv = 4,
   prior_games_disp = 6,
   plyr_tm_df = NULL,
-  player_game_data = NULL
+  player_game_data = NULL,
+  spoil_multiplier = RATING_SPOIL_MULTIPLIER
 )
 
 torp_ratings(
@@ -24,7 +25,8 @@ torp_ratings(
   prior_games_recv = 4,
   prior_games_disp = 6,
   plyr_tm_df = NULL,
-  player_game_data = NULL
+  player_game_data = NULL,
+  spoil_multiplier = RATING_SPOIL_MULTIPLIER
 )
 }
 \arguments{
@@ -43,6 +45,8 @@ torp_ratings(
 \item{plyr_tm_df}{Optional pre-loaded player team data. If NULL, will load automatically.}
 
 \item{player_game_data}{Optional pre-loaded player game data. If NULL, will load automatically.}
+
+\item{spoil_multiplier}{Multiplier for spoil component. Default is \code{RATING_SPOIL_MULTIPLIER}.}
 }
 \value{
 A data frame containing player TORP ratings.
