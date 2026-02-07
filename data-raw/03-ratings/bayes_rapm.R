@@ -1,4 +1,4 @@
-# Load necessary libraries
+# Setup ----
 library(fitzRoy)
 library(tidyverse)
 library(brms)
@@ -13,7 +13,7 @@ tictoc::tic()
 available_cores <- parallelly::availableCores() - 2
 # plan(multisession, workers = available_cores) # Dynamically set the number of workers
 
-# Fetch player statistics
+# Prepare Player Game Stats ----
 # player_stats <- fitzRoy::fetch_player_stats_afltables(2016:2024)
 player_stats <- fitzRoy::fetch_player_stats_fryzigg(2012:2024) # 2012 for advanced stats, 2003 for basics
 # maybe split 2012:2017 and 2018:2024 and do two regressions
@@ -39,7 +39,7 @@ player_game_stats <- player_stats %>%
   # select(Season, Round, Home.team, Away.team, ID = ID2, Player, Time.on.Ground, score_diff)
   select(match_id, match_home_team, match_away_team, ID = ID2, player_first_name, player_last_name, time_on_ground_percentage, score_diff)
 
-# Convert the data to a wide format where each row represents a game, and each column represents a player's performance
+# Pivot to Wide Format ----
 wide_data <- player_game_stats %>%
   select(match_id, match_home_team, match_away_team, ID, time_on_ground_percentage, score_diff) %>%
   pivot_wider(names_from = ID, values_from = time_on_ground_percentage, values_fn = sum) %>%
@@ -63,10 +63,8 @@ df_brms <- wide_data %>%
   ))) %>%
   rename(score_diff = score_diff)
 
-# Define the model formula
+# Fit Bayesian Ridge Regression ----
 formula <- bf(score_diff ~ 0 + ., center = FALSE)
-
-# Define the prior distributions (ridge regression equivalent)
 priors <- c(
   prior(normal(0, 5), class = "b"),
   prior(cauchy(0, 2.5), class = "sigma")
@@ -81,7 +79,7 @@ saveRDS(fit, "./data-raw/outputs/bayes_rapm.rds")
 # Load model
 fit <- readRDS("./data-raw/outputs/bayes_rapm.rds")
 
-# Extract posterior samples using as_draws
+# Extract RAPM Coefficients ----
 posterior_samples <- as_draws_df(fit)
 
 # Get the means of the coefficients and retain their names
@@ -123,7 +121,7 @@ MLmetrics::MAE(wide_data$pred_diff, wide_data$score_diff)
 View(wide_data %>% select(pred_diff, 1:20))
 
 
-# Calculate tot_tog and add it to player_bpm
+# BPM Regression ----
 player_bpm <- player_stats %>%
   mutate(ID = as.character(player_id)) %>%
   group_by(ID) %>%
@@ -196,10 +194,7 @@ player_bpm <- player_bpm %>%
 
 View(player_bpm)
 
-###
-# season df
-
-# Calculate tot_tog and add it to player_bpm
+# Season-Level Analysis ----
 season_bpm <- player_stats %>%
   mutate(ID = as.character(player_id)) %>%
   group_by(

@@ -1,7 +1,7 @@
+# Setup ----
 library(tidyverse)
 options(digits = 3)
 
-## iteration sims
 sims <- 500
 season_val <- get_afl_season()
 # sims_per_round <- max(ceiling(simulations / future::availableCores() * 2), 100)
@@ -10,7 +10,7 @@ season_val <- get_afl_season()
 # iter_sims <- iter_sims[iter_sims <= simulations]
 # iter_sims_num <- length(iter_sims)
 
-#
+# Prepare Sim Data ----
 sim_games <-
   fixtures %>%
   mutate(result = home.score.totalScore - away.score.totalScore) %>%
@@ -50,7 +50,7 @@ sim_games_pivot <-
   dplyr::left_join(team_map) %>%
   dplyr::mutate(team_name_season = as.factor(paste(team_name, season)))
 
-#
+# Team Ratings ----
 sim_teams <-
   tr %>%
   filter(
@@ -84,7 +84,7 @@ max_ratings <-
   ) %>%
   arrange(-torp)
 
-#
+# Run Simulations ----
 library(fitzRoy)
 max_ratings$team <- replace_teams(max_ratings$team)
 sim_teams$team <- replace_teams(sim_teams$team)
@@ -92,7 +92,7 @@ orig_ratings$team <- replace_teams(orig_ratings$team)
 sim_games$home_team <- replace_teams(sim_games$home_team)
 sim_games$away_team <- replace_teams(sim_games$away_team)
 sim_games_pivot$team_name <- replace_teams(sim_games_pivot$team_name)
-#
+
 library(purrr)
 source("R/sim-helpers.R")
 
@@ -102,6 +102,7 @@ tictoc::toc()
 
 tst_df <- tst_sims %>% list_rbind(., names_to = "sim")
 
+# Process Results ----
 # Create separate rows for home and away teams
 home_teams <- tst_df %>%
   select(sim, providerId, season, roundnum, teamId = home.team.providerId, team = home_team, utcStartTime, venue = venue.name, result, estimate, wp, outcome) %>%
@@ -221,7 +222,7 @@ combined_results_df %>%
   ) %>%
   View()
 
-###
+# Ladder Analysis ----
 create_ladder <- function(df) {
   df %>%
     group_by(team_name, sim) %>%

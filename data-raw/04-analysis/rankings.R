@@ -1,8 +1,10 @@
+# Setup ----
 library(tidyverse)
 library(devtools)
 library(rvest)
 devtools::load_all()
 
+# Load Data ----
 url <- "https://www.afl.com.au/matches/injury-list"
 inj_df <- read_html(url) %>%
   html_table() %>%
@@ -24,7 +26,7 @@ tr <- torp_ratings(2025, get_afl_week("next")) %>%
 
 view(tr)
 
-### coming week
+# Weekly Analysis ----
 missing <- tr %>% anti_join(week_teams, by = c("player_id" = "player.playerId"))
 
 # View(missing)
@@ -33,7 +35,6 @@ starting <- tr %>% inner_join(week_teams, by = c("player_id" = "player.playerId"
 
 # View(starting)
 
-###
 this_week <- player_game_ratings(get_afl_season(), get_afl_week())
 view(this_week)
 
@@ -54,6 +55,7 @@ view(ssn_25)
 # ssn_21 <- player_season_ratings(2021)
 # # view(ssn_21)
 
+# Team Rankings ----
 sd(tr$torp_hitout, na.rm = T)
 
 tr %>%
@@ -114,6 +116,7 @@ tr %>%
   ) %>%
   arrange(-torp_val)
 
+# Calibration ----
 library(probably)
 
 # Create a binned calibration plot

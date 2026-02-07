@@ -1,4 +1,4 @@
-# ###########
+# Setup ----
 library(fitzRoy)
 library(tidyverse)
 devtools::load_all()
@@ -16,14 +16,14 @@ pstot <- load_player_stats(TRUE)
 
 decay <- 500
 
-######################################### REMEMBER TO UNCOMMENT ADD_WP_VARS ON ROW 30 AND 52
+### REMEMBER TO UNCOMMENT ADD_WP_VARS ON ROW 30 AND 52
 ### player value rule of thumb:
 ### APY = torp * 175k + 100k
 ### so a replacement player is worth 100k, and someone with a torp of 7 is worth 7*175k+100k = 1.325m
 ### calculation is (teams cap ($14m) - team players (35) * min-salary (100k)) divided by mean "team torp rating" (60)
 ### (14m - 35*100k)/60 = 175,000
-######
-################### create player game df ()
+
+# Create Player Game DataFrame ----
 tictoc::tic()
 
 plyr_gm_df <-
@@ -132,7 +132,8 @@ plyr_gm_df <-
   dplyr::filter(!is.na(tm))
 
 tictoc::toc()
-###
+
+# Save Data ----
 usethis::use_data(plyr_gm_df, overwrite = TRUE)
 
 ### NEED TO GIT PUSH IF CHANGED THIS

@@ -1,4 +1,4 @@
-######################## takes 3 mins to build model, 1 min for rest
+# Setup ----
 # library(devtools)
 # library('tidyverse')
 # library('zoo')
@@ -18,9 +18,7 @@ devtools::load_all()
 # tictoc::tic()
 # model_data_epv <- clean_model_data_epv(pbp)
 # tictoc::toc()
-###########################
-# devtools::load_all()
-
+# Prepare WP Data ----
 # model_data_wp <- readRDS("model_data_wp.rds")
 tictoc::tic()
 model_data_wp <- model_data_epv %>%
@@ -31,8 +29,7 @@ tictoc::toc()
 
 
 
-#######################################
-##################
+# XGBoost Parameters ----
 nrounds <- 100
 params <-
   list(
@@ -53,21 +50,18 @@ params <-
   )
 
 
-###
+# Train WP Model ----
 full_train <- xgboost::xgb.DMatrix(
   stats::model.matrix(~ . + 0,
     data = model_data_wp %>% select_wp_model_vars()
   ),
   label = model_data_wp$label_wp
 )
-
-##################################################### BUILD THE MODEL
 set.seed(1234)
 wp_model <- xgboost::xgboost(
   params = params, data = full_train, nrounds = nrounds, print_every_n = 10
 )
 
-###
 # folds <- splitTools::create_folds(
 #   y = model_data_wp$match_id,
 #   k = 5,
@@ -88,13 +82,10 @@ wp_model <- xgboost::xgboost(
 #   early_stopping_rounds = 50,
 #   print_every_n = 50
 # )
-###
-
+# Save Model ----
 # saveRDS(wp_model, "./data/wp_model.rds")
 
 usethis::use_data(wp_model, overwrite = TRUE)
-
-#########################################################
 # # #####
 # library(mgcv)
 # wp_model_gam <- mgcv::bam(label_wp ~
@@ -118,9 +109,7 @@ usethis::use_data(wp_model, overwrite = TRUE)
 # ModelMetrics::logLoss(model_data_wp$label_wp,model_data_wp %>% add_wp_vars() %>% pull(wp))
 # ModelMetrics::logLoss(model_data_wp$label_wp,rep(0.5,nrow(model_data_wp)))
 
-# ###########
-# ### TESTING
-# #######
+# Testing ----
 match_choice <- "CD_M20220142601"
 
 df <- # load_chains(2021, 27) %>% # row 280 is messed up
@@ -155,11 +144,6 @@ df <- # load_chains(2021, 27) %>% # row 280 is messed up
 # pbps <- chains  %>% filter(matchId == match_choice) %>% clean_pbp()
 # chain <- chains %>% filter(matchId == match_choice)
 
-#
-#
-# ###
-# ###################
-#####################
 # library(EIX)
 # library(pdp)
 # dataX_train <- # xgboost::xgb.DMatrix(

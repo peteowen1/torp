@@ -1,3 +1,4 @@
+# Setup ----
 library(devtools)
 library(fitzRoy)
 library(tidyverse)
@@ -6,6 +7,7 @@ devtools::load_all()
 
 torp_ratings()
 
+# Compute TORP Ratings ----
 # Define a helper function to calculate torp ratings for a given year and round range
 get_torp_df <- function(year, rounds) {
   torp_df <- purrr::map(rounds, ~torp_ratings(year,.x), .progress = TRUE) %>%
@@ -15,6 +17,7 @@ get_torp_df <- function(year, rounds) {
   return(torp_df)
 }
 
+# Calculate All Seasons ----
 # Set up parallel processing
 # plan(multisession, workers = parallelly::availableCores() - 2)
 
@@ -34,7 +37,7 @@ torp_df_total <- torp_df_total %>% rows_upsert(torp_df_25, by = "row_id")
 
 tictoc::toc() # Stop timing
 
-# Save the final combined data frame
+# Save Data ----
 use_data(torp_df_total, overwrite = TRUE)
 
 # GIT PUSH AFTER CHANGE

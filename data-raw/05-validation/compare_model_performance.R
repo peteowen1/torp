@@ -6,6 +6,7 @@
 #' have been run in the current session and that `team_mdl_df`
 #' contains prediction columns `pred_win` and `pred_win_xgb`.
 
+# Setup ----
 library(tidyverse)
 library(MLmetrics)
 #
@@ -13,6 +14,7 @@ library(MLmetrics)
 #   stop("Required prediction columns not found in team_mdl_df")
 # }
 
+# Prepare Test Data ----
 test_df <- team_mdl_df %>%
   dplyr::filter(
     !is.na(win),
@@ -33,7 +35,7 @@ comparison <- tibble(
 
 print(comparison)
 
-####
+# mgcv Model Metrics ----
 test_df$bits <- ifelse(test_df$win == 1,
                        1 + log2(test_df$pred_win),
                        ifelse(test_df$win == 0,
@@ -46,7 +48,6 @@ test_df$tips <- ifelse(round(test_df$pred_win) == test_df$win, 1,
 )
 test_df$mae <- abs(test_df$score_diff - test_df$pred_score_diff)
 
-# library(MLmetrics)
 MLmetrics::LogLoss(test_df$pred_win, test_df$win)
 MLmetrics::MAE(test_df$pred_score_diff, test_df$score_diff)
 sum(test_df$bits)
@@ -56,7 +57,7 @@ mean(test_df$tips)
 nrow(test_df)
 
 
-####
+# XGBoost Model Metrics ----
 test_df$bits <- ifelse(test_df$win == 1,
                        1 + log2(test_df$pred_win_xgb),
                        ifelse(test_df$win == 0,

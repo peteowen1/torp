@@ -13,6 +13,8 @@
 #   Rscript data-raw/01-data/create_aggregated_files.R --chains-only
 #   Rscript data-raw/01-data/create_aggregated_files.R --pbp-only
 
+# Setup ----
+
 library(dplyr)
 library(data.table)
 library(piggyback)
@@ -21,9 +23,7 @@ library(glue)
 
 devtools::load_all()
 
-# =============================================================================
-# Configuration
-# =============================================================================
+# Configuration ----
 
 SEASONS_TO_AGGREGATE <- 2021:2025
 DATA_TYPES <- c("chains", "pbp")
@@ -51,9 +51,7 @@ get_max_round <- function(season) {
   return(28)
 }
 
-# =============================================================================
-# Core Functions
-# =============================================================================
+# Core Functions ----
 
 #' Create aggregated file for a specific data type and season
 #'
@@ -168,9 +166,7 @@ create_all_historical_aggregates <- function(
   invisible(NULL)
 }
 
-# =============================================================================
-# Execute if run as script
-# =============================================================================
+# Execute if run as script ----
 
 if (sys.nframe() == 0) {
   # Running as a script - parse command line arguments

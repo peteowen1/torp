@@ -6,6 +6,8 @@
 # For daily automated releases: data-raw/01-data/daily_release.R
 # For creating historical aggregates: data-raw/01-data/create_aggregated_files.R
 
+# Setup ----
+
 library(dplyr)
 library(stringr)
 library(httr)
@@ -16,7 +18,7 @@ tictoc::tic('total')
 
 devtools::load_all()
 
-# Get chains data  -------------------------------------------------------------
+# Chains Data ----
 tictoc::tic('chains')
 
 get_chains_data <- function(season, round) {
@@ -86,7 +88,7 @@ create_aggregated_chains(2025)
 
 tictoc::toc(log= TRUE)
 
-# Get pbp data  -------------------------------------------------------------
+# PBP Data ----
 tictoc::tic('pbp')
 get_pbp_data <- function(season, round) {
   chains <- get_week_chains(season, round)
@@ -168,7 +170,7 @@ create_aggregated_pbp(2025)
 
 tictoc::toc(log= TRUE)
 
-# Get xg data  -------------------------------------------------------------
+# XG Data ----
 tictoc::tic('xg')
 get_xg_data <- function(season) {
   xg_df <- match_xgs(season, TRUE)
@@ -186,7 +188,7 @@ purrr::walk(2025:get_afl_season(),~get_xg_data(.))
 
 tictoc::toc(log= TRUE)
 
-# Get player stats data  -------------------------------------------------------------
+# Player Stats Data ----
 tictoc::tic('player stats')
 get_player_stats <- function(season) {
   player_stats <- fitzRoy::fetch_player_stats_afl(season) %>%
@@ -203,7 +205,7 @@ purrr::walk(2025:get_afl_season(), ~ get_player_stats(.))
 
 tictoc::toc(log= TRUE)
 
-# Get player game data  -----------------------------------------------------------
+# Player Game Data ----
 tictoc::tic('player game data')
 get_player_game_data <- function(season) {
   pbp <- load_pbp(season, rounds = TRUE)
@@ -220,7 +222,7 @@ purrr::walk(2021:get_afl_season(), ~ get_player_game_data(.))
 
 tictoc::toc(log= TRUE)
 
-# Get fixtures data  -------------------------------------------------------------
+# Fixtures Data ----
 tictoc::tic('fixtures')
 get_fixtures <- function(season) {
   ### update fixtures file (17 secs)
@@ -236,7 +238,7 @@ purrr::walk(2025:lubridate::year(Sys.Date()), ~ get_fixtures(.))
 
 tictoc::toc(log= TRUE)
 
-# Get team lineups data  -------------------------------------------------------------
+# Team Lineups Data ----
 tictoc::tic('lineups')
 get_teams <- function(season) {
   ### update teams file (90 secs per season)
@@ -256,7 +258,7 @@ purrr::walk(2025:get_afl_season(), ~ get_teams(.))
 
 tictoc::toc(log= TRUE)
 
-# Get results data  -------------------------------------------------------------
+# Results Data ----
 tictoc::tic('results')
 get_results <- function(season) {
   ##### update results file (5 secs per season)
@@ -272,7 +274,7 @@ purrr::walk(2025:get_afl_season(), ~ get_results(.))
 
 tictoc::toc(log= TRUE)
 
-# Get player details data  -------------------------------------------------------------
+# Player Details Data ----
 tictoc::tic('player details')
 get_player_details <- function(season) {
   ##### update players file (20 secs per season)
@@ -298,6 +300,6 @@ tictoc::toc(log= TRUE)
 
 tictoc::toc(log= TRUE)
 
-# print a nicely formatted table of all timings
+# Timing Summary ----
 tictoc::tic.log(format = TRUE) %>% unlist()
 

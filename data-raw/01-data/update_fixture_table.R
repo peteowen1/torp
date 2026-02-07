@@ -1,11 +1,13 @@
+# Setup ----
+
 library(dplyr)
 library(purrr)
 library(fitzRoy)
 devtools::load_all()
 
-# Helper: safely fetch data, return NULL on failure
-safe_fetch <- function(fetch_fn, ...) {
+## Helper Functions ----
 
+safe_fetch <- function(fetch_fn, ...) {
   tryCatch(
     fetch_fn(...),
     error = function(e) {
@@ -15,7 +17,6 @@ safe_fetch <- function(fetch_fn, ...) {
   )
 }
 
-# Helper: check if dataframe has data
 has_data <- function(df) {
  !is.null(df) && is.data.frame(df) && nrow(df) > 0
 }
@@ -25,7 +26,7 @@ current_round <- get_afl_week()
 
 cli::cli_h1("AFL Data Update - Season {season}, Round {current_round}")
 
-# 1. Update fixtures --------------------------------------------------------
+# 1. Update Fixtures ----
 cli::cli_h2("Fixtures")
 tictoc::tic()
 
@@ -39,7 +40,7 @@ if (has_data(fixtures_upd)) {
 }
 tictoc::toc()
 
-# 2. Update team lineups ----------------------------------------------------
+# 2. Update Team Lineups ----
 cli::cli_h2("Team Lineups")
 tictoc::tic()
 
@@ -70,7 +71,7 @@ if (current_round > 0) {
 }
 tictoc::toc()
 
-# 3. Update results ---------------------------------------------------------
+# 3. Update Results ----
 cli::cli_h2("Results")
 tictoc::tic()
 
@@ -84,7 +85,7 @@ if (has_data(results_upd)) {
 }
 tictoc::toc()
 
-# 4. Update player details --------------------------------------------------
+# 4. Update Player Details ----
 cli::cli_h2("Player Details")
 tictoc::tic()
 
@@ -105,7 +106,7 @@ if (has_data(player_details_upd)) {
 }
 tictoc::toc()
 
-# 5. Update player stats ----------------------------------------------------
+# 5. Update Player Stats ----
 cli::cli_h2("Player Stats")
 tictoc::tic()
 

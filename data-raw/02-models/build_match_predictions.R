@@ -1,4 +1,4 @@
-# ###
+# Setup ----
 library(tidyverse)
 library(fitzRoy)
 # library(fuzzyjoin)
@@ -341,7 +341,6 @@ days_rest <- fix_df %>%
   ungroup() %>%
   dplyr::mutate(days_rest = replace_na(days_rest, 21))
 
-###
 library(rvest)
 url <- "https://www.afl.com.au/matches/injury-list"
 inj_df <- read_html(url) %>%
@@ -532,7 +531,6 @@ team_mdl_df <-
 # library(mgcViz)
 # set.seed("1234")
 
-###
 # afl_totshots_mdl <- mgcv::bam(
 #   total_shots ~
 #     s(team_type_fac, bs = "re") +
@@ -558,7 +556,6 @@ team_mdl_df <-
 # summary(afl_totshots_mdl)
 # Deviance explained =   22%
 
-###
 # afl_shot_mdl <- mgcv::bam(
 #   shot_diff ~
 #     s(team_type_fac, bs = "re")
@@ -735,7 +732,6 @@ afl_win_mdl <-
 # plot(mgcViz::getViz(afl_win_mdl))
 # Deviance explained = 19.6%
 
-###
 team_mdl_df$pred_win <- predict(afl_win_mdl, newdata = team_mdl_df, type = "response")
 team_mdl_df$bits <- ifelse(team_mdl_df$win == 1,
   1 + log2(team_mdl_df$pred_win),
@@ -760,7 +756,6 @@ mean(test_df$bits)
 mean(test_df$tips)
 nrow(test_df)
 
-#################################### GF
 # team_mdl_df$team_type_fac <- as.factor(ifelse(team_mdl_df$providerId == "CD_M20220142701",
 #   ifelse(team_mdl_df$team_type == "home", "home", "away"),
 #   team_mdl_df$team_type
@@ -836,5 +831,3 @@ inj_df %>%
 
 ## Final Prediction Table ----
 week_gms
-
-####

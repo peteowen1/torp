@@ -8,6 +8,7 @@
 #' fits a final model on the training data.  Predictions are stored in the
 #' `pred_win_xgb` column of `team_mdl_df`.
 
+# Setup ----
 library(tidyverse)
 library(caret)
 library(xgboost)
@@ -15,20 +16,19 @@ library(MLmetrics)
 
 devtools::load_all()
 
-# ---------------------------------------------------------------------------
 # Check that the modelling data exists
 if (!exists("team_mdl_df")) {
   stop("`team_mdl_df` not found. Run build_match_predictions.R first.")
 }
 
-# Prepare clean modeling dataset
+# Data Preparation ----
 model_df <- team_mdl_df %>%
   dplyr::filter(!is.na(win)) %>%
   dplyr::mutate(win = as.numeric(win)) %>%
   select_afl_model_vars() %>%  # Select model variables first
   tidyr::drop_na()  # Remove any rows with missing values
 
-# Create train/test split
+# Train/Test Split ----
 set.seed(1234)
 # train_idx <- caret::createDataPartition(model_df$win, p = 0.8, list = FALSE)
 train_idx <- which(model_df$season.x < get_afl_season())
@@ -69,7 +69,7 @@ cat("Test matrix rows:", nrow(test_matrix), "Test label length:", length(test_la
 dtrain <- xgb.DMatrix(data = train_matrix, label = train_label)
 dtest  <- xgb.DMatrix(data = test_matrix, label = test_label)
 
-# Hyperparameter tuning grid
+# Hyperparameter Tuning ----
 gr <- expand.grid(
   eta = c(0.05, 0.1, 0.2),
   max_depth = c(4, 6, 8),
@@ -131,7 +131,7 @@ best_params <- list(
   gamma = best$gamma
 )
 
-# Train final model
+# Train Final Model ----
 final_model <- xgb.train(
   params = best_params,
   data = dtrain,
@@ -140,7 +140,7 @@ final_model <- xgb.train(
   verbose = 0
 )
 
-# Evaluate on test data
+# Evaluation ----
 test_pred <- predict(final_model, dtest)
 logloss <- MLmetrics::LogLoss(test_pred, test_label)
 print(glue::glue("Test LogLoss: {round(logloss, 4)}"))
@@ -172,7 +172,7 @@ if ("providerId" %in% names(team_mdl_df)) {
   warning("No providerId found - predictions may not align correctly with original data")
 }
 
-# Store the fitted model for later use
+# Save Model ----
 xgb_win_model <- final_model
 usethis::use_data(xgb_win_model, overwrite = TRUE)
 

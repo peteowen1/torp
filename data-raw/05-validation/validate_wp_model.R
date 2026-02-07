@@ -1,7 +1,7 @@
 # Win Probability Model Validation and Testing
-# ============================================
 # Comprehensive evaluation of the enhanced win probability model
 
+# 1. Load Test Data ----
 library(dplyr)
 library(ggplot2)
 library(ModelMetrics)
@@ -10,10 +10,6 @@ library(calibrationUtilities)
 library(glue)
 
 devtools::load_all()
-
-# ====================================
-# 1. LOAD TEST DATA
-# ====================================
 
 cat("📊 Loading validation data...\n")
 
@@ -30,9 +26,7 @@ validation_data <- validation_chains %>%
 
 cat(glue("✅ Validation data loaded: {nrow(validation_data):,} plays from {test_season}\n"))
 
-# ====================================
-# 2. MODEL COMPARISON FRAMEWORK
-# ====================================
+# 2. Model Comparison Framework ----
 
 evaluate_wp_model <- function(data, model_name = "Model") {
   cat(glue("\n🔍 Evaluating {model_name}...\n"))
@@ -162,16 +156,12 @@ evaluate_wp_model <- function(data, model_name = "Model") {
   )
 }
 
-# ====================================
-# 3. RUN COMPREHENSIVE EVALUATION
-# ====================================
+# 3. Run Comprehensive Evaluation ----
 
 # Test the enhanced model
 enhanced_results <- evaluate_wp_model(validation_data, "Enhanced Ensemble Model")
 
-# ====================================
-# 4. BASELINE COMPARISONS
-# ====================================
+# 4. Baseline Comparisons ----
 
 cat("\n📊 Baseline Comparisons:\n")
 
@@ -208,9 +198,7 @@ baseline_naive <- evaluate_baseline(baseline_predictions, "wp_naive", "Naive (50
 baseline_score <- evaluate_baseline(baseline_predictions, "wp_score_only", "Score Only") 
 baseline_time_score <- evaluate_baseline(baseline_predictions, "wp_time_score", "Time + Score")
 
-# ====================================
-# 5. GAME-LEVEL VALIDATION
-# ====================================
+# 5. Game-Level Validation ----
 
 cat("\n🏈 Game-Level Validation:\n")
 
@@ -238,9 +226,7 @@ if (!is.null(enhanced_results)) {
   cat(glue("   Mean absolute error per game: {round(game_level_results$mean_game_mae, 4)}\n"))
 }
 
-# ====================================
-# 6. DIAGNOSTIC PLOTS AND ANALYSIS
-# ====================================
+# 6. Diagnostic Plots ----
 
 if (!is.null(enhanced_results) && nrow(enhanced_results$calibration_df) > 2) {
   cat("\n📊 Creating diagnostic plots...\n")
@@ -280,9 +266,7 @@ if (!is.null(enhanced_results) && nrow(enhanced_results$calibration_df) > 2) {
   }
 }
 
-# ====================================
-# 7. SUMMARY AND RECOMMENDATIONS
-# ====================================
+# 7. Summary ----
 
 cat("\n🎯 MODEL VALIDATION SUMMARY\n")
 cat("===============================\n")

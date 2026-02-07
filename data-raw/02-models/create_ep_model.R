@@ -1,4 +1,4 @@
-######################## takes 3 mins to build model, 1 min for rest
+# Setup ----
 library("devtools")
 library("tidyverse")
 library("zoo")
@@ -6,6 +6,7 @@ library("janitor")
 library("lubridate")
 devtools::load_all()
 
+# Load and Prep Data ----
 chains <- load_chains(TRUE, TRUE)
 
 tictoc::tic()
@@ -17,8 +18,8 @@ model_data_epv <- clean_model_data_epv(pbp)
 tictoc::toc()
 
 model_data_epv %>% select_epv_model_vars()
-#######################################
-##################
+
+# XGBoost Parameters ----
 nrounds <- 87
 params <-
   list(
@@ -38,7 +39,7 @@ params <-
     min_child_weight = 25
   )
 
-###
+# Train EP Model ----
 full_train <- xgboost::xgb.DMatrix(
   stats::model.matrix(~ . + 0,
     data = model_data_epv %>% select_epv_model_vars()
@@ -46,19 +47,16 @@ full_train <- xgboost::xgb.DMatrix(
   label = model_data_epv$label_ep
 )
 
-##################################################### UNCOMMENT TO REBUILD THE MODEL
 set.seed(1234)
 ep_model <- xgboost::xgboost(
   params = params, data = full_train, nrounds = nrounds, print_every_n = 10
 )
 
+# Save Model ----
 # saveRDS(ep_model, "./data/ep_model.rds")
 usethis::use_data(ep_model, overwrite = TRUE)
 
-###########
-### TESTING
-#######
-
+# Testing ----
 dataX_train <- # xgboost::xgb.DMatrix(
   model.matrix(~ . + 0, data = model_data_epv %>% select_epv_model_vars() %>%
     slice_head(n = 5000))

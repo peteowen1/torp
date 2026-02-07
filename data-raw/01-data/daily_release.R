@@ -12,26 +12,23 @@
 #   Rscript data-raw/01-data/daily_release.R
 #   Or: source("data-raw/01-data/daily_release.R"); run_daily_release()
 
+# Setup ----
+
 library(dplyr)
 library(glue)
 library(cli)
 library(piggyback)
 
-# Load the torp package
 devtools::load_all()
 
-# =============================================================================
-# Configuration
-# =============================================================================
+# Configuration ----
 
 #' Get TORP data repository name
 get_torpdata_repo <- function() {
  "peteowen1/torpdata"
 }
 
-# =============================================================================
-# Helper Functions
-# =============================================================================
+# Helper Functions ----
 
 #' Check if New Games Have Been Played
 #'
@@ -102,9 +99,7 @@ get_start_round <- function(season) {
   return(1)
 }
 
-# =============================================================================
-# Per-Round Data Functions
-# =============================================================================
+# Per-Round Data Functions ----
 
 #' Update Chains Data for a Round
 #'
@@ -185,9 +180,7 @@ update_round_pbp <- function(season, round) {
   invisible(NULL)
 }
 
-# =============================================================================
-# Aggregated File Functions
-# =============================================================================
+# Aggregated File Functions ----
 
 #' Update Aggregated Chains File
 #'
@@ -273,9 +266,7 @@ update_aggregated_pbp <- function(season) {
   invisible(NULL)
 }
 
-# =============================================================================
-# Season-Level Data Functions
-# =============================================================================
+# Season-Level Data Functions ----
 
 #' Update XG Data
 #'
@@ -469,9 +460,7 @@ update_player_details <- function(season) {
   invisible(NULL)
 }
 
-# =============================================================================
-# Main Entry Point
-# =============================================================================
+# Main Entry Point ----
 
 #' Run Daily Data Release
 #'
@@ -555,9 +544,7 @@ run_daily_release <- function(force = FALSE, include_aggregates = TRUE) {
   invisible(TRUE)
 }
 
-# =============================================================================
-# Execute if run as script
-# =============================================================================
+# Execute if run as script ----
 
 if (sys.nframe() == 0) {
   # Running as a script

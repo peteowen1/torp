@@ -1,3 +1,4 @@
+# Setup ----
 library(purrr)
 library(tidyverse)
 library(fitzRoy)
@@ -35,9 +36,6 @@ pl_details <- fetch_player_details_afl(get_afl_season())
 
 pstot <- load_player_stats(TRUE)
 
-### columns 22 to 88
-
-##############################
 cols <- colnames(pstot)[18:79]
 cols <- cols[!cols %in% c(
   "dream_team_points", "rating_points", "metres_gained", "last_updated",
@@ -51,7 +49,7 @@ cols_binom <- c(
 )
 cols_pois <- setdiff(cols, cols_binom)
 
-################
+# Weighted Average Function ----
 wav_data <- function(df, fil_val, model_col, decay = 365) {
   df$season_round <- paste0(substr(df$provider_id, 5, 8), substr(df$provider_id, 12, 13))
 
@@ -130,7 +128,7 @@ wav_data <- function(df, fil_val, model_col, decay = 365) {
 }
 
 
-############ POIS
+# Fit Poisson Models ----
 stat_list <- list()
 
 tictoc::tic()
@@ -181,7 +179,7 @@ for (i in cols_pois[1:length(cols_pois)]) { ############### DO 30 LATER!!!!!!!
 
 tictoc::toc()
 
-############ BINOM
+# Fit Binomial Models ----
 # stat_list_binom <- list()
 
 tictoc::tic()
@@ -234,7 +232,7 @@ for (i in cols_binom[1:length(cols_binom)]) {
 
 tictoc::toc()
 
-### combine
+# Combine Predictions ----
 pred_df <- stat_list %>% reduce(left_join, by = c(
   "player_id", "player_name", "player_position",
   "provider_id", "round", "home_away", "team_name", "opp_name"
@@ -244,11 +242,8 @@ pred_df
 arrow::write_parquet(pred_df, "./data-raw/outputs/stat_pred_df.parquet")
 tictoc::toc()
 
-#################################################################
-
 pred_df <- arrow::read_parquet("./data-raw/outputs/stat_pred_df.parquet")
 
-##############################
 model_val <- "goals"
 pred_model_val <- paste0("pred_", model_val)
 wt_avg_model_val <- paste0("wt_avg_", model_val)
@@ -261,7 +256,7 @@ mixedup::extract_random_effects(mdl) %>%
 # plot(mgcViz::getViz(mdl))
 
 
-############
+# Model Validation ----
 stat_perf <- function(var) {
   model_val <- var
   pred_model_val <- paste0("pred_", model_val)
@@ -285,7 +280,7 @@ stat_perf <- function(var) {
 
 all_perf <- map(c(cols_pois, cols_binom), ~ stat_perf(.)) %>% list_rbind()
 
-##### add to match pred data frame
+# Team-Level Predictions ----
 team_preds <- pred_df %>%
   group_by(provider_id, team_name, opp_name) %>%
   summarise_if(is.numeric, sum, na.rm = TRUE) # %>% View()
@@ -296,10 +291,9 @@ team_mdl_df <- team_mdl_df %>%
     by = c("providerId" = "provider_id", "team_name_adj.x" = "team_name")
   ) # %>% View()
 
-###
 colnames(team_mdl_df)[str_detect(colnames(team_mdl_df), "pred")]
 
-###
+# Player-Level Analysis ----
 pl_df_final <-
   pl_details %>%
   select(providerId, position) %>%
@@ -314,7 +308,6 @@ pl_df_final <-
 # summarise(sqrt(var(pred_val, na.rm=T))) %>%
 # View()
 
-########
 pl_df_final %>%
   group_by(position) %>%
   summarise(across(starts_with("pred"), ~ mean(.x, na.rm = T))) %>%
