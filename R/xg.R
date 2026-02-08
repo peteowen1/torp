@@ -11,9 +11,9 @@
 calculate_match_xgs <- function(season = get_afl_season(), round = get_afl_week(), quarter = 1:4) {
   df <- load_pbp(seasons = season, rounds = round)
 
-  shots_df <- df %>%
-    dplyr::group_by(.data$match_id) %>%
-    dplyr::filter(.data$period %in% quarter) %>%
+  shots_df <- df |>
+    dplyr::group_by(.data$match_id) |>
+    dplyr::filter(.data$period %in% quarter) |>
     dplyr::summarise(
       home_team = max(.data$home_team_team_name),
       home_shots_score = sum(dplyr::if_else(.data$team == .data$home_team_team_name, .data$points_shot, 0), na.rm = TRUE),

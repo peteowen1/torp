@@ -36,8 +36,8 @@ get_match_chains <- function(season = get_afl_season(), round = NA) {
   chains <- get_many_game_chains(games_vector)
 
   players <- get_players()
-  chains <- chains %>%
-    dplyr::inner_join(games, by = "matchId") %>%
+  chains <- chains |>
+    dplyr::inner_join(games, by = "matchId") |>
     dplyr::left_join(players, by = c("playerId", "season"))
 
   message("Success!")
@@ -99,7 +99,7 @@ access_api <- function(url) {
     url = url,
     httr::add_headers("x-media-mis-token" = token)
   )
-  httr::content(response, as = "text", encoding = "UTF-8") %>%
+  httr::content(response, as = "text", encoding = "UTF-8") |>
     jsonlite::fromJSON(flatten = TRUE)
 }
 
@@ -121,8 +121,8 @@ get_round_games <- function(season, round) {
   games <- access_api(url)[[5]]
 
   if (length(games) > 0) {
-    games <- games %>%
-      dplyr::filter(.data$status == "CONCLUDED") %>%
+    games <- games |>
+      dplyr::filter(.data$status == "CONCLUDED") |>
       dplyr::mutate(
         date = as.Date(substr(.data$utcStartTime, 1, 10)),
         season = season
@@ -162,15 +162,15 @@ get_season_games <- function(season, rounds = 28) {
 get_players <- function(use_api = FALSE) {
   if (use_api) {
     url <- "https://api.afl.com.au/cfs/afl/players"
-    players <- access_api(url)[[5]] %>%
+    players <- access_api(url)[[5]] |>
       dplyr::mutate(season = get_afl_season())
   } else {
-    players <- load_player_details(seasons = TRUE) %>%
+    players <- load_player_details(seasons = TRUE) |>
       dplyr::mutate(
         photoURL = NA,
         team.teamId = NA,
         team.teamAbbr = NA
-      ) %>%
+      ) |>
       dplyr::select(
         playerId = .data$providerId, jumperNumber = .data$jumperNumber,
         playerPosition = .data$position, photoURL = .data$photoURL,

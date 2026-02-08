@@ -6,14 +6,14 @@
 #' @return A cleaned dataframe ready for EPV modeling.
 #' @export
 clean_model_data_epv <- function(df) {
-  df %>%
-    filter_relevant_descriptions() %>%
-    dplyr::group_by(.data$match_id, .data$period, .data$tot_goals) %>%
-    dplyr::filter(dplyr::lag(.data$throw_in) == 0 | dplyr::lead(.data$throw_in) == 0 | .data$throw_in == 0) %>%
-    add_epv_variables() %>%
-    dplyr::ungroup() %>%
-    fastDummies::dummy_cols(select_columns = c("play_type", "phase_of_play")) %>%
-    janitor::clean_names()
+  df |>
+    filter_relevant_descriptions() |>
+    dplyr::group_by(.data$match_id, .data$period, .data$tot_goals) |>
+    dplyr::filter(dplyr::lag(.data$throw_in) == 0 | dplyr::lead(.data$throw_in) == 0 | .data$throw_in == 0) |>
+    add_epv_variables() |>
+    dplyr::ungroup() |>
+    fastDummies::dummy_cols(select_columns = c("play_type", "phase_of_play")) |>
+    torp_clean_names()
 }
 
 #' Clean Model Data for Win Probability (WP)
@@ -22,16 +22,16 @@ clean_model_data_epv <- function(df) {
 #' @return A cleaned dataframe ready for WP modeling.
 #' @export
 clean_model_data_wp <- function(df) {
-  df %>%
-    dplyr::filter(!is.na(.data$label_wp)) %>%
+  df |>
+    dplyr::filter(!is.na(.data$label_wp)) |>
     dplyr::mutate(
       xpoints_diff = .data$points_diff + .data$exp_pts,
       pos_lead_prob = calculate_pos_lead_prob(.data$points_diff, .data$opp_goal, .data$opp_behind, .data$no_score, .data$behind, .data$goal),
       time_left_scaler = exp(pmin(((.data$period - 1) * AFL_QUARTER_DURATION + .data$period_seconds) / AFL_QUARTER_DURATION, AFL_TIME_SCALER_MAX)),
       diff_time_ratio = .data$xpoints_diff * .data$time_left_scaler
-    ) %>%
-    fastDummies::dummy_cols(select_columns = c("play_type", "phase_of_play")) %>%
-    janitor::clean_names()
+    ) |>
+    fastDummies::dummy_cols(select_columns = c("play_type", "phase_of_play")) |>
+    torp_clean_names()
 }
 
 #' Select EPV Model Variables
@@ -54,7 +54,7 @@ select_epv_model_vars <- function(df, label = FALSE) {
     base_vars <- c(base_vars, "label_ep")
   }
   
-  df %>% dplyr::select(dplyr::all_of(base_vars))
+  df |> dplyr::select(dplyr::all_of(base_vars))
 }
 
 #' Select WP Model Variables
@@ -64,7 +64,7 @@ select_epv_model_vars <- function(df, label = FALSE) {
 #' @return A dataframe with selected variables for WP modeling.
 #' @export
 select_wp_model_vars <- function(df) {
-  df %>%
+  df |>
     dplyr::select(
       "total_seconds", "shot_row", "home", "points_diff",
       "xpoints_diff", "pos_lead_prob", "time_left_scaler", "diff_time_ratio",
@@ -80,7 +80,7 @@ select_wp_model_vars <- function(df) {
 #' @return A dataframe with selected variables for AFL modeling
 #' @export
 select_afl_model_vars <- function(df) {
-  df %>%
+  df |>
     dplyr::select(
       # Response variables
       # .data$total_xpoints_adj,
@@ -153,15 +153,15 @@ clean_shots_data <- function(df) {
   shot_player_df <- NULL
   utils::data("shot_player_df", package = "torp", envir = environment())
 
-  df %>%
-    add_shot_result_variables() %>%
-    add_shot_geometry_variables(goal_width) %>%
-    add_shot_type_variables() %>%
-    dplyr::left_join(shot_player_df, by = c("player_id" = "player_id_shot"), keep = TRUE) %>%
+  df |>
+    add_shot_result_variables() |>
+    add_shot_geometry_variables(goal_width) |>
+    add_shot_type_variables() |>
+    dplyr::left_join(shot_player_df, by = c("player_id" = "player_id_shot"), keep = TRUE) |>
     dplyr::mutate(
       player_id_shot = as.factor(tidyr::replace_na(.data$player_id_shot, "Other")),
       player_name_shot = as.factor(tidyr::replace_na(.data$player_name_shot, "Other"))
-    ) %>%
+    ) |>
     dplyr::select(-"side_b", -"side_c")
 }
 
@@ -172,7 +172,7 @@ clean_shots_data <- function(df) {
 #' @return A dataframe with selected variables for shot modeling.
 #' @export
 select_shot_model_vars <- function(df) {
-  df %>%
+  df |>
     dplyr::select(
       "goal_x", "abs_y", "angle", "distance",
       "play_type", "phase_of_play",
@@ -187,8 +187,8 @@ select_shot_model_vars <- function(df) {
 #' @return A dataframe ready for shot modeling.
 #' @export
 prepare_shot_model_data <- function(df) {
-  df %>%
-    clean_shots_data() %>%
+  df |>
+    clean_shots_data() |>
     select_shot_model_vars()
 }
 
@@ -231,8 +231,8 @@ filter_relevant_descriptions <- function(df) {
     "Out of Bounds", "Out On Full After Kick", "Ruck Hard Ball Get", "Uncontested Mark"
   )
 
-  df %>%
-    dplyr::filter(.data$description %in% relevant_descriptions) %>%
+  df |>
+    dplyr::filter(.data$description %in% relevant_descriptions) |>
     dplyr::filter(!(.data$x == -.data$lead_x_tot & .data$y == -.data$lead_y_tot & .data$description != "Centre Bounce"))
 }
 
@@ -245,7 +245,7 @@ filter_relevant_descriptions <- function(df) {
 #' @keywords internal
 #' @importFrom dplyr mutate lag lead if_else
 add_epv_variables <- function(df) {
-  df %>%
+  df |>
     dplyr::mutate(
       lag_desc = dplyr::lag(.data$description, default = dplyr::first(.data$description)),
       lead_desc = dplyr::lead(.data$description, default = dplyr::last(.data$description)),
@@ -258,8 +258,8 @@ add_epv_variables <- function(df) {
       x = .data$mirror * .data$x,
       y = .data$mirror * .data$y,
       goal_x = .data$venue_length / 2 - .data$x
-    ) %>%
-    add_lagged_variables() %>%
+    ) |>
+    add_lagged_variables() |>
     add_speed_variables()
 }
 
@@ -413,7 +413,7 @@ calculate_mirror <- function(throw_in, team_id_mdl, x) {
 #' @keywords internal
 #' @importFrom dplyr mutate lag lead
 add_lagged_variables <- function(df) {
-  df %>%
+  df |>
     dplyr::mutate(
       lag_x = calculate_lagged_coordinate(.data$x, .data$team_id_mdl),
       lag_y = calculate_lagged_coordinate(.data$y, .data$team_id_mdl),
@@ -472,7 +472,7 @@ calculate_lagged_goal_x <- function(goal_x, team_id_mdl, venue_length, lag = 1) 
 #' @importFrom dplyr mutate lag
 #' @importFrom tidyr replace_na
 add_speed_variables <- function(df) {
-  df %>%
+  df |>
     dplyr::mutate(
       speed1 = (.data$lag_goal_x - .data$goal_x) / pmax((.data$period_seconds - dplyr::lag(.data$period_seconds)), 1),
       speed1 = tidyr::replace_na(.data$speed1, 0),
@@ -512,7 +512,7 @@ calculate_pos_lead_prob <- function(points_diff, opp_goal, opp_behind, no_score,
 #' @keywords internal
 #' @importFrom dplyr mutate case_when if_else
 add_shot_result_variables <- function(df) {
-  df %>%
+  df |>
     dplyr::mutate(
       shot_result_multi = dplyr::case_when(
         .data$shot_at_goal == TRUE & .data$disposal == "clanger" ~ 0,
@@ -537,7 +537,7 @@ add_shot_result_variables <- function(df) {
 #' @keywords internal
 #' @importFrom dplyr mutate if_else
 add_shot_geometry_variables <- function(df, goal_width) {
-  df %>%
+  df |>
     dplyr::mutate(
       abs_y = abs(.data$y),
       side_b = sqrt((.data$goal_x)^2 + (.data$y + goal_width / 2)^2),
@@ -556,7 +556,7 @@ add_shot_geometry_variables <- function(df, goal_width) {
 #' @keywords internal
 #' @importFrom dplyr mutate if_else
 add_shot_type_variables <- function(df) {
-  df %>%
+  df |>
     dplyr::mutate(
       shot_clanger = dplyr::if_else(.data$shot_at_goal == TRUE & .data$disposal == "clanger", 1, 0),
       shot_effective = dplyr::if_else(.data$shot_at_goal == TRUE & .data$disposal == "effective", 1, 0),

@@ -68,8 +68,8 @@ create_grouped_cv_folds <- function(data, group_var = "match_id", k = 5, seed = 
   set.seed(seed)
 
   # Get unique groups (matches)
-  unique_groups <- data %>%
-    dplyr::distinct(!!rlang::sym(group_var)) %>%
+  unique_groups <- data |>
+    dplyr::distinct(!!rlang::sym(group_var)) |>
     dplyr::pull(!!rlang::sym(group_var))
 
   # Shuffle groups
@@ -106,15 +106,15 @@ create_grouped_cv_folds <- function(data, group_var = "match_id", k = 5, seed = 
 create_temporal_splits <- function(data, train_seasons, val_seasons, test_seasons) {
   # Extract season from match_id or use provided season column
   if (!"season" %in% names(data) && "match_id" %in% names(data)) {
-    data <- data %>%
+    data <- data |>
       dplyr::mutate(
         season = as.numeric(substr(.data$match_id, 5, 8))
       )
   }
 
-  train_data <- data %>% dplyr::filter(.data$season %in% train_seasons)
-  val_data <- data %>% dplyr::filter(.data$season %in% val_seasons)
-  test_data <- data %>% dplyr::filter(.data$season %in% test_seasons)
+  train_data <- data |> dplyr::filter(.data$season %in% train_seasons)
+  val_data <- data |> dplyr::filter(.data$season %in% val_seasons)
+  test_data <- data |> dplyr::filter(.data$season %in% test_seasons)
 
   return(list(
     train = train_data,
@@ -167,14 +167,14 @@ evaluate_model_comprehensive <- function(actual, predicted, model_name = "Model"
     pred_decile = cut(predicted, breaks = quantile(predicted, probs = 0:10/10), include.lowest = TRUE)
   )
 
-  cal_summary <- cal_data %>%
-    group_by(pred_decile) %>%
+  cal_summary <- cal_data |>
+    group_by(pred_decile) |>
     summarise(
       pred_mean = mean(predicted),
       actual_mean = mean(actual),
       n = n(),
       .groups = "drop"
-    ) %>%
+    ) |>
     filter(n >= 10)  # Only use deciles with sufficient data
 
   if (nrow(cal_summary) >= 3) {

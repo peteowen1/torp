@@ -178,15 +178,15 @@ process_games_dt <- function(sim_teams, sim_games, round_num) {
 process_games_dplyr <- function(sim_teams, sim_games, round_num) {
   sim_teams$roundnum <- round_num
 
-  sim_ratings <- sim_teams %>%
+  sim_ratings <- sim_teams |>
     dplyr::select("roundnum", "team", "torp")
 
-  sim_games <- sim_games %>%
-    dplyr::filter(is.na(.data$result)) %>%
-    dplyr::inner_join(sim_ratings, by = c("roundnum" = "roundnum", "away_team" = "team")) %>%
-    dplyr::rename(away_torp = "torp") %>%
-    dplyr::inner_join(sim_ratings, by = c("roundnum" = "roundnum", "home_team" = "team")) %>%
-    dplyr::rename(home_torp = "torp") %>%
+  sim_games <- sim_games |>
+    dplyr::filter(is.na(.data$result)) |>
+    dplyr::inner_join(sim_ratings, by = c("roundnum" = "roundnum", "away_team" = "team")) |>
+    dplyr::rename(away_torp = "torp") |>
+    dplyr::inner_join(sim_ratings, by = c("roundnum" = "roundnum", "home_team" = "team")) |>
+    dplyr::rename(home_torp = "torp") |>
     dplyr::mutate(
       estimate = SIM_HOME_ADVANTAGE + (.data$home_torp - .data$away_torp),
       wp = 1 / (10^(-.data$estimate / SIM_WP_SCALING_FACTOR) + 1),
@@ -204,25 +204,25 @@ process_games_dplyr <- function(sim_teams, sim_games, round_num) {
       torp_shift = 0.1 * (.data$result - .data$estimate)
     )
 
-  sim_teams <- sim_teams %>%
+  sim_teams <- sim_teams |>
     dplyr::left_join(
-      sim_games %>%
-        dplyr::filter(.data$roundnum == round_num) %>%
+      sim_games |>
+        dplyr::filter(.data$roundnum == round_num) |>
         dplyr::select("roundnum", "away_team", "torp_shift"),
       by = c("roundnum" = "roundnum", "team" = "away_team")
-    ) %>%
-    dplyr::mutate(torp = .data$torp - ifelse(!is.na(.data$torp_shift), .data$torp_shift, 0)) %>%
-    dplyr::select(-"torp_shift") %>%
+    ) |>
+    dplyr::mutate(torp = .data$torp - ifelse(!is.na(.data$torp_shift), .data$torp_shift, 0)) |>
+    dplyr::select(-"torp_shift") |>
     dplyr::left_join(
-      sim_games %>%
-        dplyr::filter(.data$roundnum == round_num) %>%
+      sim_games |>
+        dplyr::filter(.data$roundnum == round_num) |>
         dplyr::select("roundnum", "home_team", "torp_shift"),
       by = c("roundnum" = "roundnum", "team" = "home_team")
-    ) %>%
-    dplyr::mutate(torp = torp - dplyr::coalesce(torp_shift, 0)) %>%
+    ) |>
+    dplyr::mutate(torp = torp - dplyr::coalesce(torp_shift, 0)) |>
     dplyr::select(-"torp_shift")
 
-  sim_games <- sim_games %>%
+  sim_games <- sim_games |>
     dplyr::mutate(
       torp_home_round = dplyr::case_when(
         .data$roundnum == round_num ~ .data$home_torp,
@@ -232,7 +232,7 @@ process_games_dplyr <- function(sim_teams, sim_games, round_num) {
         .data$roundnum == round_num ~ .data$away_torp,
         TRUE ~ .data$torp_away_round
       )
-    ) %>%
+    ) |>
     dplyr::select(-"torp_shift", -"home_torp", -"away_torp")
   return(list(sim_teams = sim_teams, sim_games = sim_games))
 }

@@ -43,15 +43,15 @@ player_game_ratings <- function(season_val = get_afl_season(),
 
   df <- filter_game_data(player_game_data, season_val, round_num, matchid, team)
 
-  df %>%
-    dplyr::arrange(-.data$tot_p_adj) %>%
+  df |>
+    dplyr::arrange(-.data$tot_p_adj) |>
     dplyr::mutate(
       total_points = round(.data$tot_p_adj, 1),
       recv_points = round(.data$recv_pts_adj, 1),
       disp_points = round(.data$disp_pts_adj, 1),
       spoil_points = round(.data$spoil_pts_adj, 1),
       hitout_points = round(.data$hitout_pts_adj, 1)
-    ) %>%
+    ) |>
     dplyr::select(
       season = "season", round = "round",
       player_name = "plyr_nm", position = "pos", team_id = "team_id", team = "tm", opp = "opp",
@@ -75,12 +75,12 @@ player_game_ratings <- function(season_val = get_afl_season(),
 #' @importFrom cli cli_abort
 filter_game_data <- function(df, season_val, round_num, matchid, team) {
   if (!is.null(matchid)) {
-    df <- df %>% dplyr::filter(.data$match_id %in% matchid)
+    df <- df |> dplyr::filter(.data$match_id %in% matchid)
     if (nrow(df) == 0) {
       cli::cli_abort("Match ID not found")
     }
   } else if (!is.null(team)) {
-    df <- df %>% dplyr::filter(
+    df <- df |> dplyr::filter(
       .data$season %in% season_val,
       .data$round %in% round_num,
       (.data$tm == team | .data$opp == team)
@@ -89,7 +89,7 @@ filter_game_data <- function(df, season_val, round_num, matchid, team) {
       cli::cli_abort("Team not found. Please use one of: Adelaide Crows, Brisbane Lions, Carlton, Collingwood, Essendon, Fremantle, Geelong Cats, Gold Coast Suns, GWS Giants, Hawthorn, Melbourne, North Melbourne, Port Adelaide, Richmond, St Kilda, Sydney Swans, West Coast Eagles, Western Bulldogs")
     }
   } else {
-    df <- df %>% dplyr::filter(
+    df <- df |> dplyr::filter(
       .data$season %in% season_val,
       .data$round %in% round_num
     )
@@ -131,8 +131,8 @@ player_season_ratings <- function(season_val = get_afl_season(), round_num = NA)
 
   df <- get_season_data(season_val, round_num)
 
-  df %>%
-    dplyr::group_by(.data$season, .data$player_name, .data$player_id, .data$team_id) %>%
+  df |>
+    dplyr::group_by(.data$season, .data$player_name, .data$player_id, .data$team_id) |>
     dplyr::summarise(
       team = get_mode(.data$team),
       position = max(.data$position),
@@ -144,7 +144,7 @@ player_season_ratings <- function(season_val = get_afl_season(), round_num = NA)
       season_hitout = sum(.data$hitout_points),
       ppg = .data$season_points / .data$games,
       .groups = "drop"
-    ) %>%
+    ) |>
     dplyr::arrange(-.data$season_points)
 }
 

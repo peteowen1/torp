@@ -265,9 +265,9 @@ analyze_missing_data <- function(data) {
     missing_matrix <- as.data.frame(
       lapply(data, is.na)
     )
-    missing_patterns <- missing_matrix %>%
-      dplyr::group_by_all() %>%
-      dplyr::summarise(count = dplyr::n(), .groups = "drop") %>%
+    missing_patterns <- missing_matrix |>
+      dplyr::group_by_all() |>
+      dplyr::summarise(count = dplyr::n(), .groups = "drop") |>
       dplyr::arrange(dplyr::desc(count))
   } else {
     missing_patterns <- NULL
@@ -389,13 +389,13 @@ validate_chains_quality <- function(data) {
   
   # Check temporal consistency within matches
   if (all(c("match_id", "period", "period_seconds") %in% names(data))) {
-    temporal_issues <- data %>%
-      group_by(match_id, period) %>%
+    temporal_issues <- data |>
+      group_by(match_id, period) |>
       summarise(
         min_seconds = min(period_seconds, na.rm = TRUE),
         max_seconds = max(period_seconds, na.rm = TRUE),
         .groups = "drop"
-      ) %>%
+      ) |>
       filter(min_seconds < 0 | max_seconds > 2000)
     
     if (nrow(temporal_issues) > 0) {

@@ -70,7 +70,7 @@ predict_wp_time_score <- function(train_data, pred_data) {
   
   # Create time remaining feature if not present
   if (!"time_remaining_pct" %in% names(train_data)) {
-    train_data <- train_data %>%
+    train_data <- train_data |>
       mutate(
         time_remaining = (AFL_MAX_PERIODS - period) * AFL_QUARTER_DURATION +
                          (AFL_QUARTER_DURATION - period_seconds),
@@ -79,7 +79,7 @@ predict_wp_time_score <- function(train_data, pred_data) {
   }
 
   if (!"time_remaining_pct" %in% names(pred_data)) {
-    pred_data <- pred_data %>%
+    pred_data <- pred_data |>
       mutate(
         time_remaining = (AFL_MAX_PERIODS - period) * AFL_QUARTER_DURATION +
                          (AFL_QUARTER_DURATION - period_seconds),
@@ -167,7 +167,7 @@ predict_wp_gam_baseline <- function(data, pred_data = NULL) {
   
   # Prepare time features if needed
   if (!"time_remaining_pct" %in% names(train_data)) {
-    train_data <- train_data %>%
+    train_data <- train_data |>
       mutate(
         time_remaining = (AFL_MAX_PERIODS - period) * AFL_QUARTER_DURATION +
                          (AFL_QUARTER_DURATION - period_seconds),
@@ -176,7 +176,7 @@ predict_wp_gam_baseline <- function(data, pred_data = NULL) {
   }
 
   if (!"time_remaining_pct" %in% names(pred_data)) {
-    pred_data <- pred_data %>%
+    pred_data <- pred_data |>
       mutate(
         time_remaining = (AFL_MAX_PERIODS - period) * AFL_QUARTER_DURATION +
                          (AFL_QUARTER_DURATION - period_seconds),
@@ -298,8 +298,8 @@ compare_baseline_models <- function(train_data, test_data, main_model_preds, inc
   results$log_loss_improvement <- (naive_log_loss - results$log_loss) / naive_log_loss * 100
 
   # Rank models
-  results <- results %>%
-    dplyr::arrange(log_loss) %>%
+  results <- results |>
+    dplyr::arrange(log_loss) |>
     dplyr::mutate(rank = dplyr::row_number())
 
   return(results)
@@ -337,8 +337,8 @@ assess_model_calibration <- function(actual, predicted, n_bins = 10) {
     actual = actual,
     predicted = predicted,
     bin = pred_bins
-  ) %>%
-    group_by(bin) %>%
+  ) |>
+    group_by(bin) |>
     summarise(
       n = n(),
       mean_predicted = mean(predicted),
@@ -346,7 +346,7 @@ assess_model_calibration <- function(actual, predicted, n_bins = 10) {
       min_pred = min(predicted),
       max_pred = max(predicted),
       .groups = "drop"
-    ) %>%
+    ) |>
     filter(n >= 10)  # Only use bins with sufficient data
   
   # Calibration slope and intercept
@@ -445,7 +445,7 @@ prepare_calibration_plot <- function(calibration_results) {
     cli::cli_abort("Calibration results must contain calibration_data")
   }
   
-  plot_data <- calibration_results$calibration_data %>%
+  plot_data <- calibration_results$calibration_data |>
     mutate(
       # Add perfect calibration line
       perfect_line = mean_predicted,
@@ -621,7 +621,7 @@ evaluate_baseline_models <- function(actual, data) {
   results_list[["ensemble"]] <- make_result_row("Ensemble", ensemble_preds)
 
   # Combine and sort by AUC descending
-  dplyr::bind_rows(results_list) %>%
+  dplyr::bind_rows(results_list) |>
     dplyr::arrange(dplyr::desc(auc))
 }
 

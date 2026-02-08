@@ -45,9 +45,9 @@ calculate_torp_ratings <- function(season_val = get_afl_season(type = "current")
   gwk <- sprintf("%02d", round_val)
   match_ref <- paste0("CD_M", season_val, "014", gwk)
 
-  date_val <- load_fixtures(TRUE) %>%
-    dplyr::filter(.data$compSeason.year == season_val, .data$round.roundNumber == round_val) %>%
-    dplyr::summarise(lubridate::as_date(min(.data$utcStartTime))) %>%
+  date_val <- load_fixtures(TRUE) |>
+    dplyr::filter(.data$compSeason.year == season_val, .data$round.roundNumber == round_val) |>
+    dplyr::summarise(lubridate::as_date(min(.data$utcStartTime))) |>
     dplyr::pull()
 
   if (is.na(date_val)) {
@@ -173,27 +173,27 @@ prepare_final_dataframe <- function(plyr_tm_df = NULL, player_game_data = NULL, 
   fixtures <- NULL
   fixtures <- load_fixtures(TRUE)
 
-  plyr_tm_df %>%
-    dplyr::filter(.data$season == season_val_details) %>%
-    dplyr::left_join(player_game_data, by = c("providerId" = "player_id")) %>%
-    dplyr::ungroup() %>%
+  plyr_tm_df |>
+    dplyr::filter(.data$season == season_val_details) |>
+    dplyr::left_join(player_game_data, by = c("providerId" = "player_id")) |>
+    dplyr::ungroup() |>
     dplyr::mutate(
       round = round_val,
       season = season_val
-    ) %>%
-    dplyr::left_join(fixtures %>%
-      dplyr::group_by(season = .data$compSeason.year, round = .data$round.roundNumber) %>%
-      dplyr::summarise(ref_date = lubridate::as_date(min(.data$utcStartTime)), .groups = "drop")) %>%
+    ) |>
+    dplyr::left_join(fixtures |>
+      dplyr::group_by(season = .data$compSeason.year, round = .data$round.roundNumber) |>
+      dplyr::summarise(ref_date = lubridate::as_date(min(.data$utcStartTime)), .groups = "drop")) |>
     dplyr::mutate(
       age = lubridate::decimal_date(lubridate::as_date(.data$ref_date)) -
         lubridate::decimal_date(lubridate::as_date(.data$dateOfBirth))
-    ) %>%
+    ) |>
     dplyr::select(
       player_id = "providerId", player_name = "player_name.x", age = "age", team = "team",
       torp = "torp", torp_recv = "torp_recv_adj", torp_disp = "torp_disp_adj",
       torp_spoil = "torp_spoil_adj", torp_hitout = "torp_hitout_adj",
       position = "position", season = "season", round = "round", gms = "gms", wt_gms = "wt_gms"
-    ) %>%
+    ) |>
     dplyr::arrange(-.data$torp)
 }
 

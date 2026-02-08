@@ -19,6 +19,7 @@ jobs:
         config:
           - {os: ubuntu-latest, r: 'release'}
           - {os: ubuntu-latest, r: 'devel'}
+          - {os: ubuntu-latest, r: 'oldrel-3'}
           - {os: windows-latest, r: 'release'}
           - {os: macOS-latest, r: 'release'}
     
