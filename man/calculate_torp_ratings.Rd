@@ -9,9 +9,9 @@ calculate_torp_ratings(
   season_val = get_afl_season(type = "current"),
   round_val = get_afl_week(type = "next"),
   decay = RATING_DECAY_DEFAULT_DAYS,
-  loading = 1.5,
-  prior_games_recv = 4,
-  prior_games_disp = 6,
+  loading = RATING_LOADING_DEFAULT,
+  prior_games_recv = RATING_PRIOR_GAMES_RECV,
+  prior_games_disp = RATING_PRIOR_GAMES_DISP,
   plyr_tm_df = NULL,
   player_game_data = NULL,
   spoil_multiplier = RATING_SPOIL_MULTIPLIER
@@ -21,9 +21,9 @@ torp_ratings(
   season_val = get_afl_season(type = "current"),
   round_val = get_afl_week(type = "next"),
   decay = RATING_DECAY_DEFAULT_DAYS,
-  loading = 1.5,
-  prior_games_recv = 4,
-  prior_games_disp = 6,
+  loading = RATING_LOADING_DEFAULT,
+  prior_games_recv = RATING_PRIOR_GAMES_RECV,
+  prior_games_disp = RATING_PRIOR_GAMES_DISP,
   plyr_tm_df = NULL,
   player_game_data = NULL,
   spoil_multiplier = RATING_SPOIL_MULTIPLIER
@@ -53,6 +53,4 @@ A data frame containing player TORP ratings.
 }
 \description{
 This function calculates TORP (Total Overall Rating Points) for players based on their performance.
-
-\code{torp_ratings()} is deprecated; use \code{calculate_torp_ratings()} instead.
 }

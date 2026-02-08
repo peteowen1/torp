@@ -27,7 +27,7 @@ load_from_url(
 \item{use_disk_cache}{Logical. If TRUE (default), uses persistent disk cache for faster repeated loads.}
 }
 \value{
-A data frame, possibly of type \code{peteowen1_data}
+A tibble, possibly of type \code{peteowen1_data}
 }
 \description{
 Load parquet files from remote URLs

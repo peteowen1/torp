@@ -83,7 +83,7 @@ test_that("load_from_url uses parallel processing correctly", {
 
   # Test single URL (should not use parallel processing)
   result_single <- load_from_url(single_url)
-  expect_s3_class(result_single, "data.table")
+  expect_s3_class(result_single, "tbl_df")
   expect_equal(nrow(result_single), 3)
 
   # Test multiple URLs (should use parallel processing)
@@ -93,7 +93,7 @@ test_that("load_from_url uses parallel processing correctly", {
   )
 
   result_multiple <- load_from_url(multiple_urls)
-  expect_s3_class(result_multiple, "data.table")
+  expect_s3_class(result_multiple, "tbl_df")
   expect_equal(nrow(result_multiple), 6)  # 3 rows from each file
   expect_true(all(c("test_file1.parquet", "test_file2.parquet") %in% result_multiple$url_source))
 })

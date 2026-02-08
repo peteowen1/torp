@@ -385,9 +385,10 @@ load_predictions <- function(seasons = get_afl_season()) {
 #' @param use_disk_cache Logical. If TRUE (default), uses persistent disk cache for faster repeated loads.
 #' @param ... Named arguments that will be added as attributes to the data, e.g. `peteowen1_type` = "pbp"
 #'
-#' @return A data frame, possibly of type `peteowen1_data`
+#' @return A tibble, possibly of type `peteowen1_data`
 #' @export
 #' @importFrom data.table rbindlist setDT
+#' @importFrom tibble as_tibble
 #' @importFrom progressr progressor
 load_from_url <- function(url, ..., seasons = TRUE, rounds = TRUE, peteowen1 = FALSE, use_disk_cache = TRUE) {
   url <- as.character(url)
@@ -449,6 +450,8 @@ load_from_url <- function(url, ..., seasons = TRUE, rounds = TRUE, peteowen1 = F
 
     out <- data.table::rbindlist(out, use.names = TRUE, fill = TRUE)
   }
+
+  out <- tibble::as_tibble(out)
 
   if (peteowen1) {
     class(out) <- c("peteowen1_data", class(out))
