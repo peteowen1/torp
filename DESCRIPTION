@@ -48,6 +48,8 @@ Depends:
     R (>= 3.5)
 LazyData: true
 LazyDataCompression: xz
+Remotes:
+    peteowen1/torpmodels
 URL: https://github.com/peteowen1/torp
 BugReports: https://github.com/peteowen1/torp/issues
 VignetteBuilder: knitr
