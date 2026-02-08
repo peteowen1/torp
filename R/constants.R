@@ -35,19 +35,19 @@ RATING_DECAY_DEFAULT_DAYS <- 365
 
 #' Loading factor for TORP calculations
 #' @keywords internal
-RATING_LOADING_DEFAULT <- 1.5
+RATING_LOADING_DEFAULT <- 1.0
 
 #' Prior games constant for receiving ratings
 #' @keywords internal
-RATING_PRIOR_GAMES_RECV <- 4
+RATING_PRIOR_GAMES_RECV <- 6
 
 #' Prior games constant for disposal ratings
 #' @keywords internal
-RATING_PRIOR_GAMES_DISP <- 6
+RATING_PRIOR_GAMES_DISP <- 3
 
 #' Spoil rating multiplier
 #' @keywords internal
-RATING_SPOIL_MULTIPLIER <- 1.2
+RATING_SPOIL_MULTIPLIER <- 1.6132
 
 
 # Credit Assignment Constants
@@ -55,71 +55,71 @@ RATING_SPOIL_MULTIPLIER <- 1.2
 
 #' Disposal EPV offset when defending (pos_team == -1)
 #' @keywords internal
-CREDIT_DISP_NEG_OFFSET <- -0.04
+CREDIT_DISP_NEG_OFFSET <- -0.2
 
 #' Disposal EPV offset when possessing (pos_team == 1)
 #' @keywords internal
-CREDIT_DISP_POS_OFFSET <- 0.08
+CREDIT_DISP_POS_OFFSET <- 0.1412
 
 #' Disposal scaling factor
 #' @keywords internal
-CREDIT_DISP_SCALE <- 0.5
+CREDIT_DISP_SCALE <- 0.4855
 
 #' Bounce penalty per bounce
 #' @keywords internal
-CREDIT_BOUNCE_PENALTY <- 0.2
+CREDIT_BOUNCE_PENALTY <- 0.9871
 
 #' Reception multiplier when defending (pos_team == -1)
 #' @keywords internal
-CREDIT_RECV_NEG_MULT <- 1.5
+CREDIT_RECV_NEG_MULT <- 0.9354
 
 #' Reception offset when defending
 #' @keywords internal
-CREDIT_RECV_NEG_OFFSET <- 0.1
+CREDIT_RECV_NEG_OFFSET <- 0.2985
 
 #' Reception multiplier when possessing (pos_team == 1)
 #' @keywords internal
-CREDIT_RECV_POS_MULT <- 1.0
+CREDIT_RECV_POS_MULT <- 1.3647
 
 #' Reception offset when possessing
 #' @keywords internal
-CREDIT_RECV_POS_OFFSET <- 0.05
+CREDIT_RECV_POS_OFFSET <- 0.1761
 
 #' Reception scaling factor
 #' @keywords internal
-CREDIT_RECV_SCALE <- 0.5
+CREDIT_RECV_SCALE <- 0.3821
 
 #' Spoil weight per spoil
 #' @keywords internal
-CREDIT_SPOIL_WT <- 0.6
+CREDIT_SPOIL_WT <- 0.6771
 
 #' Tackle weight per tackle
 #' @keywords internal
-CREDIT_TACKLE_WT <- 0.1
+CREDIT_TACKLE_WT <- 0.7059
 
 #' Pressure act weight
 #' @keywords internal
-CREDIT_PRESSURE_WT <- 0.1
+CREDIT_PRESSURE_WT <- 0.1971
 
 #' Defensive half pressure act weight (subtracted)
 #' @keywords internal
-CREDIT_DEF_PRESSURE_WT <- 0.2
+CREDIT_DEF_PRESSURE_WT <- 0.6637
 
 #' Hitout weight per hitout
 #' @keywords internal
-CREDIT_HITOUT_WT <- 0.15
+CREDIT_HITOUT_WT <- 0.1424
 
 #' Hitout to advantage weight
 #' @keywords internal
-CREDIT_HITOUT_ADV_WT <- 0.25
+CREDIT_HITOUT_ADV_WT <- 0.848
 
 #' Ruck contest weight (subtracted)
 #' @keywords internal
-CREDIT_RUCK_CONTEST_WT <- 0.06
+CREDIT_RUCK_CONTEST_WT <- 0.0
 
 #' Position adjustment quantile
 #' @keywords internal
-CREDIT_POS_ADJ_QUANTILE <- 0.4
+CREDIT_POS_ADJ_QUANTILE <- 0.3027
 
 
 # Simulation Constants

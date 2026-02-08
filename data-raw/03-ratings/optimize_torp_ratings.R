@@ -491,12 +491,22 @@ par_upper <- c(
   spoil_multiplier  = 3.0
 )
 
+# 4b. No-Ratings Baseline ----
+cat("\nComputing no-ratings baseline (distance + familiarity only)...\n")
+no_rating_df <- match_dt[season %in% 2022:2025, .(margin, log_dist_diff, familiarity_diff)]
+no_rating_df <- no_rating_df[complete.cases(no_rating_df)]
+no_rating_fit <- lm(margin ~ log_dist_diff + familiarity_diff, data = no_rating_df)
+no_rating_rmse <- sqrt(mean(no_rating_fit$residuals^2))
+cat(sprintf("No-ratings baseline RMSE: %.4f (%d matches)\n", no_rating_rmse, nrow(no_rating_df)))
+cat(sprintf("  Coefficients: intercept=%.2f, log_dist_diff=%.2f, familiarity_diff=%.2f\n",
+            coef(no_rating_fit)[1], coef(no_rating_fit)[2], coef(no_rating_fit)[3]))
+
 # 5. Baseline RMSE ----
 cat("\nComputing baseline RMSE with default parameters...\n")
 tictoc::tic("Baseline")
 baseline_rmse <- objective_fn(par_defaults, pgr, match_dt, train_seasons = 2022:2025)
 tictoc::toc()
-cat(sprintf("Baseline RMSE: %.4f\n\n", baseline_rmse))
+cat(sprintf("Default-params baseline RMSE: %.4f\n\n", baseline_rmse))
 
 # 6. Staged Optimization ----
 
@@ -663,9 +673,13 @@ for (nm in names(par_defaults)[18:22]) {
 }
 
 cat("\n# Summary:\n")
-cat(sprintf("  Baseline RMSE:  %.4f\n", baseline_rmse))
-cat(sprintf("  Optimized RMSE: %.4f\n", opt_joint$value))
-cat(sprintf("  Improvement:    %.4f (%.1f%%)\n",
+cat(sprintf("  No-ratings RMSE (dist+fam only): %.4f\n", no_rating_rmse))
+cat(sprintf("  Default-params RMSE:             %.4f\n", baseline_rmse))
+cat(sprintf("  Optimized RMSE:                  %.4f\n", opt_joint$value))
+cat(sprintf("  TORP value (no-ratings - default): %.4f (%.1f%%)\n",
+            no_rating_rmse - baseline_rmse,
+            100 * (no_rating_rmse - baseline_rmse) / no_rating_rmse))
+cat(sprintf("  Optimization gain (default - opt):  %.4f (%.1f%%)\n",
             baseline_rmse - opt_joint$value,
             100 * (baseline_rmse - opt_joint$value) / baseline_rmse))
 

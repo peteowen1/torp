@@ -229,5 +229,5 @@ test_that("calculate_torp_ratings works with pre-loaded data", {
 test_that("calculate_player_stats uses RATING_SPOIL_MULTIPLIER constant", {
   # The function should multiply spoil ratings by RATING_SPOIL_MULTIPLIER
   # This test verifies the constant is being used
-  expect_equal(torp:::RATING_SPOIL_MULTIPLIER, 1.2)
+  expect_equal(torp:::RATING_SPOIL_MULTIPLIER, 1.6132)
 })

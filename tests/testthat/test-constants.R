@@ -45,25 +45,25 @@ test_that("RATING_DECAY_DEFAULT_DAYS has expected value", {
 })
 
 test_that("RATING_LOADING_DEFAULT has expected value", {
-  expect_equal(torp:::RATING_LOADING_DEFAULT, 1.5)
+  expect_equal(torp:::RATING_LOADING_DEFAULT, 1.0)
   expect_true(torp:::RATING_LOADING_DEFAULT > 0)
   expect_true(torp:::RATING_LOADING_DEFAULT < 10)  # Reasonable upper bound
 })
 
 test_that("RATING_PRIOR_GAMES_RECV has expected value", {
-  expect_equal(torp:::RATING_PRIOR_GAMES_RECV, 4)
+  expect_equal(torp:::RATING_PRIOR_GAMES_RECV, 6)
   expect_true(torp:::RATING_PRIOR_GAMES_RECV > 0)
   expect_true(torp:::RATING_PRIOR_GAMES_RECV < 50)  # Reasonable bound
 })
 
 test_that("RATING_PRIOR_GAMES_DISP has expected value", {
-  expect_equal(torp:::RATING_PRIOR_GAMES_DISP, 6)
+  expect_equal(torp:::RATING_PRIOR_GAMES_DISP, 3)
   expect_true(torp:::RATING_PRIOR_GAMES_DISP > 0)
   expect_true(torp:::RATING_PRIOR_GAMES_DISP < 50)  # Reasonable bound
 })
 
 test_that("RATING_SPOIL_MULTIPLIER has expected value", {
-  expect_equal(torp:::RATING_SPOIL_MULTIPLIER, 1.2)
+  expect_equal(torp:::RATING_SPOIL_MULTIPLIER, 1.6132)
   expect_true(torp:::RATING_SPOIL_MULTIPLIER > 0)
   expect_true(torp:::RATING_SPOIL_MULTIPLIER < 5)  # Reasonable multiplier
 })
@@ -133,11 +133,11 @@ test_that("game duration constants are consistent", {
 })
 
 test_that("rating prior games constants are reasonable relative to each other", {
-  # Disposal prior should be >= receiving prior (more data needed for disposal)
-  expect_gte(
-    torp:::RATING_PRIOR_GAMES_DISP,
-    torp:::RATING_PRIOR_GAMES_RECV
-  )
+  # Both priors should be positive and bounded
+  expect_true(torp:::RATING_PRIOR_GAMES_DISP > 0)
+  expect_true(torp:::RATING_PRIOR_GAMES_RECV > 0)
+  expect_true(torp:::RATING_PRIOR_GAMES_DISP < 50)
+  expect_true(torp:::RATING_PRIOR_GAMES_RECV < 50)
 })
 
 test_that("simulation constants produce valid probabilities", {
