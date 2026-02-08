@@ -15,5 +15,6 @@ validate_data_quality(data, data_type = "unknown")
 List containing quality assessment results
 }
 \description{
+This function is intended for internal use and may be unexported in a future release.
 Performs comprehensive data quality checks beyond schema validation
 }

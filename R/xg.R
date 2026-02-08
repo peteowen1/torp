@@ -38,6 +38,6 @@ calculate_match_xgs <- function(season = get_afl_season(), round = get_afl_week(
 #' @description `match_xgs()` is deprecated; use `calculate_match_xgs()` instead.
 #' @export
 match_xgs <- function(season = get_afl_season(), round = get_afl_week(), quarter = 1:4) {
-  .Deprecated("calculate_match_xgs")
+  .Deprecated("calculate_match_xgs", package = "torp", old = "match_xgs")
   calculate_match_xgs(season = season, round = round, quarter = quarter)
 }

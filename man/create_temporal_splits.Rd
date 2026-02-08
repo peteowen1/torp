@@ -19,5 +19,6 @@ create_temporal_splits(data, train_seasons, val_seasons, test_seasons)
 List containing train, validation, and test datasets
 }
 \description{
+This function is intended for internal use and may be unexported in a future release.
 Creates proper temporal splits for time series data to prevent data leakage
 }

@@ -17,7 +17,6 @@
 #'
 #' @importFrom dplyr filter summarise pull ungroup mutate group_by n_distinct arrange left_join select
 #' @importFrom lubridate as_date decimal_date
-#' @importFrom glue glue
 #' @importFrom cli cli_abort
 #' @importFrom utils data
 calculate_torp_ratings <- function(season_val = get_afl_season(type = "current"),
@@ -59,7 +58,7 @@ calculate_torp_ratings <- function(season_val = get_afl_season(type = "current")
 
     final_df <- prepare_final_dataframe(plyr_tm_df, plyr_gm_df_rnd, season_val, round_val)
 
-    message(glue::glue("TORP ratings as at {season_val} round {round_val}"))
+    message(paste0("TORP ratings as at ", season_val, " round ", round_val))
     return(final_df)
   }
 }

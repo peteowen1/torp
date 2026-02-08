@@ -241,6 +241,6 @@ process_games_dplyr <- function(sim_teams, sim_games, round_num) {
 #' @description `sim_season()` is deprecated; use `simulate_season()` instead.
 #' @export
 sim_season <- function(sim_teams, sim_games) {
-  .Deprecated("simulate_season")
+  .Deprecated("simulate_season", package = "torp", old = "sim_season")
   simulate_season(sim_teams = sim_teams, sim_games = sim_games)
 }

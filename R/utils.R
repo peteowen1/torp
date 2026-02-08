@@ -200,6 +200,7 @@ get_mode <- function(x) {
 
 #' Vectorized Harmonic Mean of Two Numeric Vectors
 #'
+#' @description This function is intended for internal use and may be unexported in a future release.
 #' Computes the row-wise harmonic mean of two numeric vectors. The harmonic mean
 #' is particularly useful in AFL analytics for averaging rates and proportions,
 #' giving less weight to extreme values than the arithmetic mean.
@@ -232,6 +233,7 @@ harmonic_mean <- function(x, y) {
 
 #' Normalize Player Names
 #'
+#' @description This function is intended for internal use and may be unexported in a future release.
 #' Converts input character strings into a standardized format by:
 #' \itemize{
 #'   \item Converting accented characters to ASCII (e.g., "José" → "Jose")
@@ -264,6 +266,21 @@ norm_name <- function(x) {
 
 # Add Globals Variables
 utils::globalVariables(c(".data"))
+
+#' Pipe operator
+#'
+#' See \code{magrittr::\link[magrittr:pipe]{\%>\%}} for details.
+#'
+#' @name %>%
+#' @rdname pipe
+#' @keywords internal
+#' @export
+#' @importFrom magrittr %>%
+#' @usage lhs \%>\% rhs
+#' @param lhs A value or the magrittr placeholder.
+#' @param rhs A function call using the magrittr semantics.
+#' @return The result of calling `rhs(lhs)`.
+NULL
 
 
 

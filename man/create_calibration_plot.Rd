@@ -17,9 +17,9 @@ create_calibration_plot(actual, predicted, n_bins = 10)
 List with plot data and statistics
 }
 \description{
-Creates data structure for plotting model calibration
-}
-\details{
+This function is intended for internal use and may be unexported in a future release.
+Creates data structure for plotting model calibration.
+
 A simplified wrapper around assess_model_calibration for creating calibration
 plot data. For more comprehensive calibration analysis, use assess_model_calibration
 directly followed by prepare_calibration_plot.

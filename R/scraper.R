@@ -83,6 +83,7 @@ get_token <- function() {
 
 #' Access API
 #'
+#' @description This function is intended for internal use and may be unexported in a future release.
 #' Makes an authenticated request to the AFL API.
 #'
 #' @param url The API endpoint URL.
@@ -104,6 +105,7 @@ access_api <- function(url) {
 
 #' Get Round Games
 #'
+#' @description This function is intended for internal use and may be unexported in a future release.
 #' Retrieves game data for a specific round in a season.
 #'
 #' @param season The AFL season year (numeric).
@@ -132,21 +134,23 @@ get_round_games <- function(season, round) {
 
 #' Get Season Games
 #'
+#' @description This function is intended for internal use and may be unexported in a future release.
 #' Retrieves game data for an entire season.
 #'
 #' @param season The AFL season year (numeric).
-#' @param rounds The number of rounds in the season (default: 27).
+#' @param rounds The maximum number of rounds to check (default: 28, covers all AFL season formats).
 #'
 #' @return A dataframe containing game data for the entire season.
 #' @export
 #'
 #' @importFrom purrr map_df
-get_season_games <- function(season, rounds = 27) {
+get_season_games <- function(season, rounds = 28) {
   purrr::map_df(1:rounds, ~ get_round_games(season, .))
 }
 
 #' Get Players
 #'
+#' @description This function is intended for internal use and may be unexported in a future release.
 #' Retrieves player data either from the API or from a local database.
 #'
 #' @param use_api Logical, whether to use the API (TRUE) or local database (FALSE, default).
@@ -180,6 +184,7 @@ get_players <- function(use_api = FALSE) {
 
 #' Get Many Game Chains
 #'
+#' @description This function is intended for internal use and may be unexported in a future release.
 #' Retrieves chain data for multiple games.
 #'
 #' @param games_vector A vector of game IDs.
@@ -196,6 +201,7 @@ get_many_game_chains <- function(games_vector) {
 
 #' Get Game Chains
 #'
+#' @description This function is intended for internal use and may be unexported in a future release.
 #' Retrieves chain data for a single game.
 #'
 #' @param match_id The ID of the match.
@@ -222,6 +228,7 @@ get_game_chains <- function(match_id) {
 
 #' Get Single Chain
 #'
+#' @description This function is intended for internal use and may be unexported in a future release.
 #' Processes a single chain from the game data.
 #'
 #' @param chains_t2 The chain data for a game.

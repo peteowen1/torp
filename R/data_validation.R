@@ -79,6 +79,7 @@ get_afl_data_schemas <- function() {
 
 #' Validate Data Schema
 #'
+#' @description This function is intended for internal use and may be unexported in a future release.
 #' Validates that a dataframe conforms to the expected schema
 #'
 #' @param data Dataframe to validate
@@ -168,6 +169,7 @@ validate_data_schema <- function(data, schema_name, strict = TRUE) {
 
 #' Validate Data Quality
 #'
+#' @description This function is intended for internal use and may be unexported in a future release.
 #' Performs comprehensive data quality checks beyond schema validation
 #'
 #' @param data Dataframe to validate
@@ -522,6 +524,7 @@ calculate_quality_score <- function(data, issues) {
 
 #' Validate Data Freshness
 #'
+#' @description This function is intended for internal use and may be unexported in a future release.
 #' Checks if data is recent enough for reliable predictions
 #'
 #' @param data_timestamp Timestamp of the most recent data (can be dataframe with timestamp column or direct timestamp)

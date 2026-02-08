@@ -53,6 +53,7 @@ calculate_auc_base <- function(actual, predicted) {
 
 #' Create Grouped Cross-Validation Folds
 #'
+#' @description This function is intended for internal use and may be unexported in a future release.
 #' Creates cross-validation folds ensuring matches stay together to prevent data leakage
 #'
 #' @param data A dataframe containing model data
@@ -93,6 +94,7 @@ create_grouped_cv_folds <- function(data, group_var = "match_id", k = 5, seed = 
 
 #' Time-Based Train/Validation/Test Split
 #'
+#' @description This function is intended for internal use and may be unexported in a future release.
 #' Creates proper temporal splits for time series data to prevent data leakage
 #'
 #' @param data A dataframe containing model data with date/season information
@@ -123,6 +125,7 @@ create_temporal_splits <- function(data, train_seasons, val_seasons, test_season
 
 #' Comprehensive Model Evaluation
 #'
+#' @description This function is intended for internal use and may be unexported in a future release.
 #' Evaluates model performance with multiple metrics and statistical rigor
 #'
 #' @param actual Vector of actual outcomes
@@ -238,6 +241,7 @@ evaluate_model_comprehensive <- function(actual, predicted, model_name = "Model"
 
 #' Compare Multiple Models Statistically
 #'
+#' @description This function is intended for internal use and may be unexported in a future release.
 #' Performs statistical comparison between multiple models using paired tests
 #'
 #' @param model_results List of model evaluation results
@@ -291,6 +295,7 @@ compare_models_statistical <- function(model_results, test_type = "simple") {
 
 #' Create Model Validation Report
 #'
+#' @description This function is intended for internal use and may be unexported in a future release.
 #' Generates a comprehensive model validation report
 #'
 #' @param evaluation_results List of evaluation results

@@ -15,5 +15,6 @@ create_validation_report(evaluation_results, comparison_results = NULL)
 Character string containing formatted report
 }
 \description{
+This function is intended for internal use and may be unexported in a future release.
 Generates a comprehensive model validation report
 }

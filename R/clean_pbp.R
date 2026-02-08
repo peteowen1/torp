@@ -18,7 +18,6 @@
 #' @importFrom forcats fct_na_value_to_level
 #' @importFrom stringr str_starts str_detect
 #' @importFrom data.table nafill setnafill as.data.table setDT setorder fifelse fcase shift copy
-#' @importFrom glue glue
 #' @importFrom janitor clean_names
 clean_pbp <- function(df) {
   # Use optimized data.table version
@@ -35,7 +34,6 @@ clean_pbp <- function(df) {
 #' @keywords internal
 #' @importFrom data.table as.data.table setDT setorder setkey fifelse fcase shift nafill copy
 #' @importFrom janitor clean_names
-#' @importFrom glue glue
 #' @importFrom forcats fct_na_value_to_level
 #' @importFrom stringr str_starts str_detect
 clean_pbp_dt <- function(df) {

@@ -1,5 +1,6 @@
 #' Save a Data Frame to a GitHub Release via Piggyback
 #'
+#' @description This function is intended for internal use and may be unexported in a future release.
 #' Saves a data frame as a `.parquet` file and uploads it to a GitHub release using the `piggyback` package.
 #'
 #' @param df A data frame to save.
@@ -68,7 +69,6 @@ file_reader <- function(file_name, release_tag) {
 #' })
 #' }
 #' @export
-#' @importFrom glue glue
 load_chains <- function(seasons = get_afl_season(), rounds = get_afl_week()) {
   if (isTRUE(seasons) && missing(rounds)) rounds <- TRUE
   seasons <- validate_seasons(seasons)
@@ -97,7 +97,6 @@ load_chains <- function(seasons = get_afl_season(), rounds = get_afl_week()) {
 #' })
 #' }
 #' @export
-#' @importFrom glue glue
 load_pbp <- function(seasons = get_afl_season(), rounds = get_afl_week()) {
   if (isTRUE(seasons) && missing(rounds)) rounds <- TRUE
   seasons <- validate_seasons(seasons)
@@ -125,7 +124,6 @@ load_pbp <- function(seasons = get_afl_season(), rounds = get_afl_week()) {
 #' })
 #' }
 #' @export
-#' @importFrom glue glue
 load_xg <- function(seasons = get_afl_season()) {
   seasons <- validate_seasons(seasons)
 
@@ -151,7 +149,6 @@ load_xg <- function(seasons = get_afl_season()) {
 #' })
 #' }
 #' @export
-#' @importFrom glue glue
 load_player_stats <- function(seasons = get_afl_season()) {
   seasons <- validate_seasons(seasons)
 
@@ -179,7 +176,6 @@ load_player_stats <- function(seasons = get_afl_season()) {
 #' })
 #' }
 #' @export
-#' @importFrom glue glue
 load_player_game_data <- function(seasons = get_afl_season()) {
   seasons <- validate_seasons(seasons)
 
@@ -215,7 +211,6 @@ load_player_game_data <- function(seasons = get_afl_season()) {
 #' })
 #' }
 #' @export
-#' @importFrom glue glue
 load_fixtures <- function(seasons = NULL, all = FALSE, use_cache = TRUE, cache_ttl = 3600, verbose = FALSE) {
   # Process parameters
   if (all) {
@@ -287,7 +282,6 @@ load_fixtures <- function(seasons = NULL, all = FALSE, use_cache = TRUE, cache_t
 #' })
 #' }
 #' @export
-#' @importFrom glue glue
 load_teams <- function(seasons = get_afl_season()) {
   seasons <- validate_seasons(seasons)
 
@@ -313,7 +307,6 @@ load_teams <- function(seasons = get_afl_season()) {
 #' })
 #' }
 #' @export
-#' @importFrom glue glue
 load_results <- function(seasons = get_afl_season()) {
   seasons <- validate_seasons(seasons)
 
@@ -339,7 +332,6 @@ load_results <- function(seasons = get_afl_season()) {
 #' })
 #' }
 #' @export
-#' @importFrom glue glue
 load_player_details <- function(seasons = get_afl_season()) {
   seasons <- validate_seasons(seasons)
 
@@ -365,7 +357,6 @@ load_player_details <- function(seasons = get_afl_season()) {
 #' })
 #' }
 #' @export
-#' @importFrom glue glue
 load_predictions <- function(seasons = get_afl_season()) {
   seasons <- validate_seasons(seasons)
 
@@ -378,6 +369,7 @@ load_predictions <- function(seasons = get_afl_season()) {
 
 #' Load parquet files from remote URLs
 #'
+#' @description This function is intended for internal use and may be unexported in a future release.
 #' @param url A vector of URLs to load into memory. If more than one URL provided, will row-bind them.
 #' @param seasons A numeric vector of years that will be used to filter the dataframe's `season` column. If `TRUE` (default), does not filter.
 #' @param rounds A numeric vector of rounds that will be used to filter the dataframe's `round` column. If `TRUE` (default), does not filter.
@@ -389,7 +381,6 @@ load_predictions <- function(seasons = get_afl_season()) {
 #' @export
 #' @importFrom data.table rbindlist setDT
 #' @importFrom tibble as_tibble
-#' @importFrom progressr progressor
 load_from_url <- function(url, ..., seasons = TRUE, rounds = TRUE, peteowen1 = FALSE, use_disk_cache = TRUE) {
   url <- as.character(url)
 
@@ -494,6 +485,7 @@ parquet_from_url_cached <- function(url, use_cache = TRUE, max_age_days = 7) {
 
 #' Load parquet file from a remote connection
 #'
+#' @description This function is intended for internal use and may be unexported in a future release.
 #' @param url A character URL
 #'
 #' @return A data frame
@@ -653,7 +645,6 @@ validate_seasons <- function(seasons) {
 #'
 #' @return A character vector of URLs
 #' @keywords internal
-#' @importFrom glue glue
 generate_urls <- function(data_type, file_prefix, seasons, rounds = NULL, prefer_aggregated = NULL) {
   base_url <- paste0("https://github.com/", get_torp_data_repo(), "/releases/download")
 
@@ -667,7 +658,7 @@ generate_urls <- function(data_type, file_prefix, seasons, rounds = NULL, prefer
   if (is.null(rounds)) {
     combinations <- expand.grid(seasons = seasons)
 
-    urls <- glue::glue("{base_url}/{data_type}/{file_prefix}_{combinations$seasons}.parquet")
+    urls <- paste0(base_url, "/", data_type, "/", file_prefix, "_", combinations$seasons, ".parquet")
     urls <- sort(urls)
   }
 
@@ -685,15 +676,8 @@ generate_urls <- function(data_type, file_prefix, seasons, rounds = NULL, prefer
       urls <- character(0)
 
       for (season in seasons) {
-        if (season < current_season) {
-          # Past seasons: use aggregated file
-          url <- glue::glue("{base_url}/{data_type}/{file_prefix}_{season}_all.parquet")
-          urls <- c(urls, url)
-        } else {
-          # Current season: use aggregated file (updated daily)
-          url <- glue::glue("{base_url}/{data_type}/{file_prefix}_{season}_all.parquet")
-          urls <- c(urls, url)
-        }
+        url <- paste0(base_url, "/", data_type, "/", file_prefix, "_", season, "_all.parquet")
+        urls <- c(urls, url)
       }
 
       return(as.character(urls))
@@ -703,7 +687,7 @@ generate_urls <- function(data_type, file_prefix, seasons, rounds = NULL, prefer
     rounds_02d <- sprintf("%02d", rounds)
     combinations <- expand.grid(seasons = seasons, rounds = rounds_02d)
 
-    urls <- glue::glue("{base_url}/{data_type}/{file_prefix}_{combinations$seasons}_{combinations$rounds}.parquet")
+    urls <- paste0(base_url, "/", data_type, "/", file_prefix, "_", combinations$seasons, "_", combinations$rounds, ".parquet")
     urls <- sort(urls)
   }
 
@@ -714,7 +698,7 @@ generate_urls <- function(data_type, file_prefix, seasons, rounds = NULL, prefer
     current_round <- sprintf("%02d", get_afl_week())
   }
 
-  max_url <- glue::glue("{base_url}/{data_type}/{file_prefix}_{current_season}_{current_round}.parquet")
+  max_url <- paste0(base_url, "/", data_type, "/", file_prefix, "_", current_season, "_", current_round, ".parquet")
 
   urls <- urls[urls <= max_url]
 

@@ -15,5 +15,6 @@ predict_wp_expected_points(train_data, pred_data)
 Vector of win probability predictions
 }
 \description{
+This function is intended for internal use and may be unexported in a future release.
 Uses expected points differential as the primary predictor
 }

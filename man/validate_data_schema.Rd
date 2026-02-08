@@ -17,5 +17,6 @@ validate_data_schema(data, schema_name, strict = TRUE)
 List containing validation results
 }
 \description{
+This function is intended for internal use and may be unexported in a future release.
 Validates that a dataframe conforms to the expected schema
 }

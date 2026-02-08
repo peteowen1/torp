@@ -13,5 +13,5 @@ parquet_from_url(url)
 A data frame
 }
 \description{
-Load parquet file from a remote connection
+This function is intended for internal use and may be unexported in a future release.
 }

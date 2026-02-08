@@ -19,5 +19,6 @@ create_grouped_cv_folds(data, group_var = "match_id", k = 5, seed = 42)
 List of fold indices
 }
 \description{
+This function is intended for internal use and may be unexported in a future release.
 Creates cross-validation folds ensuring matches stay together to prevent data leakage
 }
