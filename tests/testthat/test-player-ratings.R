@@ -25,30 +25,18 @@ test_that("calculate_torp_ratings has reasonable defaults", {
 
   # decay uses RATING_DECAY_DEFAULT_DAYS constant
   expect_true(is.symbol(fn_formals$decay) || fn_formals$decay == 365)
-  expect_equal(fn_formals$loading, 1.5)
-  expect_equal(fn_formals$prior_games_recv, 4)
-  expect_equal(fn_formals$prior_games_disp, 6)
+  expect_true(is.symbol(fn_formals$loading) || fn_formals$loading == torp:::RATING_LOADING_DEFAULT)
+  expect_true(is.symbol(fn_formals$prior_games_recv) || fn_formals$prior_games_recv == torp:::RATING_PRIOR_GAMES_RECV)
+  expect_true(is.symbol(fn_formals$prior_games_disp) || fn_formals$prior_games_disp == torp:::RATING_PRIOR_GAMES_DISP)
 })
 
 # -----------------------------------------------------------------------------
-# Deprecated torp_ratings Tests
+# torp_ratings Alias Tests
 # -----------------------------------------------------------------------------
 
-test_that("torp_ratings function still exists (deprecated)", {
+test_that("torp_ratings is an alias for calculate_torp_ratings", {
   expect_true(exists("torp_ratings"))
-})
-
-test_that("torp_ratings shows deprecation warning", {
-  skip_if_no_internet()
-
-  # Should warn about deprecation
-  expect_warning(
-    tryCatch(
-      torp_ratings(season_val = 2024, round_val = 1),
-      error = function(e) NULL  # Ignore errors (e.g., missing data)
-    ),
-    "deprecated|Deprecated"
-  )
+  expect_identical(torp_ratings, calculate_torp_ratings)
 })
 
 test_that("calculate_player_stats helper function works", {

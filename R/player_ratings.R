@@ -32,6 +32,10 @@ calculate_torp_ratings <- function(season_val = get_afl_season(type = "current")
   # Load player team details if not provided
   if (is.null(plyr_tm_df)) {
     plyr_tm_df <- load_player_details(season_val)
+    # Fall back to previous season if current season data unavailable
+    if (nrow(plyr_tm_df) == 0 || !"season" %in% names(plyr_tm_df)) {
+      plyr_tm_df <- load_player_details(season_val - 1)
+    }
   }
 
   # Load player game data if not provided
@@ -151,6 +155,15 @@ calculate_player_stats <- function(player_game_data = NULL, match_ref, date_val,
 prepare_final_dataframe <- function(plyr_tm_df = NULL, player_game_data = NULL, season_val, round_val) {
   if (is.null(plyr_tm_df)) {
     plyr_tm_df <- load_player_details(season_val)
+    # Fall back to previous season if current season data unavailable
+    if (nrow(plyr_tm_df) == 0 || !"season" %in% names(plyr_tm_df)) {
+      plyr_tm_df <- load_player_details(season_val - 1)
+      season_val_details <- season_val - 1
+    } else {
+      season_val_details <- season_val
+    }
+  } else {
+    season_val_details <- season_val
   }
 
   if (is.null(player_game_data)) {
@@ -162,7 +175,7 @@ prepare_final_dataframe <- function(plyr_tm_df = NULL, player_game_data = NULL, 
   fixtures <- load_fixtures(TRUE)
 
   plyr_tm_df %>%
-    dplyr::filter(.data$season == season_val) %>%
+    dplyr::filter(.data$season == season_val_details) %>%
     dplyr::left_join(player_game_data, by = c("providerId" = "player_id")) %>%
     dplyr::ungroup() %>%
     dplyr::mutate(
@@ -186,27 +199,5 @@ prepare_final_dataframe <- function(plyr_tm_df = NULL, player_game_data = NULL, 
 }
 
 #' @rdname calculate_torp_ratings
-#' @description `torp_ratings()` is deprecated; use `calculate_torp_ratings()` instead.
 #' @export
-torp_ratings <- function(season_val = get_afl_season(type = "current"),
-                         round_val = get_afl_week(type = "next"),
-                         decay = RATING_DECAY_DEFAULT_DAYS,
-                         loading = RATING_LOADING_DEFAULT,
-                         prior_games_recv = RATING_PRIOR_GAMES_RECV,
-                         prior_games_disp = RATING_PRIOR_GAMES_DISP,
-                         plyr_tm_df = NULL,
-                         player_game_data = NULL,
-                         spoil_multiplier = RATING_SPOIL_MULTIPLIER) {
-  .Deprecated("calculate_torp_ratings")
-  calculate_torp_ratings(
-    season_val = season_val,
-    round_val = round_val,
-    decay = decay,
-    loading = loading,
-    prior_games_recv = prior_games_recv,
-    prior_games_disp = prior_games_disp,
-    plyr_tm_df = plyr_tm_df,
-    player_game_data = player_game_data,
-    spoil_multiplier = spoil_multiplier
-  )
-}
+torp_ratings <- calculate_torp_ratings
