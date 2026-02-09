@@ -12,7 +12,7 @@ clean_model_data_epv <- function(df) {
     dplyr::filter(dplyr::lag(.data$throw_in) == 0 | dplyr::lead(.data$throw_in) == 0 | .data$throw_in == 0) |>
     add_epv_variables() |>
     dplyr::ungroup() |>
-    fastDummies::dummy_cols(select_columns = c("play_type", "phase_of_play")) |>
+    torp_dummy_cols(select_columns = c("play_type", "phase_of_play")) |>
     torp_clean_names()
 }
 
@@ -30,7 +30,7 @@ clean_model_data_wp <- function(df) {
       time_left_scaler = exp(pmin(((.data$period - 1) * AFL_QUARTER_DURATION + .data$period_seconds) / AFL_QUARTER_DURATION, AFL_TIME_SCALER_MAX)),
       diff_time_ratio = .data$xpoints_diff * .data$time_left_scaler
     ) |>
-    fastDummies::dummy_cols(select_columns = c("play_type", "phase_of_play")) |>
+    torp_dummy_cols(select_columns = c("play_type", "phase_of_play")) |>
     torp_clean_names()
 }
 

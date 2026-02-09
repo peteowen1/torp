@@ -267,10 +267,10 @@ test_that("validate_data_freshness handles missing timestamp column", {
   )
 
   # Should handle missing column gracefully
-  result <- tryCatch(
+  result <- suppressWarnings(tryCatch(
     validate_data_freshness(data_without_ts, "utc_start_time", max_age_days = 7),
     error = function(e) FALSE
-  )
+  ))
   expect_type(result, "logical")
 })
 

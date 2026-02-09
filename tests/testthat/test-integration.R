@@ -79,15 +79,13 @@ test_that("EP model predictions flow through add_epv_vars", {
   skip_if(is.null(pbp), "Could not load PBP data")
 
   # Try to add EP vars
-  result <- tryCatch({
+  result <- suppressWarnings(tryCatch({
     add_epv_vars(pbp[1:100, ])  # Small subset for speed
-  }, error = function(e) NULL)
+  }, error = function(e) NULL))
 
-  if (!is.null(result)) {
-    # Should have EP-related columns
-    expect_true("exp_pts" %in% names(result))
-    expect_true(is.data.frame(result))
-  }
+  skip_if(is.null(result), "EP model unavailable")
+  expect_true("exp_pts" %in% names(result))
+  expect_true(is.data.frame(result))
 })
 
 test_that("WP model predictions flow through add_wp_vars", {
@@ -103,15 +101,13 @@ test_that("WP model predictions flow through add_wp_vars", {
   skip_if(is.null(pbp), "Could not load PBP data")
 
   # Try to add WP vars
-  result <- tryCatch({
+  result <- suppressWarnings(tryCatch({
     add_wp_vars(pbp[1:100, ])  # Small subset for speed
-  }, error = function(e) NULL)
+  }, error = function(e) NULL))
 
-  if (!is.null(result)) {
-    # Should have WP-related columns
-    expect_true("wp" %in% names(result))
-    expect_true(is.data.frame(result))
-  }
+  skip_if(is.null(result), "WP model unavailable")
+  expect_true("wp" %in% names(result))
+  expect_true(is.data.frame(result))
 })
 
 # -----------------------------------------------------------------------------
@@ -147,11 +143,9 @@ test_that("player ratings can be calculated from loaded data", {
     error = function(e) NULL
   )
 
-  if (!is.null(result) && nrow(result) > 0) {
-    expect_true(is.data.frame(result))
-    # Should have player ratings
-    expect_true("torp" %in% names(result) || "player_id" %in% names(result))
-  }
+  skip_if(is.null(result) || nrow(result) == 0, "Rating calculation unavailable")
+  expect_true(is.data.frame(result))
+  expect_true("torp" %in% names(result) || "player_id" %in% names(result))
 })
 
 # -----------------------------------------------------------------------------
@@ -351,18 +345,16 @@ test_that("model cache works across multiple predictions", {
   skip_if(is.null(pbp), "Could not load PBP data")
 
   # First prediction (should load model)
-  result1 <- tryCatch({
+  result1 <- suppressWarnings(tryCatch({
     add_wp_vars(pbp[1:50, ])
-  }, error = function(e) NULL)
+  }, error = function(e) NULL))
 
   # Second prediction (should use cached model)
-  result2 <- tryCatch({
+  result2 <- suppressWarnings(tryCatch({
     add_wp_vars(pbp[51:100, ])
-  }, error = function(e) NULL)
+  }, error = function(e) NULL))
 
-  # Both should succeed (or both fail if models unavailable)
-  if (!is.null(result1) && !is.null(result2)) {
-    expect_true(is.data.frame(result1))
-    expect_true(is.data.frame(result2))
-  }
+  skip_if(is.null(result1) || is.null(result2), "WP model unavailable for cache test")
+  expect_true(is.data.frame(result1))
+  expect_true(is.data.frame(result2))
 })

@@ -60,11 +60,11 @@ test_that("get_wp_preds_enhanced handles missing data gracefully", {
   )
 
   # Should handle gracefully or give informative error
-  result <- tryCatch({
+  result <- suppressWarnings(tryCatch({
     get_wp_preds_enhanced(minimal_data)
-  }, error = function(e) e)
+  }, error = function(e) e))
 
-  # Function should succeed with fallback (warnings are expected)
+  # Function should succeed with fallback
   expect_true(is.data.frame(result))
   expect_true("wp" %in% names(result))
 })

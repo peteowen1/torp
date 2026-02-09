@@ -66,16 +66,16 @@ test_that("all=TRUE caching works", {
   clear_fixture_cache()
   
   # Load all fixtures
-  expect_message(
+  suppressWarnings(expect_message(
     fixtures1 <- load_fixtures(all = TRUE, verbose = TRUE),
     "Cache MISS"
-  )
-  
+  ))
+
   # Second load should hit cache
-  expect_message(
+  suppressWarnings(expect_message(
     fixtures2 <- load_fixtures(all = TRUE, verbose = TRUE),
     "Cache HIT"
-  )
+  ))
   
   expect_identical(fixtures1, fixtures2)
   

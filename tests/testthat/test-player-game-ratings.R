@@ -123,19 +123,19 @@ test_that("resolve_player validates input", {
 test_that("resolve_player errors on non-existent player", {
   skip_if_no_internet()
 
-  expect_error(
+  suppressWarnings(expect_error(
     torp:::resolve_player("Zzzyyyxxx Nonexistent Player 999"),
     "No player found"
-  )
+  ))
 })
 
 test_that("resolve_player returns correct structure for known player", {
   skip_if_no_internet()
 
-  result <- tryCatch(
+  result <- suppressWarnings(tryCatch(
     torp:::resolve_player("Isaac Heeney"),
     error = function(e) NULL
-  )
+  ))
 
   skip_if(is.null(result), "Could not resolve player (data unavailable)")
 
@@ -150,10 +150,10 @@ test_that("resolve_player returns correct structure for known player", {
 test_that("resolve_player works with partial name", {
   skip_if_no_internet()
 
-  result <- tryCatch(
+  result <- suppressWarnings(tryCatch(
     torp:::resolve_player("Heeney"),
     error = function(e) NULL
-  )
+  ))
 
   skip_if(is.null(result), "Could not resolve player (data unavailable)")
   expect_true(grepl("Heeney", result$player_name))
@@ -182,10 +182,10 @@ test_that("player_profile validates input", {
 test_that("player_profile returns correct class", {
   skip_if_no_internet()
 
-  result <- tryCatch(
+  result <- suppressWarnings(tryCatch(
     player_profile("Isaac Heeney", seasons = 2024),
     error = function(e) NULL
-  )
+  ))
 
   skip_if(is.null(result), "Could not load player profile (data unavailable)")
 

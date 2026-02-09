@@ -140,7 +140,7 @@ select_wp_model_vars_enhanced <- function(df, model_type = "ensemble") {
   
   # Handle categorical variables (for all model types)
   if ("lead_size_category" %in% names(df) && model_type != "gam") {
-    dummy_df <- fastDummies::dummy_cols(df["lead_size_category"], remove_first_dummy = TRUE)
+    dummy_df <- torp_dummy_cols(df["lead_size_category"], select_columns = "lead_size_category", remove_first_dummy = TRUE)
     categorical_vars <- setdiff(names(dummy_df), "lead_size_category")
     available_vars <- c(available_vars, categorical_vars)
   } else if ("lead_size_category" %in% names(df) && model_type == "gam") {

@@ -301,6 +301,30 @@ fct_na_to_level <- function(x, level = "(Missing)") {
   factor(x)
 }
 
+#' Create dummy columns for categorical variables
+#'
+#' Lightweight replacement for fastDummies::dummy_cols(). Creates binary 0/1
+#' columns for each level of the specified factor/character columns.
+#'
+#' @param df A data frame.
+#' @param select_columns Character vector of column names to create dummies for.
+#' @param remove_first_dummy Logical; if TRUE, omits the first level (useful for regression).
+#' @return The data frame with added dummy columns.
+#' @keywords internal
+torp_dummy_cols <- function(df, select_columns, remove_first_dummy = FALSE) {
+  for (col in select_columns) {
+    if (col %in% names(df)) {
+      vals <- as.factor(df[[col]])
+      lvls <- levels(vals)
+      if (remove_first_dummy) lvls <- lvls[-1]
+      for (lvl in lvls) {
+        df[[paste0(col, "_", lvl)]] <- as.integer(vals == lvl)
+      }
+    }
+  }
+  df
+}
+
 # Add Globals Variables
 utils::globalVariables(c(".data", ".SD", "disp", "season.x", "tm"))
 
