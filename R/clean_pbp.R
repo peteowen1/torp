@@ -15,11 +15,8 @@
 #'
 #' @importFrom dplyr mutate group_by ungroup row_number case_when if_else lead lag
 #' @importFrom tidyr replace_na
-#' @importFrom forcats fct_na_value_to_level
 #' @importFrom stringr str_starts str_detect
 #' @importFrom data.table nafill setnafill as.data.table setDT setorder fifelse fcase shift copy
-#' @importFrom glue glue
-#' @importFrom janitor clean_names
 clean_pbp <- function(df) {
   # Use optimized data.table version
   clean_pbp_dt(df)
@@ -34,13 +31,10 @@ clean_pbp <- function(df) {
 #' @return A cleaned and processed data.table with additional variables.
 #' @keywords internal
 #' @importFrom data.table as.data.table setDT setorder setkey fifelse fcase shift nafill copy
-#' @importFrom janitor clean_names
-#' @importFrom glue glue
-#' @importFrom forcats fct_na_value_to_level
 #' @importFrom stringr str_starts str_detect
 clean_pbp_dt <- function(df) {
   # Clean names and convert to data.table in one step (avoid extra copy)
-  dt <- data.table::as.data.table(janitor::clean_names(df))
+  dt <- data.table::as.data.table(torp_clean_names(df))
 
   # Set key for efficient grouping operations
   data.table::setkey(dt, match_id)
@@ -87,9 +81,9 @@ add_torp_ids_dt <- function(dt) {
       default = 0L
     ),
     shot_row = data.table::fifelse(is.na(shot_at_goal), 0L, 1L),
-    player_position_fac = forcats::fct_na_value_to_level(player_position, level = "Other"),
-    player_name = forcats::fct_na_value_to_level(
-      paste(player_name_given_name, player_name_surname), level = "Other"
+    player_position_fac = fct_na_to_level(player_position, "Other"),
+    player_name = fct_na_to_level(
+      paste(player_name_given_name, player_name_surname), "Other"
     )
   )]
   invisible(NULL)

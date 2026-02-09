@@ -30,5 +30,5 @@ load_from_url(
 A tibble, possibly of type \code{peteowen1_data}
 }
 \description{
-Load parquet files from remote URLs
+This function is intended for internal use and may be unexported in a future release.
 }

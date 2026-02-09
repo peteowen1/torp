@@ -9,11 +9,20 @@
 #'
 #' @importFrom dplyr group_by filter summarise if_else
 calculate_match_xgs <- function(season = get_afl_season(), round = get_afl_week(), quarter = 1:4) {
-  df <- load_pbp(seasons = season, rounds = round)
+  df <- tryCatch(
+    load_pbp(seasons = season, rounds = round),
+    error = function(e) {
+      cli::cli_abort("Could not load play-by-play data for season {season}, round {round}: {e$message}")
+    }
+  )
 
-  shots_df <- df %>%
-    dplyr::group_by(.data$match_id) %>%
-    dplyr::filter(.data$period %in% quarter) %>%
+  if (nrow(df) == 0) {
+    cli::cli_abort("No play-by-play data available for season {season}, round {round}.")
+  }
+
+  shots_df <- df |>
+    dplyr::group_by(.data$match_id) |>
+    dplyr::filter(.data$period %in% quarter) |>
     dplyr::summarise(
       home_team = max(.data$home_team_team_name),
       home_shots_score = sum(dplyr::if_else(.data$team == .data$home_team_team_name, .data$points_shot, 0), na.rm = TRUE),
@@ -38,6 +47,6 @@ calculate_match_xgs <- function(season = get_afl_season(), round = get_afl_week(
 #' @description `match_xgs()` is deprecated; use `calculate_match_xgs()` instead.
 #' @export
 match_xgs <- function(season = get_afl_season(), round = get_afl_week(), quarter = 1:4) {
-  .Deprecated("calculate_match_xgs")
+  .Deprecated("calculate_match_xgs", package = "torp", old = "match_xgs")
   calculate_match_xgs(season = season, round = round, quarter = quarter)
 }

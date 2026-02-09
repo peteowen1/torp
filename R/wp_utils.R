@@ -56,6 +56,7 @@ validate_wp_input <- function(df, model_type = "basic") {
 
 #' Get Win Probability Model Version Information
 #'
+#' @description This function is intended for internal use and may be unexported in a future release.
 #' Returns version and metadata for the current win probability model
 #'
 #' @return List with model version information
@@ -95,6 +96,7 @@ get_wp_model_info <- function() {
 
 #' Check Win Probability Model Health
 #'
+#' @description This function is intended for internal use and may be unexported in a future release.
 #' Performs basic health checks on the win probability model
 #'
 #' @return List with health check results

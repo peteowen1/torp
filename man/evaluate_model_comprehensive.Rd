@@ -27,5 +27,6 @@ evaluate_model_comprehensive(
 List containing evaluation metrics with confidence intervals
 }
 \description{
+This function is intended for internal use and may be unexported in a future release.
 Evaluates model performance with multiple metrics and statistical rigor
 }

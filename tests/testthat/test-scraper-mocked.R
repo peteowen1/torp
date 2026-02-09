@@ -85,7 +85,7 @@ test_that("get_many_game_chains handles NULL input gracefully", {
 
 test_that("get_week_chains validates season", {
   # Should return empty for seasons before 2021
-  result <- get_week_chains(2020, 1)
+  result <- suppressWarnings(get_week_chains(2020, 1))
 
   expect_true(is.data.frame(result) || data.table::is.data.table(result))
   expect_equal(nrow(result), 0)
@@ -120,10 +120,10 @@ test_that("get_match_chains validates season parameter", {
 
 test_that("get_match_chains accepts valid seasons", {
   # Should not error on validation for valid season (may error on API call)
-  result <- tryCatch(
+  result <- suppressWarnings(tryCatch(
     get_match_chains(2021, 1),
     error = function(e) NULL  # Ignore API errors
-  )
+  ))
 
   # Just ensure we get past validation
   expect_true(TRUE)  # If we got here, validation passed
@@ -234,7 +234,7 @@ test_that("get_single_chain returns correct column types", {
     stringsAsFactors = FALSE
   )
 
-  result <- get_single_chain(mock_chains, 1)
+  result <- suppressWarnings(get_single_chain(mock_chains, 1))
 
   # Check if we got a valid result
   skip_if(is.null(result) || !is.data.frame(result), "get_single_chain returned invalid result")

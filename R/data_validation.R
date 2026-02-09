@@ -79,6 +79,7 @@ get_afl_data_schemas <- function() {
 
 #' Validate Data Schema
 #'
+#' @description This function is intended for internal use and may be unexported in a future release.
 #' Validates that a dataframe conforms to the expected schema
 #'
 #' @param data Dataframe to validate
@@ -168,6 +169,7 @@ validate_data_schema <- function(data, schema_name, strict = TRUE) {
 
 #' Validate Data Quality
 #'
+#' @description This function is intended for internal use and may be unexported in a future release.
 #' Performs comprehensive data quality checks beyond schema validation
 #'
 #' @param data Dataframe to validate
@@ -263,9 +265,9 @@ analyze_missing_data <- function(data) {
     missing_matrix <- as.data.frame(
       lapply(data, is.na)
     )
-    missing_patterns <- missing_matrix %>%
-      dplyr::group_by_all() %>%
-      dplyr::summarise(count = dplyr::n(), .groups = "drop") %>%
+    missing_patterns <- missing_matrix |>
+      dplyr::group_by_all() |>
+      dplyr::summarise(count = dplyr::n(), .groups = "drop") |>
       dplyr::arrange(dplyr::desc(count))
   } else {
     missing_patterns <- NULL
@@ -387,13 +389,13 @@ validate_chains_quality <- function(data) {
   
   # Check temporal consistency within matches
   if (all(c("match_id", "period", "period_seconds") %in% names(data))) {
-    temporal_issues <- data %>%
-      group_by(match_id, period) %>%
+    temporal_issues <- data |>
+      group_by(match_id, period) |>
       summarise(
         min_seconds = min(period_seconds, na.rm = TRUE),
         max_seconds = max(period_seconds, na.rm = TRUE),
         .groups = "drop"
-      ) %>%
+      ) |>
       filter(min_seconds < 0 | max_seconds > 2000)
     
     if (nrow(temporal_issues) > 0) {
@@ -522,6 +524,7 @@ calculate_quality_score <- function(data, issues) {
 
 #' Validate Data Freshness
 #'
+#' @description This function is intended for internal use and may be unexported in a future release.
 #' Checks if data is recent enough for reliable predictions
 #'
 #' @param data_timestamp Timestamp of the most recent data (can be dataframe with timestamp column or direct timestamp)

@@ -24,8 +24,8 @@ add_epv_vars <- function(df) {
   base_ep_preds <- get_epv_preds(df)
   pbp_final <- dplyr::bind_cols(df, base_ep_preds)
 
-  pbp_final <- pbp_final %>%
-    dplyr::group_by(.data$match_id, .data$period) %>%
+  pbp_final <- pbp_final |>
+    dplyr::group_by(.data$match_id, .data$period) |>
     dplyr::mutate(
       exp_pts = round(dplyr::case_when(
         .data$description == "Centre Bounce" ~ 0,
@@ -60,7 +60,7 @@ add_epv_vars <- function(df) {
       delta_epv = dplyr::lead(.data$xpoints_diff, default = dplyr::last(.data$points_diff)) * .data$team_change - .data$xpoints_diff,
       weight_gm = exp(as.numeric(-(lubridate::as_date(Sys.Date()) - lubridate::as_date(.data$utc_start_time))) / 365),
       round_week = sprintf("%02d", .data$round_number)
-    ) %>%
+    ) |>
     dplyr::ungroup()
 
   return(pbp_final)
@@ -130,9 +130,9 @@ add_wp_vars <- function(df, use_enhanced = TRUE) {
   pbp_final <- dplyr::bind_cols(df, wp_preds)
 
   # Calculate Win Probability Added (WPA) with improved logic
-  pbp_final <- pbp_final %>%
-    dplyr::group_by(.data$match_id) %>%
-    dplyr::arrange(.data$period, .data$period_seconds) %>%
+  pbp_final <- pbp_final |>
+    dplyr::group_by(.data$match_id) |>
+    dplyr::arrange(.data$period, .data$period_seconds) |>
     dplyr::mutate(
       # Round win probability to reasonable precision
       wp = round(pmax(0.001, pmin(0.999, .data$wp)), 5),  # Bound between 0.001 and 0.999
@@ -167,7 +167,7 @@ add_wp_vars <- function(df, use_enhanced = TRUE) {
       # Remove helper columns
       wp_next = NULL,
       team_id_next = NULL
-    ) %>%
+    ) |>
     dplyr::ungroup()
 
   return(pbp_final)
@@ -198,11 +198,11 @@ add_shot_vars <- function(df) {
 
   pbp_final <- dplyr::bind_cols(df, ocat_shot_result_preds)
 
-  pbp_final <- pbp_final %>%
+  pbp_final <- pbp_final |>
     dplyr::mutate(
       on_target_prob = .data$goal_prob + .data$behind_prob,
       xscore = .data$goal_prob * 6 + .data$behind_prob
-    ) %>%
+    ) |>
     dplyr::ungroup()
 
   return(pbp_final)
@@ -232,7 +232,7 @@ get_epv_preds <- function(df) {
 
   tryCatch({
     # Detect model type and use appropriate prediction method
-    model_data <- df %>% select_epv_model_vars()
+    model_data <- df |> select_epv_model_vars()
 
     if (inherits(ep_model, "xgb.Booster")) {
       # XGBoost model - use xgboost::predict
@@ -288,7 +288,7 @@ get_wp_preds <- function(df) {
   }
 
   preds <- as.data.frame(
-    matrix(stats::predict(wp_model, stats::model.matrix(~ . + 0, data = df %>% select_wp_model_vars())),
+    matrix(stats::predict(wp_model, stats::model.matrix(~ . + 0, data = df |> select_wp_model_vars())),
       ncol = 1, byrow = TRUE
     )
   )

@@ -90,7 +90,7 @@ test_that("get_many_game_chains handles empty vector", {
 
 test_that("get_week_chains handles errors gracefully", {
   # Test with invalid parameters - should warn and return empty data.table
-  result <- get_week_chains(2019, 1)  # Season before 2021 should fail
+  result <- suppressWarnings(get_week_chains(2019, 1))  # Season before 2021 should fail
   expect_true(is.data.frame(result) || data.table::is.data.table(result))
   expect_equal(nrow(result), 0)
 })
@@ -103,10 +103,10 @@ test_that("get_players can load from local data", {
   skip_if_no_internet()
 
   # Test loading from local database (use_api = FALSE)
-  result <- tryCatch(
+  result <- suppressWarnings(tryCatch(
     get_players(use_api = FALSE),
     error = function(e) NULL
-  )
+  ))
 
   # If we got data, verify structure
 

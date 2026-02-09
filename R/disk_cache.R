@@ -284,6 +284,7 @@ get_disk_cache_size <- function() {
 
 #' Set Disk Cache Options
 #'
+#' @description This function is intended for internal use and may be unexported in a future release.
 #' Configure disk cache behavior for the current session.
 #'
 #' @param enabled Logical. Enable or disable disk caching.

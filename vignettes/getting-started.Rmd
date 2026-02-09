@@ -96,7 +96,7 @@ Calculate expected goals (xG) summaries for matches:
 
 ```{r xg-match}
 # Get xG summary for a specific round
-match_xg <- match_xgs(season = 2024, round = 1)
+match_xg <- calculate_match_xgs(season = 2024, round = 1)
 ```
 
 ## Player Ratings
@@ -109,15 +109,6 @@ player_game_data <- load_player_stats(seasons = 2024)
 
 # Calculate TORP ratings (requires additional setup)
 # See the player-ratings vignette for details
-```
-
-## Data Validation
-
-Validate your data before analysis:
-
-```{r validate}
-# Check data quality
-validation_result <- validate_data(pbp_clean)
 ```
 
 ## Configuration

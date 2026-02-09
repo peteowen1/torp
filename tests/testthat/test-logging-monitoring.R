@@ -59,27 +59,6 @@ test_that("monitor_model_drift detects performance changes", {
   expect_true(length(result_drift$drift_details) > 0)
 })
 
-test_that("get_model_health_status returns proper structure", {
-  # Test with no metrics (should handle gracefully)
-  health_status <- get_model_health_status(lookback_hours = 1)
-  
-  expect_true(is.list(health_status))
-  expect_true("status" %in% names(health_status))
-  expect_true("models" %in% names(health_status))
-  
-  # Status should be one of expected values
-  expect_true(health_status$status %in% c("unknown", "stale", "healthy"))
-})
-
-test_that("create_monitoring_dashboard_data handles empty data", {
-  # Should not error when no data available
-  dashboard_data <- create_monitoring_dashboard_data(time_range = 1)
-  
-  expect_true(is.list(dashboard_data))
-  # Should contain error message when no data
-  expect_true("error" %in% names(dashboard_data) || "time_series" %in% names(dashboard_data))
-})
-
 test_that("log_prediction_event logs correctly", {
   # Should not error with valid inputs
   expect_silent(log_prediction_event(

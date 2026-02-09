@@ -69,18 +69,18 @@ create_player_game_data <- function(pbp_data = NULL,
   if (is.null(teams)) teams <- load_teams(TRUE)
 
   # --- Step 1: Disposal points from PBP (grouped by player_id + match_id) ---
-  disp_df <- pbp_data %>%
-    dplyr::arrange(match_id, display_order) %>%
+  disp_df <- pbp_data |>
+    dplyr::arrange(match_id, display_order) |>
     dplyr::select(
       player_name, player_id, match_id, utc_start_time, home_away,
       away_team_team_name, home_team_team_name,
       delta_epv, team, player_position, round_week, pos_team, wpa
-    ) %>%
+    ) |>
     dplyr::mutate(
       weight_gm = exp(as.numeric(-(max(as.Date(utc_start_time)) - as.Date(utc_start_time))) / decay),
       opp_tm = ifelse(home_away == "Home", away_team_team_name, home_team_team_name)
-    ) %>%
-    dplyr::group_by(player_id, match_id) %>%
+    ) |>
+    dplyr::group_by(player_id, match_id) |>
     dplyr::summarise(
       plyr_nm = max(player_name, na.rm = TRUE),
       gms = dplyr::n_distinct(match_id),
@@ -98,16 +98,16 @@ create_player_game_data <- function(pbp_data = NULL,
     )
 
   # --- Step 2: Reception points (self-join on lead_player_id) ---
-  recv_df <- pbp_data %>%
+  recv_df <- pbp_data |>
     dplyr::select(
       lead_player, lead_player_id, match_id, utc_start_time, home_away,
       away_team_team_name, home_team_team_name,
       delta_epv, team, player_position, round_week, pos_team, wpa
-    ) %>%
+    ) |>
     dplyr::mutate(
       weight_gm = exp(as.numeric(-(max(as.Date(utc_start_time)) - as.Date(utc_start_time))) / decay)
-    ) %>%
-    dplyr::group_by(lead_player, lead_player_id, match_id) %>%
+    ) |>
+    dplyr::group_by(lead_player, lead_player_id, match_id) |>
     dplyr::summarise(
       recv_pts = sum(dplyr::if_else(pos_team == -1, (p$recv_neg_mult * delta_epv * pos_team) + p$recv_neg_offset, (p$recv_pos_mult * delta_epv * pos_team) + p$recv_pos_offset) * p$recv_scale),
       recv_pts_wt = sum(dplyr::if_else(pos_team == -1, (p$recv_neg_mult * delta_epv * pos_team) + p$recv_neg_offset, (p$recv_pos_mult * delta_epv * pos_team) + p$recv_pos_offset) * p$recv_scale * max(weight_gm)),
@@ -116,31 +116,31 @@ create_player_game_data <- function(pbp_data = NULL,
     )
 
   # --- Step 3: Join disposal + reception ---
-  plyr_gm_df <- disp_df %>%
+  plyr_gm_df <- disp_df |>
     dplyr::left_join(
       recv_df,
       by = c("player_id" = "lead_player_id", "match_id" = "match_id")
     )
 
   # --- Step 4: Join spoils/tackles/hitouts from raw player_stats ---
-  spoil_hitout_df <- player_stats %>%
+  spoil_hitout_df <- player_stats |>
     dplyr::mutate(
       weight_gm = exp(as.numeric(-(max(as.Date(utc_start_time)) - as.Date(utc_start_time))) / decay),
       spoil_pts = extended_stats_spoils * p$spoil_wt + tackles * p$tackle_wt + extended_stats_pressure_acts * p$pressure_wt - extended_stats_def_half_pressure_acts * p$def_pressure_wt,
       spoil_pts_wt = spoil_pts * max(weight_gm),
       hitout_pts = hitouts * p$hitout_wt + extended_stats_hitouts_to_advantage * p$hitout_adv_wt - extended_stats_ruck_contests * p$ruck_contest_wt,
       hitout_pts_wt = hitout_pts * max(weight_gm)
-    ) %>%
+    ) |>
     dplyr::select(-utc_start_time)
 
-  plyr_gm_df <- plyr_gm_df %>%
+  plyr_gm_df <- plyr_gm_df |>
     dplyr::left_join(
       spoil_hitout_df,
       by = c("player_id" = "player_player_player_player_id", "match_id" = "provider_id")
     )
 
   # --- Step 5: Replace NAs and compute totals ---
-  plyr_gm_df <- plyr_gm_df %>%
+  plyr_gm_df <- plyr_gm_df |>
     dplyr::mutate(
       recv_pts = tidyr::replace_na(recv_pts, 0),
       recv_pts_wt = tidyr::replace_na(recv_pts_wt, 0),
@@ -155,32 +155,32 @@ create_player_game_data <- function(pbp_data = NULL,
     )
 
   # --- Step 6: Join teams data for position ---
-  plyr_gm_df <- plyr_gm_df %>%
+  plyr_gm_df <- plyr_gm_df |>
     dplyr::left_join(
       teams,
       by = c("match_id" = "providerId", "player_id" = "player.playerId")
     )
 
   # --- Step 7: Position-group adjustment (subtract 40th percentile) ---
-  plyr_gm_df <- plyr_gm_df %>%
-    dplyr::ungroup() %>%
-    dplyr::group_by(position) %>%
+  plyr_gm_df <- plyr_gm_df |>
+    dplyr::ungroup() |>
+    dplyr::group_by(position) |>
     dplyr::mutate(
       recv_pts_adj = recv_pts - stats::quantile(recv_pts, p$pos_adj_quantile, na.rm = TRUE),
       disp_pts_adj = disp_pts - stats::quantile(disp_pts, p$pos_adj_quantile, na.rm = TRUE),
       spoil_pts_adj = spoil_pts - stats::quantile(spoil_pts, p$pos_adj_quantile, na.rm = TRUE),
       hitout_pts_adj = hitout_pts - stats::quantile(hitout_pts, p$pos_adj_quantile, na.rm = TRUE),
       tot_p_adj = recv_pts_adj + disp_pts_adj + spoil_pts_adj + hitout_pts_adj
-    ) %>%
+    ) |>
     dplyr::ungroup()
 
   # --- Step 8: Handle duplicate season columns and clean up ---
   if ("season.x" %in% names(plyr_gm_df)) {
-    plyr_gm_df <- plyr_gm_df %>% dplyr::mutate(season = season.x)
+    plyr_gm_df <- plyr_gm_df |> dplyr::mutate(season = season.x)
   }
 
-  plyr_gm_df <- plyr_gm_df %>%
-    dplyr::relocate(tot_p_adj, disp, recv_pts_adj, disp_pts_adj, spoil_pts_adj, hitout_pts_adj) %>%
+  plyr_gm_df <- plyr_gm_df |>
+    dplyr::relocate(tot_p_adj, disp, recv_pts_adj, disp_pts_adj, spoil_pts_adj, hitout_pts_adj) |>
     dplyr::filter(!is.na(tm))
 
   return(plyr_gm_df)

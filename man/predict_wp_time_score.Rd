@@ -15,5 +15,6 @@ predict_wp_time_score(train_data, pred_data)
 Vector of win probability predictions
 }
 \description{
+This function is intended for internal use and may be unexported in a future release.
 Logistic regression using score difference and time remaining
 }

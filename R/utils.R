@@ -57,7 +57,7 @@ get_afl_week <- function(type = "current") {
   # Try to load fixtures for current season, handle missing data gracefully
   all_fixtures <- tryCatch(
     {
-      load_fixtures(season) %>%
+      load_fixtures(season) |>
         dplyr::filter(.data$compSeason.year == season)
     },
     error = function(e) {
@@ -72,9 +72,9 @@ get_afl_week <- function(type = "current") {
     return(0)
   }
 
-  past_fixtures <- all_fixtures %>%
+  past_fixtures <- all_fixtures |>
     dplyr::filter(.data$utcStartTime < current_day)
-  future_fixtures <- all_fixtures %>%
+  future_fixtures <- all_fixtures |>
     dplyr::filter(.data$utcStartTime >= current_day)
 
   # Pre-season: no past fixtures yet
@@ -200,6 +200,7 @@ get_mode <- function(x) {
 
 #' Vectorized Harmonic Mean of Two Numeric Vectors
 #'
+#' @description This function is intended for internal use and may be unexported in a future release.
 #' Computes the row-wise harmonic mean of two numeric vectors. The harmonic mean
 #' is particularly useful in AFL analytics for averaging rates and proportions,
 #' giving less weight to extreme values than the arithmetic mean.
@@ -232,6 +233,7 @@ harmonic_mean <- function(x, y) {
 
 #' Normalize Player Names
 #'
+#' @description This function is intended for internal use and may be unexported in a future release.
 #' Converts input character strings into a standardized format by:
 #' \itemize{
 #'   \item Converting accented characters to ASCII (e.g., "José" → "Jose")
@@ -262,8 +264,70 @@ norm_name <- function(x) {
     stringr::str_squish()
 }
 
+#' Clean column names to snake_case
+#'
+#' Lightweight replacement for janitor::clean_names(). Converts column names to
+#' snake_case by handling CamelCase, dots, spaces, and special characters.
+#'
+#' @param df A data frame.
+#' @return The data frame with cleaned column names.
+#' @keywords internal
+torp_clean_names <- function(df) {
+  nms <- names(df)
+  # CamelCase to snake_case
+  nms <- gsub("([a-z0-9])([A-Z])", "\\1_\\2", nms)
+  # Replace dots, spaces, and special chars with underscores
+  nms <- gsub("[. ]+", "_", nms)
+  nms <- tolower(nms)
+  nms <- gsub("[^a-z0-9_]", "_", nms)
+  nms <- gsub("_+", "_", nms)
+  nms <- gsub("^_|_$", "", nms)
+  names(df) <- nms
+  df
+}
+
+#' Convert NA factor levels to a named level
+#'
+#' Lightweight replacement for forcats::fct_na_value_to_level().
+#' Converts a vector to factor and replaces NA values with the specified level.
+#'
+#' @param x A vector (character or factor).
+#' @param level The level name to use for NA values.
+#' @return A factor with NAs replaced by the specified level.
+#' @keywords internal
+fct_na_to_level <- function(x, level = "(Missing)") {
+  x <- as.character(x)
+  x[is.na(x)] <- level
+  factor(x)
+}
+
+#' Create dummy columns for categorical variables
+#'
+#' Lightweight replacement for fastDummies::dummy_cols(). Creates binary 0/1
+#' columns for each level of the specified factor/character columns.
+#'
+#' @param df A data frame.
+#' @param select_columns Character vector of column names to create dummies for.
+#' @param remove_first_dummy Logical; if TRUE, omits the first level (useful for regression).
+#' @return The data frame with added dummy columns.
+#' @keywords internal
+torp_dummy_cols <- function(df, select_columns, remove_first_dummy = FALSE) {
+  for (col in select_columns) {
+    if (col %in% names(df)) {
+      vals <- as.factor(df[[col]])
+      lvls <- levels(vals)
+      if (remove_first_dummy) lvls <- lvls[-1]
+      for (lvl in lvls) {
+        df[[paste0(col, "_", lvl)]] <- as.integer(vals == lvl)
+      }
+    }
+  }
+  df
+}
+
 # Add Globals Variables
-utils::globalVariables(c(".data"))
+utils::globalVariables(c(".data", ".SD", "disp", "season.x", "tm"))
+
 
 
 

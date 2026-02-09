@@ -14,17 +14,11 @@ Imports:
     data.table (>= 1.14.0),
     digest (>= 0.6.0),
     dplyr (>= 1.0.0),
-    fastDummies (>= 1.6.0),
-    forcats (>= 0.5.0),
-    glue (>= 1.6.0),
     httr (>= 1.4.0),
-    janitor (>= 2.1.0),
     jsonlite (>= 1.7.0),
     lubridate (>= 1.8.0),
-    magrittr (>= 2.0.0),
     mgcv (>= 1.8.0),
     piggyback (>= 0.1.4),
-    progressr (>= 0.10.0),
     purrr (>= 0.3.0),
     rlang (>= 1.0.0),
     stringi (>= 1.7.0),
@@ -44,10 +38,12 @@ Suggests:
     torpmodels,
     xgboost (>= 1.6.0)
 Config/testthat/edition: 3
-Depends: 
-    R (>= 3.5)
+Depends:
+    R (>= 4.1.0)
 LazyData: true
 LazyDataCompression: xz
+Remotes:
+    peteowen1/torpmodels
 URL: https://github.com/peteowen1/torp
 BugReports: https://github.com/peteowen1/torp/issues
 VignetteBuilder: knitr

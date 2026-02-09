@@ -25,6 +25,7 @@
 
 #' Setup TORP Logging Configuration
 #'
+#' @description This function is intended for internal use and may be unexported in a future release.
 #' Configures logging for the TORP package with appropriate levels and outputs
 #'
 #' @param level Logging level ("DEBUG", "INFO", "WARN", "ERROR")
@@ -101,6 +102,7 @@ safe_log_debug <- function(message, ...) {
 
 #' Log Model Performance Metrics
 #'
+#' @description This function is intended for internal use and may be unexported in a future release.
 #' Logs model performance metrics in a structured format for monitoring
 #'
 #' @param model_name Name of the model
@@ -167,6 +169,7 @@ log_prediction_event <- function(model_name, input_hash, n_predictions, summary 
 
 #' Monitor Model Drift
 #'
+#' @description This function is intended for internal use and may be unexported in a future release.
 #' Monitors for potential model drift by comparing performance metrics
 #'
 #' @param model_name Name of the model to monitor
@@ -207,86 +210,6 @@ monitor_model_drift <- function(model_name, current_metrics, baseline_metrics, d
   )
 }
 
-# -----------------------------------------------------------------------------
-# Dashboard/Health Functions (Stubs - require persistent backend)
-# -----------------------------------------------------------------------------
-
-#' Create Monitoring Dashboard Data
-#'
-#' Aggregates monitoring data for dashboard visualization.
-#' Note: Requires a persistent logging backend to be configured.
-#' Currently returns a stub structure for API compatibility.
-#'
-#' @param time_range Time range for aggregation (hours as numeric, or string like "24h", "7d")
-#' @param time_window Time window for aggregation (for backward compatibility)
-#' @param models Vector of model names to include (optional)
-#' @return List containing dashboard data structure (placeholder values)
-#' @keywords internal
-create_monitoring_dashboard_data <- function(time_range = NULL, time_window = "24h", models = NULL) {
-  if (!is.null(time_range)) {
-    time_window <- if (is.numeric(time_range)) paste0(time_range, "h") else time_range
-  }
-
-  list(
-    summary = list(
-      time_window = time_window,
-      models_monitored = 0L,
-      last_updated = Sys.time(),
-      status = "no_data"
-    ),
-    metrics = data.frame(
-      model = character(0),
-      auc = numeric(0),
-      log_loss = numeric(0),
-      predictions_made = integer(0),
-      stringsAsFactors = FALSE
-    ),
-    time_series = data.frame(
-      timestamp = as.POSIXct(character(0)),
-      predictions_count = integer(0),
-      error_rate = numeric(0),
-      stringsAsFactors = FALSE
-    ),
-    message = "Monitoring dashboard requires a persistent logging backend. No historical data available."
-  )
-}
-
-#' Get Model Health Status
-#'
-#' Retrieves the health status of models based on recent performance metrics.
-#' Note: Requires a persistent logging backend to be configured.
-#' Currently returns a stub structure for API compatibility.
-#'
-#' @param lookback_hours Number of hours to look back for health assessment (default: 24)
-#' @param models Vector of model names to check (optional)
-#' @return List containing model health status information (placeholder values)
-#' @keywords internal
-get_model_health_status <- function(lookback_hours = 24, models = NULL) {
-  list(
-    status = "unknown",
-    models = models %||% character(0),
-    timestamp = Sys.time(),
-    lookback_hours = lookback_hours,
-    models_checked = 0L,
-    overall_health = "unknown",
-    model_statuses = list(),
-    alerts = list(),
-    last_updated = Sys.time(),
-    message = "Health monitoring requires a persistent logging backend. No status data available."
-  )
-}
-
-# -----------------------------------------------------------------------------
-# Utility Operators
-# -----------------------------------------------------------------------------
-
-#' @title Null coalescing operator
-#' @description Returns the left operand if not NULL, otherwise the right operand
-#' @param x Left operand
-#' @param y Right operand
-#' @return x if not NULL, otherwise y
-#' @name null-coalesce
-#' @export
-`%||%` <- function(x, y) {
-  if (is.null(x)) y else x
-}
+# Note: %||% operator is provided by rlang (already in Imports)
+#' @importFrom rlang %||%
+NULL

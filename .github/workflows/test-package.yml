@@ -2,7 +2,7 @@ name: R Package Tests
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main, dev ]
   pull_request:
     branches: [ main ]
   workflow_dispatch:
@@ -19,6 +19,7 @@ jobs:
         config:
           - {os: ubuntu-latest, r: 'release'}
           - {os: ubuntu-latest, r: 'devel'}
+          - {os: ubuntu-latest, r: 'oldrel-1'}
           - {os: windows-latest, r: 'release'}
           - {os: macOS-latest, r: 'release'}
     
@@ -69,6 +70,7 @@ jobs:
       - name: Test coverage
         run: |
           covr::codecov(
+            type = "tests",
             quiet = FALSE,
             clean = FALSE,
             install_path = file.path(Sys.getenv("RUNNER_TEMP"), "package")

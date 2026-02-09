@@ -42,7 +42,7 @@ test_that("load_model_with_fallback handles unknown model names", {
   # Clear cache to ensure fresh state
   clear_model_cache()
 
-  result <- torp:::load_model_with_fallback("nonexistent_model")
+  result <- suppressWarnings(torp:::load_model_with_fallback("nonexistent_model"))
 
   # Should return NULL and warn
   expect_null(result)
@@ -97,9 +97,9 @@ test_that("get_epv_preds function exists and has correct structure", {
   )
 
   # Function should exist and process data (may fail without model data)
-  result <- tryCatch({
+  result <- suppressWarnings(tryCatch({
     get_epv_preds(mock_df)
-  }, error = function(e) e)
+  }, error = function(e) e))
 
   # Either works or gives expected error about missing model
   if (inherits(result, "error")) {
@@ -155,9 +155,9 @@ test_that("add_epv_vars function works correctly", {
   mock_pbp <- create_mock_pbp_data(10)
 
   # Function should exist and process data (may fail without model data)
-  result <- tryCatch({
+  result <- suppressWarnings(tryCatch({
     add_epv_vars(mock_pbp)
-  }, error = function(e) e)
+  }, error = function(e) e))
 
   # Test structure if it works, or expected error
   if (inherits(result, "error")) {
@@ -175,11 +175,11 @@ test_that("add_wp_vars function works correctly", {
   mock_pbp <- create_mock_pbp_data(10)
 
   # Function should exist and process data (may fail without model data)
-  result <- tryCatch({
+  result <- suppressWarnings(tryCatch({
     add_wp_vars(mock_pbp)
-  }, error = function(e) e)
+  }, error = function(e) e))
 
-  # Function should succeed with fallback (warnings are expected)
+  # Function should succeed with fallback
   expect_true(is.data.frame(result))
   expect_gte(ncol(result), ncol(mock_pbp))  # Should have additional columns
 })
@@ -191,9 +191,9 @@ test_that("add_shot_vars function works correctly", {
   mock_shots <- create_mock_shot_data(10)
 
   # Function should exist and process data (may fail without model data)
-  result <- tryCatch({
+  result <- suppressWarnings(tryCatch({
     add_shot_vars(mock_shots)
-  }, error = function(e) e)
+  }, error = function(e) e))
 
   # Test structure if it works, or expected error
   if (inherits(result, "error")) {
@@ -248,9 +248,9 @@ test_that("add_shot_vars rejects empty data frame", {
 test_that("add_wp_vars adds WPA calculation columns", {
   mock_pbp <- create_mock_pbp_data(20)
 
-  result <- tryCatch({
+  result <- suppressWarnings(tryCatch({
     add_wp_vars(mock_pbp)
-  }, error = function(e) NULL)
+  }, error = function(e) NULL))
 
   if (!is.null(result)) {
     # Should add wp and wpa columns
@@ -265,9 +265,9 @@ test_that("add_wp_vars adds WPA calculation columns", {
 test_that("add_wp_vars adds context columns", {
   mock_pbp <- create_mock_pbp_data(20)
 
-  result <- tryCatch({
+  result <- suppressWarnings(tryCatch({
     add_wp_vars(mock_pbp, use_enhanced = TRUE)
-  }, error = function(e) NULL)
+  }, error = function(e) NULL))
 
   if (!is.null(result)) {
     # Should add categorical columns
@@ -284,13 +284,13 @@ test_that("add_wp_vars use_enhanced parameter works", {
   mock_pbp <- create_mock_pbp_data(10)
 
   # Both should work (may fall back if enhanced fails)
-  result_enhanced <- tryCatch({
+  result_enhanced <- suppressWarnings(tryCatch({
     add_wp_vars(mock_pbp, use_enhanced = TRUE)
-  }, error = function(e) NULL)
+  }, error = function(e) NULL))
 
-  result_basic <- tryCatch({
+  result_basic <- suppressWarnings(tryCatch({
     add_wp_vars(mock_pbp, use_enhanced = FALSE)
-  }, error = function(e) NULL)
+  }, error = function(e) NULL))
 
   if (!is.null(result_enhanced) && !is.null(result_basic)) {
     # Both should have wp column
@@ -325,13 +325,12 @@ test_that("get_shot_result_preds exists as internal function", {
 test_that("get_shot_result_preds handles mock data", {
   mock_shots <- create_mock_shot_data(5)
 
-  result <- tryCatch(
+  result <- suppressWarnings(tryCatch(
     torp:::get_shot_result_preds(mock_shots),
     error = function(e) e
-  )
+  ))
 
-  if (!inherits(result, "error")) {
-    # Should return matrix/data frame with 3 columns
-    expect_true(ncol(result) == 3 || length(dim(result)) >= 1)
-  }
+  skip_if(inherits(result, "error"), "Shot model not available")
+  # Should return matrix/data frame with 3 columns
+  expect_true(ncol(result) == 3 || length(dim(result)) >= 1)
 })

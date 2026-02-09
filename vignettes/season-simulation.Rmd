@@ -1,0 +1,111 @@
+---
+title: "Season Simulation"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Season Simulation}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  eval = FALSE
+)
+```
+
+## Overview
+
+The `simulate_season()` function simulates remaining AFL matches based on team
+ratings and fixture data. This is useful for generating probabilistic season
+forecasts, finals predictions, and "what if" scenarios.
+
+## Setup
+
+```{r setup}
+library(torp)
+
+# Load fixture and results data
+fixtures <- load_fixtures(all = TRUE)
+results <- load_results(seasons = 2024)
+player_stats <- load_player_stats(seasons = 2024)
+```
+
+## Preparing Inputs
+
+`simulate_season()` requires two data frames:
+
+1. **sim_teams** — team ratings (one row per team)
+2. **sim_games** — fixture data with results for completed games and `NA` for
+   upcoming games
+
+```{r prep}
+# Calculate team ratings from TORP system
+ratings <- torp_ratings(seasons = 2024)
+
+# Build the sim_teams data frame with team-level ratings
+sim_teams <- ratings$team_ratings
+
+# Build sim_games from fixtures, marking future games with NA result
+sim_games <- fixtures |>
+  dplyr::filter(compSeason.year == 2024)
+```
+
+## Running a Simulation
+
+```{r run}
+# Simulate the season once
+sim_result <- simulate_season(sim_teams, sim_games)
+```
+
+The function returns a data frame of simulated game results, filling in
+scores for games that had `NA` results while preserving actual results for
+completed games.
+
+## Multiple Simulations
+
+For probabilistic forecasts, run many simulations and aggregate:
+
+```{r multi}
+n_sims <- 1000
+
+all_sims <- lapply(seq_len(n_sims), function(i) {
+  sim <- simulate_season(sim_teams, sim_games)
+  sim$sim_id <- i
+  sim
+})
+
+all_sims_df <- data.table::rbindlist(all_sims)
+```
+
+## Analysing Results
+
+```{r analyse}
+# Count how often each team finishes in each ladder position
+library(dplyr)
+
+finals_prob <- all_sims_df |>
+  group_by(sim_id) |>
+  arrange(desc(wins), desc(percentage)) |>
+  mutate(ladder_pos = row_number()) |>
+  ungroup() |>
+  group_by(team) |>
+  summarise(
+    top_4_pct = mean(ladder_pos <= 4) * 100,
+    top_8_pct = mean(ladder_pos <= 8) * 100,
+    avg_wins = mean(wins)
+  ) |>
+  arrange(desc(top_8_pct))
+
+finals_prob
+```
+
+## Key Parameters
+
+The simulation uses constants defined in `R/constants.R`:
+
+- **`SIM_NOISE_SD`** (default: 26) — standard deviation of the random noise
+  added to each simulated margin, controlling game-to-game variance
+- **`SIM_HOME_ADVANTAGE`** (default: 6) — points added to the home team's
+  expected margin

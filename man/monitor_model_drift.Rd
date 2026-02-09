@@ -21,5 +21,6 @@ monitor_model_drift(
 \item{drift_threshold}{Threshold for triggering drift alert (default: 0.05)}
 }
 \description{
+This function is intended for internal use and may be unexported in a future release.
 Monitors for potential model drift by comparing performance metrics
 }

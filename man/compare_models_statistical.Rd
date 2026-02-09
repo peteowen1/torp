@@ -15,5 +15,6 @@ compare_models_statistical(model_results, test_type = "simple")
 Dataframe with pairwise comparison results
 }
 \description{
+This function is intended for internal use and may be unexported in a future release.
 Performs statistical comparison between multiple models using paired tests
 }

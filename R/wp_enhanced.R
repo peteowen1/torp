@@ -24,9 +24,9 @@ create_wp_features_enhanced <- function(df, for_training = FALSE) {
 
   # Use constants from R/constants.R (AFL_QUARTER_DURATION, AFL_TOTAL_GAME_SECONDS)
 
-  df_enhanced <- df %>%
-    dplyr::group_by(.data$match_id) %>%
-    dplyr::arrange(.data$period, .data$period_seconds) %>%
+  df_enhanced <- df |>
+    dplyr::group_by(.data$match_id) |>
+    dplyr::arrange(.data$period, .data$period_seconds) |>
     dplyr::mutate(
       # Time-based features (using constants from R/constants.R)
       time_remaining = (AFL_MAX_PERIODS - .data$period) * AFL_QUARTER_DURATION + (AFL_QUARTER_DURATION - .data$period_seconds),
@@ -85,8 +85,8 @@ create_wp_features_enhanced <- function(df, for_training = FALSE) {
       # Rolling statistics
       points_diff_ma_5 = zoo::rollmean(.data$points_diff, k = 5, fill = .data$points_diff, align = "right"),
       points_diff_volatility = zoo::rollapply(.data$points_diff, width = 10, FUN = sd, fill = 0, align = "right")
-    ) %>%
-    dplyr::ungroup() %>%
+    ) |>
+    dplyr::ungroup() |>
     # Convert categorical variables
     dplyr::mutate(
       lead_size_category = factor(.data$lead_size_category, 
@@ -140,7 +140,7 @@ select_wp_model_vars_enhanced <- function(df, model_type = "ensemble") {
   
   # Handle categorical variables (for all model types)
   if ("lead_size_category" %in% names(df) && model_type != "gam") {
-    dummy_df <- fastDummies::dummy_cols(df["lead_size_category"], remove_first_dummy = TRUE)
+    dummy_df <- torp_dummy_cols(df["lead_size_category"], select_columns = "lead_size_category", remove_first_dummy = TRUE)
     categorical_vars <- setdiff(names(dummy_df), "lead_size_category")
     available_vars <- c(available_vars, categorical_vars)
   } else if ("lead_size_category" %in% names(df) && model_type == "gam") {
@@ -148,7 +148,7 @@ select_wp_model_vars_enhanced <- function(df, model_type = "ensemble") {
     available_vars <- c(available_vars, "lead_size_category")
   }
   
-  df %>% dplyr::select(dplyr::all_of(available_vars))
+  df |> dplyr::select(dplyr::all_of(available_vars))
 }
 
 #' Load Win Probability Ensemble Model Safely

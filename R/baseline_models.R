@@ -16,6 +16,7 @@ predict_wp_naive <- function(data) {
 
 #' Score-Only Baseline Model for Win Probability
 #'
+#' @description This function is intended for internal use and may be unexported in a future release.
 #' Simple logistic regression using only score difference
 #'
 #' @param data Data with 'points_diff' column (if only one parameter provided, uses internal training)
@@ -57,6 +58,7 @@ predict_wp_score_only <- function(data, pred_data = NULL) {
 
 #' Time-Aware Baseline Model for Win Probability
 #'
+#' @description This function is intended for internal use and may be unexported in a future release.
 #' Logistic regression using score difference and time remaining
 #'
 #' @param train_data Training data
@@ -68,21 +70,23 @@ predict_wp_time_score <- function(train_data, pred_data) {
   
   # Create time remaining feature if not present
   if (!"time_remaining_pct" %in% names(train_data)) {
-    train_data <- train_data %>%
+    train_data <- train_data |>
       mutate(
-        time_remaining = (4 - period) * 2000 + (2000 - period_seconds),
-        time_remaining_pct = time_remaining / 8000
+        time_remaining = (AFL_MAX_PERIODS - period) * AFL_QUARTER_DURATION +
+                         (AFL_QUARTER_DURATION - period_seconds),
+        time_remaining_pct = time_remaining / AFL_TOTAL_GAME_SECONDS
       )
   }
-  
+
   if (!"time_remaining_pct" %in% names(pred_data)) {
-    pred_data <- pred_data %>%
+    pred_data <- pred_data |>
       mutate(
-        time_remaining = (4 - period) * 2000 + (2000 - period_seconds),
-        time_remaining_pct = time_remaining / 8000
+        time_remaining = (AFL_MAX_PERIODS - period) * AFL_QUARTER_DURATION +
+                         (AFL_QUARTER_DURATION - period_seconds),
+        time_remaining_pct = time_remaining / AFL_TOTAL_GAME_SECONDS
       )
   }
-  
+
   # Fit logistic regression with interaction
   model <- stats::glm(
     label_wp ~ points_diff * time_remaining_pct + I(points_diff^2),
@@ -96,6 +100,7 @@ predict_wp_time_score <- function(train_data, pred_data) {
 
 #' Expected Points Baseline Model
 #'
+#' @description This function is intended for internal use and may be unexported in a future release.
 #' Uses expected points differential as the primary predictor
 #'
 #' @param train_data Training data
@@ -125,6 +130,7 @@ predict_wp_expected_points <- function(train_data, pred_data) {
 
 #' GAM Baseline Model
 #'
+#' @description This function is intended for internal use and may be unexported in a future release.
 #' Generalized Additive Model baseline with smooth terms
 #'
 #' @param data Data to make predictions on (if only one parameter provided)
@@ -161,21 +167,23 @@ predict_wp_gam_baseline <- function(data, pred_data = NULL) {
   
   # Prepare time features if needed
   if (!"time_remaining_pct" %in% names(train_data)) {
-    train_data <- train_data %>%
+    train_data <- train_data |>
       mutate(
-        time_remaining = (4 - period) * 2000 + (2000 - period_seconds),
-        time_remaining_pct = time_remaining / 8000
+        time_remaining = (AFL_MAX_PERIODS - period) * AFL_QUARTER_DURATION +
+                         (AFL_QUARTER_DURATION - period_seconds),
+        time_remaining_pct = time_remaining / AFL_TOTAL_GAME_SECONDS
       )
   }
-  
+
   if (!"time_remaining_pct" %in% names(pred_data)) {
-    pred_data <- pred_data %>%
+    pred_data <- pred_data |>
       mutate(
-        time_remaining = (4 - period) * 2000 + (2000 - period_seconds),
-        time_remaining_pct = time_remaining / 8000
+        time_remaining = (AFL_MAX_PERIODS - period) * AFL_QUARTER_DURATION +
+                         (AFL_QUARTER_DURATION - period_seconds),
+        time_remaining_pct = time_remaining / AFL_TOTAL_GAME_SECONDS
       )
   }
-  
+
   # Fit GAM with smooth terms
   model <- mgcv::gam(
     label_wp ~ s(points_diff, k = 10) + 
@@ -290,8 +298,8 @@ compare_baseline_models <- function(train_data, test_data, main_model_preds, inc
   results$log_loss_improvement <- (naive_log_loss - results$log_loss) / naive_log_loss * 100
 
   # Rank models
-  results <- results %>%
-    dplyr::arrange(log_loss) %>%
+  results <- results |>
+    dplyr::arrange(log_loss) |>
     dplyr::mutate(rank = dplyr::row_number())
 
   return(results)
@@ -329,8 +337,8 @@ assess_model_calibration <- function(actual, predicted, n_bins = 10) {
     actual = actual,
     predicted = predicted,
     bin = pred_bins
-  ) %>%
-    group_by(bin) %>%
+  ) |>
+    group_by(bin) |>
     summarise(
       n = n(),
       mean_predicted = mean(predicted),
@@ -338,7 +346,7 @@ assess_model_calibration <- function(actual, predicted, n_bins = 10) {
       min_pred = min(predicted),
       max_pred = max(predicted),
       .groups = "drop"
-    ) %>%
+    ) |>
     filter(n >= 10)  # Only use bins with sufficient data
   
   # Calibration slope and intercept
@@ -437,7 +445,7 @@ prepare_calibration_plot <- function(calibration_results) {
     cli::cli_abort("Calibration results must contain calibration_data")
   }
   
-  plot_data <- calibration_results$calibration_data %>%
+  plot_data <- calibration_results$calibration_data |>
     mutate(
       # Add perfect calibration line
       perfect_line = mean_predicted,
@@ -456,6 +464,7 @@ prepare_calibration_plot <- function(calibration_results) {
 
 #' Create Model Comparison Report
 #'
+#' @description This function is intended for internal use and may be unexported in a future release.
 #' Generates a comprehensive report comparing models including baselines
 #'
 #' @param comparison_results Results from compare_baseline_models
@@ -505,11 +514,11 @@ create_model_comparison_report <- function(comparison_results, calibration_resul
   # Calibration assessment
   if (!is.null(calibration_results)) {
     report <- paste0(report, sprintf(
-      "\nCALIBRATION ASSESSMENT:\n",
-      "Calibration Quality: %s\n",
-      "Calibration Slope: %.4f (ideal: 1.0)\n",
-      "Calibration Intercept: %.4f (ideal: 0.0)\n",
-      "Hosmer-Lemeshow p-value: %.4f\n",
+      paste0("\nCALIBRATION ASSESSMENT:\n",
+             "Calibration Quality: %s\n",
+             "Calibration Slope: %.4f (ideal: 1.0)\n",
+             "Calibration Intercept: %.4f (ideal: 0.0)\n",
+             "Hosmer-Lemeshow p-value: %.4f\n"),
       calibration_results$calibration_quality,
       calibration_results$calibration_slope %||% NA,
       calibration_results$calibration_intercept %||% NA,
@@ -529,8 +538,9 @@ create_model_comparison_report <- function(comparison_results, calibration_resul
 #' @keywords internal
 predict_wp_time_only <- function(data) {
   # Calculate time remaining
-  time_remaining <- (4 - data$period) * 2000 + (2000 - data$period_seconds)
-  time_remaining_pct <- pmax(0, pmin(1, time_remaining / 8000))
+  time_remaining <- (AFL_MAX_PERIODS - data$period) * AFL_QUARTER_DURATION +
+                    (AFL_QUARTER_DURATION - data$period_seconds)
+  time_remaining_pct <- pmax(0, pmin(1, time_remaining / AFL_TOTAL_GAME_SECONDS))
   
   # Simple logistic model based on time remaining
   # More time remaining = closer to 50% (more uncertain)
@@ -543,9 +553,10 @@ predict_wp_time_only <- function(data) {
 
 #' Ensemble Baseline Win Probability Prediction
 #'
+#' @description This function is intended for internal use and may be unexported in a future release.
 #' Combines multiple baseline models using simple averaging
 #'
-#' @param data Input data 
+#' @param data Input data
 #' @return Vector of ensemble win probability predictions
 #' @export
 predict_wp_ensemble_baseline <- function(data) {
@@ -610,7 +621,7 @@ evaluate_baseline_models <- function(actual, data) {
   results_list[["ensemble"]] <- make_result_row("Ensemble", ensemble_preds)
 
   # Combine and sort by AUC descending
-  dplyr::bind_rows(results_list) %>%
+  dplyr::bind_rows(results_list) |>
     dplyr::arrange(dplyr::desc(auc))
 }
 
@@ -638,7 +649,8 @@ calculate_brier_score <- function(actual, predicted) {
 
 #' Create Calibration Plot Data
 #'
-#' Creates data structure for plotting model calibration
+#' @description This function is intended for internal use and may be unexported in a future release.
+#' Creates data structure for plotting model calibration.
 #'
 #' A simplified wrapper around assess_model_calibration for creating calibration
 #' plot data. For more comprehensive calibration analysis, use assess_model_calibration

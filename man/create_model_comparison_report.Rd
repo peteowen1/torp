@@ -15,5 +15,6 @@ create_model_comparison_report(comparison_results, calibration_results = NULL)
 Character string with formatted report
 }
 \description{
+This function is intended for internal use and may be unexported in a future release.
 Generates a comprehensive report comparing models including baselines
 }

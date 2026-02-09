@@ -16,6 +16,7 @@ Files older than this will be re-downloaded.}
 Invisible list of current settings
 }
 \description{
+This function is intended for internal use and may be unexported in a future release.
 Configure disk cache behavior for the current session.
 }
 \examples{

@@ -13,5 +13,6 @@ predict_wp_ensemble_baseline(data)
 Vector of ensemble win probability predictions
 }
 \description{
+This function is intended for internal use and may be unexported in a future release.
 Combines multiple baseline models using simple averaging
 }

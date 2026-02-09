@@ -13,6 +13,7 @@ norm_name(x)
 A character vector with normalized names.
 }
 \description{
+This function is intended for internal use and may be unexported in a future release.
 Converts input character strings into a standardized format by:
 \itemize{
 \item Converting accented characters to ASCII (e.g., "José" → "Jose")
@@ -20,8 +21,7 @@ Converts input character strings into a standardized format by:
 \item Removing non-alphabetic characters (keeping spaces)
 \item Collapsing multiple spaces into a single space
 }
-}
-\details{
+
 Useful for preparing player names (or similar text fields) before
 joining tables where names may not match exactly due to case,
 punctuation, or diacritics.

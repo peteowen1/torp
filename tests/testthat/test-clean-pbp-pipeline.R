@@ -446,11 +446,9 @@ test_that("clean_shots_data processes shot data", {
     error = function(e) NULL
   )
 
-  # If it works, check for geometry columns
-  if (!is.null(result)) {
-    expect_true(is.data.frame(result))
-    expect_true("abs_y" %in% names(result) || "distance" %in% names(result))
-  }
+  skip_if(is.null(result), "clean_shots_data failed (model unavailable)")
+  expect_true(is.data.frame(result))
+  expect_true("abs_y" %in% names(result) || "distance" %in% names(result))
 })
 
 # -----------------------------------------------------------------------------

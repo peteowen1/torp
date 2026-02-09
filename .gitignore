@@ -11,6 +11,18 @@ inst/doc
 # Archive data (old data files)
 inst/extdata/archive/
 
+# Orphaned Shiny artifacts
+inst/shiny/
+
+# Deployment metadata
+data-raw/rsconnect/
+
+# Generated model outputs
+data-raw/outputs/
+
+# Obsolete scripts
+data-raw/archive/
+
 # Temporary files
 *.tmp
 *.log
