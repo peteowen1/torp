@@ -302,7 +302,7 @@ fct_na_to_level <- function(x, level = "(Missing)") {
 }
 
 # Add Globals Variables
-utils::globalVariables(c(".data"))
+utils::globalVariables(c(".data", ".SD", "disp", "season.x", "tm"))
 
 
 

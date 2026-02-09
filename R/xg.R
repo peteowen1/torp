@@ -9,7 +9,16 @@
 #'
 #' @importFrom dplyr group_by filter summarise if_else
 calculate_match_xgs <- function(season = get_afl_season(), round = get_afl_week(), quarter = 1:4) {
-  df <- load_pbp(seasons = season, rounds = round)
+  df <- tryCatch(
+    load_pbp(seasons = season, rounds = round),
+    error = function(e) {
+      cli::cli_abort("Could not load play-by-play data for season {season}, round {round}: {e$message}")
+    }
+  )
+
+  if (nrow(df) == 0) {
+    cli::cli_abort("No play-by-play data available for season {season}, round {round}.")
+  }
 
   shots_df <- df |>
     dplyr::group_by(.data$match_id) |>
