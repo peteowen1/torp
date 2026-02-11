@@ -18,15 +18,19 @@ knitr::opts_chunk$set(
 <!-- badges: start -->
 [![R-CMD-check](https://github.com/peteowen1/torp/actions/workflows/test-package.yml/badge.svg)](https://github.com/peteowen1/torp/actions/workflows/test-package.yml)
 [![Codecov test coverage](https://codecov.io/gh/peteowen1/torp/branch/main/graph/badge.svg)](https://app.codecov.io/gh/peteowen1/torp?branch=main)
+[![Lifecycle: experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](https://lifecycle.r-lib.org/articles/stages.html#experimental)
 <!-- badges: end -->
 
-**torp** is an R package for AFL analytics. It provides a player rating system (TORP), expected points and win probability models, season simulations, and easy access to processed AFL data.
+**torp** is an R package for AFL analytics. It provides player ratings (TORP), expected points and win probability models, season simulations, and easy access to processed AFL data.
 
 ## Installation
 
 ```r
 # install.packages("devtools")
 devtools::install_github("peteowen1/torp")
+
+# For the latest pre-trained models
+devtools::install_github("peteowen1/torpmodels")
 ```
 
 ## Quick Start
@@ -92,11 +96,11 @@ sim_result <- simulate_season(sim_teams, sim_games)
 
 ## Package Ecosystem
 
-```
-torp        Core analytics, data loading, ratings, models
-torpdata    Processed AFL data via GitHub releases (parquet)
-torpmodels  Pre-trained models via GitHub releases (RDS)
-```
+| Package | Role | Links |
+|---------|------|-------|
+| **torp** | Core analytics, data loading, ratings, models | [GitHub](https://github.com/peteowen1/torp) |
+| **[torpdata](https://github.com/peteowen1/torpdata)** | Processed AFL data via GitHub releases (parquet) | [GitHub](https://github.com/peteowen1/torpdata) |
+| **[torpmodels](https://github.com/peteowen1/torpmodels)** | Pre-trained models via GitHub releases (RDS) | [GitHub](https://github.com/peteowen1/torpmodels) |
 
 Data flows from the AFL API (via [fitzRoy](https://jimmyday12.github.io/fitzRoy/)) through torp's cleaning pipeline into torpdata, with models stored in torpmodels.
 

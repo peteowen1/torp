@@ -4,6 +4,12 @@ template:
   bootstrap: 5
   bootswatch: cosmo
 
+home:
+  title: torp - AFL Analytics in R
+  description: >
+    Player ratings, expected points, win probability models, season simulations,
+    and processed AFL data access.
+
 navbar:
   structure:
     left: [intro, reference, articles]
@@ -27,27 +33,36 @@ articles:
 
 reference:
   - title: Data Loading
-    desc: Load AFL data from torpdata GitHub releases
+    desc: Load processed AFL data from torpdata GitHub releases
     contents:
-      - load_pbp
-      - load_chains
-      - load_player_stats
-      - load_fixtures
-      - load_teams
-      - load_results
-      - load_player_details
-      - load_player_game_data
-      - load_xg
-      - load_predictions
-      - load_torp_ratings
+      - starts_with("load_")
+      - fixtures
+
+  - title: Prediction Models
+    desc: Add expected points, win probability, and shot predictions to play-by-play data
+    contents:
+      - add_epv_vars
+      - add_wp_vars
+      - add_shot_vars
+      - predict_shot_probabilities
+
+  - title: Data Cleaning
+    desc: Clean and prepare AFL data for analysis
+    contents:
+      - clean_pbp
+      - starts_with("clean_model")
+      - clean_shots_data
+      - norm_name
 
   - title: Player Ratings
     desc: Calculate and view TORP player ratings
     contents:
       - calculate_torp_ratings
+      - torp_ratings
       - player_game_ratings
       - player_season_ratings
       - player_profile
+      - print.torp_player_profile
       - create_player_game_data
       - default_credit_params
 
@@ -57,34 +72,49 @@ reference:
       - starts_with("sim_")
       - starts_with("simulate_")
 
+  - title: Chain Analysis
+    desc: Access and analyse possession chains
+    contents:
+      - matches("chain")
+
+  - title: Match Analysis
+    desc: Match-level expected goals and predictions
+    contents:
+      - match_xgs
+      - calculate_match_xgs
+      - calculate_player_stats
+      - get_round_games
+      - get_season_games
+      - get_season_data
+      - filter_game_data
+      - prepare_final_dataframe
+
   - title: Model Validation
-    desc: Evaluate model performance and calibration
+    desc: Evaluate model performance, calibration, and drift
     contents:
-      - calculate_brier_score
-      - calculate_log_loss
-      - calculate_auc_base
-      - assess_model_calibration
-      - prepare_calibration_plot
-      - compare_baseline_models
-      - evaluate_baseline_models
-
-  - title: Baseline Models
-    desc: Simple baseline win probability models
-    contents:
-      - predict_wp_naive
-      - predict_wp_time_only
-      - starts_with("predict_wp_")
-
-  - title: Data Validation
-    desc: Data quality checks and validation
-    contents:
-      - validate_seasons
-      - validate_rounds
-      - analyze_missing_data
-      - analyze_duplicates
-      - detect_outliers
-      - calculate_quality_score
+      - starts_with("evaluate_")
+      - starts_with("compare_")
+      - starts_with("create_calibration")
+      - starts_with("create_validation")
+      - starts_with("create_model")
+      - starts_with("check_wp")
+      - starts_with("get_wp_")
+      - starts_with("log_model")
+      - starts_with("monitor_")
       - starts_with("validate_")
+      - starts_with("analyze_")
+      - starts_with("detect_")
+      - starts_with("calculate_quality")
+
+  - title: Model Training
+    desc: Utilities for model development and cross-validation
+    contents:
+      - starts_with("select_")
+      - starts_with("create_grouped")
+      - starts_with("create_temporal")
+      - starts_with("create_shot_model")
+      - starts_with("prepare_shot")
+      - starts_with("predict_wp_")
 
   - title: Caching
     desc: In-memory and disk caching utilities
@@ -92,6 +122,8 @@ reference:
       - starts_with("clear_")
       - starts_with("get_cache")
       - starts_with("get_disk_cache")
+      - starts_with("get_model_cache")
+      - starts_with("set_disk_cache")
       - starts_with("is_cache")
       - starts_with("is_disk")
       - starts_with("store_in")
@@ -111,13 +143,19 @@ reference:
       - starts_with("CREDIT_")
 
   - title: Utilities
-    desc: Helper functions
+    desc: Helper and convenience functions
     contents:
+      - access_api
       - get_afl_season
       - get_afl_week
-      - get_mode
-      - get_torp_data_repo
+      - get_players
+      - harmonic_mean
+      - parquet_from_url
+      - save_to_release
       - set_torp_data_repo
-      - check_internet_connection
-      - generate_urls
-      - is_installed
+      - setup_torp_logging
+
+footer:
+  structure:
+    left: developed_by
+    right: built_with

@@ -1,6 +1,6 @@
 Package: torp
 Title: AFL Analytics and Player Rating System
-Version: 0.0.0.9001
+Version: 0.0.0.9002
 Authors@R: 
     person("Pete", "Owen", , "pete.owen@example.com", role = c("aut", "cre"))
 Description: Provides tools for Australian Football League (AFL) analytics including 

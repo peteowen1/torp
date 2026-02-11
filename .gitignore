@@ -34,6 +34,9 @@ data-raw/debug/
 .vscode/
 .idea/
 
+# pkgdown local build
+docs/
+
 # Claude Code files
 .claude/
 CLAUDE.md
