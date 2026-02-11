@@ -12,7 +12,8 @@ calculate_player_stats(
   loading,
   prior_games_recv,
   prior_games_disp,
-  spoil_multiplier = RATING_SPOIL_MULTIPLIER
+  prior_games_spoil = RATING_PRIOR_GAMES_SPOIL,
+  prior_games_hitout = RATING_PRIOR_GAMES_HITOUT
 )
 }
 \arguments{
@@ -30,7 +31,9 @@ calculate_player_stats(
 
 \item{prior_games_disp}{Prior games for disposal}
 
-\item{spoil_multiplier}{Multiplier for spoil component. Default is \code{RATING_SPOIL_MULTIPLIER}.}
+\item{prior_games_spoil}{Prior games for spoil shrinkage. Default is \code{RATING_PRIOR_GAMES_SPOIL}.}
+
+\item{prior_games_hitout}{Prior games for hitout shrinkage. Default is \code{RATING_PRIOR_GAMES_HITOUT}.}
 }
 \value{
 A data frame with calculated player statistics

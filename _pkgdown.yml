@@ -1,0 +1,123 @@
+url: https://peteowen1.github.io/torp/
+
+template:
+  bootstrap: 5
+  bootswatch: cosmo
+
+navbar:
+  structure:
+    left: [intro, reference, articles]
+    right: [search, github]
+  components:
+    github:
+      icon: fa-github
+      href: https://github.com/peteowen1/torp
+
+articles:
+  - title: Get Started
+    navbar: ~
+    contents:
+      - getting-started
+  - title: Guides
+    contents:
+      - data-architecture
+      - model-usage
+      - player-ratings
+      - season-simulation
+
+reference:
+  - title: Data Loading
+    desc: Load AFL data from torpdata GitHub releases
+    contents:
+      - load_pbp
+      - load_chains
+      - load_player_stats
+      - load_fixtures
+      - load_teams
+      - load_results
+      - load_player_details
+      - load_player_game_data
+      - load_xg
+      - load_predictions
+      - load_torp_ratings
+
+  - title: Player Ratings
+    desc: Calculate and view TORP player ratings
+    contents:
+      - calculate_torp_ratings
+      - player_game_ratings
+      - player_season_ratings
+      - player_profile
+      - create_player_game_data
+      - default_credit_params
+
+  - title: Season Simulation
+    desc: Simulate AFL seasons and predict match outcomes
+    contents:
+      - starts_with("sim_")
+      - starts_with("simulate_")
+
+  - title: Model Validation
+    desc: Evaluate model performance and calibration
+    contents:
+      - calculate_brier_score
+      - calculate_log_loss
+      - calculate_auc_base
+      - assess_model_calibration
+      - prepare_calibration_plot
+      - compare_baseline_models
+      - evaluate_baseline_models
+
+  - title: Baseline Models
+    desc: Simple baseline win probability models
+    contents:
+      - predict_wp_naive
+      - predict_wp_time_only
+      - starts_with("predict_wp_")
+
+  - title: Data Validation
+    desc: Data quality checks and validation
+    contents:
+      - validate_seasons
+      - validate_rounds
+      - analyze_missing_data
+      - analyze_duplicates
+      - detect_outliers
+      - calculate_quality_score
+      - starts_with("validate_")
+
+  - title: Caching
+    desc: In-memory and disk caching utilities
+    contents:
+      - starts_with("clear_")
+      - starts_with("get_cache")
+      - starts_with("get_disk_cache")
+      - starts_with("is_cache")
+      - starts_with("is_disk")
+      - starts_with("store_in")
+      - starts_with("get_from")
+      - starts_with("read_disk")
+      - starts_with("write_disk")
+
+  - title: Constants
+    desc: AFL and model constants
+    contents:
+      - starts_with("AFL_")
+      - starts_with("RATING_")
+      - starts_with("SIM_")
+      - starts_with("WP_")
+      - starts_with("FIELD_")
+      - starts_with("VALIDATION_")
+      - starts_with("CREDIT_")
+
+  - title: Utilities
+    desc: Helper functions
+    contents:
+      - get_afl_season
+      - get_afl_week
+      - get_mode
+      - get_torp_data_repo
+      - set_torp_data_repo
+      - check_internet_connection
+      - generate_urls
+      - is_installed

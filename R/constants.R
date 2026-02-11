@@ -31,7 +31,7 @@ AFL_TIME_SCALER_MAX <- 4
 
 #' Default decay factor (in days) for weighting historical games
 #' @keywords internal
-RATING_DECAY_DEFAULT_DAYS <- 365
+RATING_DECAY_DEFAULT_DAYS <- 486
 
 #' Loading factor for TORP calculations
 #' @keywords internal
@@ -39,15 +39,19 @@ RATING_LOADING_DEFAULT <- 1.0
 
 #' Prior games constant for receiving ratings
 #' @keywords internal
-RATING_PRIOR_GAMES_RECV <- 6
+RATING_PRIOR_GAMES_RECV <- 5.8689
 
 #' Prior games constant for disposal ratings
 #' @keywords internal
-RATING_PRIOR_GAMES_DISP <- 3
+RATING_PRIOR_GAMES_DISP <- 7.1371
 
-#' Spoil rating multiplier
+#' Prior games constant for spoil ratings
 #' @keywords internal
-RATING_SPOIL_MULTIPLIER <- 1.6132
+RATING_PRIOR_GAMES_SPOIL <- 3
+
+#' Prior games constant for hitout ratings
+#' @keywords internal
+RATING_PRIOR_GAMES_HITOUT <- 3
 
 
 # Credit Assignment Constants
@@ -55,67 +59,67 @@ RATING_SPOIL_MULTIPLIER <- 1.6132
 
 #' Disposal EPV offset when defending (pos_team == -1)
 #' @keywords internal
-CREDIT_DISP_NEG_OFFSET <- -0.2
+CREDIT_DISP_NEG_OFFSET <- -0.3919
 
 #' Disposal EPV offset when possessing (pos_team == 1)
 #' @keywords internal
-CREDIT_DISP_POS_OFFSET <- 0.1412
+CREDIT_DISP_POS_OFFSET <- 0.1255
 
 #' Disposal scaling factor
 #' @keywords internal
-CREDIT_DISP_SCALE <- 0.4855
+CREDIT_DISP_SCALE <- 0.7372
 
 #' Bounce penalty per bounce
 #' @keywords internal
-CREDIT_BOUNCE_PENALTY <- 0.9871
+CREDIT_BOUNCE_PENALTY <- 1.0000
 
 #' Reception multiplier when defending (pos_team == -1)
 #' @keywords internal
-CREDIT_RECV_NEG_MULT <- 0.9354
+CREDIT_RECV_NEG_MULT <- 1.0941
 
 #' Reception offset when defending
 #' @keywords internal
-CREDIT_RECV_NEG_OFFSET <- 0.2985
+CREDIT_RECV_NEG_OFFSET <- 0.5000
 
 #' Reception multiplier when possessing (pos_team == 1)
 #' @keywords internal
-CREDIT_RECV_POS_MULT <- 1.3647
+CREDIT_RECV_POS_MULT <- 1.1527
 
 #' Reception offset when possessing
 #' @keywords internal
-CREDIT_RECV_POS_OFFSET <- 0.1761
+CREDIT_RECV_POS_OFFSET <- 0.1813
 
 #' Reception scaling factor
 #' @keywords internal
-CREDIT_RECV_SCALE <- 0.3821
+CREDIT_RECV_SCALE <- 0.4324
 
 #' Spoil weight per spoil
 #' @keywords internal
-CREDIT_SPOIL_WT <- 0.6771
+CREDIT_SPOIL_WT <- 1.0268
 
 #' Tackle weight per tackle
 #' @keywords internal
-CREDIT_TACKLE_WT <- 0.7059
+CREDIT_TACKLE_WT <- 1.0809
 
 #' Pressure act weight
 #' @keywords internal
-CREDIT_PRESSURE_WT <- 0.1971
+CREDIT_PRESSURE_WT <- 0.2972
 
 #' Defensive half pressure act weight (subtracted)
 #' @keywords internal
-CREDIT_DEF_PRESSURE_WT <- 0.6637
+CREDIT_DEF_PRESSURE_WT <- 0.9998
 
 #' Hitout weight per hitout
 #' @keywords internal
-CREDIT_HITOUT_WT <- 0.1424
+CREDIT_HITOUT_WT <- 0.3412
 
 #' Hitout to advantage weight
 #' @keywords internal
-CREDIT_HITOUT_ADV_WT <- 0.848
+CREDIT_HITOUT_ADV_WT <- 0.3187
 
 #' Ruck contest weight (subtracted)
 #' @keywords internal
-CREDIT_RUCK_CONTEST_WT <- 0.0
+CREDIT_RUCK_CONTEST_WT <- 0.03
 
 #' Position adjustment quantile
 #' @keywords internal

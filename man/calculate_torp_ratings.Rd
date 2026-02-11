@@ -14,7 +14,8 @@ calculate_torp_ratings(
   prior_games_disp = RATING_PRIOR_GAMES_DISP,
   plyr_tm_df = NULL,
   player_game_data = NULL,
-  spoil_multiplier = RATING_SPOIL_MULTIPLIER
+  prior_games_spoil = RATING_PRIOR_GAMES_SPOIL,
+  prior_games_hitout = RATING_PRIOR_GAMES_HITOUT
 )
 
 torp_ratings(
@@ -26,7 +27,8 @@ torp_ratings(
   prior_games_disp = RATING_PRIOR_GAMES_DISP,
   plyr_tm_df = NULL,
   player_game_data = NULL,
-  spoil_multiplier = RATING_SPOIL_MULTIPLIER
+  prior_games_spoil = RATING_PRIOR_GAMES_SPOIL,
+  prior_games_hitout = RATING_PRIOR_GAMES_HITOUT
 )
 }
 \arguments{
@@ -46,7 +48,9 @@ torp_ratings(
 
 \item{player_game_data}{Optional pre-loaded player game data. If NULL, will load automatically.}
 
-\item{spoil_multiplier}{Multiplier for spoil component. Default is \code{RATING_SPOIL_MULTIPLIER}.}
+\item{prior_games_spoil}{Prior games for spoil shrinkage. Default is \code{RATING_PRIOR_GAMES_SPOIL}.}
+
+\item{prior_games_hitout}{Prior games for hitout shrinkage. Default is \code{RATING_PRIOR_GAMES_HITOUT}.}
 }
 \value{
 A data frame containing player TORP ratings.
