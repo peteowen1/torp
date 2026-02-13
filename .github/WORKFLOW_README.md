@@ -1,113 +1,63 @@
 # GitHub Actions Workflows
 
-This repository uses GitHub Actions for automated data collection, testing, and releases.
+## Active Workflows
 
-## 🤖 Active Workflows
+### 1. Daily Data Release (`daily-data-release.yml`)
 
-### 1. Weekly Data Release (`weekly-data-release.yml`)
-**Schedule:** Every Wednesday at 8:00 PM UTC
-**Purpose:** Automatically runs the `data-raw/release-data.R` script to update all AFL data
+**Schedule:** Daily at 4:00 PM UTC (2:00 AM AEST)
+
+Automatically runs the data release pipeline to update all AFL data on [torpdata](https://github.com/peteowen1/torpdata).
 
 **What it does:**
-- Updates chains data for current round
-- Refreshes play-by-play data with latest AFL statistics
-- Updates expected goals (xG) data
-- Refreshes player statistics, fixtures, team lineups, results, and player details
-- Commits changes and creates GitHub releases via piggyback
 
-**Manual trigger:** Available via "Actions" tab → "Weekly Data Release" → "Run workflow"
+- Fetches latest AFL data via fitzRoy
+- Processes play-by-play, chains, player stats, fixtures, results, teams, player details, and xG
+- Uploads to torpdata GitHub releases as parquet files via piggyback
+
+**Manual trigger:** Actions tab > "Daily Data Release" > "Run workflow"
+
+- `force_release` -- re-release all data even if unchanged
+- `rebuild_aggregates` -- rebuild aggregate data files
 
 ### 2. R Package Tests (`test-package.yml`)
-**Trigger:** Push to main/develop, Pull Requests
-**Purpose:** Automated testing across multiple R versions and operating systems
 
-**Testing matrix:**
+**Trigger:** Push to main/develop, Pull Requests
+
+Runs R CMD check across multiple platforms:
+
 - Ubuntu (R release, R devel)
-- Windows (R release)  
+- Windows (R release)
 - macOS (R release)
 - Test coverage reporting via codecov
 
-## 📅 Future Workflows (Templates)
+### 3. pkgdown Site (`pkgdown.yml`)
 
-### Pre-Game Data Update (`pre-game-data-update.yml.template`)
-**Status:** Template ready for activation
-**Purpose:** Update data 2 hours before each AFL game
+**Trigger:** Push to main, manual
 
-**To activate:**
-1. Rename file to remove `.template` extension
-2. Uncomment the `schedule` section
-3. Customize game-specific data collection logic
+Builds and deploys the pkgdown documentation site to GitHub Pages at <https://peteowen1.github.io/torp/>.
 
-**Proposed schedule:**
-- Thursday: 7:20 PM AEST games (09:20 UTC)
-- Friday: 7:50 PM AEST games (09:50 UTC)
-- Saturday: 1:30 PM AEST games (03:30 UTC)
-- Sunday: 3:20 PM AEST games (05:20 UTC)
-
-## 🔧 Configuration
+## Configuration
 
 ### Required Secrets
-- `GITHUB_TOKEN`: Automatically provided by GitHub Actions
-- Additional secrets may be needed for external API access
 
-### Environment Variables
-- `R_KEEP_PKG_SOURCE=yes`: Maintains package source for debugging
-- `GITHUB_PAT`: Uses GitHub token for piggyback releases
+- `GITHUB_TOKEN` -- Automatically provided by GitHub Actions
 
-### Dependencies
-All workflows automatically install required R packages:
-- devtools, piggyback, fitzRoy, tictoc, mgcv
-- Testing packages: testthat, covr, rcmdcheck
+### Key Environment Variables
 
-## 📊 Monitoring
+- `R_KEEP_PKG_SOURCE=yes` -- Maintains package source for debugging
+- `GITHUB_PAT` -- Uses GitHub token for piggyback releases
 
-### Success Indicators
-- ✅ Green checkmarks in Actions tab
-- 📈 Updated data releases in torpdata repository
-- 📋 Workflow summary reports
+## Timezone Notes
 
-### Failure Handling
-- 🚨 Automatic issue creation on workflow failures
-- 📧 Email notifications (if configured)
-- 🔄 Manual re-run capability
+All cron schedules are in UTC. AFL operates in AEST/AEDT.
 
-## 🕒 Timezone Notes
+| UTC | AEST | AEDT |
+|-----|------|------|
+| 4:00 PM | 2:00 AM (+1 day) | 3:00 AM (+1 day) |
 
-**Current Configuration:** UTC times
-**AFL Times:** AEST/AEDT (Australian Eastern Time)
+## Troubleshooting
 
-**Time Conversion:**
-- Wednesday 8:00 PM UTC = Thursday 7:00 AM AEDT (summer)
-- Wednesday 8:00 PM UTC = Thursday 6:00 AM AEST (winter)
-
-Adjust cron schedules in workflows if different timing is needed.
-
-## 🚀 Getting Started
-
-1. **Enable Actions:** GitHub Actions should be automatically enabled
-2. **Monitor First Run:** Check the first Wednesday after setup
-3. **Manual Test:** Use "Run workflow" button to test manually
-4. **Configure Notifications:** Set up email alerts in repository settings
-
-## 📞 Troubleshooting
-
-**Common Issues:**
-- **R dependency failures:** Check DESCRIPTION file matches workflow dependencies
-- **Authentication errors:** Verify GITHUB_TOKEN permissions
-- **Data access issues:** Check fitzRoy API status and rate limits
-- **Storage limits:** Monitor repository size and piggyback releases
-
-**Debug Steps:**
-1. Check workflow logs in Actions tab
-2. Verify R package installation in setup step
-3. Check data-raw/release-data.R script execution
-4. Monitor piggyback release creation
-
-## 📈 Future Enhancements
-
-**Planned Improvements:**
-- [ ] ARM compatibility workflows
-- [ ] Parallel data processing for faster execution
-- [ ] Advanced failure recovery and retry logic
-- [ ] Integration with external monitoring services
-- [ ] Automated performance benchmarking
+- **R dependency failures** -- Check DESCRIPTION matches workflow dependencies
+- **Authentication errors** -- Verify GITHUB_TOKEN permissions
+- **Data access issues** -- Check fitzRoy API status and rate limits
+- **Storage limits** -- Monitor piggyback release sizes

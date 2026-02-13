@@ -40,7 +40,7 @@ test_that("AFL_TIME_SCALER_MAX has expected value", {
 # -----------------------------------------------------------------------------
 
 test_that("RATING_DECAY_DEFAULT_DAYS has expected value", {
-  expect_equal(torp:::RATING_DECAY_DEFAULT_DAYS, 365)
+  expect_equal(torp:::RATING_DECAY_DEFAULT_DAYS, 486)
   expect_true(torp:::RATING_DECAY_DEFAULT_DAYS > 0)
 })
 
@@ -51,21 +51,27 @@ test_that("RATING_LOADING_DEFAULT has expected value", {
 })
 
 test_that("RATING_PRIOR_GAMES_RECV has expected value", {
-  expect_equal(torp:::RATING_PRIOR_GAMES_RECV, 6)
+  expect_equal(torp:::RATING_PRIOR_GAMES_RECV, 5.8689)
   expect_true(torp:::RATING_PRIOR_GAMES_RECV > 0)
   expect_true(torp:::RATING_PRIOR_GAMES_RECV < 50)  # Reasonable bound
 })
 
 test_that("RATING_PRIOR_GAMES_DISP has expected value", {
-  expect_equal(torp:::RATING_PRIOR_GAMES_DISP, 3)
+  expect_equal(torp:::RATING_PRIOR_GAMES_DISP, 7.1371)
   expect_true(torp:::RATING_PRIOR_GAMES_DISP > 0)
   expect_true(torp:::RATING_PRIOR_GAMES_DISP < 50)  # Reasonable bound
 })
 
-test_that("RATING_SPOIL_MULTIPLIER has expected value", {
-  expect_equal(torp:::RATING_SPOIL_MULTIPLIER, 1.6132)
-  expect_true(torp:::RATING_SPOIL_MULTIPLIER > 0)
-  expect_true(torp:::RATING_SPOIL_MULTIPLIER < 5)  # Reasonable multiplier
+test_that("RATING_PRIOR_GAMES_SPOIL has expected value", {
+  expect_equal(torp:::RATING_PRIOR_GAMES_SPOIL, 3)
+  expect_true(torp:::RATING_PRIOR_GAMES_SPOIL > 0)
+  expect_true(torp:::RATING_PRIOR_GAMES_SPOIL < 50)  # Reasonable bound
+})
+
+test_that("RATING_PRIOR_GAMES_HITOUT has expected value", {
+  expect_equal(torp:::RATING_PRIOR_GAMES_HITOUT, 3)
+  expect_true(torp:::RATING_PRIOR_GAMES_HITOUT > 0)
+  expect_true(torp:::RATING_PRIOR_GAMES_HITOUT < 50)  # Reasonable bound
 })
 
 # -----------------------------------------------------------------------------
@@ -133,11 +139,15 @@ test_that("game duration constants are consistent", {
 })
 
 test_that("rating prior games constants are reasonable relative to each other", {
-  # Both priors should be positive and bounded
+  # All priors should be positive and bounded
   expect_true(torp:::RATING_PRIOR_GAMES_DISP > 0)
   expect_true(torp:::RATING_PRIOR_GAMES_RECV > 0)
+  expect_true(torp:::RATING_PRIOR_GAMES_SPOIL > 0)
+  expect_true(torp:::RATING_PRIOR_GAMES_HITOUT > 0)
   expect_true(torp:::RATING_PRIOR_GAMES_DISP < 50)
   expect_true(torp:::RATING_PRIOR_GAMES_RECV < 50)
+  expect_true(torp:::RATING_PRIOR_GAMES_SPOIL < 50)
+  expect_true(torp:::RATING_PRIOR_GAMES_HITOUT < 50)
 })
 
 test_that("simulation constants produce valid probabilities", {

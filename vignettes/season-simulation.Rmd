@@ -17,51 +17,29 @@ knitr::opts_chunk$set(
 
 ## Overview
 
-The `simulate_season()` function simulates remaining AFL matches based on team
-ratings and fixture data. This is useful for generating probabilistic season
-forecasts, finals predictions, and "what if" scenarios.
+The `simulate_season()` function simulates remaining AFL matches based on team ratings and fixture data. Run many simulations to generate probabilistic forecasts for finals qualification, ladder positions, and premiership chances.
 
-## Setup
+## How It Works
 
-```{r setup}
-library(torp)
+For each unplayed match, the simulation:
 
-# Load fixture and results data
-fixtures <- load_fixtures(all = TRUE)
-results <- load_results(seasons = 2024)
-player_stats <- load_player_stats(seasons = 2024)
-```
+1. Calculates an expected margin from the team TORP rating difference
+2. Adds home ground advantage (`SIM_HOME_ADVANTAGE` = 6 points)
+3. Adds random noise (`SIM_NOISE_SD` = 26 points) to reflect game-to-game variance
+4. Records the simulated result
 
-## Preparing Inputs
-
-`simulate_season()` requires two data frames:
-
-1. **sim_teams** — team ratings (one row per team)
-2. **sim_games** — fixture data with results for completed games and `NA` for
-   upcoming games
-
-```{r prep}
-# Calculate team ratings from TORP system
-ratings <- torp_ratings(seasons = 2024)
-
-# Build the sim_teams data frame with team-level ratings
-sim_teams <- ratings$team_ratings
-
-# Build sim_games from fixtures, marking future games with NA result
-sim_games <- fixtures |>
-  dplyr::filter(compSeason.year == 2024)
-```
+Completed matches keep their actual results.
 
 ## Running a Simulation
 
-```{r run}
-# Simulate the season once
+```{r single}
+library(torp)
+
+# simulate_season() requires:
+# - sim_teams: data frame with team ratings (one row per team)
+# - sim_games: fixture data with NA results for unplayed games
 sim_result <- simulate_season(sim_teams, sim_games)
 ```
-
-The function returns a data frame of simulated game results, filling in
-scores for games that had `NA` results while preserving actual results for
-completed games.
 
 ## Multiple Simulations
 
@@ -82,9 +60,9 @@ all_sims_df <- data.table::rbindlist(all_sims)
 ## Analysing Results
 
 ```{r analyse}
-# Count how often each team finishes in each ladder position
 library(dplyr)
 
+# Finals probability by team
 finals_prob <- all_sims_df |>
   group_by(sim_id) |>
   arrange(desc(wins), desc(percentage)) |>
@@ -105,7 +83,13 @@ finals_prob
 
 The simulation uses constants defined in `R/constants.R`:
 
-- **`SIM_NOISE_SD`** (default: 26) — standard deviation of the random noise
-  added to each simulated margin, controlling game-to-game variance
-- **`SIM_HOME_ADVANTAGE`** (default: 6) — points added to the home team's
-  expected margin
+| Constant | Default | Description |
+|----------|---------|-------------|
+| `SIM_NOISE_SD` | 26 | Standard deviation of random margin noise |
+| `SIM_HOME_ADVANTAGE` | 6 | Points added to home team's expected margin |
+| `SIM_WP_SCALING_FACTOR` | 50 | Scaling factor for converting TORP diff to win probability |
+
+## See Also
+
+- `vignette("player-ratings")` -- TORP rating methodology (drives team ratings)
+- `vignette("getting-started")` -- Installation and data loading

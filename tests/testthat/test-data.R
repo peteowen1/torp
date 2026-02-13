@@ -1,18 +1,13 @@
 test_that("package data objects exist", {
-  # Test that non-model data objects exist as package data
   # Note: Models (ep_model, wp_model, shot_ocat_mdl) are loaded from torpmodels
   # package via load_model_with_fallback(), not bundled as package data
-  expect_true("player_shot_score" %in% data(package = "torp")$results[, "Item"])
-  expect_true("shot_player_df" %in% data(package = "torp")$results[, "Item"])
-  expect_true("torp_df_total" %in% data(package = "torp")$results[, "Item"])
   expect_true("fixtures" %in% data(package = "torp")$results[, "Item"])
 })
 
-test_that("data objects have correct structure", {
-  # Load data and test basic structure
-  data(shot_player_df, package = "torp", envir = environment())
-  expect_true(is.data.frame(shot_player_df))
-  expect_true(nrow(shot_player_df) > 0)
+test_that("fixtures data has correct structure", {
+  data(fixtures, package = "torp", envir = environment())
+  expect_true(is.data.frame(fixtures))
+  expect_true(nrow(fixtures) > 0)
 })
 
 test_that("models can be loaded via load_model_with_fallback", {

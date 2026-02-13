@@ -1,0 +1,161 @@
+url: https://peteowen1.github.io/torp/
+
+template:
+  bootstrap: 5
+  bootswatch: cosmo
+
+home:
+  title: torp - AFL Analytics in R
+  description: >
+    Player ratings, expected points, win probability models, season simulations,
+    and processed AFL data access.
+
+navbar:
+  structure:
+    left: [intro, reference, articles]
+    right: [search, github]
+  components:
+    github:
+      icon: fa-github
+      href: https://github.com/peteowen1/torp
+
+articles:
+  - title: Get Started
+    navbar: ~
+    contents:
+      - getting-started
+  - title: Guides
+    contents:
+      - data-architecture
+      - model-usage
+      - player-ratings
+      - season-simulation
+
+reference:
+  - title: Data Loading
+    desc: Load processed AFL data from torpdata GitHub releases
+    contents:
+      - starts_with("load_")
+      - fixtures
+
+  - title: Prediction Models
+    desc: Add expected points, win probability, and shot predictions to play-by-play data
+    contents:
+      - add_epv_vars
+      - add_wp_vars
+      - add_shot_vars
+      - predict_shot_probabilities
+
+  - title: Data Cleaning
+    desc: Clean and prepare AFL data for analysis
+    contents:
+      - clean_pbp
+      - starts_with("clean_model")
+      - clean_shots_data
+      - norm_name
+
+  - title: Player Ratings
+    desc: Calculate and view TORP player ratings
+    contents:
+      - calculate_torp_ratings
+      - torp_ratings
+      - player_game_ratings
+      - player_season_ratings
+      - player_profile
+      - print.torp_player_profile
+      - create_player_game_data
+      - default_credit_params
+
+  - title: Season Simulation
+    desc: Simulate AFL seasons and predict match outcomes
+    contents:
+      - starts_with("sim_")
+      - starts_with("simulate_")
+
+  - title: Chain Analysis
+    desc: Access and analyse possession chains
+    contents:
+      - matches("chain")
+
+  - title: Match Analysis
+    desc: Match-level expected goals and predictions
+    contents:
+      - match_xgs
+      - calculate_match_xgs
+      - calculate_player_stats
+      - get_round_games
+      - get_season_games
+      - get_season_data
+      - filter_game_data
+      - prepare_final_dataframe
+
+  - title: Model Validation
+    desc: Evaluate model performance, calibration, and drift
+    contents:
+      - starts_with("evaluate_")
+      - starts_with("compare_")
+      - starts_with("create_calibration")
+      - starts_with("create_validation")
+      - starts_with("create_model")
+      - starts_with("check_wp")
+      - starts_with("get_wp_")
+      - starts_with("log_model")
+      - starts_with("monitor_")
+      - starts_with("validate_")
+      - starts_with("analyze_")
+      - starts_with("detect_")
+      - starts_with("calculate_quality")
+
+  - title: Model Training
+    desc: Utilities for model development and cross-validation
+    contents:
+      - starts_with("select_")
+      - starts_with("create_grouped")
+      - starts_with("create_temporal")
+      - starts_with("create_shot_model")
+      - starts_with("prepare_shot")
+      - starts_with("predict_wp_")
+
+  - title: Caching
+    desc: In-memory and disk caching utilities
+    contents:
+      - starts_with("clear_")
+      - starts_with("get_cache")
+      - starts_with("get_disk_cache")
+      - starts_with("get_model_cache")
+      - starts_with("set_disk_cache")
+      - starts_with("is_cache")
+      - starts_with("is_disk")
+      - starts_with("store_in")
+      - starts_with("get_from")
+      - starts_with("read_disk")
+      - starts_with("write_disk")
+
+  - title: Constants
+    desc: AFL and model constants
+    contents:
+      - starts_with("AFL_")
+      - starts_with("RATING_")
+      - starts_with("SIM_")
+      - starts_with("WP_")
+      - starts_with("FIELD_")
+      - starts_with("VALIDATION_")
+      - starts_with("CREDIT_")
+
+  - title: Utilities
+    desc: Helper and convenience functions
+    contents:
+      - access_api
+      - get_afl_season
+      - get_afl_week
+      - get_players
+      - harmonic_mean
+      - parquet_from_url
+      - save_to_release
+      - set_torp_data_repo
+      - setup_torp_logging
+
+footer:
+  structure:
+    left: developed_by
+    right: built_with

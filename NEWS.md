@@ -1,6 +1,6 @@
-# torp (development version)
+# torp 0.0.0.9002 (development)
 
-## Code Quality Improvements
+## Code Quality
 
 * Merged `logging_monitoring.R` and `safe_logging.R` into a single `logging.R` file for better organization.
 
@@ -26,7 +26,9 @@
 
 ## Documentation
 
-* Added comprehensive "Getting Started" vignette with installation instructions, data loading examples, and configuration options.
+* Added five vignettes: Getting Started, Player Ratings, Model Usage, Data Architecture, and Season Simulation.
+* Added pkgdown site configuration with comprehensive reference sections.
+* Improved README with lifecycle badge, ecosystem table, and torpmodels install instructions.
 
 ## Internal Changes
 

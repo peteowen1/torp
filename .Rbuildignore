@@ -12,3 +12,6 @@
 ^README\.html$
 ^_ul$
 ^temp_data$
+^_pkgdown\.yml$
+^docs$
+^pkgdown$

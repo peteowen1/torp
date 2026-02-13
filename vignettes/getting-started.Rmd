@@ -1,8 +1,8 @@
 ---
-title: "Getting Started with TORP"
+title: "Getting Started with torp"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Getting Started with TORP}
+  %\VignetteIndexEntry{Getting Started with torp}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -15,16 +15,6 @@ knitr::opts_chunk$set(
 )
 ```
 
-## Introduction
-
-The **torp** package provides tools for Australian Football League (AFL) analytics, including:
-
-- Player rating systems (TORP - Team Offensive Rating Points)
-- Match outcome predictions
-- Expected goals (xG) and expected points (xP) models
-- Win probability calculations
-- Comprehensive data loading functions
-
 ## Installation
 
 Install the development version from GitHub:
@@ -34,111 +24,133 @@ Install the development version from GitHub:
 devtools::install_github("peteowen1/torp")
 ```
 
+For the latest pre-trained models, also install torpmodels:
+
+```{r install-models}
+devtools::install_github("peteowen1/torpmodels")
+```
+
 ## Loading Data
 
-The package provides several functions to load AFL data from the [torpdata repository](https://github.com/peteowen1/torpdata).
+torp loads processed AFL data from [torpdata](https://github.com/peteowen1/torpdata) GitHub releases. All data is stored as parquet files and downloaded on demand.
 
-### Play-by-Play Data
+### Play-by-Play
 
 ```{r pbp}
 library(torp)
 
-# Load play-by-play data for recent seasons
-pbp <- load_pbp(seasons = 2024)
+# Current season
+pbp <- load_pbp(2025)
 
-# Load specific rounds
-pbp_round1 <- load_pbp(seasons = 2024, rounds = 1)
+# Specific rounds
+pbp <- load_pbp(2025, rounds = 1:10)
 
-# Load all available data
-pbp_all <- load_pbp(seasons = TRUE, rounds = TRUE)
+# All available data (2021+)
+pbp_all <- load_pbp(TRUE, rounds = TRUE)
 ```
 
-### Other Data Types
+### Player Statistics
+
+```{r player-stats}
+# Current season
+stats <- load_player_stats(2025)
+
+# All seasons
+stats_all <- load_player_stats(TRUE)
+```
+
+### Other Data
 
 ```{r other-data}
-# Chains (possession sequences)
-chains <- load_chains(seasons = 2024)
-
-# Expected goals data
-xg <- load_xg(seasons = 2024)
-
-# Player statistics
-player_stats <- load_player_stats(seasons = 2024)
+# Possession chains
+chains <- load_chains(2025)
 
 # Match results
-results <- load_results(seasons = 2024)
+results <- load_results(2025)
 
-# Fixture/schedule data
-fixtures <- load_fixtures(seasons = 2024)
+# Fixtures and schedule
+fixtures <- load_fixtures(all = TRUE)
 
 # Player biographical details
-player_details <- load_player_details(seasons = 2024)
-```
+details <- load_player_details(2025)
 
-## Cleaning Play-by-Play Data
-
-The `clean_pbp()` function prepares raw play-by-play data for analysis:
-```{r clean}
-# Load and clean data
-pbp_raw <- load_pbp(seasons = 2024, rounds = 1:5)
-pbp_clean <- clean_pbp(pbp_raw)
-```
-
-This adds useful variables including:
-- Play type classification
-- Phase of play
-- Score differentials
-- Expected points values
-
-## Match Expected Goals
-
-Calculate expected goals (xG) summaries for matches:
-
-```{r xg-match}
-# Get xG summary for a specific round
-match_xg <- calculate_match_xgs(season = 2024, round = 1)
+# Expected goals
+xg <- load_xg(2025)
 ```
 
 ## Player Ratings
 
-The package includes functions for calculating player ratings:
+TORP (Total Overall Rating Points) evaluates players across four components.
 
 ```{r ratings}
-# Load player game data
-player_game_data <- load_player_stats(seasons = 2024)
+# Current TORP ratings (defaults to next round)
+ratings <- calculate_torp_ratings()
 
-# Calculate TORP ratings (requires additional setup)
-# See the player-ratings vignette for details
+# Ratings at a specific point
+ratings <- calculate_torp_ratings(season_val = 2025, round_val = 15)
+
+# Game-level player performance
+game_ratings <- player_game_ratings(season_val = 2025, round_num = 10)
+
+# Season totals
+season_totals <- player_season_ratings(2025)
 ```
 
-## Configuration
+See `vignette("player-ratings")` for the full methodology.
 
-### Data Repository
+## Prediction Models
 
-By default, data is loaded from `peteowen1/torpdata`. You can configure a different repository:
+torp includes three core models that enrich play-by-play data:
 
-```{r config}
-# Set a custom data repository
-set_torp_data_repo("your-username/your-repo")
+```{r models}
+pbp <- load_pbp(2025, rounds = 1:5)
+pbp_clean <- clean_pbp(pbp)
+
+# Expected Points -- predicts point value of each possession
+pbp_ep <- add_epv_vars(pbp_clean)
+
+# Win Probability -- estimates each team's chance of winning
+pbp_wp <- add_wp_vars(pbp_ep)
+
+# Shot Model -- goal/behind/miss probabilities for shots
+shots <- pbp_wp[!is.na(pbp_wp$shot_at_goal), ]
+shots <- add_shot_vars(shots)
 ```
 
-### Caching
+See `vignette("model-usage")` for details on each model.
 
-Fixture data supports caching for improved performance:
+## Caching
 
-```{r cache}
-# Load fixtures with caching (default)
-fixtures <- load_fixtures(all = TRUE, use_cache = TRUE)
+### Disk Cache
 
-# Disable caching
-fixtures <- load_fixtures(all = TRUE, use_cache = FALSE)
+Data downloads are cached to disk so subsequent calls don't re-download:
 
-# Verbose mode shows cache status
-fixtures <- load_fixtures(all = TRUE, verbose = TRUE)
+```{r disk-cache}
+# Cached by default
+pbp <- load_pbp(2025)
+
+# Cache location
+get_disk_cache_dir()
+
+# Clear if needed
+clear_disk_cache()
+```
+
+### In-Memory Cache
+
+Fixtures and models are cached in memory within a session:
+
+```{r mem-cache}
+fixtures <- load_fixtures(all = TRUE)  # downloads
+fixtures <- load_fixtures(all = TRUE)  # instant (cached)
+
+# Force refresh
+clear_fixture_cache()
 ```
 
 ## Next Steps
 
-- Explore the package documentation: `?torp`
-- Check available functions: `ls("package:torp")`
-- Report issues: https://github.com/peteowen1/torp/issues
+- `vignette("player-ratings")` -- TORP rating methodology
+- `vignette("model-usage")` -- EP, WP, and shot models
+- `vignette("data-architecture")` -- Data pipeline and storage
+- `vignette("season-simulation")` -- Simulating AFL seasons

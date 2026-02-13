@@ -13,110 +13,105 @@ knitr::opts_chunk$set(
 )
 ```
 
-# torp <img src="man/figures/logo.png" align="right" height="138" />
+# torp
 
 <!-- badges: start -->
-[![R-CMD-check](https://github.com/peteowen1/torp/workflows/R-CMD-check/badge.svg)](https://github.com/peteowen1/torp/actions)
+[![R-CMD-check](https://github.com/peteowen1/torp/actions/workflows/test-package.yml/badge.svg)](https://github.com/peteowen1/torp/actions/workflows/test-package.yml)
 [![Codecov test coverage](https://codecov.io/gh/peteowen1/torp/branch/main/graph/badge.svg)](https://app.codecov.io/gh/peteowen1/torp?branch=main)
-[![R-CMD-check](https://github.com/peteowen1/torp/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/peteowen1/torp/actions/workflows/R-CMD-check.yaml)
+[![Lifecycle: experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](https://lifecycle.r-lib.org/articles/stages.html#experimental)
 <!-- badges: end -->
 
-**torp** (Team Offensive Rating Points) is an R package for Australian Football League (AFL) analytics, providing tools for player rating systems, match predictions, and advanced statistical modeling.
-
-## Features
-
-- **Player Ratings**: Calculate comprehensive player ratings using advanced statistical models
-- **Match Predictions**: Predict match outcomes using XGBoost and GAM models  
-- **Expected Points (EP)**: Calculate expected points for any game situation
-- **Win Probability**: Real-time win probability calculations during matches
-- **Data Access**: Easy access to AFL data including play-by-play, player stats, and match results
+**torp** is an R package for AFL analytics. It provides player ratings (TORP), expected points and win probability models, season simulations, and easy access to processed AFL data.
 
 ## Installation
 
-You can install the development version of torp from [GitHub](https://github.com/) with:
-
-``` r
+```r
 # install.packages("devtools")
 devtools::install_github("peteowen1/torp")
+
+# For the latest pre-trained models
+devtools::install_github("peteowen1/torpmodels")
 ```
 
 ## Quick Start
 
-### Loading AFL Data
+### Load Data
+
+All data is stored as parquet files on [torpdata](https://github.com/peteowen1/torpdata) GitHub releases and loaded on demand.
 
 ```{r example, eval=FALSE}
 library(torp)
 
-# Load the latest AFL player statistics
-player_stats <- load_player_stats()
+# Play-by-play data
+pbp <- load_pbp(2025, rounds = 1:10)
 
-# Load match results for specific seasons
-results <- load_results(seasons = 2023:2024)
+# Player statistics
+player_stats <- load_player_stats(2025)
 
-# Load play-by-play data for analysis
-pbp_data <- load_pbp(seasons = 2024, rounds = 1:5)
+# Match results and fixtures
+results <- load_results(2025)
+fixtures <- load_fixtures(all = TRUE)
+
+# All available data (2021+)
+pbp_all <- load_pbp(TRUE, rounds = TRUE)
 ```
 
-### Player Ratings and Match Predictions
+### Player Ratings
+
+TORP (Total Overall Rating Points) rates players across four components: disposals, receiving, spoils/tackles, and hitouts.
 
 ```{r ratings, eval=FALSE}
-# Calculate player ratings using built-in data
-data(plyr_gm_df)
-head(plyr_gm_df)
+# Current TORP ratings
+ratings <- calculate_torp_ratings()
 
-# Access pre-trained models for predictions
-data(ep_model)   # Expected Points model
-data(wp_model)   # Win Probability model
+# Ratings at a specific point in time
+ratings <- calculate_torp_ratings(season_val = 2025, round_val = 10)
 
-# Load match fixtures for predictions
-fixtures <- load_fixtures(seasons = 2024)
+# Game-level performance
+game_ratings <- player_game_ratings(season_val = 2025, round_num = 10)
+
+# Season totals
+season_totals <- player_season_ratings(2025)
 ```
 
-### Data Processing and Analysis
+### Prediction Models
 
-```{r analysis, eval=FALSE}
-# Clean and prepare data for modeling
-# (requires raw play-by-play data)
-cleaned_data <- clean_model_data_epv
+Three core models add expected points, win probability, and shot outcome predictions to play-by-play data.
 
-# Select variables for Expected Points modeling
-model_vars <- select_epv_model_vars(cleaned_data, label = TRUE)
+```{r models, eval=FALSE}
+pbp <- load_pbp(2025, rounds = 1:5)
+pbp_clean <- clean_pbp(pbp)
 
-# Calculate advanced statistics
-harmonic_mean(c(10, 15, 20), c(12, 18, 25))
+# Add model predictions
+pbp_ep <- add_epv_vars(pbp_clean)     # Expected points
+pbp_wp <- add_wp_vars(pbp_ep)         # Win probability
 ```
 
-## Configuration
+### Season Simulation
 
-You can configure the data repository used by torp:
-
-```{r config, eval=FALSE}
-# Set a custom data repository
-set_torp_data_repo("your_username/your_repo")
-
-# Or use environment variable
-Sys.setenv(TORP_DATA_REPO = "your_username/your_repo")
+```{r sim, eval=FALSE}
+# Simulate remaining matches based on TORP ratings
+sim_result <- simulate_season(sim_teams, sim_games)
 ```
 
-## Data Sources
+## Package Ecosystem
 
-The package accesses data from the [torpdata repository](https://github.com/peteowen1/torpdata), which contains:
+| Package | Role | Links |
+|---------|------|-------|
+| **torp** | Core analytics, data loading, ratings, models | [GitHub](https://github.com/peteowen1/torp) |
+| **[torpdata](https://github.com/peteowen1/torpdata)** | Processed AFL data via GitHub releases (parquet) | [GitHub](https://github.com/peteowen1/torpdata) |
+| **[torpmodels](https://github.com/peteowen1/torpmodels)** | Pre-trained models via GitHub releases (RDS) | [GitHub](https://github.com/peteowen1/torpmodels) |
 
-- Play-by-play tracking data
-- Player statistics and biographical information  
-- Match results and fixtures
-- Team information and lineups
-- Pre-trained statistical models
+Data flows from the AFL API (via [fitzRoy](https://jimmyday12.github.io/fitzRoy/)) through torp's cleaning pipeline into torpdata, with models stored in torpmodels.
 
-## Citation
+## Learn More
 
-If you use torp in your research, please cite:
-
-```
-Owen, P. (2024). torp: AFL Analytics and Player Rating System. 
-R package version 0.0.0.9001. https://github.com/peteowen1/torp
-```
+- `vignette("getting-started")` -- Installation and data loading
+- `vignette("player-ratings")` -- TORP rating methodology
+- `vignette("model-usage")` -- EP, WP, and shot models
+- `vignette("data-architecture")` -- Data pipeline and caching
+- `vignette("season-simulation")` -- Simulating AFL seasons
 
 ## License
 
-This package is licensed under the MIT License. See [LICENSE](LICENSE) for details.
+MIT

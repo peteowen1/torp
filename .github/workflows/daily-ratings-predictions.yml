@@ -1,0 +1,208 @@
+name: Daily Ratings & Predictions
+
+on:
+  repository_dispatch:
+    types: [ratings-trigger]
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Force run (skip checks)'
+        type: boolean
+        default: false
+      week_override:
+        description: 'Override prediction week (leave empty for auto-detect)'
+        type: number
+        required: false
+
+env:
+  GITHUB_PAT: ${{ secrets.WORKFLOW_PAT }}
+  R_KEEP_PKG_SOURCE: yes
+
+jobs:
+  compute-ratings:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup R
+        uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: '4.4.0'
+          use-public-rspm: true
+
+      - name: Setup R dependencies
+        uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          cache-version: 3
+          extra-packages: |
+            any::devtools
+            any::piggyback
+            any::fitzRoy
+            any::tictoc
+            any::mgcv
+            any::cli
+            any::glue
+            any::data.table
+            any::janitor
+            any::lubridate
+            any::here
+          needs: |
+            devtools
+
+      - name: Compute TORP ratings
+        run: |
+          Rscript -e "
+            SEASONS <- NULL
+            REFRESH_UPSTREAM <- FALSE
+            REBUILD_PLAYER_GAME <- TRUE
+            REBUILD_ALL_RATINGS <- FALSE
+            source('data-raw/03-ratings/run_ratings_pipeline.R')
+          "
+
+      - name: Get release info
+        id: release_info
+        run: |
+          Rscript -e "
+            devtools::load_all()
+            cat(paste0('afl_season=', get_afl_season(), '\n'))
+            cat(paste0('afl_round=', get_afl_week(), '\n'))
+          " >> $GITHUB_OUTPUT
+
+      - name: Ratings summary
+        run: |
+          echo "## Ratings Computation Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Date:** $(date +'%Y-%m-%d %H:%M UTC')" >> $GITHUB_STEP_SUMMARY
+          echo "**AFL Season:** ${{ steps.release_info.outputs.afl_season }}" >> $GITHUB_STEP_SUMMARY
+          echo "**AFL Round:** ${{ steps.release_info.outputs.afl_round }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Trigger:** ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+
+  build-predictions:
+    needs: compute-ratings
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+      issues: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup R
+        uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: '4.4.0'
+          use-public-rspm: true
+
+      - name: Setup R dependencies
+        uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          cache-version: 3
+          extra-packages: |
+            any::devtools
+            any::piggyback
+            any::fitzRoy
+            any::tictoc
+            any::mgcv
+            any::cli
+            any::glue
+            any::data.table
+            any::janitor
+            any::lubridate
+            any::rvest
+            any::httr
+            any::geosphere
+            any::purrr
+            any::tidyverse
+          needs: |
+            devtools
+
+      - name: Build match predictions
+        env:
+          WEEK_OVERRIDE: ${{ inputs.week_override }}
+        run: |
+          Rscript -e "
+            devtools::load_all()
+            source('data-raw/02-models/build_match_predictions.R')
+            week_env <- Sys.getenv('WEEK_OVERRIDE', '')
+            week <- if (nzchar(week_env)) as.integer(week_env) else NULL
+            run_predictions_pipeline(week = week)
+          "
+
+      - name: Get prediction info
+        id: pred_info
+        run: |
+          Rscript -e "
+            devtools::load_all()
+            cat(paste0('afl_season=', get_afl_season(), '\n'))
+            cat(paste0('afl_week=', get_afl_week(type = 'next'), '\n'))
+          " >> $GITHUB_OUTPUT
+
+      - name: Predictions summary
+        run: |
+          echo "## Match Predictions Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Date:** $(date +'%Y-%m-%d %H:%M UTC')" >> $GITHUB_STEP_SUMMARY
+          echo "**AFL Season:** ${{ steps.pred_info.outputs.afl_season }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Prediction Week:** ${{ steps.pred_info.outputs.afl_week }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Trigger:** ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+
+      - name: Notify on failure
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = 'Daily Ratings/Predictions Failed';
+            const body = `The daily ratings & predictions workflow failed on ${new Date().toISOString()}.
+
+            **Details:**
+            - Season: ${{ steps.pred_info.outputs.afl_season || 'unknown' }}
+            - Week: ${{ steps.pred_info.outputs.afl_week || 'unknown' }}
+            - Trigger: ${{ github.event_name }}
+
+            Please check the [workflow run](${context.payload.repository.html_url}/actions/runs/${context.runId}) for details.
+
+            **Troubleshooting:**
+            1. Check if ratings data was uploaded successfully
+            2. Verify WORKFLOW_PAT has write permissions to torpdata releases
+            3. Check if AFL injury list is accessible
+            4. Review error logs for GAM model training failures
+
+            **Manual Recovery:**
+            - Run workflow manually via workflow_dispatch`;
+
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'automation,bug'
+            });
+
+            const existingIssue = issues.data.find(i => i.title === title);
+
+            if (existingIssue) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existingIssue.number,
+                body: `Workflow failed again on ${new Date().toISOString()}.\n\n[View run](${context.payload.repository.html_url}/actions/runs/${context.runId})`
+              });
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: title,
+                body: body,
+                labels: ['bug', 'automation']
+              });
+            }

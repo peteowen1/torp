@@ -83,5 +83,12 @@ utils::globalVariables(c(
   "extended_stats_def_half_pressure_acts", "extended_stats_hitouts_to_advantage",
   "extended_stats_ruck_contests", "bounces", "hitouts",
   "player_player_position", "position",
-  "player_name", "player_player_player_player_id", "provider_id"
+  "player_name", "player_player_player_player_id", "provider_id",
+
+  # create_player_game_data stat columns
+  "opp", "recvs", "uncontested_possessions", "marks_inside50",
+  "contested_marks", "metres_gained", "intercepts", "rebound50s",
+  "one_percenters", "frees_for", "frees_against", "clangers",
+  "turnovers", "score_involvements", "goal_assists",
+  "extended_stats_ground_ball_gets"
 ))

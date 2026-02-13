@@ -43,15 +43,17 @@ default_credit_params <- function() {
 #' @param credit_params Named list of credit assignment parameters. If NULL,
 #'   uses \code{default_credit_params()}.
 #'
-#' @return A data.table with one row per player per match, containing columns:
-#'   \code{player_id}, \code{match_id}, \code{plyr_nm}, \code{utc_start_time},
-#'   \code{tm}, \code{opp}, \code{pos}, \code{round}, \code{season}, \code{team_id},
-#'   \code{weight_gm}, \code{tot_p_adj}, \code{recv_pts_adj}, \code{disp_pts_adj},
-#'   \code{spoil_pts_adj}, \code{hitout_pts_adj}.
+#' @return A data.table with one row per player per match, containing:
+#'   identifiers (\code{player_id}, \code{match_id}, \code{season}, \code{round},
+#'   \code{plyr_nm}, \code{tm}, \code{opp}, \code{pos}, \code{position}, \code{team_id},
+#'   \code{utc_start_time}), position-adjusted TORP credits (\code{tot_p_adj},
+#'   \code{recv_pts_adj}, \code{disp_pts_adj}, \code{spoil_pts_adj}, \code{hitout_pts_adj}),
+#'   raw TORP credits (\code{tot_p}, \code{recv_pts}, \code{disp_pts}, \code{spoil_pts},
+#'   \code{hitout_pts}), and key box-score stats.
 #'
 #' @export
 #'
-#' @importFrom dplyr arrange select mutate group_by summarise left_join filter ungroup relocate if_else last n_distinct
+#' @importFrom dplyr arrange select mutate group_by summarise left_join filter ungroup if_else last n_distinct
 #' @importFrom tidyr replace_na
 #' @importFrom lubridate year
 #' @importFrom stats quantile
@@ -174,14 +176,40 @@ create_player_game_data <- function(pbp_data = NULL,
     ) |>
     dplyr::ungroup()
 
-  # --- Step 8: Handle duplicate season columns and clean up ---
+  # --- Step 8: Handle duplicate season columns and select final columns ---
   if ("season.x" %in% names(plyr_gm_df)) {
     plyr_gm_df <- plyr_gm_df |> dplyr::mutate(season = season.x)
   }
 
   plyr_gm_df <- plyr_gm_df |>
-    dplyr::relocate(tot_p_adj, disp, recv_pts_adj, disp_pts_adj, spoil_pts_adj, hitout_pts_adj) |>
-    dplyr::filter(!is.na(tm))
+    dplyr::filter(!is.na(tm)) |>
+    dplyr::select(
+      # Identifiers
+      player_id, match_id, season, round,
+      plyr_nm, tm, opp, pos, position, team_id,
+      utc_start_time,
+      # TORP credit points (position-adjusted)
+      tot_p_adj, recv_pts_adj, disp_pts_adj, spoil_pts_adj, hitout_pts_adj,
+      # TORP credit points (raw)
+      tot_p, recv_pts, disp_pts, spoil_pts, hitout_pts,
+      # PBP-derived action counts
+      disp, recvs,
+      # Credit model input stats
+      extended_stats_spoils, tackles, extended_stats_pressure_acts,
+      extended_stats_def_half_pressure_acts,
+      hitouts, extended_stats_hitouts_to_advantage, extended_stats_ruck_contests,
+      bounces,
+      # Core box-score stats
+      goals, behinds, kicks, handballs, disposals, marks,
+      contested_possessions, uncontested_possessions,
+      inside50s, marks_inside50, contested_marks,
+      clearances_total_clearances,
+      metres_gained, time_on_ground_percentage,
+      intercepts, rebound50s, one_percenters,
+      frees_for, frees_against, clangers, turnovers,
+      score_involvements, shots_at_goal, goal_assists,
+      extended_stats_ground_ball_gets
+    )
 
   return(plyr_gm_df)
 }
