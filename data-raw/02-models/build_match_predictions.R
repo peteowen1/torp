@@ -49,15 +49,16 @@ calculate_proportions <- function(data, team, current_season, current_round) {
     return(data.frame(teamId = team, season = current_season, round.roundNumber = current_round, venue = unique(data$venue), familiarity = 0))
   }
 
-  proportions <- filtered_data %>%
+  filtered_data %>%
     group_by(venue) %>%
     summarise(games_played = n(), .groups = "drop") %>%
-    mutate(total_games = sum(games_played)) %>%
-    mutate(familiarity = games_played / total_games) %>%
-    mutate(teamId = team, season = current_season, round.roundNumber = current_round) %>%
+    mutate(
+      familiarity = games_played / sum(games_played),
+      teamId = team,
+      season = current_season,
+      round.roundNumber = current_round
+    ) %>%
     select(teamId, season, round.roundNumber, venue, familiarity)
-
-  return(proportions)
 }
 
 # Main Pipeline ----
@@ -83,10 +84,9 @@ run_predictions_pipeline <- function(week = NULL) {
 
   cli::cli_inform("Loaded: fixtures={nrow(fixtures)}, results={nrow(results)}, teams={nrow(teams)}, ratings={nrow(torp_df_total)}")
 
-  # Sanity check loaded data
-  if (nrow(fixtures) < 100) cli::cli_abort("Fixtures data too small ({nrow(fixtures)} rows) - data may be missing")
-  if (nrow(torp_df_total) < 100) cli::cli_abort("Ratings data too small ({nrow(torp_df_total)} rows) - ratings may not have been computed")
-  if (nrow(teams) < 100) cli::cli_abort("Teams data too small ({nrow(teams)} rows) - lineup data may be missing")
+  if (nrow(fixtures) < 100) cli::cli_abort("Fixtures too small ({nrow(fixtures)} rows)")
+  if (nrow(torp_df_total) < 100) cli::cli_abort("Ratings too small ({nrow(torp_df_total)} rows)")
+  if (nrow(teams) < 100) cli::cli_abort("Teams too small ({nrow(teams)} rows)")
 
   # Build Fixtures Tables ----
   cli::cli_h2("Building fixture features")
@@ -169,13 +169,10 @@ run_predictions_pipeline <- function(week = NULL) {
     dplyr::filter((position.x != "EMERG" & position.x != "SUB") | is.na(position.x))
 
   na_torp_count <- sum(is.na(team_lineup_df$torp))
-  total_players <- nrow(team_lineup_df)
   if (na_torp_count > 0) {
-    na_pct <- round(100 * na_torp_count / total_players, 1)
-    cli::cli_inform("Replacing {na_torp_count}/{total_players} ({na_pct}%) NA torp ratings with 0")
-    if (na_pct > 25) {
-      cli::cli_warn("High proportion of missing ratings ({na_pct}%) - predictions may be less reliable")
-    }
+    na_pct <- round(100 * na_torp_count / nrow(team_lineup_df), 1)
+    cli::cli_inform("Replacing {na_torp_count} ({na_pct}%) NA torp ratings with 0")
+    if (na_pct > 25) cli::cli_warn("High proportion of missing ratings ({na_pct}%)")
   }
 
   team_lineup_df <- team_lineup_df %>%
@@ -682,28 +679,23 @@ run_predictions_pipeline <- function(week = NULL) {
     )
 
   team_mdl_df$pred_win <- predict(afl_win_mdl, newdata = team_mdl_df, type = "response")
-  team_mdl_df$bits <- ifelse(team_mdl_df$win == 1,
-    1 + log2(team_mdl_df$pred_win),
-    ifelse(team_mdl_df$win == 0,
-      1 + log2(1 - team_mdl_df$pred_win),
-      1 + 0.5 * log2(team_mdl_df$pred_win * (1 - team_mdl_df$pred_win))
-    )
+  team_mdl_df$bits <- dplyr::case_when(
+    team_mdl_df$win == 1   ~ 1 + log2(team_mdl_df$pred_win),
+    team_mdl_df$win == 0   ~ 1 + log2(1 - team_mdl_df$pred_win),
+    TRUE                   ~ 1 + 0.5 * log2(team_mdl_df$pred_win * (1 - team_mdl_df$pred_win))
   )
-  team_mdl_df$tips <- ifelse(round(team_mdl_df$pred_win) == team_mdl_df$win, 1,
-    ifelse(team_mdl_df$win == 0.5, 1, 0)
+  team_mdl_df$tips <- dplyr::case_when(
+    round(team_mdl_df$pred_win) == team_mdl_df$win ~ 1,
+    team_mdl_df$win == 0.5                         ~ 1,
+    TRUE                                           ~ 0
   )
   team_mdl_df$mae <- abs(team_mdl_df$score_diff - team_mdl_df$pred_score_diff)
 
   # This Week's Predictions ----
   cli::cli_h2("Generating week {week} predictions")
 
-  n <- week
-
   week_gms_home <- team_mdl_df %>%
-    dplyr::mutate(
-      totscore = pred_tot_xscore
-    ) %>%
-    dplyr::filter(season.x == lubridate::year(Sys.Date()), round.roundNumber.x == n, team_type_fac.x == "home") %>%
+    dplyr::filter(season.x == lubridate::year(Sys.Date()), round.roundNumber.x == week, team_type_fac.x == "home") %>%
     dplyr::select(
       players = count.x, providerId,
       home_team = team_name.x, home_rating = torp.x,
@@ -718,13 +710,12 @@ run_predictions_pipeline <- function(week = NULL) {
 
   week_gms_away <- team_mdl_df %>%
     dplyr::mutate(
-      pred_tot_xscore = pred_tot_xscore,
       pred_xscore_diff = -pred_xscore_diff,
       pred_score_diff = -pred_score_diff,
       pred_win = 1 - pred_win,
       score_diff = -score_diff
     ) %>%
-    dplyr::filter(season.x == lubridate::year(Sys.Date()), round.roundNumber.x == n, team_type_fac.x == "away") %>%
+    dplyr::filter(season.x == lubridate::year(Sys.Date()), round.roundNumber.x == week, team_type_fac.x == "away") %>%
     dplyr::select(
       players = count.x, providerId,
       home_team = team_name.y, home_rating = torp.y,
@@ -752,19 +743,12 @@ run_predictions_pipeline <- function(week = NULL) {
   # Validate Predictions ----
   cli::cli_h2("Validating predictions")
 
-  if (nrow(week_gms) == 0) {
-    cli::cli_abort("No predictions generated for week {week} - aborting upload")
-  }
-  if (any(is.na(week_gms$pred_win))) {
-    cli::cli_abort("NA values in pred_win - model may have failed")
-  }
-  if (any(week_gms$pred_win < 0 | week_gms$pred_win > 1)) {
-    cli::cli_abort("pred_win values out of [0,1] range - model output invalid")
-  }
-  if (any(is.na(week_gms$pred_margin))) {
-    cli::cli_abort("NA values in pred_margin - model may have failed")
-  }
-  cli::cli_alert_success("Validation passed: {nrow(week_gms)} matches, all predictions valid")
+  if (nrow(week_gms) == 0) cli::cli_abort("No predictions generated for week {week}")
+  if (any(is.na(week_gms$pred_win))) cli::cli_abort("NA values in pred_win")
+  if (any(week_gms$pred_win < 0 | week_gms$pred_win > 1)) cli::cli_abort("pred_win values out of [0,1] range")
+  if (any(is.na(week_gms$pred_margin))) cli::cli_abort("NA values in pred_margin")
+
+  cli::cli_alert_success("Validation passed: {nrow(week_gms)} matches")
 
   # Upload Predictions ----
   cli::cli_h2("Uploading predictions")
@@ -772,15 +756,9 @@ run_predictions_pipeline <- function(week = NULL) {
   pred_file_name <- paste0("predictions_", season, "_", sprintf("%02d", week))
   save_to_release(week_gms, pred_file_name, "predictions")
 
-  # Verify upload
-  uploaded <- tryCatch(
-    file_reader(pred_file_name, "predictions"),
-    error = function(e) NULL
-  )
+  uploaded <- tryCatch(file_reader(pred_file_name, "predictions"), error = function(e) NULL)
   if (is.null(uploaded) || nrow(uploaded) != nrow(week_gms)) {
-    cli::cli_warn("Upload verification failed - file may not be accessible yet (piggyback cache delay)")
-  } else {
-    cli::cli_alert_success("Upload verified: {nrow(uploaded)} rows match")
+    cli::cli_warn("Upload verification failed - piggyback cache delay may be the cause")
   }
   cli::cli_alert_success("Uploaded week {week} predictions ({nrow(week_gms)} matches)")
 

@@ -49,7 +49,7 @@ if (!exists("REBUILD_ALL_RATINGS", envir = .GlobalEnv)) REBUILD_ALL_RATINGS <- F
 resolve_seasons <- function(seasons) {
   if (is.null(seasons)) return(get_afl_season())
   if (isTRUE(seasons)) return(2021:get_afl_season())
-  return(seasons)
+  seasons
 }
 
 seasons <- resolve_seasons(SEASONS)
@@ -97,7 +97,6 @@ if (REBUILD_PLAYER_GAME) {
       pstats <- load_player_stats(s)
       teams_data <- load_teams(s)
 
-      # Sanity checks
       cli::cli_inform("  PBP: {nrow(pbp)} rows | player_stats: {nrow(pstats)} rows | teams: {nrow(teams_data)} rows")
       if (nrow(pbp) == 0) {
         cli::cli_warn("No PBP data for {s} - skipping")
@@ -131,13 +130,12 @@ if (REBUILD_PLAYER_GAME) {
 cli::cli_h2("Stage 3: Compute TORP Ratings")
 tictoc::tic("stage_3_ratings")
 
-# Pre-load player game data once for efficiency
 cli::cli_progress_step("Loading all player game data")
 all_pgd <- load_player_game_data(TRUE)
 cli::cli_inform("Player game data loaded: {nrow(all_pgd)} rows")
 
 get_torp_df <- function(year, rounds, pgd) {
-  torp_df <- purrr::map(rounds, ~ {
+  purrr::map(rounds, ~ {
     tryCatch(
       calculate_torp_ratings(year, .x, player_game_data = pgd),
       error = function(e) {
@@ -148,8 +146,6 @@ get_torp_df <- function(year, rounds, pgd) {
   }, .progress = TRUE) |>
     dplyr::bind_rows() |>
     dplyr::mutate(row_id = paste0(player_id, season, sprintf("%02d", round)))
-
-  return(torp_df)
 }
 
 torp_season_list <- list()
@@ -179,7 +175,6 @@ for (s in seasons) {
   })
 }
 
-# Combine results
 torp_new <- dplyr::bind_rows(torp_season_list)
 cli::cli_inform("New ratings computed: {nrow(torp_new)} rows")
 
@@ -192,7 +187,6 @@ if (length(failed_seasons) == length(seasons)) {
 
 if (nrow(torp_new) > 0) {
   if (!REBUILD_ALL_RATINGS) {
-    # Incremental: load existing and upsert
     cli::cli_progress_step("Incremental update: loading existing ratings")
     existing <- tryCatch(
       load_torp_ratings(),
@@ -216,15 +210,11 @@ if (nrow(torp_new) > 0) {
     torp_df_total <- torp_new
   }
 
-  # Release combined file
   save_to_release(torp_df_total, "torp_ratings", "ratings-data")
 
-  # Verify upload
   uploaded <- tryCatch(load_torp_ratings(), error = function(e) NULL)
   if (is.null(uploaded) || nrow(uploaded) != nrow(torp_df_total)) {
-    cli::cli_warn("Upload verification failed - file may not be accessible yet (piggyback cache delay)")
-  } else {
-    cli::cli_alert_success("Upload verified: {nrow(uploaded)} rows match")
+    cli::cli_warn("Upload verification failed - piggyback cache delay may be the cause")
   }
   cli::cli_alert_success("Released torp_ratings ({nrow(torp_df_total)} rows)")
 }

@@ -26,7 +26,7 @@ jobs:
       contents: write
 
     steps:
-      - name: Checkout torp
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -58,25 +58,22 @@ jobs:
 
       - name: Compute TORP ratings
         run: |
-          echo "Starting ratings computation..."
           Rscript -e "
-            # Set CI config before sourcing pipeline
             SEASONS <- NULL
             REFRESH_UPSTREAM <- FALSE
             REBUILD_PLAYER_GAME <- TRUE
             REBUILD_ALL_RATINGS <- FALSE
-
-            # Source and run the pipeline (config vars already set)
             source('data-raw/03-ratings/run_ratings_pipeline.R')
           "
 
       - name: Get release info
         id: release_info
         run: |
-          AFL_SEASON=$(Rscript -e "devtools::load_all(); cat(get_afl_season())")
-          AFL_ROUND=$(Rscript -e "devtools::load_all(); cat(get_afl_week())")
-          echo "afl_season=$AFL_SEASON" >> $GITHUB_OUTPUT
-          echo "afl_round=$AFL_ROUND" >> $GITHUB_OUTPUT
+          Rscript -e "
+            devtools::load_all()
+            cat(paste0('afl_season=', get_afl_season(), '\n'))
+            cat(paste0('afl_round=', get_afl_week(), '\n'))
+          " >> $GITHUB_OUTPUT
 
       - name: Ratings summary
         run: |
@@ -96,7 +93,7 @@ jobs:
       issues: write
 
     steps:
-      - name: Checkout torp
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -134,7 +131,6 @@ jobs:
         env:
           WEEK_OVERRIDE: ${{ inputs.week_override }}
         run: |
-          echo "Starting predictions pipeline..."
           Rscript -e "
             devtools::load_all()
             source('data-raw/02-models/build_match_predictions.R')
@@ -146,10 +142,11 @@ jobs:
       - name: Get prediction info
         id: pred_info
         run: |
-          AFL_SEASON=$(Rscript -e "devtools::load_all(); cat(get_afl_season())")
-          AFL_WEEK=$(Rscript -e "devtools::load_all(); cat(get_afl_week(type = 'next'))")
-          echo "afl_season=$AFL_SEASON" >> $GITHUB_OUTPUT
-          echo "afl_week=$AFL_WEEK" >> $GITHUB_OUTPUT
+          Rscript -e "
+            devtools::load_all()
+            cat(paste0('afl_season=', get_afl_season(), '\n'))
+            cat(paste0('afl_week=', get_afl_week(type = 'next'), '\n'))
+          " >> $GITHUB_OUTPUT
 
       - name: Predictions summary
         run: |
