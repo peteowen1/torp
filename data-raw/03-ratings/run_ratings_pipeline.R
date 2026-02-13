@@ -33,16 +33,16 @@ source(here::here("data-raw/01-data/daily_release.R"))
 #   NULL          = current season only
 #   numeric vector = specific seasons (e.g. 2024:2025)
 #   TRUE          = all seasons 2021+
-if (!exists("SEASONS")) SEASONS <- NULL
+if (!exists("SEASONS", envir = .GlobalEnv)) SEASONS <- NULL
 
 # Whether to re-fetch player_stats + teams from fitzRoy
-if (!exists("REFRESH_UPSTREAM")) REFRESH_UPSTREAM <- FALSE
+if (!exists("REFRESH_UPSTREAM", envir = .GlobalEnv)) REFRESH_UPSTREAM <- FALSE
 
 # Whether to rebuild player game tables from PBP
-if (!exists("REBUILD_PLAYER_GAME")) REBUILD_PLAYER_GAME <- FALSE
+if (!exists("REBUILD_PLAYER_GAME", envir = .GlobalEnv)) REBUILD_PLAYER_GAME <- FALSE
 
 # Full rebuild vs incremental (only configured seasons)
-if (!exists("REBUILD_ALL_RATINGS")) REBUILD_ALL_RATINGS <- FALSE
+if (!exists("REBUILD_ALL_RATINGS", envir = .GlobalEnv)) REBUILD_ALL_RATINGS <- FALSE
 
 # Resolve seasons ----
 
@@ -83,6 +83,8 @@ if (REFRESH_UPSTREAM) {
 
 # Stage 2: Build Player Game Data + Release ----
 
+stage2_failed_seasons <- character()
+
 if (REBUILD_PLAYER_GAME) {
   cli::cli_h2("Stage 2: Build Player Game Data")
   tictoc::tic("stage_2_player_game")
@@ -99,6 +101,7 @@ if (REBUILD_PLAYER_GAME) {
       cli::cli_inform("  PBP: {nrow(pbp)} rows | player_stats: {nrow(pstats)} rows | teams: {nrow(teams_data)} rows")
       if (nrow(pbp) == 0) {
         cli::cli_warn("No PBP data for {s} - skipping")
+        stage2_failed_seasons <- c(stage2_failed_seasons, as.character(s))
         next
       }
 
@@ -110,7 +113,12 @@ if (REBUILD_PLAYER_GAME) {
       cli::cli_alert_success("Released {file_name} ({nrow(pgd)} rows)")
     }, error = function(e) {
       cli::cli_warn("Failed to build player game data for {s}: {conditionMessage(e)}")
+      stage2_failed_seasons <<- c(stage2_failed_seasons, as.character(s))
     })
+  }
+
+  if (length(stage2_failed_seasons) > 0) {
+    cli::cli_warn("Stage 2 failed for seasons: {paste(stage2_failed_seasons, collapse = ', ')} - Stage 3 will use stale player game data for these")
   }
 
   tictoc::toc(log = TRUE)
@@ -145,6 +153,7 @@ get_torp_df <- function(year, rounds, pgd) {
 }
 
 torp_season_list <- list()
+failed_seasons <- character()
 
 for (s in seasons) {
   tryCatch({
@@ -166,12 +175,20 @@ for (s in seasons) {
     tictoc::toc(log = TRUE)
   }, error = function(e) {
     cli::cli_warn("Failed to compute ratings for {s}: {conditionMessage(e)}")
+    failed_seasons <<- c(failed_seasons, as.character(s))
   })
 }
 
 # Combine results
 torp_new <- dplyr::bind_rows(torp_season_list)
 cli::cli_inform("New ratings computed: {nrow(torp_new)} rows")
+
+if (length(failed_seasons) > 0) {
+  cli::cli_warn("Failed seasons: {paste(failed_seasons, collapse = ', ')}")
+}
+if (length(failed_seasons) == length(seasons)) {
+  cli::cli_abort("All seasons failed to compute - aborting pipeline")
+}
 
 if (nrow(torp_new) > 0) {
   if (!REBUILD_ALL_RATINGS) {
@@ -188,7 +205,10 @@ if (nrow(torp_new) > 0) {
     if (!is.null(existing) && nrow(existing) > 0) {
       torp_df_total <- existing |>
         dplyr::rows_upsert(torp_new, by = "row_id")
-      cli::cli_inform("Upserted into existing: {nrow(torp_df_total)} total rows")
+      if (nrow(torp_df_total) < nrow(existing)) {
+        cli::cli_abort("Row count decreased after upsert ({nrow(existing)} -> {nrow(torp_df_total)}) - possible data corruption")
+      }
+      cli::cli_inform("Upserted into existing: {nrow(torp_df_total)} total rows (was {nrow(existing)})")
     } else {
       torp_df_total <- torp_new
     }
@@ -198,6 +218,14 @@ if (nrow(torp_new) > 0) {
 
   # Release combined file
   save_to_release(torp_df_total, "torp_ratings", "ratings-data")
+
+  # Verify upload
+  uploaded <- tryCatch(load_torp_ratings(), error = function(e) NULL)
+  if (is.null(uploaded) || nrow(uploaded) != nrow(torp_df_total)) {
+    cli::cli_warn("Upload verification failed - file may not be accessible yet (piggyback cache delay)")
+  } else {
+    cli::cli_alert_success("Upload verified: {nrow(uploaded)} rows match")
+  }
   cli::cli_alert_success("Released torp_ratings ({nrow(torp_df_total)} rows)")
 }
 

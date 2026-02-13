@@ -17,11 +17,12 @@ devtools::load_all()
 
 # Helper: Scrape Injuries ----
 
-scrape_injuries <- function() {
+scrape_injuries <- function(timeout = 30) {
   tryCatch({
     library(rvest)
     url <- "https://www.afl.com.au/matches/injury-list"
-    read_html(url) %>%
+    session <- rvest::session(url, httr::timeout(timeout))
+    session %>%
       html_table() %>%
       list_rbind() %>%
       janitor::clean_names() %>%
@@ -81,6 +82,11 @@ run_predictions_pipeline <- function(week = NULL) {
   torp_df_total <- load_torp_ratings()
 
   cli::cli_inform("Loaded: fixtures={nrow(fixtures)}, results={nrow(results)}, teams={nrow(teams)}, ratings={nrow(torp_df_total)}")
+
+  # Sanity check loaded data
+  if (nrow(fixtures) < 100) cli::cli_abort("Fixtures data too small ({nrow(fixtures)} rows) - data may be missing")
+  if (nrow(torp_df_total) < 100) cli::cli_abort("Ratings data too small ({nrow(torp_df_total)} rows) - ratings may not have been computed")
+  if (nrow(teams) < 100) cli::cli_abort("Teams data too small ({nrow(teams)} rows) - lineup data may be missing")
 
   # Build Fixtures Tables ----
   cli::cli_h2("Building fixture features")
@@ -160,7 +166,19 @@ run_predictions_pipeline <- function(week = NULL) {
   team_lineup_df <-
     teams %>%
     dplyr::left_join(torp_df_total, by = c("player.playerId" = "player_id", "season" = "season", "round.roundNumber" = "round")) %>%
-    dplyr::filter((position.x != "EMERG" & position.x != "SUB") | is.na(position.x)) %>%
+    dplyr::filter((position.x != "EMERG" & position.x != "SUB") | is.na(position.x))
+
+  na_torp_count <- sum(is.na(team_lineup_df$torp))
+  total_players <- nrow(team_lineup_df)
+  if (na_torp_count > 0) {
+    na_pct <- round(100 * na_torp_count / total_players, 1)
+    cli::cli_inform("Replacing {na_torp_count}/{total_players} ({na_pct}%) NA torp ratings with 0")
+    if (na_pct > 25) {
+      cli::cli_warn("High proportion of missing ratings ({na_pct}%) - predictions may be less reliable")
+    }
+  }
+
+  team_lineup_df <- team_lineup_df %>%
     dplyr::mutate(
       torp = tidyr::replace_na(torp, 0),
       torp_recv = tidyr::replace_na(torp_recv, 0),
@@ -312,7 +330,9 @@ run_predictions_pipeline <- function(week = NULL) {
   )
 
   # Use parallel if available, fall back to sequential
-  all_proportions <- tryCatch({
+  has_in_parallel <- exists("in_parallel", where = asNamespace("purrr"), mode = "function")
+
+  if (has_in_parallel) {
     f <- purrr::in_parallel(
       \(team, season, round) {
         suppressPackageStartupMessages({
@@ -324,13 +344,13 @@ run_predictions_pipeline <- function(week = NULL) {
       df = team_rt_df,
       calculate_proportions = calculate_proportions
     )
-    purrr::pmap(grid, f, .progress = TRUE)
-  }, error = function(e) {
-    cli::cli_inform("Parallel not available, using sequential pmap")
-    purrr::pmap(grid, \(team, season, round) {
+    all_proportions <- purrr::pmap(grid, f, .progress = TRUE)
+  } else {
+    cli::cli_inform("purrr::in_parallel not available, using sequential pmap")
+    all_proportions <- purrr::pmap(grid, \(team, season, round) {
       calculate_proportions(team_rt_df, team, season, round)
     }, .progress = TRUE)
-  })
+  }
 
   ground_prop <- dplyr::bind_rows(all_proportions)
 
@@ -353,23 +373,35 @@ run_predictions_pipeline <- function(week = NULL) {
       log_dist = log(distance + 10000),
       log_dist = replace_na(log_dist, 16)
     ) %>%
-    dplyr::left_join(ground_prop) %>%
+    dplyr::left_join(ground_prop, by = c("teamId", "season", "round.roundNumber", "venue")) %>%
     dplyr::mutate(
       familiarity = replace_na(familiarity, 0)
     )
+
+  na_dist <- sum(is.na(team_dist_df$distance))
+  na_fam <- sum(team_dist_df$familiarity == 0)
+  if (na_dist > 0) cli::cli_inform("Distance: {na_dist} rows defaulted to log_dist=16 (missing venue coords)")
+  if (na_fam > 0) cli::cli_inform("Familiarity: {na_fam} rows defaulted to 0 (no prior games at venue)")
 
   ## Days Rest ----
   days_rest <- fix_df %>%
     arrange(teamId, utcStartTime) %>%
     group_by(teamId, season) %>%
     mutate(days_rest = as.numeric(difftime(utcStartTime, lag(utcStartTime), units = "days"))) %>%
-    ungroup() %>%
+    ungroup()
+
+  na_rest <- sum(is.na(days_rest$days_rest))
+  if (na_rest > 0) cli::cli_inform("Days rest: {na_rest} rows defaulted to 21 (first game of season)")
+  days_rest <- days_rest %>%
     dplyr::mutate(days_rest = replace_na(days_rest, 21))
 
   ## Injuries ----
   cli::cli_h2("Scraping injuries")
   inj_df <- scrape_injuries()
   cli::cli_inform("Injuries loaded: {nrow(inj_df)} rows")
+  if (nrow(inj_df) == 0 && week > 1) {
+    cli::cli_warn("0 injuries scraped during active season (week {week}) - all players will be treated as available")
+  }
 
   tr <- torp_ratings(season, week) %>%
     left_join(inj_df, by = c("player_name" = "player")) %>%
@@ -400,9 +432,9 @@ run_predictions_pipeline <- function(week = NULL) {
   team_rt_fix_df <-
     fix_df %>%
     mutate(team_name = fitzRoy::replace_teams(team_name)) %>%
-    left_join(team_dist_df) %>%
-    left_join(days_rest) %>%
-    left_join(team_rt_df) %>%
+    left_join(team_dist_df, by = c("providerId", "teamId")) %>%
+    left_join(days_rest, by = c("providerId", "teamId")) %>%
+    left_join(team_rt_df, by = c("providerId", "teamId", "season", "round.roundNumber")) %>%
     left_join(tr_week, by = c("team_name" = "team_name", "season" = "season", "round.roundNumber" = "round")) %>%
     mutate(
       torp = coalesce(torp, torp_week),
@@ -432,7 +464,7 @@ run_predictions_pipeline <- function(week = NULL) {
     ) %>%
     dplyr::mutate(
       torp_diff = torp.x - torp.y,
-      torp_ratio = log(torp.x / torp.y),
+      torp_ratio = log(pmax(torp.x, 0.01) / pmax(torp.y, 0.01)),
       torp_recv_diff = torp_recv.x - torp_recv.y,
       torp_disp_diff = torp_disp.x - torp_disp.y,
       torp_spoil_diff = torp_spoil.x - torp_spoil.y,
@@ -468,12 +500,12 @@ run_predictions_pipeline <- function(week = NULL) {
       ),
       harmean_shots = harmonic_mean(home_shots, away_shots),
       shot_conv = ifelse(team_type == "home",
-        homeTeamScore.matchScore.goals / home_shots,
-        awayTeamScore.matchScore.goals / away_shots
+        homeTeamScore.matchScore.goals / pmax(home_shots, 1),
+        awayTeamScore.matchScore.goals / pmax(away_shots, 1)
       ),
       shot_conv_diff = ifelse(team_type == "home",
-        (homeTeamScore.matchScore.goals / home_shots) - (awayTeamScore.matchScore.goals / away_shots),
-        (awayTeamScore.matchScore.goals / away_shots) - (homeTeamScore.matchScore.goals / home_shots)
+        (homeTeamScore.matchScore.goals / pmax(home_shots, 1)) - (awayTeamScore.matchScore.goals / pmax(away_shots, 1)),
+        (awayTeamScore.matchScore.goals / pmax(away_shots, 1)) - (homeTeamScore.matchScore.goals / pmax(home_shots, 1))
       ),
       xscore_diff = ifelse(team_type == "home",
         xscore_diff,
@@ -522,6 +554,7 @@ run_predictions_pipeline <- function(week = NULL) {
     )
 
   ## Filter out early matches ----
+  # CD_M202101409 = first match of 2021 R14 (earliest with reliable TORP + xG data)
   team_mdl_df <-
     team_mdl_df_tot %>%
     filter(providerId > "CD_M202101409")
@@ -716,10 +749,39 @@ run_predictions_pipeline <- function(week = NULL) {
     mutate(rating_diff = home_rating - away_rating + 4) %>%
     select(providerId:away_rating, rating_diff, players:margin)
 
+  # Validate Predictions ----
+  cli::cli_h2("Validating predictions")
+
+  if (nrow(week_gms) == 0) {
+    cli::cli_abort("No predictions generated for week {week} - aborting upload")
+  }
+  if (any(is.na(week_gms$pred_win))) {
+    cli::cli_abort("NA values in pred_win - model may have failed")
+  }
+  if (any(week_gms$pred_win < 0 | week_gms$pred_win > 1)) {
+    cli::cli_abort("pred_win values out of [0,1] range - model output invalid")
+  }
+  if (any(is.na(week_gms$pred_margin))) {
+    cli::cli_abort("NA values in pred_margin - model may have failed")
+  }
+  cli::cli_alert_success("Validation passed: {nrow(week_gms)} matches, all predictions valid")
+
   # Upload Predictions ----
   cli::cli_h2("Uploading predictions")
 
-  save_to_release(week_gms, paste0("predictions_", season, "_", sprintf("%02d", week)), "predictions")
+  pred_file_name <- paste0("predictions_", season, "_", sprintf("%02d", week))
+  save_to_release(week_gms, pred_file_name, "predictions")
+
+  # Verify upload
+  uploaded <- tryCatch(
+    file_reader(pred_file_name, "predictions"),
+    error = function(e) NULL
+  )
+  if (is.null(uploaded) || nrow(uploaded) != nrow(week_gms)) {
+    cli::cli_warn("Upload verification failed - file may not be accessible yet (piggyback cache delay)")
+  } else {
+    cli::cli_alert_success("Upload verified: {nrow(uploaded)} rows match")
+  }
   cli::cli_alert_success("Uploaded week {week} predictions ({nrow(week_gms)} matches)")
 
   tictoc::toc(log = TRUE)

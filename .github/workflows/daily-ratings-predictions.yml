@@ -123,6 +123,7 @@ jobs:
             any::janitor
             any::lubridate
             any::rvest
+            any::httr
             any::geosphere
             any::purrr
             any::tidyverse
@@ -130,12 +131,15 @@ jobs:
             devtools
 
       - name: Build match predictions
+        env:
+          WEEK_OVERRIDE: ${{ inputs.week_override }}
         run: |
           echo "Starting predictions pipeline..."
           Rscript -e "
             devtools::load_all()
             source('data-raw/02-models/build_match_predictions.R')
-            week <- ${{ inputs.week_override || 'NULL' }}
+            week_env <- Sys.getenv('WEEK_OVERRIDE', '')
+            week <- if (nzchar(week_env)) as.integer(week_env) else NULL
             run_predictions_pipeline(week = week)
           "
 
