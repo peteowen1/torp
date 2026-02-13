@@ -8,6 +8,11 @@
 # Usage:
 #   Rscript data-raw/03-ratings/run_ratings_pipeline.R
 #   Or: source("data-raw/03-ratings/run_ratings_pipeline.R")
+#
+# CI Usage (from GitHub Actions):
+#   Set config variables before sourcing:
+#     SEASONS <- NULL; REBUILD_PLAYER_GAME <- TRUE
+#   Then source this file - it will skip setting defaults if they already exist.
 
 # Setup ----
 
@@ -22,21 +27,22 @@ devtools::load_all()
 source(here::here("data-raw/01-data/daily_release.R"))
 
 # Configuration ----
+# These defaults are only set if not already defined (allows CI to override)
 
 # Which seasons to process:
 #   NULL          = current season only
 #   numeric vector = specific seasons (e.g. 2024:2025)
 #   TRUE          = all seasons 2021+
-SEASONS <- NULL
+if (!exists("SEASONS")) SEASONS <- NULL
 
 # Whether to re-fetch player_stats + teams from fitzRoy
-REFRESH_UPSTREAM <- FALSE
+if (!exists("REFRESH_UPSTREAM")) REFRESH_UPSTREAM <- FALSE
 
 # Whether to rebuild player game tables from PBP
-REBUILD_PLAYER_GAME <- FALSE
+if (!exists("REBUILD_PLAYER_GAME")) REBUILD_PLAYER_GAME <- FALSE
 
 # Full rebuild vs incremental (only configured seasons)
-REBUILD_ALL_RATINGS <- FALSE
+if (!exists("REBUILD_ALL_RATINGS")) REBUILD_ALL_RATINGS <- FALSE
 
 # Resolve seasons ----
 
