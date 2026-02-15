@@ -25,7 +25,7 @@ devtools::load_all()
 
 # Configuration ----
 
-SEASONS_TO_AGGREGATE <- 2021:2025
+SEASONS_TO_AGGREGATE <- 2021:get_afl_season()
 DATA_TYPES <- c("chains", "pbp")
 
 #' Get starting round for a season

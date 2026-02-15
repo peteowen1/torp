@@ -24,6 +24,9 @@ save_to_release <- function(df, file_name, release_tag) {
                        repo = get_torp_data_repo(),
                        tag = release_tag
   )
+
+  # Also save a local copy in torpdata/data/
+  save_locally(df, file_name)
 }
 
 #' Read a Parquet File from a GitHub Release via Piggyback
@@ -483,7 +486,16 @@ load_from_url <- function(url, ..., seasons = TRUE, rounds = TRUE, peteowen1 = F
 #' @importFrom cli cli_warn cli_abort
 #' @importFrom data.table data.table setDT
 parquet_from_url_cached <- function(url, use_cache = TRUE, max_age_days = 7) {
-  # Check disk cache first
+  # Check local torpdata/data/ first
+  if (is_locally_stored(url)) {
+    local_data <- read_local_parquet(url)
+    if (!is.null(local_data)) {
+      data.table::setDT(local_data)
+      return(local_data)
+    }
+  }
+
+  # Check disk cache
   if (use_cache && is_disk_cached(url, max_age_days)) {
     cached_data <- read_disk_cache(url)
     if (!is.null(cached_data)) {
@@ -565,8 +577,8 @@ parquet_from_url <- function(url) {
 #' @return Character string of the repository in format "owner/repo"
 #' @keywords internal
 get_torp_data_repo <- function() {
-  # Default repository
-  return("peteowen1/torpdata")
+  repo <- getOption("torp.data.repo", "peteowen1/torpdata")
+  return(repo)
 }
 
 #' Set TORP Data Repository
@@ -641,8 +653,8 @@ validate_seasons <- function(seasons) {
   current_season <- tryCatch({
     get_afl_season()
   }, error = function(e) {
-    cli::cli_warn("Could not determine current AFL season, using 2025 as default")
-    2025
+    cli::cli_warn("Could not determine current AFL season, using {as.integer(format(Sys.Date(), '%Y'))} as default")
+    as.integer(format(Sys.Date(), "%Y"))
   })
 
   invalid_seasons <- seasons[seasons < 2021 | seasons > current_season]
@@ -711,11 +723,16 @@ generate_urls <- function(data_type, file_prefix, seasons, rounds = NULL, prefer
     urls <- sort(urls)
   }
 
-  current_season <- get_afl_season()
-  current_round <- 99
+  if (!exists("current_season", inherits = FALSE)) {
+    current_season <- get_afl_season()
+  }
 
-  if (data_type != "fixtures-data") {
-    current_round <- sprintf("%02d", get_afl_week())
+  if (data_type == "fixtures-data") {
+    current_round <- 99
+  } else {
+    # Reuse current_round if already fetched in the rounds block above
+    raw_round <- if (exists("current_round", inherits = FALSE)) current_round else get_afl_week()
+    current_round <- sprintf("%02d", raw_round)
   }
 
   max_url <- paste0(base_url, "/", data_type, "/", file_prefix, "_", current_season, "_", current_round, ".parquet")

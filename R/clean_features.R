@@ -496,7 +496,7 @@ calculate_pos_lead_prob <- function(points_diff, opp_goal, opp_behind, no_score,
   dplyr::case_when(
     points_diff > 6 ~ 1,
     points_diff == 6 ~ (opp_goal * 0.5) + opp_behind + no_score + behind + goal,
-    points_diff > 1 ~ (opp_behind * 0.5) + no_score + behind + goal,
+    points_diff >= 1 ~ (opp_behind * 0.5) + no_score + behind + goal,
     points_diff == 0 ~ (no_score * 0.5) + behind + goal,
     points_diff == -1 ~ (behind * 0.5) + goal,
     points_diff > -6 ~ goal,
