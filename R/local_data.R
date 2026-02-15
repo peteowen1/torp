@@ -55,7 +55,10 @@ get_local_data_dir <- function() {
 #' }
 set_local_data_dir <- function(path) {
   if (!dir.exists(path)) {
-    dir.create(path, recursive = TRUE, showWarnings = FALSE)
+    created <- dir.create(path, recursive = TRUE, showWarnings = FALSE)
+    if (!created || !dir.exists(path)) {
+      cli::cli_abort("Failed to create local data directory: {path}")
+    }
   }
   path <- normalizePath(path, winslash = "/")
   options(torp.local_data_dir = path)
@@ -98,7 +101,7 @@ read_local_parquet <- function(url) {
   tryCatch({
     arrow::read_parquet(path)
   }, error = function(e) {
-    cli::cli_warn("Failed to read local file: {path}")
+    cli::cli_warn("Failed to read local file {path}: {conditionMessage(e)}")
     NULL
   })
 }
@@ -116,7 +119,7 @@ write_local_parquet <- function(url, data) {
   tryCatch({
     arrow::write_parquet(data, path)
   }, error = function(e) {
-    cli::cli_warn("Failed to write local file: {path}")
+    cli::cli_warn("Failed to write local file {path}: {conditionMessage(e)}")
   })
 
   invisible(NULL)

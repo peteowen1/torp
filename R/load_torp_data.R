@@ -486,8 +486,8 @@ load_from_url <- function(url, ..., seasons = TRUE, rounds = TRUE, peteowen1 = F
 #' @importFrom cli cli_warn cli_abort
 #' @importFrom data.table data.table setDT
 parquet_from_url_cached <- function(url, use_cache = TRUE, max_age_days = 7) {
-  # Check local torpdata/data/ first
-  if (is_locally_stored(url)) {
+  # Check local torpdata/data/ first (respects use_cache flag)
+  if (use_cache && is_locally_stored(url)) {
     local_data <- read_local_parquet(url)
     if (!is.null(local_data)) {
       data.table::setDT(local_data)
