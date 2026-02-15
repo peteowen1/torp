@@ -2,22 +2,23 @@
 
 ## Active Workflows
 
-### 1. Daily Data Release (`daily-data-release.yml`)
+### 1. Daily Ratings & Predictions (`daily-ratings-predictions.yml`)
 
-**Schedule:** Daily at 4:00 PM UTC (2:00 AM AEST)
+**Trigger:** `repository_dispatch` (type: `ratings-trigger`) or manual `workflow_dispatch`
 
-Automatically runs the data release pipeline to update all AFL data on [torpdata](https://github.com/peteowen1/torpdata).
+Two-job pipeline that computes TORP ratings and then builds match predictions.
 
 **What it does:**
 
-- Fetches latest AFL data via fitzRoy
-- Processes play-by-play, chains, player stats, fixtures, results, teams, player details, and xG
-- Uploads to torpdata GitHub releases as parquet files via piggyback
+1. **compute-ratings** -- Runs `data-raw/03-ratings/run_ratings_pipeline.R` to rebuild player game data and TORP ratings, uploads to torpdata
+2. **build-predictions** -- Runs `data-raw/02-models/build_match_predictions.R` to generate weekly match predictions
 
-**Manual trigger:** Actions tab > "Daily Data Release" > "Run workflow"
+**Manual trigger:** Actions tab > "Daily Ratings & Predictions" > "Run workflow"
 
-- `force_release` -- re-release all data even if unchanged
-- `rebuild_aggregates` -- rebuild aggregate data files
+- `force` -- Force run, skip checks
+- `week_override` -- Override prediction week (leave empty for auto-detect)
+
+**On failure:** Automatically creates/updates a GitHub issue with `bug` + `automation` labels.
 
 ### 2. R Package Tests (`test-package.yml`)
 
@@ -41,6 +42,7 @@ Builds and deploys the pkgdown documentation site to GitHub Pages at <https://pe
 ### Required Secrets
 
 - `GITHUB_TOKEN` -- Automatically provided by GitHub Actions
+- `WORKFLOW_PAT` -- Personal access token with write permissions to torpdata releases (used by ratings/predictions workflow)
 
 ### Key Environment Variables
 
