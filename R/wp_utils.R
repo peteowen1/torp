@@ -102,12 +102,12 @@ get_wp_model_info <- function() {
 #' @return List with health check results
 #' @export
 check_wp_model_health <- function() {
-  health_results <- as.environment(list(
+  health_results <- list2env(list(
     basic_model_available = FALSE,
     enhanced_model_available = FALSE,
     data_objects_loaded = FALSE,
     errors = character(0)
-  ))
+  ), parent = emptyenv())
 
   # Check basic model
   tryCatch({
@@ -146,10 +146,9 @@ check_wp_model_health <- function() {
   health_results <- as.list(health_results)
 
   # Overall health assessment
-  health_results$overall_health <- ifelse(
-    health_results$basic_model_available && health_results$data_objects_loaded,
-    "healthy", "unhealthy"
-  )
+  health_results$overall_health <- if (
+    health_results$basic_model_available && health_results$data_objects_loaded
+  ) "healthy" else "unhealthy"
 
-  return(health_results)
+  health_results
 }

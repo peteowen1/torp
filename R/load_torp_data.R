@@ -577,8 +577,7 @@ parquet_from_url <- function(url) {
 #' @return Character string of the repository in format "owner/repo"
 #' @keywords internal
 get_torp_data_repo <- function() {
-  repo <- getOption("torp.data.repo", "peteowen1/torpdata")
-  return(repo)
+  getOption("torp.data.repo", "peteowen1/torpdata")
 }
 
 #' Set TORP Data Repository
@@ -653,8 +652,9 @@ validate_seasons <- function(seasons) {
   current_season <- tryCatch({
     get_afl_season()
   }, error = function(e) {
-    cli::cli_warn("Could not determine current AFL season, using {as.integer(format(Sys.Date(), '%Y'))} as default")
-    as.integer(format(Sys.Date(), "%Y"))
+    fallback <- as.integer(format(Sys.Date(), "%Y"))
+    cli::cli_warn("Could not determine current AFL season, using {fallback} as default")
+    fallback
   })
 
   invalid_seasons <- seasons[seasons < 2021 | seasons > current_season]
@@ -687,6 +687,9 @@ generate_urls <- function(data_type, file_prefix, seasons, rounds = NULL, prefer
     prefer_aggregated <- getOption("torp.use_aggregated_files", TRUE)
   }
 
+  current_season <- get_afl_season()
+  current_round <- NULL
+
   if (is.null(rounds)) {
     combinations <- expand.grid(seasons = seasons)
 
@@ -695,7 +698,6 @@ generate_urls <- function(data_type, file_prefix, seasons, rounds = NULL, prefer
   }
 
   if (!is.null(rounds)) {
-    current_season <- get_afl_season()
     current_round <- get_afl_week()
 
     # Check if we're loading all rounds for any season (rounds 0-28 or TRUE was passed)
@@ -705,13 +707,7 @@ generate_urls <- function(data_type, file_prefix, seasons, rounds = NULL, prefer
 
     if (prefer_aggregated && loading_all_rounds) {
       # Use aggregated files for complete seasons
-      urls <- character(0)
-
-      for (season in seasons) {
-        url <- paste0(base_url, "/", data_type, "/", file_prefix, "_", season, "_all.parquet")
-        urls <- c(urls, url)
-      }
-
+      urls <- paste0(base_url, "/", data_type, "/", file_prefix, "_", seasons, "_all.parquet")
       return(as.character(urls))
     }
 
@@ -723,19 +719,14 @@ generate_urls <- function(data_type, file_prefix, seasons, rounds = NULL, prefer
     urls <- sort(urls)
   }
 
-  if (!exists("current_season", inherits = FALSE)) {
-    current_season <- get_afl_season()
-  }
-
   if (data_type == "fixtures-data") {
-    current_round <- 99
+    current_round_str <- 99
   } else {
-    # Reuse current_round if already fetched in the rounds block above
-    raw_round <- if (exists("current_round", inherits = FALSE)) current_round else get_afl_week()
-    current_round <- sprintf("%02d", raw_round)
+    if (is.null(current_round)) current_round <- get_afl_week()
+    current_round_str <- sprintf("%02d", current_round)
   }
 
-  max_url <- paste0(base_url, "/", data_type, "/", file_prefix, "_", current_season, "_", current_round, ".parquet")
+  max_url <- paste0(base_url, "/", data_type, "/", file_prefix, "_", current_season, "_", current_round_str, ".parquet")
 
   urls <- urls[urls <= max_url]
 
