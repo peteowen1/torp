@@ -100,19 +100,23 @@ add_wp_vars <- function(df, use_enhanced = TRUE) {
   }
   
   # Choose prediction method with comprehensive error handling
+  wp_model_type <- "basic"
   if (use_enhanced) {
+    wp_model_type <- "enhanced"
     wp_preds <- tryCatch({
       get_wp_preds_enhanced(df)
     }, error = function(e) {
       cli::cli_warn("Enhanced model failed: {e$message}. Falling back to basic model.")
+      wp_model_type <<- "basic_fallback"
       basic_preds <- get_wp_preds(df)
       colnames(basic_preds) <- "wp"
       return(basic_preds)
     })
-    
+
     # Validate predictions
     if (is.null(wp_preds) || !is.data.frame(wp_preds) || !"wp" %in% names(wp_preds)) {
       cli::cli_warn("Invalid enhanced predictions. Using basic model.")
+      wp_model_type <- "basic_fallback"
       wp_preds <- get_wp_preds(df)
       colnames(wp_preds) <- "wp"
     }
@@ -127,7 +131,9 @@ add_wp_vars <- function(df, use_enhanced = TRUE) {
   }
   
   # Bind predictions to original data
+  cli::cli_inform("WP model used: {wp_model_type}")
   pbp_final <- dplyr::bind_cols(df, wp_preds)
+  attr(pbp_final, "wp_model_type") <- wp_model_type
 
   # Calculate Win Probability Added (WPA) with improved logic
   pbp_final <- pbp_final |>

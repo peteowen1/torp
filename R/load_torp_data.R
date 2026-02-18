@@ -565,8 +565,7 @@ parquet_from_url <- function(url) {
 #' @return Character string of the repository in format "owner/repo"
 #' @keywords internal
 get_torp_data_repo <- function() {
-  # Default repository
-  return("peteowen1/torpdata")
+  getOption("torp.data.repo", "peteowen1/torpdata")
 }
 
 #' Set TORP Data Repository
@@ -720,7 +719,13 @@ generate_urls <- function(data_type, file_prefix, seasons, rounds = NULL, prefer
 
   max_url <- paste0(base_url, "/", data_type, "/", file_prefix, "_", current_season, "_", current_round, ".parquet")
 
+  n_before <- length(urls)
   urls <- urls[urls <= max_url]
+  n_dropped <- n_before - length(urls)
+
+  if (n_dropped > 0) {
+    cli::cli_inform("Filtered {n_dropped} future URL{?s} (current season: {current_season}, round: {current_round}).")
+  }
 
   return(as.character(urls))
 }
