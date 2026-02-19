@@ -273,9 +273,7 @@ add_game_vars_dt <- function(dt) {
   dt[, `:=`(
     pos_team_points = data.table::fifelse(home == 1L, home_points, away_points),
     opp_team_points = data.table::fifelse(home == 1L, away_points, home_points),
-    # NOTE: Uses 1800 (not AFL_QUARTER_DURATION=2000) because the WP model was
-    # trained on this scale. Changing requires WP model retraining.
-    total_seconds = (period - 1L) * 1800L + period_seconds
+    total_seconds = (period - 1L) * AFL_QUARTER_DURATION + period_seconds
   )]
 
   dt[, points_diff := pos_team_points - opp_team_points]

@@ -12,13 +12,13 @@ test_that("AFL_GOAL_WIDTH has expected value", {
 })
 
 test_that("AFL_QUARTER_DURATION has expected value", {
-  expect_equal(torp:::AFL_QUARTER_DURATION, 2000)
+  expect_equal(torp:::AFL_QUARTER_DURATION, 1800)
   expect_true(torp:::AFL_QUARTER_DURATION > 1000)  # Should be at least 1000 seconds
   expect_true(torp:::AFL_QUARTER_DURATION < 3000)  # Should be less than 50 mins
 })
 
 test_that("AFL_TOTAL_GAME_SECONDS has expected value", {
-  expect_equal(torp:::AFL_TOTAL_GAME_SECONDS, 8000)
+  expect_equal(torp:::AFL_TOTAL_GAME_SECONDS, 7200)
   # Should equal 4 quarters
   expect_equal(
     torp:::AFL_TOTAL_GAME_SECONDS,
