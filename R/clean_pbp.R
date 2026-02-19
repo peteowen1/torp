@@ -208,14 +208,10 @@ add_quarter_vars_dt <- function(dt) {
 
   dt[, `:=`(
     home_points_row = data.table::fifelse(
-      is.na(data.table::fifelse(points_team_id == home_team_id, points_row, NA_integer_)),
-      0L,
-      data.table::fifelse(points_team_id == home_team_id, points_row, NA_integer_)
+      points_team_id == home_team_id & !is.na(points_row), points_row, 0L
     ),
     away_points_row = data.table::fifelse(
-      is.na(points_row - data.table::fifelse(points_team_id == home_team_id, points_row, 0L)),
-      0L,
-      points_row - data.table::fifelse(points_team_id == home_team_id, points_row, 0L)
+      points_team_id != home_team_id & !is.na(points_row) & !is.na(points_team_id), points_row, 0L
     )
   )]
 
@@ -277,6 +273,8 @@ add_game_vars_dt <- function(dt) {
   dt[, `:=`(
     pos_team_points = data.table::fifelse(home == 1L, home_points, away_points),
     opp_team_points = data.table::fifelse(home == 1L, away_points, home_points),
+    # NOTE: Uses 1800 (not AFL_QUARTER_DURATION=2000) because the WP model was
+    # trained on this scale. Changing requires WP model retraining.
     total_seconds = (period - 1L) * 1800L + period_seconds
   )]
 

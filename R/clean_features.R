@@ -233,7 +233,7 @@ filter_relevant_descriptions <- function(df) {
 
   df |>
     dplyr::filter(.data$description %in% relevant_descriptions) |>
-    dplyr::filter(!(.data$x == -.data$lead_x_tot & .data$y == -.data$lead_y_tot & .data$description != "Centre Bounce"))
+    dplyr::filter(!(dplyr::near(.data$x, -.data$lead_x_tot) & dplyr::near(.data$y, -.data$lead_y_tot) & .data$description != "Centre Bounce"))
 }
 
 #' Add Expected Points Value (EPV) Variables
