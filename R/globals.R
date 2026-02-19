@@ -63,9 +63,6 @@ utils::globalVariables(c(
   "auc", "log_loss", "bin", "pred_decile", "estimate", "result",
   "mean_predicted", "mean_actual", "se", "count",
 
-  # Model objects
-  "wp_model_ensemble",
-
   # Player profile aggregation variables
   "full_name_norm", "firstName", "surname", "providerId",
   "goals", "behinds", "shots_at_goal", "disposals", "kicks",

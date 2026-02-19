@@ -266,7 +266,7 @@ test_that("add_wp_vars adds context columns", {
   mock_pbp <- create_mock_pbp_data(20)
 
   result <- suppressWarnings(tryCatch({
-    add_wp_vars(mock_pbp, use_enhanced = TRUE)
+    add_wp_vars(mock_pbp)
   }, error = function(e) NULL))
 
   if (!is.null(result)) {
@@ -277,25 +277,6 @@ test_that("add_wp_vars adds context columns", {
     # wp_category should have valid values
     valid_categories <- c("very_likely", "likely", "toss_up", "unlikely", "very_unlikely")
     expect_true(all(result$wp_category %in% valid_categories))
-  }
-})
-
-test_that("add_wp_vars use_enhanced parameter works", {
-  mock_pbp <- create_mock_pbp_data(10)
-
-  # Both should work (may fall back if enhanced fails)
-  result_enhanced <- suppressWarnings(tryCatch({
-    add_wp_vars(mock_pbp, use_enhanced = TRUE)
-  }, error = function(e) NULL))
-
-  result_basic <- suppressWarnings(tryCatch({
-    add_wp_vars(mock_pbp, use_enhanced = FALSE)
-  }, error = function(e) NULL))
-
-  if (!is.null(result_enhanced) && !is.null(result_basic)) {
-    # Both should have wp column
-    expect_true("wp" %in% names(result_enhanced))
-    expect_true("wp" %in% names(result_basic))
   }
 })
 

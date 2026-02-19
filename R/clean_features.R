@@ -29,9 +29,7 @@ clean_model_data_wp <- function(df) {
       pos_lead_prob = calculate_pos_lead_prob(.data$points_diff, .data$opp_goal, .data$opp_behind, .data$no_score, .data$behind, .data$goal),
       time_left_scaler = exp(pmin(((.data$period - 1) * AFL_QUARTER_DURATION + .data$period_seconds) / AFL_QUARTER_DURATION, AFL_TIME_SCALER_MAX)),
       diff_time_ratio = .data$xpoints_diff * .data$time_left_scaler
-    ) |>
-    torp_dummy_cols(select_columns = c("play_type", "phase_of_play")) |>
-    torp_clean_names()
+    )
 }
 
 #' Select EPV Model Variables
@@ -151,13 +149,25 @@ clean_shots_data <- function(df) {
   
   # Load shot player data safely
   shot_player_df <- NULL
-  utils::data("shot_player_df", package = "torp", envir = environment())
+  tryCatch(
+    utils::data("shot_player_df", package = "torp", envir = environment()),
+    warning = function(w) NULL
+  )
 
-  df |>
+  df <- df |>
     add_shot_result_variables() |>
     add_shot_geometry_variables(goal_width) |>
-    add_shot_type_variables() |>
-    dplyr::left_join(shot_player_df, by = c("player_id" = "player_id_shot"), keep = TRUE) |>
+    add_shot_type_variables()
+
+  if (!is.null(shot_player_df)) {
+    df <- df |>
+      dplyr::left_join(shot_player_df, by = c("player_id" = "player_id_shot"), keep = TRUE)
+  } else {
+    df$player_id_shot <- NA_character_
+    df$player_name_shot <- NA_character_
+  }
+
+  df |>
     dplyr::mutate(
       player_id_shot = as.factor(tidyr::replace_na(.data$player_id_shot, "Other")),
       player_name_shot = as.factor(tidyr::replace_na(.data$player_name_shot, "Other"))
@@ -233,7 +243,7 @@ filter_relevant_descriptions <- function(df) {
 
   df |>
     dplyr::filter(.data$description %in% relevant_descriptions) |>
-    dplyr::filter(!(.data$x == -.data$lead_x_tot & .data$y == -.data$lead_y_tot & .data$description != "Centre Bounce"))
+    dplyr::filter(!(dplyr::near(.data$x, -.data$lead_x_tot) & dplyr::near(.data$y, -.data$lead_y_tot) & .data$description != "Centre Bounce"))
 }
 
 #' Add Expected Points Value (EPV) Variables
@@ -496,7 +506,8 @@ calculate_pos_lead_prob <- function(points_diff, opp_goal, opp_behind, no_score,
   dplyr::case_when(
     points_diff > 6 ~ 1,
     points_diff == 6 ~ (opp_goal * 0.5) + opp_behind + no_score + behind + goal,
-    points_diff >= 1 ~ (opp_behind * 0.5) + no_score + behind + goal,
+    points_diff > 1 ~ opp_behind + no_score + behind + goal,
+    points_diff == 1 ~ (opp_behind * 0.5) + no_score + behind + goal,
     points_diff == 0 ~ (no_score * 0.5) + behind + goal,
     points_diff == -1 ~ (behind * 0.5) + goal,
     points_diff > -6 ~ goal,

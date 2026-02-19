@@ -66,105 +66,61 @@ add_epv_vars <- function(df) {
   return(pbp_final)
 }
 
-#' Add Win Probability Variables (Enhanced)
+#' Add Win Probability Variables
 #'
-#' This function adds enhanced win probability (WP) and win probability added (WPA) variables 
-#' using an ensemble model approach with sophisticated feature engineering.
+#' Adds win probability (WP) and win probability added (WPA) variables
+#' using the XGBoost WP model.
 #'
 #' @param df A dataframe containing play-by-play data.
-#' @param use_enhanced Logical, whether to use the enhanced ensemble model (default TRUE).
 #'
 #' @return A dataframe with additional win probability-related variables.
 #' @export
 #' @importFrom dplyr mutate case_when lead group_by ungroup bind_cols arrange
 #' @importFrom cli cli_abort cli_warn
-#' @importFrom zoo rollmean rollapply
-add_wp_vars <- function(df, use_enhanced = TRUE) {
-  # Input validation
+add_wp_vars <- function(df) {
   if (!is.data.frame(df)) {
     cli::cli_abort("Input 'df' must be a data frame.")
   }
-  
+
   if (nrow(df) == 0) {
     cli::cli_abort("Input data frame cannot be empty.")
   }
-  
-  # Check for required columns for enhanced model
-  required_cols <- c("match_id", "period", "period_seconds", "points_diff", 
-                    "exp_pts", "goal_x", "y", "home", "team_id_mdl")
-  
-  missing_cols <- setdiff(required_cols, names(df))
-  if (length(missing_cols) > 0 && use_enhanced) {
-    cli::cli_warn("Missing columns for enhanced model: {paste(missing_cols, collapse = ', ')}. Using basic model.")
-    use_enhanced <- FALSE
-  }
-  
-  # Choose prediction method with comprehensive error handling
-  if (use_enhanced) {
-    wp_preds <- tryCatch({
-      get_wp_preds_enhanced(df)
-    }, error = function(e) {
-      cli::cli_warn("Enhanced model failed: {e$message}. Falling back to basic model.")
-      basic_preds <- get_wp_preds(df)
-      colnames(basic_preds) <- "wp"
-      return(basic_preds)
-    })
-    
-    # Validate predictions
-    if (is.null(wp_preds) || !is.data.frame(wp_preds) || !"wp" %in% names(wp_preds)) {
-      cli::cli_warn("Invalid enhanced predictions. Using basic model.")
-      wp_preds <- get_wp_preds(df)
-      colnames(wp_preds) <- "wp"
-    }
-  } else {
-    wp_preds <- get_wp_preds(df)
-    colnames(wp_preds) <- "wp"
-  }
-  
-  # Final validation of predictions
+
+  wp_preds <- get_wp_preds(df)
+  colnames(wp_preds) <- "wp"
+
   if (nrow(wp_preds) != nrow(df)) {
     cli::cli_abort("Prediction count mismatch: expected {nrow(df)}, got {nrow(wp_preds)}")
   }
-  
-  # Bind predictions to original data
+
   pbp_final <- dplyr::bind_cols(df, wp_preds)
 
-  # Calculate Win Probability Added (WPA) with improved logic
   pbp_final <- pbp_final |>
     dplyr::group_by(.data$match_id) |>
     dplyr::arrange(.data$period, .data$period_seconds) |>
     dplyr::mutate(
-      # Round win probability to reasonable precision
-      wp = round(pmax(0.001, pmin(0.999, .data$wp)), 5),  # Bound between 0.001 and 0.999
-      
-      # Enhanced WPA calculation
+      wp = round(pmax(0.001, pmin(0.999, .data$wp)), 5),
+
       wp_next = dplyr::lead(.data$wp, default = dplyr::last(.data$wp)),
       team_id_next = dplyr::lead(.data$team_id_mdl, default = dplyr::last(.data$team_id_mdl)),
-      
-      # WPA calculation accounting for team changes
+
       wpa = round(dplyr::case_when(
-        # Same team continues possession
         .data$team_id_next == .data$team_id_mdl ~ .data$wp_next - .data$wp,
-        # Possession changes to other team
         .data$team_id_next != .data$team_id_mdl ~ (1 - .data$wp_next) - .data$wp,
-        # Default case (shouldn't happen)
         TRUE ~ 0
       ), 5),
-      
-      # Add additional context variables if using enhanced model
+
       wp_category = dplyr::case_when(
         .data$wp >= 0.8 ~ "very_likely",
-        .data$wp >= 0.6 ~ "likely", 
+        .data$wp >= 0.6 ~ "likely",
         .data$wp >= 0.4 ~ "toss_up",
         .data$wp >= 0.2 ~ "unlikely",
         TRUE ~ "very_unlikely"
       ),
-      
-      # High leverage situations (where WPA swings are most impactful)
-      high_leverage = abs(.data$wpa) >= 0.05 | 
+
+      high_leverage = abs(.data$wpa) >= 0.05 |
                      (.data$wp >= 0.2 & .data$wp <= 0.8),
-      
-      # Remove helper columns
+
       wp_next = NULL,
       team_id_next = NULL
     ) |>
@@ -248,9 +204,12 @@ get_epv_preds <- function(df) {
     }
 
     # Convert to proper format
-    preds <- as.data.frame(
-      matrix(preds_raw, ncol = 5, byrow = TRUE)
-    )
+    # xgboost 3.x returns a matrix directly; older versions return a flat vector
+    if (is.matrix(preds_raw)) {
+      preds <- as.data.frame(preds_raw)
+    } else {
+      preds <- as.data.frame(matrix(preds_raw, ncol = 5, byrow = TRUE))
+    }
     colnames(preds) <- c("opp_goal", "opp_behind", "behind", "goal", "no_score")
 
     # Log successful prediction

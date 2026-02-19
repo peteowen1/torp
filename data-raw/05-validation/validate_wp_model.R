@@ -1,5 +1,5 @@
 # Win Probability Model Validation and Testing
-# Comprehensive evaluation of the enhanced win probability model
+# Comprehensive evaluation of the XGBoost win probability model
 
 # 1. Load Test Data ----
 library(dplyr)
@@ -18,10 +18,10 @@ test_season <- 2024
 validation_chains <- load_chains(test_season, TRUE)
 
 # Process through pipeline
-validation_data <- validation_chains %>%
-  clean_pbp() %>%
-  clean_model_data_epv() %>%
-  add_epv_vars() %>%
+validation_data <- validation_chains |>
+  clean_pbp() |>
+  clean_model_data_epv() |>
+  add_epv_vars() |>
   clean_model_data_wp()
 
 cat(glue("✅ Validation data loaded: {nrow(validation_data):,} plays from {test_season}\n"))
@@ -32,15 +32,10 @@ evaluate_wp_model <- function(data, model_name = "Model") {
   cat(glue("\n🔍 Evaluating {model_name}...\n"))
   
   # Add predictions
-  data_with_wp <- tryCatch({
-    add_wp_vars(data, use_enhanced = TRUE)
-  }, error = function(e) {
-    cat(glue("Enhanced model failed, using basic: {e$message}\n"))
-    add_wp_vars(data, use_enhanced = FALSE)
-  })
+  data_with_wp <- add_wp_vars(data)
   
   # Filter for valid predictions
-  eval_data <- data_with_wp %>%
+  eval_data <- data_with_wp |>
     filter(!is.na(wp), !is.na(label_wp), is.finite(wp), is.finite(label_wp))
   
   if (nrow(eval_data) == 0) {
@@ -62,14 +57,14 @@ evaluate_wp_model <- function(data, model_name = "Model") {
     pred = y_pred,
     actual = y_true,
     pred_bin = cut(y_pred, breaks = seq(0, 1, 0.1), include.lowest = TRUE)
-  ) %>%
-    group_by(pred_bin) %>%
+  ) |>
+    group_by(pred_bin) |>
     summarise(
       pred_mean = mean(pred, na.rm = TRUE),
       actual_mean = mean(actual, na.rm = TRUE),
       n = n(),
       .groups = "drop"
-    ) %>%
+    ) |>
     filter(n >= 20)  # Only bins with sufficient data
   
   # Calibration slope (should be close to 1)
@@ -85,7 +80,7 @@ evaluate_wp_model <- function(data, model_name = "Model") {
   }
   
   # 3. Reliability analysis by game situation
-  situation_analysis <- eval_data %>%
+  situation_analysis <- eval_data |>
     mutate(
       time_segment = case_when(
         period <= 2 ~ "First_Half",
@@ -97,23 +92,23 @@ evaluate_wp_model <- function(data, model_name = "Model") {
         abs(points_diff) <= 18 ~ "Moderate",
         TRUE ~ "Blowout"
       )
-    ) %>%
-    group_by(time_segment, score_diff_category) %>%
+    ) |>
+    group_by(time_segment, score_diff_category) |>
     summarise(
       n = n(),
       mean_pred = mean(wp, na.rm = TRUE),
       mean_actual = mean(label_wp, na.rm = TRUE),
       logloss = ifelse(n >= 50, ModelMetrics::logLoss(label_wp, wp), NA),
       .groups = "drop"
-    ) %>%
+    ) |>
     filter(n >= 50)
   
   # 4. Edge case analysis
-  extreme_situations <- eval_data %>%
+  extreme_situations <- eval_data |>
     filter(
       (wp <= 0.1 | wp >= 0.9) |  # Extreme predictions
       (period == 4 & abs(points_diff) <= 12)  # Close fourth quarter
-    ) %>%
+    ) |>
     summarise(
       n_extreme = n(),
       extreme_accuracy = mean(abs(wp - label_wp) <= 0.1, na.rm = TRUE),
@@ -158,16 +153,16 @@ evaluate_wp_model <- function(data, model_name = "Model") {
 
 # 3. Run Comprehensive Evaluation ----
 
-# Test the enhanced model
-enhanced_results <- evaluate_wp_model(validation_data, "Enhanced Ensemble Model")
+# Test the WP model
+wp_results <- evaluate_wp_model(validation_data, "WP Model")
 
 # 4. Baseline Comparisons ----
 
 cat("\n📊 Baseline Comparisons:\n")
 
 # Simple baselines
-baseline_predictions <- validation_data %>%
-  filter(!is.na(label_wp)) %>%
+baseline_predictions <- validation_data |>
+  filter(!is.na(label_wp)) |>
   mutate(
     # Naive baseline: always 50%
     wp_naive = 0.5,
@@ -202,9 +197,9 @@ baseline_time_score <- evaluate_baseline(baseline_predictions, "wp_time_score", 
 
 cat("\n🏈 Game-Level Validation:\n")
 
-if (!is.null(enhanced_results)) {
-  game_level_results <- enhanced_results$predictions %>%
-    group_by(match_id) %>%
+if (!is.null(wp_results)) {
+  game_level_results <- wp_results$predictions |>
+    group_by(match_id) |>
     summarise(
       n_plays = n(),
       final_actual = last(actual),
@@ -212,7 +207,7 @@ if (!is.null(enhanced_results)) {
       max_wp_swing = max(predicted) - min(predicted),
       mean_absolute_error = mean(abs(predicted - actual)),
       .groups = "drop"
-    ) %>%
+    ) |>
     summarise(
       n_games = n(),
       final_accuracy = mean(abs(final_predicted - final_actual) <= 0.1),
@@ -228,11 +223,11 @@ if (!is.null(enhanced_results)) {
 
 # 6. Diagnostic Plots ----
 
-if (!is.null(enhanced_results) && nrow(enhanced_results$calibration_df) > 2) {
+if (!is.null(wp_results) && nrow(wp_results$calibration_df) > 2) {
   cat("\n📊 Creating diagnostic plots...\n")
   
   # Calibration plot
-  calibration_plot <- ggplot(enhanced_results$calibration_df, aes(x = pred_mean, y = actual_mean)) +
+  calibration_plot <- ggplot(wp_results$calibration_df, aes(x = pred_mean, y = actual_mean)) +
     geom_point(aes(size = n), alpha = 0.7) +
     geom_smooth(method = "lm", se = TRUE, color = "red", linetype = "dashed") +
     geom_abline(intercept = 0, slope = 1, color = "blue", linetype = "solid") +
@@ -251,19 +246,6 @@ if (!is.null(enhanced_results) && nrow(enhanced_results$calibration_df) > 2) {
   ggsave("wp_calibration_plot.png", calibration_plot, width = 10, height = 8, dpi = 300)
   cat("✅ Calibration plot saved as 'wp_calibration_plot.png'\n")
   
-  # Feature importance analysis (if available)
-  if (exists("wp_model_ensemble")) {
-    cat("\n🔍 Feature Importance Analysis:\n")
-    cat("Top 10 most important features for win probability:\n")
-    
-    # This would need the actual model object - placeholder for now
-    cat("   1. points_diff - Score differential\n")
-    cat("   2. time_remaining_pct - Time remaining percentage\n") 
-    cat("   3. xpoints_diff - Expected points differential\n")
-    cat("   4. goal_x - Field position\n")
-    cat("   5. exp_pts - Expected points from current position\n")
-    cat("   (Full analysis requires trained model)\n")
-  }
 }
 
 # 7. Summary ----
@@ -271,40 +253,38 @@ if (!is.null(enhanced_results) && nrow(enhanced_results$calibration_df) > 2) {
 cat("\n🎯 MODEL VALIDATION SUMMARY\n")
 cat("===============================\n")
 
-if (!is.null(enhanced_results)) {
-  improvement_vs_naive <- (baseline_naive$logloss - enhanced_results$logloss) / baseline_naive$logloss * 100
-  improvement_vs_simple <- (baseline_time_score$logloss - enhanced_results$logloss) / baseline_time_score$logloss * 100
+if (!is.null(wp_results)) {
+  improvement_vs_naive <- (baseline_naive$logloss - wp_results$logloss) / baseline_naive$logloss * 100
+  improvement_vs_simple <- (baseline_time_score$logloss - wp_results$logloss) / baseline_time_score$logloss * 100
   
-  cat(glue("✅ Enhanced Model Performance:\n"))
+  cat(glue("✅ WP Model Performance:\n"))
   cat(glue("   • {improvement_vs_naive:.1f}% improvement over naive baseline\n"))
   cat(glue("   • {improvement_vs_simple:.1f}% improvement over simple time+score model\n"))
-  cat(glue("   • AUC: {enhanced_results$auc:.4f} (>0.85 is excellent)\n"))
-  cat(glue("   • Calibration slope: {enhanced_results$calibration_slope:.4f} (1.0 is perfect)\n"))
+  cat(glue("   • AUC: {wp_results$auc:.4f} (>0.85 is excellent)\n"))
+  cat(glue("   • Calibration slope: {wp_results$calibration_slope:.4f} (1.0 is perfect)\n"))
   
   # Quality assessment
-  if (enhanced_results$auc >= 0.85) {
+  if (wp_results$auc >= 0.85) {
     cat("🏆 Model shows EXCELLENT discrimination ability\n")
-  } else if (enhanced_results$auc >= 0.75) {
+  } else if (wp_results$auc >= 0.75) {
     cat("✅ Model shows GOOD discrimination ability\n") 
   } else {
     cat("⚠️  Model discrimination could be improved\n")
   }
   
-  if (abs(enhanced_results$calibration_slope - 1.0) <= 0.1) {
+  if (abs(wp_results$calibration_slope - 1.0) <= 0.1) {
     cat("🎯 Model is WELL-CALIBRATED\n")
   } else {
     cat("⚠️  Model calibration needs improvement\n")
   }
   
 } else {
-  cat("❌ Enhanced model evaluation failed\n")
+  cat("❌ WP model evaluation failed\n")
 }
 
 cat("\n🔧 RECOMMENDATIONS:\n")
-cat("   1. Use the enhanced ensemble model for production\n")
-cat("   2. Monitor calibration on new data and recalibrate if needed\n")
-cat("   3. Focus on extreme probability situations for further improvement\n")
-cat("   4. Consider adding team-specific features for better accuracy\n")
-cat("   5. Implement real-time model monitoring and drift detection\n")
+cat("   1. Monitor calibration on new data and recalibrate if needed\n")
+cat("   2. Focus on extreme probability situations for further improvement\n")
+cat("   3. Consider adding team-specific features for better accuracy\n")
 
 cat("\n🎉 Win Probability Model Validation Complete! 🎉\n")

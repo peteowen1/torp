@@ -429,7 +429,11 @@ load_from_url <- function(url, ..., seasons = TRUE, rounds = TRUE, peteowen1 = F
     }
     if (!isTRUE(rounds)) {
       stopifnot(is.numeric(rounds))
-      if ("round" %in% names(out)) out <- out[out$round %in% rounds, ]
+      if ("round" %in% names(out)) {
+        out <- out[out$round %in% rounds, ]
+      } else if ("round_number" %in% names(out)) {
+        out <- out[out$round_number %in% rounds, ]
+      }
     }
   } else {
     # Check connectivity once before starting batch download
@@ -700,6 +704,16 @@ generate_urls <- function(data_type, file_prefix, seasons, rounds = NULL, prefer
   }
 
   if (!is.null(rounds)) {
+    # Chains and PBP only have _all files (no per-round files on GitHub)
+    # Always load _all and filter by round_number in load_from_url()
+    aggregated_only_types <- c("chains-data", "pbp-data")
+
+    if (data_type %in% aggregated_only_types) {
+      urls <- paste0(base_url, "/", data_type, "/", file_prefix, "_", seasons, "_all.parquet")
+      return(as.character(urls))
+    }
+
+    current_season <- get_afl_season()
     current_round <- get_afl_week()
 
     # Check if we're loading all rounds for any season (rounds 0-28 or TRUE was passed)
@@ -713,7 +727,7 @@ generate_urls <- function(data_type, file_prefix, seasons, rounds = NULL, prefer
       return(as.character(urls))
     }
 
-    # Use per-round files (default behavior)
+    # Use per-round files (default behavior for other data types)
     rounds_02d <- sprintf("%02d", rounds)
     combinations <- expand.grid(seasons = seasons, rounds = rounds_02d)
 
@@ -730,7 +744,13 @@ generate_urls <- function(data_type, file_prefix, seasons, rounds = NULL, prefer
 
   max_url <- paste0(base_url, "/", data_type, "/", file_prefix, "_", current_season, "_", current_round_str, ".parquet")
 
+  n_before <- length(urls)
   urls <- urls[urls <= max_url]
+  n_dropped <- n_before - length(urls)
+
+  if (n_dropped > 0) {
+    cli::cli_inform("Filtered {n_dropped} future URL{?s} (current season: {current_season}, round: {current_round}).")
+  }
 
   return(as.character(urls))
 }

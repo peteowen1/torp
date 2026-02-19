@@ -21,7 +21,7 @@ test_that("generate_urls creates correct URLs", {
   expect_true(all(grepl("\\.parquet$", urls)))
 })
 
-test_that("generate_urls with rounds creates correct URLs", {
+test_that("generate_urls with rounds creates correct URLs for non-aggregated types", {
   urls <- torp:::generate_urls("test-data", "test_file", seasons = 2021, rounds = c(1, 15))
 
   expect_equal(length(urls), 2)

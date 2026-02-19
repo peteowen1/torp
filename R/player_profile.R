@@ -100,11 +100,9 @@ player_profile <- function(player_name, seasons = TRUE) {
     pid_col_candidates <- c("player_id", "player_player_player_player_id")
     pid_col <- intersect(pid_col_candidates, names(dt))
     if (length(pid_col) == 0) {
-      pid_col <- grep("player.*id$", names(dt), value = TRUE, ignore.case = TRUE)
-    }
-    pid_col <- pid_col[1]
-
-    if (!is.na(pid_col) && !is.null(pid_col)) {
+      cli::cli_warn("No known player ID column found in player stats data. Expected one of: {.val {pid_col_candidates}}.")
+    } else {
+      pid_col <- pid_col[1]
       dt <- dt[dt[[pid_col]] == pid]
     }
 

@@ -12,8 +12,70 @@
 library(tidyverse)
 library(fitzRoy)
 library(cli)
+library(purrr)
 
 devtools::load_all()
+
+# Constants ----
+WEIGHT_DECAY_DAYS <- 1000
+INJURY_DISCOUNT   <- 0.95
+HOME_RATING_BOOST <- 4
+LOG_DIST_OFFSET   <- 10000
+LOG_DIST_DEFAULT  <- 16
+MIN_DATA_SEASON   <- 2021
+MIN_DATA_ROUND    <- 14
+
+# Position Lookup Tables ----
+# Maps field position (position.x) → phase/group/individual/combo columns
+PHASE_MAP <- list(
+  def = c("BPL", "BPR", "FB", "CHB", "HBFL", "HBFR"),
+  mid = c("C", "WL", "WR", "R", "RR", "RK"),
+  fwd = c("FPL", "FPR", "FF", "CHF", "HFFL", "HFFR"),
+  int = c("INT", "SUB")
+)
+
+POS_GROUP_MAP <- list(
+  backs        = c("BPL", "BPR", "FB"),
+  half_backs   = c("HBFL", "HBFR", "CHB"),
+  midfielders  = c("WL", "WR", "C"),
+  followers    = c("R", "RR", "RK"),
+  half_forwards = c("HFFL", "HFFR", "CHF"),
+  forwards     = c("FPL", "FPR", "FF")
+)
+
+INDIVIDUAL_POS <- c(
+  "BPL", "BPR", "FB", "HBFL", "HBFR", "CHB",
+  "WL", "WR", "C", "R", "RR", "RK",
+  "HFFL", "HFFR", "CHF", "FPL", "FPR", "FF"
+)
+
+COMBO_POS_MAP <- list(
+  CB   = c("CHB", "FB"),
+  BP   = c("BPL", "BPR"),
+  HBF  = c("HBFL", "HBFR"),
+  W    = c("WL", "WR"),
+  MIDS = c("C", "R", "RR"),
+  HFF  = c("HFFL", "HFFR"),
+  FP   = c("FPL", "FPR"),
+  CF   = c("FF", "CHF")
+)
+
+# Maps listed position (position.y) → column name
+LISTED_POS_MAP <- list(
+  key_def  = "KEY_DEFENDER",
+  med_def  = "MEDIUM_DEFENDER",
+  midfield = "MIDFIELDER",
+  mid_fwd  = "MIDFIELDER_FORWARD",
+  med_fwd  = "MEDIUM_FORWARD",
+  key_fwd  = "KEY_FORWARD",
+  rucks    = "RUCK"
+)
+
+# All position columns for aggregation
+POS_COLS <- c(
+  names(PHASE_MAP), names(POS_GROUP_MAP), INDIVIDUAL_POS,
+  names(COMBO_POS_MAP), names(LISTED_POS_MAP), "other_pos"
+)
 
 # Helper: Scrape Injuries ----
 
@@ -37,28 +99,6 @@ scrape_injuries <- function(timeout = 30) {
     cli::cli_warn("Failed to scrape injury list: {conditionMessage(e)}")
     data.frame(player = character(), injury = character(), estimated_return = character())
   })
-}
-
-# Helper: Calculate Familiarity Proportions ----
-
-calculate_proportions <- function(data, team, current_season, current_round) {
-  filtered_data <- data %>%
-    filter(teamId == team & ((season < current_season) | (season == current_season & round.roundNumber < current_round)))
-
-  if (nrow(filtered_data) == 0) {
-    return(data.frame(teamId = team, season = current_season, round.roundNumber = current_round, venue = unique(data$venue), familiarity = 0))
-  }
-
-  filtered_data %>%
-    group_by(venue) %>%
-    summarise(games_played = n(), .groups = "drop") %>%
-    mutate(
-      familiarity = games_played / sum(games_played),
-      teamId = team,
-      season = current_season,
-      round.roundNumber = current_round
-    ) %>%
-    select(teamId, season, round.roundNumber, venue, familiarity)
 }
 
 # Main Pipeline ----
@@ -88,9 +128,18 @@ run_predictions_pipeline <- function(week = NULL) {
   if (nrow(torp_df_total) < 100) cli::cli_abort("Ratings too small ({nrow(torp_df_total)} rows)")
   if (nrow(teams) < 100) cli::cli_abort("Teams too small ({nrow(teams)} rows)")
 
+  # Anchor date for time-decay weights (deterministic, not Sys.Date())
+  target_fixtures <- fixtures %>%
+    filter(compSeason.year == season, round.roundNumber == week)
+  weight_anchor_date <- if (nrow(target_fixtures) > 0) {
+    as.Date(min(target_fixtures$utcStartTime))
+  } else {
+    Sys.Date()
+  }
+  cli::cli_inform("Weight anchor date: {weight_anchor_date}")
+
   # Build Fixtures Tables ----
   cli::cli_h2("Building fixture features")
-  decay <- 1000
 
   team_map <-
     fixtures %>%
@@ -124,32 +173,22 @@ run_predictions_pipeline <- function(week = NULL) {
       team_name_season = as.factor(paste(team_name, season))
     )
 
-  fix_df <- fix_df %>%
-    mutate(
-      utc_dt = ymd_hms(utcStartTime, tz = "UTC")
-    ) %>%
-    rowwise() %>%
-    mutate(
-      local_start_time_str = format(
-        with_tz(utc_dt, tzone = venue.timezone),
-        "%Y-%m-%d %H:%M:%S %Z"
-      )
-    ) %>%
-    ungroup()
-
   ## Add Date Variables ----
+  # Vectorized timezone conversion: group by timezone so with_tz() processes
+  # each group as a single vectorized call (~5 groups vs ~6K per-row calls)
   fix_df <- fix_df %>%
-    rowwise() %>%
+    mutate(utc_dt = ymd_hms(utcStartTime, tz = "UTC")) %>%
+    group_by(venue.timezone) %>%
     mutate(
-      game_year = year(with_tz(utc_dt, venue.timezone)),
-      game_month = month(with_tz(utc_dt, venue.timezone)),
-      game_yday = yday(with_tz(utc_dt, venue.timezone)),
-      game_mday = day(with_tz(utc_dt, venue.timezone)),
-      game_wday = lubridate::wday(with_tz(utc_dt, venue.timezone), week_start = 1),
+      local_dt = with_tz(utc_dt, tzone = first(venue.timezone)),
+      local_start_time_str = format(local_dt, "%Y-%m-%d %H:%M:%S %Z"),
+      game_year = year(local_dt),
+      game_month = month(local_dt),
+      game_yday = yday(local_dt),
+      game_mday = day(local_dt),
+      game_wday = lubridate::wday(local_dt, week_start = 1),
       game_wday_fac = as.factor(game_wday),
-      game_hour = hour(with_tz(utc_dt, venue.timezone)) +
-        minute(with_tz(utc_dt, venue.timezone)) / 60 +
-        second(with_tz(utc_dt, venue.timezone)) / 3600,
+      game_hour = hour(local_dt) + minute(local_dt) / 60 + second(local_dt) / 3600,
       game_date_numeric = as.numeric(utc_dt),
       timezone = venue.timezone,
       game_prop_through_year = game_yday / ifelse(leap_year(game_year), 366, 365),
@@ -158,7 +197,8 @@ run_predictions_pipeline <- function(week = NULL) {
       game_prop_through_day = game_hour / 24,
       game_year_decimal = as.numeric(game_year + game_prop_through_year)
     ) %>%
-    ungroup()
+    ungroup() %>%
+    select(-local_dt)
 
   # Lineups ----
   cli::cli_h2("Processing lineups")
@@ -181,62 +221,25 @@ run_predictions_pipeline <- function(week = NULL) {
       torp_recv = tidyr::replace_na(torp_recv, 0),
       torp_disp = tidyr::replace_na(torp_disp, 0),
       torp_spoil = tidyr::replace_na(torp_spoil, 0),
-      torp_hitout = tidyr::replace_na(torp_hitout, 0),
-      phase = dplyr::case_when(
-        position.x %in% c("BPL", "BPR", "FB", "CHB", "HBFL", "HBFR") ~ "def",
-        position.x %in% c("C", "WL", "WR", "R", "RR", "RK") ~ "mid",
-        position.x %in% c("FPL", "FPR", "FF", "CHF", "HFFL", "HFFR") ~ "fwd",
-        position.x %in% c("INT", "SUB") ~ "int",
-        TRUE ~ "other",
-      ),
-      def = ifelse(phase == "def", torp, NA),
-      mid = ifelse(phase == "mid", torp, NA),
-      fwd = ifelse(phase == "fwd", torp, NA),
-      int = ifelse(phase == "int", torp, NA),
-      backs = ifelse(position.x == "BPL" | position.x == "BPR" | position.x == "FB", torp, NA),
-      half_backs = ifelse(position.x == "HBFL" | position.x == "HBFR" | position.x == "CHB", torp, NA),
-      midfielders = ifelse(position.x == "WL" | position.x == "WR" | position.x == "C", torp, NA),
-      followers = ifelse(position.x == "R" | position.x == "RR" | position.x == "RK", torp, NA),
-      half_forwards = ifelse(position.x == "HFFL" | position.x == "HFFR" | position.x == "CHF", torp, NA),
-      forwards = ifelse(position.x == "FPL" | position.x == "FPR" | position.x == "FF", torp, NA),
-      BP = ifelse(position.x == "BPL" | position.x == "BPR", torp, NA),
-      BPL = ifelse(position.x == "BPL", torp, NA),
-      BPR = ifelse(position.x == "BPR", torp, NA),
-      FB = ifelse(position.x == "FB", torp, NA),
-      HBFL = ifelse(position.x == "HBFL", torp, NA),
-      HBFR = ifelse(position.x == "HBFR", torp, NA),
-      CHB = ifelse(position.x == "CHB", torp, NA),
-      WL = ifelse(position.x == "WL", torp, NA),
-      WR = ifelse(position.x == "WR", torp, NA),
-      C = ifelse(position.x == "C", torp, NA),
-      R = ifelse(position.x == "R", torp, NA),
-      RR = ifelse(position.x == "RR", torp, NA),
-      RK = ifelse(position.x == "RK", torp, NA),
-      HFFL = ifelse(position.x == "HFFL", torp, NA),
-      HFFR = ifelse(position.x == "HFFR", torp, NA),
-      CHF = ifelse(position.x == "CHF", torp, NA),
-      FPL = ifelse(position.x == "FPL", torp, NA),
-      FPR = ifelse(position.x == "FPR", torp, NA),
-      FF = ifelse(position.x == "FF", torp, NA),
-      CB = ifelse(position.x == "CHB" | position.x == "FB", torp, NA),
-      BP = ifelse(position.x == "BPL" | position.x == "BPR", torp, NA),
-      HBF = ifelse(position.x == "HBFL" | position.x == "HBFR", torp, NA),
-      W = ifelse(position.x == "WL" | position.x == "WR", torp, NA),
-      MIDS = ifelse(position.x == "C" | position.x == "R" | position.x == "RR", torp, NA),
-      HFF = ifelse(position.x == "HFFL" | position.x == "HFFR", torp, NA),
-      FP = ifelse(position.x == "FPL" | position.x == "FPR", torp, NA),
-      CF = ifelse(position.x == "FF" | position.x == "CHF", torp, NA),
-      key_def = ifelse(position.y == "KEY_DEFENDER", torp, NA),
-      med_def = ifelse(position.y == "MEDIUM_DEFENDER", torp, NA),
-      midfield = ifelse(position.y == "MIDFIELDER", torp, NA),
-      mid_fwd = ifelse(position.y == "MIDFIELDER_FORWARD", torp, NA),
-      med_fwd = ifelse(position.y == "MEDIUM_FORWARD", torp, NA),
-      key_fwd = ifelse(position.y == "KEY_FORWARD", torp, NA),
-      rucks = ifelse(position.y == "RUCK", torp, NA),
-      other_pos = ifelse(is.na(position.y), torp, NA)
+      torp_hitout = tidyr::replace_na(torp_hitout, 0)
     )
 
+  # Generate position columns from lookup tables (replaces 52 ifelse calls)
+  for (col in names(PHASE_MAP))
+    team_lineup_df[[col]] <- ifelse(team_lineup_df$position.x %in% PHASE_MAP[[col]], team_lineup_df$torp, NA)
+  for (col in names(POS_GROUP_MAP))
+    team_lineup_df[[col]] <- ifelse(team_lineup_df$position.x %in% POS_GROUP_MAP[[col]], team_lineup_df$torp, NA)
+  for (pos in INDIVIDUAL_POS)
+    team_lineup_df[[pos]] <- ifelse(team_lineup_df$position.x == pos, team_lineup_df$torp, NA)
+  for (col in names(COMBO_POS_MAP))
+    team_lineup_df[[col]] <- ifelse(team_lineup_df$position.x %in% COMBO_POS_MAP[[col]], team_lineup_df$torp, NA)
+  for (col in names(LISTED_POS_MAP))
+    team_lineup_df[[col]] <- ifelse(team_lineup_df$position.y == LISTED_POS_MAP[[col]], team_lineup_df$torp, NA)
+  team_lineup_df$other_pos <- ifelse(is.na(team_lineup_df$position.y), team_lineup_df$torp, NA)
+
   ## Aggregate Lineups ----
+  torp_sum_cols <- c("torp", "torp_recv", "torp_disp", "torp_spoil", "torp_hitout")
+
   team_rt_df <- team_lineup_df %>%
     filter(!is.na(player.playerId)) %>%
     mutate(team_name_adj = fitzRoy::replace_teams(teamName)) %>%
@@ -244,58 +247,10 @@ run_predictions_pipeline <- function(week = NULL) {
     dplyr::summarise(
       venue = replace_venues(max(venue.name)),
       team_name_adj = max(team_name_adj),
-      torp = sum(torp, na.rm = T),
-      torp_recv = sum(torp_recv, na.rm = T),
-      torp_disp = sum(torp_disp, na.rm = T),
-      torp_spoil = sum(torp_spoil, na.rm = T),
-      torp_hitout = sum(torp_hitout, na.rm = T),
-      def = sum(def, na.rm = T),
-      mid = sum(mid, na.rm = T),
-      fwd = sum(fwd, na.rm = T),
-      int = sum(int, na.rm = T),
-      backs = sum(backs, na.rm = T),
-      half_backs = sum(half_backs, na.rm = T),
-      midfielders = sum(midfielders, na.rm = T),
-      followers = sum(followers, na.rm = T),
-      half_forwards = sum(half_forwards, na.rm = T),
-      forwards = sum(forwards, na.rm = T),
-      BPL = sum(BPL, na.rm = T),
-      BPR = sum(BPR, na.rm = T),
-      FB = sum(FB, na.rm = T),
-      HBFL = sum(HBFL, na.rm = T),
-      HBFR = sum(HBFR, na.rm = T),
-      CHB = sum(CHB, na.rm = T),
-      WL = sum(WL, na.rm = T),
-      WR = sum(WR, na.rm = T),
-      C = sum(C, na.rm = T),
-      R = sum(R, na.rm = T),
-      RR = sum(RR, na.rm = T),
-      RK = sum(RK, na.rm = T),
-      HFFL = sum(HFFL, na.rm = T),
-      HFFR = sum(HFFR, na.rm = T),
-      CHF = sum(CHF, na.rm = T),
-      FPL = sum(FPL, na.rm = T),
-      FPR = sum(FPR, na.rm = T),
-      FF = sum(FF, na.rm = T),
-      CB = sum(CB, na.rm = T),
-      BP = sum(BP, na.rm = T),
-      HBF = sum(HBF, na.rm = T),
-      W = sum(W, na.rm = T),
-      MIDS = sum(MIDS, na.rm = T),
-      HFF = sum(HFF, na.rm = T),
-      FP = sum(FP, na.rm = T),
-      CF = sum(CF, na.rm = T),
-      key_def = sum(key_def, na.rm = T),
-      med_def = sum(med_def, na.rm = T),
-      midfield = sum(midfield, na.rm = T),
-      mid_fwd = sum(mid_fwd, na.rm = T),
-      med_fwd = sum(med_fwd, na.rm = T),
-      key_fwd = sum(key_fwd, na.rm = T),
-      rucks = sum(rucks, na.rm = T),
-      other_pos = sum(other_pos, na.rm = T),
-      count = dplyr::n()
-    ) %>%
-    dplyr::ungroup()
+      across(all_of(c(torp_sum_cols, POS_COLS)), ~sum(.x, na.rm = TRUE)),
+      count = dplyr::n(),
+      .groups = "drop"
+    )
 
   # Find Home Ground ----
   home_ground <-
@@ -312,44 +267,22 @@ run_predictions_pipeline <- function(week = NULL) {
   ## Calculate Familiarity ----
   cli::cli_h2("Computing familiarity")
 
-  unique_teams <- unique(team_rt_df$teamId)
-  unique_seasons <- unique(team_rt_df$season)
-  unique_rounds <- unique(team_rt_df$round.roundNumber)
-
   tictoc::tic("familiarity")
 
-  library(purrr)
-
-  grid <- tidyr::expand_grid(
-    team   = unique_teams,
-    season = unique_seasons,
-    round  = unique_rounds
-  )
-
-  # Use parallel if available, fall back to sequential
-  has_in_parallel <- exists("in_parallel", where = asNamespace("purrr"), mode = "function")
-
-  if (has_in_parallel) {
-    f <- purrr::in_parallel(
-      \(team, season, round) {
-        suppressPackageStartupMessages({
-          library(magrittr)
-          library(dplyr)
-        })
-        calculate_proportions(df, team, season, round)
-      },
-      df = team_rt_df,
-      calculate_proportions = calculate_proportions
-    )
-    all_proportions <- purrr::pmap(grid, f, .progress = TRUE)
-  } else {
-    cli::cli_inform("purrr::in_parallel not available, using sequential pmap")
-    all_proportions <- purrr::pmap(grid, \(team, season, round) {
-      calculate_proportions(team_rt_df, team, season, round)
-    }, .progress = TRUE)
-  }
-
-  ground_prop <- dplyr::bind_rows(all_proportions)
+  # Vectorized familiarity: cumulative venue proportion per team over time
+  # For each (team, season, round), familiarity at a venue = proportion of
+  # all prior games played at that venue. Computed via cumulative counts.
+  ground_prop <- team_rt_df %>%
+    arrange(teamId, season, round.roundNumber) %>%
+    group_by(teamId) %>%
+    mutate(cum_total_games = row_number() - 1) %>%
+    group_by(teamId, venue) %>%
+    mutate(cum_venue_games = row_number() - 1) %>%
+    ungroup() %>%
+    mutate(
+      familiarity = ifelse(cum_total_games > 0, cum_venue_games / cum_total_games, 0)
+    ) %>%
+    select(teamId, season, round.roundNumber, venue, familiarity)
 
   tictoc::toc(log = TRUE)
 
@@ -357,7 +290,6 @@ run_predictions_pipeline <- function(week = NULL) {
   team_dist_df <-
     fix_df %>%
     dplyr::mutate(
-      venue = replace_venues(venue),
       venue = ifelse(venue == "Adelaide Arena at Jiangwan Stadium", "Jiangwan Stadium", venue)
     ) %>%
     dplyr::left_join(all_grounds %>% dplyr::select(venue, venue_lat = Latitude, venue_lon = Longitude), by = "venue") %>%
@@ -367,8 +299,8 @@ run_predictions_pipeline <- function(week = NULL) {
       ~ geosphere::distHaversine(c(..1, ..2), c(..3, ..4))
     )) %>%
     dplyr::mutate(
-      log_dist = log(distance + 10000),
-      log_dist = replace_na(log_dist, 16)
+      log_dist = log(distance + LOG_DIST_OFFSET),
+      log_dist = replace_na(log_dist, LOG_DIST_DEFAULT)
     ) %>%
     dplyr::left_join(ground_prop, by = c("teamId", "season", "round.roundNumber", "venue")) %>%
     dplyr::mutate(
@@ -400,7 +332,13 @@ run_predictions_pipeline <- function(week = NULL) {
     cli::cli_warn("0 injuries scraped during active season (week {week}) - all players will be treated as available")
   }
 
-  tr <- torp_ratings(season, week) %>%
+  tr <- torp_ratings(season, week)
+  if (nrow(tr) == 0 || !"player_name" %in% names(tr)) {
+    cli::cli_alert_info("No TORP ratings available for {season} R{week} (pre-season or fixtures not ready) - skipping predictions")
+    tictoc::toc(log = TRUE)
+    return(invisible(NULL))
+  }
+  tr <- tr %>%
     left_join(inj_df, by = c("player_name" = "player")) %>%
     mutate(estimated_return = replace_na(estimated_return, "None"))
 
@@ -415,11 +353,11 @@ run_predictions_pipeline <- function(week = NULL) {
     mutate(tm_rnk = rank(-torp)) %>%
     filter(tm_rnk <= 21) %>%
     summarise(
-      torp_week = sum(pmax(torp, 0), na.rm = T) * 0.95,
-      torp_recv_week = sum(pmax(torp_recv, 0), na.rm = T) * 0.95,
-      torp_disp_week = sum(pmax(torp_disp, 0), na.rm = T) * 0.95,
-      torp_spoil_week = sum(pmax(torp_spoil, 0), na.rm = T) * 0.95,
-      torp_hitout_week = sum(pmax(torp_hitout, 0), na.rm = T) * 0.95
+      torp_week = sum(pmax(torp, 0), na.rm = TRUE) * INJURY_DISCOUNT,
+      torp_recv_week = sum(pmax(torp_recv, 0), na.rm = TRUE) * INJURY_DISCOUNT,
+      torp_disp_week = sum(pmax(torp_disp, 0), na.rm = TRUE) * INJURY_DISCOUNT,
+      torp_spoil_week = sum(pmax(torp_spoil, 0), na.rm = TRUE) * INJURY_DISCOUNT,
+      torp_hitout_week = sum(pmax(torp_hitout, 0), na.rm = TRUE) * INJURY_DISCOUNT
     ) %>%
     arrange(-torp_week)
 
@@ -429,9 +367,19 @@ run_predictions_pipeline <- function(week = NULL) {
   team_rt_fix_df <-
     fix_df %>%
     mutate(team_name = fitzRoy::replace_teams(team_name)) %>%
-    left_join(team_dist_df, by = c("providerId", "teamId")) %>%
-    left_join(days_rest, by = c("providerId", "teamId")) %>%
-    left_join(team_rt_df, by = c("providerId", "teamId", "season", "round.roundNumber")) %>%
+    left_join(
+      team_dist_df %>% select(providerId, teamId, log_dist, familiarity),
+      by = c("providerId", "teamId")
+    ) %>%
+    left_join(
+      days_rest %>% select(providerId, teamId, days_rest),
+      by = c("providerId", "teamId")
+    ) %>%
+    left_join(
+      team_rt_df %>% select(providerId, teamId, season, round.roundNumber,
+                             all_of(c(torp_sum_cols, POS_COLS, "count"))),
+      by = c("providerId", "teamId", "season", "round.roundNumber")
+    ) %>%
     left_join(tr_week, by = c("team_name" = "team_name", "season" = "season", "round.roundNumber" = "round")) %>%
     mutate(
       torp = coalesce(torp, torp_week),
@@ -453,9 +401,23 @@ run_predictions_pipeline <- function(week = NULL) {
     dplyr::ungroup()
 
   # Team mdl df ----
+  # Select only needed opponent columns to reduce .x/.y column explosion
+  opp_cols <- c(
+    "providerId", "team_type",
+    "torp", "torp_recv", "torp_disp", "torp_spoil", "torp_hitout",
+    "def", "mid", "fwd", "int", INDIVIDUAL_POS,
+    "team_name", "team_name_season",
+    "log_dist", "familiarity", "days_rest",
+    # Must overlap with left side to trigger .x suffixing on columns used downstream
+    "team_type_fac", "season", "round.roundNumber", "venue", "count",
+    "game_year_decimal", "game_prop_through_year", "game_prop_through_month",
+    "game_wday_fac", "game_prop_through_day"
+  )
+
   team_mdl_df_tot <- team_rt_fix_df %>%
     dplyr::left_join(
       team_rt_fix_df %>%
+        dplyr::select(all_of(opp_cols)) %>%
         dplyr::mutate(type_anti = dplyr::if_else(team_type == "home", "away", "home")),
       by = c("providerId" = "providerId", "team_type" = "type_anti")
     ) %>%
@@ -545,16 +507,19 @@ run_predictions_pipeline <- function(week = NULL) {
       familiarity_diff = familiarity.x - familiarity.y,
       days_rest_diff = days_rest.x - days_rest.y,
       days_rest_diff_fac = as.factor(round(ifelse(days_rest_diff > 3, 4, ifelse(days_rest_diff < -3, -4, days_rest_diff)))),
-      weightz = exp(as.numeric(-(Sys.Date() - as.Date(match.utcStartTime))) / decay),
-      weightz = weightz / mean(weightz, na.rm = T),
+      weightz = exp(as.numeric(-(weight_anchor_date - as.Date(match.utcStartTime))) / WEIGHT_DECAY_DAYS),
+      weightz = weightz / mean(weightz, na.rm = TRUE),
       shot_weightz = (harmean_shots / mean(harmean_shots, na.rm = TRUE)) * weightz
     )
 
   ## Filter out early matches ----
-  # CD_M202101409 = first match of 2021 R14 (earliest with reliable TORP + xG data)
+  # Earliest with reliable TORP + xG data is 2021 R14
   team_mdl_df <-
     team_mdl_df_tot %>%
-    filter(providerId > "CD_M202101409")
+    filter(
+      season.x > MIN_DATA_SEASON |
+        (season.x == MIN_DATA_SEASON & round.roundNumber.x >= MIN_DATA_ROUND)
+    )
 
   ## Adjust total_xpoints ----
   team_mdl_df <-
@@ -592,9 +557,10 @@ run_predictions_pipeline <- function(week = NULL) {
       + s(familiarity_diff, bs = "ts", k = 5)
       + s(days_rest_diff_fac, bs = "re"),
     data = team_mdl_df, weights = weightz,
-    family = gaussian(), nthreads = 4, select = T, discrete = T,
+    family = gaussian(), nthreads = 4, select = TRUE, discrete = TRUE,
     drop.unused.levels = FALSE
   )
+  # In-sample: predictions on training data feed into downstream models
   team_mdl_df$pred_tot_xscore <- predict(afl_total_xpoints_mdl, newdata = team_mdl_df, type = "response")
 
   ## xScore Diff Model ----
@@ -613,9 +579,10 @@ run_predictions_pipeline <- function(week = NULL) {
       + s(torp_hitout_diff, bs = "ts", k = 5)
       + s(log_dist_diff, bs = "ts", k = 5) + s(familiarity_diff, bs = "ts", k = 5) + s(days_rest_diff_fac, bs = "re"),
     data = team_mdl_df, weights = weightz,
-    family = gaussian(), nthreads = 4, select = T, discrete = T,
+    family = gaussian(), nthreads = 4, select = TRUE, discrete = TRUE,
     drop.unused.levels = FALSE
   )
+  # In-sample: uses pred_tot_xscore from above
   team_mdl_df$pred_xscore_diff <- predict(afl_xscore_diff_mdl, newdata = team_mdl_df, type = "response")
 
   ## Conversion Model ----
@@ -641,9 +608,10 @@ run_predictions_pipeline <- function(week = NULL) {
       + s(venue_fac, bs = "re")
       + s(log_dist_diff, bs = "ts", k = 5) + s(familiarity_diff, bs = "ts", k = 5) + s(days_rest_diff_fac, bs = "re"),
     data = team_mdl_df, weights = shot_weightz,
-    family = gaussian(), nthreads = 4, select = T, discrete = T,
+    family = gaussian(), nthreads = 4, select = TRUE, discrete = TRUE,
     drop.unused.levels = FALSE
   )
+  # In-sample: uses pred_tot_xscore + pred_xscore_diff from above
   team_mdl_df$pred_conv_diff <- predict(afl_conv_mdl, newdata = team_mdl_df, type = "response")
 
   ## Score Diff Model ----
@@ -658,9 +626,10 @@ run_predictions_pipeline <- function(week = NULL) {
       + s(pred_xscore_diff)
       + s(log_dist_diff, bs = "ts", k = 5) + s(familiarity_diff, bs = "ts", k = 5) + s(days_rest_diff_fac, bs = "re"),
     data = team_mdl_df, weights = weightz,
-    family = "gaussian", nthreads = 4, select = T, discrete = T,
+    family = "gaussian", nthreads = 4, select = TRUE, discrete = TRUE,
     drop.unused.levels = FALSE
   )
+  # In-sample: uses pred_xscore_diff + pred_conv_diff + pred_tot_xscore from above
   team_mdl_df$pred_score_diff <- predict(afl_score_mdl, newdata = team_mdl_df, type = "response")
 
   ## Win Prob Model ----
@@ -674,7 +643,7 @@ run_predictions_pipeline <- function(week = NULL) {
         + s(pred_score_diff, bs = "ts", k = 5)
         + s(log_dist_diff, bs = "ts", k = 5) + s(familiarity_diff, bs = "ts", k = 5) + s(days_rest_diff_fac, bs = "re"),
       data = team_mdl_df, weights = weightz,
-      family = "binomial", nthreads = 4, select = T, discrete = T,
+      family = "binomial", nthreads = 4, select = TRUE, discrete = TRUE,
       drop.unused.levels = FALSE
     )
 
@@ -690,6 +659,12 @@ run_predictions_pipeline <- function(week = NULL) {
     TRUE                                           ~ 0
   )
   team_mdl_df$mae <- abs(team_mdl_df$score_diff - team_mdl_df$pred_score_diff)
+
+  # NOTE: bits/tips/mae are in-sample metrics — each GAM's predictions feed into
+  # the next model, and all models predict on their own training data. These metrics
+  # are useful for sanity-checking but should NOT be used for model comparison or
+  # reported as predictive accuracy. Use held-out evaluation for that.
+  cli::cli_alert_warning("bits/tips/mae are in-sample metrics (models predict on training data) — do not use for model comparison")
 
   # This Week's Predictions ----
   cli::cli_h2("Generating week {week} predictions")
@@ -737,7 +712,7 @@ run_predictions_pipeline <- function(week = NULL) {
       pred_win = mean(pred_win),
       margin = mean(margin)
     ) %>%
-    mutate(rating_diff = home_rating - away_rating + 4) %>%
+    mutate(rating_diff = home_rating - away_rating + HOME_RATING_BOOST) %>%
     select(providerId:away_rating, rating_diff, players:margin)
 
   # Validate Predictions ----
@@ -753,14 +728,19 @@ run_predictions_pipeline <- function(week = NULL) {
   # Upload Predictions ----
   cli::cli_h2("Uploading predictions")
 
-  pred_file_name <- paste0("predictions_", season, "_", sprintf("%02d", week))
-  save_to_release(week_gms, pred_file_name, "predictions")
+  week_gms <- week_gms %>% mutate(week = week, .before = 1)
 
-  uploaded <- tryCatch(file_reader(pred_file_name, "predictions"), error = function(e) NULL)
-  if (is.null(uploaded) || nrow(uploaded) != nrow(week_gms)) {
-    cli::cli_warn("Upload verification failed - piggyback cache delay may be the cause")
+  pred_file_name <- paste0("predictions_", season)
+  existing <- tryCatch(file_reader(pred_file_name, "predictions"), error = function(e) NULL)
+
+  if (!is.null(existing) && nrow(existing) > 0) {
+    combined <- existing %>% filter(week != !!week) %>% bind_rows(week_gms) %>% arrange(week)
+  } else {
+    combined <- week_gms
   }
-  cli::cli_alert_success("Uploaded week {week} predictions ({nrow(week_gms)} matches)")
+
+  save_to_release(combined, pred_file_name, "predictions")
+  cli::cli_alert_success("Uploaded {season} predictions ({nrow(combined)} rows, week {week} added)")
 
   tictoc::toc(log = TRUE)
 
