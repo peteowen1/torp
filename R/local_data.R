@@ -79,14 +79,23 @@ get_local_path <- function(url) {
   file.path(local_dir, basename(url))
 }
 
-#' Check if a File Exists Locally
+#' Check if a File Exists Locally and is Fresh
 #'
 #' @param url Character URL to check for a local copy
+#' @param max_age_days Maximum age in days before the local file is considered stale.
+#'   If NULL, no staleness check is performed.
 #' @return Logical
 #' @keywords internal
-is_locally_stored <- function(url) {
+is_locally_stored <- function(url, max_age_days = NULL) {
   path <- get_local_path(url)
-  !is.null(path) && file.exists(path)
+  if (is.null(path) || !file.exists(path)) return(FALSE)
+
+  if (!is.null(max_age_days)) {
+    file_age_days <- as.numeric(difftime(Sys.time(), file.info(path)$mtime, units = "days"))
+    if (file_age_days > max_age_days) return(FALSE)
+  }
+
+  TRUE
 }
 
 #' Read a Parquet File from Local Storage

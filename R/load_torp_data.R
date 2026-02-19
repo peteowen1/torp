@@ -25,8 +25,10 @@ save_to_release <- function(df, file_name, release_tag) {
                        tag = release_tag
   )
 
-  # Also save a local copy in torpdata/data/
-  save_locally(df, file_name)
+  # Also save a local copy if torpdata/data/ is configured
+  if (!is.null(get_local_data_dir())) {
+    save_locally(df, file_name)
+  }
 }
 
 #' Read a Parquet File from a GitHub Release via Piggyback
@@ -486,8 +488,8 @@ load_from_url <- function(url, ..., seasons = TRUE, rounds = TRUE, peteowen1 = F
 #' @importFrom cli cli_warn cli_abort
 #' @importFrom data.table data.table setDT
 parquet_from_url_cached <- function(url, use_cache = TRUE, max_age_days = 7) {
-  # Check local torpdata/data/ first (respects use_cache flag)
-  if (use_cache && is_locally_stored(url)) {
+  # Check local torpdata/data/ first (respects use_cache flag and max_age_days)
+  if (use_cache && is_locally_stored(url, max_age_days)) {
     local_data <- read_local_parquet(url)
     if (!is.null(local_data)) {
       data.table::setDT(local_data)

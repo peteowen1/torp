@@ -86,6 +86,24 @@ test_that("is_locally_stored returns TRUE when file exists", {
   expect_true(torp:::is_locally_stored("https://example.com/exists.parquet"))
 })
 
+test_that("is_locally_stored respects max_age_days", {
+  tmp <- file.path(tempdir(), "torp_stored_age_test")
+  dir.create(tmp, showWarnings = FALSE)
+  on.exit(unlink(tmp, recursive = TRUE), add = TRUE)
+  f <- file.path(tmp, "aged.parquet")
+  writeLines("placeholder", f)
+  # Backdate the file modification time by 10 days
+  Sys.setFileTime(f, Sys.time() - as.difftime(10, units = "days"))
+  withr::local_options(torp.local_data_dir = tmp)
+
+  # Fresh enough with 30-day window
+  expect_true(torp:::is_locally_stored("https://example.com/aged.parquet", max_age_days = 30))
+  # Stale with 7-day window
+  expect_false(torp:::is_locally_stored("https://example.com/aged.parquet", max_age_days = 7))
+  # No staleness check (NULL) — always fresh
+  expect_true(torp:::is_locally_stored("https://example.com/aged.parquet", max_age_days = NULL))
+})
+
 # -- save_locally round-trip --
 
 test_that("save_locally writes file and read_local_parquet reads it back", {
