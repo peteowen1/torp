@@ -29,9 +29,7 @@ clean_model_data_wp <- function(df) {
       pos_lead_prob = calculate_pos_lead_prob(.data$points_diff, .data$opp_goal, .data$opp_behind, .data$no_score, .data$behind, .data$goal),
       time_left_scaler = exp(pmin(((.data$period - 1) * AFL_QUARTER_DURATION + .data$period_seconds) / AFL_QUARTER_DURATION, AFL_TIME_SCALER_MAX)),
       diff_time_ratio = .data$xpoints_diff * .data$time_left_scaler
-    ) |>
-    torp_dummy_cols(select_columns = c("play_type", "phase_of_play")) |>
-    torp_clean_names()
+    )
 }
 
 #' Select EPV Model Variables
@@ -151,13 +149,25 @@ clean_shots_data <- function(df) {
   
   # Load shot player data safely
   shot_player_df <- NULL
-  utils::data("shot_player_df", package = "torp", envir = environment())
+  tryCatch(
+    utils::data("shot_player_df", package = "torp", envir = environment()),
+    warning = function(w) NULL
+  )
 
-  df |>
+  df <- df |>
     add_shot_result_variables() |>
     add_shot_geometry_variables(goal_width) |>
-    add_shot_type_variables() |>
-    dplyr::left_join(shot_player_df, by = c("player_id" = "player_id_shot"), keep = TRUE) |>
+    add_shot_type_variables()
+
+  if (!is.null(shot_player_df)) {
+    df <- df |>
+      dplyr::left_join(shot_player_df, by = c("player_id" = "player_id_shot"), keep = TRUE)
+  } else {
+    df$player_id_shot <- NA_character_
+    df$player_name_shot <- NA_character_
+  }
+
+  df |>
     dplyr::mutate(
       player_id_shot = as.factor(tidyr::replace_na(.data$player_id_shot, "Other")),
       player_name_shot = as.factor(tidyr::replace_na(.data$player_name_shot, "Other"))

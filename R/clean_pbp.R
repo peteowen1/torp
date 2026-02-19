@@ -142,16 +142,15 @@ add_quarter_vars_dt <- function(dt) {
     default = team_id
   ), by = .(match_id, period)]
 
-  # Fill NAs in team_id_mdl (character column - use nafill_char)
-  dt[, team_id_mdl := nafill_char(team_id_mdl, type = "nocb"), by = .(match_id, period)]
-  dt[, team_id_mdl := nafill_char(team_id_mdl, type = "locf"), by = .(match_id, period)]
-
-  dt[, `:=`(
-    home = data.table::fifelse(team_id_mdl == home_team_id, 1L, 0L),
-    is_goal_row = data.table::fifelse(description == "Goal", 1L, 0L)
-  )]
-
+  # Compute goal boundaries before filling so fill doesn't cross goal events
+  dt[, is_goal_row := data.table::fifelse(description == "Goal", 1L, 0L)]
   dt[, tot_goals := cumsum(is_goal_row), by = .(match_id, period)]
+
+  # Fill NAs in team_id_mdl (character column - use nafill_char)
+  dt[, team_id_mdl := nafill_char(team_id_mdl, type = "nocb"), by = .(match_id, period, tot_goals)]
+  dt[, team_id_mdl := nafill_char(team_id_mdl, type = "locf"), by = .(match_id, period, tot_goals)]
+
+  dt[, home := data.table::fifelse(team_id_mdl == home_team_id, 1L, 0L)]
 
   # scoring_team_id
   dt[, scoring_team_id := data.table::fifelse(
@@ -208,7 +207,7 @@ add_quarter_vars_dt <- function(dt) {
 
   dt[, `:=`(
     home_points_row = data.table::fifelse(
-      points_team_id == home_team_id & !is.na(points_row), points_row, 0L
+      !is.na(points_team_id) & points_team_id == home_team_id & !is.na(points_row), points_row, 0L
     ),
     away_points_row = data.table::fifelse(
       points_team_id != home_team_id & !is.na(points_row) & !is.na(points_team_id), points_row, 0L
