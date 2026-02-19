@@ -327,7 +327,9 @@ run_predictions_pipeline <- function(week = NULL) {
   )
 
   # Use parallel if available, fall back to sequential
-  has_in_parallel <- exists("in_parallel", where = asNamespace("purrr"), mode = "function")
+  has_in_parallel <- exists("in_parallel", where = asNamespace("purrr"), mode = "function") &&
+    requireNamespace("carrier", quietly = TRUE) &&
+    requireNamespace("mirai", quietly = TRUE)
 
   if (has_in_parallel) {
     f <- purrr::in_parallel(
