@@ -99,62 +99,76 @@ get_start_round <- function(season) {
   return(1)
 }
 
-# Per-Round Data Functions ----
+# Seasonal Data Update Functions (chains + PBP) ----
+# All data stored as _all files (one per season). New rounds are merged into
+# the existing _all file and re-uploaded.
 
-#' Update Chains Data for a Round
+#' Update Chains Data for Current Season
 #'
-#' Fetches and uploads chains data for a specific season and round.
+#' Fetches new round chains, merges into existing _all file, and re-uploads.
 #'
 #' @param season Season year
 #' @param round Round number
 #' @return Invisible NULL
-update_round_chains <- function(season, round) {
-  cli::cli_progress_step("Fetching chains for {season} round {round}")
+update_season_chains <- function(season, round) {
+  cli::cli_h2("Updating chains_data_{season}_all with round {round}")
 
-  chains <- tryCatch({
+  # Fetch new round data from fitzRoy
+  new_chains <- tryCatch({
     get_week_chains(season, round)
   }, error = function(e) {
     cli::cli_warn("Failed to fetch chains for {season} R{round}: {conditionMessage(e)}")
     return(NULL)
   })
 
-  if (is.null(chains) || nrow(chains) == 0) {
+  if (is.null(new_chains) || nrow(new_chains) == 0) {
     cli::cli_inform("No chains data for {season} round {round}")
     return(invisible(NULL))
   }
 
-  round_02d <- sprintf("%02d", round)
-  file_name <- glue::glue("chains_data_{season}_{round_02d}")
-  save_to_release(df = chains, file_name = file_name, release_tag = "chains-data")
+  cli::cli_inform("Fetched {nrow(new_chains)} new chain rows for round {round}")
 
-  cli::cli_inform("Saved chains: {file_name} ({nrow(chains)} rows)")
+  # Load existing _all file
+  existing <- tryCatch({
+    file_reader(glue::glue("chains_data_{season}_all"), "chains-data")
+  }, error = function(e) {
+    cli::cli_inform("No existing _all file for {season} - creating fresh")
+    NULL
+  })
+
+  if (!is.null(existing) && nrow(existing) > 0) {
+    # Remove stale data for this round (handles re-runs)
+    existing <- data.table::as.data.table(existing)
+    existing <- existing[round_number != round]
+    cli::cli_inform("Existing data: {nrow(existing)} rows (after removing round {round})")
+  }
+
+  # Combine
+  combined <- data.table::rbindlist(
+    list(existing, new_chains),
+    use.names = TRUE, fill = TRUE
+  )
+
+  file_name <- glue::glue("chains_data_{season}_all")
+  save_to_release(df = combined, file_name = file_name, release_tag = "chains-data")
+
+  cli::cli_alert_success("Saved {file_name} ({nrow(combined)} rows)")
   invisible(NULL)
 }
 
-#' Update PBP Data for a Round
+#' Update PBP Data for Current Season
 #'
-#' Fetches chains, processes into PBP, and uploads for a specific season and round.
+#' Fetches new round chains, processes into PBP, merges into existing _all file.
 #'
 #' @param season Season year
 #' @param round Round number
 #' @return Invisible NULL
-update_round_pbp <- function(season, round) {
-  cli::cli_progress_step("Processing PBP for {season} round {round}")
+update_season_pbp <- function(season, round) {
+  cli::cli_h2("Updating pbp_data_{season}_all with round {round}")
 
-  chains <- tryCatch({
-    get_week_chains(season, round)
-  }, error = function(e) {
-    cli::cli_warn("Failed to fetch chains for PBP {season} R{round}: {conditionMessage(e)}")
-    return(NULL)
-  })
-
-  if (is.null(chains) || nrow(chains) == 0) {
-    cli::cli_inform("No chains data for PBP {season} round {round}")
-    return(invisible(NULL))
-  }
-
-  # Process chains into PBP
-  pbp <- tryCatch({
+  # Fetch new round chains and process into PBP
+  new_pbp <- tryCatch({
+    chains <- get_week_chains(season, round)
     chains %>%
       clean_pbp() %>%
       clean_model_data_epv() %>%
@@ -168,101 +182,37 @@ update_round_pbp <- function(season, round) {
     return(NULL)
   })
 
-  if (is.null(pbp) || nrow(pbp) == 0) {
+  if (is.null(new_pbp) || nrow(new_pbp) == 0) {
+    cli::cli_inform("No PBP data for {season} round {round}")
     return(invisible(NULL))
   }
 
-  round_02d <- sprintf("%02d", round)
-  file_name <- glue::glue("pbp_data_{season}_{round_02d}")
-  save_to_release(df = pbp, file_name = file_name, release_tag = "pbp-data")
+  cli::cli_inform("Processed {nrow(new_pbp)} new PBP rows for round {round}")
 
-  cli::cli_inform("Saved PBP: {file_name} ({nrow(pbp)} rows)")
-  invisible(NULL)
-}
-
-# Aggregated File Functions ----
-
-#' Update Aggregated Chains File
-#'
-#' Combines all per-round chains files for a season into a single file.
-#'
-#' @param season Season year
-#' @return Invisible NULL
-update_aggregated_chains <- function(season) {
-  cli::cli_h2("Building aggregated chains for {season}")
-
-  max_round <- get_max_round(season)
-  start_round <- get_start_round(season)
-
-  # Load all rounds for the season
-  all_data <- lapply(start_round:max_round, function(round) {
-    tryCatch({
-      round_02d <- sprintf("%02d", round)
-      file_name <- glue::glue("chains_data_{season}_{round_02d}")
-      file_reader(file_name, "chains-data")
-    }, error = function(e) {
-      NULL
-    })
+  # Load existing _all file
+  existing <- tryCatch({
+    file_reader(glue::glue("pbp_data_{season}_all"), "pbp-data")
+  }, error = function(e) {
+    cli::cli_inform("No existing _all file for {season} - creating fresh")
+    NULL
   })
 
-  # Combine non-null results
-  combined <- data.table::rbindlist(
-    Filter(Negate(is.null), all_data),
-    use.names = TRUE,
-    fill = TRUE
-  )
-
-  if (nrow(combined) == 0) {
-    cli::cli_warn("No chains data found for {season}")
-    return(invisible(NULL))
+  if (!is.null(existing) && nrow(existing) > 0) {
+    existing <- data.table::as.data.table(existing)
+    existing <- existing[round_number != round]
+    cli::cli_inform("Existing data: {nrow(existing)} rows (after removing round {round})")
   }
 
-  file_name <- glue::glue("chains_data_{season}_all")
-  save_to_release(df = combined, file_name = file_name, release_tag = "chains-data")
-
-  cli::cli_alert_success("Saved aggregated chains: {file_name} ({nrow(combined)} rows)")
-  invisible(NULL)
-}
-
-#' Update Aggregated PBP File
-#'
-#' Combines all per-round PBP files for a season into a single file.
-#'
-#' @param season Season year
-#' @return Invisible NULL
-update_aggregated_pbp <- function(season) {
-  cli::cli_h2("Building aggregated PBP for {season}")
-
-  max_round <- get_max_round(season)
-  start_round <- get_start_round(season)
-
-  # Load all rounds for the season
-  all_data <- lapply(start_round:max_round, function(round) {
-    tryCatch({
-      round_02d <- sprintf("%02d", round)
-      file_name <- glue::glue("pbp_data_{season}_{round_02d}")
-      file_reader(file_name, "pbp-data")
-    }, error = function(e) {
-      NULL
-    })
-  })
-
-  # Combine non-null results
+  # Combine
   combined <- data.table::rbindlist(
-    Filter(Negate(is.null), all_data),
-    use.names = TRUE,
-    fill = TRUE
+    list(existing, new_pbp),
+    use.names = TRUE, fill = TRUE
   )
-
-  if (nrow(combined) == 0) {
-    cli::cli_warn("No PBP data found for {season}")
-    return(invisible(NULL))
-  }
 
   file_name <- glue::glue("pbp_data_{season}_all")
   save_to_release(df = combined, file_name = file_name, release_tag = "pbp-data")
 
-  cli::cli_alert_success("Saved aggregated PBP: {file_name} ({nrow(combined)} rows)")
+  cli::cli_alert_success("Saved {file_name} ({nrow(combined)} rows)")
   invisible(NULL)
 }
 
@@ -468,10 +418,9 @@ update_player_details <- function(season) {
 #' Only processes current season data to minimize runtime.
 #'
 #' @param force Logical. If TRUE, skip the new games check and force update.
-#' @param include_aggregates Logical. If TRUE (default), rebuild aggregated files.
 #' @return Invisible logical indicating success
 #' @export
-run_daily_release <- function(force = FALSE, include_aggregates = TRUE) {
+run_daily_release <- function(force = FALSE) {
   cli::cli_h1("Daily Data Release")
 
   tictoc::tic("total")
@@ -488,27 +437,15 @@ run_daily_release <- function(force = FALSE, include_aggregates = TRUE) {
   }
 
   # -------------------------------------------------------------------------
-  # 1. Update per-round data (chains + pbp) for current round
+  # 1. Update seasonal _all files (chains + pbp) with current round
   # -------------------------------------------------------------------------
-  cli::cli_h2("Updating round {current_round} data")
-  tictoc::tic("round_data")
+  cli::cli_h2("Updating season files with round {current_round}")
+  tictoc::tic("season_data")
 
-  update_round_chains(current_season, current_round)
-  update_round_pbp(current_season, current_round)
+  update_season_chains(current_season, current_round)
+  update_season_pbp(current_season, current_round)
 
   tictoc::toc(log = TRUE)
-
-  # -------------------------------------------------------------------------
-  # 2. Rebuild aggregated seasonal files
-  # -------------------------------------------------------------------------
-  if (include_aggregates) {
-    tictoc::tic("aggregates")
-
-    update_aggregated_chains(current_season)
-    update_aggregated_pbp(current_season)
-
-    tictoc::toc(log = TRUE)
-  }
 
   # -------------------------------------------------------------------------
   # 3. Update season-level data files
