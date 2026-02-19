@@ -167,3 +167,39 @@ test_that("feature engineering handles missing values appropriately", {
     expect_true(grepl("missing|NA", result$message, ignore.case = TRUE))
   }
 })
+
+# -----------------------------------------------------------------------------
+# check_wp_model_health() Tests
+# -----------------------------------------------------------------------------
+
+test_that("check_wp_model_health returns expected structure", {
+  result <- check_wp_model_health()
+  expect_type(result, "list")
+  expect_true("basic_model_available" %in% names(result))
+  expect_true("enhanced_model_available" %in% names(result))
+  expect_true("data_objects_loaded" %in% names(result))
+  expect_true("errors" %in% names(result))
+  expect_true("overall_health" %in% names(result))
+  expect_true(result$overall_health %in% c("healthy", "unhealthy"))
+})
+
+test_that("check_wp_model_health errors field is character vector", {
+  result <- check_wp_model_health()
+  expect_type(result$errors, "character")
+})
+
+test_that("check_wp_model_health boolean fields are logical", {
+  result <- check_wp_model_health()
+  expect_type(result$basic_model_available, "logical")
+  expect_type(result$enhanced_model_available, "logical")
+  expect_type(result$data_objects_loaded, "logical")
+})
+
+test_that("check_wp_model_health overall_health reflects model and data status", {
+  result <- check_wp_model_health()
+  if (result$basic_model_available && result$data_objects_loaded) {
+    expect_equal(result$overall_health, "healthy")
+  } else {
+    expect_equal(result$overall_health, "unhealthy")
+  }
+})
