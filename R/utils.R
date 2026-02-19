@@ -318,7 +318,7 @@ torp_dummy_cols <- function(df, select_columns, remove_first_dummy = FALSE) {
       lvls <- levels(vals)
       if (remove_first_dummy) lvls <- lvls[-1]
       for (lvl in lvls) {
-        df[[paste0(col, "_", lvl)]] <- as.integer(vals == lvl)
+        df[[paste0(col, "_", lvl)]] <- as.integer(!is.na(vals) & vals == lvl)
       }
     }
   }

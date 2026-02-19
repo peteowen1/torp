@@ -336,6 +336,34 @@ test_that("calculate_pos_lead_prob returns values between 0 and 1", {
   }
 })
 
+test_that("calculate_pos_lead_prob handles points_diff == 1 boundary", {
+  result <- torp:::calculate_pos_lead_prob(
+    points_diff = 1,
+    opp_goal = 0.1,
+    opp_behind = 0.15,
+    no_score = 0.3,
+    behind = 0.2,
+    goal = 0.25
+  )
+  # points_diff >= 1 branch: (opp_behind * 0.5) + no_score + behind + goal
+  expected <- (0.15 * 0.5) + 0.3 + 0.2 + 0.25
+  expect_equal(result, expected)
+})
+
+test_that("calculate_pos_lead_prob handles points_diff == -1 boundary", {
+  result <- torp:::calculate_pos_lead_prob(
+    points_diff = -1,
+    opp_goal = 0.1,
+    opp_behind = 0.15,
+    no_score = 0.3,
+    behind = 0.2,
+    goal = 0.25
+  )
+  # points_diff == -1 branch: (behind * 0.5) + goal
+  expected <- (0.2 * 0.5) + 0.25
+  expect_equal(result, expected)
+})
+
 # -----------------------------------------------------------------------------
 # add_shot_result_variables() Tests
 # -----------------------------------------------------------------------------

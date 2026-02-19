@@ -383,3 +383,55 @@ test_that("data loading utility functions exist", {
   # These functions interact with external services, so we just test they exist
   # Full testing would require mocking piggyback functionality
 })
+
+# -----------------------------------------------------------------------------
+# torp_dummy_cols() Tests
+# -----------------------------------------------------------------------------
+
+test_that("torp_dummy_cols creates correct dummy columns", {
+  df <- data.frame(color = factor(c("red", "blue", "red", "green")))
+  result <- torp:::torp_dummy_cols(df, "color")
+
+  expect_true("color_blue" %in% names(result))
+  expect_true("color_green" %in% names(result))
+  expect_true("color_red" %in% names(result))
+  expect_equal(result$color_red, c(1L, 0L, 1L, 0L))
+  expect_equal(result$color_blue, c(0L, 1L, 0L, 0L))
+  expect_equal(result$color_green, c(0L, 0L, 0L, 1L))
+})
+
+test_that("torp_dummy_cols produces 0 (not NA) for NA factor values", {
+  df <- data.frame(color = factor(c("red", NA, "blue", NA)))
+  result <- torp:::torp_dummy_cols(df, "color")
+
+  expect_equal(result$color_red, c(1L, 0L, 0L, 0L))
+  expect_equal(result$color_blue, c(0L, 0L, 1L, 0L))
+  expect_false(any(is.na(result$color_red)))
+  expect_false(any(is.na(result$color_blue)))
+})
+
+test_that("torp_dummy_cols remove_first_dummy omits first level", {
+  df <- data.frame(x = factor(c("a", "b", "c")))
+  result <- torp:::torp_dummy_cols(df, "x", remove_first_dummy = TRUE)
+
+  expect_false("x_a" %in% names(result))
+  expect_true("x_b" %in% names(result))
+  expect_true("x_c" %in% names(result))
+})
+
+test_that("torp_dummy_cols handles character columns", {
+  df <- data.frame(pos = c("fwd", "mid", "def", "mid"), stringsAsFactors = FALSE)
+  result <- torp:::torp_dummy_cols(df, "pos")
+
+  expect_true("pos_def" %in% names(result))
+  expect_true("pos_fwd" %in% names(result))
+  expect_true("pos_mid" %in% names(result))
+  expect_equal(result$pos_mid, c(0L, 1L, 0L, 1L))
+})
+
+test_that("torp_dummy_cols ignores missing columns gracefully", {
+  df <- data.frame(x = 1:3)
+  result <- torp:::torp_dummy_cols(df, "nonexistent_col")
+  expect_equal(names(result), "x")
+  expect_equal(nrow(result), 3)
+})
