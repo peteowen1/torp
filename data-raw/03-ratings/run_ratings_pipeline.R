@@ -145,11 +145,15 @@ get_torp_df <- function(year, rounds, pgd) {
     )
   }, .progress = TRUE) |>
     dplyr::bind_rows() |>
-    dplyr::mutate(row_id = paste0(player_id, season, sprintf("%02d", round)))
+    (\(df) {
+      if (nrow(df) == 0 || !"player_id" %in% names(df)) return(df)
+      dplyr::mutate(df, row_id = paste0(player_id, season, sprintf("%02d", round)))
+    })()
 }
 
 torp_season_list <- list()
 failed_seasons <- character()
+empty_seasons <- character()
 
 for (s in seasons) {
   tryCatch({
@@ -166,6 +170,10 @@ for (s in seasons) {
     torp_df <- get_torp_df(s, start_round:max_round, all_pgd)
     cli::cli_inform("  {s}: {nrow(torp_df)} rating rows")
 
+    if (nrow(torp_df) == 0) {
+      empty_seasons <<- c(empty_seasons, as.character(s))
+    }
+
     torp_season_list[[as.character(s)]] <- torp_df
 
     tictoc::toc(log = TRUE)
@@ -181,8 +189,14 @@ cli::cli_inform("New ratings computed: {nrow(torp_new)} rows")
 if (length(failed_seasons) > 0) {
   cli::cli_warn("Failed seasons: {paste(failed_seasons, collapse = ', ')}")
 }
+if (length(empty_seasons) > 0) {
+  cli::cli_alert_info("Empty seasons (no data available yet): {paste(empty_seasons, collapse = ', ')}")
+}
 if (length(failed_seasons) == length(seasons)) {
   cli::cli_abort("All seasons failed to compute - aborting pipeline")
+}
+if (nrow(torp_new) == 0 && length(failed_seasons) == 0) {
+  cli::cli_alert_info("No new ratings computed (pre-season or no games played yet) - exiting gracefully")
 }
 
 if (nrow(torp_new) > 0) {
