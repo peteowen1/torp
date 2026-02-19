@@ -367,9 +367,19 @@ run_predictions_pipeline <- function(week = NULL) {
   team_rt_fix_df <-
     fix_df %>%
     mutate(team_name = fitzRoy::replace_teams(team_name)) %>%
-    left_join(team_dist_df, by = c("providerId", "teamId")) %>%
-    left_join(days_rest, by = c("providerId", "teamId")) %>%
-    left_join(team_rt_df, by = c("providerId", "teamId", "season", "round.roundNumber")) %>%
+    left_join(
+      team_dist_df %>% select(providerId, teamId, log_dist, familiarity),
+      by = c("providerId", "teamId")
+    ) %>%
+    left_join(
+      days_rest %>% select(providerId, teamId, days_rest),
+      by = c("providerId", "teamId")
+    ) %>%
+    left_join(
+      team_rt_df %>% select(providerId, teamId, season, round.roundNumber,
+                             all_of(c(torp_sum_cols, POS_COLS, "count"))),
+      by = c("providerId", "teamId", "season", "round.roundNumber")
+    ) %>%
     left_join(tr_week, by = c("team_name" = "team_name", "season" = "season", "round.roundNumber" = "round")) %>%
     mutate(
       torp = coalesce(torp, torp_week),
@@ -718,14 +728,19 @@ run_predictions_pipeline <- function(week = NULL) {
   # Upload Predictions ----
   cli::cli_h2("Uploading predictions")
 
-  pred_file_name <- paste0("predictions_", season, "_", sprintf("%02d", week))
-  save_to_release(week_gms, pred_file_name, "predictions")
+  week_gms <- week_gms %>% mutate(week = week, .before = 1)
 
-  uploaded <- tryCatch(file_reader(pred_file_name, "predictions"), error = function(e) NULL)
-  if (is.null(uploaded) || nrow(uploaded) != nrow(week_gms)) {
-    cli::cli_warn("Upload verification failed - piggyback cache delay may be the cause")
+  pred_file_name <- paste0("predictions_", season)
+  existing <- tryCatch(file_reader(pred_file_name, "predictions"), error = function(e) NULL)
+
+  if (!is.null(existing) && nrow(existing) > 0) {
+    combined <- existing %>% filter(week != !!week) %>% bind_rows(week_gms) %>% arrange(week)
+  } else {
+    combined <- week_gms
   }
-  cli::cli_alert_success("Uploaded week {week} predictions ({nrow(week_gms)} matches)")
+
+  save_to_release(combined, pred_file_name, "predictions")
+  cli::cli_alert_success("Uploaded {season} predictions ({nrow(combined)} rows, week {week} added)")
 
   tictoc::toc(log = TRUE)
 
