@@ -402,7 +402,13 @@ run_predictions_pipeline <- function(week = NULL) {
     cli::cli_warn("0 injuries scraped during active season (week {week}) - all players will be treated as available")
   }
 
-  tr <- torp_ratings(season, week) %>%
+  tr <- torp_ratings(season, week)
+  if (nrow(tr) == 0 || !"player_name" %in% names(tr)) {
+    cli::cli_alert_info("No TORP ratings available for {season} R{week} (pre-season or fixtures not ready) - skipping predictions")
+    tictoc::toc(log = TRUE)
+    return(invisible(NULL))
+  }
+  tr <- tr %>%
     left_join(inj_df, by = c("player_name" = "player")) %>%
     mutate(estimated_return = replace_na(estimated_return, "None"))
 
