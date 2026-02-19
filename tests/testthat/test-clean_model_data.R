@@ -37,7 +37,7 @@ test_that("select_epv_model_vars works correctly", {
 
 test_that("AFL constants are defined correctly", {
   expect_equal(AFL_GOAL_WIDTH, 6.4)
-  expect_equal(AFL_QUARTER_DURATION, 1800)
+  expect_equal(AFL_QUARTER_DURATION, 2000)
   expect_equal(AFL_MAX_PERIODS, 4)
   expect_equal(AFL_TIME_SCALER_MAX, 4)
 })

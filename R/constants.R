@@ -11,13 +11,13 @@ AFL_GOAL_WIDTH <- 6.4
 
 #' Duration of AFL quarter in game seconds
 #' Median max period_seconds per quarter is ~1862 across 2021-2025 data.
-#' 1800 is the rounded baseline; time beyond this is stoppage/injury time.
+#' Set to 2000 as a safe upper bound covering P95 (~2100) without outliers.
 #' @keywords internal
-AFL_QUARTER_DURATION <- 1800
+AFL_QUARTER_DURATION <- 2000
 
 #' Total game duration in game seconds (4 quarters)
 #' @keywords internal
-AFL_TOTAL_GAME_SECONDS <- 7200
+AFL_TOTAL_GAME_SECONDS <- 8000
 
 #' Number of quarters in a standard AFL match
 #' @keywords internal
