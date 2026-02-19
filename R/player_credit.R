@@ -39,7 +39,7 @@ default_credit_params <- function() {
 #' @param pbp_data Play-by-play data from \code{load_pbp()}. If NULL, loads all available.
 #' @param player_stats Raw player stats from \code{load_player_stats()}. If NULL, loads all available.
 #' @param teams Team lineup data from \code{load_teams()}. If NULL, loads all available.
-#' @param decay Decay factor for time-weighting games. Default is 500.
+#' @param decay Decay factor for time-weighting games. Default is \code{RATING_DECAY_DEFAULT_DAYS} (486).
 #' @param credit_params Named list of credit assignment parameters. If NULL,
 #'   uses \code{default_credit_params()}.
 #'
@@ -57,10 +57,11 @@ default_credit_params <- function() {
 #' @importFrom tidyr replace_na
 #' @importFrom lubridate year
 #' @importFrom stats quantile
+#' @importFrom cli cli_warn
 create_player_game_data <- function(pbp_data = NULL,
                                     player_stats = NULL,
                                     teams = NULL,
-                                    decay = 500,
+                                    decay = RATING_DECAY_DEFAULT_DAYS,
                                     credit_params = NULL) {
 
   p <- if (is.null(credit_params)) default_credit_params() else credit_params
@@ -140,6 +141,15 @@ create_player_game_data <- function(pbp_data = NULL,
       spoil_hitout_df,
       by = c("player_id" = "player_player_player_player_id", "match_id" = "provider_id")
     )
+
+  # Assert join produced matches (catches upstream schema changes)
+  if (all(is.na(plyr_gm_df$spoil_pts))) {
+    cli::cli_warn(c(
+      "Player stats join produced no matches.",
+      "i" = "The column {.val player_player_player_player_id} may have changed in upstream data.",
+      "i" = "Spoil/hitout points will be zero for all players."
+    ))
+  }
 
   # --- Step 5: Replace NAs and compute totals ---
   plyr_gm_df <- plyr_gm_df |>

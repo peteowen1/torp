@@ -3,7 +3,9 @@
 \docType{data}
 \name{AFL_QUARTER_DURATION}
 \alias{AFL_QUARTER_DURATION}
-\title{Duration of AFL quarter in game seconds (approximately 20 minutes of game time)}
+\title{Duration of AFL quarter in game seconds
+Median max period_seconds per quarter is ~1862 across 2021-2025 data.
+Set to 2000 as a safe upper bound covering P95 (~2100) without outliers.}
 \format{
 An object of class \code{numeric} of length 1.
 }
@@ -11,6 +13,8 @@ An object of class \code{numeric} of length 1.
 AFL_QUARTER_DURATION
 }
 \description{
-Duration of AFL quarter in game seconds (approximately 20 minutes of game time)
+Duration of AFL quarter in game seconds
+Median max period_seconds per quarter is ~1862 across 2021-2025 data.
+Set to 2000 as a safe upper bound covering P95 (~2100) without outliers.
 }
 \keyword{internal}

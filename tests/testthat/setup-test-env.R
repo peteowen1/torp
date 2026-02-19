@@ -14,7 +14,10 @@ if (!dir.exists(test_temp_dir)) {
 }
 
 # Mock data repository location for testing
-options(torp.data.repo = "torpdata")
+options(torp.data.repo = "peteowen1/torpdata")
+
+# Disable local data auto-detection during tests
+options(torp.local_data_dir = NULL)
 
 # Suppress specific warnings that are expected during testing
 suppressWarnings({

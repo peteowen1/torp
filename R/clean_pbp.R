@@ -69,11 +69,6 @@ add_torp_ids_dt <- function(dt) {
     team = data.table::fifelse(team_id == home_team_id, home_team_team_name, away_team_team_name),
     opp_id = data.table::fifelse(team_id == home_team_id, away_team_id, home_team_id),
     y = -y,
-    mirror = data.table::fcase(
-      description == "Spoil", -1L,
-      !is.na(shot_at_goal) & x < 0, -1L,
-      default = 1L
-    ),
     home_away = factor(data.table::fifelse(team_id == home_team_id, "Home", "Away")),
     goal_x = venue_length / 2 - x,
     throw_in = data.table::fcase(
@@ -147,16 +142,15 @@ add_quarter_vars_dt <- function(dt) {
     default = team_id
   ), by = .(match_id, period)]
 
-  # Fill NAs in team_id_mdl (character column - use nafill_char)
-  dt[, team_id_mdl := nafill_char(team_id_mdl, type = "nocb"), by = .(match_id, period)]
-  dt[, team_id_mdl := nafill_char(team_id_mdl, type = "locf"), by = .(match_id, period)]
-
-  dt[, `:=`(
-    home = data.table::fifelse(team_id_mdl == home_team_id, 1L, 0L),
-    is_goal_row = data.table::fifelse(description == "Goal", 1L, 0L)
-  )]
-
+  # Compute goal boundaries before filling so fill doesn't cross goal events
+  dt[, is_goal_row := data.table::fifelse(description == "Goal", 1L, 0L)]
   dt[, tot_goals := cumsum(is_goal_row), by = .(match_id, period)]
+
+  # Fill NAs in team_id_mdl (character column - use nafill_char)
+  dt[, team_id_mdl := nafill_char(team_id_mdl, type = "nocb"), by = .(match_id, period, tot_goals)]
+  dt[, team_id_mdl := nafill_char(team_id_mdl, type = "locf"), by = .(match_id, period, tot_goals)]
+
+  dt[, home := data.table::fifelse(team_id_mdl == home_team_id, 1L, 0L)]
 
   # scoring_team_id
   dt[, scoring_team_id := data.table::fifelse(
@@ -164,8 +158,7 @@ add_quarter_vars_dt <- function(dt) {
     data.table::fcase(
       final_state == "behind", team_id,
       final_state == "goal", team_id,
-      final_state == "rushed" & description == "", team_id,
-      final_state == "rushed" & description == "Spoil", team_id,
+      final_state == "rushed", team_id,
       final_state == "rushedOpp", opp_id,
       default = NA_character_
     ),
@@ -175,29 +168,51 @@ add_quarter_vars_dt <- function(dt) {
   # points_team_id calculation
   dt[, lead_opp_id := data.table::shift(opp_id, n = 1L, type = "lead"), by = .(match_id, period)]
   dt[, lag_opp_id := data.table::shift(opp_id, n = 1L, type = "lag"), by = .(match_id, period)]
+  dt[, lead_desc := data.table::shift(description, n = 1L, type = "lead"), by = .(match_id, period)]
+  dt[, is_lead_kickin := data.table::fifelse(
+    !is.na(lead_desc) & grepl("Kickin", lead_desc), TRUE, FALSE
+  )]
 
   dt[, points_team_id := data.table::fcase(
     description == "Goal", team_id,
     description == "Behind", team_id,
-    final_state %in% c("rushed", "rushedOpp") & end_of_qtr == 0L, lead_opp_id,
-    final_state %in% c("rushed", "rushedOpp") & end_of_qtr == 1L & !is.na(opp_id), opp_id,
-    final_state %in% c("rushed", "rushedOpp") & end_of_qtr == 1L & is.na(opp_id), lag_opp_id,
+    # Rushed/rushedOpp: use kick-in team's opponent when next row is a kick-in
+    final_state %in% c("rushed", "rushedOpp") & is_lead_kickin, lead_opp_id,
+    # Fallback when next row is not a kick-in: use description-based logic
+    final_state == "rushedOpp", opp_id,
+    final_state == "rushed" & description == "Spoil", opp_id,
+    final_state == "rushed", team_id,
     default = NA_character_
   )]
 
   # Clean up temp columns
-  dt[, c("lead_opp_id", "lag_opp_id") := NULL]
+  dt[, c("lead_opp_id", "lag_opp_id", "lead_desc", "is_lead_kickin") := NULL]
+
+  # Fix orphan kick-ins: behinds with wrong final_state in source data
+  # A kick-in only happens after a behind, so if no scoring event precedes it,
+  # a behind was missed. Assign points to the kick-in team's opponent (the attacker).
+  dt[, lag_points_row := data.table::shift(points_row, n = 1L, type = "lag"), by = .(match_id, period)]
+  orphan_idx <- dt[, which(grepl("Kickin", description) & (is.na(lag_points_row) | lag_points_row == 0L))]
+  for (i in orphan_idx) {
+    prev <- i - 1L
+    if (prev < 1L) next
+    # Guard: don't write across match/period boundaries
+    if (dt$match_id[prev] != dt$match_id[i] || dt$period[prev] != dt$period[i]) next
+    # Skip if prev row is also a kick-in (consecutive kick-ins, not a new behind)
+    if (grepl("Kickin", dt$description[prev])) next
+    if (is.na(dt$points_row[prev]) || dt$points_row[prev] == 0L) {
+      data.table::set(dt, prev, "points_row", 1L)
+      data.table::set(dt, prev, "points_team_id", dt$opp_id[i])
+    }
+  }
+  dt[, lag_points_row := NULL]
 
   dt[, `:=`(
     home_points_row = data.table::fifelse(
-      is.na(data.table::fifelse(points_team_id == home_team_id, points_row, NA_integer_)),
-      0L,
-      data.table::fifelse(points_team_id == home_team_id, points_row, NA_integer_)
+      !is.na(points_team_id) & points_team_id == home_team_id & !is.na(points_row), points_row, 0L
     ),
     away_points_row = data.table::fifelse(
-      is.na(points_row - data.table::fifelse(points_team_id == home_team_id, points_row, 0L)),
-      0L,
-      points_row - data.table::fifelse(points_team_id == home_team_id, points_row, 0L)
+      points_team_id != home_team_id & !is.na(points_row) & !is.na(points_team_id), points_row, 0L
     )
   )]
 
@@ -259,7 +274,7 @@ add_game_vars_dt <- function(dt) {
   dt[, `:=`(
     pos_team_points = data.table::fifelse(home == 1L, home_points, away_points),
     opp_team_points = data.table::fifelse(home == 1L, away_points, home_points),
-    total_seconds = (period - 1L) * 1800L + period_seconds
+    total_seconds = (period - 1L) * AFL_QUARTER_DURATION + period_seconds
   )]
 
   dt[, points_diff := pos_team_points - opp_team_points]

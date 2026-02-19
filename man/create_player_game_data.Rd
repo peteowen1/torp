@@ -8,7 +8,7 @@ create_player_game_data(
   pbp_data = NULL,
   player_stats = NULL,
   teams = NULL,
-  decay = 500,
+  decay = RATING_DECAY_DEFAULT_DAYS,
   credit_params = NULL
 )
 }
@@ -19,7 +19,7 @@ create_player_game_data(
 
 \item{teams}{Team lineup data from \code{load_teams()}. If NULL, loads all available.}
 
-\item{decay}{Decay factor for time-weighting games. Default is 500.}
+\item{decay}{Decay factor for time-weighting games. Default is \code{RATING_DECAY_DEFAULT_DAYS} (486).}
 
 \item{credit_params}{Named list of credit assignment parameters. If NULL,
 uses \code{default_credit_params()}.}

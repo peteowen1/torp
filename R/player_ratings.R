@@ -60,7 +60,7 @@ calculate_torp_ratings <- function(season_val = get_afl_season(type = "current")
 
     final_df <- prepare_final_dataframe(plyr_tm_df, plyr_gm_df_rnd, season_val, round_val)
 
-    message(paste0("TORP ratings as at ", season_val, " round ", round_val))
+    cli::cli_inform("TORP ratings as at {season_val} round {round_val}")
     return(final_df)
   }
 }
@@ -165,7 +165,11 @@ prepare_final_dataframe <- function(plyr_tm_df = NULL, player_game_data = NULL, 
       season_val_details <- season_val
     }
   } else {
-    season_val_details <- season_val
+    if ("season" %in% names(plyr_tm_df) && !season_val %in% plyr_tm_df$season) {
+      season_val_details <- max(plyr_tm_df$season)
+    } else {
+      season_val_details <- season_val
+    }
   }
 
   if (is.null(player_game_data)) {

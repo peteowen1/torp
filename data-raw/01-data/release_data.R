@@ -21,154 +21,83 @@ devtools::load_all()
 # Chains Data ----
 tictoc::tic('chains')
 
-get_chains_data <- function(season, round) {
-  # Sys.setenv(TZ = "Australia/Melbourne")
-  # scrape_date <- Sys.Date()
-  round_02d <- sprintf("%02d", round)
-
-  file_name <- glue::glue("chains_data_{season}_{round_02d}")
-
-  chains <- get_week_chains(season, round)
-
-  # return(futures)
-  save_to_release(df = chains, file_name = file_name, release_tag = "chains-data")
-}
-
-#' Create aggregated seasonal chains file
+#' Build full season chains _all file
 #'
-#' Combines all per-round chains files for a season into a single file
-#' for faster bulk downloads.
+#' Fetches all rounds for a season from fitzRoy and saves as _all file.
 #'
-#' @param season Season year to aggregate
-create_aggregated_chains <- function(season) {
-  cli::cli_inform("Creating aggregated chains file for {season}...")
-
-  # Determine rounds to include
-  if (season == get_afl_season()) {
-    max_round <- get_afl_week()
-  } else {
-    max_round <- 28
+#' @param season Season year
+#' @param rounds Rounds to include (default: all)
+release_chains_season <- function(season, rounds = NULL) {
+  if (is.null(rounds)) {
+    start <- if (season >= 2024) 0 else 1
+    end <- if (season == get_afl_season()) get_afl_week() else 28
+    rounds <- start:end
   }
 
-  # Load all rounds for the season
-  all_chains <- purrr::map(0:max_round, function(round) {
-    tryCatch({
-      round_02d <- sprintf("%02d", round)
-      file_name <- glue::glue("chains_data_{season}_{round_02d}")
-      file_reader(file_name, "chains-data")
-    }, error = function(e) {
-      NULL
-    })
+  all_chains <- purrr::map(rounds, function(round) {
+    tryCatch(get_week_chains(season, round), error = function(e) NULL)
   })
 
-  # Combine and save
-  combined <- data.table::rbindlist(
-    purrr::compact(all_chains),
-    use.names = TRUE,
-    fill = TRUE
-  )
+  combined <- data.table::rbindlist(purrr::compact(all_chains), use.names = TRUE, fill = TRUE)
 
   if (nrow(combined) > 0) {
     file_name <- glue::glue("chains_data_{season}_all")
     save_to_release(df = combined, file_name = file_name, release_tag = "chains-data")
-    cli::cli_inform("Saved aggregated chains file: {file_name} ({nrow(combined)} rows)")
+    cli::cli_inform("Saved {file_name} ({nrow(combined)} rows)")
   }
 }
 
-# extract and save
-# purrr::walk(1:27,~get_chains_data(2021,.))
-# purrr::walk(1:27,~get_chains_data(2022,.))
-# purrr::walk(1:28,~get_chains_data(2023,.))
-# purrr::walk(0:28,~get_chains_data(2024,.))
-# purrr::walk(0:28,~get_chains_data(2025,.))
-get_chains_data(2025, get_afl_week())
+# Release current season chains
+release_chains_season(get_afl_season())
+# Historical: release_chains_season(2021) etc.
 
-# Create aggregated file for current season after uploading latest round
-create_aggregated_chains(2025)
-
-tictoc::toc(log= TRUE)
+tictoc::toc(log = TRUE)
 
 # PBP Data ----
 tictoc::tic('pbp')
-get_pbp_data <- function(season, round) {
-  chains <- get_week_chains(season, round)
 
-  ### clean chains (1.5 secs per round)
-  pbp <- clean_pbp(chains)
-
-  ### filter and prep data for epv model (7.5 secs per round)
-  model_data_epv <- clean_model_data_epv(pbp)
-
-  ### add epv and wp variables  (0.5 secs per round)
-  model_data_wp <- model_data_epv %>%
-    clean_shots_data() %>%
-    add_shot_vars() %>%
-    add_epv_vars() %>%
-    clean_model_data_wp() %>%
-    add_wp_vars()
-
-
-  round_02d <- sprintf("%02d", round)
-
-  file_name <- glue::glue("pbp_data_{season}_{round_02d}")
-
-  # return(futures)
-  save_to_release(df = model_data_wp, file_name = file_name, release_tag = "pbp-data")
-}
-
-#' Create aggregated seasonal pbp file
+#' Build full season PBP _all file
 #'
-#' Combines all per-round pbp files for a season into a single file
-#' for faster bulk downloads.
+#' Fetches fresh chains from fitzRoy, processes through full pipeline, saves as _all file.
+#' NOTE: Fetches directly from fitzRoy rather than torpdata to avoid stale data
+#' from piggyback cache delays.
 #'
-#' @param season Season year to aggregate
-create_aggregated_pbp <- function(season) {
-  cli::cli_inform("Creating aggregated pbp file for {season}...")
+#' @param season Season year
+release_pbp_season <- function(season) {
+  start <- if (season >= 2024) 0 else 1
+  end <- if (season == get_afl_season()) get_afl_week() else 28
+  rounds <- start:end
 
-  # Determine rounds to include
-  if (season == get_afl_season()) {
-    max_round <- get_afl_week()
-  } else {
-    max_round <- 28
-  }
-
-  # Load all rounds for the season
-  all_pbp <- purrr::map(0:max_round, function(round) {
-    tryCatch({
-      round_02d <- sprintf("%02d", round)
-      file_name <- glue::glue("pbp_data_{season}_{round_02d}")
-      file_reader(file_name, "pbp-data")
-    }, error = function(e) {
-      NULL
-    })
+  all_chains <- purrr::map(rounds, function(round) {
+    tryCatch(get_week_chains(season, round), error = function(e) NULL)
   })
 
-  # Combine and save
-  combined <- data.table::rbindlist(
-    purrr::compact(all_pbp),
-    use.names = TRUE,
-    fill = TRUE
-  )
+  chains <- data.table::rbindlist(purrr::compact(all_chains), use.names = TRUE, fill = TRUE)
 
-  if (nrow(combined) > 0) {
-    file_name <- glue::glue("pbp_data_{season}_all")
-    save_to_release(df = combined, file_name = file_name, release_tag = "pbp-data")
-    cli::cli_inform("Saved aggregated pbp file: {file_name} ({nrow(combined)} rows)")
+  if (nrow(chains) == 0) {
+    cli::cli_warn("No chains data fetched for {season} - skipping PBP release")
+    return(invisible(NULL))
   }
+
+  model_data_wp <- chains |>
+    clean_pbp() |>
+    clean_model_data_epv() |>
+    clean_shots_data() |>
+    add_shot_vars() |>
+    add_epv_vars() |>
+    clean_model_data_wp() |>
+    add_wp_vars()
+
+  file_name <- glue::glue("pbp_data_{season}_all")
+  save_to_release(df = model_data_wp, file_name = file_name, release_tag = "pbp-data")
+  cli::cli_inform("Saved {file_name} ({nrow(model_data_wp)} rows)")
 }
 
-# extract and save
-# purrr::walk(1:27,~get_pbp_data(2021,.))
-# purrr::walk(1:27,~get_pbp_data(2022,.))
-# purrr::walk(1:28,~get_pbp_data(2023,.))
-# purrr::walk(0:28,~get_pbp_data(2024,.))
-# purrr::walk(0:get_afl_week(),~get_pbp_data(2025,.))
-get_pbp_data(2025, get_afl_week())
+# Release current season PBP
+release_pbp_season(get_afl_season())
+# Historical: release_pbp_season(2021) etc.
 
-# Create aggregated file for current season after uploading latest round
-create_aggregated_pbp(2025)
-
-tictoc::toc(log= TRUE)
+tictoc::toc(log = TRUE)
 
 # XG Data ----
 tictoc::tic('xg')
@@ -191,8 +120,8 @@ tictoc::toc(log= TRUE)
 # Player Stats Data ----
 tictoc::tic('player stats')
 get_player_stats <- function(season) {
-  player_stats <- fitzRoy::fetch_player_stats_afl(season) %>%
-    janitor::remove_constant() %>%
+  player_stats <- fitzRoy::fetch_player_stats_afl(season) |>
+    janitor::remove_constant() |>
     janitor::clean_names()
 
   file_name <- glue::glue("player_stats_{season}")
@@ -242,11 +171,11 @@ tictoc::toc(log= TRUE)
 tictoc::tic('lineups')
 get_teams <- function(season) {
   ### update teams file (90 secs per season)
-  teams <- fitzRoy::fetch_lineup(season, comp = "AFLM") %>%
+  teams <- fitzRoy::fetch_lineup(season, comp = "AFLM") |>
     dplyr::mutate(
       season = as.numeric(substr(providerId, 5, 8)),
       row_id = paste0(providerId, teamId, player.playerId)
-    ) # %>% dplyr::filter(!is.na(player.playerId))
+    ) # |> dplyr::filter(!is.na(player.playerId))
 
   file_name <- glue::glue("teams_{season}")
 
@@ -279,7 +208,7 @@ tictoc::tic('player details')
 get_player_details <- function(season) {
   ##### update players file (20 secs per season)
   player_details <-
-    fitzRoy::fetch_player_details_afl(season = season, comp = "AFLM") %>%
+    fitzRoy::fetch_player_details_afl(season = season, comp = "AFLM") |>
     dplyr::mutate(
       player_name = paste(firstName, surname),
       age = lubridate::decimal_date(lubridate::as_date(glue::glue("{season}-07-01"))) -
@@ -301,5 +230,5 @@ tictoc::toc(log= TRUE)
 tictoc::toc(log= TRUE)
 
 # Timing Summary ----
-tictoc::tic.log(format = TRUE) %>% unlist()
+tictoc::tic.log(format = TRUE) |> unlist()
 
