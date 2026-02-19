@@ -146,7 +146,11 @@ get_torp_df <- function(year, rounds, pgd) {
   }, .progress = TRUE) |>
     dplyr::bind_rows() |>
     (\(df) {
-      if (nrow(df) == 0 || !"player_id" %in% names(df)) return(df)
+      if (nrow(df) == 0) return(df)
+      if (!"player_id" %in% names(df)) {
+        cli::cli_warn("player_id column missing from ratings output for {year} - row_id cannot be computed")
+        return(df)
+      }
       dplyr::mutate(df, row_id = paste0(player_id, season, sprintf("%02d", round)))
     })()
 }

@@ -138,8 +138,23 @@ update_season_chains <- function(season, round) {
 
   if (!is.null(existing) && nrow(existing) > 0) {
     # Remove stale data for this round (handles re-runs)
+    # Chains data uses camelCase from AFL API (roundNumber or round.roundNumber),
+    # not snake_case round_number (which only exists after clean_pbp/torp_clean_names)
     existing <- data.table::as.data.table(existing)
-    existing <- existing[round_number != round]
+    round_col <- if ("round_number" %in% names(existing)) {
+      "round_number"
+    } else if ("roundNumber" %in% names(existing)) {
+      "roundNumber"
+    } else if ("round.roundNumber" %in% names(existing)) {
+      "round.roundNumber"
+    } else {
+      NULL
+    }
+    if (!is.null(round_col)) {
+      existing <- existing[existing[[round_col]] != round, ]
+    } else {
+      cli::cli_warn("No round column found in existing chains data - cannot de-duplicate round {round}")
+    }
     cli::cli_inform("Existing data: {nrow(existing)} rows (after removing round {round})")
   }
 
@@ -169,13 +184,14 @@ update_season_pbp <- function(season, round) {
   # Fetch new round chains and process into PBP
   new_pbp <- tryCatch({
     chains <- get_week_chains(season, round)
-    chains %>%
-      clean_pbp() %>%
-      clean_model_data_epv() %>%
-      clean_shots_data() %>%
-      add_shot_vars() %>%
-      add_epv_vars() %>%
-      clean_model_data_wp() %>%
+    if (is.null(chains) || nrow(chains) == 0) return(NULL)
+    chains |>
+      clean_pbp() |>
+      clean_model_data_epv() |>
+      clean_shots_data() |>
+      add_shot_vars() |>
+      add_epv_vars() |>
+      clean_model_data_wp() |>
       add_wp_vars()
   }, error = function(e) {
     cli::cli_warn("Failed to process PBP for {season} R{round}: {conditionMessage(e)}")
@@ -301,8 +317,8 @@ update_player_stats <- function(season) {
   cli::cli_progress_step("Updating player stats for {season}")
 
   player_stats <- tryCatch({
-    fitzRoy::fetch_player_stats_afl(season) %>%
-      janitor::remove_constant() %>%
+    fitzRoy::fetch_player_stats_afl(season) |>
+      dplyr::select(where(~ dplyr::n_distinct(.) > 1)) |>
       janitor::clean_names()
   }, error = function(e) {
     cli::cli_warn("Failed to fetch player stats: {conditionMessage(e)}")

@@ -196,6 +196,8 @@ add_quarter_vars_dt <- function(dt) {
   for (i in orphan_idx) {
     prev <- i - 1L
     if (prev < 1L) next
+    # Guard: don't write across match/period boundaries
+    if (dt$match_id[prev] != dt$match_id[i] || dt$period[prev] != dt$period[i]) next
     # Skip if prev row is also a kick-in (consecutive kick-ins, not a new behind)
     if (grepl("Kickin", dt$description[prev])) next
     if (is.na(dt$points_row[prev]) || dt$points_row[prev] == 0L) {

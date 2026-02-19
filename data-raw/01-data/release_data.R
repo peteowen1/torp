@@ -58,19 +58,34 @@ tictoc::tic('pbp')
 
 #' Build full season PBP _all file
 #'
-#' Loads chains, processes through full pipeline, saves as _all file.
+#' Fetches fresh chains from fitzRoy, processes through full pipeline, saves as _all file.
+#' NOTE: Fetches directly from fitzRoy rather than torpdata to avoid stale data
+#' from piggyback cache delays.
 #'
 #' @param season Season year
 release_pbp_season <- function(season) {
-  chains <- load_chains(season, rounds = TRUE)
+  start <- if (season >= 2024) 0 else 1
+  end <- if (season == get_afl_season()) get_afl_week() else 28
+  rounds <- start:end
 
-  model_data_wp <- chains %>%
-    clean_pbp() %>%
-    clean_model_data_epv() %>%
-    clean_shots_data() %>%
-    add_shot_vars() %>%
-    add_epv_vars() %>%
-    clean_model_data_wp() %>%
+  all_chains <- purrr::map(rounds, function(round) {
+    tryCatch(get_week_chains(season, round), error = function(e) NULL)
+  })
+
+  chains <- data.table::rbindlist(purrr::compact(all_chains), use.names = TRUE, fill = TRUE)
+
+  if (nrow(chains) == 0) {
+    cli::cli_warn("No chains data fetched for {season} - skipping PBP release")
+    return(invisible(NULL))
+  }
+
+  model_data_wp <- chains |>
+    clean_pbp() |>
+    clean_model_data_epv() |>
+    clean_shots_data() |>
+    add_shot_vars() |>
+    add_epv_vars() |>
+    clean_model_data_wp() |>
     add_wp_vars()
 
   file_name <- glue::glue("pbp_data_{season}_all")
@@ -105,8 +120,8 @@ tictoc::toc(log= TRUE)
 # Player Stats Data ----
 tictoc::tic('player stats')
 get_player_stats <- function(season) {
-  player_stats <- fitzRoy::fetch_player_stats_afl(season) %>%
-    janitor::remove_constant() %>%
+  player_stats <- fitzRoy::fetch_player_stats_afl(season) |>
+    janitor::remove_constant() |>
     janitor::clean_names()
 
   file_name <- glue::glue("player_stats_{season}")
@@ -156,11 +171,11 @@ tictoc::toc(log= TRUE)
 tictoc::tic('lineups')
 get_teams <- function(season) {
   ### update teams file (90 secs per season)
-  teams <- fitzRoy::fetch_lineup(season, comp = "AFLM") %>%
+  teams <- fitzRoy::fetch_lineup(season, comp = "AFLM") |>
     dplyr::mutate(
       season = as.numeric(substr(providerId, 5, 8)),
       row_id = paste0(providerId, teamId, player.playerId)
-    ) # %>% dplyr::filter(!is.na(player.playerId))
+    ) # |> dplyr::filter(!is.na(player.playerId))
 
   file_name <- glue::glue("teams_{season}")
 
@@ -193,7 +208,7 @@ tictoc::tic('player details')
 get_player_details <- function(season) {
   ##### update players file (20 secs per season)
   player_details <-
-    fitzRoy::fetch_player_details_afl(season = season, comp = "AFLM") %>%
+    fitzRoy::fetch_player_details_afl(season = season, comp = "AFLM") |>
     dplyr::mutate(
       player_name = paste(firstName, surname),
       age = lubridate::decimal_date(lubridate::as_date(glue::glue("{season}-07-01"))) -
@@ -215,5 +230,5 @@ tictoc::toc(log= TRUE)
 tictoc::toc(log= TRUE)
 
 # Timing Summary ----
-tictoc::tic.log(format = TRUE) %>% unlist()
+tictoc::tic.log(format = TRUE) |> unlist()
 
