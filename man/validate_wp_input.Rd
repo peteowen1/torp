@@ -4,17 +4,15 @@
 \alias{validate_wp_input}
 \title{Validate Win Probability Input Data}
 \usage{
-validate_wp_input(df, model_type = "basic")
+validate_wp_input(df)
 }
 \arguments{
 \item{df}{Input dataframe}
-
-\item{model_type}{Type of model ("basic" or "enhanced")}
 }
 \value{
 Logical indicating if validation passed
 }
 \description{
-Comprehensive validation for win probability model inputs
+Validates that the input dataframe has the required columns for WP modeling.
 }
 \keyword{internal}

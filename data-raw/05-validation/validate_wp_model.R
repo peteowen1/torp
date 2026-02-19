@@ -32,12 +32,7 @@ evaluate_wp_model <- function(data, model_name = "Model") {
   cat(glue("\n🔍 Evaluating {model_name}...\n"))
   
   # Add predictions
-  data_with_wp <- tryCatch({
-    add_wp_vars(data, use_enhanced = TRUE)
-  }, error = function(e) {
-    cat(glue("Enhanced model failed, using basic: {e$message}\n"))
-    add_wp_vars(data, use_enhanced = FALSE)
-  })
+  data_with_wp <- add_wp_vars(data)
   
   # Filter for valid predictions
   eval_data <- data_with_wp %>%
@@ -159,7 +154,7 @@ evaluate_wp_model <- function(data, model_name = "Model") {
 # 3. Run Comprehensive Evaluation ----
 
 # Test the enhanced model
-enhanced_results <- evaluate_wp_model(validation_data, "Enhanced Ensemble Model")
+enhanced_results <- evaluate_wp_model(validation_data, "WP Model")
 
 # 4. Baseline Comparisons ----
 
@@ -251,19 +246,6 @@ if (!is.null(enhanced_results) && nrow(enhanced_results$calibration_df) > 2) {
   ggsave("wp_calibration_plot.png", calibration_plot, width = 10, height = 8, dpi = 300)
   cat("✅ Calibration plot saved as 'wp_calibration_plot.png'\n")
   
-  # Feature importance analysis (if available)
-  if (exists("wp_model_ensemble")) {
-    cat("\n🔍 Feature Importance Analysis:\n")
-    cat("Top 10 most important features for win probability:\n")
-    
-    # This would need the actual model object - placeholder for now
-    cat("   1. points_diff - Score differential\n")
-    cat("   2. time_remaining_pct - Time remaining percentage\n") 
-    cat("   3. xpoints_diff - Expected points differential\n")
-    cat("   4. goal_x - Field position\n")
-    cat("   5. exp_pts - Expected points from current position\n")
-    cat("   (Full analysis requires trained model)\n")
-  }
 }
 
 # 7. Summary ----
@@ -301,10 +283,8 @@ if (!is.null(enhanced_results)) {
 }
 
 cat("\n🔧 RECOMMENDATIONS:\n")
-cat("   1. Use the enhanced ensemble model for production\n")
-cat("   2. Monitor calibration on new data and recalibrate if needed\n")
-cat("   3. Focus on extreme probability situations for further improvement\n")
-cat("   4. Consider adding team-specific features for better accuracy\n")
-cat("   5. Implement real-time model monitoring and drift detection\n")
+cat("   1. Monitor calibration on new data and recalibrate if needed\n")
+cat("   2. Focus on extreme probability situations for further improvement\n")
+cat("   3. Consider adding team-specific features for better accuracy\n")
 
 cat("\n🎉 Win Probability Model Validation Complete! 🎉\n")
