@@ -10,7 +10,7 @@ load_from_url(
   seasons = TRUE,
   rounds = TRUE,
   peteowen1 = FALSE,
-  use_disk_cache = TRUE
+  use_disk_cache = FALSE
 )
 }
 \arguments{

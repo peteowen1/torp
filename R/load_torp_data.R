@@ -16,13 +16,14 @@
 #' save_to_release(my_df, "my_data", "v1.0.0")
 #' }
 save_to_release <- function(df, file_name, release_tag) {
-  temp_dir <- tempdir(check = TRUE)
   .f_name <- paste0(file_name, ".parquet")
-  arrow::write_parquet(df, file.path(temp_dir, .f_name))
+  tf <- tempfile(fileext = ".parquet")
+  arrow::write_parquet(df, tf)
 
-  piggyback::pb_upload(file.path(temp_dir, .f_name),
+  piggyback::pb_upload(tf,
                        repo = get_torp_data_repo(),
-                       tag = release_tag
+                       tag = release_tag,
+                       name = .f_name
   )
 
   # Also save a local copy if torpdata/data/ is configured
@@ -74,14 +75,14 @@ file_reader <- function(file_name, release_tag) {
 #' })
 #' }
 #' @export
-load_chains <- function(seasons = get_afl_season(), rounds = get_afl_week()) {
+load_chains <- function(seasons = get_afl_season(), rounds = get_afl_week(), use_disk_cache = FALSE) {
   if (isTRUE(seasons) && missing(rounds)) rounds <- TRUE
   seasons <- validate_seasons(seasons)
   rounds <- validate_rounds(rounds)
 
   urls <- generate_urls("chains-data", "chains_data", seasons, rounds)
 
-  out <- load_from_url(urls, seasons = seasons, rounds = rounds)
+  out <- load_from_url(urls, seasons = seasons, rounds = rounds, use_disk_cache = use_disk_cache)
 
   return(out)
 }
@@ -102,14 +103,14 @@ load_chains <- function(seasons = get_afl_season(), rounds = get_afl_week()) {
 #' })
 #' }
 #' @export
-load_pbp <- function(seasons = get_afl_season(), rounds = get_afl_week()) {
+load_pbp <- function(seasons = get_afl_season(), rounds = get_afl_week(), use_disk_cache = FALSE) {
   if (isTRUE(seasons) && missing(rounds)) rounds <- TRUE
   seasons <- validate_seasons(seasons)
   rounds <- validate_rounds(rounds)
 
   urls <- generate_urls("pbp-data", "pbp_data", seasons, rounds)
 
-  out <- load_from_url(urls, seasons = seasons, rounds = rounds)
+  out <- load_from_url(urls, seasons = seasons, rounds = rounds, use_disk_cache = use_disk_cache)
 
   return(out)
 }
@@ -129,12 +130,12 @@ load_pbp <- function(seasons = get_afl_season(), rounds = get_afl_week()) {
 #' })
 #' }
 #' @export
-load_xg <- function(seasons = get_afl_season()) {
+load_xg <- function(seasons = get_afl_season(), use_disk_cache = FALSE) {
   seasons <- validate_seasons(seasons)
 
   urls <- generate_urls("xg-data", "xg_data", seasons)
 
-  out <- load_from_url(urls, seasons = seasons)
+  out <- load_from_url(urls, seasons = seasons, use_disk_cache = use_disk_cache)
 
   return(out)
 }
@@ -154,12 +155,12 @@ load_xg <- function(seasons = get_afl_season()) {
 #' })
 #' }
 #' @export
-load_player_stats <- function(seasons = get_afl_season()) {
+load_player_stats <- function(seasons = get_afl_season(), use_disk_cache = FALSE) {
   seasons <- validate_seasons(seasons)
 
   urls <- generate_urls("player_stats-data", "player_stats", seasons)
 
-  out <- load_from_url(urls, seasons = seasons)
+  out <- load_from_url(urls, seasons = seasons, use_disk_cache = use_disk_cache)
 
   return(out)
 }
@@ -181,12 +182,12 @@ load_player_stats <- function(seasons = get_afl_season()) {
 #' })
 #' }
 #' @export
-load_player_game_data <- function(seasons = get_afl_season()) {
+load_player_game_data <- function(seasons = get_afl_season(), use_disk_cache = FALSE) {
   seasons <- validate_seasons(seasons)
 
   urls <- generate_urls("player_game-data", "player_game", seasons)
 
-  out <- load_from_url(urls, seasons = seasons)
+  out <- load_from_url(urls, seasons = seasons, use_disk_cache = use_disk_cache)
 
   return(out)
 }
@@ -287,12 +288,12 @@ load_fixtures <- function(seasons = NULL, all = FALSE, use_cache = TRUE, cache_t
 #' })
 #' }
 #' @export
-load_teams <- function(seasons = get_afl_season()) {
+load_teams <- function(seasons = get_afl_season(), use_disk_cache = FALSE) {
   seasons <- validate_seasons(seasons)
 
   urls <- generate_urls(data_type = "teams-data", file_prefix = "teams", seasons = seasons)
 
-  out <- load_from_url(urls, seasons = seasons)
+  out <- load_from_url(urls, seasons = seasons, use_disk_cache = use_disk_cache)
 
   return(out)
 }
@@ -312,12 +313,12 @@ load_teams <- function(seasons = get_afl_season()) {
 #' })
 #' }
 #' @export
-load_results <- function(seasons = get_afl_season()) {
+load_results <- function(seasons = get_afl_season(), use_disk_cache = FALSE) {
   seasons <- validate_seasons(seasons)
 
   urls <- generate_urls("results-data", "results", seasons)
 
-  out <- load_from_url(urls, seasons = seasons)
+  out <- load_from_url(urls, seasons = seasons, use_disk_cache = use_disk_cache)
 
   return(out)
 }
@@ -337,12 +338,12 @@ load_results <- function(seasons = get_afl_season()) {
 #' })
 #' }
 #' @export
-load_player_details <- function(seasons = get_afl_season()) {
+load_player_details <- function(seasons = get_afl_season(), use_disk_cache = FALSE) {
   seasons <- validate_seasons(seasons)
 
   urls <- generate_urls("player_details-data", "player_details", seasons)
 
-  out <- load_from_url(urls, seasons = seasons)
+  out <- load_from_url(urls, seasons = seasons, use_disk_cache = use_disk_cache)
 
   return(out)
 }
@@ -352,6 +353,7 @@ load_player_details <- function(seasons = get_afl_season()) {
 #' @description Loads AFL match predictions and probability data from the [torpdata repository](https://github.com/peteowen1/torpdata)
 #'
 #' @param seasons A numeric vector of 4-digit years associated with given AFL seasons - defaults to latest season. If set to `TRUE`, returns all available data since 2021.
+#' @param rounds A numeric vector associated with given AFL round - defaults to latest round. If set to `TRUE`, returns all available rounds in the given season range.
 #'
 #' @return A data frame containing AFL match predictions including win probabilities and expected scores.
 #' @seealso [load_fixtures()], [load_results()], [simulate_season()]
@@ -362,12 +364,14 @@ load_player_details <- function(seasons = get_afl_season()) {
 #' })
 #' }
 #' @export
-load_predictions <- function(seasons = get_afl_season()) {
+load_predictions <- function(seasons = get_afl_season(), rounds = get_afl_week(), use_disk_cache = FALSE) {
+  if (isTRUE(seasons) && missing(rounds)) rounds <- TRUE
   seasons <- validate_seasons(seasons)
+  rounds <- validate_rounds(rounds)
 
   urls <- generate_urls("predictions", "predictions", seasons)
 
-  out <- load_from_url(urls, seasons = seasons)
+  out <- load_from_url(urls, seasons = seasons, rounds = rounds, use_disk_cache = use_disk_cache)
 
   return(out)
 }
@@ -392,6 +396,140 @@ load_torp_ratings <- function() {
   parquet_from_url(url)
 }
 
+#' Load Player Game Ratings Data
+#'
+#' @description Loads pre-computed per-game TORP ratings from the
+#'   [torpdata repository](https://github.com/peteowen1/torpdata).
+#'   This is the output of [player_game_ratings()] — a per-game TORP breakdown
+#'   for every player, ready for leaderboards and analysis.
+#'
+#' @param seasons A numeric vector of 4-digit years associated with given AFL
+#'   seasons — defaults to latest season. If set to `TRUE`, returns all
+#'   available data since 2021.
+#' @param use_disk_cache Logical. If `TRUE`, uses persistent disk cache for
+#'   faster repeated loads. Default is `FALSE`.
+#'
+#' @return A data frame containing per-game player ratings with columns
+#'   including `season`, `round`, `match_id`, `player_id`, `player_name`,
+#'   `team`, `total_points`, `recv_points`, `disp_points`, `spoil_points`,
+#'   and `hitout_points`.
+#' @seealso [player_game_ratings()], [load_player_season_ratings()], [load_torp_ratings()]
+#' @examples
+#' \donttest{
+#' try({ # prevents cran errors
+#'   load_player_game_ratings(2024)
+#' })
+#' }
+#' @export
+load_player_game_ratings <- function(seasons = get_afl_season(), use_disk_cache = FALSE) {
+  seasons <- validate_seasons(seasons)
+
+  urls <- generate_urls("player_game_ratings-data", "player_game_ratings", seasons)
+
+  out <- load_from_url(urls, seasons = seasons, use_disk_cache = use_disk_cache)
+
+  return(out)
+}
+
+#' Load Player Season Ratings Data
+#'
+#' @description Loads pre-computed season-total TORP ratings from the
+#'   [torpdata repository](https://github.com/peteowen1/torpdata).
+#'   This is the output of [player_season_ratings()] — season totals and PPG
+#'   leaderboards per player.
+#'
+#' @param seasons A numeric vector of 4-digit years associated with given AFL
+#'   seasons — defaults to latest season. If set to `TRUE`, returns all
+#'   available data since 2021.
+#' @param use_disk_cache Logical. If `TRUE`, uses persistent disk cache for
+#'   faster repeated loads. Default is `FALSE`.
+#'
+#' @return A data frame containing season-total player ratings with columns
+#'   including `season`, `player_id`, `player_name`, `team`, `position`,
+#'   `games`, `season_points`, `season_recv`, `season_disp`, `season_spoil`,
+#'   `season_hitout`, and `ppg`.
+#' @seealso [player_season_ratings()], [load_player_game_ratings()], [load_torp_ratings()]
+#' @examples
+#' \donttest{
+#' try({ # prevents cran errors
+#'   load_player_season_ratings(2024)
+#' })
+#' }
+#' @export
+load_player_season_ratings <- function(seasons = get_afl_season(), use_disk_cache = FALSE) {
+  seasons <- validate_seasons(seasons)
+
+  urls <- generate_urls("player_season_ratings-data", "player_season_ratings", seasons)
+
+  out <- load_from_url(urls, seasons = seasons, use_disk_cache = use_disk_cache)
+
+  return(out)
+}
+
+#' Load Team Ratings Data
+#'
+#' @description Loads pre-computed team-level TORP aggregates from the
+#'   [torpdata repository](https://github.com/peteowen1/torpdata).
+#'   This data summarises per-round team ratings derived from individual
+#'   player TORP ratings.
+#'
+#' @return A data frame containing team-level ratings with columns including
+#'   `season`, `round`, `team`, `team_torp`, `team_attack`, `team_defence`,
+#'   `top_player`, `top_torp`, and `n_players`.
+#' @seealso [load_torp_ratings()], [load_player_game_ratings()]
+#' @examples
+#' \donttest{
+#' try({ # prevents cran errors
+#'   load_team_ratings()
+#' })
+#' }
+#' @export
+load_team_ratings <- function() {
+  url <- paste0("https://github.com/", get_torp_data_repo(), "/releases/download/team_ratings-data/team_ratings.parquet")
+  parquet_from_url(url)
+}
+
+#' Load EP/WP Chart Data
+#'
+#' @description Loads a lightweight subset of play-by-play data optimised for
+#'   charting Expected Points (EP) and Win Probability (WP) over a match.
+#'   Contains every play but only ~25 columns instead of the full 150+
+#'   available from [load_pbp()].
+#'
+#' @param seasons A numeric vector of 4-digit years associated with given AFL
+#'   seasons — defaults to latest season. If set to `TRUE`, returns all
+#'   available data since 2021.
+#' @param rounds A numeric vector associated with given AFL round — defaults to
+#'   latest round. If set to `TRUE`, returns all available rounds in the given
+#'   season range.
+#' @param use_disk_cache Logical. If `TRUE`, uses persistent disk cache for
+#'   faster repeated loads. Default is `FALSE`.
+#'
+#' @return A data frame containing EP/WP chart data with columns including
+#'   `match_id`, `season`, `round_number`, `period`, `total_seconds`,
+#'   `home_team_team_name`, `away_team_team_name`, `team`, `exp_pts`,
+#'   `delta_epv`, `wp`, `wpa`, `description`, `player_name`, `play_type`,
+#'   `shot_row`, and `points_shot`.
+#' @seealso [load_pbp()], [load_xg()]
+#' @examples
+#' \donttest{
+#' try({ # prevents cran errors
+#'   load_ep_wp_charts(2024)
+#' })
+#' }
+#' @export
+load_ep_wp_charts <- function(seasons = get_afl_season(), rounds = get_afl_week(), use_disk_cache = FALSE) {
+  if (isTRUE(seasons) && missing(rounds)) rounds <- TRUE
+  seasons <- validate_seasons(seasons)
+  rounds <- validate_rounds(rounds)
+
+  urls <- generate_urls("ep_wp_chart-data", "ep_wp_chart", seasons, rounds)
+
+  out <- load_from_url(urls, seasons = seasons, rounds = rounds, use_disk_cache = use_disk_cache)
+
+  return(out)
+}
+
 #' Load parquet files from remote URLs
 #'
 #' @description This function is intended for internal use and may be unexported in a future release.
@@ -406,7 +544,7 @@ load_torp_ratings <- function() {
 #' @export
 #' @importFrom data.table rbindlist setDT
 #' @importFrom tibble as_tibble
-load_from_url <- function(url, ..., seasons = TRUE, rounds = TRUE, peteowen1 = FALSE, use_disk_cache = TRUE) {
+load_from_url <- function(url, ..., seasons = TRUE, rounds = TRUE, peteowen1 = FALSE, use_disk_cache = FALSE) {
   url <- as.character(url)
 
   # Get disk cache settings
@@ -433,6 +571,8 @@ load_from_url <- function(url, ..., seasons = TRUE, rounds = TRUE, peteowen1 = F
         out <- out[out$round %in% rounds, ]
       } else if ("round_number" %in% names(out)) {
         out <- out[out$round_number %in% rounds, ]
+      } else if ("week" %in% names(out)) {
+        out <- out[out$week %in% rounds, ]
       }
     }
   } else {
@@ -704,9 +844,9 @@ generate_urls <- function(data_type, file_prefix, seasons, rounds = NULL, prefer
   }
 
   if (!is.null(rounds)) {
-    # Chains and PBP only have _all files (no per-round files on GitHub)
+    # These data types only have _all files (no per-round files on GitHub)
     # Always load _all and filter by round_number in load_from_url()
-    aggregated_only_types <- c("chains-data", "pbp-data")
+    aggregated_only_types <- c("chains-data", "pbp-data", "ep_wp_chart-data")
 
     if (data_type %in% aggregated_only_types) {
       urls <- paste0(base_url, "/", data_type, "/", file_prefix, "_", seasons, "_all.parquet")

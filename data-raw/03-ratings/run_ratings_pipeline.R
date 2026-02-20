@@ -239,6 +239,42 @@ if (nrow(torp_new) > 0) {
 
 tictoc::toc(log = TRUE)
 
+# Stage 4: Compute Team Ratings ----
+
+cli::cli_h2("Stage 4: Compute Team Ratings")
+tictoc::tic("stage_4_team_ratings")
+
+tryCatch({
+  # Use the just-released torp_ratings (or the one we built above)
+  ratings_for_teams <- if (exists("torp_df_total") && nrow(torp_df_total) > 0) {
+    torp_df_total
+  } else {
+    load_torp_ratings()
+  }
+
+  cli::cli_inform("Building team ratings from {nrow(ratings_for_teams)} player rating rows")
+
+  team_ratings <- ratings_for_teams |>
+    dplyr::group_by(.data$season, .data$round, .data$team) |>
+    dplyr::summarise(
+      team_torp = round(mean(.data$torp, na.rm = TRUE), 2),
+      team_attack = round(mean(.data$torp_recv + .data$torp_disp, na.rm = TRUE), 2),
+      team_defence = round(mean(.data$torp_spoil + .data$torp_hitout, na.rm = TRUE), 2),
+      top_player = .data$player_name[which.max(.data$torp)],
+      top_torp = round(max(.data$torp, na.rm = TRUE), 2),
+      n_players = dplyr::n(),
+      .groups = "drop"
+    ) |>
+    dplyr::arrange(.data$season, .data$round, -.data$team_torp)
+
+  save_to_release(team_ratings, "team_ratings", "team_ratings-data")
+  cli::cli_alert_success("Released team_ratings ({nrow(team_ratings)} rows)")
+}, error = function(e) {
+  cli::cli_warn("Failed to compute team ratings: {conditionMessage(e)}")
+})
+
+tictoc::toc(log = TRUE)
+
 # Summary ----
 
 cli::cli_h2("Pipeline Complete")

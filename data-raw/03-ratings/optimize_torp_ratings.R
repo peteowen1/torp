@@ -294,13 +294,12 @@ compute_credits <- function(pgr, params) {
   out[, hitout_pts := hitouts * p["hitout_wt"] + hitouts_adv * p["hitout_adv_wt"] -
                       ruck_contests * p["ruck_contest_wt"]]
 
-  # Position-group adjustment (subtract quantile)
-  q <- p["pos_adj_quantile"]
+  # Position-group adjustment (subtract per-dimension quantile)
   out[!is.na(position), `:=`(
-    disp_pts  = disp_pts  - stats::quantile(disp_pts, q, na.rm = TRUE),
-    recv_pts  = recv_pts  - stats::quantile(recv_pts, q, na.rm = TRUE),
-    spoil_pts = spoil_pts - stats::quantile(spoil_pts, q, na.rm = TRUE),
-    hitout_pts = hitout_pts - stats::quantile(hitout_pts, q, na.rm = TRUE)
+    recv_pts   = recv_pts   - stats::quantile(recv_pts, p["pos_adj_quantile_recv"], na.rm = TRUE),
+    disp_pts   = disp_pts   - stats::quantile(disp_pts, p["pos_adj_quantile_disp"], na.rm = TRUE),
+    spoil_pts  = spoil_pts  - stats::quantile(spoil_pts, p["pos_adj_quantile_spoil"], na.rm = TRUE),
+    hitout_pts = hitout_pts - stats::quantile(hitout_pts, p["pos_adj_quantile_hitout"], na.rm = TRUE)
   ), by = position]
 
   return(out)
@@ -383,15 +382,18 @@ objective_fn_fast <- function(par, env) {
   hitout_pts <- env$hitouts * p["hitout_wt"] + env$hitouts_adv * p["hitout_adv_wt"] -
                 env$ruck_contests * p["ruck_contest_wt"]
 
-  # Position-group quantile adjustment
-  q <- p["pos_adj_quantile"]
+  # Position-group quantile adjustment (per-dimension)
+  q_recv   <- p["pos_adj_quantile_recv"]
+  q_disp   <- p["pos_adj_quantile_disp"]
+  q_spoil  <- p["pos_adj_quantile_spoil"]
+  q_hitout <- p["pos_adj_quantile_hitout"]
   for (pos in env$position_levels) {
     idx <- env$pos_indices[[pos]]
     if (length(idx) > 0) {
-      disp_pts[idx]   <- disp_pts[idx]   - quantile(disp_pts[idx], q, na.rm = TRUE)
-      recv_pts[idx]   <- recv_pts[idx]   - quantile(recv_pts[idx], q, na.rm = TRUE)
-      spoil_pts[idx]  <- spoil_pts[idx]  - quantile(spoil_pts[idx], q, na.rm = TRUE)
-      hitout_pts[idx] <- hitout_pts[idx] - quantile(hitout_pts[idx], q, na.rm = TRUE)
+      recv_pts[idx]   <- recv_pts[idx]   - quantile(recv_pts[idx], q_recv, na.rm = TRUE)
+      disp_pts[idx]   <- disp_pts[idx]   - quantile(disp_pts[idx], q_disp, na.rm = TRUE)
+      spoil_pts[idx]  <- spoil_pts[idx]  - quantile(spoil_pts[idx], q_spoil, na.rm = TRUE)
+      hitout_pts[idx] <- hitout_pts[idx] - quantile(hitout_pts[idx], q_hitout, na.rm = TRUE)
     }
   }
 
@@ -576,34 +578,40 @@ objective_fn <- function(par, pgr, match_dt, train_seasons = 2022:2025,
 
 # 4. Parameter Setup ----
 
-# Current defaults (22 parameters)
+# Read current defaults from package constants (loaded via devtools::load_all())
 par_defaults <- c(
-  # Credit params (17) - from LOOCV optimization
-  disp_neg_offset   = -0.3919,
-  disp_pos_offset   = 0.1255,
-  disp_scale        = 0.7372,
-  bounce_penalty    = 1.0000,
-  recv_neg_mult     = 1.0941,
-  recv_neg_offset   = 0.5000,
-  recv_pos_mult     = 1.1527,
-  recv_pos_offset   = 0.1813,
-  recv_scale        = 0.4324,
-  spoil_wt          = 1.0268,
-  tackle_wt         = 1.0809,
-  pressure_wt       = 0.2972,
-  def_pressure_wt   = 0.9998,
-  hitout_wt         = 0.2,
-  hitout_adv_wt     = 0.2,
-  ruck_contest_wt   = 0.0300,
-  pos_adj_quantile  = 0.3027,
-  # Aggregation params (6)
-  decay_days         = 486,
-  loading            = 1.0,
-  prior_games_recv   = 5.8689,
-  prior_games_disp   = 7.1371,
-  prior_games_spoil  = 3,
-  prior_games_hitout = 3
+  # Credit params (20) - from R/constants.R
+  disp_neg_offset   = CREDIT_DISP_NEG_OFFSET,
+  disp_pos_offset   = CREDIT_DISP_POS_OFFSET,
+  disp_scale        = CREDIT_DISP_SCALE,
+  bounce_penalty    = CREDIT_BOUNCE_PENALTY,
+  recv_neg_mult     = CREDIT_RECV_NEG_MULT,
+  recv_neg_offset   = CREDIT_RECV_NEG_OFFSET,
+  recv_pos_mult     = CREDIT_RECV_POS_MULT,
+  recv_pos_offset   = CREDIT_RECV_POS_OFFSET,
+  recv_scale        = CREDIT_RECV_SCALE,
+  spoil_wt          = CREDIT_SPOIL_WT,
+  tackle_wt         = CREDIT_TACKLE_WT,
+  pressure_wt       = CREDIT_PRESSURE_WT,
+  def_pressure_wt   = CREDIT_DEF_PRESSURE_WT,
+  hitout_wt         = CREDIT_HITOUT_WT,
+  hitout_adv_wt     = CREDIT_HITOUT_ADV_WT,
+  ruck_contest_wt        = CREDIT_RUCK_CONTEST_WT,
+  pos_adj_quantile_recv  = CREDIT_POS_ADJ_QUANTILE_RECV,
+  pos_adj_quantile_disp  = CREDIT_POS_ADJ_QUANTILE_DISP,
+  pos_adj_quantile_spoil = CREDIT_POS_ADJ_QUANTILE_SPOIL,
+  pos_adj_quantile_hitout = CREDIT_POS_ADJ_QUANTILE_HITOUT,
+  # Aggregation params (6) - from R/constants.R
+  decay_days         = RATING_DECAY_DEFAULT_DAYS,
+  loading            = RATING_LOADING_DEFAULT,
+  prior_games_recv   = RATING_PRIOR_GAMES_RECV,
+  prior_games_disp   = RATING_PRIOR_GAMES_DISP,
+  prior_games_spoil  = RATING_PRIOR_GAMES_SPOIL,
+  prior_games_hitout = RATING_PRIOR_GAMES_HITOUT
 )
+
+cat("Current parameter values (from R/constants.R):\n")
+cat(sprintf("  %s\n", paste(names(par_defaults), sprintf("%.4f", par_defaults), sep = " = ")))
 
 # Lower bounds (widened where previous optima hit edges)
 par_lower <- c(
@@ -622,8 +630,11 @@ par_lower <- c(
   def_pressure_wt   = 0.0,
   hitout_wt         = 0.0,
   hitout_adv_wt     = 0.0,
-  ruck_contest_wt   = 0.03,
-  pos_adj_quantile  = 0.1,
+  ruck_contest_wt        = 0.03,
+  pos_adj_quantile_recv  = 0.3,
+  pos_adj_quantile_disp  = 0.3,
+  pos_adj_quantile_spoil = 0.3,
+  pos_adj_quantile_hitout = 0.3,
   decay_days         = 100,
   loading            = 1.0,
   prior_games_recv   = 3,
@@ -649,8 +660,11 @@ par_upper <- c(
   def_pressure_wt   = 1.5,
   hitout_wt         = 1.0,
   hitout_adv_wt     = 2.0,
-  ruck_contest_wt   = 0.5,
-  pos_adj_quantile  = 0.7,
+  ruck_contest_wt        = 0.5,
+  pos_adj_quantile_recv  = 0.7,
+  pos_adj_quantile_disp  = 0.7,
+  pos_adj_quantile_spoil = 0.7,
+  pos_adj_quantile_hitout = 0.7,
   decay_days         = 700,
   loading            = 1.0,
   prior_games_recv   = 15,
@@ -850,7 +864,7 @@ cat("=== Stage 2: Nelder-Mead on credit groups ===\n")
 tictoc::tic("Stage 2 total")
 
 # Group A: Disposal params
-disp_names <- c("disp_neg_offset", "disp_pos_offset", "disp_scale", "bounce_penalty")
+disp_names <- c("disp_neg_offset", "disp_pos_offset", "disp_scale", "bounce_penalty", "pos_adj_quantile_disp")
 cat("  Optimizing disposal params...\n")
 tictoc::tic("  Group A: disposal")
 opt_disp <- optim(
@@ -868,7 +882,7 @@ tictoc::toc()
 cat(sprintf("  Disposal optimized: RMSE = %.4f\n", opt_disp$value))
 
 # Group B: Reception params
-recv_names <- c("recv_neg_mult", "recv_neg_offset", "recv_pos_mult", "recv_pos_offset", "recv_scale")
+recv_names <- c("recv_neg_mult", "recv_neg_offset", "recv_pos_mult", "recv_pos_offset", "recv_scale", "pos_adj_quantile_recv")
 cat("  Optimizing reception params...\n")
 tictoc::tic("  Group B: reception")
 opt_recv <- optim(
@@ -886,7 +900,7 @@ tictoc::toc()
 cat(sprintf("  Reception optimized: RMSE = %.4f\n", opt_recv$value))
 
 # Group C: Spoil/tackle params
-spoil_names <- c("spoil_wt", "tackle_wt", "pressure_wt", "def_pressure_wt")
+spoil_names <- c("spoil_wt", "tackle_wt", "pressure_wt", "def_pressure_wt", "pos_adj_quantile_spoil")
 cat("  Optimizing spoil/tackle params...\n")
 tictoc::tic("  Group C: spoil/tackle")
 opt_spoil <- optim(
@@ -904,7 +918,7 @@ tictoc::toc()
 cat(sprintf("  Spoil optimized: RMSE = %.4f\n", opt_spoil$value))
 
 # Group D: Hitout params
-hitout_names <- c("hitout_wt", "hitout_adv_wt", "ruck_contest_wt")
+hitout_names <- c("hitout_wt", "hitout_adv_wt", "ruck_contest_wt", "pos_adj_quantile_hitout")
 cat("  Optimizing hitout params...\n")
 tictoc::tic("  Group D: hitout")
 opt_hitout <- optim(
@@ -1038,12 +1052,12 @@ rm(credit_dt_final, pcum_final, lookup_final, joined_final,
 # 8. Results ----
 cat("\n=== OPTIMIZED PARAMETERS ===\n")
 cat("\n# Credit params:\n")
-for (nm in names(par_defaults)[1:17]) {
-  cat(sprintf("  %-20s = %8.4f  (was %.4f)\n", nm, best_par[nm], par_defaults[nm]))
+for (nm in names(par_defaults)[1:20]) {
+  cat(sprintf("  %-28s = %8.4f  (was %.4f)\n", nm, best_par[nm], par_defaults[nm]))
 }
 cat("\n# Aggregation params:\n")
-for (nm in names(par_defaults)[18:23]) {
-  cat(sprintf("  %-20s = %8.4f  (was %.4f)\n", nm, best_par[nm], par_defaults[nm]))
+for (nm in names(par_defaults)[21:26]) {
+  cat(sprintf("  %-28s = %8.4f  (was %.4f)\n", nm, best_par[nm], par_defaults[nm]))
 }
 
 cat("\n# Summary:\n")
@@ -1058,34 +1072,78 @@ cat(sprintf("  Optimization gain (default - opt):  %.4f (%.1f%%)\n",
             100 * (baseline_rmse - final_rmse) / baseline_rmse))
 
 # 9. Save Results ----
+
+# Map from optimizer param names -> constants.R variable names
+param_to_constant <- c(
+  disp_neg_offset   = "CREDIT_DISP_NEG_OFFSET",
+  disp_pos_offset   = "CREDIT_DISP_POS_OFFSET",
+  disp_scale        = "CREDIT_DISP_SCALE",
+  bounce_penalty    = "CREDIT_BOUNCE_PENALTY",
+  recv_neg_mult     = "CREDIT_RECV_NEG_MULT",
+  recv_neg_offset   = "CREDIT_RECV_NEG_OFFSET",
+  recv_pos_mult     = "CREDIT_RECV_POS_MULT",
+  recv_pos_offset   = "CREDIT_RECV_POS_OFFSET",
+  recv_scale        = "CREDIT_RECV_SCALE",
+  spoil_wt          = "CREDIT_SPOIL_WT",
+  tackle_wt         = "CREDIT_TACKLE_WT",
+  pressure_wt       = "CREDIT_PRESSURE_WT",
+  def_pressure_wt   = "CREDIT_DEF_PRESSURE_WT",
+  hitout_wt         = "CREDIT_HITOUT_WT",
+  hitout_adv_wt     = "CREDIT_HITOUT_ADV_WT",
+  ruck_contest_wt        = "CREDIT_RUCK_CONTEST_WT",
+  pos_adj_quantile_recv  = "CREDIT_POS_ADJ_QUANTILE_RECV",
+  pos_adj_quantile_disp  = "CREDIT_POS_ADJ_QUANTILE_DISP",
+  pos_adj_quantile_spoil = "CREDIT_POS_ADJ_QUANTILE_SPOIL",
+  pos_adj_quantile_hitout = "CREDIT_POS_ADJ_QUANTILE_HITOUT",
+  decay_days        = "RATING_DECAY_DEFAULT_DAYS",
+  loading           = "RATING_LOADING_DEFAULT",
+  prior_games_recv  = "RATING_PRIOR_GAMES_RECV",
+  prior_games_disp  = "RATING_PRIOR_GAMES_DISP",
+  prior_games_spoil = "RATING_PRIOR_GAMES_SPOIL",
+  prior_games_hitout = "RATING_PRIOR_GAMES_HITOUT"
+)
+
+## 9a. Write optimized params back to R/constants.R ----
+constants_path <- "R/constants.R"
+cat(sprintf("\nUpdating %s with optimized parameters...\n", constants_path))
+
+lines <- readLines(constants_path)
+n_updated <- 0
+for (par_name in names(param_to_constant)) {
+  const_name <- param_to_constant[par_name]
+  new_val <- best_par[par_name]
+
+  # Format: integer-like values (decay_days) as integer, rest as 4-decimal
+  if (par_name == "decay_days") {
+    val_str <- sprintf("%.0f", new_val)
+  } else {
+    val_str <- sprintf("%.4f", new_val)
+  }
+
+  # Match the line: CONSTANT_NAME <- <value>
+  pattern <- paste0("^(", const_name, "\\s*<-\\s*).*$")
+  match_idx <- grep(pattern, lines)
+
+  if (length(match_idx) == 1) {
+    old_line <- lines[match_idx]
+    new_line <- sub(pattern, paste0("\\1", val_str), old_line)
+    if (old_line != new_line) {
+      lines[match_idx] <- new_line
+      n_updated <- n_updated + 1
+      cat(sprintf("  %s: %s -> %s\n", const_name,
+                  sub(paste0(const_name, "\\s*<-\\s*"), "", old_line), val_str))
+    }
+  } else {
+    warning(sprintf("Could not find unique match for %s in %s", const_name, constants_path))
+  }
+}
+
+writeLines(lines, constants_path)
+cat(sprintf("Updated %d constants in %s\n", n_updated, constants_path))
+
+## 9b. Save params as RDS backup ----
 optimized_params <- as.list(best_par)
 saveRDS(optimized_params, "data-raw/03-ratings/optimized_torp_params.rds")
-cat("\nOptimized parameters saved to data-raw/03-ratings/optimized_torp_params.rds\n")
-
-# Print code to update constants.R
-cat("\n# To update constants.R with optimized values:\n")
-cat(sprintf("CREDIT_DISP_NEG_OFFSET   <- %.4f\n", best_par["disp_neg_offset"]))
-cat(sprintf("CREDIT_DISP_POS_OFFSET   <- %.4f\n", best_par["disp_pos_offset"]))
-cat(sprintf("CREDIT_DISP_SCALE        <- %.4f\n", best_par["disp_scale"]))
-cat(sprintf("CREDIT_BOUNCE_PENALTY    <- %.4f\n", best_par["bounce_penalty"]))
-cat(sprintf("CREDIT_RECV_NEG_MULT     <- %.4f\n", best_par["recv_neg_mult"]))
-cat(sprintf("CREDIT_RECV_NEG_OFFSET   <- %.4f\n", best_par["recv_neg_offset"]))
-cat(sprintf("CREDIT_RECV_POS_MULT     <- %.4f\n", best_par["recv_pos_mult"]))
-cat(sprintf("CREDIT_RECV_POS_OFFSET   <- %.4f\n", best_par["recv_pos_offset"]))
-cat(sprintf("CREDIT_RECV_SCALE        <- %.4f\n", best_par["recv_scale"]))
-cat(sprintf("CREDIT_SPOIL_WT          <- %.4f\n", best_par["spoil_wt"]))
-cat(sprintf("CREDIT_TACKLE_WT         <- %.4f\n", best_par["tackle_wt"]))
-cat(sprintf("CREDIT_PRESSURE_WT       <- %.4f\n", best_par["pressure_wt"]))
-cat(sprintf("CREDIT_DEF_PRESSURE_WT   <- %.4f\n", best_par["def_pressure_wt"]))
-cat(sprintf("CREDIT_HITOUT_WT         <- %.4f\n", best_par["hitout_wt"]))
-cat(sprintf("CREDIT_HITOUT_ADV_WT     <- %.4f\n", best_par["hitout_adv_wt"]))
-cat(sprintf("CREDIT_RUCK_CONTEST_WT   <- %.4f\n", best_par["ruck_contest_wt"]))
-cat(sprintf("CREDIT_POS_ADJ_QUANTILE  <- %.4f\n", best_par["pos_adj_quantile"]))
-cat(sprintf("RATING_DECAY_DEFAULT_DAYS  <- %.0f\n", best_par["decay_days"]))
-cat(sprintf("RATING_LOADING_DEFAULT    <- %.4f\n", best_par["loading"]))
-cat(sprintf("RATING_PRIOR_GAMES_RECV   <- %.4f\n", best_par["prior_games_recv"]))
-cat(sprintf("RATING_PRIOR_GAMES_DISP   <- %.4f\n", best_par["prior_games_disp"]))
-cat(sprintf("RATING_PRIOR_GAMES_SPOIL  <- %.4f\n", best_par["prior_games_spoil"]))
-cat(sprintf("RATING_PRIOR_GAMES_HITOUT <- %.4f\n", best_par["prior_games_hitout"]))
+cat("Backup saved to data-raw/03-ratings/optimized_torp_params.rds\n")
 
 cat("\n=== Optimization complete ===\n")

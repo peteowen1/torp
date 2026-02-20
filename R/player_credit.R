@@ -22,8 +22,11 @@ default_credit_params <- function() {
     def_pressure_wt   = CREDIT_DEF_PRESSURE_WT,
     hitout_wt         = CREDIT_HITOUT_WT,
     hitout_adv_wt     = CREDIT_HITOUT_ADV_WT,
-    ruck_contest_wt   = CREDIT_RUCK_CONTEST_WT,
-    pos_adj_quantile  = CREDIT_POS_ADJ_QUANTILE
+    ruck_contest_wt        = CREDIT_RUCK_CONTEST_WT,
+    pos_adj_quantile_recv  = CREDIT_POS_ADJ_QUANTILE_RECV,
+    pos_adj_quantile_disp  = CREDIT_POS_ADJ_QUANTILE_DISP,
+    pos_adj_quantile_spoil = CREDIT_POS_ADJ_QUANTILE_SPOIL,
+    pos_adj_quantile_hitout = CREDIT_POS_ADJ_QUANTILE_HITOUT
   )
 }
 
@@ -178,10 +181,10 @@ create_player_game_data <- function(pbp_data = NULL,
     dplyr::ungroup() |>
     dplyr::group_by(position) |>
     dplyr::mutate(
-      recv_pts_adj = recv_pts - stats::quantile(recv_pts, p$pos_adj_quantile, na.rm = TRUE),
-      disp_pts_adj = disp_pts - stats::quantile(disp_pts, p$pos_adj_quantile, na.rm = TRUE),
-      spoil_pts_adj = spoil_pts - stats::quantile(spoil_pts, p$pos_adj_quantile, na.rm = TRUE),
-      hitout_pts_adj = hitout_pts - stats::quantile(hitout_pts, p$pos_adj_quantile, na.rm = TRUE),
+      recv_pts_adj = recv_pts - stats::quantile(recv_pts, p$pos_adj_quantile_recv, na.rm = TRUE),
+      disp_pts_adj = disp_pts - stats::quantile(disp_pts, p$pos_adj_quantile_disp, na.rm = TRUE),
+      spoil_pts_adj = spoil_pts - stats::quantile(spoil_pts, p$pos_adj_quantile_spoil, na.rm = TRUE),
+      hitout_pts_adj = hitout_pts - stats::quantile(hitout_pts, p$pos_adj_quantile_hitout, na.rm = TRUE),
       tot_p_adj = recv_pts_adj + disp_pts_adj + spoil_pts_adj + hitout_pts_adj
     ) |>
     dplyr::ungroup()
