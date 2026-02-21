@@ -17,6 +17,8 @@ available data since 2021.}
 
 \item{use_disk_cache}{Logical. If \code{TRUE}, uses persistent disk cache for
 faster repeated loads. Default is \code{FALSE}.}
+
+\item{columns}{Optional character vector of column names to read. If NULL (default), reads all columns.}
 }
 \value{
 A data frame containing per-game player ratings with columns

@@ -6,6 +6,9 @@
 \usage{
 load_torp_ratings(columns = NULL)
 }
+\arguments{
+\item{columns}{Optional character vector of column names to read. If NULL (default), reads all columns.}
+}
 \value{
 A data frame containing TORP ratings with columns including
 \code{player_id}, \code{player_name}, \code{torp}, \code{season}, \code{round}, and \code{row_id}.

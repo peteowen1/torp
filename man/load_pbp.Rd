@@ -16,6 +16,8 @@ load_pbp(
 
 \item{rounds}{A numeric vector associated with given AFL round - defaults to all rounds. If set to \code{TRUE}, returns all available rounds in the given season range.}
 
+\item{use_disk_cache}{Logical. If TRUE, uses persistent disk cache for faster repeated loads. Default is FALSE.}
+
 \item{columns}{Optional character vector of column names to read. If NULL (default), reads all columns.}
 }
 \value{

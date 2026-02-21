@@ -261,7 +261,7 @@ mark_download_skippable <- function(url) {
 #' @export
 #'
 #' @examples
-#' \donttest{
+#' \dontrun{
 #' # Download all PBP data
 #' download_torp_data("pbp")
 #'

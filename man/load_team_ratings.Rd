@@ -6,6 +6,9 @@
 \usage{
 load_team_ratings(columns = NULL)
 }
+\arguments{
+\item{columns}{Optional character vector of column names to read. If NULL (default), reads all columns.}
+}
 \value{
 A data frame containing team-level ratings with columns including
 \code{season}, \code{round}, \code{team}, \code{team_torp}, \code{team_attack}, \code{team_defence},

@@ -23,6 +23,8 @@ load_fixtures(
 \item{cache_ttl}{Numeric. Time-to-live for cached data in seconds. Default is 3600 (1 hour).}
 
 \item{verbose}{Logical. If TRUE, prints cache hit/miss information.}
+
+\item{columns}{Optional character vector of column names to read. If NULL (default), reads all columns.}
 }
 \value{
 A data frame containing AFL fixture and schedule data.

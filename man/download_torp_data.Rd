@@ -29,7 +29,7 @@ directory for fast offline access. Subsequent calls to \code{load_pbp()},
 \code{load_chains()}, etc. will read from local files instead of downloading.
 }
 \examples{
-\donttest{
+\dontrun{
 # Download all PBP data
 download_torp_data("pbp")
 

@@ -65,6 +65,7 @@ file_reader <- function(file_name, release_tag) {
 #'
 #' @param seasons A numeric vector of 4-digit years associated with given AFL seasons - defaults to latest season. If set to `TRUE`, returns all available data since 2021.
 #' @param rounds A numeric vector associated with given AFL round - defaults to all rounds. If set to `TRUE`, returns all available rounds in the given season range.
+#' @param use_disk_cache Logical. If TRUE, uses persistent disk cache for faster repeated loads. Default is FALSE.
 #' @param columns Optional character vector of column names to read. If NULL (default), reads all columns.
 #'
 #' @return A data frame containing chains data.
@@ -93,6 +94,7 @@ load_chains <- function(seasons = get_afl_season(), rounds = TRUE, use_disk_cach
 #'
 #' @param seasons A numeric vector of 4-digit years associated with given AFL seasons - defaults to latest season. If set to `TRUE`, returns all available data since 2021.
 #' @param rounds A numeric vector associated with given AFL round - defaults to all rounds. If set to `TRUE`, returns all available rounds in the given season range.
+#' @param use_disk_cache Logical. If TRUE, uses persistent disk cache for faster repeated loads. Default is FALSE.
 #' @param columns Optional character vector of column names to read. If NULL (default), reads all columns.
 #'
 #' @return A data frame containing play by play data.
@@ -120,6 +122,8 @@ load_pbp <- function(seasons = get_afl_season(), rounds = TRUE, use_disk_cache =
 #' @description Loads xg data from the [torpdata repository](https://github.com/peteowen1/torpdata)
 #'
 #' @param seasons A numeric vector of 4-digit years associated with given AFL seasons - defaults to latest season. If set to `TRUE`, returns all available data since 2021.
+#' @param use_disk_cache Logical. If TRUE, uses persistent disk cache for faster repeated loads. Default is FALSE.
+#' @param columns Optional character vector of column names to read. If NULL (default), reads all columns.
 #'
 #' @return A data frame containing xG data.
 #' @seealso [load_pbp()], [load_chains()], [calculate_match_xgs()]
@@ -145,6 +149,8 @@ load_xg <- function(seasons = get_afl_season(), use_disk_cache = FALSE, columns 
 #' @description Loads player stats data from the [torpdata repository](https://github.com/peteowen1/torpdata)
 #'
 #' @param seasons A numeric vector of 4-digit years associated with given AFL seasons - defaults to latest season. If set to `TRUE`, returns all available data since 2021.
+#' @param use_disk_cache Logical. If TRUE, uses persistent disk cache for faster repeated loads. Default is FALSE.
+#' @param columns Optional character vector of column names to read. If NULL (default), reads all columns.
 #'
 #' @return A data frame containing player stats data.
 #' @seealso [load_player_details()], [player_game_ratings()], [player_season_ratings()]
@@ -172,6 +178,8 @@ load_player_stats <- function(seasons = get_afl_season(), use_disk_cache = FALSE
 #' spoil points, hitout points) adjusted by position, as used by the TORP ratings pipeline.
 #'
 #' @param seasons A numeric vector of 4-digit years associated with given AFL seasons - defaults to latest season. If set to `TRUE`, returns all available data since 2021.
+#' @param use_disk_cache Logical. If TRUE, uses persistent disk cache for faster repeated loads. Default is FALSE.
+#' @param columns Optional character vector of column names to read. If NULL (default), reads all columns.
 #'
 #' @return A data frame containing player game performance data.
 #' @seealso [create_player_game_data()], [player_game_ratings()], [calculate_torp_ratings()]
@@ -201,6 +209,7 @@ load_player_game_data <- function(seasons = get_afl_season(), use_disk_cache = F
 #' @param use_cache Logical. If TRUE (default), uses cached data when available to speed up repeated calls.
 #' @param cache_ttl Numeric. Time-to-live for cached data in seconds. Default is 3600 (1 hour).
 #' @param verbose Logical. If TRUE, prints cache hit/miss information.
+#' @param columns Optional character vector of column names to read. If NULL (default), reads all columns.
 #'
 #' @return A data frame containing AFL fixture and schedule data.
 #' @seealso [load_results()], [load_teams()], [load_predictions()]
@@ -278,6 +287,8 @@ load_fixtures <- function(seasons = NULL, all = FALSE, use_cache = TRUE, cache_t
 #' @description Loads AFL team roster and lineup data from the [torpdata repository](https://github.com/peteowen1/torpdata)
 #'
 #' @param seasons A numeric vector of 4-digit years associated with given AFL seasons - defaults to latest season. If set to `TRUE`, returns all available data since 2021.
+#' @param use_disk_cache Logical. If TRUE, uses persistent disk cache for faster repeated loads. Default is FALSE.
+#' @param columns Optional character vector of column names to read. If NULL (default), reads all columns.
 #'
 #' @return A data frame containing AFL team and player lineup data.
 #' @seealso [load_fixtures()], [load_results()], [load_player_details()]
@@ -303,6 +314,8 @@ load_teams <- function(seasons = get_afl_season(), use_disk_cache = FALSE, colum
 #' @description Loads AFL match results and scores from the [torpdata repository](https://github.com/peteowen1/torpdata)
 #'
 #' @param seasons A numeric vector of 4-digit years associated with given AFL seasons - defaults to latest season. If set to `TRUE`, returns all available data since 2021.
+#' @param use_disk_cache Logical. If TRUE, uses persistent disk cache for faster repeated loads. Default is FALSE.
+#' @param columns Optional character vector of column names to read. If NULL (default), reads all columns.
 #'
 #' @return A data frame containing AFL match results and final scores.
 #' @seealso [load_fixtures()], [load_predictions()], [load_teams()]
@@ -328,6 +341,8 @@ load_results <- function(seasons = get_afl_season(), use_disk_cache = FALSE, col
 #' @description Loads AFL player biographical and details data from the [torpdata repository](https://github.com/peteowen1/torpdata)
 #'
 #' @param seasons A numeric vector of 4-digit years associated with given AFL seasons - defaults to latest season. If set to `TRUE`, returns all available data since 2021.
+#' @param use_disk_cache Logical. If TRUE, uses persistent disk cache for faster repeated loads. Default is FALSE.
+#' @param columns Optional character vector of column names to read. If NULL (default), reads all columns.
 #'
 #' @return A data frame containing AFL player biographical details including names, ages, and team affiliations.
 #' @seealso [load_player_stats()], [calculate_torp_ratings()], [player_game_ratings()]
@@ -354,6 +369,8 @@ load_player_details <- function(seasons = get_afl_season(), use_disk_cache = FAL
 #'
 #' @param seasons A numeric vector of 4-digit years associated with given AFL seasons - defaults to latest season. If set to `TRUE`, returns all available data since 2021.
 #' @param rounds A numeric vector associated with given AFL round - defaults to latest round. If set to `TRUE`, returns all available rounds in the given season range.
+#' @param use_disk_cache Logical. If TRUE, uses persistent disk cache for faster repeated loads. Default is FALSE.
+#' @param columns Optional character vector of column names to read. If NULL (default), reads all columns.
 #'
 #' @return A data frame containing AFL match predictions including win probabilities and expected scores.
 #' @seealso [load_fixtures()], [load_results()], [simulate_season()]
@@ -380,6 +397,8 @@ load_predictions <- function(seasons = get_afl_season(), rounds = get_afl_week()
 #'
 #' @description Loads pre-computed TORP player ratings from the [torpdata repository](https://github.com/peteowen1/torpdata).
 #' This data contains per-round TORP ratings for all players, as generated by the ratings pipeline.
+#'
+#' @param columns Optional character vector of column names to read. If NULL (default), reads all columns.
 #'
 #' @return A data frame containing TORP ratings with columns including
 #'   \code{player_id}, \code{player_name}, \code{torp}, \code{season}, \code{round}, and \code{row_id}.
@@ -409,6 +428,7 @@ load_torp_ratings <- function(columns = NULL) {
 #'   available data since 2021.
 #' @param use_disk_cache Logical. If `TRUE`, uses persistent disk cache for
 #'   faster repeated loads. Default is `FALSE`.
+#' @param columns Optional character vector of column names to read. If NULL (default), reads all columns.
 #'
 #' @return A data frame containing per-game player ratings with columns
 #'   including `season`, `round`, `match_id`, `player_id`, `player_name`,
@@ -444,6 +464,7 @@ load_player_game_ratings <- function(seasons = get_afl_season(), use_disk_cache 
 #'   available data since 2021.
 #' @param use_disk_cache Logical. If `TRUE`, uses persistent disk cache for
 #'   faster repeated loads. Default is `FALSE`.
+#' @param columns Optional character vector of column names to read. If NULL (default), reads all columns.
 #'
 #' @return A data frame containing season-total player ratings with columns
 #'   including `season`, `player_id`, `player_name`, `team`, `position`,
@@ -473,6 +494,8 @@ load_player_season_ratings <- function(seasons = get_afl_season(), use_disk_cach
 #'   [torpdata repository](https://github.com/peteowen1/torpdata).
 #'   This data summarises per-round team ratings derived from individual
 #'   player TORP ratings.
+#'
+#' @param columns Optional character vector of column names to read. If NULL (default), reads all columns.
 #'
 #' @return A data frame containing team-level ratings with columns including
 #'   `season`, `round`, `team`, `team_torp`, `team_attack`, `team_defence`,
@@ -506,6 +529,7 @@ load_team_ratings <- function(columns = NULL) {
 #'   season range.
 #' @param use_disk_cache Logical. If `TRUE`, uses persistent disk cache for
 #'   faster repeated loads. Default is `FALSE`.
+#' @param columns Optional character vector of column names to read. If NULL (default), reads all columns.
 #'
 #' @return A data frame containing EP/WP chart data with columns including
 #'   `match_id`, `season`, `round_number`, `period`, `total_seconds`,
@@ -657,26 +681,31 @@ parquet_from_urls_parallel <- function(urls, use_cache = FALSE, max_age_days = 7
     local_dt <- tryCatch({
       ds <- arrow::open_dataset(valid_paths, format = "parquet", unify_schemas = TRUE)
       if (!is.null(columns)) {
-        cols_available <- intersect(columns, names(ds))
-        if (length(cols_available) > 0) {
-          ds <- dplyr::select(ds, dplyr::any_of(columns))
-        }
+        ds <- dplyr::select(ds, dplyr::any_of(columns))
       }
       out <- dplyr::collect(ds)
       data.table::setDT(out)
       out
     }, error = function(e) {
-      # Fallback: sequential read if open_dataset fails (schema mismatch etc.)
       cli::cli_warn("Batch read failed, falling back to sequential: {conditionMessage(e)}")
+      NULL
+    })
+
+    # Sequential fallback (outside tryCatch to avoid nested error handler issues with Arrow)
+    if (is.null(local_dt)) {
       parts <- lapply(valid_paths, function(p) {
         tryCatch({
-          d <- arrow::read_parquet(p, col_select = if (!is.null(columns)) dplyr::any_of(columns) else NULL)
+          if (!is.null(columns)) {
+            d <- arrow::read_parquet(p, col_select = dplyr::any_of(columns))
+          } else {
+            d <- arrow::read_parquet(p)
+          }
           data.table::setDT(d)
           d
-        }, error = function(e2) data.table::data.table())
+        }, error = function(e) data.table::data.table())
       })
-      data.table::rbindlist(parts, use.names = TRUE, fill = TRUE)
-    })
+      local_dt <- data.table::rbindlist(parts, use.names = TRUE, fill = TRUE)
+    }
   }
 
   # --- Phase 3: Download missing files in parallel ---
@@ -744,16 +773,22 @@ parquet_from_urls_parallel <- function(urls, use_cache = FALSE, max_age_days = 7
           out <- dplyr::collect(ds)
           data.table::setDT(out)
           out
-        }, error = function(e) {
+        }, error = function(e) NULL)
+
+        if (is.null(dl_dt)) {
           parts <- lapply(new_local_paths, function(p) {
             tryCatch({
-              d <- arrow::read_parquet(p, col_select = if (!is.null(columns)) dplyr::any_of(columns) else NULL)
+              if (!is.null(columns)) {
+                d <- arrow::read_parquet(p, col_select = dplyr::any_of(columns))
+              } else {
+                d <- arrow::read_parquet(p)
+              }
               data.table::setDT(d)
               d
-            }, error = function(e2) data.table::data.table())
+            }, error = function(e) data.table::data.table())
           })
-          data.table::rbindlist(parts, use.names = TRUE, fill = TRUE)
-        })
+          dl_dt <- data.table::rbindlist(parts, use.names = TRUE, fill = TRUE)
+        }
       }
     }
   }
