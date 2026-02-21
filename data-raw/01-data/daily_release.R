@@ -515,6 +515,10 @@ update_ep_wp_chart <- function(season) {
 
     # Only keep columns that exist in the data
     available_cols <- intersect(chart_cols, names(pbp))
+    missing_cols <- setdiff(chart_cols, names(pbp))
+    if (length(missing_cols) > 0) {
+      cli::cli_warn("EP/WP chart missing {length(missing_cols)} expected column{?s}: {.val {missing_cols}}")
+    }
     pbp[, available_cols, drop = FALSE]
   }, error = function(e) {
     cli::cli_warn("Failed to create EP/WP chart data: {conditionMessage(e)}")
@@ -591,9 +595,19 @@ run_daily_release <- function(force = FALSE) {
   cli::cli_h2("Updating derived data")
   tictoc::tic("derived_data")
 
-  update_player_game_ratings(current_season)
-  update_player_season_ratings(current_season)
-  update_ep_wp_chart(current_season)
+  derived_failures <- character()
+  tryCatch(update_player_game_ratings(current_season), error = function(e) {
+    derived_failures <<- c(derived_failures, "player_game_ratings")
+    cli::cli_warn("Failed: player_game_ratings: {conditionMessage(e)}")
+  })
+  tryCatch(update_player_season_ratings(current_season), error = function(e) {
+    derived_failures <<- c(derived_failures, "player_season_ratings")
+    cli::cli_warn("Failed: player_season_ratings: {conditionMessage(e)}")
+  })
+  tryCatch(update_ep_wp_chart(current_season), error = function(e) {
+    derived_failures <<- c(derived_failures, "ep_wp_chart")
+    cli::cli_warn("Failed: ep_wp_chart: {conditionMessage(e)}")
+  })
 
   tictoc::toc(log = TRUE)
 
@@ -602,7 +616,11 @@ run_daily_release <- function(force = FALSE) {
   # -------------------------------------------------------------------------
   tictoc::toc(log = TRUE)
 
-  cli::cli_alert_success("Daily release complete!")
+  if (length(derived_failures) > 0) {
+    cli::cli_alert_warning("Daily release complete with {length(derived_failures)} derived data failure{?s}: {paste(derived_failures, collapse = ', ')}")
+  } else {
+    cli::cli_alert_success("Daily release complete!")
+  }
 
   # Print timing summary
   cli::cli_h3("Timing Summary")

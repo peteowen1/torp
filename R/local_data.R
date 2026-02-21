@@ -145,7 +145,7 @@ read_local_parquet <- function(url, columns = NULL) {
     msg <- conditionMessage(e)
     cli::cli_warn("Failed to read local file {path}: {msg}")
     # Only delete on likely corruption, not transient errors (memory, locking, version)
-    if (grepl("parquet|corrupt|invalid|magic|truncated", msg, ignore.case = TRUE)) {
+    if (grepl("corrupt|magic number|truncated|not a parquet|unexpected end", msg, ignore.case = TRUE)) {
       cli::cli_inform("Removing potentially corrupt file: {.path {basename(path)}}")
       unlink(path)
     }
@@ -167,6 +167,7 @@ write_local_parquet <- function(url, data) {
     arrow::write_parquet(data, path)
   }, error = function(e) {
     cli::cli_warn("Failed to write local file {path}: {conditionMessage(e)}")
+    if (file.exists(path)) unlink(path)  # clean up partial write
   })
 
   invisible(NULL)
@@ -227,6 +228,7 @@ is_download_skippable <- function(url) {
   if (is.null(max_age)) max_age <- 30  # historical = cap at 30 days
 
   file_age <- as.numeric(difftime(Sys.time(), file.info(skip_path)$mtime, units = "days"))
+  if (is.na(file_age)) return(FALSE)
   file_age <= max_age
 }
 
@@ -389,13 +391,25 @@ download_torp_data <- function(data_types = "all", seasons = TRUE, overwrite = F
   }
 
   cli::cli_inform("Downloading {length(urls)} file{?s} to {.path {local_dir}}...")
-  dl <- curl::multi_download(urls, destfiles = dest_files)
+  dl <- tryCatch(
+    curl::multi_download(urls, destfiles = dest_files),
+    error = function(e) {
+      # Clean up any partially-written files
+      written <- dest_files[file.exists(dest_files)]
+      if (length(written) > 0) unlink(written)
+      cli::cli_abort(c(
+        "Download failed: {conditionMessage(e)}",
+        "i" = "Check your internet connection and try again."
+      ))
+    }
+  )
 
-  n_fail <- sum(!dl$success, na.rm = TRUE)
+  success <- !is.na(dl$success) & dl$success
+  n_fail <- sum(!success)
 
   # Remove invalid files (too small to be valid parquet, e.g. placeholder releases)
-  valid_mask <- dl$success & file.exists(dest_files) & file.size(dest_files) >= MIN_PARQUET_BYTES
-  invalid_mask <- dl$success & file.exists(dest_files) & file.size(dest_files) < MIN_PARQUET_BYTES
+  valid_mask <- success & file.exists(dest_files) & file.size(dest_files) >= MIN_PARQUET_BYTES
+  invalid_mask <- success & file.exists(dest_files) & file.size(dest_files) < MIN_PARQUET_BYTES
 
   if (any(invalid_mask)) {
     cli::cli_warn("Removed {sum(invalid_mask)} file{?s} that {?is/are} too small to be valid parquet (likely placeholder{?s}).")
@@ -419,9 +433,9 @@ download_torp_data <- function(data_types = "all", seasons = TRUE, overwrite = F
   cli::cli_inform("Downloaded {n_valid} file{?s} ({total_mb} MB total).")
 
   if (n_fail > 0) {
-    failed_urls <- urls[!dl$success]
+    failed_urls <- urls[!success]
     cli::cli_warn("{n_fail} file{?s} failed to download: {.url {failed_urls}}")
-    unlink(dest_files[!dl$success])
+    unlink(dest_files[!success])
   }
 
   invisible(NULL)

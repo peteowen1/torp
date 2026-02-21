@@ -730,6 +730,10 @@ parquet_from_urls_parallel <- function(urls, use_cache = FALSE, max_age_days = 7
           data.table::data.table()
         })
       })
+      n_failed <- sum(vapply(parts, function(p) nrow(p) == 0L, logical(1)))
+      if (n_failed > 0) {
+        cli::cli_warn("{n_failed} of {length(valid_paths)} local file{?s} failed to read. Results may be incomplete.")
+      }
       local_dt <- data.table::rbindlist(parts, use.names = TRUE, fill = TRUE)
     }
   }
@@ -784,8 +788,8 @@ parquet_from_urls_parallel <- function(urls, use_cache = FALSE, max_age_days = 7
               if (use_cache) write_disk_cache(urls[idx], dt)
             }
           }, error = function(e) {
-            cli::cli_warn("Failed to read {.url {urls[idx]}}: {conditionMessage(e)}")
-            mark_download_skippable(urls[idx])
+            cli::cli_warn("Failed to read downloaded file {.url {basename(urls[idx])}}: {conditionMessage(e)}")
+            # Do NOT mark as skippable -- this was a read error, not a missing file (404)
           })
         } else {
           # Only mark as skippable for HTTP 404, not transient errors
@@ -833,7 +837,10 @@ parquet_from_urls_parallel <- function(urls, use_cache = FALSE, max_age_days = 7
 parquet_from_url_cached <- function(url, use_cache = TRUE, max_age_days = 7, columns = NULL) {
   # 0. Negative cache — skip known-bad URLs
   if (is_download_skippable(url)) {
-    cli::cli_inform("Skipping previously failed URL: {.url {basename(url)}}")
+    cli::cli_warn(c(
+      "Skipping previously failed URL: {.url {basename(url)}}",
+      "i" = "Run {.fn clear_skip_markers} to retry."
+    ))
     return(data.table::data.table())
   }
 
