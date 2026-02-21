@@ -4,6 +4,10 @@
 # torpdata/data/ directory, enabling fast offline access without
 # network downloads. Files in torpdata/data/ are gitignored.
 
+# Minimum file size for a valid parquet file. Files smaller than this
+# are treated as invalid placeholders (e.g. empty GitHub release assets).
+MIN_PARQUET_BYTES <- 100
+
 #' Get Local Data Directory
 #'
 #' Returns the path to the local torpdata/data/ directory for storing
@@ -195,6 +199,45 @@ save_locally <- function(df, file_name) {
     cli::cli_warn("Failed to save locally: {conditionMessage(e)}")
     invisible(FALSE)
   })
+}
+
+#' Check if a Download Should Be Skipped (Negative Cache)
+#'
+#' When a URL previously produced an invalid file (too small / read error),
+#' a `.skip` marker is written next to the expected local path. This avoids
+#' re-downloading known-bad files every call.
+#'
+#' @param url Character URL to check
+#' @return Logical — TRUE if a fresh `.skip` marker exists
+#' @keywords internal
+is_download_skippable <- function(url) {
+  local_path <- get_local_path(url)
+  if (is.null(local_path)) return(FALSE)
+
+  skip_path <- paste0(local_path, ".skip")
+  if (!file.exists(skip_path)) return(FALSE)
+
+  max_age <- local_max_age_for_url(url)
+  if (is.null(max_age)) return(TRUE)  # historical = skip forever
+
+  file_age <- as.numeric(difftime(Sys.time(), file.info(skip_path)$mtime, units = "days"))
+  file_age <= max_age
+}
+
+#' Mark a URL as Skippable (Negative Cache)
+#'
+#' Writes a tiny `.skip` marker so future calls don't re-download a
+#' known-invalid file.
+#'
+#' @param url Character URL
+#' @return Invisible NULL
+#' @keywords internal
+mark_download_skippable <- function(url) {
+  local_path <- get_local_path(url)
+  if (is.null(local_path)) return(invisible(NULL))
+  skip_path <- paste0(local_path, ".skip")
+  tryCatch(writeLines("skip", skip_path), error = function(e) NULL)
+  invisible(NULL)
 }
 
 #' Download TORP Data for Local Storage

@@ -116,7 +116,12 @@ mock_successful_rds_response <- function() {
 
 # Safe test environment setup
 skip_if_no_internet <- function() {
-  testthat::skip_if_not(torp:::check_internet_connection(), "No internet connection")
+  has_internet <- tryCatch({
+    con <- url("https://www.google.com", open = "r")
+    close(con)
+    TRUE
+  }, error = function(e) FALSE)
+  testthat::skip_if_not(has_internet, "No internet connection")
 }
 
 skip_if_no_github_access <- function() {

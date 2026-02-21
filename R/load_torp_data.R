@@ -604,7 +604,8 @@ load_from_url <- function(url, ..., seasons = TRUE, rounds = TRUE, peteowen1 = F
 #'
 #' Always checks local `torpdata/data/` first for each URL (with smart
 #' staleness), then optionally checks disk cache, then downloads missing
-#' files in parallel. Downloaded data is auto-saved to local storage.
+#' files in parallel. Local files are batch-read via `arrow::open_dataset()`
+#' for speed. Downloaded data is auto-saved to local storage.
 #'
 #' @param urls Character vector of URLs
 #' @param use_cache Logical. If TRUE, also check/write the `~/.torp/cache/` disk cache.
@@ -617,27 +618,30 @@ load_from_url <- function(url, ..., seasons = TRUE, rounds = TRUE, peteowen1 = F
 #' @importFrom data.table rbindlist setDT
 parquet_from_urls_parallel <- function(urls, use_cache = FALSE, max_age_days = 7, columns = NULL) {
   n <- length(urls)
-  results <- vector("list", n)
+
+  # --- Phase 1: Resolve each URL to a local file path or mark for download ---
+  local_paths <- character(n)     # local path if available, "" otherwise
   download_indices <- integer(0)
 
   for (i in seq_len(n)) {
-    # 1. ALWAYS check local torpdata/data/ first (smart staleness)
+    # Skip known-bad files (negative cache)
+    if (is_download_skippable(urls[i])) next
+
+    # Check local torpdata/data/ (smart staleness)
     local_max_age <- local_max_age_for_url(urls[i])
     if (is_locally_stored(urls[i], local_max_age)) {
-      local_data <- read_local_parquet(urls[i], columns = columns)
-      if (!is.null(local_data)) {
-        data.table::setDT(local_data)
-        results[[i]] <- local_data
+      lp <- get_local_path(urls[i])
+      if (!is.null(lp) && file.exists(lp) && file.size(lp) >= MIN_PARQUET_BYTES) {
+        local_paths[i] <- lp
         next
       }
     }
 
-    # 2. Check disk cache (opt-in)
+    # Check disk cache (opt-in)
     if (use_cache && is_disk_cached(urls[i], max_age_days)) {
-      cached_data <- read_disk_cache(urls[i], columns = columns)
-      if (!is.null(cached_data)) {
-        data.table::setDT(cached_data)
-        results[[i]] <- cached_data
+      cp <- get_disk_cache_path(urls[i])
+      if (!is.null(cp) && file.exists(cp) && file.size(cp) >= MIN_PARQUET_BYTES) {
+        local_paths[i] <- cp
         next
       }
     }
@@ -645,64 +649,121 @@ parquet_from_urls_parallel <- function(urls, use_cache = FALSE, max_age_days = 7
     download_indices <- c(download_indices, i)
   }
 
-  # Download remaining URLs in parallel
-  if (length(download_indices) > 0) {
-    if (!check_internet_connection()) {
-      if (length(download_indices) == n) {
-        cli::cli_abort("No internet connection available")
-      } else {
-        cli::cli_warn("No internet connection - using locally stored data only")
-      }
-    } else {
-      urls_to_dl <- urls[download_indices]
-      tmp_files <- vapply(urls_to_dl, function(u) tempfile(fileext = ".parquet"), character(1))
+  # --- Phase 2: Batch-read all local files with open_dataset() ---
+  valid_paths <- local_paths[nchar(local_paths) > 0]
+  local_dt <- data.table::data.table()
 
-      cli::cli_inform("Downloading {length(urls_to_dl)} file{?s} in parallel...")
-      dl <- curl::multi_download(urls_to_dl, destfiles = tmp_files)
+  if (length(valid_paths) > 0) {
+    local_dt <- tryCatch({
+      ds <- arrow::open_dataset(valid_paths, format = "parquet", unify_schemas = TRUE)
+      if (!is.null(columns)) {
+        cols_available <- intersect(columns, names(ds))
+        if (length(cols_available) > 0) {
+          ds <- dplyr::select(ds, dplyr::any_of(columns))
+        }
+      }
+      out <- dplyr::collect(ds)
+      data.table::setDT(out)
+      out
+    }, error = function(e) {
+      # Fallback: sequential read if open_dataset fails (schema mismatch etc.)
+      cli::cli_warn("Batch read failed, falling back to sequential: {conditionMessage(e)}")
+      parts <- lapply(valid_paths, function(p) {
+        tryCatch({
+          d <- arrow::read_parquet(p, col_select = if (!is.null(columns)) dplyr::any_of(columns) else NULL)
+          data.table::setDT(d)
+          d
+        }, error = function(e2) data.table::data.table())
+      })
+      data.table::rbindlist(parts, use.names = TRUE, fill = TRUE)
+    })
+  }
+
+  # --- Phase 3: Download missing files in parallel ---
+  dl_dt <- data.table::data.table()
+
+  if (length(download_indices) > 0) {
+    urls_to_dl <- urls[download_indices]
+    tmp_files <- vapply(urls_to_dl, function(u) tempfile(fileext = ".parquet"), character(1))
+
+    cli::cli_inform("Downloading {length(urls_to_dl)} file{?s} in parallel...")
+    dl <- tryCatch(
+      curl::multi_download(urls_to_dl, destfiles = tmp_files),
+      error = function(e) {
+        cli::cli_warn("Download failed: {conditionMessage(e)}")
+        NULL
+      }
+    )
+
+    if (!is.null(dl)) {
+      new_local_paths <- character(0)
 
       for (j in seq_along(download_indices)) {
         idx <- download_indices[j]
-        if (isTRUE(dl$success[j])) {
+        if (isTRUE(dl$success[j]) && file.exists(tmp_files[j]) &&
+            file.size(tmp_files[j]) >= MIN_PARQUET_BYTES) {
           tryCatch({
             dt <- arrow::read_parquet(tmp_files[j])
             data.table::setDT(dt)
-            results[[idx]] <- dt
 
-            # Auto-save full data to local storage
+            # Save full data to local storage
             if (nrow(dt) > 0) {
               write_local_parquet(urls[idx], dt)
+              lp <- get_local_path(urls[idx])
+              if (!is.null(lp) && file.exists(lp)) {
+                new_local_paths <- c(new_local_paths, lp)
+              }
             }
 
-            # Also cache to disk cache if enabled
+            # Also cache to disk if enabled
             if (use_cache && nrow(dt) > 0) {
               write_disk_cache(urls[idx], dt)
             }
-
-            # Apply column selection after saving full data
-            if (!is.null(columns) && nrow(dt) > 0) {
-              cols_present <- intersect(columns, names(dt))
-              if (length(cols_present) > 0) {
-                results[[idx]] <- dt[, ..cols_present]
-              }
-            }
           }, error = function(e) {
             cli::cli_warn("Failed to read {.url {urls[idx]}}: {conditionMessage(e)}")
-            results[[idx]] <- data.table::data.table()
+            mark_download_skippable(urls[idx])
           })
         } else {
-          cli::cli_warn("Failed to download {.url {urls[idx]}}")
-          results[[idx]] <- data.table::data.table()
+          # Mark as skippable so we don't retry next time
+          mark_download_skippable(urls[idx])
+          if (!isTRUE(dl$success[j])) {
+            cli::cli_warn("Failed to download {.url {urls[idx]}}")
+          }
         }
       }
 
       unlink(tmp_files)
+
+      # Batch-read newly downloaded files
+      if (length(new_local_paths) > 0) {
+        dl_dt <- tryCatch({
+          ds <- arrow::open_dataset(new_local_paths, format = "parquet", unify_schemas = TRUE)
+          if (!is.null(columns)) {
+            ds <- dplyr::select(ds, dplyr::any_of(columns))
+          }
+          out <- dplyr::collect(ds)
+          data.table::setDT(out)
+          out
+        }, error = function(e) {
+          parts <- lapply(new_local_paths, function(p) {
+            tryCatch({
+              d <- arrow::read_parquet(p, col_select = if (!is.null(columns)) dplyr::any_of(columns) else NULL)
+              data.table::setDT(d)
+              d
+            }, error = function(e2) data.table::data.table())
+          })
+          data.table::rbindlist(parts, use.names = TRUE, fill = TRUE)
+        })
+      }
     }
   }
 
-  # Replace any NULLs with empty data.tables
-  results <- lapply(results, function(x) if (is.null(x)) data.table::data.table() else x)
+  # --- Phase 4: Combine local + downloaded ---
+  if (nrow(local_dt) == 0 && nrow(dl_dt) == 0) return(data.table::data.table())
+  if (nrow(dl_dt) == 0) return(local_dt)
+  if (nrow(local_dt) == 0) return(dl_dt)
 
-  data.table::rbindlist(results, use.names = TRUE, fill = TRUE)
+  data.table::rbindlist(list(local_dt, dl_dt), use.names = TRUE, fill = TRUE)
 }
 
 #' Load parquet file from a remote connection with local-first loading
@@ -721,6 +782,9 @@ parquet_from_urls_parallel <- function(urls, use_cache = FALSE, max_age_days = 7
 #' @importFrom cli cli_warn cli_abort
 #' @importFrom data.table data.table setDT
 parquet_from_url_cached <- function(url, use_cache = TRUE, max_age_days = 7, columns = NULL) {
+  # 0. Negative cache — skip known-bad URLs
+  if (is_download_skippable(url)) return(data.table::data.table())
+
   # 1. ALWAYS check local torpdata/data/ first (smart staleness per URL)
   local_max_age <- local_max_age_for_url(url)
   if (is_locally_stored(url, local_max_age)) {
@@ -743,18 +807,22 @@ parquet_from_url_cached <- function(url, use_cache = TRUE, max_age_days = 7, col
   # 3. Download from URL
   result <- parquet_from_url(url)
 
-  # Auto-save full data to local storage
-  if (nrow(result) > 0) {
-    write_local_parquet(url, result)
+  # Mark as skippable if download produced nothing useful
+  if (nrow(result) == 0) {
+    mark_download_skippable(url)
+    return(result)
   }
 
+  # Auto-save full data to local storage
+  write_local_parquet(url, result)
+
   # Also cache to disk cache if enabled
-  if (use_cache && nrow(result) > 0) {
+  if (use_cache) {
     write_disk_cache(url, result)
   }
 
   # Apply column selection on the downloaded data
-  if (!is.null(columns) && nrow(result) > 0) {
+  if (!is.null(columns)) {
     cols_present <- intersect(columns, names(result))
     if (length(cols_present) > 0) {
       result <- result[, ..cols_present]
@@ -849,20 +917,6 @@ set_torp_data_repo <- function(repo) {
 }
 
 # Helper functions
-
-#' Check if internet connection is available
-#'
-#' @return Logical indicating if internet connection is available
-#' @keywords internal
-check_internet_connection <- function() {
-  tryCatch({
-    con <- url("https://www.google.com", open = "r")
-    close(con)
-    return(TRUE)
-  }, error = function(e) {
-    return(FALSE)
-  })
-}
 
 #' Validate rounds
 #'

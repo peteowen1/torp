@@ -26,6 +26,7 @@ A data.table with all files combined
 \description{
 Always checks local \verb{torpdata/data/} first for each URL (with smart
 staleness), then optionally checks disk cache, then downloads missing
-files in parallel. Downloaded data is auto-saved to local storage.
+files in parallel. Local files are batch-read via \code{arrow::open_dataset()}
+for speed. Downloaded data is auto-saved to local storage.
 }
 \keyword{internal}
