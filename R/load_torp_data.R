@@ -562,7 +562,7 @@ load_ep_wp_charts <- function(seasons = get_afl_season(), rounds = TRUE, use_dis
 #' @param seasons A numeric vector of years that will be used to filter the dataframe's `season` column. If `TRUE` (default), does not filter.
 #' @param rounds A numeric vector of rounds that will be used to filter the dataframe's `round` column. If `TRUE` (default), does not filter.
 #' @param peteowen1 TRUE to add peteowen1_data classing and attributes.
-#' @param use_disk_cache Logical. If TRUE (default), uses persistent disk cache for faster repeated loads.
+#' @param use_disk_cache Logical. If TRUE, uses persistent disk cache for faster repeated loads.
 #' @param columns Optional character vector of column names to read. If NULL (default),
 #'   reads all columns. Filter columns (season, round, round_number, week) are
 #'   auto-included when filtering is active.
@@ -592,6 +592,10 @@ load_from_url <- function(url, ..., seasons = TRUE, rounds = TRUE, peteowen1 = F
     out <- parquet_from_urls_parallel(url, use_cache = use_cache, max_age_days = max_age, columns = read_cols)
   }
 
+  if (nrow(out) == 0 && length(url) > 0) {
+    cli::cli_warn("No data loaded from {length(url)} URL{?s}. Check seasons/rounds or use {.fn clear_skip_markers} to retry previously failed files.")
+  }
+
   # Filter by season/round if specific values requested
   if (!isTRUE(seasons)) {
     stopifnot(is.numeric(seasons))
@@ -611,6 +615,9 @@ load_from_url <- function(url, ..., seasons = TRUE, rounds = TRUE, peteowen1 = F
   # Drop auto-added filter columns that weren't originally requested
   if (!is.null(columns)) {
     keep <- intersect(names(out), columns)
+    if (length(keep) == 0 && nrow(out) > 0) {
+      cli::cli_warn("None of the requested columns ({.val {columns}}) found in data. Available: {.val {head(names(out), 10)}}")
+    }
     if (length(keep) > 0) out <- out[, ..keep]
   }
 
@@ -647,9 +654,13 @@ parquet_from_urls_parallel <- function(urls, use_cache = FALSE, max_age_days = 7
   local_paths <- character(n)     # local path if available, "" otherwise
   download_indices <- integer(0)
 
+  n_skipped <- 0L
   for (i in seq_len(n)) {
     # Skip known-bad files (negative cache)
-    if (is_download_skippable(urls[i])) next
+    if (is_download_skippable(urls[i])) {
+      n_skipped <- n_skipped + 1L
+      next
+    }
 
     # Check local torpdata/data/ (smart staleness)
     local_max_age <- local_max_age_for_url(urls[i])
@@ -671,6 +682,10 @@ parquet_from_urls_parallel <- function(urls, use_cache = FALSE, max_age_days = 7
     }
 
     download_indices <- c(download_indices, i)
+  }
+
+  if (n_skipped > 0) {
+    cli::cli_inform("Skipped {n_skipped} previously failed URL{?s}. Use {.fn clear_skip_markers} to retry.")
   }
 
   # --- Phase 2: Batch-read all local files with open_dataset() ---
@@ -702,7 +717,10 @@ parquet_from_urls_parallel <- function(urls, use_cache = FALSE, max_age_days = 7
           }
           data.table::setDT(d)
           d
-        }, error = function(e) data.table::data.table())
+        }, error = function(e) {
+          cli::cli_warn("Failed to read local file {.path {basename(p)}}: {conditionMessage(e)}")
+          data.table::data.table()
+        })
       })
       local_dt <- data.table::rbindlist(parts, use.names = TRUE, fill = TRUE)
     }
@@ -725,7 +743,7 @@ parquet_from_urls_parallel <- function(urls, use_cache = FALSE, max_age_days = 7
     )
 
     if (!is.null(dl)) {
-      new_local_paths <- character(0)
+      dl_parts <- list()
 
       for (j in seq_along(download_indices)) {
         idx <- download_indices[j]
@@ -735,26 +753,33 @@ parquet_from_urls_parallel <- function(urls, use_cache = FALSE, max_age_days = 7
             dt <- arrow::read_parquet(tmp_files[j])
             data.table::setDT(dt)
 
-            # Save full data to local storage
             if (nrow(dt) > 0) {
-              write_local_parquet(urls[idx], dt)
-              lp <- get_local_path(urls[idx])
-              if (!is.null(lp) && file.exists(lp)) {
-                new_local_paths <- c(new_local_paths, lp)
+              # Apply column selection
+              if (!is.null(columns)) {
+                cols_present <- intersect(columns, names(dt))
+                if (length(cols_present) > 0) {
+                  dl_parts[[length(dl_parts) + 1L]] <- dt[, ..cols_present]
+                }
+              } else {
+                dl_parts[[length(dl_parts) + 1L]] <- dt
               }
-            }
 
-            # Also cache to disk if enabled
-            if (use_cache && nrow(dt) > 0) {
-              write_disk_cache(urls[idx], dt)
+              # Save full data to local storage (best-effort)
+              write_local_parquet(urls[idx], dt)
+
+              # Also cache to disk if enabled
+              if (use_cache) write_disk_cache(urls[idx], dt)
             }
           }, error = function(e) {
             cli::cli_warn("Failed to read {.url {urls[idx]}}: {conditionMessage(e)}")
             mark_download_skippable(urls[idx])
           })
         } else {
-          # Mark as skippable so we don't retry next time
-          mark_download_skippable(urls[idx])
+          # Only mark as skippable for HTTP 404, not transient errors
+          status <- dl$status_code[j]
+          if (!is.na(status) && status == 404) {
+            mark_download_skippable(urls[idx])
+          }
           if (!isTRUE(dl$success[j])) {
             cli::cli_warn("Failed to download {.url {urls[idx]}}")
           }
@@ -763,32 +788,8 @@ parquet_from_urls_parallel <- function(urls, use_cache = FALSE, max_age_days = 7
 
       unlink(tmp_files)
 
-      # Batch-read newly downloaded files
-      if (length(new_local_paths) > 0) {
-        dl_dt <- tryCatch({
-          ds <- arrow::open_dataset(new_local_paths, format = "parquet", unify_schemas = TRUE)
-          if (!is.null(columns)) {
-            ds <- dplyr::select(ds, dplyr::any_of(columns))
-          }
-          out <- dplyr::collect(ds)
-          data.table::setDT(out)
-          out
-        }, error = function(e) NULL)
-
-        if (is.null(dl_dt)) {
-          parts <- lapply(new_local_paths, function(p) {
-            tryCatch({
-              if (!is.null(columns)) {
-                d <- arrow::read_parquet(p, col_select = dplyr::any_of(columns))
-              } else {
-                d <- arrow::read_parquet(p)
-              }
-              data.table::setDT(d)
-              d
-            }, error = function(e) data.table::data.table())
-          })
-          dl_dt <- data.table::rbindlist(parts, use.names = TRUE, fill = TRUE)
-        }
+      if (length(dl_parts) > 0) {
+        dl_dt <- data.table::rbindlist(dl_parts, use.names = TRUE, fill = TRUE)
       }
     }
   }
@@ -818,7 +819,10 @@ parquet_from_urls_parallel <- function(urls, use_cache = FALSE, max_age_days = 7
 #' @importFrom data.table data.table setDT
 parquet_from_url_cached <- function(url, use_cache = TRUE, max_age_days = 7, columns = NULL) {
   # 0. Negative cache — skip known-bad URLs
-  if (is_download_skippable(url)) return(data.table::data.table())
+  if (is_download_skippable(url)) {
+    cli::cli_inform("Skipping previously failed URL: {.url {basename(url)}}")
+    return(data.table::data.table())
+  }
 
   # 1. ALWAYS check local torpdata/data/ first (smart staleness per URL)
   local_max_age <- local_max_age_for_url(url)
@@ -842,9 +846,11 @@ parquet_from_url_cached <- function(url, use_cache = TRUE, max_age_days = 7, col
   # 3. Download from URL
   result <- parquet_from_url(url)
 
-  # Mark as skippable if download produced nothing useful
+  # Mark as skippable only for confirmed 404s (not transient errors)
   if (nrow(result) == 0) {
-    mark_download_skippable(url)
+    if (identical(attr(result, "skip_reason"), "not_found")) {
+      mark_download_skippable(url)
+    }
     return(result)
   }
 
@@ -886,9 +892,6 @@ parquet_from_url <- function(url) {
     cli::cli_abort("URL must start with http:// or https://")
   }
 
-  # Note: Internet connectivity should be checked by caller (load_from_url)
-  # to avoid redundant checks for each URL in batch operations
-
   tryCatch({
     # Arrow can read parquet directly from URL
     load <- arrow::read_parquet(url)
@@ -904,18 +907,23 @@ parquet_from_url <- function(url) {
 
   }, error = function(e) {
     error_msg <- conditionMessage(e)
+    result <- data.table::data.table()
 
     if (grepl("404|Not Found", error_msg, ignore.case = TRUE)) {
       cli::cli_warn("Data file not found at {.url {url}} - file may not exist for this season/round combination")
+      attr(result, "skip_reason") <- "not_found"
     } else if (grepl("timeout|timed out", error_msg, ignore.case = TRUE)) {
       cli::cli_warn("Connection timeout while downloading from {.url {url}} - please try again")
+      attr(result, "skip_reason") <- "transient"
     } else if (grepl("cannot open|connection", error_msg, ignore.case = TRUE)) {
       cli::cli_warn("Failed to connect to {.url {url}} - check internet connection")
+      attr(result, "skip_reason") <- "transient"
     } else {
       cli::cli_warn("Failed to load data from {.url {url}}: {error_msg}")
+      attr(result, "skip_reason") <- "transient"
     }
 
-    return(data.table::data.table())
+    return(result)
   })
 }
 
@@ -978,7 +986,7 @@ validate_rounds <- function(rounds) {
 #'
 #' @param seasons A numeric vector or TRUE
 #'
-#' @return NULL
+#' @return A validated numeric vector of seasons
 #' @keywords internal
 validate_seasons <- function(seasons) {
   if (isTRUE(seasons)) seasons <- 2021:(get_afl_season())

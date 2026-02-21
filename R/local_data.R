@@ -143,6 +143,7 @@ read_local_parquet <- function(url, columns = NULL) {
     }
   }, error = function(e) {
     cli::cli_warn("Failed to read local file {path}: {conditionMessage(e)}")
+    unlink(path)
     NULL
   })
 }
@@ -218,7 +219,7 @@ is_download_skippable <- function(url) {
   if (!file.exists(skip_path)) return(FALSE)
 
   max_age <- local_max_age_for_url(url)
-  if (is.null(max_age)) return(TRUE)  # historical = skip forever
+  if (is.null(max_age)) max_age <- 30  # historical = cap at 30 days
 
   file_age <- as.numeric(difftime(Sys.time(), file.info(skip_path)$mtime, units = "days"))
   file_age <= max_age
@@ -238,6 +239,31 @@ mark_download_skippable <- function(url) {
   skip_path <- paste0(local_path, ".skip")
   tryCatch(writeLines("skip", skip_path), error = function(e) NULL)
   invisible(NULL)
+}
+
+#' Clear Skip Markers (Negative Cache)
+#'
+#' Removes all `.skip` marker files from the local data directory,
+#' allowing previously skipped URLs to be re-attempted on next load.
+#'
+#' @return Invisible count of markers removed
+#' @export
+clear_skip_markers <- function() {
+  local_dir <- get_local_data_dir()
+  if (is.null(local_dir)) {
+    cli::cli_inform("No local data directory configured.")
+    return(invisible(0L))
+  }
+
+  skip_files <- list.files(local_dir, pattern = "\\.skip$", full.names = TRUE)
+  if (length(skip_files) == 0) {
+    cli::cli_inform("No skip markers to clear.")
+    return(invisible(0L))
+  }
+
+  unlink(skip_files)
+  cli::cli_inform("Cleared {length(skip_files)} skip marker{?s}.")
+  invisible(length(skip_files))
 }
 
 #' Download TORP Data for Local Storage
@@ -361,9 +387,8 @@ download_torp_data <- function(data_types = "all", seasons = TRUE, overwrite = F
   n_fail <- sum(!dl$success, na.rm = TRUE)
 
   # Remove invalid files (too small to be valid parquet, e.g. placeholder releases)
-  min_parquet_bytes <- 100
-  valid_mask <- dl$success & file.exists(dest_files) & file.size(dest_files) >= min_parquet_bytes
-  invalid_mask <- dl$success & file.exists(dest_files) & file.size(dest_files) < min_parquet_bytes
+  valid_mask <- dl$success & file.exists(dest_files) & file.size(dest_files) >= MIN_PARQUET_BYTES
+  invalid_mask <- dl$success & file.exists(dest_files) & file.size(dest_files) < MIN_PARQUET_BYTES
 
   if (any(invalid_mask)) {
     cli::cli_warn("Removed {sum(invalid_mask)} file{?s} that {?is/are} too small to be valid parquet (likely placeholder{?s}).")

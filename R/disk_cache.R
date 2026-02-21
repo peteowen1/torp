@@ -108,7 +108,7 @@ read_disk_cache <- function(url, columns = NULL) {
       arrow::read_parquet(cache_path)
     }
   }, error = function(e) {
-    cli::cli_warn("Failed to read cache file: {cache_path}")
+    cli::cli_warn("Failed to read cache file {cache_path}: {conditionMessage(e)}")
     # Remove corrupted cache file
     unlink(cache_path)
     return(NULL)
@@ -127,7 +127,7 @@ write_disk_cache <- function(url, data) {
   tryCatch({
     arrow::write_parquet(data, cache_path)
   }, error = function(e) {
-    cli::cli_warn("Failed to write cache file: {cache_path}")
+    cli::cli_warn("Failed to write cache file {cache_path}: {conditionMessage(e)}")
   })
 
   invisible(NULL)
