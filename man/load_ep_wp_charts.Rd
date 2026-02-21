@@ -6,8 +6,9 @@
 \usage{
 load_ep_wp_charts(
   seasons = get_afl_season(),
-  rounds = get_afl_week(),
-  use_disk_cache = FALSE
+  rounds = TRUE,
+  use_disk_cache = FALSE,
+  columns = NULL
 )
 }
 \arguments{
@@ -16,7 +17,7 @@ seasons — defaults to latest season. If set to \code{TRUE}, returns all
 available data since 2021.}
 
 \item{rounds}{A numeric vector associated with given AFL round — defaults to
-latest round. If set to \code{TRUE}, returns all available rounds in the given
+all rounds. If set to \code{TRUE}, returns all available rounds in the given
 season range.}
 
 \item{use_disk_cache}{Logical. If \code{TRUE}, uses persistent disk cache for

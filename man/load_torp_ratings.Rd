@@ -4,7 +4,7 @@
 \alias{load_torp_ratings}
 \title{Load TORP Ratings Data}
 \usage{
-load_torp_ratings()
+load_torp_ratings(columns = NULL)
 }
 \value{
 A data frame containing TORP ratings with columns including

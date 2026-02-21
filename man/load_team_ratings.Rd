@@ -4,7 +4,7 @@
 \alias{load_team_ratings}
 \title{Load Team Ratings Data}
 \usage{
-load_team_ratings()
+load_team_ratings(columns = NULL)
 }
 \value{
 A data frame containing team-level ratings with columns including

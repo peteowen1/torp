@@ -4,7 +4,11 @@
 \alias{load_player_game_data}
 \title{Load Player Game Data}
 \usage{
-load_player_game_data(seasons = get_afl_season(), use_disk_cache = FALSE)
+load_player_game_data(
+  seasons = get_afl_season(),
+  use_disk_cache = FALSE,
+  columns = NULL
+)
 }
 \arguments{
 \item{seasons}{A numeric vector of 4-digit years associated with given AFL seasons - defaults to latest season. If set to \code{TRUE}, returns all available data since 2021.}

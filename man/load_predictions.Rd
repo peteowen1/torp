@@ -7,7 +7,8 @@
 load_predictions(
   seasons = get_afl_season(),
   rounds = get_afl_week(),
-  use_disk_cache = FALSE
+  use_disk_cache = FALSE,
+  columns = NULL
 )
 }
 \arguments{

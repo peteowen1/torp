@@ -64,7 +64,8 @@ file_reader <- function(file_name, release_tag) {
 #' @description Loads chains data from the [torpdata repository](https://github.com/peteowen1/torpdata)
 #'
 #' @param seasons A numeric vector of 4-digit years associated with given AFL seasons - defaults to latest season. If set to `TRUE`, returns all available data since 2021.
-#' @param rounds A numeric vector associated with given AFL round - defaults to latest round. If set to `TRUE`, returns all available rounds in the given season range.
+#' @param rounds A numeric vector associated with given AFL round - defaults to all rounds. If set to `TRUE`, returns all available rounds in the given season range.
+#' @param columns Optional character vector of column names to read. If NULL (default), reads all columns.
 #'
 #' @return A data frame containing chains data.
 #' @seealso [load_pbp()], [load_xg()], [load_fixtures()]
@@ -75,14 +76,13 @@ file_reader <- function(file_name, release_tag) {
 #' })
 #' }
 #' @export
-load_chains <- function(seasons = get_afl_season(), rounds = get_afl_week(), use_disk_cache = FALSE) {
-  if (isTRUE(seasons) && missing(rounds)) rounds <- TRUE
+load_chains <- function(seasons = get_afl_season(), rounds = TRUE, use_disk_cache = FALSE, columns = NULL) {
   seasons <- validate_seasons(seasons)
   rounds <- validate_rounds(rounds)
 
   urls <- generate_urls("chains-data", "chains_data", seasons, rounds)
 
-  out <- load_from_url(urls, seasons = seasons, rounds = rounds, use_disk_cache = use_disk_cache)
+  out <- load_from_url(urls, seasons = seasons, rounds = rounds, use_disk_cache = use_disk_cache, columns = columns)
 
   return(out)
 }
@@ -92,7 +92,8 @@ load_chains <- function(seasons = get_afl_season(), rounds = get_afl_week(), use
 #' @description Loads play by play seasons from the [torpdata repository](https://github.com/peteowen1/torpdata)
 #'
 #' @param seasons A numeric vector of 4-digit years associated with given AFL seasons - defaults to latest season. If set to `TRUE`, returns all available data since 2021.
-#' @param rounds A numeric vector associated with given AFL round - defaults to latest round. If set to `TRUE`, returns all available rounds in the given season range.
+#' @param rounds A numeric vector associated with given AFL round - defaults to all rounds. If set to `TRUE`, returns all available rounds in the given season range.
+#' @param columns Optional character vector of column names to read. If NULL (default), reads all columns.
 #'
 #' @return A data frame containing play by play data.
 #' @seealso [load_chains()], [load_xg()], [load_fixtures()], [clean_pbp()]
@@ -103,14 +104,13 @@ load_chains <- function(seasons = get_afl_season(), rounds = get_afl_week(), use
 #' })
 #' }
 #' @export
-load_pbp <- function(seasons = get_afl_season(), rounds = get_afl_week(), use_disk_cache = FALSE) {
-  if (isTRUE(seasons) && missing(rounds)) rounds <- TRUE
+load_pbp <- function(seasons = get_afl_season(), rounds = TRUE, use_disk_cache = FALSE, columns = NULL) {
   seasons <- validate_seasons(seasons)
   rounds <- validate_rounds(rounds)
 
   urls <- generate_urls("pbp-data", "pbp_data", seasons, rounds)
 
-  out <- load_from_url(urls, seasons = seasons, rounds = rounds, use_disk_cache = use_disk_cache)
+  out <- load_from_url(urls, seasons = seasons, rounds = rounds, use_disk_cache = use_disk_cache, columns = columns)
 
   return(out)
 }
@@ -130,12 +130,12 @@ load_pbp <- function(seasons = get_afl_season(), rounds = get_afl_week(), use_di
 #' })
 #' }
 #' @export
-load_xg <- function(seasons = get_afl_season(), use_disk_cache = FALSE) {
+load_xg <- function(seasons = get_afl_season(), use_disk_cache = FALSE, columns = NULL) {
   seasons <- validate_seasons(seasons)
 
   urls <- generate_urls("xg-data", "xg_data", seasons)
 
-  out <- load_from_url(urls, seasons = seasons, use_disk_cache = use_disk_cache)
+  out <- load_from_url(urls, seasons = seasons, use_disk_cache = use_disk_cache, columns = columns)
 
   return(out)
 }
@@ -155,12 +155,12 @@ load_xg <- function(seasons = get_afl_season(), use_disk_cache = FALSE) {
 #' })
 #' }
 #' @export
-load_player_stats <- function(seasons = get_afl_season(), use_disk_cache = FALSE) {
+load_player_stats <- function(seasons = get_afl_season(), use_disk_cache = FALSE, columns = NULL) {
   seasons <- validate_seasons(seasons)
 
   urls <- generate_urls("player_stats-data", "player_stats", seasons)
 
-  out <- load_from_url(urls, seasons = seasons, use_disk_cache = use_disk_cache)
+  out <- load_from_url(urls, seasons = seasons, use_disk_cache = use_disk_cache, columns = columns)
 
   return(out)
 }
@@ -182,12 +182,12 @@ load_player_stats <- function(seasons = get_afl_season(), use_disk_cache = FALSE
 #' })
 #' }
 #' @export
-load_player_game_data <- function(seasons = get_afl_season(), use_disk_cache = FALSE) {
+load_player_game_data <- function(seasons = get_afl_season(), use_disk_cache = FALSE, columns = NULL) {
   seasons <- validate_seasons(seasons)
 
   urls <- generate_urls("player_game-data", "player_game", seasons)
 
-  out <- load_from_url(urls, seasons = seasons, use_disk_cache = use_disk_cache)
+  out <- load_from_url(urls, seasons = seasons, use_disk_cache = use_disk_cache, columns = columns)
 
   return(out)
 }
@@ -217,7 +217,7 @@ load_player_game_data <- function(seasons = get_afl_season(), use_disk_cache = F
 #' })
 #' }
 #' @export
-load_fixtures <- function(seasons = NULL, all = FALSE, use_cache = TRUE, cache_ttl = 3600, verbose = FALSE) {
+load_fixtures <- function(seasons = NULL, all = FALSE, use_cache = TRUE, cache_ttl = 3600, verbose = FALSE, columns = NULL) {
   # Process parameters
   if (all) {
     current_year <- as.numeric(format(Sys.Date(), "%Y"))
@@ -258,7 +258,7 @@ load_fixtures <- function(seasons = NULL, all = FALSE, use_cache = TRUE, cache_t
 
   # Fetch data from URLs
   urls <- generate_urls("fixtures-data", "fixtures", seasons)
-  out <- load_from_url(urls, seasons = seasons)
+  out <- load_from_url(urls, seasons = seasons, columns = columns)
   
   # Store in cache if enabled
   if (use_cache && nrow(out) > 0) {
@@ -288,12 +288,12 @@ load_fixtures <- function(seasons = NULL, all = FALSE, use_cache = TRUE, cache_t
 #' })
 #' }
 #' @export
-load_teams <- function(seasons = get_afl_season(), use_disk_cache = FALSE) {
+load_teams <- function(seasons = get_afl_season(), use_disk_cache = FALSE, columns = NULL) {
   seasons <- validate_seasons(seasons)
 
   urls <- generate_urls(data_type = "teams-data", file_prefix = "teams", seasons = seasons)
 
-  out <- load_from_url(urls, seasons = seasons, use_disk_cache = use_disk_cache)
+  out <- load_from_url(urls, seasons = seasons, use_disk_cache = use_disk_cache, columns = columns)
 
   return(out)
 }
@@ -313,12 +313,12 @@ load_teams <- function(seasons = get_afl_season(), use_disk_cache = FALSE) {
 #' })
 #' }
 #' @export
-load_results <- function(seasons = get_afl_season(), use_disk_cache = FALSE) {
+load_results <- function(seasons = get_afl_season(), use_disk_cache = FALSE, columns = NULL) {
   seasons <- validate_seasons(seasons)
 
   urls <- generate_urls("results-data", "results", seasons)
 
-  out <- load_from_url(urls, seasons = seasons, use_disk_cache = use_disk_cache)
+  out <- load_from_url(urls, seasons = seasons, use_disk_cache = use_disk_cache, columns = columns)
 
   return(out)
 }
@@ -338,12 +338,12 @@ load_results <- function(seasons = get_afl_season(), use_disk_cache = FALSE) {
 #' })
 #' }
 #' @export
-load_player_details <- function(seasons = get_afl_season(), use_disk_cache = FALSE) {
+load_player_details <- function(seasons = get_afl_season(), use_disk_cache = FALSE, columns = NULL) {
   seasons <- validate_seasons(seasons)
 
   urls <- generate_urls("player_details-data", "player_details", seasons)
 
-  out <- load_from_url(urls, seasons = seasons, use_disk_cache = use_disk_cache)
+  out <- load_from_url(urls, seasons = seasons, use_disk_cache = use_disk_cache, columns = columns)
 
   return(out)
 }
@@ -364,14 +364,14 @@ load_player_details <- function(seasons = get_afl_season(), use_disk_cache = FAL
 #' })
 #' }
 #' @export
-load_predictions <- function(seasons = get_afl_season(), rounds = get_afl_week(), use_disk_cache = FALSE) {
+load_predictions <- function(seasons = get_afl_season(), rounds = get_afl_week(), use_disk_cache = FALSE, columns = NULL) {
   if (isTRUE(seasons) && missing(rounds)) rounds <- TRUE
   seasons <- validate_seasons(seasons)
   rounds <- validate_rounds(rounds)
 
   urls <- generate_urls("predictions", "predictions", seasons)
 
-  out <- load_from_url(urls, seasons = seasons, rounds = rounds, use_disk_cache = use_disk_cache)
+  out <- load_from_url(urls, seasons = seasons, rounds = rounds, use_disk_cache = use_disk_cache, columns = columns)
 
   return(out)
 }
@@ -391,9 +391,10 @@ load_predictions <- function(seasons = get_afl_season(), rounds = get_afl_week()
 #' })
 #' }
 #' @export
-load_torp_ratings <- function() {
+load_torp_ratings <- function(columns = NULL) {
   url <- paste0("https://github.com/", get_torp_data_repo(), "/releases/download/ratings-data/torp_ratings.parquet")
-  parquet_from_url(url)
+  out <- parquet_from_url_cached(url, use_cache = FALSE, columns = columns)
+  tibble::as_tibble(out)
 }
 
 #' Load Player Game Ratings Data
@@ -421,12 +422,12 @@ load_torp_ratings <- function() {
 #' })
 #' }
 #' @export
-load_player_game_ratings <- function(seasons = get_afl_season(), use_disk_cache = FALSE) {
+load_player_game_ratings <- function(seasons = get_afl_season(), use_disk_cache = FALSE, columns = NULL) {
   seasons <- validate_seasons(seasons)
 
   urls <- generate_urls("player_game_ratings-data", "player_game_ratings", seasons)
 
-  out <- load_from_url(urls, seasons = seasons, use_disk_cache = use_disk_cache)
+  out <- load_from_url(urls, seasons = seasons, use_disk_cache = use_disk_cache, columns = columns)
 
   return(out)
 }
@@ -456,12 +457,12 @@ load_player_game_ratings <- function(seasons = get_afl_season(), use_disk_cache 
 #' })
 #' }
 #' @export
-load_player_season_ratings <- function(seasons = get_afl_season(), use_disk_cache = FALSE) {
+load_player_season_ratings <- function(seasons = get_afl_season(), use_disk_cache = FALSE, columns = NULL) {
   seasons <- validate_seasons(seasons)
 
   urls <- generate_urls("player_season_ratings-data", "player_season_ratings", seasons)
 
-  out <- load_from_url(urls, seasons = seasons, use_disk_cache = use_disk_cache)
+  out <- load_from_url(urls, seasons = seasons, use_disk_cache = use_disk_cache, columns = columns)
 
   return(out)
 }
@@ -484,9 +485,10 @@ load_player_season_ratings <- function(seasons = get_afl_season(), use_disk_cach
 #' })
 #' }
 #' @export
-load_team_ratings <- function() {
+load_team_ratings <- function(columns = NULL) {
   url <- paste0("https://github.com/", get_torp_data_repo(), "/releases/download/team_ratings-data/team_ratings.parquet")
-  parquet_from_url(url)
+  out <- parquet_from_url_cached(url, use_cache = FALSE, columns = columns)
+  tibble::as_tibble(out)
 }
 
 #' Load EP/WP Chart Data
@@ -500,7 +502,7 @@ load_team_ratings <- function() {
 #'   seasons — defaults to latest season. If set to `TRUE`, returns all
 #'   available data since 2021.
 #' @param rounds A numeric vector associated with given AFL round — defaults to
-#'   latest round. If set to `TRUE`, returns all available rounds in the given
+#'   all rounds. If set to `TRUE`, returns all available rounds in the given
 #'   season range.
 #' @param use_disk_cache Logical. If `TRUE`, uses persistent disk cache for
 #'   faster repeated loads. Default is `FALSE`.
@@ -518,14 +520,13 @@ load_team_ratings <- function() {
 #' })
 #' }
 #' @export
-load_ep_wp_charts <- function(seasons = get_afl_season(), rounds = get_afl_week(), use_disk_cache = FALSE) {
-  if (isTRUE(seasons) && missing(rounds)) rounds <- TRUE
+load_ep_wp_charts <- function(seasons = get_afl_season(), rounds = TRUE, use_disk_cache = FALSE, columns = NULL) {
   seasons <- validate_seasons(seasons)
   rounds <- validate_rounds(rounds)
 
   urls <- generate_urls("ep_wp_chart-data", "ep_wp_chart", seasons, rounds)
 
-  out <- load_from_url(urls, seasons = seasons, rounds = rounds, use_disk_cache = use_disk_cache)
+  out <- load_from_url(urls, seasons = seasons, rounds = rounds, use_disk_cache = use_disk_cache, columns = columns)
 
   return(out)
 }
@@ -538,77 +539,55 @@ load_ep_wp_charts <- function(seasons = get_afl_season(), rounds = get_afl_week(
 #' @param rounds A numeric vector of rounds that will be used to filter the dataframe's `round` column. If `TRUE` (default), does not filter.
 #' @param peteowen1 TRUE to add peteowen1_data classing and attributes.
 #' @param use_disk_cache Logical. If TRUE (default), uses persistent disk cache for faster repeated loads.
+#' @param columns Optional character vector of column names to read. If NULL (default),
+#'   reads all columns. Filter columns (season, round, round_number, week) are
+#'   auto-included when filtering is active.
 #' @param ... Named arguments that will be added as attributes to the data, e.g. `peteowen1_type` = "pbp"
 #'
 #' @return A tibble, possibly of type `peteowen1_data`
 #' @export
 #' @importFrom data.table rbindlist setDT
 #' @importFrom tibble as_tibble
-load_from_url <- function(url, ..., seasons = TRUE, rounds = TRUE, peteowen1 = FALSE, use_disk_cache = FALSE) {
+load_from_url <- function(url, ..., seasons = TRUE, rounds = TRUE, peteowen1 = FALSE, use_disk_cache = FALSE, columns = NULL) {
   url <- as.character(url)
-
-  # Get disk cache settings
 
   cache_opts <- get_disk_cache_options()
   use_cache <- use_disk_cache && cache_opts$enabled
+  max_age <- cache_opts$max_age_days
 
-  # Check internet connectivity once at the start (only if we have URLs to download)
-  if (length(url) > 0 && !use_cache) {
-    if (!check_internet_connection()) {
-      cli::cli_abort("No internet connection available")
-    }
+  # Auto-include filter columns when columns is specified and filtering is active
+  read_cols <- columns
+  if (!is.null(read_cols)) {
+    if (!isTRUE(seasons)) read_cols <- union(read_cols, "season")
+    if (!isTRUE(rounds))  read_cols <- union(read_cols, c("round", "round_number", "week"))
   }
 
   if (length(url) == 1) {
-    out <- parquet_from_url_cached(url, use_cache = use_cache, max_age_days = cache_opts$max_age_days)
-    if (!isTRUE(seasons)) {
-      stopifnot(is.numeric(seasons))
-      if ("season" %in% names(out)) out <- out[out$season %in% seasons, ]
-    }
-    if (!isTRUE(rounds)) {
-      stopifnot(is.numeric(rounds))
-      if ("round" %in% names(out)) {
-        out <- out[out$round %in% rounds, ]
-      } else if ("round_number" %in% names(out)) {
-        out <- out[out$round_number %in% rounds, ]
-      } else if ("week" %in% names(out)) {
-        out <- out[out$week %in% rounds, ]
-      }
-    }
+    out <- parquet_from_url_cached(url, use_cache = use_cache, max_age_days = max_age, columns = read_cols)
   } else {
-    # Check connectivity once before starting batch download
-    # We'll check if any URLs need downloading (not cached)
-    urls_need_download <- if (use_cache) {
-      !vapply(url, function(u) is_disk_cached(u, cache_opts$max_age_days), logical(1))
-    } else {
-      rep(TRUE, length(url))
+    out <- parquet_from_urls_parallel(url, use_cache = use_cache, max_age_days = max_age, columns = read_cols)
+  }
+
+  # Filter by season/round if specific values requested
+  if (!isTRUE(seasons)) {
+    stopifnot(is.numeric(seasons))
+    if ("season" %in% names(out)) out <- out[out$season %in% seasons, ]
+  }
+  if (!isTRUE(rounds)) {
+    stopifnot(is.numeric(rounds))
+    if ("round" %in% names(out)) {
+      out <- out[out$round %in% rounds, ]
+    } else if ("round_number" %in% names(out)) {
+      out <- out[out$round_number %in% rounds, ]
+    } else if ("week" %in% names(out)) {
+      out <- out[out$week %in% rounds, ]
     }
+  }
 
-    if (any(urls_need_download) && !check_internet_connection()) {
-      if (all(urls_need_download)) {
-        cli::cli_abort("No internet connection available and no cached data found")
-      } else {
-        cli::cli_warn("No internet connection - using cached data only")
-      }
-    }
-
-    # Process URLs - use cache where available, download otherwise
-    max_age <- cache_opts$max_age_days
-
-    f <- function(url_single) {
-      parquet_from_url_cached(url_single, use_cache = use_cache, max_age_days = max_age)
-    }
-
-    # Process URLs with progress
-    out <- lapply(seq_along(url), function(i) {
-      if (length(url) > 1 && i %% 10 == 1) {
-        # Progress message every 10 URLs
-        cli::cli_progress_message("Loading {i}/{length(url)} files...")
-      }
-      f(url[i])
-    })
-
-    out <- data.table::rbindlist(out, use.names = TRUE, fill = TRUE)
+  # Drop auto-added filter columns that weren't originally requested
+  if (!is.null(columns)) {
+    keep <- intersect(names(out), columns)
+    if (length(keep) > 0) out <- out[, ..keep]
   }
 
   out <- tibble::as_tibble(out)
@@ -621,41 +600,165 @@ load_from_url <- function(url, ..., seasons = TRUE, rounds = TRUE, peteowen1 = F
   return(out)
 }
 
-#' Load parquet file from a remote connection with disk caching
+#' Download multiple parquet files in parallel using curl
+#'
+#' Always checks local `torpdata/data/` first for each URL (with smart
+#' staleness), then optionally checks disk cache, then downloads missing
+#' files in parallel. Downloaded data is auto-saved to local storage.
+#'
+#' @param urls Character vector of URLs
+#' @param use_cache Logical. If TRUE, also check/write the `~/.torp/cache/` disk cache.
+#' @param max_age_days Maximum disk cache age in days.
+#' @param columns Optional character vector of column names to select.
+#'
+#' @return A data.table with all files combined
+#' @keywords internal
+#' @importFrom curl multi_download
+#' @importFrom data.table rbindlist setDT
+parquet_from_urls_parallel <- function(urls, use_cache = FALSE, max_age_days = 7, columns = NULL) {
+  n <- length(urls)
+  results <- vector("list", n)
+  download_indices <- integer(0)
+
+  for (i in seq_len(n)) {
+    # 1. ALWAYS check local torpdata/data/ first (smart staleness)
+    local_max_age <- local_max_age_for_url(urls[i])
+    if (is_locally_stored(urls[i], local_max_age)) {
+      local_data <- read_local_parquet(urls[i], columns = columns)
+      if (!is.null(local_data)) {
+        data.table::setDT(local_data)
+        results[[i]] <- local_data
+        next
+      }
+    }
+
+    # 2. Check disk cache (opt-in)
+    if (use_cache && is_disk_cached(urls[i], max_age_days)) {
+      cached_data <- read_disk_cache(urls[i], columns = columns)
+      if (!is.null(cached_data)) {
+        data.table::setDT(cached_data)
+        results[[i]] <- cached_data
+        next
+      }
+    }
+
+    download_indices <- c(download_indices, i)
+  }
+
+  # Download remaining URLs in parallel
+  if (length(download_indices) > 0) {
+    if (!check_internet_connection()) {
+      if (length(download_indices) == n) {
+        cli::cli_abort("No internet connection available")
+      } else {
+        cli::cli_warn("No internet connection - using locally stored data only")
+      }
+    } else {
+      urls_to_dl <- urls[download_indices]
+      tmp_files <- vapply(urls_to_dl, function(u) tempfile(fileext = ".parquet"), character(1))
+
+      cli::cli_inform("Downloading {length(urls_to_dl)} file{?s} in parallel...")
+      dl <- curl::multi_download(urls_to_dl, destfiles = tmp_files)
+
+      for (j in seq_along(download_indices)) {
+        idx <- download_indices[j]
+        if (isTRUE(dl$success[j])) {
+          tryCatch({
+            dt <- arrow::read_parquet(tmp_files[j])
+            data.table::setDT(dt)
+            results[[idx]] <- dt
+
+            # Auto-save full data to local storage
+            if (nrow(dt) > 0) {
+              write_local_parquet(urls[idx], dt)
+            }
+
+            # Also cache to disk cache if enabled
+            if (use_cache && nrow(dt) > 0) {
+              write_disk_cache(urls[idx], dt)
+            }
+
+            # Apply column selection after saving full data
+            if (!is.null(columns) && nrow(dt) > 0) {
+              cols_present <- intersect(columns, names(dt))
+              if (length(cols_present) > 0) {
+                results[[idx]] <- dt[, ..cols_present]
+              }
+            }
+          }, error = function(e) {
+            cli::cli_warn("Failed to read {.url {urls[idx]}}: {conditionMessage(e)}")
+            results[[idx]] <- data.table::data.table()
+          })
+        } else {
+          cli::cli_warn("Failed to download {.url {urls[idx]}}")
+          results[[idx]] <- data.table::data.table()
+        }
+      }
+
+      unlink(tmp_files)
+    }
+  }
+
+  # Replace any NULLs with empty data.tables
+  results <- lapply(results, function(x) if (is.null(x)) data.table::data.table() else x)
+
+  data.table::rbindlist(results, use.names = TRUE, fill = TRUE)
+}
+
+#' Load parquet file from a remote connection with local-first loading
+#'
+#' Always checks local `torpdata/data/` first (with smart staleness), then
+#' optionally checks the disk cache, then downloads. Downloaded data is
+#' auto-saved to local storage for next time.
 #'
 #' @param url A character URL
-#' @param use_cache Logical. If TRUE, use disk cache.
-#' @param max_age_days Maximum age for cached files in days.
+#' @param use_cache Logical. If TRUE, also check/write the `~/.torp/cache/` disk cache.
+#' @param max_age_days Maximum age for disk cache files in days.
+#' @param columns Optional character vector of column names to select.
 #'
 #' @return A data frame
 #' @keywords internal
 #' @importFrom cli cli_warn cli_abort
 #' @importFrom data.table data.table setDT
-parquet_from_url_cached <- function(url, use_cache = TRUE, max_age_days = 7) {
-  # Check local torpdata/data/ first (respects use_cache flag and max_age_days)
-  if (use_cache && is_locally_stored(url, max_age_days)) {
-    local_data <- read_local_parquet(url)
+parquet_from_url_cached <- function(url, use_cache = TRUE, max_age_days = 7, columns = NULL) {
+  # 1. ALWAYS check local torpdata/data/ first (smart staleness per URL)
+  local_max_age <- local_max_age_for_url(url)
+  if (is_locally_stored(url, local_max_age)) {
+    local_data <- read_local_parquet(url, columns = columns)
     if (!is.null(local_data)) {
       data.table::setDT(local_data)
       return(local_data)
     }
   }
 
-  # Check disk cache
+  # 2. Check disk cache (opt-in)
   if (use_cache && is_disk_cached(url, max_age_days)) {
-    cached_data <- read_disk_cache(url)
+    cached_data <- read_disk_cache(url, columns = columns)
     if (!is.null(cached_data)) {
       data.table::setDT(cached_data)
       return(cached_data)
     }
   }
 
-  # Download from URL
+  # 3. Download from URL
   result <- parquet_from_url(url)
 
-  # Cache successful downloads
+  # Auto-save full data to local storage
+  if (nrow(result) > 0) {
+    write_local_parquet(url, result)
+  }
+
+  # Also cache to disk cache if enabled
   if (use_cache && nrow(result) > 0) {
     write_disk_cache(url, result)
+  }
+
+  # Apply column selection on the downloaded data
+  if (!is.null(columns) && nrow(result) > 0) {
+    cols_present <- intersect(columns, names(result))
+    if (length(cols_present) > 0) {
+      result <- result[, ..cols_present]
+    }
   }
 
   return(result)

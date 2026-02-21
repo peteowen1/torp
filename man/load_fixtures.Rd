@@ -9,7 +9,8 @@ load_fixtures(
   all = FALSE,
   use_cache = TRUE,
   cache_ttl = 3600,
-  verbose = FALSE
+  verbose = FALSE,
+  columns = NULL
 )
 }
 \arguments{

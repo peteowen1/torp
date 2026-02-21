@@ -11,6 +11,7 @@ License: MIT + file LICENSE
 Imports:
     arrow (>= 14.0.0),
     cli (>= 3.0.0),
+    curl (>= 5.0.0),
     data.table (>= 1.14.0),
     digest (>= 0.6.0),
     dplyr (>= 1.0.0),

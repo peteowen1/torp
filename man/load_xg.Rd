@@ -4,7 +4,7 @@
 \alias{load_xg}
 \title{Load Expected Goals (xG) Data}
 \usage{
-load_xg(seasons = get_afl_season(), use_disk_cache = FALSE)
+load_xg(seasons = get_afl_season(), use_disk_cache = FALSE, columns = NULL)
 }
 \arguments{
 \item{seasons}{A numeric vector of 4-digit years associated with given AFL seasons - defaults to latest season. If set to \code{TRUE}, returns all available data since 2021.}

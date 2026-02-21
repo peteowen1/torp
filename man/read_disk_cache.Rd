@@ -4,10 +4,13 @@
 \alias{read_disk_cache}
 \title{Read Data from Disk Cache}
 \usage{
-read_disk_cache(url)
+read_disk_cache(url, columns = NULL)
 }
 \arguments{
 \item{url}{Character URL to read cached data for}
+
+\item{columns}{Optional character vector of column names to read.
+If NULL (default), reads all columns.}
 }
 \value{
 Data frame if cache exists, NULL otherwise
