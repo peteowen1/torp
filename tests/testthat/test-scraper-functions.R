@@ -163,12 +163,8 @@ test_that("access_api can authenticate and fetch data", {
   skip_if_no_api_access()
 
   # Test a simple API endpoint
-  result <- tryCatch({
-    url <- "https://api.afl.com.au/cfs/afl/fixturesAndResults/season/CD_S2023014/round/CD_R202301401"
-    access_api(url)
-  }, error = function(e) NULL)
+  url <- "https://api.afl.com.au/cfs/afl/fixturesAndResults/season/CD_S2023014/round/CD_R202301401"
+  result <- access_api(url)
 
-  if (!is.null(result)) {
-    expect_true(is.list(result))
-  }
+  expect_true(is.list(result))
 })

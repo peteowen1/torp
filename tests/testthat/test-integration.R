@@ -110,18 +110,15 @@ test_that("player ratings can be calculated from loaded data", {
           "Could not load player data")
 
   # Calculate ratings
-  result <- tryCatch(
-    calculate_torp_ratings(
-      season_val = 2024,
-      round_val = 5,  # Use middle of season
-      plyr_gm_df = .integ_player_stats,
-      plyr_tm_df = .integ_player_details
-    ),
-    error = function(e) NULL
+  result <- calculate_torp_ratings(
+    season_val = 2024,
+    round_val = 5,  # Use middle of season
+    plyr_gm_df = .integ_player_stats,
+    plyr_tm_df = .integ_player_details
   )
 
-  skip_if(is.null(result) || nrow(result) == 0, "Rating calculation unavailable")
   expect_true(is.data.frame(result))
+  expect_true(nrow(result) > 0)
   expect_true("torp" %in% names(result) || "player_id" %in% names(result))
 })
 
@@ -152,15 +149,10 @@ test_that("simulation can use loaded fixture data", {
 
   # Run simulation
   set.seed(42)
-  result <- tryCatch(
-    simulate_season(teams, games),
-    error = function(e) NULL
-  )
+  result <- simulate_season(teams, games)
 
-  if (!is.null(result)) {
-    expect_true(is.data.frame(result))
-    expect_true(all(!is.na(result$result)))
-  }
+  expect_true(is.data.frame(result))
+  expect_true(all(!is.na(result$result)))
 })
 
 # -----------------------------------------------------------------------------
@@ -170,20 +162,16 @@ test_that("simulation can use loaded fixture data", {
 test_that("match XG calculations work with loaded data", {
   skip_if(is.null(.integ_pbp), "Could not load PBP data")
 
-  result <- tryCatch(
-    calculate_match_xgs(season = 2024, round = 1),
-    error = function(e) NULL
-  )
+  result <- calculate_match_xgs(season = 2024, round = 1)
 
-  if (!is.null(result) && nrow(result) > 0) {
-    expect_true(is.data.frame(result))
-    expect_true("home_xscore" %in% names(result))
-    expect_true("away_xscore" %in% names(result))
+  expect_true(is.data.frame(result))
+  expect_true(nrow(result) > 0)
+  expect_true("home_xscore" %in% names(result))
+  expect_true("away_xscore" %in% names(result))
 
-    # Validate xscore values are reasonable
-    expect_true(all(result$home_xscore >= 0))
-    expect_true(all(result$away_xscore >= 0))
-  }
+  # Validate xscore values are reasonable
+  expect_true(all(result$home_xscore >= 0))
+  expect_true(all(result$away_xscore >= 0))
 })
 
 # -----------------------------------------------------------------------------

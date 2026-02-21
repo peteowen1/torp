@@ -693,6 +693,11 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL) {
   # reported as predictive accuracy. Use held-out evaluation for that.
   cli::cli_alert_warning("bits/tips/mae are in-sample metrics (models predict on training data) — do not use for model comparison")
 
+  # Save team_mdl_df for downstream use (e.g., torpmodels XGB win model training)
+  team_mdl_path <- file.path(tempdir(), "team_mdl_df.rds")
+  saveRDS(team_mdl_df, team_mdl_path)
+  cli::cli_inform("Saved team_mdl_df to {team_mdl_path} ({nrow(team_mdl_df)} rows)")
+
   # This Week's Predictions ----
   cli::cli_h2("Generating predictions for {length(target_weeks)} week{?s}")
 

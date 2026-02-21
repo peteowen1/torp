@@ -5,13 +5,15 @@
 #' This function adds EPV-related variables to the input dataframe.
 #'
 #' @param df A dataframe containing play-by-play data.
+#' @param reference_date Date used for computing game recency weights.
+#'   Defaults to \code{Sys.Date()}. Set explicitly for reproducible historical analysis.
 #'
 #' @return A dataframe with additional EPV-related variables.
 #' @export
 #' @importFrom dplyr mutate case_when if_else lead lag group_by ungroup bind_cols
 #' @importFrom lubridate as_date
 #' @importFrom cli cli_abort
-add_epv_vars <- function(df) {
+add_epv_vars <- function(df, reference_date = Sys.Date()) {
   # Input validation
   if (!is.data.frame(df)) {
     cli::cli_abort("Input 'df' must be a data frame.")
@@ -58,7 +60,7 @@ add_epv_vars <- function(df) {
       lead_team = dplyr::if_else(is.na(.data$points_shot), dplyr::lead(.data$team), .data$team),
       xpoints_diff = .data$points_diff + .data$exp_pts,
       delta_epv = dplyr::lead(.data$xpoints_diff, default = dplyr::last(.data$points_diff)) * .data$team_change - .data$xpoints_diff,
-      weight_gm = exp(as.numeric(-(lubridate::as_date(Sys.Date()) - lubridate::as_date(.data$utc_start_time))) / 365),
+      weight_gm = exp(as.numeric(-(lubridate::as_date(reference_date) - lubridate::as_date(.data$utc_start_time))) / 365),
       round_week = sprintf("%02d", .data$round_number)
     ) |>
     dplyr::ungroup()
@@ -244,6 +246,10 @@ get_wp_preds <- function(df) {
 
   if (is.null(wp_model)) {
     cli::cli_abort("WP model not available. Install torpmodels or ensure package data is available.")
+  }
+
+  if (inherits(wp_model, "xgb.Booster") && !requireNamespace("xgboost", quietly = TRUE)) {
+    cli::cli_abort("xgboost package required but not available")
   }
 
   preds <- as.data.frame(

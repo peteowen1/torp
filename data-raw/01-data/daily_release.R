@@ -66,8 +66,8 @@ has_new_games <- function() {
     return(FALSE)
   }, error = function(e) {
     cli::cli_warn("Error checking for new games: {conditionMessage(e)}")
-    # Default to TRUE to ensure data gets updated if check fails
-    return(TRUE)
+    # Default to FALSE to avoid releasing stale/partial data when API is down
+    return(FALSE)
   })
 }
 

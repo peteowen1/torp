@@ -85,10 +85,7 @@ test_that("match_xgs shows deprecation warning", {
 
   # Should warn about deprecation
   expect_warning(
-    tryCatch(
-      match_xgs(season = 2024, round = 1),
-      error = function(e) NULL  # Ignore errors (e.g., missing data)
-    ),
+    match_xgs(season = 2024, round = 1),
     "deprecated|Deprecated"
   )
 })
@@ -130,17 +127,12 @@ test_that("calculate_match_xgs accepts subset of quarters", {
   skip_if_no_internet()
 
   # Test with first half only
-  result_first_half <- tryCatch(
-    calculate_match_xgs(season = 2024, round = 1, quarter = 1:2),
-    error = function(e) NULL
-  )
+  result_first_half <- calculate_match_xgs(season = 2024, round = 1, quarter = 1:2)
 
-  if (!is.null(result_first_half)) {
-    expect_true(is.data.frame(result_first_half))
+  expect_true(is.data.frame(result_first_half))
 
-    # First half scores should be <= full game scores
-    if (!is.null(.xg_result) && nrow(.xg_result) > 0) {
-      expect_true(all(result_first_half$home_shots_score <= .xg_result$home_shots_score))
-    }
+  # First half scores should be <= full game scores
+  if (!is.null(.xg_result) && nrow(.xg_result) > 0) {
+    expect_true(all(result_first_half$home_shots_score <= .xg_result$home_shots_score))
   }
 })

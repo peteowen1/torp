@@ -48,14 +48,14 @@ save_to_release <- function(df, file_name, release_tag) {
 #' }
 file_reader <- function(file_name, release_tag) {
   f_name <- paste0(file_name, ".parquet")
+  td <- tempdir(check = TRUE)
   piggyback::pb_download(f_name,
                          repo = get_torp_data_repo(),
                          tag = release_tag,
-                         dest = tempdir()
+                         dest = td
   )
-  temp_dir <- tempdir(check = TRUE)
 
-  arrow::read_parquet(file.path(temp_dir, f_name))
+  arrow::read_parquet(file.path(td, f_name))
 }
 
 
@@ -1106,6 +1106,7 @@ generate_urls <- function(data_type, file_prefix, seasons, rounds = NULL, prefer
 
   max_url <- paste0(base_url, "/", data_type, "/", file_prefix, "_", current_season, "_", current_round_str, ".parquet")
 
+  # Lexicographic comparison works because rounds are zero-padded via sprintf("%02d", ...)
   n_before <- length(urls)
   urls <- urls[urls <= max_url]
   n_dropped <- n_before - length(urls)

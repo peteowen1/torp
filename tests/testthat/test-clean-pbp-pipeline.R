@@ -36,15 +36,8 @@ test_that("clean_model_data_epv processes valid data", {
     stringsAsFactors = FALSE
   )
 
-  result <- tryCatch(
-    clean_model_data_epv(mock_data),
-    error = function(e) NULL
-  )
-
-  # If it works, check structure
-  if (!is.null(result)) {
-    expect_true(is.data.frame(result))
-  }
+  result <- clean_model_data_epv(mock_data)
+  expect_true(is.data.frame(result))
 })
 
 # -----------------------------------------------------------------------------

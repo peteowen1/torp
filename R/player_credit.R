@@ -74,6 +74,9 @@ create_player_game_data <- function(pbp_data = NULL,
 
   if (is.null(teams)) teams <- load_teams(TRUE)
 
+  # Compute a single reference date for consistent decay weights across all data sources
+  ref_date <- max(as.Date(pbp_data$utc_start_time), na.rm = TRUE)
+
   # --- Step 1: Disposal points from PBP (grouped by player_id + match_id) ---
   disp_df <- pbp_data |>
     dplyr::arrange(match_id, display_order) |>
@@ -83,7 +86,7 @@ create_player_game_data <- function(pbp_data = NULL,
       delta_epv, team, player_position, round_week, pos_team, wpa
     ) |>
     dplyr::mutate(
-      weight_gm = exp(as.numeric(-(max(as.Date(utc_start_time)) - as.Date(utc_start_time))) / decay),
+      weight_gm = exp(as.numeric(-(ref_date - as.Date(utc_start_time))) / decay),
       opp_tm = ifelse(home_away == "Home", away_team_team_name, home_team_team_name)
     ) |>
     dplyr::group_by(player_id, match_id) |>
@@ -111,7 +114,7 @@ create_player_game_data <- function(pbp_data = NULL,
       delta_epv, team, player_position, round_week, pos_team, wpa
     ) |>
     dplyr::mutate(
-      weight_gm = exp(as.numeric(-(max(as.Date(utc_start_time)) - as.Date(utc_start_time))) / decay)
+      weight_gm = exp(as.numeric(-(ref_date - as.Date(utc_start_time))) / decay)
     ) |>
     dplyr::group_by(lead_player, lead_player_id, match_id) |>
     dplyr::summarise(
@@ -131,7 +134,7 @@ create_player_game_data <- function(pbp_data = NULL,
   # --- Step 4: Join spoils/tackles/hitouts from raw player_stats ---
   spoil_hitout_df <- player_stats |>
     dplyr::mutate(
-      weight_gm = exp(as.numeric(-(max(as.Date(utc_start_time)) - as.Date(utc_start_time))) / decay),
+      weight_gm = exp(as.numeric(-(ref_date - as.Date(utc_start_time))) / decay),
       spoil_pts = extended_stats_spoils * p$spoil_wt + tackles * p$tackle_wt + extended_stats_pressure_acts * p$pressure_wt - extended_stats_def_half_pressure_acts * p$def_pressure_wt,
       spoil_pts_wt = spoil_pts * max(weight_gm),
       hitout_pts = hitouts * p$hitout_wt + extended_stats_hitouts_to_advantage * p$hitout_adv_wt - extended_stats_ruck_contests * p$ruck_contest_wt,
@@ -147,10 +150,10 @@ create_player_game_data <- function(pbp_data = NULL,
 
   # Assert join produced matches (catches upstream schema changes)
   if (all(is.na(plyr_gm_df$spoil_pts))) {
-    cli::cli_warn(c(
-      "Player stats join produced no matches.",
+    cli::cli_abort(c(
+      "Player stats join produced no matches — all spoil/hitout points are zero.",
       "i" = "The column {.val player_player_player_player_id} may have changed in upstream data.",
-      "i" = "Spoil/hitout points will be zero for all players."
+      "i" = "Check that {.fn load_player_stats} returns the expected column names."
     ))
   }
 
