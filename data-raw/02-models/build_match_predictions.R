@@ -5,8 +5,10 @@
 #
 # Usage:
 #   source("data-raw/02-models/build_match_predictions.R")
-#   run_predictions_pipeline()           # auto-detect next week
-#   run_predictions_pipeline(week = 5)   # specific week
+#   run_predictions_pipeline()              # auto-detect next week
+#   run_predictions_pipeline(week = 5)      # specific week
+#   run_predictions_pipeline(weeks = "all") # all fixture weeks
+#   run_predictions_pipeline(weeks = 1:5)   # specific weeks
 
 # Setup ----
 library(tidyverse)
@@ -103,13 +105,19 @@ scrape_injuries <- function(timeout = 30) {
 
 # Main Pipeline ----
 
-run_predictions_pipeline <- function(week = NULL) {
+run_predictions_pipeline <- function(week = NULL, weeks = NULL) {
 
   season <- get_afl_season()
-  if (is.null(week)) week <- get_afl_week(type = "next")
+
+  # Validate args
+  if (!is.null(week) && !is.null(weeks)) {
+    cli::cli_abort("Specify either {.arg week} or {.arg weeks}, not both")
+  }
+
+  # Auto-detect single week if neither provided
+  if (is.null(week) && is.null(weeks)) week <- get_afl_week(type = "next")
 
   cli::cli_h1("Match Predictions Pipeline")
-  cli::cli_inform("Season: {season}, Week: {week}")
   tictoc::tic("predictions_total")
 
   # Load Tables ----
@@ -128,9 +136,21 @@ run_predictions_pipeline <- function(week = NULL) {
   if (nrow(torp_df_total) < 100) cli::cli_abort("Ratings too small ({nrow(torp_df_total)} rows)")
   if (nrow(teams) < 100) cli::cli_abort("Teams too small ({nrow(teams)} rows)")
 
+  # Resolve target weeks (after fixtures loaded for "all" support)
+  if (!is.null(weeks)) {
+    if (identical(weeks, "all")) {
+      target_weeks <- sort(unique(fixtures$round.roundNumber[fixtures$compSeason.year == season]))
+    } else {
+      target_weeks <- weeks
+    }
+  } else {
+    target_weeks <- week
+  }
+  cli::cli_inform("Season: {season}, Week{?s}: {paste(target_weeks, collapse = ', ')}")
+
   # Anchor date for time-decay weights (deterministic, not Sys.Date())
   target_fixtures <- fixtures %>%
-    filter(compSeason.year == season, round.roundNumber == week)
+    filter(compSeason.year == season, round.roundNumber %in% target_weeks)
   weight_anchor_date <- if (nrow(target_fixtures) > 0) {
     as.Date(min(target_fixtures$utcStartTime))
   } else {
@@ -328,13 +348,13 @@ run_predictions_pipeline <- function(week = NULL) {
   cli::cli_h2("Scraping injuries")
   inj_df <- scrape_injuries()
   cli::cli_inform("Injuries loaded: {nrow(inj_df)} rows")
-  if (nrow(inj_df) == 0 && week > 1) {
-    cli::cli_warn("0 injuries scraped during active season (week {week}) - all players will be treated as available")
+  if (nrow(inj_df) == 0 && min(target_weeks) > 1) {
+    cli::cli_warn("0 injuries scraped during active season - all players will be treated as available")
   }
 
-  tr <- torp_ratings(season, week)
+  tr <- torp_ratings(season, min(target_weeks))
   if (nrow(tr) == 0 || !"player_name" %in% names(tr)) {
-    cli::cli_alert_info("No TORP ratings available for {season} R{week} (pre-season or fixtures not ready) - skipping predictions")
+    cli::cli_alert_info("No TORP ratings available for {season} R{min(target_weeks)} (pre-season or fixtures not ready) - skipping predictions")
     tictoc::toc(log = TRUE)
     return(invisible(NULL))
   }
@@ -360,6 +380,13 @@ run_predictions_pipeline <- function(week = NULL) {
       torp_hitout_week = sum(pmax(torp_hitout, 0), na.rm = TRUE) * INJURY_DISCOUNT
     ) %>%
     arrange(-torp_week)
+
+  # Expand estimated ratings across all target weeks (ratings identical for unplayed rounds)
+  if (length(target_weeks) > 1) {
+    tr_week <- purrr::map_dfr(target_weeks, function(w) {
+      tr_week %>% mutate(round = w)
+    })
+  }
 
   # Torp Ratings ----
   cli::cli_h2("Building model dataset")
@@ -667,11 +694,12 @@ run_predictions_pipeline <- function(week = NULL) {
   cli::cli_alert_warning("bits/tips/mae are in-sample metrics (models predict on training data) — do not use for model comparison")
 
   # This Week's Predictions ----
-  cli::cli_h2("Generating week {week} predictions")
+  cli::cli_h2("Generating predictions for {length(target_weeks)} week{?s}")
 
   week_gms_home <- team_mdl_df %>%
-    dplyr::filter(season.x == lubridate::year(Sys.Date()), round.roundNumber.x == week, team_type_fac.x == "home") %>%
+    dplyr::filter(season.x == lubridate::year(Sys.Date()), round.roundNumber.x %in% target_weeks, team_type_fac.x == "home") %>%
     dplyr::select(
+      round = round.roundNumber.x,
       players = count.x, providerId,
       home_team = team_name.x, home_rating = torp.x,
       away_team = team_name.y, away_rating = torp.y,
@@ -690,8 +718,9 @@ run_predictions_pipeline <- function(week = NULL) {
       pred_win = 1 - pred_win,
       score_diff = -score_diff
     ) %>%
-    dplyr::filter(season.x == lubridate::year(Sys.Date()), round.roundNumber.x == week, team_type_fac.x == "away") %>%
+    dplyr::filter(season.x == lubridate::year(Sys.Date()), round.roundNumber.x %in% target_weeks, team_type_fac.x == "away") %>%
     dplyr::select(
+      round = round.roundNumber.x,
       players = count.x, providerId,
       home_team = team_name.y, home_rating = torp.y,
       away_team = team_name.x, away_rating = torp.x,
@@ -704,21 +733,22 @@ run_predictions_pipeline <- function(week = NULL) {
     )
 
   week_gms <- dplyr::bind_rows(week_gms_home, week_gms_away) %>%
-    dplyr::group_by(providerId, home_team, home_rating, away_team, away_rating) %>%
+    dplyr::group_by(round, providerId, home_team, home_rating, away_team, away_rating) %>%
     dplyr::summarise(
       players = mean(players),
       pred_xtotal = mean(pred_xtotal),
       pred_margin = mean(pred_margin),
       pred_win = mean(pred_win),
-      margin = mean(margin)
+      margin = mean(margin),
+      .groups = "drop"
     ) %>%
     mutate(rating_diff = home_rating - away_rating + HOME_RATING_BOOST) %>%
-    select(providerId:away_rating, rating_diff, players:margin)
+    select(round, providerId:away_rating, rating_diff, players:margin)
 
   # Validate Predictions ----
   cli::cli_h2("Validating predictions")
 
-  if (nrow(week_gms) == 0) cli::cli_abort("No predictions generated for week {week}")
+  if (nrow(week_gms) == 0) cli::cli_abort("No predictions generated for week{?s} {paste(target_weeks, collapse = ', ')}")
   if (any(is.na(week_gms$pred_win))) cli::cli_abort("NA values in pred_win")
   if (any(week_gms$pred_win < 0 | week_gms$pred_win > 1)) cli::cli_abort("pred_win values out of [0,1] range")
   if (any(is.na(week_gms$pred_margin))) cli::cli_abort("NA values in pred_margin")
@@ -728,19 +758,19 @@ run_predictions_pipeline <- function(week = NULL) {
   # Upload Predictions ----
   cli::cli_h2("Uploading predictions")
 
-  week_gms <- week_gms %>% mutate(week = week, .before = 1)
+  week_gms <- week_gms %>% rename(week = round) %>% relocate(week)
 
   pred_file_name <- paste0("predictions_", season)
   existing <- tryCatch(file_reader(pred_file_name, "predictions"), error = function(e) NULL)
 
   if (!is.null(existing) && nrow(existing) > 0) {
-    combined <- existing %>% filter(week != !!week) %>% bind_rows(week_gms) %>% arrange(week)
+    combined <- existing %>% filter(!week %in% target_weeks) %>% bind_rows(week_gms) %>% arrange(week)
   } else {
     combined <- week_gms
   }
 
   save_to_release(combined, pred_file_name, "predictions")
-  cli::cli_alert_success("Uploaded {season} predictions ({nrow(combined)} rows, week {week} added)")
+  cli::cli_alert_success("Uploaded {season} predictions ({nrow(combined)} rows, week{?s} {paste(target_weeks, collapse = ', ')} added)")
 
   tictoc::toc(log = TRUE)
 

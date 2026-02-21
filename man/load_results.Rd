@@ -4,10 +4,18 @@
 \alias{load_results}
 \title{Load AFL Match Results Data}
 \usage{
-load_results(seasons = get_afl_season())
+load_results(
+  seasons = get_afl_season(),
+  use_disk_cache = FALSE,
+  columns = NULL
+)
 }
 \arguments{
 \item{seasons}{A numeric vector of 4-digit years associated with given AFL seasons - defaults to latest season. If set to \code{TRUE}, returns all available data since 2021.}
+
+\item{use_disk_cache}{Logical. If TRUE, uses persistent disk cache for faster repeated loads. Default is FALSE.}
+
+\item{columns}{Optional character vector of column names to read. If NULL (default), reads all columns.}
 }
 \value{
 A data frame containing AFL match results and final scores.

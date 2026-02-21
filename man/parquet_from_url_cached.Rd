@@ -2,21 +2,30 @@
 % Please edit documentation in R/load_torp_data.R
 \name{parquet_from_url_cached}
 \alias{parquet_from_url_cached}
-\title{Load parquet file from a remote connection with disk caching}
+\title{Load parquet file from a remote connection with local-first loading}
 \usage{
-parquet_from_url_cached(url, use_cache = TRUE, max_age_days = 7)
+parquet_from_url_cached(
+  url,
+  use_cache = TRUE,
+  max_age_days = 7,
+  columns = NULL
+)
 }
 \arguments{
 \item{url}{A character URL}
 
-\item{use_cache}{Logical. If TRUE, use disk cache.}
+\item{use_cache}{Logical. If TRUE, also check/write the \verb{~/.torp/cache/} disk cache.}
 
-\item{max_age_days}{Maximum age for cached files in days.}
+\item{max_age_days}{Maximum age for disk cache files in days.}
+
+\item{columns}{Optional character vector of column names to select.}
 }
 \value{
 A data frame
 }
 \description{
-Load parquet file from a remote connection with disk caching
+Always checks local \verb{torpdata/data/} first (with smart staleness), then
+optionally checks the disk cache, then downloads. Downloaded data is
+auto-saved to local storage for next time.
 }
 \keyword{internal}

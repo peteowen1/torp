@@ -9,6 +9,9 @@ validate_seasons(seasons)
 \arguments{
 \item{seasons}{A numeric vector or TRUE}
 }
+\value{
+A validated numeric vector of seasons
+}
 \description{
 Validate seasons
 }

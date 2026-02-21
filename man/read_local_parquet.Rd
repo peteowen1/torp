@@ -4,10 +4,13 @@
 \alias{read_local_parquet}
 \title{Read a Parquet File from Local Storage}
 \usage{
-read_local_parquet(url)
+read_local_parquet(url, columns = NULL)
 }
 \arguments{
 \item{url}{Character URL used as the key to find the local file}
+
+\item{columns}{Optional character vector of column names to read.
+If NULL (default), reads all columns.}
 }
 \value{
 Data frame if local file exists, NULL otherwise

@@ -4,7 +4,10 @@
 \alias{load_torp_ratings}
 \title{Load TORP Ratings Data}
 \usage{
-load_torp_ratings()
+load_torp_ratings(columns = NULL)
+}
+\arguments{
+\item{columns}{Optional character vector of column names to read. If NULL (default), reads all columns.}
 }
 \value{
 A data frame containing TORP ratings with columns including

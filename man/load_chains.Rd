@@ -4,12 +4,21 @@
 \alias{load_chains}
 \title{Load Chains Data}
 \usage{
-load_chains(seasons = get_afl_season(), rounds = get_afl_week())
+load_chains(
+  seasons = get_afl_season(),
+  rounds = TRUE,
+  use_disk_cache = FALSE,
+  columns = NULL
+)
 }
 \arguments{
 \item{seasons}{A numeric vector of 4-digit years associated with given AFL seasons - defaults to latest season. If set to \code{TRUE}, returns all available data since 2021.}
 
-\item{rounds}{A numeric vector associated with given AFL round - defaults to latest round. If set to \code{TRUE}, returns all available rounds in the given season range.}
+\item{rounds}{A numeric vector associated with given AFL round - defaults to all rounds. If set to \code{TRUE}, returns all available rounds in the given season range.}
+
+\item{use_disk_cache}{Logical. If TRUE, uses persistent disk cache for faster repeated loads. Default is FALSE.}
+
+\item{columns}{Optional character vector of column names to read. If NULL (default), reads all columns.}
 }
 \value{
 A data frame containing chains data.
