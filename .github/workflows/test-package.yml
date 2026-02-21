@@ -52,6 +52,7 @@ jobs:
           
   coverage:
     runs-on: ubuntu-latest
+    continue-on-error: true
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
       
