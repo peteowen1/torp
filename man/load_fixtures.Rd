@@ -16,7 +16,7 @@ load_fixtures(
 \arguments{
 \item{seasons}{A numeric vector of 4-digit years associated with given AFL seasons - defaults to latest season. If set to \code{TRUE}, returns all available data since 2021.}
 
-\item{all}{Logical. If TRUE, loads all available fixture data from 2018 onwards.}
+\item{all}{Logical. If TRUE, loads all available fixture data from 2021 onwards.}
 
 \item{use_cache}{Logical. If TRUE (default), uses cached data when available to speed up repeated calls.}
 

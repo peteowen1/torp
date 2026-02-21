@@ -197,7 +197,7 @@ load_player_game_data <- function(seasons = get_afl_season(), use_disk_cache = F
 #' @description Loads AFL fixture and schedule data from the [torpdata repository](https://github.com/peteowen1/torpdata)
 #'
 #' @param seasons A numeric vector of 4-digit years associated with given AFL seasons - defaults to latest season. If set to `TRUE`, returns all available data since 2021.
-#' @param all Logical. If TRUE, loads all available fixture data from 2018 onwards.
+#' @param all Logical. If TRUE, loads all available fixture data from 2021 onwards.
 #' @param use_cache Logical. If TRUE (default), uses cached data when available to speed up repeated calls.
 #' @param cache_ttl Numeric. Time-to-live for cached data in seconds. Default is 3600 (1 hour).
 #' @param verbose Logical. If TRUE, prints cache hit/miss information.
@@ -221,7 +221,7 @@ load_fixtures <- function(seasons = NULL, all = FALSE, use_cache = TRUE, cache_t
   # Process parameters
   if (all) {
     current_year <- as.numeric(format(Sys.Date(), "%Y"))
-    seasons <- 2018:current_year
+    seasons <- 2021:current_year
   } else if (is.null(seasons)) {
     seasons <- get_afl_season() # Use default season when no season is provided
   } else {
