@@ -66,9 +66,10 @@ test_that("all=TRUE caching works", {
   clear_fixture_cache()
 
   # First load — cache miss
-  fixtures1 <- suppressMessages(suppressWarnings(
-    load_fixtures(all = TRUE)
-  ))
+  expect_message(
+    fixtures1 <- suppressWarnings(load_fixtures(all = TRUE, verbose = TRUE)),
+    "Cache MISS"
+  )
 
   skip_if(nrow(fixtures1) == 0, "Could not load fixtures")
 
@@ -76,7 +77,10 @@ test_that("all=TRUE caching works", {
   cache_info <- get_cache_info()
   expect_true("fixtures_all" %in% cache_info$cache_key)
 
-  # Second load should return identical data from cache
-  fixtures2 <- load_fixtures(all = TRUE)
+  # Second load should be cache hit
+  expect_message(
+    fixtures2 <- load_fixtures(all = TRUE, verbose = TRUE),
+    "Cache HIT"
+  )
   expect_identical(fixtures1, fixtures2)
 })

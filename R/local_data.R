@@ -142,8 +142,13 @@ read_local_parquet <- function(url, columns = NULL) {
       arrow::read_parquet(path)
     }
   }, error = function(e) {
-    cli::cli_warn("Failed to read local file {path}: {conditionMessage(e)}")
-    unlink(path)
+    msg <- conditionMessage(e)
+    cli::cli_warn("Failed to read local file {path}: {msg}")
+    # Only delete on likely corruption, not transient errors (memory, locking, version)
+    if (grepl("parquet|corrupt|invalid|magic|truncated", msg, ignore.case = TRUE)) {
+      cli::cli_inform("Removing potentially corrupt file: {.path {basename(path)}}")
+      unlink(path)
+    }
     NULL
   })
 }
@@ -237,7 +242,9 @@ mark_download_skippable <- function(url) {
   local_path <- get_local_path(url)
   if (is.null(local_path)) return(invisible(NULL))
   skip_path <- paste0(local_path, ".skip")
-  tryCatch(writeLines("skip", skip_path), error = function(e) NULL)
+  tryCatch(writeLines("skip", skip_path), error = function(e) {
+    cli::cli_warn("Could not write skip marker for {.url {basename(url)}}: {conditionMessage(e)}")
+  })
   invisible(NULL)
 }
 
@@ -397,6 +404,18 @@ download_torp_data <- function(data_types = "all", seasons = TRUE, overwrite = F
 
   n_valid <- sum(valid_mask, na.rm = TRUE)
   total_mb <- round(sum(file.size(dest_files[valid_mask]), na.rm = TRUE) / 1024 / 1024, 1)
+
+  # Spot-check: verify at least one downloaded file is valid parquet
+  if (n_valid > 0) {
+    test_file <- dest_files[valid_mask][1]
+    tryCatch(
+      arrow::read_parquet(test_file, col_select = 1),
+      error = function(e) {
+        cli::cli_warn("Downloaded files may not be valid parquet. First file read failed: {conditionMessage(e)}")
+      }
+    )
+  }
+
   cli::cli_inform("Downloaded {n_valid} file{?s} ({total_mb} MB total).")
 
   if (n_fail > 0) {

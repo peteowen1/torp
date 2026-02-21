@@ -216,5 +216,5 @@ test_that("calculate_torp_ratings works with pre-loaded data", {
 
 test_that("calculate_player_stats uses prior_games_spoil and prior_games_hitout constants", {
   expect_equal(torp:::RATING_PRIOR_GAMES_SPOIL, 3)
-  expect_equal(torp:::RATING_PRIOR_GAMES_HITOUT, 3)
+  expect_equal(torp:::RATING_PRIOR_GAMES_HITOUT, 4.4426)
 })

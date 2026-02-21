@@ -70,6 +70,81 @@ test_that("error handling improvements work", {
   expect_true(exists("load_predictions"))
 })
 
+# -- New load_* functions existence and signature tests --
+
+test_that("load_ep_wp_charts exists and has correct signature", {
+  expect_true(exists("load_ep_wp_charts"))
+  expect_true("load_ep_wp_charts" %in% getNamespaceExports("torp"))
+  fn_args <- names(formals(load_ep_wp_charts))
+  expect_true("seasons" %in% fn_args)
+  expect_true("rounds" %in% fn_args)
+  expect_true("columns" %in% fn_args)
+})
+
+test_that("load_player_game_ratings exists and has correct signature", {
+  expect_true(exists("load_player_game_ratings"))
+  expect_true("load_player_game_ratings" %in% getNamespaceExports("torp"))
+  fn_args <- names(formals(load_player_game_ratings))
+  expect_true("seasons" %in% fn_args)
+  expect_true("columns" %in% fn_args)
+})
+
+test_that("load_player_season_ratings exists and has correct signature", {
+  expect_true(exists("load_player_season_ratings"))
+  expect_true("load_player_season_ratings" %in% getNamespaceExports("torp"))
+  fn_args <- names(formals(load_player_season_ratings))
+  expect_true("seasons" %in% fn_args)
+  expect_true("columns" %in% fn_args)
+})
+
+test_that("load_team_ratings exists and has correct signature", {
+  expect_true(exists("load_team_ratings"))
+  expect_true("load_team_ratings" %in% getNamespaceExports("torp"))
+  fn_args <- names(formals(load_team_ratings))
+  expect_true("columns" %in% fn_args)
+})
+
+test_that("load_torp_ratings exists and has correct signature", {
+  expect_true(exists("load_torp_ratings"))
+  expect_true("load_torp_ratings" %in% getNamespaceExports("torp"))
+  fn_args <- names(formals(load_torp_ratings))
+  expect_true("columns" %in% fn_args)
+})
+
+test_that("download_torp_data exists and validates input", {
+  expect_true(exists("download_torp_data"))
+  expect_true("download_torp_data" %in% getNamespaceExports("torp"))
+  fn_args <- names(formals(download_torp_data))
+  expect_true("data_types" %in% fn_args)
+  expect_true("seasons" %in% fn_args)
+  expect_true("overwrite" %in% fn_args)
+})
+
+test_that("columns parameter is accepted by load_from_url", {
+  # Mock the download to test column selection logic
+  local_mocked_bindings(
+    parquet_from_url = function(url) {
+      data.table::data.table(
+        season = 2024,
+        round = 1L,
+        match_id = "m1",
+        team_name = "TeamA",
+        score = 100
+      )
+    }
+  )
+
+  # Request specific columns
+  result <- load_from_url(
+    "https://example.com/test.parquet",
+    columns = c("match_id", "score")
+  )
+  expect_true("match_id" %in% names(result))
+  expect_true("score" %in% names(result))
+  # Auto-added filter columns should be dropped
+  expect_false("season" %in% names(result))
+})
+
 test_that("load_from_url uses parallel processing correctly", {
   # Test that single URL case works (sequential via parquet_from_url_cached)
   single_url <- "https://github.com/peteowen1/torpdata/releases/download/test-data/test_file.parquet"

@@ -413,6 +413,9 @@ load_predictions <- function(seasons = get_afl_season(), rounds = get_afl_week()
 load_torp_ratings <- function(columns = NULL) {
   url <- paste0("https://github.com/", get_torp_data_repo(), "/releases/download/ratings-data/torp_ratings.parquet")
   out <- parquet_from_url_cached(url, use_cache = FALSE, columns = columns)
+  if (nrow(out) == 0) {
+    cli::cli_warn("No TORP ratings data loaded. The file may not exist yet or the download failed.")
+  }
   tibble::as_tibble(out)
 }
 
@@ -511,6 +514,9 @@ load_player_season_ratings <- function(seasons = get_afl_season(), use_disk_cach
 load_team_ratings <- function(columns = NULL) {
   url <- paste0("https://github.com/", get_torp_data_repo(), "/releases/download/team_ratings-data/team_ratings.parquet")
   out <- parquet_from_url_cached(url, use_cache = FALSE, columns = columns)
+  if (nrow(out) == 0) {
+    cli::cli_warn("No team ratings data loaded. The file may not exist yet or the download failed.")
+  }
   tibble::as_tibble(out)
 }
 
@@ -609,6 +615,8 @@ load_from_url <- function(url, ..., seasons = TRUE, rounds = TRUE, peteowen1 = F
       out <- out[out$round_number %in% rounds, ]
     } else if ("week" %in% names(out)) {
       out <- out[out$week %in% rounds, ]
+    } else if (nrow(out) > 0) {
+      cli::cli_warn("Round filtering requested but no round column found in data. Returning unfiltered. Available columns: {.val {head(names(out), 10)}}")
     }
   }
 
@@ -737,7 +745,10 @@ parquet_from_urls_parallel <- function(urls, use_cache = FALSE, max_age_days = 7
     dl <- tryCatch(
       curl::multi_download(urls_to_dl, destfiles = tmp_files),
       error = function(e) {
-        cli::cli_warn("Download failed: {conditionMessage(e)}")
+        if (nrow(local_dt) == 0) {
+          cli::cli_abort("Download failed and no local data available: {conditionMessage(e)}")
+        }
+        cli::cli_warn("Download failed (using local data only): {conditionMessage(e)}")
         NULL
       }
     )
@@ -759,6 +770,8 @@ parquet_from_urls_parallel <- function(urls, use_cache = FALSE, max_age_days = 7
                 cols_present <- intersect(columns, names(dt))
                 if (length(cols_present) > 0) {
                   dl_parts[[length(dl_parts) + 1L]] <- dt[, ..cols_present]
+                } else {
+                  cli::cli_warn("None of the requested columns found in {.url {basename(urls[idx])}}. Available: {.val {head(names(dt), 10)}}")
                 }
               } else {
                 dl_parts[[length(dl_parts) + 1L]] <- dt
@@ -867,6 +880,8 @@ parquet_from_url_cached <- function(url, use_cache = TRUE, max_age_days = 7, col
     cols_present <- intersect(columns, names(result))
     if (length(cols_present) > 0) {
       result <- result[, ..cols_present]
+    } else {
+      cli::cli_warn("None of the requested columns ({.val {columns}}) found in downloaded data. Available: {.val {head(names(result), 10)}}")
     }
   }
 

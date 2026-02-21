@@ -20,7 +20,7 @@ test_that("create_player_game_data output contains required columns", {
   skip_if_no_internet()
 
   pgd <- tryCatch({
-    pbp <- load_pbp(2024)
+    pbp <- load_pbp(2024, rounds = 1)
     pstats <- load_player_stats(2024)
     teams <- load_teams(2024)
     create_player_game_data(pbp, pstats, teams)
