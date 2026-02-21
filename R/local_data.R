@@ -18,7 +18,7 @@ MIN_PARQUET_BYTES <- 100
 #' @export
 #'
 #' @examples
-#' \donttest{
+#' \dontrun{
 #' get_local_data_dir()
 #'
 #' # Set explicitly
@@ -54,7 +54,7 @@ get_local_data_dir <- function() {
 #' @export
 #'
 #' @examples
-#' \donttest{
+#' \dontrun{
 #' set_local_data_dir("path/to/torpdata/data")
 #' }
 set_local_data_dir <- function(path) {

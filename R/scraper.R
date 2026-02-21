@@ -9,7 +9,7 @@
 #' @export
 #'
 #' @examples
-#' \donttest{
+#' \dontrun{
 #' chains <- get_match_chains(2022, 1)
 #' }
 #' @importFrom dplyr inner_join left_join

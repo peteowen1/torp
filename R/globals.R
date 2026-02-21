@@ -7,8 +7,8 @@
 #' @importFrom lubridate tz
 NULL
 
-# data.table special symbols
-utils::globalVariables(c(".", ".N", ":="))
+# data.table special symbols and env-variable patterns
+utils::globalVariables(c(".", ".N", ":=", "..keep", "..cols_present"))
 
 # data.table column names used in NSE
 utils::globalVariables(c(
@@ -40,7 +40,8 @@ utils::globalVariables(c(
 
   # Scoring/goal variables
   "tot_goals", "is_goal_row", "scoring_team_id", "opp_id",
-  "lead_opp_id", "lag_opp_id", "lag_desc_tot",
+  "lead_opp_id", "lag_opp_id", "lag_desc_tot", "lead_desc",
+  "is_lead_kickin", "lag_points_row",
 
   # Model labels
   "label_ep", "label_wp", "next_score",
