@@ -71,25 +71,34 @@ test_that("error handling improvements work", {
 })
 
 test_that("load_from_url uses parallel processing correctly", {
-  # Test that single URL case works (sequential)
+  # Test that single URL case works (sequential via parquet_from_url_cached)
   single_url <- "https://github.com/peteowen1/torpdata/releases/download/test-data/test_file.parquet"
 
-  # Mock parquet_from_url for testing
+  # Mock parquet_from_url for the single-URL path
   local_mocked_bindings(
     parquet_from_url = function(url) {
       data.table::data.table(test_col = 1:3, url_source = basename(url))
     }
   )
 
-  # Test single URL (should not use parallel processing)
   result_single <- load_from_url(single_url)
   expect_s3_class(result_single, "tbl_df")
   expect_equal(nrow(result_single), 3)
 
-  # Test multiple URLs (should use parallel processing)
+  # Test multiple URLs — parquet_from_urls_parallel uses open_dataset batch reading.
+  # Mock the entire parallel function to verify it's called for multi-URL case.
   multiple_urls <- c(
     "https://github.com/peteowen1/torpdata/releases/download/test-data/test_file1.parquet",
     "https://github.com/peteowen1/torpdata/releases/download/test-data/test_file2.parquet"
+  )
+
+  local_mocked_bindings(
+    parquet_from_urls_parallel = function(urls, ...) {
+      data.table::data.table(
+        test_col = rep(1:3, length(urls)),
+        url_source = rep(basename(urls), each = 3)
+      )
+    }
   )
 
   result_multiple <- load_from_url(multiple_urls)

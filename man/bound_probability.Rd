@@ -14,7 +14,7 @@ bound_probability(p, lower = 0.001, upper = 0.999)
 \item{upper}{Upper bound (default 0.999)}
 }
 \value{
-Numeric vector bounded to \link{lower, upper}
+Numeric vector bounded to [lower, upper]
 }
 \description{
 Bound a probability to avoid log(0) and numeric edge cases
