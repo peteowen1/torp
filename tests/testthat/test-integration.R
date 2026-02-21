@@ -106,14 +106,13 @@ test_that("WP model predictions flow through add_wp_vars", {
 # -----------------------------------------------------------------------------
 
 test_that("player ratings can be calculated from loaded data", {
-  skip_if(is.null(.integ_player_stats) || is.null(.integ_player_details),
+  skip_if(is.null(.integ_player_details),
           "Could not load player data")
 
-  # Calculate ratings
+  # Calculate ratings (let function load its own player_game_data)
   result <- calculate_torp_ratings(
     season_val = 2024,
-    round_val = 5,  # Use middle of season
-    plyr_gm_df = .integ_player_stats,
+    round_val = 5,
     plyr_tm_df = .integ_player_details
   )
 

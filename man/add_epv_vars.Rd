@@ -4,10 +4,13 @@
 \alias{add_epv_vars}
 \title{Add Expected Points Value (EPV) Variables}
 \usage{
-add_epv_vars(df)
+add_epv_vars(df, reference_date = Sys.Date())
 }
 \arguments{
 \item{df}{A dataframe containing play-by-play data.}
+
+\item{reference_date}{Date used for computing game recency weights.
+Defaults to \code{Sys.Date()}. Set explicitly for reproducible historical analysis.}
 }
 \value{
 A dataframe with additional EPV-related variables.

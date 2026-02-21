@@ -151,7 +151,7 @@ create_player_game_data <- function(pbp_data = NULL,
   # Assert join produced matches (catches upstream schema changes)
   if (all(is.na(plyr_gm_df$spoil_pts))) {
     cli::cli_abort(c(
-      "Player stats join produced no matches — all spoil/hitout points are zero.",
+      "Player stats join produced no matches - all spoil/hitout points are zero.",
       "i" = "The column {.val player_player_player_player_id} may have changed in upstream data.",
       "i" = "Check that {.fn load_player_stats} returns the expected column names."
     ))
