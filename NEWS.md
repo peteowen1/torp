@@ -1,3 +1,55 @@
+# torp 0.0.0.9003 (development)
+
+## Breaking Changes
+
+* `load_pbp()` and `load_chains()` now default `rounds = TRUE` (all rounds) instead of the current week. Callers that relied on getting only the latest round without specifying `rounds` will now receive the full season. Use `rounds = get_afl_week()` to restore the old behaviour.
+
+* `load_from_url()` now defaults `use_disk_cache = FALSE` (previously `TRUE`). Pass `use_disk_cache = TRUE` explicitly if you want persistent disk caching.
+
+* `load_fixtures(all = TRUE)` now starts from 2021 (previously 2018). Seasons before 2021 are outside `validate_seasons()` range and were producing errors.
+
+* `check_internet_connection()` has been removed. Use `curl::has_internet()` directly.
+
+## New Features
+
+* **Local-first data loading**: All `load_*()` functions now check `torpdata/data/` first, then disk cache, then download. Downloaded files are auto-saved locally.
+
+* `download_torp_data()` for bulk-downloading parquet files for offline access.
+
+* **Parallel downloads**: Multi-URL loads use `curl::multi_download()` for faster batch fetching.
+
+* **Negative cache (skip markers)**: 404 URLs are marked with `.skip` files to avoid repeated failed downloads. Use `clear_skip_markers()` to retry.
+
+* **Column selection**: All `load_*()` functions accept a `columns` parameter to read only specific columns.
+
+* New load functions: `load_ep_wp_charts()`, `load_player_game_ratings()`, `load_player_season_ratings()`, `load_team_ratings()`.
+
+* `CREDIT_POS_ADJ_QUANTILE` split into 4 per-dimension constants: `CREDIT_POS_ADJ_QUANTILE_RECV`, `_DISP`, `_SPOIL`, `_HITOUT`.
+
+## Bug Fixes
+
+* `parquet_from_urls_parallel()` now warns instead of silently dropping data when column selection finds no matching columns.
+
+* `parquet_from_urls_parallel()` now errors (instead of just warning) when downloads completely fail and no local data is available.
+
+* `mark_download_skippable()` now logs write errors instead of silently swallowing them.
+
+* `read_local_parquet()` now only deletes files on likely corruption errors, not transient failures (memory, locking).
+
+* `load_torp_ratings()` and `load_team_ratings()` now warn when returning empty data.
+
+* `load_from_url()` now warns when round filtering is requested but no round column exists in the data.
+
+* Integration test data loading is now guarded against CRAN environments.
+
+## Optimized Parameters
+
+* Re-optimized rating constants: `RATING_DECAY_DEFAULT_DAYS` (486→511), `RATING_PRIOR_GAMES_RECV` (5.87→6.19), `RATING_PRIOR_GAMES_DISP` (7.14→7.11), `RATING_PRIOR_GAMES_HITOUT` (3→4.44).
+
+* Re-optimized credit assignment constants for disposal, reception, and position adjustment.
+
+---
+
 # torp 0.0.0.9002 (development)
 
 ## Code Quality

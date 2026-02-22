@@ -22,7 +22,9 @@ test_that("calculate_match_xgs has reasonable default arguments", {
   fn_formals <- formals(calculate_match_xgs)
 
   # quarter default is 1:4 (evaluates to the sequence)
+  # nolint start: eval is safe here — only evaluating function formals
   expect_equal(eval(fn_formals$quarter), 1:4)
+  # nolint end
 })
 
 # -----------------------------------------------------------------------------
@@ -50,39 +52,49 @@ test_that("match_xgs has reasonable default arguments", {
   fn_formals <- formals(match_xgs)
 
   # Default quarter should be 1:4 (evaluates to the sequence)
+  # nolint start: eval is safe here — only evaluating function formals
   expect_equal(eval(fn_formals$quarter), 1:4)
+  # nolint end
 })
+
+# -----------------------------------------------------------------------------
+# Shared Test Data (loaded once for network-dependent tests)
+# -----------------------------------------------------------------------------
+
+.xg_can_load <- !identical(Sys.getenv("NOT_CRAN"), "") || interactive()
+
+if (.xg_can_load && curl::has_internet()) {
+  .xg_result <- tryCatch(
+    calculate_match_xgs(season = 2024, round = 1, quarter = 1:4),
+    error = function(e) {
+      message("XG data load failed: ", conditionMessage(e))
+      NULL
+    }
+  )
+} else {
+  .xg_result <- NULL
+}
+
+# -----------------------------------------------------------------------------
+# Network-Dependent Tests (reuse cached result)
+# -----------------------------------------------------------------------------
 
 test_that("match_xgs shows deprecation warning", {
   skip_if_no_internet()
+  skip_if(is.null(.xg_result), "Could not load match data")
 
   # Should warn about deprecation
   expect_warning(
-    tryCatch(
-      match_xgs(season = 2024, round = 1),
-      error = function(e) NULL  # Ignore errors (e.g., missing data)
-    ),
+    match_xgs(season = 2024, round = 1),
     "deprecated|Deprecated"
   )
 })
 
-test_that("calculate_match_xgs returns expected structure when data available", {
-  skip_if_no_internet()
-
-  # This test requires actual data, so we skip if no internet
-  # or if we can't load the data
-  result <- tryCatch(
-    {
-      # Use a known historical season/round
-      calculate_match_xgs(season = 2024, round = 1, quarter = 1:4)
-    },
-    error = function(e) NULL
-  )
-
-  skip_if(is.null(result), "Could not load match data")
+test_that("calculate_match_xgs returns expected structure and valid values", {
+  skip_if(is.null(.xg_result) || nrow(.xg_result) == 0, "Could not load match data")
 
   # Check structure of returned data
-  expect_s3_class(result, "data.frame")
+  expect_s3_class(.xg_result, "data.frame")
 
   # Check expected columns exist
   expected_cols <- c(
@@ -91,70 +103,36 @@ test_that("calculate_match_xgs returns expected structure when data available", 
     "score_diff", "xscore_diff"
   )
   for (col in expected_cols) {
-    expect_true(col %in% names(result), info = paste("Missing column:", col))
+    expect_true(col %in% names(.xg_result), info = paste("Missing column:", col))
   }
 
   # Validate numeric columns
-  expect_type(result$home_shots_score, "double")
-  expect_type(result$home_xscore, "double")
-  expect_type(result$away_shots_score, "double")
-  expect_type(result$away_xscore, "double")
+  expect_type(.xg_result$home_shots_score, "double")
+  expect_type(.xg_result$home_xscore, "double")
+  expect_type(.xg_result$away_shots_score, "double")
+  expect_type(.xg_result$away_xscore, "double")
 
   # Score diff should equal home - away
   expect_equal(
-    result$score_diff,
-    result$home_shots_score - result$away_shots_score
+    .xg_result$score_diff,
+    .xg_result$home_shots_score - .xg_result$away_shots_score
   )
-})
-
-# -----------------------------------------------------------------------------
-# Quarter Parameter Tests
-# -----------------------------------------------------------------------------
-
-test_that("calculate_match_xgs accepts different quarter parameters", {
-  skip_if_no_internet()
-
-  # Test with single quarter
-  result_q1 <- tryCatch(
-    calculate_match_xgs(season = 2024, round = 1, quarter = 1),
-    error = function(e) NULL
-  )
-
-  # Test with subset of quarters
-  result_first_half <- tryCatch(
-    calculate_match_xgs(season = 2024, round = 1, quarter = 1:2),
-    error = function(e) NULL
-  )
-
-  # Both should either work or return NULL (not error)
-  if (!is.null(result_q1)) {
-    expect_true(is.data.frame(result_q1))
-  }
-
-  if (!is.null(result_first_half)) {
-    expect_true(is.data.frame(result_first_half))
-  }
-})
-
-# -----------------------------------------------------------------------------
-# XG Calculation Validation Tests
-# -----------------------------------------------------------------------------
-
-test_that("xscore values are reasonable", {
-  skip_if_no_internet()
-
-  result <- tryCatch(
-    calculate_match_xgs(season = 2024, round = 1),
-    error = function(e) NULL
-  )
-
-  skip_if(is.null(result) || nrow(result) == 0, "Could not load match data")
 
   # XG should be non-negative
-  expect_true(all(result$home_xscore >= 0))
-  expect_true(all(result$away_xscore >= 0))
+  expect_true(all(.xg_result$home_xscore >= 0))
+  expect_true(all(.xg_result$away_xscore >= 0))
+})
 
-  # XG should typically be less than actual scores (shooting performance varies)
-  # but not by too much for aggregated data
-  # This is a sanity check, not a strict rule
+test_that("calculate_match_xgs accepts subset of quarters", {
+  skip_if_no_internet()
+
+  # Test with first half only
+  result_first_half <- calculate_match_xgs(season = 2024, round = 1, quarter = 1:2)
+
+  expect_true(is.data.frame(result_first_half))
+
+  # First half scores should be <= full game scores
+  if (!is.null(.xg_result) && nrow(.xg_result) > 0) {
+    expect_true(all(result_first_half$home_shots_score <= .xg_result$home_shots_score))
+  }
 })

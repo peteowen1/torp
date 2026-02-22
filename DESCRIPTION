@@ -38,7 +38,7 @@ Suggests:
     testthat (>= 3.0.0),
     withr,
     torpmodels,
-    xgboost (>= 1.6.0)
+    xgboost (>= 2.0.0)
 Config/testthat/edition: 3
 Depends:
     R (>= 4.1.0)

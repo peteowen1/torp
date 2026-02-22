@@ -353,7 +353,8 @@ nafill_char <- function(x, type = "locf") {
     idx[idx == 0] <- NA_integer_
     x[idx]
   } else if (type == "nocb") {
-    # Next observation carried backward (reverse LOCF)
+    # Next observation carried backward: reverse the vector, apply LOCF via
+    # cummax index trick, then reverse back to original order
     n <- length(x)
     rev_idx <- cummax(seq_along(x) * (!is.na(rev(x))))
     rev_idx[rev_idx == 0] <- NA_integer_
