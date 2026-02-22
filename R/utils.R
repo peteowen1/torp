@@ -330,7 +330,7 @@ torp_dummy_cols <- function(df, select_columns, remove_first_dummy = FALSE) {
 #' @param p Numeric vector of probabilities
 #' @param lower Lower bound (default 0.001)
 #' @param upper Upper bound (default 0.999)
-#' @return Numeric vector bounded to [lower, upper]
+#' @return Numeric vector bounded to \[lower, upper\]
 #' @keywords internal
 bound_probability <- function(p, lower = 0.001, upper = 0.999) {
   pmax(lower, pmin(upper, p))

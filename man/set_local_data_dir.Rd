@@ -17,7 +17,7 @@ Sets the path to the local torpdata/data/ directory for the current session.
 Creates the directory if it doesn't exist.
 }
 \examples{
-\donttest{
+\dontrun{
 set_local_data_dir("path/to/torpdata/data")
 }
 }

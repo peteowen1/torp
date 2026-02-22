@@ -33,7 +33,7 @@ devtools::load_all()
 # source("data-raw/03-ratings/bayes_rapm.R")
 
 ## Player Ratings ----
-# source("data-raw/03-ratings/build_player_ratings.R")
+# source("data-raw/03-ratings/run_ratings_pipeline.R")
 # source("data-raw/03-ratings/create_player_ratings_table.R")
 
 # 04-ANALYSIS: Analysis & Simulation ----

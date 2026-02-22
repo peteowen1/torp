@@ -2,17 +2,20 @@
 % Please edit documentation in R/local_data.R
 \name{is_locally_stored}
 \alias{is_locally_stored}
-\title{Check if a File Exists Locally}
+\title{Check if a File Exists Locally and is Fresh}
 \usage{
-is_locally_stored(url)
+is_locally_stored(url, max_age_days = NULL)
 }
 \arguments{
 \item{url}{Character URL to check for a local copy}
+
+\item{max_age_days}{Maximum age in days before the local file is considered stale.
+If NULL, no staleness check is performed.}
 }
 \value{
 Logical
 }
 \description{
-Check if a File Exists Locally
+Check if a File Exists Locally and is Fresh
 }
 \keyword{internal}

@@ -61,25 +61,26 @@ test_that("cache can be disabled", {
 
 test_that("all=TRUE caching works", {
   skip_if_offline()
-  
+
   # Clear cache
   clear_fixture_cache()
-  
-  # Load all fixtures
-  suppressWarnings(expect_message(
-    fixtures1 <- load_fixtures(all = TRUE, verbose = TRUE),
-    "Cache MISS"
-  ))
 
-  # Second load should hit cache
-  suppressWarnings(expect_message(
-    fixtures2 <- load_fixtures(all = TRUE, verbose = TRUE),
-    "Cache HIT"
-  ))
-  
-  expect_identical(fixtures1, fixtures2)
-  
-  # Check cache info
+  # First load — cache miss
+  expect_message(
+    fixtures1 <- suppressWarnings(load_fixtures(all = TRUE, verbose = TRUE)),
+    "Cache MISS"
+  )
+
+  skip_if(nrow(fixtures1) == 0, "Could not load fixtures")
+
+  # Data should now be cached
   cache_info <- get_cache_info()
   expect_true("fixtures_all" %in% cache_info$cache_key)
+
+  # Second load should be cache hit
+  expect_message(
+    fixtures2 <- load_fixtures(all = TRUE, verbose = TRUE),
+    "Cache HIT"
+  )
+  expect_identical(fixtures1, fixtures2)
 })

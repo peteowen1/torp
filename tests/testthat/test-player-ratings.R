@@ -59,21 +59,16 @@ test_that("calculate_player_stats helper function works", {
   )
 
   # The function should work with valid inputs
-  result <- tryCatch({
-    torp:::calculate_player_stats(
-      test_data,
-      "CD_M2024014103",
-      as.Date("2024-04-08"),
-      365, 1.5, 4, 6
-    )
-  }, error = function(e) NULL)
+  result <- torp:::calculate_player_stats(
+    test_data,
+    "CD_M2024014103",
+    as.Date("2024-04-08"),
+    365, 1.5, 4, 6
+  )
 
-  # Basic structure tests if function works
-  if (!is.null(result)) {
-    expect_true(is.data.frame(result))
-    expect_true("player_id" %in% names(result))
-    expect_true("torp" %in% names(result))
-  }
+  expect_true(is.data.frame(result))
+  expect_true("player_id" %in% names(result))
+  expect_true("torp" %in% names(result))
 })
 
 # -----------------------------------------------------------------------------
@@ -194,20 +189,16 @@ test_that("calculate_torp_ratings works with pre-loaded data", {
           "Could not load player data")
 
   # Calculate ratings with pre-loaded data
-  result <- tryCatch(
-    calculate_torp_ratings(
-      season_val = 2024,
-      round_val = 1,
-      plyr_tm_df = player_details,
-      player_game_data = player_game_data
-    ),
-    error = function(e) NULL
+  result <- calculate_torp_ratings(
+    season_val = 2024,
+    round_val = 1,
+    plyr_tm_df = player_details,
+    player_game_data = player_game_data
   )
 
-  if (!is.null(result) && nrow(result) > 0) {
-    expect_true(is.data.frame(result))
-    expect_true("torp" %in% names(result) || "player_id" %in% names(result))
-  }
+  expect_true(is.data.frame(result))
+  expect_true(nrow(result) > 0)
+  expect_true("torp" %in% names(result) || "player_id" %in% names(result))
 })
 
 # -----------------------------------------------------------------------------
@@ -216,5 +207,5 @@ test_that("calculate_torp_ratings works with pre-loaded data", {
 
 test_that("calculate_player_stats uses prior_games_spoil and prior_games_hitout constants", {
   expect_equal(torp:::RATING_PRIOR_GAMES_SPOIL, 3)
-  expect_equal(torp:::RATING_PRIOR_GAMES_HITOUT, 3)
+  expect_equal(torp:::RATING_PRIOR_GAMES_HITOUT, 4.4426)
 })

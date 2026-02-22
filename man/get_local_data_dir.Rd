@@ -15,7 +15,7 @@ parquet files locally. Checks the \code{torp.local_data_dir} option first,
 then auto-detects based on common workspace layouts.
 }
 \examples{
-\donttest{
+\dontrun{
 get_local_data_dir()
 
 # Set explicitly

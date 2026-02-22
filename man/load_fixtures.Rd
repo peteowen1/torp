@@ -9,19 +9,22 @@ load_fixtures(
   all = FALSE,
   use_cache = TRUE,
   cache_ttl = 3600,
-  verbose = FALSE
+  verbose = FALSE,
+  columns = NULL
 )
 }
 \arguments{
 \item{seasons}{A numeric vector of 4-digit years associated with given AFL seasons - defaults to latest season. If set to \code{TRUE}, returns all available data since 2021.}
 
-\item{all}{Logical. If TRUE, loads all available fixture data from 2018 onwards.}
+\item{all}{Logical. If TRUE, loads all available fixture data from 2021 onwards.}
 
 \item{use_cache}{Logical. If TRUE (default), uses cached data when available to speed up repeated calls.}
 
 \item{cache_ttl}{Numeric. Time-to-live for cached data in seconds. Default is 3600 (1 hour).}
 
 \item{verbose}{Logical. If TRUE, prints cache hit/miss information.}
+
+\item{columns}{Optional character vector of column names to read. If NULL (default), reads all columns.}
 }
 \value{
 A data frame containing AFL fixture and schedule data.

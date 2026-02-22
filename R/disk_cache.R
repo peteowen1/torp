@@ -90,9 +90,11 @@ is_disk_cached <- function(url, max_age_days = 7) {
 #' Read Data from Disk Cache
 #'
 #' @param url Character URL to read cached data for
+#' @param columns Optional character vector of column names to read.
+#'   If NULL (default), reads all columns.
 #' @return Data frame if cache exists, NULL otherwise
 #' @keywords internal
-read_disk_cache <- function(url) {
+read_disk_cache <- function(url, columns = NULL) {
   cache_path <- get_disk_cache_path(url)
 
   if (!file.exists(cache_path)) {
@@ -100,9 +102,13 @@ read_disk_cache <- function(url) {
   }
 
   tryCatch({
-    arrow::read_parquet(cache_path)
+    if (!is.null(columns)) {
+      arrow::read_parquet(cache_path, col_select = dplyr::any_of(columns))
+    } else {
+      arrow::read_parquet(cache_path)
+    }
   }, error = function(e) {
-    cli::cli_warn("Failed to read cache file: {cache_path}")
+    cli::cli_warn("Failed to read cache file {cache_path}: {conditionMessage(e)}")
     # Remove corrupted cache file
     unlink(cache_path)
     return(NULL)
@@ -121,7 +127,7 @@ write_disk_cache <- function(url, data) {
   tryCatch({
     arrow::write_parquet(data, cache_path)
   }, error = function(e) {
-    cli::cli_warn("Failed to write cache file: {cache_path}")
+    cli::cli_warn("Failed to write cache file {cache_path}: {conditionMessage(e)}")
   })
 
   invisible(NULL)

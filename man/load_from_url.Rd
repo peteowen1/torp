@@ -10,7 +10,8 @@ load_from_url(
   seasons = TRUE,
   rounds = TRUE,
   peteowen1 = FALSE,
-  use_disk_cache = TRUE
+  use_disk_cache = FALSE,
+  columns = NULL
 )
 }
 \arguments{
@@ -24,7 +25,11 @@ load_from_url(
 
 \item{peteowen1}{TRUE to add peteowen1_data classing and attributes.}
 
-\item{use_disk_cache}{Logical. If TRUE (default), uses persistent disk cache for faster repeated loads.}
+\item{use_disk_cache}{Logical. If TRUE, uses persistent disk cache for faster repeated loads.}
+
+\item{columns}{Optional character vector of column names to read. If NULL (default),
+reads all columns. Filter columns (season, round, round_number, week) are
+auto-included when filtering is active.}
 }
 \value{
 A tibble, possibly of type \code{peteowen1_data}

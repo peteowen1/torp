@@ -66,8 +66,8 @@ has_new_games <- function() {
     return(FALSE)
   }, error = function(e) {
     cli::cli_warn("Error checking for new games: {conditionMessage(e)}")
-    # Default to TRUE to ensure data gets updated if check fails
-    return(TRUE)
+    # Default to FALSE to avoid releasing stale/partial data when API is down
+    return(FALSE)
   })
 }
 
@@ -426,6 +426,116 @@ update_player_details <- function(season) {
   invisible(NULL)
 }
 
+# Derived Data Functions ----
+# These run after upstream data is updated, computing derived datasets
+# from already-released data (PBP, player_game_data, etc.)
+
+#' Update Player Game Ratings
+#'
+#' Computes per-game TORP ratings for a season and releases to torpdata.
+#'
+#' @param season Season year
+#' @return Invisible NULL
+update_player_game_ratings <- function(season) {
+  cli::cli_progress_step("Updating player game ratings for {season}")
+
+  ratings <- tryCatch({
+    pgd <- load_player_game_data(season)
+    start_round <- get_start_round(season)
+    max_round <- get_max_round(season)
+    player_game_ratings(season, start_round:max_round, player_game_data = pgd)
+  }, error = function(e) {
+    cli::cli_warn("Failed to compute player game ratings: {conditionMessage(e)}")
+    return(NULL)
+  })
+
+  if (is.null(ratings) || nrow(ratings) == 0) {
+    return(invisible(NULL))
+  }
+
+  file_name <- glue::glue("player_game_ratings_{season}")
+  save_to_release(df = ratings, file_name = file_name, release_tag = "player_game_ratings-data")
+
+  cli::cli_inform("Saved player game ratings: {file_name} ({nrow(ratings)} rows)")
+  invisible(NULL)
+}
+
+#' Update Player Season Ratings
+#'
+#' Computes season-total TORP ratings for a season and releases to torpdata.
+#'
+#' @param season Season year
+#' @return Invisible NULL
+update_player_season_ratings <- function(season) {
+  cli::cli_progress_step("Updating player season ratings for {season}")
+
+  ratings <- tryCatch({
+    max_round <- get_max_round(season)
+    start_round <- get_start_round(season)
+    player_season_ratings(season, start_round:max_round)
+  }, error = function(e) {
+    cli::cli_warn("Failed to compute player season ratings: {conditionMessage(e)}")
+    return(NULL)
+  })
+
+  if (is.null(ratings) || nrow(ratings) == 0) {
+    return(invisible(NULL))
+  }
+
+  file_name <- glue::glue("player_season_ratings_{season}")
+  save_to_release(df = ratings, file_name = file_name, release_tag = "player_season_ratings-data")
+
+  cli::cli_inform("Saved player season ratings: {file_name} ({nrow(ratings)} rows)")
+  invisible(NULL)
+}
+
+#' Update EP/WP Chart Data
+#'
+#' Selects charting-relevant columns from PBP and releases as a lightweight file.
+#'
+#' @param season Season year
+#' @return Invisible NULL
+update_ep_wp_chart <- function(season) {
+  cli::cli_progress_step("Updating EP/WP chart data for {season}")
+
+  chart_data <- tryCatch({
+    pbp <- load_pbp(season, rounds = TRUE)
+    if (nrow(pbp) == 0) return(NULL)
+
+    chart_cols <- c(
+      "match_id", "season", "round_number", "period", "period_seconds",
+      "total_seconds", "display_order",
+      "home_team_team_name", "away_team_team_name", "team", "home",
+      "pos_team_points", "opp_team_points", "points_diff",
+      "home_points", "away_points",
+      "exp_pts", "delta_epv", "wp", "wpa",
+      "description", "player_name", "play_type",
+      "shot_row", "points_shot"
+    )
+
+    # Only keep columns that exist in the data
+    available_cols <- intersect(chart_cols, names(pbp))
+    missing_cols <- setdiff(chart_cols, names(pbp))
+    if (length(missing_cols) > 0) {
+      cli::cli_warn("EP/WP chart missing {length(missing_cols)} expected column{?s}: {.val {missing_cols}}")
+    }
+    pbp[, available_cols, drop = FALSE]
+  }, error = function(e) {
+    cli::cli_warn("Failed to create EP/WP chart data: {conditionMessage(e)}")
+    return(NULL)
+  })
+
+  if (is.null(chart_data) || nrow(chart_data) == 0) {
+    return(invisible(NULL))
+  }
+
+  file_name <- glue::glue("ep_wp_chart_{season}_all")
+  save_to_release(df = chart_data, file_name = file_name, release_tag = "ep_wp_chart-data")
+
+  cli::cli_inform("Saved EP/WP chart: {file_name} ({nrow(chart_data)} rows, {ncol(chart_data)} cols)")
+  invisible(NULL)
+}
+
 # Main Entry Point ----
 
 #' Run Daily Data Release
@@ -480,11 +590,37 @@ run_daily_release <- function(force = FALSE) {
   tictoc::toc(log = TRUE)
 
   # -------------------------------------------------------------------------
+  # 4. Update derived data (depends on upstream data being current)
+  # -------------------------------------------------------------------------
+  cli::cli_h2("Updating derived data")
+  tictoc::tic("derived_data")
+
+  derived_failures <- character()
+  tryCatch(update_player_game_ratings(current_season), error = function(e) {
+    derived_failures <<- c(derived_failures, "player_game_ratings")
+    cli::cli_warn("Failed: player_game_ratings: {conditionMessage(e)}")
+  })
+  tryCatch(update_player_season_ratings(current_season), error = function(e) {
+    derived_failures <<- c(derived_failures, "player_season_ratings")
+    cli::cli_warn("Failed: player_season_ratings: {conditionMessage(e)}")
+  })
+  tryCatch(update_ep_wp_chart(current_season), error = function(e) {
+    derived_failures <<- c(derived_failures, "ep_wp_chart")
+    cli::cli_warn("Failed: ep_wp_chart: {conditionMessage(e)}")
+  })
+
+  tictoc::toc(log = TRUE)
+
+  # -------------------------------------------------------------------------
   # Summary
   # -------------------------------------------------------------------------
   tictoc::toc(log = TRUE)
 
-  cli::cli_alert_success("Daily release complete!")
+  if (length(derived_failures) > 0) {
+    cli::cli_alert_warning("Daily release complete with {length(derived_failures)} derived data failure{?s}: {paste(derived_failures, collapse = ', ')}")
+  } else {
+    cli::cli_alert_success("Daily release complete!")
+  }
 
   # Print timing summary
   cli::cli_h3("Timing Summary")

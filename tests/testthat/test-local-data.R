@@ -162,3 +162,96 @@ test_that("write_local_parquet silently returns NULL when no local dir", {
   result <- torp:::write_local_parquet("https://example.com/test.parquet", data.frame(x = 1))
   expect_null(result)
 })
+
+# -- local_max_age_for_url --
+
+test_that("local_max_age_for_url returns NULL for historical seasons", {
+  url <- "https://example.com/releases/download/pbp-data/pbp_data_2023_all.parquet"
+  expect_null(torp:::local_max_age_for_url(url))
+})
+
+test_that("local_max_age_for_url returns 1 for current season", {
+  current_year <- as.numeric(format(Sys.Date(), "%Y"))
+  url <- paste0("https://example.com/pbp_data_", current_year, "_all.parquet")
+  expect_equal(torp:::local_max_age_for_url(url), 1)
+})
+
+test_that("local_max_age_for_url returns 1 for files without year", {
+  url <- "https://example.com/torp_ratings.parquet"
+  expect_equal(torp:::local_max_age_for_url(url), 1)
+})
+
+test_that("local_max_age_for_url handles season-only filenames", {
+  url <- "https://example.com/fixtures_2023.parquet"
+  expect_null(torp:::local_max_age_for_url(url))
+})
+
+# -- Skip Markers (Negative Cache) --
+
+test_that("skip markers can be written and read", {
+  tmp <- file.path(tempdir(), "torp_skip_test")
+  dir.create(tmp, showWarnings = FALSE)
+  on.exit(unlink(tmp, recursive = TRUE), add = TRUE)
+  withr::local_options(torp.local_data_dir = tmp)
+
+  url <- "https://example.com/test_2023.parquet"
+
+  # Initially not skippable
+  expect_false(torp:::is_download_skippable(url))
+
+  # Mark as skippable
+  torp:::mark_download_skippable(url)
+
+  # Now should be skippable
+  expect_true(torp:::is_download_skippable(url))
+
+  # Skip file should exist
+  expect_true(file.exists(file.path(tmp, "test_2023.parquet.skip")))
+})
+
+test_that("clear_skip_markers removes all markers", {
+  tmp <- file.path(tempdir(), "torp_clear_skip_test")
+  dir.create(tmp, showWarnings = FALSE)
+  on.exit(unlink(tmp, recursive = TRUE), add = TRUE)
+  withr::local_options(torp.local_data_dir = tmp)
+
+  torp:::mark_download_skippable("https://example.com/a_2023.parquet")
+  torp:::mark_download_skippable("https://example.com/b_2024.parquet")
+
+  skip_files <- list.files(tmp, pattern = "\\.skip$")
+  expect_equal(length(skip_files), 2)
+
+  n_cleared <- clear_skip_markers()
+  expect_equal(n_cleared, 2L)
+
+  skip_files <- list.files(tmp, pattern = "\\.skip$")
+  expect_equal(length(skip_files), 0)
+})
+
+test_that("is_download_skippable returns FALSE when no local dir", {
+  withr::local_options(torp.local_data_dir = NULL)
+  withr::local_dir(tempdir())
+  expect_false(torp:::is_download_skippable("https://example.com/test.parquet"))
+})
+
+# -- CREDIT_POS_ADJ_QUANTILE Constants --
+
+test_that("CREDIT_POS_ADJ_QUANTILE constants are valid quantiles", {
+  consts <- c(
+    torp:::CREDIT_POS_ADJ_QUANTILE_RECV,
+    torp:::CREDIT_POS_ADJ_QUANTILE_DISP,
+    torp:::CREDIT_POS_ADJ_QUANTILE_SPOIL,
+    torp:::CREDIT_POS_ADJ_QUANTILE_HITOUT
+  )
+  for (q in consts) {
+    expect_true(q > 0)
+    expect_true(q < 1)
+  }
+})
+
+test_that("CREDIT_POS_ADJ_QUANTILE constants have expected values", {
+  expect_equal(torp:::CREDIT_POS_ADJ_QUANTILE_RECV, 0.3118)
+  expect_equal(torp:::CREDIT_POS_ADJ_QUANTILE_DISP, 0.3111)
+  expect_equal(torp:::CREDIT_POS_ADJ_QUANTILE_SPOIL, 0.3026)
+  expect_equal(torp:::CREDIT_POS_ADJ_QUANTILE_HITOUT, 0.4971)
+})
