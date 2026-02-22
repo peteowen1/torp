@@ -70,6 +70,24 @@ jobs:
           
       - name: Test coverage
         run: |
+          # Patch merge_coverage to skip corrupt trace files (covr subprocess
+          # can produce truncated gzip when saveRDS runs out of memory)
+          ns <- asNamespace("covr")
+          unlockBinding("merge_coverage.character", ns)
+          assign("merge_coverage.character", function(x, ...) {
+            good <- Filter(function(f) {
+              tryCatch({ readRDS(f); TRUE }, error = function(e) {
+                message("Skipping corrupt covr trace: ", basename(f))
+                FALSE
+              })
+            }, x)
+            if (length(good) == 0) stop("All coverage trace files are corrupt")
+            covr:::merge_coverage(lapply(good, function(f) {
+              as.list(suppressWarnings(readRDS(f)))
+            }))
+          }, envir = ns)
+          lockBinding("merge_coverage.character", ns)
+
           cov <- covr::package_coverage(
             type = "tests",
             quiet = FALSE,
