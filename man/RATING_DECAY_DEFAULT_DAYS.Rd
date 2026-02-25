@@ -3,7 +3,7 @@
 \docType{data}
 \name{RATING_DECAY_DEFAULT_DAYS}
 \alias{RATING_DECAY_DEFAULT_DAYS}
-\title{Default decay factor (in days) for weighting historical games}
+\title{Default decay factor (in days) for TORP rating historical weighting}
 \format{
 An object of class \code{numeric} of length 1.
 }
@@ -11,6 +11,6 @@ An object of class \code{numeric} of length 1.
 RATING_DECAY_DEFAULT_DAYS
 }
 \description{
-Default decay factor (in days) for weighting historical games
+Default decay factor (in days) for TORP rating historical weighting
 }
 \keyword{internal}

@@ -13,5 +13,6 @@ prepare_shot_model_data(df)
 A dataframe ready for shot modeling.
 }
 \description{
-This function is intended for internal use and may be unexported in a future release.
+Prepare Shot Data for Modeling
 }
+\keyword{internal}

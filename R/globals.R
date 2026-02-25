@@ -75,8 +75,7 @@ utils::globalVariables(c(
   # create_player_game_data variables
   "delta_epv", "pos_team", "wpa", "home_away", "lead_player", "lead_player_id",
   "round_week", "opp_tm", "recv_pts", "disp_pts", "spoil_pts", "hitout_pts",
-  "recv_pts_wt", "disp_pts_wt", "spoil_pts_wt", "hitout_pts_wt",
-  "tot_p", "tot_p_wt",
+  "tot_p",
   "extended_stats_spoils", "extended_stats_pressure_acts",
   "extended_stats_def_half_pressure_acts", "extended_stats_hitouts_to_advantage",
   "extended_stats_ruck_contests", "bounces", "hitouts",

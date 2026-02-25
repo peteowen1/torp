@@ -36,7 +36,9 @@ clean_pbp_dt <- function(df) {
   # Clean names and convert to data.table in one step (avoid extra copy)
   dt <- data.table::as.data.table(torp_clean_names(df))
 
-  # Set key for efficient grouping operations
+  # Explicit sort: all shift/lag/lead operations assume within-match display_order.
+  # setkey alone only guarantees match_id ordering (within-match order is input-dependent).
+  data.table::setorder(dt, match_id, display_order)
   data.table::setkey(dt, match_id)
 
   # Apply transformations in sequence (each modifies dt by reference)

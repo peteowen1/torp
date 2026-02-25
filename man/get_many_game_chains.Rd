@@ -13,6 +13,6 @@ get_many_game_chains(games_vector)
 A dataframe containing chain data for all specified games.
 }
 \description{
-This function is intended for internal use and may be unexported in a future release.
 Retrieves chain data for multiple games.
 }
+\keyword{internal}

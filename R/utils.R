@@ -72,10 +72,13 @@ get_afl_week <- function(type = "current") {
     return(0)
   }
 
+  # Compare as Date objects to avoid POSIXct/Date coercion (which uses midnight UTC,
+
+  # not midnight AEST, creating a ~10 hour boundary mismatch)
   past_fixtures <- all_fixtures |>
-    dplyr::filter(.data$utcStartTime < current_day)
+    dplyr::filter(lubridate::as_date(.data$utcStartTime) < current_day)
   future_fixtures <- all_fixtures |>
-    dplyr::filter(.data$utcStartTime >= current_day)
+    dplyr::filter(lubridate::as_date(.data$utcStartTime) >= current_day)
 
   # Pre-season: no past fixtures yet
   if (nrow(past_fixtures) == 0) {

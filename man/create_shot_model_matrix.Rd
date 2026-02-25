@@ -13,5 +13,6 @@ create_shot_model_matrix(df)
 A model matrix ready for shot modeling.
 }
 \description{
-This function is intended for internal use and may be unexported in a future release.
+Create Shot Model Matrix
 }
+\keyword{internal}

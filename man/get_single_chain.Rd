@@ -15,6 +15,6 @@ get_single_chain(chains_t2, chain_number)
 A dataframe containing data for the specified chain.
 }
 \description{
-This function is intended for internal use and may be unexported in a future release.
 Processes a single chain from the game data.
 }
+\keyword{internal}

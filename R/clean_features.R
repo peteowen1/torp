@@ -34,11 +34,10 @@ clean_model_data_wp <- function(df) {
 
 #' Select EPV Model Variables
 #'
-#' @description This function is intended for internal use and may be unexported in a future release.
 #' @param df A dataframe containing cleaned play-by-play data.
 #' @param label Logical, whether to include the label variable for training.
 #' @return A dataframe with selected variables for EPV modeling.
-#' @export
+#' @keywords internal
 select_epv_model_vars <- function(df, label = FALSE) {
   base_vars <- c(
     "goal_x", "y", "lag_goal_x", "lag_goal_x5", "lag_y", 
@@ -57,10 +56,9 @@ select_epv_model_vars <- function(df, label = FALSE) {
 
 #' Select WP Model Variables
 #'
-#' @description This function is intended for internal use and may be unexported in a future release.
 #' @param df A dataframe containing cleaned play-by-play data.
 #' @return A dataframe with selected variables for WP modeling.
-#' @export
+#' @keywords internal
 select_wp_model_vars <- function(df) {
   df |>
     dplyr::select(
@@ -73,10 +71,9 @@ select_wp_model_vars <- function(df) {
 
 #' Select AFL Match Prediction Model Variables
 #'
-#' @description This function is intended for internal use and may be unexported in a future release.
 #' @param df A dataframe containing AFL team model data
 #' @return A dataframe with selected variables for AFL modeling
-#' @export
+#' @keywords internal
 select_afl_model_vars <- function(df) {
   df |>
     dplyr::select(
@@ -177,10 +174,9 @@ clean_shots_data <- function(df) {
 
 #' Select Shot Model Variables
 #'
-#' @description This function is intended for internal use and may be unexported in a future release.
 #' @param df A dataframe containing cleaned shot data.
 #' @return A dataframe with selected variables for shot modeling.
-#' @export
+#' @keywords internal
 select_shot_model_vars <- function(df) {
   df |>
     dplyr::select(
@@ -192,10 +188,9 @@ select_shot_model_vars <- function(df) {
 
 #' Prepare Shot Data for Modeling
 #'
-#' @description This function is intended for internal use and may be unexported in a future release.
 #' @param df A dataframe containing raw shot data.
 #' @return A dataframe ready for shot modeling.
-#' @export
+#' @keywords internal
 prepare_shot_model_data <- function(df) {
   df |>
     clean_shots_data() |>
@@ -204,21 +199,19 @@ prepare_shot_model_data <- function(df) {
 
 #' Create Shot Model Matrix
 #'
-#' @description This function is intended for internal use and may be unexported in a future release.
 #' @param df A dataframe containing prepared shot data.
 #' @return A model matrix ready for shot modeling.
-#' @export
+#' @keywords internal
 create_shot_model_matrix <- function(df) {
   stats::model.matrix(~ . - 1, data = df)
 }
 
 #' Predict Shot Probabilities
 #'
-#' @description This function is intended for internal use and may be unexported in a future release.
 #' @param model A fitted shot model.
 #' @param new_data A dataframe or model matrix containing new shot data.
 #' @return A vector of predicted probabilities.
-#' @export
+#' @keywords internal
 predict_shot_probabilities <- function(model, new_data) {
   stats::predict(model, newdata = new_data, type = "response")
 }

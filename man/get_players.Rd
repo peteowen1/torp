@@ -13,6 +13,6 @@ get_players(use_api = FALSE)
 A dataframe containing player data.
 }
 \description{
-This function is intended for internal use and may be unexported in a future release.
 Retrieves player data either from the API or from a local database.
 }
+\keyword{internal}

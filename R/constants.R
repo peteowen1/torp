@@ -31,7 +31,11 @@ AFL_TIME_SCALER_MAX <- 4
 # Rating System Constants
 # -----------------------
 
-#' Default decay factor (in days) for weighting historical games
+#' Decay factor (in days) for PBP-level game recency weighting in add_epv_vars()
+#' @keywords internal
+EPV_WEIGHT_DECAY_DAYS <- 365
+
+#' Default decay factor (in days) for TORP rating historical weighting
 #' @keywords internal
 RATING_DECAY_DEFAULT_DAYS <- 511
 

@@ -13,5 +13,6 @@ select_afl_model_vars(df)
 A dataframe with selected variables for AFL modeling
 }
 \description{
-This function is intended for internal use and may be unexported in a future release.
+Select AFL Match Prediction Model Variables
 }
+\keyword{internal}
