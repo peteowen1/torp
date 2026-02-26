@@ -106,7 +106,7 @@ calculate_player_stats <- function(player_game_data = NULL, match_ref, date_val,
   result <- dt[, .(
     player_name = max(plyr_nm),
     gms = data.table::uniqueN(match_id),
-    wt_gms = sum(unique(weight_gm), na.rm = TRUE),
+    wt_gms = sum(weight_gm[!duplicated(match_id)], na.rm = TRUE),
     tot_p_sum = sum(tot_p_adj * weight_gm, na.rm = TRUE),
     recv_sum = sum(recv_pts_adj * weight_gm, na.rm = TRUE),
     disp_sum = sum(disp_pts_adj * weight_gm, na.rm = TRUE),

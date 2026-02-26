@@ -15,6 +15,6 @@ get_round_games(season, round)
 A dataframe containing game data for the specified round.
 }
 \description{
-This function is intended for internal use and may be unexported in a future release.
 Retrieves game data for a specific round in a season.
 }
+\keyword{internal}

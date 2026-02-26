@@ -44,7 +44,6 @@ reference:
       - add_epv_vars
       - add_wp_vars
       - add_shot_vars
-      - predict_shot_probabilities
 
   - title: Data Cleaning
     desc: Clean and prepare AFL data for analysis
@@ -83,8 +82,6 @@ reference:
       - match_xgs
       - calculate_match_xgs
       - calculate_player_stats
-      - get_round_games
-      - get_season_games
       - get_season_data
       - filter_game_data
       - prepare_final_dataframe
@@ -109,12 +106,11 @@ reference:
   - title: Model Training
     desc: Utilities for model development and cross-validation
     contents:
-      - starts_with("select_")
       - starts_with("create_grouped")
       - starts_with("create_temporal")
-      - starts_with("create_shot_model")
-      - starts_with("prepare_shot")
-      - starts_with("predict_wp_")
+      - select_epv_model_vars
+      - select_wp_model_vars
+      - select_afl_model_vars
 
   - title: Caching
     desc: In-memory and disk caching utilities
@@ -145,15 +141,26 @@ reference:
   - title: Utilities
     desc: Helper and convenience functions
     contents:
-      - access_api
       - get_afl_season
       - get_afl_week
-      - get_players
       - harmonic_mean
       - parquet_from_url
       - save_to_release
       - set_torp_data_repo
       - setup_torp_logging
+
+  - title: Internal / Developer
+    desc: Internal utilities accessible via torp::: for model training and data scraping
+    contents:
+      - access_api
+      - get_players
+      - get_round_games
+      - get_season_games
+      - starts_with("predict_wp_")
+      - select_shot_model_vars
+      - starts_with("prepare_shot")
+      - starts_with("create_shot_model")
+      - predict_shot_probabilities
 
 footer:
   structure:

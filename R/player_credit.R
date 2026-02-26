@@ -96,7 +96,6 @@ create_player_game_data <- function(pbp_data = NULL,
       utc_start_time = max(utc_start_time),
       weight_gm = max(weight_gm),
       disp_pts = sum(dplyr::if_else(pos_team == -1, delta_epv + p$disp_neg_offset, delta_epv + p$disp_pos_offset) * p$disp_scale),
-      disp_pts_wt = sum(dplyr::if_else(pos_team == -1, delta_epv + p$disp_neg_offset, delta_epv + p$disp_pos_offset) * p$disp_scale * max(weight_gm)),
       disp = floor(dplyr::n() / 2),
       tm = dplyr::last(team),
       opp = dplyr::last(opp_tm),
@@ -119,7 +118,6 @@ create_player_game_data <- function(pbp_data = NULL,
     dplyr::group_by(lead_player, lead_player_id, match_id) |>
     dplyr::summarise(
       recv_pts = sum(dplyr::if_else(pos_team == -1, (p$recv_neg_mult * delta_epv * pos_team) + p$recv_neg_offset, (p$recv_pos_mult * delta_epv * pos_team) + p$recv_pos_offset) * p$recv_scale),
-      recv_pts_wt = sum(dplyr::if_else(pos_team == -1, (p$recv_neg_mult * delta_epv * pos_team) + p$recv_neg_offset, (p$recv_pos_mult * delta_epv * pos_team) + p$recv_pos_offset) * p$recv_scale * max(weight_gm)),
       recvs = dplyr::n(),
       .groups = "drop"
     )
@@ -136,9 +134,7 @@ create_player_game_data <- function(pbp_data = NULL,
     dplyr::mutate(
       weight_gm = exp(as.numeric(-(ref_date - as.Date(utc_start_time))) / decay),
       spoil_pts = extended_stats_spoils * p$spoil_wt + tackles * p$tackle_wt + extended_stats_pressure_acts * p$pressure_wt - extended_stats_def_half_pressure_acts * p$def_pressure_wt,
-      spoil_pts_wt = spoil_pts * max(weight_gm),
-      hitout_pts = hitouts * p$hitout_wt + extended_stats_hitouts_to_advantage * p$hitout_adv_wt - extended_stats_ruck_contests * p$ruck_contest_wt,
-      hitout_pts_wt = hitout_pts * max(weight_gm)
+      hitout_pts = hitouts * p$hitout_wt + extended_stats_hitouts_to_advantage * p$hitout_adv_wt - extended_stats_ruck_contests * p$ruck_contest_wt
     ) |>
     dplyr::select(-utc_start_time)
 
@@ -161,15 +157,10 @@ create_player_game_data <- function(pbp_data = NULL,
   plyr_gm_df <- plyr_gm_df |>
     dplyr::mutate(
       recv_pts = tidyr::replace_na(recv_pts, 0),
-      recv_pts_wt = tidyr::replace_na(recv_pts_wt, 0),
       disp_pts = tidyr::replace_na(disp_pts, 0) - (bounces * p$bounce_penalty),
-      disp_pts_wt = tidyr::replace_na(disp_pts_wt, 0),
       spoil_pts = tidyr::replace_na(spoil_pts, 0),
-      spoil_pts_wt = tidyr::replace_na(spoil_pts_wt, 0),
       hitout_pts = tidyr::replace_na(hitout_pts, 0),
-      hitout_pts_wt = tidyr::replace_na(hitout_pts_wt, 0),
-      tot_p = recv_pts + disp_pts + spoil_pts + hitout_pts,
-      tot_p_wt = recv_pts_wt + disp_pts_wt + spoil_pts_wt + hitout_pts_wt
+      tot_p = recv_pts + disp_pts + spoil_pts + hitout_pts
     )
 
   # --- Step 6: Join teams data for position ---

@@ -13,6 +13,6 @@ access_api(url)
 The parsed JSON content of the API response.
 }
 \description{
-This function is intended for internal use and may be unexported in a future release.
 Makes an authenticated request to the AFL API.
 }
+\keyword{internal}

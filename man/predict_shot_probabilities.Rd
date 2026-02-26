@@ -15,5 +15,6 @@ predict_shot_probabilities(model, new_data)
 A vector of predicted probabilities.
 }
 \description{
-This function is intended for internal use and may be unexported in a future release.
+Predict Shot Probabilities
 }
+\keyword{internal}

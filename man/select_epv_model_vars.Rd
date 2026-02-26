@@ -15,5 +15,5 @@ select_epv_model_vars(df, label = FALSE)
 A dataframe with selected variables for EPV modeling.
 }
 \description{
-This function is intended for internal use and may be unexported in a future release.
+Select EPV Model Variables
 }

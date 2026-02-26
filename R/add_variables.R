@@ -60,7 +60,7 @@ add_epv_vars <- function(df, reference_date = Sys.Date()) {
       lead_team = dplyr::if_else(is.na(.data$points_shot), dplyr::lead(.data$team), .data$team),
       xpoints_diff = .data$points_diff + .data$exp_pts,
       delta_epv = dplyr::lead(.data$xpoints_diff, default = dplyr::last(.data$points_diff)) * .data$team_change - .data$xpoints_diff,
-      weight_gm = exp(as.numeric(-(lubridate::as_date(reference_date) - lubridate::as_date(.data$utc_start_time))) / 365),
+      weight_gm = exp(as.numeric(-(lubridate::as_date(reference_date) - lubridate::as_date(.data$utc_start_time))) / EPV_WEIGHT_DECAY_DAYS),
       round_week = sprintf("%02d", .data$round_number)
     ) |>
     dplyr::ungroup()

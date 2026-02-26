@@ -39,6 +39,11 @@ test_that("AFL_TIME_SCALER_MAX has expected value", {
 # Rating System Constants
 # -----------------------------------------------------------------------------
 
+test_that("EPV_WEIGHT_DECAY_DAYS has expected value", {
+  expect_equal(torp:::EPV_WEIGHT_DECAY_DAYS, 365)
+  expect_true(torp:::EPV_WEIGHT_DECAY_DAYS > 0)
+})
+
 test_that("RATING_DECAY_DEFAULT_DAYS has expected value", {
   expect_equal(torp:::RATING_DECAY_DEFAULT_DAYS, 511)
   expect_true(torp:::RATING_DECAY_DEFAULT_DAYS > 0)

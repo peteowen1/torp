@@ -15,6 +15,6 @@ predict_wp_score_only(data, pred_data = NULL)
 Vector of win probability predictions
 }
 \description{
-This function is intended for internal use and may be unexported in a future release.
 Simple logistic regression using only score difference
 }
+\keyword{internal}

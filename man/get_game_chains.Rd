@@ -13,6 +13,6 @@ get_game_chains(match_id)
 A dataframe containing chain data for the specified game.
 }
 \description{
-This function is intended for internal use and may be unexported in a future release.
 Retrieves chain data for a single game.
 }
+\keyword{internal}

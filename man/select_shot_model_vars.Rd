@@ -13,5 +13,6 @@ select_shot_model_vars(df)
 A dataframe with selected variables for shot modeling.
 }
 \description{
-This function is intended for internal use and may be unexported in a future release.
+Select Shot Model Variables
 }
+\keyword{internal}

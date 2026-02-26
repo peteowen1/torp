@@ -16,13 +16,12 @@ predict_wp_naive <- function(data) {
 
 #' Score-Only Baseline Model for Win Probability
 #'
-#' @description This function is intended for internal use and may be unexported in a future release.
 #' Simple logistic regression using only score difference
 #'
 #' @param data Data with 'points_diff' column (if only one parameter provided, uses internal training)
 #' @param pred_data Optional - data to make predictions on
 #' @return Vector of win probability predictions
-#' @export
+#' @keywords internal
 #' @importFrom stats glm predict
 predict_wp_score_only <- function(data, pred_data = NULL) {
   
@@ -58,13 +57,12 @@ predict_wp_score_only <- function(data, pred_data = NULL) {
 
 #' Time-Aware Baseline Model for Win Probability
 #'
-#' @description This function is intended for internal use and may be unexported in a future release.
 #' Logistic regression using score difference and time remaining
 #'
 #' @param train_data Training data
 #' @param pred_data Data to make predictions on
 #' @return Vector of win probability predictions
-#' @export
+#' @keywords internal
 #' @importFrom dplyr mutate
 predict_wp_time_score <- function(train_data, pred_data) {
   
@@ -100,13 +98,12 @@ predict_wp_time_score <- function(train_data, pred_data) {
 
 #' Expected Points Baseline Model
 #'
-#' @description This function is intended for internal use and may be unexported in a future release.
 #' Uses expected points differential as the primary predictor
 #'
 #' @param train_data Training data
-#' @param pred_data Data to make predictions on  
+#' @param pred_data Data to make predictions on
 #' @return Vector of win probability predictions
-#' @export
+#' @keywords internal
 predict_wp_expected_points <- function(train_data, pred_data) {
   
   # Check for required columns
@@ -130,13 +127,12 @@ predict_wp_expected_points <- function(train_data, pred_data) {
 
 #' GAM Baseline Model
 #'
-#' @description This function is intended for internal use and may be unexported in a future release.
 #' Generalized Additive Model baseline with smooth terms
 #'
 #' @param data Data to make predictions on (if only one parameter provided)
 #' @param pred_data Optional - data to make predictions on
-#' @return Vector of win probability predictions  
-#' @export
+#' @return Vector of win probability predictions
+#' @keywords internal
 #' @importFrom mgcv gam
 #' @importFrom dplyr mutate
 predict_wp_gam_baseline <- function(data, pred_data = NULL) {
@@ -553,12 +549,11 @@ predict_wp_time_only <- function(data) {
 
 #' Ensemble Baseline Win Probability Prediction
 #'
-#' @description This function is intended for internal use and may be unexported in a future release.
 #' Combines multiple baseline models using simple averaging
 #'
 #' @param data Input data
 #' @return Vector of ensemble win probability predictions
-#' @export
+#' @keywords internal
 predict_wp_ensemble_baseline <- function(data) {
   # Combine different baseline approaches
   naive_pred <- predict_wp_naive(data)

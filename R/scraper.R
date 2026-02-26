@@ -20,7 +20,7 @@ get_match_chains <- function(season = get_afl_season(), round = NA) {
   }
 
   games <- if (is.na(round)) {
-    message("No round value supplied. Scraping all rounds in the season. This may take some time.")
+    cli::cli_inform("No round value supplied. Scraping all rounds in the season. This may take some time.")
     get_season_games(season)
   } else {
     get_round_games(season, round)
@@ -32,7 +32,7 @@ get_match_chains <- function(season = get_afl_season(), round = NA) {
 
   games_vector <- games$matchId
 
-  message("Scraping match chains...")
+  cli::cli_inform("Scraping match chains...")
   chains <- get_many_game_chains(games_vector)
 
   players <- get_players()
@@ -40,7 +40,7 @@ get_match_chains <- function(season = get_afl_season(), round = NA) {
     dplyr::inner_join(games, by = "matchId") |>
     dplyr::left_join(players, by = c("playerId", "season"))
 
-  message("Success!")
+  cli::cli_inform("Success!")
   return(chains)
 }
 
@@ -60,7 +60,10 @@ get_week_chains <- function(season, roundnum) {
   load <- tryCatch(
     get_match_chains(season, round = roundnum),
     error = function(e) {
-      cli::cli_warn("Failed to get match chains from {.val {season}} round {.val {roundnum}}")
+      cli::cli_warn(c(
+        "Failed to get match chains from {.val {season}} round {.val {roundnum}}",
+        "x" = conditionMessage(e)
+      ))
       return(data.table::data.table())
     }
   )
@@ -78,18 +81,18 @@ get_week_chains <- function(season, roundnum) {
 #' @importFrom httr POST content
 get_token <- function() {
   response <- httr::POST("https://api.afl.com.au/cfs/afl/WMCTok")
+  httr::stop_for_status(response, task = "authenticate with AFL API")
   httr::content(response)$token
 }
 
 #' Access API
 #'
-#' @description This function is intended for internal use and may be unexported in a future release.
 #' Makes an authenticated request to the AFL API.
 #'
 #' @param url The API endpoint URL.
 #'
 #' @return The parsed JSON content of the API response.
-#' @export
+#' @keywords internal
 #'
 #' @importFrom httr GET add_headers content
 #' @importFrom jsonlite fromJSON
@@ -99,20 +102,20 @@ access_api <- function(url) {
     url = url,
     httr::add_headers("x-media-mis-token" = token)
   )
+  httr::stop_for_status(response, task = paste("fetch data from", url))
   httr::content(response, as = "text", encoding = "UTF-8") |>
     jsonlite::fromJSON(flatten = TRUE)
 }
 
 #' Get Round Games
 #'
-#' @description This function is intended for internal use and may be unexported in a future release.
 #' Retrieves game data for a specific round in a season.
 #'
 #' @param season The AFL season year (numeric).
 #' @param round The round number (numeric).
 #'
 #' @return A dataframe containing game data for the specified round.
-#' @export
+#' @keywords internal
 #'
 #' @importFrom dplyr filter mutate
 get_round_games <- function(season, round) {
@@ -140,14 +143,13 @@ get_round_games <- function(season, round) {
 
 #' Get Season Games
 #'
-#' @description This function is intended for internal use and may be unexported in a future release.
 #' Retrieves game data for an entire season.
 #'
 #' @param season The AFL season year (numeric).
 #' @param rounds The maximum number of rounds to check (default: 28, covers all AFL season formats).
 #'
 #' @return A dataframe containing game data for the entire season.
-#' @export
+#' @keywords internal
 #'
 #' @importFrom purrr map_df
 get_season_games <- function(season, rounds = 28) {
@@ -156,13 +158,12 @@ get_season_games <- function(season, rounds = 28) {
 
 #' Get Players
 #'
-#' @description This function is intended for internal use and may be unexported in a future release.
 #' Retrieves player data either from the API or from a local database.
 #'
 #' @param use_api Logical, whether to use the API (TRUE) or local database (FALSE, default).
 #'
 #' @return A dataframe containing player data.
-#' @export
+#' @keywords internal
 #'
 #' @importFrom dplyr mutate select
 get_players <- function(use_api = FALSE) {
@@ -194,13 +195,12 @@ get_players <- function(use_api = FALSE) {
 
 #' Get Many Game Chains
 #'
-#' @description This function is intended for internal use and may be unexported in a future release.
 #' Retrieves chain data for multiple games.
 #'
 #' @param games_vector A vector of game IDs.
 #'
 #' @return A dataframe containing chain data for all specified games.
-#' @export
+#' @keywords internal
 #'
 #' @importFrom purrr map_df
 get_many_game_chains <- function(games_vector) {
@@ -211,13 +211,12 @@ get_many_game_chains <- function(games_vector) {
 
 #' Get Game Chains
 #'
-#' @description This function is intended for internal use and may be unexported in a future release.
 #' Retrieves chain data for a single game.
 #'
 #' @param match_id The ID of the match.
 #'
 #' @return A dataframe containing chain data for the specified game.
-#' @export
+#' @keywords internal
 #'
 #' @importFrom purrr map_df
 get_game_chains <- function(match_id) {
@@ -243,14 +242,13 @@ get_game_chains <- function(match_id) {
 
 #' Get Single Chain
 #'
-#' @description This function is intended for internal use and may be unexported in a future release.
 #' Processes a single chain from the game data.
 #'
 #' @param chains_t2 The chain data for a game.
 #' @param chain_number The number of the chain to process.
 #'
 #' @return A dataframe containing data for the specified chain.
-#' @export
+#' @keywords internal
 get_single_chain <- function(chains_t2, chain_number) {
   if (length(chains_t2) > 5) {
     actions_col <- which(names(chains_t2) == "actions")

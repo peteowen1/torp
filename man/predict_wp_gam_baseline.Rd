@@ -15,6 +15,6 @@ predict_wp_gam_baseline(data, pred_data = NULL)
 Vector of win probability predictions
 }
 \description{
-This function is intended for internal use and may be unexported in a future release.
 Generalized Additive Model baseline with smooth terms
 }
+\keyword{internal}

@@ -209,3 +209,41 @@ test_that("calculate_player_stats uses prior_games_spoil and prior_games_hitout 
   expect_equal(torp:::RATING_PRIOR_GAMES_SPOIL, 3)
   expect_equal(torp:::RATING_PRIOR_GAMES_HITOUT, 4.4426)
 })
+
+# -----------------------------------------------------------------------------
+# wt_gms Calculation Tests
+# -----------------------------------------------------------------------------
+
+test_that("wt_gms sums per-match weights correctly for same-day games", {
+  # Two games on the same day produce identical weight_gm values.
+ # The old sum(unique(weight_gm)) would collapse these into one weight.
+ # The fix uses !duplicated(match_id) to keep both.
+  test_data <- data.frame(
+    player_id = rep(1, 2),
+    plyr_nm = rep("Same Day", 2),
+    match_id = c("CD_M2024014101", "CD_M2024014102"),
+    utc_start_time = rep(as.Date("2024-04-01"), 2),
+    tot_p_adj = c(100, 80),
+    recv_pts_adj = c(20, 15),
+    disp_pts_adj = c(40, 35),
+    spoil_pts_adj = c(10, 8),
+    hitout_pts_adj = c(5, 3),
+    pos = rep("MID", 2),
+    stringsAsFactors = FALSE
+  )
+
+  result <- torp:::calculate_player_stats(
+    player_game_data = test_data,
+    match_ref = "CD_M2024014103",
+    date_val = as.Date("2024-04-08"),
+    decay = 365, loading = 1.5,
+    prior_games_recv = 4, prior_games_disp = 6
+  )
+
+  expect_equal(nrow(result), 1)
+  expect_equal(result$gms, 2)
+  # wt_gms should be 2x the single-game weight (both games same date, same decay)
+  # NOT collapsed to 1x via unique()
+  single_weight <- exp(-as.numeric(as.Date("2024-04-08") - as.Date("2024-04-01")) / 365)
+  expect_equal(result$wt_gms, 2 * single_weight, tolerance = 1e-10)
+})
