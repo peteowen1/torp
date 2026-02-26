@@ -390,13 +390,13 @@ validate_chains_quality <- function(data) {
   # Check temporal consistency within matches
   if (all(c("match_id", "period", "period_seconds") %in% names(data))) {
     temporal_issues <- data |>
-      group_by(match_id, period) |>
-      summarise(
-        min_seconds = min(period_seconds, na.rm = TRUE),
-        max_seconds = max(period_seconds, na.rm = TRUE),
+      dplyr::group_by(.data$match_id, .data$period) |>
+      dplyr::summarise(
+        min_seconds = min(.data$period_seconds, na.rm = TRUE),
+        max_seconds = max(.data$period_seconds, na.rm = TRUE),
         .groups = "drop"
       ) |>
-      filter(min_seconds < 0 | max_seconds > 2000)
+      dplyr::filter(.data$min_seconds < 0 | .data$max_seconds > 2000)
     
     if (nrow(temporal_issues) > 0) {
       issues$temporal_inconsistency <- paste("Temporal inconsistencies in", 

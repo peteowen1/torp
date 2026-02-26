@@ -252,12 +252,16 @@ get_wp_preds <- function(df) {
     cli::cli_abort("xgboost package required but not available")
   }
 
-  preds <- as.data.frame(
-    matrix(stats::predict(wp_model, stats::model.matrix(~ . + 0, data = df |> select_wp_model_vars())),
-      ncol = 1, byrow = TRUE
-    )
-  )
-  colnames(preds) <- "wp"
+  model_data <- df |> select_wp_model_vars()
+  model_matrix <- stats::model.matrix(~ . + 0, data = model_data)
+  preds_raw <- stats::predict(wp_model, model_matrix)
+
+  # xgboost 3.x may return a matrix; flatten to vector for binary prediction
+  if (is.matrix(preds_raw)) {
+    preds_raw <- as.vector(preds_raw)
+  }
+
+  preds <- data.frame(wp = preds_raw)
 
   return(preds)
 }
@@ -278,6 +282,16 @@ get_shot_result_preds <- function(df) {
 
   if (is.null(shot_ocat_mdl)) {
     cli::cli_abort("Shot model not available. Install torpmodels or ensure package data is available.")
+  }
+
+  # mgcv must be loaded explicitly for GAM/BAM predict() — its internal
+
+  # Xbd function is not found otherwise
+  if (inherits(shot_ocat_mdl, c("gam", "bam"))) {
+    if (!requireNamespace("mgcv", quietly = TRUE)) {
+      cli::cli_abort("mgcv package required for shot model predictions but not available")
+    }
+    loadNamespace("mgcv")
   }
 
   preds <- stats::predict(shot_ocat_mdl, df, type = "response")

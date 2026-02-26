@@ -29,7 +29,8 @@ calculate_torp_ratings <- function(season_val = get_afl_season(type = "current")
                          plyr_tm_df = NULL,
                          player_game_data = NULL,
                          prior_games_spoil = RATING_PRIOR_GAMES_SPOIL,
-                         prior_games_hitout = RATING_PRIOR_GAMES_HITOUT) {
+                         prior_games_hitout = RATING_PRIOR_GAMES_HITOUT,
+                         fixtures = NULL) {
   # Load player team details if not provided
   if (is.null(plyr_tm_df)) {
     plyr_tm_df <- load_player_details(season_val)
@@ -44,10 +45,15 @@ calculate_torp_ratings <- function(season_val = get_afl_season(type = "current")
     player_game_data <- load_player_game_data(TRUE)
   }
 
+  # Load fixtures if not provided
+  if (is.null(fixtures)) {
+    fixtures <- load_fixtures(TRUE)
+  }
+
   gwk <- sprintf("%02d", round_val)
   match_ref <- paste0("CD_M", season_val, "014", gwk)
 
-  date_val <- load_fixtures(TRUE) |>
+  date_val <- fixtures |>
     dplyr::filter(.data$compSeason.year == season_val, .data$round.roundNumber == round_val) |>
     dplyr::summarise(lubridate::as_date(min(.data$utcStartTime))) |>
     dplyr::pull()

@@ -53,42 +53,32 @@ get_wp_model_info <- function() {
 #' @return List with health check results
 #' @export
 check_wp_model_health <- function() {
-  health_results <- list2env(list(
-    basic_model_available = FALSE,
-    data_objects_loaded = FALSE,
-    errors = character(0)
-  ), parent = emptyenv())
+  errors <- character(0)
 
-  # Check basic model
+  # Check WP model via standard loading path
+  wp_available <- FALSE
   tryCatch({
-    data("wp_model", package = "torp", envir = environment())
-    if (exists("wp_model")) {
-      health_results$basic_model_available <- TRUE
-    }
+    wp <- load_model_with_fallback("wp")
+    wp_available <- !is.null(wp)
   }, error = function(e) {
-    health_results$errors <- c(health_results$errors, paste("Basic model:", e$message))
+    errors <<- c(errors, paste("WP model:", e$message))
   })
 
-  # Check data objects
+  # Check EP model via standard loading path
+  ep_available <- FALSE
   tryCatch({
-    data_objects <- data(package = "torp")$results[, "Item"]
-    required_data <- c("ep_model")
-    available_data <- intersect(required_data, data_objects)
-
-    if (length(available_data) == length(required_data)) {
-      health_results$data_objects_loaded <- TRUE
-    }
+    ep <- load_model_with_fallback("ep")
+    ep_available <- !is.null(ep)
   }, error = function(e) {
-    health_results$errors <- c(health_results$errors, paste("Data objects:", e$message))
+    errors <<- c(errors, paste("EP model:", e$message))
   })
 
-  # Convert back to list for return
-  health_results <- as.list(health_results)
+  overall <- if (wp_available && ep_available) "healthy" else "unhealthy"
 
-  health_results$overall_health <- ifelse(
-    health_results$basic_model_available && health_results$data_objects_loaded,
-    "healthy", "unhealthy"
+  list(
+    wp_model_available = wp_available,
+    ep_model_available = ep_available,
+    errors = errors,
+    overall_health = overall
   )
-
-  return(health_results)
 }

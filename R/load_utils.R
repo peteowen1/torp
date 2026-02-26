@@ -147,11 +147,8 @@ generate_urls <- function(data_type, file_prefix, seasons, rounds = NULL, prefer
     urls <- sort(urls)
   }
 
-  if (data_type != "fixtures-data") {
-    if (is.null(current_round)) current_round <- get_afl_week()
-  }
-
   # Filter out future URLs by parsing season/round numerically from filenames
+  # Only fetch current_round lazily — when a filename actually has a round to check
   n_before <- length(urls)
   keep <- vapply(urls, function(u) {
     fname <- tools::file_path_sans_ext(basename(u))
@@ -166,11 +163,13 @@ generate_urls <- function(data_type, file_prefix, seasons, rounds = NULL, prefer
     if (file_season < current_season) return(TRUE)
     if (file_season > current_season) return(FALSE)
     # Same season: check round if applicable
-    if (data_type == "fixtures-data" || is.null(current_round)) return(TRUE)
+    if (data_type == "fixtures-data") return(TRUE)
     if (length(parts) >= 2) {
       file_round <- as.numeric(parts[length(parts)])
       # "_all" files have no numeric round suffix, keep them
       if (grepl("_all\\.parquet$", u)) return(TRUE)
+      # Lazy-fetch current round only when actually needed
+      if (is.null(current_round)) current_round <<- get_afl_week()
       return(file_round <= current_round)
     }
     TRUE

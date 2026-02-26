@@ -21,18 +21,24 @@ get_afl_season <- function(type = "current") {
     cli::cli_abort('type must be one of: "current" or "next"')
   }
 
-  # TODO: Implement proper AFL season detection based on fixture data
-  # This would involve checking fixture dates to determine if we're in the
-  # current season, off-season, or upcoming season period
-
   current_year <- lubridate::year(Sys.Date())
+  current_month <- as.integer(format(Sys.Date(), "%m"))
 
-  # Simple implementation - assumes calendar year equals AFL season
-  if (type == "next") {
-    return(current_year + 1L)
+  # AFL season runs March-September. Before March, the most recent completed
+
+  # season is the previous year and the "current" season hasn't started yet.
+  # Treat pre-March as still being in the previous season for data purposes.
+  if (current_month < 3) {
+    season_year <- current_year - 1L
+  } else {
+    season_year <- current_year
   }
 
-  return(current_year)
+  if (type == "next") {
+    return(season_year + 1L)
+  }
+
+  return(season_year)
 }
 
 #' Get AFL Week

@@ -20,6 +20,13 @@ calculate_match_xgs <- function(season = get_afl_season(), round = get_afl_week(
     cli::cli_abort("No play-by-play data available for season {season}, round {round}.")
   }
 
+  if (!"xscore" %in% names(df)) {
+    cli::cli_abort(c(
+      "PBP data missing {.val xscore} column.",
+      "i" = "This column is created by {.fn add_shot_vars}. Ensure your PBP data has been processed through the shot model pipeline."
+    ))
+  }
+
   shots_df <- df |>
     dplyr::group_by(.data$match_id) |>
     dplyr::filter(.data$period %in% quarter) |>
