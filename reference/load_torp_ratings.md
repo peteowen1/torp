@@ -8,8 +8,15 @@ pipeline.
 ## Usage
 
 ``` r
-load_torp_ratings()
+load_torp_ratings(columns = NULL)
 ```
+
+## Arguments
+
+- columns:
+
+  Optional character vector of column names to read. If NULL (default),
+  reads all columns.
 
 ## Value
 
@@ -29,44 +36,21 @@ A data frame containing TORP ratings with columns including `player_id`,
 try({ # prevents cran errors
   load_torp_ratings()
 })
-#>           player_id        player_name      age              team  torp
-#>              <char>             <char>    <num>            <char> <num>
-#>      1: CD_I1000932         Tom Doedee 24.04658    Adelaide Crows    NA
-#>      2: CD_I1000998     Lachlan Murphy 22.28493    Adelaide Crows    NA
-#>      3: CD_I1004863     Mitchell Hinge 22.72055    Adelaide Crows    NA
-#>      4: CD_I1004995       Jordon Butts 21.21096    Adelaide Crows    NA
-#>      5: CD_I1005199 Elliott Himmelberg 22.78630    Adelaide Crows    NA
-#>     ---                                                                
-#> 113060: CD_I1015473       Will Verrall 21.54573         Melbourne    NA
-#> 113061: CD_I1024337    Luker Kentfield 20.04658         Melbourne    NA
-#> 113062: CD_I1029211       Ricky Mentha 19.06301         Melbourne    NA
-#> 113063: CD_I1029973      Oliver Sestan 21.45010         Melbourne    NA
-#> 113064: CD_I1028291   Coen Livingstone 20.34247 West Coast Eagles    NA
-#>         torp_recv torp_disp torp_spoil torp_hitout        position season round
-#>             <num>     <num>      <num>       <num>          <char>  <num> <int>
-#>      1:        NA        NA         NA          NA    KEY_DEFENDER   2021     1
-#>      2:        NA        NA         NA          NA  MEDIUM_FORWARD   2021     1
-#>      3:        NA        NA         NA          NA MEDIUM_DEFENDER   2021     1
-#>      4:        NA        NA         NA          NA    KEY_DEFENDER   2021     1
-#>      5:        NA        NA         NA          NA     KEY_FORWARD   2021     1
-#>     ---                                                                        
-#> 113060:        NA        NA         NA          NA            RUCK   2025    28
-#> 113061:        NA        NA         NA          NA    KEY_DEFENDER   2025    28
-#> 113062:        NA        NA         NA          NA  MEDIUM_FORWARD   2025    28
-#> 113063:        NA        NA         NA          NA MEDIUM_DEFENDER   2025    28
-#> 113064:        NA        NA         NA          NA            RUCK   2025    28
-#>           gms wt_gms            row_id
-#>         <int>  <num>            <char>
-#>      1:    NA     NA CD_I1000932202101
-#>      2:    NA     NA CD_I1000998202101
-#>      3:    NA     NA CD_I1004863202101
-#>      4:    NA     NA CD_I1004995202101
-#>      5:    NA     NA CD_I1005199202101
-#>     ---                               
-#> 113060:    NA     NA CD_I1015473202528
-#> 113061:    NA     NA CD_I1024337202528
-#> 113062:    NA     NA CD_I1029211202528
-#> 113063:    NA     NA CD_I1029973202528
-#> 113064:    NA     NA CD_I1028291202528
+#> # A tibble: 113,844 × 15
+#>    player_id   player_name        age team   torp torp_recv torp_disp torp_spoil
+#>    <chr>       <chr>            <dbl> <chr> <dbl>     <dbl>     <dbl>      <dbl>
+#>  1 CD_I1000932 Tom Doedee        24.0 Adel…    NA        NA        NA         NA
+#>  2 CD_I1000998 Lachlan Murphy    22.3 Adel…    NA        NA        NA         NA
+#>  3 CD_I1004863 Mitchell Hinge    22.7 Adel…    NA        NA        NA         NA
+#>  4 CD_I1004995 Jordon Butts      21.2 Adel…    NA        NA        NA         NA
+#>  5 CD_I1005199 Elliott Himmelb…  22.8 Adel…    NA        NA        NA         NA
+#>  6 CD_I1006136 Lachlan Sholl     21.0 Adel…    NA        NA        NA         NA
+#>  7 CD_I1006203 Chayce Jones      21.2 Adel…    NA        NA        NA         NA
+#>  8 CD_I1008159 Will Hamill       20.3 Adel…    NA        NA        NA         NA
+#>  9 CD_I1008185 Ned McHenry       20.7 Adel…    NA        NA        NA         NA
+#> 10 CD_I1008230 Nick Murray       20.2 Adel…    NA        NA        NA         NA
+#> # ℹ 113,834 more rows
+#> # ℹ 7 more variables: torp_hitout <dbl>, position <chr>, season <dbl>,
+#> #   round <int>, gms <int>, wt_gms <dbl>, row_id <chr>
 # }
 ```

@@ -1,7 +1,6 @@
 # Get Many Game Chains
 
-This function is intended for internal use and may be unexported in a
-future release. Retrieves chain data for multiple games.
+Retrieves chain data for multiple games.
 
 ## Usage
 

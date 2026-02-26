@@ -1,8 +1,6 @@
 # Get Players
 
-This function is intended for internal use and may be unexported in a
-future release. Retrieves player data either from the API or from a
-local database.
+Retrieves player data either from the API or from a local database.
 
 ## Usage
 

@@ -1,7 +1,6 @@
 # Select WP Model Variables
 
-This function is intended for internal use and may be unexported in a
-future release.
+Select WP Model Variables
 
 ## Usage
 

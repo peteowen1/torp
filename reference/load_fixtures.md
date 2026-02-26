@@ -11,7 +11,8 @@ load_fixtures(
   all = FALSE,
   use_cache = TRUE,
   cache_ttl = 3600,
-  verbose = FALSE
+  verbose = FALSE,
+  columns = NULL
 )
 ```
 
@@ -25,7 +26,7 @@ load_fixtures(
 
 - all:
 
-  Logical. If TRUE, loads all available fixture data from 2018 onwards.
+  Logical. If TRUE, loads all available fixture data from 2021 onwards.
 
 - use_cache:
 
@@ -40,6 +41,11 @@ load_fixtures(
 - verbose:
 
   Logical. If TRUE, prints cache hit/miss information.
+
+- columns:
+
+  Optional character vector of column names to read. If NULL (default),
+  reads all columns.
 
 ## Value
 
@@ -64,50 +70,30 @@ try({ # prevents cran errors
   # Load with verbose cache information
   load_fixtures(all = TRUE, verbose = TRUE)
 })
-#> Loading 1/2 files...
-#> Loading 1/9 files...
-#> Warning: downloaded length 0 != reported length 9
-#> Warning: cannot open URL 'https://github.com/peteowen1/torpdata/releases/download/fixtures-data/fixtures_2019.parquet': HTTP status was '404 Not Found'
-#> Warning: Failed to connect to
-#> <https://github.com/peteowen1/torpdata/releases/download/fixtures-data/fixtures_2019.parquet>
-#> - check internet connection
-#> Warning: downloaded length 0 != reported length 9
-#> Warning: cannot open URL 'https://github.com/peteowen1/torpdata/releases/download/fixtures-data/fixtures_2020.parquet': HTTP status was '404 Not Found'
-#> Warning: Failed to connect to
-#> <https://github.com/peteowen1/torpdata/releases/download/fixtures-data/fixtures_2020.parquet>
-#> - check internet connection
+#> Downloading 2 files in parallel...
+#> Downloading 6 files in parallel...
 #> Cache MISS for fixtures, fetching data
-#> Loading 1/9 files...
-#> Warning: downloaded length 0 != reported length 9
-#> Warning: cannot open URL 'https://github.com/peteowen1/torpdata/releases/download/fixtures-data/fixtures_2019.parquet': HTTP status was '404 Not Found'
-#> Warning: Failed to connect to
-#> <https://github.com/peteowen1/torpdata/releases/download/fixtures-data/fixtures_2019.parquet>
-#> - check internet connection
-#> Warning: downloaded length 0 != reported length 9
-#> Warning: cannot open URL 'https://github.com/peteowen1/torpdata/releases/download/fixtures-data/fixtures_2020.parquet': HTTP status was '404 Not Found'
-#> Warning: Failed to connect to
-#> <https://github.com/peteowen1/torpdata/releases/download/fixtures-data/fixtures_2020.parquet>
-#> - check internet connection
-#> Stored fixtures in cache (1476 rows)
-#> # A tibble: 1,476 × 61
+#> Downloading 6 files in parallel...
+#> Stored fixtures in cache (1269 rows)
+#> # A tibble: 1,269 × 60
 #>       id providerId      utcStartTime status compSeason.id compSeason.providerId
 #>    <int> <chr>           <chr>        <chr>          <int> <chr>                
-#>  1  1475 CD_M20180140101 2018-03-22T… CONCL…            14 CD_S2018014          
-#>  2  1707 CD_M20180140102 2018-03-23T… CONCL…            14 CD_S2018014          
-#>  3  1476 CD_M20180140103 2018-03-24T… CONCL…            14 CD_S2018014          
-#>  4  1477 CD_M20180140104 2018-03-24T… CONCL…            14 CD_S2018014          
-#>  5  1474 CD_M20180140105 2018-03-24T… CONCL…            14 CD_S2018014          
-#>  6  1483 CD_M20180140106 2018-03-24T… CONCL…            14 CD_S2018014          
-#>  7  1490 CD_M20180140107 2018-03-25T… CONCL…            14 CD_S2018014          
-#>  8  1482 CD_M20180140108 2018-03-25T… CONCL…            14 CD_S2018014          
-#>  9  1488 CD_M20180140109 2018-03-25T… CONCL…            14 CD_S2018014          
-#> 10  1534 CD_M20180140201 2018-03-29T… CONCL…            14 CD_S2018014          
-#> # ℹ 1,466 more rows
-#> # ℹ 55 more variables: compSeason.name <chr>, compSeason.shortName <chr>,
+#>  1  2991 CD_M20210140101 2021-03-18T… CONCL…            34 CD_S2021014          
+#>  2  2986 CD_M20210140102 2021-03-19T… CONCL…            34 CD_S2021014          
+#>  3  2992 CD_M20210140103 2021-03-20T… CONCL…            34 CD_S2021014          
+#>  4  2993 CD_M20210140104 2021-03-20T… CONCL…            34 CD_S2021014          
+#>  5  2994 CD_M20210140105 2021-03-20T… CONCL…            34 CD_S2021014          
+#>  6  2987 CD_M20210140106 2021-03-20T… CONCL…            34 CD_S2021014          
+#>  7  2990 CD_M20210140107 2021-03-21T… CONCL…            34 CD_S2021014          
+#>  8  2989 CD_M20210140108 2021-03-21T… CONCL…            34 CD_S2021014          
+#>  9  2988 CD_M20210140109 2021-03-21T… CONCL…            34 CD_S2021014          
+#> 10  2999 CD_M20210140201 2021-03-25T… CONCL…            34 CD_S2021014          
+#> # ℹ 1,259 more rows
+#> # ℹ 54 more variables: compSeason.name <chr>, compSeason.shortName <chr>,
 #> #   compSeason.currentRoundNumber <int>, round.id <int>,
 #> #   round.providerId <chr>, round.abbreviation <chr>, round.name <chr>,
-#> #   round.roundNumber <int>, round.byes <list<list<vctrs_unspecified>>>,
-#> #   round.utcStartTime <chr>, round.utcEndTime <chr>, home.team.id <int>,
-#> #   home.team.providerId <chr>, home.team.name <chr>, …
+#> #   round.roundNumber <int>, home.team.id <int>, home.team.providerId <chr>,
+#> #   home.team.name <chr>, home.team.abbreviation <chr>,
+#> #   home.team.nickname <chr>, home.team.teamType <chr>, …
 # }
 ```

@@ -26,15 +26,7 @@ A dataframe containing match chain data.
 ## Examples
 
 ``` r
-# \donttest{
+if (FALSE) { # \dontrun{
 chains <- get_match_chains(2022, 1)
-#> Scraping match chains...
-#> Loading 1/6 files...
-#> Warning: downloaded length 0 != reported length 9
-#> Warning: cannot open URL 'https://github.com/peteowen1/torpdata/releases/download/player_details-data/player_details_2026.parquet': HTTP status was '404 Not Found'
-#> Warning: Failed to connect to
-#> <https://github.com/peteowen1/torpdata/releases/download/player_details-data/player_details_2026.parquet>
-#> - check internet connection
-#> Success!
-# }
+} # }
 ```

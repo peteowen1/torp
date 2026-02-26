@@ -12,7 +12,8 @@ load_from_url(
   seasons = TRUE,
   rounds = TRUE,
   peteowen1 = FALSE,
-  use_disk_cache = TRUE
+  use_disk_cache = FALSE,
+  columns = NULL
 )
 ```
 
@@ -44,8 +45,14 @@ load_from_url(
 
 - use_disk_cache:
 
-  Logical. If TRUE (default), uses persistent disk cache for faster
-  repeated loads.
+  Logical. If TRUE, uses persistent disk cache for faster repeated
+  loads.
+
+- columns:
+
+  Optional character vector of column names to read. If NULL (default),
+  reads all columns. Filter columns (season, round, round_number, week)
+  are auto-included when filtering is active.
 
 ## Value
 

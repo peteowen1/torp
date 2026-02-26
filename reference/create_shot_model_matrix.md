@@ -1,7 +1,6 @@
 # Create Shot Model Matrix
 
-This function is intended for internal use and may be unexported in a
-future release.
+Create Shot Model Matrix
 
 ## Usage
 

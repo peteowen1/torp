@@ -1,13 +1,12 @@
-# Add Win Probability Variables (Enhanced)
+# Add Win Probability Variables
 
-This function adds enhanced win probability (WP) and win probability
-added (WPA) variables using an ensemble model approach with
-sophisticated feature engineering.
+Adds win probability (WP) and win probability added (WPA) variables
+using the XGBoost WP model.
 
 ## Usage
 
 ``` r
-add_wp_vars(df, use_enhanced = TRUE)
+add_wp_vars(df)
 ```
 
 ## Arguments
@@ -15,10 +14,6 @@ add_wp_vars(df, use_enhanced = TRUE)
 - df:
 
   A dataframe containing play-by-play data.
-
-- use_enhanced:
-
-  Logical, whether to use the enhanced ensemble model (default TRUE).
 
 ## Value
 

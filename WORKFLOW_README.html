@@ -34,7 +34,7 @@
   <main id="main" class="col-md-9"><div class="page-header">
 
       <h1>GitHub Actions Workflows</h1>
-      <small class="dont-index">Source: <a href="https://github.com/peteowen1/torp/blob/main/.github/WORKFLOW_README.md" class="external-link"><code>.github/WORKFLOW_README.md</code></a></small>
+      <small class="dont-index">Source: <a href="https://github.com/peteowen1/torp/blob/dev/.github/WORKFLOW_README.md" class="external-link"><code>.github/WORKFLOW_README.md</code></a></small>
     </div>
 
 <div id="github-actions-workflows" class="section level1">
@@ -42,19 +42,21 @@
 <div class="section level2">
 <h2 id="active-workflows">Active Workflows<a class="anchor" aria-label="anchor" href="#active-workflows"></a></h2>
 <div class="section level3">
-<h3 id="id_1-daily-data-release-daily-data-releaseyml">1. Daily Data Release (<code>daily-data-release.yml</code>)<a class="anchor" aria-label="anchor" href="#id_1-daily-data-release-daily-data-releaseyml"></a></h3>
-<p><strong>Schedule:</strong> Daily at 4:00 PM UTC (2:00 AM AEST)</p>
-<p>Automatically runs the data release pipeline to update all AFL data on <a href="https://github.com/peteowen1/torpdata" class="external-link">torpdata</a>.</p>
+<h3 id="id_1-daily-ratings--predictions-daily-ratings-predictionsyml">1. Daily Ratings &amp; Predictions (<code>daily-ratings-predictions.yml</code>)<a class="anchor" aria-label="anchor" href="#id_1-daily-ratings--predictions-daily-ratings-predictionsyml"></a></h3>
+<p><strong>Trigger:</strong> <code>repository_dispatch</code> (type: <code>ratings-trigger</code>) or manual <code>workflow_dispatch</code></p>
+<p>Two-job pipeline that computes TORP ratings and then builds match predictions.</p>
 <p><strong>What it does:</strong></p>
-<ul><li>Fetches latest AFL data via fitzRoy</li>
-<li>Processes play-by-play, chains, player stats, fixtures, results, teams, player details, and xG</li>
-<li>Uploads to torpdata GitHub releases as parquet files via piggyback</li>
-</ul><p><strong>Manual trigger:</strong> Actions tab &gt; “Daily Data Release” &gt; “Run workflow”</p>
-<ul><li>
-<code>force_release</code> – re-release all data even if unchanged</li>
+<ol style="list-style-type: decimal"><li>
+<strong>compute-ratings</strong> – Runs <code>data-raw/03-ratings/run_ratings_pipeline.R</code> to rebuild player game data and TORP ratings, uploads to torpdata</li>
 <li>
-<code>rebuild_aggregates</code> – rebuild aggregate data files</li>
-</ul></div>
+<strong>build-predictions</strong> – Runs <code>data-raw/02-models/build_match_predictions.R</code> to generate weekly match predictions</li>
+</ol><p><strong>Manual trigger:</strong> Actions tab &gt; “Daily Ratings &amp; Predictions” &gt; “Run workflow”</p>
+<ul><li>
+<code>force</code> – Force run, skip checks</li>
+<li>
+<code>week_override</code> – Override prediction week (leave empty for auto-detect)</li>
+</ul><p><strong>On failure:</strong> Automatically creates/updates a GitHub issue with <code>bug</code> + <code>automation</code> labels.</p>
+</div>
 <div class="section level3">
 <h3 id="id_2-r-package-tests-test-packageyml">2. R Package Tests (<code>test-package.yml</code>)<a class="anchor" aria-label="anchor" href="#id_2-r-package-tests-test-packageyml"></a></h3>
 <p><strong>Trigger:</strong> Push to main/develop, Pull Requests</p>
@@ -76,6 +78,8 @@
 <h3 id="required-secrets">Required Secrets<a class="anchor" aria-label="anchor" href="#required-secrets"></a></h3>
 <ul><li>
 <code>GITHUB_TOKEN</code> – Automatically provided by GitHub Actions</li>
+<li>
+<code>WORKFLOW_PAT</code> – Personal access token with write permissions to torpdata releases (used by ratings/predictions workflow)</li>
 </ul></div>
 <div class="section level3">
 <h3 id="key-environment-variables">Key Environment Variables<a class="anchor" aria-label="anchor" href="#key-environment-variables"></a></h3>

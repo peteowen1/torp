@@ -1,7 +1,6 @@
 # Predict Shot Probabilities
 
-This function is intended for internal use and may be unexported in a
-future release.
+Predict Shot Probabilities
 
 ## Usage
 

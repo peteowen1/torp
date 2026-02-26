@@ -1,7 +1,6 @@
 # Get Single Chain
 
-This function is intended for internal use and may be unexported in a
-future release. Processes a single chain from the game data.
+Processes a single chain from the game data.
 
 ## Usage
 

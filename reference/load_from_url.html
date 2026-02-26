@@ -34,7 +34,7 @@
   <main id="main" class="col-md-9"><div class="page-header">
 
       <h1>Load parquet files from remote URLs</h1>
-      <small class="dont-index">Source: <a href="https://github.com/peteowen1/torp/blob/main/R/load_torp_data.R" class="external-link"><code>R/load_torp_data.R</code></a></small>
+      <small class="dont-index">Source: <a href="https://github.com/peteowen1/torp/blob/dev/R/load_engines.R" class="external-link"><code>R/load_engines.R</code></a></small>
       <div class="d-none name"><code>load_from_url.Rd</code></div>
     </div>
 
@@ -50,7 +50,8 @@
 <span>  seasons <span class="op">=</span> <span class="cn">TRUE</span>,</span>
 <span>  rounds <span class="op">=</span> <span class="cn">TRUE</span>,</span>
 <span>  peteowen1 <span class="op">=</span> <span class="cn">FALSE</span>,</span>
-<span>  use_disk_cache <span class="op">=</span> <span class="cn">TRUE</span></span>
+<span>  use_disk_cache <span class="op">=</span> <span class="cn">FALSE</span>,</span>
+<span>  columns <span class="op">=</span> <span class="cn">NULL</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -79,7 +80,13 @@
 
 
 <dt id="arg-use-disk-cache">use_disk_cache<a class="anchor" aria-label="anchor" href="#arg-use-disk-cache"></a></dt>
-<dd><p>Logical. If TRUE (default), uses persistent disk cache for faster repeated loads.</p></dd>
+<dd><p>Logical. If TRUE, uses persistent disk cache for faster repeated loads.</p></dd>
+
+
+<dt id="arg-columns">columns<a class="anchor" aria-label="anchor" href="#arg-columns"></a></dt>
+<dd><p>Optional character vector of column names to read. If NULL (default),
+reads all columns. Filter columns (season, round, round_number, week) are
+auto-included when filtering is active.</p></dd>
 
 </dl></div>
     <div class="section level2">

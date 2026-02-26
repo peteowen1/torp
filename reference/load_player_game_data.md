@@ -9,7 +9,11 @@ pipeline.
 ## Usage
 
 ``` r
-load_player_game_data(seasons = get_afl_season())
+load_player_game_data(
+  seasons = get_afl_season(),
+  use_disk_cache = FALSE,
+  columns = NULL
+)
 ```
 
 ## Arguments
@@ -19,6 +23,16 @@ load_player_game_data(seasons = get_afl_season())
   A numeric vector of 4-digit years associated with given AFL seasons -
   defaults to latest season. If set to `TRUE`, returns all available
   data since 2021.
+
+- use_disk_cache:
+
+  Logical. If TRUE, uses persistent disk cache for faster repeated
+  loads. Default is FALSE.
+
+- columns:
+
+  Optional character vector of column names to read. If NULL (default),
+  reads all columns.
 
 ## Value
 

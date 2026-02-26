@@ -1,11 +1,12 @@
 # Validate Win Probability Input Data
 
-Comprehensive validation for win probability model inputs
+Validates that the input dataframe has the required columns for WP
+modeling.
 
 ## Usage
 
 ``` r
-validate_wp_input(df, model_type = "basic")
+validate_wp_input(df)
 ```
 
 ## Arguments
@@ -13,10 +14,6 @@ validate_wp_input(df, model_type = "basic")
 - df:
 
   Input dataframe
-
-- model_type:
-
-  Type of model ("basic" or "enhanced")
 
 ## Value
 

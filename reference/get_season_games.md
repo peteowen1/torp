@@ -1,7 +1,6 @@
 # Get Season Games
 
-This function is intended for internal use and may be unexported in a
-future release. Retrieves game data for an entire season.
+Retrieves game data for an entire season.
 
 ## Usage
 

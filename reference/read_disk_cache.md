@@ -5,7 +5,7 @@ Read Data from Disk Cache
 ## Usage
 
 ``` r
-read_disk_cache(url)
+read_disk_cache(url, columns = NULL)
 ```
 
 ## Arguments
@@ -13,6 +13,11 @@ read_disk_cache(url)
 - url:
 
   Character URL to read cached data for
+
+- columns:
+
+  Optional character vector of column names to read. If NULL (default),
+  reads all columns.
 
 ## Value
 

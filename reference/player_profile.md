@@ -52,57 +52,17 @@ try({ # prevents cran errors
   player_profile("Heeney")
   player_profile("Heeney", seasons = 2022:2024)
 })
-#> Loading 1/6 files...
-#> Warning: downloaded length 0 != reported length 9
-#> Warning: cannot open URL 'https://github.com/peteowen1/torpdata/releases/download/player_details-data/player_details_2026.parquet': HTTP status was '404 Not Found'
-#> Warning: Failed to connect to
-#> <https://github.com/peteowen1/torpdata/releases/download/player_details-data/player_details_2026.parquet>
-#> - check internet connection
-#> Loading 1/6 files...
-#> Warning: downloaded length 0 != reported length 9
-#> Warning: cannot open URL 'https://github.com/peteowen1/torpdata/releases/download/player_stats-data/player_stats_2026.parquet': HTTP status was '404 Not Found'
-#> Warning: Failed to connect to
-#> <https://github.com/peteowen1/torpdata/releases/download/player_stats-data/player_stats_2026.parquet>
-#> - check internet connection
-#> Loading 1/6 files...
-#> Warning: downloaded length 0 != reported length 9
-#> Warning: cannot open URL 'https://github.com/peteowen1/torpdata/releases/download/player_game-data/player_game_2026.parquet': HTTP status was '404 Not Found'
-#> Warning: Failed to connect to
-#> <https://github.com/peteowen1/torpdata/releases/download/player_game-data/player_game_2026.parquet>
-#> - check internet connection
-#> Warning: downloaded length 0 != reported length 9
-#> Warning: cannot open URL 'https://github.com/peteowen1/torpdata/releases/download/player_details-data/player_details_2026.parquet': HTTP status was '404 Not Found'
-#> Warning: Failed to connect to
-#> <https://github.com/peteowen1/torpdata/releases/download/player_details-data/player_details_2026.parquet>
-#> - check internet connection
-#> Loading 1/6 files...
-#> Warning: downloaded length 0 != reported length 9
-#> Warning: cannot open URL 'https://github.com/peteowen1/torpdata/releases/download/player_game-data/player_game_2026.parquet': HTTP status was '404 Not Found'
-#> Warning: Failed to connect to
-#> <https://github.com/peteowen1/torpdata/releases/download/player_game-data/player_game_2026.parquet>
-#> - check internet connection
-#> Loading 1/6 files...
+#> Downloading 6 files in parallel...
+#> Downloading 6 files in parallel...
+#> Downloading 6 files in parallel...
+#> Downloading 6 files in parallel...
+#> Downloading 6 files in parallel...
 #> Joining with `by = join_by(season, round)`
 #> TORP ratings as at 2026 round 0
-#> Loading 1/3 files...
-#> Loading 1/3 files...
-#> Loading 1/6 files...
-#> Warning: downloaded length 0 != reported length 9
-#> Warning: cannot open URL 'https://github.com/peteowen1/torpdata/releases/download/player_game-data/player_game_2026.parquet': HTTP status was '404 Not Found'
-#> Warning: Failed to connect to
-#> <https://github.com/peteowen1/torpdata/releases/download/player_game-data/player_game_2026.parquet>
-#> - check internet connection
-#> Warning: downloaded length 0 != reported length 9
-#> Warning: cannot open URL 'https://github.com/peteowen1/torpdata/releases/download/player_details-data/player_details_2026.parquet': HTTP status was '404 Not Found'
-#> Warning: Failed to connect to
-#> <https://github.com/peteowen1/torpdata/releases/download/player_details-data/player_details_2026.parquet>
-#> - check internet connection
-#> Loading 1/6 files...
-#> Warning: downloaded length 0 != reported length 9
-#> Warning: cannot open URL 'https://github.com/peteowen1/torpdata/releases/download/player_game-data/player_game_2026.parquet': HTTP status was '404 Not Found'
-#> Warning: Failed to connect to
-#> <https://github.com/peteowen1/torpdata/releases/download/player_game-data/player_game_2026.parquet>
-#> - check internet connection
+#> Downloading 3 files in parallel...
+#> Downloading 3 files in parallel...
+#> Downloading 6 files in parallel...
+#> Downloading 6 files in parallel...
 #> Joining with `by = join_by(season, round)`
 #> TORP ratings as at 2026 round 0
 #> === Isaac Heeney (Sydney Swans - MIDFIELDER) ===
@@ -129,11 +89,19 @@ try({ # prevents cran errors
 #> # A tibble: 3 × 13
 #>   season player_name  player_id  team_id team       position games season_points
 #>    <dbl> <chr>        <chr>      <chr>   <chr>      <chr>    <int>         <dbl>
-#> 1   2024 Isaac Heeney CD_I298539 CD_T160 Sydney Sw… MIDFIEL…    24          277.
-#> 2   2022 Isaac Heeney CD_I298539 CD_T160 Sydney Sw… MEDIUM_…    25          277.
-#> 3   2023 Isaac Heeney CD_I298539 CD_T160 Sydney Sw… MEDIUM_…    23          172.
+#> 1   2024 Isaac Heeney CD_I298539 CD_T160 Sydney Sw… MIDFIEL…    24          272.
+#> 2   2022 Isaac Heeney CD_I298539 CD_T160 Sydney Sw… MEDIUM_…    25          268.
+#> 3   2023 Isaac Heeney CD_I298539 CD_T160 Sydney Sw… MEDIUM_…    23          170.
 #> # ℹ 5 more variables: season_recv <dbl>, season_disp <dbl>, season_spoil <dbl>,
 #> #   season_hitout <dbl>, ppg <dbl>
+#> 
+#> --- Current TORP Rating ---
+#> # A tibble: 1 × 14
+#>   player_id  player_name    age team         torp torp_recv torp_disp torp_spoil
+#>   <chr>      <chr>        <dbl> <chr>       <dbl>     <dbl>     <dbl>      <dbl>
+#> 1 CD_I298539 Isaac Heeney  29.8 Sydney Swa…  9.42      3.55      3.19       2.68
+#> # ℹ 6 more variables: torp_hitout <dbl>, position <chr>, season <dbl>,
+#> #   round <dbl>, gms <int>, wt_gms <dbl>
 #> 
 # }
 ```

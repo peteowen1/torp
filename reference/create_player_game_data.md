@@ -10,7 +10,7 @@ create_player_game_data(
   pbp_data = NULL,
   player_stats = NULL,
   teams = NULL,
-  decay = 500,
+  decay = RATING_DECAY_DEFAULT_DAYS,
   credit_params = NULL
 )
 ```
@@ -37,7 +37,8 @@ create_player_game_data(
 
 - decay:
 
-  Decay factor for time-weighting games. Default is 500.
+  Decay factor for time-weighting games. Default is
+  `RATING_DECAY_DEFAULT_DAYS` (486).
 
 - credit_params:
 

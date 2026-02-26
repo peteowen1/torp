@@ -1,6 +1,6 @@
-# Default decay factor (in days) for weighting historical games
+# Default decay factor (in days) for TORP rating historical weighting
 
-Default decay factor (in days) for weighting historical games
+Default decay factor (in days) for TORP rating historical weighting
 
 ## Usage
 

@@ -1,7 +1,6 @@
 # GAM Baseline Model
 
-This function is intended for internal use and may be unexported in a
-future release. Generalized Additive Model baseline with smooth terms
+Generalized Additive Model baseline with smooth terms
 
 ## Usage
 

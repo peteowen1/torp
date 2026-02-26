@@ -1,7 +1,6 @@
 # Score-Only Baseline Model for Win Probability
 
-This function is intended for internal use and may be unexported in a
-future release. Simple logistic regression using only score difference
+Simple logistic regression using only score difference
 
 ## Usage
 

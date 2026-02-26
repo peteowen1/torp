@@ -1,7 +1,6 @@
 # Prepare Shot Data for Modeling
 
-This function is intended for internal use and may be unexported in a
-future release.
+Prepare Shot Data for Modeling
 
 ## Usage
 

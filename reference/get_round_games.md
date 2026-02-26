@@ -1,7 +1,6 @@
 # Get Round Games
 
-This function is intended for internal use and may be unexported in a
-future release. Retrieves game data for a specific round in a season.
+Retrieves game data for a specific round in a season.
 
 ## Usage
 

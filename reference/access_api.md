@@ -1,7 +1,6 @@
 # Access API
 
-This function is intended for internal use and may be unexported in a
-future release. Makes an authenticated request to the AFL API.
+Makes an authenticated request to the AFL API.
 
 ## Usage
 

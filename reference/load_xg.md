@@ -6,7 +6,7 @@ repository](https://github.com/peteowen1/torpdata)
 ## Usage
 
 ``` r
-load_xg(seasons = get_afl_season())
+load_xg(seasons = get_afl_season(), use_disk_cache = FALSE, columns = NULL)
 ```
 
 ## Arguments
@@ -16,6 +16,16 @@ load_xg(seasons = get_afl_season())
   A numeric vector of 4-digit years associated with given AFL seasons -
   defaults to latest season. If set to `TRUE`, returns all available
   data since 2021.
+
+- use_disk_cache:
+
+  Logical. If TRUE, uses persistent disk cache for faster repeated
+  loads. Default is FALSE.
+
+- columns:
+
+  Optional character vector of column names to read. If NULL (default),
+  reads all columns.
 
 ## Value
 
@@ -34,7 +44,7 @@ A data frame containing xG data.
 try({ # prevents cran errors
   load_xg(2021:2022)
 })
-#> Loading 1/2 files...
+#> Downloading 2 files in parallel...
 #> # A tibble: 414 × 15
 #>    match_id     home_team home_shots_score home_xscore home_sG home_sB away_team
 #>    <chr>        <chr>                <dbl>       <dbl>   <dbl>   <dbl> <chr>    

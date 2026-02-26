@@ -1,8 +1,6 @@
 # Time-Aware Baseline Model for Win Probability
 
-This function is intended for internal use and may be unexported in a
-future release. Logistic regression using score difference and time
-remaining
+Logistic regression using score difference and time remaining
 
 ## Usage
 
