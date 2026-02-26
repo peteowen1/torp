@@ -15,4 +15,3 @@ A dataframe with selected variables for WP modeling.
 \description{
 Select WP Model Variables
 }
-\keyword{internal}

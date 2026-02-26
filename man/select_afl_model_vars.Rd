@@ -15,4 +15,3 @@ A dataframe with selected variables for AFL modeling
 \description{
 Select AFL Match Prediction Model Variables
 }
-\keyword{internal}

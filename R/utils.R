@@ -73,7 +73,6 @@ get_afl_week <- function(type = "current") {
   }
 
   # Compare as Date objects to avoid POSIXct/Date coercion (which uses midnight UTC,
-
   # not midnight AEST, creating a ~10 hour boundary mismatch)
   past_fixtures <- all_fixtures |>
     dplyr::filter(lubridate::as_date(.data$utcStartTime) < current_day)

@@ -159,6 +159,10 @@ generate_urls <- function(data_type, file_prefix, seasons, rounds = NULL, prefer
     parts <- regmatches(fname, gregexpr("[0-9]+", fname))[[1]]
     if (length(parts) == 0) return(TRUE)
     file_season <- as.numeric(parts[length(parts) - (length(parts) > 1)])
+    if (is.na(file_season) || file_season < 2020) {
+      cli::cli_warn("Could not parse season from URL: {.url {u}}")
+      return(TRUE)
+    }
     if (file_season < current_season) return(TRUE)
     if (file_season > current_season) return(FALSE)
     # Same season: check round if applicable

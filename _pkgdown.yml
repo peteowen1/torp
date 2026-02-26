@@ -108,6 +108,9 @@ reference:
     contents:
       - starts_with("create_grouped")
       - starts_with("create_temporal")
+      - select_epv_model_vars
+      - select_wp_model_vars
+      - select_afl_model_vars
 
   - title: Caching
     desc: In-memory and disk caching utilities
@@ -154,7 +157,7 @@ reference:
       - get_round_games
       - get_season_games
       - starts_with("predict_wp_")
-      - starts_with("select_")
+      - select_shot_model_vars
       - starts_with("prepare_shot")
       - starts_with("create_shot_model")
       - predict_shot_probabilities

@@ -60,7 +60,10 @@ get_week_chains <- function(season, roundnum) {
   load <- tryCatch(
     get_match_chains(season, round = roundnum),
     error = function(e) {
-      cli::cli_warn("Failed to get match chains from {.val {season}} round {.val {roundnum}}")
+      cli::cli_warn(c(
+        "Failed to get match chains from {.val {season}} round {.val {roundnum}}",
+        "x" = conditionMessage(e)
+      ))
       return(data.table::data.table())
     }
   )

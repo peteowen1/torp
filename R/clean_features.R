@@ -37,7 +37,7 @@ clean_model_data_wp <- function(df) {
 #' @param df A dataframe containing cleaned play-by-play data.
 #' @param label Logical, whether to include the label variable for training.
 #' @return A dataframe with selected variables for EPV modeling.
-#' @keywords internal
+#' @export
 select_epv_model_vars <- function(df, label = FALSE) {
   base_vars <- c(
     "goal_x", "y", "lag_goal_x", "lag_goal_x5", "lag_y", 
@@ -58,7 +58,7 @@ select_epv_model_vars <- function(df, label = FALSE) {
 #'
 #' @param df A dataframe containing cleaned play-by-play data.
 #' @return A dataframe with selected variables for WP modeling.
-#' @keywords internal
+#' @export
 select_wp_model_vars <- function(df) {
   df |>
     dplyr::select(
@@ -73,7 +73,7 @@ select_wp_model_vars <- function(df) {
 #'
 #' @param df A dataframe containing AFL team model data
 #' @return A dataframe with selected variables for AFL modeling
-#' @keywords internal
+#' @export
 select_afl_model_vars <- function(df) {
   df |>
     dplyr::select(
