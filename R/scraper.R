@@ -127,7 +127,11 @@ get_round_games <- function(season, round) {
     cli::cli_warn("Unexpected API response structure for fixtures (expected 5+ elements, got {length(api_result)})")
     return(data.frame())
   }
-  games <- api_result[["items"]] %||% api_result[[5]]
+  games <- api_result[["items"]]
+  if (is.null(games)) {
+    cli::cli_warn("API response missing {.val items} field, using positional fallback. API schema may have changed.")
+    games <- api_result[[5]]
+  }
 
   if (length(games) > 0) {
     games <- games |>
@@ -227,7 +231,11 @@ get_game_chains <- function(match_id) {
     cli::cli_warn("Unexpected API response structure for match {match_id} (expected 8+ elements, got {length(chains_t1)})")
     return(data.frame())
   }
-  chains_t2 <- chains_t1[["chains"]] %||% chains_t1[[8]]
+  chains_t2 <- chains_t1[["chains"]]
+  if (is.null(chains_t2)) {
+    cli::cli_warn("API response missing {.val chains} field for match {.val {match_id}}, using positional fallback.")
+    chains_t2 <- chains_t1[[8]]
+  }
 
   if (!is.null(dim(chains_t2)) && nrow(chains_t2) > 0) {
     chains <- purrr::map_df(1:nrow(chains_t2), ~ get_single_chain(chains_t2, .))

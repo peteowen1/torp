@@ -18,12 +18,23 @@
 save_to_release <- function(df, file_name, release_tag) {
   .f_name <- paste0(file_name, ".parquet")
   tf <- tempfile(fileext = ".parquet")
-  arrow::write_parquet(df, tf)
+  on.exit(unlink(tf), add = TRUE)
 
-  piggyback::pb_upload(tf,
-                       repo = get_torp_data_repo(),
-                       tag = release_tag,
-                       name = .f_name
+  tryCatch(
+    arrow::write_parquet(df, tf),
+    error = function(e) {
+      cli::cli_abort("Failed to write parquet file {.val {.f_name}}: {conditionMessage(e)}")
+    }
+  )
+
+  tryCatch(
+    piggyback::pb_upload(tf,
+                         repo = get_torp_data_repo(),
+                         tag = release_tag,
+                         name = .f_name),
+    error = function(e) {
+      cli::cli_abort("Failed to upload {.val {.f_name}} to release {.val {release_tag}}: {conditionMessage(e)}")
+    }
   )
 
   # Also save a local copy if torpdata/data/ is configured
@@ -49,13 +60,23 @@ save_to_release <- function(df, file_name, release_tag) {
 file_reader <- function(file_name, release_tag) {
   f_name <- paste0(file_name, ".parquet")
   td <- tempdir(check = TRUE)
-  piggyback::pb_download(f_name,
-                         repo = get_torp_data_repo(),
-                         tag = release_tag,
-                         dest = td
+
+  tryCatch(
+    piggyback::pb_download(f_name,
+                           repo = get_torp_data_repo(),
+                           tag = release_tag,
+                           dest = td),
+    error = function(e) {
+      cli::cli_abort("Failed to download {.val {f_name}} from release {.val {release_tag}}: {conditionMessage(e)}")
+    }
   )
 
-  arrow::read_parquet(file.path(td, f_name))
+  tryCatch(
+    arrow::read_parquet(file.path(td, f_name)),
+    error = function(e) {
+      cli::cli_abort("Failed to read {.val {f_name}} after download: {conditionMessage(e)}")
+    }
+  )
 }
 
 

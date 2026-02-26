@@ -249,7 +249,7 @@ compare_baseline_models <- function(train_data, test_data, main_model_preds, inc
                                              bootstrap_ci = FALSE)
     results_list[["score"]] <- make_result_row("Score Only", score_eval, 2)
   }, error = function(e) {
-    warning(paste("Score-only baseline failed:", e$message))
+    cli::cli_warn("Score-only baseline failed: {conditionMessage(e)}")
   })
 
   # Time + Score baseline
@@ -259,7 +259,7 @@ compare_baseline_models <- function(train_data, test_data, main_model_preds, inc
                                                    bootstrap_ci = FALSE)
     results_list[["time_score"]] <- make_result_row("Time + Score", time_score_eval, 4)
   }, error = function(e) {
-    warning(paste("Time + Score baseline failed:", e$message))
+    cli::cli_warn("Time + Score baseline failed: {conditionMessage(e)}")
   })
 
   # Expected Points baseline (if available)
@@ -270,7 +270,7 @@ compare_baseline_models <- function(train_data, test_data, main_model_preds, inc
                                              bootstrap_ci = FALSE)
       results_list[["expected_pts"]] <- make_result_row("Expected Points", exp_eval, 3)
     }, error = function(e) {
-      warning(paste("Expected Points baseline failed:", e$message))
+      cli::cli_warn("Expected Points baseline failed: {conditionMessage(e)}")
     })
   }
 
@@ -282,7 +282,7 @@ compare_baseline_models <- function(train_data, test_data, main_model_preds, inc
                                              bootstrap_ci = FALSE)
       results_list[["gam"]] <- make_result_row("GAM Baseline", gam_eval, NA)
     }, error = function(e) {
-      warning(paste("GAM baseline failed:", e$message))
+      cli::cli_warn("GAM baseline failed: {conditionMessage(e)}")
     })
   }
 
@@ -590,7 +590,10 @@ evaluate_baseline_models <- function(actual, data) {
   make_result_row <- function(model_name, preds) {
     auc_val <- tryCatch({
       calculate_auc_base(actual, preds)
-    }, error = function(e) NA)
+    }, error = function(e) {
+      cli::cli_warn("AUC calculation failed for {.val {model_name}}: {conditionMessage(e)}")
+      NA
+    })
 
     data.frame(
       model_name = model_name,
