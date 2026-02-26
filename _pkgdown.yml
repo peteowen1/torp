@@ -148,6 +148,10 @@ reference:
       - save_to_release
       - set_torp_data_repo
       - setup_torp_logging
+      - download_torp_data
+      - get_local_data_dir
+      - save_locally
+      - set_local_data_dir
 
   - title: Internal / Developer
     desc: "Internal utilities accessible via torp::: for model training and data scraping"
