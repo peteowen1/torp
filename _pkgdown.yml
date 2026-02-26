@@ -150,7 +150,7 @@ reference:
       - setup_torp_logging
 
   - title: Internal / Developer
-    desc: Internal utilities accessible via torp::: for model training and data scraping
+    desc: "Internal utilities accessible via torp::: for model training and data scraping"
     contents:
       - access_api
       - get_players
