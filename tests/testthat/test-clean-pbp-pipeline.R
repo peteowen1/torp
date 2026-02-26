@@ -485,6 +485,38 @@ test_that("select_shot_model_vars function exists", {
 # Pipeline Integration Test
 # -----------------------------------------------------------------------------
 
+# -----------------------------------------------------------------------------
+# setorder Ordering Guarantee (regression test)
+# -----------------------------------------------------------------------------
+
+test_that("setorder before setkey guarantees within-match display_order for shift ops", {
+  # Regression test for clean_pbp_dt: setkey(dt, match_id) sorts by match_id
+  # but does NOT sort display_order within each match. Downstream shift/lag/lead
+  # operations depend on within-match display_order being monotonic.
+  dt <- data.table::data.table(
+    match_id = c("A", "A", "A", "A", "B", "B", "B", "B"),
+    display_order = c(4, 2, 3, 1, 3, 1, 4, 2),
+    value = c("a4", "a2", "a3", "a1", "b3", "b1", "b4", "b2")
+  )
+
+  # Replicate clean_pbp_dt ordering: setorder then setkey
+  data.table::setorder(dt, match_id, display_order)
+  data.table::setkey(dt, match_id)
+
+  # Within each match, display_order must be sorted
+  expect_equal(dt[match_id == "A", display_order], c(1, 2, 3, 4))
+  expect_equal(dt[match_id == "B", display_order], c(1, 2, 3, 4))
+
+  # shift() must produce correct lead values (critical for EP/WP pipeline)
+  dt[, next_value := data.table::shift(value, type = "lead"), by = match_id]
+  expect_equal(dt[match_id == "A", next_value], c("a2", "a3", "a4", NA))
+  expect_equal(dt[match_id == "B", next_value], c("b2", "b3", "b4", NA))
+})
+
+# -----------------------------------------------------------------------------
+# Pipeline Integration Test
+# -----------------------------------------------------------------------------
+
 test_that("EPV pipeline components work together", {
   # This tests the main flow without actual data loading
   expect_true(is.function(clean_model_data_epv))

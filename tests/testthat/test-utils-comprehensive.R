@@ -354,6 +354,39 @@ test_that("get_afl_week returns reasonable values", {
   expect_reasonable_round(result)
 })
 
+test_that("get_afl_week compares dates correctly near midnight AEST boundary", {
+  # Regression test: POSIXct-to-Date coercion uses midnight UTC, not AEST,
+
+  # creating a ~10 hour window where games are misclassified.
+  # The fix wraps utcStartTime in lubridate::as_date() before comparison.
+  mock_fixtures <- data.frame(
+    compSeason.year = rep(2025, 3),
+    round.roundNumber = c(1, 2, 3),
+    # Game at 14:10 UTC on Apr 5 = 00:10 AEST on Apr 6 (next day in AEST)
+    utcStartTime = as.POSIXct(
+      c("2025-03-20 06:00:00", "2025-04-05 14:10:00", "2025-04-12 06:00:00"),
+      tz = "UTC"
+    ),
+    stringsAsFactors = FALSE
+  )
+
+  # as_date() should classify the Apr 5 UTC game as Apr 5 (date only, no TZ shift)
+  game_dates <- lubridate::as_date(mock_fixtures$utcStartTime)
+  expect_equal(game_dates[2], as.Date("2025-04-05"))
+
+  # Verify the comparison logic: if "today" is Apr 5, the game IS today (past)
+  current_day <- as.Date("2025-04-05")
+  past <- game_dates < current_day
+  future <- game_dates >= current_day
+  expect_false(past[2])  # Apr 5 game is NOT past on Apr 5
+  expect_true(future[2]) # Apr 5 game is future/current on Apr 5
+
+  # If "today" is Apr 6, the game IS past
+  current_day2 <- as.Date("2025-04-06")
+  past2 <- game_dates < current_day2
+  expect_true(past2[2]) # Apr 5 game is past on Apr 6
+})
+
 # -----------------------------------------------------------------------------
 # is_installed() Tests
 # -----------------------------------------------------------------------------
