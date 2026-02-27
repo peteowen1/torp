@@ -12,6 +12,7 @@
 #' @param player_game_data Optional pre-loaded player game data. If NULL, will load automatically.
 #' @param prior_games_spoil Prior games for spoil shrinkage. Default is \code{RATING_PRIOR_GAMES_SPOIL}.
 #' @param prior_games_hitout Prior games for hitout shrinkage. Default is \code{RATING_PRIOR_GAMES_HITOUT}.
+#' @param fixtures Optional pre-loaded fixtures data. If NULL, will load automatically.
 #'
 #' @return A data frame containing player TORP ratings.
 #' @export

@@ -26,6 +26,8 @@ load_fixtures(
 \item{verbose}{Logical. If TRUE, prints cache hit/miss information.}
 
 \item{columns}{Optional character vector of column names to read. If NULL (default), reads all columns.}
+
+\item{use_disk_cache}{Logical. If TRUE, uses persistent disk caching. Default is FALSE.}
 }
 \value{
 A data frame containing AFL fixture and schedule data.

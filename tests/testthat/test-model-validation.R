@@ -95,8 +95,8 @@ test_that("compare_models_statistical works correctly", {
   comparison <- compare_models_statistical(list(eval1, eval2), test_type = "delong")
   
   expect_true(is.data.frame(comparison))
-  expect_true("p_value" %in% names(comparison))
   expect_true("auc_diff" %in% names(comparison))
+  expect_true("ci_non_overlap" %in% names(comparison))
   expect_equal(nrow(comparison), 1)
 })
 

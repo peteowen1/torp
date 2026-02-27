@@ -7,7 +7,7 @@
 load_model_with_fallback(model_name)
 }
 \arguments{
-\item{model_name}{Short model name: "ep", "wp", "shot", or "xgb_win"}
+\item{model_name}{Short model name: "ep", "wp", "shot", "match_gams", or "xgb_win"}
 }
 \value{
 The loaded model object.

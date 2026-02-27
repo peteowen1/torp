@@ -42,10 +42,10 @@ test_that("load_model_with_fallback handles unknown model names", {
   # Clear cache to ensure fresh state
   clear_model_cache()
 
-  result <- suppressWarnings(torp:::load_model_with_fallback("nonexistent_model"))
-
-  # Should return NULL and warn
-  expect_null(result)
+  expect_error(
+    torp:::load_model_with_fallback("nonexistent_model"),
+    "Unknown model name"
+  )
 })
 
 test_that("load_model_with_fallback caches loaded models", {
