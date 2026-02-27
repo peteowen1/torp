@@ -6,14 +6,241 @@
 #' @return A cleaned dataframe ready for EPV modeling.
 #' @export
 clean_model_data_epv <- function(df) {
-  df |>
-    filter_relevant_descriptions() |>
-    dplyr::group_by(.data$match_id, .data$period, .data$tot_goals) |>
-    dplyr::filter(dplyr::lag(.data$throw_in) == 0 | dplyr::lead(.data$throw_in) == 0 | .data$throw_in == 0) |>
-    add_epv_variables() |>
-    dplyr::ungroup() |>
-    torp_dummy_cols(select_columns = c("play_type", "phase_of_play")) |>
-    torp_clean_names()
+  clean_model_data_epv_dt(df)
+}
+
+#' Clean Model Data for EPV (data.table optimized)
+#'
+#' Optimized version using data.table shift() with by-reference helpers.
+#' Follows the same pattern as clean_pbp() -> clean_pbp_dt().
+#'
+#' @param df A dataframe containing cleaned play-by-play data from clean_pbp().
+#' @return A data.table ready for EPV modeling.
+#' @keywords internal
+#' @importFrom data.table as.data.table shift fifelse fcase
+clean_model_data_epv_dt <- function(df) {
+  dt <- data.table::as.data.table(df)
+  grp <- c("match_id", "period", "tot_goals")
+
+  # Filter relevant descriptions (vectorized, no grouping needed)
+  relevant_descriptions <- c(
+    "Ball Up Call", "Bounce", "Centre Bounce", "Contested Knock On", "Contested Mark",
+    "Free Advantage", "Free For", "Free For: Before the Bounce", "Free For: In Possession",
+    "Free For: Off The Ball", "Gather", "Gather From Hitout", "Gather from Opposition",
+    "Ground Kick", "Handball", "Handball Received", "Hard Ball Get", "Hard Ball Get Crumb",
+    "Kick", "Knock On", "Loose Ball Get", "Loose Ball Get Crumb", "Mark On Lead",
+    "Out of Bounds", "Out On Full After Kick", "Ruck Hard Ball Get", "Uncontested Mark"
+  )
+  dt <- dt[description %in% relevant_descriptions]
+  dt <- dt[!(dplyr::near(x, -lead_x_tot) & dplyr::near(y, -lead_y_tot) & description != "Centre Bounce")]
+
+  # Grouped throw_in filter via shift
+  dt[, c("lag_ti_flt", "lead_ti_flt") := .(
+    data.table::shift(throw_in, 1L, type = "lag"),
+    data.table::shift(throw_in, 1L, type = "lead")
+  ), by = grp]
+  dt <- dt[lag_ti_flt == 0L | lead_ti_flt == 0L | throw_in == 0L]
+  dt[, c("lag_ti_flt", "lead_ti_flt") := NULL]
+
+  # Team vars, mirror, coordinate transform
+  add_epv_team_vars_dt(dt, grp)
+
+  # Lagged variables + speed
+  add_epv_lag_vars_dt(dt, grp)
+
+  # Dummy columns + clean names
+  dt <- torp_dummy_cols(dt, select_columns = c("play_type", "phase_of_play"))
+  torp_clean_names(dt)
+}
+
+#' Add EPV team variables (data.table, by reference)
+#'
+#' Computes team_id_mdl, home, points, mirror, and coordinate transform.
+#' All shift operations for the mirror calculation are batched into a single
+#' := call for performance.
+#'
+#' @param dt A data.table to modify by reference.
+#' @param grp Character vector of grouping columns.
+#' @return Invisible NULL (modifies dt by reference).
+#' @keywords internal
+add_epv_team_vars_dt <- function(dt, grp) {
+  # Recompute team_id_mdl (rows removed by filtering change lag relationships)
+  dt[, team_id_mdl := data.table::fcase(
+    throw_in == 1L, data.table::shift(team_id, 1L, type = "lead"),
+    default = team_id
+  ), by = grp]
+  dt[, team_id_mdl := nafill_char(team_id_mdl, "nocb"), by = grp]
+  dt[, team_id_mdl := nafill_char(team_id_mdl, "locf"), by = grp]
+
+  # home, pos_points, opp_points, points_diff
+  dt[, `:=`(
+    home = data.table::fifelse(team_id_mdl == home_team_id, 1L, 0L),
+    pos_points = data.table::fifelse(team_id_mdl == home_team_id, home_points, away_points),
+    opp_points = data.table::fifelse(team_id_mdl == home_team_id, away_points, home_points)
+  )]
+  dt[, points_diff := pos_points - opp_points]
+
+  # Batch all 11 shifts needed for mirror (single pass over group index)
+  dt[, c("tmp_lag1_ti", "tmp_lag2_ti",
+         "tmp_lag1_tm", "tmp_lag2_tm", "tmp_lag3_tm",
+         "tmp_lag1_x", "tmp_lag2_x",
+         "tmp_lead1_x", "tmp_lead2_x",
+         "tmp_lead1_tm", "tmp_lead2_tm") := .(
+    data.table::shift(throw_in, 1L, type = "lag"),
+    data.table::shift(throw_in, 2L, type = "lag"),
+    data.table::shift(team_id_mdl, 1L, type = "lag"),
+    data.table::shift(team_id_mdl, 2L, type = "lag"),
+    data.table::shift(team_id_mdl, 3L, type = "lag"),
+    data.table::shift(x, 1L, type = "lag"),
+    data.table::shift(x, 2L, type = "lag"),
+    data.table::shift(x, 1L, type = "lead"),
+    data.table::shift(x, 2L, type = "lead"),
+    data.table::shift(team_id_mdl, 1L, type = "lead"),
+    data.table::shift(team_id_mdl, 2L, type = "lead")
+  ), by = grp]
+
+  # Mirror via fcase (same 7 conditions as calculate_mirror, NAs treated as FALSE)
+  dt[, mirror := data.table::fcase(
+    # 1. Current throw-in with team change
+    throw_in == 1L & tmp_lag1_ti != 1L & tmp_lag1_tm != team_id_mdl, -1,
+    # 2. Consecutive throw-ins on same side with different team
+    throw_in == 1L & tmp_lag1_ti == 1L & tmp_lag2_tm != team_id_mdl &
+      sign(tmp_lag1_x) == sign(x), -1,
+    # 3. Consecutive throw-ins with same team but different side
+    throw_in == 1L & tmp_lag1_ti == 1L & tmp_lag2_tm == team_id_mdl &
+      sign(tmp_lag1_x) != sign(x), -1,
+    # 4. Previous throw-in affecting current play
+    tmp_lag1_ti == 1L & sign(tmp_lag1_x) == sign(x) &
+      tmp_lag1_tm == team_id_mdl & tmp_lag2_tm != team_id_mdl, -1,
+    # 5. Throw-in two plays ago affecting current play
+    tmp_lag2_ti == 1L & sign(tmp_lag2_x) == sign(x) &
+      tmp_lag2_tm == team_id_mdl & tmp_lag3_tm != team_id_mdl, -1,
+    # 6. Previous throw-in with future position considerations
+    tmp_lag1_ti == 1L & sign(tmp_lead2_x) == sign(x) &
+      tmp_lead2_tm != team_id_mdl, -1,
+    # 7. Two plays ago throw-in with future considerations
+    tmp_lag2_ti == 1L & sign(tmp_lead1_x) == sign(x) &
+      tmp_lead1_tm != team_id_mdl, -1,
+    default = 1
+  )]
+
+  # Clean up mirror temp columns
+  dt[, c("tmp_lag1_ti", "tmp_lag2_ti",
+         "tmp_lag1_tm", "tmp_lag2_tm", "tmp_lag3_tm",
+         "tmp_lag1_x", "tmp_lag2_x",
+         "tmp_lead1_x", "tmp_lead2_x",
+         "tmp_lead1_tm", "tmp_lead2_tm") := NULL]
+
+  # Apply coordinate transform (x, y must be updated before goal_x)
+  dt[, `:=`(x = mirror * x, y = mirror * y)]
+  dt[, goal_x := venue_length / 2 - x]
+
+  invisible(NULL)
+}
+
+#' Add EPV lagged variables and speed (data.table, by reference)
+#'
+#' Computes all lag/lead variables and derived speed metrics.
+#' Batches shift operations into a single := call per group traversal.
+#'
+#' @param dt A data.table to modify by reference.
+#' @param grp Character vector of grouping columns.
+#' @return Invisible NULL (modifies dt by reference).
+#' @keywords internal
+add_epv_lag_vars_dt <- function(dt, grp) {
+  # Batch all shifts (numeric + character) in one pass
+  dt[, c("lv_lag1_x", "lv_lag1_y", "lv_lag1_gx", "lv_lag5_gx",
+         "lv_lag1_ps", "lv_lag5_ps",
+         "lv_lag1_tm", "lv_lag5_tm",
+         "lv_lead1_x", "lv_lead1_y",
+         "lv_lag1_desc", "lv_lead1_desc",
+         "lv_lag1_pn", "lv_lead1_pn") := .(
+    data.table::shift(x, 1L, type = "lag"),
+    data.table::shift(y, 1L, type = "lag"),
+    data.table::shift(goal_x, 1L, type = "lag"),
+    data.table::shift(goal_x, 5L, type = "lag"),
+    data.table::shift(period_seconds, 1L, type = "lag"),
+    data.table::shift(period_seconds, 5L, type = "lag"),
+    data.table::shift(team_id_mdl, 1L, type = "lag"),
+    data.table::shift(team_id_mdl, 5L, type = "lag"),
+    data.table::shift(x, 1L, type = "lead"),
+    data.table::shift(y, 1L, type = "lead"),
+    data.table::shift(description, 1L, type = "lag"),
+    data.table::shift(description, 1L, type = "lead"),
+    data.table::shift(player_name, 1L, type = "lag"),
+    data.table::shift(player_name, 1L, type = "lead")
+  ), by = grp]
+
+  # Fill boundary NAs: lag columns with first(), lead columns with last()
+  dt[, `:=`(
+    lv_lag1_x = data.table::fifelse(is.na(lv_lag1_x), x[1L], lv_lag1_x),
+    lv_lag1_y = data.table::fifelse(is.na(lv_lag1_y), y[1L], lv_lag1_y),
+    lv_lag1_gx = data.table::fifelse(is.na(lv_lag1_gx), goal_x[1L], lv_lag1_gx),
+    lv_lag5_gx = data.table::fifelse(is.na(lv_lag5_gx), goal_x[1L], lv_lag5_gx),
+    lv_lag5_ps = data.table::fifelse(is.na(lv_lag5_ps), period_seconds[1L], lv_lag5_ps),
+    lv_lead1_x = data.table::fifelse(is.na(lv_lead1_x), x[.N], lv_lead1_x),
+    lv_lead1_y = data.table::fifelse(is.na(lv_lead1_y), y[.N], lv_lead1_y),
+    lv_lag1_desc = data.table::fifelse(is.na(lv_lag1_desc), description[1L], lv_lag1_desc),
+    lv_lead1_desc = data.table::fifelse(is.na(lv_lead1_desc), description[.N], lv_lead1_desc),
+    lv_lag1_pn = data.table::fifelse(is.na(lv_lag1_pn), player_name[1L], lv_lag1_pn),
+    lv_lead1_pn = data.table::fifelse(is.na(lv_lead1_pn), player_name[.N], lv_lead1_pn)
+  ), by = grp]
+  # Note: lv_lag1_ps intentionally left with NAs (speed1 NA -> replaced with 0)
+  # Note: lv_lag1_tm, lv_lag5_tm left with NAs (used in fcase where NA -> default)
+
+  # lag_x, lag_y: mirror if team changed (calculate_lagged_coordinate equivalent)
+  dt[, `:=`(
+    lag_x = data.table::fcase(
+      is.na(lv_lag1_tm), lv_lag1_x,
+      lv_lag1_tm == team_id_mdl, lv_lag1_x,
+      default = -lv_lag1_x),
+    lag_y = data.table::fcase(
+      is.na(lv_lag1_tm), lv_lag1_y,
+      lv_lag1_tm == team_id_mdl, lv_lag1_y,
+      default = -lv_lag1_y)
+  )]
+
+  # lag_goal_x, lag_goal_x5: flip via venue_length if team changed
+  dt[, `:=`(
+    lag_goal_x = data.table::fcase(
+      is.na(lv_lag1_tm), lv_lag1_gx,
+      lv_lag1_tm == team_id_mdl, lv_lag1_gx,
+      default = venue_length - lv_lag1_gx),
+    lag_goal_x5 = data.table::fcase(
+      is.na(lv_lag5_tm), lv_lag5_gx,
+      lv_lag5_tm == team_id_mdl, lv_lag5_gx,
+      default = venue_length - lv_lag5_gx)
+  )]
+
+  # Remaining output columns
+  dt[, `:=`(
+    lag_desc = lv_lag1_desc,
+    lead_desc = lv_lead1_desc,
+    lag_time5 = lv_lag5_ps,
+    lag_player = lv_lag1_pn,
+    lead_player = lv_lead1_pn,
+    lead_x = lv_lead1_x,
+    lead_y = lv_lead1_y,
+    lead_goal_x = venue_length / 2 - lv_lead1_x
+  )]
+
+  # Speed variables
+  dt[, `:=`(
+    speed1 = (lag_goal_x - goal_x) / pmax(period_seconds - lv_lag1_ps, 1),
+    speed5 = (lag_goal_x5 - goal_x) / pmax(period_seconds - lag_time5, 1)
+  )]
+  dt[is.na(speed1), speed1 := 0]
+  dt[is.na(speed5), speed5 := 0]
+
+  # Clean up temp columns
+  dt[, c("lv_lag1_x", "lv_lag1_y", "lv_lag1_gx", "lv_lag5_gx",
+         "lv_lag1_ps", "lv_lag5_ps",
+         "lv_lag1_tm", "lv_lag5_tm",
+         "lv_lead1_x", "lv_lead1_y",
+         "lv_lag1_desc", "lv_lead1_desc",
+         "lv_lag1_pn", "lv_lead1_pn") := NULL]
+
+  invisible(NULL)
 }
 
 #' Clean Model Data for Win Probability (WP)
@@ -126,6 +353,60 @@ select_afl_model_vars <- function(df) {
       .data$shot_weightz,
 
       # Predicted values (generated during modeling process)
+      .data$pred_tot_xscore,
+      .data$pred_xscore_diff,
+      .data$pred_conv_diff,
+      .data$pred_score_diff,
+      .data$pred_win
+    )
+}
+
+#' Select AFL XGBoost Model Variables (Lean Feature Set)
+#'
+#' Selects a reduced set of variables optimised for XGBoost match prediction.
+#' Removes high-cardinality factor columns (team_name, team_name_season, venue)
+#' that create hundreds of sparse dummies via model.matrix(), and drops sample
+#' weights that aren't predictive features.
+#'
+#' @param df A dataframe containing AFL team model data with GAM predictions
+#' @return A dataframe with ~25 numeric/low-cardinality features + response
+#' @export
+select_afl_xgb_vars <- function(df) {
+  df |>
+    dplyr::select(
+      # Response
+      .data$win,
+
+      # Home/away (1 dummy)
+      .data$team_type_fac,
+
+      # Time features (numeric)
+      .data$game_year_decimal.x,
+      .data$game_prop_through_year.x,
+      .data$game_prop_through_month.x,
+      .data$game_prop_through_day.x,
+
+      # TORP ratings (numeric)
+      .data$torp_diff,
+      .data$torp_recv_diff,
+      .data$torp_disp_diff,
+      .data$torp_spoil_diff,
+      .data$torp_hitout_diff,
+      .data$torp.x,
+      .data$torp.y,
+
+      # Venue/travel (numeric)
+      .data$log_dist.x,
+      .data$log_dist.y,
+      .data$log_dist_diff,
+      .data$familiarity.x,
+      .data$familiarity.y,
+      .data$familiarity_diff,
+
+      # Days rest (4 dummies - low cardinality)
+      .data$days_rest_diff_fac,
+
+      # GAM predictions (the main signal)
       .data$pred_tot_xscore,
       .data$pred_xscore_diff,
       .data$pred_conv_diff,

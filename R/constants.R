@@ -37,7 +37,7 @@ EPV_WEIGHT_DECAY_DAYS <- 365
 
 #' Default decay factor (in days) for TORP rating historical weighting
 #' @keywords internal
-RATING_DECAY_DEFAULT_DAYS <- 511
+RATING_DECAY_DEFAULT_DAYS <- 513
 
 #' Loading factor for TORP calculations
 #' @keywords internal
@@ -45,11 +45,11 @@ RATING_LOADING_DEFAULT <- 1.0000
 
 #' Prior games constant for receiving ratings
 #' @keywords internal
-RATING_PRIOR_GAMES_RECV <- 6.1900
+RATING_PRIOR_GAMES_RECV <- 6.0442
 
 #' Prior games constant for disposal ratings
 #' @keywords internal
-RATING_PRIOR_GAMES_DISP <- 7.1097
+RATING_PRIOR_GAMES_DISP <- 8.0334
 
 #' Prior games constant for spoil ratings
 #' @keywords internal
@@ -57,7 +57,7 @@ RATING_PRIOR_GAMES_SPOIL <- 3.0000
 
 #' Prior games constant for hitout ratings
 #' @keywords internal
-RATING_PRIOR_GAMES_HITOUT <- 4.4426
+RATING_PRIOR_GAMES_HITOUT <- 5.3162
 
 
 # Credit Assignment Constants
@@ -65,15 +65,15 @@ RATING_PRIOR_GAMES_HITOUT <- 4.4426
 
 #' Disposal EPV offset when defending (pos_team == -1)
 #' @keywords internal
-CREDIT_DISP_NEG_OFFSET <- -0.4427
+CREDIT_DISP_NEG_OFFSET <- -0.4459
 
 #' Disposal EPV offset when possessing (pos_team == 1)
 #' @keywords internal
-CREDIT_DISP_POS_OFFSET <- 0.1282
+CREDIT_DISP_POS_OFFSET <- 0.1189
 
 #' Disposal scaling factor
 #' @keywords internal
-CREDIT_DISP_SCALE <- 0.7161
+CREDIT_DISP_SCALE <- 0.7798
 
 #' Bounce penalty per bounce
 #' @keywords internal
@@ -81,7 +81,7 @@ CREDIT_BOUNCE_PENALTY <- 1.0000
 
 #' Reception multiplier when defending (pos_team == -1)
 #' @keywords internal
-CREDIT_RECV_NEG_MULT <- 1.1052
+CREDIT_RECV_NEG_MULT <- 1.2841
 
 #' Reception offset when defending
 #' @keywords internal
@@ -89,39 +89,39 @@ CREDIT_RECV_NEG_OFFSET <- 0.5000
 
 #' Reception multiplier when possessing (pos_team == 1)
 #' @keywords internal
-CREDIT_RECV_POS_MULT <- 1.1980
+CREDIT_RECV_POS_MULT <- 1.1283
 
 #' Reception offset when possessing
 #' @keywords internal
-CREDIT_RECV_POS_OFFSET <- 0.2268
+CREDIT_RECV_POS_OFFSET <- 0.2231
 
 #' Reception scaling factor
 #' @keywords internal
-CREDIT_RECV_SCALE <- 0.4077
+CREDIT_RECV_SCALE <- 0.4234
 
 #' Spoil weight per spoil
 #' @keywords internal
-CREDIT_SPOIL_WT <- 1.0569
+CREDIT_SPOIL_WT <- 1.0531
 
 #' Tackle weight per tackle
 #' @keywords internal
-CREDIT_TACKLE_WT <- 1.1102
+CREDIT_TACKLE_WT <- 1.1408
 
 #' Pressure act weight
 #' @keywords internal
-CREDIT_PRESSURE_WT <- 0.3049
+CREDIT_PRESSURE_WT <- 0.3072
 
 #' Defensive half pressure act weight (subtracted)
 #' @keywords internal
-CREDIT_DEF_PRESSURE_WT <- 1.0214
+CREDIT_DEF_PRESSURE_WT <- 1.0312
 
 #' Hitout weight per hitout
 #' @keywords internal
-CREDIT_HITOUT_WT <- 0.4142
+CREDIT_HITOUT_WT <- 0.4528
 
 #' Hitout to advantage weight
 #' @keywords internal
-CREDIT_HITOUT_ADV_WT <- 0.2692
+CREDIT_HITOUT_ADV_WT <- 0.2523
 
 #' Ruck contest weight (subtracted)
 #' @keywords internal
@@ -129,19 +129,19 @@ CREDIT_RUCK_CONTEST_WT <- 0.0300
 
 #' Position adjustment quantile for reception
 #' @keywords internal
-CREDIT_POS_ADJ_QUANTILE_RECV <- 0.3118
+CREDIT_POS_ADJ_QUANTILE_RECV <- 0.3500
 
 #' Position adjustment quantile for disposal
 #' @keywords internal
-CREDIT_POS_ADJ_QUANTILE_DISP <- 0.3111
+CREDIT_POS_ADJ_QUANTILE_DISP <- 0.3500
 
 #' Position adjustment quantile for spoil/tackle
 #' @keywords internal
-CREDIT_POS_ADJ_QUANTILE_SPOIL <- 0.3026
+CREDIT_POS_ADJ_QUANTILE_SPOIL <- 0.3500
 
 #' Position adjustment quantile for hitout
 #' @keywords internal
-CREDIT_POS_ADJ_QUANTILE_HITOUT <- 0.4971
+CREDIT_POS_ADJ_QUANTILE_HITOUT <- 0.5100
 
 
 # Simulation Constants

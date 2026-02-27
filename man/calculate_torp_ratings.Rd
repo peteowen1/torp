@@ -15,7 +15,8 @@ calculate_torp_ratings(
   plyr_tm_df = NULL,
   player_game_data = NULL,
   prior_games_spoil = RATING_PRIOR_GAMES_SPOIL,
-  prior_games_hitout = RATING_PRIOR_GAMES_HITOUT
+  prior_games_hitout = RATING_PRIOR_GAMES_HITOUT,
+  fixtures = NULL
 )
 
 torp_ratings(
@@ -28,7 +29,8 @@ torp_ratings(
   plyr_tm_df = NULL,
   player_game_data = NULL,
   prior_games_spoil = RATING_PRIOR_GAMES_SPOIL,
-  prior_games_hitout = RATING_PRIOR_GAMES_HITOUT
+  prior_games_hitout = RATING_PRIOR_GAMES_HITOUT,
+  fixtures = NULL
 )
 }
 \arguments{

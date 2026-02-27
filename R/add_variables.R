@@ -177,12 +177,7 @@ add_shot_vars <- function(df) {
 #' @importFrom stats predict model.matrix
 #' @importFrom utils data
 get_epv_preds <- function(df) {
-  # Try to load model from torpmodels first, then fall back to package data
   ep_model <- load_model_with_fallback("ep")
-
-  if (is.null(ep_model)) {
-    cli::cli_abort("EP model not available. Install torpmodels or ensure package data is available.")
-  }
 
   # Log prediction event
   input_hash <- paste0("ep_", nrow(df), "_", ncol(df), "_", as.integer(Sys.time()))
@@ -225,7 +220,6 @@ get_epv_preds <- function(df) {
     return(preds)
 
   }, error = function(e) {
-    warning(paste("EP model prediction failed:", e$message, "- Input hash:", input_hash))
     cli::cli_abort("EP model prediction failed: {e$message}")
   })
 }
@@ -241,23 +235,22 @@ get_epv_preds <- function(df) {
 #' @importFrom stats predict model.matrix
 #' @importFrom utils data
 get_wp_preds <- function(df) {
-  # Try to load model from torpmodels first, then fall back to package data
   wp_model <- load_model_with_fallback("wp")
-
-  if (is.null(wp_model)) {
-    cli::cli_abort("WP model not available. Install torpmodels or ensure package data is available.")
-  }
 
   if (inherits(wp_model, "xgb.Booster") && !requireNamespace("xgboost", quietly = TRUE)) {
     cli::cli_abort("xgboost package required but not available")
   }
 
-  preds <- as.data.frame(
-    matrix(stats::predict(wp_model, stats::model.matrix(~ . + 0, data = df |> select_wp_model_vars())),
-      ncol = 1, byrow = TRUE
-    )
-  )
-  colnames(preds) <- "wp"
+  model_data <- df |> select_wp_model_vars()
+  model_matrix <- stats::model.matrix(~ . + 0, data = model_data)
+  preds_raw <- stats::predict(wp_model, model_matrix)
+
+  # xgboost 3.x may return a matrix; flatten to vector for binary prediction
+  if (is.matrix(preds_raw)) {
+    preds_raw <- as.vector(preds_raw)
+  }
+
+  preds <- data.frame(wp = preds_raw)
 
   return(preds)
 }
@@ -273,25 +266,28 @@ get_wp_preds <- function(df) {
 #' @importFrom stats predict
 #' @importFrom utils data
 get_shot_result_preds <- function(df) {
-  # Try to load model from torpmodels first, then fall back to package data
   shot_ocat_mdl <- load_model_with_fallback("shot")
 
-  if (is.null(shot_ocat_mdl)) {
-    cli::cli_abort("Shot model not available. Install torpmodels or ensure package data is available.")
+  # mgcv must be loaded explicitly for GAM/BAM predict() — its internal
+  # Xbd function is not found otherwise
+  if (inherits(shot_ocat_mdl, c("gam", "bam"))) {
+    if (!requireNamespace("mgcv", quietly = TRUE)) {
+      cli::cli_abort("mgcv package required for shot model predictions but not available")
+    }
+    loadNamespace("mgcv")
   }
 
   preds <- stats::predict(shot_ocat_mdl, df, type = "response")
   return(preds)
 }
 
-#' Load Model with Fallback
+#' Load Model from torpmodels
 #'
-#' Attempts to load a model from torpmodels package first, then falls back
-#' to package data if torpmodels is not available. Models are cached in memory
-#' to avoid repeated loading.
+#' Loads a model from the torpmodels package with in-memory caching.
+#' Install torpmodels via `devtools::install_github("peteowen1/torpmodels")`.
 #'
-#' @param model_name Short model name: "ep", "wp", "shot", or "xgb_win"
-#' @return The loaded model object, or NULL if not available
+#' @param model_name Short model name: "ep", "wp", "shot", "match_gams", or "xgb_win"
+#' @return The loaded model object.
 #' @keywords internal
 load_model_with_fallback <- function(model_name) {
   # Check cache first
@@ -299,46 +295,29 @@ load_model_with_fallback <- function(model_name) {
     return(get(model_name, envir = .torp_model_cache))
   }
 
-  # Map short names to full names for package data
-  model_map <- list(
-    ep = "ep_model",
-    wp = "wp_model",
-    shot = "shot_ocat_mdl",
-    xgb_win = "xgb_win_model"
+  valid_models <- c("ep", "wp", "shot", "xgb_win", "match_gams")
+  if (!model_name %in% valid_models) {
+    cli::cli_abort("Unknown model name: {model_name}. Must be one of: {paste(valid_models, collapse = ', ')}")
+  }
+
+  if (!requireNamespace("torpmodels", quietly = TRUE)) {
+    cli::cli_abort(c(
+      "torpmodels package is required but not installed.",
+      "i" = 'Install with: devtools::install_github("peteowen1/torpmodels")'
+    ))
+  }
+
+  model <- tryCatch(
+    torpmodels::load_torp_model(model_name, verbose = FALSE),
+    error = function(e) {
+      cli::cli_abort(c(
+        "Failed to load {model_name} model from torpmodels.",
+        "x" = e$message,
+        "i" = "Try: torpmodels::clear_model_cache(); then retry."
+      ))
+    }
   )
 
-  full_name <- model_map[[model_name]]
-  if (is.null(full_name)) {
-    cli::cli_warn("Unknown model name: {model_name}")
-    return(NULL)
-  }
-
-  model <- NULL
-
-  # Try torpmodels first if available
-  if (requireNamespace("torpmodels", quietly = TRUE)) {
-    model <- tryCatch({
-      torpmodels::load_torp_model(model_name, verbose = FALSE)
-    }, error = function(e) {
-      cli::cli_warn("torpmodels load failed for {model_name}: {e$message}")
-      NULL
-    })
-  }
-
-  # Fall back to package data if torpmodels didn't work
-  if (is.null(model)) {
-    tryCatch({
-      utils::data(list = full_name, package = "torp", envir = environment())
-      model <- get(full_name, envir = environment())
-    }, error = function(e) {
-      cli::cli_warn("Package data load failed for {full_name}: {e$message}")
-    })
-  }
-
-  # Store in cache if successfully loaded
-  if (!is.null(model)) {
-    assign(model_name, model, envir = .torp_model_cache)
-  }
-
-  return(model)
+  assign(model_name, model, envir = .torp_model_cache)
+  model
 }

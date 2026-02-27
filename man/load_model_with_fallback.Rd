@@ -2,7 +2,7 @@
 % Please edit documentation in R/add_variables.R
 \name{load_model_with_fallback}
 \alias{load_model_with_fallback}
-\title{Load Model with Fallback}
+\title{Load Model from torpmodels}
 \usage{
 load_model_with_fallback(model_name)
 }
@@ -10,11 +10,10 @@ load_model_with_fallback(model_name)
 \item{model_name}{Short model name: "ep", "wp", "shot", or "xgb_win"}
 }
 \value{
-The loaded model object, or NULL if not available
+The loaded model object.
 }
 \description{
-Attempts to load a model from torpmodels package first, then falls back
-to package data if torpmodels is not available. Models are cached in memory
-to avoid repeated loading.
+Loads a model from the torpmodels package with in-memory caching.
+Install torpmodels via \code{devtools::install_github("peteowen1/torpmodels")}.
 }
 \keyword{internal}

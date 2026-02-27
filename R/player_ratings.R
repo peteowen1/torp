@@ -4,10 +4,10 @@
 #'
 #' @param season_val The season to calculate ratings for. Default is the next season.
 #' @param round_val The round to calculate ratings for. Default is the next round.
-#' @param decay The decay factor for weighting games. Default is 365.
-#' @param loading The loading factor for TORP calculations. Default is 1.5.
-#' @param prior_games_recv The number of prior games to consider for receiving. Default is 4.
-#' @param prior_games_disp The number of prior games to consider for disposal. Default is 6.
+#' @param decay The decay factor for weighting games. Default is \code{RATING_DECAY_DEFAULT_DAYS}.
+#' @param loading The loading factor for TORP calculations. Default is \code{RATING_LOADING_DEFAULT}.
+#' @param prior_games_recv The number of prior games to consider for receiving. Default is \code{RATING_PRIOR_GAMES_RECV}.
+#' @param prior_games_disp The number of prior games to consider for disposal. Default is \code{RATING_PRIOR_GAMES_DISP}.
 #' @param plyr_tm_df Optional pre-loaded player team data. If NULL, will load automatically.
 #' @param player_game_data Optional pre-loaded player game data. If NULL, will load automatically.
 #' @param prior_games_spoil Prior games for spoil shrinkage. Default is \code{RATING_PRIOR_GAMES_SPOIL}.
@@ -29,7 +29,8 @@ calculate_torp_ratings <- function(season_val = get_afl_season(type = "current")
                          plyr_tm_df = NULL,
                          player_game_data = NULL,
                          prior_games_spoil = RATING_PRIOR_GAMES_SPOIL,
-                         prior_games_hitout = RATING_PRIOR_GAMES_HITOUT) {
+                         prior_games_hitout = RATING_PRIOR_GAMES_HITOUT,
+                         fixtures = NULL) {
   # Load player team details if not provided
   if (is.null(plyr_tm_df)) {
     plyr_tm_df <- load_player_details(season_val)
@@ -44,10 +45,15 @@ calculate_torp_ratings <- function(season_val = get_afl_season(type = "current")
     player_game_data <- load_player_game_data(TRUE)
   }
 
+  # Load fixtures if not provided
+  if (is.null(fixtures)) {
+    fixtures <- load_fixtures(TRUE)
+  }
+
   gwk <- sprintf("%02d", round_val)
   match_ref <- paste0("CD_M", season_val, "014", gwk)
 
-  date_val <- load_fixtures(TRUE) |>
+  date_val <- fixtures |>
     dplyr::filter(.data$compSeason.year == season_val, .data$round.roundNumber == round_val) |>
     dplyr::summarise(lubridate::as_date(min(.data$utcStartTime))) |>
     dplyr::pull()

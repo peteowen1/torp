@@ -534,15 +534,8 @@ test_that("calculate_quality_score is bounded between 0 and 1", {
 # validate_seasons() error fallback Tests
 # -----------------------------------------------------------------------------
 
-test_that("validate_seasons uses current year as fallback when get_afl_season fails", {
-  local_mocked_bindings(
-    get_afl_season = function(...) stop("simulated failure"),
-    .package = "torp"
-  )
+test_that("validate_seasons uses current calendar year as upper bound", {
   current_year <- as.integer(format(Sys.Date(), "%Y"))
-  expect_warning(
-    result <- torp:::validate_seasons(current_year),
-    "Could not determine current AFL season"
-  )
-  expect_equal(result, current_year)
+  expect_no_error(torp:::validate_seasons(current_year))
+  expect_error(torp:::validate_seasons(current_year + 1), "Invalid season years")
 })

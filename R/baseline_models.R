@@ -446,8 +446,8 @@ prepare_calibration_plot <- function(calibration_results) {
       # Add perfect calibration line
       perfect_line = mean_predicted,
       
-      # Add confidence intervals (approximate)
-      se = sqrt(mean_predicted * (1 - mean_predicted) / n),
+      # Add confidence intervals (approximate, based on observed proportion)
+      se = sqrt(mean_actual * (1 - mean_actual) / n),
       ci_lower = pmax(0, mean_actual - 1.96 * se),
       ci_upper = pmin(1, mean_actual + 1.96 * se),
       

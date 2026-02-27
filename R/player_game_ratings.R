@@ -27,8 +27,9 @@ player_game_ratings <- function(season_val = get_afl_season(),
     cli::cli_abort("round_num must be numeric (e.g., 1, 2, 3...)")
   }
 
-  if (any(season_val < 1990 | season_val > 2030)) {
-    cli::cli_abort("All seasons must be between 1990 and 2030")
+  max_season <- get_afl_season() + 1L
+  if (any(season_val < 1990 | season_val > max_season)) {
+    cli::cli_abort("All seasons must be between 1990 and {max_season}")
   }
 
   # Validate reasonable round range
@@ -120,8 +121,9 @@ player_season_ratings <- function(season_val = get_afl_season(), round_num = NA)
   }
 
   # Validate reasonable season range (handles vectors)
-  if (any(season_val < 1990 | season_val > 2030)) {
-    cli::cli_abort("All seasons must be between 1990 and 2030")
+  max_season <- get_afl_season() + 1L
+  if (any(season_val < 1990 | season_val > max_season)) {
+    cli::cli_abort("All seasons must be between 1990 and {max_season}")
   }
 
   # Validate reasonable round range

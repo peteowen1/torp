@@ -92,7 +92,6 @@ create_player_game_data <- function(pbp_data = NULL,
     dplyr::group_by(player_id, match_id) |>
     dplyr::summarise(
       plyr_nm = max(player_name, na.rm = TRUE),
-      gms = dplyr::n_distinct(match_id),
       utc_start_time = max(utc_start_time),
       weight_gm = max(weight_gm),
       disp_pts = sum(dplyr::if_else(pos_team == -1, delta_epv + p$disp_neg_offset, delta_epv + p$disp_pos_offset) * p$disp_scale),

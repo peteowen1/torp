@@ -59,20 +59,26 @@ save_to_release <- function(df, file_name, release_tag) {
 #' }
 file_reader <- function(file_name, release_tag) {
   f_name <- paste0(file_name, ".parquet")
-  td <- tempdir(check = TRUE)
+  tf <- tempfile(fileext = ".parquet")
+  on.exit(unlink(tf), add = TRUE)
 
   tryCatch(
     piggyback::pb_download(f_name,
                            repo = get_torp_data_repo(),
                            tag = release_tag,
-                           dest = td),
+                           dest = dirname(tf),
+                           overwrite = TRUE),
     error = function(e) {
       cli::cli_abort("Failed to download {.val {f_name}} from release {.val {release_tag}}: {conditionMessage(e)}")
     }
   )
 
+  # pb_download saves with the original filename in the dest directory
+  downloaded_path <- file.path(dirname(tf), f_name)
+  on.exit(unlink(downloaded_path), add = TRUE)
+
   tryCatch(
-    arrow::read_parquet(file.path(td, f_name)),
+    arrow::read_parquet(downloaded_path),
     error = function(e) {
       cli::cli_abort("Failed to read {.val {f_name}} after download: {conditionMessage(e)}")
     }
@@ -247,7 +253,7 @@ load_player_game_data <- function(seasons = get_afl_season(), use_disk_cache = F
 #' })
 #' }
 #' @export
-load_fixtures <- function(seasons = NULL, all = FALSE, use_cache = TRUE, cache_ttl = 3600, verbose = FALSE, columns = NULL) {
+load_fixtures <- function(seasons = NULL, all = FALSE, use_cache = TRUE, cache_ttl = 3600, verbose = FALSE, columns = NULL, use_disk_cache = FALSE) {
   # Process parameters
   if (all) {
     current_year <- as.numeric(format(Sys.Date(), "%Y"))
@@ -288,7 +294,7 @@ load_fixtures <- function(seasons = NULL, all = FALSE, use_cache = TRUE, cache_t
 
   # Fetch data from URLs
   urls <- generate_urls("fixtures-data", "fixtures", seasons)
-  out <- load_from_url(urls, seasons = seasons, columns = columns)
+  out <- load_from_url(urls, seasons = seasons, use_disk_cache = use_disk_cache, columns = columns)
 
   # Store in cache if enabled
   if (use_cache && nrow(out) > 0) {

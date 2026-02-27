@@ -45,7 +45,7 @@ test_that("EPV_WEIGHT_DECAY_DAYS has expected value", {
 })
 
 test_that("RATING_DECAY_DEFAULT_DAYS has expected value", {
-  expect_equal(torp:::RATING_DECAY_DEFAULT_DAYS, 511)
+  expect_equal(torp:::RATING_DECAY_DEFAULT_DAYS, 513)
   expect_true(torp:::RATING_DECAY_DEFAULT_DAYS > 0)
 })
 
@@ -56,13 +56,13 @@ test_that("RATING_LOADING_DEFAULT has expected value", {
 })
 
 test_that("RATING_PRIOR_GAMES_RECV has expected value", {
-  expect_equal(torp:::RATING_PRIOR_GAMES_RECV, 6.19)
+  expect_equal(torp:::RATING_PRIOR_GAMES_RECV, 6.0442)
   expect_true(torp:::RATING_PRIOR_GAMES_RECV > 0)
   expect_true(torp:::RATING_PRIOR_GAMES_RECV < 50)  # Reasonable bound
 })
 
 test_that("RATING_PRIOR_GAMES_DISP has expected value", {
-  expect_equal(torp:::RATING_PRIOR_GAMES_DISP, 7.1097)
+  expect_equal(torp:::RATING_PRIOR_GAMES_DISP, 8.0334)
   expect_true(torp:::RATING_PRIOR_GAMES_DISP > 0)
   expect_true(torp:::RATING_PRIOR_GAMES_DISP < 50)  # Reasonable bound
 })
@@ -74,7 +74,7 @@ test_that("RATING_PRIOR_GAMES_SPOIL has expected value", {
 })
 
 test_that("RATING_PRIOR_GAMES_HITOUT has expected value", {
-  expect_equal(torp:::RATING_PRIOR_GAMES_HITOUT, 4.4426)
+  expect_equal(torp:::RATING_PRIOR_GAMES_HITOUT, 5.3162)
   expect_true(torp:::RATING_PRIOR_GAMES_HITOUT > 0)
   expect_true(torp:::RATING_PRIOR_GAMES_HITOUT < 50)  # Reasonable bound
 })

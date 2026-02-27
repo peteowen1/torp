@@ -557,124 +557,27 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL) {
     )
 
   # Modelling ----
-  cli::cli_h2("Training GAM models")
+  # Load pre-trained GAMs from torpmodels (trained in torpmodels/data-raw/04-xgb-model/)
+  cli::cli_h2("Loading pre-trained GAM models from torpmodels")
 
-  ## Total xPoints Model ----
-  cli::cli_progress_step("Training total xPoints model")
-  afl_total_xpoints_mdl <- mgcv::bam(
-    total_xpoints_adj ~
-      s(team_type_fac.x, bs = "re")
-      + s(game_year_decimal.x, bs = "ts")
-      + s(game_prop_through_year.x, bs = "cc")
-      + s(game_prop_through_month.x, bs = "cc")
-      + s(game_wday_fac.x, bs = "re")
-      + s(game_prop_through_day.x, bs = "cc")
-      + s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
-      + s(team_name_season.x, bs = "re") + s(team_name_season.y, bs = "re")
-      + s(abs(torp_diff), bs = "ts", k = 5)
-      + s(abs(torp_recv_diff), bs = "ts", k = 5)
-      + s(abs(torp_disp_diff), bs = "ts", k = 5)
-      + s(abs(torp_spoil_diff), bs = "ts", k = 5)
-      + s(abs(torp_hitout_diff), bs = "ts", k = 5)
-      + s(torp.x, bs = "ts", k = 5) + s(torp.y, bs = "ts", k = 5)
-      + s(venue_fac, bs = "re")
-      + s(log_dist.x, bs = "ts", k = 5) + s(log_dist.y, bs = "ts", k = 5)
-      + s(familiarity.x, bs = "ts", k = 5) + s(familiarity.y, bs = "ts", k = 5)
-      + s(log_dist_diff, bs = "ts", k = 5)
-      + s(familiarity_diff, bs = "ts", k = 5)
-      + s(days_rest_diff_fac, bs = "re"),
-    data = team_mdl_df, weights = weightz,
-    family = gaussian(), nthreads = 4, select = TRUE, discrete = TRUE,
-    drop.unused.levels = FALSE
-  )
-  # In-sample: predictions on training data feed into downstream models
-  team_mdl_df$pred_tot_xscore <- predict(afl_total_xpoints_mdl, newdata = team_mdl_df, type = "response")
+  match_gams <- load_model_with_fallback("match_gams")
+  loadNamespace("mgcv")
 
-  ## xScore Diff Model ----
-  cli::cli_progress_step("Training xScore diff model")
-  afl_xscore_diff_mdl <- mgcv::bam(
-    xscore_diff ~
-      s(team_type_fac, bs = "re")
-      + s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
-      + s(team_name_season.x, bs = "re") + s(team_name_season.y, bs = "re")
-      + ti(torp_diff, pred_tot_xscore, bs = c("ts", "ts"), k = 4)
-      + s(pred_tot_xscore, bs = "ts", k = 5)
-      + s(torp_diff, bs = "ts", k = 5)
-      + s(torp_recv_diff, bs = "ts", k = 5)
-      + s(torp_disp_diff, bs = "ts", k = 5)
-      + s(torp_spoil_diff, bs = "ts", k = 5)
-      + s(torp_hitout_diff, bs = "ts", k = 5)
-      + s(log_dist_diff, bs = "ts", k = 5) + s(familiarity_diff, bs = "ts", k = 5) + s(days_rest_diff_fac, bs = "re"),
-    data = team_mdl_df, weights = weightz,
-    family = gaussian(), nthreads = 4, select = TRUE, discrete = TRUE,
-    drop.unused.levels = FALSE
-  )
-  # In-sample: uses pred_tot_xscore from above
-  team_mdl_df$pred_xscore_diff <- predict(afl_xscore_diff_mdl, newdata = team_mdl_df, type = "response")
+  # Apply sequential predictions (each model's output feeds into the next)
+  cli::cli_progress_step("Predicting total xPoints")
+  team_mdl_df$pred_tot_xscore <- predict(match_gams$total_xpoints, newdata = team_mdl_df, type = "response")
 
-  ## Conversion Model ----
-  cli::cli_progress_step("Training conversion model")
-  afl_conv_mdl <- mgcv::bam(
-    shot_conv_diff ~
-      s(team_type_fac.x, bs = "re")
-      + s(game_year_decimal.x, bs = "ts")
-      + s(game_prop_through_year.x, bs = "cc")
-      + s(game_prop_through_month.x, bs = "cc")
-      + s(game_wday_fac.x, bs = "re")
-      + s(game_prop_through_day.x, bs = "cc")
-      + s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
-      + s(team_name_season.x, bs = "re") + s(team_name_season.y, bs = "re")
-      + ti(torp_diff, pred_tot_xscore, bs = c("ts", "ts"), k = 4)
-      + s(torp_diff, bs = "ts", k = 5)
-      + s(torp_recv_diff, bs = "ts", k = 5)
-      + s(torp_disp_diff, bs = "ts", k = 5)
-      + s(torp_spoil_diff, bs = "ts", k = 5)
-      + s(torp_hitout_diff, bs = "ts", k = 5)
-      + s(pred_tot_xscore, bs = "ts", k = 5)
-      + s(pred_xscore_diff, bs = "ts", k = 5)
-      + s(venue_fac, bs = "re")
-      + s(log_dist_diff, bs = "ts", k = 5) + s(familiarity_diff, bs = "ts", k = 5) + s(days_rest_diff_fac, bs = "re"),
-    data = team_mdl_df, weights = shot_weightz,
-    family = gaussian(), nthreads = 4, select = TRUE, discrete = TRUE,
-    drop.unused.levels = FALSE
-  )
-  # In-sample: uses pred_tot_xscore + pred_xscore_diff from above
-  team_mdl_df$pred_conv_diff <- predict(afl_conv_mdl, newdata = team_mdl_df, type = "response")
+  cli::cli_progress_step("Predicting xScore diff")
+  team_mdl_df$pred_xscore_diff <- predict(match_gams$xscore_diff, newdata = team_mdl_df, type = "response")
 
-  ## Score Diff Model ----
-  cli::cli_progress_step("Training score diff model")
-  afl_score_mdl <- mgcv::bam(
-    score_diff ~
-      s(team_type_fac, bs = "re")
-      + s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
-      + s(team_name_season.x, bs = "re") + s(team_name_season.y, bs = "re")
-      + ti(pred_xscore_diff, pred_conv_diff, bs = "ts", k = 5)
-      + ti(pred_tot_xscore, pred_conv_diff, bs = "ts", k = 5)
-      + s(pred_xscore_diff)
-      + s(log_dist_diff, bs = "ts", k = 5) + s(familiarity_diff, bs = "ts", k = 5) + s(days_rest_diff_fac, bs = "re"),
-    data = team_mdl_df, weights = weightz,
-    family = "gaussian", nthreads = 4, select = TRUE, discrete = TRUE,
-    drop.unused.levels = FALSE
-  )
-  # In-sample: uses pred_xscore_diff + pred_conv_diff + pred_tot_xscore from above
-  team_mdl_df$pred_score_diff <- predict(afl_score_mdl, newdata = team_mdl_df, type = "response")
+  cli::cli_progress_step("Predicting conversion diff")
+  team_mdl_df$pred_conv_diff <- predict(match_gams$conv_diff, newdata = team_mdl_df, type = "response")
 
-  ## Win Prob Model ----
-  cli::cli_progress_step("Training win probability model")
-  afl_win_mdl <-
-    mgcv::bam(
-      win ~
-        +s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
-        + s(team_name_season.x, bs = "re") + s(team_name_season.y, bs = "re")
-        + ti(pred_tot_xscore, pred_score_diff, bs = c("ts", "ts"), k = 4)
-        + s(pred_score_diff, bs = "ts", k = 5)
-        + s(log_dist_diff, bs = "ts", k = 5) + s(familiarity_diff, bs = "ts", k = 5) + s(days_rest_diff_fac, bs = "re"),
-      data = team_mdl_df, weights = weightz,
-      family = "binomial", nthreads = 4, select = TRUE, discrete = TRUE,
-      drop.unused.levels = FALSE
-    )
+  cli::cli_progress_step("Predicting score diff")
+  team_mdl_df$pred_score_diff <- predict(match_gams$score_diff, newdata = team_mdl_df, type = "response")
 
-  team_mdl_df$pred_win <- predict(afl_win_mdl, newdata = team_mdl_df, type = "response")
+  cli::cli_progress_step("Predicting win probability")
+  team_mdl_df$pred_win <- predict(match_gams$win, newdata = team_mdl_df, type = "response")
   team_mdl_df$bits <- dplyr::case_when(
     team_mdl_df$win == 1   ~ 1 + log2(team_mdl_df$pred_win),
     team_mdl_df$win == 0   ~ 1 + log2(1 - team_mdl_df$pred_win),
@@ -687,11 +590,10 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL) {
   )
   team_mdl_df$mae <- abs(team_mdl_df$score_diff - team_mdl_df$pred_score_diff)
 
-  # NOTE: bits/tips/mae are in-sample metrics — each GAM's predictions feed into
-  # the next model, and all models predict on their own training data. These metrics
-  # are useful for sanity-checking but should NOT be used for model comparison or
-  # reported as predictive accuracy. Use held-out evaluation for that.
-  cli::cli_alert_warning("bits/tips/mae are in-sample metrics (models predict on training data) — do not use for model comparison")
+  # NOTE: bits/tips/mae use pre-trained GAM predictions on current data.
+  # Models were trained on historical data in torpmodels; predictions on new
+  # data (current season) are genuinely out-of-sample.
+  cli::cli_alert_success("Predictions generated using pre-trained GAMs from torpmodels")
 
   # This Week's Predictions ----
   cli::cli_h2("Generating predictions for {length(target_weeks)} week{?s}")

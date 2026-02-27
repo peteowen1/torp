@@ -266,26 +266,22 @@ compare_models_statistical <- function(model_results, test_type = "simple") {
       model1 <- model_results[[i]]
       model2 <- model_results[[j]]
 
-      # Simple comparison based on AUC difference and confidence intervals
+      # Compare based on AUC difference and CI overlap
       auc_diff <- model1$auc - model2$auc
-      
-      # Simple significance test based on non-overlapping confidence intervals
+
+      # Non-overlapping CIs indicate likely significant difference
+      ci_non_overlap <- FALSE
       if (!is.na(model1$auc_ci_upper) && !is.na(model2$auc_ci_lower)) {
-        significant <- (model1$auc_ci_lower > model2$auc_ci_upper) || (model2$auc_ci_lower > model1$auc_ci_upper)
-        p_value <- if (significant) 0.01 else 0.50  # Rough approximation
-      } else {
-        significant <- abs(auc_diff) > 0.05  # Simple threshold
-        p_value <- if (significant) 0.01 else 0.50
+        ci_non_overlap <- (model1$auc_ci_lower > model2$auc_ci_upper) ||
+                          (model2$auc_ci_lower > model1$auc_ci_upper)
       }
 
       comparison_results <- rbind(comparison_results, data.frame(
         model1 = model1$model_name,
         model2 = model2$model_name,
-        test_statistic = auc_diff,
-        p_value = p_value,
         auc_diff = auc_diff,
-        significant = significant,
-        test_type = "AUC Difference"
+        ci_non_overlap = ci_non_overlap,
+        test_type = "AUC Difference (CI overlap check)"
       ))
     }
   }
@@ -334,10 +330,10 @@ create_validation_report <- function(evaluation_results, comparison_results = NU
 
     for (i in 1:nrow(comparison_results)) {
       row <- comparison_results[i, ]
+      ci_note <- if (row$ci_non_overlap) "CIs non-overlapping" else "CIs overlap"
       report <- paste0(report,
-        sprintf("%s vs %s: p = %.4f %s\n",
-                row$model1, row$model2, row$p_value,
-                if (row$significant) "(significant)" else "(not significant)")
+        sprintf("%s vs %s: AUC diff = %.4f (%s)\n",
+                row$model1, row$model2, row$auc_diff, ci_note)
       )
     }
   }
