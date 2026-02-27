@@ -30,6 +30,44 @@ set_torp_data_repo <- function(repo) {
   cli::cli_inform("TORP data repository set to: {repo}")
 }
 
+# Release asset cache (session-scoped, no TTL needed)
+.torp_release_cache <- new.env(parent = emptyenv())
+
+#' Get filenames available in a GitHub release
+#'
+#' Queries the GitHub API via piggyback for the list of assets attached to a
+#' release tag. Results are cached per tag for the session so repeated calls
+#' (e.g. across multiple `load_*()` calls) don't hit the network.
+#'
+#' @param release_tag Character. The release tag name (e.g. "predictions-data").
+#' @return Character vector of filenames, or NULL if the query fails.
+#' @keywords internal
+get_release_assets <- function(release_tag) {
+  if (exists(release_tag, envir = .torp_release_cache)) {
+    return(get(release_tag, envir = .torp_release_cache))
+  }
+
+  repo_parts <- strsplit(get_torp_data_repo(), "/")[[1]]
+
+  assets <- tryCatch({
+    resp <- gh::gh(
+      "GET /repos/{owner}/{repo}/releases/tags/{tag}",
+      owner = repo_parts[1],
+      repo = repo_parts[2],
+      tag = release_tag
+    )
+    vapply(resp$assets, function(a) a$name, character(1))
+  }, error = function(e) {
+    NULL
+  })
+
+  if (!is.null(assets)) {
+    assign(release_tag, assets, envir = .torp_release_cache)
+  }
+
+  assets
+}
+
 # Helper functions
 
 #' Validate rounds
@@ -60,23 +98,17 @@ validate_rounds <- function(rounds) {
 #' @return A validated numeric vector of seasons
 #' @keywords internal
 validate_seasons <- function(seasons) {
-  if (isTRUE(seasons)) seasons <- 2021:(get_afl_season())
+  current_year <- as.integer(format(Sys.Date(), "%Y"))
+
+  if (isTRUE(seasons)) seasons <- 2021:current_year
 
   if (!is.numeric(seasons)) {
     cli::cli_abort("Seasons must be numeric values or TRUE")
   }
 
-  current_season <- tryCatch({
-    get_afl_season()
-  }, error = function(e) {
-    fallback <- as.integer(format(Sys.Date(), "%Y"))
-    cli::cli_warn("Could not determine current AFL season, using {fallback} as default")
-    fallback
-  })
-
-  invalid_seasons <- seasons[seasons < 2021 | seasons > current_season]
+  invalid_seasons <- seasons[seasons < 2021 | seasons > current_year]
   if (length(invalid_seasons) > 0) {
-    cli::cli_abort("Invalid season years: {paste(invalid_seasons, collapse = ', ')}. Seasons must be between 2021 and {current_season}")
+    cli::cli_abort("Invalid season years: {paste(invalid_seasons, collapse = ', ')}. Seasons must be between 2021 and {current_year}")
   }
 
   return(seasons)
@@ -147,12 +179,24 @@ generate_urls <- function(data_type, file_prefix, seasons, rounds = NULL, prefer
     urls <- sort(urls)
   }
 
-  # Filter out future URLs by parsing season/round numerically from filenames
-  # Only fetch current_round lazily — when a filename actually has a round to check
+  # Filter URLs against actual release assets (ground truth).
+  # Falls back to heuristic future-URL filter if the API call fails.
+  assets <- get_release_assets(data_type)
+
+  if (!is.null(assets)) {
+    requested_files <- basename(urls)
+    keep <- requested_files %in% assets
+    n_dropped <- sum(!keep)
+    if (n_dropped > 0) {
+      cli::cli_inform("Filtered {n_dropped} URL{?s} not found in {.val {data_type}} release.")
+    }
+    return(as.character(urls[keep]))
+  }
+
+  # Fallback: filter out future URLs by parsing season/round from filenames
   n_before <- length(urls)
   keep <- vapply(urls, function(u) {
     fname <- tools::file_path_sans_ext(basename(u))
-    # Extract trailing numeric segments: e.g. "pbp_data_2026_05" -> c(2026, 5)
     parts <- regmatches(fname, gregexpr("[0-9]+", fname))[[1]]
     if (length(parts) == 0) return(TRUE)
     file_season <- as.numeric(parts[length(parts) - (length(parts) > 1)])
@@ -162,13 +206,10 @@ generate_urls <- function(data_type, file_prefix, seasons, rounds = NULL, prefer
     }
     if (file_season < current_season) return(TRUE)
     if (file_season > current_season) return(FALSE)
-    # Same season: check round if applicable
     if (data_type == "fixtures-data") return(TRUE)
     if (length(parts) >= 2) {
       file_round <- as.numeric(parts[length(parts)])
-      # "_all" files have no numeric round suffix, keep them
       if (grepl("_all\\.parquet$", u)) return(TRUE)
-      # Lazy-fetch current round only when actually needed
       if (is.null(current_round)) current_round <<- get_afl_week()
       return(file_round <= current_round)
     }

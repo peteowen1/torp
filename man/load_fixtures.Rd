@@ -10,7 +10,8 @@ load_fixtures(
   use_cache = TRUE,
   cache_ttl = 3600,
   verbose = FALSE,
-  columns = NULL
+  columns = NULL,
+  use_disk_cache = FALSE
 )
 }
 \arguments{

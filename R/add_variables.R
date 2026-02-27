@@ -298,14 +298,13 @@ get_shot_result_preds <- function(df) {
   return(preds)
 }
 
-#' Load Model with Fallback
+#' Load Model from torpmodels
 #'
-#' Attempts to load a model from torpmodels package first, then falls back
-#' to package data if torpmodels is not available. Models are cached in memory
-#' to avoid repeated loading.
+#' Loads a model from the torpmodels package with in-memory caching.
+#' Install torpmodels via `devtools::install_github("peteowen1/torpmodels")`.
 #'
 #' @param model_name Short model name: "ep", "wp", "shot", or "xgb_win"
-#' @return The loaded model object, or NULL if not available
+#' @return The loaded model object.
 #' @keywords internal
 load_model_with_fallback <- function(model_name) {
   # Check cache first
@@ -313,46 +312,29 @@ load_model_with_fallback <- function(model_name) {
     return(get(model_name, envir = .torp_model_cache))
   }
 
-  # Map short names to full names for package data
-  model_map <- list(
-    ep = "ep_model",
-    wp = "wp_model",
-    shot = "shot_ocat_mdl",
-    xgb_win = "xgb_win_model"
+  valid_models <- c("ep", "wp", "shot", "xgb_win", "match_gams")
+  if (!model_name %in% valid_models) {
+    cli::cli_abort("Unknown model name: {model_name}. Must be one of: {paste(valid_models, collapse = ', ')}")
+  }
+
+  if (!requireNamespace("torpmodels", quietly = TRUE)) {
+    cli::cli_abort(c(
+      "torpmodels package is required but not installed.",
+      "i" = 'Install with: devtools::install_github("peteowen1/torpmodels")'
+    ))
+  }
+
+  model <- tryCatch(
+    torpmodels::load_torp_model(model_name, verbose = FALSE),
+    error = function(e) {
+      cli::cli_abort(c(
+        "Failed to load {model_name} model from torpmodels.",
+        "x" = e$message,
+        "i" = "Try: torpmodels::clear_model_cache(); then retry."
+      ))
+    }
   )
 
-  full_name <- model_map[[model_name]]
-  if (is.null(full_name)) {
-    cli::cli_warn("Unknown model name: {model_name}")
-    return(NULL)
-  }
-
-  model <- NULL
-
-  # Try torpmodels first if available
-  if (requireNamespace("torpmodels", quietly = TRUE)) {
-    model <- tryCatch({
-      torpmodels::load_torp_model(model_name, verbose = FALSE)
-    }, error = function(e) {
-      cli::cli_warn("torpmodels load failed for {model_name}: {e$message}")
-      NULL
-    })
-  }
-
-  # Fall back to package data if torpmodels didn't work
-  if (is.null(model)) {
-    tryCatch({
-      utils::data(list = full_name, package = "torp", envir = environment())
-      model <- get(full_name, envir = environment())
-    }, error = function(e) {
-      cli::cli_warn("Package data load failed for {full_name}: {e$message}")
-    })
-  }
-
-  # Store in cache if successfully loaded
-  if (!is.null(model)) {
-    assign(model_name, model, envir = .torp_model_cache)
-  }
-
-  return(model)
+  assign(model_name, model, envir = .torp_model_cache)
+  model
 }

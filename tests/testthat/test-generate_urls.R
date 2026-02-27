@@ -19,7 +19,8 @@ test_that("generate_urls always uses _all for chains and pbp", {
 test_that("generate_urls filters future per-round URLs for current season", {
   local_mocked_bindings(
     get_afl_season = function(...) 2025,
-    get_afl_week = function(...) 5
+    get_afl_week = function(...) 5,
+    get_release_assets = function(...) NULL
   )
 
   # Past season: all rounds kept
@@ -47,7 +48,8 @@ test_that("generate_urls filters future per-round URLs for current season", {
 test_that("generate_urls keeps fixture URLs regardless of round", {
   local_mocked_bindings(
     get_afl_season = function(...) 2025,
-    get_afl_week = function(...) 5
+    get_afl_week = function(...) 5,
+    get_release_assets = function(...) NULL
   )
 
   urls <- torp:::generate_urls("fixtures-data", "fixtures", seasons = 2025)
@@ -58,7 +60,8 @@ test_that("generate_urls keeps fixture URLs regardless of round", {
 test_that("generate_urls keeps _all aggregated files for current season", {
   local_mocked_bindings(
     get_afl_season = function(...) 2025,
-    get_afl_week = function(...) 5
+    get_afl_week = function(...) 5,
+    get_release_assets = function(...) NULL
   )
 
   urls <- torp:::generate_urls("pbp-data", "pbp_data", seasons = 2025, rounds = 0:28)

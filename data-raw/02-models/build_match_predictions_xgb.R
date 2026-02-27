@@ -110,7 +110,7 @@ cv_results <- purrr::pmap(gr, function(eta, max_depth, subsample,
     min_child_weight = min_child_weight,
     gamma = gamma,
     best_logloss = min(cv$evaluation_log$test_logloss_mean),
-    best_nrounds = cv$best_iteration
+    best_nrounds = which.min(cv$evaluation_log$test_logloss_mean)
   )
 },
 .progress = T
