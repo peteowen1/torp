@@ -177,12 +177,7 @@ add_shot_vars <- function(df) {
 #' @importFrom stats predict model.matrix
 #' @importFrom utils data
 get_epv_preds <- function(df) {
-  # Try to load model from torpmodels first, then fall back to package data
   ep_model <- load_model_with_fallback("ep")
-
-  if (is.null(ep_model)) {
-    cli::cli_abort("EP model not available. Install torpmodels or ensure package data is available.")
-  }
 
   # Log prediction event
   input_hash <- paste0("ep_", nrow(df), "_", ncol(df), "_", as.integer(Sys.time()))
@@ -225,7 +220,6 @@ get_epv_preds <- function(df) {
     return(preds)
 
   }, error = function(e) {
-    warning(paste("EP model prediction failed:", e$message, "- Input hash:", input_hash))
     cli::cli_abort("EP model prediction failed: {e$message}")
   })
 }
@@ -241,12 +235,7 @@ get_epv_preds <- function(df) {
 #' @importFrom stats predict model.matrix
 #' @importFrom utils data
 get_wp_preds <- function(df) {
-  # Try to load model from torpmodels first, then fall back to package data
   wp_model <- load_model_with_fallback("wp")
-
-  if (is.null(wp_model)) {
-    cli::cli_abort("WP model not available. Install torpmodels or ensure package data is available.")
-  }
 
   if (inherits(wp_model, "xgb.Booster") && !requireNamespace("xgboost", quietly = TRUE)) {
     cli::cli_abort("xgboost package required but not available")
@@ -277,15 +266,9 @@ get_wp_preds <- function(df) {
 #' @importFrom stats predict
 #' @importFrom utils data
 get_shot_result_preds <- function(df) {
-  # Try to load model from torpmodels first, then fall back to package data
   shot_ocat_mdl <- load_model_with_fallback("shot")
 
-  if (is.null(shot_ocat_mdl)) {
-    cli::cli_abort("Shot model not available. Install torpmodels or ensure package data is available.")
-  }
-
   # mgcv must be loaded explicitly for GAM/BAM predict() — its internal
-
   # Xbd function is not found otherwise
   if (inherits(shot_ocat_mdl, c("gam", "bam"))) {
     if (!requireNamespace("mgcv", quietly = TRUE)) {
@@ -303,7 +286,7 @@ get_shot_result_preds <- function(df) {
 #' Loads a model from the torpmodels package with in-memory caching.
 #' Install torpmodels via `devtools::install_github("peteowen1/torpmodels")`.
 #'
-#' @param model_name Short model name: "ep", "wp", "shot", or "xgb_win"
+#' @param model_name Short model name: "ep", "wp", "shot", "match_gams", or "xgb_win"
 #' @return The loaded model object.
 #' @keywords internal
 load_model_with_fallback <- function(model_name) {

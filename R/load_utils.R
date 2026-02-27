@@ -58,6 +58,7 @@ get_release_assets <- function(release_tag) {
     )
     vapply(resp$assets, function(a) a$name, character(1))
   }, error = function(e) {
+    cli::cli_inform("Could not fetch release assets for {.val {release_tag}}: {e$message}")
     NULL
   })
 
