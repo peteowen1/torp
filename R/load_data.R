@@ -16,14 +16,14 @@
 #' save_to_release(my_df, "my_data", "v1.0.0")
 #' }
 save_to_release <- function(df, file_name, release_tag) {
-  .f_name <- paste0(file_name, ".parquet")
+  f_name <- paste0(file_name, ".parquet")
   tf <- tempfile(fileext = ".parquet")
   on.exit(unlink(tf), add = TRUE)
 
   tryCatch(
     arrow::write_parquet(df, tf),
     error = function(e) {
-      cli::cli_abort("Failed to write parquet file {.val {.f_name}}: {conditionMessage(e)}")
+      cli::cli_abort("Failed to write parquet file {.val {f_name}}: {conditionMessage(e)}")
     }
   )
 
@@ -31,9 +31,9 @@ save_to_release <- function(df, file_name, release_tag) {
     piggyback::pb_upload(tf,
                          repo = get_torp_data_repo(),
                          tag = release_tag,
-                         name = .f_name),
+                         name = f_name),
     error = function(e) {
-      cli::cli_abort("Failed to upload {.val {.f_name}} to release {.val {release_tag}}: {conditionMessage(e)}")
+      cli::cli_abort("Failed to upload {.val {f_name}} to release {.val {release_tag}}: {conditionMessage(e)}")
     }
   )
 
