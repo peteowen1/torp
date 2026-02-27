@@ -38,13 +38,13 @@ torp_ratings(
 
 \item{round_val}{The round to calculate ratings for. Default is the next round.}
 
-\item{decay}{The decay factor for weighting games. Default is 365.}
+\item{decay}{The decay factor for weighting games. Default is \code{RATING_DECAY_DEFAULT_DAYS}.}
 
-\item{loading}{The loading factor for TORP calculations. Default is 1.5.}
+\item{loading}{The loading factor for TORP calculations. Default is \code{RATING_LOADING_DEFAULT}.}
 
-\item{prior_games_recv}{The number of prior games to consider for receiving. Default is 4.}
+\item{prior_games_recv}{The number of prior games to consider for receiving. Default is \code{RATING_PRIOR_GAMES_RECV}.}
 
-\item{prior_games_disp}{The number of prior games to consider for disposal. Default is 6.}
+\item{prior_games_disp}{The number of prior games to consider for disposal. Default is \code{RATING_PRIOR_GAMES_DISP}.}
 
 \item{plyr_tm_df}{Optional pre-loaded player team data. If NULL, will load automatically.}
 
@@ -53,6 +53,8 @@ torp_ratings(
 \item{prior_games_spoil}{Prior games for spoil shrinkage. Default is \code{RATING_PRIOR_GAMES_SPOIL}.}
 
 \item{prior_games_hitout}{Prior games for hitout shrinkage. Default is \code{RATING_PRIOR_GAMES_HITOUT}.}
+
+\item{fixtures}{Optional pre-loaded fixtures data. If NULL, will load automatically.}
 }
 \value{
 A data frame containing player TORP ratings.

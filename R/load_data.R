@@ -237,6 +237,7 @@ load_player_game_data <- function(seasons = get_afl_season(), use_disk_cache = F
 #' @param cache_ttl Numeric. Time-to-live for cached data in seconds. Default is 3600 (1 hour).
 #' @param verbose Logical. If TRUE, prints cache hit/miss information.
 #' @param columns Optional character vector of column names to read. If NULL (default), reads all columns.
+#' @param use_disk_cache Logical. If TRUE, uses persistent disk caching. Default is FALSE.
 #'
 #' @return A data frame containing AFL fixture and schedule data.
 #' @seealso [load_results()], [load_teams()], [load_predictions()]

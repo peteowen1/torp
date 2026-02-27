@@ -42,10 +42,10 @@ test_that("load_model_with_fallback handles unknown model names", {
   # Clear cache to ensure fresh state
   clear_model_cache()
 
-  result <- suppressWarnings(torp:::load_model_with_fallback("nonexistent_model"))
-
-  # Should return NULL and warn
-  expect_null(result)
+  expect_error(
+    torp:::load_model_with_fallback("nonexistent_model"),
+    "Unknown model name"
+  )
 })
 
 test_that("load_model_with_fallback caches loaded models", {
@@ -285,13 +285,11 @@ test_that("add_wp_vars adds context columns", {
 # -----------------------------------------------------------------------------
 
 test_that("load_model_with_fallback knows all valid model names", {
-  valid_names <- c("ep", "wp", "shot", "xgb_win")
+  valid_names <- c("ep", "wp", "shot", "xgb_win", "match_gams")
 
   for (name in valid_names) {
-    # Should not return NULL for valid name (unless model unavailable)
-    result <- suppressWarnings(torp:::load_model_with_fallback(name))
-    # Either it loads or returns NULL (but doesn't error on the name itself)
-    expect_true(is.null(result) || !is.null(result))
+    # Should not error for a valid model name (model may or may not be available)
+    expect_no_error(suppressWarnings(torp:::load_model_with_fallback(name)))
   }
 })
 

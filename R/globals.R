@@ -87,5 +87,18 @@ utils::globalVariables(c(
   "contested_marks", "metres_gained", "intercepts", "rebound50s",
   "one_percenters", "frees_for", "frees_against", "clangers",
   "turnovers", "score_involvements", "goal_assists",
-  "extended_stats_ground_ball_gets"
+  "extended_stats_ground_ball_gets",
+
+  # clean_model_data_epv_dt variables (data.table EPV pipeline)
+  "lead_x_tot", "lead_y_tot", "lag_ti_flt", "lead_ti_flt",
+  "mirror", "opp_points",
+  "tmp_lag1_ti", "tmp_lag2_ti", "tmp_lag1_tm", "tmp_lag2_tm", "tmp_lag3_tm",
+
+  "tmp_lag1_x", "tmp_lag2_x", "tmp_lead1_x", "tmp_lead2_x",
+  "tmp_lead1_tm", "tmp_lead2_tm",
+  "lv_lag1_x", "lv_lag1_y", "lv_lag1_gx", "lv_lag5_gx",
+  "lv_lag1_ps", "lv_lag5_ps", "lv_lag1_tm", "lv_lag5_tm",
+  "lv_lead1_x", "lv_lead1_y",
+  "lv_lag1_desc", "lv_lead1_desc", "lv_lag1_pn", "lv_lead1_pn",
+  "lag_goal_x", "lag_goal_x5", "lag_time5", "speed1", "speed5"
 ))

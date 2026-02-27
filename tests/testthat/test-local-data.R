@@ -250,8 +250,8 @@ test_that("CREDIT_POS_ADJ_QUANTILE constants are valid quantiles", {
 })
 
 test_that("CREDIT_POS_ADJ_QUANTILE constants have expected values", {
-  expect_equal(torp:::CREDIT_POS_ADJ_QUANTILE_RECV, 0.3118)
-  expect_equal(torp:::CREDIT_POS_ADJ_QUANTILE_DISP, 0.3111)
-  expect_equal(torp:::CREDIT_POS_ADJ_QUANTILE_SPOIL, 0.3026)
-  expect_equal(torp:::CREDIT_POS_ADJ_QUANTILE_HITOUT, 0.4971)
+  expect_equal(torp:::CREDIT_POS_ADJ_QUANTILE_RECV, 0.3500)
+  expect_equal(torp:::CREDIT_POS_ADJ_QUANTILE_DISP, 0.3500)
+  expect_equal(torp:::CREDIT_POS_ADJ_QUANTILE_SPOIL, 0.3500)
+  expect_equal(torp:::CREDIT_POS_ADJ_QUANTILE_HITOUT, 0.5100)
 })
