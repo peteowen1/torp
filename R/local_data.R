@@ -204,6 +204,10 @@ save_locally <- function(df, file_name) {
     invisible(TRUE)
   }, error = function(e) {
     cli::cli_warn("Failed to save locally: {conditionMessage(e)}")
+    # Remove stale local file so load functions don't serve outdated data
+    if (unlink(path) != 0L) {
+      cli::cli_warn("Could not remove stale local file: {.path {basename(path)}}")
+    }
     invisible(FALSE)
   })
 }

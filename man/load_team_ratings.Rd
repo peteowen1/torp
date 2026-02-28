@@ -11,14 +11,14 @@ load_team_ratings(columns = NULL)
 }
 \value{
 A data frame containing team-level ratings with columns including
-\code{season}, \code{round}, \code{team}, \code{team_torp}, \code{team_attack}, \code{team_defence},
-\code{top_player}, \code{top_torp}, and \code{n_players}.
+\code{season}, \code{round}, \code{team}, \code{team_torp}, \code{team_recv}, \code{team_disp},
+\code{team_spoil}, \code{team_hitout}, \code{top_player}, \code{top_torp}, and \code{n_players}.
 }
 \description{
 Loads pre-computed team-level TORP aggregates from the
 \href{https://github.com/peteowen1/torpdata}{torpdata repository}.
-This data summarises per-round team ratings derived from individual
-player TORP ratings.
+Aggregates are the sum of TORP ratings for each team's top-21 players
+(filtered to TORP > 0) per round, with subcategory breakdowns.
 }
 \examples{
 \donttest{
