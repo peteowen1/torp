@@ -277,6 +277,12 @@ update_fixtures <- function(season) {
     return(invisible(NULL))
   }
 
+  # Drop list-columns (nested structs from API) that arrow can't serialize
+  list_cols <- names(fixtures)[vapply(fixtures, is.list, logical(1))]
+  if (length(list_cols) > 0) {
+    fixtures <- fixtures[, !names(fixtures) %in% list_cols, drop = FALSE]
+  }
+
   file_name <- glue::glue("fixtures_{season}")
   save_to_release(df = fixtures, file_name = file_name, release_tag = "fixtures-data")
 
@@ -579,13 +585,22 @@ run_daily_release <- function(force = FALSE) {
   cli::cli_h2("Updating seasonal data")
   tictoc::tic("seasonal_data")
 
-  update_xg_data(current_season)
-  update_fixtures(current_season)
-  update_results(current_season)
-  update_player_stats(current_season)
-  update_teams(current_season)
-  update_player_details(current_season)
-  update_player_game_data(current_season)
+  seasonal_failures <- character()
+  seasonal_fns <- list(
+    xg_data = update_xg_data,
+    fixtures = update_fixtures,
+    results = update_results,
+    player_stats = update_player_stats,
+    teams = update_teams,
+    player_details = update_player_details,
+    player_game_data = update_player_game_data
+  )
+  for (nm in names(seasonal_fns)) {
+    tryCatch(seasonal_fns[[nm]](current_season), error = function(e) {
+      seasonal_failures <<- c(seasonal_failures, nm)
+      cli::cli_warn("Failed: {nm}: {conditionMessage(e)}")
+    })
+  }
 
   tictoc::toc(log = TRUE)
 
