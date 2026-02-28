@@ -257,7 +257,7 @@ tryCatch({
   team_ratings <- ratings_for_teams |>
     dplyr::filter(.data$torp > 0) |>
     dplyr::group_by(.data$season, .data$round, .data$team) |>
-    dplyr::mutate(tm_rnk = rank(-.data$torp)) |>
+    dplyr::mutate(tm_rnk = rank(-.data$torp, ties.method = "first")) |>
     dplyr::filter(.data$tm_rnk <= 21) |>
     dplyr::summarise(
       team_torp    = round(sum(.data$torp, na.rm = TRUE), 2),

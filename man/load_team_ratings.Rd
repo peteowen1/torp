@@ -17,8 +17,8 @@ A data frame containing team-level ratings with columns including
 \description{
 Loads pre-computed team-level TORP aggregates from the
 \href{https://github.com/peteowen1/torpdata}{torpdata repository}.
-This data summarises per-round team ratings derived from individual
-player TORP ratings.
+Aggregates are the sum of TORP ratings for each team's top-21 players
+(filtered to TORP > 0) per round, with subcategory breakdowns.
 }
 \examples{
 \donttest{

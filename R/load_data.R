@@ -523,8 +523,8 @@ load_player_season_ratings <- function(seasons = get_afl_season(), use_disk_cach
 #'
 #' @description Loads pre-computed team-level TORP aggregates from the
 #'   [torpdata repository](https://github.com/peteowen1/torpdata).
-#'   This data summarises per-round team ratings derived from individual
-#'   player TORP ratings.
+#'   Aggregates are the sum of TORP ratings for each team's top-21 players
+#'   (filtered to TORP > 0) per round, with subcategory breakdowns.
 #'
 #' @param columns Optional character vector of column names to read. If NULL (default), reads all columns.
 #'

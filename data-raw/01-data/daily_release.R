@@ -631,8 +631,9 @@ run_daily_release <- function(force = FALSE) {
   # -------------------------------------------------------------------------
   tictoc::toc(log = TRUE)
 
-  if (length(derived_failures) > 0) {
-    cli::cli_alert_warning("Daily release complete with {length(derived_failures)} derived data failure{?s}: {paste(derived_failures, collapse = ', ')}")
+  all_failures <- c(seasonal_failures, derived_failures)
+  if (length(all_failures) > 0) {
+    cli::cli_alert_warning("Daily release complete with {length(all_failures)} failure{?s}: {paste(all_failures, collapse = ', ')}")
   } else {
     cli::cli_alert_success("Daily release complete!")
   }
