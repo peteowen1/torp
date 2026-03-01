@@ -8,7 +8,8 @@ player_skill_profile(
   player_name,
   ref_date = Sys.Date(),
   seasons = TRUE,
-  params = NULL
+  params = NULL,
+  skills = NULL
 )
 }
 \arguments{
@@ -19,6 +20,10 @@ player_skill_profile(
 \item{seasons}{Seasons to include. Numeric vector or TRUE for all.}
 
 \item{params}{Hyperparameters from \code{default_skill_params()}.}
+
+\item{skills}{Optional pre-computed skills data (e.g. from
+\code{load_player_skills(TRUE)}). If provided, skips the expensive
+data loading and estimation steps. If NULL (default), computes from scratch.}
 }
 \value{
 A list of class \code{torp_skill_profile} with elements:

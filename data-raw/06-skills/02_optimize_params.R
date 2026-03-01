@@ -1,7 +1,8 @@
 # 02_optimize_params.R
 # ====================
 # Hyperparameter optimization for skill estimation.
-# Optimizes prior strength and decay rate (lambda) per stat category.
+# Optimizes prior strength and decay rate (lambda) for rate stat categories.
+# Efficiency stat hyperparameters are left at defaults.
 #
 # Objective: minimize TOG-weighted MSE of next-match rate prediction.
 # For rate stats, works in per-full-game rate space (analogous to panna's

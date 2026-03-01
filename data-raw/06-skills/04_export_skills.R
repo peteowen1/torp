@@ -2,7 +2,7 @@
 # ==================
 # Export computed player skills to torpdata releases.
 #
-# Input:  cache-skills/02_player_skills.rds
+# Input:  cache-skills/03_player_skills.rds
 # Output: torpdata player_skills-data release (parquet per season)
 
 # Setup ----
@@ -26,6 +26,9 @@ cli::cli_h1("Exporting to torpdata")
 
 seasons <- sort(unique(all_skills$season))
 
+n_success <- 0
+n_fail <- 0
+
 for (szn in seasons) {
   szn_data <- all_skills[all_skills$season == szn, ]
 
@@ -34,9 +37,18 @@ for (szn in seasons) {
   tryCatch({
     save_to_release(szn_data, file_name, release_tag)
     cli::cli_alert_success("{szn}: {nrow(szn_data)} rows exported")
+    n_success <- n_success + 1
   }, error = function(e) {
     cli::cli_warn("Failed to export {szn}: {conditionMessage(e)}")
+    n_fail <<- n_fail + 1
   })
 }
 
-cli::cli_alert_success("Export complete!")
+if (n_success == 0) {
+  cli::cli_abort("All {n_fail} exports failed. No data was published.")
+}
+if (n_fail > 0) {
+  cli::cli_warn("{n_fail}/{length(seasons)} season exports failed")
+} else {
+  cli::cli_alert_success("Export complete!")
+}

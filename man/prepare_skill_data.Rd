@@ -14,8 +14,8 @@ prepare_skill_data(player_game_data, player_stats)
 \value{
 A data.table with one row per player-match containing:
 identifiers (player_id, match_id, player_name, season, round, team),
-match_date, tog (time on ground as fraction), position, and all
-stat columns referenced by \code{skill_stat_definitions()}.
+match_date_skill (Date), tog (time on ground as fraction), position,
+and all stat columns referenced by \code{skill_stat_definitions()}.
 }
 \description{
 Joins player game data with player stats to produce a single table with

@@ -74,8 +74,8 @@
 #'
 #' @return A data.table with one row per player-match containing:
 #'   identifiers (player_id, match_id, player_name, season, round, team),
-#'   match_date, tog (time on ground as fraction), position, and all
-#'   stat columns referenced by \code{skill_stat_definitions()}.
+#'   match_date_skill (Date), tog (time on ground as fraction), position,
+#'   and all stat columns referenced by \code{skill_stat_definitions()}.
 #'
 #' @importFrom data.table as.data.table
 #' @export
@@ -94,8 +94,11 @@ prepare_skill_data <- function(player_game_data, player_stats) {
   pid_col <- intersect(c("player_id", "player_player_player_player_id"), names(ps))
   mid_col <- intersect(c("match_id", "provider_id"), names(ps))
   if (length(pid_col) == 0 || length(mid_col) == 0) {
-    cli::cli_warn("Cannot find player/match ID columns in player_stats; skipping disposal_efficiency join")
-    pgd[, disposal_efficiency_pct_x_disposals := 0]
+    cli::cli_warn(c(
+      "Cannot find player/match ID columns in player_stats.",
+      "i" = "disposal_efficiency skill will rely entirely on the prior."
+    ))
+    pgd[, disposal_efficiency_pct_x_disposals := NA_real_]
   } else {
     pid_col <- pid_col[1]
     mid_col <- mid_col[1]
@@ -105,8 +108,13 @@ prepare_skill_data <- function(player_game_data, player_stats) {
       ps_slim <- ps[, c(pid_col, mid_col, "disposal_efficiency"), with = FALSE]
       # Normalise column names to match pgd
       data.table::setnames(ps_slim, c(pid_col, mid_col), c("player_id", "match_id"), skip_absent = TRUE)
+      ps_slim <- unique(ps_slim, by = c("player_id", "match_id"))
 
+      n_before <- nrow(pgd)
       pgd <- merge(pgd, ps_slim, by = c("player_id", "match_id"), all.x = TRUE, suffixes = c("", "_ps"))
+      if (nrow(pgd) != n_before) {
+        cli::cli_warn("Merge with player_stats changed row count from {n_before} to {nrow(pgd)}")
+      }
 
       # Handle potential column name conflicts
       de_col <- if ("disposal_efficiency_ps" %in% names(pgd)) "disposal_efficiency_ps" else "disposal_efficiency"
@@ -119,7 +127,8 @@ prepare_skill_data <- function(player_game_data, player_stats) {
         pgd[, disposal_efficiency_ps := NULL]
       }
     } else {
-      pgd[, disposal_efficiency_pct_x_disposals := 0]
+      cli::cli_warn("disposal_efficiency column not found in player_stats; skill will rely on prior")
+      pgd[, disposal_efficiency_pct_x_disposals := NA_real_]
     }
   }
 
@@ -217,7 +226,8 @@ prepare_skill_data <- function(player_game_data, player_stats) {
 #'
 #' @param skill_data A data.table from \code{prepare_skill_data()}.
 #' @param ref_date Date to estimate skills as of. Only matches before this
-#'   date are used. If NULL, uses the max date in the data.
+#'   date are used. If NULL, includes all available matches (sets ref_date
+#'   to one day after the latest match in the data).
 #' @param params Named list of hyperparameters from \code{default_skill_params()}.
 #' @param stat_defs Output of \code{skill_stat_definitions()}. If NULL, uses default.
 #'
@@ -284,13 +294,17 @@ estimate_player_skills <- function(skill_data, ref_date = NULL,
   eff_defs <- stat_defs[stat_defs$type == "efficiency", ]
 
   skill_results <- list()
+  skipped_stats <- character(0)
 
   # --- Rate stats (Gamma-Poisson) ---
   for (i in seq_len(nrow(rate_defs))) {
     stat_nm <- rate_defs$stat_name[i]
     src_col <- rate_defs$source_col[i]
 
-    if (!src_col %in% names(dt)) next
+    if (!src_col %in% names(dt)) {
+      skipped_stats <- c(skipped_stats, stat_nm)
+      next
+    }
 
     vals <- as.numeric(dt[[src_col]])
     vals[is.na(vals)] <- 0
@@ -420,15 +434,28 @@ estimate_player_skills <- function(skill_data, ref_date = NULL,
       beta_post = (1 - mu0) * prior_str + w_den - w_num
     )]
 
+    # Guard against invalid Beta parameters (can occur when weighted
+    # successes exceed weighted attempts due to floating-point decay)
+    n_clamped <- sum(agg$alpha_post <= 0 | agg$beta_post <= 0, na.rm = TRUE)
+    if (n_clamped > 0) {
+      cli::cli_warn("Efficiency stat {.val {stat_nm}}: {n_clamped} player(s) had invalid Beta parameters, clamping to 1e-4")
+    }
+    agg[alpha_post <= 0, alpha_post := 1e-4]
+    agg[beta_post <= 0, beta_post := 1e-4]
+
     skill_col <- paste0(stat_nm, "_skill")
     lower_col <- paste0(stat_nm, "_lower")
     upper_col <- paste0(stat_nm, "_upper")
 
     agg[, (skill_col) := alpha_post / (alpha_post + beta_post)]
-    agg[, (lower_col) := suppressWarnings(stats::qbeta(ci_alpha, alpha_post, beta_post))]
-    agg[, (upper_col) := suppressWarnings(stats::qbeta(1 - ci_alpha, alpha_post, beta_post))]
+    agg[, (lower_col) := stats::qbeta(ci_alpha, alpha_post, beta_post)]
+    agg[, (upper_col) := stats::qbeta(1 - ci_alpha, alpha_post, beta_post)]
 
     skill_results[[stat_nm]] <- agg[, c("player_id", skill_col, lower_col, upper_col), with = FALSE]
+  }
+
+  if (length(skipped_stats) > 0) {
+    cli::cli_warn("Skipped {length(skipped_stats)} stat(s) due to missing columns: {paste(skipped_stats, collapse = ', ')}")
   }
 
   # Clean up temp columns
@@ -672,12 +699,19 @@ get_player_skills <- function(player_name = NULL, ref_date = NULL, seasons = TRU
 #' @importFrom data.table as.data.table
 #' @export
 aggregate_team_skills <- function(skills, team_lineups, top_n = 22) {
-  skills_dt <- data.table::as.data.table(skills)
-  lineups_dt <- data.table::as.data.table(team_lineups)
+  skills_dt <- data.table::copy(data.table::as.data.table(skills))
+  lineups_dt <- data.table::copy(data.table::as.data.table(team_lineups))
 
   # Ensure player_id columns match type
   if (is.character(skills_dt$player_id) && is.numeric(lineups_dt$player_id)) {
     lineups_dt[, player_id := as.character(player_id)]
+  }
+
+  # Drop columns from skills that would conflict with lineup columns
+  conflict_cols <- intersect(names(skills_dt), names(lineups_dt))
+  conflict_cols <- setdiff(conflict_cols, "player_id")
+  if (length(conflict_cols) > 0) {
+    skills_dt[, (conflict_cols) := NULL]
   }
 
   # Join skills to lineups
@@ -694,7 +728,6 @@ aggregate_team_skills <- function(skills, team_lineups, top_n = 22) {
   }
 
   # For each match-team, take top_n players by total skill and aggregate
-  # Use wt_games as tie-breaker for ordering
   merged[, .total_skill := rowSums(.SD, na.rm = TRUE), .SDcols = skill_cols]
 
   result <- merged[order(-`.total_skill`),

@@ -36,6 +36,7 @@ cli::cli_h1("Estimating skills by round")
 seasons <- sort(unique(skill_data$season))
 all_results <- list()
 counter <- 0
+n_failures <- 0
 
 for (szn in seasons) {
   # Get round dates from fixtures
@@ -55,6 +56,7 @@ for (szn in seasons) {
       estimate_player_skills(skill_data, ref_date = ref_date, params = params),
       error = function(e) {
         cli::cli_warn("Failed for {szn} R{rnd}: {conditionMessage(e)}")
+        n_failures <<- n_failures + 1
         NULL
       }
     )
@@ -86,6 +88,7 @@ for (szn in future_seasons) {
     estimate_player_skills(skill_data, ref_date = ref_date, params = params),
     error = function(e) {
       cli::cli_warn("Failed for {szn} R{rnd}: {conditionMessage(e)}")
+      n_failures <<- n_failures + 1
       NULL
     }
   )
@@ -97,6 +100,14 @@ for (szn in future_seasons) {
   }
 
   cli::cli_inform("Completed {szn} R{rnd} [fixture]")
+}
+
+# Check failure rate ----
+if (counter == 0) {
+  cli::cli_abort("All round estimations failed ({n_failures} errors). Aborting to prevent empty output.")
+}
+if (n_failures > 0) {
+  cli::cli_warn("{n_failures}/{counter + n_failures} round estimations failed")
 }
 
 # Combine ----

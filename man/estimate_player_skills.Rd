@@ -15,7 +15,8 @@ estimate_player_skills(
 \item{skill_data}{A data.table from \code{prepare_skill_data()}.}
 
 \item{ref_date}{Date to estimate skills as of. Only matches before this
-date are used. If NULL, uses the max date in the data.}
+date are used. If NULL, includes all available matches (sets ref_date
+to one day after the latest match in the data).}
 
 \item{params}{Named list of hyperparameters from \code{default_skill_params()}.}
 

@@ -22,5 +22,5 @@ Default 0.0013 gives about 533-day half-life.}
 \description{
 Returns sensible defaults for the Bayesian skill estimation pipeline.
 These can be overridden by optimized values from
-\code{data-raw/06-skills/03_optimize_params.R}.
+\code{data-raw/06-skills/02_optimize_params.R}.
 }
