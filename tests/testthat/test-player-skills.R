@@ -79,10 +79,15 @@ test_that("estimate_player_skills returns correct structure", {
   expect_true("goals_skill" %in% names(result))
   expect_true("goals_lower" %in% names(result))
   expect_true("goals_upper" %in% names(result))
+  expect_true("goals_raw" %in% names(result))
   expect_true("disposals_skill" %in% names(result))
+  expect_true("disposals_raw" %in% names(result))
 
-  # Should have efficiency stats
+  # Should have efficiency stats with attempts
   expect_true("goal_accuracy_skill" %in% names(result))
+  expect_true("goal_accuracy_raw" %in% names(result))
+  expect_true("goal_accuracy_attempts" %in% names(result))
+  expect_true("goal_accuracy_wt_attempts" %in% names(result))
 })
 
 test_that("player with many games has estimate close to empirical mean", {
@@ -141,6 +146,16 @@ test_that("player with many games has estimate close to empirical mean", {
 
   # Goal accuracy: 2/3 shots -> ~0.667
   expect_equal(result$goal_accuracy_skill[1], 2/3, tolerance = 0.1)
+
+  # Raw averages should be exact (no smoothing)
+  # goals_raw = sum(goals) / sum(tog) = 2 / 1 = 2.0
+  expect_equal(result$goals_raw[1], 2.0)
+
+  # goal_accuracy_raw = sum(goals) / sum(shots) = 100 / 150 = 2/3
+  expect_equal(result$goal_accuracy_raw[1], 2/3)
+
+  # goal_accuracy_attempts = total shots = 50 * 3 = 150
+  expect_equal(result$goal_accuracy_attempts[1], 150)
 })
 
 test_that("high prior_strength pulls estimates toward prior", {
