@@ -196,6 +196,36 @@ FIELD_ZONE_SCORING_50 <- 50
 FIELD_ZONE_SCORING_80 <- 80
 
 
+# Skill Estimation Constants
+# ---------------------------
+
+#' Default exponential decay rate for rate stats (per day)
+#' Half-life = ln(2) / 0.0019 ~ 365 days
+#' @keywords internal
+SKILL_LAMBDA_RATE_DEFAULT <- 0.0019
+
+#' Default exponential decay rate for efficiency stats (per day)
+#' Half-life = ln(2) / 0.0013 ~ 533 days
+#' @keywords internal
+SKILL_LAMBDA_EFFICIENCY_DEFAULT <- 0.0013
+
+#' Prior pseudo-games for Gamma-Poisson rate stats
+#' @keywords internal
+SKILL_PRIOR_GAMES_DEFAULT <- 5
+
+#' Prior pseudo-attempts for Beta-Binomial efficiency stats
+#' @keywords internal
+SKILL_PRIOR_ATTEMPTS_DEFAULT <- 30
+
+#' Minimum weighted games for a player to appear in skill output
+#' @keywords internal
+SKILL_MIN_GAMES <- 3
+
+#' Credible interval width (0.80 = 80% CI)
+#' @keywords internal
+SKILL_CREDIBLE_LEVEL <- 0.80
+
+
 # Data Validation Constants
 # -------------------------
 

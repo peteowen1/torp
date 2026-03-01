@@ -147,7 +147,6 @@ parquet_from_urls_parallel <- function(urls, use_cache = FALSE, max_age_days = 7
       data.table::setDT(out)
       out
     }, error = function(e) {
-      cli::cli_warn("Batch read failed, falling back to sequential: {conditionMessage(e)}")
       NULL
     })
 

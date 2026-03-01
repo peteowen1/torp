@@ -4,6 +4,7 @@
 # such as data.table and dplyr operations to avoid "no visible binding" NOTEs.
 
 #' @importFrom stats binomial coef complete.cases lm pchisq quantile sd var
+#' @importFrom utils head
 #' @importFrom lubridate tz
 NULL
 
@@ -101,4 +102,18 @@ utils::globalVariables(c(
   "lv_lead1_x", "lv_lead1_y",
   "lv_lag1_desc", "lv_lead1_desc", "lv_lag1_pn", "lv_lead1_pn",
   "lag_goal_x", "lag_goal_x5", "lag_time5", "speed1", "speed5"
+))
+
+# Skill estimation variables
+utils::globalVariables(c(
+  "tog", "match_date_skill", "days_since", "decay_wt",
+  "wt_events", "wt_exposure", "wt_successes", "wt_attempts",
+  "alpha_post", "beta_post", "skill_estimate", "skill_lower", "skill_upper",
+  "position_group", "wt_games_skill", "n_games_skill", "wt_games",
+  "disposal_efficiency_pct_x_disposals", "disposal_efficiency_ps",
+  "mu0", "alpha0", "w_num", "w_den",
+  ".wnum", ".wden", ".w_col", ".w_rate", ".total_skill",
+  "pos_group", "modal_pos", "i.pos_group", "i.modal_pos",
+  "i.n_games", "i.wt_games",
+  "..keep_cols", "..skill_cols", "..lower_cols", "..upper_cols"
 ))
