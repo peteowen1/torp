@@ -13,7 +13,7 @@ knitr::opts_chunk$set(
 )
 ```
 
-# torp
+# torp <a href="https://peteowen1.github.io/torp/"><img src="man/figures/logo.png" align="right" height="139" alt="torp website" /></a>
 
 <!-- badges: start -->
 [![R-CMD-check](https://github.com/peteowen1/torp/actions/workflows/test-package.yml/badge.svg)](https://github.com/peteowen1/torp/actions/workflows/test-package.yml)

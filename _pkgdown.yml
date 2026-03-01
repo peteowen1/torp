@@ -3,6 +3,8 @@ url: https://peteowen1.github.io/torp/
 template:
   bootstrap: 5
   bootswatch: cosmo
+  bslib:
+    pkgdown-nav-height: 100px
 
 home:
   title: torp - AFL Analytics in R
