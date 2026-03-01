@@ -115,8 +115,9 @@ utils::globalVariables(c(
   ".wnum", ".wden", ".w_col", ".w_rate", ".total_skill",
   ".eff_successes", ".eff_attempts", ".eff_w",
   ".raw_num", ".raw_den", ".raw_succ", ".raw_att", ".wt_att",
+  ".raw_vals", ".raw_tog",
   "pos_group", "modal_pos", "i.pos_group", "i.modal_pos",
   "i.n_games", "i.wt_games",
   "..keep_cols", "..skill_cols", "..lower_cols", "..upper_cols",
-  "..raw_cols"
+  "..lower_present", "..upper_present", "..raw_cols"
 ))

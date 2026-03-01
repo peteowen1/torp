@@ -315,11 +315,13 @@ estimate_player_skills <- function(skill_data, ref_date = NULL,
 
     data.table::set(dt, j = ".wnum", value = w_vec * vals)
     data.table::set(dt, j = ".wden", value = w_vec * tog_vals)
+    data.table::set(dt, j = ".raw_vals", value = vals)
+    data.table::set(dt, j = ".raw_tog", value = tog_vals)
 
     agg <- dt[, .(w_num = sum(.wnum, na.rm = TRUE),
                    w_den = sum(.wden, na.rm = TRUE),
-                   .raw_num = sum(vals, na.rm = TRUE),
-                   .raw_den = sum(tog_vals, na.rm = TRUE)), by = player_id]
+                   .raw_num = sum(.raw_vals, na.rm = TRUE),
+                   .raw_den = sum(.raw_tog, na.rm = TRUE)), by = player_id]
 
     # Position-specific prior: weighted mean within each position group
     agg[player_meta, pos_group := i.pos_group, on = "player_id"]
@@ -478,7 +480,8 @@ estimate_player_skills <- function(skill_data, ref_date = NULL,
   }
 
   # Clean up temp columns
-  tmp_cols <- intersect(c(".wnum", ".wden", ".w_rate", ".eff_successes", ".eff_attempts", ".eff_w"), names(dt))
+  tmp_cols <- intersect(c(".wnum", ".wden", ".w_rate", ".raw_vals", ".raw_tog",
+                          ".eff_successes", ".eff_attempts", ".eff_w"), names(dt))
   for (tc in tmp_cols) data.table::set(dt, j = tc, value = NULL)
 
   # Assemble result
@@ -496,6 +499,37 @@ estimate_player_skills <- function(skill_data, ref_date = NULL,
 
   data.table::setorder(result, -wt_games)
   result
+}
+
+
+# ============================================================================
+# Profile helpers
+# ============================================================================
+
+#' Extract column values from a single-row data.table, defaulting to NA
+#' @keywords internal
+.extract_player_cols <- function(player_row, col_names) {
+  vapply(col_names, function(col) {
+    if (col %in% names(player_row)) as.numeric(player_row[[col]]) else NA_real_
+  }, numeric(1))
+}
+
+#' Compute column means across a data.table
+#' @keywords internal
+.col_means <- function(dt, cols) {
+  if (nrow(dt) == 0) return(rep(NA_real_, length(cols)))
+  vapply(cols, function(col) mean(dt[[col]], na.rm = TRUE), numeric(1))
+}
+
+#' Compute percentile rank of a player's values within a reference data.table
+#' @keywords internal
+.col_pctiles <- function(dt, cols, player_row) {
+  if (nrow(dt) == 0) return(rep(NA_real_, length(cols)))
+  vapply(cols, function(col) {
+    player_val <- player_row[[col]]
+    if (is.na(player_val)) return(NA_real_)
+    mean(dt[[col]] <= player_val, na.rm = TRUE) * 100
+  }, numeric(1))
 }
 
 
@@ -551,71 +585,58 @@ player_skill_profile <- function(player_name, ref_date = Sys.Date(),
     cli::cli_abort("Player {.val {player_name}} not found in skill estimates (may have fewer than {SKILL_MIN_GAMES} weighted games)")
   }
 
-  # Extract target player row
+  # Extract target player row (ensure single row)
   player_row <- all_skills[player_id == pid]
+  if (nrow(player_row) > 1) {
+    cli::cli_warn("Multiple skill rows found for player {.val {player_name}}, using latest")
+    player_row <- player_row[which.max(ref_date)]
+  }
   player_pos <- player_row$pos_group[1]
 
   # Subsets for percentile computation
-  pos_subset <- all_skills[pos_group == player_pos]
+  if (is.na(player_pos)) {
+    cli::cli_warn("Player {.val {player_name}} has no position group; position-based comparisons will be NA")
+    pos_subset <- all_skills[0]
+  } else {
+    pos_subset <- all_skills[pos_group == player_pos]
+  }
   stat_defs <- skill_stat_definitions()
   skill_cols <- paste0(stat_defs$stat_name, "_skill")
   skill_cols <- intersect(skill_cols, names(all_skills))
   stat_names <- sub("_skill$", "", skill_cols)
 
-  # Build profile data.frame row-by-row
+  # Build profile data.frame
   profile <- data.frame(stat = stat_names, stringsAsFactors = FALSE)
-
-  # Skill estimate (Bayesian posterior mean)
   profile$skill <- as.numeric(player_row[, ..skill_cols])
 
   # Raw average (unsmoothed career average, NA if column missing)
   raw_cols <- paste0(stat_names, "_raw")
-  profile$raw_avg <- vapply(raw_cols, function(rc) {
-    if (rc %in% names(player_row)) as.numeric(player_row[[rc]]) else NA_real_
-  }, numeric(1))
+  if (!any(raw_cols %in% names(player_row))) {
+    cli::cli_inform(c("i" = "Pre-computed skills data is missing raw average columns.",
+                       "i" = "Re-run {.fn estimate_player_skills} for raw averages."))
+  }
+  profile$raw_avg <- .extract_player_cols(player_row, raw_cols)
 
-  # League-wide stats (across ALL players)
-  profile$league_avg <- vapply(skill_cols, function(col) {
-    mean(all_skills[[col]], na.rm = TRUE)
-  }, numeric(1))
-
-  profile$league_pct <- vapply(skill_cols, function(col) {
-    player_val <- player_row[[col]]
-    if (is.na(player_val)) return(NA_real_)
-    mean(all_skills[[col]] <= player_val, na.rm = TRUE) * 100
-  }, numeric(1))
-
-  # Position-group stats
-  profile$pos_avg <- vapply(skill_cols, function(col) {
-    mean(pos_subset[[col]], na.rm = TRUE)
-  }, numeric(1))
-
-  profile$pos_pct <- vapply(skill_cols, function(col) {
-    player_val <- player_row[[col]]
-    if (is.na(player_val)) return(NA_real_)
-    mean(pos_subset[[col]] <= player_val, na.rm = TRUE) * 100
-  }, numeric(1))
+  # League-wide and position-group comparisons
+  profile$league_avg <- .col_means(all_skills, skill_cols)
+  profile$league_pct <- .col_pctiles(all_skills, skill_cols, player_row)
+  profile$pos_avg    <- .col_means(pos_subset, skill_cols)
+  profile$pos_pct    <- .col_pctiles(pos_subset, skill_cols, player_row)
 
   # Game counts (same for all stats)
-  profile$n_games <- if ("n_games" %in% names(player_row)) as.numeric(player_row$n_games) else NA_real_
-  profile$wt_games <- if ("wt_games" %in% names(player_row)) as.numeric(player_row$wt_games) else NA_real_
+  profile$n_games  <- .extract_player_cols(player_row, "n_games")
+  profile$wt_games <- .extract_player_cols(player_row, "wt_games")
 
   # Attempts (efficiency stats only, NA for rate stats)
-  att_cols <- paste0(stat_names, "_attempts")
-  wt_att_cols <- paste0(stat_names, "_wt_attempts")
-  profile$attempts <- vapply(att_cols, function(ac) {
-    if (ac %in% names(player_row)) as.numeric(player_row[[ac]]) else NA_real_
-  }, numeric(1))
-  profile$wt_attempts <- vapply(wt_att_cols, function(wc) {
-    if (wc %in% names(player_row)) as.numeric(player_row[[wc]]) else NA_real_
-  }, numeric(1))
+  profile$attempts    <- .extract_player_cols(player_row, paste0(stat_names, "_attempts"))
+  profile$wt_attempts <- .extract_player_cols(player_row, paste0(stat_names, "_wt_attempts"))
 
   # Credible intervals
   lower_cols <- paste0(stat_names, "_lower")
   upper_cols <- paste0(stat_names, "_upper")
   lower_present <- intersect(lower_cols, names(player_row))
   upper_present <- intersect(upper_cols, names(player_row))
-  if (length(lower_present) == nrow(profile)) {
+  if (length(lower_present) == nrow(profile) && length(upper_present) == nrow(profile)) {
     profile$lower <- as.numeric(player_row[, ..lower_present])
     profile$upper <- as.numeric(player_row[, ..upper_present])
   }
