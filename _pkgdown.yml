@@ -20,6 +20,7 @@ navbar:
     github:
       icon: fa-github
       href: https://github.com/peteowen1/torp
+      aria-label: GitHub repository
 
 articles:
   - title: Get Started
@@ -67,6 +68,19 @@ reference:
       - create_player_game_data
       - default_credit_params
 
+  - title: Player Skills
+    desc: Estimate and explore player skill profiles
+    contents:
+      - aggregate_team_skills
+      - default_skill_params
+      - estimate_player_skills
+      - get_player_skills
+      - player_skill_profile
+      - prepare_skill_data
+      - print.torp_skill_profile
+      - skill_position_map
+      - skill_stat_definitions
+
   - title: Season Simulation
     desc: Simulate AFL seasons and predict match outcomes
     contents:
@@ -113,6 +127,7 @@ reference:
       - select_epv_model_vars
       - select_wp_model_vars
       - select_afl_model_vars
+      - select_afl_xgb_vars
 
   - title: Caching
     desc: In-memory and disk caching utilities
