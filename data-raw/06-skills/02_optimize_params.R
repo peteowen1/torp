@@ -60,10 +60,12 @@ player_splits <- lapply(sampled_players, function(pid) {
 })
 names(player_splits) <- as.character(sampled_players)
 
-# Compute grand means per stat (TOG-weighted) ----
+# Compute grand means per stat ----
 stat_defs <- skill_stat_definitions()
 rate_defs <- stat_defs[stat_defs$type == "rate", ]
+eff_defs <- stat_defs[stat_defs$type == "efficiency", ]
 
+# Rate stats: TOG-weighted grand mean (per-full-game rate)
 grand_means <- list()
 for (i in seq_len(nrow(rate_defs))) {
   src <- rate_defs$source_col[i]
@@ -76,17 +78,70 @@ for (i in seq_len(nrow(rate_defs))) {
   grand_means[[src]] <- if (total_exposure > 0) sum(vals) / total_exposure else 0
 }
 
+# Efficiency stats: grand mean proportion (successes / attempts)
+# Also precompute per-player successes and attempts arrays
+.compute_denom <- function(dt_row, spec) {
+  if (grepl("\\+", spec)) {
+    parts <- strsplit(spec, "\\+")[[1]]
+    result <- rep(0, nrow(dt_row))
+    for (p in parts) {
+      if (p %in% names(dt_row)) {
+        v <- as.numeric(dt_row[[p]])
+        v[is.na(v)] <- 0
+        result <- result + v
+      }
+    }
+    return(result)
+  }
+  if (spec %in% names(dt_row)) {
+    v <- as.numeric(dt_row[[spec]])
+    v[is.na(v)] <- 0
+    return(v)
+  }
+  rep(0, nrow(dt_row))
+}
 
-# Optimization objective ----
-# Following panna's approach:
-#   - events = raw_count (what was observed)
-#   - exposure = tog (fraction of game played)
-#   - Gamma-Poisson posterior mean = (alpha0 + w_events) / (beta0 + w_exposure)
-#   - This gives per-full-game RATE (not raw count)
-#   - Actual = raw_count / tog (per-full-game rate for that game)
-#   - MSE computed on rates, weighted by tog (downweight noisy low-TOG games)
-#   - Uses cumsum trick: w_i = exp(-lam*(d_j - d_i))
-#     = exp(-lam*d_j) * exp(lam*d_i), so cumulative sums are O(n)
+grand_props <- list()
+eff_player_data <- list()
+
+for (i in seq_len(nrow(eff_defs))) {
+  stat_nm <- eff_defs$stat_name[i]
+  success_spec <- eff_defs$success_col[i]
+  attempts_spec <- eff_defs$attempts_col[i]
+  if (is.na(success_spec) || is.na(attempts_spec)) next
+
+  # Compute successes and attempts for full dataset
+  if (success_spec %in% names(dt)) {
+    all_succ <- as.numeric(dt[[success_spec]])
+  } else {
+    all_succ <- .compute_denom(dt, success_spec)
+  }
+  all_succ[is.na(all_succ)] <- 0
+  all_att <- .compute_denom(dt, attempts_spec)
+  all_att[is.na(all_att)] <- 0
+  all_succ <- pmin(all_succ, all_att)
+
+  total_att <- sum(all_att)
+  grand_props[[stat_nm]] <- if (total_att > 0) sum(all_succ) / total_att else 0.5
+
+  # Build per-player arrays for efficiency optimization
+  eff_player_data[[stat_nm]] <- lapply(player_splits, function(ps) {
+    pid_rows <- which(dt$player_id == ps$player_id[1])
+    list(
+      successes = all_succ[pid_rows],
+      attempts = all_att[pid_rows]
+    )
+  })
+  names(eff_player_data[[stat_nm]]) <- names(player_splits)
+}
+
+
+# Optimization objectives ----
+# Rate stats: TOG-weighted MSE (Gamma-Poisson)
+# Efficiency stats: attempt-weighted log-loss (Beta-Binomial)
+#
+# Both use cumsum trick: w_i = exp(-lam*(d_j - d_i))
+#   = exp(-lam*d_j) * exp(lam*d_i), so cumulative sums are O(n)
 
 compute_rate_mse <- function(par, stat_col) {
   lambda <- par[1]
@@ -108,30 +163,23 @@ compute_rate_mse <- function(par, stat_col) {
     tog <- ps$.tog
     d_rel <- ps$.d_rel
 
-    # events = raw counts, exposure = tog
     events <- vals
     exposure <- tog
 
-    # Vectorized decay via cumsum trick (cap exponent to avoid overflow)
     exp_pos <- exp(pmin(lambda * d_rel, 500))
     exp_neg <- exp(pmax(-lambda * d_rel, -500))
 
     cum_events <- cumsum(exp_pos * events)
     cum_exposure <- cumsum(exp_pos * exposure)
 
-    # Predict games (min_player_games+1) through n
     j_idx <- (min_player_games + 1):ps$.n
 
     w_events <- exp_neg[j_idx] * cum_events[j_idx - 1]
     w_exposure <- exp_neg[j_idx] * cum_exposure[j_idx - 1]
 
-    # Posterior rate = (alpha0 + w_events) / (beta0 + w_exposure)
     predicted_rate <- (alpha0 + w_events) / (beta0 + w_exposure)
-
-    # Actual per-full-game rate
     actual_rate <- vals[j_idx] / pmax(tog[j_idx], 0.1)
 
-    # TOG-weighted MSE (downweight low-TOG games)
     w <- tog[j_idx]
     ok <- w > 0
 
@@ -144,37 +192,114 @@ compute_rate_mse <- function(par, stat_col) {
   if (is.nan(result) || is.infinite(result)) 1e6 else result
 }
 
+compute_efficiency_logloss <- function(par, stat_nm) {
+  lambda <- par[1]
+  prior_strength <- par[2]
 
-# Optimize per stat category ----
-cli::cli_h1("Optimizing parameters")
+  mu0 <- grand_props[[stat_nm]]
+  if (is.null(mu0)) return(1e6)
+  mu0 <- max(min(mu0, 1 - 1e-6), 1e-6)
+  alpha0 <- mu0 * prior_strength
+  beta0 <- (1 - mu0) * prior_strength
 
-categories <- unique(rate_defs$category)
-results <- list()
+  eff_data <- eff_player_data[[stat_nm]]
+  total_loss <- 0
+  total_wt <- 0
 
-for (cat in categories) {
-  cat_stats <- rate_defs[rate_defs$category == cat, ]
-  rep_stat <- cat_stats$source_col[1]
+  for (k in seq_along(player_splits)) {
+    ps <- player_splits[[k]]
+    if (ps$.n <= min_player_games) next
 
-  if (!rep_stat %in% names(dt)) {
-    cli::cli_warn("Skipping category {cat}: column {rep_stat} not found")
+    ed <- eff_data[[k]]
+    succ <- ed$successes
+    att <- ed$attempts
+    d_rel <- ps$.d_rel
+
+    exp_pos <- exp(pmin(lambda * d_rel, 500))
+    exp_neg <- exp(pmax(-lambda * d_rel, -500))
+
+    cum_succ <- cumsum(exp_pos * succ)
+    cum_att <- cumsum(exp_pos * att)
+
+    j_idx <- (min_player_games + 1):ps$.n
+
+    w_succ <- exp_neg[j_idx] * cum_succ[j_idx - 1]
+    w_att <- exp_neg[j_idx] * cum_att[j_idx - 1]
+
+    # Beta-Binomial posterior mean
+    predicted <- (alpha0 + w_succ) / (alpha0 + beta0 + w_att)
+    predicted <- pmax(pmin(predicted, 1 - 1e-8), 1e-8)
+
+    # Actual efficiency in next match (successes / attempts)
+    actual <- ifelse(att[j_idx] > 0, succ[j_idx] / att[j_idx], mu0)
+    actual <- pmax(pmin(actual, 1 - 1e-8), 1e-8)
+
+    # Binary cross-entropy, weighted by attempts
+    loss <- -(actual * log(predicted) + (1 - actual) * log(1 - predicted))
+    match_w <- att[j_idx]
+    ok <- match_w > 0
+
+    total_loss <- total_loss + sum(match_w[ok] * loss[ok])
+    total_wt <- total_wt + sum(match_w[ok])
+  }
+
+  if (total_wt == 0) return(1e6)
+  result <- total_loss / total_wt
+  if (is.nan(result) || is.infinite(result)) 1e6 else result
+}
+
+
+# Multi-start optimizer helper ----
+# Tries multiple initial values and keeps the best result.
+# L-BFGS-B with a single start can get stuck near the initial value.
+multi_start_optim <- function(fn, starts, lower, upper, ...) {
+  best <- NULL
+  for (s in starts) {
+    opt <- tryCatch(
+      stats::optim(
+        par = s, fn = fn, method = "L-BFGS-B",
+        lower = lower, upper = upper, ...
+      ),
+      error = function(e) NULL
+    )
+    if (!is.null(opt) && (is.null(best) || opt$value < best$value)) {
+      best <- opt
+    }
+  }
+  best
+}
+
+# Optimize per stat ----
+cli::cli_h1("Optimizing rate stats (MSE)")
+
+stat_results <- list()
+
+# Multi-start grid: diverse lambda x prior_strength combinations
+rate_starts <- list(
+  c(0.001, 1),   c(0.001, 5),   c(0.001, 20),
+  c(0.003, 1),   c(0.003, 5),   c(0.003, 20),
+  c(0.005, 0.5), c(0.005, 3),   c(0.005, 10),
+  c(0.01,  1),   c(0.01,  10),  c(0.01,  30)
+)
+
+for (i in seq_len(nrow(rate_defs))) {
+  stat_nm <- rate_defs$stat_name[i]
+  src_col <- rate_defs$source_col[i]
+  stat_cat <- rate_defs$category[i]
+
+  if (!src_col %in% names(dt)) {
+    cli::cli_warn("Skipping {stat_nm}: column {src_col} not found")
     next
   }
 
-  cli::cli_inform("Optimizing {cat} (representative: {rep_stat})")
+  cli::cli_inform("Optimizing {stat_nm} ({stat_cat})")
 
-  opt <- tryCatch(
-    stats::optim(
-      par = c(0.002, 5),  # Initial: lambda=0.002, prior=5
-      fn = compute_rate_mse,
-      stat_col = rep_stat,
-      method = "L-BFGS-B",
-      lower = c(0.0001, 0.5),
-      upper = c(0.02, 50)
-    ),
-    error = function(e) {
-      cli::cli_warn("Optimization failed for {cat}: {conditionMessage(e)}")
-      NULL
-    }
+  opt <- multi_start_optim(
+    fn = compute_rate_mse,
+    starts = rate_starts,
+    lower = c(0.0001, 0.1),
+    upper = c(0.02, 100),
+    stat_col = src_col
   )
 
   if (!is.null(opt)) {
@@ -182,15 +307,67 @@ for (cat in categories) {
     prior <- opt$par[2]
     half_life <- log(2) / lambda
 
-    results[[cat]] <- list(
-      category = cat,
+    stat_results[[stat_nm]] <- list(
+      stat_name = stat_nm,
+      type = "rate",
+      category = stat_cat,
       lambda = lambda,
       prior_strength = prior,
       half_life_days = half_life,
-      mse = opt$value
+      loss = opt$value,
+      loss_type = "mse"
     )
 
     cli::cli_inform("  lambda={round(lambda, 5)} (half-life={round(half_life)}d), prior={round(prior, 2)}, MSE={round(opt$value, 4)}")
+  }
+}
+
+# Optimize efficiency stats (log-loss) ----
+cli::cli_h1("Optimizing efficiency stats (log-loss)")
+
+eff_starts <- list(
+  c(0.001, 5),   c(0.001, 30),  c(0.001, 100),
+  c(0.003, 5),   c(0.003, 30),  c(0.003, 100),
+  c(0.005, 10),  c(0.005, 50),  c(0.005, 200),
+  c(0.01,  20),  c(0.01,  100), c(0.01,  300)
+)
+
+for (i in seq_len(nrow(eff_defs))) {
+  stat_nm <- eff_defs$stat_name[i]
+  stat_cat <- eff_defs$category[i]
+
+  if (!stat_nm %in% names(grand_props)) {
+    cli::cli_warn("Skipping {stat_nm}: could not compute grand proportion")
+    next
+  }
+
+  cli::cli_inform("Optimizing {stat_nm} ({stat_cat})")
+
+  opt <- multi_start_optim(
+    fn = compute_efficiency_logloss,
+    starts = eff_starts,
+    lower = c(0.0001, 1),
+    upper = c(0.02, 500),
+    stat_nm = stat_nm
+  )
+
+  if (!is.null(opt)) {
+    lambda <- opt$par[1]
+    prior <- opt$par[2]
+    half_life <- log(2) / lambda
+
+    stat_results[[stat_nm]] <- list(
+      stat_name = stat_nm,
+      type = "efficiency",
+      category = stat_cat,
+      lambda = lambda,
+      prior_strength = prior,
+      half_life_days = half_life,
+      loss = opt$value,
+      loss_type = "logloss"
+    )
+
+    cli::cli_inform("  lambda={round(lambda, 5)} (half-life={round(half_life)}d), prior={round(prior, 2)}, logloss={round(opt$value, 4)}")
   }
 }
 
@@ -199,16 +376,15 @@ cli::cli_h1("Building optimized parameter set")
 
 opt_params <- default_skill_params()
 
-# Use median lambda across categories as default
-if (length(results) > 0) {
-  lambdas <- vapply(results, function(x) x$lambda, numeric(1))
-  priors <- vapply(results, function(x) x$prior_strength, numeric(1))
+if (length(stat_results) > 0) {
+  lambdas <- vapply(stat_results, function(x) x$lambda, numeric(1))
+  priors <- vapply(stat_results, function(x) x$prior_strength, numeric(1))
 
   opt_params$lambda_rate <- median(lambdas)
   opt_params$prior_games <- median(priors)
 
-  # Per-category overrides
-  opt_params$category_params <- results
+  # Per-stat overrides
+  opt_params$stat_params <- stat_results
 
   cli::cli_inform("Median lambda_rate: {round(opt_params$lambda_rate, 5)} (half-life: {round(log(2)/opt_params$lambda_rate)}d)")
   cli::cli_inform("Median prior_games: {round(opt_params$prior_games, 2)}")
@@ -219,17 +395,22 @@ saveRDS(opt_params, file.path(cache_dir, "02_optimized_params.rds"))
 cli::cli_alert_success("Saved optimized params to {file.path(cache_dir, '02_optimized_params.rds')}")
 
 # Summary table ----
-if (length(results) > 0) {
-  summary_df <- do.call(rbind, lapply(results, function(x) {
+if (length(stat_results) > 0) {
+  summary_df <- do.call(rbind, lapply(stat_results, function(x) {
     data.frame(
+      stat = x$stat_name,
+      type = x$type,
       category = x$category,
       lambda = round(x$lambda, 5),
       half_life_days = round(x$half_life_days),
       prior_strength = round(x$prior_strength, 2),
-      mse = round(x$mse, 4),
+      loss = round(x$loss, 4),
+      loss_type = x$loss_type,
       stringsAsFactors = FALSE
     )
   }))
+  data.table::setDT(summary_df)
+  data.table::setorder(summary_df, half_life_days)
   cli::cli_h2("Optimization Summary")
   print(summary_df, row.names = FALSE)
 }

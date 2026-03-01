@@ -73,7 +73,7 @@ test_that("estimate_player_skills returns correct structure", {
 
   # Must have core metadata columns
   expect_true(all(c("player_id", "player_name", "pos_group",
-                     "n_games", "wt_games", "ref_date") %in% names(result)))
+                     "n_games", "wt_games", "n_80s", "wt_80s", "ref_date") %in% names(result)))
 
   # Should have skill columns for rate stats
   expect_true("goals_skill" %in% names(result))
@@ -205,15 +205,19 @@ test_that("raw averages are per-player, not league-wide", {
 test_that("high prior_strength pulls estimates toward prior", {
   skill_data <- create_mock_skill_data(n_players = 5, games_per_player = 3)
 
-  # Default params
+  # Default params (clear per-stat overrides so prior_games controls)
   params_low <- default_skill_params()
   params_low$prior_games <- 1
   params_low$min_games <- 0
+  params_low$stat_params <- NULL
+  params_low$category_params <- NULL
 
   # Very high prior
   params_high <- default_skill_params()
   params_high$prior_games <- 100
   params_high$min_games <- 0
+  params_high$stat_params <- NULL
+  params_high$category_params <- NULL
 
   result_low <- estimate_player_skills(skill_data, params = params_low)
   result_high <- estimate_player_skills(skill_data, params = params_high)
@@ -363,7 +367,7 @@ test_that("player_skill_profile produces correct output structure", {
   sk <- profile$skills
   expected_cols <- c("category", "stat", "type", "skill", "raw_avg",
                      "league_avg", "league_pct", "pos_avg", "pos_pct",
-                     "n_games", "wt_games", "attempts", "wt_attempts",
+                     "n_80s", "wt_80s", "attempts", "wt_attempts",
                      "lower", "upper")
   expect_true(all(expected_cols %in% names(sk)))
 
@@ -371,12 +375,14 @@ test_that("player_skill_profile produces correct output structure", {
   expect_true(all(sk$pos_pct >= 0 & sk$pos_pct <= 100, na.rm = TRUE))
   expect_true(all(sk$league_pct >= 0 & sk$league_pct <= 100, na.rm = TRUE))
 
-  # Rate stats should have NA attempts, efficiency should have numeric
+  # Rate stats: have 80s but NA attempts; efficiency: have attempts but NA 80s
   rate_rows <- sk$type == "rate"
   eff_rows <- sk$type == "efficiency"
   expect_true(all(is.na(sk$attempts[rate_rows])))
+  expect_true(all(!is.na(sk$n_80s[rate_rows])))
   if (any(eff_rows)) {
     expect_true(all(!is.na(sk$attempts[eff_rows])))
+    expect_true(all(is.na(sk$n_80s[eff_rows])))
   }
 
   # Print should not error
