@@ -106,7 +106,7 @@ utils::globalVariables(c(
 
 # Skill estimation variables
 utils::globalVariables(c(
-  "tog", "match_date_skill", "days_since", "decay_wt",
+  "tog", "tog_denominator", "match_date_skill", "days_since", "decay_wt",
   "wt_events", "wt_exposure", "wt_successes", "wt_attempts",
   "alpha_post", "beta_post", "skill_estimate", "skill_lower", "skill_upper",
   "position_group", "wt_games_skill", "n_games_skill", "wt_games",

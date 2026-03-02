@@ -48,6 +48,28 @@ create_mock_skill_data <- function(n_players = 10, games_per_player = 8) {
         score_involvements = rpois(1, 3),
         goal_assists = rpois(1, 1),
         disposal_efficiency_pct_x_disposals = NA_real_,
+        # New stats
+        tog_denominator = 1,
+        bounces = rpois(1, 0.3),
+        extended_stats_def_half_pressure_acts = rpois(1, 6),
+        clearances_centre_clearances = rpois(1, if (pos_idx == 2) 2 else 0),
+        clearances_stoppage_clearances = rpois(1, 1),
+        extended_stats_effective_kicks = rpois(1, 7),
+        extended_stats_effective_disposals = rpois(1, 14),
+        extended_stats_intercept_marks = rpois(1, if (pos_idx == 1) 2 else 0),
+        extended_stats_f50ground_ball_gets = rpois(1, 1),
+        extended_stats_score_launches = rpois(1, 1),
+        extended_stats_marks_on_lead = rpois(1, 0.3),
+        tackles_inside50 = rpois(1, 0.5),
+        extended_stats_kickins = rpois(1, if (pos_idx == 1) 2 else 0),
+        extended_stats_centre_bounce_attendances = rpois(1, if (pos_idx == 4) 15 else if (pos_idx == 2) 5 else 0),
+        extended_stats_ruck_contests = rpois(1, if (pos_idx == 4) 25 else 0),
+        extended_stats_contest_def_one_on_ones = rpois(1, 0.5),
+        extended_stats_contest_off_one_on_ones = rpois(1, 0.5),
+        extended_stats_contest_off_wins = rpois(1, 0.1),
+        extended_stats_contest_def_losses = rpois(1, 0.1),
+        dream_team_points = rpois(1, 65),
+        rating_points = round(rnorm(1, 9, 3), 1),
         stringsAsFactors = FALSE
       )
     }

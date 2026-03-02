@@ -610,7 +610,9 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL) {
       pred_margin = pred_score_diff,
       pred_win,
       bits,
-      margin = score_diff
+      margin = score_diff,
+      start_time = local_start_time_str,
+      venue = venue.x
     )
 
   week_gms_away <- team_mdl_df %>%
@@ -631,11 +633,13 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL) {
       pred_margin = pred_score_diff,
       pred_win,
       bits,
-      margin = score_diff
+      margin = score_diff,
+      start_time = local_start_time_str,
+      venue = venue.x
     )
 
   week_gms <- dplyr::bind_rows(week_gms_home, week_gms_away) %>%
-    dplyr::group_by(round, providerId, home_team, home_rating, away_team, away_rating) %>%
+    dplyr::group_by(round, providerId, home_team, home_rating, away_team, away_rating, start_time, venue) %>%
     dplyr::summarise(
       players = mean(players),
       pred_xtotal = mean(pred_xtotal),
@@ -645,7 +649,7 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL) {
       .groups = "drop"
     ) %>%
     mutate(rating_diff = home_rating - away_rating + HOME_RATING_BOOST) %>%
-    select(round, providerId:away_rating, rating_diff, players:margin)
+    select(round, providerId:away_rating, start_time, venue, rating_diff, players:margin)
 
   # Validate Predictions ----
   cli::cli_h2("Validating predictions")

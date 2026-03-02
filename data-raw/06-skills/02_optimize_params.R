@@ -66,14 +66,22 @@ rate_defs <- stat_defs[stat_defs$type == "rate", ]
 eff_defs <- stat_defs[stat_defs$type == "efficiency", ]
 
 # Rate stats: TOG-weighted grand mean (per-full-game rate)
+# For tog_adjusted=FALSE stats, use games (exposure=1) instead of TOG
 grand_means <- list()
+stat_tog_adjusted <- list()  # Track per source_col whether to use TOG
 for (i in seq_len(nrow(rate_defs))) {
   src <- rate_defs$source_col[i]
   if (!src %in% names(dt)) next
+  is_tog_adj <- is.na(rate_defs$tog_adjusted[i]) || isTRUE(rate_defs$tog_adjusted[i])
+  stat_tog_adjusted[[src]] <- is_tog_adj
   vals <- as.numeric(dt[[src]])
   vals[is.na(vals)] <- 0
-  togs <- as.numeric(dt$tog)
-  togs[is.na(togs)] <- 1
+  if (is_tog_adj) {
+    togs <- as.numeric(dt$tog)
+    togs[is.na(togs)] <- 1
+  } else {
+    togs <- rep(1, nrow(dt))
+  }
   total_exposure <- sum(togs)
   grand_means[[src]] <- if (total_exposure > 0) sum(vals) / total_exposure else 0
 }
@@ -143,7 +151,7 @@ for (i in seq_len(nrow(eff_defs))) {
 # Both use cumsum trick: w_i = exp(-lam*(d_j - d_i))
 #   = exp(-lam*d_j) * exp(lam*d_i), so cumulative sums are O(n)
 
-compute_rate_mse <- function(par, stat_col) {
+compute_rate_mse <- function(par, stat_col, use_tog = TRUE) {
   lambda <- par[1]
   prior_strength <- par[2]
 
@@ -160,7 +168,7 @@ compute_rate_mse <- function(par, stat_col) {
 
     vals <- as.numeric(ps[[stat_col]])
     vals[is.na(vals)] <- 0
-    tog <- ps$.tog
+    tog <- if (use_tog) ps$.tog else rep(1, ps$.n)
     d_rel <- ps$.d_rel
 
     events <- vals
@@ -292,14 +300,16 @@ for (i in seq_len(nrow(rate_defs))) {
     next
   }
 
-  cli::cli_inform("Optimizing {stat_nm} ({stat_cat})")
+  is_tog_adj <- isTRUE(stat_tog_adjusted[[src_col]])
+  cli::cli_inform("Optimizing {stat_nm} ({stat_cat}){if (!is_tog_adj) ' [per-game]' else ''}")
 
   opt <- multi_start_optim(
     fn = compute_rate_mse,
     starts = rate_starts,
     lower = c(0.0001, 0.1),
     upper = c(0.02, 100),
-    stat_col = src_col
+    stat_col = src_col,
+    use_tog = is_tog_adj
   )
 
   if (!is.null(opt)) {
