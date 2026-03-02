@@ -50,6 +50,12 @@
 <url><loc>https://peteowen1.github.io/torp/reference/SIM_HOME_ADVANTAGE.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/SIM_NOISE_SD.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/SIM_WP_SCALING_FACTOR.html</loc></url>
+<url><loc>https://peteowen1.github.io/torp/reference/SKILL_CREDIBLE_LEVEL.html</loc></url>
+<url><loc>https://peteowen1.github.io/torp/reference/SKILL_LAMBDA_EFFICIENCY_DEFAULT.html</loc></url>
+<url><loc>https://peteowen1.github.io/torp/reference/SKILL_LAMBDA_RATE_DEFAULT.html</loc></url>
+<url><loc>https://peteowen1.github.io/torp/reference/SKILL_MIN_GAMES.html</loc></url>
+<url><loc>https://peteowen1.github.io/torp/reference/SKILL_PRIOR_ATTEMPTS_DEFAULT.html</loc></url>
+<url><loc>https://peteowen1.github.io/torp/reference/SKILL_PRIOR_GAMES_DEFAULT.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/VALIDATION_HIGH_MISSING_THRESHOLD.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/VALIDATION_MIN_CALIBRATION_BIN_SIZE.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/WP_FINAL_2_MINS_SECONDS.html</loc></url>
@@ -58,6 +64,8 @@
 <url><loc>https://peteowen1.github.io/torp/reference/WP_TIME_SCALING.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/access_api.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/add_chain_vars_dt.html</loc></url>
+<url><loc>https://peteowen1.github.io/torp/reference/add_epv_lag_vars_dt.html</loc></url>
+<url><loc>https://peteowen1.github.io/torp/reference/add_epv_team_vars_dt.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/add_epv_variables.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/add_epv_vars.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/add_game_vars_dt.html</loc></url>
@@ -71,6 +79,7 @@
 <url><loc>https://peteowen1.github.io/torp/reference/add_speed_variables.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/add_torp_ids_dt.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/add_wp_vars.html</loc></url>
+<url><loc>https://peteowen1.github.io/torp/reference/aggregate_team_skills.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/analyze_duplicates.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/analyze_missing_data.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/assess_model_calibration.html</loc></url>
@@ -90,6 +99,7 @@
 <url><loc>https://peteowen1.github.io/torp/reference/calculate_torp_ratings.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/check_wp_model_health.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/clean_model_data_epv.html</loc></url>
+<url><loc>https://peteowen1.github.io/torp/reference/clean_model_data_epv_dt.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/clean_model_data_wp.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/clean_pbp.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/clean_pbp_dt.html</loc></url>
@@ -109,10 +119,15 @@
 <url><loc>https://peteowen1.github.io/torp/reference/create_validation_report.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/decimal_hour.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/default_credit_params.html</loc></url>
+<url><loc>https://peteowen1.github.io/torp/reference/default_skill_params.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/detect_outliers.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/determine_team_id_mdl.html</loc></url>
+<url><loc>https://peteowen1.github.io/torp/reference/dot-compute_skill_denominator.html</loc></url>
+<url><loc>https://peteowen1.github.io/torp/reference/dot-map_position_group.html</loc></url>
+<url><loc>https://peteowen1.github.io/torp/reference/dot-resolve_skill_positions.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/dot-setup_torp_logging.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/download_torp_data.html</loc></url>
+<url><loc>https://peteowen1.github.io/torp/reference/estimate_player_skills.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/evaluate_baseline_models.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/evaluate_model_comprehensive.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/fct_na_to_level.html</loc></url>
@@ -141,9 +156,11 @@
 <url><loc>https://peteowen1.github.io/torp/reference/get_match_chains.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/get_mode.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/get_model_cache_info.html</loc></url>
+<url><loc>https://peteowen1.github.io/torp/reference/get_player_skills.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/get_players.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/get_proportion_through_day.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/get_proportion_through_year.html</loc></url>
+<url><loc>https://peteowen1.github.io/torp/reference/get_release_assets.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/get_round_games.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/get_season_data.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/get_season_games.html</loc></url>
@@ -178,6 +195,7 @@
 <url><loc>https://peteowen1.github.io/torp/reference/load_player_game_data.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/load_player_game_ratings.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/load_player_season_ratings.html</loc></url>
+<url><loc>https://peteowen1.github.io/torp/reference/load_player_skills.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/load_player_stats.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/load_predictions.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/load_results.html</loc></url>
@@ -199,6 +217,7 @@
 <url><loc>https://peteowen1.github.io/torp/reference/player_game_ratings.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/player_profile.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/player_season_ratings.html</loc></url>
+<url><loc>https://peteowen1.github.io/torp/reference/player_skill_profile.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/predict_shot_probabilities.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/predict_wp_ensemble_baseline.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/predict_wp_expected_points.html</loc></url>
@@ -210,7 +229,9 @@
 <url><loc>https://peteowen1.github.io/torp/reference/prepare_calibration_plot.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/prepare_final_dataframe.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/prepare_shot_model_data.html</loc></url>
+<url><loc>https://peteowen1.github.io/torp/reference/prepare_skill_data.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/print.torp_player_profile.html</loc></url>
+<url><loc>https://peteowen1.github.io/torp/reference/print.torp_skill_profile.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/process_games.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/process_games_dt.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/read_disk_cache.html</loc></url>
@@ -223,6 +244,7 @@
 <url><loc>https://peteowen1.github.io/torp/reference/save_locally.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/save_to_release.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/select_afl_model_vars.html</loc></url>
+<url><loc>https://peteowen1.github.io/torp/reference/select_afl_xgb_vars.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/select_epv_model_vars.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/select_shot_model_vars.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/select_wp_model_vars.html</loc></url>
@@ -231,6 +253,8 @@
 <url><loc>https://peteowen1.github.io/torp/reference/set_torp_data_repo.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/setup_torp_logging.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/simulate_season.html</loc></url>
+<url><loc>https://peteowen1.github.io/torp/reference/skill_position_map.html</loc></url>
+<url><loc>https://peteowen1.github.io/torp/reference/skill_stat_definitions.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/store_in_cache.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/torp_clean_names.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/torp_dummy_cols.html</loc></url>

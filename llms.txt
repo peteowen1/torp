@@ -132,6 +132,8 @@ Load processed AFL data from torpdata GitHub releases
   : Load Player Game Ratings Data
 - [`load_player_season_ratings()`](https://peteowen1.github.io/torp/reference/load_player_season_ratings.md)
   : Load Player Season Ratings Data
+- [`load_player_skills()`](https://peteowen1.github.io/torp/reference/load_player_skills.md)
+  : Load Player Skills Data
 - [`load_player_stats()`](https://peteowen1.github.io/torp/reference/load_player_stats.md)
   : Load Player Stats Data
 - [`load_predictions()`](https://peteowen1.github.io/torp/reference/load_predictions.md)
@@ -195,6 +197,29 @@ Calculate and view TORP player ratings
   : Create Player Game Data
 - [`default_credit_params()`](https://peteowen1.github.io/torp/reference/default_credit_params.md)
   : Default credit assignment parameters
+
+## Player Skills
+
+Estimate and explore player skill profiles
+
+- [`aggregate_team_skills()`](https://peteowen1.github.io/torp/reference/aggregate_team_skills.md)
+  : Aggregate player skills to team level
+- [`default_skill_params()`](https://peteowen1.github.io/torp/reference/default_skill_params.md)
+  : Default hyperparameters for skill estimation
+- [`estimate_player_skills()`](https://peteowen1.github.io/torp/reference/estimate_player_skills.md)
+  : Estimate player skills using Bayesian conjugate priors
+- [`get_player_skills()`](https://peteowen1.github.io/torp/reference/get_player_skills.md)
+  : Get player skill estimates from pre-computed data
+- [`player_skill_profile()`](https://peteowen1.github.io/torp/reference/player_skill_profile.md)
+  : Get a player's skill profile with percentile ranks
+- [`prepare_skill_data()`](https://peteowen1.github.io/torp/reference/prepare_skill_data.md)
+  : Prepare data for skill estimation
+- [`print(`*`<torp_skill_profile>`*`)`](https://peteowen1.github.io/torp/reference/print.torp_skill_profile.md)
+  : Print a player skill profile
+- [`skill_position_map()`](https://peteowen1.github.io/torp/reference/skill_position_map.md)
+  : Position group mapping for AFL skill estimation
+- [`skill_stat_definitions()`](https://peteowen1.github.io/torp/reference/skill_stat_definitions.md)
+  : Stat definitions for player skill estimation
 
 ## Season Simulation
 
@@ -274,6 +299,8 @@ Utilities for model development and cross-validation
   : Select WP Model Variables
 - [`select_afl_model_vars()`](https://peteowen1.github.io/torp/reference/select_afl_model_vars.md)
   : Select AFL Match Prediction Model Variables
+- [`select_afl_xgb_vars()`](https://peteowen1.github.io/torp/reference/select_afl_xgb_vars.md)
+  : Select AFL XGBoost Model Variables (Lean Feature Set)
 
 ## Caching
 

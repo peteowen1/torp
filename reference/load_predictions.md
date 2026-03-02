@@ -56,9 +56,7 @@ probabilities and expected scores.
 try({ # prevents cran errors
   load_predictions(2021:2022)
 })
-#> Downloading 2 files in parallel...
-#> Warning: No data loaded from 2 URLs. Check seasons/rounds or use `clear_skip_markers()`
-#> to retry previously failed files.
+#> Filtered 2 URLs not found in "predictions" release.
 #> # A tibble: 0 × 0
 # }
 ```

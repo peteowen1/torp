@@ -12,7 +12,8 @@ load_fixtures(
   use_cache = TRUE,
   cache_ttl = 3600,
   verbose = FALSE,
-  columns = NULL
+  columns = NULL,
+  use_disk_cache = FALSE
 )
 ```
 
@@ -46,6 +47,10 @@ load_fixtures(
 
   Optional character vector of column names to read. If NULL (default),
   reads all columns.
+
+- use_disk_cache:
+
+  Logical. If TRUE, uses persistent disk caching. Default is FALSE.
 
 ## Value
 

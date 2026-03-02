@@ -1,8 +1,9 @@
 # Load Team Ratings Data
 
 Loads pre-computed team-level TORP aggregates from the [torpdata
-repository](https://github.com/peteowen1/torpdata). This data summarises
-per-round team ratings derived from individual player TORP ratings.
+repository](https://github.com/peteowen1/torpdata). Aggregates are the
+sum of TORP ratings for each team's top-21 players (filtered to TORP \>
+0) per round, with subcategory breakdowns.
 
 ## Usage
 
@@ -20,8 +21,8 @@ load_team_ratings(columns = NULL)
 ## Value
 
 A data frame containing team-level ratings with columns including
-`season`, `round`, `team`, `team_torp`, `team_attack`, `team_defence`,
-`top_player`, `top_torp`, and `n_players`.
+`season`, `round`, `team`, `team_torp`, `team_recv`, `team_disp`,
+`team_spoil`, `team_hitout`, `top_player`, `top_torp`, and `n_players`.
 
 ## See also
 
@@ -35,20 +36,20 @@ A data frame containing team-level ratings with columns including
 try({ # prevents cran errors
   load_team_ratings()
 })
-#> # A tibble: 2,520 × 9
-#>    season round team      team_torp team_attack team_defence top_player top_torp
-#>     <dbl> <int> <chr>         <dbl>       <dbl>        <dbl> <chr>         <dbl>
-#>  1   2021     2 Essendon       1.37        0.54         0.83 Devon Smi…     3.27
-#>  2   2021     2 Western …      1.31        0.68         0.63 Laitham V…     4.22
-#>  3   2021     2 Port Ade…      1.28        0.71         0.57 Travis Bo…     3.4 
-#>  4   2021     2 St Kilda       1.21        0.41         0.8  Jack Stee…     3.63
-#>  5   2021     2 Richmond       1.13        0.66         0.47 Jack Riew…     4.1 
-#>  6   2021     2 GWS GIAN…      1.06        0.43         0.63 Jacob Hop…     3.02
-#>  7   2021     2 Hawthorn       1           0.68         0.32 Sam Frost      2.47
-#>  8   2021     2 Sydney S…      0.97        0.74         0.23 Errol Gul…     3.69
-#>  9   2021     2 West Coa…      0.89        0.67         0.22 Tim Kelly      3.25
-#> 10   2021     2 Melbourne      0.86        0.5          0.36 Tom McDon…     2.93
+#> # A tibble: 2,520 × 11
+#>    season round team        team_torp team_recv team_disp team_spoil team_hitout
+#>     <dbl> <int> <chr>           <dbl>     <dbl>     <dbl>      <dbl>       <dbl>
+#>  1   2021     2 Essendon         32.2      7.76      6.8       20.9         0.51
+#>  2   2021     2 Port Adela…      30.7      9.51      9.26      13.9         0.97
+#>  3   2021     2 St Kilda         29.6      7.51      4.7       17.9         1.41
+#>  4   2021     2 Western Bu…      28.8      9.45      8.56      14.4         0.27
+#>  5   2021     2 Richmond         27.9      8.86      7.79      15.4         0.85
+#>  6   2021     2 GWS GIANTS       23.9      8.26      5.17      13.6         1.7 
+#>  7   2021     2 Sydney Swa…      23.8      9.91      8.44       8.03        0.42
+#>  8   2021     2 Hawthorn         23.6      9.95      7.17      10.3         1.09
+#>  9   2021     2 Gold Coast…      21.3      6.09      8.11      10.4         0.59
+#> 10   2021     2 North Melb…      20.8      6.71      3.72      12.9         0.17
 #> # ℹ 2,510 more rows
-#> # ℹ 1 more variable: n_players <int>
+#> # ℹ 3 more variables: top_player <chr>, top_torp <dbl>, n_players <int>
 # }
 ```

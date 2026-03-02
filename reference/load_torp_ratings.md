@@ -36,7 +36,7 @@ A data frame containing TORP ratings with columns including `player_id`,
 try({ # prevents cran errors
   load_torp_ratings()
 })
-#> # A tibble: 113,844 × 15
+#> # A tibble: 113,851 × 15
 #>    player_id   player_name        age team   torp torp_recv torp_disp torp_spoil
 #>    <chr>       <chr>            <dbl> <chr> <dbl>     <dbl>     <dbl>      <dbl>
 #>  1 CD_I1000932 Tom Doedee        24.0 Adel…    NA        NA        NA         NA
@@ -49,7 +49,7 @@ try({ # prevents cran errors
 #>  8 CD_I1008159 Will Hamill       20.3 Adel…    NA        NA        NA         NA
 #>  9 CD_I1008185 Ned McHenry       20.7 Adel…    NA        NA        NA         NA
 #> 10 CD_I1008230 Nick Murray       20.2 Adel…    NA        NA        NA         NA
-#> # ℹ 113,834 more rows
+#> # ℹ 113,841 more rows
 #> # ℹ 7 more variables: torp_hitout <dbl>, position <chr>, season <dbl>,
 #> #   round <int>, gms <int>, wt_gms <dbl>, row_id <chr>
 # }
