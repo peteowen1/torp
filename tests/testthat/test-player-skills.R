@@ -73,16 +73,25 @@ test_that("estimate_player_skills returns correct structure", {
 
   # Must have core metadata columns
   expect_true(all(c("player_id", "player_name", "pos_group",
-                     "n_games", "wt_games", "ref_date") %in% names(result)))
+                     "n_games", "wt_games", "n_80s", "wt_80s", "ref_date") %in% names(result)))
 
   # Should have skill columns for rate stats
   expect_true("goals_skill" %in% names(result))
   expect_true("goals_lower" %in% names(result))
   expect_true("goals_upper" %in% names(result))
+  expect_true("goals_raw" %in% names(result))
   expect_true("disposals_skill" %in% names(result))
+  expect_true("disposals_raw" %in% names(result))
 
-  # Should have efficiency stats
+  # Should have efficiency stats with attempts
   expect_true("goal_accuracy_skill" %in% names(result))
+  expect_true("goal_accuracy_raw" %in% names(result))
+  expect_true("goal_accuracy_attempts" %in% names(result))
+  expect_true("goal_accuracy_wt_attempts" %in% names(result))
+
+  # Rate stats should NOT have attempts columns
+  expect_false("goals_attempts" %in% names(result))
+  expect_false("goals_wt_attempts" %in% names(result))
 })
 
 test_that("player with many games has estimate close to empirical mean", {
@@ -141,20 +150,74 @@ test_that("player with many games has estimate close to empirical mean", {
 
   # Goal accuracy: 2/3 shots -> ~0.667
   expect_equal(result$goal_accuracy_skill[1], 2/3, tolerance = 0.1)
+
+  # Raw averages should be exact (no smoothing)
+  # goals_raw = sum(goals) / sum(tog) = 2 / 1 = 2.0
+  expect_equal(result$goals_raw[1], 2.0)
+
+  # goal_accuracy_raw = sum(goals) / sum(shots) = 100 / 150 = 2/3
+  expect_equal(result$goal_accuracy_raw[1], 2/3)
+
+  # goal_accuracy_attempts = total shots = 50 * 3 = 150
+  expect_equal(result$goal_accuracy_attempts[1], 150)
+
+  # wt_attempts should be < raw attempts due to time decay
+  expect_true(result$goal_accuracy_wt_attempts[1] < 150)
+  expect_true(result$goal_accuracy_wt_attempts[1] > 0)
+})
+
+test_that("raw averages are per-player, not league-wide", {
+  n <- 10
+  dt <- data.table::data.table(
+    player_id = rep(c("A", "B"), each = n),
+    match_id = paste0("M_", seq_len(2 * n)),
+    player_name = rep(c("Alice", "Bob"), each = n),
+    season = 2024, round = rep(seq_len(n), 2),
+    match_date_skill = as.Date("2024-01-01") + seq_len(2 * n) * 7,
+    tog = 1.0,
+    pos_group = "MID", position = "MIDFIELDER",
+    goals = rep(c(1, 3), each = n),
+    behinds = 0, shots_at_goal = rep(c(2, 4), each = n),
+    disposals = 20, kicks = 10, handballs = 10,
+    marks = 5, tackles = 4, contested_possessions = 8,
+    uncontested_possessions = 10, inside50s = 3,
+    hitouts = 0, extended_stats_hitouts_to_advantage = 0,
+    clearances_total_clearances = 3, contested_marks = 1,
+    extended_stats_ground_ball_gets = 3, marks_inside50 = 1,
+    rebound50s = 2, metres_gained = 300, extended_stats_spoils = 1,
+    intercepts = 2, one_percenters = 2, extended_stats_pressure_acts = 10,
+    frees_for = 1, frees_against = 1, clangers = 3, turnovers = 3,
+    score_involvements = 3, goal_assists = 1,
+    disposal_efficiency_pct_x_disposals = 14
+  )
+  params <- default_skill_params()
+  params$min_games <- 1
+  result <- estimate_player_skills(dt, params = params)
+
+  alice <- result[player_id == "A"]
+  bob   <- result[player_id == "B"]
+  expect_equal(alice$goals_raw, 1.0)
+  expect_equal(bob$goals_raw, 3.0)
+  expect_equal(alice$goal_accuracy_raw, 1/2)
+  expect_equal(bob$goal_accuracy_raw, 3/4)
 })
 
 test_that("high prior_strength pulls estimates toward prior", {
   skill_data <- create_mock_skill_data(n_players = 5, games_per_player = 3)
 
-  # Default params
+  # Default params (clear per-stat overrides so prior_games controls)
   params_low <- default_skill_params()
   params_low$prior_games <- 1
   params_low$min_games <- 0
+  params_low$stat_params <- NULL
+  params_low$category_params <- NULL
 
   # Very high prior
   params_high <- default_skill_params()
   params_high$prior_games <- 100
   params_high$min_games <- 0
+  params_high$stat_params <- NULL
+  params_high$category_params <- NULL
 
   result_low <- estimate_player_skills(skill_data, params = params_low)
   result_high <- estimate_player_skills(skill_data, params = params_high)
@@ -280,6 +343,50 @@ test_that("aggregate_team_skills produces correct output", {
   mean_cols <- grep("_team_mean$", names(result), value = TRUE)
   expect_true(length(sum_cols) > 0)
   expect_true(length(mean_cols) > 0)
+})
+
+test_that("player_skill_profile produces correct output structure", {
+  skill_data <- create_mock_skill_data(n_players = 5, games_per_player = 8)
+  params <- default_skill_params()
+  params$min_games <- 1
+  skills <- estimate_player_skills(skill_data, params = params)
+
+  # Mock resolve_player to return Player_1's info
+  local_mocked_bindings(
+    resolve_player = function(name, ...) {
+      list(player_id = "1", player_name = "Player_1",
+           team = "MockTeam", position = "KEY_DEFENDER")
+    }
+  )
+
+  profile <- player_skill_profile("Player_1", skills = skills)
+
+  expect_s3_class(profile, "torp_skill_profile")
+  expect_equal(profile$player_info$name, "Player_1")
+
+  sk <- profile$skills
+  expected_cols <- c("category", "stat", "type", "skill", "raw_avg",
+                     "league_avg", "league_pct", "pos_avg", "pos_pct",
+                     "n_80s", "wt_80s", "attempts", "wt_attempts",
+                     "lower", "upper")
+  expect_true(all(expected_cols %in% names(sk)))
+
+  # Percentiles should be 0-100
+  expect_true(all(sk$pos_pct >= 0 & sk$pos_pct <= 100, na.rm = TRUE))
+  expect_true(all(sk$league_pct >= 0 & sk$league_pct <= 100, na.rm = TRUE))
+
+  # Rate stats: have 80s but NA attempts; efficiency: have attempts but NA 80s
+  rate_rows <- sk$type == "rate"
+  eff_rows <- sk$type == "efficiency"
+  expect_true(all(is.na(sk$attempts[rate_rows])))
+  expect_true(all(!is.na(sk$n_80s[rate_rows])))
+  if (any(eff_rows)) {
+    expect_true(all(!is.na(sk$attempts[eff_rows])))
+    expect_true(all(is.na(sk$n_80s[eff_rows])))
+  }
+
+  # Print should not error
+  expect_no_error(capture.output(print(profile)))
 })
 
 test_that(".map_position_group maps correctly", {

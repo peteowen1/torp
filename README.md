@@ -1,7 +1,7 @@
 
 <!-- README.md is generated from README.Rmd. Please edit that file -->
 
-# torp
+# torp <a href="https://peteowen1.github.io/torp/"><img src="man/figures/logo.png" align="right" height="139" alt="torp website" /></a>
 
 <!-- badges: start -->
 
