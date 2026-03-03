@@ -147,18 +147,21 @@ skill_stat_definitions <- function() {
 
 #' Position group mapping for AFL skill estimation
 #'
-#' Maps AFL listed positions to 4 simplified groups used for computing
-#' position-specific priors.
+#' Maps AFL listed positions to 6 position groups for computing
+#' position-specific priors. MIDFIELDER_FORWARD is combined with
+#' MEDIUM_FORWARD.
 #'
 #' @return A named list mapping group names to character vectors of
 #'   AFL position strings.
 #' @export
 skill_position_map <- function() {
   list(
-    DEF  = c("KEY_DEFENDER", "MEDIUM_DEFENDER"),
-    MID  = c("MIDFIELDER", "MIDFIELDER_FORWARD"),
-    FWD  = c("KEY_FORWARD", "MEDIUM_FORWARD"),
-    RUCK = c("RUCK")
+    KEY_DEFENDER    = "KEY_DEFENDER",
+    MEDIUM_DEFENDER = "MEDIUM_DEFENDER",
+    MIDFIELDER      = "MIDFIELDER",
+    MEDIUM_FORWARD  = c("MEDIUM_FORWARD", "MIDFIELDER_FORWARD"),
+    KEY_FORWARD     = "KEY_FORWARD",
+    RUCK            = "RUCK"
   )
 }
 

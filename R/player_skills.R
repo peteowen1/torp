@@ -382,8 +382,8 @@ estimate_player_skills <- function(skill_data, ref_date = NULL,
     grand_mean <- if (total_exposure > 0) sum(w_vec * vals, na.rm = TRUE) / total_exposure else 0
 
     # Position multipliers
-    pos_groups <- c("DEF", "MID", "FWD", "RUCK")
-    pos_means <- stats::setNames(rep(grand_mean, 4), pos_groups)
+    pos_groups <- names(skill_position_map())
+    pos_means <- stats::setNames(rep(grand_mean, length(pos_groups)), pos_groups)
     for (pg in pos_groups) {
       idx <- which(dt$pos_group == pg)
       if (length(idx) > 0) {
@@ -488,7 +488,7 @@ estimate_player_skills <- function(skill_data, ref_date = NULL,
     grand_prop <- max(min(grand_prop, 1 - 1e-6), 1e-6)
 
     # Position-specific proportions
-    pos_props <- stats::setNames(rep(grand_prop, 4), pos_groups)
+    pos_props <- stats::setNames(rep(grand_prop, length(pos_groups)), pos_groups)
     for (pg in pos_groups) {
       idx <- which(dt$pos_group == pg)
       if (length(idx) > 0) {

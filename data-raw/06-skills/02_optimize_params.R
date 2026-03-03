@@ -45,20 +45,49 @@ if (length(eligible_players) > sample_n) {
 dt <- skill_data[player_id %in% sampled_players]
 cli::cli_inform("Using {length(sampled_players)} players (of {length(eligible_players)} eligible)")
 
-# Build per-player lists with precomputed date/tog arrays
-player_splits <- lapply(sampled_players, function(pid) {
-  pdf <- dt[player_id == pid]
-  dates_num <- as.numeric(pdf$match_date_skill)
-  togs <- as.numeric(pdf$tog)
-  togs[is.na(togs)] <- 1
+# Resolve position groups (should already exist from prepare_skill_data)
+if (!"pos_group" %in% names(dt)) {
+  .resolve_skill_positions(dt)
+}
 
-  ps <- as.list(pdf)
-  ps$.n <- nrow(pdf)
-  ps$.d_rel <- dates_num - dates_num[1]  # Days relative to first game
-  ps$.tog <- togs
-  ps
-})
-names(player_splits) <- as.character(sampled_players)
+# Build vectorized optimization structures ----
+# Stack all player data into flat vectors for O(n) objective evaluation
+# (eliminates R-level per-player loop that dominated runtime)
+dt[, player_num := .GRP, by = player_id]
+dt[, game_num := seq_len(.N), by = player_num]
+dt[, d_rel := as.numeric(match_date_skill) - as.numeric(match_date_skill[1]),
+   by = player_num]
+
+n_total <- nrow(dt)
+all_d_rel <- dt$d_rel
+all_tog <- as.numeric(dt$tog)
+all_tog[is.na(all_tog)] <- 1
+all_group <- dt$player_num
+group_start <- dt[, .I[1], by = player_num]$V1
+
+# Prediction mask: players with > min_player_games AND game_num > min_player_games
+player_ns <- dt[, .N, by = player_num]
+elig_players <- player_ns[N > min_player_games]$player_num
+pred_mask <- dt$player_num %in% elig_players & dt$game_num > min_player_games
+pred_idx <- which(pred_mask)
+prev_idx <- pred_idx - 1L  # cumsum at previous game (safe: no boundary crossing)
+
+# Modal position per player
+player_modal_pos <- dt[, {
+  pg <- pos_group[!is.na(pos_group)]
+  tt <- if (length(pg) > 0) table(pg) else character(0)
+  list(modal_pos = if (length(tt) > 0) names(tt)[which.max(tt)] else "MIDFIELDER")
+}, by = player_num]
+pred_pos <- player_modal_pos$modal_pos[all_group[pred_idx]]
+
+# Grouped cumsum: O(n) via single cumsum + boundary offset subtraction
+grouped_cumsum <- function(x, grp, grp_start) {
+  cx <- cumsum(x)
+  offsets <- c(0, cx[grp_start[-1] - 1L])
+  cx - offsets[grp]
+}
+
+cli::cli_inform("Vectorized: {n_total} rows, {length(group_start)} players, {length(pred_idx)} prediction games")
 
 # Compute grand means per stat ----
 stat_defs <- skill_stat_definitions()
@@ -67,8 +96,12 @@ eff_defs <- stat_defs[stat_defs$type == "efficiency", ]
 
 # Rate stats: TOG-weighted grand mean (per-full-game rate)
 # For tog_adjusted=FALSE stats, use games (exposure=1) instead of TOG
+# Compute both global and per-position means (matching estimate_player_skills)
 grand_means <- list()
+pos_grand_means <- list()
 stat_tog_adjusted <- list()  # Track per source_col whether to use TOG
+pos_groups <- names(skill_position_map())
+
 for (i in seq_len(nrow(rate_defs))) {
   src <- rate_defs$source_col[i]
   if (!src %in% names(dt)) next
@@ -83,7 +116,19 @@ for (i in seq_len(nrow(rate_defs))) {
     togs <- rep(1, nrow(dt))
   }
   total_exposure <- sum(togs)
-  grand_means[[src]] <- if (total_exposure > 0) sum(vals) / total_exposure else 0
+  gm <- if (total_exposure > 0) sum(vals) / total_exposure else 0
+  grand_means[[src]] <- gm
+
+  # Per-position means (panna-style positional priors)
+  pm <- stats::setNames(rep(gm, length(pos_groups)), pos_groups)
+  for (pg in pos_groups) {
+    idx <- which(dt$pos_group == pg)
+    if (length(idx) > 0) {
+      pos_exp <- sum(togs[idx])
+      if (pos_exp > 0) pm[pg] <- sum(vals[idx]) / pos_exp
+    }
+  }
+  pos_grand_means[[src]] <- pm
 }
 
 # Efficiency stats: grand mean proportion (successes / attempts)
@@ -110,7 +155,8 @@ for (i in seq_len(nrow(rate_defs))) {
 }
 
 grand_props <- list()
-eff_player_data <- list()
+pos_grand_props <- list()
+eff_flat_data <- list()
 
 for (i in seq_len(nrow(eff_defs))) {
   stat_nm <- eff_defs$stat_name[i]
@@ -130,166 +176,129 @@ for (i in seq_len(nrow(eff_defs))) {
   all_succ <- pmin(all_succ, all_att)
 
   total_att <- sum(all_att)
-  grand_props[[stat_nm]] <- if (total_att > 0) sum(all_succ) / total_att else 0.5
+  gp <- if (total_att > 0) sum(all_succ) / total_att else 0.5
+  grand_props[[stat_nm]] <- gp
 
-  # Build per-player arrays for efficiency optimization
-  eff_player_data[[stat_nm]] <- lapply(player_splits, function(ps) {
-    pid_rows <- which(dt$player_id == ps$player_id[1])
-    list(
-      successes = all_succ[pid_rows],
-      attempts = all_att[pid_rows]
-    )
-  })
-  names(eff_player_data[[stat_nm]]) <- names(player_splits)
-}
-
-
-# Optimization objectives ----
-# Rate stats: TOG-weighted MSE (Gamma-Poisson)
-# Efficiency stats: attempt-weighted log-loss (Beta-Binomial)
-#
-# Both use cumsum trick: w_i = exp(-lam*(d_j - d_i))
-#   = exp(-lam*d_j) * exp(lam*d_i), so cumulative sums are O(n)
-
-compute_rate_mse <- function(par, stat_col, use_tog = TRUE) {
-  lambda <- par[1]
-  prior_strength <- par[2]
-
-  mu0 <- grand_means[[stat_col]]
-  if (is.null(mu0)) return(1e6)
-  alpha0 <- mu0 * prior_strength
-  beta0 <- prior_strength
-
-  total_loss <- 0
-  total_wt <- 0
-
-  for (ps in player_splits) {
-    if (ps$.n <= min_player_games) next
-
-    vals <- as.numeric(ps[[stat_col]])
-    vals[is.na(vals)] <- 0
-    tog <- if (use_tog) ps$.tog else rep(1, ps$.n)
-    d_rel <- ps$.d_rel
-
-    events <- vals
-    exposure <- tog
-
-    exp_pos <- exp(pmin(lambda * d_rel, 500))
-    exp_neg <- exp(pmax(-lambda * d_rel, -500))
-
-    cum_events <- cumsum(exp_pos * events)
-    cum_exposure <- cumsum(exp_pos * exposure)
-
-    j_idx <- (min_player_games + 1):ps$.n
-
-    w_events <- exp_neg[j_idx] * cum_events[j_idx - 1]
-    w_exposure <- exp_neg[j_idx] * cum_exposure[j_idx - 1]
-
-    predicted_rate <- (alpha0 + w_events) / (beta0 + w_exposure)
-    actual_rate <- vals[j_idx] / pmax(tog[j_idx], 0.1)
-
-    w <- tog[j_idx]
-    ok <- w > 0
-
-    total_loss <- total_loss + sum(w[ok] * (predicted_rate[ok] - actual_rate[ok])^2)
-    total_wt <- total_wt + sum(w[ok])
-  }
-
-  if (total_wt == 0) return(1e6)
-  result <- total_loss / total_wt
-  if (is.nan(result) || is.infinite(result)) 1e6 else result
-}
-
-compute_efficiency_logloss <- function(par, stat_nm) {
-  lambda <- par[1]
-  prior_strength <- par[2]
-
-  mu0 <- grand_props[[stat_nm]]
-  if (is.null(mu0)) return(1e6)
-  mu0 <- max(min(mu0, 1 - 1e-6), 1e-6)
-  alpha0 <- mu0 * prior_strength
-  beta0 <- (1 - mu0) * prior_strength
-
-  eff_data <- eff_player_data[[stat_nm]]
-  total_loss <- 0
-  total_wt <- 0
-
-  for (k in seq_along(player_splits)) {
-    ps <- player_splits[[k]]
-    if (ps$.n <= min_player_games) next
-
-    ed <- eff_data[[k]]
-    succ <- ed$successes
-    att <- ed$attempts
-    d_rel <- ps$.d_rel
-
-    exp_pos <- exp(pmin(lambda * d_rel, 500))
-    exp_neg <- exp(pmax(-lambda * d_rel, -500))
-
-    cum_succ <- cumsum(exp_pos * succ)
-    cum_att <- cumsum(exp_pos * att)
-
-    j_idx <- (min_player_games + 1):ps$.n
-
-    w_succ <- exp_neg[j_idx] * cum_succ[j_idx - 1]
-    w_att <- exp_neg[j_idx] * cum_att[j_idx - 1]
-
-    # Beta-Binomial posterior mean
-    predicted <- (alpha0 + w_succ) / (alpha0 + beta0 + w_att)
-    predicted <- pmax(pmin(predicted, 1 - 1e-8), 1e-8)
-
-    # Actual efficiency in next match (successes / attempts)
-    actual <- ifelse(att[j_idx] > 0, succ[j_idx] / att[j_idx], mu0)
-    actual <- pmax(pmin(actual, 1 - 1e-8), 1e-8)
-
-    # Binary cross-entropy, weighted by attempts
-    loss <- -(actual * log(predicted) + (1 - actual) * log(1 - predicted))
-    match_w <- att[j_idx]
-    ok <- match_w > 0
-
-    total_loss <- total_loss + sum(match_w[ok] * loss[ok])
-    total_wt <- total_wt + sum(match_w[ok])
-  }
-
-  if (total_wt == 0) return(1e6)
-  result <- total_loss / total_wt
-  if (is.nan(result) || is.infinite(result)) 1e6 else result
-}
-
-
-# Multi-start optimizer helper ----
-# Tries multiple initial values and keeps the best result.
-# L-BFGS-B with a single start can get stuck near the initial value.
-multi_start_optim <- function(fn, starts, lower, upper, ...) {
-  best <- NULL
-  for (s in starts) {
-    opt <- tryCatch(
-      stats::optim(
-        par = s, fn = fn, method = "L-BFGS-B",
-        lower = lower, upper = upper, ...
-      ),
-      error = function(e) NULL
-    )
-    if (!is.null(opt) && (is.null(best) || opt$value < best$value)) {
-      best <- opt
+  # Per-position proportions
+  pp <- stats::setNames(rep(gp, length(pos_groups)), pos_groups)
+  for (pg in pos_groups) {
+    idx <- which(dt$pos_group == pg)
+    if (length(idx) > 0) {
+      pos_att <- sum(all_att[idx])
+      if (pos_att > 0) pp[pg] <- sum(all_succ[idx]) / pos_att
     }
   }
-  best
+  pos_grand_props[[stat_nm]] <- pp
+
+  # Store flat vectors for vectorized optimization
+  eff_flat_data[[stat_nm]] <- list(successes = all_succ, attempts = all_att)
 }
 
-# Optimize per stat ----
-cli::cli_h1("Optimizing rate stats (MSE)")
 
-stat_results <- list()
+# Worker function for parallel optimization ----
+# Self-contained: includes grouped_cumsum + multi_start_optim so workers
+# don't need closures or exported globals.
+optimize_single_stat <- function(task, shared) {
+  grouped_cumsum <- function(x, grp, grp_start) {
+    cx <- cumsum(x)
+    offsets <- c(0, cx[grp_start[-1] - 1L])
+    cx - offsets[grp]
+  }
 
-# Multi-start grid: diverse lambda x prior_strength combinations
+  multi_start_optim <- function(fn, starts, lower, upper) {
+    best <- NULL
+    for (s in starts) {
+      opt <- tryCatch(
+        stats::optim(par = s, fn = fn, method = "L-BFGS-B",
+                     lower = lower, upper = upper),
+        error = function(e) NULL
+      )
+      if (!is.null(opt) && (is.null(best) || opt$value < best$value)) {
+        best <- opt
+      }
+    }
+    best
+  }
+
+  all_d_rel <- shared$all_d_rel
+  all_group <- shared$all_group
+  group_start <- shared$group_start
+  pred_idx <- shared$pred_idx
+  prev_idx <- shared$prev_idx
+
+  if (task$type == "rate") {
+    fn <- function(par) {
+      lambda <- par[1]; prior_strength <- par[2]
+      exp_pos <- exp(pmin(lambda * all_d_rel, 500))
+      exp_neg <- exp(pmax(-lambda * all_d_rel, -500))
+      cum_ev <- grouped_cumsum(exp_pos * task$stat_events, all_group, group_start)
+      cum_ex <- grouped_cumsum(exp_pos * task$stat_exposure, all_group, group_start)
+      w_ev <- exp_neg[pred_idx] * cum_ev[prev_idx]
+      w_ex <- exp_neg[pred_idx] * cum_ex[prev_idx]
+      predicted <- (task$mu0_vec * prior_strength + w_ev) / (prior_strength + w_ex)
+      residual <- (predicted[task$pred_ok] - task$pred_actual[task$pred_ok])^2
+      result <- sum(task$pred_wt[task$pred_ok] * residual) / task$total_wt
+      if (is.nan(result) || is.infinite(result)) 1e6 else result
+    }
+  } else {
+    fn <- function(par) {
+      lambda <- par[1]; prior_strength <- par[2]
+      exp_pos <- exp(pmin(lambda * all_d_rel, 500))
+      exp_neg <- exp(pmax(-lambda * all_d_rel, -500))
+      cum_s <- grouped_cumsum(exp_pos * task$stat_succ, all_group, group_start)
+      cum_a <- grouped_cumsum(exp_pos * task$stat_att, all_group, group_start)
+      w_s <- exp_neg[pred_idx] * cum_s[prev_idx]
+      w_a <- exp_neg[pred_idx] * cum_a[prev_idx]
+      alpha0 <- task$mu0_vec * prior_strength
+      beta0 <- (1 - task$mu0_vec) * prior_strength
+      predicted <- pmax(pmin((alpha0 + w_s) / (alpha0 + beta0 + w_a), 1 - 1e-8), 1e-8)
+      loss <- -(task$eff_actual * log(predicted) + (1 - task$eff_actual) * log(1 - predicted))
+      result <- sum(task$pred_att[task$eff_pred_ok] * loss[task$eff_pred_ok]) / task$eff_total_wt
+      if (is.nan(result) || is.infinite(result)) 1e6 else result
+    }
+  }
+
+  opt <- multi_start_optim(fn, task$starts, task$lower, task$upper)
+
+  if (!is.null(opt)) {
+    list(
+      stat_name = task$stat_nm,
+      type = task$type,
+      category = task$stat_cat,
+      lambda = opt$par[1],
+      prior_strength = opt$par[2],
+      half_life_days = log(2) / opt$par[1],
+      loss = opt$value,
+      loss_type = task$loss_type
+    )
+  } else {
+    NULL
+  }
+}
+
+# Build optimization task list ----
+cli::cli_h1("Building optimization tasks")
+
+## Multi-start grids ----
 rate_starts <- list(
-  c(0.001, 1),   c(0.001, 5),   c(0.001, 20),
-  c(0.003, 1),   c(0.003, 5),   c(0.003, 20),
-  c(0.005, 0.5), c(0.005, 3),   c(0.005, 10),
-  c(0.01,  1),   c(0.01,  10),  c(0.01,  30)
+  c(0.001, 0.05), c(0.001, 1),   c(0.001, 5),   c(0.001, 20),
+  c(0.003, 0.05), c(0.003, 1),   c(0.003, 5),   c(0.003, 20),
+  c(0.005, 0.05), c(0.005, 0.5), c(0.005, 3),   c(0.005, 10),
+  c(0.01,  0.05), c(0.01,  1),   c(0.01,  10),  c(0.01,  30),
+  c(0.02,  0.05), c(0.02,  0.5), c(0.03,  0.05), c(0.03,  0.5)
 )
 
+eff_starts <- list(
+  c(0.00005, 10), c(0.00005, 50), c(0.00005, 200),
+  c(0.001, 0.5),  c(0.001, 5),    c(0.001, 30),  c(0.001, 100),
+  c(0.003, 0.5),  c(0.003, 5),    c(0.003, 30),  c(0.003, 100),
+  c(0.005, 10),   c(0.005, 50),   c(0.005, 200),
+  c(0.01,  20),   c(0.01,  100),  c(0.01,  300)
+)
+
+tasks <- list()
+
+## Rate stat tasks ----
 for (i in seq_len(nrow(rate_defs))) {
   stat_nm <- rate_defs$stat_name[i]
   src_col <- rate_defs$source_col[i]
@@ -301,47 +310,34 @@ for (i in seq_len(nrow(rate_defs))) {
   }
 
   is_tog_adj <- isTRUE(stat_tog_adjusted[[src_col]])
-  cli::cli_inform("Optimizing {stat_nm} ({stat_cat}){if (!is_tog_adj) ' [per-game]' else ''}")
 
-  opt <- multi_start_optim(
-    fn = compute_rate_mse,
-    starts = rate_starts,
-    lower = c(0.0001, 0.1),
-    upper = c(0.02, 100),
-    stat_col = src_col,
-    use_tog = is_tog_adj
+  stat_events <- as.numeric(dt[[src_col]])
+  stat_events[is.na(stat_events)] <- 0
+  stat_exposure <- if (is_tog_adj) all_tog else rep(1, n_total)
+
+  mu0_global <- grand_means[[src_col]]
+  mu0_pos_map <- pos_grand_means[[src_col]]
+  mu0_vec <- mu0_pos_map[pred_pos]
+  mu0_vec[is.na(mu0_vec)] <- mu0_global
+
+  stat_pred_wt <- stat_exposure[pred_idx]
+  stat_pred_ok <- stat_pred_wt > 0
+  stat_pred_actual <- stat_events[pred_idx] / pmax(stat_pred_wt, 0.1)
+  stat_total_wt <- sum(stat_pred_wt[stat_pred_ok])
+  if (stat_total_wt == 0) next
+
+  tasks[[stat_nm]] <- list(
+    stat_nm = stat_nm, type = "rate", stat_cat = stat_cat,
+    loss_type = "mse",
+    stat_events = stat_events, stat_exposure = stat_exposure,
+    mu0_vec = mu0_vec,
+    pred_wt = stat_pred_wt, pred_ok = stat_pred_ok,
+    pred_actual = stat_pred_actual, total_wt = stat_total_wt,
+    starts = rate_starts, lower = c(0.0001, 0.01), upper = c(0.04, 100)
   )
-
-  if (!is.null(opt)) {
-    lambda <- opt$par[1]
-    prior <- opt$par[2]
-    half_life <- log(2) / lambda
-
-    stat_results[[stat_nm]] <- list(
-      stat_name = stat_nm,
-      type = "rate",
-      category = stat_cat,
-      lambda = lambda,
-      prior_strength = prior,
-      half_life_days = half_life,
-      loss = opt$value,
-      loss_type = "mse"
-    )
-
-    cli::cli_inform("  lambda={round(lambda, 5)} (half-life={round(half_life)}d), prior={round(prior, 2)}, MSE={round(opt$value, 4)}")
-  }
 }
 
-# Optimize efficiency stats (log-loss) ----
-cli::cli_h1("Optimizing efficiency stats (log-loss)")
-
-eff_starts <- list(
-  c(0.001, 5),   c(0.001, 30),  c(0.001, 100),
-  c(0.003, 5),   c(0.003, 30),  c(0.003, 100),
-  c(0.005, 10),  c(0.005, 50),  c(0.005, 200),
-  c(0.01,  20),  c(0.01,  100), c(0.01,  300)
-)
-
+## Efficiency stat tasks ----
 for (i in seq_len(nrow(eff_defs))) {
   stat_nm <- eff_defs$stat_name[i]
   stat_cat <- eff_defs$category[i]
@@ -351,33 +347,67 @@ for (i in seq_len(nrow(eff_defs))) {
     next
   }
 
-  cli::cli_inform("Optimizing {stat_nm} ({stat_cat})")
+  eff_d <- eff_flat_data[[stat_nm]]
+  stat_succ <- eff_d$successes
+  stat_att <- eff_d$attempts
 
-  opt <- multi_start_optim(
-    fn = compute_efficiency_logloss,
-    starts = eff_starts,
-    lower = c(0.0001, 1),
-    upper = c(0.02, 500),
-    stat_nm = stat_nm
+  mu0_global <- max(min(grand_props[[stat_nm]], 1 - 1e-6), 1e-6)
+  mu0_pos_map <- pos_grand_props[[stat_nm]]
+  mu0_vec <- mu0_pos_map[pred_pos]
+  mu0_vec[is.na(mu0_vec)] <- mu0_global
+  mu0_vec <- pmax(pmin(mu0_vec, 1 - 1e-6), 1e-6)
+
+  pred_succ <- stat_succ[pred_idx]
+  pred_att <- stat_att[pred_idx]
+  eff_pred_ok <- pred_att > 0
+  eff_actual <- ifelse(pred_att > 0, pred_succ / pred_att, mu0_global)
+  eff_actual <- pmax(pmin(eff_actual, 1 - 1e-8), 1e-8)
+  eff_total_wt <- sum(pred_att[eff_pred_ok])
+  if (eff_total_wt == 0) next
+
+  tasks[[stat_nm]] <- list(
+    stat_nm = stat_nm, type = "efficiency", stat_cat = stat_cat,
+    loss_type = "logloss",
+    stat_succ = stat_succ, stat_att = stat_att,
+    mu0_vec = mu0_vec,
+    pred_att = pred_att, eff_pred_ok = eff_pred_ok,
+    eff_actual = eff_actual, eff_total_wt = eff_total_wt,
+    starts = eff_starts, lower = c(0.00001, 0.5), upper = c(0.02, 500)
   )
+}
 
-  if (!is.null(opt)) {
-    lambda <- opt$par[1]
-    prior <- opt$par[2]
-    half_life <- log(2) / lambda
+cli::cli_inform("Built {length(tasks)} optimization tasks ({sum(vapply(tasks, function(t) t$type == 'rate', logical(1)))} rate, {sum(vapply(tasks, function(t) t$type == 'efficiency', logical(1)))} efficiency)")
 
-    stat_results[[stat_nm]] <- list(
-      stat_name = stat_nm,
-      type = "efficiency",
-      category = stat_cat,
-      lambda = lambda,
-      prior_strength = prior,
-      half_life_days = half_life,
-      loss = opt$value,
-      loss_type = "logloss"
-    )
+# Run optimizations in parallel ----
+shared_data <- list(
+  all_d_rel = all_d_rel,
+  all_group = all_group,
+  group_start = group_start,
+  pred_idx = pred_idx,
+  prev_idx = prev_idx
+)
 
-    cli::cli_inform("  lambda={round(lambda, 5)} (half-life={round(half_life)}d), prior={round(prior, 2)}, logloss={round(opt$value, 4)}")
+n_cores <- max(1L, parallel::detectCores() - 1L)
+cli::cli_h1("Optimizing {length(tasks)} stats on {n_cores} cores")
+t0 <- proc.time()
+
+cl <- parallel::makeCluster(n_cores)
+on.exit(parallel::stopCluster(cl), add = TRUE)
+
+raw_results <- parallel::parLapply(cl, tasks, optimize_single_stat, shared = shared_data)
+
+parallel::stopCluster(cl)
+on.exit(NULL)  # already stopped
+
+elapsed <- (proc.time() - t0)["elapsed"]
+cli::cli_inform("Parallel optimization done in {round(elapsed, 1)}s")
+
+# Collect results ----
+stat_results <- list()
+for (res in raw_results) {
+  if (!is.null(res)) {
+    stat_results[[res$stat_name]] <- res
+    cli::cli_inform("{res$stat_name} ({res$category}): lambda={round(res$lambda, 5)} (half-life={round(res$half_life_days)}d), prior={round(res$prior_strength, 2)}, {res$loss_type}={round(res$loss, 4)}")
   }
 }
 
@@ -423,4 +453,36 @@ if (length(stat_results) > 0) {
   data.table::setorder(summary_df, half_life_days)
   cli::cli_h2("Optimization Summary")
   print(summary_df, row.names = FALSE)
+
+  # Bound-proximity warnings ----
+  # Rate bounds: lambda [0.0001, 0.04], prior [0.01, 100]
+  # Efficiency bounds: lambda [0.00001, 0.02], prior [0.5, 500]
+  # Use log-scale proximity: flag if within 2x of lower or upper bound
+  bound_warnings <- character(0)
+  for (x in stat_results) {
+    if (x$type == "rate") {
+      lam_lo <- 0.0001; lam_hi <- 0.04; pri_lo <- 0.01; pri_hi <- 100
+    } else {
+      lam_lo <- 0.00001; lam_hi <- 0.02; pri_lo <- 0.5; pri_hi <- 500
+    }
+    if (x$lambda <= lam_lo * 2) {
+      bound_warnings <- c(bound_warnings, paste0("  ", x$stat_name, ": lambda=", round(x$lambda, 6), " near lower bound (", lam_lo, ")"))
+    }
+    if (x$lambda >= lam_hi / 2) {
+      bound_warnings <- c(bound_warnings, paste0("  ", x$stat_name, ": lambda=", round(x$lambda, 6), " near upper bound (", lam_hi, ")"))
+    }
+    if (x$prior_strength <= pri_lo * 2) {
+      bound_warnings <- c(bound_warnings, paste0("  ", x$stat_name, ": prior=", round(x$prior_strength, 3), " near lower bound (", pri_lo, ")"))
+    }
+    if (x$prior_strength >= pri_hi / 2) {
+      bound_warnings <- c(bound_warnings, paste0("  ", x$stat_name, ": prior=", round(x$prior_strength, 3), " near upper bound (", pri_hi, ")"))
+    }
+  }
+  if (length(bound_warnings) > 0) {
+    cli::cli_h2("Bound Proximity Warnings")
+    cli::cli_warn("Parameters near optimization bounds (may need wider bounds):")
+    for (w in bound_warnings) cli::cli_inform(w)
+  } else {
+    cli::cli_alert_success("No parameters stuck at optimization bounds")
+  }
 }

@@ -1,0 +1,691 @@
+#' AFL Season Simulation System
+#'
+#' Functions for simulating complete AFL seasons including regular season,
+#' ladder calculation with AFL tiebreak rules, and finals bracket simulation.
+#'
+#' @name ladder
+NULL
+
+
+# --------------------------------------------------------------------------
+# Data preparation
+# --------------------------------------------------------------------------
+
+#' Prepare simulation data for a season
+#'
+#' Loads fixtures, team ratings, and (optionally) predictions, then separates
+#' played from unplayed games and formats everything for the simulation loop.
+#'
+#' @param season Numeric season year (e.g. 2026).
+#' @param team_ratings Optional data.table/data.frame with columns `team` and
+#'   `torp`. If NULL, loads via [load_team_ratings()].
+#' @param fixtures Optional fixture data.frame (fitzRoy format). If NULL, loads
+#'   via [load_fixtures()].
+#' @param predictions Optional predictions data.frame with `pred_xtotal`. If
+#'   NULL, attempts to load via [load_predictions()].
+#' @param injuries Optional injury data.frame from [get_all_injuries()]. When
+#'   provided, team ratings are built from player-level TORP with injured
+#'   players excluded and a lighter discount ([INJURY_KNOWN_DISCOUNT]) applied.
+#' @return A list with elements `sim_teams`, `sim_games`, `played_games`.
+#' @keywords internal
+prepare_sim_data <- function(season, team_ratings = NULL, fixtures = NULL,
+                             predictions = NULL, injuries = NULL) {
+
+ # --- Fixtures ---
+  if (is.null(fixtures)) {
+    fixtures <- load_fixtures(seasons = season)
+  }
+  fix_dt <- data.table::as.data.table(fixtures)
+
+  # Standardise column names from fitzRoy format
+  if ("compSeason.year" %in% names(fix_dt)) {
+    fix_dt <- fix_dt[get("compSeason.year") == season]
+  }
+
+  # Build sim_games from fixture columns
+  col_map <- list(
+    roundnum   = c("round.roundNumber", "roundnum", "round_number"),
+    home_team  = c("home.team.name", "home_team"),
+    away_team  = c("away.team.name", "away_team"),
+    home_score = c("home.score.totalScore", "home_score", "home_points"),
+    away_score = c("away.score.totalScore", "away_score", "away_points")
+  )
+
+  resolve_col <- function(dt, candidates) {
+    for (cand in candidates) {
+      if (cand %in% names(dt)) return(cand)
+    }
+    NULL
+  }
+
+  rnd_col  <- resolve_col(fix_dt, col_map$roundnum)
+  ht_col   <- resolve_col(fix_dt, col_map$home_team)
+  at_col   <- resolve_col(fix_dt, col_map$away_team)
+  hs_col   <- resolve_col(fix_dt, col_map$home_score)
+  as_col   <- resolve_col(fix_dt, col_map$away_score)
+
+  if (is.null(rnd_col) || is.null(ht_col) || is.null(at_col)) {
+    cli::cli_abort("Could not find required fixture columns (round, home_team, away_team).")
+  }
+
+  sim_games <- data.table::data.table(
+    roundnum  = as.integer(fix_dt[[rnd_col]]),
+    home_team = as.character(fix_dt[[ht_col]]),
+    away_team = as.character(fix_dt[[at_col]]),
+    home_score = if (!is.null(hs_col)) as.integer(fix_dt[[hs_col]]) else NA_integer_,
+    away_score = if (!is.null(as_col)) as.integer(fix_dt[[as_col]]) else NA_integer_
+  )
+
+  # Standardise team names
+  if (requireNamespace("fitzRoy", quietly = TRUE)) {
+    sim_games[, home_team := fitzRoy::replace_teams(home_team)]
+    sim_games[, away_team := fitzRoy::replace_teams(away_team)]
+  }
+
+  # Keep only regular season rounds (exclude finals)
+  max_round <- AFL_REGULAR_SEASON_ROUNDS[as.character(season)]
+  if (is.na(max_round)) max_round <- 24L
+  sim_games <- sim_games[roundnum <= max_round]
+
+  # Determine played vs unplayed
+  sim_games[, result := data.table::fifelse(
+    !is.na(home_score) & !is.na(away_score),
+    home_score - away_score,
+    NA_integer_
+  )]
+
+  # Add columns expected by simulate_season()
+  sim_games[, `:=`(
+    torp_home_round = NA_real_,
+    torp_away_round = NA_real_
+  )]
+
+  played_games <- sim_games[!is.na(result)]
+
+  # --- Team Ratings ---
+  # When injuries are provided, build from player-level ratings so we can
+
+  # exclude specific injured players. Otherwise use pre-computed team ratings.
+  use_injury_aware <- !is.null(injuries) && nrow(injuries) > 0
+
+  if (is.null(team_ratings)) {
+    sim_teams <- NULL
+
+    # When injuries provided, skip pre-computed team ratings and go straight
+    # to player-level ratings so injured players can be excluded
+    if (!use_injury_aware) {
+      # Try pre-computed team ratings first
+      tr <- tryCatch(load_team_ratings(), error = function(e) NULL)
+      if (!is.null(tr)) {
+        tr_dt <- data.table::as.data.table(tr)
+        if ("season" %in% names(tr_dt) && "round" %in% names(tr_dt)) {
+          target_season <- season
+          tr_dt <- tr_dt[season == target_season]
+          if (nrow(tr_dt) > 0) {
+            max_round <- max(tr_dt$round)
+            tr_dt <- tr_dt[round == max_round]
+            torp_col <- if ("team_torp" %in% names(tr_dt)) "team_torp" else "torp"
+            team_col <- if ("team" %in% names(tr_dt)) "team" else "team_name"
+            sim_teams <- data.table::data.table(
+              team = as.character(tr_dt[[team_col]]),
+              torp = as.numeric(tr_dt[[torp_col]])
+            )
+            sim_teams <- sim_teams[, .(torp = mean(torp)), by = team]
+          }
+        }
+      }
+    }
+
+    # Build from player ratings (top N per team, with or without injury exclusion)
+    if (is.null(sim_teams) || nrow(sim_teams) == 0) {
+      discount <- if (use_injury_aware) INJURY_KNOWN_DISCOUNT else SIM_INJURY_DISCOUNT
+      label <- if (use_injury_aware) "injury-aware" else "standard"
+      cli::cli_alert_info("Building {label} team ratings from player TORP (top {SIM_TOP_N_PLAYERS} per team)")
+
+      pr <- tryCatch(load_torp_ratings(), error = function(e) NULL)
+      if (is.null(pr)) {
+        cli::cli_abort("Could not load team or player ratings. Provide them via the {.arg team_ratings} argument.")
+      }
+      pr_dt <- data.table::as.data.table(pr)
+      # Take latest available ratings
+      if ("season" %in% names(pr_dt) && "round" %in% names(pr_dt)) {
+        max_season <- max(pr_dt$season)
+        pr_dt <- pr_dt[season == max_season]
+        max_round <- max(pr_dt$round)
+        pr_dt <- pr_dt[round == max_round]
+      }
+
+      # Exclude injured players when injury data is provided
+      if (use_injury_aware && "player_name" %in% names(pr_dt)) {
+        pr_dt[, player_norm := norm_name(player_name)]
+        injured_norms <- injuries$player_norm
+        n_before <- nrow(pr_dt)
+        pr_dt <- pr_dt[!player_norm %in% injured_norms]
+        n_excluded <- n_before - nrow(pr_dt)
+        if (n_excluded > 0) {
+          cli::cli_alert_info("Excluded {n_excluded} injured player{?s} from team ratings")
+        }
+        pr_dt[, player_norm := NULL]
+      }
+
+      # Top N players per team, sum with discount
+      pr_dt[, tm_rnk := rank(-torp), by = team]
+      sim_teams <- pr_dt[tm_rnk <= SIM_TOP_N_PLAYERS, .(
+        torp = sum(pmax(torp, 0), na.rm = TRUE) * discount
+      ), by = team]
+    }
+  } else {
+    sim_teams <- data.table::as.data.table(team_ratings)[, .(team, torp)]
+  }
+
+  # Standardise team names in ratings
+ if (requireNamespace("fitzRoy", quietly = TRUE)) {
+    sim_teams[, team := fitzRoy::replace_teams(team)]
+  }
+
+  # --- Predictions (optional) ---
+  if (is.null(predictions)) {
+    predictions <- tryCatch(
+      load_predictions(seasons = season, rounds = TRUE),
+      error = function(e) NULL
+    )
+  }
+
+  if (!is.null(predictions)) {
+    pred_dt <- data.table::as.data.table(predictions)
+    # Find matching columns for join
+    pred_rnd <- resolve_col(pred_dt, c("round.roundNumber", "roundnum", "round_number", "round"))
+    pred_ht  <- resolve_col(pred_dt, c("home.team.name", "home_team"))
+
+    if (!is.null(pred_rnd) && !is.null(pred_ht) && "pred_xtotal" %in% names(pred_dt)) {
+      if (requireNamespace("fitzRoy", quietly = TRUE)) {
+        pred_dt[, (pred_ht) := fitzRoy::replace_teams(get(pred_ht))]
+      }
+      sim_games[pred_dt,
+        pred_xtotal := i.pred_xtotal,
+        on = stats::setNames(c(pred_rnd, pred_ht), c("roundnum", "home_team"))
+      ]
+    }
+  }
+
+  list(
+    sim_teams    = sim_teams,
+    sim_games    = sim_games,
+    played_games = played_games
+  )
+}
+
+
+# --------------------------------------------------------------------------
+# Ladder calculation
+# --------------------------------------------------------------------------
+
+#' Calculate AFL ladder from game results
+#'
+#' Pivots game-level results to team-perspective rows and aggregates to produce
+#' a full AFL ladder sorted by ladder points then percentage.
+#'
+#' @param games_dt A data.table with columns `home_team`, `away_team`,
+#'   `home_score`, `away_score`, and `result` (home margin).
+#' @return A data.table with one row per team, sorted by ladder position.
+#' @export
+calculate_ladder <- function(games_dt) {
+  dt <- data.table::as.data.table(games_dt)
+
+  # Home perspective
+ home <- dt[!is.na(result), .(
+    team       = home_team,
+    score_for  = as.numeric(home_score),
+    score_against = as.numeric(away_score),
+    margin     = as.numeric(result)
+  )]
+
+  # Away perspective
+  away <- dt[!is.na(result), .(
+    team       = away_team,
+    score_for  = as.numeric(away_score),
+    score_against = as.numeric(home_score),
+    margin     = -as.numeric(result)
+  )]
+
+  team_rows <- data.table::rbindlist(list(home, away))
+
+  ladder <- team_rows[, .(
+    played     = .N,
+    wins       = sum(margin > 0),
+    draws      = sum(margin == 0),
+    losses     = sum(margin < 0),
+    points_for = sum(score_for),
+    points_against = sum(score_against)
+  ), by = team]
+
+  ladder[, `:=`(
+    percentage    = data.table::fifelse(points_against > 0,
+                                        points_for / points_against * 100,
+                                        0),
+    ladder_points = wins * 4L + draws * 2L
+  )]
+
+  data.table::setorder(ladder, -ladder_points, -percentage)
+  ladder[, rank := seq_len(.N)]
+
+  ladder[]
+}
+
+
+# --------------------------------------------------------------------------
+# Finals simulation
+# --------------------------------------------------------------------------
+
+#' Simulate a single match (internal helper)
+#'
+#' Uses the same formula as the regular season simulation. For finals,
+#' `allow_draw = FALSE` re-draws until a decisive result.
+#'
+#' @param home_torp Numeric home team TORP rating.
+#' @param away_torp Numeric away team TORP rating.
+#' @param home_advantage Numeric home advantage in points.
+#' @param allow_draw Logical; if FALSE, re-simulates ties.
+#' @return A list with `result` (margin from home perspective), `home_score`,
+#'   `away_score`, `estimate`.
+#' @keywords internal
+simulate_match <- function(home_torp, away_torp,
+                           home_advantage = SIM_HOME_ADVANTAGE,
+                           allow_draw = TRUE) {
+  estimate <- home_advantage + (home_torp - away_torp)
+
+  repeat {
+    result <- as.integer(round(
+      stats::rnorm(1, estimate, SIM_NOISE_SD + abs(estimate) / 3)
+    ))
+    if (allow_draw || result != 0L) break
+  }
+
+  total <- pmax(stats::rnorm(1, SIM_AVG_TOTAL, SIM_TOTAL_SD), 40)
+  home_score <- as.integer(pmax(round((total + result) / 2), 0))
+  away_score <- as.integer(pmax(round((total - result) / 2), 0))
+
+  list(result = result, home_score = home_score, away_score = away_score,
+       estimate = estimate)
+}
+
+
+#' Simulate AFL finals series
+#'
+#' Implements the full AFL top-8 finals bracket: qualifying finals, elimination
+#' finals, semi-finals, preliminary finals, and grand final.
+#'
+#' @param ladder_dt A data.table from [calculate_ladder()] with `team` and
+#'   `rank` columns.
+#' @param sim_teams_dt A data.table with `team` and `torp` (hot ratings after
+#'   regular season).
+#' @return A data.table with columns: `team`, `finals_finish` (week eliminated
+#'   or 5 for premier), `finals_wins`, `made_gf`, `won_gf`.
+#' @keywords internal
+simulate_finals <- function(ladder_dt, sim_teams_dt) {
+  # Build lookup: team -> torp rating
+  ratings <- stats::setNames(sim_teams_dt$torp, sim_teams_dt$team)
+  # Original ladder positions for home advantage
+  ladder_pos <- stats::setNames(ladder_dt$rank, ladder_dt$team)
+
+  top8 <- ladder_dt[rank <= 8, team]
+  if (length(top8) < 8) {
+    cli::cli_abort("Need at least 8 teams for finals simulation, got {length(top8)}.")
+  }
+
+  # Helper: play a finals match, update ratings, return winner/loser
+  play_final <- function(home, away, gf = FALSE) {
+    ha <- if (gf) SIM_GF_HOME_ADVANTAGE else SIM_HOME_ADVANTAGE
+    res <- simulate_match(ratings[home], ratings[away],
+                          home_advantage = ha, allow_draw = FALSE)
+
+    # Hot rating adjustment
+    shift <- 0.1 * (res$result - res$estimate)
+    ratings[home] <<- ratings[home] + shift
+    ratings[away] <<- ratings[away] - shift
+
+    if (res$result > 0) list(winner = home, loser = away)
+    else list(winner = away, loser = home)
+  }
+
+  # Higher-ranked team (lower rank number) is home
+  home_team <- function(a, b) {
+    if (ladder_pos[a] < ladder_pos[b]) a else b
+  }
+  away_team <- function(a, b) {
+    if (ladder_pos[a] < ladder_pos[b]) b else a
+  }
+
+  # Track results
+  finals_wins  <- stats::setNames(rep(0L, 8), top8)
+  finals_finish <- stats::setNames(rep(0L, 8), top8)
+
+  # --- Week 1 ---
+  # QF1: 1 v 4
+  qf1 <- play_final(top8[1], top8[4])
+  finals_wins[qf1$winner] <- finals_wins[qf1$winner] + 1L
+
+  # QF2: 2 v 3
+  qf2 <- play_final(top8[2], top8[3])
+  finals_wins[qf2$winner] <- finals_wins[qf2$winner] + 1L
+
+  # EF1: 5 v 8
+  ef1 <- play_final(top8[5], top8[8])
+  finals_wins[ef1$winner] <- finals_wins[ef1$winner] + 1L
+  finals_finish[ef1$loser] <- 1L  # eliminated week 1
+
+  # EF2: 6 v 7
+  ef2 <- play_final(top8[6], top8[7])
+  finals_wins[ef2$winner] <- finals_wins[ef2$winner] + 1L
+  finals_finish[ef2$loser] <- 1L  # eliminated week 1
+
+  # --- Week 2 ---
+  # SF1: Loser QF1 v Winner EF1
+  sf1_home <- home_team(qf1$loser, ef1$winner)
+  sf1_away <- away_team(qf1$loser, ef1$winner)
+  sf1 <- play_final(sf1_home, sf1_away)
+  finals_wins[sf1$winner] <- finals_wins[sf1$winner] + 1L
+  finals_finish[sf1$loser] <- 2L  # eliminated week 2
+
+  # SF2: Loser QF2 v Winner EF2
+  sf2_home <- home_team(qf2$loser, ef2$winner)
+  sf2_away <- away_team(qf2$loser, ef2$winner)
+  sf2 <- play_final(sf2_home, sf2_away)
+  finals_wins[sf2$winner] <- finals_wins[sf2$winner] + 1L
+  finals_finish[sf2$loser] <- 2L  # eliminated week 2
+
+  # --- Week 3 ---
+  # PF1: Winner QF1 v Winner SF1
+  pf1_home <- home_team(qf1$winner, sf1$winner)
+  pf1_away <- away_team(qf1$winner, sf1$winner)
+  pf1 <- play_final(pf1_home, pf1_away)
+  finals_wins[pf1$winner] <- finals_wins[pf1$winner] + 1L
+  finals_finish[pf1$loser] <- 3L  # eliminated week 3
+
+  # PF2: Winner QF2 v Winner SF2
+  pf2_home <- home_team(qf2$winner, sf2$winner)
+  pf2_away <- away_team(qf2$winner, sf2$winner)
+  pf2 <- play_final(pf2_home, pf2_away)
+  finals_wins[pf2$winner] <- finals_wins[pf2$winner] + 1L
+  finals_finish[pf2$loser] <- 3L  # eliminated week 3
+
+  # --- Week 4: Grand Final ---
+  gf_home <- home_team(pf1$winner, pf2$winner)
+  gf_away <- away_team(pf1$winner, pf2$winner)
+  gf <- play_final(gf_home, gf_away, gf = TRUE)
+  finals_wins[gf$winner] <- finals_wins[gf$winner] + 1L
+  finals_finish[gf$winner] <- 5L  # premier
+  finals_finish[gf$loser]  <- 4L  # runner-up
+
+  data.table::data.table(
+    team          = names(finals_wins),
+    finals_finish = as.integer(finals_finish[names(finals_wins)]),
+    finals_wins   = as.integer(finals_wins),
+    made_gf       = as.integer(names(finals_wins) %in% c(gf$winner, gf$loser)),
+    won_gf        = as.integer(names(finals_wins) == gf$winner)
+  )
+}
+
+
+# --------------------------------------------------------------------------
+# Main entry point
+# --------------------------------------------------------------------------
+
+#' Simulate a full AFL season
+#'
+#' Runs multiple Monte Carlo simulations of the AFL regular season and finals
+#' to estimate ladder positions, finals probabilities, and premiership odds.
+#'
+#' @param season Numeric season year (e.g. 2026).
+#' @param n_sims Number of simulations to run (default [SIM_DEFAULT_N]).
+#' @param team_ratings Optional data.table with `team` and `torp` columns. If
+#'   NULL, loads from torpdata.
+#' @param fixtures Optional fixture data. If NULL, loads from torpdata.
+#' @param predictions Optional predictions data with `pred_xtotal`.
+#' @param injuries Optional injury data.frame from [get_all_injuries()]. When
+#'   provided, injured players are excluded from team ratings and per-round
+#'   noise is reduced from [SIM_INJURY_SD] to [SIM_INJURY_SD_KNOWN].
+#' @param seed Optional random seed for reproducibility.
+#' @param verbose Logical; if TRUE, shows a progress bar.
+#' @param keep_games Logical; if TRUE, stores per-sim game results (memory
+#'   intensive). Default FALSE.
+#' @param n_cores Number of cores for parallel execution. Default 1 (sequential).
+#'   Values > 1 use [parallel::parLapply()] with reproducible L'Ecuyer-CMRG
+#'   random streams. Progress bars are not shown in parallel mode.
+#' @return An S3 object of class `"torp_sim_results"` containing `season`,
+#'   `n_sims`, `ladders`, `finals`, `games` (if requested), and
+#'   `original_ratings`.
+#' @export
+#' @examples
+#' \donttest{
+#' try({
+#'   results <- simulate_afl_season(2025, n_sims = 10, seed = 42)
+#'   print(results)
+#' })
+#' }
+simulate_afl_season <- function(season,
+                                n_sims = SIM_DEFAULT_N,
+                                team_ratings = NULL,
+                                fixtures = NULL,
+                                predictions = NULL,
+                                injuries = NULL,
+                                seed = NULL,
+                                verbose = TRUE,
+                                keep_games = FALSE,
+                                n_cores = 1L) {
+
+  if (!is.null(seed)) set.seed(seed)
+
+  # When injuries are provided, use reduced per-round noise
+  sim_injury_sd <- if (!is.null(injuries) && nrow(injuries) > 0) {
+    SIM_INJURY_SD_KNOWN
+  } else {
+    SIM_INJURY_SD
+  }
+
+  # Prepare data once
+  prep <- prepare_sim_data(
+    season      = season,
+    team_ratings = team_ratings,
+    fixtures    = fixtures,
+    predictions = predictions,
+    injuries    = injuries
+  )
+
+  base_teams <- prep$sim_teams
+  base_games <- prep$sim_games
+  played_games <- prep$played_games
+
+  # Ensure column types once (so simulate_season doesn't need to per-sim)
+  if ("result" %in% names(base_games)) {
+    base_games[, result := as.integer(result)]
+  }
+  if ("torp_home_round" %in% names(base_games)) {
+    base_games[, torp_home_round := as.numeric(torp_home_round)]
+  }
+  if ("torp_away_round" %in% names(base_games)) {
+    base_games[, torp_away_round := as.numeric(torp_away_round)]
+  }
+
+  # --- Worker function for a single sim ---
+  run_one_sim <- function(sim_id) {
+    sim_result <- simulate_season(base_teams, base_games, return_teams = TRUE,
+                                  injury_sd = sim_injury_sd)
+    simmed_games <- sim_result$games
+    sim_teams_final <- sim_result$teams
+
+    all_games <- data.table::rbindlist(
+      list(played_games, simmed_games),
+      use.names = TRUE, fill = TRUE
+    )
+
+    ladder <- calculate_ladder(all_games)
+    ladder[, sim_id := sim_id]
+
+    finals <- simulate_finals(ladder, sim_teams_final)
+    finals[, sim_id := sim_id]
+
+    out <- list(ladder = ladder, finals = finals)
+    if (keep_games) {
+      all_games[, sim_id := sim_id]
+      out$games <- all_games
+    }
+    out
+  }
+
+  # --- Execute: parallel or sequential ---
+  n_cores <- as.integer(n_cores)
+  if (n_cores > 1L) {
+    cl <- parallel::makeCluster(n_cores)
+    on.exit(parallel::stopCluster(cl), add = TRUE)
+
+    # Export required objects and functions to workers
+    parallel::clusterExport(cl, c(
+      "base_teams", "base_games", "played_games", "keep_games",
+      "sim_injury_sd",
+      "simulate_season", "process_games_dt", "calculate_ladder",
+      "simulate_finals", "simulate_match",
+      "SIM_HOME_ADVANTAGE", "SIM_NOISE_SD", "SIM_WP_SCALING_FACTOR",
+      "SIM_AVG_TOTAL", "SIM_TOTAL_SD", "SIM_GF_HOME_ADVANTAGE",
+      "SIM_INJURY_SD", "SIM_INJURY_SD_KNOWN", "SIM_MEAN_REVERSION"
+    ), envir = environment())
+    parallel::clusterEvalQ(cl, library(data.table))
+
+    # Reproducible parallel RNG
+    if (!is.null(seed)) parallel::clusterSetRNGStream(cl, seed)
+
+    # Run in batches for progress reporting
+    batch_size <- max(n_sims %/% 20L, n_cores)
+    batches <- split(seq_len(n_sims), ceiling(seq_len(n_sims) / batch_size))
+
+    if (verbose) {
+      cli::cli_progress_bar(
+        paste0("Simulating seasons (", n_cores, " cores)"),
+        total = n_sims
+      )
+    }
+
+    sim_results <- vector("list", n_sims)
+    for (batch in batches) {
+      batch_results <- parallel::parLapply(cl, batch, run_one_sim)
+      sim_results[batch] <- batch_results
+      if (verbose) cli::cli_progress_update(set = max(batch))
+    }
+
+    if (verbose) cli::cli_progress_done()
+  } else {
+    if (verbose) cli::cli_progress_bar("Simulating seasons", total = n_sims)
+
+    sim_results <- vector("list", n_sims)
+    for (i in seq_len(n_sims)) {
+      sim_results[[i]] <- run_one_sim(i)
+      if (verbose) cli::cli_progress_update()
+    }
+
+    if (verbose) cli::cli_progress_done()
+  }
+
+  # --- Collect results ---
+  result <- list(
+    season           = season,
+    n_sims           = n_sims,
+    ladders          = data.table::rbindlist(lapply(sim_results, `[[`, "ladder")),
+    finals           = data.table::rbindlist(lapply(sim_results, `[[`, "finals")),
+    games            = if (keep_games) data.table::rbindlist(lapply(sim_results, `[[`, "games")) else NULL,
+    original_ratings = base_teams
+  )
+  class(result) <- "torp_sim_results"
+  result
+}
+
+
+# --------------------------------------------------------------------------
+# Summary and print methods
+# --------------------------------------------------------------------------
+
+#' Summarise simulation results
+#'
+#' Aggregates ladder and finals results across all simulations into a single
+#' team-level summary table.
+#'
+#' @param sim_results An object of class `"torp_sim_results"`.
+#' @return A data.table with one row per team, ordered by average wins descending.
+#' @export
+summarise_simulations <- function(sim_results) {
+  n <- sim_results$n_sims
+
+  # Ladder summary
+  ladder_sum <- sim_results$ladders[, .(
+    avg_wins       = mean(wins),
+    avg_losses     = mean(losses),
+    avg_draws      = mean(draws),
+    avg_percentage = mean(percentage),
+    avg_pf_pg      = mean(points_for / played),
+    avg_pa_pg      = mean(points_against / played),
+    avg_rank       = mean(rank),
+    top_8_pct      = mean(rank <= 8),
+    top_4_pct      = mean(rank <= 4),
+    top_2_pct      = mean(rank <= 2),
+    top_1_pct      = mean(rank == 1),
+    last_pct       = mean(rank == max(rank))
+  ), by = team]
+
+  # Finals summary
+  if (nrow(sim_results$finals) > 0) {
+    finals_sum <- sim_results$finals[, .(
+      made_finals_pct = .N / n,
+      avg_finals_wins = mean(finals_wins),
+      made_gf_pct     = sum(made_gf) / n,
+      won_gf_pct      = sum(won_gf) / n
+    ), by = team]
+
+    out <- merge(ladder_sum, finals_sum, by = "team", all.x = TRUE)
+
+    # Teams that never made finals
+    out[is.na(made_finals_pct), `:=`(
+      made_finals_pct = 0,
+      avg_finals_wins = 0,
+      made_gf_pct     = 0,
+      won_gf_pct      = 0
+    )]
+  } else {
+    out <- ladder_sum
+    out[, `:=`(made_finals_pct = 0, avg_finals_wins = 0,
+               made_gf_pct = 0, won_gf_pct = 0)]
+  }
+
+  data.table::setorder(out, -avg_wins)
+  out[]
+}
+
+
+#' Print simulation results
+#'
+#' @param x A `torp_sim_results` object.
+#' @param ... Additional arguments (ignored).
+#' @export
+print.torp_sim_results <- function(x, ...) {
+  summary <- summarise_simulations(x)
+
+  cli::cli_h2("AFL Season Simulation: {x$season}")
+  cli::cli_text("{x$n_sims} simulations")
+  cli::cli_text("")
+
+  # Format compact table
+  display <- summary[, .(
+    Team    = team,
+    W       = sprintf("%.1f", avg_wins),
+    PF      = sprintf("%.1f", avg_pf_pg),
+    PA      = sprintf("%.1f", avg_pa_pg),
+    Pct     = sprintf("%.1f", avg_percentage),
+    `1st`   = sprintf("%.1f%%", top_1_pct * 100),
+    Top4    = sprintf("%.0f%%", top_4_pct * 100),
+    Top8    = sprintf("%.0f%%", top_8_pct * 100),
+    GF      = sprintf("%.0f%%", made_gf_pct * 100),
+    Premier = sprintf("%.1f%%", won_gf_pct * 100),
+    Last    = sprintf("%.1f%%", last_pct * 100)
+  )]
+
+  print(display, nrows = 18)
+  invisible(x)
+}

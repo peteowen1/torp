@@ -4,7 +4,7 @@
 \alias{process_games}
 \title{Process games for a single round}
 \usage{
-process_games(sim_teams, sim_games, round_num)
+process_games(sim_teams, sim_games, round_num, injury_sd = SIM_INJURY_SD)
 }
 \arguments{
 \item{sim_teams}{A data frame containing team ratings.}

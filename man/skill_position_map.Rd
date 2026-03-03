@@ -11,6 +11,7 @@ A named list mapping group names to character vectors of
 AFL position strings.
 }
 \description{
-Maps AFL listed positions to 4 simplified groups used for computing
-position-specific priors.
+Maps AFL listed positions to 6 position groups for computing
+position-specific priors. MIDFIELDER_FORWARD is combined with
+MEDIUM_FORWARD.
 }

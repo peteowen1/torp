@@ -415,7 +415,7 @@ test_that(".map_position_group maps correctly", {
   expect_equal(.map_position_group("KEY_DEFENDER"), "DEF")
   expect_equal(.map_position_group("MEDIUM_DEFENDER"), "DEF")
   expect_equal(.map_position_group("MIDFIELDER"), "MID")
-  expect_equal(.map_position_group("MIDFIELDER_FORWARD"), "MID")
+  expect_equal(.map_position_group("MIDFIELDER_FORWARD"), "MEDIUM_FORWARD")
   expect_equal(.map_position_group("KEY_FORWARD"), "FWD")
   expect_equal(.map_position_group("MEDIUM_FORWARD"), "FWD")
   expect_equal(.map_position_group("RUCK"), "RUCK")

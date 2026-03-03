@@ -13,6 +13,19 @@
 #' @param prior_games_spoil Prior games for spoil shrinkage. Default is \code{RATING_PRIOR_GAMES_SPOIL}.
 #' @param prior_games_hitout Prior games for hitout shrinkage. Default is \code{RATING_PRIOR_GAMES_HITOUT}.
 #' @param fixtures Optional pre-loaded fixtures data. If NULL, will load automatically.
+#' @param skills Controls TOG-weighted average adjustment. When active, TORP
+#'   components are re-centered to "above TOG-weighted average" by subtracting
+#'   the weighted mean of each component (weighted by
+#'   \code{time_on_ground_skill}). Accepts:
+#'   \itemize{
+#'     \item \code{TRUE} (default): auto-loads skills via
+#'       \code{get_player_skills(current = FALSE)}.
+#'     \item A data.frame with \code{player_id} and
+#'       \code{time_on_ground_skill} columns.
+#'     \item \code{FALSE} or \code{NULL}: skip adjustment.
+#'   }
+#'   Players not in \code{skills} default to weight 0 (excluded from the
+#'   average, but still have the average subtracted).
 #'
 #' @return A data frame containing player TORP ratings.
 #' @export
@@ -31,7 +44,35 @@ calculate_torp_ratings <- function(season_val = get_afl_season(type = "current")
                          player_game_data = NULL,
                          prior_games_spoil = RATING_PRIOR_GAMES_SPOIL,
                          prior_games_hitout = RATING_PRIOR_GAMES_HITOUT,
-                         fixtures = NULL) {
+                         fixtures = NULL,
+                         skills = TRUE,
+                         prior_rate_recv = RATING_PRIOR_RATE_RECV,
+                         prior_rate_disp = RATING_PRIOR_RATE_DISP,
+                         prior_rate_spoil = RATING_PRIOR_RATE_SPOIL,
+                         prior_rate_hitout = RATING_PRIOR_RATE_HITOUT) {
+
+
+  # Resolve skills: TRUE → auto-load, FALSE/NULL → skip, data.frame → validate
+  if (isTRUE(skills)) {
+    skills <- tryCatch(
+      get_player_skills(current = FALSE),
+      error = function(e) {
+        cli::cli_warn("Could not load skills data, skipping TOG adjustment: {conditionMessage(e)}")
+        NULL
+      }
+    )
+    if (!is.null(skills) && !"time_on_ground_skill" %in% names(skills)) {
+      cli::cli_warn("Skills data missing {.field time_on_ground_skill} column, skipping TOG adjustment.")
+      skills <- NULL
+    }
+  } else if (isFALSE(skills)) {
+    skills <- NULL
+  } else if (!is.null(skills)) {
+    if (!"time_on_ground_skill" %in% names(skills)) {
+      cli::cli_abort("{.arg skills} must contain a {.field time_on_ground_skill} column.")
+    }
+  }
+
   # Load player team details if not provided
   if (is.null(plyr_tm_df)) {
     plyr_tm_df <- load_player_details(season_val)
@@ -63,7 +104,31 @@ calculate_torp_ratings <- function(season_val = get_afl_season(type = "current")
     cli::cli_warn("Fixtures for this date not available yet")
     return(data.frame())
   } else {
-    plyr_gm_df_rnd <- calculate_player_stats(player_game_data, match_ref, date_val, decay, loading, prior_games_recv, prior_games_disp, prior_games_spoil = prior_games_spoil, prior_games_hitout = prior_games_hitout)
+    plyr_gm_df_rnd <- calculate_player_stats(player_game_data, match_ref, date_val, decay, loading, prior_games_recv, prior_games_disp, prior_games_spoil = prior_games_spoil, prior_games_hitout = prior_games_hitout, prior_rate_recv = prior_rate_recv, prior_rate_disp = prior_rate_disp, prior_rate_spoil = prior_rate_spoil, prior_rate_hitout = prior_rate_hitout)
+
+    # TOG-weighted average adjustment: re-center TORP to "above average"
+    if (!is.null(skills)) {
+      skills_dt <- data.table::as.data.table(skills)
+      plyr_gm_df_rnd[skills_dt, tog_skill := i.time_on_ground_skill, on = "player_id"]
+      plyr_gm_df_rnd[is.na(tog_skill), tog_skill := 0]
+
+      tot_tog <- sum(plyr_gm_df_rnd$tog_skill)
+      if (tot_tog > 0) {
+        comps <- c("torp_recv", "torp_disp", "torp_spoil", "torp_hitout")
+        for (comp in comps) {
+          avg_val <- sum(plyr_gm_df_rnd[[comp]] * plyr_gm_df_rnd$tog_skill) / tot_tog
+          plyr_gm_df_rnd[, (comp) := get(comp) - avg_val]
+        }
+        plyr_gm_df_rnd[, `:=`(
+          torp = round(torp_recv + torp_disp + torp_spoil + torp_hitout, 2),
+          torp_recv_adj = round(torp_recv, 2),
+          torp_disp_adj = round(torp_disp, 2),
+          torp_spoil_adj = round(torp_spoil, 2),
+          torp_hitout_adj = round(torp_hitout, 2)
+        )]
+      }
+      plyr_gm_df_rnd[, tog_skill := NULL]
+    }
 
     final_df <- prepare_final_dataframe(plyr_tm_df, plyr_gm_df_rnd, season_val, round_val)
 
@@ -87,7 +152,7 @@ calculate_torp_ratings <- function(season_val = get_afl_season(type = "current")
 #' @return A data frame with calculated player statistics
 #'
 #' @importFrom data.table as.data.table uniqueN setDT
-calculate_player_stats <- function(player_game_data = NULL, match_ref, date_val, decay, loading, prior_games_recv, prior_games_disp, prior_games_spoil = RATING_PRIOR_GAMES_SPOIL, prior_games_hitout = RATING_PRIOR_GAMES_HITOUT) {
+calculate_player_stats <- function(player_game_data = NULL, match_ref, date_val, decay, loading, prior_games_recv, prior_games_disp, prior_games_spoil = RATING_PRIOR_GAMES_SPOIL, prior_games_hitout = RATING_PRIOR_GAMES_HITOUT, prior_rate_recv = RATING_PRIOR_RATE_RECV, prior_rate_disp = RATING_PRIOR_RATE_DISP, prior_rate_spoil = RATING_PRIOR_RATE_SPOIL, prior_rate_hitout = RATING_PRIOR_RATE_HITOUT) {
   if (is.null(player_game_data)) {
     player_game_data <- load_player_game_data(TRUE)
   }
@@ -129,10 +194,10 @@ calculate_player_stats <- function(player_game_data = NULL, match_ref, date_val,
     disp_g = disp_sum / wt_gms,
     spoil_g = spoil_sum / wt_gms,
     hitout_g = hitout_sum / wt_gms,
-    torp_recv = loading * recv_sum / (wt_gms + prior_games_recv),
-    torp_disp = loading * disp_sum / (wt_gms + prior_games_disp),
-    torp_spoil = loading * spoil_sum / (wt_gms + prior_games_spoil),
-    torp_hitout = loading * hitout_sum / (wt_gms + prior_games_hitout)
+    torp_recv = (loading * recv_sum + prior_games_recv * prior_rate_recv) / (wt_gms + prior_games_recv),
+    torp_disp = (loading * disp_sum + prior_games_disp * prior_rate_disp) / (wt_gms + prior_games_disp),
+    torp_spoil = (loading * spoil_sum + prior_games_spoil * prior_rate_spoil) / (wt_gms + prior_games_spoil),
+    torp_hitout = (loading * hitout_sum + prior_games_hitout * prior_rate_hitout) / (wt_gms + prior_games_hitout)
   )]
 
   # Third pass: compute final torp and rounded values

@@ -121,3 +121,28 @@ utils::globalVariables(c(
   "..keep_cols", "..skill_cols", "..lower_cols", "..upper_cols",
   "..lower_present", "..upper_present", "..raw_cols"
 ))
+
+# Contest extraction variables
+utils::globalVariables(c(
+  ".next_desc", ".next_player_id", ".next_team_id", ".next_x", ".next_y",
+  "player1_id", "player2_id",
+  "team1_id", "team2_id", "player1_desc", "player2_desc",
+  "contest_type", "outcome", "winner", "p1_won",
+  "p1_wins", "p1_win_pct", "total",
+  "matchId", "displayOrder", "playerId", "teamId", "periodSeconds"
+))
+
+# Ladder / season simulation variables
+utils::globalVariables(c(
+  "sim_id", "played", "wins", "draws", "losses",
+  "points_for", "points_against", "percentage", "ladder_points", "rank",
+  "score_for", "score_against", "margin",
+  "home_score", "away_score",
+  "finals_finish", "finals_wins", "made_gf", "won_gf",
+  "pred_xtotal",
+  "avg_wins", "avg_losses", "avg_draws", "avg_percentage", "avg_rank",
+ "top_8_pct", "top_4_pct", "top_2_pct", "top_1_pct",
+  "made_finals_pct", "avg_finals_wins", "made_gf_pct", "won_gf_pct",
+  "i.pred_xtotal",
+  "injury", "estimated_return", "player_norm", "tm_rnk"
+))

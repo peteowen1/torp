@@ -37,7 +37,7 @@ EPV_WEIGHT_DECAY_DAYS <- 365
 
 #' Default decay factor (in days) for TORP rating historical weighting
 #' @keywords internal
-RATING_DECAY_DEFAULT_DAYS <- 513
+RATING_DECAY_DEFAULT_DAYS <- 451
 
 #' Loading factor for TORP calculations
 #' @keywords internal
@@ -45,35 +45,50 @@ RATING_LOADING_DEFAULT <- 1.0000
 
 #' Prior games constant for receiving ratings
 #' @keywords internal
-RATING_PRIOR_GAMES_RECV <- 6.0442
+RATING_PRIOR_GAMES_RECV <- 3.0000
 
 #' Prior games constant for disposal ratings
 #' @keywords internal
-RATING_PRIOR_GAMES_DISP <- 8.0334
+RATING_PRIOR_GAMES_DISP <- 9.7386
 
 #' Prior games constant for spoil ratings
 #' @keywords internal
-RATING_PRIOR_GAMES_SPOIL <- 3.0000
+RATING_PRIOR_GAMES_SPOIL <- 8.2669
 
 #' Prior games constant for hitout ratings
 #' @keywords internal
-RATING_PRIOR_GAMES_HITOUT <- 5.3162
+RATING_PRIOR_GAMES_HITOUT <- 3.7313
 
+#' Prior rate for receiving component (shrinkage target per weighted game)
+#' @keywords internal
+RATING_PRIOR_RATE_RECV <- -0.2500
+
+#' Prior rate for disposal component (shrinkage target per weighted game)
+#' @keywords internal
+RATING_PRIOR_RATE_DISP <- -0.2500
+
+#' Prior rate for spoil component (shrinkage target per weighted game)
+#' @keywords internal
+RATING_PRIOR_RATE_SPOIL <- -0.2500
+
+#' Prior rate for hitout component (shrinkage target per weighted game)
+#' @keywords internal
+RATING_PRIOR_RATE_HITOUT <- -0.2500
 
 # Credit Assignment Constants
 # ----------------------------
 
 #' Disposal EPV offset when defending (pos_team == -1)
 #' @keywords internal
-CREDIT_DISP_NEG_OFFSET <- -0.4459
+CREDIT_DISP_NEG_OFFSET <- 0.0289
 
 #' Disposal EPV offset when possessing (pos_team == 1)
 #' @keywords internal
-CREDIT_DISP_POS_OFFSET <- 0.1189
+CREDIT_DISP_POS_OFFSET <- -0.1000
 
 #' Disposal scaling factor
 #' @keywords internal
-CREDIT_DISP_SCALE <- 0.7798
+CREDIT_DISP_SCALE <- 0.8958
 
 #' Bounce penalty per bounce
 #' @keywords internal
@@ -81,7 +96,7 @@ CREDIT_BOUNCE_PENALTY <- 1.0000
 
 #' Reception multiplier when defending (pos_team == -1)
 #' @keywords internal
-CREDIT_RECV_NEG_MULT <- 1.2841
+CREDIT_RECV_NEG_MULT <- 1.2592
 
 #' Reception offset when defending
 #' @keywords internal
@@ -89,59 +104,47 @@ CREDIT_RECV_NEG_OFFSET <- 0.5000
 
 #' Reception multiplier when possessing (pos_team == 1)
 #' @keywords internal
-CREDIT_RECV_POS_MULT <- 1.1283
+CREDIT_RECV_POS_MULT <- 0.6841
 
 #' Reception offset when possessing
 #' @keywords internal
-CREDIT_RECV_POS_OFFSET <- 0.2231
+CREDIT_RECV_POS_OFFSET <- 0.5000
 
 #' Reception scaling factor
 #' @keywords internal
-CREDIT_RECV_SCALE <- 0.4234
+CREDIT_RECV_SCALE <- 0.3669
 
 #' Spoil weight per spoil
 #' @keywords internal
-CREDIT_SPOIL_WT <- 1.0531
+CREDIT_SPOIL_WT <- 1.1061
 
 #' Tackle weight per tackle
 #' @keywords internal
-CREDIT_TACKLE_WT <- 1.1408
+CREDIT_TACKLE_WT <- 1.5484
 
 #' Pressure act weight
 #' @keywords internal
-CREDIT_PRESSURE_WT <- 0.3072
+CREDIT_PRESSURE_WT <- 0.2581
 
 #' Defensive half pressure act weight (subtracted)
 #' @keywords internal
-CREDIT_DEF_PRESSURE_WT <- 1.0312
+CREDIT_DEF_PRESSURE_WT <- 1.2720
 
 #' Hitout weight per hitout
 #' @keywords internal
-CREDIT_HITOUT_WT <- 0.4528
+CREDIT_HITOUT_WT <- 0.1954
 
 #' Hitout to advantage weight
 #' @keywords internal
-CREDIT_HITOUT_ADV_WT <- 0.2523
+CREDIT_HITOUT_ADV_WT <- 0.5396
 
 #' Ruck contest weight (subtracted)
 #' @keywords internal
 CREDIT_RUCK_CONTEST_WT <- 0.0300
 
-#' Position adjustment quantile for reception
+#' Position-group quantile adjustment (shared across all credit components)
 #' @keywords internal
-CREDIT_POS_ADJ_QUANTILE_RECV <- 0.3500
-
-#' Position adjustment quantile for disposal
-#' @keywords internal
-CREDIT_POS_ADJ_QUANTILE_DISP <- 0.3500
-
-#' Position adjustment quantile for spoil/tackle
-#' @keywords internal
-CREDIT_POS_ADJ_QUANTILE_SPOIL <- 0.3500
-
-#' Position adjustment quantile for hitout
-#' @keywords internal
-CREDIT_POS_ADJ_QUANTILE_HITOUT <- 0.5100
+CREDIT_POS_ADJ_QUANTILE <- 0.3429
 
 
 # Simulation Constants
@@ -158,6 +161,67 @@ SIM_WP_SCALING_FACTOR <- 50
 #' Home ground advantage in points
 #' @keywords internal
 SIM_HOME_ADVANTAGE <- 6
+
+#' Fallback mean combined score per game
+#' @keywords internal
+SIM_AVG_TOTAL <- 160
+
+#' SD of combined score noise
+#' @keywords internal
+SIM_TOTAL_SD <- 28
+
+#' Grand Final home advantage (MCG = roughly neutral)
+#' @keywords internal
+SIM_GF_HOME_ADVANTAGE <- 0
+
+#' Per-team per-round injury/disruption noise SD (points)
+#' Represents week-to-week variation in effective team strength due to
+#' player availability, minor injuries, and roster changes.
+#' @keywords internal
+SIM_INJURY_SD <- 3
+
+#' Mean reversion rate per round
+#' Fraction of the gap between a team's rating and the league mean that is
+#' closed each round. 0.01 = ~21% total reversion over 24 rounds.
+#' @keywords internal
+SIM_MEAN_REVERSION <- 0.01
+
+#' Reduced injury noise SD when known injuries are excluded (points)
+#' When specific injured players are removed from team ratings, the remaining
+#' per-round noise can be smaller since a major source of variation is gone.
+#' @keywords internal
+SIM_INJURY_SD_KNOWN <- 2
+
+#' Injury discount for teams with known injuries excluded
+#' Lighter than SIM_INJURY_DISCOUNT (0.95) because major absences are already
+#' reflected by removing those players from the rating sum.
+#' @keywords internal
+INJURY_KNOWN_DISCOUNT <- 0.98
+
+#' Default number of simulations
+#' @keywords internal
+SIM_DEFAULT_N <- 1000
+
+#' Regular season rounds by year (excludes finals)
+#' 2022 and earlier: 23 rounds; 2023 onwards: 24 rounds
+#' @keywords internal
+AFL_REGULAR_SEASON_ROUNDS <- c(
+  "2021" = 23L,
+  "2022" = 23L,
+  "2023" = 24L,
+  "2024" = 24L,
+  "2025" = 24L,
+  "2026" = 24L
+)
+
+#' Top N players per team for rating aggregation
+#' @keywords internal
+SIM_TOP_N_PLAYERS <- 21
+
+#' Injury discount applied to team rating sums
+#' Accounts for typical player availability (injuries, rest, rotation).
+#' @keywords internal
+SIM_INJURY_DISCOUNT <- 0.95
 
 
 # Win Probability Constants
@@ -236,3 +300,46 @@ VALIDATION_HIGH_MISSING_THRESHOLD <- 0.5
 #' Minimum observations for calibration bins
 #' @keywords internal
 VALIDATION_MIN_CALIBRATION_BIN_SIZE <- 10
+
+
+# EPV Model Constants
+# -------------------
+
+#' Descriptions relevant for EPV modeling (the 27-description whitelist)
+#' Used in clean_model_data_epv_dt() and filter_relevant_descriptions()
+#' @keywords internal
+EPV_RELEVANT_DESCRIPTIONS <- c(
+  "Ball Up Call", "Bounce", "Centre Bounce", "Contested Knock On", "Contested Mark",
+  "Free Advantage", "Free For", "Free For: Before the Bounce", "Free For: In Possession",
+  "Free For: Off The Ball", "Gather", "Gather From Hitout", "Gather from Opposition",
+  "Ground Kick", "Handball", "Handball Received", "Hard Ball Get", "Hard Ball Get Crumb",
+  "Kick", "Knock On", "Loose Ball Get", "Loose Ball Get Crumb", "Mark On Lead",
+  "Out of Bounds", "Out On Full After Kick", "Ruck Hard Ball Get", "Uncontested Mark"
+)
+
+
+# Contest Extraction Constants
+# ----------------------------
+# Based on diagnostic analysis of raw CHAINS data (not cleaned PBP).
+# Chains data has 87 unique descriptions including Spoil, Contest Target,
+# Tackle, etc. that get stripped by clean_pbp(). Contests are identified by
+# matching x,y coordinates on consecutive rows from opposing teams.
+
+#' Chains descriptions for the contest target / kick result side
+#' These appear in the row BEFORE the contest outcome (Spoil, Mark, etc.)
+#' at the same x,y coordinates.
+#' @keywords internal
+CHAINS_CONTEST_TARGET_DESCS <- c("Contest Target", "Kick Inside 50 Result")
+
+#' Chains descriptions indicating the opponent won the mark
+#' @keywords internal
+CHAINS_MARK_WIN_DESCS <- c("Contested Mark", "Uncontested Mark", "Mark On Lead")
+
+#' Descriptions for ground ball contests (present in both chains and PBP)
+#' Adjacent ground ball rows from opposing teams at same x,y indicate a contest
+#' @keywords internal
+CONTEST_GROUND_BALL_DESCS <- c(
+  "Hard Ball Get", "Loose Ball Get",
+  "Hard Ball Get Crumb", "Loose Ball Get Crumb",
+  "Ruck Hard Ball Get"
+)

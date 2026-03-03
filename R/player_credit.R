@@ -23,10 +23,7 @@ default_credit_params <- function() {
     hitout_wt         = CREDIT_HITOUT_WT,
     hitout_adv_wt     = CREDIT_HITOUT_ADV_WT,
     ruck_contest_wt        = CREDIT_RUCK_CONTEST_WT,
-    pos_adj_quantile_recv  = CREDIT_POS_ADJ_QUANTILE_RECV,
-    pos_adj_quantile_disp  = CREDIT_POS_ADJ_QUANTILE_DISP,
-    pos_adj_quantile_spoil = CREDIT_POS_ADJ_QUANTILE_SPOIL,
-    pos_adj_quantile_hitout = CREDIT_POS_ADJ_QUANTILE_HITOUT
+    pos_adj_quantile       = CREDIT_POS_ADJ_QUANTILE
   )
 }
 
@@ -36,8 +33,7 @@ default_credit_params <- function() {
 #' player performance data used by the TORP ratings pipeline.
 #'
 #' Computes disposal points, reception points, spoil/tackle points, and
-#' hitout points for each player-game combination. Adjusts each component
-#' by subtracting a position-group quantile.
+#' hitout points for each player-game combination.
 #'
 #' @param pbp_data Play-by-play data from \code{load_pbp()}. If NULL, loads all available.
 #' @param player_stats Raw player stats from \code{load_player_stats()}. If NULL, loads all available.
@@ -167,17 +163,19 @@ create_player_game_data <- function(pbp_data = NULL,
     dplyr::left_join(
       teams,
       by = c("match_id" = "providerId", "player_id" = "player.playerId")
+    ) |>
+    dplyr::mutate(
+      position = dplyr::if_else(position == "MIDFIELDER_FORWARD", "MEDIUM_FORWARD", position)
     )
 
-  # --- Step 7: Position-group adjustment (subtract 40th percentile) ---
+  # --- Step 7: Position-group quantile adjustment ---
   plyr_gm_df <- plyr_gm_df |>
-    dplyr::ungroup() |>
     dplyr::group_by(position) |>
     dplyr::mutate(
-      recv_pts_adj = recv_pts - stats::quantile(recv_pts, p$pos_adj_quantile_recv, na.rm = TRUE),
-      disp_pts_adj = disp_pts - stats::quantile(disp_pts, p$pos_adj_quantile_disp, na.rm = TRUE),
-      spoil_pts_adj = spoil_pts - stats::quantile(spoil_pts, p$pos_adj_quantile_spoil, na.rm = TRUE),
-      hitout_pts_adj = hitout_pts - stats::quantile(hitout_pts, p$pos_adj_quantile_hitout, na.rm = TRUE),
+      recv_pts_adj = recv_pts - stats::quantile(recv_pts, p$pos_adj_quantile, na.rm = TRUE),
+      disp_pts_adj = disp_pts - stats::quantile(disp_pts, p$pos_adj_quantile, na.rm = TRUE),
+      spoil_pts_adj = spoil_pts - stats::quantile(spoil_pts, p$pos_adj_quantile, na.rm = TRUE),
+      hitout_pts_adj = hitout_pts - stats::quantile(hitout_pts, p$pos_adj_quantile, na.rm = TRUE),
       tot_p_adj = recv_pts_adj + disp_pts_adj + spoil_pts_adj + hitout_pts_adj
     ) |>
     dplyr::ungroup()

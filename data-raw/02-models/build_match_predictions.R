@@ -67,8 +67,7 @@ LISTED_POS_MAP <- list(
   key_def  = "KEY_DEFENDER",
   med_def  = "MEDIUM_DEFENDER",
   midfield = "MIDFIELDER",
-  mid_fwd  = "MIDFIELDER_FORWARD",
-  med_fwd  = "MEDIUM_FORWARD",
+  med_fwd  = c("MEDIUM_FORWARD", "MIDFIELDER_FORWARD"),
   key_fwd  = "KEY_FORWARD",
   rucks    = "RUCK"
 )
@@ -78,30 +77,6 @@ POS_COLS <- c(
   names(PHASE_MAP), names(POS_GROUP_MAP), INDIVIDUAL_POS,
   names(COMBO_POS_MAP), names(LISTED_POS_MAP), "other_pos"
 )
-
-# Helper: Scrape Injuries ----
-
-scrape_injuries <- function(timeout = 30) {
-  tryCatch({
-    library(rvest)
-    url <- "https://www.afl.com.au/matches/injury-list"
-    session <- rvest::session(url, httr::timeout(timeout))
-    session %>%
-      html_table() %>%
-      list_rbind() %>%
-      janitor::clean_names() %>%
-      mutate(
-        player = case_match(
-          player,
-          "Cam Zurhaar" ~ "Cameron Zurhaar",
-          .default = player
-        )
-      )
-  }, error = function(e) {
-    cli::cli_warn("Failed to scrape injury list: {conditionMessage(e)}")
-    data.frame(player = character(), injury = character(), estimated_return = character())
-  })
-}
 
 # Main Pipeline ----
 
@@ -229,19 +204,21 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL) {
     dplyr::filter((position.x != "EMERG" & position.x != "SUB") | is.na(position.x))
 
   na_torp_count <- sum(is.na(team_lineup_df$torp))
+  torp_prior_total <- RATING_PRIOR_RATE_RECV + RATING_PRIOR_RATE_DISP + RATING_PRIOR_RATE_SPOIL + RATING_PRIOR_RATE_HITOUT
   if (na_torp_count > 0) {
     na_pct <- round(100 * na_torp_count / nrow(team_lineup_df), 1)
-    cli::cli_inform("Replacing {na_torp_count} ({na_pct}%) NA torp ratings with 0")
+    cli::cli_inform("Replacing {na_torp_count} ({na_pct}%) NA torp ratings with prior ({round(torp_prior_total, 2)})")
     if (na_pct > 25) cli::cli_warn("High proportion of missing ratings ({na_pct}%)")
   }
 
+  # Use per-component priors for unknown players (consistent with shrinkage formula)
   team_lineup_df <- team_lineup_df %>%
     dplyr::mutate(
-      torp = tidyr::replace_na(torp, 0),
-      torp_recv = tidyr::replace_na(torp_recv, 0),
-      torp_disp = tidyr::replace_na(torp_disp, 0),
-      torp_spoil = tidyr::replace_na(torp_spoil, 0),
-      torp_hitout = tidyr::replace_na(torp_hitout, 0)
+      torp = tidyr::replace_na(torp, torp_prior_total),
+      torp_recv = tidyr::replace_na(torp_recv, RATING_PRIOR_RATE_RECV),
+      torp_disp = tidyr::replace_na(torp_disp, RATING_PRIOR_RATE_DISP),
+      torp_spoil = tidyr::replace_na(torp_spoil, RATING_PRIOR_RATE_SPOIL),
+      torp_hitout = tidyr::replace_na(torp_hitout, RATING_PRIOR_RATE_HITOUT)
     )
 
   # Generate position columns from lookup tables (replaces 52 ifelse calls)
@@ -254,7 +231,7 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL) {
   for (col in names(COMBO_POS_MAP))
     team_lineup_df[[col]] <- ifelse(team_lineup_df$position.x %in% COMBO_POS_MAP[[col]], team_lineup_df$torp, NA)
   for (col in names(LISTED_POS_MAP))
-    team_lineup_df[[col]] <- ifelse(team_lineup_df$position.y == LISTED_POS_MAP[[col]], team_lineup_df$torp, NA)
+    team_lineup_df[[col]] <- ifelse(team_lineup_df$position.y %in% LISTED_POS_MAP[[col]], team_lineup_df$torp, NA)
   team_lineup_df$other_pos <- ifelse(is.na(team_lineup_df$position.y), team_lineup_df$torp, NA)
 
   ## Aggregate Lineups ----
@@ -345,11 +322,11 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL) {
     dplyr::mutate(days_rest = replace_na(days_rest, 21))
 
   ## Injuries ----
-  cli::cli_h2("Scraping injuries")
-  inj_df <- scrape_injuries()
-  cli::cli_inform("Injuries loaded: {nrow(inj_df)} rows")
+  cli::cli_h2("Loading injuries")
+  inj_df <- get_all_injuries(season)
+  cli::cli_inform("Injuries loaded: {nrow(inj_df)} rows ({sum(inj_df$source == 'weekly', na.rm = TRUE)} weekly, {sum(inj_df$source == 'preseason', na.rm = TRUE)} preseason)")
   if (nrow(inj_df) == 0 && min(target_weeks) > 1) {
-    cli::cli_warn("0 injuries scraped during active season - all players will be treated as available")
+    cli::cli_warn("0 injuries loaded during active season - all players will be treated as available")
   }
 
   tr <- torp_ratings(season, min(target_weeks))
@@ -358,8 +335,7 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL) {
     tictoc::toc(log = TRUE)
     return(invisible(NULL))
   }
-  tr <- tr %>%
-    left_join(inj_df, by = c("player_name" = "player")) %>%
+  tr <- match_injuries(tr, inj_df) %>%
     mutate(estimated_return = replace_na(estimated_return, "None"))
 
   tr_week <-
