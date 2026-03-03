@@ -23,6 +23,7 @@
 skill_stat_definitions <- function() {
   rate_stats <- data.frame(
     stat_name = c(
+      # --- Existing stats ---
       "goals", "behinds", "shots_at_goal", "score_involvements", "goal_assists",
       "kicks", "handballs", "disposals",
       "marks", "contested_possessions", "uncontested_possessions",
@@ -33,9 +34,21 @@ skill_stat_definitions <- function() {
       "pressure_acts",
       "hitouts", "hitouts_to_advantage",
       "frees_for", "frees_against",
-      "clangers", "turnovers"
+      "clangers", "turnovers",
+      # --- New stats ---
+      "bounces", "def_half_pressure_acts",
+      "centre_clearances", "stoppage_clearances",
+      "effective_kicks", "effective_disposals",
+      "intercept_marks", "f50_ground_ball_gets",
+      "score_launches", "marks_on_lead",
+      "tackles_inside50", "kickins",
+      "centre_bounce_attendances", "ruck_contests",
+      "contest_def_one_on_ones", "contest_off_one_on_ones",
+      "contest_off_wins", "contest_def_losses",
+      "dream_team_points", "rating_points"
     ),
     source_col = c(
+      # --- Existing stats ---
       "goals", "behinds", "shots_at_goal", "score_involvements", "goal_assists",
       "kicks", "handballs", "disposals",
       "marks", "contested_possessions", "uncontested_possessions",
@@ -46,9 +59,21 @@ skill_stat_definitions <- function() {
       "extended_stats_pressure_acts",
       "hitouts", "extended_stats_hitouts_to_advantage",
       "frees_for", "frees_against",
-      "clangers", "turnovers"
+      "clangers", "turnovers",
+      # --- New stats ---
+      "bounces", "extended_stats_def_half_pressure_acts",
+      "clearances_centre_clearances", "clearances_stoppage_clearances",
+      "extended_stats_effective_kicks", "extended_stats_effective_disposals",
+      "extended_stats_intercept_marks", "extended_stats_f50ground_ball_gets",
+      "extended_stats_score_launches", "extended_stats_marks_on_lead",
+      "tackles_inside50", "extended_stats_kickins",
+      "extended_stats_centre_bounce_attendances", "extended_stats_ruck_contests",
+      "extended_stats_contest_def_one_on_ones", "extended_stats_contest_off_one_on_ones",
+      "extended_stats_contest_off_wins", "extended_stats_contest_def_losses",
+      "dream_team_points", "rating_points"
     ),
     category = c(
+      # --- Existing stats ---
       "scoring", "scoring", "scoring", "scoring", "scoring",
       "disposal", "disposal", "disposal",
       "possession", "possession", "possession",
@@ -59,30 +84,62 @@ skill_stat_definitions <- function() {
       "pressure",
       "ruck", "ruck",
       "discipline", "discipline",
-      "negative", "negative"
+      "negative", "negative",
+      # --- New stats ---
+      "disposal", "pressure",
+      "clearance", "clearance",
+      "disposal", "disposal",
+      "defensive", "contested",
+      "territory", "possession",
+      "defensive", "territory",
+      "ruck", "ruck",
+      "contested", "contested",
+      "contested", "contested",
+      "general", "general"
     ),
     type = "rate",
     success_col = NA_character_,
     attempts_col = NA_character_,
+    tog_adjusted = c(
+      # --- Existing stats (all TOG-adjusted) ---
+      rep(TRUE, 29),
+      # --- New stats ---
+      TRUE, TRUE,           # bounces, def_half_pressure_acts
+      TRUE, TRUE,           # centre/stoppage clearances
+      TRUE, TRUE,           # effective kicks/disposals
+      TRUE, TRUE,           # intercept_marks, f50_ground_ball_gets
+      TRUE, TRUE,           # score_launches, marks_on_lead
+      TRUE, TRUE,           # tackles_inside50, kickins
+      TRUE, TRUE,           # centre_bounce_attendances, ruck_contests
+      TRUE, TRUE,           # contest_def/off_one_on_ones
+      TRUE, TRUE,           # contest_off_wins, contest_def_losses
+      FALSE, FALSE          # dream_team_points, rating_points
+    ),
+    pos_adjusted = TRUE,
     stringsAsFactors = FALSE
   )
 
   efficiency_stats <- data.frame(
     stat_name = c(
       "disposal_efficiency", "goal_accuracy",
-      "contested_poss_rate", "hitout_win_pct"
+      "contested_poss_rate", "hitout_win_pct",
+      "kick_efficiency", "time_on_ground"
     ),
     source_col = NA_character_,
-    category = c("disposal", "scoring", "possession", "ruck"),
+    category = c("disposal", "scoring", "possession", "ruck", "disposal", "general"),
     type = "efficiency",
     success_col = c(
       "disposal_efficiency_pct_x_disposals", "goals",
-      "contested_possessions", "extended_stats_hitouts_to_advantage"
+      "contested_possessions", "extended_stats_hitouts_to_advantage",
+      "extended_stats_effective_kicks", "tog"
     ),
     attempts_col = c(
       "disposals", "shots_at_goal",
-      "contested_possessions+uncontested_possessions", "hitouts"
+      "contested_possessions+uncontested_possessions", "hitouts",
+      "kicks", "tog_denominator"
     ),
+    tog_adjusted = NA,
+    pos_adjusted = c(TRUE, TRUE, TRUE, TRUE, TRUE, FALSE),
     stringsAsFactors = FALSE
   )
 
@@ -92,18 +149,21 @@ skill_stat_definitions <- function() {
 
 #' Position group mapping for AFL skill estimation
 #'
-#' Maps AFL listed positions to 4 simplified groups used for computing
-#' position-specific priors.
+#' Maps AFL listed positions to 6 position groups for computing
+#' position-specific priors. MIDFIELDER_FORWARD is combined with
+#' MEDIUM_FORWARD.
 #'
 #' @return A named list mapping group names to character vectors of
 #'   AFL position strings.
 #' @export
 skill_position_map <- function() {
   list(
-    DEF  = c("KEY_DEFENDER", "MEDIUM_DEFENDER"),
-    MID  = c("MIDFIELDER", "MIDFIELDER_FORWARD"),
-    FWD  = c("KEY_FORWARD", "MEDIUM_FORWARD"),
-    RUCK = c("RUCK")
+    KEY_DEFENDER    = "KEY_DEFENDER",
+    MEDIUM_DEFENDER = "MEDIUM_DEFENDER",
+    MIDFIELDER      = "MIDFIELDER",
+    MEDIUM_FORWARD  = c("MEDIUM_FORWARD", "MIDFIELDER_FORWARD"),
+    KEY_FORWARD     = "KEY_FORWARD",
+    RUCK            = "RUCK"
   )
 }
 
@@ -182,6 +242,8 @@ default_skill_params <- function() {
     disposal_efficiency     = list(lambda = 0.00235, prior_strength = 32.67),
     goal_accuracy           = list(lambda = 0.00010, prior_strength = 67.73),
     contested_poss_rate     = list(lambda = 0.00303, prior_strength = 20.00),
-    hitout_win_pct          = list(lambda = 0.00135, prior_strength = 100.00)
+    hitout_win_pct          = list(lambda = 0.00135, prior_strength = 100.00),
+    kick_efficiency         = list(lambda = 0.00235, prior_strength = 32.67),
+    time_on_ground          = list(lambda = 0.01386, prior_strength = 1.00)
   )
 }

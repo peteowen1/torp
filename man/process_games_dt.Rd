@@ -4,7 +4,7 @@
 \alias{process_games_dt}
 \title{Process games for a single round (data.table optimized)}
 \usage{
-process_games_dt(sim_teams, sim_games, round_num)
+process_games_dt(sim_teams, sim_games, round_num, injury_sd = SIM_INJURY_SD)
 }
 \arguments{
 \item{sim_teams}{A data.table containing team ratings.}

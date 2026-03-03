@@ -9,18 +9,19 @@ default_skill_params()
 \value{
 A named list with elements:
 \describe{
-\item{lambda_rate}{Exponential decay rate for rate stats (per day).
-Default 0.0019 gives about 365-day half-life.}
-\item{lambda_efficiency}{Decay rate for efficiency stats.
-Default 0.0013 gives about 533-day half-life.}
-\item{prior_games}{Prior pseudo-games for Gamma-Poisson rate stats.}
+\item{lambda_rate}{Fallback decay rate for rate stats (per day).}
+\item{lambda_efficiency}{Decay rate for efficiency stats (per day).}
+\item{prior_games}{Fallback prior pseudo-games for Gamma-Poisson rate stats.}
 \item{prior_attempts}{Prior pseudo-attempts for Beta-Binomial efficiency stats.}
 \item{min_games}{Minimum weighted games to appear in output.}
 \item{credible_level}{Width of credible interval (e.g. 0.80 for 80 pct).}
+\item{category_params}{Per-category lambda and prior_strength overrides.}
 }
 }
 \description{
-Returns sensible defaults for the Bayesian skill estimation pipeline.
-These can be overridden by optimized values from
-\code{data-raw/06-skills/02_optimize_params.R}.
+Returns optimized defaults for the Bayesian skill estimation pipeline.
+Per-category lambda and prior values come from
+\code{data-raw/06-skills/02_optimize_params.R}. The global \code{lambda_rate}
+and \code{prior_games} are used as fallbacks for any category not in
+\code{category_params}.
 }

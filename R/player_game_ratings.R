@@ -47,17 +47,26 @@ player_game_ratings <- function(season_val = get_afl_season(),
   df |>
     dplyr::arrange(-.data$tot_p_adj) |>
     dplyr::mutate(
+      tog_frac = pmax(.data$time_on_ground_percentage / 100, 0.1),
       total_points = round(.data$tot_p_adj, 1),
       recv_points = round(.data$recv_pts_adj, 1),
       disp_points = round(.data$disp_pts_adj, 1),
       spoil_points = round(.data$spoil_pts_adj, 1),
-      hitout_points = round(.data$hitout_pts_adj, 1)
+      hitout_points = round(.data$hitout_pts_adj, 1),
+      total_p80 = round(.data$tot_p_adj / .data$tog_frac, 1),
+      recv_p80 = round(.data$recv_pts_adj / .data$tog_frac, 1),
+      disp_p80 = round(.data$disp_pts_adj / .data$tog_frac, 1),
+      spoil_p80 = round(.data$spoil_pts_adj / .data$tog_frac, 1),
+      hitout_p80 = round(.data$hitout_pts_adj / .data$tog_frac, 1)
     ) |>
     dplyr::select(
       season = "season", round = "round",
       player_name = "plyr_nm", position = "pos", team_id = "team_id", team = "tm", opp = "opp",
       total_points = "total_points", recv_points = "recv_points", disp_points = "disp_points",
       spoil_points = "spoil_points", hitout_points = "hitout_points",
+      total_p80 = "total_p80", recv_p80 = "recv_p80", disp_p80 = "disp_p80",
+      spoil_p80 = "spoil_p80", hitout_p80 = "hitout_p80",
+      tog = "tog_frac",
       player_id = "player_id", match_id = "match_id"
     )
 }
@@ -145,6 +154,8 @@ player_season_ratings <- function(season_val = get_afl_season(), round_num = NA)
       season_spoil = sum(.data$spoil_points),
       season_hitout = sum(.data$hitout_points),
       ppg = .data$season_points / .data$games,
+      avg_p80 = mean(.data$total_p80),
+      avg_tog = mean(.data$tog),
       .groups = "drop"
     ) |>
     dplyr::arrange(-.data$season_points)

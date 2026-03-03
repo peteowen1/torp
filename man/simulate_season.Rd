@@ -5,7 +5,12 @@
 \alias{sim_season}
 \title{Simulate a season of games}
 \usage{
-simulate_season(sim_teams, sim_games)
+simulate_season(
+  sim_teams,
+  sim_games,
+  return_teams = FALSE,
+  injury_sd = SIM_INJURY_SD
+)
 
 sim_season(sim_teams, sim_games)
 }
@@ -13,9 +18,14 @@ sim_season(sim_teams, sim_games)
 \item{sim_teams}{A data frame containing team ratings.}
 
 \item{sim_games}{A data frame containing fixture data.}
+
+\item{return_teams}{Logical. If TRUE, return a list with both games and updated
+team ratings. Default FALSE returns just the games data.table for backward
+compatibility.}
 }
 \value{
-A data frame of simulated game results.
+A data.table of simulated game results (default), or a list with
+\code{games} and \code{teams} elements when \code{return_teams = TRUE}.
 }
 \description{
 This function simulates a season of games based on team ratings and fixture data.

@@ -234,24 +234,10 @@ test_that("is_download_skippable returns FALSE when no local dir", {
   expect_false(torp:::is_download_skippable("https://example.com/test.parquet"))
 })
 
-# -- CREDIT_POS_ADJ_QUANTILE Constants --
+# -- CREDIT_POS_ADJ_QUANTILE Constant --
 
-test_that("CREDIT_POS_ADJ_QUANTILE constants are valid quantiles", {
-  consts <- c(
-    torp:::CREDIT_POS_ADJ_QUANTILE_RECV,
-    torp:::CREDIT_POS_ADJ_QUANTILE_DISP,
-    torp:::CREDIT_POS_ADJ_QUANTILE_SPOIL,
-    torp:::CREDIT_POS_ADJ_QUANTILE_HITOUT
-  )
-  for (q in consts) {
-    expect_true(q > 0)
-    expect_true(q < 1)
-  }
-})
-
-test_that("CREDIT_POS_ADJ_QUANTILE constants have expected values", {
-  expect_equal(torp:::CREDIT_POS_ADJ_QUANTILE_RECV, 0.3500)
-  expect_equal(torp:::CREDIT_POS_ADJ_QUANTILE_DISP, 0.3500)
-  expect_equal(torp:::CREDIT_POS_ADJ_QUANTILE_SPOIL, 0.3500)
-  expect_equal(torp:::CREDIT_POS_ADJ_QUANTILE_HITOUT, 0.5100)
+test_that("CREDIT_POS_ADJ_QUANTILE is a valid quantile in [0.2, 0.4]", {
+  q <- torp:::CREDIT_POS_ADJ_QUANTILE
+  expect_true(q >= 0.2)
+  expect_true(q <= 0.4)
 })

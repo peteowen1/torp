@@ -57,6 +57,7 @@ utils::globalVariables(c(
   "tot_p_adj", "tot_p_sum", "recv_pts_adj", "recv_sum",
   "disp_pts_adj", "disp_sum", "spoil_pts_adj", "spoil_sum",
   "hitout_pts_adj", "hitout_sum", "weight_gm", "wt_gms", "utc_start_time",
+  "pred_tog", "tog_safe", "tog_wt", "lineup_tog",
 
   # data.table join prefixes
   "i.torp", "i.torp_shift_away", "i.torp_shift_home",
@@ -106,7 +107,8 @@ utils::globalVariables(c(
 
 # Skill estimation variables
 utils::globalVariables(c(
-  "tog", "match_date_skill", "days_since", "decay_wt",
+  "avail_only",
+  "tog", "tog_denominator", "match_date_skill", "days_since", "decay_wt",
   "wt_events", "wt_exposure", "wt_successes", "wt_attempts",
   "alpha_post", "beta_post", "skill_estimate", "skill_lower", "skill_upper",
   "position_group", "wt_games_skill", "n_games_skill", "wt_games",
@@ -120,4 +122,31 @@ utils::globalVariables(c(
   "i.n_games", "i.wt_games",
   "..keep_cols", "..skill_cols", "..lower_cols", "..upper_cols",
   "..lower_present", "..upper_present", "..raw_cols"
+))
+
+# Contest extraction variables
+utils::globalVariables(c(
+  ".next_desc", ".next_player_id", ".next_team_id", ".next_x", ".next_y",
+  "player1_id", "player2_id",
+  "team1_id", "team2_id", "player1_desc", "player2_desc",
+  "contest_type", "outcome", "winner", "p1_won",
+  "p1_wins", "p1_win_pct", "total",
+  "matchId", "displayOrder", "playerId", "teamId", "periodSeconds"
+))
+
+# Ladder / season simulation variables
+utils::globalVariables(c(
+  "sim_id", "played", "wins", "draws", "losses",
+  "points_for", "points_against", "percentage", "ladder_points", "rank",
+  "score_for", "score_against", "margin",
+  "home_score", "away_score",
+  "finals_finish", "finals_wins", "made_gf", "won_gf",
+  "pred_xtotal",
+  "avg_wins", "avg_losses", "avg_draws", "avg_percentage", "avg_rank",
+ "top_8_pct", "top_4_pct", "top_2_pct", "top_1_pct",
+  "made_finals_pct", "avg_finals_wins", "made_gf_pct", "won_gf_pct",
+  "i.pred_xtotal",
+  "injury", "estimated_return", "player_norm", "tm_rnk",
+  "tog_frac", "total_p80", "recv_p80", "disp_p80", "spoil_p80", "hitout_p80",
+  "avg_p80", "avg_tog"
 ))

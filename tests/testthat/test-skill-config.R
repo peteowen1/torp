@@ -95,6 +95,6 @@ test_that("skill stat categories are consistent", {
   # Known categories
   expected_cats <- c("scoring", "disposal", "possession", "contested",
                      "clearance", "territory", "defensive", "pressure",
-                     "ruck", "discipline", "negative")
+                     "ruck", "discipline", "negative", "general")
   expect_true(all(defs$category %in% expected_cats))
 })

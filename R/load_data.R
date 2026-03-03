@@ -525,6 +525,8 @@ load_player_season_ratings <- function(seasons = get_afl_season(), use_disk_cach
 #'   [torpdata repository](https://github.com/peteowen1/torpdata).
 #'   Aggregates are the sum of TORP ratings for each team's top-21 players
 #'   (filtered to TORP > 0) per round, with subcategory breakdowns.
+#'   Player-level ratings are already centered relative to average, so
+#'   team sums are naturally relative to 0.
 #'
 #' @param columns Optional character vector of column names to read. If NULL (default), reads all columns.
 #'
@@ -545,7 +547,9 @@ load_team_ratings <- function(columns = NULL) {
   if (nrow(out) == 0) {
     cli::cli_warn("No team ratings data loaded. The file may not exist yet or the download failed.")
   }
-  tibble::as_tibble(out)
+  out <- tibble::as_tibble(out)
+
+  out
 }
 
 #' Load EP/WP Chart Data

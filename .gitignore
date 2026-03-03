@@ -26,6 +26,9 @@ data-raw/archive/
 # Temporary files
 *.tmp
 *.log
+
+# Skills pipeline cache (large RDS files)
+data-raw/cache-skills/
 nul
 _ul
 data-raw/debug/

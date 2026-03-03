@@ -16,7 +16,8 @@ calculate_torp_ratings(
   player_game_data = NULL,
   prior_games_spoil = RATING_PRIOR_GAMES_SPOIL,
   prior_games_hitout = RATING_PRIOR_GAMES_HITOUT,
-  fixtures = NULL
+  fixtures = NULL,
+  skills = TRUE
 )
 
 torp_ratings(
@@ -30,7 +31,8 @@ torp_ratings(
   player_game_data = NULL,
   prior_games_spoil = RATING_PRIOR_GAMES_SPOIL,
   prior_games_hitout = RATING_PRIOR_GAMES_HITOUT,
-  fixtures = NULL
+  fixtures = NULL,
+  skills = TRUE
 )
 }
 \arguments{
@@ -55,6 +57,20 @@ torp_ratings(
 \item{prior_games_hitout}{Prior games for hitout shrinkage. Default is \code{RATING_PRIOR_GAMES_HITOUT}.}
 
 \item{fixtures}{Optional pre-loaded fixtures data. If NULL, will load automatically.}
+
+\item{skills}{Controls TOG-weighted average adjustment. When active, TORP
+components are re-centered to "above TOG-weighted average" by subtracting
+the weighted mean of each component (weighted by
+\code{time_on_ground_skill}). Accepts:
+\itemize{
+\item \code{TRUE} (default): auto-loads skills via
+\code{get_player_skills(current = FALSE)}.
+\item A data.frame with \code{player_id} and
+\code{time_on_ground_skill} columns.
+\item \code{FALSE} or \code{NULL}: skip adjustment.
+}
+Players not in \code{skills} default to weight 0 (excluded from the
+average, but still have the average subtracted).}
 }
 \value{
 A data frame containing player TORP ratings.

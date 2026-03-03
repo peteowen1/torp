@@ -21,10 +21,19 @@ cli::cli_inform("Player game data: {nrow(pgd)} rows, {length(unique(pgd$player_i
 ps <- load_player_stats(TRUE, use_disk_cache = TRUE)
 cli::cli_inform("Player stats: {nrow(ps)} rows")
 
+# Load rosters for all seasons (for zero-TOG expansion of non-selected players)
+seasons <- sort(unique(pgd$season))
+rosters <- data.table::rbindlist(lapply(seasons, load_player_details), fill = TRUE)
+cli::cli_inform("Rosters: {nrow(rosters)} player-seasons across {length(seasons)} seasons")
+
+# Load fixtures (for team-round calendar: handles byes + finals correctly)
+fixtures <- load_fixtures(all = TRUE, use_disk_cache = TRUE)
+cli::cli_inform("Fixtures: {nrow(fixtures)} rows")
+
 # Prepare ----
 cli::cli_h1("Preparing skill data")
 
-skill_data <- prepare_skill_data(pgd, ps)
+skill_data <- prepare_skill_data(pgd, ps, rosters = rosters, fixtures = fixtures)
 
 cli::cli_inform("Skill data: {nrow(skill_data)} rows, {length(unique(skill_data$player_id))} players")
 cli::cli_inform("Date range: {min(skill_data$match_date_skill)} to {max(skill_data$match_date_skill)}")

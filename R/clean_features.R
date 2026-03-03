@@ -23,15 +23,7 @@ clean_model_data_epv_dt <- function(df) {
   grp <- c("match_id", "period", "tot_goals")
 
   # Filter relevant descriptions (vectorized, no grouping needed)
-  relevant_descriptions <- c(
-    "Ball Up Call", "Bounce", "Centre Bounce", "Contested Knock On", "Contested Mark",
-    "Free Advantage", "Free For", "Free For: Before the Bounce", "Free For: In Possession",
-    "Free For: Off The Ball", "Gather", "Gather From Hitout", "Gather from Opposition",
-    "Ground Kick", "Handball", "Handball Received", "Hard Ball Get", "Hard Ball Get Crumb",
-    "Kick", "Knock On", "Loose Ball Get", "Loose Ball Get Crumb", "Mark On Lead",
-    "Out of Bounds", "Out On Full After Kick", "Ruck Hard Ball Get", "Uncontested Mark"
-  )
-  dt <- dt[description %in% relevant_descriptions]
+  dt <- dt[description %in% EPV_RELEVANT_DESCRIPTIONS]
   dt <- dt[!(dplyr::near(x, -lead_x_tot) & dplyr::near(y, -lead_y_tot) & description != "Centre Bounce")]
 
   # Grouped throw_in filter via shift
@@ -506,17 +498,8 @@ predict_shot_probabilities <- function(model, new_data) {
 #' @keywords internal
 #' @importFrom dplyr filter
 filter_relevant_descriptions <- function(df) {
-  relevant_descriptions <- c(
-    "Ball Up Call", "Bounce", "Centre Bounce", "Contested Knock On", "Contested Mark",
-    "Free Advantage", "Free For", "Free For: Before the Bounce", "Free For: In Possession",
-    "Free For: Off The Ball", "Gather", "Gather From Hitout", "Gather from Opposition",
-    "Ground Kick", "Handball", "Handball Received", "Hard Ball Get", "Hard Ball Get Crumb",
-    "Kick", "Knock On", "Loose Ball Get", "Loose Ball Get Crumb", "Mark On Lead",
-    "Out of Bounds", "Out On Full After Kick", "Ruck Hard Ball Get", "Uncontested Mark"
-  )
-
   df |>
-    dplyr::filter(.data$description %in% relevant_descriptions) |>
+    dplyr::filter(.data$description %in% EPV_RELEVANT_DESCRIPTIONS) |>
     dplyr::filter(!(dplyr::near(.data$x, -.data$lead_x_tot) & dplyr::near(.data$y, -.data$lead_y_tot) & .data$description != "Centre Bounce"))
 }
 

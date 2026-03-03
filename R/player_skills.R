@@ -79,15 +79,17 @@
 #'
 #' @importFrom data.table as.data.table
 #' @export
-prepare_skill_data <- function(player_game_data, player_stats) {
+prepare_skill_data <- function(player_game_data, player_stats, rosters = NULL,
+                               fixtures = NULL) {
   pgd <- data.table::as.data.table(player_game_data)
   ps <- data.table::as.data.table(player_stats)
 
   # Compute match_date from utc_start_time
   pgd[, match_date_skill := as.Date(utc_start_time)]
 
-  # Compute TOG as fraction
+  # Compute TOG as fraction and constant denominator for Beta-Binomial model
   pgd[, tog := time_on_ground_percentage / 100]
+  pgd[, tog_denominator := 1]
 
   # Identify player_id and match_id columns in player_stats
   # player_stats uses: player_player_player_player_id (player) + provider_id (match)
@@ -96,17 +98,28 @@ prepare_skill_data <- function(player_game_data, player_stats) {
   if (length(pid_col) == 0 || length(mid_col) == 0) {
     cli::cli_warn(c(
       "Cannot find player/match ID columns in player_stats.",
-      "i" = "disposal_efficiency skill will rely entirely on the prior."
+      "i" = "Some skills will rely entirely on the prior."
     ))
     pgd[, disposal_efficiency_pct_x_disposals := NA_real_]
   } else {
     pid_col <- pid_col[1]
     mid_col <- mid_col[1]
 
-    # Bring in disposal_efficiency from player_stats (as percentage 0-100)
-    if ("disposal_efficiency" %in% names(ps)) {
-      ps_slim <- ps[, c(pid_col, mid_col, "disposal_efficiency"), with = FALSE]
-      # Normalise column names to match pgd
+    # Find all stat columns needed by skill definitions but missing from pgd
+    stat_defs_merge <- skill_stat_definitions()
+    needed_cols <- unique(c(
+      stats::na.omit(stat_defs_merge$source_col),
+      stats::na.omit(stat_defs_merge$success_col),
+      stats::na.omit(stat_defs_merge$attempts_col)
+    ))
+    needed_cols <- unique(unlist(strsplit(needed_cols, "\\+")))
+    missing_from_pgd <- setdiff(needed_cols, names(pgd))
+    # Also always bring in disposal_efficiency for the derived column
+    missing_from_pgd <- unique(c(missing_from_pgd, "disposal_efficiency"))
+    available_in_ps <- intersect(missing_from_pgd, names(ps))
+
+    if (length(available_in_ps) > 0) {
+      ps_slim <- ps[, c(pid_col, mid_col, available_in_ps), with = FALSE]
       data.table::setnames(ps_slim, c(pid_col, mid_col), c("player_id", "match_id"), skip_absent = TRUE)
       ps_slim <- unique(ps_slim, by = c("player_id", "match_id"))
 
@@ -116,18 +129,25 @@ prepare_skill_data <- function(player_game_data, player_stats) {
         cli::cli_warn("Merge with player_stats changed row count from {n_before} to {nrow(pgd)}")
       }
 
-      # Handle potential column name conflicts
-      de_col <- if ("disposal_efficiency_ps" %in% names(pgd)) "disposal_efficiency_ps" else "disposal_efficiency"
-
-      pgd[, disposal_efficiency_pct_x_disposals :=
-        data.table::fifelse(is.na(get(de_col)), 0, as.numeric(get(de_col))) / 100 * disposals]
-
-      # Remove the joined column if it was suffixed
-      if ("disposal_efficiency_ps" %in% names(pgd)) {
-        pgd[, disposal_efficiency_ps := NULL]
+      # Handle suffixed columns from name conflicts
+      for (col in available_in_ps) {
+        ps_col <- paste0(col, "_ps")
+        if (ps_col %in% names(pgd)) {
+          if (!col %in% names(pgd)) {
+            data.table::setnames(pgd, ps_col, col)
+          } else {
+            pgd[, (ps_col) := NULL]
+          }
+        }
       }
+    }
+
+    # Compute derived disposal_efficiency column for Beta-Binomial model
+    if ("disposal_efficiency" %in% names(pgd)) {
+      pgd[, disposal_efficiency_pct_x_disposals :=
+        data.table::fifelse(is.na(disposal_efficiency), 0, as.numeric(disposal_efficiency)) / 100 * disposals]
     } else {
-      cli::cli_warn("disposal_efficiency column not found in player_stats; skill will rely on prior")
+      cli::cli_warn("disposal_efficiency column not found; skill will rely on prior")
       pgd[, disposal_efficiency_pct_x_disposals := NA_real_]
     }
   }
@@ -166,6 +186,93 @@ prepare_skill_data <- function(player_game_data, player_stats) {
   # Add team column if available
   if ("tm" %in% names(pgd) && !"team" %in% keep_cols) {
     out[, team := pgd$tm]
+  }
+
+  # Expand with zero-TOG rows for rostered players who didn't play.
+  # This lets the Beta-Binomial TOG model account for selection probability:
+  # missed rounds contribute (tog=0, tog_denominator=1) to the denominator,
+  # pulling estimates down for players who miss games.
+  # Other stats are unaffected: rate stats use tog as exposure (0 * w = 0),
+  # efficiency stats have 0 successes and 0 attempts (0 * w = 0).
+  out[, avail_only := FALSE]
+
+  round_cal <- out[, .(match_date_skill = min(match_date_skill)),
+                   by = .(season, round)]
+
+  if (!is.null(rosters)) {
+    # Roster-based expansion: every rostered player × every round their team played
+    roster_dt <- data.table::as.data.table(rosters)
+    if ("providerId" %in% names(roster_dt)) {
+      data.table::setnames(roster_dt, "providerId", "player_id", skip_absent = TRUE)
+    }
+
+    if (!is.null(fixtures)) {
+      # Build team-round calendar from fixtures (handles byes + finals correctly)
+      fix_dt <- data.table::as.data.table(fixtures)
+      home <- fix_dt[, .(season = compSeason.year, round = round.roundNumber,
+                         team = home.team.name)]
+      away <- fix_dt[, .(season = compSeason.year, round = round.roundNumber,
+                         team = away.team.name)]
+      team_rounds <- unique(data.table::rbindlist(list(home, away)))
+      team_rounds <- merge(team_rounds, round_cal, by = c("season", "round"))
+
+      # Join roster players (with team) to team-round calendar
+      roster_players <- unique(roster_dt[, .(player_id, season, team)])
+      all_combos <- merge(roster_players, team_rounds,
+                          by = c("season", "team"), allow.cartesian = TRUE)
+      all_combos[, team := NULL]
+    } else {
+      # Fallback without fixtures: every round in their season (old behavior)
+      roster_players <- unique(roster_dt[, .(player_id, season)])
+      all_combos <- merge(roster_players, round_cal, by = "season",
+                          allow.cartesian = TRUE)
+    }
+  } else {
+    # Fallback: expand from each player's first game to the latest round
+    player_first <- out[, .(first_season = min(season),
+                            first_round = min(round[season == min(season)])),
+                        by = player_id]
+    all_combos <- data.table::CJ(player_id = player_first$player_id,
+                                  round_idx = seq_len(nrow(round_cal)))
+    all_combos[, c("season", "round", "match_date_skill") :=
+                 round_cal[round_idx, .(season, round, match_date_skill)]]
+    all_combos[, round_idx := NULL]
+    all_combos <- merge(all_combos, player_first, by = "player_id")
+    all_combos <- all_combos[season > first_season |
+                             (season == first_season & round >= first_round)]
+    all_combos[, c("first_season", "first_round") := NULL]
+  }
+
+  played <- unique(out[, .(player_id, season, round)])
+  played[, .played := TRUE]
+  all_combos <- merge(all_combos, played,
+                      by = c("player_id", "season", "round"), all.x = TRUE)
+  missed <- all_combos[is.na(.played)]
+
+  if (nrow(missed) > 0) {
+    zero_rows <- missed[, .(
+      player_id, season, round, match_date_skill,
+      match_id = paste0("AVAIL_", season, "_", sprintf("%02d", round)),
+      tog = 0, tog_denominator = 1, avail_only = TRUE
+    )]
+
+    # Assign pos_group: use modal position from games if available,
+    # otherwise use roster position for never-played players
+    player_pos <- out[avail_only == FALSE & !is.na(pos_group),
+                      .(pos_group = names(which.max(table(pos_group)))), by = player_id]
+    if (!is.null(rosters)) {
+      roster_pos <- unique(roster_dt[, .(player_id, position)])
+      roster_pos[, roster_pos_group := .map_position_group(position)]
+      roster_pos <- roster_pos[!is.na(roster_pos_group), .(player_id, roster_pos_group)]
+      roster_pos <- unique(roster_pos, by = "player_id")
+      # Merge: prefer game-based pos, fallback to roster pos
+      player_pos <- merge(roster_pos, player_pos, by = "player_id", all.x = TRUE)
+      player_pos[is.na(pos_group), pos_group := roster_pos_group]
+      player_pos[, roster_pos_group := NULL]
+    }
+    zero_rows <- merge(zero_rows, player_pos, by = "player_id", all.x = TRUE)
+
+    out <- data.table::rbindlist(list(out, zero_rows), fill = TRUE)
   }
 
   out
@@ -269,8 +376,17 @@ estimate_player_skills <- function(skill_data, ref_date = NULL,
   # Compute days since and decay weight (using rate lambda for game counting)
   dt[, days_since := as.numeric(ref_date - match_date_skill)]
 
-  # Player metadata
-  player_meta <- dt[, .(
+  # Ensure avail_only flag exists (rows from prepare_skill_data zero-TOG expansion)
+  if (!"avail_only" %in% names(dt)) dt[, avail_only := FALSE]
+  dt[is.na(avail_only), avail_only := FALSE]
+
+  # Weighted games count and TOG-adjusted "80s" (full-game equivalents)
+  dt[, .w_rate := exp(-params$lambda_rate * days_since)]
+  dt[, .tog_safe := data.table::fifelse(is.na(tog), 0, as.numeric(tog))]
+
+  # Player metadata and game counts: exclude availability-only rows
+  dt_played <- dt[avail_only == FALSE]
+  player_meta <- dt_played[, .(
     player_name = data.table::last(player_name),
     pos_group = {
       pg <- pos_group[!is.na(pos_group)]
@@ -279,10 +395,7 @@ estimate_player_skills <- function(skill_data, ref_date = NULL,
     }
   ), by = player_id]
 
-  # Weighted games count and TOG-adjusted "80s" (full-game equivalents)
-  dt[, .w_rate := exp(-params$lambda_rate * days_since)]
-  dt[, .tog_safe := data.table::fifelse(is.na(tog), 1, as.numeric(tog))]
-  game_counts <- dt[, {
+  game_counts <- dt_played[, {
     first <- !duplicated(match_id)
     .(n_games = sum(first),
       wt_games = sum(.w_rate[first], na.rm = TRUE),
@@ -333,8 +446,15 @@ estimate_player_skills <- function(skill_data, ref_date = NULL,
 
     vals <- as.numeric(dt[[src_col]])
     vals[is.na(vals)] <- 0
-    tog_vals <- as.numeric(dt$tog)
-    tog_vals[is.na(tog_vals)] <- 1
+
+    # Use TOG as exposure denominator unless stat is not TOG-adjusted
+    is_tog_adj <- is.na(rate_defs$tog_adjusted[i]) || isTRUE(rate_defs$tog_adjusted[i])
+    if (is_tog_adj) {
+      tog_vals <- as.numeric(dt$tog)
+      tog_vals[is.na(tog_vals)] <- 1
+    } else {
+      tog_vals <- rep(1, nrow(dt))
+    }
 
     w_vec <- exp(-stat_lambda * dt$days_since)
 
@@ -356,8 +476,8 @@ estimate_player_skills <- function(skill_data, ref_date = NULL,
     grand_mean <- if (total_exposure > 0) sum(w_vec * vals, na.rm = TRUE) / total_exposure else 0
 
     # Position multipliers
-    pos_groups <- c("DEF", "MID", "FWD", "RUCK")
-    pos_means <- stats::setNames(rep(grand_mean, 4), pos_groups)
+    pos_groups <- names(skill_position_map())
+    pos_means <- stats::setNames(rep(grand_mean, length(pos_groups)), pos_groups)
     for (pg in pos_groups) {
       idx <- which(dt$pos_group == pg)
       if (length(idx) > 0) {
@@ -461,15 +581,18 @@ estimate_player_skills <- function(skill_data, ref_date = NULL,
     grand_prop <- if (total_attempts > 0) sum(w_vec * successes, na.rm = TRUE) / total_attempts else 0.5
     grand_prop <- max(min(grand_prop, 1 - 1e-6), 1e-6)
 
-    # Position-specific proportions
-    pos_props <- stats::setNames(rep(grand_prop, 4), pos_groups)
-    for (pg in pos_groups) {
-      idx <- which(dt$pos_group == pg)
-      if (length(idx) > 0) {
-        pa <- sum(w_vec[idx] * attempts[idx], na.rm = TRUE)
-        if (pa > 0) {
-          pp <- sum(w_vec[idx] * successes[idx], na.rm = TRUE) / pa
-          pos_props[pg] <- max(min(pp, 1 - 1e-6), 1e-6)
+    # Position-specific proportions (skip if pos_adjusted = FALSE)
+    use_pos <- is.na(eff_defs$pos_adjusted[i]) || isTRUE(eff_defs$pos_adjusted[i])
+    pos_props <- stats::setNames(rep(grand_prop, length(pos_groups)), pos_groups)
+    if (use_pos) {
+      for (pg in pos_groups) {
+        idx <- which(dt$pos_group == pg)
+        if (length(idx) > 0) {
+          pa <- sum(w_vec[idx] * attempts[idx], na.rm = TRUE)
+          if (pa > 0) {
+            pp <- sum(w_vec[idx] * successes[idx], na.rm = TRUE) / pa
+            pos_props[pg] <- max(min(pp, 1 - 1e-6), 1e-6)
+          }
         }
       }
     }
