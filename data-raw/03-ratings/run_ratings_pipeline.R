@@ -255,19 +255,23 @@ tryCatch({
   cli::cli_inform("Building team ratings from {nrow(ratings_for_teams)} player rating rows")
 
   team_ratings <- ratings_for_teams |>
-    dplyr::filter(.data$torp > 0) |>
+    dplyr::filter(!is.na(.data$torp)) |>
     dplyr::group_by(.data$season, .data$round, .data$team) |>
-    dplyr::mutate(tm_rnk = rank(-.data$torp, ties.method = "first")) |>
-    dplyr::filter(.data$tm_rnk <= 21) |>
+    dplyr::mutate(
+      # Scale pred_tog to sum to 18 per team (18 full-game equivalents)
+      team_tog_sum = sum(.data$pred_tog, na.rm = TRUE),
+      tog_wt = dplyr::if_else(.data$team_tog_sum > 0,
+                               .data$pred_tog * 18 / .data$team_tog_sum, 0)
+    ) |>
     dplyr::summarise(
-      team_torp    = round(sum(.data$torp, na.rm = TRUE), 2),
-      team_recv    = round(sum(pmax(.data$torp_recv, 0), na.rm = TRUE), 2),
-      team_disp    = round(sum(pmax(.data$torp_disp, 0), na.rm = TRUE), 2),
-      team_spoil   = round(sum(pmax(.data$torp_spoil, 0), na.rm = TRUE), 2),
-      team_hitout  = round(sum(pmax(.data$torp_hitout, 0), na.rm = TRUE), 2),
+      team_torp    = round(sum(.data$torp * .data$tog_wt, na.rm = TRUE), 2),
+      team_recv    = round(sum(.data$torp_recv * .data$tog_wt, na.rm = TRUE), 2),
+      team_disp    = round(sum(.data$torp_disp * .data$tog_wt, na.rm = TRUE), 2),
+      team_spoil   = round(sum(.data$torp_spoil * .data$tog_wt, na.rm = TRUE), 2),
+      team_hitout  = round(sum(.data$torp_hitout * .data$tog_wt, na.rm = TRUE), 2),
       top_player   = .data$player_name[which.max(.data$torp)],
       top_torp     = round(max(.data$torp, na.rm = TRUE), 2),
-      n_players    = dplyr::n(),
+      n_players    = sum(.data$pred_tog > 0),
       .groups = "drop"
     ) |>
     dplyr::arrange(.data$season, .data$round, -.data$team_torp)

@@ -387,7 +387,7 @@ shared_data <- list(
   prev_idx = prev_idx
 )
 
-n_cores <- max(1L, parallel::detectCores() - 1L)
+n_cores <- max(1L, parallel::detectCores() - 2L)
 cli::cli_h1("Optimizing {length(tasks)} stats on {n_cores} cores")
 t0 <- proc.time()
 

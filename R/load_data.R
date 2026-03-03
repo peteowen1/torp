@@ -525,47 +525,29 @@ load_player_season_ratings <- function(seasons = get_afl_season(), use_disk_cach
 #'   [torpdata repository](https://github.com/peteowen1/torpdata).
 #'   Aggregates are the sum of TORP ratings for each team's top-21 players
 #'   (filtered to TORP > 0) per round, with subcategory breakdowns.
+#'   Player-level ratings are already centered relative to average, so
+#'   team sums are naturally relative to 0.
 #'
-#' @param relative Logical. If `TRUE`, converts numeric rating columns to
-#'   values relative to the average team within each season/round. Default
-#'   is `FALSE` (raw sums).
 #' @param columns Optional character vector of column names to read. If NULL (default), reads all columns.
 #'
 #' @return A data frame containing team-level ratings with columns including
 #'   `season`, `round`, `team`, `team_torp`, `team_recv`, `team_disp`,
 #'   `team_spoil`, `team_hitout`, `top_player`, `top_torp`, and `n_players`.
-#'   When `relative = TRUE`, numeric columns represent deviation from the
-#'   round average (positive = above average, negative = below average).
 #' @seealso [load_torp_ratings()], [load_player_game_ratings()]
 #' @examples
 #' \donttest{
 #' try({ # prevents cran errors
 #'   load_team_ratings()
-#'   load_team_ratings(relative = TRUE)
 #' })
 #' }
 #' @export
-load_team_ratings <- function(relative = TRUE, columns = NULL) {
+load_team_ratings <- function(columns = NULL) {
   url <- paste0("https://github.com/", get_torp_data_repo(), "/releases/download/team_ratings-data/team_ratings.parquet")
   out <- parquet_from_url_cached(url, use_cache = FALSE, columns = columns)
   if (nrow(out) == 0) {
     cli::cli_warn("No team ratings data loaded. The file may not exist yet or the download failed.")
   }
   out <- tibble::as_tibble(out)
-
-  if (relative && nrow(out) > 0) {
-    rel_cols <- intersect(
-      c("team_torp", "team_recv", "team_disp", "team_spoil", "team_hitout", "top_torp"),
-      names(out)
-    )
-    if (length(rel_cols) > 0 && all(c("season", "round") %in% names(out))) {
-      out <- dplyr::group_by(out, .data$season, .data$round)
-      for (col in rel_cols) {
-        out[[col]] <- round(out[[col]] - mean(out[[col]], na.rm = TRUE), 2)
-      }
-      out <- dplyr::ungroup(out)
-    }
-  }
 
   out
 }

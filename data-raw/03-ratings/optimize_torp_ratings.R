@@ -78,6 +78,15 @@ spoil_hitout_raw <- data.table::as.data.table(player_stats)[
 player_game_raw <- merge(disp_raw, recv_raw, by = c("player_id", "match_id"), all.x = TRUE)
 player_game_raw <- merge(player_game_raw, spoil_hitout_raw, by = c("player_id", "match_id"), all.x = TRUE)
 
+# Join TOG from player_stats for per-80 normalisation
+tog_dt <- data.table::as.data.table(player_stats)[
+  , .(tog_pct = mean(time_on_ground_percentage, na.rm = TRUE)),
+  by = .(player_id = player_player_player_player_id, match_id = provider_id)
+]
+player_game_raw <- merge(player_game_raw, tog_dt, by = c("player_id", "match_id"), all.x = TRUE)
+player_game_raw[is.na(tog_pct), tog_pct := 80]
+player_game_raw[, tog_safe := pmax(tog_pct / 100, 0.1)]
+
 # Replace NAs with 0
 num_cols <- c("sum_depv_neg", "n_neg", "sum_depv_pos", "n_pos",
               "sum_depv_pt_neg", "n_recv_neg", "sum_depv_pt_pos", "n_recv_pos",
@@ -124,7 +133,8 @@ teams_dt <- data.table::as.data.table(teams_data)
 # Filter out EMERG/SUB
 teams_dt <- teams_dt[is.na(position) | !(position %in% c("EMERG", "SUB"))]
 
-lineups <- teams_dt[, .(player_ids = list(player.playerId)),
+lineups <- teams_dt[, .(player_ids = list(player.playerId),
+                       position_xs = list(position)),
                     by = .(match_id = providerId, teamId)]
 
 # --- Home ground / distance / familiarity ---
@@ -214,13 +224,13 @@ match_dt[is.na(fam_home), fam_home := 0]
 match_dt[is.na(fam_away), fam_away := 0]
 match_dt[, familiarity_diff := fam_home - fam_away]
 
-# Merge lineups
+# Merge lineups (with positions for lineup_tog weighting)
 match_dt <- merge(match_dt,
-                  lineups[, .(match_id, home_teamId = teamId, home_players = player_ids)],
+                  lineups[, .(match_id, home_teamId = teamId, home_players = player_ids, home_positions = position_xs)],
                   by.x = c("providerId", "home_teamId"),
                   by.y = c("match_id", "home_teamId"), all.x = TRUE)
 match_dt <- merge(match_dt,
-                  lineups[, .(match_id, away_teamId = teamId, away_players = player_ids)],
+                  lineups[, .(match_id, away_teamId = teamId, away_players = player_ids, away_positions = position_xs)],
                   by.x = c("providerId", "away_teamId"),
                   by.y = c("match_id", "away_teamId"), all.x = TRUE)
 
@@ -258,10 +268,16 @@ for (i in seq_len(nrow(eval_matches_all))) {
   m <- eval_matches_all[i]
   home_ids <- m$home_players[[1]]
   away_ids <- m$away_players[[1]]
+  home_pos <- m$home_positions[[1]]
+  away_pos <- m$away_positions[[1]]
+  # Map field position to average TOG; default 0.75 for unknown positions
+  home_tog <- ifelse(home_pos %in% names(POSITION_AVG_TOG), POSITION_AVG_TOG[home_pos], 0.75)
+  away_tog <- ifelse(away_pos %in% names(POSITION_AVG_TOG), POSITION_AVG_TOG[away_pos], 0.75)
   lineup_rows[[i]] <- data.table::data.table(
     match_idx = i,
     player_id = c(home_ids, away_ids),
     is_home = c(rep(TRUE, length(home_ids)), rep(FALSE, length(away_ids))),
+    lineup_tog = c(home_tog, away_tog),
     date_num = as.numeric(m$date) - 0.5
   )
 }
@@ -315,6 +331,14 @@ compute_credits <- function(pgr, params, verbose = FALSE) {
     spoil_pts  = spoil_pts  - stats::quantile(spoil_pts, q, na.rm = TRUE),
     hitout_pts = hitout_pts - stats::quantile(hitout_pts, q, na.rm = TRUE)
   ), by = position]
+
+  # Per-80 normalisation: divide by actual TOG so ratings are per-full-game
+  out[, `:=`(
+    recv_pts   = recv_pts   / tog_safe,
+    disp_pts   = disp_pts   / tog_safe,
+    spoil_pts  = spoil_pts  / tog_safe,
+    hitout_pts = hitout_pts / tog_safe
+  )]
 
   return(out)
 }
@@ -412,6 +436,10 @@ objective_fn_fast <- function(par, env) {
   disp_pts[is.na(disp_pts)] <- 0; recv_pts[is.na(recv_pts)] <- 0
   spoil_pts[is.na(spoil_pts)] <- 0; hitout_pts[is.na(hitout_pts)] <- 0
 
+  # Per-80 normalisation: divide by actual TOG
+  disp_pts <- disp_pts / env$tog_safe; recv_pts <- recv_pts / env$tog_safe
+  spoil_pts <- spoil_pts / env$tog_safe; hitout_pts <- hitout_pts / env$tog_safe
+
   # --- Cumulative decay sums (single-vector loop, no data.table overhead) ---
   decay_days <- p["decay_days"]
   pids <- env$pgr_s$player_id
@@ -460,9 +488,10 @@ objective_fn_fast <- function(par, env) {
               (loading * lu_cs + prior_spoil * pr_spoil) / (lu_cw + prior_spoil) +
               (loading * lu_ch + prior_hitout * pr_hitout) / (lu_cw + prior_hitout)
 
-  # Match-level aggregation
-  home_sum <- tapply(torp_vec * env$lu_is_home, env$lu_match_idx, sum, na.rm = TRUE)
-  away_sum <- tapply(torp_vec * (!env$lu_is_home), env$lu_match_idx, sum, na.rm = TRUE)
+  # Match-level aggregation (weight per-80 TORP by lineup_tog)
+  torp_weighted <- torp_vec * env$lu_lineup_tog
+  home_sum <- tapply(torp_weighted * env$lu_is_home, env$lu_match_idx, sum, na.rm = TRUE)
+  away_sum <- tapply(torp_weighted * (!env$lu_is_home), env$lu_match_idx, sum, na.rm = TRUE)
   torp_diff <- as.numeric(home_sum - away_sum)
 
   fast_rmse_cv(torp_diff, env$eval_matches)
@@ -520,9 +549,11 @@ compute_torp_diff <- function(player_cum, lineup_dt, eval_matches,
   data.table::setkey(lookup, player_id, date_num)
 
   joined <- lookup[lineup_dt,
-    .(match_idx, is_home, torp = x.cum_recv, cd = x.cum_disp,
+    .(match_idx, is_home, lineup_tog = i.lineup_tog,
+      torp = x.cum_recv, cd = x.cum_disp,
       cs = x.cum_spoil, ch = x.cum_hitout, cw = x.cum_wt),
     on = .(player_id, date_num), roll = TRUE]
+  joined[is.na(lineup_tog), lineup_tog := 0.75]
 
   # Replace NAs with 0 before formula (per-component priors handle the shrinkage target)
   joined[is.na(torp), `:=`(torp = 0, cd = 0, cs = 0, ch = 0, cw = 0)]
@@ -536,10 +567,10 @@ compute_torp_diff <- function(player_cum, lineup_dt, eval_matches,
   ]
   joined[is.na(player_torp), player_torp := pr_recv + pr_disp + pr_spoil + pr_hitout]
 
-  # Aggregate to match-level
+  # Aggregate to match-level (weight per-80 TORP by lineup_tog)
   match_torp <- joined[, .(
-    home_torp = sum(player_torp[is_home], na.rm = TRUE),
-    away_torp = sum(player_torp[!is_home], na.rm = TRUE)
+    home_torp = sum(player_torp[is_home] * lineup_tog[is_home], na.rm = TRUE),
+    away_torp = sum(player_torp[!is_home] * lineup_tog[!is_home], na.rm = TRUE)
   ), by = match_idx]
   data.table::setorder(match_torp, match_idx)
 
@@ -761,7 +792,7 @@ for (d in decay_values) {
   data.table::setkey(lookup, player_id, date_num)
 
   joined <- lookup[lineup_dt_all,
-    .(match_idx = i.match_idx, is_home = i.is_home,
+    .(match_idx = i.match_idx, is_home = i.is_home, lineup_tog = i.lineup_tog,
       cr = x.cum_recv, cd = x.cum_disp, cs = x.cum_spoil,
       ch = x.cum_hitout, cw = x.cum_wt),
     on = .(player_id, date_num), roll = TRUE]
@@ -769,6 +800,7 @@ for (d in decay_values) {
   # Replace NAs with 0 for players not found
   for (col in c("cr", "cd", "cs", "ch", "cw"))
     data.table::set(joined, which(is.na(joined[[col]])), col, 0)
+  joined[is.na(lineup_tog), lineup_tog := 0.75]
 
   decay_precomp[[as.character(d)]] <- joined
 }
@@ -798,9 +830,10 @@ for (i in seq_len(nrow(agg_grid))) {
               (ld * j$cs + ps * s1_pr_s) / (j$cw + ps) +
               (ld * j$ch + ph * s1_pr_h) / (j$cw + ph)
 
-  # Aggregate to match-level torp_diff using tapply
-  home_sum <- tapply(torp_vec * j$is_home, j$match_idx, sum, na.rm = TRUE)
-  away_sum <- tapply(torp_vec * (!j$is_home), j$match_idx, sum, na.rm = TRUE)
+  # Aggregate to match-level torp_diff (weight per-80 TORP by lineup_tog)
+  torp_weighted <- torp_vec * j$lineup_tog
+  home_sum <- tapply(torp_weighted * j$is_home, j$match_idx, sum, na.rm = TRUE)
+  away_sum <- tapply(torp_weighted * (!j$is_home), j$match_idx, sum, na.rm = TRUE)
   torp_diff <- as.numeric(home_sum - away_sum)
 
   # Leave-one-season-out CV RMSE
@@ -856,6 +889,7 @@ fast_env <- list(
   hitouts        = pgr_s$hitouts,
   hitouts_adv    = pgr_s$hitouts_adv,
   ruck_contests  = pgr_s$ruck_contests,
+  tog_safe       = pgr_s$tog_safe,
   # Player/date vectors for cumulative loop
   pgr_s          = pgr_s[, .(player_id, date_num)],
   # Position indices for quantile adjustment
@@ -864,6 +898,7 @@ fast_env <- list(
   # Lineup mapping
   lu_pgr_idx     = NULL,
   lu_is_home     = NULL,
+  lu_lineup_tog  = NULL,
   lu_match_idx   = NULL,
   eval_matches   = eval_matches_all
 )
@@ -880,12 +915,14 @@ names(fast_env$pos_indices) <- fast_env$position_levels
 pgr_s[, pgr_row := .I]  # row index in pgr_s
 data.table::setkey(pgr_s, player_id, date_num)
 
-lu_joined <- pgr_s[lineup_dt_all, .(pgr_row = x.pgr_row, match_idx = i.match_idx, is_home = i.is_home),
+lu_joined <- pgr_s[lineup_dt_all, .(pgr_row = x.pgr_row, match_idx = i.match_idx,
+                                    is_home = i.is_home, lineup_tog = i.lineup_tog),
                    on = .(player_id, date_num), roll = TRUE]
 
-fast_env$lu_pgr_idx   <- lu_joined$pgr_row
-fast_env$lu_is_home   <- lu_joined$is_home
-fast_env$lu_match_idx <- lu_joined$match_idx
+fast_env$lu_pgr_idx    <- lu_joined$pgr_row
+fast_env$lu_is_home    <- lu_joined$is_home
+fast_env$lu_lineup_tog <- lu_joined$lineup_tog
+fast_env$lu_match_idx  <- lu_joined$match_idx
 
 tictoc::toc()
 cat(sprintf("  Fast env: %d pgr rows, %d lineup rows\n", nrow(pgr_s), nrow(lu_joined)))
@@ -1016,12 +1053,13 @@ pcum_final <- compute_cumulative(credit_dt_final, best_par["decay_days"])
 lookup_final <- pcum_final[, .(player_id, date_num, cum_recv, cum_disp, cum_spoil, cum_hitout, cum_wt)]
 data.table::setkey(lookup_final, player_id, date_num)
 joined_final <- lookup_final[lineup_dt_all,
-  .(match_idx = i.match_idx, is_home = i.is_home,
+  .(match_idx = i.match_idx, is_home = i.is_home, lineup_tog = i.lineup_tog,
     cr = x.cum_recv, cd = x.cum_disp, cs = x.cum_spoil,
     ch = x.cum_hitout, cw = x.cum_wt),
   on = .(player_id, date_num), roll = TRUE]
 for (col in c("cr", "cd", "cs", "ch", "cw"))
   data.table::set(joined_final, which(is.na(joined_final[[col]])), col, 0)
+joined_final[is.na(lineup_tog), lineup_tog := 0.75]
 
 ld <- best_par["loading"]; pr <- best_par["prior_games_recv"]
 pd <- best_par["prior_games_disp"]; ps <- best_par["prior_games_spoil"]
@@ -1032,8 +1070,9 @@ torp_vec_final <- (ld * joined_final$cr + pr * prr) / (joined_final$cw + pr) +
                   (ld * joined_final$cd + pd * prd) / (joined_final$cw + pd) +
                   (ld * joined_final$cs + ps * prs) / (joined_final$cw + ps) +
                   (ld * joined_final$ch + ph * prh) / (joined_final$cw + ph)
-home_sum_f <- tapply(torp_vec_final * joined_final$is_home, joined_final$match_idx, sum, na.rm = TRUE)
-away_sum_f <- tapply(torp_vec_final * (!joined_final$is_home), joined_final$match_idx, sum, na.rm = TRUE)
+torp_weighted_f <- torp_vec_final * joined_final$lineup_tog
+home_sum_f <- tapply(torp_weighted_f * joined_final$is_home, joined_final$match_idx, sum, na.rm = TRUE)
+away_sum_f <- tapply(torp_weighted_f * (!joined_final$is_home), joined_final$match_idx, sum, na.rm = TRUE)
 torp_diff_final <- as.numeric(home_sum_f - away_sum_f)
 
 # Per-fold RMSE for optimized params
@@ -1047,12 +1086,13 @@ pcum_def <- compute_cumulative(credit_dt_def, par_defaults["decay_days"])
 lookup_def <- pcum_def[, .(player_id, date_num, cum_recv, cum_disp, cum_spoil, cum_hitout, cum_wt)]
 data.table::setkey(lookup_def, player_id, date_num)
 joined_def <- lookup_def[lineup_dt_all,
-  .(match_idx = i.match_idx, is_home = i.is_home,
+  .(match_idx = i.match_idx, is_home = i.is_home, lineup_tog = i.lineup_tog,
     cr = x.cum_recv, cd = x.cum_disp, cs = x.cum_spoil,
     ch = x.cum_hitout, cw = x.cum_wt),
   on = .(player_id, date_num), roll = TRUE]
 for (col in c("cr", "cd", "cs", "ch", "cw"))
   data.table::set(joined_def, which(is.na(joined_def[[col]])), col, 0)
+joined_def[is.na(lineup_tog), lineup_tog := 0.75]
 
 ld_d <- par_defaults["loading"]; pr_d <- par_defaults["prior_games_recv"]
 pd_d <- par_defaults["prior_games_disp"]; ps_d <- par_defaults["prior_games_spoil"]
@@ -1063,8 +1103,9 @@ torp_vec_def <- (ld_d * joined_def$cr + pr_d * prr_d) / (joined_def$cw + pr_d) +
                 (ld_d * joined_def$cd + pd_d * prd_d) / (joined_def$cw + pd_d) +
                 (ld_d * joined_def$cs + ps_d * prs_d) / (joined_def$cw + ps_d) +
                 (ld_d * joined_def$ch + ph_d * prh_d) / (joined_def$cw + ph_d)
-home_sum_d <- tapply(torp_vec_def * joined_def$is_home, joined_def$match_idx, sum, na.rm = TRUE)
-away_sum_d <- tapply(torp_vec_def * (!joined_def$is_home), joined_def$match_idx, sum, na.rm = TRUE)
+torp_weighted_d <- torp_vec_def * joined_def$lineup_tog
+home_sum_d <- tapply(torp_weighted_d * joined_def$is_home, joined_def$match_idx, sum, na.rm = TRUE)
+away_sum_d <- tapply(torp_weighted_d * (!joined_def$is_home), joined_def$match_idx, sum, na.rm = TRUE)
 torp_diff_def <- as.numeric(home_sum_d - away_sum_d)
 
 residual_d <- eval_matches_all$margin - torp_diff_def

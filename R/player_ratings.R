@@ -106,31 +106,34 @@ calculate_torp_ratings <- function(season_val = get_afl_season(type = "current")
   } else {
     plyr_gm_df_rnd <- calculate_player_stats(player_game_data, match_ref, date_val, decay, loading, prior_games_recv, prior_games_disp, prior_games_spoil = prior_games_spoil, prior_games_hitout = prior_games_hitout, prior_rate_recv = prior_rate_recv, prior_rate_disp = prior_rate_disp, prior_rate_spoil = prior_rate_spoil, prior_rate_hitout = prior_rate_hitout)
 
-    # TOG-weighted average adjustment: re-center TORP to "above average"
+    # Attach raw pred_tog from skills (centering happens after roster filter)
     if (!is.null(skills)) {
       skills_dt <- data.table::as.data.table(skills)
-      plyr_gm_df_rnd[skills_dt, tog_skill := i.time_on_ground_skill, on = "player_id"]
-      plyr_gm_df_rnd[is.na(tog_skill), tog_skill := 0]
-
-      tot_tog <- sum(plyr_gm_df_rnd$tog_skill)
-      if (tot_tog > 0) {
-        comps <- c("torp_recv", "torp_disp", "torp_spoil", "torp_hitout")
-        for (comp in comps) {
-          avg_val <- sum(plyr_gm_df_rnd[[comp]] * plyr_gm_df_rnd$tog_skill) / tot_tog
-          plyr_gm_df_rnd[, (comp) := get(comp) - avg_val]
-        }
-        plyr_gm_df_rnd[, `:=`(
-          torp = round(torp_recv + torp_disp + torp_spoil + torp_hitout, 2),
-          torp_recv_adj = round(torp_recv, 2),
-          torp_disp_adj = round(torp_disp, 2),
-          torp_spoil_adj = round(torp_spoil, 2),
-          torp_hitout_adj = round(torp_hitout, 2)
-        )]
-      }
-      plyr_gm_df_rnd[, tog_skill := NULL]
+      plyr_gm_df_rnd[skills_dt, pred_tog := i.time_on_ground_skill, on = "player_id"]
+      plyr_gm_df_rnd[is.na(pred_tog), pred_tog := 0]
     }
 
     final_df <- prepare_final_dataframe(plyr_tm_df, plyr_gm_df_rnd, season_val, round_val)
+
+    # TOG-weighted centering: scale pred_tog to TOTAL_PRED_TOG (324) across
+    # rostered players, then re-center each TORP component to "above/below average"
+    if (!is.null(skills) && nrow(final_df) > 0) {
+      final_df$pred_tog[is.na(final_df$pred_tog)] <- 0
+      tot_tog <- sum(final_df$pred_tog)
+      if (tot_tog > 0) {
+        final_df$pred_tog <- final_df$pred_tog * (TOTAL_PRED_TOG / tot_tog)
+
+        comps <- c("torp_recv", "torp_disp", "torp_spoil", "torp_hitout")
+        for (comp in comps) {
+          avg_val <- sum(final_df[[comp]] * final_df$pred_tog, na.rm = TRUE) / sum(final_df$pred_tog)
+          final_df[[comp]] <- final_df[[comp]] - avg_val
+        }
+        final_df$torp <- round(final_df$torp_recv + final_df$torp_disp + final_df$torp_spoil + final_df$torp_hitout, 2)
+        for (comp in comps) {
+          final_df[[comp]] <- round(final_df[[comp]], 2)
+        }
+      }
+    }
 
     cli::cli_inform("TORP ratings as at {season_val} round {round_val}")
     return(final_df)
@@ -167,6 +170,11 @@ calculate_player_stats <- function(player_game_data = NULL, match_ref, date_val,
   dt <- dt[match_id <= match_ref]
   dt[, weight_gm := exp(as.numeric(-(as.Date(date_val) - as.Date(utc_start_time))) / decay)]
 
+  # Per-80 normalisation: divide credit by actual TOG so ratings reflect
+  # contribution per full game (TOG = 1.0). Floor at 10% to avoid blow-up
+  # from very short stints (medical subs, late concussions, etc.)
+  dt[, tog_safe := pmax(time_on_ground_percentage / 100, 0.1)]
+
   # Handle plyr_nm: use existing if present, otherwise construct from given + surname
   if (!"plyr_nm" %in% names(dt)) {
     dt[, plyr_nm := paste(player_given_name, player_surname)]
@@ -174,16 +182,17 @@ calculate_player_stats <- function(player_game_data = NULL, match_ref, date_val,
 
   # Aggregate by player_id using data.table syntax
 
-  # First pass: compute base aggregations
+  # First pass: compute base aggregations (per-80 normalised)
+  # Dividing by tog_safe converts per-game credit to per-full-game rate
   result <- dt[, .(
     player_name = max(plyr_nm),
     gms = data.table::uniqueN(match_id),
     wt_gms = sum(weight_gm[!duplicated(match_id)], na.rm = TRUE),
-    tot_p_sum = sum(tot_p_adj * weight_gm, na.rm = TRUE),
-    recv_sum = sum(recv_pts_adj * weight_gm, na.rm = TRUE),
-    disp_sum = sum(disp_pts_adj * weight_gm, na.rm = TRUE),
-    spoil_sum = sum(spoil_pts_adj * weight_gm, na.rm = TRUE),
-    hitout_sum = sum(hitout_pts_adj * weight_gm, na.rm = TRUE),
+    tot_p_sum = sum((tot_p_adj / tog_safe) * weight_gm, na.rm = TRUE),
+    recv_sum = sum((recv_pts_adj / tog_safe) * weight_gm, na.rm = TRUE),
+    disp_sum = sum((disp_pts_adj / tog_safe) * weight_gm, na.rm = TRUE),
+    spoil_sum = sum((spoil_pts_adj / tog_safe) * weight_gm, na.rm = TRUE),
+    hitout_sum = sum((hitout_pts_adj / tog_safe) * weight_gm, na.rm = TRUE),
     posn = data.table::last(pos)
   ), by = player_id]
 
@@ -269,9 +278,10 @@ prepare_final_dataframe <- function(plyr_tm_df = NULL, player_game_data = NULL, 
     ) |>
     dplyr::select(
       player_id = "providerId", player_name = "player_name.x", age = "age", team = "team",
-      torp = "torp", torp_recv = "torp_recv_adj", torp_disp = "torp_disp_adj",
-      torp_spoil = "torp_spoil_adj", torp_hitout = "torp_hitout_adj",
-      position = "position", season = "season", round = "round", gms = "gms", wt_gms = "wt_gms"
+      torp = "torp", torp_recv = "torp_recv", torp_disp = "torp_disp",
+      torp_spoil = "torp_spoil", torp_hitout = "torp_hitout",
+      position = "position", season = "season", round = "round", gms = "gms", wt_gms = "wt_gms",
+      pred_tog = "pred_tog"
     ) |>
     dplyr::arrange(-.data$torp)
 }

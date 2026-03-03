@@ -115,6 +115,7 @@ skill_stat_definitions <- function() {
       TRUE, TRUE,           # contest_off_wins, contest_def_losses
       FALSE, FALSE          # dream_team_points, rating_points
     ),
+    pos_adjusted = TRUE,
     stringsAsFactors = FALSE
   )
 
@@ -138,6 +139,7 @@ skill_stat_definitions <- function() {
       "kicks", "tog_denominator"
     ),
     tog_adjusted = NA,
+    pos_adjusted = c(TRUE, TRUE, TRUE, TRUE, TRUE, FALSE),
     stringsAsFactors = FALSE
   )
 
@@ -240,6 +242,8 @@ default_skill_params <- function() {
     disposal_efficiency     = list(lambda = 0.00235, prior_strength = 32.67),
     goal_accuracy           = list(lambda = 0.00010, prior_strength = 67.73),
     contested_poss_rate     = list(lambda = 0.00303, prior_strength = 20.00),
-    hitout_win_pct          = list(lambda = 0.00135, prior_strength = 100.00)
+    hitout_win_pct          = list(lambda = 0.00135, prior_strength = 100.00),
+    kick_efficiency         = list(lambda = 0.00235, prior_strength = 32.67),
+    time_on_ground          = list(lambda = 0.01386, prior_strength = 1.00)
   )
 }

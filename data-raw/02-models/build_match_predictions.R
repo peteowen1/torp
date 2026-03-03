@@ -212,13 +212,21 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL) {
   }
 
   # Use per-component priors for unknown players (consistent with shrinkage formula)
+  # TORP is per-80 (rate stat). Multiply by lineup_tog (position-based TOG estimate)
+  # to convert to expected game contribution before generating position columns.
   team_lineup_df <- team_lineup_df %>%
     dplyr::mutate(
       torp = tidyr::replace_na(torp, torp_prior_total),
       torp_recv = tidyr::replace_na(torp_recv, RATING_PRIOR_RATE_RECV),
       torp_disp = tidyr::replace_na(torp_disp, RATING_PRIOR_RATE_DISP),
       torp_spoil = tidyr::replace_na(torp_spoil, RATING_PRIOR_RATE_SPOIL),
-      torp_hitout = tidyr::replace_na(torp_hitout, RATING_PRIOR_RATE_HITOUT)
+      torp_hitout = tidyr::replace_na(torp_hitout, RATING_PRIOR_RATE_HITOUT),
+      lineup_tog = tidyr::replace_na(POSITION_AVG_TOG[position.x], 0.75),
+      torp = torp * lineup_tog,
+      torp_recv = torp_recv * lineup_tog,
+      torp_disp = torp_disp * lineup_tog,
+      torp_spoil = torp_spoil * lineup_tog,
+      torp_hitout = torp_hitout * lineup_tog
     )
 
   # Generate position columns from lookup tables (replaces 52 ifelse calls)
@@ -235,6 +243,7 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL) {
   team_lineup_df$other_pos <- ifelse(is.na(team_lineup_df$position.y), team_lineup_df$torp, NA)
 
   ## Aggregate Lineups ----
+  # TORP columns are already TOG-weighted (torp_p80 * lineup_tog) so simple sum works
   torp_sum_cols <- c("torp", "torp_recv", "torp_disp", "torp_spoil", "torp_hitout")
 
   team_rt_df <- team_lineup_df %>%
@@ -341,19 +350,22 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL) {
   tr_week <-
     tr %>%
     filter(
-      torp > 0,
+      !is.na(torp),
       is.na(injury)
     ) %>%
     mutate(team_name = fitzRoy::replace_teams(team)) %>%
     group_by(team_name, season, round) %>%
-    mutate(tm_rnk = rank(-torp)) %>%
-    filter(tm_rnk <= 21) %>%
+    mutate(
+      # Scale pred_tog to sum to 18 per team (18 full-game equivalents)
+      team_tog_sum = sum(pred_tog, na.rm = TRUE),
+      tog_wt = dplyr::if_else(team_tog_sum > 0, pred_tog * 18 / team_tog_sum, 0)
+    ) %>%
     summarise(
-      torp_week = sum(pmax(torp, 0), na.rm = TRUE) * INJURY_DISCOUNT,
-      torp_recv_week = sum(pmax(torp_recv, 0), na.rm = TRUE) * INJURY_DISCOUNT,
-      torp_disp_week = sum(pmax(torp_disp, 0), na.rm = TRUE) * INJURY_DISCOUNT,
-      torp_spoil_week = sum(pmax(torp_spoil, 0), na.rm = TRUE) * INJURY_DISCOUNT,
-      torp_hitout_week = sum(pmax(torp_hitout, 0), na.rm = TRUE) * INJURY_DISCOUNT
+      torp_week = sum(torp * tog_wt, na.rm = TRUE) * INJURY_DISCOUNT,
+      torp_recv_week = sum(torp_recv * tog_wt, na.rm = TRUE) * INJURY_DISCOUNT,
+      torp_disp_week = sum(torp_disp * tog_wt, na.rm = TRUE) * INJURY_DISCOUNT,
+      torp_spoil_week = sum(torp_spoil * tog_wt, na.rm = TRUE) * INJURY_DISCOUNT,
+      torp_hitout_week = sum(torp_hitout * tog_wt, na.rm = TRUE) * INJURY_DISCOUNT
     ) %>%
     arrange(-torp_week)
 

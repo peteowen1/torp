@@ -168,11 +168,22 @@ prepare_sim_data <- function(season, team_ratings = NULL, fixtures = NULL,
         pr_dt[, player_norm := NULL]
       }
 
-      # Top N players per team, sum with discount
-      pr_dt[, tm_rnk := rank(-torp), by = team]
-      sim_teams <- pr_dt[tm_rnk <= SIM_TOP_N_PLAYERS, .(
-        torp = sum(pmax(torp, 0), na.rm = TRUE) * discount
-      ), by = team]
+      # pred_tog-weighted aggregation: torp is now per-80, so
+      # torp * tog_wt gives expected game contribution per player
+      if ("pred_tog" %in% names(pr_dt)) {
+        pr_dt[, tog_wt := {
+          team_sum <- sum(pred_tog, na.rm = TRUE)
+          if (team_sum > 0) pred_tog * 18 / team_sum else 0
+        }, by = team]
+        sim_teams <- pr_dt[, .(
+          torp = sum(torp * tog_wt, na.rm = TRUE) * discount
+        ), by = team]
+      } else {
+        pr_dt[, tm_rnk := rank(-torp), by = team]
+        sim_teams <- pr_dt[tm_rnk <= SIM_TOP_N_PLAYERS, .(
+          torp = sum(pmax(torp, 0), na.rm = TRUE) * discount
+        ), by = team]
+      }
     }
   } else {
     sim_teams <- data.table::as.data.table(team_ratings)[, .(team, torp)]

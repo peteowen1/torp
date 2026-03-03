@@ -31,13 +31,17 @@ AFL_TIME_SCALER_MAX <- 4
 # Rating System Constants
 # -----------------------
 
+#' Total predicted TOG for league-wide centering (18 teams x 18 full-game equivalents)
+#' @keywords internal
+TOTAL_PRED_TOG <- 324L
+
 #' Decay factor (in days) for PBP-level game recency weighting in add_epv_vars()
 #' @keywords internal
 EPV_WEIGHT_DECAY_DAYS <- 365
 
 #' Default decay factor (in days) for TORP rating historical weighting
 #' @keywords internal
-RATING_DECAY_DEFAULT_DAYS <- 451
+RATING_DECAY_DEFAULT_DAYS <- 477
 
 #' Loading factor for TORP calculations
 #' @keywords internal
@@ -49,15 +53,15 @@ RATING_PRIOR_GAMES_RECV <- 3.0000
 
 #' Prior games constant for disposal ratings
 #' @keywords internal
-RATING_PRIOR_GAMES_DISP <- 9.7386
+RATING_PRIOR_GAMES_DISP <- 5.0014
 
 #' Prior games constant for spoil ratings
 #' @keywords internal
-RATING_PRIOR_GAMES_SPOIL <- 8.2669
+RATING_PRIOR_GAMES_SPOIL <- 9.0025
 
 #' Prior games constant for hitout ratings
 #' @keywords internal
-RATING_PRIOR_GAMES_HITOUT <- 3.7313
+RATING_PRIOR_GAMES_HITOUT <- 3.0050
 
 #' Prior rate for receiving component (shrinkage target per weighted game)
 #' @keywords internal
@@ -80,15 +84,15 @@ RATING_PRIOR_RATE_HITOUT <- -0.2500
 
 #' Disposal EPV offset when defending (pos_team == -1)
 #' @keywords internal
-CREDIT_DISP_NEG_OFFSET <- 0.0289
+CREDIT_DISP_NEG_OFFSET <- -0.1583
 
 #' Disposal EPV offset when possessing (pos_team == 1)
 #' @keywords internal
-CREDIT_DISP_POS_OFFSET <- -0.1000
+CREDIT_DISP_POS_OFFSET <- -0.0739
 
 #' Disposal scaling factor
 #' @keywords internal
-CREDIT_DISP_SCALE <- 0.8958
+CREDIT_DISP_SCALE <- 0.8192
 
 #' Bounce penalty per bounce
 #' @keywords internal
@@ -96,7 +100,7 @@ CREDIT_BOUNCE_PENALTY <- 1.0000
 
 #' Reception multiplier when defending (pos_team == -1)
 #' @keywords internal
-CREDIT_RECV_NEG_MULT <- 1.2592
+CREDIT_RECV_NEG_MULT <- 1.3056
 
 #' Reception offset when defending
 #' @keywords internal
@@ -104,7 +108,7 @@ CREDIT_RECV_NEG_OFFSET <- 0.5000
 
 #' Reception multiplier when possessing (pos_team == 1)
 #' @keywords internal
-CREDIT_RECV_POS_MULT <- 0.6841
+CREDIT_RECV_POS_MULT <- 0.6969
 
 #' Reception offset when possessing
 #' @keywords internal
@@ -112,31 +116,31 @@ CREDIT_RECV_POS_OFFSET <- 0.5000
 
 #' Reception scaling factor
 #' @keywords internal
-CREDIT_RECV_SCALE <- 0.3669
+CREDIT_RECV_SCALE <- 0.3700
 
 #' Spoil weight per spoil
 #' @keywords internal
-CREDIT_SPOIL_WT <- 1.1061
+CREDIT_SPOIL_WT <- 1.2029
 
 #' Tackle weight per tackle
 #' @keywords internal
-CREDIT_TACKLE_WT <- 1.5484
+CREDIT_TACKLE_WT <- 1.5981
 
 #' Pressure act weight
 #' @keywords internal
-CREDIT_PRESSURE_WT <- 0.2581
+CREDIT_PRESSURE_WT <- 0.1333
 
 #' Defensive half pressure act weight (subtracted)
 #' @keywords internal
-CREDIT_DEF_PRESSURE_WT <- 1.2720
+CREDIT_DEF_PRESSURE_WT <- 1.1998
 
 #' Hitout weight per hitout
 #' @keywords internal
-CREDIT_HITOUT_WT <- 0.1954
+CREDIT_HITOUT_WT <- 0.2657
 
 #' Hitout to advantage weight
 #' @keywords internal
-CREDIT_HITOUT_ADV_WT <- 0.5396
+CREDIT_HITOUT_ADV_WT <- 0.2414
 
 #' Ruck contest weight (subtracted)
 #' @keywords internal
@@ -144,7 +148,7 @@ CREDIT_RUCK_CONTEST_WT <- 0.0300
 
 #' Position-group quantile adjustment (shared across all credit components)
 #' @keywords internal
-CREDIT_POS_ADJ_QUANTILE <- 0.3429
+CREDIT_POS_ADJ_QUANTILE <- 0.3184
 
 
 # Simulation Constants
@@ -342,4 +346,22 @@ CONTEST_GROUND_BALL_DESCS <- c(
   "Hard Ball Get", "Loose Ball Get",
   "Hard Ball Get Crumb", "Loose Ball Get Crumb",
   "Ruck Hard Ball Get"
+)
+
+
+# Position-Based TOG Constants
+# -----------------------------
+
+#' Average time-on-ground fraction by field position (position.x from load_teams())
+#' Computed from historical data (2021-2025). Used to estimate per-player TOG
+#' when lineups are announced but games haven't started.
+#' Run data-raw/debug/compute_position_tog.R to regenerate from current data.
+#' @keywords internal
+POSITION_AVG_TOG <- c(
+  FB = 0.91, BPL = 0.86, CHB = 0.86, BPR = 0.85,
+  FF = 0.84, CHF = 0.82, HBFL = 0.82, HBFR = 0.82, WR = 0.82,
+  FPL = 0.81, FPR = 0.81, WL = 0.81,
+  C = 0.80, HFFL = 0.80, R = 0.80, RR = 0.80,
+  HFFR = 0.79, RK = 0.79,
+  INT = 0.73, SUB = 0.33, EMERG = 0.05
 )

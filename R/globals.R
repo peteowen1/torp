@@ -57,6 +57,7 @@ utils::globalVariables(c(
   "tot_p_adj", "tot_p_sum", "recv_pts_adj", "recv_sum",
   "disp_pts_adj", "disp_sum", "spoil_pts_adj", "spoil_sum",
   "hitout_pts_adj", "hitout_sum", "weight_gm", "wt_gms", "utc_start_time",
+  "pred_tog", "tog_safe", "tog_wt", "lineup_tog",
 
   # data.table join prefixes
   "i.torp", "i.torp_shift_away", "i.torp_shift_home",
@@ -106,6 +107,7 @@ utils::globalVariables(c(
 
 # Skill estimation variables
 utils::globalVariables(c(
+  "avail_only",
   "tog", "tog_denominator", "match_date_skill", "days_since", "decay_wt",
   "wt_events", "wt_exposure", "wt_successes", "wt_attempts",
   "alpha_post", "beta_post", "skill_estimate", "skill_lower", "skill_upper",
@@ -144,5 +146,7 @@ utils::globalVariables(c(
  "top_8_pct", "top_4_pct", "top_2_pct", "top_1_pct",
   "made_finals_pct", "avg_finals_wins", "made_gf_pct", "won_gf_pct",
   "i.pred_xtotal",
-  "injury", "estimated_return", "player_norm", "tm_rnk"
+  "injury", "estimated_return", "player_norm", "tm_rnk",
+  "tog_frac", "total_p80", "recv_p80", "disp_p80", "spoil_p80", "hitout_p80",
+  "avg_p80", "avg_tog"
 ))
