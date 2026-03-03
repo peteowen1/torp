@@ -149,23 +149,21 @@ print(avg_improvement)
 
 # Visualization: win distribution ----
 if (requireNamespace("ggplot2", quietly = TRUE)) {
-  library(ggplot2)
-
   # Win distribution histogram for top 4 teams by avg wins
   top4_teams <- summary_pre[order(-avg_wins)][1:4, team]
-  ggplot(results_pre$ladders[team %in% top4_teams],
-         aes(x = wins, fill = team)) +
-    geom_histogram(binwidth = 1, position = "dodge", alpha = 0.7) +
-    labs(title = "Win Distribution - Top 4 Favourites",
+  ggplot2::ggplot(results_pre$ladders[team %in% top4_teams],
+         ggplot2::aes(x = wins, fill = team)) +
+    ggplot2::geom_histogram(binwidth = 1, position = "dodge", alpha = 0.7) +
+    ggplot2::labs(title = "Win Distribution - Top 4 Favourites",
          x = "Wins", y = "Frequency") +
-    theme_minimal()
+    ggplot2::theme_minimal()
 
   # Ladder position boxplot
-  ggplot(results_pre$ladders, aes(x = reorder(team, rank), y = rank)) +
-    geom_boxplot(fill = "steelblue", alpha = 0.6) +
-    coord_flip() +
-    scale_y_reverse() +
-    labs(title = "Ladder Position Distribution",
+  ggplot2::ggplot(results_pre$ladders, ggplot2::aes(x = reorder(team, rank), y = rank)) +
+    ggplot2::geom_boxplot(fill = "steelblue", alpha = 0.6) +
+    ggplot2::coord_flip() +
+    ggplot2::scale_y_reverse() +
+    ggplot2::labs(title = "Ladder Position Distribution",
          x = NULL, y = "Ladder Position") +
-    theme_minimal()
+    ggplot2::theme_minimal()
 }

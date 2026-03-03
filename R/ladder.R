@@ -168,12 +168,14 @@ prepare_sim_data <- function(season, team_ratings = NULL, fixtures = NULL,
         pr_dt[, player_norm := NULL]
       }
 
-      # pred_tog-weighted aggregation: torp is now per-80, so
-      # torp * tog_wt gives expected game contribution per player
+      # pred_tog-weighted aggregation: torp is now per-80 (centered around 0),
+      # so negative values are intentional (below-average players). No pmax guard
+      # needed — TOG weighting handles contribution scaling.
       if ("pred_tog" %in% names(pr_dt)) {
         pr_dt[, tog_wt := {
           team_sum <- sum(pred_tog, na.rm = TRUE)
-          if (team_sum > 0) pred_tog * 18 / team_sum else 0
+          n_pl <- .N
+          if (team_sum > 0) pred_tog * 18 / team_sum else rep(18 / n_pl, n_pl)
         }, by = team]
         sim_teams <- pr_dt[, .(
           torp = sum(torp * tog_wt, na.rm = TRUE) * discount

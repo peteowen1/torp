@@ -59,6 +59,7 @@ test_that("calculate_player_stats helper function works", {
     disp_pts_adj = c(40, 45, 35, 38),
     spoil_pts_adj = c(10, 12, 8, 9),
     hitout_pts_adj = c(5, 8, 0, 0),
+    time_on_ground_percentage = c(82, 78, 90, 85),
     pos = c("Midfielder", "Midfielder", "Forward", "Forward"),
     stringsAsFactors = FALSE
   )
@@ -96,6 +97,7 @@ test_that("calculate_player_stats returns expected structure with valid data", {
     disp_pts_adj = runif(20, 20, 80),
     spoil_pts_adj = runif(20, 0, 20),
     hitout_pts_adj = runif(20, 0, 30),
+    time_on_ground_percentage = runif(20, 60, 95),
     pos = sample(c("FWD", "MID", "DEF", "RUC"), 20, replace = TRUE),
     stringsAsFactors = FALSE
   )
@@ -133,6 +135,7 @@ test_that("calculate_player_stats respects decay parameter", {
     disp_pts_adj = c(50, 50, 50),
     spoil_pts_adj = c(10, 10, 10),
     hitout_pts_adj = c(5, 5, 5),
+    time_on_ground_percentage = c(80, 85, 75),
     pos = rep("MID", 3),
     stringsAsFactors = FALSE
   )
@@ -212,8 +215,8 @@ test_that("calculate_torp_ratings works with pre-loaded data", {
 # -----------------------------------------------------------------------------
 
 test_that("calculate_player_stats uses prior_games_spoil and prior_games_hitout constants", {
-  expect_equal(torp:::RATING_PRIOR_GAMES_SPOIL, 3)
-  expect_equal(torp:::RATING_PRIOR_GAMES_HITOUT, 5.3162)
+  expect_equal(torp:::RATING_PRIOR_GAMES_SPOIL, 7.0464)
+  expect_equal(torp:::RATING_PRIOR_GAMES_HITOUT, 3.2153)
 })
 
 # -----------------------------------------------------------------------------
@@ -234,6 +237,7 @@ test_that("wt_gms sums per-match weights correctly for same-day games", {
     disp_pts_adj = c(40, 35),
     spoil_pts_adj = c(10, 8),
     hitout_pts_adj = c(5, 3),
+    time_on_ground_percentage = c(88, 76),
     pos = rep("MID", 2),
     stringsAsFactors = FALSE
   )
@@ -278,6 +282,7 @@ test_that("TOG-weighted average adjustment produces correct math", {
     disp_pts_adj = c(40, 40, 30, 30, 20, 20),
     spoil_pts_adj = c(10, 10, 8, 8, 5, 5),
     hitout_pts_adj = c(5, 5, 3, 3, 0, 0),
+    time_on_ground_percentage = c(85, 80, 75, 70, 90, 88),
     pos = rep("MID", 6),
     stringsAsFactors = FALSE
   )
@@ -332,6 +337,7 @@ test_that("TOG adjustment is skipped when all tog_skill are zero", {
     disp_pts_adj = c(40, 40, 30, 30),
     spoil_pts_adj = c(10, 10, 8, 8),
     hitout_pts_adj = c(5, 5, 0, 0),
+    time_on_ground_percentage = c(82, 79, 88, 84),
     pos = rep("MID", 4),
     stringsAsFactors = FALSE
   )

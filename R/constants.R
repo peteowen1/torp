@@ -31,7 +31,8 @@ AFL_TIME_SCALER_MAX <- 4
 # Rating System Constants
 # -----------------------
 
-#' Total predicted TOG for league-wide centering (18 teams x 18 full-game equivalents)
+#' Default total predicted TOG for league-wide centering (18 players per team x 18 teams).
+#' Used as fallback; actual centering adapts to the number of teams present.
 #' @keywords internal
 TOTAL_PRED_TOG <- 324L
 
@@ -41,7 +42,7 @@ EPV_WEIGHT_DECAY_DAYS <- 365
 
 #' Default decay factor (in days) for TORP rating historical weighting
 #' @keywords internal
-RATING_DECAY_DEFAULT_DAYS <- 477
+RATING_DECAY_DEFAULT_DAYS <- 476
 
 #' Loading factor for TORP calculations
 #' @keywords internal
@@ -49,19 +50,19 @@ RATING_LOADING_DEFAULT <- 1.0000
 
 #' Prior games constant for receiving ratings
 #' @keywords internal
-RATING_PRIOR_GAMES_RECV <- 3.0000
+RATING_PRIOR_GAMES_RECV <- 5.2258
 
 #' Prior games constant for disposal ratings
 #' @keywords internal
-RATING_PRIOR_GAMES_DISP <- 5.0014
+RATING_PRIOR_GAMES_DISP <- 6.2655
 
 #' Prior games constant for spoil ratings
 #' @keywords internal
-RATING_PRIOR_GAMES_SPOIL <- 9.0025
+RATING_PRIOR_GAMES_SPOIL <- 7.0464
 
 #' Prior games constant for hitout ratings
 #' @keywords internal
-RATING_PRIOR_GAMES_HITOUT <- 3.0050
+RATING_PRIOR_GAMES_HITOUT <- 3.2153
 
 #' Prior rate for receiving component (shrinkage target per weighted game)
 #' @keywords internal
@@ -69,30 +70,30 @@ RATING_PRIOR_RATE_RECV <- -0.2500
 
 #' Prior rate for disposal component (shrinkage target per weighted game)
 #' @keywords internal
-RATING_PRIOR_RATE_DISP <- -0.2500
+RATING_PRIOR_RATE_DISP <- -0.2806
 
 #' Prior rate for spoil component (shrinkage target per weighted game)
 #' @keywords internal
-RATING_PRIOR_RATE_SPOIL <- -0.2500
+RATING_PRIOR_RATE_SPOIL <- -0.4824
 
 #' Prior rate for hitout component (shrinkage target per weighted game)
 #' @keywords internal
-RATING_PRIOR_RATE_HITOUT <- -0.2500
+RATING_PRIOR_RATE_HITOUT <- -0.2580
 
 # Credit Assignment Constants
 # ----------------------------
 
 #' Disposal EPV offset when defending (pos_team == -1)
 #' @keywords internal
-CREDIT_DISP_NEG_OFFSET <- -0.1583
+CREDIT_DISP_NEG_OFFSET <- -0.1058
 
 #' Disposal EPV offset when possessing (pos_team == 1)
 #' @keywords internal
-CREDIT_DISP_POS_OFFSET <- -0.0739
+CREDIT_DISP_POS_OFFSET <- -0.0644
 
 #' Disposal scaling factor
 #' @keywords internal
-CREDIT_DISP_SCALE <- 0.8192
+CREDIT_DISP_SCALE <- 0.8179
 
 #' Bounce penalty per bounce
 #' @keywords internal
@@ -100,7 +101,7 @@ CREDIT_BOUNCE_PENALTY <- 1.0000
 
 #' Reception multiplier when defending (pos_team == -1)
 #' @keywords internal
-CREDIT_RECV_NEG_MULT <- 1.3056
+CREDIT_RECV_NEG_MULT <- 1.3831
 
 #' Reception offset when defending
 #' @keywords internal
@@ -108,7 +109,7 @@ CREDIT_RECV_NEG_OFFSET <- 0.5000
 
 #' Reception multiplier when possessing (pos_team == 1)
 #' @keywords internal
-CREDIT_RECV_POS_MULT <- 0.6969
+CREDIT_RECV_POS_MULT <- 0.6683
 
 #' Reception offset when possessing
 #' @keywords internal
@@ -116,31 +117,31 @@ CREDIT_RECV_POS_OFFSET <- 0.5000
 
 #' Reception scaling factor
 #' @keywords internal
-CREDIT_RECV_SCALE <- 0.3700
+CREDIT_RECV_SCALE <- 0.3791
 
 #' Spoil weight per spoil
 #' @keywords internal
-CREDIT_SPOIL_WT <- 1.2029
+CREDIT_SPOIL_WT <- 1.1367
 
 #' Tackle weight per tackle
 #' @keywords internal
-CREDIT_TACKLE_WT <- 1.5981
+CREDIT_TACKLE_WT <- 1.5155
 
 #' Pressure act weight
 #' @keywords internal
-CREDIT_PRESSURE_WT <- 0.1333
+CREDIT_PRESSURE_WT <- 0.1263
 
 #' Defensive half pressure act weight (subtracted)
 #' @keywords internal
-CREDIT_DEF_PRESSURE_WT <- 1.1998
+CREDIT_DEF_PRESSURE_WT <- 1.1366
 
 #' Hitout weight per hitout
 #' @keywords internal
-CREDIT_HITOUT_WT <- 0.2657
+CREDIT_HITOUT_WT <- 0.2625
 
 #' Hitout to advantage weight
 #' @keywords internal
-CREDIT_HITOUT_ADV_WT <- 0.2414
+CREDIT_HITOUT_ADV_WT <- 0.2120
 
 #' Ruck contest weight (subtracted)
 #' @keywords internal
@@ -355,6 +356,8 @@ CONTEST_GROUND_BALL_DESCS <- c(
 #' Average time-on-ground fraction by field position (position.x from load_teams())
 #' Computed from historical data (2021-2025). Used to estimate per-player TOG
 #' when lineups are announced but games haven't started.
+#' EMERG/SUB are currently filtered upstream but kept here for future use.
+#' Unknown positions fall back to 0.75 with a warning.
 #' Run data-raw/debug/compute_position_tog.R to regenerate from current data.
 #' @keywords internal
 POSITION_AVG_TOG <- c(

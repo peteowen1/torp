@@ -20,7 +20,7 @@ devtools::load_all()
 
 # Constants ----
 WEIGHT_DECAY_DAYS <- 1000
-INJURY_DISCOUNT   <- 0.95
+INJURY_DISCOUNT   <- SIM_INJURY_DISCOUNT
 HOME_RATING_BOOST <- 4
 LOG_DIST_OFFSET   <- 10000
 LOG_DIST_DEFAULT  <- 16
@@ -124,7 +124,7 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL) {
   cli::cli_inform("Season: {season}, Week{?s}: {paste(target_weeks, collapse = ', ')}")
 
   # Anchor date for time-decay weights (deterministic, not Sys.Date())
-  target_fixtures <- fixtures %>%
+  target_fixtures <- fixtures |>
     filter(compSeason.year == season, round.roundNumber %in% target_weeks)
   weight_anchor_date <- if (nrow(target_fixtures) > 0) {
     as.Date(min(target_fixtures$utcStartTime))
@@ -137,33 +137,33 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL) {
   cli::cli_h2("Building fixture features")
 
   team_map <-
-    fixtures %>%
-    group_by(teamId = home.team.providerId) %>%
-    summarise(team_name = get_mode(home.team.name)) %>%
+    fixtures |>
+    group_by(teamId = home.team.providerId) |>
+    summarise(team_name = get_mode(home.team.name)) |>
     mutate(team_name = replace_teams(team_name))
 
   fix_df <-
-    fixtures %>%
-    mutate(result = home.score.totalScore - away.score.totalScore) %>%
+    fixtures |>
+    mutate(result = home.score.totalScore - away.score.totalScore) |>
     select(
       providerId, compSeason.year, round.roundNumber, home.team.providerId, away.team.providerId, utcStartTime, venue.name, venue.timezone,
       result
-    ) %>%
+    ) |>
     pivot_longer(
       cols = ends_with("team.providerId"),
       names_to = "team_type",
       values_to = "team.providerId"
-    ) %>%
+    ) |>
     mutate(
       venue = replace_venues(venue.name),
       team_type = substr(team_type, 1, 4),
       result = ifelse(team_type == "away", -result, result)
-    ) %>%
+    ) |>
     select(providerId,
       season = compSeason.year, round.roundNumber, team_type, teamId = team.providerId, utcStartTime, venue, venue.timezone,
       result
-    ) %>%
-    dplyr::left_join(team_map, by = "teamId") %>%
+    ) |>
+    dplyr::left_join(team_map, by = "teamId") |>
     dplyr::mutate(
       team_name_season = as.factor(paste(team_name, season))
     )
@@ -171,9 +171,9 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL) {
   ## Add Date Variables ----
   # Vectorized timezone conversion: group by timezone so with_tz() processes
   # each group as a single vectorized call (~5 groups vs ~6K per-row calls)
-  fix_df <- fix_df %>%
-    mutate(utc_dt = ymd_hms(utcStartTime, tz = "UTC")) %>%
-    group_by(venue.timezone) %>%
+  fix_df <- fix_df |>
+    mutate(utc_dt = ymd_hms(utcStartTime, tz = "UTC")) |>
+    group_by(venue.timezone) |>
     mutate(
       local_dt = with_tz(utc_dt, tzone = first(venue.timezone)),
       local_start_time_str = format(local_dt, "%Y-%m-%d %H:%M:%S %Z"),
@@ -191,16 +191,16 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL) {
       game_prop_through_week = game_wday / 7,
       game_prop_through_day = game_hour / 24,
       game_year_decimal = as.numeric(game_year + game_prop_through_year)
-    ) %>%
-    ungroup() %>%
+    ) |>
+    ungroup() |>
     select(-local_dt)
 
   # Lineups ----
   cli::cli_h2("Processing lineups")
 
   team_lineup_df <-
-    teams %>%
-    dplyr::left_join(torp_df_total, by = c("player.playerId" = "player_id", "season" = "season", "round.roundNumber" = "round")) %>%
+    teams |>
+    dplyr::left_join(torp_df_total, by = c("player.playerId" = "player_id", "season" = "season", "round.roundNumber" = "round")) |>
     dplyr::filter((position.x != "EMERG" & position.x != "SUB") | is.na(position.x))
 
   na_torp_count <- sum(is.na(team_lineup_df$torp))
@@ -214,7 +214,7 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL) {
   # Use per-component priors for unknown players (consistent with shrinkage formula)
   # TORP is per-80 (rate stat). Multiply by lineup_tog (position-based TOG estimate)
   # to convert to expected game contribution before generating position columns.
-  team_lineup_df <- team_lineup_df %>%
+  team_lineup_df <- team_lineup_df |>
     dplyr::mutate(
       torp = tidyr::replace_na(torp, torp_prior_total),
       torp_recv = tidyr::replace_na(torp_recv, RATING_PRIOR_RATE_RECV),
@@ -222,12 +222,20 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL) {
       torp_spoil = tidyr::replace_na(torp_spoil, RATING_PRIOR_RATE_SPOIL),
       torp_hitout = tidyr::replace_na(torp_hitout, RATING_PRIOR_RATE_HITOUT),
       lineup_tog = tidyr::replace_na(POSITION_AVG_TOG[position.x], 0.75),
+      .unknown_pos = !is.na(position.x) & is.na(POSITION_AVG_TOG[position.x]),
       torp = torp * lineup_tog,
       torp_recv = torp_recv * lineup_tog,
       torp_disp = torp_disp * lineup_tog,
       torp_spoil = torp_spoil * lineup_tog,
       torp_hitout = torp_hitout * lineup_tog
     )
+
+  n_unknown <- sum(team_lineup_df$.unknown_pos, na.rm = TRUE)
+  if (n_unknown > 0) {
+    unknown_codes <- unique(team_lineup_df$position.x[team_lineup_df$.unknown_pos])
+    cli::cli_warn("Unknown position code{?s} not in POSITION_AVG_TOG: {paste(unknown_codes, collapse = ', ')} ({n_unknown} row{?s} defaulted to TOG=0.75)")
+  }
+  team_lineup_df$.unknown_pos <- NULL
 
   # Generate position columns from lookup tables (replaces 52 ifelse calls)
   for (col in names(PHASE_MAP))
@@ -246,10 +254,10 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL) {
   # TORP columns are already TOG-weighted (torp_p80 * lineup_tog) so simple sum works
   torp_sum_cols <- c("torp", "torp_recv", "torp_disp", "torp_spoil", "torp_hitout")
 
-  team_rt_df <- team_lineup_df %>%
-    filter(!is.na(player.playerId)) %>%
-    mutate(team_name_adj = fitzRoy::replace_teams(teamName)) %>%
-    dplyr::group_by(providerId, teamId, season, round.roundNumber, teamType) %>%
+  team_rt_df <- team_lineup_df |>
+    filter(!is.na(player.playerId)) |>
+    mutate(team_name_adj = fitzRoy::replace_teams(teamName)) |>
+    dplyr::group_by(providerId, teamId, season, round.roundNumber, teamType) |>
     dplyr::summarise(
       venue = replace_venues(max(venue.name)),
       team_name_adj = max(team_name_adj),
@@ -260,12 +268,12 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL) {
 
   # Find Home Ground ----
   home_ground <-
-    team_rt_df %>%
-    group_by(teamId, team_name_adj) %>%
-    summarise(home_ground = get_mode(venue), .groups = "drop") %>%
-    mutate(venue_adj = replace_venues(as.character(home_ground))) %>%
+    team_rt_df |>
+    group_by(teamId, team_name_adj) |>
+    summarise(home_ground = get_mode(venue), .groups = "drop") |>
+    mutate(venue_adj = replace_venues(as.character(home_ground))) |>
     left_join(
-      all_grounds %>%
+      all_grounds |>
         mutate(venue_adj = replace_venues(as.character(Ground))),
       by = c("venue_adj" = "venue_adj")
     )
@@ -278,37 +286,37 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL) {
   # Vectorized familiarity: cumulative venue proportion per team over time
   # For each (team, season, round), familiarity at a venue = proportion of
   # all prior games played at that venue. Computed via cumulative counts.
-  ground_prop <- team_rt_df %>%
-    arrange(teamId, season, round.roundNumber) %>%
-    group_by(teamId) %>%
-    mutate(cum_total_games = row_number() - 1) %>%
-    group_by(teamId, venue) %>%
-    mutate(cum_venue_games = row_number() - 1) %>%
-    ungroup() %>%
+  ground_prop <- team_rt_df |>
+    arrange(teamId, season, round.roundNumber) |>
+    group_by(teamId) |>
+    mutate(cum_total_games = row_number() - 1) |>
+    group_by(teamId, venue) |>
+    mutate(cum_venue_games = row_number() - 1) |>
+    ungroup() |>
     mutate(
       familiarity = ifelse(cum_total_games > 0, cum_venue_games / cum_total_games, 0)
-    ) %>%
+    ) |>
     select(teamId, season, round.roundNumber, venue, familiarity)
 
   tictoc::toc(log = TRUE)
 
   ## Distance Traveled ----
   team_dist_df <-
-    fix_df %>%
+    fix_df |>
     dplyr::mutate(
       venue = ifelse(venue == "Adelaide Arena at Jiangwan Stadium", "Jiangwan Stadium", venue)
-    ) %>%
-    dplyr::left_join(all_grounds %>% dplyr::select(venue, venue_lat = Latitude, venue_lon = Longitude), by = "venue") %>%
-    dplyr::left_join(home_ground %>% dplyr::select(teamId, team_lat = Latitude, team_lon = Longitude), by = "teamId") %>%
+    ) |>
+    dplyr::left_join(all_grounds |> dplyr::select(venue, venue_lat = Latitude, venue_lon = Longitude), by = "venue") |>
+    dplyr::left_join(home_ground |> dplyr::select(teamId, team_lat = Latitude, team_lon = Longitude), by = "teamId") |>
     dplyr::mutate(distance = purrr::pmap_dbl(
       list(venue_lon, venue_lat, team_lon, team_lat),
       ~ geosphere::distHaversine(c(..1, ..2), c(..3, ..4))
-    )) %>%
+    )) |>
     dplyr::mutate(
       log_dist = log(distance + LOG_DIST_OFFSET),
       log_dist = replace_na(log_dist, LOG_DIST_DEFAULT)
-    ) %>%
-    dplyr::left_join(ground_prop, by = c("teamId", "season", "round.roundNumber", "venue")) %>%
+    ) |>
+    dplyr::left_join(ground_prop, by = c("teamId", "season", "round.roundNumber", "venue")) |>
     dplyr::mutate(
       familiarity = replace_na(familiarity, 0)
     )
@@ -319,15 +327,15 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL) {
   if (na_fam > 0) cli::cli_inform("Familiarity: {na_fam} rows defaulted to 0 (no prior games at venue)")
 
   ## Days Rest ----
-  days_rest <- fix_df %>%
-    arrange(teamId, utcStartTime) %>%
-    group_by(teamId, season) %>%
-    mutate(days_rest = as.numeric(difftime(utcStartTime, lag(utcStartTime), units = "days"))) %>%
+  days_rest <- fix_df |>
+    arrange(teamId, utcStartTime) |>
+    group_by(teamId, season) |>
+    mutate(days_rest = as.numeric(difftime(utcStartTime, lag(utcStartTime), units = "days"))) |>
     ungroup()
 
   na_rest <- sum(is.na(days_rest$days_rest))
   if (na_rest > 0) cli::cli_inform("Days rest: {na_rest} rows defaulted to 21 (first game of season)")
-  days_rest <- days_rest %>%
+  days_rest <- days_rest |>
     dplyr::mutate(days_rest = replace_na(days_rest, 21))
 
   ## Injuries ----
@@ -344,35 +352,37 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL) {
     tictoc::toc(log = TRUE)
     return(invisible(NULL))
   }
-  tr <- match_injuries(tr, inj_df) %>%
+  tr <- match_injuries(tr, inj_df) |>
     mutate(estimated_return = replace_na(estimated_return, "None"))
 
   tr_week <-
-    tr %>%
+    tr |>
     filter(
       !is.na(torp),
       is.na(injury)
-    ) %>%
-    mutate(team_name = fitzRoy::replace_teams(team)) %>%
-    group_by(team_name, season, round) %>%
+    ) |>
+    mutate(team_name = fitzRoy::replace_teams(team)) |>
+    group_by(team_name, season, round) |>
     mutate(
       # Scale pred_tog to sum to 18 per team (18 full-game equivalents)
+      # Fall back to equal weighting when all pred_tog are 0 (e.g., skills data missing)
+      n_players = dplyr::n(),
       team_tog_sum = sum(pred_tog, na.rm = TRUE),
-      tog_wt = dplyr::if_else(team_tog_sum > 0, pred_tog * 18 / team_tog_sum, 0)
-    ) %>%
+      tog_wt = dplyr::if_else(team_tog_sum > 0, pred_tog * 18 / team_tog_sum, 18 / n_players)
+    ) |>
     summarise(
       torp_week = sum(torp * tog_wt, na.rm = TRUE) * INJURY_DISCOUNT,
       torp_recv_week = sum(torp_recv * tog_wt, na.rm = TRUE) * INJURY_DISCOUNT,
       torp_disp_week = sum(torp_disp * tog_wt, na.rm = TRUE) * INJURY_DISCOUNT,
       torp_spoil_week = sum(torp_spoil * tog_wt, na.rm = TRUE) * INJURY_DISCOUNT,
       torp_hitout_week = sum(torp_hitout * tog_wt, na.rm = TRUE) * INJURY_DISCOUNT
-    ) %>%
+    ) |>
     arrange(-torp_week)
 
   # Expand estimated ratings across all target weeks (ratings identical for unplayed rounds)
   if (length(target_weeks) > 1) {
     tr_week <- purrr::map_dfr(target_weeks, function(w) {
-      tr_week %>% mutate(round = w)
+      tr_week |> mutate(round = w)
     })
   }
 
@@ -380,39 +390,39 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL) {
   cli::cli_h2("Building model dataset")
 
   team_rt_fix_df <-
-    fix_df %>%
-    mutate(team_name = fitzRoy::replace_teams(team_name)) %>%
+    fix_df |>
+    mutate(team_name = fitzRoy::replace_teams(team_name)) |>
     left_join(
-      team_dist_df %>% select(providerId, teamId, log_dist, familiarity),
+      team_dist_df |> select(providerId, teamId, log_dist, familiarity),
       by = c("providerId", "teamId")
-    ) %>%
+    ) |>
     left_join(
-      days_rest %>% select(providerId, teamId, days_rest),
+      days_rest |> select(providerId, teamId, days_rest),
       by = c("providerId", "teamId")
-    ) %>%
+    ) |>
     left_join(
-      team_rt_df %>% select(providerId, teamId, season, round.roundNumber,
+      team_rt_df |> select(providerId, teamId, season, round.roundNumber,
                              all_of(c(torp_sum_cols, POS_COLS, "count"))),
       by = c("providerId", "teamId", "season", "round.roundNumber")
-    ) %>%
-    left_join(tr_week, by = c("team_name" = "team_name", "season" = "season", "round.roundNumber" = "round")) %>%
+    ) |>
+    left_join(tr_week, by = c("team_name" = "team_name", "season" = "season", "round.roundNumber" = "round")) |>
     mutate(
       torp = coalesce(torp, torp_week),
       torp_recv = coalesce(torp_recv, torp_recv_week),
       torp_disp = coalesce(torp_disp, torp_disp_week),
       torp_spoil = coalesce(torp_spoil, torp_spoil_week),
       torp_hitout = coalesce(torp_hitout, torp_hitout_week)
-    ) %>%
-    dplyr::group_by(teamId) %>%
-    tidyr::fill(torp, torp_recv, torp_disp, torp_spoil, torp_hitout) %>%
+    ) |>
+    dplyr::group_by(teamId) |>
+    tidyr::fill(torp, torp_recv, torp_disp, torp_spoil, torp_hitout) |>
     dplyr::mutate(
       def = ifelse(def == 0, dplyr::lag(def), def),
       mid = ifelse(mid == 0, dplyr::lag(mid), mid),
       fwd = ifelse(fwd == 0, dplyr::lag(fwd), fwd),
       int = ifelse(int == 0, dplyr::lag(int), int),
       team_type_fac = as.factor(team_type)
-    ) %>%
-    tidyr::fill(def, mid, fwd, int) %>%
+    ) |>
+    tidyr::fill(def, mid, fwd, int) |>
     dplyr::ungroup()
 
   # Team mdl df ----
@@ -429,13 +439,13 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL) {
     "game_wday_fac", "game_prop_through_day"
   )
 
-  team_mdl_df_tot <- team_rt_fix_df %>%
+  team_mdl_df_tot <- team_rt_fix_df |>
     dplyr::left_join(
-      team_rt_fix_df %>%
-        dplyr::select(all_of(opp_cols)) %>%
+      team_rt_fix_df |>
+        dplyr::select(all_of(opp_cols)) |>
         dplyr::mutate(type_anti = dplyr::if_else(team_type == "home", "away", "home")),
       by = c("providerId" = "providerId", "team_type" = "type_anti")
-    ) %>%
+    ) |>
     dplyr::mutate(
       torp_diff = torp.x - torp.y,
       torp_ratio = log(pmax(torp.x, 0.01) / pmax(torp.y, 0.01)),
@@ -443,9 +453,9 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL) {
       torp_disp_diff = torp_disp.x - torp_disp.y,
       torp_spoil_diff = torp_spoil.x - torp_spoil.y,
       torp_hitout_diff = torp_hitout.x - torp_hitout.y
-    ) %>%
+    ) |>
     dplyr::left_join(
-      results %>%
+      results |>
         dplyr::select(
           match.matchId,
           homeTeamScore.matchScore.totalScore, homeTeamScore.matchScore.goals, homeTeamScore.matchScore.behinds,
@@ -453,10 +463,10 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL) {
           match.utcStartTime
         ),
       by = c("providerId" = "match.matchId")
-    ) %>%
+    ) |>
     dplyr::left_join(xg_df,
       by = c("providerId" = "match_id")
-    ) %>%
+    ) |>
     dplyr::mutate(
       home_shots = homeTeamScore.matchScore.goals + homeTeamScore.matchScore.behinds,
       away_shots = awayTeamScore.matchScore.goals + awayTeamScore.matchScore.behinds,
@@ -530,7 +540,7 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL) {
   ## Filter out early matches ----
   # Earliest with reliable TORP + xG data is 2021 R14
   team_mdl_df <-
-    team_mdl_df_tot %>%
+    team_mdl_df_tot |>
     filter(
       season.x > MIN_DATA_SEASON |
         (season.x == MIN_DATA_SEASON & round.roundNumber.x >= MIN_DATA_ROUND)
@@ -538,7 +548,7 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL) {
 
   ## Adjust total_xpoints ----
   team_mdl_df <-
-    team_mdl_df %>%
+    team_mdl_df |>
     mutate(
       total_xpoints_adj = total_xpoints * (mean(total_points, na.rm = TRUE) / mean(total_xpoints, na.rm = TRUE)),
       venue_fac = as.factor(venue.x)
@@ -586,8 +596,8 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL) {
   # This Week's Predictions ----
   cli::cli_h2("Generating predictions for {length(target_weeks)} week{?s}")
 
-  week_gms_home <- team_mdl_df %>%
-    dplyr::filter(season.x == lubridate::year(Sys.Date()), round.roundNumber.x %in% target_weeks, team_type_fac.x == "home") %>%
+  week_gms_home <- team_mdl_df |>
+    dplyr::filter(season.x == lubridate::year(Sys.Date()), round.roundNumber.x %in% target_weeks, team_type_fac.x == "home") |>
     dplyr::select(
       round = round.roundNumber.x,
       players = count.x, providerId,
@@ -603,14 +613,14 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL) {
       venue = venue.x
     )
 
-  week_gms_away <- team_mdl_df %>%
+  week_gms_away <- team_mdl_df |>
     dplyr::mutate(
       pred_xscore_diff = -pred_xscore_diff,
       pred_score_diff = -pred_score_diff,
       pred_win = 1 - pred_win,
       score_diff = -score_diff
-    ) %>%
-    dplyr::filter(season.x == lubridate::year(Sys.Date()), round.roundNumber.x %in% target_weeks, team_type_fac.x == "away") %>%
+    ) |>
+    dplyr::filter(season.x == lubridate::year(Sys.Date()), round.roundNumber.x %in% target_weeks, team_type_fac.x == "away") |>
     dplyr::select(
       round = round.roundNumber.x,
       players = count.x, providerId,
@@ -626,8 +636,8 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL) {
       venue = venue.x
     )
 
-  week_gms <- dplyr::bind_rows(week_gms_home, week_gms_away) %>%
-    dplyr::group_by(round, providerId, home_team, home_rating, away_team, away_rating, start_time, venue) %>%
+  week_gms <- dplyr::bind_rows(week_gms_home, week_gms_away) |>
+    dplyr::group_by(round, providerId, home_team, home_rating, away_team, away_rating, start_time, venue) |>
     dplyr::summarise(
       players = mean(players),
       pred_xtotal = mean(pred_xtotal),
@@ -635,8 +645,8 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL) {
       pred_win = mean(pred_win),
       margin = mean(margin),
       .groups = "drop"
-    ) %>%
-    mutate(rating_diff = home_rating - away_rating + HOME_RATING_BOOST) %>%
+    ) |>
+    mutate(rating_diff = home_rating - away_rating + HOME_RATING_BOOST) |>
     select(round, providerId:away_rating, start_time, venue, rating_diff, players:margin)
 
   # Validate Predictions ----
@@ -652,13 +662,13 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL) {
   # Upload Predictions ----
   cli::cli_h2("Uploading predictions")
 
-  week_gms <- week_gms %>% rename(week = round) %>% relocate(week)
+  week_gms <- week_gms |> rename(week = round) |> relocate(week)
 
   pred_file_name <- paste0("predictions_", season)
   existing <- tryCatch(file_reader(pred_file_name, "predictions"), error = function(e) NULL)
 
   if (!is.null(existing) && nrow(existing) > 0) {
-    combined <- existing %>% filter(!week %in% target_weeks) %>% bind_rows(week_gms) %>% arrange(week)
+    combined <- existing |> filter(!week %in% target_weeks) |> bind_rows(week_gms) |> arrange(week)
   } else {
     combined <- week_gms
   }

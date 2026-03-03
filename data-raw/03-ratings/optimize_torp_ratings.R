@@ -311,10 +311,20 @@ compute_credits <- function(pgr, params, verbose = FALSE) {
   out[, hitout_pts := hitouts * p["hitout_wt"] + hitouts_adv * p["hitout_adv_wt"] -
                       ruck_contests * p["ruck_contest_wt"]]
 
-  # Position-group quantile adjustment
+  # Per-80 normalisation first: divide by actual TOG so ratings are per-full-game.
+  # Must happen BEFORE position-quantile so the quantile operates on per-80 rates
+  # (otherwise low-TOG players have the per-game quantile amplified by 1/tog_safe).
+  out[, `:=`(
+    recv_pts   = recv_pts   / tog_safe,
+    disp_pts   = disp_pts   / tog_safe,
+    spoil_pts  = spoil_pts  / tog_safe,
+    hitout_pts = hitout_pts / tog_safe
+  )]
+
+  # Position-group quantile adjustment (on per-80 rates)
   q <- p["pos_adj_quantile"]
   if (verbose) {
-    cat(sprintf("\n  Position quantile adjustment (q = %.2f%%):\n", q * 100))
+    cat(sprintf("\n  Position quantile adjustment on per-80 rates (q = %.2f%%):\n", q * 100))
     cat(sprintf("  %-18s %8s %8s %8s %8s\n", "Position", "recv", "disp", "spoil", "hitout"))
     for (pos in sort(unique(out$position[!is.na(out$position)]))) {
       idx <- out$position == pos & !is.na(out$position)
@@ -331,14 +341,6 @@ compute_credits <- function(pgr, params, verbose = FALSE) {
     spoil_pts  = spoil_pts  - stats::quantile(spoil_pts, q, na.rm = TRUE),
     hitout_pts = hitout_pts - stats::quantile(hitout_pts, q, na.rm = TRUE)
   ), by = position]
-
-  # Per-80 normalisation: divide by actual TOG so ratings are per-full-game
-  out[, `:=`(
-    recv_pts   = recv_pts   / tog_safe,
-    disp_pts   = disp_pts   / tog_safe,
-    spoil_pts  = spoil_pts  / tog_safe,
-    hitout_pts = hitout_pts / tog_safe
-  )]
 
   return(out)
 }
@@ -420,7 +422,16 @@ objective_fn_fast <- function(par, env) {
   hitout_pts <- env$hitouts * p["hitout_wt"] + env$hitouts_adv * p["hitout_adv_wt"] -
                 env$ruck_contests * p["ruck_contest_wt"]
 
-  # Position-group quantile adjustment
+  # Per-80 normalisation first (before position-quantile, so quantile
+  # operates on per-80 rates rather than inflating per-game adjustments)
+  disp_pts <- disp_pts / env$tog_safe; recv_pts <- recv_pts / env$tog_safe
+  spoil_pts <- spoil_pts / env$tog_safe; hitout_pts <- hitout_pts / env$tog_safe
+
+  # Replace any NaN/NA credits with 0
+  disp_pts[is.na(disp_pts)] <- 0; recv_pts[is.na(recv_pts)] <- 0
+  spoil_pts[is.na(spoil_pts)] <- 0; hitout_pts[is.na(hitout_pts)] <- 0
+
+  # Position-group quantile adjustment (on per-80 rates)
   q <- p["pos_adj_quantile"]
   for (pos in env$position_levels) {
     idx <- env$pos_indices[[pos]]
@@ -431,14 +442,6 @@ objective_fn_fast <- function(par, env) {
       hitout_pts[idx] <- hitout_pts[idx] - quantile(hitout_pts[idx], q, na.rm = TRUE)
     }
   }
-
-  # Replace any NaN/NA credits with 0
-  disp_pts[is.na(disp_pts)] <- 0; recv_pts[is.na(recv_pts)] <- 0
-  spoil_pts[is.na(spoil_pts)] <- 0; hitout_pts[is.na(hitout_pts)] <- 0
-
-  # Per-80 normalisation: divide by actual TOG
-  disp_pts <- disp_pts / env$tog_safe; recv_pts <- recv_pts / env$tog_safe
-  spoil_pts <- spoil_pts / env$tog_safe; hitout_pts <- hitout_pts / env$tog_safe
 
   # --- Cumulative decay sums (single-vector loop, no data.table overhead) ---
   decay_days <- p["decay_days"]
@@ -1223,9 +1226,9 @@ for (par_name in names(param_to_constant)) {
 writeLines(lines, constants_path)
 cat(sprintf("Updated %d constants in %s\n", n_updated, constants_path))
 
-## 9b. Save params as RDS backup ----
-optimized_params <- as.list(best_par)
-saveRDS(optimized_params, "data-raw/03-ratings/optimized_torp_params.rds")
-cat("Backup saved to data-raw/03-ratings/optimized_torp_params.rds\n")
+## 9b. Save params as CSV backup ----
+optimized_params_df <- data.frame(param = names(best_par), value = unname(best_par))
+utils::write.csv(optimized_params_df, "data-raw/03-ratings/optimized_torp_params.csv", row.names = FALSE)
+cat("Backup saved to data-raw/03-ratings/optimized_torp_params.csv\n")
 
 cat("\n=== Optimization complete ===\n")

@@ -106,6 +106,9 @@ calculate_torp_ratings <- function(season_val = get_afl_season(type = "current")
   } else {
     plyr_gm_df_rnd <- calculate_player_stats(player_game_data, match_ref, date_val, decay, loading, prior_games_recv, prior_games_disp, prior_games_spoil = prior_games_spoil, prior_games_hitout = prior_games_hitout, prior_rate_recv = prior_rate_recv, prior_rate_disp = prior_rate_disp, prior_rate_spoil = prior_rate_spoil, prior_rate_hitout = prior_rate_hitout)
 
+    # Ensure pred_tog column exists (needed by prepare_final_dataframe)
+    plyr_gm_df_rnd[, pred_tog := NA_real_]
+
     # Attach raw pred_tog from skills (centering happens after roster filter)
     if (!is.null(skills)) {
       skills_dt <- data.table::as.data.table(skills)
@@ -115,13 +118,15 @@ calculate_torp_ratings <- function(season_val = get_afl_season(type = "current")
 
     final_df <- prepare_final_dataframe(plyr_tm_df, plyr_gm_df_rnd, season_val, round_val)
 
-    # TOG-weighted centering: scale pred_tog to TOTAL_PRED_TOG (324) across
-    # rostered players, then re-center each TORP component to "above/below average"
+    # TOG-weighted centering: scale pred_tog to n_teams * 18 (full-game equivalents)
+    # across rostered players, then re-center each TORP component to "above/below average"
     if (!is.null(skills) && nrow(final_df) > 0) {
       final_df$pred_tog[is.na(final_df$pred_tog)] <- 0
       tot_tog <- sum(final_df$pred_tog)
       if (tot_tog > 0) {
-        final_df$pred_tog <- final_df$pred_tog * (TOTAL_PRED_TOG / tot_tog)
+        n_teams <- length(unique(final_df$team))
+        target_tog <- n_teams * 18L
+        final_df$pred_tog <- final_df$pred_tog * (target_tog / tot_tog)
 
         comps <- c("torp_recv", "torp_disp", "torp_spoil", "torp_hitout")
         for (comp in comps) {
@@ -209,14 +214,8 @@ calculate_player_stats <- function(player_game_data = NULL, match_ref, date_val,
     torp_hitout = (loading * hitout_sum + prior_games_hitout * prior_rate_hitout) / (wt_gms + prior_games_hitout)
   )]
 
-  # Third pass: compute final torp and rounded values
-  result[, `:=`(
-    torp = round(torp_recv + torp_disp + torp_spoil + torp_hitout, 2),
-    torp_recv_adj = round(torp_recv, 2),
-    torp_disp_adj = round(torp_disp, 2),
-    torp_spoil_adj = round(torp_spoil, 2),
-    torp_hitout_adj = round(torp_hitout, 2)
-  )]
+  # Third pass: compute final torp
+  result[, torp := round(torp_recv + torp_disp + torp_spoil + torp_hitout, 2)]
 
   # Remove intermediate columns
   result[, c("tot_p_sum", "recv_sum", "disp_sum", "spoil_sum", "hitout_sum") := NULL]
