@@ -40,9 +40,25 @@ TOTAL_PRED_TOG <- 324L
 #' @keywords internal
 EPV_WEIGHT_DECAY_DAYS <- 365
 
-#' Default decay factor (in days) for TORP rating historical weighting
+#' Decay factor (in days) for receiving component weighting
 #' @keywords internal
-RATING_DECAY_DEFAULT_DAYS <- 476
+RATING_DECAY_RECV <- 450
+
+#' Decay factor (in days) for disposal component weighting
+#' @keywords internal
+RATING_DECAY_DISP <- 450
+
+#' Decay factor (in days) for spoil component weighting
+#' @keywords internal
+RATING_DECAY_SPOIL <- 450
+
+#' Decay factor (in days) for hitout component weighting
+#' @keywords internal
+RATING_DECAY_HITOUT <- 450
+
+#' Default decay factor (in days) — legacy alias for backwards compatibility
+#' @keywords internal
+RATING_DECAY_DEFAULT_DAYS <- RATING_DECAY_RECV
 
 #' Loading factor for TORP calculations
 #' @keywords internal
@@ -50,50 +66,50 @@ RATING_LOADING_DEFAULT <- 1.0000
 
 #' Prior games constant for receiving ratings
 #' @keywords internal
-RATING_PRIOR_GAMES_RECV <- 5.2258
+RATING_PRIOR_GAMES_RECV <- 9.8752
 
 #' Prior games constant for disposal ratings
 #' @keywords internal
-RATING_PRIOR_GAMES_DISP <- 6.2655
+RATING_PRIOR_GAMES_DISP <- 5.7428
 
 #' Prior games constant for spoil ratings
 #' @keywords internal
-RATING_PRIOR_GAMES_SPOIL <- 7.0464
+RATING_PRIOR_GAMES_SPOIL <- 3.9409
 
 #' Prior games constant for hitout ratings
 #' @keywords internal
-RATING_PRIOR_GAMES_HITOUT <- 3.2153
+RATING_PRIOR_GAMES_HITOUT <- 15.0000
 
 #' Prior rate for receiving component (shrinkage target per weighted game)
 #' @keywords internal
-RATING_PRIOR_RATE_RECV <- -0.2500
+RATING_PRIOR_RATE_RECV <- 0.0000
 
 #' Prior rate for disposal component (shrinkage target per weighted game)
 #' @keywords internal
-RATING_PRIOR_RATE_DISP <- -0.2806
+RATING_PRIOR_RATE_DISP <- 0.0000
 
 #' Prior rate for spoil component (shrinkage target per weighted game)
 #' @keywords internal
-RATING_PRIOR_RATE_SPOIL <- -0.4824
+RATING_PRIOR_RATE_SPOIL <- 0.0000
 
 #' Prior rate for hitout component (shrinkage target per weighted game)
 #' @keywords internal
-RATING_PRIOR_RATE_HITOUT <- -0.2580
+RATING_PRIOR_RATE_HITOUT <- -1.1407
 
 # Credit Assignment Constants
 # ----------------------------
 
 #' Disposal EPV offset when defending (pos_team == -1)
 #' @keywords internal
-CREDIT_DISP_NEG_OFFSET <- -0.1058
+CREDIT_DISP_NEG_OFFSET <- -0.0609
 
 #' Disposal EPV offset when possessing (pos_team == 1)
 #' @keywords internal
-CREDIT_DISP_POS_OFFSET <- -0.0644
+CREDIT_DISP_POS_OFFSET <- -0.0335
 
 #' Disposal scaling factor
 #' @keywords internal
-CREDIT_DISP_SCALE <- 0.8179
+CREDIT_DISP_SCALE <- 0.6817
 
 #' Bounce penalty per bounce
 #' @keywords internal
@@ -101,7 +117,7 @@ CREDIT_BOUNCE_PENALTY <- 1.0000
 
 #' Reception multiplier when defending (pos_team == -1)
 #' @keywords internal
-CREDIT_RECV_NEG_MULT <- 1.3831
+CREDIT_RECV_NEG_MULT <- 1.1382
 
 #' Reception offset when defending
 #' @keywords internal
@@ -109,7 +125,7 @@ CREDIT_RECV_NEG_OFFSET <- 0.5000
 
 #' Reception multiplier when possessing (pos_team == 1)
 #' @keywords internal
-CREDIT_RECV_POS_MULT <- 0.6683
+CREDIT_RECV_POS_MULT <- 1.2294
 
 #' Reception offset when possessing
 #' @keywords internal
@@ -117,39 +133,55 @@ CREDIT_RECV_POS_OFFSET <- 0.5000
 
 #' Reception scaling factor
 #' @keywords internal
-CREDIT_RECV_SCALE <- 0.3791
+CREDIT_RECV_SCALE <- 0.3899
 
 #' Spoil weight per spoil
 #' @keywords internal
-CREDIT_SPOIL_WT <- 1.1367
+CREDIT_SPOIL_WT <- 1.0692
 
 #' Tackle weight per tackle
 #' @keywords internal
-CREDIT_TACKLE_WT <- 1.5155
+CREDIT_TACKLE_WT <- 1.2453
 
 #' Pressure act weight
 #' @keywords internal
-CREDIT_PRESSURE_WT <- 0.1263
+CREDIT_PRESSURE_WT <- 0.2242
 
 #' Defensive half pressure act weight (subtracted)
 #' @keywords internal
-CREDIT_DEF_PRESSURE_WT <- 1.1366
+CREDIT_DEF_PRESSURE_WT <- 1.1265
 
 #' Hitout weight per hitout
 #' @keywords internal
-CREDIT_HITOUT_WT <- 0.2625
+CREDIT_HITOUT_WT <- 0.6504
 
 #' Hitout to advantage weight
 #' @keywords internal
-CREDIT_HITOUT_ADV_WT <- 0.2120
+CREDIT_HITOUT_ADV_WT <- 0.1000
 
 #' Ruck contest weight (subtracted)
 #' @keywords internal
 CREDIT_RUCK_CONTEST_WT <- 0.0300
 
-#' Position-group quantile adjustment (shared across all credit components)
+#' Position-group quantile adjustment for receiving component
 #' @keywords internal
-CREDIT_POS_ADJ_QUANTILE <- 0.3184
+CREDIT_POS_ADJ_QUANTILE_RECV <- 0.3184
+
+#' Position-group quantile adjustment for disposal component
+#' @keywords internal
+CREDIT_POS_ADJ_QUANTILE_DISP <- 0.2998
+
+#' Position-group quantile adjustment for spoil component
+#' @keywords internal
+CREDIT_POS_ADJ_QUANTILE_SPOIL <- 0.3230
+
+#' Position-group quantile adjustment for hitout component
+#' @keywords internal
+CREDIT_POS_ADJ_QUANTILE_HITOUT <- 0.4000
+
+#' Position-group quantile adjustment — legacy alias for backwards compatibility
+#' @keywords internal
+CREDIT_POS_ADJ_QUANTILE <- CREDIT_POS_ADJ_QUANTILE_RECV
 
 
 # Simulation Constants

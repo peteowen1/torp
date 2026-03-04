@@ -1,5 +1,5 @@
-# 02_optimize_params.R
-# ====================
+# 02_optimize_skill_params.R
+# ==========================
 # Hyperparameter optimization for skill estimation.
 # Optimizes prior strength and decay rate (lambda) for rate stat categories.
 # Efficiency stat hyperparameters are left at defaults.
@@ -205,11 +205,15 @@ optimize_single_stat <- function(task, shared) {
     cx - offsets[grp]
   }
 
-  multi_start_optim <- function(fn, starts, lower, upper) {
+  multi_start_optim <- function(fn, starts, lower, upper, top_n = 5L) {
+    # Phase 1: evaluate all starts cheaply to find promising regions
+    start_vals <- vapply(starts, fn, numeric(1))
+    # Phase 2: run L-BFGS-B only from the top_n best starting points
+    top_idx <- order(start_vals)[seq_len(min(top_n, length(starts)))]
     best <- NULL
-    for (s in starts) {
+    for (i in top_idx) {
       opt <- tryCatch(
-        stats::optim(par = s, fn = fn, method = "L-BFGS-B",
+        stats::optim(par = starts[[i]], fn = fn, method = "L-BFGS-B",
                      lower = lower, upper = upper),
         error = function(e) NULL
       )

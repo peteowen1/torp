@@ -44,20 +44,22 @@ player_game_ratings <- function(season_val = get_afl_season(),
 
   df <- filter_game_data(player_game_data, season_val, round_num, matchid, team)
 
+  # _adj columns are already per-80 normalised (done in create_player_game_data),
+  # so total_points uses raw credits and p80 columns use _adj directly.
   df |>
     dplyr::arrange(-.data$tot_p_adj) |>
     dplyr::mutate(
       tog_frac = pmax(.data$time_on_ground_percentage / 100, 0.1),
-      total_points = round(.data$tot_p_adj, 1),
-      recv_points = round(.data$recv_pts_adj, 1),
-      disp_points = round(.data$disp_pts_adj, 1),
-      spoil_points = round(.data$spoil_pts_adj, 1),
-      hitout_points = round(.data$hitout_pts_adj, 1),
-      total_p80 = round(.data$tot_p_adj / .data$tog_frac, 1),
-      recv_p80 = round(.data$recv_pts_adj / .data$tog_frac, 1),
-      disp_p80 = round(.data$disp_pts_adj / .data$tog_frac, 1),
-      spoil_p80 = round(.data$spoil_pts_adj / .data$tog_frac, 1),
-      hitout_p80 = round(.data$hitout_pts_adj / .data$tog_frac, 1)
+      total_points = round(.data$tot_p, 1),
+      recv_points = round(.data$recv_pts, 1),
+      disp_points = round(.data$disp_pts, 1),
+      spoil_points = round(.data$spoil_pts, 1),
+      hitout_points = round(.data$hitout_pts, 1),
+      total_p80 = round(.data$tot_p_adj, 1),
+      recv_p80 = round(.data$recv_pts_adj, 1),
+      disp_p80 = round(.data$disp_pts_adj, 1),
+      spoil_p80 = round(.data$spoil_pts_adj, 1),
+      hitout_p80 = round(.data$hitout_pts_adj, 1)
     ) |>
     dplyr::select(
       season = "season", round = "round",

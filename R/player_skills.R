@@ -475,28 +475,21 @@ estimate_player_skills <- function(skill_data, ref_date = NULL,
     total_exposure <- sum(w_vec * tog_vals, na.rm = TRUE)
     grand_mean <- if (total_exposure > 0) sum(w_vec * vals, na.rm = TRUE) / total_exposure else 0
 
-    # Position multipliers
+    # Position-specific prior means (vectorized lookup instead of per-group loop)
     pos_groups <- names(skill_position_map())
+    pos_means_dt <- dt[!is.na(pos_group),
+      .(pos_mean = if (sum(.wden, na.rm = TRUE) > 0)
+                     sum(.wnum, na.rm = TRUE) / sum(.wden, na.rm = TRUE)
+                   else grand_mean),
+      by = pos_group]
     pos_means <- stats::setNames(rep(grand_mean, length(pos_groups)), pos_groups)
-    for (pg in pos_groups) {
-      idx <- which(dt$pos_group == pg)
-      if (length(idx) > 0) {
-        pw <- w_vec[idx] * tog_vals[idx]
-        pv <- vals[idx]
-        if (sum(pw, na.rm = TRUE) > 0) {
-          pos_means[pg] <- sum(w_vec[idx] * pv, na.rm = TRUE) / sum(pw, na.rm = TRUE)
-        }
-      }
-    }
+    pos_means[pos_means_dt$pos_group] <- pos_means_dt$pos_mean
 
-    # Compute posterior
+    # Compute posterior: vectorized position lookup (no R-level loop)
     agg[, alpha0 := {
-      m <- rep(grand_mean, .N)
-      for (pg in pos_groups) {
-        m[pos_group == pg] <- pos_means[pg]
-      }
-      m[is.na(m)] <- grand_mean
-      m * prior_str
+      mu <- pos_means[pos_group]
+      mu[is.na(mu)] <- grand_mean
+      mu * prior_str
     }]
 
     agg[, `:=`(
@@ -581,27 +574,23 @@ estimate_player_skills <- function(skill_data, ref_date = NULL,
     grand_prop <- if (total_attempts > 0) sum(w_vec * successes, na.rm = TRUE) / total_attempts else 0.5
     grand_prop <- max(min(grand_prop, 1 - 1e-6), 1e-6)
 
-    # Position-specific proportions (skip if pos_adjusted = FALSE)
+    # Position-specific proportions (vectorized lookup instead of per-group loop)
     use_pos <- is.na(eff_defs$pos_adjusted[i]) || isTRUE(eff_defs$pos_adjusted[i])
     pos_props <- stats::setNames(rep(grand_prop, length(pos_groups)), pos_groups)
     if (use_pos) {
-      for (pg in pos_groups) {
-        idx <- which(dt$pos_group == pg)
-        if (length(idx) > 0) {
-          pa <- sum(w_vec[idx] * attempts[idx], na.rm = TRUE)
-          if (pa > 0) {
-            pp <- sum(w_vec[idx] * successes[idx], na.rm = TRUE) / pa
-            pos_props[pg] <- max(min(pp, 1 - 1e-6), 1e-6)
-          }
-        }
-      }
+      pos_props_dt <- dt[!is.na(pos_group),
+        .(pp = {
+          pa <- sum(.wden, na.rm = TRUE)
+          if (pa > 0) max(min(sum(.wnum, na.rm = TRUE) / pa, 1 - 1e-6), 1e-6)
+          else grand_prop
+        }),
+        by = pos_group]
+      pos_props[pos_props_dt$pos_group] <- pos_props_dt$pp
     }
 
+    # Vectorized position lookup (no R-level loop)
     agg[, mu0 := {
-      m <- rep(grand_prop, .N)
-      for (pg in pos_groups) {
-        m[pos_group == pg] <- pos_props[pg]
-      }
+      m <- pos_props[pos_group]
       m[is.na(m)] <- grand_prop
       pmax(pmin(m, 1 - 1e-6), 1e-6)
     }]
