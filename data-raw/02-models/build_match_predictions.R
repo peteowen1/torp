@@ -673,7 +673,7 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL) {
     combined <- week_gms
   }
 
-  save_to_release(combined, pred_file_name, "predictions")
+  save_to_release(combined, pred_file_name, "predictions", also_csv = TRUE)
   cli::cli_alert_success("Uploaded {season} predictions ({nrow(combined)} rows, week{?s} {paste(target_weeks, collapse = ', ')} added)")
 
   tictoc::toc(log = TRUE)
