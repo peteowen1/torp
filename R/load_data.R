@@ -44,27 +44,25 @@ save_to_release <- function(df, file_name, release_tag, also_csv = FALSE) {
     tf_csv <- tempfile(fileext = ".csv")
     on.exit(unlink(tf_csv), add = TRUE)
 
-    tryCatch(
-      utils::write.csv(df, tf_csv, row.names = FALSE),
-      error = function(e) {
-        cli::cli_abort("Failed to write CSV file {.val {csv_name}}: {conditionMessage(e)}")
-      }
-    )
-
-    tryCatch(
+    tryCatch({
+      utils::write.csv(df, tf_csv, row.names = FALSE)
       piggyback::pb_upload(tf_csv,
                            repo = get_torp_data_repo(),
                            tag = release_tag,
-                           name = csv_name),
-      error = function(e) {
-        cli::cli_abort("Failed to upload {.val {csv_name}} to release {.val {release_tag}}: {conditionMessage(e)}")
-      }
-    )
+                           name = csv_name)
+    }, error = function(e) {
+      cli::cli_warn("Parquet uploaded but CSV copy failed for {.val {csv_name}}: {conditionMessage(e)}")
+    })
   }
 
   # Also save a local copy if torpdata/data/ is configured
   if (!is.null(get_local_data_dir())) {
-    save_locally(df, file_name)
+    tryCatch(
+      save_locally(df, file_name),
+      error = function(e) {
+        cli::cli_warn("Remote upload succeeded but local save failed: {conditionMessage(e)}")
+      }
+    )
   }
 }
 

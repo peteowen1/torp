@@ -185,6 +185,11 @@ calculate_player_stats <- function(player_game_data = NULL, match_ref, date_val,
     dt <- dt[match_id <= match_ref]
   }
   dt[, days_diff := as.numeric(as.Date(date_val) - as.Date(utc_start_time))]
+  n_future <- sum(dt$days_diff < 0, na.rm = TRUE)
+  if (n_future > 0) {
+    cli::cli_warn("Filtering {n_future} row{?s} with future dates (days_diff < 0)")
+    dt <- dt[days_diff >= 0]
+  }
   dt[, `:=`(
     wt_recv   = exp(-days_diff / decay_recv),
     wt_disp   = exp(-days_diff / decay_disp),
@@ -219,8 +224,8 @@ calculate_player_stats <- function(player_game_data = NULL, match_ref, date_val,
 
   # Derive per-component TORP with per-component wt_gms
   result[, `:=`(
-    wt_gms = wt_gms_recv,
-    wt_tog = round(tog_sum / wt_gms_recv, 1),
+    wt_gms = wt_gms_recv,  # backwards-compat alias; per-component cols are canonical
+    wt_tog = round(tog_sum / pmax(wt_gms_recv, 1e-10), 1),
     torp_recv   = (loading * recv_sum   + prior_games_recv   * prior_rate_recv)   / (wt_gms_recv   + prior_games_recv),
     torp_disp   = (loading * disp_sum   + prior_games_disp   * prior_rate_disp)   / (wt_gms_disp   + prior_games_disp),
     torp_spoil  = (loading * spoil_sum  + prior_games_spoil  * prior_rate_spoil)  / (wt_gms_spoil  + prior_games_spoil),

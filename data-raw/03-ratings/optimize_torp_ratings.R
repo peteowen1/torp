@@ -798,10 +798,10 @@ par_upper <- c(
   prior_games_disp   = 15,
   prior_games_spoil  = 15,
   prior_games_hitout = 15,
-  prior_rate_recv    = -0,
-  prior_rate_disp    = -0,
-  prior_rate_spoil   = -0,
-  prior_rate_hitout  = -0
+  prior_rate_recv    = 0,
+  prior_rate_disp    = 0,
+  prior_rate_spoil   = 0,
+  prior_rate_hitout  = 0
 )
 
 # 4b. No-Ratings Baseline (LOOCV) ----

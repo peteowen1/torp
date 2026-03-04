@@ -173,7 +173,6 @@ create_player_game_data <- function(pbp_data = NULL,
 
   # --- Step 7: Per-80 normalisation then position-group quantile adjustment ---
   # Normalise to per-full-game rate BEFORE position adjustment so the quantile
-
   # compares like-for-like rates, not raw totals that mix ability with TOG.
   plyr_gm_df <- plyr_gm_df |>
     dplyr::mutate(

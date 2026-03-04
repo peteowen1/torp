@@ -152,7 +152,7 @@ get_torp_df <- function(year, rounds, pgd, skills, fixtures) {
     plyr_tm_df <- load_player_details(year - 1)
   }
 
-  purrr::map(rounds, ~ {
+  results <- purrr::map(rounds, ~ {
     tryCatch(
       calculate_torp_ratings(year, .x,
         player_game_data = pgd,
@@ -164,7 +164,14 @@ get_torp_df <- function(year, rounds, pgd, skills, fixtures) {
         NULL
       }
     )
-  }, .progress = TRUE) |>
+  }, .progress = TRUE)
+
+  n_failed <- sum(vapply(results, is.null, logical(1)))
+  if (n_failed == length(rounds) && length(rounds) > 1) {
+    cli::cli_abort("All {length(rounds)} rounds failed for {year} -- likely a systemic data issue")
+  }
+
+  results |>
     dplyr::bind_rows() |>
     (\(df) {
       if (nrow(df) == 0) return(df)

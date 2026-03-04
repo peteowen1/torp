@@ -665,7 +665,13 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
   week_gms <- week_gms |> rename(week = round) |> relocate(week)
 
   pred_file_name <- paste0("predictions_", season)
-  existing <- tryCatch(file_reader(pred_file_name, "predictions"), error = function(e) NULL)
+  existing <- tryCatch(
+    file_reader(pred_file_name, "predictions"),
+    error = function(e) {
+      cli::cli_warn("Could not load existing predictions ({conditionMessage(e)}). Uploading current weeks only.")
+      NULL
+    }
+  )
 
   if (!is.null(existing) && nrow(existing) > 0) {
     combined <- existing |> filter(!week %in% target_weeks) |> bind_rows(week_gms) |> arrange(week)
