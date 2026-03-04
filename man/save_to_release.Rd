@@ -4,7 +4,7 @@
 \alias{save_to_release}
 \title{Save a Data Frame to a GitHub Release via Piggyback}
 \usage{
-save_to_release(df, file_name, release_tag)
+save_to_release(df, file_name, release_tag, also_csv = FALSE)
 }
 \arguments{
 \item{df}{A data frame to save.}
@@ -12,6 +12,8 @@ save_to_release(df, file_name, release_tag)
 \item{file_name}{A string for the file name (without extension).}
 
 \item{release_tag}{The GitHub release tag to associate with the uploaded file.}
+
+\item{also_csv}{Logical. If TRUE, also upload a \code{.csv} copy alongside parquet.}
 }
 \value{
 No return value. Used for side effects (file upload).
@@ -24,5 +26,6 @@ Saves a data frame as a \code{.parquet} file and uploads it to a GitHub release 
 \dontrun{
 my_df <- data.frame(x = 1:3)
 save_to_release(my_df, "my_data", "v1.0.0")
+save_to_release(my_df, "my_data", "v1.0.0", also_csv = TRUE)
 }
 }

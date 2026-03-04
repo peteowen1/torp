@@ -56,7 +56,9 @@ utils::globalVariables(c(
   "torp_home_round", "torp_away_round", "home_torp", "away_torp",
   "tot_p_adj", "tot_p_sum", "recv_pts_adj", "recv_sum",
   "disp_pts_adj", "disp_sum", "spoil_pts_adj", "spoil_sum",
-  "hitout_pts_adj", "hitout_sum", "weight_gm", "wt_gms", "utc_start_time",
+  "hitout_pts_adj", "hitout_sum", "weight_gm", "wt_gms", "wt_tog", "tog_sum", "utc_start_time",
+  "days_diff", "wt_recv", "wt_disp", "wt_spoil", "wt_hitout",
+  "wt_gms_recv", "wt_gms_disp", "wt_gms_spoil", "wt_gms_hitout",
   "pred_tog", "tog_safe", "tog_wt", "lineup_tog",
 
   # data.table join prefixes

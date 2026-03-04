@@ -172,7 +172,7 @@ skill_position_map <- function() {
 #'
 #' Returns optimized defaults for the Bayesian skill estimation pipeline.
 #' Per-category lambda and prior values come from
-#' \code{data-raw/06-skills/02_optimize_params.R}. The global \code{lambda_rate}
+#' \code{data-raw/06-skills/02_optimize_skill_params.R}. The global \code{lambda_rate}
 #' and \code{prior_games} are used as fallbacks for any category not in
 #' \code{category_params}.
 #'
@@ -201,7 +201,7 @@ default_skill_params <- function() {
 
 #' Optimized per-stat hyperparameters
 #'
-#' Baked-in results from \code{data-raw/06-skills/02_optimize_params.R}.
+#' Baked-in results from \code{data-raw/06-skills/02_optimize_skill_params.R}.
 #' Rate stats optimized via TOG-weighted MSE, efficiency stats via
 #' attempt-weighted log-loss. Each entry has \code{lambda} (decay per day)
 #' and \code{prior_strength}.

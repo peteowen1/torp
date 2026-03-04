@@ -23,7 +23,10 @@ default_credit_params <- function() {
     hitout_wt         = CREDIT_HITOUT_WT,
     hitout_adv_wt     = CREDIT_HITOUT_ADV_WT,
     ruck_contest_wt        = CREDIT_RUCK_CONTEST_WT,
-    pos_adj_quantile       = CREDIT_POS_ADJ_QUANTILE
+    pos_adj_quantile_recv   = CREDIT_POS_ADJ_QUANTILE_RECV,
+    pos_adj_quantile_disp   = CREDIT_POS_ADJ_QUANTILE_DISP,
+    pos_adj_quantile_spoil  = CREDIT_POS_ADJ_QUANTILE_SPOIL,
+    pos_adj_quantile_hitout = CREDIT_POS_ADJ_QUANTILE_HITOUT
   )
 }
 
@@ -168,17 +171,27 @@ create_player_game_data <- function(pbp_data = NULL,
       position = dplyr::if_else(position == "MIDFIELDER_FORWARD", "MEDIUM_FORWARD", position)
     )
 
-  # --- Step 7: Position-group quantile adjustment ---
+  # --- Step 7: Per-80 normalisation then position-group quantile adjustment ---
+  # Normalise to per-full-game rate BEFORE position adjustment so the quantile
+  # compares like-for-like rates, not raw totals that mix ability with TOG.
   plyr_gm_df <- plyr_gm_df |>
+    dplyr::mutate(
+      tog_safe = pmax(.data$time_on_ground_percentage / 100, 0.1),
+      recv_p80 = .data$recv_pts / .data$tog_safe,
+      disp_p80 = .data$disp_pts / .data$tog_safe,
+      spoil_p80 = .data$spoil_pts / .data$tog_safe,
+      hitout_p80 = .data$hitout_pts / .data$tog_safe
+    ) |>
     dplyr::group_by(position) |>
     dplyr::mutate(
-      recv_pts_adj = recv_pts - stats::quantile(recv_pts, p$pos_adj_quantile, na.rm = TRUE),
-      disp_pts_adj = disp_pts - stats::quantile(disp_pts, p$pos_adj_quantile, na.rm = TRUE),
-      spoil_pts_adj = spoil_pts - stats::quantile(spoil_pts, p$pos_adj_quantile, na.rm = TRUE),
-      hitout_pts_adj = hitout_pts - stats::quantile(hitout_pts, p$pos_adj_quantile, na.rm = TRUE),
-      tot_p_adj = recv_pts_adj + disp_pts_adj + spoil_pts_adj + hitout_pts_adj
+      recv_pts_adj = .data$recv_p80 - stats::quantile(.data$recv_p80, p$pos_adj_quantile_recv, na.rm = TRUE),
+      disp_pts_adj = .data$disp_p80 - stats::quantile(.data$disp_p80, p$pos_adj_quantile_disp, na.rm = TRUE),
+      spoil_pts_adj = .data$spoil_p80 - stats::quantile(.data$spoil_p80, p$pos_adj_quantile_spoil, na.rm = TRUE),
+      hitout_pts_adj = .data$hitout_p80 - stats::quantile(.data$hitout_p80, p$pos_adj_quantile_hitout, na.rm = TRUE),
+      tot_p_adj = .data$recv_pts_adj + .data$disp_pts_adj + .data$spoil_pts_adj + .data$hitout_pts_adj
     ) |>
-    dplyr::ungroup()
+    dplyr::ungroup() |>
+    dplyr::select(-"tog_safe", -"recv_p80", -"disp_p80", -"spoil_p80", -"hitout_p80")
 
   # --- Step 8: Handle duplicate season columns and select final columns ---
   if ("season.x" %in% names(plyr_gm_df)) {

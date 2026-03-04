@@ -33,16 +33,16 @@ source(here::here("data-raw/01-data/daily_release.R"))
 #   NULL          = current season only
 #   numeric vector = specific seasons (e.g. 2024:2025)
 #   TRUE          = all seasons 2021+
-if (!exists("SEASONS", envir = .GlobalEnv)) SEASONS <- NULL
+if (!exists("SEASONS", envir = .GlobalEnv)) SEASONS <- TRUE
 
 # Whether to re-fetch player_stats + teams from fitzRoy
 if (!exists("REFRESH_UPSTREAM", envir = .GlobalEnv)) REFRESH_UPSTREAM <- FALSE
 
 # Whether to rebuild player game tables from PBP
-if (!exists("REBUILD_PLAYER_GAME", envir = .GlobalEnv)) REBUILD_PLAYER_GAME <- FALSE
+if (!exists("REBUILD_PLAYER_GAME", envir = .GlobalEnv)) REBUILD_PLAYER_GAME <- TRUE
 
 # Full rebuild vs incremental (only configured seasons)
-if (!exists("REBUILD_ALL_RATINGS", envir = .GlobalEnv)) REBUILD_ALL_RATINGS <- FALSE
+if (!exists("REBUILD_ALL_RATINGS", envir = .GlobalEnv)) REBUILD_ALL_RATINGS <- TRUE
 
 # Resolve seasons ----
 
@@ -134,16 +134,44 @@ cli::cli_progress_step("Loading all player game data")
 all_pgd <- load_player_game_data(TRUE)
 cli::cli_inform("Player game data loaded: {nrow(all_pgd)} rows")
 
-get_torp_df <- function(year, rounds, pgd) {
-  purrr::map(rounds, ~ {
+# Convert to keyed data.table once — avoids full copy on every round call
+data.table::setDT(all_pgd)
+data.table::setkey(all_pgd, match_id)
+
+# Pre-load shared data once — avoids ~145 redundant loads per full rebuild
+cli::cli_progress_step("Pre-loading shared reference data")
+shared_skills <- tryCatch(get_player_skills(current = FALSE), error = function(e) {
+  cli::cli_warn("Could not load skills: {conditionMessage(e)}")
+  NULL
+})
+shared_fixtures <- load_fixtures(TRUE)
+
+get_torp_df <- function(year, rounds, pgd, skills, fixtures) {
+  plyr_tm_df <- load_player_details(year)
+  if (nrow(plyr_tm_df) == 0 || !"season" %in% names(plyr_tm_df)) {
+    plyr_tm_df <- load_player_details(year - 1)
+  }
+
+  results <- purrr::map(rounds, ~ {
     tryCatch(
-      calculate_torp_ratings(year, .x, player_game_data = pgd),
+      calculate_torp_ratings(year, .x,
+        player_game_data = pgd,
+        plyr_tm_df = plyr_tm_df,
+        fixtures = fixtures,
+        skills = skills),
       error = function(e) {
         cli::cli_warn("Failed for {year} R{.x}: {conditionMessage(e)}")
         NULL
       }
     )
-  }, .progress = TRUE) |>
+  }, .progress = TRUE)
+
+  n_failed <- sum(vapply(results, is.null, logical(1)))
+  if (n_failed == length(rounds) && length(rounds) > 1) {
+    cli::cli_abort("All {length(rounds)} rounds failed for {year} -- likely a systemic data issue")
+  }
+
+  results |>
     dplyr::bind_rows() |>
     (\(df) {
       if (nrow(df) == 0) return(df)
@@ -171,7 +199,7 @@ for (s in seasons) {
     cli::cli_h3("Computing ratings for {s} (rounds {start_round}-{max_round})")
     tictoc::tic(paste0("ratings_", s))
 
-    torp_df <- get_torp_df(s, start_round:max_round, all_pgd)
+    torp_df <- get_torp_df(s, start_round:max_round, all_pgd, shared_skills, shared_fixtures)
     cli::cli_inform("  {s}: {nrow(torp_df)} rating rows")
 
     if (nrow(torp_df) == 0) {

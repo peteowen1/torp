@@ -10,6 +10,7 @@ library(devtools)
 library(data.table)
 library(dplyr)
 library(fitzRoy)
+library(optimParallel)
 devtools::load_all()
 
 cat("=== TORP Ratings Parameter Optimization ===\n\n")
@@ -23,7 +24,7 @@ player_stats  <- load_player_stats(TRUE)
 teams_data    <- load_teams(TRUE)
 fixtures      <- load_fixtures(TRUE)
 results       <- load_results(TRUE)
-all_grounds   <- readRDS("./data-raw/outputs/stadium_data.rds")
+all_grounds   <- file_reader("stadium_data", "reference-data")
 
 tictoc::toc()
 
@@ -60,7 +61,20 @@ recv_raw <- data.table::as.data.table(pbp_data)[
 setnames(recv_raw, "lead_player_id", "player_id")
 
 ## 2c. Spoil/hitout raw counts ----
-spoil_hitout_raw <- data.table::as.data.table(player_stats)[
+# Detect player_id column name (upstream schema changed from player_player_player_player_id to player_id)
+ps_dt <- data.table::as.data.table(player_stats)
+ps_pid_col <- intersect(c("player_id", "player_player_player_player_id"), names(ps_dt))[1]
+ps_mid_col <- intersect(c("match_id", "provider_id"), names(ps_dt))[1]
+if (is.na(ps_pid_col) || is.na(ps_mid_col)) {
+  stop("Cannot find player_id or match_id column in player_stats. Available: ", paste(names(ps_dt), collapse = ", "))
+}
+cat(sprintf("  player_stats ID columns: %s, %s\n", ps_pid_col, ps_mid_col))
+
+# Standardise column names for downstream use
+if (ps_pid_col != "player_id") data.table::setnames(ps_dt, ps_pid_col, "player_id")
+if (ps_mid_col != "match_id") data.table::setnames(ps_dt, ps_mid_col, "match_id")
+
+spoil_hitout_raw <- ps_dt[
   , .(
     spoils          = sum(extended_stats_spoils, na.rm = TRUE),
     tackles         = sum(tackles, na.rm = TRUE),
@@ -71,7 +85,7 @@ spoil_hitout_raw <- data.table::as.data.table(player_stats)[
     ruck_contests   = sum(extended_stats_ruck_contests, na.rm = TRUE),
     bounces         = sum(bounces, na.rm = TRUE)
   ),
-  by = .(player_id = player_player_player_player_id, match_id = provider_id)
+  by = .(player_id, match_id)
 ]
 
 ## 2d. Merge all raw components ----
@@ -79,13 +93,18 @@ player_game_raw <- merge(disp_raw, recv_raw, by = c("player_id", "match_id"), al
 player_game_raw <- merge(player_game_raw, spoil_hitout_raw, by = c("player_id", "match_id"), all.x = TRUE)
 
 # Join TOG from player_stats for per-80 normalisation
-tog_dt <- data.table::as.data.table(player_stats)[
+tog_dt <- ps_dt[
   , .(tog_pct = mean(time_on_ground_percentage, na.rm = TRUE)),
-  by = .(player_id = player_player_player_player_id, match_id = provider_id)
+  by = .(player_id, match_id)
 ]
 player_game_raw <- merge(player_game_raw, tog_dt, by = c("player_id", "match_id"), all.x = TRUE)
-player_game_raw[is.na(tog_pct), tog_pct := 80]
+player_game_raw[is.na(tog_pct), tog_pct := 10]
 player_game_raw[, tog_safe := pmax(tog_pct / 100, 0.1)]
+
+# Remove rows with NA player_id (pbp rows where no player is attributed)
+n_na <- sum(is.na(player_game_raw$player_id))
+if (n_na > 0) cat(sprintf("Dropping %d rows with NA player_id\n", n_na))
+player_game_raw <- player_game_raw[!is.na(player_id)]
 
 # Replace NAs with 0
 num_cols <- c("sum_depv_neg", "n_neg", "sum_depv_pos", "n_pos",
@@ -192,17 +211,19 @@ compute_familiarity <- function(match_dt, teams_dt) {
   )
   data.table::setorder(team_matches, teamId, date)
 
-  # For each team-match, compute proportion of prior games at this venue
-  team_matches[, row_idx := .I]
+  # O(n) per team: cumulative count per venue using a running counter table
   team_matches[, familiarity := {
+    venue_counts <- integer(0)  # named integer vector: venue -> count
     fam <- numeric(.N)
     for (i in seq_len(.N)) {
-      if (i == 1) {
+      total_prior <- i - 1L
+      if (total_prior == 0L) {
         fam[i] <- 0
       } else {
-        prior <- venue[1:(i - 1)]
-        fam[i] <- sum(prior == venue[i]) / length(prior)
+        v <- venue[i]
+        fam[i] <- (venue_counts[v] %||% 0L) / total_prior
       }
+      venue_counts[venue[i]] <- (venue_counts[venue[i]] %||% 0L) + 1L
     }
     fam
   }, by = teamId]
@@ -321,25 +342,29 @@ compute_credits <- function(pgr, params, verbose = FALSE) {
     hitout_pts = hitout_pts / tog_safe
   )]
 
-  # Position-group quantile adjustment (on per-80 rates)
-  q <- p["pos_adj_quantile"]
+  # Position-group quantile adjustment (on per-80 rates) — per-component quantiles
+  q_r <- p["pos_adj_quantile_recv"]
+  q_d <- p["pos_adj_quantile_disp"]
+  q_s <- p["pos_adj_quantile_spoil"]
+  q_h <- p["pos_adj_quantile_hitout"]
   if (verbose) {
-    cat(sprintf("\n  Position quantile adjustment on per-80 rates (q = %.2f%%):\n", q * 100))
+    cat(sprintf("\n  Position quantile adjustment on per-80 rates (q_r=%.2f%%, q_d=%.2f%%, q_s=%.2f%%, q_h=%.2f%%):\n",
+                q_r * 100, q_d * 100, q_s * 100, q_h * 100))
     cat(sprintf("  %-18s %8s %8s %8s %8s\n", "Position", "recv", "disp", "spoil", "hitout"))
     for (pos in sort(unique(out$position[!is.na(out$position)]))) {
       idx <- out$position == pos & !is.na(out$position)
       cat(sprintf("  %-18s %+8.3f %+8.3f %+8.3f %+8.3f\n", pos,
-        quantile(out$recv_pts[idx], q, na.rm = TRUE),
-        quantile(out$disp_pts[idx], q, na.rm = TRUE),
-        quantile(out$spoil_pts[idx], q, na.rm = TRUE),
-        quantile(out$hitout_pts[idx], q, na.rm = TRUE)))
+        quantile(out$recv_pts[idx], q_r, na.rm = TRUE),
+        quantile(out$disp_pts[idx], q_d, na.rm = TRUE),
+        quantile(out$spoil_pts[idx], q_s, na.rm = TRUE),
+        quantile(out$hitout_pts[idx], q_h, na.rm = TRUE)))
     }
   }
   out[!is.na(position), `:=`(
-    recv_pts   = recv_pts   - stats::quantile(recv_pts, q, na.rm = TRUE),
-    disp_pts   = disp_pts   - stats::quantile(disp_pts, q, na.rm = TRUE),
-    spoil_pts  = spoil_pts  - stats::quantile(spoil_pts, q, na.rm = TRUE),
-    hitout_pts = hitout_pts - stats::quantile(hitout_pts, q, na.rm = TRUE)
+    recv_pts   = recv_pts   - stats::quantile(recv_pts, q_r, na.rm = TRUE),
+    disp_pts   = disp_pts   - stats::quantile(disp_pts, q_d, na.rm = TRUE),
+    spoil_pts  = spoil_pts  - stats::quantile(spoil_pts, q_s, na.rm = TRUE),
+    hitout_pts = hitout_pts - stats::quantile(hitout_pts, q_h, na.rm = TRUE)
   ), by = position]
 
   return(out)
@@ -348,31 +373,44 @@ compute_credits <- function(pgr, params, verbose = FALSE) {
 #' Compute cumulative decay-weighted sums per player
 #'
 #' @param credit_dt Credit-assigned player-game data (with recv_pts, disp_pts, etc.)
-#' @param decay_days Decay factor in days
+#' @param decay_recv Decay factor in days for receiving
+#' @param decay_disp Decay factor in days for disposal
+#' @param decay_spoil Decay factor in days for spoil
+#' @param decay_hitout Decay factor in days for hitout
 #' @return data.table with cumulative sums per player per game
-compute_cumulative <- function(credit_dt, decay_days) {
+compute_cumulative <- function(credit_dt, decay_recv, decay_disp = decay_recv,
+                               decay_spoil = decay_recv, decay_hitout = decay_recv) {
   dt <- data.table::copy(credit_dt)
   data.table::setorder(dt, player_id, date)
   dt[, date_num := as.numeric(date)]
 
   dt[, {
     n <- .N
-    cr <- cd <- cs <- ch <- cw <- numeric(n)
+    cr <- cd <- cs <- ch <- cw_r <- cw_d <- cw_s <- cw_h <- numeric(n)
     for (i in seq_len(n)) {
       if (i == 1) {
         cr[i] <- recv_pts[i]; cd[i] <- disp_pts[i]
-        cs[i] <- spoil_pts[i]; ch[i] <- hitout_pts[i]; cw[i] <- 1
+        cs[i] <- spoil_pts[i]; ch[i] <- hitout_pts[i]
+        cw_r[i] <- 1; cw_d[i] <- 1; cw_s[i] <- 1; cw_h[i] <- 1
       } else {
-        df <- exp(-(date_num[i] - date_num[i - 1]) / decay_days)
-        cr[i] <- cr[i - 1] * df + recv_pts[i]
-        cd[i] <- cd[i - 1] * df + disp_pts[i]
-        cs[i] <- cs[i - 1] * df + spoil_pts[i]
-        ch[i] <- ch[i - 1] * df + hitout_pts[i]
-        cw[i] <- cw[i - 1] * df + 1
+        gap <- date_num[i] - date_num[i - 1]
+        df_r <- exp(-gap / decay_recv)
+        df_d <- exp(-gap / decay_disp)
+        df_s <- exp(-gap / decay_spoil)
+        df_h <- exp(-gap / decay_hitout)
+        cr[i] <- cr[i - 1] * df_r + recv_pts[i]
+        cd[i] <- cd[i - 1] * df_d + disp_pts[i]
+        cs[i] <- cs[i - 1] * df_s + spoil_pts[i]
+        ch[i] <- ch[i - 1] * df_h + hitout_pts[i]
+        cw_r[i] <- cw_r[i - 1] * df_r + 1
+        cw_d[i] <- cw_d[i - 1] * df_d + 1
+        cw_s[i] <- cw_s[i - 1] * df_s + 1
+        cw_h[i] <- cw_h[i - 1] * df_h + 1
       }
     }
     .(match_id = match_id, date_num = date_num,
-      cum_recv = cr, cum_disp = cd, cum_spoil = cs, cum_hitout = ch, cum_wt = cw)
+      cum_recv = cr, cum_disp = cd, cum_spoil = cs, cum_hitout = ch,
+      cum_wt_recv = cw_r, cum_wt_disp = cw_d, cum_wt_spoil = cw_s, cum_wt_hitout = cw_h)
   }, by = player_id]
 }
 
@@ -404,9 +442,8 @@ compute_cumulative_single <- function(pgr_sorted, col_name, decay_days) {
 #' @param env Pre-computed environment with pgr_s, lineup join data, etc.
 #' @return RMSE value
 objective_fn_fast <- function(par, env) {
-  # Enforce bounds (Nelder-Mead is unconstrained)
-  p <- pmax(par, par_lower[names(par)])
-  p <- pmin(p, par_upper[names(par)])
+  # L-BFGS-B enforces bounds natively; keep safety clamp for any other caller
+  p <- par
 
   # --- Compute per-game credits directly on sorted vectors (no copy) ---
   disp_pts <- (env$sum_depv_neg + env$n_neg * p["disp_neg_offset"]) * p["disp_scale"] +
@@ -431,37 +468,48 @@ objective_fn_fast <- function(par, env) {
   disp_pts[is.na(disp_pts)] <- 0; recv_pts[is.na(recv_pts)] <- 0
   spoil_pts[is.na(spoil_pts)] <- 0; hitout_pts[is.na(hitout_pts)] <- 0
 
-  # Position-group quantile adjustment (on per-80 rates)
-  q <- p["pos_adj_quantile"]
+  # Position-group quantile adjustment (on per-80 rates) — per-component quantiles
+  q_r <- p["pos_adj_quantile_recv"]
+  q_d <- p["pos_adj_quantile_disp"]
+  q_s <- p["pos_adj_quantile_spoil"]
+  q_h <- p["pos_adj_quantile_hitout"]
   for (pos in env$position_levels) {
     idx <- env$pos_indices[[pos]]
     if (length(idx) > 0) {
-      recv_pts[idx]   <- recv_pts[idx]   - quantile(recv_pts[idx], q, na.rm = TRUE)
-      disp_pts[idx]   <- disp_pts[idx]   - quantile(disp_pts[idx], q, na.rm = TRUE)
-      spoil_pts[idx]  <- spoil_pts[idx]  - quantile(spoil_pts[idx], q, na.rm = TRUE)
-      hitout_pts[idx] <- hitout_pts[idx] - quantile(hitout_pts[idx], q, na.rm = TRUE)
+      recv_pts[idx]   <- recv_pts[idx]   - quantile(recv_pts[idx], q_r, na.rm = TRUE)
+      disp_pts[idx]   <- disp_pts[idx]   - quantile(disp_pts[idx], q_d, na.rm = TRUE)
+      spoil_pts[idx]  <- spoil_pts[idx]  - quantile(spoil_pts[idx], q_s, na.rm = TRUE)
+      hitout_pts[idx] <- hitout_pts[idx] - quantile(hitout_pts[idx], q_h, na.rm = TRUE)
     }
   }
 
-  # --- Cumulative decay sums (single-vector loop, no data.table overhead) ---
-  decay_days <- p["decay_days"]
+  # --- Cumulative decay sums (per-component decay, single-vector loop) ---
+  decay_r <- p["decay_recv"]; decay_d <- p["decay_disp"]
+  decay_s <- p["decay_spoil"]; decay_h <- p["decay_hitout"]
   pids <- env$pgr_s$player_id
   dnums <- env$pgr_s$date_num
   n <- length(disp_pts)
-  cr <- cd <- cs <- ch <- cw <- numeric(n)
+  cr <- cd <- cs <- ch <- cw_r <- cw_d <- cw_s <- cw_h <- numeric(n)
   cr[1] <- recv_pts[1]; cd[1] <- disp_pts[1]
-  cs[1] <- spoil_pts[1]; ch[1] <- hitout_pts[1]; cw[1] <- 1
+  cs[1] <- spoil_pts[1]; ch[1] <- hitout_pts[1]
+  cw_r[1] <- 1; cw_d[1] <- 1; cw_s[1] <- 1; cw_h[1] <- 1
   for (i in 2:n) {
     if (pids[i] == pids[i - 1]) {
-      df <- exp(-(dnums[i] - dnums[i - 1]) / decay_days)
-      cr[i] <- cr[i - 1] * df + recv_pts[i]
-      cd[i] <- cd[i - 1] * df + disp_pts[i]
-      cs[i] <- cs[i - 1] * df + spoil_pts[i]
-      ch[i] <- ch[i - 1] * df + hitout_pts[i]
-      cw[i] <- cw[i - 1] * df + 1
+      gap <- dnums[i] - dnums[i - 1]
+      df_r <- exp(-gap / decay_r); df_d <- exp(-gap / decay_d)
+      df_s <- exp(-gap / decay_s); df_h <- exp(-gap / decay_h)
+      cr[i] <- cr[i - 1] * df_r + recv_pts[i]
+      cd[i] <- cd[i - 1] * df_d + disp_pts[i]
+      cs[i] <- cs[i - 1] * df_s + spoil_pts[i]
+      ch[i] <- ch[i - 1] * df_h + hitout_pts[i]
+      cw_r[i] <- cw_r[i - 1] * df_r + 1
+      cw_d[i] <- cw_d[i - 1] * df_d + 1
+      cw_s[i] <- cw_s[i - 1] * df_s + 1
+      cw_h[i] <- cw_h[i - 1] * df_h + 1
     } else {
       cr[i] <- recv_pts[i]; cd[i] <- disp_pts[i]
-      cs[i] <- spoil_pts[i]; ch[i] <- hitout_pts[i]; cw[i] <- 1
+      cs[i] <- spoil_pts[i]; ch[i] <- hitout_pts[i]
+      cw_r[i] <- 1; cw_d[i] <- 1; cw_s[i] <- 1; cw_h[i] <- 1
     }
   }
 
@@ -477,24 +525,27 @@ objective_fn_fast <- function(par, env) {
   pr_hitout    <- p["prior_rate_hitout"]
 
   lu_idx <- env$lu_pgr_idx  # maps each lineup row to pgr_s row
-  lu_cr <- cr[lu_idx]; lu_cd <- cd[lu_idx]; lu_cs <- cs[lu_idx]
-  lu_ch <- ch[lu_idx]; lu_cw <- cw[lu_idx]
+  lu_cr <- cr[lu_idx]; lu_cd <- cd[lu_idx]; lu_cs <- cs[lu_idx]; lu_ch <- ch[lu_idx]
+  lu_cw_r <- cw_r[lu_idx]; lu_cw_d <- cw_d[lu_idx]
+  lu_cw_s <- cw_s[lu_idx]; lu_cw_h <- cw_h[lu_idx]
 
   # Replace NAs (unmatched players) with 0
   lu_cr[is.na(lu_cr)] <- 0; lu_cd[is.na(lu_cd)] <- 0
   lu_cs[is.na(lu_cs)] <- 0; lu_ch[is.na(lu_ch)] <- 0
-  lu_cw[is.na(lu_cw)] <- 0
+  lu_cw_r[is.na(lu_cw_r)] <- 0; lu_cw_d[is.na(lu_cw_d)] <- 0
+  lu_cw_s[is.na(lu_cw_s)] <- 0; lu_cw_h[is.na(lu_cw_h)] <- 0
 
-  # TORP per player-match (per-component shrinkage targets)
-  torp_vec <- (loading * lu_cr + prior_recv * pr_recv) / (lu_cw + prior_recv) +
-              (loading * lu_cd + prior_disp * pr_disp) / (lu_cw + prior_disp) +
-              (loading * lu_cs + prior_spoil * pr_spoil) / (lu_cw + prior_spoil) +
-              (loading * lu_ch + prior_hitout * pr_hitout) / (lu_cw + prior_hitout)
+  # TORP per player-match (per-component shrinkage with per-component wt_gms)
+  torp_vec <- (loading * lu_cr + prior_recv * pr_recv) / (lu_cw_r + prior_recv) +
+              (loading * lu_cd + prior_disp * pr_disp) / (lu_cw_d + prior_disp) +
+              (loading * lu_cs + prior_spoil * pr_spoil) / (lu_cw_s + prior_spoil) +
+              (loading * lu_ch + prior_hitout * pr_hitout) / (lu_cw_h + prior_hitout)
 
   # Match-level aggregation (weight per-80 TORP by lineup_tog)
+  # rowsum is a compiled C primitive — much faster than tapply for grouped sums
   torp_weighted <- torp_vec * env$lu_lineup_tog
-  home_sum <- tapply(torp_weighted * env$lu_is_home, env$lu_match_idx, sum, na.rm = TRUE)
-  away_sum <- tapply(torp_weighted * (!env$lu_is_home), env$lu_match_idx, sum, na.rm = TRUE)
+  home_sum <- rowsum(torp_weighted * env$lu_is_home, env$lu_match_idx, reorder = FALSE, na.rm = TRUE)
+  away_sum <- rowsum(torp_weighted * env$lu_not_home, env$lu_match_idx, reorder = FALSE, na.rm = TRUE)
   torp_diff <- as.numeric(home_sum - away_sum)
 
   fast_rmse_cv(torp_diff, env$eval_matches)
@@ -548,25 +599,29 @@ compute_torp_diff <- function(player_cum, lineup_dt, eval_matches,
                               loading, prior_recv, prior_disp, prior_spoil, prior_hitout,
                               pr_recv = RATING_PRIOR_RATE_RECV, pr_disp = RATING_PRIOR_RATE_DISP,
                               pr_spoil = RATING_PRIOR_RATE_SPOIL, pr_hitout = RATING_PRIOR_RATE_HITOUT) {
-  lookup <- player_cum[, .(player_id, date_num, cum_recv, cum_disp, cum_spoil, cum_hitout, cum_wt)]
+  lookup <- player_cum[, .(player_id, date_num, cum_recv, cum_disp, cum_spoil, cum_hitout,
+                           cum_wt_recv, cum_wt_disp, cum_wt_spoil, cum_wt_hitout)]
   data.table::setkey(lookup, player_id, date_num)
 
   joined <- lookup[lineup_dt,
     .(match_idx, is_home, lineup_tog = i.lineup_tog,
       torp = x.cum_recv, cd = x.cum_disp,
-      cs = x.cum_spoil, ch = x.cum_hitout, cw = x.cum_wt),
+      cs = x.cum_spoil, ch = x.cum_hitout,
+      cw_r = x.cum_wt_recv, cw_d = x.cum_wt_disp,
+      cw_s = x.cum_wt_spoil, cw_h = x.cum_wt_hitout),
     on = .(player_id, date_num), roll = TRUE]
   joined[is.na(lineup_tog), lineup_tog := 0.75]
 
   # Replace NAs with 0 before formula (per-component priors handle the shrinkage target)
-  joined[is.na(torp), `:=`(torp = 0, cd = 0, cs = 0, ch = 0, cw = 0)]
+  joined[is.na(torp), `:=`(torp = 0, cd = 0, cs = 0, ch = 0,
+                            cw_r = 0, cw_d = 0, cw_s = 0, cw_h = 0)]
 
-  # Compute TORP per player (per-component shrinkage targets)
+  # Compute TORP per player (per-component shrinkage with per-component wt_gms)
   joined[, player_torp :=
-    (loading * torp + prior_recv * pr_recv) / (cw + prior_recv) +
-    (loading * cd + prior_disp * pr_disp) / (cw + prior_disp) +
-    (loading * cs + prior_spoil * pr_spoil) / (cw + prior_spoil) +
-    (loading * ch + prior_hitout * pr_hitout) / (cw + prior_hitout)
+    (loading * torp + prior_recv * pr_recv) / (cw_r + prior_recv) +
+    (loading * cd + prior_disp * pr_disp) / (cw_d + prior_disp) +
+    (loading * cs + prior_spoil * pr_spoil) / (cw_s + prior_spoil) +
+    (loading * ch + prior_hitout * pr_hitout) / (cw_h + prior_hitout)
   ]
   joined[is.na(player_torp), player_torp := pr_recv + pr_disp + pr_spoil + pr_hitout]
 
@@ -591,10 +646,6 @@ compute_torp_diff <- function(player_cum, lineup_dt, eval_matches,
 #' @return RMSE value
 objective_fn <- function(par, pgr, match_dt, train_seasons = 2022:2025,
                          eval_matches = NULL, lineup_dt = NULL) {
-  # Enforce bounds
-  par <- pmax(par, par_lower[names(par)])
-  par <- pmin(par, par_upper[names(par)])
-  decay_days   <- par["decay_days"]
   loading      <- par["loading"]
   prior_recv   <- par["prior_games_recv"]
   prior_disp   <- par["prior_games_disp"]
@@ -604,8 +655,9 @@ objective_fn <- function(par, pgr, match_dt, train_seasons = 2022:2025,
   # Compute credit-assigned points
   credit_dt <- compute_credits(pgr, par)
 
-  # Compute cumulative decay-weighted sums
-  player_cum <- compute_cumulative(credit_dt, decay_days)
+  # Compute cumulative decay-weighted sums (per-component decay)
+  player_cum <- compute_cumulative(credit_dt, par["decay_recv"], par["decay_disp"],
+                                   par["decay_spoil"], par["decay_hitout"])
 
   # Use pre-computed eval data if available, otherwise build
   if (is.null(eval_matches)) {
@@ -655,9 +707,15 @@ par_defaults <- c(
   hitout_wt         = CREDIT_HITOUT_WT,
   hitout_adv_wt     = CREDIT_HITOUT_ADV_WT,
   ruck_contest_wt        = CREDIT_RUCK_CONTEST_WT,
-  pos_adj_quantile       = CREDIT_POS_ADJ_QUANTILE,
-  # Aggregation params (10) - from R/constants.R
-  decay_days         = RATING_DECAY_DEFAULT_DAYS,
+  pos_adj_quantile_recv   = CREDIT_POS_ADJ_QUANTILE_RECV,
+  pos_adj_quantile_disp   = CREDIT_POS_ADJ_QUANTILE_DISP,
+  pos_adj_quantile_spoil  = CREDIT_POS_ADJ_QUANTILE_SPOIL,
+  pos_adj_quantile_hitout = CREDIT_POS_ADJ_QUANTILE_HITOUT,
+  # Aggregation params - from R/constants.R
+  decay_recv         = RATING_DECAY_RECV,
+  decay_disp         = RATING_DECAY_DISP,
+  decay_spoil        = RATING_DECAY_SPOIL,
+  decay_hitout       = RATING_DECAY_HITOUT,
   loading            = RATING_LOADING_DEFAULT,
   prior_games_recv   = RATING_PRIOR_GAMES_RECV,
   prior_games_disp   = RATING_PRIOR_GAMES_DISP,
@@ -687,11 +745,17 @@ par_lower <- c(
   tackle_wt         = 0.0,
   pressure_wt       = 0.0,
   def_pressure_wt   = 0.0,
-  hitout_wt         = 0.0,
-  hitout_adv_wt     = 0.0,
+  hitout_wt         = 0.03,
+  hitout_adv_wt     = 0.1,
   ruck_contest_wt        = 0.03,
-  pos_adj_quantile       = 0.2,
-  decay_days         = 100,
+  pos_adj_quantile_recv   = 0.2,
+  pos_adj_quantile_disp   = 0.2,
+  pos_adj_quantile_spoil  = 0.2,
+  pos_adj_quantile_hitout = 0.2,
+  decay_recv         = 100,
+  decay_disp         = 100,
+  decay_spoil        = 100,
+  decay_hitout       = 100,
   loading            = 1.0,
   prior_games_recv   = 3,
   prior_games_disp   = 3,
@@ -721,17 +785,23 @@ par_upper <- c(
   hitout_wt         = 1.0,
   hitout_adv_wt     = 2.0,
   ruck_contest_wt        = 0.5,
-  pos_adj_quantile       = 0.4,
-  decay_days         = 700,
+  pos_adj_quantile_recv   = 0.4,
+  pos_adj_quantile_disp   = 0.4,
+  pos_adj_quantile_spoil  = 0.4,
+  pos_adj_quantile_hitout = 0.4,
+  decay_recv         = 700,
+  decay_disp         = 700,
+  decay_spoil        = 700,
+  decay_hitout       = 700,
   loading            = 1.0,
   prior_games_recv   = 15,
   prior_games_disp   = 15,
   prior_games_spoil  = 15,
   prior_games_hitout = 15,
-  prior_rate_recv    = -0.25,
-  prior_rate_disp    = -0.25,
-  prior_rate_spoil   = -0.25,
-  prior_rate_hitout  = -0.25
+  prior_rate_recv    = 0,
+  prior_rate_disp    = 0,
+  prior_rate_spoil   = 0,
+  prior_rate_hitout  = 0
 )
 
 # 4b. No-Ratings Baseline (LOOCV) ----
@@ -766,7 +836,7 @@ cat("=== Stage 1: Grid search on aggregation params ===\n")
 tictoc::tic("Stage 1")
 
 agg_grid <- expand.grid(
-  decay_days         = c(350, 450, 550, 650),
+  decay_shared       = c(350, 450, 550, 650),
   loading            = 1.0,
   prior_games_recv   = c(3, 5, 7, 9),
   prior_games_disp   = c(3, 5, 7, 9),
@@ -777,27 +847,28 @@ agg_grid <- expand.grid(
 cat(sprintf("  Grid has %d combinations\n", nrow(agg_grid)))
 
 # --- Fast Stage 1: pre-compute credits once + cumulative sums per decay ---
-# Credit params are fixed during Stage 1, only agg params vary
+# Credit params are fixed during Stage 1, only agg params vary.
+# All 4 decay components share one value during grid search (Nelder-Mead diverges them later).
 cat("  Pre-computing credits (fixed during Stage 1)...\n")
 s1_credit_dt <- compute_credits(pgr, par_defaults)
 
-decay_values <- sort(unique(agg_grid$decay_days))
+decay_values <- sort(unique(agg_grid$decay_shared))
 cat(sprintf("  Pre-computing cumulative sums for %d decay values...\n", length(decay_values)))
 
-# For each decay value: compute cumulative sums, rolling join to lineup, store result
+# For each decay value: compute cumulative sums (shared across components), rolling join to lineup
 decay_precomp <- list()
 for (d in decay_values) {
   cat(sprintf("    decay=%d...\n", d))
-  pcum <- compute_cumulative(s1_credit_dt, d)
+  pcum <- compute_cumulative(s1_credit_dt, d)  # all 4 components share same decay
 
   # Rolling join to pre-computed lineup
-  lookup <- pcum[, .(player_id, date_num, cum_recv, cum_disp, cum_spoil, cum_hitout, cum_wt)]
+  lookup <- pcum[, .(player_id, date_num, cum_recv, cum_disp, cum_spoil, cum_hitout, cum_wt_recv)]
   data.table::setkey(lookup, player_id, date_num)
 
   joined <- lookup[lineup_dt_all,
     .(match_idx = i.match_idx, is_home = i.is_home, lineup_tog = i.lineup_tog,
       cr = x.cum_recv, cd = x.cum_disp, cs = x.cum_spoil,
-      ch = x.cum_hitout, cw = x.cum_wt),
+      ch = x.cum_hitout, cw = x.cum_wt_recv),
     on = .(player_id, date_num), roll = TRUE]
 
   # Replace NAs with 0 for players not found
@@ -813,7 +884,7 @@ best_rmse <- baseline_rmse
 best_par <- par_defaults
 
 for (i in seq_len(nrow(agg_grid))) {
-  d  <- as.character(agg_grid$decay_days[i])
+  d  <- as.character(agg_grid$decay_shared[i])
   ld <- agg_grid$loading[i]
   pr <- agg_grid$prior_games_recv[i]
   pd <- agg_grid$prior_games_disp[i]
@@ -824,6 +895,7 @@ for (i in seq_len(nrow(agg_grid))) {
 
   # Vectorized TORP per player-match (~37K elements)
   # Use default per-component priors for Stage 1 (optimized in Stage 2)
+  # All 4 cum_wt columns are identical during Stage 1 (shared decay)
   s1_pr_r <- par_defaults["prior_rate_recv"]
   s1_pr_d <- par_defaults["prior_rate_disp"]
   s1_pr_s <- par_defaults["prior_rate_spoil"]
@@ -845,7 +917,10 @@ for (i in seq_len(nrow(agg_grid))) {
   if (rmse_i < best_rmse) {
     best_rmse <- rmse_i
     best_par <- par_defaults
-    best_par["decay_days"]         <- agg_grid$decay_days[i]
+    best_par["decay_recv"]         <- agg_grid$decay_shared[i]
+    best_par["decay_disp"]         <- agg_grid$decay_shared[i]
+    best_par["decay_spoil"]        <- agg_grid$decay_shared[i]
+    best_par["decay_hitout"]       <- agg_grid$decay_shared[i]
     best_par["loading"]            <- ld
     best_par["prior_games_recv"]   <- pr
     best_par["prior_games_disp"]   <- pd
@@ -853,7 +928,7 @@ for (i in seq_len(nrow(agg_grid))) {
     best_par["prior_games_hitout"] <- ph
     cat(sprintf("  [%d/%d] New best RMSE: %.4f (decay=%.0f, pr=%.0f, pd=%.0f, ps=%.0f, ph=%.0f)\n",
                 i, nrow(agg_grid), rmse_i,
-                agg_grid$decay_days[i], pr, pd, ps, ph))
+                agg_grid$decay_shared[i], pr, pd, ps, ph))
   }
 
   if (i %% 500 == 0) cat(sprintf("  [%d/%d] Current best: %.4f\n", i, nrow(agg_grid), best_rmse))
@@ -924,6 +999,7 @@ lu_joined <- pgr_s[lineup_dt_all, .(pgr_row = x.pgr_row, match_idx = i.match_idx
 
 fast_env$lu_pgr_idx    <- lu_joined$pgr_row
 fast_env$lu_is_home    <- lu_joined$is_home
+fast_env$lu_not_home   <- !lu_joined$is_home
 fast_env$lu_lineup_tog <- lu_joined$lineup_tog
 fast_env$lu_match_idx  <- lu_joined$match_idx
 
@@ -933,114 +1009,110 @@ cat(sprintf("  Fast env: %d pgr rows, %d lineup rows\n", nrow(pgr_s), nrow(lu_jo
 # Fast objective wrapper
 obj_fast <- function(par) objective_fn_fast(par, fast_env)
 
-## Stage 2: Nelder-Mead on credit groups ----
-cat("=== Stage 2: Nelder-Mead on credit groups ===\n")
+# Set up parallel cluster for gradient computation
+n_cores <- max(parallel::detectCores() - 1L, 2L)
+cat(sprintf("Setting up parallel cluster with %d cores...\n", n_cores))
+cl <- parallel::makeCluster(n_cores)
+# Export heavy objects + all functions called by objective_fn_fast
+parallel::clusterExport(cl, c("objective_fn_fast", "fast_env", "par_lower", "par_upper",
+                               "fast_rmse_cv", "fast_rmse"),
+                        envir = environment())
+on.exit(parallel::stopCluster(cl), add = TRUE)
+
+## Stage 2: Parallel L-BFGS-B on credit groups with cycling ----
+cat("=== Stage 2: Parallel L-BFGS-B on credit groups (with cycling) ===\n")
 tictoc::tic("Stage 2 total")
 
-# Group A: Disposal params
-disp_names <- c("disp_neg_offset", "disp_pos_offset", "disp_scale", "bounce_penalty")
-cat("  Optimizing disposal params...\n")
-tictoc::tic("  Group A: disposal")
-opt_disp <- optim(
-  par = best_par[disp_names],
-  fn = function(sub_par) {
-    test_par <- best_par
-    test_par[disp_names] <- sub_par
-    obj_fast(test_par)
-  },
-  method = "Nelder-Mead",
-  control = list(maxit = 200, trace = 1)
+# Define parameter groups (Group E split into E1 + E2 for manageable dimensionality)
+optim_groups <- list(
+  "A: disposal"   = c("disp_neg_offset", "disp_pos_offset", "disp_scale", "bounce_penalty"),
+  "B: reception"  = c("recv_neg_mult", "recv_neg_offset", "recv_pos_mult", "recv_pos_offset", "recv_scale"),
+  "C: spoil"      = c("spoil_wt", "tackle_wt", "pressure_wt", "def_pressure_wt"),
+  "D: hitout"     = c("hitout_wt", "hitout_adv_wt", "ruck_contest_wt"),
+  "E1: quantiles+decay" = c("pos_adj_quantile_recv", "pos_adj_quantile_disp",
+                             "pos_adj_quantile_spoil", "pos_adj_quantile_hitout",
+                             "decay_recv", "decay_disp", "decay_spoil", "decay_hitout"),
+  "E2: priors"    = c("prior_games_recv", "prior_games_disp", "prior_games_spoil", "prior_games_hitout",
+                       "prior_rate_recv", "prior_rate_disp", "prior_rate_spoil", "prior_rate_hitout")
 )
-best_par[disp_names] <- opt_disp$par
-tictoc::toc()
-cat(sprintf("  Disposal optimized: RMSE = %.4f\n", opt_disp$value))
 
-# Group B: Reception params
-recv_names <- c("recv_neg_mult", "recv_neg_offset", "recv_pos_mult", "recv_pos_offset", "recv_scale")
-cat("  Optimizing reception params...\n")
-tictoc::tic("  Group B: reception")
-opt_recv <- optim(
-  par = best_par[recv_names],
-  fn = function(sub_par) {
-    test_par <- best_par
-    test_par[recv_names] <- sub_par
-    obj_fast(test_par)
-  },
-  method = "Nelder-Mead",
-  control = list(maxit = 200, trace = 1)
-)
-best_par[recv_names] <- opt_recv$par
-tictoc::toc()
-cat(sprintf("  Reception optimized: RMSE = %.4f\n", opt_recv$value))
+# Helper: optimize one group with parallel L-BFGS-B
+# optimParallel parallelizes the d+1 finite-difference gradient evaluations across cores
+optimize_group <- function(group_names, best_par, maxit = 200) {
+  optimParallel::optimParallel(
+    par = best_par[group_names],
+    fn = function(sub_par) {
+      test_par <- best_par
+      test_par[group_names] <- sub_par
+      objective_fn_fast(test_par, fast_env)
+    },
+    lower = par_lower[group_names],
+    upper = par_upper[group_names],
+    parallel = list(cl = cl, forward = FALSE),
+    control = list(maxit = maxit, trace = 1)
+  )
+}
 
-# Group C: Spoil/tackle params
-spoil_names <- c("spoil_wt", "tackle_wt", "pressure_wt", "def_pressure_wt")
-cat("  Optimizing spoil/tackle params...\n")
-tictoc::tic("  Group C: spoil/tackle")
-opt_spoil <- optim(
-  par = best_par[spoil_names],
-  fn = function(sub_par) {
-    test_par <- best_par
-    test_par[spoil_names] <- sub_par
-    obj_fast(test_par)
-  },
-  method = "Nelder-Mead",
-  control = list(maxit = 200, trace = 1)
-)
-best_par[spoil_names] <- opt_spoil$par
-tictoc::toc()
-cat(sprintf("  Spoil optimized: RMSE = %.4f\n", opt_spoil$value))
+# Cycle through all groups until convergence
+MAX_CYCLES <- 3
+CYCLE_TOL <- 0.0005  # stop cycling if RMSE improves less than this
 
-# Group D: Hitout params
-hitout_names <- c("hitout_wt", "hitout_adv_wt", "ruck_contest_wt")
-cat("  Optimizing hitout params...\n")
-tictoc::tic("  Group D: hitout")
-opt_hitout <- optim(
-  par = best_par[hitout_names],
-  fn = function(sub_par) {
-    test_par <- best_par
-    test_par[hitout_names] <- sub_par
-    obj_fast(test_par)
-  },
-  method = "Nelder-Mead",
-  control = list(maxit = 200, trace = 1)
-)
-best_par[hitout_names] <- opt_hitout$par
-tictoc::toc()
-cat(sprintf("  Hitout optimized: RMSE = %.4f\n", opt_hitout$value))
+cycle_rmse <- obj_fast(best_par)
+for (cycle in seq_len(MAX_CYCLES)) {
+  cat(sprintf("\n--- Cycle %d/%d (starting RMSE: %.4f) ---\n", cycle, MAX_CYCLES, cycle_rmse))
+  tictoc::tic(sprintf("  Cycle %d", cycle))
 
-# Group E: Aggregation params (priors + decay + prior rates)
-agg_names <- c("pos_adj_quantile", "decay_days",
-               "prior_games_recv", "prior_games_disp", "prior_games_spoil", "prior_games_hitout",
-               "prior_rate_recv", "prior_rate_disp", "prior_rate_spoil", "prior_rate_hitout")
-cat("  Optimizing aggregation params...\n")
-tictoc::tic("  Group E: aggregation")
-opt_agg <- optim(
-  par = best_par[agg_names],
-  fn = function(sub_par) {
-    test_par <- best_par
-    test_par[agg_names] <- sub_par
-    obj_fast(test_par)
-  },
-  method = "Nelder-Mead",
-  control = list(maxit = 300, trace = 1)
-)
-best_par[agg_names] <- opt_agg$par
-tictoc::toc()
-cat(sprintf("  Aggregation optimized: RMSE = %.4f\n", opt_agg$value))
+  for (grp_name in names(optim_groups)) {
+    grp_params <- optim_groups[[grp_name]]
+    cat(sprintf("  Group %s (%d params)...\n", grp_name, length(grp_params)))
+    tictoc::tic(sprintf("    %s", grp_name))
+
+    maxit <- if (length(grp_params) >= 8) 300 else 200
+    opt_result <- optimize_group(grp_params, best_par, maxit = maxit)
+    best_par[grp_params] <- opt_result$par
+
+    tictoc::toc()
+    cat(sprintf("    -> RMSE = %.4f\n", opt_result$value))
+  }
+
+  new_rmse <- obj_fast(best_par)
+  improvement <- cycle_rmse - new_rmse
+  tictoc::toc()
+  cat(sprintf("  Cycle %d complete: RMSE %.4f -> %.4f (improvement: %.4f)\n",
+              cycle, cycle_rmse, new_rmse, improvement))
+
+  if (improvement < CYCLE_TOL) {
+    cat(sprintf("  Converged (improvement %.4f < tolerance %.4f)\n", improvement, CYCLE_TOL))
+    break
+  }
+  cycle_rmse <- new_rmse
+}
 
 tictoc::toc()
-cat(sprintf("Stage 2 best RMSE: %.4f\n\n", opt_agg$value))
-
-# Clamp best_par to bounds (Nelder-Mead is unconstrained)
-best_par <- pmax(best_par, par_lower[names(best_par)])
-best_par <- pmin(best_par, par_upper[names(best_par)])
-
-# Recompute overall RMSE with all Stage 2 updates
 stage2_rmse <- obj_fast(best_par)
-cat(sprintf("Stage 2 combined RMSE: %.4f\n\n", stage2_rmse))
+cat(sprintf("Stage 2 best RMSE: %.4f\n\n", stage2_rmse))
 
-final_rmse <- stage2_rmse
+## Stage 3: Joint parallel L-BFGS-B polish on all parameters ----
+# 33 params → 34 gradient evaluations per iteration → massive parallelism win
+cat("=== Stage 3: Joint parallel L-BFGS-B polish (all 33 params) ===\n")
+tictoc::tic("Stage 3 joint polish")
+
+all_names <- names(best_par)
+opt_joint <- optimParallel::optimParallel(
+  par = best_par,
+  fn = function(p) objective_fn_fast(p, fast_env),
+  lower = par_lower[all_names],
+  upper = par_upper[all_names],
+  parallel = list(cl = cl, forward = FALSE),
+  control = list(maxit = 500, trace = 1)
+)
+best_par <- opt_joint$par
+
+tictoc::toc()
+final_rmse <- obj_fast(best_par)
+cat(sprintf("Stage 3 joint polish RMSE: %.4f (was %.4f, gain: %.4f)\n\n",
+            final_rmse, stage2_rmse, stage2_rmse - final_rmse))
+
 cat(sprintf("\nFinal optimized RMSE (LOOCV): %.4f\n\n", final_rmse))
 
 # 7. Per-fold RMSE breakdown ----
@@ -1052,15 +1124,17 @@ cat("=== Per-fold RMSE breakdown (leave-one-season-out) ===\n")
 
 # Compute torp_diff using objective_fn's pipeline for reporting
 credit_dt_final <- compute_credits(pgr, best_par, verbose = TRUE)
-pcum_final <- compute_cumulative(credit_dt_final, best_par["decay_days"])
-lookup_final <- pcum_final[, .(player_id, date_num, cum_recv, cum_disp, cum_spoil, cum_hitout, cum_wt)]
+pcum_final <- compute_cumulative(credit_dt_final, best_par["decay_recv"], best_par["decay_disp"],
+                                 best_par["decay_spoil"], best_par["decay_hitout"])
+lookup_final <- pcum_final[, .(player_id, date_num, cum_recv, cum_disp, cum_spoil, cum_hitout,
+                               cum_wt_recv, cum_wt_disp, cum_wt_spoil, cum_wt_hitout)]
 data.table::setkey(lookup_final, player_id, date_num)
 joined_final <- lookup_final[lineup_dt_all,
   .(match_idx = i.match_idx, is_home = i.is_home, lineup_tog = i.lineup_tog,
-    cr = x.cum_recv, cd = x.cum_disp, cs = x.cum_spoil,
-    ch = x.cum_hitout, cw = x.cum_wt),
+    cr = x.cum_recv, cd = x.cum_disp, cs = x.cum_spoil, ch = x.cum_hitout,
+    cw_r = x.cum_wt_recv, cw_d = x.cum_wt_disp, cw_s = x.cum_wt_spoil, cw_h = x.cum_wt_hitout),
   on = .(player_id, date_num), roll = TRUE]
-for (col in c("cr", "cd", "cs", "ch", "cw"))
+for (col in c("cr", "cd", "cs", "ch", "cw_r", "cw_d", "cw_s", "cw_h"))
   data.table::set(joined_final, which(is.na(joined_final[[col]])), col, 0)
 joined_final[is.na(lineup_tog), lineup_tog := 0.75]
 
@@ -1069,10 +1143,10 @@ pd <- best_par["prior_games_disp"]; ps <- best_par["prior_games_spoil"]
 ph <- best_par["prior_games_hitout"]
 prr <- best_par["prior_rate_recv"]; prd <- best_par["prior_rate_disp"]
 prs <- best_par["prior_rate_spoil"]; prh <- best_par["prior_rate_hitout"]
-torp_vec_final <- (ld * joined_final$cr + pr * prr) / (joined_final$cw + pr) +
-                  (ld * joined_final$cd + pd * prd) / (joined_final$cw + pd) +
-                  (ld * joined_final$cs + ps * prs) / (joined_final$cw + ps) +
-                  (ld * joined_final$ch + ph * prh) / (joined_final$cw + ph)
+torp_vec_final <- (ld * joined_final$cr + pr * prr) / (joined_final$cw_r + pr) +
+                  (ld * joined_final$cd + pd * prd) / (joined_final$cw_d + pd) +
+                  (ld * joined_final$cs + ps * prs) / (joined_final$cw_s + ps) +
+                  (ld * joined_final$ch + ph * prh) / (joined_final$cw_h + ph)
 torp_weighted_f <- torp_vec_final * joined_final$lineup_tog
 home_sum_f <- tapply(torp_weighted_f * joined_final$is_home, joined_final$match_idx, sum, na.rm = TRUE)
 away_sum_f <- tapply(torp_weighted_f * (!joined_final$is_home), joined_final$match_idx, sum, na.rm = TRUE)
@@ -1085,15 +1159,17 @@ valid_f <- complete.cases(X_f, residual_f)
 
 # Also compute default torp_diff for comparison
 credit_dt_def <- compute_credits(pgr, par_defaults)
-pcum_def <- compute_cumulative(credit_dt_def, par_defaults["decay_days"])
-lookup_def <- pcum_def[, .(player_id, date_num, cum_recv, cum_disp, cum_spoil, cum_hitout, cum_wt)]
+pcum_def <- compute_cumulative(credit_dt_def, par_defaults["decay_recv"], par_defaults["decay_disp"],
+                               par_defaults["decay_spoil"], par_defaults["decay_hitout"])
+lookup_def <- pcum_def[, .(player_id, date_num, cum_recv, cum_disp, cum_spoil, cum_hitout,
+                           cum_wt_recv, cum_wt_disp, cum_wt_spoil, cum_wt_hitout)]
 data.table::setkey(lookup_def, player_id, date_num)
 joined_def <- lookup_def[lineup_dt_all,
   .(match_idx = i.match_idx, is_home = i.is_home, lineup_tog = i.lineup_tog,
-    cr = x.cum_recv, cd = x.cum_disp, cs = x.cum_spoil,
-    ch = x.cum_hitout, cw = x.cum_wt),
+    cr = x.cum_recv, cd = x.cum_disp, cs = x.cum_spoil, ch = x.cum_hitout,
+    cw_r = x.cum_wt_recv, cw_d = x.cum_wt_disp, cw_s = x.cum_wt_spoil, cw_h = x.cum_wt_hitout),
   on = .(player_id, date_num), roll = TRUE]
-for (col in c("cr", "cd", "cs", "ch", "cw"))
+for (col in c("cr", "cd", "cs", "ch", "cw_r", "cw_d", "cw_s", "cw_h"))
   data.table::set(joined_def, which(is.na(joined_def[[col]])), col, 0)
 joined_def[is.na(lineup_tog), lineup_tog := 0.75]
 
@@ -1102,10 +1178,10 @@ pd_d <- par_defaults["prior_games_disp"]; ps_d <- par_defaults["prior_games_spoi
 ph_d <- par_defaults["prior_games_hitout"]
 prr_d <- par_defaults["prior_rate_recv"]; prd_d <- par_defaults["prior_rate_disp"]
 prs_d <- par_defaults["prior_rate_spoil"]; prh_d <- par_defaults["prior_rate_hitout"]
-torp_vec_def <- (ld_d * joined_def$cr + pr_d * prr_d) / (joined_def$cw + pr_d) +
-                (ld_d * joined_def$cd + pd_d * prd_d) / (joined_def$cw + pd_d) +
-                (ld_d * joined_def$cs + ps_d * prs_d) / (joined_def$cw + ps_d) +
-                (ld_d * joined_def$ch + ph_d * prh_d) / (joined_def$cw + ph_d)
+torp_vec_def <- (ld_d * joined_def$cr + pr_d * prr_d) / (joined_def$cw_r + pr_d) +
+                (ld_d * joined_def$cd + pd_d * prd_d) / (joined_def$cw_d + pd_d) +
+                (ld_d * joined_def$cs + ps_d * prs_d) / (joined_def$cw_s + ps_d) +
+                (ld_d * joined_def$ch + ph_d * prh_d) / (joined_def$cw_h + ph_d)
 torp_weighted_d <- torp_vec_def * joined_def$lineup_tog
 home_sum_d <- tapply(torp_weighted_d * joined_def$is_home, joined_def$match_idx, sum, na.rm = TRUE)
 away_sum_d <- tapply(torp_weighted_d * (!joined_def$is_home), joined_def$match_idx, sum, na.rm = TRUE)
@@ -1136,11 +1212,11 @@ rm(credit_dt_final, pcum_final, lookup_final, joined_final,
 # 8. Results ----
 cat("\n=== OPTIMIZED PARAMETERS ===\n")
 cat("\n# Credit params:\n")
-for (nm in names(par_defaults)[1:17]) {
+for (nm in names(par_defaults)[1:20]) {
   cat(sprintf("  %-28s = %8.4f  (was %.4f)\n", nm, best_par[nm], par_defaults[nm]))
 }
 cat("\n# Aggregation params:\n")
-for (nm in names(par_defaults)[18:length(par_defaults)]) {
+for (nm in names(par_defaults)[21:length(par_defaults)]) {
   cat(sprintf("  %-28s = %8.4f  (was %.4f)\n", nm, best_par[nm], par_defaults[nm]))
 }
 
@@ -1175,8 +1251,14 @@ param_to_constant <- c(
   hitout_wt         = "CREDIT_HITOUT_WT",
   hitout_adv_wt     = "CREDIT_HITOUT_ADV_WT",
   ruck_contest_wt        = "CREDIT_RUCK_CONTEST_WT",
-  pos_adj_quantile       = "CREDIT_POS_ADJ_QUANTILE",
-  decay_days        = "RATING_DECAY_DEFAULT_DAYS",
+  pos_adj_quantile_recv   = "CREDIT_POS_ADJ_QUANTILE_RECV",
+  pos_adj_quantile_disp   = "CREDIT_POS_ADJ_QUANTILE_DISP",
+  pos_adj_quantile_spoil  = "CREDIT_POS_ADJ_QUANTILE_SPOIL",
+  pos_adj_quantile_hitout = "CREDIT_POS_ADJ_QUANTILE_HITOUT",
+  decay_recv        = "RATING_DECAY_RECV",
+  decay_disp        = "RATING_DECAY_DISP",
+  decay_spoil       = "RATING_DECAY_SPOIL",
+  decay_hitout      = "RATING_DECAY_HITOUT",
   loading           = "RATING_LOADING_DEFAULT",
   prior_games_recv  = "RATING_PRIOR_GAMES_RECV",
   prior_games_disp  = "RATING_PRIOR_GAMES_DISP",
@@ -1198,8 +1280,8 @@ for (par_name in names(param_to_constant)) {
   const_name <- param_to_constant[par_name]
   new_val <- best_par[par_name]
 
-  # Format: integer-like values (decay_days) as integer, rest as 4-decimal
-  if (par_name == "decay_days") {
+  # Format: integer-like values (decay_*) as integer, rest as 4-decimal
+  if (grepl("^decay_", par_name)) {
     val_str <- sprintf("%.0f", new_val)
   } else {
     val_str <- sprintf("%.4f", new_val)

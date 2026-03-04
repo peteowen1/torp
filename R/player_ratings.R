@@ -4,7 +4,10 @@
 #'
 #' @param season_val The season to calculate ratings for. Default is the next season.
 #' @param round_val The round to calculate ratings for. Default is the next round.
-#' @param decay The decay factor for weighting games. Default is \code{RATING_DECAY_DEFAULT_DAYS}.
+#' @param decay_recv Decay factor (days) for receiving component. Default is \code{RATING_DECAY_RECV}.
+#' @param decay_disp Decay factor (days) for disposal component. Default is \code{RATING_DECAY_DISP}.
+#' @param decay_spoil Decay factor (days) for spoil component. Default is \code{RATING_DECAY_SPOIL}.
+#' @param decay_hitout Decay factor (days) for hitout component. Default is \code{RATING_DECAY_HITOUT}.
 #' @param loading The loading factor for TORP calculations. Default is \code{RATING_LOADING_DEFAULT}.
 #' @param prior_games_recv The number of prior games to consider for receiving. Default is \code{RATING_PRIOR_GAMES_RECV}.
 #' @param prior_games_disp The number of prior games to consider for disposal. Default is \code{RATING_PRIOR_GAMES_DISP}.
@@ -36,7 +39,10 @@
 #' @importFrom utils data
 calculate_torp_ratings <- function(season_val = get_afl_season(type = "current"),
                          round_val = get_afl_week(type = "next"),
-                         decay = RATING_DECAY_DEFAULT_DAYS,
+                         decay_recv = RATING_DECAY_RECV,
+                         decay_disp = RATING_DECAY_DISP,
+                         decay_spoil = RATING_DECAY_SPOIL,
+                         decay_hitout = RATING_DECAY_HITOUT,
                          loading = RATING_LOADING_DEFAULT,
                          prior_games_recv = RATING_PRIOR_GAMES_RECV,
                          prior_games_disp = RATING_PRIOR_GAMES_DISP,
@@ -104,7 +110,7 @@ calculate_torp_ratings <- function(season_val = get_afl_season(type = "current")
     cli::cli_warn("Fixtures for this date not available yet")
     return(data.frame())
   } else {
-    plyr_gm_df_rnd <- calculate_player_stats(player_game_data, match_ref, date_val, decay, loading, prior_games_recv, prior_games_disp, prior_games_spoil = prior_games_spoil, prior_games_hitout = prior_games_hitout, prior_rate_recv = prior_rate_recv, prior_rate_disp = prior_rate_disp, prior_rate_spoil = prior_rate_spoil, prior_rate_hitout = prior_rate_hitout)
+    plyr_gm_df_rnd <- calculate_player_stats(player_game_data, match_ref, date_val, decay_recv = decay_recv, decay_disp = decay_disp, decay_spoil = decay_spoil, decay_hitout = decay_hitout, loading = loading, prior_games_recv = prior_games_recv, prior_games_disp = prior_games_disp, prior_games_spoil = prior_games_spoil, prior_games_hitout = prior_games_hitout, prior_rate_recv = prior_rate_recv, prior_rate_disp = prior_rate_disp, prior_rate_spoil = prior_rate_spoil, prior_rate_hitout = prior_rate_hitout)
 
     # Ensure pred_tog column exists (needed by prepare_final_dataframe)
     plyr_gm_df_rnd[, pred_tog := NA_real_]
@@ -116,7 +122,7 @@ calculate_torp_ratings <- function(season_val = get_afl_season(type = "current")
       plyr_gm_df_rnd[is.na(pred_tog), pred_tog := 0]
     }
 
-    final_df <- prepare_final_dataframe(plyr_tm_df, plyr_gm_df_rnd, season_val, round_val)
+    final_df <- prepare_final_dataframe(plyr_tm_df, plyr_gm_df_rnd, season_val, round_val, fixtures)
 
     # TOG-weighted centering: scale pred_tog to n_teams * 18 (full-game equivalents)
     # across rostered players, then re-center each TORP component to "above/below average"
@@ -150,7 +156,10 @@ calculate_torp_ratings <- function(season_val = get_afl_season(type = "current")
 #' @param player_game_data Player game data frame
 #' @param match_ref Match reference
 #' @param date_val Date value
-#' @param decay Decay factor
+#' @param decay_recv Decay factor (days) for receiving component
+#' @param decay_disp Decay factor (days) for disposal component
+#' @param decay_spoil Decay factor (days) for spoil component
+#' @param decay_hitout Decay factor (days) for hitout component
 #' @param loading Loading factor
 #' @param prior_games_recv Prior games for receiving
 #' @param prior_games_disp Prior games for disposal
@@ -160,25 +169,33 @@ calculate_torp_ratings <- function(season_val = get_afl_season(type = "current")
 #' @return A data frame with calculated player statistics
 #'
 #' @importFrom data.table as.data.table uniqueN setDT
-calculate_player_stats <- function(player_game_data = NULL, match_ref, date_val, decay, loading, prior_games_recv, prior_games_disp, prior_games_spoil = RATING_PRIOR_GAMES_SPOIL, prior_games_hitout = RATING_PRIOR_GAMES_HITOUT, prior_rate_recv = RATING_PRIOR_RATE_RECV, prior_rate_disp = RATING_PRIOR_RATE_DISP, prior_rate_spoil = RATING_PRIOR_RATE_SPOIL, prior_rate_hitout = RATING_PRIOR_RATE_HITOUT) {
+calculate_player_stats <- function(player_game_data = NULL, match_ref, date_val, decay_recv = RATING_DECAY_RECV, decay_disp = RATING_DECAY_DISP, decay_spoil = RATING_DECAY_SPOIL, decay_hitout = RATING_DECAY_HITOUT, loading = RATING_LOADING_DEFAULT, prior_games_recv = RATING_PRIOR_GAMES_RECV, prior_games_disp = RATING_PRIOR_GAMES_DISP, prior_games_spoil = RATING_PRIOR_GAMES_SPOIL, prior_games_hitout = RATING_PRIOR_GAMES_HITOUT, prior_rate_recv = RATING_PRIOR_RATE_RECV, prior_rate_disp = RATING_PRIOR_RATE_DISP, prior_rate_spoil = RATING_PRIOR_RATE_SPOIL, prior_rate_hitout = RATING_PRIOR_RATE_HITOUT) {
   if (is.null(player_game_data)) {
     player_game_data <- load_player_game_data(TRUE)
   }
 
-  # Convert to data.table (makes a copy to avoid modifying original)
-  dt <- data.table::as.data.table(player_game_data)
-
-  # Set key for efficient filtering and grouping
-  data.table::setkey(dt, match_id)
-
-  # Filter and add computed columns
-  dt <- dt[match_id <= match_ref]
-  dt[, weight_gm := exp(as.numeric(-(as.Date(date_val) - as.Date(utc_start_time))) / decay)]
-
-  # Per-80 normalisation: divide credit by actual TOG so ratings reflect
-  # contribution per full game (TOG = 1.0). Floor at 10% to avoid blow-up
-  # from very short stints (medical subs, late concussions, etc.)
-  dt[, tog_safe := pmax(time_on_ground_percentage / 100, 0.1)]
+  # Subset to relevant matches — avoid full copy if already a keyed data.table
+  if (data.table::is.data.table(player_game_data) &&
+      identical(data.table::key(player_game_data), "match_id")) {
+    # Binary search on existing key, no copy of full dataset
+    dt <- player_game_data[match_id <= match_ref]
+  } else {
+    dt <- data.table::as.data.table(player_game_data)
+    data.table::setkey(dt, match_id)
+    dt <- dt[match_id <= match_ref]
+  }
+  dt[, days_diff := as.numeric(as.Date(date_val) - as.Date(utc_start_time))]
+  n_future <- sum(dt$days_diff < 0, na.rm = TRUE)
+  if (n_future > 0) {
+    cli::cli_warn("Filtering {n_future} row{?s} with future dates (days_diff < 0)")
+    dt <- dt[days_diff >= 0]
+  }
+  dt[, `:=`(
+    wt_recv   = exp(-days_diff / decay_recv),
+    wt_disp   = exp(-days_diff / decay_disp),
+    wt_spoil  = exp(-days_diff / decay_spoil),
+    wt_hitout = exp(-days_diff / decay_hitout)
+  )]
 
   # Handle plyr_nm: use existing if present, otherwise construct from given + surname
   if (!"plyr_nm" %in% names(dt)) {
@@ -186,39 +203,40 @@ calculate_player_stats <- function(player_game_data = NULL, match_ref, date_val,
   }
 
   # Aggregate by player_id using data.table syntax
-
-  # First pass: compute base aggregations (per-80 normalised)
-  # Dividing by tog_safe converts per-game credit to per-full-game rate
+  # Per-80 normalisation is already applied in create_player_game_data() (before
+  # position adjustment), so _adj columns are already per-full-game rates.
+  # Each component uses its own decay weight for both sums and wt_gms.
+  # Note: player_game_data has one row per player-match, so wt_gms = sum(wt).
   result <- dt[, .(
     player_name = max(plyr_nm),
-    gms = data.table::uniqueN(match_id),
-    wt_gms = sum(weight_gm[!duplicated(match_id)], na.rm = TRUE),
-    tot_p_sum = sum((tot_p_adj / tog_safe) * weight_gm, na.rm = TRUE),
-    recv_sum = sum((recv_pts_adj / tog_safe) * weight_gm, na.rm = TRUE),
-    disp_sum = sum((disp_pts_adj / tog_safe) * weight_gm, na.rm = TRUE),
-    spoil_sum = sum((spoil_pts_adj / tog_safe) * weight_gm, na.rm = TRUE),
-    hitout_sum = sum((hitout_pts_adj / tog_safe) * weight_gm, na.rm = TRUE),
+    gms = .N,
+    wt_gms_recv   = sum(wt_recv, na.rm = TRUE),
+    wt_gms_disp   = sum(wt_disp, na.rm = TRUE),
+    wt_gms_spoil  = sum(wt_spoil, na.rm = TRUE),
+    wt_gms_hitout = sum(wt_hitout, na.rm = TRUE),
+    tog_sum    = sum(time_on_ground_percentage * wt_recv, na.rm = TRUE),
+    recv_sum   = sum(recv_pts_adj * wt_recv, na.rm = TRUE),
+    disp_sum   = sum(disp_pts_adj * wt_disp, na.rm = TRUE),
+    spoil_sum  = sum(spoil_pts_adj * wt_spoil, na.rm = TRUE),
+    hitout_sum = sum(hitout_pts_adj * wt_hitout, na.rm = TRUE),
     posn = data.table::last(pos)
   ), by = player_id]
 
-  # Second pass: compute derived columns by reference (avoids repeated division)
+  # Derive per-component TORP with per-component wt_gms
   result[, `:=`(
-    tot_p_g = tot_p_sum / wt_gms,
-    recv_g = recv_sum / wt_gms,
-    disp_g = disp_sum / wt_gms,
-    spoil_g = spoil_sum / wt_gms,
-    hitout_g = hitout_sum / wt_gms,
-    torp_recv = (loading * recv_sum + prior_games_recv * prior_rate_recv) / (wt_gms + prior_games_recv),
-    torp_disp = (loading * disp_sum + prior_games_disp * prior_rate_disp) / (wt_gms + prior_games_disp),
-    torp_spoil = (loading * spoil_sum + prior_games_spoil * prior_rate_spoil) / (wt_gms + prior_games_spoil),
-    torp_hitout = (loading * hitout_sum + prior_games_hitout * prior_rate_hitout) / (wt_gms + prior_games_hitout)
+    wt_gms = wt_gms_recv,  # backwards-compat alias; per-component cols are canonical
+    wt_tog = round(tog_sum / pmax(wt_gms_recv, 1e-10), 1),
+    torp_recv   = (loading * recv_sum   + prior_games_recv   * prior_rate_recv)   / (wt_gms_recv   + prior_games_recv),
+    torp_disp   = (loading * disp_sum   + prior_games_disp   * prior_rate_disp)   / (wt_gms_disp   + prior_games_disp),
+    torp_spoil  = (loading * spoil_sum  + prior_games_spoil  * prior_rate_spoil)  / (wt_gms_spoil  + prior_games_spoil),
+    torp_hitout = (loading * hitout_sum + prior_games_hitout * prior_rate_hitout) / (wt_gms_hitout + prior_games_hitout)
   )]
 
-  # Third pass: compute final torp
+  # Compute final torp
   result[, torp := round(torp_recv + torp_disp + torp_spoil + torp_hitout, 2)]
 
   # Remove intermediate columns
-  result[, c("tot_p_sum", "recv_sum", "disp_sum", "spoil_sum", "hitout_sum") := NULL]
+  result[, c("tog_sum", "recv_sum", "disp_sum", "spoil_sum", "hitout_sum") := NULL]
 
   return(result)
 }
@@ -229,12 +247,13 @@ calculate_player_stats <- function(player_game_data = NULL, match_ref, date_val,
 #' @param player_game_data Player statistics dataframe (aggregated from calculate_player_stats)
 #' @param season_val Season value
 #' @param round_val Round value
+#' @param fixtures Optional pre-loaded fixtures data. If NULL, will load automatically.
 #'
 #' @return A final dataframe with player ratings
 #'
 #' @importFrom dplyr filter left_join ungroup mutate select arrange
 #' @importFrom utils data
-prepare_final_dataframe <- function(plyr_tm_df = NULL, player_game_data = NULL, season_val, round_val) {
+prepare_final_dataframe <- function(plyr_tm_df = NULL, player_game_data = NULL, season_val, round_val, fixtures = NULL) {
   if (is.null(plyr_tm_df)) {
     plyr_tm_df <- load_player_details(season_val)
     # Fall back to previous season if current season data unavailable
@@ -256,9 +275,10 @@ prepare_final_dataframe <- function(plyr_tm_df = NULL, player_game_data = NULL, 
     player_game_data <- load_player_game_data(season_val)
   }
 
-  # Load fixtures data safely
-  fixtures <- NULL
-  fixtures <- load_fixtures(TRUE)
+  # Load fixtures if not provided
+  if (is.null(fixtures)) {
+    fixtures <- load_fixtures(TRUE)
+  }
 
   plyr_tm_df |>
     dplyr::filter(.data$season == season_val_details) |>
@@ -279,7 +299,9 @@ prepare_final_dataframe <- function(plyr_tm_df = NULL, player_game_data = NULL, 
       player_id = "providerId", player_name = "player_name.x", age = "age", team = "team",
       torp = "torp", torp_recv = "torp_recv", torp_disp = "torp_disp",
       torp_spoil = "torp_spoil", torp_hitout = "torp_hitout",
-      position = "position", season = "season", round = "round", gms = "gms", wt_gms = "wt_gms",
+      position = "position", season = "season", round = "round", gms = "gms", wt_gms = "wt_gms", wt_tog = "wt_tog",
+      wt_gms_recv = "wt_gms_recv", wt_gms_disp = "wt_gms_disp",
+      wt_gms_spoil = "wt_gms_spoil", wt_gms_hitout = "wt_gms_hitout",
       pred_tog = "pred_tog"
     ) |>
     dplyr::arrange(-.data$torp)

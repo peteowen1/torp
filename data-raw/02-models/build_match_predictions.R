@@ -80,9 +80,9 @@ POS_COLS <- c(
 
 # Main Pipeline ----
 
-run_predictions_pipeline <- function(week = NULL, weeks = NULL) {
+run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
 
-  season <- get_afl_season()
+  if (is.null(season)) season <- get_afl_season()
 
   # Validate args
   if (!is.null(week) && !is.null(weeks)) {
@@ -597,7 +597,7 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL) {
   cli::cli_h2("Generating predictions for {length(target_weeks)} week{?s}")
 
   week_gms_home <- team_mdl_df |>
-    dplyr::filter(season.x == lubridate::year(Sys.Date()), round.roundNumber.x %in% target_weeks, team_type_fac.x == "home") |>
+    dplyr::filter(season.x == season, round.roundNumber.x %in% target_weeks, team_type_fac.x == "home") |>
     dplyr::select(
       round = round.roundNumber.x,
       players = count.x, providerId,
@@ -620,7 +620,7 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL) {
       pred_win = 1 - pred_win,
       score_diff = -score_diff
     ) |>
-    dplyr::filter(season.x == lubridate::year(Sys.Date()), round.roundNumber.x %in% target_weeks, team_type_fac.x == "away") |>
+    dplyr::filter(season.x == season, round.roundNumber.x %in% target_weeks, team_type_fac.x == "away") |>
     dplyr::select(
       round = round.roundNumber.x,
       players = count.x, providerId,
@@ -665,7 +665,13 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL) {
   week_gms <- week_gms |> rename(week = round) |> relocate(week)
 
   pred_file_name <- paste0("predictions_", season)
-  existing <- tryCatch(file_reader(pred_file_name, "predictions"), error = function(e) NULL)
+  existing <- tryCatch(
+    file_reader(pred_file_name, "predictions"),
+    error = function(e) {
+      cli::cli_warn("Could not load existing predictions ({conditionMessage(e)}). Uploading current weeks only.")
+      NULL
+    }
+  )
 
   if (!is.null(existing) && nrow(existing) > 0) {
     combined <- existing |> filter(!week %in% target_weeks) |> bind_rows(week_gms) |> arrange(week)
@@ -673,7 +679,7 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL) {
     combined <- week_gms
   }
 
-  save_to_release(combined, pred_file_name, "predictions")
+  save_to_release(combined, pred_file_name, "predictions", also_csv = TRUE)
   cli::cli_alert_success("Uploaded {season} predictions ({nrow(combined)} rows, week{?s} {paste(target_weeks, collapse = ', ')} added)")
 
   tictoc::toc(log = TRUE)

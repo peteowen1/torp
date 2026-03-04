@@ -6,6 +6,7 @@
 #' @param df A data frame to save.
 #' @param file_name A string for the file name (without extension).
 #' @param release_tag The GitHub release tag to associate with the uploaded file.
+#' @param also_csv Logical. If TRUE, also upload a `.csv` copy alongside parquet.
 #'
 #' @return No return value. Used for side effects (file upload).
 #' @export
@@ -14,8 +15,9 @@
 #' \dontrun{
 #' my_df <- data.frame(x = 1:3)
 #' save_to_release(my_df, "my_data", "v1.0.0")
+#' save_to_release(my_df, "my_data", "v1.0.0", also_csv = TRUE)
 #' }
-save_to_release <- function(df, file_name, release_tag) {
+save_to_release <- function(df, file_name, release_tag, also_csv = FALSE) {
   f_name <- paste0(file_name, ".parquet")
   tf <- tempfile(fileext = ".parquet")
   on.exit(unlink(tf), add = TRUE)
@@ -37,9 +39,30 @@ save_to_release <- function(df, file_name, release_tag) {
     }
   )
 
+  if (also_csv) {
+    csv_name <- paste0(file_name, ".csv")
+    tf_csv <- tempfile(fileext = ".csv")
+    on.exit(unlink(tf_csv), add = TRUE)
+
+    tryCatch({
+      utils::write.csv(df, tf_csv, row.names = FALSE)
+      piggyback::pb_upload(tf_csv,
+                           repo = get_torp_data_repo(),
+                           tag = release_tag,
+                           name = csv_name)
+    }, error = function(e) {
+      cli::cli_warn("Parquet uploaded but CSV copy failed for {.val {csv_name}}: {conditionMessage(e)}")
+    })
+  }
+
   # Also save a local copy if torpdata/data/ is configured
   if (!is.null(get_local_data_dir())) {
-    save_locally(df, file_name)
+    tryCatch(
+      save_locally(df, file_name),
+      error = function(e) {
+        cli::cli_warn("Remote upload succeeded but local save failed: {conditionMessage(e)}")
+      }
+    )
   }
 }
 
