@@ -150,8 +150,8 @@ get_all_injuries <- function(season, scrape = TRUE) {
   # Ensure both have the same columns before binding
   all_cols <- c("player", "team", "injury", "estimated_return", "player_norm", "source")
   for (col in all_cols) {
-    if (!col %in% names(weekly)) weekly[[col]] <- NA_character_
-    if (!col %in% names(preseason)) preseason[[col]] <- NA_character_
+    if (!col %in% names(weekly)) weekly[[col]] <- rep(NA_character_, nrow(weekly))
+    if (!col %in% names(preseason)) preseason[[col]] <- rep(NA_character_, nrow(preseason))
   }
 
   combined <- rbind(

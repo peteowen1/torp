@@ -80,9 +80,9 @@ POS_COLS <- c(
 
 # Main Pipeline ----
 
-run_predictions_pipeline <- function(week = NULL, weeks = NULL) {
+run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
 
-  season <- get_afl_season()
+  if (is.null(season)) season <- get_afl_season()
 
   # Validate args
   if (!is.null(week) && !is.null(weeks)) {
@@ -597,7 +597,7 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL) {
   cli::cli_h2("Generating predictions for {length(target_weeks)} week{?s}")
 
   week_gms_home <- team_mdl_df |>
-    dplyr::filter(season.x == lubridate::year(Sys.Date()), round.roundNumber.x %in% target_weeks, team_type_fac.x == "home") |>
+    dplyr::filter(season.x == season, round.roundNumber.x %in% target_weeks, team_type_fac.x == "home") |>
     dplyr::select(
       round = round.roundNumber.x,
       players = count.x, providerId,
@@ -620,7 +620,7 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL) {
       pred_win = 1 - pred_win,
       score_diff = -score_diff
     ) |>
-    dplyr::filter(season.x == lubridate::year(Sys.Date()), round.roundNumber.x %in% target_weeks, team_type_fac.x == "away") |>
+    dplyr::filter(season.x == season, round.roundNumber.x %in% target_weeks, team_type_fac.x == "away") |>
     dplyr::select(
       round = round.roundNumber.x,
       players = count.x, providerId,
