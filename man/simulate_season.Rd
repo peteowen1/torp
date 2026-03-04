@@ -22,6 +22,8 @@ sim_season(sim_teams, sim_games)
 \item{return_teams}{Logical. If TRUE, return a list with both games and updated
 team ratings. Default FALSE returns just the games data.table for backward
 compatibility.}
+
+\item{injury_sd}{Standard deviation for injury impact on team ratings. Default is \code{SIM_INJURY_SD}.}
 }
 \value{
 A data.table of simulated game results (default), or a list with

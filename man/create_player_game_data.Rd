@@ -39,6 +39,5 @@ player performance data used by the TORP ratings pipeline.
 }
 \details{
 Computes disposal points, reception points, spoil/tackle points, and
-hitout points for each player-game combination. Adjusts each component
-by subtracting a position-group quantile.
+hitout points for each player-game combination.
 }

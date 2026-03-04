@@ -3,7 +3,7 @@
 \docType{data}
 \name{CREDIT_POS_ADJ_QUANTILE_HITOUT}
 \alias{CREDIT_POS_ADJ_QUANTILE_HITOUT}
-\title{Position adjustment quantile for hitout}
+\title{Position-group quantile adjustment for hitout component}
 \format{
 An object of class \code{numeric} of length 1.
 }
@@ -11,6 +11,6 @@ An object of class \code{numeric} of length 1.
 CREDIT_POS_ADJ_QUANTILE_HITOUT
 }
 \description{
-Position adjustment quantile for hitout
+Position-group quantile adjustment for hitout component
 }
 \keyword{internal}

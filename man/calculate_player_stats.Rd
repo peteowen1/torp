@@ -8,12 +8,19 @@ calculate_player_stats(
   player_game_data = NULL,
   match_ref,
   date_val,
-  decay,
-  loading,
-  prior_games_recv,
-  prior_games_disp,
+  decay_recv = RATING_DECAY_RECV,
+  decay_disp = RATING_DECAY_DISP,
+  decay_spoil = RATING_DECAY_SPOIL,
+  decay_hitout = RATING_DECAY_HITOUT,
+  loading = RATING_LOADING_DEFAULT,
+  prior_games_recv = RATING_PRIOR_GAMES_RECV,
+  prior_games_disp = RATING_PRIOR_GAMES_DISP,
   prior_games_spoil = RATING_PRIOR_GAMES_SPOIL,
-  prior_games_hitout = RATING_PRIOR_GAMES_HITOUT
+  prior_games_hitout = RATING_PRIOR_GAMES_HITOUT,
+  prior_rate_recv = RATING_PRIOR_RATE_RECV,
+  prior_rate_disp = RATING_PRIOR_RATE_DISP,
+  prior_rate_spoil = RATING_PRIOR_RATE_SPOIL,
+  prior_rate_hitout = RATING_PRIOR_RATE_HITOUT
 )
 }
 \arguments{
@@ -23,7 +30,13 @@ calculate_player_stats(
 
 \item{date_val}{Date value}
 
-\item{decay}{Decay factor}
+\item{decay_recv}{Decay factor (days) for receiving component}
+
+\item{decay_disp}{Decay factor (days) for disposal component}
+
+\item{decay_spoil}{Decay factor (days) for spoil component}
+
+\item{decay_hitout}{Decay factor (days) for hitout component}
 
 \item{loading}{Loading factor}
 
@@ -34,6 +47,14 @@ calculate_player_stats(
 \item{prior_games_spoil}{Prior games for spoil shrinkage. Default is \code{RATING_PRIOR_GAMES_SPOIL}.}
 
 \item{prior_games_hitout}{Prior games for hitout shrinkage. Default is \code{RATING_PRIOR_GAMES_HITOUT}.}
+
+\item{prior_rate_recv}{Prior rate for receiving shrinkage target. Default is \code{RATING_PRIOR_RATE_RECV}.}
+
+\item{prior_rate_disp}{Prior rate for disposal shrinkage target. Default is \code{RATING_PRIOR_RATE_DISP}.}
+
+\item{prior_rate_spoil}{Prior rate for spoil shrinkage target. Default is \code{RATING_PRIOR_RATE_SPOIL}.}
+
+\item{prior_rate_hitout}{Prior rate for hitout shrinkage target. Default is \code{RATING_PRIOR_RATE_HITOUT}.}
 }
 \value{
 A data frame with calculated player statistics

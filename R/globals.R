@@ -3,13 +3,13 @@
 # This file declares variables used in non-standard evaluation (NSE) contexts
 # such as data.table and dplyr operations to avoid "no visible binding" NOTEs.
 
-#' @importFrom stats binomial coef complete.cases lm pchisq quantile sd var
+#' @importFrom stats binomial coef complete.cases lm pchisq quantile sd var setNames
 #' @importFrom utils head
 #' @importFrom lubridate tz
 NULL
 
 # data.table special symbols and env-variable patterns
-utils::globalVariables(c(".", ".N", ":=", "..keep", "..cols_present"))
+utils::globalVariables(c(".", ".N", ".I", ":=", "..keep", "..cols_present"))
 
 # data.table column names used in NSE
 utils::globalVariables(c(
@@ -59,7 +59,8 @@ utils::globalVariables(c(
   "hitout_pts_adj", "hitout_sum", "weight_gm", "wt_gms", "wt_tog", "tog_sum", "utc_start_time",
   "days_diff", "wt_recv", "wt_disp", "wt_spoil", "wt_hitout",
   "wt_gms_recv", "wt_gms_disp", "wt_gms_spoil", "wt_gms_hitout",
-  "pred_tog", "tog_safe", "tog_wt", "lineup_tog",
+  "pred_tog", ".tog_safe", "tog_safe", "tog_wt", "lineup_tog",
+  "i.time_on_ground_skill", "i.n_80s", "i.wt_80s",
 
   # data.table join prefixes
   "i.torp", "i.torp_shift_away", "i.torp_shift_home",
@@ -109,7 +110,9 @@ utils::globalVariables(c(
 
 # Skill estimation variables
 utils::globalVariables(c(
-  "avail_only",
+  "avail_only", ".played", "roster_pos_group",
+  "compSeason.year", "round.roundNumber", "home.team.name", "away.team.name",
+  "round_idx", "first_season", "first_round",
   "tog", "tog_denominator", "match_date_skill", "days_since", "decay_wt",
   "wt_events", "wt_exposure", "wt_successes", "wt_attempts",
   "alpha_post", "beta_post", "skill_estimate", "skill_lower", "skill_upper",
@@ -145,6 +148,8 @@ utils::globalVariables(c(
   "finals_finish", "finals_wins", "made_gf", "won_gf",
   "pred_xtotal",
   "avg_wins", "avg_losses", "avg_draws", "avg_percentage", "avg_rank",
+  "avg_pf_pg", "avg_pa_pg", "last_pct",
+  "home_torp_eff", "away_torp_eff",
  "top_8_pct", "top_4_pct", "top_2_pct", "top_1_pct",
   "made_finals_pct", "avg_finals_wins", "made_gf_pct", "won_gf_pct",
   "i.pred_xtotal",

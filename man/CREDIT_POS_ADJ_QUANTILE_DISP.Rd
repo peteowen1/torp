@@ -3,7 +3,7 @@
 \docType{data}
 \name{CREDIT_POS_ADJ_QUANTILE_DISP}
 \alias{CREDIT_POS_ADJ_QUANTILE_DISP}
-\title{Position adjustment quantile for disposal}
+\title{Position-group quantile adjustment for disposal component}
 \format{
 An object of class \code{numeric} of length 1.
 }
@@ -11,6 +11,6 @@ An object of class \code{numeric} of length 1.
 CREDIT_POS_ADJ_QUANTILE_DISP
 }
 \description{
-Position adjustment quantile for disposal
+Position-group quantile adjustment for disposal component
 }
 \keyword{internal}
