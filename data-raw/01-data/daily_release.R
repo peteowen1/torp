@@ -71,6 +71,76 @@ has_new_games <- function() {
   })
 }
 
+# Module-level cache to avoid double-fetching lineup data within a single run
+.release_cache <- new.env(parent = emptyenv())
+
+#' Check if New Team/Lineup Data Exists
+#'
+#' Compares current lineup data from fitzRoy against the existing torpdata
+#' release. Detects both new rows (new round lineups) and changed rows
+#' (player swaps within an existing round).
+#'
+#' Caches fetched lineup data in `.release_cache` so `update_teams()` can
+#' reuse it without a second API call.
+#'
+#' @return Logical indicating if new or changed lineup data is available
+has_new_team_data <- function() {
+  tryCatch({
+    current_season <- get_afl_season()
+
+    # Fetch fresh lineup data from API
+    fresh_teams <- fitzRoy::fetch_lineup(current_season, comp = "AFLM") %>%
+      dplyr::mutate(
+        season = as.numeric(substr(providerId, 5, 8)),
+        row_id = paste0(providerId, teamId, player.playerId)
+      )
+
+    if (is.null(fresh_teams) || nrow(fresh_teams) == 0) {
+      cli::cli_inform("No lineup data available for {current_season}")
+      return(FALSE)
+    }
+
+    # Cache for reuse by update_teams()
+    .release_cache$teams <- fresh_teams
+
+    # Compare against existing torpdata release
+    existing_teams <- tryCatch({
+      load_teams(current_season)
+    }, error = function(e) {
+      cli::cli_inform("No existing teams data found — treating as new")
+      return(NULL)
+    })
+
+    if (is.null(existing_teams) || nrow(existing_teams) == 0) {
+      cli::cli_inform("No existing teams data — new lineup data available")
+      return(TRUE)
+    }
+
+    # Check row count difference (new round lineups added)
+    if (nrow(fresh_teams) != nrow(existing_teams)) {
+      cli::cli_inform(
+        "Team data row count changed: {nrow(existing_teams)} -> {nrow(fresh_teams)}"
+      )
+      return(TRUE)
+    }
+
+    # Check for player swaps (same row count but different row_ids)
+    fresh_ids <- sort(fresh_teams$row_id)
+    existing_ids <- sort(existing_teams$row_id)
+    if (!identical(fresh_ids, existing_ids)) {
+      n_diff <- sum(!fresh_ids %in% existing_ids)
+      cli::cli_inform("Team data has {n_diff} changed row_id(s) (player swaps)")
+      return(TRUE)
+    }
+
+    cli::cli_inform("No changes in team/lineup data")
+    return(FALSE)
+  }, error = function(e) {
+    cli::cli_warn("Error checking for new team data: {conditionMessage(e)}")
+    return(FALSE)
+  })
+}
+
 #' Get Maximum Round for a Season
 #'
 #' Returns the maximum round number to process for a given season.
@@ -349,16 +419,22 @@ update_player_stats <- function(season) {
 update_teams <- function(season) {
   cli::cli_progress_step("Updating teams/lineups for {season}")
 
-  teams <- tryCatch({
-    fitzRoy::fetch_lineup(season, comp = "AFLM") %>%
-      dplyr::mutate(
-        season = as.numeric(substr(providerId, 5, 8)),
-        row_id = paste0(providerId, teamId, player.playerId)
-      )
-  }, error = function(e) {
-    cli::cli_warn("Failed to fetch teams: {conditionMessage(e)}")
-    return(NULL)
-  })
+  # Reuse cached data from has_new_team_data() if available
+  teams <- if (!is.null(.release_cache$teams)) {
+    cli::cli_inform("Using cached lineup data")
+    .release_cache$teams
+  } else {
+    tryCatch({
+      fitzRoy::fetch_lineup(season, comp = "AFLM") %>%
+        dplyr::mutate(
+          season = as.numeric(substr(providerId, 5, 8)),
+          row_id = paste0(providerId, teamId, player.playerId)
+        )
+    }, error = function(e) {
+      cli::cli_warn("Failed to fetch teams: {conditionMessage(e)}")
+      return(NULL)
+    })
+  }
 
   if (is.null(teams) || nrow(teams) == 0) {
     return(invisible(NULL))
@@ -549,11 +625,22 @@ update_ep_wp_chart <- function(season) {
 #' Main entry point for daily automated data release.
 #' Only processes current season data to minimize runtime.
 #'
-#' @param force Logical. If TRUE, skip the new games check and force update.
-#' @return Invisible logical indicating success
+#' Returns a release mode string:
+#' - `"full"`: new games detected (or forced) — all data types updated
+#' - `"team_only"`: no new games but lineup changes detected — only teams,
+#'   fixtures, results, and player_details updated
+#' - `"none"`: nothing new to release
+#'
+#' @param force Logical. If TRUE, skip the new games check and force full update.
+#' @return Character string: `"full"`, `"team_only"`, or `"none"` (invisibly)
 #' @export
 run_daily_release <- function(force = FALSE) {
   cli::cli_h1("Daily Data Release")
+
+  # Ensure cache is cleaned up on exit (even on error)
+  on.exit({
+    rm(list = ls(.release_cache), envir = .release_cache)
+  }, add = TRUE)
 
   tictoc::tic("total")
 
@@ -562,39 +649,61 @@ run_daily_release <- function(force = FALSE) {
 
   cli::cli_inform("Season: {current_season}, Round: {current_round}")
 
-  # Skip if no new games (unless forced)
-  if (!force && !has_new_games()) {
-    cli::cli_alert_info("No new games detected - skipping release")
-    return(invisible(FALSE))
+  # Determine release mode
+  if (force || has_new_games()) {
+    release_mode <- "full"
+  } else if (has_new_team_data()) {
+    release_mode <- "team_only"
+  } else {
+    cli::cli_alert_info("No new games or lineup changes detected - skipping release")
+    tictoc::toc(log = TRUE)
+    tictoc::tic.clearlog()
+    return(invisible("none"))
+  }
+
+  cli::cli_alert_info("Release mode: {release_mode}")
+
+  if (release_mode == "full") {
+    # -----------------------------------------------------------------------
+    # 1. Update seasonal _all files (chains + pbp) with current round
+    # -----------------------------------------------------------------------
+    cli::cli_h2("Updating season files with round {current_round}")
+    tictoc::tic("season_data")
+
+    update_season_chains(current_season, current_round)
+    update_season_pbp(current_season, current_round)
+
+    tictoc::toc(log = TRUE)
   }
 
   # -------------------------------------------------------------------------
-  # 1. Update seasonal _all files (chains + pbp) with current round
-  # -------------------------------------------------------------------------
-  cli::cli_h2("Updating season files with round {current_round}")
-  tictoc::tic("season_data")
-
-  update_season_chains(current_season, current_round)
-  update_season_pbp(current_season, current_round)
-
-  tictoc::toc(log = TRUE)
-
-  # -------------------------------------------------------------------------
-  # 3. Update season-level data files
+  # 2. Update season-level data files
   # -------------------------------------------------------------------------
   cli::cli_h2("Updating seasonal data")
   tictoc::tic("seasonal_data")
 
   seasonal_failures <- character()
-  seasonal_fns <- list(
-    xg_data = update_xg_data,
-    fixtures = update_fixtures,
-    results = update_results,
-    player_stats = update_player_stats,
-    teams = update_teams,
-    player_details = update_player_details,
-    player_game_data = update_player_game_data
-  )
+
+  if (release_mode == "full") {
+    seasonal_fns <- list(
+      xg_data = update_xg_data,
+      fixtures = update_fixtures,
+      results = update_results,
+      player_stats = update_player_stats,
+      teams = update_teams,
+      player_details = update_player_details,
+      player_game_data = update_player_game_data
+    )
+  } else {
+    # team_only: skip heavy data types that haven't changed
+    seasonal_fns <- list(
+      teams = update_teams,
+      fixtures = update_fixtures,
+      results = update_results,
+      player_details = update_player_details
+    )
+  }
+
   for (nm in names(seasonal_fns)) {
     tryCatch(seasonal_fns[[nm]](current_season), error = function(e) {
       seasonal_failures <<- c(seasonal_failures, nm)
@@ -605,26 +714,29 @@ run_daily_release <- function(force = FALSE) {
   tictoc::toc(log = TRUE)
 
   # -------------------------------------------------------------------------
-  # 4. Update derived data (depends on upstream data being current)
+  # 3. Update derived data (full mode only)
   # -------------------------------------------------------------------------
-  cli::cli_h2("Updating derived data")
-  tictoc::tic("derived_data")
-
   derived_failures <- character()
-  tryCatch(update_player_game_ratings(current_season), error = function(e) {
-    derived_failures <<- c(derived_failures, "player_game_ratings")
-    cli::cli_warn("Failed: player_game_ratings: {conditionMessage(e)}")
-  })
-  tryCatch(update_player_season_ratings(current_season), error = function(e) {
-    derived_failures <<- c(derived_failures, "player_season_ratings")
-    cli::cli_warn("Failed: player_season_ratings: {conditionMessage(e)}")
-  })
-  tryCatch(update_ep_wp_chart(current_season), error = function(e) {
-    derived_failures <<- c(derived_failures, "ep_wp_chart")
-    cli::cli_warn("Failed: ep_wp_chart: {conditionMessage(e)}")
-  })
 
-  tictoc::toc(log = TRUE)
+  if (release_mode == "full") {
+    cli::cli_h2("Updating derived data")
+    tictoc::tic("derived_data")
+
+    tryCatch(update_player_game_ratings(current_season), error = function(e) {
+      derived_failures <<- c(derived_failures, "player_game_ratings")
+      cli::cli_warn("Failed: player_game_ratings: {conditionMessage(e)}")
+    })
+    tryCatch(update_player_season_ratings(current_season), error = function(e) {
+      derived_failures <<- c(derived_failures, "player_season_ratings")
+      cli::cli_warn("Failed: player_season_ratings: {conditionMessage(e)}")
+    })
+    tryCatch(update_ep_wp_chart(current_season), error = function(e) {
+      derived_failures <<- c(derived_failures, "ep_wp_chart")
+      cli::cli_warn("Failed: ep_wp_chart: {conditionMessage(e)}")
+    })
+
+    tictoc::toc(log = TRUE)
+  }
 
   # -------------------------------------------------------------------------
   # Summary
@@ -633,9 +745,9 @@ run_daily_release <- function(force = FALSE) {
 
   all_failures <- c(seasonal_failures, derived_failures)
   if (length(all_failures) > 0) {
-    cli::cli_alert_warning("Daily release complete with {length(all_failures)} failure{?s}: {paste(all_failures, collapse = ', ')}")
+    cli::cli_alert_warning("Daily release ({release_mode}) complete with {length(all_failures)} failure{?s}: {paste(all_failures, collapse = ', ')}")
   } else {
-    cli::cli_alert_success("Daily release complete!")
+    cli::cli_alert_success("Daily release ({release_mode}) complete!")
   }
 
   # Print timing summary
@@ -646,7 +758,7 @@ run_daily_release <- function(force = FALSE) {
   }
   tictoc::tic.clearlog()
 
-  invisible(TRUE)
+  invisible(release_mode)
 }
 
 # Execute if run as script ----
