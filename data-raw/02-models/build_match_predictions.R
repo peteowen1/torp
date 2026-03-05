@@ -561,6 +561,9 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
   gam_df <- team_mdl_df |> filter(!is.na(win))
   train_mask <- !is.na(team_mdl_df$win)
   cli::cli_inform("Training on {nrow(gam_df)} completed matches")
+  if (nrow(gam_df) == 0) {
+    cli::cli_abort("Cannot train GAM models: 0 completed matches after filtering to season >= {MIN_DATA_SEASON} R{MIN_DATA_ROUND}")
+  }
 
   # Sequential GAM pipeline: each model's predictions feed into the next
   cli::cli_progress_step("Training total xPoints model")
