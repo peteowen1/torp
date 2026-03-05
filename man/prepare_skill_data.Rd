@@ -4,12 +4,21 @@
 \alias{prepare_skill_data}
 \title{Prepare data for skill estimation}
 \usage{
-prepare_skill_data(player_game_data, player_stats)
+prepare_skill_data(
+  player_game_data,
+  player_stats,
+  rosters = NULL,
+  fixtures = NULL
+)
 }
 \arguments{
 \item{player_game_data}{Player game data from \code{load_player_game_data(TRUE)}.}
 
 \item{player_stats}{Player stats from \code{load_player_stats(TRUE)}.}
+
+\item{rosters}{Optional roster data. If NULL, loads from torpdata.}
+
+\item{fixtures}{Optional fixture data. If NULL, loads from torpdata.}
 }
 \value{
 A data.table with one row per player-match containing:

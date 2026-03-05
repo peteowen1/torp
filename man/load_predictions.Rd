@@ -27,7 +27,7 @@ A data frame containing AFL match predictions including win probabilities and ex
 Loads AFL match predictions and probability data from the \href{https://github.com/peteowen1/torpdata}{torpdata repository}
 }
 \examples{
-\donttest{
+\dontrun{
 try({ # prevents cran errors
   load_predictions(2021:2022)
 })

@@ -24,7 +24,7 @@ A data frame containing AFL player biographical details including names, ages, a
 Loads AFL player biographical and details data from the \href{https://github.com/peteowen1/torpdata}{torpdata repository}
 }
 \examples{
-\donttest{
+\dontrun{
 try({ # prevents cran errors
   load_player_details(2021:2022)
 })

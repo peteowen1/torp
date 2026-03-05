@@ -56,7 +56,7 @@ Ground ball contests are consecutive ground ball actions (Hard Ball Get,
 Loose Ball Get, crumbs) at the same x,y from opposing teams.
 }
 \examples{
-\donttest{
+\dontrun{
 try({
   contests <- extract_contests(seasons = 2024, rounds = 1:5, type = "aerial")
   head(contests)

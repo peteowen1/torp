@@ -41,7 +41,7 @@ Retrieves the contest history between two specific players across their
 career matchups. Uses fuzzy name matching via \code{resolve_player()}.
 }
 \examples{
-\donttest{
+\dontrun{
 try({
   h2h <- head_to_head("Harris Andrews", "Charlie Curnow", type = "aerial")
   print(h2h)

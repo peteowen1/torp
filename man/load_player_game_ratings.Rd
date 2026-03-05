@@ -33,7 +33,7 @@ This is the output of \code{\link[=player_game_ratings]{player_game_ratings()}} 
 for every player, ready for leaderboards and analysis.
 }
 \examples{
-\donttest{
+\dontrun{
 try({ # prevents cran errors
   load_player_game_ratings(2024)
 })

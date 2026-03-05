@@ -20,7 +20,7 @@ A data frame containing xG data.
 Loads xg data from the \href{https://github.com/peteowen1/torpdata}{torpdata repository}
 }
 \examples{
-\donttest{
+\dontrun{
 try({ # prevents cran errors
   load_xg(2021:2022)
 })

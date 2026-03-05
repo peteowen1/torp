@@ -27,7 +27,7 @@ A data frame containing chains data.
 Loads chains data from the \href{https://github.com/peteowen1/torpdata}{torpdata repository}
 }
 \examples{
-\donttest{
+\dontrun{
 try({ # prevents cran errors
   load_chains(2021:2022)
 })

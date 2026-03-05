@@ -48,7 +48,7 @@
 #' @importFrom cli cli_abort
 #'
 #' @examples
-#' \donttest{
+#' \dontrun{
 #' try({
 #'   contests <- extract_contests(seasons = 2024, rounds = 1:5, type = "aerial")
 #'   head(contests)
@@ -200,7 +200,7 @@ extract_contests <- function(chains = NULL, type = "all", seasons = TRUE,
 #' @importFrom cli cli_abort
 #'
 #' @examples
-#' \donttest{
+#' \dontrun{
 #' try({
 #'   h2h <- head_to_head("Harris Andrews", "Charlie Curnow", type = "aerial")
 #'   print(h2h)

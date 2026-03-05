@@ -39,7 +39,7 @@ Contains every play but only ~25 columns instead of the full 150+
 available from \code{\link[=load_pbp]{load_pbp()}}.
 }
 \examples{
-\donttest{
+\dontrun{
 try({ # prevents cran errors
   load_ep_wp_charts(2024)
 })

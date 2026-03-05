@@ -71,7 +71,7 @@ resolve_player <- function(player_name, seasons = TRUE) {
 #' @importFrom data.table as.data.table
 #' @importFrom cli cli_abort
 #' @examples
-#' \donttest{
+#' \dontrun{
 #' try({ # prevents cran errors
 #'   player_profile("Heeney")
 #'   player_profile("Heeney", seasons = 2022:2024)

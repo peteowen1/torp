@@ -3,7 +3,7 @@
 \docType{data}
 \name{CREDIT_POS_ADJ_QUANTILE_SPOIL}
 \alias{CREDIT_POS_ADJ_QUANTILE_SPOIL}
-\title{Position adjustment quantile for spoil/tackle}
+\title{Position-group quantile adjustment for spoil component}
 \format{
 An object of class \code{numeric} of length 1.
 }
@@ -11,6 +11,6 @@ An object of class \code{numeric} of length 1.
 CREDIT_POS_ADJ_QUANTILE_SPOIL
 }
 \description{
-Position adjustment quantile for spoil/tackle
+Position-group quantile adjustment for spoil component
 }
 \keyword{internal}

@@ -71,6 +71,8 @@
 #'
 #' @param player_game_data Player game data from \code{load_player_game_data(TRUE)}.
 #' @param player_stats Player stats from \code{load_player_stats(TRUE)}.
+#' @param rosters Optional roster data. If NULL, loads from torpdata.
+#' @param fixtures Optional fixture data. If NULL, loads from torpdata.
 #'
 #' @return A data.table with one row per player-match containing:
 #'   identifiers (player_id, match_id, player_name, season, round, team),

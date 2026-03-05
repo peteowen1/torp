@@ -470,7 +470,7 @@ simulate_finals <- function(ladder_dt, sim_teams_dt) {
 #'   `original_ratings`.
 #' @export
 #' @examples
-#' \donttest{
+#' \dontrun{
 #' try({
 #'   results <- simulate_afl_season(2025, n_sims = 10, seed = 42)
 #'   print(results)

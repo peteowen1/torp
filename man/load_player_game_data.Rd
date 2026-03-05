@@ -26,7 +26,7 @@ This data contains per-game performance metrics (disposal points, reception poin
 spoil points, hitout points) adjusted by position, as used by the TORP ratings pipeline.
 }
 \examples{
-\donttest{
+\dontrun{
 try({ # prevents cran errors
   load_player_game_data(2024)
 })

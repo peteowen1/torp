@@ -3,7 +3,7 @@
 \docType{data}
 \name{CREDIT_POS_ADJ_QUANTILE_RECV}
 \alias{CREDIT_POS_ADJ_QUANTILE_RECV}
-\title{Position adjustment quantile for reception}
+\title{Position-group quantile adjustment for receiving component}
 \format{
 An object of class \code{numeric} of length 1.
 }
@@ -11,6 +11,6 @@ An object of class \code{numeric} of length 1.
 CREDIT_POS_ADJ_QUANTILE_RECV
 }
 \description{
-Position adjustment quantile for reception
+Position-group quantile adjustment for receiving component
 }
 \keyword{internal}

@@ -8,7 +8,8 @@ prepare_final_dataframe(
   plyr_tm_df = NULL,
   player_game_data = NULL,
   season_val,
-  round_val
+  round_val,
+  fixtures = NULL
 )
 }
 \arguments{
@@ -19,6 +20,8 @@ prepare_final_dataframe(
 \item{season_val}{Season value}
 
 \item{round_val}{Round value}
+
+\item{fixtures}{Optional pre-loaded fixtures data. If NULL, will load automatically.}
 }
 \value{
 A final dataframe with player ratings

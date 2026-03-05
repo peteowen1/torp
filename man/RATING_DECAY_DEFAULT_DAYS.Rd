@@ -3,7 +3,7 @@
 \docType{data}
 \name{RATING_DECAY_DEFAULT_DAYS}
 \alias{RATING_DECAY_DEFAULT_DAYS}
-\title{Default decay factor (in days) for TORP rating historical weighting}
+\title{Default decay factor (in days) — legacy alias for backwards compatibility}
 \format{
 An object of class \code{numeric} of length 1.
 }
@@ -11,6 +11,6 @@ An object of class \code{numeric} of length 1.
 RATING_DECAY_DEFAULT_DAYS
 }
 \description{
-Default decay factor (in days) for TORP rating historical weighting
+Default decay factor (in days) — legacy alias for backwards compatibility
 }
 \keyword{internal}

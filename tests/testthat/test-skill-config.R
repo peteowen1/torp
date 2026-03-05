@@ -40,7 +40,7 @@ test_that("skill_position_map covers expected AFL positions", {
   pm <- skill_position_map()
 
   expect_type(pm, "list")
-  expect_named(pm, c("DEF", "MID", "FWD", "RUCK"))
+  expect_named(pm, c("KEY_DEFENDER", "MEDIUM_DEFENDER", "MIDFIELDER", "MEDIUM_FORWARD", "KEY_FORWARD", "RUCK"))
 
   # All positions are character vectors
   for (grp in names(pm)) {

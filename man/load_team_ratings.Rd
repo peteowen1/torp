@@ -19,9 +19,11 @@ Loads pre-computed team-level TORP aggregates from the
 \href{https://github.com/peteowen1/torpdata}{torpdata repository}.
 Aggregates are the sum of TORP ratings for each team's top-21 players
 (filtered to TORP > 0) per round, with subcategory breakdowns.
+Player-level ratings are already centered relative to average, so
+team sums are naturally relative to 0.
 }
 \examples{
-\donttest{
+\dontrun{
 try({ # prevents cran errors
   load_team_ratings()
 })

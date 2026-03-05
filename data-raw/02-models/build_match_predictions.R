@@ -21,7 +21,6 @@ devtools::load_all()
 # Constants ----
 WEIGHT_DECAY_DAYS <- 1000
 INJURY_DISCOUNT   <- SIM_INJURY_DISCOUNT
-HOME_RATING_BOOST <- 4
 LOG_DIST_OFFSET   <- 10000
 LOG_DIST_DEFAULT  <- 16
 MIN_DATA_SEASON   <- 2021
@@ -646,7 +645,7 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
       margin = mean(margin),
       .groups = "drop"
     ) |>
-    mutate(rating_diff = home_rating - away_rating + HOME_RATING_BOOST) |>
+    mutate(rating_diff = home_rating - away_rating) |>
     select(round, providerId:away_rating, start_time, venue, rating_diff, players:margin)
 
   # Validate Predictions ----

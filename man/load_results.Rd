@@ -24,7 +24,7 @@ A data frame containing AFL match results and final scores.
 Loads AFL match results and scores from the \href{https://github.com/peteowen1/torpdata}{torpdata repository}
 }
 \examples{
-\donttest{
+\dontrun{
 try({ # prevents cran errors
   load_results(2021:2022)
 })

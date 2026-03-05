@@ -12,7 +12,10 @@ test_that("calculate_torp_ratings has correct function signature", {
 
   expect_true("season_val" %in% fn_args)
   expect_true("round_val" %in% fn_args)
-  expect_true("decay" %in% fn_args)
+  expect_true("decay_recv" %in% fn_args)
+  expect_true("decay_disp" %in% fn_args)
+  expect_true("decay_spoil" %in% fn_args)
+  expect_true("decay_hitout" %in% fn_args)
   expect_true("loading" %in% fn_args)
   expect_true("prior_games_recv" %in% fn_args)
   expect_true("prior_games_disp" %in% fn_args)
@@ -28,8 +31,8 @@ test_that("calculate_torp_ratings skills parameter defaults to TRUE", {
 test_that("calculate_torp_ratings has reasonable defaults", {
   fn_formals <- formals(calculate_torp_ratings)
 
-  # decay uses RATING_DECAY_DEFAULT_DAYS constant
-  expect_true(is.symbol(fn_formals$decay) || fn_formals$decay == 365)
+  # decay_recv uses RATING_DECAY_RECV constant
+  expect_true(is.symbol(fn_formals$decay_recv) || fn_formals$decay_recv == torp:::RATING_DECAY_RECV)
   expect_true(is.symbol(fn_formals$loading) || fn_formals$loading == torp:::RATING_LOADING_DEFAULT)
   expect_true(is.symbol(fn_formals$prior_games_recv) || fn_formals$prior_games_recv == torp:::RATING_PRIOR_GAMES_RECV)
   expect_true(is.symbol(fn_formals$prior_games_disp) || fn_formals$prior_games_disp == torp:::RATING_PRIOR_GAMES_DISP)
@@ -66,10 +69,12 @@ test_that("calculate_player_stats helper function works", {
 
   # The function should work with valid inputs
   result <- torp:::calculate_player_stats(
-    test_data,
-    "CD_M2024014103",
-    as.Date("2024-04-08"),
-    365, 1.5, 4, 6
+    player_game_data = test_data,
+    match_ref = "CD_M2024014103",
+    date_val = as.Date("2024-04-08"),
+    loading = 1.5,
+    prior_games_recv = 4,
+    prior_games_disp = 6
   )
 
   expect_true(is.data.frame(result))
@@ -106,7 +111,6 @@ test_that("calculate_player_stats returns expected structure with valid data", {
     player_game_data = test_data,
     match_ref = "CD_M2024014105",
     date_val = as.Date("2024-05-01"),
-    decay = 365,
     loading = 1.5,
     prior_games_recv = 4,
     prior_games_disp = 6
@@ -145,7 +149,7 @@ test_that("calculate_player_stats respects decay parameter", {
     player_game_data = test_data,
     match_ref = "CD_M2024014104",
     date_val = as.Date("2024-06-01"),
-    decay = 30,  # Short decay
+    decay_recv = 30, decay_disp = 30, decay_spoil = 30, decay_hitout = 30,
     loading = 1.5,
     prior_games_recv = 4,
     prior_games_disp = 6
@@ -156,7 +160,7 @@ test_that("calculate_player_stats respects decay parameter", {
     player_game_data = test_data,
     match_ref = "CD_M2024014104",
     date_val = as.Date("2024-06-01"),
-    decay = 1000,  # Long decay
+    decay_recv = 1000, decay_disp = 1000, decay_spoil = 1000, decay_hitout = 1000,
     loading = 1.5,
     prior_games_recv = 4,
     prior_games_disp = 6
@@ -215,8 +219,8 @@ test_that("calculate_torp_ratings works with pre-loaded data", {
 # -----------------------------------------------------------------------------
 
 test_that("calculate_player_stats uses prior_games_spoil and prior_games_hitout constants", {
-  expect_equal(torp:::RATING_PRIOR_GAMES_SPOIL, 7.0464)
-  expect_equal(torp:::RATING_PRIOR_GAMES_HITOUT, 3.2153)
+  expect_equal(torp:::RATING_PRIOR_GAMES_SPOIL, 3.9409)
+  expect_equal(torp:::RATING_PRIOR_GAMES_HITOUT, 15.0000)
 })
 
 # -----------------------------------------------------------------------------
@@ -246,7 +250,7 @@ test_that("wt_gms sums per-match weights correctly for same-day games", {
     player_game_data = test_data,
     match_ref = "CD_M2024014103",
     date_val = as.Date("2024-04-08"),
-    decay = 365, loading = 1.5,
+    loading = 1.5,
     prior_games_recv = 4, prior_games_disp = 6
   )
 
@@ -254,7 +258,7 @@ test_that("wt_gms sums per-match weights correctly for same-day games", {
   expect_equal(result$gms, 2)
   # wt_gms should be 2x the single-game weight (both games same date, same decay)
   # NOT collapsed to 1x via unique()
-  single_weight <- exp(-as.numeric(as.Date("2024-04-08") - as.Date("2024-04-01")) / 365)
+  single_weight <- exp(-as.numeric(as.Date("2024-04-08") - as.Date("2024-04-01")) / torp:::RATING_DECAY_RECV)
   expect_equal(result$wt_gms, 2 * single_weight, tolerance = 1e-10)
 })
 
@@ -292,7 +296,7 @@ test_that("TOG-weighted average adjustment produces correct math", {
     player_game_data = test_data,
     match_ref = "CD_M2024014103",
     date_val = as.Date("2024-04-08"),
-    decay = 365, loading = 1.5,
+    loading = 1.5,
     prior_games_recv = 4, prior_games_disp = 6
   )
 
@@ -346,7 +350,7 @@ test_that("TOG adjustment is skipped when all tog_skill are zero", {
     player_game_data = test_data,
     match_ref = "CD_M2024014103",
     date_val = as.Date("2024-04-08"),
-    decay = 365, loading = 1.5,
+    loading = 1.5,
     prior_games_recv = 4, prior_games_disp = 6
   )
 

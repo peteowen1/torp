@@ -16,6 +16,10 @@
 #' @param prior_games_spoil Prior games for spoil shrinkage. Default is \code{RATING_PRIOR_GAMES_SPOIL}.
 #' @param prior_games_hitout Prior games for hitout shrinkage. Default is \code{RATING_PRIOR_GAMES_HITOUT}.
 #' @param fixtures Optional pre-loaded fixtures data. If NULL, will load automatically.
+#' @param prior_rate_recv Prior rate for receiving shrinkage target. Default is \code{RATING_PRIOR_RATE_RECV}.
+#' @param prior_rate_disp Prior rate for disposal shrinkage target. Default is \code{RATING_PRIOR_RATE_DISP}.
+#' @param prior_rate_spoil Prior rate for spoil shrinkage target. Default is \code{RATING_PRIOR_RATE_SPOIL}.
+#' @param prior_rate_hitout Prior rate for hitout shrinkage target. Default is \code{RATING_PRIOR_RATE_HITOUT}.
 #' @param skills Controls TOG-weighted average adjustment. When active, TORP
 #'   components are re-centered to "above TOG-weighted average" by subtracting
 #'   the weighted mean of each component (weighted by
@@ -165,6 +169,10 @@ calculate_torp_ratings <- function(season_val = get_afl_season(type = "current")
 #' @param prior_games_disp Prior games for disposal
 #' @param prior_games_spoil Prior games for spoil shrinkage. Default is \code{RATING_PRIOR_GAMES_SPOIL}.
 #' @param prior_games_hitout Prior games for hitout shrinkage. Default is \code{RATING_PRIOR_GAMES_HITOUT}.
+#' @param prior_rate_recv Prior rate for receiving shrinkage target. Default is \code{RATING_PRIOR_RATE_RECV}.
+#' @param prior_rate_disp Prior rate for disposal shrinkage target. Default is \code{RATING_PRIOR_RATE_DISP}.
+#' @param prior_rate_spoil Prior rate for spoil shrinkage target. Default is \code{RATING_PRIOR_RATE_SPOIL}.
+#' @param prior_rate_hitout Prior rate for hitout shrinkage target. Default is \code{RATING_PRIOR_RATE_HITOUT}.
 #'
 #' @return A data frame with calculated player statistics
 #'

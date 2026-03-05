@@ -7,7 +7,7 @@
 .skill_stat_params()
 }
 \description{
-Baked-in results from \code{data-raw/06-skills/02_optimize_params.R}.
+Baked-in results from \code{data-raw/06-skills/02_optimize_skill_params.R}.
 Rate stats optimized via TOG-weighted MSE, efficiency stats via
 attempt-weighted log-loss. Each entry has \code{lambda} (decay per day)
 and \code{prior_strength}.
