@@ -15,8 +15,107 @@ library(tidyverse)
 library(fitzRoy)
 library(cli)
 library(purrr)
+library(httr2)
 
 devtools::load_all()
+
+# Weather Helpers ----
+
+#' Fetch forecast weather from Open-Meteo for upcoming matches
+fetch_forecast_weather <- function(fixtures_upcoming, all_grounds) {
+  if (nrow(fixtures_upcoming) == 0) return(tibble())
+
+  fixtures_geo <- fixtures_upcoming |>
+    mutate(venue = replace_venues(venue.name)) |>
+    left_join(
+      all_grounds |> select(venue, Latitude, Longitude) |> distinct(venue, .keep_all = TRUE),
+      by = "venue"
+    ) |>
+    filter(!is.na(Latitude))
+
+  if (nrow(fixtures_geo) == 0) return(tibble())
+
+  venue_dates <- fixtures_geo |>
+    mutate(match_date = as.Date(as.POSIXct(utcStartTime, format = "%Y-%m-%dT%H:%M", tz = "UTC"))) |>
+    group_by(venue, Latitude, Longitude) |>
+    summarise(min_date = min(match_date), max_date = max(match_date), .groups = "drop")
+
+  all_hourly <- list()
+  for (i in seq_len(nrow(venue_dates))) {
+    vd <- venue_dates[i, ]
+    hourly <- tryCatch({
+      resp <- httr2::request("https://api.open-meteo.com/v1/forecast") |>
+        httr2::req_url_query(
+          latitude = vd$Latitude, longitude = vd$Longitude,
+          start_date = format(vd$min_date, "%Y-%m-%d"),
+          end_date = format(vd$max_date, "%Y-%m-%d"),
+          hourly = "temperature_2m,precipitation,wind_speed_10m,relative_humidity_2m",
+          timezone = "UTC"
+        ) |>
+        httr2::req_retry(max_tries = 3, backoff = ~ 2) |>
+        httr2::req_perform() |>
+        httr2::resp_body_json()
+      tibble(
+        time = as.POSIXct(unlist(hourly$hourly$time), format = "%Y-%m-%dT%H:%M", tz = "UTC"),
+        temperature_2m = as.numeric(unlist(hourly$hourly$temperature_2m)),
+        precipitation = as.numeric(unlist(hourly$hourly$precipitation)),
+        wind_speed_10m = as.numeric(unlist(hourly$hourly$wind_speed_10m)),
+        relative_humidity_2m = as.numeric(unlist(hourly$hourly$relative_humidity_2m)),
+        venue = vd$venue
+      )
+    }, error = function(e) {
+      cli::cli_warn("Forecast failed for {vd$venue}: {conditionMessage(e)}")
+      NULL
+    })
+    if (!is.null(hourly)) all_hourly[[i]] <- hourly
+    Sys.sleep(0.3)
+  }
+
+  if (length(all_hourly) == 0) return(tibble())
+  hourly_df <- bind_rows(all_hourly)
+
+  # Aggregate to match-level (3hr window from kickoff)
+  fixtures_geo |>
+    mutate(kickoff_utc = as.POSIXct(utcStartTime, format = "%Y-%m-%dT%H:%M", tz = "UTC")) |>
+    left_join(hourly_df, by = "venue", relationship = "many-to-many") |>
+    filter(time >= kickoff_utc, time < kickoff_utc + lubridate::hours(3)) |>
+    group_by(providerId) |>
+    summarise(
+      temp_avg = mean(temperature_2m, na.rm = TRUE),
+      precipitation_total = sum(precipitation, na.rm = TRUE),
+      wind_avg = mean(wind_speed_10m, na.rm = TRUE),
+      humidity_avg = mean(relative_humidity_2m, na.rm = TRUE),
+      is_roof = first(venue) == "Docklands",
+      .groups = "drop"
+    )
+}
+
+#' Load weather data: historical parquet + forecast for upcoming matches
+load_weather_data <- function(fixtures, all_grounds, target_weeks, season) {
+  # Historical weather from backfill
+  weather_path <- file.path("data-raw", "weather_data.parquet")
+  if (!file.exists(weather_path)) {
+    cli::cli_warn("Weather data not found at {weather_path} — skipping weather features")
+    return(tibble(providerId = character()))
+  }
+  historical <- arrow::read_parquet(weather_path) |>
+    select(providerId, temp_avg, precipitation_total, wind_avg, humidity_avg, is_roof)
+
+  # Forecast for target week fixtures that aren't in historical
+  upcoming <- fixtures |>
+    filter(compSeason.year == season, round.roundNumber %in% target_weeks,
+           !providerId %in% historical$providerId)
+
+  if (nrow(upcoming) > 0) {
+    cli::cli_inform("Fetching forecast weather for {nrow(upcoming)} upcoming fixtures")
+    forecast <- fetch_forecast_weather(upcoming, all_grounds)
+    weather_df <- bind_rows(historical, forecast)
+  } else {
+    weather_df <- historical
+  }
+
+  weather_df
+}
 
 # Constants ----
 WEIGHT_DECAY_DAYS <- 1000
@@ -104,7 +203,10 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
   teams <- load_teams(TRUE)
   torp_df_total <- load_torp_ratings()
 
-  cli::cli_inform("Loaded: fixtures={nrow(fixtures)}, results={nrow(results)}, teams={nrow(teams)}, ratings={nrow(torp_df_total)}")
+  # Weather data (historical from parquet + forecast for upcoming matches)
+  weather_df <- load_weather_data(fixtures, all_grounds, target_weeks, season)
+
+  cli::cli_inform("Loaded: fixtures={nrow(fixtures)}, results={nrow(results)}, teams={nrow(teams)}, ratings={nrow(torp_df_total)}, weather={nrow(weather_df)}")
 
   if (nrow(fixtures) < 100) cli::cli_abort("Fixtures too small ({nrow(fixtures)} rows)")
   if (nrow(torp_df_total) < 100) cli::cli_abort("Ratings too small ({nrow(torp_df_total)} rows)")
@@ -552,6 +654,18 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
       total_xpoints_adj = total_xpoints * (mean(total_points, na.rm = TRUE) / mean(total_xpoints, na.rm = TRUE)),
       venue_fac = as.factor(venue.x)
     )
+
+  ## Join weather ----
+  team_mdl_df <- team_mdl_df |>
+    left_join(weather_df, by = "providerId") |>
+    mutate(
+      temp_avg = replace_na(temp_avg, median(temp_avg, na.rm = TRUE)),
+      wind_avg = replace_na(wind_avg, median(wind_avg, na.rm = TRUE)),
+      humidity_avg = replace_na(humidity_avg, median(humidity_avg, na.rm = TRUE)),
+      precipitation_total = replace_na(precipitation_total, 0),
+      is_roof = replace_na(is_roof, FALSE)
+    )
+  cli::cli_inform("Weather joined: {sum(!is.na(team_mdl_df$temp_avg))} of {nrow(team_mdl_df)} rows with weather")
 
   # Modelling ----
   # Train GAMs inline on completed matches, then predict on all rows
