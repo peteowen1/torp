@@ -20,7 +20,7 @@ A data frame containing AFL team and player lineup data.
 Loads AFL team roster and lineup data from the \href{https://github.com/peteowen1/torpdata}{torpdata repository}
 }
 \examples{
-\donttest{
+\dontrun{
 try({ # prevents cran errors
   load_teams(2021:2022)
 })

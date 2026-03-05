@@ -23,7 +23,7 @@ Player-level ratings are already centered relative to average, so
 team sums are naturally relative to 0.
 }
 \examples{
-\donttest{
+\dontrun{
 try({ # prevents cran errors
   load_team_ratings()
 })

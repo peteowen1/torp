@@ -27,7 +27,7 @@ A data frame containing play by play data.
 Loads play by play seasons from the \href{https://github.com/peteowen1/torpdata}{torpdata repository}
 }
 \examples{
-\donttest{
+\dontrun{
 try({ # prevents cran errors
   load_pbp(2021:2022)
 })

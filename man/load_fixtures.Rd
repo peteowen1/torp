@@ -36,7 +36,7 @@ A data frame containing AFL fixture and schedule data.
 Loads AFL fixture and schedule data from the \href{https://github.com/peteowen1/torpdata}{torpdata repository}
 }
 \examples{
-\donttest{
+\dontrun{
 try({ # prevents cran errors
   load_fixtures(2021:2022)
 

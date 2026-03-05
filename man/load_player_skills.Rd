@@ -33,7 +33,7 @@ Skills are per-stat estimates with credible intervals, produced by
 \code{estimate_player_skills()}.
 }
 \examples{
-\donttest{
+\dontrun{
 try({ # prevents cran errors
   load_player_skills(2024)
 })

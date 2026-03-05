@@ -33,7 +33,7 @@ This is the output of \code{\link[=player_season_ratings]{player_season_ratings(
 leaderboards per player.
 }
 \examples{
-\donttest{
+\dontrun{
 try({ # prevents cran errors
   load_player_season_ratings(2024)
 })

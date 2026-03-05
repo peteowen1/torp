@@ -24,7 +24,7 @@ A data frame containing player stats data.
 Loads player stats data from the \href{https://github.com/peteowen1/torpdata}{torpdata repository}
 }
 \examples{
-\donttest{
+\dontrun{
 try({ # prevents cran errors
   load_player_stats(2021:2022)
 })

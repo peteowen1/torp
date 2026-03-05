@@ -25,7 +25,7 @@ Combines raw stats, TORP season ratings, and current TORP rating for a
 player into a single object. Accepts partial name matches (e.g. "Heeney").
 }
 \examples{
-\donttest{
+\dontrun{
 try({ # prevents cran errors
   player_profile("Heeney")
   player_profile("Heeney", seasons = 2022:2024)

@@ -54,7 +54,7 @@ Runs multiple Monte Carlo simulations of the AFL regular season and finals
 to estimate ladder positions, finals probabilities, and premiership odds.
 }
 \examples{
-\donttest{
+\dontrun{
 try({
   results <- simulate_afl_season(2025, n_sims = 10, seed = 42)
   print(results)

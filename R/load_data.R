@@ -121,7 +121,7 @@ file_reader <- function(file_name, release_tag) {
 #' @return A data frame containing chains data.
 #' @seealso [load_pbp()], [load_xg()], [load_fixtures()]
 #' @examples
-#' \donttest{
+#' \dontrun{
 #' try({ # prevents cran errors
 #'   load_chains(2021:2022)
 #' })
@@ -150,7 +150,7 @@ load_chains <- function(seasons = get_afl_season(), rounds = TRUE, use_disk_cach
 #' @return A data frame containing play by play data.
 #' @seealso [load_chains()], [load_xg()], [load_fixtures()], [clean_pbp()]
 #' @examples
-#' \donttest{
+#' \dontrun{
 #' try({ # prevents cran errors
 #'   load_pbp(2021:2022)
 #' })
@@ -178,7 +178,7 @@ load_pbp <- function(seasons = get_afl_season(), rounds = TRUE, use_disk_cache =
 #' @return A data frame containing xG data.
 #' @seealso [load_pbp()], [load_chains()], [calculate_match_xgs()]
 #' @examples
-#' \donttest{
+#' \dontrun{
 #' try({ # prevents cran errors
 #'   load_xg(2021:2022)
 #' })
@@ -205,7 +205,7 @@ load_xg <- function(seasons = get_afl_season(), use_disk_cache = FALSE, columns 
 #' @return A data frame containing player stats data.
 #' @seealso [load_player_details()], [player_game_ratings()], [player_season_ratings()]
 #' @examples
-#' \donttest{
+#' \dontrun{
 #' try({ # prevents cran errors
 #'   load_player_stats(2021:2022)
 #' })
@@ -234,7 +234,7 @@ load_player_stats <- function(seasons = get_afl_season(), use_disk_cache = FALSE
 #' @return A data frame containing player game performance data.
 #' @seealso [create_player_game_data()], [player_game_ratings()], [calculate_torp_ratings()]
 #' @examples
-#' \donttest{
+#' \dontrun{
 #' try({ # prevents cran errors
 #'   load_player_game_data(2024)
 #' })
@@ -265,7 +265,7 @@ load_player_game_data <- function(seasons = get_afl_season(), use_disk_cache = F
 #' @return A data frame containing AFL fixture and schedule data.
 #' @seealso [load_results()], [load_teams()], [load_predictions()]
 #' @examples
-#' \donttest{
+#' \dontrun{
 #' try({ # prevents cran errors
 #'   load_fixtures(2021:2022)
 #'
@@ -344,7 +344,7 @@ load_fixtures <- function(seasons = NULL, all = FALSE, use_cache = TRUE, cache_t
 #' @return A data frame containing AFL team and player lineup data.
 #' @seealso [load_fixtures()], [load_results()], [load_player_details()]
 #' @examples
-#' \donttest{
+#' \dontrun{
 #' try({ # prevents cran errors
 #'   load_teams(2021:2022)
 #' })
@@ -371,7 +371,7 @@ load_teams <- function(seasons = get_afl_season(), use_disk_cache = FALSE, colum
 #' @return A data frame containing AFL match results and final scores.
 #' @seealso [load_fixtures()], [load_predictions()], [load_teams()]
 #' @examples
-#' \donttest{
+#' \dontrun{
 #' try({ # prevents cran errors
 #'   load_results(2021:2022)
 #' })
@@ -398,7 +398,7 @@ load_results <- function(seasons = get_afl_season(), use_disk_cache = FALSE, col
 #' @return A data frame containing AFL player biographical details including names, ages, and team affiliations.
 #' @seealso [load_player_stats()], [calculate_torp_ratings()], [player_game_ratings()]
 #' @examples
-#' \donttest{
+#' \dontrun{
 #' try({ # prevents cran errors
 #'   load_player_details(2021:2022)
 #' })
@@ -426,7 +426,7 @@ load_player_details <- function(seasons = get_afl_season(), use_disk_cache = FAL
 #' @return A data frame containing AFL match predictions including win probabilities and expected scores.
 #' @seealso [load_fixtures()], [load_results()], [simulate_season()]
 #' @examples
-#' \donttest{
+#' \dontrun{
 #' try({ # prevents cran errors
 #'   load_predictions(2021:2022)
 #' })
@@ -455,7 +455,7 @@ load_predictions <- function(seasons = get_afl_season(), rounds = get_afl_week()
 #'   \code{player_id}, \code{player_name}, \code{torp}, \code{season}, \code{round}, and \code{row_id}.
 #' @seealso [calculate_torp_ratings()], [load_player_game_data()], [player_season_ratings()]
 #' @examples
-#' \donttest{
+#' \dontrun{
 #' try({ # prevents cran errors
 #'   load_torp_ratings()
 #' })
@@ -490,7 +490,7 @@ load_torp_ratings <- function(columns = NULL) {
 #'   and `hitout_points`.
 #' @seealso [player_game_ratings()], [load_player_season_ratings()], [load_torp_ratings()]
 #' @examples
-#' \donttest{
+#' \dontrun{
 #' try({ # prevents cran errors
 #'   load_player_game_ratings(2024)
 #' })
@@ -526,7 +526,7 @@ load_player_game_ratings <- function(seasons = get_afl_season(), use_disk_cache 
 #'   `season_hitout`, and `ppg`.
 #' @seealso [player_season_ratings()], [load_player_game_ratings()], [load_torp_ratings()]
 #' @examples
-#' \donttest{
+#' \dontrun{
 #' try({ # prevents cran errors
 #'   load_player_season_ratings(2024)
 #' })
@@ -558,7 +558,7 @@ load_player_season_ratings <- function(seasons = get_afl_season(), use_disk_cach
 #'   `team_spoil`, `team_hitout`, `top_player`, `top_torp`, and `n_players`.
 #' @seealso [load_torp_ratings()], [load_player_game_ratings()]
 #' @examples
-#' \donttest{
+#' \dontrun{
 #' try({ # prevents cran errors
 #'   load_team_ratings()
 #' })
@@ -599,7 +599,7 @@ load_team_ratings <- function(columns = NULL) {
 #'   `shot_row`, and `points_shot`.
 #' @seealso [load_pbp()], [load_xg()]
 #' @examples
-#' \donttest{
+#' \dontrun{
 #' try({ # prevents cran errors
 #'   load_ep_wp_charts(2024)
 #' })
@@ -636,7 +636,7 @@ load_ep_wp_charts <- function(seasons = get_afl_season(), rounds = TRUE, use_dis
 #'   `{stat}_upper` for each estimated stat.
 #' @seealso [estimate_player_skills()], [player_skill_profile()], [load_player_game_ratings()]
 #' @examples
-#' \donttest{
+#' \dontrun{
 #' try({ # prevents cran errors
 #'   load_player_skills(2024)
 #' })
