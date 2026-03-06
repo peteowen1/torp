@@ -121,7 +121,7 @@ test_that("resolve_player validates input", {
 })
 
 test_that("resolve_player errors on non-existent player", {
-  skip_if_no_internet()
+  skip_if(!.shared$can_load || !curl::has_internet(), "No internet")
 
   suppressWarnings(expect_error(
     torp:::resolve_player("Zzzyyyxxx Nonexistent Player 999"),
@@ -130,7 +130,7 @@ test_that("resolve_player errors on non-existent player", {
 })
 
 test_that("resolve_player returns correct structure for known player", {
-  skip_if_no_internet()
+  skip_if(!.shared$can_load || !curl::has_internet(), "No internet")
 
   result <- suppressWarnings(tryCatch(
     torp:::resolve_player("Isaac Heeney"),
@@ -148,7 +148,7 @@ test_that("resolve_player returns correct structure for known player", {
 })
 
 test_that("resolve_player works with partial name", {
-  skip_if_no_internet()
+  skip_if(!.shared$can_load || !curl::has_internet(), "No internet")
 
   result <- suppressWarnings(tryCatch(
     torp:::resolve_player("Heeney"),
@@ -180,7 +180,7 @@ test_that("player_profile validates input", {
 })
 
 test_that("player_profile returns correct class", {
-  skip_if_no_internet()
+  skip_if(!.shared$can_load || !curl::has_internet(), "No internet")
 
   result <- suppressWarnings(tryCatch(
     player_profile("Isaac Heeney", seasons = 2024),

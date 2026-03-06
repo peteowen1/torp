@@ -404,3 +404,30 @@ create_mock_api_response <- function() {
     )
   )
 }
+# -----------------------------------------------------------------------------
+# Shared Network Data (loaded once per test session, reused by all test files)
+# -----------------------------------------------------------------------------
+# Avoids each test file independently downloading the same datasets.
+# Access via .shared$pbp, .shared$chains, etc.
+
+.shared <- new.env(parent = emptyenv())
+.shared$can_load <- !identical(Sys.getenv("NOT_CRAN"), "") || interactive()
+
+if (.shared$can_load && curl::has_internet()) {
+  .shared$pbp <- tryCatch(load_pbp(2024, rounds = 1), error = function(e) NULL)
+  .shared$chains <- tryCatch(load_chains(2024, rounds = 1), error = function(e) NULL)
+  .shared$fixtures <- tryCatch(load_fixtures(2024), error = function(e) NULL)
+  .shared$player_stats <- tryCatch(load_player_stats(2024), error = function(e) NULL)
+  .shared$player_details <- tryCatch(load_player_details(2024), error = function(e) NULL)
+  .shared$player_game_data <- tryCatch(load_player_game_data(2024), error = function(e) NULL)
+  .shared$teams <- tryCatch(load_teams(2024), error = function(e) NULL)
+  .shared$match_xgs <- tryCatch(
+    calculate_match_xgs(season = 2024, round = 1, quarter = 1:4),
+    error = function(e) NULL
+  )
+} else {
+  .shared$pbp <- .shared$chains <- .shared$fixtures <- NULL
+  .shared$player_stats <- .shared$player_details <- NULL
+  .shared$player_game_data <- .shared$teams <- NULL
+  .shared$match_xgs <- NULL
+}
