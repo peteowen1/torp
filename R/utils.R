@@ -197,7 +197,7 @@ get_mode <- function(x) {
 
 #' Vectorized Harmonic Mean of Two Numeric Vectors
 #'
-#' @description This function is intended for internal use and may be unexported in a future release.
+#' @description Internal function.
 #' Computes the row-wise harmonic mean of two numeric vectors. The harmonic mean
 #' is particularly useful in AFL analytics for averaging rates and proportions,
 #' giving less weight to extreme values than the arithmetic mean.
@@ -205,8 +205,9 @@ get_mode <- function(x) {
 #' @param x Numeric vector (e.g. home_shots).
 #' @param y Numeric vector (e.g. away_shots).
 #' @return A numeric vector of harmonic means. Returns NA for pairs where either value is 0.
-#' @export
+#' @keywords internal
 #' @examples
+#' \dontrun{
 #' # Calculate harmonic mean of shot attempts
 #' home_shots <- c(10, 15, 20)
 #' away_shots <- c(12, 18, 25)
@@ -214,6 +215,7 @@ get_mode <- function(x) {
 #'
 #' # Returns NA when one value is zero
 #' harmonic_mean(c(10, 0, 20), c(15, 10, 25))
+#' }
 harmonic_mean <- function(x, y) {
   if (length(x) != length(y)) {
     cli::cli_abort("Vectors x and y must be the same length.")
@@ -230,7 +232,7 @@ harmonic_mean <- function(x, y) {
 
 #' Normalize Player Names
 #'
-#' @description This function is intended for internal use and may be unexported in a future release.
+#' @description Internal function.
 #' Converts input character strings into a standardized format by:
 #' \itemize{
 #'   \item Converting accented characters to ASCII (e.g., "José" → "Jose")
@@ -252,7 +254,7 @@ harmonic_mean <- function(x, y) {
 #'
 #' @seealso [stringi::stri_trans_general()], [stringr::str_to_lower()]
 #' @importFrom stringi stri_trans_general
-#' @export
+#' @keywords internal
 norm_name <- function(x) {
   x |>
     stringi::stri_trans_general("Latin-ASCII") |>

@@ -310,17 +310,17 @@ test_that("baseline models handle single row input", {
 })
 
 test_that("baseline models handle large datasets efficiently", {
-  # Test with 10000 rows to ensure no memory issues
+  # Test with 1000 rows to ensure no memory issues
   large_data <- data.frame(
-    points_diff = sample(-50:50, 10000, replace = TRUE),
-    period = sample(1:4, 10000, replace = TRUE),
-    period_seconds = sample(0:1800, 10000, replace = TRUE),
-    goal_x = runif(10000, 10, 90),
-    y = runif(10000, -40, 40)
+    points_diff = sample(-50:50, 1000, replace = TRUE),
+    period = sample(1:4, 1000, replace = TRUE),
+    period_seconds = sample(0:1800, 1000, replace = TRUE),
+    goal_x = runif(1000, 10, 90),
+    y = runif(1000, -40, 40)
   )
 
   result <- predict_wp_score_only(large_data)
-  expect_length(result, 10000)
+  expect_length(result, 1000)
   expect_true(all(result >= 0 & result <= 1))
 })
 

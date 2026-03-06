@@ -10,6 +10,7 @@ get_wp_model_info()
 List with model version information
 }
 \description{
-This function is intended for internal use and may be unexported in a future release.
+Internal function.
 Returns version and metadata for the current win probability model
 }
+\keyword{internal}

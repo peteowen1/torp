@@ -13,7 +13,7 @@ norm_name(x)
 A character vector with normalized names.
 }
 \description{
-This function is intended for internal use and may be unexported in a future release.
+Internal function.
 Converts input character strings into a standardized format by:
 \itemize{
 \item Converting accented characters to ASCII (e.g., "José" → "Jose")
@@ -34,3 +34,4 @@ norm_name(c("Cam Zurhaar", "Cameron   Zúrhär", "  José López "))
 \seealso{
 \code{\link[stringi:stri_trans_general]{stringi::stri_trans_general()}}, \code{\link[stringr:case]{stringr::str_to_lower()}}
 }
+\keyword{internal}

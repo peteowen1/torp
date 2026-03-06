@@ -184,28 +184,15 @@ test_that("prepare_final_dataframe function exists", {
 # -----------------------------------------------------------------------------
 
 test_that("calculate_torp_ratings works with pre-loaded data", {
-  skip_if_no_internet()
-
-  # Load player game data (processed, not raw)
-  player_game_data <- tryCatch(
-    load_player_game_data(2024),
-    error = function(e) NULL
-  )
-
-  player_details <- tryCatch(
-    load_player_details(2024),
-    error = function(e) NULL
-  )
-
-  skip_if(is.null(player_game_data) || is.null(player_details),
+  skip_if(is.null(.shared$player_game_data) || is.null(.shared$player_details),
           "Could not load player data")
 
   # Calculate ratings with pre-loaded data (skills = FALSE to isolate rating logic)
   result <- calculate_torp_ratings(
     season_val = 2024,
     round_val = 1,
-    plyr_tm_df = player_details,
-    player_game_data = player_game_data,
+    plyr_tm_df = .shared$player_details,
+    player_game_data = .shared$player_game_data,
     skills = FALSE
   )
 
@@ -219,7 +206,7 @@ test_that("calculate_torp_ratings works with pre-loaded data", {
 # -----------------------------------------------------------------------------
 
 test_that("calculate_player_stats uses prior_games_spoil and prior_games_hitout constants", {
-  expect_equal(torp:::RATING_PRIOR_GAMES_SPOIL, 3.9409)
+  expect_equal(torp:::RATING_PRIOR_GAMES_SPOIL, 3.0000)
   expect_equal(torp:::RATING_PRIOR_GAMES_HITOUT, 15.0000)
 })
 

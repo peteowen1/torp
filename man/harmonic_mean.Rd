@@ -15,7 +15,7 @@ harmonic_mean(x, y)
 A numeric vector of harmonic means. Returns NA for pairs where either value is 0.
 }
 \description{
-This function is intended for internal use and may be unexported in a future release.
+Internal function.
 Computes the row-wise harmonic mean of two numeric vectors. The harmonic mean
 is particularly useful in AFL analytics for averaging rates and proportions,
 giving less weight to extreme values than the arithmetic mean.
@@ -29,3 +29,4 @@ harmonic_mean(home_shots, away_shots)
 # Returns NA when one value is zero
 harmonic_mean(c(10, 0, 20), c(15, 10, 25))
 }
+\keyword{internal}

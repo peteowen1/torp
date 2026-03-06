@@ -184,10 +184,10 @@ create_player_game_data <- function(pbp_data = NULL,
     ) |>
     dplyr::group_by(position) |>
     dplyr::mutate(
-      recv_pts_adj = .data$recv_p80 - stats::quantile(.data$recv_p80, p$pos_adj_quantile_recv, na.rm = TRUE),
-      disp_pts_adj = .data$disp_p80 - stats::quantile(.data$disp_p80, p$pos_adj_quantile_disp, na.rm = TRUE),
-      spoil_pts_adj = .data$spoil_p80 - stats::quantile(.data$spoil_p80, p$pos_adj_quantile_spoil, na.rm = TRUE),
-      hitout_pts_adj = .data$hitout_p80 - stats::quantile(.data$hitout_p80, p$pos_adj_quantile_hitout, na.rm = TRUE),
+      recv_pts_adj = .data$recv_p80 - mean(.data$recv_p80, na.rm = TRUE),
+      disp_pts_adj = .data$disp_p80 - mean(.data$disp_p80, na.rm = TRUE),
+      spoil_pts_adj = .data$spoil_p80 - mean(.data$spoil_p80, na.rm = TRUE),
+      hitout_pts_adj = .data$hitout_p80 - mean(.data$hitout_p80, na.rm = TRUE),
       tot_p_adj = .data$recv_pts_adj + .data$disp_pts_adj + .data$spoil_pts_adj + .data$hitout_pts_adj
     ) |>
     dplyr::ungroup() |>

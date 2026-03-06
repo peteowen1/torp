@@ -9,7 +9,7 @@
 [![Codecov test
 coverage](https://codecov.io/gh/peteowen1/torp/branch/main/graph/badge.svg)](https://app.codecov.io/gh/peteowen1/torp?branch=main)
 [![Lifecycle:
-experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](https://lifecycle.r-lib.org/articles/stages.html#experimental)
+stable](https://img.shields.io/badge/lifecycle-stable-brightgreen.svg)](https://lifecycle.r-lib.org/articles/stages.html#stable)
 <!-- badges: end -->
 
 **torp** is an R package for AFL analytics. It provides player ratings

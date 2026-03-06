@@ -52,7 +52,9 @@ load_from_url <- function(url, ..., seasons = TRUE, rounds = TRUE, peteowen1 = F
       out <- out[out$round_number %in% rounds, ]
     } else if ("week" %in% names(out)) {
       out <- out[out$week %in% rounds, ]
-    } else if (nrow(out) > 0) {
+    } else if (nrow(out) > 0 && !setequal(rounds, 0:28)) {
+      # Only warn when specific rounds were requested but no round column exists.
+      # When rounds = 0:28 (from validate_rounds(TRUE)), filtering is a no-op anyway.
       cli::cli_warn("Round filtering requested but no round column found in data. Returning unfiltered. Available columns: {.val {head(names(out), 10)}}")
     }
   }

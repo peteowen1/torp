@@ -17,16 +17,15 @@ test_that("create_player_game_data has correct function signature", {
 })
 
 test_that("create_player_game_data output contains required columns", {
-  skip_if_no_internet()
+  skip_if(is.null(.shared$pbp) || is.null(.shared$player_stats) || is.null(.shared$teams),
+          "Could not load required data")
 
-  pgd <- tryCatch({
-    pbp <- load_pbp(2024, rounds = 1)
-    pstats <- load_player_stats(2024)
-    teams <- load_teams(2024)
-    create_player_game_data(pbp, pstats, teams)
-  }, error = function(e) NULL)
+  pgd <- tryCatch(
+    create_player_game_data(.shared$pbp, .shared$player_stats, .shared$teams),
+    error = function(e) NULL
+  )
 
-  skip_if(is.null(pgd), "Could not create player game data (data unavailable)")
+  skip_if(is.null(pgd), "Could not create player game data")
 
   required_cols <- c(
     "match_id", "player_id", "tot_p_adj", "recv_pts_adj",

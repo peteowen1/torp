@@ -1,14 +1,9 @@
 # Tests for scraper_functions.R
 # These tests cover the AFL API scraping functions
 
-# Helper to skip API tests when no internet
+# Helper to skip API tests when no internet (reuses shared internet check)
 skip_if_no_api_access <- function() {
-  has_internet <- tryCatch({
-    con <- url("https://www.google.com", open = "r")
-    close(con)
-    TRUE
-  }, error = function(e) FALSE)
-  testthat::skip_if_not(has_internet, "No internet connection")
+  testthat::skip_if(!.shared$can_load || !curl::has_internet(), "No internet connection")
   result <- try({
     httr::GET("https://api.afl.com.au/cfs/afl/WMCTok", httr::timeout(5))
   }, silent = TRUE)
@@ -105,7 +100,7 @@ test_that("get_week_chains handles errors gracefully", {
 # -----------------------------------------------------------------------------
 
 test_that("get_players can load from local data", {
-  skip_if_no_internet()
+  skip_if(!.shared$can_load || !curl::has_internet(), "No internet")
 
   # Test loading from local database (use_api = FALSE)
   result <- suppressWarnings(tryCatch(

@@ -120,7 +120,7 @@ tictoc::toc(log= TRUE)
 # Player Stats Data ----
 tictoc::tic('player stats')
 get_player_stats <- function(season) {
-  player_stats <- fitzRoy::fetch_player_stats_afl(season) |>
+  player_stats <- get_afl_player_stats(season) |>
     janitor::remove_constant() |>
     janitor::clean_names()
 
@@ -155,7 +155,7 @@ tictoc::toc(log= TRUE)
 tictoc::tic('fixtures')
 get_fixtures <- function(season) {
   ### update fixtures file (17 secs)
-  fixtures <- fitzRoy::fetch_fixture_afl(season, comp = "AFLM")
+  fixtures <- get_afl_fixtures(season)
 
   file_name <- glue::glue("fixtures_{season}")
 
@@ -171,11 +171,7 @@ tictoc::toc(log= TRUE)
 tictoc::tic('lineups')
 get_teams <- function(season) {
   ### update teams file (90 secs per season)
-  teams <- fitzRoy::fetch_lineup(season, comp = "AFLM") |>
-    dplyr::mutate(
-      season = as.numeric(substr(providerId, 5, 8)),
-      row_id = paste0(providerId, teamId, player.playerId)
-    ) # |> dplyr::filter(!is.na(player.playerId))
+  teams <- get_afl_lineups(season) # |> dplyr::filter(!is.na(player.playerId))
 
   file_name <- glue::glue("teams_{season}")
 
@@ -191,7 +187,7 @@ tictoc::toc(log= TRUE)
 tictoc::tic('results')
 get_results <- function(season) {
   ##### update results file (5 secs per season)
-  results <- fitzRoy::fetch_results_afl(season, comp = "AFLM")
+  results <- get_afl_results(season)
 
   file_name <- glue::glue("results_{season}")
 
@@ -208,13 +204,7 @@ tictoc::tic('player details')
 get_player_details <- function(season) {
   ##### update players file (20 secs per season)
   player_details <-
-    fitzRoy::fetch_player_details_afl(season = season, comp = "AFLM") |>
-    dplyr::mutate(
-      player_name = paste(firstName, surname),
-      age = lubridate::decimal_date(lubridate::as_date(glue::glue("{season}-07-01"))) -
-        lubridate::decimal_date(lubridate::as_date(dateOfBirth)),
-      row_id = paste(providerId, season)
-    )
+    get_afl_player_details(season)
 
 
   file_name <- glue::glue("player_details_{season}")

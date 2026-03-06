@@ -2,73 +2,41 @@
 # =================
 # Full pipeline tests that verify components work together
 # These tests require network access and may take longer to run
-
-# -----------------------------------------------------------------------------
-# Shared Test Data (loaded once, reused across all tests)
-# -----------------------------------------------------------------------------
-
-# Only attempt network loads when NOT on CRAN and internet is available
-.integ_can_load <- !identical(Sys.getenv("NOT_CRAN"), "") || interactive()
-
-if (.integ_can_load && curl::has_internet()) {
-  .integ_pbp <- tryCatch(load_pbp(2024, rounds = 1), error = function(e) {
-    message("Integration data load failed (pbp): ", conditionMessage(e))
-    NULL
-  })
-  .integ_chains <- tryCatch(load_chains(2024, rounds = 1), error = function(e) {
-    message("Integration data load failed (chains): ", conditionMessage(e))
-    NULL
-  })
-  .integ_fixtures <- tryCatch(load_fixtures(2024), error = function(e) {
-    message("Integration data load failed (fixtures): ", conditionMessage(e))
-    NULL
-  })
-  .integ_player_stats <- tryCatch(load_player_stats(2024), error = function(e) {
-    message("Integration data load failed (player_stats): ", conditionMessage(e))
-    NULL
-  })
-  .integ_player_details <- tryCatch(load_player_details(2024), error = function(e) {
-    message("Integration data load failed (player_details): ", conditionMessage(e))
-    NULL
-  })
-} else {
-  .integ_pbp <- .integ_chains <- .integ_fixtures <- NULL
-  .integ_player_stats <- .integ_player_details <- NULL
-}
+# All network data is loaded once in helper-test-data.R (.shared env)
 
 # -----------------------------------------------------------------------------
 # Data Loading Pipeline Tests
 # -----------------------------------------------------------------------------
 
 test_that("load_pbp returns data with expected structure", {
-  skip_if(is.null(.integ_pbp), "Could not load PBP data")
+  skip_if(is.null(.shared$pbp), "Could not load PBP data")
 
-  expect_true(is.data.frame(.integ_pbp))
-  expect_true(nrow(.integ_pbp) > 0)
+  expect_true(is.data.frame(.shared$pbp))
+  expect_true(nrow(.shared$pbp) > 0)
 
   # Check for essential columns
   essential_cols <- c("match_id", "period", "team_id")
   for (col in essential_cols) {
-    expect_true(col %in% names(.integ_pbp),
+    expect_true(col %in% names(.shared$pbp),
                 info = paste("Missing essential column:", col))
   }
 })
 
 test_that("load_chains returns data with expected structure", {
-  skip_if(is.null(.integ_chains), "Could not load chains data")
+  skip_if(is.null(.shared$chains), "Could not load chains data")
 
-  expect_true(is.data.frame(.integ_chains))
-  expect_true(nrow(.integ_chains) > 0)
+  expect_true(is.data.frame(.shared$chains))
+  expect_true(nrow(.shared$chains) > 0)
 })
 
 test_that("load_fixtures returns data with expected structure", {
-  skip_if(is.null(.integ_fixtures), "Could not load fixtures data")
+  skip_if(is.null(.shared$fixtures), "Could not load fixtures data")
 
-  expect_true(is.data.frame(.integ_fixtures))
-  expect_true(nrow(.integ_fixtures) > 0)
+  expect_true(is.data.frame(.shared$fixtures))
+  expect_true(nrow(.shared$fixtures) > 0)
 
   # Should have season and round info
-  expect_true("compSeason.year" %in% names(.integ_fixtures) || "season" %in% names(.integ_fixtures))
+  expect_true("compSeason.year" %in% names(.shared$fixtures) || "season" %in% names(.shared$fixtures))
 })
 
 # -----------------------------------------------------------------------------
@@ -76,11 +44,10 @@ test_that("load_fixtures returns data with expected structure", {
 # -----------------------------------------------------------------------------
 
 test_that("EP model predictions flow through add_epv_vars", {
-  skip_if(is.null(.integ_pbp), "Could not load PBP data")
+  skip_if(is.null(.shared$pbp), "Could not load PBP data")
 
-  # Try to add EP vars
   result <- suppressWarnings(tryCatch({
-    add_epv_vars(.integ_pbp[1:100, ])  # Small subset for speed
+    add_epv_vars(.shared$pbp[1:100, ])
   }, error = function(e) NULL))
 
   skip_if(is.null(result), "EP model unavailable")
@@ -89,11 +56,10 @@ test_that("EP model predictions flow through add_epv_vars", {
 })
 
 test_that("WP model predictions flow through add_wp_vars", {
-  skip_if(is.null(.integ_pbp), "Could not load PBP data")
+  skip_if(is.null(.shared$pbp), "Could not load PBP data")
 
-  # Try to add WP vars
   result <- suppressWarnings(tryCatch({
-    add_wp_vars(.integ_pbp[1:100, ])  # Small subset for speed
+    add_wp_vars(.shared$pbp[1:100, ])
   }, error = function(e) NULL))
 
   skip_if(is.null(result), "WP model unavailable")
@@ -106,14 +72,13 @@ test_that("WP model predictions flow through add_wp_vars", {
 # -----------------------------------------------------------------------------
 
 test_that("player ratings can be calculated from loaded data", {
-  skip_if(is.null(.integ_player_details),
+  skip_if(is.null(.shared$player_details),
           "Could not load player data")
 
-  # Calculate ratings (let function load its own player_game_data)
   result <- calculate_torp_ratings(
     season_val = 2024,
     round_val = 5,
-    plyr_tm_df = .integ_player_details
+    plyr_tm_df = .shared$player_details
   )
 
   expect_true(is.data.frame(result))
@@ -126,27 +91,24 @@ test_that("player ratings can be calculated from loaded data", {
 # -----------------------------------------------------------------------------
 
 test_that("simulation can use loaded fixture data", {
-  skip_if(is.null(.integ_fixtures), "Could not load fixtures")
+  skip_if(is.null(.shared$fixtures), "Could not load fixtures")
 
-  # Create minimal team data
   teams <- data.frame(
-    team = unique(c(.integ_fixtures$home.team.name[1:9], .integ_fixtures$away.team.name[1:9]))[1:18],
+    team = unique(c(.shared$fixtures$home.team.name[1:9], .shared$fixtures$away.team.name[1:9]))[1:18],
     torp = runif(18, -20, 20),
     stringsAsFactors = FALSE
   )
 
-  # Create game data from first few fixtures
   games <- data.frame(
     roundnum = rep(1, 9),
-    home_team = .integ_fixtures$home.team.name[1:9],
-    away_team = .integ_fixtures$away.team.name[1:9],
+    home_team = .shared$fixtures$home.team.name[1:9],
+    away_team = .shared$fixtures$away.team.name[1:9],
     result = NA_integer_,
     torp_home_round = NA_real_,
     torp_away_round = NA_real_,
     stringsAsFactors = FALSE
   )
 
-  # Run simulation
   set.seed(42)
   result <- simulate_season(teams, games)
 
@@ -159,18 +121,15 @@ test_that("simulation can use loaded fixture data", {
 # -----------------------------------------------------------------------------
 
 test_that("match XG calculations work with loaded data", {
-  skip_if(is.null(.integ_pbp), "Could not load PBP data")
+  skip_if(is.null(.shared$match_xgs), "Could not load match XG data")
 
-  result <- calculate_match_xgs(season = 2024, round = 1)
+  expect_true(is.data.frame(.shared$match_xgs))
+  expect_true(nrow(.shared$match_xgs) > 0)
+  expect_true("home_xscore" %in% names(.shared$match_xgs))
+  expect_true("away_xscore" %in% names(.shared$match_xgs))
 
-  expect_true(is.data.frame(result))
-  expect_true(nrow(result) > 0)
-  expect_true("home_xscore" %in% names(result))
-  expect_true("away_xscore" %in% names(result))
-
-  # Validate xscore values are reasonable
-  expect_true(all(result$home_xscore >= 0))
-  expect_true(all(result$away_xscore >= 0))
+  expect_true(all(.shared$match_xgs$home_xscore >= 0))
+  expect_true(all(.shared$match_xgs$away_xscore >= 0))
 })
 
 # -----------------------------------------------------------------------------
@@ -178,26 +137,22 @@ test_that("match XG calculations work with loaded data", {
 # -----------------------------------------------------------------------------
 
 test_that("loaded data passes validation checks", {
-  skip_if(is.null(.integ_chains), "Could not load chains data")
+  skip_if(is.null(.shared$chains), "Could not load chains data")
 
-  # Validate schema
-  validation_result <- validate_data_schema(.integ_chains, "chains_data", strict = FALSE)
+  validation_result <- validate_data_schema(.shared$chains, "chains_data", strict = FALSE)
 
-  # Should pass (or have minor issues)
   expect_true(is.list(validation_result))
   expect_true("valid" %in% names(validation_result))
 })
 
 test_that("data quality checks work on loaded data", {
-  skip_if(is.null(.integ_pbp), "Could not load PBP data")
+  skip_if(is.null(.shared$pbp), "Could not load PBP data")
 
-  pbp <- .integ_pbp
-  # Convert to data.frame to avoid data.table issues
+  pbp <- .shared$pbp
   if (data.table::is.data.table(pbp)) {
     pbp <- as.data.frame(pbp)
   }
 
-  # Run quality check
   quality_result <- tryCatch(
     validate_data_quality(pbp, "pbp"),
     error = function(e) NULL
@@ -216,15 +171,13 @@ test_that("data quality checks work on loaded data", {
 # -----------------------------------------------------------------------------
 
 test_that("validation functions work with rating calculations", {
-  skip_if(is.null(.integ_player_stats), "Could not load player stats")
+  skip_if(is.null(.shared$player_stats), "Could not load player stats")
 
-  player_stats <- .integ_player_stats
-  # Convert to data.frame to avoid data.table issues
+  player_stats <- .shared$player_stats
   if (data.table::is.data.table(player_stats)) {
     player_stats <- as.data.frame(player_stats)
   }
 
-  # Quality check on loaded data
   quality_result <- tryCatch(
     validate_data_quality(player_stats, "player_stats"),
     error = function(e) NULL
@@ -233,7 +186,7 @@ test_that("validation functions work with rating calculations", {
   skip_if(is.null(quality_result), "Quality check failed")
 
   expect_true(is.list(quality_result))
-  expect_true(quality_result$quality_score > 0.5)  # Should be reasonable quality
+  expect_true(quality_result$quality_score > 0.5)
 })
 
 # -----------------------------------------------------------------------------
@@ -241,29 +194,24 @@ test_that("validation functions work with rating calculations", {
 # -----------------------------------------------------------------------------
 
 test_that("fixture cache works across multiple calls", {
-  skip_if(is.null(.integ_fixtures), "Could not load fixtures")
+  skip_if(is.null(.shared$fixtures), "Could not load fixtures")
 
-  # Second call should use cache (first call was at file level)
   fixtures2 <- load_fixtures(2024)
 
-  # Should be identical
-  expect_equal(nrow(.integ_fixtures), nrow(fixtures2))
+  expect_equal(nrow(.shared$fixtures), nrow(fixtures2))
 })
 
 test_that("model cache works across multiple predictions", {
-  skip_if(is.null(.integ_pbp), "Could not load PBP data")
+  skip_if(is.null(.shared$pbp), "Could not load PBP data")
 
-  # Clear cache
   clear_model_cache()
 
-  # First prediction (should load model)
   result1 <- suppressWarnings(tryCatch({
-    add_wp_vars(.integ_pbp[1:50, ])
+    add_wp_vars(.shared$pbp[1:50, ])
   }, error = function(e) NULL))
 
-  # Second prediction (should use cached model)
   result2 <- suppressWarnings(tryCatch({
-    add_wp_vars(.integ_pbp[51:100, ])
+    add_wp_vars(.shared$pbp[51:100, ])
   }, error = function(e) NULL))
 
   skip_if(is.null(result1) || is.null(result2), "WP model unavailable for cache test")
