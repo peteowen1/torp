@@ -96,7 +96,7 @@ game_ratings <- player_game_ratings(season_val = 2025, round_num = 10)
 season_totals <- player_season_ratings(2025)
 ```
 
-See `vignette("player-ratings")` for the full methodology.
+See `vignette("torp-guide")` for the full methodology.
 
 ## Prediction Models
 
@@ -117,7 +117,7 @@ shots <- pbp_wp[!is.na(pbp_wp$shot_at_goal), ]
 shots <- add_shot_vars(shots)
 ```
 
-See `vignette("model-usage")` for details on each model.
+See `vignette("torp-guide")` for details on each model.
 
 ## Caching
 
@@ -150,7 +150,4 @@ clear_fixture_cache()
 
 ## Next Steps
 
-- `vignette("player-ratings")` -- TORP rating methodology
-- `vignette("model-usage")` -- EP, WP, and shot models
-- `vignette("data-architecture")` -- Data pipeline and storage
-- `vignette("season-simulation")` -- Simulating AFL seasons
+- `vignette("torp-guide")` -- Full reference: data architecture, ratings, models, simulation
