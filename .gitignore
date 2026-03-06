@@ -32,6 +32,7 @@ data-raw/cache-skills/
 nul
 _ul
 data-raw/debug/
+debug/
 
 # Development files
 .vscode/
