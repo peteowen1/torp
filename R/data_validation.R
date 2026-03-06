@@ -87,7 +87,7 @@ get_afl_data_schemas <- function() {
 #' @param strict Logical, whether to fail on schema violations (default: TRUE)
 #' @return List containing validation results
 #' @export
-#' @importFrom dplyr mutate_all group_by_all summarise arrange desc group_by filter
+#' @importFrom dplyr group_by across everything summarise arrange desc filter
 validate_data_schema <- function(data, schema_name, strict = TRUE) {
   
   schemas <- get_afl_data_schemas()
@@ -250,7 +250,7 @@ validate_data_quality <- function(data, data_type = "unknown") {
 #' @param data Dataframe to analyze
 #' @return List with missing data analysis results
 #' @keywords internal
-#' @importFrom dplyr group_by_all summarise arrange desc n
+#' @importFrom dplyr group_by across everything summarise arrange desc n
 analyze_missing_data <- function(data) {
 
   # Calculate missing percentages by column (vectorized, no full copy)
@@ -266,7 +266,7 @@ analyze_missing_data <- function(data) {
       lapply(data, is.na)
     )
     missing_patterns <- missing_matrix |>
-      dplyr::group_by_all() |>
+      dplyr::group_by(dplyr::across(dplyr::everything())) |>
       dplyr::summarise(count = dplyr::n(), .groups = "drop") |>
       dplyr::arrange(dplyr::desc(count))
   } else {
