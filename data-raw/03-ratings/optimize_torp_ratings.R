@@ -9,7 +9,6 @@
 library(devtools)
 library(data.table)
 library(dplyr)
-library(fitzRoy)
 library(nloptr)
 library(Rcpp)
 devtools::load_all()
@@ -124,7 +123,7 @@ data.table::setorder(player_game_raw, date, match_id)
 team_map <- data.table::as.data.table(fixtures)[
   , .(team_name = names(sort(table(home.team.name), decreasing = TRUE))[1]),
   by = .(teamId = home.team.providerId)
-][, team_name := fitzRoy::replace_teams(team_name)]
+][, team_name := torp_replace_teams(team_name)]
 
 # Fixtures with results
 fix_dt <- data.table::as.data.table(fixtures)[
@@ -133,17 +132,27 @@ fix_dt <- data.table::as.data.table(fixtures)[
       utcStartTime, venue_name = venue.name)
 ]
 
-results_dt <- data.table::as.data.table(results)[
-  , .(providerId = match.matchId,
-      home_score = homeTeamScore.matchScore.totalScore,
-      away_score = awayTeamScore.matchScore.totalScore)
-]
+# Handle both CFS schema (historical) and fixture schema (new)
+results_raw <- data.table::as.data.table(results)
+if ("match.matchId" %in% names(results_raw)) {
+  results_dt <- results_raw[, .(
+    providerId = match.matchId,
+    home_score = homeTeamScore.matchScore.totalScore,
+    away_score = awayTeamScore.matchScore.totalScore
+  )]
+} else {
+  results_dt <- results_raw[, .(
+    providerId = providerId,
+    home_score = home.score.totalScore,
+    away_score = away.score.totalScore
+  )]
+}
 
 match_dt <- merge(fix_dt, results_dt, by = "providerId", all.x = TRUE)
 match_dt[, `:=`(
   margin = home_score - away_score,
   date = as.Date(utcStartTime),
-  venue = replace_venues(venue_name)
+  venue = torp_replace_venues(venue_name)
 )]
 match_dt <- match_dt[!is.na(margin)]
 data.table::setorder(match_dt, date, providerId)
@@ -159,11 +168,11 @@ lineups <- teams_dt[, .(player_ids = list(player.playerId),
 
 # --- Home ground / distance / familiarity ---
 grounds_dt <- data.table::as.data.table(all_grounds)
-grounds_dt[, venue := replace_venues(as.character(Ground))]
+grounds_dt[, venue := torp_replace_venues(as.character(Ground))]
 
 # Find each team's home ground (mode of venue)
 home_ground <- data.table::as.data.table(teams_data)[
-  , .(venue = replace_venues(names(sort(table(venue.name), decreasing = TRUE))[1])),
+  , .(venue = torp_replace_venues(names(sort(table(venue.name), decreasing = TRUE))[1])),
   by = .(teamId)
 ]
 home_ground <- merge(home_ground, grounds_dt[, .(venue, home_lat = Latitude, home_lon = Longitude)],

@@ -207,6 +207,7 @@ get_mode <- function(x) {
 #' @return A numeric vector of harmonic means. Returns NA for pairs where either value is 0.
 #' @keywords internal
 #' @examples
+#' \dontrun{
 #' # Calculate harmonic mean of shot attempts
 #' home_shots <- c(10, 15, 20)
 #' away_shots <- c(12, 18, 25)
@@ -214,6 +215,7 @@ get_mode <- function(x) {
 #'
 #' # Returns NA when one value is zero
 #' harmonic_mean(c(10, 0, 20), c(15, 10, 25))
+#' }
 harmonic_mean <- function(x, y) {
   if (length(x) != length(y)) {
     cli::cli_abort("Vectors x and y must be the same length.")

@@ -42,7 +42,7 @@ has_new_games <- function() {
     current_round <- get_afl_week()
 
     # Get fixtures for current season
-    fixtures <- fitzRoy::fetch_fixture_afl(current_season, comp = "AFLM")
+    fixtures <- get_afl_fixtures(current_season)
 
     if (nrow(fixtures) == 0) {
       cli::cli_inform("No fixtures found for season {current_season}")
@@ -89,11 +89,7 @@ has_new_team_data <- function() {
     current_season <- get_afl_season()
 
     # Fetch fresh lineup data from API
-    fresh_teams <- fitzRoy::fetch_lineup(current_season, comp = "AFLM") %>%
-      dplyr::mutate(
-        season = as.numeric(substr(providerId, 5, 8)),
-        row_id = paste0(providerId, teamId, player.playerId)
-      )
+    fresh_teams <- get_afl_lineups(current_season)
 
     if (is.null(fresh_teams) || nrow(fresh_teams) == 0) {
       cli::cli_inform("No lineup data available for {current_season}")
@@ -337,7 +333,7 @@ update_fixtures <- function(season) {
   cli::cli_progress_step("Updating fixtures for {season}")
 
   fixtures <- tryCatch({
-    fitzRoy::fetch_fixture_afl(season, comp = "AFLM")
+    get_afl_fixtures(season)
   }, error = function(e) {
     cli::cli_warn("Failed to fetch fixtures: {conditionMessage(e)}")
     return(NULL)
@@ -368,7 +364,7 @@ update_results <- function(season) {
   cli::cli_progress_step("Updating results for {season}")
 
   results <- tryCatch({
-    fitzRoy::fetch_results_afl(season, comp = "AFLM")
+    get_afl_results(season)
   }, error = function(e) {
     cli::cli_warn("Failed to fetch results: {conditionMessage(e)}")
     return(NULL)
@@ -393,7 +389,7 @@ update_player_stats <- function(season) {
   cli::cli_progress_step("Updating player stats for {season}")
 
   player_stats <- tryCatch({
-    fitzRoy::fetch_player_stats_afl(season) |>
+    get_afl_player_stats(season) |>
       dplyr::select(where(~ dplyr::n_distinct(.) > 1)) |>
       janitor::clean_names()
   }, error = function(e) {
@@ -425,11 +421,7 @@ update_teams <- function(season) {
     .release_cache$teams
   } else {
     tryCatch({
-      fitzRoy::fetch_lineup(season, comp = "AFLM") %>%
-        dplyr::mutate(
-          season = as.numeric(substr(providerId, 5, 8)),
-          row_id = paste0(providerId, teamId, player.playerId)
-        )
+      get_afl_lineups(season)
     }, error = function(e) {
       cli::cli_warn("Failed to fetch teams: {conditionMessage(e)}")
       return(NULL)
@@ -485,13 +477,7 @@ update_player_details <- function(season) {
   cli::cli_progress_step("Updating player details for {season}")
 
   player_details <- tryCatch({
-    fitzRoy::fetch_player_details_afl(season = season, comp = "AFLM") %>%
-      dplyr::mutate(
-        player_name = paste(firstName, surname),
-        age = lubridate::decimal_date(lubridate::as_date(glue::glue("{season}-07-01"))) -
-          lubridate::decimal_date(lubridate::as_date(dateOfBirth)),
-        row_id = paste(providerId, season)
-      )
+    get_afl_player_details(season)
   }, error = function(e) {
     cli::cli_warn("Failed to fetch player details: {conditionMessage(e)}")
     return(NULL)

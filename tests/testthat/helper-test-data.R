@@ -413,7 +413,7 @@ create_mock_api_response <- function() {
 .shared <- new.env(parent = emptyenv())
 .shared$can_load <- !identical(Sys.getenv("NOT_CRAN"), "") || interactive()
 
-if (.shared$can_load && curl::has_internet()) {
+if (.shared$can_load && identical(Sys.getenv("TESTTHAT"), "true") && curl::has_internet()) {
   .shared$pbp <- tryCatch(load_pbp(2024, rounds = 1), error = function(e) NULL)
   .shared$chains <- tryCatch(load_chains(2024, rounds = 1), error = function(e) NULL)
   .shared$fixtures <- tryCatch(load_fixtures(2024), error = function(e) NULL)

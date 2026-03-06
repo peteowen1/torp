@@ -3,7 +3,7 @@
 # This file declares variables used in non-standard evaluation (NSE) contexts
 # such as data.table and dplyr operations to avoid "no visible binding" NOTEs.
 
-#' @importFrom stats binomial coef complete.cases lm pchisq quantile sd var setNames
+#' @importFrom stats binomial coef complete.cases gaussian lm pchisq quantile sd var setNames
 #' @importFrom utils head
 #' @importFrom lubridate tz
 NULL
@@ -210,12 +210,17 @@ utils::globalVariables(c(
   "total_xpoints_adj",
   "home_xscore", "away_xscore",
 
-  # xG join columns
+  # xG join columns (results schema — kept via rename in .build_team_mdl_df)
   "homeTeamScore.matchScore.totalScore", "homeTeamScore.matchScore.goals",
   "homeTeamScore.matchScore.behinds",
   "awayTeamScore.matchScore.totalScore", "awayTeamScore.matchScore.goals",
   "awayTeamScore.matchScore.behinds",
   "match.matchId", "match.utcStartTime",
+
+  # Fixture-schema score columns (from get_afl_results)
+  "home.score.totalScore", "home.score.goals", "home.score.behinds",
+  "away.score.totalScore", "away.score.goals", "away.score.behinds",
+  "utcStartTime",
 
   # Distance/familiarity/rest
   "log_dist", "distance", "venue_lat", "venue_lon", "team_lat", "team_lon",
@@ -284,5 +289,13 @@ utils::globalVariables(c(
   "week", "source", "pred_xtotal", "pred_xmargin",
 
   # Backfill helper
-  ".actual_margin"
+  ".actual_margin",
+
+  # Fixture/join schema columns
+  "home.team.providerId", "away.team.providerId", "team.providerId",
+  "team_name", "team_type", "venue", "match_date", "precipitation",
+
+  # Predictions pipeline
+  "home_rating", "away_rating", "start_time", "players",
+  "pred_margin", "rating_diff"
 ))

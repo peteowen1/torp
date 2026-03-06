@@ -20,7 +20,7 @@
   team_map <- fixtures |>
     dplyr::group_by(teamId = home.team.providerId) |>
     dplyr::summarise(team_name = get_mode(home.team.name)) |>
-    dplyr::mutate(team_name = fitzRoy::replace_teams(team_name))
+    dplyr::mutate(team_name = torp_replace_teams(team_name))
 
   fix_df <- fixtures |>
     dplyr::mutate(result = home.score.totalScore - away.score.totalScore) |>
@@ -35,7 +35,7 @@
       values_to = "team.providerId"
     ) |>
     dplyr::mutate(
-      venue = fitzRoy::replace_venues(venue.name),
+      venue = torp_replace_venues(venue.name),
       team_type = substr(team_type, 1, 4),
       result = ifelse(team_type == "away", -result, result)
     ) |>
@@ -155,10 +155,10 @@
 
   team_rt_df <- team_lineup_df |>
     dplyr::filter(!is.na(player.playerId)) |>
-    dplyr::mutate(team_name_adj = fitzRoy::replace_teams(teamName)) |>
+    dplyr::mutate(team_name_adj = torp_replace_teams(teamName)) |>
     dplyr::group_by(providerId, teamId, season, round.roundNumber, teamType) |>
     dplyr::summarise(
-      venue = fitzRoy::replace_venues(max(venue.name)),
+      venue = torp_replace_venues(max(venue.name)),
       team_name_adj = max(team_name_adj),
       dplyr::across(dplyr::all_of(c(torp_sum_cols, MATCH_POS_COLS)), ~ sum(.x, na.rm = TRUE)),
       count = dplyr::n(),
@@ -185,10 +185,10 @@
   home_ground <- team_rt_df |>
     dplyr::group_by(teamId, team_name_adj) |>
     dplyr::summarise(home_ground = get_mode(venue), .groups = "drop") |>
-    dplyr::mutate(venue_adj = fitzRoy::replace_venues(as.character(home_ground))) |>
+    dplyr::mutate(venue_adj = torp_replace_venues(as.character(home_ground))) |>
     dplyr::left_join(
       all_grounds |>
-        dplyr::mutate(venue_adj = fitzRoy::replace_venues(as.character(Ground))),
+        dplyr::mutate(venue_adj = torp_replace_venues(as.character(Ground))),
       by = c("venue_adj" = "venue_adj")
     )
 
@@ -239,7 +239,7 @@
 
   # Combine all features
   team_rt_fix_df <- fix_df |>
-    dplyr::mutate(team_name = fitzRoy::replace_teams(team_name)) |>
+    dplyr::mutate(team_name = torp_replace_teams(team_name)) |>
     dplyr::left_join(
       team_dist_df |> dplyr::select(providerId, teamId, log_dist, familiarity),
       by = c("providerId", "teamId")
@@ -328,7 +328,7 @@
   if (nrow(fixtures_upcoming) == 0) return(tibble::tibble())
 
   fixtures_geo <- fixtures_upcoming |>
-    dplyr::mutate(venue = fitzRoy::replace_venues(venue.name)) |>
+    dplyr::mutate(venue = torp_replace_venues(venue.name)) |>
     dplyr::left_join(
       all_grounds |>
         dplyr::select(venue, Latitude, Longitude) |>
@@ -401,6 +401,66 @@
 }
 
 
+# .normalise_results_schema ----
+
+#' Normalise results to a common schema
+#'
+#' Handles both the old CFS schema (from historical torpdata releases with
+#' `match.matchId`, `homeTeamScore.matchScore.*`) and the new fixture schema
+#' (from `get_afl_results()` with `providerId`, `home.score.*`).
+#' Returns a tibble with the legacy column names used downstream.
+#'
+#' @param results Raw results data (may be mixed schema across seasons)
+#' @return Tibble with columns: providerId, homeTeamScore.matchScore.totalScore,
+#'   homeTeamScore.matchScore.goals, homeTeamScore.matchScore.behinds,
+#'   awayTeamScore.matchScore.totalScore, awayTeamScore.matchScore.goals,
+#'   awayTeamScore.matchScore.behinds, match.utcStartTime
+#' @keywords internal
+.normalise_results_schema <- function(results) {
+  has_cfs <- "match.matchId" %in% names(results)
+  has_fix <- "home.score.totalScore" %in% names(results)
+
+  if (has_cfs && !has_fix) {
+    # Pure CFS schema (historical data only)
+    results |>
+      dplyr::select(
+        providerId = match.matchId,
+        homeTeamScore.matchScore.totalScore,
+        homeTeamScore.matchScore.goals,
+        homeTeamScore.matchScore.behinds,
+        awayTeamScore.matchScore.totalScore,
+        awayTeamScore.matchScore.goals,
+        awayTeamScore.matchScore.behinds,
+        match.utcStartTime
+      )
+  } else if (has_fix) {
+    # Fixture schema (new) — rename to legacy column names used downstream
+    results |>
+      dplyr::select(
+        providerId,
+        home.score.totalScore,
+        home.score.goals,
+        home.score.behinds,
+        away.score.totalScore,
+        away.score.goals,
+        away.score.behinds,
+        utcStartTime
+      ) |>
+      dplyr::rename(
+        homeTeamScore.matchScore.totalScore = home.score.totalScore,
+        homeTeamScore.matchScore.goals = home.score.goals,
+        homeTeamScore.matchScore.behinds = home.score.behinds,
+        awayTeamScore.matchScore.totalScore = away.score.totalScore,
+        awayTeamScore.matchScore.goals = away.score.goals,
+        awayTeamScore.matchScore.behinds = away.score.behinds,
+        match.utcStartTime = utcStartTime
+      )
+  } else {
+    cli::cli_abort("Results data has unrecognised schema. Expected match.matchId or home.score.totalScore columns.")
+  }
+}
+
+
 # .build_team_mdl_df ----
 
 #' Build the full match model dataset
@@ -445,18 +505,8 @@
       torp_hitout_diff = torp_hitout.x - torp_hitout.y
     ) |>
     dplyr::left_join(
-      results |>
-        dplyr::select(
-          match.matchId,
-          homeTeamScore.matchScore.totalScore,
-          homeTeamScore.matchScore.goals,
-          homeTeamScore.matchScore.behinds,
-          awayTeamScore.matchScore.totalScore,
-          awayTeamScore.matchScore.goals,
-          awayTeamScore.matchScore.behinds,
-          match.utcStartTime
-        ),
-      by = c("providerId" = "match.matchId")
+      .normalise_results_schema(results),
+      by = "providerId"
     ) |>
     dplyr::left_join(xg_df, by = c("providerId" = "match_id")) |>
     dplyr::mutate(
@@ -841,6 +891,20 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
   xg_df <- load_xg(TRUE)
   fixtures <- load_fixtures(TRUE)
   results <- load_results(TRUE)
+
+  # Refresh current season results from AFL API
+  tryCatch({
+    cli::cli_progress_step("Refreshing {season} results from AFL API")
+    fresh_results <- get_afl_results(season)
+    if (!is.null(fresh_results) && nrow(fresh_results) > 0) {
+      save_to_release(fresh_results, paste0("results_", season), "results-data")
+      results <- load_results(TRUE)
+      cli::cli_inform("Refreshed results: {nrow(fresh_results)} rows for {season}")
+    }
+  }, error = function(e) {
+    cli::cli_warn("Could not refresh {season} results: {e$message}")
+  })
+
   teams <- load_teams(TRUE)
   torp_df_total <- load_torp_ratings()
 
@@ -901,7 +965,7 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
 
   tr_week <- tr |>
     dplyr::filter(!is.na(torp), is.na(injury)) |>
-    dplyr::mutate(team_name = fitzRoy::replace_teams(team)) |>
+    dplyr::mutate(team_name = torp_replace_teams(team)) |>
     dplyr::group_by(team_name, season, round) |>
     dplyr::mutate(
       n_players = dplyr::n(),
@@ -1062,4 +1126,157 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
   tictoc::tic.clearlog()
 
   invisible(week_gms)
+}
+
+
+#' Show TORP Match Predictions
+#'
+#' Display a formatted summary of TORP match predictions for a given round,
+#' including predicted margins, win probabilities, and actual results where
+#' available.
+#'
+#' @param season Season year (default: current via `get_afl_season()`)
+#' @param week Round number (default: current via `get_afl_week()`)
+#' @param refresh If `TRUE`, run `run_predictions_pipeline()` first
+#' @return Predictions tibble with results joined (invisibly)
+#' @export
+#' @examples
+#' \dontrun{
+#' show_predictions()
+#' show_predictions(2025, 10)
+#' show_predictions(refresh = TRUE)
+#' }
+show_predictions <- function(season = get_afl_season(),
+                             week = get_afl_week(),
+                             refresh = FALSE) {
+  if (isTRUE(refresh)) {
+    run_predictions_pipeline(week = week, season = season)
+  }
+
+  preds <- tryCatch(
+    load_predictions(season, week),
+    error = function(e) {
+      cli::cli_abort(c(
+        "Could not load predictions for {season} Round {week}.",
+        "i" = "Run {.code show_predictions(refresh = TRUE)} to generate them.",
+        "x" = e$message
+      ))
+    }
+  )
+
+  if (is.null(preds) || nrow(preds) == 0) {
+    cli::cli_alert_warning("No predictions found for {season} Round {week}")
+    return(invisible(preds))
+  }
+
+  # Backfill actual margins for completed games missing results
+  now <- Sys.time()
+  game_duration_hrs <- 3.5
+  preds$start_time_utc <- .parse_start_time(preds$start_time)
+  preds$is_complete <- !is.na(preds$start_time_utc) &
+    (now > preds$start_time_utc + game_duration_hrs * 3600)
+
+  needs_results <- any(preds$is_complete & is.na(preds$margin))
+  if (needs_results) {
+    tryCatch({
+      fresh <- get_afl_results(season)
+      if (!is.null(fresh) && nrow(fresh) > 0) {
+        result_margins <- fresh |>
+          dplyr::transmute(
+            providerId = providerId,
+            .actual_margin = home.score.totalScore -
+              away.score.totalScore
+          )
+        preds <- preds |>
+          dplyr::left_join(result_margins, by = "providerId") |>
+          dplyr::mutate(margin = dplyr::coalesce(margin, .actual_margin)) |>
+          dplyr::select(-.actual_margin)
+      }
+    }, error = function(e) {
+      cli::cli_warn("Could not fetch results to backfill: {e$message}")
+    })
+  }
+
+  # Format and print
+  cli::cli_h1("TORP Predictions: {season} Round {week}")
+
+  # Column widths
+  w_team <- 20
+  header <- paste0(
+    format("Home", width = w_team),
+    format("Away", width = w_team),
+    format("Pred", width = 8, justify = "right"),
+    format("Win%", width = 8, justify = "right"),
+    format("Result", width = 10, justify = "right")
+  )
+  cli::cli_text("{.strong {header}}")
+
+  tips_correct <- 0
+  tips_total <- 0
+  abs_errors <- c()
+
+  for (i in seq_len(nrow(preds))) {
+    row <- preds[i, ]
+    pred_str <- sprintf("%+.1f", row$pred_margin)
+    win_pct <- sprintf("%.1f%%", row$pred_win * 100)
+
+    if (!is.na(row$margin)) {
+      result_str <- sprintf("%+.0f", row$margin)
+      # Tip correct: predicted winner matches actual winner (same sign)
+      tip_ok <- (row$pred_margin > 0 & row$margin > 0) |
+        (row$pred_margin < 0 & row$margin < 0) |
+        (row$margin == 0)  # draw counts as correct
+      icon <- if (tip_ok) cli::col_green("\u2713") else cli::col_red("\u2717")
+      result_display <- paste(result_str, icon)
+      tips_total <- tips_total + 1
+      tips_correct <- tips_correct + as.integer(tip_ok)
+      abs_errors <- c(abs_errors, abs(row$pred_margin - row$margin))
+    } else if (isTRUE(row$is_complete)) {
+      result_display <- "?"
+    } else {
+      result_display <- "-"
+    }
+
+    line <- paste0(
+      format(row$home_team, width = w_team),
+      format(row$away_team, width = w_team),
+      format(pred_str, width = 8, justify = "right"),
+      format(win_pct, width = 8, justify = "right"),
+      format(result_display, width = 10, justify = "right")
+    )
+    cli::cli_text(line)
+  }
+
+  # Summary
+  cli::cli_text("")
+  parts <- c()
+  if (tips_total > 0) {
+    parts <- c(parts, paste0("Tips: ", tips_correct, "/", tips_total, " correct"))
+    parts <- c(parts, paste0("MAE: ", sprintf("%.1f", mean(abs_errors))))
+  }
+  n_complete <- sum(preds$is_complete | !is.na(preds$margin))
+  parts <- c(parts, paste0("Completed: ", n_complete, "/", nrow(preds)))
+  cli::cli_text(paste(parts, collapse = " | "))
+
+  preds$start_time_utc <- NULL
+  preds$is_complete <- NULL
+  invisible(preds)
+}
+
+
+#' Parse start_time strings to POSIXct
+#'
+#' Handles the local-time formatted strings stored in predictions data.
+#'
+#' @param x Character vector of start time strings
+#' @return POSIXct vector
+#' @keywords internal
+.parse_start_time <- function(x) {
+  # start_time is formatted as "YYYY-MM-DD HH:MM:SS TZ"
+  # Try parsing with timezone, fall back to UTC
+  parsed <- suppressWarnings(lubridate::ymd_hms(x, tz = "Australia/Melbourne"))
+  if (all(is.na(parsed))) {
+    parsed <- suppressWarnings(as.POSIXct(x, format = "%Y-%m-%d %H:%M:%S", tz = "Australia/Melbourne"))
+  }
+  parsed
 }
