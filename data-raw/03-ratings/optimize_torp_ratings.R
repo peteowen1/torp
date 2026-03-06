@@ -10,7 +10,8 @@ library(devtools)
 library(data.table)
 library(dplyr)
 library(fitzRoy)
-library(optimParallel)
+library(nloptr)
+library(Rcpp)
 devtools::load_all()
 
 cat("=== TORP Ratings Parameter Optimization ===\n\n")
@@ -306,7 +307,95 @@ lineup_dt_all <- data.table::rbindlist(lineup_rows)
 cat(sprintf("  Lineup expansion: %d player-match rows for %d matches\n",
             nrow(lineup_dt_all), nrow(eval_matches_all)))
 
+## 2h. Pre-compute lineup-level role positions (for balance penalty) ----
+cat("  Pre-computing lineup positions for balance penalty...
+")
+pgr_pos_lookup <- pgr[!is.na(position), .(player_id, date_num = as.numeric(date), position)]
+data.table::setkey(pgr_pos_lookup, player_id, date_num)
+lu_pos_joined <- pgr_pos_lookup[lineup_dt_all, .(position = x.position),
+                                 on = .(player_id, date_num), roll = TRUE]
+lineup_dt_all[, role_position := lu_pos_joined$position]
+rm(pgr_pos_lookup, lu_pos_joined)
+
+# Pre-compute position group indices for lineup rows (reused in all stages)
+lu_role_positions <- lineup_dt_all$role_position
+lu_pos_levels <- unique(lu_role_positions[!is.na(lu_role_positions)])
+lu_pos_idx <- lapply(lu_pos_levels, function(p) which(lu_role_positions == p))
+names(lu_pos_idx) <- lu_pos_levels
+cat(sprintf("  Position groups: %s
+", paste(lu_pos_levels, collapse = ", ")))
+
+# Position balance penalty: lambda * sd(position-group mean TORPs).
+# Larger values produce more balanced positions at the cost of slightly
+# worse margin prediction accuracy. Set to 0 to disable.
+POSITION_BALANCE_LAMBDA <- 1.0
+
 # 3. Objective Function ----
+
+# Compile Rcpp cumulative decay kernel for ~20-50x speedup over R for-loop
+cat("Compiling Rcpp cumulative decay kernel...\n")
+Rcpp::cppFunction('
+Rcpp::List cumulative_decay_cpp(Rcpp::IntegerVector pids,
+                                Rcpp::NumericVector dnums,
+                                Rcpp::NumericVector recv_pts,
+                                Rcpp::NumericVector disp_pts,
+                                Rcpp::NumericVector spoil_pts,
+                                Rcpp::NumericVector hitout_pts,
+                                double decay_r, double decay_d,
+                                double decay_s, double decay_h) {
+  int n = pids.size();
+  Rcpp::NumericVector cr(n), cd(n), cs(n), ch(n);
+  Rcpp::NumericVector cw_r(n), cw_d(n), cw_s(n), cw_h(n);
+
+  cr[0] = recv_pts[0]; cd[0] = disp_pts[0];
+  cs[0] = spoil_pts[0]; ch[0] = hitout_pts[0];
+  cw_r[0] = 1.0; cw_d[0] = 1.0; cw_s[0] = 1.0; cw_h[0] = 1.0;
+
+  for (int i = 1; i < n; i++) {
+    if (pids[i] == pids[i-1]) {
+      double gap = dnums[i] - dnums[i-1];
+      double df_r = std::exp(-gap / decay_r);
+      double df_d = std::exp(-gap / decay_d);
+      double df_s = std::exp(-gap / decay_s);
+      double df_h = std::exp(-gap / decay_h);
+      cr[i] = cr[i-1] * df_r + recv_pts[i];
+      cd[i] = cd[i-1] * df_d + disp_pts[i];
+      cs[i] = cs[i-1] * df_s + spoil_pts[i];
+      ch[i] = ch[i-1] * df_h + hitout_pts[i];
+      cw_r[i] = cw_r[i-1] * df_r + 1.0;
+      cw_d[i] = cw_d[i-1] * df_d + 1.0;
+      cw_s[i] = cw_s[i-1] * df_s + 1.0;
+      cw_h[i] = cw_h[i-1] * df_h + 1.0;
+    } else {
+      cr[i] = recv_pts[i]; cd[i] = disp_pts[i];
+      cs[i] = spoil_pts[i]; ch[i] = hitout_pts[i];
+      cw_r[i] = 1.0; cw_d[i] = 1.0; cw_s[i] = 1.0; cw_h[i] = 1.0;
+    }
+  }
+  return Rcpp::List::create(
+    Rcpp::Named("cr") = cr, Rcpp::Named("cd") = cd,
+    Rcpp::Named("cs") = cs, Rcpp::Named("ch") = ch,
+    Rcpp::Named("cw_r") = cw_r, Rcpp::Named("cw_d") = cw_d,
+    Rcpp::Named("cw_s") = cw_s, Rcpp::Named("cw_h") = cw_h
+  );
+}
+')
+
+#' Soft quantile: differentiable approximation using kernel-weighted sorted values.
+#' Unlike stats::quantile() which is a step function w.r.t. q, this provides
+#' smooth gradients so optimizers explore the landscape cleanly.
+soft_quantile <- function(x, q, bandwidth = 0.05) {
+  x <- x[!is.na(x)]
+  n <- length(x)
+  if (n == 0) return(0)
+  sorted <- sort(x)
+  ranks <- (seq_len(n) - 0.5) / n
+  weights <- dnorm(ranks, mean = q, sd = bandwidth)
+  ws <- sum(weights)
+  if (ws < 1e-12) return(sorted[max(1, round(q * n))])
+  sum(sorted * weights) / ws
+}
+
 
 #' Compute credit-assigned points from raw components given params
 #' Returns a data.table with player_id, match_id, date, disp_pts, recv_pts,
@@ -342,29 +431,28 @@ compute_credits <- function(pgr, params, verbose = FALSE) {
     hitout_pts = hitout_pts / tog_safe
   )]
 
-  # Position-group quantile adjustment (on per-80 rates) — per-component quantiles
-  q_r <- p["pos_adj_quantile_recv"]
-  q_d <- p["pos_adj_quantile_disp"]
-  q_s <- p["pos_adj_quantile_spoil"]
-  q_h <- p["pos_adj_quantile_hitout"]
+  # Position-group mean subtraction (on per-80 rates)
   if (verbose) {
-    cat(sprintf("\n  Position quantile adjustment on per-80 rates (q_r=%.2f%%, q_d=%.2f%%, q_s=%.2f%%, q_h=%.2f%%):\n",
-                q_r * 100, q_d * 100, q_s * 100, q_h * 100))
-    cat(sprintf("  %-18s %8s %8s %8s %8s\n", "Position", "recv", "disp", "spoil", "hitout"))
+    cat(sprintf("
+  Position mean adjustment on per-80 rates:
+"))
+    cat(sprintf("  %-18s %8s %8s %8s %8s
+", "Position", "recv", "disp", "spoil", "hitout"))
     for (pos in sort(unique(out$position[!is.na(out$position)]))) {
       idx <- out$position == pos & !is.na(out$position)
-      cat(sprintf("  %-18s %+8.3f %+8.3f %+8.3f %+8.3f\n", pos,
-        quantile(out$recv_pts[idx], q_r, na.rm = TRUE),
-        quantile(out$disp_pts[idx], q_d, na.rm = TRUE),
-        quantile(out$spoil_pts[idx], q_s, na.rm = TRUE),
-        quantile(out$hitout_pts[idx], q_h, na.rm = TRUE)))
+      cat(sprintf("  %-18s %+8.3f %+8.3f %+8.3f %+8.3f
+", pos,
+        mean(out$recv_pts[idx], na.rm = TRUE),
+        mean(out$disp_pts[idx], na.rm = TRUE),
+        mean(out$spoil_pts[idx], na.rm = TRUE),
+        mean(out$hitout_pts[idx], na.rm = TRUE)))
     }
   }
   out[!is.na(position), `:=`(
-    recv_pts   = recv_pts   - stats::quantile(recv_pts, q_r, na.rm = TRUE),
-    disp_pts   = disp_pts   - stats::quantile(disp_pts, q_d, na.rm = TRUE),
-    spoil_pts  = spoil_pts  - stats::quantile(spoil_pts, q_s, na.rm = TRUE),
-    hitout_pts = hitout_pts - stats::quantile(hitout_pts, q_h, na.rm = TRUE)
+    recv_pts   = recv_pts   - mean(recv_pts, na.rm = TRUE),
+    disp_pts   = disp_pts   - mean(disp_pts, na.rm = TRUE),
+    spoil_pts  = spoil_pts  - mean(spoil_pts, na.rm = TRUE),
+    hitout_pts = hitout_pts - mean(hitout_pts, na.rm = TRUE)
   ), by = position]
 
   return(out)
@@ -468,53 +556,31 @@ objective_fn_fast <- function(par, env) {
   disp_pts[is.na(disp_pts)] <- 0; recv_pts[is.na(recv_pts)] <- 0
   spoil_pts[is.na(spoil_pts)] <- 0; hitout_pts[is.na(hitout_pts)] <- 0
 
-  # Position-group quantile adjustment (on per-80 rates) — per-component quantiles
-  q_r <- p["pos_adj_quantile_recv"]
-  q_d <- p["pos_adj_quantile_disp"]
-  q_s <- p["pos_adj_quantile_spoil"]
-  q_h <- p["pos_adj_quantile_hitout"]
+  # Position-group mean subtraction
   for (pos in env$position_levels) {
     idx <- env$pos_indices[[pos]]
     if (length(idx) > 0) {
-      recv_pts[idx]   <- recv_pts[idx]   - quantile(recv_pts[idx], q_r, na.rm = TRUE)
-      disp_pts[idx]   <- disp_pts[idx]   - quantile(disp_pts[idx], q_d, na.rm = TRUE)
-      spoil_pts[idx]  <- spoil_pts[idx]  - quantile(spoil_pts[idx], q_s, na.rm = TRUE)
-      hitout_pts[idx] <- hitout_pts[idx] - quantile(hitout_pts[idx], q_h, na.rm = TRUE)
+      recv_pts[idx]   <- recv_pts[idx]   - mean(recv_pts[idx], na.rm = TRUE)
+      disp_pts[idx]   <- disp_pts[idx]   - mean(disp_pts[idx], na.rm = TRUE)
+      spoil_pts[idx]  <- spoil_pts[idx]  - mean(spoil_pts[idx], na.rm = TRUE)
+      hitout_pts[idx] <- hitout_pts[idx] - mean(hitout_pts[idx], na.rm = TRUE)
     }
   }
 
-  # --- Cumulative decay sums (per-component decay, single-vector loop) ---
+  # --- Cumulative decay sums via Rcpp (per-component decay) ---
   decay_r <- p["decay_recv"]; decay_d <- p["decay_disp"]
   decay_s <- p["decay_spoil"]; decay_h <- p["decay_hitout"]
   pids <- env$pgr_s$player_id
   dnums <- env$pgr_s$date_num
-  n <- length(disp_pts)
-  cr <- cd <- cs <- ch <- cw_r <- cw_d <- cw_s <- cw_h <- numeric(n)
-  cr[1] <- recv_pts[1]; cd[1] <- disp_pts[1]
-  cs[1] <- spoil_pts[1]; ch[1] <- hitout_pts[1]
-  cw_r[1] <- 1; cw_d[1] <- 1; cw_s[1] <- 1; cw_h[1] <- 1
-  for (i in 2:n) {
-    if (pids[i] == pids[i - 1]) {
-      gap <- dnums[i] - dnums[i - 1]
-      df_r <- exp(-gap / decay_r); df_d <- exp(-gap / decay_d)
-      df_s <- exp(-gap / decay_s); df_h <- exp(-gap / decay_h)
-      cr[i] <- cr[i - 1] * df_r + recv_pts[i]
-      cd[i] <- cd[i - 1] * df_d + disp_pts[i]
-      cs[i] <- cs[i - 1] * df_s + spoil_pts[i]
-      ch[i] <- ch[i - 1] * df_h + hitout_pts[i]
-      cw_r[i] <- cw_r[i - 1] * df_r + 1
-      cw_d[i] <- cw_d[i - 1] * df_d + 1
-      cw_s[i] <- cw_s[i - 1] * df_s + 1
-      cw_h[i] <- cw_h[i - 1] * df_h + 1
-    } else {
-      cr[i] <- recv_pts[i]; cd[i] <- disp_pts[i]
-      cs[i] <- spoil_pts[i]; ch[i] <- hitout_pts[i]
-      cw_r[i] <- 1; cw_d[i] <- 1; cw_s[i] <- 1; cw_h[i] <- 1
-    }
-  }
+
+  cum <- cumulative_decay_cpp(pids, dnums, recv_pts, disp_pts,
+                              spoil_pts, hitout_pts,
+                              decay_r, decay_d, decay_s, decay_h)
+  cr <- cum$cr; cd <- cum$cd; cs <- cum$cs; ch <- cum$ch
+  cw_r <- cum$cw_r; cw_d <- cum$cw_d; cw_s <- cum$cw_s; cw_h <- cum$cw_h
 
   # --- Map to lineup via pre-computed indices ---
-  loading      <- p["loading"]
+  loading      <- 1.0  # fixed — unidentifiable when scale params are free
   prior_recv   <- p["prior_games_recv"]
   prior_disp   <- p["prior_games_disp"]
   prior_spoil  <- p["prior_games_spoil"]
@@ -548,7 +614,15 @@ objective_fn_fast <- function(par, env) {
   away_sum <- rowsum(torp_weighted * env$lu_not_home, env$lu_match_idx, reorder = FALSE, na.rm = TRUE)
   torp_diff <- as.numeric(home_sum - away_sum)
 
-  fast_rmse_cv(torp_diff, env$eval_matches)
+  # Position balance penalty: penalize systematic position-group bias
+  pos_means <- vapply(env$lu_pos_levels, function(pos) {
+    idx <- env$lu_pos_idx[[pos]]
+    tog <- env$lu_lineup_tog[idx]
+    sum(torp_vec[idx] * tog, na.rm = TRUE) / sum(tog, na.rm = TRUE)
+  }, numeric(1))
+  balance_penalty <- POSITION_BALANCE_LAMBDA * sd(pos_means, na.rm = TRUE)
+
+  fast_rmse_cv(torp_diff, env$eval_matches) + balance_penalty
 }
 
 #' Fast RMSE from torp_diff vector and eval match data
@@ -707,10 +781,6 @@ par_defaults <- c(
   hitout_wt         = CREDIT_HITOUT_WT,
   hitout_adv_wt     = CREDIT_HITOUT_ADV_WT,
   ruck_contest_wt        = CREDIT_RUCK_CONTEST_WT,
-  pos_adj_quantile_recv   = CREDIT_POS_ADJ_QUANTILE_RECV,
-  pos_adj_quantile_disp   = CREDIT_POS_ADJ_QUANTILE_DISP,
-  pos_adj_quantile_spoil  = CREDIT_POS_ADJ_QUANTILE_SPOIL,
-  pos_adj_quantile_hitout = CREDIT_POS_ADJ_QUANTILE_HITOUT,
   # Aggregation params - from R/constants.R
   decay_recv         = RATING_DECAY_RECV,
   decay_disp         = RATING_DECAY_DISP,
@@ -748,10 +818,6 @@ par_lower <- c(
   hitout_wt         = 0.03,
   hitout_adv_wt     = 0.1,
   ruck_contest_wt        = 0.03,
-  pos_adj_quantile_recv   = 0.2,
-  pos_adj_quantile_disp   = 0.2,
-  pos_adj_quantile_spoil  = 0.2,
-  pos_adj_quantile_hitout = 0.2,
   decay_recv         = 100,
   decay_disp         = 100,
   decay_spoil        = 100,
@@ -782,13 +848,9 @@ par_upper <- c(
   tackle_wt         = 2.0,
   pressure_wt       = 1.0,
   def_pressure_wt   = 1.5,
-  hitout_wt         = 1.0,
-  hitout_adv_wt     = 2.0,
-  ruck_contest_wt        = 0.5,
-  pos_adj_quantile_recv   = 0.4,
-  pos_adj_quantile_disp   = 0.4,
-  pos_adj_quantile_spoil  = 0.4,
-  pos_adj_quantile_hitout = 0.4,
+  hitout_wt         = 0.3,
+  hitout_adv_wt     = 1.0,
+  ruck_contest_wt        = 0.3,
   decay_recv         = 700,
   decay_disp         = 700,
   decay_spoil        = 700,
@@ -911,8 +973,16 @@ for (i in seq_len(nrow(agg_grid))) {
   away_sum <- tapply(torp_weighted * (!j$is_home), j$match_idx, sum, na.rm = TRUE)
   torp_diff <- as.numeric(home_sum - away_sum)
 
-  # Leave-one-season-out CV RMSE
-  rmse_i <- fast_rmse_cv(torp_diff, eval_matches_all)
+  # Position balance penalty
+  pos_means_s1 <- vapply(lu_pos_levels, function(pos) {
+    idx <- lu_pos_idx[[pos]]
+    tog <- j$lineup_tog[idx]
+    sum(torp_vec[idx] * tog, na.rm = TRUE) / sum(tog, na.rm = TRUE)
+  }, numeric(1))
+  balance_penalty_s1 <- POSITION_BALANCE_LAMBDA * sd(pos_means_s1, na.rm = TRUE)
+
+  # Leave-one-season-out CV RMSE + balance penalty
+  rmse_i <- fast_rmse_cv(torp_diff, eval_matches_all) + balance_penalty_s1
 
   if (rmse_i < best_rmse) {
     best_rmse <- rmse_i
@@ -969,7 +1039,7 @@ fast_env <- list(
   ruck_contests  = pgr_s$ruck_contests,
   tog_safe       = pgr_s$tog_safe,
   # Player/date vectors for cumulative loop
-  pgr_s          = pgr_s[, .(player_id, date_num)],
+  pgr_s          = pgr_s[, .(player_id = as.integer(factor(player_id)), date_num)],
   # Position indices for quantile adjustment
   position_levels = NULL,
   pos_indices     = NULL,
@@ -1002,6 +1072,8 @@ fast_env$lu_is_home    <- lu_joined$is_home
 fast_env$lu_not_home   <- !lu_joined$is_home
 fast_env$lu_lineup_tog <- lu_joined$lineup_tog
 fast_env$lu_match_idx  <- lu_joined$match_idx
+fast_env$lu_pos_levels <- lu_pos_levels
+fast_env$lu_pos_idx    <- lu_pos_idx
 
 tictoc::toc()
 cat(sprintf("  Fast env: %d pgr rows, %d lineup rows\n", nrow(pgr_s), nrow(lu_joined)))
@@ -1009,111 +1081,118 @@ cat(sprintf("  Fast env: %d pgr rows, %d lineup rows\n", nrow(pgr_s), nrow(lu_jo
 # Fast objective wrapper
 obj_fast <- function(par) objective_fn_fast(par, fast_env)
 
-# Set up parallel cluster for gradient computation
-n_cores <- max(parallel::detectCores() - 1L, 2L)
-cat(sprintf("Setting up parallel cluster with %d cores...\n", n_cores))
-cl <- parallel::makeCluster(n_cores)
-# Export heavy objects + all functions called by objective_fn_fast
-parallel::clusterExport(cl, c("objective_fn_fast", "fast_env", "par_lower", "par_upper",
-                               "fast_rmse_cv", "fast_rmse"),
-                        envir = environment())
-on.exit(parallel::stopCluster(cl), add = TRUE)
+## Stage 2: BOBYQA derivative-free optimization ----
+# loading is fixed at 1.0 (unidentifiable when scales are free), excluded from optimization
+cat("=== Stage 2: BOBYQA derivative-free optimization (all params except loading) ===
+")
+tictoc::tic("Stage 2 BOBYQA")
 
-## Stage 2: Parallel L-BFGS-B on credit groups with cycling ----
-cat("=== Stage 2: Parallel L-BFGS-B on credit groups (with cycling) ===\n")
-tictoc::tic("Stage 2 total")
+# Remove loading from optimization
+optim_names <- setdiff(names(best_par), "loading")
+n_optim <- length(optim_names)
+cat(sprintf("  Optimizing %d parameters (loading fixed at 1.0)
+", n_optim))
 
-# Define parameter groups (Group E split into E1 + E2 for manageable dimensionality)
-optim_groups <- list(
-  "A: disposal"   = c("disp_neg_offset", "disp_pos_offset", "disp_scale", "bounce_penalty"),
-  "B: reception"  = c("recv_neg_mult", "recv_neg_offset", "recv_pos_mult", "recv_pos_offset", "recv_scale"),
-  "C: spoil"      = c("spoil_wt", "tackle_wt", "pressure_wt", "def_pressure_wt"),
-  "D: hitout"     = c("hitout_wt", "hitout_adv_wt", "ruck_contest_wt"),
-  "E1: quantiles+decay" = c("pos_adj_quantile_recv", "pos_adj_quantile_disp",
-                             "pos_adj_quantile_spoil", "pos_adj_quantile_hitout",
-                             "decay_recv", "decay_disp", "decay_spoil", "decay_hitout"),
-  "E2: priors"    = c("prior_games_recv", "prior_games_disp", "prior_games_spoil", "prior_games_hitout",
-                       "prior_rate_recv", "prior_rate_disp", "prior_rate_spoil", "prior_rate_hitout")
-)
+# nloptr wrapper: convert unnamed vector <-> named vector
+nloptr_fn <- function(x) {
+  par <- best_par
+  par[optim_names] <- x
+  obj_fast(par)
+}
 
-# Helper: optimize one group with parallel L-BFGS-B
-# optimParallel parallelizes the d+1 finite-difference gradient evaluations across cores
-optimize_group <- function(group_names, best_par, maxit = 200) {
-  optimParallel::optimParallel(
-    par = best_par[group_names],
-    fn = function(sub_par) {
-      test_par <- best_par
-      test_par[group_names] <- sub_par
-      objective_fn_fast(test_par, fast_env)
-    },
-    lower = par_lower[group_names],
-    upper = par_upper[group_names],
-    parallel = list(cl = cl, forward = FALSE),
-    control = list(maxit = maxit, trace = 1)
+# Track progress
+s2_eval_count <- 0L
+s2_best_rmse <- obj_fast(best_par)
+s2_start_time <- proc.time()[3]
+
+nloptr_fn_verbose <- function(x) {
+  rmse <- nloptr_fn(x)
+  s2_eval_count <<- s2_eval_count + 1L
+  if (rmse < s2_best_rmse) s2_best_rmse <<- rmse
+  if (s2_eval_count %% 50 == 0) {
+    elapsed <- proc.time()[3] - s2_start_time
+    cat(sprintf("  [%4d evals] best RMSE: %.4f | current: %.4f | %.0fs
+",
+                s2_eval_count, s2_best_rmse, rmse, elapsed))
+  }
+  rmse
+}
+
+# BOBYQA: quadratic model-based derivative-free optimizer
+opt_bobyqa <- nloptr::nloptr(
+  x0 = unname(best_par[optim_names]),
+  eval_f = nloptr_fn_verbose,
+  lb = unname(par_lower[optim_names]),
+  ub = unname(par_upper[optim_names]),
+  opts = list(
+    algorithm = "NLOPT_LN_BOBYQA",
+    maxeval = 5000,
+    ftol_rel = 1e-7,
+    xtol_rel = 1e-6
   )
-}
-
-# Cycle through all groups until convergence
-MAX_CYCLES <- 3
-CYCLE_TOL <- 0.0005  # stop cycling if RMSE improves less than this
-
-cycle_rmse <- obj_fast(best_par)
-for (cycle in seq_len(MAX_CYCLES)) {
-  cat(sprintf("\n--- Cycle %d/%d (starting RMSE: %.4f) ---\n", cycle, MAX_CYCLES, cycle_rmse))
-  tictoc::tic(sprintf("  Cycle %d", cycle))
-
-  for (grp_name in names(optim_groups)) {
-    grp_params <- optim_groups[[grp_name]]
-    cat(sprintf("  Group %s (%d params)...\n", grp_name, length(grp_params)))
-    tictoc::tic(sprintf("    %s", grp_name))
-
-    maxit <- if (length(grp_params) >= 8) 300 else 200
-    opt_result <- optimize_group(grp_params, best_par, maxit = maxit)
-    best_par[grp_params] <- opt_result$par
-
-    tictoc::toc()
-    cat(sprintf("    -> RMSE = %.4f\n", opt_result$value))
-  }
-
-  new_rmse <- obj_fast(best_par)
-  improvement <- cycle_rmse - new_rmse
-  tictoc::toc()
-  cat(sprintf("  Cycle %d complete: RMSE %.4f -> %.4f (improvement: %.4f)\n",
-              cycle, cycle_rmse, new_rmse, improvement))
-
-  if (improvement < CYCLE_TOL) {
-    cat(sprintf("  Converged (improvement %.4f < tolerance %.4f)\n", improvement, CYCLE_TOL))
-    break
-  }
-  cycle_rmse <- new_rmse
-}
-
-tictoc::toc()
-stage2_rmse <- obj_fast(best_par)
-cat(sprintf("Stage 2 best RMSE: %.4f\n\n", stage2_rmse))
-
-## Stage 3: Joint parallel L-BFGS-B polish on all parameters ----
-# 33 params → 34 gradient evaluations per iteration → massive parallelism win
-cat("=== Stage 3: Joint parallel L-BFGS-B polish (all 33 params) ===\n")
-tictoc::tic("Stage 3 joint polish")
-
-all_names <- names(best_par)
-opt_joint <- optimParallel::optimParallel(
-  par = best_par,
-  fn = function(p) objective_fn_fast(p, fast_env),
-  lower = par_lower[all_names],
-  upper = par_upper[all_names],
-  parallel = list(cl = cl, forward = FALSE),
-  control = list(maxit = 500, trace = 1)
 )
-best_par <- opt_joint$par
 
+best_par[optim_names] <- opt_bobyqa$solution
+bobyqa_rmse <- obj_fast(best_par)
 tictoc::toc()
-final_rmse <- obj_fast(best_par)
-cat(sprintf("Stage 3 joint polish RMSE: %.4f (was %.4f, gain: %.4f)\n\n",
-            final_rmse, stage2_rmse, stage2_rmse - final_rmse))
+cat(sprintf("Stage 2 BOBYQA RMSE: %.4f (started at %.4f, gain: %.4f)
 
-cat(sprintf("\nFinal optimized RMSE (LOOCV): %.4f\n\n", final_rmse))
+",
+            bobyqa_rmse, s2_best_rmse, s2_best_rmse - bobyqa_rmse))
+
+## Stage 3: Subplex polish from BOBYQA solution ----
+# Subplex uses a different search geometry (simplex-based) and often finds
+# improvements that BOBYQA misses, especially in shallow valleys.
+cat("=== Stage 3: Subplex polish (different search geometry) ===
+")
+tictoc::tic("Stage 3 Subplex")
+
+s3_eval_count <- 0L
+s3_best_rmse <- bobyqa_rmse
+s3_start_time <- proc.time()[3]
+
+nloptr_fn_verbose_s3 <- function(x) {
+  rmse <- nloptr_fn(x)
+  s3_eval_count <<- s3_eval_count + 1L
+  if (rmse < s3_best_rmse) s3_best_rmse <<- rmse
+  if (s3_eval_count %% 50 == 0) {
+    elapsed <- proc.time()[3] - s3_start_time
+    cat(sprintf("  [%4d evals] best RMSE: %.4f | current: %.4f | %.0fs
+",
+                s3_eval_count, s3_best_rmse, rmse, elapsed))
+  }
+  rmse
+}
+
+# Clamp to bounds (BOBYQA can return values at floating-point boundary)
+sbplx_x0 <- pmin(pmax(opt_bobyqa$solution, unname(par_lower[optim_names])), unname(par_upper[optim_names]))
+
+opt_sbplx <- nloptr::nloptr(
+  x0 = sbplx_x0,
+  eval_f = nloptr_fn_verbose_s3,
+  lb = unname(par_lower[optim_names]),
+  ub = unname(par_upper[optim_names]),
+  opts = list(
+    algorithm = "NLOPT_LN_SBPLX",
+    maxeval = 5000,
+    ftol_rel = 1e-7,
+    xtol_rel = 1e-6
+  )
+)
+
+best_par[optim_names] <- opt_sbplx$solution
+sbplx_rmse <- obj_fast(best_par)
+tictoc::toc()
+cat(sprintf("Stage 3 Subplex RMSE: %.4f (was %.4f, gain: %.4f)
+
+",
+            sbplx_rmse, bobyqa_rmse, bobyqa_rmse - sbplx_rmse))
+
+final_rmse <- sbplx_rmse
+cat(sprintf("
+Final optimized RMSE (LOOCV): %.4f
+
+", final_rmse))
 
 # 7. Per-fold RMSE breakdown ----
 cat("=== Per-fold RMSE breakdown (leave-one-season-out) ===\n")
@@ -1251,10 +1330,6 @@ param_to_constant <- c(
   hitout_wt         = "CREDIT_HITOUT_WT",
   hitout_adv_wt     = "CREDIT_HITOUT_ADV_WT",
   ruck_contest_wt        = "CREDIT_RUCK_CONTEST_WT",
-  pos_adj_quantile_recv   = "CREDIT_POS_ADJ_QUANTILE_RECV",
-  pos_adj_quantile_disp   = "CREDIT_POS_ADJ_QUANTILE_DISP",
-  pos_adj_quantile_spoil  = "CREDIT_POS_ADJ_QUANTILE_SPOIL",
-  pos_adj_quantile_hitout = "CREDIT_POS_ADJ_QUANTILE_HITOUT",
   decay_recv        = "RATING_DECAY_RECV",
   decay_disp        = "RATING_DECAY_DISP",
   decay_spoil       = "RATING_DECAY_SPOIL",
