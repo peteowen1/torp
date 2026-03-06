@@ -258,6 +258,20 @@
 #' @importFrom httr GET stop_for_status content
 #' @importFrom jsonlite fromJSON
 get_afl_fixtures <- function(season = NULL) {
+  # TRUE = all available seasons
+  if (isTRUE(season)) {
+    seasons_df <- .afl_all_comp_seasons()
+    if (is.null(seasons_df) || nrow(seasons_df) == 0) {
+      cli::cli_abort("Could not fetch available seasons from AFL API.")
+    }
+    all_ids <- seasons_df$id
+    cli::cli_inform("Fetching fixtures for {length(all_ids)} season{?s}...")
+    results <- purrr::map(all_ids, function(sid) {
+      tryCatch(.fetch_fixtures_for_season_id(sid), error = function(e) NULL)
+    })
+    return(purrr::list_rbind(purrr::compact(results)))
+  }
+
   if (is.null(season)) {
     season <- get_afl_season()
     auto_season <- TRUE
@@ -280,31 +294,34 @@ get_afl_fixtures <- function(season = NULL) {
   result
 }
 
-#' Fetch fixtures for a single season (internal)
+#' Fetch fixtures for a single season by year (internal)
 #' @param season Numeric year
 #' @return A tibble, or NULL if the API returns an error
 #' @keywords internal
 .fetch_fixtures_for_season <- function(season) {
   season_id <- .afl_comp_season_id(season)
   if (is.null(season_id)) return(NULL)
+  .fetch_fixtures_for_season_id(season_id)
+}
 
+#' Fetch fixtures for a single comp season ID (internal)
+#' @param season_id Numeric comp season ID (e.g. 85)
+#' @return A tibble, or NULL if the API returns an error
+#' @keywords internal
+.fetch_fixtures_for_season_id <- function(season_id) {
   url <- paste0(
     "https://aflapi.afl.com.au/afl/v2/matches?compSeasonId=", season_id,
     "&pageSize=1000"
   )
 
   resp <- httr::GET(url)
-
   if (httr::http_error(resp)) return(NULL)
 
   json <- httr::content(resp, as = "text", encoding = "UTF-8") |>
     jsonlite::fromJSON(flatten = TRUE)
 
   matches <- json$matches
-  if (is.null(matches) || length(matches) == 0) {
-    cli::cli_warn("No fixtures returned for season {season}")
-    return(tibble::tibble())
-  }
+  if (is.null(matches) || length(matches) == 0) return(NULL)
 
   # Drop list-columns (nested structs) that arrow can't serialize
   list_cols <- names(matches)[vapply(matches, is.list, logical(1))]
