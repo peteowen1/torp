@@ -1,0 +1,1065 @@
+# Match Model Shared Functions
+# ============================
+# Shared data preparation and GAM training logic used by both:
+#   - data-raw/02-models/build_match_predictions.R  (weekly CI predictions)
+#   - torpmodels/data-raw/04-match-model/train_match_models.R (model evaluation)
+#
+# All functions are internal (not exported). The convenience wrapper
+# build_team_mdl_df() chains them end-to-end.
+
+# .build_fixtures_df ----
+
+#' Build fixture dataframe with temporal features
+#'
+#' Pivots home/away, adds date/time features with timezone-safe conversion.
+#'
+#' @param fixtures Raw fixtures from load_fixtures()
+#' @return Pivoted fixture dataframe with temporal columns
+#' @keywords internal
+.build_fixtures_df <- function(fixtures) {
+  team_map <- fixtures |>
+    dplyr::group_by(teamId = home.team.providerId) |>
+    dplyr::summarise(team_name = get_mode(home.team.name)) |>
+    dplyr::mutate(team_name = fitzRoy::replace_teams(team_name))
+
+  fix_df <- fixtures |>
+    dplyr::mutate(result = home.score.totalScore - away.score.totalScore) |>
+    dplyr::select(
+      providerId, compSeason.year, round.roundNumber,
+      home.team.providerId, away.team.providerId,
+      utcStartTime, venue.name, venue.timezone, result
+    ) |>
+    tidyr::pivot_longer(
+      cols = dplyr::ends_with("team.providerId"),
+      names_to = "team_type",
+      values_to = "team.providerId"
+    ) |>
+    dplyr::mutate(
+      venue = fitzRoy::replace_venues(venue.name),
+      team_type = substr(team_type, 1, 4),
+      result = ifelse(team_type == "away", -result, result)
+    ) |>
+    dplyr::select(
+      providerId, season = compSeason.year, round.roundNumber,
+      team_type, teamId = team.providerId,
+      utcStartTime, venue, venue.timezone, result
+    ) |>
+    dplyr::left_join(team_map, by = "teamId") |>
+    dplyr::mutate(team_name_season = as.factor(paste(team_name, season)))
+
+  # Vectorized timezone conversion: group by timezone
+  fix_df <- fix_df |>
+    dplyr::mutate(utc_dt = lubridate::ymd_hms(utcStartTime, tz = "UTC")) |>
+    dplyr::group_by(venue.timezone) |>
+    dplyr::mutate(
+      local_dt = lubridate::with_tz(utc_dt, tzone = dplyr::first(venue.timezone)),
+      local_start_time_str = format(local_dt, "%Y-%m-%d %H:%M:%S %Z"),
+      game_year = lubridate::year(local_dt),
+      game_month = lubridate::month(local_dt),
+      game_yday = lubridate::yday(local_dt),
+      game_mday = lubridate::day(local_dt),
+      game_wday = lubridate::wday(local_dt, week_start = 1),
+      game_wday_fac = as.factor(game_wday),
+      game_hour = lubridate::hour(local_dt) + lubridate::minute(local_dt) / 60 +
+        lubridate::second(local_dt) / 3600,
+      game_date_numeric = as.numeric(utc_dt),
+      timezone = venue.timezone,
+      game_prop_through_year = game_yday / ifelse(lubridate::leap_year(game_year), 366, 365),
+      game_prop_through_month = game_mday / lubridate::days_in_month(game_month),
+      game_prop_through_week = game_wday / 7,
+      game_prop_through_day = game_hour / 24,
+      game_year_decimal = as.numeric(game_year + game_prop_through_year)
+    ) |>
+    dplyr::ungroup() |>
+    dplyr::select(-local_dt)
+
+  fix_df
+}
+
+
+# .build_team_ratings_df ----
+
+#' Build team-level ratings from lineups
+#'
+#' Joins lineups to TORP ratings, imputes missing with priors, applies
+#' TOG weighting, generates all position columns, and aggregates to team level.
+#'
+#' @param teams Raw teams/lineups from load_teams()
+#' @param torp_df TORP ratings from load_torp_ratings()
+#' @return Team-level aggregated ratings with position columns
+#' @keywords internal
+.build_team_ratings_df <- function(teams, torp_df) {
+  torp_prior_total <- RATING_PRIOR_RATE_RECV + RATING_PRIOR_RATE_DISP +
+    RATING_PRIOR_RATE_SPOIL + RATING_PRIOR_RATE_HITOUT
+
+  team_lineup_df <- teams |>
+    dplyr::left_join(
+      torp_df,
+      by = c("player.playerId" = "player_id", "season" = "season", "round.roundNumber" = "round")
+    ) |>
+    dplyr::filter((position.x != "EMERG" & position.x != "SUB") | is.na(position.x))
+
+  # Impute missing ratings with per-component priors
+  na_torp_count <- sum(is.na(team_lineup_df$torp))
+  if (na_torp_count > 0) {
+    na_pct <- round(100 * na_torp_count / nrow(team_lineup_df), 1)
+    cli::cli_inform("Replacing {na_torp_count} ({na_pct}%) NA torp ratings with prior ({round(torp_prior_total, 2)})")
+    if (na_pct > 25) cli::cli_warn("High proportion of missing ratings ({na_pct}%)")
+    if (na_pct > 50) cli::cli_abort("More than 50% of ratings are missing ({na_pct}%) -- check data pipeline")
+  }
+
+  team_lineup_df <- team_lineup_df |>
+    dplyr::mutate(
+      torp = tidyr::replace_na(torp, torp_prior_total),
+      torp_recv = tidyr::replace_na(torp_recv, RATING_PRIOR_RATE_RECV),
+      torp_disp = tidyr::replace_na(torp_disp, RATING_PRIOR_RATE_DISP),
+      torp_spoil = tidyr::replace_na(torp_spoil, RATING_PRIOR_RATE_SPOIL),
+      torp_hitout = tidyr::replace_na(torp_hitout, RATING_PRIOR_RATE_HITOUT),
+      lineup_tog = tidyr::replace_na(POSITION_AVG_TOG[position.x], 0.75),
+      .unknown_pos = !is.na(position.x) & is.na(POSITION_AVG_TOG[position.x]),
+      torp = torp * lineup_tog,
+      torp_recv = torp_recv * lineup_tog,
+      torp_disp = torp_disp * lineup_tog,
+      torp_spoil = torp_spoil * lineup_tog,
+      torp_hitout = torp_hitout * lineup_tog
+    )
+
+  n_unknown <- sum(team_lineup_df$.unknown_pos, na.rm = TRUE)
+  if (n_unknown > 0) {
+    unknown_codes <- unique(team_lineup_df$position.x[team_lineup_df$.unknown_pos])
+    cli::cli_warn("Unknown position code{?s} not in POSITION_AVG_TOG: {paste(unknown_codes, collapse = ', ')} ({n_unknown} row{?s} defaulted to TOG=0.75)")
+  }
+  team_lineup_df$.unknown_pos <- NULL
+
+  # Generate position columns from lookup tables
+  for (col in names(MATCH_PHASE_MAP))
+    team_lineup_df[[col]] <- ifelse(team_lineup_df$position.x %in% MATCH_PHASE_MAP[[col]], team_lineup_df$torp, NA)
+  for (col in names(MATCH_POS_GROUP_MAP))
+    team_lineup_df[[col]] <- ifelse(team_lineup_df$position.x %in% MATCH_POS_GROUP_MAP[[col]], team_lineup_df$torp, NA)
+  for (pos in MATCH_INDIVIDUAL_POS)
+    team_lineup_df[[pos]] <- ifelse(team_lineup_df$position.x == pos, team_lineup_df$torp, NA)
+  for (col in names(MATCH_COMBO_POS_MAP))
+    team_lineup_df[[col]] <- ifelse(team_lineup_df$position.x %in% MATCH_COMBO_POS_MAP[[col]], team_lineup_df$torp, NA)
+  for (col in names(MATCH_LISTED_POS_MAP))
+    team_lineup_df[[col]] <- ifelse(team_lineup_df$position.y %in% MATCH_LISTED_POS_MAP[[col]], team_lineup_df$torp, NA)
+  team_lineup_df$other_pos <- ifelse(is.na(team_lineup_df$position.y), team_lineup_df$torp, NA)
+
+  # Verify position columns exist
+  missing_pos <- setdiff(MATCH_POS_COLS, names(team_lineup_df))
+  if (length(missing_pos) > 0) {
+    cli::cli_abort("Missing position columns after generation: {paste(missing_pos, collapse = ', ')}")
+  }
+
+  # Aggregate to team level
+  torp_sum_cols <- c("torp", "torp_recv", "torp_disp", "torp_spoil", "torp_hitout")
+
+  team_rt_df <- team_lineup_df |>
+    dplyr::filter(!is.na(player.playerId)) |>
+    dplyr::mutate(team_name_adj = fitzRoy::replace_teams(teamName)) |>
+    dplyr::group_by(providerId, teamId, season, round.roundNumber, teamType) |>
+    dplyr::summarise(
+      venue = fitzRoy::replace_venues(max(venue.name)),
+      team_name_adj = max(team_name_adj),
+      dplyr::across(dplyr::all_of(c(torp_sum_cols, MATCH_POS_COLS)), ~ sum(.x, na.rm = TRUE)),
+      count = dplyr::n(),
+      .groups = "drop"
+    )
+
+  team_rt_df
+}
+
+
+# .build_match_features ----
+
+#' Build match-level features (home ground, familiarity, distance, days rest)
+#'
+#' @param fix_df Pivoted fixture df from .build_fixtures_df()
+#' @param team_rt_df Team ratings df from .build_team_ratings_df()
+#' @param all_grounds Stadium reference data
+#' @return Fixture df enriched with log_dist, familiarity, days_rest, and team ratings
+#' @keywords internal
+.build_match_features <- function(fix_df, team_rt_df, all_grounds) {
+  torp_sum_cols <- c("torp", "torp_recv", "torp_disp", "torp_spoil", "torp_hitout")
+
+  # Home ground detection
+  home_ground <- team_rt_df |>
+    dplyr::group_by(teamId, team_name_adj) |>
+    dplyr::summarise(home_ground = get_mode(venue), .groups = "drop") |>
+    dplyr::mutate(venue_adj = fitzRoy::replace_venues(as.character(home_ground))) |>
+    dplyr::left_join(
+      all_grounds |>
+        dplyr::mutate(venue_adj = fitzRoy::replace_venues(as.character(Ground))),
+      by = c("venue_adj" = "venue_adj")
+    )
+
+  # Familiarity: cumulative venue proportion per team
+  ground_prop <- team_rt_df |>
+    dplyr::arrange(teamId, season, round.roundNumber) |>
+    dplyr::group_by(teamId) |>
+    dplyr::mutate(cum_total_games = dplyr::row_number() - 1) |>
+    dplyr::group_by(teamId, venue) |>
+    dplyr::mutate(cum_venue_games = dplyr::row_number() - 1) |>
+    dplyr::ungroup() |>
+    dplyr::mutate(
+      familiarity = ifelse(cum_total_games > 0, cum_venue_games / cum_total_games, 0)
+    ) |>
+    dplyr::select(teamId, season, round.roundNumber, venue, familiarity)
+
+  # Distance traveled (Haversine)
+  team_dist_df <- fix_df |>
+    dplyr::mutate(
+      venue = ifelse(venue == "Adelaide Arena at Jiangwan Stadium", "Jiangwan Stadium", venue)
+    ) |>
+    dplyr::left_join(
+      all_grounds |> dplyr::select(venue, venue_lat = Latitude, venue_lon = Longitude),
+      by = "venue"
+    ) |>
+    dplyr::left_join(
+      home_ground |> dplyr::select(teamId, team_lat = Latitude, team_lon = Longitude),
+      by = "teamId"
+    ) |>
+    dplyr::mutate(
+      distance = purrr::pmap_dbl(
+        list(venue_lon, venue_lat, team_lon, team_lat),
+        ~ geosphere::distHaversine(c(..1, ..2), c(..3, ..4))
+      ),
+      log_dist = log(distance + MATCH_LOG_DIST_OFFSET),
+      log_dist = tidyr::replace_na(log_dist, MATCH_LOG_DIST_DEFAULT)
+    ) |>
+    dplyr::left_join(ground_prop, by = c("teamId", "season", "round.roundNumber", "venue")) |>
+    dplyr::mutate(familiarity = tidyr::replace_na(familiarity, 0))
+
+  # Days rest
+  days_rest <- fix_df |>
+    dplyr::arrange(teamId, utcStartTime) |>
+    dplyr::group_by(teamId, season) |>
+    dplyr::mutate(days_rest = as.numeric(difftime(utcStartTime, dplyr::lag(utcStartTime), units = "days"))) |>
+    dplyr::ungroup() |>
+    dplyr::mutate(days_rest = tidyr::replace_na(days_rest, 21))
+
+  # Combine all features
+  team_rt_fix_df <- fix_df |>
+    dplyr::mutate(team_name = fitzRoy::replace_teams(team_name)) |>
+    dplyr::left_join(
+      team_dist_df |> dplyr::select(providerId, teamId, log_dist, familiarity),
+      by = c("providerId", "teamId")
+    ) |>
+    dplyr::left_join(
+      days_rest |> dplyr::select(providerId, teamId, days_rest),
+      by = c("providerId", "teamId")
+    ) |>
+    dplyr::left_join(
+      team_rt_df |> dplyr::select(
+        providerId, teamId, season, round.roundNumber,
+        dplyr::all_of(c(torp_sum_cols, MATCH_POS_COLS, "count"))
+      ),
+      by = c("providerId", "teamId", "season", "round.roundNumber")
+    ) |>
+    dplyr::group_by(teamId) |>
+    tidyr::fill(torp, torp_recv, torp_disp, torp_spoil, torp_hitout) |>
+    dplyr::mutate(
+      def = ifelse(def == 0, dplyr::lag(def), def),
+      mid = ifelse(mid == 0, dplyr::lag(mid), mid),
+      fwd = ifelse(fwd == 0, dplyr::lag(fwd), fwd),
+      int = ifelse(int == 0, dplyr::lag(int), int),
+      team_type_fac = as.factor(team_type)
+    ) |>
+    tidyr::fill(def, mid, fwd, int) |>
+    dplyr::ungroup()
+
+  team_rt_fix_df
+}
+
+
+# .load_match_weather ----
+
+#' Load weather data for match modelling
+#'
+#' Loads historical weather from parquet and optionally fetches forecast
+#' for upcoming matches via Open-Meteo API.
+#'
+#' @param fixtures Raw fixtures (for identifying upcoming matches)
+#' @param all_grounds Stadium reference data (for geocoding)
+#' @param target_weeks Numeric vector of target round numbers
+#' @param season Target season
+#' @param weather_path Path to historical weather parquet file
+#' @return Tibble with providerId, temp_avg, precipitation_total, wind_avg, humidity_avg, is_roof
+#' @keywords internal
+.load_match_weather <- function(fixtures, all_grounds, target_weeks = NULL,
+                                season = NULL, weather_path = NULL) {
+  if (is.null(weather_path)) {
+    weather_path <- file.path("data-raw", "weather_data.parquet")
+  }
+
+  if (!file.exists(weather_path)) {
+    cli::cli_warn("Weather data not found at {weather_path} -- skipping weather features")
+    return(tibble::tibble(providerId = character()))
+  }
+
+  historical <- arrow::read_parquet(weather_path) |>
+    dplyr::select(providerId, temp_avg, precipitation_total, wind_avg, humidity_avg, is_roof)
+
+  # Forecast for upcoming matches not in historical data
+  if (!is.null(target_weeks) && !is.null(season)) {
+    upcoming <- fixtures |>
+      dplyr::filter(
+        compSeason.year == season,
+        round.roundNumber %in% target_weeks,
+        !providerId %in% historical$providerId
+      )
+
+    if (nrow(upcoming) > 0) {
+      cli::cli_inform("Fetching forecast weather for {nrow(upcoming)} upcoming fixtures")
+      forecast <- .fetch_forecast_weather(upcoming, all_grounds)
+      weather_df <- dplyr::bind_rows(historical, forecast)
+    } else {
+      weather_df <- historical
+    }
+  } else {
+    weather_df <- historical
+  }
+
+  weather_df
+}
+
+#' Fetch forecast weather from Open-Meteo API
+#' @keywords internal
+.fetch_forecast_weather <- function(fixtures_upcoming, all_grounds) {
+  if (nrow(fixtures_upcoming) == 0) return(tibble::tibble())
+
+  fixtures_geo <- fixtures_upcoming |>
+    dplyr::mutate(venue = fitzRoy::replace_venues(venue.name)) |>
+    dplyr::left_join(
+      all_grounds |>
+        dplyr::select(venue, Latitude, Longitude) |>
+        dplyr::distinct(venue, .keep_all = TRUE),
+      by = "venue"
+    ) |>
+    dplyr::filter(!is.na(Latitude))
+
+  if (nrow(fixtures_geo) == 0) return(tibble::tibble())
+
+  venue_dates <- fixtures_geo |>
+    dplyr::mutate(
+      match_date = as.Date(as.POSIXct(utcStartTime, format = "%Y-%m-%dT%H:%M", tz = "UTC"))
+    ) |>
+    dplyr::group_by(venue, Latitude, Longitude) |>
+    dplyr::summarise(
+      min_date = min(match_date), max_date = max(match_date), .groups = "drop"
+    )
+
+  all_hourly <- list()
+  for (i in seq_len(nrow(venue_dates))) {
+    vd <- venue_dates[i, ]
+    hourly <- tryCatch({
+      resp <- httr2::request("https://api.open-meteo.com/v1/forecast") |>
+        httr2::req_url_query(
+          latitude = vd$Latitude, longitude = vd$Longitude,
+          start_date = format(vd$min_date, "%Y-%m-%d"),
+          end_date = format(vd$max_date, "%Y-%m-%d"),
+          hourly = "temperature_2m,precipitation,wind_speed_10m,relative_humidity_2m",
+          timezone = "UTC"
+        ) |>
+        httr2::req_retry(max_tries = 3, backoff = ~ 2) |>
+        httr2::req_perform() |>
+        httr2::resp_body_json()
+      tibble::tibble(
+        time = as.POSIXct(unlist(hourly$hourly$time), format = "%Y-%m-%dT%H:%M", tz = "UTC"),
+        temperature_2m = as.numeric(unlist(hourly$hourly$temperature_2m)),
+        precipitation = as.numeric(unlist(hourly$hourly$precipitation)),
+        wind_speed_10m = as.numeric(unlist(hourly$hourly$wind_speed_10m)),
+        relative_humidity_2m = as.numeric(unlist(hourly$hourly$relative_humidity_2m)),
+        venue = vd$venue
+      )
+    }, error = function(e) {
+      cli::cli_warn("Forecast failed for {vd$venue}: {conditionMessage(e)}")
+      NULL
+    })
+    if (!is.null(hourly)) all_hourly[[i]] <- hourly
+    Sys.sleep(0.3)
+  }
+
+  if (length(all_hourly) == 0) return(tibble::tibble())
+  hourly_df <- dplyr::bind_rows(all_hourly)
+
+  # Aggregate to match-level (3hr window from kickoff)
+  fixtures_geo |>
+    dplyr::mutate(
+      kickoff_utc = as.POSIXct(utcStartTime, format = "%Y-%m-%dT%H:%M", tz = "UTC")
+    ) |>
+    dplyr::left_join(hourly_df, by = "venue", relationship = "many-to-many") |>
+    dplyr::filter(time >= kickoff_utc, time < kickoff_utc + lubridate::hours(3)) |>
+    dplyr::group_by(providerId) |>
+    dplyr::summarise(
+      temp_avg = mean(temperature_2m, na.rm = TRUE),
+      precipitation_total = sum(precipitation, na.rm = TRUE),
+      wind_avg = mean(wind_speed_10m, na.rm = TRUE),
+      humidity_avg = mean(relative_humidity_2m, na.rm = TRUE),
+      is_roof = dplyr::first(venue) == "Docklands",
+      .groups = "drop"
+    )
+}
+
+
+# .build_team_mdl_df ----
+
+#' Build the full match model dataset
+#'
+#' Self-joins for opponent features, computes diffs, joins results/xG/weather,
+#' adds log-transformed weather, and applies time-decay weights.
+#'
+#' @param team_rt_fix_df Combined fixture + team ratings from .build_match_features()
+#' @param results Match results from load_results()
+#' @param xg_df Expected goals data from load_xg()
+#' @param weather_df Weather data from .load_match_weather()
+#' @param weight_anchor_date Date for time-decay weight anchoring
+#' @return Complete model dataset ready for GAM training
+#' @keywords internal
+.build_team_mdl_df <- function(team_rt_fix_df, results, xg_df, weather_df,
+                               weight_anchor_date) {
+  # Opponent columns for self-join
+  opp_cols <- c(
+    "providerId", "team_type",
+    "torp", "torp_recv", "torp_disp", "torp_spoil", "torp_hitout",
+    "def", "mid", "fwd", "int", MATCH_INDIVIDUAL_POS,
+    "team_name", "team_name_season",
+    "log_dist", "familiarity", "days_rest",
+    "team_type_fac", "season", "round.roundNumber", "venue", "count",
+    "game_year_decimal", "game_prop_through_year", "game_prop_through_month",
+    "game_wday_fac", "game_prop_through_day"
+  )
+
+  team_mdl_df_tot <- team_rt_fix_df |>
+    dplyr::left_join(
+      team_rt_fix_df |>
+        dplyr::select(dplyr::all_of(opp_cols)) |>
+        dplyr::mutate(type_anti = dplyr::if_else(team_type == "home", "away", "home")),
+      by = c("providerId" = "providerId", "team_type" = "type_anti")
+    ) |>
+    dplyr::mutate(
+      torp_diff = torp.x - torp.y,
+      torp_ratio = log(pmax(torp.x, 0.01) / pmax(torp.y, 0.01)),
+      torp_recv_diff = torp_recv.x - torp_recv.y,
+      torp_disp_diff = torp_disp.x - torp_disp.y,
+      torp_spoil_diff = torp_spoil.x - torp_spoil.y,
+      torp_hitout_diff = torp_hitout.x - torp_hitout.y
+    ) |>
+    dplyr::left_join(
+      results |>
+        dplyr::select(
+          match.matchId,
+          homeTeamScore.matchScore.totalScore,
+          homeTeamScore.matchScore.goals,
+          homeTeamScore.matchScore.behinds,
+          awayTeamScore.matchScore.totalScore,
+          awayTeamScore.matchScore.goals,
+          awayTeamScore.matchScore.behinds,
+          match.utcStartTime
+        ),
+      by = c("providerId" = "match.matchId")
+    ) |>
+    dplyr::left_join(xg_df, by = c("providerId" = "match_id")) |>
+    dplyr::mutate(
+      home_shots = homeTeamScore.matchScore.goals + homeTeamScore.matchScore.behinds,
+      away_shots = awayTeamScore.matchScore.goals + awayTeamScore.matchScore.behinds,
+      score_diff = ifelse(team_type == "home",
+        homeTeamScore.matchScore.totalScore - awayTeamScore.matchScore.totalScore,
+        awayTeamScore.matchScore.totalScore - homeTeamScore.matchScore.totalScore),
+      shot_diff = ifelse(team_type == "home",
+        home_shots - away_shots, away_shots - home_shots),
+      team_shots = ifelse(team_type == "home", home_shots, away_shots),
+      harmean_shots = harmonic_mean(home_shots, away_shots),
+      shot_conv = ifelse(team_type == "home",
+        homeTeamScore.matchScore.goals / pmax(home_shots, 1),
+        awayTeamScore.matchScore.goals / pmax(away_shots, 1)),
+      shot_conv_diff = ifelse(team_type == "home",
+        (homeTeamScore.matchScore.goals / pmax(home_shots, 1)) -
+          (awayTeamScore.matchScore.goals / pmax(away_shots, 1)),
+        (awayTeamScore.matchScore.goals / pmax(away_shots, 1)) -
+          (homeTeamScore.matchScore.goals / pmax(home_shots, 1))),
+      xscore_diff = ifelse(team_type == "home", xscore_diff, -xscore_diff),
+      team_xscore = ifelse(team_type == "home", home_xscore, away_xscore),
+      win = ifelse(score_diff > 0, 1, ifelse(score_diff == 0, 0.5, 0)),
+      hoff_adef = pmax(pmin((fwd.x - def.y), 20), -5),
+      hmid_amid = pmax(pmin((mid.x - mid.y), 12), -12),
+      hdef_afwd = pmax(pmin((def.x - fwd.y), 5), -20),
+      hint_aint = pmax(pmin((int.x - int.y), 10), -10)
+    )
+
+  # Individual position diffs
+  for (pos in MATCH_INDIVIDUAL_POS) {
+    diff_col <- paste0(pos, "_diff")
+    x_col <- paste0(pos, ".x")
+    y_col <- paste0(pos, ".y")
+    team_mdl_df_tot[[diff_col]] <- team_mdl_df_tot[[x_col]] - team_mdl_df_tot[[y_col]]
+  }
+
+  team_mdl_df_tot <- team_mdl_df_tot |>
+    dplyr::mutate(
+      int_diff = int.x - int.y,
+      team_type_fac = team_type_fac.x,
+      total_score = homeTeamScore.matchScore.totalScore + awayTeamScore.matchScore.totalScore,
+      total_shots = home_shots + away_shots,
+      team_name.x = as.factor(team_name.x),
+      team_name.y = as.factor(team_name.y),
+      log_dist_diff = log_dist.x - log_dist.y,
+      familiarity_diff = familiarity.x - familiarity.y,
+      days_rest_diff = days_rest.x - days_rest.y,
+      days_rest_diff_fac = as.factor(round(ifelse(
+        days_rest_diff > 3, 4, ifelse(days_rest_diff < -3, -4, days_rest_diff)
+      ))),
+      weightz = exp(as.numeric(-(weight_anchor_date - as.Date(match.utcStartTime))) /
+        MATCH_WEIGHT_DECAY_DAYS),
+      weightz = weightz / mean(weightz, na.rm = TRUE),
+      shot_weightz = (harmean_shots / mean(harmean_shots, na.rm = TRUE)) * weightz
+    )
+
+  # Filter early matches with unreliable data
+  team_mdl_df <- team_mdl_df_tot |>
+    dplyr::filter(
+      season.x > MATCH_MIN_DATA_SEASON |
+        (season.x == MATCH_MIN_DATA_SEASON & round.roundNumber.x >= MATCH_MIN_DATA_ROUND)
+    )
+
+  # Adjust total_xpoints scale
+  xpoints_scale <- mean(team_mdl_df$total_points, na.rm = TRUE) /
+    mean(team_mdl_df$total_xpoints, na.rm = TRUE)
+  if (!is.finite(xpoints_scale)) {
+    cli::cli_abort(c(
+      "Cannot compute xpoints scaling factor (NaN/Inf).",
+      "i" = "total_points non-NA: {sum(!is.na(team_mdl_df$total_points))}",
+      "i" = "total_xpoints non-NA: {sum(!is.na(team_mdl_df$total_xpoints))}",
+      "i" = "Check xg_df join."
+    ))
+  }
+  team_mdl_df <- team_mdl_df |>
+    dplyr::mutate(
+      total_xpoints_adj = total_xpoints * xpoints_scale,
+      venue_fac = as.factor(venue.x)
+    )
+
+  # Join weather and apply log transforms
+  team_mdl_df <- team_mdl_df |>
+    dplyr::left_join(weather_df, by = "providerId") |>
+    dplyr::mutate(
+      temp_avg = tidyr::replace_na(temp_avg, stats::median(temp_avg, na.rm = TRUE)),
+      wind_avg = tidyr::replace_na(wind_avg, stats::median(wind_avg, na.rm = TRUE)),
+      humidity_avg = tidyr::replace_na(humidity_avg, stats::median(humidity_avg, na.rm = TRUE)),
+      precipitation_total = tidyr::replace_na(precipitation_total, 0),
+      is_roof = tidyr::replace_na(is_roof, FALSE),
+      log_wind = log1p(wind_avg),
+      log_precip = log1p(precipitation_total)
+    )
+
+  cli::cli_inform("team_mdl_df: {nrow(team_mdl_df)} rows, {ncol(team_mdl_df)} cols")
+  cli::cli_inform("Weather joined: {sum(!is.na(team_mdl_df$temp_avg))} of {nrow(team_mdl_df)} rows")
+
+  team_mdl_df
+}
+
+
+# .train_match_gams ----
+
+#' Train the 5-model sequential GAM pipeline
+#'
+#' Trains total xPoints, xScore diff, conversion, score diff, and win probability
+#' GAMs sequentially (each model's predictions feed the next). Model 1 includes
+#' weather smooths (log_wind, log_precip, temp_avg, humidity_avg).
+#'
+#' @param team_mdl_df Complete model dataset from .build_team_mdl_df()
+#' @param train_filter Logical vector indicating training rows (NULL = all completed matches)
+#' @param nthreads Number of threads for mgcv::bam() (default 4)
+#' @return List with $models (named list of 5 GAMs) and $data (team_mdl_df with predictions)
+#' @keywords internal
+.train_match_gams <- function(team_mdl_df, train_filter = NULL, nthreads = 4L) {
+  loadNamespace("mgcv")
+
+  if (is.null(train_filter)) {
+    train_mask <- !is.na(team_mdl_df$win)
+  } else {
+    train_mask <- train_filter & !is.na(team_mdl_df$win)
+  }
+
+  gam_df <- team_mdl_df[train_mask, ]
+  cli::cli_inform("Training on {nrow(gam_df)} completed matches")
+  if (nrow(gam_df) == 0) {
+    cli::cli_abort("Cannot train GAM models: 0 completed matches after filtering")
+  }
+
+  # Model 1: Total expected points (includes weather smooths)
+  cli::cli_progress_step("Training total xPoints model")
+  afl_total_xpoints_mdl <- mgcv::bam(
+    total_xpoints_adj ~
+      s(team_type_fac, bs = "re")
+      + s(game_year_decimal.x, bs = "ts")
+      + s(game_prop_through_year.x, bs = "cc")
+      + s(game_prop_through_month.x, bs = "cc")
+      + s(game_wday_fac.x, bs = "re")
+      + s(game_prop_through_day.x, bs = "cc")
+      + s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
+      + s(team_name_season.x, bs = "re") + s(team_name_season.y, bs = "re")
+      + s(abs(torp_diff), bs = "ts", k = 5)
+      + s(abs(torp_recv_diff), bs = "ts", k = 5)
+      + s(abs(torp_disp_diff), bs = "ts", k = 5)
+      + s(abs(torp_spoil_diff), bs = "ts", k = 5)
+      + s(abs(torp_hitout_diff), bs = "ts", k = 5)
+      + s(torp.x, bs = "ts", k = 5) + s(torp.y, bs = "ts", k = 5)
+      + s(venue_fac, bs = "re")
+      + s(log_dist.x, bs = "ts", k = 5) + s(log_dist.y, bs = "ts", k = 5)
+      + s(familiarity.x, bs = "ts", k = 5) + s(familiarity.y, bs = "ts", k = 5)
+      + s(log_dist_diff, bs = "ts", k = 5)
+      + s(familiarity_diff, bs = "ts", k = 5)
+      + s(days_rest_diff_fac, bs = "re")
+      + s(log_wind, bs = "ts", k = 5)
+      + s(log_precip, bs = "ts", k = 5)
+      + s(temp_avg, bs = "ts", k = 5)
+      + s(humidity_avg, bs = "ts", k = 5),
+    data = gam_df, weights = gam_df$weightz,
+    family = gaussian(), nthreads = nthreads, select = TRUE, discrete = TRUE,
+    drop.unused.levels = FALSE
+  )
+  team_mdl_df$pred_tot_xscore <- predict(afl_total_xpoints_mdl, newdata = team_mdl_df, type = "response")
+
+  # Model 2: xScore differential
+  cli::cli_progress_step("Training xScore diff model")
+  gam_df$pred_tot_xscore <- team_mdl_df$pred_tot_xscore[train_mask]
+  afl_xscore_diff_mdl <- mgcv::bam(
+    xscore_diff ~
+      s(team_type_fac, bs = "re")
+      + s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
+      + s(team_name_season.x, bs = "re") + s(team_name_season.y, bs = "re")
+      + ti(torp_diff, pred_tot_xscore, bs = c("ts", "ts"), k = 4)
+      + s(pred_tot_xscore, bs = "ts", k = 5)
+      + s(torp_diff, bs = "ts", k = 5)
+      + s(torp_recv_diff, bs = "ts", k = 5)
+      + s(torp_disp_diff, bs = "ts", k = 5)
+      + s(torp_spoil_diff, bs = "ts", k = 5)
+      + s(torp_hitout_diff, bs = "ts", k = 5)
+      + s(log_dist_diff, bs = "ts", k = 5) + s(familiarity_diff, bs = "ts", k = 5)
+      + s(days_rest_diff_fac, bs = "re"),
+    data = gam_df, weights = gam_df$weightz,
+    family = gaussian(), nthreads = nthreads, select = TRUE, discrete = TRUE,
+    drop.unused.levels = FALSE
+  )
+  team_mdl_df$pred_xscore_diff <- predict(afl_xscore_diff_mdl, newdata = team_mdl_df, type = "response")
+
+  # Model 3: Conversion differential
+  cli::cli_progress_step("Training conversion model")
+  gam_df$pred_xscore_diff <- team_mdl_df$pred_xscore_diff[train_mask]
+  afl_conv_mdl <- mgcv::bam(
+    shot_conv_diff ~
+      s(team_type_fac, bs = "re")
+      + s(game_year_decimal.x, bs = "ts")
+      + s(game_prop_through_year.x, bs = "cc")
+      + s(game_prop_through_month.x, bs = "cc")
+      + s(game_wday_fac.x, bs = "re")
+      + s(game_prop_through_day.x, bs = "cc")
+      + s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
+      + s(team_name_season.x, bs = "re") + s(team_name_season.y, bs = "re")
+      + ti(torp_diff, pred_tot_xscore, bs = c("ts", "ts"), k = 4)
+      + s(torp_diff, bs = "ts", k = 5)
+      + s(torp_recv_diff, bs = "ts", k = 5)
+      + s(torp_disp_diff, bs = "ts", k = 5)
+      + s(torp_spoil_diff, bs = "ts", k = 5)
+      + s(torp_hitout_diff, bs = "ts", k = 5)
+      + s(pred_tot_xscore, bs = "ts", k = 5)
+      + s(pred_xscore_diff, bs = "ts", k = 5)
+      + s(venue_fac, bs = "re")
+      + s(log_dist_diff, bs = "ts", k = 5) + s(familiarity_diff, bs = "ts", k = 5)
+      + s(days_rest_diff_fac, bs = "re"),
+    data = gam_df, weights = gam_df$shot_weightz,
+    family = gaussian(), nthreads = nthreads, select = TRUE, discrete = TRUE,
+    drop.unused.levels = FALSE
+  )
+  team_mdl_df$pred_conv_diff <- predict(afl_conv_mdl, newdata = team_mdl_df, type = "response")
+
+  # Model 4: Score differential
+  cli::cli_progress_step("Training score diff model")
+  gam_df$pred_conv_diff <- team_mdl_df$pred_conv_diff[train_mask]
+  afl_score_mdl <- mgcv::bam(
+    score_diff ~
+      s(team_type_fac, bs = "re")
+      + s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
+      + s(team_name_season.x, bs = "re") + s(team_name_season.y, bs = "re")
+      + ti(pred_xscore_diff, pred_conv_diff, bs = "ts", k = 5)
+      + ti(pred_tot_xscore, pred_conv_diff, bs = "ts", k = 5)
+      + s(pred_xscore_diff)
+      + s(log_dist_diff, bs = "ts", k = 5) + s(familiarity_diff, bs = "ts", k = 5)
+      + s(days_rest_diff_fac, bs = "re"),
+    data = gam_df, weights = gam_df$weightz,
+    family = "gaussian", nthreads = nthreads, select = TRUE, discrete = TRUE,
+    drop.unused.levels = FALSE
+  )
+  team_mdl_df$pred_score_diff <- predict(afl_score_mdl, newdata = team_mdl_df, type = "response")
+
+  # Model 5: Win probability
+  cli::cli_progress_step("Training win probability model")
+  gam_df$pred_score_diff <- team_mdl_df$pred_score_diff[train_mask]
+  afl_win_mdl <- mgcv::bam(
+    win ~
+      +s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
+      + s(team_name_season.x, bs = "re") + s(team_name_season.y, bs = "re")
+      + ti(pred_tot_xscore, pred_score_diff, bs = c("ts", "ts"), k = 4)
+      + s(pred_score_diff, bs = "ts", k = 5)
+      + s(log_dist_diff, bs = "ts", k = 5) + s(familiarity_diff, bs = "ts", k = 5)
+      + s(days_rest_diff_fac, bs = "re"),
+    data = gam_df, weights = gam_df$weightz,
+    family = "binomial", nthreads = nthreads, select = TRUE, discrete = TRUE,
+    drop.unused.levels = FALSE
+  )
+  team_mdl_df$pred_win <- predict(afl_win_mdl, newdata = team_mdl_df, type = "response")
+
+  # Validation
+  if (any(is.na(team_mdl_df$pred_win[!is.na(team_mdl_df$win)]))) {
+    cli::cli_warn("NA values in pred_win for completed matches")
+  }
+  pred_win_range <- range(team_mdl_df$pred_win, na.rm = TRUE)
+  if (pred_win_range[1] < 0 || pred_win_range[2] > 1) {
+    cli::cli_warn("pred_win outside [0,1]: [{round(pred_win_range[1], 4)}, {round(pred_win_range[2], 4)}]")
+  }
+
+  # Scoring metrics
+  team_mdl_df$bits <- dplyr::case_when(
+    team_mdl_df$win == 1   ~ 1 + log2(team_mdl_df$pred_win),
+    team_mdl_df$win == 0   ~ 1 + log2(1 - team_mdl_df$pred_win),
+    TRUE                   ~ 1 + 0.5 * log2(team_mdl_df$pred_win * (1 - team_mdl_df$pred_win))
+  )
+  team_mdl_df$tips <- dplyr::case_when(
+    round(team_mdl_df$pred_win) == team_mdl_df$win ~ 1,
+    team_mdl_df$win == 0.5                         ~ 1,
+    TRUE                                           ~ 0
+  )
+  team_mdl_df$mae <- abs(team_mdl_df$score_diff - team_mdl_df$pred_score_diff)
+
+  models <- list(
+    total_xpoints = afl_total_xpoints_mdl,
+    xscore_diff   = afl_xscore_diff_mdl,
+    conv_diff     = afl_conv_mdl,
+    score_diff    = afl_score_mdl,
+    win           = afl_win_mdl
+  )
+
+  cli::cli_alert_success("GAM pipeline trained on {nrow(gam_df)} matches, predictions generated")
+
+  list(models = models, data = team_mdl_df)
+}
+
+
+# build_team_mdl_df (convenience wrapper) ----
+
+#' Build complete match model dataset end-to-end
+#'
+#' Convenience wrapper chaining all internal .build_* functions.
+#' Loads data, builds fixtures, ratings, features, weather, and model dataset.
+#'
+#' @param season Season to build for (default: current via get_afl_season())
+#' @param target_weeks Numeric vector of target round numbers (used for weather forecasting)
+#' @param weather_path Path to historical weather parquet (default: data-raw/weather_data.parquet)
+#' @return Complete team_mdl_df ready for GAM training
+#' @keywords internal
+build_team_mdl_df <- function(season = NULL, target_weeks = NULL,
+                              weather_path = NULL) {
+  if (is.null(season)) season <- get_afl_season()
+
+  cli::cli_h2("Loading data")
+  all_grounds <- file_reader("stadium_data", "reference-data")
+  xg_df <- load_xg(TRUE)
+  fixtures <- load_fixtures(TRUE)
+  results <- load_results(TRUE)
+  teams <- load_teams(TRUE)
+  torp_df <- load_torp_ratings()
+
+  cli::cli_inform(paste0(
+    "Loaded: fixtures=", nrow(fixtures), ", results=", nrow(results),
+    ", teams=", nrow(teams), ", ratings=", nrow(torp_df)
+  ))
+
+  # Input validation
+  if (nrow(fixtures) < 100) cli::cli_abort("Fixtures too small ({nrow(fixtures)} rows)")
+  if (nrow(torp_df) < 100) cli::cli_abort("Ratings too small ({nrow(torp_df)} rows)")
+  if (nrow(teams) < 100) cli::cli_abort("Teams too small ({nrow(teams)} rows)")
+
+  cli::cli_h2("Building fixture features")
+  fix_df <- .build_fixtures_df(fixtures)
+
+  cli::cli_h2("Processing lineups")
+  team_rt_df <- .build_team_ratings_df(teams, torp_df)
+
+  cli::cli_h2("Computing features")
+  team_rt_fix_df <- .build_match_features(fix_df, team_rt_df, all_grounds)
+
+  cli::cli_h2("Loading weather")
+  weather_df <- .load_match_weather(fixtures, all_grounds, target_weeks, season, weather_path)
+
+  # Weight anchor: most recent fixture date
+  weight_anchor_date <- if (!is.null(target_weeks) && !is.null(season)) {
+    target_fix <- fixtures |>
+      dplyr::filter(compSeason.year == season, round.roundNumber %in% target_weeks)
+    if (nrow(target_fix) > 0) as.Date(min(target_fix$utcStartTime)) else Sys.Date()
+  } else {
+    max(as.Date(fix_df$utcStartTime), na.rm = TRUE)
+  }
+  cli::cli_inform("Weight anchor date: {weight_anchor_date}")
+
+  cli::cli_h2("Building model dataset")
+  team_mdl_df <- .build_team_mdl_df(
+    team_rt_fix_df, results, xg_df, weather_df, weight_anchor_date
+  )
+
+  team_mdl_df
+}
+
+
+# run_predictions_pipeline ----
+
+#' Run weekly match predictions pipeline
+#'
+#' Builds team_mdl_df with injury-adjusted ratings, trains 5 sequential GAMs,
+#' generates predictions for target weeks, and uploads to torpdata releases.
+#'
+#' @param week Single target week (auto-detected if NULL)
+#' @param weeks Vector of weeks, or "all" for all fixture weeks
+#' @param season Season year (default: current via get_afl_season())
+#' @return Prediction tibble (invisibly)
+#' @keywords internal
+run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
+
+  if (is.null(season)) season <- get_afl_season()
+
+  if (!is.null(week) && !is.null(weeks)) {
+    cli::cli_abort("Specify either {.arg week} or {.arg weeks}, not both")
+  }
+  if (is.null(week) && is.null(weeks)) week <- get_afl_week(type = "next")
+
+  cli::cli_h1("Match Predictions Pipeline")
+  tictoc::tic("predictions_total")
+
+  # Load Data ----
+  cli::cli_h2("Loading data")
+
+  all_grounds <- file_reader("stadium_data", "reference-data")
+  xg_df <- load_xg(TRUE)
+  fixtures <- load_fixtures(TRUE)
+  results <- load_results(TRUE)
+  teams <- load_teams(TRUE)
+  torp_df_total <- load_torp_ratings()
+
+  cli::cli_inform("Loaded: fixtures={nrow(fixtures)}, results={nrow(results)}, teams={nrow(teams)}, ratings={nrow(torp_df_total)}")
+
+  if (nrow(fixtures) < 100) cli::cli_abort("Fixtures too small ({nrow(fixtures)} rows)")
+  if (nrow(torp_df_total) < 100) cli::cli_abort("Ratings too small ({nrow(torp_df_total)} rows)")
+  if (nrow(teams) < 100) cli::cli_abort("Teams too small ({nrow(teams)} rows)")
+
+  # Resolve target weeks
+  if (!is.null(weeks)) {
+    if (identical(weeks, "all")) {
+      target_weeks <- sort(unique(fixtures$round.roundNumber[fixtures$compSeason.year == season]))
+    } else {
+      target_weeks <- weeks
+    }
+  } else {
+    target_weeks <- week
+  }
+  cli::cli_inform("Season: {season}, Week{?s}: {paste(target_weeks, collapse = ', ')}")
+
+  # Weight anchor date (deterministic)
+  target_fixtures <- fixtures |>
+    dplyr::filter(compSeason.year == season, round.roundNumber %in% target_weeks)
+  weight_anchor_date <- if (nrow(target_fixtures) > 0) {
+    as.Date(min(target_fixtures$utcStartTime))
+  } else {
+    Sys.Date()
+  }
+  cli::cli_inform("Weight anchor date: {weight_anchor_date}")
+
+  # Build Shared Data ----
+  cli::cli_h2("Building fixture features")
+  fix_df <- .build_fixtures_df(fixtures)
+
+  cli::cli_h2("Processing lineups")
+  team_rt_df <- .build_team_ratings_df(teams, torp_df_total)
+
+  cli::cli_h2("Computing features")
+  team_rt_fix_df <- .build_match_features(fix_df, team_rt_df, all_grounds)
+
+  # Injuries ----
+  cli::cli_h2("Loading injuries")
+  inj_df <- get_all_injuries(season)
+  cli::cli_inform("Injuries loaded: {nrow(inj_df)} rows ({sum(inj_df$source == 'weekly', na.rm = TRUE)} weekly, {sum(inj_df$source == 'preseason', na.rm = TRUE)} preseason)")
+  if (nrow(inj_df) == 0 && min(target_weeks) > 1) {
+    cli::cli_warn("0 injuries loaded during active season - all players will be treated as available")
+  }
+
+  tr <- torp_ratings(season, min(target_weeks))
+  if (nrow(tr) == 0 || !"player_name" %in% names(tr)) {
+    cli::cli_alert_info("No TORP ratings available for {season} R{min(target_weeks)} (pre-season or fixtures not ready) - skipping predictions")
+    tictoc::toc(log = TRUE)
+    return(invisible(NULL))
+  }
+  tr <- match_injuries(tr, inj_df) |>
+    dplyr::mutate(estimated_return = tidyr::replace_na(estimated_return, "None"))
+
+  tr_week <- tr |>
+    dplyr::filter(!is.na(torp), is.na(injury)) |>
+    dplyr::mutate(team_name = fitzRoy::replace_teams(team)) |>
+    dplyr::group_by(team_name, season, round) |>
+    dplyr::mutate(
+      n_players = dplyr::n(),
+      team_tog_sum = sum(pred_tog, na.rm = TRUE),
+      tog_wt = dplyr::if_else(team_tog_sum > 0, pred_tog * 18 / team_tog_sum, 18 / n_players)
+    ) |>
+    dplyr::summarise(
+      torp_week = sum(torp * tog_wt, na.rm = TRUE) * SIM_INJURY_DISCOUNT,
+      torp_recv_week = sum(torp_recv * tog_wt, na.rm = TRUE) * SIM_INJURY_DISCOUNT,
+      torp_disp_week = sum(torp_disp * tog_wt, na.rm = TRUE) * SIM_INJURY_DISCOUNT,
+      torp_spoil_week = sum(torp_spoil * tog_wt, na.rm = TRUE) * SIM_INJURY_DISCOUNT,
+      torp_hitout_week = sum(torp_hitout * tog_wt, na.rm = TRUE) * SIM_INJURY_DISCOUNT,
+      .groups = "drop"
+    ) |>
+    dplyr::arrange(-torp_week)
+
+  # Expand estimated ratings across all target weeks
+  if (length(target_weeks) > 1) {
+    tr_week <- purrr::map_dfr(target_weeks, function(w) {
+      tr_week |> dplyr::mutate(round = w)
+    })
+  }
+
+  # Overlay injury-adjusted ratings
+  team_rt_fix_df <- team_rt_fix_df |>
+    dplyr::left_join(tr_week, by = c("team_name" = "team_name", "season" = "season", "round.roundNumber" = "round")) |>
+    dplyr::mutate(
+      torp = dplyr::coalesce(torp, torp_week),
+      torp_recv = dplyr::coalesce(torp_recv, torp_recv_week),
+      torp_disp = dplyr::coalesce(torp_disp, torp_disp_week),
+      torp_spoil = dplyr::coalesce(torp_spoil, torp_spoil_week),
+      torp_hitout = dplyr::coalesce(torp_hitout, torp_hitout_week)
+    )
+
+  # Weather ----
+  cli::cli_h2("Loading weather")
+  weather_df <- .load_match_weather(fixtures, all_grounds, target_weeks, season)
+
+  # Build Model Dataset ----
+  cli::cli_h2("Building model dataset")
+  team_mdl_df <- .build_team_mdl_df(team_rt_fix_df, results, xg_df, weather_df, weight_anchor_date)
+
+  # Train GAMs & Predict ----
+  cli::cli_h2("Training GAM models on completed matches")
+  gam_result <- .train_match_gams(team_mdl_df)
+  team_mdl_df <- gam_result$data
+
+  # Format Predictions ----
+  cli::cli_h2("Generating predictions for {length(target_weeks)} week{?s}")
+
+  week_gms_home <- team_mdl_df |>
+    dplyr::filter(season.x == season, round.roundNumber.x %in% target_weeks, team_type_fac.x == "home") |>
+    dplyr::select(
+      round = round.roundNumber.x, players = count.x, providerId,
+      home_team = team_name.x, home_rating = torp.x,
+      away_team = team_name.y, away_rating = torp.y,
+      pred_xtotal = pred_tot_xscore, pred_xmargin = pred_xscore_diff,
+      pred_margin = pred_score_diff, pred_win, bits,
+      margin = score_diff, start_time = local_start_time_str, venue = venue.x
+    )
+
+  week_gms_away <- team_mdl_df |>
+    dplyr::mutate(
+      pred_xscore_diff = -pred_xscore_diff,
+      pred_score_diff = -pred_score_diff,
+      pred_win = 1 - pred_win,
+      score_diff = -score_diff
+    ) |>
+    dplyr::filter(season.x == season, round.roundNumber.x %in% target_weeks, team_type_fac.x == "away") |>
+    dplyr::select(
+      round = round.roundNumber.x, players = count.x, providerId,
+      home_team = team_name.y, home_rating = torp.y,
+      away_team = team_name.x, away_rating = torp.x,
+      pred_xtotal = pred_tot_xscore, pred_xmargin = pred_xscore_diff,
+      pred_margin = pred_score_diff, pred_win, bits,
+      margin = score_diff, start_time = local_start_time_str, venue = venue.x
+    )
+
+  week_gms <- dplyr::bind_rows(week_gms_home, week_gms_away) |>
+    dplyr::group_by(round, providerId, home_team, home_rating, away_team, away_rating, start_time, venue) |>
+    dplyr::summarise(
+      players = mean(players), pred_xtotal = mean(pred_xtotal),
+      pred_margin = mean(pred_margin), pred_win = mean(pred_win),
+      margin = mean(margin), .groups = "drop"
+    ) |>
+    dplyr::mutate(rating_diff = home_rating - away_rating) |>
+    dplyr::select(round, providerId:away_rating, start_time, venue, rating_diff, players:margin)
+
+  # Validate ----
+  cli::cli_h2("Validating predictions")
+  if (nrow(week_gms) == 0) cli::cli_abort("No predictions generated for week{?s} {paste(target_weeks, collapse = ', ')}")
+  if (any(is.na(week_gms$pred_win))) cli::cli_abort("NA values in pred_win")
+  if (any(week_gms$pred_win < 0 | week_gms$pred_win > 1)) cli::cli_abort("pred_win values out of [0,1] range")
+  if (any(is.na(week_gms$pred_margin))) cli::cli_abort("NA values in pred_margin")
+  cli::cli_alert_success("Validation passed: {nrow(week_gms)} matches")
+
+  # Upload ----
+  cli::cli_h2("Uploading predictions")
+  week_gms <- week_gms |> dplyr::rename(week = round) |> dplyr::relocate(week)
+
+  pred_file_name <- paste0("predictions_", season)
+  existing <- tryCatch(
+    file_reader(pred_file_name, "predictions"),
+    error = function(e) {
+      cli::cli_warn("Could not load existing predictions ({conditionMessage(e)}). Uploading current weeks only.")
+      NULL
+    }
+  )
+
+  if (!is.null(existing) && nrow(existing) > 0) {
+    # Backfill actual margins for completed matches
+    completed <- team_mdl_df |>
+      dplyr::filter(!is.na(score_diff), team_type_fac.x == "home") |>
+      dplyr::distinct(providerId, .keep_all = TRUE) |>
+      dplyr::transmute(providerId, .actual_margin = score_diff)
+
+    n_backfilled <- sum(is.na(existing$margin) & existing$providerId %in% completed$providerId)
+    if (n_backfilled > 0) {
+      existing <- existing |>
+        dplyr::left_join(completed, by = "providerId") |>
+        dplyr::mutate(margin = dplyr::coalesce(margin, .actual_margin)) |>
+        dplyr::select(-.actual_margin)
+      cli::cli_alert_success("Backfilled {n_backfilled} match margin{?s} from results")
+    }
+
+    # Only replace predictions for games that haven't started yet
+    started_ids <- team_mdl_df |>
+      dplyr::filter(
+        season.x == season,
+        round.roundNumber.x %in% target_weeks,
+        team_type_fac.x == "home",
+        utc_dt <= Sys.time()
+      ) |>
+      dplyr::pull(providerId)
+
+    week_gms <- week_gms |>
+      dplyr::filter(!providerId %in% started_ids)
+
+    if (length(started_ids) > 0) {
+      cli::cli_alert_info("Keeping existing predictions for {length(started_ids)} already-started match{?es}")
+    }
+
+    combined <- existing |>
+      dplyr::filter(!providerId %in% week_gms$providerId) |>
+      dplyr::bind_rows(week_gms) |>
+      dplyr::arrange(week)
+  } else {
+    combined <- week_gms
+  }
+
+  save_to_release(combined, pred_file_name, "predictions", also_csv = TRUE)
+  cli::cli_alert_success("Uploaded {season} predictions ({nrow(combined)} rows, week{?s} {paste(target_weeks, collapse = ', ')} added)")
+
+  tictoc::toc(log = TRUE)
+  cli::cli_h2("Pipeline Complete")
+  timings <- tictoc::tic.log(format = TRUE)
+  for (t in timings) cli::cli_inform(t)
+  tictoc::tic.clearlog()
+
+  invisible(week_gms)
+}
