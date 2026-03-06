@@ -1,8 +1,8 @@
 Package: torp
 Title: AFL Analytics and Player Rating System
-Version: 0.0.0.9002
+Version: 1.0.0
 Authors@R: 
-    person("Pete", "Owen", , "pete.owen@example.com", role = c("aut", "cre"))
+    person("Pete", "Owen", , "pete.owen1@hotmail.co.uk", role = c("aut", "cre"))
 Description: Provides tools for Australian Football League (AFL) analytics including 
     player rating systems, match predictions, and advanced statistical modeling. 
     Features XGBoost and GAM models for predicting match outcomes, player performance 
