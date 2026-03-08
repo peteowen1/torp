@@ -1,4 +1,4 @@
-# torp 0.0.0.9003 (development)
+# torp 1.0.0 (2026-03-05)
 
 ## Breaking Changes
 
@@ -9,6 +9,8 @@
 * `load_fixtures(all = TRUE)` now starts from 2021 (previously 2018). Seasons before 2021 are outside `validate_seasons()` range and were producing errors.
 
 * `check_internet_connection()` has been removed. Use `curl::has_internet()` directly.
+
+* Unexported internal-use functions: `get_wp_model_info()`, `check_wp_model_health()`, `harmonic_mean()`, `norm_name()`. These remain accessible via `torp:::`.
 
 ## New Features
 
@@ -26,6 +28,12 @@
 
 * `CREDIT_POS_ADJ_QUANTILE` split into 4 per-dimension constants: `CREDIT_POS_ADJ_QUANTILE_RECV`, `_DISP`, `_SPOIL`, `_HITOUT`.
 
+* Added `R/constants.R` with centralized AFL and model constants:
+  - `AFL_GOAL_WIDTH`, `AFL_QUARTER_DURATION`, `AFL_TOTAL_GAME_SECONDS`
+  - `RATING_DECAY_DEFAULT_DAYS`, `SIM_NOISE_SD`, `SIM_WP_SCALING_FACTOR`
+
+* Placeholder dashboard functions (`create_monitoring_dashboard_data()`, `get_model_health_status()`) now return informative empty structures instead of fake data.
+
 ## Bug Fixes
 
 * `parquet_from_urls_parallel()` now warns instead of silently dropping data when column selection finds no matching columns.
@@ -42,15 +50,13 @@
 
 * Integration test data loading is now guarded against CRAN environments.
 
+* Fixed double fixture load in `get_afl_week()` - now loads fixtures once and filters twice.
+
 ## Optimized Parameters
 
-* Re-optimized rating constants: `RATING_DECAY_DEFAULT_DAYS` (486→511), `RATING_PRIOR_GAMES_RECV` (5.87→6.19), `RATING_PRIOR_GAMES_DISP` (7.14→7.11), `RATING_PRIOR_GAMES_HITOUT` (3→4.44).
+* Re-optimized rating constants with per-component decay: `RATING_DECAY_RECV` (260), `RATING_DECAY_DISP` (700), `RATING_DECAY_SPOIL` (295), `RATING_DECAY_HITOUT` (700). Prior games: `RATING_PRIOR_GAMES_RECV` (12.56), `RATING_PRIOR_GAMES_DISP` (5.83), `RATING_PRIOR_GAMES_SPOIL` (3.00), `RATING_PRIOR_GAMES_HITOUT` (15.00).
 
 * Re-optimized credit assignment constants for disposal, reception, and position adjustment.
-
----
-
-# torp 0.0.0.9002 (development)
 
 ## Code Quality
 
@@ -62,24 +68,18 @@
 
 * Fixed inefficient `rbind()` patterns in `compare_baseline_models()` and `evaluate_baseline_models()` by using pre-allocated lists with `dplyr::bind_rows()`.
 
-* Fixed double fixture load in `get_afl_week()` - now loads fixtures once and filters twice.
-
 * Fixed `mutate_all()` performance issue in data validation using `lapply()` for column-wise operations.
 
 * Removed unused `match_id` parameter from `match_xgs()` function.
 
-## New Features
-
-* Added `R/constants.R` with centralized AFL and model constants:
- - `AFL_GOAL_WIDTH`, `AFL_QUARTER_DURATION`, `AFL_TOTAL_GAME_SECONDS`
- - `RATING_DECAY_DEFAULT_DAYS`, `SIM_NOISE_SD`, `SIM_WP_SCALING_FACTOR`
-
-* Placeholder dashboard functions (`create_monitoring_dashboard_data()`, `get_model_health_status()`) now return informative empty structures instead of fake data.
+* Replaced deprecated `dplyr::group_by_all()` with `dplyr::group_by(dplyr::across(dplyr::everything()))`.
 
 ## Documentation
 
-* Added five vignettes: Getting Started, Player Ratings, Model Usage, Data Architecture, and Season Simulation.
+* Added two vignettes: Getting Started and torp Reference Guide (consolidating ratings, models, data architecture, and simulation).
+
 * Added pkgdown site configuration with comprehensive reference sections.
+
 * Improved README with lifecycle badge, ecosystem table, and torpmodels install instructions.
 
 ## Internal Changes
@@ -88,6 +88,8 @@
   - `rds_from_url()`, `file_reader()` (internal data loading helpers)
   - `predict_wp_naive()`, `predict_wp_time_only()` (baseline model internals)
   - `log_prediction_event()`, `log_data_quality()` (internal logging helpers)
+  - `get_wp_model_info()`, `check_wp_model_health()` (model diagnostics)
+  - `harmonic_mean()`, `norm_name()` (utility helpers)
 
 * Moved manual test scripts to `tests/manual/` directory.
 

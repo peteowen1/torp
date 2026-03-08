@@ -42,19 +42,19 @@ EPV_WEIGHT_DECAY_DAYS <- 365
 
 #' Decay factor (in days) for receiving component weighting
 #' @keywords internal
-RATING_DECAY_RECV <- 450
+RATING_DECAY_RECV <- 260
 
 #' Decay factor (in days) for disposal component weighting
 #' @keywords internal
-RATING_DECAY_DISP <- 450
+RATING_DECAY_DISP <- 700
 
 #' Decay factor (in days) for spoil component weighting
 #' @keywords internal
-RATING_DECAY_SPOIL <- 450
+RATING_DECAY_SPOIL <- 295
 
 #' Decay factor (in days) for hitout component weighting
 #' @keywords internal
-RATING_DECAY_HITOUT <- 450
+RATING_DECAY_HITOUT <- 700
 
 #' Default decay factor (in days) — legacy alias for backwards compatibility
 #' @keywords internal
@@ -66,15 +66,15 @@ RATING_LOADING_DEFAULT <- 1.0000
 
 #' Prior games constant for receiving ratings
 #' @keywords internal
-RATING_PRIOR_GAMES_RECV <- 9.8752
+RATING_PRIOR_GAMES_RECV <- 12.5632
 
 #' Prior games constant for disposal ratings
 #' @keywords internal
-RATING_PRIOR_GAMES_DISP <- 5.7428
+RATING_PRIOR_GAMES_DISP <- 5.8261
 
 #' Prior games constant for spoil ratings
 #' @keywords internal
-RATING_PRIOR_GAMES_SPOIL <- 3.9409
+RATING_PRIOR_GAMES_SPOIL <- 3.0000
 
 #' Prior games constant for hitout ratings
 #' @keywords internal
@@ -82,106 +82,210 @@ RATING_PRIOR_GAMES_HITOUT <- 15.0000
 
 #' Prior rate for receiving component (shrinkage target per weighted game)
 #' @keywords internal
-RATING_PRIOR_RATE_RECV <- 0.0000
+RATING_PRIOR_RATE_RECV <- -2.6169
 
 #' Prior rate for disposal component (shrinkage target per weighted game)
 #' @keywords internal
-RATING_PRIOR_RATE_DISP <- 0.0000
+RATING_PRIOR_RATE_DISP <- -2.8281
 
 #' Prior rate for spoil component (shrinkage target per weighted game)
 #' @keywords internal
-RATING_PRIOR_RATE_SPOIL <- 0.0000
+RATING_PRIOR_RATE_SPOIL <- -0.0000
 
 #' Prior rate for hitout component (shrinkage target per weighted game)
 #' @keywords internal
-RATING_PRIOR_RATE_HITOUT <- -1.1407
+RATING_PRIOR_RATE_HITOUT <- -4.0000
 
 # Credit Assignment Constants
 # ----------------------------
 
 #' Disposal EPV offset when defending (pos_team == -1)
 #' @keywords internal
-CREDIT_DISP_NEG_OFFSET <- -0.0609
+CREDIT_DISP_NEG_OFFSET <- 0.0000
 
 #' Disposal EPV offset when possessing (pos_team == 1)
 #' @keywords internal
-CREDIT_DISP_POS_OFFSET <- -0.0335
+CREDIT_DISP_POS_OFFSET <- 0.0000
 
 #' Disposal scaling factor
 #' @keywords internal
-CREDIT_DISP_SCALE <- 0.6817
+CREDIT_DISP_SCALE <- 1.0000
 
-#' Bounce penalty per bounce
+#' Bounce weight per bounce (disp component)
 #' @keywords internal
-CREDIT_BOUNCE_PENALTY <- 1.0000
+CREDIT_BOUNCE_WT <- -0.3212
 
 #' Reception multiplier when defending (pos_team == -1)
 #' @keywords internal
-CREDIT_RECV_NEG_MULT <- 1.1382
+CREDIT_RECV_NEG_MULT <- 1.0000
 
 #' Reception offset when defending
 #' @keywords internal
-CREDIT_RECV_NEG_OFFSET <- 0.5000
+CREDIT_RECV_NEG_OFFSET <- 0.0000
 
 #' Reception multiplier when possessing (pos_team == 1)
 #' @keywords internal
-CREDIT_RECV_POS_MULT <- 1.2294
+CREDIT_RECV_POS_MULT <- 1.0000
 
 #' Reception offset when possessing
 #' @keywords internal
-CREDIT_RECV_POS_OFFSET <- 0.5000
+CREDIT_RECV_POS_OFFSET <- 0.0000
 
 #' Reception scaling factor
 #' @keywords internal
-CREDIT_RECV_SCALE <- 0.3899
+CREDIT_RECV_SCALE <- 1.0000
 
 #' Spoil weight per spoil
 #' @keywords internal
-CREDIT_SPOIL_WT <- 1.0692
+CREDIT_SPOIL_WT <- 0.0694
 
 #' Tackle weight per tackle
 #' @keywords internal
-CREDIT_TACKLE_WT <- 1.2453
+CREDIT_TACKLE_WT <- 0.1161
 
 #' Pressure act weight
 #' @keywords internal
-CREDIT_PRESSURE_WT <- 0.2242
+CREDIT_PRESSURE_WT <- -0.0034
 
-#' Defensive half pressure act weight (subtracted)
+#' Defensive half pressure act weight (spoil component)
 #' @keywords internal
-CREDIT_DEF_PRESSURE_WT <- 1.1265
+CREDIT_DEF_PRESSURE_WT <- -0.0964
 
 #' Hitout weight per hitout
 #' @keywords internal
-CREDIT_HITOUT_WT <- 0.6504
+CREDIT_HITOUT_WT <- 0.0130
 
 #' Hitout to advantage weight
 #' @keywords internal
-CREDIT_HITOUT_ADV_WT <- 0.1000
+CREDIT_HITOUT_ADV_WT <- 0.0620
 
-#' Ruck contest weight (subtracted)
+#' Ruck contest weight (hitout component)
 #' @keywords internal
-CREDIT_RUCK_CONTEST_WT <- 0.0300
+CREDIT_RUCK_CONTEST_WT <- 0.0072
+
+#' Contested possessions weight (recv component)
+#' @keywords internal
+CREDIT_CONTESTED_POSS_WT <- 0.0547
+
+#' Contested marks weight (recv component)
+#' @keywords internal
+CREDIT_CONTESTED_MARKS_WT <- 0.0588
+
+#' Ground ball gets weight (recv component)
+#' @keywords internal
+CREDIT_GROUND_BALL_GETS_WT <- 0.0683
+
+#' Marks inside 50 weight (recv component)
+#' @keywords internal
+CREDIT_MARKS_INSIDE50_WT <- 0.0438
+
+#' Inside 50s weight (disp component)
+#' @keywords internal
+CREDIT_INSIDE50S_WT <- 0.0776
+
+#' Clangers weight (disp component)
+#' @keywords internal
+CREDIT_CLANGERS_WT <- -0.0250
+
+#' Score involvements weight (disp component)
+#' @keywords internal
+CREDIT_SCORE_INVOLVEMENTS_WT <- 0.0908
+
+#' Intercepts weight (spoil component)
+#' @keywords internal
+CREDIT_INTERCEPTS_WT <- 0.0135
+
+#' One percenters weight (spoil component)
+#' @keywords internal
+CREDIT_ONE_PERCENTERS_WT <- 0.0952
+
+#' Rebound 50s weight (spoil component)
+#' @keywords internal
+CREDIT_REBOUND50S_WT <- -0.1002
+
+#' Frees against weight (spoil component)
+#' @keywords internal
+CREDIT_FREES_AGAINST_WT <- 0.0611
+
+#' Clearances weight (hitout component)
+#' @keywords internal
+CREDIT_CLEARANCES_WT <- 0.0445
+
+#' Frees for weight (recv component)
+#' @keywords internal
+CREDIT_FREES_FOR_WT <- 0.0441
+
+#' Goals weight (disp component)
+#' @keywords internal
+CREDIT_GOALS_WT <- 0.0413
+
+#' Behinds weight (disp component)
+#' @keywords internal
+CREDIT_BEHINDS_WT <- 0.4660
+
+#' Total marks weight (recv component)
+#' @keywords internal
+CREDIT_MARKS_WT <- 0.0041
+
+#' Uncontested possessions weight (recv component)
+#' @keywords internal
+CREDIT_UNCONTESTED_POSS_WT <- 0.0162
+
+#' Shots at goal weight (disp component)
+#' @keywords internal
+CREDIT_SHOTS_AT_GOAL_WT <- 0.1336
+
+#' Kicks weight (disp component)
+#' @keywords internal
+CREDIT_KICKS_WT <- 0.0152
+
+#' Handballs weight (disp component)
+#' @keywords internal
+CREDIT_HANDBALLS_WT <- 0.0392
+
+#' Metres gained weight (disp component)
+#' @keywords internal
+CREDIT_METRES_GAINED_WT <- 0.0001
+
+#' Turnovers weight (disp component)
+#' @keywords internal
+CREDIT_TURNOVERS_WT <- -0.0089
+
+#' Goal assists weight (disp component)
+#' @keywords internal
+CREDIT_GOAL_ASSISTS_WT <- -0.1142
+
+#' L2 (ridge) regularization lambda for count-based stat weights
+#' @keywords internal
+STAT_WEIGHT_LAMBDA <- 0.5
 
 #' Position-group quantile adjustment for receiving component
 #' @keywords internal
-CREDIT_POS_ADJ_QUANTILE_RECV <- 0.3184
+CREDIT_POS_ADJ_QUANTILE_RECV <- 0.2942
 
 #' Position-group quantile adjustment for disposal component
 #' @keywords internal
-CREDIT_POS_ADJ_QUANTILE_DISP <- 0.2998
+CREDIT_POS_ADJ_QUANTILE_DISP <- 0.3344
 
 #' Position-group quantile adjustment for spoil component
 #' @keywords internal
-CREDIT_POS_ADJ_QUANTILE_SPOIL <- 0.3230
+CREDIT_POS_ADJ_QUANTILE_SPOIL <- 0.3500
 
 #' Position-group quantile adjustment for hitout component
 #' @keywords internal
-CREDIT_POS_ADJ_QUANTILE_HITOUT <- 0.4000
+CREDIT_POS_ADJ_QUANTILE_HITOUT <- 0.3500
 
 #' Position-group quantile adjustment — legacy alias for backwards compatibility
 #' @keywords internal
 CREDIT_POS_ADJ_QUANTILE <- CREDIT_POS_ADJ_QUANTILE_RECV
+
+
+# WP Credit Constants
+# -------------------
+
+#' Default disposer share of WPA in win probability credit assignment
+#' @keywords internal
+WP_CREDIT_DISP_SHARE <- 0.5
 
 
 # Simulation Constants
@@ -400,3 +504,90 @@ POSITION_AVG_TOG <- c(
   HFFR = 0.79, RK = 0.79,
   INT = 0.73, SUB = 0.33, EMERG = 0.05
 )
+
+
+# Match Model Constants
+# ----------------------
+
+#' Phase groupings for match model position columns
+#' Maps field position (position.x) to broad phase categories
+#' @keywords internal
+MATCH_PHASE_MAP <- list(
+  def = c("BPL", "BPR", "FB", "CHB", "HBFL", "HBFR"),
+  mid = c("C", "WL", "WR", "R", "RR", "RK"),
+  fwd = c("FPL", "FPR", "FF", "CHF", "HFFL", "HFFR"),
+  int = c("INT", "SUB")
+)
+
+#' Position group aggregation map for match models
+#' @keywords internal
+MATCH_POS_GROUP_MAP <- list(
+  backs         = c("BPL", "BPR", "FB"),
+  half_backs    = c("HBFL", "HBFR", "CHB"),
+  midfielders   = c("WL", "WR", "C"),
+  followers     = c("R", "RR", "RK"),
+  half_forwards = c("HFFL", "HFFR", "CHF"),
+  forwards      = c("FPL", "FPR", "FF")
+)
+
+#' Individual field position codes for match models (18 on-field positions)
+#' @keywords internal
+MATCH_INDIVIDUAL_POS <- c(
+  "BPL", "BPR", "FB", "HBFL", "HBFR", "CHB",
+  "WL", "WR", "C", "R", "RR", "RK",
+  "HFFL", "HFFR", "CHF", "FPL", "FPR", "FF"
+)
+
+#' Combined position map for match models (structural pairs/trios)
+#' @keywords internal
+MATCH_COMBO_POS_MAP <- list(
+  CB   = c("CHB", "FB"),
+  BP   = c("BPL", "BPR"),
+  HBF  = c("HBFL", "HBFR"),
+  W    = c("WL", "WR"),
+  MIDS = c("C", "R", "RR"),
+  HFF  = c("HFFL", "HFFR"),
+  FP   = c("FPL", "FPR"),
+  CF   = c("FF", "CHF")
+)
+
+#' Listed position map for match models (position.y from load_teams())
+#' Combines MEDIUM_FORWARD and MIDFIELDER_FORWARD into med_fwd.
+#' Entries are vectors so matching must use %in%, not ==.
+#' @keywords internal
+MATCH_LISTED_POS_MAP <- list(
+  key_def  = "KEY_DEFENDER",
+  med_def  = "MEDIUM_DEFENDER",
+  midfield = "MIDFIELDER",
+  med_fwd  = c("MEDIUM_FORWARD", "MIDFIELDER_FORWARD"),
+  key_fwd  = "KEY_FORWARD",
+  rucks    = "RUCK"
+)
+
+#' All generated position column names for match model aggregation
+#' @keywords internal
+MATCH_POS_COLS <- c(
+  names(MATCH_PHASE_MAP), names(MATCH_POS_GROUP_MAP), MATCH_INDIVIDUAL_POS,
+  names(MATCH_COMBO_POS_MAP), names(MATCH_LISTED_POS_MAP), "other_pos"
+)
+
+#' Exponential decay half-life in days for match model time-weighting
+#' @keywords internal
+MATCH_WEIGHT_DECAY_DAYS <- 1000
+
+#' Offset added to Haversine distance (metres) before log-transform
+#' Prevents log(0) for home games and dampens the curve for short trips
+#' @keywords internal
+MATCH_LOG_DIST_OFFSET <- 10000
+
+#' Default log-distance value when venue coordinates are missing
+#' @keywords internal
+MATCH_LOG_DIST_DEFAULT <- 16
+
+#' Earliest season with reliable TORP + xG data for match modelling
+#' @keywords internal
+MATCH_MIN_DATA_SEASON <- 2021
+
+#' Earliest round in MATCH_MIN_DATA_SEASON with reliable data
+#' @keywords internal
+MATCH_MIN_DATA_ROUND <- 14

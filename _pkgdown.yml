@@ -29,10 +29,7 @@ articles:
       - getting-started
   - title: Guides
     contents:
-      - data-architecture
-      - model-usage
-      - player-ratings
-      - season-simulation
+      - torp-guide
 
 reference:
   - title: Data Loading
@@ -54,7 +51,6 @@ reference:
       - clean_pbp
       - starts_with("clean_model")
       - clean_shots_data
-      - norm_name
 
   - title: Player Ratings
     desc: Calculate and view TORP player ratings
@@ -97,10 +93,6 @@ reference:
     contents:
       - match_xgs
       - calculate_match_xgs
-      - calculate_player_stats
-      - get_season_data
-      - filter_game_data
-      - prepare_final_dataframe
 
   - title: Model Validation
     desc: Evaluate model performance, calibration, and drift
@@ -110,8 +102,6 @@ reference:
       - starts_with("create_calibration")
       - starts_with("create_validation")
       - starts_with("create_model")
-      - starts_with("check_wp")
-      - starts_with("get_wp_")
       - starts_with("log_model")
       - starts_with("monitor_")
       - starts_with("validate_")
@@ -160,7 +150,6 @@ reference:
     contents:
       - get_afl_season
       - get_afl_week
-      - harmonic_mean
       - parquet_from_url
       - save_to_release
       - set_torp_data_repo

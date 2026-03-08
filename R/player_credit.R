@@ -10,7 +10,7 @@ default_credit_params <- function() {
     disp_neg_offset   = CREDIT_DISP_NEG_OFFSET,
     disp_pos_offset   = CREDIT_DISP_POS_OFFSET,
     disp_scale        = CREDIT_DISP_SCALE,
-    bounce_penalty    = CREDIT_BOUNCE_PENALTY,
+    bounce_wt         = CREDIT_BOUNCE_WT,
     recv_neg_mult     = CREDIT_RECV_NEG_MULT,
     recv_neg_offset   = CREDIT_RECV_NEG_OFFSET,
     recv_pos_mult     = CREDIT_RECV_POS_MULT,
@@ -23,6 +23,29 @@ default_credit_params <- function() {
     hitout_wt         = CREDIT_HITOUT_WT,
     hitout_adv_wt     = CREDIT_HITOUT_ADV_WT,
     ruck_contest_wt        = CREDIT_RUCK_CONTEST_WT,
+    contested_poss_wt      = CREDIT_CONTESTED_POSS_WT,
+    contested_marks_wt     = CREDIT_CONTESTED_MARKS_WT,
+    ground_ball_gets_wt    = CREDIT_GROUND_BALL_GETS_WT,
+    marks_inside50_wt      = CREDIT_MARKS_INSIDE50_WT,
+    inside50s_wt           = CREDIT_INSIDE50S_WT,
+    clangers_wt            = CREDIT_CLANGERS_WT,
+    score_involvements_wt  = CREDIT_SCORE_INVOLVEMENTS_WT,
+    intercepts_wt          = CREDIT_INTERCEPTS_WT,
+    one_percenters_wt      = CREDIT_ONE_PERCENTERS_WT,
+    rebound50s_wt          = CREDIT_REBOUND50S_WT,
+    frees_against_wt       = CREDIT_FREES_AGAINST_WT,
+    clearances_wt          = CREDIT_CLEARANCES_WT,
+    frees_for_wt           = CREDIT_FREES_FOR_WT,
+    goals_wt               = CREDIT_GOALS_WT,
+    behinds_wt             = CREDIT_BEHINDS_WT,
+    marks_wt               = CREDIT_MARKS_WT,
+    uncontested_poss_wt    = CREDIT_UNCONTESTED_POSS_WT,
+    shots_at_goal_wt       = CREDIT_SHOTS_AT_GOAL_WT,
+    kicks_wt               = CREDIT_KICKS_WT,
+    handballs_wt           = CREDIT_HANDBALLS_WT,
+    metres_gained_wt       = CREDIT_METRES_GAINED_WT,
+    turnovers_wt           = CREDIT_TURNOVERS_WT,
+    goal_assists_wt        = CREDIT_GOAL_ASSISTS_WT,
     pos_adj_quantile_recv   = CREDIT_POS_ADJ_QUANTILE_RECV,
     pos_adj_quantile_disp   = CREDIT_POS_ADJ_QUANTILE_DISP,
     pos_adj_quantile_spoil  = CREDIT_POS_ADJ_QUANTILE_SPOIL,
@@ -131,8 +154,10 @@ create_player_game_data <- function(pbp_data = NULL,
   spoil_hitout_df <- player_stats |>
     dplyr::mutate(
       weight_gm = exp(as.numeric(-(ref_date - as.Date(utc_start_time))) / decay),
-      spoil_pts = extended_stats_spoils * p$spoil_wt + tackles * p$tackle_wt + extended_stats_pressure_acts * p$pressure_wt - extended_stats_def_half_pressure_acts * p$def_pressure_wt,
-      hitout_pts = hitouts * p$hitout_wt + extended_stats_hitouts_to_advantage * p$hitout_adv_wt - extended_stats_ruck_contests * p$ruck_contest_wt
+      spoil_pts = extended_stats_spoils * p$spoil_wt + tackles * p$tackle_wt + extended_stats_pressure_acts * p$pressure_wt + extended_stats_def_half_pressure_acts * p$def_pressure_wt +
+                  intercepts * p$intercepts_wt + one_percenters * p$one_percenters_wt + rebound50s * p$rebound50s_wt + frees_against * p$frees_against_wt,
+      hitout_pts = hitouts * p$hitout_wt + extended_stats_hitouts_to_advantage * p$hitout_adv_wt + extended_stats_ruck_contests * p$ruck_contest_wt +
+                   clearances_total_clearances * p$clearances_wt
     ) |>
     dplyr::select(-utc_start_time)
 
@@ -154,8 +179,16 @@ create_player_game_data <- function(pbp_data = NULL,
   # --- Step 5: Replace NAs and compute totals ---
   plyr_gm_df <- plyr_gm_df |>
     dplyr::mutate(
-      recv_pts = tidyr::replace_na(recv_pts, 0),
-      disp_pts = tidyr::replace_na(disp_pts, 0) - (bounces * p$bounce_penalty),
+      recv_pts = tidyr::replace_na(recv_pts, 0) +
+                 contested_possessions * p$contested_poss_wt + contested_marks * p$contested_marks_wt +
+                 extended_stats_ground_ball_gets * p$ground_ball_gets_wt + marks_inside50 * p$marks_inside50_wt +
+                 marks * p$marks_wt + uncontested_possessions * p$uncontested_poss_wt +
+                 frees_for * p$frees_for_wt,
+      disp_pts = tidyr::replace_na(disp_pts, 0) + bounces * p$bounce_wt +
+                 inside50s * p$inside50s_wt + clangers * p$clangers_wt + score_involvements * p$score_involvements_wt +
+                 kicks * p$kicks_wt + handballs * p$handballs_wt + metres_gained * p$metres_gained_wt +
+                 turnovers * p$turnovers_wt + goal_assists * p$goal_assists_wt +
+                 goals * p$goals_wt + behinds * p$behinds_wt + shots_at_goal * p$shots_at_goal_wt,
       spoil_pts = tidyr::replace_na(spoil_pts, 0),
       hitout_pts = tidyr::replace_na(hitout_pts, 0),
       tot_p = recv_pts + disp_pts + spoil_pts + hitout_pts
@@ -184,10 +217,10 @@ create_player_game_data <- function(pbp_data = NULL,
     ) |>
     dplyr::group_by(position) |>
     dplyr::mutate(
-      recv_pts_adj = .data$recv_p80 - stats::quantile(.data$recv_p80, p$pos_adj_quantile_recv, na.rm = TRUE),
-      disp_pts_adj = .data$disp_p80 - stats::quantile(.data$disp_p80, p$pos_adj_quantile_disp, na.rm = TRUE),
-      spoil_pts_adj = .data$spoil_p80 - stats::quantile(.data$spoil_p80, p$pos_adj_quantile_spoil, na.rm = TRUE),
-      hitout_pts_adj = .data$hitout_p80 - stats::quantile(.data$hitout_p80, p$pos_adj_quantile_hitout, na.rm = TRUE),
+      recv_pts_adj = .data$recv_p80 - mean(.data$recv_p80, na.rm = TRUE),
+      disp_pts_adj = .data$disp_p80 - mean(.data$disp_p80, na.rm = TRUE),
+      spoil_pts_adj = .data$spoil_p80 - mean(.data$spoil_p80, na.rm = TRUE),
+      hitout_pts_adj = .data$hitout_p80 - mean(.data$hitout_p80, na.rm = TRUE),
       tot_p_adj = .data$recv_pts_adj + .data$disp_pts_adj + .data$spoil_pts_adj + .data$hitout_pts_adj
     ) |>
     dplyr::ungroup() |>

@@ -3,7 +3,7 @@
 \docType{data}
 \name{CREDIT_DEF_PRESSURE_WT}
 \alias{CREDIT_DEF_PRESSURE_WT}
-\title{Defensive half pressure act weight (subtracted)}
+\title{Defensive half pressure act weight (spoil component)}
 \format{
 An object of class \code{numeric} of length 1.
 }
@@ -11,6 +11,6 @@ An object of class \code{numeric} of length 1.
 CREDIT_DEF_PRESSURE_WT
 }
 \description{
-Defensive half pressure act weight (subtracted)
+Defensive half pressure act weight (spoil component)
 }
 \keyword{internal}

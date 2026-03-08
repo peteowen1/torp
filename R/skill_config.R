@@ -123,25 +123,29 @@ skill_stat_definitions <- function() {
     stat_name = c(
       "disposal_efficiency", "goal_accuracy",
       "contested_poss_rate", "hitout_win_pct",
-      "kick_efficiency", "time_on_ground"
+      "kick_efficiency", "cond_tog", "squad_selection"
     ),
     source_col = NA_character_,
-    category = c("disposal", "scoring", "possession", "ruck", "disposal", "general"),
+    category = c("disposal", "scoring", "possession", "ruck", "disposal", "general", "general"),
     type = "efficiency",
     success_col = c(
       "disposal_efficiency_pct_x_disposals", "goals",
       "contested_possessions", "extended_stats_hitouts_to_advantage",
-      "extended_stats_effective_kicks", "tog"
+      "extended_stats_effective_kicks", "tog", "played"
     ),
     attempts_col = c(
       "disposals", "shots_at_goal",
       "contested_possessions+uncontested_possessions", "hitouts",
-      "kicks", "tog_denominator"
+      "kicks", "tog_denominator", "tog_denominator"
     ),
     tog_adjusted = NA,
-    pos_adjusted = c(TRUE, TRUE, TRUE, TRUE, TRUE, FALSE),
+    pos_adjusted = c(TRUE, TRUE, TRUE, TRUE, TRUE, FALSE, FALSE),
+    played_only = c(NA, NA, NA, NA, NA, TRUE, FALSE),
     stringsAsFactors = FALSE
   )
+
+  # Add played_only column to rate_stats so rbind works
+  rate_stats$played_only <- NA
 
   rbind(rate_stats, efficiency_stats)
 }
@@ -209,41 +213,62 @@ default_skill_params <- function() {
 .skill_stat_params <- function() {
   list(
     # Rate stats (Gamma-Poisson, optimized via multi-start MSE)
-    goals                   = list(lambda = 0.00307, prior_strength = 1.08),
-    behinds                 = list(lambda = 0.00234, prior_strength = 2.26),
-    shots_at_goal           = list(lambda = 0.00401, prior_strength = 0.58),
-    score_involvements      = list(lambda = 0.00291, prior_strength = 1.23),
-    goal_assists            = list(lambda = 0.00187, prior_strength = 5.02),
-    kicks                   = list(lambda = 0.00580, prior_strength = 0.41),
-    handballs               = list(lambda = 0.00499, prior_strength = 0.34),
-    disposals               = list(lambda = 0.00617, prior_strength = 0.24),
-    marks                   = list(lambda = 0.00327, prior_strength = 2.14),
-    contested_possessions   = list(lambda = 0.00451, prior_strength = 0.60),
-    uncontested_possessions = list(lambda = 0.00507, prior_strength = 0.44),
-    contested_marks         = list(lambda = 0.00191, prior_strength = 1.70),
-    ground_ball_gets        = list(lambda = 0.00316, prior_strength = 0.88),
-    clearances              = list(lambda = 0.00663, prior_strength = 0.26),
-    inside50s               = list(lambda = 0.00375, prior_strength = 1.00),
-    marks_inside50          = list(lambda = 0.00317, prior_strength = 0.77),
-    rebound50s              = list(lambda = 0.00692, prior_strength = 0.40),
-    metres_gained           = list(lambda = 0.00555, prior_strength = 0.40),
-    tackles                 = list(lambda = 0.00400, prior_strength = 0.95),
-    spoils                  = list(lambda = 0.00387, prior_strength = 0.52),
-    intercepts              = list(lambda = 0.00511, prior_strength = 0.57),
-    one_percenters          = list(lambda = 0.00346, prior_strength = 0.72),
-    pressure_acts           = list(lambda = 0.00610, prior_strength = 0.36),
-    hitouts                 = list(lambda = 0.00804, prior_strength = 0.10),
-    hitouts_to_advantage    = list(lambda = 0.00503, prior_strength = 0.10),
-    frees_for               = list(lambda = 0.00158, prior_strength = 5.27),
-    frees_against           = list(lambda = 0.00121, prior_strength = 5.24),
-    clangers                = list(lambda = 0.00209, prior_strength = 3.25),
-    turnovers               = list(lambda = 0.00298, prior_strength = 2.30),
+    goals                     = list(lambda = 0.00301, prior_strength = 3.05),
+    behinds                   = list(lambda = 0.00199, prior_strength = 6.53),
+    shots_at_goal             = list(lambda = 0.00384, prior_strength = 1.62),
+    score_involvements        = list(lambda = 0.00274, prior_strength = 2.52),
+    goal_assists              = list(lambda = 0.00181, prior_strength = 11.16),
+    kicks                     = list(lambda = 0.00593, prior_strength = 0.69),
+    handballs                 = list(lambda = 0.00473, prior_strength = 0.77),
+    disposals                 = list(lambda = 0.00606, prior_strength = 0.51),
+    marks                     = list(lambda = 0.00333, prior_strength = 2.67),
+    contested_possessions     = list(lambda = 0.00408, prior_strength = 1.00),
+    uncontested_possessions   = list(lambda = 0.00539, prior_strength = 0.97),
+    contested_marks           = list(lambda = 0.00214, prior_strength = 5.18),
+    ground_ball_gets          = list(lambda = 0.00284, prior_strength = 1.87),
+    clearances                = list(lambda = 0.00610, prior_strength = 0.51),
+    inside50s                 = list(lambda = 0.00372, prior_strength = 2.03),
+    marks_inside50            = list(lambda = 0.00309, prior_strength = 3.04),
+    rebound50s                = list(lambda = 0.00649, prior_strength = 1.13),
+    metres_gained             = list(lambda = 0.00542, prior_strength = 0.82),
+    tackles                   = list(lambda = 0.00364, prior_strength = 1.51),
+    spoils                    = list(lambda = 0.00443, prior_strength = 1.80),
+    intercepts                = list(lambda = 0.00552, prior_strength = 1.77),
+    one_percenters            = list(lambda = 0.00385, prior_strength = 2.32),
+    pressure_acts             = list(lambda = 0.00608, prior_strength = 0.83),
+    hitouts                   = list(lambda = 0.00617, prior_strength = 0.16),
+    hitouts_to_advantage      = list(lambda = 0.00280, prior_strength = 1.07),
+    frees_for                 = list(lambda = 0.00169, prior_strength = 7.65),
+    frees_against             = list(lambda = 0.00093, prior_strength = 7.13),
+    clangers                  = list(lambda = 0.00170, prior_strength = 5.14),
+    turnovers                 = list(lambda = 0.00263, prior_strength = 4.36),
+    bounces                   = list(lambda = 0.00493, prior_strength = 1.70),
+    def_half_pressure_acts    = list(lambda = 0.00461, prior_strength = 1.59),
+    centre_clearances         = list(lambda = 0.00530, prior_strength = 0.86),
+    stoppage_clearances       = list(lambda = 0.00427, prior_strength = 1.21),
+    effective_kicks           = list(lambda = 0.00571, prior_strength = 0.86),
+    effective_disposals       = list(lambda = 0.00558, prior_strength = 0.69),
+    intercept_marks           = list(lambda = 0.00341, prior_strength = 2.68),
+    f50_ground_ball_gets      = list(lambda = 0.00356, prior_strength = 3.92),
+    score_launches            = list(lambda = 0.00150, prior_strength = 6.07),
+    marks_on_lead             = list(lambda = 0.00381, prior_strength = 3.92),
+    tackles_inside50          = list(lambda = 0.00359, prior_strength = 4.08),
+    kickins                   = list(lambda = 0.01044, prior_strength = 0.26),
+    centre_bounce_attendances = list(lambda = 0.01316, prior_strength = 0.07),
+    ruck_contests             = list(lambda = 0.01061, prior_strength = 0.01),
+    contest_def_one_on_ones   = list(lambda = 0.00543, prior_strength = 2.23),
+    contest_off_one_on_ones   = list(lambda = 0.00535, prior_strength = 1.71),
+    contest_off_wins          = list(lambda = 0.00308, prior_strength = 5.02),
+    contest_def_losses        = list(lambda = 0.00387, prior_strength = 10.29),
+    dream_team_points         = list(lambda = 0.01815, prior_strength = 0.28),
+    rating_points             = list(lambda = 0.01709, prior_strength = 0.52),
     # Efficiency stats (Beta-Binomial, optimized via multi-start log-loss)
-    disposal_efficiency     = list(lambda = 0.00235, prior_strength = 32.67),
-    goal_accuracy           = list(lambda = 0.00010, prior_strength = 67.73),
-    contested_poss_rate     = list(lambda = 0.00303, prior_strength = 20.00),
-    hitout_win_pct          = list(lambda = 0.00135, prior_strength = 100.00),
-    kick_efficiency         = list(lambda = 0.00235, prior_strength = 32.67),
-    time_on_ground          = list(lambda = 0.01386, prior_strength = 1.00)
+    disposal_efficiency       = list(lambda = 0.00254, prior_strength = 115.40),
+    goal_accuracy             = list(lambda = 1e-05, prior_strength = 100.89),
+    contested_poss_rate       = list(lambda = 0.00308, prior_strength = 39.77),
+    hitout_win_pct            = list(lambda = 0.00119, prior_strength = 239.50),
+    kick_efficiency           = list(lambda = 0.00252, prior_strength = 66.72),
+    cond_tog                  = list(lambda = 0.00739, prior_strength = 1.20),
+    squad_selection           = list(lambda = 0.01749, prior_strength = 0.48)
   )
 }

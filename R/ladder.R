@@ -19,7 +19,7 @@ NULL
 #' @param season Numeric season year (e.g. 2026).
 #' @param team_ratings Optional data.table/data.frame with columns `team` and
 #'   `torp`. If NULL, loads via [load_team_ratings()].
-#' @param fixtures Optional fixture data.frame (fitzRoy format). If NULL, loads
+#' @param fixtures Optional fixture data.frame (AFL API format). If NULL, loads
 #'   via [load_fixtures()].
 #' @param predictions Optional predictions data.frame with `pred_xtotal`. If
 #'   NULL, attempts to load via [load_predictions()].
@@ -37,7 +37,7 @@ prepare_sim_data <- function(season, team_ratings = NULL, fixtures = NULL,
   }
   fix_dt <- data.table::as.data.table(fixtures)
 
-  # Standardise column names from fitzRoy format
+  # Standardise column names from fixture format
   if ("compSeason.year" %in% names(fix_dt)) {
     fix_dt <- fix_dt[get("compSeason.year") == season]
   }
@@ -77,10 +77,8 @@ prepare_sim_data <- function(season, team_ratings = NULL, fixtures = NULL,
   )
 
   # Standardise team names
-  if (requireNamespace("fitzRoy", quietly = TRUE)) {
-    sim_games[, home_team := fitzRoy::replace_teams(home_team)]
-    sim_games[, away_team := fitzRoy::replace_teams(away_team)]
-  }
+  sim_games[, home_team := torp_replace_teams(home_team)]
+  sim_games[, away_team := torp_replace_teams(away_team)]
 
   # Keep only regular season rounds (exclude finals)
   max_round <- AFL_REGULAR_SEASON_ROUNDS[as.character(season)]
@@ -192,9 +190,7 @@ prepare_sim_data <- function(season, team_ratings = NULL, fixtures = NULL,
   }
 
   # Standardise team names in ratings
- if (requireNamespace("fitzRoy", quietly = TRUE)) {
-    sim_teams[, team := fitzRoy::replace_teams(team)]
-  }
+  sim_teams[, team := torp_replace_teams(team)]
 
   # --- Predictions (optional) ---
   if (is.null(predictions)) {
@@ -211,9 +207,7 @@ prepare_sim_data <- function(season, team_ratings = NULL, fixtures = NULL,
     pred_ht  <- resolve_col(pred_dt, c("home.team.name", "home_team"))
 
     if (!is.null(pred_rnd) && !is.null(pred_ht) && "pred_xtotal" %in% names(pred_dt)) {
-      if (requireNamespace("fitzRoy", quietly = TRUE)) {
-        pred_dt[, (pred_ht) := fitzRoy::replace_teams(get(pred_ht))]
-      }
+      pred_dt[, (pred_ht) := torp_replace_teams(get(pred_ht))]
       sim_games[pred_dt,
         pred_xtotal := i.pred_xtotal,
         on = stats::setNames(c(pred_rnd, pred_ht), c("roundnum", "home_team"))

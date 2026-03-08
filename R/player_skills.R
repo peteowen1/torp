@@ -92,6 +92,7 @@ prepare_skill_data <- function(player_game_data, player_stats, rosters = NULL,
   # Compute TOG as fraction and constant denominator for Beta-Binomial model
   pgd[, tog := time_on_ground_percentage / 100]
   pgd[, tog_denominator := 1]
+  pgd[, played := 1L]
 
   # Identify player_id and match_id columns in player_stats
   # player_stats uses: player_player_player_player_id (player) + provider_id (match)
@@ -255,7 +256,7 @@ prepare_skill_data <- function(player_game_data, player_stats, rosters = NULL,
     zero_rows <- missed[, .(
       player_id, season, round, match_date_skill,
       match_id = paste0("AVAIL_", season, "_", sprintf("%02d", round)),
-      tog = 0, tog_denominator = 1, avail_only = TRUE
+      tog = 0, tog_denominator = 1, played = 0L, avail_only = TRUE
     )]
 
     # Assign pos_group: use modal position from games if available,
@@ -339,6 +340,9 @@ prepare_skill_data <- function(player_game_data, player_stats, rosters = NULL,
 #'   to one day after the latest match in the data).
 #' @param params Named list of hyperparameters from \code{default_skill_params()}.
 #' @param stat_defs Output of \code{skill_stat_definitions()}. If NULL, uses default.
+#' @param compute_ci Logical. If TRUE (default), compute credible intervals
+#'   (\code{_lower}/\code{_upper} columns) using qgamma/qbeta. Set to FALSE
+#'   to skip interval computation for faster batch processing.
 #'
 #' @return A data.table with one row per player containing:
 #'   \code{player_id}, \code{player_name}, \code{pos_group},
@@ -349,11 +353,12 @@ prepare_skill_data <- function(player_game_data, player_stats, rosters = NULL,
 #' @importFrom stats qgamma qbeta
 #' @export
 estimate_player_skills <- function(skill_data, ref_date = NULL,
-                                    params = NULL, stat_defs = NULL) {
+                                    params = NULL, stat_defs = NULL,
+                                    compute_ci = TRUE) {
   if (is.null(params)) params <- default_skill_params()
   if (is.null(stat_defs)) stat_defs <- skill_stat_definitions()
 
-  dt <- data.table::copy(data.table::as.data.table(skill_data))
+  dt <- data.table::as.data.table(skill_data)
 
   # Ensure date column
   if (!inherits(dt$match_date_skill, "Date")) {
@@ -366,8 +371,7 @@ estimate_player_skills <- function(skill_data, ref_date = NULL,
   }
   ref_date <- as.Date(ref_date)
 
-  # Filter to matches before ref_date
-
+  # Filter to matches before ref_date (creates a copy — no prior copy needed)
   dt <- dt[match_date_skill < ref_date]
 
   if (nrow(dt) == 0) {
@@ -505,8 +509,10 @@ estimate_player_skills <- function(skill_data, ref_date = NULL,
     upper_col <- paste0(stat_nm, "_upper")
 
     agg[, (skill_col) := alpha_post / beta_post]
-    agg[, (lower_col) := stats::qgamma(ci_alpha, shape = alpha_post, rate = beta_post)]
-    agg[, (upper_col) := stats::qgamma(1 - ci_alpha, shape = alpha_post, rate = beta_post)]
+    if (compute_ci) {
+      agg[, (lower_col) := stats::qgamma(ci_alpha, shape = alpha_post, rate = beta_post)]
+      agg[, (upper_col) := stats::qgamma(1 - ci_alpha, shape = alpha_post, rate = beta_post)]
+    }
 
     raw_col <- paste0(stat_nm, "_raw")
     n80_col <- paste0(stat_nm, "_n80s")
@@ -515,8 +521,9 @@ estimate_player_skills <- function(skill_data, ref_date = NULL,
     agg[, (n80_col) := .raw_den]
     agg[, (wt80_col) := w_den]
 
-    skill_results[[stat_nm]] <- agg[, c("player_id", skill_col, lower_col, upper_col,
-                                         raw_col, n80_col, wt80_col), with = FALSE]
+    keep_cols <- c("player_id", skill_col, raw_col, n80_col, wt80_col)
+    if (compute_ci) keep_cols <- c(keep_cols, lower_col, upper_col)
+    skill_results[[stat_nm]] <- agg[, keep_cols, with = FALSE]
   }
 
   # Resolve per-stat efficiency params
@@ -536,34 +543,38 @@ estimate_player_skills <- function(skill_data, ref_date = NULL,
 
     if (is.na(success_spec) || is.na(attempts_spec)) next
 
+    # Filter rows based on played_only flag
+    use_played_only <- !is.na(eff_defs$played_only[i]) && isTRUE(eff_defs$played_only[i])
+    dt_eff <- if (use_played_only) dt[avail_only == FALSE] else dt
+
     # Per-stat lambda and prior strength
     ep <- .resolve_eff_params(stat_nm)
     stat_lambda <- ep$lambda
     prior_str <- ep$prior
 
     # Get success and attempt vectors
-    if (success_spec %in% names(dt)) {
-      successes <- as.numeric(dt[[success_spec]])
+    if (success_spec %in% names(dt_eff)) {
+      successes <- as.numeric(dt_eff[[success_spec]])
     } else {
-      successes <- .compute_skill_denominator(dt, success_spec)
+      successes <- .compute_skill_denominator(dt_eff, success_spec)
     }
     successes[is.na(successes)] <- 0
 
-    attempts <- .compute_skill_denominator(dt, attempts_spec)
+    attempts <- .compute_skill_denominator(dt_eff, attempts_spec)
     attempts[is.na(attempts)] <- 0
 
     # Ensure successes <= attempts
     successes <- pmin(successes, attempts)
 
-    w_vec <- exp(-stat_lambda * dt$days_since)
+    w_vec <- exp(-stat_lambda * dt_eff$days_since)
 
-    data.table::set(dt, j = ".wnum", value = w_vec * successes)
-    data.table::set(dt, j = ".wden", value = w_vec * attempts)
-    data.table::set(dt, j = ".eff_successes", value = successes)
-    data.table::set(dt, j = ".eff_attempts", value = attempts)
-    data.table::set(dt, j = ".eff_w", value = w_vec)
+    data.table::set(dt_eff, j = ".wnum", value = w_vec * successes)
+    data.table::set(dt_eff, j = ".wden", value = w_vec * attempts)
+    data.table::set(dt_eff, j = ".eff_successes", value = successes)
+    data.table::set(dt_eff, j = ".eff_attempts", value = attempts)
+    data.table::set(dt_eff, j = ".eff_w", value = w_vec)
 
-    agg <- dt[, .(w_num = sum(.wnum, na.rm = TRUE),
+    agg <- dt_eff[, .(w_num = sum(.wnum, na.rm = TRUE),
                    w_den = sum(.wden, na.rm = TRUE),
                    .raw_succ = sum(.eff_successes, na.rm = TRUE),
                    .raw_att = sum(.eff_attempts, na.rm = TRUE),
@@ -580,7 +591,7 @@ estimate_player_skills <- function(skill_data, ref_date = NULL,
     use_pos <- is.na(eff_defs$pos_adjusted[i]) || isTRUE(eff_defs$pos_adjusted[i])
     pos_props <- stats::setNames(rep(grand_prop, length(pos_groups)), pos_groups)
     if (use_pos) {
-      pos_props_dt <- dt[!is.na(pos_group),
+      pos_props_dt <- dt_eff[!is.na(pos_group),
         .(pp = {
           pa <- sum(.wden, na.rm = TRUE)
           if (pa > 0) max(min(sum(.wnum, na.rm = TRUE) / pa, 1 - 1e-6), 1e-6)
@@ -616,8 +627,10 @@ estimate_player_skills <- function(skill_data, ref_date = NULL,
     upper_col <- paste0(stat_nm, "_upper")
 
     agg[, (skill_col) := alpha_post / (alpha_post + beta_post)]
-    agg[, (lower_col) := stats::qbeta(ci_alpha, alpha_post, beta_post)]
-    agg[, (upper_col) := stats::qbeta(1 - ci_alpha, alpha_post, beta_post)]
+    if (compute_ci) {
+      agg[, (lower_col) := stats::qbeta(ci_alpha, alpha_post, beta_post)]
+      agg[, (upper_col) := stats::qbeta(1 - ci_alpha, alpha_post, beta_post)]
+    }
 
     raw_col <- paste0(stat_nm, "_raw")
     att_col <- paste0(stat_nm, "_attempts")
@@ -626,8 +639,9 @@ estimate_player_skills <- function(skill_data, ref_date = NULL,
     agg[, (att_col) := .raw_att]
     agg[, (wt_att_col) := .wt_att]
 
-    skill_results[[stat_nm]] <- agg[, c("player_id", skill_col, lower_col, upper_col,
-                                         raw_col, att_col, wt_att_col), with = FALSE]
+    keep_cols <- c("player_id", skill_col, raw_col, att_col, wt_att_col)
+    if (compute_ci) keep_cols <- c(keep_cols, lower_col, upper_col)
+    skill_results[[stat_nm]] <- agg[, keep_cols, with = FALSE]
   }
 
   if (length(skipped_stats) > 0) {
@@ -647,7 +661,9 @@ estimate_player_skills <- function(skill_data, ref_date = NULL,
 
   for (stat_nm in names(skill_results)) {
     sr <- skill_results[[stat_nm]]
-    result <- merge(result, sr, by = "player_id", all.x = TRUE)
+    idx <- match(result$player_id, sr$player_id)
+    cols <- setdiff(names(sr), "player_id")
+    for (col in cols) data.table::set(result, j = col, value = sr[[col]][idx])
   }
 
   # Filter to min games
@@ -655,6 +671,62 @@ estimate_player_skills <- function(skill_data, ref_date = NULL,
 
   data.table::setorder(result, -wt_games)
   result
+}
+
+
+# ============================================================================
+# Batch skill estimation
+# ============================================================================
+
+#' Estimate player skills for multiple reference dates efficiently
+#'
+#' Internal function that eliminates redundant work when estimating skills
+#' across many dates: date conversion and avail_only setup are done once,
+#' and the data is sorted so each iteration filters an ascending subset.
+#'
+#' @param skill_data A data.table from \code{prepare_skill_data()}.
+#' @param ref_dates Date vector of reference dates.
+#' @param params Named list of hyperparameters from \code{default_skill_params()}.
+#' @param stat_defs Output of \code{skill_stat_definitions()}. If NULL, uses default.
+#' @param compute_ci Logical. If FALSE (default), skip credible interval computation.
+#'
+#' @return Named list of data.tables (keyed by ref_date as character), one per date.
+#' @keywords internal
+.estimate_skills_batch <- function(skill_data, ref_dates, params = NULL,
+                                   stat_defs = NULL, compute_ci = FALSE) {
+  if (is.null(params)) params <- default_skill_params()
+  if (is.null(stat_defs)) stat_defs <- skill_stat_definitions()
+
+  # One-time setup: convert to data.table, ensure types, sort by date
+  dt_base <- data.table::as.data.table(skill_data)
+  if (!inherits(dt_base$match_date_skill, "Date")) {
+    dt_base[, match_date_skill := as.Date(match_date_skill)]
+  }
+  if (!"avail_only" %in% names(dt_base)) dt_base[, avail_only := FALSE]
+  dt_base[is.na(avail_only), avail_only := FALSE]
+  data.table::setorder(dt_base, match_date_skill)
+
+  # Process ref_dates in chronological order
+  ref_dates_sorted <- sort(unique(as.Date(ref_dates)))
+  results <- vector("list", length(ref_dates_sorted))
+
+  for (i in seq_along(ref_dates_sorted)) {
+    rd <- ref_dates_sorted[i]
+    # Subset via filter on sorted data — creates a copy (no prior copy needed)
+    dt_sub <- dt_base[match_date_skill < rd]
+    if (nrow(dt_sub) == 0) next
+    results[[i]] <- tryCatch(
+      estimate_player_skills(dt_sub, ref_date = rd, params = params,
+                             stat_defs = stat_defs, compute_ci = compute_ci),
+      error = function(e) {
+        cli::cli_warn("Batch estimation failed for {rd}: {conditionMessage(e)}")
+        NULL
+      }
+    )
+  }
+
+  names(results) <- as.character(ref_dates_sorted)
+  results[!vapply(results, is.null, logical(1))]
 }
 
 

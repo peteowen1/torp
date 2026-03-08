@@ -80,13 +80,13 @@ torp_ratings(
 
 \item{skills}{Controls TOG-weighted average adjustment. When active, TORP
 components are re-centered to "above TOG-weighted average" by subtracting
-the weighted mean of each component (weighted by
-\code{time_on_ground_skill}). Accepts:
+the weighted mean of each component (weighted by pred_tog =
+\code{squad_selection_skill * cond_tog_skill}). Accepts:
 \itemize{
 \item \code{TRUE} (default): auto-loads skills via
 \code{get_player_skills(current = FALSE)}.
-\item A data.frame with \code{player_id} and
-\code{time_on_ground_skill} columns.
+\item A data.frame with \code{player_id},
+\code{cond_tog_skill}, and \code{squad_selection_skill} columns.
 \item \code{FALSE} or \code{NULL}: skip adjustment.
 }
 Players not in \code{skills} default to weight 0 (excluded from the

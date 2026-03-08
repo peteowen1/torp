@@ -12,7 +12,7 @@ Key columns include \code{id}, \code{providerId}, \code{utcStartTime}, \code{sta
 and \code{compSeason.year}.
 }
 \source{
-AFL fixture data via fitzRoy package
+AFL fixture data via AFL API
 }
 \usage{
 fixtures

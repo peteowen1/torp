@@ -3,7 +3,7 @@
 # This file declares variables used in non-standard evaluation (NSE) contexts
 # such as data.table and dplyr operations to avoid "no visible binding" NOTEs.
 
-#' @importFrom stats binomial coef complete.cases lm pchisq quantile sd var setNames
+#' @importFrom stats binomial coef complete.cases gaussian lm pchisq quantile sd var setNames
 #' @importFrom utils head
 #' @importFrom lubridate tz
 NULL
@@ -59,8 +59,9 @@ utils::globalVariables(c(
   "hitout_pts_adj", "hitout_sum", "weight_gm", "wt_gms", "wt_tog", "tog_sum", "utc_start_time",
   "days_diff", "wt_recv", "wt_disp", "wt_spoil", "wt_hitout",
   "wt_gms_recv", "wt_gms_disp", "wt_gms_spoil", "wt_gms_hitout",
-  "pred_tog", ".tog_safe", "tog_safe", "tog_wt", "lineup_tog",
-  "i.time_on_ground_skill", "i.n_80s", "i.wt_80s",
+  "pred_tog", "pred_selection", "pred_cond_tog",
+  ".tog_safe", "tog_safe", "tog_wt", "lineup_tog",
+  "i.squad_selection_skill", "i.cond_tog_skill", "i.n_80s", "i.wt_80s",
 
   # data.table join prefixes
   "i.torp", "i.torp_shift_away", "i.torp_shift_home",
@@ -108,6 +109,16 @@ utils::globalVariables(c(
   "lag_goal_x", "lag_goal_x5", "lag_time5", "speed1", "speed5"
 ))
 
+# WP credit variables
+utils::globalVariables(c(
+  "wp_credit", "wp_disp_credit", "wp_recv_credit",
+  "n_disposals", "n_receptions",
+  "max_play_wpa", "max_play_display_order", "max_play_role",
+  "abs_wpa", "disp_share",
+  "has_receiver", "disp_wpa", "recv_wpa",
+  "disp_peak_wpa", "disp_peak_do", "recv_peak_wpa", "recv_peak_do"
+))
+
 # Skill estimation variables
 utils::globalVariables(c(
   "avail_only", ".played", "roster_pos_group",
@@ -124,10 +135,21 @@ utils::globalVariables(c(
   ".raw_num", ".raw_den", ".raw_succ", ".raw_att", ".wt_att",
   ".raw_vals", ".raw_tog",
   "pos_group", "modal_pos", "i.pos_group", "i.modal_pos",
-  "i.n_games", "i.wt_games",
+  "i.n_games", "i.wt_games", "ref_date",
   "..keep_cols", "..skill_cols", "..lower_cols", "..upper_cols",
   "..lower_present", "..upper_present", "..raw_cols"
 ))
+
+# Batch rating variables
+utils::globalVariables(c(
+  "match_idx", "match_idx_max", "match_ref", "date_val", "round_val"
+))
+
+# PSR variables
+utils::globalVariables(c("psr_raw", "psr"))
+
+# rlang .env pronoun
+utils::globalVariables(c(".env"))
 
 # Contest extraction variables
 utils::globalVariables(c(
@@ -156,4 +178,136 @@ utils::globalVariables(c(
   "injury", "estimated_return", "player_norm", "tm_rnk",
   "tog_frac", "total_p80", "recv_p80", "disp_p80", "spoil_p80", "hitout_p80",
   "avg_p80", "avg_tog"
+))
+
+# Match model variables
+utils::globalVariables(c(
+  # Fixture/temporal features
+  "utc_dt", "local_dt", "local_start_time_str", "venue.name", "venue.timezone",
+  "game_year", "game_month", "game_yday", "game_mday", "game_wday", "game_wday_fac",
+  "game_hour", "game_date_numeric", "timezone",
+  "game_prop_through_year", "game_prop_through_month", "game_prop_through_week",
+  "game_prop_through_day", "game_year_decimal",
+  "compSeason.year", "team_name_season",
+
+  # Position diff columns
+  "BPL_diff", "BPR_diff", "FB_diff", "HBFL_diff", "HBFR_diff", "CHB_diff",
+  "WL_diff", "WR_diff", "C_diff", "R_diff", "RR_diff", "RK_diff",
+  "HFFL_diff", "HFFR_diff", "CHF_diff", "FPL_diff", "FPR_diff", "FF_diff",
+  "int_diff",
+
+  # Phase/group position columns
+  "def", "mid", "fwd", "int",
+  "backs", "half_backs", "midfielders", "followers", "half_forwards", "forwards",
+  "key_def", "med_def", "midfield", "med_fwd", "key_fwd", "rucks", "other_pos",
+  "CB", "BP", "HBF", "W", "MIDS", "HFF", "FP", "CF",
+
+  # Individual position columns
+  "BPL", "BPR", "FB", "HBFL", "HBFR", "CHB",
+  "WL", "WR", "C", "R", "RR", "RK",
+  "HFFL", "HFFR", "CHF", "FPL", "FPR", "FF",
+
+  # TORP rating diffs
+  "torp_diff", "torp_ratio", "torp_recv_diff", "torp_disp_diff",
+  "torp_spoil_diff", "torp_hitout_diff",
+
+  # Phase matchup columns
+  "hoff_adef", "hmid_amid", "hdef_afwd", "hint_aint",
+
+  # Score/result columns in match model
+  "home_shots", "away_shots", "score_diff", "shot_diff", "team_shots",
+  "harmean_shots", "shot_conv", "shot_conv_diff",
+  "xscore_diff", "team_xscore", "win",
+  "total_score", "total_shots", "total_xpoints", "total_points",
+  "total_xpoints_adj",
+  "home_xscore", "away_xscore",
+
+  # xG join columns (results schema — kept via rename in .build_team_mdl_df)
+  "homeTeamScore.matchScore.totalScore", "homeTeamScore.matchScore.goals",
+  "homeTeamScore.matchScore.behinds",
+  "awayTeamScore.matchScore.totalScore", "awayTeamScore.matchScore.goals",
+  "awayTeamScore.matchScore.behinds",
+  "match.matchId", "match.utcStartTime",
+
+  # Fixture-schema score columns (from get_afl_results)
+  "home.score.totalScore", "home.score.goals", "home.score.behinds",
+  "away.score.totalScore", "away.score.goals", "away.score.behinds",
+  "utcStartTime",
+
+  # Distance/familiarity/rest
+  "log_dist", "distance", "venue_lat", "venue_lon", "team_lat", "team_lon",
+  "familiarity", "cum_total_games", "cum_venue_games",
+  "days_rest", "log_dist_diff", "familiarity_diff",
+  "days_rest_diff", "days_rest_diff_fac",
+
+  # Weather columns
+  "temp_avg", "wind_avg", "humidity_avg", "precipitation_total",
+  "log_wind", "log_precip", "is_roof",
+
+  # Weight columns
+  "weightz", "shot_weightz",
+
+  # GAM prediction columns
+  "pred_tot_xscore", "pred_xscore_diff", "pred_conv_diff",
+  "pred_score_diff", "pred_win",
+  "bits", "tips", "mae",
+
+  # Aggregation/join columns
+  "team_type_fac", "venue_fac", "count",
+  "team_name_adj", "home_ground", "venue_adj",
+
+  # .x/.y suffixed columns from self-join
+  "torp.x", "torp.y", "torp_recv.x", "torp_recv.y",
+  "torp_disp.x", "torp_disp.y", "torp_spoil.x", "torp_spoil.y",
+  "torp_hitout.x", "torp_hitout.y",
+  "def.x", "def.y", "mid.x", "mid.y", "fwd.x", "fwd.y", "int.x", "int.y",
+  "BPL.x", "BPL.y", "BPR.x", "BPR.y", "FB.x", "FB.y",
+  "HBFL.x", "HBFL.y", "HBFR.x", "HBFR.y", "CHB.x", "CHB.y",
+  "WL.x", "WL.y", "WR.x", "WR.y", "C.x", "C.y",
+  "R.x", "R.y", "RR.x", "RR.y", "RK.x", "RK.y",
+  "HFFL.x", "HFFL.y", "HFFR.x", "HFFR.y", "CHF.x", "CHF.y",
+  "FPL.x", "FPL.y", "FPR.x", "FPR.y", "FF.x", "FF.y",
+  "team_name.x", "team_name.y",
+  "team_name_season.x", "team_name_season.y",
+  "log_dist.x", "log_dist.y",
+  "familiarity.x", "familiarity.y",
+  "days_rest.x", "days_rest.y",
+  "team_type_fac.x", "team_type_fac.y",
+  "season.x", "season.y",
+  "round.roundNumber.x", "round.roundNumber.y",
+  "venue.x", "venue.y",
+  "count.x", "count.y",
+  "game_year_decimal.x", "game_year_decimal.y",
+  "game_prop_through_year.x", "game_prop_through_year.y",
+  "game_prop_through_month.x", "game_prop_through_month.y",
+  "game_wday_fac.x", "game_wday_fac.y",
+  "game_prop_through_day.x", "game_prop_through_day.y",
+
+  # Lineup processing
+  "lineup_tog", ".unknown_pos", "teamName", "teamType",
+  "player.playerId", "position.x", "position.y",
+
+  # Weather forecast
+  "Latitude", "Longitude", "temperature_2m", "wind_speed_10m",
+  "relative_humidity_2m", "kickoff_utc", "time",
+
+  # Predictions pipeline specific
+  "torp_week", "torp_recv_week", "torp_disp_week",
+  "torp_spoil_week", "torp_hitout_week",
+  "n_players", "team_tog_sum",
+  "type_anti", "Ground",
+
+  # Predictions pipeline output
+  "week", "source", "pred_xtotal", "pred_xmargin",
+
+  # Backfill helper
+  ".actual_margin",
+
+  # Fixture/join schema columns
+  "home.team.providerId", "away.team.providerId", "team.providerId",
+  "team_name", "team_type", "venue", "match_date", "precipitation",
+
+  # Predictions pipeline
+  "home_rating", "away_rating", "start_time", "players",
+  "pred_margin", "rating_diff"
 ))

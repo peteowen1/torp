@@ -9,8 +9,8 @@
 library(devtools)
 library(data.table)
 library(dplyr)
-library(fitzRoy)
-library(optimParallel)
+library(nloptr)
+library(Rcpp)
 devtools::load_all()
 
 cat("=== TORP Ratings Parameter Optimization ===\n\n")
@@ -83,7 +83,30 @@ spoil_hitout_raw <- ps_dt[
     hitouts         = sum(hitouts, na.rm = TRUE),
     hitouts_adv     = sum(extended_stats_hitouts_to_advantage, na.rm = TRUE),
     ruck_contests   = sum(extended_stats_ruck_contests, na.rm = TRUE),
-    bounces         = sum(bounces, na.rm = TRUE)
+    bounces         = sum(bounces, na.rm = TRUE),
+    contested_poss  = sum(contested_possessions, na.rm = TRUE),
+    contested_marks = sum(contested_marks, na.rm = TRUE),
+    ground_ball_gets = sum(extended_stats_ground_ball_gets, na.rm = TRUE),
+    marks_inside50  = sum(marks_inside50, na.rm = TRUE),
+    inside50s       = sum(inside50s, na.rm = TRUE),
+    clangers        = sum(clangers, na.rm = TRUE),
+    score_inv       = sum(score_involvements, na.rm = TRUE),
+    intercepts      = sum(intercepts, na.rm = TRUE),
+    one_percenters  = sum(one_percenters, na.rm = TRUE),
+    rebound50s      = sum(rebound50s, na.rm = TRUE),
+    frees_against   = sum(frees_against, na.rm = TRUE),
+    clearances      = sum(clearances_total_clearances, na.rm = TRUE),
+    frees_for       = sum(frees_for, na.rm = TRUE),
+    goals           = sum(goals, na.rm = TRUE),
+    behinds         = sum(behinds, na.rm = TRUE),
+    marks_total     = sum(marks, na.rm = TRUE),
+    uncontested_poss = sum(uncontested_possessions, na.rm = TRUE),
+    shots_at_goal   = sum(shots_at_goal, na.rm = TRUE),
+    kicks           = sum(kicks, na.rm = TRUE),
+    handballs       = sum(handballs, na.rm = TRUE),
+    metres_gained   = sum(metres_gained, na.rm = TRUE),
+    turnovers_stat  = sum(turnovers, na.rm = TRUE),
+    goal_assists    = sum(goal_assists, na.rm = TRUE)
   ),
   by = .(player_id, match_id)
 ]
@@ -110,9 +133,40 @@ player_game_raw <- player_game_raw[!is.na(player_id)]
 num_cols <- c("sum_depv_neg", "n_neg", "sum_depv_pos", "n_pos",
               "sum_depv_pt_neg", "n_recv_neg", "sum_depv_pt_pos", "n_recv_pos",
               "spoils", "tackles", "pressure_acts", "def_pressure",
-              "hitouts", "hitouts_adv", "ruck_contests", "bounces")
+              "hitouts", "hitouts_adv", "ruck_contests", "bounces",
+              "contested_poss", "contested_marks", "ground_ball_gets", "marks_inside50",
+              "inside50s", "clangers", "score_inv",
+              "intercepts", "one_percenters", "rebound50s", "frees_against",
+              "clearances", "frees_for",
+              "goals", "behinds", "marks_total", "uncontested_poss", "shots_at_goal",
+              "kicks", "handballs", "metres_gained", "turnovers_stat", "goal_assists")
 for (col in num_cols) {
   data.table::set(player_game_raw, which(is.na(player_game_raw[[col]])), col, 0)
+}
+
+## 2c2. Normalize count-based stats by SD ----
+# Dividing by SD makes all stat weights "per-SD" so L2 regularization treats them fairly.
+# On writeback, weights are un-normalized back to per-raw-unit for player_credit.R.
+stat_cols_to_normalize <- c(
+  "bounces", "spoils", "tackles", "pressure_acts", "def_pressure",
+  "hitouts", "hitouts_adv", "ruck_contests",
+  "contested_poss", "contested_marks", "ground_ball_gets", "marks_inside50",
+  "inside50s", "clangers", "score_inv",
+  "intercepts", "one_percenters", "rebound50s", "frees_against",
+  "clearances", "frees_for",
+  "goals", "behinds", "marks_total", "uncontested_poss", "shots_at_goal",
+  "kicks", "handballs", "metres_gained", "turnovers_stat", "goal_assists"
+)
+stat_sds <- sapply(stat_cols_to_normalize, function(col) {
+  s <- sd(player_game_raw[[col]], na.rm = TRUE)
+  if (is.na(s) || s < 1e-6) 1 else s
+})
+cat("  Stat SDs for normalization:\n")
+for (col in stat_cols_to_normalize) {
+  cat(sprintf("    %-20s SD = %.4f\n", col, stat_sds[col]))
+}
+for (col in stat_cols_to_normalize) {
+  player_game_raw[[col]] <- player_game_raw[[col]] / stat_sds[col]
 }
 
 # Sort chronologically
@@ -123,7 +177,7 @@ data.table::setorder(player_game_raw, date, match_id)
 team_map <- data.table::as.data.table(fixtures)[
   , .(team_name = names(sort(table(home.team.name), decreasing = TRUE))[1]),
   by = .(teamId = home.team.providerId)
-][, team_name := fitzRoy::replace_teams(team_name)]
+][, team_name := torp_replace_teams(team_name)]
 
 # Fixtures with results
 fix_dt <- data.table::as.data.table(fixtures)[
@@ -132,17 +186,27 @@ fix_dt <- data.table::as.data.table(fixtures)[
       utcStartTime, venue_name = venue.name)
 ]
 
-results_dt <- data.table::as.data.table(results)[
-  , .(providerId = match.matchId,
-      home_score = homeTeamScore.matchScore.totalScore,
-      away_score = awayTeamScore.matchScore.totalScore)
-]
+# Handle both CFS schema (historical) and fixture schema (new)
+results_raw <- data.table::as.data.table(results)
+if ("match.matchId" %in% names(results_raw)) {
+  results_dt <- results_raw[, .(
+    providerId = match.matchId,
+    home_score = homeTeamScore.matchScore.totalScore,
+    away_score = awayTeamScore.matchScore.totalScore
+  )]
+} else {
+  results_dt <- results_raw[, .(
+    providerId = providerId,
+    home_score = home.score.totalScore,
+    away_score = away.score.totalScore
+  )]
+}
 
 match_dt <- merge(fix_dt, results_dt, by = "providerId", all.x = TRUE)
 match_dt[, `:=`(
   margin = home_score - away_score,
   date = as.Date(utcStartTime),
-  venue = replace_venues(venue_name)
+  venue = torp_replace_venues(venue_name)
 )]
 match_dt <- match_dt[!is.na(margin)]
 data.table::setorder(match_dt, date, providerId)
@@ -158,11 +222,11 @@ lineups <- teams_dt[, .(player_ids = list(player.playerId),
 
 # --- Home ground / distance / familiarity ---
 grounds_dt <- data.table::as.data.table(all_grounds)
-grounds_dt[, venue := replace_venues(as.character(Ground))]
+grounds_dt[, venue := torp_replace_venues(as.character(Ground))]
 
 # Find each team's home ground (mode of venue)
 home_ground <- data.table::as.data.table(teams_data)[
-  , .(venue = replace_venues(names(sort(table(venue.name), decreasing = TRUE))[1])),
+  , .(venue = torp_replace_venues(names(sort(table(venue.name), decreasing = TRUE))[1])),
   by = .(teamId)
 ]
 home_ground <- merge(home_ground, grounds_dt[, .(venue, home_lat = Latitude, home_lon = Longitude)],
@@ -306,7 +370,110 @@ lineup_dt_all <- data.table::rbindlist(lineup_rows)
 cat(sprintf("  Lineup expansion: %d player-match rows for %d matches\n",
             nrow(lineup_dt_all), nrow(eval_matches_all)))
 
+## 2h. Pre-compute lineup-level role positions (for balance penalty) ----
+cat("  Pre-computing lineup positions for balance penalty...
+")
+pgr_pos_lookup <- pgr[!is.na(position), .(player_id, date_num = as.numeric(date), position)]
+data.table::setkey(pgr_pos_lookup, player_id, date_num)
+lu_pos_joined <- pgr_pos_lookup[lineup_dt_all, .(position = x.position),
+                                 on = .(player_id, date_num), roll = TRUE]
+lineup_dt_all[, role_position := lu_pos_joined$position]
+rm(pgr_pos_lookup, lu_pos_joined)
+
+# Pre-compute position group indices for lineup rows (reused in all stages)
+lu_role_positions <- lineup_dt_all$role_position
+lu_pos_levels <- unique(lu_role_positions[!is.na(lu_role_positions)])
+lu_pos_idx <- lapply(lu_pos_levels, function(p) which(lu_role_positions == p))
+names(lu_pos_idx) <- lu_pos_levels
+cat(sprintf("  Position groups: %s
+", paste(lu_pos_levels, collapse = ", ")))
+
+# Position balance penalty: lambda * sd(position-group mean TORPs). ----
+# Larger values produce more balanced positions at the cost of slightly
+# worse margin prediction accuracy. Set to 0 to disable.
+POSITION_BALANCE_LAMBDA <- 0.1
+
+# L2 (ridge) penalty on count-based stat weights to prevent overfitting ----
+STAT_WEIGHT_LAMBDA <- 0.25
+
+# Names of count-based stat weight params subject to L2 penalty
+L2_PARAM_NAMES <- c("bounce_wt",
+                     "spoil_wt", "tackle_wt", "pressure_wt", "def_pressure_wt",
+                     "hitout_wt", "hitout_adv_wt", "ruck_contest_wt",
+                     "contested_poss_wt", "contested_marks_wt", "ground_ball_gets_wt",
+                     "marks_inside50_wt", "inside50s_wt", "clangers_wt",
+                     "score_involvements_wt", "intercepts_wt", "one_percenters_wt",
+                     "rebound50s_wt", "frees_against_wt", "clearances_wt", "frees_for_wt",
+                     "goals_wt", "behinds_wt", "marks_wt", "uncontested_poss_wt",
+                     "shots_at_goal_wt", "kicks_wt", "handballs_wt",
+                     "metres_gained_wt", "turnovers_wt", "goal_assists_wt")
+
 # 3. Objective Function ----
+
+# Compile Rcpp cumulative decay kernel for ~20-50x speedup over R for-loop
+cat("Compiling Rcpp cumulative decay kernel...\n")
+Rcpp::cppFunction('
+Rcpp::List cumulative_decay_cpp(Rcpp::IntegerVector pids,
+                                Rcpp::NumericVector dnums,
+                                Rcpp::NumericVector recv_pts,
+                                Rcpp::NumericVector disp_pts,
+                                Rcpp::NumericVector spoil_pts,
+                                Rcpp::NumericVector hitout_pts,
+                                double decay_r, double decay_d,
+                                double decay_s, double decay_h) {
+  int n = pids.size();
+  Rcpp::NumericVector cr(n), cd(n), cs(n), ch(n);
+  Rcpp::NumericVector cw_r(n), cw_d(n), cw_s(n), cw_h(n);
+
+  cr[0] = recv_pts[0]; cd[0] = disp_pts[0];
+  cs[0] = spoil_pts[0]; ch[0] = hitout_pts[0];
+  cw_r[0] = 1.0; cw_d[0] = 1.0; cw_s[0] = 1.0; cw_h[0] = 1.0;
+
+  for (int i = 1; i < n; i++) {
+    if (pids[i] == pids[i-1]) {
+      double gap = dnums[i] - dnums[i-1];
+      double df_r = std::exp(-gap / decay_r);
+      double df_d = std::exp(-gap / decay_d);
+      double df_s = std::exp(-gap / decay_s);
+      double df_h = std::exp(-gap / decay_h);
+      cr[i] = cr[i-1] * df_r + recv_pts[i];
+      cd[i] = cd[i-1] * df_d + disp_pts[i];
+      cs[i] = cs[i-1] * df_s + spoil_pts[i];
+      ch[i] = ch[i-1] * df_h + hitout_pts[i];
+      cw_r[i] = cw_r[i-1] * df_r + 1.0;
+      cw_d[i] = cw_d[i-1] * df_d + 1.0;
+      cw_s[i] = cw_s[i-1] * df_s + 1.0;
+      cw_h[i] = cw_h[i-1] * df_h + 1.0;
+    } else {
+      cr[i] = recv_pts[i]; cd[i] = disp_pts[i];
+      cs[i] = spoil_pts[i]; ch[i] = hitout_pts[i];
+      cw_r[i] = 1.0; cw_d[i] = 1.0; cw_s[i] = 1.0; cw_h[i] = 1.0;
+    }
+  }
+  return Rcpp::List::create(
+    Rcpp::Named("cr") = cr, Rcpp::Named("cd") = cd,
+    Rcpp::Named("cs") = cs, Rcpp::Named("ch") = ch,
+    Rcpp::Named("cw_r") = cw_r, Rcpp::Named("cw_d") = cw_d,
+    Rcpp::Named("cw_s") = cw_s, Rcpp::Named("cw_h") = cw_h
+  );
+}
+')
+
+#' Soft quantile: differentiable approximation using kernel-weighted sorted values.
+#' Unlike stats::quantile() which is a step function w.r.t. q, this provides
+#' smooth gradients so optimizers explore the landscape cleanly.
+soft_quantile <- function(x, q, bandwidth = 0.05) {
+  x <- x[!is.na(x)]
+  n <- length(x)
+  if (n == 0) return(0)
+  sorted <- sort(x)
+  ranks <- (seq_len(n) - 0.5) / n
+  weights <- dnorm(ranks, mean = q, sd = bandwidth)
+  ws <- sum(weights)
+  if (ws < 1e-12) return(sorted[max(1, round(q * n))])
+  sum(sorted * weights) / ws
+}
+
 
 #' Compute credit-assigned points from raw components given params
 #' Returns a data.table with player_id, match_id, date, disp_pts, recv_pts,
@@ -317,20 +484,34 @@ compute_credits <- function(pgr, params, verbose = FALSE) {
 
   # Disposal points
   out[, disp_pts := (sum_depv_neg + n_neg * p["disp_neg_offset"]) * p["disp_scale"] +
-                    (sum_depv_pos + n_pos * p["disp_pos_offset"]) * p["disp_scale"] -
-                    bounces * p["bounce_penalty"]]
+                    (sum_depv_pos + n_pos * p["disp_pos_offset"]) * p["disp_scale"] +
+                    bounces * p["bounce_wt"] +
+                    inside50s * p["inside50s_wt"] + clangers * p["clangers_wt"] +
+                    score_inv * p["score_involvements_wt"] +
+                    kicks * p["kicks_wt"] + handballs * p["handballs_wt"] +
+                    metres_gained * p["metres_gained_wt"] + turnovers_stat * p["turnovers_wt"] +
+                    goal_assists * p["goal_assists_wt"] +
+                    goals * p["goals_wt"] + behinds * p["behinds_wt"] +
+                    shots_at_goal * p["shots_at_goal_wt"]]
 
- # Reception points
+  # Reception points
   out[, recv_pts := (p["recv_neg_mult"] * sum_depv_pt_neg + n_recv_neg * p["recv_neg_offset"]) * p["recv_scale"] +
-                    (p["recv_pos_mult"] * sum_depv_pt_pos + n_recv_pos * p["recv_pos_offset"]) * p["recv_scale"]]
+                    (p["recv_pos_mult"] * sum_depv_pt_pos + n_recv_pos * p["recv_pos_offset"]) * p["recv_scale"] +
+                    contested_poss * p["contested_poss_wt"] + contested_marks * p["contested_marks_wt"] +
+                    ground_ball_gets * p["ground_ball_gets_wt"] + marks_inside50 * p["marks_inside50_wt"] +
+                    marks_total * p["marks_wt"] + uncontested_poss * p["uncontested_poss_wt"] +
+                    frees_for * p["frees_for_wt"]]
 
   # Spoil points
   out[, spoil_pts := spoils * p["spoil_wt"] + tackles * p["tackle_wt"] +
-                     pressure_acts * p["pressure_wt"] - def_pressure * p["def_pressure_wt"]]
+                     pressure_acts * p["pressure_wt"] + def_pressure * p["def_pressure_wt"] +
+                     intercepts * p["intercepts_wt"] + one_percenters * p["one_percenters_wt"] +
+                     rebound50s * p["rebound50s_wt"] + frees_against * p["frees_against_wt"]]
 
   # Hitout points
-  out[, hitout_pts := hitouts * p["hitout_wt"] + hitouts_adv * p["hitout_adv_wt"] -
-                      ruck_contests * p["ruck_contest_wt"]]
+  out[, hitout_pts := hitouts * p["hitout_wt"] + hitouts_adv * p["hitout_adv_wt"] +
+                      ruck_contests * p["ruck_contest_wt"] +
+                      clearances * p["clearances_wt"]]
 
   # Per-80 normalisation first: divide by actual TOG so ratings are per-full-game.
   # Must happen BEFORE position-quantile so the quantile operates on per-80 rates
@@ -342,29 +523,28 @@ compute_credits <- function(pgr, params, verbose = FALSE) {
     hitout_pts = hitout_pts / tog_safe
   )]
 
-  # Position-group quantile adjustment (on per-80 rates) — per-component quantiles
-  q_r <- p["pos_adj_quantile_recv"]
-  q_d <- p["pos_adj_quantile_disp"]
-  q_s <- p["pos_adj_quantile_spoil"]
-  q_h <- p["pos_adj_quantile_hitout"]
+  # Position-group mean subtraction (on per-80 rates)
   if (verbose) {
-    cat(sprintf("\n  Position quantile adjustment on per-80 rates (q_r=%.2f%%, q_d=%.2f%%, q_s=%.2f%%, q_h=%.2f%%):\n",
-                q_r * 100, q_d * 100, q_s * 100, q_h * 100))
-    cat(sprintf("  %-18s %8s %8s %8s %8s\n", "Position", "recv", "disp", "spoil", "hitout"))
+    cat(sprintf("
+  Position mean adjustment on per-80 rates:
+"))
+    cat(sprintf("  %-18s %8s %8s %8s %8s
+", "Position", "recv", "disp", "spoil", "hitout"))
     for (pos in sort(unique(out$position[!is.na(out$position)]))) {
       idx <- out$position == pos & !is.na(out$position)
-      cat(sprintf("  %-18s %+8.3f %+8.3f %+8.3f %+8.3f\n", pos,
-        quantile(out$recv_pts[idx], q_r, na.rm = TRUE),
-        quantile(out$disp_pts[idx], q_d, na.rm = TRUE),
-        quantile(out$spoil_pts[idx], q_s, na.rm = TRUE),
-        quantile(out$hitout_pts[idx], q_h, na.rm = TRUE)))
+      cat(sprintf("  %-18s %+8.3f %+8.3f %+8.3f %+8.3f
+", pos,
+        mean(out$recv_pts[idx], na.rm = TRUE),
+        mean(out$disp_pts[idx], na.rm = TRUE),
+        mean(out$spoil_pts[idx], na.rm = TRUE),
+        mean(out$hitout_pts[idx], na.rm = TRUE)))
     }
   }
   out[!is.na(position), `:=`(
-    recv_pts   = recv_pts   - stats::quantile(recv_pts, q_r, na.rm = TRUE),
-    disp_pts   = disp_pts   - stats::quantile(disp_pts, q_d, na.rm = TRUE),
-    spoil_pts  = spoil_pts  - stats::quantile(spoil_pts, q_s, na.rm = TRUE),
-    hitout_pts = hitout_pts - stats::quantile(hitout_pts, q_h, na.rm = TRUE)
+    recv_pts   = recv_pts   - mean(recv_pts, na.rm = TRUE),
+    disp_pts   = disp_pts   - mean(disp_pts, na.rm = TRUE),
+    spoil_pts  = spoil_pts  - mean(spoil_pts, na.rm = TRUE),
+    hitout_pts = hitout_pts - mean(hitout_pts, na.rm = TRUE)
   ), by = position]
 
   return(out)
@@ -447,17 +627,43 @@ objective_fn_fast <- function(par, env) {
 
   # --- Compute per-game credits directly on sorted vectors (no copy) ---
   disp_pts <- (env$sum_depv_neg + env$n_neg * p["disp_neg_offset"]) * p["disp_scale"] +
-              (env$sum_depv_pos + env$n_pos * p["disp_pos_offset"]) * p["disp_scale"] -
-              env$bounces * p["bounce_penalty"]
+              (env$sum_depv_pos + env$n_pos * p["disp_pos_offset"]) * p["disp_scale"] +
+              env$bounces * p["bounce_wt"] +
+              env$inside50s * p["inside50s_wt"] +
+              env$clangers * p["clangers_wt"] +
+              env$score_inv * p["score_involvements_wt"] +
+              env$kicks * p["kicks_wt"] +
+              env$handballs * p["handballs_wt"] +
+              env$metres_gained * p["metres_gained_wt"] +
+              env$turnovers_stat * p["turnovers_wt"] +
+              env$goal_assists * p["goal_assists_wt"] +
+              env$goals * p["goals_wt"] +
+              env$behinds * p["behinds_wt"] +
+              env$shots_at_goal * p["shots_at_goal_wt"]
 
   recv_pts <- (p["recv_neg_mult"] * env$sum_depv_pt_neg + env$n_recv_neg * p["recv_neg_offset"]) * p["recv_scale"] +
-              (p["recv_pos_mult"] * env$sum_depv_pt_pos + env$n_recv_pos * p["recv_pos_offset"]) * p["recv_scale"]
+              (p["recv_pos_mult"] * env$sum_depv_pt_pos + env$n_recv_pos * p["recv_pos_offset"]) * p["recv_scale"] +
+              env$contested_poss * p["contested_poss_wt"] +
+              env$contested_marks * p["contested_marks_wt"] +
+              env$ground_ball_gets * p["ground_ball_gets_wt"] +
+              env$marks_inside50 * p["marks_inside50_wt"] +
+              env$marks_total * p["marks_wt"] +
+              env$uncontested_poss * p["uncontested_poss_wt"] +
+              env$frees_for * p["frees_for_wt"]
 
-  spoil_pts <- env$spoils * p["spoil_wt"] + env$tackles * p["tackle_wt"] +
-               env$pressure_acts * p["pressure_wt"] - env$def_pressure * p["def_pressure_wt"]
+  spoil_pts <- env$spoils * p["spoil_wt"] +
+               env$tackles * p["tackle_wt"] +
+               env$pressure_acts * p["pressure_wt"] +
+               env$def_pressure * p["def_pressure_wt"] +
+               env$one_percenters * p["one_percenters_wt"] +
+               env$frees_against * p["frees_against_wt"] +
+               env$intercepts * p["intercepts_wt"] +
+               env$rebound50s * p["rebound50s_wt"]
 
-  hitout_pts <- env$hitouts * p["hitout_wt"] + env$hitouts_adv * p["hitout_adv_wt"] -
-                env$ruck_contests * p["ruck_contest_wt"]
+  hitout_pts <- env$hitouts * p["hitout_wt"] +
+                env$hitouts_adv * p["hitout_adv_wt"] +
+                env$ruck_contests * p["ruck_contest_wt"] +
+                env$clearances * p["clearances_wt"]
 
   # Per-80 normalisation first (before position-quantile, so quantile
   # operates on per-80 rates rather than inflating per-game adjustments)
@@ -468,53 +674,31 @@ objective_fn_fast <- function(par, env) {
   disp_pts[is.na(disp_pts)] <- 0; recv_pts[is.na(recv_pts)] <- 0
   spoil_pts[is.na(spoil_pts)] <- 0; hitout_pts[is.na(hitout_pts)] <- 0
 
-  # Position-group quantile adjustment (on per-80 rates) — per-component quantiles
-  q_r <- p["pos_adj_quantile_recv"]
-  q_d <- p["pos_adj_quantile_disp"]
-  q_s <- p["pos_adj_quantile_spoil"]
-  q_h <- p["pos_adj_quantile_hitout"]
+  # Position-group mean subtraction
   for (pos in env$position_levels) {
     idx <- env$pos_indices[[pos]]
     if (length(idx) > 0) {
-      recv_pts[idx]   <- recv_pts[idx]   - quantile(recv_pts[idx], q_r, na.rm = TRUE)
-      disp_pts[idx]   <- disp_pts[idx]   - quantile(disp_pts[idx], q_d, na.rm = TRUE)
-      spoil_pts[idx]  <- spoil_pts[idx]  - quantile(spoil_pts[idx], q_s, na.rm = TRUE)
-      hitout_pts[idx] <- hitout_pts[idx] - quantile(hitout_pts[idx], q_h, na.rm = TRUE)
+      recv_pts[idx]   <- recv_pts[idx]   - mean(recv_pts[idx], na.rm = TRUE)
+      disp_pts[idx]   <- disp_pts[idx]   - mean(disp_pts[idx], na.rm = TRUE)
+      spoil_pts[idx]  <- spoil_pts[idx]  - mean(spoil_pts[idx], na.rm = TRUE)
+      hitout_pts[idx] <- hitout_pts[idx] - mean(hitout_pts[idx], na.rm = TRUE)
     }
   }
 
-  # --- Cumulative decay sums (per-component decay, single-vector loop) ---
+  # --- Cumulative decay sums via Rcpp (per-component decay) ---
   decay_r <- p["decay_recv"]; decay_d <- p["decay_disp"]
   decay_s <- p["decay_spoil"]; decay_h <- p["decay_hitout"]
   pids <- env$pgr_s$player_id
   dnums <- env$pgr_s$date_num
-  n <- length(disp_pts)
-  cr <- cd <- cs <- ch <- cw_r <- cw_d <- cw_s <- cw_h <- numeric(n)
-  cr[1] <- recv_pts[1]; cd[1] <- disp_pts[1]
-  cs[1] <- spoil_pts[1]; ch[1] <- hitout_pts[1]
-  cw_r[1] <- 1; cw_d[1] <- 1; cw_s[1] <- 1; cw_h[1] <- 1
-  for (i in 2:n) {
-    if (pids[i] == pids[i - 1]) {
-      gap <- dnums[i] - dnums[i - 1]
-      df_r <- exp(-gap / decay_r); df_d <- exp(-gap / decay_d)
-      df_s <- exp(-gap / decay_s); df_h <- exp(-gap / decay_h)
-      cr[i] <- cr[i - 1] * df_r + recv_pts[i]
-      cd[i] <- cd[i - 1] * df_d + disp_pts[i]
-      cs[i] <- cs[i - 1] * df_s + spoil_pts[i]
-      ch[i] <- ch[i - 1] * df_h + hitout_pts[i]
-      cw_r[i] <- cw_r[i - 1] * df_r + 1
-      cw_d[i] <- cw_d[i - 1] * df_d + 1
-      cw_s[i] <- cw_s[i - 1] * df_s + 1
-      cw_h[i] <- cw_h[i - 1] * df_h + 1
-    } else {
-      cr[i] <- recv_pts[i]; cd[i] <- disp_pts[i]
-      cs[i] <- spoil_pts[i]; ch[i] <- hitout_pts[i]
-      cw_r[i] <- 1; cw_d[i] <- 1; cw_s[i] <- 1; cw_h[i] <- 1
-    }
-  }
+
+  cum <- cumulative_decay_cpp(pids, dnums, recv_pts, disp_pts,
+                              spoil_pts, hitout_pts,
+                              decay_r, decay_d, decay_s, decay_h)
+  cr <- cum$cr; cd <- cum$cd; cs <- cum$cs; ch <- cum$ch
+  cw_r <- cum$cw_r; cw_d <- cum$cw_d; cw_s <- cum$cw_s; cw_h <- cum$cw_h
 
   # --- Map to lineup via pre-computed indices ---
-  loading      <- p["loading"]
+  loading      <- 1.0  # fixed — unidentifiable when scale params are free
   prior_recv   <- p["prior_games_recv"]
   prior_disp   <- p["prior_games_disp"]
   prior_spoil  <- p["prior_games_spoil"]
@@ -548,7 +732,18 @@ objective_fn_fast <- function(par, env) {
   away_sum <- rowsum(torp_weighted * env$lu_not_home, env$lu_match_idx, reorder = FALSE, na.rm = TRUE)
   torp_diff <- as.numeric(home_sum - away_sum)
 
-  fast_rmse_cv(torp_diff, env$eval_matches)
+  # Position balance penalty: penalize systematic position-group bias
+  pos_means <- vapply(env$lu_pos_levels, function(pos) {
+    idx <- env$lu_pos_idx[[pos]]
+    tog <- env$lu_lineup_tog[idx]
+    sum(torp_vec[idx] * tog, na.rm = TRUE) / sum(tog, na.rm = TRUE)
+  }, numeric(1))
+  balance_penalty <- POSITION_BALANCE_LAMBDA * sd(pos_means, na.rm = TRUE)
+
+  # L2 (ridge) penalty on count-based stat weights
+  l2_penalty <- STAT_WEIGHT_LAMBDA * sum(p[L2_PARAM_NAMES]^2)
+
+  fast_rmse_cv(torp_diff, env$eval_matches) + balance_penalty + l2_penalty
 }
 
 #' Fast RMSE from torp_diff vector and eval match data
@@ -690,119 +885,218 @@ objective_fn <- function(par, pgr, match_dt, train_seasons = 2022:2025,
 
 # Read current defaults from package constants (loaded via devtools::load_all())
 par_defaults <- c(
-  # Credit params (20) - from R/constants.R
-  disp_neg_offset   = CREDIT_DISP_NEG_OFFSET,
-  disp_pos_offset   = CREDIT_DISP_POS_OFFSET,
-  disp_scale        = CREDIT_DISP_SCALE,
-  bounce_penalty    = CREDIT_BOUNCE_PENALTY,
-  recv_neg_mult     = CREDIT_RECV_NEG_MULT,
-  recv_neg_offset   = CREDIT_RECV_NEG_OFFSET,
-  recv_pos_mult     = CREDIT_RECV_POS_MULT,
-  recv_pos_offset   = CREDIT_RECV_POS_OFFSET,
-  recv_scale        = CREDIT_RECV_SCALE,
-  spoil_wt          = CREDIT_SPOIL_WT,
-  tackle_wt         = CREDIT_TACKLE_WT,
-  pressure_wt       = CREDIT_PRESSURE_WT,
-  def_pressure_wt   = CREDIT_DEF_PRESSURE_WT,
-  hitout_wt         = CREDIT_HITOUT_WT,
-  hitout_adv_wt     = CREDIT_HITOUT_ADV_WT,
+  # --- EPV/scale params (disp) ---
+  disp_neg_offset        = CREDIT_DISP_NEG_OFFSET,
+  disp_pos_offset        = CREDIT_DISP_POS_OFFSET,
+  disp_scale             = CREDIT_DISP_SCALE,
+  # --- EPV/scale params (recv) ---
+  recv_neg_mult          = CREDIT_RECV_NEG_MULT,
+  recv_neg_offset        = CREDIT_RECV_NEG_OFFSET,
+  recv_pos_mult          = CREDIT_RECV_POS_MULT,
+  recv_pos_offset        = CREDIT_RECV_POS_OFFSET,
+  recv_scale             = CREDIT_RECV_SCALE,
+  # --- Stat weights: disp component ---
+  bounce_wt              = CREDIT_BOUNCE_WT,
+  inside50s_wt           = CREDIT_INSIDE50S_WT,
+  clangers_wt            = CREDIT_CLANGERS_WT,
+  score_involvements_wt  = CREDIT_SCORE_INVOLVEMENTS_WT,
+  kicks_wt               = CREDIT_KICKS_WT,
+  handballs_wt           = CREDIT_HANDBALLS_WT,
+  metres_gained_wt       = CREDIT_METRES_GAINED_WT,
+  turnovers_wt           = CREDIT_TURNOVERS_WT,
+  goal_assists_wt        = CREDIT_GOAL_ASSISTS_WT,
+  # --- Stat weights: recv component ---
+  contested_poss_wt      = CREDIT_CONTESTED_POSS_WT,
+  contested_marks_wt     = CREDIT_CONTESTED_MARKS_WT,
+  ground_ball_gets_wt    = CREDIT_GROUND_BALL_GETS_WT,
+  goals_wt               = CREDIT_GOALS_WT,
+  marks_inside50_wt      = CREDIT_MARKS_INSIDE50_WT,
+  behinds_wt             = CREDIT_BEHINDS_WT,
+  marks_wt               = CREDIT_MARKS_WT,
+  uncontested_poss_wt    = CREDIT_UNCONTESTED_POSS_WT,
+  shots_at_goal_wt       = CREDIT_SHOTS_AT_GOAL_WT,
+  # --- Stat weights: spoil component ---
+  spoil_wt               = CREDIT_SPOIL_WT,
+  tackle_wt              = CREDIT_TACKLE_WT,
+  pressure_wt            = CREDIT_PRESSURE_WT,
+  def_pressure_wt        = CREDIT_DEF_PRESSURE_WT,
+  intercepts_wt          = CREDIT_INTERCEPTS_WT,
+  one_percenters_wt      = CREDIT_ONE_PERCENTERS_WT,
+  rebound50s_wt          = CREDIT_REBOUND50S_WT,
+  frees_against_wt       = CREDIT_FREES_AGAINST_WT,
+  # --- Stat weights: hitout component ---
+  hitout_wt              = CREDIT_HITOUT_WT,
+  hitout_adv_wt          = CREDIT_HITOUT_ADV_WT,
   ruck_contest_wt        = CREDIT_RUCK_CONTEST_WT,
-  pos_adj_quantile_recv   = CREDIT_POS_ADJ_QUANTILE_RECV,
-  pos_adj_quantile_disp   = CREDIT_POS_ADJ_QUANTILE_DISP,
-  pos_adj_quantile_spoil  = CREDIT_POS_ADJ_QUANTILE_SPOIL,
-  pos_adj_quantile_hitout = CREDIT_POS_ADJ_QUANTILE_HITOUT,
-  # Aggregation params - from R/constants.R
-  decay_recv         = RATING_DECAY_RECV,
-  decay_disp         = RATING_DECAY_DISP,
-  decay_spoil        = RATING_DECAY_SPOIL,
-  decay_hitout       = RATING_DECAY_HITOUT,
-  loading            = RATING_LOADING_DEFAULT,
-  prior_games_recv   = RATING_PRIOR_GAMES_RECV,
-  prior_games_disp   = RATING_PRIOR_GAMES_DISP,
-  prior_games_spoil  = RATING_PRIOR_GAMES_SPOIL,
-  prior_games_hitout = RATING_PRIOR_GAMES_HITOUT,
-  prior_rate_recv    = RATING_PRIOR_RATE_RECV,
-  prior_rate_disp    = RATING_PRIOR_RATE_DISP,
-  prior_rate_spoil   = RATING_PRIOR_RATE_SPOIL,
-  prior_rate_hitout  = RATING_PRIOR_RATE_HITOUT
+  clearances_wt          = CREDIT_CLEARANCES_WT,
+  frees_for_wt           = CREDIT_FREES_FOR_WT,
+  # --- Aggregation params ---
+  decay_recv             = RATING_DECAY_RECV,
+  decay_disp             = RATING_DECAY_DISP,
+  decay_spoil            = RATING_DECAY_SPOIL,
+  decay_hitout           = RATING_DECAY_HITOUT,
+  loading                = RATING_LOADING_DEFAULT,
+  prior_games_recv       = RATING_PRIOR_GAMES_RECV,
+  prior_games_disp       = RATING_PRIOR_GAMES_DISP,
+  prior_games_spoil      = RATING_PRIOR_GAMES_SPOIL,
+  prior_games_hitout     = RATING_PRIOR_GAMES_HITOUT,
+  prior_rate_recv        = RATING_PRIOR_RATE_RECV,
+  prior_rate_disp        = RATING_PRIOR_RATE_DISP,
+  prior_rate_spoil       = RATING_PRIOR_RATE_SPOIL,
+  prior_rate_hitout      = RATING_PRIOR_RATE_HITOUT
 )
+
+# Convert raw-scale defaults to normalized-scale (multiply by SD)
+# Constants are in per-raw-unit; optimizer works in per-SD-unit
+param_stat_map <- c(
+  bounce_wt = "bounces", spoil_wt = "spoils", tackle_wt = "tackles",
+  pressure_wt = "pressure_acts", def_pressure_wt = "def_pressure",
+  hitout_wt = "hitouts", hitout_adv_wt = "hitouts_adv", ruck_contest_wt = "ruck_contests",
+  contested_poss_wt = "contested_poss", contested_marks_wt = "contested_marks",
+  ground_ball_gets_wt = "ground_ball_gets", marks_inside50_wt = "marks_inside50",
+  inside50s_wt = "inside50s", clangers_wt = "clangers", score_involvements_wt = "score_inv",
+  intercepts_wt = "intercepts", one_percenters_wt = "one_percenters",
+  rebound50s_wt = "rebound50s", frees_against_wt = "frees_against",
+  clearances_wt = "clearances", frees_for_wt = "frees_for",
+  goals_wt = "goals", behinds_wt = "behinds", marks_wt = "marks_total",
+  uncontested_poss_wt = "uncontested_poss", shots_at_goal_wt = "shots_at_goal",
+  kicks_wt = "kicks", handballs_wt = "handballs", metres_gained_wt = "metres_gained",
+  turnovers_wt = "turnovers_stat", goal_assists_wt = "goal_assists"
+)
+for (nm in names(param_stat_map)) {
+  par_defaults[nm] <- par_defaults[nm] * stat_sds[param_stat_map[nm]]
+}
+
+# Lower bounds (widened; stat weight bounds now [-10, 10] since normalization changes scale)
+par_lower <- c(
+  # --- EPV/scale params (disp) ---
+  disp_neg_offset        = 0,
+  disp_pos_offset        = 0,
+  disp_scale             = 1,
+  # --- EPV/scale params (recv) ---
+  recv_neg_mult          = 1,
+  recv_neg_offset        = 0,
+  recv_pos_mult          = 1,
+  recv_pos_offset        = 0,
+  recv_scale             = 1,
+  # --- Stat weights: disp component (all [-10, 10]; L2 provides real constraint) ---
+  bounce_wt              = -10,
+  inside50s_wt           = -10,
+  clangers_wt            = -10,
+  score_involvements_wt  = -10,
+  kicks_wt               = -10,
+  handballs_wt           = -10,
+  metres_gained_wt       = -10,
+  turnovers_wt           = -10,
+  goal_assists_wt        = -10,
+  # --- Stat weights: recv component ---
+  contested_poss_wt      = -10,
+  contested_marks_wt     = -10,
+  ground_ball_gets_wt    = -10,
+  marks_inside50_wt      = -10,
+  goals_wt               = -10,
+  behinds_wt             = -10,
+  marks_wt               = -10,
+  uncontested_poss_wt    = -10,
+  shots_at_goal_wt       = -10,
+  # --- Stat weights: spoil component ---
+  spoil_wt               = -10,
+  tackle_wt              = -10,
+  pressure_wt            = -10,
+  def_pressure_wt        = -10,
+  intercepts_wt          = -10,
+  one_percenters_wt      = -10,
+  rebound50s_wt          = -10,
+  frees_against_wt       = -10,
+  # --- Stat weights: hitout component ---
+  hitout_wt              = -10,
+  hitout_adv_wt          = -10,
+  ruck_contest_wt        = -10,
+  clearances_wt          = -10,
+  frees_for_wt           = -10,
+  # --- Aggregation params ---
+  decay_recv             = 100,
+  decay_disp             = 100,
+  decay_spoil            = 100,
+  decay_hitout           = 100,
+  loading                = 1.0,
+  prior_games_recv       = 3,
+  prior_games_disp       = 3,
+  prior_games_spoil      = 3,
+  prior_games_hitout     = 3,
+  prior_rate_recv        = -4,
+  prior_rate_disp        = -4,
+  prior_rate_spoil       = -4,
+  prior_rate_hitout       = -4
+)
+
+par_upper <- c(
+  # --- EPV/scale params (disp) ---
+  disp_neg_offset        = 0,
+  disp_pos_offset        = 0,
+  disp_scale             = 1,
+  # --- EPV/scale params (recv) ---
+  recv_neg_mult          = 1,
+  recv_neg_offset        = 0,
+  recv_pos_mult          = 1,
+  recv_pos_offset        = 0,
+  recv_scale             = 1,
+  # --- Stat weights: disp component ---
+  bounce_wt              = 10,
+  inside50s_wt           = 10,
+  clangers_wt            = 10,
+  score_involvements_wt  = 10,
+  kicks_wt               = 10,
+  handballs_wt           = 10,
+  metres_gained_wt       = 10,
+  turnovers_wt           = 10,
+  goal_assists_wt        = 10,
+  # --- Stat weights: recv component ---
+  contested_poss_wt      = 10,
+  contested_marks_wt     = 10,
+  ground_ball_gets_wt    = 10,
+  marks_inside50_wt      = 10,
+  goals_wt               = 10,
+  behinds_wt             = 10,
+  marks_wt               = 10,
+  uncontested_poss_wt    = 10,
+  shots_at_goal_wt       = 10,
+  # --- Stat weights: spoil component ---
+  spoil_wt               = 10,
+  tackle_wt              = 10,
+  pressure_wt            = 10,
+  def_pressure_wt        = 10,
+  intercepts_wt          = 10,
+  one_percenters_wt      = 10,
+  rebound50s_wt          = 10,
+  frees_against_wt       = 10,
+  # --- Stat weights: hitout component ---
+  hitout_wt              = 10,
+  hitout_adv_wt          = 10,
+  ruck_contest_wt        = 10,
+  clearances_wt          = 10,
+  frees_for_wt           = 10,
+  # --- Aggregation params ---
+  decay_recv             = 700,
+  decay_disp             = 700,
+  decay_spoil            = 700,
+  decay_hitout           = 700,
+  loading                = 1.0,
+  prior_games_recv       = 15,
+  prior_games_disp       = 15,
+  prior_games_spoil      = 15,
+  prior_games_hitout     = 15,
+  prior_rate_recv        = 0,
+  prior_rate_disp        = 0,
+  prior_rate_spoil       = 0,
+  prior_rate_hitout      = 0
+)
+
+# Clamp defaults to bounds (prevents x0 > ub errors when bounds are tightened)
+par_defaults <- pmax(par_lower, pmin(par_upper, par_defaults))
 
 cat("Current parameter values (from R/constants.R):\n")
 cat(sprintf("  %s\n", paste(names(par_defaults), sprintf("%.4f", par_defaults), sep = " = ")))
-
-# Lower bounds (widened where previous optima hit edges)
-par_lower <- c(
-  disp_neg_offset   = -0.5,
-  disp_pos_offset   = -0.1,
-  disp_scale        = 0.1,
-  bounce_penalty    = 0.0,
-  recv_neg_mult     = 0.3,
-  recv_neg_offset   = -0.1,
-  recv_pos_mult     = 0.3,
-  recv_pos_offset   = -0.1,
-  recv_scale        = 0.1,
-  spoil_wt          = 0.0,
-  tackle_wt         = 0.0,
-  pressure_wt       = 0.0,
-  def_pressure_wt   = 0.0,
-  hitout_wt         = 0.03,
-  hitout_adv_wt     = 0.1,
-  ruck_contest_wt        = 0.03,
-  pos_adj_quantile_recv   = 0.2,
-  pos_adj_quantile_disp   = 0.2,
-  pos_adj_quantile_spoil  = 0.2,
-  pos_adj_quantile_hitout = 0.2,
-  decay_recv         = 100,
-  decay_disp         = 100,
-  decay_spoil        = 100,
-  decay_hitout       = 100,
-  loading            = 1.0,
-  prior_games_recv   = 3,
-  prior_games_disp   = 3,
-  prior_games_spoil  = 3,
-  prior_games_hitout = 3,
-  prior_rate_recv    = -3,
-  prior_rate_disp    = -3,
-  prior_rate_spoil   = -3,
-  prior_rate_hitout  = -3
-)
-
-# Upper bounds (widened where previous optima hit edges)
-par_upper <- c(
-  disp_neg_offset   = 0.1,
-  disp_pos_offset   = 0.5,
-  disp_scale        = 2.0,
-  bounce_penalty    = 1.0,
-  recv_neg_mult     = 3.0,
-  recv_neg_offset   = 0.5,
-  recv_pos_mult     = 3.0,
-  recv_pos_offset   = 0.5,
-  recv_scale        = 2.0,
-  spoil_wt          = 2.0,
-  tackle_wt         = 2.0,
-  pressure_wt       = 1.0,
-  def_pressure_wt   = 1.5,
-  hitout_wt         = 1.0,
-  hitout_adv_wt     = 2.0,
-  ruck_contest_wt        = 0.5,
-  pos_adj_quantile_recv   = 0.4,
-  pos_adj_quantile_disp   = 0.4,
-  pos_adj_quantile_spoil  = 0.4,
-  pos_adj_quantile_hitout = 0.4,
-  decay_recv         = 700,
-  decay_disp         = 700,
-  decay_spoil        = 700,
-  decay_hitout       = 700,
-  loading            = 1.0,
-  prior_games_recv   = 15,
-  prior_games_disp   = 15,
-  prior_games_spoil  = 15,
-  prior_games_hitout = 15,
-  prior_rate_recv    = 0,
-  prior_rate_disp    = 0,
-  prior_rate_spoil   = 0,
-  prior_rate_hitout  = 0
-)
 
 # 4b. No-Ratings Baseline (LOOCV) ----
 cat("\nComputing no-ratings baseline (distance + familiarity only, LOOCV)...\n")
@@ -824,10 +1118,17 @@ cat(sprintf("  Per-fold: %s\n", paste(sprintf("%.2f", no_rating_rmses), collapse
 # 5. Baseline RMSE ----
 cat("\nComputing baseline RMSE with default parameters...\n")
 tictoc::tic("Baseline")
-baseline_rmse <- objective_fn(par_defaults, pgr, match_dt, train_seasons = 2022:2025,
-                              eval_matches = eval_matches_all, lineup_dt = lineup_dt_all)
+baseline_rmse_pure <- objective_fn(par_defaults, pgr, match_dt, train_seasons = 2022:2025,
+                                   eval_matches = eval_matches_all, lineup_dt = lineup_dt_all)
+# Add same penalties used in optimization so comparisons are consistent
+baseline_l2 <- STAT_WEIGHT_LAMBDA * sum(par_defaults[L2_PARAM_NAMES]^2)
+# Position balance penalty can't be computed yet (needs lineup data from Stage 1 setup),
+# but it's the same constant added to both baseline and grid search, so it cancels out.
+# We include L2 here since it changes across stages when stat weights are optimized.
+baseline_rmse <- baseline_rmse_pure + baseline_l2
 tictoc::toc()
-cat(sprintf("Default-params baseline RMSE: %.4f\n\n", baseline_rmse))
+cat(sprintf("Default-params baseline RMSE: %.4f (pure: %.4f, L2 penalty: %.4f)\n\n",
+            baseline_rmse, baseline_rmse_pure, baseline_l2))
 
 # 6. Staged Optimization ----
 
@@ -911,8 +1212,18 @@ for (i in seq_len(nrow(agg_grid))) {
   away_sum <- tapply(torp_weighted * (!j$is_home), j$match_idx, sum, na.rm = TRUE)
   torp_diff <- as.numeric(home_sum - away_sum)
 
-  # Leave-one-season-out CV RMSE
-  rmse_i <- fast_rmse_cv(torp_diff, eval_matches_all)
+  # Position balance penalty
+  pos_means_s1 <- vapply(lu_pos_levels, function(pos) {
+    idx <- lu_pos_idx[[pos]]
+    tog <- j$lineup_tog[idx]
+    sum(torp_vec[idx] * tog, na.rm = TRUE) / sum(tog, na.rm = TRUE)
+  }, numeric(1))
+  balance_penalty_s1 <- POSITION_BALANCE_LAMBDA * sd(pos_means_s1, na.rm = TRUE)
+
+  # Leave-one-season-out CV RMSE + balance penalty + L2 penalty
+  # L2 is constant during Stage 1 (credit params fixed), but must be included
+  # so the baseline comparison is consistent with Stages 2-3
+  rmse_i <- fast_rmse_cv(torp_diff, eval_matches_all) + balance_penalty_s1 + baseline_l2
 
   if (rmse_i < best_rmse) {
     best_rmse <- rmse_i
@@ -967,9 +1278,32 @@ fast_env <- list(
   hitouts        = pgr_s$hitouts,
   hitouts_adv    = pgr_s$hitouts_adv,
   ruck_contests  = pgr_s$ruck_contests,
+  contested_poss = pgr_s$contested_poss,
+  contested_marks = pgr_s$contested_marks,
+  ground_ball_gets = pgr_s$ground_ball_gets,
+  marks_inside50 = pgr_s$marks_inside50,
+  inside50s      = pgr_s$inside50s,
+  clangers       = pgr_s$clangers,
+  score_inv      = pgr_s$score_inv,
+  intercepts     = pgr_s$intercepts,
+  one_percenters = pgr_s$one_percenters,
+  rebound50s     = pgr_s$rebound50s,
+  frees_against  = pgr_s$frees_against,
+  clearances     = pgr_s$clearances,
+  frees_for      = pgr_s$frees_for,
+  goals          = pgr_s$goals,
+  behinds        = pgr_s$behinds,
+  marks_total    = pgr_s$marks_total,
+  uncontested_poss = pgr_s$uncontested_poss,
+  shots_at_goal  = pgr_s$shots_at_goal,
+  kicks          = pgr_s$kicks,
+  handballs      = pgr_s$handballs,
+  metres_gained  = pgr_s$metres_gained,
+  turnovers_stat = pgr_s$turnovers_stat,
+  goal_assists   = pgr_s$goal_assists,
   tog_safe       = pgr_s$tog_safe,
   # Player/date vectors for cumulative loop
-  pgr_s          = pgr_s[, .(player_id, date_num)],
+  pgr_s          = pgr_s[, .(player_id = as.integer(factor(player_id)), date_num)],
   # Position indices for quantile adjustment
   position_levels = NULL,
   pos_indices     = NULL,
@@ -1002,6 +1336,8 @@ fast_env$lu_is_home    <- lu_joined$is_home
 fast_env$lu_not_home   <- !lu_joined$is_home
 fast_env$lu_lineup_tog <- lu_joined$lineup_tog
 fast_env$lu_match_idx  <- lu_joined$match_idx
+fast_env$lu_pos_levels <- lu_pos_levels
+fast_env$lu_pos_idx    <- lu_pos_idx
 
 tictoc::toc()
 cat(sprintf("  Fast env: %d pgr rows, %d lineup rows\n", nrow(pgr_s), nrow(lu_joined)))
@@ -1009,111 +1345,118 @@ cat(sprintf("  Fast env: %d pgr rows, %d lineup rows\n", nrow(pgr_s), nrow(lu_jo
 # Fast objective wrapper
 obj_fast <- function(par) objective_fn_fast(par, fast_env)
 
-# Set up parallel cluster for gradient computation
-n_cores <- max(parallel::detectCores() - 1L, 2L)
-cat(sprintf("Setting up parallel cluster with %d cores...\n", n_cores))
-cl <- parallel::makeCluster(n_cores)
-# Export heavy objects + all functions called by objective_fn_fast
-parallel::clusterExport(cl, c("objective_fn_fast", "fast_env", "par_lower", "par_upper",
-                               "fast_rmse_cv", "fast_rmse"),
-                        envir = environment())
-on.exit(parallel::stopCluster(cl), add = TRUE)
+## Stage 2: BOBYQA derivative-free optimization ----
+# loading is fixed at 1.0 (unidentifiable when scales are free), excluded from optimization
+cat("=== Stage 2: BOBYQA derivative-free optimization (all params except loading) ===
+")
+tictoc::tic("Stage 2 BOBYQA")
 
-## Stage 2: Parallel L-BFGS-B on credit groups with cycling ----
-cat("=== Stage 2: Parallel L-BFGS-B on credit groups (with cycling) ===\n")
-tictoc::tic("Stage 2 total")
+# Remove loading from optimization
+optim_names <- setdiff(names(best_par), "loading")
+n_optim <- length(optim_names)
+cat(sprintf("  Optimizing %d parameters (loading fixed at 1.0)
+", n_optim))
 
-# Define parameter groups (Group E split into E1 + E2 for manageable dimensionality)
-optim_groups <- list(
-  "A: disposal"   = c("disp_neg_offset", "disp_pos_offset", "disp_scale", "bounce_penalty"),
-  "B: reception"  = c("recv_neg_mult", "recv_neg_offset", "recv_pos_mult", "recv_pos_offset", "recv_scale"),
-  "C: spoil"      = c("spoil_wt", "tackle_wt", "pressure_wt", "def_pressure_wt"),
-  "D: hitout"     = c("hitout_wt", "hitout_adv_wt", "ruck_contest_wt"),
-  "E1: quantiles+decay" = c("pos_adj_quantile_recv", "pos_adj_quantile_disp",
-                             "pos_adj_quantile_spoil", "pos_adj_quantile_hitout",
-                             "decay_recv", "decay_disp", "decay_spoil", "decay_hitout"),
-  "E2: priors"    = c("prior_games_recv", "prior_games_disp", "prior_games_spoil", "prior_games_hitout",
-                       "prior_rate_recv", "prior_rate_disp", "prior_rate_spoil", "prior_rate_hitout")
-)
+# nloptr wrapper: convert unnamed vector <-> named vector
+nloptr_fn <- function(x) {
+  par <- best_par
+  par[optim_names] <- x
+  obj_fast(par)
+}
 
-# Helper: optimize one group with parallel L-BFGS-B
-# optimParallel parallelizes the d+1 finite-difference gradient evaluations across cores
-optimize_group <- function(group_names, best_par, maxit = 200) {
-  optimParallel::optimParallel(
-    par = best_par[group_names],
-    fn = function(sub_par) {
-      test_par <- best_par
-      test_par[group_names] <- sub_par
-      objective_fn_fast(test_par, fast_env)
-    },
-    lower = par_lower[group_names],
-    upper = par_upper[group_names],
-    parallel = list(cl = cl, forward = FALSE),
-    control = list(maxit = maxit, trace = 1)
+# Track progress
+s2_eval_count <- 0L
+s2_best_rmse <- obj_fast(best_par)
+s2_start_time <- proc.time()[3]
+
+nloptr_fn_verbose <- function(x) {
+  rmse <- nloptr_fn(x)
+  s2_eval_count <<- s2_eval_count + 1L
+  if (rmse < s2_best_rmse) s2_best_rmse <<- rmse
+  if (s2_eval_count %% 50 == 0) {
+    elapsed <- proc.time()[3] - s2_start_time
+    cat(sprintf("  [%4d evals] best RMSE: %.4f | current: %.4f | %.0fs
+",
+                s2_eval_count, s2_best_rmse, rmse, elapsed))
+  }
+  rmse
+}
+
+# BOBYQA: quadratic model-based derivative-free optimizer
+opt_bobyqa <- nloptr::nloptr(
+  x0 = unname(best_par[optim_names]),
+  eval_f = nloptr_fn_verbose,
+  lb = unname(par_lower[optim_names]),
+  ub = unname(par_upper[optim_names]),
+  opts = list(
+    algorithm = "NLOPT_LN_BOBYQA",
+    maxeval = 5000,
+    ftol_rel = 1e-7,
+    xtol_rel = 1e-6
   )
-}
-
-# Cycle through all groups until convergence
-MAX_CYCLES <- 3
-CYCLE_TOL <- 0.0005  # stop cycling if RMSE improves less than this
-
-cycle_rmse <- obj_fast(best_par)
-for (cycle in seq_len(MAX_CYCLES)) {
-  cat(sprintf("\n--- Cycle %d/%d (starting RMSE: %.4f) ---\n", cycle, MAX_CYCLES, cycle_rmse))
-  tictoc::tic(sprintf("  Cycle %d", cycle))
-
-  for (grp_name in names(optim_groups)) {
-    grp_params <- optim_groups[[grp_name]]
-    cat(sprintf("  Group %s (%d params)...\n", grp_name, length(grp_params)))
-    tictoc::tic(sprintf("    %s", grp_name))
-
-    maxit <- if (length(grp_params) >= 8) 300 else 200
-    opt_result <- optimize_group(grp_params, best_par, maxit = maxit)
-    best_par[grp_params] <- opt_result$par
-
-    tictoc::toc()
-    cat(sprintf("    -> RMSE = %.4f\n", opt_result$value))
-  }
-
-  new_rmse <- obj_fast(best_par)
-  improvement <- cycle_rmse - new_rmse
-  tictoc::toc()
-  cat(sprintf("  Cycle %d complete: RMSE %.4f -> %.4f (improvement: %.4f)\n",
-              cycle, cycle_rmse, new_rmse, improvement))
-
-  if (improvement < CYCLE_TOL) {
-    cat(sprintf("  Converged (improvement %.4f < tolerance %.4f)\n", improvement, CYCLE_TOL))
-    break
-  }
-  cycle_rmse <- new_rmse
-}
-
-tictoc::toc()
-stage2_rmse <- obj_fast(best_par)
-cat(sprintf("Stage 2 best RMSE: %.4f\n\n", stage2_rmse))
-
-## Stage 3: Joint parallel L-BFGS-B polish on all parameters ----
-# 33 params → 34 gradient evaluations per iteration → massive parallelism win
-cat("=== Stage 3: Joint parallel L-BFGS-B polish (all 33 params) ===\n")
-tictoc::tic("Stage 3 joint polish")
-
-all_names <- names(best_par)
-opt_joint <- optimParallel::optimParallel(
-  par = best_par,
-  fn = function(p) objective_fn_fast(p, fast_env),
-  lower = par_lower[all_names],
-  upper = par_upper[all_names],
-  parallel = list(cl = cl, forward = FALSE),
-  control = list(maxit = 500, trace = 1)
 )
-best_par <- opt_joint$par
 
+best_par[optim_names] <- opt_bobyqa$solution
+bobyqa_rmse <- obj_fast(best_par)
 tictoc::toc()
-final_rmse <- obj_fast(best_par)
-cat(sprintf("Stage 3 joint polish RMSE: %.4f (was %.4f, gain: %.4f)\n\n",
-            final_rmse, stage2_rmse, stage2_rmse - final_rmse))
+cat(sprintf("Stage 2 BOBYQA RMSE: %.4f (started at %.4f, gain: %.4f)
 
-cat(sprintf("\nFinal optimized RMSE (LOOCV): %.4f\n\n", final_rmse))
+",
+            bobyqa_rmse, s2_best_rmse, s2_best_rmse - bobyqa_rmse))
+
+## Stage 3: Subplex polish from BOBYQA solution ----
+# Subplex uses a different search geometry (simplex-based) and often finds
+# improvements that BOBYQA misses, especially in shallow valleys.
+cat("=== Stage 3: Subplex polish (different search geometry) ===
+")
+tictoc::tic("Stage 3 Subplex")
+
+s3_eval_count <- 0L
+s3_best_rmse <- bobyqa_rmse
+s3_start_time <- proc.time()[3]
+
+nloptr_fn_verbose_s3 <- function(x) {
+  rmse <- nloptr_fn(x)
+  s3_eval_count <<- s3_eval_count + 1L
+  if (rmse < s3_best_rmse) s3_best_rmse <<- rmse
+  if (s3_eval_count %% 50 == 0) {
+    elapsed <- proc.time()[3] - s3_start_time
+    cat(sprintf("  [%4d evals] best RMSE: %.4f | current: %.4f | %.0fs
+",
+                s3_eval_count, s3_best_rmse, rmse, elapsed))
+  }
+  rmse
+}
+
+# Clamp to bounds (BOBYQA can return values at floating-point boundary)
+sbplx_x0 <- pmin(pmax(opt_bobyqa$solution, unname(par_lower[optim_names])), unname(par_upper[optim_names]))
+
+opt_sbplx <- nloptr::nloptr(
+  x0 = sbplx_x0,
+  eval_f = nloptr_fn_verbose_s3,
+  lb = unname(par_lower[optim_names]),
+  ub = unname(par_upper[optim_names]),
+  opts = list(
+    algorithm = "NLOPT_LN_SBPLX",
+    maxeval = 5000,
+    ftol_rel = 1e-7,
+    xtol_rel = 1e-6
+  )
+)
+
+best_par[optim_names] <- opt_sbplx$solution
+sbplx_rmse <- obj_fast(best_par)
+tictoc::toc()
+cat(sprintf("Stage 3 Subplex RMSE: %.4f (was %.4f, gain: %.4f)
+
+",
+            sbplx_rmse, bobyqa_rmse, bobyqa_rmse - sbplx_rmse))
+
+final_rmse <- sbplx_rmse
+cat(sprintf("
+Final optimized RMSE (LOOCV): %.4f
+
+", final_rmse))
 
 # 7. Per-fold RMSE breakdown ----
 cat("=== Per-fold RMSE breakdown (leave-one-season-out) ===\n")
@@ -1210,26 +1553,63 @@ rm(credit_dt_final, pcum_final, lookup_final, joined_final,
    credit_dt_def, pcum_def, lookup_def, joined_def)
 
 # 8. Results ----
-cat("\n=== OPTIMIZED PARAMETERS ===\n")
-cat("\n# Credit params:\n")
-for (nm in names(par_defaults)[1:20]) {
+cat("\n=== OPTIMIZED PARAMETERS (normalized scale) ===\n")
+cat("\n# Stat weights (normalized = per-SD; raw = per-count for constants.R):\n")
+stat_categories <- list(
+  "Scoring/Forward" = c("goals_wt", "behinds_wt", "shots_at_goal_wt",
+                         "marks_inside50_wt", "inside50s_wt",
+                         "score_involvements_wt", "goal_assists_wt"),
+  "Contested/Ground" = c("contested_poss_wt", "contested_marks_wt",
+                          "ground_ball_gets_wt", "clearances_wt"),
+  "Defence" = c("spoil_wt", "tackle_wt", "pressure_wt", "def_pressure_wt",
+                "intercepts_wt", "one_percenters_wt", "rebound50s_wt"),
+  "Ruck" = c("hitout_wt", "hitout_adv_wt", "ruck_contest_wt"),
+  "Disposal/Possession" = c("kicks_wt", "handballs_wt", "marks_wt",
+                             "uncontested_poss_wt", "metres_gained_wt",
+                             "bounce_wt"),
+  "Turnover/Discipline" = c("clangers_wt", "turnovers_wt",
+                             "frees_against_wt", "frees_for_wt")
+)
+for (cat_name in names(stat_categories)) {
+  cat(sprintf("\n  --- %s ---\n", cat_name))
+  cat(sprintf("  %-28s %10s %10s %10s\n", "param", "normalized", "raw", "default_raw"))
+  for (nm in stat_categories[[cat_name]]) {
+    sd_col <- param_stat_map[nm]
+    raw_wt <- best_par[nm] / stat_sds[sd_col]
+    def_raw <- par_defaults[nm] / stat_sds[sd_col]
+    cat(sprintf("  %-28s %+10.4f %+10.4f %+10.4f\n", nm, best_par[nm], raw_wt, def_raw))
+  }
+}
+cat("\n# EPV/scale params:\n")
+epv_params <- setdiff(names(par_defaults), c(names(param_stat_map),
+  "decay_recv", "decay_disp", "decay_spoil", "decay_hitout", "loading",
+  "prior_games_recv", "prior_games_disp", "prior_games_spoil", "prior_games_hitout",
+  "prior_rate_recv", "prior_rate_disp", "prior_rate_spoil", "prior_rate_hitout"))
+for (nm in epv_params) {
   cat(sprintf("  %-28s = %8.4f  (was %.4f)\n", nm, best_par[nm], par_defaults[nm]))
 }
 cat("\n# Aggregation params:\n")
-for (nm in names(par_defaults)[21:length(par_defaults)]) {
+agg_params <- c("decay_recv", "decay_disp", "decay_spoil", "decay_hitout", "loading",
+  "prior_games_recv", "prior_games_disp", "prior_games_spoil", "prior_games_hitout",
+  "prior_rate_recv", "prior_rate_disp", "prior_rate_spoil", "prior_rate_hitout")
+for (nm in agg_params) {
   cat(sprintf("  %-28s = %8.4f  (was %.4f)\n", nm, best_par[nm], par_defaults[nm]))
 }
 
 cat("\n# Summary:\n")
-cat(sprintf("  No-ratings RMSE (dist+fam only): %.4f\n", no_rating_rmse))
-cat(sprintf("  Default-params RMSE:             %.4f\n", baseline_rmse))
-cat(sprintf("  Optimized RMSE (LOOCV):          %.4f\n", final_rmse))
-cat(sprintf("  TORP value (no-ratings - default): %.4f (%.1f%%)\n",
-            no_rating_rmse - baseline_rmse,
-            100 * (no_rating_rmse - baseline_rmse) / no_rating_rmse))
-cat(sprintf("  Optimization gain (default - opt):  %.4f (%.1f%%)\n",
-            baseline_rmse - final_rmse,
-            100 * (baseline_rmse - final_rmse) / baseline_rmse))
+# Compute pure (unpenalized) RMSE for the optimized params for fair comparison
+final_rmse_pure <- fast_rmse_cv(torp_diff_final, eval_matches_all)
+final_l2 <- STAT_WEIGHT_LAMBDA * sum(best_par[L2_PARAM_NAMES]^2)
+cat(sprintf("  No-ratings RMSE (dist+fam only):    %.4f\n", no_rating_rmse))
+cat(sprintf("  Default-params RMSE (pure):         %.4f\n", baseline_rmse_pure))
+cat(sprintf("  Optimized RMSE (pure):              %.4f\n", final_rmse_pure))
+cat(sprintf("  Optimized RMSE (penalized):         %.4f  (L2=%.4f)\n", final_rmse, final_l2))
+cat(sprintf("  TORP value (no-ratings - default):  %.4f (%.1f%%)\n",
+            no_rating_rmse - baseline_rmse_pure,
+            100 * (no_rating_rmse - baseline_rmse_pure) / no_rating_rmse))
+cat(sprintf("  Optimization gain (pure RMSE):      %.4f (%.2f%%)\n",
+            baseline_rmse_pure - final_rmse_pure,
+            100 * (baseline_rmse_pure - final_rmse_pure) / baseline_rmse_pure))
 
 # 9. Save Results ----
 
@@ -1238,7 +1618,7 @@ param_to_constant <- c(
   disp_neg_offset   = "CREDIT_DISP_NEG_OFFSET",
   disp_pos_offset   = "CREDIT_DISP_POS_OFFSET",
   disp_scale        = "CREDIT_DISP_SCALE",
-  bounce_penalty    = "CREDIT_BOUNCE_PENALTY",
+  bounce_wt    = "CREDIT_BOUNCE_WT",
   recv_neg_mult     = "CREDIT_RECV_NEG_MULT",
   recv_neg_offset   = "CREDIT_RECV_NEG_OFFSET",
   recv_pos_mult     = "CREDIT_RECV_POS_MULT",
@@ -1251,10 +1631,29 @@ param_to_constant <- c(
   hitout_wt         = "CREDIT_HITOUT_WT",
   hitout_adv_wt     = "CREDIT_HITOUT_ADV_WT",
   ruck_contest_wt        = "CREDIT_RUCK_CONTEST_WT",
-  pos_adj_quantile_recv   = "CREDIT_POS_ADJ_QUANTILE_RECV",
-  pos_adj_quantile_disp   = "CREDIT_POS_ADJ_QUANTILE_DISP",
-  pos_adj_quantile_spoil  = "CREDIT_POS_ADJ_QUANTILE_SPOIL",
-  pos_adj_quantile_hitout = "CREDIT_POS_ADJ_QUANTILE_HITOUT",
+  contested_poss_wt      = "CREDIT_CONTESTED_POSS_WT",
+  contested_marks_wt     = "CREDIT_CONTESTED_MARKS_WT",
+  ground_ball_gets_wt    = "CREDIT_GROUND_BALL_GETS_WT",
+  marks_inside50_wt      = "CREDIT_MARKS_INSIDE50_WT",
+  inside50s_wt           = "CREDIT_INSIDE50S_WT",
+  clangers_wt            = "CREDIT_CLANGERS_WT",
+  score_involvements_wt  = "CREDIT_SCORE_INVOLVEMENTS_WT",
+  intercepts_wt          = "CREDIT_INTERCEPTS_WT",
+  one_percenters_wt      = "CREDIT_ONE_PERCENTERS_WT",
+  rebound50s_wt          = "CREDIT_REBOUND50S_WT",
+  frees_against_wt       = "CREDIT_FREES_AGAINST_WT",
+  clearances_wt          = "CREDIT_CLEARANCES_WT",
+  frees_for_wt           = "CREDIT_FREES_FOR_WT",
+  goals_wt               = "CREDIT_GOALS_WT",
+  behinds_wt             = "CREDIT_BEHINDS_WT",
+  marks_wt               = "CREDIT_MARKS_WT",
+  uncontested_poss_wt    = "CREDIT_UNCONTESTED_POSS_WT",
+  shots_at_goal_wt       = "CREDIT_SHOTS_AT_GOAL_WT",
+  kicks_wt               = "CREDIT_KICKS_WT",
+  handballs_wt           = "CREDIT_HANDBALLS_WT",
+  metres_gained_wt       = "CREDIT_METRES_GAINED_WT",
+  turnovers_wt           = "CREDIT_TURNOVERS_WT",
+  goal_assists_wt        = "CREDIT_GOAL_ASSISTS_WT",
   decay_recv        = "RATING_DECAY_RECV",
   decay_disp        = "RATING_DECAY_DISP",
   decay_spoil       = "RATING_DECAY_SPOIL",
@@ -1270,7 +1669,14 @@ param_to_constant <- c(
   prior_rate_hitout  = "RATING_PRIOR_RATE_HITOUT"
 )
 
-## 9a. Write optimized params back to R/constants.R ----
+## 9a. Un-normalize stat weights back to per-raw-unit for constants.R ----
+# Optimizer works in per-SD scale; constants.R needs per-raw-unit weights
+best_par_raw <- best_par
+for (nm in names(param_stat_map)) {
+  best_par_raw[nm] <- best_par[nm] / stat_sds[param_stat_map[nm]]
+}
+
+## 9b. Write optimized params back to R/constants.R ----
 constants_path <- "R/constants.R"
 cat(sprintf("\nUpdating %s with optimized parameters...\n", constants_path))
 
@@ -1278,7 +1684,7 @@ lines <- readLines(constants_path)
 n_updated <- 0
 for (par_name in names(param_to_constant)) {
   const_name <- param_to_constant[par_name]
-  new_val <- best_par[par_name]
+  new_val <- best_par_raw[par_name]
 
   # Format: integer-like values (decay_*) as integer, rest as 4-decimal
   if (grepl("^decay_", par_name)) {
@@ -1308,8 +1714,12 @@ for (par_name in names(param_to_constant)) {
 writeLines(lines, constants_path)
 cat(sprintf("Updated %d constants in %s\n", n_updated, constants_path))
 
-## 9b. Save params as CSV backup ----
-optimized_params_df <- data.frame(param = names(best_par), value = unname(best_par))
+## 9c. Save params as CSV backup ----
+optimized_params_df <- data.frame(
+  param = names(best_par_raw),
+  value_raw = unname(best_par_raw),
+  value_normalized = unname(best_par[names(best_par_raw)])
+)
 utils::write.csv(optimized_params_df, "data-raw/03-ratings/optimized_torp_params.csv", row.names = FALSE)
 cat("Backup saved to data-raw/03-ratings/optimized_torp_params.csv\n")
 

@@ -9,7 +9,7 @@
 [![Codecov test
 coverage](https://codecov.io/gh/peteowen1/torp/branch/main/graph/badge.svg)](https://app.codecov.io/gh/peteowen1/torp?branch=main)
 [![Lifecycle:
-experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](https://lifecycle.r-lib.org/articles/stages.html#experimental)
+stable](https://img.shields.io/badge/lifecycle-stable-brightgreen.svg)](https://lifecycle.r-lib.org/articles/stages.html#stable)
 <!-- badges: end -->
 
 **torp** is an R package for AFL analytics. It provides player ratings
@@ -99,17 +99,14 @@ sim_result <- simulate_season(sim_teams, sim_games)
 | **[torpdata](https://github.com/peteowen1/torpdata)** | Processed AFL data via GitHub releases (parquet) | [GitHub](https://github.com/peteowen1/torpdata) |
 | **[torpmodels](https://github.com/peteowen1/torpmodels)** | Pre-trained models via GitHub releases (RDS) | [GitHub](https://github.com/peteowen1/torpmodels) |
 
-Data flows from the AFL API (via
-[fitzRoy](https://jimmyday12.github.io/fitzRoy/)) through torp’s
-cleaning pipeline into torpdata, with models stored in torpmodels.
+Data flows from the AFL API (via torp’s `get_afl_*()` functions)
+through torp’s cleaning pipeline into torpdata, with models stored in
+torpmodels.
 
 ## Learn More
 
 - `vignette("getting-started")` – Installation and data loading
-- `vignette("player-ratings")` – TORP rating methodology
-- `vignette("model-usage")` – EP, WP, and shot models
-- `vignette("data-architecture")` – Data pipeline and caching
-- `vignette("season-simulation")` – Simulating AFL seasons
+- `vignette("torp-guide")` – Ratings, models, data architecture, and simulation
 
 ## License
 
