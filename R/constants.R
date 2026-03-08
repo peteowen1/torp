@@ -42,19 +42,19 @@ EPV_WEIGHT_DECAY_DAYS <- 365
 
 #' Decay factor (in days) for receiving component weighting
 #' @keywords internal
-RATING_DECAY_RECV <- 257
+RATING_DECAY_RECV <- 321
 
 #' Decay factor (in days) for disposal component weighting
 #' @keywords internal
-RATING_DECAY_DISP <- 299
+RATING_DECAY_DISP <- 649
 
 #' Decay factor (in days) for spoil component weighting
 #' @keywords internal
-RATING_DECAY_SPOIL <- 700
+RATING_DECAY_SPOIL <- 486
 
 #' Decay factor (in days) for hitout component weighting
 #' @keywords internal
-RATING_DECAY_HITOUT <- 644
+RATING_DECAY_HITOUT <- 700
 
 #' Default decay factor (in days) — legacy alias for backwards compatibility
 #' @keywords internal
@@ -66,11 +66,11 @@ RATING_LOADING_DEFAULT <- 1.0000
 
 #' Prior games constant for receiving ratings
 #' @keywords internal
-RATING_PRIOR_GAMES_RECV <- 14.9977
+RATING_PRIOR_GAMES_RECV <- 9.3819
 
 #' Prior games constant for disposal ratings
 #' @keywords internal
-RATING_PRIOR_GAMES_DISP <- 3.7338
+RATING_PRIOR_GAMES_DISP <- 4.9696
 
 #' Prior games constant for spoil ratings
 #' @keywords internal
@@ -82,42 +82,42 @@ RATING_PRIOR_GAMES_HITOUT <- 15.0000
 
 #' Prior rate for receiving component (shrinkage target per weighted game)
 #' @keywords internal
-RATING_PRIOR_RATE_RECV <- -2.4072
+RATING_PRIOR_RATE_RECV <- -2.6613
 
 #' Prior rate for disposal component (shrinkage target per weighted game)
 #' @keywords internal
-RATING_PRIOR_RATE_DISP <- 0.0000
+RATING_PRIOR_RATE_DISP <- -0.0000
 
 #' Prior rate for spoil component (shrinkage target per weighted game)
 #' @keywords internal
-RATING_PRIOR_RATE_SPOIL <- -3.0000
+RATING_PRIOR_RATE_SPOIL <- -2.4973
 
 #' Prior rate for hitout component (shrinkage target per weighted game)
 #' @keywords internal
-RATING_PRIOR_RATE_HITOUT <- -3.0000
+RATING_PRIOR_RATE_HITOUT <- -4.0000
 
 # Credit Assignment Constants
 # ----------------------------
 
 #' Disposal EPV offset when defending (pos_team == -1)
 #' @keywords internal
-CREDIT_DISP_NEG_OFFSET <- 0.1000
+CREDIT_DISP_NEG_OFFSET <- -0.5000
 
 #' Disposal EPV offset when possessing (pos_team == 1)
 #' @keywords internal
-CREDIT_DISP_POS_OFFSET <- -0.1000
+CREDIT_DISP_POS_OFFSET <- 0.0000
 
 #' Disposal scaling factor
 #' @keywords internal
-CREDIT_DISP_SCALE <- 0.7893
+CREDIT_DISP_SCALE <- 0.7340
 
-#' Bounce penalty per bounce
+#' Bounce weight per bounce (disp component)
 #' @keywords internal
-CREDIT_BOUNCE_PENALTY <- 1.0000
+CREDIT_BOUNCE_WT <- -0.3663
 
 #' Reception multiplier when defending (pos_team == -1)
 #' @keywords internal
-CREDIT_RECV_NEG_MULT <- 1.9805
+CREDIT_RECV_NEG_MULT <- 0.3000
 
 #' Reception offset when defending
 #' @keywords internal
@@ -125,43 +125,139 @@ CREDIT_RECV_NEG_OFFSET <- 0.5000
 
 #' Reception multiplier when possessing (pos_team == 1)
 #' @keywords internal
-CREDIT_RECV_POS_MULT <- 0.3000
+CREDIT_RECV_POS_MULT <- 0.4227
 
 #' Reception offset when possessing
 #' @keywords internal
-CREDIT_RECV_POS_OFFSET <- 0.4968
+CREDIT_RECV_POS_OFFSET <- 0.0788
 
 #' Reception scaling factor
 #' @keywords internal
-CREDIT_RECV_SCALE <- 0.6173
+CREDIT_RECV_SCALE <- 1.9562
 
 #' Spoil weight per spoil
 #' @keywords internal
-CREDIT_SPOIL_WT <- 0.5190
+CREDIT_SPOIL_WT <- 0.0753
 
 #' Tackle weight per tackle
 #' @keywords internal
-CREDIT_TACKLE_WT <- 1.1395
+CREDIT_TACKLE_WT <- 0.0971
 
 #' Pressure act weight
 #' @keywords internal
-CREDIT_PRESSURE_WT <- 0.0561
+CREDIT_PRESSURE_WT <- -0.0056
 
-#' Defensive half pressure act weight (subtracted)
+#' Defensive half pressure act weight (spoil component)
 #' @keywords internal
-CREDIT_DEF_PRESSURE_WT <- 0.9516
+CREDIT_DEF_PRESSURE_WT <- -0.1007
 
 #' Hitout weight per hitout
 #' @keywords internal
-CREDIT_HITOUT_WT <- 0.3000
+CREDIT_HITOUT_WT <- 0.0140
 
 #' Hitout to advantage weight
 #' @keywords internal
-CREDIT_HITOUT_ADV_WT <- 0.1576
+CREDIT_HITOUT_ADV_WT <- 0.0581
 
-#' Ruck contest weight (subtracted)
+#' Ruck contest weight (hitout component)
 #' @keywords internal
-CREDIT_RUCK_CONTEST_WT <- 0.0300
+CREDIT_RUCK_CONTEST_WT <- 0.0077
+
+#' Contested possessions weight (recv component)
+#' @keywords internal
+CREDIT_CONTESTED_POSS_WT <- 0.0378
+
+#' Contested marks weight (recv component)
+#' @keywords internal
+CREDIT_CONTESTED_MARKS_WT <- 0.0355
+
+#' Ground ball gets weight (recv component)
+#' @keywords internal
+CREDIT_GROUND_BALL_GETS_WT <- 0.0485
+
+#' Marks inside 50 weight (recv component)
+#' @keywords internal
+CREDIT_MARKS_INSIDE50_WT <- 0.0626
+
+#' Inside 50s weight (disp component)
+#' @keywords internal
+CREDIT_INSIDE50S_WT <- 0.0712
+
+#' Clangers weight (disp component)
+#' @keywords internal
+CREDIT_CLANGERS_WT <- -0.0333
+
+#' Score involvements weight (disp component)
+#' @keywords internal
+CREDIT_SCORE_INVOLVEMENTS_WT <- 0.0696
+
+#' Intercepts weight (spoil component)
+#' @keywords internal
+CREDIT_INTERCEPTS_WT <- -0.0278
+
+#' One percenters weight (spoil component)
+#' @keywords internal
+CREDIT_ONE_PERCENTERS_WT <- 0.0849
+
+#' Rebound 50s weight (spoil component)
+#' @keywords internal
+CREDIT_REBOUND50S_WT <- -0.1018
+
+#' Frees against weight (spoil component)
+#' @keywords internal
+CREDIT_FREES_AGAINST_WT <- 0.1062
+
+#' Clearances weight (hitout component)
+#' @keywords internal
+CREDIT_CLEARANCES_WT <- 0.0339
+
+#' Frees for weight (hitout component)
+#' @keywords internal
+CREDIT_FREES_FOR_WT <- 0.0278
+
+#' Goals weight (recv component)
+#' @keywords internal
+CREDIT_GOALS_WT <- 0.0645
+
+#' Behinds weight (recv component)
+#' @keywords internal
+CREDIT_BEHINDS_WT <- 0.3644
+
+#' Total marks weight (recv component)
+#' @keywords internal
+CREDIT_MARKS_WT <- -0.0303
+
+#' Uncontested possessions weight (recv component)
+#' @keywords internal
+CREDIT_UNCONTESTED_POSS_WT <- -0.0266
+
+#' Shots at goal weight (recv component)
+#' @keywords internal
+CREDIT_SHOTS_AT_GOAL_WT <- 0.1096
+
+#' Kicks weight (disp component)
+#' @keywords internal
+CREDIT_KICKS_WT <- -0.0093
+
+#' Handballs weight (disp component)
+#' @keywords internal
+CREDIT_HANDBALLS_WT <- -0.0315
+
+#' Metres gained weight (disp component)
+#' @keywords internal
+CREDIT_METRES_GAINED_WT <- -0.0002
+
+#' Turnovers weight (disp component)
+#' @keywords internal
+CREDIT_TURNOVERS_WT <- -0.0421
+
+#' Goal assists weight (disp component)
+#' @keywords internal
+CREDIT_GOAL_ASSISTS_WT <- -0.0540
+
+#' L2 (ridge) regularization lambda for count-based stat weights
+#' @keywords internal
+STAT_WEIGHT_LAMBDA <- 0.5
 
 #' Position-group quantile adjustment for receiving component
 #' @keywords internal

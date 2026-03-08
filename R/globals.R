@@ -59,8 +59,9 @@ utils::globalVariables(c(
   "hitout_pts_adj", "hitout_sum", "weight_gm", "wt_gms", "wt_tog", "tog_sum", "utc_start_time",
   "days_diff", "wt_recv", "wt_disp", "wt_spoil", "wt_hitout",
   "wt_gms_recv", "wt_gms_disp", "wt_gms_spoil", "wt_gms_hitout",
-  "pred_tog", ".tog_safe", "tog_safe", "tog_wt", "lineup_tog",
-  "i.time_on_ground_skill", "i.n_80s", "i.wt_80s",
+  "pred_tog", "pred_selection", "pred_cond_tog",
+  ".tog_safe", "tog_safe", "tog_wt", "lineup_tog",
+  "i.squad_selection_skill", "i.cond_tog_skill", "i.n_80s", "i.wt_80s",
 
   # data.table join prefixes
   "i.torp", "i.torp_shift_away", "i.torp_shift_home",
@@ -134,7 +135,7 @@ utils::globalVariables(c(
   ".raw_num", ".raw_den", ".raw_succ", ".raw_att", ".wt_att",
   ".raw_vals", ".raw_tog",
   "pos_group", "modal_pos", "i.pos_group", "i.modal_pos",
-  "i.n_games", "i.wt_games",
+  "i.n_games", "i.wt_games", "ref_date",
   "..keep_cols", "..skill_cols", "..lower_cols", "..upper_cols",
   "..lower_present", "..upper_present", "..raw_cols"
 ))

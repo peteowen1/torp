@@ -13,4 +13,17 @@
 #   run_predictions_pipeline(weeks = 1:5)   # specific weeks
 
 devtools::load_all()
-run_predictions_pipeline()
+
+result <- run_predictions_pipeline()
+
+# All predictions for analysis
+result$predictions
+result$predictions |> filter(season == 2026, round == 0)  # completed matches
+
+# Model summaries
+summary(result$models$win)
+summary(result$models$score_diff)
+summary(result$models$total_xpoints)
+
+# All 5 models at a glance
+lapply(result$models, summary)

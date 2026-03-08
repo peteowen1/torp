@@ -164,14 +164,18 @@ for (i in seq_len(nrow(eff_defs))) {
   attempts_spec <- eff_defs$attempts_col[i]
   if (is.na(success_spec) || is.na(attempts_spec)) next
 
-  # Compute successes and attempts for full dataset
-  if (success_spec %in% names(dt)) {
-    all_succ <- as.numeric(dt[[success_spec]])
+  # For played_only stats, compute grand means from played rows only
+  is_po <- !is.na(eff_defs$played_only[i]) && isTRUE(eff_defs$played_only[i])
+  dt_eff <- if (is_po && "avail_only" %in% names(dt)) dt[avail_only == FALSE] else dt
+
+  # Compute successes and attempts
+  if (success_spec %in% names(dt_eff)) {
+    all_succ <- as.numeric(dt_eff[[success_spec]])
   } else {
-    all_succ <- .compute_denom(dt, success_spec)
+    all_succ <- .compute_denom(dt_eff, success_spec)
   }
   all_succ[is.na(all_succ)] <- 0
-  all_att <- .compute_denom(dt, attempts_spec)
+  all_att <- .compute_denom(dt_eff, attempts_spec)
   all_att[is.na(all_att)] <- 0
   all_succ <- pmin(all_succ, all_att)
 
@@ -182,7 +186,7 @@ for (i in seq_len(nrow(eff_defs))) {
   # Per-position proportions
   pp <- stats::setNames(rep(gp, length(pos_groups)), pos_groups)
   for (pg in pos_groups) {
-    idx <- which(dt$pos_group == pg)
+    idx <- which(dt_eff$pos_group == pg)
     if (length(idx) > 0) {
       pos_att <- sum(all_att[idx])
       if (pos_att > 0) pp[pg] <- sum(all_succ[idx]) / pos_att
@@ -190,8 +194,11 @@ for (i in seq_len(nrow(eff_defs))) {
   }
   pos_grand_props[[stat_nm]] <- pp
 
-  # Store flat vectors for vectorized optimization
-  eff_flat_data[[stat_nm]] <- list(successes = all_succ, attempts = all_att)
+  # Store flat vectors for vectorized optimization (full dt for non-played_only)
+  if (!is_po) {
+    eff_flat_data[[stat_nm]] <- list(successes = all_succ, attempts = all_att)
+  }
+  # played_only stats compute their vectors directly in the task-building loop
 }
 
 
@@ -208,27 +215,36 @@ optimize_single_stat <- function(task, shared) {
   multi_start_optim <- function(fn, starts, lower, upper, top_n = 5L) {
     # Phase 1: evaluate all starts cheaply to find promising regions
     start_vals <- vapply(starts, fn, numeric(1))
-    # Phase 2: run L-BFGS-B only from the top_n best starting points
+    # Phase 2: run BOBYQA from the top_n best starting points
     top_idx <- order(start_vals)[seq_len(min(top_n, length(starts)))]
     best <- NULL
     for (i in top_idx) {
       opt <- tryCatch(
-        stats::optim(par = starts[[i]], fn = fn, method = "L-BFGS-B",
-                     lower = lower, upper = upper),
+        nloptr::bobyqa(x0 = starts[[i]], fn = fn,
+                       lower = lower, upper = upper,
+                       control = list(maxeval = 2000, xtol_rel = 1e-10)),
         error = function(e) NULL
       )
-      if (!is.null(opt) && (is.null(best) || opt$value < best$value)) {
-        best <- opt
+      if (!is.null(opt)) {
+        # Normalize to optim()-compatible output
+        opt_out <- list(par = opt$par, value = opt$value)
+        if (is.null(best) || opt_out$value < best$value) {
+          best <- opt_out
+        }
       }
     }
     best
   }
 
-  all_d_rel <- shared$all_d_rel
-  all_group <- shared$all_group
-  group_start <- shared$group_start
-  pred_idx <- shared$pred_idx
-  prev_idx <- shared$prev_idx
+  # Use per-stat overrides if present (for played_only stats),
+
+  # otherwise use shared structures
+  s <- if (!is.null(task$override_shared)) task$override_shared else shared
+  all_d_rel <- s$all_d_rel
+  all_group <- s$all_group
+  group_start <- s$group_start
+  pred_idx <- s$pred_idx
+  prev_idx <- s$prev_idx
 
   if (task$type == "rate") {
     fn <- function(par) {
@@ -262,6 +278,13 @@ optimize_single_stat <- function(task, shared) {
     }
   }
 
+  # Evaluate loss at previous baked-in params (if available)
+  prev_loss <- if (!is.null(task$old_par)) {
+    tryCatch(fn(task$old_par), error = function(e) NA_real_)
+  } else {
+    NA_real_
+  }
+
   opt <- multi_start_optim(fn, task$starts, task$lower, task$upper)
 
   if (!is.null(opt)) {
@@ -273,6 +296,7 @@ optimize_single_stat <- function(task, shared) {
       prior_strength = opt$par[2],
       half_life_days = log(2) / opt$par[1],
       loss = opt$value,
+      prev_loss = prev_loss,
       loss_type = task$loss_type
     )
   } else {
@@ -282,6 +306,9 @@ optimize_single_stat <- function(task, shared) {
 
 # Build optimization task list ----
 cli::cli_h1("Building optimization tasks")
+
+# Load current baked-in params for comparison
+old_stat_params <- .skill_stat_params()
 
 ## Multi-start grids ----
 rate_starts <- list(
@@ -297,7 +324,8 @@ eff_starts <- list(
   c(0.001, 0.5),  c(0.001, 5),    c(0.001, 30),  c(0.001, 100),
   c(0.003, 0.5),  c(0.003, 5),    c(0.003, 30),  c(0.003, 100),
   c(0.005, 10),   c(0.005, 50),   c(0.005, 200),
-  c(0.01,  20),   c(0.01,  100),  c(0.01,  300)
+  c(0.01,  20),   c(0.01,  100),  c(0.01,  300),
+  c(0.02,  0.1),  c(0.02,  1),    c(0.03,  0.5), c(0.04,  0.2)
 )
 
 tasks <- list()
@@ -330,6 +358,9 @@ for (i in seq_len(nrow(rate_defs))) {
   stat_total_wt <- sum(stat_pred_wt[stat_pred_ok])
   if (stat_total_wt == 0) next
 
+  old_p <- old_stat_params[[stat_nm]]
+  old_par <- if (!is.null(old_p)) c(old_p$lambda, old_p$prior_strength) else NULL
+
   tasks[[stat_nm]] <- list(
     stat_nm = stat_nm, type = "rate", stat_cat = stat_cat,
     loss_type = "mse",
@@ -337,11 +368,43 @@ for (i in seq_len(nrow(rate_defs))) {
     mu0_vec = mu0_vec,
     pred_wt = stat_pred_wt, pred_ok = stat_pred_ok,
     pred_actual = stat_pred_actual, total_wt = stat_total_wt,
-    starts = rate_starts, lower = c(0.0001, 0.01), upper = c(0.04, 100)
+    starts = rate_starts, lower = c(0.0001, 0.01), upper = c(0.04, 100),
+    old_par = old_par
   )
 }
 
 ## Efficiency stat tasks ----
+# For played_only stats (e.g. cond_tog), we need filtered vectorized structures
+# that exclude avail_only rows, matching estimate_player_skills() behavior.
+use_played_only_flag <- !is.na(eff_defs$played_only) & eff_defs$played_only == TRUE
+has_avail_only <- "avail_only" %in% names(dt)
+
+# Pre-build filtered structures for played_only stats (computed once, shared)
+if (any(use_played_only_flag) && has_avail_only) {
+  dt_played <- dt[avail_only == FALSE]
+  dt_played[, player_num_po := .GRP, by = player_id]
+  dt_played[, game_num_po := seq_len(.N), by = player_num_po]
+  dt_played[, d_rel_po := as.numeric(match_date_skill) - as.numeric(match_date_skill[1]),
+            by = player_num_po]
+
+  po_d_rel <- dt_played$d_rel_po
+  po_group <- dt_played$player_num_po
+  po_group_start <- dt_played[, .I[1], by = player_num_po]$V1
+
+  po_player_ns <- dt_played[, .N, by = player_num_po]
+  po_elig <- po_player_ns[N > min_player_games]$player_num_po
+  po_pred_mask <- dt_played$player_num_po %in% po_elig & dt_played$game_num_po > min_player_games
+  po_pred_idx <- which(po_pred_mask)
+  po_prev_idx <- po_pred_idx - 1L
+
+  po_modal_pos <- dt_played[, {
+    pg <- pos_group[!is.na(pos_group)]
+    tt <- if (length(pg) > 0) table(pg) else character(0)
+    list(modal_pos = if (length(tt) > 0) names(tt)[which.max(tt)] else "MIDFIELDER")
+  }, by = player_num_po]
+  po_pred_pos <- po_modal_pos$modal_pos[po_group[po_pred_idx]]
+}
+
 for (i in seq_len(nrow(eff_defs))) {
   stat_nm <- eff_defs$stat_name[i]
   stat_cat <- eff_defs$category[i]
@@ -351,33 +414,75 @@ for (i in seq_len(nrow(eff_defs))) {
     next
   }
 
-  eff_d <- eff_flat_data[[stat_nm]]
-  stat_succ <- eff_d$successes
-  stat_att <- eff_d$attempts
+  # Determine if this stat uses played_only filtering
+  is_played_only <- use_played_only_flag[i] && has_avail_only
+
+  if (is_played_only) {
+    # Use filtered data (only actual games, no avail_only rows)
+    success_spec <- eff_defs$success_col[i]
+    attempts_spec <- eff_defs$attempts_col[i]
+    if (success_spec %in% names(dt_played)) {
+      stat_succ <- as.numeric(dt_played[[success_spec]])
+    } else {
+      stat_succ <- .compute_denom(dt_played, success_spec)
+    }
+    stat_succ[is.na(stat_succ)] <- 0
+    stat_att <- .compute_denom(dt_played, attempts_spec)
+    stat_att[is.na(stat_att)] <- 0
+    stat_succ <- pmin(stat_succ, stat_att)
+
+    use_pred_idx <- po_pred_idx
+    use_pred_pos <- po_pred_pos
+  } else {
+    eff_d <- eff_flat_data[[stat_nm]]
+    stat_succ <- eff_d$successes
+    stat_att <- eff_d$attempts
+    use_pred_idx <- pred_idx
+    use_pred_pos <- pred_pos
+  }
 
   mu0_global <- max(min(grand_props[[stat_nm]], 1 - 1e-6), 1e-6)
   mu0_pos_map <- pos_grand_props[[stat_nm]]
-  mu0_vec <- mu0_pos_map[pred_pos]
+  mu0_vec <- mu0_pos_map[use_pred_pos]
   mu0_vec[is.na(mu0_vec)] <- mu0_global
   mu0_vec <- pmax(pmin(mu0_vec, 1 - 1e-6), 1e-6)
 
-  pred_succ <- stat_succ[pred_idx]
-  pred_att <- stat_att[pred_idx]
+  pred_succ <- stat_succ[use_pred_idx]
+  pred_att <- stat_att[use_pred_idx]
   eff_pred_ok <- pred_att > 0
   eff_actual <- ifelse(pred_att > 0, pred_succ / pred_att, mu0_global)
   eff_actual <- pmax(pmin(eff_actual, 1 - 1e-8), 1e-8)
   eff_total_wt <- sum(pred_att[eff_pred_ok])
   if (eff_total_wt == 0) next
 
-  tasks[[stat_nm]] <- list(
+  old_p <- old_stat_params[[stat_nm]]
+  old_par <- if (!is.null(old_p)) c(old_p$lambda, old_p$prior_strength) else NULL
+
+  task_entry <- list(
     stat_nm = stat_nm, type = "efficiency", stat_cat = stat_cat,
     loss_type = "logloss",
     stat_succ = stat_succ, stat_att = stat_att,
     mu0_vec = mu0_vec,
     pred_att = pred_att, eff_pred_ok = eff_pred_ok,
     eff_actual = eff_actual, eff_total_wt = eff_total_wt,
-    starts = eff_starts, lower = c(0.00001, 0.5), upper = c(0.02, 500)
+    starts = eff_starts,
+    lower = c(0.00001, 0.1),
+    upper = c(0.05, 500),
+    old_par = old_par
   )
+
+  # For played_only stats, override shared vectorized structures
+  if (is_played_only) {
+    task_entry$override_shared <- list(
+      all_d_rel = po_d_rel,
+      all_group = po_group,
+      group_start = po_group_start,
+      pred_idx = po_pred_idx,
+      prev_idx = po_prev_idx
+    )
+  }
+
+  tasks[[stat_nm]] <- task_entry
 }
 
 cli::cli_inform("Built {length(tasks)} optimization tasks ({sum(vapply(tasks, function(t) t$type == 'rate', logical(1)))} rate, {sum(vapply(tasks, function(t) t$type == 'efficiency', logical(1)))} efficiency)")
@@ -441,6 +546,8 @@ cli::cli_alert_success("Saved optimized params to {file.path(cache_dir, '02_opti
 # Summary table ----
 if (length(stat_results) > 0) {
   summary_df <- do.call(rbind, lapply(stat_results, function(x) {
+    prev <- if (!is.null(x$prev_loss) && !is.na(x$prev_loss)) round(x$prev_loss, 4) else NA_real_
+    delta_pct <- if (!is.na(prev) && prev > 0) round((x$loss - prev) / prev * 100, 2) else NA_real_
     data.frame(
       stat = x$stat_name,
       type = x$type,
@@ -448,7 +555,9 @@ if (length(stat_results) > 0) {
       lambda = round(x$lambda, 5),
       half_life_days = round(x$half_life_days),
       prior_strength = round(x$prior_strength, 2),
+      prev_loss = prev,
       loss = round(x$loss, 4),
+      delta_pct = delta_pct,
       loss_type = x$loss_type,
       stringsAsFactors = FALSE
     )
@@ -467,7 +576,7 @@ if (length(stat_results) > 0) {
     if (x$type == "rate") {
       lam_lo <- 0.0001; lam_hi <- 0.04; pri_lo <- 0.01; pri_hi <- 100
     } else {
-      lam_lo <- 0.00001; lam_hi <- 0.02; pri_lo <- 0.5; pri_hi <- 500
+      lam_lo <- 0.00001; lam_hi <- 0.05; pri_lo <- 0.1; pri_hi <- 500
     }
     if (x$lambda <= lam_lo * 2) {
       bound_warnings <- c(bound_warnings, paste0("  ", x$stat_name, ": lambda=", round(x$lambda, 6), " near lower bound (", lam_lo, ")"))
@@ -488,5 +597,100 @@ if (length(stat_results) > 0) {
     for (w in bound_warnings) cli::cli_inform(w)
   } else {
     cli::cli_alert_success("No parameters stuck at optimization bounds")
+  }
+}
+
+# Update skill_config.R ----
+# Writes optimized values directly into .skill_stat_params() so they're
+# baked into the package without manual copy-paste.
+if (length(stat_results) > 0) {
+  cli::cli_h1("Updating skill_config.R")
+
+  config_path <- file.path("R", "skill_config.R")
+  config_lines <- readLines(config_path)
+
+  # Find the function body boundaries
+  fn_start <- grep("^\\.skill_stat_params <- function\\(\\)", config_lines)
+  if (length(fn_start) != 1) {
+    cli::cli_warn("Could not find .skill_stat_params in {config_path}, skipping auto-update")
+  } else {
+    # Find matching closing brace — track brace depth from fn_start
+    depth <- 0
+    fn_end <- NA_integer_
+    for (i in fn_start:length(config_lines)) {
+      depth <- depth + nchar(gsub("[^{]", "", config_lines[i])) -
+                        nchar(gsub("[^}]", "", config_lines[i]))
+      if (depth == 0 && i > fn_start) {
+        fn_end <- i
+        break
+      }
+    }
+
+    if (is.na(fn_end)) {
+      cli::cli_warn("Could not find end of .skill_stat_params, skipping auto-update")
+    } else {
+      # Get stat definitions to separate rate vs efficiency
+      defs <- skill_stat_definitions()
+
+      # Build the replacement function body
+      # Pad stat names to align = signs
+      all_names <- names(stat_results)
+      max_len <- max(nchar(all_names))
+
+      rate_lines <- character(0)
+      eff_lines <- character(0)
+
+      for (nm in all_names) {
+        res <- stat_results[[nm]]
+        padded <- formatC(nm, width = -max_len, flag = "-")
+        # Format lambda: use scientific for very small values
+        lam_str <- if (res$lambda < 0.0001) {
+          formatC(res$lambda, format = "e", digits = 0)
+        } else {
+          formatC(res$lambda, format = "f", digits = 5)
+        }
+        pri_str <- formatC(res$prior_strength, format = "f", digits = 2)
+        line <- paste0("    ", padded, " = list(lambda = ", lam_str, ", prior_strength = ", pri_str, ")")
+
+        if (res$type == "rate") {
+          rate_lines <- c(rate_lines, line)
+        } else {
+          eff_lines <- c(eff_lines, line)
+        }
+      }
+
+      # Join with commas (all but last in each section get a comma)
+      all_param_lines <- c(
+        "    # Rate stats (Gamma-Poisson, optimized via multi-start MSE)",
+        paste0(rate_lines, ","),
+        "    # Efficiency stats (Beta-Binomial, optimized via multi-start log-loss)",
+        paste0(eff_lines, ",")
+      )
+      # Remove trailing comma from the very last entry
+      all_param_lines[length(all_param_lines)] <- sub(",$", "", all_param_lines[length(all_param_lines)])
+
+      new_fn <- c(
+        ".skill_stat_params <- function() {",
+        "  list(",
+        all_param_lines,
+        "  )",
+        "}"
+      )
+
+      # Replace the old function
+      trailing <- if (fn_end < length(config_lines)) {
+        config_lines[(fn_end + 1):length(config_lines)]
+      } else {
+        character(0)
+      }
+      config_lines <- c(
+        config_lines[1:(fn_start - 1)],
+        new_fn,
+        trailing
+      )
+
+      writeLines(config_lines, config_path)
+      cli::cli_alert_success("Updated .skill_stat_params() in {config_path} with {length(stat_results)} optimized stats")
+    }
   }
 }

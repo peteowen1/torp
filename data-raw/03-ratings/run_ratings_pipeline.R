@@ -89,13 +89,20 @@ if (REBUILD_PLAYER_GAME) {
   cli::cli_h2("Stage 2: Build Player Game Data")
   tictoc::tic("stage_2_player_game")
 
+  # Batch load all seasons at once (parallel download via curl::multi_download)
+  cli::cli_progress_step("Batch loading PBP, player_stats, teams for {length(seasons)} seasons")
+  all_pbp <- load_pbp(seasons, rounds = TRUE)
+  all_pstats <- load_player_stats(seasons)
+  all_teams <- load_teams(seasons)
+  cli::cli_inform("  Loaded: PBP {nrow(all_pbp)} | player_stats {nrow(all_pstats)} | teams {nrow(all_teams)}")
+
   for (s in seasons) {
     tryCatch({
       cli::cli_progress_step("Building player game data for {s}")
 
-      pbp <- load_pbp(s, rounds = TRUE)
-      pstats <- load_player_stats(s)
-      teams_data <- load_teams(s)
+      pbp <- all_pbp[all_pbp$season == s, ]
+      pstats <- all_pstats[all_pstats$season == s, ]
+      teams_data <- all_teams[all_teams$season == s, ]
 
       cli::cli_inform("  PBP: {nrow(pbp)} rows | player_stats: {nrow(pstats)} rows | teams: {nrow(teams_data)} rows")
       if (nrow(pbp) == 0) {
@@ -144,6 +151,16 @@ shared_skills <- tryCatch(get_player_skills(current = FALSE), error = function(e
   cli::cli_warn("Could not load skills: {conditionMessage(e)}")
   NULL
 })
+# Backwards compat: rename time_on_ground_skill → cond_tog_skill if needed
+if (!is.null(shared_skills)) {
+  if (!"cond_tog_skill" %in% names(shared_skills) && "time_on_ground_skill" %in% names(shared_skills)) {
+    shared_skills$cond_tog_skill <- shared_skills$time_on_ground_skill
+  }
+  if (!"squad_selection_skill" %in% names(shared_skills)) {
+    cli::cli_warn("Skills missing squad_selection_skill; using cond_tog_skill alone as pred_tog")
+    shared_skills$squad_selection_skill <- 1
+  }
+}
 shared_fixtures <- load_fixtures(TRUE)
 
 get_torp_df <- function(year, rounds, pgd, skills, fixtures) {
@@ -152,23 +169,78 @@ get_torp_df <- function(year, rounds, pgd, skills, fixtures) {
     plyr_tm_df <- load_player_details(year - 1)
   }
 
-  results <- purrr::map(rounds, ~ {
-    tryCatch(
-      calculate_torp_ratings(year, .x,
-        player_game_data = pgd,
-        plyr_tm_df = plyr_tm_df,
-        fixtures = fixtures,
-        skills = skills),
-      error = function(e) {
-        cli::cli_warn("Failed for {year} R{.x}: {conditionMessage(e)}")
-        NULL
-      }
-    )
-  }, .progress = TRUE)
+  # Build round_info with dates from fixtures
+  fix_dt <- data.table::as.data.table(fixtures)
+  fix_dates <- fix_dt[
+    compSeason.year == year & round.roundNumber %in% rounds,
+    .(date_val = lubridate::as_date(min(utcStartTime))),
+    by = .(round_val = round.roundNumber)
+  ]
 
-  n_failed <- sum(vapply(results, is.null, logical(1)))
-  if (n_failed == length(rounds) && length(rounds) > 1) {
-    cli::cli_abort("All {length(rounds)} rounds failed for {year} -- likely a systemic data issue")
+  round_info <- data.table::data.table(
+    round_val = rounds,
+    match_ref = paste0("CD_M", year, "014", sprintf("%02d", rounds))
+  )
+  round_info <- round_info[fix_dates, on = "round_val", nomatch = NULL]
+
+  if (nrow(round_info) == 0) {
+    cli::cli_warn("No fixtures found for {year}")
+    return(data.frame())
+  }
+
+  # Batch compute all rounds' player stats in one data.table pass
+  batch_stats <- calculate_player_stats_batch(pgd, round_info)
+
+  # Attach decomposed TOG from skills
+  batch_stats[, pred_tog := NA_real_]
+  batch_stats[, pred_selection := NA_real_]
+  batch_stats[, pred_cond_tog := NA_real_]
+  if (!is.null(skills)) {
+    skills_dt <- data.table::as.data.table(skills)
+    batch_stats[skills_dt, `:=`(
+      pred_selection = i.squad_selection_skill,
+      pred_cond_tog = i.cond_tog_skill
+    ), on = "player_id"]
+    batch_stats[is.na(pred_selection), pred_selection := 0]
+    batch_stats[is.na(pred_cond_tog), pred_cond_tog := 0]
+    batch_stats[, pred_tog := pred_selection * pred_cond_tog]
+  }
+
+  # Pre-compute fixtures summary once (avoids re-summarising 6K rows per round)
+  fix_summary <- fixtures |>
+    dplyr::group_by(season = .data$compSeason.year, round = .data$round.roundNumber) |>
+    dplyr::summarise(ref_date = lubridate::as_date(min(.data$utcStartTime)), .groups = "drop")
+
+  # Per-round: roster join + TOG centering (lightweight ~700 rows per round)
+  results <- lapply(round_info$round_val, function(rv) {
+    round_dt <- batch_stats[round_val == rv]
+    final_df <- prepare_final_dataframe(plyr_tm_df, round_dt, year, rv, fixtures, fix_summary = fix_summary)
+
+    if (!is.null(skills) && nrow(final_df) > 0) {
+      final_df$pred_tog[is.na(final_df$pred_tog)] <- 0
+      tot_tog <- sum(final_df$pred_tog)
+      if (tot_tog > 0) {
+        n_teams <- length(unique(final_df$team))
+        target_tog <- n_teams * 18L
+        final_df$pred_tog <- final_df$pred_tog * (target_tog / tot_tog)
+        comps <- c("torp_recv", "torp_disp", "torp_spoil", "torp_hitout")
+        for (comp in comps) {
+          avg_val <- sum(final_df[[comp]] * final_df$pred_tog, na.rm = TRUE) / sum(final_df$pred_tog)
+          final_df[[comp]] <- final_df[[comp]] - avg_val
+        }
+        final_df$torp <- round(final_df$torp_recv + final_df$torp_disp + final_df$torp_spoil + final_df$torp_hitout, 2)
+        for (comp in comps) {
+          final_df[[comp]] <- round(final_df[[comp]], 2)
+        }
+      }
+    }
+
+    final_df
+  })
+
+  n_empty <- sum(vapply(results, function(x) nrow(x) == 0, logical(1)))
+  if (n_empty == length(round_info$round_val) && length(round_info$round_val) > 1) {
+    cli::cli_abort("All {length(round_info$round_val)} rounds empty for {year}")
   }
 
   results |>

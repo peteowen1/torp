@@ -4,9 +4,11 @@
 #' Currently simplified to return the current calendar year - future enhancement
 #' should implement proper AFL season detection based on fixture data.
 #'
-#' @param type A character string: "current" returns the current season, "next" returns the upcoming season.
+#' @param type A character string or logical: "current" (default) returns the current
+#'   season year, "next" returns the upcoming season, and `TRUE` returns all seasons
+#'   (2021 to current year), consistent with `load_*()` functions.
 #'
-#' @return An integer representing the AFL season year.
+#' @return An integer vector of AFL season year(s).
 #' @export
 #' @importFrom lubridate year
 #' @importFrom cli cli_abort
@@ -16,12 +18,19 @@
 #'
 #' # Get the next AFL season
 #' get_afl_season("next")
+#'
+#' # Get all available seasons
+#' get_afl_season(TRUE)
 get_afl_season <- function(type = "current") {
-  if (!type %in% c("current", "next")) {
-    cli::cli_abort('type must be one of: "current" or "next"')
+  season_year <- lubridate::year(Sys.Date())
+
+  if (isTRUE(type)) {
+    return(2021L:as.integer(season_year))
   }
 
-  season_year <- lubridate::year(Sys.Date())
+  if (!type %in% c("current", "next")) {
+    cli::cli_abort('type must be one of: TRUE, "current", or "next"')
+  }
 
   if (type == "next") {
     return(season_year + 1L)

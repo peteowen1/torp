@@ -253,11 +253,11 @@ test_that("wt_gms sums per-match weights correctly for same-day games", {
 # TOG-Weighted Average Adjustment Tests
 # -----------------------------------------------------------------------------
 
-test_that("calculate_torp_ratings rejects skills without time_on_ground_skill column", {
+test_that("calculate_torp_ratings rejects skills without cond_tog_skill column", {
   bad_skills <- data.frame(player_id = 1, some_other_col = 0.5)
   expect_error(
     calculate_torp_ratings(skills = bad_skills),
-    "time_on_ground_skill"
+    "cond_tog_skill"
   )
 })
 
@@ -287,16 +287,17 @@ test_that("TOG-weighted average adjustment produces correct math", {
     prior_games_recv = 4, prior_games_disp = 6
   )
 
-  # Create skills with known TOG weights
- skills <- data.frame(
+  # Create skills with known TOG weights (decomposed)
+  skills <- data.frame(
     player_id = 1:3,
-    time_on_ground_skill = c(0.9, 0.7, 0.3)
+    cond_tog_skill = c(0.9, 0.7, 0.3),
+    squad_selection_skill = c(1.0, 1.0, 1.0)
   )
 
   # Apply adjustment manually (mirror the code in calculate_torp_ratings)
   adj <- data.table::copy(unadj)
   skills_dt <- data.table::as.data.table(skills)
-  adj[skills_dt, tog_skill := i.time_on_ground_skill, on = "player_id"]
+  adj[skills_dt, tog_skill := i.squad_selection_skill * i.cond_tog_skill, on = "player_id"]
   adj[is.na(tog_skill), tog_skill := 0]
 
   tot_tog <- sum(adj$tog_skill)
@@ -344,13 +345,14 @@ test_that("TOG adjustment is skipped when all tog_skill are zero", {
   # Skills with no matching player_ids → all default to 0
   skills <- data.frame(
     player_id = c(99, 100),
-    time_on_ground_skill = c(0.8, 0.5)
+    cond_tog_skill = c(0.8, 0.5),
+    squad_selection_skill = c(1.0, 1.0)
   )
 
   # Apply adjustment: tot_tog = 0, should skip
   adj <- data.table::copy(unadj)
   skills_dt <- data.table::as.data.table(skills)
-  adj[skills_dt, tog_skill := i.time_on_ground_skill, on = "player_id"]
+  adj[skills_dt, tog_skill := i.squad_selection_skill * i.cond_tog_skill, on = "player_id"]
   adj[is.na(tog_skill), tog_skill := 0]
 
   tot_tog <- sum(adj$tog_skill)

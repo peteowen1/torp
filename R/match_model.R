@@ -420,33 +420,53 @@
   has_cfs <- "match.matchId" %in% names(results)
   has_fix <- "home.score.totalScore" %in% names(results)
 
-  if (has_cfs && !has_fix) {
+  out_cols <- c("providerId", "homeTeamScore.matchScore.totalScore",
+                "homeTeamScore.matchScore.goals", "homeTeamScore.matchScore.behinds",
+                "awayTeamScore.matchScore.totalScore", "awayTeamScore.matchScore.goals",
+                "awayTeamScore.matchScore.behinds", "match.utcStartTime")
+
+  if (has_cfs && has_fix) {
+    # Mixed schema: CFS (2021-2025) + fixture (2026+) row-bound together.
+    # Split by which schema each row uses, normalise each, rebind.
+    is_fix_row <- !is.na(results[["home.score.totalScore"]])
+    parts <- list()
+    if (any(!is_fix_row)) {
+      parts[[1]] <- results[!is_fix_row, ] |>
+        dplyr::transmute(
+          providerId = match.matchId,
+          homeTeamScore.matchScore.totalScore,
+          homeTeamScore.matchScore.goals,
+          homeTeamScore.matchScore.behinds,
+          awayTeamScore.matchScore.totalScore,
+          awayTeamScore.matchScore.goals,
+          awayTeamScore.matchScore.behinds,
+          match.utcStartTime
+        )
+    }
+    if (any(is_fix_row)) {
+      parts[[2]] <- results[is_fix_row, ] |>
+        dplyr::transmute(
+          providerId = providerId,
+          homeTeamScore.matchScore.totalScore = home.score.totalScore,
+          homeTeamScore.matchScore.goals = home.score.goals,
+          homeTeamScore.matchScore.behinds = home.score.behinds,
+          awayTeamScore.matchScore.totalScore = away.score.totalScore,
+          awayTeamScore.matchScore.goals = away.score.goals,
+          awayTeamScore.matchScore.behinds = away.score.behinds,
+          match.utcStartTime = utcStartTime
+        )
+    }
+    dplyr::bind_rows(parts)
+  } else if (has_cfs) {
     # Pure CFS schema (historical data only)
     results |>
-      dplyr::select(
-        providerId = match.matchId,
-        homeTeamScore.matchScore.totalScore,
-        homeTeamScore.matchScore.goals,
-        homeTeamScore.matchScore.behinds,
-        awayTeamScore.matchScore.totalScore,
-        awayTeamScore.matchScore.goals,
-        awayTeamScore.matchScore.behinds,
-        match.utcStartTime
-      )
+      dplyr::select(dplyr::all_of(out_cols[out_cols %in% names(results)])) |>
+      dplyr::rename(providerId = match.matchId)
   } else if (has_fix) {
-    # Fixture schema (new) — rename to legacy column names used downstream
+    # Pure fixture schema (2026+)
     results |>
-      dplyr::select(
-        providerId,
-        home.score.totalScore,
-        home.score.goals,
-        home.score.behinds,
-        away.score.totalScore,
-        away.score.goals,
-        away.score.behinds,
-        utcStartTime
-      ) |>
-      dplyr::rename(
+      dplyr::transmute(
+        providerId = providerId,
         homeTeamScore.matchScore.totalScore = home.score.totalScore,
         homeTeamScore.matchScore.goals = home.score.goals,
         homeTeamScore.matchScore.behinds = home.score.behinds,
@@ -870,7 +890,11 @@ build_team_mdl_df <- function(season = NULL, target_weeks = NULL,
 #' @param week Single target week (auto-detected if NULL)
 #' @param weeks Vector of weeks, or "all" for all fixture weeks
 #' @param season Season year (default: current via get_afl_season())
-#' @return Prediction tibble (invisibly)
+#' @return A list (invisibly) with:
+#'   \item{predictions}{All match predictions across all seasons (season, round,
+#'     providerId, home_team, away_team, pred_margin, pred_win, margin, etc.)}
+#'   \item{models}{Named list of 5 GAM models: total_xpoints, xscore_diff,
+#'     conv_diff, score_diff, win}
 #' @keywords internal
 run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
 
@@ -1016,43 +1040,52 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
   # Format Predictions ----
   cli::cli_h2("Generating predictions for {length(target_weeks)} week{?s}")
 
-  week_gms_home <- team_mdl_df |>
-    dplyr::filter(season.x == season, round.roundNumber.x %in% target_weeks, team_type_fac.x == "home") |>
-    dplyr::select(
-      round = round.roundNumber.x, players = count.x, providerId,
-      home_team = team_name.x, home_rating = torp.x,
-      away_team = team_name.y, away_rating = torp.y,
-      pred_xtotal = pred_tot_xscore, pred_xmargin = pred_xscore_diff,
-      pred_margin = pred_score_diff, pred_win, bits,
-      margin = score_diff, start_time = local_start_time_str, venue = venue.x
-    )
+  # Helper: average home/away rows into one match-level prediction
+  .format_match_preds <- function(df) {
+    home <- df |>
+      dplyr::filter(team_type_fac.x == "home") |>
+      dplyr::select(
+        season = season.x, round = round.roundNumber.x, players = count.x, providerId,
+        home_team = team_name.x, home_rating = torp.x,
+        away_team = team_name.y, away_rating = torp.y,
+        pred_xtotal = pred_tot_xscore, pred_xmargin = pred_xscore_diff,
+        pred_margin = pred_score_diff, pred_win, bits,
+        margin = score_diff, start_time = local_start_time_str, venue = venue.x
+      )
+    away <- df |>
+      dplyr::mutate(
+        pred_xscore_diff = -pred_xscore_diff,
+        pred_score_diff = -pred_score_diff,
+        pred_win = 1 - pred_win,
+        score_diff = -score_diff
+      ) |>
+      dplyr::filter(team_type_fac.x == "away") |>
+      dplyr::select(
+        season = season.x, round = round.roundNumber.x, players = count.x, providerId,
+        home_team = team_name.y, home_rating = torp.y,
+        away_team = team_name.x, away_rating = torp.x,
+        pred_xtotal = pred_tot_xscore, pred_xmargin = pred_xscore_diff,
+        pred_margin = pred_score_diff, pred_win, bits,
+        margin = score_diff, start_time = local_start_time_str, venue = venue.x
+      )
+    dplyr::bind_rows(home, away) |>
+      dplyr::group_by(season, round, providerId, home_team, home_rating, away_team, away_rating, start_time, venue) |>
+      dplyr::summarise(
+        players = mean(players), pred_xtotal = mean(pred_xtotal),
+        pred_margin = mean(pred_margin), pred_win = mean(pred_win),
+        margin = mean(margin), .groups = "drop"
+      ) |>
+      dplyr::mutate(rating_diff = home_rating - away_rating) |>
+      dplyr::select(season, round, providerId:away_rating, start_time, venue, rating_diff, players:margin)
+  }
 
-  week_gms_away <- team_mdl_df |>
-    dplyr::mutate(
-      pred_xscore_diff = -pred_xscore_diff,
-      pred_score_diff = -pred_score_diff,
-      pred_win = 1 - pred_win,
-      score_diff = -score_diff
-    ) |>
-    dplyr::filter(season.x == season, round.roundNumber.x %in% target_weeks, team_type_fac.x == "away") |>
-    dplyr::select(
-      round = round.roundNumber.x, players = count.x, providerId,
-      home_team = team_name.y, home_rating = torp.y,
-      away_team = team_name.x, away_rating = torp.x,
-      pred_xtotal = pred_tot_xscore, pred_xmargin = pred_xscore_diff,
-      pred_margin = pred_score_diff, pred_win, bits,
-      margin = score_diff, start_time = local_start_time_str, venue = venue.x
-    )
+  # All matches (for analysis)
+  all_preds <- .format_match_preds(team_mdl_df)
 
-  week_gms <- dplyr::bind_rows(week_gms_home, week_gms_away) |>
-    dplyr::group_by(round, providerId, home_team, home_rating, away_team, away_rating, start_time, venue) |>
-    dplyr::summarise(
-      players = mean(players), pred_xtotal = mean(pred_xtotal),
-      pred_margin = mean(pred_margin), pred_win = mean(pred_win),
-      margin = mean(margin), .groups = "drop"
-    ) |>
-    dplyr::mutate(rating_diff = home_rating - away_rating) |>
-    dplyr::select(round, providerId:away_rating, start_time, venue, rating_diff, players:margin)
+  # Target week predictions (for upload)
+  week_gms <- all_preds |>
+    dplyr::filter(season == .env$season, round %in% target_weeks) |>
+    dplyr::select(-season)
 
   # Validate ----
   cli::cli_h2("Validating predictions")
@@ -1125,7 +1158,10 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
   for (t in timings) cli::cli_inform(t)
   tictoc::tic.clearlog()
 
-  invisible(week_gms)
+  invisible(list(
+    predictions = all_preds,
+    models = gam_result$models
+  ))
 }
 
 

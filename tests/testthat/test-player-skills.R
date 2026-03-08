@@ -50,6 +50,8 @@ create_mock_skill_data <- function(n_players = 10, games_per_player = 8) {
         disposal_efficiency_pct_x_disposals = NA_real_,
         # New stats
         tog_denominator = 1,
+        played = 1L,
+        avail_only = FALSE,
         bounces = rpois(1, 0.3),
         extended_stats_def_half_pressure_acts = rpois(1, 6),
         clearances_centre_clearances = rpois(1, if (pos_idx == 2) 2 else 0),
@@ -79,6 +81,31 @@ create_mock_skill_data <- function(n_players = 10, games_per_player = 8) {
 
   # Set disposal efficiency: ~70% of disposals are effective
   dt[, disposal_efficiency_pct_x_disposals := round(disposals * runif(.N, 0.55, 0.85))]
+
+  # Add zero-TOG expansion rows (missed rounds) for squad_selection estimation
+  missed_rows <- list()
+  for (p in seq_len(n_players)) {
+    # Each player misses 2 rounds
+    for (g in (games_per_player + 1):(games_per_player + 2)) {
+      missed_rows[[length(missed_rows) + 1]] <- data.frame(
+        player_id = as.character(p),
+        match_id = paste0("AVAIL_", p, "_", g),
+        player_name = paste0("Player_", p),
+        season = 2024,
+        round = g,
+        match_date_skill = as.Date("2024-01-01") + (g - 1) * 14,
+        tog = 0,
+        pos_group = dt[player_id == as.character(p), pos_group[1]],
+        position = dt[player_id == as.character(p), position[1]],
+        tog_denominator = 1,
+        played = 0L,
+        avail_only = TRUE,
+        stringsAsFactors = FALSE
+      )
+    }
+  }
+  missed_dt <- data.table::rbindlist(missed_rows, fill = TRUE)
+  dt <- data.table::rbindlist(list(dt, missed_dt), fill = TRUE)
 
   dt
 }
