@@ -52,30 +52,9 @@ A data frame containing play by play data.
 ## Examples
 
 ``` r
-# \donttest{
+if (FALSE) { # \dontrun{
 try({ # prevents cran errors
   load_pbp(2021:2022)
 })
-#> Downloading 2 files in parallel...
-#> # A tibble: 640,911 × 174
-#>    display_order description   period_seconds player_id team_id disposal
-#>            <int> <chr>                  <int> <chr>     <chr>   <chr>   
-#>  1             1 Centre Bounce              0 NA        NA      NA      
-#>  2             1 Centre Bounce              0 NA        NA      NA      
-#>  3             1 Centre Bounce              0 NA        NA      NA      
-#>  4             1 Centre Bounce              0 NA        NA      NA      
-#>  5             1 Centre Bounce              0 NA        NA      NA      
-#>  6             1 Centre Bounce              0 NA        NA      NA      
-#>  7             1 Centre Bounce              0 NA        NA      NA      
-#>  8             1 Centre Bounce              0 NA        NA      NA      
-#>  9             1 Centre Bounce              0 NA        NA      NA      
-#> 10             1 Centre Bounce              0 NA        NA      NA      
-#> # ℹ 640,901 more rows
-#> # ℹ 168 more variables: shot_at_goal <lgl>, behind_info <chr>, x <dbl>,
-#> #   y <dbl>, final_state <chr>, initial_state <chr>, period <int>,
-#> #   chain_number <int>, match_id <chr>, venue_width <int>, venue_length <int>,
-#> #   home_team_direction_qtr1 <chr>, status <chr>, utc_start_time <chr>,
-#> #   home_team_id <chr>, away_team_id <chr>, competition_id <chr>,
-#> #   round_number <int>, round_id <chr>, venue_local_start_time <lgl>, …
-# }
+} # }
 ```

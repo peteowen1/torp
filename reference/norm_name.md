@@ -1,7 +1,6 @@
 # Normalize Player Names
 
-This function is intended for internal use and may be unexported in a
-future release. Converts input character strings into a standardized
+Internal function. Converts input character strings into a standardized
 format by:
 
 - Converting accented characters to ASCII (e.g., "José" → "Jose")
@@ -40,7 +39,7 @@ A character vector with normalized names.
 ## Examples
 
 ``` r
-norm_name(c("Cam Zurhaar", "Cameron   Zúrhär", "  José López "))
-#> [1] "cam zurhaar"    "cameron zurhar" "jose lopez"    
-# Returns: "cam zurhaar" "cameron zurhar" "jose lopez"
+if (FALSE) { # \dontrun{
+norm_name(c("Cam Zurhaar", "Cameron   Zurhaar", "  Jose Lopez "))
+} # }
 ```

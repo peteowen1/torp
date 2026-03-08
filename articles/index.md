@@ -7,11 +7,5 @@
 
 ### Guides
 
-- [Data
-  Architecture](https://peteowen1.github.io/torp/articles/data-architecture.md):
-- [Using Prediction
-  Models](https://peteowen1.github.io/torp/articles/model-usage.md):
-- [TORP Player
-  Ratings](https://peteowen1.github.io/torp/articles/player-ratings.md):
-- [Season
-  Simulation](https://peteowen1.github.io/torp/articles/season-simulation.md):
+- [torp Reference
+  Guide](https://peteowen1.github.io/torp/articles/torp-guide.md):

@@ -9,7 +9,7 @@ sim_season() is deprecated; use simulate_season() instead."><meta property="og:i
 
     <a class="navbar-brand me-2" href="../index.html">torp</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.0.0.9002</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.0.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -35,7 +35,7 @@ sim_season() is deprecated; use simulate_season() instead."><meta property="og:i
 <div class="row">
   <main id="main" class="col-md-9"><div class="page-header">
       <img src="../logo.png" class="logo" alt=""><h1>Simulate a season of games</h1>
-      <small class="dont-index">Source: <a href="https://github.com/peteowen1/torp/blob/main/R/simulate.R" class="external-link"><code>R/simulate.R</code></a></small>
+      <small class="dont-index">Source: <a href="https://github.com/peteowen1/torp/blob/dev/R/simulate.R" class="external-link"><code>R/simulate.R</code></a></small>
       <div class="d-none name"><code>simulate_season.Rd</code></div>
     </div>
 
@@ -46,7 +46,12 @@ sim_season() is deprecated; use simulate_season() instead."><meta property="og:i
 
     <div class="section level2">
     <h2 id="ref-usage">Usage<a class="anchor" aria-label="anchor" href="#ref-usage"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">simulate_season</span><span class="op">(</span><span class="va">sim_teams</span>, <span class="va">sim_games</span><span class="op">)</span></span>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">simulate_season</span><span class="op">(</span></span>
+<span>  <span class="va">sim_teams</span>,</span>
+<span>  <span class="va">sim_games</span>,</span>
+<span>  return_teams <span class="op">=</span> <span class="cn">FALSE</span>,</span>
+<span>  injury_sd <span class="op">=</span> <span class="va">SIM_INJURY_SD</span></span>
+<span><span class="op">)</span></span>
 <span></span>
 <span><span class="fu">sim_season</span><span class="op">(</span><span class="va">sim_teams</span>, <span class="va">sim_games</span><span class="op">)</span></span></code></pre></div>
     </div>
@@ -62,10 +67,21 @@ sim_season() is deprecated; use simulate_season() instead."><meta property="og:i
 <dt id="arg-sim-games">sim_games<a class="anchor" aria-label="anchor" href="#arg-sim-games"></a></dt>
 <dd><p>A data frame containing fixture data.</p></dd>
 
+
+<dt id="arg-return-teams">return_teams<a class="anchor" aria-label="anchor" href="#arg-return-teams"></a></dt>
+<dd><p>Logical. If TRUE, return a list with both games and updated
+team ratings. Default FALSE returns just the games data.table for backward
+compatibility.</p></dd>
+
+
+<dt id="arg-injury-sd">injury_sd<a class="anchor" aria-label="anchor" href="#arg-injury-sd"></a></dt>
+<dd><p>Standard deviation for injury impact on team ratings. Default is <code>SIM_INJURY_SD</code>.</p></dd>
+
 </dl></div>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
-    <p>A data frame of simulated game results.</p>
+    <p>A data.table of simulated game results (default), or a list with
+<code>games</code> and <code>teams</code> elements when <code>return_teams = TRUE</code>.</p>
     </div>
 
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>

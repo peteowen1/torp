@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">torp</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.0.0.9002</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.0.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -33,7 +33,7 @@
 <div class="row">
   <main id="main" class="col-md-9"><div class="page-header">
       <img src="../logo.png" class="logo" alt=""><h1>Prepare final dataframe</h1>
-      <small class="dont-index">Source: <a href="https://github.com/peteowen1/torp/blob/main/R/player_ratings.R" class="external-link"><code>R/player_ratings.R</code></a></small>
+      <small class="dont-index">Source: <a href="https://github.com/peteowen1/torp/blob/dev/R/player_ratings.R" class="external-link"><code>R/player_ratings.R</code></a></small>
       <div class="d-none name"><code>prepare_final_dataframe.Rd</code></div>
     </div>
 
@@ -47,7 +47,9 @@
 <span>  plyr_tm_df <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  player_game_data <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  <span class="va">season_val</span>,</span>
-<span>  <span class="va">round_val</span></span>
+<span>  <span class="va">round_val</span>,</span>
+<span>  fixtures <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  fix_summary <span class="op">=</span> <span class="cn">NULL</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -69,6 +71,16 @@
 
 <dt id="arg-round-val">round_val<a class="anchor" aria-label="anchor" href="#arg-round-val"></a></dt>
 <dd><p>Round value</p></dd>
+
+
+<dt id="arg-fixtures">fixtures<a class="anchor" aria-label="anchor" href="#arg-fixtures"></a></dt>
+<dd><p>Optional pre-loaded fixtures data. If NULL, will load automatically.</p></dd>
+
+
+<dt id="arg-fix-summary">fix_summary<a class="anchor" aria-label="anchor" href="#arg-fix-summary"></a></dt>
+<dd><p>Optional pre-computed fixtures summary (season, round, ref_date).
+If NULL, computed from <code>fixtures</code> each call. Pass this when calling in a loop
+to avoid redundant summarisation.</p></dd>
 
 </dl></div>
     <div class="section level2">

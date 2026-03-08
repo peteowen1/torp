@@ -56,29 +56,9 @@ A data frame containing EP/WP chart data with columns including
 ## Examples
 
 ``` r
-# \donttest{
+if (FALSE) { # \dontrun{
 try({ # prevents cran errors
   load_ep_wp_charts(2024)
 })
-#> # A tibble: 324,958 × 25
-#>    match_id        season round_number period period_seconds total_seconds
-#>    <chr>            <dbl>        <int>  <int>          <int>         <dbl>
-#>  1 CD_M20240140001   2024            0      1              0             0
-#>  2 CD_M20240140002   2024            0      1              0             0
-#>  3 CD_M20240140004   2024            0      1              0             0
-#>  4 CD_M20240140102   2024            1      1              0             0
-#>  5 CD_M20240140103   2024            1      1              0             0
-#>  6 CD_M20240140106   2024            1      1              0             0
-#>  7 CD_M20240140107   2024            1      1              0             0
-#>  8 CD_M20240140108   2024            1      1              0             0
-#>  9 CD_M20240140201   2024            2      1              0             0
-#> 10 CD_M20240140202   2024            2      1              0             0
-#> # ℹ 324,948 more rows
-#> # ℹ 19 more variables: display_order <int>, home_team_team_name <chr>,
-#> #   away_team_team_name <chr>, team <chr>, home <dbl>, pos_team_points <int>,
-#> #   opp_team_points <int>, points_diff <int>, home_points <int>,
-#> #   away_points <int>, exp_pts <dbl>, delta_epv <dbl>, wp <dbl>, wpa <dbl>,
-#> #   description <chr>, player_name <chr>, play_type <fct>, shot_row <int>,
-#> #   points_shot <dbl>
-# }
+} # }
 ```

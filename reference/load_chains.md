@@ -51,33 +51,9 @@ A data frame containing chains data.
 ## Examples
 
 ``` r
-# \donttest{
+if (FALSE) { # \dontrun{
 try({ # prevents cran errors
   load_chains(2021:2022)
 })
-#> Downloading 2 files in parallel...
-#> Warning: Round filtering requested but no round column found in data. Returning
-#> unfiltered. Available columns: "displayOrder", "description", "periodSeconds",
-#> "playerId", "teamId", "disposal", "shotAtGoal", "behindInfo", "x", and "y"
-#> # A tibble: 847,299 × 59
-#>    displayOrder description    periodSeconds playerId teamId disposal shotAtGoal
-#>           <int> <chr>                  <int> <chr>    <chr>  <chr>    <lgl>     
-#>  1            1 Centre Bounce              0 NA       NA     NA       NA        
-#>  2            2 Ground Kick               10 CD_I260… CD_T1… ineffec… NA        
-#>  3            3 Ball Up Call              15 NA       NA     NA       NA        
-#>  4            4 Free For                  33 CD_I290… CD_T1… NA       NA        
-#>  5            5 Handball                  36 CD_I290… CD_T1… effecti… NA        
-#>  6            6 Handball Rece…            38 CD_I992… CD_T1… NA       NA        
-#>  7            7 Kick                      39 CD_I992… CD_T1… effecti… NA        
-#>  8            8 Kick Into F50             39 CD_I992… CD_T1… NA       NA        
-#>  9            9 Kick Inside 5…            40 CD_I250… CD_T1… NA       NA        
-#> 10           10 Mark On Lead              42 CD_I250… CD_T1… NA       NA        
-#> # ℹ 847,289 more rows
-#> # ℹ 52 more variables: behindInfo <chr>, x <int>, y <int>, finalState <chr>,
-#> #   initialState <chr>, period <int>, chain_number <int>, matchId <chr>,
-#> #   venueWidth <int>, venueLength <int>, homeTeamDirectionQtr1 <chr>,
-#> #   status <chr>, utcStartTime <chr>, homeTeamId <chr>, awayTeamId <chr>,
-#> #   competitionId <chr>, roundNumber <int>, roundId <chr>,
-#> #   venueLocalStartTime <lgl>, lastUpdated <chr>, providerMatchId <chr>, …
-# }
+} # }
 ```

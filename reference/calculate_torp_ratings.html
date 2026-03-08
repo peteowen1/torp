@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">torp</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.0.0.9002</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.0.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -33,7 +33,7 @@
 <div class="row">
   <main id="main" class="col-md-9"><div class="page-header">
       <img src="../logo.png" class="logo" alt=""><h1>Get TORP ratings</h1>
-      <small class="dont-index">Source: <a href="https://github.com/peteowen1/torp/blob/main/R/player_ratings.R" class="external-link"><code>R/player_ratings.R</code></a></small>
+      <small class="dont-index">Source: <a href="https://github.com/peteowen1/torp/blob/dev/R/player_ratings.R" class="external-link"><code>R/player_ratings.R</code></a></small>
       <div class="d-none name"><code>calculate_torp_ratings.Rd</code></div>
     </div>
 
@@ -46,7 +46,10 @@
     <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">calculate_torp_ratings</span><span class="op">(</span></span>
 <span>  season_val <span class="op">=</span> <span class="fu"><a href="get_afl_season.html">get_afl_season</a></span><span class="op">(</span>type <span class="op">=</span> <span class="st">"current"</span><span class="op">)</span>,</span>
 <span>  round_val <span class="op">=</span> <span class="fu"><a href="get_afl_week.html">get_afl_week</a></span><span class="op">(</span>type <span class="op">=</span> <span class="st">"next"</span><span class="op">)</span>,</span>
-<span>  decay <span class="op">=</span> <span class="va">RATING_DECAY_DEFAULT_DAYS</span>,</span>
+<span>  decay_recv <span class="op">=</span> <span class="va">RATING_DECAY_RECV</span>,</span>
+<span>  decay_disp <span class="op">=</span> <span class="va">RATING_DECAY_DISP</span>,</span>
+<span>  decay_spoil <span class="op">=</span> <span class="va">RATING_DECAY_SPOIL</span>,</span>
+<span>  decay_hitout <span class="op">=</span> <span class="va">RATING_DECAY_HITOUT</span>,</span>
 <span>  loading <span class="op">=</span> <span class="va">RATING_LOADING_DEFAULT</span>,</span>
 <span>  prior_games_recv <span class="op">=</span> <span class="va">RATING_PRIOR_GAMES_RECV</span>,</span>
 <span>  prior_games_disp <span class="op">=</span> <span class="va">RATING_PRIOR_GAMES_DISP</span>,</span>
@@ -54,13 +57,21 @@
 <span>  player_game_data <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  prior_games_spoil <span class="op">=</span> <span class="va">RATING_PRIOR_GAMES_SPOIL</span>,</span>
 <span>  prior_games_hitout <span class="op">=</span> <span class="va">RATING_PRIOR_GAMES_HITOUT</span>,</span>
-<span>  fixtures <span class="op">=</span> <span class="cn">NULL</span></span>
+<span>  fixtures <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  skills <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>  prior_rate_recv <span class="op">=</span> <span class="va">RATING_PRIOR_RATE_RECV</span>,</span>
+<span>  prior_rate_disp <span class="op">=</span> <span class="va">RATING_PRIOR_RATE_DISP</span>,</span>
+<span>  prior_rate_spoil <span class="op">=</span> <span class="va">RATING_PRIOR_RATE_SPOIL</span>,</span>
+<span>  prior_rate_hitout <span class="op">=</span> <span class="va">RATING_PRIOR_RATE_HITOUT</span></span>
 <span><span class="op">)</span></span>
 <span></span>
 <span><span class="fu">torp_ratings</span><span class="op">(</span></span>
 <span>  season_val <span class="op">=</span> <span class="fu"><a href="get_afl_season.html">get_afl_season</a></span><span class="op">(</span>type <span class="op">=</span> <span class="st">"current"</span><span class="op">)</span>,</span>
 <span>  round_val <span class="op">=</span> <span class="fu"><a href="get_afl_week.html">get_afl_week</a></span><span class="op">(</span>type <span class="op">=</span> <span class="st">"next"</span><span class="op">)</span>,</span>
-<span>  decay <span class="op">=</span> <span class="va">RATING_DECAY_DEFAULT_DAYS</span>,</span>
+<span>  decay_recv <span class="op">=</span> <span class="va">RATING_DECAY_RECV</span>,</span>
+<span>  decay_disp <span class="op">=</span> <span class="va">RATING_DECAY_DISP</span>,</span>
+<span>  decay_spoil <span class="op">=</span> <span class="va">RATING_DECAY_SPOIL</span>,</span>
+<span>  decay_hitout <span class="op">=</span> <span class="va">RATING_DECAY_HITOUT</span>,</span>
 <span>  loading <span class="op">=</span> <span class="va">RATING_LOADING_DEFAULT</span>,</span>
 <span>  prior_games_recv <span class="op">=</span> <span class="va">RATING_PRIOR_GAMES_RECV</span>,</span>
 <span>  prior_games_disp <span class="op">=</span> <span class="va">RATING_PRIOR_GAMES_DISP</span>,</span>
@@ -68,7 +79,12 @@
 <span>  player_game_data <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  prior_games_spoil <span class="op">=</span> <span class="va">RATING_PRIOR_GAMES_SPOIL</span>,</span>
 <span>  prior_games_hitout <span class="op">=</span> <span class="va">RATING_PRIOR_GAMES_HITOUT</span>,</span>
-<span>  fixtures <span class="op">=</span> <span class="cn">NULL</span></span>
+<span>  fixtures <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  skills <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>  prior_rate_recv <span class="op">=</span> <span class="va">RATING_PRIOR_RATE_RECV</span>,</span>
+<span>  prior_rate_disp <span class="op">=</span> <span class="va">RATING_PRIOR_RATE_DISP</span>,</span>
+<span>  prior_rate_spoil <span class="op">=</span> <span class="va">RATING_PRIOR_RATE_SPOIL</span>,</span>
+<span>  prior_rate_hitout <span class="op">=</span> <span class="va">RATING_PRIOR_RATE_HITOUT</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -84,8 +100,20 @@
 <dd><p>The round to calculate ratings for. Default is the next round.</p></dd>
 
 
-<dt id="arg-decay">decay<a class="anchor" aria-label="anchor" href="#arg-decay"></a></dt>
-<dd><p>The decay factor for weighting games. Default is <code>RATING_DECAY_DEFAULT_DAYS</code>.</p></dd>
+<dt id="arg-decay-recv">decay_recv<a class="anchor" aria-label="anchor" href="#arg-decay-recv"></a></dt>
+<dd><p>Decay factor (days) for receiving component. Default is <code>RATING_DECAY_RECV</code>.</p></dd>
+
+
+<dt id="arg-decay-disp">decay_disp<a class="anchor" aria-label="anchor" href="#arg-decay-disp"></a></dt>
+<dd><p>Decay factor (days) for disposal component. Default is <code>RATING_DECAY_DISP</code>.</p></dd>
+
+
+<dt id="arg-decay-spoil">decay_spoil<a class="anchor" aria-label="anchor" href="#arg-decay-spoil"></a></dt>
+<dd><p>Decay factor (days) for spoil component. Default is <code>RATING_DECAY_SPOIL</code>.</p></dd>
+
+
+<dt id="arg-decay-hitout">decay_hitout<a class="anchor" aria-label="anchor" href="#arg-decay-hitout"></a></dt>
+<dd><p>Decay factor (days) for hitout component. Default is <code>RATING_DECAY_HITOUT</code>.</p></dd>
 
 
 <dt id="arg-loading">loading<a class="anchor" aria-label="anchor" href="#arg-loading"></a></dt>
@@ -118,6 +146,35 @@
 
 <dt id="arg-fixtures">fixtures<a class="anchor" aria-label="anchor" href="#arg-fixtures"></a></dt>
 <dd><p>Optional pre-loaded fixtures data. If NULL, will load automatically.</p></dd>
+
+
+<dt id="arg-skills">skills<a class="anchor" aria-label="anchor" href="#arg-skills"></a></dt>
+<dd><p>Controls TOG-weighted average adjustment. When active, TORP
+components are re-centered to "above TOG-weighted average" by subtracting
+the weighted mean of each component (weighted by pred_tog =
+<code>squad_selection_skill * cond_tog_skill</code>). Accepts:</p><ul><li><p><code>TRUE</code> (default): auto-loads skills via
+<code>get_player_skills(current = FALSE)</code>.</p></li>
+<li><p>A data.frame with <code>player_id</code>,
+<code>cond_tog_skill</code>, and <code>squad_selection_skill</code> columns.</p></li>
+<li><p><code>FALSE</code> or <code>NULL</code>: skip adjustment.</p></li>
+</ul><p>Players not in <code>skills</code> default to weight 0 (excluded from the
+average, but still have the average subtracted).</p></dd>
+
+
+<dt id="arg-prior-rate-recv">prior_rate_recv<a class="anchor" aria-label="anchor" href="#arg-prior-rate-recv"></a></dt>
+<dd><p>Prior rate for receiving shrinkage target. Default is <code>RATING_PRIOR_RATE_RECV</code>.</p></dd>
+
+
+<dt id="arg-prior-rate-disp">prior_rate_disp<a class="anchor" aria-label="anchor" href="#arg-prior-rate-disp"></a></dt>
+<dd><p>Prior rate for disposal shrinkage target. Default is <code>RATING_PRIOR_RATE_DISP</code>.</p></dd>
+
+
+<dt id="arg-prior-rate-spoil">prior_rate_spoil<a class="anchor" aria-label="anchor" href="#arg-prior-rate-spoil"></a></dt>
+<dd><p>Prior rate for spoil shrinkage target. Default is <code>RATING_PRIOR_RATE_SPOIL</code>.</p></dd>
+
+
+<dt id="arg-prior-rate-hitout">prior_rate_hitout<a class="anchor" aria-label="anchor" href="#arg-prior-rate-hitout"></a></dt>
+<dd><p>Prior rate for hitout shrinkage target. Default is <code>RATING_PRIOR_RATE_HITOUT</code>.</p></dd>
 
 </dl></div>
     <div class="section level2">

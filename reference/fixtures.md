@@ -20,7 +20,7 @@ metadata. Key columns include `id`, `providerId`, `utcStartTime`,
 
 ## Source
 
-AFL fixture data via fitzRoy package
+AFL fixture data via AFL API
 
 ## Note
 

@@ -85,7 +85,7 @@ season_totals <- player_season_ratings(2025)
 ```
 
 See
-[`vignette("player-ratings")`](https://peteowen1.github.io/torp/articles/player-ratings.md)
+[`vignette("torp-guide")`](https://peteowen1.github.io/torp/articles/torp-guide.md)
 for the full methodology.
 
 ## Prediction Models
@@ -108,7 +108,7 @@ shots <- add_shot_vars(shots)
 ```
 
 See
-[`vignette("model-usage")`](https://peteowen1.github.io/torp/articles/model-usage.md)
+[`vignette("torp-guide")`](https://peteowen1.github.io/torp/articles/torp-guide.md)
 for details on each model.
 
 ## Caching
@@ -142,11 +142,5 @@ clear_fixture_cache()
 
 ## Next Steps
 
-- [`vignette("player-ratings")`](https://peteowen1.github.io/torp/articles/player-ratings.md)
-  – TORP rating methodology
-- [`vignette("model-usage")`](https://peteowen1.github.io/torp/articles/model-usage.md)
-  – EP, WP, and shot models
-- [`vignette("data-architecture")`](https://peteowen1.github.io/torp/articles/data-architecture.md)
-  – Data pipeline and storage
-- [`vignette("season-simulation")`](https://peteowen1.github.io/torp/articles/season-simulation.md)
-  – Simulating AFL seasons
+- [`vignette("torp-guide")`](https://peteowen1.github.io/torp/articles/torp-guide.md)
+  – Full reference: data architecture, ratings, models, simulation

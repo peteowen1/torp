@@ -9,7 +9,10 @@ based on their performance.
 calculate_torp_ratings(
   season_val = get_afl_season(type = "current"),
   round_val = get_afl_week(type = "next"),
-  decay = RATING_DECAY_DEFAULT_DAYS,
+  decay_recv = RATING_DECAY_RECV,
+  decay_disp = RATING_DECAY_DISP,
+  decay_spoil = RATING_DECAY_SPOIL,
+  decay_hitout = RATING_DECAY_HITOUT,
   loading = RATING_LOADING_DEFAULT,
   prior_games_recv = RATING_PRIOR_GAMES_RECV,
   prior_games_disp = RATING_PRIOR_GAMES_DISP,
@@ -17,13 +20,21 @@ calculate_torp_ratings(
   player_game_data = NULL,
   prior_games_spoil = RATING_PRIOR_GAMES_SPOIL,
   prior_games_hitout = RATING_PRIOR_GAMES_HITOUT,
-  fixtures = NULL
+  fixtures = NULL,
+  skills = TRUE,
+  prior_rate_recv = RATING_PRIOR_RATE_RECV,
+  prior_rate_disp = RATING_PRIOR_RATE_DISP,
+  prior_rate_spoil = RATING_PRIOR_RATE_SPOIL,
+  prior_rate_hitout = RATING_PRIOR_RATE_HITOUT
 )
 
 torp_ratings(
   season_val = get_afl_season(type = "current"),
   round_val = get_afl_week(type = "next"),
-  decay = RATING_DECAY_DEFAULT_DAYS,
+  decay_recv = RATING_DECAY_RECV,
+  decay_disp = RATING_DECAY_DISP,
+  decay_spoil = RATING_DECAY_SPOIL,
+  decay_hitout = RATING_DECAY_HITOUT,
   loading = RATING_LOADING_DEFAULT,
   prior_games_recv = RATING_PRIOR_GAMES_RECV,
   prior_games_disp = RATING_PRIOR_GAMES_DISP,
@@ -31,7 +42,12 @@ torp_ratings(
   player_game_data = NULL,
   prior_games_spoil = RATING_PRIOR_GAMES_SPOIL,
   prior_games_hitout = RATING_PRIOR_GAMES_HITOUT,
-  fixtures = NULL
+  fixtures = NULL,
+  skills = TRUE,
+  prior_rate_recv = RATING_PRIOR_RATE_RECV,
+  prior_rate_disp = RATING_PRIOR_RATE_DISP,
+  prior_rate_spoil = RATING_PRIOR_RATE_SPOIL,
+  prior_rate_hitout = RATING_PRIOR_RATE_HITOUT
 )
 ```
 
@@ -45,10 +61,25 @@ torp_ratings(
 
   The round to calculate ratings for. Default is the next round.
 
-- decay:
+- decay_recv:
 
-  The decay factor for weighting games. Default is
-  `RATING_DECAY_DEFAULT_DAYS`.
+  Decay factor (days) for receiving component. Default is
+  `RATING_DECAY_RECV`.
+
+- decay_disp:
+
+  Decay factor (days) for disposal component. Default is
+  `RATING_DECAY_DISP`.
+
+- decay_spoil:
+
+  Decay factor (days) for spoil component. Default is
+  `RATING_DECAY_SPOIL`.
+
+- decay_hitout:
+
+  Decay factor (days) for hitout component. Default is
+  `RATING_DECAY_HITOUT`.
 
 - loading:
 
@@ -88,6 +119,44 @@ torp_ratings(
 - fixtures:
 
   Optional pre-loaded fixtures data. If NULL, will load automatically.
+
+- skills:
+
+  Controls TOG-weighted average adjustment. When active, TORP components
+  are re-centered to "above TOG-weighted average" by subtracting the
+  weighted mean of each component (weighted by pred_tog =
+  `squad_selection_skill * cond_tog_skill`). Accepts:
+
+  - `TRUE` (default): auto-loads skills via
+    `get_player_skills(current = FALSE)`.
+
+  - A data.frame with `player_id`, `cond_tog_skill`, and
+    `squad_selection_skill` columns.
+
+  - `FALSE` or `NULL`: skip adjustment.
+
+  Players not in `skills` default to weight 0 (excluded from the
+  average, but still have the average subtracted).
+
+- prior_rate_recv:
+
+  Prior rate for receiving shrinkage target. Default is
+  `RATING_PRIOR_RATE_RECV`.
+
+- prior_rate_disp:
+
+  Prior rate for disposal shrinkage target. Default is
+  `RATING_PRIOR_RATE_DISP`.
+
+- prior_rate_spoil:
+
+  Prior rate for spoil shrinkage target. Default is
+  `RATING_PRIOR_RATE_SPOIL`.
+
+- prior_rate_hitout:
+
+  Prior rate for hitout shrinkage target. Default is
+  `RATING_PRIOR_RATE_HITOUT`.
 
 ## Value
 

@@ -40,27 +40,9 @@ A data frame containing xG data.
 ## Examples
 
 ``` r
-# \donttest{
+if (FALSE) { # \dontrun{
 try({ # prevents cran errors
   load_xg(2021:2022)
 })
-#> Downloading 2 files in parallel...
-#> # A tibble: 414 × 15
-#>    match_id     home_team home_shots_score home_xscore home_sG home_sB away_team
-#>    <chr>        <chr>                <dbl>       <dbl>   <dbl>   <dbl> <chr>    
-#>  1 CD_M2021014… Richmond               105       114.       15      15 Carlton  
-#>  2 CD_M2021014… Collingw…               53        60.6       7      11 Western …
-#>  3 CD_M2021014… Melbourne               79        97.1      11      13 Fremantle
-#>  4 CD_M2021014… Adelaide…              104        89.9      15      14 Geelong …
-#>  5 CD_M2021014… Essendon                91        90.8      13      13 Hawthorn 
-#>  6 CD_M2021014… Brisbane…               94        65.2      14      10 Sydney S…
-#>  7 CD_M2021014… North Me…               65        82.7       9      11 Port Ade…
-#>  8 CD_M2021014… GWS GIAN…               78        87.9      11      12 St Kilda 
-#>  9 CD_M2021014… West Coa…               83        97.2      12      11 Gold Coa…
-#> 10 CD_M2021014… Carlton                 85        75.6      13       7 Collingw…
-#> # ℹ 404 more rows
-#> # ℹ 8 more variables: away_shots_score <dbl>, away_xscore <dbl>, away_sG <dbl>,
-#> #   away_sB <dbl>, score_diff <dbl>, xscore_diff <dbl>, total_points <dbl>,
-#> #   total_xpoints <dbl>
-# }
+} # }
 ```

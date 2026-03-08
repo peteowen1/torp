@@ -52,11 +52,9 @@ probabilities and expected scores.
 ## Examples
 
 ``` r
-# \donttest{
+if (FALSE) { # \dontrun{
 try({ # prevents cran errors
   load_predictions(2021:2022)
 })
-#> Filtered 2 URLs not found in "predictions" release.
-#> # A tibble: 0 × 0
-# }
+} # }
 ```

@@ -11,7 +11,8 @@ estimate_player_skills(
   skill_data,
   ref_date = NULL,
   params = NULL,
-  stat_defs = NULL
+  stat_defs = NULL,
+  compute_ci = TRUE
 )
 ```
 
@@ -38,6 +39,12 @@ estimate_player_skills(
   Output of
   [`skill_stat_definitions()`](https://peteowen1.github.io/torp/reference/skill_stat_definitions.md).
   If NULL, uses default.
+
+- compute_ci:
+
+  Logical. If TRUE (default), compute credible intervals
+  (`_lower`/`_upper` columns) using qgamma/qbeta. Set to FALSE to skip
+  interval computation for faster batch processing.
 
 ## Value
 

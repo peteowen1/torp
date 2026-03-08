@@ -6,7 +6,12 @@ all required columns for the skill estimation pipeline.
 ## Usage
 
 ``` r
-prepare_skill_data(player_game_data, player_stats)
+prepare_skill_data(
+  player_game_data,
+  player_stats,
+  rosters = NULL,
+  fixtures = NULL
+)
 ```
 
 ## Arguments
@@ -18,6 +23,14 @@ prepare_skill_data(player_game_data, player_stats)
 - player_stats:
 
   Player stats from `load_player_stats(TRUE)`.
+
+- rosters:
+
+  Optional roster data. If NULL, loads from torpdata.
+
+- fixtures:
+
+  Optional fixture data. If NULL, loads from torpdata.
 
 ## Value
 

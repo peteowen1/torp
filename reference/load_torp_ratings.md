@@ -32,25 +32,9 @@ A data frame containing TORP ratings with columns including `player_id`,
 ## Examples
 
 ``` r
-# \donttest{
+if (FALSE) { # \dontrun{
 try({ # prevents cran errors
   load_torp_ratings()
 })
-#> # A tibble: 113,851 × 15
-#>    player_id   player_name        age team   torp torp_recv torp_disp torp_spoil
-#>    <chr>       <chr>            <dbl> <chr> <dbl>     <dbl>     <dbl>      <dbl>
-#>  1 CD_I1000932 Tom Doedee        24.0 Adel…    NA        NA        NA         NA
-#>  2 CD_I1000998 Lachlan Murphy    22.3 Adel…    NA        NA        NA         NA
-#>  3 CD_I1004863 Mitchell Hinge    22.7 Adel…    NA        NA        NA         NA
-#>  4 CD_I1004995 Jordon Butts      21.2 Adel…    NA        NA        NA         NA
-#>  5 CD_I1005199 Elliott Himmelb…  22.8 Adel…    NA        NA        NA         NA
-#>  6 CD_I1006136 Lachlan Sholl     21.0 Adel…    NA        NA        NA         NA
-#>  7 CD_I1006203 Chayce Jones      21.2 Adel…    NA        NA        NA         NA
-#>  8 CD_I1008159 Will Hamill       20.3 Adel…    NA        NA        NA         NA
-#>  9 CD_I1008185 Ned McHenry       20.7 Adel…    NA        NA        NA         NA
-#> 10 CD_I1008230 Nick Murray       20.2 Adel…    NA        NA        NA         NA
-#> # ℹ 113,841 more rows
-#> # ℹ 7 more variables: torp_hitout <dbl>, position <chr>, season <dbl>,
-#> #   round <int>, gms <int>, wt_gms <dbl>, row_id <chr>
-# }
+} # }
 ```

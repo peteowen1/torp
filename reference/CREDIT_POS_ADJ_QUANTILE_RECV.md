@@ -1,6 +1,6 @@
-# Position adjustment quantile for reception
+# Position-group quantile adjustment for receiving component
 
-Position adjustment quantile for reception
+Position-group quantile adjustment for receiving component
 
 ## Usage
 

@@ -1,6 +1,7 @@
-# Position adjustment quantile
+# Position-group quantile adjustment — legacy alias for backwards compatibility
 
-Position adjustment quantile
+Position-group quantile adjustment — legacy alias for backwards
+compatibility
 
 ## Usage
 

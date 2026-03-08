@@ -9,7 +9,7 @@ matches. Uses conjugate Bayesian updating with exponential time decay.'><meta pr
 
     <a class="navbar-brand me-2" href="../index.html">torp</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.0.0.9002</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.0.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -35,7 +35,7 @@ matches. Uses conjugate Bayesian updating with exponential time decay.'><meta pr
 <div class="row">
   <main id="main" class="col-md-9"><div class="page-header">
       <img src="../logo.png" class="logo" alt=""><h1>Estimate player skills using Bayesian conjugate priors</h1>
-      <small class="dont-index">Source: <a href="https://github.com/peteowen1/torp/blob/main/R/player_skills.R" class="external-link"><code>R/player_skills.R</code></a></small>
+      <small class="dont-index">Source: <a href="https://github.com/peteowen1/torp/blob/dev/R/player_skills.R" class="external-link"><code>R/player_skills.R</code></a></small>
       <div class="d-none name"><code>estimate_player_skills.Rd</code></div>
     </div>
 
@@ -50,7 +50,8 @@ matches. Uses conjugate Bayesian updating with exponential time decay.</p>
 <span>  <span class="va">skill_data</span>,</span>
 <span>  ref_date <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  params <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>  stat_defs <span class="op">=</span> <span class="cn">NULL</span></span>
+<span>  stat_defs <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  compute_ci <span class="op">=</span> <span class="cn">TRUE</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -74,6 +75,12 @@ to one day after the latest match in the data).</p></dd>
 
 <dt id="arg-stat-defs">stat_defs<a class="anchor" aria-label="anchor" href="#arg-stat-defs"></a></dt>
 <dd><p>Output of <code><a href="skill_stat_definitions.html">skill_stat_definitions()</a></code>. If NULL, uses default.</p></dd>
+
+
+<dt id="arg-compute-ci">compute_ci<a class="anchor" aria-label="anchor" href="#arg-compute-ci"></a></dt>
+<dd><p>Logical. If TRUE (default), compute credible intervals
+(<code>_lower</code>/<code>_upper</code> columns) using qgamma/qbeta. Set to FALSE
+to skip interval computation for faster batch processing.</p></dd>
 
 </dl></div>
     <div class="section level2">

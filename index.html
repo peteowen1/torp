@@ -25,7 +25,7 @@
 
     <a class="navbar-brand me-2" href="index.html">torp</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.0.0.9002</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.0.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -167,7 +167,7 @@
 </tr>
 </tbody>
 </table>
-<p>Data flows from the AFL API (via <a href="https://jimmyday12.github.io/fitzRoy/" class="external-link">fitzRoy</a>) through torp’s cleaning pipeline into torpdata, with models stored in torpmodels.</p>
+<p>Data flows from the AFL API (via torp’s <code>get_afl_*()</code> functions) through torp’s cleaning pipeline into torpdata, with models stored in torpmodels.</p>
 </div>
 <div class="section level2">
 <h2 id="learn-more">Learn More<a class="anchor" aria-label="anchor" href="#learn-more"></a>
@@ -176,13 +176,7 @@
 <li>
 <code><a href="articles/getting-started.html">vignette("getting-started")</a></code> – Installation and data loading</li>
 <li>
-<code><a href="articles/player-ratings.html">vignette("player-ratings")</a></code> – TORP rating methodology</li>
-<li>
-<code><a href="articles/model-usage.html">vignette("model-usage")</a></code> – EP, WP, and shot models</li>
-<li>
-<code><a href="articles/data-architecture.html">vignette("data-architecture")</a></code> – Data pipeline and caching</li>
-<li>
-<code><a href="articles/season-simulation.html">vignette("season-simulation")</a></code> – Simulating AFL seasons</li>
+<code><a href="articles/torp-guide.html">vignette("torp-guide")</a></code> – Ratings, models, data architecture, and simulation</li>
 </ul>
 </div>
 <div class="section level2">
@@ -227,7 +221,7 @@
 <ul class="list-unstyled">
 <li><a href="https://github.com/peteowen1/torp/actions/workflows/test-package.yml" class="external-link"><img src="https://github.com/peteowen1/torp/actions/workflows/test-package.yml/badge.svg" alt="R-CMD-check"></a></li>
 <li><a href="https://app.codecov.io/gh/peteowen1/torp?branch=main" class="external-link"><img src="https://codecov.io/gh/peteowen1/torp/branch/main/graph/badge.svg" alt="Codecov test coverage"></a></li>
-<li><a href="https://lifecycle.r-lib.org/articles/stages.html#experimental" class="external-link"><img src="https://img.shields.io/badge/lifecycle-experimental-orange.svg" alt="Lifecycle: experimental"></a></li>
+<li><a href="https://lifecycle.r-lib.org/articles/stages.html#stable" class="external-link"><img src="https://img.shields.io/badge/lifecycle-stable-brightgreen.svg" alt="Lifecycle: stable"></a></li>
 </ul>
 </div>
 

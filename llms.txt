@@ -87,22 +87,16 @@ sim_result <- simulate_season(sim_teams, sim_games)
 | **[torpdata](https://github.com/peteowen1/torpdata)**     | Processed AFL data via GitHub releases (parquet) | [GitHub](https://github.com/peteowen1/torpdata)   |
 | **[torpmodels](https://github.com/peteowen1/torpmodels)** | Pre-trained models via GitHub releases (RDS)     | [GitHub](https://github.com/peteowen1/torpmodels) |
 
-Data flows from the AFL API (via
-[fitzRoy](https://jimmyday12.github.io/fitzRoy/)) through torp’s
-cleaning pipeline into torpdata, with models stored in torpmodels.
+Data flows from the AFL API (via torp’s `get_afl_*()` functions) through
+torp’s cleaning pipeline into torpdata, with models stored in
+torpmodels.
 
 ## Learn More
 
 - [`vignette("getting-started")`](https://peteowen1.github.io/torp/articles/getting-started.md)
   – Installation and data loading
-- [`vignette("player-ratings")`](https://peteowen1.github.io/torp/articles/player-ratings.md)
-  – TORP rating methodology
-- [`vignette("model-usage")`](https://peteowen1.github.io/torp/articles/model-usage.md)
-  – EP, WP, and shot models
-- [`vignette("data-architecture")`](https://peteowen1.github.io/torp/articles/data-architecture.md)
-  – Data pipeline and caching
-- [`vignette("season-simulation")`](https://peteowen1.github.io/torp/articles/season-simulation.md)
-  – Simulating AFL seasons
+- [`vignette("torp-guide")`](https://peteowen1.github.io/torp/articles/torp-guide.md)
+  – Ratings, models, data architecture, and simulation
 
 ## License
 
@@ -138,6 +132,8 @@ Load processed AFL data from torpdata GitHub releases
   : Load Player Stats Data
 - [`load_predictions()`](https://peteowen1.github.io/torp/reference/load_predictions.md)
   : Load AFL Match Predictions Data
+- [`load_preseason_injuries()`](https://peteowen1.github.io/torp/reference/load_preseason_injuries.md)
+  : Load Preseason Injury List
 - [`load_results()`](https://peteowen1.github.io/torp/reference/load_results.md)
   : Load AFL Match Results Data
 - [`load_team_ratings()`](https://peteowen1.github.io/torp/reference/load_team_ratings.md)
@@ -175,8 +171,6 @@ Clean and prepare AFL data for analysis
   : Clean Model Data for Win Probability (WP)
 - [`clean_shots_data()`](https://peteowen1.github.io/torp/reference/clean_shots_data.md)
   : Clean Shots Data
-- [`norm_name()`](https://peteowen1.github.io/torp/reference/norm_name.md)
-  : Normalize Player Names
 
 ## Player Ratings
 
@@ -197,6 +191,16 @@ Calculate and view TORP player ratings
   : Create Player Game Data
 - [`default_credit_params()`](https://peteowen1.github.io/torp/reference/default_credit_params.md)
   : Default credit assignment parameters
+- [`create_wp_credit()`](https://peteowen1.github.io/torp/reference/create_wp_credit.md)
+  : Create Win Probability Credit Data
+- [`calculate_player_stats()`](https://peteowen1.github.io/torp/reference/calculate_player_stats.md)
+  : Calculate player statistics
+- [`calculate_psr()`](https://peteowen1.github.io/torp/reference/calculate_psr.md)
+  : Calculate Player Skill Ratings (PSR)
+- [`filter_game_data()`](https://peteowen1.github.io/torp/reference/filter_game_data.md)
+  : Filter game data
+- [`get_season_data()`](https://peteowen1.github.io/torp/reference/get_season_data.md)
+  : Get season data
 
 ## Player Skills
 
@@ -228,6 +232,20 @@ Simulate AFL seasons and predict match outcomes
 - [`simulate_season()`](https://peteowen1.github.io/torp/reference/simulate_season.md)
   [`sim_season()`](https://peteowen1.github.io/torp/reference/simulate_season.md)
   : Simulate a season of games
+- [`simulate_afl_season()`](https://peteowen1.github.io/torp/reference/simulate_afl_season.md)
+  : Simulate a full AFL season
+- [`summarise_simulations()`](https://peteowen1.github.io/torp/reference/summarise_simulations.md)
+  : Summarise simulation results
+- [`show_predictions()`](https://peteowen1.github.io/torp/reference/show_predictions.md)
+  : Show TORP Match Predictions
+- [`print(`*`<torp_sim_results>`*`)`](https://peteowen1.github.io/torp/reference/print.torp_sim_results.md)
+  : Print simulation results
+- [`prepare_final_dataframe()`](https://peteowen1.github.io/torp/reference/prepare_final_dataframe.md)
+  : Prepare final dataframe
+- [`ladder`](https://peteowen1.github.io/torp/reference/ladder.md) : AFL
+  Season Simulation System
+- [`calculate_ladder()`](https://peteowen1.github.io/torp/reference/calculate_ladder.md)
+  : Calculate AFL ladder from game results
 
 ## Chain Analysis
 
@@ -239,22 +257,20 @@ Access and analyse possession chains
   : Get Week Chains
 - [`load_chains()`](https://peteowen1.github.io/torp/reference/load_chains.md)
   : Load Chains Data
+- [`extract_contests()`](https://peteowen1.github.io/torp/reference/extract_contests.md)
+  : Extract Head-to-Head Contests from Chains Data
 
 ## Match Analysis
 
-Match-level expected goals and predictions
+Match-level expected goals, predictions, and head-to-head comparisons
 
 - [`calculate_match_xgs()`](https://peteowen1.github.io/torp/reference/calculate_match_xgs.md)
   [`match_xgs()`](https://peteowen1.github.io/torp/reference/calculate_match_xgs.md)
   : Calculate xGs for AFL Matches
-- [`calculate_player_stats()`](https://peteowen1.github.io/torp/reference/calculate_player_stats.md)
-  : Calculate player statistics
-- [`get_season_data()`](https://peteowen1.github.io/torp/reference/get_season_data.md)
-  : Get season data
-- [`filter_game_data()`](https://peteowen1.github.io/torp/reference/filter_game_data.md)
-  : Filter game data
-- [`prepare_final_dataframe()`](https://peteowen1.github.io/torp/reference/prepare_final_dataframe.md)
-  : Prepare final dataframe
+- [`head_to_head()`](https://peteowen1.github.io/torp/reference/head_to_head.md)
+  : Head-to-Head Contest History Between Two Players
+- [`print(`*`<torp_head_to_head>`*`)`](https://peteowen1.github.io/torp/reference/print.torp_head_to_head.md)
+  : Print Head-to-Head Results
 
 ## Model Validation
 
@@ -270,10 +286,6 @@ Evaluate model performance, calibration, and drift
   : Create Model Validation Report
 - [`create_model_comparison_report()`](https://peteowen1.github.io/torp/reference/create_model_comparison_report.md)
   : Create Model Comparison Report
-- [`check_wp_model_health()`](https://peteowen1.github.io/torp/reference/check_wp_model_health.md)
-  : Check Win Probability Model Health
-- [`get_wp_model_info()`](https://peteowen1.github.io/torp/reference/get_wp_model_info.md)
-  : Get Win Probability Model Version Information
 - [`log_model_performance()`](https://peteowen1.github.io/torp/reference/log_model_performance.md)
   : Log Model Performance Metrics
 - [`monitor_model_drift()`](https://peteowen1.github.io/torp/reference/monitor_model_drift.md)
@@ -329,6 +341,19 @@ In-memory and disk caching utilities
 
 AFL and model constants
 
+## Injuries
+
+Injury data access and matching
+
+- [`injuries`](https://peteowen1.github.io/torp/reference/injuries.md) :
+  AFL Injury Data Functions
+- [`get_all_injuries()`](https://peteowen1.github.io/torp/reference/get_all_injuries.md)
+  : Get All Injuries (Weekly + Preseason)
+- [`match_injuries()`](https://peteowen1.github.io/torp/reference/match_injuries.md)
+  : Match Injuries to a Ratings Data Frame
+- [`scrape_injuries()`](https://peteowen1.github.io/torp/reference/scrape_injuries.md)
+  : Scrape AFL Weekly Injury List
+
 ## Utilities
 
 Helper and convenience functions
@@ -337,8 +362,6 @@ Helper and convenience functions
   : Get AFL Season
 - [`get_afl_week()`](https://peteowen1.github.io/torp/reference/get_afl_week.md)
   : Get AFL Week
-- [`harmonic_mean()`](https://peteowen1.github.io/torp/reference/harmonic_mean.md)
-  : Vectorized Harmonic Mean of Two Numeric Vectors
 - [`parquet_from_url()`](https://peteowen1.github.io/torp/reference/parquet_from_url.md)
   : Load parquet file from a remote connection
 - [`save_to_release()`](https://peteowen1.github.io/torp/reference/save_to_release.md)
@@ -355,6 +378,25 @@ Helper and convenience functions
   : Save Data Frame Locally in torpdata/data/
 - [`set_local_data_dir()`](https://peteowen1.github.io/torp/reference/set_local_data_dir.md)
   : Set Local Data Directory
+- [`torp_replace_teams()`](https://peteowen1.github.io/torp/reference/torp_replace_teams.md)
+  : Standardise AFL Team Names
+- [`torp_replace_venues()`](https://peteowen1.github.io/torp/reference/torp_replace_venues.md)
+  : Standardise AFL Venue Names
+
+## AFL API
+
+Access AFL data directly from the API
+
+- [`get_afl_fixtures()`](https://peteowen1.github.io/torp/reference/get_afl_fixtures.md)
+  : Fetch AFL Fixtures
+- [`get_afl_lineups()`](https://peteowen1.github.io/torp/reference/get_afl_lineups.md)
+  : Fetch AFL Lineups
+- [`get_afl_player_details()`](https://peteowen1.github.io/torp/reference/get_afl_player_details.md)
+  : Fetch AFL Player Details
+- [`get_afl_player_stats()`](https://peteowen1.github.io/torp/reference/get_afl_player_stats.md)
+  : Fetch AFL Player Stats
+- [`get_afl_results()`](https://peteowen1.github.io/torp/reference/get_afl_results.md)
+  : Fetch AFL Results
 
 ## Internal / Developer
 
@@ -383,11 +425,5 @@ scraping
 
 ### Guides
 
-- [Data
-  Architecture](https://peteowen1.github.io/torp/articles/data-architecture.md):
-- [Using Prediction
-  Models](https://peteowen1.github.io/torp/articles/model-usage.md):
-- [TORP Player
-  Ratings](https://peteowen1.github.io/torp/articles/player-ratings.md):
-- [Season
-  Simulation](https://peteowen1.github.io/torp/articles/season-simulation.md):
+- [torp Reference
+  Guide](https://peteowen1.github.io/torp/articles/torp-guide.md):

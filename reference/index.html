@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">torp</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.0.0.9002</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.0.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -131,6 +131,13 @@
 
         <dt>
 
+          <code><a href="load_preseason_injuries.html">load_preseason_injuries()</a></code>
+
+        </dt>
+        <dd>Load Preseason Injury List</dd>
+
+        <dt>
+
           <code><a href="load_results.html">load_results()</a></code>
 
         </dt>
@@ -237,13 +244,6 @@
 
         </dt>
         <dd>Clean Shots Data</dd>
-
-        <dt>
-
-          <code><a href="norm_name.html">norm_name()</a></code>
-
-        </dt>
-        <dd>Normalize Player Names</dd>
       </dl></div><div class="section level2">
       <h2 id="player-ratings">Player Ratings<a class="anchor" aria-label="anchor" href="#player-ratings"></a></h2>
 
@@ -302,6 +302,41 @@
 
         </dt>
         <dd>Default credit assignment parameters</dd>
+
+        <dt>
+
+          <code><a href="create_wp_credit.html">create_wp_credit()</a></code>
+
+        </dt>
+        <dd>Create Win Probability Credit Data</dd>
+
+        <dt>
+
+          <code><a href="calculate_player_stats.html">calculate_player_stats()</a></code>
+
+        </dt>
+        <dd>Calculate player statistics</dd>
+
+        <dt>
+
+          <code><a href="calculate_psr.html">calculate_psr()</a></code>
+
+        </dt>
+        <dd>Calculate Player Skill Ratings (PSR)</dd>
+
+        <dt>
+
+          <code><a href="filter_game_data.html">filter_game_data()</a></code>
+
+        </dt>
+        <dd>Filter game data</dd>
+
+        <dt>
+
+          <code><a href="get_season_data.html">get_season_data()</a></code>
+
+        </dt>
+        <dd>Get season data</dd>
       </dl></div><div class="section level2">
       <h2 id="player-skills">Player Skills<a class="anchor" aria-label="anchor" href="#player-skills"></a></h2>
 
@@ -390,6 +425,55 @@
 
         </dt>
         <dd>Simulate a season of games</dd>
+
+        <dt>
+
+          <code><a href="simulate_afl_season.html">simulate_afl_season()</a></code>
+
+        </dt>
+        <dd>Simulate a full AFL season</dd>
+
+        <dt>
+
+          <code><a href="summarise_simulations.html">summarise_simulations()</a></code>
+
+        </dt>
+        <dd>Summarise simulation results</dd>
+
+        <dt>
+
+          <code><a href="show_predictions.html">show_predictions()</a></code>
+
+        </dt>
+        <dd>Show TORP Match Predictions</dd>
+
+        <dt>
+
+          <code><a href="print.torp_sim_results.html">print(<i>&lt;torp_sim_results&gt;</i>)</a></code>
+
+        </dt>
+        <dd>Print simulation results</dd>
+
+        <dt>
+
+          <code><a href="prepare_final_dataframe.html">prepare_final_dataframe()</a></code>
+
+        </dt>
+        <dd>Prepare final dataframe</dd>
+
+        <dt>
+
+          <code><a href="ladder.html">ladder</a></code>
+
+        </dt>
+        <dd>AFL Season Simulation System</dd>
+
+        <dt>
+
+          <code><a href="calculate_ladder.html">calculate_ladder()</a></code>
+
+        </dt>
+        <dd>Calculate AFL ladder from game results</dd>
       </dl></div><div class="section level2">
       <h2 id="chain-analysis">Chain Analysis<a class="anchor" aria-label="anchor" href="#chain-analysis"></a></h2>
 
@@ -420,10 +504,17 @@
 
         </dt>
         <dd>Load Chains Data</dd>
+
+        <dt>
+
+          <code><a href="extract_contests.html">extract_contests()</a></code>
+
+        </dt>
+        <dd>Extract Head-to-Head Contests from Chains Data</dd>
       </dl></div><div class="section level2">
       <h2 id="match-analysis">Match Analysis<a class="anchor" aria-label="anchor" href="#match-analysis"></a></h2>
 
-      <div class="section-desc"><p>Match-level expected goals and predictions</p></div>
+      <div class="section-desc"><p>Match-level expected goals, predictions, and head-to-head comparisons</p></div>
 
       <dl></dl></div><div class="section level2">
 
@@ -439,31 +530,17 @@
 
         <dt>
 
-          <code><a href="calculate_player_stats.html">calculate_player_stats()</a></code>
+          <code><a href="head_to_head.html">head_to_head()</a></code>
 
         </dt>
-        <dd>Calculate player statistics</dd>
+        <dd>Head-to-Head Contest History Between Two Players</dd>
 
         <dt>
 
-          <code><a href="get_season_data.html">get_season_data()</a></code>
+          <code><a href="print.torp_head_to_head.html">print(<i>&lt;torp_head_to_head&gt;</i>)</a></code>
 
         </dt>
-        <dd>Get season data</dd>
-
-        <dt>
-
-          <code><a href="filter_game_data.html">filter_game_data()</a></code>
-
-        </dt>
-        <dd>Filter game data</dd>
-
-        <dt>
-
-          <code><a href="prepare_final_dataframe.html">prepare_final_dataframe()</a></code>
-
-        </dt>
-        <dd>Prepare final dataframe</dd>
+        <dd>Print Head-to-Head Results</dd>
       </dl></div><div class="section level2">
       <h2 id="model-validation">Model Validation<a class="anchor" aria-label="anchor" href="#model-validation"></a></h2>
 
@@ -508,20 +585,6 @@
 
         </dt>
         <dd>Create Model Comparison Report</dd>
-
-        <dt>
-
-          <code><a href="check_wp_model_health.html">check_wp_model_health()</a></code>
-
-        </dt>
-        <dd>Check Win Probability Model Health</dd>
-
-        <dt>
-
-          <code><a href="get_wp_model_info.html">get_wp_model_info()</a></code>
-
-        </dt>
-        <dd>Get Win Probability Model Version Information</dd>
 
         <dt>
 
@@ -691,6 +754,43 @@
 
 
       <dl></dl></div><div class="section level2">
+      <h2 id="injuries">Injuries<a class="anchor" aria-label="anchor" href="#injuries"></a></h2>
+
+      <div class="section-desc"><p>Injury data access and matching</p></div>
+
+      <dl></dl></div><div class="section level2">
+
+
+
+
+      <dl><dt>
+
+          <code><a href="injuries.html">injuries</a></code>
+
+        </dt>
+        <dd>AFL Injury Data Functions</dd>
+
+        <dt>
+
+          <code><a href="get_all_injuries.html">get_all_injuries()</a></code>
+
+        </dt>
+        <dd>Get All Injuries (Weekly + Preseason)</dd>
+
+        <dt>
+
+          <code><a href="match_injuries.html">match_injuries()</a></code>
+
+        </dt>
+        <dd>Match Injuries to a Ratings Data Frame</dd>
+
+        <dt>
+
+          <code><a href="scrape_injuries.html">scrape_injuries()</a></code>
+
+        </dt>
+        <dd>Scrape AFL Weekly Injury List</dd>
+      </dl></div><div class="section level2">
       <h2 id="utilities">Utilities<a class="anchor" aria-label="anchor" href="#utilities"></a></h2>
 
       <div class="section-desc"><p>Helper and convenience functions</p></div>
@@ -713,13 +813,6 @@
 
         </dt>
         <dd>Get AFL Week</dd>
-
-        <dt>
-
-          <code><a href="harmonic_mean.html">harmonic_mean()</a></code>
-
-        </dt>
-        <dd>Vectorized Harmonic Mean of Two Numeric Vectors</dd>
 
         <dt>
 
@@ -776,6 +869,64 @@
 
         </dt>
         <dd>Set Local Data Directory</dd>
+
+        <dt>
+
+          <code><a href="torp_replace_teams.html">torp_replace_teams()</a></code>
+
+        </dt>
+        <dd>Standardise AFL Team Names</dd>
+
+        <dt>
+
+          <code><a href="torp_replace_venues.html">torp_replace_venues()</a></code>
+
+        </dt>
+        <dd>Standardise AFL Venue Names</dd>
+      </dl></div><div class="section level2">
+      <h2 id="afl-api">AFL API<a class="anchor" aria-label="anchor" href="#afl-api"></a></h2>
+
+      <div class="section-desc"><p>Access AFL data directly from the API</p></div>
+
+      <dl></dl></div><div class="section level2">
+
+
+
+
+      <dl><dt>
+
+          <code><a href="get_afl_fixtures.html">get_afl_fixtures()</a></code>
+
+        </dt>
+        <dd>Fetch AFL Fixtures</dd>
+
+        <dt>
+
+          <code><a href="get_afl_lineups.html">get_afl_lineups()</a></code>
+
+        </dt>
+        <dd>Fetch AFL Lineups</dd>
+
+        <dt>
+
+          <code><a href="get_afl_player_details.html">get_afl_player_details()</a></code>
+
+        </dt>
+        <dd>Fetch AFL Player Details</dd>
+
+        <dt>
+
+          <code><a href="get_afl_player_stats.html">get_afl_player_stats()</a></code>
+
+        </dt>
+        <dd>Fetch AFL Player Stats</dd>
+
+        <dt>
+
+          <code><a href="get_afl_results.html">get_afl_results()</a></code>
+
+        </dt>
+        <dd>Fetch AFL Results</dd>
       </dl></div><div class="section level2">
       <h2 id="internal-developer">Internal / Developer<a class="anchor" aria-label="anchor" href="#internal-developer"></a></h2>
 

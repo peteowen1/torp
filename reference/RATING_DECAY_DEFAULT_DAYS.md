@@ -1,6 +1,7 @@
-# Default decay factor (in days) for TORP rating historical weighting
+# Default decay factor (in days) — legacy alias for backwards compatibility
 
-Default decay factor (in days) for TORP rating historical weighting
+Default decay factor (in days) — legacy alias for backwards
+compatibility
 
 ## Usage
 

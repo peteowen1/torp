@@ -87,22 +87,16 @@ sim_result <- simulate_season(sim_teams, sim_games)
 | **[torpdata](https://github.com/peteowen1/torpdata)**     | Processed AFL data via GitHub releases (parquet) | [GitHub](https://github.com/peteowen1/torpdata)   |
 | **[torpmodels](https://github.com/peteowen1/torpmodels)** | Pre-trained models via GitHub releases (RDS)     | [GitHub](https://github.com/peteowen1/torpmodels) |
 
-Data flows from the AFL API (via
-[fitzRoy](https://jimmyday12.github.io/fitzRoy/)) through torp’s
-cleaning pipeline into torpdata, with models stored in torpmodels.
+Data flows from the AFL API (via torp’s `get_afl_*()` functions) through
+torp’s cleaning pipeline into torpdata, with models stored in
+torpmodels.
 
 ## Learn More
 
 - [`vignette("getting-started")`](https://peteowen1.github.io/torp/articles/getting-started.md)
   – Installation and data loading
-- [`vignette("player-ratings")`](https://peteowen1.github.io/torp/articles/player-ratings.md)
-  – TORP rating methodology
-- [`vignette("model-usage")`](https://peteowen1.github.io/torp/articles/model-usage.md)
-  – EP, WP, and shot models
-- [`vignette("data-architecture")`](https://peteowen1.github.io/torp/articles/data-architecture.md)
-  – Data pipeline and caching
-- [`vignette("season-simulation")`](https://peteowen1.github.io/torp/articles/season-simulation.md)
-  – Simulating AFL seasons
+- [`vignette("torp-guide")`](https://peteowen1.github.io/torp/articles/torp-guide.md)
+  – Ratings, models, data architecture, and simulation
 
 ## License
 

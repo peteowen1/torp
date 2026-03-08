@@ -6,7 +6,7 @@ optimized data.table implementation internally.
 ## Usage
 
 ``` r
-process_games(sim_teams, sim_games, round_num)
+process_games(sim_teams, sim_games, round_num, injury_sd = SIM_INJURY_SD)
 ```
 
 ## Arguments

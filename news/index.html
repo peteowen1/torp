@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">torp</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.0.0.9002</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.0.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -33,20 +33,21 @@
 <div class="row">
   <main id="main" class="col-md-9"><div class="page-header">
       <img src="../logo.png" class="logo" alt=""><h1>Changelog</h1>
-      <small>Source: <a href="https://github.com/peteowen1/torp/blob/main/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
+      <small>Source: <a href="https://github.com/peteowen1/torp/blob/dev/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
     <div class="section level2">
-<h2 class="pkg-version" data-toc-text="0.0.0.9003" id="torp-0009003-development">torp 0.0.0.9003 (development)<a class="anchor" aria-label="anchor" href="#torp-0009003-development"></a></h2>
+<h2 class="pkg-version" data-toc-text="1.0.0" id="torp-100-2026-03-05">torp 1.0.0 (2026-03-05)<a class="anchor" aria-label="anchor" href="#torp-100-2026-03-05"></a></h2>
 <div class="section level3">
-<h3 id="breaking-changes-0-0-0-9003">Breaking Changes<a class="anchor" aria-label="anchor" href="#breaking-changes-0-0-0-9003"></a></h3>
+<h3 id="breaking-changes-1-0-0">Breaking Changes<a class="anchor" aria-label="anchor" href="#breaking-changes-1-0-0"></a></h3>
 <ul><li><p><code><a href="../reference/load_pbp.html">load_pbp()</a></code> and <code><a href="../reference/load_chains.html">load_chains()</a></code> now default <code>rounds = TRUE</code> (all rounds) instead of the current week. Callers that relied on getting only the latest round without specifying <code>rounds</code> will now receive the full season. Use <code>rounds = get_afl_week()</code> to restore the old behaviour.</p></li>
 <li><p><code><a href="../reference/load_from_url.html">load_from_url()</a></code> now defaults <code>use_disk_cache = FALSE</code> (previously <code>TRUE</code>). Pass <code>use_disk_cache = TRUE</code> explicitly if you want persistent disk caching.</p></li>
 <li><p><code>load_fixtures(all = TRUE)</code> now starts from 2021 (previously 2018). Seasons before 2021 are outside <code><a href="../reference/validate_seasons.html">validate_seasons()</a></code> range and were producing errors.</p></li>
 <li><p><code>check_internet_connection()</code> has been removed. Use <code><a href="https://jeroen.r-universe.dev/curl/reference/nslookup.html" class="external-link">curl::has_internet()</a></code> directly.</p></li>
+<li><p>Unexported internal-use functions: <code><a href="../reference/get_wp_model_info.html">get_wp_model_info()</a></code>, <code><a href="../reference/check_wp_model_health.html">check_wp_model_health()</a></code>, <code><a href="../reference/harmonic_mean.html">harmonic_mean()</a></code>, <code><a href="../reference/norm_name.html">norm_name()</a></code>. These remain accessible via <code>torp:::</code>.</p></li>
 </ul></div>
 <div class="section level3">
-<h3 id="new-features-0-0-0-9003">New Features<a class="anchor" aria-label="anchor" href="#new-features-0-0-0-9003"></a></h3>
+<h3 id="new-features-1-0-0">New Features<a class="anchor" aria-label="anchor" href="#new-features-1-0-0"></a></h3>
 <ul><li><p><strong>Local-first data loading</strong>: All <code>load_*()</code> functions now check <code>torpdata/data/</code> first, then disk cache, then download. Downloaded files are auto-saved locally.</p></li>
 <li><p><code><a href="../reference/download_torp_data.html">download_torp_data()</a></code> for bulk-downloading parquet files for offline access.</p></li>
 <li><p><strong>Parallel downloads</strong>: Multi-URL loads use <code><a href="https://jeroen.r-universe.dev/curl/reference/multi_download.html" class="external-link">curl::multi_download()</a></code> for faster batch fetching.</p></li>
@@ -54,9 +55,19 @@
 <li><p><strong>Column selection</strong>: All <code>load_*()</code> functions accept a <code>columns</code> parameter to read only specific columns.</p></li>
 <li><p>New load functions: <code><a href="../reference/load_ep_wp_charts.html">load_ep_wp_charts()</a></code>, <code><a href="../reference/load_player_game_ratings.html">load_player_game_ratings()</a></code>, <code><a href="../reference/load_player_season_ratings.html">load_player_season_ratings()</a></code>, <code><a href="../reference/load_team_ratings.html">load_team_ratings()</a></code>.</p></li>
 <li><p><code>CREDIT_POS_ADJ_QUANTILE</code> split into 4 per-dimension constants: <code>CREDIT_POS_ADJ_QUANTILE_RECV</code>, <code>_DISP</code>, <code>_SPOIL</code>, <code>_HITOUT</code>.</p></li>
+<li>
+<p>Added <code>R/constants.R</code> with centralized AFL and model constants:</p>
+<ul><li>
+<code>AFL_GOAL_WIDTH</code>, <code>AFL_QUARTER_DURATION</code>, <code>AFL_TOTAL_GAME_SECONDS</code>
+</li>
+<li>
+<code>RATING_DECAY_DEFAULT_DAYS</code>, <code>SIM_NOISE_SD</code>, <code>SIM_WP_SCALING_FACTOR</code>
+</li>
+</ul></li>
+<li><p>Placeholder dashboard functions (<code>create_monitoring_dashboard_data()</code>, <code>get_model_health_status()</code>) now return informative empty structures instead of fake data.</p></li>
 </ul></div>
 <div class="section level3">
-<h3 id="bug-fixes-0-0-0-9003">Bug Fixes<a class="anchor" aria-label="anchor" href="#bug-fixes-0-0-0-9003"></a></h3>
+<h3 id="bug-fixes-1-0-0">Bug Fixes<a class="anchor" aria-label="anchor" href="#bug-fixes-1-0-0"></a></h3>
 <ul><li><p><code><a href="../reference/parquet_from_urls_parallel.html">parquet_from_urls_parallel()</a></code> now warns instead of silently dropping data when column selection finds no matching columns.</p></li>
 <li><p><code><a href="../reference/parquet_from_urls_parallel.html">parquet_from_urls_parallel()</a></code> now errors (instead of just warning) when downloads completely fail and no local data is available.</p></li>
 <li><p><code><a href="../reference/mark_download_skippable.html">mark_download_skippable()</a></code> now logs write errors instead of silently swallowing them.</p></li>
@@ -64,40 +75,31 @@
 <li><p><code><a href="../reference/load_torp_ratings.html">load_torp_ratings()</a></code> and <code><a href="../reference/load_team_ratings.html">load_team_ratings()</a></code> now warn when returning empty data.</p></li>
 <li><p><code><a href="../reference/load_from_url.html">load_from_url()</a></code> now warns when round filtering is requested but no round column exists in the data.</p></li>
 <li><p>Integration test data loading is now guarded against CRAN environments.</p></li>
+<li><p>Fixed double fixture load in <code><a href="../reference/get_afl_week.html">get_afl_week()</a></code> - now loads fixtures once and filters twice.</p></li>
 </ul></div>
 <div class="section level3">
-<h3 id="optimized-parameters-0-0-0-9003">Optimized Parameters<a class="anchor" aria-label="anchor" href="#optimized-parameters-0-0-0-9003"></a></h3>
-<ul><li><p>Re-optimized rating constants: <code>RATING_DECAY_DEFAULT_DAYS</code> (486→511), <code>RATING_PRIOR_GAMES_RECV</code> (5.87→6.19), <code>RATING_PRIOR_GAMES_DISP</code> (7.14→7.11), <code>RATING_PRIOR_GAMES_HITOUT</code> (3→4.44).</p></li>
+<h3 id="optimized-parameters-1-0-0">Optimized Parameters<a class="anchor" aria-label="anchor" href="#optimized-parameters-1-0-0"></a></h3>
+<ul><li><p>Re-optimized rating constants with per-component decay: <code>RATING_DECAY_RECV</code> (260), <code>RATING_DECAY_DISP</code> (700), <code>RATING_DECAY_SPOIL</code> (295), <code>RATING_DECAY_HITOUT</code> (700). Prior games: <code>RATING_PRIOR_GAMES_RECV</code> (12.56), <code>RATING_PRIOR_GAMES_DISP</code> (5.83), <code>RATING_PRIOR_GAMES_SPOIL</code> (3.00), <code>RATING_PRIOR_GAMES_HITOUT</code> (15.00).</p></li>
 <li><p>Re-optimized credit assignment constants for disposal, reception, and position adjustment.</p></li>
-</ul><hr></div>
-</div>
-    <div class="section level2">
-<h2 class="pkg-version" data-toc-text="0.0.0.9002" id="torp-0009002-development">torp 0.0.0.9002 (development)<a class="anchor" aria-label="anchor" href="#torp-0009002-development"></a></h2>
+</ul></div>
 <div class="section level3">
-<h3 id="code-quality-0-0-0-9002">Code Quality<a class="anchor" aria-label="anchor" href="#code-quality-0-0-0-9002"></a></h3>
+<h3 id="code-quality-1-0-0">Code Quality<a class="anchor" aria-label="anchor" href="#code-quality-1-0-0"></a></h3>
 <ul><li><p>Merged <code>logging_monitoring.R</code> and <code>safe_logging.R</code> into a single <code>logging.R</code> file for better organization.</p></li>
 <li><p>Fixed global state issues by replacing <code>&lt;&lt;-</code> operator with package-level environment for logging state.</p></li>
 <li><p>Improved AUC calculation efficiency using Mann-Whitney U-statistic (O(n log n) instead of O(n^2)).</p></li>
 <li><p>Fixed inefficient <code><a href="https://rdrr.io/r/base/cbind.html" class="external-link">rbind()</a></code> patterns in <code><a href="../reference/compare_baseline_models.html">compare_baseline_models()</a></code> and <code><a href="../reference/evaluate_baseline_models.html">evaluate_baseline_models()</a></code> by using pre-allocated lists with <code><a href="https://dplyr.tidyverse.org/reference/bind_rows.html" class="external-link">dplyr::bind_rows()</a></code>.</p></li>
-<li><p>Fixed double fixture load in <code><a href="../reference/get_afl_week.html">get_afl_week()</a></code> - now loads fixtures once and filters twice.</p></li>
-<li><p>Fixed <code><a href="https://dplyr.tidyverse.org/reference/mutate_all.html" class="external-link">mutate_all()</a></code> performance issue in data validation using <code><a href="https://rdrr.io/r/base/lapply.html" class="external-link">lapply()</a></code> for column-wise operations.</p></li>
+<li><p>Fixed <code>mutate_all()</code> performance issue in data validation using <code><a href="https://rdrr.io/r/base/lapply.html" class="external-link">lapply()</a></code> for column-wise operations.</p></li>
 <li><p>Removed unused <code>match_id</code> parameter from <code><a href="../reference/calculate_match_xgs.html">match_xgs()</a></code> function.</p></li>
+<li><p>Replaced deprecated <code><a href="https://dplyr.tidyverse.org/reference/group_by_all.html" class="external-link">dplyr::group_by_all()</a></code> with <code>dplyr::group_by(dplyr::across(dplyr::everything()))</code>.</p></li>
 </ul></div>
 <div class="section level3">
-<h3 id="new-features-0-0-0-9002">New Features<a class="anchor" aria-label="anchor" href="#new-features-0-0-0-9002"></a></h3>
-<ul><li><p>Added <code>R/constants.R</code> with centralized AFL and model constants:</p></li>
-<li><p><code>AFL_GOAL_WIDTH</code>, <code>AFL_QUARTER_DURATION</code>, <code>AFL_TOTAL_GAME_SECONDS</code></p></li>
-<li><p><code>RATING_DECAY_DEFAULT_DAYS</code>, <code>SIM_NOISE_SD</code>, <code>SIM_WP_SCALING_FACTOR</code></p></li>
-<li><p>Placeholder dashboard functions (<code>create_monitoring_dashboard_data()</code>, <code>get_model_health_status()</code>) now return informative empty structures instead of fake data.</p></li>
+<h3 id="documentation-1-0-0">Documentation<a class="anchor" aria-label="anchor" href="#documentation-1-0-0"></a></h3>
+<ul><li><p>Added two vignettes: Getting Started and torp Reference Guide (consolidating ratings, models, data architecture, and simulation).</p></li>
+<li><p>Added pkgdown site configuration with comprehensive reference sections.</p></li>
+<li><p>Improved README with lifecycle badge, ecosystem table, and torpmodels install instructions.</p></li>
 </ul></div>
 <div class="section level3">
-<h3 id="documentation-0-0-0-9002">Documentation<a class="anchor" aria-label="anchor" href="#documentation-0-0-0-9002"></a></h3>
-<ul><li>Added five vignettes: Getting Started, Player Ratings, Model Usage, Data Architecture, and Season Simulation.</li>
-<li>Added pkgdown site configuration with comprehensive reference sections.</li>
-<li>Improved README with lifecycle badge, ecosystem table, and torpmodels install instructions.</li>
-</ul></div>
-<div class="section level3">
-<h3 id="internal-changes-0-0-0-9002">Internal Changes<a class="anchor" aria-label="anchor" href="#internal-changes-0-0-0-9002"></a></h3>
+<h3 id="internal-changes-1-0-0">Internal Changes<a class="anchor" aria-label="anchor" href="#internal-changes-1-0-0"></a></h3>
 <ul><li>
 <p>Reduced exported functions - internalized helper functions:</p>
 <ul><li>
@@ -106,13 +108,17 @@
 <code><a href="../reference/predict_wp_naive.html">predict_wp_naive()</a></code>, <code><a href="../reference/predict_wp_time_only.html">predict_wp_time_only()</a></code> (baseline model internals)</li>
 <li>
 <code><a href="../reference/log_prediction_event.html">log_prediction_event()</a></code>, <code><a href="../reference/log_data_quality.html">log_data_quality()</a></code> (internal logging helpers)</li>
+<li>
+<code><a href="../reference/get_wp_model_info.html">get_wp_model_info()</a></code>, <code><a href="../reference/check_wp_model_health.html">check_wp_model_health()</a></code> (model diagnostics)</li>
+<li>
+<code><a href="../reference/harmonic_mean.html">harmonic_mean()</a></code>, <code><a href="../reference/norm_name.html">norm_name()</a></code> (utility helpers)</li>
 </ul></li>
 <li><p>Moved manual test scripts to <code>tests/manual/</code> directory.</p></li>
 <li><p>Archived legacy data-raw scripts to <code>inst/extdata/archive/scripts/</code>.</p></li>
 <li><p>Enhanced test helper functions with additional mock data creators.</p></li>
 </ul></div>
 <div class="section level3">
-<h3 id="test-coverage-0-0-0-9002">Test Coverage<a class="anchor" aria-label="anchor" href="#test-coverage-0-0-0-9002"></a></h3>
+<h3 id="test-coverage-1-0-0">Test Coverage<a class="anchor" aria-label="anchor" href="#test-coverage-1-0-0"></a></h3>
 <ul><li>Added tests for <code>helper_functions.R</code> internal functions.</li>
 <li>Added tests for <code>match_xg_functions.R</code> function signatures.</li>
 <li>Added tests for <code>sim-helpers.R</code> simulation functions.</li>

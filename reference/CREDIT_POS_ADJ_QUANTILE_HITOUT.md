@@ -1,6 +1,6 @@
-# Position adjustment quantile for hitout
+# Position-group quantile adjustment for hitout component
 
-Position adjustment quantile for hitout
+Position-group quantile adjustment for hitout component
 
 ## Usage
 

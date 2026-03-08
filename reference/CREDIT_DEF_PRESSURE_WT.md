@@ -1,6 +1,6 @@
-# Defensive half pressure act weight (subtracted)
+# Defensive half pressure act weight (spoil component)
 
-Defensive half pressure act weight (subtracted)
+Defensive half pressure act weight (spoil component)
 
 ## Usage
 

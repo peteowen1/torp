@@ -13,7 +13,7 @@ available from load_pbp()."><meta property="og:image" content="https://peteowen1
 
     <a class="navbar-brand me-2" href="../index.html">torp</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.0.0.9002</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.0.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -39,7 +39,7 @@ available from load_pbp()."><meta property="og:image" content="https://peteowen1
 <div class="row">
   <main id="main" class="col-md-9"><div class="page-header">
       <img src="../logo.png" class="logo" alt=""><h1>Load EP/WP Chart Data</h1>
-      <small class="dont-index">Source: <a href="https://github.com/peteowen1/torp/blob/main/R/load_data.R" class="external-link"><code>R/load_data.R</code></a></small>
+      <small class="dont-index">Source: <a href="https://github.com/peteowen1/torp/blob/dev/R/load_data.R" class="external-link"><code>R/load_data.R</code></a></small>
       <div class="d-none name"><code>load_ep_wp_charts.Rd</code></div>
     </div>
 
@@ -100,31 +100,11 @@ faster repeated loads. Default is <code>FALSE</code>.</p></dd>
 
     <div class="section level2">
     <h2 id="ref-examples">Examples<a class="anchor" aria-label="anchor" href="#ref-examples"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="co"># \donttest{</span></span></span>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="kw">if</span> <span class="op">(</span><span class="cn">FALSE</span><span class="op">)</span> <span class="op">{</span> <span class="co"># \dontrun{</span></span></span>
 <span class="r-in"><span><span class="kw"><a href="https://rdrr.io/r/base/try.html" class="external-link">try</a></span><span class="op">(</span><span class="op">{</span> <span class="co"># prevents cran errors</span></span></span>
 <span class="r-in"><span>  <span class="fu">load_ep_wp_charts</span><span class="op">(</span><span class="fl">2024</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="op">}</span><span class="op">)</span></span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;"># A tibble: 324,958 × 25</span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>    match_id        season round_number period period_seconds total_seconds</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>            <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span>        <span style="color: #949494; font-style: italic;">&lt;int&gt;</span>  <span style="color: #949494; font-style: italic;">&lt;int&gt;</span>          <span style="color: #949494; font-style: italic;">&lt;int&gt;</span>         <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;"> 1</span> CD_M20240140001   <span style="text-decoration: underline;">2</span>024            0      1              0             0</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;"> 2</span> CD_M20240140002   <span style="text-decoration: underline;">2</span>024            0      1              0             0</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;"> 3</span> CD_M20240140004   <span style="text-decoration: underline;">2</span>024            0      1              0             0</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;"> 4</span> CD_M20240140102   <span style="text-decoration: underline;">2</span>024            1      1              0             0</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;"> 5</span> CD_M20240140103   <span style="text-decoration: underline;">2</span>024            1      1              0             0</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;"> 6</span> CD_M20240140106   <span style="text-decoration: underline;">2</span>024            1      1              0             0</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;"> 7</span> CD_M20240140107   <span style="text-decoration: underline;">2</span>024            1      1              0             0</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;"> 8</span> CD_M20240140108   <span style="text-decoration: underline;">2</span>024            1      1              0             0</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;"> 9</span> CD_M20240140201   <span style="text-decoration: underline;">2</span>024            2      1              0             0</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">10</span> CD_M20240140202   <span style="text-decoration: underline;">2</span>024            2      1              0             0</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;"># ℹ 324,948 more rows</span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;"># ℹ 19 more variables: display_order &lt;int&gt;, home_team_team_name &lt;chr&gt;,</span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;">#   away_team_team_name &lt;chr&gt;, team &lt;chr&gt;, home &lt;dbl&gt;, pos_team_points &lt;int&gt;,</span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;">#   opp_team_points &lt;int&gt;, points_diff &lt;int&gt;, home_points &lt;int&gt;,</span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;">#   away_points &lt;int&gt;, exp_pts &lt;dbl&gt;, delta_epv &lt;dbl&gt;, wp &lt;dbl&gt;, wpa &lt;dbl&gt;,</span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;">#   description &lt;chr&gt;, player_name &lt;chr&gt;, play_type &lt;fct&gt;, shot_row &lt;int&gt;,</span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;">#   points_shot &lt;dbl&gt;</span></span>
-<span class="r-in"><span><span class="co"># }</span></span></span>
+<span class="r-in"><span><span class="op">}</span> <span class="co"># }</span></span></span>
 </code></pre></div>
     </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>

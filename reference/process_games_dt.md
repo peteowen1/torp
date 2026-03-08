@@ -5,7 +5,7 @@ Internal data.table implementation for processing games.
 ## Usage
 
 ``` r
-process_games_dt(sim_teams, sim_games, round_num)
+process_games_dt(sim_teams, sim_games, round_num, injury_sd = SIM_INJURY_SD)
 ```
 
 ## Arguments

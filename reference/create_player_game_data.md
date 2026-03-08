@@ -57,5 +57,4 @@ credits (`tot_p_adj`, `recv_pts_adj`, `disp_pts_adj`, `spoil_pts_adj`,
 ## Details
 
 Computes disposal points, reception points, spoil/tackle points, and
-hitout points for each player-game combination. Adjusts each component
-by subtracting a position-group quantile.
+hitout points for each player-game combination.

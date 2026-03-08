@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">torp</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.0.0.9002</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.0.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -33,7 +33,7 @@
 <div class="row">
   <main id="main" class="col-md-9"><div class="page-header">
       <img src="../logo.png" class="logo" alt=""><h1>Calculate player statistics</h1>
-      <small class="dont-index">Source: <a href="https://github.com/peteowen1/torp/blob/main/R/player_ratings.R" class="external-link"><code>R/player_ratings.R</code></a></small>
+      <small class="dont-index">Source: <a href="https://github.com/peteowen1/torp/blob/dev/R/player_ratings.R" class="external-link"><code>R/player_ratings.R</code></a></small>
       <div class="d-none name"><code>calculate_player_stats.Rd</code></div>
     </div>
 
@@ -47,12 +47,19 @@
 <span>  player_game_data <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  <span class="va">match_ref</span>,</span>
 <span>  <span class="va">date_val</span>,</span>
-<span>  <span class="va">decay</span>,</span>
-<span>  <span class="va">loading</span>,</span>
-<span>  <span class="va">prior_games_recv</span>,</span>
-<span>  <span class="va">prior_games_disp</span>,</span>
+<span>  decay_recv <span class="op">=</span> <span class="va">RATING_DECAY_RECV</span>,</span>
+<span>  decay_disp <span class="op">=</span> <span class="va">RATING_DECAY_DISP</span>,</span>
+<span>  decay_spoil <span class="op">=</span> <span class="va">RATING_DECAY_SPOIL</span>,</span>
+<span>  decay_hitout <span class="op">=</span> <span class="va">RATING_DECAY_HITOUT</span>,</span>
+<span>  loading <span class="op">=</span> <span class="va">RATING_LOADING_DEFAULT</span>,</span>
+<span>  prior_games_recv <span class="op">=</span> <span class="va">RATING_PRIOR_GAMES_RECV</span>,</span>
+<span>  prior_games_disp <span class="op">=</span> <span class="va">RATING_PRIOR_GAMES_DISP</span>,</span>
 <span>  prior_games_spoil <span class="op">=</span> <span class="va">RATING_PRIOR_GAMES_SPOIL</span>,</span>
-<span>  prior_games_hitout <span class="op">=</span> <span class="va">RATING_PRIOR_GAMES_HITOUT</span></span>
+<span>  prior_games_hitout <span class="op">=</span> <span class="va">RATING_PRIOR_GAMES_HITOUT</span>,</span>
+<span>  prior_rate_recv <span class="op">=</span> <span class="va">RATING_PRIOR_RATE_RECV</span>,</span>
+<span>  prior_rate_disp <span class="op">=</span> <span class="va">RATING_PRIOR_RATE_DISP</span>,</span>
+<span>  prior_rate_spoil <span class="op">=</span> <span class="va">RATING_PRIOR_RATE_SPOIL</span>,</span>
+<span>  prior_rate_hitout <span class="op">=</span> <span class="va">RATING_PRIOR_RATE_HITOUT</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -72,8 +79,20 @@
 <dd><p>Date value</p></dd>
 
 
-<dt id="arg-decay">decay<a class="anchor" aria-label="anchor" href="#arg-decay"></a></dt>
-<dd><p>Decay factor</p></dd>
+<dt id="arg-decay-recv">decay_recv<a class="anchor" aria-label="anchor" href="#arg-decay-recv"></a></dt>
+<dd><p>Decay factor (days) for receiving component</p></dd>
+
+
+<dt id="arg-decay-disp">decay_disp<a class="anchor" aria-label="anchor" href="#arg-decay-disp"></a></dt>
+<dd><p>Decay factor (days) for disposal component</p></dd>
+
+
+<dt id="arg-decay-spoil">decay_spoil<a class="anchor" aria-label="anchor" href="#arg-decay-spoil"></a></dt>
+<dd><p>Decay factor (days) for spoil component</p></dd>
+
+
+<dt id="arg-decay-hitout">decay_hitout<a class="anchor" aria-label="anchor" href="#arg-decay-hitout"></a></dt>
+<dd><p>Decay factor (days) for hitout component</p></dd>
 
 
 <dt id="arg-loading">loading<a class="anchor" aria-label="anchor" href="#arg-loading"></a></dt>
@@ -94,6 +113,22 @@
 
 <dt id="arg-prior-games-hitout">prior_games_hitout<a class="anchor" aria-label="anchor" href="#arg-prior-games-hitout"></a></dt>
 <dd><p>Prior games for hitout shrinkage. Default is <code>RATING_PRIOR_GAMES_HITOUT</code>.</p></dd>
+
+
+<dt id="arg-prior-rate-recv">prior_rate_recv<a class="anchor" aria-label="anchor" href="#arg-prior-rate-recv"></a></dt>
+<dd><p>Prior rate for receiving shrinkage target. Default is <code>RATING_PRIOR_RATE_RECV</code>.</p></dd>
+
+
+<dt id="arg-prior-rate-disp">prior_rate_disp<a class="anchor" aria-label="anchor" href="#arg-prior-rate-disp"></a></dt>
+<dd><p>Prior rate for disposal shrinkage target. Default is <code>RATING_PRIOR_RATE_DISP</code>.</p></dd>
+
+
+<dt id="arg-prior-rate-spoil">prior_rate_spoil<a class="anchor" aria-label="anchor" href="#arg-prior-rate-spoil"></a></dt>
+<dd><p>Prior rate for spoil shrinkage target. Default is <code>RATING_PRIOR_RATE_SPOIL</code>.</p></dd>
+
+
+<dt id="arg-prior-rate-hitout">prior_rate_hitout<a class="anchor" aria-label="anchor" href="#arg-prior-rate-hitout"></a></dt>
+<dd><p>Prior rate for hitout shrinkage target. Default is <code>RATING_PRIOR_RATE_HITOUT</code>.</p></dd>
 
 </dl></div>
     <div class="section level2">

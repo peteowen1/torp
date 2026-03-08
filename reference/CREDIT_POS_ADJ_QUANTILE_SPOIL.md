@@ -1,6 +1,6 @@
-# Position adjustment quantile for spoil/tackle
+# Position-group quantile adjustment for spoil component
 
-Position adjustment quantile for spoil/tackle
+Position-group quantile adjustment for spoil component
 
 ## Usage
 

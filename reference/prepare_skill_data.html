@@ -9,7 +9,7 @@ all required columns for the skill estimation pipeline."><meta property="og:imag
 
     <a class="navbar-brand me-2" href="../index.html">torp</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.0.0.9002</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.0.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -35,7 +35,7 @@ all required columns for the skill estimation pipeline."><meta property="og:imag
 <div class="row">
   <main id="main" class="col-md-9"><div class="page-header">
       <img src="../logo.png" class="logo" alt=""><h1>Prepare data for skill estimation</h1>
-      <small class="dont-index">Source: <a href="https://github.com/peteowen1/torp/blob/main/R/player_skills.R" class="external-link"><code>R/player_skills.R</code></a></small>
+      <small class="dont-index">Source: <a href="https://github.com/peteowen1/torp/blob/dev/R/player_skills.R" class="external-link"><code>R/player_skills.R</code></a></small>
       <div class="d-none name"><code>prepare_skill_data.Rd</code></div>
     </div>
 
@@ -46,7 +46,12 @@ all required columns for the skill estimation pipeline.</p>
 
     <div class="section level2">
     <h2 id="ref-usage">Usage<a class="anchor" aria-label="anchor" href="#ref-usage"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">prepare_skill_data</span><span class="op">(</span><span class="va">player_game_data</span>, <span class="va">player_stats</span><span class="op">)</span></span></code></pre></div>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">prepare_skill_data</span><span class="op">(</span></span>
+<span>  <span class="va">player_game_data</span>,</span>
+<span>  <span class="va">player_stats</span>,</span>
+<span>  rosters <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  fixtures <span class="op">=</span> <span class="cn">NULL</span></span>
+<span><span class="op">)</span></span></code></pre></div>
     </div>
 
     <div class="section level2">
@@ -59,6 +64,14 @@ all required columns for the skill estimation pipeline.</p>
 
 <dt id="arg-player-stats">player_stats<a class="anchor" aria-label="anchor" href="#arg-player-stats"></a></dt>
 <dd><p>Player stats from <code>load_player_stats(TRUE)</code>.</p></dd>
+
+
+<dt id="arg-rosters">rosters<a class="anchor" aria-label="anchor" href="#arg-rosters"></a></dt>
+<dd><p>Optional roster data. If NULL, loads from torpdata.</p></dd>
+
+
+<dt id="arg-fixtures">fixtures<a class="anchor" aria-label="anchor" href="#arg-fixtures"></a></dt>
+<dd><p>Optional fixture data. If NULL, loads from torpdata.</p></dd>
 
 </dl></div>
     <div class="section level2">

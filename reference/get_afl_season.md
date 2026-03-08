@@ -15,12 +15,14 @@ get_afl_season(type = "current")
 
 - type:
 
-  A character string: "current" returns the current season, "next"
-  returns the upcoming season.
+  A character string or logical: "current" (default) returns the current
+  season year, "next" returns the upcoming season, and `TRUE` returns
+  all seasons (2021 to current year), consistent with `load_*()`
+  functions.
 
 ## Value
 
-An integer representing the AFL season year.
+An integer vector of AFL season year(s).
 
 ## Examples
 
@@ -32,4 +34,8 @@ get_afl_season("current")
 # Get the next AFL season
 get_afl_season("next")
 #> [1] 2027
+
+# Get all available seasons
+get_afl_season(TRUE)
+#> [1] 2021 2022 2023 2024 2025 2026
 ```

@@ -1,6 +1,6 @@
-# Position adjustment quantile for disposal
+# Position-group quantile adjustment for disposal component
 
-Position adjustment quantile for disposal
+Position-group quantile adjustment for disposal component
 
 ## Usage
 

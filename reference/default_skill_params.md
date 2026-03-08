@@ -1,8 +1,10 @@
 # Default hyperparameters for skill estimation
 
-Returns sensible defaults for the Bayesian skill estimation pipeline.
-These can be overridden by optimized values from
-`data-raw/06-skills/02_optimize_params.R`.
+Returns optimized defaults for the Bayesian skill estimation pipeline.
+Per-category lambda and prior values come from
+`data-raw/06-skills/02_optimize_skill_params.R`. The global
+`lambda_rate` and `prior_games` are used as fallbacks for any category
+not in `category_params`.
 
 ## Usage
 
@@ -16,17 +18,15 @@ A named list with elements:
 
 - lambda_rate:
 
-  Exponential decay rate for rate stats (per day). Default 0.0019 gives
-  about 365-day half-life.
+  Fallback decay rate for rate stats (per day).
 
 - lambda_efficiency:
 
-  Decay rate for efficiency stats. Default 0.0013 gives about 533-day
-  half-life.
+  Decay rate for efficiency stats (per day).
 
 - prior_games:
 
-  Prior pseudo-games for Gamma-Poisson rate stats.
+  Fallback prior pseudo-games for Gamma-Poisson rate stats.
 
 - prior_attempts:
 
@@ -39,3 +39,7 @@ A named list with elements:
 - credible_level:
 
   Width of credible interval (e.g. 0.80 for 80 pct).
+
+- category_params:
+
+  Per-category lambda and prior_strength overrides.

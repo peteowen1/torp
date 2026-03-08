@@ -1,6 +1,6 @@
 # Changelog
 
-## torp 0.0.0.9003 (development)
+## torp 1.0.0 (2026-03-05)
 
 ### Breaking Changes
 
@@ -25,6 +25,13 @@
 - `check_internet_connection()` has been removed. Use
   [`curl::has_internet()`](https://jeroen.r-universe.dev/curl/reference/nslookup.html)
   directly.
+
+- Unexported internal-use functions:
+  [`get_wp_model_info()`](https://peteowen1.github.io/torp/reference/get_wp_model_info.md),
+  [`check_wp_model_health()`](https://peteowen1.github.io/torp/reference/check_wp_model_health.md),
+  [`harmonic_mean()`](https://peteowen1.github.io/torp/reference/harmonic_mean.md),
+  [`norm_name()`](https://peteowen1.github.io/torp/reference/norm_name.md).
+  These remain accessible via `torp:::`.
 
 ### New Features
 
@@ -56,6 +63,15 @@
 - `CREDIT_POS_ADJ_QUANTILE` split into 4 per-dimension constants:
   `CREDIT_POS_ADJ_QUANTILE_RECV`, `_DISP`, `_SPOIL`, `_HITOUT`.
 
+- Added `R/constants.R` with centralized AFL and model constants:
+
+  - `AFL_GOAL_WIDTH`, `AFL_QUARTER_DURATION`, `AFL_TOTAL_GAME_SECONDS`
+  - `RATING_DECAY_DEFAULT_DAYS`, `SIM_NOISE_SD`, `SIM_WP_SCALING_FACTOR`
+
+- Placeholder dashboard functions (`create_monitoring_dashboard_data()`,
+  `get_model_health_status()`) now return informative empty structures
+  instead of fake data.
+
 ### Bug Fixes
 
 - [`parquet_from_urls_parallel()`](https://peteowen1.github.io/torp/reference/parquet_from_urls_parallel.md)
@@ -85,18 +101,21 @@
 - Integration test data loading is now guarded against CRAN
   environments.
 
+- Fixed double fixture load in
+  [`get_afl_week()`](https://peteowen1.github.io/torp/reference/get_afl_week.md) -
+  now loads fixtures once and filters twice.
+
 ### Optimized Parameters
 
-- Re-optimized rating constants: `RATING_DECAY_DEFAULT_DAYS` (486→511),
-  `RATING_PRIOR_GAMES_RECV` (5.87→6.19), `RATING_PRIOR_GAMES_DISP`
-  (7.14→7.11), `RATING_PRIOR_GAMES_HITOUT` (3→4.44).
+- Re-optimized rating constants with per-component decay:
+  `RATING_DECAY_RECV` (260), `RATING_DECAY_DISP` (700),
+  `RATING_DECAY_SPOIL` (295), `RATING_DECAY_HITOUT` (700). Prior games:
+  `RATING_PRIOR_GAMES_RECV` (12.56), `RATING_PRIOR_GAMES_DISP` (5.83),
+  `RATING_PRIOR_GAMES_SPOIL` (3.00), `RATING_PRIOR_GAMES_HITOUT`
+  (15.00).
 
 - Re-optimized credit assignment constants for disposal, reception, and
   position adjustment.
-
-------------------------------------------------------------------------
-
-## torp 0.0.0.9002 (development)
 
 ### Code Quality
 
@@ -117,13 +136,7 @@
   by using pre-allocated lists with
   [`dplyr::bind_rows()`](https://dplyr.tidyverse.org/reference/bind_rows.html).
 
-- Fixed double fixture load in
-  [`get_afl_week()`](https://peteowen1.github.io/torp/reference/get_afl_week.md) -
-  now loads fixtures once and filters twice.
-
-- Fixed
-  [`mutate_all()`](https://dplyr.tidyverse.org/reference/mutate_all.html)
-  performance issue in data validation using
+- Fixed `mutate_all()` performance issue in data validation using
   [`lapply()`](https://rdrr.io/r/base/lapply.html) for column-wise
   operations.
 
@@ -131,24 +144,18 @@
   [`match_xgs()`](https://peteowen1.github.io/torp/reference/calculate_match_xgs.md)
   function.
 
-### New Features
-
-- Added `R/constants.R` with centralized AFL and model constants:
-
-- `AFL_GOAL_WIDTH`, `AFL_QUARTER_DURATION`, `AFL_TOTAL_GAME_SECONDS`
-
-- `RATING_DECAY_DEFAULT_DAYS`, `SIM_NOISE_SD`, `SIM_WP_SCALING_FACTOR`
-
-- Placeholder dashboard functions (`create_monitoring_dashboard_data()`,
-  `get_model_health_status()`) now return informative empty structures
-  instead of fake data.
+- Replaced deprecated
+  [`dplyr::group_by_all()`](https://dplyr.tidyverse.org/reference/group_by_all.html)
+  with `dplyr::group_by(dplyr::across(dplyr::everything()))`.
 
 ### Documentation
 
-- Added five vignettes: Getting Started, Player Ratings, Model Usage,
-  Data Architecture, and Season Simulation.
+- Added two vignettes: Getting Started and torp Reference Guide
+  (consolidating ratings, models, data architecture, and simulation).
+
 - Added pkgdown site configuration with comprehensive reference
   sections.
+
 - Improved README with lifecycle badge, ecosystem table, and torpmodels
   install instructions.
 
@@ -165,6 +172,12 @@
   - [`log_prediction_event()`](https://peteowen1.github.io/torp/reference/log_prediction_event.md),
     [`log_data_quality()`](https://peteowen1.github.io/torp/reference/log_data_quality.md)
     (internal logging helpers)
+  - [`get_wp_model_info()`](https://peteowen1.github.io/torp/reference/get_wp_model_info.md),
+    [`check_wp_model_health()`](https://peteowen1.github.io/torp/reference/check_wp_model_health.md)
+    (model diagnostics)
+  - [`harmonic_mean()`](https://peteowen1.github.io/torp/reference/harmonic_mean.md),
+    [`norm_name()`](https://peteowen1.github.io/torp/reference/norm_name.md)
+    (utility helpers)
 
 - Moved manual test scripts to `tests/manual/` directory.
 

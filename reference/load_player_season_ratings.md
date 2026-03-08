@@ -50,25 +50,9 @@ including `season`, `player_id`, `player_name`, `team`, `position`,
 ## Examples
 
 ``` r
-# \donttest{
+if (FALSE) { # \dontrun{
 try({ # prevents cran errors
   load_player_season_ratings(2024)
 })
-#> # A tibble: 658 × 13
-#>    season player_name       player_id team_id team  position games season_points
-#>     <dbl> <chr>             <chr>     <chr>   <chr> <chr>    <int>         <dbl>
-#>  1   2024 Marcus Bontempel… CD_I2973… CD_T140 West… MIDFIEL…    23          312.
-#>  2   2024 Jeremy Cameron    CD_I2938… CD_T70  Geel… KEY_FOR…    24          304 
-#>  3   2024 Hayden Young      CD_I1009… CD_T60  Frem… MIDFIEL…    23          302.
-#>  4   2024 Hayden McLean     CD_I1003… CD_T160 Sydn… KEY_FOR…    26          299.
-#>  5   2024 Dylan Moore       CD_I1006… CD_T80  Hawt… MEDIUM_…    25          294.
-#>  6   2024 Errol Gulden      CD_I1013… CD_T160 Sydn… MIDFIEL…    26          284.
-#>  7   2024 Nick Daicos       CD_I1023… CD_T40  Coll… MIDFIEL…    23          282.
-#>  8   2024 Kai Lohmann       CD_I1014… CD_T20  Bris… MEDIUM_…    27          276.
-#>  9   2024 Harris Andrews    CD_I9960… CD_T20  Bris… KEY_DEF…    26          272.
-#> 10   2024 Isaac Heeney      CD_I2985… CD_T160 Sydn… MIDFIEL…    24          272.
-#> # ℹ 648 more rows
-#> # ℹ 5 more variables: season_recv <dbl>, season_disp <dbl>, season_spoil <dbl>,
-#> #   season_hitout <dbl>, ppg <dbl>
-# }
+} # }
 ```

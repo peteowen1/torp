@@ -1,6 +1,6 @@
-# Ruck contest weight (subtracted)
+# Ruck contest weight (hitout component)
 
-Ruck contest weight (subtracted)
+Ruck contest weight (hitout component)
 
 ## Usage
 

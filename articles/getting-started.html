@@ -20,7 +20,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">torp</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.0.0.9002</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.0.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -59,7 +59,7 @@
       <img src="../logo.png" class="logo" alt=""><h1>Getting Started with torp</h1>
             
       
-      <small class="dont-index">Source: <a href="https://github.com/peteowen1/torp/blob/main/vignettes/getting-started.Rmd" class="external-link"><code>vignettes/getting-started.Rmd</code></a></small>
+      <small class="dont-index">Source: <a href="https://github.com/peteowen1/torp/blob/dev/vignettes/getting-started.Rmd" class="external-link"><code>vignettes/getting-started.Rmd</code></a></small>
       <div class="d-none name"><code>getting-started.Rmd</code></div>
     </div>
 
@@ -144,8 +144,7 @@ components.</p>
 <span></span>
 <span><span class="co"># Season totals</span></span>
 <span><span class="va">season_totals</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/player_season_ratings.html">player_season_ratings</a></span><span class="op">(</span><span class="fl">2025</span><span class="op">)</span></span></code></pre></div>
-<p>See <code><a href="../articles/player-ratings.html">vignette("player-ratings")</a></code> for the full
-methodology.</p>
+<p>See <code><a href="../articles/torp-guide.html">vignette("torp-guide")</a></code> for the full methodology.</p>
 </div>
 <div class="section level2">
 <h2 id="prediction-models">Prediction Models<a class="anchor" aria-label="anchor" href="#prediction-models"></a>
@@ -164,7 +163,7 @@ methodology.</p>
 <span><span class="co"># Shot Model -- goal/behind/miss probabilities for shots</span></span>
 <span><span class="va">shots</span> <span class="op">&lt;-</span> <span class="va">pbp_wp</span><span class="op">[</span><span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/NA.html" class="external-link">is.na</a></span><span class="op">(</span><span class="va">pbp_wp</span><span class="op">$</span><span class="va">shot_at_goal</span><span class="op">)</span>, <span class="op">]</span></span>
 <span><span class="va">shots</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/add_shot_vars.html">add_shot_vars</a></span><span class="op">(</span><span class="va">shots</span><span class="op">)</span></span></code></pre></div>
-<p>See <code><a href="../articles/model-usage.html">vignette("model-usage")</a></code> for details on each
+<p>See <code><a href="../articles/torp-guide.html">vignette("torp-guide")</a></code> for details on each
 model.</p>
 </div>
 <div class="section level2">
@@ -202,16 +201,8 @@ re-download:</p>
 </h2>
 <ul>
 <li>
-<code><a href="../articles/player-ratings.html">vignette("player-ratings")</a></code> – TORP rating
-methodology</li>
-<li>
-<code><a href="../articles/model-usage.html">vignette("model-usage")</a></code> – EP, WP, and shot models</li>
-<li>
-<code><a href="../articles/data-architecture.html">vignette("data-architecture")</a></code> – Data pipeline and
-storage</li>
-<li>
-<code><a href="../articles/season-simulation.html">vignette("season-simulation")</a></code> – Simulating AFL
-seasons</li>
+<code><a href="../articles/torp-guide.html">vignette("torp-guide")</a></code> – Full reference: data
+architecture, ratings, models, simulation</li>
 </ul>
 </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>

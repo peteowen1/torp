@@ -40,30 +40,9 @@ A data frame containing AFL team and player lineup data.
 ## Examples
 
 ``` r
-# \donttest{
+if (FALSE) { # \dontrun{
 try({ # prevents cran errors
   load_teams(2021:2022)
 })
-#> Downloading 2 files in parallel...
-#> # A tibble: 19,044 × 22
-#>    providerId      utcStartTime           status compSeason.shortName round.name
-#>    <chr>           <chr>                  <chr>  <chr>                <chr>     
-#>  1 CD_M20210140101 2021-03-18T08:25:00.0… CONCL… Premiership          Round 1   
-#>  2 CD_M20210140101 2021-03-18T08:25:00.0… CONCL… Premiership          Round 1   
-#>  3 CD_M20210140101 2021-03-18T08:25:00.0… CONCL… Premiership          Round 1   
-#>  4 CD_M20210140101 2021-03-18T08:25:00.0… CONCL… Premiership          Round 1   
-#>  5 CD_M20210140101 2021-03-18T08:25:00.0… CONCL… Premiership          Round 1   
-#>  6 CD_M20210140101 2021-03-18T08:25:00.0… CONCL… Premiership          Round 1   
-#>  7 CD_M20210140101 2021-03-18T08:25:00.0… CONCL… Premiership          Round 1   
-#>  8 CD_M20210140101 2021-03-18T08:25:00.0… CONCL… Premiership          Round 1   
-#>  9 CD_M20210140101 2021-03-18T08:25:00.0… CONCL… Premiership          Round 1   
-#> 10 CD_M20210140101 2021-03-18T08:25:00.0… CONCL… Premiership          Round 1   
-#> # ℹ 19,034 more rows
-#> # ℹ 17 more variables: round.roundNumber <int>, venue.name <chr>,
-#> #   teamAbbr <chr>, teamName <chr>, teamNickname <chr>, teamId <chr>,
-#> #   position <chr>, player.playerId <chr>, player.captain <lgl>,
-#> #   player.playerJumperNumber <int>, player.playerName.givenName <chr>,
-#> #   player.playerName.surname <chr>, teamStatus <chr>, teamType <chr>,
-#> #   lateChanges <chr>, season <dbl>, row_id <chr>
-# }
+} # }
 ```

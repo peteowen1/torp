@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">torp</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.0.0.9002</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.0.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -33,7 +33,7 @@
 <div class="row">
   <main id="main" class="col-md-9"><div class="page-header">
       <img src="../logo.png" class="logo" alt=""><h1>Load Chains Data</h1>
-      <small class="dont-index">Source: <a href="https://github.com/peteowen1/torp/blob/main/R/load_data.R" class="external-link"><code>R/load_data.R</code></a></small>
+      <small class="dont-index">Source: <a href="https://github.com/peteowen1/torp/blob/dev/R/load_data.R" class="external-link"><code>R/load_data.R</code></a></small>
       <div class="d-none name"><code>load_chains.Rd</code></div>
     </div>
 
@@ -82,35 +82,11 @@
 
     <div class="section level2">
     <h2 id="ref-examples">Examples<a class="anchor" aria-label="anchor" href="#ref-examples"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="co"># \donttest{</span></span></span>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="kw">if</span> <span class="op">(</span><span class="cn">FALSE</span><span class="op">)</span> <span class="op">{</span> <span class="co"># \dontrun{</span></span></span>
 <span class="r-in"><span><span class="kw"><a href="https://rdrr.io/r/base/try.html" class="external-link">try</a></span><span class="op">(</span><span class="op">{</span> <span class="co"># prevents cran errors</span></span></span>
 <span class="r-in"><span>  <span class="fu">load_chains</span><span class="op">(</span><span class="fl">2021</span><span class="op">:</span><span class="fl">2022</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="op">}</span><span class="op">)</span></span></span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> Downloading 2 files in parallel...</span>
-<span class="r-wrn co"><span class="r-pr">#&gt;</span> <span class="warning">Warning: </span>Round filtering requested but no round column found in data. Returning</span>
-<span class="r-wrn co"><span class="r-pr">#&gt;</span> unfiltered. Available columns: <span style="color: #0000BB;">"displayOrder"</span>, <span style="color: #0000BB;">"description"</span>, <span style="color: #0000BB;">"periodSeconds"</span>,</span>
-<span class="r-wrn co"><span class="r-pr">#&gt;</span> <span style="color: #0000BB;">"playerId"</span>, <span style="color: #0000BB;">"teamId"</span>, <span style="color: #0000BB;">"disposal"</span>, <span style="color: #0000BB;">"shotAtGoal"</span>, <span style="color: #0000BB;">"behindInfo"</span>, <span style="color: #0000BB;">"x"</span>, and <span style="color: #0000BB;">"y"</span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;"># A tibble: 847,299 × 59</span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>    displayOrder description    periodSeconds playerId teamId disposal shotAtGoal</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>           <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>                  <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>  <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;lgl&gt;</span>     </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;"> 1</span>            1 Centre Bounce              0 <span style="color: #BB0000;">NA</span>       <span style="color: #BB0000;">NA</span>     <span style="color: #BB0000;">NA</span>       <span style="color: #BB0000;">NA</span>        </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;"> 2</span>            2 Ground Kick               10 CD_I260… CD_T1… ineffec… <span style="color: #BB0000;">NA</span>        </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;"> 3</span>            3 Ball Up Call              15 <span style="color: #BB0000;">NA</span>       <span style="color: #BB0000;">NA</span>     <span style="color: #BB0000;">NA</span>       <span style="color: #BB0000;">NA</span>        </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;"> 4</span>            4 Free For                  33 CD_I290… CD_T1… <span style="color: #BB0000;">NA</span>       <span style="color: #BB0000;">NA</span>        </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;"> 5</span>            5 Handball                  36 CD_I290… CD_T1… effecti… <span style="color: #BB0000;">NA</span>        </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;"> 6</span>            6 Handball Rece…            38 CD_I992… CD_T1… <span style="color: #BB0000;">NA</span>       <span style="color: #BB0000;">NA</span>        </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;"> 7</span>            7 Kick                      39 CD_I992… CD_T1… effecti… <span style="color: #BB0000;">NA</span>        </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;"> 8</span>            8 Kick Into F50             39 CD_I992… CD_T1… <span style="color: #BB0000;">NA</span>       <span style="color: #BB0000;">NA</span>        </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;"> 9</span>            9 Kick Inside 5…            40 CD_I250… CD_T1… <span style="color: #BB0000;">NA</span>       <span style="color: #BB0000;">NA</span>        </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">10</span>           10 Mark On Lead              42 CD_I250… CD_T1… <span style="color: #BB0000;">NA</span>       <span style="color: #BB0000;">NA</span>        </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;"># ℹ 847,289 more rows</span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;"># ℹ 52 more variables: behindInfo &lt;chr&gt;, x &lt;int&gt;, y &lt;int&gt;, finalState &lt;chr&gt;,</span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;">#   initialState &lt;chr&gt;, period &lt;int&gt;, chain_number &lt;int&gt;, matchId &lt;chr&gt;,</span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;">#   venueWidth &lt;int&gt;, venueLength &lt;int&gt;, homeTeamDirectionQtr1 &lt;chr&gt;,</span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;">#   status &lt;chr&gt;, utcStartTime &lt;chr&gt;, homeTeamId &lt;chr&gt;, awayTeamId &lt;chr&gt;,</span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;">#   competitionId &lt;chr&gt;, roundNumber &lt;int&gt;, roundId &lt;chr&gt;,</span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;">#   venueLocalStartTime &lt;lgl&gt;, lastUpdated &lt;chr&gt;, providerMatchId &lt;chr&gt;, …</span></span>
-<span class="r-in"><span><span class="co"># }</span></span></span>
+<span class="r-in"><span><span class="op">}</span> <span class="co"># }</span></span></span>
 </code></pre></div>
     </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
