@@ -63,6 +63,11 @@ reference:
       - print.torp_player_profile
       - create_player_game_data
       - default_credit_params
+      - create_wp_credit
+      - calculate_player_stats
+      - calculate_psr
+      - filter_game_data
+      - get_season_data
 
   - title: Player Skills
     desc: Estimate and explore player skill profiles
@@ -82,17 +87,26 @@ reference:
     contents:
       - starts_with("sim_")
       - starts_with("simulate_")
+      - summarise_simulations
+      - show_predictions
+      - print.torp_sim_results
+      - prepare_final_dataframe
+      - ladder
+      - calculate_ladder
 
   - title: Chain Analysis
     desc: Access and analyse possession chains
     contents:
       - matches("chain")
+      - extract_contests
 
   - title: Match Analysis
-    desc: Match-level expected goals and predictions
+    desc: Match-level expected goals, predictions, and head-to-head comparisons
     contents:
       - match_xgs
       - calculate_match_xgs
+      - head_to_head
+      - print.torp_head_to_head
 
   - title: Model Validation
     desc: Evaluate model performance, calibration, and drift
@@ -145,6 +159,14 @@ reference:
       - starts_with("VALIDATION_")
       - starts_with("CREDIT_")
 
+  - title: Injuries
+    desc: Injury data access and matching
+    contents:
+      - injuries
+      - get_all_injuries
+      - match_injuries
+      - scrape_injuries
+
   - title: Utilities
     desc: Helper and convenience functions
     contents:
@@ -158,6 +180,17 @@ reference:
       - get_local_data_dir
       - save_locally
       - set_local_data_dir
+      - torp_replace_teams
+      - torp_replace_venues
+
+  - title: AFL API
+    desc: Access AFL data directly from the API
+    contents:
+      - get_afl_fixtures
+      - get_afl_lineups
+      - get_afl_player_details
+      - get_afl_player_stats
+      - get_afl_results
 
   - title: Internal / Developer
     desc: "Internal utilities accessible via torp::: for model training and data scraping"
