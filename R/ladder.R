@@ -19,7 +19,7 @@ NULL
 #' @param season Numeric season year (e.g. 2026).
 #' @param team_ratings Optional data.table/data.frame with columns `team` and
 #'   `torp`. If NULL, loads via [load_team_ratings()].
-#' @param fixtures Optional fixture data.frame (fitzRoy format). If NULL, loads
+#' @param fixtures Optional fixture data.frame (AFL API format). If NULL, loads
 #'   via [load_fixtures()].
 #' @param predictions Optional predictions data.frame with `pred_xtotal`. If
 #'   NULL, attempts to load via [load_predictions()].
@@ -37,7 +37,7 @@ prepare_sim_data <- function(season, team_ratings = NULL, fixtures = NULL,
   }
   fix_dt <- data.table::as.data.table(fixtures)
 
-  # Standardise column names from fitzRoy format
+  # Standardise column names from fixture format
   if ("compSeason.year" %in% names(fix_dt)) {
     fix_dt <- fix_dt[get("compSeason.year") == season]
   }

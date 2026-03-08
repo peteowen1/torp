@@ -258,8 +258,9 @@ harmonic_mean <- function(x, y) {
 #'
 #' @return A character vector with normalized names.
 #' @examples
-#' norm_name(c("Cam Zurhaar", "Cameron   Zúrhär", "  José López "))
-#' # Returns: "cam zurhaar" "cameron zurhar" "jose lopez"
+#' \dontrun{
+#' norm_name(c("Cam Zurhaar", "Cameron   Zurhaar", "  Jose Lopez "))
+#' }
 #'
 #' @seealso [stringi::stri_trans_general()], [stringr::str_to_lower()]
 #' @importFrom stringi stri_trans_general

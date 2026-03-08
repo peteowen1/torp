@@ -4,7 +4,7 @@
 \alias{get_afl_lineups}
 \title{Fetch AFL Lineups}
 \usage{
-get_afl_lineups(season = get_afl_season(), round = NULL)
+get_afl_lineups(season = NULL, round = NULL)
 }
 \arguments{
 \item{season}{Numeric year (default: current season via \code{\link[=get_afl_season]{get_afl_season()}})}

@@ -8,7 +8,8 @@ estimate_player_skills(
   skill_data,
   ref_date = NULL,
   params = NULL,
-  stat_defs = NULL
+  stat_defs = NULL,
+  compute_ci = TRUE
 )
 }
 \arguments{
@@ -21,6 +22,10 @@ to one day after the latest match in the data).}
 \item{params}{Named list of hyperparameters from \code{default_skill_params()}.}
 
 \item{stat_defs}{Output of \code{skill_stat_definitions()}. If NULL, uses default.}
+
+\item{compute_ci}{Logical. If TRUE (default), compute credible intervals
+(\code{_lower}/\code{_upper} columns) using qgamma/qbeta. Set to FALSE
+to skip interval computation for faster batch processing.}
 }
 \value{
 A data.table with one row per player containing:

@@ -14,7 +14,7 @@ Character vector with standardised names
 }
 \description{
 Maps venue name variants (sponsor names, old names) to canonical stable names.
-Drop-in replacement for \code{fitzRoy::torp_replace_venues()}.
+Drop-in replacement for \code{fitzRoy::replace_venues()}.
 }
 \examples{
 torp_replace_venues("Marvel Stadium")

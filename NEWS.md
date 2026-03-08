@@ -54,7 +54,7 @@
 
 ## Optimized Parameters
 
-* Re-optimized rating constants: `RATING_DECAY_DEFAULT_DAYS` (486→511), `RATING_PRIOR_GAMES_RECV` (5.87→6.19), `RATING_PRIOR_GAMES_DISP` (7.14→7.11), `RATING_PRIOR_GAMES_HITOUT` (3→4.44).
+* Re-optimized rating constants with per-component decay: `RATING_DECAY_RECV` (260), `RATING_DECAY_DISP` (700), `RATING_DECAY_SPOIL` (295), `RATING_DECAY_HITOUT` (700). Prior games: `RATING_PRIOR_GAMES_RECV` (12.56), `RATING_PRIOR_GAMES_DISP` (5.83), `RATING_PRIOR_GAMES_SPOIL` (3.00), `RATING_PRIOR_GAMES_HITOUT` (15.00).
 
 * Re-optimized credit assignment constants for disposal, reception, and position adjustment.
 
@@ -76,7 +76,7 @@
 
 ## Documentation
 
-* Added five vignettes: Getting Started, Player Ratings, Model Usage, Data Architecture, and Season Simulation.
+* Added two vignettes: Getting Started and torp Reference Guide (consolidating ratings, models, data architecture, and simulation).
 
 * Added pkgdown site configuration with comprehensive reference sections.
 

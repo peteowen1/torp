@@ -30,17 +30,16 @@ Imports:
     zoo (>= 1.8.0)
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
-RoxygenNote: 7.3.3.9000
+RoxygenNote: 7.3.3
 Suggests:
     geosphere,
-    httr2,
+    httr2 (>= 1.0.0),
     knitr,
     readr (>= 2.1.0),
     rvest (>= 1.0.0),
     splitTools,
     rmarkdown,
     testthat (>= 3.0.0),
-    tictoc,
     withr,
     torpmodels,
     xgboost (>= 2.0.0)

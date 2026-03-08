@@ -97,10 +97,8 @@ if (is.na(max_round_2025)) max_round_2025 <- 24L
 games_2025 <- games_2025[roundnum <= max_round_2025 & !is.na(home_score) & !is.na(away_score)]
 games_2025[, result := home_score - away_score]
 
-if (requireNamespace("fitzRoy", quietly = TRUE)) {
-  games_2025[, home_team := fitzRoy::replace_teams(home_team)]
-  games_2025[, away_team := fitzRoy::replace_teams(away_team)]
-}
+games_2025[, home_team := torp_replace_teams(home_team)]
+games_2025[, away_team := torp_replace_teams(away_team)]
 
 ladder_2025 <- calculate_ladder(games_2025)
 # Count draws as half a win

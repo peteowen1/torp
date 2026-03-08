@@ -14,7 +14,7 @@ Character vector with standardised names
 }
 \description{
 Maps team name variants (abbreviations, nicknames, Indigenous round names)
-to canonical team names. Drop-in replacement for \code{fitzRoy::torp_replace_teams()}.
+to canonical team names. Drop-in replacement for \code{fitzRoy::replace_teams()}.
 }
 \examples{
 torp_replace_teams("Adelaide Crows")

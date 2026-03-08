@@ -9,7 +9,8 @@ prepare_final_dataframe(
   player_game_data = NULL,
   season_val,
   round_val,
-  fixtures = NULL
+  fixtures = NULL,
+  fix_summary = NULL
 )
 }
 \arguments{
@@ -22,6 +23,10 @@ prepare_final_dataframe(
 \item{round_val}{Round value}
 
 \item{fixtures}{Optional pre-loaded fixtures data. If NULL, will load automatically.}
+
+\item{fix_summary}{Optional pre-computed fixtures summary (season, round, ref_date).
+If NULL, computed from \code{fixtures} each call. Pass this when calling in a loop
+to avoid redundant summarisation.}
 }
 \value{
 A final dataframe with player ratings

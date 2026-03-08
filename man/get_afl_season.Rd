@@ -7,10 +7,12 @@
 get_afl_season(type = "current")
 }
 \arguments{
-\item{type}{A character string: "current" returns the current season, "next" returns the upcoming season.}
+\item{type}{A character string or logical: "current" (default) returns the current
+season year, "next" returns the upcoming season, and \code{TRUE} returns all seasons
+(2021 to current year), consistent with \verb{load_*()} functions.}
 }
 \value{
-An integer representing the AFL season year.
+An integer vector of AFL season year(s).
 }
 \description{
 A helper function to choose the most recent season available for a given dataset.
@@ -23,4 +25,7 @@ get_afl_season("current")
 
 # Get the next AFL season
 get_afl_season("next")
+
+# Get all available seasons
+get_afl_season(TRUE)
 }

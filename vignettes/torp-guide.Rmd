@@ -28,14 +28,14 @@ knitr::opts_chunk$set(
 ### Data Flow
 
 ```
-AFL API (fitzRoy) --> torp (clean + enrich) --> torpdata (store)
-                          |
-                     torpmodels (models)
-                          |
-                     torp (predict)
+AFL API (get_afl_*) --> torp (clean + enrich) --> torpdata (store)
+                            |
+                       torpmodels (models)
+                            |
+                       torp (predict)
 ```
 
-1. **Collection**: Raw data fetched from the AFL API via [fitzRoy](https://jimmyday12.github.io/fitzRoy/)
+1. **Collection**: Raw data fetched from the AFL API via torp's `get_afl_*()` functions
 2. **Processing**: torp cleans data, adds EP/WP/shot model predictions
 3. **Storage**: Processed data uploaded to torpdata GitHub releases as parquet files
 4. **Loading**: torp `load_*()` functions download from torpdata on demand
@@ -132,16 +132,16 @@ season <- player_season_ratings(2025)
 weight = exp(-days_since_game / decay_days)
 ```
 
-Default 486 days. A game one year ago has weight ~0.47.
+Decay varies by component: Receiving 260 days, Spoil 295 days, Disposal/Hitout 700 days. A game one year ago has weight ~0.24 for receiving, ~0.59 for disposal.
 
 ### Bayesian Shrinkage
 
-| Component | Prior Games | Effect |
-|-----------|------------|--------|
-| Receiving | 5.87 | ~6 games of zero performance added |
-| Disposal  | 7.14 | ~7 games of zero performance added |
-| Spoil     | 3 | ~3 games of zero performance added |
-| Hitout    | 3 | ~3 games of zero performance added |
+| Component | Prior Games | Decay (days) |
+|-----------|------------|--------------|
+| Receiving | 12.56 | 260 |
+| Disposal  | 5.83 | 700 |
+| Spoil     | 3.00 | 295 |
+| Hitout    | 15.00 | 700 |
 
 ### Pre-Loading Data
 

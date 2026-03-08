@@ -9,7 +9,7 @@
 #'   Key columns include `id`, `providerId`, `utcStartTime`, `status`,
 #'   `round.roundNumber`, `home.team.name`, `away.team.name`, `venue.name`,
 #'   and `compSeason.year`.
-#' @source AFL fixture data via fitzRoy package
+#' @source AFL fixture data via AFL API
 #' @note For live/current fixtures, use `load_fixtures()` from torpdata.
 #'   This bundled copy serves as offline fallback reference.
 "fixtures"

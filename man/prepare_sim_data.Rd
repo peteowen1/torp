@@ -18,7 +18,7 @@ prepare_sim_data(
 \item{team_ratings}{Optional data.table/data.frame with columns \code{team} and
 \code{torp}. If NULL, loads via \code{\link[=load_team_ratings]{load_team_ratings()}}.}
 
-\item{fixtures}{Optional fixture data.frame (fitzRoy format). If NULL, loads
+\item{fixtures}{Optional fixture data.frame (AFL API format). If NULL, loads
 via \code{\link[=load_fixtures]{load_fixtures()}}.}
 
 \item{predictions}{Optional predictions data.frame with \code{pred_xtotal}. If

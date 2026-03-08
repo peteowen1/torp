@@ -69,7 +69,7 @@ create_wp_credit <- function(pbp_data = NULL,
     player_name    = player_name[1L],
     team           = team[1L],
     season         = as.integer(format(as.Date(utc_start_time[1L]), "%Y")),
-    round          = as.numeric(sprintf("%02d", round_number[1L])),
+    round          = round_number[1L],
     utc_start_time = utc_start_time[1L],
     # Peak disposal play
     disp_peak_wpa  = disp_wpa[which.max(abs(disp_wpa))],

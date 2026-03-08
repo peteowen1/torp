@@ -4,10 +4,10 @@
 \alias{get_afl_fixtures}
 \title{Fetch AFL Fixtures}
 \usage{
-get_afl_fixtures(season = get_afl_season())
+get_afl_fixtures(season = NULL)
 }
 \arguments{
-\item{season}{Numeric year (default: current season via \code{\link[=get_afl_season]{get_afl_season()}})}
+\item{season}{Numeric year, or \code{TRUE} for all available seasons (default: current season via \code{\link[=get_afl_season]{get_afl_season()}})}
 }
 \value{
 A tibble of fixture data

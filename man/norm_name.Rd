@@ -27,8 +27,9 @@ joining tables where names may not match exactly due to case,
 punctuation, or diacritics.
 }
 \examples{
-norm_name(c("Cam Zurhaar", "Cameron   Zúrhär", "  José López "))
-# Returns: "cam zurhaar" "cameron zurhar" "jose lopez"
+\dontrun{
+norm_name(c("Cam Zurhaar", "Cameron   Zurhaar", "  Jose Lopez "))
+}
 
 }
 \seealso{

@@ -4,11 +4,11 @@
 # Uses torp's existing get_token()/access_api() from scraper.R.
 #
 # Key speed wins over fitzRoy:
-#   - Fixtures: 1 HTTP call (vs 3) — season ID constructed directly (CD_S{year}014)
+#   - Fixtures: 3 HTTP calls on cold cache (2 cached per session + 1 per season)
 #   - Results:  0 extra calls — derived from fixture data (scores included!)
-#   - Lineups:  1+M calls (vs 3+M) — reuses cached fixtures + shared token
-#   - Player stats: 1+M calls (vs 3+M) — same pattern
-#   - Player details: 1+T calls (vs 3+T) — same pattern
+#   - Lineups:  1+M calls — reuses cached fixtures + shared token
+#   - Player stats: 1+M calls — same pattern
+#   - Player details: 1+T calls — same pattern
 
 
 # Internal Helpers ----
@@ -76,7 +76,10 @@
   comp_text <- httr::content(comp_resp, as = "text", encoding = "UTF-8")
   comp_json <- tryCatch(
     jsonlite::fromJSON(comp_text, flatten = TRUE),
-    error = function(e) NULL
+    error = function(e) {
+      cli::cli_warn("Failed to parse AFL API competitions response: {conditionMessage(e)}")
+      NULL
+    }
   )
   if (is.null(comp_json)) return(NULL)
 
@@ -106,7 +109,10 @@
   cs_text <- httr::content(cs_resp, as = "text", encoding = "UTF-8")
   cs_json <- tryCatch(
     jsonlite::fromJSON(cs_text, flatten = TRUE),
-    error = function(e) NULL
+    error = function(e) {
+      cli::cli_warn("Failed to parse AFL API comp seasons response: {conditionMessage(e)}")
+      NULL
+    }
   )
   if (is.null(cs_json)) return(NULL)
 
@@ -162,7 +168,10 @@
       }
     } else if (is.list(positions)) {
       # Raw list — try to bind
-      players <- tryCatch(dplyr::bind_rows(positions), error = function(e) NULL)
+      players <- tryCatch(dplyr::bind_rows(positions), error = function(e) {
+        cli::cli_warn("Failed to bind roster positions for match {match_id} ({team_type}): {conditionMessage(e)}")
+        NULL
+      })
     } else {
       return(NULL)
     }
@@ -207,7 +216,10 @@
     } else {
       df <- tryCatch(
         jsonlite::fromJSON(jsonlite::toJSON(team_stats, auto_unbox = TRUE), flatten = TRUE),
-        error = function(e) NULL
+        error = function(e) {
+          cli::cli_warn("Failed to parse {team_status} team stats for match {match_id}: {conditionMessage(e)}")
+          NULL
+        }
       )
     }
     if (is.null(df) || !is.data.frame(df) || nrow(df) == 0) return(NULL)
@@ -245,7 +257,7 @@
 #' Fetches fixture data for a season from the AFL API in a single HTTP call.
 #' Includes scores for completed games (same data the results endpoint returns).
 #'
-#' @param season Numeric year (default: current season via [get_afl_season()])
+#' @param season Numeric year, or `TRUE` for all available seasons (default: current season via [get_afl_season()])
 #' @return A tibble of fixture data
 #' @export
 #'
@@ -267,8 +279,15 @@ get_afl_fixtures <- function(season = NULL) {
     all_ids <- seasons_df$id
     cli::cli_inform("Fetching fixtures for {length(all_ids)} season{?s}...")
     results <- purrr::map(all_ids, function(sid) {
-      tryCatch(.fetch_fixtures_for_season_id(sid), error = function(e) NULL)
+      tryCatch(.fetch_fixtures_for_season_id(sid), error = function(e) {
+        cli::cli_warn("Failed to fetch fixtures for season ID {sid}: {conditionMessage(e)}")
+        NULL
+      })
     })
+    n_failed <- sum(vapply(results, is.null, logical(1)))
+    if (n_failed > 0) {
+      cli::cli_warn("{n_failed} of {length(all_ids)} season{?s} failed to load")
+    }
     return(purrr::list_rbind(purrr::compact(results)))
   }
 
@@ -314,11 +333,26 @@ get_afl_fixtures <- function(season = NULL) {
     "&pageSize=1000"
   )
 
-  resp <- httr::GET(url)
-  if (httr::http_error(resp)) return(NULL)
+  resp <- tryCatch(httr::GET(url), error = function(e) {
+    cli::cli_warn("HTTP request failed for season {season_id}: {conditionMessage(e)}")
+    NULL
+  })
+  if (is.null(resp) || httr::http_error(resp)) {
+    if (!is.null(resp)) {
+      cli::cli_warn("AFL API returned HTTP {httr::status_code(resp)} for season {season_id}")
+    }
+    return(NULL)
+  }
 
-  json <- httr::content(resp, as = "text", encoding = "UTF-8") |>
-    jsonlite::fromJSON(flatten = TRUE)
+  json <- tryCatch(
+    httr::content(resp, as = "text", encoding = "UTF-8") |>
+      jsonlite::fromJSON(flatten = TRUE),
+    error = function(e) {
+      cli::cli_warn("Failed to parse fixtures JSON for season {season_id}: {conditionMessage(e)}")
+      NULL
+    }
+  )
+  if (is.null(json)) return(NULL)
 
   matches <- json$matches
   if (is.null(matches) || length(matches) == 0) return(NULL)
@@ -362,6 +396,7 @@ get_afl_results <- function(season = NULL) {
     results <- fixtures[fixtures$status == "CONCLUDED", ]
   } else {
     # Fallback: games with non-zero scores
+    cli::cli_inform("No 'status' column in fixtures -- using score-based fallback for completed games")
     results <- fixtures[
       !is.na(fixtures$home.score.totalScore) & fixtures$home.score.totalScore > 0, ]
   }
@@ -593,7 +628,7 @@ get_afl_player_details <- function(season = NULL) {
 #' Standardise AFL Team Names
 #'
 #' Maps team name variants (abbreviations, nicknames, Indigenous round names)
-#' to canonical team names. Drop-in replacement for `fitzRoy::torp_replace_teams()`.
+#' to canonical team names. Drop-in replacement for `fitzRoy::replace_teams()`.
 #'
 #' @param team Character vector of team names
 #' @return Character vector with standardised names
@@ -646,7 +681,7 @@ torp_replace_teams <- function(team) {
 #' Standardise AFL Venue Names
 #'
 #' Maps venue name variants (sponsor names, old names) to canonical stable names.
-#' Drop-in replacement for `fitzRoy::torp_replace_venues()`.
+#' Drop-in replacement for `fitzRoy::replace_venues()`.
 #'
 #' @param venue Character vector of venue names
 #' @return Character vector with standardised names

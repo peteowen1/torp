@@ -280,7 +280,6 @@ calculate_player_stats <- function(player_game_data = NULL, match_ref, date_val,
 #' @return A data.table with a \code{round_val} column and the same per-player
 #'   columns as \code{calculate_player_stats} output.
 #' @keywords internal
-#' @export
 calculate_player_stats_batch <- function(player_game_data = NULL,
                                          round_info,
                                          decay_recv = RATING_DECAY_RECV,

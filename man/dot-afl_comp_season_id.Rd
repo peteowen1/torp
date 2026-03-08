@@ -2,7 +2,7 @@
 % Please edit documentation in R/afl_api.R
 \name{.afl_comp_season_id}
 \alias{.afl_comp_season_id}
-\title{Construct AFL API compSeasonId for a season}
+\title{Resolve AFL API compSeasonId for a season}
 \usage{
 .afl_comp_season_id(season)
 }
@@ -10,11 +10,11 @@
 \item{season}{Numeric year}
 }
 \value{
-Character compSeasonId (e.g. "CD_S2025014")
+Numeric compSeasonId, or NULL if not found
 }
 \description{
-AFL comp season IDs follow a predictable \verb{CD_S\{year\}014} pattern
-(the 014 suffix is the AFL Premiership competition). This avoids
-HTTP lookups entirely — same pattern used in \code{scraper.R}.
+The public AFL API (\code{aflapi.afl.com.au}) uses numeric comp season IDs,
+not the \verb{CD_S\{year\}014} format used by the CFS endpoint. This function
+resolves the numeric ID via a cached HTTP lookup (at most once per session).
 }
 \keyword{internal}

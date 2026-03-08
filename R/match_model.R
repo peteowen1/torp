@@ -178,6 +178,7 @@
 #' @param all_grounds Stadium reference data
 #' @return Fixture df enriched with log_dist, familiarity, days_rest, and team ratings
 #' @keywords internal
+#' @importFrom purrr pmap_dbl
 .build_match_features <- function(fix_df, team_rt_df, all_grounds) {
   torp_sum_cols <- c("torp", "torp_recv", "torp_disp", "torp_spoil", "torp_hitout")
 
@@ -379,7 +380,14 @@
     Sys.sleep(0.3)
   }
 
-  if (length(all_hourly) == 0) return(tibble::tibble())
+  n_failed <- nrow(venue_dates) - length(all_hourly)
+  if (n_failed > 0) {
+    cli::cli_warn("Weather forecast failed for {n_failed} of {nrow(venue_dates)} venue{?s}")
+  }
+  if (length(all_hourly) == 0) {
+    cli::cli_warn("All weather forecasts failed -- predictions will use median weather imputation")
+    return(tibble::tibble())
+  }
   hourly_df <- dplyr::bind_rows(all_hourly)
 
   # Aggregate to match-level (3hr window from kickoff)
@@ -515,7 +523,16 @@
         dplyr::select(dplyr::all_of(opp_cols)) |>
         dplyr::mutate(type_anti = dplyr::if_else(team_type == "home", "away", "home")),
       by = c("providerId" = "providerId", "team_type" = "type_anti")
-    ) |>
+    )
+
+  # Validate self-join completeness
+  na_opp <- sum(is.na(team_mdl_df_tot$torp.y))
+  if (na_opp > 0) {
+    bad_ids <- unique(team_mdl_df_tot$providerId[is.na(team_mdl_df_tot$torp.y)])
+    cli::cli_warn("{na_opp} row{?s} have no opponent data after self-join. Affected matches: {paste(utils::head(bad_ids, 5), collapse = ', ')}")
+  }
+
+  team_mdl_df_tot <- team_mdl_df_tot |>
     dplyr::mutate(
       torp_diff = torp.x - torp.y,
       torp_ratio = log(pmax(torp.x, 0.01) / pmax(torp.y, 0.01)),
@@ -622,7 +639,11 @@
     )
 
   cli::cli_inform("team_mdl_df: {nrow(team_mdl_df)} rows, {ncol(team_mdl_df)} cols")
-  cli::cli_inform("Weather joined: {sum(!is.na(team_mdl_df$temp_avg))} of {nrow(team_mdl_df)} rows")
+  weather_pct <- 100 * sum(!is.na(team_mdl_df$temp_avg)) / nrow(team_mdl_df)
+  cli::cli_inform("Weather joined: {sum(!is.na(team_mdl_df$temp_avg))} of {nrow(team_mdl_df)} rows ({round(weather_pct, 1)}%)")
+  if (weather_pct < 80) {
+    cli::cli_warn("Low weather coverage ({round(weather_pct, 1)}%) -- median imputation may affect predictions")
+  }
 
   team_mdl_df
 }
@@ -906,7 +927,7 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
   if (is.null(week) && is.null(weeks)) week <- get_afl_week(type = "next")
 
   cli::cli_h1("Match Predictions Pipeline")
-  tictoc::tic("predictions_total")
+  .pipeline_start <- proc.time()
 
   # Load Data ----
   cli::cli_h2("Loading data")
@@ -981,7 +1002,8 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
   tr <- torp_ratings(season, min(target_weeks))
   if (nrow(tr) == 0 || !"player_name" %in% names(tr)) {
     cli::cli_alert_info("No TORP ratings available for {season} R{min(target_weeks)} (pre-season or fixtures not ready) - skipping predictions")
-    tictoc::toc(log = TRUE)
+    elapsed <- (proc.time() - .pipeline_start)[["elapsed"]]
+    cli::cli_inform("Pipeline aborted after {round(elapsed, 1)}s")
     return(invisible(NULL))
   }
   tr <- match_injuries(tr, inj_df) |>
@@ -1149,14 +1171,25 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
     combined <- week_gms
   }
 
-  save_to_release(combined, pred_file_name, "predictions", also_csv = TRUE)
-  cli::cli_alert_success("Uploaded {season} predictions ({nrow(combined)} rows, week{?s} {paste(target_weeks, collapse = ', ')} added)")
+  tryCatch(
+    {
+      save_to_release(combined, pred_file_name, "predictions", also_csv = TRUE)
+      cli::cli_alert_success("Uploaded {season} predictions ({nrow(combined)} rows, week{?s} {paste(target_weeks, collapse = ', ')} added)")
+    },
+    error = function(e) {
+      local_path <- file.path("data-raw", paste0(pred_file_name, ".parquet"))
+      arrow::write_parquet(combined, local_path)
+      cli::cli_warn(c(
+        "Failed to upload predictions: {conditionMessage(e)}",
+        "i" = "Saved locally to {local_path}",
+        "i" = "Check WORKFLOW_PAT if this is a permissions issue"
+      ))
+    }
+  )
 
-  tictoc::toc(log = TRUE)
+  elapsed <- (proc.time() - .pipeline_start)[["elapsed"]]
   cli::cli_h2("Pipeline Complete")
-  timings <- tictoc::tic.log(format = TRUE)
-  for (t in timings) cli::cli_inform(t)
-  tictoc::tic.clearlog()
+  cli::cli_inform("Total elapsed: {round(elapsed, 1)}s")
 
   invisible(list(
     predictions = all_preds,
@@ -1313,6 +1346,9 @@ show_predictions <- function(season = get_afl_season(),
   parsed <- suppressWarnings(lubridate::ymd_hms(x, tz = "Australia/Melbourne"))
   if (all(is.na(parsed))) {
     parsed <- suppressWarnings(as.POSIXct(x, format = "%Y-%m-%d %H:%M:%S", tz = "Australia/Melbourne"))
+  }
+  if (all(is.na(parsed)) && length(x) > 0 && !all(is.na(x))) {
+    cli::cli_warn("Could not parse any start_time values. Example: {x[!is.na(x)][1]}")
   }
   parsed
 }

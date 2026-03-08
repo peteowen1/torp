@@ -4,7 +4,7 @@
 \alias{get_afl_results}
 \title{Fetch AFL Results}
 \usage{
-get_afl_results(season = get_afl_season())
+get_afl_results(season = NULL)
 }
 \arguments{
 \item{season}{Numeric year (default: current season via \code{\link[=get_afl_season]{get_afl_season()}})}

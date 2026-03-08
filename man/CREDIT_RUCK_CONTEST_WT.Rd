@@ -3,7 +3,7 @@
 \docType{data}
 \name{CREDIT_RUCK_CONTEST_WT}
 \alias{CREDIT_RUCK_CONTEST_WT}
-\title{Ruck contest weight (subtracted)}
+\title{Ruck contest weight (hitout component)}
 \format{
 An object of class \code{numeric} of length 1.
 }
@@ -11,6 +11,6 @@ An object of class \code{numeric} of length 1.
 CREDIT_RUCK_CONTEST_WT
 }
 \description{
-Ruck contest weight (subtracted)
+Ruck contest weight (hitout component)
 }
 \keyword{internal}

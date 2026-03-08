@@ -14,7 +14,11 @@ run_predictions_pipeline(week = NULL, weeks = NULL, season = NULL)
 \item{season}{Season year (default: current via get_afl_season())}
 }
 \value{
-Prediction tibble (invisibly)
+A list (invisibly) with:
+\item{predictions}{All match predictions across all seasons (season, round,
+providerId, home_team, away_team, pred_margin, pred_win, margin, etc.)}
+\item{models}{Named list of 5 GAM models: total_xpoints, xscore_diff,
+conv_diff, score_diff, win}
 }
 \description{
 Builds team_mdl_df with injury-adjusted ratings, trains 5 sequential GAMs,

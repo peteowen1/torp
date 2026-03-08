@@ -140,6 +140,17 @@ utils::globalVariables(c(
   "..lower_present", "..upper_present", "..raw_cols"
 ))
 
+# Batch rating variables
+utils::globalVariables(c(
+  "match_idx", "match_idx_max", "match_ref", "date_val", "round_val"
+))
+
+# PSR variables
+utils::globalVariables(c("psr_raw", "psr"))
+
+# rlang .env pronoun
+utils::globalVariables(c(".env"))
+
 # Contest extraction variables
 utils::globalVariables(c(
   ".next_desc", ".next_player_id", ".next_team_id", ".next_x", ".next_y",

@@ -37,7 +37,7 @@ calculate_psr <- function(skills, coef_df, center = TRUE) {
   coef_df <- coef_df[coef_df$beta != 0, , drop = FALSE]
 
   if (nrow(coef_df) == 0) {
-    cli::cli_warn("All coefficients are zero — PSR will be zero for all players")
+    cli::cli_warn("All coefficients are zero -- PSR will be zero for all players")
     dt[, c("psr_raw", "psr") := 0]
     id_cols <- intersect(c("player_id", "player_name", "season", "round", "pos_group"), names(dt))
     return(dt[, c(id_cols, "psr_raw", "psr"), with = FALSE])

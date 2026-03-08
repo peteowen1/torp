@@ -29,10 +29,7 @@ articles:
       - getting-started
   - title: Guides
     contents:
-      - data-architecture
-      - model-usage
-      - player-ratings
-      - season-simulation
+      - torp-guide
 
 reference:
   - title: Data Loading

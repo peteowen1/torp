@@ -6,8 +6,6 @@ library(dplyr)
 library(httr2)
 library(arrow)
 library(lubridate)
-library(fitzRoy)
-
 devtools::load_all()
 
 # Load data ----
@@ -15,7 +13,7 @@ devtools::load_all()
 fixtures <- load_fixtures(all = TRUE) |>
   filter(!is.na(utcStartTime)) |>
   mutate(
-    venue = replace_venues(venue.name),
+    venue = torp_replace_venues(venue.name),
     utcStartTime = as.POSIXct(utcStartTime, format = "%Y-%m-%dT%H:%M", tz = "UTC")
   ) |>
   filter(!is.na(utcStartTime)) |>
