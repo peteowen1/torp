@@ -956,15 +956,15 @@ for (nm in names(param_stat_map)) {
 # Lower bounds (widened; stat weight bounds now [-10, 10] since normalization changes scale)
 par_lower <- c(
   # --- EPV/scale params (disp) ---
-  disp_neg_offset        = -0.5,
+  disp_neg_offset        = 0,
   disp_pos_offset        = 0,
-  disp_scale             = 0.1,
+  disp_scale             = 1,
   # --- EPV/scale params (recv) ---
-  recv_neg_mult          = 0.3,
-  recv_neg_offset        = -0.3,
-  recv_pos_mult          = 0.3,
+  recv_neg_mult          = 1,
+  recv_neg_offset        = 0,
+  recv_pos_mult          = 1,
   recv_pos_offset        = 0,
-  recv_scale             = 0.1,
+  recv_scale             = 1,
   # --- Stat weights: disp component (all [-10, 10]; L2 provides real constraint) ---
   bounce_wt              = -10,
   inside50s_wt           = -10,
@@ -1019,14 +1019,14 @@ par_lower <- c(
 par_upper <- c(
   # --- EPV/scale params (disp) ---
   disp_neg_offset        = 0,
-  disp_pos_offset        = 0.5,
-  disp_scale             = 2.0,
+  disp_pos_offset        = 0,
+  disp_scale             = 1,
   # --- EPV/scale params (recv) ---
-  recv_neg_mult          = 3.0,
-  recv_neg_offset        = 0.5,
-  recv_pos_mult          = 3.0,
-  recv_pos_offset        = 0.5,
-  recv_scale             = 2.0,
+  recv_neg_mult          = 1,
+  recv_neg_offset        = 0,
+  recv_pos_mult          = 1,
+  recv_pos_offset        = 0,
+  recv_scale             = 1,
   # --- Stat weights: disp component ---
   bounce_wt              = 10,
   inside50s_wt           = 10,
@@ -1541,12 +1541,30 @@ rm(credit_dt_final, pcum_final, lookup_final, joined_final,
 # 8. Results ----
 cat("\n=== OPTIMIZED PARAMETERS (normalized scale) ===\n")
 cat("\n# Stat weights (normalized = per-SD; raw = per-count for constants.R):\n")
-cat(sprintf("  %-28s %10s %10s %10s\n", "param", "normalized", "raw", "default_raw"))
-for (nm in names(param_stat_map)) {
-  sd_col <- param_stat_map[nm]
-  raw_wt <- best_par[nm] / stat_sds[sd_col]
-  def_raw <- par_defaults[nm] / stat_sds[sd_col]
-  cat(sprintf("  %-28s %+10.4f %+10.4f %+10.4f\n", nm, best_par[nm], raw_wt, def_raw))
+stat_categories <- list(
+  "Scoring/Forward" = c("goals_wt", "behinds_wt", "shots_at_goal_wt",
+                         "marks_inside50_wt", "inside50s_wt",
+                         "score_involvements_wt", "goal_assists_wt"),
+  "Contested/Ground" = c("contested_poss_wt", "contested_marks_wt",
+                          "ground_ball_gets_wt", "clearances_wt"),
+  "Defence" = c("spoil_wt", "tackle_wt", "pressure_wt", "def_pressure_wt",
+                "intercepts_wt", "one_percenters_wt", "rebound50s_wt"),
+  "Ruck" = c("hitout_wt", "hitout_adv_wt", "ruck_contest_wt"),
+  "Disposal/Possession" = c("kicks_wt", "handballs_wt", "marks_wt",
+                             "uncontested_poss_wt", "metres_gained_wt",
+                             "bounce_wt"),
+  "Turnover/Discipline" = c("clangers_wt", "turnovers_wt",
+                             "frees_against_wt", "frees_for_wt")
+)
+for (cat_name in names(stat_categories)) {
+  cat(sprintf("\n  --- %s ---\n", cat_name))
+  cat(sprintf("  %-28s %10s %10s %10s\n", "param", "normalized", "raw", "default_raw"))
+  for (nm in stat_categories[[cat_name]]) {
+    sd_col <- param_stat_map[nm]
+    raw_wt <- best_par[nm] / stat_sds[sd_col]
+    def_raw <- par_defaults[nm] / stat_sds[sd_col]
+    cat(sprintf("  %-28s %+10.4f %+10.4f %+10.4f\n", nm, best_par[nm], raw_wt, def_raw))
+  }
 }
 cat("\n# EPV/scale params:\n")
 epv_params <- setdiff(names(par_defaults), c(names(param_stat_map),
