@@ -490,16 +490,17 @@ compute_credits <- function(pgr, params, verbose = FALSE) {
                     score_inv * p["score_involvements_wt"] +
                     kicks * p["kicks_wt"] + handballs * p["handballs_wt"] +
                     metres_gained * p["metres_gained_wt"] + turnovers_stat * p["turnovers_wt"] +
-                    goal_assists * p["goal_assists_wt"]]
+                    goal_assists * p["goal_assists_wt"] +
+                    goals * p["goals_wt"] + behinds * p["behinds_wt"] +
+                    shots_at_goal * p["shots_at_goal_wt"]]
 
   # Reception points
   out[, recv_pts := (p["recv_neg_mult"] * sum_depv_pt_neg + n_recv_neg * p["recv_neg_offset"]) * p["recv_scale"] +
                     (p["recv_pos_mult"] * sum_depv_pt_pos + n_recv_pos * p["recv_pos_offset"]) * p["recv_scale"] +
                     contested_poss * p["contested_poss_wt"] + contested_marks * p["contested_marks_wt"] +
                     ground_ball_gets * p["ground_ball_gets_wt"] + marks_inside50 * p["marks_inside50_wt"] +
-                    goals * p["goals_wt"] + behinds * p["behinds_wt"] +
                     marks_total * p["marks_wt"] + uncontested_poss * p["uncontested_poss_wt"] +
-                    shots_at_goal * p["shots_at_goal_wt"]]
+                    frees_for * p["frees_for_wt"]]
 
   # Spoil points
   out[, spoil_pts := spoils * p["spoil_wt"] + tackles * p["tackle_wt"] +
@@ -510,7 +511,7 @@ compute_credits <- function(pgr, params, verbose = FALSE) {
   # Hitout points
   out[, hitout_pts := hitouts * p["hitout_wt"] + hitouts_adv * p["hitout_adv_wt"] +
                       ruck_contests * p["ruck_contest_wt"] +
-                      clearances * p["clearances_wt"] + frees_for * p["frees_for_wt"]]
+                      clearances * p["clearances_wt"]]
 
   # Per-80 normalisation first: divide by actual TOG so ratings are per-full-game.
   # Must happen BEFORE position-quantile so the quantile operates on per-80 rates
@@ -628,28 +629,41 @@ objective_fn_fast <- function(par, env) {
   disp_pts <- (env$sum_depv_neg + env$n_neg * p["disp_neg_offset"]) * p["disp_scale"] +
               (env$sum_depv_pos + env$n_pos * p["disp_pos_offset"]) * p["disp_scale"] +
               env$bounces * p["bounce_wt"] +
-              env$inside50s * p["inside50s_wt"] + env$clangers * p["clangers_wt"] +
+              env$inside50s * p["inside50s_wt"] +
+              env$clangers * p["clangers_wt"] +
               env$score_inv * p["score_involvements_wt"] +
-              env$kicks * p["kicks_wt"] + env$handballs * p["handballs_wt"] +
-              env$metres_gained * p["metres_gained_wt"] + env$turnovers_stat * p["turnovers_wt"] +
-              env$goal_assists * p["goal_assists_wt"]
+              env$kicks * p["kicks_wt"] +
+              env$handballs * p["handballs_wt"] +
+              env$metres_gained * p["metres_gained_wt"] +
+              env$turnovers_stat * p["turnovers_wt"] +
+              env$goal_assists * p["goal_assists_wt"] +
+              env$goals * p["goals_wt"] +
+              env$behinds * p["behinds_wt"] +
+              env$shots_at_goal * p["shots_at_goal_wt"]
 
   recv_pts <- (p["recv_neg_mult"] * env$sum_depv_pt_neg + env$n_recv_neg * p["recv_neg_offset"]) * p["recv_scale"] +
               (p["recv_pos_mult"] * env$sum_depv_pt_pos + env$n_recv_pos * p["recv_pos_offset"]) * p["recv_scale"] +
-              env$contested_poss * p["contested_poss_wt"] + env$contested_marks * p["contested_marks_wt"] +
-              env$ground_ball_gets * p["ground_ball_gets_wt"] + env$marks_inside50 * p["marks_inside50_wt"] +
-              env$goals * p["goals_wt"] + env$behinds * p["behinds_wt"] +
-              env$marks_total * p["marks_wt"] + env$uncontested_poss * p["uncontested_poss_wt"] +
-              env$shots_at_goal * p["shots_at_goal_wt"]
+              env$contested_poss * p["contested_poss_wt"] +
+              env$contested_marks * p["contested_marks_wt"] +
+              env$ground_ball_gets * p["ground_ball_gets_wt"] +
+              env$marks_inside50 * p["marks_inside50_wt"] +
+              env$marks_total * p["marks_wt"] +
+              env$uncontested_poss * p["uncontested_poss_wt"] +
+              env$frees_for * p["frees_for_wt"]
 
-  spoil_pts <- env$spoils * p["spoil_wt"] + env$tackles * p["tackle_wt"] +
-               env$pressure_acts * p["pressure_wt"] + env$def_pressure * p["def_pressure_wt"] +
-               env$intercepts * p["intercepts_wt"] + env$one_percenters * p["one_percenters_wt"] +
-               env$rebound50s * p["rebound50s_wt"] + env$frees_against * p["frees_against_wt"]
+  spoil_pts <- env$spoils * p["spoil_wt"] +
+               env$tackles * p["tackle_wt"] +
+               env$pressure_acts * p["pressure_wt"] +
+               env$def_pressure * p["def_pressure_wt"] +
+               env$one_percenters * p["one_percenters_wt"] +
+               env$frees_against * p["frees_against_wt"] +
+               env$intercepts * p["intercepts_wt"] +
+               env$rebound50s * p["rebound50s_wt"]
 
-  hitout_pts <- env$hitouts * p["hitout_wt"] + env$hitouts_adv * p["hitout_adv_wt"] +
+  hitout_pts <- env$hitouts * p["hitout_wt"] +
+                env$hitouts_adv * p["hitout_adv_wt"] +
                 env$ruck_contests * p["ruck_contest_wt"] +
-                env$clearances * p["clearances_wt"] + env$frees_for * p["frees_for_wt"]
+                env$clearances * p["clearances_wt"]
 
   # Per-80 normalisation first (before position-quantile, so quantile
   # operates on per-80 rates rather than inflating per-game adjustments)

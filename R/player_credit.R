@@ -157,7 +157,7 @@ create_player_game_data <- function(pbp_data = NULL,
       spoil_pts = extended_stats_spoils * p$spoil_wt + tackles * p$tackle_wt + extended_stats_pressure_acts * p$pressure_wt + extended_stats_def_half_pressure_acts * p$def_pressure_wt +
                   intercepts * p$intercepts_wt + one_percenters * p$one_percenters_wt + rebound50s * p$rebound50s_wt + frees_against * p$frees_against_wt,
       hitout_pts = hitouts * p$hitout_wt + extended_stats_hitouts_to_advantage * p$hitout_adv_wt + extended_stats_ruck_contests * p$ruck_contest_wt +
-                   clearances_total_clearances * p$clearances_wt + frees_for * p$frees_for_wt
+                   clearances_total_clearances * p$clearances_wt
     ) |>
     dplyr::select(-utc_start_time)
 
@@ -182,12 +182,13 @@ create_player_game_data <- function(pbp_data = NULL,
       recv_pts = tidyr::replace_na(recv_pts, 0) +
                  contested_possessions * p$contested_poss_wt + contested_marks * p$contested_marks_wt +
                  extended_stats_ground_ball_gets * p$ground_ball_gets_wt + marks_inside50 * p$marks_inside50_wt +
-                 goals * p$goals_wt + behinds * p$behinds_wt + marks * p$marks_wt +
-                 uncontested_possessions * p$uncontested_poss_wt + shots_at_goal * p$shots_at_goal_wt,
+                 marks * p$marks_wt + uncontested_possessions * p$uncontested_poss_wt +
+                 frees_for * p$frees_for_wt,
       disp_pts = tidyr::replace_na(disp_pts, 0) + bounces * p$bounce_wt +
                  inside50s * p$inside50s_wt + clangers * p$clangers_wt + score_involvements * p$score_involvements_wt +
                  kicks * p$kicks_wt + handballs * p$handballs_wt + metres_gained * p$metres_gained_wt +
-                 turnovers * p$turnovers_wt + goal_assists * p$goal_assists_wt,
+                 turnovers * p$turnovers_wt + goal_assists * p$goal_assists_wt +
+                 goals * p$goals_wt + behinds * p$behinds_wt + shots_at_goal * p$shots_at_goal_wt,
       spoil_pts = tidyr::replace_na(spoil_pts, 0),
       hitout_pts = tidyr::replace_na(hitout_pts, 0),
       tot_p = recv_pts + disp_pts + spoil_pts + hitout_pts
