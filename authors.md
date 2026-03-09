@@ -7,7 +7,7 @@
 ## Citation
 
 Source:
-[`DESCRIPTION`](https://github.com/peteowen1/torp/blob/dev/DESCRIPTION)
+[`DESCRIPTION`](https://github.com/peteowen1/torp/blob/main/DESCRIPTION)
 
 Owen P (2026). *torp: AFL Analytics and Player Rating System*. R package
 version 1.0.0, <https://peteowen1.github.io/torp/>.

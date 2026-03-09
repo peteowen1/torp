@@ -341,6 +341,11 @@ In-memory and disk caching utilities
 
 AFL and model constants
 
+- [`AFL_TEAMS`](https://peteowen1.github.io/torp/reference/AFL_TEAMS.md)
+  : Canonical AFL team lookup table
+- [`AFL_TEAM_ALIASES`](https://peteowen1.github.io/torp/reference/AFL_TEAM_ALIASES.md)
+  : Named vector mapping team name variants to canonical names
+
 ## Injuries
 
 Injury data access and matching
@@ -380,6 +385,10 @@ Helper and convenience functions
   : Set Local Data Directory
 - [`torp_replace_teams()`](https://peteowen1.github.io/torp/reference/torp_replace_teams.md)
   : Standardise AFL Team Names
+- [`torp_team_abbr()`](https://peteowen1.github.io/torp/reference/torp_team_abbr.md)
+  : Get AFL Team Abbreviation
+- [`torp_team_full()`](https://peteowen1.github.io/torp/reference/torp_team_full.md)
+  : Get AFL Team Full Name
 - [`torp_replace_venues()`](https://peteowen1.github.io/torp/reference/torp_replace_venues.md)
   : Standardise AFL Venue Names
 

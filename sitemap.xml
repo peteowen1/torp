@@ -13,6 +13,8 @@
 <url><loc>https://peteowen1.github.io/torp/reference/AFL_MAX_PERIODS.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/AFL_QUARTER_DURATION.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/AFL_REGULAR_SEASON_ROUNDS.html</loc></url>
+<url><loc>https://peteowen1.github.io/torp/reference/AFL_TEAMS.html</loc></url>
+<url><loc>https://peteowen1.github.io/torp/reference/AFL_TEAM_ALIASES.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/AFL_TIME_SCALER_MAX.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/AFL_TOTAL_GAME_SECONDS.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/CHAINS_CONTEST_TARGET_DESCS.html</loc></url>
@@ -204,6 +206,7 @@
 <url><loc>https://peteowen1.github.io/torp/reference/dot-fetch_forecast_weather.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/dot-load_match_weather.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/dot-map_position_group.html</loc></url>
+<url><loc>https://peteowen1.github.io/torp/reference/dot-normalise_pbp_columns.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/dot-normalise_results_schema.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/dot-parse_match_roster.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/dot-parse_match_stats.html</loc></url>
@@ -370,6 +373,8 @@
 <url><loc>https://peteowen1.github.io/torp/reference/torp_dummy_cols.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/torp_replace_teams.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/torp_replace_venues.html</loc></url>
+<url><loc>https://peteowen1.github.io/torp/reference/torp_team_abbr.html</loc></url>
+<url><loc>https://peteowen1.github.io/torp/reference/torp_team_full.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/validate_chains_quality.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/validate_data_freshness.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/validate_data_quality.html</loc></url>
