@@ -422,8 +422,8 @@ prepare_final_dataframe <- function(plyr_tm_df = NULL, player_game_data = NULL, 
     dplyr::left_join(player_game_data, by = c("providerId" = "player_id")) |>
     dplyr::ungroup() |>
     dplyr::mutate(
-      round = round_val,
-      season = season_val
+      round = .env$round_val,
+      season = .env$season_val
     ) |>
     dplyr::left_join(fix_summary) |>
     dplyr::mutate(

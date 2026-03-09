@@ -315,6 +315,9 @@ if (nrow(torp_new) > 0) {
     )
 
     if (!is.null(existing) && nrow(existing) > 0) {
+      # Deduplicate both sides by row_id (keeps first occurrence)
+      existing <- dplyr::distinct(existing, row_id, .keep_all = TRUE)
+      torp_new <- dplyr::distinct(torp_new, row_id, .keep_all = TRUE)
       torp_df_total <- existing |>
         dplyr::rows_upsert(torp_new, by = "row_id")
       if (nrow(torp_df_total) < nrow(existing)) {
