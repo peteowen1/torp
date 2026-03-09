@@ -181,6 +181,8 @@ reference:
       - save_locally
       - set_local_data_dir
       - torp_replace_teams
+      - torp_team_abbr
+      - torp_team_full
       - torp_replace_venues
 
   - title: AFL API

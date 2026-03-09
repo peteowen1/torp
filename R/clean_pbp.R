@@ -68,7 +68,9 @@ add_torp_ids_dt <- function(dt) {
       sprintf("%04d", display_order)
     ),
     # Basic variables
-    team = data.table::fifelse(team_id == home_team_id, home_team_team_name, away_team_team_name),
+    team = torp_replace_teams(
+      data.table::fifelse(team_id == home_team_id, home_team_team_name, away_team_team_name)
+    ),
     opp_id = data.table::fifelse(team_id == home_team_id, away_team_id, home_team_id),
     y = -y,
     home_away = factor(data.table::fifelse(team_id == home_team_id, "Home", "Away")),

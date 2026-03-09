@@ -98,7 +98,10 @@ filter_game_data <- function(df, season_val, round_num, matchid, team) {
       (.data$tm == team | .data$opp == team)
     )
     if (nrow(df) == 0) {
-      cli::cli_abort("Team not found. Please use one of: Adelaide Crows, Brisbane Lions, Carlton, Collingwood, Essendon, Fremantle, Geelong Cats, Gold Coast Suns, GWS Giants, Hawthorn, Melbourne, North Melbourne, Port Adelaide, Richmond, St Kilda, Sydney Swans, West Coast Eagles, Western Bulldogs")
+      cli::cli_abort(paste0(
+        "Team not found. Please use one of: ",
+        paste(AFL_TEAMS$name, collapse = ", ")
+      ))
     }
   } else {
     df <- df |> dplyr::filter(

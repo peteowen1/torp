@@ -591,3 +591,128 @@ MATCH_MIN_DATA_SEASON <- 2021
 #' Earliest round in MATCH_MIN_DATA_SEASON with reliable data
 #' @keywords internal
 MATCH_MIN_DATA_ROUND <- 14
+
+
+# Team Name Constants
+# --------------------
+
+#' Canonical AFL team lookup table
+#'
+#' Data frame with 18 rows mapping canonical short name, full name, and
+#' AFL API abbreviation for each current AFL team.
+#' @export
+AFL_TEAMS <- data.frame(
+  name = c(
+    "Adelaide", "Brisbane Lions", "Carlton", "Collingwood", "Essendon",
+    "Fremantle", "Geelong", "Gold Coast", "GWS", "Hawthorn",
+    "Melbourne", "North Melbourne", "Port Adelaide", "Richmond",
+    "St Kilda", "Sydney", "West Coast", "Western Bulldogs"
+  ),
+  full = c(
+    "Adelaide Crows", "Brisbane Lions", "Carlton Blues", "Collingwood Magpies",
+    "Essendon Bombers", "Fremantle Dockers", "Geelong Cats", "Gold Coast Suns",
+    "GWS Giants", "Hawthorn Hawks", "Melbourne Demons", "North Melbourne Kangaroos",
+    "Port Adelaide Power", "Richmond Tigers", "St Kilda Saints", "Sydney Swans",
+    "West Coast Eagles", "Western Bulldogs"
+  ),
+  abbr = c(
+    "ADEL", "BL", "CARL", "COLL", "ESS",
+    "FRE", "GEEL", "GCFC", "GWS", "HAW",
+    "MELB", "NMFC", "PA", "RICH",
+    "STK", "SYD", "WCE", "WB"
+  ),
+  stringsAsFactors = FALSE
+)
+
+#' Named vector mapping team name variants to canonical names
+#'
+#' Maps abbreviations, full names, nicknames, Indigenous round names,
+#' and other variants to the canonical short name used in `AFL_TEAMS$name`.
+#' @export
+AFL_TEAM_ALIASES <- c(
+
+  # --- Abbreviations (AFL API + common) ---
+  "ADEL"  = "Adelaide",
+  "BL"    = "Brisbane Lions",
+  "CARL"  = "Carlton",
+  "COLL"  = "Collingwood",
+  "ESS"   = "Essendon",
+  "FRE"   = "Fremantle",
+  "GEEL"  = "Geelong",
+  "GCFC"  = "Gold Coast",
+  "GWS"   = "GWS",
+  "HAW"   = "Hawthorn",
+  "MELB"  = "Melbourne",
+  "NMFC"  = "North Melbourne",
+  "NM"    = "North Melbourne",
+  "PA"    = "Port Adelaide",
+  "RICH"  = "Richmond",
+  "STK"   = "St Kilda",
+  "SYD"   = "Sydney",
+  "WCE"   = "West Coast",
+  "WB"    = "Western Bulldogs",
+
+  # --- Full names ---
+  "Adelaide Crows"             = "Adelaide",
+  "Brisbane Lions"             = "Brisbane Lions",
+  "Brisbane Bears"             = "Brisbane Lions",
+  "Carlton Blues"              = "Carlton",
+  "Collingwood Magpies"        = "Collingwood",
+  "Essendon Bombers"           = "Essendon",
+  "Fremantle Dockers"          = "Fremantle",
+  "Geelong Cats"               = "Geelong",
+  "Gold Coast Suns"            = "Gold Coast",
+  "GWS Giants"                 = "GWS",
+  "Greater Western Sydney"     = "GWS",
+  "Greater Western Sydney Giants" = "GWS",
+  "GW Sydney Giants"           = "GWS",
+  "Hawthorn Hawks"             = "Hawthorn",
+  "Melbourne Demons"           = "Melbourne",
+  "North Melbourne Kangaroos"  = "North Melbourne",
+  "Port Adelaide Power"        = "Port Adelaide",
+  "Richmond Tigers"            = "Richmond",
+
+  "St Kilda Saints"            = "St Kilda",
+  "Sydney Swans"               = "Sydney",
+  "South Melbourne"            = "Sydney",
+  "South Melbourne Swans"      = "Sydney",
+  "West Coast Eagles"          = "West Coast",
+  "Western Bulldogs"           = "Western Bulldogs",
+  "Footscray"                  = "Western Bulldogs",
+  "Footscray Bulldogs"         = "Western Bulldogs",
+
+  # --- Nicknames ---
+  "Crows"     = "Adelaide",
+  "Lions"     = "Brisbane Lions",
+  "Bears"     = "Brisbane Lions",
+
+  "Blues"     = "Carlton",
+  "Magpies"   = "Collingwood",
+  "Pies"      = "Collingwood",
+  "Bombers"   = "Essendon",
+  "Dockers"   = "Fremantle",
+  "Cats"      = "Geelong",
+  "Suns"      = "Gold Coast",
+  "SUNS"      = "Gold Coast",
+  "Giants"    = "GWS",
+  "GIANTS"    = "GWS",
+  "Hawks"     = "Hawthorn",
+  "Demons"    = "Melbourne",
+  "Kangaroos" = "North Melbourne",
+  "Roos"      = "North Melbourne",
+  "Power"     = "Port Adelaide",
+  "Tigers"    = "Richmond",
+  "Saints"    = "St Kilda",
+  "Swans"     = "Sydney",
+  "Eagles"    = "West Coast",
+  "Bulldogs"  = "Western Bulldogs",
+
+  # --- Indigenous round names ---
+  "Kuwarna"          = "Adelaide",
+  "Narrm"            = "Melbourne",
+  "Walyalup"         = "Fremantle",
+  "Yartapuulti"      = "Port Adelaide",
+  "Euro-Yroke"       = "St Kilda",
+  "Waalitj Marawar"  = "West Coast",
+  "Wallitj Marawar"  = "West Coast"
+)

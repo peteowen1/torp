@@ -10,14 +10,14 @@ torp_replace_teams(team)
 \item{team}{Character vector of team names}
 }
 \value{
-Character vector with standardised names
+Character vector with standardised names. Unknown values pass through unchanged.
 }
 \description{
 Maps team name variants (abbreviations, nicknames, Indigenous round names)
-to canonical team names. Drop-in replacement for \code{fitzRoy::replace_teams()}.
+to canonical team names using \link{AFL_TEAM_ALIASES}. Drop-in replacement for
+\code{fitzRoy::replace_teams()}.
 }
 \examples{
 torp_replace_teams("Adelaide Crows")
 torp_replace_teams(c("GWS Giants", "Narrm", "WB"))
-
 }
