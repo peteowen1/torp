@@ -220,6 +220,9 @@ load_player_stats <- function(seasons = get_afl_season(), use_disk_cache = FALSE
 
   out <- load_from_url(urls, seasons = seasons, use_disk_cache = use_disk_cache, columns = columns)
 
+  # Normalise column names across API schema versions (2021-2025 vs 2026+ v2)
+  out <- .normalise_player_stats_columns(out)
+
   return(out)
 }
 

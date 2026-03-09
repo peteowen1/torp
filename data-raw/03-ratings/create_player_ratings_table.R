@@ -97,7 +97,7 @@ plyr_gm_df <-
         hitout_pts_wt = hitout_pts * max(weight_gm)
       ) %>%
       dplyr::select(-utc_start_time),
-    by = c("player_id" = "player_player_player_player_id", "match_id" = "provider_id")
+    by = c("player_id" = "player_id", "match_id" = "match_id")
   ) %>%
   dplyr::mutate(
     recv_pts = tidyr::replace_na(recv_pts, 0), # + 0.15 * extended_stats_effective_disposals - bounces * 0.5,

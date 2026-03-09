@@ -61,18 +61,8 @@ recv_raw <- data.table::as.data.table(pbp_data)[
 setnames(recv_raw, "lead_player_id", "player_id")
 
 ## 2c. Spoil/hitout raw counts ----
-# Detect player_id column name (upstream schema changed from player_player_player_player_id to player_id)
+# load_player_stats() now normalises column names (player_id, match_id, etc.)
 ps_dt <- data.table::as.data.table(player_stats)
-ps_pid_col <- intersect(c("player_id", "player_player_player_player_id"), names(ps_dt))[1]
-ps_mid_col <- intersect(c("match_id", "provider_id"), names(ps_dt))[1]
-if (is.na(ps_pid_col) || is.na(ps_mid_col)) {
-  stop("Cannot find player_id or match_id column in player_stats. Available: ", paste(names(ps_dt), collapse = ", "))
-}
-cat(sprintf("  player_stats ID columns: %s, %s\n", ps_pid_col, ps_mid_col))
-
-# Standardise column names for downstream use
-if (ps_pid_col != "player_id") data.table::setnames(ps_dt, ps_pid_col, "player_id")
-if (ps_mid_col != "match_id") data.table::setnames(ps_dt, ps_mid_col, "match_id")
 
 spoil_hitout_raw <- ps_dt[
   , .(
@@ -1208,8 +1198,8 @@ for (i in seq_len(nrow(agg_grid))) {
 
   # Aggregate to match-level torp_diff (weight per-80 TORP by lineup_tog)
   torp_weighted <- torp_vec * j$lineup_tog
-  home_sum <- tapply(torp_weighted * j$is_home, j$match_idx, sum, na.rm = TRUE)
-  away_sum <- tapply(torp_weighted * (!j$is_home), j$match_idx, sum, na.rm = TRUE)
+  home_sum <- rowsum(torp_weighted * j$is_home, j$match_idx, reorder = FALSE, na.rm = TRUE)
+  away_sum <- rowsum(torp_weighted * (!j$is_home), j$match_idx, reorder = FALSE, na.rm = TRUE)
   torp_diff <- as.numeric(home_sum - away_sum)
 
   # Position balance penalty

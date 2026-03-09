@@ -94,19 +94,16 @@ prepare_skill_data <- function(player_game_data, player_stats, rosters = NULL,
   pgd[, tog_denominator := 1]
   pgd[, played := 1L]
 
-  # Identify player_id and match_id columns in player_stats
-  # player_stats uses: player_player_player_player_id (player) + provider_id (match)
-  pid_col <- intersect(c("player_id", "player_player_player_player_id"), names(ps))
-  mid_col <- intersect(c("match_id", "provider_id"), names(ps))
-  if (length(pid_col) == 0 || length(mid_col) == 0) {
+  # player_stats columns are normalised by load_player_stats()
+  if (!all(c("player_id", "match_id") %in% names(ps))) {
     cli::cli_warn(c(
-      "Cannot find player/match ID columns in player_stats.",
+      "Cannot find player_id/match_id columns in player_stats.",
       "i" = "Some skills will rely entirely on the prior."
     ))
     pgd[, disposal_efficiency_pct_x_disposals := NA_real_]
   } else {
-    pid_col <- pid_col[1]
-    mid_col <- mid_col[1]
+    pid_col <- "player_id"
+    mid_col <- "match_id"
 
     # Find all stat columns needed by skill definitions but missing from pgd
     stat_defs_merge <- skill_stat_definitions()

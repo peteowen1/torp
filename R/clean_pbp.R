@@ -200,16 +200,22 @@ add_quarter_vars_dt <- function(dt) {
   # a behind was missed. Assign points to the kick-in team's opponent (the attacker).
   dt[, lag_points_row := data.table::shift(points_row, n = 1L, type = "lag"), by = .(match_id, period)]
   orphan_idx <- dt[, which(grepl("Kickin", description) & (is.na(lag_points_row) | lag_points_row == 0L))]
-  for (i in orphan_idx) {
-    prev <- i - 1L
-    if (prev < 1L) next
-    # Guard: don't write across match/period boundaries
-    if (dt$match_id[prev] != dt$match_id[i] || dt$period[prev] != dt$period[i]) next
-    # Skip if prev row is also a kick-in (consecutive kick-ins, not a new behind)
-    if (grepl("Kickin", dt$description[prev])) next
-    if (is.na(dt$points_row[prev]) || dt$points_row[prev] == 0L) {
-      data.table::set(dt, prev, "points_row", 1L)
-      data.table::set(dt, prev, "points_team_id", dt$opp_id[i])
+  if (length(orphan_idx) > 0L) {
+    prev_idx <- orphan_idx - 1L
+    # Filter to valid prev indices (not row 0)
+    keep <- prev_idx >= 1L
+    orphan_idx <- orphan_idx[keep]
+    prev_idx <- prev_idx[keep]
+    if (length(prev_idx) > 0L) {
+      # Vectorised guards: same match/period, prev not a kick-in, prev has no points
+      valid <- dt$match_id[prev_idx] == dt$match_id[orphan_idx] &
+        dt$period[prev_idx] == dt$period[orphan_idx] &
+        !grepl("Kickin", dt$description[prev_idx]) &
+        (is.na(dt$points_row[prev_idx]) | dt$points_row[prev_idx] == 0L)
+      if (any(valid)) {
+        data.table::set(dt, prev_idx[valid], "points_row", 1L)
+        data.table::set(dt, prev_idx[valid], "points_team_id", dt$opp_id[orphan_idx[valid]])
+      }
     }
   }
   dt[, lag_points_row := NULL]

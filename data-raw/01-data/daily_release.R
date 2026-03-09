@@ -401,6 +401,14 @@ update_player_stats <- function(season) {
     return(invisible(NULL))
   }
 
+  # Normalise column names (strips v2 stats_ prefix, renames player/match IDs)
+  player_stats <- .normalise_player_stats_columns(player_stats)
+
+  # Ensure season column exists
+  if (!"season" %in% names(player_stats)) {
+    player_stats$season <- as.integer(season)
+  }
+
   file_name <- glue::glue("player_stats_{season}")
   save_to_release(df = player_stats, file_name = file_name, release_tag = "player_stats-data")
 

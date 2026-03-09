@@ -99,56 +99,40 @@ create_player_game_data <- function(pbp_data = NULL,
   # Compute a single reference date for consistent decay weights across all data sources
   ref_date <- max(as.Date(pbp_data$utc_start_time), na.rm = TRUE)
 
-  # --- Step 1: Disposal points from PBP (grouped by player_id + match_id) ---
-  disp_df <- pbp_data |>
-    dplyr::arrange(match_id, display_order) |>
-    dplyr::select(
-      player_name, player_id, match_id, utc_start_time, home_away,
-      away_team_team_name, home_team_team_name,
-      delta_epv, team, player_position, round_week, pos_team, wpa
-    ) |>
-    dplyr::mutate(
-      weight_gm = exp(as.numeric(-(ref_date - as.Date(utc_start_time))) / decay),
-      opp_tm = ifelse(home_away == "Home", away_team_team_name, home_team_team_name)
-    ) |>
-    dplyr::group_by(player_id, match_id) |>
-    dplyr::summarise(
-      plyr_nm = max(player_name, na.rm = TRUE),
-      utc_start_time = max(utc_start_time),
-      weight_gm = max(weight_gm),
-      disp_pts = sum(dplyr::if_else(pos_team == -1, delta_epv + p$disp_neg_offset, delta_epv + p$disp_pos_offset) * p$disp_scale),
-      disp = floor(dplyr::n() / 2),
-      tm = dplyr::last(team),
-      opp = dplyr::last(opp_tm),
-      pos = dplyr::last(player_position),
-      round = as.numeric(dplyr::last(round_week)),
-      season = dplyr::last(lubridate::year(utc_start_time)),
-      .groups = "drop"
-    )
+  # --- Steps 1-3: PBP aggregation using data.table for performance ---
+  # Convert once and compute shared columns (avoids two full dplyr scans of PBP)
+  dt <- data.table::as.data.table(pbp_data)
+  data.table::setorder(dt, match_id, display_order)
+  dt[, `:=`(
+    weight_gm = exp(as.numeric(-(ref_date - as.Date(utc_start_time))) / decay),
+    opp_tm = data.table::fifelse(home_away == "Home", away_team_team_name, home_team_team_name)
+  )]
 
-  # --- Step 2: Reception points (self-join on lead_player_id) ---
-  recv_df <- pbp_data |>
-    dplyr::select(
-      lead_player, lead_player_id, match_id, utc_start_time, home_away,
-      away_team_team_name, home_team_team_name,
-      delta_epv, team, player_position, round_week, pos_team, wpa
-    ) |>
-    dplyr::mutate(
-      weight_gm = exp(as.numeric(-(ref_date - as.Date(utc_start_time))) / decay)
-    ) |>
-    dplyr::group_by(lead_player, lead_player_id, match_id) |>
-    dplyr::summarise(
-      recv_pts = sum(dplyr::if_else(pos_team == -1, (p$recv_neg_mult * delta_epv * pos_team) + p$recv_neg_offset, (p$recv_pos_mult * delta_epv * pos_team) + p$recv_pos_offset) * p$recv_scale),
-      recvs = dplyr::n(),
-      .groups = "drop"
-    )
+  # Step 1: Disposal points (grouped by player_id + match_id)
+  disp_dt <- dt[, .(
+    plyr_nm = max(player_name, na.rm = TRUE),
+    utc_start_time = max(utc_start_time),
+    weight_gm = max(weight_gm),
+    disp_pts = sum(data.table::fifelse(pos_team == -1, delta_epv + p$disp_neg_offset, delta_epv + p$disp_pos_offset) * p$disp_scale),
+    disp = floor(.N / 2L),
+    tm = team[.N],
+    opp = opp_tm[.N],
+    pos = player_position[.N],
+    round = as.numeric(round_week[.N]),
+    season = lubridate::year(utc_start_time[.N])
+  ), by = .(player_id, match_id)]
 
-  # --- Step 3: Join disposal + reception ---
-  plyr_gm_df <- disp_df |>
-    dplyr::left_join(
-      recv_df,
-      by = c("player_id" = "lead_player_id", "match_id" = "match_id")
-    )
+  # Step 2: Reception points (grouped by lead_player_id + match_id)
+  recv_dt <- dt[, .(
+    recv_pts = sum(data.table::fifelse(pos_team == -1, (p$recv_neg_mult * delta_epv * pos_team) + p$recv_neg_offset, (p$recv_pos_mult * delta_epv * pos_team) + p$recv_pos_offset) * p$recv_scale),
+    recvs = .N
+  ), by = .(lead_player_id, match_id)]
+
+  # Step 3: Join disposal + reception
+  plyr_gm_df <- merge(disp_dt, recv_dt,
+    by.x = c("player_id", "match_id"),
+    by.y = c("lead_player_id", "match_id"),
+    all.x = TRUE, sort = FALSE)
 
   # --- Step 4: Join spoils/tackles/hitouts from raw player_stats ---
   spoil_hitout_df <- player_stats |>
@@ -164,14 +148,13 @@ create_player_game_data <- function(pbp_data = NULL,
   plyr_gm_df <- plyr_gm_df |>
     dplyr::left_join(
       spoil_hitout_df,
-      by = c("player_id" = "player_player_player_player_id", "match_id" = "provider_id")
+      by = c("player_id" = "player_id", "match_id" = "match_id")
     )
 
   # Assert join produced matches (catches upstream schema changes)
   if (all(is.na(plyr_gm_df$spoil_pts))) {
     cli::cli_abort(c(
       "Player stats join produced no matches - all spoil/hitout points are zero.",
-      "i" = "The column {.val player_player_player_player_id} may have changed in upstream data.",
       "i" = "Check that {.fn load_player_stats} returns the expected column names."
     ))
   }

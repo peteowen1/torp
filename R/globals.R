@@ -85,8 +85,8 @@ utils::globalVariables(c(
   "extended_stats_spoils", "extended_stats_pressure_acts",
   "extended_stats_def_half_pressure_acts", "extended_stats_hitouts_to_advantage",
   "extended_stats_ruck_contests", "bounces", "hitouts",
-  "player_player_position", "position",
-  "player_name", "player_player_player_player_id", "provider_id",
+  "position", "round_number",
+  "player_name", "given_name", "surname", "jumper_number",
 
   # create_player_game_data stat columns
   "opp", "recvs", "uncontested_possessions", "marks_inside50",

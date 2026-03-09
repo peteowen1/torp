@@ -96,14 +96,11 @@ player_profile <- function(player_name, seasons = TRUE) {
   if (!is.null(raw)) {
     dt <- data.table::as.data.table(raw)
 
-    # Detect the player_id column (varies across data versions)
-    pid_col_candidates <- c("player_id", "player_player_player_player_id")
-    pid_col <- intersect(pid_col_candidates, names(dt))
-    if (length(pid_col) == 0) {
-      cli::cli_warn("No known player ID column found in player stats data. Expected one of: {.val {pid_col_candidates}}.")
+    # player_id column is normalised by load_player_stats()
+    if (!"player_id" %in% names(dt)) {
+      cli::cli_warn("No {.val player_id} column found in player stats data.")
     } else {
-      pid_col <- pid_col[1]
-      dt <- dt[dt[[pid_col]] == pid]
+      dt <- dt[dt[["player_id"]] == pid]
     }
 
     # Detect season column

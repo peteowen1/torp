@@ -206,11 +206,8 @@ get_players <- function(use_api = FALSE) {
 #' @return A dataframe containing chain data for all specified games.
 #' @keywords internal
 #'
-#' @importFrom purrr map_df
 get_many_game_chains <- function(games_vector) {
-  purrr::map_df(games_vector, ~ {
-    get_game_chains(.)
-  })
+  data.table::rbindlist(lapply(games_vector, get_game_chains), fill = TRUE)
 }
 
 #' Get Game Chains
@@ -222,7 +219,6 @@ get_many_game_chains <- function(games_vector) {
 #' @return A dataframe containing chain data for the specified game.
 #' @keywords internal
 #'
-#' @importFrom purrr map_df
 get_game_chains <- function(match_id) {
   url <- paste0("https://sapi.afl.com.au/afl/matchPlays/", match_id)
   chains_t1 <- access_api(url)
@@ -237,15 +233,37 @@ get_game_chains <- function(match_id) {
     chains_t2 <- chains_t1[[8]]
   }
 
-  if (!is.null(dim(chains_t2)) && nrow(chains_t2) > 0) {
-    chains <- purrr::map_df(1:nrow(chains_t2), ~ get_single_chain(chains_t2, .))
-    chains$matchId <- chains_t1$matchId
-    chains$venueWidth <- chains_t1$venueWidth
-    chains$venueLength <- chains_t1$venueLength
-    chains$homeTeamDirectionQtr1 <- chains_t1$homeTeamDirectionQtr1
-    return(chains)
+  if (is.null(dim(chains_t2)) || nrow(chains_t2) == 0 || length(chains_t2) <= 5) {
+    return(data.frame())
   }
-  data.frame() # Return empty dataframe if no chains found
+
+  # Hoist column index lookup (constant across all chains in a match)
+  actions_col <- which(names(chains_t2) == "actions")
+  col_idx <- if (length(actions_col) == 1) actions_col else 6
+
+  chains <- data.table::rbindlist(lapply(seq_len(nrow(chains_t2)), function(i) {
+    acts <- chains_t2[[i, col_idx]]
+    if (length(acts) == 0) return(NULL)
+    dt <- data.table::as.data.table(acts)
+    dt[, `:=`(
+      finalState = chains_t2$finalState[i],
+      initialState = chains_t2$initialState[i],
+      period = chains_t2$period[i],
+      chain_number = i
+    )]
+    dt
+  }), fill = TRUE)
+
+  if (nrow(chains) == 0) return(data.frame())
+
+  chains[, `:=`(
+    matchId = chains_t1$matchId,
+    venueWidth = chains_t1$venueWidth,
+    venueLength = chains_t1$venueLength,
+    homeTeamDirectionQtr1 = chains_t1$homeTeamDirectionQtr1
+  )]
+
+  chains
 }
 
 #' Get Single Chain
