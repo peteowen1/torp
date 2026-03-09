@@ -94,6 +94,15 @@ test_that("get_mode handles factors", {
   expect_equal(get_mode(f), "a")
 })
 
+test_that("get_mode returns NA_character_ for empty input", {
+  expect_identical(get_mode(character(0)), NA_character_)
+  expect_identical(get_mode(integer(0)), NA_character_)
+})
+
+test_that("get_mode returns NA_character_ for all-NA input", {
+  expect_identical(get_mode(c(NA_character_, NA_character_)), NA_character_)
+})
+
 # -----------------------------------------------------------------------------
 # decimal_hour() Tests
 # -----------------------------------------------------------------------------

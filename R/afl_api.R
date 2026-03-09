@@ -617,16 +617,26 @@ get_afl_player_details <- function(season = NULL) {
   pid_col <- intersect(c("player.providerId", "providerId"), names(result))[1]
 
   # Standardise column names — strip "player." prefix from flattened API response
-  names(result) <- sub("^player\\.", "", names(result))
+  new_names <- sub("^player\\.", "", names(result))
+  duped <- new_names[duplicated(new_names)]
+  if (length(duped) > 0) {
+    cli::cli_warn("Prefix stripping created duplicate columns: {.val {unique(duped)}}. Keeping originals for conflicts.")
+    collision <- new_names != names(result) & duplicated(new_names, fromLast = FALSE)
+    new_names[collision] <- names(result)[collision]
+  }
+  names(result) <- new_names
 
   if (!is.na(pid_col)) {
     pid_col_clean <- sub("^player\\.", "", pid_col)
     result$row_id <- paste(result[[pid_col_clean]], actual_season)
   }
 
-  # Standardise team column
+  # Standardise team column name and values
   if ("team.name" %in% names(result) && !"team" %in% names(result)) {
     names(result)[names(result) == "team.name"] <- "team"
+  }
+  if ("team" %in% names(result)) {
+    result$team <- torp_replace_teams(result$team)
   }
 
   result$season <- actual_season
@@ -651,6 +661,7 @@ get_afl_player_details <- function(season = NULL) {
 #' torp_replace_teams("Adelaide Crows")
 #' torp_replace_teams(c("GWS Giants", "Narrm", "WB"))
 torp_replace_teams <- function(team) {
+  if (length(team) == 0L) return(character(0))
   mapped <- unname(AFL_TEAM_ALIASES[team])
   ifelse(!is.na(mapped), mapped, team)
 }

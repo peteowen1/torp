@@ -538,7 +538,7 @@ add_epv_variables <- function(df) {
 #' @keywords internal
 #' @importFrom dplyr case_when lead
 determine_team_id_mdl <- function(throw_in, team_id) {
-  rlang::check_installed("zoo", version = "1.8.0", reason = "for NA fill in PBP cleaning")
+  rlang::check_installed("zoo", version = "1.8.0", reason = "for NA fill in EPV model data preparation")
   result <- dplyr::case_when(
     throw_in == 1 ~ dplyr::lead(team_id),
     TRUE ~ team_id

@@ -45,8 +45,7 @@ jobs:
       - name: Validate pkgdown reference index
         run: |
           install.packages("pkgdown", repos = "https://cloud.r-project.org")
-          pkg <- pkgdown::as_pkgdown(".")
-          pkgdown:::data_reference_index(pkg)
+          pkgdown::check_pkgdown(".")
           cat("pkgdown reference index OK\n")
         shell: Rscript {0}
 

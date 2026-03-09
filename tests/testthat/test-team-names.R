@@ -93,6 +93,24 @@ test_that("NA input returns NA", {
   expect_true(is.na(torp_replace_teams(NA_character_)))
 })
 
+test_that("zero-length input returns character(0)", {
+  expect_identical(torp_replace_teams(character(0)), character(0))
+  expect_identical(torp_team_abbr(character(0)), character(0))
+  expect_identical(torp_team_full(character(0)), character(0))
+})
+
+test_that("historical name variants resolve correctly", {
+  expect_equal(torp_replace_teams("Greater Western Sydney"), "GWS")
+  expect_equal(torp_replace_teams("Greater Western Sydney Giants"), "GWS")
+  expect_equal(torp_replace_teams("South Melbourne"), "Sydney")
+  expect_equal(torp_replace_teams("Brisbane Bears"), "Brisbane Lions")
+})
+
+test_that("round-trip: abbr and full names resolve back to canonical", {
+  expect_equal(torp_replace_teams(AFL_TEAMS$abbr), AFL_TEAMS$name)
+  expect_equal(torp_replace_teams(AFL_TEAMS$full), AFL_TEAMS$name)
+})
+
 # -----------------------------------------------------------------------------
 # torp_team_abbr()
 # -----------------------------------------------------------------------------
@@ -112,6 +130,11 @@ test_that("torp_team_abbr works vectorized", {
   )
 })
 
+test_that("torp_team_abbr returns NA for unknown or NA input", {
+  expect_true(is.na(torp_team_abbr("Unknown FC")))
+  expect_true(is.na(torp_team_abbr(NA_character_)))
+})
+
 # -----------------------------------------------------------------------------
 # torp_team_full()
 # -----------------------------------------------------------------------------
@@ -128,4 +151,9 @@ test_that("torp_team_full works vectorized", {
     torp_team_full(c("Adelaide", "GWS", "Narrm")),
     c("Adelaide Crows", "GWS Giants", "Melbourne Demons")
   )
+})
+
+test_that("torp_team_full returns NA for unknown or NA input", {
+  expect_true(is.na(torp_team_full("Unknown FC")))
+  expect_true(is.na(torp_team_full(NA_character_)))
 })

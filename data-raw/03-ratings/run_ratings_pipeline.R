@@ -316,6 +316,14 @@ if (nrow(torp_new) > 0) {
 
     if (!is.null(existing) && nrow(existing) > 0) {
       # Deduplicate both sides by row_id (keeps first occurrence)
+      n_dup_existing <- sum(duplicated(existing$row_id))
+      n_dup_new <- sum(duplicated(torp_new$row_id))
+      if (n_dup_existing > 0) {
+        cli::cli_warn("Existing ratings had {n_dup_existing} duplicate row_id{?s} (keeping first)")
+      }
+      if (n_dup_new > 0) {
+        cli::cli_warn("New ratings had {n_dup_new} duplicate row_id{?s} (keeping first)")
+      }
       existing <- dplyr::distinct(existing, row_id, .keep_all = TRUE)
       torp_new <- dplyr::distinct(torp_new, row_id, .keep_all = TRUE)
       torp_df_total <- existing |>
