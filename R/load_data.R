@@ -18,6 +18,7 @@
 #' save_to_release(my_df, "my_data", "v1.0.0", also_csv = TRUE)
 #' }
 save_to_release <- function(df, file_name, release_tag, also_csv = FALSE) {
+  rlang::check_installed("piggyback", version = "0.1.4", reason = "to upload data to GitHub releases")
   f_name <- paste0(file_name, ".parquet")
   tf <- tempfile(fileext = ".parquet")
   on.exit(unlink(tf), add = TRUE)
@@ -81,6 +82,7 @@ save_to_release <- function(df, file_name, release_tag, also_csv = FALSE) {
 #' df <- file_reader("latest_data", "v1.0.0")
 #' }
 file_reader <- function(file_name, release_tag) {
+  rlang::check_installed("piggyback", version = "0.1.4", reason = "to download data from GitHub releases")
   f_name <- paste0(file_name, ".parquet")
   tf <- tempfile(fileext = ".parquet")
   on.exit(unlink(tf), add = TRUE)

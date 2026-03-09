@@ -20,19 +20,18 @@ Imports:
     jsonlite (>= 1.7.0),
     lubridate (>= 1.8.0),
     mgcv (>= 1.8.0),
-    piggyback (>= 0.1.4),
     purrr (>= 0.3.0),
     rlang (>= 1.0.0),
     stringi (>= 1.7.0),
     stringr (>= 1.4.0),
     tibble (>= 3.0.0),
-    tidyr (>= 1.2.0),
-    zoo (>= 1.8.0)
+    tidyr (>= 1.2.0)
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.3.9000
 Suggests:
     geosphere,
+    piggyback (>= 0.1.4),
     httr2 (>= 1.0.0),
     knitr,
     readr (>= 2.1.0),
@@ -42,7 +41,8 @@ Suggests:
     testthat (>= 3.0.0),
     withr,
     torpmodels,
-    xgboost (>= 2.0.0)
+    xgboost (>= 2.0.0),
+    zoo (>= 1.8.0)
 Config/testthat/edition: 3
 Depends:
     R (>= 4.1.0)

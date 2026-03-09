@@ -537,8 +537,8 @@ add_epv_variables <- function(df) {
 #' @return A vector of determined team IDs.
 #' @keywords internal
 #' @importFrom dplyr case_when lead
-#' @importFrom zoo na.locf0
 determine_team_id_mdl <- function(throw_in, team_id) {
+  rlang::check_installed("zoo", version = "1.8.0", reason = "for NA fill in PBP cleaning")
   result <- dplyr::case_when(
     throw_in == 1 ~ dplyr::lead(team_id),
     TRUE ~ team_id
