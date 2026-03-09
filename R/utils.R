@@ -201,6 +201,7 @@ decimal_hour <- function(datetime) {
 #' @keywords internal
 get_mode <- function(x) {
   t <- table(x)
+  if (length(t) == 0L) return(NA_character_)
   names(t)[which.max(t)]
 }
 

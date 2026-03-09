@@ -42,6 +42,13 @@ jobs:
           upload-snapshots: true
           build_args: 'c("--no-manual","--compact-vignettes=gs+qpdf")'
 
+      - name: Validate pkgdown reference index
+        run: |
+          install.packages("pkgdown", repos = "https://cloud.r-project.org")
+          pkgdown::check_pkgdown(".")
+          cat("pkgdown reference index OK\n")
+        shell: Rscript {0}
+
   coverage:
     runs-on: ubuntu-latest
     continue-on-error: true
