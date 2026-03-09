@@ -615,9 +615,21 @@ get_afl_player_details <- function(season = NULL) {
       lubridate::decimal_date(lubridate::as_date(result[[dob_col]]))
   }
   pid_col <- intersect(c("player.providerId", "providerId"), names(result))[1]
+
+  # Standardise column names — strip "player." prefix from flattened API response
+  names(result) <- sub("^player\\.", "", names(result))
+
   if (!is.na(pid_col)) {
-    result$row_id <- paste(result[[pid_col]], actual_season)
+    pid_col_clean <- sub("^player\\.", "", pid_col)
+    result$row_id <- paste(result[[pid_col_clean]], actual_season)
   }
+
+  # Standardise team column
+  if ("team.name" %in% names(result) && !"team" %in% names(result)) {
+    names(result)[names(result) == "team.name"] <- "team"
+  }
+
+  result$season <- actual_season
 
   tibble::as_tibble(result)
 }
@@ -628,53 +640,53 @@ get_afl_player_details <- function(season = NULL) {
 #' Standardise AFL Team Names
 #'
 #' Maps team name variants (abbreviations, nicknames, Indigenous round names)
-#' to canonical team names. Drop-in replacement for `fitzRoy::replace_teams()`.
+#' to canonical team names using [AFL_TEAM_ALIASES]. Drop-in replacement for
+#' `fitzRoy::replace_teams()`.
 #'
 #' @param team Character vector of team names
-#' @return Character vector with standardised names
+#' @return Character vector with standardised names. Unknown values pass through unchanged.
 #' @export
 #'
 #' @examples
 #' torp_replace_teams("Adelaide Crows")
 #' torp_replace_teams(c("GWS Giants", "Narrm", "WB"))
-#'
-#' @importFrom dplyr case_when
-#' @importFrom stringr str_detect
 torp_replace_teams <- function(team) {
-  dplyr::case_when(
-    team == "NM" ~ "North Melbourne",
-    team == "WB" ~ "Footscray",
-    team == "PA" ~ "Port Adelaide",
-    team == "Blues" ~ "Carlton",
-    stringr::str_detect(tolower(team), "crows") ~ "Adelaide",
-    stringr::str_detect(tolower(team), "brisbane|lions|bears") ~ "Brisbane Lions",
-    stringr::str_detect(tolower(team), "carlton") ~ "Carlton",
-    stringr::str_detect(tolower(team), "magpies|pies") ~ "Collingwood",
-    stringr::str_detect(tolower(team), "bombers") ~ "Essendon",
-    stringr::str_detect(tolower(team), "bulldog") ~ "Footscray",
-    stringr::str_detect(tolower(team), "docker") ~ "Fremantle",
-    stringr::str_detect(tolower(team), "gw syd|gws|greater western|giants") ~ "GWS",
-    stringr::str_detect(tolower(team), "cats") ~ "Geelong",
-    stringr::str_detect(tolower(team), "gc|suns") ~ "Gold Coast",
-    stringr::str_detect(tolower(team), "hawks") ~ "Hawthorn",
-    stringr::str_detect(tolower(team), "demons") ~ "Melbourne",
-    stringr::str_detect(tolower(team), "kangaroos") ~ "North Melbourne",
-    stringr::str_detect(tolower(team), "power") ~ "Port Adelaide",
-    stringr::str_detect(tolower(team), "tigers") ~ "Richmond",
-    stringr::str_detect(tolower(team), "stk|saints") ~ "St Kilda",
-    stringr::str_detect(tolower(team), "swans|south melbourne") ~ "Sydney",
-    stringr::str_detect(tolower(team), "wce|eagles") ~ "West Coast",
-    stringr::str_detect(team, "SUNS") ~ "Gold Coast",
-    stringr::str_detect(team, "GIANTS") ~ "GWS",
-    team == "Narrm" ~ "Melbourne",
-    team == "Walyalup" ~ "Fremantle",
-    team == "Yartapuulti" ~ "Port Adelaide",
-    team == "Euro-Yroke" ~ "St Kilda",
-    team == "Kuwarna" ~ "Adelaide",
-    team == "Waalitj Marawar" ~ "West Coast",
-    team == "Wallitj Marawar" ~ "West Coast",
-    TRUE ~ team
-  )
+  mapped <- unname(AFL_TEAM_ALIASES[team])
+  ifelse(!is.na(mapped), mapped, team)
+}
+
+
+#' Get AFL Team Abbreviation
+#'
+#' Converts any team name variant to its canonical AFL API abbreviation.
+#'
+#' @param team Character vector of team names (any recognised variant)
+#' @return Character vector of abbreviations (e.g. "ADEL", "BL", "WB")
+#' @export
+#'
+#' @examples
+#' torp_team_abbr("Adelaide Crows")
+#' torp_team_abbr(c("Narrm", "Western Bulldogs", "CARL"))
+torp_team_abbr <- function(team) {
+  canonical <- torp_replace_teams(team)
+  AFL_TEAMS$abbr[match(canonical, AFL_TEAMS$name)]
+}
+
+
+#' Get AFL Team Full Name
+#'
+#' Converts any team name variant to its canonical full name.
+#'
+#' @param team Character vector of team names (any recognised variant)
+#' @return Character vector of full names (e.g. "Adelaide Crows", "GWS Giants")
+#' @export
+#'
+#' @examples
+#' torp_team_full("Adelaide")
+#' torp_team_full(c("WB", "Narrm", "Cats"))
+torp_team_full <- function(team) {
+  canonical <- torp_replace_teams(team)
+  AFL_TEAMS$full[match(canonical, AFL_TEAMS$name)]
 }
 
 
