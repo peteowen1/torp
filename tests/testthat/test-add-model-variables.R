@@ -313,3 +313,22 @@ test_that("get_shot_result_preds handles mock data", {
   # Should return matrix/data frame with 3 columns
   expect_true(ncol(result) == 3 || length(dim(result)) >= 1)
 })
+
+test_that("get_shot_result_preds attaches mgcv for GAM models (regression)", {
+  # Regression test: requireNamespace() alone is insufficient for GAM predict()
+  # because mgcv's internal Xbd C function must be on the search path.
+  # The fix must *attach* mgcv (via require() or attachNamespace()), not just load it.
+
+  fn_body <- deparse(body(torp:::get_shot_result_preds))
+  fn_text <- paste(fn_body, collapse = " ")
+
+  # Must use an attaching mechanism (require or attachNamespace), not requireNamespace
+  uses_attach <- grepl('require\\("mgcv"', fn_text) ||
+                 grepl('attachNamespace\\("mgcv"', fn_text)
+  uses_only_load <- grepl('requireNamespace\\("mgcv"', fn_text) && !uses_attach
+
+  expect_true(uses_attach,
+    info = "get_shot_result_preds must attach mgcv (require or attachNamespace)")
+  expect_false(uses_only_load,
+    info = "requireNamespace alone is insufficient — mgcv must be attached for Xbd")
+})

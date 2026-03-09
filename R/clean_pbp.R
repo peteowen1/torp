@@ -418,5 +418,14 @@ nafill_char <- function(x, type = "locf") {
     cli::cli_inform("PBP schema normalisation: remapped {length(remapped)} column{?s}: {paste(remapped, collapse = ', ')}")
   }
 
+  # Validate critical columns exist after remapping
+  critical <- c("home_team_id", "away_team_id", "home_team_team_name",
+                 "away_team_team_name", "round_number")
+  nms <- names(dt)
+  missing <- critical[!critical %in% nms]
+  if (length(missing) > 0) {
+    cli::cli_alert_danger("PBP schema missing critical column{?s} after normalisation: {paste(missing, collapse = ', ')}. Downstream errors likely.")
+  }
+
   invisible(NULL)
 }

@@ -72,7 +72,7 @@ if (REFRESH_UPSTREAM) {
       update_player_stats(s)
       update_teams(s)
     }, error = function(e) {
-      cli::cli_warn("Failed to refresh upstream for {s}: {conditionMessage(e)}")
+      cli::cli_alert_danger("Failed to refresh upstream for {s}: {conditionMessage(e)}")
     })
   }
 
@@ -106,7 +106,7 @@ if (REBUILD_PLAYER_GAME) {
 
       cli::cli_inform("  PBP: {nrow(pbp)} rows | player_stats: {nrow(pstats)} rows | teams: {nrow(teams_data)} rows")
       if (nrow(pbp) == 0) {
-        cli::cli_warn("No PBP data for {s} - skipping")
+        cli::cli_alert_danger("No PBP data for {s} - skipping")
         stage2_failed_seasons <- c(stage2_failed_seasons, as.character(s))
         next
       }
@@ -118,13 +118,13 @@ if (REBUILD_PLAYER_GAME) {
       save_to_release(pgd, file_name, "player_game-data")
       cli::cli_alert_success("Released {file_name} ({nrow(pgd)} rows)")
     }, error = function(e) {
-      cli::cli_warn("Failed to build player game data for {s}: {conditionMessage(e)}")
+      cli::cli_alert_danger("Failed to build player game data for {s}: {conditionMessage(e)}")
       stage2_failed_seasons <<- c(stage2_failed_seasons, as.character(s))
     })
   }
 
   if (length(stage2_failed_seasons) > 0) {
-    cli::cli_warn("Stage 2 failed for seasons: {paste(stage2_failed_seasons, collapse = ', ')} - Stage 3 will use stale player game data for these")
+    cli::cli_alert_danger("Stage 2 failed for seasons: {paste(stage2_failed_seasons, collapse = ', ')} - Stage 3 will use stale player game data for these")
   }
 
   tictoc::toc(log = TRUE)
@@ -148,7 +148,7 @@ data.table::setkey(all_pgd, match_id)
 # Pre-load shared data once — avoids ~145 redundant loads per full rebuild
 cli::cli_progress_step("Pre-loading shared reference data")
 shared_skills <- tryCatch(get_player_skills(current = FALSE), error = function(e) {
-  cli::cli_warn("Could not load skills: {conditionMessage(e)}")
+  cli::cli_alert_danger("Could not load skills: {conditionMessage(e)}")
   NULL
 })
 # Backwards compat: rename time_on_ground_skill → cond_tog_skill if needed
@@ -157,7 +157,7 @@ if (!is.null(shared_skills)) {
     shared_skills$cond_tog_skill <- shared_skills$time_on_ground_skill
   }
   if (!"squad_selection_skill" %in% names(shared_skills)) {
-    cli::cli_warn("Skills missing squad_selection_skill; using cond_tog_skill alone as pred_tog")
+    cli::cli_alert_danger("Skills missing squad_selection_skill; using cond_tog_skill alone as pred_tog")
     shared_skills$squad_selection_skill <- 1
   }
 }
@@ -184,7 +184,7 @@ get_torp_df <- function(year, rounds, pgd, skills, fixtures) {
   round_info <- round_info[fix_dates, on = "round_val", nomatch = NULL]
 
   if (nrow(round_info) == 0) {
-    cli::cli_warn("No fixtures found for {year}")
+    cli::cli_alert_danger("No fixtures found for {year}")
     return(data.frame())
   }
 
@@ -248,7 +248,7 @@ get_torp_df <- function(year, rounds, pgd, skills, fixtures) {
     (\(df) {
       if (nrow(df) == 0) return(df)
       if (!"player_id" %in% names(df)) {
-        cli::cli_warn("player_id column missing from ratings output for {year} - row_id cannot be computed")
+        cli::cli_alert_danger("player_id column missing from ratings output for {year} - row_id cannot be computed")
         return(df)
       }
       dplyr::mutate(df, row_id = paste0(player_id, season, sprintf("%02d", round)))
@@ -282,7 +282,7 @@ for (s in seasons) {
 
     tictoc::toc(log = TRUE)
   }, error = function(e) {
-    cli::cli_warn("Failed to compute ratings for {s}: {conditionMessage(e)}")
+    cli::cli_alert_danger("Failed to compute ratings for {s}: {conditionMessage(e)}")
     failed_seasons <<- c(failed_seasons, as.character(s))
   })
 }
@@ -291,7 +291,7 @@ torp_new <- dplyr::bind_rows(torp_season_list)
 cli::cli_inform("New ratings computed: {nrow(torp_new)} rows")
 
 if (length(failed_seasons) > 0) {
-  cli::cli_warn("Failed seasons: {paste(failed_seasons, collapse = ', ')}")
+  cli::cli_alert_danger("Failed seasons: {paste(failed_seasons, collapse = ', ')}")
 }
 if (length(empty_seasons) > 0) {
   cli::cli_alert_info("Empty seasons (no data available yet): {paste(empty_seasons, collapse = ', ')}")
@@ -309,7 +309,7 @@ if (nrow(torp_new) > 0) {
     existing <- tryCatch(
       load_torp_ratings(),
       error = function(e) {
-        cli::cli_warn("No existing ratings found, doing full build: {conditionMessage(e)}")
+        cli::cli_alert_danger("No existing ratings found, doing full build: {conditionMessage(e)}")
         NULL
       }
     )
@@ -319,10 +319,10 @@ if (nrow(torp_new) > 0) {
       n_dup_existing <- sum(duplicated(existing$row_id))
       n_dup_new <- sum(duplicated(torp_new$row_id))
       if (n_dup_existing > 0) {
-        cli::cli_warn("Existing ratings had {n_dup_existing} duplicate row_id{?s} (keeping first)")
+        cli::cli_alert_danger("Existing ratings had {n_dup_existing} duplicate row_id{?s} (keeping first)")
       }
       if (n_dup_new > 0) {
-        cli::cli_warn("New ratings had {n_dup_new} duplicate row_id{?s} (keeping first)")
+        cli::cli_alert_danger("New ratings had {n_dup_new} duplicate row_id{?s} (keeping first)")
       }
       existing <- dplyr::distinct(existing, row_id, .keep_all = TRUE)
       torp_new <- dplyr::distinct(torp_new, row_id, .keep_all = TRUE)
@@ -343,7 +343,7 @@ if (nrow(torp_new) > 0) {
 
   uploaded <- tryCatch(load_torp_ratings(), error = function(e) NULL)
   if (is.null(uploaded) || nrow(uploaded) != nrow(torp_df_total)) {
-    cli::cli_warn("Upload verification failed - piggyback cache delay may be the cause")
+    cli::cli_alert_danger("Upload verification failed - piggyback cache delay may be the cause")
   }
   cli::cli_alert_success("Released torp_ratings ({nrow(torp_df_total)} rows)")
 }
@@ -390,7 +390,7 @@ tryCatch({
   save_to_release(team_ratings, "team_ratings", "team_ratings-data")
   cli::cli_alert_success("Released team_ratings ({nrow(team_ratings)} rows)")
 }, error = function(e) {
-  cli::cli_warn("Failed to compute team ratings: {conditionMessage(e)}")
+  cli::cli_alert_danger("Failed to compute team ratings: {conditionMessage(e)}")
 })
 
 tictoc::toc(log = TRUE)

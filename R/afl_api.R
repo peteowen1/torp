@@ -69,7 +69,7 @@
     error = function(e) NULL
   )
   if (is.null(comp_resp) || httr::http_error(comp_resp)) {
-    cli::cli_warn("Could not reach AFL API competitions endpoint")
+    cli::cli_alert_danger("Could not reach AFL API competitions endpoint")
     return(NULL)
   }
 
@@ -77,7 +77,7 @@
   comp_json <- tryCatch(
     jsonlite::fromJSON(comp_text, flatten = TRUE),
     error = function(e) {
-      cli::cli_warn("Failed to parse AFL API competitions response: {conditionMessage(e)}")
+      cli::cli_alert_danger("Failed to parse AFL API competitions response: {conditionMessage(e)}")
       NULL
     }
   )
@@ -102,7 +102,7 @@
     error = function(e) NULL
   )
   if (is.null(cs_resp) || httr::http_error(cs_resp)) {
-    cli::cli_warn("Could not fetch comp seasons from AFL API (comp_id={comp_id})")
+    cli::cli_alert_danger("Could not fetch comp seasons from AFL API (comp_id={comp_id})")
     return(NULL)
   }
 
@@ -110,7 +110,7 @@
   cs_json <- tryCatch(
     jsonlite::fromJSON(cs_text, flatten = TRUE),
     error = function(e) {
-      cli::cli_warn("Failed to parse AFL API comp seasons response: {conditionMessage(e)}")
+      cli::cli_alert_danger("Failed to parse AFL API comp seasons response: {conditionMessage(e)}")
       NULL
     }
   )
@@ -169,7 +169,7 @@
     } else if (is.list(positions)) {
       # Raw list — try to bind
       players <- tryCatch(dplyr::bind_rows(positions), error = function(e) {
-        cli::cli_warn("Failed to bind roster positions for match {match_id} ({team_type}): {conditionMessage(e)}")
+        cli::cli_alert_danger("Failed to bind roster positions for match {match_id} ({team_type}): {conditionMessage(e)}")
         NULL
       })
     } else {
@@ -217,7 +217,7 @@
       df <- tryCatch(
         jsonlite::fromJSON(jsonlite::toJSON(team_stats, auto_unbox = TRUE), flatten = TRUE),
         error = function(e) {
-          cli::cli_warn("Failed to parse {team_status} team stats for match {match_id}: {conditionMessage(e)}")
+          cli::cli_alert_danger("Failed to parse {team_status} team stats for match {match_id}: {conditionMessage(e)}")
           NULL
         }
       )
@@ -280,13 +280,13 @@ get_afl_fixtures <- function(season = NULL) {
     cli::cli_inform("Fetching fixtures for {length(all_ids)} season{?s}...")
     results <- purrr::map(all_ids, function(sid) {
       tryCatch(.fetch_fixtures_for_season_id(sid), error = function(e) {
-        cli::cli_warn("Failed to fetch fixtures for season ID {sid}: {conditionMessage(e)}")
+        cli::cli_alert_danger("Failed to fetch fixtures for season ID {sid}: {conditionMessage(e)}")
         NULL
       })
     })
     n_failed <- sum(vapply(results, is.null, logical(1)))
     if (n_failed > 0) {
-      cli::cli_warn("{n_failed} of {length(all_ids)} season{?s} failed to load")
+      cli::cli_alert_danger("{n_failed} of {length(all_ids)} season{?s} failed to load")
     }
     return(purrr::list_rbind(purrr::compact(results)))
   }
@@ -334,12 +334,12 @@ get_afl_fixtures <- function(season = NULL) {
   )
 
   resp <- tryCatch(httr::GET(url), error = function(e) {
-    cli::cli_warn("HTTP request failed for season {season_id}: {conditionMessage(e)}")
+    cli::cli_alert_danger("HTTP request failed for season {season_id}: {conditionMessage(e)}")
     NULL
   })
   if (is.null(resp) || httr::http_error(resp)) {
     if (!is.null(resp)) {
-      cli::cli_warn("AFL API returned HTTP {httr::status_code(resp)} for season {season_id}")
+      cli::cli_alert_danger("AFL API returned HTTP {httr::status_code(resp)} for season {season_id}")
     }
     return(NULL)
   }
@@ -348,7 +348,7 @@ get_afl_fixtures <- function(season = NULL) {
     httr::content(resp, as = "text", encoding = "UTF-8") |>
       jsonlite::fromJSON(flatten = TRUE),
     error = function(e) {
-      cli::cli_warn("Failed to parse fixtures JSON for season {season_id}: {conditionMessage(e)}")
+      cli::cli_alert_danger("Failed to parse fixtures JSON for season {season_id}: {conditionMessage(e)}")
       NULL
     }
   )
@@ -429,7 +429,7 @@ get_afl_lineups <- function(season = NULL, round = NULL) {
   if (!is.null(round)) {
     fixtures <- fixtures[fixtures$round.roundNumber %in% round, ]
     if (nrow(fixtures) == 0) {
-      cli::cli_warn("No fixtures for season {season} round {round}")
+      cli::cli_alert_danger("No fixtures for season {season} round {round}")
       return(tibble::tibble())
     }
   }
@@ -452,7 +452,7 @@ get_afl_lineups <- function(season = NULL, round = NULL) {
         jsonlite::fromJSON(flatten = TRUE)
       .parse_match_roster(json, mid)
     }, error = function(e) {
-      cli::cli_warn("Failed to fetch roster for match {mid}: {e$message}")
+      cli::cli_alert_danger("Failed to fetch roster for match {mid}: {e$message}")
       NULL
     })
   })
@@ -508,7 +508,7 @@ get_afl_player_stats <- function(season = NULL) {
         jsonlite::fromJSON(flatten = TRUE)
       .parse_match_stats(json, mid)
     }, error = function(e) {
-      cli::cli_warn("Failed to fetch stats for match {mid}: {e$message}")
+      cli::cli_alert_danger("Failed to fetch stats for match {mid}: {e$message}")
       NULL
     })
   })
@@ -595,7 +595,7 @@ get_afl_player_details <- function(season = NULL) {
       }
       players
     }, error = function(e) {
-      cli::cli_warn("Failed to fetch details for team {tid}: {e$message}")
+      cli::cli_alert_danger("Failed to fetch details for team {tid}: {e$message}")
       NULL
     })
   })
@@ -620,7 +620,7 @@ get_afl_player_details <- function(season = NULL) {
   new_names <- sub("^player\\.", "", names(result))
   duped <- new_names[duplicated(new_names)]
   if (length(duped) > 0) {
-    cli::cli_warn("Prefix stripping created duplicate columns: {.val {unique(duped)}}. Keeping originals for conflicts.")
+    cli::cli_alert_danger("Prefix stripping created duplicate columns: {.val {unique(duped)}}. Keeping originals for conflicts.")
     collision <- new_names != names(result) & duplicated(new_names, fromLast = FALSE)
     new_names[collision] <- names(result)[collision]
   }

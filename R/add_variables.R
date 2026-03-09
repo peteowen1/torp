@@ -269,10 +269,14 @@ get_shot_result_preds <- function(df) {
   shot_ocat_mdl <- load_model_with_fallback("shot")
 
   # mgcv must be attached (not just loaded) for GAM/BAM predict() — its
-  # internal Xbd C function is only available on the search path when attached
+  # internal Xbd C function is only available on the search path when attached.
+  # Uses attachNamespace() instead of require() to avoid R CMD check NOTE.
   if (inherits(shot_ocat_mdl, c("gam", "bam"))) {
-    if (!require("mgcv", quietly = TRUE, character.only = TRUE)) {
+    if (!requireNamespace("mgcv", quietly = TRUE)) {
       cli::cli_abort("mgcv package required for shot model predictions but not available")
+    }
+    if (!"mgcv" %in% .packages()) {
+      attachNamespace("mgcv")
     }
   }
 
