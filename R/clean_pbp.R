@@ -36,6 +36,9 @@ clean_pbp_dt <- function(df) {
   # Clean names and convert to data.table in one step (avoid extra copy)
   dt <- data.table::as.data.table(torp_clean_names(df))
 
+  # Normalise column names across API schema versions (CFS vs v2)
+  .normalise_pbp_columns(dt)
+
   # Explicit sort: all shift/lag/lead operations assume within-match display_order.
   # setkey alone only guarantees match_id ordering (within-match order is input-dependent).
   data.table::setorder(dt, match_id, display_order)
@@ -366,4 +369,54 @@ nafill_char <- function(x, type = "locf") {
   } else {
     cli::cli_abort("type must be 'locf' or 'nocb'")
   }
+}
+
+#' Normalise PBP column names across API schema versions
+#'
+#' The AFL API changed its response schema for 2026+. The old CFS schema uses
+#' names like `homeTeamScore.totalScore` (→ `home_team_score_total_score`),
+#' while the new schema uses `home.score.totalScore` (→ `home_score_total_score`).
+#' This function detects the schema and renames columns to the expected names
+#' used throughout the PBP pipeline.
+#'
+#' @param dt A data.table with cleaned (snake_case) column names.
+#' @return Invisible NULL (renames columns by reference).
+#' @keywords internal
+.normalise_pbp_columns <- function(dt) {
+  nms <- names(dt)
+
+  # Mapping: new_schema_name -> expected_name
+  # Only remap if the expected column is missing AND the alternative exists
+  col_map <- c(
+    # Score columns (v2 API uses home.score.* instead of homeTeamScore.*)
+    "home_score_total_score" = "home_team_score_total_score",
+    "away_score_total_score" = "away_team_score_total_score",
+    # Team name columns (v2 API uses home.team.name instead of homeTeam.teamName)
+    "home_team_name"         = "home_team_team_name",
+    "away_team_name"         = "away_team_team_name",
+    # Team abbreviation (v2 uses home.team.abbreviation instead of homeTeam.teamAbbr)
+    "home_team_abbreviation" = "home_team_team_abbr",
+    "away_team_abbreviation" = "away_team_team_abbr",
+    # Team ID (v2 uses home.team.providerId instead of homeTeamId)
+    "home_team_provider_id"  = "home_team_id",
+    "away_team_provider_id"  = "away_team_id",
+    # Round number (v2 nests under round.roundNumber)
+    "round_round_number"     = "round_number"
+  )
+
+  remapped <- character()
+  for (from in names(col_map)) {
+    to <- col_map[[from]]
+    if (!to %in% nms && from %in% nms) {
+      data.table::setnames(dt, from, to)
+      nms[nms == from] <- to
+      remapped <- c(remapped, paste0(from, " -> ", to))
+    }
+  }
+
+  if (length(remapped) > 0) {
+    cli::cli_inform("PBP schema normalisation: remapped {length(remapped)} column{?s}: {paste(remapped, collapse = ', ')}")
+  }
+
+  invisible(NULL)
 }

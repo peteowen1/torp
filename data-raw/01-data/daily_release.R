@@ -65,7 +65,7 @@ has_new_games <- function() {
     cli::cli_inform("No completed games found in round {current_round}")
     return(FALSE)
   }, error = function(e) {
-    cli::cli_warn("Error checking for new games: {conditionMessage(e)}")
+    cli::cli_alert_danger("Error checking for new games: {conditionMessage(e)}")
     # Default to FALSE to avoid releasing stale/partial data when API is down
     return(FALSE)
   })
@@ -132,7 +132,7 @@ has_new_team_data <- function() {
     cli::cli_inform("No changes in team/lineup data")
     return(FALSE)
   }, error = function(e) {
-    cli::cli_warn("Error checking for new team data: {conditionMessage(e)}")
+    cli::cli_alert_danger("Error checking for new team data: {conditionMessage(e)}")
     return(FALSE)
   })
 }
@@ -183,7 +183,7 @@ update_season_chains <- function(season, round) {
   new_chains <- tryCatch({
     get_week_chains(season, round)
   }, error = function(e) {
-    cli::cli_warn("Failed to fetch chains for {season} R{round}: {conditionMessage(e)}")
+    cli::cli_alert_danger("Failed to fetch chains for {season} R{round}: {conditionMessage(e)}")
     return(NULL)
   })
 
@@ -260,7 +260,7 @@ update_season_pbp <- function(season, round) {
       clean_model_data_wp() |>
       add_wp_vars()
   }, error = function(e) {
-    cli::cli_warn("Failed to process PBP for {season} R{round}: {conditionMessage(e)}")
+    cli::cli_alert_danger("Failed to process PBP for {season} R{round}: {conditionMessage(e)}")
     return(NULL)
   })
 
@@ -310,7 +310,7 @@ update_xg_data <- function(season) {
   xg_df <- tryCatch({
     match_xgs(season, TRUE)
   }, error = function(e) {
-    cli::cli_warn("Failed to generate xG data: {conditionMessage(e)}")
+    cli::cli_alert_danger("Failed to generate xG data: {conditionMessage(e)}")
     return(NULL)
   })
 
@@ -335,7 +335,7 @@ update_fixtures <- function(season) {
   fixtures <- tryCatch({
     get_afl_fixtures(season)
   }, error = function(e) {
-    cli::cli_warn("Failed to fetch fixtures: {conditionMessage(e)}")
+    cli::cli_alert_danger("Failed to fetch fixtures: {conditionMessage(e)}")
     return(NULL)
   })
 
@@ -366,7 +366,7 @@ update_results <- function(season) {
   results <- tryCatch({
     get_afl_results(season)
   }, error = function(e) {
-    cli::cli_warn("Failed to fetch results: {conditionMessage(e)}")
+    cli::cli_alert_danger("Failed to fetch results: {conditionMessage(e)}")
     return(NULL)
   })
 
@@ -393,7 +393,7 @@ update_player_stats <- function(season) {
       dplyr::select(where(~ dplyr::n_distinct(.) > 1)) |>
       janitor::clean_names()
   }, error = function(e) {
-    cli::cli_warn("Failed to fetch player stats: {conditionMessage(e)}")
+    cli::cli_alert_danger("Failed to fetch player stats: {conditionMessage(e)}")
     return(NULL)
   })
 
@@ -423,7 +423,7 @@ update_teams <- function(season) {
     tryCatch({
       get_afl_lineups(season)
     }, error = function(e) {
-      cli::cli_warn("Failed to fetch teams: {conditionMessage(e)}")
+      cli::cli_alert_danger("Failed to fetch teams: {conditionMessage(e)}")
       return(NULL)
     })
   }
@@ -454,7 +454,7 @@ update_player_game_data <- function(season) {
     teams_data <- load_teams(season)
     create_player_game_data(pbp, pstats, teams_data)
   }, error = function(e) {
-    cli::cli_warn("Failed to create player game data: {conditionMessage(e)}")
+    cli::cli_alert_danger("Failed to create player game data: {conditionMessage(e)}")
     return(NULL)
   })
 
@@ -479,7 +479,7 @@ update_player_details <- function(season) {
   player_details <- tryCatch({
     get_afl_player_details(season)
   }, error = function(e) {
-    cli::cli_warn("Failed to fetch player details: {conditionMessage(e)}")
+    cli::cli_alert_danger("Failed to fetch player details: {conditionMessage(e)}")
     return(NULL)
   })
 
@@ -513,7 +513,7 @@ update_player_game_ratings <- function(season) {
     max_round <- get_max_round(season)
     player_game_ratings(season, start_round:max_round, player_game_data = pgd)
   }, error = function(e) {
-    cli::cli_warn("Failed to compute player game ratings: {conditionMessage(e)}")
+    cli::cli_alert_danger("Failed to compute player game ratings: {conditionMessage(e)}")
     return(NULL)
   })
 
@@ -542,7 +542,7 @@ update_player_season_ratings <- function(season) {
     start_round <- get_start_round(season)
     player_season_ratings(season, start_round:max_round)
   }, error = function(e) {
-    cli::cli_warn("Failed to compute player season ratings: {conditionMessage(e)}")
+    cli::cli_alert_danger("Failed to compute player season ratings: {conditionMessage(e)}")
     return(NULL)
   })
 
@@ -589,7 +589,7 @@ update_ep_wp_chart <- function(season) {
     }
     pbp[, available_cols, drop = FALSE]
   }, error = function(e) {
-    cli::cli_warn("Failed to create EP/WP chart data: {conditionMessage(e)}")
+    cli::cli_alert_danger("Failed to create EP/WP chart data: {conditionMessage(e)}")
     return(NULL)
   })
 
@@ -693,7 +693,7 @@ run_daily_release <- function(force = FALSE) {
   for (nm in names(seasonal_fns)) {
     tryCatch(seasonal_fns[[nm]](current_season), error = function(e) {
       seasonal_failures <<- c(seasonal_failures, nm)
-      cli::cli_warn("Failed: {nm}: {conditionMessage(e)}")
+      cli::cli_alert_danger("Failed: {nm}: {conditionMessage(e)}")
     })
   }
 
@@ -710,15 +710,15 @@ run_daily_release <- function(force = FALSE) {
 
     tryCatch(update_player_game_ratings(current_season), error = function(e) {
       derived_failures <<- c(derived_failures, "player_game_ratings")
-      cli::cli_warn("Failed: player_game_ratings: {conditionMessage(e)}")
+      cli::cli_alert_danger("Failed: player_game_ratings: {conditionMessage(e)}")
     })
     tryCatch(update_player_season_ratings(current_season), error = function(e) {
       derived_failures <<- c(derived_failures, "player_season_ratings")
-      cli::cli_warn("Failed: player_season_ratings: {conditionMessage(e)}")
+      cli::cli_alert_danger("Failed: player_season_ratings: {conditionMessage(e)}")
     })
     tryCatch(update_ep_wp_chart(current_season), error = function(e) {
       derived_failures <<- c(derived_failures, "ep_wp_chart")
-      cli::cli_warn("Failed: ep_wp_chart: {conditionMessage(e)}")
+      cli::cli_alert_danger("Failed: ep_wp_chart: {conditionMessage(e)}")
     })
 
     tictoc::toc(log = TRUE)

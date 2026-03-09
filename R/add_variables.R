@@ -268,13 +268,12 @@ get_wp_preds <- function(df) {
 get_shot_result_preds <- function(df) {
   shot_ocat_mdl <- load_model_with_fallback("shot")
 
-  # mgcv must be loaded explicitly for GAM/BAM predict() — its internal
-  # Xbd function is not found otherwise
+  # mgcv must be attached (not just loaded) for GAM/BAM predict() — its
+  # internal Xbd C function is only available on the search path when attached
   if (inherits(shot_ocat_mdl, c("gam", "bam"))) {
-    if (!requireNamespace("mgcv", quietly = TRUE)) {
+    if (!require("mgcv", quietly = TRUE, character.only = TRUE)) {
       cli::cli_abort("mgcv package required for shot model predictions but not available")
     }
-    loadNamespace("mgcv")
   }
 
   preds <- stats::predict(shot_ocat_mdl, df, type = "response")
