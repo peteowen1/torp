@@ -288,7 +288,9 @@ get_afl_fixtures <- function(season = NULL) {
     if (n_failed > 0) {
       cli::cli_alert_danger("{n_failed} of {length(all_ids)} season{?s} failed to load")
     }
-    return(purrr::list_rbind(purrr::compact(results)))
+    all_fixtures <- purrr::list_rbind(purrr::compact(results))
+    .normalise_fixture_columns(all_fixtures)
+    return(all_fixtures)
   }
 
   if (is.null(season)) {
@@ -363,7 +365,7 @@ get_afl_fixtures <- function(season = NULL) {
     matches <- matches[, !names(matches) %in% list_cols, drop = FALSE]
   }
 
-  # Add compSeason.year (extracted from providerId) — needed by match_model, ladder, etc.
+  # Add compSeason.year (extracted from providerId) — normalised to `season` by .normalise_fixture_columns()
   if (!"compSeason.year" %in% names(matches) && "compSeason.providerId" %in% names(matches)) {
     matches$compSeason.year <- as.numeric(
       gsub("CD_S(\\d{4})\\d+", "\\1", matches$compSeason.providerId)
@@ -529,6 +531,11 @@ get_afl_player_stats <- function(season = NULL) {
   )
   match_info <- concluded[, join_cols, drop = FALSE]
   result <- dplyr::left_join(result, match_info, by = c("providerId" = "match_id"))
+
+  # Rename providerId → match_id to match canonical naming
+  if ("providerId" %in% names(result)) {
+    names(result)[names(result) == "providerId"] <- "match_id"
+  }
 
   result
 }

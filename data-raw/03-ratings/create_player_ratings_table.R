@@ -91,7 +91,7 @@ plyr_gm_df <-
       # ) %>%
       dplyr::mutate(
         weight_gm = exp(as.numeric(-(max(as.Date(utc_start_time)) - as.Date(utc_start_time))) / decay),
-        spoil_credits = spoils * 0.6 + tackles * 0.1 + pressure_acts * 0.1 - def_half_pressure_acts * 0.2, # HMMMMMMMMM
+        spoil_credits = spoils * 0.6 + tackles * 0.1 + pressure_acts * 0.1 - def_half_pressure_acts * 0.2,
         spoil_credits_wt = spoil_credits * max(weight_gm),
         hitout_credits = hitouts * 0.15 + hitouts_to_advantage * 0.25 - ruck_contests * 0.06,
         hitout_credits_wt = hitout_credits * max(weight_gm)

@@ -297,6 +297,9 @@ load_player_game_data <- function(seasons = get_afl_season(), use_disk_cache = F
 
   out <- load_from_url(urls, seasons = seasons, use_disk_cache = use_disk_cache, columns = columns)
 
+  # Normalise old abbreviated column names (plyr_nm → player_name, etc.)
+  if (nrow(out) > 0) .normalise_columns(out, PLAYER_GAME_COL_MAP, verbose = TRUE, label = "Player game")
+
   return(out)
 }
 

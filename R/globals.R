@@ -17,13 +17,12 @@ utils::globalVariables(c(
   "match_id", "season", "round_number", "roundnum", "period", "display_order",
 
   # Team variables
-  "team", "team_id", "home", "home_team", "home_team_id", "home_team_team_abbr",
-  "home_team_team_name", "away_team", "away_team_id", "away_team_team_abbr",
-  "away_team_team_name", "team_id_mdl",
+  "team", "team_id", "home", "home_team", "home_team_id", "home_team_abbr",
+  "home_team_name", "away_team", "away_team_id", "away_team_abbr",
+  "away_team_name", "team_id_mdl",
 
   # Score variables
   "home_points", "away_points", "home_points_row", "away_points_row",
-  "home_team_score_total_score", "away_team_score_total_score",
   "pos_team_points", "opp_team_points", "pos_points", "pos_points_team_id",
   "points_diff", "points_row", "points_row_na", "points_shot", "points_team_id",
   "model_points",

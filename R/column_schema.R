@@ -15,13 +15,15 @@
 #' where names are variant (old) names and values are canonical (new) names.
 #' Only renames when the variant exists and the canonical does not.
 #'
-#' @param dt A data.table to modify.
+#' @param dt A data.frame, tibble, or data.table to modify (renames by reference via `data.table::setnames`).
 #' @param col_map Named character vector: variant_name -> canonical_name.
 #' @param verbose Logical. If TRUE, emits a message listing renames.
 #' @param label Optional label for the log message (e.g. "PBP", "Player Stats").
 #' @return Invisible NULL (modifies dt by reference).
 #' @keywords internal
 .normalise_columns <- function(dt, col_map, verbose = TRUE, label = NULL) {
+  if (is.null(dt) || length(dt) == 0L) return(invisible(NULL))
+
   nms <- names(dt)
   remapped <- character()
 

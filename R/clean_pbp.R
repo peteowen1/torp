@@ -380,10 +380,9 @@ nafill_char <- function(x, type = "locf") {
 #' Normalise PBP column names across API schema versions
 #'
 #' The AFL API changed its response schema for 2026+. The old CFS schema uses
-#' names like `homeTeamScore.totalScore` (→ `home_score`),
-#' while the new schema uses `home.score.totalScore` (→ `home_score_total_score`).
-#' This function detects the schema and renames columns to the expected names
-#' used throughout the PBP pipeline.
+#' names like `homeTeamScore.totalScore` (cleaned to `home_team_score_total_score`),
+#' while the new schema uses `home.score.totalScore` (cleaned to `home_score_total_score`).
+#' Both are normalised to the canonical name `home_score` via `PBP_COL_MAP`.
 #'
 #' @param dt A data.table with cleaned (snake_case) column names.
 #' @return Invisible NULL (renames columns by reference).
@@ -396,7 +395,11 @@ nafill_char <- function(x, type = "locf") {
                  "away_team_name", "round_number")
   missing <- critical[!critical %in% names(dt)]
   if (length(missing) > 0) {
-    cli::cli_alert_danger("PBP schema missing critical column{?s} after normalisation: {paste(missing, collapse = ', ')}. Downstream errors likely.")
+    cli::cli_warn(c(
+      "PBP schema missing critical column{?s} after normalisation: {paste(missing, collapse = ', ')}.",
+      "i" = "This usually means the AFL API response schema has changed.",
+      "i" = "Check column mappings in {.fn .normalise_pbp_columns}."
+    ))
   }
 
   invisible(NULL)

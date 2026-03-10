@@ -7,7 +7,7 @@
 .normalise_columns(dt, col_map, verbose = TRUE, label = NULL)
 }
 \arguments{
-\item{dt}{A data.table to modify.}
+\item{dt}{A data.frame, tibble, or data.table to modify (renames by reference via \code{data.table::setnames}).}
 
 \item{col_map}{Named character vector: variant_name -> canonical_name.}
 

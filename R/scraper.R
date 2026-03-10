@@ -137,7 +137,7 @@ get_round_games <- function(season, round) {
     games <- games |>
       dplyr::filter(.data$status == "CONCLUDED") |>
       dplyr::mutate(
-        date = as.Date(substr(.data$utc_start_time, 1, 10)),
+        date = as.Date(substr(.data$utcStartTime, 1, 10)),
         season = season
       )
     return(games)

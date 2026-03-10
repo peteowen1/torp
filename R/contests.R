@@ -299,9 +299,10 @@ detect_chains_columns <- function(dt) {
 
   if (is_camel) {
     # Old un-normalised data — normalise it now
-    if (data.table::is.data.table(dt)) {
-      .normalise_chains_columns(dt)
+    if (!data.table::is.data.table(dt)) {
+      dt <- data.table::as.data.table(dt)
     }
+    .normalise_chains_columns(dt)
   }
 
   # Canonical snake_case names
