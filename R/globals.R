@@ -17,13 +17,12 @@ utils::globalVariables(c(
   "match_id", "season", "round_number", "roundnum", "period", "display_order",
 
   # Team variables
-  "team", "team_id", "home", "home_team", "home_team_id", "home_team_team_abbr",
-  "home_team_team_name", "away_team", "away_team_id", "away_team_team_abbr",
-  "away_team_team_name", "team_id_mdl",
+  "team", "team_id", "home", "home_team", "home_team_id", "home_team_abbr",
+  "home_team_name", "away_team", "away_team_id", "away_team_abbr",
+  "away_team_name", "team_id_mdl",
 
   # Score variables
   "home_points", "away_points", "home_points_row", "away_points_row",
-  "home_team_score_total_score", "away_team_score_total_score",
   "pos_team_points", "opp_team_points", "pos_points", "pos_points_team_id",
   "points_diff", "points_row", "points_row_na", "points_shot", "points_team_id",
   "model_points",
@@ -48,15 +47,15 @@ utils::globalVariables(c(
   "label_ep", "label_wp", "next_score",
 
   # Player variables
-  "player_id", "player_given_name", "player_surname", "plyr_nm",
-  "player_name_given_name", "player_name_surname", "player_position", "pos",
+  "player_id", "player_given_name", "player_surname",
+  "player_name_given_name", "player_name_surname", "player_position", "listed_position",
 
   # TORP rating variables
   "torp", "torp_shift", "torp_recv", "torp_disp", "torp_spoil", "torp_hitout",
   "torp_home_round", "torp_away_round", "home_torp", "away_torp",
-  "tot_p_adj", "tot_p_sum", "recv_pts_adj", "recv_sum",
-  "disp_pts_adj", "disp_sum", "spoil_pts_adj", "spoil_sum",
-  "hitout_pts_adj", "hitout_sum", "weight_gm", "wt_gms", "wt_tog", "tog_sum", "utc_start_time",
+  "total_credits_adj", "recv_credits_adj", "recv_sum",
+  "disp_credits_adj", "disp_sum", "spoil_credits_adj", "spoil_sum",
+  "hitout_credits_adj", "hitout_sum", "weight_gm", "wt_gms", "wt_tog", "tog_sum", "utc_start_time",
   "days_diff", "wt_recv", "wt_disp", "wt_spoil", "wt_hitout",
   "wt_gms_recv", "wt_gms_disp", "wt_gms_spoil", "wt_gms_hitout",
   "pred_tog", "pred_selection", "pred_cond_tog",
@@ -74,26 +73,23 @@ utils::globalVariables(c(
   "full_name_norm", "firstName", "surname", "providerId",
   "goals", "behinds", "shots_at_goal", "disposals", "kicks",
   "handballs", "inside50s", "marks", "tackles",
-  "contested_possessions", "clearances_total_clearances",
+  "contested_possessions", "clearances",
   "disposal_efficiency", "time_on_ground_percentage",
   "games",
 
   # create_player_game_data variables
   "delta_epv", "pos_team", "wpa", "home_away", "lead_player", "lead_player_id",
-  "round_week", "opp_tm", "recv_pts", "disp_pts", "spoil_pts", "hitout_pts",
-  "tot_p",
-  "extended_stats_spoils", "extended_stats_pressure_acts",
-  "extended_stats_def_half_pressure_acts", "extended_stats_hitouts_to_advantage",
-  "extended_stats_ruck_contests", "bounces", "hitouts",
+  "round_week", "opp_tm", "recv_credits", "disp_credits", "spoil_credits", "hitout_credits",
+  "total_credits", "receptions", "disposals_pbp", "opponent",
+  "bounces", "hitouts",
   "position", "round_number",
   "player_name", "given_name", "surname", "jumper_number",
 
   # create_player_game_data stat columns
-  "opp", "recvs", "uncontested_possessions", "marks_inside50",
+  "uncontested_possessions", "marks_inside50",
   "contested_marks", "metres_gained", "intercepts", "rebound50s",
   "one_percenters", "frees_for", "frees_against", "clangers",
   "turnovers", "score_involvements", "goal_assists",
-  "extended_stats_ground_ball_gets",
 
   # clean_model_data_epv_dt variables (data.table EPV pipeline)
   "lead_x_tot", "lead_y_tot", "lag_ti_flt", "lead_ti_flt",
@@ -122,7 +118,6 @@ utils::globalVariables(c(
 # Skill estimation variables
 utils::globalVariables(c(
   "avail_only", ".played", "roster_pos_group",
-  "compSeason.year", "round.roundNumber", "home.team.name", "away.team.name",
   "round_idx", "first_season", "first_round",
   "tog", "tog_denominator", "match_date_skill", "days_since", "decay_wt",
   "wt_events", "wt_exposure", "wt_successes", "wt_attempts",

@@ -37,20 +37,14 @@ prepare_sim_data <- function(season, team_ratings = NULL, fixtures = NULL,
   }
   fix_dt <- data.table::as.data.table(fixtures)
 
-  # Standardise column names from fixture format
-  if ("compSeason.year" %in% names(fix_dt)) {
-    fix_dt <- fix_dt[get("compSeason.year") == season]
+  # Filter to target season (normalised fixtures use canonical `season` column)
+  if ("season" %in% names(fix_dt)) {
+    fix_dt <- fix_dt[get("season") == season]
   }
 
-  # Build sim_games from fixture columns
-  col_map <- list(
-    roundnum   = c("round.roundNumber", "roundnum", "round_number"),
-    home_team  = c("home.team.name", "home_team"),
-    away_team  = c("away.team.name", "away_team"),
-    home_score = c("home.score.totalScore", "home_score", "home_points"),
-    away_score = c("away.score.totalScore", "away_score", "away_points")
-  )
-
+  # Build sim_games from canonical fixture columns
+  # Fixtures are normalised at load time via .normalise_fixture_columns(),
+  # but keep minimal fallbacks for directly-passed user data
   resolve_col <- function(dt, candidates) {
     for (cand in candidates) {
       if (cand %in% names(dt)) return(cand)
@@ -58,14 +52,14 @@ prepare_sim_data <- function(season, team_ratings = NULL, fixtures = NULL,
     NULL
   }
 
-  rnd_col  <- resolve_col(fix_dt, col_map$roundnum)
-  ht_col   <- resolve_col(fix_dt, col_map$home_team)
-  at_col   <- resolve_col(fix_dt, col_map$away_team)
-  hs_col   <- resolve_col(fix_dt, col_map$home_score)
-  as_col   <- resolve_col(fix_dt, col_map$away_score)
+  rnd_col  <- resolve_col(fix_dt, c("round_number", "roundnum"))
+  ht_col   <- resolve_col(fix_dt, c("home_team_name", "home_team"))
+  at_col   <- resolve_col(fix_dt, c("away_team_name", "away_team"))
+  hs_col   <- resolve_col(fix_dt, c("home_score", "home_points"))
+  as_col   <- resolve_col(fix_dt, c("away_score", "away_points"))
 
   if (is.null(rnd_col) || is.null(ht_col) || is.null(at_col)) {
-    cli::cli_abort("Could not find required fixture columns (round, home_team, away_team).")
+    cli::cli_abort("Could not find required fixture columns (round_number, home_team_name, away_team_name).")
   }
 
   sim_games <- data.table::data.table(
@@ -203,8 +197,8 @@ prepare_sim_data <- function(season, team_ratings = NULL, fixtures = NULL,
   if (!is.null(predictions)) {
     pred_dt <- data.table::as.data.table(predictions)
     # Find matching columns for join
-    pred_rnd <- resolve_col(pred_dt, c("round.roundNumber", "roundnum", "round_number", "round"))
-    pred_ht  <- resolve_col(pred_dt, c("home.team.name", "home_team"))
+    pred_rnd <- resolve_col(pred_dt, c("round_number", "roundnum", "round", "week"))
+    pred_ht  <- resolve_col(pred_dt, c("home_team", "home_team_name"))
 
     if (!is.null(pred_rnd) && !is.null(pred_ht) && "pred_xtotal" %in% names(pred_dt)) {
       pred_dt[, (pred_ht) := torp_replace_teams(get(pred_ht))]

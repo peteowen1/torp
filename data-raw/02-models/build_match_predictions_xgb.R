@@ -35,25 +35,25 @@ train_idx <- which(model_df$season.x < get_afl_season())
 train_df  <- model_df[train_idx, ]
 test_df   <- model_df[-train_idx, ]
 
-# Store providerId and team_type before creating matrices (if needed for later joining)
-if ("providerId" %in% names(team_mdl_df)) {
+# Store match_id and team_type before creating matrices (if needed for later joining)
+if ("match_id" %in% names(team_mdl_df)) {
   # Create a clean dataset with IDs
   clean_with_ids <- team_mdl_df %>%
     dplyr::filter(!is.na(win)) %>%
     dplyr::mutate(win = as.numeric(win)) %>%
-    dplyr::select(providerId, team_type, everything()) %>%
-    dplyr::select(providerId, team_type, all_of(names(select_afl_model_vars(.)))) %>%
+    dplyr::select(match_id, team_type, everything()) %>%
+    dplyr::select(match_id, team_type, all_of(names(select_afl_model_vars(.)))) %>%
     tidyr::drop_na()
 
   # Extract just the model variables for matrices
-  model_df <- clean_with_ids %>% dplyr::select(-providerId, -team_type)
+  model_df <- clean_with_ids %>% dplyr::select(-match_id, -team_type)
 
   # Store the IDs separately
-  id_df <- clean_with_ids %>% dplyr::select(providerId, team_type)
+  id_df <- clean_with_ids %>% dplyr::select(match_id, team_type)
 }
 
 # Create model matrices - exclude response variable and any ID columns
-feature_cols <- setdiff(names(train_df), c("win", "providerId", "team_type"))
+feature_cols <- setdiff(names(train_df), c("win", "match_id", "team_type"))
 
 train_matrix <- model.matrix(~ . - 1, data = train_df[, feature_cols])
 train_label  <- train_df$win
@@ -157,7 +157,7 @@ dfull <- xgb.DMatrix(data = full_matrix)
 model_df$pred_win_xgb <- predict(final_model, dfull)
 
 # Approach 1: Remove column if it exists before joining
-if ("providerId" %in% names(team_mdl_df)) {
+if ("match_id" %in% names(team_mdl_df)) {
   # Create a dataframe with IDs and predictions
   pred_df <- id_df %>%
     dplyr::mutate(pred_win_xgb = model_df$pred_win_xgb)
@@ -165,11 +165,11 @@ if ("providerId" %in% names(team_mdl_df)) {
   # Remove the column if it already exists
   team_mdl_df <- team_mdl_df %>%
     dplyr::select(-any_of("pred_win_xgb")) %>%  # Remove if exists, ignore if doesn't
-    dplyr::left_join(pred_df, by = c("providerId", "team_type"))
+    dplyr::left_join(pred_df, by = c("match_id", "team_type"))
 
 } else {
   team_mdl_df$pred_win_xgb <- NA
-  warning("No providerId found - predictions may not align correctly with original data")
+  warning("No match_id found - predictions may not align correctly with original data")
 }
 
 # Save Model ----

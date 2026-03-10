@@ -67,6 +67,45 @@ save_to_release <- function(df, file_name, release_tag, also_csv = FALSE) {
   }
 }
 
+#' Update Player Stats Release
+#'
+#' Scrapes player stats from the AFL API for a given season, normalises
+#' column names, and uploads to the torpdata GitHub release.
+#'
+#' @param season Season year (numeric).
+#' @return Invisible NULL. Called for side effects (upload).
+#' @keywords internal
+update_player_stats <- function(season) {
+  cli::cli_progress_step("Updating player stats for {season}")
+
+  player_stats <- tryCatch({
+    get_afl_player_stats(season) |>
+      dplyr::select(where(~ dplyr::n_distinct(.) > 1)) |>
+      torp_clean_names()
+  }, error = function(e) {
+    cli::cli_alert_danger("Failed to fetch player stats: {conditionMessage(e)}")
+    return(NULL)
+  })
+
+  if (is.null(player_stats) || nrow(player_stats) == 0) {
+    cli::cli_alert_warning("No player stats data for {season}")
+    return(invisible(NULL))
+  }
+
+  # Normalise column names (strips v2 stats_ prefix, renames player/match IDs)
+  player_stats <- .normalise_player_stats_columns(player_stats)
+
+  if (!"season" %in% names(player_stats)) {
+    player_stats$season <- as.integer(season)
+  }
+
+  file_name <- glue::glue("player_stats_{season}")
+  save_to_release(df = player_stats, file_name = file_name, release_tag = "player_stats-data")
+
+  cli::cli_inform("Saved player stats: {file_name} ({nrow(player_stats)} rows)")
+  invisible(NULL)
+}
+
 #' Read a Parquet File from a GitHub Release via Piggyback
 #'
 #' Downloads and reads a `.parquet` file from a GitHub release using the `piggyback` package.
@@ -136,6 +175,12 @@ load_chains <- function(seasons = get_afl_season(), rounds = TRUE, use_disk_cach
   urls <- generate_urls("chains-data", "chains_data", seasons, rounds)
 
   out <- load_from_url(urls, seasons = seasons, rounds = rounds, use_disk_cache = use_disk_cache, columns = columns)
+
+  # Normalise camelCase chains columns (matchId → match_id, etc.)
+  if (nrow(out) > 0) {
+    if (!data.table::is.data.table(out)) out <- data.table::as.data.table(out)
+    .normalise_chains_columns(out)
+  }
 
   return(out)
 }
@@ -252,6 +297,9 @@ load_player_game_data <- function(seasons = get_afl_season(), use_disk_cache = F
 
   out <- load_from_url(urls, seasons = seasons, use_disk_cache = use_disk_cache, columns = columns)
 
+  # Normalise old abbreviated column names (plyr_nm → player_name, etc.)
+  if (nrow(out) > 0) .normalise_columns(out, PLAYER_GAME_COL_MAP, verbose = TRUE, label = "Player game")
+
   return(out)
 }
 
@@ -325,6 +373,9 @@ load_fixtures <- function(seasons = NULL, all = FALSE, use_cache = TRUE, cache_t
   urls <- generate_urls("fixtures-data", "fixtures", seasons)
   out <- load_from_url(urls, seasons = seasons, use_disk_cache = use_disk_cache, columns = columns)
 
+  # Normalise column names (old parquets have dot-notation from API)
+  .normalise_fixture_columns(out)
+
   # Store in cache if enabled
   if (use_cache && nrow(out) > 0) {
     store_in_cache(cache_key, out)
@@ -362,6 +413,9 @@ load_teams <- function(seasons = get_afl_season(), use_disk_cache = FALSE, colum
 
   out <- load_from_url(urls, seasons = seasons, use_disk_cache = use_disk_cache, columns = columns)
 
+  # Normalise column names (old parquets have camelCase from API)
+  .normalise_teams_columns(out)
+
   return(out)
 }
 
@@ -388,6 +442,9 @@ load_results <- function(seasons = get_afl_season(), use_disk_cache = FALSE, col
   urls <- generate_urls("results-data", "results", seasons)
 
   out <- load_from_url(urls, seasons = seasons, use_disk_cache = use_disk_cache, columns = columns)
+
+  # Normalise column names (old parquets may have CFS or fixture schemas)
+  .normalise_fixture_columns(out)
 
   return(out)
 }
@@ -599,7 +656,7 @@ load_team_ratings <- function(columns = NULL) {
 #'
 #' @return A data frame containing EP/WP chart data with columns including
 #'   `match_id`, `season`, `round_number`, `period`, `total_seconds`,
-#'   `home_team_team_name`, `away_team_team_name`, `team`, `exp_pts`,
+#'   `home_team_name`, `away_team_name`, `team`, `exp_pts`,
 #'   `delta_epv`, `wp`, `wpa`, `description`, `player_name`, `play_type`,
 #'   `shot_row`, and `points_shot`.
 #' @seealso [load_pbp()], [load_xg()]

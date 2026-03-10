@@ -51,19 +51,19 @@ test_that("calculate_player_stats helper function works", {
   # Test the helper function exists
   expect_true(exists("calculate_player_stats"))
 
-  # Create minimal test data with plyr_nm (as produced by create_player_game_data)
+  # Create minimal test data with player_name (as produced by create_player_game_data)
   test_data <- data.frame(
     player_id = c(1, 1, 2, 2),
-    plyr_nm = c("Player1", "Player1", "Player2", "Player2"),
+    player_name = c("Player1", "Player1", "Player2", "Player2"),
     match_id = c("CD_M2024014101", "CD_M2024014102", "CD_M2024014101", "CD_M2024014102"),
     utc_start_time = rep(as.Date("2024-04-01"), 4),
-    tot_p_adj = c(100, 120, 80, 90),
-    recv_pts_adj = c(20, 25, 15, 18),
-    disp_pts_adj = c(40, 45, 35, 38),
-    spoil_pts_adj = c(10, 12, 8, 9),
-    hitout_pts_adj = c(5, 8, 0, 0),
+    total_credits_adj = c(100, 120, 80, 90),
+    recv_credits_adj = c(20, 25, 15, 18),
+    disp_credits_adj = c(40, 45, 35, 38),
+    spoil_credits_adj = c(10, 12, 8, 9),
+    hitout_credits_adj = c(5, 8, 0, 0),
     time_on_ground_percentage = c(82, 78, 90, 85),
-    pos = c("Midfielder", "Midfielder", "Forward", "Forward"),
+    listed_position = c("Midfielder", "Midfielder", "Forward", "Forward"),
     stringsAsFactors = FALSE
   )
 
@@ -94,16 +94,16 @@ test_that("calculate_player_stats returns expected structure with valid data", {
   # Create comprehensive test data (as produced by create_player_game_data)
   test_data <- data.frame(
     player_id = rep(1:5, each = 4),
-    plyr_nm = rep(paste("First", paste0("Last", 1:5)), each = 4),
+    player_name = rep(paste("First", paste0("Last", 1:5)), each = 4),
     match_id = rep(c("CD_M2024014101", "CD_M2024014102", "CD_M2024014103", "CD_M2024014104"), 5),
     utc_start_time = rep(as.Date("2024-04-01") + c(0, 7, 14, 21), 5),
-    tot_p_adj = runif(20, 50, 150),
-    recv_pts_adj = runif(20, 10, 50),
-    disp_pts_adj = runif(20, 20, 80),
-    spoil_pts_adj = runif(20, 0, 20),
-    hitout_pts_adj = runif(20, 0, 30),
+    total_credits_adj = runif(20, 50, 150),
+    recv_credits_adj = runif(20, 10, 50),
+    disp_credits_adj = runif(20, 20, 80),
+    spoil_credits_adj = runif(20, 0, 20),
+    hitout_credits_adj = runif(20, 0, 30),
     time_on_ground_percentage = runif(20, 60, 95),
-    pos = sample(c("FWD", "MID", "DEF", "RUC"), 20, replace = TRUE),
+    listed_position = sample(c("FWD", "MID", "DEF", "RUC"), 20, replace = TRUE),
     stringsAsFactors = FALSE
   )
 
@@ -131,16 +131,16 @@ test_that("calculate_player_stats respects decay parameter", {
   # Create test data with games at different times
   test_data <- data.frame(
     player_id = rep(1, 3),
-    plyr_nm = rep("First Last", 3),
+    player_name = rep("First Last", 3),
     match_id = c("CD_M2024014101", "CD_M2024014102", "CD_M2024014103"),
     utc_start_time = as.Date("2024-04-01") + c(0, 30, 60),  # 0, 30, 60 days apart
-    tot_p_adj = c(100, 100, 100),
-    recv_pts_adj = c(50, 50, 50),
-    disp_pts_adj = c(50, 50, 50),
-    spoil_pts_adj = c(10, 10, 10),
-    hitout_pts_adj = c(5, 5, 5),
+    total_credits_adj = c(100, 100, 100),
+    recv_credits_adj = c(50, 50, 50),
+    disp_credits_adj = c(50, 50, 50),
+    spoil_credits_adj = c(10, 10, 10),
+    hitout_credits_adj = c(5, 5, 5),
     time_on_ground_percentage = c(80, 85, 75),
-    pos = rep("MID", 3),
+    listed_position = rep("MID", 3),
     stringsAsFactors = FALSE
   )
 
@@ -220,16 +220,16 @@ test_that("wt_gms sums per-match weights correctly for same-day games", {
  # The fix uses !duplicated(match_id) to keep both.
   test_data <- data.frame(
     player_id = rep(1, 2),
-    plyr_nm = rep("Same Day", 2),
+    player_name = rep("Same Day", 2),
     match_id = c("CD_M2024014101", "CD_M2024014102"),
     utc_start_time = rep(as.Date("2024-04-01"), 2),
-    tot_p_adj = c(100, 80),
-    recv_pts_adj = c(20, 15),
-    disp_pts_adj = c(40, 35),
-    spoil_pts_adj = c(10, 8),
-    hitout_pts_adj = c(5, 3),
+    total_credits_adj = c(100, 80),
+    recv_credits_adj = c(20, 15),
+    disp_credits_adj = c(40, 35),
+    spoil_credits_adj = c(10, 8),
+    hitout_credits_adj = c(5, 3),
     time_on_ground_percentage = c(88, 76),
-    pos = rep("MID", 2),
+    listed_position = rep("MID", 2),
     stringsAsFactors = FALSE
   )
 
@@ -265,16 +265,16 @@ test_that("TOG-weighted average adjustment produces correct math", {
   # Build mock player game data for 3 players
   test_data <- data.frame(
     player_id = rep(1:3, each = 2),
-    plyr_nm = rep(c("Player One", "Player Two", "Player Three"), each = 2),
+    player_name = rep(c("Player One", "Player Two", "Player Three"), each = 2),
     match_id = rep(c("CD_M2024014101", "CD_M2024014102"), 3),
     utc_start_time = rep(as.Date("2024-04-01"), 6),
-    tot_p_adj = c(100, 100, 80, 80, 60, 60),
-    recv_pts_adj = c(30, 30, 20, 20, 10, 10),
-    disp_pts_adj = c(40, 40, 30, 30, 20, 20),
-    spoil_pts_adj = c(10, 10, 8, 8, 5, 5),
-    hitout_pts_adj = c(5, 5, 3, 3, 0, 0),
+    total_credits_adj = c(100, 100, 80, 80, 60, 60),
+    recv_credits_adj = c(30, 30, 20, 20, 10, 10),
+    disp_credits_adj = c(40, 40, 30, 30, 20, 20),
+    spoil_credits_adj = c(10, 10, 8, 8, 5, 5),
+    hitout_credits_adj = c(5, 5, 3, 3, 0, 0),
     time_on_ground_percentage = c(85, 80, 75, 70, 90, 88),
-    pos = rep("MID", 6),
+    listed_position = rep("MID", 6),
     stringsAsFactors = FALSE
   )
 
@@ -321,16 +321,16 @@ test_that("TOG-weighted average adjustment produces correct math", {
 test_that("TOG adjustment is skipped when all tog_skill are zero", {
   test_data <- data.frame(
     player_id = rep(1:2, each = 2),
-    plyr_nm = rep(c("Player One", "Player Two"), each = 2),
+    player_name = rep(c("Player One", "Player Two"), each = 2),
     match_id = rep(c("CD_M2024014101", "CD_M2024014102"), 2),
     utc_start_time = rep(as.Date("2024-04-01"), 4),
-    tot_p_adj = c(100, 100, 80, 80),
-    recv_pts_adj = c(30, 30, 20, 20),
-    disp_pts_adj = c(40, 40, 30, 30),
-    spoil_pts_adj = c(10, 10, 8, 8),
-    hitout_pts_adj = c(5, 5, 0, 0),
+    total_credits_adj = c(100, 100, 80, 80),
+    recv_credits_adj = c(30, 30, 20, 20),
+    disp_credits_adj = c(40, 40, 30, 30),
+    spoil_credits_adj = c(10, 10, 8, 8),
+    hitout_credits_adj = c(5, 5, 0, 0),
     time_on_ground_percentage = c(82, 79, 88, 84),
-    pos = rep("MID", 4),
+    listed_position = rep("MID", 4),
     stringsAsFactors = FALSE
   )
 

@@ -29,7 +29,7 @@ resolve_player <- function(player_name, seasons = TRUE) {
 
   # Deduplicate to unique players (keep latest season entry)
   matches <- matches[order(matches$season, decreasing = TRUE), ]
-  unique_players <- matches[!duplicated(matches$providerId), ]
+  unique_players <- matches[!duplicated(matches$player_id), ]
 
   if (nrow(unique_players) > 1) {
     player_list <- paste(
@@ -43,7 +43,7 @@ resolve_player <- function(player_name, seasons = TRUE) {
   picked <- unique_players[1, ]
 
   list(
-    player_id = picked$providerId,
+    player_id = picked$player_id,
     player_name = paste(picked$firstName, picked$surname),
     team = picked$team,
     position = picked$position
@@ -113,7 +113,7 @@ player_profile <- function(player_name, seasons = TRUE) {
     # Stat columns to aggregate (sum per season)
     sum_cols <- c("goals", "behinds", "shots_at_goal", "disposals", "kicks",
                   "handballs", "inside50s", "marks", "tackles",
-                  "contested_possessions", "clearances_total_clearances")
+                  "contested_possessions", "clearances")
     # Percentage columns to average per season
     pct_cols <- c("disposal_efficiency", "time_on_ground_percentage")
 

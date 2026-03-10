@@ -286,9 +286,9 @@ print.torp_head_to_head <- function(x, ...) {
 
 #' Detect chains column naming convention
 #'
-#' Chains data uses camelCase (matchId, displayOrder, teamId) while PBP data
-#' after clean_pbp() uses snake_case (match_id, display_order, team_id).
-#' This detects which convention is present.
+#' Chains data is normalised to snake_case at load/fetch time via
+#' `.normalise_chains_columns()`. This function handles both conventions
+#' for backward compatibility with any un-normalised data.
 #'
 #' @param dt A data.table of chains data
 #' @return Named list mapping logical names to actual column names
@@ -298,34 +298,27 @@ detect_chains_columns <- function(dt) {
   is_camel <- "matchId" %in% nms
 
   if (is_camel) {
-    list(
-      match_id = "matchId",
-      display_order = "displayOrder",
-      description = "description",
-      player_id = "playerId",
-      team_id = "teamId",
-      x = "x",
-      y = "y",
-      period = "period",
-      period_seconds = "periodSeconds",
-      season = "season",
-      round_number = "round_number"
-    )
-  } else {
-    list(
-      match_id = "match_id",
-      display_order = "display_order",
-      description = "description",
-      player_id = "player_id",
-      team_id = "team_id",
-      x = "x",
-      y = "y",
-      period = "period",
-      period_seconds = "period_seconds",
-      season = "season",
-      round_number = "round_number"
-    )
+    # Old un-normalised data — normalise it now
+    if (!data.table::is.data.table(dt)) {
+      dt <- data.table::as.data.table(dt)
+    }
+    .normalise_chains_columns(dt)
   }
+
+  # Canonical snake_case names
+  list(
+    match_id = "match_id",
+    display_order = "display_order",
+    description = "description",
+    player_id = "player_id",
+    team_id = "team_id",
+    x = "x",
+    y = "y",
+    period = "period",
+    period_seconds = "period_seconds",
+    season = "season",
+    round_number = "round_number"
+  )
 }
 
 

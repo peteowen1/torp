@@ -28,7 +28,7 @@ faster repeated loads. Default is \code{FALSE}.}
 \value{
 A data frame containing EP/WP chart data with columns including
 \code{match_id}, \code{season}, \code{round_number}, \code{period}, \code{total_seconds},
-\code{home_team_team_name}, \code{away_team_team_name}, \code{team}, \code{exp_pts},
+\code{home_team_name}, \code{away_team_name}, \code{team}, \code{exp_pts},
 \code{delta_epv}, \code{wp}, \code{wpa}, \code{description}, \code{player_name}, \code{play_type},
 \code{shot_row}, and \code{points_shot}.
 }

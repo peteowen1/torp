@@ -172,9 +172,9 @@ get_torp_df <- function(year, rounds, pgd, skills, fixtures) {
   # Build round_info with dates from fixtures
   fix_dt <- data.table::as.data.table(fixtures)
   fix_dates <- fix_dt[
-    compSeason.year == year & round.roundNumber %in% rounds,
-    .(date_val = lubridate::as_date(min(utcStartTime))),
-    by = .(round_val = round.roundNumber)
+    season == year & round_number %in% rounds,
+    .(date_val = lubridate::as_date(min(utc_start_time))),
+    by = .(round_val = round_number)
   ]
 
   round_info <- data.table::data.table(
@@ -208,8 +208,8 @@ get_torp_df <- function(year, rounds, pgd, skills, fixtures) {
 
   # Pre-compute fixtures summary once (avoids re-summarising 6K rows per round)
   fix_summary <- fixtures |>
-    dplyr::group_by(season = .data$compSeason.year, round = .data$round.roundNumber) |>
-    dplyr::summarise(ref_date = lubridate::as_date(min(.data$utcStartTime)), .groups = "drop")
+    dplyr::group_by(season = .data$season, round = .data$round_number) |>
+    dplyr::summarise(ref_date = lubridate::as_date(min(.data$utc_start_time)), .groups = "drop")
 
   # Per-round: roster join + TOG centering (lightweight ~700 rows per round)
   results <- lapply(round_info$round_val, function(rv) {

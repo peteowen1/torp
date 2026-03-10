@@ -11,15 +11,15 @@ devtools::load_all()
 # Load data ----
 
 fixtures <- load_fixtures(all = TRUE) |>
-  filter(!is.na(utcStartTime)) |>
+  filter(!is.na(utc_start_time)) |>
   mutate(
-    venue = torp_replace_venues(venue.name),
-    utcStartTime = as.POSIXct(utcStartTime, format = "%Y-%m-%dT%H:%M", tz = "UTC")
+    venue = torp_replace_venues(venue_name),
+    utc_start_time = as.POSIXct(utc_start_time, format = "%Y-%m-%dT%H:%M", tz = "UTC")
   ) |>
-  filter(!is.na(utcStartTime)) |>
-  select(providerId, compSeason.year, round.roundNumber,
-         venue.name, venue, venue.timezone, utcStartTime,
-         home.team.name, away.team.name)
+  filter(!is.na(utc_start_time)) |>
+  select(match_id, season, round_number,
+         venue_name, venue, venue_timezone, utc_start_time,
+         home_team_name, away_team_name)
 
 all_grounds <- file_reader("stadium_data", "reference-data") |>
   select(venue, Latitude, Longitude) |>
@@ -69,8 +69,8 @@ fetch_weather_batch <- function(lat, lon, start_date, end_date) {
 # Filter to past matches only (archive API doesn't have future data)
 # and exclude venues missing coordinates
 fixtures_geo <- fixtures_geo |>
-  filter(!is.na(Latitude), utcStartTime < Sys.time()) |>
-  mutate(match_date = as.Date(utcStartTime))
+  filter(!is.na(Latitude), utc_start_time < Sys.time()) |>
+  mutate(match_date = as.Date(utc_start_time))
 
 venue_groups <- fixtures_geo |>
   group_by(venue, Latitude, Longitude) |>
@@ -115,8 +115,8 @@ hourly_weather <- bind_rows(all_weather_hourly)
 match_weather <- fixtures_geo |>
   rowwise() |>
   mutate(
-    kickoff_utc = utcStartTime,
-    end_utc = utcStartTime + hours(3)
+    kickoff_utc = utc_start_time,
+    end_utc = utc_start_time + hours(3)
   ) |>
   ungroup()
 
@@ -124,8 +124,8 @@ match_weather <- fixtures_geo |>
 match_weather_agg <- match_weather |>
   left_join(hourly_weather, by = "venue", relationship = "many-to-many") |>
   filter(time >= kickoff_utc, time < end_utc) |>
-  group_by(providerId, compSeason.year, round.roundNumber,
-           venue.name, venue, home.team.name, away.team.name,
+  group_by(match_id, season, round_number,
+           venue_name, venue, home_team_name, away_team_name,
            Latitude, Longitude, kickoff_utc) |>
   summarise(
     temp_avg = mean(temperature_2m, na.rm = TRUE),

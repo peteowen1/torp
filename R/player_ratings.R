@@ -115,8 +115,8 @@ calculate_torp_ratings <- function(season_val = get_afl_season(type = "current")
   match_ref <- paste0("CD_M", season_val, "014", gwk)
 
   date_val <- fixtures |>
-    dplyr::filter(.data$compSeason.year == season_val, .data$round.roundNumber == round_val) |>
-    dplyr::summarise(lubridate::as_date(min(.data$utcStartTime))) |>
+    dplyr::filter(.data$season == season_val, .data$round_number == round_val) |>
+    dplyr::summarise(lubridate::as_date(min(.data$utc_start_time))) |>
     dplyr::pull()
 
   if (is.na(date_val)) {
@@ -221,9 +221,9 @@ calculate_player_stats <- function(player_game_data = NULL, match_ref, date_val,
     wt_hitout = exp(-days_diff / decay_hitout)
   )]
 
-  # Handle plyr_nm: use existing if present, otherwise construct from given + surname
-  if (!"plyr_nm" %in% names(dt)) {
-    dt[, plyr_nm := paste(player_given_name, player_surname)]
+  # Handle player_name: use existing if present, otherwise construct from given + surname
+  if (!"player_name" %in% names(dt)) {
+    dt[, player_name := paste(player_given_name, player_surname)]
   }
 
   # Aggregate by player_id using data.table syntax
@@ -232,18 +232,18 @@ calculate_player_stats <- function(player_game_data = NULL, match_ref, date_val,
   # Each component uses its own decay weight for both sums and wt_gms.
   # Note: player_game_data has one row per player-match, so wt_gms = sum(wt).
   result <- dt[, .(
-    player_name = max(plyr_nm),
+    player_name = max(player_name),
     gms = .N,
     wt_gms_recv   = sum(wt_recv, na.rm = TRUE),
     wt_gms_disp   = sum(wt_disp, na.rm = TRUE),
     wt_gms_spoil  = sum(wt_spoil, na.rm = TRUE),
     wt_gms_hitout = sum(wt_hitout, na.rm = TRUE),
     tog_sum    = sum(time_on_ground_percentage * wt_recv, na.rm = TRUE),
-    recv_sum   = sum(recv_pts_adj * wt_recv, na.rm = TRUE),
-    disp_sum   = sum(disp_pts_adj * wt_disp, na.rm = TRUE),
-    spoil_sum  = sum(spoil_pts_adj * wt_spoil, na.rm = TRUE),
-    hitout_sum = sum(hitout_pts_adj * wt_hitout, na.rm = TRUE),
-    posn = data.table::last(pos)
+    recv_sum   = sum(recv_credits_adj * wt_recv, na.rm = TRUE),
+    disp_sum   = sum(disp_credits_adj * wt_disp, na.rm = TRUE),
+    spoil_sum  = sum(spoil_credits_adj * wt_spoil, na.rm = TRUE),
+    hitout_sum = sum(hitout_credits_adj * wt_hitout, na.rm = TRUE),
+    posn = data.table::last(listed_position)
   ), by = player_id]
 
   # Derive per-component TORP with per-component wt_gms
@@ -333,24 +333,24 @@ calculate_player_stats_batch <- function(player_game_data = NULL,
     wt_hitout = exp(-days_diff / decay_hitout)
   )]
 
-  if (!"plyr_nm" %in% names(cross)) {
-    cross[, plyr_nm := paste(player_given_name, player_surname)]
+  if (!"player_name" %in% names(cross)) {
+    cross[, player_name := paste(player_given_name, player_surname)]
   }
 
   # Aggregate by (round_val, player_id) — all rounds in one pass
   result <- cross[, .(
-    player_name = max(plyr_nm),
+    player_name = max(player_name),
     gms = .N,
     wt_gms_recv   = sum(wt_recv, na.rm = TRUE),
     wt_gms_disp   = sum(wt_disp, na.rm = TRUE),
     wt_gms_spoil  = sum(wt_spoil, na.rm = TRUE),
     wt_gms_hitout = sum(wt_hitout, na.rm = TRUE),
     tog_sum    = sum(time_on_ground_percentage * wt_recv, na.rm = TRUE),
-    recv_sum   = sum(recv_pts_adj * wt_recv, na.rm = TRUE),
-    disp_sum   = sum(disp_pts_adj * wt_disp, na.rm = TRUE),
-    spoil_sum  = sum(spoil_pts_adj * wt_spoil, na.rm = TRUE),
-    hitout_sum = sum(hitout_pts_adj * wt_hitout, na.rm = TRUE),
-    posn = data.table::last(pos)
+    recv_sum   = sum(recv_credits_adj * wt_recv, na.rm = TRUE),
+    disp_sum   = sum(disp_credits_adj * wt_disp, na.rm = TRUE),
+    spoil_sum  = sum(spoil_credits_adj * wt_spoil, na.rm = TRUE),
+    hitout_sum = sum(hitout_credits_adj * wt_hitout, na.rm = TRUE),
+    posn = data.table::last(listed_position)
   ), by = .(round_val, player_id)]
 
   result[, `:=`(
@@ -413,13 +413,13 @@ prepare_final_dataframe <- function(plyr_tm_df = NULL, player_game_data = NULL, 
   # Pre-compute fixtures summary if not provided (avoids redundant summarise in loops)
   if (is.null(fix_summary)) {
     fix_summary <- fixtures |>
-      dplyr::group_by(season = .data$compSeason.year, round = .data$round.roundNumber) |>
-      dplyr::summarise(ref_date = lubridate::as_date(min(.data$utcStartTime)), .groups = "drop")
+      dplyr::group_by(season = .data$season, round = .data$round_number) |>
+      dplyr::summarise(ref_date = lubridate::as_date(min(.data$utc_start_time)), .groups = "drop")
   }
 
   plyr_tm_df |>
     dplyr::filter(.data$season == season_val_details) |>
-    dplyr::left_join(player_game_data, by = c("providerId" = "player_id")) |>
+    dplyr::left_join(player_game_data, by = c("player_id")) |>
     dplyr::ungroup() |>
     dplyr::mutate(
       round = .env$round_val,
@@ -431,7 +431,7 @@ prepare_final_dataframe <- function(plyr_tm_df = NULL, player_game_data = NULL, 
         lubridate::decimal_date(lubridate::as_date(.data$dateOfBirth))
     ) |>
     dplyr::select(
-      player_id = "providerId", player_name = "player_name.x", age = "age", team = "team",
+      player_id = "player_id", player_name = "player_name.x", age = "age", team = "team",
       torp = "torp", torp_recv = "torp_recv", torp_disp = "torp_disp",
       torp_spoil = "torp_spoil", torp_hitout = "torp_hitout",
       position = "position", season = "season", round = "round", gms = "gms", wt_gms = "wt_gms", wt_tog = "wt_tog",

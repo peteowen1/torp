@@ -53,8 +53,8 @@ has_new_games <- function() {
     time_aest <- lubridate::with_tz(Sys.time(), tzone = "Australia/Brisbane")
     completed_games <- fixtures %>%
       dplyr::filter(
-        .data$round.roundNumber == current_round,
-        .data$utcStartTime < time_aest
+        .data$round_number == current_round,
+        .data$utc_start_time < time_aest
       )
 
     if (nrow(completed_games) > 0) {
@@ -204,15 +204,11 @@ update_season_chains <- function(season, round) {
 
   if (!is.null(existing) && nrow(existing) > 0) {
     # Remove stale data for this round (handles re-runs)
-    # Chains data uses camelCase from AFL API (roundNumber or round.roundNumber),
-    # not snake_case round_number (which only exists after clean_pbp/torp_clean_names)
+    # Normalise existing chains columns (old parquets may use camelCase)
     existing <- data.table::as.data.table(existing)
+    .normalise_chains_columns(existing)
     round_col <- if ("round_number" %in% names(existing)) {
       "round_number"
-    } else if ("roundNumber" %in% names(existing)) {
-      "roundNumber"
-    } else if ("round.roundNumber" %in% names(existing)) {
-      "round.roundNumber"
     } else {
       NULL
     }
@@ -581,7 +577,7 @@ update_ep_wp_chart <- function(season) {
     chart_cols <- c(
       "match_id", "season", "round_number", "period", "period_seconds",
       "total_seconds", "display_order",
-      "home_team_team_name", "away_team_team_name", "team", "home",
+      "home_team_name", "away_team_name", "team", "home",
       "pos_team_points", "opp_team_points", "points_diff",
       "home_points", "away_points",
       "exp_pts", "delta_epv", "wp", "wpa",
