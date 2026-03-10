@@ -178,11 +178,12 @@ create_player_game_data <- function(pbp_data = NULL,
     )
 
   # --- Step 6: Join teams data for position ---
+  teams_pos <- teams |>
+    dplyr::select(match_id, player_id, position) |>
+    dplyr::distinct()
   plyr_gm_df <- plyr_gm_df |>
-    dplyr::left_join(
-      teams,
-      by = c("match_id", "player_id")
-    ) |>
+    dplyr::select(-dplyr::any_of("position")) |>
+    dplyr::left_join(teams_pos, by = c("match_id", "player_id")) |>
     dplyr::mutate(
       position = dplyr::if_else(position == "MIDFIELDER_FORWARD", "MEDIUM_FORWARD", position)
     )

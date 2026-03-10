@@ -526,7 +526,7 @@ get_afl_player_stats <- function(season = NULL) {
   # Join match details from fixtures (normalised column names)
   join_cols <- intersect(
     c("match_id", "venue_name", "round_number",
-      "home_team_name", "away_team_name"),
+      "home_team_name", "away_team_name", "utc_start_time"),
     names(concluded)
   )
   match_info <- concluded[, join_cols, drop = FALSE]

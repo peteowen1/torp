@@ -37,8 +37,8 @@ get_match_chains <- function(season = get_afl_season(), round = NA) {
 
   players <- get_players()
   chains <- chains |>
-    dplyr::inner_join(games, by = "matchId") |>
-    dplyr::left_join(players, by = c("playerId", "season"))
+    dplyr::inner_join(games, by = c("match_id" = "matchId")) |>
+    dplyr::left_join(players, by = c("player_id" = "playerId", "season"))
 
   cli::cli_inform("Success!")
   return(chains)
