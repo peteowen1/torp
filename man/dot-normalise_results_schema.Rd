@@ -7,18 +7,19 @@
 .normalise_results_schema(results)
 }
 \arguments{
-\item{results}{Raw results data (may be mixed schema across seasons)}
+\item{results}{Results data (may be mixed schema across seasons)}
 }
 \value{
-Tibble with columns: providerId, homeTeamScore.matchScore.totalScore,
-homeTeamScore.matchScore.goals, homeTeamScore.matchScore.behinds,
-awayTeamScore.matchScore.totalScore, awayTeamScore.matchScore.goals,
-awayTeamScore.matchScore.behinds, match.utcStartTime
+Tibble with columns: match_id, home_score, home_goals, home_behinds,
+away_score, away_goals, away_behinds, utc_start_time
 }
 \description{
-Handles both the old CFS schema (from historical torpdata releases with
-\code{match.matchId}, \verb{homeTeamScore.matchScore.*}) and the new fixture schema
-(from \code{get_afl_results()} with \code{providerId}, \verb{home.score.*}).
-Returns a tibble with the legacy column names used downstream.
+Handles three result schemas:
+\itemize{
+\item \strong{Canonical} (normalised fixtures/results): \code{match_id}, \code{home_score}, etc.
+\item \strong{CFS} (old torpdata releases): \code{match.matchId}, \verb{homeTeamScore.matchScore.*}
+\item \strong{Fixture} (raw API, pre-normalisation): \code{providerId}, \verb{home.score.*}
+}
+Returns a tibble with canonical column names.
 }
 \keyword{internal}

@@ -27,11 +27,11 @@ uses \code{default_credit_params()}.}
 \value{
 A data.table with one row per player per match, containing:
 identifiers (\code{player_id}, \code{match_id}, \code{season}, \code{round},
-\code{plyr_nm}, \code{tm}, \code{opp}, \code{pos}, \code{position}, \code{team_id},
-\code{utc_start_time}), position-adjusted TORP credits (\code{tot_p_adj},
-\code{recv_pts_adj}, \code{disp_pts_adj}, \code{spoil_pts_adj}, \code{hitout_pts_adj}),
-raw TORP credits (\code{tot_p}, \code{recv_pts}, \code{disp_pts}, \code{spoil_pts},
-\code{hitout_pts}), and key box-score stats.
+\code{player_name}, \code{team}, \code{opponent}, \code{listed_position}, \code{position}, \code{team_id},
+\code{utc_start_time}), position-adjusted TORP credits (\code{total_credits_adj},
+\code{recv_credits_adj}, \code{disp_credits_adj}, \code{spoil_credits_adj}, \code{hitout_credits_adj}),
+raw TORP credits (\code{total_credits}, \code{recv_credits}, \code{disp_credits}, \code{spoil_credits},
+\code{hitout_credits}), and key box-score stats.
 }
 \description{
 Transforms raw play-by-play data and player stats into processed per-game

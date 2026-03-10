@@ -14,7 +14,7 @@ Invisible NULL (renames columns by reference).
 }
 \description{
 The AFL API changed its response schema for 2026+. The old CFS schema uses
-names like \code{homeTeamScore.totalScore} (→ \code{home_team_score_total_score}),
+names like \code{homeTeamScore.totalScore} (→ \code{home_score}),
 while the new schema uses \code{home.score.totalScore} (→ \code{home_score_total_score}).
 This function detects the schema and renames columns to the expected names
 used throughout the PBP pipeline.

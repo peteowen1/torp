@@ -171,7 +171,7 @@ tictoc::toc(log= TRUE)
 tictoc::tic('lineups')
 get_teams <- function(season) {
   ### update teams file (90 secs per season)
-  teams <- get_afl_lineups(season) # |> dplyr::filter(!is.na(player.playerId))
+  teams <- get_afl_lineups(season) # |> dplyr::filter(!is.na(player_id))
 
   file_name <- glue::glue("teams_{season}")
 

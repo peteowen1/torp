@@ -13,14 +13,14 @@ season_val <- get_afl_season()
 # Prepare Sim Data ----
 sim_games <-
   fixtures %>%
-  mutate(result = home.score.totalScore - away.score.totalScore) %>%
-  filter(compSeason.year == season_val) %>%
-  select(providerId,
-    season = compSeason.year,
-    roundnum = round.roundNumber,
-    home.team.providerId, home_team = home.team.club.name,
-    away.team.providerId, away_team = away.team.club.name,
-    utcStartTime, venue.name, result
+  mutate(result = home_score - away_score) %>%
+  filter(season == season_val) %>%
+  select(match_id,
+    season,
+    roundnum = round_number,
+    home_team_id, home_team = home_team_name,
+    away_team_id, away_team = away_team_name,
+    utc_start_time, venue_name, result
   ) %>%
   mutate(
     torp_home_round = NA_real_,
@@ -30,21 +30,21 @@ sim_games <-
 sim_games_pivot <-
   sim_games %>%
   dplyr::select(
-    providerId, season, roundnum, home.team.providerId, away.team.providerId, utcStartTime, venue.name,
+    match_id, season, roundnum, home_team_id, away_team_id, utc_start_time, venue_name,
     result
   ) %>%
   tidyr::pivot_longer(
-    cols = ends_with("team.providerId"),
+    cols = ends_with("team_id"),
     names_to = "team_type",
-    values_to = "team.providerId"
+    values_to = "team_id"
   ) %>%
   dplyr::mutate(
-    venue = replace_venues(venue.name),
+    venue = replace_venues(venue_name),
     team_type = substr(team_type, 1, 4),
     result = ifelse(team_type == "away", -result, result)
   ) %>%
-  dplyr::select(providerId, season, roundnum, team_type,
-    teamId = team.providerId, utcStartTime, venue,
+  dplyr::select(match_id, season, roundnum, team_type,
+    teamId = team_id, utc_start_time, venue,
     result
   ) %>%
   dplyr::left_join(team_map) %>%
@@ -105,11 +105,11 @@ tst_df <- tst_sims %>% list_rbind(., names_to = "sim")
 # Process Results ----
 # Create separate rows for home and away teams
 home_teams <- tst_df %>%
-  select(sim, providerId, season, roundnum, teamId = home.team.providerId, team = home_team, utcStartTime, venue = venue.name, result, estimate, wp, outcome) %>%
+  select(sim, match_id, season, roundnum, teamId = home_team_id, team = home_team, utc_start_time, venue = venue_name, result, estimate, wp, outcome) %>%
   mutate(team_type = "home")
 
 away_teams <- tst_df %>%
-  select(sim, providerId, season, roundnum, teamId = away.team.providerId, team = away_team, utcStartTime, venue = venue.name, result, estimate, wp, outcome) %>%
+  select(sim, match_id, season, roundnum, teamId = away_team_id, team = away_team, utc_start_time, venue = venue_name, result, estimate, wp, outcome) %>%
   mutate(
     team_type = "away",
     result = -result,
@@ -120,7 +120,7 @@ away_teams <- tst_df %>%
 
 # Combine home and away teams
 pivoted_data <- bind_rows(home_teams, away_teams) %>%
-  arrange(sim, providerId, roundnum, team_type) %>%
+  arrange(sim, match_id, roundnum, team_type) %>%
   mutate(team_name = replace_teams(team))
 
 pivoted_data %>%
@@ -238,7 +238,7 @@ create_ladder <- function(df) {
 ####
 # Define a function that checks if the data frame meets the condition
 check_condition <- function(df) {
-  # any(df$providerId == "CD_M20240141901" & df$team_name == "Brisbane Lions" & df$outcome == 1)
+  # any(df$match_id == "CD_M20240141901" & df$team_name == "Brisbane Lions" & df$outcome == 1)
   TRUE
 }
 

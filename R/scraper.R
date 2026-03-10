@@ -137,7 +137,7 @@ get_round_games <- function(season, round) {
     games <- games |>
       dplyr::filter(.data$status == "CONCLUDED") |>
       dplyr::mutate(
-        date = as.Date(substr(.data$utcStartTime, 1, 10)),
+        date = as.Date(substr(.data$utc_start_time, 1, 10)),
         season = season
       )
     return(games)
@@ -187,7 +187,7 @@ get_players <- function(use_api = FALSE) {
         team.teamAbbr = NA
       ) |>
       dplyr::select(
-        playerId = .data$providerId, jumperNumber = .data$jumperNumber,
+        playerId = .data$player_id, jumperNumber = .data$jumperNumber,
         playerPosition = .data$position, photoURL = .data$photoURL,
         playerName.givenName = .data$firstName, playerName.surname = .data$surname,
         team.teamId = .data$team.teamId, team.teamAbbr = .data$team.teamAbbr,
@@ -262,6 +262,9 @@ get_game_chains <- function(match_id) {
     venueLength = chains_t1$venueLength,
     homeTeamDirectionQtr1 = chains_t1$homeTeamDirectionQtr1
   )]
+
+  # Normalise camelCase → snake_case (matchId → match_id, etc.)
+  .normalise_chains_columns(chains)
 
   chains
 }

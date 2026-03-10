@@ -32,23 +32,20 @@ teams <- as.data.table(load_teams(TRUE))
 fixtures <- as.data.table(load_fixtures(all = TRUE))
 
 fixtures_margin <- fixtures[
-  !is.na(home.score.totalScore) & !is.na(away.score.totalScore),
-  .(providerId,
-    season = as.integer(compSeason.year),
-    round = as.integer(round.roundNumber),
-    home_score = as.numeric(home.score.totalScore),
-    away_score = as.numeric(away.score.totalScore),
-    home_margin = home.score.totalScore - away.score.totalScore,
-    match_date = as.Date(substr(utcStartTime, 1, 10)))
+  !is.na(home_score) & !is.na(away_score),
+  .(match_id,
+    season = as.integer(season),
+    round = as.integer(round_number),
+    home_score = as.numeric(home_score),
+    away_score = as.numeric(away_score),
+    home_margin = home_score - away_score,
+    match_date = as.Date(substr(utc_start_time, 1, 10)))
 ]
 
 teams <- teams[is.na(position) | (position != "EMERG" & position != "SUB")]
-if ("player.playerId" %in% names(teams)) setnames(teams, "player.playerId", "player_id")
-if ("round.roundNumber" %in% names(teams) && !"round" %in% names(teams))
-  teams[, round := as.integer(round.roundNumber)]
-if (!"season" %in% names(teams)) teams[, season := as.integer(compSeason.year)]
 teams[, player_id := as.character(player_id)]
 teams[, season := as.integer(season)]
+teams[, round := as.integer(round_number)]
 skills[, player_id := as.character(player_id)]
 skills[, season := as.integer(season)]
 skills[, round := as.integer(round)]
@@ -82,17 +79,17 @@ for (sc in skill_cols) {
 # Aggregate to team level
 merged[, .total_skill := rowSums(.SD, na.rm = TRUE), .SDcols = skill_cols]
 team_skills <- merged[order(-.total_skill)][
-  , head(.SD, 22), by = .(providerId, teamId)
+  , head(.SD, 22), by = .(match_id, team_id)
 ][, {
   out <- list(n_players = .N)
   for (sc in skill_cols) out[[sc]] <- sum(get(sc), na.rm = TRUE)
   out
-}, by = .(providerId, teamId, season, round)]
+}, by = .(match_id, team_id, season, round)]
 
 team_skills <- merge(team_skills,
-  fixtures[, .(providerId, home_teamId = home.team.providerId, away_teamId = away.team.providerId)],
-  by = "providerId", all.x = TRUE)
-team_skills[, team_type := fifelse(teamId == home_teamId, "home", "away")]
+  fixtures[, .(match_id, home_team_id, away_team_id)],
+  by = "match_id", all.x = TRUE)
+team_skills[, team_type := fifelse(team_id == home_team_id, "home", "away")]
 
 # 2. Build separate home/away feature matrix ----
 cli::cli_h1("Building separate home/away feature matrix")
@@ -107,14 +104,14 @@ setnames(home, skill_cols, home_cols)
 setnames(away, skill_cols, away_cols)
 
 match_df <- merge(
-  home[, c("providerId", "season", "round", home_cols), with = FALSE],
-  away[, c("providerId", away_cols), with = FALSE],
-  by = "providerId"
+  home[, c("match_id", "season", "round", home_cols), with = FALSE],
+  away[, c("match_id", away_cols), with = FALSE],
+  by = "match_id"
 )
 
 match_df <- merge(match_df,
-  fixtures_margin[, .(providerId, home_score, away_score, home_margin, match_date)],
-  by = "providerId")
+  fixtures_margin[, .(match_id, home_score, away_score, home_margin, match_date)],
+  by = "match_id")
 
 cli::cli_inform("Match rows: {nrow(match_df)}, Features: {length(home_cols) + length(away_cols)} (52 home + 52 away)")
 
@@ -344,12 +341,9 @@ torp_join[, round := as.integer(round)]
 
 teams2 <- as.data.table(load_teams(TRUE))
 teams2 <- teams2[is.na(position) | (position != "EMERG" & position != "SUB")]
-if ("player.playerId" %in% names(teams2)) setnames(teams2, "player.playerId", "player_id")
-if ("round.roundNumber" %in% names(teams2) && !"round" %in% names(teams2))
-  teams2[, round := as.integer(round.roundNumber)]
-if (!"season" %in% names(teams2)) teams2[, season := as.integer(compSeason.year)]
 teams2[, player_id := as.character(player_id)]
 teams2[, season := as.integer(season)]
+teams2[, round := as.integer(round_number)]
 
 merged_torp <- merge(teams2, torp_join, by = c("player_id", "season", "round"), all.x = TRUE)
 for (tc in torp_cols) {
@@ -359,26 +353,26 @@ for (tc in torp_cols) {
 
 merged_torp[, .torp_total := fifelse(is.na(torp), 0, torp)]
 team_torp <- merged_torp[order(-.torp_total)][
-  , head(.SD, 22), by = .(providerId, teamId)
-][, lapply(.SD, sum, na.rm = TRUE), by = .(providerId, teamId, season, round), .SDcols = torp_cols]
+  , head(.SD, 22), by = .(match_id, team_id)
+][, lapply(.SD, sum, na.rm = TRUE), by = .(match_id, team_id, season, round), .SDcols = torp_cols]
 
 team_torp <- merge(team_torp,
-  fixtures[, .(providerId, home_teamId = home.team.providerId, away_teamId = away.team.providerId)],
-  by = "providerId", all.x = TRUE)
-team_torp[, team_type := fifelse(teamId == home_teamId, "home", "away")]
+  fixtures[, .(match_id, home_team_id, away_team_id)],
+  by = "match_id", all.x = TRUE)
+team_torp[, team_type := fifelse(team_id == home_team_id, "home", "away")]
 
 home_t <- team_torp[team_type == "home"]
 away_t <- team_torp[team_type == "away"]
 setnames(home_t, torp_cols, paste0(torp_cols, "_home"))
 setnames(away_t, torp_cols, paste0(torp_cols, "_away"))
 match_torp <- merge(
-  home_t[, c("providerId", "season", "round", paste0(torp_cols, "_home")), with = FALSE],
-  away_t[, c("providerId", paste0(torp_cols, "_away")), with = FALSE],
-  by = "providerId")
+  home_t[, c("match_id", "season", "round", paste0(torp_cols, "_home")), with = FALSE],
+  away_t[, c("match_id", paste0(torp_cols, "_away")), with = FALSE],
+  by = "match_id")
 for (tc in torp_cols) {
   match_torp[, paste0(tc, "_diff") := get(paste0(tc, "_home")) - get(paste0(tc, "_away"))]
 }
-match_torp <- merge(match_torp, fixtures_margin[, .(providerId, home_margin, match_date)], by = "providerId")
+match_torp <- merge(match_torp, fixtures_margin[, .(match_id, home_margin, match_date)], by = "match_id")
 torp_train <- match_torp[season < 2025]
 torp_test <- match_torp[season >= 2025]
 torp_train[, weightz := exp(as.numeric(-(anchor_date - match_date)) / 1000)]
@@ -387,9 +381,9 @@ fit_torp <- lm(home_margin ~ torp_diff, data = torp_train, weights = weightz)
 pred_torp <- predict(fit_torp, torp_test)
 
 # Align
-common_ids <- intersect(match_df$providerId[test_idx], torp_test$providerId)
-psr_ci <- match(common_ids, match_df$providerId[test_idx])
-torp_ci <- match(common_ids, torp_test$providerId)
+common_ids <- intersect(match_df$match_id[test_idx], torp_test$match_id)
+psr_ci <- match(common_ids, match_df$match_id[test_idx])
+torp_ci <- match(common_ids, torp_test$match_id)
 y_common <- y_margin_test[psr_ci]
 baseline <- mean(y_margin_train)
 

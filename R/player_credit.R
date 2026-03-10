@@ -70,11 +70,11 @@ default_credit_params <- function() {
 #'
 #' @return A data.table with one row per player per match, containing:
 #'   identifiers (\code{player_id}, \code{match_id}, \code{season}, \code{round},
-#'   \code{plyr_nm}, \code{tm}, \code{opp}, \code{pos}, \code{position}, \code{team_id},
-#'   \code{utc_start_time}), position-adjusted TORP credits (\code{tot_p_adj},
-#'   \code{recv_pts_adj}, \code{disp_pts_adj}, \code{spoil_pts_adj}, \code{hitout_pts_adj}),
-#'   raw TORP credits (\code{tot_p}, \code{recv_pts}, \code{disp_pts}, \code{spoil_pts},
-#'   \code{hitout_pts}), and key box-score stats.
+#'   \code{player_name}, \code{team}, \code{opponent}, \code{listed_position}, \code{position}, \code{team_id},
+#'   \code{utc_start_time}), position-adjusted TORP credits (\code{total_credits_adj},
+#'   \code{recv_credits_adj}, \code{disp_credits_adj}, \code{spoil_credits_adj}, \code{hitout_credits_adj}),
+#'   raw TORP credits (\code{total_credits}, \code{recv_credits}, \code{disp_credits}, \code{spoil_credits},
+#'   \code{hitout_credits}), and key box-score stats.
 #'
 #' @export
 #'
@@ -105,27 +105,27 @@ create_player_game_data <- function(pbp_data = NULL,
   data.table::setorder(dt, match_id, display_order)
   dt[, `:=`(
     weight_gm = exp(as.numeric(-(ref_date - as.Date(utc_start_time))) / decay),
-    opp_tm = data.table::fifelse(home_away == "Home", away_team_team_name, home_team_team_name)
+    opp_tm = data.table::fifelse(home_away == "Home", away_team_name, home_team_name)
   )]
 
   # Step 1: Disposal points (grouped by player_id + match_id)
   disp_dt <- dt[, .(
-    plyr_nm = max(player_name, na.rm = TRUE),
+    player_name = max(player_name, na.rm = TRUE),
     utc_start_time = max(utc_start_time),
     weight_gm = max(weight_gm),
-    disp_pts = sum(data.table::fifelse(pos_team == -1, delta_epv + p$disp_neg_offset, delta_epv + p$disp_pos_offset) * p$disp_scale),
-    disp = floor(.N / 2L),
-    tm = team[.N],
-    opp = opp_tm[.N],
-    pos = player_position[.N],
+    disp_credits = sum(data.table::fifelse(pos_team == -1, delta_epv + p$disp_neg_offset, delta_epv + p$disp_pos_offset) * p$disp_scale),
+    disposals_pbp = floor(.N / 2L),
+    team = team[.N],
+    opponent = opp_tm[.N],
+    listed_position = player_position[.N],
     round = as.numeric(round_week[.N]),
     season = lubridate::year(utc_start_time[.N])
   ), by = .(player_id, match_id)]
 
   # Step 2: Reception points (grouped by lead_player_id + match_id)
   recv_dt <- dt[, .(
-    recv_pts = sum(data.table::fifelse(pos_team == -1, (p$recv_neg_mult * delta_epv * pos_team) + p$recv_neg_offset, (p$recv_pos_mult * delta_epv * pos_team) + p$recv_pos_offset) * p$recv_scale),
-    recvs = .N
+    recv_credits = sum(data.table::fifelse(pos_team == -1, (p$recv_neg_mult * delta_epv * pos_team) + p$recv_neg_offset, (p$recv_pos_mult * delta_epv * pos_team) + p$recv_pos_offset) * p$recv_scale),
+    receptions = .N
   ), by = .(lead_player_id, match_id)]
 
   # Step 3: Join disposal + reception
@@ -138,10 +138,10 @@ create_player_game_data <- function(pbp_data = NULL,
   spoil_hitout_df <- player_stats |>
     dplyr::mutate(
       weight_gm = exp(as.numeric(-(ref_date - as.Date(utc_start_time))) / decay),
-      spoil_pts = extended_stats_spoils * p$spoil_wt + tackles * p$tackle_wt + extended_stats_pressure_acts * p$pressure_wt + extended_stats_def_half_pressure_acts * p$def_pressure_wt +
+      spoil_credits = spoils * p$spoil_wt + tackles * p$tackle_wt + pressure_acts * p$pressure_wt + def_half_pressure_acts * p$def_pressure_wt +
                   intercepts * p$intercepts_wt + one_percenters * p$one_percenters_wt + rebound50s * p$rebound50s_wt + frees_against * p$frees_against_wt,
-      hitout_pts = hitouts * p$hitout_wt + extended_stats_hitouts_to_advantage * p$hitout_adv_wt + extended_stats_ruck_contests * p$ruck_contest_wt +
-                   clearances_total_clearances * p$clearances_wt
+      hitout_credits = hitouts * p$hitout_wt + hitouts_to_advantage * p$hitout_adv_wt + ruck_contests * p$ruck_contest_wt +
+                   clearances * p$clearances_wt
     ) |>
     dplyr::select(-utc_start_time)
 
@@ -152,7 +152,7 @@ create_player_game_data <- function(pbp_data = NULL,
     )
 
   # Assert join produced matches (catches upstream schema changes)
-  if (all(is.na(plyr_gm_df$spoil_pts))) {
+  if (all(is.na(plyr_gm_df$spoil_credits))) {
     cli::cli_abort(c(
       "Player stats join produced no matches - all spoil/hitout points are zero.",
       "i" = "Check that {.fn load_player_stats} returns the expected column names."
@@ -162,26 +162,26 @@ create_player_game_data <- function(pbp_data = NULL,
   # --- Step 5: Replace NAs and compute totals ---
   plyr_gm_df <- plyr_gm_df |>
     dplyr::mutate(
-      recv_pts = tidyr::replace_na(recv_pts, 0) +
+      recv_credits = tidyr::replace_na(recv_credits, 0) +
                  contested_possessions * p$contested_poss_wt + contested_marks * p$contested_marks_wt +
-                 extended_stats_ground_ball_gets * p$ground_ball_gets_wt + marks_inside50 * p$marks_inside50_wt +
+                 ground_ball_gets * p$ground_ball_gets_wt + marks_inside50 * p$marks_inside50_wt +
                  marks * p$marks_wt + uncontested_possessions * p$uncontested_poss_wt +
                  frees_for * p$frees_for_wt,
-      disp_pts = tidyr::replace_na(disp_pts, 0) + bounces * p$bounce_wt +
+      disp_credits = tidyr::replace_na(disp_credits, 0) + bounces * p$bounce_wt +
                  inside50s * p$inside50s_wt + clangers * p$clangers_wt + score_involvements * p$score_involvements_wt +
                  kicks * p$kicks_wt + handballs * p$handballs_wt + metres_gained * p$metres_gained_wt +
                  turnovers * p$turnovers_wt + goal_assists * p$goal_assists_wt +
                  goals * p$goals_wt + behinds * p$behinds_wt + shots_at_goal * p$shots_at_goal_wt,
-      spoil_pts = tidyr::replace_na(spoil_pts, 0),
-      hitout_pts = tidyr::replace_na(hitout_pts, 0),
-      tot_p = recv_pts + disp_pts + spoil_pts + hitout_pts
+      spoil_credits = tidyr::replace_na(spoil_credits, 0),
+      hitout_credits = tidyr::replace_na(hitout_credits, 0),
+      total_credits = recv_credits + disp_credits + spoil_credits + hitout_credits
     )
 
   # --- Step 6: Join teams data for position ---
   plyr_gm_df <- plyr_gm_df |>
     dplyr::left_join(
       teams,
-      by = c("match_id" = "providerId", "player_id" = "player.playerId")
+      by = c("match_id", "player_id")
     ) |>
     dplyr::mutate(
       position = dplyr::if_else(position == "MIDFIELDER_FORWARD", "MEDIUM_FORWARD", position)
@@ -193,18 +193,18 @@ create_player_game_data <- function(pbp_data = NULL,
   plyr_gm_df <- plyr_gm_df |>
     dplyr::mutate(
       tog_safe = pmax(.data$time_on_ground_percentage / 100, 0.1),
-      recv_p80 = .data$recv_pts / .data$tog_safe,
-      disp_p80 = .data$disp_pts / .data$tog_safe,
-      spoil_p80 = .data$spoil_pts / .data$tog_safe,
-      hitout_p80 = .data$hitout_pts / .data$tog_safe
+      recv_p80 = .data$recv_credits / .data$tog_safe,
+      disp_p80 = .data$disp_credits / .data$tog_safe,
+      spoil_p80 = .data$spoil_credits / .data$tog_safe,
+      hitout_p80 = .data$hitout_credits / .data$tog_safe
     ) |>
     dplyr::group_by(position) |>
     dplyr::mutate(
-      recv_pts_adj = .data$recv_p80 - mean(.data$recv_p80, na.rm = TRUE),
-      disp_pts_adj = .data$disp_p80 - mean(.data$disp_p80, na.rm = TRUE),
-      spoil_pts_adj = .data$spoil_p80 - mean(.data$spoil_p80, na.rm = TRUE),
-      hitout_pts_adj = .data$hitout_p80 - mean(.data$hitout_p80, na.rm = TRUE),
-      tot_p_adj = .data$recv_pts_adj + .data$disp_pts_adj + .data$spoil_pts_adj + .data$hitout_pts_adj
+      recv_credits_adj = .data$recv_p80 - mean(.data$recv_p80, na.rm = TRUE),
+      disp_credits_adj = .data$disp_p80 - mean(.data$disp_p80, na.rm = TRUE),
+      spoil_credits_adj = .data$spoil_p80 - mean(.data$spoil_p80, na.rm = TRUE),
+      hitout_credits_adj = .data$hitout_p80 - mean(.data$hitout_p80, na.rm = TRUE),
+      total_credits_adj = .data$recv_credits_adj + .data$disp_credits_adj + .data$spoil_credits_adj + .data$hitout_credits_adj
     ) |>
     dplyr::ungroup() |>
     dplyr::select(-"tog_safe", -"recv_p80", -"disp_p80", -"spoil_p80", -"hitout_p80")
@@ -215,33 +215,33 @@ create_player_game_data <- function(pbp_data = NULL,
   }
 
   plyr_gm_df <- plyr_gm_df |>
-    dplyr::filter(!is.na(tm)) |>
+    dplyr::filter(!is.na(team)) |>
     dplyr::select(
       # Identifiers
       player_id, match_id, season, round,
-      plyr_nm, tm, opp, pos, position, team_id,
+      player_name, team, opponent, listed_position, position, team_id,
       utc_start_time,
       # TORP credit points (position-adjusted)
-      tot_p_adj, recv_pts_adj, disp_pts_adj, spoil_pts_adj, hitout_pts_adj,
+      total_credits_adj, recv_credits_adj, disp_credits_adj, spoil_credits_adj, hitout_credits_adj,
       # TORP credit points (raw)
-      tot_p, recv_pts, disp_pts, spoil_pts, hitout_pts,
+      total_credits, recv_credits, disp_credits, spoil_credits, hitout_credits,
       # PBP-derived action counts
-      disp, recvs,
+      disposals_pbp, receptions,
       # Credit model input stats
-      extended_stats_spoils, tackles, extended_stats_pressure_acts,
-      extended_stats_def_half_pressure_acts,
-      hitouts, extended_stats_hitouts_to_advantage, extended_stats_ruck_contests,
+      spoils, tackles, pressure_acts,
+      def_half_pressure_acts,
+      hitouts, hitouts_to_advantage, ruck_contests,
       bounces,
       # Core box-score stats
       goals, behinds, kicks, handballs, disposals, marks,
       contested_possessions, uncontested_possessions,
       inside50s, marks_inside50, contested_marks,
-      clearances_total_clearances,
+      clearances,
       metres_gained, time_on_ground_percentage,
       intercepts, rebound50s, one_percenters,
       frees_for, frees_against, clangers, turnovers,
       score_involvements, shots_at_goal, goal_assists,
-      extended_stats_ground_ball_gets
+      ground_ball_gets
     )
 
   return(plyr_gm_df)

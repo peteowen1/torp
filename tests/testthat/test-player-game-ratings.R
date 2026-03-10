@@ -80,9 +80,9 @@ test_that("filter_game_data helper function works", {
     season = c(2024, 2024, 2023, 2024),
     round = c(1, 2, 1, 1),
     match_id = c("M1", "M2", "M3", "M4"),
-    tm = c("Adelaide Crows", "Brisbane Lions", "Carlton", "Adelaide Crows"),
-    opp = c("Brisbane Lions", "Adelaide Crows", "Essendon", "Carlton"),
-    tot_p_adj = c(100, 120, 80, 90),
+    team = c("Adelaide Crows", "Brisbane Lions", "Carlton", "Adelaide Crows"),
+    opponent = c("Brisbane Lions", "Adelaide Crows", "Essendon", "Carlton"),
+    total_credits_adj = c(100, 120, 80, 90),
     stringsAsFactors = FALSE
   )
 
@@ -94,7 +94,7 @@ test_that("filter_game_data helper function works", {
   # Test filtering by team
   result2 <- torp:::filter_game_data(test_df, 2024, 1, NULL, "Adelaide Crows")
   expect_equal(nrow(result2), 2)
-  expect_true(all(result2$tm == "Adelaide Crows" | result2$opp == "Adelaide Crows"))
+  expect_true(all(result2$team == "Adelaide Crows" | result2$opponent == "Adelaide Crows"))
 
   # Test filtering by season and round
   result3 <- torp:::filter_game_data(test_df, 2024, 1, NULL, NULL)

@@ -28,9 +28,9 @@ test_that("create_player_game_data output contains required columns", {
   skip_if(is.null(pgd), "Could not create player game data")
 
   required_cols <- c(
-    "match_id", "player_id", "tot_p_adj", "recv_pts_adj",
-    "disp_pts_adj", "spoil_pts_adj", "hitout_pts_adj",
-    "tm", "opp", "season", "round"
+    "match_id", "player_id", "total_credits_adj", "recv_credits_adj",
+    "disp_credits_adj", "spoil_credits_adj", "hitout_credits_adj",
+    "team", "opponent", "season", "round"
   )
 
   for (col in required_cols) {

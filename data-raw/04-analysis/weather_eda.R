@@ -13,19 +13,16 @@ weather <- read_parquet("./data-raw/weather_data.parquet")
 results <- load_results(TRUE)
 
 # Join weather to results for total points
-# Fixtures use `providerId`, results use `match.matchId` — same ID format
+# Results are normalised at load time — canonical column names
 match_data <- weather |>
   inner_join(
     results |>
-      mutate(total_points = homeTeamScore.matchScore.totalScore +
-               awayTeamScore.matchScore.totalScore) |>
-      select(match_id = match.matchId, total_points,
-             home_score = homeTeamScore.matchScore.totalScore,
-             away_score = awayTeamScore.matchScore.totalScore,
+      mutate(total_points = home_score + away_score) |>
+      select(match_id, total_points, home_score, away_score,
              afl_weather_type = weather.weatherType,
              afl_weather_desc = weather.description,
              afl_temp = weather.tempInCelsius),
-    by = c("providerId" = "match_id")
+    by = "match_id"
   )
 
 cat("Matched", nrow(match_data), "of", nrow(weather), "weather records to results\n")

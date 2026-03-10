@@ -370,7 +370,9 @@ get_afl_fixtures <- function(season = NULL) {
     )
   }
 
-  tibble::as_tibble(matches)
+  result <- tibble::as_tibble(matches)
+  .normalise_fixture_columns(result)
+  result
 }
 
 
@@ -398,7 +400,7 @@ get_afl_results <- function(season = NULL) {
     # Fallback: games with non-zero scores
     cli::cli_inform("No 'status' column in fixtures -- using score-based fallback for completed games")
     results <- fixtures[
-      !is.na(fixtures$home.score.totalScore) & fixtures$home.score.totalScore > 0, ]
+      !is.na(fixtures$home_score) & fixtures$home_score > 0, ]
   }
 
   results
@@ -427,7 +429,7 @@ get_afl_lineups <- function(season = NULL, round = NULL) {
   if (nrow(fixtures) == 0) return(tibble::tibble())
 
   if (!is.null(round)) {
-    fixtures <- fixtures[fixtures$round.roundNumber %in% round, ]
+    fixtures <- fixtures[fixtures$round_number %in% round, ]
     if (nrow(fixtures) == 0) {
       cli::cli_alert_danger("No fixtures for season {season} round {round}")
       return(tibble::tibble())
@@ -440,7 +442,7 @@ get_afl_lineups <- function(season = NULL, round = NULL) {
     if (nrow(fixtures) == 0) return(tibble::tibble())
   }
 
-  match_ids <- fixtures$providerId
+  match_ids <- fixtures$match_id
   token <- get_token()
 
   rosters <- purrr::map(match_ids, function(mid) {
@@ -465,6 +467,9 @@ get_afl_lineups <- function(season = NULL, round = NULL) {
   if ("player.playerId" %in% names(result)) {
     result$row_id <- paste0(result$providerId, result$teamId, result$player.playerId)
   }
+
+  # Normalise column names (providerId → match_id, teamId → team_id, etc.)
+  .normalise_teams_columns(result)
 
   result
 }
@@ -494,7 +499,7 @@ get_afl_player_stats <- function(season = NULL) {
   concluded <- fixtures[fixtures$status == "CONCLUDED", ]
   if (nrow(concluded) == 0) return(tibble::tibble())
 
-  match_ids <- concluded$providerId
+  match_ids <- concluded$match_id
   token <- get_token()
 
   cli::cli_inform("Fetching player stats for {length(match_ids)} match{?es}...")
@@ -516,14 +521,14 @@ get_afl_player_stats <- function(season = NULL) {
   result <- purrr::list_rbind(purrr::compact(stats_list))
   if (nrow(result) == 0) return(tibble::tibble())
 
-  # Join match details from fixtures
+  # Join match details from fixtures (normalised column names)
   join_cols <- intersect(
-    c("providerId", "venue.name", "round.roundNumber",
-      "home.team.name", "away.team.name", "compSeason.name"),
+    c("match_id", "venue_name", "round_number",
+      "home_team_name", "away_team_name"),
     names(concluded)
   )
   match_info <- concluded[, join_cols, drop = FALSE]
-  result <- dplyr::left_join(result, match_info, by = "providerId")
+  result <- dplyr::left_join(result, match_info, by = c("providerId" = "match_id"))
 
   result
 }
@@ -551,8 +556,8 @@ get_afl_player_details <- function(season = NULL) {
   if (nrow(fixtures) == 0) return(tibble::tibble())
 
   # Derive actual season from fixture data (handles auto-fallback)
-  actual_season <- if ("compSeason.year" %in% names(fixtures)) {
-    fixtures$compSeason.year[1]
+  actual_season <- if ("season" %in% names(fixtures)) {
+    fixtures$season[1]
   } else if ("compSeason.providerId" %in% names(fixtures)) {
     as.numeric(gsub("CD_S(\\d{4})\\d+", "\\1", fixtures$compSeason.providerId[1]))
   } else {
@@ -629,6 +634,10 @@ get_afl_player_details <- function(season = NULL) {
   if (!is.na(pid_col)) {
     pid_col_clean <- sub("^player\\.", "", pid_col)
     result$row_id <- paste(result[[pid_col_clean]], actual_season)
+    # Rename providerId → player_id (this is a player ID, not a match ID)
+    if (pid_col_clean %in% names(result) && !"player_id" %in% names(result)) {
+      names(result)[names(result) == pid_col_clean] <- "player_id"
+    }
   }
 
   # Standardise team column name and values

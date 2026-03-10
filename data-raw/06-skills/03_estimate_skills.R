@@ -38,9 +38,9 @@ seasons <- sort(unique(skill_data$season))
 
 # Collect all ref_dates: one per season-round (= first match of that round)
 ref_date_map <- fixtures_dt[
-  compSeason.year %in% seasons,
-  .(ref_date = min(as.Date(utcStartTime), na.rm = TRUE)),
-  by = .(season = compSeason.year, round = round.roundNumber)
+  season %in% seasons,
+  .(ref_date = min(as.Date(utc_start_time), na.rm = TRUE)),
+  by = .(season, round = round_number)
 ]
 ref_date_map <- ref_date_map[!is.na(ref_date) & is.finite(ref_date)]
 data.table::setorder(ref_date_map, ref_date)
@@ -83,14 +83,14 @@ for (szn in seasons) {
 }
 
 # Estimate for future fixture seasons (first round only) ----
-future_seasons <- setdiff(sort(unique(fixtures_dt$compSeason.year)), seasons)
+future_seasons <- setdiff(sort(unique(fixtures_dt$season)), seasons)
 
 for (szn in future_seasons) {
-  fix_szn <- fixtures_dt[compSeason.year == szn]
+  fix_szn <- fixtures_dt[season == szn]
   if (nrow(fix_szn) == 0) next
 
-  rnd <- min(fix_szn$round.roundNumber, na.rm = TRUE)
-  ref_date <- min(as.Date(fix_szn$utcStartTime[fix_szn$round.roundNumber == rnd]),
+  rnd <- min(fix_szn$round_number, na.rm = TRUE)
+  ref_date <- min(as.Date(fix_szn$utc_start_time[fix_szn$round_number == rnd]),
                   na.rm = TRUE)
 
   if (is.na(ref_date) || is.infinite(ref_date)) next

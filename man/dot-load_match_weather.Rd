@@ -24,7 +24,7 @@
 \item{weather_path}{Path to historical weather parquet file}
 }
 \value{
-Tibble with providerId, temp_avg, precipitation_total, wind_avg, humidity_avg, is_roof
+Tibble with match_id, temp_avg, precipitation_total, wind_avg, humidity_avg, is_roof
 }
 \description{
 Loads historical weather from parquet and optionally fetches forecast

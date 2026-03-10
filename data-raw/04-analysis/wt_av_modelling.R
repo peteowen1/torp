@@ -39,13 +39,13 @@ pstot <- load_player_stats(TRUE)
 cols <- colnames(pstot)[18:79]
 cols <- cols[!cols %in% c(
   "dream_team_points", "rating_points", "metres_gained", "last_updated",
-  "extended_stats_centre_bounce_attendances", "extended_stats_kickins", "extended_stats_kickins_playon"
+  "centre_bounce_attendances", "kickins", "kickins_playon"
 )]
 
 cols_binom <- c(
   "time_on_ground_percentage", "disposal_efficiency", "goal_accuracy",
-  "extended_stats_kick_efficiency", "extended_stats_contested_possession_rate", "extended_stats_hitout_win_percentage",
-  "extended_stats_hitout_to_advantage_rate", "extended_stats_contest_def_loss_percentage", "extended_stats_contest_off_wins_percentage"
+  "kick_efficiency", "contested_possession_rate", "hitout_win_percentage",
+  "hitout_to_advantage_rate", "contest_def_loss_percentage", "contest_off_wins_percentage"
 )
 cols_pois <- setdiff(cols, cols_binom)
 
@@ -287,7 +287,7 @@ team_preds <- pred_df %>%
 team_mdl_df <- team_mdl_df %>%
   # mutate(team_name_adj = fitzRoy::replace_teams(team_name)) %>%
   left_join(team_preds %>% mutate(team_name_adj = fitzRoy::replace_teams(team_name)),
-    by = c("providerId" = "match_id", "team_name_adj.x" = "team_name")
+    by = c("match_id", "team_name_adj.x" = "team_name")
   ) # %>% View()
 
 colnames(team_mdl_df)[str_detect(colnames(team_mdl_df), "pred")]
