@@ -682,7 +682,7 @@ load_player_skills <- function(seasons = get_afl_season(), use_disk_cache = FALS
   names(df) <- nms
   df <- torp_clean_names(df)
 
-  # Targeted renames for clarity (matches .normalise_pbp_columns() conventions)
+  # Targeted renames for clarity (consistent with PBP naming conventions)
   renames <- c(
     provider_id = "match_id",
     player_jumper_number = "jumper_number",

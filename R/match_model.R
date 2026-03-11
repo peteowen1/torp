@@ -84,7 +84,7 @@
 #' Joins lineups to TORP ratings, imputes missing with priors, applies
 #' TOG weighting, generates all position columns, and aggregates to team level.
 #'
-#' @param teams Raw teams/lineups from load_teams()
+#' @param teams Teams/lineups data from load_teams() (snake_case column names)
 #' @param torp_df TORP ratings from load_torp_ratings()
 #' @return Team-level aggregated ratings with position columns
 #' @keywords internal
@@ -173,8 +173,11 @@
 
 #' Build match-level features (home ground, familiarity, distance, days rest)
 #'
-#' @param fix_df Pivoted fixture df from .build_fixtures_df()
-#' @param team_rt_df Team ratings df from .build_team_ratings_df()
+#' @param fix_df Pivoted fixture df from .build_fixtures_df() (uses fixture-domain
+#'   names: providerId, teamId, round.roundNumber)
+#' @param team_rt_df Team ratings df from .build_team_ratings_df() (uses normalised
+#'   names: match_id, team_id, round_number). Cross-domain joins use explicit
+#'   column mapping — do not normalise one side without updating the other.
 #' @param all_grounds Stadium reference data
 #' @return Fixture df enriched with log_dist, familiarity, days_rest, and team ratings
 #' @keywords internal

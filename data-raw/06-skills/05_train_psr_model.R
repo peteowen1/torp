@@ -45,16 +45,9 @@ cli::cli_inform("Fixtures with scores: {nrow(fixtures_margin)} matches")
 # Filter teams: exclude EMERG/SUB
 teams <- teams[is.na(position) | (position != "EMERG" & position != "SUB")]
 
-# Standardise column names for join
-# Teams uses player.playerId, skills uses player_id
-if ("player.playerId" %in% names(teams) && !"player_id" %in% names(teams)) {
-  setnames(teams, "player.playerId", "player_id")
-}
-if ("round.roundNumber" %in% names(teams) && !"round" %in% names(teams)) {
-  teams[, round := as.integer(round.roundNumber)]
-}
-if (!"season" %in% names(teams) && "compSeason.year" %in% names(teams)) {
-  teams[, season := as.integer(compSeason.year)]
+# load_teams() now returns snake_case columns (player_id, round_number, season)
+if (!"round" %in% names(teams) && "round_number" %in% names(teams)) {
+  teams[, round := as.integer(round_number)]
 }
 # Ensure consistent types
 teams[, player_id := as.character(player_id)]
