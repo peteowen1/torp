@@ -558,14 +558,13 @@ test_that(".normalise_pbp_columns remaps v2 schema columns", {
 
   torp:::.normalise_pbp_columns(dt)
 
-  # All should be remapped to expected names
-
-  expect_true("home_team_score_total_score" %in% names(dt))
-  expect_true("away_team_score_total_score" %in% names(dt))
-  expect_true("home_team_team_name" %in% names(dt))
-  expect_true("away_team_team_name" %in% names(dt))
-  expect_true("home_team_team_abbr" %in% names(dt))
-  expect_true("away_team_team_abbr" %in% names(dt))
+  # All should be remapped to canonical names
+  expect_true("home_score" %in% names(dt))
+  expect_true("away_score" %in% names(dt))
+  expect_true("home_team_name" %in% names(dt))
+  expect_true("away_team_name" %in% names(dt))
+  expect_true("home_team_abbr" %in% names(dt))
+  expect_true("away_team_abbr" %in% names(dt))
   expect_true("home_team_id" %in% names(dt))
   expect_true("away_team_id" %in% names(dt))
   expect_true("round_number" %in% names(dt))
@@ -575,22 +574,22 @@ test_that(".normalise_pbp_columns remaps v2 schema columns", {
   expect_false("round_round_number" %in% names(dt))
 
   # Values preserved
-  expect_equal(dt$home_team_score_total_score, 100L)
-  expect_equal(dt$home_team_team_name, "Collingwood")
+  expect_equal(dt$home_score, 100L)
+  expect_equal(dt$home_team_name, "Collingwood")
 })
 
-test_that(".normalise_pbp_columns passes through old schema unchanged", {
-  # Old schema already has the expected column names
+test_that(".normalise_pbp_columns passes through new canonical schema unchanged", {
+  # New canonical schema — names already match targets, no remapping needed
   dt <- data.table::data.table(
-    home_team_score_total_score = 100L,
-    away_team_score_total_score = 80L,
-    home_team_team_name         = "Collingwood",
-    away_team_team_name         = "Richmond",
-    home_team_team_abbr         = "COL",
-    away_team_team_abbr         = "RIC",
-    home_team_id                = "CD_T10",
-    away_team_id                = "CD_T120",
-    round_number                = 1L
+    home_score      = 100L,
+    away_score      = 80L,
+    home_team_name  = "Collingwood",
+    away_team_name  = "Richmond",
+    home_team_abbr  = "COL",
+    away_team_abbr  = "RIC",
+    home_team_id    = "CD_T10",
+    away_team_id    = "CD_T120",
+    round_number    = 1L
   )
 
   original_names <- copy(names(dt))
@@ -602,47 +601,52 @@ test_that(".normalise_pbp_columns passes through old schema unchanged", {
 
 test_that(".normalise_pbp_columns handles mixed schema (partial v2)", {
 
-  # Some columns old-style, some new-style
+  # Some columns old-style (CFS), some v2 style — all should land on new canonical names
   dt <- data.table::data.table(
-    home_team_score_total_score = 100L,  # already old-style
-    away_score_total_score      = 80L,   # v2 style
-    home_team_team_name         = "Collingwood",  # already old-style
-    away_team_name              = "Richmond",     # v2 style
-    round_number                = 1L              # already old-style
+    home_team_score_total_score = 100L,  # CFS style → home_score
+    away_score_total_score      = 80L,   # v2 style  → away_score
+    home_team_team_name         = "Collingwood",  # CFS → home_team_name
+    away_team_name              = "Richmond",     # v2  → away_team_name (already canonical)
+    round_number                = 1L              # already canonical
   )
 
   torp:::.normalise_pbp_columns(dt)
 
-  # Old-style columns preserved
-  expect_true("home_team_score_total_score" %in% names(dt))
-  expect_true("home_team_team_name" %in% names(dt))
+  # All columns should be canonical
+  expect_true("home_score" %in% names(dt))
+  expect_true("away_score" %in% names(dt))
+  expect_true("home_team_name" %in% names(dt))
+  expect_true("away_team_name" %in% names(dt))
   expect_true("round_number" %in% names(dt))
 
-  # v2 columns remapped
-  expect_true("away_team_score_total_score" %in% names(dt))
-  expect_true("away_team_team_name" %in% names(dt))
-
-  # v2 source names should be gone
+  # Old source names should be gone
+  expect_false("home_team_score_total_score" %in% names(dt))
   expect_false("away_score_total_score" %in% names(dt))
-  expect_false("away_team_name" %in% names(dt))
+  expect_false("home_team_team_name" %in% names(dt))
+
+  # Values preserved
+  expect_equal(dt$home_score, 100L)
+  expect_equal(dt$away_score, 80L)
+  expect_equal(dt$home_team_name, "Collingwood")
 })
 
-test_that(".normalise_pbp_columns does not remap when both old and new exist", {
-  # Edge case: both the v2 and expected column are present
+test_that(".normalise_pbp_columns does not remap when canonical target already exists", {
+  # Edge case: both a source name and its canonical target are present.
+  # The source should NOT be renamed (would collide), canonical value is kept.
   dt <- data.table::data.table(
-    home_score_total_score      = 999L,   # v2 name
-    home_team_score_total_score = 100L,   # expected name also present
-    round_round_number          = 5L,     # v2 name
-    round_number                = 1L      # expected name also present
+    home_score_total_score      = 999L,   # v2 source → would map to home_score
+    home_score                  = 100L,   # canonical target already present
+    round_round_number          = 5L,     # v2 source → would map to round_number
+    round_number                = 1L      # canonical target already present
   )
 
   torp:::.normalise_pbp_columns(dt)
 
-  # Expected columns retain original values (not overwritten)
-  expect_equal(dt$home_team_score_total_score, 100L)
+  # Canonical columns retain original values (not overwritten)
+  expect_equal(dt$home_score, 100L)
   expect_equal(dt$round_number, 1L)
 
-  # v2 columns still present (not renamed because target already existed)
+  # Source columns still present (not renamed because target already existed)
   expect_true("home_score_total_score" %in% names(dt))
   expect_true("round_round_number" %in% names(dt))
 })
@@ -650,13 +654,17 @@ test_that(".normalise_pbp_columns does not remap when both old and new exist", {
 test_that(".normalise_pbp_columns handles empty data.table", {
   dt <- data.table::data.table(
     home_score_total_score = integer(0),
-    away_team_name = character(0)
+    away_team_team_name = character(0)
   )
 
   # Should not error on zero rows (warns about missing critical columns)
   expect_no_error(torp:::.normalise_pbp_columns(dt))
 
   # Should still remap column names (names exist even with 0 rows)
-  expect_true("home_team_score_total_score" %in% names(dt))
-  expect_true("away_team_team_name" %in% names(dt))
+  expect_true("home_score" %in% names(dt))
+  expect_true("away_team_name" %in% names(dt))
+
+  # Source names should be gone
+  expect_false("home_score_total_score" %in% names(dt))
+  expect_false("away_team_team_name" %in% names(dt))
 })

@@ -28,16 +28,16 @@ cli::cli_inform("Fixtures: {nrow(fixtures)} rows")
 
 # Extract margins from fixtures (home perspective only)
 fixtures_margin <- fixtures[
-  !is.na(home.score.totalScore) & !is.na(away.score.totalScore),
-  .(providerId,
-    season = as.integer(compSeason.year),
-    round = as.integer(round.roundNumber),
-    home_team_name = home.team.name,
-    away_team_name = away.team.name,
-    home_score = as.numeric(home.score.totalScore),
-    away_score = as.numeric(away.score.totalScore),
-    home_margin = home.score.totalScore - away.score.totalScore,
-    match_date = as.Date(substr(utcStartTime, 1, 10)))
+  !is.na(home_score) & !is.na(away_score),
+  .(match_id,
+    season = as.integer(season),
+    round = as.integer(round_number),
+    home_team_name,
+    away_team_name,
+    home_score = as.numeric(home_score),
+    away_score = as.numeric(away_score),
+    home_margin = home_score - away_score,
+    match_date = as.Date(substr(utc_start_time, 1, 10)))
 ]
 
 cli::cli_inform("Fixtures with scores: {nrow(fixtures_margin)} matches")
@@ -45,18 +45,8 @@ cli::cli_inform("Fixtures with scores: {nrow(fixtures_margin)} matches")
 # Filter teams: exclude EMERG/SUB
 teams <- teams[is.na(position) | (position != "EMERG" & position != "SUB")]
 
-# Standardise column names for join
-# Teams uses player.playerId, skills uses player_id
-if ("player.playerId" %in% names(teams) && !"player_id" %in% names(teams)) {
-  setnames(teams, "player.playerId", "player_id")
-}
-if ("round.roundNumber" %in% names(teams) && !"round" %in% names(teams)) {
-  teams[, round := as.integer(round.roundNumber)]
-}
-if (!"season" %in% names(teams) && "compSeason.year" %in% names(teams)) {
-  teams[, season := as.integer(compSeason.year)]
-}
 # Ensure consistent types
+teams[, round := as.integer(round_number)]
 teams[, player_id := as.character(player_id)]
 teams[, season := as.integer(season)]
 skills[, player_id := as.character(player_id)]
@@ -131,27 +121,27 @@ merged[, .total_skill := rowSums(.SD, na.rm = TRUE), .SDcols = skill_cols]
 # Top 22 by total skill per match-team, then sum skills
 team_skills <- merged[
   order(-.total_skill)
-][, head(.SD, 22), by = .(providerId, teamId)
+][, head(.SD, 22), by = .(match_id, team_id)
 ][, {
   out <- list(n_players = .N)
   for (sc in skill_cols) {
     out[[sc]] <- sum(get(sc), na.rm = TRUE)
   }
   out
-}, by = .(providerId, teamId, season, round)]
+}, by = .(match_id, team_id, season, round)]
 
 cli::cli_inform("Team-match skill rows: {nrow(team_skills)}")
 
 # Identify home/away teams by joining to fixtures
 team_skills <- merge(
   team_skills,
-  fixtures[, .(providerId,
-               home_teamId = home.team.providerId,
-               away_teamId = away.team.providerId)],
-  by = "providerId",
+  fixtures[, .(match_id,
+               home_team_id,
+               away_team_id)],
+  by = "match_id",
   all.x = TRUE
 )
-team_skills[, team_type := fifelse(teamId == home_teamId, "home", "away")]
+team_skills[, team_type := fifelse(team_id == home_team_id, "home", "away")]
 
 # Pivot to one row per match: home vs away skill diffs
 home <- team_skills[team_type == "home"]
@@ -161,9 +151,9 @@ setnames(home, skill_cols, paste0(skill_cols, "_home"))
 setnames(away, skill_cols, paste0(skill_cols, "_away"))
 
 match_df <- merge(
-  home[, c("providerId", "season", "round", paste0(skill_cols, "_home")), with = FALSE],
-  away[, c("providerId", paste0(skill_cols, "_away")), with = FALSE],
-  by = "providerId"
+  home[, c("match_id", "season", "round", paste0(skill_cols, "_home")), with = FALSE],
+  away[, c("match_id", paste0(skill_cols, "_away")), with = FALSE],
+  by = "match_id"
 )
 
 # Compute diffs
@@ -177,8 +167,8 @@ for (i in seq_along(skill_cols)) {
 
 # Join margin + scores
 match_df <- merge(match_df,
-                  fixtures_margin[, .(providerId, home_score, away_score, home_margin, match_date)],
-                  by = "providerId")
+                  fixtures_margin[, .(match_id, home_score, away_score, home_margin, match_date)],
+                  by = "match_id")
 
 cli::cli_inform("Match model rows: {nrow(match_df)}")
 

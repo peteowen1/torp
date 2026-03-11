@@ -41,8 +41,8 @@ disp_raw <- data.table::as.data.table(pbp_data)[
     n_neg        = sum(pos_team == -1, na.rm = TRUE),
     sum_depv_pos = sum(delta_epv[pos_team == 1], na.rm = TRUE),
     n_pos        = sum(pos_team == 1, na.rm = TRUE),
-    tm           = data.table::last(team),
-    pos          = data.table::last(player_position)
+    team         = data.table::last(team),
+    listed_position = data.table::last(player_position)
   ),
   by = .(player_id, match_id)
 ]
@@ -61,32 +61,22 @@ recv_raw <- data.table::as.data.table(pbp_data)[
 setnames(recv_raw, "lead_player_id", "player_id")
 
 ## 2c. Spoil/hitout raw counts ----
-# Detect player_id column name (upstream schema changed from player_player_player_player_id to player_id)
+# load_player_stats() now normalises column names (player_id, match_id, etc.)
 ps_dt <- data.table::as.data.table(player_stats)
-ps_pid_col <- intersect(c("player_id", "player_player_player_player_id"), names(ps_dt))[1]
-ps_mid_col <- intersect(c("match_id", "provider_id"), names(ps_dt))[1]
-if (is.na(ps_pid_col) || is.na(ps_mid_col)) {
-  stop("Cannot find player_id or match_id column in player_stats. Available: ", paste(names(ps_dt), collapse = ", "))
-}
-cat(sprintf("  player_stats ID columns: %s, %s\n", ps_pid_col, ps_mid_col))
-
-# Standardise column names for downstream use
-if (ps_pid_col != "player_id") data.table::setnames(ps_dt, ps_pid_col, "player_id")
-if (ps_mid_col != "match_id") data.table::setnames(ps_dt, ps_mid_col, "match_id")
 
 spoil_hitout_raw <- ps_dt[
   , .(
-    spoils          = sum(extended_stats_spoils, na.rm = TRUE),
+    spoils          = sum(spoils, na.rm = TRUE),
     tackles         = sum(tackles, na.rm = TRUE),
-    pressure_acts   = sum(extended_stats_pressure_acts, na.rm = TRUE),
-    def_pressure    = sum(extended_stats_def_half_pressure_acts, na.rm = TRUE),
+    pressure_acts   = sum(pressure_acts, na.rm = TRUE),
+    def_pressure    = sum(def_half_pressure_acts, na.rm = TRUE),
     hitouts         = sum(hitouts, na.rm = TRUE),
-    hitouts_adv     = sum(extended_stats_hitouts_to_advantage, na.rm = TRUE),
-    ruck_contests   = sum(extended_stats_ruck_contests, na.rm = TRUE),
+    hitouts_adv     = sum(hitouts_to_advantage, na.rm = TRUE),
+    ruck_contests   = sum(ruck_contests, na.rm = TRUE),
     bounces         = sum(bounces, na.rm = TRUE),
     contested_poss  = sum(contested_possessions, na.rm = TRUE),
     contested_marks = sum(contested_marks, na.rm = TRUE),
-    ground_ball_gets = sum(extended_stats_ground_ball_gets, na.rm = TRUE),
+    ground_ball_gets = sum(ground_ball_gets, na.rm = TRUE),
     marks_inside50  = sum(marks_inside50, na.rm = TRUE),
     inside50s       = sum(inside50s, na.rm = TRUE),
     clangers        = sum(clangers, na.rm = TRUE),
@@ -95,7 +85,7 @@ spoil_hitout_raw <- ps_dt[
     one_percenters  = sum(one_percenters, na.rm = TRUE),
     rebound50s      = sum(rebound50s, na.rm = TRUE),
     frees_against   = sum(frees_against, na.rm = TRUE),
-    clearances      = sum(clearances_total_clearances, na.rm = TRUE),
+    clearances      = sum(clearances, na.rm = TRUE),
     frees_for       = sum(frees_for, na.rm = TRUE),
     goals           = sum(goals, na.rm = TRUE),
     behinds         = sum(behinds, na.rm = TRUE),
@@ -175,50 +165,39 @@ data.table::setorder(player_game_raw, date, match_id)
 ## 2e. Build match-level data ----
 # Team map
 team_map <- data.table::as.data.table(fixtures)[
-  , .(team_name = names(sort(table(home.team.name), decreasing = TRUE))[1]),
-  by = .(teamId = home.team.providerId)
+  , .(team_name = names(sort(table(home_team_name), decreasing = TRUE))[1]),
+  by = .(teamId = home_team_id)
 ][, team_name := torp_replace_teams(team_name)]
 
-# Fixtures with results
+# Fixtures with results (columns normalised at load time)
 fix_dt <- data.table::as.data.table(fixtures)[
-  , .(providerId, season = compSeason.year, round = round.roundNumber,
-      home_teamId = home.team.providerId, away_teamId = away.team.providerId,
-      utcStartTime, venue_name = venue.name)
+  , .(match_id, season, round = round_number,
+      home_teamId = home_team_id, away_teamId = away_team_id,
+      utc_start_time, venue_name)
 ]
 
-# Handle both CFS schema (historical) and fixture schema (new)
-results_raw <- data.table::as.data.table(results)
-if ("match.matchId" %in% names(results_raw)) {
-  results_dt <- results_raw[, .(
-    providerId = match.matchId,
-    home_score = homeTeamScore.matchScore.totalScore,
-    away_score = awayTeamScore.matchScore.totalScore
-  )]
-} else {
-  results_dt <- results_raw[, .(
-    providerId = providerId,
-    home_score = home.score.totalScore,
-    away_score = away.score.totalScore
-  )]
-}
+# Results are normalised at load time — canonical columns
+results_dt <- data.table::as.data.table(results)[
+  , .(match_id, home_score, away_score)
+]
 
-match_dt <- merge(fix_dt, results_dt, by = "providerId", all.x = TRUE)
+match_dt <- merge(fix_dt, results_dt, by = "match_id", all.x = TRUE)
 match_dt[, `:=`(
   margin = home_score - away_score,
-  date = as.Date(utcStartTime),
+  date = as.Date(utc_start_time),
   venue = torp_replace_venues(venue_name)
 )]
 match_dt <- match_dt[!is.na(margin)]
-data.table::setorder(match_dt, date, providerId)
+data.table::setorder(match_dt, date, match_id)
 
 # --- Lineups per team per match ---
 teams_dt <- data.table::as.data.table(teams_data)
 # Filter out EMERG/SUB
 teams_dt <- teams_dt[is.na(position) | !(position %in% c("EMERG", "SUB"))]
 
-lineups <- teams_dt[, .(player_ids = list(player.playerId),
+lineups <- teams_dt[, .(player_ids = list(player_id),
                        position_xs = list(position)),
-                    by = .(match_id = providerId, teamId)]
+                    by = .(match_id, teamId = team_id)]
 
 # --- Home ground / distance / familiarity ---
 grounds_dt <- data.table::as.data.table(all_grounds)
@@ -226,8 +205,8 @@ grounds_dt[, venue := torp_replace_venues(as.character(Ground))]
 
 # Find each team's home ground (mode of venue)
 home_ground <- data.table::as.data.table(teams_data)[
-  , .(venue = torp_replace_venues(names(sort(table(venue.name), decreasing = TRUE))[1])),
-  by = .(teamId)
+  , .(venue = torp_replace_venues(names(sort(table(venue_name), decreasing = TRUE))[1])),
+  by = .(teamId = team_id)
 ]
 home_ground <- merge(home_ground, grounds_dt[, .(venue, home_lat = Latitude, home_lon = Longitude)],
                      by = "venue", all.x = TRUE)
@@ -270,8 +249,8 @@ match_dt[, log_dist_diff := log(dist_home + 10000) - log(dist_away + 10000)]
 compute_familiarity <- function(match_dt, teams_dt) {
   # Get all team-match-venue records
   team_matches <- rbind(
-    match_dt[, .(teamId = home_teamId, providerId, date, venue)],
-    match_dt[, .(teamId = away_teamId, providerId, date, venue)]
+    match_dt[, .(teamId = home_teamId, match_id, date, venue)],
+    match_dt[, .(teamId = away_teamId, match_id, date, venue)]
   )
   data.table::setorder(team_matches, teamId, date)
 
@@ -292,7 +271,7 @@ compute_familiarity <- function(match_dt, teams_dt) {
     fam
   }, by = teamId]
 
-  return(team_matches[, .(teamId, providerId, familiarity)])
+  return(team_matches[, .(teamId, match_id, familiarity)])
 }
 
 cat("  Computing familiarity...\n")
@@ -300,11 +279,11 @@ fam_dt <- compute_familiarity(match_dt, teams_dt)
 
 # Merge familiarity for home and away
 match_dt <- merge(match_dt,
-                  fam_dt[, .(home_teamId = teamId, providerId, fam_home = familiarity)],
-                  by = c("home_teamId", "providerId"), all.x = TRUE)
+                  fam_dt[, .(home_teamId = teamId, match_id, fam_home = familiarity)],
+                  by = c("home_teamId", "match_id"), all.x = TRUE)
 match_dt <- merge(match_dt,
-                  fam_dt[, .(away_teamId = teamId, providerId, fam_away = familiarity)],
-                  by = c("away_teamId", "providerId"), all.x = TRUE)
+                  fam_dt[, .(away_teamId = teamId, match_id, fam_away = familiarity)],
+                  by = c("away_teamId", "match_id"), all.x = TRUE)
 match_dt[is.na(fam_home), fam_home := 0]
 match_dt[is.na(fam_away), fam_away := 0]
 match_dt[, familiarity_diff := fam_home - fam_away]
@@ -312,16 +291,14 @@ match_dt[, familiarity_diff := fam_home - fam_away]
 # Merge lineups (with positions for lineup_tog weighting)
 match_dt <- merge(match_dt,
                   lineups[, .(match_id, home_teamId = teamId, home_players = player_ids, home_positions = position_xs)],
-                  by.x = c("providerId", "home_teamId"),
-                  by.y = c("match_id", "home_teamId"), all.x = TRUE)
+                  by = c("match_id", "home_teamId"), all.x = TRUE)
 match_dt <- merge(match_dt,
                   lineups[, .(match_id, away_teamId = teamId, away_players = player_ids, away_positions = position_xs)],
-                  by.x = c("providerId", "away_teamId"),
-                  by.y = c("match_id", "away_teamId"), all.x = TRUE)
+                  by = c("match_id", "away_teamId"), all.x = TRUE)
 
 # Filter to evaluation window (2022+) and valid lineups
 match_dt <- match_dt[season >= 2022 & !is.na(home_players) & !is.na(away_players)]
-data.table::setorder(match_dt, date, providerId)
+data.table::setorder(match_dt, date, match_id)
 
 cat(sprintf("  %d matches in evaluation window (2022+)\n", nrow(match_dt)))
 
@@ -336,7 +313,7 @@ data.table::setkey(pgr, player_id, match_id)
 
 # Also get position info from teams_data for position-group means
 pos_dt <- data.table::as.data.table(teams_data)[
-  , .(player_id = player.playerId, match_id = providerId, position)
+  , .(player_id, match_id, position)
 ]
 pos_dt <- pos_dt[!is.na(position) & !(position %in% c("EMERG", "SUB"))]
 pos_dt[position == "MIDFIELDER_FORWARD", position := "MEDIUM_FORWARD"]
@@ -415,18 +392,18 @@ cat("Compiling Rcpp cumulative decay kernel...\n")
 Rcpp::cppFunction('
 Rcpp::List cumulative_decay_cpp(Rcpp::IntegerVector pids,
                                 Rcpp::NumericVector dnums,
-                                Rcpp::NumericVector recv_pts,
-                                Rcpp::NumericVector disp_pts,
-                                Rcpp::NumericVector spoil_pts,
-                                Rcpp::NumericVector hitout_pts,
+                                Rcpp::NumericVector recv_credits,
+                                Rcpp::NumericVector disp_credits,
+                                Rcpp::NumericVector spoil_credits,
+                                Rcpp::NumericVector hitout_credits,
                                 double decay_r, double decay_d,
                                 double decay_s, double decay_h) {
   int n = pids.size();
   Rcpp::NumericVector cr(n), cd(n), cs(n), ch(n);
   Rcpp::NumericVector cw_r(n), cw_d(n), cw_s(n), cw_h(n);
 
-  cr[0] = recv_pts[0]; cd[0] = disp_pts[0];
-  cs[0] = spoil_pts[0]; ch[0] = hitout_pts[0];
+  cr[0] = recv_credits[0]; cd[0] = disp_credits[0];
+  cs[0] = spoil_credits[0]; ch[0] = hitout_credits[0];
   cw_r[0] = 1.0; cw_d[0] = 1.0; cw_s[0] = 1.0; cw_h[0] = 1.0;
 
   for (int i = 1; i < n; i++) {
@@ -436,17 +413,17 @@ Rcpp::List cumulative_decay_cpp(Rcpp::IntegerVector pids,
       double df_d = std::exp(-gap / decay_d);
       double df_s = std::exp(-gap / decay_s);
       double df_h = std::exp(-gap / decay_h);
-      cr[i] = cr[i-1] * df_r + recv_pts[i];
-      cd[i] = cd[i-1] * df_d + disp_pts[i];
-      cs[i] = cs[i-1] * df_s + spoil_pts[i];
-      ch[i] = ch[i-1] * df_h + hitout_pts[i];
+      cr[i] = cr[i-1] * df_r + recv_credits[i];
+      cd[i] = cd[i-1] * df_d + disp_credits[i];
+      cs[i] = cs[i-1] * df_s + spoil_credits[i];
+      ch[i] = ch[i-1] * df_h + hitout_credits[i];
       cw_r[i] = cw_r[i-1] * df_r + 1.0;
       cw_d[i] = cw_d[i-1] * df_d + 1.0;
       cw_s[i] = cw_s[i-1] * df_s + 1.0;
       cw_h[i] = cw_h[i-1] * df_h + 1.0;
     } else {
-      cr[i] = recv_pts[i]; cd[i] = disp_pts[i];
-      cs[i] = spoil_pts[i]; ch[i] = hitout_pts[i];
+      cr[i] = recv_credits[i]; cd[i] = disp_credits[i];
+      cs[i] = spoil_credits[i]; ch[i] = hitout_credits[i];
       cw_r[i] = 1.0; cw_d[i] = 1.0; cw_s[i] = 1.0; cw_h[i] = 1.0;
     }
   }
@@ -476,14 +453,14 @@ soft_quantile <- function(x, q, bandwidth = 0.05) {
 
 
 #' Compute credit-assigned points from raw components given params
-#' Returns a data.table with player_id, match_id, date, disp_pts, recv_pts,
-#' spoil_pts, hitout_pts (before position adjustment)
+#' Returns a data.table with player_id, match_id, date, disp_credits, recv_credits,
+#' spoil_credits, hitout_credits (before position adjustment)
 compute_credits <- function(pgr, params, verbose = FALSE) {
   out <- data.table::copy(pgr)
   p <- params
 
   # Disposal points
-  out[, disp_pts := (sum_depv_neg + n_neg * p["disp_neg_offset"]) * p["disp_scale"] +
+  out[, disp_credits := (sum_depv_neg + n_neg * p["disp_neg_offset"]) * p["disp_scale"] +
                     (sum_depv_pos + n_pos * p["disp_pos_offset"]) * p["disp_scale"] +
                     bounces * p["bounce_wt"] +
                     inside50s * p["inside50s_wt"] + clangers * p["clangers_wt"] +
@@ -495,7 +472,7 @@ compute_credits <- function(pgr, params, verbose = FALSE) {
                     shots_at_goal * p["shots_at_goal_wt"]]
 
   # Reception points
-  out[, recv_pts := (p["recv_neg_mult"] * sum_depv_pt_neg + n_recv_neg * p["recv_neg_offset"]) * p["recv_scale"] +
+  out[, recv_credits := (p["recv_neg_mult"] * sum_depv_pt_neg + n_recv_neg * p["recv_neg_offset"]) * p["recv_scale"] +
                     (p["recv_pos_mult"] * sum_depv_pt_pos + n_recv_pos * p["recv_pos_offset"]) * p["recv_scale"] +
                     contested_poss * p["contested_poss_wt"] + contested_marks * p["contested_marks_wt"] +
                     ground_ball_gets * p["ground_ball_gets_wt"] + marks_inside50 * p["marks_inside50_wt"] +
@@ -503,13 +480,13 @@ compute_credits <- function(pgr, params, verbose = FALSE) {
                     frees_for * p["frees_for_wt"]]
 
   # Spoil points
-  out[, spoil_pts := spoils * p["spoil_wt"] + tackles * p["tackle_wt"] +
+  out[, spoil_credits := spoils * p["spoil_wt"] + tackles * p["tackle_wt"] +
                      pressure_acts * p["pressure_wt"] + def_pressure * p["def_pressure_wt"] +
                      intercepts * p["intercepts_wt"] + one_percenters * p["one_percenters_wt"] +
                      rebound50s * p["rebound50s_wt"] + frees_against * p["frees_against_wt"]]
 
   # Hitout points
-  out[, hitout_pts := hitouts * p["hitout_wt"] + hitouts_adv * p["hitout_adv_wt"] +
+  out[, hitout_credits := hitouts * p["hitout_wt"] + hitouts_adv * p["hitout_adv_wt"] +
                       ruck_contests * p["ruck_contest_wt"] +
                       clearances * p["clearances_wt"]]
 
@@ -517,10 +494,10 @@ compute_credits <- function(pgr, params, verbose = FALSE) {
   # Must happen BEFORE position-quantile so the quantile operates on per-80 rates
   # (otherwise low-TOG players have the per-game quantile amplified by 1/tog_safe).
   out[, `:=`(
-    recv_pts   = recv_pts   / tog_safe,
-    disp_pts   = disp_pts   / tog_safe,
-    spoil_pts  = spoil_pts  / tog_safe,
-    hitout_pts = hitout_pts / tog_safe
+    recv_credits   = recv_credits   / tog_safe,
+    disp_credits   = disp_credits   / tog_safe,
+    spoil_credits  = spoil_credits  / tog_safe,
+    hitout_credits = hitout_credits / tog_safe
   )]
 
   # Position-group mean subtraction (on per-80 rates)
@@ -534,17 +511,17 @@ compute_credits <- function(pgr, params, verbose = FALSE) {
       idx <- out$position == pos & !is.na(out$position)
       cat(sprintf("  %-18s %+8.3f %+8.3f %+8.3f %+8.3f
 ", pos,
-        mean(out$recv_pts[idx], na.rm = TRUE),
-        mean(out$disp_pts[idx], na.rm = TRUE),
-        mean(out$spoil_pts[idx], na.rm = TRUE),
-        mean(out$hitout_pts[idx], na.rm = TRUE)))
+        mean(out$recv_credits[idx], na.rm = TRUE),
+        mean(out$disp_credits[idx], na.rm = TRUE),
+        mean(out$spoil_credits[idx], na.rm = TRUE),
+        mean(out$hitout_credits[idx], na.rm = TRUE)))
     }
   }
   out[!is.na(position), `:=`(
-    recv_pts   = recv_pts   - mean(recv_pts, na.rm = TRUE),
-    disp_pts   = disp_pts   - mean(disp_pts, na.rm = TRUE),
-    spoil_pts  = spoil_pts  - mean(spoil_pts, na.rm = TRUE),
-    hitout_pts = hitout_pts - mean(hitout_pts, na.rm = TRUE)
+    recv_credits   = recv_credits   - mean(recv_credits, na.rm = TRUE),
+    disp_credits   = disp_credits   - mean(disp_credits, na.rm = TRUE),
+    spoil_credits  = spoil_credits  - mean(spoil_credits, na.rm = TRUE),
+    hitout_credits = hitout_credits - mean(hitout_credits, na.rm = TRUE)
   ), by = position]
 
   return(out)
@@ -552,7 +529,7 @@ compute_credits <- function(pgr, params, verbose = FALSE) {
 
 #' Compute cumulative decay-weighted sums per player
 #'
-#' @param credit_dt Credit-assigned player-game data (with recv_pts, disp_pts, etc.)
+#' @param credit_dt Credit-assigned player-game data (with recv_credits, disp_credits, etc.)
 #' @param decay_recv Decay factor in days for receiving
 #' @param decay_disp Decay factor in days for disposal
 #' @param decay_spoil Decay factor in days for spoil
@@ -569,8 +546,8 @@ compute_cumulative <- function(credit_dt, decay_recv, decay_disp = decay_recv,
     cr <- cd <- cs <- ch <- cw_r <- cw_d <- cw_s <- cw_h <- numeric(n)
     for (i in seq_len(n)) {
       if (i == 1) {
-        cr[i] <- recv_pts[i]; cd[i] <- disp_pts[i]
-        cs[i] <- spoil_pts[i]; ch[i] <- hitout_pts[i]
+        cr[i] <- recv_credits[i]; cd[i] <- disp_credits[i]
+        cs[i] <- spoil_credits[i]; ch[i] <- hitout_credits[i]
         cw_r[i] <- 1; cw_d[i] <- 1; cw_s[i] <- 1; cw_h[i] <- 1
       } else {
         gap <- date_num[i] - date_num[i - 1]
@@ -578,10 +555,10 @@ compute_cumulative <- function(credit_dt, decay_recv, decay_disp = decay_recv,
         df_d <- exp(-gap / decay_disp)
         df_s <- exp(-gap / decay_spoil)
         df_h <- exp(-gap / decay_hitout)
-        cr[i] <- cr[i - 1] * df_r + recv_pts[i]
-        cd[i] <- cd[i - 1] * df_d + disp_pts[i]
-        cs[i] <- cs[i - 1] * df_s + spoil_pts[i]
-        ch[i] <- ch[i - 1] * df_h + hitout_pts[i]
+        cr[i] <- cr[i - 1] * df_r + recv_credits[i]
+        cd[i] <- cd[i - 1] * df_d + disp_credits[i]
+        cs[i] <- cs[i - 1] * df_s + spoil_credits[i]
+        ch[i] <- ch[i - 1] * df_h + hitout_credits[i]
         cw_r[i] <- cw_r[i - 1] * df_r + 1
         cw_d[i] <- cw_d[i - 1] * df_d + 1
         cw_s[i] <- cw_s[i - 1] * df_s + 1
@@ -626,7 +603,7 @@ objective_fn_fast <- function(par, env) {
   p <- par
 
   # --- Compute per-game credits directly on sorted vectors (no copy) ---
-  disp_pts <- (env$sum_depv_neg + env$n_neg * p["disp_neg_offset"]) * p["disp_scale"] +
+  disp_credits <- (env$sum_depv_neg + env$n_neg * p["disp_neg_offset"]) * p["disp_scale"] +
               (env$sum_depv_pos + env$n_pos * p["disp_pos_offset"]) * p["disp_scale"] +
               env$bounces * p["bounce_wt"] +
               env$inside50s * p["inside50s_wt"] +
@@ -641,7 +618,7 @@ objective_fn_fast <- function(par, env) {
               env$behinds * p["behinds_wt"] +
               env$shots_at_goal * p["shots_at_goal_wt"]
 
-  recv_pts <- (p["recv_neg_mult"] * env$sum_depv_pt_neg + env$n_recv_neg * p["recv_neg_offset"]) * p["recv_scale"] +
+  recv_credits <- (p["recv_neg_mult"] * env$sum_depv_pt_neg + env$n_recv_neg * p["recv_neg_offset"]) * p["recv_scale"] +
               (p["recv_pos_mult"] * env$sum_depv_pt_pos + env$n_recv_pos * p["recv_pos_offset"]) * p["recv_scale"] +
               env$contested_poss * p["contested_poss_wt"] +
               env$contested_marks * p["contested_marks_wt"] +
@@ -651,7 +628,7 @@ objective_fn_fast <- function(par, env) {
               env$uncontested_poss * p["uncontested_poss_wt"] +
               env$frees_for * p["frees_for_wt"]
 
-  spoil_pts <- env$spoils * p["spoil_wt"] +
+  spoil_credits <- env$spoils * p["spoil_wt"] +
                env$tackles * p["tackle_wt"] +
                env$pressure_acts * p["pressure_wt"] +
                env$def_pressure * p["def_pressure_wt"] +
@@ -660,28 +637,28 @@ objective_fn_fast <- function(par, env) {
                env$intercepts * p["intercepts_wt"] +
                env$rebound50s * p["rebound50s_wt"]
 
-  hitout_pts <- env$hitouts * p["hitout_wt"] +
+  hitout_credits <- env$hitouts * p["hitout_wt"] +
                 env$hitouts_adv * p["hitout_adv_wt"] +
                 env$ruck_contests * p["ruck_contest_wt"] +
                 env$clearances * p["clearances_wt"]
 
   # Per-80 normalisation first (before position-quantile, so quantile
   # operates on per-80 rates rather than inflating per-game adjustments)
-  disp_pts <- disp_pts / env$tog_safe; recv_pts <- recv_pts / env$tog_safe
-  spoil_pts <- spoil_pts / env$tog_safe; hitout_pts <- hitout_pts / env$tog_safe
+  disp_credits <- disp_credits / env$tog_safe; recv_credits <- recv_credits / env$tog_safe
+  spoil_credits <- spoil_credits / env$tog_safe; hitout_credits <- hitout_credits / env$tog_safe
 
   # Replace any NaN/NA credits with 0
-  disp_pts[is.na(disp_pts)] <- 0; recv_pts[is.na(recv_pts)] <- 0
-  spoil_pts[is.na(spoil_pts)] <- 0; hitout_pts[is.na(hitout_pts)] <- 0
+  disp_credits[is.na(disp_credits)] <- 0; recv_credits[is.na(recv_credits)] <- 0
+  spoil_credits[is.na(spoil_credits)] <- 0; hitout_credits[is.na(hitout_credits)] <- 0
 
   # Position-group mean subtraction
   for (pos in env$position_levels) {
     idx <- env$pos_indices[[pos]]
     if (length(idx) > 0) {
-      recv_pts[idx]   <- recv_pts[idx]   - mean(recv_pts[idx], na.rm = TRUE)
-      disp_pts[idx]   <- disp_pts[idx]   - mean(disp_pts[idx], na.rm = TRUE)
-      spoil_pts[idx]  <- spoil_pts[idx]  - mean(spoil_pts[idx], na.rm = TRUE)
-      hitout_pts[idx] <- hitout_pts[idx] - mean(hitout_pts[idx], na.rm = TRUE)
+      recv_credits[idx]   <- recv_credits[idx]   - mean(recv_credits[idx], na.rm = TRUE)
+      disp_credits[idx]   <- disp_credits[idx]   - mean(disp_credits[idx], na.rm = TRUE)
+      spoil_credits[idx]  <- spoil_credits[idx]  - mean(spoil_credits[idx], na.rm = TRUE)
+      hitout_credits[idx] <- hitout_credits[idx] - mean(hitout_credits[idx], na.rm = TRUE)
     }
   }
 
@@ -691,8 +668,8 @@ objective_fn_fast <- function(par, env) {
   pids <- env$pgr_s$player_id
   dnums <- env$pgr_s$date_num
 
-  cum <- cumulative_decay_cpp(pids, dnums, recv_pts, disp_pts,
-                              spoil_pts, hitout_pts,
+  cum <- cumulative_decay_cpp(pids, dnums, recv_credits, disp_credits,
+                              spoil_credits, hitout_credits,
                               decay_r, decay_d, decay_s, decay_h)
   cr <- cum$cr; cd <- cum$cd; cs <- cum$cs; ch <- cum$ch
   cw_r <- cum$cw_r; cw_d <- cum$cw_d; cw_s <- cum$cw_s; cw_h <- cum$cw_h
@@ -1208,8 +1185,8 @@ for (i in seq_len(nrow(agg_grid))) {
 
   # Aggregate to match-level torp_diff (weight per-80 TORP by lineup_tog)
   torp_weighted <- torp_vec * j$lineup_tog
-  home_sum <- tapply(torp_weighted * j$is_home, j$match_idx, sum, na.rm = TRUE)
-  away_sum <- tapply(torp_weighted * (!j$is_home), j$match_idx, sum, na.rm = TRUE)
+  home_sum <- rowsum(torp_weighted * j$is_home, j$match_idx, reorder = FALSE, na.rm = TRUE)
+  away_sum <- rowsum(torp_weighted * (!j$is_home), j$match_idx, reorder = FALSE, na.rm = TRUE)
   torp_diff <- as.numeric(home_sum - away_sum)
 
   # Position balance penalty

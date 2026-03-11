@@ -13,6 +13,192 @@
 
 # Internal Helpers ----
 
+#' Batch-fetch JSON from CFS API endpoints
+#'
+#' Downloads multiple CFS API JSON responses in parallel using
+#' in-memory [curl::curl_fetch_multi()], then parses each with a supplied
+#' parser. No disk I/O — callers handle caching at the season level.
+#'
+#' @param ids Character vector of endpoint suffixes (e.g. match IDs).
+#' @param url_template Character. `sprintf()`-style template with one `%s` placeholder.
+#' @param token Character. CFS API auth token.
+#' @param parse_fn Function taking `(parsed_json, id)` and returning a data.frame.
+#' @param label Character. Label for progress messages (e.g. "roster", "stats").
+#' @return A tibble of all parsed results row-bound together.
+#' @keywords internal
+#' @importFrom curl new_pool new_handle curl_fetch_multi multi_run
+.fetch_cfs_batch <- function(ids, url_template, token, parse_fn, label = "data") {
+  if (length(ids) == 0) return(tibble::tibble())
+
+  cli::cli_inform("Fetching {label} for {length(ids)} match{?es} in parallel...")
+
+  pool <- curl::new_pool(total_con = 200L, host_con = 50L)
+  results <- vector("list", length(ids))
+  n_failed <- 0L
+
+  for (i in seq_along(ids)) {
+    url <- sprintf(url_template, ids[i])
+    h <- curl::new_handle(httpheader = paste0("x-media-mis-token: ", token))
+
+    local({
+      idx <- i
+      mid <- ids[i]
+      curl::curl_fetch_multi(url, done = function(resp) {
+        if (resp$status_code == 200L) {
+          tryCatch({
+            json <- jsonlite::fromJSON(rawToChar(resp$content), flatten = TRUE)
+            results[[idx]] <<- parse_fn(json, mid)
+          }, error = function(e) {
+            cli::cli_alert_danger("Failed to parse {label} for {mid}: {conditionMessage(e)}")
+          })
+        } else {
+          n_failed <<- n_failed + 1L
+          cli::cli_alert_danger("HTTP {resp$status_code} for {label} {mid}")
+        }
+      }, fail = function(msg) {
+        n_failed <<- n_failed + 1L
+        cli::cli_alert_danger("Connection failed for {label} {mid}: {msg}")
+      }, handle = h, pool = pool)
+    })
+  }
+
+  curl::multi_run(pool = pool)
+
+  if (n_failed > 0) {
+    cli::cli_alert_danger("{n_failed} of {length(ids)} {label} request{?s} failed")
+  }
+
+  out <- purrr::list_rbind(purrr::compact(results))
+  if (is.null(out) || nrow(out) == 0) return(tibble::tibble())
+  out
+}
+
+# Bulk Multi-Season Fetcher (Player Details) ----
+# Gathers all team-season tuples, then fires one in-memory curl pool.
+# Only beneficial for player details (~108 requests across 6 seasons).
+# For lineups/stats (~1067 per-match requests), per-season batching
+# performs equally or better due to connection contention.
+
+#' Fetch player details for multiple seasons in one parallel batch
+#' @param seasons Numeric vector of years
+#' @return A tibble of player details across all seasons
+#' @keywords internal
+.fetch_all_player_details <- function(seasons) {
+  # Gather all (team_id, season_id, actual_season) tuples across seasons
+  team_season_info <- list()
+  for (s in seasons) {
+    fixtures <- get_afl_fixtures(s)
+    if (nrow(fixtures) == 0) next
+
+    actual_season <- if ("season" %in% names(fixtures)) {
+      fixtures$season[1]
+    } else if ("compSeason.providerId" %in% names(fixtures)) {
+      as.numeric(gsub("CD_S(\\d{4})\\d+", "\\1", fixtures$compSeason.providerId[1]))
+    } else {
+      s
+    }
+    season_id <- .afl_comp_season_id(actual_season)
+    if (is.null(season_id)) next
+
+    team_ids <- unique(c(fixtures$home.team.id, fixtures$away.team.id))
+    team_ids <- team_ids[!is.na(team_ids)]
+
+    for (tid in team_ids) {
+      team_season_info[[length(team_season_info) + 1]] <- list(
+        team_id = tid, season_id = season_id, actual_season = actual_season
+      )
+    }
+  }
+
+  if (length(team_season_info) == 0) return(tibble::tibble())
+
+  # Build URLs and download all in one parallel batch
+  urls <- vapply(team_season_info, function(x) {
+    paste0("https://aflapi.afl.com.au/afl/v2/squads?teamId=", x$team_id,
+           "&compSeasonId=", x$season_id)
+  }, character(1))
+
+  cli::cli_inform("Fetching player details for {length(urls)} team-season{?s} in parallel...")
+
+  # In-memory curl pool — no temp files, no file descriptor limit
+  pool <- curl::new_pool(total_con = 50L, host_con = 20L)
+  details_list <- vector("list", length(urls))
+
+  for (i in seq_along(urls)) {
+    h <- curl::new_handle()
+    local({
+      idx <- i
+      curl::curl_fetch_multi(urls[idx], done = function(resp) {
+        if (resp$status_code == 200L) {
+          tryCatch({
+            json <- jsonlite::fromJSON(rawToChar(resp$content), flatten = TRUE)
+            out <- .parse_squad_json(json)
+            if (!is.null(out)) out$.actual_season <- team_season_info[[idx]]$actual_season
+            details_list[[idx]] <<- out
+          }, error = function(e) {
+            cli::cli_alert_danger("Failed to parse player details for team-season {idx}: {conditionMessage(e)}")
+          })
+        } else {
+          cli::cli_alert_danger("HTTP {resp$status_code} fetching player details for team-season {idx}")
+        }
+      }, fail = function(msg) {
+        cli::cli_alert_danger("Connection failed for player details team-season {idx}: {msg}")
+      }, handle = h, pool = pool)
+    })
+  }
+
+  curl::multi_run(pool = pool)
+
+  result <- purrr::list_rbind(purrr::compact(details_list))
+  if (nrow(result) == 0) return(tibble::tibble())
+
+  # Post-process per season group (age depends on season)
+  fn_col <- intersect(c("player.firstName", "firstName"), names(result))[1]
+  sn_col <- intersect(c("player.surname", "surname"), names(result))[1]
+  if (!is.na(fn_col) && !is.na(sn_col)) {
+    result$player_name <- paste(result[[fn_col]], result[[sn_col]])
+  }
+  dob_col <- intersect(c("player.dateOfBirth", "dateOfBirth"), names(result))[1]
+  if (!is.na(dob_col)) {
+    result$age <- lubridate::decimal_date(
+      lubridate::as_date(paste0(result$.actual_season, "-07-01"))
+    ) - lubridate::decimal_date(lubridate::as_date(result[[dob_col]]))
+  }
+  pid_col <- intersect(c("player.providerId", "providerId"), names(result))[1]
+
+  # Strip "player." prefix
+  new_names <- sub("^player\\.", "", names(result))
+  duped <- new_names[duplicated(new_names)]
+  if (length(duped) > 0) {
+    collision <- new_names != names(result) & duplicated(new_names, fromLast = FALSE)
+    new_names[collision] <- names(result)[collision]
+  }
+  names(result) <- new_names
+
+  if (!is.na(pid_col)) {
+    pid_col_clean <- sub("^player\\.", "", pid_col)
+    result$row_id <- paste(result[[pid_col_clean]], result$.actual_season)
+    if (pid_col_clean %in% names(result) && !"player_id" %in% names(result)) {
+      names(result)[names(result) == pid_col_clean] <- "player_id"
+    }
+  }
+
+  # Standardise team column
+  if ("team.name" %in% names(result) && !"team" %in% names(result)) {
+    names(result)[names(result) == "team.name"] <- "team"
+  }
+  if ("team" %in% names(result)) {
+    result$team <- torp_replace_teams(result$team)
+  }
+
+  # Add season column, then clean up internal column
+  result$season <- result$.actual_season
+  result$.actual_season <- NULL
+
+  tibble::as_tibble(result)
+}
+
+
 #' Resolve AFL API compSeasonId for a season
 #'
 #' The public AFL API (`aflapi.afl.com.au`) uses numeric comp season IDs,
@@ -250,6 +436,27 @@
 }
 
 
+#' Parse squad JSON into a player data.frame
+#'
+#' @param json Parsed JSON from the squads endpoint
+#' @return A data.frame of players with team info, or NULL
+#' @keywords internal
+.parse_squad_json <- function(json) {
+  players <- json$squad$players
+  if (is.null(players) || !is.data.frame(players) || nrow(players) == 0) return(NULL)
+
+  players$team.name <- json$squad$team$name %||% NA_character_
+  players$team.providerId <- json$squad$team$providerId %||% NA_character_
+
+  # Drop list-columns
+  list_cols <- names(players)[vapply(players, is.list, logical(1))]
+  if (length(list_cols) > 0) {
+    players <- players[, !names(players) %in% list_cols, drop = FALSE]
+  }
+  players
+}
+
+
 # Exported API Functions ----
 
 #' Fetch AFL Fixtures
@@ -288,7 +495,9 @@ get_afl_fixtures <- function(season = NULL) {
     if (n_failed > 0) {
       cli::cli_alert_danger("{n_failed} of {length(all_ids)} season{?s} failed to load")
     }
-    return(purrr::list_rbind(purrr::compact(results)))
+    all_fixtures <- purrr::list_rbind(purrr::compact(results))
+    .normalise_fixture_columns(all_fixtures)
+    return(all_fixtures)
   }
 
   if (is.null(season)) {
@@ -318,9 +527,17 @@ get_afl_fixtures <- function(season = NULL) {
 #' @return A tibble, or NULL if the API returns an error
 #' @keywords internal
 .fetch_fixtures_for_season <- function(season) {
+  cache_key <- paste0("afl_fixtures_", season)
+  cached <- get_from_cache(cache_key)
+  if (!is.null(cached)) return(cached)
+
   season_id <- .afl_comp_season_id(season)
   if (is.null(season_id)) return(NULL)
-  .fetch_fixtures_for_season_id(season_id)
+  result <- .fetch_fixtures_for_season_id(season_id)
+  if (!is.null(result) && nrow(result) > 0) {
+    store_in_cache(cache_key, result)
+  }
+  result
 }
 
 #' Fetch fixtures for a single comp season ID (internal)
@@ -363,14 +580,16 @@ get_afl_fixtures <- function(season = NULL) {
     matches <- matches[, !names(matches) %in% list_cols, drop = FALSE]
   }
 
-  # Add compSeason.year (extracted from providerId) — needed by match_model, ladder, etc.
+  # Add compSeason.year (extracted from providerId) — normalised to `season` by .normalise_fixture_columns()
   if (!"compSeason.year" %in% names(matches) && "compSeason.providerId" %in% names(matches)) {
     matches$compSeason.year <- as.numeric(
       gsub("CD_S(\\d{4})\\d+", "\\1", matches$compSeason.providerId)
     )
   }
 
-  tibble::as_tibble(matches)
+  result <- tibble::as_tibble(matches)
+  .normalise_fixture_columns(result)
+  result
 }
 
 
@@ -398,7 +617,7 @@ get_afl_results <- function(season = NULL) {
     # Fallback: games with non-zero scores
     cli::cli_inform("No 'status' column in fixtures -- using score-based fallback for completed games")
     results <- fixtures[
-      !is.na(fixtures$home.score.totalScore) & fixtures$home.score.totalScore > 0, ]
+      !is.na(fixtures$home_score) & fixtures$home_score > 0, ]
   }
 
   results
@@ -427,7 +646,7 @@ get_afl_lineups <- function(season = NULL, round = NULL) {
   if (nrow(fixtures) == 0) return(tibble::tibble())
 
   if (!is.null(round)) {
-    fixtures <- fixtures[fixtures$round.roundNumber %in% round, ]
+    fixtures <- fixtures[fixtures$round_number %in% round, ]
     if (nrow(fixtures) == 0) {
       cli::cli_alert_danger("No fixtures for season {season} round {round}")
       return(tibble::tibble())
@@ -440,24 +659,16 @@ get_afl_lineups <- function(season = NULL, round = NULL) {
     if (nrow(fixtures) == 0) return(tibble::tibble())
   }
 
-  match_ids <- fixtures$providerId
+  match_ids <- fixtures$match_id
   token <- get_token()
 
-  rosters <- purrr::map(match_ids, function(mid) {
-    tryCatch({
-      url <- paste0("https://api.afl.com.au/cfs/afl/matchRoster/full/", mid)
-      resp <- httr::GET(url, httr::add_headers("x-media-mis-token" = token))
-      httr::stop_for_status(resp)
-      json <- httr::content(resp, as = "text", encoding = "UTF-8") |>
-        jsonlite::fromJSON(flatten = TRUE)
-      .parse_match_roster(json, mid)
-    }, error = function(e) {
-      cli::cli_alert_danger("Failed to fetch roster for match {mid}: {e$message}")
-      NULL
-    })
-  })
-
-  result <- purrr::list_rbind(purrr::compact(rosters))
+  result <- .fetch_cfs_batch(
+    ids = match_ids,
+    url_template = "https://api.afl.com.au/cfs/afl/matchRoster/full/%s",
+    token = token,
+    parse_fn = .parse_match_roster,
+    label = "roster"
+  )
   if (nrow(result) == 0) return(tibble::tibble())
 
   # Add season and row_id to match existing schema
@@ -465,6 +676,9 @@ get_afl_lineups <- function(season = NULL, round = NULL) {
   if ("player.playerId" %in% names(result)) {
     result$row_id <- paste0(result$providerId, result$teamId, result$player.playerId)
   }
+
+  # Normalise column names (providerId → match_id, teamId → team_id, etc.)
+  .normalise_teams_columns(result)
 
   result
 }
@@ -494,36 +708,31 @@ get_afl_player_stats <- function(season = NULL) {
   concluded <- fixtures[fixtures$status == "CONCLUDED", ]
   if (nrow(concluded) == 0) return(tibble::tibble())
 
-  match_ids <- concluded$providerId
+  match_ids <- concluded$match_id
   token <- get_token()
 
-  cli::cli_inform("Fetching player stats for {length(match_ids)} match{?es}...")
-
-  stats_list <- purrr::map(match_ids, function(mid) {
-    tryCatch({
-      url <- paste0("https://api.afl.com.au/cfs/afl/playerStats/match/", mid)
-      resp <- httr::GET(url, httr::add_headers("x-media-mis-token" = token))
-      httr::stop_for_status(resp)
-      json <- httr::content(resp, as = "text", encoding = "UTF-8") |>
-        jsonlite::fromJSON(flatten = TRUE)
-      .parse_match_stats(json, mid)
-    }, error = function(e) {
-      cli::cli_alert_danger("Failed to fetch stats for match {mid}: {e$message}")
-      NULL
-    })
-  })
-
-  result <- purrr::list_rbind(purrr::compact(stats_list))
+  result <- .fetch_cfs_batch(
+    ids = match_ids,
+    url_template = "https://api.afl.com.au/cfs/afl/playerStats/match/%s",
+    token = token,
+    parse_fn = .parse_match_stats,
+    label = "player stats"
+  )
   if (nrow(result) == 0) return(tibble::tibble())
 
-  # Join match details from fixtures
+  # Join match details from fixtures (normalised column names)
   join_cols <- intersect(
-    c("providerId", "venue.name", "round.roundNumber",
-      "home.team.name", "away.team.name", "compSeason.name"),
+    c("match_id", "venue_name", "round_number",
+      "home_team_name", "away_team_name", "utc_start_time"),
     names(concluded)
   )
   match_info <- concluded[, join_cols, drop = FALSE]
-  result <- dplyr::left_join(result, match_info, by = "providerId")
+  result <- dplyr::left_join(result, match_info, by = c("providerId" = "match_id"))
+
+  # Rename providerId → match_id to match canonical naming
+  if ("providerId" %in% names(result)) {
+    names(result)[names(result) == "providerId"] <- "match_id"
+  }
 
   result
 }
@@ -551,8 +760,8 @@ get_afl_player_details <- function(season = NULL) {
   if (nrow(fixtures) == 0) return(tibble::tibble())
 
   # Derive actual season from fixture data (handles auto-fallback)
-  actual_season <- if ("compSeason.year" %in% names(fixtures)) {
-    fixtures$compSeason.year[1]
+  actual_season <- if ("season" %in% names(fixtures)) {
+    fixtures$season[1]
   } else if ("compSeason.providerId" %in% names(fixtures)) {
     as.numeric(gsub("CD_S(\\d{4})\\d+", "\\1", fixtures$compSeason.providerId[1]))
   } else {
@@ -567,38 +776,39 @@ get_afl_player_details <- function(season = NULL) {
   team_ids <- unique(c(fixtures$home.team.id, fixtures$away.team.id))
   team_ids <- team_ids[!is.na(team_ids)]
 
-  cli::cli_inform("Fetching player details for {length(team_ids)} team{?s}...")
+  cli::cli_inform("Fetching player details for {length(team_ids)} team{?s} in parallel...")
 
-  details_list <- purrr::map(team_ids, function(tid) {
-    tryCatch({
-      url <- paste0(
-        "https://aflapi.afl.com.au/afl/v2/squads?teamId=", tid,
-        "&compSeasonId=", season_id
-      )
-      resp <- httr::GET(url)
-      httr::stop_for_status(resp)
-      json <- httr::content(resp, as = "text", encoding = "UTF-8") |>
-        jsonlite::fromJSON(flatten = TRUE)
+  urls <- paste0(
+    "https://aflapi.afl.com.au/afl/v2/squads?teamId=", team_ids,
+    "&compSeasonId=", season_id
+  )
 
-      # Players nested under json$squad$players
-      players <- json$squad$players
-      if (is.null(players) || !is.data.frame(players) || nrow(players) == 0) return(NULL)
+  # In-memory curl pool — no temp files
+  pool <- curl::new_pool(total_con = 50L, host_con = 20L)
+  details_list <- vector("list", length(team_ids))
 
-      # Add team info from the response
-      players$team.name <- json$squad$team$name %||% NA_character_
-      players$team.providerId <- json$squad$team$providerId %||% NA_character_
-
-      # Drop list-columns
-      list_cols <- names(players)[vapply(players, is.list, logical(1))]
-      if (length(list_cols) > 0) {
-        players <- players[, !names(players) %in% list_cols, drop = FALSE]
-      }
-      players
-    }, error = function(e) {
-      cli::cli_alert_danger("Failed to fetch details for team {tid}: {e$message}")
-      NULL
+  for (i in seq_along(urls)) {
+    h <- curl::new_handle()
+    local({
+      idx <- i
+      curl::curl_fetch_multi(urls[idx], done = function(resp) {
+        if (resp$status_code == 200L) {
+          tryCatch({
+            json <- jsonlite::fromJSON(rawToChar(resp$content), flatten = TRUE)
+            details_list[[idx]] <<- .parse_squad_json(json)
+          }, error = function(e) {
+            cli::cli_alert_danger("Failed to parse squad for team {team_ids[idx]}: {conditionMessage(e)}")
+          })
+        } else {
+          cli::cli_alert_danger("HTTP {resp$status_code} fetching squad for team {team_ids[idx]}")
+        }
+      }, fail = function(msg) {
+        cli::cli_alert_danger("Failed to fetch squad for team {team_ids[idx]}: {msg}")
+      }, handle = h, pool = pool)
     })
-  })
+  }
+
+  curl::multi_run(pool = pool)
 
   result <- purrr::list_rbind(purrr::compact(details_list))
   if (nrow(result) == 0) return(tibble::tibble())
@@ -629,6 +839,10 @@ get_afl_player_details <- function(season = NULL) {
   if (!is.na(pid_col)) {
     pid_col_clean <- sub("^player\\.", "", pid_col)
     result$row_id <- paste(result[[pid_col_clean]], actual_season)
+    # Rename providerId → player_id (this is a player ID, not a match ID)
+    if (pid_col_clean %in% names(result) && !"player_id" %in% names(result)) {
+      names(result)[names(result) == pid_col_clean] <- "player_id"
+    }
   }
 
   # Standardise team column name and values

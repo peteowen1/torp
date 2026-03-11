@@ -46,17 +46,18 @@ test_that("cache expiration works", {
 
 test_that("cache can be disabled", {
   skip_if_offline()
-  
+
   # Clear cache
   clear_fixture_cache()
-  
+
   # Load without cache
   fixtures1 <- load_fixtures(seasons = 2021, use_cache = FALSE)
   fixtures2 <- load_fixtures(seasons = 2021, use_cache = FALSE)
-  
-  # Cache should still be empty
+
+  # No fixtures cache entry should exist (AFL API internal caches are OK)
   cache_info <- get_cache_info()
-  expect_equal(nrow(cache_info), 0)
+  fixtures_keys <- cache_info$cache_key[grepl("^fixtures_", cache_info$cache_key)]
+  expect_equal(length(fixtures_keys), 0)
 })
 
 test_that("all=TRUE caching works", {
@@ -73,9 +74,10 @@ test_that("all=TRUE caching works", {
 
   skip_if(nrow(fixtures1) == 0, "Could not load fixtures")
 
-  # Data should now be cached
+  # Data should now be cached (key is fixtures_2021_2022_..._YYYY)
   cache_info <- get_cache_info()
-  expect_true("fixtures_all" %in% cache_info$cache_key)
+  fixtures_keys <- cache_info$cache_key[grepl("^fixtures_", cache_info$cache_key)]
+  expect_true(length(fixtures_keys) > 0)
 
   # Second load should be cache hit
   expect_message(

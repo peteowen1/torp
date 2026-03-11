@@ -62,7 +62,7 @@ get_afl_week <- function(type = "current") {
   all_fixtures <- tryCatch(
     {
       load_fixtures(season) |>
-        dplyr::filter(.data$compSeason.year == season)
+        dplyr::filter(.data$season == !!season)
     },
     error = function(e) {
       cli::cli_warn("Could not load fixtures for season {season}: {e$message}")
@@ -79,13 +79,13 @@ get_afl_week <- function(type = "current") {
   # Compare as Date objects to avoid POSIXct/Date coercion (which uses midnight UTC,
   # not midnight AEST, creating a ~10 hour boundary mismatch)
   past_fixtures <- all_fixtures |>
-    dplyr::filter(lubridate::as_date(.data$utcStartTime) < current_day)
+    dplyr::filter(lubridate::as_date(.data$utc_start_time) < current_day)
   future_fixtures <- all_fixtures |>
-    dplyr::filter(lubridate::as_date(.data$utcStartTime) >= current_day)
+    dplyr::filter(lubridate::as_date(.data$utc_start_time) >= current_day)
 
   # Pre-season: no past fixtures yet
   if (nrow(past_fixtures) == 0) {
-    round <- as.numeric(min(future_fixtures$round.roundNumber))
+    round <- as.numeric(min(future_fixtures$round_number))
     if (type == "current") {
       return(0)
     }
@@ -94,14 +94,14 @@ get_afl_week <- function(type = "current") {
 
   # Post-season: no future fixtures
   if (nrow(future_fixtures) == 0) {
-    return(as.numeric(max(past_fixtures$round.roundNumber)))
+    return(as.numeric(max(past_fixtures$round_number)))
   }
 
   # Mid-season: both past and future fixtures exist
   if (type == "current") {
-    round <- as.numeric(max(past_fixtures$round.roundNumber))
+    round <- as.numeric(max(past_fixtures$round_number))
   } else {
-    round <- as.numeric(min(future_fixtures$round.roundNumber))
+    round <- as.numeric(min(future_fixtures$round_number))
   }
   return(round)
 }

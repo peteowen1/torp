@@ -67,6 +67,45 @@ save_to_release <- function(df, file_name, release_tag, also_csv = FALSE) {
   }
 }
 
+#' Update Player Stats Release
+#'
+#' Scrapes player stats from the AFL API for a given season, normalises
+#' column names, and uploads to the torpdata GitHub release.
+#'
+#' @param season Season year (numeric).
+#' @return Invisible NULL. Called for side effects (upload).
+#' @keywords internal
+update_player_stats <- function(season) {
+  cli::cli_progress_step("Updating player stats for {season}")
+
+  player_stats <- tryCatch({
+    get_afl_player_stats(season) |>
+      dplyr::select(where(~ dplyr::n_distinct(.) > 1)) |>
+      torp_clean_names()
+  }, error = function(e) {
+    cli::cli_alert_danger("Failed to fetch player stats: {conditionMessage(e)}")
+    return(NULL)
+  })
+
+  if (is.null(player_stats) || nrow(player_stats) == 0) {
+    cli::cli_alert_warning("No player stats data for {season}")
+    return(invisible(NULL))
+  }
+
+  # Normalise column names (strips v2 stats_ prefix, renames player/match IDs)
+  player_stats <- .normalise_player_stats_columns(player_stats)
+
+  if (!"season" %in% names(player_stats)) {
+    player_stats$season <- as.integer(season)
+  }
+
+  file_name <- glue::glue("player_stats_{season}")
+  save_to_release(df = player_stats, file_name = file_name, release_tag = "player_stats-data")
+
+  cli::cli_inform("Saved player stats: {file_name} ({nrow(player_stats)} rows)")
+  invisible(NULL)
+}
+
 #' Read a Parquet File from a GitHub Release via Piggyback
 #'
 #' Downloads and reads a `.parquet` file from a GitHub release using the `piggyback` package.
@@ -111,6 +150,181 @@ file_reader <- function(file_name, release_tag) {
 }
 
 
+# ============================================================================
+# Internal helper: load data via API with in-memory cache
+# ============================================================================
+
+#' Load data from AFL API with caching
+#'
+#' Generalised helper that wraps any `get_afl_*()` function with per-season
+#' fetching, in-memory caching, and column selection. Used by `load_fixtures()`,
+#' `load_results()`, `load_teams()`, `load_player_stats()`, and
+#' `load_player_details()`.
+#'
+#' @param cache_prefix Character. Cache key prefix (e.g. "fixtures", "results").
+#' @param seasons Numeric vector of seasons.
+#' @param fetch_fn Function that takes a single season year and returns a
+#'   data.frame/tibble.
+#' @param use_cache Logical. Whether to use in-memory caching.
+#' @param cache_ttl Numeric. Cache time-to-live in seconds.
+#' @param verbose Logical. Print cache hit/miss info.
+#' @param columns Optional character vector of column names to select.
+#' @param fetch_all_fn Optional function that takes a vector of seasons and
+#'   returns all data in one batch. When provided and `length(seasons) > 1`,
+#'   used instead of per-season `lapply(seasons, fetch_fn)` for efficiency
+#'   (e.g. one big `curl::multi_download()` instead of N sequential batches).
+#' @return A tibble.
+#' @keywords internal
+.load_with_cache <- function(cache_prefix, seasons, fetch_fn,
+                             use_cache = TRUE, cache_ttl = 3600,
+                             verbose = FALSE, columns = NULL,
+                             fetch_all_fn = NULL,
+                             use_disk_cache = FALSE,
+                             refresh = FALSE) {
+  cache_key <- paste0(cache_prefix, "_", paste(sort(seasons), collapse = "_"))
+
+  # Force refresh: clear in-memory and disk caches
+  if (refresh) {
+    if (exists(cache_key, envir = .torp_cache)) {
+      rm(list = cache_key, envir = .torp_cache)
+    }
+    if (use_disk_cache) {
+      clear_disk_cache(pattern = sprintf("cfs_%s_", cache_prefix))
+    }
+  }
+
+  # Check in-memory cache
+  if (!refresh && use_cache && exists(cache_key, envir = .torp_cache)) {
+    cache_entry <- get(cache_key, envir = .torp_cache)
+    if (is_cache_valid(cache_entry, cache_ttl)) {
+      if (verbose) {
+        age_seconds <- as.numeric(difftime(Sys.time(), cache_entry$timestamp, units = "secs"))
+        cli::cli_inform("Cache HIT for {cache_prefix} (age: {round(age_seconds, 1)}s)")
+      }
+      out <- cache_entry$data
+      if (!is.null(columns)) {
+        keep <- intersect(columns, names(out))
+        out <- out[, keep, drop = FALSE]
+      }
+      return(tibble::as_tibble(out))
+    } else {
+      if (verbose) cli::cli_inform("Cache EXPIRED for {cache_prefix}, fetching fresh data")
+      rm(list = cache_key, envir = .torp_cache)
+    }
+  } else if (use_cache && verbose) {
+    cli::cli_inform("Cache MISS for {cache_prefix}, fetching data")
+  }
+
+  current_year <- as.numeric(format(Sys.Date(), "%Y"))
+
+  # Fetch data — use bulk fetcher if available and multi-season, else per-season
+  if (!is.null(fetch_all_fn) && length(seasons) > 1) {
+    results <- list(tryCatch(
+      suppressMessages(fetch_all_fn(seasons)),
+      error = function(e) {
+        cli::cli_alert_danger("Bulk fetch failed for {cache_prefix}: {conditionMessage(e)}")
+        NULL
+      }
+    ))
+  } else {
+    results <- lapply(seasons, function(s) {
+      # Check per-season disk cache
+      if (use_disk_cache) {
+        disk_data <- .read_season_disk_cache(cache_prefix, s, current_year)
+        if (!is.null(disk_data)) return(disk_data)
+      }
+
+      data <- tryCatch(suppressMessages(fetch_fn(s)), error = function(e) {
+        cli::cli_alert_danger("Failed to fetch {cache_prefix} for {s}: {conditionMessage(e)}")
+        NULL
+      })
+
+      # Save to per-season disk cache (past seasons only)
+      if (use_disk_cache && s < current_year && !is.null(data) && nrow(data) > 0) {
+        .write_season_disk_cache(cache_prefix, s, data)
+      }
+
+      data
+    })
+  }
+  results <- Filter(Negate(is.null), results)
+
+  if (length(results) == 0) {
+    cli::cli_warn("No {cache_prefix} data returned for seasons: {paste(seasons, collapse = ', ')}")
+    return(tibble::tibble())
+  }
+
+  # rbindlist with fill=TRUE handles differing column sets across seasons
+  out <- data.table::rbindlist(lapply(results, data.table::as.data.table), fill = TRUE)
+  out <- tibble::as_tibble(out)
+
+  # Store in in-memory cache before column selection
+  if (use_cache && nrow(out) > 0) {
+    store_in_cache(cache_key, out)
+    if (verbose) cli::cli_inform("Stored {cache_prefix} in cache ({nrow(out)} rows)")
+  }
+
+  # Apply column selection
+  if (!is.null(columns)) {
+    keep <- intersect(columns, names(out))
+    out <- out[, keep, drop = FALSE]
+  }
+
+  out
+}
+
+#' Read per-season disk cache for CFS data
+#'
+#' Only caches past seasons (before current year). Current season data
+#' may contain provisional lineups or live stats, so it is always
+#' fetched fresh from the API.
+#'
+#' @param prefix Cache prefix (e.g. "teams", "player_stats")
+#' @param season Season year
+#' @param current_year Current calendar year
+#' @return Data frame if cache hit, NULL if miss
+#' @keywords internal
+.read_season_disk_cache <- function(prefix, season, current_year) {
+  # Never use disk cache for current season — data may be provisional
+  if (season >= current_year) return(NULL)
+
+  cache_dir <- get_disk_cache_dir()
+  disk_path <- file.path(cache_dir, sprintf("cfs_%s_%d.parquet", prefix, season))
+
+  if (!file.exists(disk_path)) return(NULL)
+
+  tryCatch({
+    data <- arrow::read_parquet(disk_path)
+    if (nrow(data) > 0) {
+      cli::cli_inform("Disk cache HIT for {prefix} {season} ({nrow(data)} rows)")
+      return(data)
+    }
+    NULL
+  }, error = function(e) {
+    cli::cli_warn("Corrupt disk cache for {prefix} {season} -- deleting and re-fetching: {conditionMessage(e)}")
+    unlink(disk_path)
+    NULL
+  })
+}
+
+#' Write per-season disk cache for CFS data
+#'
+#' @param prefix Cache prefix
+#' @param season Season year
+#' @param data Data frame to cache
+#' @keywords internal
+.write_season_disk_cache <- function(prefix, season, data) {
+  cache_dir <- get_disk_cache_dir()
+  disk_path <- file.path(cache_dir, sprintf("cfs_%s_%d.parquet", prefix, season))
+  tryCatch(
+    arrow::write_parquet(data, disk_path),
+    error = function(e) {
+      cli::cli_warn("Failed to write disk cache for {prefix} {season}: {conditionMessage(e)}")
+    }
+  )
+}
+
+
 #' Load Chains Data
 #'
 #' @description Loads chains data from the [torpdata repository](https://github.com/peteowen1/torpdata)
@@ -136,6 +350,12 @@ load_chains <- function(seasons = get_afl_season(), rounds = TRUE, use_disk_cach
   urls <- generate_urls("chains-data", "chains_data", seasons, rounds)
 
   out <- load_from_url(urls, seasons = seasons, rounds = rounds, use_disk_cache = use_disk_cache, columns = columns)
+
+  # Normalise camelCase chains columns (matchId → match_id, etc.)
+  if (nrow(out) > 0) {
+    if (!data.table::is.data.table(out)) out <- data.table::as.data.table(out)
+    .normalise_chains_columns(out)
+  }
 
   return(out)
 }
@@ -201,7 +421,11 @@ load_xg <- function(seasons = get_afl_season(), use_disk_cache = FALSE, columns 
 #' @description Loads player stats data from the [torpdata repository](https://github.com/peteowen1/torpdata)
 #'
 #' @param seasons A numeric vector of 4-digit years associated with given AFL seasons - defaults to latest season. If set to `TRUE`, returns all available data since 2021.
-#' @param use_disk_cache Logical. If TRUE, uses persistent disk cache for faster repeated loads. Default is FALSE.
+#' @param use_disk_cache Logical. If TRUE (default), caches completed past seasons
+#'   to disk so they load instantly on subsequent calls. Current season is always
+#'   fetched fresh from the API.
+#' @param refresh Logical. If TRUE, clears all caches and fetches fresh data
+#'   from the API for all seasons. Default is FALSE.
 #' @param columns Optional character vector of column names to read. If NULL (default), reads all columns.
 #'
 #' @return A data frame containing player stats data.
@@ -213,14 +437,21 @@ load_xg <- function(seasons = get_afl_season(), use_disk_cache = FALSE, columns 
 #' })
 #' }
 #' @export
-load_player_stats <- function(seasons = get_afl_season(), use_disk_cache = FALSE, columns = NULL) {
+load_player_stats <- function(seasons = get_afl_season(), use_disk_cache = TRUE, refresh = FALSE, columns = NULL) {
   seasons <- validate_seasons(seasons)
 
-  urls <- generate_urls("player_stats-data", "player_stats", seasons)
-
-  out <- load_from_url(urls, seasons = seasons, use_disk_cache = use_disk_cache, columns = columns)
-
-  return(out)
+  .load_with_cache(
+    cache_prefix = "player_stats",
+    seasons = seasons,
+    fetch_fn = function(s) {
+      out <- get_afl_player_stats(s)
+      out <- .normalise_player_stats_columns(out)
+      out
+    },
+    columns = columns,
+    use_disk_cache = use_disk_cache,
+    refresh = refresh
+  )
 }
 
 #' Load Player Game Data
@@ -248,6 +479,9 @@ load_player_game_data <- function(seasons = get_afl_season(), use_disk_cache = F
   urls <- generate_urls("player_game-data", "player_game", seasons)
 
   out <- load_from_url(urls, seasons = seasons, use_disk_cache = use_disk_cache, columns = columns)
+
+  # Normalise old abbreviated column names (plyr_nm → player_name, etc.)
+  if (nrow(out) > 0) .normalise_columns(out, PLAYER_GAME_COL_MAP, verbose = TRUE, label = "Player game")
 
   return(out)
 }
@@ -285,52 +519,21 @@ load_fixtures <- function(seasons = NULL, all = FALSE, use_cache = TRUE, cache_t
     current_year <- as.numeric(format(Sys.Date(), "%Y"))
     seasons <- 2021:current_year
   } else if (is.null(seasons)) {
-    seasons <- get_afl_season() # Use default season when no season is provided
+    seasons <- get_afl_season()
   } else {
     seasons <- validate_seasons(seasons)
   }
 
-  # Check cache if enabled
-  if (use_cache) {
-    cache_key <- generate_fixture_cache_key(seasons, all)
-
-    # Try to get from cache
-    if (exists(cache_key, envir = .torp_cache)) {
-      cache_entry <- get(cache_key, envir = .torp_cache)
-
-      if (is_cache_valid(cache_entry, cache_ttl)) {
-        if (verbose) {
-          age_seconds <- as.numeric(difftime(Sys.time(), cache_entry$timestamp, units = "secs"))
-          cli::cli_inform("Cache HIT for fixtures (age: {round(age_seconds, 1)}s)")
-        }
-        return(cache_entry$data)
-      } else {
-        if (verbose) {
-          cli::cli_inform("Cache EXPIRED for fixtures, fetching fresh data")
-        }
-        # Remove expired cache entry
-        rm(list = cache_key, envir = .torp_cache)
-      }
-    } else {
-      if (verbose) {
-        cli::cli_inform("Cache MISS for fixtures, fetching data")
-      }
-    }
-  }
-
-  # Fetch data from URLs
-  urls <- generate_urls("fixtures-data", "fixtures", seasons)
-  out <- load_from_url(urls, seasons = seasons, use_disk_cache = use_disk_cache, columns = columns)
-
-  # Store in cache if enabled
-  if (use_cache && nrow(out) > 0) {
-    store_in_cache(cache_key, out)
-    if (verbose) {
-      cli::cli_inform("Stored fixtures in cache ({nrow(out)} rows)")
-    }
-  }
-
-  return(out)
+  .load_with_cache(
+    cache_prefix = "fixtures",
+    seasons = seasons,
+    fetch_fn = get_afl_fixtures,
+    use_cache = use_cache,
+    cache_ttl = cache_ttl,
+    verbose = verbose,
+    columns = columns,
+    use_disk_cache = use_disk_cache
+  )
 }
 
 
@@ -340,7 +543,11 @@ load_fixtures <- function(seasons = NULL, all = FALSE, use_cache = TRUE, cache_t
 #' @description Loads AFL team roster and lineup data from the [torpdata repository](https://github.com/peteowen1/torpdata)
 #'
 #' @param seasons A numeric vector of 4-digit years associated with given AFL seasons - defaults to latest season. If set to `TRUE`, returns all available data since 2021.
-#' @param use_disk_cache Logical. If TRUE, uses persistent disk cache for faster repeated loads. Default is FALSE.
+#' @param use_disk_cache Logical. If TRUE (default), caches completed past seasons
+#'   to disk so they load instantly on subsequent calls. Current season is always
+#'   fetched fresh from the API.
+#' @param refresh Logical. If TRUE, clears all caches and fetches fresh data
+#'   from the API for all seasons. Default is FALSE.
 #' @param columns Optional character vector of column names to read. If NULL (default), reads all columns.
 #'
 #' @return A data frame containing AFL team and player lineup data.
@@ -352,14 +559,17 @@ load_fixtures <- function(seasons = NULL, all = FALSE, use_cache = TRUE, cache_t
 #' })
 #' }
 #' @export
-load_teams <- function(seasons = get_afl_season(), use_disk_cache = FALSE, columns = NULL) {
+load_teams <- function(seasons = get_afl_season(), use_disk_cache = TRUE, refresh = FALSE, columns = NULL) {
   seasons <- validate_seasons(seasons)
 
-  urls <- generate_urls(data_type = "teams-data", file_prefix = "teams", seasons = seasons)
-
-  out <- load_from_url(urls, seasons = seasons, use_disk_cache = use_disk_cache, columns = columns)
-
-  return(out)
+  .load_with_cache(
+    cache_prefix = "teams",
+    seasons = seasons,
+    fetch_fn = get_afl_lineups,
+    columns = columns,
+    use_disk_cache = use_disk_cache,
+    refresh = refresh
+  )
 }
 
 #' Load AFL Match Results Data
@@ -382,11 +592,12 @@ load_teams <- function(seasons = get_afl_season(), use_disk_cache = FALSE, colum
 load_results <- function(seasons = get_afl_season(), use_disk_cache = FALSE, columns = NULL) {
   seasons <- validate_seasons(seasons)
 
-  urls <- generate_urls("results-data", "results", seasons)
-
-  out <- load_from_url(urls, seasons = seasons, use_disk_cache = use_disk_cache, columns = columns)
-
-  return(out)
+  .load_with_cache(
+    cache_prefix = "results",
+    seasons = seasons,
+    fetch_fn = get_afl_results,
+    columns = columns
+  )
 }
 
 #' Load AFL Player Details Data
@@ -394,7 +605,11 @@ load_results <- function(seasons = get_afl_season(), use_disk_cache = FALSE, col
 #' @description Loads AFL player biographical and details data from the [torpdata repository](https://github.com/peteowen1/torpdata)
 #'
 #' @param seasons A numeric vector of 4-digit years associated with given AFL seasons - defaults to latest season. If set to `TRUE`, returns all available data since 2021.
-#' @param use_disk_cache Logical. If TRUE, uses persistent disk cache for faster repeated loads. Default is FALSE.
+#' @param use_disk_cache Logical. If TRUE (default), caches completed past seasons
+#'   to disk so they load instantly on subsequent calls. Current season is always
+#'   fetched fresh from the API.
+#' @param refresh Logical. If TRUE, clears all caches and fetches fresh data
+#'   from the API for all seasons. Default is FALSE.
 #' @param columns Optional character vector of column names to read. If NULL (default), reads all columns.
 #'
 #' @return A data frame containing AFL player biographical details including names, ages, and team affiliations.
@@ -406,14 +621,18 @@ load_results <- function(seasons = get_afl_season(), use_disk_cache = FALSE, col
 #' })
 #' }
 #' @export
-load_player_details <- function(seasons = get_afl_season(), use_disk_cache = FALSE, columns = NULL) {
+load_player_details <- function(seasons = get_afl_season(), use_disk_cache = TRUE, refresh = FALSE, columns = NULL) {
   seasons <- validate_seasons(seasons)
 
-  urls <- generate_urls("player_details-data", "player_details", seasons)
-
-  out <- load_from_url(urls, seasons = seasons, use_disk_cache = use_disk_cache, columns = columns)
-
-  return(out)
+  .load_with_cache(
+    cache_prefix = "player_details",
+    seasons = seasons,
+    fetch_fn = get_afl_player_details,
+    fetch_all_fn = .fetch_all_player_details,
+    columns = columns,
+    use_disk_cache = use_disk_cache,
+    refresh = refresh
+  )
 }
 
 #' Load AFL Match Predictions Data
@@ -596,7 +815,7 @@ load_team_ratings <- function(columns = NULL) {
 #'
 #' @return A data frame containing EP/WP chart data with columns including
 #'   `match_id`, `season`, `round_number`, `period`, `total_seconds`,
-#'   `home_team_team_name`, `away_team_team_name`, `team`, `exp_pts`,
+#'   `home_team_name`, `away_team_name`, `team`, `exp_pts`,
 #'   `delta_epv`, `wp`, `wpa`, `description`, `player_name`, `play_type`,
 #'   `shot_row`, and `points_shot`.
 #' @seealso [load_pbp()], [load_xg()]

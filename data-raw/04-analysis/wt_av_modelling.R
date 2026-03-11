@@ -39,19 +39,19 @@ pstot <- load_player_stats(TRUE)
 cols <- colnames(pstot)[18:79]
 cols <- cols[!cols %in% c(
   "dream_team_points", "rating_points", "metres_gained", "last_updated",
-  "extended_stats_centre_bounce_attendances", "extended_stats_kickins", "extended_stats_kickins_playon"
+  "centre_bounce_attendances", "kickins", "kickins_playon"
 )]
 
 cols_binom <- c(
   "time_on_ground_percentage", "disposal_efficiency", "goal_accuracy",
-  "extended_stats_kick_efficiency", "extended_stats_contested_possession_rate", "extended_stats_hitout_win_percentage",
-  "extended_stats_hitout_to_advantage_rate", "extended_stats_contest_def_loss_percentage", "extended_stats_contest_off_wins_percentage"
+  "kick_efficiency", "contested_possession_rate", "hitout_win_percentage",
+  "hitout_to_advantage_rate", "contest_def_loss_percentage", "contest_off_wins_percentage"
 )
 cols_pois <- setdiff(cols, cols_binom)
 
 # Weighted Average Function ----
 wav_data <- function(df, fil_val, model_col, decay = 365) {
-  df$season_round <- paste0(substr(df$provider_id, 5, 8), substr(df$provider_id, 12, 13))
+  df$season_round <- paste0(substr(df$match_id, 5, 8), substr(df$match_id, 12, 13))
 
   df$opponent_name <- ifelse(df$team_status == "home", df$away_team_name, df$home_team_name)
 
@@ -65,8 +65,7 @@ wav_data <- function(df, fil_val, model_col, decay = 365) {
   df_player <-
     df_old %>%
     group_by(
-      player_id = player_player_player_player_id,
-      # player_name = paste(player_player_player_given_name,player_player_player_surname)
+      player_id = player_id,
     ) %>%
     summarise(
       wt_avg = round(sum(.data[[model_col]] * .data$weight_gm, na.rm = T) / sum(.data$weight_gm, na.rm = T), 3),
@@ -103,20 +102,20 @@ wav_data <- function(df, fil_val, model_col, decay = 365) {
   ###########
   df_tot <-
     df_player %>%
-    right_join(df_cur, by = c("player_id" = "player_player_player_player_id")) %>%
+    right_join(df_cur, by = c("player_id" = "player_id")) %>%
     left_join(df_team, by = c("team_name" = "team_name")) %>%
     left_join(df_opp, by = c("opponent_name" = "opponent_name")) %>%
     mutate(
-      round = round_round_number,
-      season = as.factor(substr(provider_id, 5, 8)),
+      round = round_number,
+      season = as.factor(substr(match_id, 5, 8)),
       venue = as.factor(venue_name),
       aest_start = with_tz(as_datetime(utc_start_time), "Australia/Brisbane"),
       date_numeric = as.numeric(aest_start),
       aest_hour = (hour(aest_start) * 60 + minute(aest_start)) / 60,
       aest_day = wday(aest_start, label = TRUE),
-      position = as.factor(substr(player_player_position, 1, 2)),
+      position = as.factor(substr(position, 1, 2)),
       home_away = as.factor(team_status),
-      player_name = paste(player_player_player_given_name, player_player_player_surname)
+      player_name = paste(given_name, surname)
     ) %>%
     filter(
       position != "EM",
@@ -157,9 +156,9 @@ for (i in cols_pois[1:length(cols_pois)]) { ############### DO 30 LATER!!!!!!!
   model_preds <- tibble(
     player_id = df_mdl$player_id,
     player_name = df_mdl$player_name,
-    player_position = df_mdl$player_player_position,
-    provider_id = df_mdl$provider_id,
-    round = df_mdl$round_round_number,
+    player_position = df_mdl$position,
+    match_id = df_mdl$match_id,
+    round = df_mdl$round_number,
     home_away = df_mdl$home_away,
     team_name = df_mdl$team_name,
     opp_name = df_mdl$opponent_name,
@@ -210,9 +209,9 @@ for (i in cols_binom[1:length(cols_binom)]) {
   model_preds <- tibble(
     player_id = df_mdl$player_id,
     player_name = df_mdl$player_name,
-    player_position = df_mdl$player_player_position,
-    provider_id = df_mdl$provider_id,
-    round = df_mdl$round_round_number,
+    player_position = df_mdl$position,
+    match_id = df_mdl$match_id,
+    round = df_mdl$round_number,
     home_away = df_mdl$home_away,
     team_name = df_mdl$team_name,
     opp_name = df_mdl$opponent_name,
@@ -235,7 +234,7 @@ tictoc::toc()
 # Combine Predictions ----
 pred_df <- stat_list %>% reduce(left_join, by = c(
   "player_id", "player_name", "player_position",
-  "provider_id", "round", "home_away", "team_name", "opp_name"
+  "match_id", "round", "home_away", "team_name", "opp_name"
 ))
 pred_df
 
@@ -282,13 +281,13 @@ all_perf <- map(c(cols_pois, cols_binom), ~ stat_perf(.)) %>% list_rbind()
 
 # Team-Level Predictions ----
 team_preds <- pred_df %>%
-  group_by(provider_id, team_name, opp_name) %>%
+  group_by(match_id, team_name, opp_name) %>%
   summarise_if(is.numeric, sum, na.rm = TRUE) # %>% View()
 
 team_mdl_df <- team_mdl_df %>%
   # mutate(team_name_adj = fitzRoy::replace_teams(team_name)) %>%
   left_join(team_preds %>% mutate(team_name_adj = fitzRoy::replace_teams(team_name)),
-    by = c("providerId" = "provider_id", "team_name_adj.x" = "team_name")
+    by = c("match_id", "team_name_adj.x" = "team_name")
   ) # %>% View()
 
 colnames(team_mdl_df)[str_detect(colnames(team_mdl_df), "pred")]
@@ -297,7 +296,7 @@ colnames(team_mdl_df)[str_detect(colnames(team_mdl_df), "pred")]
 pl_df_final <-
   pl_details %>%
   select(providerId, position) %>%
-  left_join(pred_df %>% filter(substr(provider_id, 1, 13) == "CD_M202301423"),
+  left_join(pred_df %>% filter(substr(match_id, 1, 13) == "CD_M202301423"),
     by = c("providerId" = "player_id")
   ) # %>%
 # filter(position == "RUCK") %>%
@@ -314,5 +313,5 @@ pl_df_final %>%
   view()
 
 
-tst_df <- pred_df %>% filter(substr(provider_id,1,8)=='CD_M2025',round == 4) %>% select(1:50)
+tst_df <- pred_df %>% filter(substr(match_id,1,8)=='CD_M2025',round == 4) %>% select(1:50)
 View(tst_df)

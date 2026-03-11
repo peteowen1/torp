@@ -7,9 +7,9 @@
 \format{
 A data frame with fixture information including match IDs, start times,
 round details, home/away team information, venue details, and season metadata.
-Key columns include \code{id}, \code{providerId}, \code{utcStartTime}, \code{status},
-\code{round.roundNumber}, \code{home.team.name}, \code{away.team.name}, \code{venue.name},
-and \code{compSeason.year}.
+Key columns include \code{match_id}, \code{utc_start_time}, \code{status},
+\code{round_number}, \code{home_team_name}, \code{away_team_name}, \code{venue_name},
+and \code{season}.
 }
 \source{
 AFL fixture data via AFL API

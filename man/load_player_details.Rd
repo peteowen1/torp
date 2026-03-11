@@ -6,14 +6,20 @@
 \usage{
 load_player_details(
   seasons = get_afl_season(),
-  use_disk_cache = FALSE,
+  use_disk_cache = TRUE,
+  refresh = FALSE,
   columns = NULL
 )
 }
 \arguments{
 \item{seasons}{A numeric vector of 4-digit years associated with given AFL seasons - defaults to latest season. If set to \code{TRUE}, returns all available data since 2021.}
 
-\item{use_disk_cache}{Logical. If TRUE, uses persistent disk cache for faster repeated loads. Default is FALSE.}
+\item{use_disk_cache}{Logical. If TRUE (default), caches completed past seasons
+to disk so they load instantly on subsequent calls. Current season is always
+fetched fresh from the API.}
+
+\item{refresh}{Logical. If TRUE, clears all caches and fetches fresh data
+from the API for all seasons. Default is FALSE.}
 
 \item{columns}{Optional character vector of column names to read. If NULL (default), reads all columns.}
 }

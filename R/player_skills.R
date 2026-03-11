@@ -35,9 +35,9 @@
 #' @return The data.table with added `pos_group` column.
 #' @keywords internal
 .resolve_skill_positions <- function(dt) {
-  # Use 'pos' column (listed position: KEY_DEFENDER, MIDFIELDER, etc.)
-  # Fallback to 'position' if 'pos' not available
-  pos_col <- if ("pos" %in% names(dt)) "pos" else "position"
+  # Use 'listed_position' column (listed position: KEY_DEFENDER, MIDFIELDER, etc.)
+  # Fallback to 'position' if 'listed_position' not available
+  pos_col <- if ("listed_position" %in% names(dt)) "listed_position" else "position"
   dt[, pos_group := .map_position_group(get(pos_col))]
 
   na_idx <- which(is.na(dt$pos_group))
@@ -94,19 +94,16 @@ prepare_skill_data <- function(player_game_data, player_stats, rosters = NULL,
   pgd[, tog_denominator := 1]
   pgd[, played := 1L]
 
-  # Identify player_id and match_id columns in player_stats
-  # player_stats uses: player_player_player_player_id (player) + provider_id (match)
-  pid_col <- intersect(c("player_id", "player_player_player_player_id"), names(ps))
-  mid_col <- intersect(c("match_id", "provider_id"), names(ps))
-  if (length(pid_col) == 0 || length(mid_col) == 0) {
+  # player_stats columns are normalised by load_player_stats()
+  if (!all(c("player_id", "match_id") %in% names(ps))) {
     cli::cli_warn(c(
-      "Cannot find player/match ID columns in player_stats.",
+      "Cannot find player_id/match_id columns in player_stats.",
       "i" = "Some skills will rely entirely on the prior."
     ))
     pgd[, disposal_efficiency_pct_x_disposals := NA_real_]
   } else {
-    pid_col <- pid_col[1]
-    mid_col <- mid_col[1]
+    pid_col <- "player_id"
+    mid_col <- "match_id"
 
     # Find all stat columns needed by skill definitions but missing from pgd
     stat_defs_merge <- skill_stat_definitions()
@@ -158,11 +155,6 @@ prepare_skill_data <- function(player_game_data, player_stats, rosters = NULL,
   # Map positions to groups
   pgd <- .resolve_skill_positions(pgd)
 
-  # Construct player_name if not present
-  if (!"player_name" %in% names(pgd) && "plyr_nm" %in% names(pgd)) {
-    pgd[, player_name := plyr_nm]
-  }
-
   # Select essential columns + all stat source columns
   stat_defs <- skill_stat_definitions()
   rate_cols <- stats::na.omit(unique(stat_defs$source_col))
@@ -187,8 +179,8 @@ prepare_skill_data <- function(player_game_data, player_stats, rosters = NULL,
   out <- pgd[, ..keep_cols]
 
   # Add team column if available
-  if ("tm" %in% names(pgd) && !"team" %in% keep_cols) {
-    out[, team := pgd$tm]
+  if ("team" %in% names(pgd) && !"team" %in% keep_cols) {
+    out[, team := pgd$team]
   }
 
   # Expand with zero-TOG rows for rostered players who didn't play.
@@ -205,17 +197,14 @@ prepare_skill_data <- function(player_game_data, player_stats, rosters = NULL,
   if (!is.null(rosters)) {
     # Roster-based expansion: every rostered player × every round their team played
     roster_dt <- data.table::as.data.table(rosters)
-    if ("providerId" %in% names(roster_dt)) {
-      data.table::setnames(roster_dt, "providerId", "player_id", skip_absent = TRUE)
-    }
 
     if (!is.null(fixtures)) {
       # Build team-round calendar from fixtures (handles byes + finals correctly)
       fix_dt <- data.table::as.data.table(fixtures)
-      home <- fix_dt[, .(season = compSeason.year, round = round.roundNumber,
-                         team = home.team.name)]
-      away <- fix_dt[, .(season = compSeason.year, round = round.roundNumber,
-                         team = away.team.name)]
+      home <- fix_dt[, .(season, round = round_number,
+                         team = home_team_name)]
+      away <- fix_dt[, .(season, round = round_number,
+                         team = away_team_name)]
       team_rounds <- unique(data.table::rbindlist(list(home, away)))
       team_rounds <- merge(team_rounds, round_cal, by = c("season", "round"))
 

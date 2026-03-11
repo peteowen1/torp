@@ -65,14 +65,14 @@ clean_pbp_dt <- function(df) {
 add_torp_ids_dt <- function(dt) {
   dt[, `:=`(
     # TORP IDs (use paste0 instead of glue for data.table compatibility)
-    torp_match_id = paste0(season, "_", round_number, "_", home_team_team_abbr, "_", away_team_team_abbr),
+    torp_match_id = paste0(season, "_", round_number, "_", home_team_abbr, "_", away_team_abbr),
     torp_row_id = paste0(
-      season, "_", round_number, "_", home_team_team_abbr, "_", away_team_team_abbr,
+      season, "_", round_number, "_", home_team_abbr, "_", away_team_abbr,
       sprintf("%04d", display_order)
     ),
     # Basic variables
     team = torp_replace_teams(
-      data.table::fifelse(team_id == home_team_id, home_team_team_name, away_team_team_name)
+      data.table::fifelse(team_id == home_team_id, home_team_name, away_team_name)
     ),
     opp_id = data.table::fifelse(team_id == home_team_id, away_team_id, home_team_id),
     y = -y,
@@ -200,16 +200,22 @@ add_quarter_vars_dt <- function(dt) {
   # a behind was missed. Assign points to the kick-in team's opponent (the attacker).
   dt[, lag_points_row := data.table::shift(points_row, n = 1L, type = "lag"), by = .(match_id, period)]
   orphan_idx <- dt[, which(grepl("Kickin", description) & (is.na(lag_points_row) | lag_points_row == 0L))]
-  for (i in orphan_idx) {
-    prev <- i - 1L
-    if (prev < 1L) next
-    # Guard: don't write across match/period boundaries
-    if (dt$match_id[prev] != dt$match_id[i] || dt$period[prev] != dt$period[i]) next
-    # Skip if prev row is also a kick-in (consecutive kick-ins, not a new behind)
-    if (grepl("Kickin", dt$description[prev])) next
-    if (is.na(dt$points_row[prev]) || dt$points_row[prev] == 0L) {
-      data.table::set(dt, prev, "points_row", 1L)
-      data.table::set(dt, prev, "points_team_id", dt$opp_id[i])
+  if (length(orphan_idx) > 0L) {
+    prev_idx <- orphan_idx - 1L
+    # Filter to valid prev indices (not row 0)
+    keep <- prev_idx >= 1L
+    orphan_idx <- orphan_idx[keep]
+    prev_idx <- prev_idx[keep]
+    if (length(prev_idx) > 0L) {
+      # Vectorised guards: same match/period, prev not a kick-in, prev has no points
+      valid <- dt$match_id[prev_idx] == dt$match_id[orphan_idx] &
+        dt$period[prev_idx] == dt$period[orphan_idx] &
+        !grepl("Kickin", dt$description[prev_idx]) &
+        (is.na(dt$points_row[prev_idx]) | dt$points_row[prev_idx] == 0L)
+      if (any(valid)) {
+        data.table::set(dt, prev_idx[valid], "points_row", 1L)
+        data.table::set(dt, prev_idx[valid], "points_team_id", dt$opp_id[orphan_idx[valid]])
+      }
     }
   }
   dt[, lag_points_row := NULL]
@@ -316,12 +322,12 @@ add_game_vars_dt <- function(dt) {
 #' @keywords internal
 add_score_vars_dt <- function(dt) {
   dt[, label_wp := data.table::fcase(
-    home_team_score_total_score > away_team_score_total_score & home == 1L, 1,
-    home_team_score_total_score == away_team_score_total_score & home == 1L, 0.5,
-    home_team_score_total_score < away_team_score_total_score & home == 1L, 0,
-    home_team_score_total_score > away_team_score_total_score & home == 0L, 0,
-    home_team_score_total_score == away_team_score_total_score & home == 0L, 0.5,
-    home_team_score_total_score < away_team_score_total_score & home == 0L, 1,
+    home_score > away_score & home == 1L, 1,
+    home_score == away_score & home == 1L, 0.5,
+    home_score < away_score & home == 1L, 0,
+    home_score > away_score & home == 0L, 0,
+    home_score == away_score & home == 0L, 0.5,
+    home_score < away_score & home == 0L, 1,
     default = NA_real_
   )]
 
@@ -374,57 +380,26 @@ nafill_char <- function(x, type = "locf") {
 #' Normalise PBP column names across API schema versions
 #'
 #' The AFL API changed its response schema for 2026+. The old CFS schema uses
-#' names like `homeTeamScore.totalScore` (→ `home_team_score_total_score`),
-#' while the new schema uses `home.score.totalScore` (→ `home_score_total_score`).
-#' This function detects the schema and renames columns to the expected names
-#' used throughout the PBP pipeline.
+#' names like `homeTeamScore.totalScore` (cleaned to `home_team_score_total_score`),
+#' while the new schema uses `home.score.totalScore` (cleaned to `home_score_total_score`).
+#' Both are normalised to the canonical name `home_score` via `PBP_COL_MAP`.
 #'
 #' @param dt A data.table with cleaned (snake_case) column names.
 #' @return Invisible NULL (renames columns by reference).
 #' @keywords internal
 .normalise_pbp_columns <- function(dt) {
-  nms <- names(dt)
-
-  # Mapping: new_schema_name -> expected_name
-  # Only remap if the expected column is missing AND the alternative exists
-  col_map <- c(
-    # Score columns (v2 API uses home.score.* instead of homeTeamScore.*)
-    "home_score_total_score" = "home_team_score_total_score",
-    "away_score_total_score" = "away_team_score_total_score",
-    # Team name columns (v2 API uses home.team.name instead of homeTeam.teamName)
-    "home_team_name"         = "home_team_team_name",
-    "away_team_name"         = "away_team_team_name",
-    # Team abbreviation (v2 uses home.team.abbreviation instead of homeTeam.teamAbbr)
-    "home_team_abbreviation" = "home_team_team_abbr",
-    "away_team_abbreviation" = "away_team_team_abbr",
-    # Team ID (v2 uses home.team.providerId instead of homeTeamId)
-    "home_team_provider_id"  = "home_team_id",
-    "away_team_provider_id"  = "away_team_id",
-    # Round number (v2 nests under round.roundNumber)
-    "round_round_number"     = "round_number"
-  )
-
-  remapped <- character()
-  for (from in names(col_map)) {
-    to <- col_map[[from]]
-    if (!to %in% nms && from %in% nms) {
-      data.table::setnames(dt, from, to)
-      nms[nms == from] <- to
-      remapped <- c(remapped, paste0(from, " -> ", to))
-    }
-  }
-
-  if (length(remapped) > 0) {
-    cli::cli_inform("PBP schema normalisation: remapped {length(remapped)} column{?s}: {paste(remapped, collapse = ', ')}")
-  }
+  .normalise_columns(dt, PBP_COL_MAP, verbose = TRUE, label = "PBP")
 
   # Validate critical columns exist after remapping
-  critical <- c("home_team_id", "away_team_id", "home_team_team_name",
-                 "away_team_team_name", "round_number")
-  nms <- names(dt)
-  missing <- critical[!critical %in% nms]
+  critical <- c("home_team_id", "away_team_id", "home_team_name",
+                 "away_team_name", "round_number")
+  missing <- critical[!critical %in% names(dt)]
   if (length(missing) > 0) {
-    cli::cli_alert_danger("PBP schema missing critical column{?s} after normalisation: {paste(missing, collapse = ', ')}. Downstream errors likely.")
+    cli::cli_warn(c(
+      "PBP schema missing critical column{?s} after normalisation: {paste(missing, collapse = ', ')}.",
+      "i" = "This usually means the AFL API response schema has changed.",
+      "i" = "Check column mappings in {.fn .normalise_pbp_columns}."
+    ))
   }
 
   invisible(NULL)

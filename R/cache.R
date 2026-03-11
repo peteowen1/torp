@@ -4,52 +4,61 @@
 .torp_cache <- new.env(parent = emptyenv())
 .torp_model_cache <- new.env(parent = emptyenv())
 
-#' Clear Fixture Cache
+#' Clear Data Cache
 #'
-#' Clears the cached fixture data from memory.
+#' Clears all cached data from memory (fixtures, results, teams,
+#' player stats, player details, and AFL API lookups).
 #'
 #' @param verbose Logical. If TRUE, prints cache clearing information.
 #' @return Invisible NULL
 #' @export
 #' @examples
 #' \donttest{
-#' # Clear all cached fixtures
-#' clear_fixture_cache()
-#' 
-#' # Clear with verbose output
-#' clear_fixture_cache(verbose = TRUE)
+#' clear_data_cache()
+#' clear_data_cache(verbose = TRUE)
 #' }
-clear_fixture_cache <- function(verbose = FALSE) {
-  cache_keys <- ls(.torp_cache, pattern = "^fixtures_")
-  
+clear_data_cache <- function(verbose = FALSE) {
+  cache_keys <- ls(.torp_cache)
+
   if (length(cache_keys) > 0) {
     rm(list = cache_keys, envir = .torp_cache)
     if (verbose) {
-      cli::cli_inform("Cleared {length(cache_keys)} fixture cache entr{?y/ies}")
+      cli::cli_inform("Cleared {length(cache_keys)} data cache entr{?y/ies}")
     }
   } else {
     if (verbose) {
-      cli::cli_inform("No fixture cache entries to clear")
+      cli::cli_inform("No data cache entries to clear")
     }
   }
-  
+
   invisible(NULL)
+}
+
+#' Clear Fixture Cache
+#'
+#' Backward-compatible alias for [clear_data_cache()].
+#'
+#' @inheritParams clear_data_cache
+#' @return Invisible NULL
+#' @export
+clear_fixture_cache <- function(verbose = FALSE) {
+  clear_data_cache(verbose = verbose)
 }
 
 #' Get Cache Information
 #'
-#' Returns information about the current fixture cache state.
+#' Returns information about all data cached in memory (fixtures, results,
+#' teams, player stats, player details, and AFL API lookups).
 #'
 #' @return A data frame with cache information including keys, timestamps, and data sizes
 #' @export
 #' @examples
 #' \donttest{
-#' # Check current cache status
 #' get_cache_info()
 #' }
 get_cache_info <- function() {
-  cache_keys <- ls(.torp_cache, pattern = "^fixtures_")
-  
+  cache_keys <- ls(.torp_cache)
+
   if (length(cache_keys) == 0) {
     return(data.frame(
       cache_key = character(0),
@@ -59,36 +68,29 @@ get_cache_info <- function() {
       stringsAsFactors = FALSE
     ))
   }
-  
+
   info_list <- lapply(cache_keys, function(key) {
     cache_entry <- get(key, envir = .torp_cache)
-    age_seconds <- as.numeric(difftime(Sys.time(), cache_entry$timestamp, units = "secs"))
-    
+
+    # Cache entries with $data and $timestamp are load_* caches
+    if (is.list(cache_entry) && !is.null(cache_entry$timestamp)) {
+      age_seconds <- as.numeric(difftime(Sys.time(), cache_entry$timestamp, units = "secs"))
+      n_rows <- if (is.data.frame(cache_entry$data)) nrow(cache_entry$data) else NA_integer_
+    } else {
+      age_seconds <- NA_real_
+      n_rows <- NA_integer_
+    }
+
     data.frame(
       cache_key = key,
-      timestamp = format(cache_entry$timestamp),
+      timestamp = if (!is.na(age_seconds)) format(cache_entry$timestamp) else NA_character_,
       age_seconds = round(age_seconds, 1),
-      data_rows = nrow(cache_entry$data),
+      data_rows = n_rows,
       stringsAsFactors = FALSE
     )
   })
-  
-  do.call(rbind, info_list)
-}
 
-#' Generate cache key for fixture data
-#'
-#' @param seasons Seasons parameter
-#' @param all All parameter
-#' @return Character cache key
-#' @keywords internal
-generate_fixture_cache_key <- function(seasons, all) {
-  if (all) {
-    return("fixtures_all")
-  } else {
-    seasons_str <- paste(sort(seasons), collapse = "_")
-    return(paste0("fixtures_", seasons_str))
-  }
+  do.call(rbind, info_list)
 }
 
 #' Check if cache entry is valid

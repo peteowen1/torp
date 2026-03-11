@@ -18,7 +18,7 @@ cli::cli_h1("Loading data")
 pgd <- load_player_game_data(TRUE, use_disk_cache = TRUE)
 cli::cli_inform("Player game data: {nrow(pgd)} rows, {length(unique(pgd$player_id))} players")
 
-ps <- load_player_stats(TRUE, use_disk_cache = TRUE)
+ps <- load_player_stats(TRUE)
 cli::cli_inform("Player stats: {nrow(ps)} rows")
 
 # Load rosters for all seasons (for zero-TOG expansion of non-selected players)

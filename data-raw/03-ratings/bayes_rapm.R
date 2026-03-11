@@ -252,7 +252,7 @@ season_bpm %>%
   filter(rnk <= 22) %>%
   group_by(player_team) %>%
   summarise(
-    tot_p = sum(pred_bpm * tot_tog) / sum(tot_tog / 18),
+    total_credits = sum(pred_bpm * tot_tog) / sum(tot_tog / 18),
     max_val = sum(pred_bpm),
     plyrs = n()
   ) %>%

@@ -47,23 +47,23 @@ player_game_ratings <- function(season_val = get_afl_season(),
   # _adj columns are already per-80 normalised (done in create_player_game_data),
   # so total_points uses raw credits and p80 columns use _adj directly.
   df |>
-    dplyr::arrange(-.data$tot_p_adj) |>
+    dplyr::arrange(-.data$total_credits_adj) |>
     dplyr::mutate(
       tog_frac = pmax(.data$time_on_ground_percentage / 100, 0.1),
-      total_points = round(.data$tot_p, 1),
-      recv_points = round(.data$recv_pts, 1),
-      disp_points = round(.data$disp_pts, 1),
-      spoil_points = round(.data$spoil_pts, 1),
-      hitout_points = round(.data$hitout_pts, 1),
-      total_p80 = round(.data$tot_p_adj, 1),
-      recv_p80 = round(.data$recv_pts_adj, 1),
-      disp_p80 = round(.data$disp_pts_adj, 1),
-      spoil_p80 = round(.data$spoil_pts_adj, 1),
-      hitout_p80 = round(.data$hitout_pts_adj, 1)
+      total_points = round(.data$total_credits, 1),
+      recv_points = round(.data$recv_credits, 1),
+      disp_points = round(.data$disp_credits, 1),
+      spoil_points = round(.data$spoil_credits, 1),
+      hitout_points = round(.data$hitout_credits, 1),
+      total_p80 = round(.data$total_credits_adj, 1),
+      recv_p80 = round(.data$recv_credits_adj, 1),
+      disp_p80 = round(.data$disp_credits_adj, 1),
+      spoil_p80 = round(.data$spoil_credits_adj, 1),
+      hitout_p80 = round(.data$hitout_credits_adj, 1)
     ) |>
     dplyr::select(
       season = "season", round = "round",
-      player_name = "plyr_nm", position = "pos", team_id = "team_id", team = "tm", opp = "opp",
+      player_name = "player_name", position = "listed_position", team_id = "team_id", team = "team", opp = "opponent",
       total_points = "total_points", recv_points = "recv_points", disp_points = "disp_points",
       spoil_points = "spoil_points", hitout_points = "hitout_points",
       total_p80 = "total_p80", recv_p80 = "recv_p80", disp_p80 = "disp_p80",
@@ -95,7 +95,7 @@ filter_game_data <- function(df, season_val, round_num, matchid, team) {
     df <- df |> dplyr::filter(
       .data$season %in% season_val,
       .data$round %in% round_num,
-      (.data$tm == team | .data$opp == team)
+      (.data$team == .env$team | .data$opponent == .env$team)
     )
     if (nrow(df) == 0) {
       cli::cli_abort(paste0(

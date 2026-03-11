@@ -86,11 +86,11 @@ fix_2025_dt <- data.table::as.data.table(fixtures_2025)
 
 # Build game results for calculate_ladder() — regular season only
 games_2025 <- data.table::data.table(
-  roundnum   = as.integer(fix_2025_dt$round.roundNumber),
-  home_team  = fix_2025_dt$home.team.name,
-  away_team  = fix_2025_dt$away.team.name,
-  home_score = fix_2025_dt$home.score.totalScore,
-  away_score = fix_2025_dt$away.score.totalScore
+  roundnum   = as.integer(fix_2025_dt$round_number),
+  home_team  = fix_2025_dt$home_team_name,
+  away_team  = fix_2025_dt$away_team_name,
+  home_score = fix_2025_dt$home_score,
+  away_score = fix_2025_dt$away_score
 )
 max_round_2025 <- AFL_REGULAR_SEASON_ROUNDS[as.character(2025)]
 if (is.na(max_round_2025)) max_round_2025 <- 24L

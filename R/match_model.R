@@ -18,41 +18,41 @@
 #' @keywords internal
 .build_fixtures_df <- function(fixtures) {
   team_map <- fixtures |>
-    dplyr::group_by(teamId = home.team.providerId) |>
-    dplyr::summarise(team_name = get_mode(home.team.name)) |>
+    dplyr::group_by(team_id = home_team_id) |>
+    dplyr::summarise(team_name = get_mode(home_team_name)) |>
     dplyr::mutate(team_name = torp_replace_teams(team_name))
 
   fix_df <- fixtures |>
-    dplyr::mutate(result = home.score.totalScore - away.score.totalScore) |>
+    dplyr::mutate(result = home_score - away_score) |>
     dplyr::select(
-      providerId, compSeason.year, round.roundNumber,
-      home.team.providerId, away.team.providerId,
-      utcStartTime, venue.name, venue.timezone, result
+      match_id, season, round_number,
+      home_team_id, away_team_id,
+      utc_start_time, venue_name, venue_timezone, result
     ) |>
     tidyr::pivot_longer(
-      cols = dplyr::ends_with("team.providerId"),
+      cols = c("home_team_id", "away_team_id"),
       names_to = "team_type",
-      values_to = "team.providerId"
+      values_to = "team_id"
     ) |>
     dplyr::mutate(
-      venue = torp_replace_venues(venue.name),
+      venue = torp_replace_venues(venue_name),
       team_type = substr(team_type, 1, 4),
       result = ifelse(team_type == "away", -result, result)
     ) |>
     dplyr::select(
-      providerId, season = compSeason.year, round.roundNumber,
-      team_type, teamId = team.providerId,
-      utcStartTime, venue, venue.timezone, result
+      match_id, season, round_number,
+      team_type, team_id,
+      utc_start_time, venue, venue_timezone, result
     ) |>
-    dplyr::left_join(team_map, by = "teamId") |>
+    dplyr::left_join(team_map, by = "team_id") |>
     dplyr::mutate(team_name_season = as.factor(paste(team_name, season)))
 
   # Vectorized timezone conversion: group by timezone
   fix_df <- fix_df |>
-    dplyr::mutate(utc_dt = lubridate::ymd_hms(utcStartTime, tz = "UTC")) |>
-    dplyr::group_by(venue.timezone) |>
+    dplyr::mutate(utc_dt = lubridate::ymd_hms(utc_start_time, tz = "UTC")) |>
+    dplyr::group_by(venue_timezone) |>
     dplyr::mutate(
-      local_dt = lubridate::with_tz(utc_dt, tzone = dplyr::first(venue.timezone)),
+      local_dt = lubridate::with_tz(utc_dt, tzone = dplyr::first(venue_timezone)),
       local_start_time_str = format(local_dt, "%Y-%m-%d %H:%M:%S %Z"),
       game_year = lubridate::year(local_dt),
       game_month = lubridate::month(local_dt),
@@ -63,7 +63,7 @@
       game_hour = lubridate::hour(local_dt) + lubridate::minute(local_dt) / 60 +
         lubridate::second(local_dt) / 3600,
       game_date_numeric = as.numeric(utc_dt),
-      timezone = venue.timezone,
+      timezone = venue_timezone,
       game_prop_through_year = game_yday / ifelse(lubridate::leap_year(game_year), 366, 365),
       game_prop_through_month = game_mday / lubridate::days_in_month(game_month),
       game_prop_through_week = game_wday / 7,
@@ -95,7 +95,7 @@
   team_lineup_df <- teams |>
     dplyr::left_join(
       torp_df,
-      by = c("player.playerId" = "player_id", "season" = "season", "round.roundNumber" = "round")
+      by = c("player_id" = "player_id", "season" = "season", "round_number" = "round")
     ) |>
     dplyr::filter((position.x != "EMERG" & position.x != "SUB") | is.na(position.x))
 
@@ -154,11 +154,11 @@
   torp_sum_cols <- c("torp", "torp_recv", "torp_disp", "torp_spoil", "torp_hitout")
 
   team_rt_df <- team_lineup_df |>
-    dplyr::filter(!is.na(player.playerId)) |>
-    dplyr::mutate(team_name_adj = torp_replace_teams(teamName)) |>
-    dplyr::group_by(providerId, teamId, season, round.roundNumber, teamType) |>
+    dplyr::filter(!is.na(player_id)) |>
+    dplyr::mutate(team_name_adj = torp_replace_teams(team_name)) |>
+    dplyr::group_by(match_id, team_id, season, round_number, team_type) |>
     dplyr::summarise(
-      venue = torp_replace_venues(max(venue.name)),
+      venue = torp_replace_venues(max(venue_name)),
       team_name_adj = max(team_name_adj),
       dplyr::across(dplyr::all_of(c(torp_sum_cols, MATCH_POS_COLS)), ~ sum(.x, na.rm = TRUE)),
       count = dplyr::n(),
@@ -184,7 +184,7 @@
 
   # Home ground detection
   home_ground <- team_rt_df |>
-    dplyr::group_by(teamId, team_name_adj) |>
+    dplyr::group_by(team_id, team_name_adj) |>
     dplyr::summarise(home_ground = get_mode(venue), .groups = "drop") |>
     dplyr::mutate(venue_adj = torp_replace_venues(as.character(home_ground))) |>
     dplyr::left_join(
@@ -195,16 +195,16 @@
 
   # Familiarity: cumulative venue proportion per team
   ground_prop <- team_rt_df |>
-    dplyr::arrange(teamId, season, round.roundNumber) |>
-    dplyr::group_by(teamId) |>
+    dplyr::arrange(team_id, season, round_number) |>
+    dplyr::group_by(team_id) |>
     dplyr::mutate(cum_total_games = dplyr::row_number() - 1) |>
-    dplyr::group_by(teamId, venue) |>
+    dplyr::group_by(team_id, venue) |>
     dplyr::mutate(cum_venue_games = dplyr::row_number() - 1) |>
     dplyr::ungroup() |>
     dplyr::mutate(
       familiarity = ifelse(cum_total_games > 0, cum_venue_games / cum_total_games, 0)
     ) |>
-    dplyr::select(teamId, season, round.roundNumber, venue, familiarity)
+    dplyr::select(team_id, season, round_number, venue, familiarity)
 
   # Distance traveled (Haversine)
   team_dist_df <- fix_df |>
@@ -216,8 +216,8 @@
       by = "venue"
     ) |>
     dplyr::left_join(
-      home_ground |> dplyr::select(teamId, team_lat = Latitude, team_lon = Longitude),
-      by = "teamId"
+      home_ground |> dplyr::select(team_id, team_lat = Latitude, team_lon = Longitude),
+      by = "team_id"
     ) |>
     dplyr::mutate(
       distance = purrr::pmap_dbl(
@@ -227,14 +227,14 @@
       log_dist = log(distance + MATCH_LOG_DIST_OFFSET),
       log_dist = tidyr::replace_na(log_dist, MATCH_LOG_DIST_DEFAULT)
     ) |>
-    dplyr::left_join(ground_prop, by = c("teamId", "season", "round.roundNumber", "venue")) |>
+    dplyr::left_join(ground_prop, by = c("team_id", "season", "round_number", "venue")) |>
     dplyr::mutate(familiarity = tidyr::replace_na(familiarity, 0))
 
   # Days rest
   days_rest <- fix_df |>
-    dplyr::arrange(teamId, utcStartTime) |>
-    dplyr::group_by(teamId, season) |>
-    dplyr::mutate(days_rest = as.numeric(difftime(utcStartTime, dplyr::lag(utcStartTime), units = "days"))) |>
+    dplyr::arrange(team_id, utc_start_time) |>
+    dplyr::group_by(team_id, season) |>
+    dplyr::mutate(days_rest = as.numeric(difftime(utc_start_time, dplyr::lag(utc_start_time), units = "days"))) |>
     dplyr::ungroup() |>
     dplyr::mutate(days_rest = tidyr::replace_na(days_rest, 21))
 
@@ -242,21 +242,21 @@
   team_rt_fix_df <- fix_df |>
     dplyr::mutate(team_name = torp_replace_teams(team_name)) |>
     dplyr::left_join(
-      team_dist_df |> dplyr::select(providerId, teamId, log_dist, familiarity),
-      by = c("providerId", "teamId")
+      team_dist_df |> dplyr::select(match_id, team_id, log_dist, familiarity),
+      by = c("match_id", "team_id")
     ) |>
     dplyr::left_join(
-      days_rest |> dplyr::select(providerId, teamId, days_rest),
-      by = c("providerId", "teamId")
+      days_rest |> dplyr::select(match_id, team_id, days_rest),
+      by = c("match_id", "team_id")
     ) |>
     dplyr::left_join(
       team_rt_df |> dplyr::select(
-        providerId, teamId, season, round.roundNumber,
+        match_id, team_id, season, round_number,
         dplyr::all_of(c(torp_sum_cols, MATCH_POS_COLS, "count"))
       ),
-      by = c("providerId", "teamId", "season", "round.roundNumber")
+      by = c("match_id", "team_id", "season", "round_number")
     ) |>
-    dplyr::group_by(teamId) |>
+    dplyr::group_by(team_id) |>
     tidyr::fill(torp, torp_recv, torp_disp, torp_spoil, torp_hitout) |>
     dplyr::mutate(
       def = ifelse(def == 0, dplyr::lag(def), def),
@@ -284,7 +284,7 @@
 #' @param target_weeks Numeric vector of target round numbers
 #' @param season Target season
 #' @param weather_path Path to historical weather parquet file
-#' @return Tibble with providerId, temp_avg, precipitation_total, wind_avg, humidity_avg, is_roof
+#' @return Tibble with match_id, temp_avg, precipitation_total, wind_avg, humidity_avg, is_roof
 #' @keywords internal
 .load_match_weather <- function(fixtures, all_grounds, target_weeks = NULL,
                                 season = NULL, weather_path = NULL) {
@@ -294,19 +294,24 @@
 
   if (!file.exists(weather_path)) {
     cli::cli_warn("Weather data not found at {weather_path} -- skipping weather features")
-    return(tibble::tibble(providerId = character()))
+    return(tibble::tibble(match_id = character()))
   }
 
-  historical <- arrow::read_parquet(weather_path) |>
-    dplyr::select(providerId, temp_avg, precipitation_total, wind_avg, humidity_avg, is_roof)
+  historical <- arrow::read_parquet(weather_path)
+  # Normalise old weather files with providerId
+  if ("providerId" %in% names(historical) && !"match_id" %in% names(historical)) {
+    names(historical)[names(historical) == "providerId"] <- "match_id"
+  }
+  historical <- historical |>
+    dplyr::select(match_id, temp_avg, precipitation_total, wind_avg, humidity_avg, is_roof)
 
   # Forecast for upcoming matches not in historical data
   if (!is.null(target_weeks) && !is.null(season)) {
     upcoming <- fixtures |>
       dplyr::filter(
-        compSeason.year == season,
-        round.roundNumber %in% target_weeks,
-        !providerId %in% historical$providerId
+        season == .env$season,
+        round_number %in% target_weeks,
+        !match_id %in% historical$match_id
       )
 
     if (nrow(upcoming) > 0) {
@@ -329,7 +334,7 @@
   if (nrow(fixtures_upcoming) == 0) return(tibble::tibble())
 
   fixtures_geo <- fixtures_upcoming |>
-    dplyr::mutate(venue = torp_replace_venues(venue.name)) |>
+    dplyr::mutate(venue = torp_replace_venues(venue_name)) |>
     dplyr::left_join(
       all_grounds |>
         dplyr::select(venue, Latitude, Longitude) |>
@@ -342,7 +347,7 @@
 
   venue_dates <- fixtures_geo |>
     dplyr::mutate(
-      match_date = as.Date(as.POSIXct(utcStartTime, format = "%Y-%m-%dT%H:%M", tz = "UTC"))
+      match_date = as.Date(as.POSIXct(utc_start_time, format = "%Y-%m-%dT%H:%M", tz = "UTC"))
     ) |>
     dplyr::group_by(venue, Latitude, Longitude) |>
     dplyr::summarise(
@@ -393,11 +398,11 @@
   # Aggregate to match-level (3hr window from kickoff)
   fixtures_geo |>
     dplyr::mutate(
-      kickoff_utc = as.POSIXct(utcStartTime, format = "%Y-%m-%dT%H:%M", tz = "UTC")
+      kickoff_utc = as.POSIXct(utc_start_time, format = "%Y-%m-%dT%H:%M", tz = "UTC")
     ) |>
     dplyr::left_join(hourly_df, by = "venue", relationship = "many-to-many") |>
     dplyr::filter(time >= kickoff_utc, time < kickoff_utc + lubridate::hours(3)) |>
-    dplyr::group_by(providerId) |>
+    dplyr::group_by(match_id) |>
     dplyr::summarise(
       temp_avg = mean(temperature_2m, na.rm = TRUE),
       precipitation_total = sum(precipitation, na.rm = TRUE),
@@ -413,78 +418,89 @@
 
 #' Normalise results to a common schema
 #'
-#' Handles both the old CFS schema (from historical torpdata releases with
-#' `match.matchId`, `homeTeamScore.matchScore.*`) and the new fixture schema
-#' (from `get_afl_results()` with `providerId`, `home.score.*`).
-#' Returns a tibble with the legacy column names used downstream.
+#' Handles three result schemas:
+#' \itemize{
+#'   \item **Canonical** (normalised fixtures/results): `match_id`, `home_score`, etc.
+#'   \item **CFS** (old torpdata releases): `match.matchId`, `homeTeamScore.matchScore.*`
+#'   \item **Fixture** (raw API, pre-normalisation): `providerId`, `home.score.*`
+#' }
+#' Returns a tibble with canonical column names.
 #'
-#' @param results Raw results data (may be mixed schema across seasons)
-#' @return Tibble with columns: providerId, homeTeamScore.matchScore.totalScore,
-#'   homeTeamScore.matchScore.goals, homeTeamScore.matchScore.behinds,
-#'   awayTeamScore.matchScore.totalScore, awayTeamScore.matchScore.goals,
-#'   awayTeamScore.matchScore.behinds, match.utcStartTime
+#' @param results Results data (may be mixed schema across seasons)
+#' @return Tibble with columns: match_id, home_score, home_goals, home_behinds,
+#'   away_score, away_goals, away_behinds, utc_start_time
 #' @keywords internal
 .normalise_results_schema <- function(results) {
+  has_canonical <- "match_id" %in% names(results) && "home_score" %in% names(results)
   has_cfs <- "match.matchId" %in% names(results)
   has_fix <- "home.score.totalScore" %in% names(results)
 
-  out_cols <- c("providerId", "homeTeamScore.matchScore.totalScore",
-                "homeTeamScore.matchScore.goals", "homeTeamScore.matchScore.behinds",
-                "awayTeamScore.matchScore.totalScore", "awayTeamScore.matchScore.goals",
-                "awayTeamScore.matchScore.behinds", "match.utcStartTime")
+  if (has_canonical) {
+    # Already normalised — select canonical columns
+    return(results |>
+      dplyr::select(
+        match_id, home_score, home_goals, home_behinds,
+        away_score, away_goals, away_behinds, utc_start_time
+      ))
+  }
 
   if (has_cfs && has_fix) {
     # Mixed schema: CFS (2021-2025) + fixture (2026+) row-bound together.
-    # Split by which schema each row uses, normalise each, rebind.
     is_fix_row <- !is.na(results[["home.score.totalScore"]])
     parts <- list()
     if (any(!is_fix_row)) {
       parts[[1]] <- results[!is_fix_row, ] |>
         dplyr::transmute(
-          providerId = match.matchId,
-          homeTeamScore.matchScore.totalScore,
-          homeTeamScore.matchScore.goals,
-          homeTeamScore.matchScore.behinds,
-          awayTeamScore.matchScore.totalScore,
-          awayTeamScore.matchScore.goals,
-          awayTeamScore.matchScore.behinds,
-          match.utcStartTime
+          match_id = match.matchId,
+          home_score = homeTeamScore.matchScore.totalScore,
+          home_goals = homeTeamScore.matchScore.goals,
+          home_behinds = homeTeamScore.matchScore.behinds,
+          away_score = awayTeamScore.matchScore.totalScore,
+          away_goals = awayTeamScore.matchScore.goals,
+          away_behinds = awayTeamScore.matchScore.behinds,
+          utc_start_time = match.utcStartTime
         )
     }
     if (any(is_fix_row)) {
       parts[[2]] <- results[is_fix_row, ] |>
         dplyr::transmute(
-          providerId = providerId,
-          homeTeamScore.matchScore.totalScore = home.score.totalScore,
-          homeTeamScore.matchScore.goals = home.score.goals,
-          homeTeamScore.matchScore.behinds = home.score.behinds,
-          awayTeamScore.matchScore.totalScore = away.score.totalScore,
-          awayTeamScore.matchScore.goals = away.score.goals,
-          awayTeamScore.matchScore.behinds = away.score.behinds,
-          match.utcStartTime = utcStartTime
+          match_id = providerId,
+          home_score = home.score.totalScore,
+          home_goals = home.score.goals,
+          home_behinds = home.score.behinds,
+          away_score = away.score.totalScore,
+          away_goals = away.score.goals,
+          away_behinds = away.score.behinds,
+          utc_start_time = utcStartTime
         )
     }
     dplyr::bind_rows(parts)
   } else if (has_cfs) {
-    # Pure CFS schema (historical data only)
-    results |>
-      dplyr::select(dplyr::all_of(out_cols[out_cols %in% names(results)])) |>
-      dplyr::rename(providerId = match.matchId)
-  } else if (has_fix) {
-    # Pure fixture schema (2026+)
     results |>
       dplyr::transmute(
-        providerId = providerId,
-        homeTeamScore.matchScore.totalScore = home.score.totalScore,
-        homeTeamScore.matchScore.goals = home.score.goals,
-        homeTeamScore.matchScore.behinds = home.score.behinds,
-        awayTeamScore.matchScore.totalScore = away.score.totalScore,
-        awayTeamScore.matchScore.goals = away.score.goals,
-        awayTeamScore.matchScore.behinds = away.score.behinds,
-        match.utcStartTime = utcStartTime
+        match_id = match.matchId,
+        home_score = homeTeamScore.matchScore.totalScore,
+        home_goals = homeTeamScore.matchScore.goals,
+        home_behinds = homeTeamScore.matchScore.behinds,
+        away_score = awayTeamScore.matchScore.totalScore,
+        away_goals = awayTeamScore.matchScore.goals,
+        away_behinds = awayTeamScore.matchScore.behinds,
+        utc_start_time = match.utcStartTime
+      )
+  } else if (has_fix) {
+    results |>
+      dplyr::transmute(
+        match_id = providerId,
+        home_score = home.score.totalScore,
+        home_goals = home.score.goals,
+        home_behinds = home.score.behinds,
+        away_score = away.score.totalScore,
+        away_goals = away.score.goals,
+        away_behinds = away.score.behinds,
+        utc_start_time = utcStartTime
       )
   } else {
-    cli::cli_abort("Results data has unrecognised schema. Expected match.matchId or home.score.totalScore columns.")
+    cli::cli_abort("Results data has unrecognised schema. Expected match_id, match.matchId, or home.score.totalScore columns.")
   }
 }
 
@@ -507,12 +523,12 @@
                                weight_anchor_date) {
   # Opponent columns for self-join
   opp_cols <- c(
-    "providerId", "team_type",
+    "match_id", "team_type",
     "torp", "torp_recv", "torp_disp", "torp_spoil", "torp_hitout",
     "def", "mid", "fwd", "int", MATCH_INDIVIDUAL_POS,
     "team_name", "team_name_season",
     "log_dist", "familiarity", "days_rest",
-    "team_type_fac", "season", "round.roundNumber", "venue", "count",
+    "team_type_fac", "season", "round_number", "venue", "count",
     "game_year_decimal", "game_prop_through_year", "game_prop_through_month",
     "game_wday_fac", "game_prop_through_day"
   )
@@ -522,13 +538,13 @@
       team_rt_fix_df |>
         dplyr::select(dplyr::all_of(opp_cols)) |>
         dplyr::mutate(type_anti = dplyr::if_else(team_type == "home", "away", "home")),
-      by = c("providerId" = "providerId", "team_type" = "type_anti")
+      by = c("match_id" = "match_id", "team_type" = "type_anti")
     )
 
   # Validate self-join completeness
   na_opp <- sum(is.na(team_mdl_df_tot$torp.y))
   if (na_opp > 0) {
-    bad_ids <- unique(team_mdl_df_tot$providerId[is.na(team_mdl_df_tot$torp.y)])
+    bad_ids <- unique(team_mdl_df_tot$match_id[is.na(team_mdl_df_tot$torp.y)])
     cli::cli_warn("{na_opp} row{?s} have no opponent data after self-join. Affected matches: {paste(utils::head(bad_ids, 5), collapse = ', ')}")
   }
 
@@ -543,27 +559,27 @@
     ) |>
     dplyr::left_join(
       .normalise_results_schema(results),
-      by = "providerId"
+      by = "match_id"
     ) |>
-    dplyr::left_join(xg_df, by = c("providerId" = "match_id")) |>
+    dplyr::left_join(xg_df, by = c("match_id" = "match_id")) |>
     dplyr::mutate(
-      home_shots = homeTeamScore.matchScore.goals + homeTeamScore.matchScore.behinds,
-      away_shots = awayTeamScore.matchScore.goals + awayTeamScore.matchScore.behinds,
+      home_shots = home_goals + home_behinds,
+      away_shots = away_goals + away_behinds,
       score_diff = ifelse(team_type == "home",
-        homeTeamScore.matchScore.totalScore - awayTeamScore.matchScore.totalScore,
-        awayTeamScore.matchScore.totalScore - homeTeamScore.matchScore.totalScore),
+        home_score - away_score,
+        away_score - home_score),
       shot_diff = ifelse(team_type == "home",
         home_shots - away_shots, away_shots - home_shots),
       team_shots = ifelse(team_type == "home", home_shots, away_shots),
       harmean_shots = harmonic_mean(home_shots, away_shots),
       shot_conv = ifelse(team_type == "home",
-        homeTeamScore.matchScore.goals / pmax(home_shots, 1),
-        awayTeamScore.matchScore.goals / pmax(away_shots, 1)),
+        home_goals / pmax(home_shots, 1),
+        away_goals / pmax(away_shots, 1)),
       shot_conv_diff = ifelse(team_type == "home",
-        (homeTeamScore.matchScore.goals / pmax(home_shots, 1)) -
-          (awayTeamScore.matchScore.goals / pmax(away_shots, 1)),
-        (awayTeamScore.matchScore.goals / pmax(away_shots, 1)) -
-          (homeTeamScore.matchScore.goals / pmax(home_shots, 1))),
+        (home_goals / pmax(home_shots, 1)) -
+          (away_goals / pmax(away_shots, 1)),
+        (away_goals / pmax(away_shots, 1)) -
+          (home_goals / pmax(home_shots, 1))),
       xscore_diff = ifelse(team_type == "home", xscore_diff, -xscore_diff),
       team_xscore = ifelse(team_type == "home", home_xscore, away_xscore),
       win = ifelse(score_diff > 0, 1, ifelse(score_diff == 0, 0.5, 0)),
@@ -585,7 +601,7 @@
     dplyr::mutate(
       int_diff = int.x - int.y,
       team_type_fac = team_type_fac.x,
-      total_score = homeTeamScore.matchScore.totalScore + awayTeamScore.matchScore.totalScore,
+      total_score = home_score + away_score,
       total_shots = home_shots + away_shots,
       team_name.x = as.factor(team_name.x),
       team_name.y = as.factor(team_name.y),
@@ -595,7 +611,7 @@
       days_rest_diff_fac = as.factor(round(ifelse(
         days_rest_diff > 3, 4, ifelse(days_rest_diff < -3, -4, days_rest_diff)
       ))),
-      weightz = exp(as.numeric(-(weight_anchor_date - as.Date(match.utcStartTime))) /
+      weightz = exp(as.numeric(-(weight_anchor_date - as.Date(utc_start_time))) /
         MATCH_WEIGHT_DECAY_DAYS),
       weightz = weightz / mean(weightz, na.rm = TRUE),
       shot_weightz = (harmean_shots / mean(harmean_shots, na.rm = TRUE)) * weightz
@@ -605,7 +621,7 @@
   team_mdl_df <- team_mdl_df_tot |>
     dplyr::filter(
       season.x > MATCH_MIN_DATA_SEASON |
-        (season.x == MATCH_MIN_DATA_SEASON & round.roundNumber.x >= MATCH_MIN_DATA_ROUND)
+        (season.x == MATCH_MIN_DATA_SEASON & round_number.x >= MATCH_MIN_DATA_ROUND)
     )
 
   # Adjust total_xpoints scale
@@ -627,7 +643,7 @@
 
   # Join weather and apply log transforms
   team_mdl_df <- team_mdl_df |>
-    dplyr::left_join(weather_df, by = "providerId") |>
+    dplyr::left_join(weather_df, by = "match_id") |>
     dplyr::mutate(
       temp_avg = tidyr::replace_na(temp_avg, stats::median(temp_avg, na.rm = TRUE)),
       wind_avg = tidyr::replace_na(wind_avg, stats::median(wind_avg, na.rm = TRUE)),
@@ -885,10 +901,10 @@ build_team_mdl_df <- function(season = NULL, target_weeks = NULL,
   # Weight anchor: most recent fixture date
   weight_anchor_date <- if (!is.null(target_weeks) && !is.null(season)) {
     target_fix <- fixtures |>
-      dplyr::filter(compSeason.year == season, round.roundNumber %in% target_weeks)
-    if (nrow(target_fix) > 0) as.Date(min(target_fix$utcStartTime)) else Sys.Date()
+      dplyr::filter(season == .env$season, round_number %in% target_weeks)
+    if (nrow(target_fix) > 0) as.Date(min(target_fix$utc_start_time)) else Sys.Date()
   } else {
-    max(as.Date(fix_df$utcStartTime), na.rm = TRUE)
+    max(as.Date(fix_df$utc_start_time), na.rm = TRUE)
   }
   cli::cli_inform("Weight anchor date: {weight_anchor_date}")
 
@@ -962,7 +978,7 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
   # Resolve target weeks
   if (!is.null(weeks)) {
     if (identical(weeks, "all")) {
-      target_weeks <- sort(unique(fixtures$round.roundNumber[fixtures$compSeason.year == season]))
+      target_weeks <- sort(unique(fixtures$round_number[fixtures$season == season]))
     } else {
       target_weeks <- weeks
     }
@@ -973,9 +989,9 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
 
   # Weight anchor date (deterministic)
   target_fixtures <- fixtures |>
-    dplyr::filter(compSeason.year == season, round.roundNumber %in% target_weeks)
+    dplyr::filter(season == .env$season, round_number %in% target_weeks)
   weight_anchor_date <- if (nrow(target_fixtures) > 0) {
-    as.Date(min(target_fixtures$utcStartTime))
+    as.Date(min(target_fixtures$utc_start_time))
   } else {
     Sys.Date()
   }
@@ -1037,7 +1053,7 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
 
   # Overlay injury-adjusted ratings
   team_rt_fix_df <- team_rt_fix_df |>
-    dplyr::left_join(tr_week, by = c("team_name" = "team_name", "season" = "season", "round.roundNumber" = "round")) |>
+    dplyr::left_join(tr_week, by = c("team_name" = "team_name", "season" = "season", "round_number" = "round")) |>
     dplyr::mutate(
       torp = dplyr::coalesce(torp, torp_week),
       torp_recv = dplyr::coalesce(torp_recv, torp_recv_week),
@@ -1067,7 +1083,7 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
     home <- df |>
       dplyr::filter(team_type_fac.x == "home") |>
       dplyr::select(
-        season = season.x, round = round.roundNumber.x, players = count.x, providerId,
+        season = season.x, round = round_number.x, players = count.x, match_id,
         home_team = team_name.x, home_rating = torp.x,
         away_team = team_name.y, away_rating = torp.y,
         pred_xtotal = pred_tot_xscore, pred_xmargin = pred_xscore_diff,
@@ -1083,7 +1099,7 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
       ) |>
       dplyr::filter(team_type_fac.x == "away") |>
       dplyr::select(
-        season = season.x, round = round.roundNumber.x, players = count.x, providerId,
+        season = season.x, round = round_number.x, players = count.x, match_id,
         home_team = team_name.y, home_rating = torp.y,
         away_team = team_name.x, away_rating = torp.x,
         pred_xtotal = pred_tot_xscore, pred_xmargin = pred_xscore_diff,
@@ -1091,14 +1107,14 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
         margin = score_diff, start_time = local_start_time_str, venue = venue.x
       )
     dplyr::bind_rows(home, away) |>
-      dplyr::group_by(season, round, providerId, home_team, home_rating, away_team, away_rating, start_time, venue) |>
+      dplyr::group_by(season, round, match_id, home_team, home_rating, away_team, away_rating, start_time, venue) |>
       dplyr::summarise(
         players = mean(players), pred_xtotal = mean(pred_xtotal),
         pred_margin = mean(pred_margin), pred_win = mean(pred_win),
         margin = mean(margin), .groups = "drop"
       ) |>
       dplyr::mutate(rating_diff = home_rating - away_rating) |>
-      dplyr::select(season, round, providerId:away_rating, start_time, venue, rating_diff, players:margin)
+      dplyr::select(season, round, match_id:away_rating, start_time, venue, rating_diff, players:margin)
   }
 
   # All matches (for analysis)
@@ -1134,13 +1150,18 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
     # Backfill actual margins for completed matches
     completed <- team_mdl_df |>
       dplyr::filter(!is.na(score_diff), team_type_fac.x == "home") |>
-      dplyr::distinct(providerId, .keep_all = TRUE) |>
-      dplyr::transmute(providerId, .actual_margin = score_diff)
+      dplyr::distinct(match_id, .keep_all = TRUE) |>
+      dplyr::transmute(match_id, .actual_margin = score_diff)
 
-    n_backfilled <- sum(is.na(existing$margin) & existing$providerId %in% completed$providerId)
+    # Backward compat: existing predictions may use old providerId column
+    if (!"match_id" %in% names(existing) && "providerId" %in% names(existing)) {
+      data.table::setnames(existing, "providerId", "match_id")
+    }
+
+    n_backfilled <- sum(is.na(existing$margin) & existing$match_id %in% completed$match_id)
     if (n_backfilled > 0) {
       existing <- existing |>
-        dplyr::left_join(completed, by = "providerId") |>
+        dplyr::left_join(completed, by = "match_id") |>
         dplyr::mutate(margin = dplyr::coalesce(margin, .actual_margin)) |>
         dplyr::select(-.actual_margin)
       cli::cli_alert_success("Backfilled {n_backfilled} match margin{?s} from results")
@@ -1150,21 +1171,21 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
     started_ids <- team_mdl_df |>
       dplyr::filter(
         season.x == season,
-        round.roundNumber.x %in% target_weeks,
+        round_number.x %in% target_weeks,
         team_type_fac.x == "home",
         utc_dt <= Sys.time()
       ) |>
-      dplyr::pull(providerId)
+      dplyr::pull(match_id)
 
     week_gms <- week_gms |>
-      dplyr::filter(!providerId %in% started_ids)
+      dplyr::filter(!match_id %in% started_ids)
 
     if (length(started_ids) > 0) {
       cli::cli_alert_info("Keeping existing predictions for {length(started_ids)} already-started match{?es}")
     }
 
     combined <- existing |>
-      dplyr::filter(!providerId %in% week_gms$providerId) |>
+      dplyr::filter(!match_id %in% week_gms$match_id) |>
       dplyr::bind_rows(week_gms) |>
       dplyr::arrange(week)
   } else {
@@ -1252,12 +1273,15 @@ show_predictions <- function(season = get_afl_season(),
       if (!is.null(fresh) && nrow(fresh) > 0) {
         result_margins <- fresh |>
           dplyr::transmute(
-            providerId = providerId,
-            .actual_margin = home.score.totalScore -
-              away.score.totalScore
+            match_id = match_id,
+            .actual_margin = home_score - away_score
           )
+        # Backward compat: preds may use old providerId column
+        if (!"match_id" %in% names(preds) && "providerId" %in% names(preds)) {
+          data.table::setnames(preds, "providerId", "match_id")
+        }
         preds <- preds |>
-          dplyr::left_join(result_margins, by = "providerId") |>
+          dplyr::left_join(result_margins, by = "match_id") |>
           dplyr::mutate(margin = dplyr::coalesce(margin, .actual_margin)) |>
           dplyr::select(-.actual_margin)
       }

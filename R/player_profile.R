@@ -29,7 +29,7 @@ resolve_player <- function(player_name, seasons = TRUE) {
 
   # Deduplicate to unique players (keep latest season entry)
   matches <- matches[order(matches$season, decreasing = TRUE), ]
-  unique_players <- matches[!duplicated(matches$providerId), ]
+  unique_players <- matches[!duplicated(matches$player_id), ]
 
   if (nrow(unique_players) > 1) {
     player_list <- paste(
@@ -43,7 +43,7 @@ resolve_player <- function(player_name, seasons = TRUE) {
   picked <- unique_players[1, ]
 
   list(
-    player_id = picked$providerId,
+    player_id = picked$player_id,
     player_name = paste(picked$firstName, picked$surname),
     team = picked$team,
     position = picked$position
@@ -96,14 +96,11 @@ player_profile <- function(player_name, seasons = TRUE) {
   if (!is.null(raw)) {
     dt <- data.table::as.data.table(raw)
 
-    # Detect the player_id column (varies across data versions)
-    pid_col_candidates <- c("player_id", "player_player_player_player_id")
-    pid_col <- intersect(pid_col_candidates, names(dt))
-    if (length(pid_col) == 0) {
-      cli::cli_warn("No known player ID column found in player stats data. Expected one of: {.val {pid_col_candidates}}.")
+    # player_id column is normalised by load_player_stats()
+    if (!"player_id" %in% names(dt)) {
+      cli::cli_warn("No {.val player_id} column found in player stats data.")
     } else {
-      pid_col <- pid_col[1]
-      dt <- dt[dt[[pid_col]] == pid]
+      dt <- dt[dt[["player_id"]] == pid]
     }
 
     # Detect season column
@@ -116,7 +113,7 @@ player_profile <- function(player_name, seasons = TRUE) {
     # Stat columns to aggregate (sum per season)
     sum_cols <- c("goals", "behinds", "shots_at_goal", "disposals", "kicks",
                   "handballs", "inside50s", "marks", "tackles",
-                  "contested_possessions", "clearances_total_clearances")
+                  "contested_possessions", "clearances")
     # Percentage columns to average per season
     pct_cols <- c("disposal_efficiency", "time_on_ground_percentage")
 
