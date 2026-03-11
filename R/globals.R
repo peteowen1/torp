@@ -143,6 +143,19 @@ utils::globalVariables(c(
 # PSR variables
 utils::globalVariables(c("psr_raw", "psr"))
 
+# player_credit.R stat columns
+utils::globalVariables(c(
+  "spoils", "pressure_acts", "def_half_pressure_acts",
+  "hitouts_to_advantage", "ruck_contests", "ground_ball_gets"
+))
+
+# match_model.R columns
+utils::globalVariables(c(
+  "venue_name", "venue_timezone",
+  "home_goals", "home_behinds", "away_goals", "away_behinds",
+  "round_number.x"
+))
+
 # rlang .env pronoun
 utils::globalVariables(c(".env"))
 

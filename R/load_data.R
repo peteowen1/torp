@@ -80,7 +80,7 @@ update_player_stats <- function(season) {
 
   player_stats <- tryCatch({
     get_afl_player_stats(season) |>
-      dplyr::select(where(~ dplyr::n_distinct(.) > 1)) |>
+      dplyr::select(tidyselect::where(~ dplyr::n_distinct(.) > 1)) |>
       torp_clean_names()
   }, error = function(e) {
     cli::cli_alert_danger("Failed to fetch player stats: {conditionMessage(e)}")
@@ -99,7 +99,7 @@ update_player_stats <- function(season) {
     player_stats$season <- as.integer(season)
   }
 
-  file_name <- glue::glue("player_stats_{season}")
+  file_name <- paste0("player_stats_", season)
   save_to_release(df = player_stats, file_name = file_name, release_tag = "player_stats-data")
 
   cli::cli_inform("Saved player stats: {file_name} ({nrow(player_stats)} rows)")
