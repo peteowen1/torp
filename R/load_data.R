@@ -301,6 +301,7 @@ file_reader <- function(file_name, release_tag) {
     }
     NULL
   }, error = function(e) {
+    cli::cli_warn("Corrupt disk cache for {prefix} {season} -- deleting and re-fetching: {conditionMessage(e)}")
     unlink(disk_path)
     NULL
   })
@@ -317,7 +318,9 @@ file_reader <- function(file_name, release_tag) {
   disk_path <- file.path(cache_dir, sprintf("cfs_%s_%d.parquet", prefix, season))
   tryCatch(
     arrow::write_parquet(data, disk_path),
-    error = function(e) NULL
+    error = function(e) {
+      cli::cli_warn("Failed to write disk cache for {prefix} {season}: {conditionMessage(e)}")
+    }
   )
 }
 
@@ -528,7 +531,8 @@ load_fixtures <- function(seasons = NULL, all = FALSE, use_cache = TRUE, cache_t
     use_cache = use_cache,
     cache_ttl = cache_ttl,
     verbose = verbose,
-    columns = columns
+    columns = columns,
+    use_disk_cache = use_disk_cache
   )
 }
 

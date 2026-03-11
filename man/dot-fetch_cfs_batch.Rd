@@ -22,7 +22,7 @@ A tibble of all parsed results row-bound together.
 }
 \description{
 Downloads multiple CFS API JSON responses in parallel using
-\code{\link[curl:multi_download]{curl::multi_download()}}, then parses each with a supplied parser.
-Falls back to sequential \code{\link[httr:GET]{httr::GET()}} if parallel download fails.
+in-memory \code{\link[curl:curl_fetch]{curl::curl_fetch_multi()}}, then parses each with a supplied
+parser. No disk I/O — callers handle caching at the season level.
 }
 \keyword{internal}

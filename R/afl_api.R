@@ -16,8 +16,8 @@
 #' Batch-fetch JSON from CFS API endpoints
 #'
 #' Downloads multiple CFS API JSON responses in parallel using
-#' [curl::multi_download()], then parses each with a supplied parser.
-#' Falls back to sequential [httr::GET()] if parallel download fails.
+#' in-memory [curl::curl_fetch_multi()], then parses each with a supplied
+#' parser. No disk I/O — callers handle caching at the season level.
 #'
 #' @param ids Character vector of endpoint suffixes (e.g. match IDs).
 #' @param url_template Character. `sprintf()`-style template with one `%s` placeholder.
@@ -30,110 +30,48 @@
 .fetch_cfs_batch <- function(ids, url_template, token, parse_fn, label = "data") {
   if (length(ids) == 0) return(tibble::tibble())
 
-  # --- Incremental disk cache: skip IDs already cached ---
-  cache_dir <- file.path(get_disk_cache_dir(), label)
-  if (!dir.exists(cache_dir)) dir.create(cache_dir, recursive = TRUE, showWarnings = FALSE)
+  cli::cli_inform("Fetching {label} for {length(ids)} match{?es} in parallel...")
 
-  cached_results <- vector("list", length(ids))
-  fetch_idx <- integer(0)
+  pool <- curl::new_pool(total_con = 200L, host_con = 50L)
+  results <- vector("list", length(ids))
+  n_failed <- 0L
 
   for (i in seq_along(ids)) {
-    cache_file <- file.path(cache_dir, paste0(ids[i], ".parquet"))
-    if (file.exists(cache_file)) {
-      tryCatch({
-        cached_results[[i]] <- arrow::read_parquet(cache_file)
-      }, error = function(e) {
-        unlink(cache_file)
-        fetch_idx <<- c(fetch_idx, i)
-      })
-    } else {
-      fetch_idx <- c(fetch_idx, i)
-    }
-  }
+    url <- sprintf(url_template, ids[i])
+    h <- curl::new_handle(httpheader = paste0("x-media-mis-token: ", token))
 
-  n_cached <- length(ids) - length(fetch_idx)
-  if (n_cached > 0) {
-    cli::cli_inform("Loaded {n_cached} cached {label} from disk, fetching {length(fetch_idx)} new...")
-  } else {
-    cli::cli_inform("Fetching {label} for {length(ids)} match{?es} in parallel...")
-  }
-
-  # --- Fetch only uncached matches ---
-  if (length(fetch_idx) > 0) {
-    fetch_ids <- ids[fetch_idx]
-    pool <- curl::new_pool(total_con = 200L, host_con = 50L)
-    fetch_results <- vector("list", length(fetch_ids))
-    n_failed <- 0L
-
-    for (j in seq_along(fetch_ids)) {
-      url <- sprintf(url_template, fetch_ids[j])
-      h <- curl::new_handle(httpheader = paste0("x-media-mis-token: ", token))
-
-      local({
-        jj <- j
-        mid <- fetch_ids[j]
-        curl::curl_fetch_multi(url, done = function(resp) {
-          if (resp$status_code == 200L) {
-            tryCatch({
-              json <- jsonlite::fromJSON(rawToChar(resp$content), flatten = TRUE)
-              fetch_results[[jj]] <<- parse_fn(json, mid)
-            }, error = function(e) {
-              cli::cli_alert_danger("Failed to parse {label} for {mid}: {conditionMessage(e)}")
-            })
-          } else {
-            n_failed <<- n_failed + 1L
-          }
-        }, fail = function(msg) {
+    local({
+      idx <- i
+      mid <- ids[i]
+      curl::curl_fetch_multi(url, done = function(resp) {
+        if (resp$status_code == 200L) {
+          tryCatch({
+            json <- jsonlite::fromJSON(rawToChar(resp$content), flatten = TRUE)
+            results[[idx]] <<- parse_fn(json, mid)
+          }, error = function(e) {
+            cli::cli_alert_danger("Failed to parse {label} for {mid}: {conditionMessage(e)}")
+          })
+        } else {
           n_failed <<- n_failed + 1L
-        }, handle = h, pool = pool)
-      })
-    }
-
-    curl::multi_run(pool = pool)
-
-    if (n_failed > 0) {
-      cli::cli_alert_danger("{n_failed} of {length(fetch_ids)} {label} request{?s} failed")
-    }
-
-    # Write newly fetched results to disk cache
-    for (j in seq_along(fetch_ids)) {
-      if (!is.null(fetch_results[[j]]) && nrow(fetch_results[[j]]) > 0) {
-        cache_file <- file.path(cache_dir, paste0(fetch_ids[j], ".parquet"))
-        tryCatch(
-          arrow::write_parquet(fetch_results[[j]], cache_file),
-          error = function(e) NULL
-        )
-        cached_results[[fetch_idx[j]]] <- fetch_results[[j]]
-      }
-    }
+          cli::cli_alert_danger("HTTP {resp$status_code} for {label} {mid}")
+        }
+      }, fail = function(msg) {
+        n_failed <<- n_failed + 1L
+        cli::cli_alert_danger("Connection failed for {label} {mid}: {msg}")
+      }, handle = h, pool = pool)
+    })
   }
 
-  out <- purrr::list_rbind(purrr::compact(cached_results))
+  curl::multi_run(pool = pool)
+
+  if (n_failed > 0) {
+    cli::cli_alert_danger("{n_failed} of {length(ids)} {label} request{?s} failed")
+  }
+
+  out <- purrr::list_rbind(purrr::compact(results))
   if (is.null(out) || nrow(out) == 0) return(tibble::tibble())
   out
 }
-
-#' Sequential fallback for CFS API fetching
-#' @inheritParams .fetch_cfs_batch
-#' @keywords internal
-.fetch_cfs_sequential <- function(ids, url_template, token, parse_fn, label = "data") {
-  cli::cli_inform("Fetching {label} for {length(ids)} match{?es} sequentially...")
-  results <- purrr::map(ids, function(mid) {
-    tryCatch({
-      url <- sprintf(url_template, mid)
-      resp <- httr::GET(url, httr::add_headers("x-media-mis-token" = token))
-      httr::stop_for_status(resp)
-      json <- httr::content(resp, as = "text", encoding = "UTF-8") |>
-        jsonlite::fromJSON(flatten = TRUE)
-      parse_fn(json, mid)
-    }, error = function(e) {
-      cli::cli_alert_danger("Failed to fetch {label} for {mid}: {conditionMessage(e)}")
-      NULL
-    })
-  })
-  purrr::list_rbind(purrr::compact(results))
-}
-
 
 # Bulk Multi-Season Fetcher (Player Details) ----
 # Gathers all team-season tuples, then fires one in-memory curl pool.
@@ -197,9 +135,15 @@
             out <- .parse_squad_json(json)
             if (!is.null(out)) out$.actual_season <- team_season_info[[idx]]$actual_season
             details_list[[idx]] <<- out
-          }, error = function(e) NULL)
+          }, error = function(e) {
+            cli::cli_alert_danger("Failed to parse player details for team-season {idx}: {conditionMessage(e)}")
+          })
+        } else {
+          cli::cli_alert_danger("HTTP {resp$status_code} fetching player details for team-season {idx}")
         }
-      }, fail = function(msg) NULL, handle = h, pool = pool)
+      }, fail = function(msg) {
+        cli::cli_alert_danger("Connection failed for player details team-season {idx}: {msg}")
+      }, handle = h, pool = pool)
     })
   }
 
@@ -855,9 +799,11 @@ get_afl_player_details <- function(season = NULL) {
           }, error = function(e) {
             cli::cli_alert_danger("Failed to parse squad for team {team_ids[idx]}: {conditionMessage(e)}")
           })
+        } else {
+          cli::cli_alert_danger("HTTP {resp$status_code} fetching squad for team {team_ids[idx]}")
         }
       }, fail = function(msg) {
-        cli::cli_alert_danger("Failed to fetch squad: {msg}")
+        cli::cli_alert_danger("Failed to fetch squad for team {team_ids[idx]}: {msg}")
       }, handle = h, pool = pool)
     })
   }
