@@ -371,7 +371,7 @@ cat(sprintf("  Position groups: %s
 POSITION_BALANCE_LAMBDA <- 0.1
 
 # L2 (ridge) penalty on count-based stat weights to prevent overfitting ----
-STAT_WEIGHT_LAMBDA <- 0.25
+STAT_WEIGHT_LAMBDA <- 0.1
 
 # Names of count-based stat weight params subject to L2 penalty
 L2_PARAM_NAMES <- c("bounce_wt",
@@ -949,13 +949,13 @@ par_lower <- c(
   # --- EPV/scale params (disp) ---
   disp_neg_offset        = 0,
   disp_pos_offset        = 0,
-  disp_scale             = 1,
+  disp_scale             = 0.5,
   # --- EPV/scale params (recv) ---
   recv_neg_mult          = 1,
   recv_neg_offset        = 0,
   recv_pos_mult          = 1,
   recv_pos_offset        = 0,
-  recv_scale             = 1,
+  recv_scale             = 0.5,
   # --- Stat weights: disp component (all [-10, 10]; L2 provides real constraint) ---
   bounce_wt              = -10,
   inside50s_wt           = -10,
@@ -1011,13 +1011,13 @@ par_upper <- c(
   # --- EPV/scale params (disp) ---
   disp_neg_offset        = 0,
   disp_pos_offset        = 0,
-  disp_scale             = 1,
+  disp_scale             = 0.5,
   # --- EPV/scale params (recv) ---
   recv_neg_mult          = 1,
   recv_neg_offset        = 0,
   recv_pos_mult          = 1,
   recv_pos_offset        = 0,
-  recv_scale             = 1,
+  recv_scale             = 0.5,
   # --- Stat weights: disp component ---
   bounce_wt              = 10,
   inside50s_wt           = 10,

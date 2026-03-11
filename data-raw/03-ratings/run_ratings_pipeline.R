@@ -36,7 +36,7 @@ source(here::here("data-raw/01-data/daily_release.R"))
 if (!exists("SEASONS", envir = .GlobalEnv)) SEASONS <- TRUE
 
 # Whether to re-fetch player_stats + teams from fitzRoy
-if (!exists("REFRESH_UPSTREAM", envir = .GlobalEnv)) REFRESH_UPSTREAM <- FALSE
+if (!exists("REFRESH_UPSTREAM", envir = .GlobalEnv)) REFRESH_UPSTREAM <- TRUE
 
 # Whether to rebuild player game tables from PBP
 if (!exists("REBUILD_PLAYER_GAME", envir = .GlobalEnv)) REBUILD_PLAYER_GAME <- TRUE

@@ -319,3 +319,9 @@ utils::globalVariables(c(
   "home_rating", "away_rating", "start_time", "players",
   "pred_margin", "rating_diff"
 ))
+
+# Team profile variables
+utils::globalVariables(c(
+  "pf", "pa", "loss", "draw", "round", "last_match",
+  "..mean_cols", "..sum_cols", "..display_cols"
+))
