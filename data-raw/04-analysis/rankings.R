@@ -18,7 +18,7 @@ inj_df <- read_html(url) %>%
     )
   )
 
-week_teams <- load_teams() %>% filter(round.roundNumber == get_afl_week("next"))
+week_teams <- load_teams() %>% filter(round_number == get_afl_week("next"))
 #
 tr <- torp_ratings(2025, get_afl_week("next")) %>%
   left_join(inj_df, by = c("player_name" = "player")) %>%

@@ -472,7 +472,8 @@ get_afl_lineups <- function(season = NULL, round = NULL) {
   result <- torp_clean_names(result)
 
   # Rename for clarity
-  renames <- c(provider_id = "match_id", player_jumper_number = "jumper_number")
+  renames <- c(provider_id = "match_id", player_jumper_number = "jumper_number",
+               round_round_number = "round_number")
   for (old_nm in names(renames)) {
     if (old_nm %in% names(result)) {
       names(result)[names(result) == old_nm] <- renames[[old_nm]]

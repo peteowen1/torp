@@ -672,8 +672,9 @@ load_player_skills <- function(seasons = get_afl_season(), use_disk_cache = FALS
   nms <- names(df)
 
   # Already clean — nothing to do
-
-  if ("player_id" %in% nms && !"player.playerId" %in% nms) return(df)
+  already_clean <- all(c("player_id", "team_id", "match_id") %in% nms) &&
+    !"player.playerId" %in% nms
+  if (already_clean) return(df)
 
   # Strip nested player. prefixes, then clean to snake_case
   nms <- sub("^player\\.playerName\\.", "", nms)
@@ -691,6 +692,18 @@ load_player_skills <- function(seasons = get_afl_season(), use_disk_cache = FALS
     if (old_nm %in% names(df)) {
       names(df)[names(df) == old_nm] <- renames[[old_nm]]
     }
+  }
+
+  # Validate critical columns exist after normalisation
+  required <- c("player_id", "match_id", "team_id")
+  missing <- setdiff(required, names(df))
+  if (length(missing) > 0) {
+    cli::cli_warn(c(
+      "Column normalisation may be incomplete: expected columns missing.",
+      "i" = "Missing: {paste(missing, collapse = ', ')}",
+      "i" = "Available: {paste(utils::head(names(df), 20), collapse = ', ')}",
+      "i" = "This may indicate an upstream API schema change."
+    ))
   }
 
   df
