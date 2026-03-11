@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">torp</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.0.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.1.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -45,7 +45,8 @@
     <h2 id="ref-usage">Usage<a class="anchor" aria-label="anchor" href="#ref-usage"></a></h2>
     <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">load_player_stats</span><span class="op">(</span></span>
 <span>  seasons <span class="op">=</span> <span class="fu"><a href="get_afl_season.html">get_afl_season</a></span><span class="op">(</span><span class="op">)</span>,</span>
-<span>  use_disk_cache <span class="op">=</span> <span class="cn">FALSE</span>,</span>
+<span>  use_disk_cache <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>  refresh <span class="op">=</span> <span class="cn">FALSE</span>,</span>
 <span>  columns <span class="op">=</span> <span class="cn">NULL</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
@@ -59,7 +60,14 @@
 
 
 <dt id="arg-use-disk-cache">use_disk_cache<a class="anchor" aria-label="anchor" href="#arg-use-disk-cache"></a></dt>
-<dd><p>Logical. If TRUE, uses persistent disk cache for faster repeated loads. Default is FALSE.</p></dd>
+<dd><p>Logical. If TRUE (default), caches completed past seasons
+to disk so they load instantly on subsequent calls. Current season is always
+fetched fresh from the API.</p></dd>
+
+
+<dt id="arg-refresh">refresh<a class="anchor" aria-label="anchor" href="#arg-refresh"></a></dt>
+<dd><p>Logical. If TRUE, clears all caches and fetches fresh data
+from the API for all seasons. Default is FALSE.</p></dd>
 
 
 <dt id="arg-columns">columns<a class="anchor" aria-label="anchor" href="#arg-columns"></a></dt>

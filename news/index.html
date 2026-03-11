@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">torp</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.0.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.1.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -36,6 +36,37 @@
       <small>Source: <a href="https://github.com/peteowen1/torp/blob/main/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="1.1.0" id="torp-110-2026-03-10">torp 1.1.0 (2026-03-10)<a class="anchor" aria-label="anchor" href="#torp-110-2026-03-10"></a></h2>
+<div class="section level3">
+<h3 id="breaking-changes-1-1-0">Breaking Changes<a class="anchor" aria-label="anchor" href="#breaking-changes-1-1-0"></a></h3>
+<ul><li>
+<strong>Standardised all column names to canonical <code>snake_case</code></strong> across the entire torp ecosystem. Old column names from multiple API schema versions (CFS camelCase, v2 dot-notation, ad-hoc abbreviations) are now normalised at load/fetch time via central column maps in <code>R/column_schema.R</code>. Key renames include:
+<ul><li>Fixtures: <code>providerId</code> → <code>match_id</code>, <code>compSeason.year</code> → <code>season</code>, <code>round.roundNumber</code> → <code>round_number</code>, <code>home.score.totalScore</code> → <code>home_score</code>
+</li>
+<li>PBP: <code>home_team_team_name</code> → <code>home_team_name</code>, <code>home_team_score_total_score</code> → <code>home_score</code>
+</li>
+<li>Chains: <code>matchId</code> → <code>match_id</code>, <code>playerId</code> → <code>player_id</code>, <code>displayOrder</code> → <code>display_order</code>
+</li>
+<li>Player stats: <code>extended_stats_spoils</code> → <code>spoils</code>, <code>clearances_total_clearances</code> → <code>clearances</code>
+</li>
+<li>Player game data: <code>plyr_nm</code> → <code>player_name</code>, <code>tot_p</code> → <code>total_credits</code>, <code>recv_pts</code> → <code>recv_credits</code>, <code>tm</code> → <code>team</code>
+</li>
+</ul></li>
+<li>Old parquet files with legacy column names are normalised automatically at load time — no data regeneration required for backward compatibility.</li>
+</ul></div>
+<div class="section level3">
+<h3 id="new-features-1-1-0">New Features<a class="anchor" aria-label="anchor" href="#new-features-1-1-0"></a></h3>
+<ul><li>
+<strong>Central column schema infrastructure</strong> (<code>R/column_schema.R</code>): per-data-type column maps (<code>FIXTURE_COL_MAP</code>, <code>PBP_COL_MAP</code>, <code>CHAINS_COL_MAP</code>, <code>PLAYER_STATS_COL_MAP</code>, <code>PLAYER_GAME_COL_MAP</code>, <code>TEAMS_COL_MAP</code>) and a generic <code><a href="../reference/dot-normalise_columns.html">.normalise_columns()</a></code> function that remaps old names at load time.</li>
+</ul></div>
+<div class="section level3">
+<h3 id="bug-fixes-1-1-0">Bug Fixes<a class="anchor" aria-label="anchor" href="#bug-fixes-1-1-0"></a></h3>
+<ul><li><p>Fixed dplyr data masking bug in <code><a href="../reference/filter_game_data.html">filter_game_data()</a></code> where renaming column <code>tm</code> → <code>team</code> caused it to shadow the function parameter. Now uses <code>.env$</code> pronoun for disambiguation.</p></li>
+<li><p>Fixed <code><a href="../reference/get_afl_player_stats.html">get_afl_player_stats()</a></code> returning <code>providerId</code> instead of <code>match_id</code> in output.</p></li>
+<li><p>Fixed <code><a href="../reference/detect_chains_columns.html">detect_chains_columns()</a></code> silently returning wrong column name mappings when passed a plain data.frame (non-data.table) with camelCase columns.</p></li>
+</ul><hr></div>
+</div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="1.0.0" id="torp-100-2026-03-05">torp 1.0.0 (2026-03-05)<a class="anchor" aria-label="anchor" href="#torp-100-2026-03-05"></a></h2>
 <div class="section level3">

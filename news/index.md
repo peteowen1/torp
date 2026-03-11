@@ -1,5 +1,56 @@
 # Changelog
 
+## torp 1.1.0 (2026-03-10)
+
+### Breaking Changes
+
+- **Standardised all column names to canonical `snake_case`** across the
+  entire torp ecosystem. Old column names from multiple API schema
+  versions (CFS camelCase, v2 dot-notation, ad-hoc abbreviations) are
+  now normalised at load/fetch time via central column maps in
+  `R/column_schema.R`. Key renames include:
+  - Fixtures: `providerId` → `match_id`, `compSeason.year` → `season`,
+    `round.roundNumber` → `round_number`, `home.score.totalScore` →
+    `home_score`
+  - PBP: `home_team_team_name` → `home_team_name`,
+    `home_team_score_total_score` → `home_score`
+  - Chains: `matchId` → `match_id`, `playerId` → `player_id`,
+    `displayOrder` → `display_order`
+  - Player stats: `extended_stats_spoils` → `spoils`,
+    `clearances_total_clearances` → `clearances`
+  - Player game data: `plyr_nm` → `player_name`, `tot_p` →
+    `total_credits`, `recv_pts` → `recv_credits`, `tm` → `team`
+- Old parquet files with legacy column names are normalised
+  automatically at load time — no data regeneration required for
+  backward compatibility.
+
+### New Features
+
+- **Central column schema infrastructure** (`R/column_schema.R`):
+  per-data-type column maps (`FIXTURE_COL_MAP`, `PBP_COL_MAP`,
+  `CHAINS_COL_MAP`, `PLAYER_STATS_COL_MAP`, `PLAYER_GAME_COL_MAP`,
+  `TEAMS_COL_MAP`) and a generic
+  [`.normalise_columns()`](https://peteowen1.github.io/torp/reference/dot-normalise_columns.md)
+  function that remaps old names at load time.
+
+### Bug Fixes
+
+- Fixed dplyr data masking bug in
+  [`filter_game_data()`](https://peteowen1.github.io/torp/reference/filter_game_data.md)
+  where renaming column `tm` → `team` caused it to shadow the function
+  parameter. Now uses `.env$` pronoun for disambiguation.
+
+- Fixed
+  [`get_afl_player_stats()`](https://peteowen1.github.io/torp/reference/get_afl_player_stats.md)
+  returning `providerId` instead of `match_id` in output.
+
+- Fixed
+  [`detect_chains_columns()`](https://peteowen1.github.io/torp/reference/detect_chains_columns.md)
+  silently returning wrong column name mappings when passed a plain
+  data.frame (non-data.table) with camelCase columns.
+
+------------------------------------------------------------------------
+
 ## torp 1.0.0 (2026-03-05)
 
 ### Breaking Changes

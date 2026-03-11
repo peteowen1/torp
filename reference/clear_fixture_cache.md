@@ -1,6 +1,7 @@
 # Clear Fixture Cache
 
-Clears the cached fixture data from memory.
+Backward-compatible alias for
+[`clear_data_cache()`](https://peteowen1.github.io/torp/reference/clear_data_cache.md).
 
 ## Usage
 
@@ -17,16 +18,3 @@ clear_fixture_cache(verbose = FALSE)
 ## Value
 
 Invisible NULL
-
-## Examples
-
-``` r
-# \donttest{
-# Clear all cached fixtures
-clear_fixture_cache()
-
-# Clear with verbose output
-clear_fixture_cache(verbose = TRUE)
-#> No fixture cache entries to clear
-# }
-```

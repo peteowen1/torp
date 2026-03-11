@@ -39,5 +39,5 @@ for upcoming matches via Open-Meteo API.
 
 ## Value
 
-Tibble with providerId, temp_avg, precipitation_total, wind_avg,
+Tibble with match_id, temp_avg, precipitation_total, wind_avg,
 humidity_avg, is_roof

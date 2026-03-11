@@ -9,7 +9,7 @@ player performance data used by the TORP ratings pipeline."><meta property="og:i
 
     <a class="navbar-brand me-2" href="../index.html">torp</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.0.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.1.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -84,11 +84,11 @@ uses <code><a href="default_credit_params.html">default_credit_params()</a></cod
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
     <p>A data.table with one row per player per match, containing:
 identifiers (<code>player_id</code>, <code>match_id</code>, <code>season</code>, <code>round</code>,
-<code>plyr_nm</code>, <code>tm</code>, <code>opp</code>, <code>pos</code>, <code>position</code>, <code>team_id</code>,
-<code>utc_start_time</code>), position-adjusted TORP credits (<code>tot_p_adj</code>,
-<code>recv_pts_adj</code>, <code>disp_pts_adj</code>, <code>spoil_pts_adj</code>, <code>hitout_pts_adj</code>),
-raw TORP credits (<code>tot_p</code>, <code>recv_pts</code>, <code>disp_pts</code>, <code>spoil_pts</code>,
-<code>hitout_pts</code>), and key box-score stats.</p>
+<code>player_name</code>, <code>team</code>, <code>opponent</code>, <code>listed_position</code>, <code>position</code>, <code>team_id</code>,
+<code>utc_start_time</code>), position-adjusted TORP credits (<code>total_credits_adj</code>,
+<code>recv_credits_adj</code>, <code>disp_credits_adj</code>, <code>spoil_credits_adj</code>, <code>hitout_credits_adj</code>),
+raw TORP credits (<code>total_credits</code>, <code>recv_credits</code>, <code>disp_credits</code>, <code>spoil_credits</code>,
+<code>hitout_credits</code>), and key box-score stats.</p>
     </div>
     <div class="section level2">
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>

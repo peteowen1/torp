@@ -214,6 +214,8 @@ Utilities for model development and cross-validation
 
 In-memory and disk caching utilities
 
+- [`clear_data_cache()`](https://peteowen1.github.io/torp/reference/clear_data_cache.md)
+  : Clear Data Cache
 - [`clear_disk_cache()`](https://peteowen1.github.io/torp/reference/clear_disk_cache.md)
   : Clear Disk Cache
 - [`clear_fixture_cache()`](https://peteowen1.github.io/torp/reference/clear_fixture_cache.md)

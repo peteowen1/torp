@@ -48,11 +48,12 @@ create_player_game_data(
 ## Value
 
 A data.table with one row per player per match, containing: identifiers
-(`player_id`, `match_id`, `season`, `round`, `plyr_nm`, `tm`, `opp`,
-`pos`, `position`, `team_id`, `utc_start_time`), position-adjusted TORP
-credits (`tot_p_adj`, `recv_pts_adj`, `disp_pts_adj`, `spoil_pts_adj`,
-`hitout_pts_adj`), raw TORP credits (`tot_p`, `recv_pts`, `disp_pts`,
-`spoil_pts`, `hitout_pts`), and key box-score stats.
+(`player_id`, `match_id`, `season`, `round`, `player_name`, `team`,
+`opponent`, `listed_position`, `position`, `team_id`, `utc_start_time`),
+position-adjusted TORP credits (`total_credits_adj`, `recv_credits_adj`,
+`disp_credits_adj`, `spoil_credits_adj`, `hitout_credits_adj`), raw TORP
+credits (`total_credits`, `recv_credits`, `disp_credits`,
+`spoil_credits`, `hitout_credits`), and key box-score stats.
 
 ## Details
 

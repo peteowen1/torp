@@ -8,7 +8,8 @@ repository](https://github.com/peteowen1/torpdata)
 ``` r
 load_player_details(
   seasons = get_afl_season(),
-  use_disk_cache = FALSE,
+  use_disk_cache = TRUE,
+  refresh = FALSE,
   columns = NULL
 )
 ```
@@ -23,8 +24,14 @@ load_player_details(
 
 - use_disk_cache:
 
-  Logical. If TRUE, uses persistent disk cache for faster repeated
-  loads. Default is FALSE.
+  Logical. If TRUE (default), caches completed past seasons to disk so
+  they load instantly on subsequent calls. Current season is always
+  fetched fresh from the API.
+
+- refresh:
+
+  Logical. If TRUE, clears all caches and fetches fresh data from the
+  API for all seasons. Default is FALSE.
 
 - columns:
 

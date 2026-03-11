@@ -1,6 +1,7 @@
 # Get Cache Information
 
-Returns information about the current fixture cache state.
+Returns information about all data cached in memory (fixtures, results,
+teams, player stats, player details, and AFL API lookups).
 
 ## Usage
 
@@ -17,7 +18,6 @@ sizes
 
 ``` r
 # \donttest{
-# Check current cache status
 get_cache_info()
 #> [1] cache_key   timestamp   age_seconds data_rows  
 #> <0 rows> (or 0-length row.names)

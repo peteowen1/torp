@@ -1,11 +1,16 @@
 # Normalise results to a common schema
 
-Handles both the old CFS schema (from historical torpdata releases with
-`match.matchId`, `homeTeamScore.matchScore.*`) and the new fixture
-schema (from
-[`get_afl_results()`](https://peteowen1.github.io/torp/reference/get_afl_results.md)
-with `providerId`, `home.score.*`). Returns a tibble with the legacy
-column names used downstream.
+Handles three result schemas:
+
+- **Canonical** (normalised fixtures/results): `match_id`, `home_score`,
+  etc.
+
+- **CFS** (old torpdata releases): `match.matchId`,
+  `homeTeamScore.matchScore.*`
+
+- **Fixture** (raw API, pre-normalisation): `providerId`, `home.score.*`
+
+Returns a tibble with canonical column names.
 
 ## Usage
 
@@ -17,11 +22,9 @@ column names used downstream.
 
 - results:
 
-  Raw results data (may be mixed schema across seasons)
+  Results data (may be mixed schema across seasons)
 
 ## Value
 
-Tibble with columns: providerId, homeTeamScore.matchScore.totalScore,
-homeTeamScore.matchScore.goals, homeTeamScore.matchScore.behinds,
-awayTeamScore.matchScore.totalScore, awayTeamScore.matchScore.goals,
-awayTeamScore.matchScore.behinds, match.utcStartTime
+Tibble with columns: match_id, home_score, home_goals, home_behinds,
+away_score, away_goals, away_behinds, utc_start_time

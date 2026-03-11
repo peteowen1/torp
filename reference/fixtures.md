@@ -14,9 +14,9 @@ fixtures
 
 A data frame with fixture information including match IDs, start times,
 round details, home/away team information, venue details, and season
-metadata. Key columns include `id`, `providerId`, `utcStartTime`,
-`status`, `round.roundNumber`, `home.team.name`, `away.team.name`,
-`venue.name`, and `compSeason.year`.
+metadata. Key columns include `match_id`, `utc_start_time`, `status`,
+`round_number`, `home_team_name`, `away_team_name`, `venue_name`, and
+`season`.
 
 ## Source
 

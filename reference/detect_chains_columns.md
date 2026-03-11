@@ -1,8 +1,9 @@
 # Detect chains column naming convention
 
-Chains data uses camelCase (matchId, displayOrder, teamId) while PBP
-data after clean_pbp() uses snake_case (match_id, display_order,
-team_id). This detects which convention is present.
+Chains data is normalised to snake_case at load/fetch time via
+[`.normalise_chains_columns()`](https://peteowen1.github.io/torp/reference/dot-normalise_chains_columns.md).
+This function handles both conventions for backward compatibility with
+any un-normalised data.
 
 ## Usage
 

@@ -44,9 +44,9 @@ load_ep_wp_charts(
 
 A data frame containing EP/WP chart data with columns including
 `match_id`, `season`, `round_number`, `period`, `total_seconds`,
-`home_team_team_name`, `away_team_team_name`, `team`, `exp_pts`,
-`delta_epv`, `wp`, `wpa`, `description`, `player_name`, `play_type`,
-`shot_row`, and `points_shot`.
+`home_team_name`, `away_team_name`, `team`, `exp_pts`, `delta_epv`,
+`wp`, `wpa`, `description`, `player_name`, `play_type`, `shot_row`, and
+`points_shot`.
 
 ## See also
 
