@@ -13,14 +13,5 @@ clear_fixture_cache(verbose = FALSE)
 Invisible NULL
 }
 \description{
-Clears the cached fixture data from memory.
-}
-\examples{
-\donttest{
-# Clear all cached fixtures
-clear_fixture_cache()
-
-# Clear with verbose output
-clear_fixture_cache(verbose = TRUE)
-}
+Backward-compatible alias for \code{\link[=clear_data_cache]{clear_data_cache()}}.
 }

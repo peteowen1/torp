@@ -10,11 +10,11 @@ get_cache_info()
 A data frame with cache information including keys, timestamps, and data sizes
 }
 \description{
-Returns information about the current fixture cache state.
+Returns information about all data cached in memory (fixtures, results,
+teams, player stats, player details, and AFL API lookups).
 }
 \examples{
 \donttest{
-# Check current cache status
 get_cache_info()
 }
 }
