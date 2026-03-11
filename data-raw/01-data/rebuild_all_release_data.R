@@ -291,14 +291,16 @@ if (run_ratings) {
     # Player Game Ratings
     safe_run(paste0("player_game_ratings_", season), {
       pgd <- load_player_game_data(season)
-      ratings <- player_game_ratings(season, start_rd:end_rd, player_game_data = pgd)
+      ratings <- .compute_player_game_ratings(pgd, season, start_rd:end_rd)
       save_to_release(ratings, paste0("player_game_ratings_", season), "player_game_ratings-data")
       cli::cli_inform("  player_game_ratings_{season}: {nrow(ratings)} rows")
     })
 
     # Player Season Ratings
     safe_run(paste0("player_season_ratings_", season), {
-      ratings <- player_season_ratings(season, start_rd:end_rd)
+      pgd <- load_player_game_data(season)
+      pgr <- .compute_player_game_ratings(pgd, season, start_rd:end_rd)
+      ratings <- .compute_player_season_ratings(pgr)
       save_to_release(ratings, paste0("player_season_ratings_", season), "player_season_ratings-data")
       cli::cli_inform("  player_season_ratings_{season}: {nrow(ratings)} rows")
     })

@@ -195,13 +195,17 @@ FIXTURE_COL_MAP <- c(
 
 #' @keywords internal
 TEAMS_COL_MAP <- c(
-  "player.playerId"   = "player_id",
-  "teamId"            = "team_id",
-  "teamName"          = "team_name",
-  "teamType"          = "team_type",
-  "providerId"        = "match_id",
-  "round.roundNumber" = "round_number",
-  "venue.name"        = "venue_name"
+  "player.playerId"              = "player_id",
+  "teamId"                       = "team_id",
+  "teamName"                     = "team_name",
+  "teamType"                     = "team_type",
+  "providerId"                   = "match_id",
+  "round.roundNumber"            = "round_number",
+  "venue.name"                   = "venue_name",
+  "player.captain"               = "captain",
+  "player.playerJumperNumber"    = "jumper_number",
+  "player.playerName.givenName"  = "given_name",
+  "player.playerName.surname"    = "surname"
 )
 
 
@@ -347,7 +351,13 @@ PLAYER_GAME_COL_MAP <- c(
 #' @keywords internal
 .normalise_teams_columns <- function(df) {
   .normalise_columns(df, TEAMS_COL_MAP, verbose = TRUE, label = "Teams")
-  invisible(df)
+
+  # Derive round_number from match_id when absent (AFL API data lacks it)
+  if (!"round_number" %in% names(df) && "match_id" %in% names(df)) {
+    df[["round_number"]] <- as.integer(substr(df[["match_id"]], 12L, 13L))
+  }
+
+  df
 }
 
 

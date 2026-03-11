@@ -203,11 +203,13 @@ lineups <- teams_dt[, .(player_ids = list(player_id),
 grounds_dt <- data.table::as.data.table(all_grounds)
 grounds_dt[, venue := torp_replace_venues(as.character(Ground))]
 
-# Find each team's home ground (mode of venue)
-home_ground <- data.table::as.data.table(teams_data)[
-  , .(venue = torp_replace_venues(names(sort(table(venue_name), decreasing = TRUE))[1])),
-  by = .(teamId = team_id)
-]
+# Find each team's home ground (mode of venue) — join fixtures for venue_name
+home_ground <- merge(
+  data.table::as.data.table(teams_data)[, .(match_id, team_id)],
+  fix_dt[, .(match_id, venue_name)],
+  by = "match_id"
+)[, .(venue = torp_replace_venues(names(sort(table(venue_name), decreasing = TRUE))[1])),
+  by = .(teamId = team_id)]
 home_ground <- merge(home_ground, grounds_dt[, .(venue, home_lat = Latitude, home_lon = Longitude)],
                      by = "venue", all.x = TRUE)
 
