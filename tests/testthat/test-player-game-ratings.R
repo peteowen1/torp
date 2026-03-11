@@ -13,7 +13,6 @@ test_that("player_game_ratings has correct function signature", {
   expect_true("round_num" %in% fn_args)
   expect_true("matchid" %in% fn_args)
   expect_true("team" %in% fn_args)
-  expect_true("player_game_data" %in% fn_args)
 })
 
 test_that("player_game_ratings validates input", {
@@ -40,49 +39,18 @@ test_that("player_season_ratings validates input", {
 })
 
 # -----------------------------------------------------------------------------
-# get_season_data Tests
-# -----------------------------------------------------------------------------
-
-test_that("get_season_data uses valid round range (0:28)", {
-  # Verify the function exists
-
-  expect_true(exists("get_season_data", envir = asNamespace("torp")))
-
-  # Patch player_game_ratings to capture the round_range argument
-  captured_rounds <- NULL
-  with_mocked_bindings(
-    player_game_ratings = function(season_val, round_num, ...) {
-      captured_rounds <<- round_num
-      data.frame()  # Return empty df
-    },
-    {
-      tryCatch(
-        torp:::get_season_data(2023, NA),
-        error = function(e) NULL
-      )
-    }
-  )
-
-  # Round range should be 0:28, not 0:99
-  if (!is.null(captured_rounds)) {
-    expect_true(all(captured_rounds <= 28),
-                info = "get_season_data should not generate rounds > 28")
-  }
-})
-
-# -----------------------------------------------------------------------------
 # filter_game_data Tests
 # -----------------------------------------------------------------------------
 
 test_that("filter_game_data helper function works", {
-  # Create test data
+  # Create test data (uses 'opp' column like player_game_ratings output)
   test_df <- data.frame(
     season = c(2024, 2024, 2023, 2024),
     round = c(1, 2, 1, 1),
     match_id = c("M1", "M2", "M3", "M4"),
     team = c("Adelaide Crows", "Brisbane Lions", "Carlton", "Adelaide Crows"),
-    opponent = c("Brisbane Lions", "Adelaide Crows", "Essendon", "Carlton"),
-    total_credits_adj = c(100, 120, 80, 90),
+    opp = c("Brisbane Lions", "Adelaide Crows", "Essendon", "Carlton"),
+    total_p80 = c(100, 120, 80, 90),
     stringsAsFactors = FALSE
   )
 
@@ -94,7 +62,7 @@ test_that("filter_game_data helper function works", {
   # Test filtering by team
   result2 <- torp:::filter_game_data(test_df, 2024, 1, NULL, "Adelaide Crows")
   expect_equal(nrow(result2), 2)
-  expect_true(all(result2$team == "Adelaide Crows" | result2$opponent == "Adelaide Crows"))
+  expect_true(all(result2$team == "Adelaide Crows" | result2$opp == "Adelaide Crows"))
 
   # Test filtering by season and round
   result3 <- torp:::filter_game_data(test_df, 2024, 1, NULL, NULL)

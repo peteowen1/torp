@@ -515,7 +515,7 @@ update_player_game_ratings <- function(season) {
     pgd <- load_player_game_data(season)
     start_round <- get_start_round(season)
     max_round <- get_max_round(season)
-    player_game_ratings(season, start_round:max_round, player_game_data = pgd)
+    .compute_player_game_ratings(pgd, season, start_round:max_round)
   }, error = function(e) {
     cli::cli_alert_danger("Failed to compute player game ratings: {conditionMessage(e)}")
     return(NULL)
@@ -542,9 +542,11 @@ update_player_season_ratings <- function(season) {
   cli::cli_progress_step("Updating player season ratings for {season}")
 
   ratings <- tryCatch({
-    max_round <- get_max_round(season)
+    pgd <- load_player_game_data(season)
     start_round <- get_start_round(season)
-    player_season_ratings(season, start_round:max_round)
+    max_round <- get_max_round(season)
+    pgr <- .compute_player_game_ratings(pgd, season, start_round:max_round)
+    .compute_player_season_ratings(pgr)
   }, error = function(e) {
     cli::cli_alert_danger("Failed to compute player season ratings: {conditionMessage(e)}")
     return(NULL)

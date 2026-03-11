@@ -653,7 +653,7 @@ load_player_details <- function(seasons = get_afl_season(), use_disk_cache = TRU
 #' })
 #' }
 #' @export
-load_predictions <- function(seasons = get_afl_season(), rounds = get_afl_week(), use_disk_cache = FALSE, columns = NULL) {
+load_predictions <- function(seasons = get_afl_season(), rounds = get_afl_week(type = "next"), use_disk_cache = FALSE, columns = NULL) {
   if (isTRUE(seasons) && missing(rounds)) rounds <- TRUE
   seasons <- validate_seasons(seasons)
   rounds <- validate_rounds(rounds)

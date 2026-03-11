@@ -1,22 +1,22 @@
 #' Get game ratings
 #'
-#' This function retrieves game ratings for players based on specified criteria.
+#' Convenience wrapper around [load_player_game_ratings()] with filtering
+#' by season, round, match, or team. Returns the same data as the load
+#' function — both pull from the same pre-computed release.
 #'
 #' @param season_val The season to get ratings for. Default is the current season.
 #' @param round_num The round number to get ratings for. Default is the current round.
 #' @param matchid The match ID to filter by. Default is NULL (no filtering).
 #' @param team The team to filter by. Default is NULL (no filtering).
-#' @param player_game_data Optional pre-loaded player game data. If NULL, will load automatically.
 #'
 #' @return A data frame containing player game ratings.
 #' @export
 #'
-#' @importFrom dplyr filter arrange mutate select
+#' @importFrom dplyr filter arrange
 player_game_ratings <- function(season_val = get_afl_season(),
                                 round_num = get_afl_week(),
                                 matchid = NULL,
-                                team = NULL,
-                                player_game_data = NULL) {
+                                team = NULL) {
 
   # Input validation
   if (!is.numeric(season_val) && !is.na(season_val)) {
@@ -37,15 +37,31 @@ player_game_ratings <- function(season_val = get_afl_season(),
     cli::cli_abort("round_num must be between 0 and 28")
   }
 
-  # Load player game data if not provided
-  if (is.null(player_game_data)) {
-    player_game_data <- load_player_game_data(TRUE)
-  }
+  df <- load_player_game_ratings(season_val)
+  df <- filter_game_data(df, season_val, round_num, matchid, team)
+  df |> dplyr::arrange(-.data$total_p80)
+}
 
-  df <- filter_game_data(player_game_data, season_val, round_num, matchid, team)
+#' Compute player game ratings from raw player game data
+#'
+#' Internal function used by the pipeline to transform raw credits from
+#' [create_player_game_data()] into the display-friendly ratings format
+#' that gets released to torpdata.
+#'
+#' @param player_game_data Player game data (output of [create_player_game_data()]).
+#' @param season_val Season(s) to compute for.
+#' @param round_num Round(s) to compute for.
+#'
+#' @return A data frame in player game ratings format.
+#' @keywords internal
+#'
+#' @importFrom dplyr arrange mutate select
+.compute_player_game_ratings <- function(player_game_data,
+                                         season_val,
+                                         round_num) {
 
-  # _adj columns are already per-80 normalised (done in create_player_game_data),
-  # so total_points uses raw credits and p80 columns use _adj directly.
+  df <- filter_game_data(player_game_data, season_val, round_num, matchid = NULL, team = NULL)
+
   df |>
     dplyr::arrange(-.data$total_credits_adj) |>
     dplyr::mutate(
@@ -64,11 +80,11 @@ player_game_ratings <- function(season_val = get_afl_season(),
     dplyr::select(
       season = "season", round = "round",
       player_name = "player_name", position = "listed_position", team_id = "team_id", team = "team", opp = "opponent",
+      tog = "tog_frac",
       total_points = "total_points", recv_points = "recv_points", disp_points = "disp_points",
       spoil_points = "spoil_points", hitout_points = "hitout_points",
       total_p80 = "total_p80", recv_p80 = "recv_p80", disp_p80 = "disp_p80",
       spoil_p80 = "spoil_p80", hitout_p80 = "hitout_p80",
-      tog = "tog_frac",
       player_id = "player_id", match_id = "match_id"
     )
 }
@@ -95,7 +111,7 @@ filter_game_data <- function(df, season_val, round_num, matchid, team) {
     df <- df |> dplyr::filter(
       .data$season %in% season_val,
       .data$round %in% round_num,
-      (.data$team == .env$team | .data$opponent == .env$team)
+      (.data$team == .env$team | .data$opp == .env$team)
     )
     if (nrow(df) == 0) {
       cli::cli_abort(paste0(
@@ -114,7 +130,7 @@ filter_game_data <- function(df, season_val, round_num, matchid, team) {
 
 #' Get season total ratings
 #'
-#' This function calculates season total ratings for players.
+#' Convenience wrapper around [load_player_season_ratings()] with filtering.
 #'
 #' @param season_val The season to calculate ratings for. Default is the current season.
 #' @param round_num The round number to calculate ratings for. Default is NA (all rounds).
@@ -145,9 +161,21 @@ player_season_ratings <- function(season_val = get_afl_season(), round_num = NA)
     cli::cli_abort("round_num must be between 0 and 28")
   }
 
-  df <- get_season_data(season_val, round_num)
+  load_player_season_ratings(season_val)
+}
 
-  df |>
+#' Compute player season ratings from player game ratings
+#'
+#' Internal function used by the pipeline to aggregate per-game ratings
+#' into season totals for release to torpdata.
+#'
+#' @param player_game_ratings_df Player game ratings data frame
+#'   (output of [.compute_player_game_ratings()]).
+#'
+#' @return A data frame with season-total ratings.
+#' @keywords internal
+.compute_player_season_ratings <- function(player_game_ratings_df) {
+  player_game_ratings_df |>
     dplyr::group_by(.data$season, .data$player_name, .data$player_id, .data$team_id) |>
     dplyr::summarise(
       team = get_mode(.data$team),
@@ -164,28 +192,4 @@ player_season_ratings <- function(season_val = get_afl_season(), round_num = NA)
       .groups = "drop"
     ) |>
     dplyr::arrange(-.data$season_points)
-}
-
-#' Get season data
-#'
-#' @param season_val Season value (can be a vector)
-#' @param round_num Round number
-#'
-#' @return Season data frame
-get_season_data <- function(season_val, round_num) {
-  current_season <- get_afl_season()
-
-  # Determine round range based on whether we're looking at past or current seasons
-  if (all(season_val < current_season)) {
-    # All historical seasons - use all rounds
-    round_range <- if (any(is.na(round_num))) 0:28 else round_num
-  } else if (all(season_val == current_season)) {
-    # Current season only - limit to current week
-    round_range <- if (any(is.na(round_num))) 0:get_afl_week() else round_num
-  } else {
-    # Mix of seasons - use provided rounds or all available
-    round_range <- if (any(is.na(round_num))) 0:28 else round_num
-  }
-
-  player_game_ratings(season_val, round_range)
 }

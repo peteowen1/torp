@@ -203,11 +203,13 @@ lineups <- teams_dt[, .(player_ids = list(player_id),
 grounds_dt <- data.table::as.data.table(all_grounds)
 grounds_dt[, venue := torp_replace_venues(as.character(Ground))]
 
-# Find each team's home ground (mode of venue)
-home_ground <- data.table::as.data.table(teams_data)[
-  , .(venue = torp_replace_venues(names(sort(table(venue_name), decreasing = TRUE))[1])),
-  by = .(teamId = team_id)
-]
+# Find each team's home ground (mode of venue) — join fixtures for venue_name
+home_ground <- merge(
+  data.table::as.data.table(teams_data)[, .(match_id, team_id)],
+  fix_dt[, .(match_id, venue_name)],
+  by = "match_id"
+)[, .(venue = torp_replace_venues(names(sort(table(venue_name), decreasing = TRUE))[1])),
+  by = .(teamId = team_id)]
 home_ground <- merge(home_ground, grounds_dt[, .(venue, home_lat = Latitude, home_lon = Longitude)],
                      by = "venue", all.x = TRUE)
 
@@ -371,7 +373,7 @@ cat(sprintf("  Position groups: %s
 POSITION_BALANCE_LAMBDA <- 0.1
 
 # L2 (ridge) penalty on count-based stat weights to prevent overfitting ----
-STAT_WEIGHT_LAMBDA <- 0.25
+STAT_WEIGHT_LAMBDA <- 0.10
 
 # Names of count-based stat weight params subject to L2 penalty
 L2_PARAM_NAMES <- c("bounce_wt",
@@ -949,13 +951,13 @@ par_lower <- c(
   # --- EPV/scale params (disp) ---
   disp_neg_offset        = 0,
   disp_pos_offset        = 0,
-  disp_scale             = 1,
+  disp_scale             = 0.5,
   # --- EPV/scale params (recv) ---
   recv_neg_mult          = 1,
   recv_neg_offset        = 0,
   recv_pos_mult          = 1,
   recv_pos_offset        = 0,
-  recv_scale             = 1,
+  recv_scale             = 0.5,
   # --- Stat weights: disp component (all [-10, 10]; L2 provides real constraint) ---
   bounce_wt              = -10,
   inside50s_wt           = -10,
@@ -1011,13 +1013,13 @@ par_upper <- c(
   # --- EPV/scale params (disp) ---
   disp_neg_offset        = 0,
   disp_pos_offset        = 0,
-  disp_scale             = 1,
+  disp_scale             = 0.5,
   # --- EPV/scale params (recv) ---
   recv_neg_mult          = 1,
   recv_neg_offset        = 0,
   recv_pos_mult          = 1,
   recv_pos_offset        = 0,
-  recv_scale             = 1,
+  recv_scale             = 0.5,
   # --- Stat weights: disp component ---
   bounce_wt              = 10,
   inside50s_wt           = 10,

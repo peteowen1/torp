@@ -158,7 +158,6 @@
     dplyr::mutate(team_name_adj = torp_replace_teams(team_name)) |>
     dplyr::group_by(match_id, team_id, season, round_number, team_type) |>
     dplyr::summarise(
-      venue = torp_replace_venues(max(venue_name)),
       team_name_adj = max(team_name_adj),
       dplyr::across(dplyr::all_of(c(torp_sum_cols, MATCH_POS_COLS)), ~ sum(.x, na.rm = TRUE)),
       count = dplyr::n(),
@@ -181,6 +180,13 @@
 #' @importFrom purrr pmap_dbl
 .build_match_features <- function(fix_df, team_rt_df, all_grounds) {
   torp_sum_cols <- c("torp", "torp_recv", "torp_disp", "torp_spoil", "torp_hitout")
+
+  # Add venue from fixtures (teams data doesn't carry venue)
+  team_rt_df <- team_rt_df |>
+    dplyr::left_join(
+      fix_df |> dplyr::select(match_id, team_id, venue),
+      by = c("match_id", "team_id")
+    )
 
   # Home ground detection
   home_ground <- team_rt_df |>
