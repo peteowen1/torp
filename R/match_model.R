@@ -95,7 +95,7 @@
   team_lineup_df <- teams |>
     dplyr::left_join(
       torp_df,
-      by = c("player.playerId" = "player_id", "season" = "season", "round.roundNumber" = "round")
+      by = c("player_id" = "player_id", "season" = "season", "round_number" = "round")
     ) |>
     dplyr::filter((position.x != "EMERG" & position.x != "SUB") | is.na(position.x))
 
@@ -154,11 +154,11 @@
   torp_sum_cols <- c("torp", "torp_recv", "torp_disp", "torp_spoil", "torp_hitout")
 
   team_rt_df <- team_lineup_df |>
-    dplyr::filter(!is.na(player.playerId)) |>
-    dplyr::mutate(team_name_adj = torp_replace_teams(teamName)) |>
-    dplyr::group_by(providerId, teamId, season, round.roundNumber, teamType) |>
+    dplyr::filter(!is.na(player_id)) |>
+    dplyr::mutate(team_name_adj = torp_replace_teams(team_name)) |>
+    dplyr::group_by(match_id, team_id, season, round_number, team_type) |>
     dplyr::summarise(
-      venue = torp_replace_venues(max(venue.name)),
+      venue = torp_replace_venues(max(venue_name)),
       team_name_adj = max(team_name_adj),
       dplyr::across(dplyr::all_of(c(torp_sum_cols, MATCH_POS_COLS)), ~ sum(.x, na.rm = TRUE)),
       count = dplyr::n(),
@@ -184,7 +184,7 @@
 
   # Home ground detection
   home_ground <- team_rt_df |>
-    dplyr::group_by(teamId, team_name_adj) |>
+    dplyr::group_by(team_id, team_name_adj) |>
     dplyr::summarise(home_ground = get_mode(venue), .groups = "drop") |>
     dplyr::mutate(venue_adj = torp_replace_venues(as.character(home_ground))) |>
     dplyr::left_join(
@@ -195,16 +195,16 @@
 
   # Familiarity: cumulative venue proportion per team
   ground_prop <- team_rt_df |>
-    dplyr::arrange(teamId, season, round.roundNumber) |>
-    dplyr::group_by(teamId) |>
+    dplyr::arrange(team_id, season, round_number) |>
+    dplyr::group_by(team_id) |>
     dplyr::mutate(cum_total_games = dplyr::row_number() - 1) |>
-    dplyr::group_by(teamId, venue) |>
+    dplyr::group_by(team_id, venue) |>
     dplyr::mutate(cum_venue_games = dplyr::row_number() - 1) |>
     dplyr::ungroup() |>
     dplyr::mutate(
       familiarity = ifelse(cum_total_games > 0, cum_venue_games / cum_total_games, 0)
     ) |>
-    dplyr::select(teamId, season, round.roundNumber, venue, familiarity)
+    dplyr::select(team_id, season, round_number, venue, familiarity)
 
   # Distance traveled (Haversine)
   team_dist_df <- fix_df |>
@@ -216,8 +216,8 @@
       by = "venue"
     ) |>
     dplyr::left_join(
-      home_ground |> dplyr::select(teamId, team_lat = Latitude, team_lon = Longitude),
-      by = "teamId"
+      home_ground |> dplyr::select(team_id, team_lat = Latitude, team_lon = Longitude),
+      by = c("teamId" = "team_id")
     ) |>
     dplyr::mutate(
       distance = purrr::pmap_dbl(
@@ -227,7 +227,7 @@
       log_dist = log(distance + MATCH_LOG_DIST_OFFSET),
       log_dist = tidyr::replace_na(log_dist, MATCH_LOG_DIST_DEFAULT)
     ) |>
-    dplyr::left_join(ground_prop, by = c("teamId", "season", "round.roundNumber", "venue")) |>
+    dplyr::left_join(ground_prop, by = c("teamId" = "team_id", "season", "round.roundNumber" = "round_number", "venue")) |>
     dplyr::mutate(familiarity = tidyr::replace_na(familiarity, 0))
 
   # Days rest
@@ -251,10 +251,10 @@
     ) |>
     dplyr::left_join(
       team_rt_df |> dplyr::select(
-        providerId, teamId, season, round.roundNumber,
+        match_id, team_id, season, round_number,
         dplyr::all_of(c(torp_sum_cols, MATCH_POS_COLS, "count"))
       ),
-      by = c("providerId", "teamId", "season", "round.roundNumber")
+      by = c("providerId" = "match_id", "teamId" = "team_id", "season", "round.roundNumber" = "round_number")
     ) |>
     dplyr::group_by(teamId) |>
     tidyr::fill(torp, torp_recv, torp_disp, torp_spoil, torp_hitout) |>

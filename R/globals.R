@@ -284,8 +284,8 @@ utils::globalVariables(c(
   "game_prop_through_day.x", "game_prop_through_day.y",
 
   # Lineup processing
-  "lineup_tog", ".unknown_pos", "teamName", "teamType",
-  "player.playerId", "position.x", "position.y",
+  "lineup_tog", ".unknown_pos", "team_name", "team_type",
+  "player_id", "position.x", "position.y",
 
   # Weather forecast
   "Latitude", "Longitude", "temperature_2m", "wind_speed_10m",

@@ -198,7 +198,7 @@ create_player_game_data <- function(pbp_data = NULL,
   plyr_gm_df <- plyr_gm_df |>
     dplyr::left_join(
       teams,
-      by = c("match_id" = "providerId", "player_id" = "player.playerId")
+      by = c("match_id" = "match_id", "player_id" = "player_id")
     ) |>
     dplyr::mutate(
       position = dplyr::if_else(position == "MIDFIELDER_FORWARD", "MEDIUM_FORWARD", position)

@@ -359,6 +359,9 @@ load_teams <- function(seasons = get_afl_season(), use_disk_cache = FALSE, colum
 
   out <- load_from_url(urls, seasons = seasons, use_disk_cache = use_disk_cache, columns = columns)
 
+  # Normalise column names — handles both legacy (player.playerId) and clean parquets
+  out <- .normalise_teams_columns(out)
+
   return(out)
 }
 
@@ -652,4 +655,43 @@ load_player_skills <- function(seasons = get_afl_season(), use_disk_cache = FALS
   out <- load_from_url(urls, seasons = seasons, use_disk_cache = use_disk_cache, columns = columns)
 
   return(out)
+}
+
+
+#' Normalise teams/lineups column names
+#'
+#' Handles both legacy (dot-notation) and clean (snake_case) parquets so
+#' downstream code can rely on a single naming convention.
+#'
+#' @param df A data frame of teams/lineups data
+#' @return The data frame with normalised column names
+#' @keywords internal
+.normalise_teams_columns <- function(df) {
+  if (is.null(df) || nrow(df) == 0) return(df)
+
+  nms <- names(df)
+
+  # Already clean — nothing to do
+
+  if ("player_id" %in% nms && !"player.playerId" %in% nms) return(df)
+
+  # Strip nested player. prefixes, then clean to snake_case
+  nms <- sub("^player\\.playerName\\.", "", nms)
+  nms <- sub("^player\\.", "", nms)
+  names(df) <- nms
+  df <- torp_clean_names(df)
+
+  # Targeted renames for clarity (matches .normalise_pbp_columns() conventions)
+  renames <- c(
+    provider_id = "match_id",
+    player_jumper_number = "jumper_number",
+    round_round_number = "round_number"
+  )
+  for (old_nm in names(renames)) {
+    if (old_nm %in% names(df)) {
+      names(df)[names(df) == old_nm] <- renames[[old_nm]]
+    }
+  }
+
+  df
 }

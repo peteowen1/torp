@@ -27,11 +27,11 @@ tr <- torp_ratings(2025, get_afl_week("next")) %>%
 view(tr)
 
 # Weekly Analysis ----
-missing <- tr %>% anti_join(week_teams, by = c("player_id" = "player.playerId"))
+missing <- tr %>% anti_join(week_teams, by = c("player_id" = "player_id"))
 
 # View(missing)
 
-starting <- tr %>% inner_join(week_teams, by = c("player_id" = "player.playerId"))
+starting <- tr %>% inner_join(week_teams, by = c("player_id" = "player_id"))
 
 # View(starting)
 
@@ -104,11 +104,11 @@ tr %>%
 
 
 tr %>%
-  left_join(week_teams, by = c("player_id" = "player.playerId")) %>%
+  left_join(week_teams, by = c("player_id" = "player_id")) %>%
   View()
 
 tr %>%
-  inner_join(week_teams, by = c("player_id" = "player.playerId")) %>%
+  inner_join(week_teams, by = c("player_id" = "player_id")) %>%
   group_by(team) %>%
   summarise(
     torp_val = sum(torp, na.rm = T),

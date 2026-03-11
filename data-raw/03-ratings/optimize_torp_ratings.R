@@ -216,9 +216,9 @@ teams_dt <- data.table::as.data.table(teams_data)
 # Filter out EMERG/SUB
 teams_dt <- teams_dt[is.na(position) | !(position %in% c("EMERG", "SUB"))]
 
-lineups <- teams_dt[, .(player_ids = list(player.playerId),
+lineups <- teams_dt[, .(player_ids = list(player_id),
                        position_xs = list(position)),
-                    by = .(match_id = providerId, teamId)]
+                    by = .(match_id, team_id)]
 
 # --- Home ground / distance / familiarity ---
 grounds_dt <- data.table::as.data.table(all_grounds)
@@ -226,8 +226,8 @@ grounds_dt[, venue := torp_replace_venues(as.character(Ground))]
 
 # Find each team's home ground (mode of venue)
 home_ground <- data.table::as.data.table(teams_data)[
-  , .(venue = torp_replace_venues(names(sort(table(venue.name), decreasing = TRUE))[1])),
-  by = .(teamId)
+  , .(venue = torp_replace_venues(names(sort(table(venue_name), decreasing = TRUE))[1])),
+  by = .(team_id)
 ]
 home_ground <- merge(home_ground, grounds_dt[, .(venue, home_lat = Latitude, home_lon = Longitude)],
                      by = "venue", all.x = TRUE)
@@ -239,12 +239,12 @@ match_dt <- merge(match_dt,
 
 # Home team distance
 match_dt <- merge(match_dt,
-                  home_ground[, .(teamId, home_lat_h = home_lat, home_lon_h = home_lon)],
-                  by.x = "home_teamId", by.y = "teamId", all.x = TRUE)
+                  home_ground[, .(team_id, home_lat_h = home_lat, home_lon_h = home_lon)],
+                  by.x = "home_teamId", by.y = "team_id", all.x = TRUE)
 # Away team distance
 match_dt <- merge(match_dt,
-                  home_ground[, .(teamId, home_lat_a = home_lat, home_lon_a = home_lon)],
-                  by.x = "away_teamId", by.y = "teamId", all.x = TRUE)
+                  home_ground[, .(team_id, home_lat_a = home_lat, home_lon_a = home_lon)],
+                  by.x = "away_teamId", by.y = "team_id", all.x = TRUE)
 
 # Haversine distances
 haversine <- function(lon1, lat1, lon2, lat2) {
@@ -311,11 +311,11 @@ match_dt[, familiarity_diff := fam_home - fam_away]
 
 # Merge lineups (with positions for lineup_tog weighting)
 match_dt <- merge(match_dt,
-                  lineups[, .(match_id, home_teamId = teamId, home_players = player_ids, home_positions = position_xs)],
+                  lineups[, .(match_id, home_teamId = team_id, home_players = player_ids, home_positions = position_xs)],
                   by.x = c("providerId", "home_teamId"),
                   by.y = c("match_id", "home_teamId"), all.x = TRUE)
 match_dt <- merge(match_dt,
-                  lineups[, .(match_id, away_teamId = teamId, away_players = player_ids, away_positions = position_xs)],
+                  lineups[, .(match_id, away_teamId = team_id, away_players = player_ids, away_positions = position_xs)],
                   by.x = c("providerId", "away_teamId"),
                   by.y = c("match_id", "away_teamId"), all.x = TRUE)
 
@@ -336,7 +336,7 @@ data.table::setkey(pgr, player_id, match_id)
 
 # Also get position info from teams_data for position-group means
 pos_dt <- data.table::as.data.table(teams_data)[
-  , .(player_id = player.playerId, match_id = providerId, position)
+  , .(player_id, match_id, position)
 ]
 pos_dt <- pos_dt[!is.na(position) & !(position %in% c("EMERG", "SUB"))]
 pos_dt[position == "MIDFIELDER_FORWARD", position := "MEDIUM_FORWARD"]

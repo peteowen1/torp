@@ -460,10 +460,23 @@ get_afl_lineups <- function(season = NULL, round = NULL) {
   result <- purrr::list_rbind(purrr::compact(rosters))
   if (nrow(result) == 0) return(tibble::tibble())
 
-  # Add season and row_id to match existing schema
+  # Add season and row_id before name cleaning (references raw API names)
   result$season <- as.numeric(substr(result$providerId, 5, 8))
   if ("player.playerId" %in% names(result)) {
     result$row_id <- paste0(result$providerId, result$teamId, result$player.playerId)
+  }
+
+  # Standardise column names — strip nested player. prefix and clean to snake_case
+  names(result) <- sub("^player\\.playerName\\.", "", names(result))
+  names(result) <- sub("^player\\.", "", names(result))
+  result <- torp_clean_names(result)
+
+  # Rename for clarity
+  renames <- c(provider_id = "match_id", player_jumper_number = "jumper_number")
+  for (old_nm in names(renames)) {
+    if (old_nm %in% names(result)) {
+      names(result)[names(result) == old_nm] <- renames[[old_nm]]
+    }
   }
 
   result
