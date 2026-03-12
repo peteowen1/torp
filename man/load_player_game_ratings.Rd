@@ -6,6 +6,7 @@
 \usage{
 load_player_game_ratings(
   seasons = get_afl_season(),
+  rounds = TRUE,
   use_disk_cache = FALSE,
   columns = NULL
 )
@@ -14,6 +15,9 @@ load_player_game_ratings(
 \item{seasons}{A numeric vector of 4-digit years associated with given AFL
 seasons — defaults to latest season. If set to \code{TRUE}, returns all
 available data since 2021.}
+
+\item{rounds}{A numeric vector of round numbers to filter to, or \code{TRUE}
+(default) for all rounds.}
 
 \item{use_disk_cache}{Logical. If \code{TRUE}, uses persistent disk cache for
 faster repeated loads. Default is \code{FALSE}.}
@@ -36,6 +40,7 @@ for every player, ready for leaderboards and analysis.
 \dontrun{
 try({ # prevents cran errors
   load_player_game_ratings(2024)
+  load_player_game_ratings(2024, rounds = 1:5)
 })
 }
 }

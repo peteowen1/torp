@@ -4,7 +4,12 @@
 \alias{build_team_mdl_df}
 \title{Build complete match model dataset end-to-end}
 \usage{
-build_team_mdl_df(season = NULL, target_weeks = NULL, weather_path = NULL)
+build_team_mdl_df(
+  season = NULL,
+  target_weeks = NULL,
+  weather_path = NULL,
+  psr_coef_path = NULL
+)
 }
 \arguments{
 \item{season}{Season to build for (default: current via get_afl_season())}

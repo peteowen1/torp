@@ -4,7 +4,7 @@
 \alias{.build_team_ratings_df}
 \title{Build team-level ratings from lineups}
 \usage{
-.build_team_ratings_df(teams, torp_df)
+.build_team_ratings_df(teams, torp_df, psr_df = NULL)
 }
 \arguments{
 \item{teams}{Raw teams/lineups from load_teams()}
