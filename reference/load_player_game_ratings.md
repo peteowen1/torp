@@ -12,6 +12,7 @@ analysis.
 ``` r
 load_player_game_ratings(
   seasons = get_afl_season(),
+  rounds = TRUE,
   use_disk_cache = FALSE,
   columns = NULL
 )
@@ -24,6 +25,11 @@ load_player_game_ratings(
   A numeric vector of 4-digit years associated with given AFL seasons —
   defaults to latest season. If set to `TRUE`, returns all available
   data since 2021.
+
+- rounds:
+
+  A numeric vector of round numbers to filter to, or `TRUE` (default)
+  for all rounds.
 
 - use_disk_cache:
 
@@ -54,6 +60,7 @@ A data frame containing per-game player ratings with columns including
 if (FALSE) { # \dontrun{
 try({ # prevents cran errors
   load_player_game_ratings(2024)
+  load_player_game_ratings(2024, rounds = 1:5)
 })
 } # }
 ```

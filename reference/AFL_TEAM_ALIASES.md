@@ -11,4 +11,4 @@ AFL_TEAM_ALIASES
 
 ## Format
 
-An object of class `character` of length 75.
+An object of class `character` of length 93.

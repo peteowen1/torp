@@ -6,7 +6,7 @@ weighting, generates all position columns, and aggregates to team level.
 ## Usage
 
 ``` r
-.build_team_ratings_df(teams, torp_df)
+.build_team_ratings_df(teams, torp_df, psr_df = NULL)
 ```
 
 ## Arguments

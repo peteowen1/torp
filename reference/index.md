@@ -95,8 +95,10 @@ Calculate and view TORP player ratings
   : Calculate Player Skill Ratings (PSR)
 - [`filter_game_data()`](https://peteowen1.github.io/torp/reference/filter_game_data.md)
   : Filter game data
-- [`get_season_data()`](https://peteowen1.github.io/torp/reference/get_season_data.md)
-  : Get season data
+- [`team_profile()`](https://peteowen1.github.io/torp/reference/team_profile.md)
+  : Get a Team Profile
+- [`print(`*`<torp_team_profile>`*`)`](https://peteowen1.github.io/torp/reference/print.torp_team_profile.md)
+  : Print a team profile
 
 ## Player Skills
 
@@ -120,6 +122,12 @@ Estimate and explore player skill profiles
   : Position group mapping for AFL skill estimation
 - [`skill_stat_definitions()`](https://peteowen1.github.io/torp/reference/skill_stat_definitions.md)
   : Stat definitions for player skill estimation
+- [`get_team_skills()`](https://peteowen1.github.io/torp/reference/get_team_skills.md)
+  : Get Team Skills
+- [`team_skill_profile()`](https://peteowen1.github.io/torp/reference/team_skill_profile.md)
+  : Get a Team Skill Profile
+- [`print(`*`<torp_team_skill_profile>`*`)`](https://peteowen1.github.io/torp/reference/print.torp_team_skill_profile.md)
+  : Print a team skill profile
 
 ## Season Simulation
 
@@ -214,6 +222,8 @@ Utilities for model development and cross-validation
 
 In-memory and disk caching utilities
 
+- [`clear_all_cache()`](https://peteowen1.github.io/torp/reference/clear_all_cache.md)
+  : Clear All Caches
 - [`clear_data_cache()`](https://peteowen1.github.io/torp/reference/clear_data_cache.md)
   : Clear Data Cache
 - [`clear_disk_cache()`](https://peteowen1.github.io/torp/reference/clear_disk_cache.md)
@@ -289,6 +299,8 @@ Helper and convenience functions
   : Get AFL Team Full Name
 - [`torp_replace_venues()`](https://peteowen1.github.io/torp/reference/torp_replace_venues.md)
   : Standardise AFL Venue Names
+- [`match_local_time()`](https://peteowen1.github.io/torp/reference/match_local_time.md)
+  : Convert UTC match time to local venue time
 
 ## AFL API
 

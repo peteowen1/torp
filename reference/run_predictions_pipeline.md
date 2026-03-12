@@ -1,4 +1,4 @@
-# Run weekly match predictions pipeline
+# Builds team_mdl_df with injury-adjusted ratings, trains 5 sequential GAMs, generates predictions for target weeks, and uploads to torpdata releases.
 
 Builds team_mdl_df with injury-adjusted ratings, trains 5 sequential
 GAMs, generates predictions for target weeks, and uploads to torpdata

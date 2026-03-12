@@ -43,11 +43,33 @@
 
     <div class="section level2">
     <h2 id="ref-usage">Usage<a class="anchor" aria-label="anchor" href="#ref-usage"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">.col_pctiles</span><span class="op">(</span><span class="va">dt</span>, <span class="va">cols</span>, <span class="va">player_row</span><span class="op">)</span></span></code></pre></div>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">.col_pctiles</span><span class="op">(</span><span class="va">dt</span>, <span class="va">cols</span>, <span class="va">player_row</span>, higher_is_better <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span></span></code></pre></div>
     </div>
 
+    <div class="section level2">
+    <h2 id="arguments">Arguments<a class="anchor" aria-label="anchor" href="#arguments"></a></h2>
 
-  </main></div>
+
+<dl><dt id="arg-dt">dt<a class="anchor" aria-label="anchor" href="#arg-dt"></a></dt>
+<dd><p>Reference data.table for comparison.</p></dd>
+
+
+<dt id="arg-cols">cols<a class="anchor" aria-label="anchor" href="#arg-cols"></a></dt>
+<dd><p>Column names to compute percentiles for.</p></dd>
+
+
+<dt id="arg-player-row">player_row<a class="anchor" aria-label="anchor" href="#arg-player-row"></a></dt>
+<dd><p>Single-row data.table of the target player.</p></dd>
+
+
+<dt id="arg-higher-is-better">higher_is_better<a class="anchor" aria-label="anchor" href="#arg-higher-is-better"></a></dt>
+<dd><p>Optional logical vector (same length as cols).
+If FALSE for a stat, percentile is flipped (lower = better).</p></dd>
+
+</dl></div>
+
+  </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
+    </nav></aside></div>
 
 
     <footer><div class="pkgdown-footer-left">

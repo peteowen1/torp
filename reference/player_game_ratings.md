@@ -1,7 +1,9 @@
 # Get game ratings
 
-This function retrieves game ratings for players based on specified
-criteria.
+Convenience wrapper around
+[`load_player_game_ratings()`](https://peteowen1.github.io/torp/reference/load_player_game_ratings.md)
+with filtering by season, round, match, or team. Returns the same data
+as the load function — both pull from the same pre-computed release.
 
 ## Usage
 
@@ -10,8 +12,7 @@ player_game_ratings(
   season_val = get_afl_season(),
   round_num = get_afl_week(),
   matchid = NULL,
-  team = NULL,
-  player_game_data = NULL
+  team = NULL
 )
 ```
 
@@ -32,11 +33,6 @@ player_game_ratings(
 - team:
 
   The team to filter by. Default is NULL (no filtering).
-
-- player_game_data:
-
-  Optional pre-loaded player game data. If NULL, will load
-  automatically.
 
 ## Value
 

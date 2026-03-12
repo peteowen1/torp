@@ -1,6 +1,8 @@
 # Get season total ratings
 
-This function calculates season total ratings for players.
+Convenience wrapper around
+[`load_player_season_ratings()`](https://peteowen1.github.io/torp/reference/load_player_season_ratings.md)
+with filtering.
 
 ## Usage
 

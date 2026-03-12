@@ -27,4 +27,4 @@ Returns a tibble with canonical column names.
 ## Value
 
 Tibble with columns: match_id, home_score, home_goals, home_behinds,
-away_score, away_goals, away_behinds, utc_start_time
+away_score, away_goals, away_behinds

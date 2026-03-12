@@ -8,7 +8,7 @@ repository](https://github.com/peteowen1/torpdata)
 ``` r
 load_predictions(
   seasons = get_afl_season(),
-  rounds = get_afl_week(),
+  rounds = get_afl_week(type = "next"),
   use_disk_cache = FALSE,
   columns = NULL
 )
