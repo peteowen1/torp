@@ -11,7 +11,7 @@
 }
 \value{
 Tibble with columns: match_id, home_score, home_goals, home_behinds,
-away_score, away_goals, away_behinds, utc_start_time
+away_score, away_goals, away_behinds
 }
 \description{
 Handles three result schemas:

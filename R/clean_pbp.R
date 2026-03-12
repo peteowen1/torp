@@ -30,7 +30,7 @@ clean_pbp <- function(df) {
 #' @param df A dataframe containing raw play-by-play data.
 #' @return A cleaned and processed data.table with additional variables.
 #' @keywords internal
-#' @importFrom data.table as.data.table setDT setorder setkey fifelse fcase shift nafill copy
+#' @importFrom data.table as.data.table setDT setorder setkey fifelse fcase shift nafill copy `%chin%`
 #' @importFrom stringr str_starts str_detect
 clean_pbp_dt <- function(df) {
   # Clean names and convert to data.table in one step (avoid extra copy)
@@ -291,6 +291,23 @@ add_game_vars_dt <- function(dt) {
   )]
 
   dt[, points_diff := pos_team_points - opp_team_points]
+
+  # --- Estimated game time (excludes clock stoppages) ---
+  dt[, .play_delta := period_seconds - data.table::shift(period_seconds, 1L, type = "lag"),
+     by = .(match_id, period)]
+  dt[is.na(.play_delta) | .play_delta < 0, .play_delta := 0]
+
+  dt[, .lag_desc := data.table::shift(description, 1L, type = "lag"), by = .(match_id, period)]
+  dt[.lag_desc %chin% CLOCK_STOPPAGE_TRIGGERS | description %chin% CLOCK_RESTART_EVENTS,
+     .play_delta := 0]
+  dt[.play_delta > CLOCK_DELTA_CAP, .play_delta := CLOCK_DELTA_CAP]
+
+  dt[, game_time_elapsed := cumsum(.play_delta), by = .(match_id, period)]
+  dt[, game_time_remaining := pmax(0L, AFL_PLAY_QUARTER_SECONDS - game_time_elapsed)]
+  dt[, total_game_time_elapsed := (period - 1L) * AFL_PLAY_QUARTER_SECONDS + game_time_elapsed]
+  dt[, total_game_time_remaining := pmax(0L, AFL_PLAY_GAME_SECONDS - total_game_time_elapsed)]
+
+  dt[, c(".play_delta", ".lag_desc") := NULL]
 
   dt[, model_points := data.table::fifelse(pos_points_team_id == team_id_mdl, pos_points, -pos_points)]
 

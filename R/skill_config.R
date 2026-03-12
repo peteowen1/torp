@@ -98,6 +98,31 @@ skill_stat_definitions <- function() {
       "general", "general"
     ),
     type = "rate",
+    higher_is_better = c(
+      # --- Existing stats ---
+      TRUE, FALSE, TRUE, TRUE, TRUE,          # goals, behinds(miss), shots, SIs, assists
+      TRUE, TRUE, TRUE,                        # kicks, handballs, disposals
+      TRUE, TRUE, TRUE,                        # marks, CP, UP
+      TRUE, TRUE,                              # contested marks, GBGs
+      TRUE,                                    # clearances
+      TRUE, TRUE, TRUE, TRUE,                  # I50s, MI50, rebound50s, metres_gained
+      TRUE, TRUE, TRUE, TRUE,                  # tackles, spoils, intercepts, 1%ers
+      TRUE,                                    # pressure_acts
+      TRUE, TRUE,                              # hitouts, HTA
+      TRUE, FALSE,                             # frees_for, frees_against
+      FALSE, FALSE,                            # clangers, turnovers
+      # --- New stats ---
+      TRUE, TRUE,                              # bounces, def_half_pressure_acts
+      TRUE, TRUE,                              # centre/stoppage clearances
+      TRUE, TRUE,                              # effective kicks/disposals
+      TRUE, TRUE,                              # intercept_marks, f50_GBGs
+      TRUE, TRUE,                              # score_launches, marks_on_lead
+      TRUE, TRUE,                              # tackles_inside50, kickins
+      TRUE, TRUE,                              # CBA, ruck_contests
+      TRUE, TRUE,                              # contest_def_one_on_ones, contest_off_one_on_ones
+      TRUE, FALSE,                             # contest_off_wins, contest_def_losses
+      TRUE, TRUE                               # DT points, rating points
+    ),
     success_col = NA_character_,
     attempts_col = NA_character_,
     tog_adjusted = c(
@@ -128,6 +153,7 @@ skill_stat_definitions <- function() {
     source_col = NA_character_,
     category = c("disposal", "scoring", "possession", "ruck", "disposal", "general", "general"),
     type = "efficiency",
+    higher_is_better = c(TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE),
     success_col = c(
       "disposal_efficiency_pct_x_disposals", "goals",
       "contested_possessions", "hitouts_to_advantage",

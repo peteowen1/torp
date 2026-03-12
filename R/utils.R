@@ -367,6 +367,19 @@ calculate_time_remaining_pct <- function(period, period_seconds) {
   calculate_time_remaining(period, period_seconds) / AFL_TOTAL_GAME_SECONDS
 }
 
+#' Calculate game time remaining in an AFL match (playing seconds)
+#'
+#' Uses estimated playing time (excluding stoppages) rather than raw clock time.
+#'
+#' @param period Numeric vector of period numbers (1-4)
+#' @param game_time_elapsed Numeric vector of estimated playing seconds elapsed in the current quarter
+#' @return Numeric vector of estimated playing seconds remaining in the match
+#' @keywords internal
+calculate_game_time_remaining <- function(period, game_time_elapsed) {
+  pmax(0, (AFL_MAX_PERIODS - period) * AFL_PLAY_QUARTER_SECONDS +
+    (AFL_PLAY_QUARTER_SECONDS - game_time_elapsed))
+}
+
 # Add Globals Variables
 utils::globalVariables(c(".data", ".SD", "disp", "season.x", "tm"))
 

@@ -88,7 +88,7 @@
 #' @param torp_df TORP ratings from load_torp_ratings()
 #' @return Team-level aggregated ratings with position columns
 #' @keywords internal
-.build_team_ratings_df <- function(teams, torp_df) {
+.build_team_ratings_df <- function(teams, torp_df, psr_df = NULL) {
   torp_prior_total <- RATING_PRIOR_RATE_RECV + RATING_PRIOR_RATE_DISP +
     RATING_PRIOR_RATE_SPOIL + RATING_PRIOR_RATE_HITOUT
 
@@ -131,6 +131,27 @@
   }
   team_lineup_df$.unknown_pos <- NULL
 
+  # Join PSR if provided — use each player's most recent PSR value
+
+  if (!is.null(psr_df)) {
+    latest_psr <- psr_df |>
+      dplyr::select(player_id, season, round, psr) |>
+      dplyr::arrange(player_id, season, round) |>
+      dplyr::group_by(player_id) |>
+      dplyr::slice_tail(n = 1) |>
+      dplyr::ungroup() |>
+      dplyr::select(player_id, psr)
+
+    team_lineup_df <- team_lineup_df |>
+      dplyr::left_join(latest_psr, by = "player_id") |>
+      dplyr::mutate(
+        psr = tidyr::replace_na(psr, 0),
+        psr = psr * lineup_tog
+      )
+  } else {
+    team_lineup_df$psr <- 0
+  }
+
   # Generate position columns from lookup tables
   for (col in names(MATCH_PHASE_MAP))
     team_lineup_df[[col]] <- ifelse(team_lineup_df$position.x %in% MATCH_PHASE_MAP[[col]], team_lineup_df$torp, NA)
@@ -151,14 +172,13 @@
   }
 
   # Aggregate to team level
-  torp_sum_cols <- c("torp", "torp_recv", "torp_disp", "torp_spoil", "torp_hitout")
+  torp_sum_cols <- c("torp", "torp_recv", "torp_disp", "torp_spoil", "torp_hitout", "psr")
 
   team_rt_df <- team_lineup_df |>
     dplyr::filter(!is.na(player_id)) |>
     dplyr::mutate(team_name_adj = torp_replace_teams(team_name)) |>
     dplyr::group_by(match_id, team_id, season, round_number, team_type) |>
     dplyr::summarise(
-      venue = torp_replace_venues(max(venue_name)),
       team_name_adj = max(team_name_adj),
       dplyr::across(dplyr::all_of(c(torp_sum_cols, MATCH_POS_COLS)), ~ sum(.x, na.rm = TRUE)),
       count = dplyr::n(),
@@ -180,11 +200,18 @@
 #' @keywords internal
 #' @importFrom purrr pmap_dbl
 .build_match_features <- function(fix_df, team_rt_df, all_grounds) {
-  torp_sum_cols <- c("torp", "torp_recv", "torp_disp", "torp_spoil", "torp_hitout")
+  torp_sum_cols <- c("torp", "torp_recv", "torp_disp", "torp_spoil", "torp_hitout", "psr")
+
+  # Add venue from fixtures (teams data doesn't carry venue)
+  team_rt_df <- team_rt_df |>
+    dplyr::left_join(
+      fix_df |> dplyr::select(match_id, team_id, venue),
+      by = c("match_id", "team_id")
+    )
 
   # Home ground detection
   home_ground <- team_rt_df |>
-    dplyr::group_by(team_id, team_name_adj) |>
+    dplyr::group_by(team_id) |>
     dplyr::summarise(home_ground = get_mode(venue), .groups = "drop") |>
     dplyr::mutate(venue_adj = torp_replace_venues(as.character(home_ground))) |>
     dplyr::left_join(
@@ -257,7 +284,7 @@
       by = c("match_id", "team_id", "season", "round_number")
     ) |>
     dplyr::group_by(team_id) |>
-    tidyr::fill(torp, torp_recv, torp_disp, torp_spoil, torp_hitout) |>
+    tidyr::fill(torp, torp_recv, torp_disp, torp_spoil, torp_hitout, psr) |>
     dplyr::mutate(
       def = ifelse(def == 0, dplyr::lag(def), def),
       mid = ifelse(mid == 0, dplyr::lag(mid), mid),
@@ -370,11 +397,11 @@
         httr2::req_perform() |>
         httr2::resp_body_json()
       tibble::tibble(
-        time = as.POSIXct(unlist(hourly$hourly$time), format = "%Y-%m-%dT%H:%M", tz = "UTC"),
-        temperature_2m = as.numeric(unlist(hourly$hourly$temperature_2m)),
-        precipitation = as.numeric(unlist(hourly$hourly$precipitation)),
-        wind_speed_10m = as.numeric(unlist(hourly$hourly$wind_speed_10m)),
-        relative_humidity_2m = as.numeric(unlist(hourly$hourly$relative_humidity_2m)),
+        time = as.POSIXct(unlist(resp$hourly$time), format = "%Y-%m-%dT%H:%M", tz = "UTC"),
+        temperature_2m = as.numeric(unlist(resp$hourly$temperature_2m)),
+        precipitation = as.numeric(unlist(resp$hourly$precipitation)),
+        wind_speed_10m = as.numeric(unlist(resp$hourly$wind_speed_10m)),
+        relative_humidity_2m = as.numeric(unlist(resp$hourly$relative_humidity_2m)),
         venue = vd$venue
       )
     }, error = function(e) {
@@ -428,7 +455,7 @@
 #'
 #' @param results Results data (may be mixed schema across seasons)
 #' @return Tibble with columns: match_id, home_score, home_goals, home_behinds,
-#'   away_score, away_goals, away_behinds, utc_start_time
+#'   away_score, away_goals, away_behinds
 #' @keywords internal
 .normalise_results_schema <- function(results) {
   has_canonical <- "match_id" %in% names(results) && "home_score" %in% names(results)
@@ -436,16 +463,14 @@
   has_fix <- "home.score.totalScore" %in% names(results)
 
   if (has_canonical) {
-    # Already normalised — select canonical columns
     return(results |>
       dplyr::select(
         match_id, home_score, home_goals, home_behinds,
-        away_score, away_goals, away_behinds, utc_start_time
+        away_score, away_goals, away_behinds
       ))
   }
 
   if (has_cfs && has_fix) {
-    # Mixed schema: CFS (2021-2025) + fixture (2026+) row-bound together.
     is_fix_row <- !is.na(results[["home.score.totalScore"]])
     parts <- list()
     if (any(!is_fix_row)) {
@@ -457,8 +482,7 @@
           home_behinds = homeTeamScore.matchScore.behinds,
           away_score = awayTeamScore.matchScore.totalScore,
           away_goals = awayTeamScore.matchScore.goals,
-          away_behinds = awayTeamScore.matchScore.behinds,
-          utc_start_time = match.utcStartTime
+          away_behinds = awayTeamScore.matchScore.behinds
         )
     }
     if (any(is_fix_row)) {
@@ -470,8 +494,7 @@
           home_behinds = home.score.behinds,
           away_score = away.score.totalScore,
           away_goals = away.score.goals,
-          away_behinds = away.score.behinds,
-          utc_start_time = utcStartTime
+          away_behinds = away.score.behinds
         )
     }
     dplyr::bind_rows(parts)
@@ -484,8 +507,7 @@
         home_behinds = homeTeamScore.matchScore.behinds,
         away_score = awayTeamScore.matchScore.totalScore,
         away_goals = awayTeamScore.matchScore.goals,
-        away_behinds = awayTeamScore.matchScore.behinds,
-        utc_start_time = match.utcStartTime
+        away_behinds = awayTeamScore.matchScore.behinds
       )
   } else if (has_fix) {
     results |>
@@ -496,8 +518,7 @@
         home_behinds = home.score.behinds,
         away_score = away.score.totalScore,
         away_goals = away.score.goals,
-        away_behinds = away.score.behinds,
-        utc_start_time = utcStartTime
+        away_behinds = away.score.behinds
       )
   } else {
     cli::cli_abort("Results data has unrecognised schema. Expected match_id, match.matchId, or home.score.totalScore columns.")
@@ -524,7 +545,7 @@
   # Opponent columns for self-join
   opp_cols <- c(
     "match_id", "team_type",
-    "torp", "torp_recv", "torp_disp", "torp_spoil", "torp_hitout",
+    "torp", "torp_recv", "torp_disp", "torp_spoil", "torp_hitout", "psr",
     "def", "mid", "fwd", "int", MATCH_INDIVIDUAL_POS,
     "team_name", "team_name_season",
     "log_dist", "familiarity", "days_rest",
@@ -555,7 +576,8 @@
       torp_recv_diff = torp_recv.x - torp_recv.y,
       torp_disp_diff = torp_disp.x - torp_disp.y,
       torp_spoil_diff = torp_spoil.x - torp_spoil.y,
-      torp_hitout_diff = torp_hitout.x - torp_hitout.y
+      torp_hitout_diff = torp_hitout.x - torp_hitout.y,
+      psr_diff = psr.x - psr.y
     ) |>
     dplyr::left_join(
       .normalise_results_schema(results),
@@ -711,6 +733,7 @@
       + s(abs(torp_spoil_diff), bs = "ts", k = 5)
       + s(abs(torp_hitout_diff), bs = "ts", k = 5)
       + s(torp.x, bs = "ts", k = 5) + s(torp.y, bs = "ts", k = 5)
+      + s(psr.x, bs = "ts", k = 5) + s(psr.y, bs = "ts", k = 5)
       + s(venue_fac, bs = "re")
       + s(log_dist.x, bs = "ts", k = 5) + s(log_dist.y, bs = "ts", k = 5)
       + s(familiarity.x, bs = "ts", k = 5) + s(familiarity.y, bs = "ts", k = 5)
@@ -742,6 +765,7 @@
       + s(torp_disp_diff, bs = "ts", k = 5)
       + s(torp_spoil_diff, bs = "ts", k = 5)
       + s(torp_hitout_diff, bs = "ts", k = 5)
+      + s(psr_diff, bs = "ts", k = 5)
       + s(log_dist_diff, bs = "ts", k = 5) + s(familiarity_diff, bs = "ts", k = 5)
       + s(days_rest_diff_fac, bs = "re"),
     data = gam_df, weights = gam_df$weightz,
@@ -769,6 +793,7 @@
       + s(torp_disp_diff, bs = "ts", k = 5)
       + s(torp_spoil_diff, bs = "ts", k = 5)
       + s(torp_hitout_diff, bs = "ts", k = 5)
+      + s(psr_diff, bs = "ts", k = 5)
       + s(pred_tot_xscore, bs = "ts", k = 5)
       + s(pred_xscore_diff, bs = "ts", k = 5)
       + s(venue_fac, bs = "re")
@@ -791,6 +816,7 @@
       + ti(pred_xscore_diff, pred_conv_diff, bs = "ts", k = 5)
       + ti(pred_tot_xscore, pred_conv_diff, bs = "ts", k = 5)
       + s(pred_xscore_diff)
+      + s(psr_diff, bs = "ts", k = 5)
       + s(log_dist_diff, bs = "ts", k = 5) + s(familiarity_diff, bs = "ts", k = 5)
       + s(days_rest_diff_fac, bs = "re"),
     data = gam_df, weights = gam_df$weightz,
@@ -825,6 +851,33 @@
     cli::cli_warn("pred_win outside [0,1]: [{round(pred_win_range[1], 4)}, {round(pred_win_range[2], 4)}]")
   }
 
+  # Home/away symmetry check: for each match, H_score_diff ≈ -A_score_diff
+  # and H_win + A_win ≈ 1. Large deviations indicate a data pipeline bug.
+  sym_check <- team_mdl_df |>
+    dplyr::group_by(match_id) |>
+    dplyr::summarise(
+      score_sum = sum(pred_score_diff),
+      win_sum = sum(pred_win),
+      n = dplyr::n(),
+      .groups = "drop"
+    ) |>
+    dplyr::filter(n == 2)
+
+  if (nrow(sym_check) > 0) {
+    max_score_asym <- max(abs(sym_check$score_sum))
+    max_win_asym <- max(abs(sym_check$win_sum - 1))
+    if (max_score_asym > 5) {
+      cli::cli_abort(c(
+        "Home/away prediction asymmetry detected (max score_diff sum: {round(max_score_asym, 1)}).",
+        "i" = "For each match, home pred_score_diff + away pred_score_diff should be ~0.",
+        "i" = "This usually indicates a column name mismatch in the data pipeline."
+      ))
+    }
+    if (max_win_asym > 0.1) {
+      cli::cli_warn("Home/away win probability asymmetry: max |H_win + A_win - 1| = {round(max_win_asym, 4)}")
+    }
+  }
+
   # Scoring metrics
   team_mdl_df$bits <- dplyr::case_when(
     team_mdl_df$win == 1   ~ 1 + log2(team_mdl_df$pred_win),
@@ -852,6 +905,140 @@
 }
 
 
+# .train_match_xgb ----
+
+#' Train the 5-model sequential XGBoost pipeline
+#'
+#' Mirrors the GAM pipeline structure: total xPoints -> xScore diff -> conv diff
+#' -> score diff -> win probability, each step feeding the next.
+#'
+#' @param team_mdl_df Complete model dataset (with GAM predictions already added)
+#' @param train_filter Logical vector indicating training rows (NULL = all completed matches)
+#' @return List with $models (named list of 5 XGBoost models) and $data (team_mdl_df
+#'   with xgb_pred_score_diff and xgb_pred_win columns added)
+#' @keywords internal
+.train_match_xgb <- function(team_mdl_df, train_filter = NULL) {
+  loadNamespace("xgboost")
+
+  if (is.null(train_filter)) {
+    train_mask <- !is.na(team_mdl_df$win) & !is.na(team_mdl_df$total_xpoints_adj) &
+      !is.na(team_mdl_df$xscore_diff) & !is.na(team_mdl_df$shot_conv_diff) &
+      !is.na(team_mdl_df$score_diff)
+  } else {
+    train_mask <- train_filter & !is.na(team_mdl_df$win) &
+      !is.na(team_mdl_df$total_xpoints_adj) & !is.na(team_mdl_df$xscore_diff) &
+      !is.na(team_mdl_df$shot_conv_diff) & !is.na(team_mdl_df$score_diff)
+  }
+
+  xgb_df <- team_mdl_df[train_mask, ]
+  cli::cli_inform("XGBoost training on {nrow(xgb_df)} rows")
+  if (nrow(xgb_df) == 0) {
+    cli::cli_abort("Cannot train XGBoost: 0 complete rows after filtering")
+  }
+
+  # Feature columns
+  base_cols <- c(
+    "team_type_fac",
+    "game_year_decimal.x", "game_prop_through_year.x",
+    "game_prop_through_month.x", "game_prop_through_day.x",
+    "torp_diff", "torp_recv_diff", "torp_disp_diff",
+    "torp_spoil_diff", "torp_hitout_diff", "torp.x", "torp.y",
+    "psr_diff", "psr.x", "psr.y",
+    "log_dist.x", "log_dist.y", "log_dist_diff",
+    "familiarity.x", "familiarity.y", "familiarity_diff",
+    "days_rest_diff_fac"
+  )
+
+  reg_params <- list(
+    objective = "reg:squarederror", eval_metric = "rmse",
+    tree_method = "hist", eta = 0.05, subsample = 0.7,
+    colsample_bytree = 0.8, max_depth = 3, min_child_weight = 15
+  )
+  cls_params <- list(
+    objective = "binary:logistic", eval_metric = "logloss",
+    tree_method = "hist", eta = 0.05, subsample = 0.7,
+    colsample_bytree = 0.8, max_depth = 3, min_child_weight = 15
+  )
+
+  # Season-grouped CV folds
+  train_seasons <- sort(unique(xgb_df$season.x))
+  folds <- lapply(train_seasons, function(s) which(xgb_df$season.x == s))
+
+  # Helper: build DMatrix, run CV, train final model
+  train_step <- function(df, label, weights, feature_cols, params, step_name) {
+    fmat <- stats::model.matrix(~ . - 1, data = df[, feature_cols, drop = FALSE])
+    dtrain <- xgboost::xgb.DMatrix(data = fmat, label = label, weight = weights)
+
+    set.seed(1234)
+    cv <- xgboost::xgb.cv(
+      params = params, data = dtrain, nrounds = 1000, folds = folds,
+      early_stopping_rounds = 30, print_every_n = 0, verbose = 0
+    )
+    metric_col <- paste0("test_", params$eval_metric, "_mean")
+    best_n <- which.min(cv$evaluation_log[[metric_col]])
+    cv_score <- min(cv$evaluation_log[[metric_col]])
+
+    set.seed(1234)
+    model <- xgboost::xgb.train(
+      params = params, data = dtrain, nrounds = best_n,
+      print_every_n = 0, verbose = 0
+    )
+    list(model = model, preds = predict(model, dtrain),
+         best_n = best_n, cv_score = cv_score)
+  }
+
+  # Helper: predict on full dataset
+  predict_all <- function(model, df, feature_cols) {
+    mat <- stats::model.matrix(~ . - 1, data = df[, feature_cols, drop = FALSE])
+    predict(model, xgboost::xgb.DMatrix(data = mat))
+  }
+
+  # Step 1: total xPoints
+  s1 <- train_step(xgb_df, xgb_df$total_xpoints_adj, xgb_df$weightz, base_cols, reg_params, "total_xpoints")
+  xgb_df$xgb_pred_tot_xscore <- s1$preds
+  team_mdl_df$xgb_pred_tot_xscore <- predict_all(s1$model, team_mdl_df, base_cols)
+
+  # Step 2: xScore diff
+  s2_cols <- c(base_cols, "xgb_pred_tot_xscore")
+  s2 <- train_step(xgb_df, xgb_df$xscore_diff, xgb_df$weightz, s2_cols, reg_params, "xscore_diff")
+  xgb_df$xgb_pred_xscore_diff <- s2$preds
+  team_mdl_df$xgb_pred_xscore_diff <- predict_all(s2$model, team_mdl_df, s2_cols)
+
+  # Step 3: conv diff
+  s3_cols <- c(base_cols, "xgb_pred_tot_xscore", "xgb_pred_xscore_diff")
+  s3 <- train_step(xgb_df, xgb_df$shot_conv_diff, xgb_df$shot_weightz, s3_cols, reg_params, "conv_diff")
+  xgb_df$xgb_pred_conv_diff <- s3$preds
+  team_mdl_df$xgb_pred_conv_diff <- predict_all(s3$model, team_mdl_df, s3_cols)
+
+  # Step 4: score diff
+  s4_cols <- c(base_cols, "xgb_pred_xscore_diff", "xgb_pred_conv_diff", "xgb_pred_tot_xscore")
+  s4 <- train_step(xgb_df, xgb_df$score_diff, xgb_df$weightz, s4_cols, reg_params, "score_diff")
+  xgb_df$xgb_pred_score_diff <- s4$preds
+  team_mdl_df$xgb_pred_score_diff <- predict_all(s4$model, team_mdl_df, s4_cols)
+
+  # Step 5: win probability
+  s5_cols <- c(base_cols, "xgb_pred_tot_xscore", "xgb_pred_score_diff")
+  s5 <- train_step(xgb_df, as.numeric(xgb_df$win), xgb_df$weightz, s5_cols, cls_params, "win")
+  xgb_df$xgb_pred_win <- s5$preds
+  team_mdl_df$xgb_pred_win <- predict_all(s5$model, team_mdl_df, s5_cols)
+
+  cli::cli_alert_success("XGBoost pipeline trained ({s1$best_n}/{s2$best_n}/{s3$best_n}/{s4$best_n}/{s5$best_n} rounds)")
+
+  models <- list(
+    total_xpoints = s1$model, xscore_diff = s2$model, conv_diff = s3$model,
+    score_diff = s4$model, win = s5$model
+  )
+  steps <- list(
+    total_xpoints = list(best_n = s1$best_n, cv_score = s1$cv_score),
+    xscore_diff   = list(best_n = s2$best_n, cv_score = s2$cv_score),
+    conv_diff      = list(best_n = s3$best_n, cv_score = s3$cv_score),
+    score_diff     = list(best_n = s4$best_n, cv_score = s4$cv_score),
+    win            = list(best_n = s5$best_n, cv_score = s5$cv_score)
+  )
+  list(models = models, steps = steps, data = team_mdl_df)
+}
+
+
 # build_team_mdl_df (convenience wrapper) ----
 
 #' Build complete match model dataset end-to-end
@@ -865,7 +1052,7 @@
 #' @return Complete team_mdl_df ready for GAM training
 #' @keywords internal
 build_team_mdl_df <- function(season = NULL, target_weeks = NULL,
-                              weather_path = NULL) {
+                              weather_path = NULL, psr_coef_path = NULL) {
   if (is.null(season)) season <- get_afl_season()
 
   cli::cli_h2("Loading data")
@@ -875,6 +1062,30 @@ build_team_mdl_df <- function(season = NULL, target_weeks = NULL,
   results <- load_results(TRUE)
   teams <- load_teams(TRUE)
   torp_df <- load_torp_ratings()
+
+  # Load PSR (Player Skill Ratings)
+  psr_df <- NULL
+  tryCatch({
+    skills <- load_player_skills(TRUE)
+    if (is.null(psr_coef_path)) {
+      psr_coef_path <- system.file("extdata", "psr_v2_coefficients.csv", package = "torp")
+      if (psr_coef_path == "") {
+        psr_coef_path <- file.path(
+          find.package("torp", quiet = TRUE)[1] %||% ".",
+          "data-raw", "cache-skills", "psr_v2_coefficients.csv"
+        )
+      }
+    }
+    if (file.exists(psr_coef_path)) {
+      coef_df <- utils::read.csv(psr_coef_path)
+      psr_df <- calculate_psr(skills, coef_df)
+      cli::cli_inform("PSR computed for {nrow(psr_df)} player-rounds")
+    } else {
+      cli::cli_warn("PSR coefficient file not found: {psr_coef_path}")
+    }
+  }, error = function(e) {
+    cli::cli_warn("Failed to compute PSR: {e$message}")
+  })
 
   cli::cli_inform(paste0(
     "Loaded: fixtures=", nrow(fixtures), ", results=", nrow(results),
@@ -890,7 +1101,7 @@ build_team_mdl_df <- function(season = NULL, target_weeks = NULL,
   fix_df <- .build_fixtures_df(fixtures)
 
   cli::cli_h2("Processing lineups")
-  team_rt_df <- .build_team_ratings_df(teams, torp_df)
+  team_rt_df <- .build_team_ratings_df(teams, torp_df, psr_df)
 
   cli::cli_h2("Computing features")
   team_rt_fix_df <- .build_match_features(fix_df, team_rt_df, all_grounds)
@@ -921,6 +1132,60 @@ build_team_mdl_df <- function(season = NULL, target_weeks = NULL,
 
 #' Run weekly match predictions pipeline
 #'
+#' Average home/away rows into one match-level prediction
+#'
+#' Flips away-team predictions to the home-team perspective, then averages
+#' home and (flipped) away predictions per match. Expects columns from
+#' \code{.train_match_gams()} output (team_mdl_df).
+#'
+#' @param df Long-form team_mdl_df with both home and away rows per match
+#' @return One-row-per-match tibble with averaged predictions from the home
+#'   team perspective
+#' @keywords internal
+.format_match_preds <- function(df) {
+  home <- df |>
+    dplyr::filter(team_type_fac.x == "home") |>
+    dplyr::select(
+      season = season.x, round = round_number.x, players = count.x, match_id,
+      home_team = team_name.x, home_rating = torp.x, home_psr = psr.x,
+      away_team = team_name.y, away_rating = torp.y, away_psr = psr.y,
+      pred_xtotal = pred_tot_xscore, pred_xmargin = pred_xscore_diff,
+      pred_margin = pred_score_diff, pred_win, bits,
+      margin = score_diff, start_time = local_start_time_str, venue = venue.x
+    )
+  away <- df |>
+    dplyr::mutate(
+      pred_xscore_diff = -pred_xscore_diff,
+      pred_score_diff = -pred_score_diff,
+      pred_win = 1 - pred_win,
+      score_diff = -score_diff
+    ) |>
+    dplyr::filter(team_type_fac.x == "away") |>
+    dplyr::select(
+      season = season.x, round = round_number.x, players = count.x, match_id,
+      home_team = team_name.y, home_rating = torp.y, home_psr = psr.y,
+      away_team = team_name.x, away_rating = torp.x, away_psr = psr.x,
+      pred_xtotal = pred_tot_xscore, pred_xmargin = pred_xscore_diff,
+      pred_margin = pred_score_diff, pred_win, bits,
+      margin = score_diff, start_time = local_start_time_str, venue = venue.x
+    )
+  dplyr::bind_rows(home, away) |>
+    dplyr::group_by(season, round, match_id, home_team, home_rating, home_psr,
+                    away_team, away_rating, away_psr, start_time, venue) |>
+    dplyr::summarise(
+      players = mean(players), pred_xtotal = mean(pred_xtotal),
+      pred_margin = mean(pred_margin), pred_win = mean(pred_win),
+      margin = mean(margin), .groups = "drop"
+    ) |>
+    dplyr::mutate(
+      rating_diff = home_rating - away_rating,
+      psr_diff = home_psr - away_psr
+    ) |>
+    dplyr::select(season, round, match_id:away_psr, start_time, venue,
+                  rating_diff, psr_diff, players:margin)
+}
+
+
 #' Builds team_mdl_df with injury-adjusted ratings, trains 5 sequential GAMs,
 #' generates predictions for target weeks, and uploads to torpdata releases.
 #'
@@ -1001,8 +1266,30 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
   cli::cli_h2("Building fixture features")
   fix_df <- .build_fixtures_df(fixtures)
 
+  cli::cli_h2("Loading PSR")
+  psr_df <- NULL
+  tryCatch({
+    skills <- load_player_skills(TRUE)
+    psr_coef_path <- system.file("extdata", "psr_v2_coefficients.csv", package = "torp")
+    if (psr_coef_path == "") {
+      psr_coef_path <- file.path(
+        find.package("torp", quiet = TRUE)[1] %||% ".",
+        "data-raw", "cache-skills", "psr_v2_coefficients.csv"
+      )
+    }
+    if (file.exists(psr_coef_path)) {
+      coef_df <- utils::read.csv(psr_coef_path)
+      psr_df <- calculate_psr(skills, coef_df)
+      cli::cli_inform("PSR computed for {nrow(psr_df)} player-rounds")
+    } else {
+      cli::cli_warn("PSR coefficient file not found: {psr_coef_path}")
+    }
+  }, error = function(e) {
+    cli::cli_warn("Failed to compute PSR: {e$message}")
+  })
+
   cli::cli_h2("Processing lineups")
-  team_rt_df <- .build_team_ratings_df(teams, torp_df_total)
+  team_rt_df <- .build_team_ratings_df(teams, torp_df_total, psr_df)
 
   cli::cli_h2("Computing features")
   team_rt_fix_df <- .build_match_features(fix_df, team_rt_df, all_grounds)
@@ -1025,6 +1312,18 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
   tr <- match_injuries(tr, inj_df) |>
     dplyr::mutate(estimated_return = tidyr::replace_na(estimated_return, "None"))
 
+  # Join PSR to player-level ratings for injury-adjusted weekly summary
+  if (!is.null(psr_df)) {
+    tr <- tr |>
+      dplyr::left_join(
+        psr_df |> dplyr::select(player_id, season, round, psr),
+        by = c("player_id", "season", "round")
+      ) |>
+      dplyr::mutate(psr = tidyr::replace_na(psr, 0))
+  } else {
+    tr$psr <- 0
+  }
+
   tr_week <- tr |>
     dplyr::filter(!is.na(torp), is.na(injury)) |>
     dplyr::mutate(team_name = torp_replace_teams(team)) |>
@@ -1040,6 +1339,7 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
       torp_disp_week = sum(torp_disp * tog_wt, na.rm = TRUE) * SIM_INJURY_DISCOUNT,
       torp_spoil_week = sum(torp_spoil * tog_wt, na.rm = TRUE) * SIM_INJURY_DISCOUNT,
       torp_hitout_week = sum(torp_hitout * tog_wt, na.rm = TRUE) * SIM_INJURY_DISCOUNT,
+      psr_week = sum(psr * tog_wt, na.rm = TRUE) * SIM_INJURY_DISCOUNT,
       .groups = "drop"
     ) |>
     dplyr::arrange(-torp_week)
@@ -1059,7 +1359,8 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
       torp_recv = dplyr::coalesce(torp_recv, torp_recv_week),
       torp_disp = dplyr::coalesce(torp_disp, torp_disp_week),
       torp_spoil = dplyr::coalesce(torp_spoil, torp_spoil_week),
-      torp_hitout = dplyr::coalesce(torp_hitout, torp_hitout_week)
+      torp_hitout = dplyr::coalesce(torp_hitout, torp_hitout_week),
+      psr = dplyr::coalesce(psr, psr_week)
     )
 
   # Weather ----
@@ -1075,47 +1376,18 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
   gam_result <- .train_match_gams(team_mdl_df)
   team_mdl_df <- gam_result$data
 
+  # Train XGBoost & Blend ----
+  cli::cli_h2("Training XGBoost models on completed matches")
+  xgb_result <- .train_match_xgb(team_mdl_df)
+  team_mdl_df <- xgb_result$data
+
+  # 50/50 blend of GAM and XGBoost predictions
+  team_mdl_df$pred_score_diff <- 0.5 * team_mdl_df$pred_score_diff + 0.5 * team_mdl_df$xgb_pred_score_diff
+  team_mdl_df$pred_win <- 0.5 * team_mdl_df$pred_win + 0.5 * team_mdl_df$xgb_pred_win
+  cli::cli_alert_success("Blended GAM + XGBoost predictions (50/50)")
+
   # Format Predictions ----
   cli::cli_h2("Generating predictions for {length(target_weeks)} week{?s}")
-
-  # Helper: average home/away rows into one match-level prediction
-  .format_match_preds <- function(df) {
-    home <- df |>
-      dplyr::filter(team_type_fac.x == "home") |>
-      dplyr::select(
-        season = season.x, round = round_number.x, players = count.x, match_id,
-        home_team = team_name.x, home_rating = torp.x,
-        away_team = team_name.y, away_rating = torp.y,
-        pred_xtotal = pred_tot_xscore, pred_xmargin = pred_xscore_diff,
-        pred_margin = pred_score_diff, pred_win, bits,
-        margin = score_diff, start_time = local_start_time_str, venue = venue.x
-      )
-    away <- df |>
-      dplyr::mutate(
-        pred_xscore_diff = -pred_xscore_diff,
-        pred_score_diff = -pred_score_diff,
-        pred_win = 1 - pred_win,
-        score_diff = -score_diff
-      ) |>
-      dplyr::filter(team_type_fac.x == "away") |>
-      dplyr::select(
-        season = season.x, round = round_number.x, players = count.x, match_id,
-        home_team = team_name.y, home_rating = torp.y,
-        away_team = team_name.x, away_rating = torp.x,
-        pred_xtotal = pred_tot_xscore, pred_xmargin = pred_xscore_diff,
-        pred_margin = pred_score_diff, pred_win, bits,
-        margin = score_diff, start_time = local_start_time_str, venue = venue.x
-      )
-    dplyr::bind_rows(home, away) |>
-      dplyr::group_by(season, round, match_id, home_team, home_rating, away_team, away_rating, start_time, venue) |>
-      dplyr::summarise(
-        players = mean(players), pred_xtotal = mean(pred_xtotal),
-        pred_margin = mean(pred_margin), pred_win = mean(pred_win),
-        margin = mean(margin), .groups = "drop"
-      ) |>
-      dplyr::mutate(rating_diff = home_rating - away_rating) |>
-      dplyr::select(season, round, match_id:away_rating, start_time, venue, rating_diff, players:margin)
-  }
 
   # All matches (for analysis)
   all_preds <- .format_match_preds(team_mdl_df)
@@ -1131,11 +1403,37 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
   if (any(is.na(week_gms$pred_win))) cli::cli_abort("NA values in pred_win")
   if (any(week_gms$pred_win < 0 | week_gms$pred_win > 1)) cli::cli_abort("pred_win values out of [0,1] range")
   if (any(is.na(week_gms$pred_margin))) cli::cli_abort("NA values in pred_margin")
+
+  # Margin and win probability must agree in direction
+  margin_sign <- sign(week_gms$pred_margin)
+  win_sign <- sign(week_gms$pred_win - 0.5)
+  # Exclude near-zero margins (< 1 point) and near-50/50 win probs where sign can legitimately differ
+  meaningful <- abs(week_gms$pred_margin) > 1 & abs(week_gms$pred_win - 0.5) > 0.02
+  disagreements <- meaningful & margin_sign != win_sign
+  if (any(disagreements)) {
+    bad <- week_gms[disagreements, ]
+    cli::cli_abort(c(
+      "Margin and win probability disagree in direction for {sum(disagreements)} match{?es}.",
+      "i" = "e.g. {bad$home_team[1]} vs {bad$away_team[1]}: margin={round(bad$pred_margin[1], 1)}, win={round(bad$pred_win[1], 3)}",
+      "i" = "Positive margin should correspond to win probability > 0.5."
+    ))
+  }
+
+  # Total expected score should be in a plausible range (100-250 points)
+  if (any(week_gms$pred_xtotal < 100 | week_gms$pred_xtotal > 250)) {
+    bad_xt <- week_gms[week_gms$pred_xtotal < 100 | week_gms$pred_xtotal > 250, ]
+    cli::cli_abort(c(
+      "Implausible pred_xtotal values detected ({nrow(bad_xt)} match{?es} outside 100-250 range).",
+      "i" = "e.g. {bad_xt$home_team[1]} vs {bad_xt$away_team[1]}: pred_xtotal={round(bad_xt$pred_xtotal[1], 1)}",
+      "i" = "This usually indicates missing or corrupt XG data in the training set."
+    ))
+  }
+
   cli::cli_alert_success("Validation passed: {nrow(week_gms)} matches")
 
   # Upload ----
   cli::cli_h2("Uploading predictions")
-  week_gms <- week_gms |> dplyr::rename(week = round) |> dplyr::relocate(week)
+  week_gms <- week_gms |> dplyr::ungroup() |> dplyr::rename(week = round) |> dplyr::relocate(week)
 
   pred_file_name <- paste0("predictions_", season)
   existing <- tryCatch(
@@ -1185,8 +1483,9 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
     }
 
     combined <- existing |>
+      dplyr::ungroup() |>
       dplyr::filter(!match_id %in% week_gms$match_id) |>
-      dplyr::bind_rows(week_gms) |>
+      dplyr::bind_rows(dplyr::ungroup(week_gms)) |>
       dplyr::arrange(week)
   } else {
     combined <- week_gms
@@ -1214,7 +1513,9 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
 
   invisible(list(
     predictions = all_preds,
-    models = gam_result$models
+    models = gam_result$models,
+    xgb_models = xgb_result$models,
+    model_data = team_mdl_df
   ))
 }
 

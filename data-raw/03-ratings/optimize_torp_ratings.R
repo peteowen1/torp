@@ -48,17 +48,26 @@ disp_raw <- data.table::as.data.table(pbp_data)[
 ]
 
 ## 2b. Reception raw components ----
-recv_raw <- data.table::as.data.table(pbp_data)[
+# Intercept marks: pos_team == -1 AND lead_desc_tot indicates a mark
+pbp_dt <- data.table::as.data.table(pbp_data)
+pbp_dt[, is_intercept_mark := pos_team == -1L & grepl("ted Mark|Mark On", lead_desc_tot)]
+recv_raw <- pbp_dt[
   , .(
     # For reception: delta_epv * pos_team, split by pos_team
-    sum_depv_pt_neg = sum((delta_epv * pos_team)[pos_team == -1], na.rm = TRUE),
-    n_recv_neg      = sum(pos_team == -1, na.rm = TRUE),
+    # Non-intercept-mark defensive receptions
+    sum_depv_pt_neg = sum((delta_epv * pos_team)[pos_team == -1 & !is_intercept_mark], na.rm = TRUE),
+    n_recv_neg      = sum(pos_team == -1 & !is_intercept_mark, na.rm = TRUE),
+    # Intercept mark defensive receptions (separate scale)
+    sum_depv_pt_neg_im = sum((delta_epv * pos_team)[is_intercept_mark], na.rm = TRUE),
+    n_recv_neg_im      = sum(is_intercept_mark, na.rm = TRUE),
+    # Positive (offensive) receptions
     sum_depv_pt_pos = sum((delta_epv * pos_team)[pos_team == 1], na.rm = TRUE),
     n_recv_pos      = sum(pos_team == 1, na.rm = TRUE)
   ),
   by = .(lead_player_id, match_id)
 ]
 setnames(recv_raw, "lead_player_id", "player_id")
+pbp_dt[, is_intercept_mark := NULL]
 
 ## 2c. Spoil/hitout raw counts ----
 # load_player_stats() now normalises column names (player_id, match_id, etc.)
@@ -203,11 +212,13 @@ lineups <- teams_dt[, .(player_ids = list(player_id),
 grounds_dt <- data.table::as.data.table(all_grounds)
 grounds_dt[, venue := torp_replace_venues(as.character(Ground))]
 
-# Find each team's home ground (mode of venue)
-home_ground <- data.table::as.data.table(teams_data)[
-  , .(venue = torp_replace_venues(names(sort(table(venue_name), decreasing = TRUE))[1])),
-  by = .(teamId = team_id)
-]
+# Find each team's home ground (mode of venue) — join fixtures for venue_name
+home_ground <- merge(
+  data.table::as.data.table(teams_data)[, .(match_id, team_id)],
+  fix_dt[, .(match_id, venue_name)],
+  by = "match_id"
+)[, .(venue = torp_replace_venues(names(sort(table(venue_name), decreasing = TRUE))[1])),
+  by = .(teamId = team_id)]
 home_ground <- merge(home_ground, grounds_dt[, .(venue, home_lat = Latitude, home_lon = Longitude)],
                      by = "venue", all.x = TRUE)
 
@@ -371,7 +382,7 @@ cat(sprintf("  Position groups: %s
 POSITION_BALANCE_LAMBDA <- 0.1
 
 # L2 (ridge) penalty on count-based stat weights to prevent overfitting ----
-STAT_WEIGHT_LAMBDA <- 0.25
+STAT_WEIGHT_LAMBDA <- 0.1
 
 # Names of count-based stat weight params subject to L2 penalty
 L2_PARAM_NAMES <- c("bounce_wt",
@@ -471,8 +482,9 @@ compute_credits <- function(pgr, params, verbose = FALSE) {
                     goals * p["goals_wt"] + behinds * p["behinds_wt"] +
                     shots_at_goal * p["shots_at_goal_wt"]]
 
-  # Reception points
+  # Reception points (intercept marks get separate scale)
   out[, recv_credits := (p["recv_neg_mult"] * sum_depv_pt_neg + n_recv_neg * p["recv_neg_offset"]) * p["recv_scale"] +
+                    (p["recv_neg_mult"] * sum_depv_pt_neg_im + n_recv_neg_im * p["recv_neg_offset"]) * p["recv_intercept_mark_scale"] +
                     (p["recv_pos_mult"] * sum_depv_pt_pos + n_recv_pos * p["recv_pos_offset"]) * p["recv_scale"] +
                     contested_poss * p["contested_poss_wt"] + contested_marks * p["contested_marks_wt"] +
                     ground_ball_gets * p["ground_ball_gets_wt"] + marks_inside50 * p["marks_inside50_wt"] +
@@ -619,6 +631,7 @@ objective_fn_fast <- function(par, env) {
               env$shots_at_goal * p["shots_at_goal_wt"]
 
   recv_credits <- (p["recv_neg_mult"] * env$sum_depv_pt_neg + env$n_recv_neg * p["recv_neg_offset"]) * p["recv_scale"] +
+              (p["recv_neg_mult"] * env$sum_depv_pt_neg_im + env$n_recv_neg_im * p["recv_neg_offset"]) * p["recv_intercept_mark_scale"] +
               (p["recv_pos_mult"] * env$sum_depv_pt_pos + env$n_recv_pos * p["recv_pos_offset"]) * p["recv_scale"] +
               env$contested_poss * p["contested_poss_wt"] +
               env$contested_marks * p["contested_marks_wt"] +
@@ -872,6 +885,7 @@ par_defaults <- c(
   recv_pos_mult          = CREDIT_RECV_POS_MULT,
   recv_pos_offset        = CREDIT_RECV_POS_OFFSET,
   recv_scale             = CREDIT_RECV_SCALE,
+  recv_intercept_mark_scale = CREDIT_RECV_INTERCEPT_MARK_SCALE,
   # --- Stat weights: disp component ---
   bounce_wt              = CREDIT_BOUNCE_WT,
   inside50s_wt           = CREDIT_INSIDE50S_WT,
@@ -949,13 +963,14 @@ par_lower <- c(
   # --- EPV/scale params (disp) ---
   disp_neg_offset        = 0,
   disp_pos_offset        = 0,
-  disp_scale             = 1,
+  disp_scale             = 0.5,
   # --- EPV/scale params (recv) ---
   recv_neg_mult          = 1,
   recv_neg_offset        = 0,
   recv_pos_mult          = 1,
   recv_pos_offset        = 0,
-  recv_scale             = 1,
+  recv_scale             = 0.5,
+  recv_intercept_mark_scale = 1,
   # --- Stat weights: disp component (all [-10, 10]; L2 provides real constraint) ---
   bounce_wt              = -10,
   inside50s_wt           = -10,
@@ -1011,13 +1026,14 @@ par_upper <- c(
   # --- EPV/scale params (disp) ---
   disp_neg_offset        = 0,
   disp_pos_offset        = 0,
-  disp_scale             = 1,
+  disp_scale             = 0.5,
   # --- EPV/scale params (recv) ---
   recv_neg_mult          = 1,
   recv_neg_offset        = 0,
   recv_pos_mult          = 1,
   recv_pos_offset        = 0,
-  recv_scale             = 1,
+  recv_scale             = 0.5,
+  recv_intercept_mark_scale = 1,
   # --- Stat weights: disp component ---
   bounce_wt              = 10,
   inside50s_wt           = 10,
@@ -1246,6 +1262,8 @@ fast_env <- list(
   bounces        = pgr_s$bounces,
   sum_depv_pt_neg = pgr_s$sum_depv_pt_neg,
   n_recv_neg     = pgr_s$n_recv_neg,
+  sum_depv_pt_neg_im = pgr_s$sum_depv_pt_neg_im,
+  n_recv_neg_im  = pgr_s$n_recv_neg_im,
   sum_depv_pt_pos = pgr_s$sum_depv_pt_pos,
   n_recv_pos     = pgr_s$n_recv_pos,
   spoils         = pgr_s$spoils,
@@ -1601,6 +1619,7 @@ param_to_constant <- c(
   recv_pos_mult     = "CREDIT_RECV_POS_MULT",
   recv_pos_offset   = "CREDIT_RECV_POS_OFFSET",
   recv_scale        = "CREDIT_RECV_SCALE",
+  recv_intercept_mark_scale = "CREDIT_RECV_INTERCEPT_MARK_SCALE",
   spoil_wt          = "CREDIT_SPOIL_WT",
   tackle_wt         = "CREDIT_TACKLE_WT",
   pressure_wt       = "CREDIT_PRESSURE_WT",

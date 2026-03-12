@@ -18,7 +18,11 @@ resolve_player <- function(player_name, seasons = TRUE) {
   details <- load_player_details(seasons)
 
   # Build a normalised full name column for matching
-  details$full_name_norm <- norm_name(paste(details$firstName, details$surname))
+  # Support both old (firstName) and new (first_name) column names
+  fn_col <- if ("first_name" %in% names(details)) "first_name" else "firstName"
+  sn_col <- "surname"
+
+  details$full_name_norm <- norm_name(paste(details[[fn_col]], details[[sn_col]]))
   search_norm <- norm_name(player_name)
 
   matches <- details[grepl(search_norm, details$full_name_norm, fixed = TRUE), ]
@@ -33,7 +37,7 @@ resolve_player <- function(player_name, seasons = TRUE) {
 
   if (nrow(unique_players) > 1) {
     player_list <- paste(
-      paste(unique_players$firstName, unique_players$surname),
+      paste(unique_players[[fn_col]], unique_players[[sn_col]]),
       paste0("(", unique_players$team, ")"),
       collapse = ", "
     )
@@ -44,7 +48,7 @@ resolve_player <- function(player_name, seasons = TRUE) {
 
   list(
     player_id = picked$player_id,
-    player_name = paste(picked$firstName, picked$surname),
+    player_name = paste(picked[[fn_col]], picked[[sn_col]]),
     team = picked$team,
     position = picked$position
   )

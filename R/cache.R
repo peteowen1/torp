@@ -170,6 +170,32 @@ clear_model_cache <- function(verbose = FALSE) {
   invisible(NULL)
 }
 
+#' Clear All Caches
+#'
+#' Clears all torp caches: in-memory data, in-memory models, and on-disk
+#' parquet files. This is the nuclear option — use when you want a completely
+#' fresh start (e.g. after a package update that changes column schemas).
+#'
+#' @param verbose Logical. If TRUE, prints cache clearing information.
+#' @return Invisible NULL
+#' @export
+#' @examples
+#' \donttest{
+#' clear_all_cache()
+#' clear_all_cache(verbose = TRUE)
+#' }
+clear_all_cache <- function(verbose = FALSE) {
+  clear_data_cache(verbose = verbose)
+  clear_model_cache(verbose = verbose)
+  clear_disk_cache(verbose = verbose)
+
+  if (verbose) {
+    cli::cli_inform("All torp caches cleared (data, model, disk)")
+  }
+
+  invisible(NULL)
+}
+
 #' Get Model Cache Info
 #'
 #' Returns information about cached models.

@@ -16,6 +16,7 @@ default_credit_params <- function() {
     recv_pos_mult     = CREDIT_RECV_POS_MULT,
     recv_pos_offset   = CREDIT_RECV_POS_OFFSET,
     recv_scale        = CREDIT_RECV_SCALE,
+    recv_intercept_mark_scale = CREDIT_RECV_INTERCEPT_MARK_SCALE,
     spoil_wt          = CREDIT_SPOIL_WT,
     tackle_wt         = CREDIT_TACKLE_WT,
     pressure_wt       = CREDIT_PRESSURE_WT,
@@ -123,10 +124,21 @@ create_player_game_data <- function(pbp_data = NULL,
   ), by = .(player_id, match_id)]
 
   # Step 2: Reception points (grouped by lead_player_id + match_id)
+  # Intercept marks (pos_team == -1 AND mark description) get a separate scale
+  dt[, is_intercept_mark := pos_team == -1L & grepl("ted Mark|Mark On", lead_desc_tot)]
   recv_dt <- dt[, .(
-    recv_credits = sum(data.table::fifelse(pos_team == -1, (p$recv_neg_mult * delta_epv * pos_team) + p$recv_neg_offset, (p$recv_pos_mult * delta_epv * pos_team) + p$recv_pos_offset) * p$recv_scale),
+    recv_credits = sum(data.table::fifelse(
+      is_intercept_mark,
+      ((p$recv_neg_mult * delta_epv * pos_team) + p$recv_neg_offset) * p$recv_intercept_mark_scale,
+      data.table::fifelse(
+        pos_team == -1L,
+        ((p$recv_neg_mult * delta_epv * pos_team) + p$recv_neg_offset) * p$recv_scale,
+        ((p$recv_pos_mult * delta_epv * pos_team) + p$recv_pos_offset) * p$recv_scale
+      )
+    )),
     receptions = .N
   ), by = .(lead_player_id, match_id)]
+  dt[, is_intercept_mark := NULL]
 
   # Step 3: Join disposal + reception
   plyr_gm_df <- merge(disp_dt, recv_dt,

@@ -32,6 +32,9 @@ utils::globalVariables(c(
 
   # Time variables
   "period_seconds", "time_remaining", "min_seconds", "max_seconds",
+  "game_time_elapsed", "game_time_remaining",
+  "total_game_time_elapsed", "total_game_time_remaining",
+  ".play_delta", ".lag_desc", "score_urgency",
 
   # Chain/play variables
   "chain_number", "phase_of_play", "play_type", "description",
@@ -78,12 +81,12 @@ utils::globalVariables(c(
   "games",
 
   # create_player_game_data variables
-  "delta_epv", "pos_team", "wpa", "home_away", "lead_player", "lead_player_id",
+  "delta_epv", "pos_team", "wpa", "home_away", "lead_player", "lead_player_id", "is_intercept_mark", "lead_desc_tot",
   "round_week", "opp_tm", "recv_credits", "disp_credits", "spoil_credits", "hitout_credits",
   "total_credits", "receptions", "disposals_pbp", "opponent",
   "bounces", "hitouts",
   "position", "round_number",
-  "player_name", "given_name", "surname", "jumper_number",
+  "player_name", "given_name", "surname", "jumper_number", "captain",
 
   # create_player_game_data stat columns
   "uncontested_possessions", "marks_inside50",
@@ -141,7 +144,21 @@ utils::globalVariables(c(
 ))
 
 # PSR variables
-utils::globalVariables(c("psr_raw", "psr"))
+utils::globalVariables(c("psr_raw", "psr", "psr.x", "psr.y", "psr_diff",
+                          "home_psr", "away_psr", "psr_week"))
+
+# player_credit.R stat columns
+utils::globalVariables(c(
+  "spoils", "pressure_acts", "def_half_pressure_acts",
+  "hitouts_to_advantage", "ruck_contests", "ground_ball_gets"
+))
+
+# match_model.R columns
+utils::globalVariables(c(
+  "venue_name", "venue_timezone",
+  "home_goals", "home_behinds", "away_goals", "away_behinds",
+  "round_number.x"
+))
 
 # rlang .env pronoun
 utils::globalVariables(c(".env"))
@@ -305,4 +322,10 @@ utils::globalVariables(c(
   # Predictions pipeline
   "home_rating", "away_rating", "start_time", "players",
   "pred_margin", "rating_diff"
+))
+
+# Team profile variables
+utils::globalVariables(c(
+  "pf", "pa", "loss", "draw", "round", "last_match",
+  "..mean_cols", "..sum_cols", "..display_cols"
 ))

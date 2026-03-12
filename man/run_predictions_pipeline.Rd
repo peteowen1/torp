@@ -2,7 +2,8 @@
 % Please edit documentation in R/match_model.R
 \name{run_predictions_pipeline}
 \alias{run_predictions_pipeline}
-\title{Run weekly match predictions pipeline}
+\title{Builds team_mdl_df with injury-adjusted ratings, trains 5 sequential GAMs,
+generates predictions for target weeks, and uploads to torpdata releases.}
 \usage{
 run_predictions_pipeline(week = NULL, weeks = NULL, season = NULL)
 }

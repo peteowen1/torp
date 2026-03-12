@@ -80,7 +80,7 @@ update_player_stats <- function(season) {
 
   player_stats <- tryCatch({
     get_afl_player_stats(season) |>
-      dplyr::select(where(~ dplyr::n_distinct(.) > 1)) |>
+      dplyr::select(tidyselect::where(~ dplyr::n_distinct(.) > 1)) |>
       torp_clean_names()
   }, error = function(e) {
     cli::cli_alert_danger("Failed to fetch player stats: {conditionMessage(e)}")
@@ -99,7 +99,7 @@ update_player_stats <- function(season) {
     player_stats$season <- as.integer(season)
   }
 
-  file_name <- glue::glue("player_stats_{season}")
+  file_name <- paste0("player_stats_", season)
   save_to_release(df = player_stats, file_name = file_name, release_tag = "player_stats-data")
 
   cli::cli_inform("Saved player stats: {file_name} ({nrow(player_stats)} rows)")
@@ -413,6 +413,11 @@ load_xg <- function(seasons = get_afl_season(), use_disk_cache = FALSE, columns 
 
   out <- load_from_url(urls, seasons = seasons, use_disk_cache = use_disk_cache, columns = columns)
 
+  # Normalise old column names (home_sG → home_scored_goals, etc.)
+  if (nrow(out) > 0) {
+    .normalise_columns(out, XG_COL_MAP, verbose = TRUE, label = "XG")
+  }
+
   return(out)
 }
 
@@ -440,7 +445,7 @@ load_xg <- function(seasons = get_afl_season(), use_disk_cache = FALSE, columns 
 load_player_stats <- function(seasons = get_afl_season(), use_disk_cache = TRUE, refresh = FALSE, columns = NULL) {
   seasons <- validate_seasons(seasons)
 
-  .load_with_cache(
+  out <- .load_with_cache(
     cache_prefix = "player_stats",
     seasons = seasons,
     fetch_fn = function(s) {
@@ -452,6 +457,11 @@ load_player_stats <- function(seasons = get_afl_season(), use_disk_cache = TRUE,
     use_disk_cache = use_disk_cache,
     refresh = refresh
   )
+
+  # Always normalise — disk cache may predate the column schema
+  if (nrow(out) > 0) out <- tibble::as_tibble(.normalise_player_stats_columns(out))
+
+  out
 }
 
 #' Load Player Game Data
@@ -562,7 +572,7 @@ load_fixtures <- function(seasons = NULL, all = FALSE, use_cache = TRUE, cache_t
 load_teams <- function(seasons = get_afl_season(), use_disk_cache = TRUE, refresh = FALSE, columns = NULL) {
   seasons <- validate_seasons(seasons)
 
-  .load_with_cache(
+  out <- .load_with_cache(
     cache_prefix = "teams",
     seasons = seasons,
     fetch_fn = get_afl_lineups,
@@ -570,6 +580,16 @@ load_teams <- function(seasons = get_afl_season(), use_disk_cache = TRUE, refres
     use_disk_cache = use_disk_cache,
     refresh = refresh
   )
+
+  # Derive round_number from match_id if absent or NA (disk-cached data may lack it)
+  if (nrow(out) > 0 && "match_id" %in% names(out)) {
+    needs_round <- !"round_number" %in% names(out) || anyNA(out$round_number)
+    if (needs_round) {
+      out$round_number <- as.integer(substr(out$match_id, 12L, 13L))
+    }
+  }
+
+  out
 }
 
 #' Load AFL Match Results Data
@@ -653,7 +673,7 @@ load_player_details <- function(seasons = get_afl_season(), use_disk_cache = TRU
 #' })
 #' }
 #' @export
-load_predictions <- function(seasons = get_afl_season(), rounds = get_afl_week(), use_disk_cache = FALSE, columns = NULL) {
+load_predictions <- function(seasons = get_afl_season(), rounds = get_afl_week(type = "next"), use_disk_cache = FALSE, columns = NULL) {
   if (isTRUE(seasons) && missing(rounds)) rounds <- TRUE
   seasons <- validate_seasons(seasons)
   rounds <- validate_rounds(rounds)
@@ -661,6 +681,13 @@ load_predictions <- function(seasons = get_afl_season(), rounds = get_afl_week()
   urls <- generate_urls("predictions", "predictions", seasons)
 
   out <- load_from_url(urls, seasons = seasons, rounds = rounds, use_disk_cache = use_disk_cache, columns = columns)
+
+  # Normalise old column names (providerId → match_id, etc.)
+  if (nrow(out) > 0) {
+    if (!data.table::is.data.table(out)) out <- data.table::as.data.table(out)
+    .normalise_predictions_columns(out)
+    out <- tibble::as_tibble(out)
+  }
 
   return(out)
 }
@@ -701,6 +728,8 @@ load_torp_ratings <- function(columns = NULL) {
 #' @param seasons A numeric vector of 4-digit years associated with given AFL
 #'   seasons — defaults to latest season. If set to `TRUE`, returns all
 #'   available data since 2021.
+#' @param rounds A numeric vector of round numbers to filter to, or `TRUE`
+#'   (default) for all rounds.
 #' @param use_disk_cache Logical. If `TRUE`, uses persistent disk cache for
 #'   faster repeated loads. Default is `FALSE`.
 #' @param columns Optional character vector of column names to read. If NULL (default), reads all columns.
@@ -714,15 +743,22 @@ load_torp_ratings <- function(columns = NULL) {
 #' \dontrun{
 #' try({ # prevents cran errors
 #'   load_player_game_ratings(2024)
+#'   load_player_game_ratings(2024, rounds = 1:5)
 #' })
 #' }
 #' @export
-load_player_game_ratings <- function(seasons = get_afl_season(), use_disk_cache = FALSE, columns = NULL) {
+load_player_game_ratings <- function(seasons = get_afl_season(), rounds = TRUE, use_disk_cache = FALSE, columns = NULL) {
   seasons <- validate_seasons(seasons)
+  rounds <- validate_rounds(rounds)
 
   urls <- generate_urls("player_game_ratings-data", "player_game_ratings", seasons)
 
   out <- load_from_url(urls, seasons = seasons, use_disk_cache = use_disk_cache, columns = columns)
+
+  # Post-load round filter (data is stored per-season, not per-round)
+  if (!isTRUE(rounds) && "round" %in% names(out)) {
+    out <- out[out$round %in% rounds, ]
+  }
 
   return(out)
 }

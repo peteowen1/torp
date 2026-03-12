@@ -42,9 +42,14 @@ jobs:
           upload-snapshots: true
           build_args: 'c("--no-manual","--compact-vignettes=gs+qpdf")'
 
+      - name: Install pkgdown
+        uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          packages: any::pkgdown
+          needs: website
+
       - name: Validate pkgdown reference index
         run: |
-          install.packages("pkgdown", repos = "https://cloud.r-project.org")
           pkgdown::check_pkgdown(".")
           cat("pkgdown reference index OK\n")
         shell: Rscript {0}

@@ -18,7 +18,7 @@ result <- run_predictions_pipeline()
 
 # All predictions for analysis
 result$predictions
-result$predictions |> filter(season == 2026, round == 0)  # completed matches
+result$predictions |> filter(season == 2026, round == 1)  # completed matches
 
 # Model summaries
 summary(result$models$win)

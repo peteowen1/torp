@@ -8,8 +8,7 @@ player_game_ratings(
   season_val = get_afl_season(),
   round_num = get_afl_week(),
   matchid = NULL,
-  team = NULL,
-  player_game_data = NULL
+  team = NULL
 )
 }
 \arguments{
@@ -20,12 +19,12 @@ player_game_ratings(
 \item{matchid}{The match ID to filter by. Default is NULL (no filtering).}
 
 \item{team}{The team to filter by. Default is NULL (no filtering).}
-
-\item{player_game_data}{Optional pre-loaded player game data. If NULL, will load automatically.}
 }
 \value{
 A data frame containing player game ratings.
 }
 \description{
-This function retrieves game ratings for players based on specified criteria.
+Convenience wrapper around \code{\link[=load_player_game_ratings]{load_player_game_ratings()}} with filtering
+by season, round, match, or team. Returns the same data as the load
+function — both pull from the same pre-computed release.
 }

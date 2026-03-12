@@ -67,7 +67,8 @@ reference:
       - calculate_player_stats
       - calculate_psr
       - filter_game_data
-      - get_season_data
+      - team_profile
+      - print.torp_team_profile
 
   - title: Player Skills
     desc: Estimate and explore player skill profiles
@@ -81,6 +82,9 @@ reference:
       - print.torp_skill_profile
       - skill_position_map
       - skill_stat_definitions
+      - get_team_skills
+      - team_skill_profile
+      - print.torp_team_skill_profile
 
   - title: Season Simulation
     desc: Simulate AFL seasons and predict match outcomes
@@ -184,6 +188,7 @@ reference:
       - torp_team_abbr
       - torp_team_full
       - torp_replace_venues
+      - match_local_time
 
   - title: AFL API
     desc: Access AFL data directly from the API

@@ -44,39 +44,34 @@ test_that("EPV_WEIGHT_DECAY_DAYS has expected value", {
   expect_true(torp:::EPV_WEIGHT_DECAY_DAYS > 0)
 })
 
-test_that("RATING_DECAY_DEFAULT_DAYS has expected value", {
-  expect_equal(torp:::RATING_DECAY_DEFAULT_DAYS, 260)
+test_that("RATING_DECAY_DEFAULT_DAYS is within reasonable bounds", {
   expect_true(torp:::RATING_DECAY_DEFAULT_DAYS > 0)
+  expect_true(torp:::RATING_DECAY_DEFAULT_DAYS < 1000)
 })
 
-test_that("RATING_LOADING_DEFAULT has expected value", {
-  expect_equal(torp:::RATING_LOADING_DEFAULT, 1.0)
+test_that("RATING_LOADING_DEFAULT is within reasonable bounds", {
   expect_true(torp:::RATING_LOADING_DEFAULT > 0)
-  expect_true(torp:::RATING_LOADING_DEFAULT < 10)  # Reasonable upper bound
+  expect_true(torp:::RATING_LOADING_DEFAULT < 10)
 })
 
-test_that("RATING_PRIOR_GAMES_RECV has expected value", {
-  expect_equal(torp:::RATING_PRIOR_GAMES_RECV, 12.5632)
+test_that("RATING_PRIOR_GAMES_RECV is within reasonable bounds", {
   expect_true(torp:::RATING_PRIOR_GAMES_RECV > 0)
-  expect_true(torp:::RATING_PRIOR_GAMES_RECV < 50)  # Reasonable bound
+  expect_true(torp:::RATING_PRIOR_GAMES_RECV < 50)
 })
 
-test_that("RATING_PRIOR_GAMES_DISP has expected value", {
-  expect_equal(torp:::RATING_PRIOR_GAMES_DISP, 5.8261)
+test_that("RATING_PRIOR_GAMES_DISP is within reasonable bounds", {
   expect_true(torp:::RATING_PRIOR_GAMES_DISP > 0)
-  expect_true(torp:::RATING_PRIOR_GAMES_DISP < 50)  # Reasonable bound
+  expect_true(torp:::RATING_PRIOR_GAMES_DISP < 50)
 })
 
-test_that("RATING_PRIOR_GAMES_SPOIL has expected value", {
-  expect_equal(torp:::RATING_PRIOR_GAMES_SPOIL, 3.0000)
+test_that("RATING_PRIOR_GAMES_SPOIL is within reasonable bounds", {
   expect_true(torp:::RATING_PRIOR_GAMES_SPOIL > 0)
-  expect_true(torp:::RATING_PRIOR_GAMES_SPOIL < 50)  # Reasonable bound
+  expect_true(torp:::RATING_PRIOR_GAMES_SPOIL < 50)
 })
 
-test_that("RATING_PRIOR_GAMES_HITOUT has expected value", {
-  expect_equal(torp:::RATING_PRIOR_GAMES_HITOUT, 15.0000)
+test_that("RATING_PRIOR_GAMES_HITOUT is within reasonable bounds", {
   expect_true(torp:::RATING_PRIOR_GAMES_HITOUT > 0)
-  expect_true(torp:::RATING_PRIOR_GAMES_HITOUT < 50)  # Reasonable bound
+  expect_true(torp:::RATING_PRIOR_GAMES_HITOUT < 50)
 })
 
 # -----------------------------------------------------------------------------

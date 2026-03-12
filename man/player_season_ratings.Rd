@@ -15,5 +15,5 @@ player_season_ratings(season_val = get_afl_season(), round_num = NA)
 A data frame containing player season total ratings.
 }
 \description{
-This function calculates season total ratings for players.
+Convenience wrapper around \code{\link[=load_player_season_ratings]{load_player_season_ratings()}} with filtering.
 }

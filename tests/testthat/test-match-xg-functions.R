@@ -97,6 +97,33 @@ test_that("calculate_match_xgs returns expected structure and valid values", {
   # XG should be non-negative
   expect_true(all(.shared$match_xgs$home_xscore >= 0))
   expect_true(all(.shared$match_xgs$away_xscore >= 0))
+
+  # No matches should have zero total xscore (indicates team name mismatch)
+  expect_true(
+    all(.shared$match_xgs$total_xpoints > 0),
+    info = paste(
+      "Matches with zero xscore (team name mismatch?):",
+      paste(
+        .shared$match_xgs$match_id[.shared$match_xgs$total_xpoints == 0],
+        collapse = ", "
+      )
+    )
+  )
+})
+
+test_that("stored XG data has no zero-total matches", {
+  skip_if_offline()
+  xg_df <- tryCatch(load_xg(TRUE), error = function(e) NULL)
+  skip_if(is.null(xg_df), "Could not load XG data")
+
+  zeros <- xg_df$total_xpoints == 0
+  expect_true(
+    !any(zeros),
+    info = paste(
+      sum(zeros), "matches have zero total_xpoints in stored XG data.",
+      "Run rebuild_xg.R to fix."
+    )
+  )
 })
 
 test_that("calculate_match_xgs accepts subset of quarters", {

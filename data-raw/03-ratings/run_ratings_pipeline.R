@@ -36,7 +36,7 @@ source(here::here("data-raw/01-data/daily_release.R"))
 if (!exists("SEASONS", envir = .GlobalEnv)) SEASONS <- TRUE
 
 # Whether to re-fetch player_stats + teams from fitzRoy
-if (!exists("REFRESH_UPSTREAM", envir = .GlobalEnv)) REFRESH_UPSTREAM <- FALSE
+if (!exists("REFRESH_UPSTREAM", envir = .GlobalEnv)) REFRESH_UPSTREAM <- TRUE
 
 # Whether to rebuild player game tables from PBP
 if (!exists("REBUILD_PLAYER_GAME", envir = .GlobalEnv)) REBUILD_PLAYER_GAME <- TRUE
@@ -392,6 +392,37 @@ tryCatch({
 }, error = function(e) {
   cli::cli_alert_danger("Failed to compute team ratings: {conditionMessage(e)}")
 })
+
+tictoc::toc(log = TRUE)
+
+# Stage 5: Compute Player Game & Season Ratings ----
+
+cli::cli_h2("Stage 5: Player Game & Season Ratings")
+tictoc::tic("stage_5_derived_ratings")
+
+for (s in seasons) {
+  tryCatch({
+    start_round <- get_start_round(s)
+    max_round <- get_max_round(s)
+
+    pgd <- all_pgd[all_pgd$season == s, ]
+    if (nrow(pgd) == 0) next
+
+    # Player game ratings
+    pgr <- .compute_player_game_ratings(pgd, s, start_round:max_round)
+    file_name <- paste0("player_game_ratings_", s)
+    save_to_release(pgr, file_name, "player_game_ratings-data")
+    cli::cli_alert_success("Released {file_name} ({nrow(pgr)} rows)")
+
+    # Player season ratings
+    psr <- .compute_player_season_ratings(pgr)
+    file_name <- paste0("player_season_ratings_", s)
+    save_to_release(psr, file_name, "player_season_ratings-data")
+    cli::cli_alert_success("Released {file_name} ({nrow(psr)} rows)")
+  }, error = function(e) {
+    cli::cli_alert_danger("Failed derived ratings for {s}: {conditionMessage(e)}")
+  })
+}
 
 tictoc::toc(log = TRUE)
 
