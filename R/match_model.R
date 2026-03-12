@@ -1058,7 +1058,7 @@ build_team_mdl_df <- function(season = NULL, target_weeks = NULL,
   cli::cli_h2("Loading data")
   all_grounds <- file_reader("stadium_data", "reference-data")
   xg_df <- load_xg(TRUE)
-  fixtures <- load_fixtures(TRUE)
+  fixtures <- load_fixtures(TRUE, use_cache = TRUE)
   results <- load_results(TRUE)
   teams <- load_teams(TRUE)
   torp_df <- load_torp_ratings()
@@ -1215,7 +1215,7 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
 
   all_grounds <- file_reader("stadium_data", "reference-data")
   xg_df <- load_xg(TRUE)
-  fixtures <- load_fixtures(TRUE)
+  fixtures <- load_fixtures(TRUE, use_cache = TRUE)
   results <- load_results(TRUE)
 
   # Refresh current season results from AFL API

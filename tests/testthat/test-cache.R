@@ -6,13 +6,13 @@ test_that("fixture caching works correctly", {
   
   # Test initial load (should be cache miss)
   expect_message(
-    fixtures1 <- load_fixtures(seasons = 2021, verbose = TRUE),
+    fixtures1 <- load_fixtures(seasons = 2021, use_cache = TRUE, verbose = TRUE),
     "Cache MISS"
   )
-  
+
   # Test second load (should be cache hit)
   expect_message(
-    fixtures2 <- load_fixtures(seasons = 2021, verbose = TRUE),
+    fixtures2 <- load_fixtures(seasons = 2021, use_cache = TRUE, verbose = TRUE),
     "Cache HIT"
   )
   
@@ -32,14 +32,14 @@ test_that("cache expiration works", {
   clear_fixture_cache()
   
   # Load with very short TTL
-  fixtures1 <- load_fixtures(seasons = 2021, cache_ttl = 0.1)
-  
+  fixtures1 <- load_fixtures(seasons = 2021, use_cache = TRUE, cache_ttl = 0.1)
+
   # Wait for cache to expire
   Sys.sleep(0.2)
-  
+
   # Should get fresh data (cache expired)
   expect_message(
-    fixtures2 <- load_fixtures(seasons = 2021, verbose = TRUE, cache_ttl = 0.1),
+    fixtures2 <- load_fixtures(seasons = 2021, use_cache = TRUE, verbose = TRUE, cache_ttl = 0.1),
     "Cache EXPIRED"
   )
 })
@@ -68,7 +68,7 @@ test_that("all=TRUE caching works", {
 
   # First load — cache miss
   expect_message(
-    fixtures1 <- suppressWarnings(load_fixtures(all = TRUE, verbose = TRUE)),
+    fixtures1 <- suppressWarnings(load_fixtures(all = TRUE, use_cache = TRUE, verbose = TRUE)),
     "Cache MISS"
   )
 
@@ -81,7 +81,7 @@ test_that("all=TRUE caching works", {
 
   # Second load should be cache hit
   expect_message(
-    fixtures2 <- load_fixtures(all = TRUE, verbose = TRUE),
+    fixtures2 <- load_fixtures(all = TRUE, use_cache = TRUE, verbose = TRUE),
     "Cache HIT"
   )
   expect_identical(fixtures1, fixtures2)

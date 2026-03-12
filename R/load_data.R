@@ -515,8 +515,8 @@ load_player_game_data <- function(seasons = get_afl_season(), use_disk_cache = F
 #' try({ # prevents cran errors
 #'   load_fixtures(2021:2022)
 #'
-#'   # Load all fixtures with caching disabled
-#'   load_fixtures(all = TRUE, use_cache = FALSE)
+#'   # Load all fixtures with in-memory caching enabled
+#'   load_fixtures(all = TRUE, use_cache = TRUE)
 #'
 #'   # Load with verbose cache information
 #'   load_fixtures(all = TRUE, verbose = TRUE)

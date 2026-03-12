@@ -61,7 +61,7 @@ get_afl_week <- function(type = "current") {
   # Try to load fixtures for current season, handle missing data gracefully
   all_fixtures <- tryCatch(
     {
-      load_fixtures(season) |>
+      load_fixtures(season, use_cache = TRUE) |>
         dplyr::filter(.data$season == !!season)
     },
     error = function(e) {
