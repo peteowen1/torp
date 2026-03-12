@@ -108,7 +108,7 @@ calculate_torp_ratings <- function(season_val = get_afl_season(type = "current")
 
   # Load fixtures if not provided
   if (is.null(fixtures)) {
-    fixtures <- load_fixtures(TRUE, use_cache = TRUE)
+    fixtures <- load_fixtures(TRUE)
   }
 
   gwk <- sprintf("%02d", round_val)
@@ -407,7 +407,7 @@ prepare_final_dataframe <- function(plyr_tm_df = NULL, player_game_data = NULL, 
 
   # Load fixtures if not provided
   if (is.null(fixtures)) {
-    fixtures <- load_fixtures(TRUE, use_cache = TRUE)
+    fixtures <- load_fixtures(TRUE)
   }
 
   # Pre-compute fixtures summary if not provided (avoids redundant summarise in loops)

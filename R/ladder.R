@@ -33,7 +33,7 @@ prepare_sim_data <- function(season, team_ratings = NULL, fixtures = NULL,
 
  # --- Fixtures ---
   if (is.null(fixtures)) {
-    fixtures <- load_fixtures(seasons = season, use_cache = TRUE)
+    fixtures <- load_fixtures(seasons = season)
   }
   fix_dt <- data.table::as.data.table(fixtures)
 

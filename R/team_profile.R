@@ -630,7 +630,7 @@ match_local_time <- function(utc_start_time, venue_timezone = NULL) {
 
   # Try to get fixture details
   fixture <- tryCatch({
-    fix <- data.table::as.data.table(load_fixtures(all = TRUE, use_cache = TRUE))
+    fix <- data.table::as.data.table(load_fixtures(all = TRUE))
     fix[match_id == mid | as.character(match_id) == mid]
   }, error = function(e) NULL)
 
