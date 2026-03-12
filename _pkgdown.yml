@@ -67,7 +67,6 @@ reference:
       - calculate_player_stats
       - calculate_psr
       - filter_game_data
-      - get_season_data
 
   - title: Player Skills
     desc: Estimate and explore player skill profiles
