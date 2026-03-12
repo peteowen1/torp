@@ -144,7 +144,8 @@ utils::globalVariables(c(
 ))
 
 # PSR variables
-utils::globalVariables(c("psr_raw", "psr"))
+utils::globalVariables(c("psr_raw", "psr", "psr.x", "psr.y", "psr_diff",
+                          "home_psr", "away_psr", "psr_week"))
 
 # player_credit.R stat columns
 utils::globalVariables(c(
