@@ -492,6 +492,18 @@ XG_COL_MAP <- c(
   .normalise_columns(df, TEAMS_COL_MAP, verbose = TRUE, label = "Teams")
   .bulk_snake_case(df, verbose = TRUE, label = "Teams")
 
+  # AFL roster API returns abbreviations in teamName (e.g. "SYD", "CARL").
+
+  # Preserve as team_abbr and resolve to full display name in team_name.
+  if ("team_name" %in% names(df)) {
+    df[["team_abbr"]] <- df[["team_name"]]
+    abbr_lookup <- stats::setNames(AFL_TEAMS$name, AFL_TEAMS$abbr)
+    df[["team_name"]] <- unname(abbr_lookup[df[["team_abbr"]]]) %||% df[["team_abbr"]]
+    # Fall back to original value for any unmatched abbreviations
+    na_idx <- is.na(df[["team_name"]])
+    if (any(na_idx)) df[["team_name"]][na_idx] <- df[["team_abbr"]][na_idx]
+  }
+
   # Derive round_number from match_id when absent (AFL API data lacks it)
   if (!"round_number" %in% names(df) && "match_id" %in% names(df)) {
     df[["round_number"]] <- as.integer(substr(df[["match_id"]], 12L, 13L))
