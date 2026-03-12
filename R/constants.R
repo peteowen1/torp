@@ -744,5 +744,25 @@ AFL_TEAM_ALIASES <- c(
   "Yartapuulti"      = "Port Adelaide",
   "Euro-Yroke"       = "St Kilda",
   "Waalitj Marawar"  = "West Coast",
-  "Wallitj Marawar"  = "West Coast"
+  "Wallitj Marawar"  = "West Coast",
+
+  # --- ALL CAPS mascot variants (AFL API team names) ---
+  "Adelaide CROWS"             = "Adelaide",
+  "Brisbane LIONS"             = "Brisbane Lions",
+  "Carlton BLUES"              = "Carlton",
+  "Collingwood MAGPIES"        = "Collingwood",
+  "Essendon BOMBERS"           = "Essendon",
+  "Fremantle DOCKERS"          = "Fremantle",
+  "Geelong CATS"               = "Geelong",
+  "Gold Coast SUNS"            = "Gold Coast",
+  "GWS GIANTS"                 = "GWS",
+  "Hawthorn HAWKS"             = "Hawthorn",
+  "Melbourne DEMONS"           = "Melbourne",
+  "North Melbourne KANGAROOS"  = "North Melbourne",
+  "Port Adelaide POWER"        = "Port Adelaide",
+  "Richmond TIGERS"            = "Richmond",
+  "St Kilda SAINTS"            = "St Kilda",
+  "Sydney SWANS"               = "Sydney",
+  "West Coast EAGLES"          = "West Coast",
+  "Western BULLDOGS"           = "Western Bulldogs"
 )
