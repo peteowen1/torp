@@ -739,14 +739,26 @@ estimate_player_skills <- function(skill_data, ref_date = NULL,
 }
 
 #' Compute percentile rank of a player's values within a reference data.table
+#'
+#' @param dt Reference data.table for comparison.
+#' @param cols Column names to compute percentiles for.
+#' @param player_row Single-row data.table of the target player.
+#' @param higher_is_better Optional logical vector (same length as cols).
+#'   If FALSE for a stat, percentile is flipped (lower = better).
 #' @keywords internal
-.col_pctiles <- function(dt, cols, player_row) {
+.col_pctiles <- function(dt, cols, player_row, higher_is_better = NULL) {
   if (nrow(dt) == 0) return(rep(NA_real_, length(cols)))
-  vapply(cols, function(col) {
+  pcts <- vapply(cols, function(col) {
     player_val <- player_row[[col]]
     if (is.na(player_val)) return(NA_real_)
     mean(dt[[col]] <= player_val, na.rm = TRUE) * 100
   }, numeric(1))
+  # Flip for negative stats
+  if (!is.null(higher_is_better) && length(higher_is_better) == length(pcts)) {
+    flip <- !is.na(higher_is_better) & !higher_is_better
+    pcts[flip] <- 100 - pcts[flip]
+  }
+  pcts
 }
 
 
@@ -834,11 +846,12 @@ player_skill_profile <- function(player_name, ref_date = Sys.Date(),
   }
   profile$raw_avg <- .extract_player_cols(player_row, raw_cols)
 
-  # League-wide and position-group comparisons
+  # League-wide and position-group comparisons (flip percentiles for negative stats)
+  hib <- stat_defs$higher_is_better[match(stat_names, stat_defs$stat_name)]
   profile$league_avg <- .col_means(all_skills, skill_cols)
-  profile$league_pct <- .col_pctiles(all_skills, skill_cols, player_row)
+  profile$league_pct <- .col_pctiles(all_skills, skill_cols, player_row, hib)
   profile$pos_avg    <- .col_means(pos_subset, skill_cols)
-  profile$pos_pct    <- .col_pctiles(pos_subset, skill_cols, player_row)
+  profile$pos_pct    <- .col_pctiles(pos_subset, skill_cols, player_row, hib)
 
   # Exposure: per-stat 80s for rate stats, attempts for efficiency stats
   profile$n_80s  <- .extract_player_cols(player_row, paste0(stat_names, "_n80s"))

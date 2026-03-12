@@ -310,8 +310,8 @@ print.torp_team_profile <- function(x, ...) {
 #' })
 #' }
 get_team_skills <- function(team_name = NULL, top_n = 22) {
-  # Load current player skills
-  skills <- data.table::as.data.table(get_player_skills(current = TRUE))
+  # Load current player skills (current season only — faster than loading all history)
+  skills <- data.table::as.data.table(get_player_skills(seasons = get_afl_season(), current = TRUE))
 
   if (nrow(skills) == 0) {
     cli::cli_warn("No player skills data available.")
@@ -344,7 +344,9 @@ get_team_skills <- function(team_name = NULL, top_n = 22) {
   }
 
   # Try to get latest lineups to filter to actual selected players
-  lineup_ids <- .get_latest_lineup_ids()
+  lineup_data <- .get_latest_lineup_ids()
+  lineup_ids <- if (!is.null(lineup_data)) lineup_data$players else NULL
+  match_info <- if (!is.null(lineup_data)) lineup_data$match_info else NULL
 
   # Find skill columns
   stat_defs <- skill_stat_definitions()
@@ -406,6 +408,12 @@ get_team_skills <- function(team_name = NULL, top_n = 22) {
   }
 
   data.table::setorder(result, team)
+
+  # Attach lineup match info as attribute for downstream display
+  if (!is.null(match_info)) {
+    attr(result, "match_info") <- match_info
+  }
+
   result
 }
 
@@ -415,8 +423,12 @@ get_team_skills <- function(team_name = NULL, top_n = 22) {
 #' Loads lineup data for the current season and extracts each team's most
 #' recent match lineup. Maps abbreviation-style team names to canonical names.
 #'
-#' @return A data.table with \code{player_id} and \code{team} (canonical name),
-#'   or NULL if lineup data is unavailable.
+#' @return A list with elements:
+#' \describe{
+#'   \item{players}{data.table with \code{player_id} and \code{team} (canonical name)}
+#'   \item{match_info}{data.table with \code{team} and \code{match_id} for each team's latest match}
+#' }
+#' Returns NULL if lineup data is unavailable.
 #' @keywords internal
 .get_latest_lineup_ids <- function() {
   lineups <- tryCatch(
@@ -439,7 +451,10 @@ get_team_skills <- function(team_name = NULL, top_n = 22) {
   lineups <- merge(lineups, latest, by = "team")
   lineups <- lineups[match_id == last_match]
 
-  unique(lineups[, .(player_id, team)])
+  list(
+    players = unique(lineups[, .(player_id, team)]),
+    match_info = unique(latest)
+  )
 }
 
 
@@ -509,13 +524,20 @@ team_skill_profile <- function(team_name, top_n = 22) {
   # League average (mean across all teams)
   profile$league_avg <- colMeans(all_teams[, ..mean_cols], na.rm = TRUE)
 
-  # Percentile rank among all teams (by mean)
+
+  # Percentile rank among all teams (by mean), flipped for negative stats
+  hib_lookup <- stats::setNames(stat_defs$higher_is_better, stat_defs$stat_name)
+
   profile$league_pct <- vapply(seq_along(mean_cols), function(i) {
     col <- mean_cols[i]
     vals <- all_teams[[col]]
     team_val <- target[[col]]
     if (is.na(team_val) || all(is.na(vals))) return(NA_real_)
-    sum(vals <= team_val, na.rm = TRUE) / sum(!is.na(vals)) * 100
+    pct <- sum(vals <= team_val, na.rm = TRUE) / sum(!is.na(vals)) * 100
+    # Flip for negative stats (lower is better)
+    sn <- stat_names[i]
+    if (!is.na(hib_lookup[sn]) && !hib_lookup[sn]) pct <- 100 - pct
+    pct
   }, numeric(1))
 
   # Add category from stat definitions
@@ -530,6 +552,9 @@ team_skill_profile <- function(team_name, top_n = 22) {
   col_order <- intersect(col_order, names(profile))
   profile <- profile[, col_order]
 
+  # Resolve lineup match info for display
+  lineup_info <- .resolve_lineup_info(all_teams, tm$name)
+
   out <- list(
     team_info = data.frame(
       name = tm$name,
@@ -538,10 +563,99 @@ team_skill_profile <- function(team_name, top_n = 22) {
       stringsAsFactors = FALSE
     ),
     skills = profile[order(-profile$league_pct), ],
-    n_players = as.integer(target$n_players)
+    n_players = as.integer(target$n_players),
+    lineup_info = lineup_info
   )
   class(out) <- "torp_team_skill_profile"
   out
+}
+
+
+#' Convert UTC match time to local venue time
+#'
+#' Parses a UTC start time string and converts it to local time based on
+#' the venue timezone from fixture data.
+#'
+#' @param utc_start_time Character string in ISO 8601 format
+#'   (e.g. \code{"2026-03-05T08:30:00.000+0000"}).
+#' @param venue_timezone Olson timezone string (e.g. \code{"Australia/Sydney"}).
+#'   If NULL or NA, defaults to \code{"Australia/Melbourne"}.
+#'
+#' @return A formatted local time string (e.g. \code{"2026-03-05 19:30 AEDT"}),
+#'   or NA if the input cannot be parsed.
+#'
+#' @importFrom lubridate ymd_hms
+#' @export
+#'
+#' @examples
+#' match_local_time("2026-03-05T08:30:00.000+0000", "Australia/Sydney")
+#' match_local_time("2026-03-05T08:30:00.000+0000", "Australia/Perth")
+match_local_time <- function(utc_start_time, venue_timezone = NULL) {
+  if (is.na(utc_start_time) || is.null(utc_start_time)) return(NA_character_)
+
+  if (is.null(venue_timezone) || is.na(venue_timezone)) {
+    venue_timezone <- "Australia/Melbourne"
+  }
+
+  utc_time <- tryCatch(
+    lubridate::ymd_hms(utc_start_time, tz = "UTC"),
+    warning = function(w) NA,
+    error = function(e) NA
+  )
+
+  if (is.na(utc_time)) return(NA_character_)
+
+  format(utc_time, tz = venue_timezone, format = "%Y-%m-%d %H:%M %Z")
+}
+
+
+#' Resolve lineup match info for a team
+#'
+#' Looks up the match_id from the lineup attribute and joins with fixture
+#' data to get the opponent, round, and local datetime.
+#'
+#' @param team_skills The result of \code{get_team_skills()} (carries match_info attribute).
+#' @param team_name Canonical team name.
+#' @return A list with \code{match_id}, \code{opponent}, \code{round}, \code{datetime},
+#'   or NULL if unavailable.
+#' @keywords internal
+.resolve_lineup_info <- function(team_skills, team_name) {
+  match_info <- attr(team_skills, "match_info")
+  if (is.null(match_info)) return(NULL)
+
+  tm_match <- match_info[team == team_name]
+  if (nrow(tm_match) == 0) return(NULL)
+
+  mid <- tm_match$last_match[1]
+
+  # Try to get fixture details
+  fixture <- tryCatch({
+    fix <- data.table::as.data.table(load_fixtures(all = TRUE, use_cache = TRUE))
+    fix[match_id == mid | as.character(match_id) == mid]
+  }, error = function(e) NULL)
+
+  if (is.null(fixture) || nrow(fixture) == 0) {
+    return(list(match_id = mid, opponent = NA, round = NA, datetime = NA))
+  }
+
+  row <- fixture[1]
+
+  # Determine opponent (standardise fixture team names to canonical for comparison)
+  home_raw <- if ("home_team_name" %in% names(row)) as.character(row$home_team_name) else NA
+  away_raw <- if ("away_team_name" %in% names(row)) as.character(row$away_team_name) else NA
+  home <- torp_replace_teams(home_raw)
+  away <- torp_replace_teams(away_raw)
+  opponent <- if (!is.na(home) && home == team_name) away else home
+
+  # Round
+  rnd <- if ("round_number" %in% names(row)) row$round_number else NA
+
+  # Local datetime using venue timezone
+  tz_val <- if ("venue_timezone" %in% names(row)) as.character(row$venue_timezone) else NULL
+  utc_val <- if ("utc_start_time" %in% names(row)) as.character(row$utc_start_time) else NA
+  dt_val <- match_local_time(utc_val, tz_val)
+
+  list(match_id = mid, opponent = opponent, round = rnd, datetime = dt_val)
 }
 
 
@@ -553,11 +667,26 @@ team_skill_profile <- function(team_name, top_n = 22) {
 #' @export
 print.torp_team_skill_profile <- function(x, ...) {
   info <- x$team_info
+  li <- x$lineup_info
+
+  # Header
   cat(paste0(
     "=== Team Skill Profile: ", info$full,
     " (", info$abbr, ") ===\n",
-    "Players: ", x$n_players, "\n\n"
+    "Players: ", x$n_players
   ))
+
+  # Lineup source
+  if (!is.null(li)) {
+    parts <- character(0)
+    if (!is.na(li$round)) parts <- c(parts, paste0("R", li$round))
+    if (!is.na(li$opponent)) parts <- c(parts, paste0("vs ", li$opponent))
+    if (!is.na(li$datetime)) parts <- c(parts, li$datetime)
+    if (length(parts) > 0) {
+      cat(paste0("  |  Lineup: ", paste(parts, collapse = ", ")))
+    }
+  }
+  cat("\n\n")
 
   sk <- x$skills
 

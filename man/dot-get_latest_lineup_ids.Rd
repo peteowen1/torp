@@ -7,8 +7,12 @@
 .get_latest_lineup_ids()
 }
 \value{
-A data.table with \code{player_id} and \code{team} (canonical name),
-or NULL if lineup data is unavailable.
+A list with elements:
+\describe{
+\item{players}{data.table with \code{player_id} and \code{team} (canonical name)}
+\item{match_info}{data.table with \code{team} and \code{match_id} for each team's latest match}
+}
+Returns NULL if lineup data is unavailable.
 }
 \description{
 Loads lineup data for the current season and extracts each team's most
