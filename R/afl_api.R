@@ -530,17 +530,9 @@ get_afl_fixtures <- function(season = NULL) {
 #' @return A tibble, or NULL if the API returns an error
 #' @keywords internal
 .fetch_fixtures_for_season <- function(season) {
-  cache_key <- paste0("afl_fixtures_", season)
-  cached <- get_from_cache(cache_key)
-  if (!is.null(cached)) return(cached)
-
   season_id <- .afl_comp_season_id(season)
   if (is.null(season_id)) return(NULL)
-  result <- .fetch_fixtures_for_season_id(season_id)
-  if (!is.null(result) && nrow(result) > 0) {
-    store_in_cache(cache_key, result)
-  }
-  result
+  .fetch_fixtures_for_season_id(season_id)
 }
 
 #' Fetch fixtures for a single comp season ID (internal)
