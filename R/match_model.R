@@ -131,13 +131,19 @@
   }
   team_lineup_df$.unknown_pos <- NULL
 
-  # Join PSR if provided
+  # Join PSR if provided — use each player's most recent PSR value
+
   if (!is.null(psr_df)) {
+    latest_psr <- psr_df |>
+      dplyr::select(player_id, season, round, psr) |>
+      dplyr::arrange(player_id, season, round) |>
+      dplyr::group_by(player_id) |>
+      dplyr::slice_tail(n = 1) |>
+      dplyr::ungroup() |>
+      dplyr::select(player_id, psr)
+
     team_lineup_df <- team_lineup_df |>
-      dplyr::left_join(
-        psr_df |> dplyr::select(player_id, season, round, psr),
-        by = c("player_id" = "player_id", "season" = "season", "round_number" = "round")
-      ) |>
+      dplyr::left_join(latest_psr, by = "player_id") |>
       dplyr::mutate(
         psr = tidyr::replace_na(psr, 0),
         psr = psr * lineup_tog
