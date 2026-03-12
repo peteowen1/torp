@@ -445,7 +445,7 @@ load_xg <- function(seasons = get_afl_season(), use_disk_cache = FALSE, columns 
 load_player_stats <- function(seasons = get_afl_season(), use_disk_cache = TRUE, refresh = FALSE, columns = NULL) {
   seasons <- validate_seasons(seasons)
 
-  .load_with_cache(
+  out <- .load_with_cache(
     cache_prefix = "player_stats",
     seasons = seasons,
     fetch_fn = function(s) {
@@ -457,6 +457,11 @@ load_player_stats <- function(seasons = get_afl_season(), use_disk_cache = TRUE,
     use_disk_cache = use_disk_cache,
     refresh = refresh
   )
+
+  # Always normalise — disk cache may predate the column schema
+  if (nrow(out) > 0) out <- tibble::as_tibble(.normalise_player_stats_columns(out))
+
+  out
 }
 
 #' Load Player Game Data
@@ -723,6 +728,8 @@ load_torp_ratings <- function(columns = NULL) {
 #' @param seasons A numeric vector of 4-digit years associated with given AFL
 #'   seasons — defaults to latest season. If set to `TRUE`, returns all
 #'   available data since 2021.
+#' @param rounds A numeric vector of round numbers to filter to, or `TRUE`
+#'   (default) for all rounds.
 #' @param use_disk_cache Logical. If `TRUE`, uses persistent disk cache for
 #'   faster repeated loads. Default is `FALSE`.
 #' @param columns Optional character vector of column names to read. If NULL (default), reads all columns.
@@ -736,15 +743,22 @@ load_torp_ratings <- function(columns = NULL) {
 #' \dontrun{
 #' try({ # prevents cran errors
 #'   load_player_game_ratings(2024)
+#'   load_player_game_ratings(2024, rounds = 1:5)
 #' })
 #' }
 #' @export
-load_player_game_ratings <- function(seasons = get_afl_season(), use_disk_cache = FALSE, columns = NULL) {
+load_player_game_ratings <- function(seasons = get_afl_season(), rounds = TRUE, use_disk_cache = FALSE, columns = NULL) {
   seasons <- validate_seasons(seasons)
+  rounds <- validate_rounds(rounds)
 
   urls <- generate_urls("player_game_ratings-data", "player_game_ratings", seasons)
 
   out <- load_from_url(urls, seasons = seasons, use_disk_cache = use_disk_cache, columns = columns)
+
+  # Post-load round filter (data is stored per-season, not per-round)
+  if (!isTRUE(rounds) && "round" %in% names(out)) {
+    out <- out[out$round %in% rounds, ]
+  }
 
   return(out)
 }

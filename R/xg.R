@@ -60,7 +60,7 @@ calculate_match_xgs <- function(season = get_afl_season(), round = get_afl_week(
   zero_xg <- shots_df$match_id[shots_df$total_xpoints == 0]
   if (length(zero_xg) > 0) {
     cli::cli_warn(c(
-      "{length(zero_xg)} match{?es} ha{?s/ve} zero total xscore — likely a team name mismatch.",
+      "{length(zero_xg)} match{?es} ha{?s/ve} zero total xscore -- likely a team name mismatch.",
       "i" = "Check that PBP 'team' col matches 'home_team_name'/'away_team_name'.",
       "i" = "Affected: {paste(utils::head(zero_xg, 5), collapse = ', ')}"
     ))

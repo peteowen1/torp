@@ -118,17 +118,24 @@ PLAYER_STATS_COL_MAP <- c(
   # These are applied AFTER the bulk stats_ prefix strip
 
   # --- Player/match/round ID renames ---
-  "player_player_player_player_id" = "player_id",
-  "player_player_id"               = "player_id",
-  "player_player_player_given_name" = "given_name",
+  # Multiple nesting depths exist across API versions; map them all
+  "player_player_player_player_id"             = "player_id",
+  "player_player_id"                           = "player_id",
+  "player_player_player_given_name"            = "given_name",
   "player_player_player_player_name_given_name" = "given_name",
-  "player_player_player_surname"   = "surname",
-  "player_player_player_player_name_surname" = "surname",
-  "player_player_position"         = "position",
-  "player_jumper_number"           = "jumper_number",
-  "player_player_jumper_number"    = "jumper_number",
-  "provider_id"                    = "match_id",
-  "round_round_number"             = "round_number",
+  "player_player_name_given_name"              = "given_name",
+  "player_player_player_surname"               = "surname",
+  "player_player_player_player_name_surname"   = "surname",
+  "player_player_name_surname"                 = "surname",
+  "player_player_position"                     = "position",
+  "player_jumper_number"                       = "jumper_number",
+  "player_player_jumper_number"                = "jumper_number",
+  "player_player_player_player_jumper_number"  = "jumper_number",
+  "player_player_player_captain"               = "captain",
+  "player_captain"                             = "captain",
+  "stats_last_updated"                           = "last_updated",
+  "provider_id"                                = "match_id",
+  "round_round_number"                         = "round_number",
 
   # --- extended_stats_ prefix stripping ---
   "extended_stats_spoils"                     = "spoils",
@@ -420,10 +427,30 @@ XG_COL_MAP <- c(
   # --- 4. Bulk snake_case for any remaining camelCase columns ---
   .bulk_snake_case(dt, verbose = TRUE, label = "Player stats")
 
-  # --- 5. Add `season` column if missing ---
+  # --- 5. Add `player_name` from given_name + surname if missing ---
+  nms <- names(dt)
+  if (!"player_name" %in% nms && all(c("given_name", "surname") %in% nms)) {
+    dt[, player_name := paste(given_name, surname)]
+  }
+
+  # --- 6. Add `season` column if missing ---
   nms <- names(dt)
   if (!"season" %in% nms && "utc_start_time" %in% nms) {
     dt[, season := as.integer(format(as.Date(utc_start_time), "%Y"))]
+  }
+
+  # --- 7. Drop leftover columns that map to an already-existing canonical name ---
+  # e.g. player_player_id when player_id already exists from a deeper variant
+  nms <- names(dt)
+  drop_cols <- character()
+  for (from in names(PLAYER_STATS_COL_MAP)) {
+    to <- PLAYER_STATS_COL_MAP[[from]]
+    if (from %in% nms && to %in% nms && from != to) {
+      drop_cols <- c(drop_cols, from)
+    }
+  }
+  if (length(drop_cols) > 0) {
+    dt[, (drop_cols) := NULL]
   }
 
   invisible(dt)

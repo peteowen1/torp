@@ -81,12 +81,12 @@ utils::globalVariables(c(
   "games",
 
   # create_player_game_data variables
-  "delta_epv", "pos_team", "wpa", "home_away", "lead_player", "lead_player_id",
+  "delta_epv", "pos_team", "wpa", "home_away", "lead_player", "lead_player_id", "is_intercept_mark", "lead_desc_tot",
   "round_week", "opp_tm", "recv_credits", "disp_credits", "spoil_credits", "hitout_credits",
   "total_credits", "receptions", "disposals_pbp", "opponent",
   "bounces", "hitouts",
   "position", "round_number",
-  "player_name", "given_name", "surname", "jumper_number",
+  "player_name", "given_name", "surname", "jumper_number", "captain",
 
   # create_player_game_data stat columns
   "uncontested_possessions", "marks_inside50",
