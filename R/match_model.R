@@ -190,7 +190,7 @@
 
   # Home ground detection
   home_ground <- team_rt_df |>
-    dplyr::group_by(team_id, team_name_adj) |>
+    dplyr::group_by(team_id) |>
     dplyr::summarise(home_ground = get_mode(venue), .groups = "drop") |>
     dplyr::mutate(venue_adj = torp_replace_venues(as.character(home_ground))) |>
     dplyr::left_join(
@@ -376,11 +376,11 @@
         httr2::req_perform() |>
         httr2::resp_body_json()
       tibble::tibble(
-        time = as.POSIXct(unlist(hourly$hourly$time), format = "%Y-%m-%dT%H:%M", tz = "UTC"),
-        temperature_2m = as.numeric(unlist(hourly$hourly$temperature_2m)),
-        precipitation = as.numeric(unlist(hourly$hourly$precipitation)),
-        wind_speed_10m = as.numeric(unlist(hourly$hourly$wind_speed_10m)),
-        relative_humidity_2m = as.numeric(unlist(hourly$hourly$relative_humidity_2m)),
+        time = as.POSIXct(unlist(resp$hourly$time), format = "%Y-%m-%dT%H:%M", tz = "UTC"),
+        temperature_2m = as.numeric(unlist(resp$hourly$temperature_2m)),
+        precipitation = as.numeric(unlist(resp$hourly$precipitation)),
+        wind_speed_10m = as.numeric(unlist(resp$hourly$wind_speed_10m)),
+        relative_humidity_2m = as.numeric(unlist(resp$hourly$relative_humidity_2m)),
         venue = vd$venue
       )
     }, error = function(e) {
@@ -434,7 +434,7 @@
 #'
 #' @param results Results data (may be mixed schema across seasons)
 #' @return Tibble with columns: match_id, home_score, home_goals, home_behinds,
-#'   away_score, away_goals, away_behinds, utc_start_time
+#'   away_score, away_goals, away_behinds
 #' @keywords internal
 .normalise_results_schema <- function(results) {
   has_canonical <- "match_id" %in% names(results) && "home_score" %in% names(results)
@@ -442,16 +442,14 @@
   has_fix <- "home.score.totalScore" %in% names(results)
 
   if (has_canonical) {
-    # Already normalised — select canonical columns
     return(results |>
       dplyr::select(
         match_id, home_score, home_goals, home_behinds,
-        away_score, away_goals, away_behinds, utc_start_time
+        away_score, away_goals, away_behinds
       ))
   }
 
   if (has_cfs && has_fix) {
-    # Mixed schema: CFS (2021-2025) + fixture (2026+) row-bound together.
     is_fix_row <- !is.na(results[["home.score.totalScore"]])
     parts <- list()
     if (any(!is_fix_row)) {
@@ -463,8 +461,7 @@
           home_behinds = homeTeamScore.matchScore.behinds,
           away_score = awayTeamScore.matchScore.totalScore,
           away_goals = awayTeamScore.matchScore.goals,
-          away_behinds = awayTeamScore.matchScore.behinds,
-          utc_start_time = match.utcStartTime
+          away_behinds = awayTeamScore.matchScore.behinds
         )
     }
     if (any(is_fix_row)) {
@@ -476,8 +473,7 @@
           home_behinds = home.score.behinds,
           away_score = away.score.totalScore,
           away_goals = away.score.goals,
-          away_behinds = away.score.behinds,
-          utc_start_time = utcStartTime
+          away_behinds = away.score.behinds
         )
     }
     dplyr::bind_rows(parts)
@@ -490,8 +486,7 @@
         home_behinds = homeTeamScore.matchScore.behinds,
         away_score = awayTeamScore.matchScore.totalScore,
         away_goals = awayTeamScore.matchScore.goals,
-        away_behinds = awayTeamScore.matchScore.behinds,
-        utc_start_time = match.utcStartTime
+        away_behinds = awayTeamScore.matchScore.behinds
       )
   } else if (has_fix) {
     results |>
@@ -502,8 +497,7 @@
         home_behinds = home.score.behinds,
         away_score = away.score.totalScore,
         away_goals = away.score.goals,
-        away_behinds = away.score.behinds,
-        utc_start_time = utcStartTime
+        away_behinds = away.score.behinds
       )
   } else {
     cli::cli_abort("Results data has unrecognised schema. Expected match_id, match.matchId, or home.score.totalScore columns.")
@@ -831,6 +825,33 @@
     cli::cli_warn("pred_win outside [0,1]: [{round(pred_win_range[1], 4)}, {round(pred_win_range[2], 4)}]")
   }
 
+  # Home/away symmetry check: for each match, H_score_diff ≈ -A_score_diff
+  # and H_win + A_win ≈ 1. Large deviations indicate a data pipeline bug.
+  sym_check <- team_mdl_df |>
+    dplyr::group_by(match_id) |>
+    dplyr::summarise(
+      score_sum = sum(pred_score_diff),
+      win_sum = sum(pred_win),
+      n = dplyr::n(),
+      .groups = "drop"
+    ) |>
+    dplyr::filter(n == 2)
+
+  if (nrow(sym_check) > 0) {
+    max_score_asym <- max(abs(sym_check$score_sum))
+    max_win_asym <- max(abs(sym_check$win_sum - 1))
+    if (max_score_asym > 5) {
+      cli::cli_abort(c(
+        "Home/away prediction asymmetry detected (max score_diff sum: {round(max_score_asym, 1)}).",
+        "i" = "For each match, home pred_score_diff + away pred_score_diff should be ~0.",
+        "i" = "This usually indicates a column name mismatch in the data pipeline."
+      ))
+    }
+    if (max_win_asym > 0.1) {
+      cli::cli_warn("Home/away win probability asymmetry: max |H_win + A_win - 1| = {round(max_win_asym, 4)}")
+    }
+  }
+
   # Scoring metrics
   team_mdl_df$bits <- dplyr::case_when(
     team_mdl_df$win == 1   ~ 1 + log2(team_mdl_df$pred_win),
@@ -1137,11 +1158,37 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
   if (any(is.na(week_gms$pred_win))) cli::cli_abort("NA values in pred_win")
   if (any(week_gms$pred_win < 0 | week_gms$pred_win > 1)) cli::cli_abort("pred_win values out of [0,1] range")
   if (any(is.na(week_gms$pred_margin))) cli::cli_abort("NA values in pred_margin")
+
+  # Margin and win probability must agree in direction
+  margin_sign <- sign(week_gms$pred_margin)
+  win_sign <- sign(week_gms$pred_win - 0.5)
+  # Exclude near-zero margins (< 1 point) and near-50/50 win probs where sign can legitimately differ
+  meaningful <- abs(week_gms$pred_margin) > 1 & abs(week_gms$pred_win - 0.5) > 0.02
+  disagreements <- meaningful & margin_sign != win_sign
+  if (any(disagreements)) {
+    bad <- week_gms[disagreements, ]
+    cli::cli_abort(c(
+      "Margin and win probability disagree in direction for {sum(disagreements)} match{?es}.",
+      "i" = "e.g. {bad$home_team[1]} vs {bad$away_team[1]}: margin={round(bad$pred_margin[1], 1)}, win={round(bad$pred_win[1], 3)}",
+      "i" = "Positive margin should correspond to win probability > 0.5."
+    ))
+  }
+
+  # Total expected score should be in a plausible range (100-250 points)
+  if (any(week_gms$pred_xtotal < 100 | week_gms$pred_xtotal > 250)) {
+    bad_xt <- week_gms[week_gms$pred_xtotal < 100 | week_gms$pred_xtotal > 250, ]
+    cli::cli_abort(c(
+      "Implausible pred_xtotal values detected ({nrow(bad_xt)} match{?es} outside 100-250 range).",
+      "i" = "e.g. {bad_xt$home_team[1]} vs {bad_xt$away_team[1]}: pred_xtotal={round(bad_xt$pred_xtotal[1], 1)}",
+      "i" = "This usually indicates missing or corrupt XG data in the training set."
+    ))
+  }
+
   cli::cli_alert_success("Validation passed: {nrow(week_gms)} matches")
 
   # Upload ----
   cli::cli_h2("Uploading predictions")
-  week_gms <- week_gms |> dplyr::rename(week = round) |> dplyr::relocate(week)
+  week_gms <- week_gms |> dplyr::ungroup() |> dplyr::rename(week = round) |> dplyr::relocate(week)
 
   pred_file_name <- paste0("predictions_", season)
   existing <- tryCatch(
@@ -1191,8 +1238,9 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
     }
 
     combined <- existing |>
+      dplyr::ungroup() |>
       dplyr::filter(!match_id %in% week_gms$match_id) |>
-      dplyr::bind_rows(week_gms) |>
+      dplyr::bind_rows(dplyr::ungroup(week_gms)) |>
       dplyr::arrange(week)
   } else {
     combined <- week_gms
@@ -1220,7 +1268,8 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
 
   invisible(list(
     predictions = all_preds,
-    models = gam_result$models
+    models = gam_result$models,
+    model_data = team_mdl_df
   ))
 }
 

@@ -94,6 +94,8 @@ test_that("clean_model_data_wp filters NA label_wp", {
     goal = rep(0.3, 6),
     period = rep(1, 6),
     period_seconds = rep(500, 6),
+    total_game_time_elapsed = rep(400, 6),
+    total_game_time_remaining = rep(4400, 6),
     play_type = rep("kick", 6),
     phase_of_play = rep("set_shot", 6),
     stringsAsFactors = FALSE
@@ -160,10 +162,13 @@ test_that("select_wp_model_vars selects correct columns", {
   # Create mock data with WP model columns
   mock_data <- create_mock_pbp_data(10)
   mock_data$total_seconds <- mock_data$period_seconds + (mock_data$period - 1) * 2000
+  mock_data$total_game_time_elapsed <- sample(0:4800, 10, replace = TRUE)
+  mock_data$total_game_time_remaining <- 4800 - mock_data$total_game_time_elapsed
   mock_data$xpoints_diff <- runif(10, -10, 10)
   mock_data$pos_lead_prob <- runif(10, 0, 1)
   mock_data$time_left_scaler <- runif(10, 1, 4)
   mock_data$diff_time_ratio <- runif(10, -50, 50)
+  mock_data$score_urgency <- runif(10, -5, 5)
 
   result <- tryCatch(
     select_wp_model_vars(mock_data),
@@ -174,7 +179,7 @@ test_that("select_wp_model_vars selects correct columns", {
     expect_true(is.data.frame(result))
 
     # Check expected columns
-    expected_cols <- c("total_seconds", "shot_row", "home", "points_diff")
+    expected_cols <- c("total_game_time_elapsed", "shot_row", "home", "points_diff")
     present <- expected_cols %in% names(result)
     expect_true(sum(present) >= 3)
   }
@@ -575,10 +580,10 @@ test_that("game_time_elapsed is 0 at Centre Bounce start of quarter", {
   dt[, .lag_desc := data.table::shift(description, 1L, type = "lag"), by = .(match_id, period)]
   dt[.lag_desc %in% CLOCK_STOPPAGE_TRIGGERS | description %in% CLOCK_RESTART_EVENTS,
      .play_delta := 0]
+  dt[.play_delta > CLOCK_DELTA_CAP, .play_delta := CLOCK_DELTA_CAP]
   dt[, game_time_elapsed := cumsum(.play_delta), by = .(match_id, period)]
 
   # Centre Bounce at row 1 → game_time_elapsed should be 0
-
   expect_equal(dt$game_time_elapsed[1], 0)
   # Subsequent rows accumulate play time
   expect_true(all(diff(dt$game_time_elapsed) >= 0))
@@ -589,7 +594,7 @@ test_that("goal row keeps its delta but row after goal has delta zeroed", {
     match_id = rep("M1", 6),
     period = rep(1L, 6),
     display_order = 1:6,
-    period_seconds = c(0, 100, 200, 300, 310, 400),
+    period_seconds = c(0, 10, 20, 100, 105, 120),
     description = c("Centre Bounce", "Kick", "Goal", "Centre Bounce", "Kick", "Handball")
   )
 
@@ -599,11 +604,12 @@ test_that("goal row keeps its delta but row after goal has delta zeroed", {
   dt[, .lag_desc := data.table::shift(description, 1L, type = "lag"), by = .(match_id, period)]
   dt[.lag_desc %in% CLOCK_STOPPAGE_TRIGGERS | description %in% CLOCK_RESTART_EVENTS,
      .play_delta := 0]
+  dt[.play_delta > CLOCK_DELTA_CAP, .play_delta := CLOCK_DELTA_CAP]
 
   # Row 1 (Centre Bounce): restart → delta = 0
   expect_equal(dt$.play_delta[1], 0)
   # Row 3 (Goal): lag_desc = "Kick" (not stoppage), desc = "Goal" (not restart) → keeps delta
-  expect_equal(dt$.play_delta[3], 100)
+  expect_equal(dt$.play_delta[3], 10)
   # Row 4 (Centre Bounce after Goal): lag_desc = "Goal" (stoppage) AND desc = "Centre Bounce" (restart)
   expect_equal(dt$.play_delta[4], 0)
 })
@@ -613,7 +619,7 @@ test_that("Out of Bounds → Ball Up Call transition delta zeroed", {
     match_id = rep("M1", 4),
     period = rep(1L, 4),
     display_order = 1:4,
-    period_seconds = c(100, 200, 250, 350),
+    period_seconds = c(100, 110, 125, 140),
     description = c("Kick", "Out of Bounds", "Ball Up Call", "Kick")
   )
 
@@ -623,11 +629,12 @@ test_that("Out of Bounds → Ball Up Call transition delta zeroed", {
   dt[, .lag_desc := data.table::shift(description, 1L, type = "lag"), by = .(match_id, period)]
   dt[.lag_desc %in% CLOCK_STOPPAGE_TRIGGERS | description %in% CLOCK_RESTART_EVENTS,
      .play_delta := 0]
+  dt[.play_delta > CLOCK_DELTA_CAP, .play_delta := CLOCK_DELTA_CAP]
 
   # Row 3 (Ball Up Call): lag_desc = "Out of Bounds" (stoppage trigger) → delta zeroed
   expect_equal(dt$.play_delta[3], 0)
   # Row 4 (Kick after Ball Up Call): normal play → keeps delta
-  expect_equal(dt$.play_delta[4], 100)
+  expect_equal(dt$.play_delta[4], 15)
 })
 
 test_that("negative period_seconds deltas clamped to 0", {
@@ -662,20 +669,21 @@ test_that("game_time_remaining never negative", {
   dt[, .lag_desc := data.table::shift(description, 1L, type = "lag"), by = .(match_id, period)]
   dt[.lag_desc %in% CLOCK_STOPPAGE_TRIGGERS | description %in% CLOCK_RESTART_EVENTS,
      .play_delta := 0]
+  dt[.play_delta > CLOCK_DELTA_CAP, .play_delta := CLOCK_DELTA_CAP]
   dt[, game_time_elapsed := cumsum(.play_delta), by = .(match_id, period)]
   dt[, game_time_remaining := pmax(0L, AFL_PLAY_QUARTER_SECONDS - game_time_elapsed)]
 
-  # game_time_elapsed exceeds 1200 at row 3, but remaining is clamped to 0
+  # Remaining is clamped to 0 (never negative)
   expect_true(all(dt$game_time_remaining >= 0))
 })
 
 test_that("total_game_time_elapsed spans quarters correctly", {
   dt <- data.table::data.table(
-    match_id = rep("M1", 4),
-    period = c(1L, 1L, 2L, 2L),
-    display_order = 1:4,
-    period_seconds = c(0, 600, 0, 400),
-    description = c("Centre Bounce", "Kick", "Centre Bounce", "Kick")
+    match_id = rep("M1", 6),
+    period = c(1L, 1L, 1L, 2L, 2L, 2L),
+    display_order = 1:6,
+    period_seconds = c(0, 10, 20, 0, 10, 20),
+    description = c("Centre Bounce", "Kick", "Kick", "Centre Bounce", "Kick", "Kick")
   )
 
   dt[, .play_delta := period_seconds - data.table::shift(period_seconds, 1L, type = "lag"),
@@ -684,13 +692,35 @@ test_that("total_game_time_elapsed spans quarters correctly", {
   dt[, .lag_desc := data.table::shift(description, 1L, type = "lag"), by = .(match_id, period)]
   dt[.lag_desc %in% CLOCK_STOPPAGE_TRIGGERS | description %in% CLOCK_RESTART_EVENTS,
      .play_delta := 0]
+  dt[.play_delta > CLOCK_DELTA_CAP, .play_delta := CLOCK_DELTA_CAP]
   dt[, game_time_elapsed := cumsum(.play_delta), by = .(match_id, period)]
   dt[, total_game_time_elapsed := (period - 1L) * AFL_PLAY_QUARTER_SECONDS + game_time_elapsed]
 
-  # Period 2, row with 400s elapsed → total = 1200 + 400 = 1600
-  expect_equal(dt$total_game_time_elapsed[4], 1600)
+  # Period 2, row with 20s elapsed → total = 1200 + 20 = 1220
+  expect_equal(dt$total_game_time_elapsed[6], 1220)
   # Period 1 start → 0
   expect_equal(dt$total_game_time_elapsed[1], 0)
+})
+
+test_that("play deltas capped at CLOCK_DELTA_CAP seconds", {
+  dt <- data.table::data.table(
+    match_id = rep("M1", 3),
+    period = rep(1L, 3),
+    display_order = 1:3,
+    period_seconds = c(0, 10, 200),
+    description = c("Centre Bounce", "Kick", "Kick")
+  )
+
+  dt[, .play_delta := period_seconds - data.table::shift(period_seconds, 1L, type = "lag"),
+     by = .(match_id, period)]
+  dt[is.na(.play_delta) | .play_delta < 0, .play_delta := 0]
+  dt[, .lag_desc := data.table::shift(description, 1L, type = "lag"), by = .(match_id, period)]
+  dt[.lag_desc %in% CLOCK_STOPPAGE_TRIGGERS | description %in% CLOCK_RESTART_EVENTS,
+     .play_delta := 0]
+  dt[.play_delta > CLOCK_DELTA_CAP, .play_delta := CLOCK_DELTA_CAP]
+
+  # Row 3: raw delta = 190, capped to CLOCK_DELTA_CAP (30)
+  expect_equal(dt$.play_delta[3], CLOCK_DELTA_CAP)
 })
 
 test_that("calculate_game_time_remaining helper works correctly", {

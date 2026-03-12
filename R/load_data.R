@@ -413,6 +413,11 @@ load_xg <- function(seasons = get_afl_season(), use_disk_cache = FALSE, columns 
 
   out <- load_from_url(urls, seasons = seasons, use_disk_cache = use_disk_cache, columns = columns)
 
+  # Normalise old column names (home_sG → home_scored_goals, etc.)
+  if (nrow(out) > 0) {
+    .normalise_columns(out, XG_COL_MAP, verbose = TRUE, label = "XG")
+  }
+
   return(out)
 }
 
@@ -562,7 +567,7 @@ load_fixtures <- function(seasons = NULL, all = FALSE, use_cache = TRUE, cache_t
 load_teams <- function(seasons = get_afl_season(), use_disk_cache = TRUE, refresh = FALSE, columns = NULL) {
   seasons <- validate_seasons(seasons)
 
-  .load_with_cache(
+  out <- .load_with_cache(
     cache_prefix = "teams",
     seasons = seasons,
     fetch_fn = get_afl_lineups,
@@ -570,6 +575,16 @@ load_teams <- function(seasons = get_afl_season(), use_disk_cache = TRUE, refres
     use_disk_cache = use_disk_cache,
     refresh = refresh
   )
+
+  # Derive round_number from match_id if absent or NA (disk-cached data may lack it)
+  if (nrow(out) > 0 && "match_id" %in% names(out)) {
+    needs_round <- !"round_number" %in% names(out) || anyNA(out$round_number)
+    if (needs_round) {
+      out$round_number <- as.integer(substr(out$match_id, 12L, 13L))
+    }
+  }
+
+  out
 }
 
 #' Load AFL Match Results Data
@@ -661,6 +676,13 @@ load_predictions <- function(seasons = get_afl_season(), rounds = get_afl_week(t
   urls <- generate_urls("predictions", "predictions", seasons)
 
   out <- load_from_url(urls, seasons = seasons, rounds = rounds, use_disk_cache = use_disk_cache, columns = columns)
+
+  # Normalise old column names (providerId → match_id, etc.)
+  if (nrow(out) > 0) {
+    if (!data.table::is.data.table(out)) out <- data.table::as.data.table(out)
+    .normalise_predictions_columns(out)
+    out <- tibble::as_tibble(out)
+  }
 
   return(out)
 }

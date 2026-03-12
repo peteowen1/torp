@@ -3,14 +3,14 @@
 \docType{data}
 \name{CLOCK_RESTART_EVENTS}
 \alias{CLOCK_RESTART_EVENTS}
-\title{Descriptions that always follow dead time (restarts)}
+\title{Descriptions that always follow dead time (restarts after clock stoppage)}
 \format{
-An object of class \code{character} of length 2.
+An object of class \code{character} of length 9.
 }
 \usage{
 CLOCK_RESTART_EVENTS
 }
 \description{
-Descriptions that always follow dead time (restarts)
+Descriptions that always follow dead time (restarts after clock stoppage)
 }
 \keyword{internal}

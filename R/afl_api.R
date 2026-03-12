@@ -100,7 +100,7 @@
     season_id <- .afl_comp_season_id(actual_season)
     if (is.null(season_id)) next
 
-    team_ids <- unique(c(fixtures$home.team.id, fixtures$away.team.id))
+    team_ids <- unique(c(fixtures$home_team_api_id, fixtures$away_team_api_id))
     team_ids <- team_ids[!is.na(team_ids)]
 
     for (tid in team_ids) {
@@ -194,6 +194,9 @@
   # Add season column, then clean up internal column
   result$season <- result$.actual_season
   result$.actual_season <- NULL
+
+  # Normalise remaining camelCase columns to snake_case
+  .normalise_player_details_columns(result)
 
   tibble::as_tibble(result)
 }
@@ -678,7 +681,7 @@ get_afl_lineups <- function(season = NULL, round = NULL) {
   }
 
   # Normalise column names (providerId → match_id, teamId → team_id, etc.)
-  .normalise_teams_columns(result)
+  result <- .normalise_teams_columns(result)
 
   result
 }
@@ -773,7 +776,7 @@ get_afl_player_details <- function(season = NULL) {
   }
 
   # Get unique numeric team IDs (the public API needs numeric IDs, not CD_T providerIds)
-  team_ids <- unique(c(fixtures$home.team.id, fixtures$away.team.id))
+  team_ids <- unique(c(fixtures$home_team_api_id, fixtures$away_team_api_id))
   team_ids <- team_ids[!is.na(team_ids)]
 
   cli::cli_inform("Fetching player details for {length(team_ids)} team{?s} in parallel...")
@@ -854,6 +857,9 @@ get_afl_player_details <- function(season = NULL) {
   }
 
   result$season <- actual_season
+
+  # Normalise remaining camelCase columns to snake_case
+  .normalise_player_details_columns(result)
 
   tibble::as_tibble(result)
 }

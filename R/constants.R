@@ -15,11 +15,21 @@ AFL_PLAY_GAME_SECONDS <- 4800L
 
 #' Descriptions after which the clock stops (scoring resets, ball out of play)
 #' @keywords internal
-CLOCK_STOPPAGE_TRIGGERS <- c("Goal", "Behind", "Out of Bounds", "Out On Full After Kick")
+CLOCK_STOPPAGE_TRIGGERS <- c("Goal", "Behind", "Rushed",
+                              "Out of Bounds", "Out On Full After Kick", "Out On Full")
 
-#' Descriptions that always follow dead time (restarts)
+#' Descriptions that always follow dead time (restarts after clock stoppage)
 #' @keywords internal
-CLOCK_RESTART_EVENTS <- c("Centre Bounce", "Ball Up Call")
+CLOCK_RESTART_EVENTS <- c("Centre Bounce", "Ball Up Call",
+                           "Kickin play on", "Kickin short", "Kickin long",
+                           "OOF Kick In",
+                           "Kick In Ineffective", "Kick In Clanger",
+                           "Kick In Long To Adv.")
+
+#' Maximum seconds between consecutive plays counted as playing time.
+#' Gaps larger than this indicate unrecorded stoppages (injuries, reviews, etc.)
+#' @keywords internal
+CLOCK_DELTA_CAP <- 30L
 
 #' AFL goal post width in meters
 #' @keywords internal

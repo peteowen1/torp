@@ -246,8 +246,9 @@ clean_model_data_wp <- function(df) {
     dplyr::mutate(
       xpoints_diff = .data$points_diff + .data$exp_pts,
       pos_lead_prob = calculate_pos_lead_prob(.data$points_diff, .data$opp_goal, .data$opp_behind, .data$no_score, .data$behind, .data$goal),
-      time_left_scaler = exp(pmin(((.data$period - 1) * AFL_QUARTER_DURATION + .data$period_seconds) / AFL_QUARTER_DURATION, AFL_TIME_SCALER_MAX)),
-      diff_time_ratio = .data$xpoints_diff * .data$time_left_scaler
+      time_left_scaler = exp(pmin(.data$total_game_time_elapsed / AFL_PLAY_QUARTER_SECONDS, AFL_TIME_SCALER_MAX)),
+      diff_time_ratio = .data$xpoints_diff * .data$time_left_scaler,
+      score_urgency = .data$points_diff / pmax(.data$total_game_time_remaining / 60, 1)
     )
 }
 
@@ -281,8 +282,9 @@ select_epv_model_vars <- function(df, label = FALSE) {
 select_wp_model_vars <- function(df) {
   df |>
     dplyr::select(
-      "total_seconds", "shot_row", "home", "points_diff",
-      "xpoints_diff", "pos_lead_prob", "time_left_scaler", "diff_time_ratio",
+      "total_game_time_elapsed", "total_game_time_remaining", "shot_row", "home", "points_diff",
+      "xpoints_diff", "pos_lead_prob", "time_left_scaler", "diff_time_ratio", "score_urgency",
+      "goal_x",
       "play_type_handball", "play_type_kick", "play_type_reception", "phase_of_play_handball_received",
       "phase_of_play_hard_ball", "phase_of_play_loose_ball", "phase_of_play_set_shot"
     )

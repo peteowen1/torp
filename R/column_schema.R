@@ -45,6 +45,69 @@
 }
 
 
+#' Bulk-convert remaining non-snake_case column names
+#'
+#' Applies a generic camelCase/dot.notation to snake_case conversion on any
+#' columns that are not already snake_case. Run AFTER explicit column maps
+#' to catch API columns not covered by manual mappings.
+#'
+#' @param dt A data.frame, tibble, or data.table to modify.
+#' @param verbose Logical. If TRUE, emits a message listing renames.
+#' @param label Optional label for the log message.
+#' @return Invisible NULL (modifies names by reference for data.table, or in place for data.frame).
+#' @keywords internal
+.bulk_snake_case <- function(dt, verbose = TRUE, label = NULL) {
+  if (is.null(dt) || length(dt) == 0L) return(invisible(NULL))
+
+  nms <- names(dt)
+
+  # Detect non-snake_case columns (contain uppercase, dots, or spaces)
+  needs_fix <- grepl("[A-Z. ]", nms)
+  if (!any(needs_fix)) return(invisible(NULL))
+
+  old_names <- nms[needs_fix]
+  new_names <- .to_snake_case(old_names)
+
+  # Avoid collisions with existing columns
+  safe <- !new_names %in% nms[!needs_fix] & new_names != old_names
+  if (!any(safe)) return(invisible(NULL))
+
+  # setnames works by reference on both data.table and data.frame
+  data.table::setnames(dt, old_names[safe], new_names[safe])
+
+  if (verbose && sum(safe) > 0) {
+    lbl <- if (!is.null(label)) paste0(label, " snake_case: ") else "Snake_case: "
+    renamed <- paste0(old_names[safe], " -> ", new_names[safe])
+    cli::cli_inform("{lbl}converted {sum(safe)} column{?s}: {paste(renamed, collapse = ', ')}")
+  }
+
+  invisible(NULL)
+}
+
+
+#' Convert a character vector to snake_case
+#'
+#' Handles camelCase, dot.notation, and mixed patterns.
+#'
+#' @param x Character vector of names.
+#' @return Character vector in snake_case.
+#' @keywords internal
+.to_snake_case <- function(x) {
+  # camelCase boundaries: insert _ before uppercase preceded by lowercase/digit
+  x <- gsub("([a-z0-9])([A-Z])", "\\1_\\2", x)
+  # Replace dots, spaces with underscores
+  x <- gsub("[. ]+", "_", x)
+  x <- tolower(x)
+  # Remove non-alphanumeric except underscore
+  x <- gsub("[^a-z0-9_]", "_", x)
+  # Collapse multiple underscores
+  x <- gsub("_+", "_", x)
+  # Trim leading/trailing underscores
+  x <- gsub("^_|_$", "", x)
+  x
+}
+
+
 # ============================================================================
 # Player Stats column map
 # ============================================================================
@@ -185,7 +248,11 @@ FIXTURE_COL_MAP <- c(
 
   # --- Venue ---
   "venue.name"              = "venue_name",
-  "venue.timezone"          = "venue_timezone"
+  "venue.timezone"          = "venue_timezone",
+
+  # --- Numeric team IDs (distinct from providerId-based team IDs) ---
+  "home.team.id"            = "home_team_api_id",
+  "away.team.id"            = "away_team_api_id"
 )
 
 
@@ -253,6 +320,47 @@ PLAYER_GAME_COL_MAP <- c(
 
 
 # ============================================================================
+# Player Details column map
+# ============================================================================
+
+#' @keywords internal
+PLAYER_DETAILS_COL_MAP <- c(
+  "providerId"          = "player_id",
+  "firstName"           = "first_name",
+  "surname"             = "surname",
+  "heightInCm"          = "height_cm",
+  "weightInKg"          = "weight_kg",
+  "dateOfBirth"         = "date_of_birth",
+  "team.name"           = "team",
+  "team.providerId"     = "team_provider_id",
+  "gamesPlayed"         = "games_played"
+)
+
+
+# ============================================================================
+# Predictions column map
+# ============================================================================
+
+#' @keywords internal
+PREDICTIONS_COL_MAP <- c(
+  "providerId"          = "match_id"
+)
+
+
+# ============================================================================
+# XG column map
+# ============================================================================
+
+#' @keywords internal
+XG_COL_MAP <- c(
+  "home_sG"  = "home_scored_goals",
+  "home_sB"  = "home_scored_behinds",
+  "away_sG"  = "away_scored_goals",
+  "away_sB"  = "away_scored_behinds"
+)
+
+
+# ============================================================================
 # Normalise Player Stats Columns
 # ============================================================================
 
@@ -309,7 +417,10 @@ PLAYER_GAME_COL_MAP <- c(
     }
   }
 
-  # --- 4. Add `season` column if missing ---
+  # --- 4. Bulk snake_case for any remaining camelCase columns ---
+  .bulk_snake_case(dt, verbose = TRUE, label = "Player stats")
+
+  # --- 5. Add `season` column if missing ---
   nms <- names(dt)
   if (!"season" %in% nms && "utc_start_time" %in% nms) {
     dt[, season := as.integer(format(as.Date(utc_start_time), "%Y"))]
@@ -334,6 +445,7 @@ PLAYER_GAME_COL_MAP <- c(
 #' @keywords internal
 .normalise_fixture_columns <- function(df) {
   .normalise_columns(df, FIXTURE_COL_MAP, verbose = TRUE, label = "Fixture")
+  .bulk_snake_case(df, verbose = TRUE, label = "Fixture")
   invisible(df)
 }
 
@@ -351,6 +463,7 @@ PLAYER_GAME_COL_MAP <- c(
 #' @keywords internal
 .normalise_teams_columns <- function(df) {
   .normalise_columns(df, TEAMS_COL_MAP, verbose = TRUE, label = "Teams")
+  .bulk_snake_case(df, verbose = TRUE, label = "Teams")
 
   # Derive round_number from match_id when absent (AFL API data lacks it)
   if (!"round_number" %in% names(df) && "match_id" %in% names(df)) {
@@ -374,5 +487,42 @@ PLAYER_GAME_COL_MAP <- c(
 #' @keywords internal
 .normalise_chains_columns <- function(df) {
   .normalise_columns(df, CHAINS_COL_MAP, verbose = TRUE, label = "Chains")
+  .bulk_snake_case(df, verbose = TRUE, label = "Chains")
+  invisible(df)
+}
+
+
+# ============================================================================
+# Normalise Player Details Columns
+# ============================================================================
+
+#' Normalise Player Details Column Names
+#'
+#' Maps camelCase columns from squad/player details data to canonical snake_case.
+#'
+#' @param df A data.frame, tibble, or data.table of player details data.
+#' @return The input with normalised column names, modified by reference.
+#' @keywords internal
+.normalise_player_details_columns <- function(df) {
+  .normalise_columns(df, PLAYER_DETAILS_COL_MAP, verbose = TRUE, label = "Player details")
+  .bulk_snake_case(df, verbose = TRUE, label = "Player details")
+  invisible(df)
+}
+
+
+# ============================================================================
+# Normalise Predictions Columns
+# ============================================================================
+
+#' Normalise Predictions Column Names
+#'
+#' Maps old column names in predictions data to canonical snake_case.
+#'
+#' @param df A data.frame, tibble, or data.table of predictions data.
+#' @return The input with normalised column names, modified by reference.
+#' @keywords internal
+.normalise_predictions_columns <- function(df) {
+  .normalise_columns(df, PREDICTIONS_COL_MAP, verbose = TRUE, label = "Predictions")
+  .bulk_snake_case(df, verbose = TRUE, label = "Predictions")
   invisible(df)
 }

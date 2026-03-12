@@ -116,7 +116,8 @@ test_that("get_wp_preds function exists and has correct structure", {
 
   # Test with mock data
   mock_df <- data.frame(
-    total_seconds = c(1800, 3600, 5400),
+    total_game_time_elapsed = c(1200, 2400, 3600),
+    total_game_time_remaining = c(3600, 2400, 1200),
     shot_row = c(0, 1, 0),
     home = c(1, 0, 1),
     points_diff = c(6, -3, 12),
@@ -124,6 +125,8 @@ test_that("get_wp_preds function exists and has correct structure", {
     pos_lead_prob = c(0.7, 0.3, 0.9),
     time_left_scaler = c(1.5, 2.0, 2.5),
     diff_time_ratio = c(9.75, -5.6, 30.75),
+    score_urgency = c(0.1, -0.05, 0.6),
+    goal_x = c(50, 30, 80),
     play_type_handball = c(1, 0, 1),
     play_type_kick = c(0, 1, 0),
     play_type_reception = c(0, 0, 1),

@@ -34,7 +34,7 @@ utils::globalVariables(c(
   "period_seconds", "time_remaining", "min_seconds", "max_seconds",
   "game_time_elapsed", "game_time_remaining",
   "total_game_time_elapsed", "total_game_time_remaining",
-  ".play_delta", ".lag_desc",
+  ".play_delta", ".lag_desc", "score_urgency",
 
   # Chain/play variables
   "chain_number", "phase_of_play", "play_type", "description",

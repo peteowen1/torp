@@ -428,7 +428,7 @@ prepare_final_dataframe <- function(plyr_tm_df = NULL, player_game_data = NULL, 
     dplyr::left_join(fix_summary) |>
     dplyr::mutate(
       age = lubridate::decimal_date(lubridate::as_date(.data$ref_date)) -
-        lubridate::decimal_date(lubridate::as_date(.data$dateOfBirth))
+        lubridate::decimal_date(lubridate::as_date(.data$date_of_birth))
     ) |>
     dplyr::select(
       player_id = "player_id", player_name = "player_name.x", age = "age", team = "team",

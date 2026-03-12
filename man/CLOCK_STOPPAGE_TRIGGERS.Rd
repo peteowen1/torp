@@ -5,7 +5,7 @@
 \alias{CLOCK_STOPPAGE_TRIGGERS}
 \title{Descriptions after which the clock stops (scoring resets, ball out of play)}
 \format{
-An object of class \code{character} of length 4.
+An object of class \code{character} of length 6.
 }
 \usage{
 CLOCK_STOPPAGE_TRIGGERS
