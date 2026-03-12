@@ -515,15 +515,12 @@ load_player_game_data <- function(seasons = get_afl_season(), use_disk_cache = F
 #' try({ # prevents cran errors
 #'   load_fixtures(2021:2022)
 #'
-#'   # Load all fixtures with caching disabled
-#'   load_fixtures(all = TRUE, use_cache = FALSE)
-#'
-#'   # Load with verbose cache information
-#'   load_fixtures(all = TRUE, verbose = TRUE)
+#'   # Load all fixtures
+#'   load_fixtures(all = TRUE)
 #' })
 #' }
 #' @export
-load_fixtures <- function(seasons = NULL, all = FALSE, use_cache = TRUE, cache_ttl = 3600, verbose = FALSE, columns = NULL, use_disk_cache = FALSE) {
+load_fixtures <- function(seasons = NULL, all = FALSE, use_cache = FALSE, cache_ttl = 3600, verbose = FALSE, columns = NULL, use_disk_cache = FALSE) {
   # Process parameters
   if (all) {
     current_year <- as.numeric(format(Sys.Date(), "%Y"))
@@ -616,7 +613,8 @@ load_results <- function(seasons = get_afl_season(), use_disk_cache = FALSE, col
     cache_prefix = "results",
     seasons = seasons,
     fetch_fn = get_afl_results,
-    columns = columns
+    columns = columns,
+    use_cache = FALSE
   )
 }
 
