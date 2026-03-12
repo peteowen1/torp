@@ -494,14 +494,21 @@ XG_COL_MAP <- c(
 
   # AFL roster API returns abbreviations in teamName (e.g. "SYD", "CARL").
 
-  # Preserve as team_abbr and resolve to full display name in team_name.
+  # Preserve as team_abbr and resolve to canonical name in team_name.
   if ("team_name" %in% names(df)) {
     df[["team_abbr"]] <- df[["team_name"]]
+    # Primary lookup from AFL_TEAMS$abbr, fallback to AFL_TEAM_ALIASES for
+    # non-standard abbreviations (e.g. "PORT" for Port Adelaide)
     abbr_lookup <- stats::setNames(AFL_TEAMS$name, AFL_TEAMS$abbr)
-    df[["team_name"]] <- unname(abbr_lookup[df[["team_abbr"]]]) %||% df[["team_abbr"]]
-    # Fall back to original value for any unmatched abbreviations
-    na_idx <- is.na(df[["team_name"]])
-    if (any(na_idx)) df[["team_name"]][na_idx] <- df[["team_abbr"]][na_idx]
+    resolved <- unname(abbr_lookup[df[["team_abbr"]]])
+    na_idx <- is.na(resolved)
+    if (any(na_idx)) {
+      resolved[na_idx] <- unname(AFL_TEAM_ALIASES[df[["team_abbr"]][na_idx]])
+    }
+    # Final fallback: keep original value for any still-unmatched abbreviations
+    still_na <- is.na(resolved)
+    if (any(still_na)) resolved[still_na] <- df[["team_abbr"]][still_na]
+    df[["team_name"]] <- resolved
   }
 
   # Derive round_number from match_id when absent (AFL API data lacks it)

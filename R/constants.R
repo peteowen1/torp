@@ -676,6 +676,7 @@ AFL_TEAM_ALIASES <- c(
   "NMFC"  = "North Melbourne",
   "NM"    = "North Melbourne",
   "PA"    = "Port Adelaide",
+  "PORT"  = "Port Adelaide",
   "RICH"  = "Richmond",
   "STK"   = "St Kilda",
   "SYD"   = "Sydney",
