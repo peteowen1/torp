@@ -502,7 +502,7 @@ load_player_game_data <- function(seasons = get_afl_season(), use_disk_cache = F
 #'
 #' @param seasons A numeric vector of 4-digit years associated with given AFL seasons - defaults to latest season. If set to `TRUE`, returns all available data since 2021.
 #' @param all Logical. If TRUE, loads all available fixture data from 2021 onwards.
-#' @param use_cache Logical. If TRUE (default), uses cached data when available to speed up repeated calls.
+#' @param use_cache Logical. If TRUE, uses cached data when available to speed up repeated calls. Default is FALSE.
 #' @param cache_ttl Numeric. Time-to-live for cached data in seconds. Default is 3600 (1 hour).
 #' @param verbose Logical. If TRUE, prints cache hit/miss information.
 #' @param columns Optional character vector of column names to read. If NULL (default), reads all columns.
