@@ -29,10 +29,24 @@
 
   for (from in names(col_map)) {
     to <- col_map[[from]]
-    if (!to %in% nms && from %in% nms) {
-      data.table::setnames(dt, from, to)
-      nms[nms == from] <- to
-      remapped <- c(remapped, paste0(from, " -> ", to))
+    if (from %in% nms) {
+      if (!to %in% nms) {
+        # Simple rename: target doesn't exist yet
+        data.table::setnames(dt, from, to)
+        nms[nms == from] <- to
+        remapped <- c(remapped, paste0(from, " -> ", to))
+      } else if (all(is.na(dt[[to]])) && !all(is.na(dt[[from]]))) {
+        # Target exists but is all-NA; source has real data — replace
+        if (data.table::is.data.table(dt)) {
+          data.table::set(dt, j = to, value = dt[[from]])
+          data.table::set(dt, j = from, value = NULL)
+        } else {
+          dt[[to]] <- dt[[from]]
+          dt[[from]] <- NULL
+        }
+        nms <- names(dt)
+        remapped <- c(remapped, paste0(from, " -> ", to, " (replaced all-NA)"))
+      }
     }
   }
 
@@ -199,7 +213,13 @@ PBP_COL_MAP <- c(
   "away_team_provider_id"        = "away_team_id",
 
   # --- Round number ---
-  "round_round_number"           = "round_number"
+  "round_round_number"           = "round_number",
+
+  # --- Estimated time (backward compat) ---
+  "game_time_elapsed"            = "est_qtr_elapsed",
+  "game_time_remaining"          = "est_qtr_remaining",
+  "total_game_time_elapsed"      = "est_match_elapsed",
+  "total_game_time_remaining"    = "est_match_remaining"
 )
 
 

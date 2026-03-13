@@ -46,11 +46,11 @@ load_from_url <- function(url, ..., seasons = TRUE, rounds = TRUE, peteowen1 = F
   }
   if (!isTRUE(rounds)) {
     stopifnot(is.numeric(rounds))
-    if ("round" %in% names(out)) {
+    if ("round" %in% names(out) && !all(is.na(out$round))) {
       out <- out[out$round %in% rounds, ]
-    } else if ("round_number" %in% names(out)) {
+    } else if ("round_number" %in% names(out) && !all(is.na(out$round_number))) {
       out <- out[out$round_number %in% rounds, ]
-    } else if ("week" %in% names(out)) {
+    } else if ("week" %in% names(out) && !all(is.na(out$week))) {
       out <- out[out$week %in% rounds, ]
     } else if (nrow(out) > 0 && !setequal(rounds, 0:28)) {
       # Only warn when specific rounds were requested but no round column exists.

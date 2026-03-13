@@ -32,8 +32,8 @@ utils::globalVariables(c(
 
   # Time variables
   "period_seconds", "time_remaining", "min_seconds", "max_seconds",
-  "game_time_elapsed", "game_time_remaining",
-  "total_game_time_elapsed", "total_game_time_remaining",
+  "est_qtr_elapsed", "est_qtr_remaining",
+  "est_match_elapsed", "est_match_remaining",
   ".play_delta", ".lag_desc", "score_urgency",
 
   # Chain/play variables

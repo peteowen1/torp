@@ -4,12 +4,12 @@
 \alias{calculate_game_time_remaining}
 \title{Calculate game time remaining in an AFL match (playing seconds)}
 \usage{
-calculate_game_time_remaining(period, game_time_elapsed)
+calculate_game_time_remaining(period, est_qtr_elapsed)
 }
 \arguments{
 \item{period}{Numeric vector of period numbers (1-4)}
 
-\item{game_time_elapsed}{Numeric vector of estimated playing seconds elapsed in the current quarter}
+\item{est_qtr_elapsed}{Numeric vector of estimated playing seconds elapsed in the current quarter}
 }
 \value{
 Numeric vector of estimated playing seconds remaining in the match

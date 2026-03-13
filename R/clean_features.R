@@ -246,9 +246,9 @@ clean_model_data_wp <- function(df) {
     dplyr::mutate(
       xpoints_diff = .data$points_diff + .data$exp_pts,
       pos_lead_prob = calculate_pos_lead_prob(.data$points_diff, .data$opp_goal, .data$opp_behind, .data$no_score, .data$behind, .data$goal),
-      time_left_scaler = exp(pmin(.data$total_game_time_elapsed / AFL_PLAY_QUARTER_SECONDS, AFL_TIME_SCALER_MAX)),
+      time_left_scaler = exp(pmin(.data$est_match_elapsed / AFL_PLAY_QUARTER_SECONDS, AFL_TIME_SCALER_MAX)),
       diff_time_ratio = .data$xpoints_diff * .data$time_left_scaler,
-      score_urgency = .data$points_diff / pmax(.data$total_game_time_remaining / 60, 1)
+      score_urgency = .data$points_diff / pmax(.data$est_match_remaining / 60, 1)
     )
 }
 
@@ -260,11 +260,12 @@ clean_model_data_wp <- function(df) {
 #' @export
 select_epv_model_vars <- function(df, label = FALSE) {
   base_vars <- c(
-    "goal_x", "y", "lag_goal_x", "lag_goal_x5", "lag_y", 
-    "period_seconds", "period", "play_type_handball", "play_type_kick", 
-    "play_type_reception", "phase_of_play_handball_received", 
-    "phase_of_play_hard_ball", "phase_of_play_loose_ball", 
-    "phase_of_play_set_shot", "shot_row", "speed5", "home"
+    "goal_x", "y", "lag_goal_x", "lag_goal_x5", "lag_y",
+    "period_seconds", "period", "play_type_handball", "play_type_kick",
+    "play_type_reception", "phase_of_play_handball_received",
+    "phase_of_play_hard_ball", "phase_of_play_loose_ball",
+    "phase_of_play_set_shot", "shot_row", "speed5", "home",
+    "est_qtr_remaining", "est_match_remaining"
   )
   
   if (label) {
@@ -282,7 +283,7 @@ select_epv_model_vars <- function(df, label = FALSE) {
 select_wp_model_vars <- function(df) {
   df |>
     dplyr::select(
-      "total_game_time_elapsed", "total_game_time_remaining", "shot_row", "home", "points_diff",
+      "est_match_elapsed", "est_match_remaining", "shot_row", "home", "points_diff",
       "xpoints_diff", "pos_lead_prob", "time_left_scaler", "diff_time_ratio", "score_urgency",
       "goal_x",
       "play_type_handball", "play_type_kick", "play_type_reception", "phase_of_play_handball_received",
