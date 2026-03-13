@@ -563,6 +563,46 @@ update_player_season_ratings <- function(season) {
   invisible(NULL)
 }
 
+#' Update PSR (Player Skill Ratings)
+#'
+#' Computes PSR from player skills + coefficients and releases to torpdata.
+#'
+#' @param season Season year
+#' @return Invisible NULL
+update_psr <- function(season) {
+  cli::cli_progress_step("Updating PSR for {season}")
+
+  psr_data <- tryCatch({
+    skills <- load_player_skills(season)
+    if (nrow(skills) == 0) return(NULL)
+
+    psr_coef_path <- file.path("data-raw", "cache-skills", "psr_v2_coefficients.csv")
+    if (!file.exists(psr_coef_path)) {
+      psr_coef_path <- system.file("extdata", "psr_v2_coefficients.csv", package = "torp")
+    }
+    if (!file.exists(psr_coef_path) || nchar(psr_coef_path) == 0) {
+      cli::cli_warn("PSR coefficient file not found - skipping PSR update")
+      return(NULL)
+    }
+
+    coef_df <- utils::read.csv(psr_coef_path)
+    calculate_psr(skills, coef_df)
+  }, error = function(e) {
+    cli::cli_alert_danger("Failed to compute PSR: {conditionMessage(e)}")
+    return(NULL)
+  })
+
+  if (is.null(psr_data) || nrow(psr_data) == 0) {
+    return(invisible(NULL))
+  }
+
+  file_name <- paste0("psr_", season)
+  save_to_release(df = psr_data, file_name = file_name, release_tag = "psr-data")
+
+  cli::cli_inform("Saved PSR: {file_name} ({nrow(psr_data)} rows)")
+  invisible(NULL)
+}
+
 #' Update EP/WP Chart Data
 #'
 #' Selects charting-relevant columns from PBP and releases as a lightweight file.
@@ -725,6 +765,10 @@ run_daily_release <- function(force = FALSE) {
     tryCatch(update_ep_wp_chart(current_season), error = function(e) {
       derived_failures <<- c(derived_failures, "ep_wp_chart")
       cli::cli_alert_danger("Failed: ep_wp_chart: {conditionMessage(e)}")
+    })
+    tryCatch(update_psr(current_season), error = function(e) {
+      derived_failures <<- c(derived_failures, "psr")
+      cli::cli_alert_danger("Failed: psr: {conditionMessage(e)}")
     })
 
     tictoc::toc(log = TRUE)

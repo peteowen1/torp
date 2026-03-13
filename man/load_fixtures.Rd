@@ -7,7 +7,7 @@
 load_fixtures(
   seasons = NULL,
   all = FALSE,
-  use_cache = TRUE,
+  use_cache = FALSE,
   cache_ttl = 3600,
   verbose = FALSE,
   columns = NULL,
@@ -19,7 +19,7 @@ load_fixtures(
 
 \item{all}{Logical. If TRUE, loads all available fixture data from 2021 onwards.}
 
-\item{use_cache}{Logical. If TRUE (default), uses cached data when available to speed up repeated calls.}
+\item{use_cache}{Logical. If TRUE, uses cached data when available to speed up repeated calls. Default is FALSE.}
 
 \item{cache_ttl}{Numeric. Time-to-live for cached data in seconds. Default is 3600 (1 hour).}
 
@@ -40,11 +40,8 @@ Loads AFL fixture and schedule data from the \href{https://github.com/peteowen1/
 try({ # prevents cran errors
   load_fixtures(2021:2022)
 
-  # Load all fixtures with caching disabled
-  load_fixtures(all = TRUE, use_cache = FALSE)
-
-  # Load with verbose cache information
-  load_fixtures(all = TRUE, verbose = TRUE)
+  # Load all fixtures
+  load_fixtures(all = TRUE)
 })
 }
 }

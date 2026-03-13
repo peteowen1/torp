@@ -715,35 +715,74 @@
     cli::cli_abort("Cannot train GAM models: 0 completed matches after filtering")
   }
 
+  # Check which optional smooth terms have sufficient unique values (need >= k)
+  # Terms with constant/near-constant data are dropped to prevent mgcv errors
+  optional_smooth_terms <- list(
+    # Model 1 optional terms (psr + weather)
+    "s(psr.x, bs = \"ts\", k = 5)"           = list(var = "psr.x", k = 5),
+    "s(psr.y, bs = \"ts\", k = 5)"           = list(var = "psr.y", k = 5),
+    "s(log_wind, bs = \"ts\", k = 5)"        = list(var = "log_wind", k = 5),
+    "s(log_precip, bs = \"ts\", k = 5)"      = list(var = "log_precip", k = 5),
+    "s(temp_avg, bs = \"ts\", k = 5)"        = list(var = "temp_avg", k = 5),
+    "s(humidity_avg, bs = \"ts\", k = 5)"     = list(var = "humidity_avg", k = 5),
+    # Models 2-4 optional term
+    "s(psr_diff, bs = \"ts\", k = 5)"        = list(var = "psr_diff", k = 5)
+  )
+  drop_terms <- character(0)
+  for (term_str in names(optional_smooth_terms)) {
+    info <- optional_smooth_terms[[term_str]]
+    vals <- gam_df[[info$var]]
+    n_unique <- length(unique(vals[!is.na(vals)]))
+    if (n_unique < info$k) {
+      drop_terms <- c(drop_terms, term_str)
+      cli::cli_warn("Dropping smooth {.code {term_str}}: only {n_unique} unique value{?s} (need >= {info$k})")
+    }
+  }
+
+  # Helper to build formula by conditionally adding optional terms
+  .add_optional <- function(base_terms, optional_terms) {
+    keep <- setdiff(optional_terms, drop_terms)
+    if (length(keep) > 0) {
+      paste(base_terms, "+", paste(keep, collapse = " + "))
+    } else {
+      base_terms
+    }
+  }
+
   # Model 1: Total expected points (includes weather smooths)
   cli::cli_progress_step("Training total xPoints model")
+  m1_base <- paste(
+    "total_xpoints_adj ~",
+    "s(team_type_fac, bs = \"re\")",
+    "+ s(game_year_decimal.x, bs = \"ts\")",
+    "+ s(game_prop_through_year.x, bs = \"cc\")",
+    "+ s(game_prop_through_month.x, bs = \"cc\")",
+    "+ s(game_wday_fac.x, bs = \"re\")",
+    "+ s(game_prop_through_day.x, bs = \"cc\")",
+    "+ s(team_name.x, bs = \"re\") + s(team_name.y, bs = \"re\")",
+    "+ s(team_name_season.x, bs = \"re\") + s(team_name_season.y, bs = \"re\")",
+    "+ s(abs(torp_diff), bs = \"ts\", k = 5)",
+    "+ s(abs(torp_recv_diff), bs = \"ts\", k = 5)",
+    "+ s(abs(torp_disp_diff), bs = \"ts\", k = 5)",
+    "+ s(abs(torp_spoil_diff), bs = \"ts\", k = 5)",
+    "+ s(abs(torp_hitout_diff), bs = \"ts\", k = 5)",
+    "+ s(torp.x, bs = \"ts\", k = 5) + s(torp.y, bs = \"ts\", k = 5)",
+    "+ s(venue_fac, bs = \"re\")",
+    "+ s(log_dist.x, bs = \"ts\", k = 5) + s(log_dist.y, bs = \"ts\", k = 5)",
+    "+ s(familiarity.x, bs = \"ts\", k = 5) + s(familiarity.y, bs = \"ts\", k = 5)",
+    "+ s(log_dist_diff, bs = \"ts\", k = 5)",
+    "+ s(familiarity_diff, bs = \"ts\", k = 5)",
+    "+ s(days_rest_diff_fac, bs = \"re\")"
+  )
+  m1_optional <- c(
+    "s(psr.x, bs = \"ts\", k = 5)", "s(psr.y, bs = \"ts\", k = 5)",
+    "s(log_wind, bs = \"ts\", k = 5)", "s(log_precip, bs = \"ts\", k = 5)",
+    "s(temp_avg, bs = \"ts\", k = 5)", "s(humidity_avg, bs = \"ts\", k = 5)"
+  )
+  m1_formula <- stats::as.formula(.add_optional(m1_base, m1_optional))
+
   afl_total_xpoints_mdl <- mgcv::bam(
-    total_xpoints_adj ~
-      s(team_type_fac, bs = "re")
-      + s(game_year_decimal.x, bs = "ts")
-      + s(game_prop_through_year.x, bs = "cc")
-      + s(game_prop_through_month.x, bs = "cc")
-      + s(game_wday_fac.x, bs = "re")
-      + s(game_prop_through_day.x, bs = "cc")
-      + s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
-      + s(team_name_season.x, bs = "re") + s(team_name_season.y, bs = "re")
-      + s(abs(torp_diff), bs = "ts", k = 5)
-      + s(abs(torp_recv_diff), bs = "ts", k = 5)
-      + s(abs(torp_disp_diff), bs = "ts", k = 5)
-      + s(abs(torp_spoil_diff), bs = "ts", k = 5)
-      + s(abs(torp_hitout_diff), bs = "ts", k = 5)
-      + s(torp.x, bs = "ts", k = 5) + s(torp.y, bs = "ts", k = 5)
-      + s(psr.x, bs = "ts", k = 5) + s(psr.y, bs = "ts", k = 5)
-      + s(venue_fac, bs = "re")
-      + s(log_dist.x, bs = "ts", k = 5) + s(log_dist.y, bs = "ts", k = 5)
-      + s(familiarity.x, bs = "ts", k = 5) + s(familiarity.y, bs = "ts", k = 5)
-      + s(log_dist_diff, bs = "ts", k = 5)
-      + s(familiarity_diff, bs = "ts", k = 5)
-      + s(days_rest_diff_fac, bs = "re")
-      + s(log_wind, bs = "ts", k = 5)
-      + s(log_precip, bs = "ts", k = 5)
-      + s(temp_avg, bs = "ts", k = 5)
-      + s(humidity_avg, bs = "ts", k = 5),
+    m1_formula,
     data = gam_df, weights = gam_df$weightz,
     family = gaussian(), nthreads = nthreads, select = TRUE, discrete = TRUE,
     drop.unused.levels = FALSE
@@ -753,21 +792,25 @@
   # Model 2: xScore differential
   cli::cli_progress_step("Training xScore diff model")
   gam_df$pred_tot_xscore <- team_mdl_df$pred_tot_xscore[train_mask]
+  m2_base <- paste(
+    "xscore_diff ~",
+    "s(team_type_fac, bs = \"re\")",
+    "+ s(team_name.x, bs = \"re\") + s(team_name.y, bs = \"re\")",
+    "+ s(team_name_season.x, bs = \"re\") + s(team_name_season.y, bs = \"re\")",
+    "+ ti(torp_diff, pred_tot_xscore, bs = c(\"ts\", \"ts\"), k = 4)",
+    "+ s(pred_tot_xscore, bs = \"ts\", k = 5)",
+    "+ s(torp_diff, bs = \"ts\", k = 5)",
+    "+ s(torp_recv_diff, bs = \"ts\", k = 5)",
+    "+ s(torp_disp_diff, bs = \"ts\", k = 5)",
+    "+ s(torp_spoil_diff, bs = \"ts\", k = 5)",
+    "+ s(torp_hitout_diff, bs = \"ts\", k = 5)",
+    "+ s(log_dist_diff, bs = \"ts\", k = 5) + s(familiarity_diff, bs = \"ts\", k = 5)",
+    "+ s(days_rest_diff_fac, bs = \"re\")"
+  )
+  m2_formula <- stats::as.formula(.add_optional(m2_base, "s(psr_diff, bs = \"ts\", k = 5)"))
+
   afl_xscore_diff_mdl <- mgcv::bam(
-    xscore_diff ~
-      s(team_type_fac, bs = "re")
-      + s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
-      + s(team_name_season.x, bs = "re") + s(team_name_season.y, bs = "re")
-      + ti(torp_diff, pred_tot_xscore, bs = c("ts", "ts"), k = 4)
-      + s(pred_tot_xscore, bs = "ts", k = 5)
-      + s(torp_diff, bs = "ts", k = 5)
-      + s(torp_recv_diff, bs = "ts", k = 5)
-      + s(torp_disp_diff, bs = "ts", k = 5)
-      + s(torp_spoil_diff, bs = "ts", k = 5)
-      + s(torp_hitout_diff, bs = "ts", k = 5)
-      + s(psr_diff, bs = "ts", k = 5)
-      + s(log_dist_diff, bs = "ts", k = 5) + s(familiarity_diff, bs = "ts", k = 5)
-      + s(days_rest_diff_fac, bs = "re"),
+    m2_formula,
     data = gam_df, weights = gam_df$weightz,
     family = gaussian(), nthreads = nthreads, select = TRUE, discrete = TRUE,
     drop.unused.levels = FALSE
@@ -777,28 +820,32 @@
   # Model 3: Conversion differential
   cli::cli_progress_step("Training conversion model")
   gam_df$pred_xscore_diff <- team_mdl_df$pred_xscore_diff[train_mask]
+  m3_base <- paste(
+    "shot_conv_diff ~",
+    "s(team_type_fac, bs = \"re\")",
+    "+ s(game_year_decimal.x, bs = \"ts\")",
+    "+ s(game_prop_through_year.x, bs = \"cc\")",
+    "+ s(game_prop_through_month.x, bs = \"cc\")",
+    "+ s(game_wday_fac.x, bs = \"re\")",
+    "+ s(game_prop_through_day.x, bs = \"cc\")",
+    "+ s(team_name.x, bs = \"re\") + s(team_name.y, bs = \"re\")",
+    "+ s(team_name_season.x, bs = \"re\") + s(team_name_season.y, bs = \"re\")",
+    "+ ti(torp_diff, pred_tot_xscore, bs = c(\"ts\", \"ts\"), k = 4)",
+    "+ s(torp_diff, bs = \"ts\", k = 5)",
+    "+ s(torp_recv_diff, bs = \"ts\", k = 5)",
+    "+ s(torp_disp_diff, bs = \"ts\", k = 5)",
+    "+ s(torp_spoil_diff, bs = \"ts\", k = 5)",
+    "+ s(torp_hitout_diff, bs = \"ts\", k = 5)",
+    "+ s(pred_tot_xscore, bs = \"ts\", k = 5)",
+    "+ s(pred_xscore_diff, bs = \"ts\", k = 5)",
+    "+ s(venue_fac, bs = \"re\")",
+    "+ s(log_dist_diff, bs = \"ts\", k = 5) + s(familiarity_diff, bs = \"ts\", k = 5)",
+    "+ s(days_rest_diff_fac, bs = \"re\")"
+  )
+  m3_formula <- stats::as.formula(.add_optional(m3_base, "s(psr_diff, bs = \"ts\", k = 5)"))
+
   afl_conv_mdl <- mgcv::bam(
-    shot_conv_diff ~
-      s(team_type_fac, bs = "re")
-      + s(game_year_decimal.x, bs = "ts")
-      + s(game_prop_through_year.x, bs = "cc")
-      + s(game_prop_through_month.x, bs = "cc")
-      + s(game_wday_fac.x, bs = "re")
-      + s(game_prop_through_day.x, bs = "cc")
-      + s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
-      + s(team_name_season.x, bs = "re") + s(team_name_season.y, bs = "re")
-      + ti(torp_diff, pred_tot_xscore, bs = c("ts", "ts"), k = 4)
-      + s(torp_diff, bs = "ts", k = 5)
-      + s(torp_recv_diff, bs = "ts", k = 5)
-      + s(torp_disp_diff, bs = "ts", k = 5)
-      + s(torp_spoil_diff, bs = "ts", k = 5)
-      + s(torp_hitout_diff, bs = "ts", k = 5)
-      + s(psr_diff, bs = "ts", k = 5)
-      + s(pred_tot_xscore, bs = "ts", k = 5)
-      + s(pred_xscore_diff, bs = "ts", k = 5)
-      + s(venue_fac, bs = "re")
-      + s(log_dist_diff, bs = "ts", k = 5) + s(familiarity_diff, bs = "ts", k = 5)
-      + s(days_rest_diff_fac, bs = "re"),
+    m3_formula,
     data = gam_df, weights = gam_df$shot_weightz,
     family = gaussian(), nthreads = nthreads, select = TRUE, discrete = TRUE,
     drop.unused.levels = FALSE
@@ -808,17 +855,21 @@
   # Model 4: Score differential
   cli::cli_progress_step("Training score diff model")
   gam_df$pred_conv_diff <- team_mdl_df$pred_conv_diff[train_mask]
+  m4_base <- paste(
+    "score_diff ~",
+    "s(team_type_fac, bs = \"re\")",
+    "+ s(team_name.x, bs = \"re\") + s(team_name.y, bs = \"re\")",
+    "+ s(team_name_season.x, bs = \"re\") + s(team_name_season.y, bs = \"re\")",
+    "+ ti(pred_xscore_diff, pred_conv_diff, bs = \"ts\", k = 5)",
+    "+ ti(pred_tot_xscore, pred_conv_diff, bs = \"ts\", k = 5)",
+    "+ s(pred_xscore_diff)",
+    "+ s(log_dist_diff, bs = \"ts\", k = 5) + s(familiarity_diff, bs = \"ts\", k = 5)",
+    "+ s(days_rest_diff_fac, bs = \"re\")"
+  )
+  m4_formula <- stats::as.formula(.add_optional(m4_base, "s(psr_diff, bs = \"ts\", k = 5)"))
+
   afl_score_mdl <- mgcv::bam(
-    score_diff ~
-      s(team_type_fac, bs = "re")
-      + s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
-      + s(team_name_season.x, bs = "re") + s(team_name_season.y, bs = "re")
-      + ti(pred_xscore_diff, pred_conv_diff, bs = "ts", k = 5)
-      + ti(pred_tot_xscore, pred_conv_diff, bs = "ts", k = 5)
-      + s(pred_xscore_diff)
-      + s(psr_diff, bs = "ts", k = 5)
-      + s(log_dist_diff, bs = "ts", k = 5) + s(familiarity_diff, bs = "ts", k = 5)
-      + s(days_rest_diff_fac, bs = "re"),
+    m4_formula,
     data = gam_df, weights = gam_df$weightz,
     family = "gaussian", nthreads = nthreads, select = TRUE, discrete = TRUE,
     drop.unused.levels = FALSE
@@ -1232,7 +1283,21 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
   })
 
   teams <- load_teams(TRUE)
-  torp_df_total <- load_torp_ratings()
+
+  # Load TORP ratings with compute-from-scratch fallback
+  torp_df_total <- tryCatch(load_torp_ratings(), error = function(e) {
+    cli::cli_warn("Could not load TORP ratings from release: {e$message}")
+    NULL
+  })
+  if (is.null(torp_df_total) || nrow(torp_df_total) < 100) {
+    cli::cli_warn("TORP ratings unavailable or too small from release - computing from scratch (this may be slow)")
+    torp_df_total <- tryCatch(
+      calculate_torp_ratings(season_val = season, round_val = get_afl_week(type = "next")),
+      error = function(e) {
+        cli::cli_abort("Failed to compute TORP ratings from scratch: {e$message}")
+      }
+    )
+  }
 
   cli::cli_inform("Loaded: fixtures={nrow(fixtures)}, results={nrow(results)}, teams={nrow(teams)}, ratings={nrow(torp_df_total)}")
 
@@ -1268,25 +1333,46 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
 
   cli::cli_h2("Loading PSR")
   psr_df <- NULL
+
+  # Strategy 1: Load pre-computed PSR from torpdata releases
+
   tryCatch({
-    skills <- load_player_skills(TRUE)
-    psr_coef_path <- system.file("extdata", "psr_v2_coefficients.csv", package = "torp")
-    if (psr_coef_path == "") {
-      psr_coef_path <- file.path(
-        find.package("torp", quiet = TRUE)[1] %||% ".",
-        "data-raw", "cache-skills", "psr_v2_coefficients.csv"
-      )
-    }
-    if (file.exists(psr_coef_path)) {
-      coef_df <- utils::read.csv(psr_coef_path)
-      psr_df <- calculate_psr(skills, coef_df)
-      cli::cli_inform("PSR computed for {nrow(psr_df)} player-rounds")
+    psr_df <- load_psr(TRUE)
+    if (nrow(psr_df) > 0) {
+      cli::cli_inform("PSR loaded from release: {nrow(psr_df)} player-rounds")
     } else {
-      cli::cli_warn("PSR coefficient file not found: {psr_coef_path}")
+      psr_df <- NULL
     }
   }, error = function(e) {
-    cli::cli_warn("Failed to compute PSR: {e$message}")
+    cli::cli_warn("Could not load PSR from release: {e$message}")
   })
+
+  # Strategy 2: Compute from skills + coefficients
+  if (is.null(psr_df)) {
+    tryCatch({
+      skills <- load_player_skills(TRUE)
+      psr_coef_path <- system.file("extdata", "psr_v2_coefficients.csv", package = "torp")
+      if (psr_coef_path == "") {
+        psr_coef_path <- file.path(
+          find.package("torp", quiet = TRUE)[1] %||% ".",
+          "data-raw", "cache-skills", "psr_v2_coefficients.csv"
+        )
+      }
+      if (file.exists(psr_coef_path)) {
+        coef_df <- utils::read.csv(psr_coef_path)
+        psr_df <- calculate_psr(skills, coef_df)
+        cli::cli_inform("PSR computed from skills+coefficients: {nrow(psr_df)} player-rounds")
+      } else {
+        cli::cli_warn("PSR coefficient file not found: {psr_coef_path}")
+      }
+    }, error = function(e) {
+      cli::cli_warn("Failed to compute PSR: {e$message}")
+    })
+  }
+
+  if (is.null(psr_df)) {
+    cli::cli_warn("PSR unavailable - predictions will proceed without PSR features")
+  }
 
   cli::cli_h2("Processing lineups")
   team_rt_df <- .build_team_ratings_df(teams, torp_df_total, psr_df)
