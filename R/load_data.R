@@ -906,3 +906,40 @@ load_player_skills <- function(seasons = get_afl_season(), use_disk_cache = FALS
 
   return(out)
 }
+
+
+#' Load Player Skill Ratings (PSR)
+#'
+#' @description Loads pre-computed PSR (Player Skill Ratings) from the
+#'   [torpdata repository](https://github.com/peteowen1/torpdata).
+#'   PSR represents each player's predicted contribution to match margin
+#'   based on their skill profile.
+#'
+#' @param seasons A numeric vector of 4-digit years associated with given AFL
+#'   seasons — defaults to latest season. If set to `TRUE`, returns all
+#'   available data since 2021.
+#' @param use_disk_cache Logical. If `TRUE`, uses persistent disk cache for
+#'   faster repeated loads. Default is `FALSE`.
+#' @param columns Optional character vector of column names to read. If NULL (default), reads all columns.
+#'
+#' @return A data frame containing PSR data with columns including
+#'   \code{player_id}, \code{player_name}, \code{season}, \code{round},
+#'   \code{pos_group}, \code{psr_raw}, and \code{psr}.
+#' @seealso [calculate_psr()], [load_player_skills()], [load_torp_ratings()]
+#' @examples
+#' \dontrun{
+#' try({ # prevents cran errors
+#'   load_psr(2024)
+#'   load_psr(TRUE)  # all seasons
+#' })
+#' }
+#' @export
+load_psr <- function(seasons = get_afl_season(), use_disk_cache = FALSE, columns = NULL) {
+  seasons <- validate_seasons(seasons)
+
+  urls <- generate_urls("psr-data", "psr", seasons)
+
+  out <- load_from_url(urls, seasons = seasons, use_disk_cache = use_disk_cache, columns = columns)
+
+  return(out)
+}

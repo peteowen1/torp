@@ -426,6 +426,37 @@ for (s in seasons) {
 
 tictoc::toc(log = TRUE)
 
+# Stage 6: Compute & Release PSR ----
+
+cli::cli_h2("Stage 6: Compute & Release PSR")
+tictoc::tic("stage_6_psr")
+
+tryCatch({
+  skills <- load_player_skills(TRUE)
+  psr_coef_path <- file.path("data-raw", "cache-skills", "psr_v2_coefficients.csv")
+  if (!file.exists(psr_coef_path)) {
+    psr_coef_path <- system.file("extdata", "psr_v2_coefficients.csv", package = "torp")
+  }
+  if (file.exists(psr_coef_path) && nchar(psr_coef_path) > 0) {
+    coef_df <- utils::read.csv(psr_coef_path)
+    psr_all <- calculate_psr(skills, coef_df)
+    cli::cli_inform("PSR computed for {nrow(psr_all)} player-rounds across {length(unique(psr_all$season))} seasons")
+
+    for (s in sort(unique(psr_all$season))) {
+      psr_season <- psr_all[psr_all$season == s, ]
+      file_name <- paste0("psr_", s)
+      save_to_release(psr_season, file_name, "psr-data")
+      cli::cli_alert_success("Released {file_name} ({nrow(psr_season)} rows)")
+    }
+  } else {
+    cli::cli_warn("PSR coefficient file not found - skipping PSR release")
+  }
+}, error = function(e) {
+  cli::cli_alert_danger("Failed to compute/release PSR: {conditionMessage(e)}")
+})
+
+tictoc::toc(log = TRUE)
+
 # Summary ----
 
 cli::cli_h2("Pipeline Complete")
