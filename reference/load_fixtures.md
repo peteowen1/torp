@@ -9,7 +9,7 @@ repository](https://github.com/peteowen1/torpdata)
 load_fixtures(
   seasons = NULL,
   all = FALSE,
-  use_cache = TRUE,
+  use_cache = FALSE,
   cache_ttl = 3600,
   verbose = FALSE,
   columns = NULL,
@@ -31,8 +31,8 @@ load_fixtures(
 
 - use_cache:
 
-  Logical. If TRUE (default), uses cached data when available to speed
-  up repeated calls.
+  Logical. If TRUE, uses cached data when available to speed up repeated
+  calls. Default is FALSE.
 
 - cache_ttl:
 
@@ -69,11 +69,8 @@ if (FALSE) { # \dontrun{
 try({ # prevents cran errors
   load_fixtures(2021:2022)
 
-  # Load all fixtures with caching disabled
-  load_fixtures(all = TRUE, use_cache = FALSE)
-
-  # Load with verbose cache information
-  load_fixtures(all = TRUE, verbose = TRUE)
+  # Load all fixtures
+  load_fixtures(all = TRUE)
 })
 } # }
 ```

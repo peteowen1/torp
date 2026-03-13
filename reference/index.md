@@ -30,6 +30,8 @@ Load processed AFL data from torpdata GitHub releases
   : Load AFL Match Predictions Data
 - [`load_preseason_injuries()`](https://peteowen1.github.io/torp/reference/load_preseason_injuries.md)
   : Load Preseason Injury List
+- [`load_psr()`](https://peteowen1.github.io/torp/reference/load_psr.md)
+  : Load Player Skill Ratings (PSR)
 - [`load_results()`](https://peteowen1.github.io/torp/reference/load_results.md)
   : Load AFL Match Results Data
 - [`load_team_ratings()`](https://peteowen1.github.io/torp/reference/load_team_ratings.md)
