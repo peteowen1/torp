@@ -4,12 +4,12 @@
 \alias{player_season_ratings}
 \title{Get season total ratings}
 \usage{
-player_season_ratings(season_val = get_afl_season(), round_num = NA)
+player_season_ratings(season_val = get_afl_season(), round_num = NULL)
 }
 \arguments{
 \item{season_val}{The season to calculate ratings for. Default is the current season.}
 
-\item{round_num}{The round number to calculate ratings for. Default is NA (all rounds).}
+\item{round_num}{Deprecated and ignored. Retained for backwards compatibility.}
 }
 \value{
 A data frame containing player season total ratings.

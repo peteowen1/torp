@@ -133,32 +133,28 @@ filter_game_data <- function(df, season_val, round_num, matchid, team) {
 #' Convenience wrapper around [load_player_season_ratings()] with filtering.
 #'
 #' @param season_val The season to calculate ratings for. Default is the current season.
-#' @param round_num The round number to calculate ratings for. Default is NA (all rounds).
+#' @param round_num Deprecated and ignored. Retained for backwards compatibility.
 #'
 #' @return A data frame containing player season total ratings.
 #' @export
 #'
 #' @importFrom dplyr group_by summarise arrange n
-player_season_ratings <- function(season_val = get_afl_season(), round_num = NA) {
+player_season_ratings <- function(season_val = get_afl_season(), round_num = NULL) {
+  # Backwards compat: round_num was never functional but was in the signature
+
+  if (!is.null(round_num)) {
+    cli::cli_warn("{.arg round_num} is ignored by {.fn player_season_ratings} and will be removed in a future version.")
+  }
 
   # Input validation
   if (!is.numeric(season_val) && !is.na(season_val)) {
     cli::cli_abort("season_val must be numeric (e.g., 2024)")
   }
 
-  if (!is.numeric(round_num) && !all(is.na(round_num))) {
-    cli::cli_abort("round_num must be numeric (e.g., 1, 2, 3...)")
-  }
-
   # Validate reasonable season range (handles vectors)
   max_season <- get_afl_season() + 1L
   if (any(season_val < 1990 | season_val > max_season)) {
     cli::cli_abort("All seasons must be between 1990 and {max_season}")
-  }
-
-  # Validate reasonable round range
-  if (is.numeric(round_num) && any(round_num < 0 | round_num > 28, na.rm = TRUE)) {
-    cli::cli_abort("round_num must be between 0 and 28")
   }
 
   load_player_season_ratings(season_val)
@@ -179,7 +175,7 @@ player_season_ratings <- function(season_val = get_afl_season(), round_num = NA)
     dplyr::group_by(.data$season, .data$player_name, .data$player_id, .data$team_id) |>
     dplyr::summarise(
       team = get_mode(.data$team),
-      position = max(.data$position),
+      position = get_mode(.data$position),
       games = dplyr::n(),
       season_points = sum(.data$total_points),
       season_recv = sum(.data$recv_points),

@@ -101,15 +101,15 @@ validate_rounds <- function(rounds) {
 validate_seasons <- function(seasons) {
   current_year <- as.integer(format(Sys.Date(), "%Y"))
 
-  if (isTRUE(seasons)) seasons <- 2021:current_year
+  if (isTRUE(seasons)) seasons <- AFL_MIN_SEASON:current_year
 
   if (!is.numeric(seasons)) {
     cli::cli_abort("Seasons must be numeric values or TRUE")
   }
 
-  invalid_seasons <- seasons[seasons < 2021 | seasons > current_year]
+  invalid_seasons <- seasons[seasons < AFL_MIN_SEASON | seasons > current_year]
   if (length(invalid_seasons) > 0) {
-    cli::cli_abort("Invalid season years: {paste(invalid_seasons, collapse = ', ')}. Seasons must be between 2021 and {current_year}")
+    cli::cli_abort("Invalid season years: {paste(invalid_seasons, collapse = ', ')}. Seasons must be between {AFL_MIN_SEASON} and {current_year}")
   }
 
   return(seasons)

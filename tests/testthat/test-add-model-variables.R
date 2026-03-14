@@ -116,8 +116,8 @@ test_that("get_wp_preds function exists and has correct structure", {
 
   # Test with mock data
   mock_df <- data.frame(
-    total_game_time_elapsed = c(1200, 2400, 3600),
-    total_game_time_remaining = c(3600, 2400, 1200),
+    est_match_elapsed = c(1200, 2400, 3600),
+    est_match_remaining = c(3600, 2400, 1200),
     shot_row = c(0, 1, 0),
     home = c(1, 0, 1),
     points_diff = c(6, -3, 12),

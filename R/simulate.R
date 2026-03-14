@@ -68,12 +68,16 @@ simulate_season <- function(sim_teams, sim_games, return_teams = FALSE,
 
 #' Process games for a single round
 #'
-#' This function processes games for a single round of the season.
-#' Uses optimized data.table implementation internally.
+#' @description
+#' `r lifecycle::badge("deprecated")`
+#'
+#' Thin wrapper around [process_games_dt()] that converts results back to
+#' data.frames. Use [process_games_dt()] directly for better performance.
 #'
 #' @param sim_teams A data frame containing team ratings.
 #' @param sim_games A data frame containing fixture data.
 #' @param round_num The round number to process.
+#' @param injury_sd Standard deviation for injury impact.
 #' @return A list containing updated sim_teams and sim_games data frames.
 #' @importFrom data.table as.data.table setkey copy fifelse fcase
 #' @importFrom stats rnorm

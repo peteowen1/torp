@@ -220,6 +220,10 @@ update_season_chains <- function(season, round) {
     cli::cli_inform("Existing data: {nrow(existing)} rows (after removing round {round})")
   }
 
+  # Normalise new chains to match existing schema
+  new_chains <- data.table::as.data.table(new_chains)
+  .normalise_chains_columns(new_chains)
+
   # Combine
   combined <- data.table::rbindlist(
     list(existing, new_chains),

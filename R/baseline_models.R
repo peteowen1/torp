@@ -233,20 +233,20 @@ compare_baseline_models <- function(train_data, test_data, main_model_preds, inc
 
   # Main model performance
   main_eval <- evaluate_model_comprehensive(actual, main_model_preds, "Main Model",
-                                           bootstrap_ci = FALSE)
+                                           compute_ci = FALSE)
   results_list[["main"]] <- make_result_row("Main Model", main_eval, NA)
 
   # Naive baseline
   naive_preds <- predict_wp_naive(test_data)
   naive_eval <- evaluate_model_comprehensive(actual, naive_preds, "Naive (50%)",
-                                           bootstrap_ci = FALSE)
+                                           compute_ci = FALSE)
   results_list[["naive"]] <- make_result_row("Naive (50%)", naive_eval, 0)
 
   # Score-only baseline
   tryCatch({
     score_preds <- predict_wp_score_only(train_data, test_data)
     score_eval <- evaluate_model_comprehensive(actual, score_preds, "Score Only",
-                                             bootstrap_ci = FALSE)
+                                             compute_ci = FALSE)
     results_list[["score"]] <- make_result_row("Score Only", score_eval, 2)
   }, error = function(e) {
     cli::cli_warn("Score-only baseline failed: {conditionMessage(e)}")
@@ -256,7 +256,7 @@ compare_baseline_models <- function(train_data, test_data, main_model_preds, inc
   tryCatch({
     time_score_preds <- predict_wp_time_score(train_data, test_data)
     time_score_eval <- evaluate_model_comprehensive(actual, time_score_preds, "Time + Score",
-                                                   bootstrap_ci = FALSE)
+                                                   compute_ci = FALSE)
     results_list[["time_score"]] <- make_result_row("Time + Score", time_score_eval, 4)
   }, error = function(e) {
     cli::cli_warn("Time + Score baseline failed: {conditionMessage(e)}")
@@ -267,7 +267,7 @@ compare_baseline_models <- function(train_data, test_data, main_model_preds, inc
     tryCatch({
       exp_preds <- predict_wp_expected_points(train_data, test_data)
       exp_eval <- evaluate_model_comprehensive(actual, exp_preds, "Expected Points",
-                                             bootstrap_ci = FALSE)
+                                             compute_ci = FALSE)
       results_list[["expected_pts"]] <- make_result_row("Expected Points", exp_eval, 3)
     }, error = function(e) {
       cli::cli_warn("Expected Points baseline failed: {conditionMessage(e)}")
@@ -279,7 +279,7 @@ compare_baseline_models <- function(train_data, test_data, main_model_preds, inc
     tryCatch({
       gam_preds <- predict_wp_gam_baseline(train_data, test_data)
       gam_eval <- evaluate_model_comprehensive(actual, gam_preds, "GAM Baseline",
-                                             bootstrap_ci = FALSE)
+                                             compute_ci = FALSE)
       results_list[["gam"]] <- make_result_row("GAM Baseline", gam_eval, NA)
     }, error = function(e) {
       cli::cli_warn("GAM baseline failed: {conditionMessage(e)}")
@@ -476,7 +476,7 @@ create_model_comparison_report <- function(comparison_results, calibration_resul
   
   # Model rankings
   report <- paste0(report, "MODEL RANKINGS (by Log Loss):\n")
-  for (i in 1:nrow(comparison_results)) {
+  for (i in seq_len(nrow(comparison_results))) {
     row <- comparison_results[i, ]
     report <- paste0(report, sprintf(
       "%d. %s: Log Loss = %.4f, AUC = %.4f, Improvement = +%.1f%%\n",

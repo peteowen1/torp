@@ -18,19 +18,21 @@ test_that("select_epv_model_vars works correctly", {
     shot_row = c(0, 1, 0),
     speed5 = c(10, 15, 20),
     home = c(1, 0, 1),
+    est_qtr_remaining = c(1100, 1000, 900),
+    est_match_remaining = c(4700, 4600, 2500),
     label_ep = c(0.5, 0.3, 0.7),
     extra_col = c("a", "b", "c")
   )
-  
+
   # Test without label
   result_no_label <- torp:::select_epv_model_vars(test_df, label = FALSE)
-  expect_equal(ncol(result_no_label), 17)
+  expect_equal(ncol(result_no_label), 19)
   expect_false("label_ep" %in% names(result_no_label))
   expect_false("extra_col" %in% names(result_no_label))
-  
+
   # Test with label
   result_with_label <- torp:::select_epv_model_vars(test_df, label = TRUE)
-  expect_equal(ncol(result_with_label), 18)
+  expect_equal(ncol(result_with_label), 20)
   expect_true("label_ep" %in% names(result_with_label))
   expect_false("extra_col" %in% names(result_with_label))
 })

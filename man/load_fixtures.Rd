@@ -7,7 +7,7 @@
 load_fixtures(
   seasons = NULL,
   all = FALSE,
-  use_cache = FALSE,
+  use_cache = TRUE,
   cache_ttl = 3600,
   verbose = FALSE,
   columns = NULL,
@@ -17,9 +17,9 @@ load_fixtures(
 \arguments{
 \item{seasons}{A numeric vector of 4-digit years associated with given AFL seasons - defaults to latest season. If set to \code{TRUE}, returns all available data since 2021.}
 
-\item{all}{Logical. If TRUE, loads all available fixture data from 2021 onwards.}
+\item{all}{Deprecated. Use \code{seasons = TRUE} instead (consistent with other \verb{load_*()} functions).}
 
-\item{use_cache}{Logical. If TRUE, uses cached data when available to speed up repeated calls. Default is FALSE.}
+\item{use_cache}{Logical. If TRUE, uses in-memory cached data when available to speed up repeated calls. Default is TRUE.}
 
 \item{cache_ttl}{Numeric. Time-to-live for cached data in seconds. Default is 3600 (1 hour).}
 
@@ -41,7 +41,7 @@ try({ # prevents cran errors
   load_fixtures(2021:2022)
 
   # Load all fixtures
-  load_fixtures(all = TRUE)
+  load_fixtures(seasons = TRUE)
 })
 }
 }

@@ -40,6 +40,10 @@ get_match_chains <- function(season = get_afl_season(), round = NA) {
     dplyr::inner_join(games, by = c("match_id" = "matchId")) |>
     dplyr::left_join(players, by = c("player_id" = "playerId", "season"))
 
+  # Normalise to snake_case (API returns camelCase from games/players joins)
+  chains <- data.table::as.data.table(chains)
+  .normalise_chains_columns(chains)
+
   cli::cli_inform("Success!")
   return(chains)
 }

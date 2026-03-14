@@ -4,7 +4,7 @@
 \alias{simulate_finals}
 \title{Simulate AFL finals series}
 \usage{
-simulate_finals(ladder_dt, sim_teams_dt)
+simulate_finals(ladder_dt, sim_teams_dt, gf_familiarity = NULL)
 }
 \arguments{
 \item{ladder_dt}{A data.table from \code{\link[=calculate_ladder]{calculate_ladder()}} with \code{team} and
@@ -12,6 +12,10 @@ simulate_finals(ladder_dt, sim_teams_dt)
 
 \item{sim_teams_dt}{A data.table with \code{team} and \code{torp} (hot ratings after
 regular season).}
+
+\item{gf_familiarity}{Optional data.table with \code{team} and \code{gf_familiarity}
+columns (proportion of games played at GF venue). When provided, the Grand
+Final home advantage is based on familiarity difference between teams.}
 }
 \value{
 A data.table with columns: \code{team}, \code{finals_finish} (week eliminated

@@ -34,8 +34,7 @@ test_that("player_season_ratings function exists and is exported", {
 test_that("player_season_ratings validates input", {
   expect_error(player_season_ratings(season_val = "invalid"), "season_val must be numeric")
   expect_error(player_season_ratings(season_val = 1900), "1990 and")
-  expect_error(player_season_ratings(round_num = "invalid"), "round_num must be numeric")
-  expect_error(player_season_ratings(round_num = 50), "0 and 28")
+  expect_warning(player_season_ratings(round_num = 5), "ignored")
 })
 
 # -----------------------------------------------------------------------------

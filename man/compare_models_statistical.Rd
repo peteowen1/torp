@@ -9,12 +9,13 @@ compare_models_statistical(model_results, test_type = "simple")
 \arguments{
 \item{model_results}{List of model evaluation results}
 
-\item{test_type}{Type of statistical test ("mcnemar", "delong")}
+\item{test_type}{Unused; retained for backwards compatibility. Comparison is
+always based on AUC confidence interval overlap.}
 }
 \value{
 Dataframe with pairwise comparison results
 }
 \description{
 This function is intended for internal use and may be unexported in a future release.
-Performs statistical comparison between multiple models using paired tests
+Compares multiple models using AUC difference and CI overlap
 }

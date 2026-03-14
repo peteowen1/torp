@@ -25,7 +25,7 @@ get_afl_season <- function(type = "current") {
   season_year <- lubridate::year(Sys.Date())
 
   if (isTRUE(type)) {
-    return(2021L:as.integer(season_year))
+    return(AFL_MIN_SEASON:as.integer(season_year))
   }
 
   if (!type %in% c("current", "next")) {
@@ -58,10 +58,11 @@ get_afl_week <- function(type = "current") {
   time_aest <- lubridate::with_tz(Sys.time(), tzone = "Australia/Brisbane")
   current_day <- lubridate::as_date(time_aest)
 
-  # Try to load fixtures for current season, handle missing data gracefully
+  # Try to load fixtures for current season with caching enabled
+  # (get_afl_week is called frequently as a default parameter value)
   all_fixtures <- tryCatch(
     {
-      load_fixtures(season) |>
+      load_fixtures(season, use_cache = TRUE) |>
         dplyr::filter(.data$season == !!season)
     },
     error = function(e) {
@@ -372,12 +373,12 @@ calculate_time_remaining_pct <- function(period, period_seconds) {
 #' Uses estimated playing time (excluding stoppages) rather than raw clock time.
 #'
 #' @param period Numeric vector of period numbers (1-4)
-#' @param game_time_elapsed Numeric vector of estimated playing seconds elapsed in the current quarter
+#' @param est_qtr_elapsed Numeric vector of estimated playing seconds elapsed in the current quarter
 #' @return Numeric vector of estimated playing seconds remaining in the match
 #' @keywords internal
-calculate_game_time_remaining <- function(period, game_time_elapsed) {
+calculate_game_time_remaining <- function(period, est_qtr_elapsed) {
   pmax(0, (AFL_MAX_PERIODS - period) * AFL_PLAY_QUARTER_SECONDS +
-    (AFL_PLAY_QUARTER_SECONDS - game_time_elapsed))
+    (AFL_PLAY_QUARTER_SECONDS - est_qtr_elapsed))
 }
 
 # Add Globals Variables

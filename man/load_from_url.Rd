@@ -9,7 +9,6 @@ load_from_url(
   ...,
   seasons = TRUE,
   rounds = TRUE,
-  peteowen1 = FALSE,
   use_disk_cache = FALSE,
   columns = NULL
 )
@@ -17,13 +16,11 @@ load_from_url(
 \arguments{
 \item{url}{A vector of URLs to load into memory. If more than one URL provided, will row-bind them.}
 
-\item{...}{Named arguments that will be added as attributes to the data, e.g. \code{peteowen1_type} = "pbp"}
+\item{...}{Additional arguments (currently unused).}
 
 \item{seasons}{A numeric vector of years that will be used to filter the dataframe's \code{season} column. If \code{TRUE} (default), does not filter.}
 
 \item{rounds}{A numeric vector of rounds that will be used to filter the dataframe's \code{round} column. If \code{TRUE} (default), does not filter.}
-
-\item{peteowen1}{TRUE to add peteowen1_data classing and attributes.}
 
 \item{use_disk_cache}{Logical. If TRUE, uses persistent disk cache for faster repeated loads.}
 
@@ -32,7 +29,7 @@ reads all columns. Filter columns (season, round, round_number, week) are
 auto-included when filtering is active.}
 }
 \value{
-A tibble, possibly of type \code{peteowen1_data}
+A tibble
 }
 \description{
 This function is intended for internal use and may be unexported in a future release.

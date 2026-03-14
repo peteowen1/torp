@@ -19,7 +19,7 @@ validate_wp_input <- function(df) {
     cli::cli_abort("Input data frame cannot be empty")
   }
 
-  required_cols <- c("total_game_time_elapsed", "total_game_time_remaining", "shot_row", "home", "points_diff", "xpoints_diff")
+  required_cols <- c("est_match_elapsed", "est_match_remaining", "shot_row", "home", "points_diff", "xpoints_diff")
 
   missing_cols <- setdiff(required_cols, names(df))
   if (length(missing_cols) > 0) {
@@ -28,21 +28,6 @@ validate_wp_input <- function(df) {
   }
 
   return(TRUE)
-}
-
-#' Get Win Probability Model Version Information
-#'
-#' @description Internal function.
-#' Returns version and metadata for the current win probability model
-#'
-#' @return List with model version information
-#' @keywords internal
-get_wp_model_info <- function() {
-  list(
-    model_type = "basic",
-    version = "1.0",
-    components = "xgboost"
-  )
 }
 
 #' Check Win Probability Model Health

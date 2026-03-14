@@ -302,10 +302,10 @@ add_game_vars_dt <- function(dt) {
      .play_delta := 0]
   dt[.play_delta > CLOCK_DELTA_CAP, .play_delta := CLOCK_DELTA_CAP]
 
-  dt[, game_time_elapsed := cumsum(.play_delta), by = .(match_id, period)]
-  dt[, game_time_remaining := pmax(0L, AFL_PLAY_QUARTER_SECONDS - game_time_elapsed)]
-  dt[, total_game_time_elapsed := (period - 1L) * AFL_PLAY_QUARTER_SECONDS + game_time_elapsed]
-  dt[, total_game_time_remaining := pmax(0L, AFL_PLAY_GAME_SECONDS - total_game_time_elapsed)]
+  dt[, est_qtr_elapsed := cumsum(.play_delta), by = .(match_id, period)]
+  dt[, est_qtr_remaining := pmax(0L, AFL_PLAY_QUARTER_SECONDS - est_qtr_elapsed)]
+  dt[, est_match_elapsed := (period - 1L) * AFL_PLAY_QUARTER_SECONDS + est_qtr_elapsed]
+  dt[, est_match_remaining := pmax(0L, AFL_PLAY_GAME_SECONDS - est_match_elapsed)]
 
   dt[, c(".play_delta", ".lag_desc") := NULL]
 

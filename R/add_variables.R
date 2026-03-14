@@ -195,9 +195,8 @@ get_epv_preds <- function(df) {
       model_matrix <- stats::model.matrix(~ . + 0, data = model_data)
       preds_raw <- predict(ep_model, model_matrix)
     } else {
-      # GAM or other model types - use stats::predict
-      model_matrix <- stats::model.matrix(~ . + 0, data = model_data)
-      preds_raw <- stats::predict(ep_model, model_matrix)
+      # GAM or other model types - use stats::predict with original data frame
+      preds_raw <- stats::predict(ep_model, newdata = model_data)
     }
 
     # Convert to proper format
