@@ -80,7 +80,7 @@ create_grouped_cv_folds <- function(data, group_var = "match_id", k = 5, seed = 
 
   # Create fold indices
   folds <- list()
-  for (i in 1:k) {
+  for (i in seq_len(k)) {
     test_groups <- unique_groups[fold_assignment == i]
     test_indices <- which(data[[group_var]] %in% test_groups)
     folds[[i]] <- list(
@@ -131,12 +131,14 @@ create_temporal_splits <- function(data, train_seasons, val_seasons, test_season
 #' @param actual Vector of actual outcomes
 #' @param predicted Vector of predicted probabilities
 #' @param model_name Name of the model being evaluated
-#' @param bootstrap_ci Logical, whether to compute bootstrap confidence intervals
-#' @param n_bootstrap Number of bootstrap samples (default: 1000)
+#' @param compute_ci Logical, whether to compute approximate confidence intervals
+#'   using normal approximation (not bootstrap).
+#' @param n_bootstrap Deprecated; retained for backwards compatibility but unused.
 #' @return List containing evaluation metrics with confidence intervals
 #' @export
 evaluate_model_comprehensive <- function(actual, predicted, model_name = "Model",
-                                       bootstrap_ci = TRUE, n_bootstrap = 1000) {
+                                       compute_ci = TRUE, bootstrap_ci = compute_ci,
+                                       n_bootstrap = 1000) {
 
   # Input validation
   if (length(actual) != length(predicted)) {
@@ -153,12 +155,12 @@ evaluate_model_comprehensive <- function(actual, predicted, model_name = "Model"
   # Core metrics
   n <- length(actual)
 
-  # Calculate AUC using base R (trapezoidal rule)
+  # Calculate AUC using base R (Mann-Whitney U)
   auc_value <- calculate_auc_base(actual, predicted)
 
-  # Calibration metrics
-  log_loss <- -mean(actual * log(predicted + 1e-15) + (1 - actual) * log(1 - predicted + 1e-15))
-  brier_score <- mean((predicted - actual)^2)
+  # Calibration metrics (shared with baseline_models.R)
+  log_loss <- calculate_log_loss(actual, predicted)
+  brier_score <- calculate_brier_score(actual, predicted)
 
   # Calibration slope (should be close to 1.0)
   cal_data <- data.frame(
@@ -188,8 +190,8 @@ evaluate_model_comprehensive <- function(actual, predicted, model_name = "Model"
     calibration_r2 <- NA
   }
 
-  # Simple confidence intervals using normal approximation (replaces bootstrap)
-  if (bootstrap_ci && n >= 100) {
+  # Simple confidence intervals using normal approximation
+  if (compute_ci && n >= 100) {
     # AUC confidence interval using normal approximation
     auc_se <- sqrt(auc_value * (1 - auc_value) / n)  # Simplified SE estimate
     auc_lower <- max(0, auc_value - 1.96 * auc_se)
@@ -242,10 +244,11 @@ evaluate_model_comprehensive <- function(actual, predicted, model_name = "Model"
 #' Compare Multiple Models Statistically
 #'
 #' @description This function is intended for internal use and may be unexported in a future release.
-#' Performs statistical comparison between multiple models using paired tests
+#' Compares multiple models using AUC difference and CI overlap
 #'
 #' @param model_results List of model evaluation results
-#' @param test_type Type of statistical test ("mcnemar", "delong")
+#' @param test_type Unused; retained for backwards compatibility. Comparison is
+#'   always based on AUC confidence interval overlap.
 #' @return Dataframe with pairwise comparison results
 #' @export
 compare_models_statistical <- function(model_results, test_type = "simple") {
@@ -328,7 +331,7 @@ create_validation_report <- function(evaluation_results, comparison_results = NU
     report <- paste0(report, "\nMODEL COMPARISONS\n")
     report <- paste0(report, "-----------------\n")
 
-    for (i in 1:nrow(comparison_results)) {
+    for (i in seq_len(nrow(comparison_results))) {
       row <- comparison_results[i, ]
       ci_note <- if (row$ci_non_overlap) "CIs non-overlapping" else "CIs overlap"
       report <- paste0(report,

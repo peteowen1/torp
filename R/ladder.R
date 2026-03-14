@@ -209,10 +209,36 @@ prepare_sim_data <- function(season, team_ratings = NULL, fixtures = NULL,
     }
   }
 
+  # --- GF Venue Familiarity ---
+  # Compute each team's proportion of games at the GF venue (MCG)
+  venue_col <- resolve_col(fix_dt, c("venue_name", "venue"))
+  if (!is.null(venue_col)) {
+    venue_dt <- data.table::data.table(
+      home_team = torp_replace_teams(as.character(fix_dt[[ht_col]])),
+      away_team = torp_replace_teams(as.character(fix_dt[[at_col]])),
+      venue     = torp_replace_venues(as.character(fix_dt[[venue_col]]))
+    )
+    # Pivot to team-level rows
+    home_rows <- venue_dt[, .(team = home_team, venue)]
+    away_rows <- venue_dt[, .(team = away_team, venue)]
+    all_rows  <- data.table::rbindlist(list(home_rows, away_rows))
+
+    gf_venue <- SIM_GF_VENUE
+    gf_familiarity <- all_rows[, .(
+      gf_familiarity = sum(venue == gf_venue) / .N
+    ), by = team]
+  } else {
+    gf_familiarity <- data.table::data.table(
+      team = sim_teams$team,
+      gf_familiarity = 0
+    )
+  }
+
   list(
-    sim_teams    = sim_teams,
-    sim_games    = sim_games,
-    played_games = played_games
+    sim_teams      = sim_teams,
+    sim_games      = sim_games,
+    played_games   = played_games,
+    gf_familiarity = gf_familiarity
   )
 }
 
@@ -275,6 +301,43 @@ calculate_ladder <- function(games_dt) {
 
 
 # --------------------------------------------------------------------------
+# Finals venue advantage
+# --------------------------------------------------------------------------
+
+#' Compute finals home advantage based on venue familiarity
+#'
+#' AFL finals venue rules: the higher-seeded team hosts in their home state.
+#' Victorian teams play at the MCG, where familiarity varies by team.
+#' Interstate teams host at their home ground (standard home advantage).
+#' The Grand Final is always at the MCG regardless of who is playing.
+#'
+#' @param home Character. Home (higher-seeded) team name.
+#' @param away Character. Away team name.
+#' @param fam_lookup Named numeric vector of MCG familiarity per team,
+#'   or NULL (falls back to standard home advantage).
+#' @param gf Logical. TRUE for the Grand Final (always MCG).
+#' @return Numeric points advantage for the home team.
+#' @keywords internal
+finals_home_advantage <- function(home, away, fam_lookup, gf = FALSE) {
+  is_mcg <- gf || (home %in% SIM_VICTORIAN_TEAMS)
+
+  if (is_mcg && !is.null(fam_lookup)) {
+    fam_home <- if (home %in% names(fam_lookup)) fam_lookup[[home]] else 0
+    fam_away <- if (away %in% names(fam_lookup)) fam_lookup[[away]] else 0
+    (fam_home - fam_away) * SIM_GF_FAMILIARITY_SCALE
+  } else {
+    SIM_HOME_ADVANTAGE
+  }
+}
+
+#' @rdname finals_home_advantage
+#' @keywords internal
+gf_home_advantage <- function(home, away, fam_lookup) {
+  finals_home_advantage(home, away, fam_lookup, gf = TRUE)
+}
+
+
+# --------------------------------------------------------------------------
 # Finals simulation
 # --------------------------------------------------------------------------
 
@@ -320,14 +383,24 @@ simulate_match <- function(home_torp, away_torp,
 #'   `rank` columns.
 #' @param sim_teams_dt A data.table with `team` and `torp` (hot ratings after
 #'   regular season).
+#' @param gf_familiarity Optional data.table with `team` and `gf_familiarity`
+#'   columns (proportion of games played at GF venue). When provided, the Grand
+#'   Final home advantage is based on familiarity difference between teams.
 #' @return A data.table with columns: `team`, `finals_finish` (week eliminated
 #'   or 5 for premier), `finals_wins`, `made_gf`, `won_gf`.
 #' @keywords internal
-simulate_finals <- function(ladder_dt, sim_teams_dt) {
+simulate_finals <- function(ladder_dt, sim_teams_dt, gf_familiarity = NULL) {
   # Build lookup: team -> torp rating
   ratings <- stats::setNames(sim_teams_dt$torp, sim_teams_dt$team)
   # Original ladder positions for home advantage
   ladder_pos <- stats::setNames(ladder_dt$rank, ladder_dt$team)
+
+  # GF venue familiarity lookup
+  fam_lookup <- if (!is.null(gf_familiarity)) {
+    stats::setNames(gf_familiarity$gf_familiarity, gf_familiarity$team)
+  } else {
+    NULL
+  }
 
   top8 <- ladder_dt[rank <= 8, team]
   if (length(top8) < 8) {
@@ -336,7 +409,7 @@ simulate_finals <- function(ladder_dt, sim_teams_dt) {
 
   # Helper: play a finals match, update ratings, return winner/loser
   play_final <- function(home, away, gf = FALSE) {
-    ha <- if (gf) SIM_GF_HOME_ADVANTAGE else SIM_HOME_ADVANTAGE
+    ha <- finals_home_advantage(home, away, fam_lookup, gf = gf)
     res <- simulate_match(ratings[home], ratings[away],
                           home_advantage = ha, allow_draw = FALSE)
 
@@ -496,6 +569,7 @@ simulate_afl_season <- function(season,
   base_teams <- prep$sim_teams
   base_games <- prep$sim_games
   played_games <- prep$played_games
+  gf_familiarity <- prep$gf_familiarity
 
   # Ensure column types once (so simulate_season doesn't need to per-sim)
   if ("result" %in% names(base_games)) {
@@ -523,7 +597,7 @@ simulate_afl_season <- function(season,
     ladder <- calculate_ladder(all_games)
     ladder[, sim_id := sim_id]
 
-    finals <- simulate_finals(ladder, sim_teams_final)
+    finals <- simulate_finals(ladder, sim_teams_final, gf_familiarity)
     finals[, sim_id := sim_id]
 
     out <- list(ladder = ladder, finals = finals)
@@ -543,11 +617,13 @@ simulate_afl_season <- function(season,
     # Export required objects and functions to workers
     parallel::clusterExport(cl, c(
       "base_teams", "base_games", "played_games", "keep_games",
-      "sim_injury_sd",
+      "sim_injury_sd", "gf_familiarity",
       "simulate_season", "process_games_dt", "calculate_ladder",
       "simulate_finals", "simulate_match",
+      "finals_home_advantage", "gf_home_advantage",
       "SIM_HOME_ADVANTAGE", "SIM_NOISE_SD", "SIM_WP_SCALING_FACTOR",
-      "SIM_AVG_TOTAL", "SIM_TOTAL_SD", "SIM_GF_HOME_ADVANTAGE",
+      "SIM_AVG_TOTAL", "SIM_TOTAL_SD", "SIM_GF_FAMILIARITY_SCALE",
+      "SIM_GF_VENUE", "SIM_VICTORIAN_TEAMS",
       "SIM_INJURY_SD", "SIM_INJURY_SD_KNOWN", "SIM_MEAN_REVERSION"
     ), envir = environment())
     parallel::clusterEvalQ(cl, library(data.table))
@@ -687,6 +763,6 @@ print.torp_sim_results <- function(x, ...) {
     Last    = sprintf("%.1f%%", last_pct * 100)
   )]
 
-  print(display, nrows = 18)
+  print(display, nrow = 18)
   invisible(x)
 }

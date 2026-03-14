@@ -476,7 +476,7 @@ create_model_comparison_report <- function(comparison_results, calibration_resul
   
   # Model rankings
   report <- paste0(report, "MODEL RANKINGS (by Log Loss):\n")
-  for (i in 1:nrow(comparison_results)) {
+  for (i in seq_len(nrow(comparison_results))) {
     row <- comparison_results[i, ]
     report <- paste0(report, sprintf(
       "%d. %s: Log Loss = %.4f, AUC = %.4f, Improvement = +%.1f%%\n",

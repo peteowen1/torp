@@ -19,7 +19,6 @@
   # Initialize logging environment if not already done
   if (exists(".torp_logging_env", envir = asNamespace(pkgname))) {
     .torp_logging_env$log_level <- "INFO"
-    .torp_logging_env$log_file <- NULL
     .torp_logging_env$console_output <- FALSE
   }
 

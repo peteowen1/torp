@@ -448,17 +448,13 @@ load_player_stats <- function(seasons = get_afl_season(), use_disk_cache = TRUE,
   out <- .load_with_cache(
     cache_prefix = "player_stats",
     seasons = seasons,
-    fetch_fn = function(s) {
-      out <- get_afl_player_stats(s)
-      out <- .normalise_player_stats_columns(out)
-      out
-    },
+    fetch_fn = get_afl_player_stats,
     columns = columns,
     use_disk_cache = use_disk_cache,
     refresh = refresh
   )
 
-  # Always normalise — disk cache may predate the column schema
+  # Normalise once after retrieval (handles both fresh API data and stale disk cache)
   if (nrow(out) > 0) out <- tibble::as_tibble(.normalise_player_stats_columns(out))
 
   out
@@ -501,7 +497,7 @@ load_player_game_data <- function(seasons = get_afl_season(), use_disk_cache = F
 #' @description Loads AFL fixture and schedule data from the [torpdata repository](https://github.com/peteowen1/torpdata)
 #'
 #' @param seasons A numeric vector of 4-digit years associated with given AFL seasons - defaults to latest season. If set to `TRUE`, returns all available data since 2021.
-#' @param all Logical. If TRUE, loads all available fixture data from 2021 onwards.
+#' @param all Deprecated. Use `seasons = TRUE` instead (consistent with other `load_*()` functions).
 #' @param use_cache Logical. If TRUE, uses cached data when available to speed up repeated calls. Default is FALSE.
 #' @param cache_ttl Numeric. Time-to-live for cached data in seconds. Default is 3600 (1 hour).
 #' @param verbose Logical. If TRUE, prints cache hit/miss information.
@@ -516,16 +512,14 @@ load_player_game_data <- function(seasons = get_afl_season(), use_disk_cache = F
 #'   load_fixtures(2021:2022)
 #'
 #'   # Load all fixtures
-#'   load_fixtures(all = TRUE)
+#'   load_fixtures(seasons = TRUE)
 #' })
 #' }
 #' @export
-load_fixtures <- function(seasons = NULL, all = FALSE, use_cache = FALSE, cache_ttl = 3600, verbose = FALSE, columns = NULL, use_disk_cache = FALSE) {
-  # Process parameters
-  if (all) {
-    current_year <- as.numeric(format(Sys.Date(), "%Y"))
-    seasons <- 2021:current_year
-  } else if (is.null(seasons)) {
+load_fixtures <- function(seasons = NULL, all = FALSE, use_cache = TRUE, cache_ttl = 3600, verbose = FALSE, columns = NULL, use_disk_cache = FALSE) {
+  # Process parameters — `all = TRUE` is equivalent to `seasons = TRUE`
+  if (all) seasons <- TRUE
+  if (is.null(seasons)) {
     seasons <- get_afl_season()
   } else {
     seasons <- validate_seasons(seasons)
@@ -614,7 +608,7 @@ load_results <- function(seasons = get_afl_season(), use_disk_cache = FALSE, col
     seasons = seasons,
     fetch_fn = get_afl_results,
     columns = columns,
-    use_cache = FALSE
+    use_disk_cache = use_disk_cache
   )
 }
 
@@ -708,12 +702,14 @@ load_predictions <- function(seasons = get_afl_season(), rounds = get_afl_week(t
 #' }
 #' @export
 load_torp_ratings <- function(columns = NULL) {
-  url <- paste0("https://github.com/", get_torp_data_repo(), "/releases/download/ratings-data/torp_ratings.parquet")
-  out <- parquet_from_url_cached(url, use_cache = FALSE, columns = columns)
+  base_url <- paste0("https://github.com/", get_torp_data_repo(), "/releases/download")
+  url <- paste0(base_url, "/ratings-data/torp_ratings.parquet")
+  out <- load_from_url(url, columns = columns)
+
   if (nrow(out) == 0) {
     cli::cli_warn("No TORP ratings data loaded. The file may not exist yet or the download failed.")
   }
-  tibble::as_tibble(out)
+  out
 }
 
 #' Load Player Game Ratings Data
@@ -820,13 +816,13 @@ load_player_season_ratings <- function(seasons = get_afl_season(), use_disk_cach
 #' }
 #' @export
 load_team_ratings <- function(columns = NULL) {
-  url <- paste0("https://github.com/", get_torp_data_repo(), "/releases/download/team_ratings-data/team_ratings.parquet")
-  out <- parquet_from_url_cached(url, use_cache = FALSE, columns = columns)
+  base_url <- paste0("https://github.com/", get_torp_data_repo(), "/releases/download")
+  url <- paste0(base_url, "/team_ratings-data/team_ratings.parquet")
+  out <- load_from_url(url, columns = columns)
+
   if (nrow(out) == 0) {
     cli::cli_warn("No team ratings data loaded. The file may not exist yet or the download failed.")
   }
-  out <- tibble::as_tibble(out)
-
   out
 }
 

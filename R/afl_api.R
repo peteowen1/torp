@@ -83,6 +83,87 @@
 #' @param seasons Numeric vector of years
 #' @return A tibble of player details across all seasons
 #' @keywords internal
+#' Post-process raw squad API response into clean player details
+#'
+#' Shared helper used by both get_afl_player_details() (single season) and
+#' .fetch_all_player_details() (multi-season). Handles name construction,
+#' age calculation, prefix stripping, ID renaming, and column normalisation.
+#'
+#' @param result Data frame from list_rbind of .parse_squad_json() results.
+#' @param season_col Character column name containing per-row season values,
+#'   or NULL if a scalar season should be used.
+#' @param scalar_season Single season value (used when season_col is NULL).
+#' @return A tibble with normalised player details.
+#' @keywords internal
+.post_process_squad_result <- function(result, season_col = NULL, scalar_season = NULL) {
+  if (nrow(result) == 0) return(tibble::tibble())
+
+  # Name construction
+  fn_col <- intersect(c("player.firstName", "firstName"), names(result))[1]
+  sn_col <- intersect(c("player.surname", "surname"), names(result))[1]
+  if (!is.na(fn_col) && !is.na(sn_col)) {
+    result$player_name <- paste(result[[fn_col]], result[[sn_col]])
+  }
+
+  # Age calculation
+  dob_col <- intersect(c("player.dateOfBirth", "dateOfBirth"), names(result))[1]
+  if (!is.na(dob_col)) {
+    season_ref <- if (!is.null(season_col) && season_col %in% names(result)) {
+      result[[season_col]]
+    } else {
+      scalar_season
+    }
+    result$age <- lubridate::decimal_date(
+      lubridate::as_date(paste0(season_ref, "-07-01"))
+    ) - lubridate::decimal_date(lubridate::as_date(result[[dob_col]]))
+  }
+
+  pid_col <- intersect(c("player.providerId", "providerId"), names(result))[1]
+
+  # Strip "player." prefix
+  new_names <- sub("^player\\.", "", names(result))
+  duped <- new_names[duplicated(new_names)]
+  if (length(duped) > 0) {
+    collision <- new_names != names(result) & duplicated(new_names, fromLast = FALSE)
+    new_names[collision] <- names(result)[collision]
+  }
+  names(result) <- new_names
+
+  # Rename providerId → player_id
+  if (!is.na(pid_col)) {
+    pid_col_clean <- sub("^player\\.", "", pid_col)
+    season_for_id <- if (!is.null(season_col) && season_col %in% names(result)) {
+      result[[season_col]]
+    } else {
+      scalar_season
+    }
+    result$row_id <- paste(result[[pid_col_clean]], season_for_id)
+    if (pid_col_clean %in% names(result) && !"player_id" %in% names(result)) {
+      names(result)[names(result) == pid_col_clean] <- "player_id"
+    }
+  }
+
+  # Standardise team column
+  if ("team.name" %in% names(result) && !"team" %in% names(result)) {
+    names(result)[names(result) == "team.name"] <- "team"
+  }
+  if ("team" %in% names(result)) {
+    result$team <- torp_replace_teams(result$team)
+  }
+
+  # Season column
+  if (!is.null(season_col) && season_col %in% names(result)) {
+    result$season <- result[[season_col]]
+    result[[season_col]] <- NULL
+  } else {
+    result$season <- scalar_season
+  }
+
+  .normalise_player_details_columns(result)
+  tibble::as_tibble(result)
+}
+
+
 .fetch_all_player_details <- function(seasons) {
   # Gather all (team_id, season_id, actual_season) tuples across seasons
   team_season_info <- list()
@@ -150,55 +231,8 @@
   curl::multi_run(pool = pool)
 
   result <- purrr::list_rbind(purrr::compact(details_list))
-  if (nrow(result) == 0) return(tibble::tibble())
 
-  # Post-process per season group (age depends on season)
-  fn_col <- intersect(c("player.firstName", "firstName"), names(result))[1]
-  sn_col <- intersect(c("player.surname", "surname"), names(result))[1]
-  if (!is.na(fn_col) && !is.na(sn_col)) {
-    result$player_name <- paste(result[[fn_col]], result[[sn_col]])
-  }
-  dob_col <- intersect(c("player.dateOfBirth", "dateOfBirth"), names(result))[1]
-  if (!is.na(dob_col)) {
-    result$age <- lubridate::decimal_date(
-      lubridate::as_date(paste0(result$.actual_season, "-07-01"))
-    ) - lubridate::decimal_date(lubridate::as_date(result[[dob_col]]))
-  }
-  pid_col <- intersect(c("player.providerId", "providerId"), names(result))[1]
-
-  # Strip "player." prefix
-  new_names <- sub("^player\\.", "", names(result))
-  duped <- new_names[duplicated(new_names)]
-  if (length(duped) > 0) {
-    collision <- new_names != names(result) & duplicated(new_names, fromLast = FALSE)
-    new_names[collision] <- names(result)[collision]
-  }
-  names(result) <- new_names
-
-  if (!is.na(pid_col)) {
-    pid_col_clean <- sub("^player\\.", "", pid_col)
-    result$row_id <- paste(result[[pid_col_clean]], result$.actual_season)
-    if (pid_col_clean %in% names(result) && !"player_id" %in% names(result)) {
-      names(result)[names(result) == pid_col_clean] <- "player_id"
-    }
-  }
-
-  # Standardise team column
-  if ("team.name" %in% names(result) && !"team" %in% names(result)) {
-    names(result)[names(result) == "team.name"] <- "team"
-  }
-  if ("team" %in% names(result)) {
-    result$team <- torp_replace_teams(result$team)
-  }
-
-  # Add season column, then clean up internal column
-  result$season <- result$.actual_season
-  result$.actual_season <- NULL
-
-  # Normalise remaining camelCase columns to snake_case
-  .normalise_player_details_columns(result)
-
-  tibble::as_tibble(result)
+  .post_process_squad_result(result, season_col = ".actual_season")
 }
 
 
@@ -806,54 +840,8 @@ get_afl_player_details <- function(season = NULL) {
   curl::multi_run(pool = pool)
 
   result <- purrr::list_rbind(purrr::compact(details_list))
-  if (nrow(result) == 0) return(tibble::tibble())
 
-  # Add derived columns to match existing post-processing
-  fn_col <- intersect(c("player.firstName", "firstName"), names(result))[1]
-  sn_col <- intersect(c("player.surname", "surname"), names(result))[1]
-  if (!is.na(fn_col) && !is.na(sn_col)) {
-    result$player_name <- paste(result[[fn_col]], result[[sn_col]])
-  }
-  dob_col <- intersect(c("player.dateOfBirth", "dateOfBirth"), names(result))[1]
-  if (!is.na(dob_col)) {
-    result$age <- lubridate::decimal_date(lubridate::as_date(paste0(actual_season, "-07-01"))) -
-      lubridate::decimal_date(lubridate::as_date(result[[dob_col]]))
-  }
-  pid_col <- intersect(c("player.providerId", "providerId"), names(result))[1]
-
-  # Standardise column names — strip "player." prefix from flattened API response
-  new_names <- sub("^player\\.", "", names(result))
-  duped <- new_names[duplicated(new_names)]
-  if (length(duped) > 0) {
-    cli::cli_alert_danger("Prefix stripping created duplicate columns: {.val {unique(duped)}}. Keeping originals for conflicts.")
-    collision <- new_names != names(result) & duplicated(new_names, fromLast = FALSE)
-    new_names[collision] <- names(result)[collision]
-  }
-  names(result) <- new_names
-
-  if (!is.na(pid_col)) {
-    pid_col_clean <- sub("^player\\.", "", pid_col)
-    result$row_id <- paste(result[[pid_col_clean]], actual_season)
-    # Rename providerId → player_id (this is a player ID, not a match ID)
-    if (pid_col_clean %in% names(result) && !"player_id" %in% names(result)) {
-      names(result)[names(result) == pid_col_clean] <- "player_id"
-    }
-  }
-
-  # Standardise team column name and values
-  if ("team.name" %in% names(result) && !"team" %in% names(result)) {
-    names(result)[names(result) == "team.name"] <- "team"
-  }
-  if ("team" %in% names(result)) {
-    result$team <- torp_replace_teams(result$team)
-  }
-
-  result$season <- actual_season
-
-  # Normalise remaining camelCase columns to snake_case
-  .normalise_player_details_columns(result)
-
-  tibble::as_tibble(result)
+  .post_process_squad_result(result, scalar_season = actual_season)
 }
 
 
@@ -964,6 +952,7 @@ torp_replace_venues <- function(venue) {
     venue == "Westpac Stadium" ~ "Wellington",
     venue == "University of Tasmania Stadium" ~ "York Park",
     venue == "UTAS Stadium" ~ "York Park",
+    venue == "Adelaide Arena at Jiangwan Stadium" ~ "Jiangwan Stadium",
     TRUE ~ venue
   )
 }

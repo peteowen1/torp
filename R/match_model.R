@@ -235,9 +235,6 @@
 
   # Distance traveled (Haversine)
   team_dist_df <- fix_df |>
-    dplyr::mutate(
-      venue = ifelse(venue == "Adelaide Arena at Jiangwan Stadium", "Jiangwan Stadium", venue)
-    ) |>
     dplyr::left_join(
       all_grounds |> dplyr::select(venue, venue_lat = Latitude, venue_lon = Longitude),
       by = "venue"
@@ -257,11 +254,11 @@
     dplyr::left_join(ground_prop, by = c("team_id", "season", "round_number", "venue")) |>
     dplyr::mutate(familiarity = tidyr::replace_na(familiarity, 0))
 
-  # Days rest
+  # Days rest (use parsed utc_dt, not character utc_start_time)
   days_rest <- fix_df |>
-    dplyr::arrange(team_id, utc_start_time) |>
+    dplyr::arrange(team_id, utc_dt) |>
     dplyr::group_by(team_id, season) |>
-    dplyr::mutate(days_rest = as.numeric(difftime(utc_start_time, dplyr::lag(utc_start_time), units = "days"))) |>
+    dplyr::mutate(days_rest = as.numeric(difftime(utc_dt, dplyr::lag(utc_dt), units = "days"))) |>
     dplyr::ungroup() |>
     dplyr::mutate(days_rest = tidyr::replace_na(days_rest, 21))
 

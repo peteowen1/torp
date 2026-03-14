@@ -5,6 +5,10 @@
 # AFL Field and Game Constants
 # ----------------------------
 
+#' Earliest season with data available in torpdata
+#' @keywords internal
+AFL_MIN_SEASON <- 2021L
+
 #' Nominal playing time per AFL quarter in seconds (excludes stoppages)
 #' @keywords internal
 AFL_PLAY_QUARTER_SECONDS <- 1200L
@@ -341,9 +345,27 @@ SIM_AVG_TOTAL <- 160
 #' @keywords internal
 SIM_TOTAL_SD <- 28
 
-#' Grand Final home advantage (MCG = roughly neutral)
+#' Grand Final venue (standardised name via torp_replace_venues)
 #' @keywords internal
-SIM_GF_HOME_ADVANTAGE <- 0
+SIM_GF_VENUE <- "M.C.G."
+
+#' Scaling factor for familiarity-based Grand Final advantage (points).
+#' Multiplied by familiarity difference (home - away) to produce a
+#' venue-specific GF advantage. E.g., a Melbourne MCG tenant with 0.50
+#' familiarity vs an interstate team with 0.05 gives a diff of 0.45,
+#' yielding 0.45 * 6 = ~2.7 points advantage.
+#' @keywords internal
+SIM_GF_FAMILIARITY_SCALE <- 6
+
+#' Victorian teams whose home finals are played at the MCG.
+#' When a Victorian team is "home" in a final, the match is at the MCG
+#' and venue familiarity applies instead of standard home advantage.
+#' @keywords internal
+SIM_VICTORIAN_TEAMS <- c(
+  "Carlton", "Collingwood", "Essendon", "Geelong Cats",
+  "Hawthorn", "Melbourne", "North Melbourne", "Richmond",
+  "St Kilda", "Western Bulldogs"
+)
 
 #' Per-team per-round injury/disruption noise SD (points)
 #' Represents week-to-week variation in effective team strength due to

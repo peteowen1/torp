@@ -94,6 +94,97 @@ test_that("simulate_finals produces valid bracket results", {
   expect_equal(sum(finals$finals_finish == 3), 2)
 })
 
+# --------------------------------------------------------------------------
+# Finals venue familiarity tests
+# --------------------------------------------------------------------------
+
+test_that("finals_home_advantage falls back to standard HA when fam_lookup is NULL", {
+  ha <- finals_home_advantage("Collingwood", "Sydney Swans", NULL, gf = TRUE)
+  expect_equal(ha, SIM_HOME_ADVANTAGE)
+})
+
+test_that("gf_home_advantage returns positive for MCG tenant vs interstate", {
+  fam <- c("Collingwood" = 0.50, "West Coast Eagles" = 0.05)
+  ha <- gf_home_advantage("Collingwood", "West Coast Eagles", fam)
+  expect_gt(ha, 0)
+  expect_equal(ha, (0.50 - 0.05) * SIM_GF_FAMILIARITY_SCALE)
+})
+
+test_that("gf_home_advantage returns near-zero for two MCG tenants", {
+  fam <- c("Collingwood" = 0.50, "Melbourne" = 0.48)
+  ha <- gf_home_advantage("Collingwood", "Melbourne", fam)
+  expect_lt(abs(ha), 0.5)
+})
+
+test_that("finals_home_advantage uses MCG familiarity for Victorian home teams", {
+  fam <- c("Collingwood" = 0.50, "Sydney Swans" = 0.08)
+  ha <- finals_home_advantage("Collingwood", "Sydney Swans", fam, gf = FALSE)
+  expect_equal(ha, (0.50 - 0.08) * SIM_GF_FAMILIARITY_SCALE)
+})
+
+test_that("finals_home_advantage uses standard HA for interstate home teams", {
+  fam <- c("Brisbane Lions" = 0.08, "Collingwood" = 0.50)
+  ha <- finals_home_advantage("Brisbane Lions", "Collingwood", fam, gf = FALSE)
+  expect_equal(ha, SIM_HOME_ADVANTAGE)
+})
+
+test_that("finals_home_advantage always uses MCG for GF regardless of teams", {
+  fam <- c("Brisbane Lions" = 0.08, "Sydney Swans" = 0.06)
+  ha <- finals_home_advantage("Brisbane Lions", "Sydney Swans", fam, gf = TRUE)
+  # GF always at MCG, so familiarity applies even for interstate teams
+  expect_equal(ha, (0.08 - 0.06) * SIM_GF_FAMILIARITY_SCALE)
+})
+
+test_that("gf_home_advantage is negative when away team has higher familiarity", {
+  fam <- c("Fremantle" = 0.05, "Richmond" = 0.55)
+  ha <- gf_home_advantage("Fremantle", "Richmond", fam)
+  expect_lt(ha, 0)
+})
+
+test_that("gf_home_advantage defaults to 0 for unknown teams", {
+  fam <- c("Collingwood" = 0.50)
+  ha <- gf_home_advantage("Collingwood", "UnknownFC", fam)
+  expect_equal(ha, 0.50 * SIM_GF_FAMILIARITY_SCALE)
+})
+
+test_that("simulate_finals accepts gf_familiarity parameter", {
+  set.seed(123)
+  teams <- paste0("Team", 1:18)
+  ladder <- data.table::data.table(
+    team = teams, rank = 1:18,
+    wins = 18:1, percentage = seq(130, 95, length.out = 18)
+  )
+  sim_teams <- data.table::data.table(
+    team = teams, torp = seq(80, 10, length.out = 18)
+  )
+  gf_fam <- data.table::data.table(
+    team = teams,
+    gf_familiarity = c(0.50, 0.45, 0.08, 0.05, rep(0.10, 14))
+  )
+
+  finals <- simulate_finals(ladder, sim_teams, gf_fam)
+  expect_s3_class(finals, "data.table")
+  expect_equal(sum(finals$won_gf), 1)
+  expect_equal(sum(finals$made_gf), 2)
+})
+
+test_that("simulate_finals works without gf_familiarity (backward compat)", {
+  set.seed(123)
+  teams <- paste0("Team", 1:18)
+  ladder <- data.table::data.table(
+    team = teams, rank = 1:18,
+    wins = 18:1, percentage = seq(130, 95, length.out = 18)
+  )
+  sim_teams <- data.table::data.table(
+    team = teams, torp = seq(80, 10, length.out = 18)
+  )
+
+  finals <- simulate_finals(ladder, sim_teams)
+  expect_s3_class(finals, "data.table")
+  expect_equal(sum(finals$won_gf), 1)
+})
+
+
 test_that("simulate_afl_season returns valid structure", {
   set.seed(42)
 

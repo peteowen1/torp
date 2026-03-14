@@ -25,7 +25,7 @@ get_afl_season <- function(type = "current") {
   season_year <- lubridate::year(Sys.Date())
 
   if (isTRUE(type)) {
-    return(2021L:as.integer(season_year))
+    return(AFL_MIN_SEASON:as.integer(season_year))
   }
 
   if (!type %in% c("current", "next")) {
@@ -58,10 +58,11 @@ get_afl_week <- function(type = "current") {
   time_aest <- lubridate::with_tz(Sys.time(), tzone = "Australia/Brisbane")
   current_day <- lubridate::as_date(time_aest)
 
-  # Try to load fixtures for current season, handle missing data gracefully
+  # Try to load fixtures for current season with caching enabled
+  # (get_afl_week is called frequently as a default parameter value)
   all_fixtures <- tryCatch(
     {
-      load_fixtures(season) |>
+      load_fixtures(season, use_cache = TRUE) |>
         dplyr::filter(.data$season == !!season)
     },
     error = function(e) {

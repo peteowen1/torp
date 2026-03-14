@@ -4,18 +4,17 @@
 #' @param url A vector of URLs to load into memory. If more than one URL provided, will row-bind them.
 #' @param seasons A numeric vector of years that will be used to filter the dataframe's `season` column. If `TRUE` (default), does not filter.
 #' @param rounds A numeric vector of rounds that will be used to filter the dataframe's `round` column. If `TRUE` (default), does not filter.
-#' @param peteowen1 TRUE to add peteowen1_data classing and attributes.
 #' @param use_disk_cache Logical. If TRUE, uses persistent disk cache for faster repeated loads.
 #' @param columns Optional character vector of column names to read. If NULL (default),
 #'   reads all columns. Filter columns (season, round, round_number, week) are
 #'   auto-included when filtering is active.
-#' @param ... Named arguments that will be added as attributes to the data, e.g. `peteowen1_type` = "pbp"
+#' @param ... Additional arguments (currently unused).
 #'
-#' @return A tibble, possibly of type `peteowen1_data`
+#' @return A tibble
 #' @export
 #' @importFrom data.table rbindlist setDT
 #' @importFrom tibble as_tibble
-load_from_url <- function(url, ..., seasons = TRUE, rounds = TRUE, peteowen1 = FALSE, use_disk_cache = FALSE, columns = NULL) {
+load_from_url <- function(url, ..., seasons = TRUE, rounds = TRUE, use_disk_cache = FALSE, columns = NULL) {
   url <- as.character(url)
 
   cache_opts <- get_disk_cache_options()
@@ -69,11 +68,6 @@ load_from_url <- function(url, ..., seasons = TRUE, rounds = TRUE, peteowen1 = F
   }
 
   out <- tibble::as_tibble(out)
-
-  if (peteowen1) {
-    class(out) <- c("peteowen1_data", class(out))
-    attributes(out) <- c(attributes(out), list(...))
-  }
 
   return(out)
 }

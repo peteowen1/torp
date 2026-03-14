@@ -30,21 +30,6 @@ validate_wp_input <- function(df) {
   return(TRUE)
 }
 
-#' Get Win Probability Model Version Information
-#'
-#' @description Internal function.
-#' Returns version and metadata for the current win probability model
-#'
-#' @return List with model version information
-#' @keywords internal
-get_wp_model_info <- function() {
-  list(
-    model_type = "basic",
-    version = "1.0",
-    components = "xgboost"
-  )
-}
-
 #' Check Win Probability Model Health
 #'
 #' @description Internal function.
