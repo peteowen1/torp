@@ -11,7 +11,8 @@ evaluate_model_comprehensive(
   actual,
   predicted,
   model_name = "Model",
-  bootstrap_ci = TRUE,
+  compute_ci = TRUE,
+  bootstrap_ci,
   n_bootstrap = 1000
 )
 ```
@@ -30,13 +31,19 @@ evaluate_model_comprehensive(
 
   Name of the model being evaluated
 
+- compute_ci:
+
+  Logical, whether to compute approximate confidence intervals using
+  normal approximation.
+
 - bootstrap_ci:
 
-  Logical, whether to compute bootstrap confidence intervals
+  Deprecated alias for `compute_ci`; retained for backwards
+  compatibility. If provided, overrides `compute_ci`.
 
 - n_bootstrap:
 
-  Number of bootstrap samples (default: 1000)
+  Deprecated; retained for backwards compatibility but unused.
 
 ## Value
 

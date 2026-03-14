@@ -1,7 +1,12 @@
 # Process games for a single round
 
-This function processes games for a single round of the season. Uses
-optimized data.table implementation internally.
+**\[deprecated\]**
+
+Thin wrapper around
+[`process_games_dt()`](https://peteowen1.github.io/torp/reference/process_games_dt.md)
+that converts results back to data.frames. Use
+[`process_games_dt()`](https://peteowen1.github.io/torp/reference/process_games_dt.md)
+directly for better performance.
 
 ## Usage
 
@@ -22,6 +27,10 @@ process_games(sim_teams, sim_games, round_num, injury_sd = SIM_INJURY_SD)
 - round_num:
 
   The round number to process.
+
+- injury_sd:
+
+  Standard deviation for injury impact.
 
 ## Value
 

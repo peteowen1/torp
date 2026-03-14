@@ -1,8 +1,8 @@
 # Compare Multiple Models Statistically
 
 This function is intended for internal use and may be unexported in a
-future release. Performs statistical comparison between multiple models
-using paired tests
+future release. Compares multiple models using AUC difference and CI
+overlap
 
 ## Usage
 
@@ -18,7 +18,8 @@ compare_models_statistical(model_results, test_type = "simple")
 
 - test_type:
 
-  Type of statistical test ("mcnemar", "delong")
+  Unused; retained for backwards compatibility. Comparison is always
+  based on AUC confidence interval overlap.
 
 ## Value
 

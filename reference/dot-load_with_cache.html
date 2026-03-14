@@ -105,6 +105,16 @@ returns all data in one batch. When provided and <code>length(seasons) &gt; 1</c
 used instead of per-season <code>lapply(seasons, fetch_fn)</code> for efficiency
 (e.g. one big <code><a href="https://jeroen.r-universe.dev/curl/reference/multi_download.html" class="external-link">curl::multi_download()</a></code> instead of N sequential batches).</p></dd>
 
+
+<dt id="arg-use-disk-cache">use_disk_cache<a class="anchor" aria-label="anchor" href="#arg-use-disk-cache"></a></dt>
+<dd><p>Logical. If TRUE, uses persistent disk cache for
+completed past seasons. Default is FALSE.</p></dd>
+
+
+<dt id="arg-refresh">refresh<a class="anchor" aria-label="anchor" href="#arg-refresh"></a></dt>
+<dd><p>Logical. If TRUE, clears all caches and fetches fresh
+data from the API. Default is FALSE.</p></dd>
+
 </dl></div>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>

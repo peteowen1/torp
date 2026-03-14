@@ -11,7 +11,6 @@ load_from_url(
   ...,
   seasons = TRUE,
   rounds = TRUE,
-  peteowen1 = FALSE,
   use_disk_cache = FALSE,
   columns = NULL
 )
@@ -26,8 +25,7 @@ load_from_url(
 
 - ...:
 
-  Named arguments that will be added as attributes to the data, e.g.
-  `peteowen1_type` = "pbp"
+  Additional arguments (currently unused).
 
 - seasons:
 
@@ -38,10 +36,6 @@ load_from_url(
 
   A numeric vector of rounds that will be used to filter the dataframe's
   `round` column. If `TRUE` (default), does not filter.
-
-- peteowen1:
-
-  TRUE to add peteowen1_data classing and attributes.
 
 - use_disk_cache:
 
@@ -56,4 +50,4 @@ load_from_url(
 
 ## Value
 
-A tibble, possibly of type `peteowen1_data`
+A tibble

@@ -9,7 +9,7 @@ repository](https://github.com/peteowen1/torpdata)
 load_fixtures(
   seasons = NULL,
   all = FALSE,
-  use_cache = FALSE,
+  use_cache = TRUE,
   cache_ttl = 3600,
   verbose = FALSE,
   columns = NULL,
@@ -27,12 +27,13 @@ load_fixtures(
 
 - all:
 
-  Logical. If TRUE, loads all available fixture data from 2021 onwards.
+  Deprecated. Use `seasons = TRUE` instead (consistent with other
+  `load_*()` functions).
 
 - use_cache:
 
-  Logical. If TRUE, uses cached data when available to speed up repeated
-  calls. Default is FALSE.
+  Logical. If TRUE, uses in-memory cached data when available to speed
+  up repeated calls. Default is TRUE.
 
 - cache_ttl:
 
@@ -70,7 +71,7 @@ try({ # prevents cran errors
   load_fixtures(2021:2022)
 
   # Load all fixtures
-  load_fixtures(all = TRUE)
+  load_fixtures(seasons = TRUE)
 })
 } # }
 ```

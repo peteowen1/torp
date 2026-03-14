@@ -2,12 +2,6 @@
 
 Fetch player details for multiple seasons in one parallel batch
 
-## Usage
-
-``` r
-.fetch_all_player_details(seasons)
-```
-
 ## Arguments
 
 - seasons:

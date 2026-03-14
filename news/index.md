@@ -77,8 +77,7 @@
   [`curl::has_internet()`](https://jeroen.r-universe.dev/curl/reference/nslookup.html)
   directly.
 
-- Unexported internal-use functions:
-  [`get_wp_model_info()`](https://peteowen1.github.io/torp/reference/get_wp_model_info.md),
+- Unexported internal-use functions: `get_wp_model_info()`,
   [`check_wp_model_health()`](https://peteowen1.github.io/torp/reference/check_wp_model_health.md),
   [`harmonic_mean()`](https://peteowen1.github.io/torp/reference/harmonic_mean.md),
   [`norm_name()`](https://peteowen1.github.io/torp/reference/norm_name.md).
@@ -223,7 +222,7 @@
   - [`log_prediction_event()`](https://peteowen1.github.io/torp/reference/log_prediction_event.md),
     [`log_data_quality()`](https://peteowen1.github.io/torp/reference/log_data_quality.md)
     (internal logging helpers)
-  - [`get_wp_model_info()`](https://peteowen1.github.io/torp/reference/get_wp_model_info.md),
+  - `get_wp_model_info()`,
     [`check_wp_model_health()`](https://peteowen1.github.io/torp/reference/check_wp_model_health.md)
     (model diagnostics)
   - [`harmonic_mean()`](https://peteowen1.github.io/torp/reference/harmonic_mean.md),

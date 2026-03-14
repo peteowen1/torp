@@ -7,7 +7,7 @@ with filtering.
 ## Usage
 
 ``` r
-player_season_ratings(season_val = get_afl_season(), round_num = NA)
+player_season_ratings(season_val = get_afl_season(), round_num = NULL)
 ```
 
 ## Arguments
@@ -18,7 +18,7 @@ player_season_ratings(season_val = get_afl_season(), round_num = NA)
 
 - round_num:
 
-  The round number to calculate ratings for. Default is NA (all rounds).
+  Deprecated and ignored. Retained for backwards compatibility.
 
 ## Value
 

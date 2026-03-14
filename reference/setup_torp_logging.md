@@ -18,7 +18,7 @@ setup_torp_logging(level = "INFO", log_file = NULL, console_output = FALSE)
 
 - log_file:
 
-  Path to log file (optional)
+  Deprecated; retained for backwards compatibility but unused.
 
 - console_output:
 

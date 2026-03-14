@@ -75,7 +75,7 @@
 <li><p><code><a href="../reference/load_from_url.html">load_from_url()</a></code> now defaults <code>use_disk_cache = FALSE</code> (previously <code>TRUE</code>). Pass <code>use_disk_cache = TRUE</code> explicitly if you want persistent disk caching.</p></li>
 <li><p><code>load_fixtures(all = TRUE)</code> now starts from 2021 (previously 2018). Seasons before 2021 are outside <code><a href="../reference/validate_seasons.html">validate_seasons()</a></code> range and were producing errors.</p></li>
 <li><p><code>check_internet_connection()</code> has been removed. Use <code><a href="https://jeroen.r-universe.dev/curl/reference/nslookup.html" class="external-link">curl::has_internet()</a></code> directly.</p></li>
-<li><p>Unexported internal-use functions: <code><a href="../reference/get_wp_model_info.html">get_wp_model_info()</a></code>, <code><a href="../reference/check_wp_model_health.html">check_wp_model_health()</a></code>, <code><a href="../reference/harmonic_mean.html">harmonic_mean()</a></code>, <code><a href="../reference/norm_name.html">norm_name()</a></code>. These remain accessible via <code>torp:::</code>.</p></li>
+<li><p>Unexported internal-use functions: <code>get_wp_model_info()</code>, <code><a href="../reference/check_wp_model_health.html">check_wp_model_health()</a></code>, <code><a href="../reference/harmonic_mean.html">harmonic_mean()</a></code>, <code><a href="../reference/norm_name.html">norm_name()</a></code>. These remain accessible via <code>torp:::</code>.</p></li>
 </ul></div>
 <div class="section level3">
 <h3 id="new-features-1-0-0">New Features<a class="anchor" aria-label="anchor" href="#new-features-1-0-0"></a></h3>
@@ -140,7 +140,7 @@
 <li>
 <code><a href="../reference/log_prediction_event.html">log_prediction_event()</a></code>, <code><a href="../reference/log_data_quality.html">log_data_quality()</a></code> (internal logging helpers)</li>
 <li>
-<code><a href="../reference/get_wp_model_info.html">get_wp_model_info()</a></code>, <code><a href="../reference/check_wp_model_health.html">check_wp_model_health()</a></code> (model diagnostics)</li>
+<code>get_wp_model_info()</code>, <code><a href="../reference/check_wp_model_health.html">check_wp_model_health()</a></code> (model diagnostics)</li>
 <li>
 <code><a href="../reference/harmonic_mean.html">harmonic_mean()</a></code>, <code><a href="../reference/norm_name.html">norm_name()</a></code> (utility helpers)</li>
 </ul></li>

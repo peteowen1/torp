@@ -11,6 +11,7 @@
 <url><loc>https://peteowen1.github.io/torp/news/index.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/AFL_GOAL_WIDTH.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/AFL_MAX_PERIODS.html</loc></url>
+<url><loc>https://peteowen1.github.io/torp/reference/AFL_MIN_SEASON.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/AFL_PLAY_GAME_SECONDS.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/AFL_PLAY_QUARTER_SECONDS.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/AFL_QUARTER_DURATION.html</loc></url>
@@ -104,7 +105,8 @@
 <url><loc>https://peteowen1.github.io/torp/reference/RATING_PRIOR_RATE_SPOIL.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/SIM_AVG_TOTAL.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/SIM_DEFAULT_N.html</loc></url>
-<url><loc>https://peteowen1.github.io/torp/reference/SIM_GF_HOME_ADVANTAGE.html</loc></url>
+<url><loc>https://peteowen1.github.io/torp/reference/SIM_GF_FAMILIARITY_SCALE.html</loc></url>
+<url><loc>https://peteowen1.github.io/torp/reference/SIM_GF_VENUE.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/SIM_HOME_ADVANTAGE.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/SIM_INJURY_DISCOUNT.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/SIM_INJURY_SD.html</loc></url>
@@ -113,6 +115,7 @@
 <url><loc>https://peteowen1.github.io/torp/reference/SIM_NOISE_SD.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/SIM_TOP_N_PLAYERS.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/SIM_TOTAL_SD.html</loc></url>
+<url><loc>https://peteowen1.github.io/torp/reference/SIM_VICTORIAN_TEAMS.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/SIM_WP_SCALING_FACTOR.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/SKILL_CREDIBLE_LEVEL.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/SKILL_LAMBDA_EFFICIENCY_DEFAULT.html</loc></url>
@@ -237,6 +240,7 @@
 <url><loc>https://peteowen1.github.io/torp/reference/dot-parse_match_stats.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/dot-parse_squad_json.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/dot-parse_start_time.html</loc></url>
+<url><loc>https://peteowen1.github.io/torp/reference/dot-post_process_squad_result.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/dot-read_season_disk_cache.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/dot-resolve_lineup_info.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/dot-resolve_skill_positions.html</loc></url>
@@ -256,6 +260,7 @@
 <url><loc>https://peteowen1.github.io/torp/reference/file_reader.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/filter_game_data.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/filter_relevant_descriptions.html</loc></url>
+<url><loc>https://peteowen1.github.io/torp/reference/finals_home_advantage.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/fixtures.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/format_contest_rows.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/generate_disk_cache_key.html</loc></url>
@@ -297,7 +302,6 @@
 <url><loc>https://peteowen1.github.io/torp/reference/get_token.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/get_torp_data_repo.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/get_week_chains.html</loc></url>
-<url><loc>https://peteowen1.github.io/torp/reference/get_wp_model_info.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/get_wp_preds.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/harmonic_mean.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/head_to_head.html</loc></url>

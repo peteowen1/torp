@@ -6,7 +6,7 @@ elimination finals, semi-finals, preliminary finals, and grand final.
 ## Usage
 
 ``` r
-simulate_finals(ladder_dt, sim_teams_dt)
+simulate_finals(ladder_dt, sim_teams_dt, gf_familiarity = NULL)
 ```
 
 ## Arguments
@@ -21,6 +21,12 @@ simulate_finals(ladder_dt, sim_teams_dt)
 
   A data.table with `team` and `torp` (hot ratings after regular
   season).
+
+- gf_familiarity:
+
+  Optional data.table with `team` and `gf_familiarity` columns
+  (proportion of games played at GF venue). When provided, the Grand
+  Final home advantage is based on familiarity difference between teams.
 
 ## Value
 

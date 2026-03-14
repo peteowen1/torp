@@ -46,7 +46,7 @@
     <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">load_fixtures</span><span class="op">(</span></span>
 <span>  seasons <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  all <span class="op">=</span> <span class="cn">FALSE</span>,</span>
-<span>  use_cache <span class="op">=</span> <span class="cn">FALSE</span>,</span>
+<span>  use_cache <span class="op">=</span> <span class="cn">TRUE</span>,</span>
 <span>  cache_ttl <span class="op">=</span> <span class="fl">3600</span>,</span>
 <span>  verbose <span class="op">=</span> <span class="cn">FALSE</span>,</span>
 <span>  columns <span class="op">=</span> <span class="cn">NULL</span>,</span>
@@ -63,11 +63,11 @@
 
 
 <dt id="arg-all">all<a class="anchor" aria-label="anchor" href="#arg-all"></a></dt>
-<dd><p>Logical. If TRUE, loads all available fixture data from 2021 onwards.</p></dd>
+<dd><p>Deprecated. Use <code>seasons = TRUE</code> instead (consistent with other <code>load_*()</code> functions).</p></dd>
 
 
 <dt id="arg-use-cache">use_cache<a class="anchor" aria-label="anchor" href="#arg-use-cache"></a></dt>
-<dd><p>Logical. If TRUE, uses cached data when available to speed up repeated calls. Default is FALSE.</p></dd>
+<dd><p>Logical. If TRUE, uses in-memory cached data when available to speed up repeated calls. Default is TRUE.</p></dd>
 
 
 <dt id="arg-cache-ttl">cache_ttl<a class="anchor" aria-label="anchor" href="#arg-cache-ttl"></a></dt>
@@ -102,7 +102,7 @@
 <span class="r-in"><span>  <span class="fu">load_fixtures</span><span class="op">(</span><span class="fl">2021</span><span class="op">:</span><span class="fl">2022</span><span class="op">)</span></span></span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span>  <span class="co"># Load all fixtures</span></span></span>
-<span class="r-in"><span>  <span class="fu">load_fixtures</span><span class="op">(</span>all <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></span>
+<span class="r-in"><span>  <span class="fu">load_fixtures</span><span class="op">(</span>seasons <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="op">}</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="op">}</span> <span class="co"># }</span></span></span>
 </code></pre></div>

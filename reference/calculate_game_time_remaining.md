@@ -6,7 +6,7 @@ time.
 ## Usage
 
 ``` r
-calculate_game_time_remaining(period, game_time_elapsed)
+calculate_game_time_remaining(period, est_qtr_elapsed)
 ```
 
 ## Arguments
@@ -15,7 +15,7 @@ calculate_game_time_remaining(period, game_time_elapsed)
 
   Numeric vector of period numbers (1-4)
 
-- game_time_elapsed:
+- est_qtr_elapsed:
 
   Numeric vector of estimated playing seconds elapsed in the current
   quarter

@@ -46,7 +46,7 @@ finals, semi-finals, preliminary finals, and grand final.</p>
 
     <div class="section level2">
     <h2 id="ref-usage">Usage<a class="anchor" aria-label="anchor" href="#ref-usage"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">simulate_finals</span><span class="op">(</span><span class="va">ladder_dt</span>, <span class="va">sim_teams_dt</span><span class="op">)</span></span></code></pre></div>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">simulate_finals</span><span class="op">(</span><span class="va">ladder_dt</span>, <span class="va">sim_teams_dt</span>, gf_familiarity <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span></span></code></pre></div>
     </div>
 
     <div class="section level2">
@@ -61,6 +61,12 @@ finals, semi-finals, preliminary finals, and grand final.</p>
 <dt id="arg-sim-teams-dt">sim_teams_dt<a class="anchor" aria-label="anchor" href="#arg-sim-teams-dt"></a></dt>
 <dd><p>A data.table with <code>team</code> and <code>torp</code> (hot ratings after
 regular season).</p></dd>
+
+
+<dt id="arg-gf-familiarity">gf_familiarity<a class="anchor" aria-label="anchor" href="#arg-gf-familiarity"></a></dt>
+<dd><p>Optional data.table with <code>team</code> and <code>gf_familiarity</code>
+columns (proportion of games played at GF venue). When provided, the Grand
+Final home advantage is based on familiarity difference between teams.</p></dd>
 
 </dl></div>
     <div class="section level2">

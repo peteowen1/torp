@@ -65,6 +65,16 @@ and
   [`curl::multi_download()`](https://jeroen.r-universe.dev/curl/reference/multi_download.html)
   instead of N sequential batches).
 
+- use_disk_cache:
+
+  Logical. If TRUE, uses persistent disk cache for completed past
+  seasons. Default is FALSE.
+
+- refresh:
+
+  Logical. If TRUE, clears all caches and fetches fresh data from the
+  API. Default is FALSE.
+
 ## Value
 
 A tibble.
