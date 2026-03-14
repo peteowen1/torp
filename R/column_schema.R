@@ -431,7 +431,7 @@ XG_COL_MAP <- c(
   }
 
   # --- 2. Apply the centralised column map ---
-  .normalise_columns(dt, PLAYER_STATS_COL_MAP, verbose = TRUE, label = "Player stats")
+  .normalise_columns(dt, PLAYER_STATS_COL_MAP, verbose = FALSE, label = "Player stats")
 
   # --- 3. Catch any remaining extended_stats_ columns not in the explicit map ---
   nms <- names(dt)
@@ -445,7 +445,7 @@ XG_COL_MAP <- c(
   }
 
   # --- 4. Bulk snake_case for any remaining camelCase columns ---
-  .bulk_snake_case(dt, verbose = TRUE, label = "Player stats")
+  .bulk_snake_case(dt, verbose = FALSE, label = "Player stats")
 
   # --- 5. Add `player_name` from given_name + surname if missing ---
   nms <- names(dt)
@@ -491,8 +491,8 @@ XG_COL_MAP <- c(
 #' @return The input with normalised column names, modified by reference.
 #' @keywords internal
 .normalise_fixture_columns <- function(df) {
-  .normalise_columns(df, FIXTURE_COL_MAP, verbose = TRUE, label = "Fixture")
-  .bulk_snake_case(df, verbose = TRUE, label = "Fixture")
+  .normalise_columns(df, FIXTURE_COL_MAP, verbose = FALSE, label = "Fixture")
+  .bulk_snake_case(df, verbose = FALSE, label = "Fixture")
   invisible(df)
 }
 
@@ -509,8 +509,8 @@ XG_COL_MAP <- c(
 #' @return The input with normalised column names, modified by reference.
 #' @keywords internal
 .normalise_teams_columns <- function(df) {
-  .normalise_columns(df, TEAMS_COL_MAP, verbose = TRUE, label = "Teams")
-  .bulk_snake_case(df, verbose = TRUE, label = "Teams")
+  .normalise_columns(df, TEAMS_COL_MAP, verbose = FALSE, label = "Teams")
+  .bulk_snake_case(df, verbose = FALSE, label = "Teams")
 
   # AFL roster API returns abbreviations in teamName (e.g. "SYD", "CARL").
 
@@ -552,8 +552,8 @@ XG_COL_MAP <- c(
 #' @return The input with normalised column names, modified by reference.
 #' @keywords internal
 .normalise_chains_columns <- function(df) {
-  .normalise_columns(df, CHAINS_COL_MAP, verbose = TRUE, label = "Chains")
-  .bulk_snake_case(df, verbose = TRUE, label = "Chains")
+  .normalise_columns(df, CHAINS_COL_MAP, verbose = FALSE, label = "Chains")
+  .bulk_snake_case(df, verbose = FALSE, label = "Chains")
   invisible(df)
 }
 
@@ -570,8 +570,8 @@ XG_COL_MAP <- c(
 #' @return The input with normalised column names, modified by reference.
 #' @keywords internal
 .normalise_player_details_columns <- function(df) {
-  .normalise_columns(df, PLAYER_DETAILS_COL_MAP, verbose = TRUE, label = "Player details")
-  .bulk_snake_case(df, verbose = TRUE, label = "Player details")
+  .normalise_columns(df, PLAYER_DETAILS_COL_MAP, verbose = FALSE, label = "Player details")
+  .bulk_snake_case(df, verbose = FALSE, label = "Player details")
   invisible(df)
 }
 
@@ -588,7 +588,7 @@ XG_COL_MAP <- c(
 #' @return The input with normalised column names, modified by reference.
 #' @keywords internal
 .normalise_predictions_columns <- function(df) {
-  .normalise_columns(df, PREDICTIONS_COL_MAP, verbose = TRUE, label = "Predictions")
-  .bulk_snake_case(df, verbose = TRUE, label = "Predictions")
+  .normalise_columns(df, PREDICTIONS_COL_MAP, verbose = FALSE, label = "Predictions")
+  .bulk_snake_case(df, verbose = FALSE, label = "Predictions")
   invisible(df)
 }

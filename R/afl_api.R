@@ -35,6 +35,7 @@
   pool <- curl::new_pool(total_con = 200L, host_con = 50L)
   results <- vector("list", length(ids))
   n_failed <- 0L
+  n_parse_errors <- 0L
 
   for (i in seq_along(ids)) {
     url <- sprintf(url_template, ids[i])
@@ -49,24 +50,22 @@
             json <- jsonlite::fromJSON(rawToChar(resp$content), flatten = TRUE)
             results[[idx]] <<- parse_fn(json, mid)
           }, error = function(e) {
+            n_parse_errors <<- n_parse_errors + 1L
             cli::cli_alert_danger("Failed to parse {label} for {mid}: {conditionMessage(e)}")
           })
         } else {
           n_failed <<- n_failed + 1L
-          cli::cli_alert_danger("HTTP {resp$status_code} for {label} {mid}")
         }
       }, fail = function(msg) {
         n_failed <<- n_failed + 1L
-        cli::cli_alert_danger("Connection failed for {label} {mid}: {msg}")
       }, handle = h, pool = pool)
     })
   }
 
   curl::multi_run(pool = pool)
 
-  if (n_failed > 0) {
-    cli::cli_alert_danger("{n_failed} of {length(ids)} {label} request{?s} failed")
-  }
+  n_ok <- length(ids) - n_failed - n_parse_errors
+  cli::cli_inform("Fetched {label} for {n_ok} of {length(ids)} match{?es}.")
 
   out <- purrr::list_rbind(purrr::compact(results))
   if (is.null(out) || nrow(out) == 0) return(tibble::tibble())
@@ -688,9 +687,9 @@ get_afl_lineups <- function(season = NULL, round = NULL) {
     }
   }
 
-  # Only fetch rosters for matches that have lineup data (not future scheduled)
+  # Exclude matches that definitely won't have rosters
   if ("status" %in% names(fixtures)) {
-    fixtures <- fixtures[fixtures$status != "SCHEDULED", ]
+    fixtures <- fixtures[!fixtures$status %in% c("SCHEDULED", "PLACEHOLDER"), ]
     if (nrow(fixtures) == 0) return(tibble::tibble())
   }
 
