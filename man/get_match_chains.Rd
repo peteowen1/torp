@@ -7,7 +7,9 @@
 get_match_chains(season = get_afl_season(), round = NA)
 }
 \arguments{
-\item{season}{The AFL season year (numeric).}
+\item{season}{The AFL season year (numeric), or a match ID string
+(e.g. \code{"CD_M20260140001"}). When a match ID is supplied, \code{round} is
+ignored and chains are fetched for that single match.}
 
 \item{round}{The round number (numeric). If NA, retrieves data for all rounds in the season.}
 }
@@ -15,10 +17,12 @@ get_match_chains(season = get_afl_season(), round = NA)
 A dataframe containing match chain data.
 }
 \description{
-Retrieves match chain data for a given season and round.
+Retrieves match chain data for a given season and round, or for a specific
+match ID.
 }
 \examples{
 \dontrun{
 chains <- get_match_chains(2022, 1)
+chains <- get_match_chains("CD_M20260140001")
 }
 }

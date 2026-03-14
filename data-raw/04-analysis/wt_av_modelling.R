@@ -1,7 +1,7 @@
 # Setup ----
 library(purrr)
 library(tidyverse)
-library(fitzRoy)
+# library(fitzRoy)  # replaced by internal AFL API functions
 devtools::load_all()
 
 szns <- 2021:get_afl_season()
@@ -15,7 +15,7 @@ decay <- 365
 
 tictoc::tic()
 
-pl_details <- fetch_player_details_afl(get_afl_season())
+pl_details <- get_afl_player_details(get_afl_season())
 
 # ps24 <- fetch_player_stats_afl(2024) %>%
 #   janitor::remove_constant() %>%
@@ -285,8 +285,8 @@ team_preds <- pred_df %>%
   summarise_if(is.numeric, sum, na.rm = TRUE) # %>% View()
 
 team_mdl_df <- team_mdl_df %>%
-  # mutate(team_name_adj = fitzRoy::replace_teams(team_name)) %>%
-  left_join(team_preds %>% mutate(team_name_adj = fitzRoy::replace_teams(team_name)),
+  # mutate(team_name_adj = torp_replace_teams(team_name)) %>%
+  left_join(team_preds %>% mutate(team_name_adj = torp_replace_teams(team_name)),
     by = c("match_id", "team_name_adj.x" = "team_name")
   ) # %>% View()
 

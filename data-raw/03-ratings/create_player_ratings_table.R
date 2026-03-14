@@ -1,5 +1,5 @@
 # Setup ----
-library(fitzRoy)
+# library(fitzRoy)  # replaced by internal functions
 library(tidyverse)
 devtools::load_all()
 skip_em <- "no"

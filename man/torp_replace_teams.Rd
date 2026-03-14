@@ -15,7 +15,7 @@ Character vector with standardised names. Unknown values pass through unchanged.
 \description{
 Maps team name variants (abbreviations, nicknames, Indigenous round names)
 to canonical team names using \link{AFL_TEAM_ALIASES}. Drop-in replacement for
-\code{fitzRoy::replace_teams()}.
+external team name standardisation packages.
 }
 \examples{
 torp_replace_teams("Adelaide Crows")

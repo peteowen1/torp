@@ -1,9 +1,9 @@
 # AFL API Functions
 # =================
-# Optimized in-house replacements for fitzRoy API functions.
+# In-house AFL API functions.
 # Uses torp's existing get_token()/access_api() from scraper.R.
 #
-# Key speed wins over fitzRoy:
+# Key design choices:
 #   - Fixtures: 3 HTTP calls on cold cache (2 cached per session + 1 per season)
 #   - Results:  0 extra calls — derived from fixture data (scores included!)
 #   - Lineups:  1+M calls — reuses cached fixtures + shared token
@@ -658,6 +658,41 @@ get_afl_results <- function(season = NULL) {
 }
 
 
+#' Fetch AFL Ladder (Current Standings)
+#'
+#' Computes the current season ladder from concluded match results.
+#' Uses [get_afl_results()] and [calculate_ladder()] internally — no
+#' external dependencies.
+#'
+#' @param season Numeric year (default: current season via [get_afl_season()])
+#' @return A data.table with columns: team, played, wins, draws, losses,
+#'   points_for, points_against, percentage, ladder_points, rank.
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' ladder <- get_afl_ladder(2026)
+#' }
+get_afl_ladder <- function(season = NULL) {
+  results <- get_afl_results(season)
+  if (nrow(results) == 0) {
+    cli::cli_inform("No completed games for ladder calculation.")
+    return(data.table::data.table())
+  }
+
+  # Build games_dt in the format calculate_ladder() expects
+  games_dt <- data.table::data.table(
+    home_team  = results$home_team_name,
+    away_team  = results$away_team_name,
+    home_score = as.numeric(results$home_score),
+    away_score = as.numeric(results$away_score),
+    result     = as.numeric(results$home_score) - as.numeric(results$away_score)
+  )
+
+  calculate_ladder(games_dt)
+}
+
+
 #' Fetch AFL Lineups
 #'
 #' Fetches team lineups/rosters for a season (optionally filtered by round).
@@ -856,7 +891,7 @@ get_afl_player_details <- function(season = NULL) {
 #'
 #' Maps team name variants (abbreviations, nicknames, Indigenous round names)
 #' to canonical team names using [AFL_TEAM_ALIASES]. Drop-in replacement for
-#' `fitzRoy::replace_teams()`.
+#' external team name standardisation packages.
 #'
 #' @param team Character vector of team names
 #' @return Character vector with standardised names. Unknown values pass through unchanged.
@@ -909,7 +944,7 @@ torp_team_full <- function(team) {
 #' Standardise AFL Venue Names
 #'
 #' Maps venue name variants (sponsor names, old names) to canonical stable names.
-#' Drop-in replacement for `fitzRoy::replace_venues()`.
+#' Standardises AFL venue names to canonical forms.
 #'
 #' @param venue Character vector of venue names
 #' @return Character vector with standardised names

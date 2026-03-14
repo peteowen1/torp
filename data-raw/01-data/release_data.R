@@ -23,7 +23,7 @@ tictoc::tic('chains')
 
 #' Build full season chains _all file
 #'
-#' Fetches all rounds for a season from fitzRoy and saves as _all file.
+#' Fetches all rounds for a season from AFL API and saves as _all file.
 #'
 #' @param season Season year
 #' @param rounds Rounds to include (default: all)
@@ -58,8 +58,8 @@ tictoc::tic('pbp')
 
 #' Build full season PBP _all file
 #'
-#' Fetches fresh chains from fitzRoy, processes through full pipeline, saves as _all file.
-#' NOTE: Fetches directly from fitzRoy rather than torpdata to avoid stale data
+#' Fetches fresh chains from AFL API, processes through full pipeline, saves as _all file.
+#' NOTE: Fetches directly from AFL API rather than torpdata to avoid stale data
 #' from piggyback cache delays.
 #'
 #' @param season Season year
