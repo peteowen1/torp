@@ -44,7 +44,7 @@ jobs:
           extra-packages: |
             any::devtools
             any::piggyback
-            any::fitzRoy
+
             any::tictoc
             any::mgcv
             any::cli
@@ -111,7 +111,7 @@ jobs:
           extra-packages: |
             any::devtools
             any::piggyback
-            any::fitzRoy
+
             any::tictoc
             any::mgcv
             any::cli

@@ -1,6 +1,6 @@
 # Test script for parallel player ratings functionality
 library(devtools)
-library(fitzRoy)
+# library(fitzRoy)  # replaced by internal functions
 library(tidyverse)
 devtools::load_all()
 

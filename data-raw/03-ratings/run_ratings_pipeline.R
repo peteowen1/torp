@@ -1,7 +1,7 @@
 # TORP Ratings Pipeline
 #
 # End-to-end script for computing TORP ratings:
-#   Stage 1: Refresh upstream data (player_stats, teams) from fitzRoy
+#   Stage 1: Refresh upstream data (player_stats, teams) from AFL API
 #   Stage 2: Build player game data from PBP + player_stats + teams
 #   Stage 3: Compute TORP ratings per season/round and release
 #
@@ -35,7 +35,7 @@ source(here::here("data-raw/01-data/daily_release.R"))
 #   TRUE          = all seasons 2021+
 if (!exists("SEASONS", envir = .GlobalEnv)) SEASONS <- TRUE
 
-# Whether to re-fetch player_stats + teams from fitzRoy
+# Whether to re-fetch player_stats + teams from AFL API
 if (!exists("REFRESH_UPSTREAM", envir = .GlobalEnv)) REFRESH_UPSTREAM <- TRUE
 
 # Whether to rebuild player game tables from PBP

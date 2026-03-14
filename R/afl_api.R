@@ -1,9 +1,9 @@
 # AFL API Functions
 # =================
-# Optimized in-house replacements for fitzRoy API functions.
+# In-house AFL API functions.
 # Uses torp's existing get_token()/access_api() from scraper.R.
 #
-# Key speed wins over fitzRoy:
+# Key design choices:
 #   - Fixtures: 3 HTTP calls on cold cache (2 cached per session + 1 per season)
 #   - Results:  0 extra calls — derived from fixture data (scores included!)
 #   - Lineups:  1+M calls — reuses cached fixtures + shared token
@@ -35,6 +35,7 @@
   pool <- curl::new_pool(total_con = 200L, host_con = 50L)
   results <- vector("list", length(ids))
   n_failed <- 0L
+  n_parse_errors <- 0L
 
   for (i in seq_along(ids)) {
     url <- sprintf(url_template, ids[i])
@@ -49,24 +50,22 @@
             json <- jsonlite::fromJSON(rawToChar(resp$content), flatten = TRUE)
             results[[idx]] <<- parse_fn(json, mid)
           }, error = function(e) {
+            n_parse_errors <<- n_parse_errors + 1L
             cli::cli_alert_danger("Failed to parse {label} for {mid}: {conditionMessage(e)}")
           })
         } else {
           n_failed <<- n_failed + 1L
-          cli::cli_alert_danger("HTTP {resp$status_code} for {label} {mid}")
         }
       }, fail = function(msg) {
         n_failed <<- n_failed + 1L
-        cli::cli_alert_danger("Connection failed for {label} {mid}: {msg}")
       }, handle = h, pool = pool)
     })
   }
 
   curl::multi_run(pool = pool)
 
-  if (n_failed > 0) {
-    cli::cli_alert_danger("{n_failed} of {length(ids)} {label} request{?s} failed")
-  }
+  n_ok <- length(ids) - n_failed - n_parse_errors
+  cli::cli_inform("Fetched {label} for {n_ok} of {length(ids)} match{?es}.")
 
   out <- purrr::list_rbind(purrr::compact(results))
   if (is.null(out) || nrow(out) == 0) return(tibble::tibble())
@@ -659,6 +658,41 @@ get_afl_results <- function(season = NULL) {
 }
 
 
+#' Fetch AFL Ladder (Current Standings)
+#'
+#' Computes the current season ladder from concluded match results.
+#' Uses [get_afl_results()] and [calculate_ladder()] internally — no
+#' external dependencies.
+#'
+#' @param season Numeric year (default: current season via [get_afl_season()])
+#' @return A data.table with columns: team, played, wins, draws, losses,
+#'   points_for, points_against, percentage, ladder_points, rank.
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' ladder <- get_afl_ladder(2026)
+#' }
+get_afl_ladder <- function(season = NULL) {
+  results <- get_afl_results(season)
+  if (nrow(results) == 0) {
+    cli::cli_inform("No completed games for ladder calculation.")
+    return(data.table::data.table())
+  }
+
+  # Build games_dt in the format calculate_ladder() expects
+  games_dt <- data.table::data.table(
+    home_team  = results$home_team_name,
+    away_team  = results$away_team_name,
+    home_score = as.numeric(results$home_score),
+    away_score = as.numeric(results$away_score),
+    result     = as.numeric(results$home_score) - as.numeric(results$away_score)
+  )
+
+  calculate_ladder(games_dt)
+}
+
+
 #' Fetch AFL Lineups
 #'
 #' Fetches team lineups/rosters for a season (optionally filtered by round).
@@ -688,9 +722,9 @@ get_afl_lineups <- function(season = NULL, round = NULL) {
     }
   }
 
-  # Only fetch rosters for matches that have lineup data (not future scheduled)
+  # Exclude matches that definitely won't have rosters
   if ("status" %in% names(fixtures)) {
-    fixtures <- fixtures[fixtures$status != "SCHEDULED", ]
+    fixtures <- fixtures[!fixtures$status %in% c("SCHEDULED", "PLACEHOLDER"), ]
     if (nrow(fixtures) == 0) return(tibble::tibble())
   }
 
@@ -857,7 +891,7 @@ get_afl_player_details <- function(season = NULL) {
 #'
 #' Maps team name variants (abbreviations, nicknames, Indigenous round names)
 #' to canonical team names using [AFL_TEAM_ALIASES]. Drop-in replacement for
-#' `fitzRoy::replace_teams()`.
+#' external team name standardisation packages.
 #'
 #' @param team Character vector of team names
 #' @return Character vector with standardised names. Unknown values pass through unchanged.
@@ -910,7 +944,7 @@ torp_team_full <- function(team) {
 #' Standardise AFL Venue Names
 #'
 #' Maps venue name variants (sponsor names, old names) to canonical stable names.
-#' Drop-in replacement for `fitzRoy::replace_venues()`.
+#' Standardises AFL venue names to canonical forms.
 #'
 #' @param venue Character vector of venue names
 #' @return Character vector with standardised names

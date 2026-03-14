@@ -5,7 +5,7 @@ library(dplyr)
 library(tidyr)
 library(osmdata)
 library(stringr)
-library(fitzRoy)
+# library(fitzRoy)  # no longer needed
 
 # Scrape Wikipedia ----
 

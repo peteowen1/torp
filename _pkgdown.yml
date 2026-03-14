@@ -198,6 +198,7 @@ reference:
       - get_afl_player_details
       - get_afl_player_stats
       - get_afl_results
+      - get_afl_ladder
 
   - title: Internal / Developer
     desc: "Internal utilities accessible via torp::: for model training and data scraping"

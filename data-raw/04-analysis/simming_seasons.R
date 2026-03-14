@@ -85,13 +85,13 @@ max_ratings <-
   arrange(-torp)
 
 # Run Simulations ----
-library(fitzRoy)
-max_ratings$team <- replace_teams(max_ratings$team)
-sim_teams$team <- replace_teams(sim_teams$team)
-orig_ratings$team <- replace_teams(orig_ratings$team)
-sim_games$home_team <- replace_teams(sim_games$home_team)
-sim_games$away_team <- replace_teams(sim_games$away_team)
-sim_games_pivot$team_name <- replace_teams(sim_games_pivot$team_name)
+# library(fitzRoy)  # replaced by torp_replace_teams()
+max_ratings$team <- torp_replace_teams(max_ratings$team)
+sim_teams$team <- torp_replace_teams(sim_teams$team)
+orig_ratings$team <- torp_replace_teams(orig_ratings$team)
+sim_games$home_team <- torp_replace_teams(sim_games$home_team)
+sim_games$away_team <- torp_replace_teams(sim_games$away_team)
+sim_games_pivot$team_name <- torp_replace_teams(sim_games_pivot$team_name)
 
 library(purrr)
 source("R/sim-helpers.R")

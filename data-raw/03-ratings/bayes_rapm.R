@@ -1,5 +1,5 @@
 # Setup ----
-library(fitzRoy)
+# library(fitzRoy)  # replaced by internal functions
 library(tidyverse)
 library(brms)
 library(future)
@@ -14,8 +14,9 @@ available_cores <- parallelly::availableCores() - 2
 # plan(multisession, workers = available_cores) # Dynamically set the number of workers
 
 # Prepare Player Game Stats ----
-# player_stats <- fitzRoy::fetch_player_stats_afltables(2016:2024)
-player_stats <- fitzRoy::fetch_player_stats_fryzigg(2012:2024) # 2012 for advanced stats, 2003 for basics
+# player_stats <- fitzRoy::fetch_player_stats_afltables(2016:2024)  # legacy
+# player_stats <- fitzRoy::fetch_player_stats_fryzigg(2012:2024)   # legacy
+player_stats <- load_player_stats(2012:2024)
 # maybe split 2012:2017 and 2018:2024 and do two regressions
 
 # Prepare the data for modeling

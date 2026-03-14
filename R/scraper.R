@@ -1,8 +1,11 @@
 #' Get Match Chains
 #'
-#' Retrieves match chain data for a given season and round.
+#' Retrieves match chain data for a given season and round, or for a specific
+#' match ID.
 #'
-#' @param season The AFL season year (numeric).
+#' @param season The AFL season year (numeric), or a match ID string
+#'   (e.g. `"CD_M20260140001"`). When a match ID is supplied, `round` is
+#'   ignored and chains are fetched for that single match.
 #' @param round The round number (numeric). If NA, retrieves data for all rounds in the season.
 #'
 #' @return A dataframe containing match chain data.
@@ -11,10 +14,16 @@
 #' @examples
 #' \dontrun{
 #' chains <- get_match_chains(2022, 1)
+#' chains <- get_match_chains("CD_M20260140001")
 #' }
-#' @importFrom dplyr inner_join left_join
-#' @importFrom cli cli_abort
+#' @importFrom dplyr inner_join left_join filter
+#' @importFrom cli cli_abort cli_inform
 get_match_chains <- function(season = get_afl_season(), round = NA) {
+  # Detect match ID input (e.g. "CD_M20260140001")
+  if (is.character(season) && grepl("^CD_M", season)) {
+    return(.get_chains_by_match_id(season))
+  }
+
   if (season < 2021) {
     cli::cli_abort("Match chain data is not available for seasons prior to 2021.")
   }
@@ -46,6 +55,62 @@ get_match_chains <- function(season = get_afl_season(), round = NA) {
 
   cli::cli_inform("Success!")
   return(chains)
+}
+
+#' Fetch chains for a single match ID
+#'
+#' @param match_id A match ID string (e.g. `"CD_M20260140001"`).
+#' @return A data.table of chain data with game and player metadata joined.
+#' @keywords internal
+.get_chains_by_match_id <- function(match_id) {
+  match_year <- as.numeric(substr(match_id, 5, 8))
+  if (is.na(match_year) || match_year < 2021) {
+    cli::cli_abort("Match chain data is not available for seasons prior to 2021.")
+  }
+
+  cli::cli_inform("Scraping chains for match {.val {match_id}}...")
+  chains <- get_game_chains(match_id)
+
+  if (nrow(chains) == 0) {
+    cli::cli_abort("No chain data returned for match {.val {match_id}}.")
+  }
+
+  # Find game metadata by scanning rounds until we locate the match
+  games <- .find_game_by_match_id(match_year, match_id)
+
+  if (nrow(games) > 0) {
+    chains <- chains |>
+      dplyr::inner_join(games, by = c("match_id" = "matchId"))
+  } else {
+    chains$season <- match_year
+  }
+
+  players <- get_players()
+  chains <- chains |>
+    dplyr::left_join(players, by = c("player_id" = "playerId", "season"))
+
+  chains <- data.table::as.data.table(chains)
+  .normalise_chains_columns(chains)
+
+  cli::cli_inform("Success!")
+  return(chains)
+}
+
+#' Find game metadata for a match ID by scanning rounds
+#'
+#' @param season Numeric season year.
+#' @param match_id Match ID string.
+#' @return A single-row data.frame of game metadata, or empty data.frame.
+#' @keywords internal
+.find_game_by_match_id <- function(season, match_id) {
+  for (rd in 1:28) {
+    games <- tryCatch(get_round_games(season, rd), error = function(e) data.frame())
+    if (nrow(games) == 0) next
+    match_row <- games |> dplyr::filter(.data$matchId == match_id)
+    if (nrow(match_row) > 0) return(match_row)
+  }
+  cli::cli_warn("Could not find game metadata for {.val {match_id}} in season {.val {season}}. Returning chains without game metadata.")
+  data.frame()
 }
 
 #' Get Week Chains
@@ -131,11 +196,7 @@ get_round_games <- function(season, round) {
     cli::cli_warn("Unexpected API response structure for fixtures (expected 5+ elements, got {length(api_result)})")
     return(data.frame())
   }
-  games <- api_result[["items"]]
-  if (is.null(games)) {
-    cli::cli_warn("API response missing {.val items} field, using positional fallback. API schema may have changed.")
-    games <- api_result[[5]]
-  }
+  games <- api_result[["items"]] %||% api_result[[5]]
 
   if (length(games) > 0) {
     games <- games |>
@@ -191,9 +252,9 @@ get_players <- function(use_api = FALSE) {
         team.teamAbbr = NA
       ) |>
       dplyr::select(
-        playerId = .data$player_id, jumperNumber = .data$jumperNumber,
+        playerId = .data$player_id, jumperNumber = .data$jumper_number,
         playerPosition = .data$position, photoURL = .data$photoURL,
-        playerName.givenName = .data$firstName, playerName.surname = .data$surname,
+        playerName.givenName = .data$first_name, playerName.surname = .data$surname,
         team.teamId = .data$team.teamId, team.teamAbbr = .data$team.teamAbbr,
         team.teamName = .data$team, season = .data$season
       )
@@ -231,11 +292,7 @@ get_game_chains <- function(match_id) {
     cli::cli_warn("Unexpected API response structure for match {match_id} (expected 8+ elements, got {length(chains_t1)})")
     return(data.frame())
   }
-  chains_t2 <- chains_t1[["chains"]]
-  if (is.null(chains_t2)) {
-    cli::cli_warn("API response missing {.val chains} field for match {.val {match_id}}, using positional fallback.")
-    chains_t2 <- chains_t1[[8]]
-  }
+  chains_t2 <- chains_t1[["chains"]] %||% chains_t1[[8]]
 
   if (is.null(dim(chains_t2)) || nrow(chains_t2) == 0 || length(chains_t2) <= 5) {
     return(data.frame())

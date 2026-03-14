@@ -76,7 +76,7 @@ has_new_games <- function() {
 
 #' Check if New Team/Lineup Data Exists
 #'
-#' Compares current lineup data from fitzRoy against the existing torpdata
+#' Compares current lineup data from AFL API against the existing torpdata
 #' release. Detects both new rows (new round lineups) and changed rows
 #' (player swaps within an existing round).
 #'
@@ -179,7 +179,7 @@ get_start_round <- function(season) {
 update_season_chains <- function(season, round) {
   cli::cli_h2("Updating chains_data_{season}_all with round {round}")
 
-  # Fetch new round data from fitzRoy
+  # Fetch new round data from AFL API
   new_chains <- tryCatch({
     get_week_chains(season, round)
   }, error = function(e) {
