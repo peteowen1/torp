@@ -763,6 +763,6 @@ print.torp_sim_results <- function(x, ...) {
     Last    = sprintf("%.1f%%", last_pct * 100)
   )]
 
-  print(display, nrow = 18)
+  print(display, nrows = 18)
   invisible(x)
 }

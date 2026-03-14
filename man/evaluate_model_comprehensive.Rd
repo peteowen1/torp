@@ -8,7 +8,8 @@ evaluate_model_comprehensive(
   actual,
   predicted,
   model_name = "Model",
-  bootstrap_ci = TRUE,
+  compute_ci = TRUE,
+  bootstrap_ci,
   n_bootstrap = 1000
 )
 }
@@ -19,9 +20,10 @@ evaluate_model_comprehensive(
 
 \item{model_name}{Name of the model being evaluated}
 
-\item{bootstrap_ci}{Logical, whether to compute bootstrap confidence intervals}
+\item{compute_ci}{Logical, whether to compute approximate confidence intervals
+using normal approximation (not bootstrap).}
 
-\item{n_bootstrap}{Number of bootstrap samples (default: 1000)}
+\item{n_bootstrap}{Deprecated; retained for backwards compatibility but unused.}
 }
 \value{
 List containing evaluation metrics with confidence intervals

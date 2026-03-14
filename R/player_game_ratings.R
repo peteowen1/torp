@@ -138,7 +138,12 @@ filter_game_data <- function(df, season_val, round_num, matchid, team) {
 #' @export
 #'
 #' @importFrom dplyr group_by summarise arrange n
-player_season_ratings <- function(season_val = get_afl_season()) {
+player_season_ratings <- function(season_val = get_afl_season(), round_num = NULL) {
+  # Backwards compat: round_num was never functional but was in the signature
+
+  if (!is.null(round_num)) {
+    cli::cli_warn("{.arg round_num} is ignored by {.fn player_season_ratings} and will be removed in a future version.")
+  }
 
   # Input validation
   if (!is.numeric(season_val) && !is.na(season_val)) {

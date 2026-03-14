@@ -37,6 +37,12 @@ data.frame/tibble.}
 returns all data in one batch. When provided and \code{length(seasons) > 1},
 used instead of per-season \code{lapply(seasons, fetch_fn)} for efficiency
 (e.g. one big \code{curl::multi_download()} instead of N sequential batches).}
+
+\item{use_disk_cache}{Logical. If TRUE, uses persistent disk cache for
+completed past seasons. Default is FALSE.}
+
+\item{refresh}{Logical. If TRUE, clears all caches and fetches fresh
+data from the API. Default is FALSE.}
 }
 \value{
 A tibble.

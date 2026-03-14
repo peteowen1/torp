@@ -9,7 +9,7 @@ setup_torp_logging(level = "INFO", log_file = NULL, console_output = FALSE)
 \arguments{
 \item{level}{Logging level ("DEBUG", "INFO", "WARN", "ERROR")}
 
-\item{log_file}{Path to log file (optional)}
+\item{log_file}{Deprecated; retained for backwards compatibility but unused.}
 
 \item{console_output}{Logical, whether to output to console}
 }

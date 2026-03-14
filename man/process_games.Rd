@@ -12,12 +12,16 @@ process_games(sim_teams, sim_games, round_num, injury_sd = SIM_INJURY_SD)
 \item{sim_games}{A data frame containing fixture data.}
 
 \item{round_num}{The round number to process.}
+
+\item{injury_sd}{Standard deviation for injury impact.}
 }
 \value{
 A list containing updated sim_teams and sim_games data frames.
 }
 \description{
-This function processes games for a single round of the season.
-Uses optimized data.table implementation internally.
+\ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#deprecated}{\figure{lifecycle-deprecated.svg}{options: alt='[Deprecated]'}}}{\strong{[Deprecated]}}
+
+Thin wrapper around \code{\link[=process_games_dt]{process_games_dt()}} that converts results back to
+data.frames. Use \code{\link[=process_games_dt]{process_games_dt()}} directly for better performance.
 }
 \keyword{internal}

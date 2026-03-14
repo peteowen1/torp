@@ -103,6 +103,8 @@
   sn_col <- intersect(c("player.surname", "surname"), names(result))[1]
   if (!is.na(fn_col) && !is.na(sn_col)) {
     result$player_name <- paste(result[[fn_col]], result[[sn_col]])
+  } else {
+    cli::cli_warn("Could not construct player_name: missing first/surname columns. Available: {.val {head(names(result), 10)}}")
   }
 
   # Age calculation

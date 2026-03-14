@@ -137,16 +137,18 @@ create_temporal_splits <- function(data, train_seasons, val_seasons, test_season
 #' @return List containing evaluation metrics with confidence intervals
 #' @export
 evaluate_model_comprehensive <- function(actual, predicted, model_name = "Model",
-                                       compute_ci = TRUE, bootstrap_ci = compute_ci,
+                                       compute_ci = TRUE, bootstrap_ci,
                                        n_bootstrap = 1000) {
+  # Backwards compatibility: old callers may pass bootstrap_ci
+  if (!missing(bootstrap_ci)) compute_ci <- bootstrap_ci
 
   # Input validation
   if (length(actual) != length(predicted)) {
-    stop("Actual and predicted vectors must have the same length")
+    cli::cli_abort("Actual and predicted vectors must have the same length")
   }
 
   if (any(is.na(actual)) || any(is.na(predicted))) {
-    warning("Missing values detected, removing them")
+    cli::cli_warn("Missing values detected, removing them")
     complete_cases <- complete.cases(actual, predicted)
     actual <- actual[complete_cases]
     predicted <- predicted[complete_cases]
@@ -255,7 +257,7 @@ compare_models_statistical <- function(model_results, test_type = "simple") {
 
   n_models <- length(model_results)
   if (n_models < 2) {
-    stop("Need at least 2 models for comparison")
+    cli::cli_abort("Need at least 2 models for comparison")
   }
 
   model_names <- sapply(model_results, function(x) x$model_name)

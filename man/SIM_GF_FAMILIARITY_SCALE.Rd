@@ -7,7 +7,7 @@
 Multiplied by familiarity difference (home - away) to produce a
 venue-specific GF advantage. E.g., a Melbourne MCG tenant with 0.50
 familiarity vs an interstate team with 0.05 gives a diff of 0.45,
-yielding 0.45 * 9 = ~4 points advantage.}
+yielding 0.45 * 6 = ~2.7 points advantage.}
 \format{
 An object of class \code{numeric} of length 1.
 }
@@ -19,6 +19,6 @@ Scaling factor for familiarity-based Grand Final advantage (points).
 Multiplied by familiarity difference (home - away) to produce a
 venue-specific GF advantage. E.g., a Melbourne MCG tenant with 0.50
 familiarity vs an interstate team with 0.05 gives a diff of 0.45,
-yielding 0.45 * 9 = ~4 points advantage.
+yielding 0.45 * 6 = ~2.7 points advantage.
 }
 \keyword{internal}
