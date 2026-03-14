@@ -2,7 +2,7 @@
 % Please edit documentation in R/afl_api.R
 \name{.post_process_squad_result}
 \alias{.post_process_squad_result}
-\title{Fetch player details for multiple seasons in one parallel batch}
+\title{Post-process raw squad API response into clean player details}
 \usage{
 .post_process_squad_result(result, season_col = NULL, scalar_season = NULL)
 }
@@ -13,46 +13,13 @@
 or NULL if a scalar season should be used.}
 
 \item{scalar_season}{Single season value (used when season_col is NULL).}
-
-\item{seasons}{Numeric vector of years}
 }
 \value{
-A tibble of player details across all seasons
-
 A tibble with normalised player details.
 }
 \description{
-Fetch player details for multiple seasons in one parallel batch
+Shared helper used by both get_afl_player_details() (single season) and
+.fetch_all_player_details() (multi-season). Handles name construction,
+age calculation, prefix stripping, ID renaming, and column normalisation.
 }
-\keyword{(multi-season).}
-\keyword{(single}
-\keyword{.fetch_all_player_details()}
-\keyword{API}
-\keyword{Handles}
-\keyword{ID}
-\keyword{Post-process}
-\keyword{Shared}
-\keyword{age}
-\keyword{and}
-\keyword{both}
-\keyword{by}
-\keyword{calculation,}
-\keyword{clean}
-\keyword{column}
-\keyword{construction,}
-\keyword{details}
-\keyword{get_afl_player_details()}
-\keyword{helper}
 \keyword{internal}
-\keyword{into}
-\keyword{name}
-\keyword{normalisation.}
-\keyword{player}
-\keyword{prefix}
-\keyword{raw}
-\keyword{renaming,}
-\keyword{response}
-\keyword{season)}
-\keyword{squad}
-\keyword{stripping,}
-\keyword{used}

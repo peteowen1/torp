@@ -133,6 +133,7 @@ filter_game_data <- function(df, season_val, round_num, matchid, team) {
 #' Convenience wrapper around [load_player_season_ratings()] with filtering.
 #'
 #' @param season_val The season to calculate ratings for. Default is the current season.
+#' @param round_num Deprecated and ignored. Retained for backwards compatibility.
 #'
 #' @return A data frame containing player season total ratings.
 #' @export

@@ -21,7 +21,10 @@ evaluate_model_comprehensive(
 \item{model_name}{Name of the model being evaluated}
 
 \item{compute_ci}{Logical, whether to compute approximate confidence intervals
-using normal approximation (not bootstrap).}
+using normal approximation.}
+
+\item{bootstrap_ci}{Deprecated alias for \code{compute_ci}; retained for
+backwards compatibility. If provided, overrides \code{compute_ci}.}
 
 \item{n_bootstrap}{Deprecated; retained for backwards compatibility but unused.}
 }

@@ -132,7 +132,9 @@ create_temporal_splits <- function(data, train_seasons, val_seasons, test_season
 #' @param predicted Vector of predicted probabilities
 #' @param model_name Name of the model being evaluated
 #' @param compute_ci Logical, whether to compute approximate confidence intervals
-#'   using normal approximation (not bootstrap).
+#'   using normal approximation.
+#' @param bootstrap_ci Deprecated alias for `compute_ci`; retained for
+#'   backwards compatibility. If provided, overrides `compute_ci`.
 #' @param n_bootstrap Deprecated; retained for backwards compatibility but unused.
 #' @return List containing evaluation metrics with confidence intervals
 #' @export

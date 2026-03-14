@@ -83,6 +83,10 @@
 #' @param seasons Numeric vector of years
 #' @return A tibble of player details across all seasons
 #' @keywords internal
+#' @name dot-fetch_all_player_details
+NULL
+
+
 #' Post-process raw squad API response into clean player details
 #'
 #' Shared helper used by both get_afl_player_details() (single season) and
