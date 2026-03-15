@@ -984,16 +984,16 @@
     cli::cli_abort("Cannot train XGBoost: 0 complete rows after filtering")
   }
 
-  # Feature columns
+  # Feature columns — diffs only (no .x/.y positional features) to enforce symmetry
   base_cols <- c(
     "team_type_fac",
     "game_year_decimal.x", "game_prop_through_year.x",
     "game_prop_through_month.x", "game_prop_through_day.x",
     "torp_diff", "torp_recv_diff", "torp_disp_diff",
-    "torp_spoil_diff", "torp_hitout_diff", "torp.x", "torp.y",
-    "psr_diff", "psr.x", "psr.y",
-    "log_dist.x", "log_dist.y", "log_dist_diff",
-    "familiarity.x", "familiarity.y", "familiarity_diff",
+    "torp_spoil_diff", "torp_hitout_diff",
+    "psr_diff",
+    "log_dist_diff",
+    "familiarity_diff",
     "days_rest_diff_fac"
   )
 
@@ -1064,8 +1064,12 @@
   xgb_df$xgb_pred_score_diff <- s4$preds
   team_mdl_df$xgb_pred_score_diff <- predict_all(s4$model, team_mdl_df, s4_cols)
 
-  # Step 5: win probability
-  s5_cols <- c(base_cols, "xgb_pred_tot_xscore", "xgb_pred_score_diff")
+  # Step 5: win probability — slim features to avoid overfitting binary target
+  s5_cols <- c(
+    "team_type_fac",
+    "xgb_pred_tot_xscore", "xgb_pred_score_diff",
+    "log_dist_diff", "familiarity_diff", "days_rest_diff_fac"
+  )
   s5 <- train_step(xgb_df, as.numeric(xgb_df$win), xgb_df$weightz, s5_cols, cls_params, "win")
   xgb_df$xgb_pred_win <- s5$preds
   team_mdl_df$xgb_pred_win <- predict_all(s5$model, team_mdl_df, s5_cols)
@@ -1482,10 +1486,12 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
 
   # Validate ----
   cli::cli_h2("Validating predictions")
+  validation_errors <- character(0)
+
   if (nrow(week_gms) == 0) cli::cli_abort("No predictions generated for week{?s} {paste(target_weeks, collapse = ', ')}")
-  if (any(is.na(week_gms$pred_win))) cli::cli_abort("NA values in pred_win")
-  if (any(week_gms$pred_win < 0 | week_gms$pred_win > 1)) cli::cli_abort("pred_win values out of [0,1] range")
-  if (any(is.na(week_gms$pred_margin))) cli::cli_abort("NA values in pred_margin")
+  if (any(is.na(week_gms$pred_win))) validation_errors <- c(validation_errors, "NA values in pred_win")
+  if (any(week_gms$pred_win < 0 | week_gms$pred_win > 1)) validation_errors <- c(validation_errors, "pred_win values out of [0,1] range")
+  if (any(is.na(week_gms$pred_margin))) validation_errors <- c(validation_errors, "NA values in pred_margin")
 
   # Margin and win probability must agree in direction
   margin_sign <- sign(week_gms$pred_margin)
@@ -1495,26 +1501,38 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
   disagreements <- meaningful & margin_sign != win_sign
   if (any(disagreements)) {
     bad <- week_gms[disagreements, ]
-    cli::cli_abort(c(
-      "Margin and win probability disagree in direction for {sum(disagreements)} match{?es}.",
-      "i" = "e.g. {bad$home_team[1]} vs {bad$away_team[1]}: margin={round(bad$pred_margin[1], 1)}, win={round(bad$pred_win[1], 3)}",
-      "i" = "Positive margin should correspond to win probability > 0.5."
+    validation_errors <- c(validation_errors, paste0(
+      "Margin/win probability direction disagreement for ", sum(disagreements), " match(es). ",
+      "e.g. ", bad$home_team[1], " vs ", bad$away_team[1],
+      " (", season, " R", bad$round[1], ", ", bad$match_id[1], ")",
+      ": margin=", round(bad$pred_margin[1], 1), ", win=", round(bad$pred_win[1], 3)
     ))
   }
 
   # Total expected score should be in a plausible range (100-250 points)
   if (any(week_gms$pred_xtotal < 100 | week_gms$pred_xtotal > 250)) {
     bad_xt <- week_gms[week_gms$pred_xtotal < 100 | week_gms$pred_xtotal > 250, ]
-    cli::cli_abort(c(
-      "Implausible pred_xtotal values detected ({nrow(bad_xt)} match{?es} outside 100-250 range).",
-      "i" = "e.g. {bad_xt$home_team[1]} vs {bad_xt$away_team[1]}: pred_xtotal={round(bad_xt$pred_xtotal[1], 1)}",
-      "i" = "This usually indicates missing or corrupt XG data in the training set."
+    validation_errors <- c(validation_errors, paste0(
+      "Implausible pred_xtotal for ", nrow(bad_xt), " match(es) outside 100-250 range. ",
+      "e.g. ", bad_xt$home_team[1], " vs ", bad_xt$away_team[1],
+      " (", season, " R", bad_xt$round[1], ", ", bad_xt$match_id[1], ")",
+      ": pred_xtotal=", round(bad_xt$pred_xtotal[1], 1)
     ))
   }
 
-  cli::cli_alert_success("Validation passed: {nrow(week_gms)} matches")
+  if (length(validation_errors) > 0) {
+    if (interactive()) {
+      cli::cli_warn(c("Prediction validation failed ({length(validation_errors)} issue{?s}):", validation_errors))
+      cli::cli_alert_info("Returning models and data for debugging (predictions NOT uploaded)")
+    } else {
+      cli::cli_abort(c("Prediction validation failed ({length(validation_errors)} issue{?s}):", validation_errors))
+    }
+  } else {
+    cli::cli_alert_success("Validation passed: {nrow(week_gms)} matches")
+  }
 
   # Upload ----
+  if (length(validation_errors) == 0) {
   cli::cli_h2("Uploading predictions")
   week_gms <- week_gms |> dplyr::ungroup() |> dplyr::rename(week = round) |> dplyr::relocate(week)
 
@@ -1589,6 +1607,7 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
       ))
     }
   )
+  } # end validation_errors == 0
 
   elapsed <- (proc.time() - .pipeline_start)[["elapsed"]]
   cli::cli_h2("Pipeline Complete")
@@ -1598,7 +1617,8 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
     predictions = all_preds,
     models = gam_result$models,
     xgb_models = xgb_result$models,
-    model_data = team_mdl_df
+    model_data = team_mdl_df,
+    validation_errors = if (length(validation_errors) > 0) validation_errors else NULL
   ))
 }
 
