@@ -984,7 +984,8 @@
     cli::cli_abort("Cannot train XGBoost: 0 complete rows after filtering")
   }
 
-  # Feature columns — diffs only (no .x/.y positional features) to enforce symmetry
+  # Feature columns — diffs only for rating/context features (no .x/.y splits)
+  # to enforce symmetry. Temporal .x features are shared per match, not team-specific.
   base_cols <- c(
     "team_type_fac",
     "game_year_decimal.x", "game_prop_through_year.x",
@@ -1553,22 +1554,22 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
     }
   )
 
-  if (!is.null(existing) && nrow(existing) > 0) {
-    # Backfill actual margins for completed matches
-    completed <- team_mdl_df |>
-      dplyr::filter(!is.na(score_diff), team_type_fac.x == "home") |>
-      dplyr::distinct(match_id, .keep_all = TRUE) |>
-      dplyr::transmute(match_id, .actual_margin = score_diff)
+  # Actual margins from completed matches (shared by locked preds + retrodictions)
+  completed_margins <- team_mdl_df |>
+    dplyr::filter(!is.na(score_diff), team_type_fac.x == "home") |>
+    dplyr::distinct(match_id, .keep_all = TRUE) |>
+    dplyr::transmute(match_id, .actual_margin = score_diff)
 
+  if (!is.null(existing) && nrow(existing) > 0) {
     # Backward compat: existing predictions may use old providerId column
     if (!"match_id" %in% names(existing) && "providerId" %in% names(existing)) {
       data.table::setnames(existing, "providerId", "match_id")
     }
 
-    n_backfilled <- sum(is.na(existing$margin) & existing$match_id %in% completed$match_id)
+    n_backfilled <- sum(is.na(existing$margin) & existing$match_id %in% completed_margins$match_id)
     if (n_backfilled > 0) {
       existing <- existing |>
-        dplyr::left_join(completed, by = "match_id") |>
+        dplyr::left_join(completed_margins, by = "match_id") |>
         dplyr::mutate(margin = dplyr::coalesce(margin, .actual_margin)) |>
         dplyr::select(-.actual_margin)
       cli::cli_alert_success("Backfilled {n_backfilled} match margin{?s} from results")
@@ -1617,24 +1618,17 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
   )
 
   # --- Retrodictions: current model on all matches, fully overwritten each run ---
-  # Backfill actual margins for completed matches
-  retro_completed <- team_mdl_df |>
-    dplyr::filter(!is.na(score_diff), team_type_fac.x == "home") |>
-    dplyr::distinct(match_id, .keep_all = TRUE) |>
-    dplyr::transmute(match_id, .actual_margin = score_diff)
-
   retro_all <- all_preds |>
     dplyr::rename(week = round) |>
     dplyr::relocate(week)
 
-  if (nrow(retro_completed) > 0) {
+  if (nrow(completed_margins) > 0) {
     retro_all <- retro_all |>
-      dplyr::left_join(retro_completed, by = "match_id") |>
+      dplyr::left_join(completed_margins, by = "match_id") |>
       dplyr::mutate(margin = dplyr::coalesce(.actual_margin, margin)) |>
       dplyr::select(-.actual_margin)
   }
 
-  # Daily runs: current season only. Full backfill: all seasons (weeks = "all")
   # Daily runs: current season only. Full backfill when weeks = "all"
   retro_seasons <- if (is_backfill) sort(unique(retro_all$season)) else season
   retro_failures <- 0L
