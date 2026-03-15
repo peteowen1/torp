@@ -138,6 +138,8 @@ Load processed AFL data from torpdata GitHub releases
   : Load Player Skill Ratings (PSR)
 - [`load_results()`](https://peteowen1.github.io/torp/reference/load_results.md)
   : Load AFL Match Results Data
+- [`load_retrodictions()`](https://peteowen1.github.io/torp/reference/load_retrodictions.md)
+  : Load Retrodictions Data
 - [`load_team_ratings()`](https://peteowen1.github.io/torp/reference/load_team_ratings.md)
   : Load Team Ratings Data
 - [`load_teams()`](https://peteowen1.github.io/torp/reference/load_teams.md)
