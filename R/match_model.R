@@ -1491,7 +1491,7 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
 
   if (nrow(week_gms) == 0) cli::cli_abort("No predictions generated for week{?s} {paste(target_weeks, collapse = ', ')}")
   if (any(is.na(week_gms$pred_win))) validation_errors <- c(validation_errors, "NA values in pred_win")
-  if (any(week_gms$pred_win < 0 | week_gms$pred_win > 1)) validation_errors <- c(validation_errors, "pred_win values out of [0,1] range")
+  if (any(week_gms$pred_win < 0 | week_gms$pred_win > 1, na.rm = TRUE)) validation_errors <- c(validation_errors, "pred_win values out of [0,1] range")
   if (any(is.na(week_gms$pred_margin))) validation_errors <- c(validation_errors, "NA values in pred_margin")
 
   # Margin and win probability must agree in direction
@@ -1500,7 +1500,7 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
   # Exclude near-zero margins (< 1 point) and near-50/50 win probs where sign can legitimately differ
   meaningful <- abs(week_gms$pred_margin) > 1 & abs(week_gms$pred_win - 0.5) > 0.02
   disagreements <- meaningful & margin_sign != win_sign
-  if (any(disagreements)) {
+  if (any(disagreements, na.rm = TRUE)) {
     bad <- week_gms[disagreements, ]
     validation_errors <- c(validation_errors, paste0(
       "Margin/win probability direction disagreement for ", sum(disagreements), " match(es). ",
@@ -1511,7 +1511,7 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
   }
 
   # Total expected score should be in a plausible range (100-250 points)
-  if (any(week_gms$pred_xtotal < 100 | week_gms$pred_xtotal > 250)) {
+  if (any(week_gms$pred_xtotal < 100 | week_gms$pred_xtotal > 250, na.rm = TRUE)) {
     bad_xt <- week_gms[week_gms$pred_xtotal < 100 | week_gms$pred_xtotal > 250, ]
     validation_errors <- c(validation_errors, paste0(
       "Implausible pred_xtotal for ", nrow(bad_xt), " match(es) outside 100-250 range. ",
