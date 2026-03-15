@@ -696,7 +696,7 @@ load_predictions <- function(seasons = get_afl_season(), rounds = get_afl_week(t
 #' pre-game predictions frozen at kickoff.
 #'
 #' @param seasons A numeric vector of 4-digit years - defaults to latest season. If set to `TRUE`, returns all available data since 2021.
-#' @param rounds A numeric vector of round numbers - defaults to all rounds. If set to `TRUE`, returns all available rounds.
+#' @param rounds A numeric vector of round numbers - defaults to latest round. If set to `TRUE`, returns all available rounds.
 #' @param use_disk_cache Logical. If TRUE, uses persistent disk cache. Default is FALSE.
 #' @param columns Optional character vector of column names to read. If NULL (default), reads all columns.
 #'
@@ -709,7 +709,7 @@ load_predictions <- function(seasons = get_afl_season(), rounds = get_afl_week(t
 #' })
 #' }
 #' @export
-load_retrodictions <- function(seasons = get_afl_season(), rounds = TRUE, use_disk_cache = FALSE, columns = NULL) {
+load_retrodictions <- function(seasons = get_afl_season(), rounds = get_afl_week(type = "next"), use_disk_cache = FALSE, columns = NULL) {
   if (isTRUE(seasons) && missing(rounds)) rounds <- TRUE
   seasons <- validate_seasons(seasons)
   rounds <- validate_rounds(rounds)

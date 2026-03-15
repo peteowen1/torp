@@ -6,7 +6,7 @@
 \usage{
 load_retrodictions(
   seasons = get_afl_season(),
-  rounds = TRUE,
+  rounds = get_afl_week(type = "next"),
   use_disk_cache = FALSE,
   columns = NULL
 )
@@ -14,7 +14,7 @@ load_retrodictions(
 \arguments{
 \item{seasons}{A numeric vector of 4-digit years - defaults to latest season. If set to \code{TRUE}, returns all available data since 2021.}
 
-\item{rounds}{A numeric vector of round numbers - defaults to all rounds. If set to \code{TRUE}, returns all available rounds.}
+\item{rounds}{A numeric vector of round numbers - defaults to latest round. If set to \code{TRUE}, returns all available rounds.}
 
 \item{use_disk_cache}{Logical. If TRUE, uses persistent disk cache. Default is FALSE.}
 
