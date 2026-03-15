@@ -1307,8 +1307,9 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
   if (nrow(teams) < 100) cli::cli_abort("Teams too small ({nrow(teams)} rows)")
 
   # Resolve target weeks
+  is_backfill <- identical(weeks, "all")
   if (!is.null(weeks)) {
-    if (identical(weeks, "all")) {
+    if (is_backfill) {
       target_weeks <- sort(unique(fixtures$round_number[fixtures$season == season]))
     } else {
       target_weeks <- weeks
@@ -1524,15 +1525,21 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
     if (interactive()) {
       cli::cli_warn(c("Prediction validation failed ({length(validation_errors)} issue{?s}):", validation_errors))
       cli::cli_alert_info("Returning models and data for debugging (predictions NOT uploaded)")
+      return(invisible(list(
+        predictions = all_preds,
+        models = gam_result$models,
+        xgb_models = xgb_result$models,
+        model_data = team_mdl_df,
+        validation_errors = validation_errors
+      )))
     } else {
       cli::cli_abort(c("Prediction validation failed ({length(validation_errors)} issue{?s}):", validation_errors))
     }
-  } else {
-    cli::cli_alert_success("Validation passed: {nrow(week_gms)} matches")
   }
 
+  cli::cli_alert_success("Validation passed: {nrow(week_gms)} matches")
+
   # Upload ----
-  if (length(validation_errors) == 0) {
   cli::cli_h2("Uploading predictions")
   week_gms <- week_gms |> dplyr::ungroup() |> dplyr::rename(week = round) |> dplyr::relocate(week)
 
@@ -1628,13 +1635,15 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
   }
 
   # Daily runs: current season only. Full backfill: all seasons (weeks = "all")
-  retro_seasons <- if (length(target_weeks) > 1) {
-    sort(unique(retro_all$season))
-  } else {
-    season
-  }
+  # Daily runs: current season only. Full backfill when weeks = "all"
+  retro_seasons <- if (is_backfill) sort(unique(retro_all$season)) else season
+  retro_failures <- 0L
   for (retro_s in retro_seasons) {
     retro_preds <- retro_all |> dplyr::filter(season == retro_s)
+    if (nrow(retro_preds) == 0) {
+      cli::cli_warn("Skipping retrodictions_{retro_s}: 0 rows")
+      next
+    }
     retro_file_name <- paste0("retrodictions_", retro_s)
     tryCatch(
       {
@@ -1642,6 +1651,7 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
         cli::cli_alert_success("Uploaded retrodictions_{retro_s} ({nrow(retro_preds)} rows)")
       },
       error = function(e) {
+        retro_failures <<- retro_failures + 1L
         local_path <- file.path("data-raw", paste0(retro_file_name, ".parquet"))
         arrow::write_parquet(retro_preds, local_path)
         cli::cli_warn(c(
@@ -1651,8 +1661,11 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
       }
     )
   }
-  cli::cli_alert_success("Retrodictions uploaded for {length(retro_seasons)} season{?s}")
-  } # end validation_errors == 0
+  if (retro_failures > 0) {
+    cli::cli_warn("Retrodictions: {retro_failures}/{length(retro_seasons)} season(s) failed to upload")
+  } else {
+    cli::cli_alert_success("Retrodictions uploaded for {length(retro_seasons)} season{?s}")
+  }
 
   elapsed <- (proc.time() - .pipeline_start)[["elapsed"]]
   cli::cli_h2("Pipeline Complete")
@@ -1662,8 +1675,7 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
     predictions = all_preds,
     models = gam_result$models,
     xgb_models = xgb_result$models,
-    model_data = team_mdl_df,
-    validation_errors = if (length(validation_errors) > 0) validation_errors else NULL
+    model_data = team_mdl_df
   ))
 }
 
