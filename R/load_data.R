@@ -688,6 +688,45 @@ load_predictions <- function(seasons = get_afl_season(), rounds = get_afl_week(t
   return(out)
 }
 
+#' Load Retrodictions Data
+#'
+#' @description Loads retrodictions from the [torpdata repository](https://github.com/peteowen1/torpdata).
+#' Retrodictions are the current model's predictions for all matches (completed and upcoming),
+#' regenerated each pipeline run. Compare with [load_predictions()] which returns locked
+#' pre-game predictions frozen at kickoff.
+#'
+#' @param seasons A numeric vector of 4-digit years - defaults to latest season. If set to `TRUE`, returns all available data since 2021.
+#' @param rounds A numeric vector of round numbers - defaults to all rounds. If set to `TRUE`, returns all available rounds.
+#' @param use_disk_cache Logical. If TRUE, uses persistent disk cache. Default is FALSE.
+#' @param columns Optional character vector of column names to read. If NULL (default), reads all columns.
+#'
+#' @return A data frame containing retrodictions with the same columns as [load_predictions()].
+#' @seealso [load_predictions()], [load_results()]
+#' @examples
+#' \dontrun{
+#' try({ # prevents cran errors
+#'   load_retrodictions(2026)
+#' })
+#' }
+#' @export
+load_retrodictions <- function(seasons = get_afl_season(), rounds = TRUE, use_disk_cache = FALSE, columns = NULL) {
+  if (isTRUE(seasons) && missing(rounds)) rounds <- TRUE
+  seasons <- validate_seasons(seasons)
+  rounds <- validate_rounds(rounds)
+
+  urls <- generate_urls("retrodictions", "retrodictions", seasons)
+
+  out <- load_from_url(urls, seasons = seasons, rounds = rounds, use_disk_cache = use_disk_cache, columns = columns)
+
+  if (nrow(out) > 0) {
+    if (!data.table::is.data.table(out)) out <- data.table::as.data.table(out)
+    .normalise_predictions_columns(out)
+    out <- tibble::as_tibble(out)
+  }
+
+  return(out)
+}
+
 #' Load TORP Ratings Data
 #'
 #' @description Loads pre-computed TORP player ratings from the [torpdata repository](https://github.com/peteowen1/torpdata).

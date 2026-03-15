@@ -1536,6 +1536,7 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
   cli::cli_h2("Uploading predictions")
   week_gms <- week_gms |> dplyr::ungroup() |> dplyr::rename(week = round) |> dplyr::relocate(week)
 
+  # --- Locked predictions: frozen at game start, never overwritten ---
   pred_file_name <- paste0("predictions_", season)
   existing <- tryCatch(
     file_reader(pred_file_name, "predictions"),
@@ -1580,7 +1581,7 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
       dplyr::filter(!match_id %in% started_ids)
 
     if (length(started_ids) > 0) {
-      cli::cli_alert_info("Keeping existing predictions for {length(started_ids)} already-started match{?es}")
+      cli::cli_alert_info("Keeping locked predictions for {length(started_ids)} already-started match{?es}")
     }
 
     combined <- existing |>
@@ -1595,15 +1596,51 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
   tryCatch(
     {
       save_to_release(combined, pred_file_name, "predictions", also_csv = TRUE)
-      cli::cli_alert_success("Uploaded {season} predictions ({nrow(combined)} rows, week{?s} {paste(target_weeks, collapse = ', ')} added)")
+      cli::cli_alert_success("Uploaded locked predictions ({nrow(combined)} rows, week{?s} {paste(target_weeks, collapse = ', ')} updated)")
     },
     error = function(e) {
       local_path <- file.path("data-raw", paste0(pred_file_name, ".parquet"))
       arrow::write_parquet(combined, local_path)
       cli::cli_warn(c(
-        "Failed to upload predictions: {conditionMessage(e)}",
+        "Failed to upload locked predictions: {conditionMessage(e)}",
         "i" = "Saved locally to {local_path}",
         "i" = "Check WORKFLOW_PAT if this is a permissions issue"
+      ))
+    }
+  )
+
+  # --- Retrodictions: current model on all matches, fully overwritten each run ---
+  retro_file_name <- paste0("retrodictions_", season)
+  retro_preds <- all_preds |>
+    dplyr::filter(season == .env$season) |>
+    dplyr::rename(week = round) |>
+    dplyr::relocate(week)
+
+  # Backfill actual margins for completed matches
+  retro_completed <- team_mdl_df |>
+    dplyr::filter(!is.na(score_diff), team_type_fac.x == "home",
+                  season.x == season) |>
+    dplyr::distinct(match_id, .keep_all = TRUE) |>
+    dplyr::transmute(match_id, .actual_margin = score_diff)
+
+  if (nrow(retro_completed) > 0) {
+    retro_preds <- retro_preds |>
+      dplyr::left_join(retro_completed, by = "match_id") |>
+      dplyr::mutate(margin = dplyr::coalesce(.actual_margin, margin)) |>
+      dplyr::select(-.actual_margin)
+  }
+
+  tryCatch(
+    {
+      save_to_release(retro_preds, retro_file_name, "retrodictions", also_csv = TRUE)
+      cli::cli_alert_success("Uploaded retrodictions ({nrow(retro_preds)} rows, current model on all {season} matches)")
+    },
+    error = function(e) {
+      local_path <- file.path("data-raw", paste0(retro_file_name, ".parquet"))
+      arrow::write_parquet(retro_preds, local_path)
+      cli::cli_warn(c(
+        "Failed to upload retrodictions: {conditionMessage(e)}",
+        "i" = "Saved locally to {local_path}"
       ))
     }
   )
