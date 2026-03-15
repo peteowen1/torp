@@ -984,16 +984,17 @@
     cli::cli_abort("Cannot train XGBoost: 0 complete rows after filtering")
   }
 
-  # Feature columns
+  # Feature columns — diffs only for rating/context features (no .x/.y splits)
+  # to enforce symmetry. Temporal .x features are shared per match, not team-specific.
   base_cols <- c(
     "team_type_fac",
     "game_year_decimal.x", "game_prop_through_year.x",
     "game_prop_through_month.x", "game_prop_through_day.x",
     "torp_diff", "torp_recv_diff", "torp_disp_diff",
-    "torp_spoil_diff", "torp_hitout_diff", "torp.x", "torp.y",
-    "psr_diff", "psr.x", "psr.y",
-    "log_dist.x", "log_dist.y", "log_dist_diff",
-    "familiarity.x", "familiarity.y", "familiarity_diff",
+    "torp_spoil_diff", "torp_hitout_diff",
+    "psr_diff",
+    "log_dist_diff",
+    "familiarity_diff",
     "days_rest_diff_fac"
   )
 
@@ -1064,8 +1065,12 @@
   xgb_df$xgb_pred_score_diff <- s4$preds
   team_mdl_df$xgb_pred_score_diff <- predict_all(s4$model, team_mdl_df, s4_cols)
 
-  # Step 5: win probability
-  s5_cols <- c(base_cols, "xgb_pred_tot_xscore", "xgb_pred_score_diff")
+  # Step 5: win probability — slim features to avoid overfitting binary target
+  s5_cols <- c(
+    "team_type_fac",
+    "xgb_pred_tot_xscore", "xgb_pred_score_diff",
+    "log_dist_diff", "familiarity_diff", "days_rest_diff_fac"
+  )
   s5 <- train_step(xgb_df, as.numeric(xgb_df$win), xgb_df$weightz, s5_cols, cls_params, "win")
   xgb_df$xgb_pred_win <- s5$preds
   team_mdl_df$xgb_pred_win <- predict_all(s5$model, team_mdl_df, s5_cols)
@@ -1303,8 +1308,9 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
   if (nrow(teams) < 100) cli::cli_abort("Teams too small ({nrow(teams)} rows)")
 
   # Resolve target weeks
+  is_backfill <- identical(weeks, "all")
   if (!is.null(weeks)) {
-    if (identical(weeks, "all")) {
+    if (is_backfill) {
       target_weeks <- sort(unique(fixtures$round_number[fixtures$season == season]))
     } else {
       target_weeks <- weeks
@@ -1482,10 +1488,12 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
 
   # Validate ----
   cli::cli_h2("Validating predictions")
+  validation_errors <- character(0)
+
   if (nrow(week_gms) == 0) cli::cli_abort("No predictions generated for week{?s} {paste(target_weeks, collapse = ', ')}")
-  if (any(is.na(week_gms$pred_win))) cli::cli_abort("NA values in pred_win")
-  if (any(week_gms$pred_win < 0 | week_gms$pred_win > 1)) cli::cli_abort("pred_win values out of [0,1] range")
-  if (any(is.na(week_gms$pred_margin))) cli::cli_abort("NA values in pred_margin")
+  if (any(is.na(week_gms$pred_win))) validation_errors <- c(validation_errors, "NA values in pred_win")
+  if (any(week_gms$pred_win < 0 | week_gms$pred_win > 1, na.rm = TRUE)) validation_errors <- c(validation_errors, "pred_win values out of [0,1] range")
+  if (any(is.na(week_gms$pred_margin))) validation_errors <- c(validation_errors, "NA values in pred_margin")
 
   # Margin and win probability must agree in direction
   margin_sign <- sign(week_gms$pred_margin)
@@ -1493,23 +1501,41 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
   # Exclude near-zero margins (< 1 point) and near-50/50 win probs where sign can legitimately differ
   meaningful <- abs(week_gms$pred_margin) > 1 & abs(week_gms$pred_win - 0.5) > 0.02
   disagreements <- meaningful & margin_sign != win_sign
-  if (any(disagreements)) {
+  if (any(disagreements, na.rm = TRUE)) {
     bad <- week_gms[disagreements, ]
-    cli::cli_abort(c(
-      "Margin and win probability disagree in direction for {sum(disagreements)} match{?es}.",
-      "i" = "e.g. {bad$home_team[1]} vs {bad$away_team[1]}: margin={round(bad$pred_margin[1], 1)}, win={round(bad$pred_win[1], 3)}",
-      "i" = "Positive margin should correspond to win probability > 0.5."
+    validation_errors <- c(validation_errors, paste0(
+      "Margin/win probability direction disagreement for ", sum(disagreements), " match(es). ",
+      "e.g. ", bad$home_team[1], " vs ", bad$away_team[1],
+      " (", season, " R", bad$round[1], ", ", bad$match_id[1], ")",
+      ": margin=", round(bad$pred_margin[1], 1), ", win=", round(bad$pred_win[1], 3)
     ))
   }
 
   # Total expected score should be in a plausible range (100-250 points)
-  if (any(week_gms$pred_xtotal < 100 | week_gms$pred_xtotal > 250)) {
+  if (any(week_gms$pred_xtotal < 100 | week_gms$pred_xtotal > 250, na.rm = TRUE)) {
     bad_xt <- week_gms[week_gms$pred_xtotal < 100 | week_gms$pred_xtotal > 250, ]
-    cli::cli_abort(c(
-      "Implausible pred_xtotal values detected ({nrow(bad_xt)} match{?es} outside 100-250 range).",
-      "i" = "e.g. {bad_xt$home_team[1]} vs {bad_xt$away_team[1]}: pred_xtotal={round(bad_xt$pred_xtotal[1], 1)}",
-      "i" = "This usually indicates missing or corrupt XG data in the training set."
+    validation_errors <- c(validation_errors, paste0(
+      "Implausible pred_xtotal for ", nrow(bad_xt), " match(es) outside 100-250 range. ",
+      "e.g. ", bad_xt$home_team[1], " vs ", bad_xt$away_team[1],
+      " (", season, " R", bad_xt$round[1], ", ", bad_xt$match_id[1], ")",
+      ": pred_xtotal=", round(bad_xt$pred_xtotal[1], 1)
     ))
+  }
+
+  if (length(validation_errors) > 0) {
+    if (interactive()) {
+      cli::cli_warn(c("Prediction validation failed ({length(validation_errors)} issue{?s}):", validation_errors))
+      cli::cli_alert_info("Returning models and data for debugging (predictions NOT uploaded)")
+      return(invisible(list(
+        predictions = all_preds,
+        models = gam_result$models,
+        xgb_models = xgb_result$models,
+        model_data = team_mdl_df,
+        validation_errors = validation_errors
+      )))
+    } else {
+      cli::cli_abort(c("Prediction validation failed ({length(validation_errors)} issue{?s}):", validation_errors))
+    }
   }
 
   cli::cli_alert_success("Validation passed: {nrow(week_gms)} matches")
@@ -1518,6 +1544,7 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
   cli::cli_h2("Uploading predictions")
   week_gms <- week_gms |> dplyr::ungroup() |> dplyr::rename(week = round) |> dplyr::relocate(week)
 
+  # --- Locked predictions: frozen at game start, never overwritten ---
   pred_file_name <- paste0("predictions_", season)
   existing <- tryCatch(
     file_reader(pred_file_name, "predictions"),
@@ -1527,22 +1554,22 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
     }
   )
 
-  if (!is.null(existing) && nrow(existing) > 0) {
-    # Backfill actual margins for completed matches
-    completed <- team_mdl_df |>
-      dplyr::filter(!is.na(score_diff), team_type_fac.x == "home") |>
-      dplyr::distinct(match_id, .keep_all = TRUE) |>
-      dplyr::transmute(match_id, .actual_margin = score_diff)
+  # Actual margins from completed matches (shared by locked preds + retrodictions)
+  completed_margins <- team_mdl_df |>
+    dplyr::filter(!is.na(score_diff), team_type_fac.x == "home") |>
+    dplyr::distinct(match_id, .keep_all = TRUE) |>
+    dplyr::transmute(match_id, .actual_margin = score_diff)
 
+  if (!is.null(existing) && nrow(existing) > 0) {
     # Backward compat: existing predictions may use old providerId column
     if (!"match_id" %in% names(existing) && "providerId" %in% names(existing)) {
       data.table::setnames(existing, "providerId", "match_id")
     }
 
-    n_backfilled <- sum(is.na(existing$margin) & existing$match_id %in% completed$match_id)
+    n_backfilled <- sum(is.na(existing$margin) & existing$match_id %in% completed_margins$match_id)
     if (n_backfilled > 0) {
       existing <- existing |>
-        dplyr::left_join(completed, by = "match_id") |>
+        dplyr::left_join(completed_margins, by = "match_id") |>
         dplyr::mutate(margin = dplyr::coalesce(margin, .actual_margin)) |>
         dplyr::select(-.actual_margin)
       cli::cli_alert_success("Backfilled {n_backfilled} match margin{?s} from results")
@@ -1562,7 +1589,7 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
       dplyr::filter(!match_id %in% started_ids)
 
     if (length(started_ids) > 0) {
-      cli::cli_alert_info("Keeping existing predictions for {length(started_ids)} already-started match{?es}")
+      cli::cli_alert_info("Keeping locked predictions for {length(started_ids)} already-started match{?es}")
     }
 
     combined <- existing |>
@@ -1577,18 +1604,62 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
   tryCatch(
     {
       save_to_release(combined, pred_file_name, "predictions", also_csv = TRUE)
-      cli::cli_alert_success("Uploaded {season} predictions ({nrow(combined)} rows, week{?s} {paste(target_weeks, collapse = ', ')} added)")
+      cli::cli_alert_success("Uploaded locked predictions ({nrow(combined)} rows, week{?s} {paste(target_weeks, collapse = ', ')} updated)")
     },
     error = function(e) {
       local_path <- file.path("data-raw", paste0(pred_file_name, ".parquet"))
       arrow::write_parquet(combined, local_path)
       cli::cli_warn(c(
-        "Failed to upload predictions: {conditionMessage(e)}",
+        "Failed to upload locked predictions: {conditionMessage(e)}",
         "i" = "Saved locally to {local_path}",
         "i" = "Check WORKFLOW_PAT if this is a permissions issue"
       ))
     }
   )
+
+  # --- Retrodictions: current model on all matches, fully overwritten each run ---
+  retro_all <- all_preds |>
+    dplyr::rename(week = round) |>
+    dplyr::relocate(week)
+
+  if (nrow(completed_margins) > 0) {
+    retro_all <- retro_all |>
+      dplyr::left_join(completed_margins, by = "match_id") |>
+      dplyr::mutate(margin = dplyr::coalesce(.actual_margin, margin)) |>
+      dplyr::select(-.actual_margin)
+  }
+
+  # Daily runs: current season only. Full backfill when weeks = "all"
+  retro_seasons <- if (is_backfill) sort(unique(retro_all$season)) else season
+  retro_failures <- 0L
+  for (retro_s in retro_seasons) {
+    retro_preds <- retro_all |> dplyr::filter(season == retro_s)
+    if (nrow(retro_preds) == 0) {
+      cli::cli_warn("Skipping retrodictions_{retro_s}: 0 rows")
+      next
+    }
+    retro_file_name <- paste0("retrodictions_", retro_s)
+    tryCatch(
+      {
+        save_to_release(retro_preds, retro_file_name, "retrodictions", also_csv = TRUE)
+        cli::cli_alert_success("Uploaded retrodictions_{retro_s} ({nrow(retro_preds)} rows)")
+      },
+      error = function(e) {
+        retro_failures <<- retro_failures + 1L
+        local_path <- file.path("data-raw", paste0(retro_file_name, ".parquet"))
+        arrow::write_parquet(retro_preds, local_path)
+        cli::cli_warn(c(
+          "Failed to upload retrodictions_{retro_s}: {conditionMessage(e)}",
+          "i" = "Saved locally to {local_path}"
+        ))
+      }
+    )
+  }
+  if (retro_failures > 0) {
+    cli::cli_warn("Retrodictions: {retro_failures}/{length(retro_seasons)} season(s) failed to upload")
+  } else {
+    cli::cli_alert_success("Retrodictions uploaded for {length(retro_seasons)} season{?s}")
+  }
 
   elapsed <- (proc.time() - .pipeline_start)[["elapsed"]]
   cli::cli_h2("Pipeline Complete")

@@ -15,15 +15,3 @@
 devtools::load_all()
 
 result <- run_predictions_pipeline()
-
-# All predictions for analysis
-result$predictions
-result$predictions |> filter(season == get_afl_season(), round == get_afl_week('next'))  # completed matches
-
-# Model summaries
-summary(result$models$win)
-summary(result$models$score_diff)
-summary(result$models$total_xpoints)
-
-# All 5 models at a glance
-lapply(result$models, summary)
