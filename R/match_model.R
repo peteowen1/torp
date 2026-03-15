@@ -1610,40 +1610,48 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
   )
 
   # --- Retrodictions: current model on all matches, fully overwritten each run ---
-  retro_file_name <- paste0("retrodictions_", season)
-  retro_preds <- all_preds |>
-    dplyr::filter(season == .env$season) |>
-    dplyr::rename(week = round) |>
-    dplyr::relocate(week)
-
   # Backfill actual margins for completed matches
   retro_completed <- team_mdl_df |>
-    dplyr::filter(!is.na(score_diff), team_type_fac.x == "home",
-                  season.x == season) |>
+    dplyr::filter(!is.na(score_diff), team_type_fac.x == "home") |>
     dplyr::distinct(match_id, .keep_all = TRUE) |>
     dplyr::transmute(match_id, .actual_margin = score_diff)
 
+  retro_all <- all_preds |>
+    dplyr::rename(week = round) |>
+    dplyr::relocate(week)
+
   if (nrow(retro_completed) > 0) {
-    retro_preds <- retro_preds |>
+    retro_all <- retro_all |>
       dplyr::left_join(retro_completed, by = "match_id") |>
       dplyr::mutate(margin = dplyr::coalesce(.actual_margin, margin)) |>
       dplyr::select(-.actual_margin)
   }
 
-  tryCatch(
-    {
-      save_to_release(retro_preds, retro_file_name, "retrodictions", also_csv = TRUE)
-      cli::cli_alert_success("Uploaded retrodictions ({nrow(retro_preds)} rows, current model on all {season} matches)")
-    },
-    error = function(e) {
-      local_path <- file.path("data-raw", paste0(retro_file_name, ".parquet"))
-      arrow::write_parquet(retro_preds, local_path)
-      cli::cli_warn(c(
-        "Failed to upload retrodictions: {conditionMessage(e)}",
-        "i" = "Saved locally to {local_path}"
-      ))
-    }
-  )
+  # Daily runs: current season only. Full backfill: all seasons (weeks = "all")
+  retro_seasons <- if (length(target_weeks) > 1) {
+    sort(unique(retro_all$season))
+  } else {
+    season
+  }
+  for (retro_s in retro_seasons) {
+    retro_preds <- retro_all |> dplyr::filter(season == retro_s)
+    retro_file_name <- paste0("retrodictions_", retro_s)
+    tryCatch(
+      {
+        save_to_release(retro_preds, retro_file_name, "retrodictions", also_csv = TRUE)
+        cli::cli_alert_success("Uploaded retrodictions_{retro_s} ({nrow(retro_preds)} rows)")
+      },
+      error = function(e) {
+        local_path <- file.path("data-raw", paste0(retro_file_name, ".parquet"))
+        arrow::write_parquet(retro_preds, local_path)
+        cli::cli_warn(c(
+          "Failed to upload retrodictions_{retro_s}: {conditionMessage(e)}",
+          "i" = "Saved locally to {local_path}"
+        ))
+      }
+    )
+  }
+  cli::cli_alert_success("Retrodictions uploaded for {length(retro_seasons)} season{?s}")
   } # end validation_errors == 0
 
   elapsed <- (proc.time() - .pipeline_start)[["elapsed"]]
