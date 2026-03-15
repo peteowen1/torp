@@ -318,6 +318,8 @@ Access AFL data directly from the API
   : Fetch AFL Player Stats
 - [`get_afl_results()`](https://peteowen1.github.io/torp/reference/get_afl_results.md)
   : Fetch AFL Results
+- [`get_afl_ladder()`](https://peteowen1.github.io/torp/reference/get_afl_ladder.md)
+  : Fetch AFL Ladder (Current Standings)
 
 ## Internal / Developer
 

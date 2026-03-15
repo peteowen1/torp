@@ -1,7 +1,7 @@
 # Standardise AFL Venue Names
 
 Maps venue name variants (sponsor names, old names) to canonical stable
-names. Drop-in replacement for `fitzRoy::replace_venues()`.
+names. Standardises AFL venue names to canonical forms.
 
 ## Usage
 

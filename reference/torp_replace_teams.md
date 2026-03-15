@@ -3,7 +3,7 @@
 Maps team name variants (abbreviations, nicknames, Indigenous round
 names) to canonical team names using
 [AFL_TEAM_ALIASES](https://peteowen1.github.io/torp/reference/AFL_TEAM_ALIASES.md).
-Drop-in replacement for `fitzRoy::replace_teams()`.
+Drop-in replacement for external team name standardisation packages.
 
 ## Usage
 

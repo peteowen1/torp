@@ -1,6 +1,7 @@
 # Get Match Chains
 
-Retrieves match chain data for a given season and round.
+Retrieves match chain data for a given season and round, or for a
+specific match ID.
 
 ## Usage
 
@@ -12,7 +13,9 @@ get_match_chains(season = get_afl_season(), round = NA)
 
 - season:
 
-  The AFL season year (numeric).
+  The AFL season year (numeric), or a match ID string (e.g.
+  `"CD_M20260140001"`). When a match ID is supplied, `round` is ignored
+  and chains are fetched for that single match.
 
 - round:
 
@@ -28,5 +31,6 @@ A dataframe containing match chain data.
 ``` r
 if (FALSE) { # \dontrun{
 chains <- get_match_chains(2022, 1)
+chains <- get_match_chains("CD_M20260140001")
 } # }
 ```

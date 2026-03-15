@@ -222,7 +222,9 @@
 <url><loc>https://peteowen1.github.io/torp/reference/dot-fetch_fixtures_for_season.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/dot-fetch_fixtures_for_season_id.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/dot-fetch_forecast_weather.html</loc></url>
+<url><loc>https://peteowen1.github.io/torp/reference/dot-find_game_by_match_id.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/dot-format_match_preds.html</loc></url>
+<url><loc>https://peteowen1.github.io/torp/reference/dot-get_chains_by_match_id.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/dot-get_latest_lineup_ids.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/dot-load_match_weather.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/dot-load_with_cache.html</loc></url>
@@ -267,6 +269,7 @@
 <url><loc>https://peteowen1.github.io/torp/reference/generate_urls.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/get_afl_data_schemas.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/get_afl_fixtures.html</loc></url>
+<url><loc>https://peteowen1.github.io/torp/reference/get_afl_ladder.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/get_afl_lineups.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/get_afl_player_details.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/get_afl_player_stats.html</loc></url>
