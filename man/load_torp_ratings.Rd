@@ -25,5 +25,5 @@ try({ # prevents cran errors
 }
 }
 \seealso{
-\code{\link[=calculate_torp_ratings]{calculate_torp_ratings()}}, \code{\link[=load_player_game_data]{load_player_game_data()}}, \code{\link[=player_season_ratings]{player_season_ratings()}}
+\code{\link[=calculate_epr]{calculate_epr()}}, \code{\link[=load_player_game_data]{load_player_game_data()}}, \code{\link[=player_season_ratings]{player_season_ratings()}}
 }

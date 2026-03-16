@@ -1,8 +1,8 @@
 # optimize_torp_ratings.R
 # ======================
-# Optimize TORP rating parameters to minimize RMSE when team-sum TORP predicts
-# next-game margin. Uses pre-computed raw components and incremental cumulative
-# decay for speed.
+# Optimize EPR (Estimated Player Rating) parameters to minimize RMSE when
+# team-sum EPR predicts next-game margin. Uses pre-computed raw components
+# and incremental cumulative decay for speed.
 #
 # Usage: powershell.exe -Command 'Rscript "data-raw/03-ratings/optimize_torp_ratings.R"'
 
@@ -13,7 +13,7 @@ library(nloptr)
 library(Rcpp)
 devtools::load_all()
 
-cat("=== TORP Ratings Parameter Optimization ===\n\n")
+cat("=== EPR Parameter Optimization ===\n\n")
 
 # 1. Load Data ----
 cat("Loading data...\n")
@@ -376,7 +376,7 @@ names(lu_pos_idx) <- lu_pos_levels
 cat(sprintf("  Position groups: %s
 ", paste(lu_pos_levels, collapse = ", ")))
 
-# Position balance penalty: lambda * sd(position-group mean TORPs). ----
+# Position balance penalty: lambda * sd(position-group mean EPRs). ----
 # Larger values produce more balanced positions at the cost of slightly
 # worse margin prediction accuracy. Set to 0 to disable.
 POSITION_BALANCE_LAMBDA <- 0.1
@@ -403,18 +403,18 @@ cat("Compiling Rcpp cumulative decay kernel...\n")
 Rcpp::cppFunction('
 Rcpp::List cumulative_decay_cpp(Rcpp::IntegerVector pids,
                                 Rcpp::NumericVector dnums,
-                                Rcpp::NumericVector recv_credits,
-                                Rcpp::NumericVector disp_credits,
-                                Rcpp::NumericVector spoil_credits,
-                                Rcpp::NumericVector hitout_credits,
+                                Rcpp::NumericVector recv_epv,
+                                Rcpp::NumericVector disp_epv,
+                                Rcpp::NumericVector spoil_epv,
+                                Rcpp::NumericVector hitout_epv,
                                 double decay_r, double decay_d,
                                 double decay_s, double decay_h) {
   int n = pids.size();
   Rcpp::NumericVector cr(n), cd(n), cs(n), ch(n);
   Rcpp::NumericVector cw_r(n), cw_d(n), cw_s(n), cw_h(n);
 
-  cr[0] = recv_credits[0]; cd[0] = disp_credits[0];
-  cs[0] = spoil_credits[0]; ch[0] = hitout_credits[0];
+  cr[0] = recv_epv[0]; cd[0] = disp_epv[0];
+  cs[0] = spoil_epv[0]; ch[0] = hitout_epv[0];
   cw_r[0] = 1.0; cw_d[0] = 1.0; cw_s[0] = 1.0; cw_h[0] = 1.0;
 
   for (int i = 1; i < n; i++) {
@@ -424,17 +424,17 @@ Rcpp::List cumulative_decay_cpp(Rcpp::IntegerVector pids,
       double df_d = std::exp(-gap / decay_d);
       double df_s = std::exp(-gap / decay_s);
       double df_h = std::exp(-gap / decay_h);
-      cr[i] = cr[i-1] * df_r + recv_credits[i];
-      cd[i] = cd[i-1] * df_d + disp_credits[i];
-      cs[i] = cs[i-1] * df_s + spoil_credits[i];
-      ch[i] = ch[i-1] * df_h + hitout_credits[i];
+      cr[i] = cr[i-1] * df_r + recv_epv[i];
+      cd[i] = cd[i-1] * df_d + disp_epv[i];
+      cs[i] = cs[i-1] * df_s + spoil_epv[i];
+      ch[i] = ch[i-1] * df_h + hitout_epv[i];
       cw_r[i] = cw_r[i-1] * df_r + 1.0;
       cw_d[i] = cw_d[i-1] * df_d + 1.0;
       cw_s[i] = cw_s[i-1] * df_s + 1.0;
       cw_h[i] = cw_h[i-1] * df_h + 1.0;
     } else {
-      cr[i] = recv_credits[i]; cd[i] = disp_credits[i];
-      cs[i] = spoil_credits[i]; ch[i] = hitout_credits[i];
+      cr[i] = recv_epv[i]; cd[i] = disp_epv[i];
+      cs[i] = spoil_epv[i]; ch[i] = hitout_epv[i];
       cw_r[i] = 1.0; cw_d[i] = 1.0; cw_s[i] = 1.0; cw_h[i] = 1.0;
     }
   }
@@ -463,15 +463,15 @@ soft_quantile <- function(x, q, bandwidth = 0.05) {
 }
 
 
-#' Compute credit-assigned points from raw components given params
-#' Returns a data.table with player_id, match_id, date, disp_credits, recv_credits,
-#' spoil_credits, hitout_credits (before position adjustment)
-compute_credits <- function(pgr, params, verbose = FALSE) {
+#' Compute EPV (expected point value) from raw components given params
+#' Returns a data.table with player_id, match_id, date, disp_epv, recv_epv,
+#' spoil_epv, hitout_epv (before position adjustment)
+compute_epv <- function(pgr, params, verbose = FALSE) {
   out <- data.table::copy(pgr)
   p <- params
 
-  # Disposal points
-  out[, disp_credits := (sum_depv_neg + n_neg * p["disp_neg_offset"]) * p["disp_scale"] +
+  # Disposal EPV
+  out[, disp_epv := (sum_depv_neg + n_neg * p["disp_neg_offset"]) * p["disp_scale"] +
                     (sum_depv_pos + n_pos * p["disp_pos_offset"]) * p["disp_scale"] +
                     bounces * p["bounce_wt"] +
                     inside50s * p["inside50s_wt"] + clangers * p["clangers_wt"] +
@@ -482,8 +482,8 @@ compute_credits <- function(pgr, params, verbose = FALSE) {
                     goals * p["goals_wt"] + behinds * p["behinds_wt"] +
                     shots_at_goal * p["shots_at_goal_wt"]]
 
-  # Reception points (intercept marks get separate scale)
-  out[, recv_credits := (p["recv_neg_mult"] * sum_depv_pt_neg + n_recv_neg * p["recv_neg_offset"]) * p["recv_scale"] +
+  # Reception EPV (intercept marks get separate scale)
+  out[, recv_epv := (p["recv_neg_mult"] * sum_depv_pt_neg + n_recv_neg * p["recv_neg_offset"]) * p["recv_scale"] +
                     (p["recv_neg_mult"] * sum_depv_pt_neg_im + n_recv_neg_im * p["recv_neg_offset"]) * p["recv_intercept_mark_scale"] +
                     (p["recv_pos_mult"] * sum_depv_pt_pos + n_recv_pos * p["recv_pos_offset"]) * p["recv_scale"] +
                     contested_poss * p["contested_poss_wt"] + contested_marks * p["contested_marks_wt"] +
@@ -491,25 +491,25 @@ compute_credits <- function(pgr, params, verbose = FALSE) {
                     marks_total * p["marks_wt"] + uncontested_poss * p["uncontested_poss_wt"] +
                     frees_for * p["frees_for_wt"]]
 
-  # Spoil points
-  out[, spoil_credits := spoils * p["spoil_wt"] + tackles * p["tackle_wt"] +
+  # Spoil EPV
+  out[, spoil_epv := spoils * p["spoil_wt"] + tackles * p["tackle_wt"] +
                      pressure_acts * p["pressure_wt"] + def_pressure * p["def_pressure_wt"] +
                      intercepts * p["intercepts_wt"] + one_percenters * p["one_percenters_wt"] +
                      rebound50s * p["rebound50s_wt"] + frees_against * p["frees_against_wt"]]
 
-  # Hitout points
-  out[, hitout_credits := hitouts * p["hitout_wt"] + hitouts_adv * p["hitout_adv_wt"] +
+  # Hitout EPV
+  out[, hitout_epv := hitouts * p["hitout_wt"] + hitouts_adv * p["hitout_adv_wt"] +
                       ruck_contests * p["ruck_contest_wt"] +
                       clearances * p["clearances_wt"]]
 
   # Per-80 normalisation first: divide by actual TOG so ratings are per-full-game.
-  # Must happen BEFORE position-quantile so the quantile operates on per-80 rates
-  # (otherwise low-TOG players have the per-game quantile amplified by 1/tog_safe).
+  # Must happen BEFORE position adjustment so it operates on per-80 rates
+  # (otherwise low-TOG players have the per-game adjustment amplified by 1/tog_safe).
   out[, `:=`(
-    recv_credits   = recv_credits   / tog_safe,
-    disp_credits   = disp_credits   / tog_safe,
-    spoil_credits  = spoil_credits  / tog_safe,
-    hitout_credits = hitout_credits / tog_safe
+    recv_epv   = recv_epv   / tog_safe,
+    disp_epv   = disp_epv   / tog_safe,
+    spoil_epv  = spoil_epv  / tog_safe,
+    hitout_epv = hitout_epv / tog_safe
   )]
 
   # Position-group mean subtraction (on per-80 rates)
@@ -523,17 +523,17 @@ compute_credits <- function(pgr, params, verbose = FALSE) {
       idx <- out$position == pos & !is.na(out$position)
       cat(sprintf("  %-18s %+8.3f %+8.3f %+8.3f %+8.3f
 ", pos,
-        mean(out$recv_credits[idx], na.rm = TRUE),
-        mean(out$disp_credits[idx], na.rm = TRUE),
-        mean(out$spoil_credits[idx], na.rm = TRUE),
-        mean(out$hitout_credits[idx], na.rm = TRUE)))
+        mean(out$recv_epv[idx], na.rm = TRUE),
+        mean(out$disp_epv[idx], na.rm = TRUE),
+        mean(out$spoil_epv[idx], na.rm = TRUE),
+        mean(out$hitout_epv[idx], na.rm = TRUE)))
     }
   }
   out[!is.na(position), `:=`(
-    recv_credits   = recv_credits   - mean(recv_credits, na.rm = TRUE),
-    disp_credits   = disp_credits   - mean(disp_credits, na.rm = TRUE),
-    spoil_credits  = spoil_credits  - mean(spoil_credits, na.rm = TRUE),
-    hitout_credits = hitout_credits - mean(hitout_credits, na.rm = TRUE)
+    recv_epv   = recv_epv   - mean(recv_epv, na.rm = TRUE),
+    disp_epv   = disp_epv   - mean(disp_epv, na.rm = TRUE),
+    spoil_epv  = spoil_epv  - mean(spoil_epv, na.rm = TRUE),
+    hitout_epv = hitout_epv - mean(hitout_epv, na.rm = TRUE)
   ), by = position]
 
   return(out)
@@ -541,15 +541,15 @@ compute_credits <- function(pgr, params, verbose = FALSE) {
 
 #' Compute cumulative decay-weighted sums per player
 #'
-#' @param credit_dt Credit-assigned player-game data (with recv_credits, disp_credits, etc.)
+#' @param epv_dt EPV-assigned player-game data (with recv_epv, disp_epv, etc.)
 #' @param decay_recv Decay factor in days for receiving
 #' @param decay_disp Decay factor in days for disposal
 #' @param decay_spoil Decay factor in days for spoil
 #' @param decay_hitout Decay factor in days for hitout
 #' @return data.table with cumulative sums per player per game
-compute_cumulative <- function(credit_dt, decay_recv, decay_disp = decay_recv,
+compute_cumulative <- function(epv_dt, decay_recv, decay_disp = decay_recv,
                                decay_spoil = decay_recv, decay_hitout = decay_recv) {
-  dt <- data.table::copy(credit_dt)
+  dt <- data.table::copy(epv_dt)
   data.table::setorder(dt, player_id, date)
   dt[, date_num := as.numeric(date)]
 
@@ -558,8 +558,8 @@ compute_cumulative <- function(credit_dt, decay_recv, decay_disp = decay_recv,
     cr <- cd <- cs <- ch <- cw_r <- cw_d <- cw_s <- cw_h <- numeric(n)
     for (i in seq_len(n)) {
       if (i == 1) {
-        cr[i] <- recv_credits[i]; cd[i] <- disp_credits[i]
-        cs[i] <- spoil_credits[i]; ch[i] <- hitout_credits[i]
+        cr[i] <- recv_epv[i]; cd[i] <- disp_epv[i]
+        cs[i] <- spoil_epv[i]; ch[i] <- hitout_epv[i]
         cw_r[i] <- 1; cw_d[i] <- 1; cw_s[i] <- 1; cw_h[i] <- 1
       } else {
         gap <- date_num[i] - date_num[i - 1]
@@ -567,10 +567,10 @@ compute_cumulative <- function(credit_dt, decay_recv, decay_disp = decay_recv,
         df_d <- exp(-gap / decay_disp)
         df_s <- exp(-gap / decay_spoil)
         df_h <- exp(-gap / decay_hitout)
-        cr[i] <- cr[i - 1] * df_r + recv_credits[i]
-        cd[i] <- cd[i - 1] * df_d + disp_credits[i]
-        cs[i] <- cs[i - 1] * df_s + spoil_credits[i]
-        ch[i] <- ch[i - 1] * df_h + hitout_credits[i]
+        cr[i] <- cr[i - 1] * df_r + recv_epv[i]
+        cd[i] <- cd[i - 1] * df_d + disp_epv[i]
+        cs[i] <- cs[i - 1] * df_s + spoil_epv[i]
+        ch[i] <- ch[i - 1] * df_h + hitout_epv[i]
         cw_r[i] <- cw_r[i - 1] * df_r + 1
         cw_d[i] <- cw_d[i - 1] * df_d + 1
         cw_s[i] <- cw_s[i - 1] * df_s + 1
@@ -614,8 +614,8 @@ objective_fn_fast <- function(par, env) {
   # L-BFGS-B enforces bounds natively; keep safety clamp for any other caller
   p <- par
 
-  # --- Compute per-game credits directly on sorted vectors (no copy) ---
-  disp_credits <- (env$sum_depv_neg + env$n_neg * p["disp_neg_offset"]) * p["disp_scale"] +
+  # --- Compute per-game EPV directly on sorted vectors (no copy) ---
+  disp_epv <- (env$sum_depv_neg + env$n_neg * p["disp_neg_offset"]) * p["disp_scale"] +
               (env$sum_depv_pos + env$n_pos * p["disp_pos_offset"]) * p["disp_scale"] +
               env$bounces * p["bounce_wt"] +
               env$inside50s * p["inside50s_wt"] +
@@ -630,7 +630,7 @@ objective_fn_fast <- function(par, env) {
               env$behinds * p["behinds_wt"] +
               env$shots_at_goal * p["shots_at_goal_wt"]
 
-  recv_credits <- (p["recv_neg_mult"] * env$sum_depv_pt_neg + env$n_recv_neg * p["recv_neg_offset"]) * p["recv_scale"] +
+  recv_epv <- (p["recv_neg_mult"] * env$sum_depv_pt_neg + env$n_recv_neg * p["recv_neg_offset"]) * p["recv_scale"] +
               (p["recv_neg_mult"] * env$sum_depv_pt_neg_im + env$n_recv_neg_im * p["recv_neg_offset"]) * p["recv_intercept_mark_scale"] +
               (p["recv_pos_mult"] * env$sum_depv_pt_pos + env$n_recv_pos * p["recv_pos_offset"]) * p["recv_scale"] +
               env$contested_poss * p["contested_poss_wt"] +
@@ -641,7 +641,7 @@ objective_fn_fast <- function(par, env) {
               env$uncontested_poss * p["uncontested_poss_wt"] +
               env$frees_for * p["frees_for_wt"]
 
-  spoil_credits <- env$spoils * p["spoil_wt"] +
+  spoil_epv <- env$spoils * p["spoil_wt"] +
                env$tackles * p["tackle_wt"] +
                env$pressure_acts * p["pressure_wt"] +
                env$def_pressure * p["def_pressure_wt"] +
@@ -650,28 +650,28 @@ objective_fn_fast <- function(par, env) {
                env$intercepts * p["intercepts_wt"] +
                env$rebound50s * p["rebound50s_wt"]
 
-  hitout_credits <- env$hitouts * p["hitout_wt"] +
+  hitout_epv <- env$hitouts * p["hitout_wt"] +
                 env$hitouts_adv * p["hitout_adv_wt"] +
                 env$ruck_contests * p["ruck_contest_wt"] +
                 env$clearances * p["clearances_wt"]
 
-  # Per-80 normalisation first (before position-quantile, so quantile
+  # Per-80 normalisation first (before position adjustment, so adjustment
   # operates on per-80 rates rather than inflating per-game adjustments)
-  disp_credits <- disp_credits / env$tog_safe; recv_credits <- recv_credits / env$tog_safe
-  spoil_credits <- spoil_credits / env$tog_safe; hitout_credits <- hitout_credits / env$tog_safe
+  disp_epv <- disp_epv / env$tog_safe; recv_epv <- recv_epv / env$tog_safe
+  spoil_epv <- spoil_epv / env$tog_safe; hitout_epv <- hitout_epv / env$tog_safe
 
-  # Replace any NaN/NA credits with 0
-  disp_credits[is.na(disp_credits)] <- 0; recv_credits[is.na(recv_credits)] <- 0
-  spoil_credits[is.na(spoil_credits)] <- 0; hitout_credits[is.na(hitout_credits)] <- 0
+  # Replace any NaN/NA EPV with 0
+  disp_epv[is.na(disp_epv)] <- 0; recv_epv[is.na(recv_epv)] <- 0
+  spoil_epv[is.na(spoil_epv)] <- 0; hitout_epv[is.na(hitout_epv)] <- 0
 
   # Position-group mean subtraction
   for (pos in env$position_levels) {
     idx <- env$pos_indices[[pos]]
     if (length(idx) > 0) {
-      recv_credits[idx]   <- recv_credits[idx]   - mean(recv_credits[idx], na.rm = TRUE)
-      disp_credits[idx]   <- disp_credits[idx]   - mean(disp_credits[idx], na.rm = TRUE)
-      spoil_credits[idx]  <- spoil_credits[idx]  - mean(spoil_credits[idx], na.rm = TRUE)
-      hitout_credits[idx] <- hitout_credits[idx] - mean(hitout_credits[idx], na.rm = TRUE)
+      recv_epv[idx]   <- recv_epv[idx]   - mean(recv_epv[idx], na.rm = TRUE)
+      disp_epv[idx]   <- disp_epv[idx]   - mean(disp_epv[idx], na.rm = TRUE)
+      spoil_epv[idx]  <- spoil_epv[idx]  - mean(spoil_epv[idx], na.rm = TRUE)
+      hitout_epv[idx] <- hitout_epv[idx] - mean(hitout_epv[idx], na.rm = TRUE)
     }
   }
 
@@ -681,8 +681,8 @@ objective_fn_fast <- function(par, env) {
   pids <- env$pgr_s$player_id
   dnums <- env$pgr_s$date_num
 
-  cum <- cumulative_decay_cpp(pids, dnums, recv_credits, disp_credits,
-                              spoil_credits, hitout_credits,
+  cum <- cumulative_decay_cpp(pids, dnums, recv_epv, disp_epv,
+                              spoil_epv, hitout_epv,
                               decay_r, decay_d, decay_s, decay_h)
   cr <- cum$cr; cd <- cum$cd; cs <- cum$cs; ch <- cum$ch
   cw_r <- cum$cw_r; cw_d <- cum$cw_d; cw_s <- cum$cw_s; cw_h <- cum$cw_h
@@ -709,38 +709,38 @@ objective_fn_fast <- function(par, env) {
   lu_cw_r[is.na(lu_cw_r)] <- 0; lu_cw_d[is.na(lu_cw_d)] <- 0
   lu_cw_s[is.na(lu_cw_s)] <- 0; lu_cw_h[is.na(lu_cw_h)] <- 0
 
-  # TORP per player-match (per-component shrinkage with per-component wt_gms)
-  torp_vec <- (loading * lu_cr + prior_recv * pr_recv) / (lu_cw_r + prior_recv) +
+  # EPR per player-match (per-component shrinkage with per-component wt_gms)
+  epr_vec <- (loading * lu_cr + prior_recv * pr_recv) / (lu_cw_r + prior_recv) +
               (loading * lu_cd + prior_disp * pr_disp) / (lu_cw_d + prior_disp) +
               (loading * lu_cs + prior_spoil * pr_spoil) / (lu_cw_s + prior_spoil) +
               (loading * lu_ch + prior_hitout * pr_hitout) / (lu_cw_h + prior_hitout)
 
-  # Match-level aggregation (weight per-80 TORP by lineup_tog)
+  # Match-level aggregation (weight per-80 EPR by lineup_tog)
   # rowsum is a compiled C primitive — much faster than tapply for grouped sums
-  torp_weighted <- torp_vec * env$lu_lineup_tog
-  home_sum <- rowsum(torp_weighted * env$lu_is_home, env$lu_match_idx, reorder = FALSE, na.rm = TRUE)
-  away_sum <- rowsum(torp_weighted * env$lu_not_home, env$lu_match_idx, reorder = FALSE, na.rm = TRUE)
-  torp_diff <- as.numeric(home_sum - away_sum)
+  epr_weighted <- epr_vec * env$lu_lineup_tog
+  home_sum <- rowsum(epr_weighted * env$lu_is_home, env$lu_match_idx, reorder = FALSE, na.rm = TRUE)
+  away_sum <- rowsum(epr_weighted * env$lu_not_home, env$lu_match_idx, reorder = FALSE, na.rm = TRUE)
+  epr_diff <- as.numeric(home_sum - away_sum)
 
   # Position balance penalty: penalize systematic position-group bias
   pos_means <- vapply(env$lu_pos_levels, function(pos) {
     idx <- env$lu_pos_idx[[pos]]
     tog <- env$lu_lineup_tog[idx]
-    sum(torp_vec[idx] * tog, na.rm = TRUE) / sum(tog, na.rm = TRUE)
+    sum(epr_vec[idx] * tog, na.rm = TRUE) / sum(tog, na.rm = TRUE)
   }, numeric(1))
   balance_penalty <- POSITION_BALANCE_LAMBDA * sd(pos_means, na.rm = TRUE)
 
   # L2 (ridge) penalty on count-based stat weights
   l2_penalty <- STAT_WEIGHT_LAMBDA * sum(p[L2_PARAM_NAMES]^2)
 
-  fast_rmse_cv(torp_diff, env$eval_matches) + balance_penalty + l2_penalty
+  fast_rmse_cv(epr_diff, env$eval_matches) + balance_penalty + l2_penalty
 }
 
-#' Fast RMSE from torp_diff vector and eval match data
-#' Forces torp_diff coefficient = 1 so TORP points map directly to margin points.
+#' Fast RMSE from epr_diff vector and eval match data
+#' Forces epr_diff coefficient = 1 so EPR points map directly to margin points.
 #' Only fits intercept + distance + familiarity controls on the residual.
-fast_rmse <- function(torp_diff, eval_matches) {
-  residual <- eval_matches$margin - torp_diff
+fast_rmse <- function(epr_diff, eval_matches) {
+  residual <- eval_matches$margin - epr_diff
   X <- cbind(1, eval_matches$log_dist_diff, eval_matches$familiarity_diff)
   valid <- complete.cases(X, residual)
   if (sum(valid) < 50) return(999)
@@ -749,10 +749,10 @@ fast_rmse <- function(torp_diff, eval_matches) {
 }
 
 #' Leave-one-season-out CV RMSE
-#' Computes torp_diff once, then for each fold: fit controls on 3 seasons, test on 1.
+#' Computes epr_diff once, then for each fold: fit controls on 3 seasons, test on 1.
 #' Returns mean test RMSE across folds.
-fast_rmse_cv <- function(torp_diff, eval_matches, cv_seasons = 2022:2025) {
-  residual <- eval_matches$margin - torp_diff
+fast_rmse_cv <- function(epr_diff, eval_matches, cv_seasons = 2022:2025) {
+  residual <- eval_matches$margin - epr_diff
   X <- cbind(1, eval_matches$log_dist_diff, eval_matches$familiarity_diff)
   valid <- complete.cases(X, residual)
   seasons <- eval_matches$season
@@ -769,7 +769,7 @@ fast_rmse_cv <- function(torp_diff, eval_matches, cv_seasons = 2022:2025) {
   mean(fold_rmses)
 }
 
-#' Rolling join cumulative data to lineup, then compute match-level torp_diff
+#' Rolling join cumulative data to lineup, then compute match-level epr_diff
 #'
 #' @param player_cum Cumulative sums per player (from compute_cumulative)
 #' @param lineup_dt Pre-computed lineup expansion
@@ -779,18 +779,18 @@ fast_rmse_cv <- function(torp_diff, eval_matches, cv_seasons = 2022:2025) {
 #' @param prior_disp Prior games for disposal
 #' @param prior_spoil Prior games for spoil
 #' @param prior_hitout Prior games for hitout
-#' @return Numeric vector of torp_diff per match
-compute_torp_diff <- function(player_cum, lineup_dt, eval_matches,
+#' @return Numeric vector of epr_diff per match
+compute_epr_diff <- function(player_cum, lineup_dt, eval_matches,
                               loading, prior_recv, prior_disp, prior_spoil, prior_hitout,
-                              pr_recv = RATING_PRIOR_RATE_RECV, pr_disp = RATING_PRIOR_RATE_DISP,
-                              pr_spoil = RATING_PRIOR_RATE_SPOIL, pr_hitout = RATING_PRIOR_RATE_HITOUT) {
+                              pr_recv = EPR_PRIOR_RATE_RECV, pr_disp = EPR_PRIOR_RATE_DISP,
+                              pr_spoil = EPR_PRIOR_RATE_SPOIL, pr_hitout = EPR_PRIOR_RATE_HITOUT) {
   lookup <- player_cum[, .(player_id, date_num, cum_recv, cum_disp, cum_spoil, cum_hitout,
                            cum_wt_recv, cum_wt_disp, cum_wt_spoil, cum_wt_hitout)]
   data.table::setkey(lookup, player_id, date_num)
 
   joined <- lookup[lineup_dt,
     .(match_idx, is_home, lineup_tog = i.lineup_tog,
-      torp = x.cum_recv, cd = x.cum_disp,
+      cr = x.cum_recv, cd = x.cum_disp,
       cs = x.cum_spoil, ch = x.cum_hitout,
       cw_r = x.cum_wt_recv, cw_d = x.cum_wt_disp,
       cw_s = x.cum_wt_spoil, cw_h = x.cum_wt_hitout),
@@ -798,29 +798,29 @@ compute_torp_diff <- function(player_cum, lineup_dt, eval_matches,
   joined[is.na(lineup_tog), lineup_tog := 0.75]
 
   # Replace NAs with 0 before formula (per-component priors handle the shrinkage target)
-  joined[is.na(torp), `:=`(torp = 0, cd = 0, cs = 0, ch = 0,
-                            cw_r = 0, cw_d = 0, cw_s = 0, cw_h = 0)]
+  joined[is.na(cr), `:=`(cr = 0, cd = 0, cs = 0, ch = 0,
+                         cw_r = 0, cw_d = 0, cw_s = 0, cw_h = 0)]
 
-  # Compute TORP per player (per-component shrinkage with per-component wt_gms)
-  joined[, player_torp :=
-    (loading * torp + prior_recv * pr_recv) / (cw_r + prior_recv) +
+  # Compute EPR per player (per-component shrinkage with per-component wt_gms)
+  joined[, player_epr :=
+    (loading * cr + prior_recv * pr_recv) / (cw_r + prior_recv) +
     (loading * cd + prior_disp * pr_disp) / (cw_d + prior_disp) +
     (loading * cs + prior_spoil * pr_spoil) / (cw_s + prior_spoil) +
     (loading * ch + prior_hitout * pr_hitout) / (cw_h + prior_hitout)
   ]
-  joined[is.na(player_torp), player_torp := pr_recv + pr_disp + pr_spoil + pr_hitout]
+  joined[is.na(player_epr), player_epr := pr_recv + pr_disp + pr_spoil + pr_hitout]
 
-  # Aggregate to match-level (weight per-80 TORP by lineup_tog)
-  match_torp <- joined[, .(
-    home_torp = sum(player_torp[is_home] * lineup_tog[is_home], na.rm = TRUE),
-    away_torp = sum(player_torp[!is_home] * lineup_tog[!is_home], na.rm = TRUE)
+  # Aggregate to match-level (weight per-80 EPR by lineup_tog)
+  match_epr <- joined[, .(
+    home_epr = sum(player_epr[is_home] * lineup_tog[is_home], na.rm = TRUE),
+    away_epr = sum(player_epr[!is_home] * lineup_tog[!is_home], na.rm = TRUE)
   ), by = match_idx]
-  data.table::setorder(match_torp, match_idx)
+  data.table::setorder(match_epr, match_idx)
 
-  match_torp$home_torp - match_torp$away_torp
+  match_epr$home_epr - match_epr$away_epr
 }
 
-#' Objective function: compute RMSE of margin ~ torp_diff + controls
+#' Objective function: compute RMSE of margin ~ epr_diff + controls
 #'
 #' @param par Named numeric vector of all parameters
 #' @param pgr Pre-computed player-game raw data
@@ -837,11 +837,11 @@ objective_fn <- function(par, pgr, match_dt, train_seasons = 2022:2025,
   prior_spoil  <- par["prior_games_spoil"]
   prior_hitout <- par["prior_games_hitout"]
 
-  # Compute credit-assigned points
-  credit_dt <- compute_credits(pgr, par)
+  # Compute EPV-assigned points
+  epv_dt <- compute_epv(pgr, par)
 
   # Compute cumulative decay-weighted sums (per-component decay)
-  player_cum <- compute_cumulative(credit_dt, par["decay_recv"], par["decay_disp"],
+  player_cum <- compute_cumulative(epv_dt, par["decay_recv"], par["decay_disp"],
                                    par["decay_spoil"], par["decay_hitout"])
 
   # Use pre-computed eval data if available, otherwise build
@@ -864,11 +864,11 @@ objective_fn <- function(par, pgr, match_dt, train_seasons = 2022:2025,
     lineup_dt <- data.table::rbindlist(lineup_rows)
   }
 
-  torp_diff <- compute_torp_diff(player_cum, lineup_dt, eval_matches,
+  epr_diff <- compute_epr_diff(player_cum, lineup_dt, eval_matches,
                                  loading, prior_recv, prior_disp, prior_spoil, prior_hitout,
                                  pr_recv = par["prior_rate_recv"], pr_disp = par["prior_rate_disp"],
                                  pr_spoil = par["prior_rate_spoil"], pr_hitout = par["prior_rate_hitout"])
-  fast_rmse_cv(torp_diff, eval_matches)
+  fast_rmse_cv(epr_diff, eval_matches)
 }
 
 # 4. Parameter Setup ----
@@ -876,65 +876,65 @@ objective_fn <- function(par, pgr, match_dt, train_seasons = 2022:2025,
 # Read current defaults from package constants (loaded via devtools::load_all())
 par_defaults <- c(
   # --- EPV/scale params (disp) ---
-  disp_neg_offset        = CREDIT_DISP_NEG_OFFSET,
-  disp_pos_offset        = CREDIT_DISP_POS_OFFSET,
-  disp_scale             = CREDIT_DISP_SCALE,
+  disp_neg_offset        = EPV_DISP_NEG_OFFSET,
+  disp_pos_offset        = EPV_DISP_POS_OFFSET,
+  disp_scale             = EPV_DISP_SCALE,
   # --- EPV/scale params (recv) ---
-  recv_neg_mult          = CREDIT_RECV_NEG_MULT,
-  recv_neg_offset        = CREDIT_RECV_NEG_OFFSET,
-  recv_pos_mult          = CREDIT_RECV_POS_MULT,
-  recv_pos_offset        = CREDIT_RECV_POS_OFFSET,
-  recv_scale             = CREDIT_RECV_SCALE,
-  recv_intercept_mark_scale = CREDIT_RECV_INTERCEPT_MARK_SCALE,
+  recv_neg_mult          = EPV_RECV_NEG_MULT,
+  recv_neg_offset        = EPV_RECV_NEG_OFFSET,
+  recv_pos_mult          = EPV_RECV_POS_MULT,
+  recv_pos_offset        = EPV_RECV_POS_OFFSET,
+  recv_scale             = EPV_RECV_SCALE,
+  recv_intercept_mark_scale = EPV_RECV_INTERCEPT_MARK_SCALE,
   # --- Stat weights: disp component ---
-  bounce_wt              = CREDIT_BOUNCE_WT,
-  inside50s_wt           = CREDIT_INSIDE50S_WT,
-  clangers_wt            = CREDIT_CLANGERS_WT,
-  score_involvements_wt  = CREDIT_SCORE_INVOLVEMENTS_WT,
-  kicks_wt               = CREDIT_KICKS_WT,
-  handballs_wt           = CREDIT_HANDBALLS_WT,
-  metres_gained_wt       = CREDIT_METRES_GAINED_WT,
-  turnovers_wt           = CREDIT_TURNOVERS_WT,
-  goal_assists_wt        = CREDIT_GOAL_ASSISTS_WT,
+  bounce_wt              = EPV_BOUNCE_WT,
+  inside50s_wt           = EPV_INSIDE50S_WT,
+  clangers_wt            = EPV_CLANGERS_WT,
+  score_involvements_wt  = EPV_SCORE_INVOLVEMENTS_WT,
+  kicks_wt               = EPV_KICKS_WT,
+  handballs_wt           = EPV_HANDBALLS_WT,
+  metres_gained_wt       = EPV_METRES_GAINED_WT,
+  turnovers_wt           = EPV_TURNOVERS_WT,
+  goal_assists_wt        = EPV_GOAL_ASSISTS_WT,
   # --- Stat weights: recv component ---
-  contested_poss_wt      = CREDIT_CONTESTED_POSS_WT,
-  contested_marks_wt     = CREDIT_CONTESTED_MARKS_WT,
-  ground_ball_gets_wt    = CREDIT_GROUND_BALL_GETS_WT,
-  goals_wt               = CREDIT_GOALS_WT,
-  marks_inside50_wt      = CREDIT_MARKS_INSIDE50_WT,
-  behinds_wt             = CREDIT_BEHINDS_WT,
-  marks_wt               = CREDIT_MARKS_WT,
-  uncontested_poss_wt    = CREDIT_UNCONTESTED_POSS_WT,
-  shots_at_goal_wt       = CREDIT_SHOTS_AT_GOAL_WT,
+  contested_poss_wt      = EPV_CONTESTED_POSS_WT,
+  contested_marks_wt     = EPV_CONTESTED_MARKS_WT,
+  ground_ball_gets_wt    = EPV_GROUND_BALL_GETS_WT,
+  goals_wt               = EPV_GOALS_WT,
+  marks_inside50_wt      = EPV_MARKS_INSIDE50_WT,
+  behinds_wt             = EPV_BEHINDS_WT,
+  marks_wt               = EPV_MARKS_WT,
+  uncontested_poss_wt    = EPV_UNCONTESTED_POSS_WT,
+  shots_at_goal_wt       = EPV_SHOTS_AT_GOAL_WT,
   # --- Stat weights: spoil component ---
-  spoil_wt               = CREDIT_SPOIL_WT,
-  tackle_wt              = CREDIT_TACKLE_WT,
-  pressure_wt            = CREDIT_PRESSURE_WT,
-  def_pressure_wt        = CREDIT_DEF_PRESSURE_WT,
-  intercepts_wt          = CREDIT_INTERCEPTS_WT,
-  one_percenters_wt      = CREDIT_ONE_PERCENTERS_WT,
-  rebound50s_wt          = CREDIT_REBOUND50S_WT,
-  frees_against_wt       = CREDIT_FREES_AGAINST_WT,
+  spoil_wt               = EPV_SPOIL_WT,
+  tackle_wt              = EPV_TACKLE_WT,
+  pressure_wt            = EPV_PRESSURE_WT,
+  def_pressure_wt        = EPV_DEF_PRESSURE_WT,
+  intercepts_wt          = EPV_INTERCEPTS_WT,
+  one_percenters_wt      = EPV_ONE_PERCENTERS_WT,
+  rebound50s_wt          = EPV_REBOUND50S_WT,
+  frees_against_wt       = EPV_FREES_AGAINST_WT,
   # --- Stat weights: hitout component ---
-  hitout_wt              = CREDIT_HITOUT_WT,
-  hitout_adv_wt          = CREDIT_HITOUT_ADV_WT,
-  ruck_contest_wt        = CREDIT_RUCK_CONTEST_WT,
-  clearances_wt          = CREDIT_CLEARANCES_WT,
-  frees_for_wt           = CREDIT_FREES_FOR_WT,
+  hitout_wt              = EPV_HITOUT_WT,
+  hitout_adv_wt          = EPV_HITOUT_ADV_WT,
+  ruck_contest_wt        = EPV_RUCK_CONTEST_WT,
+  clearances_wt          = EPV_CLEARANCES_WT,
+  frees_for_wt           = EPV_FREES_FOR_WT,
   # --- Aggregation params ---
-  decay_recv             = RATING_DECAY_RECV,
-  decay_disp             = RATING_DECAY_DISP,
-  decay_spoil            = RATING_DECAY_SPOIL,
-  decay_hitout           = RATING_DECAY_HITOUT,
-  loading                = RATING_LOADING_DEFAULT,
-  prior_games_recv       = RATING_PRIOR_GAMES_RECV,
-  prior_games_disp       = RATING_PRIOR_GAMES_DISP,
-  prior_games_spoil      = RATING_PRIOR_GAMES_SPOIL,
-  prior_games_hitout     = RATING_PRIOR_GAMES_HITOUT,
-  prior_rate_recv        = RATING_PRIOR_RATE_RECV,
-  prior_rate_disp        = RATING_PRIOR_RATE_DISP,
-  prior_rate_spoil       = RATING_PRIOR_RATE_SPOIL,
-  prior_rate_hitout      = RATING_PRIOR_RATE_HITOUT
+  decay_recv             = EPR_DECAY_RECV,
+  decay_disp             = EPR_DECAY_DISP,
+  decay_spoil            = EPR_DECAY_SPOIL,
+  decay_hitout           = EPR_DECAY_HITOUT,
+  loading                = EPR_LOADING_DEFAULT,
+  prior_games_recv       = EPR_PRIOR_GAMES_RECV,
+  prior_games_disp       = EPR_PRIOR_GAMES_DISP,
+  prior_games_spoil      = EPR_PRIOR_GAMES_SPOIL,
+  prior_games_hitout     = EPR_PRIOR_GAMES_HITOUT,
+  prior_rate_recv        = EPR_PRIOR_RATE_RECV,
+  prior_rate_disp        = EPR_PRIOR_RATE_DISP,
+  prior_rate_spoil       = EPR_PRIOR_RATE_SPOIL,
+  prior_rate_hitout      = EPR_PRIOR_RATE_HITOUT
 )
 
 # Convert raw-scale defaults to normalized-scale (multiply by SD)
@@ -1140,11 +1140,11 @@ agg_grid <- expand.grid(
 
 cat(sprintf("  Grid has %d combinations\n", nrow(agg_grid)))
 
-# --- Fast Stage 1: pre-compute credits once + cumulative sums per decay ---
+# --- Fast Stage 1: pre-compute EPV once + cumulative sums per decay ---
 # Credit params are fixed during Stage 1, only agg params vary.
 # All 4 decay components share one value during grid search (Nelder-Mead diverges them later).
-cat("  Pre-computing credits (fixed during Stage 1)...\n")
-s1_credit_dt <- compute_credits(pgr, par_defaults)
+cat("  Pre-computing EPV (fixed during Stage 1)...\n")
+s1_epv_dt <- compute_epv(pgr, par_defaults)
 
 decay_values <- sort(unique(agg_grid$decay_shared))
 cat(sprintf("  Pre-computing cumulative sums for %d decay values...\n", length(decay_values)))
@@ -1153,7 +1153,7 @@ cat(sprintf("  Pre-computing cumulative sums for %d decay values...\n", length(d
 decay_precomp <- list()
 for (d in decay_values) {
   cat(sprintf("    decay=%d...\n", d))
-  pcum <- compute_cumulative(s1_credit_dt, d)  # all 4 components share same decay
+  pcum <- compute_cumulative(s1_epv_dt, d)  # all 4 components share same decay
 
   # Rolling join to pre-computed lineup
   lookup <- pcum[, .(player_id, date_num, cum_recv, cum_disp, cum_spoil, cum_hitout, cum_wt_recv)]
@@ -1187,36 +1187,36 @@ for (i in seq_len(nrow(agg_grid))) {
 
   j <- decay_precomp[[d]]
 
-  # Vectorized TORP per player-match (~37K elements)
+  # Vectorized EPR per player-match (~37K elements)
   # Use default per-component priors for Stage 1 (optimized in Stage 2)
   # All 4 cum_wt columns are identical during Stage 1 (shared decay)
   s1_pr_r <- par_defaults["prior_rate_recv"]
   s1_pr_d <- par_defaults["prior_rate_disp"]
   s1_pr_s <- par_defaults["prior_rate_spoil"]
   s1_pr_h <- par_defaults["prior_rate_hitout"]
-  torp_vec <- (ld * j$cr + pr * s1_pr_r) / (j$cw + pr) +
+  epr_vec <- (ld * j$cr + pr * s1_pr_r) / (j$cw + pr) +
               (ld * j$cd + pd * s1_pr_d) / (j$cw + pd) +
               (ld * j$cs + ps * s1_pr_s) / (j$cw + ps) +
               (ld * j$ch + ph * s1_pr_h) / (j$cw + ph)
 
-  # Aggregate to match-level torp_diff (weight per-80 TORP by lineup_tog)
-  torp_weighted <- torp_vec * j$lineup_tog
-  home_sum <- rowsum(torp_weighted * j$is_home, j$match_idx, reorder = FALSE, na.rm = TRUE)
-  away_sum <- rowsum(torp_weighted * (!j$is_home), j$match_idx, reorder = FALSE, na.rm = TRUE)
-  torp_diff <- as.numeric(home_sum - away_sum)
+  # Aggregate to match-level epr_diff (weight per-80 EPR by lineup_tog)
+  epr_weighted <- epr_vec * j$lineup_tog
+  home_sum <- rowsum(epr_weighted * j$is_home, j$match_idx, reorder = FALSE, na.rm = TRUE)
+  away_sum <- rowsum(epr_weighted * (!j$is_home), j$match_idx, reorder = FALSE, na.rm = TRUE)
+  epr_diff <- as.numeric(home_sum - away_sum)
 
   # Position balance penalty
   pos_means_s1 <- vapply(lu_pos_levels, function(pos) {
     idx <- lu_pos_idx[[pos]]
     tog <- j$lineup_tog[idx]
-    sum(torp_vec[idx] * tog, na.rm = TRUE) / sum(tog, na.rm = TRUE)
+    sum(epr_vec[idx] * tog, na.rm = TRUE) / sum(tog, na.rm = TRUE)
   }, numeric(1))
   balance_penalty_s1 <- POSITION_BALANCE_LAMBDA * sd(pos_means_s1, na.rm = TRUE)
 
   # Leave-one-season-out CV RMSE + balance penalty + L2 penalty
-  # L2 is constant during Stage 1 (credit params fixed), but must be included
+  # L2 is constant during Stage 1 (EPV params fixed), but must be included
   # so the baseline comparison is consistent with Stages 2-3
-  rmse_i <- fast_rmse_cv(torp_diff, eval_matches_all) + balance_penalty_s1 + baseline_l2
+  rmse_i <- fast_rmse_cv(epr_diff, eval_matches_all) + balance_penalty_s1 + baseline_l2
 
   if (rmse_i < best_rmse) {
     best_rmse <- rmse_i
@@ -1239,7 +1239,7 @@ for (i in seq_len(nrow(agg_grid))) {
 }
 
 # Clean up Stage 1 pre-computed data
-rm(s1_credit_dt, decay_precomp)
+rm(s1_epv_dt, decay_precomp)
 
 tictoc::toc()
 cat(sprintf("Stage 1 best RMSE: %.4f\n\n", best_rmse))
@@ -1456,13 +1456,13 @@ Final optimized RMSE (LOOCV): %.4f
 # 7. Per-fold RMSE breakdown ----
 cat("=== Per-fold RMSE breakdown (leave-one-season-out) ===\n")
 
-# Recompute torp_diff with optimized params for fold breakdown
-# Use the fast objective internals to get torp_diff
+# Recompute epr_diff with optimized params for fold breakdown
+# Use the fast objective internals to get epr_diff
 # We already have final_rmse, now compute per-fold details
 
-# Compute torp_diff using objective_fn's pipeline for reporting
-credit_dt_final <- compute_credits(pgr, best_par, verbose = TRUE)
-pcum_final <- compute_cumulative(credit_dt_final, best_par["decay_recv"], best_par["decay_disp"],
+# Compute epr_diff using objective_fn's pipeline for reporting
+epv_dt_final <- compute_epv(pgr, best_par, verbose = TRUE)
+pcum_final <- compute_cumulative(epv_dt_final, best_par["decay_recv"], best_par["decay_disp"],
                                  best_par["decay_spoil"], best_par["decay_hitout"])
 lookup_final <- pcum_final[, .(player_id, date_num, cum_recv, cum_disp, cum_spoil, cum_hitout,
                                cum_wt_recv, cum_wt_disp, cum_wt_spoil, cum_wt_hitout)]
@@ -1481,23 +1481,23 @@ pd <- best_par["prior_games_disp"]; ps <- best_par["prior_games_spoil"]
 ph <- best_par["prior_games_hitout"]
 prr <- best_par["prior_rate_recv"]; prd <- best_par["prior_rate_disp"]
 prs <- best_par["prior_rate_spoil"]; prh <- best_par["prior_rate_hitout"]
-torp_vec_final <- (ld * joined_final$cr + pr * prr) / (joined_final$cw_r + pr) +
+epr_vec_final <- (ld * joined_final$cr + pr * prr) / (joined_final$cw_r + pr) +
                   (ld * joined_final$cd + pd * prd) / (joined_final$cw_d + pd) +
                   (ld * joined_final$cs + ps * prs) / (joined_final$cw_s + ps) +
                   (ld * joined_final$ch + ph * prh) / (joined_final$cw_h + ph)
-torp_weighted_f <- torp_vec_final * joined_final$lineup_tog
-home_sum_f <- tapply(torp_weighted_f * joined_final$is_home, joined_final$match_idx, sum, na.rm = TRUE)
-away_sum_f <- tapply(torp_weighted_f * (!joined_final$is_home), joined_final$match_idx, sum, na.rm = TRUE)
-torp_diff_final <- as.numeric(home_sum_f - away_sum_f)
+epr_weighted_f <- epr_vec_final * joined_final$lineup_tog
+home_sum_f <- tapply(epr_weighted_f * joined_final$is_home, joined_final$match_idx, sum, na.rm = TRUE)
+away_sum_f <- tapply(epr_weighted_f * (!joined_final$is_home), joined_final$match_idx, sum, na.rm = TRUE)
+epr_diff_final <- as.numeric(home_sum_f - away_sum_f)
 
 # Per-fold RMSE for optimized params
-residual_f <- eval_matches_all$margin - torp_diff_final
+residual_f <- eval_matches_all$margin - epr_diff_final
 X_f <- cbind(1, eval_matches_all$log_dist_diff, eval_matches_all$familiarity_diff)
 valid_f <- complete.cases(X_f, residual_f)
 
-# Also compute default torp_diff for comparison
-credit_dt_def <- compute_credits(pgr, par_defaults)
-pcum_def <- compute_cumulative(credit_dt_def, par_defaults["decay_recv"], par_defaults["decay_disp"],
+# Also compute default epr_diff for comparison
+epv_dt_def <- compute_epv(pgr, par_defaults)
+pcum_def <- compute_cumulative(epv_dt_def, par_defaults["decay_recv"], par_defaults["decay_disp"],
                                par_defaults["decay_spoil"], par_defaults["decay_hitout"])
 lookup_def <- pcum_def[, .(player_id, date_num, cum_recv, cum_disp, cum_spoil, cum_hitout,
                            cum_wt_recv, cum_wt_disp, cum_wt_spoil, cum_wt_hitout)]
@@ -1516,16 +1516,16 @@ pd_d <- par_defaults["prior_games_disp"]; ps_d <- par_defaults["prior_games_spoi
 ph_d <- par_defaults["prior_games_hitout"]
 prr_d <- par_defaults["prior_rate_recv"]; prd_d <- par_defaults["prior_rate_disp"]
 prs_d <- par_defaults["prior_rate_spoil"]; prh_d <- par_defaults["prior_rate_hitout"]
-torp_vec_def <- (ld_d * joined_def$cr + pr_d * prr_d) / (joined_def$cw_r + pr_d) +
+epr_vec_def <- (ld_d * joined_def$cr + pr_d * prr_d) / (joined_def$cw_r + pr_d) +
                 (ld_d * joined_def$cd + pd_d * prd_d) / (joined_def$cw_d + pd_d) +
                 (ld_d * joined_def$cs + ps_d * prs_d) / (joined_def$cw_s + ps_d) +
                 (ld_d * joined_def$ch + ph_d * prh_d) / (joined_def$cw_h + ph_d)
-torp_weighted_d <- torp_vec_def * joined_def$lineup_tog
-home_sum_d <- tapply(torp_weighted_d * joined_def$is_home, joined_def$match_idx, sum, na.rm = TRUE)
-away_sum_d <- tapply(torp_weighted_d * (!joined_def$is_home), joined_def$match_idx, sum, na.rm = TRUE)
-torp_diff_def <- as.numeric(home_sum_d - away_sum_d)
+epr_weighted_d <- epr_vec_def * joined_def$lineup_tog
+home_sum_d <- tapply(epr_weighted_d * joined_def$is_home, joined_def$match_idx, sum, na.rm = TRUE)
+away_sum_d <- tapply(epr_weighted_d * (!joined_def$is_home), joined_def$match_idx, sum, na.rm = TRUE)
+epr_diff_def <- as.numeric(home_sum_d - away_sum_d)
 
-residual_d <- eval_matches_all$margin - torp_diff_def
+residual_d <- eval_matches_all$margin - epr_diff_def
 seasons_v <- eval_matches_all$season
 
 cat(sprintf("  %-8s  %8s  %8s  %8s\n", "Season", "Optimized", "Defaults", "Improvement"))
@@ -1537,15 +1537,15 @@ for (s in 2022:2025) {
   pred_opt <- X_f[test_m, , drop = FALSE] %*% fit_opt$coefficients
   rmse_opt <- sqrt(mean((residual_f[test_m] - pred_opt)^2))
   # Defaults
-  res_d <- eval_matches_all$margin - torp_diff_def
+  res_d <- eval_matches_all$margin - epr_diff_def
   X_d <- X_f  # same controls
   fit_def <- .lm.fit(X_d[train_m, , drop = FALSE], res_d[train_m])
   pred_def <- X_d[test_m, , drop = FALSE] %*% fit_def$coefficients
   rmse_def <- sqrt(mean((res_d[test_m] - pred_def)^2))
   cat(sprintf("  %-8d  %8.4f  %8.4f  %+8.4f\n", s, rmse_opt, rmse_def, rmse_def - rmse_opt))
 }
-rm(credit_dt_final, pcum_final, lookup_final, joined_final,
-   credit_dt_def, pcum_def, lookup_def, joined_def)
+rm(epv_dt_final, pcum_final, lookup_final, joined_final,
+   epv_dt_def, pcum_def, lookup_def, joined_def)
 
 # 8. Results ----
 cat("\n=== OPTIMIZED PARAMETERS (normalized scale) ===\n")
@@ -1593,13 +1593,13 @@ for (nm in agg_params) {
 
 cat("\n# Summary:\n")
 # Compute pure (unpenalized) RMSE for the optimized params for fair comparison
-final_rmse_pure <- fast_rmse_cv(torp_diff_final, eval_matches_all)
+final_rmse_pure <- fast_rmse_cv(epr_diff_final, eval_matches_all)
 final_l2 <- STAT_WEIGHT_LAMBDA * sum(best_par[L2_PARAM_NAMES]^2)
 cat(sprintf("  No-ratings RMSE (dist+fam only):    %.4f\n", no_rating_rmse))
 cat(sprintf("  Default-params RMSE (pure):         %.4f\n", baseline_rmse_pure))
 cat(sprintf("  Optimized RMSE (pure):              %.4f\n", final_rmse_pure))
 cat(sprintf("  Optimized RMSE (penalized):         %.4f  (L2=%.4f)\n", final_rmse, final_l2))
-cat(sprintf("  TORP value (no-ratings - default):  %.4f (%.1f%%)\n",
+cat(sprintf("  EPR value (no-ratings - default):  %.4f (%.1f%%)\n",
             no_rating_rmse - baseline_rmse_pure,
             100 * (no_rating_rmse - baseline_rmse_pure) / no_rating_rmse))
 cat(sprintf("  Optimization gain (pure RMSE):      %.4f (%.2f%%)\n",
@@ -1610,59 +1610,59 @@ cat(sprintf("  Optimization gain (pure RMSE):      %.4f (%.2f%%)\n",
 
 # Map from optimizer param names -> constants.R variable names
 param_to_constant <- c(
-  disp_neg_offset   = "CREDIT_DISP_NEG_OFFSET",
-  disp_pos_offset   = "CREDIT_DISP_POS_OFFSET",
-  disp_scale        = "CREDIT_DISP_SCALE",
-  bounce_wt    = "CREDIT_BOUNCE_WT",
-  recv_neg_mult     = "CREDIT_RECV_NEG_MULT",
-  recv_neg_offset   = "CREDIT_RECV_NEG_OFFSET",
-  recv_pos_mult     = "CREDIT_RECV_POS_MULT",
-  recv_pos_offset   = "CREDIT_RECV_POS_OFFSET",
-  recv_scale        = "CREDIT_RECV_SCALE",
-  recv_intercept_mark_scale = "CREDIT_RECV_INTERCEPT_MARK_SCALE",
-  spoil_wt          = "CREDIT_SPOIL_WT",
-  tackle_wt         = "CREDIT_TACKLE_WT",
-  pressure_wt       = "CREDIT_PRESSURE_WT",
-  def_pressure_wt   = "CREDIT_DEF_PRESSURE_WT",
-  hitout_wt         = "CREDIT_HITOUT_WT",
-  hitout_adv_wt     = "CREDIT_HITOUT_ADV_WT",
-  ruck_contest_wt        = "CREDIT_RUCK_CONTEST_WT",
-  contested_poss_wt      = "CREDIT_CONTESTED_POSS_WT",
-  contested_marks_wt     = "CREDIT_CONTESTED_MARKS_WT",
-  ground_ball_gets_wt    = "CREDIT_GROUND_BALL_GETS_WT",
-  marks_inside50_wt      = "CREDIT_MARKS_INSIDE50_WT",
-  inside50s_wt           = "CREDIT_INSIDE50S_WT",
-  clangers_wt            = "CREDIT_CLANGERS_WT",
-  score_involvements_wt  = "CREDIT_SCORE_INVOLVEMENTS_WT",
-  intercepts_wt          = "CREDIT_INTERCEPTS_WT",
-  one_percenters_wt      = "CREDIT_ONE_PERCENTERS_WT",
-  rebound50s_wt          = "CREDIT_REBOUND50S_WT",
-  frees_against_wt       = "CREDIT_FREES_AGAINST_WT",
-  clearances_wt          = "CREDIT_CLEARANCES_WT",
-  frees_for_wt           = "CREDIT_FREES_FOR_WT",
-  goals_wt               = "CREDIT_GOALS_WT",
-  behinds_wt             = "CREDIT_BEHINDS_WT",
-  marks_wt               = "CREDIT_MARKS_WT",
-  uncontested_poss_wt    = "CREDIT_UNCONTESTED_POSS_WT",
-  shots_at_goal_wt       = "CREDIT_SHOTS_AT_GOAL_WT",
-  kicks_wt               = "CREDIT_KICKS_WT",
-  handballs_wt           = "CREDIT_HANDBALLS_WT",
-  metres_gained_wt       = "CREDIT_METRES_GAINED_WT",
-  turnovers_wt           = "CREDIT_TURNOVERS_WT",
-  goal_assists_wt        = "CREDIT_GOAL_ASSISTS_WT",
-  decay_recv        = "RATING_DECAY_RECV",
-  decay_disp        = "RATING_DECAY_DISP",
-  decay_spoil       = "RATING_DECAY_SPOIL",
-  decay_hitout      = "RATING_DECAY_HITOUT",
-  loading           = "RATING_LOADING_DEFAULT",
-  prior_games_recv  = "RATING_PRIOR_GAMES_RECV",
-  prior_games_disp  = "RATING_PRIOR_GAMES_DISP",
-  prior_games_spoil = "RATING_PRIOR_GAMES_SPOIL",
-  prior_games_hitout = "RATING_PRIOR_GAMES_HITOUT",
-  prior_rate_recv    = "RATING_PRIOR_RATE_RECV",
-  prior_rate_disp    = "RATING_PRIOR_RATE_DISP",
-  prior_rate_spoil   = "RATING_PRIOR_RATE_SPOIL",
-  prior_rate_hitout  = "RATING_PRIOR_RATE_HITOUT"
+  disp_neg_offset   = "EPV_DISP_NEG_OFFSET",
+  disp_pos_offset   = "EPV_DISP_POS_OFFSET",
+  disp_scale        = "EPV_DISP_SCALE",
+  bounce_wt    = "EPV_BOUNCE_WT",
+  recv_neg_mult     = "EPV_RECV_NEG_MULT",
+  recv_neg_offset   = "EPV_RECV_NEG_OFFSET",
+  recv_pos_mult     = "EPV_RECV_POS_MULT",
+  recv_pos_offset   = "EPV_RECV_POS_OFFSET",
+  recv_scale        = "EPV_RECV_SCALE",
+  recv_intercept_mark_scale = "EPV_RECV_INTERCEPT_MARK_SCALE",
+  spoil_wt          = "EPV_SPOIL_WT",
+  tackle_wt         = "EPV_TACKLE_WT",
+  pressure_wt       = "EPV_PRESSURE_WT",
+  def_pressure_wt   = "EPV_DEF_PRESSURE_WT",
+  hitout_wt         = "EPV_HITOUT_WT",
+  hitout_adv_wt     = "EPV_HITOUT_ADV_WT",
+  ruck_contest_wt        = "EPV_RUCK_CONTEST_WT",
+  contested_poss_wt      = "EPV_CONTESTED_POSS_WT",
+  contested_marks_wt     = "EPV_CONTESTED_MARKS_WT",
+  ground_ball_gets_wt    = "EPV_GROUND_BALL_GETS_WT",
+  marks_inside50_wt      = "EPV_MARKS_INSIDE50_WT",
+  inside50s_wt           = "EPV_INSIDE50S_WT",
+  clangers_wt            = "EPV_CLANGERS_WT",
+  score_involvements_wt  = "EPV_SCORE_INVOLVEMENTS_WT",
+  intercepts_wt          = "EPV_INTERCEPTS_WT",
+  one_percenters_wt      = "EPV_ONE_PERCENTERS_WT",
+  rebound50s_wt          = "EPV_REBOUND50S_WT",
+  frees_against_wt       = "EPV_FREES_AGAINST_WT",
+  clearances_wt          = "EPV_CLEARANCES_WT",
+  frees_for_wt           = "EPV_FREES_FOR_WT",
+  goals_wt               = "EPV_GOALS_WT",
+  behinds_wt             = "EPV_BEHINDS_WT",
+  marks_wt               = "EPV_MARKS_WT",
+  uncontested_poss_wt    = "EPV_UNCONTESTED_POSS_WT",
+  shots_at_goal_wt       = "EPV_SHOTS_AT_GOAL_WT",
+  kicks_wt               = "EPV_KICKS_WT",
+  handballs_wt           = "EPV_HANDBALLS_WT",
+  metres_gained_wt       = "EPV_METRES_GAINED_WT",
+  turnovers_wt           = "EPV_TURNOVERS_WT",
+  goal_assists_wt        = "EPV_GOAL_ASSISTS_WT",
+  decay_recv        = "EPR_DECAY_RECV",
+  decay_disp        = "EPR_DECAY_DISP",
+  decay_spoil       = "EPR_DECAY_SPOIL",
+  decay_hitout      = "EPR_DECAY_HITOUT",
+  loading           = "EPR_LOADING_DEFAULT",
+  prior_games_recv  = "EPR_PRIOR_GAMES_RECV",
+  prior_games_disp  = "EPR_PRIOR_GAMES_DISP",
+  prior_games_spoil = "EPR_PRIOR_GAMES_SPOIL",
+  prior_games_hitout = "EPR_PRIOR_GAMES_HITOUT",
+  prior_rate_recv    = "EPR_PRIOR_RATE_RECV",
+  prior_rate_disp    = "EPR_PRIOR_RATE_DISP",
+  prior_rate_spoil   = "EPR_PRIOR_RATE_SPOIL",
+  prior_rate_hitout  = "EPR_PRIOR_RATE_HITOUT"
 )
 
 ## 9a. Un-normalize stat weights back to per-raw-unit for constants.R ----

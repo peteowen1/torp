@@ -192,11 +192,11 @@ create_test_player_game_data <- function(n_rows = 200) {
     listed_position = sample(c("FWD", "MID", "DEF", "RUC"), n_rows, replace = TRUE),
     team = sample(c("Adelaide Crows", "Brisbane Lions", "Carlton"), n_rows, replace = TRUE),
     opponent = sample(c("Collingwood", "Essendon", "Fremantle"), n_rows, replace = TRUE),
-    total_credits_adj = runif(n_rows, -5, 15),
-    recv_credits_adj = runif(n_rows, -2, 8),
-    disp_credits_adj = runif(n_rows, -2, 8),
-    spoil_credits_adj = runif(n_rows, -1, 3),
-    hitout_credits_adj = runif(n_rows, 0, 5),
+    epv_adj = runif(n_rows, -5, 15),
+    recv_epv_adj = runif(n_rows, -2, 8),
+    disp_epv_adj = runif(n_rows, -2, 8),
+    spoil_epv_adj = runif(n_rows, -1, 3),
+    hitout_epv_adj = runif(n_rows, 0, 5),
     stringsAsFactors = FALSE
   )
 }

@@ -1,9 +1,9 @@
-# TORP Ratings Pipeline
+# EPR Ratings Pipeline
 #
-# End-to-end script for computing TORP ratings:
+# End-to-end script for computing EPR ratings:
 #   Stage 1: Refresh upstream data (player_stats, teams) from AFL API
 #   Stage 2: Build player game data from PBP + player_stats + teams
-#   Stage 3: Compute TORP ratings per season/round and release
+#   Stage 3: Compute EPR ratings per season/round and release
 #
 # Usage:
 #   Rscript data-raw/03-ratings/run_ratings_pipeline.R
@@ -54,7 +54,7 @@ resolve_seasons <- function(seasons) {
 
 seasons <- resolve_seasons(SEASONS)
 
-cli::cli_h1("TORP Ratings Pipeline")
+cli::cli_h1("EPR Ratings Pipeline")
 cli::cli_inform("Seasons: {paste(seasons, collapse = ', ')}")
 cli::cli_inform("Refresh upstream: {REFRESH_UPSTREAM}")
 cli::cli_inform("Rebuild player game: {REBUILD_PLAYER_GAME}")
@@ -132,9 +132,9 @@ if (REBUILD_PLAYER_GAME) {
   cli::cli_alert_info("Skipping Stage 2 (REBUILD_PLAYER_GAME = FALSE)")
 }
 
-# Stage 3: Compute TORP Ratings + Release ----
+# Stage 3: Compute EPR Ratings + Release ----
 
-cli::cli_h2("Stage 3: Compute TORP Ratings")
+cli::cli_h2("Stage 3: Compute EPR Ratings")
 tictoc::tic("stage_3_ratings")
 
 cli::cli_progress_step("Loading all player game data")
@@ -163,7 +163,7 @@ if (!is.null(shared_skills)) {
 }
 shared_fixtures <- load_fixtures(TRUE)
 
-get_torp_df <- function(year, rounds, pgd, skills, fixtures) {
+get_epr_df <- function(year, rounds, pgd, skills, fixtures) {
   plyr_tm_df <- load_player_details(year)
   if (nrow(plyr_tm_df) == 0 || !"season" %in% names(plyr_tm_df)) {
     plyr_tm_df <- load_player_details(year - 1)
@@ -223,12 +223,12 @@ get_torp_df <- function(year, rounds, pgd, skills, fixtures) {
         n_teams <- length(unique(final_df$team))
         target_tog <- n_teams * 18L
         final_df$pred_tog <- final_df$pred_tog * (target_tog / tot_tog)
-        comps <- c("torp_recv", "torp_disp", "torp_spoil", "torp_hitout")
+        comps <- c("recv_epr", "disp_epr", "spoil_epr", "hitout_epr")
         for (comp in comps) {
           avg_val <- sum(final_df[[comp]] * final_df$pred_tog, na.rm = TRUE) / sum(final_df$pred_tog)
           final_df[[comp]] <- final_df[[comp]] - avg_val
         }
-        final_df$torp <- round(final_df$torp_recv + final_df$torp_disp + final_df$torp_spoil + final_df$torp_hitout, 2)
+        final_df$epr <- round(final_df$recv_epr + final_df$disp_epr + final_df$spoil_epr + final_df$hitout_epr, 2)
         for (comp in comps) {
           final_df[[comp]] <- round(final_df[[comp]], 2)
         }
@@ -271,7 +271,7 @@ for (s in seasons) {
     cli::cli_h3("Computing ratings for {s} (rounds {start_round}-{max_round})")
     tictoc::tic(paste0("ratings_", s))
 
-    torp_df <- get_torp_df(s, start_round:max_round, all_pgd, shared_skills, shared_fixtures)
+    torp_df <- get_epr_df(s, start_round:max_round, all_pgd, shared_skills, shared_fixtures)
     cli::cli_inform("  {s}: {nrow(torp_df)} rating rows")
 
     if (nrow(torp_df) == 0) {
@@ -366,7 +366,7 @@ tryCatch({
   cli::cli_inform("Building team ratings from {nrow(ratings_for_teams)} player rating rows")
 
   team_ratings <- ratings_for_teams |>
-    dplyr::filter(!is.na(.data$torp)) |>
+    dplyr::filter(!is.na(.data$epr)) |>
     dplyr::group_by(.data$season, .data$round, .data$team) |>
     dplyr::mutate(
       # Scale pred_tog to sum to 18 per team (18 full-game equivalents)
@@ -375,17 +375,17 @@ tryCatch({
                                .data$pred_tog * 18 / .data$team_tog_sum, 0)
     ) |>
     dplyr::summarise(
-      team_torp    = round(sum(.data$torp * .data$tog_wt, na.rm = TRUE), 2),
-      team_recv    = round(sum(.data$torp_recv * .data$tog_wt, na.rm = TRUE), 2),
-      team_disp    = round(sum(.data$torp_disp * .data$tog_wt, na.rm = TRUE), 2),
-      team_spoil   = round(sum(.data$torp_spoil * .data$tog_wt, na.rm = TRUE), 2),
-      team_hitout  = round(sum(.data$torp_hitout * .data$tog_wt, na.rm = TRUE), 2),
-      top_player   = .data$player_name[which.max(.data$torp)],
-      top_torp     = round(max(.data$torp, na.rm = TRUE), 2),
+      team_epr     = round(sum(.data$epr * .data$tog_wt, na.rm = TRUE), 2),
+      team_recv    = round(sum(.data$recv_epr * .data$tog_wt, na.rm = TRUE), 2),
+      team_disp    = round(sum(.data$disp_epr * .data$tog_wt, na.rm = TRUE), 2),
+      team_spoil   = round(sum(.data$spoil_epr * .data$tog_wt, na.rm = TRUE), 2),
+      team_hitout  = round(sum(.data$hitout_epr * .data$tog_wt, na.rm = TRUE), 2),
+      top_player   = .data$player_name[which.max(.data$epr)],
+      top_epr      = round(max(.data$epr, na.rm = TRUE), 2),
       n_players    = sum(.data$pred_tog > 0),
       .groups = "drop"
     ) |>
-    dplyr::arrange(.data$season, .data$round, -.data$team_torp)
+    dplyr::arrange(.data$season, .data$round, -.data$team_epr)
 
   save_to_release(team_ratings, "team_ratings", "team_ratings-data")
   cli::cli_alert_success("Released team_ratings ({nrow(team_ratings)} rows)")

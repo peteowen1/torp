@@ -62,7 +62,7 @@ reference:
       - player_profile
       - print.torp_player_profile
       - create_player_game_data
-      - default_credit_params
+      - default_epv_params
       - create_wp_credit
       - calculate_player_stats
       - calculate_psr

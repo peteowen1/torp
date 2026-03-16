@@ -8,8 +8,8 @@ create_player_game_data(
   pbp_data = NULL,
   player_stats = NULL,
   teams = NULL,
-  decay = RATING_DECAY_DEFAULT_DAYS,
-  credit_params = NULL
+  decay = EPR_DECAY_DEFAULT_DAYS,
+  epv_params = NULL
 )
 }
 \arguments{
@@ -19,19 +19,19 @@ create_player_game_data(
 
 \item{teams}{Team lineup data from \code{load_teams()}. If NULL, loads all available.}
 
-\item{decay}{Decay factor for time-weighting games. Default is \code{RATING_DECAY_DEFAULT_DAYS} (486).}
+\item{decay}{Decay factor for time-weighting games. Default is \code{EPR_DECAY_DEFAULT_DAYS} (486).}
 
-\item{credit_params}{Named list of credit assignment parameters. If NULL,
-uses \code{default_credit_params()}.}
+\item{epv_params}{Named list of EPV assignment parameters. If NULL,
+uses \code{default_epv_params()}.}
 }
 \value{
 A data.table with one row per player per match, containing:
 identifiers (\code{player_id}, \code{match_id}, \code{season}, \code{round},
 \code{player_name}, \code{team}, \code{opponent}, \code{listed_position}, \code{position}, \code{team_id},
-\code{utc_start_time}), position-adjusted TORP credits (\code{total_credits_adj},
-\code{recv_credits_adj}, \code{disp_credits_adj}, \code{spoil_credits_adj}, \code{hitout_credits_adj}),
-raw TORP credits (\code{total_credits}, \code{recv_credits}, \code{disp_credits}, \code{spoil_credits},
-\code{hitout_credits}), and key box-score stats.
+\code{utc_start_time}), position-adjusted EPV (\code{epv_adj},
+\code{recv_epv_adj}, \code{disp_epv_adj}, \code{spoil_epv_adj}, \code{hitout_epv_adj}),
+raw EPV (\code{epv}, \code{recv_epv}, \code{disp_epv}, \code{spoil_epv},
+\code{hitout_epv}), and key box-score stats.
 }
 \description{
 Transforms raw play-by-play data and player stats into processed per-game

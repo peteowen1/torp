@@ -9,13 +9,13 @@
 \arguments{
 \item{teams}{Raw teams/lineups from load_teams()}
 
-\item{torp_df}{TORP ratings from load_torp_ratings()}
+\item{torp_df}{EPR ratings from load_torp_ratings()}
 }
 \value{
 Team-level aggregated ratings with position columns
 }
 \description{
-Joins lineups to TORP ratings, imputes missing with priors, applies
+Joins lineups to EPR ratings, imputes missing with priors, applies
 TOG weighting, generates all position columns, and aggregates to team level.
 }
 \keyword{internal}

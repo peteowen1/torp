@@ -1,56 +1,56 @@
-#' Default credit assignment parameters
+#' Default EPV assignment parameters
 #'
-#' Returns a named list of all credit assignment parameters with their default
+#' Returns a named list of all EPV assignment parameters with their default
 #' values. Used by \code{create_player_game_data()} when no custom params are provided.
 #'
-#' @return A named list of credit assignment parameters.
+#' @return A named list of EPV assignment parameters.
 #' @export
-default_credit_params <- function() {
+default_epv_params <- function() {
   list(
-    disp_neg_offset   = CREDIT_DISP_NEG_OFFSET,
-    disp_pos_offset   = CREDIT_DISP_POS_OFFSET,
-    disp_scale        = CREDIT_DISP_SCALE,
-    bounce_wt         = CREDIT_BOUNCE_WT,
-    recv_neg_mult     = CREDIT_RECV_NEG_MULT,
-    recv_neg_offset   = CREDIT_RECV_NEG_OFFSET,
-    recv_pos_mult     = CREDIT_RECV_POS_MULT,
-    recv_pos_offset   = CREDIT_RECV_POS_OFFSET,
-    recv_scale        = CREDIT_RECV_SCALE,
-    recv_intercept_mark_scale = CREDIT_RECV_INTERCEPT_MARK_SCALE,
-    spoil_wt          = CREDIT_SPOIL_WT,
-    tackle_wt         = CREDIT_TACKLE_WT,
-    pressure_wt       = CREDIT_PRESSURE_WT,
-    def_pressure_wt   = CREDIT_DEF_PRESSURE_WT,
-    hitout_wt         = CREDIT_HITOUT_WT,
-    hitout_adv_wt     = CREDIT_HITOUT_ADV_WT,
-    ruck_contest_wt        = CREDIT_RUCK_CONTEST_WT,
-    contested_poss_wt      = CREDIT_CONTESTED_POSS_WT,
-    contested_marks_wt     = CREDIT_CONTESTED_MARKS_WT,
-    ground_ball_gets_wt    = CREDIT_GROUND_BALL_GETS_WT,
-    marks_inside50_wt      = CREDIT_MARKS_INSIDE50_WT,
-    inside50s_wt           = CREDIT_INSIDE50S_WT,
-    clangers_wt            = CREDIT_CLANGERS_WT,
-    score_involvements_wt  = CREDIT_SCORE_INVOLVEMENTS_WT,
-    intercepts_wt          = CREDIT_INTERCEPTS_WT,
-    one_percenters_wt      = CREDIT_ONE_PERCENTERS_WT,
-    rebound50s_wt          = CREDIT_REBOUND50S_WT,
-    frees_against_wt       = CREDIT_FREES_AGAINST_WT,
-    clearances_wt          = CREDIT_CLEARANCES_WT,
-    frees_for_wt           = CREDIT_FREES_FOR_WT,
-    goals_wt               = CREDIT_GOALS_WT,
-    behinds_wt             = CREDIT_BEHINDS_WT,
-    marks_wt               = CREDIT_MARKS_WT,
-    uncontested_poss_wt    = CREDIT_UNCONTESTED_POSS_WT,
-    shots_at_goal_wt       = CREDIT_SHOTS_AT_GOAL_WT,
-    kicks_wt               = CREDIT_KICKS_WT,
-    handballs_wt           = CREDIT_HANDBALLS_WT,
-    metres_gained_wt       = CREDIT_METRES_GAINED_WT,
-    turnovers_wt           = CREDIT_TURNOVERS_WT,
-    goal_assists_wt        = CREDIT_GOAL_ASSISTS_WT,
-    pos_adj_quantile_recv   = CREDIT_POS_ADJ_QUANTILE_RECV,
-    pos_adj_quantile_disp   = CREDIT_POS_ADJ_QUANTILE_DISP,
-    pos_adj_quantile_spoil  = CREDIT_POS_ADJ_QUANTILE_SPOIL,
-    pos_adj_quantile_hitout = CREDIT_POS_ADJ_QUANTILE_HITOUT
+    disp_neg_offset   = EPV_DISP_NEG_OFFSET,
+    disp_pos_offset   = EPV_DISP_POS_OFFSET,
+    disp_scale        = EPV_DISP_SCALE,
+    bounce_wt         = EPV_BOUNCE_WT,
+    recv_neg_mult     = EPV_RECV_NEG_MULT,
+    recv_neg_offset   = EPV_RECV_NEG_OFFSET,
+    recv_pos_mult     = EPV_RECV_POS_MULT,
+    recv_pos_offset   = EPV_RECV_POS_OFFSET,
+    recv_scale        = EPV_RECV_SCALE,
+    recv_intercept_mark_scale = EPV_RECV_INTERCEPT_MARK_SCALE,
+    spoil_wt          = EPV_SPOIL_WT,
+    tackle_wt         = EPV_TACKLE_WT,
+    pressure_wt       = EPV_PRESSURE_WT,
+    def_pressure_wt   = EPV_DEF_PRESSURE_WT,
+    hitout_wt         = EPV_HITOUT_WT,
+    hitout_adv_wt     = EPV_HITOUT_ADV_WT,
+    ruck_contest_wt        = EPV_RUCK_CONTEST_WT,
+    contested_poss_wt      = EPV_CONTESTED_POSS_WT,
+    contested_marks_wt     = EPV_CONTESTED_MARKS_WT,
+    ground_ball_gets_wt    = EPV_GROUND_BALL_GETS_WT,
+    marks_inside50_wt      = EPV_MARKS_INSIDE50_WT,
+    inside50s_wt           = EPV_INSIDE50S_WT,
+    clangers_wt            = EPV_CLANGERS_WT,
+    score_involvements_wt  = EPV_SCORE_INVOLVEMENTS_WT,
+    intercepts_wt          = EPV_INTERCEPTS_WT,
+    one_percenters_wt      = EPV_ONE_PERCENTERS_WT,
+    rebound50s_wt          = EPV_REBOUND50S_WT,
+    frees_against_wt       = EPV_FREES_AGAINST_WT,
+    clearances_wt          = EPV_CLEARANCES_WT,
+    frees_for_wt           = EPV_FREES_FOR_WT,
+    goals_wt               = EPV_GOALS_WT,
+    behinds_wt             = EPV_BEHINDS_WT,
+    marks_wt               = EPV_MARKS_WT,
+    uncontested_poss_wt    = EPV_UNCONTESTED_POSS_WT,
+    shots_at_goal_wt       = EPV_SHOTS_AT_GOAL_WT,
+    kicks_wt               = EPV_KICKS_WT,
+    handballs_wt           = EPV_HANDBALLS_WT,
+    metres_gained_wt       = EPV_METRES_GAINED_WT,
+    turnovers_wt           = EPV_TURNOVERS_WT,
+    goal_assists_wt        = EPV_GOAL_ASSISTS_WT,
+    pos_adj_quantile_recv   = EPV_POS_ADJ_QUANTILE_RECV,
+    pos_adj_quantile_disp   = EPV_POS_ADJ_QUANTILE_DISP,
+    pos_adj_quantile_spoil  = EPV_POS_ADJ_QUANTILE_SPOIL,
+    pos_adj_quantile_hitout = EPV_POS_ADJ_QUANTILE_HITOUT
   )
 }
 
@@ -65,17 +65,17 @@ default_credit_params <- function() {
 #' @param pbp_data Play-by-play data from \code{load_pbp()}. If NULL, loads all available.
 #' @param player_stats Raw player stats from \code{load_player_stats()}. If NULL, loads all available.
 #' @param teams Team lineup data from \code{load_teams()}. If NULL, loads all available.
-#' @param decay Decay factor for time-weighting games. Default is \code{RATING_DECAY_DEFAULT_DAYS} (486).
-#' @param credit_params Named list of credit assignment parameters. If NULL,
-#'   uses \code{default_credit_params()}.
+#' @param decay Decay factor for time-weighting games. Default is \code{EPR_DECAY_DEFAULT_DAYS} (486).
+#' @param epv_params Named list of EPV assignment parameters. If NULL,
+#'   uses \code{default_epv_params()}.
 #'
 #' @return A data.table with one row per player per match, containing:
 #'   identifiers (\code{player_id}, \code{match_id}, \code{season}, \code{round},
 #'   \code{player_name}, \code{team}, \code{opponent}, \code{listed_position}, \code{position}, \code{team_id},
-#'   \code{utc_start_time}), position-adjusted TORP credits (\code{total_credits_adj},
-#'   \code{recv_credits_adj}, \code{disp_credits_adj}, \code{spoil_credits_adj}, \code{hitout_credits_adj}),
-#'   raw TORP credits (\code{total_credits}, \code{recv_credits}, \code{disp_credits}, \code{spoil_credits},
-#'   \code{hitout_credits}), and key box-score stats.
+#'   \code{utc_start_time}), position-adjusted EPV (\code{epv_adj},
+#'   \code{recv_epv_adj}, \code{disp_epv_adj}, \code{spoil_epv_adj}, \code{hitout_epv_adj}),
+#'   raw EPV (\code{epv}, \code{recv_epv}, \code{disp_epv}, \code{spoil_epv},
+#'   \code{hitout_epv}), and key box-score stats.
 #'
 #' @export
 #'
@@ -87,10 +87,10 @@ default_credit_params <- function() {
 create_player_game_data <- function(pbp_data = NULL,
                                     player_stats = NULL,
                                     teams = NULL,
-                                    decay = RATING_DECAY_DEFAULT_DAYS,
-                                    credit_params = NULL) {
+                                    decay = EPR_DECAY_DEFAULT_DAYS,
+                                    epv_params = NULL) {
 
-  p <- if (is.null(credit_params)) default_credit_params() else credit_params
+  p <- if (is.null(epv_params)) default_epv_params() else epv_params
 
   if (is.null(pbp_data)) pbp_data <- load_pbp(TRUE)
   if (is.null(player_stats)) player_stats <- load_player_stats(TRUE)
@@ -114,7 +114,7 @@ create_player_game_data <- function(pbp_data = NULL,
     player_name = max(player_name, na.rm = TRUE),
     utc_start_time = max(utc_start_time),
     weight_gm = max(weight_gm),
-    disp_credits = sum(data.table::fifelse(pos_team == -1, delta_epv + p$disp_neg_offset, delta_epv + p$disp_pos_offset) * p$disp_scale),
+    disp_epv = sum(data.table::fifelse(pos_team == -1, delta_epv + p$disp_neg_offset, delta_epv + p$disp_pos_offset) * p$disp_scale),
     disposals_pbp = floor(.N / 2L),
     team = team[.N],
     opponent = opp_tm[.N],
@@ -127,7 +127,7 @@ create_player_game_data <- function(pbp_data = NULL,
   # Intercept marks (pos_team == -1 AND mark description) get a separate scale
   dt[, is_intercept_mark := pos_team == -1L & grepl("ted Mark|Mark On", lead_desc_tot)]
   recv_dt <- dt[, .(
-    recv_credits = sum(data.table::fifelse(
+    recv_epv = sum(data.table::fifelse(
       is_intercept_mark,
       ((p$recv_neg_mult * delta_epv * pos_team) + p$recv_neg_offset) * p$recv_intercept_mark_scale,
       data.table::fifelse(
@@ -150,9 +150,9 @@ create_player_game_data <- function(pbp_data = NULL,
   spoil_hitout_df <- player_stats |>
     dplyr::mutate(
       weight_gm = exp(as.numeric(-(ref_date - as.Date(utc_start_time))) / decay),
-      spoil_credits = spoils * p$spoil_wt + tackles * p$tackle_wt + pressure_acts * p$pressure_wt + def_half_pressure_acts * p$def_pressure_wt +
+      spoil_epv = spoils * p$spoil_wt + tackles * p$tackle_wt + pressure_acts * p$pressure_wt + def_half_pressure_acts * p$def_pressure_wt +
                   intercepts * p$intercepts_wt + one_percenters * p$one_percenters_wt + rebound50s * p$rebound50s_wt + frees_against * p$frees_against_wt,
-      hitout_credits = hitouts * p$hitout_wt + hitouts_to_advantage * p$hitout_adv_wt + ruck_contests * p$ruck_contest_wt +
+      hitout_epv = hitouts * p$hitout_wt + hitouts_to_advantage * p$hitout_adv_wt + ruck_contests * p$ruck_contest_wt +
                    clearances * p$clearances_wt
     ) |>
     dplyr::select(-utc_start_time)
@@ -164,7 +164,7 @@ create_player_game_data <- function(pbp_data = NULL,
     )
 
   # Assert join produced matches (catches upstream schema changes)
-  if (all(is.na(plyr_gm_df$spoil_credits))) {
+  if (all(is.na(plyr_gm_df$spoil_epv))) {
     cli::cli_abort(c(
       "Player stats join produced no matches - all spoil/hitout points are zero.",
       "i" = "Check that {.fn load_player_stats} returns the expected column names."
@@ -174,19 +174,19 @@ create_player_game_data <- function(pbp_data = NULL,
   # --- Step 5: Replace NAs and compute totals ---
   plyr_gm_df <- plyr_gm_df |>
     dplyr::mutate(
-      recv_credits = tidyr::replace_na(recv_credits, 0) +
+      recv_epv = tidyr::replace_na(recv_epv, 0) +
                  contested_possessions * p$contested_poss_wt + contested_marks * p$contested_marks_wt +
                  ground_ball_gets * p$ground_ball_gets_wt + marks_inside50 * p$marks_inside50_wt +
                  marks * p$marks_wt + uncontested_possessions * p$uncontested_poss_wt +
                  frees_for * p$frees_for_wt,
-      disp_credits = tidyr::replace_na(disp_credits, 0) + bounces * p$bounce_wt +
+      disp_epv = tidyr::replace_na(disp_epv, 0) + bounces * p$bounce_wt +
                  inside50s * p$inside50s_wt + clangers * p$clangers_wt + score_involvements * p$score_involvements_wt +
                  kicks * p$kicks_wt + handballs * p$handballs_wt + metres_gained * p$metres_gained_wt +
                  turnovers * p$turnovers_wt + goal_assists * p$goal_assists_wt +
                  goals * p$goals_wt + behinds * p$behinds_wt + shots_at_goal * p$shots_at_goal_wt,
-      spoil_credits = tidyr::replace_na(spoil_credits, 0),
-      hitout_credits = tidyr::replace_na(hitout_credits, 0),
-      total_credits = recv_credits + disp_credits + spoil_credits + hitout_credits
+      spoil_epv = tidyr::replace_na(spoil_epv, 0),
+      hitout_epv = tidyr::replace_na(hitout_epv, 0),
+      epv = recv_epv + disp_epv + spoil_epv + hitout_epv
     )
 
   # --- Step 6: Join teams data for position ---
@@ -206,21 +206,21 @@ create_player_game_data <- function(pbp_data = NULL,
   plyr_gm_df <- plyr_gm_df |>
     dplyr::mutate(
       tog_safe = pmax(.data$time_on_ground_percentage / 100, 0.1),
-      recv_p80 = .data$recv_credits / .data$tog_safe,
-      disp_p80 = .data$disp_credits / .data$tog_safe,
-      spoil_p80 = .data$spoil_credits / .data$tog_safe,
-      hitout_p80 = .data$hitout_credits / .data$tog_safe
+      recv_epv_p80 = .data$recv_epv / .data$tog_safe,
+      disp_epv_p80 = .data$disp_epv / .data$tog_safe,
+      spoil_epv_p80 = .data$spoil_epv / .data$tog_safe,
+      hitout_epv_p80 = .data$hitout_epv / .data$tog_safe
     ) |>
     dplyr::group_by(position) |>
     dplyr::mutate(
-      recv_credits_adj = .data$recv_p80 - mean(.data$recv_p80, na.rm = TRUE),
-      disp_credits_adj = .data$disp_p80 - mean(.data$disp_p80, na.rm = TRUE),
-      spoil_credits_adj = .data$spoil_p80 - mean(.data$spoil_p80, na.rm = TRUE),
-      hitout_credits_adj = .data$hitout_p80 - mean(.data$hitout_p80, na.rm = TRUE),
-      total_credits_adj = .data$recv_credits_adj + .data$disp_credits_adj + .data$spoil_credits_adj + .data$hitout_credits_adj
+      recv_epv_adj = .data$recv_epv_p80 - mean(.data$recv_epv_p80, na.rm = TRUE),
+      disp_epv_adj = .data$disp_epv_p80 - mean(.data$disp_epv_p80, na.rm = TRUE),
+      spoil_epv_adj = .data$spoil_epv_p80 - mean(.data$spoil_epv_p80, na.rm = TRUE),
+      hitout_epv_adj = .data$hitout_epv_p80 - mean(.data$hitout_epv_p80, na.rm = TRUE),
+      epv_adj = .data$recv_epv_adj + .data$disp_epv_adj + .data$spoil_epv_adj + .data$hitout_epv_adj
     ) |>
     dplyr::ungroup() |>
-    dplyr::select(-"tog_safe", -"recv_p80", -"disp_p80", -"spoil_p80", -"hitout_p80")
+    dplyr::select(-"tog_safe", -"recv_epv_p80", -"disp_epv_p80", -"spoil_epv_p80", -"hitout_epv_p80")
 
   # --- Step 8: Handle duplicate season columns and select final columns ---
   if ("season.x" %in% names(plyr_gm_df)) {
@@ -234,13 +234,13 @@ create_player_game_data <- function(pbp_data = NULL,
       player_id, match_id, season, round,
       player_name, team, opponent, listed_position, position, team_id,
       utc_start_time,
-      # TORP credit points (position-adjusted)
-      total_credits_adj, recv_credits_adj, disp_credits_adj, spoil_credits_adj, hitout_credits_adj,
-      # TORP credit points (raw)
-      total_credits, recv_credits, disp_credits, spoil_credits, hitout_credits,
+      # EPV (position-adjusted)
+      epv_adj, recv_epv_adj, disp_epv_adj, spoil_epv_adj, hitout_epv_adj,
+      # EPV (raw)
+      epv, recv_epv, disp_epv, spoil_epv, hitout_epv,
       # PBP-derived action counts
       disposals_pbp, receptions,
-      # Credit model input stats
+      # EPV model input stats
       spoils, tackles, pressure_acts,
       def_half_pressure_acts,
       hitouts, hitouts_to_advantage, ruck_contests,
@@ -259,3 +259,7 @@ create_player_game_data <- function(pbp_data = NULL,
 
   return(plyr_gm_df)
 }
+
+#' @rdname default_epv_params
+#' @export
+default_credit_params <- default_epv_params

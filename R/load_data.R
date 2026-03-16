@@ -419,7 +419,7 @@ load_xg <- function(seasons = get_afl_season(), use_disk_cache = FALSE, columns 
 
   # Normalise old column names (home_sG → home_scored_goals, etc.)
   if (nrow(out) > 0) {
-    .normalise_columns(out, XG_COL_MAP, verbose = TRUE, label = "XG")
+    .normalise_columns(out, XG_COL_MAP)
   }
 
   return(out)
@@ -475,7 +475,7 @@ load_player_stats <- function(seasons = get_afl_season(), use_disk_cache = TRUE,
 #' @param columns Optional character vector of column names to read. If NULL (default), reads all columns.
 #'
 #' @return A data frame containing player game performance data.
-#' @seealso [create_player_game_data()], [player_game_ratings()], [calculate_torp_ratings()]
+#' @seealso [create_player_game_data()], [player_game_ratings()], [calculate_epr()]
 #' @examples
 #' \dontrun{
 #' try({ # prevents cran errors
@@ -491,7 +491,7 @@ load_player_game_data <- function(seasons = get_afl_season(), use_disk_cache = F
   out <- load_from_url(urls, seasons = seasons, use_disk_cache = use_disk_cache, columns = columns)
 
   # Normalise old abbreviated column names (plyr_nm → player_name, etc.)
-  if (nrow(out) > 0) .normalise_columns(out, PLAYER_GAME_COL_MAP, verbose = TRUE, label = "Player game")
+  if (nrow(out) > 0) .normalise_columns(out, PLAYER_GAME_COL_MAP)
 
   return(out)
 }
@@ -629,7 +629,7 @@ load_results <- function(seasons = get_afl_season(), use_disk_cache = FALSE, col
 #' @param columns Optional character vector of column names to read. If NULL (default), reads all columns.
 #'
 #' @return A data frame containing AFL player biographical details including names, ages, and team affiliations.
-#' @seealso [load_player_stats()], [calculate_torp_ratings()], [player_game_ratings()]
+#' @seealso [load_player_stats()], [calculate_epr()], [player_game_ratings()]
 #' @examples
 #' \dontrun{
 #' try({ # prevents cran errors
@@ -736,7 +736,7 @@ load_retrodictions <- function(seasons = get_afl_season(), rounds = get_afl_week
 #'
 #' @return A data frame containing TORP ratings with columns including
 #'   \code{player_id}, \code{player_name}, \code{torp}, \code{season}, \code{round}, and \code{row_id}.
-#' @seealso [calculate_torp_ratings()], [load_player_game_data()], [player_season_ratings()]
+#' @seealso [calculate_epr()], [load_player_game_data()], [player_season_ratings()]
 #' @examples
 #' \dontrun{
 #' try({ # prevents cran errors
@@ -748,6 +748,9 @@ load_torp_ratings <- function(columns = NULL) {
   base_url <- paste0("https://github.com/", get_torp_data_repo(), "/releases/download")
   url <- paste0(base_url, "/ratings-data/torp_ratings.parquet")
   out <- load_from_url(url, columns = columns)
+
+  # Normalise old torp_* column names to new *_epr names
+  if (nrow(out) > 0) .normalise_columns(out, TORP_RATINGS_COL_MAP)
 
   if (nrow(out) == 0) {
     cli::cli_warn("No TORP ratings data loaded. The file may not exist yet or the download failed.")
@@ -797,6 +800,9 @@ load_player_game_ratings <- function(seasons = get_afl_season(), rounds = TRUE, 
     out <- out[out$round %in% rounds, ]
   }
 
+  # Normalise old display column names (total_points → epv_raw, etc.)
+  if (nrow(out) > 0) .normalise_columns(out, PLAYER_GAME_RATINGS_COL_MAP)
+
   return(out)
 }
 
@@ -832,6 +838,9 @@ load_player_season_ratings <- function(seasons = get_afl_season(), use_disk_cach
   urls <- generate_urls("player_season_ratings-data", "player_season_ratings", seasons)
 
   out <- load_from_url(urls, seasons = seasons, use_disk_cache = use_disk_cache, columns = columns)
+
+  # Normalise old season rating column names
+  if (nrow(out) > 0) .normalise_columns(out, PLAYER_GAME_RATINGS_COL_MAP)
 
   return(out)
 }

@@ -136,9 +136,9 @@ team_profile <- function(team_name, seasons = get_afl_season(), top_n = 10) {
     # Filter to latest snapshot
     ratings <- ratings[season == max(season, na.rm = TRUE)]
     ratings <- ratings[round == max(round, na.rm = TRUE)]
-    team_players <- ratings[team == tm$name & !is.na(torp)]
+    team_players <- ratings[team == tm$name & !is.na(epr)]
     if (nrow(team_players) > 0) {
-      data.table::setorder(team_players, -torp)
+      data.table::setorder(team_players, -epr)
       head(team_players, top_n)
     } else {
       data.frame()
@@ -262,7 +262,7 @@ print.torp_team_profile <- function(x, ...) {
     cat("--- Top Players (TORP) ---\n")
     # Show a compact view
     display_cols <- intersect(
-      c("player_name", "torp", "torp_recv", "torp_disp", "torp_spoil", "torp_hitout"),
+      c("player_name", "epr", "recv_epr", "disp_epr", "spoil_epr", "hitout_epr"),
       names(x$top_players)
     )
     if (length(display_cols) > 0) {

@@ -81,16 +81,16 @@
 
 #' Build team-level ratings from lineups
 #'
-#' Joins lineups to TORP ratings, imputes missing with priors, applies
+#' Joins lineups to EPR ratings, imputes missing with priors, applies
 #' TOG weighting, generates all position columns, and aggregates to team level.
 #'
 #' @param teams Raw teams/lineups from load_teams()
-#' @param torp_df TORP ratings from load_torp_ratings()
+#' @param torp_df EPR ratings from load_torp_ratings()
 #' @return Team-level aggregated ratings with position columns
 #' @keywords internal
 .build_team_ratings_df <- function(teams, torp_df, psr_df = NULL) {
-  torp_prior_total <- RATING_PRIOR_RATE_RECV + RATING_PRIOR_RATE_DISP +
-    RATING_PRIOR_RATE_SPOIL + RATING_PRIOR_RATE_HITOUT
+  torp_prior_total <- EPR_PRIOR_RATE_RECV + EPR_PRIOR_RATE_DISP +
+    EPR_PRIOR_RATE_SPOIL + EPR_PRIOR_RATE_HITOUT
 
   team_lineup_df <- teams |>
     dplyr::left_join(
@@ -100,28 +100,28 @@
     dplyr::filter((position.x != "EMERG" & position.x != "SUB") | is.na(position.x))
 
   # Impute missing ratings with per-component priors
-  na_torp_count <- sum(is.na(team_lineup_df$torp))
+  na_torp_count <- sum(is.na(team_lineup_df$epr))
   if (na_torp_count > 0) {
     na_pct <- round(100 * na_torp_count / nrow(team_lineup_df), 1)
-    cli::cli_inform("Replacing {na_torp_count} ({na_pct}%) NA torp ratings with prior ({round(torp_prior_total, 2)})")
+    cli::cli_inform("Replacing {na_torp_count} ({na_pct}%) NA EPR ratings with prior ({round(torp_prior_total, 2)})")
     if (na_pct > 25) cli::cli_warn("High proportion of missing ratings ({na_pct}%)")
     if (na_pct > 50) cli::cli_abort("More than 50% of ratings are missing ({na_pct}%) -- check data pipeline")
   }
 
   team_lineup_df <- team_lineup_df |>
     dplyr::mutate(
-      torp = tidyr::replace_na(torp, torp_prior_total),
-      torp_recv = tidyr::replace_na(torp_recv, RATING_PRIOR_RATE_RECV),
-      torp_disp = tidyr::replace_na(torp_disp, RATING_PRIOR_RATE_DISP),
-      torp_spoil = tidyr::replace_na(torp_spoil, RATING_PRIOR_RATE_SPOIL),
-      torp_hitout = tidyr::replace_na(torp_hitout, RATING_PRIOR_RATE_HITOUT),
+      epr = tidyr::replace_na(epr, torp_prior_total),
+      recv_epr = tidyr::replace_na(recv_epr, EPR_PRIOR_RATE_RECV),
+      disp_epr = tidyr::replace_na(disp_epr, EPR_PRIOR_RATE_DISP),
+      spoil_epr = tidyr::replace_na(spoil_epr, EPR_PRIOR_RATE_SPOIL),
+      hitout_epr = tidyr::replace_na(hitout_epr, EPR_PRIOR_RATE_HITOUT),
       lineup_tog = tidyr::replace_na(POSITION_AVG_TOG[position.x], 0.75),
       .unknown_pos = !is.na(position.x) & is.na(POSITION_AVG_TOG[position.x]),
-      torp = torp * lineup_tog,
-      torp_recv = torp_recv * lineup_tog,
-      torp_disp = torp_disp * lineup_tog,
-      torp_spoil = torp_spoil * lineup_tog,
-      torp_hitout = torp_hitout * lineup_tog
+      epr = epr * lineup_tog,
+      recv_epr = recv_epr * lineup_tog,
+      disp_epr = disp_epr * lineup_tog,
+      spoil_epr = spoil_epr * lineup_tog,
+      hitout_epr = hitout_epr * lineup_tog
     )
 
   n_unknown <- sum(team_lineup_df$.unknown_pos, na.rm = TRUE)
@@ -134,36 +134,49 @@
   # Join PSR if provided — use each player's most recent PSR value
 
   if (!is.null(psr_df)) {
+    has_osr_dsr <- all(c("osr", "dsr") %in% names(psr_df))
+    select_cols <- if (has_osr_dsr) c("player_id", "season", "round", "psr", "osr", "dsr") else c("player_id", "season", "round", "psr")
+
     latest_psr <- psr_df |>
-      dplyr::select(player_id, season, round, psr) |>
+      dplyr::select(dplyr::any_of(select_cols)) |>
       dplyr::arrange(player_id, season, round) |>
       dplyr::group_by(player_id) |>
       dplyr::slice_tail(n = 1) |>
       dplyr::ungroup() |>
-      dplyr::select(player_id, psr)
+      dplyr::select(-season, -round)
 
     team_lineup_df <- team_lineup_df |>
       dplyr::left_join(latest_psr, by = "player_id") |>
       dplyr::mutate(
-        psr = tidyr::replace_na(psr, 0),
+        psr = tidyr::replace_na(psr, PSR_PRIOR_RATE),
         psr = psr * lineup_tog
       )
+
+    if (has_osr_dsr) {
+      team_lineup_df <- team_lineup_df |>
+        dplyr::mutate(
+          osr = tidyr::replace_na(osr, PSR_PRIOR_RATE / 2),
+          dsr = tidyr::replace_na(dsr, PSR_PRIOR_RATE / 2),
+          osr = osr * lineup_tog,
+          dsr = dsr * lineup_tog
+        )
+    }
   } else {
-    team_lineup_df$psr <- 0
+    team_lineup_df$psr <- PSR_PRIOR_RATE
   }
 
   # Generate position columns from lookup tables
   for (col in names(MATCH_PHASE_MAP))
-    team_lineup_df[[col]] <- ifelse(team_lineup_df$position.x %in% MATCH_PHASE_MAP[[col]], team_lineup_df$torp, NA)
+    team_lineup_df[[col]] <- ifelse(team_lineup_df$position.x %in% MATCH_PHASE_MAP[[col]], team_lineup_df$epr, NA)
   for (col in names(MATCH_POS_GROUP_MAP))
-    team_lineup_df[[col]] <- ifelse(team_lineup_df$position.x %in% MATCH_POS_GROUP_MAP[[col]], team_lineup_df$torp, NA)
+    team_lineup_df[[col]] <- ifelse(team_lineup_df$position.x %in% MATCH_POS_GROUP_MAP[[col]], team_lineup_df$epr, NA)
   for (pos in MATCH_INDIVIDUAL_POS)
-    team_lineup_df[[pos]] <- ifelse(team_lineup_df$position.x == pos, team_lineup_df$torp, NA)
+    team_lineup_df[[pos]] <- ifelse(team_lineup_df$position.x == pos, team_lineup_df$epr, NA)
   for (col in names(MATCH_COMBO_POS_MAP))
-    team_lineup_df[[col]] <- ifelse(team_lineup_df$position.x %in% MATCH_COMBO_POS_MAP[[col]], team_lineup_df$torp, NA)
+    team_lineup_df[[col]] <- ifelse(team_lineup_df$position.x %in% MATCH_COMBO_POS_MAP[[col]], team_lineup_df$epr, NA)
   for (col in names(MATCH_LISTED_POS_MAP))
-    team_lineup_df[[col]] <- ifelse(team_lineup_df$position.y %in% MATCH_LISTED_POS_MAP[[col]], team_lineup_df$torp, NA)
-  team_lineup_df$other_pos <- ifelse(is.na(team_lineup_df$position.y), team_lineup_df$torp, NA)
+    team_lineup_df[[col]] <- ifelse(team_lineup_df$position.y %in% MATCH_LISTED_POS_MAP[[col]], team_lineup_df$epr, NA)
+  team_lineup_df$other_pos <- ifelse(is.na(team_lineup_df$position.y), team_lineup_df$epr, NA)
 
   # Verify position columns exist
   missing_pos <- setdiff(MATCH_POS_COLS, names(team_lineup_df))
@@ -172,7 +185,8 @@
   }
 
   # Aggregate to team level
-  torp_sum_cols <- c("torp", "torp_recv", "torp_disp", "torp_spoil", "torp_hitout", "psr")
+  torp_sum_cols <- c("epr", "recv_epr", "disp_epr", "spoil_epr", "hitout_epr", "psr")
+  if ("osr" %in% names(team_lineup_df)) torp_sum_cols <- c(torp_sum_cols, "osr", "dsr")
 
   team_rt_df <- team_lineup_df |>
     dplyr::filter(!is.na(player_id)) |>
@@ -200,7 +214,8 @@
 #' @keywords internal
 #' @importFrom purrr pmap_dbl
 .build_match_features <- function(fix_df, team_rt_df, all_grounds) {
-  torp_sum_cols <- c("torp", "torp_recv", "torp_disp", "torp_spoil", "torp_hitout", "psr")
+  torp_sum_cols <- c("epr", "recv_epr", "disp_epr", "spoil_epr", "hitout_epr", "psr")
+  if ("osr" %in% names(team_rt_df)) torp_sum_cols <- c(torp_sum_cols, "osr", "dsr")
 
   # Add venue from fixtures (teams data doesn't carry venue)
   team_rt_df <- team_rt_df |>
@@ -281,7 +296,7 @@
       by = c("match_id", "team_id", "season", "round_number")
     ) |>
     dplyr::group_by(team_id) |>
-    tidyr::fill(torp, torp_recv, torp_disp, torp_spoil, torp_hitout, psr) |>
+    tidyr::fill(epr, recv_epr, disp_epr, spoil_epr, hitout_epr, psr) |>
     dplyr::mutate(
       def = ifelse(def == 0, dplyr::lag(def), def),
       mid = ifelse(mid == 0, dplyr::lag(mid), mid),
@@ -542,7 +557,7 @@
   # Opponent columns for self-join
   opp_cols <- c(
     "match_id", "team_type",
-    "torp", "torp_recv", "torp_disp", "torp_spoil", "torp_hitout", "psr",
+    "epr", "recv_epr", "disp_epr", "spoil_epr", "hitout_epr", "psr",
     "def", "mid", "fwd", "int", MATCH_INDIVIDUAL_POS,
     "team_name", "team_name_season",
     "log_dist", "familiarity", "days_rest",
@@ -560,20 +575,20 @@
     )
 
   # Validate self-join completeness
-  na_opp <- sum(is.na(team_mdl_df_tot$torp.y))
+  na_opp <- sum(is.na(team_mdl_df_tot$epr.y))
   if (na_opp > 0) {
-    bad_ids <- unique(team_mdl_df_tot$match_id[is.na(team_mdl_df_tot$torp.y)])
+    bad_ids <- unique(team_mdl_df_tot$match_id[is.na(team_mdl_df_tot$epr.y)])
     cli::cli_warn("{na_opp} row{?s} have no opponent data after self-join. Affected matches: {paste(utils::head(bad_ids, 5), collapse = ', ')}")
   }
 
   team_mdl_df_tot <- team_mdl_df_tot |>
     dplyr::mutate(
-      torp_diff = torp.x - torp.y,
-      torp_ratio = log(pmax(torp.x, 0.01) / pmax(torp.y, 0.01)),
-      torp_recv_diff = torp_recv.x - torp_recv.y,
-      torp_disp_diff = torp_disp.x - torp_disp.y,
-      torp_spoil_diff = torp_spoil.x - torp_spoil.y,
-      torp_hitout_diff = torp_hitout.x - torp_hitout.y,
+      epr_diff = epr.x - epr.y,
+      epr_ratio = log(pmax(epr.x, 0.01) / pmax(epr.y, 0.01)),
+      epr_recv_diff = recv_epr.x - recv_epr.y,
+      epr_disp_diff = disp_epr.x - disp_epr.y,
+      epr_spoil_diff = spoil_epr.x - spoil_epr.y,
+      epr_hitout_diff = hitout_epr.x - hitout_epr.y,
       psr_diff = psr.x - psr.y
     ) |>
     dplyr::left_join(
@@ -758,12 +773,12 @@
     "+ s(game_prop_through_day.x, bs = \"cc\")",
     "+ s(team_name.x, bs = \"re\") + s(team_name.y, bs = \"re\")",
     "+ s(team_name_season.x, bs = \"re\") + s(team_name_season.y, bs = \"re\")",
-    "+ s(abs(torp_diff), bs = \"ts\", k = 5)",
-    "+ s(abs(torp_recv_diff), bs = \"ts\", k = 5)",
-    "+ s(abs(torp_disp_diff), bs = \"ts\", k = 5)",
-    "+ s(abs(torp_spoil_diff), bs = \"ts\", k = 5)",
-    "+ s(abs(torp_hitout_diff), bs = \"ts\", k = 5)",
-    "+ s(torp.x, bs = \"ts\", k = 5) + s(torp.y, bs = \"ts\", k = 5)",
+    "+ s(abs(epr_diff), bs = \"ts\", k = 5)",
+    "+ s(abs(epr_recv_diff), bs = \"ts\", k = 5)",
+    "+ s(abs(epr_disp_diff), bs = \"ts\", k = 5)",
+    "+ s(abs(epr_spoil_diff), bs = \"ts\", k = 5)",
+    "+ s(abs(epr_hitout_diff), bs = \"ts\", k = 5)",
+    "+ s(epr.x, bs = \"ts\", k = 5) + s(epr.y, bs = \"ts\", k = 5)",
     "+ s(venue_fac, bs = \"re\")",
     "+ s(log_dist.x, bs = \"ts\", k = 5) + s(log_dist.y, bs = \"ts\", k = 5)",
     "+ s(familiarity.x, bs = \"ts\", k = 5) + s(familiarity.y, bs = \"ts\", k = 5)",
@@ -794,13 +809,13 @@
     "s(team_type_fac, bs = \"re\")",
     "+ s(team_name.x, bs = \"re\") + s(team_name.y, bs = \"re\")",
     "+ s(team_name_season.x, bs = \"re\") + s(team_name_season.y, bs = \"re\")",
-    "+ ti(torp_diff, pred_tot_xscore, bs = c(\"ts\", \"ts\"), k = 4)",
+    "+ ti(epr_diff, pred_tot_xscore, bs = c(\"ts\", \"ts\"), k = 4)",
     "+ s(pred_tot_xscore, bs = \"ts\", k = 5)",
-    "+ s(torp_diff, bs = \"ts\", k = 5)",
-    "+ s(torp_recv_diff, bs = \"ts\", k = 5)",
-    "+ s(torp_disp_diff, bs = \"ts\", k = 5)",
-    "+ s(torp_spoil_diff, bs = \"ts\", k = 5)",
-    "+ s(torp_hitout_diff, bs = \"ts\", k = 5)",
+    "+ s(epr_diff, bs = \"ts\", k = 5)",
+    "+ s(epr_recv_diff, bs = \"ts\", k = 5)",
+    "+ s(epr_disp_diff, bs = \"ts\", k = 5)",
+    "+ s(epr_spoil_diff, bs = \"ts\", k = 5)",
+    "+ s(epr_hitout_diff, bs = \"ts\", k = 5)",
     "+ s(log_dist_diff, bs = \"ts\", k = 5) + s(familiarity_diff, bs = \"ts\", k = 5)",
     "+ s(days_rest_diff_fac, bs = \"re\")"
   )
@@ -827,12 +842,12 @@
     "+ s(game_prop_through_day.x, bs = \"cc\")",
     "+ s(team_name.x, bs = \"re\") + s(team_name.y, bs = \"re\")",
     "+ s(team_name_season.x, bs = \"re\") + s(team_name_season.y, bs = \"re\")",
-    "+ ti(torp_diff, pred_tot_xscore, bs = c(\"ts\", \"ts\"), k = 4)",
-    "+ s(torp_diff, bs = \"ts\", k = 5)",
-    "+ s(torp_recv_diff, bs = \"ts\", k = 5)",
-    "+ s(torp_disp_diff, bs = \"ts\", k = 5)",
-    "+ s(torp_spoil_diff, bs = \"ts\", k = 5)",
-    "+ s(torp_hitout_diff, bs = \"ts\", k = 5)",
+    "+ ti(epr_diff, pred_tot_xscore, bs = c(\"ts\", \"ts\"), k = 4)",
+    "+ s(epr_diff, bs = \"ts\", k = 5)",
+    "+ s(epr_recv_diff, bs = \"ts\", k = 5)",
+    "+ s(epr_disp_diff, bs = \"ts\", k = 5)",
+    "+ s(epr_spoil_diff, bs = \"ts\", k = 5)",
+    "+ s(epr_hitout_diff, bs = \"ts\", k = 5)",
     "+ s(pred_tot_xscore, bs = \"ts\", k = 5)",
     "+ s(pred_xscore_diff, bs = \"ts\", k = 5)",
     "+ s(venue_fac, bs = \"re\")",
@@ -990,8 +1005,8 @@
     "team_type_fac",
     "game_year_decimal.x", "game_prop_through_year.x",
     "game_prop_through_month.x", "game_prop_through_day.x",
-    "torp_diff", "torp_recv_diff", "torp_disp_diff",
-    "torp_spoil_diff", "torp_hitout_diff",
+    "epr_diff", "epr_recv_diff", "epr_disp_diff",
+    "epr_spoil_diff", "epr_hitout_diff",
     "psr_diff",
     "log_dist_diff",
     "familiarity_diff",
@@ -1116,25 +1131,13 @@ build_team_mdl_df <- function(season = NULL, target_weeks = NULL,
   teams <- load_teams(TRUE)
   torp_df <- load_torp_ratings()
 
-  # Load PSR (Player Skill Ratings)
+  # Load PSR (Player Skill Ratings) with osr/dsr decomposition
   psr_df <- NULL
   tryCatch({
     skills <- load_player_skills(TRUE)
-    if (is.null(psr_coef_path)) {
-      psr_coef_path <- system.file("extdata", "psr_v2_coefficients.csv", package = "torp")
-      if (psr_coef_path == "") {
-        psr_coef_path <- file.path(
-          find.package("torp", quiet = TRUE)[1] %||% ".",
-          "data-raw", "cache-skills", "psr_v2_coefficients.csv"
-        )
-      }
-    }
-    if (file.exists(psr_coef_path)) {
-      coef_df <- utils::read.csv(psr_coef_path)
-      psr_df <- calculate_psr(skills, coef_df)
+    psr_df <- .compute_psr_from_skills(skills, psr_coef_path)
+    if (!is.null(psr_df)) {
       cli::cli_inform("PSR computed for {nrow(psr_df)} player-rounds")
-    } else {
-      cli::cli_warn("PSR coefficient file not found: {psr_coef_path}")
     }
   }, error = function(e) {
     cli::cli_warn("Failed to compute PSR: {e$message}")
@@ -1200,8 +1203,8 @@ build_team_mdl_df <- function(season = NULL, target_weeks = NULL,
     dplyr::filter(team_type_fac.x == "home") |>
     dplyr::select(
       season = season.x, round = round_number.x, players = count.x, match_id,
-      home_team = team_name.x, home_rating = torp.x, home_psr = psr.x,
-      away_team = team_name.y, away_rating = torp.y, away_psr = psr.y,
+      home_team = team_name.x, home_rating = epr.x, home_psr = psr.x,
+      away_team = team_name.y, away_rating = epr.y, away_psr = psr.y,
       pred_xtotal = pred_tot_xscore, pred_xmargin = pred_xscore_diff,
       pred_margin = pred_score_diff, pred_win, bits,
       margin = score_diff, start_time = local_start_time_str, venue = venue.x
@@ -1216,8 +1219,8 @@ build_team_mdl_df <- function(season = NULL, target_weeks = NULL,
     dplyr::filter(team_type_fac.x == "away") |>
     dplyr::select(
       season = season.x, round = round_number.x, players = count.x, match_id,
-      home_team = team_name.y, home_rating = torp.y, home_psr = psr.y,
-      away_team = team_name.x, away_rating = torp.x, away_psr = psr.x,
+      home_team = team_name.y, home_rating = epr.y, home_psr = psr.y,
+      away_team = team_name.x, away_rating = epr.x, away_psr = psr.x,
       pred_xtotal = pred_tot_xscore, pred_xmargin = pred_xscore_diff,
       pred_margin = pred_score_diff, pred_win, bits,
       margin = score_diff, start_time = local_start_time_str, venue = venue.x
@@ -1294,7 +1297,7 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
   if (is.null(torp_df_total) || nrow(torp_df_total) < 100) {
     cli::cli_warn("TORP ratings unavailable or too small from release - computing from scratch (this may be slow)")
     torp_df_total <- tryCatch(
-      calculate_torp_ratings(season_val = season, round_val = get_afl_week(type = "next")),
+      calculate_epr(season_val = season, round_val = get_afl_week(type = "next")),
       error = function(e) {
         cli::cli_abort("Failed to compute TORP ratings from scratch: {e$message}")
       }
@@ -1350,23 +1353,13 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
     cli::cli_warn("Could not load PSR from release: {e$message}")
   })
 
-  # Strategy 2: Compute from skills + coefficients
+  # Strategy 2: Compute from skills + coefficients (with osr/dsr decomposition)
   if (is.null(psr_df)) {
     tryCatch({
       skills <- load_player_skills(TRUE)
-      psr_coef_path <- system.file("extdata", "psr_v2_coefficients.csv", package = "torp")
-      if (psr_coef_path == "") {
-        psr_coef_path <- file.path(
-          find.package("torp", quiet = TRUE)[1] %||% ".",
-          "data-raw", "cache-skills", "psr_v2_coefficients.csv"
-        )
-      }
-      if (file.exists(psr_coef_path)) {
-        coef_df <- utils::read.csv(psr_coef_path)
-        psr_df <- calculate_psr(skills, coef_df)
+      psr_df <- .compute_psr_from_skills(skills)
+      if (!is.null(psr_df)) {
         cli::cli_inform("PSR computed from skills+coefficients: {nrow(psr_df)} player-rounds")
-      } else {
-        cli::cli_warn("PSR coefficient file not found: {psr_coef_path}")
       }
     }, error = function(e) {
       cli::cli_warn("Failed to compute PSR: {e$message}")
@@ -1408,13 +1401,13 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
         psr_df |> dplyr::select(player_id, season, round, psr),
         by = c("player_id", "season", "round")
       ) |>
-      dplyr::mutate(psr = tidyr::replace_na(psr, 0))
+      dplyr::mutate(psr = tidyr::replace_na(psr, PSR_PRIOR_RATE))
   } else {
-    tr$psr <- 0
+    tr$psr <- PSR_PRIOR_RATE
   }
 
   tr_week <- tr |>
-    dplyr::filter(!is.na(torp), is.na(injury)) |>
+    dplyr::filter(!is.na(epr), is.na(injury)) |>
     dplyr::mutate(team_name = torp_replace_teams(team)) |>
     dplyr::group_by(team_name, season, round) |>
     dplyr::mutate(
@@ -1423,15 +1416,15 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
       tog_wt = dplyr::if_else(team_tog_sum > 0, pred_tog * 18 / team_tog_sum, 18 / n_players)
     ) |>
     dplyr::summarise(
-      torp_week = sum(torp * tog_wt, na.rm = TRUE) * SIM_INJURY_DISCOUNT,
-      torp_recv_week = sum(torp_recv * tog_wt, na.rm = TRUE) * SIM_INJURY_DISCOUNT,
-      torp_disp_week = sum(torp_disp * tog_wt, na.rm = TRUE) * SIM_INJURY_DISCOUNT,
-      torp_spoil_week = sum(torp_spoil * tog_wt, na.rm = TRUE) * SIM_INJURY_DISCOUNT,
-      torp_hitout_week = sum(torp_hitout * tog_wt, na.rm = TRUE) * SIM_INJURY_DISCOUNT,
+      epr_week = sum(epr * tog_wt, na.rm = TRUE) * SIM_INJURY_DISCOUNT,
+      epr_recv_week = sum(recv_epr * tog_wt, na.rm = TRUE) * SIM_INJURY_DISCOUNT,
+      epr_disp_week = sum(disp_epr * tog_wt, na.rm = TRUE) * SIM_INJURY_DISCOUNT,
+      epr_spoil_week = sum(spoil_epr * tog_wt, na.rm = TRUE) * SIM_INJURY_DISCOUNT,
+      epr_hitout_week = sum(hitout_epr * tog_wt, na.rm = TRUE) * SIM_INJURY_DISCOUNT,
       psr_week = sum(psr * tog_wt, na.rm = TRUE) * SIM_INJURY_DISCOUNT,
       .groups = "drop"
     ) |>
-    dplyr::arrange(-torp_week)
+    dplyr::arrange(-epr_week)
 
   # Expand estimated ratings across all target weeks
   if (length(target_weeks) > 1) {
@@ -1444,11 +1437,11 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
   team_rt_fix_df <- team_rt_fix_df |>
     dplyr::left_join(tr_week, by = c("team_name" = "team_name", "season" = "season", "round_number" = "round")) |>
     dplyr::mutate(
-      torp = dplyr::coalesce(torp, torp_week),
-      torp_recv = dplyr::coalesce(torp_recv, torp_recv_week),
-      torp_disp = dplyr::coalesce(torp_disp, torp_disp_week),
-      torp_spoil = dplyr::coalesce(torp_spoil, torp_spoil_week),
-      torp_hitout = dplyr::coalesce(torp_hitout, torp_hitout_week),
+      epr = dplyr::coalesce(epr, epr_week),
+      recv_epr = dplyr::coalesce(recv_epr, epr_recv_week),
+      disp_epr = dplyr::coalesce(disp_epr, epr_disp_week),
+      spoil_epr = dplyr::coalesce(spoil_epr, epr_spoil_week),
+      hitout_epr = dplyr::coalesce(hitout_epr, epr_hitout_week),
       psr = dplyr::coalesce(psr, psr_week)
     )
 

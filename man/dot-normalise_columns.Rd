@@ -4,16 +4,12 @@
 \alias{.normalise_columns}
 \title{Normalise column names using a mapping}
 \usage{
-.normalise_columns(dt, col_map, verbose = TRUE, label = NULL)
+.normalise_columns(dt, col_map)
 }
 \arguments{
 \item{dt}{A data.frame, tibble, or data.table to modify (renames by reference via \code{data.table::setnames}).}
 
 \item{col_map}{Named character vector: variant_name -> canonical_name.}
-
-\item{verbose}{Logical. If TRUE, emits a message listing renames.}
-
-\item{label}{Optional label for the log message (e.g. "PBP", "Player Stats").}
 }
 \value{
 Invisible NULL (modifies dt by reference).

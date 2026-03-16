@@ -405,7 +405,7 @@ nafill_char <- function(x, type = "locf") {
 #' @return Invisible NULL (renames columns by reference).
 #' @keywords internal
 .normalise_pbp_columns <- function(dt) {
-  .normalise_columns(dt, PBP_COL_MAP, verbose = TRUE, label = "PBP")
+  .normalise_columns(dt, PBP_COL_MAP)
 
   # Validate critical columns exist after remapping
   critical <- c("home_team_id", "away_team_id", "home_team_name",

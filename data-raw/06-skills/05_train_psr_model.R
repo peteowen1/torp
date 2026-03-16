@@ -311,27 +311,28 @@ cat(sprintf("\nNon-zero coefficients: %d / %d\n", n_nonzero, nrow(coef_df)))
 # 7. Calculate PSR for all players ----
 cli::cli_h1("Calculating PSR")
 
-psr <- calculate_psr(skills, coef_df, center = TRUE)
+psr_margin <- calculate_psr(skills, coef_df, center = TRUE)
+setnames(psr_margin, "psr", "psr_margin")
 
 # Latest round leaderboard
-latest <- psr[, .SD[round == max(round)], by = season]
+latest <- psr_margin[, .SD[round == max(round)], by = season]
 latest <- latest[season == max(season)]
-latest <- latest[order(-psr)]
+latest <- latest[order(-psr_margin)]
 
-cat("\n--- Top 20 Players by PSR (latest round) ---\n")
-print(head(latest[, .(player_name, pos_group, season, round, psr = round(psr, 2))], 20),
+cat("\n--- Top 20 Players by PSR margin (latest round) ---\n")
+print(head(latest[, .(player_name, pos_group, season, round, psr_margin = round(psr_margin, 2))], 20),
       row.names = FALSE)
 
-cat("\n--- Bottom 20 Players by PSR (latest round) ---\n")
-print(tail(latest[, .(player_name, pos_group, season, round, psr = round(psr, 2))], 20),
+cat("\n--- Bottom 20 Players by PSR margin (latest round) ---\n")
+print(tail(latest[, .(player_name, pos_group, season, round, psr_margin = round(psr_margin, 2))], 20),
       row.names = FALSE)
 
 # Summary stats
-cat(sprintf("\nPSR summary (latest round): mean=%.2f, sd=%.2f, min=%.2f, max=%.2f\n",
-            mean(latest$psr), sd(latest$psr), min(latest$psr), max(latest$psr)))
+cat(sprintf("\nPSR margin summary (latest round): mean=%.2f, sd=%.2f, min=%.2f, max=%.2f\n",
+            mean(latest$psr_margin), sd(latest$psr_margin), min(latest$psr_margin), max(latest$psr_margin)))
 
-# 8. OPSR / DPSR models ----
-cli::cli_h1("Fitting OPSR (offense) and DPSR (defense) models")
+# 8. OSR / DSR models ----
+cli::cli_h1("Fitting OSR (offense) and DSR (defense) models")
 
 # Helper: fit glmnet with alpha CV, return best model + coef_df
 fit_psr_model <- function(X_tr, y_tr, w_tr, fold_id, X_te, y_te, label) {
@@ -372,80 +373,80 @@ fit_psr_model <- function(X_tr, y_tr, w_tr, fold_id, X_te, y_te, label) {
 # Offensive model: predict home_score from skill diffs
 y_off_train <- match_df$home_score[train_idx]
 y_off_test <- match_df$home_score[test_idx]
-off_result <- fit_psr_model(X_train, y_off_train, w_train, foldid, X_test, y_off_test, "OPSR")
+off_result <- fit_psr_model(X_train, y_off_train, w_train, foldid, X_test, y_off_test, "OSR")
 
 # Defensive model: predict away_score from skill diffs
 y_def_train <- match_df$away_score[train_idx]
 y_def_test <- match_df$away_score[test_idx]
-def_result <- fit_psr_model(X_train, y_def_train, w_train, foldid, X_test, y_def_test, "DPSR")
+def_result <- fit_psr_model(X_train, y_def_train, w_train, foldid, X_test, y_def_test, "DSR")
 
-cat("\n--- OPSR Top 10 Coefficients ---\n")
+cat("\n--- OSR Top 10 Coefficients ---\n")
 off_sorted <- off_result$coef_df[order(-abs(off_result$coef_df$beta)), ]
 print(head(off_sorted[, c("stat_name", "beta")], 10), row.names = FALSE)
 
-cat("\n--- DPSR Top 10 Coefficients ---\n")
+cat("\n--- DSR Top 10 Coefficients ---\n")
 def_sorted <- def_result$coef_df[order(-abs(def_result$coef_df$beta)), ]
 print(head(def_sorted[, c("stat_name", "beta")], 10), row.names = FALSE)
 
-# 9. Calculate OPSR, DPSR, TPSR ----
-cli::cli_h1("Calculating OPSR, DPSR, TPSR")
+# 9. Calculate OSR, DSR, PSR (= OSR + DSR) ----
+cli::cli_h1("Calculating OSR, DSR, PSR")
 
-# OPSR: positive beta = more skill → more own scoring (good)
-opsr <- calculate_psr(skills, off_result$coef_df, center = TRUE)
-setnames(opsr, c("psr_raw", "psr"), c("opsr_raw", "opsr"))
+# OSR: positive beta = more skill → more own scoring (good)
+osr_dt <- calculate_psr(skills, off_result$coef_df, center = TRUE)
+setnames(osr_dt, c("psr_raw", "psr"), c("osr_raw", "osr"))
 
-# DPSR: positive beta = more skill → more opponent scoring (bad!)
-# Negate so positive DPSR = good defender
-dpsr_coef <- data.table::copy(def_result$coef_df)
-dpsr_coef$beta <- -dpsr_coef$beta
-dpsr <- calculate_psr(skills, dpsr_coef, center = TRUE)
-setnames(dpsr, c("psr_raw", "psr"), c("dpsr_raw", "dpsr"))
+# DSR: positive beta = more skill → more opponent scoring (bad!)
+# Negate so positive DSR = good defender
+dsr_coef <- data.table::copy(def_result$coef_df)
+dsr_coef$beta <- -dsr_coef$beta
+dsr_dt <- calculate_psr(skills, dsr_coef, center = TRUE)
+setnames(dsr_dt, c("psr_raw", "psr"), c("dsr_raw", "dsr"))
 
 # Merge all ratings
-id_cols <- intersect(names(opsr), names(dpsr))
-id_cols <- setdiff(id_cols, c("opsr_raw", "opsr", "dpsr_raw", "dpsr"))
+id_cols <- intersect(names(osr_dt), names(dsr_dt))
+id_cols <- setdiff(id_cols, c("osr_raw", "osr", "dsr_raw", "dsr"))
 all_psr <- merge(
-  merge(psr, opsr, by = id_cols, all = TRUE),
-  dpsr, by = id_cols, all = TRUE
+  merge(psr_margin, osr_dt, by = id_cols, all = TRUE),
+  dsr_dt, by = id_cols, all = TRUE
 )
-all_psr[, tpsr := opsr + dpsr]
+all_psr[, psr := osr + dsr]
 
 # Latest round comparison
 latest_all <- all_psr[, .SD[round == max(round)], by = season]
 latest_all <- latest_all[season == max(season)]
 
-cat("\n--- Top 20 by TPSR (latest round) ---\n")
+cat("\n--- Top 20 by PSR (= OSR + DSR, latest round) ---\n")
 print(
-  head(latest_all[order(-tpsr), .(player_name, pos_group, opsr = round(opsr, 2),
-                                   dpsr = round(dpsr, 2), tpsr = round(tpsr, 2),
-                                   psr = round(psr, 2))], 20),
+  head(latest_all[order(-psr), .(player_name, pos_group, osr = round(osr, 2),
+                                   dsr = round(dsr, 2), psr = round(psr, 2),
+                                   psr_margin = round(psr_margin, 2))], 20),
   row.names = FALSE
 )
 
-cat("\n--- Bottom 20 by TPSR (latest round) ---\n")
+cat("\n--- Bottom 20 by PSR (latest round) ---\n")
 print(
-  tail(latest_all[order(-tpsr), .(player_name, pos_group, opsr = round(opsr, 2),
-                                   dpsr = round(dpsr, 2), tpsr = round(tpsr, 2),
-                                   psr = round(psr, 2))], 20),
+  tail(latest_all[order(-psr), .(player_name, pos_group, osr = round(osr, 2),
+                                   dsr = round(dsr, 2), psr = round(psr, 2),
+                                   psr_margin = round(psr_margin, 2))], 20),
   row.names = FALSE
 )
 
-# PSR vs TPSR correlation
-cat(sprintf("\nPSR vs TPSR correlation: %.3f\n", cor(latest_all$psr, latest_all$tpsr, use = "complete.obs")))
-cat(sprintf("OPSR vs DPSR correlation: %.3f\n", cor(latest_all$opsr, latest_all$dpsr, use = "complete.obs")))
+# PSR margin vs PSR (osr+dsr) correlation
+cat(sprintf("\nPSR margin vs PSR (osr+dsr) correlation: %.3f\n", cor(latest_all$psr_margin, latest_all$psr, use = "complete.obs")))
+cat(sprintf("OSR vs DSR correlation: %.3f\n", cor(latest_all$osr, latest_all$dsr, use = "complete.obs")))
 
 # Biggest differences: who benefits most from the split?
-latest_all[, psr_tpsr_diff := tpsr - psr]
-cat("\n--- Biggest TPSR > PSR (undervalued by margin model) ---\n")
-print(head(latest_all[order(-psr_tpsr_diff), .(player_name, pos_group,
-  opsr = round(opsr, 2), dpsr = round(dpsr, 2),
-  tpsr = round(tpsr, 2), psr = round(psr, 2), diff = round(psr_tpsr_diff, 2))], 10),
+latest_all[, psr_diff := psr - psr_margin]
+cat("\n--- Biggest PSR > PSR margin (undervalued by margin model) ---\n")
+print(head(latest_all[order(-psr_diff), .(player_name, pos_group,
+  osr = round(osr, 2), dsr = round(dsr, 2),
+  psr = round(psr, 2), psr_margin = round(psr_margin, 2), diff = round(psr_diff, 2))], 10),
   row.names = FALSE)
 
-cat("\n--- Biggest PSR > TPSR (overvalued by margin model) ---\n")
-print(head(latest_all[order(psr_tpsr_diff), .(player_name, pos_group,
-  opsr = round(opsr, 2), dpsr = round(dpsr, 2),
-  tpsr = round(tpsr, 2), psr = round(psr, 2), diff = round(psr_tpsr_diff, 2))], 10),
+cat("\n--- Biggest PSR margin > PSR (overvalued by margin model) ---\n")
+print(head(latest_all[order(psr_diff), .(player_name, pos_group,
+  osr = round(osr, 2), dsr = round(dsr, 2),
+  psr = round(psr, 2), psr_margin = round(psr_margin, 2), diff = round(psr_diff, 2))], 10),
   row.names = FALSE)
 
 # 10. Save outputs ----
@@ -459,21 +460,21 @@ coef_out <- rbind(
 write.csv(coef_out, file.path(cache_dir, "psr_coefficients.csv"), row.names = FALSE)
 cli::cli_alert_success("Saved: psr_coefficients.csv")
 
-# OPSR coefficients CSV
-opsr_coef_out <- rbind(
+# OSR coefficients CSV
+osr_coef_out <- rbind(
   data.frame(stat_name = "(Intercept)", beta = off_result$intercept, sd = NA),
   off_result$coef_df
 )
-write.csv(opsr_coef_out, file.path(cache_dir, "opsr_coefficients.csv"), row.names = FALSE)
-cli::cli_alert_success("Saved: opsr_coefficients.csv")
+write.csv(osr_coef_out, file.path(cache_dir, "osr_coefficients.csv"), row.names = FALSE)
+cli::cli_alert_success("Saved: osr_coefficients.csv")
 
-# DPSR coefficients CSV (stored with original sign; negate at attribution time)
-dpsr_coef_out <- rbind(
+# DSR coefficients CSV (stored with original sign; negate at attribution time)
+dsr_coef_out <- rbind(
   data.frame(stat_name = "(Intercept)", beta = def_result$intercept, sd = NA),
   def_result$coef_df
 )
-write.csv(dpsr_coef_out, file.path(cache_dir, "dpsr_coefficients.csv"), row.names = FALSE)
-cli::cli_alert_success("Saved: dpsr_coefficients.csv")
+write.csv(dsr_coef_out, file.path(cache_dir, "dsr_coefficients.csv"), row.names = FALSE)
+cli::cli_alert_success("Saved: dsr_coefficients.csv")
 
 # All models RDS
 model_out <- list(
@@ -484,12 +485,12 @@ model_out <- list(
   cv_results = cv_results,
   coef_df = coef_df,
   intercept = intercept_val,
-  # Offensive model (OPSR)
+  # Offensive model (OSR)
   off_model = off_result$model,
   off_coef_df = off_result$coef_df,
   off_intercept = off_result$intercept,
   off_best_alpha = off_result$best_alpha,
-  # Defensive model (DPSR)
+  # Defensive model (DSR)
   def_model = def_result$model,
   def_coef_df = def_result$coef_df,
   def_intercept = def_result$intercept,

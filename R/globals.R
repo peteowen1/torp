@@ -54,11 +54,11 @@ utils::globalVariables(c(
   "player_name_given_name", "player_name_surname", "player_position", "listed_position",
 
   # TORP rating variables
-  "torp", "torp_shift", "torp_recv", "torp_disp", "torp_spoil", "torp_hitout",
+  "torp", "torp_shift", "epr", "recv_epr", "disp_epr", "spoil_epr", "hitout_epr",
   "torp_home_round", "torp_away_round", "home_torp", "away_torp",
-  "total_credits_adj", "recv_credits_adj", "recv_sum",
-  "disp_credits_adj", "disp_sum", "spoil_credits_adj", "spoil_sum",
-  "hitout_credits_adj", "hitout_sum", "weight_gm", "wt_gms", "wt_tog", "tog_sum", "utc_start_time",
+  "epv_adj", "recv_epv_adj", "recv_sum",
+  "disp_epv_adj", "disp_sum", "spoil_epv_adj", "spoil_sum",
+  "hitout_epv_adj", "hitout_sum", "weight_gm", "wt_gms", "wt_tog", "tog_sum", "utc_start_time",
   "days_diff", "wt_recv", "wt_disp", "wt_spoil", "wt_hitout",
   "wt_gms_recv", "wt_gms_disp", "wt_gms_spoil", "wt_gms_hitout",
   "pred_tog", "pred_selection", "pred_cond_tog",
@@ -66,7 +66,7 @@ utils::globalVariables(c(
   "i.squad_selection_skill", "i.cond_tog_skill", "i.n_80s", "i.wt_80s",
 
   # data.table join prefixes
-  "i.torp", "i.torp_shift_away", "i.torp_shift_home",
+  "i.epr", "i.torp_shift_away", "i.torp_shift_home",
 
   # Model evaluation variables
   "auc", "log_loss", "bin", "pred_decile", "estimate", "result",
@@ -82,8 +82,8 @@ utils::globalVariables(c(
 
   # create_player_game_data variables
   "delta_epv", "pos_team", "wpa", "home_away", "lead_player", "lead_player_id", "is_intercept_mark", "lead_desc_tot",
-  "round_week", "opp_tm", "recv_credits", "disp_credits", "spoil_credits", "hitout_credits",
-  "total_credits", "receptions", "disposals_pbp", "opponent",
+  "round_week", "opp_tm", "recv_epv", "disp_epv", "spoil_epv", "hitout_epv",
+  "epv", "receptions", "disposals_pbp", "opponent",
   "bounces", "hitouts",
   "position", "round_number",
   "player_name", "given_name", "surname", "jumper_number", "captain",
@@ -145,7 +145,8 @@ utils::globalVariables(c(
 
 # PSR variables
 utils::globalVariables(c("psr_raw", "psr", "psr.x", "psr.y", "psr_diff",
-                          "home_psr", "away_psr", "psr_week"))
+                          "home_psr", "away_psr", "psr_week",
+                          "osr", "dsr"))
 
 # player_credit.R stat columns
 utils::globalVariables(c(
@@ -188,7 +189,9 @@ utils::globalVariables(c(
   "made_finals_pct", "avg_finals_wins", "made_gf_pct", "won_gf_pct",
   "i.pred_xtotal",
   "injury", "estimated_return", "player_norm", "tm_rnk",
-  "tog_frac", "total_p80", "recv_p80", "disp_p80", "spoil_p80", "hitout_p80",
+  "tog_frac", "epv_p80", "recv_epv_p80", "disp_epv_p80", "spoil_epv_p80", "hitout_epv_p80",
+  "epv_raw", "recv_epv_raw", "disp_epv_raw", "spoil_epv_raw", "hitout_epv_raw",
+  "season_epv", "season_recv_epv", "season_disp_epv", "season_spoil_epv", "season_hitout_epv", "epv_pg",
   "avg_p80", "avg_tog"
 ))
 
@@ -220,8 +223,8 @@ utils::globalVariables(c(
   "HFFL", "HFFR", "CHF", "FPL", "FPR", "FF",
 
   # TORP rating diffs
-  "torp_diff", "torp_ratio", "torp_recv_diff", "torp_disp_diff",
-  "torp_spoil_diff", "torp_hitout_diff",
+  "epr_diff", "epr_ratio", "epr_recv_diff", "epr_disp_diff",
+  "epr_spoil_diff", "epr_hitout_diff",
 
   # Phase matchup columns
   "hoff_adef", "hmid_amid", "hdef_afwd", "hint_aint",
@@ -269,9 +272,9 @@ utils::globalVariables(c(
   "team_name_adj", "home_ground", "venue_adj",
 
   # .x/.y suffixed columns from self-join
-  "torp.x", "torp.y", "torp_recv.x", "torp_recv.y",
-  "torp_disp.x", "torp_disp.y", "torp_spoil.x", "torp_spoil.y",
-  "torp_hitout.x", "torp_hitout.y",
+  "epr.x", "epr.y", "recv_epr.x", "recv_epr.y",
+  "disp_epr.x", "disp_epr.y", "spoil_epr.x", "spoil_epr.y",
+  "hitout_epr.x", "hitout_epr.y",
   "def.x", "def.y", "mid.x", "mid.y", "fwd.x", "fwd.y", "int.x", "int.y",
   "BPL.x", "BPL.y", "BPR.x", "BPR.y", "FB.x", "FB.y",
   "HBFL.x", "HBFL.y", "HBFR.x", "HBFR.y", "CHB.x", "CHB.y",
@@ -304,8 +307,8 @@ utils::globalVariables(c(
   "relative_humidity_2m", "kickoff_utc", "time",
 
   # Predictions pipeline specific
-  "torp_week", "torp_recv_week", "torp_disp_week",
-  "torp_spoil_week", "torp_hitout_week",
+  "epr_week", "epr_recv_week", "epr_disp_week",
+  "epr_spoil_week", "epr_hitout_week",
   "n_players", "team_tog_sum",
   "type_anti", "Ground",
 
@@ -321,7 +324,12 @@ utils::globalVariables(c(
 
   # Predictions pipeline
   "home_rating", "away_rating", "start_time", "players",
-  "pred_margin", "rating_diff"
+  "pred_margin", "rating_diff",
+
+  # Final ladder
+  "win_prob", "is_played", "expected_wins", "expected_losses",
+  "i.pred_win", "i.pred_margin", "i.pred_xtotal",
+  "pred_home", "flipped"
 ))
 
 # Team profile variables
