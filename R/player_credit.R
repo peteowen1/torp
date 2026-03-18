@@ -257,7 +257,10 @@ create_player_game_data <- function(pbp_data = NULL,
       intercepts, rebound50s, one_percenters,
       frees_for, frees_against, clangers, turnovers,
       score_involvements, shots_at_goal, goal_assists,
-      ground_ball_gets
+      ground_ball_gets,
+      # Efficiency stats
+      dplyr::any_of(c("effective_disposals", "effective_kicks",
+                       "disposal_efficiency", "kick_efficiency"))
     )
 
   return(plyr_gm_df)
