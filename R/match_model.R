@@ -93,10 +93,7 @@
     EPR_PRIOR_RATE_SPOIL + EPR_PRIOR_RATE_HITOUT
 
   # Drop PSR columns from torp_df to avoid collision with psr_df join later
-  psr_cols_in_torp <- intersect(c("psr", "osr", "dsr"), names(torp_df))
-  if (length(psr_cols_in_torp) > 0) {
-    torp_df <- torp_df |> dplyr::select(-dplyr::all_of(psr_cols_in_torp))
-  }
+  torp_df <- torp_df |> dplyr::select(-dplyr::any_of(c("psr", "osr", "dsr")))
 
   team_lineup_df <- teams |>
     dplyr::left_join(
@@ -341,7 +338,10 @@
   # Strategy 1: Load from torpdata release
   historical <- tryCatch({
     load_weather()
-  }, error = function(e) NULL)
+  }, error = function(e) {
+    cli::cli_warn("Could not load weather from release: {conditionMessage(e)} -- trying local file")
+    NULL
+  })
 
   # Strategy 2: Fall back to local file
   if (is.null(historical) || nrow(historical) == 0) {

@@ -700,8 +700,14 @@ update_weather <- function() {
                   venue_name, venue, venue_timezone, utc_start_time,
                   home_team_name, away_team_name) |>
     dplyr::left_join(all_grounds, by = "venue") |>
-    dplyr::filter(!is.na(Latitude)) |>
     dplyr::mutate(match_date = as.Date(utc_start_time))
+
+  no_geo <- fixtures_geo |> dplyr::filter(is.na(Latitude))
+  if (nrow(no_geo) > 0) {
+    missing_venues <- unique(no_geo$venue)
+    cli::cli_warn("Skipping {nrow(no_geo)} match{?es} at unmapped venue{?s}: {paste(missing_venues, collapse = ', ')}")
+  }
+  fixtures_geo <- fixtures_geo |> dplyr::filter(!is.na(Latitude))
 
   # Fetch per venue batch
   venue_groups <- fixtures_geo |>
@@ -769,6 +775,12 @@ update_weather <- function() {
       is_rain = precipitation_total > 0.5,
       is_roof = venue == "Docklands"
     )
+
+  # Warn if matches had no hourly data in the kickoff window
+  n_no_weather <- nrow(fixtures_geo) - length(unique(new_weather$match_id))
+  if (n_no_weather > 0) {
+    cli::cli_warn("{n_no_weather} match{?es} had no hourly weather data in the 3hr kickoff window")
+  }
 
   # Merge with existing and upload
   combined <- dplyr::bind_rows(existing, new_weather) |>
