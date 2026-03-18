@@ -134,7 +134,13 @@ prepare_sim_data <- function(season, team_ratings = NULL, fixtures = NULL,
       label <- if (use_injury_aware) "injury-aware" else "standard"
       cli::cli_alert_info("Building {label} team ratings from player TORP (top {SIM_TOP_N_PLAYERS} per team)")
 
-      pr <- tryCatch(load_torp_ratings(), error = function(e) NULL)
+      # Injury-aware path: use torp_ratings() for live computation with full
+      # TORP blend (epr + psr). Standard path: download pre-computed release.
+      if (use_injury_aware) {
+        pr <- tryCatch(torp_ratings(season), error = function(e) NULL)
+      } else {
+        pr <- tryCatch(load_torp_ratings(), error = function(e) NULL)
+      }
       if (is.null(pr)) {
         cli::cli_abort("Could not load team or player ratings. Provide them via the {.arg team_ratings} argument.")
       }

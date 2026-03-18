@@ -339,6 +339,19 @@ if (nrow(torp_new) > 0) {
     torp_df_total <- torp_new
   }
 
+  # Blend PSR into ratings so the release has torp/psr/osr/dsr columns
+  psr_df <- tryCatch({
+    skills <- load_player_skills()
+    .compute_psr_from_skills(skills)
+  }, error = function(e) {
+    cli::cli_warn("Could not compute PSR for release: {e$message}")
+    NULL
+  })
+  if (!is.null(psr_df)) {
+    torp_df_total <- calculate_torp(torp_df_total, psr_df)
+    cli::cli_alert_success("Blended PSR into ratings ({sum(!is.na(torp_df_total$torp))} rows with torp)")
+  }
+
   save_to_release(torp_df_total, "torp_ratings", "ratings-data")
 
   uploaded <- tryCatch(load_torp_ratings(), error = function(e) NULL)
