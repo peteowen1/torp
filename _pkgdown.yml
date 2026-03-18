@@ -56,6 +56,9 @@ reference:
     desc: Calculate and view TORP player ratings
     contents:
       - calculate_torp_ratings
+      - calculate_epr_stats
+      - calculate_torp
+      - calculate_psr_components
       - torp_ratings
       - epr_ratings
       - psr_ratings
@@ -98,6 +101,7 @@ reference:
       - prepare_final_dataframe
       - ladder
       - calculate_ladder
+      - calculate_final_ladder
 
   - title: Chain Analysis
     desc: Access and analyse possession chains
