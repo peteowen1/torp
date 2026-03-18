@@ -155,7 +155,10 @@ create_player_game_data <- function(pbp_data = NULL,
       hitout_epv = hitouts * p$hitout_wt + hitouts_to_advantage * p$hitout_adv_wt + ruck_contests * p$ruck_contest_wt +
                    clearances * p$clearances_wt
     ) |>
-    dplyr::select(-utc_start_time)
+    dplyr::select(-dplyr::any_of(c("utc_start_time", "player_name", "given_name", "surname",
+                                   "player_captain", "player_jumper_number", "player_photo_url",
+                                   "home_team_name", "away_team_name", "last_updated",
+                                   "team_status")))
 
   plyr_gm_df <- plyr_gm_df |>
     dplyr::left_join(
