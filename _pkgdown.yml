@@ -64,7 +64,6 @@ reference:
       - create_player_game_data
       - default_epv_params
       - create_wp_credit
-      - calculate_player_stats
       - calculate_psr
       - filter_game_data
       - team_profile
