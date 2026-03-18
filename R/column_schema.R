@@ -473,6 +473,23 @@ XG_COL_MAP <- c(
     dt[, (drop_cols) := NULL]
   }
 
+  # --- 8. Zero-fill expected extended_stats columns missing from API response ---
+  # The AFL API occasionally drops extended stat columns between seasons.
+  # Filling with 0 is safe: these are counting stats, so 0 = not recorded.
+  expected_ext <- c(
+    "spoils", "pressure_acts", "def_half_pressure_acts",
+    "hitouts_to_advantage", "ruck_contests", "ground_ball_gets",
+    "intercepts", "one_percenters", "rebound50s", "frees_against", "frees_for",
+    "score_involvements", "contest_def_one_on_ones", "contest_off_one_on_ones",
+    "contest_off_wins", "contest_def_losses", "metres_gained", "turnovers",
+    "goal_assists", "shots_at_goal"
+  )
+  nms <- names(dt)
+  missing_ext <- expected_ext[!expected_ext %in% nms]
+  if (length(missing_ext) > 0) {
+    dt[, (missing_ext) := lapply(missing_ext, function(x) 0L)]
+  }
+
   invisible(dt)
 }
 
