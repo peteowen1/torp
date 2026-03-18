@@ -456,6 +456,13 @@ XG_COL_MAP <- c(
     dt <- data.table::as.data.table(dt)
   }
 
+  # --- 0. Convert dot-notation + camelCase to snake_case FIRST ---
+  # The live AFL API returns columns like stats.extendedStats.spoils (dots + camelCase).
+  # The explicit maps below expect underscore names (stats_extended_stats_spoils).
+  # Running bulk_snake_case first ensures maps fire correctly for both live API
+  # data and pre-normalised release parquets.
+  .bulk_snake_case(dt, verbose = FALSE, label = "Player stats")
+
   nms <- names(dt)
 
   # --- 1. Strip v2 `stats_` prefix from stat columns ---
@@ -486,8 +493,7 @@ XG_COL_MAP <- c(
     }
   }
 
-  # --- 4. Bulk snake_case for any remaining camelCase columns ---
-  .bulk_snake_case(dt, verbose = FALSE, label = "Player stats")
+  # (bulk_snake_case already ran as step 0 above)
 
   # --- 5. Add `player_name` from given_name + surname if missing ---
   nms <- names(dt)
@@ -515,9 +521,10 @@ XG_COL_MAP <- c(
     dt[, (drop_cols) := NULL]
   }
 
-  # --- 8. Zero-fill expected extended_stats columns missing from API response ---
-  # The AFL API occasionally drops extended stat columns between seasons.
-  # Filling with 0 is safe: these are counting stats, so 0 = not recorded.
+  # --- 8. Last-resort zero-fill for any columns still missing after renaming ---
+  # Step 0 + the maps above should handle all known schemas. This catches any
+  # columns the API genuinely drops (new seasons, provisional data, etc.).
+  # Zero is safe for counting stats: 0 = not recorded.
   expected_ext <- c(
     "spoils", "pressure_acts", "def_half_pressure_acts",
     "hitouts_to_advantage", "ruck_contests", "ground_ball_gets",
