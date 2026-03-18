@@ -147,7 +147,15 @@ prepare_sim_data <- function(season, team_ratings = NULL, fixtures = NULL,
         pr_dt <- pr_dt[round == max_round]
       }
 
+      # Normalise rating column name: epr -> torp for consistency
+      if ("epr" %in% names(pr_dt) && !"torp" %in% names(pr_dt)) {
+        data.table::setnames(pr_dt, "epr", "torp")
+      }
+
       # Exclude injured players when injury data is provided
+      # Keep a copy of full ratings before exclusion for injury schedule
+      pr_dt_full <- if (use_injury_aware) data.table::copy(pr_dt) else NULL
+
       if (use_injury_aware && "player_name" %in% names(pr_dt)) {
         pr_dt[, player_norm := norm_name(player_name)]
         injured_norms <- injuries$player_norm
@@ -185,6 +193,23 @@ prepare_sim_data <- function(season, team_ratings = NULL, fixtures = NULL,
 
   # Standardise team names in ratings
   sim_teams[, team := torp_replace_teams(team)]
+
+  # --- Injury Return Schedule ---
+  # Build a schedule of TORP boosts for when injured players return
+  injury_schedule <- NULL
+  if (use_injury_aware && exists("pr_dt_full") && !is.null(pr_dt_full)) {
+    # Determine current round from played games
+    current_round <- if (nrow(played_games) > 0) max(played_games$roundnum) else 1L
+    inj_with_round <- injuries
+    inj_with_round$return_round <- parse_return_round(
+      injuries$estimated_return, season, current_round
+    )
+    injury_schedule <- build_injury_schedule(inj_with_round, pr_dt_full)
+    if (nrow(injury_schedule) > 0) {
+      n_returning <- nrow(injury_schedule)
+      cli::cli_alert_info("Injury schedule: {n_returning} team-round return boost{?s} computed")
+    }
+  }
 
   # --- Predictions (optional) ---
   if (is.null(predictions)) {
@@ -235,10 +260,11 @@ prepare_sim_data <- function(season, team_ratings = NULL, fixtures = NULL,
   }
 
   list(
-    sim_teams      = sim_teams,
-    sim_games      = sim_games,
-    played_games   = played_games,
-    gf_familiarity = gf_familiarity
+    sim_teams       = sim_teams,
+    sim_games       = sim_games,
+    played_games    = played_games,
+    gf_familiarity  = gf_familiarity,
+    injury_schedule = injury_schedule
   )
 }
 
@@ -754,6 +780,7 @@ simulate_afl_season <- function(season,
   base_games <- prep$sim_games
   played_games <- prep$played_games
   gf_familiarity <- prep$gf_familiarity
+  injury_schedule <- prep$injury_schedule
 
   # Ensure column types once (so simulate_season doesn't need to per-sim)
   if ("result" %in% names(base_games)) {
@@ -769,7 +796,8 @@ simulate_afl_season <- function(season,
   # --- Worker function for a single sim ---
   run_one_sim <- function(sim_id) {
     sim_result <- simulate_season(base_teams, base_games, return_teams = TRUE,
-                                  injury_sd = sim_injury_sd)
+                                  injury_sd = sim_injury_sd,
+                                  injury_schedule = injury_schedule)
     simmed_games <- sim_result$games
     sim_teams_final <- sim_result$teams
 
@@ -801,7 +829,7 @@ simulate_afl_season <- function(season,
     # Export required objects and functions to workers
     parallel::clusterExport(cl, c(
       "base_teams", "base_games", "played_games", "keep_games",
-      "sim_injury_sd", "gf_familiarity",
+      "sim_injury_sd", "gf_familiarity", "injury_schedule",
       "simulate_season", "process_games_dt", "calculate_ladder",
       "simulate_finals", "simulate_match",
       "finals_home_advantage", "gf_home_advantage",

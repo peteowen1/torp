@@ -290,11 +290,11 @@ default_skill_params <- function() {
     rating_points             = list(lambda = 0.01709, prior_strength = 0.52),
     # Efficiency stats (Beta-Binomial, optimized via multi-start log-loss)
     disposal_efficiency       = list(lambda = 0.00254, prior_strength = 115.40),
-    goal_accuracy             = list(lambda = 1e-05, prior_strength = 100.89),
+    goal_accuracy             = list(lambda = 1e-05,   prior_strength = 100.89),
     contested_poss_rate       = list(lambda = 0.00308, prior_strength = 39.77),
     hitout_win_pct            = list(lambda = 0.00119, prior_strength = 239.50),
     kick_efficiency           = list(lambda = 0.00252, prior_strength = 66.72),
-    cond_tog                  = list(lambda = 0.00739, prior_strength = 1.20),
-    squad_selection           = list(lambda = 0.01749, prior_strength = 0.48)
+    cond_tog                  = list(lambda = 0.00739, prior_strength = 1.20,   prior_quantile = 0.5),
+    squad_selection           = list(lambda = 0.01749, prior_strength = 0.48,   prior_quantile = 0.5)
   )
 }

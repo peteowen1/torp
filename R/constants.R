@@ -391,6 +391,22 @@ SIM_INJURY_SD <- 3
 #' @keywords internal
 SIM_MEAN_REVERSION <- 0.01
 
+#' TBC/unknown injuries: assume back in ~3 rounds
+#' @keywords internal
+SIM_INJURY_TBC_BUFFER <- 3L
+
+#' "Mid-season" estimated return maps to round 12
+#' @keywords internal
+SIM_INJURY_SEASON_MID <- 12L
+
+#' "Late season" estimated return maps to round 18
+#' @keywords internal
+SIM_INJURY_SEASON_LATE <- 18L
+
+#' "Second half of YYYY" estimated return maps to round 13
+#' @keywords internal
+SIM_INJURY_SECOND_HALF <- 13L
+
 #' Reduced injury noise SD when known injuries are excluded (points)
 #' When specific injured players are removed from team ratings, the remaining
 #' per-round noise can be smaller since a major source of variation is gone.

@@ -164,12 +164,16 @@ reference:
       - starts_with("CREDIT_")
 
   - title: Injuries
-    desc: Injury data access and matching
+    desc: Injury data access, matching, and simulation scheduling
     contents:
       - injuries
       - get_all_injuries
       - match_injuries
       - scrape_injuries
+      - parse_return_round
+      - build_injury_schedule
+      - save_injury_data
+      - load_injury_data
 
   - title: Utilities
     desc: Helper and convenience functions

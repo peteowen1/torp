@@ -878,6 +878,35 @@ load_team_ratings <- function(columns = NULL) {
   out
 }
 
+#' Load Injury Data from GitHub Releases
+#'
+#' Loads historical injury list snapshots from the torpdata repository.
+#' Each snapshot is a parquet file saved by [save_injury_data()] during
+#' the predictions pipeline.
+#'
+#' @param seasons A numeric vector of 4-digit years. Defaults to the current
+#'   AFL season via [get_afl_season()].
+#' @param columns Optional character vector of column names to read.
+#' @return A data frame containing injury snapshots with columns including
+#'   `player`, `team`, `injury`, `estimated_return`, `updated`,
+#'   `player_norm`, `source`, and `scraped_date`.
+#' @seealso [get_all_injuries()], [save_injury_data()]
+#' @examples
+#' \dontrun{
+#' try({
+#'   load_injury_data(2026)
+#' })
+#' }
+#' @export
+load_injury_data <- function(seasons = get_afl_season(), columns = NULL) {
+  seasons <- validate_seasons(seasons)
+  base_url <- paste0("https://github.com/", get_torp_data_repo(), "/releases/download")
+  urls <- paste0(base_url, "/injury-data/injury_list_", seasons, ".parquet")
+  out <- load_from_url(urls, seasons = seasons, columns = columns)
+  out
+}
+
+
 #' Load EP/WP Chart Data
 #'
 #' @description Loads a lightweight subset of play-by-play data optimised for

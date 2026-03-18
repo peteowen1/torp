@@ -1384,6 +1384,17 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
     cli::cli_warn("0 injuries loaded during active season - all players will be treated as available")
   }
 
+  # Parse return rounds and save injury snapshot to torpdata release
+  if (nrow(inj_df) > 0) {
+    inj_df$return_round <- parse_return_round(
+      inj_df$estimated_return, season, min(target_weeks)
+    )
+    tryCatch(
+      save_injury_data(inj_df, season),
+      error = function(e) cli::cli_warn("Failed to save injury data: {conditionMessage(e)}")
+    )
+  }
+
   tr <- torp_ratings(season, min(target_weeks))
   if (nrow(tr) == 0 || !"player_name" %in% names(tr)) {
     cli::cli_alert_info("No TORP ratings available for {season} R{min(target_weeks)} (pre-season or fixtures not ready) - skipping predictions")
@@ -1397,6 +1408,7 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
   # Join PSR to player-level ratings for injury-adjusted weekly summary
   if (!is.null(psr_df)) {
     tr <- tr |>
+      dplyr::select(-dplyr::any_of("psr")) |>
       dplyr::left_join(
         psr_df |> dplyr::select(player_id, season, round, psr),
         by = c("player_id", "season", "round")

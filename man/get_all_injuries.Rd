@@ -13,9 +13,10 @@ get_all_injuries(season, scrape = TRUE)
 Set to FALSE for pre-season use or testing when the AFL page is empty.}
 }
 \value{
-A data.frame with columns: \code{player}, \code{injury}, \code{estimated_return},
-\code{player_norm}, \code{source}. The \code{source} column is \code{"weekly"} or
-\code{"preseason"}.
+A data.frame with columns: \code{player}, \code{team}, \code{injury},
+\code{estimated_return}, \code{updated}, \code{player_norm}, \code{source}. The \code{source}
+column is \code{"weekly"} or \code{"preseason"}. \code{updated} is the per-team date
+from the AFL injury page (Date class; NA for preseason entries).
 }
 \description{
 Combines the live AFL weekly injury list with the curated preseason
