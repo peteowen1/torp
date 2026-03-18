@@ -1,14 +1,14 @@
 # -----------------------------------------------------------------------------
-# calculate_torp_ratings Tests
+# calculate_epr Tests
 # -----------------------------------------------------------------------------
 
-test_that("calculate_torp_ratings function exists and is exported", {
-  expect_true(exists("calculate_torp_ratings"))
-  expect_true("calculate_torp_ratings" %in% getNamespaceExports("torp"))
+test_that("calculate_epr function exists and is exported", {
+  expect_true(exists("calculate_epr"))
+  expect_true("calculate_epr" %in% getNamespaceExports("torp"))
 })
 
-test_that("calculate_torp_ratings has correct function signature", {
-  fn_args <- names(formals(calculate_torp_ratings))
+test_that("calculate_epr has correct function signature", {
+  fn_args <- names(formals(calculate_epr))
 
   expect_true("season_val" %in% fn_args)
   expect_true("round_val" %in% fn_args)
@@ -24,32 +24,34 @@ test_that("calculate_torp_ratings has correct function signature", {
   expect_true("skills" %in% fn_args)
 })
 
-test_that("calculate_torp_ratings skills parameter defaults to TRUE", {
-  expect_true(formals(calculate_torp_ratings)$skills)
+test_that("calculate_epr skills parameter defaults to TRUE", {
+  expect_true(formals(calculate_epr)$skills)
 })
 
-test_that("calculate_torp_ratings has reasonable defaults", {
-  fn_formals <- formals(calculate_torp_ratings)
+test_that("calculate_epr has reasonable defaults", {
+  fn_formals <- formals(calculate_epr)
 
-  # decay_recv uses RATING_DECAY_RECV constant
-  expect_true(is.symbol(fn_formals$decay_recv) || fn_formals$decay_recv == torp:::RATING_DECAY_RECV)
-  expect_true(is.symbol(fn_formals$loading) || fn_formals$loading == torp:::RATING_LOADING_DEFAULT)
-  expect_true(is.symbol(fn_formals$prior_games_recv) || fn_formals$prior_games_recv == torp:::RATING_PRIOR_GAMES_RECV)
-  expect_true(is.symbol(fn_formals$prior_games_disp) || fn_formals$prior_games_disp == torp:::RATING_PRIOR_GAMES_DISP)
+  # decay_recv uses EPR_DECAY_RECV constant
+  expect_true(is.symbol(fn_formals$decay_recv) || fn_formals$decay_recv == torp:::EPR_DECAY_RECV)
+  expect_true(is.symbol(fn_formals$loading) || fn_formals$loading == torp:::EPR_LOADING_DEFAULT)
+  expect_true(is.symbol(fn_formals$prior_games_recv) || fn_formals$prior_games_recv == torp:::EPR_PRIOR_GAMES_RECV)
+  expect_true(is.symbol(fn_formals$prior_games_disp) || fn_formals$prior_games_disp == torp:::EPR_PRIOR_GAMES_DISP)
 })
 
 # -----------------------------------------------------------------------------
 # torp_ratings Alias Tests
 # -----------------------------------------------------------------------------
 
-test_that("torp_ratings is an alias for calculate_torp_ratings", {
+test_that("torp_ratings exists and calculate_torp_ratings is alias for calculate_epr", {
   expect_true(exists("torp_ratings"))
-  expect_identical(torp_ratings, calculate_torp_ratings)
+  expect_true(is.function(torp_ratings))
+  expect_true(exists("calculate_torp_ratings"))
+  expect_identical(calculate_torp_ratings, calculate_epr)
 })
 
-test_that("calculate_player_stats helper function works", {
+test_that("calculate_epr_stats helper function works", {
   # Test the helper function exists
-  expect_true(exists("calculate_player_stats"))
+  expect_true(exists("calculate_epr_stats", envir = asNamespace("torp")))
 
   # Create minimal test data with player_name (as produced by create_player_game_data)
   test_data <- data.frame(
@@ -57,18 +59,18 @@ test_that("calculate_player_stats helper function works", {
     player_name = c("Player1", "Player1", "Player2", "Player2"),
     match_id = c("CD_M2024014101", "CD_M2024014102", "CD_M2024014101", "CD_M2024014102"),
     utc_start_time = rep(as.Date("2024-04-01"), 4),
-    total_credits_adj = c(100, 120, 80, 90),
-    recv_credits_adj = c(20, 25, 15, 18),
-    disp_credits_adj = c(40, 45, 35, 38),
-    spoil_credits_adj = c(10, 12, 8, 9),
-    hitout_credits_adj = c(5, 8, 0, 0),
+    epv_adj = c(100, 120, 80, 90),
+    recv_epv_adj = c(20, 25, 15, 18),
+    disp_epv_adj = c(40, 45, 35, 38),
+    spoil_epv_adj = c(10, 12, 8, 9),
+    hitout_epv_adj = c(5, 8, 0, 0),
     time_on_ground_percentage = c(82, 78, 90, 85),
     listed_position = c("Midfielder", "Midfielder", "Forward", "Forward"),
     stringsAsFactors = FALSE
   )
 
   # The function should work with valid inputs
-  result <- torp:::calculate_player_stats(
+  result <- torp:::calculate_epr_stats(
     player_game_data = test_data,
     match_ref = "CD_M2024014103",
     date_val = as.Date("2024-04-08"),
@@ -79,35 +81,35 @@ test_that("calculate_player_stats helper function works", {
 
   expect_true(is.data.frame(result))
   expect_true("player_id" %in% names(result))
-  expect_true("torp" %in% names(result))
+  expect_true("epr" %in% names(result))
 })
 
 # -----------------------------------------------------------------------------
-# calculate_player_stats Tests
+# calculate_epr_stats Tests
 # -----------------------------------------------------------------------------
 
-test_that("calculate_player_stats function exists", {
-  expect_true(exists("calculate_player_stats", envir = asNamespace("torp")))
+test_that("calculate_epr_stats function exists", {
+  expect_true(exists("calculate_epr_stats", envir = asNamespace("torp")))
 })
 
-test_that("calculate_player_stats returns expected structure with valid data", {
+test_that("calculate_epr_stats returns expected structure with valid data", {
   # Create comprehensive test data (as produced by create_player_game_data)
   test_data <- data.frame(
     player_id = rep(1:5, each = 4),
     player_name = rep(paste("First", paste0("Last", 1:5)), each = 4),
     match_id = rep(c("CD_M2024014101", "CD_M2024014102", "CD_M2024014103", "CD_M2024014104"), 5),
     utc_start_time = rep(as.Date("2024-04-01") + c(0, 7, 14, 21), 5),
-    total_credits_adj = runif(20, 50, 150),
-    recv_credits_adj = runif(20, 10, 50),
-    disp_credits_adj = runif(20, 20, 80),
-    spoil_credits_adj = runif(20, 0, 20),
-    hitout_credits_adj = runif(20, 0, 30),
+    epv_adj = runif(20, 50, 150),
+    recv_epv_adj = runif(20, 10, 50),
+    disp_epv_adj = runif(20, 20, 80),
+    spoil_epv_adj = runif(20, 0, 20),
+    hitout_epv_adj = runif(20, 0, 30),
     time_on_ground_percentage = runif(20, 60, 95),
     listed_position = sample(c("FWD", "MID", "DEF", "RUC"), 20, replace = TRUE),
     stringsAsFactors = FALSE
   )
 
-  result <- torp:::calculate_player_stats(
+  result <- torp:::calculate_epr_stats(
     player_game_data = test_data,
     match_ref = "CD_M2024014105",
     date_val = as.Date("2024-05-01"),
@@ -119,33 +121,33 @@ test_that("calculate_player_stats returns expected structure with valid data", {
   # Check structure
   expect_true(is.data.frame(result) || data.table::is.data.table(result))
   expect_true("player_id" %in% names(result))
-  expect_true("torp" %in% names(result))
-  expect_true("torp_recv" %in% names(result) || "torp_recv_adj" %in% names(result))
-  expect_true("torp_disp" %in% names(result) || "torp_disp_adj" %in% names(result))
+  expect_true("epr" %in% names(result))
+  expect_true("recv_epr" %in% names(result) || "recv_epr_adj" %in% names(result))
+  expect_true("disp_epr" %in% names(result) || "disp_epr_adj" %in% names(result))
 
   # Should have 5 unique players
   expect_equal(nrow(result), 5)
 })
 
-test_that("calculate_player_stats respects decay parameter", {
+test_that("calculate_epr_stats respects decay parameter", {
   # Create test data with games at different times
   test_data <- data.frame(
     player_id = rep(1, 3),
     player_name = rep("First Last", 3),
     match_id = c("CD_M2024014101", "CD_M2024014102", "CD_M2024014103"),
     utc_start_time = as.Date("2024-04-01") + c(0, 30, 60),  # 0, 30, 60 days apart
-    total_credits_adj = c(100, 100, 100),
-    recv_credits_adj = c(50, 50, 50),
-    disp_credits_adj = c(50, 50, 50),
-    spoil_credits_adj = c(10, 10, 10),
-    hitout_credits_adj = c(5, 5, 5),
+    epv_adj = c(100, 100, 100),
+    recv_epv_adj = c(50, 50, 50),
+    disp_epv_adj = c(50, 50, 50),
+    spoil_epv_adj = c(10, 10, 10),
+    hitout_epv_adj = c(5, 5, 5),
     time_on_ground_percentage = c(80, 85, 75),
     listed_position = rep("MID", 3),
     stringsAsFactors = FALSE
   )
 
   # Calculate with short decay (recent games weighted more)
-  result_short <- torp:::calculate_player_stats(
+  result_short <- torp:::calculate_epr_stats(
     player_game_data = test_data,
     match_ref = "CD_M2024014104",
     date_val = as.Date("2024-06-01"),
@@ -156,7 +158,7 @@ test_that("calculate_player_stats respects decay parameter", {
   )
 
   # Calculate with long decay (all games weighted similarly)
-  result_long <- torp:::calculate_player_stats(
+  result_long <- torp:::calculate_epr_stats(
     player_game_data = test_data,
     match_ref = "CD_M2024014104",
     date_val = as.Date("2024-06-01"),
@@ -183,12 +185,12 @@ test_that("prepare_final_dataframe function exists", {
 # Integration Tests
 # -----------------------------------------------------------------------------
 
-test_that("calculate_torp_ratings works with pre-loaded data", {
+test_that("calculate_epr works with pre-loaded data", {
   skip_if(is.null(.shared$player_game_data) || is.null(.shared$player_details),
           "Could not load player data")
 
   # Calculate ratings with pre-loaded data (skills = FALSE to isolate rating logic)
-  result <- calculate_torp_ratings(
+  result <- calculate_epr(
     season_val = 2024,
     round_val = 1,
     plyr_tm_df = .shared$player_details,
@@ -198,16 +200,16 @@ test_that("calculate_torp_ratings works with pre-loaded data", {
 
   expect_true(is.data.frame(result))
   expect_true(nrow(result) > 0)
-  expect_true("torp" %in% names(result) || "player_id" %in% names(result))
+  expect_true("epr" %in% names(result) || "player_id" %in% names(result))
 })
 
 # -----------------------------------------------------------------------------
 # Constants Usage Tests
 # -----------------------------------------------------------------------------
 
-test_that("calculate_player_stats uses prior_games_spoil and prior_games_hitout constants", {
-  expect_equal(torp:::RATING_PRIOR_GAMES_SPOIL, 3.0000)
-  expect_equal(torp:::RATING_PRIOR_GAMES_HITOUT, 15.0000)
+test_that("calculate_epr_stats uses prior_games_spoil and prior_games_hitout constants", {
+  expect_equal(torp:::EPR_PRIOR_GAMES_SPOIL, 3.0000)
+  expect_equal(torp:::EPR_PRIOR_GAMES_HITOUT, 15.0000)
 })
 
 # -----------------------------------------------------------------------------
@@ -223,17 +225,17 @@ test_that("wt_gms sums per-match weights correctly for same-day games", {
     player_name = rep("Same Day", 2),
     match_id = c("CD_M2024014101", "CD_M2024014102"),
     utc_start_time = rep(as.Date("2024-04-01"), 2),
-    total_credits_adj = c(100, 80),
-    recv_credits_adj = c(20, 15),
-    disp_credits_adj = c(40, 35),
-    spoil_credits_adj = c(10, 8),
-    hitout_credits_adj = c(5, 3),
+    epv_adj = c(100, 80),
+    recv_epv_adj = c(20, 15),
+    disp_epv_adj = c(40, 35),
+    spoil_epv_adj = c(10, 8),
+    hitout_epv_adj = c(5, 3),
     time_on_ground_percentage = c(88, 76),
     listed_position = rep("MID", 2),
     stringsAsFactors = FALSE
   )
 
-  result <- torp:::calculate_player_stats(
+  result <- torp:::calculate_epr_stats(
     player_game_data = test_data,
     match_ref = "CD_M2024014103",
     date_val = as.Date("2024-04-08"),
@@ -245,7 +247,7 @@ test_that("wt_gms sums per-match weights correctly for same-day games", {
   expect_equal(result$gms, 2)
   # wt_gms should be 2x the single-game weight (both games same date, same decay)
   # NOT collapsed to 1x via unique()
-  single_weight <- exp(-as.numeric(as.Date("2024-04-08") - as.Date("2024-04-01")) / torp:::RATING_DECAY_RECV)
+  single_weight <- exp(-as.numeric(as.Date("2024-04-08") - as.Date("2024-04-01")) / torp:::EPR_DECAY_RECV)
   expect_equal(result$wt_gms, 2 * single_weight, tolerance = 1e-10)
 })
 
@@ -253,10 +255,10 @@ test_that("wt_gms sums per-match weights correctly for same-day games", {
 # TOG-Weighted Average Adjustment Tests
 # -----------------------------------------------------------------------------
 
-test_that("calculate_torp_ratings rejects skills without cond_tog_skill column", {
+test_that("calculate_epr rejects skills without cond_tog_skill column", {
   bad_skills <- data.frame(player_id = 1, some_other_col = 0.5)
   expect_error(
-    calculate_torp_ratings(skills = bad_skills),
+    calculate_epr(skills = bad_skills),
     "cond_tog_skill"
   )
 })
@@ -268,18 +270,18 @@ test_that("TOG-weighted average adjustment produces correct math", {
     player_name = rep(c("Player One", "Player Two", "Player Three"), each = 2),
     match_id = rep(c("CD_M2024014101", "CD_M2024014102"), 3),
     utc_start_time = rep(as.Date("2024-04-01"), 6),
-    total_credits_adj = c(100, 100, 80, 80, 60, 60),
-    recv_credits_adj = c(30, 30, 20, 20, 10, 10),
-    disp_credits_adj = c(40, 40, 30, 30, 20, 20),
-    spoil_credits_adj = c(10, 10, 8, 8, 5, 5),
-    hitout_credits_adj = c(5, 5, 3, 3, 0, 0),
+    epv_adj = c(100, 100, 80, 80, 60, 60),
+    recv_epv_adj = c(30, 30, 20, 20, 10, 10),
+    disp_epv_adj = c(40, 40, 30, 30, 20, 20),
+    spoil_epv_adj = c(10, 10, 8, 8, 5, 5),
+    hitout_epv_adj = c(5, 5, 3, 3, 0, 0),
     time_on_ground_percentage = c(85, 80, 75, 70, 90, 88),
     listed_position = rep("MID", 6),
     stringsAsFactors = FALSE
   )
 
-  # Get unadjusted stats from calculate_player_stats
-  unadj <- torp:::calculate_player_stats(
+  # Get unadjusted stats from calculate_epr_stats
+  unadj <- torp:::calculate_epr_stats(
     player_game_data = test_data,
     match_ref = "CD_M2024014103",
     date_val = as.Date("2024-04-08"),
@@ -294,14 +296,14 @@ test_that("TOG-weighted average adjustment produces correct math", {
     squad_selection_skill = c(1.0, 1.0, 1.0)
   )
 
-  # Apply adjustment manually (mirror the code in calculate_torp_ratings)
+  # Apply adjustment manually (mirrors the code in calculate_epr)
   adj <- data.table::copy(unadj)
   skills_dt <- data.table::as.data.table(skills)
   adj[skills_dt, tog_skill := i.squad_selection_skill * i.cond_tog_skill, on = "player_id"]
   adj[is.na(tog_skill), tog_skill := 0]
 
   tot_tog <- sum(adj$tog_skill)
-  comps <- c("torp_recv", "torp_disp", "torp_spoil", "torp_hitout")
+  comps <- c("recv_epr", "disp_epr", "spoil_epr", "hitout_epr")
   for (comp in comps) {
     avg_val <- sum(adj[[comp]] * adj$tog_skill) / tot_tog
     data.table::set(adj, j = comp, value = adj[[comp]] - avg_val)
@@ -315,7 +317,7 @@ test_that("TOG-weighted average adjustment produces correct math", {
   }
 
   # Verify: adjustment shifts values (high-TOG player 1 should still be highest)
-  expect_true(adj$torp_recv[adj$player_id == 1] > adj$torp_recv[adj$player_id == 3])
+  expect_true(adj$recv_epr[adj$player_id == 1] > adj$recv_epr[adj$player_id == 3])
 })
 
 test_that("TOG adjustment is skipped when all tog_skill are zero", {
@@ -324,17 +326,17 @@ test_that("TOG adjustment is skipped when all tog_skill are zero", {
     player_name = rep(c("Player One", "Player Two"), each = 2),
     match_id = rep(c("CD_M2024014101", "CD_M2024014102"), 2),
     utc_start_time = rep(as.Date("2024-04-01"), 4),
-    total_credits_adj = c(100, 100, 80, 80),
-    recv_credits_adj = c(30, 30, 20, 20),
-    disp_credits_adj = c(40, 40, 30, 30),
-    spoil_credits_adj = c(10, 10, 8, 8),
-    hitout_credits_adj = c(5, 5, 0, 0),
+    epv_adj = c(100, 100, 80, 80),
+    recv_epv_adj = c(30, 30, 20, 20),
+    disp_epv_adj = c(40, 40, 30, 30),
+    spoil_epv_adj = c(10, 10, 8, 8),
+    hitout_epv_adj = c(5, 5, 0, 0),
     time_on_ground_percentage = c(82, 79, 88, 84),
     listed_position = rep("MID", 4),
     stringsAsFactors = FALSE
   )
 
-  unadj <- torp:::calculate_player_stats(
+  unadj <- torp:::calculate_epr_stats(
     player_game_data = test_data,
     match_ref = "CD_M2024014103",
     date_val = as.Date("2024-04-08"),
@@ -359,5 +361,5 @@ test_that("TOG adjustment is skipped when all tog_skill are zero", {
   expect_equal(tot_tog, 0)
 
   # Values unchanged when tot_tog == 0
-  expect_equal(adj$torp_recv, unadj$torp_recv)
+  expect_equal(adj$recv_epr, unadj$recv_epr)
 })

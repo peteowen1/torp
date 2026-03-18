@@ -75,7 +75,7 @@ test_that("player ratings can be calculated from loaded data", {
   skip_if(is.null(.shared$player_details),
           "Could not load player data")
 
-  result <- calculate_torp_ratings(
+  result <- calculate_epr(
     season_val = 2024,
     round_val = 5,
     plyr_tm_df = .shared$player_details
@@ -83,7 +83,7 @@ test_that("player ratings can be calculated from loaded data", {
 
   expect_true(is.data.frame(result))
   expect_true(nrow(result) > 0)
-  expect_true("torp" %in% names(result) || "player_id" %in% names(result))
+  expect_true("epr" %in% names(result) || "player_id" %in% names(result))
 })
 
 # -----------------------------------------------------------------------------

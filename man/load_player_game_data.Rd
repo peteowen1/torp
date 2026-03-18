@@ -33,5 +33,5 @@ try({ # prevents cran errors
 }
 }
 \seealso{
-\code{\link[=create_player_game_data]{create_player_game_data()}}, \code{\link[=player_game_ratings]{player_game_ratings()}}, \code{\link[=calculate_torp_ratings]{calculate_torp_ratings()}}
+\code{\link[=create_player_game_data]{create_player_game_data()}}, \code{\link[=player_game_ratings]{player_game_ratings()}}, \code{\link[=calculate_epr]{calculate_epr()}}
 }

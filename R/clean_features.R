@@ -324,14 +324,14 @@ select_afl_model_vars <- function(df) {
       .data$game_wday_fac.x,
       .data$game_prop_through_day.x,
 
-      # Team rating variables (TORP - Team Overall Rating Points)
-      .data$torp_diff,
-      .data$torp_recv_diff,
-      .data$torp_disp_diff,
-      .data$torp_spoil_diff,
-      .data$torp_hitout_diff,
-      .data$torp.x,
-      .data$torp.y,
+      # Team rating variables (EPR - Expected Possession Rating)
+      .data$epr_diff,
+      .data$epr_recv_diff,
+      .data$epr_disp_diff,
+      .data$epr_spoil_diff,
+      .data$epr_hitout_diff,
+      .data$epr.x,
+      .data$epr.y,
 
       # Venue and travel variables
       .data$venue_fac,
@@ -381,14 +381,14 @@ select_afl_xgb_vars <- function(df) {
       .data$game_prop_through_month.x,
       .data$game_prop_through_day.x,
 
-      # TORP ratings (numeric)
-      .data$torp_diff,
-      .data$torp_recv_diff,
-      .data$torp_disp_diff,
-      .data$torp_spoil_diff,
-      .data$torp_hitout_diff,
-      .data$torp.x,
-      .data$torp.y,
+      # EPR ratings (numeric)
+      .data$epr_diff,
+      .data$epr_recv_diff,
+      .data$epr_disp_diff,
+      .data$epr_spoil_diff,
+      .data$epr_hitout_diff,
+      .data$epr.x,
+      .data$epr.y,
 
       # Venue/travel (numeric)
       .data$log_dist.x,

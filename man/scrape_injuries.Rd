@@ -10,10 +10,12 @@ scrape_injuries(timeout = 30)
 \item{timeout}{Numeric timeout in seconds for the HTTP request.}
 }
 \value{
-A data.frame with columns: \code{player}, \code{injury}, \code{estimated_return},
-\code{player_norm}.
+A data.frame with columns: \code{player}, \code{team}, \code{injury},
+\code{estimated_return}, \code{updated}, \code{player_norm}.
 }
 \description{
-Scrapes the current injury list from afl.com.au. Returns player names,
-injury descriptions, and estimated return timelines.
+Scrapes the current injury list from afl.com.au. The page contains 18 tables
+(one per team) in alphabetical team order. Each table's last row contains an
+"Updated: ..." date stamp. Returns player names, injury descriptions,
+estimated return timelines, team names, and the per-team updated date.
 }

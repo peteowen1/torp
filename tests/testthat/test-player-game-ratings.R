@@ -49,7 +49,7 @@ test_that("filter_game_data helper function works", {
     match_id = c("M1", "M2", "M3", "M4"),
     team = c("Adelaide Crows", "Brisbane Lions", "Carlton", "Adelaide Crows"),
     opp = c("Brisbane Lions", "Adelaide Crows", "Essendon", "Carlton"),
-    total_p80 = c(100, 120, 80, 90),
+    epv_p80 = c(100, 120, 80, 90),
     stringsAsFactors = FALSE
   )
 
@@ -185,8 +185,8 @@ test_that("print.torp_player_profile produces output", {
         stringsAsFactors = FALSE
       ),
       yearly_stats = data.frame(season = 2024, games = 10),
-      torp_season = data.frame(season = 2024, season_points = 100),
-      current_torp = data.frame(torp = 5.5)
+      torp_season = data.frame(season = 2024, season_epv = 100),
+      current_torp = data.frame(epr = 5.5)
     ),
     class = "torp_player_profile"
   )

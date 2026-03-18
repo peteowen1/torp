@@ -67,7 +67,7 @@ resolve_player <- function(player_name, seasons = TRUE) {
 #'   \item{player_info}{1-row tibble with player_id, name, team, position.}
 #'   \item{yearly_stats}{Per-season aggregated raw stats from \code{load_player_stats()}.}
 #'   \item{torp_season}{Per-season TORP ratings from \code{player_season_ratings()}.}
-#'   \item{current_torp}{Current TORP rating from \code{calculate_torp_ratings()}.}
+#'   \item{current_torp}{Current TORP rating from \code{calculate_epr()}.}
 #' }
 #'
 #' @export
@@ -155,7 +155,7 @@ player_profile <- function(player_name, seasons = TRUE) {
 
   # --- Current TORP rating ---
   current_torp <- tryCatch({
-    cr <- calculate_torp_ratings()
+    cr <- calculate_epr()
     cr[cr$player_id == pid, , drop = FALSE]
   }, error = function(e) data.frame())
 

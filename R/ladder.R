@@ -134,7 +134,13 @@ prepare_sim_data <- function(season, team_ratings = NULL, fixtures = NULL,
       label <- if (use_injury_aware) "injury-aware" else "standard"
       cli::cli_alert_info("Building {label} team ratings from player TORP (top {SIM_TOP_N_PLAYERS} per team)")
 
-      pr <- tryCatch(load_torp_ratings(), error = function(e) NULL)
+      # Injury-aware path: use torp_ratings() for live computation with full
+      # TORP blend (epr + psr). Standard path: download pre-computed release.
+      if (use_injury_aware) {
+        pr <- tryCatch(torp_ratings(season), error = function(e) NULL)
+      } else {
+        pr <- tryCatch(load_torp_ratings(), error = function(e) NULL)
+      }
       if (is.null(pr)) {
         cli::cli_abort("Could not load team or player ratings. Provide them via the {.arg team_ratings} argument.")
       }
@@ -147,7 +153,15 @@ prepare_sim_data <- function(season, team_ratings = NULL, fixtures = NULL,
         pr_dt <- pr_dt[round == max_round]
       }
 
+      # Normalise rating column name: epr -> torp for consistency
+      if ("epr" %in% names(pr_dt) && !"torp" %in% names(pr_dt)) {
+        data.table::setnames(pr_dt, "epr", "torp")
+      }
+
       # Exclude injured players when injury data is provided
+      # Keep a copy of full ratings before exclusion for injury schedule
+      pr_dt_full <- if (use_injury_aware) data.table::copy(pr_dt) else NULL
+
       if (use_injury_aware && "player_name" %in% names(pr_dt)) {
         pr_dt[, player_norm := norm_name(player_name)]
         injured_norms <- injuries$player_norm
@@ -185,6 +199,23 @@ prepare_sim_data <- function(season, team_ratings = NULL, fixtures = NULL,
 
   # Standardise team names in ratings
   sim_teams[, team := torp_replace_teams(team)]
+
+  # --- Injury Return Schedule ---
+  # Build a schedule of TORP boosts for when injured players return
+  injury_schedule <- NULL
+  if (use_injury_aware && exists("pr_dt_full") && !is.null(pr_dt_full)) {
+    # Determine current round from played games
+    current_round <- if (nrow(played_games) > 0) max(played_games$roundnum) else 1L
+    inj_with_round <- injuries
+    inj_with_round$return_round <- parse_return_round(
+      injuries$estimated_return, season, current_round
+    )
+    injury_schedule <- build_injury_schedule(inj_with_round, pr_dt_full)
+    if (nrow(injury_schedule) > 0) {
+      n_returning <- nrow(injury_schedule)
+      cli::cli_alert_info("Injury schedule: {n_returning} team-round return boost{?s} computed")
+    }
+  }
 
   # --- Predictions (optional) ---
   if (is.null(predictions)) {
@@ -235,10 +266,11 @@ prepare_sim_data <- function(season, team_ratings = NULL, fixtures = NULL,
   }
 
   list(
-    sim_teams      = sim_teams,
-    sim_games      = sim_games,
-    played_games   = played_games,
-    gf_familiarity = gf_familiarity
+    sim_teams       = sim_teams,
+    sim_games       = sim_games,
+    played_games    = played_games,
+    gf_familiarity  = gf_familiarity,
+    injury_schedule = injury_schedule
   )
 }
 
@@ -291,6 +323,265 @@ calculate_ladder <- function(games_dt) {
                                         points_for / points_against * 100,
                                         0),
     ladder_points = wins * 4L + draws * 2L
+  )]
+
+  data.table::setorder(ladder, -ladder_points, -percentage)
+  ladder[, rank := seq_len(.N)]
+
+  ladder[]
+}
+
+
+#' Calculate expected final ladder from actual results + predictions
+#'
+#' Combines played game results with model predictions for remaining games
+#' to produce a single deterministic expected end-of-season ladder. Uses
+#' fractional wins (pred_win) for unplayed games, giving a smooth expected
+#' ladder that properly reflects match uncertainty.
+#'
+#' When `injuries` is provided, predicted margins for unplayed games are
+#' adjusted to reflect injured players returning mid-season. The injury
+#' schedule is built using [torp_ratings()], [parse_return_round()], and
+#' [build_injury_schedule()], and cumulative TORP boosts are applied per
+#' round to shift `pred_margin` and recalculate `pred_win`.
+#'
+#' @param season Numeric season year (e.g. 2026).
+#' @param fixtures Optional fixture data. If NULL, loads via [load_fixtures()].
+#' @param predictions Optional predictions data. If NULL, loads via
+#'   [load_predictions()].
+#' @param injuries Optional injury data.frame from [get_all_injuries()]. When
+#'   provided, team predictions are adjusted for injured players returning
+#'   during the season.
+#' @return A data.table with one row per team, sorted by expected ladder
+#'   position. Columns: `team`, `played`, `wins`, `draws`, `losses`,
+#'   `expected_wins`, `expected_losses`, `points_for`, `points_against`,
+#'   `percentage`, `ladder_points`, `rank`.
+#' @export
+calculate_final_ladder <- function(season = get_afl_season(),
+                                   fixtures = NULL,
+                                   predictions = NULL,
+                                   injuries = NULL) {
+
+  # --- Load fixtures ---
+  if (is.null(fixtures)) {
+    fixtures <- load_fixtures(seasons = season)
+  }
+  fix_dt <- data.table::as.data.table(fixtures)
+  if ("season" %in% names(fix_dt)) {
+    fix_dt <- fix_dt[get("season") == season]
+  }
+
+  # Resolve columns (same helper logic as prepare_sim_data)
+  resolve_col <- function(dt, candidates) {
+    for (cand in candidates) {
+      if (cand %in% names(dt)) return(cand)
+    }
+    NULL
+  }
+
+  rnd_col <- resolve_col(fix_dt, c("round_number", "roundnum"))
+  ht_col  <- resolve_col(fix_dt, c("home_team_name", "home_team"))
+  at_col  <- resolve_col(fix_dt, c("away_team_name", "away_team"))
+  hs_col  <- resolve_col(fix_dt, c("home_score", "home_points"))
+  as_col  <- resolve_col(fix_dt, c("away_score", "away_points"))
+
+  if (is.null(rnd_col) || is.null(ht_col) || is.null(at_col)) {
+    cli::cli_abort("Could not find required fixture columns.")
+  }
+
+  mid_col <- resolve_col(fix_dt, c("match_id", "providerId"))
+
+  games <- data.table::data.table(
+    match_id   = if (!is.null(mid_col)) as.character(fix_dt[[mid_col]]) else NA_character_,
+    roundnum   = as.integer(fix_dt[[rnd_col]]),
+    home_team  = torp_replace_teams(as.character(fix_dt[[ht_col]])),
+    away_team  = torp_replace_teams(as.character(fix_dt[[at_col]])),
+    home_score = if (!is.null(hs_col)) as.numeric(fix_dt[[hs_col]]) else NA_real_,
+    away_score = if (!is.null(as_col)) as.numeric(fix_dt[[as_col]]) else NA_real_
+  )
+
+  # Keep only regular season
+  max_round <- AFL_REGULAR_SEASON_ROUNDS[as.character(season)]
+  if (is.na(max_round)) max_round <- 24L
+  games <- games[roundnum <= max_round]
+
+  games[, played := !is.na(home_score) & !is.na(away_score)]
+
+  # --- Load predictions ---
+  if (is.null(predictions)) {
+    predictions <- tryCatch(
+      load_predictions(seasons = season, rounds = TRUE),
+      error = function(e) NULL
+    )
+  }
+
+  if (!is.null(predictions)) {
+    pred_dt <- data.table::as.data.table(predictions)
+
+    # Standardise team names in predictions (coerce factors to character first)
+    pred_ht <- resolve_col(pred_dt, c("home_team", "home_team_name"))
+    pred_at <- resolve_col(pred_dt, c("away_team", "away_team_name"))
+    if (!is.null(pred_ht)) pred_dt[, (pred_ht) := torp_replace_teams(as.character(get(pred_ht)))]
+    if (!is.null(pred_at)) pred_dt[, (pred_at) := torp_replace_teams(as.character(get(pred_at)))]
+
+    # Join on match_id (predictions may have home/away swapped vs fixtures)
+    pred_mid <- resolve_col(pred_dt, c("match_id", "providerId"))
+
+    if (!is.null(pred_mid) && !is.null(mid_col)) {
+      # Build a lookup with the prediction's home_team for flip detection
+      pred_lookup <- pred_dt[, c(pred_mid, "pred_win", "pred_margin",
+                                  "pred_xtotal", pred_ht), with = FALSE]
+      data.table::setnames(pred_lookup, pred_ht, "pred_home_team")
+      data.table::setnames(pred_lookup, pred_mid, "match_id")
+
+      games[pred_lookup, `:=`(
+        pred_win    = i.pred_win,
+        pred_margin = i.pred_margin,
+        pred_xtotal = i.pred_xtotal,
+        pred_home   = i.pred_home_team
+      ), on = "match_id"]
+
+      # Flip pred_margin and pred_win when prediction home != fixture home
+      flipped <- !is.na(games$pred_home) & games$pred_home != games$home_team
+      if (any(flipped)) {
+        games[flipped, `:=`(
+          pred_margin = -pred_margin,
+          pred_win    = 1 - pred_win
+        )]
+      }
+      games[, pred_home := NULL]
+    }
+  }
+
+  # --- Injury adjustment ---
+  # When injuries are provided, adjust pred_margin for unplayed games to
+
+  # reflect injured players returning mid-season
+  if (!is.null(injuries) && nrow(injuries) > 0) {
+    # Determine current round from played games
+    current_round <- if (any(games$played)) max(games[played == TRUE, roundnum]) else 1L
+
+    # Build injury schedule from player-level ratings
+    pr <- tryCatch(torp_ratings(season), error = function(e) NULL)
+    if (!is.null(pr)) {
+      pr_dt <- data.table::as.data.table(pr)
+      if ("season" %in% names(pr_dt) && "round" %in% names(pr_dt)) {
+        max_s <- max(pr_dt$season)
+        pr_dt <- pr_dt[season == max_s]
+        max_r <- max(pr_dt$round)
+        pr_dt <- pr_dt[round == max_r]
+      }
+
+      inj_with_round <- data.table::as.data.table(injuries)
+      inj_with_round[, return_round := parse_return_round(
+        estimated_return, season, current_round
+      )]
+
+      injury_schedule <- build_injury_schedule(inj_with_round, pr_dt)
+
+      if (nrow(injury_schedule) > 0) {
+        # Compute cumulative torp_boost per team up to each round
+        # (returning players stay returned for all subsequent rounds)
+        all_rounds <- sort(unique(games[played == FALSE, roundnum]))
+        all_teams <- unique(injury_schedule$team)
+
+        # Build a lookup: for each (team, round), sum boosts from all
+        # return_rounds <= that round
+        cum_boost <- data.table::CJ(team = all_teams, roundnum = all_rounds)
+        cum_boost[, boost := vapply(seq_len(.N), function(i) {
+          sum(injury_schedule[team == cum_boost$team[i] &
+                              return_round <= cum_boost$roundnum[i],
+                              torp_boost])
+        }, numeric(1))]
+        cum_boost <- cum_boost[boost != 0]
+
+        if (nrow(cum_boost) > 0) {
+          # Join home and away boosts to unplayed games
+          games[cum_boost, home_boost := i.boost,
+                on = .(home_team = team, roundnum)]
+          games[cum_boost, away_boost := i.boost,
+                on = .(away_team = team, roundnum)]
+          games[is.na(home_boost), home_boost := 0]
+          games[is.na(away_boost), away_boost := 0]
+
+          # Adjust pred_margin then recalculate pred_win from the new margin
+          unplayed_adj <- games$played == FALSE &
+                          (games$home_boost != 0 | games$away_boost != 0)
+          games[unplayed_adj,
+                pred_margin := pred_margin + (home_boost - away_boost)]
+          games[unplayed_adj,
+                pred_win := 1 / (10^(-pred_margin / SIM_WP_SCALING_FACTOR) + 1)]
+
+          games[, c("home_boost", "away_boost") := NULL]
+        }
+      }
+    }
+  }
+
+  # For unplayed games, derive expected scores from predictions
+  # Games with full predictions: use pred_xtotal + pred_margin
+  games[played == FALSE & !is.na(pred_xtotal) & !is.na(pred_margin), `:=`(
+    home_score = (pred_xtotal + pred_margin) / 2,
+    away_score = (pred_xtotal - pred_margin) / 2
+  )]
+
+  # Games with pred_margin but no pred_xtotal: use average total
+  games[played == FALSE & is.na(pred_xtotal) & !is.na(pred_margin), `:=`(
+    home_score = (SIM_AVG_TOTAL + pred_margin) / 2,
+    away_score = (SIM_AVG_TOTAL - pred_margin) / 2
+  )]
+
+  # Games with no predictions at all: 50/50 toss-up, average scores
+  games[played == FALSE & is.na(pred_win), pred_win := 0.5]
+  games[played == FALSE & is.na(home_score), `:=`(
+    home_score = SIM_AVG_TOTAL / 2,
+    away_score = SIM_AVG_TOTAL / 2
+  )]
+
+  # --- Pivot to team rows ---
+  # Home perspective
+  home <- games[, .(
+    team          = home_team,
+    score_for     = home_score,
+    score_against = away_score,
+    is_played     = played,
+    win_prob      = data.table::fifelse(played,
+      data.table::fifelse(home_score > away_score, 1, data.table::fifelse(home_score == away_score, 0.5, 0)),
+      pred_win)
+  )]
+
+  # Away perspective
+  away <- games[, .(
+    team          = away_team,
+    score_for     = away_score,
+    score_against = home_score,
+    is_played     = played,
+    win_prob      = data.table::fifelse(played,
+      data.table::fifelse(away_score > home_score, 1, data.table::fifelse(away_score == home_score, 0.5, 0)),
+      1 - pred_win)
+  )]
+
+  team_rows <- data.table::rbindlist(list(home, away))
+
+  # Drop rows with no score info at all
+  team_rows <- team_rows[!is.na(score_for)]
+
+  # --- Aggregate ---
+  ladder <- team_rows[, .(
+    played         = sum(is_played),
+    wins           = sum(win_prob[is_played == TRUE] == 1),
+    draws          = sum(win_prob[is_played == TRUE] == 0.5),
+    losses         = sum(win_prob[is_played == TRUE] == 0),
+    expected_wins  = sum(win_prob),
+    expected_losses = sum(1 - win_prob),
+    points_for     = round(sum(score_for, na.rm = TRUE)),
+    points_against = round(sum(score_against, na.rm = TRUE))
+  ), by = team]
+
+  ladder[, `:=`(
+    percentage    = data.table::fifelse(points_against > 0,
+                                        points_for / points_against * 100, 0),
+    ladder_points = round(expected_wins * 4)
   )]
 
   data.table::setorder(ladder, -ladder_points, -percentage)
@@ -570,6 +861,7 @@ simulate_afl_season <- function(season,
   base_games <- prep$sim_games
   played_games <- prep$played_games
   gf_familiarity <- prep$gf_familiarity
+  injury_schedule <- prep$injury_schedule
 
   # Ensure column types once (so simulate_season doesn't need to per-sim)
   if ("result" %in% names(base_games)) {
@@ -585,7 +877,8 @@ simulate_afl_season <- function(season,
   # --- Worker function for a single sim ---
   run_one_sim <- function(sim_id) {
     sim_result <- simulate_season(base_teams, base_games, return_teams = TRUE,
-                                  injury_sd = sim_injury_sd)
+                                  injury_sd = sim_injury_sd,
+                                  injury_schedule = injury_schedule)
     simmed_games <- sim_result$games
     sim_teams_final <- sim_result$teams
 
@@ -617,7 +910,7 @@ simulate_afl_season <- function(season,
     # Export required objects and functions to workers
     parallel::clusterExport(cl, c(
       "base_teams", "base_games", "played_games", "keep_games",
-      "sim_injury_sd", "gf_familiarity",
+      "sim_injury_sd", "gf_familiarity", "injury_schedule",
       "simulate_season", "process_games_dt", "calculate_ladder",
       "simulate_finals", "simulate_match",
       "finals_home_advantage", "gf_home_advantage",
@@ -669,7 +962,8 @@ simulate_afl_season <- function(season,
     ladders          = data.table::rbindlist(lapply(sim_results, `[[`, "ladder")),
     finals           = data.table::rbindlist(lapply(sim_results, `[[`, "finals")),
     games            = if (keep_games) data.table::rbindlist(lapply(sim_results, `[[`, "games")) else NULL,
-    original_ratings = base_teams
+    original_ratings = base_teams,
+    injury_schedule  = injury_schedule
   )
   class(result) <- "torp_sim_results"
   result
@@ -746,6 +1040,22 @@ print.torp_sim_results <- function(x, ...) {
 
   cli::cli_h2("AFL Season Simulation: {x$season}")
   cli::cli_text("{x$n_sims} simulations")
+
+  # Show injury schedule summary if present
+  inj_sched <- x$injury_schedule
+  if (!is.null(inj_sched) && nrow(inj_sched) > 0) {
+    # Net boost per team (sum of all returning players' contributions)
+    net_boost <- inj_sched[, .(net_boost = sum(torp_boost)), by = team]
+    data.table::setorder(net_boost, -net_boost)
+    top_gains <- utils::head(net_boost[net_boost > 0], 3)
+    if (nrow(top_gains) > 0) {
+      boost_str <- paste(
+        sprintf("%s (+%.1f)", top_gains$team, top_gains$net_boost),
+        collapse = ", "
+      )
+      cli::cli_text("Injury-aware | biggest return boosts: {boost_str}")
+    }
+  }
   cli::cli_text("")
 
   # Format compact table

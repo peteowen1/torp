@@ -56,15 +56,19 @@ reference:
     desc: Calculate and view TORP player ratings
     contents:
       - calculate_torp_ratings
+      - calculate_epr_stats
+      - calculate_torp
+      - calculate_psr_components
       - torp_ratings
+      - epr_ratings
+      - psr_ratings
       - player_game_ratings
       - player_season_ratings
       - player_profile
       - print.torp_player_profile
       - create_player_game_data
-      - default_credit_params
+      - default_epv_params
       - create_wp_credit
-      - calculate_player_stats
       - calculate_psr
       - filter_game_data
       - team_profile
@@ -97,6 +101,7 @@ reference:
       - prepare_final_dataframe
       - ladder
       - calculate_ladder
+      - calculate_final_ladder
 
   - title: Chain Analysis
     desc: Access and analyse possession chains
@@ -164,12 +169,16 @@ reference:
       - starts_with("CREDIT_")
 
   - title: Injuries
-    desc: Injury data access and matching
+    desc: Injury data access, matching, and simulation scheduling
     contents:
       - injuries
       - get_all_injuries
       - match_injuries
       - scrape_injuries
+      - parse_return_round
+      - build_injury_schedule
+      - save_injury_data
+      - load_injury_data
 
   - title: Utilities
     desc: Helper and convenience functions

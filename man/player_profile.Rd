@@ -17,7 +17,7 @@ A list of class \code{torp_player_profile} with elements:
 \item{player_info}{1-row tibble with player_id, name, team, position.}
 \item{yearly_stats}{Per-season aggregated raw stats from \code{load_player_stats()}.}
 \item{torp_season}{Per-season TORP ratings from \code{player_season_ratings()}.}
-\item{current_torp}{Current TORP rating from \code{calculate_torp_ratings()}.}
+\item{current_torp}{Current TORP rating from \code{calculate_epr()}.}
 }
 }
 \description{

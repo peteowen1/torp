@@ -39,7 +39,7 @@ player_game_ratings <- function(season_val = get_afl_season(),
 
   df <- load_player_game_ratings(season_val)
   df <- filter_game_data(df, season_val, round_num, matchid, team)
-  df |> dplyr::arrange(-.data$total_p80)
+  df |> dplyr::arrange(-.data$epv_p80)
 }
 
 #' Compute player game ratings from raw player game data
@@ -63,28 +63,28 @@ player_game_ratings <- function(season_val = get_afl_season(),
   df <- filter_game_data(player_game_data, season_val, round_num, matchid = NULL, team = NULL)
 
   df |>
-    dplyr::arrange(-.data$total_credits_adj) |>
+    dplyr::arrange(-.data$epv_adj) |>
     dplyr::mutate(
       tog_frac = pmax(.data$time_on_ground_percentage / 100, 0.1),
-      total_points = round(.data$total_credits, 1),
-      recv_points = round(.data$recv_credits, 1),
-      disp_points = round(.data$disp_credits, 1),
-      spoil_points = round(.data$spoil_credits, 1),
-      hitout_points = round(.data$hitout_credits, 1),
-      total_p80 = round(.data$total_credits_adj, 1),
-      recv_p80 = round(.data$recv_credits_adj, 1),
-      disp_p80 = round(.data$disp_credits_adj, 1),
-      spoil_p80 = round(.data$spoil_credits_adj, 1),
-      hitout_p80 = round(.data$hitout_credits_adj, 1)
+      epv_raw = round(.data$epv, 1),
+      recv_epv_raw = round(.data$recv_epv, 1),
+      disp_epv_raw = round(.data$disp_epv, 1),
+      spoil_epv_raw = round(.data$spoil_epv, 1),
+      hitout_epv_raw = round(.data$hitout_epv, 1),
+      epv_p80 = round(.data$epv_adj, 1),
+      recv_epv_p80 = round(.data$recv_epv_adj, 1),
+      disp_epv_p80 = round(.data$disp_epv_adj, 1),
+      spoil_epv_p80 = round(.data$spoil_epv_adj, 1),
+      hitout_epv_p80 = round(.data$hitout_epv_adj, 1)
     ) |>
     dplyr::select(
       season = "season", round = "round",
       player_name = "player_name", position = "listed_position", team_id = "team_id", team = "team", opp = "opponent",
       tog = "tog_frac",
-      total_points = "total_points", recv_points = "recv_points", disp_points = "disp_points",
-      spoil_points = "spoil_points", hitout_points = "hitout_points",
-      total_p80 = "total_p80", recv_p80 = "recv_p80", disp_p80 = "disp_p80",
-      spoil_p80 = "spoil_p80", hitout_p80 = "hitout_p80",
+      epv_raw = "epv_raw", recv_epv_raw = "recv_epv_raw", disp_epv_raw = "disp_epv_raw",
+      spoil_epv_raw = "spoil_epv_raw", hitout_epv_raw = "hitout_epv_raw",
+      epv_p80 = "epv_p80", recv_epv_p80 = "recv_epv_p80", disp_epv_p80 = "disp_epv_p80",
+      spoil_epv_p80 = "spoil_epv_p80", hitout_epv_p80 = "hitout_epv_p80",
       player_id = "player_id", match_id = "match_id"
     )
 }
@@ -177,15 +177,15 @@ player_season_ratings <- function(season_val = get_afl_season(), round_num = NUL
       team = get_mode(.data$team),
       position = get_mode(.data$position),
       games = dplyr::n(),
-      season_points = sum(.data$total_points),
-      season_recv = sum(.data$recv_points),
-      season_disp = sum(.data$disp_points),
-      season_spoil = sum(.data$spoil_points),
-      season_hitout = sum(.data$hitout_points),
-      ppg = .data$season_points / .data$games,
-      avg_p80 = mean(.data$total_p80),
+      season_epv = sum(.data$epv_raw),
+      season_recv_epv = sum(.data$recv_epv_raw),
+      season_disp_epv = sum(.data$disp_epv_raw),
+      season_spoil_epv = sum(.data$spoil_epv_raw),
+      season_hitout_epv = sum(.data$hitout_epv_raw),
+      epv_pg = .data$season_epv / .data$games,
+      avg_p80 = mean(.data$epv_p80),
       avg_tog = mean(.data$tog),
       .groups = "drop"
     ) |>
-    dplyr::arrange(-.data$season_points)
+    dplyr::arrange(-.data$season_epv)
 }

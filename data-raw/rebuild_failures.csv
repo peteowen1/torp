@@ -1,0 +1,17 @@
+"label","error","time"
+"player_game_2021","Can't select columns that don't exist.
+[31m✖[39m Column `player_name` doesn't exist.","2026-03-13 17:49:47"
+"player_game_2022","Can't select columns that don't exist.
+[31m✖[39m Column `player_name` doesn't exist.","2026-03-13 17:50:05"
+"player_game_2023","Can't select columns that don't exist.
+[31m✖[39m Column `player_name` doesn't exist.","2026-03-13 17:50:21"
+"player_game_2024","Can't select columns that don't exist.
+[31m✖[39m Column `player_name` doesn't exist.","2026-03-13 17:50:37"
+"player_game_2025","Can't select columns that don't exist.
+[31m✖[39m Column `player_name` doesn't exist.","2026-03-13 17:50:57"
+"player_game_2026","Can't select columns that don't exist.
+[31m✖[39m Column `player_name` doesn't exist.","2026-03-13 17:51:06"
+"skills_02_optimize_skill_params.R","invalid connection","2026-03-13 17:52:36"
+"match_predictions","[38;5;232mMargin and win probability disagree in direction for 4 matches.
+[36mℹ[38;5;232m e.g. Brisbane Lions vs Geelong: margin=-2.6, win=0.56
+[36mℹ[38;5;232m Positive margin should correspond to win probability > 0.5.[39m","2026-03-13 17:59:29"

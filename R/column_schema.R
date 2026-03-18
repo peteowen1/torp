@@ -17,24 +17,19 @@
 #'
 #' @param dt A data.frame, tibble, or data.table to modify (renames by reference via `data.table::setnames`).
 #' @param col_map Named character vector: variant_name -> canonical_name.
-#' @param verbose Logical. If TRUE, emits a message listing renames.
-#' @param label Optional label for the log message (e.g. "PBP", "Player Stats").
 #' @return Invisible NULL (modifies dt by reference).
 #' @keywords internal
-.normalise_columns <- function(dt, col_map, verbose = TRUE, label = NULL) {
+.normalise_columns <- function(dt, col_map) {
   if (is.null(dt) || length(dt) == 0L) return(invisible(NULL))
 
   nms <- names(dt)
-  remapped <- character()
 
   for (from in names(col_map)) {
     to <- col_map[[from]]
     if (from %in% nms) {
       if (!to %in% nms) {
-        # Simple rename: target doesn't exist yet
         data.table::setnames(dt, from, to)
         nms[nms == from] <- to
-        remapped <- c(remapped, paste0(from, " -> ", to))
       } else if (all(is.na(dt[[to]])) && !all(is.na(dt[[from]]))) {
         # Target exists but is all-NA; source has real data — replace
         if (data.table::is.data.table(dt)) {
@@ -45,14 +40,8 @@
           dt[[from]] <- NULL
         }
         nms <- names(dt)
-        remapped <- c(remapped, paste0(from, " -> ", to, " (replaced all-NA)"))
       }
     }
-  }
-
-  if (verbose && length(remapped) > 0) {
-    lbl <- if (!is.null(label)) paste0(label, " normalisation: ") else "Column normalisation: "
-    cli::cli_inform("{lbl}remapped {length(remapped)} column{?s}: {paste(remapped, collapse = ', ')}")
   }
 
   invisible(NULL)
@@ -331,18 +320,71 @@ PLAYER_GAME_COL_MAP <- c(
   "tm"              = "team",
   "opp"             = "opponent",
   "pos"             = "listed_position",
-  "tot_p"           = "total_credits",
-  "tot_p_adj"       = "total_credits_adj",
-  "recv_pts"        = "recv_credits",
-  "disp_pts"        = "disp_credits",
-  "spoil_pts"       = "spoil_credits",
-  "hitout_pts"      = "hitout_credits",
-  "recv_pts_adj"    = "recv_credits_adj",
-  "disp_pts_adj"    = "disp_credits_adj",
-  "spoil_pts_adj"   = "spoil_credits_adj",
-  "hitout_pts_adj"  = "hitout_credits_adj",
+  "tot_p"           = "epv",
+  "tot_p_adj"       = "epv_adj",
+  "recv_pts"        = "recv_epv",
+  "disp_pts"        = "disp_epv",
+  "spoil_pts"       = "spoil_epv",
+  "hitout_pts"      = "hitout_epv",
+  "recv_pts_adj"    = "recv_epv_adj",
+  "disp_pts_adj"    = "disp_epv_adj",
+  "spoil_pts_adj"   = "spoil_epv_adj",
+  "hitout_pts_adj"  = "hitout_epv_adj",
   "recvs"           = "receptions",
-  "disp"            = "disposals_pbp"
+  "disp"            = "disposals_pbp",
+  # Second-hop: credits → epv (for parquets already using credits names)
+  "recv_credits"        = "recv_epv",
+  "disp_credits"        = "disp_epv",
+  "spoil_credits"       = "spoil_epv",
+  "hitout_credits"      = "hitout_epv",
+  "total_credits"       = "epv",
+  "recv_credits_adj"    = "recv_epv_adj",
+  "disp_credits_adj"    = "disp_epv_adj",
+  "spoil_credits_adj"   = "spoil_epv_adj",
+  "hitout_credits_adj"  = "hitout_epv_adj",
+  "total_credits_adj"   = "epv_adj"
+)
+
+
+# ============================================================================
+# TORP Ratings column map (old torp_* → new *_epr)
+# ============================================================================
+
+#' @keywords internal
+TORP_RATINGS_COL_MAP <- c(
+  "torp"         = "epr",
+  "torp_recv"    = "recv_epr",
+  "torp_disp"    = "disp_epr",
+  "torp_spoil"   = "spoil_epr",
+  "torp_hitout"  = "hitout_epr"
+)
+
+
+# ============================================================================
+# Player Game Ratings column map (old display names → new EPV names)
+# ============================================================================
+
+#' @keywords internal
+PLAYER_GAME_RATINGS_COL_MAP <- c(
+  # Raw points → EPV raw
+  "total_points"   = "epv_raw",
+  "recv_points"    = "recv_epv_raw",
+  "disp_points"    = "disp_epv_raw",
+  "spoil_points"   = "spoil_epv_raw",
+  "hitout_points"  = "hitout_epv_raw",
+  # Per-80 → EPV per-80
+  "total_p80"      = "epv_p80",
+  "recv_p80"       = "recv_epv_p80",
+  "disp_p80"       = "disp_epv_p80",
+  "spoil_p80"      = "spoil_epv_p80",
+  "hitout_p80"     = "hitout_epv_p80",
+  # Season aggregates
+  "season_points"  = "season_epv",
+  "season_recv"    = "season_recv_epv",
+  "season_disp"    = "season_disp_epv",
+  "season_spoil"   = "season_spoil_epv",
+  "season_hitout"  = "season_hitout_epv",
+  "ppg"            = "epv_pg"
 )
 
 
@@ -438,7 +480,7 @@ XG_COL_MAP <- c(
   }
 
   # --- 2. Apply the centralised column map ---
-  .normalise_columns(dt, PLAYER_STATS_COL_MAP, verbose = FALSE, label = "Player stats")
+  .normalise_columns(dt, PLAYER_STATS_COL_MAP)
 
   # --- 3. Catch any remaining extended_stats_ columns not in the explicit map ---
   nms <- names(dt)
@@ -515,7 +557,7 @@ XG_COL_MAP <- c(
 #' @return The input with normalised column names, modified by reference.
 #' @keywords internal
 .normalise_fixture_columns <- function(df) {
-  .normalise_columns(df, FIXTURE_COL_MAP, verbose = FALSE, label = "Fixture")
+  .normalise_columns(df, FIXTURE_COL_MAP)
   .bulk_snake_case(df, verbose = FALSE, label = "Fixture")
   invisible(df)
 }
@@ -533,7 +575,7 @@ XG_COL_MAP <- c(
 #' @return The input with normalised column names, modified by reference.
 #' @keywords internal
 .normalise_teams_columns <- function(df) {
-  .normalise_columns(df, TEAMS_COL_MAP, verbose = FALSE, label = "Teams")
+  .normalise_columns(df, TEAMS_COL_MAP)
   .bulk_snake_case(df, verbose = FALSE, label = "Teams")
 
   # AFL roster API returns abbreviations in teamName (e.g. "SYD", "CARL").
@@ -576,7 +618,7 @@ XG_COL_MAP <- c(
 #' @return The input with normalised column names, modified by reference.
 #' @keywords internal
 .normalise_chains_columns <- function(df) {
-  .normalise_columns(df, CHAINS_COL_MAP, verbose = FALSE, label = "Chains")
+  .normalise_columns(df, CHAINS_COL_MAP)
   .bulk_snake_case(df, verbose = FALSE, label = "Chains")
   invisible(df)
 }
@@ -594,7 +636,7 @@ XG_COL_MAP <- c(
 #' @return The input with normalised column names, modified by reference.
 #' @keywords internal
 .normalise_player_details_columns <- function(df) {
-  .normalise_columns(df, PLAYER_DETAILS_COL_MAP, verbose = FALSE, label = "Player details")
+  .normalise_columns(df, PLAYER_DETAILS_COL_MAP)
   .bulk_snake_case(df, verbose = FALSE, label = "Player details")
   invisible(df)
 }
@@ -612,7 +654,7 @@ XG_COL_MAP <- c(
 #' @return The input with normalised column names, modified by reference.
 #' @keywords internal
 .normalise_predictions_columns <- function(df) {
-  .normalise_columns(df, PREDICTIONS_COL_MAP, verbose = FALSE, label = "Predictions")
+  .normalise_columns(df, PREDICTIONS_COL_MAP)
   .bulk_snake_case(df, verbose = FALSE, label = "Predictions")
   invisible(df)
 }

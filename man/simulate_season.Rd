@@ -9,7 +9,8 @@ simulate_season(
   sim_teams,
   sim_games,
   return_teams = FALSE,
-  injury_sd = SIM_INJURY_SD
+  injury_sd = SIM_INJURY_SD,
+  injury_schedule = NULL
 )
 
 sim_season(sim_teams, sim_games)
@@ -24,6 +25,10 @@ team ratings. Default FALSE returns just the games data.table for backward
 compatibility.}
 
 \item{injury_sd}{Standard deviation for injury impact on team ratings. Default is \code{SIM_INJURY_SD}.}
+
+\item{injury_schedule}{Optional data.table from \code{\link[=build_injury_schedule]{build_injury_schedule()}} with
+columns \code{team}, \code{torp_boost}, \code{return_round}. When provided, returning
+players' TORP contributions are added back at the appropriate round.}
 }
 \value{
 A data.table of simulated game results (default), or a list with

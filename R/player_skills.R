@@ -470,7 +470,7 @@ estimate_player_skills <- function(skill_data, ref_date = NULL,
     total_exposure <- sum(w_vec * tog_vals, na.rm = TRUE)
     grand_mean <- if (total_exposure > 0) sum(w_vec * vals, na.rm = TRUE) / total_exposure else 0
 
-    # Position-specific prior means (vectorized lookup instead of per-group loop)
+    # Position-specific prior means (weighted mean within each position group)
     pos_groups <- names(skill_position_map())
     pos_means_dt <- dt[!is.na(pos_group),
       .(pos_mean = if (sum(.wden, na.rm = TRUE) > 0)

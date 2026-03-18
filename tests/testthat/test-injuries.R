@@ -167,3 +167,142 @@ test_that("norm_name handles common injury list name variations", {
   # Apostrophes
   expect_equal(norm_name("Tom O'Brien"), "tom o brien")
 })
+
+
+# --- parse_return_round() ---
+
+test_that("parse_return_round handles 'Round N' patterns", {
+  expect_equal(parse_return_round("Round 14", 2026), 14)
+  expect_equal(parse_return_round("Round 5", 2026), 5)
+  expect_equal(parse_return_round("round 1", 2026), 1)
+})
+
+test_that("parse_return_round handles 'Round N-M' range (uses upper bound)", {
+  expect_equal(parse_return_round("Round 10-12", 2026), 12)
+  expect_equal(parse_return_round("Round 3-5", 2026), 5)
+})
+
+test_that("parse_return_round handles future year as Inf", {
+  expect_equal(parse_return_round("2027", 2026), Inf)
+  expect_equal(parse_return_round("2028", 2026), Inf)
+})
+
+test_that("parse_return_round handles current year as NA", {
+  expect_true(is.na(parse_return_round("2026", 2026)))
+})
+
+test_that("parse_return_round handles season timeline phrases", {
+  expect_equal(parse_return_round("Mid-season", 2026), SIM_INJURY_SEASON_MID)
+  expect_equal(parse_return_round("Mid-to-late season", 2026), SIM_INJURY_SEASON_MID)
+  expect_equal(parse_return_round("Late season", 2026), SIM_INJURY_SEASON_LATE)
+  expect_equal(parse_return_round("Second half of 2026", 2026), SIM_INJURY_SECOND_HALF)
+})
+
+test_that("parse_return_round handles TBC/Indefinite with buffer", {
+  expect_equal(parse_return_round("TBC", 2026, current_round = 5), 5 + SIM_INJURY_TBC_BUFFER)
+  expect_equal(parse_return_round("Indefinite", 2026, current_round = 10), 10 + SIM_INJURY_TBC_BUFFER)
+  expect_equal(parse_return_round("Test", 2026, current_round = 2), 2 + SIM_INJURY_TBC_BUFFER)
+})
+
+test_that("parse_return_round handles NA / empty / None", {
+  expect_true(is.na(parse_return_round(NA, 2026)))
+  expect_true(is.na(parse_return_round("", 2026)))
+  expect_true(is.na(parse_return_round("None", 2026)))
+})
+
+test_that("parse_return_round is vectorized", {
+  result <- parse_return_round(
+    c("Round 5", "2027", "TBC", "Mid-season", NA),
+    season = 2026, current_round = 3
+  )
+  expect_length(result, 5)
+  expect_equal(result[1], 5)
+  expect_equal(result[2], Inf)
+  expect_equal(result[3], 3 + SIM_INJURY_TBC_BUFFER)
+  expect_equal(result[4], SIM_INJURY_SEASON_MID)
+  expect_true(is.na(result[5]))
+})
+
+test_that("parse_return_round handles N-M weeks range", {
+  # "7-11 weeks" from round 2 -> round 2 + 11 = 13
+
+  expect_equal(parse_return_round("7-11 weeks", 2026, current_round = 2), 13)
+  # "1-2 weeks" from round 5 -> round 5 + 2 = 7
+  expect_equal(parse_return_round("1-2 weeks", 2026, current_round = 5), 7)
+  # "3-4 weeks" from round 1 -> round 1 + 4 = 5
+  expect_equal(parse_return_round("3-4 weeks", 2026, current_round = 1), 5)
+})
+
+test_that("parse_return_round handles single N weeks", {
+  expect_equal(parse_return_round("4 weeks", 2026, current_round = 3), 7)
+  expect_equal(parse_return_round("1 week", 2026, current_round = 10), 11)
+})
+
+
+# --- build_injury_schedule() ---
+
+test_that("build_injury_schedule returns empty dt for empty input", {
+  result <- build_injury_schedule(NULL, data.table::data.table())
+  expect_equal(nrow(result), 0)
+  expect_true(all(c("team", "torp_boost", "return_round") %in% names(result)))
+})
+
+test_that("build_injury_schedule excludes Inf return_round players", {
+  injuries <- data.frame(
+    player = "John Smith",
+    player_norm = "john smith",
+    return_round = Inf,
+    stringsAsFactors = FALSE
+  )
+  ratings <- data.table::data.table(
+    player_name = "John Smith",
+    team = "Sydney",
+    torp = 10.0,
+    pred_tog = 0.8
+  )
+  result <- build_injury_schedule(injuries, ratings)
+  expect_equal(nrow(result), 0)
+})
+
+test_that("build_injury_schedule computes correct boosts", {
+  injuries <- data.frame(
+    player = c("Player A", "Player B"),
+    player_norm = c("player a", "player b"),
+    return_round = c(5, 10),
+    stringsAsFactors = FALSE
+  )
+  ratings <- data.table::data.table(
+    player_name = c("Player A", "Player B", "Player C"),
+    team = c("Sydney", "Sydney", "Sydney"),
+    torp = c(10.0, 5.0, 3.0),
+    pred_tog = c(0.8, 0.7, 0.6)
+  )
+  result <- build_injury_schedule(injuries, ratings)
+
+  expect_true(nrow(result) > 0)
+  expect_true(all(c("team", "torp_boost", "return_round") %in% names(result)))
+  # Both returning players should generate positive boosts
+  expect_true(all(result$torp_boost > 0))
+  # Should have entries for rounds 5 and 10
+  expect_true(5 %in% result$return_round)
+  expect_true(10 %in% result$return_round)
+})
+
+test_that("build_injury_schedule aggregates same-round returns", {
+  injuries <- data.frame(
+    player = c("Player A", "Player B"),
+    player_norm = c("player a", "player b"),
+    return_round = c(5, 5),
+    stringsAsFactors = FALSE
+  )
+  ratings <- data.table::data.table(
+    player_name = c("Player A", "Player B", "Player C"),
+    team = c("Sydney", "Sydney", "Sydney"),
+    torp = c(10.0, 5.0, 3.0),
+    pred_tog = c(0.8, 0.7, 0.6)
+  )
+  result <- build_injury_schedule(injuries, ratings)
+  # Both return round 5, should be aggregated into one row per team
+  sydney_r5 <- result[team == "Sydney" & return_round == 5]
+  expect_equal(nrow(sydney_r5), 1)
+})

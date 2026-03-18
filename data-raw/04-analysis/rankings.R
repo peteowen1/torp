@@ -56,7 +56,7 @@ view(ssn_25)
 # # view(ssn_21)
 
 # Team Rankings ----
-sd(tr$torp_hitout, na.rm = T)
+sd(tr$hitout_epr, na.rm = T)
 
 tr %>%
   group_by(position) %>%
@@ -111,10 +111,10 @@ tr %>%
   inner_join(week_teams, by = "player_id") %>%
   group_by(team) %>%
   summarise(
-    torp_val = sum(torp, na.rm = T),
+    epr_val = sum(torp, na.rm = T),
     plyrs = n()
   ) %>%
-  arrange(-torp_val)
+  arrange(-epr_val)
 
 # Calibration ----
 library(probably)

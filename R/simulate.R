@@ -8,13 +8,17 @@
 #'   team ratings. Default FALSE returns just the games data.table for backward
 #'   compatibility.
 #' @param injury_sd Standard deviation for injury impact on team ratings. Default is \code{SIM_INJURY_SD}.
+#' @param injury_schedule Optional data.table from [build_injury_schedule()] with
+#'   columns `team`, `torp_boost`, `return_round`. When provided, returning
+#'   players' TORP contributions are added back at the appropriate round.
 #' @return A data.table of simulated game results (default), or a list with
 #'   `games` and `teams` elements when `return_teams = TRUE`.
 #' @importFrom data.table as.data.table setkey rbindlist fifelse fcase
 #' @importFrom stats rnorm
 #' @export
 simulate_season <- function(sim_teams, sim_games, return_teams = FALSE,
-                            injury_sd = SIM_INJURY_SD) {
+                            injury_sd = SIM_INJURY_SD,
+                            injury_schedule = NULL) {
   # Convert to data.table for performance
   sim_teams_dt <- data.table::as.data.table(sim_teams)
   sim_games_dt <- data.table::as.data.table(sim_games)
@@ -43,6 +47,15 @@ simulate_season <- function(sim_teams, sim_games, return_teams = FALSE,
   # Loop over each round and simulate games
   for (i in seq_along(rounds_to_sim)) {
     round_num <- rounds_to_sim[i]
+
+    # Add back TORP contributions of players returning from injury this round
+    if (!is.null(injury_schedule) && nrow(injury_schedule) > 0) {
+      returning <- injury_schedule[return_round == round_num]
+      if (nrow(returning) > 0) {
+        sim_teams_dt[returning, torp := torp + i.torp_boost, on = "team"]
+      }
+    }
+
     # Process only this round's games (~9 rows instead of ~216)
     result <- process_games_dt(sim_teams_dt,
                                games_by_round[[as.character(round_num)]],
