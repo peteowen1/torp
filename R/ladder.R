@@ -962,7 +962,8 @@ simulate_afl_season <- function(season,
     ladders          = data.table::rbindlist(lapply(sim_results, `[[`, "ladder")),
     finals           = data.table::rbindlist(lapply(sim_results, `[[`, "finals")),
     games            = if (keep_games) data.table::rbindlist(lapply(sim_results, `[[`, "games")) else NULL,
-    original_ratings = base_teams
+    original_ratings = base_teams,
+    injury_schedule  = injury_schedule
   )
   class(result) <- "torp_sim_results"
   result
@@ -1039,6 +1040,22 @@ print.torp_sim_results <- function(x, ...) {
 
   cli::cli_h2("AFL Season Simulation: {x$season}")
   cli::cli_text("{x$n_sims} simulations")
+
+  # Show injury schedule summary if present
+  inj_sched <- x$injury_schedule
+  if (!is.null(inj_sched) && nrow(inj_sched) > 0) {
+    # Net boost per team (sum of all returning players' contributions)
+    net_boost <- inj_sched[, .(net_boost = sum(torp_boost)), by = team]
+    data.table::setorder(net_boost, -net_boost)
+    top_gains <- utils::head(net_boost[net_boost > 0], 3)
+    if (nrow(top_gains) > 0) {
+      boost_str <- paste(
+        sprintf("%s (+%.1f)", top_gains$team, top_gains$net_boost),
+        collapse = ", "
+      )
+      cli::cli_text("Injury-aware | biggest return boosts: {boost_str}")
+    }
+  }
   cli::cli_text("")
 
   # Format compact table

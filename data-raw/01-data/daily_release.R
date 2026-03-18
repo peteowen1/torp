@@ -658,6 +658,28 @@ update_ep_wp_chart <- function(season) {
 
 #' Run Daily Data Release
 #'
+#' Update Injury Data
+#'
+#' Scrapes the current AFL injury list, parses return rounds, and saves
+#' a timestamped snapshot to the torpdata injury-data release.
+#'
+#' @param season Numeric season year.
+#' @keywords internal
+update_injury_data <- function(season) {
+  cli::cli_progress_step("Updating injury data for {season}")
+  inj <- get_all_injuries(season)
+  if (nrow(inj) == 0) {
+    cli::cli_alert_info("No injuries scraped - skipping save")
+    return(invisible(NULL))
+  }
+  current_round <- get_afl_week()
+  inj$return_round <- parse_return_round(inj$estimated_return, season, current_round)
+  save_injury_data(inj, season)
+  cli::cli_alert_success("Saved injury snapshot: {nrow(inj)} injuries")
+  invisible(inj)
+}
+
+
 #' Main entry point for daily automated data release.
 #' Only processes current season data to minimize runtime.
 #'
@@ -777,6 +799,13 @@ run_daily_release <- function(force = FALSE) {
 
     tictoc::toc(log = TRUE)
   }
+
+  # -------------------------------------------------------------------------
+  # 4. Injury snapshot (both modes — injuries change without new games)
+  # -------------------------------------------------------------------------
+  tryCatch(update_injury_data(current_season), error = function(e) {
+    cli::cli_alert_danger("Failed: injury_data: {conditionMessage(e)}")
+  })
 
   # -------------------------------------------------------------------------
   # Summary
