@@ -309,8 +309,9 @@ utils::globalVariables(c(
 
   # Predictions pipeline specific
   "epr_week", "epr_recv_week", "epr_disp_week",
-  "epr_spoil_week", "epr_hitout_week",
+  "epr_spoil_week", "epr_hitout_week", "epr_boost",
   "n_players", "team_tog_sum",
+  "home_boost", "away_boost", "boost",
   "type_anti", "Ground",
 
   # Predictions pipeline output

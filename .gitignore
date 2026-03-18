@@ -20,6 +20,9 @@ data-raw/rsconnect/
 # Generated model outputs
 data-raw/outputs/
 
+# Cached model files (from torpmodels)
+inst/models/
+
 # Obsolete scripts
 data-raw/archive/
 

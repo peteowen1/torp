@@ -7,7 +7,8 @@
 calculate_final_ladder(
   season = get_afl_season(),
   fixtures = NULL,
-  predictions = NULL
+  predictions = NULL,
+  injuries = NULL
 )
 }
 \arguments{
@@ -17,6 +18,10 @@ calculate_final_ladder(
 
 \item{predictions}{Optional predictions data. If NULL, loads via
 \code{\link[=load_predictions]{load_predictions()}}.}
+
+\item{injuries}{Optional injury data.frame from \code{\link[=get_all_injuries]{get_all_injuries()}}. When
+provided, team predictions are adjusted for injured players returning
+during the season.}
 }
 \value{
 A data.table with one row per team, sorted by expected ladder
@@ -29,4 +34,11 @@ Combines played game results with model predictions for remaining games
 to produce a single deterministic expected end-of-season ladder. Uses
 fractional wins (pred_win) for unplayed games, giving a smooth expected
 ladder that properly reflects match uncertainty.
+}
+\details{
+When \code{injuries} is provided, predicted margins for unplayed games are
+adjusted to reflect injured players returning mid-season. The injury
+schedule is built using \code{\link[=torp_ratings]{torp_ratings()}}, \code{\link[=parse_return_round]{parse_return_round()}}, and
+\code{\link[=build_injury_schedule]{build_injury_schedule()}}, and cumulative TORP boosts are applied per
+round to shift \code{pred_margin} and recalculate \code{pred_win}.
 }

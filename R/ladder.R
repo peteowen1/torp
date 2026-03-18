@@ -339,10 +339,19 @@ calculate_ladder <- function(games_dt) {
 #' fractional wins (pred_win) for unplayed games, giving a smooth expected
 #' ladder that properly reflects match uncertainty.
 #'
+#' When `injuries` is provided, predicted margins for unplayed games are
+#' adjusted to reflect injured players returning mid-season. The injury
+#' schedule is built using [torp_ratings()], [parse_return_round()], and
+#' [build_injury_schedule()], and cumulative TORP boosts are applied per
+#' round to shift `pred_margin` and recalculate `pred_win`.
+#'
 #' @param season Numeric season year (e.g. 2026).
 #' @param fixtures Optional fixture data. If NULL, loads via [load_fixtures()].
 #' @param predictions Optional predictions data. If NULL, loads via
 #'   [load_predictions()].
+#' @param injuries Optional injury data.frame from [get_all_injuries()]. When
+#'   provided, team predictions are adjusted for injured players returning
+#'   during the season.
 #' @return A data.table with one row per team, sorted by expected ladder
 #'   position. Columns: `team`, `played`, `wins`, `draws`, `losses`,
 #'   `expected_wins`, `expected_losses`, `points_for`, `points_against`,
@@ -350,7 +359,8 @@ calculate_ladder <- function(games_dt) {
 #' @export
 calculate_final_ladder <- function(season = get_afl_season(),
                                    fixtures = NULL,
-                                   predictions = NULL) {
+                                   predictions = NULL,
+                                   injuries = NULL) {
 
   # --- Load fixtures ---
   if (is.null(fixtures)) {
@@ -440,6 +450,71 @@ calculate_final_ladder <- function(season = get_afl_season(),
         )]
       }
       games[, pred_home := NULL]
+    }
+  }
+
+  # --- Injury adjustment ---
+  # When injuries are provided, adjust pred_margin for unplayed games to
+
+  # reflect injured players returning mid-season
+  if (!is.null(injuries) && nrow(injuries) > 0) {
+    # Determine current round from played games
+    current_round <- if (any(games$played)) max(games[played == TRUE, roundnum]) else 1L
+
+    # Build injury schedule from player-level ratings
+    pr <- tryCatch(torp_ratings(season), error = function(e) NULL)
+    if (!is.null(pr)) {
+      pr_dt <- data.table::as.data.table(pr)
+      if ("season" %in% names(pr_dt) && "round" %in% names(pr_dt)) {
+        max_s <- max(pr_dt$season)
+        pr_dt <- pr_dt[season == max_s]
+        max_r <- max(pr_dt$round)
+        pr_dt <- pr_dt[round == max_r]
+      }
+
+      inj_with_round <- data.table::as.data.table(injuries)
+      inj_with_round[, return_round := parse_return_round(
+        estimated_return, season, current_round
+      )]
+
+      injury_schedule <- build_injury_schedule(inj_with_round, pr_dt)
+
+      if (nrow(injury_schedule) > 0) {
+        # Compute cumulative torp_boost per team up to each round
+        # (returning players stay returned for all subsequent rounds)
+        all_rounds <- sort(unique(games[played == FALSE, roundnum]))
+        all_teams <- unique(injury_schedule$team)
+
+        # Build a lookup: for each (team, round), sum boosts from all
+        # return_rounds <= that round
+        cum_boost <- data.table::CJ(team = all_teams, roundnum = all_rounds)
+        cum_boost[, boost := vapply(seq_len(.N), function(i) {
+          sum(injury_schedule[team == cum_boost$team[i] &
+                              return_round <= cum_boost$roundnum[i],
+                              torp_boost])
+        }, numeric(1))]
+        cum_boost <- cum_boost[boost != 0]
+
+        if (nrow(cum_boost) > 0) {
+          # Join home and away boosts to unplayed games
+          games[cum_boost, home_boost := i.boost,
+                on = .(home_team = team, roundnum)]
+          games[cum_boost, away_boost := i.boost,
+                on = .(away_team = team, roundnum)]
+          games[is.na(home_boost), home_boost := 0]
+          games[is.na(away_boost), away_boost := 0]
+
+          # Adjust pred_margin then recalculate pred_win from the new margin
+          unplayed_adj <- games$played == FALSE &
+                          (games$home_boost != 0 | games$away_boost != 0)
+          games[unplayed_adj,
+                pred_margin := pred_margin + (home_boost - away_boost)]
+          games[unplayed_adj,
+                pred_win := 1 / (10^(-pred_margin / SIM_WP_SCALING_FACTOR) + 1)]
+
+          games[, c("home_boost", "away_boost") := NULL]
+        }
+      }
     }
   }
 

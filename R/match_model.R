@@ -1438,8 +1438,33 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
     ) |>
     dplyr::arrange(-epr_week)
 
-  # Expand estimated ratings across all target weeks
-  if (length(target_weeks) > 1) {
+  # Expand estimated ratings across all target weeks, adjusting for
+
+  # injured players returning at different rounds. Players whose
+  # return_round <= week get their TORP contribution added back.
+  if (length(target_weeks) > 1 && nrow(inj_df) > 0 &&
+      "return_round" %in% names(inj_df)) {
+    inj_schedule <- build_injury_schedule(inj_df, data.table::as.data.table(tr))
+    tr_week <- purrr::map_dfr(target_weeks, function(w) {
+      tw <- tr_week |> dplyr::mutate(round = w)
+      if (nrow(inj_schedule) > 0) {
+        # Cumulative boost: sum boosts from all players returning by round w
+        boosts <- inj_schedule[return_round <= w,
+                                .(epr_boost = sum(torp_boost, na.rm = TRUE)),
+                                by = team]
+        if (nrow(boosts) > 0) {
+          tw <- dplyr::left_join(tw, tibble::as_tibble(boosts),
+                                  by = c("team_name" = "team"))
+          tw <- dplyr::mutate(tw,
+            epr_boost = tidyr::replace_na(epr_boost, 0),
+            epr_week = epr_week + epr_boost
+          )
+          tw <- dplyr::select(tw, -epr_boost)
+        }
+      }
+      tw
+    })
+  } else if (length(target_weeks) > 1) {
     tr_week <- purrr::map_dfr(target_weeks, function(w) {
       tr_week |> dplyr::mutate(round = w)
     })
