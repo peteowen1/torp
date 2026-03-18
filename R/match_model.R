@@ -92,6 +92,12 @@
   torp_prior_total <- EPR_PRIOR_RATE_RECV + EPR_PRIOR_RATE_DISP +
     EPR_PRIOR_RATE_SPOIL + EPR_PRIOR_RATE_HITOUT
 
+  # Drop PSR columns from torp_df to avoid collision with psr_df join later
+  psr_cols_in_torp <- intersect(c("psr", "osr", "dsr"), names(torp_df))
+  if (length(psr_cols_in_torp) > 0) {
+    torp_df <- torp_df |> dplyr::select(-dplyr::all_of(psr_cols_in_torp))
+  }
+
   team_lineup_df <- teams |>
     dplyr::left_join(
       torp_df,
@@ -333,7 +339,10 @@
 
   if (!file.exists(weather_path)) {
     cli::cli_warn("Weather data not found at {weather_path} -- skipping weather features")
-    return(tibble::tibble(match_id = character()))
+    return(tibble::tibble(
+      match_id = character(), temp_avg = numeric(), wind_avg = numeric(),
+      humidity_avg = numeric(), precipitation_total = numeric(), is_roof = logical()
+    ))
   }
 
   historical <- arrow::read_parquet(weather_path)
