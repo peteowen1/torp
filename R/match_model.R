@@ -333,19 +333,28 @@
 #' @keywords internal
 .load_match_weather <- function(fixtures, all_grounds, target_weeks = NULL,
                                 season = NULL, weather_path = NULL) {
-  if (is.null(weather_path)) {
-    weather_path <- file.path("data-raw", "weather_data.parquet")
-  }
+  empty_weather <- tibble::tibble(
+    match_id = character(), temp_avg = numeric(), wind_avg = numeric(),
+    humidity_avg = numeric(), precipitation_total = numeric(), is_roof = logical()
+  )
 
-  if (!file.exists(weather_path)) {
-    cli::cli_warn("Weather data not found at {weather_path} -- skipping weather features")
-    return(tibble::tibble(
-      match_id = character(), temp_avg = numeric(), wind_avg = numeric(),
-      humidity_avg = numeric(), precipitation_total = numeric(), is_roof = logical()
-    ))
-  }
+  # Strategy 1: Load from torpdata release
+  historical <- tryCatch({
+    load_weather()
+  }, error = function(e) NULL)
 
-  historical <- arrow::read_parquet(weather_path)
+  # Strategy 2: Fall back to local file
+  if (is.null(historical) || nrow(historical) == 0) {
+    if (is.null(weather_path)) {
+      weather_path <- file.path("data-raw", "weather_data.parquet")
+    }
+    if (file.exists(weather_path)) {
+      historical <- arrow::read_parquet(weather_path)
+    } else {
+      cli::cli_warn("Weather data unavailable (no release or local file) -- skipping weather features")
+      return(empty_weather)
+    }
+  }
   # Normalise old weather files with providerId
   if ("providerId" %in% names(historical) && !"match_id" %in% names(historical)) {
     names(historical)[names(historical) == "providerId"] <- "match_id"
