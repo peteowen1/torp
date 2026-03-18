@@ -148,6 +148,8 @@ Load processed AFL data from torpdata GitHub releases
   : Load AFL Team and Lineup Data
 - [`load_torp_ratings()`](https://peteowen1.github.io/torp/reference/load_torp_ratings.md)
   : Load TORP Ratings Data
+- [`load_weather()`](https://peteowen1.github.io/torp/reference/load_weather.md)
+  : Load Weather Data
 - [`load_xg()`](https://peteowen1.github.io/torp/reference/load_xg.md) :
   Load Expected Goals (xG) Data
 - [`fixtures`](https://peteowen1.github.io/torp/reference/fixtures.md) :
