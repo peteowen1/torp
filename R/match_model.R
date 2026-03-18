@@ -1428,46 +1428,64 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
       tog_wt = dplyr::if_else(team_tog_sum > 0, pred_tog * 18 / team_tog_sum, 18 / n_players)
     ) |>
     dplyr::summarise(
-      epr_week = sum(epr * tog_wt, na.rm = TRUE) * SIM_INJURY_DISCOUNT,
-      epr_recv_week = sum(recv_epr * tog_wt, na.rm = TRUE) * SIM_INJURY_DISCOUNT,
-      epr_disp_week = sum(disp_epr * tog_wt, na.rm = TRUE) * SIM_INJURY_DISCOUNT,
-      epr_spoil_week = sum(spoil_epr * tog_wt, na.rm = TRUE) * SIM_INJURY_DISCOUNT,
-      epr_hitout_week = sum(hitout_epr * tog_wt, na.rm = TRUE) * SIM_INJURY_DISCOUNT,
-      psr_week = sum(psr * tog_wt, na.rm = TRUE) * SIM_INJURY_DISCOUNT,
+      epr_week = sum(epr * tog_wt, na.rm = TRUE) * INJURY_KNOWN_DISCOUNT,
+      epr_recv_week = sum(recv_epr * tog_wt, na.rm = TRUE) * INJURY_KNOWN_DISCOUNT,
+      epr_disp_week = sum(disp_epr * tog_wt, na.rm = TRUE) * INJURY_KNOWN_DISCOUNT,
+      epr_spoil_week = sum(spoil_epr * tog_wt, na.rm = TRUE) * INJURY_KNOWN_DISCOUNT,
+      epr_hitout_week = sum(hitout_epr * tog_wt, na.rm = TRUE) * INJURY_KNOWN_DISCOUNT,
+      psr_week = sum(psr * tog_wt, na.rm = TRUE) * INJURY_KNOWN_DISCOUNT,
       .groups = "drop"
     ) |>
     dplyr::arrange(-epr_week)
 
   # Expand estimated ratings across all target weeks, adjusting for
-
   # injured players returning at different rounds. Players whose
   # return_round <= week get their TORP contribution added back.
-  if (length(target_weeks) > 1 && nrow(inj_df) > 0 &&
-      "return_round" %in% names(inj_df)) {
-    inj_schedule <- build_injury_schedule(inj_df, data.table::as.data.table(tr))
+  # Boosts are distributed proportionally across sub-component columns.
+  has_inj_schedule <- nrow(inj_df) > 0 && "return_round" %in% names(inj_df)
+  inj_schedule <- if (has_inj_schedule) {
+    build_injury_schedule(inj_df, data.table::as.data.table(tr))
+  } else {
+    data.table::data.table(team = character(), torp_boost = numeric(), return_round = numeric())
+  }
+
+  apply_injury_boosts <- function(tw, w) {
+    if (nrow(inj_schedule) == 0) return(tw)
+    boosts <- inj_schedule[return_round <= w,
+                            .(epr_boost = sum(torp_boost, na.rm = TRUE)),
+                            by = team]
+    if (nrow(boosts) == 0) return(tw)
+    tw <- dplyr::left_join(tw, tibble::as_tibble(boosts),
+                            by = c("team_name" = "team"))
+    tw <- dplyr::mutate(tw, epr_boost = tidyr::replace_na(epr_boost, 0))
+    # Distribute boost proportionally across sub-components
+    tw <- dplyr::mutate(tw,
+      total_sub = abs(epr_recv_week) + abs(epr_disp_week) +
+                  abs(epr_spoil_week) + abs(epr_hitout_week),
+      epr_recv_week = dplyr::if_else(total_sub > 0,
+        epr_recv_week + epr_boost * abs(epr_recv_week) / total_sub,
+        epr_recv_week),
+      epr_disp_week = dplyr::if_else(total_sub > 0,
+        epr_disp_week + epr_boost * abs(epr_disp_week) / total_sub,
+        epr_disp_week),
+      epr_spoil_week = dplyr::if_else(total_sub > 0,
+        epr_spoil_week + epr_boost * abs(epr_spoil_week) / total_sub,
+        epr_spoil_week),
+      epr_hitout_week = dplyr::if_else(total_sub > 0,
+        epr_hitout_week + epr_boost * abs(epr_hitout_week) / total_sub,
+        epr_hitout_week),
+      epr_week = epr_week + epr_boost
+    )
+    dplyr::select(tw, -epr_boost, -total_sub)
+  }
+
+  if (length(target_weeks) > 1) {
     tr_week <- purrr::map_dfr(target_weeks, function(w) {
       tw <- tr_week |> dplyr::mutate(round = w)
-      if (nrow(inj_schedule) > 0) {
-        # Cumulative boost: sum boosts from all players returning by round w
-        boosts <- inj_schedule[return_round <= w,
-                                .(epr_boost = sum(torp_boost, na.rm = TRUE)),
-                                by = team]
-        if (nrow(boosts) > 0) {
-          tw <- dplyr::left_join(tw, tibble::as_tibble(boosts),
-                                  by = c("team_name" = "team"))
-          tw <- dplyr::mutate(tw,
-            epr_boost = tidyr::replace_na(epr_boost, 0),
-            epr_week = epr_week + epr_boost
-          )
-          tw <- dplyr::select(tw, -epr_boost)
-        }
-      }
-      tw
+      apply_injury_boosts(tw, w)
     })
-  } else if (length(target_weeks) > 1) {
-    tr_week <- purrr::map_dfr(target_weeks, function(w) {
-      tr_week |> dplyr::mutate(round = w)
-    })
+  } else if (has_inj_schedule) {
+    tr_week <- apply_injury_boosts(tr_week, target_weeks)
   }
 
   # Overlay injury-adjusted ratings
