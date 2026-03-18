@@ -57,6 +57,8 @@ reference:
     contents:
       - calculate_torp_ratings
       - torp_ratings
+      - epr_ratings
+      - psr_ratings
       - player_game_ratings
       - player_season_ratings
       - player_profile
