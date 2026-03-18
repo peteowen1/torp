@@ -189,7 +189,7 @@ get_epr_df <- function(year, rounds, pgd, skills, fixtures) {
   }
 
   # Batch compute all rounds' player stats in one data.table pass
-  batch_stats <- calculate_player_stats_batch(pgd, round_info)
+  batch_stats <- calculate_epr_stats_batch(pgd, round_info)
 
   # Attach decomposed TOG from skills
   batch_stats[, pred_tog := NA_real_]
