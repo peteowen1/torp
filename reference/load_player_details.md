@@ -46,7 +46,7 @@ ages, and team affiliations.
 ## See also
 
 [`load_player_stats()`](https://peteowen1.github.io/torp/reference/load_player_stats.md),
-[`calculate_torp_ratings()`](https://peteowen1.github.io/torp/reference/calculate_torp_ratings.md),
+[`calculate_epr()`](https://peteowen1.github.io/torp/reference/calculate_epr.md),
 [`player_game_ratings()`](https://peteowen1.github.io/torp/reference/player_game_ratings.md)
 
 ## Examples

@@ -42,7 +42,7 @@ A list of class `torp_player_profile` with elements:
 - current_torp:
 
   Current TORP rating from
-  [`calculate_torp_ratings()`](https://peteowen1.github.io/torp/reference/calculate_torp_ratings.md).
+  [`calculate_epr()`](https://peteowen1.github.io/torp/reference/calculate_epr.md).
 
 ## Examples
 

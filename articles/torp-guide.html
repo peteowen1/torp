@@ -295,8 +295,8 @@ hitouts and ruck contests.</p>
 </h3>
 <div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://peteowen1.github.io/torp/">torp</a></span><span class="op">)</span></span>
-<span><span class="va">ratings</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/calculate_torp_ratings.html">calculate_torp_ratings</a></span><span class="op">(</span><span class="op">)</span></span>
-<span><span class="va">ratings</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/calculate_torp_ratings.html">calculate_torp_ratings</a></span><span class="op">(</span>season_val <span class="op">=</span> <span class="fl">2025</span>, round_val <span class="op">=</span> <span class="fl">15</span><span class="op">)</span></span>
+<span><span class="va">ratings</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/calculate_epr.html">calculate_torp_ratings</a></span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="va">ratings</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/calculate_epr.html">calculate_torp_ratings</a></span><span class="op">(</span>season_val <span class="op">=</span> <span class="fl">2025</span>, round_val <span class="op">=</span> <span class="fl">15</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Game-level</span></span>
 <span><span class="va">game_ratings</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/player_game_ratings.html">player_game_ratings</a></span><span class="op">(</span>season_val <span class="op">=</span> <span class="fl">2025</span>, round_num <span class="op">=</span> <span class="fl">10</span><span class="op">)</span></span>
@@ -351,7 +351,7 @@ receiving, ~0.59 for disposal.</p>
 <div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">player_game_data</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/load_player_game_data.html">load_player_game_data</a></span><span class="op">(</span><span class="cn">TRUE</span><span class="op">)</span></span>
 <span><span class="va">player_details</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/load_player_details.html">load_player_details</a></span><span class="op">(</span><span class="fl">2025</span><span class="op">)</span></span>
-<span><span class="va">ratings</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/calculate_torp_ratings.html">calculate_torp_ratings</a></span><span class="op">(</span></span>
+<span><span class="va">ratings</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/calculate_epr.html">calculate_torp_ratings</a></span><span class="op">(</span></span>
 <span>  season_val <span class="op">=</span> <span class="fl">2025</span>, round_val <span class="op">=</span> <span class="fl">15</span>,</span>
 <span>  plyr_tm_df <span class="op">=</span> <span class="va">player_details</span>,</span>
 <span>  player_game_data <span class="op">=</span> <span class="va">player_game_data</span></span>

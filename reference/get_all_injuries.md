@@ -23,6 +23,7 @@ get_all_injuries(season, scrape = TRUE)
 
 ## Value
 
-A data.frame with columns: `player`, `injury`, `estimated_return`,
-`player_norm`, `source`. The `source` column is `"weekly"` or
-`"preseason"`.
+A data.frame with columns: `player`, `team`, `injury`,
+`estimated_return`, `updated`, `player_norm`, `source`. The `source`
+column is `"weekly"` or `"preseason"`. `updated` is the per-team date
+from the AFL injury page (Date class; NA for preseason entries).

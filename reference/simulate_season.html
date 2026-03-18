@@ -50,7 +50,8 @@ sim_season() is deprecated; use simulate_season() instead."><meta property="og:i
 <span>  <span class="va">sim_teams</span>,</span>
 <span>  <span class="va">sim_games</span>,</span>
 <span>  return_teams <span class="op">=</span> <span class="cn">FALSE</span>,</span>
-<span>  injury_sd <span class="op">=</span> <span class="va">SIM_INJURY_SD</span></span>
+<span>  injury_sd <span class="op">=</span> <span class="va">SIM_INJURY_SD</span>,</span>
+<span>  injury_schedule <span class="op">=</span> <span class="cn">NULL</span></span>
 <span><span class="op">)</span></span>
 <span></span>
 <span><span class="fu">sim_season</span><span class="op">(</span><span class="va">sim_teams</span>, <span class="va">sim_games</span><span class="op">)</span></span></code></pre></div>
@@ -76,6 +77,12 @@ compatibility.</p></dd>
 
 <dt id="arg-injury-sd">injury_sd<a class="anchor" aria-label="anchor" href="#arg-injury-sd"></a></dt>
 <dd><p>Standard deviation for injury impact on team ratings. Default is <code>SIM_INJURY_SD</code>.</p></dd>
+
+
+<dt id="arg-injury-schedule">injury_schedule<a class="anchor" aria-label="anchor" href="#arg-injury-schedule"></a></dt>
+<dd><p>Optional data.table from <code><a href="build_injury_schedule.html">build_injury_schedule()</a></code> with
+columns <code>team</code>, <code>torp_boost</code>, <code>return_round</code>. When provided, returning
+players' TORP contributions are added back at the appropriate round.</p></dd>
 
 </dl></div>
     <div class="section level2">

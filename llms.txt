@@ -116,6 +116,8 @@ Load processed AFL data from torpdata GitHub releases
   : Load AFL Fixture Data
 - [`load_from_url()`](https://peteowen1.github.io/torp/reference/load_from_url.md)
   : Load parquet files from remote URLs
+- [`load_injury_data()`](https://peteowen1.github.io/torp/reference/load_injury_data.md)
+  : Load Injury Data from GitHub Releases
 - [`load_pbp()`](https://peteowen1.github.io/torp/reference/load_pbp.md)
   : Load Play By Play Data
 - [`load_player_details()`](https://peteowen1.github.io/torp/reference/load_player_details.md)
@@ -180,9 +182,21 @@ Clean and prepare AFL data for analysis
 
 Calculate and view TORP player ratings
 
-- [`calculate_torp_ratings()`](https://peteowen1.github.io/torp/reference/calculate_torp_ratings.md)
-  [`torp_ratings()`](https://peteowen1.github.io/torp/reference/calculate_torp_ratings.md)
-  : Get TORP ratings
+- [`calculate_epr()`](https://peteowen1.github.io/torp/reference/calculate_epr.md)
+  [`calculate_torp_ratings()`](https://peteowen1.github.io/torp/reference/calculate_epr.md)
+  : Calculate EPR (Expected Possession Rating)
+- [`calculate_epr_stats()`](https://peteowen1.github.io/torp/reference/calculate_epr_stats.md)
+  : Calculate EPR statistics per player
+- [`calculate_torp()`](https://peteowen1.github.io/torp/reference/calculate_torp.md)
+  : Calculate TORP (Total Over Replacement Predictive-value)
+- [`calculate_psr_components()`](https://peteowen1.github.io/torp/reference/calculate_psr_components.md)
+  : Calculate PSR with Offensive/Defensive Decomposition
+- [`torp_ratings()`](https://peteowen1.github.io/torp/reference/torp_ratings.md)
+  : TORP Ratings (Total Over Replacement Predictive-value)
+- [`epr_ratings()`](https://peteowen1.github.io/torp/reference/epr_ratings.md)
+  : EPR Ratings (Expected Possession Rating)
+- [`psr_ratings()`](https://peteowen1.github.io/torp/reference/psr_ratings.md)
+  : PSR Ratings (Player Skill Rating)
 - [`player_game_ratings()`](https://peteowen1.github.io/torp/reference/player_game_ratings.md)
   : Get game ratings
 - [`player_season_ratings()`](https://peteowen1.github.io/torp/reference/player_season_ratings.md)
@@ -193,12 +207,11 @@ Calculate and view TORP player ratings
   : Print a player profile
 - [`create_player_game_data()`](https://peteowen1.github.io/torp/reference/create_player_game_data.md)
   : Create Player Game Data
-- [`default_credit_params()`](https://peteowen1.github.io/torp/reference/default_credit_params.md)
-  : Default credit assignment parameters
+- [`default_epv_params()`](https://peteowen1.github.io/torp/reference/default_epv_params.md)
+  [`default_credit_params()`](https://peteowen1.github.io/torp/reference/default_epv_params.md)
+  : Default EPV assignment parameters
 - [`create_wp_credit()`](https://peteowen1.github.io/torp/reference/create_wp_credit.md)
   : Create Win Probability Credit Data
-- [`calculate_player_stats()`](https://peteowen1.github.io/torp/reference/calculate_player_stats.md)
-  : Calculate player statistics
 - [`calculate_psr()`](https://peteowen1.github.io/torp/reference/calculate_psr.md)
   : Calculate Player Skill Ratings (PSR)
 - [`filter_game_data()`](https://peteowen1.github.io/torp/reference/filter_game_data.md)
@@ -258,6 +271,8 @@ Simulate AFL seasons and predict match outcomes
   Season Simulation System
 - [`calculate_ladder()`](https://peteowen1.github.io/torp/reference/calculate_ladder.md)
   : Calculate AFL ladder from game results
+- [`calculate_final_ladder()`](https://peteowen1.github.io/torp/reference/calculate_final_ladder.md)
+  : Calculate expected final ladder from actual results + predictions
 
 ## Chain Analysis
 
@@ -364,7 +379,7 @@ AFL and model constants
 
 ## Injuries
 
-Injury data access and matching
+Injury data access, matching, and simulation scheduling
 
 - [`injuries`](https://peteowen1.github.io/torp/reference/injuries.md) :
   AFL Injury Data Functions
@@ -374,6 +389,14 @@ Injury data access and matching
   : Match Injuries to a Ratings Data Frame
 - [`scrape_injuries()`](https://peteowen1.github.io/torp/reference/scrape_injuries.md)
   : Scrape AFL Weekly Injury List
+- [`parse_return_round()`](https://peteowen1.github.io/torp/reference/parse_return_round.md)
+  : Parse Estimated Return into Round Number
+- [`build_injury_schedule()`](https://peteowen1.github.io/torp/reference/build_injury_schedule.md)
+  : Build Injury Return Schedule for Simulation
+- [`save_injury_data()`](https://peteowen1.github.io/torp/reference/save_injury_data.md)
+  : Save Injury Data to GitHub Release
+- [`load_injury_data()`](https://peteowen1.github.io/torp/reference/load_injury_data.md)
+  : Load Injury Data from GitHub Releases
 
 ## Utilities
 

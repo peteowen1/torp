@@ -12,7 +12,8 @@ simulate_season(
   sim_teams,
   sim_games,
   return_teams = FALSE,
-  injury_sd = SIM_INJURY_SD
+  injury_sd = SIM_INJURY_SD,
+  injury_schedule = NULL
 )
 
 sim_season(sim_teams, sim_games)
@@ -38,6 +39,14 @@ sim_season(sim_teams, sim_games)
 
   Standard deviation for injury impact on team ratings. Default is
   `SIM_INJURY_SD`.
+
+- injury_schedule:
+
+  Optional data.table from
+  [`build_injury_schedule()`](https://peteowen1.github.io/torp/reference/build_injury_schedule.md)
+  with columns `team`, `torp_boost`, `return_round`. When provided,
+  returning players' TORP contributions are added back at the
+  appropriate round.
 
 ## Value
 

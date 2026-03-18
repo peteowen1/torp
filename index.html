@@ -104,10 +104,10 @@
 <p>TORP (Total Overall Rating Points) rates players across four components: disposals, receiving, spoils/tackles, and hitouts.</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Current TORP ratings</span></span>
-<span><span class="va">ratings</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/calculate_torp_ratings.html">calculate_torp_ratings</a></span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="va">ratings</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/calculate_epr.html">calculate_torp_ratings</a></span><span class="op">(</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Ratings at a specific point in time</span></span>
-<span><span class="va">ratings</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/calculate_torp_ratings.html">calculate_torp_ratings</a></span><span class="op">(</span>season_val <span class="op">=</span> <span class="fl">2025</span>, round_val <span class="op">=</span> <span class="fl">10</span><span class="op">)</span></span>
+<span><span class="va">ratings</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/calculate_epr.html">calculate_torp_ratings</a></span><span class="op">(</span>season_val <span class="op">=</span> <span class="fl">2025</span>, round_val <span class="op">=</span> <span class="fl">10</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Game-level performance</span></span>
 <span><span class="va">game_ratings</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/player_game_ratings.html">player_game_ratings</a></span><span class="op">(</span>season_val <span class="op">=</span> <span class="fl">2025</span>, round_num <span class="op">=</span> <span class="fl">10</span><span class="op">)</span></span>

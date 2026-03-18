@@ -8,7 +8,7 @@ not.
 ## Usage
 
 ``` r
-.normalise_columns(dt, col_map, verbose = TRUE, label = NULL)
+.normalise_columns(dt, col_map)
 ```
 
 ## Arguments
@@ -22,14 +22,6 @@ not.
 - col_map:
 
   Named character vector: variant_name -\> canonical_name.
-
-- verbose:
-
-  Logical. If TRUE, emits a message listing renames.
-
-- label:
-
-  Optional label for the log message (e.g. "PBP", "Player Stats").
 
 ## Value
 

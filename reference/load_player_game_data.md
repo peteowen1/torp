@@ -42,7 +42,7 @@ A data frame containing player game performance data.
 
 [`create_player_game_data()`](https://peteowen1.github.io/torp/reference/create_player_game_data.md),
 [`player_game_ratings()`](https://peteowen1.github.io/torp/reference/player_game_ratings.md),
-[`calculate_torp_ratings()`](https://peteowen1.github.io/torp/reference/calculate_torp_ratings.md)
+[`calculate_epr()`](https://peteowen1.github.io/torp/reference/calculate_epr.md)
 
 ## Examples
 

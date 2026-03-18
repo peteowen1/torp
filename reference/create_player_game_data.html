@@ -50,8 +50,8 @@ player performance data used by the TORP ratings pipeline.</p>
 <span>  pbp_data <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  player_stats <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  teams <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>  decay <span class="op">=</span> <span class="va">RATING_DECAY_DEFAULT_DAYS</span>,</span>
-<span>  credit_params <span class="op">=</span> <span class="cn">NULL</span></span>
+<span>  decay <span class="op">=</span> <span class="va">EPR_DECAY_DEFAULT_DAYS</span>,</span>
+<span>  epv_params <span class="op">=</span> <span class="cn">NULL</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -72,12 +72,12 @@ player performance data used by the TORP ratings pipeline.</p>
 
 
 <dt id="arg-decay">decay<a class="anchor" aria-label="anchor" href="#arg-decay"></a></dt>
-<dd><p>Decay factor for time-weighting games. Default is <code>RATING_DECAY_DEFAULT_DAYS</code> (486).</p></dd>
+<dd><p>Decay factor for time-weighting games. Default is <code>EPR_DECAY_DEFAULT_DAYS</code> (486).</p></dd>
 
 
-<dt id="arg-credit-params">credit_params<a class="anchor" aria-label="anchor" href="#arg-credit-params"></a></dt>
-<dd><p>Named list of credit assignment parameters. If NULL,
-uses <code><a href="default_credit_params.html">default_credit_params()</a></code>.</p></dd>
+<dt id="arg-epv-params">epv_params<a class="anchor" aria-label="anchor" href="#arg-epv-params"></a></dt>
+<dd><p>Named list of EPV assignment parameters. If NULL,
+uses <code><a href="default_epv_params.html">default_epv_params()</a></code>.</p></dd>
 
 </dl></div>
     <div class="section level2">
@@ -85,10 +85,10 @@ uses <code><a href="default_credit_params.html">default_credit_params()</a></cod
     <p>A data.table with one row per player per match, containing:
 identifiers (<code>player_id</code>, <code>match_id</code>, <code>season</code>, <code>round</code>,
 <code>player_name</code>, <code>team</code>, <code>opponent</code>, <code>listed_position</code>, <code>position</code>, <code>team_id</code>,
-<code>utc_start_time</code>), position-adjusted TORP credits (<code>total_credits_adj</code>,
-<code>recv_credits_adj</code>, <code>disp_credits_adj</code>, <code>spoil_credits_adj</code>, <code>hitout_credits_adj</code>),
-raw TORP credits (<code>total_credits</code>, <code>recv_credits</code>, <code>disp_credits</code>, <code>spoil_credits</code>,
-<code>hitout_credits</code>), and key box-score stats.</p>
+<code>utc_start_time</code>), position-adjusted EPV (<code>epv_adj</code>,
+<code>recv_epv_adj</code>, <code>disp_epv_adj</code>, <code>spoil_epv_adj</code>, <code>hitout_epv_adj</code>),
+raw EPV (<code>epv</code>, <code>recv_epv</code>, <code>disp_epv</code>, <code>spoil_epv</code>,
+<code>hitout_epv</code>), and key box-score stats.</p>
     </div>
     <div class="section level2">
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>

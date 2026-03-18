@@ -1,6 +1,6 @@
 # Build team-level ratings from lineups
 
-Joins lineups to TORP ratings, imputes missing with priors, applies TOG
+Joins lineups to EPR ratings, imputes missing with priors, applies TOG
 weighting, generates all position columns, and aggregates to team level.
 
 ## Usage
@@ -17,7 +17,7 @@ weighting, generates all position columns, and aggregates to team level.
 
 - torp_df:
 
-  TORP ratings from load_torp_ratings()
+  EPR ratings from load_torp_ratings()
 
 ## Value
 

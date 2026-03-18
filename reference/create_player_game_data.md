@@ -10,8 +10,8 @@ create_player_game_data(
   pbp_data = NULL,
   player_stats = NULL,
   teams = NULL,
-  decay = RATING_DECAY_DEFAULT_DAYS,
-  credit_params = NULL
+  decay = EPR_DECAY_DEFAULT_DAYS,
+  epv_params = NULL
 )
 ```
 
@@ -38,22 +38,21 @@ create_player_game_data(
 - decay:
 
   Decay factor for time-weighting games. Default is
-  `RATING_DECAY_DEFAULT_DAYS` (486).
+  `EPR_DECAY_DEFAULT_DAYS` (486).
 
-- credit_params:
+- epv_params:
 
-  Named list of credit assignment parameters. If NULL, uses
-  [`default_credit_params()`](https://peteowen1.github.io/torp/reference/default_credit_params.md).
+  Named list of EPV assignment parameters. If NULL, uses
+  [`default_epv_params()`](https://peteowen1.github.io/torp/reference/default_epv_params.md).
 
 ## Value
 
 A data.table with one row per player per match, containing: identifiers
 (`player_id`, `match_id`, `season`, `round`, `player_name`, `team`,
 `opponent`, `listed_position`, `position`, `team_id`, `utc_start_time`),
-position-adjusted TORP credits (`total_credits_adj`, `recv_credits_adj`,
-`disp_credits_adj`, `spoil_credits_adj`, `hitout_credits_adj`), raw TORP
-credits (`total_credits`, `recv_credits`, `disp_credits`,
-`spoil_credits`, `hitout_credits`), and key box-score stats.
+position-adjusted EPV (`epv_adj`, `recv_epv_adj`, `disp_epv_adj`,
+`spoil_epv_adj`, `hitout_epv_adj`), raw EPV (`epv`, `recv_epv`,
+`disp_epv`, `spoil_epv`, `hitout_epv`), and key box-score stats.
 
 ## Details
 

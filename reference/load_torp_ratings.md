@@ -25,7 +25,7 @@ A data frame containing TORP ratings with columns including `player_id`,
 
 ## See also
 
-[`calculate_torp_ratings()`](https://peteowen1.github.io/torp/reference/calculate_torp_ratings.md),
+[`calculate_epr()`](https://peteowen1.github.io/torp/reference/calculate_epr.md),
 [`load_player_game_data()`](https://peteowen1.github.io/torp/reference/load_player_game_data.md),
 [`player_season_ratings()`](https://peteowen1.github.io/torp/reference/player_season_ratings.md)
 
