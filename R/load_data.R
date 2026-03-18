@@ -1020,3 +1020,24 @@ load_psr <- function(seasons = get_afl_season(), use_disk_cache = FALSE, columns
 
   return(out)
 }
+
+
+#' Load Weather Data
+#'
+#' Downloads historical match weather data from the torpdata GitHub release.
+#' Returns a tibble with match-level weather aggregates (temp, wind,
+#' humidity, precipitation) derived from Open-Meteo archive data.
+#'
+#' @return A tibble with columns: match_id, temp_avg, wind_avg,
+#'   humidity_avg, precipitation_total, is_roof, and additional metadata.
+#' @seealso [save_to_release()]
+#' @examples
+#' \dontrun{
+#' try({ # prevents cran errors
+#'   load_weather()
+#' })
+#' }
+#' @export
+load_weather <- function() {
+  file_reader("weather_data", "weather-data")
+}

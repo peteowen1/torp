@@ -654,6 +654,144 @@ update_ep_wp_chart <- function(season) {
   invisible(NULL)
 }
 
+#' Update Weather Data
+#'
+#' Fetches historical weather for recently completed matches not yet in the
+#' weather release, merges with existing data, and re-uploads.
+#'
+#' @return Invisible NULL
+#' @keywords internal
+update_weather <- function() {
+  cli::cli_progress_step("Updating weather data")
+
+  # Load existing weather from release
+  existing <- tryCatch(load_weather(), error = function(e) {
+    cli::cli_warn("Could not load existing weather: {conditionMessage(e)}")
+    NULL
+  })
+  existing_ids <- if (!is.null(existing)) existing$match_id else character()
+
+  # Find completed matches missing weather
+  fixtures <- load_fixtures(all = TRUE) |>
+    dplyr::filter(!is.na(utc_start_time)) |>
+    dplyr::mutate(
+      venue = torp_replace_venues(venue_name),
+      utc_start_time = as.POSIXct(utc_start_time, format = "%Y-%m-%dT%H:%M", tz = "UTC")
+    ) |>
+    dplyr::filter(
+      !is.na(utc_start_time),
+      utc_start_time < Sys.time(),
+      !match_id %in% existing_ids
+    )
+
+  if (nrow(fixtures) == 0) {
+    cli::cli_alert_info("Weather already up to date - no new matches to backfill")
+    return(invisible(NULL))
+  }
+
+  cli::cli_inform("Fetching weather for {nrow(fixtures)} new match{?es}")
+
+  all_grounds <- file_reader("stadium_data", "reference-data") |>
+    dplyr::select(venue, Latitude, Longitude) |>
+    dplyr::distinct(venue, .keep_all = TRUE)
+
+  fixtures_geo <- fixtures |>
+    dplyr::select(match_id, season, round_number,
+                  venue_name, venue, venue_timezone, utc_start_time,
+                  home_team_name, away_team_name) |>
+    dplyr::left_join(all_grounds, by = "venue") |>
+    dplyr::mutate(match_date = as.Date(utc_start_time))
+
+  no_geo <- fixtures_geo |> dplyr::filter(is.na(Latitude))
+  if (nrow(no_geo) > 0) {
+    missing_venues <- unique(no_geo$venue)
+    cli::cli_warn("Skipping {nrow(no_geo)} match{?es} at unmapped venue{?s}: {paste(missing_venues, collapse = ', ')}")
+  }
+  fixtures_geo <- fixtures_geo |> dplyr::filter(!is.na(Latitude))
+
+  # Fetch per venue batch
+  venue_groups <- fixtures_geo |>
+    dplyr::group_by(venue, Latitude, Longitude) |>
+    dplyr::summarise(
+      min_date = min(match_date), max_date = max(match_date),
+      n_matches = dplyr::n(), .groups = "drop"
+    )
+
+  all_hourly <- list()
+  for (i in seq_len(nrow(venue_groups))) {
+    vg <- venue_groups[i, ]
+    hourly <- tryCatch({
+      resp <- httr2::request("https://archive-api.open-meteo.com/v1/archive") |>
+        httr2::req_url_query(
+          latitude = vg$Latitude, longitude = vg$Longitude,
+          start_date = format(vg$min_date, "%Y-%m-%d"),
+          end_date = format(vg$max_date, "%Y-%m-%d"),
+          hourly = "temperature_2m,precipitation,wind_speed_10m,relative_humidity_2m",
+          timezone = "UTC"
+        ) |>
+        httr2::req_retry(max_tries = 3, backoff = ~ 2) |>
+        httr2::req_perform() |>
+        httr2::resp_body_json()
+      tibble::tibble(
+        time = as.POSIXct(unlist(resp$hourly$time), format = "%Y-%m-%dT%H:%M", tz = "UTC"),
+        temperature_2m = as.numeric(unlist(resp$hourly$temperature_2m)),
+        precipitation = as.numeric(unlist(resp$hourly$precipitation)),
+        wind_speed_10m = as.numeric(unlist(resp$hourly$wind_speed_10m)),
+        relative_humidity_2m = as.numeric(unlist(resp$hourly$relative_humidity_2m)),
+        venue = vg$venue
+      )
+    }, error = function(e) {
+      cli::cli_warn("Weather fetch failed for {vg$venue}: {conditionMessage(e)}")
+      NULL
+    })
+    if (!is.null(hourly)) all_hourly[[i]] <- hourly
+    Sys.sleep(0.5)
+  }
+
+  if (length(all_hourly) == 0) {
+    cli::cli_warn("All weather fetches failed - skipping update")
+    return(invisible(NULL))
+  }
+
+  hourly_df <- dplyr::bind_rows(all_hourly)
+
+  # Aggregate to match-level (3hr window from kickoff)
+  new_weather <- fixtures_geo |>
+    dplyr::mutate(kickoff_utc = utc_start_time) |>
+    dplyr::left_join(hourly_df, by = "venue", relationship = "many-to-many") |>
+    dplyr::filter(time >= kickoff_utc, time < kickoff_utc + lubridate::hours(3)) |>
+    dplyr::group_by(match_id, season, round_number,
+                    venue_name, venue, home_team_name, away_team_name,
+                    Latitude, Longitude, kickoff_utc) |>
+    dplyr::summarise(
+      temp_avg = mean(temperature_2m, na.rm = TRUE),
+      precipitation_total = sum(precipitation, na.rm = TRUE),
+      wind_avg = mean(wind_speed_10m, na.rm = TRUE),
+      humidity_avg = mean(relative_humidity_2m, na.rm = TRUE),
+      weather_hours = dplyr::n(),
+      .groups = "drop"
+    ) |>
+    dplyr::mutate(
+      is_rain = precipitation_total > 0.5,
+      is_roof = venue == "Docklands"
+    )
+
+  # Warn if matches had no hourly data in the kickoff window
+  n_no_weather <- nrow(fixtures_geo) - length(unique(new_weather$match_id))
+  if (n_no_weather > 0) {
+    cli::cli_warn("{n_no_weather} match{?es} had no hourly weather data in the 3hr kickoff window")
+  }
+
+  # Merge with existing and upload
+  combined <- dplyr::bind_rows(existing, new_weather) |>
+    dplyr::distinct(match_id, .keep_all = TRUE) |>
+    dplyr::arrange(season, round_number)
+
+  save_to_release(combined, "weather_data", "weather-data")
+  cli::cli_alert_success("Weather updated: {nrow(new_weather)} new + {length(existing_ids)} existing = {nrow(combined)} total")
+  invisible(NULL)
+}
+
 # Main Entry Point ----
 
 #' Run Daily Data Release
@@ -795,6 +933,10 @@ run_daily_release <- function(force = FALSE) {
     tryCatch(update_psr(current_season), error = function(e) {
       derived_failures <<- c(derived_failures, "psr")
       cli::cli_alert_danger("Failed: psr: {conditionMessage(e)}")
+    })
+    tryCatch(update_weather(), error = function(e) {
+      derived_failures <<- c(derived_failures, "weather")
+      cli::cli_alert_danger("Failed: weather: {conditionMessage(e)}")
     })
 
     tictoc::toc(log = TRUE)
