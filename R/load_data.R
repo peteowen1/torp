@@ -398,6 +398,7 @@ load_pbp <- function(seasons = get_afl_season(), rounds = TRUE, use_disk_cache =
 #' @description Loads xg data from the [torpdata repository](https://github.com/peteowen1/torpdata)
 #'
 #' @param seasons A numeric vector of 4-digit years associated with given AFL seasons - defaults to latest season. If set to `TRUE`, returns all available data since 2021.
+#' @param rounds A numeric vector of round numbers to filter to. If `NULL` (default), returns all rounds.
 #' @param use_disk_cache Logical. If TRUE, uses persistent disk cache for faster repeated loads. Default is FALSE.
 #' @param columns Optional character vector of column names to read. If NULL (default), reads all columns.
 #'
@@ -407,10 +408,11 @@ load_pbp <- function(seasons = get_afl_season(), rounds = TRUE, use_disk_cache =
 #' \dontrun{
 #' try({ # prevents cran errors
 #'   load_xg(2021:2022)
+#'   load_xg(2026, 2)
 #' })
 #' }
 #' @export
-load_xg <- function(seasons = get_afl_season(), use_disk_cache = FALSE, columns = NULL) {
+load_xg <- function(seasons = get_afl_season(), rounds = NULL, use_disk_cache = FALSE, columns = NULL) {
   seasons <- validate_seasons(seasons)
 
   urls <- generate_urls("xg-data", "xg_data", seasons)
@@ -420,6 +422,13 @@ load_xg <- function(seasons = get_afl_season(), use_disk_cache = FALSE, columns 
   # Normalise old column names (home_sG → home_scored_goals, etc.)
   if (nrow(out) > 0) {
     .normalise_columns(out, XG_COL_MAP)
+  }
+
+  # Filter by round if requested (round parsed from match_id chars 12-13)
+  if (!is.null(rounds) && nrow(out) > 0) {
+    if (!data.table::is.data.table(out)) out <- data.table::as.data.table(out)
+    out[, round_number := as.integer(substr(match_id, 12L, 13L))]
+    out <- out[round_number %in% as.integer(rounds)]
   }
 
   return(out)
