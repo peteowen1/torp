@@ -399,7 +399,9 @@ calculate_game_time_remaining <- function(period, est_qtr_elapsed) {
 
 # Add Globals Variables
 utils::globalVariables(c(".data", ".SD", "disp", "season.x", "tm",
-                         "s_x", "s_lag1_x", "s_lag2_x", "s_lead1_x", "s_lead2_x"))
+                         "s_x", "s_lag1_x", "s_lag2_x", "s_lead1_x", "s_lead2_x",
+                         "current_d", "current_l", "current_w",
+                         "i.boost", "torp_boost"))
 
 
 
