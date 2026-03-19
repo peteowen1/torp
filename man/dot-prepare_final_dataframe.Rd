@@ -16,7 +16,7 @@
 \arguments{
 \item{plyr_tm_df}{Player team database}
 
-\item{player_game_data}{Player statistics dataframe (aggregated from calculate_player_stats)}
+\item{player_game_data}{Player statistics dataframe (aggregated from calculate_epr_stats)}
 
 \item{season_val}{Season value}
 

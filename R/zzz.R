@@ -25,7 +25,13 @@
   # Attach mgcv early so GAM/BAM predict() finds its internal Xbd function.
   # This avoids repeated attachNamespace() calls in get_shot_result_preds().
   if (requireNamespace("mgcv", quietly = TRUE) && !"mgcv" %in% .packages()) {
-    tryCatch(attachNamespace("mgcv"), error = function(e) NULL)
+    tryCatch(
+      attachNamespace("mgcv"),
+      error = function(e) {
+        warning("mgcv namespace attachment failed: ", conditionMessage(e),
+                ". Shot model predictions may fail.", call. = FALSE)
+      }
+    )
   }
 
   invisible()

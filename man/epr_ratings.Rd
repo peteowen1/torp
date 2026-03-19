@@ -27,7 +27,7 @@ epr_ratings(
 )
 }
 \arguments{
-\item{season_val}{The season to calculate ratings for. Default is the next season.}
+\item{season_val}{The season to calculate ratings for. Default is the current season.}
 
 \item{round_val}{The round to calculate ratings for. Default is the next round.}
 

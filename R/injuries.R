@@ -262,7 +262,7 @@ match_injuries <- function(ratings_df, injuries_df) {
 #' @param current_round Integer current round number. Used to compute TBC fallback.
 #' @return Numeric vector. `Inf` = out for season. `NA` = not injured / already
 #'   available. Finite values = round the player is expected to return.
-#' @export
+#' @keywords internal
 parse_return_round <- function(estimated_return, season, current_round = 1L) {
   current_round <- as.integer(current_round)
   n <- length(estimated_return)
@@ -340,6 +340,7 @@ parse_return_round <- function(estimated_return, season, current_round = 1L) {
     }
 
     # Fallback: treat unrecognised strings as TBC
+    cli::cli_warn("Unrecognised estimated return: {.val {val}} -- treating as TBC (~{SIM_INJURY_TBC_BUFFER} rounds)")
     result[i] <- current_round + SIM_INJURY_TBC_BUFFER
   }
 
@@ -403,6 +404,11 @@ build_injury_schedule <- function(injuries_df, player_ratings_dt) {
                    by = "player_norm", all.x = TRUE)
 
   # Drop unmatched (players not in ratings)
+  n_unmatched <- sum(is.na(matched$torp))
+  if (n_unmatched > 0) {
+    unmatched_names <- matched[is.na(torp), player_norm]
+    cli::cli_warn("Dropped {n_unmatched} injured player{?s} not found in ratings: {paste(utils::head(unmatched_names, 5), collapse = ', ')}")
+  }
   matched <- matched[!is.na(torp)]
 
   if (nrow(matched) == 0) {
@@ -451,7 +457,7 @@ build_injury_schedule <- function(injuries_df, player_ratings_dt) {
 #' @param injuries_df A data.frame of injuries (e.g., from [get_all_injuries()]).
 #' @param season Numeric season year (e.g. 2026).
 #' @return Invisible NULL. Called for side effects (upload).
-#' @export
+#' @keywords internal
 save_injury_data <- function(injuries_df, season) {
   injuries_df$scraped_date <- Sys.Date()
   save_to_release(injuries_df, paste0("injury_list_", season), "injury-data")

@@ -16,7 +16,7 @@
 #' Calculates EPR ratings for players based on their EPV credit contributions,
 #' with exponential decay weighting and Bayesian shrinkage.
 #'
-#' @param season_val The season to calculate ratings for. Default is the next season.
+#' @param season_val The season to calculate ratings for. Default is the current season.
 #' @param round_val The round to calculate ratings for. Default is the next round.
 #' @param decay_recv Decay factor (days) for receiving component. Default is \code{EPR_DECAY_RECV}.
 #' @param decay_disp Decay factor (days) for disposal component. Default is \code{EPR_DECAY_DISP}.
@@ -397,7 +397,7 @@ calculate_epr_stats_batch <- function(player_game_data = NULL,
 #' Prepare final dataframe
 #'
 #' @param plyr_tm_df Player team database
-#' @param player_game_data Player statistics dataframe (aggregated from calculate_player_stats)
+#' @param player_game_data Player statistics dataframe (aggregated from calculate_epr_stats)
 #' @param season_val Season value
 #' @param round_val Round value
 #' @param fixtures Optional pre-loaded fixtures data. If NULL, will load automatically.
@@ -525,6 +525,18 @@ calculate_torp <- function(epr_df, psr_df, epr_weight = TORP_EPR_WEIGHT) {
 epr_ratings <- calculate_epr
 
 
+#' Deprecated: use \code{\link{calculate_epr}} or \code{\link{torp_ratings}}
+#'
+#' @param ... Arguments passed to \code{\link{calculate_epr}}.
+#' @return See \code{\link{calculate_epr}}.
+#' @keywords internal
+#' @export
+calculate_torp_ratings <- function(...) {
+  cli::cli_warn("{.fn calculate_torp_ratings} is deprecated. Use {.fn calculate_epr} for EPR-only or {.fn torp_ratings} for the full TORP blend.")
+  calculate_epr(...)
+}
+
+
 #' PSR Ratings (Player Skill Rating)
 #'
 #' Computes skill-based ratings for each player-round: \code{psr} (margin-based
@@ -555,7 +567,13 @@ psr_ratings <- function(season_val = get_afl_season(type = "current"),
                         psr_coef_path = NULL) {
   skills <- load_player_skills(season_val)
   result <- .compute_psr_from_skills(skills, psr_coef_path)
-  if (is.null(result)) return(result)
+  if (is.null(result)) {
+    return(data.table::data.table(
+      player_id = character(), player_name = character(),
+      season = integer(), round = integer(),
+      pos_group = character(), psr = numeric(), osr = numeric(), dsr = numeric()
+    ))
+  }
   if (!is.null(round_val)) {
     result <- result[result$round == round_val, ]
   }
@@ -604,6 +622,8 @@ torp_ratings <- function(season_val = get_afl_season(type = "current"),
   })
 
   if (is.null(psr_df)) {
+    epr_df$torp <- epr_df$epr
+    epr_df$psr <- PSR_PRIOR_RATE
     epr_df$has_psr <- FALSE
     return(epr_df)
   }
