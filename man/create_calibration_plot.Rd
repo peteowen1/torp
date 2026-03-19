@@ -27,3 +27,4 @@ directly followed by prepare_calibration_plot.
 \seealso{
 \code{\link{assess_model_calibration}}, \code{\link{prepare_calibration_plot}}
 }
+\keyword{internal}

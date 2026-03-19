@@ -15,3 +15,4 @@ Maps AFL listed positions to 6 position groups for computing
 position-specific priors. MIDFIELDER_FORWARD is combined with
 MEDIUM_FORWARD.
 }
+\keyword{internal}

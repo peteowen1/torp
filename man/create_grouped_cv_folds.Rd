@@ -22,3 +22,4 @@ List of fold indices
 This function is intended for internal use and may be unexported in a future release.
 Creates cross-validation folds ensuring matches stay together to prevent data leakage
 }
+\keyword{internal}

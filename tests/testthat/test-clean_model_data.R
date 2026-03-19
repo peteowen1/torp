@@ -44,50 +44,6 @@ test_that("AFL constants are defined correctly", {
   expect_equal(AFL_TIME_SCALER_MAX, 4)
 })
 
-test_that("is_current_throw_in_team_change works correctly", {
-  throw_in <- c(0, 1, 0, 1)
-  team_id_mdl <- c(1, 1, 2, 2)
-  
-  result <- torp:::is_current_throw_in_team_change(throw_in, team_id_mdl)
-  
-  # Should be TRUE for position 4 (throw_in=1, lag(throw_in)=0, lag(team_id_mdl)=2 != team_id_mdl=2)
-  expect_type(result, "logical")
-  expect_length(result, 4)
-})
-
-test_that("calculate_mirror helper functions work", {
-  # Test data
-  throw_in <- c(0, 1, 1, 0, 1)
-  team_id_mdl <- c(1, 1, 2, 2, 1)
-  x <- c(-10, -5, 5, 10, -8)
-  
-  # Test helper functions exist and return logical vectors
-  result1 <- torp:::is_current_throw_in_team_change(throw_in, team_id_mdl)
-  expect_type(result1, "logical")
-  expect_length(result1, 5)
-  
-  result2 <- torp:::is_consecutive_throw_in_same_side(throw_in, team_id_mdl, x)
-  expect_type(result2, "logical")
-  expect_length(result2, 5)
-  
-  result3 <- torp:::is_consecutive_throw_in_side_change(throw_in, team_id_mdl, x)
-  expect_type(result3, "logical")
-  expect_length(result3, 5)
-  
-  result4 <- torp:::is_previous_throw_in_affecting(throw_in, team_id_mdl, x)
-  expect_type(result4, "logical")
-  expect_length(result4, 5)
-})
-
-test_that("calculate_mirror returns correct values", {
-  # Simple test case
-  throw_in <- c(0, 1, 0, 1)
-  team_id_mdl <- c(1, 1, 2, 2) 
-  x <- c(-10, -5, 5, 10)
-  
-  result <- torp:::calculate_mirror(throw_in, team_id_mdl, x)
-  
-  expect_type(result, "double")
-  expect_length(result, 4)
-  expect_true(all(result %in% c(-1, 1)))
-})
+# NOTE: is_current_throw_in_team_change, calculate_mirror, and related
+# dplyr-based mirror helpers were removed in favour of the data.table
+# fcase() implementation in add_epv_team_vars_dt().

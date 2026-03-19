@@ -20,3 +20,4 @@ List containing validation results
 This function is intended for internal use and may be unexported in a future release.
 Validates that a dataframe conforms to the expected schema
 }
+\keyword{internal}

@@ -2,7 +2,6 @@
 % Please edit documentation in R/simulate.R
 \name{simulate_season}
 \alias{simulate_season}
-\alias{sim_season}
 \title{Simulate a season of games}
 \usage{
 simulate_season(
@@ -12,8 +11,6 @@ simulate_season(
   injury_sd = SIM_INJURY_SD,
   injury_schedule = NULL
 )
-
-sim_season(sim_teams, sim_games)
 }
 \arguments{
 \item{sim_teams}{A data frame containing team ratings.}
@@ -36,6 +33,4 @@ A data.table of simulated game results (default), or a list with
 }
 \description{
 This function simulates a season of games based on team ratings and fixture data.
-
-\code{sim_season()} is deprecated; use \code{simulate_season()} instead.
 }

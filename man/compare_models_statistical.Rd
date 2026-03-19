@@ -19,3 +19,4 @@ Dataframe with pairwise comparison results
 This function is intended for internal use and may be unexported in a future release.
 Compares multiple models using AUC difference and CI overlap
 }
+\keyword{internal}

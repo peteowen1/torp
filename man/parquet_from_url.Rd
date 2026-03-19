@@ -15,3 +15,4 @@ A data frame
 \description{
 This function is intended for internal use and may be unexported in a future release.
 }
+\keyword{internal}

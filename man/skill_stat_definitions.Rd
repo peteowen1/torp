@@ -22,3 +22,4 @@ Returns a data.frame describing every stat to estimate. Each row specifies
 how to extract the raw value from player data and whether it's a rate stat
 (Gamma-Poisson, scaled by TOG) or an efficiency stat (Beta-Binomial).
 }
+\keyword{internal}

@@ -4,14 +4,14 @@
 \alias{filter_game_data}
 \title{Filter game data}
 \usage{
-filter_game_data(df, season_val, round_num, matchid, team)
+filter_game_data(df, season_val, round_val, matchid, team)
 }
 \arguments{
 \item{df}{Input data frame}
 
 \item{season_val}{Season value}
 
-\item{round_num}{Round number}
+\item{round_val}{Round number}
 
 \item{matchid}{Match ID (NULL for no filtering)}
 
@@ -23,3 +23,4 @@ Filtered data frame
 \description{
 Filter game data
 }
+\keyword{internal}

@@ -62,7 +62,7 @@ get_afl_week <- function(type = "current") {
   # (get_afl_week is called frequently as a default parameter value)
   all_fixtures <- tryCatch(
     {
-      load_fixtures(season, use_cache = TRUE) |>
+      load_fixtures(season, use_mem_cache = TRUE) |>
         dplyr::filter(.data$season == !!season)
     },
     error = function(e) {
@@ -381,8 +381,25 @@ calculate_game_time_remaining <- function(period, est_qtr_elapsed) {
     (AFL_PLAY_QUARTER_SECONDS - est_qtr_elapsed))
 }
 
+#' Drop list-columns from a data.frame
+#'
+#' Removes any columns that are lists (e.g. nested JSON structs) which
+#' cannot be serialized to parquet or used in model matrices.
+#'
+#' @param df A data.frame.
+#' @return The data.frame with list-columns removed.
+#' @keywords internal
+.drop_list_cols <- function(df) {
+  lcols <- names(df)[vapply(df, is.list, logical(1))]
+  if (length(lcols) > 0) {
+    df <- df[, !names(df) %in% lcols, drop = FALSE]
+  }
+  df
+}
+
 # Add Globals Variables
-utils::globalVariables(c(".data", ".SD", "disp", "season.x", "tm"))
+utils::globalVariables(c(".data", ".SD", "disp", "season.x", "tm",
+                         "s_x", "s_lag1_x", "s_lag2_x", "s_lead1_x", "s_lead2_x"))
 
 
 

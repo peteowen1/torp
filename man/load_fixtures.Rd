@@ -7,11 +7,12 @@
 load_fixtures(
   seasons = NULL,
   all = FALSE,
-  use_cache = TRUE,
+  use_disk_cache = FALSE,
+  use_mem_cache = TRUE,
   cache_ttl = 3600,
   verbose = FALSE,
   columns = NULL,
-  use_disk_cache = FALSE
+  use_cache = NULL
 )
 }
 \arguments{
@@ -19,7 +20,9 @@ load_fixtures(
 
 \item{all}{Deprecated. Use \code{seasons = TRUE} instead (consistent with other \verb{load_*()} functions).}
 
-\item{use_cache}{Logical. If TRUE, uses in-memory cached data when available to speed up repeated calls. Default is TRUE.}
+\item{use_disk_cache}{Logical. If TRUE, uses persistent disk caching. Default is FALSE.}
+
+\item{use_mem_cache}{Logical. If TRUE, uses in-memory cached data when available to speed up repeated calls. Default is TRUE.}
 
 \item{cache_ttl}{Numeric. Time-to-live for cached data in seconds. Default is 3600 (1 hour).}
 
@@ -27,7 +30,7 @@ load_fixtures(
 
 \item{columns}{Optional character vector of column names to read. If NULL (default), reads all columns.}
 
-\item{use_disk_cache}{Logical. If TRUE, uses persistent disk caching. Default is FALSE.}
+\item{use_cache}{Deprecated. Use \code{use_mem_cache} instead.}
 }
 \value{
 A data frame containing AFL fixture and schedule data.

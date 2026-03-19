@@ -22,3 +22,4 @@ List containing train, validation, and test datasets
 This function is intended for internal use and may be unexported in a future release.
 Creates proper temporal splits for time series data to prevent data leakage
 }
+\keyword{internal}

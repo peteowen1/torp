@@ -18,3 +18,4 @@ Removes high-cardinality factor columns (team_name, team_name_season, venue)
 that create hundreds of sparse dummies via model.matrix(), and drops sample
 weights that aren't predictive features.
 }
+\keyword{internal}

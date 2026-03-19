@@ -29,9 +29,9 @@ NULL, loads from torpdata.}
 
 \item{predictions}{Optional predictions data with \code{pred_xtotal}.}
 
-\item{injuries}{Optional injury data.frame from \code{\link[=get_all_injuries]{get_all_injuries()}}. When
-provided, injured players are excluded from team ratings and per-round
-noise is reduced from \link{SIM_INJURY_SD} to \link{SIM_INJURY_SD_KNOWN}.}
+\item{injuries}{Injury data.frame from \code{\link[=get_all_injuries]{get_all_injuries()}}. By default,
+fetched automatically from the AFL injury list. Pass \code{FALSE} to disable
+injury-aware simulation, or supply your own data.frame.}
 
 \item{seed}{Optional random seed for reproducibility.}
 

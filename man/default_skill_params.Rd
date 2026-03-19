@@ -25,3 +25,4 @@ Per-category lambda and prior values come from
 and \code{prior_games} are used as fallbacks for any category not in
 \code{category_params}.
 }
+\keyword{internal}

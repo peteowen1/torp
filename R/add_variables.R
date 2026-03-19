@@ -180,7 +180,7 @@ get_epv_preds <- function(df) {
   ep_model <- load_model_with_fallback("ep")
 
   # Log prediction event
-  input_hash <- paste0("ep_", nrow(df), "_", ncol(df), "_", as.integer(Sys.time()))
+  input_hash <- paste0("ep_", nrow(df), "_", ncol(df))
   log_prediction_event("ep_model", input_hash, nrow(df))
 
   tryCatch({
@@ -269,14 +269,13 @@ get_shot_result_preds <- function(df) {
 
   # mgcv must be attached (not just loaded) for GAM/BAM predict() — its
   # internal Xbd C function is only available on the search path when attached.
-  # Uses attachNamespace() instead of require() to avoid R CMD check NOTE.
-  if (inherits(shot_ocat_mdl, c("gam", "bam"))) {
+  # Attachment is done once in .onLoad(); this guard handles edge cases where
+  # the package is loaded outside the normal path.
+  if (inherits(shot_ocat_mdl, c("gam", "bam")) && !"mgcv" %in% .packages()) {
     if (!requireNamespace("mgcv", quietly = TRUE)) {
       cli::cli_abort("mgcv package required for shot model predictions but not available")
     }
-    if (!"mgcv" %in% .packages()) {
-      attachNamespace("mgcv")
-    }
+    attachNamespace("mgcv")
   }
 
   preds <- stats::predict(shot_ocat_mdl, df, type = "response")

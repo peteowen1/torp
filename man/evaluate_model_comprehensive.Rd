@@ -35,3 +35,4 @@ List containing evaluation metrics with confidence intervals
 This function is intended for internal use and may be unexported in a future release.
 Evaluates model performance with multiple metrics and statistical rigor
 }
+\keyword{internal}

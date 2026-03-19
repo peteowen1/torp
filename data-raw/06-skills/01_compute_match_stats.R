@@ -33,7 +33,7 @@ cli::cli_inform("Fixtures: {nrow(fixtures)} rows")
 # Prepare ----
 cli::cli_h1("Preparing skill data")
 
-skill_data <- prepare_skill_data(pgd, ps, rosters = rosters, fixtures = fixtures)
+skill_data <- .prepare_skill_data(pgd, ps, rosters = rosters, fixtures = fixtures)
 
 cli::cli_inform("Skill data: {nrow(skill_data)} rows, {length(unique(skill_data$player_id))} players")
 cli::cli_inform("Date range: {min(skill_data$match_date_skill)} to {max(skill_data$match_date_skill)}")

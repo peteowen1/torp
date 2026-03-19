@@ -9,7 +9,7 @@
 #' @param also_csv Logical. If TRUE, also upload a `.csv` copy alongside parquet.
 #'
 #' @return No return value. Used for side effects (file upload).
-#' @export
+#' @keywords internal
 #'
 #' @examples
 #' \dontrun{
@@ -502,11 +502,12 @@ load_player_game_data <- function(seasons = get_afl_season(), use_disk_cache = F
 #'
 #' @param seasons A numeric vector of 4-digit years associated with given AFL seasons - defaults to latest season. If set to `TRUE`, returns all available data since 2021.
 #' @param all Deprecated. Use `seasons = TRUE` instead (consistent with other `load_*()` functions).
-#' @param use_cache Logical. If TRUE, uses in-memory cached data when available to speed up repeated calls. Default is TRUE.
+#' @param use_disk_cache Logical. If TRUE, uses persistent disk caching. Default is FALSE.
+#' @param use_cache Deprecated. Use \code{use_mem_cache} instead.
+#' @param use_mem_cache Logical. If TRUE, uses in-memory cached data when available to speed up repeated calls. Default is TRUE.
 #' @param cache_ttl Numeric. Time-to-live for cached data in seconds. Default is 3600 (1 hour).
 #' @param verbose Logical. If TRUE, prints cache hit/miss information.
 #' @param columns Optional character vector of column names to read. If NULL (default), reads all columns.
-#' @param use_disk_cache Logical. If TRUE, uses persistent disk caching. Default is FALSE.
 #'
 #' @return A data frame containing AFL fixture and schedule data.
 #' @seealso [load_results()], [load_teams()], [load_predictions()]
@@ -520,7 +521,15 @@ load_player_game_data <- function(seasons = get_afl_season(), use_disk_cache = F
 #' })
 #' }
 #' @export
-load_fixtures <- function(seasons = NULL, all = FALSE, use_cache = TRUE, cache_ttl = 3600, verbose = FALSE, columns = NULL, use_disk_cache = FALSE) {
+load_fixtures <- function(seasons = NULL, all = FALSE, use_disk_cache = FALSE,
+                          use_mem_cache = TRUE, cache_ttl = 3600, verbose = FALSE,
+                          columns = NULL, use_cache = NULL) {
+  # Deprecation shim: use_cache → use_mem_cache
+  if (!is.null(use_cache)) {
+    cli::cli_warn("{.arg use_cache} is deprecated in {.fn load_fixtures}. Use {.arg use_mem_cache} instead.")
+    use_mem_cache <- use_cache
+  }
+
   # Process parameters — `all = TRUE` is equivalent to `seasons = TRUE`
   if (all) seasons <- TRUE
   if (is.null(seasons)) {
@@ -533,7 +542,7 @@ load_fixtures <- function(seasons = NULL, all = FALSE, use_cache = TRUE, cache_t
     cache_prefix = "fixtures",
     seasons = seasons,
     fetch_fn = get_afl_fixtures,
-    use_cache = use_cache,
+    use_cache = use_mem_cache,
     cache_ttl = cache_ttl,
     verbose = verbose,
     columns = columns,

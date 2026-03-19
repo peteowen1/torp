@@ -18,3 +18,4 @@ Invisible NULL. Called for side effects (upload).
 Saves a timestamped snapshot of injury data to the torpdata repository
 as a parquet file for historical tracking.
 }
+\keyword{internal}

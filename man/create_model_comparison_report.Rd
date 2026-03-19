@@ -18,3 +18,4 @@ Character string with formatted report
 This function is intended for internal use and may be unexported in a future release.
 Generates a comprehensive report comparing models including baselines
 }
+\keyword{internal}
