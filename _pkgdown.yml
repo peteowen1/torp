@@ -102,6 +102,8 @@ reference:
   - title: Match Analysis
     desc: Match-level expected goals, predictions, and head-to-head comparisons
     contents:
+      - get_player_match_ratings
+      - get_xg
       - calculate_match_xgs
       - head_to_head
       - print.torp_head_to_head

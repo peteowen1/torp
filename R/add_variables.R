@@ -296,7 +296,7 @@ load_model_with_fallback <- function(model_name) {
     return(get(model_name, envir = .torp_model_cache))
   }
 
-  valid_models <- c("ep", "wp", "shot", "xgb_win", "match_gams")
+  valid_models <- c("ep", "wp", "shot", "xgb_win", "match_gams", "shot_player_df")
   if (!model_name %in% valid_models) {
     cli::cli_abort("Unknown model name: {model_name}. Must be one of: {paste(valid_models, collapse = ', ')}")
   }

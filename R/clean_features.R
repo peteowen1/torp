@@ -424,15 +424,13 @@ select_afl_xgb_vars <- function(df) {
 #' @param df A dataframe containing raw shot data.
 #' @return A cleaned dataframe with additional shot-related variables.
 #' @keywords internal
-#' @importFrom utils data
 clean_shots_data <- function(df) {
   goal_width <- AFL_GOAL_WIDTH
   
-  # Load shot player data safely
-  shot_player_df <- NULL
-  tryCatch(
-    utils::data("shot_player_df", package = "torp", envir = environment()),
-    warning = function(w) NULL
+  # Load shot player lookup (maps player_id to lumped factor for shot model)
+  shot_player_df <- tryCatch(
+    load_model_with_fallback("shot_player_df"),
+    error = function(e) NULL
   )
 
   df <- df |>
