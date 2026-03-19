@@ -214,7 +214,7 @@ get_epr_df <- function(year, rounds, pgd, skills, fixtures) {
   # Per-round: roster join + TOG centering (lightweight ~700 rows per round)
   results <- lapply(round_info$round_val, function(rv) {
     round_dt <- batch_stats[round_val == rv]
-    final_df <- prepare_final_dataframe(plyr_tm_df, round_dt, year, rv, fixtures, fix_summary = fix_summary)
+    final_df <- .prepare_final_dataframe(plyr_tm_df, round_dt, year, rv, fixtures, fix_summary = fix_summary)
 
     if (!is.null(skills) && nrow(final_df) > 0) {
       final_df$pred_tog[is.na(final_df$pred_tog)] <- 0

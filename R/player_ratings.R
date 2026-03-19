@@ -1,9 +1,22 @@
+#' Load player details with previous-season fallback
+#'
+#' @param season_val Season year to load.
+#' @return A data frame of player details.
+#' @keywords internal
+.load_player_details_with_fallback <- function(season_val) {
+  plyr_tm_df <- load_player_details(season_val)
+  if (nrow(plyr_tm_df) == 0 || !"season" %in% names(plyr_tm_df)) {
+    plyr_tm_df <- load_player_details(season_val - 1)
+  }
+  plyr_tm_df
+}
+
 #' Calculate EPR (Expected Possession Rating)
 #'
 #' Calculates EPR ratings for players based on their EPV credit contributions,
 #' with exponential decay weighting and Bayesian shrinkage.
 #'
-#' @param season_val The season to calculate ratings for. Default is the next season.
+#' @param season_val The season to calculate ratings for. Default is the current season.
 #' @param round_val The round to calculate ratings for. Default is the next round.
 #' @param decay_recv Decay factor (days) for receiving component. Default is \code{EPR_DECAY_RECV}.
 #' @param decay_disp Decay factor (days) for disposal component. Default is \code{EPR_DECAY_DISP}.
@@ -95,11 +108,7 @@ calculate_epr <- function(season_val = get_afl_season(type = "current"),
 
   # Load player team details if not provided
   if (is.null(plyr_tm_df)) {
-    plyr_tm_df <- load_player_details(season_val)
-    # Fall back to previous season if current season data unavailable
-    if (nrow(plyr_tm_df) == 0 || !"season" %in% names(plyr_tm_df)) {
-      plyr_tm_df <- load_player_details(season_val - 1)
-    }
+    plyr_tm_df <- .load_player_details_with_fallback(season_val)
   }
 
   # Load player game data if not provided
@@ -126,7 +135,7 @@ calculate_epr <- function(season_val = get_afl_season(type = "current"),
   } else {
     plyr_gm_df_rnd <- calculate_epr_stats(player_game_data, match_ref, date_val, decay_recv = decay_recv, decay_disp = decay_disp, decay_spoil = decay_spoil, decay_hitout = decay_hitout, loading = loading, prior_games_recv = prior_games_recv, prior_games_disp = prior_games_disp, prior_games_spoil = prior_games_spoil, prior_games_hitout = prior_games_hitout, prior_rate_recv = prior_rate_recv, prior_rate_disp = prior_rate_disp, prior_rate_spoil = prior_rate_spoil, prior_rate_hitout = prior_rate_hitout)
 
-    # Ensure decomposed TOG columns exist (needed by prepare_final_dataframe)
+    # Ensure decomposed TOG columns exist (needed by .prepare_final_dataframe)
     plyr_gm_df_rnd[, pred_tog := NA_real_]
     plyr_gm_df_rnd[, pred_selection := NA_real_]
     plyr_gm_df_rnd[, pred_cond_tog := NA_real_]
@@ -143,7 +152,7 @@ calculate_epr <- function(season_val = get_afl_season(type = "current"),
       plyr_gm_df_rnd[, pred_tog := pred_selection * pred_cond_tog]
     }
 
-    final_df <- prepare_final_dataframe(plyr_tm_df, plyr_gm_df_rnd, season_val, round_val, fixtures)
+    final_df <- .prepare_final_dataframe(plyr_tm_df, plyr_gm_df_rnd, season_val, round_val, fixtures)
 
     # TOG-weighted centering: scale pred_tog to n_teams * 18 (full-game equivalents)
     # across rostered players, then re-center each TORP component to "above/below average"
@@ -170,6 +179,22 @@ calculate_epr <- function(season_val = get_afl_season(type = "current"),
     cli::cli_inform("EPR ratings as at {season_val} round {round_val}")
     return(final_df)
   }
+}
+
+#' Bayesian shrinkage formula
+#'
+#' Computes the posterior mean for a single EPR component:
+#' \code{(loading * sum_val + prior_games * prior_rate) / (wt_gms + prior_games)}.
+#'
+#' @param sum_val Numeric vector of weighted sums.
+#' @param wt_gms Numeric vector of weighted games.
+#' @param loading Loading factor.
+#' @param prior_games Prior games shrinkage strength.
+#' @param prior_rate Prior rate (shrinkage target).
+#' @return Numeric vector of posterior means.
+#' @keywords internal
+.bayesian_shrink <- function(sum_val, wt_gms, loading, prior_games, prior_rate) {
+  (loading * sum_val + prior_games * prior_rate) / (wt_gms + prior_games)
 }
 
 #' Calculate EPR statistics per player
@@ -251,10 +276,10 @@ calculate_epr_stats <- function(player_game_data = NULL, match_ref, date_val, de
   result[, `:=`(
     wt_gms = wt_gms_recv,  # backwards-compat alias; per-component cols are canonical
     wt_tog = round(tog_sum / pmax(wt_gms_recv, 1e-10), 1),
-    recv_epr   = (loading * recv_sum   + prior_games_recv   * prior_rate_recv)   / (wt_gms_recv   + prior_games_recv),
-    disp_epr   = (loading * disp_sum   + prior_games_disp   * prior_rate_disp)   / (wt_gms_disp   + prior_games_disp),
-    spoil_epr  = (loading * spoil_sum  + prior_games_spoil  * prior_rate_spoil)  / (wt_gms_spoil  + prior_games_spoil),
-    hitout_epr = (loading * hitout_sum + prior_games_hitout * prior_rate_hitout) / (wt_gms_hitout + prior_games_hitout)
+    recv_epr   = .bayesian_shrink(recv_sum,   wt_gms_recv,   loading, prior_games_recv,   prior_rate_recv),
+    disp_epr   = .bayesian_shrink(disp_sum,   wt_gms_disp,   loading, prior_games_disp,   prior_rate_disp),
+    spoil_epr  = .bayesian_shrink(spoil_sum,  wt_gms_spoil,  loading, prior_games_spoil,  prior_rate_spoil),
+    hitout_epr = .bayesian_shrink(hitout_sum, wt_gms_hitout, loading, prior_games_hitout, prior_rate_hitout)
   )]
 
   # Compute final epr
@@ -357,10 +382,10 @@ calculate_epr_stats_batch <- function(player_game_data = NULL,
   result[, `:=`(
     wt_gms = wt_gms_recv,
     wt_tog = round(tog_sum / pmax(wt_gms_recv, 1e-10), 1),
-    recv_epr   = (loading * recv_sum   + prior_games_recv   * prior_rate_recv)   / (wt_gms_recv   + prior_games_recv),
-    disp_epr   = (loading * disp_sum   + prior_games_disp   * prior_rate_disp)   / (wt_gms_disp   + prior_games_disp),
-    spoil_epr  = (loading * spoil_sum  + prior_games_spoil  * prior_rate_spoil)  / (wt_gms_spoil  + prior_games_spoil),
-    hitout_epr = (loading * hitout_sum + prior_games_hitout * prior_rate_hitout) / (wt_gms_hitout + prior_games_hitout)
+    recv_epr   = .bayesian_shrink(recv_sum,   wt_gms_recv,   loading, prior_games_recv,   prior_rate_recv),
+    disp_epr   = .bayesian_shrink(disp_sum,   wt_gms_disp,   loading, prior_games_disp,   prior_rate_disp),
+    spoil_epr  = .bayesian_shrink(spoil_sum,  wt_gms_spoil,  loading, prior_games_spoil,  prior_rate_spoil),
+    hitout_epr = .bayesian_shrink(hitout_sum, wt_gms_hitout, loading, prior_games_hitout, prior_rate_hitout)
   )]
 
   result[, epr := round(recv_epr + disp_epr + spoil_epr + hitout_epr, 2)]
@@ -372,7 +397,7 @@ calculate_epr_stats_batch <- function(player_game_data = NULL,
 #' Prepare final dataframe
 #'
 #' @param plyr_tm_df Player team database
-#' @param player_game_data Player statistics dataframe (aggregated from calculate_player_stats)
+#' @param player_game_data Player statistics dataframe (aggregated from calculate_epr_stats)
 #' @param season_val Season value
 #' @param round_val Round value
 #' @param fixtures Optional pre-loaded fixtures data. If NULL, will load automatically.
@@ -381,18 +406,17 @@ calculate_epr_stats_batch <- function(player_game_data = NULL,
 #'   to avoid redundant summarisation.
 #'
 #' @return A final dataframe with player ratings
+#' @keywords internal
 #'
 #' @importFrom dplyr filter left_join ungroup mutate select arrange
 #' @importFrom utils data
-prepare_final_dataframe <- function(plyr_tm_df = NULL, player_game_data = NULL, season_val, round_val, fixtures = NULL, fix_summary = NULL) {
+.prepare_final_dataframe <- function(plyr_tm_df = NULL, player_game_data = NULL, season_val, round_val, fixtures = NULL, fix_summary = NULL) {
   if (is.null(plyr_tm_df)) {
-    plyr_tm_df <- load_player_details(season_val)
-    # Fall back to previous season if current season data unavailable
-    if (nrow(plyr_tm_df) == 0 || !"season" %in% names(plyr_tm_df)) {
-      plyr_tm_df <- load_player_details(season_val - 1)
-      season_val_details <- season_val - 1
+    plyr_tm_df <- .load_player_details_with_fallback(season_val)
+    season_val_details <- if ("season" %in% names(plyr_tm_df)) {
+      plyr_tm_df$season[1]
     } else {
-      season_val_details <- season_val
+      season_val
     }
   } else {
     if ("season" %in% names(plyr_tm_df) && !season_val %in% plyr_tm_df$season) {
@@ -476,9 +500,6 @@ calculate_torp <- function(epr_df, psr_df, epr_weight = TORP_EPR_WEIGHT) {
   dplyr::arrange(result, -.data$torp)
 }
 
-#' @rdname calculate_epr
-#' @export
-calculate_torp_ratings <- calculate_epr
 
 
 #' EPR Ratings (Expected Possession Rating)
@@ -502,6 +523,18 @@ calculate_torp_ratings <- calculate_epr
 #'
 #' @export
 epr_ratings <- calculate_epr
+
+
+#' Deprecated: use \code{\link{calculate_epr}} or \code{\link{torp_ratings}}
+#'
+#' @param ... Arguments passed to \code{\link{calculate_epr}}.
+#' @return See \code{\link{calculate_epr}}.
+#' @keywords internal
+#' @export
+calculate_torp_ratings <- function(...) {
+  cli::cli_warn("{.fn calculate_torp_ratings} is deprecated. Use {.fn calculate_epr} for EPR-only or {.fn torp_ratings} for the full TORP blend.")
+  calculate_epr(...)
+}
 
 
 #' PSR Ratings (Player Skill Rating)
@@ -534,7 +567,13 @@ psr_ratings <- function(season_val = get_afl_season(type = "current"),
                         psr_coef_path = NULL) {
   skills <- load_player_skills(season_val)
   result <- .compute_psr_from_skills(skills, psr_coef_path)
-  if (is.null(result)) return(result)
+  if (is.null(result)) {
+    return(data.table::data.table(
+      player_id = character(), player_name = character(),
+      season = integer(), round = integer(),
+      pos_group = character(), psr = numeric(), osr = numeric(), dsr = numeric()
+    ))
+  }
   if (!is.null(round_val)) {
     result <- result[result$round == round_val, ]
   }
@@ -571,23 +610,36 @@ psr_ratings <- function(season_val = get_afl_season(type = "current"),
 torp_ratings <- function(season_val = get_afl_season(type = "current"),
                          round_val = get_afl_week(type = "next"), ...) {
   # Step 1: EPR
-  epr_df <- calculate_epr(season_val, round_val, ...)
+  epr_df <- suppressMessages(calculate_epr(season_val, round_val, ...))
 
   # Step 2: PSR with osr/dsr decomposition (only load current season skills)
   psr_df <- tryCatch({
     skills <- load_player_skills(season_val)
     .compute_psr_from_skills(skills)
   }, error = function(e) {
-    cli::cli_warn("Could not compute PSR: {e$message} -- returning EPR only")
+    cli::cli_warn("Could not compute PSR: {e$message} -- returning EPR-only ratings (no TORP blend)")
     NULL
   })
 
-  if (is.null(psr_df)) return(epr_df)
+  if (is.null(psr_df)) {
+    epr_df$torp <- epr_df$epr
+    epr_df$psr <- PSR_PRIOR_RATE
+    epr_df$has_psr <- FALSE
+    return(epr_df)
+  }
 
   # Step 3: Blend and reorder columns so torp is visible
+  cli::cli_inform("TORP ratings as at {season_val} round {round_val}")
   result <- calculate_torp(epr_df, psr_df)
-  front_cols <- c("player_id", "player_name", "age", "team", "torp", "epr", "psr", "osr", "dsr")
+
+  # Step 4: Join current injuries
+  injuries <- tryCatch(get_all_injuries(season_val, scrape = TRUE), error = function(e) NULL)
+  result <- match_injuries(result, injuries)
+
+  front_cols <- c("player_id", "player_name", "age", "team", "torp", "epr", "psr",
+                  "osr", "dsr", "injury", "estimated_return")
   front_cols <- intersect(front_cols, names(result))
   other_cols <- setdiff(names(result), front_cols)
-  result[, c(front_cols, other_cols)]
+  result <- result[order(-result$torp), c(front_cols, other_cols)]
+  result
 }

@@ -220,32 +220,9 @@ test_that("filter_relevant_descriptions handles empty data", {
   expect_equal(nrow(result), 0)
 })
 
-# -----------------------------------------------------------------------------
-# calculate_mirror() Tests
-# -----------------------------------------------------------------------------
-
-test_that("calculate_mirror returns valid values", {
-  result <- torp:::calculate_mirror(
-    throw_in = c(0, 0, 1, 0, 0),
-    team_id_mdl = c(1, 1, 2, 2, 2),
-    x = c(50, 60, 70, -50, -60)
-  )
-
-  # Should only return -1 or 1
-  expect_true(all(result %in% c(-1, 1)))
-  expect_length(result, 5)
-})
-
-test_that("calculate_mirror handles all zeros", {
-  result <- torp:::calculate_mirror(
-    throw_in = rep(0, 5),
-    team_id_mdl = rep(1, 5),
-    x = rep(50, 5)
-  )
-
-  # With no throw-ins, should all be 1
-  expect_true(all(result == 1))
-})
+# NOTE: calculate_mirror() and its helpers were removed in favour of
+# the data.table fcase() implementation in add_epv_team_vars_dt().
+# Mirror logic is tested via clean_model_data_epv_dt integration tests.
 
 # -----------------------------------------------------------------------------
 # determine_team_id_mdl() Tests
@@ -527,7 +504,7 @@ test_that("EPV pipeline components work together", {
   expect_true(is.function(clean_model_data_epv))
   expect_true(is.function(select_epv_model_vars))
   expect_true(is.function(torp:::filter_relevant_descriptions))
-  expect_true(is.function(torp:::add_epv_variables))
+  expect_true(is.function(torp:::add_epv_team_vars_dt))
 })
 
 test_that("WP pipeline components work together", {

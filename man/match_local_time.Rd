@@ -22,6 +22,9 @@ Parses a UTC start time string and converts it to local time based on
 the venue timezone from fixture data.
 }
 \examples{
+\dontrun{
 match_local_time("2026-03-05T08:30:00.000+0000", "Australia/Sydney")
 match_local_time("2026-03-05T08:30:00.000+0000", "Australia/Perth")
 }
+}
+\keyword{internal}

@@ -49,17 +49,15 @@ reference:
     desc: Clean and prepare AFL data for analysis
     contents:
       - clean_pbp
-      - starts_with("clean_model")
-      - clean_shots_data
 
   - title: Player Ratings
     desc: Calculate and view TORP player ratings
     contents:
-      - calculate_torp_ratings
       - calculate_epr_stats
       - calculate_torp
       - calculate_psr_components
       - torp_ratings
+      - calculate_epr
       - epr_ratings
       - psr_ratings
       - player_game_ratings
@@ -67,10 +65,8 @@ reference:
       - player_profile
       - print.torp_player_profile
       - create_player_game_data
-      - default_epv_params
       - create_wp_credit
       - calculate_psr
-      - filter_game_data
       - team_profile
       - print.torp_team_profile
 
@@ -78,14 +74,10 @@ reference:
     desc: Estimate and explore player skill profiles
     contents:
       - aggregate_team_skills
-      - default_skill_params
       - estimate_player_skills
       - get_player_skills
       - player_skill_profile
-      - prepare_skill_data
       - print.torp_skill_profile
-      - skill_position_map
-      - skill_stat_definitions
       - get_team_skills
       - team_skill_profile
       - print.torp_team_skill_profile
@@ -93,12 +85,10 @@ reference:
   - title: Season Simulation
     desc: Simulate AFL seasons and predict match outcomes
     contents:
-      - starts_with("sim_")
       - starts_with("simulate_")
       - summarise_simulations
       - show_predictions
       - print.torp_sim_results
-      - prepare_final_dataframe
       - ladder
       - calculate_ladder
       - calculate_final_ladder
@@ -112,7 +102,6 @@ reference:
   - title: Match Analysis
     desc: Match-level expected goals, predictions, and head-to-head comparisons
     contents:
-      - match_xgs
       - calculate_match_xgs
       - head_to_head
       - print.torp_head_to_head
@@ -120,40 +109,22 @@ reference:
   - title: Model Validation
     desc: Evaluate model performance, calibration, and drift
     contents:
-      - starts_with("evaluate_")
-      - starts_with("compare_")
-      - starts_with("create_calibration")
-      - starts_with("create_validation")
-      - starts_with("create_model")
-      - starts_with("log_model")
-      - starts_with("monitor_")
-      - starts_with("validate_")
       - starts_with("analyze_")
       - starts_with("detect_")
       - starts_with("calculate_quality")
 
-  - title: Model Training
-    desc: Utilities for model development and cross-validation
-    contents:
-      - starts_with("create_grouped")
-      - starts_with("create_temporal")
-      - select_epv_model_vars
-      - select_wp_model_vars
-      - select_afl_model_vars
-      - select_afl_xgb_vars
-
   - title: Caching
     desc: In-memory and disk caching utilities
     contents:
-      - starts_with("clear_")
+      - clear_data_cache
+      - clear_model_cache
+      - clear_all_cache
+      - clear_disk_cache
       - starts_with("get_cache")
       - starts_with("get_disk_cache")
       - starts_with("get_model_cache")
       - starts_with("set_disk_cache")
-      - starts_with("is_cache")
       - starts_with("is_disk")
-      - starts_with("store_in")
-      - starts_with("get_from")
       - starts_with("read_disk")
       - starts_with("write_disk")
 
@@ -175,9 +146,7 @@ reference:
       - get_all_injuries
       - match_injuries
       - scrape_injuries
-      - parse_return_round
       - build_injury_schedule
-      - save_injury_data
       - load_injury_data
 
   - title: Utilities
@@ -185,8 +154,6 @@ reference:
     contents:
       - get_afl_season
       - get_afl_week
-      - parquet_from_url
-      - save_to_release
       - set_torp_data_repo
       - setup_torp_logging
       - download_torp_data
@@ -197,7 +164,6 @@ reference:
       - torp_team_abbr
       - torp_team_full
       - torp_replace_venues
-      - match_local_time
 
   - title: AFL API
     desc: Access AFL data directly from the API

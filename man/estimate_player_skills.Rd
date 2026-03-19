@@ -13,7 +13,7 @@ estimate_player_skills(
 )
 }
 \arguments{
-\item{skill_data}{A data.table from \code{prepare_skill_data()}.}
+\item{skill_data}{A data.table from \code{.prepare_skill_data()}.}
 
 \item{ref_date}{Date to estimate skills as of. Only matches before this
 date are used. If NULL, includes all available matches (sets ref_date

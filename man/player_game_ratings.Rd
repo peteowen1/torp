@@ -6,19 +6,22 @@
 \usage{
 player_game_ratings(
   season_val = get_afl_season(),
-  round_num = get_afl_week(),
+  round_val = get_afl_week(),
   matchid = NULL,
-  team = NULL
+  team = NULL,
+  round_num = NULL
 )
 }
 \arguments{
 \item{season_val}{The season to get ratings for. Default is the current season.}
 
-\item{round_num}{The round number to get ratings for. Default is the current round.}
+\item{round_val}{The round number to get ratings for. Default is the current round.}
 
 \item{matchid}{The match ID to filter by. Default is NULL (no filtering).}
 
 \item{team}{The team to filter by. Default is NULL (no filtering).}
+
+\item{round_num}{Deprecated. Use \code{round_val} instead.}
 }
 \value{
 A data frame containing player game ratings.

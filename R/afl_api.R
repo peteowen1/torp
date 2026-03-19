@@ -407,10 +407,7 @@ NULL
     if (is.null(players) || !is.data.frame(players) || nrow(players) == 0) return(NULL)
 
     # Drop any remaining list-columns before adding metadata
-    lcols <- names(players)[vapply(players, is.list, logical(1))]
-    if (length(lcols) > 0) {
-      players <- players[, !names(players) %in% lcols, drop = FALSE]
-    }
+    players <- .drop_list_cols(players)
 
     players$teamId <- team_id
     players$teamName <- team_name
@@ -453,10 +450,7 @@ NULL
     if (is.null(df) || !is.data.frame(df) || nrow(df) == 0) return(NULL)
 
     # Drop list-columns
-    lcols <- names(df)[vapply(df, is.list, logical(1))]
-    if (length(lcols) > 0) {
-      df <- df[, !names(df) %in% lcols, drop = FALSE]
-    }
+    df <- .drop_list_cols(df)
 
     # Strip playerStats. prefix from column names
     names(df) <- gsub("^playerStats\\.", "", names(df))
@@ -491,10 +485,7 @@ NULL
   players$team.providerId <- json$squad$team$providerId %||% NA_character_
 
   # Drop list-columns
-  list_cols <- names(players)[vapply(players, is.list, logical(1))]
-  if (length(list_cols) > 0) {
-    players <- players[, !names(players) %in% list_cols, drop = FALSE]
-  }
+  players <- .drop_list_cols(players)
   players
 }
 
@@ -609,10 +600,7 @@ get_afl_fixtures <- function(season = NULL) {
   if (is.null(matches) || length(matches) == 0) return(NULL)
 
   # Drop list-columns (nested structs) that arrow can't serialize
-  list_cols <- names(matches)[vapply(matches, is.list, logical(1))]
-  if (length(list_cols) > 0) {
-    matches <- matches[, !names(matches) %in% list_cols, drop = FALSE]
-  }
+  matches <- .drop_list_cols(matches)
 
   # Add compSeason.year (extracted from providerId) — normalised to `season` by .normalise_fixture_columns()
   if (!"compSeason.year" %in% names(matches) && "compSeason.providerId" %in% names(matches)) {
@@ -722,12 +710,7 @@ get_afl_lineups <- function(season = NULL, round = NULL) {
     }
   }
 
-  # Exclude matches that definitely won't have rosters
-  if ("status" %in% names(fixtures)) {
-    fixtures <- fixtures[!fixtures$status %in% c("SCHEDULED", "PLACEHOLDER"), ]
-    if (nrow(fixtures) == 0) return(tibble::tibble())
-  }
-
+  n_total <- nrow(fixtures)
   match_ids <- fixtures$match_id
   token <- get_token()
 
@@ -738,7 +721,13 @@ get_afl_lineups <- function(season = NULL, round = NULL) {
     parse_fn = .parse_match_roster,
     label = "roster"
   )
-  if (nrow(result) == 0) return(tibble::tibble())
+  if (nrow(result) == 0) {
+    cli::cli_inform("Loaded lineups for 0 of {n_total} match{?es}.")
+    return(tibble::tibble())
+  }
+
+  n_with_lineups <- length(unique(result$providerId))
+  cli::cli_inform("Loaded lineups for {n_with_lineups} of {n_total} match{?es}.")
 
   # Add season and row_id to match existing schema
   result$season <- as.numeric(substr(result$providerId, 5, 8))

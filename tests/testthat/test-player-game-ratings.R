@@ -17,9 +17,9 @@ test_that("player_game_ratings has correct function signature", {
 
 test_that("player_game_ratings validates input", {
   expect_error(player_game_ratings(season_val = "invalid"), "season_val must be numeric")
-  expect_error(player_game_ratings(round_num = "invalid"), "round_num must be numeric")
+  expect_error(player_game_ratings(round_val = "invalid"), "round_val must be numeric")
   expect_error(player_game_ratings(season_val = 1900), "1990 and")
-  expect_error(player_game_ratings(round_num = 50), "0 and 28")
+  expect_error(player_game_ratings(round_val = 50), "0 and 28")
 })
 
 # -----------------------------------------------------------------------------

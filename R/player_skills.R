@@ -80,8 +80,8 @@
 #'   and all stat columns referenced by \code{skill_stat_definitions()}.
 #'
 #' @importFrom data.table as.data.table
-#' @export
-prepare_skill_data <- function(player_game_data, player_stats, rosters = NULL,
+#' @keywords internal
+.prepare_skill_data <- function(player_game_data, player_stats, rosters = NULL,
                                fixtures = NULL) {
   pgd <- data.table::as.data.table(player_game_data)
   ps <- data.table::as.data.table(player_stats)
@@ -323,7 +323,7 @@ prepare_skill_data <- function(player_game_data, player_stats, rosters = NULL,
 #' and attempts are decay-weighted; the Beta prior is centered on the
 #' position mean with strength controlled by \code{prior_attempts}.
 #'
-#' @param skill_data A data.table from \code{prepare_skill_data()}.
+#' @param skill_data A data.table from \code{.prepare_skill_data()}.
 #' @param ref_date Date to estimate skills as of. Only matches before this
 #'   date are used. If NULL, includes all available matches (sets ref_date
 #'   to one day after the latest match in the data).
@@ -371,7 +371,7 @@ estimate_player_skills <- function(skill_data, ref_date = NULL,
   # Compute days since and decay weight (using rate lambda for game counting)
   dt[, days_since := as.numeric(ref_date - match_date_skill)]
 
-  # Ensure avail_only flag exists (rows from prepare_skill_data zero-TOG expansion)
+  # Ensure avail_only flag exists (rows from .prepare_skill_data zero-TOG expansion)
   if (!"avail_only" %in% names(dt)) dt[, avail_only := FALSE]
   dt[is.na(avail_only), avail_only := FALSE]
 
@@ -673,7 +673,7 @@ estimate_player_skills <- function(skill_data, ref_date = NULL,
 #' across many dates: date conversion and avail_only setup are done once,
 #' and the data is sorted so each iteration filters an ascending subset.
 #'
-#' @param skill_data A data.table from \code{prepare_skill_data()}.
+#' @param skill_data A data.table from \code{.prepare_skill_data()}.
 #' @param ref_dates Date vector of reference dates.
 #' @param params Named list of hyperparameters from \code{default_skill_params()}.
 #' @param stat_defs Output of \code{skill_stat_definitions()}. If NULL, uses default.
@@ -806,7 +806,7 @@ player_skill_profile <- function(player_name, ref_date = Sys.Date(),
     # Slow path: compute from scratch
     pgd <- load_player_game_data(seasons, use_disk_cache = TRUE)
     ps <- load_player_stats(seasons, use_disk_cache = TRUE)
-    skill_data <- prepare_skill_data(pgd, ps)
+    skill_data <- .prepare_skill_data(pgd, ps)
     all_skills <- estimate_player_skills(skill_data, ref_date = ref_date, params = params)
   }
 

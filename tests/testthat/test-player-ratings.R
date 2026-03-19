@@ -42,11 +42,11 @@ test_that("calculate_epr has reasonable defaults", {
 # torp_ratings Alias Tests
 # -----------------------------------------------------------------------------
 
-test_that("torp_ratings exists and calculate_torp_ratings is alias for calculate_epr", {
+test_that("torp_ratings and epr_ratings exist as exported functions", {
   expect_true(exists("torp_ratings"))
   expect_true(is.function(torp_ratings))
-  expect_true(exists("calculate_torp_ratings"))
-  expect_identical(calculate_torp_ratings, calculate_epr)
+  expect_true(exists("epr_ratings"))
+  expect_identical(epr_ratings, calculate_epr)
 })
 
 test_that("calculate_epr_stats helper function works", {
@@ -174,11 +174,11 @@ test_that("calculate_epr_stats respects decay parameter", {
 })
 
 # -----------------------------------------------------------------------------
-# prepare_final_dataframe Tests
+# .prepare_final_dataframe Tests
 # -----------------------------------------------------------------------------
 
-test_that("prepare_final_dataframe function exists", {
-  expect_true(exists("prepare_final_dataframe", envir = asNamespace("torp")))
+test_that(".prepare_final_dataframe function exists", {
+  expect_true(exists(".prepare_final_dataframe", envir = asNamespace("torp")))
 })
 
 # -----------------------------------------------------------------------------

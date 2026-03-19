@@ -13,7 +13,7 @@
 )
 }
 \arguments{
-\item{skill_data}{A data.table from \code{prepare_skill_data()}.}
+\item{skill_data}{A data.table from \code{.prepare_skill_data()}.}
 
 \item{ref_dates}{Date vector of reference dates.}
 

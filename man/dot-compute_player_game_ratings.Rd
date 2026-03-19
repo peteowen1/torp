@@ -4,14 +4,14 @@
 \alias{.compute_player_game_ratings}
 \title{Compute player game ratings from raw player game data}
 \usage{
-.compute_player_game_ratings(player_game_data, season_val, round_num)
+.compute_player_game_ratings(player_game_data, season_val, round_val)
 }
 \arguments{
 \item{player_game_data}{Player game data (output of \code{\link[=create_player_game_data]{create_player_game_data()}}).}
 
 \item{season_val}{Season(s) to compute for.}
 
-\item{round_num}{Round(s) to compute for.}
+\item{round_val}{Round(s) to compute for.}
 }
 \value{
 A data frame in player game ratings format.

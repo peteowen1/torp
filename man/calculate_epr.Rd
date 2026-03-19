@@ -2,7 +2,6 @@
 % Please edit documentation in R/player_ratings.R
 \name{calculate_epr}
 \alias{calculate_epr}
-\alias{calculate_torp_ratings}
 \title{Calculate EPR (Expected Possession Rating)}
 \usage{
 calculate_epr(
@@ -26,31 +25,9 @@ calculate_epr(
   prior_rate_spoil = EPR_PRIOR_RATE_SPOIL,
   prior_rate_hitout = EPR_PRIOR_RATE_HITOUT
 )
-
-calculate_torp_ratings(
-  season_val = get_afl_season(type = "current"),
-  round_val = get_afl_week(type = "next"),
-  decay_recv = EPR_DECAY_RECV,
-  decay_disp = EPR_DECAY_DISP,
-  decay_spoil = EPR_DECAY_SPOIL,
-  decay_hitout = EPR_DECAY_HITOUT,
-  loading = EPR_LOADING_DEFAULT,
-  prior_games_recv = EPR_PRIOR_GAMES_RECV,
-  prior_games_disp = EPR_PRIOR_GAMES_DISP,
-  plyr_tm_df = NULL,
-  player_game_data = NULL,
-  prior_games_spoil = EPR_PRIOR_GAMES_SPOIL,
-  prior_games_hitout = EPR_PRIOR_GAMES_HITOUT,
-  fixtures = NULL,
-  skills = TRUE,
-  prior_rate_recv = EPR_PRIOR_RATE_RECV,
-  prior_rate_disp = EPR_PRIOR_RATE_DISP,
-  prior_rate_spoil = EPR_PRIOR_RATE_SPOIL,
-  prior_rate_hitout = EPR_PRIOR_RATE_HITOUT
-)
 }
 \arguments{
-\item{season_val}{The season to calculate ratings for. Default is the next season.}
+\item{season_val}{The season to calculate ratings for. Default is the current season.}
 
 \item{round_val}{The round to calculate ratings for. Default is the next round.}
 

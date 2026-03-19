@@ -22,3 +22,4 @@ available. Finite values = round the player is expected to return.
 Vectorized function that converts free-text estimated return strings from the
 AFL injury list into numeric round numbers for use in simulation scheduling.
 }
+\keyword{internal}

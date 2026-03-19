@@ -221,7 +221,10 @@ prepare_sim_data <- function(season, team_ratings = NULL, fixtures = NULL,
   if (is.null(predictions)) {
     predictions <- tryCatch(
       load_predictions(seasons = season, rounds = TRUE),
-      error = function(e) NULL
+      error = function(e) {
+        cli::cli_warn("Could not load predictions: {conditionMessage(e)} -- simulations will use team ratings only")
+        NULL
+      }
     )
   }
 
@@ -411,7 +414,10 @@ calculate_final_ladder <- function(season = get_afl_season(),
   if (is.null(predictions)) {
     predictions <- tryCatch(
       load_predictions(seasons = season, rounds = TRUE),
-      error = function(e) NULL
+      error = function(e) {
+        cli::cli_warn("Could not load predictions: {conditionMessage(e)} -- unplayed games will use 50/50 toss-up estimates")
+        NULL
+      }
     )
   }
 
@@ -462,7 +468,10 @@ calculate_final_ladder <- function(season = get_afl_season(),
     current_round <- if (any(games$played)) max(games[played == TRUE, roundnum]) else 1L
 
     # Build injury schedule from player-level ratings
-    pr <- tryCatch(torp_ratings(season), error = function(e) NULL)
+    pr <- tryCatch(torp_ratings(season), error = function(e) {
+      cli::cli_warn("Could not load player ratings for injury adjustment: {conditionMessage(e)} -- returning ladder without injury adjustments")
+      NULL
+    })
     if (!is.null(pr)) {
       pr_dt <- data.table::as.data.table(pr)
       if ("season" %in% names(pr_dt) && "round" %in% names(pr_dt)) {
@@ -807,9 +816,9 @@ simulate_finals <- function(ladder_dt, sim_teams_dt, gf_familiarity = NULL) {
 #'   NULL, loads from torpdata.
 #' @param fixtures Optional fixture data. If NULL, loads from torpdata.
 #' @param predictions Optional predictions data with `pred_xtotal`.
-#' @param injuries Optional injury data.frame from [get_all_injuries()]. When
-#'   provided, injured players are excluded from team ratings and per-round
-#'   noise is reduced from [SIM_INJURY_SD] to [SIM_INJURY_SD_KNOWN].
+#' @param injuries Injury data.frame from [get_all_injuries()]. By default,
+#'   fetched automatically from the AFL injury list. Pass `FALSE` to disable
+#'   injury-aware simulation, or supply your own data.frame.
 #' @param seed Optional random seed for reproducibility.
 #' @param verbose Logical; if TRUE, shows a progress bar.
 #' @param keep_games Logical; if TRUE, stores per-sim game results (memory
@@ -840,6 +849,16 @@ simulate_afl_season <- function(season,
                                 n_cores = 1L) {
 
   if (!is.null(seed)) set.seed(seed)
+
+  # Default: fetch current injury list from AFL. Pass FALSE to skip.
+  if (isFALSE(injuries)) {
+    injuries <- NULL
+  } else if (is.null(injuries)) {
+    injuries <- tryCatch(get_all_injuries(season), error = function(e) {
+      cli::cli_alert_warning("Could not fetch injuries: {conditionMessage(e)}")
+      NULL
+    })
+  }
 
   # When injuries are provided, use reduced per-round noise
   sim_injury_sd <- if (!is.null(injuries) && nrow(injuries) > 0) {
@@ -963,6 +982,7 @@ simulate_afl_season <- function(season,
     finals           = data.table::rbindlist(lapply(sim_results, `[[`, "finals")),
     games            = if (keep_games) data.table::rbindlist(lapply(sim_results, `[[`, "games")) else NULL,
     original_ratings = base_teams,
+    played_games     = played_games,
     injury_schedule  = injury_schedule
   )
   class(result) <- "torp_sim_results"
@@ -1025,6 +1045,27 @@ summarise_simulations <- function(sim_results) {
                made_gf_pct = 0, won_gf_pct = 0)]
   }
 
+  # Join original TORP ratings
+  if (!is.null(sim_results$original_ratings)) {
+    ratings_dt <- data.table::as.data.table(sim_results$original_ratings)[, .(team, torp)]
+    out <- merge(out, ratings_dt, by = "team", all.x = TRUE)
+  }
+
+  # Compute current W-L from played games
+  if (!is.null(sim_results$played_games) && nrow(sim_results$played_games) > 0) {
+    pg <- sim_results$played_games
+    home <- pg[, .(team = home_team, margin = result)]
+    away <- pg[, .(team = away_team, margin = -result)]
+    records <- data.table::rbindlist(list(home, away))
+    current_record <- records[, .(
+      current_w = sum(margin > 0),
+      current_l = sum(margin < 0),
+      current_d = sum(margin == 0)
+    ), by = team]
+    out <- merge(out, current_record, by = "team", all.x = TRUE)
+    out[is.na(current_w), `:=`(current_w = 0L, current_l = 0L, current_d = 0L)]
+  }
+
   data.table::setorder(out, -avg_wins)
   out[]
 }
@@ -1061,6 +1102,11 @@ print.torp_sim_results <- function(x, ...) {
   # Format compact table
   display <- summary[, .(
     Team    = team,
+    TORP    = if ("torp" %in% names(summary)) sprintf("%.1f", torp) else NA_character_,
+    Record  = if ("current_w" %in% names(summary)) {
+      sprintf("%d-%d%s", current_w, current_l,
+              ifelse(current_d > 0, sprintf("-%d", current_d), ""))
+    } else NA_character_,
     W       = sprintf("%.1f", avg_wins),
     PF      = sprintf("%.1f", avg_pf_pg),
     PA      = sprintf("%.1f", avg_pa_pg),
@@ -1072,6 +1118,10 @@ print.torp_sim_results <- function(x, ...) {
     Premier = sprintf("%.1f%%", won_gf_pct * 100),
     Last    = sprintf("%.1f%%", last_pct * 100)
   )]
+
+  # Drop columns that are all NA (e.g. no played games yet)
+  na_cols <- names(display)[vapply(display, function(x) all(is.na(x)), logical(1))]
+  if (length(na_cols) > 0) display[, (na_cols) := NULL]
 
   print(display, nrows = 18)
   invisible(x)

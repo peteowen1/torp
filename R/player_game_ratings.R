@@ -5,26 +5,34 @@
 #' function — both pull from the same pre-computed release.
 #'
 #' @param season_val The season to get ratings for. Default is the current season.
-#' @param round_num The round number to get ratings for. Default is the current round.
+#' @param round_val The round number to get ratings for. Default is the current round.
 #' @param matchid The match ID to filter by. Default is NULL (no filtering).
 #' @param team The team to filter by. Default is NULL (no filtering).
+#' @param round_num Deprecated. Use \code{round_val} instead.
 #'
 #' @return A data frame containing player game ratings.
 #' @export
 #'
 #' @importFrom dplyr filter arrange
 player_game_ratings <- function(season_val = get_afl_season(),
-                                round_num = get_afl_week(),
+                                round_val = get_afl_week(),
                                 matchid = NULL,
-                                team = NULL) {
+                                team = NULL,
+                                round_num = NULL) {
+
+  # Deprecation shim: round_num → round_val
+  if (!is.null(round_num)) {
+    cli::cli_warn("{.arg round_num} is deprecated in {.fn player_game_ratings}. Use {.arg round_val} instead.")
+    round_val <- round_num
+  }
 
   # Input validation
   if (!is.numeric(season_val) && !is.na(season_val)) {
     cli::cli_abort("season_val must be numeric (e.g., 2024)")
   }
 
-  if (!is.numeric(round_num) && !is.na(round_num)) {
-    cli::cli_abort("round_num must be numeric (e.g., 1, 2, 3...)")
+  if (!is.numeric(round_val) && !is.na(round_val)) {
+    cli::cli_abort("round_val must be numeric (e.g., 1, 2, 3...)")
   }
 
   max_season <- get_afl_season() + 1L
@@ -33,12 +41,12 @@ player_game_ratings <- function(season_val = get_afl_season(),
   }
 
   # Validate reasonable round range
-  if (is.numeric(round_num) && (any(round_num < 0) || any(round_num > 28))) {
-    cli::cli_abort("round_num must be between 0 and 28")
+  if (is.numeric(round_val) && (any(round_val < 0) || any(round_val > 28))) {
+    cli::cli_abort("round_val must be between 0 and 28")
   }
 
   df <- load_player_game_ratings(season_val)
-  df <- filter_game_data(df, season_val, round_num, matchid, team)
+  df <- filter_game_data(df, season_val, round_val, matchid, team)
   df |> dplyr::arrange(-.data$epv_p80)
 }
 
@@ -50,7 +58,7 @@ player_game_ratings <- function(season_val = get_afl_season(),
 #'
 #' @param player_game_data Player game data (output of [create_player_game_data()]).
 #' @param season_val Season(s) to compute for.
-#' @param round_num Round(s) to compute for.
+#' @param round_val Round(s) to compute for.
 #'
 #' @return A data frame in player game ratings format.
 #' @keywords internal
@@ -58,9 +66,9 @@ player_game_ratings <- function(season_val = get_afl_season(),
 #' @importFrom dplyr arrange mutate select
 .compute_player_game_ratings <- function(player_game_data,
                                          season_val,
-                                         round_num) {
+                                         round_val) {
 
-  df <- filter_game_data(player_game_data, season_val, round_num, matchid = NULL, team = NULL)
+  df <- filter_game_data(player_game_data, season_val, round_val, matchid = NULL, team = NULL)
 
   df |>
     dplyr::arrange(-.data$epv_adj) |>
@@ -93,15 +101,16 @@ player_game_ratings <- function(season_val = get_afl_season(),
 #'
 #' @param df Input data frame
 #' @param season_val Season value
-#' @param round_num Round number
+#' @param round_val Round number
 #' @param matchid Match ID (NULL for no filtering)
 #' @param team Team name (NULL for no filtering)
 #'
 #' @return Filtered data frame
+#' @keywords internal
 #'
 #' @importFrom dplyr filter
 #' @importFrom cli cli_abort
-filter_game_data <- function(df, season_val, round_num, matchid, team) {
+filter_game_data <- function(df, season_val, round_val, matchid, team) {
   if (!is.null(matchid)) {
     df <- df |> dplyr::filter(.data$match_id %in% matchid)
     if (nrow(df) == 0) {
@@ -110,7 +119,7 @@ filter_game_data <- function(df, season_val, round_num, matchid, team) {
   } else if (!is.null(team)) {
     df <- df |> dplyr::filter(
       .data$season %in% season_val,
-      .data$round %in% round_num,
+      .data$round %in% round_val,
       (.data$team == .env$team | .data$opp == .env$team)
     )
     if (nrow(df) == 0) {
@@ -122,7 +131,7 @@ filter_game_data <- function(df, season_val, round_num, matchid, team) {
   } else {
     df <- df |> dplyr::filter(
       .data$season %in% season_val,
-      .data$round %in% round_num
+      .data$round %in% round_val
     )
   }
   return(df)

@@ -27,3 +27,4 @@ Logical indicating if data is fresh enough
 This function is intended for internal use and may be unexported in a future release.
 Checks if data is recent enough for reliable predictions
 }
+\keyword{internal}

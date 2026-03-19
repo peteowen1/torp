@@ -24,3 +24,4 @@ log_model_performance(
 This function is intended for internal use and may be unexported in a future release.
 Logs model performance metrics in a structured format for monitoring
 }
+\keyword{internal}

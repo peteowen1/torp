@@ -13,3 +13,4 @@ Invisible count of markers removed
 Removes all \code{.skip} marker files from the local data directory,
 allowing previously skipped URLs to be re-attempted on next load.
 }
+\keyword{internal}

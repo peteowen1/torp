@@ -15,3 +15,4 @@ A cleaned dataframe with additional shot-related variables.
 \description{
 Clean Shots Data
 }
+\keyword{internal}
