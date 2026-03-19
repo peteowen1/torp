@@ -86,9 +86,9 @@ NULL, loads from torpdata.</p></dd>
 
 
 <dt id="arg-injuries">injuries<a class="anchor" aria-label="anchor" href="#arg-injuries"></a></dt>
-<dd><p>Optional injury data.frame from <code><a href="get_all_injuries.html">get_all_injuries()</a></code>. When
-provided, injured players are excluded from team ratings and per-round
-noise is reduced from <a href="SIM_INJURY_SD.html">SIM_INJURY_SD</a> to <a href="SIM_INJURY_SD_KNOWN.html">SIM_INJURY_SD_KNOWN</a>.</p></dd>
+<dd><p>Injury data.frame from <code><a href="get_all_injuries.html">get_all_injuries()</a></code>. By default,
+fetched automatically from the AFL injury list. Pass <code>FALSE</code> to disable
+injury-aware simulation, or supply your own data.frame.</p></dd>
 
 
 <dt id="arg-seed">seed<a class="anchor" aria-label="anchor" href="#arg-seed"></a></dt>

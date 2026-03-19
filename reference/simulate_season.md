@@ -3,8 +3,6 @@
 This function simulates a season of games based on team ratings and
 fixture data.
 
-`sim_season()` is deprecated; use `simulate_season()` instead.
-
 ## Usage
 
 ``` r
@@ -15,8 +13,6 @@ simulate_season(
   injury_sd = SIM_INJURY_SD,
   injury_schedule = NULL
 )
-
-sim_season(sim_teams, sim_games)
 ```
 
 ## Arguments

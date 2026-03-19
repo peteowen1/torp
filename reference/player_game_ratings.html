@@ -51,9 +51,10 @@ function — both pull from the same pre-computed release.</p>
     <h2 id="ref-usage">Usage<a class="anchor" aria-label="anchor" href="#ref-usage"></a></h2>
     <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">player_game_ratings</span><span class="op">(</span></span>
 <span>  season_val <span class="op">=</span> <span class="fu"><a href="get_afl_season.html">get_afl_season</a></span><span class="op">(</span><span class="op">)</span>,</span>
-<span>  round_num <span class="op">=</span> <span class="fu"><a href="get_afl_week.html">get_afl_week</a></span><span class="op">(</span><span class="op">)</span>,</span>
+<span>  round_val <span class="op">=</span> <span class="fu"><a href="get_afl_week.html">get_afl_week</a></span><span class="op">(</span><span class="op">)</span>,</span>
 <span>  matchid <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>  team <span class="op">=</span> <span class="cn">NULL</span></span>
+<span>  team <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  round_num <span class="op">=</span> <span class="cn">NULL</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -65,7 +66,7 @@ function — both pull from the same pre-computed release.</p>
 <dd><p>The season to get ratings for. Default is the current season.</p></dd>
 
 
-<dt id="arg-round-num">round_num<a class="anchor" aria-label="anchor" href="#arg-round-num"></a></dt>
+<dt id="arg-round-val">round_val<a class="anchor" aria-label="anchor" href="#arg-round-val"></a></dt>
 <dd><p>The round number to get ratings for. Default is the current round.</p></dd>
 
 
@@ -75,6 +76,10 @@ function — both pull from the same pre-computed release.</p>
 
 <dt id="arg-team">team<a class="anchor" aria-label="anchor" href="#arg-team"></a></dt>
 <dd><p>The team to filter by. Default is NULL (no filtering).</p></dd>
+
+
+<dt id="arg-round-num">round_num<a class="anchor" aria-label="anchor" href="#arg-round-num"></a></dt>
+<dd><p>Deprecated. Use <code>round_val</code> instead.</p></dd>
 
 </dl></div>
     <div class="section level2">

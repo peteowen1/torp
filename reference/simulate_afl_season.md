@@ -47,13 +47,11 @@ simulate_afl_season(
 
 - injuries:
 
-  Optional injury data.frame from
+  Injury data.frame from
   [`get_all_injuries()`](https://peteowen1.github.io/torp/reference/get_all_injuries.md).
-  When provided, injured players are excluded from team ratings and
-  per-round noise is reduced from
-  [SIM_INJURY_SD](https://peteowen1.github.io/torp/reference/SIM_INJURY_SD.md)
-  to
-  [SIM_INJURY_SD_KNOWN](https://peteowen1.github.io/torp/reference/SIM_INJURY_SD_KNOWN.md).
+  By default, fetched automatically from the AFL injury list. Pass
+  `FALSE` to disable injury-aware simulation, or supply your own
+  data.frame.
 
 - seed:
 

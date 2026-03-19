@@ -46,11 +46,12 @@
     <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">load_fixtures</span><span class="op">(</span></span>
 <span>  seasons <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  all <span class="op">=</span> <span class="cn">FALSE</span>,</span>
-<span>  use_cache <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>  use_disk_cache <span class="op">=</span> <span class="cn">FALSE</span>,</span>
+<span>  use_mem_cache <span class="op">=</span> <span class="cn">TRUE</span>,</span>
 <span>  cache_ttl <span class="op">=</span> <span class="fl">3600</span>,</span>
 <span>  verbose <span class="op">=</span> <span class="cn">FALSE</span>,</span>
 <span>  columns <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>  use_disk_cache <span class="op">=</span> <span class="cn">FALSE</span></span>
+<span>  use_cache <span class="op">=</span> <span class="cn">NULL</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -66,7 +67,11 @@
 <dd><p>Deprecated. Use <code>seasons = TRUE</code> instead (consistent with other <code>load_*()</code> functions).</p></dd>
 
 
-<dt id="arg-use-cache">use_cache<a class="anchor" aria-label="anchor" href="#arg-use-cache"></a></dt>
+<dt id="arg-use-disk-cache">use_disk_cache<a class="anchor" aria-label="anchor" href="#arg-use-disk-cache"></a></dt>
+<dd><p>Logical. If TRUE, uses persistent disk caching. Default is FALSE.</p></dd>
+
+
+<dt id="arg-use-mem-cache">use_mem_cache<a class="anchor" aria-label="anchor" href="#arg-use-mem-cache"></a></dt>
 <dd><p>Logical. If TRUE, uses in-memory cached data when available to speed up repeated calls. Default is TRUE.</p></dd>
 
 
@@ -82,8 +87,8 @@
 <dd><p>Optional character vector of column names to read. If NULL (default), reads all columns.</p></dd>
 
 
-<dt id="arg-use-disk-cache">use_disk_cache<a class="anchor" aria-label="anchor" href="#arg-use-disk-cache"></a></dt>
-<dd><p>Logical. If TRUE, uses persistent disk caching. Default is FALSE.</p></dd>
+<dt id="arg-use-cache">use_cache<a class="anchor" aria-label="anchor" href="#arg-use-cache"></a></dt>
+<dd><p>Deprecated. Use <code>use_mem_cache</code> instead.</p></dd>
 
 </dl></div>
     <div class="section level2">

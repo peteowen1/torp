@@ -5,7 +5,7 @@ Filter game data
 ## Usage
 
 ``` r
-filter_game_data(df, season_val, round_num, matchid, team)
+filter_game_data(df, season_val, round_val, matchid, team)
 ```
 
 ## Arguments
@@ -18,7 +18,7 @@ filter_game_data(df, season_val, round_num, matchid, team)
 
   Season value
 
-- round_num:
+- round_val:
 
   Round number
 

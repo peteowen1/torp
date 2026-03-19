@@ -34,7 +34,7 @@ epr_ratings(
 
 - season_val:
 
-  The season to calculate ratings for. Default is the next season.
+  The season to calculate ratings for. Default is the current season.
 
 - round_val:
 

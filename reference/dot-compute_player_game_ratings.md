@@ -7,7 +7,7 @@ into the display-friendly ratings format that gets released to torpdata.
 ## Usage
 
 ``` r
-.compute_player_game_ratings(player_game_data, season_val, round_num)
+.compute_player_game_ratings(player_game_data, season_val, round_val)
 ```
 
 ## Arguments
@@ -21,7 +21,7 @@ into the display-friendly ratings format that gets released to torpdata.
 
   Season(s) to compute for.
 
-- round_num:
+- round_val:
 
   Round(s) to compute for.
 

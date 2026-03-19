@@ -190,9 +190,7 @@
   [`lapply()`](https://rdrr.io/r/base/lapply.html) for column-wise
   operations.
 
-- Removed unused `match_id` parameter from
-  [`match_xgs()`](https://peteowen1.github.io/torp/reference/calculate_match_xgs.md)
-  function.
+- Removed unused `match_id` parameter from `match_xgs()` function.
 
 - Replaced deprecated
   [`dplyr::group_by_all()`](https://dplyr.tidyverse.org/reference/group_by_all.html)

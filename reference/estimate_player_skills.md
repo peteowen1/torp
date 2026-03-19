@@ -21,7 +21,7 @@ estimate_player_skills(
 - skill_data:
 
   A data.table from
-  [`prepare_skill_data()`](https://peteowen1.github.io/torp/reference/prepare_skill_data.md).
+  [`.prepare_skill_data()`](https://peteowen1.github.io/torp/reference/dot-prepare_skill_data.md).
 
 - ref_date:
 

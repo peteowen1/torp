@@ -120,7 +120,7 @@
 <li><p>Improved AUC calculation efficiency using Mann-Whitney U-statistic (O(n log n) instead of O(n^2)).</p></li>
 <li><p>Fixed inefficient <code><a href="https://rdrr.io/r/base/cbind.html" class="external-link">rbind()</a></code> patterns in <code><a href="../reference/compare_baseline_models.html">compare_baseline_models()</a></code> and <code><a href="../reference/evaluate_baseline_models.html">evaluate_baseline_models()</a></code> by using pre-allocated lists with <code><a href="https://dplyr.tidyverse.org/reference/bind_rows.html" class="external-link">dplyr::bind_rows()</a></code>.</p></li>
 <li><p>Fixed <code>mutate_all()</code> performance issue in data validation using <code><a href="https://rdrr.io/r/base/lapply.html" class="external-link">lapply()</a></code> for column-wise operations.</p></li>
-<li><p>Removed unused <code>match_id</code> parameter from <code><a href="../reference/calculate_match_xgs.html">match_xgs()</a></code> function.</p></li>
+<li><p>Removed unused <code>match_id</code> parameter from <code>match_xgs()</code> function.</p></li>
 <li><p>Replaced deprecated <code><a href="https://dplyr.tidyverse.org/reference/group_by_all.html" class="external-link">dplyr::group_by_all()</a></code> with <code>dplyr::group_by(dplyr::across(dplyr::everything()))</code>.</p></li>
 </ul></div>
 <div class="section level3">

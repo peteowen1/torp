@@ -29,8 +29,8 @@ the input cannot be parsed.
 ## Examples
 
 ``` r
+if (FALSE) { # \dontrun{
 match_local_time("2026-03-05T08:30:00.000+0000", "Australia/Sydney")
-#> [1] "2026-03-05 19:30 AEDT"
 match_local_time("2026-03-05T08:30:00.000+0000", "Australia/Perth")
-#> [1] "2026-03-05 16:30 AWST"
+} # }
 ```

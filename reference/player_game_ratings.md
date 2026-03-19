@@ -10,9 +10,10 @@ as the load function — both pull from the same pre-computed release.
 ``` r
 player_game_ratings(
   season_val = get_afl_season(),
-  round_num = get_afl_week(),
+  round_val = get_afl_week(),
   matchid = NULL,
-  team = NULL
+  team = NULL,
+  round_num = NULL
 )
 ```
 
@@ -22,7 +23,7 @@ player_game_ratings(
 
   The season to get ratings for. Default is the current season.
 
-- round_num:
+- round_val:
 
   The round number to get ratings for. Default is the current round.
 
@@ -33,6 +34,10 @@ player_game_ratings(
 - team:
 
   The team to filter by. Default is NULL (no filtering).
+
+- round_num:
+
+  Deprecated. Use `round_val` instead.
 
 ## Value
 

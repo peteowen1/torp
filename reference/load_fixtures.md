@@ -9,11 +9,12 @@ repository](https://github.com/peteowen1/torpdata)
 load_fixtures(
   seasons = NULL,
   all = FALSE,
-  use_cache = TRUE,
+  use_disk_cache = FALSE,
+  use_mem_cache = TRUE,
   cache_ttl = 3600,
   verbose = FALSE,
   columns = NULL,
-  use_disk_cache = FALSE
+  use_cache = NULL
 )
 ```
 
@@ -30,7 +31,11 @@ load_fixtures(
   Deprecated. Use `seasons = TRUE` instead (consistent with other
   `load_*()` functions).
 
-- use_cache:
+- use_disk_cache:
+
+  Logical. If TRUE, uses persistent disk caching. Default is FALSE.
+
+- use_mem_cache:
 
   Logical. If TRUE, uses in-memory cached data when available to speed
   up repeated calls. Default is TRUE.
@@ -49,9 +54,9 @@ load_fixtures(
   Optional character vector of column names to read. If NULL (default),
   reads all columns.
 
-- use_disk_cache:
+- use_cache:
 
-  Logical. If TRUE, uses persistent disk caching. Default is FALSE.
+  Deprecated. Use `use_mem_cache` instead.
 
 ## Value
 

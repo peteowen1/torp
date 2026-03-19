@@ -114,8 +114,6 @@ Load processed AFL data from torpdata GitHub releases
   : Load EP/WP Chart Data
 - [`load_fixtures()`](https://peteowen1.github.io/torp/reference/load_fixtures.md)
   : Load AFL Fixture Data
-- [`load_from_url()`](https://peteowen1.github.io/torp/reference/load_from_url.md)
-  : Load parquet files from remote URLs
 - [`load_injury_data()`](https://peteowen1.github.io/torp/reference/load_injury_data.md)
   : Load Injury Data from GitHub Releases
 - [`load_pbp()`](https://peteowen1.github.io/torp/reference/load_pbp.md)
@@ -173,20 +171,11 @@ Clean and prepare AFL data for analysis
 
 - [`clean_pbp()`](https://peteowen1.github.io/torp/reference/clean_pbp.md)
   : Clean Play-by-Play Data
-- [`clean_model_data_epv()`](https://peteowen1.github.io/torp/reference/clean_model_data_epv.md)
-  : Clean Model Data for Expected Points Value (EPV)
-- [`clean_model_data_wp()`](https://peteowen1.github.io/torp/reference/clean_model_data_wp.md)
-  : Clean Model Data for Win Probability (WP)
-- [`clean_shots_data()`](https://peteowen1.github.io/torp/reference/clean_shots_data.md)
-  : Clean Shots Data
 
 ## Player Ratings
 
 Calculate and view TORP player ratings
 
-- [`calculate_epr()`](https://peteowen1.github.io/torp/reference/calculate_epr.md)
-  [`calculate_torp_ratings()`](https://peteowen1.github.io/torp/reference/calculate_epr.md)
-  : Calculate EPR (Expected Possession Rating)
 - [`calculate_epr_stats()`](https://peteowen1.github.io/torp/reference/calculate_epr_stats.md)
   : Calculate EPR statistics per player
 - [`calculate_torp()`](https://peteowen1.github.io/torp/reference/calculate_torp.md)
@@ -195,6 +184,8 @@ Calculate and view TORP player ratings
   : Calculate PSR with Offensive/Defensive Decomposition
 - [`torp_ratings()`](https://peteowen1.github.io/torp/reference/torp_ratings.md)
   : TORP Ratings (Total Over Replacement Predictive-value)
+- [`calculate_epr()`](https://peteowen1.github.io/torp/reference/calculate_epr.md)
+  : Calculate EPR (Expected Possession Rating)
 - [`epr_ratings()`](https://peteowen1.github.io/torp/reference/epr_ratings.md)
   : EPR Ratings (Expected Possession Rating)
 - [`psr_ratings()`](https://peteowen1.github.io/torp/reference/psr_ratings.md)
@@ -209,15 +200,10 @@ Calculate and view TORP player ratings
   : Print a player profile
 - [`create_player_game_data()`](https://peteowen1.github.io/torp/reference/create_player_game_data.md)
   : Create Player Game Data
-- [`default_epv_params()`](https://peteowen1.github.io/torp/reference/default_epv_params.md)
-  [`default_credit_params()`](https://peteowen1.github.io/torp/reference/default_epv_params.md)
-  : Default EPV assignment parameters
 - [`create_wp_credit()`](https://peteowen1.github.io/torp/reference/create_wp_credit.md)
   : Create Win Probability Credit Data
 - [`calculate_psr()`](https://peteowen1.github.io/torp/reference/calculate_psr.md)
   : Calculate Player Skill Ratings (PSR)
-- [`filter_game_data()`](https://peteowen1.github.io/torp/reference/filter_game_data.md)
-  : Filter game data
 - [`team_profile()`](https://peteowen1.github.io/torp/reference/team_profile.md)
   : Get a Team Profile
 - [`print(`*`<torp_team_profile>`*`)`](https://peteowen1.github.io/torp/reference/print.torp_team_profile.md)
@@ -229,22 +215,14 @@ Estimate and explore player skill profiles
 
 - [`aggregate_team_skills()`](https://peteowen1.github.io/torp/reference/aggregate_team_skills.md)
   : Aggregate player skills to team level
-- [`default_skill_params()`](https://peteowen1.github.io/torp/reference/default_skill_params.md)
-  : Default hyperparameters for skill estimation
 - [`estimate_player_skills()`](https://peteowen1.github.io/torp/reference/estimate_player_skills.md)
   : Estimate player skills using Bayesian conjugate priors
 - [`get_player_skills()`](https://peteowen1.github.io/torp/reference/get_player_skills.md)
   : Get player skill estimates from pre-computed data
 - [`player_skill_profile()`](https://peteowen1.github.io/torp/reference/player_skill_profile.md)
   : Get a player's skill profile with percentile ranks
-- [`prepare_skill_data()`](https://peteowen1.github.io/torp/reference/prepare_skill_data.md)
-  : Prepare data for skill estimation
 - [`print(`*`<torp_skill_profile>`*`)`](https://peteowen1.github.io/torp/reference/print.torp_skill_profile.md)
   : Print a player skill profile
-- [`skill_position_map()`](https://peteowen1.github.io/torp/reference/skill_position_map.md)
-  : Position group mapping for AFL skill estimation
-- [`skill_stat_definitions()`](https://peteowen1.github.io/torp/reference/skill_stat_definitions.md)
-  : Stat definitions for player skill estimation
 - [`get_team_skills()`](https://peteowen1.github.io/torp/reference/get_team_skills.md)
   : Get Team Skills
 - [`team_skill_profile()`](https://peteowen1.github.io/torp/reference/team_skill_profile.md)
@@ -256,19 +234,16 @@ Estimate and explore player skill profiles
 
 Simulate AFL seasons and predict match outcomes
 
-- [`simulate_season()`](https://peteowen1.github.io/torp/reference/simulate_season.md)
-  [`sim_season()`](https://peteowen1.github.io/torp/reference/simulate_season.md)
-  : Simulate a season of games
 - [`simulate_afl_season()`](https://peteowen1.github.io/torp/reference/simulate_afl_season.md)
   : Simulate a full AFL season
+- [`simulate_season()`](https://peteowen1.github.io/torp/reference/simulate_season.md)
+  : Simulate a season of games
 - [`summarise_simulations()`](https://peteowen1.github.io/torp/reference/summarise_simulations.md)
   : Summarise simulation results
 - [`show_predictions()`](https://peteowen1.github.io/torp/reference/show_predictions.md)
   : Show TORP Match Predictions
 - [`print(`*`<torp_sim_results>`*`)`](https://peteowen1.github.io/torp/reference/print.torp_sim_results.md)
   : Print simulation results
-- [`prepare_final_dataframe()`](https://peteowen1.github.io/torp/reference/prepare_final_dataframe.md)
-  : Prepare final dataframe
 - [`ladder`](https://peteowen1.github.io/torp/reference/ladder.md) : AFL
   Season Simulation System
 - [`calculate_ladder()`](https://peteowen1.github.io/torp/reference/calculate_ladder.md)
@@ -294,7 +269,6 @@ Access and analyse possession chains
 Match-level expected goals, predictions, and head-to-head comparisons
 
 - [`calculate_match_xgs()`](https://peteowen1.github.io/torp/reference/calculate_match_xgs.md)
-  [`match_xgs()`](https://peteowen1.github.io/torp/reference/calculate_match_xgs.md)
   : Calculate xGs for AFL Matches
 - [`head_to_head()`](https://peteowen1.github.io/torp/reference/head_to_head.md)
   : Head-to-Head Contest History Between Two Players
@@ -305,60 +279,18 @@ Match-level expected goals, predictions, and head-to-head comparisons
 
 Evaluate model performance, calibration, and drift
 
-- [`evaluate_model_comprehensive()`](https://peteowen1.github.io/torp/reference/evaluate_model_comprehensive.md)
-  : Comprehensive Model Evaluation
-- [`compare_models_statistical()`](https://peteowen1.github.io/torp/reference/compare_models_statistical.md)
-  : Compare Multiple Models Statistically
-- [`create_calibration_plot()`](https://peteowen1.github.io/torp/reference/create_calibration_plot.md)
-  : Create Calibration Plot Data
-- [`create_validation_report()`](https://peteowen1.github.io/torp/reference/create_validation_report.md)
-  : Create Model Validation Report
-- [`create_model_comparison_report()`](https://peteowen1.github.io/torp/reference/create_model_comparison_report.md)
-  : Create Model Comparison Report
-- [`log_model_performance()`](https://peteowen1.github.io/torp/reference/log_model_performance.md)
-  : Log Model Performance Metrics
-- [`monitor_model_drift()`](https://peteowen1.github.io/torp/reference/monitor_model_drift.md)
-  : Monitor Model Drift
-- [`validate_data_freshness()`](https://peteowen1.github.io/torp/reference/validate_data_freshness.md)
-  : Validate Data Freshness
-- [`validate_data_quality()`](https://peteowen1.github.io/torp/reference/validate_data_quality.md)
-  : Validate Data Quality
-- [`validate_data_schema()`](https://peteowen1.github.io/torp/reference/validate_data_schema.md)
-  : Validate Data Schema
-
-## Model Training
-
-Utilities for model development and cross-validation
-
-- [`create_grouped_cv_folds()`](https://peteowen1.github.io/torp/reference/create_grouped_cv_folds.md)
-  : Create Grouped Cross-Validation Folds
-- [`create_temporal_splits()`](https://peteowen1.github.io/torp/reference/create_temporal_splits.md)
-  : Time-Based Train/Validation/Test Split
-- [`select_epv_model_vars()`](https://peteowen1.github.io/torp/reference/select_epv_model_vars.md)
-  : Select EPV Model Variables
-- [`select_wp_model_vars()`](https://peteowen1.github.io/torp/reference/select_wp_model_vars.md)
-  : Select WP Model Variables
-- [`select_afl_model_vars()`](https://peteowen1.github.io/torp/reference/select_afl_model_vars.md)
-  : Select AFL Match Prediction Model Variables
-- [`select_afl_xgb_vars()`](https://peteowen1.github.io/torp/reference/select_afl_xgb_vars.md)
-  : Select AFL XGBoost Model Variables (Lean Feature Set)
-
 ## Caching
 
 In-memory and disk caching utilities
 
-- [`clear_all_cache()`](https://peteowen1.github.io/torp/reference/clear_all_cache.md)
-  : Clear All Caches
 - [`clear_data_cache()`](https://peteowen1.github.io/torp/reference/clear_data_cache.md)
   : Clear Data Cache
-- [`clear_disk_cache()`](https://peteowen1.github.io/torp/reference/clear_disk_cache.md)
-  : Clear Disk Cache
-- [`clear_fixture_cache()`](https://peteowen1.github.io/torp/reference/clear_fixture_cache.md)
-  : Clear Fixture Cache
 - [`clear_model_cache()`](https://peteowen1.github.io/torp/reference/clear_model_cache.md)
   : Clear Model Cache
-- [`clear_skip_markers()`](https://peteowen1.github.io/torp/reference/clear_skip_markers.md)
-  : Clear Skip Markers (Negative Cache)
+- [`clear_all_cache()`](https://peteowen1.github.io/torp/reference/clear_all_cache.md)
+  : Clear All Caches
+- [`clear_disk_cache()`](https://peteowen1.github.io/torp/reference/clear_disk_cache.md)
+  : Clear Disk Cache
 - [`get_cache_info()`](https://peteowen1.github.io/torp/reference/get_cache_info.md)
   : Get Cache Information
 - [`get_disk_cache_info()`](https://peteowen1.github.io/torp/reference/get_disk_cache_info.md)
@@ -391,12 +323,8 @@ Injury data access, matching, and simulation scheduling
   : Match Injuries to a Ratings Data Frame
 - [`scrape_injuries()`](https://peteowen1.github.io/torp/reference/scrape_injuries.md)
   : Scrape AFL Weekly Injury List
-- [`parse_return_round()`](https://peteowen1.github.io/torp/reference/parse_return_round.md)
-  : Parse Estimated Return into Round Number
 - [`build_injury_schedule()`](https://peteowen1.github.io/torp/reference/build_injury_schedule.md)
   : Build Injury Return Schedule for Simulation
-- [`save_injury_data()`](https://peteowen1.github.io/torp/reference/save_injury_data.md)
-  : Save Injury Data to GitHub Release
 - [`load_injury_data()`](https://peteowen1.github.io/torp/reference/load_injury_data.md)
   : Load Injury Data from GitHub Releases
 
@@ -408,10 +336,6 @@ Helper and convenience functions
   : Get AFL Season
 - [`get_afl_week()`](https://peteowen1.github.io/torp/reference/get_afl_week.md)
   : Get AFL Week
-- [`parquet_from_url()`](https://peteowen1.github.io/torp/reference/parquet_from_url.md)
-  : Load parquet file from a remote connection
-- [`save_to_release()`](https://peteowen1.github.io/torp/reference/save_to_release.md)
-  : Save a Data Frame to a GitHub Release via Piggyback
 - [`set_torp_data_repo()`](https://peteowen1.github.io/torp/reference/set_torp_data_repo.md)
   : Set TORP Data Repository
 - [`setup_torp_logging()`](https://peteowen1.github.io/torp/reference/setup_torp_logging.md)
@@ -432,8 +356,6 @@ Helper and convenience functions
   : Get AFL Team Full Name
 - [`torp_replace_venues()`](https://peteowen1.github.io/torp/reference/torp_replace_venues.md)
   : Standardise AFL Venue Names
-- [`match_local_time()`](https://peteowen1.github.io/torp/reference/match_local_time.md)
-  : Convert UTC match time to local venue time
 
 ## AFL API
 
