@@ -194,6 +194,7 @@ test_that("simulate_afl_season returns valid structure", {
   results <- simulate_afl_season(
     season       = 2025,
     n_sims       = 5,
+    n_cores      = 1L,
     team_ratings = teams,
     fixtures     = data.table::data.table(
       roundnum  = games$roundnum,
@@ -228,6 +229,7 @@ test_that("summarise_simulations produces valid summary", {
   results <- simulate_afl_season(
     season       = 2025,
     n_sims       = 10,
+    n_cores      = 1L,
     team_ratings = teams,
     fixtures     = data.table::data.table(
       roundnum  = games$roundnum,
