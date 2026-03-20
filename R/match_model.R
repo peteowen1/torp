@@ -1420,8 +1420,12 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
     cli::cli_inform("Pipeline aborted after {round(elapsed, 1)}s")
     return(invisible(NULL))
   }
-  tr <- match_injuries(tr, inj_df) |>
-    dplyr::mutate(estimated_return = tidyr::replace_na(estimated_return, "None"))
+  # torp_ratings() already joins injuries — drop those columns before re-joining
+  # with the pipeline's own injury data (which includes return_round parsing)
+  tr[c("injury", "estimated_return")] <- NULL
+  tr <- match_injuries(tr, inj_df)
+  if (!"estimated_return" %in% names(tr)) tr$estimated_return <- NA_character_
+  tr <- dplyr::mutate(tr, estimated_return = tidyr::replace_na(estimated_return, "None"))
 
   # Join PSR to player-level ratings for injury-adjusted weekly summary
   if (!is.null(psr_df)) {
