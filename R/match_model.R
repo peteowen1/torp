@@ -1411,7 +1411,6 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
     return(invisible(NULL))
   }
   # torp_ratings() already joins injuries — drop those columns before re-joining
-
   # with the pipeline's own injury data (which includes return_round parsing)
   tr[c("injury", "estimated_return")] <- NULL
   tr <- match_injuries(tr, inj_df)
