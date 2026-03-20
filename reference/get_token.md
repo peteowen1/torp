@@ -1,6 +1,7 @@
 # Get API Token
 
-Retrieves an authentication token for the AFL API.
+Retrieves an authentication token for the AFL API, caching it for 5
+minutes.
 
 ## Usage
 

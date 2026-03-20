@@ -153,8 +153,6 @@ Access and analyse possession chains
 
 - [`get_match_chains()`](https://peteowen1.github.io/torp/reference/get_match_chains.md)
   : Get Match Chains
-- [`get_week_chains()`](https://peteowen1.github.io/torp/reference/get_week_chains.md)
-  : Get Week Chains
 - [`load_chains()`](https://peteowen1.github.io/torp/reference/load_chains.md)
   : Load Chains Data
 - [`extract_contests()`](https://peteowen1.github.io/torp/reference/extract_contests.md)
@@ -164,7 +162,12 @@ Access and analyse possession chains
 
 Match-level expected goals, predictions, and head-to-head comparisons
 
+- [`get_player_match_ratings()`](https://peteowen1.github.io/torp/reference/get_player_match_ratings.md)
+  : Get Player Match Ratings
+- [`get_xg()`](https://peteowen1.github.io/torp/reference/get_xg.md) :
+  Get Live xG for a Match or Round
 - [`calculate_match_xgs()`](https://peteowen1.github.io/torp/reference/calculate_match_xgs.md)
+  [`match_xgs()`](https://peteowen1.github.io/torp/reference/calculate_match_xgs.md)
   : Calculate xGs for AFL Matches
 - [`head_to_head()`](https://peteowen1.github.io/torp/reference/head_to_head.md)
   : Head-to-Head Contest History Between Two Players

@@ -1,6 +1,6 @@
 # Calculate xGs for AFL Matches
 
-Calculate xGs for AFL Matches
+`match_xgs()` is deprecated; use `calculate_match_xgs()` instead.
 
 ## Usage
 
@@ -10,6 +10,8 @@ calculate_match_xgs(
   round = get_afl_week(),
   quarter = 1:4
 )
+
+match_xgs(season = get_afl_season(), round = get_afl_week(), quarter = 1:4)
 ```
 
 ## Arguments

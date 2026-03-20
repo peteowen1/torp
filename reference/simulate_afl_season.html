@@ -56,7 +56,7 @@ to estimate ladder positions, finals probabilities, and premiership odds.</p>
 <span>  seed <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  verbose <span class="op">=</span> <span class="cn">TRUE</span>,</span>
 <span>  keep_games <span class="op">=</span> <span class="cn">FALSE</span>,</span>
-<span>  n_cores <span class="op">=</span> <span class="fl">1L</span></span>
+<span>  n_cores <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="fl">1L</span>, <span class="fu">parallel</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/r/parallel/detectCores.html" class="external-link">detectCores</a></span><span class="op">(</span><span class="op">)</span> <span class="op">-</span> <span class="fl">1L</span><span class="op">)</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -105,7 +105,9 @@ intensive). Default FALSE.</p></dd>
 
 
 <dt id="arg-n-cores">n_cores<a class="anchor" aria-label="anchor" href="#arg-n-cores"></a></dt>
-<dd><p>Number of cores for parallel execution. Default 1 (sequential).
+<dd><p>Number of cores for parallel execution. Defaults to
+<code>parallel::detectCores() - 1</code> (leaving one core free for the OS/session).
+Set to <code>1L</code> for sequential execution.
 Values &gt; 1 use <code><a href="https://rdrr.io/r/parallel/clusterApply.html" class="external-link">parallel::parLapply()</a></code> with reproducible L'Ecuyer-CMRG
 random streams. Progress bars are not shown in parallel mode.</p></dd>
 

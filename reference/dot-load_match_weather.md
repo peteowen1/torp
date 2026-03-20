@@ -11,7 +11,7 @@ for upcoming matches via Open-Meteo API.
   all_grounds,
   target_weeks = NULL,
   season = NULL,
-  weather_path = NULL
+  ...
 )
 ```
 
@@ -32,10 +32,6 @@ for upcoming matches via Open-Meteo API.
 - season:
 
   Target season
-
-- weather_path:
-
-  Path to historical weather parquet file
 
 ## Value
 

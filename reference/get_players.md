@@ -5,10 +5,14 @@ Retrieves player data either from the API or from a local database.
 ## Usage
 
 ``` r
-get_players(use_api = FALSE)
+get_players(season = TRUE, use_api = FALSE)
 ```
 
 ## Arguments
+
+- season:
+
+  Numeric season(s) to load. Defaults to all seasons (TRUE).
 
 - use_api:
 

@@ -46,12 +46,7 @@ Loads data, builds fixtures, ratings, features, weather, and model dataset.</p>
 
     <div class="section level2">
     <h2 id="ref-usage">Usage<a class="anchor" aria-label="anchor" href="#ref-usage"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">build_team_mdl_df</span><span class="op">(</span></span>
-<span>  season <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>  target_weeks <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>  weather_path <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>  psr_coef_path <span class="op">=</span> <span class="cn">NULL</span></span>
-<span><span class="op">)</span></span></code></pre></div>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">build_team_mdl_df</span><span class="op">(</span>season <span class="op">=</span> <span class="cn">NULL</span>, target_weeks <span class="op">=</span> <span class="cn">NULL</span>, psr_coef_path <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span></span></code></pre></div>
     </div>
 
     <div class="section level2">
@@ -64,10 +59,6 @@ Loads data, builds fixtures, ratings, features, weather, and model dataset.</p>
 
 <dt id="arg-target-weeks">target_weeks<a class="anchor" aria-label="anchor" href="#arg-target-weeks"></a></dt>
 <dd><p>Numeric vector of target round numbers (used for weather forecasting)</p></dd>
-
-
-<dt id="arg-weather-path">weather_path<a class="anchor" aria-label="anchor" href="#arg-weather-path"></a></dt>
-<dd><p>Path to historical weather parquet (default: data-raw/weather_data.parquet)</p></dd>
 
 </dl></div>
     <div class="section level2">

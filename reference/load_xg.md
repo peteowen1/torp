@@ -6,7 +6,12 @@ repository](https://github.com/peteowen1/torpdata)
 ## Usage
 
 ``` r
-load_xg(seasons = get_afl_season(), use_disk_cache = FALSE, columns = NULL)
+load_xg(
+  seasons = get_afl_season(),
+  rounds = NULL,
+  use_disk_cache = FALSE,
+  columns = NULL
+)
 ```
 
 ## Arguments
@@ -16,6 +21,11 @@ load_xg(seasons = get_afl_season(), use_disk_cache = FALSE, columns = NULL)
   A numeric vector of 4-digit years associated with given AFL seasons -
   defaults to latest season. If set to `TRUE`, returns all available
   data since 2021.
+
+- rounds:
+
+  A numeric vector of round numbers to filter to. If `NULL` (default),
+  returns all rounds.
 
 - use_disk_cache:
 
@@ -43,6 +53,7 @@ A data frame containing xG data.
 if (FALSE) { # \dontrun{
 try({ # prevents cran errors
   load_xg(2021:2022)
+  load_xg(2026, 2)
 })
 } # }
 ```

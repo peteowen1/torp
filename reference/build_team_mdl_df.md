@@ -6,12 +6,7 @@ data, builds fixtures, ratings, features, weather, and model dataset.
 ## Usage
 
 ``` r
-build_team_mdl_df(
-  season = NULL,
-  target_weeks = NULL,
-  weather_path = NULL,
-  psr_coef_path = NULL
-)
+build_team_mdl_df(season = NULL, target_weeks = NULL, psr_coef_path = NULL)
 ```
 
 ## Arguments
@@ -23,11 +18,6 @@ build_team_mdl_df(
 - target_weeks:
 
   Numeric vector of target round numbers (used for weather forecasting)
-
-- weather_path:
-
-  Path to historical weather parquet (default:
-  data-raw/weather_data.parquet)
 
 ## Value
 

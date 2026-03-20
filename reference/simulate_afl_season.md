@@ -17,7 +17,7 @@ simulate_afl_season(
   seed = NULL,
   verbose = TRUE,
   keep_games = FALSE,
-  n_cores = 1L
+  n_cores = max(1L, parallel::detectCores() - 1L)
 )
 ```
 
@@ -68,8 +68,9 @@ simulate_afl_season(
 
 - n_cores:
 
-  Number of cores for parallel execution. Default 1 (sequential). Values
-  \> 1 use
+  Number of cores for parallel execution. Defaults to
+  `parallel::detectCores() - 1` (leaving one core free for the
+  OS/session). Set to `1L` for sequential execution. Values \> 1 use
   [`parallel::parLapply()`](https://rdrr.io/r/parallel/clusterApply.html)
   with reproducible L'Ecuyer-CMRG random streams. Progress bars are not
   shown in parallel mode.
