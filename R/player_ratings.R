@@ -493,6 +493,12 @@ calculate_torp <- function(epr_df, psr_df, epr_weight = TORP_EPR_WEIGHT) {
     dplyr::select(-dplyr::any_of(c("season", "round")))
 
   result <- dplyr::left_join(epr_df, latest_psr, by = "player_id")
+
+  # Ensure psr column exists even if join didn't add it
+  if (!"psr" %in% names(result)) {
+    cli::cli_warn("PSR column missing after join \u2014 defaulting all players to prior rate")
+    result$psr <- PSR_PRIOR_RATE
+  }
   result$psr[is.na(result$psr)] <- PSR_PRIOR_RATE
   if ("osr" %in% names(result)) result$osr[is.na(result$osr)] <- PSR_PRIOR_RATE / 2
   if ("dsr" %in% names(result)) result$dsr[is.na(result$dsr)] <- PSR_PRIOR_RATE / 2

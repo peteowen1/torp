@@ -347,7 +347,7 @@ if (nrow(torp_new) > 0) {
     cli::cli_warn("Could not compute PSR for release: {e$message}")
     NULL
   })
-  if (!is.null(psr_df)) {
+  if (!is.null(psr_df) && nrow(psr_df) > 0 && "psr" %in% names(psr_df)) {
     torp_df_total <- calculate_torp(torp_df_total, psr_df)
     cli::cli_alert_success("Blended PSR into ratings ({sum(!is.na(torp_df_total$torp))} rows with torp)")
   }
