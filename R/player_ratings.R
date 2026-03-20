@@ -492,6 +492,14 @@ calculate_torp <- function(epr_df, psr_df, epr_weight = TORP_EPR_WEIGHT) {
     dplyr::ungroup() |>
     dplyr::select(-dplyr::any_of(c("season", "round")))
 
+  # Remove pre-existing psr/osr/dsr/torp columns (and any .x/.y suffixed
+  # duplicates from prior joins) to prevent column name collisions when
+  # epr_df was loaded from a previous pipeline run that already blended PSR
+  stale_cols <- grep("^(psr|osr|dsr|torp)(\\.|$)", names(epr_df), value = TRUE)
+  if (length(stale_cols) > 0) {
+    epr_df <- epr_df[, setdiff(names(epr_df), stale_cols), drop = FALSE]
+  }
+
   result <- dplyr::left_join(epr_df, latest_psr, by = "player_id")
 
   # Ensure psr column exists even if join didn't add it
