@@ -2,7 +2,7 @@ test_that("fixture caching works correctly", {
   skip_if_offline()
   
   # Clear any existing cache
-  clear_fixture_cache()
+  clear_data_cache()
   
   # Test initial load (should be cache miss)
   expect_message(
@@ -29,7 +29,7 @@ test_that("cache expiration works", {
   skip_if_offline()
   
   # Clear cache
-  clear_fixture_cache()
+  clear_data_cache()
   
   # Load with very short TTL
   fixtures1 <- load_fixtures(seasons = 2021, use_cache = TRUE, cache_ttl = 0.1)
@@ -48,7 +48,7 @@ test_that("cache can be disabled", {
   skip_if_offline()
 
   # Clear cache
-  clear_fixture_cache()
+  clear_data_cache()
 
   # Load without cache
   fixtures1 <- load_fixtures(seasons = 2021, use_cache = FALSE)
@@ -64,7 +64,7 @@ test_that("all=TRUE caching works", {
   skip_if_offline()
 
   # Clear cache
-  clear_fixture_cache()
+  clear_data_cache()
 
   # First load — cache miss
   expect_message(

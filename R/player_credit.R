@@ -4,7 +4,7 @@
 #' values. Used by \code{create_player_game_data()} when no custom params are provided.
 #'
 #' @return A named list of EPV assignment parameters.
-#' @export
+#' @keywords internal
 default_epv_params <- function() {
   list(
     disp_neg_offset   = EPV_DISP_NEG_OFFSET,
@@ -267,5 +267,5 @@ create_player_game_data <- function(pbp_data = NULL,
 }
 
 #' @rdname default_epv_params
-#' @export
+#' @keywords internal
 default_credit_params <- default_epv_params

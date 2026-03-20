@@ -823,7 +823,9 @@ simulate_finals <- function(ladder_dt, sim_teams_dt, gf_familiarity = NULL) {
 #' @param verbose Logical; if TRUE, shows a progress bar.
 #' @param keep_games Logical; if TRUE, stores per-sim game results (memory
 #'   intensive). Default FALSE.
-#' @param n_cores Number of cores for parallel execution. Default 1 (sequential).
+#' @param n_cores Number of cores for parallel execution. Defaults to
+#'   `parallel::detectCores() - 1` (leaving one core free for the OS/session).
+#'   Set to `1L` for sequential execution.
 #'   Values > 1 use [parallel::parLapply()] with reproducible L'Ecuyer-CMRG
 #'   random streams. Progress bars are not shown in parallel mode.
 #' @return An S3 object of class `"torp_sim_results"` containing `season`,
@@ -846,7 +848,7 @@ simulate_afl_season <- function(season,
                                 seed = NULL,
                                 verbose = TRUE,
                                 keep_games = FALSE,
-                                n_cores = 1L) {
+                                n_cores = max(1L, parallel::detectCores() - 1L)) {
 
   if (!is.null(seed)) set.seed(seed)
 
@@ -922,6 +924,9 @@ simulate_afl_season <- function(season,
 
   # --- Execute: parallel or sequential ---
   n_cores <- as.integer(n_cores)
+  if (verbose) {
+    cli::cli_inform("Running {n_sims} simulations on {n_cores} core{?s}.")
+  }
   if (n_cores > 1L) {
     cl <- parallel::makeCluster(n_cores)
     on.exit(parallel::stopCluster(cl), add = TRUE)

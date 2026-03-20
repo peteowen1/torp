@@ -260,7 +260,7 @@ mark_download_skippable <- function(url) {
 #' allowing previously skipped URLs to be re-attempted on next load.
 #'
 #' @return Invisible count of markers removed
-#' @export
+#' @keywords internal
 clear_skip_markers <- function() {
   local_dir <- get_local_data_dir()
   if (is.null(local_dir)) {

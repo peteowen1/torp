@@ -10,29 +10,8 @@ test_that("simulate_season function exists and is exported", {
   expect_true("simulate_season" %in% getNamespaceExports("torp"))
 })
 
-test_that("sim_season deprecated alias exists", {
-  expect_true(exists("sim_season"))
-  expect_true("sim_season" %in% getNamespaceExports("torp"))
-})
-
-test_that("sim_season shows deprecation warning", {
-  sim_teams <- create_test_sim_teams(4)
-  sim_games <- data.frame(
-    roundnum = 1,
-    home_team = "Adelaide Crows",
-    away_team = "Brisbane Lions",
-    result = NA_integer_,
-    torp_home_round = NA_real_,
-    torp_away_round = NA_real_,
-    stringsAsFactors = FALSE
-  )
-
-  # Should warn about deprecation
-  set.seed(42)
-  expect_warning(
-    sim_season(sim_teams, sim_games),
-    "deprecated|Deprecated"
-  )
+test_that("sim_season deprecated alias has been removed", {
+  expect_false("sim_season" %in% getNamespaceExports("torp"))
 })
 
 test_that("process_games is available as internal function", {

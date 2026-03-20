@@ -4,9 +4,11 @@
 \alias{get_players}
 \title{Get Players}
 \usage{
-get_players(use_api = FALSE)
+get_players(season = TRUE, use_api = FALSE)
 }
 \arguments{
+\item{season}{Numeric season(s) to load. Defaults to all seasons (TRUE).}
+
 \item{use_api}{Logical, whether to use the API (TRUE) or local database (FALSE, default).}
 }
 \value{

@@ -61,7 +61,7 @@ calculate_auc_base <- function(actual, predicted) {
 #' @param k Number of folds (default: 5)
 #' @param seed Random seed for reproducibility
 #' @return List of fold indices
-#' @export
+#' @keywords internal
 #' @importFrom dplyr distinct pull filter mutate group_by summarise
 #' @importFrom rlang sym
 create_grouped_cv_folds <- function(data, group_var = "match_id", k = 5, seed = 42) {
@@ -102,7 +102,7 @@ create_grouped_cv_folds <- function(data, group_var = "match_id", k = 5, seed = 
 #' @param val_seasons Vector of seasons for validation
 #' @param test_seasons Vector of seasons for testing
 #' @return List containing train, validation, and test datasets
-#' @export
+#' @keywords internal
 create_temporal_splits <- function(data, train_seasons, val_seasons, test_seasons) {
   # Extract season from match_id or use provided season column
   if (!"season" %in% names(data) && "match_id" %in% names(data)) {
@@ -137,7 +137,7 @@ create_temporal_splits <- function(data, train_seasons, val_seasons, test_season
 #'   backwards compatibility. If provided, overrides `compute_ci`.
 #' @param n_bootstrap Deprecated; retained for backwards compatibility but unused.
 #' @return List containing evaluation metrics with confidence intervals
-#' @export
+#' @keywords internal
 evaluate_model_comprehensive <- function(actual, predicted, model_name = "Model",
                                        compute_ci = TRUE, bootstrap_ci,
                                        n_bootstrap = 1000) {
@@ -254,7 +254,7 @@ evaluate_model_comprehensive <- function(actual, predicted, model_name = "Model"
 #' @param test_type Unused; retained for backwards compatibility. Comparison is
 #'   always based on AUC confidence interval overlap.
 #' @return Dataframe with pairwise comparison results
-#' @export
+#' @keywords internal
 compare_models_statistical <- function(model_results, test_type = "simple") {
 
   n_models <- length(model_results)
@@ -304,7 +304,7 @@ compare_models_statistical <- function(model_results, test_type = "simple") {
 #' @param evaluation_results List of evaluation results
 #' @param comparison_results Dataframe of model comparisons (optional)
 #' @return Character string containing formatted report
-#' @export
+#' @keywords internal
 create_validation_report <- function(evaluation_results, comparison_results = NULL) {
 
   report <- paste0(

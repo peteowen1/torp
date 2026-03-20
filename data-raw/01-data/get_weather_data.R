@@ -154,9 +154,6 @@ cat("Wind range:", round(range(match_weather_agg$wind_avg), 1), "\n")
 
 # Save ----
 
-write_parquet(match_weather_agg, "./data-raw/weather_data.parquet")
-cat("\nSaved to data-raw/weather_data.parquet\n")
-
-# Upload to torpdata release
+# Upload to torpdata release (loaded via load_weather())
 save_to_release(match_weather_agg, "weather_data", "weather-data")
-cat("Uploaded to torpdata weather-data release\n")
+cat("\nUploaded to torpdata weather-data release\n")

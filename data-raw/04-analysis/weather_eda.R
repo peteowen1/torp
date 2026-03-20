@@ -9,7 +9,7 @@ devtools::load_all()
 
 # Load data ----
 
-weather <- read_parquet("./data-raw/weather_data.parquet")
+weather <- load_weather()
 results <- load_results(TRUE)
 
 # Join weather to results for total points

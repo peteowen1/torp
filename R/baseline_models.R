@@ -466,7 +466,7 @@ prepare_calibration_plot <- function(calibration_results) {
 #' @param comparison_results Results from compare_baseline_models
 #' @param calibration_results Optional calibration assessment results
 #' @return Character string with formatted report
-#' @export
+#' @keywords internal
 create_model_comparison_report <- function(comparison_results, calibration_results = NULL) {
   
   report <- paste0(
@@ -658,7 +658,7 @@ calculate_brier_score <- function(actual, predicted) {
 #' @param predicted Vector of predicted probabilities
 #' @param n_bins Number of bins for calibration plot
 #' @return List with plot data and statistics
-#' @export
+#' @keywords internal
 #' @seealso \code{\link{assess_model_calibration}}, \code{\link{prepare_calibration_plot}}
 create_calibration_plot <- function(actual, predicted, n_bins = 10) {
   # Use the comprehensive assess_model_calibration internally

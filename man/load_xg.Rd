@@ -4,10 +4,17 @@
 \alias{load_xg}
 \title{Load Expected Goals (xG) Data}
 \usage{
-load_xg(seasons = get_afl_season(), use_disk_cache = FALSE, columns = NULL)
+load_xg(
+  seasons = get_afl_season(),
+  rounds = NULL,
+  use_disk_cache = FALSE,
+  columns = NULL
+)
 }
 \arguments{
 \item{seasons}{A numeric vector of 4-digit years associated with given AFL seasons - defaults to latest season. If set to \code{TRUE}, returns all available data since 2021.}
+
+\item{rounds}{A numeric vector of round numbers to filter to. If \code{NULL} (default), returns all rounds.}
 
 \item{use_disk_cache}{Logical. If TRUE, uses persistent disk cache for faster repeated loads. Default is FALSE.}
 
@@ -23,6 +30,7 @@ Loads xg data from the \href{https://github.com/peteowen1/torpdata}{torpdata rep
 \dontrun{
 try({ # prevents cran errors
   load_xg(2021:2022)
+  load_xg(2026, 2)
 })
 }
 }

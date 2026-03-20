@@ -179,7 +179,7 @@ if (run_chains) {
     tic(paste0("chains_", season))
 
     all_chains <- purrr::map(rounds, function(rd) {
-      tryCatch(get_week_chains(season, rd), error = function(e) {
+      tryCatch(get_match_chains(season, rd), error = function(e) {
         cli::cli_warn("  Failed to fetch chains {season} R{rd}: {conditionMessage(e)}")
         NULL
       })

@@ -2,7 +2,7 @@
 % Please edit documentation in R/scraper.R
 \name{.find_game_by_match_id}
 \alias{.find_game_by_match_id}
-\title{Find game metadata for a match ID by scanning rounds}
+\title{Find game metadata for a match ID}
 \usage{
 .find_game_by_match_id(season, match_id)
 }
@@ -15,6 +15,7 @@
 A single-row data.frame of game metadata, or empty data.frame.
 }
 \description{
-Find game metadata for a match ID by scanning rounds
+Extracts the round number from the match ID structure
+(\verb{CD_M\{year\}\{comp\}\{round\}\{game\}}) and fetches that round's fixtures directly.
 }
 \keyword{internal}

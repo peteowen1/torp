@@ -105,7 +105,7 @@ safe_log_debug <- function(message, ...) {
 #' @param metrics Named list of performance metrics
 #' @param data_info Information about the data used
 #' @param model_version Version of the model
-#' @export
+#' @keywords internal
 log_model_performance <- function(model_name, metrics, data_info = NULL, model_version = NULL) {
   if (isTRUE(.torp_logging_env$console_output)) {
     message(paste("INFO: Model performance logged - Model:", model_name,
@@ -172,7 +172,7 @@ log_prediction_event <- function(model_name, input_hash, n_predictions, summary 
 #' @param current_metrics Current performance metrics
 #' @param baseline_metrics Baseline metrics for comparison
 #' @param drift_threshold Threshold for triggering drift alert (default: 0.05)
-#' @export
+#' @keywords internal
 monitor_model_drift <- function(model_name, current_metrics, baseline_metrics, drift_threshold = 0.05) {
   auc_drift <- abs(current_metrics$auc - baseline_metrics$auc)
   drift_detected <- auc_drift > drift_threshold

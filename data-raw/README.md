@@ -63,16 +63,27 @@ data-raw/
 
 ## Running Scripts
 
-Use `_run-all.R` to see the recommended execution order. Most scripts assume:
+Use `rebuild_everything.R` for a full end-to-end rebuild. It supports CLI flags to run specific phases:
+
+```bash
+# Full rebuild
+powershell.exe -Command 'Rscript "torp/data-raw/rebuild_everything.R"'
+
+# Specific season range
+Rscript rebuild_everything.R 2024 2026
+
+# Only retrain models
+Rscript rebuild_everything.R --models-only
+
+# Skip API scraping and simulation
+Rscript rebuild_everything.R --skip-api --skip-sim
+```
+
+Most scripts assume:
 
 1. The torp package is loaded via `devtools::load_all()`
 2. Required data is available from torpdata releases
 3. Previous steps in the workflow have been completed
-
-```r
-# Example: rebuild all models
-source("data-raw/_run-all.R")
-```
 
 ## Output Files
 

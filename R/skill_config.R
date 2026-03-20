@@ -19,7 +19,7 @@
 #'     \item{success_col}{Column or expression for successes (efficiency stats only)}
 #'     \item{attempts_col}{Column or expression for attempts (efficiency stats only)}
 #'   }
-#' @export
+#' @keywords internal
 skill_stat_definitions <- function() {
   rate_stats <- data.frame(
     stat_name = c(
@@ -185,7 +185,7 @@ skill_stat_definitions <- function() {
 #'
 #' @return A named list mapping group names to character vectors of
 #'   AFL position strings.
-#' @export
+#' @keywords internal
 skill_position_map <- function() {
   list(
     KEY_DEFENDER    = "KEY_DEFENDER",
@@ -216,7 +216,7 @@ skill_position_map <- function() {
 #'     \item{credible_level}{Width of credible interval (e.g. 0.80 for 80 pct).}
 #'     \item{category_params}{Per-category lambda and prior_strength overrides.}
 #'   }
-#' @export
+#' @keywords internal
 default_skill_params <- function() {
   list(
     lambda_rate       = SKILL_LAMBDA_RATE_DEFAULT,

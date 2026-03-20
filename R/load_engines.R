@@ -11,7 +11,7 @@
 #' @param ... Additional arguments (currently unused).
 #'
 #' @return A tibble
-#' @export
+#' @keywords internal
 #' @importFrom data.table rbindlist setDT
 #' @importFrom tibble as_tibble
 load_from_url <- function(url, ..., seasons = TRUE, rounds = TRUE, use_disk_cache = FALSE, columns = NULL) {
@@ -334,7 +334,7 @@ parquet_from_url_cached <- function(url, use_cache = TRUE, max_age_days = 7, col
 #' @param url A character URL
 #'
 #' @return A data frame
-#' @export
+#' @keywords internal
 #' @importFrom cli cli_warn cli_abort
 #' @importFrom data.table data.table setDT
 parquet_from_url <- function(url) {

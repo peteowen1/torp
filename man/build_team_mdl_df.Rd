@@ -4,19 +4,12 @@
 \alias{build_team_mdl_df}
 \title{Build complete match model dataset end-to-end}
 \usage{
-build_team_mdl_df(
-  season = NULL,
-  target_weeks = NULL,
-  weather_path = NULL,
-  psr_coef_path = NULL
-)
+build_team_mdl_df(season = NULL, target_weeks = NULL, psr_coef_path = NULL)
 }
 \arguments{
 \item{season}{Season to build for (default: current via get_afl_season())}
 
 \item{target_weeks}{Numeric vector of target round numbers (used for weather forecasting)}
-
-\item{weather_path}{Path to historical weather parquet (default: data-raw/weather_data.parquet)}
 }
 \value{
 Complete team_mdl_df ready for GAM training

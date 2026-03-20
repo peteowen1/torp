@@ -27,45 +27,8 @@ test_that("calculate_match_xgs has reasonable default arguments", {
 })
 
 # -----------------------------------------------------------------------------
-# Deprecated match_xgs Tests
-# -----------------------------------------------------------------------------
-
-test_that("match_xgs deprecated alias exists and is exported", {
-  expect_true(exists("match_xgs"))
-  expect_true("match_xgs" %in% getNamespaceExports("torp"))
-})
-
-test_that("match_xgs has correct function signature", {
-  fn_args <- names(formals(match_xgs))
-
-  expect_true("season" %in% fn_args)
-  expect_true("round" %in% fn_args)
-  expect_true("quarter" %in% fn_args)
-
-  # Ensure match_id parameter was removed (per code review fix)
-  expect_false("match_id" %in% fn_args)
-})
-
-test_that("match_xgs has reasonable default arguments", {
-  fn_formals <- formals(match_xgs)
-
-  # nolint start: eval is safe here - only evaluating function formals
-  expect_equal(eval(fn_formals$quarter), 1:4)
-  # nolint end
-})
-
-# -----------------------------------------------------------------------------
 # Network-Dependent Tests (reuse shared data from helper-test-data.R)
 # -----------------------------------------------------------------------------
-
-test_that("match_xgs shows deprecation warning", {
-  skip_if(is.null(.shared$match_xgs), "Could not load match data")
-
-  expect_warning(
-    match_xgs(season = 2024, round = 1),
-    "deprecated|Deprecated"
-  )
-})
 
 test_that("calculate_match_xgs returns expected structure and valid values", {
   skip_if(is.null(.shared$match_xgs) || nrow(.shared$match_xgs) == 0, "Could not load match data")
