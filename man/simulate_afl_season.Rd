@@ -14,7 +14,7 @@ simulate_afl_season(
   seed = NULL,
   verbose = TRUE,
   keep_games = FALSE,
-  n_cores = 1L
+  n_cores = max(1L, parallel::detectCores() - 1L)
 )
 }
 \arguments{
@@ -40,7 +40,9 @@ injury-aware simulation, or supply your own data.frame.}
 \item{keep_games}{Logical; if TRUE, stores per-sim game results (memory
 intensive). Default FALSE.}
 
-\item{n_cores}{Number of cores for parallel execution. Default 1 (sequential).
+\item{n_cores}{Number of cores for parallel execution. Defaults to
+\code{parallel::detectCores() - 1} (leaving one core free for the OS/session).
+Set to \code{1L} for sequential execution.
 Values > 1 use \code{\link[parallel:clusterApply]{parallel::parLapply()}} with reproducible L'Ecuyer-CMRG
 random streams. Progress bars are not shown in parallel mode.}
 }

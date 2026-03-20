@@ -9,7 +9,7 @@
   all_grounds,
   target_weeks = NULL,
   season = NULL,
-  weather_path = NULL
+  ...
 )
 }
 \arguments{
@@ -20,8 +20,6 @@
 \item{target_weeks}{Numeric vector of target round numbers}
 
 \item{season}{Target season}
-
-\item{weather_path}{Path to historical weather parquet file}
 }
 \value{
 Tibble with match_id, temp_avg, precipitation_total, wind_avg, humidity_avg, is_roof

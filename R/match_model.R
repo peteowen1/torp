@@ -325,35 +325,26 @@
 #' @param all_grounds Stadium reference data (for geocoding)
 #' @param target_weeks Numeric vector of target round numbers
 #' @param season Target season
-#' @param weather_path Path to historical weather parquet file
 #' @return Tibble with match_id, temp_avg, precipitation_total, wind_avg, humidity_avg, is_roof
 #' @keywords internal
 .load_match_weather <- function(fixtures, all_grounds, target_weeks = NULL,
-                                season = NULL, weather_path = NULL) {
+                                season = NULL, ...) {
   empty_weather <- tibble::tibble(
     match_id = character(), temp_avg = numeric(), wind_avg = numeric(),
     humidity_avg = numeric(), precipitation_total = numeric(), is_roof = logical()
   )
 
-  # Strategy 1: Load from torpdata release
+  # Load from torpdata release
   historical <- tryCatch({
     load_weather()
   }, error = function(e) {
-    cli::cli_warn("Could not load weather from release: {conditionMessage(e)} -- trying local file")
+    cli::cli_warn("Could not load weather data: {conditionMessage(e)} -- skipping weather features")
     NULL
   })
 
-  # Strategy 2: Fall back to local file
   if (is.null(historical) || nrow(historical) == 0) {
-    if (is.null(weather_path)) {
-      weather_path <- file.path("data-raw", "weather_data.parquet")
-    }
-    if (file.exists(weather_path)) {
-      historical <- arrow::read_parquet(weather_path)
-    } else {
-      cli::cli_warn("Weather data unavailable (no release or local file) -- skipping weather features")
-      return(empty_weather)
-    }
+    cli::cli_warn("Weather data unavailable -- skipping weather features")
+    return(empty_weather)
   }
   # Normalise old weather files with providerId
   if ("providerId" %in% names(historical) && !"match_id" %in% names(historical)) {
@@ -1134,11 +1125,10 @@
 #'
 #' @param season Season to build for (default: current via get_afl_season())
 #' @param target_weeks Numeric vector of target round numbers (used for weather forecasting)
-#' @param weather_path Path to historical weather parquet (default: data-raw/weather_data.parquet)
 #' @return Complete team_mdl_df ready for GAM training
 #' @keywords internal
 build_team_mdl_df <- function(season = NULL, target_weeks = NULL,
-                              weather_path = NULL, psr_coef_path = NULL) {
+                              psr_coef_path = NULL) {
   if (is.null(season)) season <- get_afl_season()
 
   cli::cli_h2("Loading data")
@@ -1181,7 +1171,7 @@ build_team_mdl_df <- function(season = NULL, target_weeks = NULL,
   team_rt_fix_df <- .build_match_features(fix_df, team_rt_df, all_grounds)
 
   cli::cli_h2("Loading weather")
-  weather_df <- .load_match_weather(fixtures, all_grounds, target_weeks, season, weather_path)
+  weather_df <- .load_match_weather(fixtures, all_grounds, target_weeks, season)
 
   # Weight anchor: most recent fixture date
   weight_anchor_date <- if (!is.null(target_weeks) && !is.null(season)) {

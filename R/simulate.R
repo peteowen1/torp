@@ -208,10 +208,3 @@ process_games_dt <- function(sim_teams, sim_games, round_num,
   return(list(sim_teams = sim_teams, sim_games = sim_games))
 }
 
-#' @rdname simulate_season
-#' @description `sim_season()` is deprecated; use `simulate_season()` instead.
-#' @export
-sim_season <- function(sim_teams, sim_games) {
-  .Deprecated("simulate_season", package = "torp", old = "sim_season")
-  simulate_season(sim_teams = sim_teams, sim_games = sim_games)
-}

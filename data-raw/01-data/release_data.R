@@ -35,7 +35,7 @@ release_chains_season <- function(season, rounds = NULL) {
   }
 
   all_chains <- purrr::map(rounds, function(round) {
-    tryCatch(get_week_chains(season, round), error = function(e) NULL)
+    tryCatch(get_match_chains(season, round), error = function(e) NULL)
   })
 
   combined <- data.table::rbindlist(purrr::compact(all_chains), use.names = TRUE, fill = TRUE)
@@ -69,7 +69,7 @@ release_pbp_season <- function(season) {
   rounds <- start:end
 
   all_chains <- purrr::map(rounds, function(round) {
-    tryCatch(get_week_chains(season, round), error = function(e) NULL)
+    tryCatch(get_match_chains(season, round), error = function(e) NULL)
   })
 
   chains <- data.table::rbindlist(purrr::compact(all_chains), use.names = TRUE, fill = TRUE)

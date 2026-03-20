@@ -181,7 +181,7 @@ update_season_chains <- function(season, round) {
 
   # Fetch new round data from AFL API
   new_chains <- tryCatch({
-    get_week_chains(season, round)
+    get_match_chains(season, round)
   }, error = function(e) {
     cli::cli_alert_danger("Failed to fetch chains for {season} R{round}: {conditionMessage(e)}")
     return(NULL)
@@ -249,7 +249,7 @@ update_season_pbp <- function(season, round) {
 
   # Fetch new round chains and process into PBP
   new_pbp <- tryCatch({
-    chains <- get_week_chains(season, round)
+    chains <- get_match_chains(season, round)
     if (is.null(chains) || nrow(chains) == 0) return(NULL)
     chains |>
       clean_pbp() |>

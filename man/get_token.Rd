@@ -10,6 +10,6 @@ get_token()
 A character string containing the API token.
 }
 \description{
-Retrieves an authentication token for the AFL API.
+Retrieves an authentication token for the AFL API, caching it for 5 minutes.
 }
 \keyword{internal}

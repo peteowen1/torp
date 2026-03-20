@@ -56,20 +56,6 @@ test_that("get_token function exists and is internal", {
   expect_true(exists("get_token", envir = asNamespace("torp")))
 })
 
-test_that("get_single_chain handles empty data gracefully", {
-  # Test with empty/minimal chain data
-  empty_chains <- data.frame()
-  result <- get_single_chain(empty_chains, 1)
-  expect_true(is.data.frame(result))
-  expect_equal(nrow(result), 0)
-
-  # Test with insufficient columns
-  small_chains <- data.frame(a = 1, b = 2)
-  result2 <- get_single_chain(small_chains, 1)
-  expect_true(is.data.frame(result2))
-  expect_equal(nrow(result2), 0)
-})
-
 test_that("get_game_chains returns empty data frame for invalid match", {
   skip_if_no_api_access()
 
@@ -85,13 +71,6 @@ test_that("get_many_game_chains handles empty vector", {
   # Empty vector should return empty data frame
   result <- get_many_game_chains(character(0))
   expect_true(is.data.frame(result))
-  expect_equal(nrow(result), 0)
-})
-
-test_that("get_week_chains handles errors gracefully", {
-  # Test with invalid parameters - should warn and return empty data.table
-  result <- suppressWarnings(get_week_chains(2019, 1))  # Season before 2021 should fail
-  expect_true(is.data.frame(result) || data.table::is.data.table(result))
   expect_equal(nrow(result), 0)
 })
 

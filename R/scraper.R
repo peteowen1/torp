@@ -44,12 +44,11 @@ get_match_chains <- function(season = get_afl_season(), round = NA) {
   cli::cli_inform("Scraping match chains...")
   chains <- get_many_game_chains(games_vector)
 
-  players <- get_players()
+  players <- get_players(season = season)
   chains <- chains |>
-    dplyr::inner_join(games, by = c("match_id" = "matchId")) |>
-    dplyr::left_join(players, by = c("player_id" = "playerId", "season"))
+    dplyr::inner_join(games, by = "matchId") |>
+    dplyr::left_join(players, by = c("playerId", "season"))
 
-  # Normalise to snake_case (API returns camelCase from games/players joins)
   chains <- data.table::as.data.table(chains)
   .normalise_chains_columns(chains)
 
@@ -75,19 +74,18 @@ get_match_chains <- function(season = get_afl_season(), round = NA) {
     cli::cli_abort("No chain data returned for match {.val {match_id}}.")
   }
 
-  # Find game metadata by scanning rounds until we locate the match
   games <- .find_game_by_match_id(match_year, match_id)
 
   if (nrow(games) > 0) {
     chains <- chains |>
-      dplyr::inner_join(games, by = c("match_id" = "matchId"))
+      dplyr::inner_join(games, by = "matchId")
   } else {
     chains$season <- match_year
   }
 
-  players <- get_players()
+  players <- get_players(season = match_year)
   chains <- chains |>
-    dplyr::left_join(players, by = c("player_id" = "playerId", "season"))
+    dplyr::left_join(players, by = c("playerId", "season"))
 
   chains <- data.table::as.data.table(chains)
   .normalise_chains_columns(chains)
@@ -96,62 +94,52 @@ get_match_chains <- function(season = get_afl_season(), round = NA) {
   return(chains)
 }
 
-#' Find game metadata for a match ID by scanning rounds
+#' Find game metadata for a match ID
+#'
+#' Extracts the round number from the match ID structure
+#' (`CD_M{year}{comp}{round}{game}`) and fetches that round's fixtures directly.
 #'
 #' @param season Numeric season year.
 #' @param match_id Match ID string.
 #' @return A single-row data.frame of game metadata, or empty data.frame.
 #' @keywords internal
 .find_game_by_match_id <- function(season, match_id) {
-  for (rd in 1:28) {
-    games <- tryCatch(get_round_games(season, rd), error = function(e) data.frame())
-    if (nrow(games) == 0) next
-    match_row <- games |> dplyr::filter(.data$matchId == match_id)
-    if (nrow(match_row) > 0) return(match_row)
+  round_num <- as.integer(substr(match_id, 12, 13))
+  games <- tryCatch(get_round_games(season, round_num), error = function(e) data.frame())
+  if (nrow(games) == 0) {
+    cli::cli_warn("Could not find game metadata for {.val {match_id}} in season {.val {season}}. Returning chains without game metadata.")
+    return(data.frame())
   }
-  cli::cli_warn("Could not find game metadata for {.val {match_id}} in season {.val {season}}. Returning chains without game metadata.")
+  match_row <- games |> dplyr::filter(.data$matchId == match_id)
+  if (nrow(match_row) > 0) return(match_row)
+  cli::cli_warn("Could not find game metadata for {.val {match_id}} in round {.val {round_num}}. Returning chains without game metadata.")
   data.frame()
 }
 
-#' Get Week Chains
-#'
-#' Retrieves chain data for a specific week (round) in a season.
-#'
-#' @param season The AFL season year (numeric).
-#' @param roundnum The round number (numeric).
-#'
-#' @return A dataframe containing chain data for the specified week.
-#' @export
-#'
-#' @importFrom cli cli_warn
-#' @importFrom data.table data.table
-get_week_chains <- function(season, roundnum) {
-  load <- tryCatch(
-    get_match_chains(season, round = roundnum),
-    error = function(e) {
-      cli::cli_warn(c(
-        "Failed to get match chains from {.val {season}} round {.val {roundnum}}",
-        "x" = conditionMessage(e)
-      ))
-      return(data.table::data.table())
-    }
-  )
 
-  return(load)
-}
+# Token cache environment (avoids re-authenticating on every API call)
+.torp_token_cache <- new.env(parent = emptyenv())
 
 #' Get API Token
 #'
-#' Retrieves an authentication token for the AFL API.
+#' Retrieves an authentication token for the AFL API, caching it for 5 minutes.
 #'
 #' @return A character string containing the API token.
 #' @keywords internal
 #'
 #' @importFrom httr POST content
 get_token <- function() {
+  now <- Sys.time()
+  if (!is.null(.torp_token_cache$token) &&
+      difftime(now, .torp_token_cache$fetched, units = "mins") < 5) {
+    return(.torp_token_cache$token)
+  }
   response <- httr::POST("https://api.afl.com.au/cfs/afl/WMCTok")
   httr::stop_for_status(response, task = "authenticate with AFL API")
-  httr::content(response)$token
+  token <- httr::content(response)$token
+  .torp_token_cache$token <- token
+  .torp_token_cache$fetched <- now
+  token
 }
 
 #' Access API
@@ -229,13 +217,14 @@ get_season_games <- function(season, rounds = 28) {
 #'
 #' Retrieves player data either from the API or from a local database.
 #'
+#' @param season Numeric season(s) to load. Defaults to all seasons (TRUE).
 #' @param use_api Logical, whether to use the API (TRUE) or local database (FALSE, default).
 #'
 #' @return A dataframe containing player data.
 #' @keywords internal
 #'
 #' @importFrom dplyr mutate select
-get_players <- function(use_api = FALSE) {
+get_players <- function(season = TRUE, use_api = FALSE) {
   if (use_api) {
     url <- "https://api.afl.com.au/cfs/afl/players"
     api_result <- access_api(url)
@@ -245,7 +234,7 @@ get_players <- function(use_api = FALSE) {
     players <- (api_result[["players"]] %||% api_result[[5]]) |>
       dplyr::mutate(season = get_afl_season())
   } else {
-    players <- load_player_details(seasons = TRUE) |>
+    players <- load_player_details(seasons = season) |>
       dplyr::mutate(
         photoURL = NA,
         team.teamId = NA,
@@ -286,30 +275,30 @@ get_many_game_chains <- function(games_vector) {
 #'
 get_game_chains <- function(match_id) {
   url <- paste0("https://sapi.afl.com.au/afl/matchPlays/", match_id)
-  chains_t1 <- access_api(url)
+  api_response <- access_api(url)
 
-  if (length(chains_t1) < 8) {
-    cli::cli_warn("Unexpected API response structure for match {match_id} (expected 8+ elements, got {length(chains_t1)})")
+  if (length(api_response) < 8) {
+    cli::cli_warn("Unexpected API response structure for match {match_id} (expected 8+ elements, got {length(api_response)})")
     return(data.frame())
   }
-  chains_t2 <- chains_t1[["chains"]] %||% chains_t1[[8]]
+  chain_list <- api_response[["chains"]] %||% api_response[[8]]
 
-  if (is.null(dim(chains_t2)) || nrow(chains_t2) == 0 || length(chains_t2) <= 5) {
+  if (is.null(dim(chain_list)) || nrow(chain_list) == 0 || length(chain_list) <= 5) {
     return(data.frame())
   }
 
   # Hoist column index lookup (constant across all chains in a match)
-  actions_col <- which(names(chains_t2) == "actions")
+  actions_col <- which(names(chain_list) == "actions")
   col_idx <- if (length(actions_col) == 1) actions_col else 6
 
-  chains <- data.table::rbindlist(lapply(seq_len(nrow(chains_t2)), function(i) {
-    acts <- chains_t2[[i, col_idx]]
+  chains <- data.table::rbindlist(lapply(seq_len(nrow(chain_list)), function(i) {
+    acts <- chain_list[[i, col_idx]]
     if (length(acts) == 0) return(NULL)
     dt <- data.table::as.data.table(acts)
     dt[, `:=`(
-      finalState = chains_t2$finalState[i],
-      initialState = chains_t2$initialState[i],
-      period = chains_t2$period[i],
+      finalState = chain_list$finalState[i],
+      initialState = chain_list$initialState[i],
+      period = chain_list$period[i],
       chain_number = i
     )]
     dt
@@ -318,39 +307,12 @@ get_game_chains <- function(match_id) {
   if (nrow(chains) == 0) return(data.frame())
 
   chains[, `:=`(
-    matchId = chains_t1$matchId,
-    venueWidth = chains_t1$venueWidth,
-    venueLength = chains_t1$venueLength,
-    homeTeamDirectionQtr1 = chains_t1$homeTeamDirectionQtr1
+    matchId = api_response$matchId,
+    venueWidth = api_response$venueWidth,
+    venueLength = api_response$venueLength,
+    homeTeamDirectionQtr1 = api_response$homeTeamDirectionQtr1
   )]
 
-  # Normalise camelCase → snake_case (matchId → match_id, etc.)
-  .normalise_chains_columns(chains)
-
-  chains
+  chains[]
 }
 
-#' Get Single Chain
-#'
-#' Processes a single chain from the game data.
-#'
-#' @param chains_t2 The chain data for a game.
-#' @param chain_number The number of the chain to process.
-#'
-#' @return A dataframe containing data for the specified chain.
-#' @keywords internal
-get_single_chain <- function(chains_t2, chain_number) {
-  if (length(chains_t2) > 5) {
-    actions_col <- which(names(chains_t2) == "actions")
-    col_idx <- if (length(actions_col) == 1) actions_col else 6
-    chains_t3 <- chains_t2[[chain_number, col_idx]]
-    if (length(chains_t3) > 0) {
-      chains_t3$finalState <- chains_t2$finalState[chain_number]
-      chains_t3$initialState <- chains_t2$initialState[chain_number]
-      chains_t3$period <- chains_t2$period[chain_number]
-      chains_t3$chain_number <- chain_number
-      return(chains_t3)
-    }
-  }
-  data.frame() # Return empty dataframe if chain processing fails
-}

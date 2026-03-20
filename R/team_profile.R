@@ -585,11 +585,13 @@ team_skill_profile <- function(team_name, top_n = 22) {
 #'   or NA if the input cannot be parsed.
 #'
 #' @importFrom lubridate ymd_hms
-#' @export
+#' @keywords internal
 #'
 #' @examples
+#' \dontrun{
 #' match_local_time("2026-03-05T08:30:00.000+0000", "Australia/Sydney")
 #' match_local_time("2026-03-05T08:30:00.000+0000", "Australia/Perth")
+#' }
 match_local_time <- function(utc_start_time, venue_timezone = NULL) {
   if (is.na(utc_start_time) || is.null(utc_start_time)) return(NA_character_)
 

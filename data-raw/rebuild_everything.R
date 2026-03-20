@@ -12,15 +12,20 @@
 #
 #   # Phase flags (skip)
 #   --skip-api        Skip Phase 1 (API scraping)
-#   --skip-chains     Skip Phase 2+4 (chains/PBP)
-#   --skip-models     Skip Phase 3 (model training)
-#   --skip-skills     Skip Phase 6 (skills pipeline)
-#   --skip-sim        Skip Phase 9 (simulation)
+#   --skip-chains     Skip Phase 2 (chains scraping)
+#   --skip-pbp        Skip Phase 3 (build PBP from chains)
+#   --skip-models     Skip Phase 4 (model training)
+#   --skip-skills     Skip Phase 7 (skills pipeline)
+#   --skip-sim        Skip Phase 10 (simulation)
 #
 #   # Phase flags (only)
-#   --models-only     Only Phase 3 (train + upload models)
-#   --ratings-only    Only Phases 7-8 (ratings + predictions)
-#   --predictions-only Only Phase 8 (match predictions)
+#   --models-only     Only Phase 4 (train + upload models)
+#   --ratings-only    Only Phases 8-9 (ratings + predictions)
+#   --predictions-only Only Phase 9 (match predictions)
+#
+#   # Common combos
+#   --skip-api --skip-chains              # Start from PBP build (Phase 3)
+#   --skip-api --skip-chains --skip-pbp   # Start from model training (Phase 4)
 #
 #   # Model training season override
 #   --training-seasons 2021 2025   # override training range (default 2021:current-1)
@@ -52,6 +57,38 @@ torpmodels_root <- if (file.exists("torpmodels/DESCRIPTION")) {
 }
 
 devtools::load_all(torp_root)
+devtools::load_all(torpmodels_root)
+
+# Interactive start-from prompt ----
+# When sourcing in RStudio, lets you pick which phase to start from.
+# Set START_FROM in the global env to skip the prompt, e.g. START_FROM <- 3
+
+phase_menu <- c(
+  "1 - API Data",
+  "2 - Scrape Chains",
+  "3 - Build PBP",
+  "4 - Train Models",
+  "5 - Rebuild PBP (new models)",
+  "6 - Derived Data",
+  "7 - Skills Pipeline",
+  "8 - TORP Ratings",
+  "9 - Match Predictions",
+  "10 - Season Simulation"
+)
+
+start_from <- 1L
+
+if (interactive()) {
+  if (exists("START_FROM", envir = .GlobalEnv)) {
+    start_from <- as.integer(get("START_FROM", envir = .GlobalEnv))
+    cli::cli_alert_info("Using START_FROM = {start_from} from global env")
+  } else {
+    cli::cli_h2("Start from which phase?")
+    cat(paste(phase_menu, collapse = "\n"), "\n")
+    answer <- readline("Start from phase [1]: ")
+    if (nzchar(answer)) start_from <- as.integer(answer)
+  }
+}
 
 # Parse CLI Args ----
 
@@ -62,6 +99,7 @@ pos_args <- args[!grepl("^--", args)]
 # Phase flags
 skip_api    <- "--skip-api" %in% flag_args
 skip_chains <- "--skip-chains" %in% flag_args
+skip_pbp    <- "--skip-pbp" %in% flag_args
 skip_models <- "--skip-models" %in% flag_args
 skip_skills <- "--skip-skills" %in% flag_args
 skip_sim    <- "--skip-sim" %in% flag_args
@@ -72,24 +110,36 @@ predictions_only <- "--predictions-only" %in% flag_args
 
 # "only" flags disable everything else
 if (models_only) {
-  skip_api <- TRUE; skip_chains <- TRUE; skip_skills <- TRUE; skip_sim <- TRUE
-}
-if (ratings_only) {
-  skip_api <- TRUE; skip_chains <- TRUE; skip_models <- TRUE; skip_skills <- TRUE; skip_sim <- TRUE
-}
-if (predictions_only) {
-  skip_api <- TRUE; skip_chains <- TRUE; skip_models <- TRUE
+  skip_api <- TRUE; skip_chains <- TRUE; skip_pbp <- TRUE
   skip_skills <- TRUE; skip_sim <- TRUE
 }
+if (ratings_only) {
+  skip_api <- TRUE; skip_chains <- TRUE; skip_pbp <- TRUE
+  skip_models <- TRUE; skip_skills <- TRUE; skip_sim <- TRUE
+}
+if (predictions_only) {
+  skip_api <- TRUE; skip_chains <- TRUE; skip_pbp <- TRUE
+  skip_models <- TRUE; skip_skills <- TRUE; skip_sim <- TRUE
+}
+
+# Apply start_from — skip all phases before it
+if (start_from > 1)  skip_api    <- TRUE
+if (start_from > 2)  skip_chains <- TRUE
+if (start_from > 3)  skip_pbp    <- TRUE
+if (start_from > 4)  skip_models <- TRUE
+# Phase 5 (rebuild PBP) is auto-gated by run_pbp && run_models
+if (start_from > 6)  skip_skills <- TRUE  # Phase 7 maps to skills
+if (start_from > 10) skip_sim    <- TRUE
 
 # Derive phase booleans
 run_api         <- !skip_api && !models_only && !ratings_only && !predictions_only
 run_chains      <- !skip_chains && !models_only && !ratings_only && !predictions_only
+run_pbp         <- !skip_pbp && !models_only && !ratings_only && !predictions_only
 run_models      <- !skip_models && !ratings_only && !predictions_only
-run_derived     <- !models_only && !predictions_only
+run_derived     <- !models_only && !predictions_only && start_from <= 6
 run_skills      <- !skip_skills && !models_only && !predictions_only
-run_ratings     <- !models_only && !predictions_only
-run_predictions <- !models_only
+run_ratings     <- !models_only && !predictions_only && start_from <= 8
+run_predictions <- !models_only && start_from <= 9
 run_sim         <- !skip_sim && !models_only && !ratings_only && !predictions_only
 
 # Season range
@@ -123,9 +173,9 @@ cli::cli_h1("Full Torpverse Rebuild")
 cli::cli_inform("Data seasons: {paste(range(seasons), collapse = '-')}")
 cli::cli_inform("Training seasons: {paste(range(training_seasons), collapse = '-')}")
 cli::cli_inform(paste0(
-  "Phases: API=", run_api, " Chains=", run_chains, " Models=", run_models,
-  " Derived=", run_derived, " Skills=", run_skills, " Ratings=", run_ratings,
-  " Predictions=", run_predictions, " Sim=", run_sim
+  "Phases: API=", run_api, " Chains=", run_chains, " PBP=", run_pbp,
+  " Models=", run_models, " Derived=", run_derived, " Skills=", run_skills,
+  " Ratings=", run_ratings, " Predictions=", run_predictions, " Sim=", run_sim
 ))
 
 # Helpers ----
@@ -208,11 +258,11 @@ if (run_api) {
   toc(log = TRUE)
 }
 
-# Phase 2: Chains + Initial PBP ----
+# Phase 2: Scrape Chains ----
 
 if (run_chains) {
-  cli::cli_h1("Phase 2: Chains + Initial PBP")
-  tic("phase_2_chains_pbp")
+  cli::cli_h1("Phase 2: Scrape Chains")
+  tic("phase_2_chains")
 
   for (season in seasons) {
     cli::cli_h2("Season {season}")
@@ -224,7 +274,7 @@ if (run_chains) {
     tic(paste0("chains_", season))
 
     all_chains <- purrr::map(rounds, function(rd) {
-      tryCatch(get_week_chains(season, rd), error = function(e) {
+      tryCatch(get_match_chains(season, rd), error = function(e) {
         cli::cli_warn("  Failed to fetch chains {season} R{rd}: {conditionMessage(e)}")
         NULL
       })
@@ -243,7 +293,31 @@ if (run_chains) {
       cli::cli_inform("  chains_{season}: {nrow(chains)} rows")
     })
 
+    toc(log = TRUE)
+    rm(all_chains, chains)
+    gc()
+  }
+
+  toc(log = TRUE)
+}
+
+# Phase 3: Build PBP ----
+
+if (run_pbp) {
+  cli::cli_h1("Phase 3: Build PBP")
+  tic("phase_3_pbp")
+
+  for (season in seasons) {
+    cli::cli_h2("Season {season}")
+
     safe_run(paste0("pbp_data_", season, "_all"), {
+      chains <- load_chains(seasons = season, rounds = TRUE)
+
+      if (nrow(chains) == 0) {
+        cli::cli_warn("No chains for {season} - skipping PBP")
+        return(invisible(NULL))
+      }
+
       pbp <- chains |>
         clean_pbp() |>
         clean_model_data_epv() |>
@@ -254,20 +328,19 @@ if (run_chains) {
         add_wp_vars()
       save_to_release(pbp, paste0("pbp_data_", season, "_all"), "pbp-data")
       cli::cli_inform("  pbp_{season}: {nrow(pbp)} rows")
-    })
 
-    toc(log = TRUE)
-    rm(all_chains, chains)
-    gc()
+      rm(chains, pbp)
+      gc()
+    })
   }
 
   toc(log = TRUE)
 }
 
-# Phase 3: Train Models ----
+# Phase 4: Train Models ----
 
 if (run_models) {
-  cli::cli_h1("Phase 3: Train Models")
+  cli::cli_h1("Phase 4: Train Models")
 
   model_output_dir <- if (!is.null(torpmodels_root)) {
     file.path(torpmodels_root, "inst", "models", "core")
@@ -276,9 +349,9 @@ if (run_models) {
   }
   if (!dir.exists(model_output_dir)) dir.create(model_output_dir, recursive = TRUE)
 
-  # --- 3a: EP Model ---
-  cli::cli_h2("Phase 3a: EP Model")
-  tic("phase_3a_ep")
+  # --- 4a: EP Model ---
+  cli::cli_h2("Phase 4a: EP Model")
+  tic("phase_4a_ep")
 
   safe_run("ep_model_training", {
     cli::cli_inform("Loading chains {training_start}-{training_end}...")
@@ -341,9 +414,9 @@ if (run_models) {
 
   toc(log = TRUE)
 
-  # --- 3b: WP Model ---
-  cli::cli_h2("Phase 3b: WP Model")
-  tic("phase_3b_wp")
+  # --- 4b: WP Model ---
+  cli::cli_h2("Phase 4b: WP Model")
+  tic("phase_4b_wp")
 
   safe_run("wp_model_training", {
     # Custom EP predictor using in-memory model
@@ -427,9 +500,9 @@ if (run_models) {
 
   toc(log = TRUE)
 
-  # --- 3c: Shot Model ---
-  cli::cli_h2("Phase 3c: Shot Model")
-  tic("phase_3c_shot")
+  # --- 4c: Shot Model ---
+  cli::cli_h2("Phase 4c: Shot Model")
+  tic("phase_4c_shot")
 
   safe_run("shot_model_training", {
     shots_prep <- load_pbp(seasons = training_seasons, rounds = TRUE)
@@ -492,9 +565,9 @@ if (run_models) {
 
   toc(log = TRUE)
 
-  # --- 3d: Match GAMs ---
-  cli::cli_h2("Phase 3d: Match GAMs")
-  tic("phase_3d_match_gams")
+  # --- 4d: Match GAMs ---
+  cli::cli_h2("Phase 4d: Match GAMs")
+  tic("phase_4d_match_gams")
 
   match_model_script <- if (!is.null(torpmodels_root)) {
     file.path(torpmodels_root, "data-raw", "04-match-model", "train_match_models.R")
@@ -511,7 +584,7 @@ if (run_models) {
       source(match_model_script, local = match_env)
     })
   } else {
-    cli::cli_alert_info("Match model script not found - match GAMs will train in Phase 8 via run_predictions_pipeline()")
+    cli::cli_alert_info("Match model script not found - match GAMs will train in Phase 9 via run_predictions_pipeline()")
   }
 
   toc(log = TRUE)
@@ -521,11 +594,11 @@ if (run_models) {
   cli::cli_alert_info("Model cache cleared")
 }
 
-# Phase 4: Rebuild PBP with New Models ----
+# Phase 5: Rebuild PBP with New Models ----
 
-if (run_chains && run_models) {
-  cli::cli_h1("Phase 4: Rebuild PBP with New Models")
-  tic("phase_4_pbp_rebuild")
+if (run_pbp && run_models) {
+  cli::cli_h1("Phase 5: Rebuild PBP with New Models")
+  tic("phase_5_pbp_rebuild")
 
   for (season in seasons) {
     cli::cli_h2("Season {season} (re-processing PBP)")
@@ -556,15 +629,15 @@ if (run_chains && run_models) {
   }
 
   toc(log = TRUE)
-} else if (run_chains && !run_models) {
-  cli::cli_alert_info("Skipping Phase 4 (PBP rebuild) - no new models trained")
+} else if (run_pbp && !run_models) {
+  cli::cli_alert_info("Skipping Phase 5 (PBP rebuild) - no new models trained")
 }
 
-# Phase 5: Derived Data ----
+# Phase 6: Derived Data ----
 
 if (run_derived) {
-  cli::cli_h1("Phase 5: Derived Data")
-  tic("phase_5_derived")
+  cli::cli_h1("Phase 6: Derived Data")
+  tic("phase_6_derived")
 
   for (season in seasons) {
     cli::cli_h2("Season {season}")
@@ -610,11 +683,11 @@ if (run_derived) {
   toc(log = TRUE)
 }
 
-# Phase 6: Skills Pipeline ----
+# Phase 7: Skills Pipeline ----
 
 if (run_skills) {
-  cli::cli_h1("Phase 6: Skills Pipeline")
-  tic("phase_6_skills")
+  cli::cli_h1("Phase 7: Skills Pipeline")
+  tic("phase_7_skills")
 
   skills_dir <- file.path(torp_root, "data-raw", "06-skills")
 
@@ -642,16 +715,16 @@ if (run_skills) {
   toc(log = TRUE)
 }
 
-# Phase 7: TORP Ratings ----
+# Phase 8: TORP Ratings ----
 
 if (run_ratings) {
-  cli::cli_h1("Phase 7: TORP Ratings")
-  tic("phase_7_ratings")
+  cli::cli_h1("Phase 8: TORP Ratings")
+  tic("phase_8_ratings")
 
   # Set config in global env (run_ratings_pipeline.R checks .GlobalEnv)
   SEASONS <<- TRUE
   REFRESH_UPSTREAM <<- FALSE  # Phase 1 already handled this
-  REBUILD_PLAYER_GAME <<- FALSE  # Phase 5 already handled this
+  REBUILD_PLAYER_GAME <<- FALSE  # Phase 6 already handled this
   REBUILD_ALL_RATINGS <<- TRUE
 
   ratings_script <- file.path(torp_root, "data-raw", "03-ratings", "run_ratings_pipeline.R")
@@ -666,11 +739,11 @@ if (run_ratings) {
   toc(log = TRUE)
 }
 
-# Phase 8: Match Predictions ----
+# Phase 9: Match Predictions ----
 
 if (run_predictions) {
-  cli::cli_h1("Phase 8: Match Predictions")
-  tic("phase_8_predictions")
+  cli::cli_h1("Phase 9: Match Predictions")
+  tic("phase_9_predictions")
 
   safe_run("match_predictions", {
     # Reload torp to pick up any new ratings data
@@ -683,11 +756,11 @@ if (run_predictions) {
   toc(log = TRUE)
 }
 
-# Phase 9: Season Simulation ----
+# Phase 10: Season Simulation ----
 
 if (run_sim) {
-  cli::cli_h1("Phase 9: Season Simulation")
-  tic("phase_9_simulation")
+  cli::cli_h1("Phase 10: Season Simulation")
+  tic("phase_10_simulation")
 
   safe_run("season_simulation", {
     devtools::load_all(torp_root)
@@ -716,7 +789,7 @@ if (run_sim) {
   toc(log = TRUE)
 }
 
-# Phase 10: Summary ----
+# Phase 11: Summary ----
 
 cli::cli_h1("Rebuild Complete")
 

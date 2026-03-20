@@ -2,6 +2,9 @@
 outputs/*.rds
 outputs/*.parquet
 
+# Transient rebuild logs
+rebuild_failures.csv
+
 # Legacy patterns (files now in outputs/)
 .bayes_od_rapm_16_24.rds
 .bayes_od_rapm_12_19.rds

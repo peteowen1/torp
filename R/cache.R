@@ -34,16 +34,6 @@ clear_data_cache <- function(verbose = FALSE) {
   invisible(NULL)
 }
 
-#' Clear Fixture Cache
-#'
-#' Backward-compatible alias for [clear_data_cache()].
-#'
-#' @inheritParams clear_data_cache
-#' @return Invisible NULL
-#' @export
-clear_fixture_cache <- function(verbose = FALSE) {
-  clear_data_cache(verbose = verbose)
-}
 
 #' Get Cache Information
 #'

@@ -86,7 +86,7 @@ get_afl_data_schemas <- function() {
 #' @param schema_name Name of the schema to validate against
 #' @param strict Logical, whether to fail on schema violations (default: TRUE)
 #' @return List containing validation results
-#' @export
+#' @keywords internal
 #' @importFrom dplyr group_by across everything summarise arrange desc filter
 validate_data_schema <- function(data, schema_name, strict = TRUE) {
   
@@ -175,7 +175,7 @@ validate_data_schema <- function(data, schema_name, strict = TRUE) {
 #' @param data Dataframe to validate
 #' @param data_type Type of data ("chains", "model", "player", etc.)
 #' @return List containing quality assessment results
-#' @export
+#' @keywords internal
 validate_data_quality <- function(data, data_type = "unknown") {
   
   quality_issues <- list()
@@ -532,7 +532,7 @@ calculate_quality_score <- function(data, issues) {
 #' @param max_age_days Maximum acceptable age in days (default: 7, overrides hours if provided)
 #' @param max_age_hours Maximum acceptable age in hours (default: 24, used if max_age_days not provided)
 #' @return Logical indicating if data is fresh enough
-#' @export
+#' @keywords internal
 validate_data_freshness <- function(data_timestamp, timestamp_col = "utc_start_time", max_age_days = NULL, max_age_hours = 24) {
   
   # Determine the time threshold - days takes precedence over hours
