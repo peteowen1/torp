@@ -2,7 +2,7 @@
 % Please edit documentation in R/psr.R
 \name{calculate_psv}
 \alias{calculate_psv}
-\title{Load PSR Coefficient Files and Compute Components}
+\title{Calculate Player Stat Value (PSV) from Per-Game Stats}
 \usage{
 calculate_psv(player_stats, coef_df, tog_adjust = TRUE, center = TRUE)
 }
@@ -21,60 +21,14 @@ on). If FALSE, use raw counts directly.}
 
 \item{center}{Logical. If TRUE (default), subtract the per-round league mean
 so PSV represents contribution above the average player that round.}
-
-\item{psr_coef_path}{Path to the margin PSR coefficient CSV. If NULL,
-searches \code{inst/extdata/psr_v2_coefficients.csv}.}
 }
 \value{
-A data.table with \code{psr}, \code{osr}, \code{dsr} columns,
-or the result of \code{calculate_psr()} (without osr/dsr) if the
-offensive/defensive coefficient files are not found.
-
 A data.table with identifier columns plus \code{psv_raw} and
 \code{psv}.
 }
 \description{
-Convenience wrapper that loads the margin, offensive, and defensive
-coefficient CSVs from \code{inst/extdata} (or a fallback path) and
-calls \code{\link{calculate_psr_components}}.
+Applies the same glmnet coefficients used by PSR to raw single-game stats
+to produce a per-game margin contribution score. While PSR uses Bayesian
+smoothed career estimates (\code{_rating} columns), PSV uses actual
+box-score stats from a single game.
 }
-\keyword{(PSV)}
-\keyword{(\code{_rating}}
-\keyword{Applies}
-\keyword{Bayesian}
-\keyword{Calculate}
-\keyword{PSR}
-\keyword{PSV}
-\keyword{Per-Game}
-\keyword{Player}
-\keyword{Stat}
-\keyword{Stats}
-\keyword{Value}
-\keyword{While}
-\keyword{a}
-\keyword{actual}
-\keyword{box-score}
-\keyword{by}
-\keyword{career}
-\keyword{coefficients}
-\keyword{columns),}
-\keyword{contribution}
-\keyword{estimates}
-\keyword{from}
-\keyword{game.}
-\keyword{glmnet}
-\keyword{internal}
-\keyword{margin}
-\keyword{per-game}
-\keyword{produce}
-\keyword{raw}
-\keyword{same}
-\keyword{score.}
-\keyword{single}
-\keyword{single-game}
-\keyword{smoothed}
-\keyword{stats}
-\keyword{the}
-\keyword{to}
-\keyword{used}
-\keyword{uses}

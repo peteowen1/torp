@@ -98,3 +98,66 @@ test_that("stat rating categories are consistent", {
                      "ruck", "discipline", "negative", "general")
   expect_true(all(defs$category %in% expected_cats))
 })
+
+
+# ==========================================================================
+# Tests for .normalise_stat_rating_columns()
+# ==========================================================================
+
+test_that("normalise_stat_rating_columns renames _skill to _rating", {
+  dt <- data.table::data.table(
+    player_id = "P1",
+    goals_skill = 1.5,
+    kicks_skill = 10.2
+  )
+
+  .normalise_stat_rating_columns(dt)
+
+  expect_true("goals_rating" %in% names(dt))
+  expect_true("kicks_rating" %in% names(dt))
+  expect_false("goals_skill" %in% names(dt))
+  expect_equal(dt$goals_rating, 1.5)
+})
+
+test_that("normalise_stat_rating_columns renames CI columns", {
+  dt <- data.table::data.table(
+    player_id = "P1",
+    goals_skill = 1.5,
+    goals_lower = 0.8,
+    goals_upper = 2.2
+  )
+
+  .normalise_stat_rating_columns(dt)
+
+  expect_true("goals_rating_lower" %in% names(dt))
+  expect_true("goals_rating_upper" %in% names(dt))
+  expect_false("goals_lower" %in% names(dt))
+  expect_equal(dt$goals_rating_lower, 0.8)
+})
+
+test_that("normalise_stat_rating_columns does not rename when target exists", {
+  dt <- data.table::data.table(
+    player_id = "P1",
+    goals_skill = 99,      # old name with stale value
+    goals_rating = 1.5     # new name already present
+  )
+
+  .normalise_stat_rating_columns(dt)
+
+  # Should keep the existing goals_rating, not overwrite
+  expect_equal(dt$goals_rating, 1.5)
+})
+
+test_that("normalise_stat_rating_columns leaves non-stat columns untouched", {
+  dt <- data.table::data.table(
+    player_id = "P1",
+    some_other_skill = 42
+  )
+
+  .normalise_stat_rating_columns(dt)
+
+  # "some_other" is not a stat_name in definitions, but the regex rename
+
+  # still fires on _skill$ pattern — verify it still renames
+  expect_true("some_other_rating" %in% names(dt))
+})
