@@ -68,6 +68,7 @@ resolve_player <- function(player_name, seasons = TRUE) {
 #'   \item{yearly_stats}{Per-season aggregated raw stats from \code{load_player_stats()}.}
 #'   \item{torp_season}{Per-season TORP ratings from \code{player_season_ratings()}.}
 #'   \item{current_torp}{Current TORP rating from \code{calculate_epr()}.}
+#'   \item{psv_season}{Per-season average PSV/OSV/DSV from \code{load_player_game_ratings()}.}
 #' }
 #'
 #' @export
@@ -159,11 +160,29 @@ player_profile <- function(player_name, seasons = TRUE) {
     cr[cr$player_id == pid, , drop = FALSE]
   }, error = function(e) data.frame())
 
+  # --- PSV per-game values (from player game ratings if available) ---
+  psv_season <- tryCatch({
+    season_vec <- if (isTRUE(seasons)) 2021:get_afl_season() else seasons
+    pgr <- load_player_game_ratings(season_vec)
+    pgr_dt <- data.table::as.data.table(pgr)
+    pgr_dt <- pgr_dt[player_id == pid]
+    if ("psv" %in% names(pgr_dt) && nrow(pgr_dt) > 0) {
+      psv_cols <- intersect(c("psv", "osv", "dsv"), names(pgr_dt))
+      pgr_dt[, c(
+        list(games = .N),
+        lapply(.SD, function(x) round(mean(x, na.rm = TRUE), 2))
+      ), by = season, .SDcols = psv_cols]
+    } else {
+      data.table::data.table()
+    }
+  }, error = function(e) data.table::data.table())
+
   out <- list(
     player_info = player_info,
     yearly_stats = yearly_stats,
     torp_season = torp_season,
-    current_torp = current_torp
+    current_torp = current_torp,
+    psv_season = psv_season
   )
   class(out) <- "torp_player_profile"
   out
@@ -195,6 +214,12 @@ print.torp_player_profile <- function(x, ...) {
   if (nrow(x$current_torp) > 0) {
     cat("--- Current TORP Rating ---\n")
     print(x$current_torp, row.names = FALSE)
+    cat("\n")
+  }
+
+  if (!is.null(x$psv_season) && nrow(x$psv_season) > 0) {
+    cat("--- PSV Season Averages (per game) ---\n")
+    print(x$psv_season, row.names = FALSE)
     cat("\n")
   }
 

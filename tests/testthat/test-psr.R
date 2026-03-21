@@ -213,24 +213,28 @@ test_that("calculate_psv applies TOG adjustment to rate stats", {
   expect_equal(result[player_id == "P2"]$psv, 20)
 })
 
-test_that("calculate_psv does NOT TOG-adjust efficiency stats", {
+test_that("calculate_psv excludes efficiency stats and bounces", {
   stats <- data.table::data.table(
     player_id = "P1",
     player_name = "Alice",
     season = 2025L, round = 1L,
     match_id = "M1",
-    tog = 0.5,
-    disposal_efficiency = 70  # percentage scale
+    tog = 1.0,
+    kicks = 10,
+    disposal_efficiency = 70,
+    bounces = 5
   )
 
-  coef_df <- data.frame(stat_name = "disposal_efficiency", beta = 1, stringsAsFactors = FALSE)
+  coef_df <- data.frame(
+    stat_name = c("kicks", "disposal_efficiency", "bounces"),
+    beta = c(1, 1, -1),
+    stringsAsFactors = FALSE
+  )
 
   result <- calculate_psv(stats, coef_df, center = FALSE)
 
-  # disposal_efficiency is an efficiency stat — should be converted to 0-1 (0.7)
-
-  # but NOT divided by TOG
-  expect_equal(result$psv, 0.7)
+  # Only kicks should contribute (efficiency + bounces excluded)
+  expect_equal(result$psv, 10)
 })
 
 test_that("calculate_psv handles SD normalization", {
@@ -292,22 +296,29 @@ test_that("calculate_psv_components ensures osv + dsv = psv", {
   expect_equal(result$osv + result$dsv, result$psv, tolerance = 1e-10)
 })
 
-test_that("calculate_psv derives contested_poss_rate from components", {
+test_that("calculate_psv excludes efficiency stats, bounces, and availability stats", {
   stats <- data.table::data.table(
     player_id = "P1",
     player_name = "Alice",
     season = 2025L, round = 1L,
     match_id = "M1",
     tog = 1.0,
-    contested_possessions = 8,
-    uncontested_possessions = 12,
-    contested_poss_rate = 0  # zero = not directly available
+    kicks = 10,
+    disposal_efficiency = 70,
+    goal_accuracy = 50,
+    bounces = 5,
+    cond_tog = 0.8
   )
 
-  coef_df <- data.frame(stat_name = "contested_poss_rate", beta = 1, stringsAsFactors = FALSE)
+  # Coefficients for all stats including excluded ones
+  coef_df <- data.frame(
+    stat_name = c("kicks", "disposal_efficiency", "goal_accuracy", "bounces", "cond_tog"),
+    beta = c(1, 1, 1, -1, 1),
+    stringsAsFactors = FALSE
+  )
 
   result <- calculate_psv(stats, coef_df, center = FALSE)
 
-  # Should derive: 8 / (8+12) = 0.4
-  expect_equal(result$psv, 0.4)
+  # Only kicks (10/1.0 = 10) should contribute — all others excluded
+  expect_equal(result$psv, 10)
 })

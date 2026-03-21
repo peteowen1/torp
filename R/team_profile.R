@@ -145,11 +145,27 @@ team_profile <- function(team_name, seasons = get_afl_season(), top_n = 10) {
     }
   }, error = function(e) data.frame())
 
+  # --- Team PSV season averages (from player game ratings) ---
+  psv_season <- tryCatch({
+    pgr <- data.table::as.data.table(load_player_game_ratings(seasons))
+    pgr_team <- pgr[team == tm$name]
+    if ("psv" %in% names(pgr_team) && nrow(pgr_team) > 0) {
+      psv_cols <- intersect(c("psv", "osv", "dsv", "epv"), names(pgr_team))
+      pgr_team[, c(
+        list(games = .N, players = data.table::uniqueN(player_id)),
+        lapply(.SD, function(x) round(mean(x, na.rm = TRUE), 2))
+      ), by = season, .SDcols = psv_cols]
+    } else {
+      data.table::data.table()
+    }
+  }, error = function(e) data.table::data.table())
+
   out <- list(
     team_info = team_info,
     team_rating = team_rating,
     season_record = season_record,
-    top_players = top_players
+    top_players = top_players,
+    psv_season = psv_season
   )
   class(out) <- "torp_team_profile"
   out
@@ -270,6 +286,12 @@ print.torp_team_profile <- function(x, ...) {
     } else {
       print(x$top_players, row.names = FALSE)
     }
+    cat("\n")
+  }
+
+  if (!is.null(x$psv_season) && nrow(x$psv_season) > 0) {
+    cat("--- PSV Season Averages (per player-game) ---\n")
+    print(x$psv_season, row.names = FALSE)
     cat("\n")
   }
 

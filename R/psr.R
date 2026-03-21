@@ -200,71 +200,28 @@ calculate_psv <- function(player_stats, coef_df, tog_adjust = TRUE, center = TRU
 
   coef_df <- coef_df[available, , drop = FALSE]
   stat_cols <- stat_cols[available]
-  betas <- coef_df$beta
 
-  # Identify efficiency stats (proportions, not counts) — don't TOG-adjust these
-  eff_stats <- tryCatch({
-    defs <- stat_rating_definitions()
-    defs$stat_name[defs$type == "efficiency"]
-  }, error = function(e) {
-    cli::cli_warn("Could not load stat rating definitions: {conditionMessage(e)}. Using hardcoded efficiency stats.")
-    c("disposal_efficiency", "goal_accuracy", "contested_poss_rate",
-      "hitout_win_pct", "kick_efficiency", "cond_tog", "squad_selection")
-  })
+  # Exclude stats that don't belong in per-game PSV:
+  #  - Efficiency %s (redundant — numerator + denominator already in as rate stats)
+  #  - bounces (negative coefficient, not causal)
+  #  - cond_tog, squad_selection (availability metrics, not performance)
+  psv_exclude <- c("disposal_efficiency", "goal_accuracy", "contested_poss_rate",
+                    "hitout_win_pct", "kick_efficiency", "bounces",
+                    "cond_tog", "squad_selection")
+  keep <- !stat_cols %in% psv_exclude
+  coef_df <- coef_df[keep, , drop = FALSE]
+  stat_cols <- stat_cols[keep]
+  betas <- coef_df$beta
 
   # Extract raw stat values
   mat <- as.matrix(dt[, stat_cols, with = FALSE])
   mat[is.na(mat)] <- 0
 
-  # Convert disposal_efficiency from 0-100 to 0-1 scale if needed
-  # (raw player_stats has it as percentage, _rating has it as proportion)
-  pct_stats <- c("disposal_efficiency", "kick_efficiency")
-  for (ps in pct_stats) {
-    col_idx <- which(stat_cols == ps)
-    if (length(col_idx) == 1 && max(mat[, col_idx], na.rm = TRUE) > 1) {
-      mat[, col_idx] <- mat[, col_idx] / 100
-    }
-  }
-
-  # Compute contested_poss_rate if not present but components are
-  cpri <- which(stat_cols == "contested_poss_rate")
-  if (length(cpri) == 1 && all(mat[, cpri] == 0)) {
-    if (all(c("contested_possessions", "uncontested_possessions") %in% names(dt))) {
-      cp <- as.numeric(dt$contested_possessions)
-      up <- as.numeric(dt$uncontested_possessions)
-      total <- cp + up
-      mat[, cpri] <- ifelse(total > 0, cp / total, 0)
-    }
-  }
-
-  # Compute hitout_win_pct if not present but components are
-  hwpi <- which(stat_cols == "hitout_win_pct")
-  if (length(hwpi) == 1 && all(mat[, hwpi] == 0)) {
-    if (all(c("hitouts_to_advantage", "hitouts") %in% names(dt))) {
-      hta <- as.numeric(dt$hitouts_to_advantage)
-      ho <- as.numeric(dt$hitouts)
-      mat[, hwpi] <- ifelse(ho > 0, hta / ho, 0)
-    }
-  }
-
-  # Compute goal_accuracy if not present but components are
-  gai <- which(stat_cols == "goal_accuracy")
-  if (length(gai) == 1 && all(mat[, gai] == 0)) {
-    if (all(c("goals", "shots_at_goal") %in% names(dt))) {
-      g <- as.numeric(dt$goals)
-      s <- as.numeric(dt$shots_at_goal)
-      mat[, gai] <- ifelse(s > 0, g / s, 0)
-    }
-  }
-
-  # TOG-adjust rate stats only (not efficiency stats)
+  # TOG-adjust: divide counts by TOG to get per-full-game rates
   if (tog_adjust && "tog" %in% names(dt)) {
     tog_vec <- as.numeric(dt$tog)
     tog_vec[is.na(tog_vec) | tog_vec <= 0] <- 1
-    is_eff <- stat_cols %in% eff_stats
-    for (j in which(!is_eff)) {
-      mat[, j] <- mat[, j] / tog_vec
-    }
+    mat <- mat / tog_vec
   }
 
   # Standardize using SDs from coefficient file (same scale as PSR training)
