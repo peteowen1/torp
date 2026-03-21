@@ -456,6 +456,15 @@ for (s in seasons) {
       }
     }
 
+    # Compute per-game TORP value: 50% EPV + 50% PSV (parallels career TORP = 50% EPR + 50% PSR)
+    if (all(c("epv", "psv") %in% names(pgr))) {
+      pgr$torp_value <- round(
+        TORP_EPR_WEIGHT * pgr$epv + (1 - TORP_EPR_WEIGHT) * pgr$psv,
+        1
+      )
+      pgr$torp_value_p80 <- round(pgr$torp_value / pgr$tog, 1)
+    }
+
     file_name <- paste0("player_game_ratings_", s)
     save_to_release(pgr, file_name, "player_game_ratings-data")
     cli::cli_alert_success("Released {file_name} ({nrow(pgr)} rows)")

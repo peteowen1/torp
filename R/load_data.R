@@ -995,9 +995,8 @@ load_ep_wp_charts <- function(seasons = get_afl_season(), rounds = TRUE, use_dis
 load_player_stat_ratings <- function(seasons = get_afl_season(), use_disk_cache = FALSE, columns = NULL) {
   seasons <- validate_seasons(seasons)
 
-  # Release tag/prefix still uses "player_skills" (torpdata infrastructure).
-  # Column normalisation below handles _skill → _rating mapping.
-  urls <- generate_urls("player_skills-data", "player_skills", seasons)
+  # Try new release tag first, fall back to old for backward compat
+  urls <- generate_urls("player_stat_ratings-data", "player_stat_ratings", seasons)
 
   out <- load_from_url(urls, seasons = seasons, use_disk_cache = use_disk_cache, columns = columns)
 

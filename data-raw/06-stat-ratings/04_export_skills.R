@@ -3,14 +3,14 @@
 # Export computed player stat ratings to torpdata releases.
 #
 # Input:  cache-skills/03_player_skills.rds
-# Output: torpdata player_skills-data release (parquet per season)
+# Output: torpdata player_stat_ratings-data release (parquet per season)
 
 # Setup ----
 devtools::load_all()
 
 # Config ----
 cache_dir <- file.path("data-raw", "cache-skills")
-release_tag <- "player_skills-data"
+release_tag <- "player_stat_ratings-data"
 
 # Load data ----
 cli::cli_h1("Loading computed stat ratings")
@@ -32,7 +32,7 @@ n_fail <- 0
 for (szn in seasons) {
   szn_data <- all_stat_ratings[all_stat_ratings$season == szn, ]
 
-  file_name <- paste0("player_skills_", szn)
+  file_name <- paste0("player_stat_ratings_", szn)
 
   tryCatch({
     save_to_release(szn_data, file_name, release_tag)

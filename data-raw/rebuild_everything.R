@@ -689,7 +689,7 @@ if (run_skills) {
   cli::cli_h1("Phase 7: Stat Ratings Pipeline")
   tic("phase_7_stat_ratings")
 
-  stat_ratings_dir <- file.path(torp_root, "data-raw", "06-skills")
+  stat_ratings_dir <- file.path(torp_root, "data-raw", "06-stat-ratings")
 
   stat_ratings_scripts <- c(
     "01_compute_match_stats.R",

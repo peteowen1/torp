@@ -64,7 +64,7 @@ utils::globalVariables(c(
   "pred_tog", "pred_selection", "pred_cond_tog",
   ".tog_safe", "tog_safe", "tog_wt", "lineup_tog",
   "i.squad_selection_rating", "i.cond_tog_rating", "i.n_80s", "i.wt_80s",
-  "psv_raw", "psv", "osv", "dsv",
+  "psv_raw", "psv", "osv", "dsv", "torp_value", "torp_value_p80",
 
   # data.table join prefixes
   "i.epr", "i.torp_shift_away", "i.torp_shift_home",
