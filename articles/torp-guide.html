@@ -188,6 +188,21 @@ via <code><a href="../reference/load_model_with_fallback.html">load_model_with_f
 <td>Pre-computed TORP ratings</td>
 <td>~113K rows total</td>
 </tr>
+<tr class="odd">
+<td><code><a href="../reference/load_player_stat_ratings.html">load_player_stat_ratings()</a></code></td>
+<td>Bayesian stat ratings per round</td>
+<td>~15K rows/season</td>
+</tr>
+<tr class="even">
+<td><code><a href="../reference/load_psr.html">load_psr()</a></code></td>
+<td>Player Stat Ratings (PSR/OSR/DSR)</td>
+<td>~15K rows/season</td>
+</tr>
+<tr class="odd">
+<td><code><a href="../reference/load_player_game_ratings.html">load_player_game_ratings()</a></code></td>
+<td>Per-game EPV + PSV + torp_value</td>
+<td>~10K rows/season</td>
+</tr>
 </tbody>
 </table>
 </div>
@@ -275,87 +290,156 @@ within a session. Models cached in memory to avoid reloading.</p>
 <div class="section level3">
 <h3 id="overview">Overview<a class="anchor" aria-label="anchor" href="#overview"></a>
 </h3>
-<p>TORP (Total Overall Rating Points) evaluates AFL players across four
-skill categories using play-by-play expected points data.</p>
-<pre><code><span><span class="va">torp</span> <span class="op">=</span> <span class="va">recv</span><span class="op">/</span><span class="op">(</span><span class="va">wt</span> <span class="op">+</span> <span class="va">prior_recv</span><span class="op">)</span> <span class="op">+</span> <span class="va">disp</span><span class="op">/</span><span class="op">(</span><span class="va">wt</span> <span class="op">+</span> <span class="va">prior_disp</span><span class="op">)</span></span>
-<span>     <span class="op">+</span> <span class="va">spoil</span><span class="op">/</span><span class="op">(</span><span class="va">wt</span> <span class="op">+</span> <span class="va">prior_spoil</span><span class="op">)</span> <span class="op">+</span> <span class="va">hitout</span><span class="op">/</span><span class="op">(</span><span class="va">wt</span> <span class="op">+</span> <span class="va">prior_hitout</span><span class="op">)</span></span></code></pre>
+<p>TORP blends two independent rating systems to evaluate AFL
+players:</p>
+<pre><code><span><span class="va">torp</span> <span class="op">=</span> <span class="fl">50</span><span class="op">% EPR + 50%</span> <span class="va">PSR</span></span></code></pre>
+<table class="table">
+<colgroup>
+<col width="18%">
+<col width="25%">
+<col width="18%">
+<col width="38%">
+</colgroup>
+<thead><tr class="header">
+<th>System</th>
+<th>Full Name</th>
+<th>Source</th>
+<th>What it measures</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td><strong>EPR</strong></td>
+<td>Expected Points Rating</td>
+<td>Play-by-play data</td>
+<td>Value from possessions (disposals, marks, spoils, hitouts)</td>
+</tr>
+<tr class="even">
+<td><strong>PSR</strong></td>
+<td>Player Stat Rating</td>
+<td>Box-score stats</td>
+<td>Predicted margin contribution from 48 rate stats</td>
+</tr>
+</tbody>
+</table>
 </div>
 <div class="section level3">
-<h3 id="rating-components">Rating Components<a class="anchor" aria-label="anchor" href="#rating-components"></a>
+<h3 id="naming-convention">Naming Convention<a class="anchor" aria-label="anchor" href="#naming-convention"></a>
 </h3>
-<p><strong>Disposal (torp_disp)</strong>: Value added through kicks and
-handballs (delta EPV). <strong>Receiving (torp_recv)</strong>: Value of
-receiving a disposal (EPV change to receiver). <strong>Spoil/Tackle
-(torp_spoil)</strong>: Defensive impact from spoils, tackles, pressure
-acts. <strong>Hitout (torp_hitout)</strong>: Ruck contribution from
-hitouts and ruck contests.</p>
+<p><strong>R = Rating</strong> (predictive, career-level) | <strong>V =
+Value</strong> (descriptive, per-game)</p>
+<table class="table">
+<thead><tr class="header">
+<th>Level</th>
+<th>EP System</th>
+<th>PS System</th>
+<th>Blended</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td><strong>Per-game value</strong></td>
+<td><code>epv</code></td>
+<td>
+<code>psv</code> / <code>osv</code> / <code>dsv</code>
+</td>
+<td><code>torp_value</code></td>
+</tr>
+<tr class="even">
+<td><strong>Career rating</strong></td>
+<td><code>epr</code></td>
+<td>
+<code>psr</code> / <code>osr</code> / <code>dsr</code>
+</td>
+<td><code>torp</code></td>
+</tr>
+<tr class="odd">
+<td><strong>Individual stat</strong></td>
+<td>—</td>
+<td>
+<code>goals_rating</code>, <code>tackles_rating</code>, etc.</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="section level3">
+<h3 id="epr-components">EPR Components<a class="anchor" aria-label="anchor" href="#epr-components"></a>
+</h3>
+<table class="table">
+<colgroup>
+<col width="30%">
+<col width="22%">
+<col width="47%">
+</colgroup>
+<thead><tr class="header">
+<th>Component</th>
+<th>Column</th>
+<th>What it captures</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td>Receiving</td>
+<td><code>recv_epr</code></td>
+<td>Winning the ball (contested possessions, marks, ground ball
+gets)</td>
+</tr>
+<tr class="even">
+<td>Disposal</td>
+<td><code>disp_epr</code></td>
+<td>Disposing of the ball (kicks, handballs, goals, inside 50s)</td>
+</tr>
+<tr class="odd">
+<td>Spoil/Tackle</td>
+<td><code>spoil_epr</code></td>
+<td>Defensive acts (spoils, tackles, pressure, intercepts)</td>
+</tr>
+<tr class="even">
+<td>Hitout</td>
+<td><code>hitout_epr</code></td>
+<td>Ruck work (hitouts, ruck contests, clearances)</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="section level3">
+<h3 id="psrpsv">PSR/PSV<a class="anchor" aria-label="anchor" href="#psrpsv"></a>
+</h3>
+<p>PSR applies glmnet coefficients to Bayesian-smoothed stat ratings
+(<code>goals_rating</code>, <code>tackles_rating</code>, etc.) to
+predict margin contribution. PSV applies the same coefficients to raw
+per-game stats.</p>
+<p>PSV uses <strong>rate stats only</strong> — efficiency percentages,
+bounces, and availability metrics are excluded.</p>
 </div>
 <div class="section level3">
 <h3 id="getting-ratings">Getting Ratings<a class="anchor" aria-label="anchor" href="#getting-ratings"></a>
 </h3>
 <div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://peteowen1.github.io/torp/">torp</a></span><span class="op">)</span></span>
-<span><span class="va">ratings</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/calculate_torp_ratings.html">calculate_torp_ratings</a></span><span class="op">(</span><span class="op">)</span></span>
-<span><span class="va">ratings</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/calculate_torp_ratings.html">calculate_torp_ratings</a></span><span class="op">(</span>season_val <span class="op">=</span> <span class="fl">2025</span>, round_val <span class="op">=</span> <span class="fl">15</span><span class="op">)</span></span>
 <span></span>
-<span><span class="co"># Game-level</span></span>
-<span><span class="va">game_ratings</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/player_game_ratings.html">player_game_ratings</a></span><span class="op">(</span>season_val <span class="op">=</span> <span class="fl">2025</span>, round_num <span class="op">=</span> <span class="fl">10</span><span class="op">)</span></span>
+<span><span class="co"># Career ratings (TORP = EPR + PSR)</span></span>
+<span><span class="va">ratings</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/calculate_torp.html">calculate_torp</a></span><span class="op">(</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Per-game values (EPV + PSV + torp_value)</span></span>
+<span><span class="va">game_ratings</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/player_game_ratings.html">player_game_ratings</a></span><span class="op">(</span>season_val <span class="op">=</span> <span class="fl">2026</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Season totals</span></span>
-<span><span class="va">season</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/player_season_ratings.html">player_season_ratings</a></span><span class="op">(</span><span class="fl">2025</span><span class="op">)</span></span></code></pre></div>
+<span><span class="va">season</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/player_season_ratings.html">player_season_ratings</a></span><span class="op">(</span><span class="fl">2026</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Player stat ratings (Bayesian estimates)</span></span>
+<span><span class="va">stat_ratings</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/load_player_stat_ratings.html">load_player_stat_ratings</a></span><span class="op">(</span><span class="fl">2026</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># PSV from raw stats</span></span>
+<span><span class="va">psv</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/calculate_psv.html">calculate_psv</a></span><span class="op">(</span><span class="va">player_stats</span>, <span class="va">coef_df</span><span class="op">)</span></span></code></pre></div>
 </div>
 <div class="section level3">
-<h3 id="decay-weighting">Decay Weighting<a class="anchor" aria-label="anchor" href="#decay-weighting"></a>
+<h3 id="player-profiles">Player Profiles<a class="anchor" aria-label="anchor" href="#player-profiles"></a>
 </h3>
-<pre><code><span><span class="va">weight</span> <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Log.html" class="external-link">exp</a></span><span class="op">(</span><span class="op">-</span><span class="va">days_since_game</span> <span class="op">/</span> <span class="va">decay_days</span><span class="op">)</span></span></code></pre>
-<p>Decay varies by component: Receiving 260 days, Spoil 295 days,
-Disposal/Hitout 700 days. A game one year ago has weight ~0.24 for
-receiving, ~0.59 for disposal.</p>
-</div>
-<div class="section level3">
-<h3 id="bayesian-shrinkage">Bayesian Shrinkage<a class="anchor" aria-label="anchor" href="#bayesian-shrinkage"></a>
-</h3>
-<table class="table">
-<thead><tr class="header">
-<th>Component</th>
-<th>Prior Games</th>
-<th>Decay (days)</th>
-</tr></thead>
-<tbody>
-<tr class="odd">
-<td>Receiving</td>
-<td>12.56</td>
-<td>260</td>
-</tr>
-<tr class="even">
-<td>Disposal</td>
-<td>5.83</td>
-<td>700</td>
-</tr>
-<tr class="odd">
-<td>Spoil</td>
-<td>3.00</td>
-<td>295</td>
-</tr>
-<tr class="even">
-<td>Hitout</td>
-<td>15.00</td>
-<td>700</td>
-</tr>
-</tbody>
-</table>
-</div>
-<div class="section level3">
-<h3 id="pre-loading-data">Pre-Loading Data<a class="anchor" aria-label="anchor" href="#pre-loading-data"></a>
-</h3>
-<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">player_game_data</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/load_player_game_data.html">load_player_game_data</a></span><span class="op">(</span><span class="cn">TRUE</span><span class="op">)</span></span>
-<span><span class="va">player_details</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/load_player_details.html">load_player_details</a></span><span class="op">(</span><span class="fl">2025</span><span class="op">)</span></span>
-<span><span class="va">ratings</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/calculate_torp_ratings.html">calculate_torp_ratings</a></span><span class="op">(</span></span>
-<span>  season_val <span class="op">=</span> <span class="fl">2025</span>, round_val <span class="op">=</span> <span class="fl">15</span>,</span>
-<span>  plyr_tm_df <span class="op">=</span> <span class="va">player_details</span>,</span>
-<span>  player_game_data <span class="op">=</span> <span class="va">player_game_data</span></span>
-<span><span class="op">)</span></span></code></pre></div>
+<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># Full profile with yearly stats, TORP ratings, and PSV averages</span></span>
+<span><span class="va">profile</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/player_profile.html">player_profile</a></span><span class="op">(</span><span class="st">"Heeney"</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Stat rating profile with percentile ranks</span></span>
+<span><span class="va">skill_profile</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/player_stat_rating_profile.html">player_stat_rating_profile</a></span><span class="op">(</span><span class="st">"Heeney"</span><span class="op">)</span></span></code></pre></div>
 <hr>
 </div>
 </div>
@@ -367,7 +451,7 @@ cached in memory.</p>
 <div class="section level3">
 <h3 id="complete-pipeline">Complete Pipeline<a class="anchor" aria-label="anchor" href="#complete-pipeline"></a>
 </h3>
-<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://peteowen1.github.io/torp/">torp</a></span><span class="op">)</span></span>
 <span><span class="va">pbp</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/load_pbp.html">load_pbp</a></span><span class="op">(</span><span class="fl">2025</span>, rounds <span class="op">=</span> <span class="fl">1</span><span class="op">:</span><span class="fl">10</span><span class="op">)</span></span>
 <span><span class="va">pbp_clean</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/clean_pbp.html">clean_pbp</a></span><span class="op">(</span><span class="va">pbp</span><span class="op">)</span></span>
@@ -405,7 +489,7 @@ cached in memory.</p>
 team TORP ratings.</p>
 <p>For each unplayed match: expected margin from TORP difference + home
 advantage (6 pts) + random noise (SD = 26 pts).</p>
-<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">sim_result</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/simulate_season.html">simulate_season</a></span><span class="op">(</span><span class="va">sim_teams</span>, <span class="va">sim_games</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Multiple simulations</span></span>

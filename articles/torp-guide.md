@@ -30,18 +30,21 @@
 
 ### Data Types
 
-| Function                                                                                         | Data                          | Approx Size       |
-|--------------------------------------------------------------------------------------------------|-------------------------------|-------------------|
-| [`load_pbp()`](https://peteowen1.github.io/torp/reference/load_pbp.md)                           | Play-by-play events           | ~320K rows/season |
-| [`load_chains()`](https://peteowen1.github.io/torp/reference/load_chains.md)                     | Possession sequences          | ~160K rows/season |
-| [`load_player_stats()`](https://peteowen1.github.io/torp/reference/load_player_stats.md)         | Player game stats             | ~10K rows/season  |
-| [`load_player_game_data()`](https://peteowen1.github.io/torp/reference/load_player_game_data.md) | Player credit points for TORP | ~10K rows/season  |
-| [`load_fixtures()`](https://peteowen1.github.io/torp/reference/load_fixtures.md)                 | Match schedule                | ~200 rows/season  |
-| [`load_results()`](https://peteowen1.github.io/torp/reference/load_results.md)                   | Match scores                  | ~200 rows/season  |
-| [`load_teams()`](https://peteowen1.github.io/torp/reference/load_teams.md)                       | Team lineups                  | ~10K rows/season  |
-| [`load_player_details()`](https://peteowen1.github.io/torp/reference/load_player_details.md)     | Player bio info               | ~800 rows/season  |
-| [`load_xg()`](https://peteowen1.github.io/torp/reference/load_xg.md)                             | Expected goals                | ~200 rows/season  |
-| [`load_torp_ratings()`](https://peteowen1.github.io/torp/reference/load_torp_ratings.md)         | Pre-computed TORP ratings     | ~113K rows total  |
+| Function                                                                                               | Data                              | Approx Size       |
+|--------------------------------------------------------------------------------------------------------|-----------------------------------|-------------------|
+| [`load_pbp()`](https://peteowen1.github.io/torp/reference/load_pbp.md)                                 | Play-by-play events               | ~320K rows/season |
+| [`load_chains()`](https://peteowen1.github.io/torp/reference/load_chains.md)                           | Possession sequences              | ~160K rows/season |
+| [`load_player_stats()`](https://peteowen1.github.io/torp/reference/load_player_stats.md)               | Player game stats                 | ~10K rows/season  |
+| [`load_player_game_data()`](https://peteowen1.github.io/torp/reference/load_player_game_data.md)       | Player credit points for TORP     | ~10K rows/season  |
+| [`load_fixtures()`](https://peteowen1.github.io/torp/reference/load_fixtures.md)                       | Match schedule                    | ~200 rows/season  |
+| [`load_results()`](https://peteowen1.github.io/torp/reference/load_results.md)                         | Match scores                      | ~200 rows/season  |
+| [`load_teams()`](https://peteowen1.github.io/torp/reference/load_teams.md)                             | Team lineups                      | ~10K rows/season  |
+| [`load_player_details()`](https://peteowen1.github.io/torp/reference/load_player_details.md)           | Player bio info                   | ~800 rows/season  |
+| [`load_xg()`](https://peteowen1.github.io/torp/reference/load_xg.md)                                   | Expected goals                    | ~200 rows/season  |
+| [`load_torp_ratings()`](https://peteowen1.github.io/torp/reference/load_torp_ratings.md)               | Pre-computed TORP ratings         | ~113K rows total  |
+| [`load_player_stat_ratings()`](https://peteowen1.github.io/torp/reference/load_player_stat_ratings.md) | Bayesian stat ratings per round   | ~15K rows/season  |
+| [`load_psr()`](https://peteowen1.github.io/torp/reference/load_psr.md)                                 | Player Stat Ratings (PSR/OSR/DSR) | ~15K rows/season  |
+| [`load_player_game_ratings()`](https://peteowen1.github.io/torp/reference/load_player_game_ratings.md) | Per-game EPV + PSV + torp_value   | ~10K rows/season  |
 
 ### Loading Examples
 
@@ -86,61 +89,73 @@ clear_model_cache()
 
 ### Overview
 
-TORP (Total Overall Rating Points) evaluates AFL players across four
-skill categories using play-by-play expected points data.
+TORP blends two independent rating systems to evaluate AFL players:
 
-    torp = recv/(wt + prior_recv) + disp/(wt + prior_disp)
-         + spoil/(wt + prior_spoil) + hitout/(wt + prior_hitout)
+    torp = 50% EPR + 50% PSR
 
-### Rating Components
+| System  | Full Name              | Source            | What it measures                                           |
+|---------|------------------------|-------------------|------------------------------------------------------------|
+| **EPR** | Expected Points Rating | Play-by-play data | Value from possessions (disposals, marks, spoils, hitouts) |
+| **PSR** | Player Stat Rating     | Box-score stats   | Predicted margin contribution from 48 rate stats           |
 
-**Disposal (torp_disp)**: Value added through kicks and handballs (delta
-EPV). **Receiving (torp_recv)**: Value of receiving a disposal (EPV
-change to receiver). **Spoil/Tackle (torp_spoil)**: Defensive impact
-from spoils, tackles, pressure acts. **Hitout (torp_hitout)**: Ruck
-contribution from hitouts and ruck contests.
+### Naming Convention
+
+**R = Rating** (predictive, career-level) \| **V = Value** (descriptive,
+per-game)
+
+| Level               | EP System | PS System                              | Blended      |
+|---------------------|-----------|----------------------------------------|--------------|
+| **Per-game value**  | `epv`     | `psv` / `osv` / `dsv`                  | `torp_value` |
+| **Career rating**   | `epr`     | `psr` / `osr` / `dsr`                  | `torp`       |
+| **Individual stat** | —         | `goals_rating`, `tackles_rating`, etc. | —            |
+
+### EPR Components
+
+| Component    | Column       | What it captures                                                  |
+|--------------|--------------|-------------------------------------------------------------------|
+| Receiving    | `recv_epr`   | Winning the ball (contested possessions, marks, ground ball gets) |
+| Disposal     | `disp_epr`   | Disposing of the ball (kicks, handballs, goals, inside 50s)       |
+| Spoil/Tackle | `spoil_epr`  | Defensive acts (spoils, tackles, pressure, intercepts)            |
+| Hitout       | `hitout_epr` | Ruck work (hitouts, ruck contests, clearances)                    |
+
+### PSR/PSV
+
+PSR applies glmnet coefficients to Bayesian-smoothed stat ratings
+(`goals_rating`, `tackles_rating`, etc.) to predict margin contribution.
+PSV applies the same coefficients to raw per-game stats.
+
+PSV uses **rate stats only** — efficiency percentages, bounces, and
+availability metrics are excluded.
 
 ### Getting Ratings
 
 ``` r
 library(torp)
-ratings <- calculate_torp_ratings()
-ratings <- calculate_torp_ratings(season_val = 2025, round_val = 15)
 
-# Game-level
-game_ratings <- player_game_ratings(season_val = 2025, round_num = 10)
+# Career ratings (TORP = EPR + PSR)
+ratings <- calculate_torp()
+
+# Per-game values (EPV + PSV + torp_value)
+game_ratings <- player_game_ratings(season_val = 2026)
 
 # Season totals
-season <- player_season_ratings(2025)
+season <- player_season_ratings(2026)
+
+# Player stat ratings (Bayesian estimates)
+stat_ratings <- load_player_stat_ratings(2026)
+
+# PSV from raw stats
+psv <- calculate_psv(player_stats, coef_df)
 ```
 
-### Decay Weighting
-
-    weight = exp(-days_since_game / decay_days)
-
-Decay varies by component: Receiving 260 days, Spoil 295 days,
-Disposal/Hitout 700 days. A game one year ago has weight ~0.24 for
-receiving, ~0.59 for disposal.
-
-### Bayesian Shrinkage
-
-| Component | Prior Games | Decay (days) |
-|-----------|-------------|--------------|
-| Receiving | 12.56       | 260          |
-| Disposal  | 5.83        | 700          |
-| Spoil     | 3.00        | 295          |
-| Hitout    | 15.00       | 700          |
-
-### Pre-Loading Data
+### Player Profiles
 
 ``` r
-player_game_data <- load_player_game_data(TRUE)
-player_details <- load_player_details(2025)
-ratings <- calculate_torp_ratings(
-  season_val = 2025, round_val = 15,
-  plyr_tm_df = player_details,
-  player_game_data = player_game_data
-)
+# Full profile with yearly stats, TORP ratings, and PSV averages
+profile <- player_profile("Heeney")
+
+# Stat rating profile with percentile ranks
+skill_profile <- player_stat_rating_profile("Heeney")
 ```
 
 ------------------------------------------------------------------------

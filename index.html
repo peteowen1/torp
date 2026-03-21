@@ -101,19 +101,19 @@
 <div class="section level3">
 <h3 id="player-ratings">Player Ratings<a class="anchor" aria-label="anchor" href="#player-ratings"></a>
 </h3>
-<p>TORP (Total Overall Rating Points) rates players across four components: disposals, receiving, spoils/tackles, and hitouts.</p>
+<p>TORP blends two independent rating systems: <strong>EPR</strong> (from play-by-play data) and <strong>PSR</strong> (from box-score stats via Bayesian estimation + glmnet). Per-game equivalents <strong>EPV</strong> and <strong>PSV</strong> measure single-game contribution.</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="co"># Current TORP ratings</span></span>
-<span><span class="va">ratings</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/calculate_torp_ratings.html">calculate_torp_ratings</a></span><span class="op">(</span><span class="op">)</span></span>
+<code class="sourceCode R"><span><span class="co"># Career TORP ratings (EPR + PSR blend)</span></span>
+<span><span class="va">ratings</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/calculate_torp.html">calculate_torp</a></span><span class="op">(</span><span class="op">)</span></span>
 <span></span>
-<span><span class="co"># Ratings at a specific point in time</span></span>
-<span><span class="va">ratings</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/calculate_torp_ratings.html">calculate_torp_ratings</a></span><span class="op">(</span>season_val <span class="op">=</span> <span class="fl">2025</span>, round_val <span class="op">=</span> <span class="fl">10</span><span class="op">)</span></span>
-<span></span>
-<span><span class="co"># Game-level performance</span></span>
-<span><span class="va">game_ratings</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/player_game_ratings.html">player_game_ratings</a></span><span class="op">(</span>season_val <span class="op">=</span> <span class="fl">2025</span>, round_num <span class="op">=</span> <span class="fl">10</span><span class="op">)</span></span>
+<span><span class="co"># Per-game values (EPV + PSV + torp_value)</span></span>
+<span><span class="va">game_ratings</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/player_game_ratings.html">player_game_ratings</a></span><span class="op">(</span>season_val <span class="op">=</span> <span class="fl">2026</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Season totals</span></span>
-<span><span class="va">season_totals</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/player_season_ratings.html">player_season_ratings</a></span><span class="op">(</span><span class="fl">2025</span><span class="op">)</span></span></code></pre></div>
+<span><span class="va">season_totals</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/player_season_ratings.html">player_season_ratings</a></span><span class="op">(</span><span class="fl">2026</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Bayesian stat ratings (per-stat next-game predictions)</span></span>
+<span><span class="va">stat_ratings</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/load_player_stat_ratings.html">load_player_stat_ratings</a></span><span class="op">(</span><span class="fl">2026</span><span class="op">)</span></span></code></pre></div>
 </div>
 <div class="section level3">
 <h3 id="prediction-models">Prediction Models<a class="anchor" aria-label="anchor" href="#prediction-models"></a>

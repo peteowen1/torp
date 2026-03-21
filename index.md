@@ -41,21 +41,23 @@ pbp_all <- load_pbp(TRUE, rounds = TRUE)
 
 ### Player Ratings
 
-TORP (Total Overall Rating Points) rates players across four components:
-disposals, receiving, spoils/tackles, and hitouts.
+TORP blends two independent rating systems: **EPR** (from play-by-play
+data) and **PSR** (from box-score stats via Bayesian estimation +
+glmnet). Per-game equivalents **EPV** and **PSV** measure single-game
+contribution.
 
 ``` r
-# Current TORP ratings
-ratings <- calculate_torp_ratings()
+# Career TORP ratings (EPR + PSR blend)
+ratings <- calculate_torp()
 
-# Ratings at a specific point in time
-ratings <- calculate_torp_ratings(season_val = 2025, round_val = 10)
-
-# Game-level performance
-game_ratings <- player_game_ratings(season_val = 2025, round_num = 10)
+# Per-game values (EPV + PSV + torp_value)
+game_ratings <- player_game_ratings(season_val = 2026)
 
 # Season totals
-season_totals <- player_season_ratings(2025)
+season_totals <- player_season_ratings(2026)
+
+# Bayesian stat ratings (per-stat next-game predictions)
+stat_ratings <- load_player_stat_ratings(2026)
 ```
 
 ### Prediction Models
