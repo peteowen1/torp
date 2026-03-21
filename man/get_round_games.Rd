@@ -4,7 +4,7 @@
 \alias{get_round_games}
 \title{Get Round Games}
 \usage{
-get_round_games(season, round)
+get_round_games(season, round, concluded_only = TRUE)
 }
 \arguments{
 \item{season}{The AFL season year (numeric).}

@@ -8,15 +8,15 @@
 #' Calculate Player Skill Ratings (PSR)
 #'
 #' Computes PSR for each player-round by applying glmnet coefficients to
-#' individual player skill values. PSR represents each player's predicted
-#' contribution to match margin based on their skill profile.
+#' individual player stat rating values. PSR represents each player's predicted
+#' contribution to match margin based on their stat rating profile.
 #'
-#' @param skills A data.table/data.frame from \code{load_player_skills()},
+#' @param skills A data.table/data.frame from \code{load_player_stat_ratings()},
 #'   containing \code{player_id}, \code{player_name}, \code{season},
-#'   \code{round}, \code{pos_group}, and \code{*_skill} columns.
+#'   \code{round}, \code{pos_group}, and \code{*_rating} columns.
 #' @param coef_df A data.frame with columns \code{stat_name} and \code{beta},
 #'   as produced by the PSR training script. If an \code{sd} column is present,
-#'   each skill is divided by its SD before multiplying by beta (i.e. the
+#'   each stat rating is divided by its SD before multiplying by beta (i.e. the
 #'   coefficients are on the standardized scale).
 #' @param center Logical. If TRUE (default), subtract the league mean so
 #'   PSR = contribution above average player.
@@ -43,12 +43,17 @@ calculate_psr <- function(skills, coef_df, center = TRUE) {
     return(dt[, c(id_cols, "psr_raw", "psr"), with = FALSE])
   }
 
-  # Map stat_name to skill column name
-  skill_cols <- paste0(coef_df$stat_name, "_skill")
+  # Map stat_name to rating column name (try _rating first, fall back to _skill)
+  skill_cols <- paste0(coef_df$stat_name, "_rating")
   available <- skill_cols %in% names(dt)
+  # Backward compat: if _rating columns not found, try _skill
+  if (sum(available) == 0) {
+    skill_cols <- paste0(coef_df$stat_name, "_skill")
+    available <- skill_cols %in% names(dt)
+  }
 
   if (sum(available) == 0) {
-    cli::cli_abort("No matching skill columns found in data")
+    cli::cli_abort("No matching stat rating columns found in data")
   }
   if (any(!available)) {
     missing <- coef_df$stat_name[!available]
@@ -139,22 +144,256 @@ calculate_psr_components <- function(skills, coef_df, osr_coef_df, dsr_coef_df,
 }
 
 
+# ============================================================================
+# PSV: Per-Game Stat Value
+# ============================================================================
+
+#' Calculate Player Stat Value (PSV) from Per-Game Stats
+#'
+#' Applies the same glmnet coefficients used by PSR to raw single-game stats
+#' to produce a per-game margin contribution score. While PSR uses Bayesian
+#' smoothed career estimates (\code{_rating} columns), PSV uses actual
+#' box-score stats from a single game.
+#'
+#' @param player_stats A data.table/data.frame of per-game player data with
+#'   raw stat columns (e.g. \code{goals}, \code{kicks}, \code{disposals}) and
+#'   a \code{tog} column (time-on-ground as a fraction 0-1).
+#' @param coef_df A data.frame with columns \code{stat_name} and \code{beta}
+#'   (same format as for \code{calculate_psr()}). If an \code{sd} column is
+#'   present, raw rates are divided by SD before applying betas.
+#' @param tog_adjust Logical. If TRUE (default), divide raw counts by TOG to
+#'   get per-full-game rates (matching the scale the coefficients were trained
+#'   on). If FALSE, use raw counts directly.
+#' @param center Logical. If TRUE (default), subtract the per-round league mean
+#'   so PSV represents contribution above the average player that round.
+#'
+#' @return A data.table with identifier columns plus \code{psv_raw} and
+#'   \code{psv}.
+#'
+#' @export
+calculate_psv <- function(player_stats, coef_df, tog_adjust = TRUE, center = TRUE) {
+  dt <- data.table::as.data.table(player_stats)
+
+  if (!all(c("stat_name", "beta") %in% names(coef_df))) {
+    cli::cli_abort("{.arg coef_df} must have columns {.val stat_name} and {.val beta}")
+  }
+
+  coef_df <- coef_df[coef_df$beta != 0, , drop = FALSE]
+
+  if (nrow(coef_df) == 0) {
+    dt[, c("psv_raw", "psv") := 0]
+    id_cols <- intersect(c("player_id", "player_name", "season", "round", "match_id", "team"), names(dt))
+    return(dt[, c(id_cols, "psv_raw", "psv"), with = FALSE])
+  }
+
+  # Map stat_name to raw stat columns (direct column names, not _rating)
+  stat_cols <- coef_df$stat_name
+  available <- stat_cols %in% names(dt)
+
+  if (sum(available) == 0) {
+    cli::cli_abort("No matching stat columns found in data for PSV calculation")
+  }
+  if (any(!available)) {
+    missing <- stat_cols[!available]
+    cli::cli_warn("Stat columns not found (skipped): {paste(missing, collapse = ', ')}")
+  }
+
+  coef_df <- coef_df[available, , drop = FALSE]
+  stat_cols <- stat_cols[available]
+  betas <- coef_df$beta
+
+  # Identify efficiency stats (proportions, not counts) — don't TOG-adjust these
+  eff_stats <- tryCatch({
+    defs <- stat_rating_definitions()
+    defs$stat_name[defs$type == "efficiency"]
+  }, error = function(e) {
+    cli::cli_warn("Could not load stat rating definitions: {conditionMessage(e)}. Using hardcoded efficiency stats.")
+    c("disposal_efficiency", "goal_accuracy", "contested_poss_rate",
+      "hitout_win_pct", "kick_efficiency", "cond_tog", "squad_selection")
+  })
+
+  # Extract raw stat values
+  mat <- as.matrix(dt[, stat_cols, with = FALSE])
+  mat[is.na(mat)] <- 0
+
+  # Convert disposal_efficiency from 0-100 to 0-1 scale if needed
+  # (raw player_stats has it as percentage, _rating has it as proportion)
+  pct_stats <- c("disposal_efficiency", "kick_efficiency")
+  for (ps in pct_stats) {
+    col_idx <- which(stat_cols == ps)
+    if (length(col_idx) == 1 && max(mat[, col_idx], na.rm = TRUE) > 1) {
+      mat[, col_idx] <- mat[, col_idx] / 100
+    }
+  }
+
+  # Compute contested_poss_rate if not present but components are
+  cpri <- which(stat_cols == "contested_poss_rate")
+  if (length(cpri) == 1 && all(mat[, cpri] == 0)) {
+    if (all(c("contested_possessions", "uncontested_possessions") %in% names(dt))) {
+      cp <- as.numeric(dt$contested_possessions)
+      up <- as.numeric(dt$uncontested_possessions)
+      total <- cp + up
+      mat[, cpri] <- ifelse(total > 0, cp / total, 0)
+    }
+  }
+
+  # Compute hitout_win_pct if not present but components are
+  hwpi <- which(stat_cols == "hitout_win_pct")
+  if (length(hwpi) == 1 && all(mat[, hwpi] == 0)) {
+    if (all(c("hitouts_to_advantage", "hitouts") %in% names(dt))) {
+      hta <- as.numeric(dt$hitouts_to_advantage)
+      ho <- as.numeric(dt$hitouts)
+      mat[, hwpi] <- ifelse(ho > 0, hta / ho, 0)
+    }
+  }
+
+  # Compute goal_accuracy if not present but components are
+  gai <- which(stat_cols == "goal_accuracy")
+  if (length(gai) == 1 && all(mat[, gai] == 0)) {
+    if (all(c("goals", "shots_at_goal") %in% names(dt))) {
+      g <- as.numeric(dt$goals)
+      s <- as.numeric(dt$shots_at_goal)
+      mat[, gai] <- ifelse(s > 0, g / s, 0)
+    }
+  }
+
+  # TOG-adjust rate stats only (not efficiency stats)
+  if (tog_adjust && "tog" %in% names(dt)) {
+    tog_vec <- as.numeric(dt$tog)
+    tog_vec[is.na(tog_vec) | tog_vec <= 0] <- 1
+    is_eff <- stat_cols %in% eff_stats
+    for (j in which(!is_eff)) {
+      mat[, j] <- mat[, j] / tog_vec
+    }
+  }
+
+  # Standardize using SDs from coefficient file (same scale as PSR training)
+  if ("sd" %in% names(coef_df)) {
+    sds <- coef_df$sd
+    sds[sds == 0 | is.na(sds)] <- 1
+    mat <- sweep(mat, 2, sds, "/")
+  }
+
+  dt[, psv_raw := as.numeric(mat %*% betas)]
+
+  if (center) {
+    # Center within each round (so PSV = contribution above average that round)
+    group_cols <- intersect(c("season", "round"), names(dt))
+    if (length(group_cols) > 0) {
+      dt[, psv := psv_raw - mean(psv_raw, na.rm = TRUE), by = group_cols]
+    } else {
+      dt[, psv := psv_raw - mean(psv_raw, na.rm = TRUE)]
+    }
+  } else {
+    dt[, psv := psv_raw]
+  }
+
+  id_cols <- intersect(
+    c("player_id", "player_name", "season", "round", "match_id",
+      "team", "opponent", "tog"),
+    names(dt)
+  )
+
+  dt[, c(id_cols, "psv_raw", "psv"), with = FALSE]
+}
+
+
+#' Calculate PSV with Offensive/Defensive Decomposition
+#'
+#' Applies offensive and defensive coefficient models to per-game stats,
+#' producing \code{psv}, \code{osv}, and \code{dsv} columns where
+#' \code{osv + dsv = psv}.
+#'
+#' @inheritParams calculate_psv
+#' @param osr_coef_df Coefficient data.frame for the offensive model.
+#' @param dsr_coef_df Coefficient data.frame for the defensive model.
+#'
+#' @return A data.table with identifier columns plus \code{psv_raw},
+#'   \code{psv}, \code{osv}, \code{dsv}.
+#'
+#' @export
+calculate_psv_components <- function(player_stats, coef_df, osr_coef_df,
+                                      dsr_coef_df, tog_adjust = TRUE,
+                                      center = TRUE) {
+  psv_result <- calculate_psv(player_stats, coef_df, tog_adjust = tog_adjust,
+                               center = center)
+  osv_result <- calculate_psv(player_stats, osr_coef_df, tog_adjust = tog_adjust,
+                               center = center)
+  dsv_result <- calculate_psv(player_stats, dsr_coef_df, tog_adjust = tog_adjust,
+                               center = center)
+
+  # Additive shift so osv + dsv = psv
+  raw_osv <- osv_result$psv
+  raw_dsv <- dsv_result$psv
+  delta <- (psv_result$psv - raw_osv - raw_dsv) / 2
+
+  psv_result[, osv := raw_osv + delta]
+  psv_result[, dsv := raw_dsv + delta]
+
+  psv_result
+}
+
+
+#' Convenience wrapper to compute PSV from coefficient files
+#'
+#' Loads the margin, offensive, and defensive coefficient CSVs from
+#' \code{inst/extdata} and calls \code{\link{calculate_psv_components}}.
+#'
+#' @inheritParams calculate_psv
+#' @param psr_coef_path Path to the margin PSR coefficient CSV. If NULL,
+#'   searches \code{inst/extdata/psr_v2_coefficients.csv}.
+#'
+#' @return A data.table with \code{psv}, \code{osv}, \code{dsv} columns.
+#'
+#' @keywords internal
+.compute_psv <- function(player_stats, psr_coef_path = NULL, tog_adjust = TRUE,
+                          center = TRUE) {
+  if (is.null(psr_coef_path)) {
+    psr_coef_path <- system.file("extdata", "psr_v2_coefficients.csv", package = "torp")
+    if (psr_coef_path == "") {
+      psr_coef_path <- file.path(
+        find.package("torp", quiet = TRUE)[1] %||% ".",
+        "data-raw", "cache-skills", "psr_v2_coefficients.csv"
+      )
+    }
+  }
+
+  if (!file.exists(psr_coef_path)) {
+    cli::cli_warn("PSR coefficient file not found: {psr_coef_path}")
+    return(NULL)
+  }
+
+  coef_df <- utils::read.csv(psr_coef_path)
+
+  coef_dir <- dirname(psr_coef_path)
+  osr_path <- file.path(coef_dir, "osr_v2_coefficients.csv")
+  dsr_path <- file.path(coef_dir, "dsr_v2_coefficients.csv")
+
+  if (file.exists(osr_path) && file.exists(dsr_path)) {
+    osr_coef_df <- utils::read.csv(osr_path)
+    dsr_coef_df <- utils::read.csv(dsr_path)
+    calculate_psv_components(player_stats, coef_df, osr_coef_df, dsr_coef_df,
+                              tog_adjust = tog_adjust, center = center)
+  } else {
+    cli::cli_inform("OSR/DSR coefficient files not found -- computing PSV only (no osv/dsv decomposition)")
+    calculate_psv(player_stats, coef_df, tog_adjust = tog_adjust, center = center)
+  }
+}
+
+
 #' Load PSR Coefficient Files and Compute Components
 #'
 #' Convenience wrapper that loads the margin, offensive, and defensive
-#' coefficient CSVs from \code{inst/extdata} (or a fallback path) and
-#' calls \code{\link{calculate_psr_components}}.
+#' coefficient CSVs from \code{inst/extdata} and calls
+#' \code{\link{calculate_psr_components}}.
 #'
 #' @inheritParams calculate_psr
 #' @param psr_coef_path Path to the margin PSR coefficient CSV. If NULL,
 #'   searches \code{inst/extdata/psr_v2_coefficients.csv}.
 #'
-#' @return A data.table with \code{psr}, \code{osr}, \code{dsr} columns,
-#'   or the result of \code{calculate_psr()} (without osr/dsr) if the
-#'   offensive/defensive coefficient files are not found.
-#'
+#' @return A data.table with \code{psr}, \code{osr}, \code{dsr} columns.
 #' @keywords internal
-.compute_psr_from_skills <- function(skills, psr_coef_path = NULL, center = TRUE) {
+.compute_psr_from_stat_ratings <- function(skills, psr_coef_path = NULL, center = TRUE) {
   # Resolve margin coefficient path
 
   if (is.null(psr_coef_path)) {

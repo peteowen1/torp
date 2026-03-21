@@ -1,10 +1,14 @@
-# Player Skill Estimation
-# ========================
-# Bayesian conjugate prior estimation of per-stat player skills,
+# Player Stat Rating Estimation
+# ==============================
+# Bayesian conjugate prior estimation of per-stat player ratings,
 # with exponential time decay and position-specific priors.
 #
 # Rate stats use Gamma-Poisson conjugate model (counts per game).
 # Efficiency stats use Beta-Binomial conjugate model (proportions).
+#
+# Output columns use `_rating` suffix (e.g. `goals_rating`).
+# These are individual stat-level predictions, distinct from composite
+# ratings like PSR/EPR.
 
 
 # ============================================================================
@@ -17,7 +21,7 @@
 #' @return Character vector of position groups (DEF/MID/FWD/RUCK), NA for unknown.
 #' @keywords internal
 .map_position_group <- function(pos) {
-  pm <- skill_position_map()
+  pm <- stat_rating_position_map()
   # Build reverse lookup: position -> group
   lookup <- character(0)
   for (grp in names(pm)) {
@@ -34,7 +38,7 @@
 #' @param dt A data.table with player_id and position columns.
 #' @return The data.table with added `pos_group` column.
 #' @keywords internal
-.resolve_skill_positions <- function(dt) {
+.resolve_stat_rating_positions <- function(dt) {
   # Use 'listed_position' column (listed position: KEY_DEFENDER, MIDFIELDER, etc.)
   # Fallback to 'position' if 'listed_position' not available
   pos_col <- if ("listed_position" %in% names(dt)) "listed_position" else "position"
@@ -64,10 +68,10 @@
 # Data preparation
 # ============================================================================
 
-#' Prepare data for skill estimation
+#' Prepare data for stat rating estimation
 #'
 #' Joins player game data with player stats to produce a single table with
-#' all required columns for the skill estimation pipeline.
+#' all required columns for the stat rating estimation pipeline.
 #'
 #' @param player_game_data Player game data from \code{load_player_game_data(TRUE)}.
 #' @param player_stats Player stats from \code{load_player_stats(TRUE)}.
@@ -76,18 +80,18 @@
 #'
 #' @return A data.table with one row per player-match containing:
 #'   identifiers (player_id, match_id, player_name, season, round, team),
-#'   match_date_skill (Date), tog (time on ground as fraction), position,
-#'   and all stat columns referenced by \code{skill_stat_definitions()}.
+#'   match_date_rating (Date), tog (time on ground as fraction), position,
+#'   and all stat columns referenced by \code{stat_rating_definitions()}.
 #'
 #' @importFrom data.table as.data.table
 #' @keywords internal
-.prepare_skill_data <- function(player_game_data, player_stats, rosters = NULL,
+.prepare_stat_rating_data <- function(player_game_data, player_stats, rosters = NULL,
                                fixtures = NULL) {
   pgd <- data.table::as.data.table(player_game_data)
   ps <- data.table::as.data.table(player_stats)
 
   # Compute match_date from utc_start_time
-  pgd[, match_date_skill := as.Date(utc_start_time)]
+  pgd[, match_date_rating := as.Date(utc_start_time)]
 
   # Compute TOG as fraction and constant denominator for Beta-Binomial model
   pgd[, tog := time_on_ground_percentage / 100]
@@ -106,7 +110,7 @@
     mid_col <- "match_id"
 
     # Find all stat columns needed by skill definitions but missing from pgd
-    stat_defs_merge <- skill_stat_definitions()
+    stat_defs_merge <- stat_rating_definitions()
     needed_cols <- unique(c(
       stats::na.omit(stat_defs_merge$source_col),
       stats::na.omit(stat_defs_merge$success_col),
@@ -153,10 +157,10 @@
   }
 
   # Map positions to groups
-  pgd <- .resolve_skill_positions(pgd)
+  pgd <- .resolve_stat_rating_positions(pgd)
 
   # Select essential columns + all stat source columns
-  stat_defs <- skill_stat_definitions()
+  stat_defs <- stat_rating_definitions()
   rate_cols <- stats::na.omit(unique(stat_defs$source_col))
   # For efficiency stats, parse columns from success_col and attempts_col
   eff_cols <- unique(c(
@@ -169,7 +173,7 @@
   all_stat_cols <- unique(c(rate_cols, eff_cols))
   keep_cols <- unique(c(
     "player_id", "match_id", "player_name", "season", "round",
-    "match_date_skill", "tog", "pos_group", "position",
+    "match_date_rating", "tog", "pos_group", "position",
     intersect(all_stat_cols, names(pgd)),
     "disposal_efficiency_pct_x_disposals"
   ))
@@ -191,7 +195,7 @@
   # efficiency stats have 0 successes and 0 attempts (0 * w = 0).
   out[, avail_only := FALSE]
 
-  round_cal <- out[, .(match_date_skill = min(match_date_skill)),
+  round_cal <- out[, .(match_date_rating = min(match_date_rating)),
                    by = .(season, round)]
 
   if (!is.null(rosters)) {
@@ -226,8 +230,8 @@
                         by = player_id]
     all_combos <- data.table::CJ(player_id = player_first$player_id,
                                   round_idx = seq_len(nrow(round_cal)))
-    all_combos[, c("season", "round", "match_date_skill") :=
-                 round_cal[round_idx, .(season, round, match_date_skill)]]
+    all_combos[, c("season", "round", "match_date_rating") :=
+                 round_cal[round_idx, .(season, round, match_date_rating)]]
     all_combos[, round_idx := NULL]
     all_combos <- merge(all_combos, player_first, by = "player_id")
     all_combos <- all_combos[season > first_season |
@@ -243,7 +247,7 @@
 
   if (nrow(missed) > 0) {
     zero_rows <- missed[, .(
-      player_id, season, round, match_date_skill,
+      player_id, season, round, match_date_rating,
       match_id = paste0("AVAIL_", season, "_", sprintf("%02d", round)),
       tog = 0, tog_denominator = 1, played = 0L, avail_only = TRUE
     )]
@@ -283,7 +287,7 @@
 #' @param denom_spec A string like "col" or "col1+col2".
 #' @return Numeric vector of denominators.
 #' @keywords internal
-.compute_skill_denominator <- function(dt, denom_spec) {
+.compute_stat_rating_denominator <- function(dt, denom_spec) {
   if (grepl("\\+", denom_spec)) {
     parts <- strsplit(denom_spec, "\\+")[[1]]
     result <- rep(0, nrow(dt))
@@ -306,12 +310,12 @@
 
 
 # ============================================================================
-# Core skill estimation
+# Core stat rating estimation
 # ============================================================================
 
-#' Estimate player skills using Bayesian conjugate priors
+#' Estimate player stat ratings using Bayesian conjugate priors
 #'
-#' For each player, estimates "true skill" at a reference date using all prior
+#' For each player, estimates "true stat rating" at a reference date using all prior
 #' matches. Uses conjugate Bayesian updating with exponential time decay.
 #'
 #' \strong{Rate stats (per-game):} Gamma-Poisson model. Raw event counts are
@@ -323,12 +327,12 @@
 #' and attempts are decay-weighted; the Beta prior is centered on the
 #' position mean with strength controlled by \code{prior_attempts}.
 #'
-#' @param skill_data A data.table from \code{.prepare_skill_data()}.
+#' @param stat_rating_data A data.table from \code{.prepare_stat_rating_data()}.
 #' @param ref_date Date to estimate skills as of. Only matches before this
 #'   date are used. If NULL, includes all available matches (sets ref_date
 #'   to one day after the latest match in the data).
-#' @param params Named list of hyperparameters from \code{default_skill_params()}.
-#' @param stat_defs Output of \code{skill_stat_definitions()}. If NULL, uses default.
+#' @param params Named list of hyperparameters from \code{default_stat_rating_params()}.
+#' @param stat_defs Output of \code{stat_rating_definitions()}. If NULL, uses default.
 #' @param compute_ci Logical. If TRUE (default), compute credible intervals
 #'   (\code{_lower}/\code{_upper} columns) using qgamma/qbeta. Set to FALSE
 #'   to skip interval computation for faster batch processing.
@@ -336,32 +340,32 @@
 #' @return A data.table with one row per player containing:
 #'   \code{player_id}, \code{player_name}, \code{pos_group},
 #'   \code{n_games}, \code{wt_games}, \code{ref_date},
-#'   and for each stat: \code{{stat}_skill}, \code{{stat}_lower}, \code{{stat}_upper}.
+#'   and for each stat: \code{{stat}_rating}, \code{{stat}_rating_lower}, \code{{stat}_rating_upper}.
 #'
 #' @importFrom data.table as.data.table copy
 #' @importFrom stats qgamma qbeta
 #' @export
-estimate_player_skills <- function(skill_data, ref_date = NULL,
+estimate_player_stat_ratings <- function(stat_rating_data, ref_date = NULL,
                                     params = NULL, stat_defs = NULL,
                                     compute_ci = TRUE) {
-  if (is.null(params)) params <- default_skill_params()
-  if (is.null(stat_defs)) stat_defs <- skill_stat_definitions()
+  if (is.null(params)) params <- default_stat_rating_params()
+  if (is.null(stat_defs)) stat_defs <- stat_rating_definitions()
 
-  dt <- data.table::as.data.table(skill_data)
+  dt <- data.table::as.data.table(stat_rating_data)
 
   # Ensure date column
-  if (!inherits(dt$match_date_skill, "Date")) {
-    dt[, match_date_skill := as.Date(match_date_skill)]
+  if (!inherits(dt$match_date_rating, "Date")) {
+    dt[, match_date_rating := as.Date(match_date_rating)]
   }
 
   # Determine reference date
   if (is.null(ref_date)) {
-    ref_date <- max(dt$match_date_skill, na.rm = TRUE) + 1L
+    ref_date <- max(dt$match_date_rating, na.rm = TRUE) + 1L
   }
   ref_date <- as.Date(ref_date)
 
   # Filter to matches before ref_date (creates a copy — no prior copy needed)
-  dt <- dt[match_date_skill < ref_date]
+  dt <- dt[match_date_rating < ref_date]
 
   if (nrow(dt) == 0) {
     cli::cli_warn("No match data available before ref_date.")
@@ -369,9 +373,9 @@ estimate_player_skills <- function(skill_data, ref_date = NULL,
   }
 
   # Compute days since and decay weight (using rate lambda for game counting)
-  dt[, days_since := as.numeric(ref_date - match_date_skill)]
+  dt[, days_since := as.numeric(ref_date - match_date_rating)]
 
-  # Ensure avail_only flag exists (rows from .prepare_skill_data zero-TOG expansion)
+  # Ensure avail_only flag exists (rows from .prepare_stat_rating_data zero-TOG expansion)
   if (!"avail_only" %in% names(dt)) dt[, avail_only := FALSE]
   dt[is.na(avail_only), avail_only := FALSE]
 
@@ -471,7 +475,7 @@ estimate_player_skills <- function(skill_data, ref_date = NULL,
     grand_mean <- if (total_exposure > 0) sum(w_vec * vals, na.rm = TRUE) / total_exposure else 0
 
     # Position-specific prior means (weighted mean within each position group)
-    pos_groups <- names(skill_position_map())
+    pos_groups <- names(stat_rating_position_map())
     pos_means_dt <- dt[!is.na(pos_group),
       .(pos_mean = if (sum(.wden, na.rm = TRUE) > 0)
                      sum(.wnum, na.rm = TRUE) / sum(.wden, na.rm = TRUE)
@@ -493,11 +497,11 @@ estimate_player_skills <- function(skill_data, ref_date = NULL,
     )]
 
     # Posterior mean = alpha / beta (per-game rate, full-TOG adjusted)
-    skill_col <- paste0(stat_nm, "_skill")
-    lower_col <- paste0(stat_nm, "_lower")
-    upper_col <- paste0(stat_nm, "_upper")
+    rating_col <- paste0(stat_nm, "_rating")
+    lower_col <- paste0(stat_nm, "_rating_lower")
+    upper_col <- paste0(stat_nm, "_rating_upper")
 
-    agg[, (skill_col) := alpha_post / beta_post]
+    agg[, (rating_col) := alpha_post / beta_post]
     if (compute_ci) {
       agg[, (lower_col) := stats::qgamma(ci_alpha, shape = alpha_post, rate = beta_post)]
       agg[, (upper_col) := stats::qgamma(1 - ci_alpha, shape = alpha_post, rate = beta_post)]
@@ -510,7 +514,7 @@ estimate_player_skills <- function(skill_data, ref_date = NULL,
     agg[, (n80_col) := .raw_den]
     agg[, (wt80_col) := w_den]
 
-    keep_cols <- c("player_id", skill_col, raw_col, n80_col, wt80_col)
+    keep_cols <- c("player_id", rating_col, raw_col, n80_col, wt80_col)
     if (compute_ci) keep_cols <- c(keep_cols, lower_col, upper_col)
     skill_results[[stat_nm]] <- agg[, keep_cols, with = FALSE]
   }
@@ -545,11 +549,11 @@ estimate_player_skills <- function(skill_data, ref_date = NULL,
     if (success_spec %in% names(dt_eff)) {
       successes <- as.numeric(dt_eff[[success_spec]])
     } else {
-      successes <- .compute_skill_denominator(dt_eff, success_spec)
+      successes <- .compute_stat_rating_denominator(dt_eff, success_spec)
     }
     successes[is.na(successes)] <- 0
 
-    attempts <- .compute_skill_denominator(dt_eff, attempts_spec)
+    attempts <- .compute_stat_rating_denominator(dt_eff, attempts_spec)
     attempts[is.na(attempts)] <- 0
 
     # Ensure successes <= attempts
@@ -611,11 +615,11 @@ estimate_player_skills <- function(skill_data, ref_date = NULL,
     agg[alpha_post <= 0, alpha_post := 1e-4]
     agg[beta_post <= 0, beta_post := 1e-4]
 
-    skill_col <- paste0(stat_nm, "_skill")
-    lower_col <- paste0(stat_nm, "_lower")
-    upper_col <- paste0(stat_nm, "_upper")
+    rating_col <- paste0(stat_nm, "_rating")
+    lower_col <- paste0(stat_nm, "_rating_lower")
+    upper_col <- paste0(stat_nm, "_rating_upper")
 
-    agg[, (skill_col) := alpha_post / (alpha_post + beta_post)]
+    agg[, (rating_col) := alpha_post / (alpha_post + beta_post)]
     if (compute_ci) {
       agg[, (lower_col) := stats::qbeta(ci_alpha, alpha_post, beta_post)]
       agg[, (upper_col) := stats::qbeta(1 - ci_alpha, alpha_post, beta_post)]
@@ -628,7 +632,7 @@ estimate_player_skills <- function(skill_data, ref_date = NULL,
     agg[, (att_col) := .raw_att]
     agg[, (wt_att_col) := .wt_att]
 
-    keep_cols <- c("player_id", skill_col, raw_col, att_col, wt_att_col)
+    keep_cols <- c("player_id", rating_col, raw_col, att_col, wt_att_col)
     if (compute_ci) keep_cols <- c(keep_cols, lower_col, upper_col)
     skill_results[[stat_nm]] <- agg[, keep_cols, with = FALSE]
   }
@@ -664,36 +668,36 @@ estimate_player_skills <- function(skill_data, ref_date = NULL,
 
 
 # ============================================================================
-# Batch skill estimation
+# Batch stat rating estimation
 # ============================================================================
 
-#' Estimate player skills for multiple reference dates efficiently
+#' Estimate player stat ratings for multiple reference dates efficiently
 #'
-#' Internal function that eliminates redundant work when estimating skills
+#' Internal function that eliminates redundant work when estimating stat ratings
 #' across many dates: date conversion and avail_only setup are done once,
 #' and the data is sorted so each iteration filters an ascending subset.
 #'
-#' @param skill_data A data.table from \code{.prepare_skill_data()}.
+#' @param stat_rating_data A data.table from \code{.prepare_stat_rating_data()}.
 #' @param ref_dates Date vector of reference dates.
-#' @param params Named list of hyperparameters from \code{default_skill_params()}.
-#' @param stat_defs Output of \code{skill_stat_definitions()}. If NULL, uses default.
+#' @param params Named list of hyperparameters from \code{default_stat_rating_params()}.
+#' @param stat_defs Output of \code{stat_rating_definitions()}. If NULL, uses default.
 #' @param compute_ci Logical. If FALSE (default), skip credible interval computation.
 #'
 #' @return Named list of data.tables (keyed by ref_date as character), one per date.
 #' @keywords internal
-.estimate_skills_batch <- function(skill_data, ref_dates, params = NULL,
+.estimate_stat_ratings_batch <- function(stat_rating_data, ref_dates, params = NULL,
                                    stat_defs = NULL, compute_ci = FALSE) {
-  if (is.null(params)) params <- default_skill_params()
-  if (is.null(stat_defs)) stat_defs <- skill_stat_definitions()
+  if (is.null(params)) params <- default_stat_rating_params()
+  if (is.null(stat_defs)) stat_defs <- stat_rating_definitions()
 
   # One-time setup: convert to data.table, ensure types, sort by date
-  dt_base <- data.table::as.data.table(skill_data)
-  if (!inherits(dt_base$match_date_skill, "Date")) {
-    dt_base[, match_date_skill := as.Date(match_date_skill)]
+  dt_base <- data.table::as.data.table(stat_rating_data)
+  if (!inherits(dt_base$match_date_rating, "Date")) {
+    dt_base[, match_date_rating := as.Date(match_date_rating)]
   }
   if (!"avail_only" %in% names(dt_base)) dt_base[, avail_only := FALSE]
   dt_base[is.na(avail_only), avail_only := FALSE]
-  data.table::setorder(dt_base, match_date_skill)
+  data.table::setorder(dt_base, match_date_rating)
 
   # Process ref_dates in chronological order
   ref_dates_sorted <- sort(unique(as.Date(ref_dates)))
@@ -702,10 +706,10 @@ estimate_player_skills <- function(skill_data, ref_date = NULL,
   for (i in seq_along(ref_dates_sorted)) {
     rd <- ref_dates_sorted[i]
     # Subset via filter on sorted data — creates a copy (no prior copy needed)
-    dt_sub <- dt_base[match_date_skill < rd]
+    dt_sub <- dt_base[match_date_rating < rd]
     if (nrow(dt_sub) == 0) next
     results[[i]] <- tryCatch(
-      estimate_player_skills(dt_sub, ref_date = rd, params = params,
+      estimate_player_stat_ratings(dt_sub, ref_date = rd, params = params,
                              stat_defs = stat_defs, compute_ci = compute_ci),
       error = function(e) {
         cli::cli_warn("Batch estimation failed for {rd}: {conditionMessage(e)}")
@@ -763,32 +767,32 @@ estimate_player_skills <- function(skill_data, ref_date = NULL,
 
 
 # ============================================================================
-# Player skill profile
+# Player stat rating profile
 # ============================================================================
 
-#' Get a player's skill profile with percentile ranks
+#' Get a player's stat rating profile with percentile ranks
 #'
-#' Resolves a player by name (partial match OK), estimates skills for all
+#' Resolves a player by name (partial match OK), estimates stat ratings for all
 #' players, then returns the target player's row with within-position
 #' percentile ranks appended.
 #'
 #' @param player_name A character string of the player's name (partial OK).
-#' @param ref_date Date to estimate skills as of. Default is today.
+#' @param ref_date Date to estimate stat ratings as of. Default is today.
 #' @param seasons Seasons to include. Numeric vector or TRUE for all.
-#' @param params Hyperparameters from \code{default_skill_params()}.
-#' @param skills Optional pre-computed skills data (e.g. from
-#'   \code{load_player_skills(TRUE)}). If provided, skips the expensive
+#' @param params Hyperparameters from \code{default_stat_rating_params()}.
+#' @param skills Optional pre-computed stat ratings data (e.g. from
+#'   \code{load_player_stat_ratings(TRUE)}). If provided, skips the expensive
 #'   data loading and estimation steps. If NULL (default), computes from scratch.
 #'
-#' @return A list of class \code{torp_skill_profile} with elements:
+#' @return A list of class \code{torp_stat_rating_profile} with elements:
 #'   \describe{
 #'     \item{player_info}{Player ID, name, team, position.}
-#'     \item{skills}{Data.frame of skill estimates with percentile ranks.}
+#'     \item{skills}{Data.frame of stat rating estimates with percentile ranks.}
 #'     \item{ref_date}{Reference date used.}
 #'   }
 #'
 #' @export
-player_skill_profile <- function(player_name, ref_date = Sys.Date(),
+player_stat_rating_profile <- function(player_name, ref_date = Sys.Date(),
                                   seasons = TRUE, params = NULL,
                                   skills = NULL) {
   player <- resolve_player(player_name, seasons = seasons)
@@ -796,26 +800,26 @@ player_skill_profile <- function(player_name, ref_date = Sys.Date(),
 
   if (!is.null(skills)) {
     # Fast path: use pre-computed skills
-    all_skills <- data.table::as.data.table(skills)
+    all_ratings <- data.table::as.data.table(skills)
     # If multiple snapshots per player, keep latest at or before ref_date
-    if ("ref_date" %in% names(all_skills)) {
-      all_skills <- all_skills[all_skills$ref_date <= ref_date]
-      all_skills <- all_skills[all_skills[, .I[which.max(ref_date)], by = player_id]$V1]
+    if ("ref_date" %in% names(all_ratings)) {
+      all_ratings <- all_ratings[all_ratings$ref_date <= ref_date]
+      all_ratings <- all_ratings[all_ratings[, .I[which.max(ref_date)], by = player_id]$V1]
     }
   } else {
     # Slow path: compute from scratch
     pgd <- load_player_game_data(seasons, use_disk_cache = TRUE)
     ps <- load_player_stats(seasons, use_disk_cache = TRUE)
-    skill_data <- .prepare_skill_data(pgd, ps)
-    all_skills <- estimate_player_skills(skill_data, ref_date = ref_date, params = params)
+    stat_rating_data <- .prepare_stat_rating_data(pgd, ps)
+    all_ratings <- estimate_player_stat_ratings(stat_rating_data, ref_date = ref_date, params = params)
   }
 
-  if (nrow(all_skills) == 0 || !pid %in% all_skills$player_id) {
-    cli::cli_abort("Player {.val {player_name}} not found in skill estimates (may have fewer than {SKILL_MIN_GAMES} weighted games)")
+  if (nrow(all_ratings) == 0 || !pid %in% all_ratings$player_id) {
+    cli::cli_abort("Player {.val {player_name}} not found in stat rating estimates (may have fewer than {STAT_RATING_MIN_GAMES} weighted games)")
   }
 
   # Extract target player row (ensure single row)
-  player_row <- all_skills[player_id == pid]
+  player_row <- all_ratings[player_id == pid]
   if (nrow(player_row) > 1) {
     cli::cli_warn("Multiple skill rows found for player {.val {player_name}}, using latest")
     player_row <- player_row[which.max(ref_date)]
@@ -825,33 +829,33 @@ player_skill_profile <- function(player_name, ref_date = Sys.Date(),
   # Subsets for percentile computation
   if (is.na(player_pos)) {
     cli::cli_warn("Player {.val {player_name}} has no position group; position-based comparisons will be NA")
-    pos_subset <- all_skills[0]
+    pos_subset <- all_ratings[0]
   } else {
-    pos_subset <- all_skills[pos_group == player_pos]
+    pos_subset <- all_ratings[pos_group == player_pos]
   }
-  stat_defs <- skill_stat_definitions()
-  skill_cols <- paste0(stat_defs$stat_name, "_skill")
-  skill_cols <- intersect(skill_cols, names(all_skills))
-  stat_names <- sub("_skill$", "", skill_cols)
+  stat_defs <- stat_rating_definitions()
+  rating_cols <- paste0(stat_defs$stat_name, "_rating")
+  rating_cols <- intersect(rating_cols, names(all_ratings))
+  stat_names <- sub("_rating$", "", rating_cols)
 
   # Build profile data.frame
   profile <- data.frame(stat = stat_names, stringsAsFactors = FALSE)
-  profile$skill <- as.numeric(player_row[, ..skill_cols])
+  profile$rating <- as.numeric(player_row[, ..rating_cols])
 
   # Raw average (unsmoothed career average, NA if column missing)
   raw_cols <- paste0(stat_names, "_raw")
   if (!any(raw_cols %in% names(player_row))) {
     cli::cli_inform(c("i" = "Pre-computed skills data is missing raw average columns.",
-                       "i" = "Re-run {.fn estimate_player_skills} for raw averages."))
+                       "i" = "Re-run {.fn estimate_player_stat_ratings} for raw averages."))
   }
   profile$raw_avg <- .extract_player_cols(player_row, raw_cols)
 
   # League-wide and position-group comparisons (flip percentiles for negative stats)
   hib <- stat_defs$higher_is_better[match(stat_names, stat_defs$stat_name)]
-  profile$league_avg <- .col_means(all_skills, skill_cols)
-  profile$league_pct <- .col_pctiles(all_skills, skill_cols, player_row, hib)
-  profile$pos_avg    <- .col_means(pos_subset, skill_cols)
-  profile$pos_pct    <- .col_pctiles(pos_subset, skill_cols, player_row, hib)
+  profile$league_avg <- .col_means(all_ratings, rating_cols)
+  profile$league_pct <- .col_pctiles(all_ratings, rating_cols, player_row, hib)
+  profile$pos_avg    <- .col_means(pos_subset, rating_cols)
+  profile$pos_pct    <- .col_pctiles(pos_subset, rating_cols, player_row, hib)
 
   # Exposure: per-stat 80s for rate stats, attempts for efficiency stats
   profile$n_80s  <- .extract_player_cols(player_row, paste0(stat_names, "_n80s"))
@@ -859,9 +863,14 @@ player_skill_profile <- function(player_name, ref_date = Sys.Date(),
   profile$attempts    <- .extract_player_cols(player_row, paste0(stat_names, "_attempts"))
   profile$wt_attempts <- .extract_player_cols(player_row, paste0(stat_names, "_wt_attempts"))
 
-  # Credible intervals
-  lower_cols <- paste0(stat_names, "_lower")
-  upper_cols <- paste0(stat_names, "_upper")
+  # Credible intervals — merge both naming conventions for transition period
+  lower_cols_new <- paste0(stat_names, "_rating_lower")
+  lower_cols_old <- paste0(stat_names, "_lower")
+  upper_cols_new <- paste0(stat_names, "_rating_upper")
+  upper_cols_old <- paste0(stat_names, "_upper")
+  # Prefer _rating_lower, fall back to _lower per stat
+  lower_cols <- ifelse(lower_cols_new %in% names(player_row), lower_cols_new, lower_cols_old)
+  upper_cols <- ifelse(upper_cols_new %in% names(player_row), upper_cols_new, upper_cols_old)
   lower_present <- intersect(lower_cols, names(player_row))
   upper_present <- intersect(upper_cols, names(player_row))
   if (length(lower_present) == nrow(profile) && length(upper_present) == nrow(profile)) {
@@ -877,7 +886,7 @@ player_skill_profile <- function(player_name, ref_date = Sys.Date(),
   )
 
   # Reorder columns
-  col_order <- c("category", "stat", "type", "skill", "raw_avg",
+  col_order <- c("category", "stat", "type", "rating", "raw_avg",
                   "league_avg", "league_pct", "pos_avg", "pos_pct",
                   "n_80s", "wt_80s", "attempts", "wt_attempts",
                   "lower", "upper")
@@ -893,33 +902,33 @@ player_skill_profile <- function(player_name, ref_date = Sys.Date(),
       pos_group = player_pos,
       stringsAsFactors = FALSE
     ),
-    skills = profile[order(-profile$pos_pct), ],
+    stat_ratings = profile[order(-profile$pos_pct), ],
     ref_date = ref_date,
     n_games = as.numeric(player_row$n_games),
     n_80s = as.numeric(player_row$n_80s),
     wt_80s = as.numeric(player_row$wt_80s)
   )
-  class(out) <- "torp_skill_profile"
+  class(out) <- "torp_stat_rating_profile"
   out
 }
 
 
-#' Print a player skill profile
+#' Print a player stat rating profile
 #'
-#' @param x A \code{torp_skill_profile} object.
+#' @param x A \code{torp_stat_rating_profile} object.
 #' @param ... Additional arguments (ignored).
 #' @return Invisibly returns \code{x}.
 #' @export
-print.torp_skill_profile <- function(x, ...) {
+print.torp_stat_rating_profile <- function(x, ...) {
   info <- x$player_info
-  sk <- x$skills
+  sk <- x$stat_ratings
 
   # Header: games and 80s
   n_g <- if (!is.null(x$n_games)) x$n_games else NA
   n_80 <- if (!is.null(x$n_80s)) round(x$n_80s, 1) else NA
   wt_80 <- if (!is.null(x$wt_80s)) round(x$wt_80s, 1) else NA
   cat(paste0(
-    "=== Skill Profile: ", info$name,
+    "=== Stat Rating Profile: ", info$name,
     " (", info$team, " - ", info$pos_group, ") ===\n",
     "As at: ", x$ref_date,
     "  |  Games: ", n_g,
@@ -928,7 +937,7 @@ print.torp_skill_profile <- function(x, ...) {
 
   # Select display columns (exclude lower/upper)
   display_cols <- intersect(
-    c("category", "stat", "type", "skill", "raw_avg",
+    c("category", "stat", "type", "rating", "raw_avg",
       "league_avg", "league_pct", "pos_avg", "pos_pct",
       "n_80s", "wt_80s", "attempts", "wt_attempts"),
     names(sk)
@@ -945,7 +954,7 @@ print.torp_skill_profile <- function(x, ...) {
   fmt_1dp <- function(v) {
     ifelse(is.na(v), "", formatC(round(v, 1), format = "f", digits = 1))
   }
-  for (col in intersect(c("skill", "raw_avg", "league_avg", "pos_avg"), names(display))) {
+  for (col in intersect(c("rating", "raw_avg", "league_avg", "pos_avg"), names(display))) {
     display[[col]] <- fmt_sig4(display[[col]])
   }
   for (col in intersect(c("league_pct", "pos_pct"), names(display))) {
@@ -961,12 +970,12 @@ print.torp_skill_profile <- function(x, ...) {
 
 
 # ============================================================================
-# Quick player skill lookup
+# Quick player stat rating lookup
 # ============================================================================
 
-#' Get player skill estimates from pre-computed data
+#' Get player stat rating estimates from pre-computed data
 #'
-#' A fast convenience function that looks up skill estimates from the
+#' A fast convenience function that looks up stat rating estimates from the
 #' pre-computed data stored in torpdata releases. When called with a player
 #' name, returns one row for that player. When called without arguments,
 #' returns the latest snapshot for every player.
@@ -977,18 +986,18 @@ print.torp_skill_profile <- function(x, ...) {
 #'   this date. If NULL, uses the latest available snapshot.
 #' @param seasons Seasons to include. Numeric vector or TRUE for all.
 #' @param current If TRUE (default), only return players on a current team
-#'   (i.e. those with a skill estimate in the latest season). Set FALSE to
+#'   (i.e. those with a stat rating estimate in the latest season). Set FALSE to
 #'   include all historical players.
 #'
-#' @return A data.table of skill estimates — one row per player.
+#' @return A data.table of stat rating estimates -- one row per player.
 #'
-#' @seealso [player_skill_profile()] for full profile with percentile ranks,
-#'   [load_player_skills()] to load raw pre-computed data.
+#' @seealso [player_stat_rating_profile()] for full profile with percentile ranks,
+#'   [load_player_stat_ratings()] to load raw pre-computed data.
 #'
 #' @export
-get_player_skills <- function(player_name = NULL, ref_date = NULL, seasons = TRUE,
+get_player_stat_ratings <- function(player_name = NULL, ref_date = NULL, seasons = TRUE,
                               current = TRUE) {
-  skills <- load_player_skills(seasons, use_disk_cache = TRUE)
+  skills <- load_player_stat_ratings(seasons, use_disk_cache = TRUE)
   dt <- data.table::as.data.table(skills)
 
   if (!is.null(ref_date)) {
@@ -1027,16 +1036,16 @@ get_player_skills <- function(player_name = NULL, ref_date = NULL, seasons = TRU
 
 
 # ============================================================================
-# Team skill aggregation
+# Team stat rating aggregation
 # ============================================================================
 
-#' Aggregate player skills to team level
+#' Aggregate player stat ratings to team level
 #'
-#' For each team in a lineup, sums and averages the skill estimates of the
+#' For each team in a lineup, sums and averages the stat rating estimates of the
 #' players in that team. Used to create team-level features for match
 #' prediction models.
 #'
-#' @param skills A data.table from \code{estimate_player_skills()}.
+#' @param skills A data.table from \code{estimate_player_stat_ratings()}.
 #' @param team_lineups A data.table with columns \code{match_id},
 #'   \code{team}, and \code{player_id} identifying the lineup for each
 #'   match-team combination.
@@ -1048,7 +1057,7 @@ get_player_skills <- function(player_name = NULL, ref_date = NULL, seasons = TRU
 #'
 #' @importFrom data.table as.data.table
 #' @export
-aggregate_team_skills <- function(skills, team_lineups, top_n = 22) {
+aggregate_team_stat_ratings <- function(skills, team_lineups, top_n = 22) {
   skills_dt <- data.table::copy(data.table::as.data.table(skills))
   lineups_dt <- data.table::copy(data.table::as.data.table(team_lineups))
 
@@ -1068,26 +1077,26 @@ aggregate_team_skills <- function(skills, team_lineups, top_n = 22) {
   merged <- merge(lineups_dt, skills_dt, by = "player_id", all.x = TRUE)
 
   # Find skill columns
-  stat_defs <- skill_stat_definitions()
-  skill_cols <- paste0(stat_defs$stat_name, "_skill")
-  skill_cols <- intersect(skill_cols, names(merged))
+  stat_defs <- stat_rating_definitions()
+  rating_cols <- paste0(stat_defs$stat_name, "_rating")
+  rating_cols <- intersect(rating_cols, names(merged))
 
-  if (length(skill_cols) == 0) {
-    cli::cli_warn("No skill columns found in merged data")
+  if (length(rating_cols) == 0) {
+    cli::cli_warn("No stat rating columns found in merged data")
     return(data.table::data.table())
   }
 
-  # For each match-team, take top_n players by total skill and aggregate
-  merged[, .total_skill := rowSums(.SD, na.rm = TRUE), .SDcols = skill_cols]
+  # For each match-team, take top_n players by total stat rating and aggregate
+  merged[, .total_rating := rowSums(.SD, na.rm = TRUE), .SDcols = rating_cols]
 
-  result <- merged[order(-`.total_skill`),
+  result <- merged[order(-`.total_rating`),
     head(.SD, top_n),
     by = .(match_id, team)
   ][, {
     out <- list(n_players = .N)
-    for (sc in skill_cols) {
-      stat_nm <- sub("_skill$", "", sc)
-      vals <- get(sc)
+    for (rc in rating_cols) {
+      stat_nm <- sub("_rating$", "", rc)
+      vals <- get(rc)
       out[[paste0(stat_nm, "_team_sum")]] <- sum(vals, na.rm = TRUE)
       out[[paste0(stat_nm, "_team_mean")]] <- mean(vals, na.rm = TRUE)
     }
@@ -1095,7 +1104,48 @@ aggregate_team_skills <- function(skills, team_lineups, top_n = 22) {
   }, by = .(match_id, team)]
 
   # Clean up
-  merged[, .total_skill := NULL]
+  merged[, .total_rating := NULL]
 
   result
 }
+
+
+# ============================================================================
+# Backward compatibility aliases
+# ============================================================================
+
+#' @rdname .prepare_stat_rating_data
+#' @keywords internal
+.prepare_skill_data <- .prepare_stat_rating_data
+
+#' @rdname .resolve_stat_rating_positions
+#' @keywords internal
+.resolve_skill_positions <- .resolve_stat_rating_positions
+
+#' @rdname .compute_stat_rating_denominator
+#' @keywords internal
+.compute_skill_denominator <- .compute_stat_rating_denominator
+
+#' @rdname estimate_player_stat_ratings
+#' @export
+estimate_player_skills <- estimate_player_stat_ratings
+
+#' @rdname .estimate_stat_ratings_batch
+#' @keywords internal
+.estimate_skills_batch <- .estimate_stat_ratings_batch
+
+#' @rdname player_stat_rating_profile
+#' @export
+player_skill_profile <- player_stat_rating_profile
+
+#' @rdname print.torp_stat_rating_profile
+#' @export
+print.torp_skill_profile <- function(x, ...) print.torp_stat_rating_profile(x, ...)
+
+#' @rdname get_player_stat_ratings
+#' @export
+get_player_skills <- get_player_stat_ratings
+
+#' @rdname aggregate_team_stat_ratings
+#' @export
+aggregate_team_skills <- aggregate_team_stat_ratings

@@ -1,8 +1,9 @@
-#' Get Player Match Ratings
+#' Get Player Game Ratings (Live)
 #'
 #' Scrapes chain data for a match (or full round) and produces per-player
-#' EPV credit and game-level PSR ratings. Designed to be run immediately
-#' after a game finishes, using live API data rather than stored releases.
+#' EPV ratings in the same format as [player_game_ratings()]. Designed to
+#' be run immediately after a game finishes, using live API data rather
+#' than stored releases.
 #'
 #' @param match Input: either a match ID string (e.g. `"CD_M20260140201"`)
 #'   or a pre-scraped chains data.frame from [get_match_chains()].
@@ -11,29 +12,28 @@
 #'   [get_afl_season()]). Only used when `match` is `NULL`.
 #' @param round Numeric round number. Only used when `match` is `NULL`.
 #'
-#' @return A data.table with one row per player per match, containing:
-#'   identifiers (player_id, match_id, player_name, team, opponent, position),
-#'   EPV components (epv, recv_epv, disp_epv, spoil_epv, hitout_epv, epv_adj),
-#'   game PSR (game_psr, game_osr, game_dsr), and key box-score stats.
+#' @return A tibble with the same columns as [player_game_ratings()]:
+#'   identifiers, TOG-weighted centered EPV components, and position-adjusted
+#'   EPV per-80 metrics.
 #'
 #' @export
 #'
 #' @examples
 #' \dontrun{
 #' # From match ID (scrapes everything automatically)
-#' result <- get_player_match_ratings("CD_M20260140201")
+#' result <- get_player_game_ratings("CD_M20260140201")
 #'
 #' # From season and round (all matches in the round)
-#' result <- get_player_match_ratings(round = 2)
-#' result <- get_player_match_ratings(season = 2025, round = 14)
+#' result <- get_player_game_ratings(round = 2)
+#' result <- get_player_game_ratings(season = 2025, round = 14)
 #'
 #' # From pre-scraped chains
 #' chains <- get_match_chains(2026, 2)
-#' result <- get_player_match_ratings(chains)
+#' result <- get_player_game_ratings(chains)
 #' }
-get_player_match_ratings <- function(match = NULL,
-                                     season = get_afl_season(),
-                                     round = NULL) {
+get_player_game_ratings <- function(match = NULL,
+                                    season = get_afl_season(),
+                                    round = NULL) {
   # --- Resolve input: match ID, season+round, or pre-scraped chains ---
   if (is.null(match)) {
     if (is.null(round)) {
@@ -96,12 +96,10 @@ get_player_match_ratings <- function(match = NULL,
     hitout_epv_adj = hitout_epv
   )]
 
-  # --- Step 4: Game PSR from raw stats ---
-  cli::cli_inform("Computing game PSR...")
-  player_epv <- .add_game_psr(player_epv)
-
+  # --- Step 4: Format as game ratings (same output as player_game_ratings) ---
   cli::cli_inform("Done!")
-  player_epv[]
+  round_val <- unique(player_epv$round)
+  .compute_player_game_ratings(player_epv, season, round_val)
 }
 
 

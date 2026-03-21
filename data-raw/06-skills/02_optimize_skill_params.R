@@ -1,6 +1,6 @@
 # 02_optimize_skill_params.R
 # ==========================
-# Hyperparameter optimization for skill estimation.
+# Hyperparameter optimization for stat rating estimation.
 # Optimizes prior strength and decay rate (lambda) for rate stat categories.
 # Efficiency stat hyperparameters are left at defaults.
 #
@@ -21,20 +21,20 @@ sample_n <- 500         # Max players to sample (for speed)
 seed <- 42
 
 # Load data ----
-cli::cli_h1("Loading skill data")
+cli::cli_h1("Loading stat rating data")
 
-skill_data <- readRDS(file.path(cache_dir, "01_skill_data.rds"))
-data.table::setDT(skill_data)
-cli::cli_inform("Loaded {nrow(skill_data)} rows, {length(unique(skill_data$player_id))} players")
+stat_rating_data <- readRDS(file.path(cache_dir, "01_skill_data.rds"))
+data.table::setDT(stat_rating_data)
+cli::cli_inform("Loaded {nrow(stat_rating_data)} rows, {length(unique(stat_rating_data$player_id))} players")
 
 # Sort by player + date
-data.table::setorder(skill_data, player_id, match_date_skill)
+data.table::setorder(stat_rating_data, player_id, match_date_rating)
 
 # Precompute per-player data ----
 cli::cli_h1("Precomputing per-player splits")
 
 # Sample players for speed
-player_game_counts <- skill_data[, .(n = data.table::uniqueN(match_id)), by = player_id]
+player_game_counts <- stat_rating_data[, .(n = data.table::uniqueN(match_id)), by = player_id]
 eligible_players <- player_game_counts[n >= min_player_games]$player_id
 set.seed(seed)
 if (length(eligible_players) > sample_n) {
@@ -42,10 +42,10 @@ if (length(eligible_players) > sample_n) {
 } else {
   sampled_players <- eligible_players
 }
-dt <- skill_data[player_id %in% sampled_players]
+dt <- stat_rating_data[player_id %in% sampled_players]
 cli::cli_inform("Using {length(sampled_players)} players (of {length(eligible_players)} eligible)")
 
-# Resolve position groups (should already exist from prepare_skill_data)
+# Resolve position groups (should already exist from prepare_stat_rating_data)
 if (!"pos_group" %in% names(dt)) {
   .resolve_skill_positions(dt)
 }
@@ -55,7 +55,7 @@ if (!"pos_group" %in% names(dt)) {
 # (eliminates R-level per-player loop that dominated runtime)
 dt[, player_num := .GRP, by = player_id]
 dt[, game_num := seq_len(.N), by = player_num]
-dt[, d_rel := as.numeric(match_date_skill) - as.numeric(match_date_skill[1]),
+dt[, d_rel := as.numeric(match_date_rating) - as.numeric(match_date_rating[1]),
    by = player_num]
 
 n_total <- nrow(dt)
@@ -90,17 +90,17 @@ grouped_cumsum <- function(x, grp, grp_start) {
 cli::cli_inform("Vectorized: {n_total} rows, {length(group_start)} players, {length(pred_idx)} prediction games")
 
 # Compute grand means per stat ----
-stat_defs <- skill_stat_definitions()
+stat_defs <- stat_rating_definitions()
 rate_defs <- stat_defs[stat_defs$type == "rate", ]
 eff_defs <- stat_defs[stat_defs$type == "efficiency", ]
 
 # Rate stats: TOG-weighted grand mean (per-full-game rate)
 # For tog_adjusted=FALSE stats, use games (exposure=1) instead of TOG
-# Compute both global and per-position means (matching estimate_player_skills)
+# Compute both global and per-position means (matching estimate_player_stat_ratings)
 grand_means <- list()
 pos_grand_means <- list()
 stat_tog_adjusted <- list()  # Track per source_col whether to use TOG
-pos_groups <- names(skill_position_map())
+pos_groups <- names(stat_rating_position_map())
 
 for (i in seq_len(nrow(rate_defs))) {
   src <- rate_defs$source_col[i]
@@ -308,7 +308,7 @@ optimize_single_stat <- function(task, shared) {
 cli::cli_h1("Building optimization tasks")
 
 # Load current baked-in params for comparison
-old_stat_params <- .skill_stat_params()
+old_stat_params <- .stat_rating_params()
 
 ## Multi-start grids ----
 rate_starts <- list(
@@ -375,7 +375,7 @@ for (i in seq_len(nrow(rate_defs))) {
 
 ## Efficiency stat tasks ----
 # For played_only stats (e.g. cond_tog), we need filtered vectorized structures
-# that exclude avail_only rows, matching estimate_player_skills() behavior.
+# that exclude avail_only rows, matching estimate_player_stat_ratings() behavior.
 use_played_only_flag <- !is.na(eff_defs$played_only) & eff_defs$played_only == TRUE
 has_avail_only <- "avail_only" %in% names(dt)
 
@@ -384,7 +384,7 @@ if (any(use_played_only_flag) && has_avail_only) {
   dt_played <- dt[avail_only == FALSE]
   dt_played[, player_num_po := .GRP, by = player_id]
   dt_played[, game_num_po := seq_len(.N), by = player_num_po]
-  dt_played[, d_rel_po := as.numeric(match_date_skill) - as.numeric(match_date_skill[1]),
+  dt_played[, d_rel_po := as.numeric(match_date_rating) - as.numeric(match_date_rating[1]),
             by = player_num_po]
 
   po_d_rel <- dt_played$d_rel_po
@@ -523,7 +523,7 @@ for (res in raw_results) {
 # Build optimized params ----
 cli::cli_h1("Building optimized parameter set")
 
-opt_params <- default_skill_params()
+opt_params <- default_stat_rating_params()
 
 if (length(stat_results) > 0) {
   lambdas <- vapply(stat_results, function(x) x$lambda, numeric(1))
@@ -601,7 +601,7 @@ if (length(stat_results) > 0) {
 }
 
 # Update skill_config.R ----
-# Writes optimized values directly into .skill_stat_params() so they're
+# Writes optimized values directly into .stat_rating_params() so they're
 # baked into the package without manual copy-paste.
 if (length(stat_results) > 0) {
   cli::cli_h1("Updating skill_config.R")
@@ -610,9 +610,9 @@ if (length(stat_results) > 0) {
   config_lines <- readLines(config_path)
 
   # Find the function body boundaries
-  fn_start <- grep("^\\.skill_stat_params <- function\\(\\)", config_lines)
+  fn_start <- grep("^\\.stat_rating_params <- function\\(\\)", config_lines)
   if (length(fn_start) != 1) {
-    cli::cli_warn("Could not find .skill_stat_params in {config_path}, skipping auto-update")
+    cli::cli_warn("Could not find .stat_rating_params in {config_path}, skipping auto-update")
   } else {
     # Find matching closing brace — track brace depth from fn_start
     depth <- 0
@@ -627,10 +627,10 @@ if (length(stat_results) > 0) {
     }
 
     if (is.na(fn_end)) {
-      cli::cli_warn("Could not find end of .skill_stat_params, skipping auto-update")
+      cli::cli_warn("Could not find end of .stat_rating_params, skipping auto-update")
     } else {
       # Get stat definitions to separate rate vs efficiency
-      defs <- skill_stat_definitions()
+      defs <- stat_rating_definitions()
 
       # Build the replacement function body
       # Pad stat names to align = signs
@@ -670,7 +670,7 @@ if (length(stat_results) > 0) {
       all_param_lines[length(all_param_lines)] <- sub(",$", "", all_param_lines[length(all_param_lines)])
 
       new_fn <- c(
-        ".skill_stat_params <- function() {",
+        ".stat_rating_params <- function() {",
         "  list(",
         all_param_lines,
         "  )",
@@ -690,7 +690,7 @@ if (length(stat_results) > 0) {
       )
 
       writeLines(config_lines, config_path)
-      cli::cli_alert_success("Updated .skill_stat_params() in {config_path} with {length(stat_results)} optimized stats")
+      cli::cli_alert_success("Updated .stat_rating_params() in {config_path} with {length(stat_results)} optimized stats")
     }
   }
 }

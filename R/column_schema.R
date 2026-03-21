@@ -366,7 +366,7 @@ TORP_RATINGS_COL_MAP <- c(
 
 #' @keywords internal
 PLAYER_GAME_RATINGS_COL_MAP <- c(
-  # Raw points → EPV raw
+  # Raw points → EPV raw (pre-centering names, kept for torpdata compat)
   "total_points"   = "epv_raw",
   "recv_points"    = "recv_epv_raw",
   "disp_points"    = "disp_epv_raw",
@@ -384,6 +384,7 @@ PLAYER_GAME_RATINGS_COL_MAP <- c(
   "season_disp"    = "season_disp_epv",
   "season_spoil"   = "season_spoil_epv",
   "season_hitout"  = "season_hitout_epv",
+  "avg_p80"        = "epv_p80",
   "ppg"            = "epv_pg"
 )
 
@@ -656,5 +657,57 @@ XG_COL_MAP <- c(
 .normalise_predictions_columns <- function(df) {
   .normalise_columns(df, PREDICTIONS_COL_MAP)
   .bulk_snake_case(df, verbose = FALSE, label = "Predictions")
+  invisible(df)
+}
+
+
+# ============================================================================
+# Normalise Stat Rating Columns (old _skill → _rating)
+# ============================================================================
+
+#' Normalise Stat Rating Column Names
+#'
+#' Maps old \code{*_skill} column names (and their \code{_lower}/\code{_upper}
+#' credible interval variants) to the new \code{*_rating} suffix convention.
+#' Runs dynamically from \code{stat_rating_definitions()} so new stats are
+#' automatically covered.
+#'
+#' @param df A data.frame, tibble, or data.table containing stat rating data.
+#' @return The input with normalised column names, modified by reference.
+#' @keywords internal
+.normalise_stat_rating_columns <- function(df) {
+  nms <- names(df)
+  # Find all *_skill columns and map to *_rating
+  skill_cols <- grep("_skill$", nms, value = TRUE)
+  if (length(skill_cols) > 0) {
+    new_names <- sub("_skill$", "_rating", skill_cols)
+    safe <- !new_names %in% nms
+    if (any(safe)) {
+      data.table::setnames(df, skill_cols[safe], new_names[safe])
+      nms <- names(df)
+    }
+  }
+  # Also map *_lower/*_upper to *_rating_lower/*_rating_upper
+  # (old format was goals_lower, new format is goals_rating_lower)
+  stat_defs <- tryCatch(stat_rating_definitions(), error = function(e) {
+    cli::cli_warn("Could not load stat rating definitions for CI column normalisation: {conditionMessage(e)}")
+    NULL
+  })
+  if (!is.null(stat_defs)) {
+    for (stat_nm in stat_defs$stat_name) {
+      old_lower <- paste0(stat_nm, "_lower")
+      old_upper <- paste0(stat_nm, "_upper")
+      new_lower <- paste0(stat_nm, "_rating_lower")
+      new_upper <- paste0(stat_nm, "_rating_upper")
+      if (old_lower %in% nms && !new_lower %in% nms) {
+        data.table::setnames(df, old_lower, new_lower)
+        nms <- names(df)
+      }
+      if (old_upper %in% nms && !new_upper %in% nms) {
+        data.table::setnames(df, old_upper, new_upper)
+        nms <- names(df)
+      }
+    }
+  }
   invisible(df)
 }

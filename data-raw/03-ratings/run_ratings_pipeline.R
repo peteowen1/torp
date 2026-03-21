@@ -147,23 +147,31 @@ data.table::setkey(all_pgd, match_id)
 
 # Pre-load shared data once — avoids ~145 redundant loads per full rebuild
 cli::cli_progress_step("Pre-loading shared reference data")
-shared_skills <- tryCatch(get_player_skills(current = FALSE), error = function(e) {
-  cli::cli_alert_danger("Could not load skills: {conditionMessage(e)}")
+shared_stat_ratings <- tryCatch(get_player_stat_ratings(current = FALSE), error = function(e) {
+  cli::cli_alert_danger("Could not load stat ratings: {conditionMessage(e)}")
   NULL
 })
-# Backwards compat: rename time_on_ground_skill → cond_tog_skill if needed
-if (!is.null(shared_skills)) {
-  if (!"cond_tog_skill" %in% names(shared_skills) && "time_on_ground_skill" %in% names(shared_skills)) {
-    shared_skills$cond_tog_skill <- shared_skills$time_on_ground_skill
+# Backwards compat: rename time_on_ground_rating → cond_tog_rating if needed
+if (!is.null(shared_stat_ratings)) {
+  if (!"cond_tog_rating" %in% names(shared_stat_ratings) && "time_on_ground_rating" %in% names(shared_stat_ratings)) {
+    shared_stat_ratings$cond_tog_rating <- shared_stat_ratings$time_on_ground_rating
   }
-  if (!"squad_selection_skill" %in% names(shared_skills)) {
-    cli::cli_alert_danger("Skills missing squad_selection_skill; using cond_tog_skill alone as pred_tog")
-    shared_skills$squad_selection_skill <- 1
+  # Also handle old _skill column names during transition
+  if (!"cond_tog_rating" %in% names(shared_stat_ratings) && "cond_tog_skill" %in% names(shared_stat_ratings)) {
+    shared_stat_ratings$cond_tog_rating <- shared_stat_ratings$cond_tog_skill
+  }
+  if (!"squad_selection_rating" %in% names(shared_stat_ratings)) {
+    if ("squad_selection_skill" %in% names(shared_stat_ratings)) {
+      shared_stat_ratings$squad_selection_rating <- shared_stat_ratings$squad_selection_skill
+    } else {
+      cli::cli_alert_danger("Stat ratings missing squad_selection_rating; using cond_tog_rating alone as pred_tog")
+      shared_stat_ratings$squad_selection_rating <- 1
+    }
   }
 }
 shared_fixtures <- load_fixtures(TRUE)
 
-get_epr_df <- function(year, rounds, pgd, skills, fixtures) {
+get_epr_df <- function(year, rounds, pgd, stat_ratings, fixtures) {
   plyr_tm_df <- load_player_details(year)
   if (nrow(plyr_tm_df) == 0 || !"season" %in% names(plyr_tm_df)) {
     plyr_tm_df <- load_player_details(year - 1)
@@ -191,15 +199,15 @@ get_epr_df <- function(year, rounds, pgd, skills, fixtures) {
   # Batch compute all rounds' player stats in one data.table pass
   batch_stats <- calculate_epr_stats_batch(pgd, round_info)
 
-  # Attach decomposed TOG from skills
+  # Attach decomposed TOG from stat ratings
   batch_stats[, pred_tog := NA_real_]
   batch_stats[, pred_selection := NA_real_]
   batch_stats[, pred_cond_tog := NA_real_]
-  if (!is.null(skills)) {
-    skills_dt <- data.table::as.data.table(skills)
-    batch_stats[skills_dt, `:=`(
-      pred_selection = i.squad_selection_skill,
-      pred_cond_tog = i.cond_tog_skill
+  if (!is.null(stat_ratings)) {
+    stat_ratings_dt <- data.table::as.data.table(stat_ratings)
+    batch_stats[stat_ratings_dt, `:=`(
+      pred_selection = i.squad_selection_rating,
+      pred_cond_tog = i.cond_tog_rating
     ), on = "player_id"]
     batch_stats[is.na(pred_selection), pred_selection := 0]
     batch_stats[is.na(pred_cond_tog), pred_cond_tog := 0]
@@ -216,7 +224,7 @@ get_epr_df <- function(year, rounds, pgd, skills, fixtures) {
     round_dt <- batch_stats[round_val == rv]
     final_df <- .prepare_final_dataframe(plyr_tm_df, round_dt, year, rv, fixtures, fix_summary = fix_summary)
 
-    if (!is.null(skills) && nrow(final_df) > 0) {
+    if (!is.null(stat_ratings) && nrow(final_df) > 0) {
       final_df$pred_tog[is.na(final_df$pred_tog)] <- 0
       tot_tog <- sum(final_df$pred_tog)
       if (tot_tog > 0) {
@@ -271,7 +279,7 @@ for (s in seasons) {
     cli::cli_h3("Computing ratings for {s} (rounds {start_round}-{max_round})")
     tictoc::tic(paste0("ratings_", s))
 
-    torp_df <- get_epr_df(s, start_round:max_round, all_pgd, shared_skills, shared_fixtures)
+    torp_df <- get_epr_df(s, start_round:max_round, all_pgd, shared_stat_ratings, shared_fixtures)
     cli::cli_inform("  {s}: {nrow(torp_df)} rating rows")
 
     if (nrow(torp_df) == 0) {
@@ -341,8 +349,8 @@ if (nrow(torp_new) > 0) {
 
   # Blend PSR into ratings so the release has torp/psr/osr/dsr columns
   psr_df <- tryCatch({
-    skills <- load_player_skills()
-    .compute_psr_from_skills(skills)
+    stat_ratings <- load_player_stat_ratings()
+    .compute_psr_from_stat_ratings(stat_ratings)
   }, error = function(e) {
     cli::cli_warn("Could not compute PSR for release: {e$message}")
     NULL
@@ -421,8 +429,33 @@ for (s in seasons) {
     pgd <- all_pgd[all_pgd$season == s, ]
     if (nrow(pgd) == 0) next
 
-    # Player game ratings
+    # Player game ratings (EPV-based)
     pgr <- .compute_player_game_ratings(pgd, s, start_round:max_round)
+
+    # Add PSV columns from box-score stats
+    pstats_season <- data.table::as.data.table(all_pstats[all_pstats$season == s, ])
+    if (nrow(pstats_season) > 0) {
+      # Ensure tog column exists (PSV expects fraction 0-1)
+      if (!"tog" %in% names(pstats_season) && "time_on_ground_percentage" %in% names(pstats_season)) {
+        pstats_season[, tog := pmax(time_on_ground_percentage / 100, 0.1)]
+      }
+      psv_result <- tryCatch({
+        .compute_psv(pstats_season)
+      }, error = function(e) {
+        cli::cli_warn("PSV computation failed for {s}: {conditionMessage(e)}")
+        NULL
+      })
+      if (!is.null(psv_result)) {
+        psv_cols <- intersect(c("psv", "osv", "dsv"), names(psv_result))
+        if (length(psv_cols) > 0 && "player_id" %in% names(psv_result) &&
+            "match_id" %in% names(psv_result)) {
+          psv_slim <- psv_result[, c("player_id", "match_id", psv_cols), with = FALSE]
+          pgr <- merge(pgr, psv_slim, by = c("player_id", "match_id"), all.x = TRUE)
+          cli::cli_inform("  Added PSV columns to game ratings ({sum(!is.na(pgr$psv))} matched)")
+        }
+      }
+    }
+
     file_name <- paste0("player_game_ratings_", s)
     save_to_release(pgr, file_name, "player_game_ratings-data")
     cli::cli_alert_success("Released {file_name} ({nrow(pgr)} rows)")
@@ -445,14 +478,14 @@ cli::cli_h2("Stage 6: Compute & Release PSR")
 tictoc::tic("stage_6_psr")
 
 tryCatch({
-  skills <- load_player_skills(TRUE)
+  stat_ratings <- load_player_stat_ratings(TRUE)
   psr_coef_path <- file.path("data-raw", "cache-skills", "psr_v2_coefficients.csv")
   if (!file.exists(psr_coef_path)) {
     psr_coef_path <- system.file("extdata", "psr_v2_coefficients.csv", package = "torp")
   }
   if (file.exists(psr_coef_path) && nchar(psr_coef_path) > 0) {
     coef_df <- utils::read.csv(psr_coef_path)
-    psr_all <- calculate_psr(skills, coef_df)
+    psr_all <- calculate_psr(stat_ratings, coef_df)
     cli::cli_inform("PSR computed for {nrow(psr_all)} player-rounds across {length(unique(psr_all$season))} seasons")
 
     for (s in sort(unique(psr_all$season))) {

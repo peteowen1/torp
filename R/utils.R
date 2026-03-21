@@ -51,8 +51,9 @@ get_afl_season <- function(type = "current") {
 #' @importFrom dplyr filter
 #' @importFrom cli cli_abort
 get_afl_week <- function(type = "current") {
+  if (isTRUE(type)) return(0:28)
   if (!type %in% c("current", "next")) {
-    cli::cli_abort('type must be one of: "current" or "next"')
+    cli::cli_abort('type must be one of: "current", "next", or TRUE for all rounds')
   }
   season <- get_afl_season("current")
   time_aest <- lubridate::with_tz(Sys.time(), tzone = "Australia/Brisbane")

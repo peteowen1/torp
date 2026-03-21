@@ -15,7 +15,7 @@
 #   --skip-chains     Skip Phase 2 (chains scraping)
 #   --skip-pbp        Skip Phase 3 (build PBP from chains)
 #   --skip-models     Skip Phase 4 (model training)
-#   --skip-skills     Skip Phase 7 (skills pipeline)
+#   --skip-skills     Skip Phase 7 (stat ratings pipeline)
 #   --skip-sim        Skip Phase 10 (simulation)
 #
 #   # Phase flags (only)
@@ -76,7 +76,7 @@ phase_menu <- c(
   "10 - Season Simulation"
 )
 
-start_from <- 1L
+start_from <- 8L
 
 if (interactive()) {
   if (exists("START_FROM", envir = .GlobalEnv)) {
@@ -128,7 +128,7 @@ if (start_from > 2)  skip_chains <- TRUE
 if (start_from > 3)  skip_pbp    <- TRUE
 if (start_from > 4)  skip_models <- TRUE
 # Phase 5 (rebuild PBP) is auto-gated by run_pbp && run_models
-if (start_from > 6)  skip_skills <- TRUE  # Phase 7 maps to skills
+if (start_from > 6)  skip_skills <- TRUE  # Phase 7 maps to stat ratings
 if (start_from > 10) skip_sim    <- TRUE
 
 # Derive phase booleans
@@ -174,7 +174,7 @@ cli::cli_inform("Data seasons: {paste(range(seasons), collapse = '-')}")
 cli::cli_inform("Training seasons: {paste(range(training_seasons), collapse = '-')}")
 cli::cli_inform(paste0(
   "Phases: API=", run_api, " Chains=", run_chains, " PBP=", run_pbp,
-  " Models=", run_models, " Derived=", run_derived, " Skills=", run_skills,
+  " Models=", run_models, " Derived=", run_derived, " StatRatings=", run_skills,
   " Ratings=", run_ratings, " Predictions=", run_predictions, " Sim=", run_sim
 ))
 
@@ -683,15 +683,15 @@ if (run_derived) {
   toc(log = TRUE)
 }
 
-# Phase 7: Skills Pipeline ----
+# Phase 7: Stat Ratings Pipeline ----
 
 if (run_skills) {
-  cli::cli_h1("Phase 7: Skills Pipeline")
-  tic("phase_7_skills")
+  cli::cli_h1("Phase 7: Stat Ratings Pipeline")
+  tic("phase_7_stat_ratings")
 
-  skills_dir <- file.path(torp_root, "data-raw", "06-skills")
+  stat_ratings_dir <- file.path(torp_root, "data-raw", "06-skills")
 
-  skills_scripts <- c(
+  stat_ratings_scripts <- c(
     "01_compute_match_stats.R",
     "02_optimize_skill_params.R",
     "03_estimate_skills.R",
@@ -700,13 +700,13 @@ if (run_skills) {
     "06_train_psr_v2.R"
   )
 
-  for (script in skills_scripts) {
-    script_path <- file.path(skills_dir, script)
+  for (script in stat_ratings_scripts) {
+    script_path <- file.path(stat_ratings_dir, script)
     if (!file.exists(script_path)) {
-      cli::cli_warn("Skills script not found: {script}")
+      cli::cli_warn("Stat ratings script not found: {script}")
       next
     }
-    safe_run(paste0("skills_", script), {
+    safe_run(paste0("stat_ratings_", script), {
       cli::cli_inform("Running {script}...")
       source(script_path, local = new.env(parent = globalenv()))
     })
@@ -724,7 +724,7 @@ if (run_ratings) {
   # Set config in global env (run_ratings_pipeline.R checks .GlobalEnv)
   SEASONS <<- TRUE
   REFRESH_UPSTREAM <<- FALSE  # Phase 1 already handled this
-  REBUILD_PLAYER_GAME <<- FALSE  # Phase 6 already handled this
+  REBUILD_PLAYER_GAME <<- TRUE  # Phase 6 might have already handled this but set as TRUE to be safe
   REBUILD_ALL_RATINGS <<- TRUE
 
   ratings_script <- file.path(torp_root, "data-raw", "03-ratings", "run_ratings_pipeline.R")

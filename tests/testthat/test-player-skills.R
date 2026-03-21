@@ -1,5 +1,5 @@
-# Test helpers for mock skill data
-create_mock_skill_data <- function(n_players = 10, games_per_player = 8) {
+# Test helpers for mock stat rating data
+create_mock_stat_rating_data <- function(n_players = 10, games_per_player = 8) {
   set.seed(42)
   positions <- c("KEY_DEFENDER", "MIDFIELDER", "KEY_FORWARD", "RUCK")
   pos_groups <- c("DEF", "MID", "FWD", "RUCK")
@@ -14,7 +14,7 @@ create_mock_skill_data <- function(n_players = 10, games_per_player = 8) {
         player_name = paste0("Player_", p),
         season = 2024,
         round = g,
-        match_date_skill = as.Date("2024-01-01") + (g - 1) * 14,
+        match_date_rating = as.Date("2024-01-01") + (g - 1) * 14,
         tog = runif(1, 0.6, 1.0),
         pos_group = pos_groups[pos_idx],
         position = positions[pos_idx],
@@ -93,7 +93,7 @@ create_mock_skill_data <- function(n_players = 10, games_per_player = 8) {
         player_name = paste0("Player_", p),
         season = 2024,
         round = g,
-        match_date_skill = as.Date("2024-01-01") + (g - 1) * 14,
+        match_date_rating = as.Date("2024-01-01") + (g - 1) * 14,
         tog = 0,
         pos_group = dt[player_id == as.character(p), pos_group[1]],
         position = dt[player_id == as.character(p), position[1]],
@@ -111,11 +111,11 @@ create_mock_skill_data <- function(n_players = 10, games_per_player = 8) {
 }
 
 
-test_that("estimate_player_skills returns correct structure", {
-  skill_data <- create_mock_skill_data()
-  params <- default_skill_params()
+test_that("estimate_player_stat_ratings returns correct structure", {
+  stat_rating_data <- create_mock_stat_rating_data()
+  params <- default_stat_rating_params()
 
-  result <- estimate_player_skills(skill_data, params = params)
+  result <- estimate_player_stat_ratings(stat_rating_data, params = params)
 
   expect_s3_class(result, "data.table")
   expect_true(nrow(result) > 0)
@@ -124,16 +124,16 @@ test_that("estimate_player_skills returns correct structure", {
   expect_true(all(c("player_id", "player_name", "pos_group",
                      "n_games", "wt_games", "n_80s", "wt_80s", "ref_date") %in% names(result)))
 
-  # Should have skill columns for rate stats
-  expect_true("goals_skill" %in% names(result))
-  expect_true("goals_lower" %in% names(result))
-  expect_true("goals_upper" %in% names(result))
+  # Should have stat rating columns for rate stats
+  expect_true("goals_rating" %in% names(result))
+  expect_true("goals_rating_lower" %in% names(result))
+  expect_true("goals_rating_upper" %in% names(result))
   expect_true("goals_raw" %in% names(result))
-  expect_true("disposals_skill" %in% names(result))
+  expect_true("disposals_rating" %in% names(result))
   expect_true("disposals_raw" %in% names(result))
 
   # Should have efficiency stats with attempts
-  expect_true("goal_accuracy_skill" %in% names(result))
+  expect_true("goal_accuracy_rating" %in% names(result))
   expect_true("goal_accuracy_raw" %in% names(result))
   expect_true("goal_accuracy_attempts" %in% names(result))
   expect_true("goal_accuracy_wt_attempts" %in% names(result))
@@ -143,7 +143,7 @@ test_that("estimate_player_skills returns correct structure", {
   expect_false("goals_wt_attempts" %in% names(result))
 })
 
-test_that("player with many games has estimate close to empirical mean", {
+test_that("player with many games has stat rating close to empirical mean", {
   # Create player with many games and known stat value
   set.seed(123)
   n_games <- 50
@@ -153,7 +153,7 @@ test_that("player with many games has estimate close to empirical mean", {
     player_name = rep("Test Player", n_games),
     season = rep(2024, n_games),
     round = seq_len(n_games),
-    match_date_skill = as.Date("2024-01-01") + seq_len(n_games) * 7,
+    match_date_rating = as.Date("2024-01-01") + seq_len(n_games) * 7,
     tog = rep(1.0, n_games),
     pos_group = rep("MID", n_games),
     position = rep("MIDFIELDER", n_games),
@@ -189,16 +189,16 @@ test_that("player with many games has estimate close to empirical mean", {
     disposal_efficiency_pct_x_disposals = rep(18, n_games)
   )
 
-  params <- default_skill_params()
+  params <- default_stat_rating_params()
   params$min_games <- 1
 
-  result <- estimate_player_skills(dt, params = params)
+  result <- estimate_player_stat_ratings(dt, params = params)
 
   # With 50 games at exactly 2 goals, estimate should be close to 2
-  expect_equal(result$goals_skill[1], 2, tolerance = 0.3)
+  expect_equal(result$goals_rating[1], 2, tolerance = 0.3)
 
   # Goal accuracy: 2/3 shots -> ~0.667
-  expect_equal(result$goal_accuracy_skill[1], 2/3, tolerance = 0.1)
+  expect_equal(result$goal_accuracy_rating[1], 2/3, tolerance = 0.1)
 
   # Raw averages should be exact (no smoothing)
   # goals_raw = sum(goals) / sum(tog) = 2 / 1 = 2.0
@@ -222,7 +222,7 @@ test_that("raw averages are per-player, not league-wide", {
     match_id = paste0("M_", seq_len(2 * n)),
     player_name = rep(c("Alice", "Bob"), each = n),
     season = 2024, round = rep(seq_len(n), 2),
-    match_date_skill = as.Date("2024-01-01") + seq_len(2 * n) * 7,
+    match_date_rating = as.Date("2024-01-01") + seq_len(2 * n) * 7,
     tog = 1.0,
     pos_group = "MID", position = "MIDFIELDER",
     goals = rep(c(1, 3), each = n),
@@ -239,9 +239,9 @@ test_that("raw averages are per-player, not league-wide", {
     score_involvements = 3, goal_assists = 1,
     disposal_efficiency_pct_x_disposals = 14
   )
-  params <- default_skill_params()
+  params <- default_stat_rating_params()
   params$min_games <- 1
-  result <- estimate_player_skills(dt, params = params)
+  result <- estimate_player_stat_ratings(dt, params = params)
 
   alice <- result[player_id == "A"]
   bob   <- result[player_id == "B"]
@@ -251,47 +251,47 @@ test_that("raw averages are per-player, not league-wide", {
   expect_equal(bob$goal_accuracy_raw, 3/4)
 })
 
-test_that("high prior_strength pulls estimates toward prior", {
-  skill_data <- create_mock_skill_data(n_players = 5, games_per_player = 3)
+test_that("high prior_strength pulls stat ratings toward prior", {
+  stat_rating_data <- create_mock_stat_rating_data(n_players = 5, games_per_player = 3)
 
   # Default params (clear per-stat overrides so prior_games controls)
-  params_low <- default_skill_params()
+  params_low <- default_stat_rating_params()
   params_low$prior_games <- 1
   params_low$min_games <- 0
   params_low$stat_params <- NULL
   params_low$category_params <- NULL
 
   # Very high prior
-  params_high <- default_skill_params()
+  params_high <- default_stat_rating_params()
   params_high$prior_games <- 100
   params_high$min_games <- 0
   params_high$stat_params <- NULL
   params_high$category_params <- NULL
 
-  result_low <- estimate_player_skills(skill_data, params = params_low)
-  result_high <- estimate_player_skills(skill_data, params = params_high)
+  result_low <- estimate_player_stat_ratings(stat_rating_data, params = params_low)
+  result_high <- estimate_player_stat_ratings(stat_rating_data, params = params_high)
 
   # With high prior, all players' estimates should be more similar
   # (closer to position mean)
-  sd_low <- sd(result_low$goals_skill, na.rm = TRUE)
-  sd_high <- sd(result_high$goals_skill, na.rm = TRUE)
+  sd_low <- sd(result_low$goals_rating, na.rm = TRUE)
+  sd_high <- sd(result_high$goals_rating, na.rm = TRUE)
 
   expect_lt(sd_high, sd_low)
 })
 
-test_that("efficiency stats are bounded between 0 and 1", {
-  skill_data <- create_mock_skill_data()
-  params <- default_skill_params()
+test_that("efficiency stat ratings are bounded between 0 and 1", {
+  stat_rating_data <- create_mock_stat_rating_data()
+  params <- default_stat_rating_params()
 
-  result <- estimate_player_skills(skill_data, params = params)
+  result <- estimate_player_stat_ratings(stat_rating_data, params = params)
 
-  eff_cols <- grep("_skill$", names(result), value = TRUE)
-  eff_defs <- skill_stat_definitions()
+  eff_cols <- grep("_rating$", names(result), value = TRUE)
+  eff_defs <- stat_rating_definitions()
   eff_stat_names <- eff_defs$stat_name[eff_defs$type == "efficiency"]
-  eff_skill_cols <- paste0(eff_stat_names, "_skill")
-  eff_skill_cols <- intersect(eff_skill_cols, names(result))
+  eff_rating_cols <- paste0(eff_stat_names, "_rating")
+  eff_rating_cols <- intersect(eff_rating_cols, names(result))
 
-  for (col in eff_skill_cols) {
+  for (col in eff_rating_cols) {
     vals <- result[[col]]
     vals <- vals[!is.na(vals)]
     if (length(vals) > 0) {
@@ -302,19 +302,19 @@ test_that("efficiency stats are bounded between 0 and 1", {
 })
 
 test_that("credible intervals contain point estimate", {
-  skill_data <- create_mock_skill_data()
-  params <- default_skill_params()
+  stat_rating_data <- create_mock_stat_rating_data()
+  params <- default_stat_rating_params()
 
-  result <- estimate_player_skills(skill_data, params = params)
+  result <- estimate_player_stat_ratings(stat_rating_data, params = params)
 
-  stat_defs <- skill_stat_definitions()
+  stat_defs <- stat_rating_definitions()
   for (stat_nm in stat_defs$stat_name) {
-    skill_col <- paste0(stat_nm, "_skill")
-    lower_col <- paste0(stat_nm, "_lower")
-    upper_col <- paste0(stat_nm, "_upper")
+    rating_col <- paste0(stat_nm, "_rating")
+    lower_col <- paste0(stat_nm, "_rating_lower")
+    upper_col <- paste0(stat_nm, "_rating_upper")
 
-    if (all(c(skill_col, lower_col, upper_col) %in% names(result))) {
-      est <- result[[skill_col]]
+    if (all(c(rating_col, lower_col, upper_col) %in% names(result))) {
+      est <- result[[rating_col]]
       lo <- result[[lower_col]]
       hi <- result[[upper_col]]
 
@@ -330,33 +330,33 @@ test_that("credible intervals contain point estimate", {
 })
 
 test_that("min_games filter works correctly", {
-  skill_data <- create_mock_skill_data(n_players = 5, games_per_player = 2)
+  stat_rating_data <- create_mock_stat_rating_data(n_players = 5, games_per_player = 2)
 
   # With min_games = 10, all players should be filtered out (only 2 games each)
-  params <- default_skill_params()
+  params <- default_stat_rating_params()
   params$min_games <- 10
 
-  result <- estimate_player_skills(skill_data, params = params)
+  result <- estimate_player_stat_ratings(stat_rating_data, params = params)
   expect_equal(nrow(result), 0)
 
   # With min_games = 1, all should be included
   params$min_games <- 1
-  result <- estimate_player_skills(skill_data, params = params)
+  result <- estimate_player_stat_ratings(stat_rating_data, params = params)
   expect_equal(nrow(result), 5)
 })
 
 test_that("ref_date filters correctly", {
-  skill_data <- create_mock_skill_data(n_players = 3, games_per_player = 5)
+  stat_rating_data <- create_mock_stat_rating_data(n_players = 3, games_per_player = 5)
 
-  params <- default_skill_params()
+  params <- default_stat_rating_params()
   params$min_games <- 1
 
   # Use all data
-  result_all <- estimate_player_skills(skill_data, params = params)
+  result_all <- estimate_player_stat_ratings(stat_rating_data, params = params)
 
   # Use only first 2 games (dates: 2024-01-15, 2024-01-29)
-  result_early <- estimate_player_skills(
-    skill_data,
+  result_early <- estimate_player_stat_ratings(
+    stat_rating_data,
     ref_date = as.Date("2024-02-15"),
     params = params
   )
@@ -365,12 +365,12 @@ test_that("ref_date filters correctly", {
   expect_true(all(result_early$wt_games <= result_all$wt_games))
 })
 
-test_that("aggregate_team_skills produces correct output", {
-  skill_data <- create_mock_skill_data(n_players = 10, games_per_player = 5)
-  params <- default_skill_params()
+test_that("aggregate_team_stat_ratings produces correct output", {
+  stat_rating_data <- create_mock_stat_rating_data(n_players = 10, games_per_player = 5)
+  params <- default_stat_rating_params()
   params$min_games <- 1
 
-  skills <- estimate_player_skills(skill_data, params = params)
+  stat_ratings <- estimate_player_stat_ratings(stat_rating_data, params = params)
 
   # Create mock lineups: 2 matches, 5 players per team
   lineups <- data.table::data.table(
@@ -379,7 +379,7 @@ test_that("aggregate_team_skills produces correct output", {
     player_id = rep(as.character(1:10), 2)
   )
 
-  result <- aggregate_team_skills(skills, lineups)
+  result <- aggregate_team_stat_ratings(stat_ratings, lineups)
 
   expect_s3_class(result, "data.table")
   expect_true(nrow(result) > 0)
@@ -394,11 +394,11 @@ test_that("aggregate_team_skills produces correct output", {
   expect_true(length(mean_cols) > 0)
 })
 
-test_that("player_skill_profile produces correct output structure", {
-  skill_data <- create_mock_skill_data(n_players = 5, games_per_player = 8)
-  params <- default_skill_params()
+test_that("player_stat_rating_profile produces correct output structure", {
+  stat_rating_data <- create_mock_stat_rating_data(n_players = 5, games_per_player = 8)
+  params <- default_stat_rating_params()
   params$min_games <- 1
-  skills <- estimate_player_skills(skill_data, params = params)
+  stat_ratings <- estimate_player_stat_ratings(stat_rating_data, params = params)
 
   # Mock resolve_player to return Player_1's info
   local_mocked_bindings(
@@ -408,13 +408,13 @@ test_that("player_skill_profile produces correct output structure", {
     }
   )
 
-  profile <- player_skill_profile("Player_1", skills = skills)
+  profile <- player_stat_rating_profile("Player_1", skills = stat_ratings)
 
-  expect_s3_class(profile, "torp_skill_profile")
+  expect_s3_class(profile, "torp_stat_rating_profile")
   expect_equal(profile$player_info$name, "Player_1")
 
-  sk <- profile$skills
-  expected_cols <- c("category", "stat", "type", "skill", "raw_avg",
+  sk <- profile$stat_ratings
+  expected_cols <- c("category", "stat", "type", "rating", "raw_avg",
                      "league_avg", "league_pct", "pos_avg", "pos_pct",
                      "n_80s", "wt_80s", "attempts", "wt_attempts",
                      "lower", "upper")

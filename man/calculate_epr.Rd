@@ -58,12 +58,12 @@ calculate_epr(
 \item{skills}{Controls TOG-weighted average adjustment. When active, EPR
 components are re-centered to "above TOG-weighted average" by subtracting
 the weighted mean of each component (weighted by pred_tog =
-\code{squad_selection_skill * cond_tog_skill}). Accepts:
+\code{squad_selection_rating * cond_tog_rating}). Accepts:
 \itemize{
-\item \code{TRUE} (default): auto-loads skills via
-\code{get_player_skills(current = FALSE)}.
+\item \code{TRUE} (default): auto-loads stat ratings via
+\code{get_player_stat_ratings(current = FALSE)}.
 \item A data.frame with \code{player_id},
-\code{cond_tog_skill}, and \code{squad_selection_skill} columns.
+\code{cond_tog_rating}, and \code{squad_selection_rating} columns.
 \item \code{FALSE} or \code{NULL}: skip adjustment.
 }
 Players not in \code{skills} default to weight 0 (excluded from the

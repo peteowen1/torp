@@ -255,11 +255,11 @@ test_that("wt_gms sums per-match weights correctly for same-day games", {
 # TOG-Weighted Average Adjustment Tests
 # -----------------------------------------------------------------------------
 
-test_that("calculate_epr rejects skills without cond_tog_skill column", {
+test_that("calculate_epr rejects skills without cond_tog_rating stat rating column", {
   bad_skills <- data.frame(player_id = 1, some_other_col = 0.5)
   expect_error(
     calculate_epr(skills = bad_skills),
-    "cond_tog_skill"
+    "cond_tog_rating"
   )
 })
 
@@ -292,26 +292,26 @@ test_that("TOG-weighted average adjustment produces correct math", {
   # Create skills with known TOG weights (decomposed)
   skills <- data.frame(
     player_id = 1:3,
-    cond_tog_skill = c(0.9, 0.7, 0.3),
-    squad_selection_skill = c(1.0, 1.0, 1.0)
+    cond_tog_rating = c(0.9, 0.7, 0.3),
+    squad_selection_rating = c(1.0, 1.0, 1.0)
   )
 
   # Apply adjustment manually (mirrors the code in calculate_epr)
   adj <- data.table::copy(unadj)
   skills_dt <- data.table::as.data.table(skills)
-  adj[skills_dt, tog_skill := i.squad_selection_skill * i.cond_tog_skill, on = "player_id"]
-  adj[is.na(tog_skill), tog_skill := 0]
+  adj[skills_dt, tog_rating := i.squad_selection_rating * i.cond_tog_rating, on = "player_id"]
+  adj[is.na(tog_rating), tog_rating := 0]
 
-  tot_tog <- sum(adj$tog_skill)
+  tot_tog <- sum(adj$tog_rating)
   comps <- c("recv_epr", "disp_epr", "spoil_epr", "hitout_epr")
   for (comp in comps) {
-    avg_val <- sum(adj[[comp]] * adj$tog_skill) / tot_tog
+    avg_val <- sum(adj[[comp]] * adj$tog_rating) / tot_tog
     data.table::set(adj, j = comp, value = adj[[comp]] - avg_val)
   }
 
   # Verify: TOG-weighted average of adjusted components should be ~0
   for (comp in comps) {
-    weighted_avg <- sum(adj[[comp]] * adj$tog_skill) / tot_tog
+    weighted_avg <- sum(adj[[comp]] * adj$tog_rating) / tot_tog
     expect_equal(weighted_avg, 0, tolerance = 1e-10,
                  label = paste("weighted avg of adjusted", comp))
   }
@@ -320,7 +320,7 @@ test_that("TOG-weighted average adjustment produces correct math", {
   expect_true(adj$recv_epr[adj$player_id == 1] > adj$recv_epr[adj$player_id == 3])
 })
 
-test_that("TOG adjustment is skipped when all tog_skill are zero", {
+test_that("TOG adjustment is skipped when all tog_rating values are zero", {
   test_data <- data.frame(
     player_id = rep(1:2, each = 2),
     player_name = rep(c("Player One", "Player Two"), each = 2),
@@ -347,17 +347,17 @@ test_that("TOG adjustment is skipped when all tog_skill are zero", {
   # Skills with no matching player_ids → all default to 0
   skills <- data.frame(
     player_id = c(99, 100),
-    cond_tog_skill = c(0.8, 0.5),
-    squad_selection_skill = c(1.0, 1.0)
+    cond_tog_rating = c(0.8, 0.5),
+    squad_selection_rating = c(1.0, 1.0)
   )
 
   # Apply adjustment: tot_tog = 0, should skip
   adj <- data.table::copy(unadj)
   skills_dt <- data.table::as.data.table(skills)
-  adj[skills_dt, tog_skill := i.squad_selection_skill * i.cond_tog_skill, on = "player_id"]
-  adj[is.na(tog_skill), tog_skill := 0]
+  adj[skills_dt, tog_rating := i.squad_selection_rating * i.cond_tog_rating, on = "player_id"]
+  adj[is.na(tog_rating), tog_rating := 0]
 
-  tot_tog <- sum(adj$tog_skill)
+  tot_tog <- sum(adj$tog_rating)
   expect_equal(tot_tog, 0)
 
   # Values unchanged when tot_tog == 0

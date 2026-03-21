@@ -37,12 +37,12 @@
 #' @param skills Controls TOG-weighted average adjustment. When active, EPR
 #'   components are re-centered to "above TOG-weighted average" by subtracting
 #'   the weighted mean of each component (weighted by pred_tog =
-#'   \code{squad_selection_skill * cond_tog_skill}). Accepts:
+#'   \code{squad_selection_rating * cond_tog_rating}). Accepts:
 #'   \itemize{
-#'     \item \code{TRUE} (default): auto-loads skills via
-#'       \code{get_player_skills(current = FALSE)}.
+#'     \item \code{TRUE} (default): auto-loads stat ratings via
+#'       \code{get_player_stat_ratings(current = FALSE)}.
 #'     \item A data.frame with \code{player_id},
-#'       \code{cond_tog_skill}, and \code{squad_selection_skill} columns.
+#'       \code{cond_tog_rating}, and \code{squad_selection_rating} columns.
 #'     \item \code{FALSE} or \code{NULL}: skip adjustment.
 #'   }
 #'   Players not in \code{skills} default to weight 0 (excluded from the
@@ -79,29 +79,43 @@ calculate_epr <- function(season_val = get_afl_season(type = "current"),
   # Resolve skills: TRUE → auto-load, FALSE/NULL → skip, data.frame → validate
   if (isTRUE(skills)) {
     skills <- tryCatch(
-      get_player_skills(current = FALSE),
+      get_player_stat_ratings(current = FALSE),
       error = function(e) {
         cli::cli_warn("Could not load skills data, skipping TOG adjustment: {conditionMessage(e)}")
         NULL
       }
     )
-    if (!is.null(skills) && !"cond_tog_skill" %in% names(skills)) {
-      # Backwards compat: accept time_on_ground_skill as cond_tog_skill
-      if ("time_on_ground_skill" %in% names(skills)) {
-        skills$cond_tog_skill <- skills$time_on_ground_skill
+    if (!is.null(skills) && !"cond_tog_rating" %in% names(skills)) {
+      # Backwards compat: accept _skill suffix as _rating
+      if ("cond_tog_skill" %in% names(skills)) {
+        skills$cond_tog_rating <- skills$cond_tog_skill
+      } else if ("time_on_ground_skill" %in% names(skills)) {
+        skills$cond_tog_rating <- skills$time_on_ground_skill
       } else {
-        cli::cli_warn("Skills data missing {.field cond_tog_skill} column, skipping TOG adjustment.")
+        cli::cli_warn("Skills data missing {.field cond_tog_rating} column, skipping TOG adjustment.")
         skills <- NULL
+      }
+    }
+    if (!is.null(skills) && !"squad_selection_rating" %in% names(skills)) {
+      if ("squad_selection_skill" %in% names(skills)) {
+        skills$squad_selection_rating <- skills$squad_selection_skill
       }
     }
   } else if (isFALSE(skills)) {
     skills <- NULL
   } else if (!is.null(skills)) {
-    if (!"cond_tog_skill" %in% names(skills)) {
-      if ("time_on_ground_skill" %in% names(skills)) {
-        skills$cond_tog_skill <- skills$time_on_ground_skill
+    if (!"cond_tog_rating" %in% names(skills)) {
+      if ("cond_tog_skill" %in% names(skills)) {
+        skills$cond_tog_rating <- skills$cond_tog_skill
+      } else if ("time_on_ground_skill" %in% names(skills)) {
+        skills$cond_tog_rating <- skills$time_on_ground_skill
       } else {
-        cli::cli_abort("{.arg skills} must contain a {.field cond_tog_skill} column.")
+        cli::cli_abort("{.arg skills} must contain a {.field cond_tog_rating} column.")
+      }
+    }
+    if (!"squad_selection_rating" %in% names(skills)) {
+      if ("squad_selection_skill" %in% names(skills)) {
+        skills$squad_selection_rating <- skills$squad_selection_skill
       }
     }
   }
@@ -144,8 +158,8 @@ calculate_epr <- function(season_val = get_afl_season(type = "current"),
     if (!is.null(skills)) {
       skills_dt <- data.table::as.data.table(skills)
       plyr_gm_df_rnd[skills_dt, `:=`(
-        pred_selection = i.squad_selection_skill,
-        pred_cond_tog = i.cond_tog_skill
+        pred_selection = i.squad_selection_rating,
+        pred_cond_tog = i.cond_tog_rating
       ), on = "player_id"]
       plyr_gm_df_rnd[is.na(pred_selection), pred_selection := 0]
       plyr_gm_df_rnd[is.na(pred_cond_tog), pred_cond_tog := 0]
@@ -579,8 +593,8 @@ calculate_torp_ratings <- function(...) {
 psr_ratings <- function(season_val = get_afl_season(type = "current"),
                         round_val = get_afl_week(type = "next"),
                         psr_coef_path = NULL) {
-  skills <- load_player_skills(season_val)
-  result <- .compute_psr_from_skills(skills, psr_coef_path)
+  skills <- load_player_stat_ratings(season_val)
+  result <- .compute_psr_from_stat_ratings(skills, psr_coef_path)
   if (is.null(result)) {
     return(data.table::data.table(
       player_id = character(), player_name = character(),
@@ -628,8 +642,8 @@ torp_ratings <- function(season_val = get_afl_season(type = "current"),
 
   # Step 2: PSR with osr/dsr decomposition (only load current season skills)
   psr_df <- tryCatch({
-    skills <- load_player_skills(season_val)
-    .compute_psr_from_skills(skills)
+    skills <- load_player_stat_ratings(season_val)
+    .compute_psr_from_stat_ratings(skills)
   }, error = function(e) {
     cli::cli_warn("Could not compute PSR: {e$message} -- returning EPR-only ratings (no TORP blend)")
     NULL

@@ -1142,8 +1142,8 @@ build_team_mdl_df <- function(season = NULL, target_weeks = NULL,
   # Load PSR (Player Skill Ratings) with osr/dsr decomposition
   psr_df <- NULL
   tryCatch({
-    skills <- load_player_skills(TRUE)
-    psr_df <- .compute_psr_from_skills(skills, psr_coef_path)
+    skills <- load_player_stat_ratings(TRUE)
+    psr_df <- .compute_psr_from_stat_ratings(skills, psr_coef_path)
     if (!is.null(psr_df)) {
       cli::cli_inform("PSR computed for {nrow(psr_df)} player-rounds")
     }
@@ -1364,8 +1364,8 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
   # Strategy 2: Compute from skills + coefficients (with osr/dsr decomposition)
   if (is.null(psr_df)) {
     tryCatch({
-      skills <- load_player_skills(TRUE)
-      psr_df <- .compute_psr_from_skills(skills)
+      skills <- load_player_stat_ratings(TRUE)
+      psr_df <- .compute_psr_from_stat_ratings(skills)
       if (!is.null(psr_df)) {
         cli::cli_inform("PSR computed from skills+coefficients: {nrow(psr_df)} player-rounds")
       }
