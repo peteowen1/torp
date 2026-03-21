@@ -13,6 +13,10 @@ on:
         description: 'Override prediction week (leave empty for auto-detect)'
         type: number
         required: false
+      seasons:
+        description: 'Seasons to process (e.g. "2021:2025", "TRUE" for all, empty for current only)'
+        type: string
+        required: false
 
 env:
   GITHUB_PAT: ${{ secrets.WORKFLOW_PAT }}
@@ -57,12 +61,23 @@ jobs:
             devtools
 
       - name: Compute TORP ratings
+        env:
+          INPUT_SEASONS: ${{ github.event.inputs.seasons }}
         run: |
           Rscript -e "
-            SEASONS <- NULL
+            seasons_input <- Sys.getenv('INPUT_SEASONS', '')
+            if (seasons_input == '' || seasons_input == 'NA') {
+              SEASONS <- NULL
+            } else if (seasons_input == 'TRUE') {
+              SEASONS <- TRUE
+            } else {
+              # Parse range like '2021:2025' safely
+              parts <- as.integer(strsplit(seasons_input, ':')[[1]])
+              SEASONS <- if (length(parts) == 2) parts[1]:parts[2] else parts
+            }
             REFRESH_UPSTREAM <- FALSE
             REBUILD_PLAYER_GAME <- TRUE
-            REBUILD_ALL_RATINGS <- FALSE
+            REBUILD_ALL_RATINGS <- !is.null(SEASONS)
             source('data-raw/03-ratings/run_ratings_pipeline.R')
           "
 
