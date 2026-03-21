@@ -7,8 +7,8 @@ test_that("calculate_psr returns expected structure", {
     season = 2025L,
     round = 1L,
     pos_group = c("mid", "fwd", "def"),
-    kicks_skill = c(10, 5, 8),
-    handballs_skill = c(6, 3, 7)
+    kicks_rating = c(10, 5, 8),
+    handballs_rating = c(6, 3, 7)
   )
 
   coef_df <- data.frame(
@@ -32,8 +32,8 @@ test_that("calculate_psr applies coefficients correctly", {
     player_name = c("Alice", "Bob"),
     season = 2025L,
     round = 1L,
-    kicks_skill = c(10, 0),
-    handballs_skill = c(0, 5)
+    kicks_rating = c(10, 0),
+    handballs_rating = c(0, 5)
   )
 
   coef_df <- data.frame(
@@ -56,7 +56,7 @@ test_that("calculate_psr centers by default", {
     player_name = c("Alice", "Bob"),
     season = 2025L,
     round = 1L,
-    kicks_skill = c(10, 0)
+    kicks_rating = c(10, 0)
   )
 
   coef_df <- data.frame(
@@ -80,7 +80,7 @@ test_that("calculate_psr handles SD normalization", {
     player_name = "Alice",
     season = 2025L,
     round = 1L,
-    kicks_skill = 10
+    kicks_rating = 10
   )
 
   coef_df <- data.frame(
@@ -97,13 +97,13 @@ test_that("calculate_psr handles SD normalization", {
   expect_equal(result$psr, 4)
 })
 
-test_that("calculate_psr handles missing skill columns gracefully", {
+test_that("calculate_psr handles missing stat rating columns gracefully", {
   skills <- data.table::data.table(
     player_id = "P1",
     player_name = "Alice",
     season = 2025L,
     round = 1L,
-    kicks_skill = 10
+    kicks_rating = 10
   )
 
   coef_df <- data.frame(
@@ -121,7 +121,7 @@ test_that("calculate_psr handles missing skill columns gracefully", {
 })
 
 test_that("calculate_psr errors on missing required coef_df columns", {
-  skills <- data.table::data.table(player_id = "P1", kicks_skill = 10)
+  skills <- data.table::data.table(player_id = "P1", kicks_rating = 10)
   bad_coef <- data.frame(stat = "kicks", value = 1)
 
   expect_error(calculate_psr(skills, bad_coef), "stat_name")
@@ -133,7 +133,7 @@ test_that("calculate_psr handles all-zero coefficients", {
     player_name = "Alice",
     season = 2025L,
     round = 1L,
-    kicks_skill = 10
+    kicks_rating = 10
   )
 
   coef_df <- data.frame(stat_name = "kicks", beta = 0)
@@ -145,13 +145,13 @@ test_that("calculate_psr handles all-zero coefficients", {
   expect_equal(result$psr, 0)
 })
 
-test_that("calculate_psr treats NA skills as zero", {
+test_that("calculate_psr treats NA stat ratings as zero", {
   skills <- data.table::data.table(
     player_id = c("P1", "P2"),
     player_name = c("Alice", "Bob"),
     season = 2025L,
     round = 1L,
-    kicks_skill = c(10, NA_real_)
+    kicks_rating = c(10, NA_real_)
   )
 
   coef_df <- data.frame(stat_name = "kicks", beta = 1)

@@ -185,7 +185,7 @@ test_that("print.torp_player_profile produces output", {
         stringsAsFactors = FALSE
       ),
       yearly_stats = data.frame(season = 2024, games = 10),
-      torp_season = data.frame(season = 2024, season_epv = 100),
+      torp_season = data.frame(season = 2024, epv = 100),
       current_torp = data.frame(epr = 5.5)
     ),
     class = "torp_player_profile"

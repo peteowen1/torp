@@ -7,13 +7,13 @@
 calculate_psr(skills, coef_df, center = TRUE)
 }
 \arguments{
-\item{skills}{A data.table/data.frame from \code{load_player_skills()},
+\item{skills}{A data.table/data.frame from \code{load_player_stat_ratings()},
 containing \code{player_id}, \code{player_name}, \code{season},
-\code{round}, \code{pos_group}, and \code{*_skill} columns.}
+\code{round}, \code{pos_group}, and \code{*_rating} columns.}
 
 \item{coef_df}{A data.frame with columns \code{stat_name} and \code{beta},
 as produced by the PSR training script. If an \code{sd} column is present,
-each skill is divided by its SD before multiplying by beta (i.e. the
+each stat rating is divided by its SD before multiplying by beta (i.e. the
 coefficients are on the standardized scale).}
 
 \item{center}{Logical. If TRUE (default), subtract the league mean so
@@ -25,6 +25,6 @@ A data.table with columns: \code{player_id}, \code{player_name},
 }
 \description{
 Computes PSR for each player-round by applying glmnet coefficients to
-individual player skill values. PSR represents each player's predicted
-contribution to match margin based on their skill profile.
+individual player stat rating values. PSR represents each player's predicted
+contribution to match margin based on their stat rating profile.
 }

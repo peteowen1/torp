@@ -56,6 +56,8 @@ reference:
       - calculate_epr_stats
       - calculate_torp
       - calculate_psr_components
+      - calculate_psv
+      - calculate_psv_components
       - torp_ratings
       - calculate_epr
       - epr_ratings
@@ -70,17 +72,17 @@ reference:
       - team_profile
       - print.torp_team_profile
 
-  - title: Player Skills
-    desc: Estimate and explore player skill profiles
+  - title: Player Stat Ratings
+    desc: Estimate and explore player stat rating profiles
     contents:
-      - aggregate_team_skills
-      - estimate_player_skills
-      - get_player_skills
-      - player_skill_profile
-      - print.torp_skill_profile
-      - get_team_skills
-      - team_skill_profile
-      - print.torp_team_skill_profile
+      - aggregate_team_stat_ratings
+      - estimate_player_stat_ratings
+      - get_player_stat_ratings
+      - player_stat_rating_profile
+      - print.torp_stat_rating_profile
+      - get_team_stat_ratings
+      - team_stat_rating_profile
+      - print.torp_team_stat_rating_profile
 
   - title: Season Simulation
     desc: Simulate AFL seasons and predict match outcomes
@@ -102,7 +104,7 @@ reference:
   - title: Match Analysis
     desc: Match-level expected goals, predictions, and head-to-head comparisons
     contents:
-      - get_player_match_ratings
+      - get_player_game_ratings
       - get_xg
       - calculate_match_xgs
       - head_to_head

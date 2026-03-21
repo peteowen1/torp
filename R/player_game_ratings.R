@@ -31,8 +31,9 @@ player_game_ratings <- function(season_val = get_afl_season(),
     cli::cli_abort("season_val must be numeric (e.g., 2024)")
   }
 
+  if (isTRUE(round_val)) round_val <- 0:28
   if (!is.numeric(round_val) && !is.na(round_val)) {
-    cli::cli_abort("round_val must be numeric (e.g., 1, 2, 3...)")
+    cli::cli_abort("round_val must be numeric (e.g., 1, 2, 3...) or TRUE for all rounds")
   }
 
   max_season <- get_afl_season() + 1L
@@ -46,8 +47,16 @@ player_game_ratings <- function(season_val = get_afl_season(),
   }
 
   df <- load_player_game_ratings(season_val)
+  df <- .center_epv_raw(df)
   df <- filter_game_data(df, season_val, round_val, matchid, team)
-  df |> dplyr::arrange(-.data$epv_p80)
+  df |>
+    dplyr::select(
+      "season", "round", "player_name", "position", "team", "opp", "tog",
+      "epv", "recv_epv", "disp_epv", "spoil_epv", "hitout_epv",
+      "epv_p80", "recv_epv_p80", "disp_epv_p80", "spoil_epv_p80", "hitout_epv_p80",
+      "player_id", "team_id", "match_id"
+    ) |>
+    dplyr::arrange(-.data$epv)
 }
 
 #' Compute player game ratings from raw player game data
@@ -73,28 +82,73 @@ player_game_ratings <- function(season_val = get_afl_season(),
   df |>
     dplyr::arrange(-.data$epv_adj) |>
     dplyr::mutate(
+      listed_position = dplyr::if_else(.data$listed_position == "MIDFIELDER_FORWARD",
+                                       "MEDIUM_FORWARD", .data$listed_position),
       tog_frac = pmax(.data$time_on_ground_percentage / 100, 0.1),
-      epv_raw = round(.data$epv, 1),
-      recv_epv_raw = round(.data$recv_epv, 1),
-      disp_epv_raw = round(.data$disp_epv, 1),
-      spoil_epv_raw = round(.data$spoil_epv, 1),
-      hitout_epv_raw = round(.data$hitout_epv, 1),
-      epv_p80 = round(.data$epv_adj, 1),
-      recv_epv_p80 = round(.data$recv_epv_adj, 1),
-      disp_epv_p80 = round(.data$disp_epv_adj, 1),
-      spoil_epv_p80 = round(.data$spoil_epv_adj, 1),
-      hitout_epv_p80 = round(.data$hitout_epv_adj, 1)
+      recv_epv_c = round(.data$recv_epv -
+        sum(.data$recv_epv) / sum(.data$tog_frac) * .data$tog_frac, 1),
+      disp_epv_c = round(.data$disp_epv -
+        sum(.data$disp_epv) / sum(.data$tog_frac) * .data$tog_frac, 1),
+      spoil_epv_c = round(.data$spoil_epv -
+        sum(.data$spoil_epv) / sum(.data$tog_frac) * .data$tog_frac, 1),
+      hitout_epv_c = round(.data$hitout_epv -
+        sum(.data$hitout_epv) / sum(.data$tog_frac) * .data$tog_frac, 1),
+      epv_c = round(.data$recv_epv_c + .data$disp_epv_c +
+        .data$spoil_epv_c + .data$hitout_epv_c, 1),
+      .by = c("season", "listed_position")
+    ) |>
+    dplyr::mutate(
+      epv_p80 = round(.data$epv_c / .data$tog_frac, 1),
+      recv_epv_p80 = round(.data$recv_epv_c / .data$tog_frac, 1),
+      disp_epv_p80 = round(.data$disp_epv_c / .data$tog_frac, 1),
+      spoil_epv_p80 = round(.data$spoil_epv_c / .data$tog_frac, 1),
+      hitout_epv_p80 = round(.data$hitout_epv_c / .data$tog_frac, 1)
     ) |>
     dplyr::select(
       season = "season", round = "round",
-      player_name = "player_name", position = "listed_position", team_id = "team_id", team = "team", opp = "opponent",
+      player_name = "player_name", position = "listed_position", team = "team", opp = "opponent",
       tog = "tog_frac",
-      epv_raw = "epv_raw", recv_epv_raw = "recv_epv_raw", disp_epv_raw = "disp_epv_raw",
-      spoil_epv_raw = "spoil_epv_raw", hitout_epv_raw = "hitout_epv_raw",
+      epv = "epv_c", recv_epv = "recv_epv_c", disp_epv = "disp_epv_c",
+      spoil_epv = "spoil_epv_c", hitout_epv = "hitout_epv_c",
       epv_p80 = "epv_p80", recv_epv_p80 = "recv_epv_p80", disp_epv_p80 = "disp_epv_p80",
       spoil_epv_p80 = "spoil_epv_p80", hitout_epv_p80 = "hitout_epv_p80",
-      player_id = "player_id", match_id = "match_id"
+      player_id = "player_id", team_id = "team_id", match_id = "match_id"
     )
+}
+
+#' Center EPV raw columns to per-position-season mean of zero
+#'
+#' @param df Player game ratings data frame.
+#' @return Data frame with centered EPV and per-80 columns.
+#' @keywords internal
+.center_epv_raw <- function(df) {
+  df |>
+    dplyr::mutate(
+      position = dplyr::if_else(.data$position == "MIDFIELDER_FORWARD",
+                                "MEDIUM_FORWARD", .data$position)
+    ) |>
+    dplyr::mutate(
+      recv_epv = round(.data$recv_epv_raw -
+        sum(.data$recv_epv_raw) / sum(.data$tog) * .data$tog, 1),
+      disp_epv = round(.data$disp_epv_raw -
+        sum(.data$disp_epv_raw) / sum(.data$tog) * .data$tog, 1),
+      spoil_epv = round(.data$spoil_epv_raw -
+        sum(.data$spoil_epv_raw) / sum(.data$tog) * .data$tog, 1),
+      hitout_epv = round(.data$hitout_epv_raw -
+        sum(.data$hitout_epv_raw) / sum(.data$tog) * .data$tog, 1),
+      epv = round(.data$recv_epv + .data$disp_epv +
+        .data$spoil_epv + .data$hitout_epv, 1),
+      .by = c("season", "position")
+    ) |>
+    dplyr::mutate(
+      epv_p80 = round(.data$epv / .data$tog, 1),
+      recv_epv_p80 = round(.data$recv_epv / .data$tog, 1),
+      disp_epv_p80 = round(.data$disp_epv / .data$tog, 1),
+      spoil_epv_p80 = round(.data$spoil_epv / .data$tog, 1),
+      hitout_epv_p80 = round(.data$hitout_epv / .data$tog, 1)
+    ) |>
+    dplyr::select(-"epv_raw", -"recv_epv_raw", -"disp_epv_raw",
+                   -"spoil_epv_raw", -"hitout_epv_raw")
 }
 
 #' Filter game data
@@ -166,7 +220,9 @@ player_season_ratings <- function(season_val = get_afl_season(), round_num = NUL
     cli::cli_abort("All seasons must be between 1990 and {max_season}")
   }
 
-  load_player_season_ratings(season_val)
+  pgr <- load_player_game_ratings(season_val)
+  pgr <- .center_epv_raw(pgr)
+  .compute_player_season_ratings(pgr)
 }
 
 #' Compute player season ratings from player game ratings
@@ -186,15 +242,21 @@ player_season_ratings <- function(season_val = get_afl_season(), round_num = NUL
       team = get_mode(.data$team),
       position = get_mode(.data$position),
       games = dplyr::n(),
-      season_epv = sum(.data$epv_raw),
-      season_recv_epv = sum(.data$recv_epv_raw),
-      season_disp_epv = sum(.data$disp_epv_raw),
-      season_spoil_epv = sum(.data$spoil_epv_raw),
-      season_hitout_epv = sum(.data$hitout_epv_raw),
-      epv_pg = .data$season_epv / .data$games,
-      avg_p80 = mean(.data$epv_p80),
       avg_tog = mean(.data$tog),
+      epv = sum(.data$epv),
+      recv_epv = sum(.data$recv_epv),
+      disp_epv = sum(.data$disp_epv),
+      spoil_epv = sum(.data$spoil_epv),
+      hitout_epv = sum(.data$hitout_epv),
+      epv_pg = .data$epv / .data$games,
+      epv_p80 = mean(.data$epv_p80),
       .groups = "drop"
     ) |>
-    dplyr::arrange(-.data$season_epv)
+    dplyr::select(
+      "season", "player_name", "position", "team", "games", "avg_tog",
+      "epv", "recv_epv", "disp_epv", "spoil_epv", "hitout_epv",
+      "epv_pg", "epv_p80",
+      "player_id", "team_id"
+    ) |>
+    dplyr::arrange(-.data$epv)
 }

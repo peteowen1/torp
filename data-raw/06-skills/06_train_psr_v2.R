@@ -1,15 +1,15 @@
 # 06_train_psr_v2.R
 # =================
-# PSR v2: Separate home/away skill features (not diffs) for cleaner
+# PSR v2: Separate home/away stat rating features (not diffs) for cleaner
 # offense/defense decomposition.
 #
-# OSR model: home_score ~ home_skills + away_skills
-# DSR model: away_score ~ home_skills + away_skills
-# Margin model: margin ~ home_skills + away_skills
+# OSR model: home_score ~ home_ratings + away_ratings
+# DSR model: away_score ~ home_ratings + away_ratings
+# Margin model: margin ~ home_ratings + away_ratings
 #
 # Player attribution:
-#   OSR = Σ β_own_off × skill/sd  (your skills → your team scores more)
-#   DSR = -Σ β_opp_def × skill/sd (your skills → opponent scores less)
+#   OSR = Σ β_own_off × rating/sd  (your ratings → your team scores more)
+#   DSR = -Σ β_opp_def × rating/sd (your ratings → opponent scores less)
 #
 # Train: 2021-2024, Test: 2025
 
@@ -27,7 +27,7 @@ r2 <- function(a, p) 1 - sum((a - p)^2) / sum((a - mean(a))^2)
 # 1. Load & prep data (same as v1) ----
 cli::cli_h1("Loading data")
 
-skills <- as.data.table(load_player_skills(TRUE))
+stat_ratings <- as.data.table(load_player_stat_ratings(TRUE))
 teams <- as.data.table(load_teams(TRUE))
 fixtures <- as.data.table(load_fixtures(all = TRUE))
 
@@ -46,25 +46,25 @@ teams <- teams[is.na(position) | (position != "EMERG" & position != "SUB")]
 teams[, round := as.integer(round_number)]
 teams[, player_id := as.character(player_id)]
 teams[, season := as.integer(season)]
-skills[, player_id := as.character(player_id)]
-skills[, season := as.integer(season)]
-skills[, round := as.integer(round)]
+stat_ratings[, player_id := as.character(player_id)]
+stat_ratings[, season := as.integer(season)]
+stat_ratings[, round := as.integer(round)]
 
-stat_defs <- skill_stat_definitions()
+stat_defs <- stat_rating_definitions()
 exclude_stats <- c("cond_tog", "squad_selection", "dream_team_points", "rating_points")
-all_skill_names <- setdiff(stat_defs$stat_name, exclude_stats)
-skill_cols <- intersect(paste0(all_skill_names, "_skill"), names(skills))
+all_rating_names <- setdiff(stat_defs$stat_name, exclude_stats)
+rating_cols <- intersect(paste0(all_rating_names, "_rating"), names(stat_ratings))
 
-cli::cli_inform("Using {length(skill_cols)} skill columns")
+cli::cli_inform("Using {length(rating_cols)} stat rating columns")
 
-skills_join <- skills[, c("player_id", "season", "round", "pos_group", skill_cols), with = FALSE]
-merged <- merge(teams, skills_join, by = c("player_id", "season", "round"), all.x = TRUE)
+ratings_join <- stat_ratings[, c("player_id", "season", "round", "pos_group", rating_cols), with = FALSE]
+merged <- merge(teams, ratings_join, by = c("player_id", "season", "round"), all.x = TRUE)
 
 # Impute
 pos_means <- merged[!is.na(pos_group), lapply(.SD, mean, na.rm = TRUE),
-                    by = pos_group, .SDcols = skill_cols]
-global_means <- merged[, lapply(.SD, mean, na.rm = TRUE), .SDcols = skill_cols]
-for (sc in skill_cols) {
+                    by = pos_group, .SDcols = rating_cols]
+global_means <- merged[, lapply(.SD, mean, na.rm = TRUE), .SDcols = rating_cols]
+for (sc in rating_cols) {
   na_idx <- which(is.na(merged[[sc]]))
   if (length(na_idx) > 0) {
     for (pg in unique(pos_means$pos_group)) {
@@ -77,31 +77,31 @@ for (sc in skill_cols) {
 }
 
 # Aggregate to team level
-merged[, .total_skill := rowSums(.SD, na.rm = TRUE), .SDcols = skill_cols]
-team_skills <- merged[order(-.total_skill)][
+merged[, .total_rating := rowSums(.SD, na.rm = TRUE), .SDcols = rating_cols]
+team_ratings <- merged[order(-.total_rating)][
   , head(.SD, 22), by = .(match_id, team_id)
 ][, {
   out <- list(n_players = .N)
-  for (sc in skill_cols) out[[sc]] <- sum(get(sc), na.rm = TRUE)
+  for (sc in rating_cols) out[[sc]] <- sum(get(sc), na.rm = TRUE)
   out
 }, by = .(match_id, team_id, season, round)]
 
-team_skills <- merge(team_skills,
+team_ratings <- merge(team_ratings,
   fixtures[, .(match_id, home_team_id, away_team_id)],
   by = "match_id", all.x = TRUE)
-team_skills[, team_type := fifelse(team_id == home_team_id, "home", "away")]
+team_ratings[, team_type := fifelse(team_id == home_team_id, "home", "away")]
 
 # 2. Build separate home/away feature matrix ----
 cli::cli_h1("Building separate home/away feature matrix")
 
-home <- team_skills[team_type == "home"]
-away <- team_skills[team_type == "away"]
+home <- team_ratings[team_type == "home"]
+away <- team_ratings[team_type == "away"]
 
-home_cols <- paste0("home_", skill_cols)
-away_cols <- paste0("away_", skill_cols)
+home_cols <- paste0("home_", rating_cols)
+away_cols <- paste0("away_", rating_cols)
 
-setnames(home, skill_cols, home_cols)
-setnames(away, skill_cols, away_cols)
+setnames(home, rating_cols, home_cols)
+setnames(away, rating_cols, away_cols)
 
 match_df <- merge(
   home[, c("match_id", "season", "round", home_cols), with = FALSE],
@@ -199,25 +199,25 @@ cli::cli_h1("Extracting player-level coefficients")
 
 # Offensive model coefficients
 off_cs <- off_fit$coefs
-# home_* coefficients = "own skills → own score" = OSR
-# away_* coefficients = "opponent skills → own score" = opponent's defensive impact
-off_home_beta <- off_cs[paste0("home_", skill_cols), 1]
-off_away_beta <- off_cs[paste0("away_", skill_cols), 1]
+# home_* coefficients = "own ratings → own score" = OSR
+# away_* coefficients = "opponent ratings → own score" = opponent's defensive impact
+off_home_beta <- off_cs[paste0("home_", rating_cols), 1]
+off_away_beta <- off_cs[paste0("away_", rating_cols), 1]
 
 # Defensive model coefficients
 def_cs <- def_fit$coefs
-# home_* coefficients = "own skills → opponent score" = own defensive impact
-# away_* coefficients = "opponent skills → opponent score" = opponent's OSR
-def_home_beta <- def_cs[paste0("home_", skill_cols), 1]
-def_away_beta <- def_cs[paste0("away_", skill_cols), 1]
+# home_* coefficients = "own ratings → opponent score" = own defensive impact
+# away_* coefficients = "opponent ratings → opponent score" = opponent's OSR
+def_home_beta <- def_cs[paste0("home_", rating_cols), 1]
+def_away_beta <- def_cs[paste0("away_", rating_cols), 1]
 
 # For a player on the HOME team:
-#   OSR = off_home_beta × skill (my skills → my team scores more)
-#   DSR = -def_home_beta × skill (my skills → opponent scores less; negate so positive = good)
+#   OSR = off_home_beta × rating (my ratings → my team scores more)
+#   DSR = -def_home_beta × rating (my ratings → opponent scores less; negate so positive = good)
 #
 # For a player on the AWAY team:
-#   OSR = def_away_beta × skill (my skills → my team scores more)
-#   DSR = -off_away_beta × skill (my skills → opponent scores less; negate so positive = good)
+#   OSR = def_away_beta × rating (my ratings → my team scores more)
+#   DSR = -off_away_beta × rating (my ratings → opponent scores less; negate so positive = good)
 #
 # For symmetric attribution, average the home and away perspectives:
 #   OSR_beta = (off_home_beta + def_away_beta) / 2
@@ -226,19 +226,19 @@ def_away_beta <- def_cs[paste0("away_", skill_cols), 1]
 osr_beta <- (off_home_beta + def_away_beta) / 2
 dsr_beta <- -(def_home_beta + off_away_beta) / 2
 
-# SDs for the home_ columns (player skills get divided by these)
-home_sds <- train_sds[paste0("home_", skill_cols)]
+# SDs for the home_ columns (player stat ratings get divided by these)
+home_sds <- train_sds[paste0("home_", rating_cols)]
 
 # Build coef_dfs for calculate_psr()
 osr_coef_df <- data.frame(
-  stat_name = sub("_skill$", "", skill_cols),
+  stat_name = sub("_rating$", "", rating_cols),
   beta = as.numeric(osr_beta),
   sd = as.numeric(home_sds),
   stringsAsFactors = FALSE
 )
 
 dsr_coef_df <- data.frame(
-  stat_name = sub("_skill$", "", skill_cols),
+  stat_name = sub("_rating$", "", rating_cols),
   beta = as.numeric(dsr_beta),
   sd = as.numeric(home_sds),
   stringsAsFactors = FALSE
@@ -246,12 +246,12 @@ dsr_coef_df <- data.frame(
 
 # Margin model: average home and away perspectives too
 margin_cs <- margin_fit$coefs
-margin_home_beta <- margin_cs[paste0("home_", skill_cols), 1]
-margin_away_beta <- margin_cs[paste0("away_", skill_cols), 1]
+margin_home_beta <- margin_cs[paste0("home_", rating_cols), 1]
+margin_away_beta <- margin_cs[paste0("away_", rating_cols), 1]
 psr_beta <- (margin_home_beta - margin_away_beta) / 2
 
 psr_coef_df <- data.frame(
-  stat_name = sub("_skill$", "", skill_cols),
+  stat_name = sub("_rating$", "", rating_cols),
   beta = as.numeric(psr_beta),
   sd = as.numeric(home_sds),
   stringsAsFactors = FALSE
@@ -269,13 +269,13 @@ print(head(psr_coef_df[order(-abs(psr_coef_df$beta)), c("stat_name", "beta")], 1
 # 5. Calculate player ratings ----
 cli::cli_h1("Player ratings")
 
-osr <- calculate_psr(skills, osr_coef_df, center = TRUE)
+osr <- calculate_psr(stat_ratings, osr_coef_df, center = TRUE)
 setnames(osr, c("psr_raw", "psr"), c("osr_raw", "osr"))
 
-dsr <- calculate_psr(skills, dsr_coef_df, center = TRUE)
+dsr <- calculate_psr(stat_ratings, dsr_coef_df, center = TRUE)
 setnames(dsr, c("psr_raw", "psr"), c("dsr_raw", "dsr"))
 
-psr_v2 <- calculate_psr(skills, psr_coef_df, center = TRUE)
+psr_v2 <- calculate_psr(stat_ratings, psr_coef_df, center = TRUE)
 setnames(psr_v2, c("psr_raw", "psr"), c("margin_psr_raw", "margin_psr"))
 
 id_cols <- intersect(names(osr), names(dsr))
@@ -323,7 +323,7 @@ v1_out <- if (has_v1) readRDS(v1_path) else NULL
 
 # v1 diff features (rebuild quickly)
 if (has_v1) {
-  diff_cols <- paste0(all_skill_names[paste0(all_skill_names, "_skill") %in% skill_cols], "_diff")
+  diff_cols <- paste0(all_rating_names[paste0(all_rating_names, "_rating") %in% rating_cols], "_diff")
   X_diff_raw <- as.matrix(match_df[, home_cols, with = FALSE]) -
                 as.matrix(match_df[, away_cols, with = FALSE])
   colnames(X_diff_raw) <- diff_cols
@@ -427,7 +427,7 @@ v2_out <- list(
   margin_intercept = margin_fit$coefs[1, 1],
   off_intercept = off_fit$coefs[1, 1], def_intercept = def_fit$coefs[1, 1],
   train_sds = train_sds, home_sds = home_sds,
-  skill_cols = skill_cols,
+  rating_cols = rating_cols,
   train_seasons = sort(unique(train_seasons)),
   test_rmse_margin = margin_fit$test_rmse,
   test_rmse_psr = rmse(y_margin_test, pred_psr_v2)

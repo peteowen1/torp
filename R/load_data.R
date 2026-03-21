@@ -966,41 +966,50 @@ load_ep_wp_charts <- function(seasons = get_afl_season(), rounds = TRUE, use_dis
   return(out)
 }
 
-#' Load Player Skills Data
+#' Load Player Stat Ratings Data
 #'
-#' @description Loads pre-computed Bayesian player skill estimates from the
+#' @description Loads pre-computed Bayesian player stat rating estimates from the
 #'   [torpdata repository](https://github.com/peteowen1/torpdata).
-#'   Skills are per-stat estimates with credible intervals, produced by
-#'   \code{estimate_player_skills()}.
+#'   Stat ratings are per-stat estimates with credible intervals, produced by
+#'   \code{estimate_player_stat_ratings()}.
 #'
 #' @param seasons A numeric vector of 4-digit years associated with given AFL
-#'   seasons — defaults to latest season. If set to `TRUE`, returns all
+#'   seasons -- defaults to latest season. If set to `TRUE`, returns all
 #'   available data since 2021.
 #' @param use_disk_cache Logical. If `TRUE`, uses persistent disk cache for
 #'   faster repeated loads. Default is `FALSE`.
 #' @param columns Optional character vector of column names to read. If NULL (default), reads all columns.
 #'
-#' @return A data frame containing player skill estimates with columns
+#' @return A data frame containing player stat rating estimates with columns
 #'   including `player_id`, `player_name`, `pos_group`, `n_games`,
-#'   `wt_games`, `ref_date`, and `{stat}_skill`, `{stat}_lower`,
+#'   `wt_games`, `ref_date`, and `{stat}_rating`, `{stat}_lower`,
 #'   `{stat}_upper` for each estimated stat.
-#' @seealso [estimate_player_skills()], [player_skill_profile()], [load_player_game_ratings()]
+#' @seealso [estimate_player_stat_ratings()], [player_stat_rating_profile()], [load_player_game_ratings()]
 #' @examples
 #' \dontrun{
 #' try({ # prevents cran errors
-#'   load_player_skills(2024)
+#'   load_player_stat_ratings(2024)
 #' })
 #' }
 #' @export
-load_player_skills <- function(seasons = get_afl_season(), use_disk_cache = FALSE, columns = NULL) {
+load_player_stat_ratings <- function(seasons = get_afl_season(), use_disk_cache = FALSE, columns = NULL) {
   seasons <- validate_seasons(seasons)
 
+  # Release tag/prefix still uses "player_skills" (torpdata infrastructure).
+  # Column normalisation below handles _skill → _rating mapping.
   urls <- generate_urls("player_skills-data", "player_skills", seasons)
 
   out <- load_from_url(urls, seasons = seasons, use_disk_cache = use_disk_cache, columns = columns)
 
+  # Map old *_skill columns to *_rating for backward compat with old parquets
+  .normalise_stat_rating_columns(out)
+
   return(out)
 }
+
+#' @rdname load_player_stat_ratings
+#' @export
+load_player_skills <- load_player_stat_ratings
 
 
 #' Load Player Skill Ratings (PSR)
@@ -1020,7 +1029,7 @@ load_player_skills <- function(seasons = get_afl_season(), use_disk_cache = FALS
 #' @return A data frame containing PSR data with columns including
 #'   \code{player_id}, \code{player_name}, \code{season}, \code{round},
 #'   \code{pos_group}, \code{psr_raw}, and \code{psr}.
-#' @seealso [calculate_psr()], [load_player_skills()], [load_torp_ratings()]
+#' @seealso [calculate_psr()], [load_player_stat_ratings()], [load_torp_ratings()]
 #' @examples
 #' \dontrun{
 #' try({ # prevents cran errors

@@ -1,10 +1,10 @@
-# Player Skill Estimation Configuration
-# ======================================
+# Player Stat Rating Estimation Configuration
+# =============================================
 # Stat definitions, position mapping, and default hyperparameters
-# for Bayesian skill estimation pipeline.
+# for Bayesian stat rating estimation pipeline.
 
 
-#' Stat definitions for player skill estimation
+#' Stat definitions for player stat rating estimation
 #'
 #' Returns a data.frame describing every stat to estimate. Each row specifies
 #' how to extract the raw value from player data and whether it's a rate stat
@@ -20,7 +20,7 @@
 #'     \item{attempts_col}{Column or expression for attempts (efficiency stats only)}
 #'   }
 #' @keywords internal
-skill_stat_definitions <- function() {
+stat_rating_definitions <- function() {
   rate_stats <- data.frame(
     stat_name = c(
       # --- Existing stats ---
@@ -177,7 +177,7 @@ skill_stat_definitions <- function() {
 }
 
 
-#' Position group mapping for AFL skill estimation
+#' Position group mapping for AFL stat rating estimation
 #'
 #' Maps AFL listed positions to 6 position groups for computing
 #' position-specific priors. MIDFIELDER_FORWARD is combined with
@@ -186,7 +186,7 @@ skill_stat_definitions <- function() {
 #' @return A named list mapping group names to character vectors of
 #'   AFL position strings.
 #' @keywords internal
-skill_position_map <- function() {
+stat_rating_position_map <- function() {
   list(
     KEY_DEFENDER    = "KEY_DEFENDER",
     MEDIUM_DEFENDER = "MEDIUM_DEFENDER",
@@ -198,9 +198,9 @@ skill_position_map <- function() {
 }
 
 
-#' Default hyperparameters for skill estimation
+#' Default hyperparameters for stat rating estimation
 #'
-#' Returns optimized defaults for the Bayesian skill estimation pipeline.
+#' Returns optimized defaults for the Bayesian stat rating estimation pipeline.
 #' Per-category lambda and prior values come from
 #' \code{data-raw/06-skills/02_optimize_skill_params.R}. The global \code{lambda_rate}
 #' and \code{prior_games} are used as fallbacks for any category not in
@@ -217,15 +217,15 @@ skill_position_map <- function() {
 #'     \item{category_params}{Per-category lambda and prior_strength overrides.}
 #'   }
 #' @keywords internal
-default_skill_params <- function() {
+default_stat_rating_params <- function() {
   list(
-    lambda_rate       = SKILL_LAMBDA_RATE_DEFAULT,
-    lambda_efficiency = SKILL_LAMBDA_EFFICIENCY_DEFAULT,
-    prior_games       = SKILL_PRIOR_GAMES_DEFAULT,
-    prior_attempts    = SKILL_PRIOR_ATTEMPTS_DEFAULT,
-    min_games         = SKILL_MIN_GAMES,
-    credible_level    = SKILL_CREDIBLE_LEVEL,
-    stat_params       = .skill_stat_params()
+    lambda_rate       = STAT_RATING_LAMBDA_RATE_DEFAULT,
+    lambda_efficiency = STAT_RATING_LAMBDA_EFFICIENCY_DEFAULT,
+    prior_games       = STAT_RATING_PRIOR_GAMES_DEFAULT,
+    prior_attempts    = STAT_RATING_PRIOR_ATTEMPTS_DEFAULT,
+    min_games         = STAT_RATING_MIN_GAMES,
+    credible_level    = STAT_RATING_CREDIBLE_LEVEL,
+    stat_params       = .stat_rating_params()
   )
 }
 
@@ -236,7 +236,7 @@ default_skill_params <- function() {
 #' attempt-weighted log-loss. Each entry has \code{lambda} (decay per day)
 #' and \code{prior_strength}.
 #' @keywords internal
-.skill_stat_params <- function() {
+.stat_rating_params <- function() {
   list(
     # Rate stats (Gamma-Poisson, optimized via multi-start MSE)
     goals                     = list(lambda = 0.00301, prior_strength = 3.05),
@@ -298,3 +298,24 @@ default_skill_params <- function() {
     squad_selection           = list(lambda = 0.01749, prior_strength = 0.48,   prior_quantile = 0.5)
   )
 }
+
+
+# ============================================================================
+# Backward compatibility aliases
+# ============================================================================
+
+#' @rdname stat_rating_definitions
+#' @export
+skill_stat_definitions <- stat_rating_definitions
+
+#' @rdname stat_rating_position_map
+#' @export
+skill_position_map <- stat_rating_position_map
+
+#' @rdname default_stat_rating_params
+#' @export
+default_skill_params <- default_stat_rating_params
+
+#' @rdname .stat_rating_params
+#' @keywords internal
+.skill_stat_params <- .stat_rating_params

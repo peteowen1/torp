@@ -305,16 +305,16 @@ if (run_ratings) {
       cli::cli_inform("  player_season_ratings_{season}: {nrow(ratings)} rows")
     })
 
-    # PSR (Player Skill Ratings)
+    # PSR (Player Stat Ratings)
     safe_run(paste0("psr_", season), {
-      skills <- load_player_skills(season)
+      stat_ratings <- load_player_stat_ratings(season)
       psr_coef_path <- system.file("extdata", "psr_v2_coefficients.csv", package = "torp")
       if (psr_coef_path == "") {
         psr_coef_path <- file.path("data-raw", "cache-skills", "psr_v2_coefficients.csv")
       }
       if (file.exists(psr_coef_path)) {
         coef_df <- utils::read.csv(psr_coef_path)
-        psr_data <- calculate_psr(skills, coef_df)
+        psr_data <- calculate_psr(stat_ratings, coef_df)
         save_to_release(psr_data, paste0("psr_", season), "psr-data")
         cli::cli_inform("  psr_{season}: {nrow(psr_data)} rows")
       } else {

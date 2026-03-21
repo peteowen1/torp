@@ -1,7 +1,7 @@
 # 05_train_psr_model.R
 # ====================
-# Train PSR (Player Skill Rating) model: glmnet predicting match margin
-# from team-aggregated player skill diffs, then apportion coefficients
+# Train PSR (Player Stat Rating) model: glmnet predicting match margin
+# from team-aggregated player stat rating diffs, then apportion coefficients
 # back to individual players.
 #
 # Train: 2021-2024, Test: 2025
@@ -18,11 +18,11 @@ if (!dir.exists(cache_dir)) dir.create(cache_dir, recursive = TRUE)
 # 1. Load data ----
 cli::cli_h1("Loading data")
 
-skills <- as.data.table(load_player_skills(TRUE))
+stat_ratings <- as.data.table(load_player_stat_ratings(TRUE))
 teams <- as.data.table(load_teams(TRUE))
 fixtures <- as.data.table(load_fixtures(all = TRUE))
 
-cli::cli_inform("Skills: {nrow(skills)} rows, {length(unique(skills$season))} seasons")
+cli::cli_inform("Stat ratings: {nrow(stat_ratings)} rows, {length(unique(stat_ratings$season))} seasons")
 cli::cli_inform("Teams: {nrow(teams)} rows")
 cli::cli_inform("Fixtures: {nrow(fixtures)} rows")
 
@@ -49,49 +49,49 @@ teams <- teams[is.na(position) | (position != "EMERG" & position != "SUB")]
 teams[, round := as.integer(round_number)]
 teams[, player_id := as.character(player_id)]
 teams[, season := as.integer(season)]
-skills[, player_id := as.character(player_id)]
-skills[, season := as.integer(season)]
-skills[, round := as.integer(round)]
+stat_ratings[, player_id := as.character(player_id)]
+stat_ratings[, season := as.integer(season)]
+stat_ratings[, round := as.integer(round)]
 
-# 2. Join skills to lineups ----
-cli::cli_h1("Joining skills to lineups")
+# 2. Join stat ratings to lineups ----
+cli::cli_h1("Joining stat ratings to lineups")
 
-# Identify skill columns (exclude time_on_ground, dream_team_points, rating_points)
-stat_defs <- skill_stat_definitions()
-all_skill_names <- stat_defs$stat_name
+# Identify rating columns (exclude time_on_ground, dream_team_points, rating_points)
+stat_defs <- stat_rating_definitions()
+all_rating_names <- stat_defs$stat_name
 exclude_stats <- c("cond_tog", "squad_selection", "dream_team_points", "rating_points")
-all_skill_names <- setdiff(all_skill_names, exclude_stats)
-skill_cols <- paste0(all_skill_names, "_skill")
-skill_cols <- intersect(skill_cols, names(skills))
+all_rating_names <- setdiff(all_rating_names, exclude_stats)
+rating_cols <- paste0(all_rating_names, "_rating")
+rating_cols <- intersect(rating_cols, names(stat_ratings))
 
-cli::cli_inform("Using {length(skill_cols)} skill columns (excl. {paste(exclude_stats, collapse = ', ')})")
+cli::cli_inform("Using {length(rating_cols)} stat rating columns (excl. {paste(exclude_stats, collapse = ', ')})")
 
-# Select minimal columns from skills for join
-skills_join <- skills[, c("player_id", "season", "round", "pos_group", skill_cols), with = FALSE]
+# Select minimal columns from stat ratings for join
+ratings_join <- stat_ratings[, c("player_id", "season", "round", "pos_group", rating_cols), with = FALSE]
 
 # Join on player_id + season + round
 merged <- merge(
   teams,
-  skills_join,
+  ratings_join,
   by = c("player_id", "season", "round"),
   all.x = TRUE
 )
 
-n_matched <- sum(!is.na(merged[[skill_cols[1]]]))
+n_matched <- sum(!is.na(merged[[rating_cols[1]]]))
 n_total <- nrow(merged)
-cli::cli_inform("Skill match rate: {n_matched}/{n_total} ({round(100 * n_matched / n_total, 1)}%)")
+cli::cli_inform("Stat rating match rate: {n_matched}/{n_total} ({round(100 * n_matched / n_total, 1)}%)")
 
-# Impute missing skills with position-group means
-cli::cli_h2("Imputing missing skills")
+# Impute missing stat ratings with position-group means
+cli::cli_h2("Imputing missing stat ratings")
 
 # Compute position-group means across all data
 pos_means <- merged[!is.na(pos_group), lapply(.SD, mean, na.rm = TRUE),
-                    by = pos_group, .SDcols = skill_cols]
+                    by = pos_group, .SDcols = rating_cols]
 
 # Global fallback means
-global_means <- merged[, lapply(.SD, mean, na.rm = TRUE), .SDcols = skill_cols]
+global_means <- merged[, lapply(.SD, mean, na.rm = TRUE), .SDcols = rating_cols]
 
-for (sc in skill_cols) {
+for (sc in rating_cols) {
   na_idx <- which(is.na(merged[[sc]]))
   if (length(na_idx) > 0) {
     # Try position-group imputation
@@ -109,59 +109,59 @@ for (sc in skill_cols) {
   }
 }
 
-n_still_na <- sum(is.na(merged[, skill_cols, with = FALSE]))
+n_still_na <- sum(is.na(merged[, rating_cols, with = FALSE]))
 cli::cli_inform("Remaining NAs after imputation: {n_still_na}")
 
 # 3. Aggregate to team level ----
 cli::cli_h1("Aggregating to team level")
 
-# Total skill per player (for top-22 selection)
-merged[, .total_skill := rowSums(.SD, na.rm = TRUE), .SDcols = skill_cols]
+# Total rating per player (for top-22 selection)
+merged[, .total_rating := rowSums(.SD, na.rm = TRUE), .SDcols = rating_cols]
 
-# Top 22 by total skill per match-team, then sum skills
-team_skills <- merged[
-  order(-.total_skill)
+# Top 22 by total rating per match-team, then sum ratings
+team_ratings <- merged[
+  order(-.total_rating)
 ][, head(.SD, 22), by = .(match_id, team_id)
 ][, {
   out <- list(n_players = .N)
-  for (sc in skill_cols) {
+  for (sc in rating_cols) {
     out[[sc]] <- sum(get(sc), na.rm = TRUE)
   }
   out
 }, by = .(match_id, team_id, season, round)]
 
-cli::cli_inform("Team-match skill rows: {nrow(team_skills)}")
+cli::cli_inform("Team-match stat rating rows: {nrow(team_ratings)}")
 
 # Identify home/away teams by joining to fixtures
-team_skills <- merge(
-  team_skills,
+team_ratings <- merge(
+  team_ratings,
   fixtures[, .(match_id,
                home_team_id,
                away_team_id)],
   by = "match_id",
   all.x = TRUE
 )
-team_skills[, team_type := fifelse(team_id == home_team_id, "home", "away")]
+team_ratings[, team_type := fifelse(team_id == home_team_id, "home", "away")]
 
-# Pivot to one row per match: home vs away skill diffs
-home <- team_skills[team_type == "home"]
-away <- team_skills[team_type == "away"]
+# Pivot to one row per match: home vs away stat rating diffs
+home <- team_ratings[team_type == "home"]
+away <- team_ratings[team_type == "away"]
 
-setnames(home, skill_cols, paste0(skill_cols, "_home"))
-setnames(away, skill_cols, paste0(skill_cols, "_away"))
+setnames(home, rating_cols, paste0(rating_cols, "_home"))
+setnames(away, rating_cols, paste0(rating_cols, "_away"))
 
 match_df <- merge(
-  home[, c("match_id", "season", "round", paste0(skill_cols, "_home")), with = FALSE],
-  away[, c("match_id", paste0(skill_cols, "_away")), with = FALSE],
+  home[, c("match_id", "season", "round", paste0(rating_cols, "_home")), with = FALSE],
+  away[, c("match_id", paste0(rating_cols, "_away")), with = FALSE],
   by = "match_id"
 )
 
 # Compute diffs
-diff_cols <- paste0(all_skill_names[paste0(all_skill_names, "_skill") %in% skill_cols], "_diff")
-for (i in seq_along(skill_cols)) {
+diff_cols <- paste0(all_rating_names[paste0(all_rating_names, "_rating") %in% rating_cols], "_diff")
+for (i in seq_along(rating_cols)) {
   diff_col <- diff_cols[i]
-  home_col <- paste0(skill_cols[i], "_home")
-  away_col <- paste0(skill_cols[i], "_away")
+  home_col <- paste0(rating_cols[i], "_home")
+  away_col <- paste0(rating_cols[i], "_away")
   match_df[, (diff_col) := get(home_col) - get(away_col)]
 }
 
@@ -311,7 +311,7 @@ cat(sprintf("\nNon-zero coefficients: %d / %d\n", n_nonzero, nrow(coef_df)))
 # 7. Calculate PSR for all players ----
 cli::cli_h1("Calculating PSR")
 
-psr_margin <- calculate_psr(skills, coef_df, center = TRUE)
+psr_margin <- calculate_psr(stat_ratings, coef_df, center = TRUE)
 setnames(psr_margin, "psr", "psr_margin")
 
 # Latest round leaderboard
@@ -370,12 +370,12 @@ fit_psr_model <- function(X_tr, y_tr, w_tr, fold_id, X_te, y_te, label) {
        best_alpha = best_a, test_rmse = rmse(y_te, p_te))
 }
 
-# Offensive model: predict home_score from skill diffs
+# Offensive model: predict home_score from stat rating diffs
 y_off_train <- match_df$home_score[train_idx]
 y_off_test <- match_df$home_score[test_idx]
 off_result <- fit_psr_model(X_train, y_off_train, w_train, foldid, X_test, y_off_test, "OSR")
 
-# Defensive model: predict away_score from skill diffs
+# Defensive model: predict away_score from stat rating diffs
 y_def_train <- match_df$away_score[train_idx]
 y_def_test <- match_df$away_score[test_idx]
 def_result <- fit_psr_model(X_train, y_def_train, w_train, foldid, X_test, y_def_test, "DSR")
@@ -391,15 +391,15 @@ print(head(def_sorted[, c("stat_name", "beta")], 10), row.names = FALSE)
 # 9. Calculate OSR, DSR, PSR (= OSR + DSR) ----
 cli::cli_h1("Calculating OSR, DSR, PSR")
 
-# OSR: positive beta = more skill → more own scoring (good)
-osr_dt <- calculate_psr(skills, off_result$coef_df, center = TRUE)
+# OSR: positive beta = more stat rating → more own scoring (good)
+osr_dt <- calculate_psr(stat_ratings, off_result$coef_df, center = TRUE)
 setnames(osr_dt, c("psr_raw", "psr"), c("osr_raw", "osr"))
 
-# DSR: positive beta = more skill → more opponent scoring (bad!)
+# DSR: positive beta = more stat rating → more opponent scoring (bad!)
 # Negate so positive DSR = good defender
 dsr_coef <- data.table::copy(def_result$coef_df)
 dsr_coef$beta <- -dsr_coef$beta
-dsr_dt <- calculate_psr(skills, dsr_coef, center = TRUE)
+dsr_dt <- calculate_psr(stat_ratings, dsr_coef, center = TRUE)
 setnames(dsr_dt, c("psr_raw", "psr"), c("dsr_raw", "dsr"))
 
 # Merge all ratings
@@ -498,7 +498,7 @@ model_out <- list(
   # Shared
   train_sds = train_sds,
   diff_cols = diff_cols,
-  skill_cols = skill_cols,
+  rating_cols = rating_cols,
   train_seasons = unique_seasons,
   test_rmse = rmse(y_test, pred_test),
   train_rmse = rmse(y_train, pred_train)

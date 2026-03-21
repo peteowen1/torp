@@ -36,5 +36,5 @@ try({ # prevents cran errors
 }
 }
 \seealso{
-\code{\link[=calculate_psr]{calculate_psr()}}, \code{\link[=load_player_skills]{load_player_skills()}}, \code{\link[=load_torp_ratings]{load_torp_ratings()}}
+\code{\link[=calculate_psr]{calculate_psr()}}, \code{\link[=load_player_stat_ratings]{load_player_stat_ratings()}}, \code{\link[=load_torp_ratings]{load_torp_ratings()}}
 }

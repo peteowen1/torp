@@ -567,9 +567,9 @@ update_player_season_ratings <- function(season) {
   invisible(NULL)
 }
 
-#' Update PSR (Player Skill Ratings)
+#' Update PSR (Player Stat Ratings)
 #'
-#' Computes PSR from player skills + coefficients and releases to torpdata.
+#' Computes PSR from player stat ratings + coefficients and releases to torpdata.
 #'
 #' @param season Season year
 #' @return Invisible NULL
@@ -577,8 +577,8 @@ update_psr <- function(season) {
   cli::cli_progress_step("Updating PSR for {season}")
 
   psr_data <- tryCatch({
-    skills <- load_player_skills(season)
-    if (nrow(skills) == 0) return(NULL)
+    stat_ratings <- load_player_stat_ratings(season)
+    if (nrow(stat_ratings) == 0) return(NULL)
 
     psr_coef_path <- file.path("data-raw", "cache-skills", "psr_v2_coefficients.csv")
     if (!file.exists(psr_coef_path)) {
@@ -590,7 +590,7 @@ update_psr <- function(season) {
     }
 
     coef_df <- utils::read.csv(psr_coef_path)
-    calculate_psr(skills, coef_df)
+    calculate_psr(stat_ratings, coef_df)
   }, error = function(e) {
     cli::cli_alert_danger("Failed to compute PSR: {conditionMessage(e)}")
     return(NULL)

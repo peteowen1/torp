@@ -4,10 +4,10 @@
 \alias{.resolve_lineup_info}
 \title{Resolve lineup match info for a team}
 \usage{
-.resolve_lineup_info(team_skills, team_name)
+.resolve_lineup_info(team_stat_ratings, team_name)
 }
 \arguments{
-\item{team_skills}{The result of \code{get_team_skills()} (carries match_info attribute).}
+\item{team_stat_ratings}{The result of \code{get_team_stat_ratings()} (carries match_info attribute).}
 
 \item{team_name}{Canonical team name.}
 }

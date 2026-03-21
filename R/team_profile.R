@@ -1,8 +1,8 @@
-# Team Profile & Team Skills
-# ===========================
-# Team-level equivalents of player_profile.R and player_skills.R functions.
-# Provides team profiles, team skill aggregation, and team skill profiles
-# with league-wide percentile ranks.
+# Team Profile & Team Stat Ratings
+# =================================
+# Team-level equivalents of player_profile.R and player_stat_ratings.R functions.
+# Provides team profiles, team stat rating aggregation, and team stat rating
+# profiles with league-wide percentile ranks.
 
 
 # ============================================================================
@@ -278,25 +278,25 @@ print.torp_team_profile <- function(x, ...) {
 
 
 # ============================================================================
-# Team skill aggregation
+# Team stat rating aggregation
 # ============================================================================
 
-#' Get Team Skills
+#' Get Team Stat Ratings
 #'
-#' Aggregates player-level skill estimates to team level. For each team,
-#' sums and averages the Bayesian skill estimates of its current players.
+#' Aggregates player-level stat rating estimates to team level. For each team,
+#' sums and averages the Bayesian stat rating estimates of its current players.
 #'
 #' @param team_name Optional team name (partial OK). If NULL (default), returns
 #'   all teams.
 #' @param top_n Maximum number of players per team to include (ordered by
-#'   total skill). Default 22 (a full team).
+#'   total stat rating). Default 22 (a full team).
 #'
 #' @return A data.table with one row per team, containing \code{team},
 #'   \code{n_players}, and for each stat: \code{{stat}_sum} and
 #'   \code{{stat}_mean}.
 #'
-#' @seealso [get_player_skills()], [aggregate_team_skills()],
-#'   [team_skill_profile()]
+#' @seealso [get_player_stat_ratings()], [aggregate_team_stat_ratings()],
+#'   [team_stat_rating_profile()]
 #'
 #' @importFrom data.table as.data.table setorder
 #' @importFrom cli cli_abort cli_warn
@@ -305,16 +305,16 @@ print.torp_team_profile <- function(x, ...) {
 #' @examples
 #' \dontrun{
 #' try({ # prevents cran errors
-#'   get_team_skills()
-#'   get_team_skills("Sydney")
+#'   get_team_stat_ratings()
+#'   get_team_stat_ratings("Sydney")
 #' })
 #' }
-get_team_skills <- function(team_name = NULL, top_n = 22) {
-  # Load current player skills (current season only — faster than loading all history)
-  skills <- data.table::as.data.table(get_player_skills(seasons = get_afl_season(), current = TRUE))
+get_team_stat_ratings <- function(team_name = NULL, top_n = 22) {
+  # Load current player stat ratings (current season only -- faster than loading all history)
+  stat_ratings <- data.table::as.data.table(get_player_stat_ratings(seasons = get_afl_season(), current = TRUE))
 
-  if (nrow(skills) == 0) {
-    cli::cli_warn("No player skills data available.")
+  if (nrow(stat_ratings) == 0) {
+    cli::cli_warn("No player stat_ratings data available.")
     return(data.table::data.table())
   }
 
@@ -336,10 +336,10 @@ get_team_skills <- function(team_name = NULL, top_n = 22) {
   ratings <- ratings[round == max(round, na.rm = TRUE)]
   team_lookup <- unique(ratings[!is.na(team), .(player_id, team)])
 
-  skills_with_team <- merge(skills, team_lookup, by = "player_id", all.x = FALSE)
+  ratings_with_team <- merge(stat_ratings, team_lookup, by = "player_id", all.x = FALSE)
 
-  if (nrow(skills_with_team) == 0) {
-    cli::cli_warn("No players matched between skills and ratings data.")
+  if (nrow(ratings_with_team) == 0) {
+    cli::cli_warn("No players matched between stat_ratings and ratings data.")
     return(data.table::data.table())
   }
 
@@ -348,48 +348,48 @@ get_team_skills <- function(team_name = NULL, top_n = 22) {
   lineup_ids <- if (!is.null(lineup_data)) lineup_data$players else NULL
   match_info <- if (!is.null(lineup_data)) lineup_data$match_info else NULL
 
-  # Find skill columns
-  stat_defs <- skill_stat_definitions()
-  skill_cols <- paste0(stat_defs$stat_name, "_skill")
-  skill_cols <- intersect(skill_cols, names(skills_with_team))
+  # Find stat rating columns
+  stat_defs <- stat_rating_definitions()
+  rating_cols <- paste0(stat_defs$stat_name, "_rating")
+  rating_cols <- intersect(rating_cols, names(ratings_with_team))
 
-  if (length(skill_cols) == 0) {
-    cli::cli_warn("No skill columns found in data.")
+  if (length(rating_cols) == 0) {
+    cli::cli_warn("No stat rating columns found in data.")
     return(data.table::data.table())
   }
 
-  # Compute total skill for ordering (used as fallback when no lineup)
-  skills_with_team[, .total_skill := rowSums(.SD, na.rm = TRUE), .SDcols = skill_cols]
+  # Compute total stat rating for ordering (used as fallback when no lineup)
+  ratings_with_team[, .total_rating := rowSums(.SD, na.rm = TRUE), .SDcols = rating_cols]
 
-  # For each team: use lineup if available, else top_n by skill
-  all_teams <- unique(skills_with_team$team)
+  # For each team: use lineup if available, else top_n by stat rating
+  all_teams <- unique(ratings_with_team$team)
   result_list <- vector("list", length(all_teams))
 
   for (i in seq_along(all_teams)) {
     tm_name <- all_teams[i]
-    tm_skills <- skills_with_team[team == tm_name]
+    tm_ratings <- ratings_with_team[team == tm_name]
 
     # Check if we have lineup data for this team
     if (!is.null(lineup_ids)) {
       tm_lineup <- lineup_ids[team == tm_name]
       if (nrow(tm_lineup) > 0) {
         # Filter to players in the lineup
-        tm_skills <- tm_skills[player_id %in% tm_lineup$player_id]
+        tm_ratings <- tm_ratings[player_id %in% tm_lineup$player_id]
       }
     }
 
-    # Fallback: take top_n by total skill
-    if (nrow(tm_skills) > top_n) {
-      data.table::setorder(tm_skills, -.total_skill)
-      tm_skills <- head(tm_skills, top_n)
+    # Fallback: take top_n by total stat rating
+    if (nrow(tm_ratings) > top_n) {
+      data.table::setorder(tm_ratings, -.total_rating)
+      tm_ratings <- head(tm_ratings, top_n)
     }
 
-    if (nrow(tm_skills) == 0) next
+    if (nrow(tm_ratings) == 0) next
 
-    out <- list(team = tm_name, n_players = nrow(tm_skills))
-    for (sc in skill_cols) {
-      stat_nm <- sub("_skill$", "", sc)
-      vals <- tm_skills[[sc]]
+    out <- list(team = tm_name, n_players = nrow(tm_ratings))
+    for (rc in rating_cols) {
+      stat_nm <- sub("_rating$", "", rc)
+      vals <- tm_ratings[[rc]]
       out[[paste0(stat_nm, "_sum")]] <- sum(vals, na.rm = TRUE)
       out[[paste0(stat_nm, "_mean")]] <- mean(vals, na.rm = TRUE)
     }
@@ -403,7 +403,7 @@ get_team_skills <- function(team_name = NULL, top_n = 22) {
     tm <- resolve_team(team_name)
     result <- result[team == tm$name]
     if (nrow(result) == 0) {
-      cli::cli_abort("No skill data found for {.val {tm$name}}")
+      cli::cli_abort("No stat rating data found for {.val {tm$name}}")
     }
   }
 
@@ -459,25 +459,25 @@ get_team_skills <- function(team_name = NULL, top_n = 22) {
 
 
 # ============================================================================
-# Team skill profile
+# Team stat rating profile
 # ============================================================================
 
-#' Get a Team Skill Profile
+#' Get a Team Stat Rating Profile
 #'
-#' Aggregates player skills for a team and computes league-wide percentile
-#' ranks across all 18 teams. The team equivalent of [player_skill_profile()].
+#' Aggregates player stat ratings for a team and computes league-wide percentile
+#' ranks across all 18 teams. The team equivalent of [player_stat_rating_profile()].
 #'
 #' @param team_name A character string of the team's name (partial OK).
 #' @param top_n Maximum number of players per team to include. Default 22.
 #'
-#' @return A list of class \code{torp_team_skill_profile} with elements:
+#' @return A list of class \code{torp_team_stat_rating_profile} with elements:
 #' \describe{
 #'   \item{team_info}{1-row data.frame with team name, full name, abbreviation.}
-#'   \item{skills}{Data.frame of skill estimates with league percentile ranks.}
+#'   \item{stat_ratings}{Data.frame of stat rating estimates with league percentile ranks.}
 #'   \item{n_players}{Number of players included in the aggregation.}
 #' }
 #'
-#' @seealso [get_team_skills()], [player_skill_profile()]
+#' @seealso [get_team_stat_ratings()], [player_stat_rating_profile()]
 #'
 #' @importFrom data.table as.data.table
 #' @export
@@ -485,27 +485,27 @@ get_team_skills <- function(team_name = NULL, top_n = 22) {
 #' @examples
 #' \dontrun{
 #' try({ # prevents cran errors
-#'   team_skill_profile("Sydney")
-#'   team_skill_profile("Geelong")
+#'   team_stat_rating_profile("Sydney")
+#'   team_stat_rating_profile("Geelong")
 #' })
 #' }
-team_skill_profile <- function(team_name, top_n = 22) {
+team_stat_rating_profile <- function(team_name, top_n = 22) {
   tm <- resolve_team(team_name)
 
-  # Get all team skills
-  all_teams <- get_team_skills(top_n = top_n)
+  # Get all team stat ratings
+  all_teams <- get_team_stat_ratings(top_n = top_n)
 
   if (nrow(all_teams) == 0) {
-    cli::cli_abort("No team skill data available.")
+    cli::cli_abort("No team stat rating data available.")
   }
 
   target <- all_teams[team == tm$name]
   if (nrow(target) == 0) {
-    cli::cli_abort("No skill data found for {.val {tm$name}}")
+    cli::cli_abort("No stat rating data found for {.val {tm$name}}")
   }
 
   # Identify stat columns (sum and mean variants)
-  stat_defs <- skill_stat_definitions()
+  stat_defs <- stat_rating_definitions()
   sum_cols <- paste0(stat_defs$stat_name, "_sum")
   mean_cols <- paste0(stat_defs$stat_name, "_mean")
   sum_cols <- intersect(sum_cols, names(all_teams))
@@ -515,10 +515,10 @@ team_skill_profile <- function(team_name, top_n = 22) {
   # Build profile using mean (per-player average) for comparability
   profile <- data.frame(stat = stat_names, stringsAsFactors = FALSE)
 
-  # Team's mean skill per stat
+  # Team's mean stat rating
   profile$team_mean <- as.numeric(target[, ..mean_cols])
 
-  # Team's total skill per stat
+  # Team's total stat rating
   profile$team_sum <- as.numeric(target[, ..sum_cols])
 
   # League average (mean across all teams)
@@ -562,11 +562,11 @@ team_skill_profile <- function(team_name, top_n = 22) {
       abbr = tm$abbr,
       stringsAsFactors = FALSE
     ),
-    skills = profile[order(-profile$league_pct), ],
+    stat_ratings = profile[order(-profile$league_pct), ],
     n_players = as.integer(target$n_players),
     lineup_info = lineup_info
   )
-  class(out) <- "torp_team_skill_profile"
+  class(out) <- "torp_team_stat_rating_profile"
   out
 }
 
@@ -616,13 +616,13 @@ match_local_time <- function(utc_start_time, venue_timezone = NULL) {
 #' Looks up the match_id from the lineup attribute and joins with fixture
 #' data to get the opponent, round, and local datetime.
 #'
-#' @param team_skills The result of \code{get_team_skills()} (carries match_info attribute).
+#' @param team_stat_ratings The result of \code{get_team_stat_ratings()} (carries match_info attribute).
 #' @param team_name Canonical team name.
 #' @return A list with \code{match_id}, \code{opponent}, \code{round}, \code{datetime},
 #'   or NULL if unavailable.
 #' @keywords internal
-.resolve_lineup_info <- function(team_skills, team_name) {
-  match_info <- attr(team_skills, "match_info")
+.resolve_lineup_info <- function(team_stat_ratings, team_name) {
+  match_info <- attr(team_stat_ratings, "match_info")
   if (is.null(match_info)) return(NULL)
 
   tm_match <- match_info[team == team_name]
@@ -661,13 +661,13 @@ match_local_time <- function(utc_start_time, venue_timezone = NULL) {
 }
 
 
-#' Print a team skill profile
+#' Print a team stat rating profile
 #'
-#' @param x A \code{torp_team_skill_profile} object.
+#' @param x A \code{torp_team_stat_rating_profile} object.
 #' @param ... Additional arguments (ignored).
 #' @return Invisibly returns \code{x}.
 #' @export
-print.torp_team_skill_profile <- function(x, ...) {
+print.torp_team_stat_rating_profile <- function(x, ...) {
   info <- x$team_info
   li <- x$lineup_info
 
@@ -690,7 +690,7 @@ print.torp_team_skill_profile <- function(x, ...) {
   }
   cat("\n\n")
 
-  sk <- x$skills
+  sk <- x$stat_ratings
 
   # Format display
   display_cols <- intersect(
@@ -719,3 +719,20 @@ print.torp_team_skill_profile <- function(x, ...) {
   print(display, row.names = FALSE)
   invisible(x)
 }
+
+
+# ============================================================================
+# Backward compatibility aliases
+# ============================================================================
+
+#' @rdname get_team_stat_ratings
+#' @export
+get_team_skills <- get_team_stat_ratings
+
+#' @rdname team_stat_rating_profile
+#' @export
+team_skill_profile <- team_stat_rating_profile
+
+#' @rdname print.torp_team_stat_rating_profile
+#' @export
+print.torp_team_skill_profile <- function(x, ...) print.torp_team_stat_rating_profile(x, ...)

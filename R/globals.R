@@ -63,7 +63,8 @@ utils::globalVariables(c(
   "wt_gms_recv", "wt_gms_disp", "wt_gms_spoil", "wt_gms_hitout",
   "pred_tog", "pred_selection", "pred_cond_tog",
   ".tog_safe", "tog_safe", "tog_wt", "lineup_tog",
-  "i.squad_selection_skill", "i.cond_tog_skill", "i.n_80s", "i.wt_80s",
+  "i.squad_selection_rating", "i.cond_tog_rating", "i.n_80s", "i.wt_80s",
+  "psv_raw", "psv", "osv", "dsv",
 
   # data.table join prefixes
   "i.epr", "i.torp_shift_away", "i.torp_shift_home",
@@ -122,19 +123,19 @@ utils::globalVariables(c(
 utils::globalVariables(c(
   "avail_only", ".played", "roster_pos_group",
   "round_idx", "first_season", "first_round",
-  "tog", "tog_denominator", "match_date_skill", "days_since", "decay_wt",
+  "tog", "tog_denominator", "match_date_rating", "days_since", "decay_wt",
   "wt_events", "wt_exposure", "wt_successes", "wt_attempts",
   "alpha_post", "beta_post", "skill_estimate", "skill_lower", "skill_upper",
-  "position_group", "wt_games_skill", "n_games_skill", "wt_games",
+  "position_group", "wt_games_rating", "n_games_rating", "wt_games",
   "disposal_efficiency_pct_x_disposals", "disposal_efficiency_ps",
   "mu0", "alpha0", "w_num", "w_den",
-  ".wnum", ".wden", ".w_col", ".w_rate", ".total_skill",
+  ".wnum", ".wden", ".w_col", ".w_rate", ".total_rating",
   ".eff_successes", ".eff_attempts", ".eff_w",
   ".raw_num", ".raw_den", ".raw_succ", ".raw_att", ".wt_att",
   ".raw_vals", ".raw_tog",
   "pos_group", "modal_pos", "i.pos_group", "i.modal_pos",
   "i.n_games", "i.wt_games", "ref_date",
-  "..keep_cols", "..skill_cols", "..lower_cols", "..upper_cols",
+  "..keep_cols", "..skill_cols", "..rating_cols", "..lower_cols", "..upper_cols",
   "..lower_present", "..upper_present", "..raw_cols"
 ))
 
@@ -192,8 +193,8 @@ utils::globalVariables(c(
   "injury", "estimated_return", "player_norm", "tm_rnk",
   "tog_frac", "epv_p80", "recv_epv_p80", "disp_epv_p80", "spoil_epv_p80", "hitout_epv_p80",
   "epv_raw", "recv_epv_raw", "disp_epv_raw", "spoil_epv_raw", "hitout_epv_raw",
-  "season_epv", "season_recv_epv", "season_disp_epv", "season_spoil_epv", "season_hitout_epv", "epv_pg",
-  "avg_p80", "avg_tog"
+  "epv_c", "recv_epv_c", "disp_epv_c", "spoil_epv_c", "hitout_epv_c",
+  "epv_pg", "avg_tog"
 ))
 
 # Match model variables

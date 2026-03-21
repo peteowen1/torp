@@ -81,6 +81,7 @@ get_match_chains <- function(season = get_afl_season(), round = NA) {
       dplyr::inner_join(games, by = "matchId")
   } else {
     chains$season <- match_year
+    chains$roundNumber <- as.integer(substr(match_id, 12, 13))
   }
 
   players <- get_players(season = match_year)
@@ -105,7 +106,7 @@ get_match_chains <- function(season = get_afl_season(), round = NA) {
 #' @keywords internal
 .find_game_by_match_id <- function(season, match_id) {
   round_num <- as.integer(substr(match_id, 12, 13))
-  games <- tryCatch(get_round_games(season, round_num), error = function(e) data.frame())
+  games <- tryCatch(get_round_games(season, round_num, concluded_only = FALSE), error = function(e) data.frame())
   if (nrow(games) == 0) {
     cli::cli_warn("Could not find game metadata for {.val {match_id}} in season {.val {season}}. Returning chains without game metadata.")
     return(data.frame())
@@ -175,7 +176,7 @@ access_api <- function(url) {
 #' @keywords internal
 #'
 #' @importFrom dplyr filter mutate
-get_round_games <- function(season, round) {
+get_round_games <- function(season, round, concluded_only = TRUE) {
   round <- sprintf("%02d", round)
   url <- paste0("https://api.afl.com.au/cfs/afl/fixturesAndResults/season/CD_S", season, "014/round/CD_R", season, "014", round)
   api_result <- access_api(url)
@@ -187,8 +188,11 @@ get_round_games <- function(season, round) {
   games <- api_result[["items"]] %||% api_result[[5]]
 
   if (length(games) > 0) {
+    if (concluded_only) {
+      games <- games |>
+        dplyr::filter(.data$status == "CONCLUDED")
+    }
     games <- games |>
-      dplyr::filter(.data$status == "CONCLUDED") |>
       dplyr::mutate(
         date = as.Date(substr(.data$utcStartTime, 1, 10)),
         season = season
