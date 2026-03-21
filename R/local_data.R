@@ -339,6 +339,7 @@ download_torp_data <- function(data_types = "all", seasons = TRUE, overwrite = F
     torp_ratings   = list(tag = "ratings-data",         prefix = "torp_ratings",         has_rounds = FALSE, no_season = TRUE),
     team_ratings   = list(tag = "team_ratings-data",    prefix = "team_ratings",         has_rounds = FALSE, no_season = TRUE),
     psr            = list(tag = "psr-data",             prefix = "psr",                  has_rounds = FALSE),
+    player_stat_ratings = list(tag = "player_stat_ratings-data", prefix = "player_stat_ratings", has_rounds = FALSE),
     player_skills  = list(tag = "player_skills-data",   prefix = "player_skills",        has_rounds = FALSE)
   )
 
