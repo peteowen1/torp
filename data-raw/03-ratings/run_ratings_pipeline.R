@@ -350,7 +350,7 @@ if (nrow(torp_new) > 0) {
   # Blend PSR into ratings so the release has torp/psr/osr/dsr columns
   psr_df <- tryCatch({
     stat_ratings <- load_player_stat_ratings()
-    .compute_psr_from_skills(stat_ratings)
+    .compute_psr_from_stat_ratings(stat_ratings)
   }, error = function(e) {
     cli::cli_warn("Could not compute PSR for release: {e$message}")
     NULL

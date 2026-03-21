@@ -863,17 +863,16 @@ player_stat_rating_profile <- function(player_name, ref_date = Sys.Date(),
   profile$attempts    <- .extract_player_cols(player_row, paste0(stat_names, "_attempts"))
   profile$wt_attempts <- .extract_player_cols(player_row, paste0(stat_names, "_wt_attempts"))
 
-  # Credible intervals (try _rating_lower first, fall back to _lower for old data)
-  lower_cols <- paste0(stat_names, "_rating_lower")
-  upper_cols <- paste0(stat_names, "_rating_upper")
+  # Credible intervals — merge both naming conventions for transition period
+  lower_cols_new <- paste0(stat_names, "_rating_lower")
+  lower_cols_old <- paste0(stat_names, "_lower")
+  upper_cols_new <- paste0(stat_names, "_rating_upper")
+  upper_cols_old <- paste0(stat_names, "_upper")
+  # Prefer _rating_lower, fall back to _lower per stat
+  lower_cols <- ifelse(lower_cols_new %in% names(player_row), lower_cols_new, lower_cols_old)
+  upper_cols <- ifelse(upper_cols_new %in% names(player_row), upper_cols_new, upper_cols_old)
   lower_present <- intersect(lower_cols, names(player_row))
   upper_present <- intersect(upper_cols, names(player_row))
-  if (length(lower_present) == 0) {
-    lower_cols <- paste0(stat_names, "_lower")
-    upper_cols <- paste0(stat_names, "_upper")
-    lower_present <- intersect(lower_cols, names(player_row))
-    upper_present <- intersect(upper_cols, names(player_row))
-  }
   if (length(lower_present) == nrow(profile) && length(upper_present) == nrow(profile)) {
     profile$lower <- as.numeric(player_row[, ..lower_present])
     profile$upper <- as.numeric(player_row[, ..upper_present])
@@ -1117,7 +1116,7 @@ aggregate_team_stat_ratings <- function(skills, team_lineups, top_n = 22) {
 
 #' @rdname .prepare_stat_rating_data
 #' @keywords internal
-.prepare_stat_rating_data <- .prepare_stat_rating_data
+.prepare_skill_data <- .prepare_stat_rating_data
 
 #' @rdname .resolve_stat_rating_positions
 #' @keywords internal

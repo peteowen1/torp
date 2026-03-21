@@ -144,21 +144,6 @@ calculate_psr_components <- function(skills, coef_df, osr_coef_df, dsr_coef_df,
 }
 
 
-#' Load PSR Coefficient Files and Compute Components
-#'
-#' Convenience wrapper that loads the margin, offensive, and defensive
-#' coefficient CSVs from \code{inst/extdata} (or a fallback path) and
-#' calls \code{\link{calculate_psr_components}}.
-#'
-#' @inheritParams calculate_psr
-#' @param psr_coef_path Path to the margin PSR coefficient CSV. If NULL,
-#'   searches \code{inst/extdata/psr_v2_coefficients.csv}.
-#'
-#' @return A data.table with \code{psr}, \code{osr}, \code{dsr} columns,
-#'   or the result of \code{calculate_psr()} (without osr/dsr) if the
-#'   offensive/defensive coefficient files are not found.
-#'
-#' @keywords internal
 # ============================================================================
 # PSV: Per-Game Stat Value
 # ============================================================================
@@ -221,7 +206,11 @@ calculate_psv <- function(player_stats, coef_df, tog_adjust = TRUE, center = TRU
   eff_stats <- tryCatch({
     defs <- stat_rating_definitions()
     defs$stat_name[defs$type == "efficiency"]
-  }, error = function(e) character(0))
+  }, error = function(e) {
+    cli::cli_warn("Could not load stat rating definitions: {conditionMessage(e)}. Using hardcoded efficiency stats.")
+    c("disposal_efficiency", "goal_accuracy", "contested_poss_rate",
+      "hitout_win_pct", "kick_efficiency", "cond_tog", "squad_selection")
+  })
 
   # Extract raw stat values
   mat <- as.matrix(dt[, stat_cols, with = FALSE])
@@ -392,6 +381,18 @@ calculate_psv_components <- function(player_stats, coef_df, osr_coef_df,
 }
 
 
+#' Load PSR Coefficient Files and Compute Components
+#'
+#' Convenience wrapper that loads the margin, offensive, and defensive
+#' coefficient CSVs from \code{inst/extdata} and calls
+#' \code{\link{calculate_psr_components}}.
+#'
+#' @inheritParams calculate_psr
+#' @param psr_coef_path Path to the margin PSR coefficient CSV. If NULL,
+#'   searches \code{inst/extdata/psr_v2_coefficients.csv}.
+#'
+#' @return A data.table with \code{psr}, \code{osr}, \code{dsr} columns.
+#' @keywords internal
 .compute_psr_from_stat_ratings <- function(skills, psr_coef_path = NULL, center = TRUE) {
   # Resolve margin coefficient path
 

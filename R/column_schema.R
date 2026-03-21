@@ -689,7 +689,10 @@ XG_COL_MAP <- c(
   }
   # Also map *_lower/*_upper to *_rating_lower/*_rating_upper
   # (old format was goals_lower, new format is goals_rating_lower)
-  stat_defs <- tryCatch(stat_rating_definitions(), error = function(e) NULL)
+  stat_defs <- tryCatch(stat_rating_definitions(), error = function(e) {
+    cli::cli_warn("Could not load stat rating definitions for CI column normalisation: {conditionMessage(e)}")
+    NULL
+  })
   if (!is.null(stat_defs)) {
     for (stat_nm in stat_defs$stat_name) {
       old_lower <- paste0(stat_nm, "_lower")
