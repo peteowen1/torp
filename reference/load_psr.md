@@ -37,7 +37,7 @@ A data frame containing PSR data with columns including `player_id`,
 ## See also
 
 [`calculate_psr()`](https://peteowen1.github.io/torp/reference/calculate_psr.md),
-[`load_player_skills()`](https://peteowen1.github.io/torp/reference/load_player_skills.md),
+[`load_player_stat_ratings()`](https://peteowen1.github.io/torp/reference/load_player_stat_ratings.md),
 [`load_torp_ratings()`](https://peteowen1.github.io/torp/reference/load_torp_ratings.md)
 
 ## Examples

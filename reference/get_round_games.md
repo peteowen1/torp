@@ -5,7 +5,7 @@ Retrieves game data for a specific round in a season.
 ## Usage
 
 ``` r
-get_round_games(season, round)
+get_round_games(season, round, concluded_only = TRUE)
 ```
 
 ## Arguments

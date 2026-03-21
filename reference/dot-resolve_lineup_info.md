@@ -6,15 +6,15 @@ data to get the opponent, round, and local datetime.
 ## Usage
 
 ``` r
-.resolve_lineup_info(team_skills, team_name)
+.resolve_lineup_info(team_stat_ratings, team_name)
 ```
 
 ## Arguments
 
-- team_skills:
+- team_stat_ratings:
 
   The result of
-  [`get_team_skills()`](https://peteowen1.github.io/torp/reference/get_team_skills.md)
+  [`get_team_stat_ratings()`](https://peteowen1.github.io/torp/reference/get_team_stat_ratings.md)
   (carries match_info attribute).
 
 - team_name:

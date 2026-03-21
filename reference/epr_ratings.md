@@ -101,13 +101,13 @@ epr_ratings(
   Controls TOG-weighted average adjustment. When active, EPR components
   are re-centered to "above TOG-weighted average" by subtracting the
   weighted mean of each component (weighted by pred_tog =
-  `squad_selection_skill * cond_tog_skill`). Accepts:
+  `squad_selection_rating * cond_tog_rating`). Accepts:
 
-  - `TRUE` (default): auto-loads skills via
-    `get_player_skills(current = FALSE)`.
+  - `TRUE` (default): auto-loads stat ratings via
+    `get_player_stat_ratings(current = FALSE)`.
 
-  - A data.frame with `player_id`, `cond_tog_skill`, and
-    `squad_selection_skill` columns.
+  - A data.frame with `player_id`, `cond_tog_rating`, and
+    `squad_selection_rating` columns.
 
   - `FALSE` or `NULL`: skip adjustment.
 

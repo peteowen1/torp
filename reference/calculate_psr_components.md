@@ -22,14 +22,14 @@ calculate_psr_components(
 - skills:
 
   A data.table/data.frame from
-  [`load_player_skills()`](https://peteowen1.github.io/torp/reference/load_player_skills.md),
+  [`load_player_stat_ratings()`](https://peteowen1.github.io/torp/reference/load_player_stat_ratings.md),
   containing `player_id`, `player_name`, `season`, `round`, `pos_group`,
-  and `*_skill` columns.
+  and `*_rating` columns.
 
 - coef_df:
 
   A data.frame with columns `stat_name` and `beta`, as produced by the
-  PSR training script. If an `sd` column is present, each skill is
+  PSR training script. If an `sd` column is present, each stat rating is
   divided by its SD before multiplying by beta (i.e. the coefficients
   are on the standardized scale).
 

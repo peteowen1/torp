@@ -66,15 +66,15 @@ shift so that <code>osr + dsr = psr</code> exactly.</p>
 
 
 <dl><dt id="arg-skills">skills<a class="anchor" aria-label="anchor" href="#arg-skills"></a></dt>
-<dd><p>A data.table/data.frame from <code><a href="load_player_skills.html">load_player_skills()</a></code>,
+<dd><p>A data.table/data.frame from <code><a href="load_player_stat_ratings.html">load_player_stat_ratings()</a></code>,
 containing <code>player_id</code>, <code>player_name</code>, <code>season</code>,
-<code>round</code>, <code>pos_group</code>, and <code>*_skill</code> columns.</p></dd>
+<code>round</code>, <code>pos_group</code>, and <code>*_rating</code> columns.</p></dd>
 
 
 <dt id="arg-coef-df">coef_df<a class="anchor" aria-label="anchor" href="#arg-coef-df"></a></dt>
 <dd><p>A data.frame with columns <code>stat_name</code> and <code>beta</code>,
 as produced by the PSR training script. If an <code>sd</code> column is present,
-each skill is divided by its SD before multiplying by beta (i.e. the
+each stat rating is divided by its SD before multiplying by beta (i.e. the
 coefficients are on the standardized scale).</p></dd>
 
 

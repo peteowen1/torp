@@ -22,8 +22,9 @@ Load processed AFL data from torpdata GitHub releases
   : Load Player Game Ratings Data
 - [`load_player_season_ratings()`](https://peteowen1.github.io/torp/reference/load_player_season_ratings.md)
   : Load Player Season Ratings Data
-- [`load_player_skills()`](https://peteowen1.github.io/torp/reference/load_player_skills.md)
-  : Load Player Skills Data
+- [`load_player_stat_ratings()`](https://peteowen1.github.io/torp/reference/load_player_stat_ratings.md)
+  [`load_player_skills()`](https://peteowen1.github.io/torp/reference/load_player_stat_ratings.md)
+  : Load Player Stat Ratings Data
 - [`load_player_stats()`](https://peteowen1.github.io/torp/reference/load_player_stats.md)
   : Load Player Stats Data
 - [`load_predictions()`](https://peteowen1.github.io/torp/reference/load_predictions.md)
@@ -78,6 +79,10 @@ Calculate and view TORP player ratings
   : Calculate TORP (Total Over Replacement Predictive-value)
 - [`calculate_psr_components()`](https://peteowen1.github.io/torp/reference/calculate_psr_components.md)
   : Calculate PSR with Offensive/Defensive Decomposition
+- [`calculate_psv()`](https://peteowen1.github.io/torp/reference/calculate_psv.md)
+  : Calculate Player Stat Value (PSV) from Per-Game Stats
+- [`calculate_psv_components()`](https://peteowen1.github.io/torp/reference/calculate_psv_components.md)
+  : Calculate PSV with Offensive/Defensive Decomposition
 - [`torp_ratings()`](https://peteowen1.github.io/torp/reference/torp_ratings.md)
   : TORP Ratings (Total Over Replacement Predictive-value)
 - [`calculate_epr()`](https://peteowen1.github.io/torp/reference/calculate_epr.md)
@@ -105,26 +110,34 @@ Calculate and view TORP player ratings
 - [`print(`*`<torp_team_profile>`*`)`](https://peteowen1.github.io/torp/reference/print.torp_team_profile.md)
   : Print a team profile
 
-## Player Skills
+## Player Stat Ratings
 
-Estimate and explore player skill profiles
+Estimate and explore player stat rating profiles
 
-- [`aggregate_team_skills()`](https://peteowen1.github.io/torp/reference/aggregate_team_skills.md)
-  : Aggregate player skills to team level
-- [`estimate_player_skills()`](https://peteowen1.github.io/torp/reference/estimate_player_skills.md)
-  : Estimate player skills using Bayesian conjugate priors
-- [`get_player_skills()`](https://peteowen1.github.io/torp/reference/get_player_skills.md)
-  : Get player skill estimates from pre-computed data
-- [`player_skill_profile()`](https://peteowen1.github.io/torp/reference/player_skill_profile.md)
-  : Get a player's skill profile with percentile ranks
-- [`print(`*`<torp_skill_profile>`*`)`](https://peteowen1.github.io/torp/reference/print.torp_skill_profile.md)
-  : Print a player skill profile
-- [`get_team_skills()`](https://peteowen1.github.io/torp/reference/get_team_skills.md)
-  : Get Team Skills
-- [`team_skill_profile()`](https://peteowen1.github.io/torp/reference/team_skill_profile.md)
-  : Get a Team Skill Profile
-- [`print(`*`<torp_team_skill_profile>`*`)`](https://peteowen1.github.io/torp/reference/print.torp_team_skill_profile.md)
-  : Print a team skill profile
+- [`aggregate_team_stat_ratings()`](https://peteowen1.github.io/torp/reference/aggregate_team_stat_ratings.md)
+  [`aggregate_team_skills()`](https://peteowen1.github.io/torp/reference/aggregate_team_stat_ratings.md)
+  : Aggregate player stat ratings to team level
+- [`estimate_player_stat_ratings()`](https://peteowen1.github.io/torp/reference/estimate_player_stat_ratings.md)
+  [`estimate_player_skills()`](https://peteowen1.github.io/torp/reference/estimate_player_stat_ratings.md)
+  : Estimate player stat ratings using Bayesian conjugate priors
+- [`get_player_stat_ratings()`](https://peteowen1.github.io/torp/reference/get_player_stat_ratings.md)
+  [`get_player_skills()`](https://peteowen1.github.io/torp/reference/get_player_stat_ratings.md)
+  : Get player stat rating estimates from pre-computed data
+- [`player_stat_rating_profile()`](https://peteowen1.github.io/torp/reference/player_stat_rating_profile.md)
+  [`player_skill_profile()`](https://peteowen1.github.io/torp/reference/player_stat_rating_profile.md)
+  : Get a player's stat rating profile with percentile ranks
+- [`print(`*`<torp_stat_rating_profile>`*`)`](https://peteowen1.github.io/torp/reference/print.torp_stat_rating_profile.md)
+  [`print(`*`<torp_skill_profile>`*`)`](https://peteowen1.github.io/torp/reference/print.torp_stat_rating_profile.md)
+  : Print a player stat rating profile
+- [`get_team_stat_ratings()`](https://peteowen1.github.io/torp/reference/get_team_stat_ratings.md)
+  [`get_team_skills()`](https://peteowen1.github.io/torp/reference/get_team_stat_ratings.md)
+  : Get Team Stat Ratings
+- [`team_stat_rating_profile()`](https://peteowen1.github.io/torp/reference/team_stat_rating_profile.md)
+  [`team_skill_profile()`](https://peteowen1.github.io/torp/reference/team_stat_rating_profile.md)
+  : Get a Team Stat Rating Profile
+- [`print(`*`<torp_team_stat_rating_profile>`*`)`](https://peteowen1.github.io/torp/reference/print.torp_team_stat_rating_profile.md)
+  [`print(`*`<torp_team_skill_profile>`*`)`](https://peteowen1.github.io/torp/reference/print.torp_team_stat_rating_profile.md)
+  : Print a team stat rating profile
 
 ## Season Simulation
 
@@ -162,8 +175,8 @@ Access and analyse possession chains
 
 Match-level expected goals, predictions, and head-to-head comparisons
 
-- [`get_player_match_ratings()`](https://peteowen1.github.io/torp/reference/get_player_match_ratings.md)
-  : Get Player Match Ratings
+- [`get_player_game_ratings()`](https://peteowen1.github.io/torp/reference/get_player_game_ratings.md)
+  : Get Player Game Ratings (Live)
 - [`get_xg()`](https://peteowen1.github.io/torp/reference/get_xg.md) :
   Get Live xG for a Match or Round
 - [`calculate_match_xgs()`](https://peteowen1.github.io/torp/reference/calculate_match_xgs.md)

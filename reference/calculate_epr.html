@@ -133,10 +133,10 @@ with exponential decay weighting and Bayesian shrinkage.</p>
 <dd><p>Controls TOG-weighted average adjustment. When active, EPR
 components are re-centered to "above TOG-weighted average" by subtracting
 the weighted mean of each component (weighted by pred_tog =
-<code>squad_selection_skill * cond_tog_skill</code>). Accepts:</p><ul><li><p><code>TRUE</code> (default): auto-loads skills via
-<code>get_player_skills(current = FALSE)</code>.</p></li>
+<code>squad_selection_rating * cond_tog_rating</code>). Accepts:</p><ul><li><p><code>TRUE</code> (default): auto-loads stat ratings via
+<code>get_player_stat_ratings(current = FALSE)</code>.</p></li>
 <li><p>A data.frame with <code>player_id</code>,
-<code>cond_tog_skill</code>, and <code>squad_selection_skill</code> columns.</p></li>
+<code>cond_tog_rating</code>, and <code>squad_selection_rating</code> columns.</p></li>
 <li><p><code>FALSE</code> or <code>NULL</code>: skip adjustment.</p></li>
 </ul><p>Players not in <code>skills</code> default to weight 0 (excluded from the
 average, but still have the average subtracted).</p></dd>
