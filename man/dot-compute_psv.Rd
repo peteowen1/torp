@@ -17,7 +17,7 @@ raw stat columns (e.g. \code{goals}, \code{kicks}, \code{disposals}) and
 a \code{tog} column (time-on-ground as a fraction 0-1).}
 
 \item{psr_coef_path}{Path to the margin PSR coefficient CSV. If NULL,
-searches \code{inst/extdata/psr_v2_coefficients.csv}.}
+searches \code{inst/extdata/psr_coefficients.csv}.}
 
 \item{tog_adjust}{Logical. If TRUE (default), divide raw counts by TOG to
 get per-full-game rates (matching the scale the coefficients were trained

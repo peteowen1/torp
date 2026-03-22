@@ -298,7 +298,7 @@ calculate_psv_components <- function(player_stats, coef_df, osr_coef_df,
 #'
 #' @inheritParams calculate_psv
 #' @param psr_coef_path Path to the margin PSR coefficient CSV. If NULL,
-#'   searches \code{inst/extdata/psr_v2_coefficients.csv}.
+#'   searches \code{inst/extdata/psr_coefficients.csv}.
 #'
 #' @return A data.table with \code{psv}, \code{osv}, \code{dsv} columns.
 #'
@@ -306,11 +306,11 @@ calculate_psv_components <- function(player_stats, coef_df, osr_coef_df,
 .compute_psv <- function(player_stats, psr_coef_path = NULL, tog_adjust = TRUE,
                           center = TRUE) {
   if (is.null(psr_coef_path)) {
-    psr_coef_path <- system.file("extdata", "psr_v2_coefficients.csv", package = "torp")
+    psr_coef_path <- system.file("extdata", "psr_coefficients.csv", package = "torp")
     if (psr_coef_path == "") {
       psr_coef_path <- file.path(
         find.package("torp", quiet = TRUE)[1] %||% ".",
-        "data-raw", "cache-skills", "psr_v2_coefficients.csv"
+        "data-raw", "cache-stat-ratings", "psr_coefficients.csv"
       )
     }
   }
@@ -323,8 +323,8 @@ calculate_psv_components <- function(player_stats, coef_df, osr_coef_df,
   coef_df <- utils::read.csv(psr_coef_path)
 
   coef_dir <- dirname(psr_coef_path)
-  osr_path <- file.path(coef_dir, "osr_v2_coefficients.csv")
-  dsr_path <- file.path(coef_dir, "dsr_v2_coefficients.csv")
+  osr_path <- file.path(coef_dir, "osr_coefficients.csv")
+  dsr_path <- file.path(coef_dir, "dsr_coefficients.csv")
 
   if (file.exists(osr_path) && file.exists(dsr_path)) {
     osr_coef_df <- utils::read.csv(osr_path)
@@ -346,7 +346,7 @@ calculate_psv_components <- function(player_stats, coef_df, osr_coef_df,
 #'
 #' @inheritParams calculate_psr
 #' @param psr_coef_path Path to the margin PSR coefficient CSV. If NULL,
-#'   searches \code{inst/extdata/psr_v2_coefficients.csv}.
+#'   searches \code{inst/extdata/psr_coefficients.csv}.
 #'
 #' @return A data.table with \code{psr}, \code{osr}, \code{dsr} columns.
 #' @keywords internal
@@ -354,11 +354,11 @@ calculate_psv_components <- function(player_stats, coef_df, osr_coef_df,
   # Resolve margin coefficient path
 
   if (is.null(psr_coef_path)) {
-    psr_coef_path <- system.file("extdata", "psr_v2_coefficients.csv", package = "torp")
+    psr_coef_path <- system.file("extdata", "psr_coefficients.csv", package = "torp")
     if (psr_coef_path == "") {
       psr_coef_path <- file.path(
         find.package("torp", quiet = TRUE)[1] %||% ".",
-        "data-raw", "cache-skills", "psr_v2_coefficients.csv"
+        "data-raw", "cache-stat-ratings", "psr_coefficients.csv"
       )
     }
   }
@@ -372,8 +372,8 @@ calculate_psv_components <- function(player_stats, coef_df, osr_coef_df,
 
   # Try to find osr/dsr coefficient files in the same directory
   coef_dir <- dirname(psr_coef_path)
-  osr_path <- file.path(coef_dir, "osr_v2_coefficients.csv")
-  dsr_path <- file.path(coef_dir, "dsr_v2_coefficients.csv")
+  osr_path <- file.path(coef_dir, "osr_coefficients.csv")
+  dsr_path <- file.path(coef_dir, "dsr_coefficients.csv")
 
   if (file.exists(osr_path) && file.exists(dsr_path)) {
     osr_coef_df <- utils::read.csv(osr_path)

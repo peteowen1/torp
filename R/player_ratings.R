@@ -574,7 +574,7 @@ calculate_torp_ratings <- function(...) {
 #' @param season_val Season to compute PSR for. Default is current season.
 #' @param round_val Round to filter to. If NULL (default), returns all rounds.
 #' @param psr_coef_path Optional path to the margin PSR coefficient CSV.
-#'   If NULL, uses the bundled \code{inst/extdata/psr_v2_coefficients.csv}.
+#'   If NULL, uses the bundled \code{inst/extdata/psr_coefficients.csv}.
 #'
 #' @return A data.table with columns: \code{player_id}, \code{player_name},
 #'   \code{season}, \code{round}, \code{pos_group}, \code{psr_raw},

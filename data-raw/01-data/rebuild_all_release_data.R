@@ -308,9 +308,9 @@ if (run_ratings) {
     # PSR (Player Stat Ratings)
     safe_run(paste0("psr_", season), {
       stat_ratings <- load_player_stat_ratings(season)
-      psr_coef_path <- system.file("extdata", "psr_v2_coefficients.csv", package = "torp")
+      psr_coef_path <- system.file("extdata", "psr_coefficients.csv", package = "torp")
       if (psr_coef_path == "") {
-        psr_coef_path <- file.path("data-raw", "cache-skills", "psr_v2_coefficients.csv")
+        psr_coef_path <- file.path("data-raw", "cache-stat-ratings", "psr_coefficients.csv")
       }
       if (file.exists(psr_coef_path)) {
         coef_df <- utils::read.csv(psr_coef_path)

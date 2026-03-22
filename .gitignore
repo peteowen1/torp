@@ -31,8 +31,8 @@ data-raw/archive/
 *.log
 *.bak*
 
-# Skills pipeline cache (large RDS files)
-data-raw/cache-skills/
+# Stat rating pipeline cache (large RDS files)
+data-raw/cache-stat-ratings/
 nul
 _ul
 data-raw/debug/

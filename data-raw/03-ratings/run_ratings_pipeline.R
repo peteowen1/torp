@@ -488,9 +488,9 @@ tictoc::tic("stage_6_psr")
 
 tryCatch({
   stat_ratings <- load_player_stat_ratings(TRUE)
-  psr_coef_path <- file.path("data-raw", "cache-skills", "psr_v2_coefficients.csv")
+  psr_coef_path <- file.path("data-raw", "cache-stat-ratings", "psr_coefficients.csv")
   if (!file.exists(psr_coef_path)) {
-    psr_coef_path <- system.file("extdata", "psr_v2_coefficients.csv", package = "torp")
+    psr_coef_path <- system.file("extdata", "psr_coefficients.csv", package = "torp")
   }
   if (file.exists(psr_coef_path) && nchar(psr_coef_path) > 0) {
     coef_df <- utils::read.csv(psr_coef_path)

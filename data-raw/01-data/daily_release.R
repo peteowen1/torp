@@ -580,9 +580,9 @@ update_psr <- function(season) {
     stat_ratings <- load_player_stat_ratings(season)
     if (nrow(stat_ratings) == 0) return(NULL)
 
-    psr_coef_path <- file.path("data-raw", "cache-skills", "psr_v2_coefficients.csv")
+    psr_coef_path <- file.path("data-raw", "cache-stat-ratings", "psr_coefficients.csv")
     if (!file.exists(psr_coef_path)) {
-      psr_coef_path <- system.file("extdata", "psr_v2_coefficients.csv", package = "torp")
+      psr_coef_path <- system.file("extdata", "psr_coefficients.csv", package = "torp")
     }
     if (!file.exists(psr_coef_path) || nchar(psr_coef_path) == 0) {
       cli::cli_warn("PSR coefficient file not found - skipping PSR update")

@@ -1,21 +1,21 @@
-# 04_export_skills.R
-# ==================
+# 04_export_stat_ratings.R
+# ========================
 # Export computed player stat ratings to torpdata releases.
 #
-# Input:  cache-skills/03_player_skills.rds
+# Input:  cache-stat-ratings/03_player_stat_ratings.rds
 # Output: torpdata player_stat_ratings-data release (parquet per season)
 
 # Setup ----
 devtools::load_all()
 
 # Config ----
-cache_dir <- file.path("data-raw", "cache-skills")
+cache_dir <- file.path("data-raw", "cache-stat-ratings")
 release_tag <- "player_stat_ratings-data"
 
 # Load data ----
 cli::cli_h1("Loading computed stat ratings")
 
-all_stat_ratings <- readRDS(file.path(cache_dir, "03_player_skills.rds"))
+all_stat_ratings <- readRDS(file.path(cache_dir, "03_player_stat_ratings.rds"))
 # Ensure consistent column types for Arrow batch reads
 all_stat_ratings$season <- as.integer(all_stat_ratings$season)
 all_stat_ratings$round <- as.integer(all_stat_ratings$round)

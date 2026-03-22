@@ -24,7 +24,7 @@ A named list with elements:
 \description{
 Returns optimized defaults for the Bayesian stat rating estimation pipeline.
 Per-category lambda and prior values come from
-\code{data-raw/06-skills/02_optimize_skill_params.R}. The global \code{lambda_rate}
+\code{data-raw/06-stat-ratings/02_optimize_skill_params.R}. The global \code{lambda_rate}
 and \code{prior_games} are used as fallbacks for any category not in
 \code{category_params}.
 }
