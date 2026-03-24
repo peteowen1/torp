@@ -491,6 +491,46 @@ calculate_epr_stats_batch <- function(player_game_data = NULL,
     dplyr::arrange(-.data$epr)
 }
 
+#' Compute PSR inline from raw data (fallback when pre-computed not available)
+#'
+#' Loads player_game_data and player_stats, prepares stat rating data,
+#' estimates ratings for the target round, then applies PSR coefficients.
+#'
+#' @param season_val Season year.
+#' @param round_val Round number.
+#' @return A data.table with PSR columns, or NULL on failure.
+#' @keywords internal
+.compute_psr_inline <- function(season_val, round_val) {
+  # Load raw data
+  pgd <- load_player_game_data(TRUE)
+  ps <- load_player_stats(TRUE)
+  fixtures <- load_fixtures(TRUE)
+
+  # Get ref_date for this round
+  fix_dt <- data.table::as.data.table(fixtures)
+  ref_date <- fix_dt[season == season_val & round_number == round_val,
+                      min(as.Date(utc_start_time), na.rm = TRUE)]
+  if (is.na(ref_date) || !is.finite(ref_date)) {
+    cli::cli_warn("Cannot determine ref_date for {season_val} round {round_val}")
+    return(NULL)
+  }
+
+  # Prepare stat rating data
+  stat_data <- .prepare_stat_rating_data(pgd, ps)
+
+  # Estimate ratings for this single ref_date
+  skills <- estimate_player_stat_ratings(stat_data, ref_date = ref_date, compute_ci = FALSE)
+  if (nrow(skills) == 0) return(NULL)
+
+  skills[, season := season_val]
+  skills[, round := round_val]
+
+  cli::cli_inform("Inline stat ratings: {nrow(skills)} players")
+
+  .compute_psr_from_stat_ratings(skills)
+}
+
+
 #' Calculate TORP (Total Over Replacement Predictive-value)
 #'
 #' Blends EPR (Expected Possession Rating) with PSR (Player Skill Rating)
@@ -649,16 +689,18 @@ torp_ratings <- function(season_val = get_afl_season(type = "current"),
   epr_df <- suppressMessages(calculate_epr(season_val, round_val, ...))
 
   # Step 2: PSR with osr/dsr decomposition
-  # Load all seasons so players who transferred or lack current-season stat
-
-  # ratings still get PSR from their most recent data (calculate_torp takes
-  # the latest per player via slice_tail)
+  # Try pre-computed stat ratings first (fast); fall back to inline estimation
   psr_df <- tryCatch({
     skills <- load_player_stat_ratings(TRUE)
     .compute_psr_from_stat_ratings(skills)
   }, error = function(e) {
-    cli::cli_warn("Could not compute PSR: {e$message} -- returning EPR-only ratings (no TORP blend)")
-    NULL
+    cli::cli_inform("Pre-computed stat ratings not available, computing inline...")
+    tryCatch({
+      .compute_psr_inline(season_val, round_val)
+    }, error = function(e2) {
+      cli::cli_warn("Could not compute PSR: {e2$message} -- returning EPR-only ratings (no TORP blend)")
+      NULL
+    })
   })
 
   if (is.null(psr_df)) {
