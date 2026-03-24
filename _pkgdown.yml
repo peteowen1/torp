@@ -73,6 +73,7 @@ reference:
       - explain_player_rating
       - explain_player_game
       - explain_player_plays
+      - torp_movers
       - team_profile
       - print.torp_team_profile
 

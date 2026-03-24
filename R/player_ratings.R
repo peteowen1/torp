@@ -725,3 +725,67 @@ torp_ratings <- function(season_val = get_afl_season(type = "current"),
   result <- result[order(-result$torp), c(front_cols, other_cols)]
   result
 }
+
+
+#' TORP Movers: Biggest Round-Over-Round Rating Changes
+#'
+#' Compares TORP ratings between two rounds and shows which players moved
+#' the most. Uses pre-computed ratings from torpdata releases for speed.
+#'
+#' @param season_val Season year. Default is current season.
+#' @param round_val The "current" round. Default is the latest round.
+#' @param prev_round The "previous" round to compare against. Default is
+#'   \code{round_val - 1}.
+#' @param top_n Number of biggest movers to show in each direction. Default 10.
+#' @param metric Column to compare. Default \code{"torp"}. Can also be
+#'   \code{"epr"}, \code{"psr"}, \code{"recv_epr"}, etc.
+#'
+#' @return A data.table with columns: \code{player_name}, \code{team},
+#'   \code{prev} (previous round value), \code{curr} (current round value),
+#'   \code{change}, \code{direction} ("up" or "down").
+#'
+#' @export
+torp_movers <- function(season_val = get_afl_season(),
+                         round_val = get_afl_week(),
+                         prev_round = round_val - 1L,
+                         top_n = 10,
+                         metric = "torp") {
+  ratings <- data.table::as.data.table(load_torp_ratings())
+
+  curr <- ratings[season == season_val & round == round_val]
+  prev <- ratings[season == season_val & round == prev_round]
+
+  if (nrow(curr) == 0) cli::cli_abort("No ratings found for {season_val} round {round_val}")
+  if (nrow(prev) == 0) cli::cli_abort("No ratings found for {season_val} round {prev_round}")
+
+  if (!metric %in% names(curr)) {
+    cli::cli_abort("Column {.val {metric}} not found in ratings. Available: {paste(names(curr), collapse = ', ')}")
+  }
+
+  merged <- merge(
+    prev[, .(player_id, player_name, team, prev = get(metric))],
+    curr[, .(player_id, curr = get(metric))],
+    by = "player_id"
+  )
+  merged <- merged[!is.na(prev) & !is.na(curr)]
+  merged[, change := round(curr - prev, 2)]
+  data.table::setorderv(merged, "change", order = -1L)
+
+  risers <- head(merged, top_n)
+  risers[, direction := "up"]
+  fallers <- tail(merged, top_n)
+  fallers[, direction := "down"]
+  data.table::setorderv(fallers, "change", order = 1L)
+
+  result <- data.table::rbindlist(list(risers, fallers))
+
+  cli::cli_h2("{metric} movers: Round {prev_round} -> {round_val} ({season_val})")
+  cli::cli_h3("Biggest risers")
+  print(risers[, .(player_name, team, prev = round(prev, 2), curr = round(curr, 2), change)],
+        row.names = FALSE)
+  cli::cli_h3("Biggest fallers")
+  print(fallers[, .(player_name, team, prev = round(prev, 2), curr = round(curr, 2), change)],
+        row.names = FALSE)
+
+  invisible(result)
+}
