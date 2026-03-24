@@ -136,18 +136,33 @@ utils::globalVariables(c(
   "pos_group", "modal_pos", "i.pos_group", "i.modal_pos",
   "i.n_games", "i.wt_games", "ref_date",
   "..keep_cols", "..skill_cols", "..rating_cols", "..lower_cols", "..upper_cols",
-  "..lower_present", "..upper_present", "..raw_cols"
+  "..lower_present", "..upper_present", "..raw_cols",
+  ".d", ".base_w", "join_d", "ref_idx", "grp", "cum_num", "cum_den",
+  "i.grp", "i.ref_idx", "i.player_name", "i.cum_num", "i.cum_den",
+  "i.grand_mean", "i.pos_mean", "i.grand_prop", "i.pos_prop",
+  "x.cum_num", "x.cum_den",
+  "grand_mean", "pos_mean", "grand_prop", "pos_prop",
+  "ref_d_val"
 ))
 
 # Batch rating variables
 utils::globalVariables(c(
-  "match_idx", "match_idx_max", "match_ref", "date_val", "round_val"
+  "match_idx", "match_idx_max", "match_ref", "date_val", "round_val",
+  "wt_gms_raw"
 ))
 
 # PSR variables
 utils::globalVariables(c("psr_raw", "psr", "psr.x", "psr.y", "psr_diff",
                           "home_psr", "away_psr", "psr_week",
-                          "osr", "dsr"))
+                          "osr", "dsr",
+                          "effective_disposals", "effective_kicks",
+                          "game_psr", "game_osr", "game_dsr"))
+
+# explain_player_game / explain_player_plays variables
+utils::globalVariables(c(
+  "component", "raw_value", "stat", "rate", "team_status", "opp",
+  ".row_idx", "is_play", "recv_credit", "disp_credit", "marker"
+))
 
 # player_credit.R stat columns
 utils::globalVariables(c(
