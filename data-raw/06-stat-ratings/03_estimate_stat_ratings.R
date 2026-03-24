@@ -1,20 +1,20 @@
-# 03_estimate_skills.R
-# ====================
+# 03_estimate_stat_ratings.R
+# ==========================
 # Run stat rating estimation for all seasons/rounds.
 #
-# Input:  cache-skills/01_skill_data.rds, optional 02_optimized_params.rds
-# Output: cache-skills/03_player_skills.rds
+# Input:  cache-stat-ratings/01_stat_rating_data.rds, optional 02_optimized_params.rds
+# Output: cache-stat-ratings/03_player_stat_ratings.rds
 
 # Setup ----
 devtools::load_all()
 
 # Config ----
-cache_dir <- file.path("data-raw", "cache-skills")
+cache_dir <- file.path("data-raw", "cache-stat-ratings")
 
 # Load data ----
 cli::cli_h1("Loading stat rating data")
 
-stat_rating_data <- readRDS(file.path(cache_dir, "01_skill_data.rds"))
+stat_rating_data <- readRDS(file.path(cache_dir, "01_stat_rating_data.rds"))
 cli::cli_inform("Loaded {nrow(stat_rating_data)} rows")
 
 # Load optimized params if available, otherwise use defaults
@@ -130,5 +130,5 @@ all_seasons <- sort(unique(all_stat_ratings$season))
 cli::cli_inform("Total: {nrow(all_stat_ratings)} player-round rows across {length(all_seasons)} seasons")
 
 # Save ----
-saveRDS(all_stat_ratings, file.path(cache_dir, "03_player_skills.rds"))
-cli::cli_alert_success("Saved to {file.path(cache_dir, '03_player_skills.rds')}")
+saveRDS(all_stat_ratings, file.path(cache_dir, "03_player_stat_ratings.rds"))
+cli::cli_alert_success("Saved to {file.path(cache_dir, '03_player_stat_ratings.rds')}")

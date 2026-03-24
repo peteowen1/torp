@@ -1,6 +1,6 @@
-# 06_train_psr_v2.R
-# =================
-# PSR v2: Separate home/away stat rating features (not diffs) for cleaner
+# 06_train_psr_model.R
+# ====================
+# Train PSR model: separate home/away stat rating features for cleaner
 # offense/defense decomposition.
 #
 # OSR model: home_score ~ home_ratings + away_ratings
@@ -18,13 +18,13 @@ devtools::load_all()
 library(glmnet)
 library(data.table)
 
-cache_dir <- file.path("data-raw", "cache-skills")
+cache_dir <- file.path("data-raw", "cache-stat-ratings")
 
 rmse <- function(a, p) sqrt(mean((a - p)^2))
 mae <- function(a, p) mean(abs(a - p))
 r2 <- function(a, p) 1 - sum((a - p)^2) / sum((a - mean(a))^2)
 
-# 1. Load & prep data (same as v1) ----
+# 1. Load & prep data ----
 cli::cli_h1("Loading data")
 
 stat_ratings <- as.data.table(load_player_stat_ratings(TRUE))
@@ -183,16 +183,16 @@ fit_model <- function(y_tr, y_te, label) {
        test_rmse = rmse(y_te, p_te))
 }
 
-margin_fit <- fit_model(y_margin_train, y_margin_test, "Margin (v2 PSR)")
-off_fit <- fit_model(y_off_train, y_off_test, "Offense (v2 OSR)")
-def_fit <- fit_model(y_def_train, y_def_test, "Defense (v2 DSR)")
+margin_fit <- fit_model(y_margin_train, y_margin_test, "Margin (PSR)")
+off_fit <- fit_model(y_off_train, y_off_test, "Offense (OSR)")
+def_fit <- fit_model(y_def_train, y_def_test, "Defense (DSR)")
 
-# PSR match prediction
-pred_psr_v2 <- off_fit$pred_test - def_fit$pred_test
+# PSR match prediction (off - def as margin proxy)
+pred_psr_combined <- off_fit$pred_test - def_fit$pred_test
 
-cat(sprintf("\nv2 PSR (off - def): Test RMSE=%.2f, MAE=%.2f, R2=%.3f\n",
-  rmse(y_margin_test, pred_psr_v2), mae(y_margin_test, pred_psr_v2),
-  r2(y_margin_test, pred_psr_v2)))
+cat(sprintf("\nPSR (off - def): Test RMSE=%.2f, MAE=%.2f, R2=%.3f\n",
+  rmse(y_margin_test, pred_psr_combined), mae(y_margin_test, pred_psr_combined),
+  r2(y_margin_test, pred_psr_combined)))
 
 # 4. Extract offense/defense coefficients ----
 cli::cli_h1("Extracting player-level coefficients")
@@ -257,13 +257,13 @@ psr_coef_df <- data.frame(
   stringsAsFactors = FALSE
 )
 
-cat("\n--- v2 OSR Top 10 Coefficients ---\n")
+cat("\n--- OSR Top 10 Coefficients ---\n")
 print(head(osr_coef_df[order(-abs(osr_coef_df$beta)), c("stat_name", "beta")], 10), row.names = FALSE)
 
-cat("\n--- v2 DSR Top 10 Coefficients ---\n")
+cat("\n--- DSR Top 10 Coefficients ---\n")
 print(head(dsr_coef_df[order(-abs(dsr_coef_df$beta)), c("stat_name", "beta")], 10), row.names = FALSE)
 
-cat("\n--- v2 PSR Top 10 Coefficients ---\n")
+cat("\n--- PSR Top 10 Coefficients ---\n")
 print(head(psr_coef_df[order(-abs(psr_coef_df$beta)), c("stat_name", "beta")], 10), row.names = FALSE)
 
 # 5. Calculate player ratings ----
@@ -275,24 +275,24 @@ setnames(osr, c("psr_raw", "psr"), c("osr_raw", "osr"))
 dsr <- calculate_psr(stat_ratings, dsr_coef_df, center = TRUE)
 setnames(dsr, c("psr_raw", "psr"), c("dsr_raw", "dsr"))
 
-psr_v2 <- calculate_psr(stat_ratings, psr_coef_df, center = TRUE)
-setnames(psr_v2, c("psr_raw", "psr"), c("margin_psr_raw", "margin_psr"))
+psr_margin <- calculate_psr(stat_ratings, psr_coef_df, center = TRUE)
+setnames(psr_margin, c("psr_raw", "psr"), c("margin_psr_raw", "margin_psr"))
 
 id_cols <- intersect(names(osr), names(dsr))
 id_cols <- setdiff(id_cols, c("osr_raw", "osr", "dsr_raw", "dsr"))
-all_ratings <- merge(merge(psr_v2, osr, by = id_cols, all = TRUE),
+all_ratings <- merge(merge(psr_margin, osr, by = id_cols, all = TRUE),
                      dsr, by = id_cols, all = TRUE)
 all_ratings[, psr := osr + dsr]
 
 latest <- all_ratings[, .SD[round == max(round)], by = season]
 latest <- latest[season == max(season)]
 
-cat("\n--- Top 20 by v2 PSR ---\n")
+cat("\n--- Top 20 by PSR ---\n")
 print(head(latest[order(-psr),
   .(player_name, pos_group, osr = round(osr, 2), dsr = round(dsr, 2),
     psr = round(psr, 2), margin_psr = round(margin_psr, 2))], 20), row.names = FALSE)
 
-cat("\n--- Bottom 20 by v2 PSR ---\n")
+cat("\n--- Bottom 20 by PSR ---\n")
 print(tail(latest[order(-psr),
   .(player_name, pos_group, osr = round(osr, 2), dsr = round(dsr, 2),
     psr = round(psr, 2), margin_psr = round(margin_psr, 2))], 20), row.names = FALSE)
@@ -301,127 +301,25 @@ cat(sprintf("\nOSR vs DSR correlation: %.3f\n",
   cor(latest$osr, latest$dsr, use = "complete.obs")))
 
 # Best offensive players
-cat("\n--- Top 10 by v2 OSR ---\n")
+cat("\n--- Top 10 by OSR ---\n")
 print(head(latest[order(-osr),
   .(player_name, pos_group, osr = round(osr, 2), dsr = round(dsr, 2))], 10),
   row.names = FALSE)
 
 # Best defensive players
-cat("\n--- Top 10 by v2 DSR ---\n")
+cat("\n--- Top 10 by DSR ---\n")
 print(head(latest[order(-dsr),
   .(player_name, pos_group, osr = round(osr, 2), dsr = round(dsr, 2))], 10),
   row.names = FALSE)
 
-# 6. Compare v1 vs v2 vs EPR ----
-cli::cli_h1("v1 vs v2 vs EPR comparison")
+# 6. Save outputs ----
+cli::cli_h1("Saving outputs")
 
-# Load v1 model (skip comparison if not available)
-v1_path <- file.path(cache_dir, "psr_model.rds")
-has_v1 <- file.exists(v1_path)
-if (!has_v1) cli::cli_warn("v1 model not found at {v1_path} — skipping v1 comparison")
-v1_out <- if (has_v1) readRDS(v1_path) else NULL
+write.csv(osr_coef_df, file.path(cache_dir, "osr_coefficients.csv"), row.names = FALSE)
+write.csv(dsr_coef_df, file.path(cache_dir, "dsr_coefficients.csv"), row.names = FALSE)
+write.csv(psr_coef_df, file.path(cache_dir, "psr_coefficients.csv"), row.names = FALSE)
 
-# v1 diff features (rebuild quickly)
-if (has_v1) {
-  diff_cols <- paste0(all_rating_names[paste0(all_rating_names, "_rating") %in% rating_cols], "_diff")
-  X_diff_raw <- as.matrix(match_df[, home_cols, with = FALSE]) -
-                as.matrix(match_df[, away_cols, with = FALSE])
-  colnames(X_diff_raw) <- diff_cols
-  X_diff <- sweep(X_diff_raw, 2, v1_out$train_sds, "/")
-  X_diff_test <- X_diff[test_idx, ]
-
-  pred_v1_psr <- as.numeric(predict(v1_out$model, X_diff_test))
-  pred_v1_off <- as.numeric(predict(v1_out$off_model, X_diff_test))
-  pred_v1_def <- as.numeric(predict(v1_out$def_model, X_diff_test))
-  pred_v1_psr_combined <- pred_v1_off - pred_v1_def
-}
-
-# EPR
-epr_df <- as.data.table(load_torp_ratings())
-epr_df[, player_id := as.character(player_id)]
-epr_cols <- c("epr", "recv_epr", "disp_epr", "spoil_epr", "hitout_epr")
-epr_join <- epr_df[, c("player_id", "season", "round", epr_cols), with = FALSE]
-epr_join[, season := as.integer(season)]
-epr_join[, round := as.integer(round)]
-
-teams2 <- as.data.table(load_teams(TRUE))
-teams2 <- teams2[is.na(position) | (position != "EMERG" & position != "SUB")]
-teams2[, round := as.integer(round_number)]
-teams2[, player_id := as.character(player_id)]
-teams2[, season := as.integer(season)]
-
-merged_epr <- merge(teams2, epr_join, by = c("player_id", "season", "round"), all.x = TRUE)
-for (tc in epr_cols) {
-  na_idx <- which(is.na(merged_epr[[tc]]))
-  if (length(na_idx) > 0) merged_epr[na_idx, (tc) := median(merged_epr[[tc]], na.rm = TRUE)]
-}
-
-merged_epr[, .epr_total := fifelse(is.na(epr), 0, epr)]
-team_epr <- merged_epr[order(-.epr_total)][
-  , head(.SD, 22), by = .(match_id, team_id)
-][, lapply(.SD, sum, na.rm = TRUE), by = .(match_id, team_id, season, round), .SDcols = epr_cols]
-
-team_epr <- merge(team_epr,
-  fixtures[, .(match_id, home_team_id, away_team_id)],
-  by = "match_id", all.x = TRUE)
-team_epr[, team_type := fifelse(team_id == home_team_id, "home", "away")]
-
-home_t <- team_epr[team_type == "home"]
-away_t <- team_epr[team_type == "away"]
-setnames(home_t, epr_cols, paste0(epr_cols, "_home"))
-setnames(away_t, epr_cols, paste0(epr_cols, "_away"))
-match_epr <- merge(
-  home_t[, c("match_id", "season", "round", paste0(epr_cols, "_home")), with = FALSE],
-  away_t[, c("match_id", paste0(epr_cols, "_away")), with = FALSE],
-  by = "match_id")
-for (tc in epr_cols) {
-  match_epr[, paste0(tc, "_diff") := get(paste0(tc, "_home")) - get(paste0(tc, "_away"))]
-}
-match_epr <- merge(match_epr, fixtures_margin[, .(match_id, home_margin, match_date)], by = "match_id")
-epr_train <- match_epr[season < 2025]
-epr_test <- match_epr[season >= 2025]
-epr_train[, weightz := exp(as.numeric(-(anchor_date - match_date)) / 1000)]
-epr_train[, weightz := weightz / mean(weightz, na.rm = TRUE)]
-fit_epr <- lm(home_margin ~ epr_diff, data = epr_train, weights = weightz)
-pred_epr <- predict(fit_epr, epr_test)
-
-# Align
-common_ids <- intersect(match_df$match_id[test_idx], epr_test$match_id)
-psr_ci <- match(common_ids, match_df$match_id[test_idx])
-epr_ci <- match(common_ids, epr_test$match_id)
-y_common <- y_margin_test[psr_ci]
-baseline <- mean(y_margin_train)
-
-cat(sprintf("\nTest set: %d matches\n\n", length(common_ids)))
-cat(sprintf("%-35s  %8s  %8s  %6s\n", "Model", "RMSE", "MAE", "R²"))
-cat(paste(rep("-", 63), collapse = ""), "\n")
-
-results <- list(
-  "Baseline (predict mean)" = rep(baseline, length(common_ids)),
-  "EPR: epr_diff OLS" = pred_epr[epr_ci],
-  "v2 PSR (home+away)" = margin_fit$pred_test[psr_ci],
-  "v2 PSR combined (home+away)" = pred_psr_v2[psr_ci],
-  "Ensemble (EPR + v2 PSR)" = (pred_epr[epr_ci] + pred_psr_v2[psr_ci]) / 2
-)
-if (has_v1) {
-  results[["v1 PSR (diffs)"]] <- pred_v1_psr[psr_ci]
-  results[["v1 PSR combined (diffs)"]] <- pred_v1_psr_combined[psr_ci]
-}
-
-for (nm in names(results)) {
-  p <- results[[nm]]
-  cat(sprintf("%-35s  %8.2f  %8.2f  %6.3f\n",
-    nm, rmse(y_common, p), mae(y_common, p), r2(y_common, p)))
-}
-
-# 7. Save v2 outputs ----
-cli::cli_h1("Saving v2 outputs")
-
-write.csv(osr_coef_df, file.path(cache_dir, "osr_v2_coefficients.csv"), row.names = FALSE)
-write.csv(dsr_coef_df, file.path(cache_dir, "dsr_v2_coefficients.csv"), row.names = FALSE)
-write.csv(psr_coef_df, file.path(cache_dir, "psr_v2_coefficients.csv"), row.names = FALSE)
-
-v2_out <- list(
+model_out <- list(
   margin_model = margin_fit$model, off_model = off_fit$model, def_model = def_fit$model,
   psr_coef_df = psr_coef_df, osr_coef_df = osr_coef_df, dsr_coef_df = dsr_coef_df,
   margin_intercept = margin_fit$coefs[1, 1],
@@ -430,9 +328,9 @@ v2_out <- list(
   rating_cols = rating_cols,
   train_seasons = sort(unique(train_seasons)),
   test_rmse_margin = margin_fit$test_rmse,
-  test_rmse_psr = rmse(y_margin_test, pred_psr_v2)
+  test_rmse_psr = rmse(y_margin_test, pred_psr_combined)
 )
-saveRDS(v2_out, file.path(cache_dir, "psr_v2_model.rds"))
+saveRDS(model_out, file.path(cache_dir, "psr_model.rds"))
 
-cli::cli_alert_success("Saved v2 outputs")
+cli::cli_alert_success("Saved outputs")
 cli::cli_alert_success("Done!")

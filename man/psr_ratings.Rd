@@ -16,7 +16,7 @@ psr_ratings(
 \item{round_val}{Round to filter to. If NULL (default), returns all rounds.}
 
 \item{psr_coef_path}{Optional path to the margin PSR coefficient CSV.
-If NULL, uses the bundled \code{inst/extdata/psr_v2_coefficients.csv}.}
+If NULL, uses the bundled \code{inst/extdata/psr_coefficients.csv}.}
 }
 \value{
 A data.table with columns: \code{player_id}, \code{player_name},

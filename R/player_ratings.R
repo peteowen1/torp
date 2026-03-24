@@ -187,6 +187,8 @@ calculate_epr <- function(season_val = get_afl_season(type = "current"),
         for (comp in comps) {
           final_df[[comp]] <- round(final_df[[comp]], 2)
         }
+      } else {
+        cli::cli_warn("Total predicted TOG is zero -- TOG-weighted centering skipped. Check skills data alignment.")
       }
     }
 
@@ -267,29 +269,32 @@ calculate_epr_stats <- function(player_game_data = NULL, match_ref, date_val, de
   }
 
   # Aggregate by player_id using data.table syntax
-  # Per-80 normalisation is already applied in create_player_game_data() (before
-  # position adjustment), so _adj columns are already per-full-game rates.
-  # Each component uses its own decay weight for both sums and wt_gms.
-  # Note: player_game_data has one row per player-match, so wt_gms = sum(wt).
+  # _adj columns are per-80-min position-adjusted rates. We convert back to
+
+  # game totals (* tog) so the shrinkage denominator is in weighted minutes
+  # (wt * tog), not weighted games. This ensures low-TOG games (noisier rates)
+  # contribute proportionally less to the posterior.
+  dt[, tog_safe := pmax(data.table::fifelse(is.na(time_on_ground_percentage), 100, time_on_ground_percentage) / 100, 0.1)]
   result <- dt[, .(
     player_name = max(player_name),
     gms = .N,
-    wt_gms_recv   = sum(wt_recv, na.rm = TRUE),
-    wt_gms_disp   = sum(wt_disp, na.rm = TRUE),
-    wt_gms_spoil  = sum(wt_spoil, na.rm = TRUE),
-    wt_gms_hitout = sum(wt_hitout, na.rm = TRUE),
+    wt_gms_recv   = sum(wt_recv * tog_safe, na.rm = TRUE),
+    wt_gms_disp   = sum(wt_disp * tog_safe, na.rm = TRUE),
+    wt_gms_spoil  = sum(wt_spoil * tog_safe, na.rm = TRUE),
+    wt_gms_hitout = sum(wt_hitout * tog_safe, na.rm = TRUE),
     tog_sum    = sum(time_on_ground_percentage * wt_recv, na.rm = TRUE),
-    recv_sum   = sum(recv_epv_adj * wt_recv, na.rm = TRUE),
-    disp_sum   = sum(disp_epv_adj * wt_disp, na.rm = TRUE),
-    spoil_sum  = sum(spoil_epv_adj * wt_spoil, na.rm = TRUE),
-    hitout_sum = sum(hitout_epv_adj * wt_hitout, na.rm = TRUE),
+    wt_gms_raw = sum(wt_recv, na.rm = TRUE),
+    recv_sum   = sum(recv_epv_adj * tog_safe * wt_recv, na.rm = TRUE),
+    disp_sum   = sum(disp_epv_adj * tog_safe * wt_disp, na.rm = TRUE),
+    spoil_sum  = sum(spoil_epv_adj * tog_safe * wt_spoil, na.rm = TRUE),
+    hitout_sum = sum(hitout_epv_adj * tog_safe * wt_hitout, na.rm = TRUE),
     posn = data.table::last(listed_position)
   ), by = player_id]
 
-  # Derive per-component EPR with per-component wt_gms
+  # Derive per-component EPR with TOG-weighted games
   result[, `:=`(
     wt_gms = wt_gms_recv,  # backwards-compat alias; per-component cols are canonical
-    wt_tog = round(tog_sum / pmax(wt_gms_recv, 1e-10), 1),
+    wt_tog = round(tog_sum / pmax(wt_gms_raw, 1e-10), 1),
     recv_epr   = .bayesian_shrink(recv_sum,   wt_gms_recv,   loading, prior_games_recv,   prior_rate_recv),
     disp_epr   = .bayesian_shrink(disp_sum,   wt_gms_disp,   loading, prior_games_disp,   prior_rate_disp),
     spoil_epr  = .bayesian_shrink(spoil_sum,  wt_gms_spoil,  loading, prior_games_spoil,  prior_rate_spoil),
@@ -300,7 +305,7 @@ calculate_epr_stats <- function(player_game_data = NULL, match_ref, date_val, de
   result[, epr := round(recv_epr + disp_epr + spoil_epr + hitout_epr, 2)]
 
   # Remove intermediate columns
-  result[, c("tog_sum", "recv_sum", "disp_sum", "spoil_sum", "hitout_sum") := NULL]
+  result[, c("tog_sum", "wt_gms_raw", "recv_sum", "disp_sum", "spoil_sum", "hitout_sum") := NULL]
 
   return(result)
 }
@@ -378,24 +383,27 @@ calculate_epr_stats_batch <- function(player_game_data = NULL,
   }
 
   # Aggregate by (round_val, player_id) — all rounds in one pass
+  # Weight by TOG so low-TOG games contribute proportionally less
+  cross[, tog_safe := pmax(data.table::fifelse(is.na(time_on_ground_percentage), 100, time_on_ground_percentage) / 100, 0.1)]
   result <- cross[, .(
     player_name = max(player_name),
     gms = .N,
-    wt_gms_recv   = sum(wt_recv, na.rm = TRUE),
-    wt_gms_disp   = sum(wt_disp, na.rm = TRUE),
-    wt_gms_spoil  = sum(wt_spoil, na.rm = TRUE),
-    wt_gms_hitout = sum(wt_hitout, na.rm = TRUE),
+    wt_gms_recv   = sum(wt_recv * tog_safe, na.rm = TRUE),
+    wt_gms_disp   = sum(wt_disp * tog_safe, na.rm = TRUE),
+    wt_gms_spoil  = sum(wt_spoil * tog_safe, na.rm = TRUE),
+    wt_gms_hitout = sum(wt_hitout * tog_safe, na.rm = TRUE),
     tog_sum    = sum(time_on_ground_percentage * wt_recv, na.rm = TRUE),
-    recv_sum   = sum(recv_epv_adj * wt_recv, na.rm = TRUE),
-    disp_sum   = sum(disp_epv_adj * wt_disp, na.rm = TRUE),
-    spoil_sum  = sum(spoil_epv_adj * wt_spoil, na.rm = TRUE),
-    hitout_sum = sum(hitout_epv_adj * wt_hitout, na.rm = TRUE),
+    wt_gms_raw = sum(wt_recv, na.rm = TRUE),
+    recv_sum   = sum(recv_epv_adj * tog_safe * wt_recv, na.rm = TRUE),
+    disp_sum   = sum(disp_epv_adj * tog_safe * wt_disp, na.rm = TRUE),
+    spoil_sum  = sum(spoil_epv_adj * tog_safe * wt_spoil, na.rm = TRUE),
+    hitout_sum = sum(hitout_epv_adj * tog_safe * wt_hitout, na.rm = TRUE),
     posn = data.table::last(listed_position)
   ), by = .(round_val, player_id)]
 
   result[, `:=`(
     wt_gms = wt_gms_recv,
-    wt_tog = round(tog_sum / pmax(wt_gms_recv, 1e-10), 1),
+    wt_tog = round(tog_sum / pmax(wt_gms_raw, 1e-10), 1),
     recv_epr   = .bayesian_shrink(recv_sum,   wt_gms_recv,   loading, prior_games_recv,   prior_rate_recv),
     disp_epr   = .bayesian_shrink(disp_sum,   wt_gms_disp,   loading, prior_games_disp,   prior_rate_disp),
     spoil_epr  = .bayesian_shrink(spoil_sum,  wt_gms_spoil,  loading, prior_games_spoil,  prior_rate_spoil),
@@ -403,7 +411,7 @@ calculate_epr_stats_batch <- function(player_game_data = NULL,
   )]
 
   result[, epr := round(recv_epr + disp_epr + spoil_epr + hitout_epr, 2)]
-  result[, c("tog_sum", "recv_sum", "disp_sum", "spoil_sum", "hitout_sum") := NULL]
+  result[, c("tog_sum", "wt_gms_raw", "recv_sum", "disp_sum", "spoil_sum", "hitout_sum") := NULL]
 
   return(result)
 }
@@ -574,7 +582,7 @@ calculate_torp_ratings <- function(...) {
 #' @param season_val Season to compute PSR for. Default is current season.
 #' @param round_val Round to filter to. If NULL (default), returns all rounds.
 #' @param psr_coef_path Optional path to the margin PSR coefficient CSV.
-#'   If NULL, uses the bundled \code{inst/extdata/psr_v2_coefficients.csv}.
+#'   If NULL, uses the bundled \code{inst/extdata/psr_coefficients.csv}.
 #'
 #' @return A data.table with columns: \code{player_id}, \code{player_name},
 #'   \code{season}, \code{round}, \code{pos_group}, \code{psr_raw},
@@ -593,7 +601,7 @@ calculate_torp_ratings <- function(...) {
 psr_ratings <- function(season_val = get_afl_season(type = "current"),
                         round_val = get_afl_week(type = "next"),
                         psr_coef_path = NULL) {
-  skills <- load_player_stat_ratings(season_val)
+  skills <- load_player_stat_ratings(TRUE)
   result <- .compute_psr_from_stat_ratings(skills, psr_coef_path)
   if (is.null(result)) {
     return(data.table::data.table(
@@ -640,9 +648,13 @@ torp_ratings <- function(season_val = get_afl_season(type = "current"),
   # Step 1: EPR
   epr_df <- suppressMessages(calculate_epr(season_val, round_val, ...))
 
-  # Step 2: PSR with osr/dsr decomposition (only load current season skills)
+  # Step 2: PSR with osr/dsr decomposition
+  # Load all seasons so players who transferred or lack current-season stat
+
+  # ratings still get PSR from their most recent data (calculate_torp takes
+  # the latest per player via slice_tail)
   psr_df <- tryCatch({
-    skills <- load_player_stat_ratings(season_val)
+    skills <- load_player_stat_ratings(TRUE)
     .compute_psr_from_stat_ratings(skills)
   }, error = function(e) {
     cli::cli_warn("Could not compute PSR: {e$message} -- returning EPR-only ratings (no TORP blend)")

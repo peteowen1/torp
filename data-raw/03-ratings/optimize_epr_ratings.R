@@ -1,10 +1,10 @@
-# optimize_torp_ratings.R
+# optimize_epr_ratings.R
 # ======================
 # Optimize EPR (Estimated Player Rating) parameters to minimize RMSE when
 # team-sum EPR predicts next-game margin. Uses pre-computed raw components
 # and incremental cumulative decay for speed.
 #
-# Usage: powershell.exe -Command 'Rscript "data-raw/03-ratings/optimize_torp_ratings.R"'
+# Usage: powershell.exe -Command 'Rscript "data-raw/03-ratings/optimize_epr_ratings.R"'
 
 library(devtools)
 library(data.table)
@@ -132,7 +132,7 @@ player_game_raw <- player_game_raw[!is.na(player_id)]
 num_cols <- c("sum_depv_neg", "n_neg", "sum_depv_pos", "n_pos",
               "sum_depv_pt_neg", "n_recv_neg", "sum_depv_pt_pos", "n_recv_pos",
               "spoils", "tackles", "pressure_acts", "def_pressure",
-              "hitouts", "hitouts_adv", "ruck_contests", "bounces",
+              "hitouts", "hitouts_adv", "ruck_contests",
               "contested_poss", "contested_marks", "ground_ball_gets", "marks_inside50",
               "inside50s", "clangers", "score_inv",
               "intercepts", "one_percenters", "rebound50s", "frees_against",
@@ -147,7 +147,7 @@ for (col in num_cols) {
 # Dividing by SD makes all stat weights "per-SD" so L2 regularization treats them fairly.
 # On writeback, weights are un-normalized back to per-raw-unit for player_credit.R.
 stat_cols_to_normalize <- c(
-  "bounces", "spoils", "tackles", "pressure_acts", "def_pressure",
+  "spoils", "tackles", "pressure_acts", "def_pressure",
   "hitouts", "hitouts_adv", "ruck_contests",
   "contested_poss", "contested_marks", "ground_ball_gets", "marks_inside50",
   "inside50s", "clangers", "score_inv",
@@ -167,6 +167,9 @@ for (col in stat_cols_to_normalize) {
 for (col in stat_cols_to_normalize) {
   player_game_raw[[col]] <- player_game_raw[[col]] / stat_sds[col]
 }
+
+# Derive season from date (needed for per-season position centering)
+player_game_raw[, season := lubridate::year(date)]
 
 # Sort chronologically
 data.table::setorder(player_game_raw, date, match_id)
@@ -385,8 +388,7 @@ POSITION_BALANCE_LAMBDA <- 0.1
 STAT_WEIGHT_LAMBDA <- 0.1
 
 # Names of count-based stat weight params subject to L2 penalty
-L2_PARAM_NAMES <- c("bounce_wt",
-                     "spoil_wt", "tackle_wt", "pressure_wt", "def_pressure_wt",
+L2_PARAM_NAMES <- c("spoil_wt", "tackle_wt", "pressure_wt", "def_pressure_wt",
                      "hitout_wt", "hitout_adv_wt", "ruck_contest_wt",
                      "contested_poss_wt", "contested_marks_wt", "ground_ball_gets_wt",
                      "marks_inside50_wt", "inside50s_wt", "clangers_wt",
@@ -407,35 +409,40 @@ Rcpp::List cumulative_decay_cpp(Rcpp::IntegerVector pids,
                                 Rcpp::NumericVector disp_epv,
                                 Rcpp::NumericVector spoil_epv,
                                 Rcpp::NumericVector hitout_epv,
+                                Rcpp::NumericVector tog,
                                 double decay_r, double decay_d,
                                 double decay_s, double decay_h) {
   int n = pids.size();
   Rcpp::NumericVector cr(n), cd(n), cs(n), ch(n);
   Rcpp::NumericVector cw_r(n), cw_d(n), cw_s(n), cw_h(n);
 
-  cr[0] = recv_epv[0]; cd[0] = disp_epv[0];
-  cs[0] = spoil_epv[0]; ch[0] = hitout_epv[0];
-  cw_r[0] = 1.0; cw_d[0] = 1.0; cw_s[0] = 1.0; cw_h[0] = 1.0;
+  // TOG-weighted: sums accumulate epv * tog (game total),
+  // weights accumulate tog (weighted minutes)
+  double t0 = tog[0];
+  cr[0] = recv_epv[0] * t0; cd[0] = disp_epv[0] * t0;
+  cs[0] = spoil_epv[0] * t0; ch[0] = hitout_epv[0] * t0;
+  cw_r[0] = t0; cw_d[0] = t0; cw_s[0] = t0; cw_h[0] = t0;
 
   for (int i = 1; i < n; i++) {
+    double ti = tog[i];
     if (pids[i] == pids[i-1]) {
       double gap = dnums[i] - dnums[i-1];
       double df_r = std::exp(-gap / decay_r);
       double df_d = std::exp(-gap / decay_d);
       double df_s = std::exp(-gap / decay_s);
       double df_h = std::exp(-gap / decay_h);
-      cr[i] = cr[i-1] * df_r + recv_epv[i];
-      cd[i] = cd[i-1] * df_d + disp_epv[i];
-      cs[i] = cs[i-1] * df_s + spoil_epv[i];
-      ch[i] = ch[i-1] * df_h + hitout_epv[i];
-      cw_r[i] = cw_r[i-1] * df_r + 1.0;
-      cw_d[i] = cw_d[i-1] * df_d + 1.0;
-      cw_s[i] = cw_s[i-1] * df_s + 1.0;
-      cw_h[i] = cw_h[i-1] * df_h + 1.0;
+      cr[i] = cr[i-1] * df_r + recv_epv[i] * ti;
+      cd[i] = cd[i-1] * df_d + disp_epv[i] * ti;
+      cs[i] = cs[i-1] * df_s + spoil_epv[i] * ti;
+      ch[i] = ch[i-1] * df_h + hitout_epv[i] * ti;
+      cw_r[i] = cw_r[i-1] * df_r + ti;
+      cw_d[i] = cw_d[i-1] * df_d + ti;
+      cw_s[i] = cw_s[i-1] * df_s + ti;
+      cw_h[i] = cw_h[i-1] * df_h + ti;
     } else {
-      cr[i] = recv_epv[i]; cd[i] = disp_epv[i];
-      cs[i] = spoil_epv[i]; ch[i] = hitout_epv[i];
-      cw_r[i] = 1.0; cw_d[i] = 1.0; cw_s[i] = 1.0; cw_h[i] = 1.0;
+      cr[i] = recv_epv[i] * ti; cd[i] = disp_epv[i] * ti;
+      cs[i] = spoil_epv[i] * ti; ch[i] = hitout_epv[i] * ti;
+      cw_r[i] = ti; cw_d[i] = ti; cw_s[i] = ti; cw_h[i] = ti;
     }
   }
   return Rcpp::List::create(
@@ -473,7 +480,6 @@ compute_epv <- function(pgr, params, verbose = FALSE) {
   # Disposal EPV
   out[, disp_epv := (sum_depv_neg + n_neg * p["disp_neg_offset"]) * p["disp_scale"] +
                     (sum_depv_pos + n_pos * p["disp_pos_offset"]) * p["disp_scale"] +
-                    bounces * p["bounce_wt"] +
                     inside50s * p["inside50s_wt"] + clangers * p["clangers_wt"] +
                     score_inv * p["score_involvements_wt"] +
                     kicks * p["kicks_wt"] + handballs * p["handballs_wt"] +
@@ -529,12 +535,15 @@ compute_epv <- function(pgr, params, verbose = FALSE) {
         mean(out$hitout_epv[idx], na.rm = TRUE)))
     }
   }
+  # TOG-weighted centering by (position, season) to match create_player_game_data()
+  # which is called per-season in the production pipeline. Weighting by tog_safe
+  # prevents low-TOG players with noisy per-80 rates from swinging the mean.
   out[!is.na(position), `:=`(
-    recv_epv   = recv_epv   - mean(recv_epv, na.rm = TRUE),
-    disp_epv   = disp_epv   - mean(disp_epv, na.rm = TRUE),
-    spoil_epv  = spoil_epv  - mean(spoil_epv, na.rm = TRUE),
-    hitout_epv = hitout_epv - mean(hitout_epv, na.rm = TRUE)
-  ), by = position]
+    recv_epv   = recv_epv   - weighted.mean(recv_epv, tog_safe, na.rm = TRUE),
+    disp_epv   = disp_epv   - weighted.mean(disp_epv, tog_safe, na.rm = TRUE),
+    spoil_epv  = spoil_epv  - weighted.mean(spoil_epv, tog_safe, na.rm = TRUE),
+    hitout_epv = hitout_epv - weighted.mean(hitout_epv, tog_safe, na.rm = TRUE)
+  ), by = .(position, season)]
 
   return(out)
 }
@@ -553,28 +562,31 @@ compute_cumulative <- function(epv_dt, decay_recv, decay_disp = decay_recv,
   data.table::setorder(dt, player_id, date)
   dt[, date_num := as.numeric(date)]
 
+  # TOG-weighted: sums accumulate epv * tog (game total),
+  # weights accumulate tog (weighted minutes)
   dt[, {
     n <- .N
     cr <- cd <- cs <- ch <- cw_r <- cw_d <- cw_s <- cw_h <- numeric(n)
     for (i in seq_len(n)) {
+      ti <- tog_safe[i]
       if (i == 1) {
-        cr[i] <- recv_epv[i]; cd[i] <- disp_epv[i]
-        cs[i] <- spoil_epv[i]; ch[i] <- hitout_epv[i]
-        cw_r[i] <- 1; cw_d[i] <- 1; cw_s[i] <- 1; cw_h[i] <- 1
+        cr[i] <- recv_epv[i] * ti; cd[i] <- disp_epv[i] * ti
+        cs[i] <- spoil_epv[i] * ti; ch[i] <- hitout_epv[i] * ti
+        cw_r[i] <- ti; cw_d[i] <- ti; cw_s[i] <- ti; cw_h[i] <- ti
       } else {
         gap <- date_num[i] - date_num[i - 1]
         df_r <- exp(-gap / decay_recv)
         df_d <- exp(-gap / decay_disp)
         df_s <- exp(-gap / decay_spoil)
         df_h <- exp(-gap / decay_hitout)
-        cr[i] <- cr[i - 1] * df_r + recv_epv[i]
-        cd[i] <- cd[i - 1] * df_d + disp_epv[i]
-        cs[i] <- cs[i - 1] * df_s + spoil_epv[i]
-        ch[i] <- ch[i - 1] * df_h + hitout_epv[i]
-        cw_r[i] <- cw_r[i - 1] * df_r + 1
-        cw_d[i] <- cw_d[i - 1] * df_d + 1
-        cw_s[i] <- cw_s[i - 1] * df_s + 1
-        cw_h[i] <- cw_h[i - 1] * df_h + 1
+        cr[i] <- cr[i - 1] * df_r + recv_epv[i] * ti
+        cd[i] <- cd[i - 1] * df_d + disp_epv[i] * ti
+        cs[i] <- cs[i - 1] * df_s + spoil_epv[i] * ti
+        ch[i] <- ch[i - 1] * df_h + hitout_epv[i] * ti
+        cw_r[i] <- cw_r[i - 1] * df_r + ti
+        cw_d[i] <- cw_d[i - 1] * df_d + ti
+        cw_s[i] <- cw_s[i - 1] * df_s + ti
+        cw_h[i] <- cw_h[i - 1] * df_h + ti
       }
     }
     .(match_id = match_id, date_num = date_num,
@@ -587,18 +599,20 @@ compute_cumulative <- function(epv_dt, decay_recv, decay_disp = decay_recv,
 #' Much faster than compute_cumulative() when only one component changed
 compute_cumulative_single <- function(pgr_sorted, col_name, decay_days) {
   vals <- pgr_sorted[[col_name]]
+  togs <- pgr_sorted$tog_safe
   pids <- pgr_sorted$player_id
   dnums <- pgr_sorted$date_num
   n <- length(vals)
   cum <- numeric(n)
 
-  cum[1] <- vals[1]
+  # TOG-weighted: accumulate val * tog (game total)
+  cum[1] <- vals[1] * togs[1]
   for (i in 2:n) {
     if (pids[i] == pids[i - 1]) {
       df <- exp(-(dnums[i] - dnums[i - 1]) / decay_days)
-      cum[i] <- cum[i - 1] * df + vals[i]
+      cum[i] <- cum[i - 1] * df + vals[i] * togs[i]
     } else {
-      cum[i] <- vals[i]
+      cum[i] <- vals[i] * togs[i]
     }
   }
   cum
@@ -617,7 +631,6 @@ objective_fn_fast <- function(par, env) {
   # --- Compute per-game EPV directly on sorted vectors (no copy) ---
   disp_epv <- (env$sum_depv_neg + env$n_neg * p["disp_neg_offset"]) * p["disp_scale"] +
               (env$sum_depv_pos + env$n_pos * p["disp_pos_offset"]) * p["disp_scale"] +
-              env$bounces * p["bounce_wt"] +
               env$inside50s * p["inside50s_wt"] +
               env$clangers * p["clangers_wt"] +
               env$score_inv * p["score_involvements_wt"] +
@@ -664,14 +677,16 @@ objective_fn_fast <- function(par, env) {
   disp_epv[is.na(disp_epv)] <- 0; recv_epv[is.na(recv_epv)] <- 0
   spoil_epv[is.na(spoil_epv)] <- 0; hitout_epv[is.na(hitout_epv)] <- 0
 
-  # Position-group mean subtraction
+  # TOG-weighted position-season mean subtraction
   for (pos in env$position_levels) {
     idx <- env$pos_indices[[pos]]
     if (length(idx) > 0) {
-      recv_epv[idx]   <- recv_epv[idx]   - mean(recv_epv[idx], na.rm = TRUE)
-      disp_epv[idx]   <- disp_epv[idx]   - mean(disp_epv[idx], na.rm = TRUE)
-      spoil_epv[idx]  <- spoil_epv[idx]  - mean(spoil_epv[idx], na.rm = TRUE)
-      hitout_epv[idx] <- hitout_epv[idx] - mean(hitout_epv[idx], na.rm = TRUE)
+      w <- env$tog_safe[idx]
+      ws <- sum(w)
+      recv_epv[idx]   <- recv_epv[idx]   - sum(recv_epv[idx] * w) / ws
+      disp_epv[idx]   <- disp_epv[idx]   - sum(disp_epv[idx] * w) / ws
+      spoil_epv[idx]  <- spoil_epv[idx]  - sum(spoil_epv[idx] * w) / ws
+      hitout_epv[idx] <- hitout_epv[idx] - sum(hitout_epv[idx] * w) / ws
     }
   }
 
@@ -682,7 +697,7 @@ objective_fn_fast <- function(par, env) {
   dnums <- env$pgr_s$date_num
 
   cum <- cumulative_decay_cpp(pids, dnums, recv_epv, disp_epv,
-                              spoil_epv, hitout_epv,
+                              spoil_epv, hitout_epv, env$tog_safe,
                               decay_r, decay_d, decay_s, decay_h)
   cr <- cum$cr; cd <- cum$cd; cs <- cum$cs; ch <- cum$ch
   cw_r <- cum$cw_r; cw_d <- cum$cw_d; cw_s <- cum$cw_s; cw_h <- cum$cw_h
@@ -887,7 +902,6 @@ par_defaults <- c(
   recv_scale             = EPV_RECV_SCALE,
   recv_intercept_mark_scale = EPV_RECV_INTERCEPT_MARK_SCALE,
   # --- Stat weights: disp component ---
-  bounce_wt              = EPV_BOUNCE_WT,
   inside50s_wt           = EPV_INSIDE50S_WT,
   clangers_wt            = EPV_CLANGERS_WT,
   score_involvements_wt  = EPV_SCORE_INVOLVEMENTS_WT,
@@ -940,7 +954,7 @@ par_defaults <- c(
 # Convert raw-scale defaults to normalized-scale (multiply by SD)
 # Constants are in per-raw-unit; optimizer works in per-SD-unit
 param_stat_map <- c(
-  bounce_wt = "bounces", spoil_wt = "spoils", tackle_wt = "tackles",
+  spoil_wt = "spoils", tackle_wt = "tackles",
   pressure_wt = "pressure_acts", def_pressure_wt = "def_pressure",
   hitout_wt = "hitouts", hitout_adv_wt = "hitouts_adv", ruck_contest_wt = "ruck_contests",
   contested_poss_wt = "contested_poss", contested_marks_wt = "contested_marks",
@@ -972,7 +986,6 @@ par_lower <- c(
   recv_scale             = 0.5,
   recv_intercept_mark_scale = 1,
   # --- Stat weights: disp component (all [-10, 10]; L2 provides real constraint) ---
-  bounce_wt              = -10,
   inside50s_wt           = -10,
   clangers_wt            = -10,
   score_involvements_wt  = -10,
@@ -1016,10 +1029,10 @@ par_lower <- c(
   prior_games_disp       = 3,
   prior_games_spoil      = 3,
   prior_games_hitout     = 3,
-  prior_rate_recv        = -4,
-  prior_rate_disp        = -4,
-  prior_rate_spoil       = -4,
-  prior_rate_hitout       = -4
+  prior_rate_recv        = -3,
+  prior_rate_disp        = -3,
+  prior_rate_spoil       = -3,
+  prior_rate_hitout      = -3
 )
 
 par_upper <- c(
@@ -1035,7 +1048,6 @@ par_upper <- c(
   recv_scale             = 0.5,
   recv_intercept_mark_scale = 1,
   # --- Stat weights: disp component ---
-  bounce_wt              = 10,
   inside50s_wt           = 10,
   clangers_wt            = 10,
   score_involvements_wt  = 10,
@@ -1259,7 +1271,6 @@ fast_env <- list(
   n_neg          = pgr_s$n_neg,
   sum_depv_pos   = pgr_s$sum_depv_pos,
   n_pos          = pgr_s$n_pos,
-  bounces        = pgr_s$bounces,
   sum_depv_pt_neg = pgr_s$sum_depv_pt_neg,
   n_recv_neg     = pgr_s$n_recv_neg,
   sum_depv_pt_neg_im = pgr_s$sum_depv_pt_neg_im,
@@ -1310,11 +1321,18 @@ fast_env <- list(
   eval_matches   = eval_matches_all
 )
 
-# Pre-compute position group indices
+# Pre-compute position-season group indices (matches per-season centering in pipeline)
 positions <- pgr_s$position
+seasons_vec <- pgr_s$season
 has_pos <- !is.na(positions)
-fast_env$position_levels <- unique(positions[has_pos])
-fast_env$pos_indices <- lapply(fast_env$position_levels, function(p) which(positions == p))
+pos_season_pairs <- unique(data.table::data.table(
+  position = positions[has_pos],
+  season = seasons_vec[has_pos]
+))
+fast_env$position_levels <- paste0(pos_season_pairs$position, ":", pos_season_pairs$season)
+fast_env$pos_indices <- lapply(seq_len(nrow(pos_season_pairs)), function(i) {
+  which(positions == pos_season_pairs$position[i] & seasons_vec == pos_season_pairs$season[i])
+})
 names(fast_env$pos_indices) <- fast_env$position_levels
 
 # Pre-compute lineup -> pgr_s rolling join index
@@ -1347,10 +1365,12 @@ cat("=== Stage 2: BOBYQA derivative-free optimization (all params except loading
 tictoc::tic("Stage 2 BOBYQA")
 
 # Remove loading from optimization
-optim_names <- setdiff(names(best_par), "loading")
+# Exclude loading (unidentifiable) and prior_rate_* (set empirically from first-game EPV data)
+fixed_params <- c("loading", "prior_rate_recv", "prior_rate_disp", "prior_rate_spoil", "prior_rate_hitout")
+optim_names <- setdiff(names(best_par), fixed_params)
 n_optim <- length(optim_names)
-cat(sprintf("  Optimizing %d parameters (loading fixed at 1.0)
-", n_optim))
+cat(sprintf("  Optimizing %d parameters (fixed: %s)
+", n_optim, paste(fixed_params, collapse = ", ")))
 
 # nloptr wrapper: convert unnamed vector <-> named vector
 nloptr_fn <- function(x) {
@@ -1560,8 +1580,7 @@ stat_categories <- list(
                 "intercepts_wt", "one_percenters_wt", "rebound50s_wt"),
   "Ruck" = c("hitout_wt", "hitout_adv_wt", "ruck_contest_wt"),
   "Disposal/Possession" = c("kicks_wt", "handballs_wt", "marks_wt",
-                             "uncontested_poss_wt", "metres_gained_wt",
-                             "bounce_wt"),
+                             "uncontested_poss_wt", "metres_gained_wt"),
   "Turnover/Discipline" = c("clangers_wt", "turnovers_wt",
                              "frees_against_wt", "frees_for_wt")
 )
@@ -1613,7 +1632,6 @@ param_to_constant <- c(
   disp_neg_offset   = "EPV_DISP_NEG_OFFSET",
   disp_pos_offset   = "EPV_DISP_POS_OFFSET",
   disp_scale        = "EPV_DISP_SCALE",
-  bounce_wt    = "EPV_BOUNCE_WT",
   recv_neg_mult     = "EPV_RECV_NEG_MULT",
   recv_neg_offset   = "EPV_RECV_NEG_OFFSET",
   recv_pos_mult     = "EPV_RECV_POS_MULT",
@@ -1658,11 +1676,8 @@ param_to_constant <- c(
   prior_games_recv  = "EPR_PRIOR_GAMES_RECV",
   prior_games_disp  = "EPR_PRIOR_GAMES_DISP",
   prior_games_spoil = "EPR_PRIOR_GAMES_SPOIL",
-  prior_games_hitout = "EPR_PRIOR_GAMES_HITOUT",
-  prior_rate_recv    = "EPR_PRIOR_RATE_RECV",
-  prior_rate_disp    = "EPR_PRIOR_RATE_DISP",
-  prior_rate_spoil   = "EPR_PRIOR_RATE_SPOIL",
-  prior_rate_hitout  = "EPR_PRIOR_RATE_HITOUT"
+  prior_games_hitout = "EPR_PRIOR_GAMES_HITOUT"
+  # prior_rate_* excluded — set empirically from first-game EPV, not optimized
 )
 
 ## 9a. Un-normalize stat weights back to per-raw-unit for constants.R ----

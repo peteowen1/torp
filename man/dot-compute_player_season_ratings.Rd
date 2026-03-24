@@ -4,14 +4,16 @@
 \alias{.compute_player_season_ratings}
 \title{Compute player season ratings from player game ratings}
 \usage{
-.compute_player_season_ratings(player_game_ratings_df)
+.compute_player_season_ratings(player_game_ratings_df, per80 = FALSE)
 }
 \arguments{
 \item{player_game_ratings_df}{Player game ratings data frame
 (output of \code{\link[=.compute_player_game_ratings]{.compute_player_game_ratings()}}).}
+
+\item{per80}{If TRUE, return per-80-minute averages instead of totals.}
 }
 \value{
-A data frame with season-total ratings.
+A data frame with season ratings.
 }
 \description{
 Internal function used by the pipeline to aggregate per-game ratings

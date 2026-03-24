@@ -8,6 +8,8 @@
 #' @param round_val The round number to get ratings for. Default is the current round.
 #' @param matchid The match ID to filter by. Default is NULL (no filtering).
 #' @param team The team to filter by. Default is NULL (no filtering).
+#' @param per80 Logical. If `TRUE`, return per-80-minute rates instead of
+#'   totals. Default `FALSE` (totals).
 #' @param round_num Deprecated. Use \code{round_val} instead.
 #'
 #' @return A data frame containing player game ratings.
@@ -18,6 +20,7 @@ player_game_ratings <- function(season_val = get_afl_season(),
                                 round_val = get_afl_week(),
                                 matchid = NULL,
                                 team = NULL,
+                                per80 = FALSE,
                                 round_num = NULL) {
 
   # Deprecation shim: round_num → round_val
@@ -47,16 +50,39 @@ player_game_ratings <- function(season_val = get_afl_season(),
   }
 
   df <- load_player_game_ratings(season_val)
-  df <- .center_epv_raw(df)
+  if ("recv_epv_raw" %in% names(df)) {
+    df <- .center_epv_raw(df)
+  }
   df <- filter_game_data(df, season_val, round_val, matchid, team)
-  df |>
-    dplyr::select(
-      "season", "round", "player_name", "position", "team", "opp", "tog",
-      "epv", "recv_epv", "disp_epv", "spoil_epv", "hitout_epv",
-      "epv_p80", "recv_epv_p80", "disp_epv_p80", "spoil_epv_p80", "hitout_epv_p80",
-      "player_id", "team_id", "match_id"
-    ) |>
-    dplyr::arrange(-.data$epv)
+
+  # Compute PSV p80s if missing
+  dt <- data.table::as.data.table(df)
+  for (col in c("psv", "osv", "dsv")) {
+    p80_col <- paste0(col, "_p80")
+    if (col %in% names(dt) && !p80_col %in% names(dt)) {
+      dt[, (p80_col) := round(get(col) / tog, 1)]
+    }
+  }
+
+  if (per80) {
+    val_cols <- c("epv_p80", "recv_epv_p80", "disp_epv_p80", "spoil_epv_p80", "hitout_epv_p80",
+                  "psv_p80", "osv_p80", "dsv_p80", "torp_value_p80")
+  } else {
+    val_cols <- c("epv", "recv_epv", "disp_epv", "spoil_epv", "hitout_epv",
+                  "psv", "osv", "dsv", "torp_value")
+  }
+
+  col_order <- c(
+    "season", "round", "player_name", "position", "team", "opp", "tog",
+    val_cols,
+    "player_id", "team_id", "match_id"
+  )
+
+  result <- dt[, intersect(col_order, names(dt)), with = FALSE]
+  sort_col <- if (per80) "torp_value_p80" else "torp_value"
+  if (!sort_col %in% names(result)) sort_col <- if (per80) "epv_p80" else "epv"
+  if (sort_col %in% names(result)) data.table::setorderv(result, sort_col, order = -1L)
+  result
 }
 
 #' Compute player game ratings from raw player game data
@@ -196,33 +222,35 @@ filter_game_data <- function(df, season_val, round_val, matchid, team) {
 #' Convenience wrapper around [load_player_season_ratings()] with filtering.
 #'
 #' @param season_val The season to calculate ratings for. Default is the current season.
+#' @param per80 Logical. If `TRUE`, return per-80-minute averages instead of
+#'   season totals. Default `FALSE` (totals).
 #' @param round_num Deprecated and ignored. Retained for backwards compatibility.
 #'
-#' @return A data frame containing player season total ratings.
+#' @return A data frame containing player season ratings.
 #' @export
 #'
 #' @importFrom dplyr group_by summarise arrange n
-player_season_ratings <- function(season_val = get_afl_season(), round_num = NULL) {
-  # Backwards compat: round_num was never functional but was in the signature
-
+player_season_ratings <- function(season_val = get_afl_season(),
+                                  per80 = FALSE,
+                                  round_num = NULL) {
   if (!is.null(round_num)) {
     cli::cli_warn("{.arg round_num} is ignored by {.fn player_season_ratings} and will be removed in a future version.")
   }
 
-  # Input validation
   if (!is.numeric(season_val) && !is.na(season_val)) {
     cli::cli_abort("season_val must be numeric (e.g., 2024)")
   }
 
-  # Validate reasonable season range (handles vectors)
   max_season <- get_afl_season() + 1L
   if (any(season_val < 1990 | season_val > max_season)) {
     cli::cli_abort("All seasons must be between 1990 and {max_season}")
   }
 
   pgr <- load_player_game_ratings(season_val)
-  pgr <- .center_epv_raw(pgr)
-  .compute_player_season_ratings(pgr)
+  if ("recv_epv_raw" %in% names(pgr)) {
+    pgr <- .center_epv_raw(pgr)
+  }
+  .compute_player_season_ratings(pgr, per80 = per80)
 }
 
 #' Compute player season ratings from player game ratings
@@ -232,31 +260,153 @@ player_season_ratings <- function(season_val = get_afl_season(), round_num = NUL
 #'
 #' @param player_game_ratings_df Player game ratings data frame
 #'   (output of [.compute_player_game_ratings()]).
+#' @param per80 If TRUE, return per-80-minute averages instead of totals.
 #'
-#' @return A data frame with season-total ratings.
+#' @return A data frame with season ratings.
 #' @keywords internal
-.compute_player_season_ratings <- function(player_game_ratings_df) {
-  player_game_ratings_df |>
-    dplyr::group_by(.data$season, .data$player_name, .data$player_id, .data$team_id) |>
-    dplyr::summarise(
-      team = get_mode(.data$team),
-      position = get_mode(.data$position),
-      games = dplyr::n(),
-      avg_tog = mean(.data$tog),
-      epv = sum(.data$epv),
-      recv_epv = sum(.data$recv_epv),
-      disp_epv = sum(.data$disp_epv),
-      spoil_epv = sum(.data$spoil_epv),
-      hitout_epv = sum(.data$hitout_epv),
-      epv_pg = .data$epv / .data$games,
-      epv_p80 = mean(.data$epv_p80),
-      .groups = "drop"
-    ) |>
-    dplyr::select(
-      "season", "player_name", "position", "team", "games", "avg_tog",
-      "epv", "recv_epv", "disp_epv", "spoil_epv", "hitout_epv",
-      "epv_pg", "epv_p80",
-      "player_id", "team_id"
-    ) |>
-    dplyr::arrange(-.data$epv)
+.compute_player_season_ratings <- function(player_game_ratings_df, per80 = FALSE) {
+  df <- data.table::as.data.table(player_game_ratings_df)
+
+  # Base aggregation
+  result <- df[, {
+    out <- list(
+      team = get_mode(team),
+      position = get_mode(position),
+      games = .N,
+      avg_tog = round(mean(tog, na.rm = TRUE), 2)
+    )
+    # EPV columns (always present)
+    for (col in c("epv", "recv_epv", "disp_epv", "spoil_epv", "hitout_epv")) {
+      if (col %in% names(.SD)) out[[col]] <- round(sum(get(col), na.rm = TRUE), 1)
+    }
+    # PSV columns (optional)
+    for (col in c("psv", "osv", "dsv", "torp_value")) {
+      if (col %in% names(.SD)) out[[col]] <- round(sum(get(col), na.rm = TRUE), 1)
+    }
+    out
+  }, by = .(season, player_name, player_id, team_id)]
+
+  # Compute p80 variants
+  epv_cols <- intersect(c("epv", "recv_epv", "disp_epv", "spoil_epv", "hitout_epv"), names(result))
+  psv_cols <- intersect(c("psv", "osv", "dsv", "torp_value"), names(result))
+  all_val_cols <- c(epv_cols, psv_cols)
+
+  for (col in all_val_cols) {
+    p80_col <- paste0(col, "_p80")
+    result[, (p80_col) := round(get(col) / (games * avg_tog), 1)]
+  }
+
+  # Select and order columns
+  if (per80) {
+    val_select <- paste0(all_val_cols, "_p80")
+  } else {
+    val_select <- all_val_cols
+  }
+
+  col_order <- c(
+    "season", "player_name", "position", "team", "games", "avg_tog",
+    val_select,
+    "player_id", "team_id"
+  )
+  col_order <- intersect(col_order, names(result))
+
+  sort_col <- if (per80) {
+    if ("torp_value_p80" %in% names(result)) "torp_value_p80" else "epv_p80"
+  } else {
+    if ("torp_value" %in% names(result)) "torp_value" else "epv"
+  }
+
+  result <- result[, col_order, with = FALSE]
+  data.table::setorderv(result, sort_col, order = -1L)
+  result
+}
+
+
+#' Get player season stats
+#'
+#' Aggregates per-game box-score stats from [load_player_stats()] into
+#' season totals or per-80-minute averages. Useful for seeing stat leaders.
+#'
+#' @param season_val Season year(s). Default is current season.
+#' @param per80 Logical. If `TRUE`, return per-80-minute averages.
+#'   Default `FALSE` (season totals).
+#' @param sort_by Column name to sort by (descending). Default `"disposals"`.
+#'
+#' @return A data.table with season-aggregated stats.
+#' @export
+player_season_stats <- function(season_val = get_afl_season(),
+                                per80 = FALSE,
+                                sort_by = "disposals") {
+  ps <- data.table::as.data.table(load_player_stats(season_val, use_disk_cache = TRUE))
+
+  # Derive team from home/away + team_status
+  if (!"team" %in% names(ps) && all(c("home_team_name", "away_team_name", "team_status") %in% names(ps))) {
+    ps[, team := data.table::fifelse(team_status == "home", home_team_name, away_team_name)]
+  }
+
+  # TOG fraction
+  if (!"tog" %in% names(ps) && "time_on_ground_percentage" %in% names(ps)) {
+    ps[, tog := pmax(as.numeric(time_on_ground_percentage) / 100, 0.1)]
+  }
+
+  # Round number
+  if (!"round" %in% names(ps) && "round_number" %in% names(ps)) {
+    ps[, round := as.integer(round_number)]
+  }
+
+  # Stat columns to aggregate (count stats that make sense to sum)
+  count_stats <- c(
+    "goals", "behinds", "kicks", "handballs", "disposals",
+    "marks", "tackles", "hitouts", "contested_possessions",
+    "uncontested_possessions", "inside50s", "marks_inside50",
+    "contested_marks", "clearances", "centre_clearances",
+    "stoppage_clearances", "one_percenters", "clangers",
+    "frees_for", "frees_against", "rebound50s", "turnovers",
+    "intercepts", "spoils", "ground_ball_gets", "bounces",
+    "tackles_inside50", "shots_at_goal", "score_involvements",
+    "metres_gained", "goal_assists", "pressure_acts",
+    "def_half_pressure_acts", "effective_kicks", "effective_disposals",
+    "intercept_marks", "f50_ground_ball_gets", "score_launches",
+    "marks_on_lead", "hitouts_to_advantage", "ruck_contests",
+    "centre_bounce_attendances", "contest_def_one_on_ones",
+    "contest_off_one_on_ones", "contest_off_wins", "contest_def_losses",
+    "kickins", "dream_team_points", "rating_points"
+  )
+  stat_cols <- intersect(count_stats, names(ps))
+
+  # Ensure numeric
+  for (col in stat_cols) {
+    if (!is.numeric(ps[[col]])) ps[, (col) := as.numeric(get(col))]
+  }
+
+  # Aggregate
+  result <- ps[, {
+    out <- list(
+      team = get_mode(team),
+      position = get_mode(position),
+      games = .N,
+      avg_tog = round(mean(tog, na.rm = TRUE), 2)
+    )
+    for (col in stat_cols) out[[col]] <- sum(get(col), na.rm = TRUE)
+    out
+  }, by = .(season, player_name, player_id)]
+
+  # Per-80 mode: divide by (games * avg_tog) to get per-full-game rates
+  if (per80) {
+    for (col in stat_cols) {
+      result[, (col) := round(get(col) / (games * avg_tog), 1)]
+    }
+  }
+
+  # Sort
+  if (!sort_by %in% names(result)) {
+    cli::cli_warn("Column {.val {sort_by}} not found, sorting by disposals")
+    sort_by <- "disposals"
+  }
+  data.table::setorderv(result, sort_by, order = -1L)
+
+  # Column order: info first, then stats, then ID
+  col_order <- c("season", "player_name", "position", "team", "games", "avg_tog",
+                 stat_cols, "player_id")
+  result[, intersect(col_order, names(result)), with = FALSE]
 }

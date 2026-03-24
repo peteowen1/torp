@@ -18,6 +18,7 @@ A list of class \code{torp_player_profile} with elements:
 \item{yearly_stats}{Per-season aggregated raw stats from \code{load_player_stats()}.}
 \item{torp_season}{Per-season TORP ratings from \code{player_season_ratings()}.}
 \item{current_torp}{Current TORP rating from \code{calculate_epr()}.}
+\item{psv_season}{Per-season average PSV/OSV/DSV from \code{load_player_game_ratings()}.}
 }
 }
 \description{

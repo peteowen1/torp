@@ -173,9 +173,9 @@ get_player_game_ratings <- function(match = NULL,
   dt <- data.table::as.data.table(player_epv)
 
   # Load coefficient files
-  psr_coefs <- .load_psr_coefs("psr_v2_coefficients.csv")
-  osr_coefs <- .load_psr_coefs("osr_v2_coefficients.csv")
-  dsr_coefs <- .load_psr_coefs("dsr_v2_coefficients.csv")
+  psr_coefs <- .load_psr_coefs("psr_coefficients.csv")
+  osr_coefs <- .load_psr_coefs("osr_coefficients.csv")
+  dsr_coefs <- .load_psr_coefs("dsr_coefficients.csv")
 
   if (is.null(psr_coefs)) {
     cli::cli_warn("PSR coefficient file not found -- skipping game PSR")
@@ -262,7 +262,7 @@ get_player_game_ratings <- function(match = NULL,
   if (path == "") {
     fallback <- file.path(
       find.package("torp", quiet = TRUE)[1] %||% ".",
-      "data-raw", "cache-skills", filename
+      "data-raw", "cache-stat-ratings", filename
     )
     if (file.exists(fallback)) path <- fallback
   }

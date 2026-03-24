@@ -1,5 +1,5 @@
-# 02_optimize_skill_params.R
-# ==========================
+# 02_optimize_stat_rating_params.R
+# =================================
 # Hyperparameter optimization for stat rating estimation.
 # Optimizes prior strength and decay rate (lambda) for rate stat categories.
 # Efficiency stat hyperparameters are left at defaults.
@@ -8,14 +8,14 @@
 # For rate stats, works in per-full-game rate space (analogous to panna's
 # per-90 approach). Uses cumsum trick for O(n) per player.
 #
-# Input:  cache-skills/01_skill_data.rds
-# Output: cache-skills/02_optimized_params.rds
+# Input:  cache-stat-ratings/01_stat_rating_data.rds
+# Output: cache-stat-ratings/02_optimized_params.rds
 
 # Setup ----
 devtools::load_all()
 
 # Config ----
-cache_dir <- file.path("data-raw", "cache-skills")
+cache_dir <- file.path("data-raw", "cache-stat-ratings")
 min_player_games <- 5  # Min games for a player to be in optimization set
 sample_n <- 500         # Max players to sample (for speed)
 seed <- 42
@@ -23,7 +23,7 @@ seed <- 42
 # Load data ----
 cli::cli_h1("Loading stat rating data")
 
-stat_rating_data <- readRDS(file.path(cache_dir, "01_skill_data.rds"))
+stat_rating_data <- readRDS(file.path(cache_dir, "01_stat_rating_data.rds"))
 data.table::setDT(stat_rating_data)
 cli::cli_inform("Loaded {nrow(stat_rating_data)} rows, {length(unique(stat_rating_data$player_id))} players")
 

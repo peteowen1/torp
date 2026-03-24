@@ -12,7 +12,7 @@ containing \code{player_id}, \code{player_name}, \code{season},
 \code{round}, \code{pos_group}, and \code{*_rating} columns.}
 
 \item{psr_coef_path}{Path to the margin PSR coefficient CSV. If NULL,
-searches \code{inst/extdata/psr_v2_coefficients.csv}.}
+searches \code{inst/extdata/psr_coefficients.csv}.}
 
 \item{center}{Logical. If TRUE (default), subtract the league mean so
 PSR = contribution above average player.}

@@ -209,7 +209,7 @@ test_that("calculate_epr works with pre-loaded data", {
 
 test_that("calculate_epr_stats uses prior_games_spoil and prior_games_hitout constants", {
   expect_equal(torp:::EPR_PRIOR_GAMES_SPOIL, 3.0000)
-  expect_equal(torp:::EPR_PRIOR_GAMES_HITOUT, 15.0000)
+  expect_equal(torp:::EPR_PRIOR_GAMES_HITOUT, 3.0000)
 })
 
 # -----------------------------------------------------------------------------
@@ -245,10 +245,12 @@ test_that("wt_gms sums per-match weights correctly for same-day games", {
 
   expect_equal(nrow(result), 1)
   expect_equal(result$gms, 2)
-  # wt_gms should be 2x the single-game weight (both games same date, same decay)
-  # NOT collapsed to 1x via unique()
+  # wt_gms is now TOG-weighted: sum(wt * tog) where tog = pmax(tog_pct/100, 0.1)
   single_weight <- exp(-as.numeric(as.Date("2024-04-08") - as.Date("2024-04-01")) / torp:::EPR_DECAY_RECV)
-  expect_equal(result$wt_gms, 2 * single_weight, tolerance = 1e-10)
+  tog1 <- 88 / 100  # first game TOG
+  tog2 <- 76 / 100  # second game TOG
+  expected_wt_gms <- single_weight * tog1 + single_weight * tog2
+  expect_equal(result$wt_gms, expected_wt_gms, tolerance = 1e-10)
 })
 
 # -----------------------------------------------------------------------------

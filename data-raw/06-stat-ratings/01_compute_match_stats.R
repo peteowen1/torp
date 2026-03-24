@@ -3,13 +3,13 @@
 # Assemble per-player-match stat table for stat rating estimation.
 #
 # Input:  player_game_data + player_stats from torpdata releases
-# Output: data-raw/cache-skills/01_skill_data.rds
+# Output: data-raw/cache-stat-ratings/01_stat_rating_data.rds
 
 # Setup ----
 devtools::load_all()
 
 # Config ----
-cache_dir <- file.path("data-raw", "cache-skills")
+cache_dir <- file.path("data-raw", "cache-stat-ratings")
 if (!dir.exists(cache_dir)) dir.create(cache_dir, recursive = TRUE)
 
 # Load data ----
@@ -40,5 +40,5 @@ cli::cli_inform("Date range: {min(stat_rating_data$match_date_rating)} to {max(s
 cli::cli_inform("Position groups: {paste(sort(unique(stat_rating_data$pos_group)), collapse = ', ')}")
 
 # Save ----
-saveRDS(stat_rating_data, file.path(cache_dir, "01_skill_data.rds"))
-cli::cli_alert_success("Saved to {file.path(cache_dir, '01_skill_data.rds')}")
+saveRDS(stat_rating_data, file.path(cache_dir, "01_stat_rating_data.rds"))
+cli::cli_alert_success("Saved to {file.path(cache_dir, '01_stat_rating_data.rds')}")
