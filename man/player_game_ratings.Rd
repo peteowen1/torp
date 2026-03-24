@@ -9,6 +9,7 @@ player_game_ratings(
   round_val = get_afl_week(),
   matchid = NULL,
   team = NULL,
+  per80 = FALSE,
   round_num = NULL
 )
 }
@@ -20,6 +21,9 @@ player_game_ratings(
 \item{matchid}{The match ID to filter by. Default is NULL (no filtering).}
 
 \item{team}{The team to filter by. Default is NULL (no filtering).}
+
+\item{per80}{Logical. If \code{TRUE}, return per-80-minute rates instead of
+totals. Default \code{FALSE} (totals).}
 
 \item{round_num}{Deprecated. Use \code{round_val} instead.}
 }

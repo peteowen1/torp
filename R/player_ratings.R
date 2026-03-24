@@ -187,6 +187,8 @@ calculate_epr <- function(season_val = get_afl_season(type = "current"),
         for (comp in comps) {
           final_df[[comp]] <- round(final_df[[comp]], 2)
         }
+      } else {
+        cli::cli_warn("Total predicted TOG is zero -- TOG-weighted centering skipped. Check skills data alignment.")
       }
     }
 
@@ -272,7 +274,7 @@ calculate_epr_stats <- function(player_game_data = NULL, match_ref, date_val, de
   # game totals (* tog) so the shrinkage denominator is in weighted minutes
   # (wt * tog), not weighted games. This ensures low-TOG games (noisier rates)
   # contribute proportionally less to the posterior.
-  dt[, tog_safe := pmax(time_on_ground_percentage / 100, 0.1)]
+  dt[, tog_safe := pmax(data.table::fifelse(is.na(time_on_ground_percentage), 100, time_on_ground_percentage) / 100, 0.1)]
   result <- dt[, .(
     player_name = max(player_name),
     gms = .N,
@@ -382,7 +384,7 @@ calculate_epr_stats_batch <- function(player_game_data = NULL,
 
   # Aggregate by (round_val, player_id) — all rounds in one pass
   # Weight by TOG so low-TOG games contribute proportionally less
-  cross[, tog_safe := pmax(time_on_ground_percentage / 100, 0.1)]
+  cross[, tog_safe := pmax(data.table::fifelse(is.na(time_on_ground_percentage), 100, time_on_ground_percentage) / 100, 0.1)]
   result <- cross[, .(
     player_name = max(player_name),
     gms = .N,

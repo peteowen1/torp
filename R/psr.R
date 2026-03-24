@@ -831,13 +831,14 @@ explain_epr <- function(player,
   wt_gms_spoil  <- sum(dt$wt_spoil * dt$tog, na.rm = TRUE)
   wt_gms_hitout <- sum(dt$wt_hitout * dt$tog, na.rm = TRUE)
 
-  # Bayesian shrinkage
-  prior <- 3.0
+  # Bayesian shrinkage (use actual per-component constants)
   loading <- EPR_LOADING_DEFAULT
-  recv_epr   <- (loading * recv_sum   + prior * EPR_PRIOR_RATE_RECV)   / (wt_gms_recv   + prior)
-  disp_epr   <- (loading * disp_sum   + prior * EPR_PRIOR_RATE_DISP)   / (wt_gms_disp   + prior)
-  spoil_epr  <- (loading * spoil_sum  + prior * EPR_PRIOR_RATE_SPOIL)  / (wt_gms_spoil  + prior)
-  hitout_epr <- (loading * hitout_sum + prior * EPR_PRIOR_RATE_HITOUT) / (wt_gms_hitout + prior)
+  prior_gms <- c(recv = EPR_PRIOR_GAMES_RECV, disp = EPR_PRIOR_GAMES_DISP,
+                  spoil = EPR_PRIOR_GAMES_SPOIL, hitout = EPR_PRIOR_GAMES_HITOUT)
+  recv_epr   <- (loading * recv_sum   + prior_gms["recv"]   * EPR_PRIOR_RATE_RECV)   / (wt_gms_recv   + prior_gms["recv"])
+  disp_epr   <- (loading * disp_sum   + prior_gms["disp"]   * EPR_PRIOR_RATE_DISP)   / (wt_gms_disp   + prior_gms["disp"])
+  spoil_epr  <- (loading * spoil_sum  + prior_gms["spoil"]  * EPR_PRIOR_RATE_SPOIL)  / (wt_gms_spoil  + prior_gms["spoil"])
+  hitout_epr <- (loading * hitout_sum + prior_gms["hitout"] * EPR_PRIOR_RATE_HITOUT) / (wt_gms_hitout + prior_gms["hitout"])
 
   cli::cli_h2("Shrinkage Calculation (pre-centering, TOG-weighted)")
 
@@ -846,25 +847,26 @@ explain_epr <- function(player,
     weighted_sum = round(c(recv_sum, disp_sum, spoil_sum, hitout_sum), 2),
     wt_mins = round(c(wt_gms_recv, wt_gms_disp, wt_gms_spoil, wt_gms_hitout), 2),
     decay_days = c(EPR_DECAY_RECV, EPR_DECAY_DISP, EPR_DECAY_SPOIL, EPR_DECAY_HITOUT),
+    prior_games = unname(prior_gms),
     prior_rate = c(EPR_PRIOR_RATE_RECV, EPR_PRIOR_RATE_DISP, EPR_PRIOR_RATE_SPOIL, EPR_PRIOR_RATE_HITOUT),
     epr_raw = round(c(recv_epr, disp_epr, spoil_epr, hitout_epr), 2)
   )
   print(components, row.names = FALSE)
 
-  cat(sprintf("\n  Formula: EPR_i = (%.1f * sum_i + 3 * prior_rate_i) / (wt_mins_i + 3)\n", loading))
-  cat(sprintf("  recv_epr = (%.1f * %.2f + 3 * %.1f) / (%.2f + 3) = %.2f\n",
-              loading, recv_sum, EPR_PRIOR_RATE_RECV, wt_gms_recv, recv_epr))
-  cat(sprintf("  disp_epr = (%.1f * %.2f + 3 * %.1f) / (%.2f + 3) = %.2f\n",
-              loading, disp_sum, EPR_PRIOR_RATE_DISP, wt_gms_disp, disp_epr))
+  cat(sprintf("\n  Formula: EPR_i = (%.1f * sum_i + prior_i * rate_i) / (wt_mins_i + prior_i)\n", loading))
+  cat(sprintf("  recv_epr = (%.1f * %.2f + %.1f * %.1f) / (%.2f + %.1f) = %.2f\n",
+              loading, recv_sum, prior_gms["recv"], EPR_PRIOR_RATE_RECV, wt_gms_recv, prior_gms["recv"], recv_epr))
+  cat(sprintf("  disp_epr = (%.1f * %.2f + %.1f * %.1f) / (%.2f + %.1f) = %.2f\n",
+              loading, disp_sum, prior_gms["disp"], EPR_PRIOR_RATE_DISP, wt_gms_disp, prior_gms["disp"], disp_epr))
 
   # Weighted average recv rate (what recv_epr approximates before shrinkage)
-  avg_recv <- recv_sum / wt_gms_recv
+  avg_recv <- if (wt_gms_recv > 0) recv_sum / wt_gms_recv else 0
   cat(sprintf("\n  Weighted avg recv rate: %.2f (shrinkage pulls toward %.1f)\n",
               avg_recv, EPR_PRIOR_RATE_RECV))
-  cat(sprintf("  Shrinkage strength: %.0f%% data / %.0f%% prior (wt_mins=%.1f vs prior=3)\n",
-              wt_gms_recv / (wt_gms_recv + prior) * 100,
-              prior / (wt_gms_recv + prior) * 100,
-              wt_gms_recv))
+  cat(sprintf("  Shrinkage strength: %.0f%% data / %.0f%% prior (wt_mins=%.1f vs prior=%.1f)\n",
+              wt_gms_recv / (wt_gms_recv + prior_gms["recv"]) * 100,
+              prior_gms["recv"] / (wt_gms_recv + prior_gms["recv"]) * 100,
+              wt_gms_recv, prior_gms["recv"]))
 
   cat(sprintf("\n  Note: sums use game totals (per80 * tog), denominator is weighted minutes\n"))
   cat(sprintf("  (wt * tog). Final EPR also has TOG-weighted centering (see calculate_epr()).\n"))

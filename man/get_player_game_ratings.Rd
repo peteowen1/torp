@@ -4,7 +4,12 @@
 \alias{get_player_game_ratings}
 \title{Get Player Game Ratings (Live)}
 \usage{
-get_player_game_ratings(match = NULL, season = get_afl_season(), round = NULL)
+get_player_game_ratings(
+  match = NULL,
+  season = get_afl_season(),
+  round = NULL,
+  per80 = FALSE
+)
 }
 \arguments{
 \item{match}{Input: either a match ID string (e.g. \code{"CD_M20260140201"})
@@ -15,11 +20,13 @@ If \code{NULL} (default), uses \code{season} and \code{round} to fetch chains.}
 \code{\link[=get_afl_season]{get_afl_season()}}). Only used when \code{match} is \code{NULL}.}
 
 \item{round}{Numeric round number. Only used when \code{match} is \code{NULL}.}
+
+\item{per80}{Logical. If \code{TRUE}, return per-80-minute rates instead of
+totals for EPV and PSV columns. Default \code{FALSE} (totals).}
 }
 \value{
-A tibble with the same columns as \code{\link[=player_game_ratings]{player_game_ratings()}}:
-identifiers, TOG-weighted centered EPV components, and position-adjusted
-EPV per-80 metrics.
+A data.table with EPV components, PSV/OSV/DSV, and TORP value.
+If \code{per80 = TRUE}, values are divided by TOG (per full game).
 }
 \description{
 Scrapes chain data for a match (or full round) and produces per-player
@@ -35,6 +42,9 @@ result <- get_player_game_ratings("CD_M20260140201")
 # From season and round (all matches in the round)
 result <- get_player_game_ratings(round = 2)
 result <- get_player_game_ratings(season = 2025, round = 14)
+
+# Per-80 rates instead of totals
+result <- get_player_game_ratings(round = 2, per80 = TRUE)
 
 # From pre-scraped chains
 chains <- get_match_chains(2026, 2)

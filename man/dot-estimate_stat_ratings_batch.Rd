@@ -27,8 +27,16 @@
 Named list of data.tables (keyed by ref_date as character), one per date.
 }
 \description{
-Internal function that eliminates redundant work when estimating stat ratings
-across many dates: date conversion and avail_only setup are done once,
-and the data is sorted so each iteration filters an ascending subset.
+Uses cumulative-sum factorisation to avoid redundant aggregation across
+dates.  Decay weight \code{exp(-lambda * (ref - match))} is split into
+\code{exp(-lambda * ref) * exp(lambda * match)}.  The match-side factor
+is fixed per row, so we pre-multiply values by it and take per-player
+cumulative sums (sorted by date).
+A data.table rolling join then looks up each ref_date in O(log n), and
+the ref-side scalar completes the product.
+}
+\details{
+Complexity drops from O(dates * stats * rows) to O(stats * rows) for
+the cumsums plus O(stats * players * dates) for the lookups.
 }
 \keyword{internal}

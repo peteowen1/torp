@@ -4,15 +4,22 @@
 \alias{player_season_ratings}
 \title{Get season total ratings}
 \usage{
-player_season_ratings(season_val = get_afl_season(), round_num = NULL)
+player_season_ratings(
+  season_val = get_afl_season(),
+  per80 = FALSE,
+  round_num = NULL
+)
 }
 \arguments{
 \item{season_val}{The season to calculate ratings for. Default is the current season.}
 
+\item{per80}{Logical. If \code{TRUE}, return per-80-minute averages instead of
+season totals. Default \code{FALSE} (totals).}
+
 \item{round_num}{Deprecated and ignored. Retained for backwards compatibility.}
 }
 \value{
-A data frame containing player season total ratings.
+A data frame containing player season ratings.
 }
 \description{
 Convenience wrapper around \code{\link[=load_player_season_ratings]{load_player_season_ratings()}} with filtering.
