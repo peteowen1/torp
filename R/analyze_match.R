@@ -11,10 +11,11 @@
 #' @param season Numeric season year (default: current season via
 #'   [get_afl_season()]). Only used when `match` is `NULL`.
 #' @param round Numeric round number. Only used when `match` is `NULL`.
+#' @param per80 Logical. If `TRUE`, return per-80-minute rates instead of
+#'   totals for EPV and PSV columns. Default `FALSE` (totals).
 #'
-#' @return A tibble with the same columns as [player_game_ratings()]:
-#'   identifiers, TOG-weighted centered EPV components, and position-adjusted
-#'   EPV per-80 metrics.
+#' @return A data.table with EPV components, PSV/OSV/DSV, and TORP value.
+#'   If `per80 = TRUE`, values are divided by TOG (per full game).
 #'
 #' @export
 #'
@@ -27,13 +28,17 @@
 #' result <- get_player_game_ratings(round = 2)
 #' result <- get_player_game_ratings(season = 2025, round = 14)
 #'
+#' # Per-80 rates instead of totals
+#' result <- get_player_game_ratings(round = 2, per80 = TRUE)
+#'
 #' # From pre-scraped chains
 #' chains <- get_match_chains(2026, 2)
 #' result <- get_player_game_ratings(chains)
 #' }
 get_player_game_ratings <- function(match = NULL,
                                     season = get_afl_season(),
-                                    round = NULL) {
+                                    round = NULL,
+                                    per80 = FALSE) {
   # --- Resolve input: match ID, season+round, or pre-scraped chains ---
   if (is.null(match)) {
     if (is.null(round)) {
@@ -97,9 +102,75 @@ get_player_game_ratings <- function(match = NULL,
   )]
 
   # --- Step 4: Format as game ratings (same output as player_game_ratings) ---
-  cli::cli_inform("Done!")
   round_val <- unique(player_epv$round)
-  .compute_player_game_ratings(player_epv, season, round_val)
+  pgr <- .compute_player_game_ratings(player_epv, season, round_val)
+
+  # --- Step 5: Add PSV/OSV/DSV from box-score stats ---
+  ps_dt <- data.table::as.data.table(player_stats)
+  if (!"tog" %in% names(ps_dt) && "time_on_ground_percentage" %in% names(ps_dt)) {
+    ps_dt[, tog := pmax(time_on_ground_percentage / 100, 0.1)]
+  }
+  if ("season" %in% names(player_epv) && !"season" %in% names(ps_dt)) {
+    ps_dt[, season := season]
+  }
+  if ("round" %in% names(player_epv) && !"round" %in% names(ps_dt)) {
+    ps_dt[, round := as.integer(round_val[1])]
+  }
+
+  psv_result <- tryCatch(.compute_psv(ps_dt), error = function(e) {
+    cli::cli_warn("PSV computation skipped: {conditionMessage(e)}")
+    NULL
+  })
+
+  if (!is.null(psv_result)) {
+    psv_cols <- intersect(c("psv", "osv", "dsv"), names(psv_result))
+    if (length(psv_cols) > 0 && "player_id" %in% names(psv_result) &&
+        "match_id" %in% names(psv_result)) {
+      psv_slim <- psv_result[, c("player_id", "match_id", psv_cols), with = FALSE]
+      pgr <- merge(pgr, psv_slim, by = c("player_id", "match_id"), all.x = TRUE)
+
+      # PSV per-80 rates
+      for (col in psv_cols) {
+        p80_col <- paste0(col, "_p80")
+        pgr[, (p80_col) := round(get(col) / tog, 1)]
+      }
+
+      # TORP value: 50% EPV + 50% PSV
+      if (all(c("epv", "psv") %in% names(pgr))) {
+        pgr[, torp_value := round(TORP_EPR_WEIGHT * epv + (1 - TORP_EPR_WEIGHT) * psv, 1)]
+        pgr[, torp_value_p80 := round(torp_value / tog, 1)]
+      }
+    }
+  }
+
+  # Select totals or p80 columns based on per80 parameter
+  if (per80) {
+    val_cols <- c("epv_p80", "recv_epv_p80", "disp_epv_p80", "spoil_epv_p80", "hitout_epv_p80",
+                  "psv_p80", "osv_p80", "dsv_p80", "torp_value_p80")
+  } else {
+    val_cols <- c("epv", "recv_epv", "disp_epv", "spoil_epv", "hitout_epv",
+                  "psv", "osv", "dsv", "torp_value")
+  }
+
+  col_order <- c(
+    "season", "round", "player_name", "position", "team", "opp", "tog",
+    val_cols,
+    "player_id", "team_id", "match_id"
+  )
+  col_order <- intersect(col_order, names(pgr))
+  # Drop the other set (totals if per80, p80s if not)
+  keep_cols <- c("season", "round", "player_name", "position", "team", "opp", "tog",
+                 col_order[col_order %in% val_cols],
+                 "player_id", "team_id", "match_id")
+  pgr <- pgr[, intersect(keep_cols, names(pgr)), with = FALSE]
+  data.table::setcolorder(pgr, intersect(col_order, names(pgr)))
+
+  sort_col <- if (per80) "torp_value_p80" else "torp_value"
+  if (!sort_col %in% names(pgr)) sort_col <- if (per80) "epv_p80" else "epv"
+  if (sort_col %in% names(pgr)) data.table::setorderv(pgr, sort_col, order = -1L)
+
+  cli::cli_inform("Done!")
+  pgr
 }
 
 

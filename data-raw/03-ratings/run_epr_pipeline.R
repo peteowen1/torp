@@ -6,8 +6,8 @@
 #   Stage 3: Compute EPR ratings per season/round and release
 #
 # Usage:
-#   Rscript data-raw/03-ratings/run_ratings_pipeline.R
-#   Or: source("data-raw/03-ratings/run_ratings_pipeline.R")
+#   Rscript data-raw/03-ratings/run_epr_pipeline.R
+#   Or: source("data-raw/03-ratings/run_epr_pipeline.R")
 #
 # CI Usage (from GitHub Actions):
 #   Set config variables before sourcing:

@@ -16,6 +16,6 @@ devtools::load_all()
 
 result <- run_predictions_pipeline()
 result$predictions %>% filter(season == get_afl_season(), round == get_afl_week('next'))
-
+#
 # sim_results <- simulate_afl_season(2026, n_sims = 3000, seed = 42, n_cores = 12)
 # print(sim_results)

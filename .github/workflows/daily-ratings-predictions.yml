@@ -78,7 +78,7 @@ jobs:
             REFRESH_UPSTREAM <- FALSE
             REBUILD_PLAYER_GAME <- TRUE
             REBUILD_ALL_RATINGS <- !is.null(SEASONS)
-            source('data-raw/03-ratings/run_ratings_pipeline.R')
+            source('data-raw/03-ratings/run_epr_pipeline.R')
           "
 
       - name: Get release info

@@ -76,7 +76,7 @@ phase_menu <- c(
   "10 - Season Simulation"
 )
 
-start_from <- 8L
+start_from <- 6L
 
 if (interactive()) {
   if (exists("START_FROM", envir = .GlobalEnv)) {
@@ -721,13 +721,13 @@ if (run_ratings) {
   cli::cli_h1("Phase 8: TORP Ratings")
   tic("phase_8_ratings")
 
-  # Set config in global env (run_ratings_pipeline.R checks .GlobalEnv)
+  # Set config in global env (run_epr_pipeline.R checks .GlobalEnv)
   SEASONS <<- TRUE
   REFRESH_UPSTREAM <<- FALSE  # Phase 1 already handled this
   REBUILD_PLAYER_GAME <<- TRUE  # Phase 6 might have already handled this but set as TRUE to be safe
   REBUILD_ALL_RATINGS <<- TRUE
 
-  ratings_script <- file.path(torp_root, "data-raw", "03-ratings", "run_ratings_pipeline.R")
+  ratings_script <- file.path(torp_root, "data-raw", "03-ratings", "run_epr_pipeline.R")
   if (file.exists(ratings_script)) {
     safe_run("torp_ratings_pipeline", {
       source(ratings_script)

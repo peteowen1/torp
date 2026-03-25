@@ -10,7 +10,6 @@ default_epv_params <- function() {
     disp_neg_offset   = EPV_DISP_NEG_OFFSET,
     disp_pos_offset   = EPV_DISP_POS_OFFSET,
     disp_scale        = EPV_DISP_SCALE,
-    bounce_wt         = EPV_BOUNCE_WT,
     recv_neg_mult     = EPV_RECV_NEG_MULT,
     recv_neg_offset   = EPV_RECV_NEG_OFFSET,
     recv_pos_mult     = EPV_RECV_POS_MULT,
@@ -46,11 +45,7 @@ default_epv_params <- function() {
     handballs_wt           = EPV_HANDBALLS_WT,
     metres_gained_wt       = EPV_METRES_GAINED_WT,
     turnovers_wt           = EPV_TURNOVERS_WT,
-    goal_assists_wt        = EPV_GOAL_ASSISTS_WT,
-    pos_adj_quantile_recv   = EPV_POS_ADJ_QUANTILE_RECV,
-    pos_adj_quantile_disp   = EPV_POS_ADJ_QUANTILE_DISP,
-    pos_adj_quantile_spoil  = EPV_POS_ADJ_QUANTILE_SPOIL,
-    pos_adj_quantile_hitout = EPV_POS_ADJ_QUANTILE_HITOUT
+    goal_assists_wt        = EPV_GOAL_ASSISTS_WT
   )
 }
 
@@ -182,7 +177,7 @@ create_player_game_data <- function(pbp_data = NULL,
                  ground_ball_gets * p$ground_ball_gets_wt + marks_inside50 * p$marks_inside50_wt +
                  marks * p$marks_wt + uncontested_possessions * p$uncontested_poss_wt +
                  frees_for * p$frees_for_wt,
-      disp_epv = tidyr::replace_na(disp_epv, 0) + bounces * p$bounce_wt +
+      disp_epv = tidyr::replace_na(disp_epv, 0) +
                  inside50s * p$inside50s_wt + clangers * p$clangers_wt + score_involvements * p$score_involvements_wt +
                  kicks * p$kicks_wt + handballs * p$handballs_wt + metres_gained * p$metres_gained_wt +
                  turnovers * p$turnovers_wt + goal_assists * p$goal_assists_wt +
@@ -216,10 +211,10 @@ create_player_game_data <- function(pbp_data = NULL,
     ) |>
     dplyr::group_by(position) |>
     dplyr::mutate(
-      recv_epv_adj = .data$recv_epv_p80 - mean(.data$recv_epv_p80, na.rm = TRUE),
-      disp_epv_adj = .data$disp_epv_p80 - mean(.data$disp_epv_p80, na.rm = TRUE),
-      spoil_epv_adj = .data$spoil_epv_p80 - mean(.data$spoil_epv_p80, na.rm = TRUE),
-      hitout_epv_adj = .data$hitout_epv_p80 - mean(.data$hitout_epv_p80, na.rm = TRUE),
+      recv_epv_adj = .data$recv_epv_p80 - stats::weighted.mean(.data$recv_epv_p80, .data$tog_safe, na.rm = TRUE),
+      disp_epv_adj = .data$disp_epv_p80 - stats::weighted.mean(.data$disp_epv_p80, .data$tog_safe, na.rm = TRUE),
+      spoil_epv_adj = .data$spoil_epv_p80 - stats::weighted.mean(.data$spoil_epv_p80, .data$tog_safe, na.rm = TRUE),
+      hitout_epv_adj = .data$hitout_epv_p80 - stats::weighted.mean(.data$hitout_epv_p80, .data$tog_safe, na.rm = TRUE),
       epv_adj = .data$recv_epv_adj + .data$disp_epv_adj + .data$spoil_epv_adj + .data$hitout_epv_adj
     ) |>
     dplyr::ungroup() |>
