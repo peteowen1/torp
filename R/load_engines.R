@@ -40,11 +40,11 @@ load_from_url <- function(url, ..., seasons = TRUE, rounds = TRUE, use_disk_cach
 
   # Filter by season/round if specific values requested
   if (!isTRUE(seasons)) {
-    stopifnot(is.numeric(seasons))
+    if (!is.numeric(seasons)) cli::cli_abort("{.arg seasons} must be numeric, not {.cls {class(seasons)}}")
     if ("season" %in% names(out)) out <- out[out$season %in% seasons, ]
   }
   if (!isTRUE(rounds)) {
-    stopifnot(is.numeric(rounds))
+    if (!is.numeric(rounds)) cli::cli_abort("{.arg rounds} must be numeric, not {.cls {class(rounds)}}")
     if ("round" %in% names(out) && !all(is.na(out$round))) {
       out <- out[out$round %in% rounds, ]
     } else if ("round_number" %in% names(out) && !all(is.na(out$round_number))) {

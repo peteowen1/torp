@@ -24,7 +24,8 @@ clean_model_data_epv_dt <- function(df) {
 
   # Filter relevant descriptions (vectorized, no grouping needed)
   dt <- dt[description %in% EPV_RELEVANT_DESCRIPTIONS]
-  dt <- dt[!(dplyr::near(x, -lead_x_tot) & dplyr::near(y, -lead_y_tot) & description != "Centre Bounce")]
+  tol <- .Machine$double.eps^0.5
+  dt <- dt[!(abs(x - (-lead_x_tot)) < tol & abs(y - (-lead_y_tot)) < tol & description != "Centre Bounce")]
 
   # Grouped throw_in filter via shift
   dt[, c("lag_ti_flt", "lead_ti_flt") := .(

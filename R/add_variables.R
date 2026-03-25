@@ -65,6 +65,14 @@ add_epv_vars <- function(df, reference_date = Sys.Date()) {
     ) |>
     dplyr::ungroup()
 
+  # Sanity checks on derived columns
+  if (any(!pbp_final$pos_team %in% c(-1L, 1L), na.rm = TRUE)) {
+    cli::cli_warn("Unexpected pos_team values detected (expected -1 or 1)")
+  }
+  if (any(!pbp_final$team_change %in% c(-1L, 1L), na.rm = TRUE)) {
+    cli::cli_warn("Unexpected team_change values detected (expected -1 or 1)")
+  }
+
   return(pbp_final)
 }
 

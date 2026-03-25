@@ -43,7 +43,7 @@ generate_disk_cache_key <- function(url) {
 
 
   # Combine prefix with hash for unique but identifiable key
-  paste0(file_prefix, "_", substr(hash, 1, 8))
+  paste0(file_prefix, "_", substr(hash, 1, 16))
 }
 
 #' Get Disk Cache Path for URL
