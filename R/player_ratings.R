@@ -11,6 +11,44 @@
   plyr_tm_df
 }
 
+#' Normalise skills column names for backwards compatibility
+#'
+#' Remaps legacy `_skill` suffixed columns to canonical `_rating` names.
+#' When `strict = TRUE` (user-supplied data), aborts on missing columns.
+#' When `strict = FALSE` (auto-loaded), warns and returns NULL.
+#'
+#' @param skills A data.frame or NULL.
+#' @param strict Logical. If TRUE, abort on missing required columns.
+#' @return The normalised data.frame, or NULL if unusable.
+#' @keywords internal
+.normalise_skills_columns <- function(skills, strict = FALSE) {
+  if (is.null(skills)) return(NULL)
+
+  # cond_tog_rating: try _skill and time_on_ground_skill as fallbacks
+
+  if (!"cond_tog_rating" %in% names(skills)) {
+    if ("cond_tog_skill" %in% names(skills)) {
+      skills$cond_tog_rating <- skills$cond_tog_skill
+    } else if ("time_on_ground_skill" %in% names(skills)) {
+      skills$cond_tog_rating <- skills$time_on_ground_skill
+    } else if (strict) {
+      cli::cli_abort("{.arg skills} must contain a {.field cond_tog_rating} column.")
+    } else {
+      cli::cli_warn("Skills data missing {.field cond_tog_rating} column, skipping TOG adjustment.")
+      return(NULL)
+    }
+  }
+
+  # squad_selection_rating: try _skill as fallback
+  if (!"squad_selection_rating" %in% names(skills)) {
+    if ("squad_selection_skill" %in% names(skills)) {
+      skills$squad_selection_rating <- skills$squad_selection_skill
+    }
+  }
+
+  skills
+}
+
 #' Calculate EPR (Expected Possession Rating)
 #'
 #' Calculates EPR ratings for players based on their EPV credit contributions,
@@ -85,39 +123,11 @@ calculate_epr <- function(season_val = get_afl_season(type = "current"),
         NULL
       }
     )
-    if (!is.null(skills) && !"cond_tog_rating" %in% names(skills)) {
-      # Backwards compat: accept _skill suffix as _rating
-      if ("cond_tog_skill" %in% names(skills)) {
-        skills$cond_tog_rating <- skills$cond_tog_skill
-      } else if ("time_on_ground_skill" %in% names(skills)) {
-        skills$cond_tog_rating <- skills$time_on_ground_skill
-      } else {
-        cli::cli_warn("Skills data missing {.field cond_tog_rating} column, skipping TOG adjustment.")
-        skills <- NULL
-      }
-    }
-    if (!is.null(skills) && !"squad_selection_rating" %in% names(skills)) {
-      if ("squad_selection_skill" %in% names(skills)) {
-        skills$squad_selection_rating <- skills$squad_selection_skill
-      }
-    }
+    skills <- .normalise_skills_columns(skills, strict = FALSE)
   } else if (isFALSE(skills)) {
     skills <- NULL
   } else if (!is.null(skills)) {
-    if (!"cond_tog_rating" %in% names(skills)) {
-      if ("cond_tog_skill" %in% names(skills)) {
-        skills$cond_tog_rating <- skills$cond_tog_skill
-      } else if ("time_on_ground_skill" %in% names(skills)) {
-        skills$cond_tog_rating <- skills$time_on_ground_skill
-      } else {
-        cli::cli_abort("{.arg skills} must contain a {.field cond_tog_rating} column.")
-      }
-    }
-    if (!"squad_selection_rating" %in% names(skills)) {
-      if ("squad_selection_skill" %in% names(skills)) {
-        skills$squad_selection_rating <- skills$squad_selection_skill
-      }
-    }
+    skills <- .normalise_skills_columns(skills, strict = TRUE)
   }
 
   # Load player team details if not provided

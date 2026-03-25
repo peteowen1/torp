@@ -147,6 +147,83 @@ test_that("simulation win probability follows expected pattern", {
   expect_gt(wins, losses)
 })
 
+# -----------------------------------------------------------------------------
+# Injury Schedule Integration Tests
+# -----------------------------------------------------------------------------
+
+test_that("simulate_season applies injury_schedule boosts at correct round", {
+  sim_teams <- data.frame(
+    team = c("Team A", "Team B"),
+    torp = c(0, 0),
+    stringsAsFactors = FALSE
+  )
+
+  sim_games <- data.frame(
+    roundnum = c(1L, 1L, 2L, 2L),
+    home_team = c("Team A", "Team A", "Team A", "Team A"),
+    away_team = c("Team B", "Team B", "Team B", "Team B"),
+    result = NA_integer_,
+    torp_home_round = NA_real_,
+    torp_away_round = NA_real_,
+    stringsAsFactors = FALSE
+  )
+
+  # Team A gets a +20 TORP boost at round 2 (star player returns)
+  inj_sched <- data.table::data.table(
+    team = "Team A",
+    torp_boost = 20,
+    return_round = 2L
+  )
+
+  set.seed(42)
+  result <- simulate_season(sim_teams, sim_games, return_teams = TRUE,
+                            injury_schedule = inj_sched)
+
+  games_dt <- result[["games"]]
+  teams_dt <- result[["teams"]]
+
+  # Round 1: teams start equal (torp = 0 each)
+  # Round 2: Team A gets +20 boost before games are simulated
+  r1_games <- games_dt[games_dt$roundnum == 1L, ]
+  r2_games <- games_dt[games_dt$roundnum == 2L, ]
+
+  # Team A's recorded TORP in round 2 should be higher than round 1
+  # (torp_home_round captures the pre-game rating)
+  expect_gt(mean(r2_games$torp_home_round), mean(r1_games$torp_home_round))
+
+  # Final team rating for Team A should reflect the boost
+  final_a <- teams_dt[teams_dt$team == "Team A", ]$torp
+  final_b <- teams_dt[teams_dt$team == "Team B", ]$torp
+  expect_gt(final_a, final_b)
+})
+
+test_that("simulate_season works with empty injury_schedule", {
+  sim_teams <- data.frame(
+    team = c("Team A", "Team B"),
+    torp = c(5, -5),
+    stringsAsFactors = FALSE
+  )
+
+  sim_games <- data.frame(
+    roundnum = c(1L),
+    home_team = "Team A",
+    away_team = "Team B",
+    result = NA_integer_,
+    torp_home_round = NA_real_,
+    torp_away_round = NA_real_,
+    stringsAsFactors = FALSE
+  )
+
+  empty_sched <- data.table::data.table(
+    team = character(), torp_boost = numeric(), return_round = integer()
+  )
+
+  set.seed(42)
+  result <- simulate_season(sim_teams, sim_games, injury_schedule = empty_sched)
+  expect_s3_class(result, "data.frame")
+  expect_true(all(!is.na(result$result)))
+})
+
 test_that("simulation respects home ground advantage", {
   # Create teams with equal ratings
   sim_teams <- data.frame(

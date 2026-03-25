@@ -39,8 +39,9 @@ clean_pbp_dt <- function(df) {
   # Normalise column names across API schema versions (CFS vs v2)
   .normalise_pbp_columns(dt)
 
-  # Explicit sort: all shift/lag/lead operations assume within-match display_order.
-  # setkey alone only guarantees match_id ordering (within-match order is input-dependent).
+  # Sort by match_id + display_order: all shift/lag/lead operations assume this order.
+  # setkey(match_id) sets the key attribute for fast by-group operations while
+  # preserving the within-match display_order sort (setkey is stable within key groups).
   data.table::setorder(dt, match_id, display_order)
   data.table::setkey(dt, match_id)
 

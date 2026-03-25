@@ -211,6 +211,7 @@ NULL
 
   # In-memory curl pool — no temp files, no file descriptor limit
   # <<- in callbacks is safe: multi_run() is synchronous (no concurrent mutation)
+  # No auth header — aflapi.afl.com.au/afl/v2 is a public endpoint (unlike CFS)
   pool <- curl::new_pool(total_con = 50L, host_con = 20L)
   details_list <- vector("list", length(urls))
 

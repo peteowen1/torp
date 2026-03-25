@@ -81,7 +81,7 @@ get_match_chains <- function(season = get_afl_season(), round = NA) {
       dplyr::inner_join(games, by = "matchId")
   } else {
     chains$season <- match_year
-    chains$roundNumber <- as.integer(substr(match_id, 12, 13))
+    chains$roundNumber <- .extract_round_from_match_id(match_id)
   }
 
   players <- get_players(season = match_year)
@@ -95,17 +95,31 @@ get_match_chains <- function(season = get_afl_season(), round = NA) {
   return(chains)
 }
 
+#' Extract round number from an AFL match ID
+#'
+#' Parses the CD_M format via regex rather than positional substr,
+#' so it handles variable comp-ID lengths safely.
+#'
+#' @param match_id Character match ID.
+#' @return Integer round number, or NA if format does not match.
+#' @keywords internal
+.extract_round_from_match_id <- function(match_id) {
+  m <- regmatches(match_id, regexec("^CD_M\\d{4}\\d{3}(\\d{2})", match_id))
+  if (length(m[[1]]) < 2) return(NA_integer_)
+  as.integer(m[[1]][2])
+}
+
 #' Find game metadata for a match ID
 #'
 #' Extracts the round number from the match ID structure
-#' (`CD_M{year}{comp}{round}{game}`) and fetches that round's fixtures directly.
+#' and fetches that round's fixtures directly.
 #'
 #' @param season Numeric season year.
 #' @param match_id Match ID string.
 #' @return A single-row data.frame of game metadata, or empty data.frame.
 #' @keywords internal
 .find_game_by_match_id <- function(season, match_id) {
-  round_num <- as.integer(substr(match_id, 12, 13))
+  round_num <- .extract_round_from_match_id(match_id)
   games <- tryCatch(get_round_games(season, round_num, concluded_only = FALSE), error = function(e) data.frame())
   if (nrow(games) == 0) {
     cli::cli_warn("Could not find game metadata for {.val {match_id}} in season {.val {season}}. Returning chains without game metadata.")
@@ -119,6 +133,9 @@ get_match_chains <- function(season = get_afl_season(), round = NA) {
 
 
 # Token cache environment (avoids re-authenticating on every API call)
+# 5-min TTL is conservative — actual token lifetime is undocumented by AFL.
+# Short enough to recover from token rotation, long enough to avoid
+# re-auth on every call during batch scraping sessions.
 .torp_token_cache <- new.env(parent = emptyenv())
 
 #' Get API Token
@@ -138,6 +155,9 @@ get_token <- function() {
   response <- httr::POST("https://api.afl.com.au/cfs/afl/WMCTok")
   httr::stop_for_status(response, task = "authenticate with AFL API")
   token <- httr::content(response)$token
+  if (is.null(token) || !nzchar(token)) {
+    cli::cli_abort("AFL API returned empty or missing token (HTTP 200 but no token in body)")
+  }
   .torp_token_cache$token <- token
   .torp_token_cache$fetched <- now
   token
@@ -181,11 +201,11 @@ get_round_games <- function(season, round, concluded_only = TRUE) {
   url <- paste0("https://api.afl.com.au/cfs/afl/fixturesAndResults/season/CD_S", season, "014/round/CD_R", season, "014", round)
   api_result <- access_api(url)
 
-  if (length(api_result) < 5) {
-    cli::cli_warn("Unexpected API response structure for fixtures (expected 5+ elements, got {length(api_result)})")
+  games <- api_result[["items"]]
+  if (is.null(games)) {
+    cli::cli_warn("AFL API fixtures response missing {.field items} key for round {.val {round}}")
     return(data.frame())
   }
-  games <- api_result[["items"]] %||% api_result[[5]]
 
   if (length(games) > 0) {
     if (concluded_only) {
@@ -204,7 +224,7 @@ get_round_games <- function(season, round, concluded_only = TRUE) {
 
 #' Get Season Games
 #'
-#' Retrieves game data for an entire season.
+#' Retrieves game data for an entire season using parallel HTTP requests.
 #'
 #' @param season The AFL season year (numeric).
 #' @param rounds The maximum number of rounds to check (default: 28, covers all AFL season formats).
@@ -212,9 +232,44 @@ get_round_games <- function(season, round, concluded_only = TRUE) {
 #' @return A dataframe containing game data for the entire season.
 #' @keywords internal
 #'
-#' @importFrom purrr map_df
+#' @importFrom curl new_pool new_handle curl_fetch_multi multi_run
 get_season_games <- function(season, rounds = 28) {
-  purrr::map_df(1:rounds, ~ get_round_games(season, .))
+  token <- get_token()
+  urls <- vapply(seq_len(rounds), function(r) {
+    paste0("https://api.afl.com.au/cfs/afl/fixturesAndResults/season/CD_S",
+           season, "014/round/CD_R", season, "014", sprintf("%02d", r))
+  }, character(1))
+
+  pool <- curl::new_pool(total_con = 30L, host_con = 10L)
+  results <- vector("list", rounds)
+
+  for (i in seq_len(rounds)) {
+    h <- curl::new_handle(httpheader = paste0("x-media-mis-token: ", token))
+    local({
+      idx <- i
+      curl::curl_fetch_multi(urls[idx], done = function(resp) {
+        if (resp$status_code == 200L) {
+          tryCatch({
+            json <- jsonlite::fromJSON(rawToChar(resp$content), flatten = TRUE)
+            games <- json[["items"]]
+            if (!is.null(games) && length(games) > 0) {
+              games <- games[games$status == "CONCLUDED", , drop = FALSE]
+              if (nrow(games) > 0) {
+                games$date <- as.Date(substr(games$utcStartTime, 1, 10))
+                games$season <- season
+                results[[idx]] <<- games
+              }
+            }
+          }, error = function(e) NULL)
+        }
+      }, fail = function(msg) NULL, handle = h, pool = pool)
+    })
+  }
+
+  curl::multi_run(pool = pool)
+  out <- dplyr::bind_rows(purrr::compact(results))
+  if (nrow(out) == 0) return(data.frame())
+  out
 }
 
 #' Get Players
@@ -232,10 +287,11 @@ get_players <- function(season = TRUE, use_api = FALSE) {
   if (use_api) {
     url <- "https://api.afl.com.au/cfs/afl/players"
     api_result <- access_api(url)
-    if (length(api_result) < 5) {
-      cli::cli_abort("Unexpected API response structure for players (expected 5+ elements, got {length(api_result)})")
+    players <- api_result[["players"]]
+    if (is.null(players)) {
+      cli::cli_abort("AFL API players response missing {.field players} key")
     }
-    players <- (api_result[["players"]] %||% api_result[[5]]) |>
+    players <- players |>
       dplyr::mutate(season = get_afl_season())
   } else {
     players <- load_player_details(seasons = season) |>
@@ -281,11 +337,11 @@ get_game_chains <- function(match_id) {
   url <- paste0("https://sapi.afl.com.au/afl/matchPlays/", match_id)
   api_response <- access_api(url)
 
-  if (length(api_response) < 8) {
-    cli::cli_warn("Unexpected API response structure for match {match_id} (expected 8+ elements, got {length(api_response)})")
+  chain_list <- api_response[["chains"]]
+  if (is.null(chain_list)) {
+    cli::cli_warn("AFL API match response missing {.field chains} key for {.val {match_id}}")
     return(data.frame())
   }
-  chain_list <- api_response[["chains"]] %||% api_response[[8]]
 
   if (is.null(dim(chain_list)) || nrow(chain_list) == 0 || length(chain_list) <= 5) {
     return(data.frame())

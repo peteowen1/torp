@@ -93,7 +93,7 @@ parquet_from_urls_parallel <- function(urls, use_cache = FALSE, max_age_days = 7
 
   # --- Phase 1: Resolve each URL to a local file path or mark for download ---
   local_paths <- character(n)     # local path if available, "" otherwise
-  download_indices <- integer(0)
+  needs_download <- logical(n)    # pre-allocated flag vector
 
   n_skipped <- 0L
   for (i in seq_len(n)) {
@@ -122,8 +122,9 @@ parquet_from_urls_parallel <- function(urls, use_cache = FALSE, max_age_days = 7
       }
     }
 
-    download_indices <- c(download_indices, i)
+    needs_download[i] <- TRUE
   }
+  download_indices <- which(needs_download)
 
   if (n_skipped > 0) {
     cli::cli_inform("Skipped {n_skipped} previously failed URL{?s}. Use {.fn clear_skip_markers} to retry.")

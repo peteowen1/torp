@@ -114,7 +114,12 @@ store_in_cache <- function(cache_key, data) {
   invisible(NULL)
 }
 
-#' Get data from cache
+#' Get data from cache (no TTL check)
+#'
+#' Returns cached data regardless of age. Use for session-scoped lookups
+#' (e.g. comp season IDs) where staleness is acceptable. For TTL-aware
+#' retrieval, use [get_from_cache_ttl()] or the full [.load_with_cache()]
+#' pipeline.
 #'
 #' @param cache_key Character cache key
 #' @return Cached data or NULL if not found
@@ -125,6 +130,25 @@ get_from_cache <- function(cache_key) {
     return(cache_entry$data)
   }
   return(NULL)
+}
+
+#' Get data from cache with TTL enforcement
+#'
+#' Returns cached data only if it exists and is younger than \code{cache_ttl}
+#' seconds. Expired entries are removed from the cache.
+#'
+#' @param cache_key Character cache key
+#' @param cache_ttl Maximum age in seconds (default 3600 = 1 hour)
+#' @return Cached data or NULL if not found or expired
+#' @keywords internal
+get_from_cache_ttl <- function(cache_key, cache_ttl = 3600) {
+  if (!exists(cache_key, envir = .torp_cache)) return(NULL)
+  cache_entry <- get(cache_key, envir = .torp_cache)
+  if (is_cache_valid(cache_entry, cache_ttl)) {
+    return(cache_entry$data)
+  }
+  rm(list = cache_key, envir = .torp_cache)
+  NULL
 }
 
 
