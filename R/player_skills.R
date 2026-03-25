@@ -6,308 +6,7 @@
 # Rate stats use Gamma-Poisson conjugate model (counts per game).
 # Efficiency stats use Beta-Binomial conjugate model (proportions).
 #
-# Output columns use `_rating` suffix (e.g. `goals_rating`).
-# These are individual stat-level predictions, distinct from composite
-# ratings like PSR/EPR.
-
-
-# ============================================================================
-# Position helpers
-# ============================================================================
-
-#' Map AFL positions to simplified position groups
-#'
-#' @param pos Character vector of AFL position strings.
-#' @return Character vector of position groups (DEF/MID/FWD/RUCK), NA for unknown.
-#' @keywords internal
-.map_position_group <- function(pos) {
-  pm <- stat_rating_position_map()
-  # Build reverse lookup: position -> group
-  lookup <- character(0)
-  for (grp in names(pm)) {
-    for (p in pm[[grp]]) {
-      lookup[p] <- grp
-    }
-  }
-  unname(lookup[pos])
-}
-
-
-#' Resolve position groups, filling NAs with each player's modal position
-#'
-#' @param dt A data.table with player_id and position columns.
-#' @return The data.table with added `pos_group` column.
-#' @keywords internal
-.resolve_stat_rating_positions <- function(dt) {
-  # Use 'listed_position' column (listed position: KEY_DEFENDER, MIDFIELDER, etc.)
-  # Fallback to 'position' if 'listed_position' not available
-  pos_col <- if ("listed_position" %in% names(dt)) "listed_position" else "position"
-  dt[, pos_group := .map_position_group(get(pos_col))]
-
-  na_idx <- which(is.na(dt$pos_group))
-  if (length(na_idx) > 0) {
-    # Compute modal position per player from non-NA rows
-    valid <- dt[!is.na(pos_group)]
-    if (nrow(valid) > 0) {
-      modal_pos <- valid[, {
-        tt <- table(pos_group)
-        list(modal_pos = if (length(tt) > 0) names(tt)[which.max(tt)] else NA_character_)
-      }, by = player_id]
-
-      dt[modal_pos, on = "player_id", modal_pos := i.modal_pos]
-      dt[is.na(pos_group) & !is.na(modal_pos), pos_group := modal_pos]
-      dt[, modal_pos := NULL]
-    }
-  }
-
-  dt
-}
-
-
-# ============================================================================
-# Data preparation
-# ============================================================================
-
-#' Prepare data for stat rating estimation
-#'
-#' Joins player game data with player stats to produce a single table with
-#' all required columns for the stat rating estimation pipeline.
-#'
-#' @param player_game_data Player game data from \code{load_player_game_data(TRUE)}.
-#' @param player_stats Player stats from \code{load_player_stats(TRUE)}.
-#' @param rosters Optional roster data. If NULL, loads from torpdata.
-#' @param fixtures Optional fixture data. If NULL, loads from torpdata.
-#'
-#' @return A data.table with one row per player-match containing:
-#'   identifiers (player_id, match_id, player_name, season, round, team),
-#'   match_date_rating (Date), tog (time on ground as fraction), position,
-#'   and all stat columns referenced by \code{stat_rating_definitions()}.
-#'
-#' @importFrom data.table as.data.table
-#' @keywords internal
-.prepare_stat_rating_data <- function(player_game_data, player_stats, rosters = NULL,
-                               fixtures = NULL) {
-  pgd <- data.table::as.data.table(player_game_data)
-  ps <- data.table::as.data.table(player_stats)
-
-  # Compute match_date from utc_start_time
-  pgd[, match_date_rating := as.Date(utc_start_time)]
-
-  # Compute TOG as fraction and constant denominator for Beta-Binomial model
-  pgd[, tog := time_on_ground_percentage / 100]
-  pgd[, tog_denominator := 1]
-  pgd[, played := 1L]
-
-  # player_stats columns are normalised by load_player_stats()
-  if (!all(c("player_id", "match_id") %in% names(ps))) {
-    cli::cli_warn(c(
-      "Cannot find player_id/match_id columns in player_stats.",
-      "i" = "Some skills will rely entirely on the prior."
-    ))
-    pgd[, disposal_efficiency_pct_x_disposals := NA_real_]
-  } else {
-    pid_col <- "player_id"
-    mid_col <- "match_id"
-
-    # Find all stat columns needed by skill definitions but missing from pgd
-    stat_defs_merge <- stat_rating_definitions()
-    needed_cols <- unique(c(
-      stats::na.omit(stat_defs_merge$source_col),
-      stats::na.omit(stat_defs_merge$success_col),
-      stats::na.omit(stat_defs_merge$attempts_col)
-    ))
-    needed_cols <- unique(unlist(strsplit(needed_cols, "\\+")))
-    missing_from_pgd <- setdiff(needed_cols, names(pgd))
-    # Also always bring in disposal_efficiency for the derived column
-    missing_from_pgd <- unique(c(missing_from_pgd, "disposal_efficiency"))
-    available_in_ps <- intersect(missing_from_pgd, names(ps))
-
-    if (length(available_in_ps) > 0) {
-      ps_slim <- ps[, c(pid_col, mid_col, available_in_ps), with = FALSE]
-      data.table::setnames(ps_slim, c(pid_col, mid_col), c("player_id", "match_id"), skip_absent = TRUE)
-      ps_slim <- unique(ps_slim, by = c("player_id", "match_id"))
-
-      n_before <- nrow(pgd)
-      pgd <- merge(pgd, ps_slim, by = c("player_id", "match_id"), all.x = TRUE, suffixes = c("", "_ps"))
-      if (nrow(pgd) != n_before) {
-        cli::cli_warn("Merge with player_stats changed row count from {n_before} to {nrow(pgd)}")
-      }
-
-      # Handle suffixed columns from name conflicts
-      for (col in available_in_ps) {
-        ps_col <- paste0(col, "_ps")
-        if (ps_col %in% names(pgd)) {
-          if (!col %in% names(pgd)) {
-            data.table::setnames(pgd, ps_col, col)
-          } else {
-            pgd[, (ps_col) := NULL]
-          }
-        }
-      }
-    }
-
-    # Compute derived disposal_efficiency column for Beta-Binomial model
-    if ("disposal_efficiency" %in% names(pgd)) {
-      pgd[, disposal_efficiency_pct_x_disposals :=
-        data.table::fifelse(is.na(disposal_efficiency), 0, as.numeric(disposal_efficiency)) / 100 * disposals]
-    } else {
-      cli::cli_warn("disposal_efficiency column not found; skill will rely on prior")
-      pgd[, disposal_efficiency_pct_x_disposals := NA_real_]
-    }
-  }
-
-  # Map positions to groups
-  pgd <- .resolve_stat_rating_positions(pgd)
-
-  # Select essential columns + all stat source columns
-  stat_defs <- stat_rating_definitions()
-  rate_cols <- stats::na.omit(unique(stat_defs$source_col))
-  # For efficiency stats, parse columns from success_col and attempts_col
-  eff_cols <- unique(c(
-    stats::na.omit(stat_defs$success_col),
-    stats::na.omit(stat_defs$attempts_col)
-  ))
-  # Handle "col1+col2" specs
-  eff_cols <- unlist(strsplit(eff_cols, "\\+"))
-
-  all_stat_cols <- unique(c(rate_cols, eff_cols))
-  keep_cols <- unique(c(
-    "player_id", "match_id", "player_name", "season", "round",
-    "match_date_rating", "tog", "pos_group", "position",
-    intersect(all_stat_cols, names(pgd)),
-    "disposal_efficiency_pct_x_disposals"
-  ))
-
-  # Only keep columns that exist
-  keep_cols <- intersect(keep_cols, names(pgd))
-  out <- pgd[, ..keep_cols]
-
-  # Add team column if available
-  if ("team" %in% names(pgd) && !"team" %in% keep_cols) {
-    out[, team := pgd$team]
-  }
-
-  # Expand with zero-TOG rows for rostered players who didn't play.
-  # This lets the Beta-Binomial TOG model account for selection probability:
-  # missed rounds contribute (tog=0, tog_denominator=1) to the denominator,
-  # pulling estimates down for players who miss games.
-  # Other stats are unaffected: rate stats use tog as exposure (0 * w = 0),
-  # efficiency stats have 0 successes and 0 attempts (0 * w = 0).
-  out[, avail_only := FALSE]
-
-  round_cal <- out[, .(match_date_rating = min(match_date_rating)),
-                   by = .(season, round)]
-
-  if (!is.null(rosters)) {
-    # Roster-based expansion: every rostered player × every round their team played
-    roster_dt <- data.table::as.data.table(rosters)
-
-    if (!is.null(fixtures)) {
-      # Build team-round calendar from fixtures (handles byes + finals correctly)
-      fix_dt <- data.table::as.data.table(fixtures)
-      home <- fix_dt[, .(season, round = round_number,
-                         team = home_team_name)]
-      away <- fix_dt[, .(season, round = round_number,
-                         team = away_team_name)]
-      team_rounds <- unique(data.table::rbindlist(list(home, away)))
-      team_rounds <- merge(team_rounds, round_cal, by = c("season", "round"))
-
-      # Join roster players (with team) to team-round calendar
-      roster_players <- unique(roster_dt[, .(player_id, season, team)])
-      all_combos <- merge(roster_players, team_rounds,
-                          by = c("season", "team"), allow.cartesian = TRUE)
-      all_combos[, team := NULL]
-    } else {
-      # Fallback without fixtures: every round in their season (old behavior)
-      roster_players <- unique(roster_dt[, .(player_id, season)])
-      all_combos <- merge(roster_players, round_cal, by = "season",
-                          allow.cartesian = TRUE)
-    }
-  } else {
-    # Fallback: expand from each player's first game to the latest round
-    player_first <- out[, .(first_season = min(season),
-                            first_round = min(round[season == min(season)])),
-                        by = player_id]
-    all_combos <- data.table::CJ(player_id = player_first$player_id,
-                                  round_idx = seq_len(nrow(round_cal)))
-    all_combos[, c("season", "round", "match_date_rating") :=
-                 round_cal[round_idx, .(season, round, match_date_rating)]]
-    all_combos[, round_idx := NULL]
-    all_combos <- merge(all_combos, player_first, by = "player_id")
-    all_combos <- all_combos[season > first_season |
-                             (season == first_season & round >= first_round)]
-    all_combos[, c("first_season", "first_round") := NULL]
-  }
-
-  played <- unique(out[, .(player_id, season, round)])
-  played[, .played := TRUE]
-  all_combos <- merge(all_combos, played,
-                      by = c("player_id", "season", "round"), all.x = TRUE)
-  missed <- all_combos[is.na(.played)]
-
-  if (nrow(missed) > 0) {
-    zero_rows <- missed[, .(
-      player_id, season, round, match_date_rating,
-      match_id = paste0("AVAIL_", season, "_", sprintf("%02d", round)),
-      tog = 0, tog_denominator = 1, played = 0L, avail_only = TRUE
-    )]
-
-    # Assign pos_group: use modal position from games if available,
-    # otherwise use roster position for never-played players
-    player_pos <- out[avail_only == FALSE & !is.na(pos_group),
-                      .(pos_group = names(which.max(table(pos_group)))), by = player_id]
-    if (!is.null(rosters)) {
-      roster_pos <- unique(roster_dt[, .(player_id, position)])
-      roster_pos[, roster_pos_group := .map_position_group(position)]
-      roster_pos <- roster_pos[!is.na(roster_pos_group), .(player_id, roster_pos_group)]
-      roster_pos <- unique(roster_pos, by = "player_id")
-      # Merge: prefer game-based pos, fallback to roster pos
-      player_pos <- merge(roster_pos, player_pos, by = "player_id", all.x = TRUE)
-      player_pos[is.na(pos_group), pos_group := roster_pos_group]
-      player_pos[, roster_pos_group := NULL]
-    }
-    zero_rows <- merge(zero_rows, player_pos, by = "player_id", all.x = TRUE)
-
-    out <- data.table::rbindlist(list(out, zero_rows), fill = TRUE)
-  }
-
-  out
-}
-
-
-# ============================================================================
-# Denominator helper for efficiency stats
-# ============================================================================
-
-#' Compute denominator vector from a column spec string
-#'
-#' Supports "col1+col2" for summing multiple columns.
-#'
-#' @param dt A data.table.
-#' @param denom_spec A string like "col" or "col1+col2".
-#' @return Numeric vector of denominators.
-#' @keywords internal
-.compute_stat_rating_denominator <- function(dt, denom_spec) {
-  if (grepl("\\+", denom_spec)) {
-    parts <- strsplit(denom_spec, "\\+")[[1]]
-    result <- rep(0, nrow(dt))
-    for (p in parts) {
-      if (p %in% names(dt)) {
-        v <- as.numeric(dt[[p]])
-        v[is.na(v)] <- 0
-        result <- result + v
-      }
-    }
-    return(result)
-  }
-  if (denom_spec %in% names(dt)) {
-    v <- as.numeric(dt[[denom_spec]])
-    v[is.na(v)] <- 0
-    return(v)
-  }
-  rep(0, nrow(dt))
-}
-
+# Data prep is in player_skills_data.R; profiles in player_skills_profile.R.
 
 # ============================================================================
 # Core stat rating estimation
@@ -673,9 +372,16 @@ estimate_player_stat_ratings <- function(stat_rating_data, ref_date = NULL,
 
 #' Estimate player stat ratings for multiple reference dates efficiently
 #'
-#' Internal function that eliminates redundant work when estimating stat ratings
-#' across many dates: date conversion and avail_only setup are done once,
-#' and the data is sorted so each iteration filters an ascending subset.
+#' Uses cumulative-sum factorisation to avoid redundant aggregation across
+#' dates.  Decay weight \code{exp(-lambda * (ref - match))} is split into
+#' \code{exp(-lambda * ref) * exp(lambda * match)}.  The match-side factor
+#' is fixed per row, so we pre-multiply values by it and take per-player
+#' cumulative sums (sorted by date).
+#' A data.table rolling join then looks up each ref_date in O(log n), and
+#' the ref-side scalar completes the product.
+#'
+#' Complexity drops from O(dates * stats * rows) to O(stats * rows) for
+#' the cumsums plus O(stats * players * dates) for the lookups.
 #'
 #' @param stat_rating_data A data.table from \code{.prepare_stat_rating_data()}.
 #' @param ref_dates Date vector of reference dates.
@@ -690,442 +396,425 @@ estimate_player_stat_ratings <- function(stat_rating_data, ref_date = NULL,
   if (is.null(params)) params <- default_stat_rating_params()
   if (is.null(stat_defs)) stat_defs <- stat_rating_definitions()
 
-  # One-time setup: convert to data.table, ensure types, sort by date
-  dt_base <- data.table::as.data.table(stat_rating_data)
-  if (!inherits(dt_base$match_date_rating, "Date")) {
-    dt_base[, match_date_rating := as.Date(match_date_rating)]
-  }
-  if (!"avail_only" %in% names(dt_base)) dt_base[, avail_only := FALSE]
-  dt_base[is.na(avail_only), avail_only := FALSE]
-  data.table::setorder(dt_base, match_date_rating)
+  # === One-time setup ===
+  t_batch_start <- proc.time()
+  dt <- data.table::as.data.table(stat_rating_data)
+  if (!inherits(dt$match_date_rating, "Date"))
+    dt[, match_date_rating := as.Date(match_date_rating)]
+  if (!"avail_only" %in% names(dt)) dt[, avail_only := FALSE]
+  dt[is.na(avail_only), avail_only := FALSE]
+  data.table::setorder(dt, match_date_rating)
 
-  # Process ref_dates in chronological order
   ref_dates_sorted <- sort(unique(as.Date(ref_dates)))
-  results <- vector("list", length(ref_dates_sorted))
+  n_dates <- length(ref_dates_sorted)
 
-  for (i in seq_along(ref_dates_sorted)) {
-    rd <- ref_dates_sorted[i]
-    # Subset via filter on sorted data — creates a copy (no prior copy needed)
-    dt_sub <- dt_base[match_date_rating < rd]
-    if (nrow(dt_sub) == 0) next
-    results[[i]] <- tryCatch(
-      estimate_player_stat_ratings(dt_sub, ref_date = rd, params = params,
-                             stat_defs = stat_defs, compute_ci = compute_ci),
-      error = function(e) {
-        cli::cli_warn("Batch estimation failed for {rd}: {conditionMessage(e)}")
-        NULL
-      }
+  # Numeric day offsets relative to earliest match (keeps exp() stable)
+  d0 <- as.numeric(min(dt$match_date_rating))
+  dt[, .d := as.numeric(match_date_rating) - d0]
+  ref_d <- as.numeric(ref_dates_sorted) - d0
+
+  # Player metadata: latest name from all data, position via cumsum per ref_date
+  dt_played <- dt[avail_only == FALSE]
+  player_meta <- dt_played[, .(
+    player_name = data.table::last(player_name)
+  ), by = player_id]
+
+  all_pids <- player_meta$player_id
+  pos_groups <- names(stat_rating_position_map())
+
+  # Per-(player, ref_date) modal position via cumulative position counts.
+  # Sort pos_groups alphabetically to match table()/which.max() tie-breaking
+  # in the single-date function.
+  pos_groups_alpha <- sort(pos_groups)
+  pos_track <- dt_played[!is.na(pos_group), .(player_id, match_date_rating, pos_group)]
+  for (pg in pos_groups_alpha)
+    pos_track[, (pg) := as.integer(pos_group == pg)]
+  data.table::setorder(pos_track, player_id, match_date_rating)
+  for (pg in pos_groups_alpha)
+    pos_track[, (pg) := cumsum(get(pg)), by = player_id]
+  pos_cum <- pos_track[, c("player_id", "match_date_rating", pos_groups_alpha), with = FALSE]
+
+  # Rolling join to get cumulative position counts at each ref_date per player
+  pos_lookup <- data.table::CJ(player_id = all_pids, ref_idx = seq_len(n_dates))
+  pos_lookup[, join_d := ref_dates_sorted[ref_idx] - 1L]
+  data.table::setkeyv(pos_cum, c("player_id", "match_date_rating"))
+  pos_joined <- pos_cum[pos_lookup,
+    on = .(player_id, match_date_rating = join_d), roll = TRUE]
+  pos_vals <- as.matrix(pos_joined[, pos_groups_alpha, with = FALSE])
+  pos_vals[is.na(pos_vals)] <- 0L
+  has_any <- rowSums(pos_vals) > 0
+  modal_idx <- max.col(pos_vals, ties.method = "first")
+  pos_joined[, `:=`(pos_group = NA_character_, ref_idx = pos_lookup$ref_idx)]
+  pos_joined[has_any, pos_group := pos_groups_alpha[modal_idx[has_any]]]
+  # pos_meta: (player_id, ref_idx, pos_group) — per-ref_date modal position
+  pos_meta <- pos_joined[, .(player_id, ref_idx, pos_group)]
+
+  # Resolve per-stat params helpers
+  stat_params <- params$stat_params
+  cat_params <- params$category_params
+  .resolve_rate_params <- function(stat_name, category) {
+    if (!is.null(stat_params) && stat_name %in% names(stat_params)) {
+      sp <- stat_params[[stat_name]]
+      return(list(lambda = sp$lambda, prior = sp$prior_strength))
+    }
+    if (!is.null(cat_params) && category %in% names(cat_params)) {
+      cp <- cat_params[[category]]
+      return(list(lambda = cp$lambda, prior = cp$prior_strength))
+    }
+    list(lambda = params$lambda_rate, prior = params$prior_games)
+  }
+  .resolve_eff_params <- function(stat_name) {
+    if (!is.null(stat_params) && stat_name %in% names(stat_params)) {
+      sp <- stat_params[[stat_name]]
+      return(list(lambda = sp$lambda, prior = sp$prior_strength))
+    }
+    list(lambda = params$lambda_efficiency, prior = params$prior_attempts)
+  }
+
+  # === Rolling-join lookup helper ===
+  # Given a cumsum table (grp, match_date_rating, cum_num, cum_den) sorted
+  # by (grp, match_date_rating), look up values at each ref_date per group.
+  # Uses ref_date - 1 for strict < semantics (Date is integer days).
+  # Returns data.table(grp, ref_idx, cum_num, cum_den).
+  .lookup_cumsums <- function(cs, grps, grp_col = "grp") {
+    lookup <- data.table::CJ(grp = grps, ref_idx = seq_len(n_dates))
+    lookup[, join_d := ref_dates_sorted[ref_idx] - 1L]
+    data.table::setnames(cs, grp_col, "grp", skip_absent = TRUE)
+    data.table::setkeyv(cs, c("grp", "match_date_rating"))
+    joined <- cs[lookup, .(grp = i.grp, ref_idx = i.ref_idx,
+                           cum_num = x.cum_num, cum_den = x.cum_den),
+                 on = .(grp, match_date_rating = join_d), roll = TRUE]
+    joined[is.na(cum_num), `:=`(cum_num = 0, cum_den = 0)]
+    joined
+  }
+
+  # === Game counts via cumsum ===
+  # Deduplicate to one row per (player, match), using lambda_rate decay
+  dt_match <- dt_played[!duplicated(paste(player_id, match_id))]
+  dt_match[, .tog_safe := data.table::fifelse(is.na(tog), 0, as.numeric(tog))]
+  lam_rate <- params$lambda_rate
+  dt_match[, .base_w := exp(lam_rate * .d)]
+
+  gc_cs <- dt_match[, .(
+    grp = player_id, match_date_rating,
+    cum_num = .base_w,            # each unique match counts as 1 * base_w
+    cum_den = .base_w * .tog_safe # weighted 80s
+  )]
+  data.table::setorder(gc_cs, grp, match_date_rating)
+  gc_cs[, `:=`(cum_num = cumsum(cum_num), cum_den = cumsum(cum_den)), by = grp]
+
+  # Raw (unweighted) game counts — cumulative count and cumulative TOG
+  gc_raw_cs <- dt_match[, .(grp = player_id, match_date_rating,
+                            cum_num = 1, cum_den = .tog_safe)]
+  data.table::setorder(gc_raw_cs, grp, match_date_rating)
+  gc_raw_cs[, `:=`(cum_num = cumsum(cum_num), cum_den = cumsum(cum_den)), by = grp]
+
+  gc_look <- .lookup_cumsums(gc_cs, all_pids)
+  gc_raw_look <- .lookup_cumsums(gc_raw_cs, all_pids)
+
+  # Build skeleton result: (player × ref_date)
+  res <- data.table::CJ(player_id = all_pids, ref_idx = seq_len(n_dates))
+  res[player_meta, player_name := i.player_name, on = "player_id"]
+  res[pos_meta, pos_group := i.pos_group, on = .(player_id, ref_idx)]
+  res[, ref_date := ref_dates_sorted[ref_idx]]
+
+  # Merge game counts (pre-compute final values on gc_look, then join)
+  gc_look[, ref_d_val := ref_d[ref_idx]]
+  gc_look[, `:=`(
+    wt_games = cum_num * exp(-lam_rate * ref_d_val),
+    wt_80s   = cum_den * exp(-lam_rate * ref_d_val)
+  )]
+  res[gc_look, `:=`(wt_games = i.wt_games, wt_80s = i.wt_80s),
+      on = .(player_id = grp, ref_idx)]
+
+  gc_raw_look[, ref_d_val := ref_d[ref_idx]]
+  res[gc_raw_look, `:=`(n_games = i.cum_num, n_80s = i.cum_den),
+      on = .(player_id = grp, ref_idx)]
+
+  # Fill NAs (players with no data before a ref_date)
+  for (col in c("wt_games", "wt_80s", "n_games", "n_80s"))
+    data.table::set(res, which(is.na(res[[col]])), col, 0)
+
+  # CI quantiles
+  ci_alpha <- (1 - params$credible_level) / 2
+
+  rate_defs <- stat_defs[stat_defs$type == "rate", ]
+  eff_defs  <- stat_defs[stat_defs$type == "efficiency", ]
+  skipped_stats <- character(0)
+  t_stats <- proc.time()
+
+  n_total_stats <- nrow(rate_defs) + nrow(eff_defs)
+  cli::cli_progress_bar("Estimating stat ratings", total = n_total_stats,
+                        format = "{cli::pb_bar} {cli::pb_current}/{cli::pb_total} stats [{cli::pb_elapsed}]")
+
+  # === Rate stats (Gamma-Poisson) via cumsum ===
+  for (i in seq_len(nrow(rate_defs))) {
+    stat_nm  <- rate_defs$stat_name[i]
+    src_col  <- rate_defs$source_col[i]
+    stat_cat <- rate_defs$category[i]
+
+    if (!src_col %in% names(dt)) { skipped_stats <- c(skipped_stats, stat_nm); next }
+
+    rp <- .resolve_rate_params(stat_nm, stat_cat)
+    lam <- rp$lambda
+    prior_str <- rp$prior
+
+    vals <- as.numeric(dt[[src_col]]); vals[is.na(vals)] <- 0
+    is_tog_adj <- is.na(rate_defs$tog_adjusted[i]) || isTRUE(rate_defs$tog_adjusted[i])
+    tog_vals <- if (is_tog_adj) { tv <- as.numeric(dt$tog); tv[is.na(tv)] <- 1; tv } else rep(1, nrow(dt))
+
+    base_w <- exp(lam * dt$.d)
+
+    # --- Per-player cumsums ---
+    pcs <- data.table::data.table(
+      grp = dt$player_id, match_date_rating = dt$match_date_rating,
+      cum_num = base_w * vals, cum_den = base_w * tog_vals
     )
-  }
+    data.table::setorder(pcs, grp, match_date_rating)
+    pcs[, `:=`(cum_num = cumsum(cum_num), cum_den = cumsum(cum_den)), by = grp]
+    p_look <- .lookup_cumsums(pcs, all_pids)
+    p_look[, ref_d_val := ref_d[ref_idx]]
+    p_look[, `:=`(w_num = cum_num * exp(-lam * ref_d_val),
+                  w_den = cum_den * exp(-lam * ref_d_val))]
 
-  names(results) <- as.character(ref_dates_sorted)
-  results[!vapply(results, is.null, logical(1))]
-}
+    # --- Per-position cumsums (for priors) ---
+    # exp(-lam*ref) cancels in the ratio, so pos_mean = cum_num_pos / cum_den_pos
+    pos_cs <- data.table::data.table(
+      grp = dt$pos_group, match_date_rating = dt$match_date_rating,
+      cum_num = base_w * vals, cum_den = base_w * tog_vals
+    )
+    pos_cs <- pos_cs[!is.na(grp)]
+    data.table::setorder(pos_cs, grp, match_date_rating)
+    pos_cs[, `:=`(cum_num = cumsum(cum_num), cum_den = cumsum(cum_den)), by = grp]
+    pos_look <- .lookup_cumsums(pos_cs, pos_groups)
 
+    # Global cumsums (for fallback grand mean — ratio so scaling cancels)
+    glob_cs <- data.table::data.table(
+      grp = "ALL", match_date_rating = dt$match_date_rating,
+      cum_num = base_w * vals, cum_den = base_w * tog_vals
+    )
+    data.table::setorder(glob_cs, grp, match_date_rating)
+    glob_cs[, `:=`(cum_num = cumsum(cum_num), cum_den = cumsum(cum_den)), by = grp]
+    g_look <- .lookup_cumsums(glob_cs, "ALL")
+    g_look[, grand_mean := data.table::fifelse(cum_den > 0, cum_num / cum_den, 0)]
 
-# ============================================================================
-# Profile helpers
-# ============================================================================
+    # Build position mean lookup: (pos_group, ref_idx) -> pos_mean
+    pos_look[, pos_mean := data.table::fifelse(cum_den > 0, cum_num / cum_den, NA_real_)]
+    # Merge grand_mean as fallback
+    pos_look[g_look, grand_mean := i.grand_mean, on = "ref_idx"]
+    pos_look[is.na(pos_mean), pos_mean := grand_mean]
 
-#' Extract column values from a single-row data.table, defaulting to NA
-#' @keywords internal
-.extract_player_cols <- function(player_row, col_names) {
-  vapply(col_names, function(col) {
-    if (col %in% names(player_row)) as.numeric(player_row[[col]]) else NA_real_
-  }, numeric(1))
-}
+    # Merge into per-player lookup: need per-ref_date pos_group
+    p_look[pos_meta, pos_group := i.pos_group, on = .(grp = player_id, ref_idx)]
+    p_look[pos_look, pos_mean := i.pos_mean, on = .(pos_group = grp, ref_idx)]
+    # Fallback for unknown position
+    p_look[g_look, grand_mean := i.grand_mean, on = "ref_idx"]
+    p_look[is.na(pos_mean), pos_mean := grand_mean]
 
-#' Compute column means across a data.table
-#' @keywords internal
-.col_means <- function(dt, cols) {
-  if (nrow(dt) == 0) return(rep(NA_real_, length(cols)))
-  vapply(cols, function(col) mean(dt[[col]], na.rm = TRUE), numeric(1))
-}
+    # Posterior
+    p_look[, alpha0 := pos_mean * prior_str]
+    p_look[, `:=`(alpha_post = alpha0 + w_num, beta_post = prior_str + w_den)]
 
-#' Compute percentile rank of a player's values within a reference data.table
-#'
-#' @param dt Reference data.table for comparison.
-#' @param cols Column names to compute percentiles for.
-#' @param player_row Single-row data.table of the target player.
-#' @param higher_is_better Optional logical vector (same length as cols).
-#'   If FALSE for a stat, percentile is flipped (lower = better).
-#' @keywords internal
-.col_pctiles <- function(dt, cols, player_row, higher_is_better = NULL) {
-  if (nrow(dt) == 0) return(rep(NA_real_, length(cols)))
-  pcts <- vapply(cols, function(col) {
-    player_val <- player_row[[col]]
-    if (is.na(player_val)) return(NA_real_)
-    mean(dt[[col]] <= player_val, na.rm = TRUE) * 100
-  }, numeric(1))
-  # Flip for negative stats
-  if (!is.null(higher_is_better) && length(higher_is_better) == length(pcts)) {
-    flip <- !is.na(higher_is_better) & !higher_is_better
-    pcts[flip] <- 100 - pcts[flip]
-  }
-  pcts
-}
+    rating_col <- paste0(stat_nm, "_rating")
+    raw_col    <- paste0(stat_nm, "_raw")
+    n80_col    <- paste0(stat_nm, "_n80s")
+    wt80_col   <- paste0(stat_nm, "_wt80s")
 
+    p_look[, (rating_col) := alpha_post / beta_post]
 
-# ============================================================================
-# Player stat rating profile
-# ============================================================================
+    # Raw rate (unweighted) — need raw cumsums separately
+    raw_cs <- data.table::data.table(
+      grp = dt$player_id, match_date_rating = dt$match_date_rating,
+      cum_num = vals, cum_den = tog_vals
+    )
+    data.table::setorder(raw_cs, grp, match_date_rating)
+    raw_cs[, `:=`(cum_num = cumsum(cum_num), cum_den = cumsum(cum_den)), by = grp]
+    raw_look <- .lookup_cumsums(raw_cs, all_pids)
+    p_look[raw_look, `:=`(.raw_num = i.cum_num, .raw_den = i.cum_den),
+           on = .(grp, ref_idx)]
+    p_look[, (raw_col) := data.table::fifelse(.raw_den > 0, .raw_num / .raw_den, NA_real_)]
+    p_look[, (n80_col) := .raw_den]
+    p_look[, (wt80_col) := w_den]
 
-#' Get a player's stat rating profile with percentile ranks
-#'
-#' Resolves a player by name (partial match OK), estimates stat ratings for all
-#' players, then returns the target player's row with within-position
-#' percentile ranks appended.
-#'
-#' @param player_name A character string of the player's name (partial OK).
-#' @param ref_date Date to estimate stat ratings as of. Default is today.
-#' @param seasons Seasons to include. Numeric vector or TRUE for all.
-#' @param params Hyperparameters from \code{default_stat_rating_params()}.
-#' @param skills Optional pre-computed stat ratings data (e.g. from
-#'   \code{load_player_stat_ratings(TRUE)}). If provided, skips the expensive
-#'   data loading and estimation steps. If NULL (default), computes from scratch.
-#'
-#' @return A list of class \code{torp_stat_rating_profile} with elements:
-#'   \describe{
-#'     \item{player_info}{Player ID, name, team, position.}
-#'     \item{skills}{Data.frame of stat rating estimates with percentile ranks.}
-#'     \item{ref_date}{Reference date used.}
-#'   }
-#'
-#' @export
-player_stat_rating_profile <- function(player_name, ref_date = Sys.Date(),
-                                  seasons = TRUE, params = NULL,
-                                  skills = NULL) {
-  player <- resolve_player(player_name, seasons = seasons)
-  pid <- player$player_id
-
-  if (!is.null(skills)) {
-    # Fast path: use pre-computed skills
-    all_ratings <- data.table::as.data.table(skills)
-    # If multiple snapshots per player, keep latest at or before ref_date
-    if ("ref_date" %in% names(all_ratings)) {
-      all_ratings <- all_ratings[all_ratings$ref_date <= ref_date]
-      all_ratings <- all_ratings[all_ratings[, .I[which.max(ref_date)], by = player_id]$V1]
+    # CI
+    if (compute_ci) {
+      lower_col <- paste0(stat_nm, "_rating_lower")
+      upper_col <- paste0(stat_nm, "_rating_upper")
+      p_look[, (lower_col) := stats::qgamma(ci_alpha, shape = alpha_post, rate = beta_post)]
+      p_look[, (upper_col) := stats::qgamma(1 - ci_alpha, shape = alpha_post, rate = beta_post)]
+      merge_cols <- c(rating_col, raw_col, n80_col, wt80_col, lower_col, upper_col)
+    } else {
+      merge_cols <- c(rating_col, raw_col, n80_col, wt80_col)
     }
-  } else {
-    # Slow path: compute from scratch
-    pgd <- load_player_game_data(seasons, use_disk_cache = TRUE)
-    ps <- load_player_stats(seasons, use_disk_cache = TRUE)
-    stat_rating_data <- .prepare_stat_rating_data(pgd, ps)
-    all_ratings <- estimate_player_stat_ratings(stat_rating_data, ref_date = ref_date, params = params)
+
+    # Merge into result via keyed join
+    data.table::setkeyv(p_look, c("grp", "ref_idx"))
+    for (mc in merge_cols)
+      res[p_look, (mc) := get(paste0("i.", mc)), on = .(player_id = grp, ref_idx)]
+    cli::cli_progress_update()
   }
 
-  if (nrow(all_ratings) == 0 || !pid %in% all_ratings$player_id) {
-    cli::cli_abort("Player {.val {player_name}} not found in stat rating estimates (may have fewer than {STAT_RATING_MIN_GAMES} weighted games)")
+  # === Efficiency stats (Beta-Binomial) via cumsum ===
+  for (i in seq_len(nrow(eff_defs))) {
+    stat_nm       <- eff_defs$stat_name[i]
+    success_spec  <- eff_defs$success_col[i]
+    attempts_spec <- eff_defs$attempts_col[i]
+    if (is.na(success_spec) || is.na(attempts_spec)) next
+
+    use_played_only <- !is.na(eff_defs$played_only[i]) && isTRUE(eff_defs$played_only[i])
+    dt_eff <- if (use_played_only) dt[avail_only == FALSE] else dt
+
+    ep <- .resolve_eff_params(stat_nm)
+    lam <- ep$lambda
+    prior_str <- ep$prior
+
+    # Successes and attempts
+    successes <- if (success_spec %in% names(dt_eff)) {
+      as.numeric(dt_eff[[success_spec]])
+    } else {
+      .compute_stat_rating_denominator(dt_eff, success_spec)
+    }
+    successes[is.na(successes)] <- 0
+
+    attempts <- .compute_stat_rating_denominator(dt_eff, attempts_spec)
+    attempts[is.na(attempts)] <- 0
+    successes <- pmin(successes, attempts)
+
+    base_w <- exp(lam * dt_eff$.d)
+
+    # Per-player cumsums (weighted successes and weighted attempts)
+    pcs <- data.table::data.table(
+      grp = dt_eff$player_id, match_date_rating = dt_eff$match_date_rating,
+      cum_num = base_w * successes, cum_den = base_w * attempts
+    )
+    data.table::setorder(pcs, grp, match_date_rating)
+    pcs[, `:=`(cum_num = cumsum(cum_num), cum_den = cumsum(cum_den)), by = grp]
+    p_look <- .lookup_cumsums(pcs, all_pids)
+    p_look[, ref_d_val := ref_d[ref_idx]]
+    p_look[, `:=`(w_num = cum_num * exp(-lam * ref_d_val),
+                  w_den = cum_den * exp(-lam * ref_d_val))]
+
+    # Position priors (ratio — scaling cancels)
+    use_pos <- is.na(eff_defs$pos_adjusted[i]) || isTRUE(eff_defs$pos_adjusted[i])
+    if (use_pos) {
+      pos_cs <- data.table::data.table(
+        grp = dt_eff$pos_group, match_date_rating = dt_eff$match_date_rating,
+        cum_num = base_w * successes, cum_den = base_w * attempts
+      )
+      pos_cs <- pos_cs[!is.na(grp)]
+      data.table::setorder(pos_cs, grp, match_date_rating)
+      pos_cs[, `:=`(cum_num = cumsum(cum_num), cum_den = cumsum(cum_den)), by = grp]
+      pos_look <- .lookup_cumsums(pos_cs, pos_groups)
+      pos_look[, pos_prop := {
+        pp <- data.table::fifelse(cum_den > 0, cum_num / cum_den, NA_real_)
+        pmax(pmin(pp, 1 - 1e-6), 1e-6)
+      }]
+    }
+
+    # Grand proportion
+    glob_cs <- data.table::data.table(
+      grp = "ALL", match_date_rating = dt_eff$match_date_rating,
+      cum_num = base_w * successes, cum_den = base_w * attempts
+    )
+    data.table::setorder(glob_cs, grp, match_date_rating)
+    glob_cs[, `:=`(cum_num = cumsum(cum_num), cum_den = cumsum(cum_den)), by = grp]
+    g_look <- .lookup_cumsums(glob_cs, "ALL")
+    g_look[, grand_prop := {
+      gp <- data.table::fifelse(cum_den > 0, cum_num / cum_den, 0.5)
+      pmax(pmin(gp, 1 - 1e-6), 1e-6)
+    }]
+
+    # Merge position/grand priors into player lookup
+    p_look[pos_meta, pos_group := i.pos_group, on = .(grp = player_id, ref_idx)]
+    if (use_pos) {
+      p_look[pos_look, pos_prop := i.pos_prop, on = .(pos_group = grp, ref_idx)]
+    }
+    p_look[g_look, grand_prop := i.grand_prop, on = "ref_idx"]
+    if (use_pos) {
+      p_look[is.na(pos_prop), pos_prop := grand_prop]
+      p_look[, mu0 := pos_prop]
+    } else {
+      p_look[, mu0 := grand_prop]
+    }
+    p_look[is.na(mu0), mu0 := 0.5]
+
+    # Posterior
+    p_look[, `:=`(
+      alpha_post = mu0 * prior_str + w_num,
+      beta_post  = (1 - mu0) * prior_str + w_den - w_num
+    )]
+    # Guard against invalid Beta params
+    p_look[alpha_post <= 0, alpha_post := 1e-4]
+    p_look[beta_post  <= 0, beta_post  := 1e-4]
+
+    rating_col <- paste0(stat_nm, "_rating")
+    raw_col    <- paste0(stat_nm, "_raw")
+    att_col    <- paste0(stat_nm, "_attempts")
+    wt_att_col <- paste0(stat_nm, "_wt_attempts")
+
+    p_look[, (rating_col) := alpha_post / (alpha_post + beta_post)]
+
+    # Raw (unweighted) cumsums for raw rate and attempt counts
+    raw_cs <- data.table::data.table(
+      grp = dt_eff$player_id, match_date_rating = dt_eff$match_date_rating,
+      cum_num = successes, cum_den = attempts
+    )
+    data.table::setorder(raw_cs, grp, match_date_rating)
+    raw_cs[, `:=`(cum_num = cumsum(cum_num), cum_den = cumsum(cum_den)), by = grp]
+    raw_look <- .lookup_cumsums(raw_cs, all_pids)
+    p_look[raw_look, `:=`(.raw_succ = i.cum_num, .raw_att = i.cum_den),
+           on = .(grp, ref_idx)]
+    p_look[, (raw_col) := data.table::fifelse(.raw_att > 0, .raw_succ / .raw_att, NA_real_)]
+    p_look[, (att_col) := .raw_att]
+    p_look[, (wt_att_col) := w_den]
+
+    # CI
+    if (compute_ci) {
+      lower_col <- paste0(stat_nm, "_rating_lower")
+      upper_col <- paste0(stat_nm, "_rating_upper")
+      p_look[, (lower_col) := stats::qbeta(ci_alpha, alpha_post, beta_post)]
+      p_look[, (upper_col) := stats::qbeta(1 - ci_alpha, alpha_post, beta_post)]
+      merge_cols <- c(rating_col, raw_col, att_col, wt_att_col, lower_col, upper_col)
+    } else {
+      merge_cols <- c(rating_col, raw_col, att_col, wt_att_col)
+    }
+
+    # Merge into result via keyed join
+    data.table::setkeyv(p_look, c("grp", "ref_idx"))
+    for (mc in merge_cols)
+      res[p_look, (mc) := get(paste0("i.", mc)), on = .(player_id = grp, ref_idx)]
+    cli::cli_progress_update()
   }
 
-  # Extract target player row (ensure single row)
-  player_row <- all_ratings[player_id == pid]
-  if (nrow(player_row) > 1) {
-    cli::cli_warn("Multiple skill rows found for player {.val {player_name}}, using latest")
-    player_row <- player_row[which.max(ref_date)]
-  }
-  player_pos <- player_row$pos_group[1]
+  cli::cli_progress_done()
+  stats_elapsed <- (proc.time() - t_stats)[["elapsed"]]
 
-  # Subsets for percentile computation
-  if (is.na(player_pos)) {
-    cli::cli_warn("Player {.val {player_name}} has no position group; position-based comparisons will be NA")
-    pos_subset <- all_ratings[0]
-  } else {
-    pos_subset <- all_ratings[pos_group == player_pos]
-  }
-  stat_defs <- stat_rating_definitions()
-  rating_cols <- paste0(stat_defs$stat_name, "_rating")
-  rating_cols <- intersect(rating_cols, names(all_ratings))
-  stat_names <- sub("_rating$", "", rating_cols)
+  if (length(skipped_stats) > 0)
+    cli::cli_warn("Skipped {length(skipped_stats)} stat(s) due to missing columns: {paste(skipped_stats, collapse = ', ')}")
 
-  # Build profile data.frame
-  profile <- data.frame(stat = stat_names, stringsAsFactors = FALSE)
-  profile$rating <- as.numeric(player_row[, ..rating_cols])
+  # === Filter and split into per-ref_date results ===
+  res <- res[wt_games >= params$min_games]
+  data.table::setorder(res, ref_idx, -wt_games)
+  res[, ref_idx := NULL]
 
-  # Raw average (unsmoothed career average, NA if column missing)
-  raw_cols <- paste0(stat_names, "_raw")
-  if (!any(raw_cols %in% names(player_row))) {
-    cli::cli_inform(c("i" = "Pre-computed skills data is missing raw average columns.",
-                       "i" = "Re-run {.fn estimate_player_stat_ratings} for raw averages."))
-  }
-  profile$raw_avg <- .extract_player_cols(player_row, raw_cols)
+  # Split into named list keyed by ref_date as character (same format as before)
+  if (nrow(res) == 0) return(list())
+  result_list <- split(res, by = "ref_date", keep.by = TRUE)
+  # split() names by ref_date character values — matches original output format
+  result_list <- result_list[vapply(result_list, function(x) nrow(x) > 0, logical(1))]
 
-  # League-wide and position-group comparisons (flip percentiles for negative stats)
-  hib <- stat_defs$higher_is_better[match(stat_names, stat_defs$stat_name)]
-  profile$league_avg <- .col_means(all_ratings, rating_cols)
-  profile$league_pct <- .col_pctiles(all_ratings, rating_cols, player_row, hib)
-  profile$pos_avg    <- .col_means(pos_subset, rating_cols)
-  profile$pos_pct    <- .col_pctiles(pos_subset, rating_cols, player_row, hib)
-
-  # Exposure: per-stat 80s for rate stats, attempts for efficiency stats
-  profile$n_80s  <- .extract_player_cols(player_row, paste0(stat_names, "_n80s"))
-  profile$wt_80s <- .extract_player_cols(player_row, paste0(stat_names, "_wt80s"))
-  profile$attempts    <- .extract_player_cols(player_row, paste0(stat_names, "_attempts"))
-  profile$wt_attempts <- .extract_player_cols(player_row, paste0(stat_names, "_wt_attempts"))
-
-  # Credible intervals — merge both naming conventions for transition period
-  lower_cols_new <- paste0(stat_names, "_rating_lower")
-  lower_cols_old <- paste0(stat_names, "_lower")
-  upper_cols_new <- paste0(stat_names, "_rating_upper")
-  upper_cols_old <- paste0(stat_names, "_upper")
-  # Prefer _rating_lower, fall back to _lower per stat
-  lower_cols <- ifelse(lower_cols_new %in% names(player_row), lower_cols_new, lower_cols_old)
-  upper_cols <- ifelse(upper_cols_new %in% names(player_row), upper_cols_new, upper_cols_old)
-  lower_present <- intersect(lower_cols, names(player_row))
-  upper_present <- intersect(upper_cols, names(player_row))
-  if (length(lower_present) == nrow(profile) && length(upper_present) == nrow(profile)) {
-    profile$lower <- as.numeric(player_row[, ..lower_present])
-    profile$upper <- as.numeric(player_row[, ..upper_present])
-  }
-
-  # Add category/type from stat definitions
-  profile <- merge(
-    profile,
-    stat_defs[, c("stat_name", "category", "type")],
-    by.x = "stat", by.y = "stat_name", all.x = TRUE
-  )
-
-  # Reorder columns
-  col_order <- c("category", "stat", "type", "rating", "raw_avg",
-                  "league_avg", "league_pct", "pos_avg", "pos_pct",
-                  "n_80s", "wt_80s", "attempts", "wt_attempts",
-                  "lower", "upper")
-  col_order <- intersect(col_order, names(profile))
-  profile <- profile[, col_order]
-
-  out <- list(
-    player_info = data.frame(
-      player_id = pid,
-      name = player$player_name,
-      team = player$team,
-      position = player$position,
-      pos_group = player_pos,
-      stringsAsFactors = FALSE
-    ),
-    stat_ratings = profile[order(-profile$pos_pct), ],
-    ref_date = ref_date,
-    n_games = as.numeric(player_row$n_games),
-    n_80s = as.numeric(player_row$n_80s),
-    wt_80s = as.numeric(player_row$wt_80s)
-  )
-  class(out) <- "torp_stat_rating_profile"
-  out
-}
-
-
-#' Print a player stat rating profile
-#'
-#' @param x A \code{torp_stat_rating_profile} object.
-#' @param ... Additional arguments (ignored).
-#' @return Invisibly returns \code{x}.
-#' @export
-print.torp_stat_rating_profile <- function(x, ...) {
-  info <- x$player_info
-  sk <- x$stat_ratings
-
-  # Header: games and 80s
-  n_g <- if (!is.null(x$n_games)) x$n_games else NA
-  n_80 <- if (!is.null(x$n_80s)) round(x$n_80s, 1) else NA
-  wt_80 <- if (!is.null(x$wt_80s)) round(x$wt_80s, 1) else NA
-  cat(paste0(
-    "=== Stat Rating Profile: ", info$name,
-    " (", info$team, " - ", info$pos_group, ") ===\n",
-    "As at: ", x$ref_date,
-    "  |  Games: ", n_g,
-    "  |  80s: ", n_80, " (wt: ", wt_80, ")\n\n"
+  total_elapsed <- (proc.time() - t_batch_start)[["elapsed"]]
+  setup_elapsed <- total_elapsed - stats_elapsed
+  cli::cli_inform(paste0(
+    "Batch estimation: {length(result_list)} ref_dates, ",
+    "{n_total_stats} stats in {round(total_elapsed, 1)}s ",
+    "(setup {round(setup_elapsed, 1)}s + stats {round(stats_elapsed, 1)}s)"
   ))
-
-  # Select display columns (exclude lower/upper)
-  display_cols <- intersect(
-    c("category", "stat", "type", "rating", "raw_avg",
-      "league_avg", "league_pct", "pos_avg", "pos_pct",
-      "n_80s", "wt_80s", "attempts", "wt_attempts"),
-    names(sk)
-  )
-  display <- sk[, display_cols]
-
-  # Format: 4 sig figs for estimates, 1 dp for percentiles and exposure
-  fmt_sig4 <- function(v) {
-    vapply(v, function(x) {
-      if (is.na(x)) return("")
-      format(signif(x, 4), scientific = FALSE, drop0trailing = TRUE, trim = TRUE)
-    }, character(1), USE.NAMES = FALSE)
-  }
-  fmt_1dp <- function(v) {
-    ifelse(is.na(v), "", formatC(round(v, 1), format = "f", digits = 1))
-  }
-  for (col in intersect(c("rating", "raw_avg", "league_avg", "pos_avg"), names(display))) {
-    display[[col]] <- fmt_sig4(display[[col]])
-  }
-  for (col in intersect(c("league_pct", "pos_pct"), names(display))) {
-    display[[col]] <- fmt_1dp(display[[col]])
-  }
-  for (col in intersect(c("n_80s", "wt_80s", "attempts", "wt_attempts"), names(display))) {
-    display[[col]] <- fmt_1dp(display[[col]])
-  }
-
-  print(display, row.names = FALSE)
-  invisible(x)
+  result_list
 }
 
 
-# ============================================================================
-# Quick player stat rating lookup
-# ============================================================================
-
-#' Get player stat rating estimates from pre-computed data
-#'
-#' A fast convenience function that looks up stat rating estimates from the
-#' pre-computed data stored in torpdata releases. When called with a player
-#' name, returns one row for that player. When called without arguments,
-#' returns the latest snapshot for every player.
-#'
-#' @param player_name A character string of the player's name (partial OK).
-#'   If NULL (default), returns all players.
-#' @param ref_date Optional date to filter to the latest snapshot at or before
-#'   this date. If NULL, uses the latest available snapshot.
-#' @param seasons Seasons to include. Numeric vector or TRUE for all.
-#' @param current If TRUE (default), only return players on a current team
-#'   (i.e. those with a stat rating estimate in the latest season). Set FALSE to
-#'   include all historical players.
-#'
-#' @return A data.table of stat rating estimates -- one row per player.
-#'
-#' @seealso [player_stat_rating_profile()] for full profile with percentile ranks,
-#'   [load_player_stat_ratings()] to load raw pre-computed data.
-#'
-#' @export
-get_player_stat_ratings <- function(player_name = NULL, ref_date = NULL, seasons = TRUE,
-                              current = TRUE) {
-  skills <- load_player_stat_ratings(seasons, use_disk_cache = TRUE)
-  dt <- data.table::as.data.table(skills)
-
-  if (!is.null(ref_date)) {
-    ref_date <- as.Date(ref_date)
-    dt <- dt[dt$ref_date <= ref_date]
-  }
-
-  if (!is.null(player_name)) {
-    player <- resolve_player(player_name, seasons = seasons)
-    dt <- dt[player_id == player$player_id]
-    if (nrow(dt) == 0) {
-      cli::cli_abort("No skills found for {.val {player_name}}")
-    }
-  }
-
-  if (nrow(dt) == 0) {
-    cli::cli_warn("No skills found for the specified filters")
-    return(dt)
-  }
-
-  # Keep latest snapshot per player
-  dt <- dt[dt[, .I[which.max(ref_date)], by = player_id]$V1]
-
-  # Filter to current players (those in the latest season)
-  if (current && is.null(player_name)) {
-    max_season <- max(dt$season, na.rm = TRUE)
-    dt <- dt[season == max_season]
-  }
-
-  # Drop lower/upper interval columns
-  drop_cols <- grep("_(lower|upper)$", names(dt), value = TRUE)
-  if (length(drop_cols) > 0) dt[, (drop_cols) := NULL]
-
-  dt
-}
-
-
-# ============================================================================
-# Team stat rating aggregation
-# ============================================================================
-
-#' Aggregate player stat ratings to team level
-#'
-#' For each team in a lineup, sums and averages the stat rating estimates of the
-#' players in that team. Used to create team-level features for match
-#' prediction models.
-#'
-#' @param skills A data.table from \code{estimate_player_stat_ratings()}.
-#' @param team_lineups A data.table with columns \code{match_id},
-#'   \code{team}, and \code{player_id} identifying the lineup for each
-#'   match-team combination.
-#' @param top_n Maximum number of players per team to include. Default 22.
-#'
-#' @return A data.table with one row per match-team, containing
-#'   \code{match_id}, \code{team}, and for each stat:
-#'   \code{{stat}_team_sum} and \code{{stat}_team_mean}.
-#'
-#' @importFrom data.table as.data.table
-#' @export
-aggregate_team_stat_ratings <- function(skills, team_lineups, top_n = 22) {
-  skills_dt <- data.table::copy(data.table::as.data.table(skills))
-  lineups_dt <- data.table::copy(data.table::as.data.table(team_lineups))
-
-  # Ensure player_id columns match type
-  if (is.character(skills_dt$player_id) && is.numeric(lineups_dt$player_id)) {
-    lineups_dt[, player_id := as.character(player_id)]
-  }
-
-  # Drop columns from skills that would conflict with lineup columns
-  conflict_cols <- intersect(names(skills_dt), names(lineups_dt))
-  conflict_cols <- setdiff(conflict_cols, "player_id")
-  if (length(conflict_cols) > 0) {
-    skills_dt[, (conflict_cols) := NULL]
-  }
-
-  # Join skills to lineups
-  merged <- merge(lineups_dt, skills_dt, by = "player_id", all.x = TRUE)
-
-  # Find skill columns
-  stat_defs <- stat_rating_definitions()
-  rating_cols <- paste0(stat_defs$stat_name, "_rating")
-  rating_cols <- intersect(rating_cols, names(merged))
-
-  if (length(rating_cols) == 0) {
-    cli::cli_warn("No stat rating columns found in merged data")
-    return(data.table::data.table())
-  }
-
-  # For each match-team, take top_n players by total stat rating and aggregate
-  merged[, .total_rating := rowSums(.SD, na.rm = TRUE), .SDcols = rating_cols]
-
-  result <- merged[order(-`.total_rating`),
-    head(.SD, top_n),
-    by = .(match_id, team)
-  ][, {
-    out <- list(n_players = .N)
-    for (rc in rating_cols) {
-      stat_nm <- sub("_rating$", "", rc)
-      vals <- get(rc)
-      out[[paste0(stat_nm, "_team_sum")]] <- sum(vals, na.rm = TRUE)
-      out[[paste0(stat_nm, "_team_mean")]] <- mean(vals, na.rm = TRUE)
-    }
-    out
-  }, by = .(match_id, team)]
-
-  # Clean up
-  merged[, .total_rating := NULL]
-
-  result
-}
-
-
-# ============================================================================
 # Backward compatibility aliases
-# ============================================================================
-
-#' @rdname .prepare_stat_rating_data
-#' @keywords internal
-.prepare_skill_data <- .prepare_stat_rating_data
-
-#' @rdname .resolve_stat_rating_positions
-#' @keywords internal
-.resolve_skill_positions <- .resolve_stat_rating_positions
-
-#' @rdname .compute_stat_rating_denominator
-#' @keywords internal
-.compute_skill_denominator <- .compute_stat_rating_denominator
-
 #' @rdname estimate_player_stat_ratings
 #' @export
 estimate_player_skills <- estimate_player_stat_ratings
@@ -1133,19 +822,3 @@ estimate_player_skills <- estimate_player_stat_ratings
 #' @rdname .estimate_stat_ratings_batch
 #' @keywords internal
 .estimate_skills_batch <- .estimate_stat_ratings_batch
-
-#' @rdname player_stat_rating_profile
-#' @export
-player_skill_profile <- player_stat_rating_profile
-
-#' @rdname print.torp_stat_rating_profile
-#' @export
-print.torp_skill_profile <- function(x, ...) print.torp_stat_rating_profile(x, ...)
-
-#' @rdname get_player_stat_ratings
-#' @export
-get_player_skills <- get_player_stat_ratings
-
-#' @rdname aggregate_team_stat_ratings
-#' @export
-aggregate_team_skills <- aggregate_team_stat_ratings
