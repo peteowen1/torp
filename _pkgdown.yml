@@ -30,6 +30,7 @@ articles:
   - title: Guides
     contents:
       - torp-guide
+      - visualizations
 
 reference:
   - title: Data Loading
@@ -88,6 +89,14 @@ reference:
       - get_team_stat_ratings
       - team_stat_rating_profile
       - print.torp_team_stat_rating_profile
+
+  - title: Visualization
+    desc: Plot functions for game flow, player ratings, simulations, and team comparisons
+    contents:
+      - starts_with("plot_")
+      - theme_torp
+      - team_color_scale
+      - team_fill_scale
 
   - title: Season Simulation
     desc: Simulate AFL seasons and predict match outcomes

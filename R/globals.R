@@ -4,7 +4,7 @@
 # such as data.table and dplyr operations to avoid "no visible binding" NOTEs.
 
 #' @importFrom stats binomial coef complete.cases gaussian lm pchisq quantile sd var setNames
-#' @importFrom utils head
+#' @importFrom utils head tail
 #' @importFrom lubridate tz
 NULL
 
@@ -354,4 +354,20 @@ utils::globalVariables(c(
 utils::globalVariables(c(
   "pf", "pa", "loss", "draw", "round", "last_match",
   "..mean_cols", "..sum_cols", "..display_cols"
+))
+
+# torp_movers variables
+utils::globalVariables(c("change", "direction", "prev", "curr"))
+
+# Plot variables (NSE in ggplot2 aes/data manipulation)
+utils::globalVariables(c(
+  "total_seconds", "wp", "exp_pts", "home_wp",
+  "game_date", "game_number", "rolling_avg",
+  "percentile", "stat_name", "category",
+  "avg_wins", "pct", "prob", "ladder_position",
+  "metric_value",
+  # Shot map
+  "goal_prob", "behind_prob", "clanger_prob", "xscore", "outcome",
+  # Player comparison
+  "player_label", "season_fac", "avg_pct"
 ))

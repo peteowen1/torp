@@ -361,6 +361,7 @@ load_chains <- function(seasons = get_afl_season(), rounds = TRUE, use_disk_cach
     .normalise_chains_columns(out)
   }
 
+  if (nrow(out) > 0) out <- .normalise_team_values(out)
   return(out)
 }
 
@@ -390,6 +391,7 @@ load_pbp <- function(seasons = get_afl_season(), rounds = TRUE, use_disk_cache =
 
   out <- load_from_url(urls, seasons = seasons, rounds = rounds, use_disk_cache = use_disk_cache, columns = columns)
 
+  if (nrow(out) > 0) out <- .normalise_team_values(out)
   return(out)
 }
 
@@ -431,6 +433,7 @@ load_xg <- function(seasons = get_afl_season(), rounds = NULL, use_disk_cache = 
     out <- out[round_number %in% as.integer(rounds)]
   }
 
+  if (nrow(out) > 0) out <- .normalise_team_values(out)
   return(out)
 }
 
@@ -470,6 +473,7 @@ load_player_stats <- function(seasons = get_afl_season(), use_disk_cache = TRUE,
   # Normalise once after retrieval (handles both fresh API data and stale disk cache)
   if (nrow(out) > 0) out <- tibble::as_tibble(.normalise_player_stats_columns(out))
 
+  if (nrow(out) > 0) out <- .normalise_team_values(out)
   out
 }
 
@@ -502,6 +506,7 @@ load_player_game_data <- function(seasons = get_afl_season(), use_disk_cache = F
   # Normalise old abbreviated column names (plyr_nm → player_name, etc.)
   if (nrow(out) > 0) .normalise_columns(out, PLAYER_GAME_COL_MAP)
 
+  if (nrow(out) > 0) out <- .normalise_team_values(out)
   return(out)
 }
 
@@ -547,7 +552,7 @@ load_fixtures <- function(seasons = NULL, all = FALSE, use_disk_cache = FALSE,
     seasons <- validate_seasons(seasons)
   }
 
-  .load_with_cache(
+  out <- .load_with_cache(
     cache_prefix = "fixtures",
     seasons = seasons,
     fetch_fn = get_afl_fixtures,
@@ -557,6 +562,8 @@ load_fixtures <- function(seasons = NULL, all = FALSE, use_disk_cache = FALSE,
     columns = columns,
     use_disk_cache = use_disk_cache
   )
+  if (nrow(out) > 0) out <- .normalise_team_values(out)
+  out
 }
 
 
@@ -602,6 +609,7 @@ load_teams <- function(seasons = get_afl_season(), use_disk_cache = TRUE, refres
     }
   }
 
+  if (nrow(out) > 0) out <- .normalise_team_values(out)
   out
 }
 
@@ -625,13 +633,15 @@ load_teams <- function(seasons = get_afl_season(), use_disk_cache = TRUE, refres
 load_results <- function(seasons = get_afl_season(), use_disk_cache = FALSE, columns = NULL) {
   seasons <- validate_seasons(seasons)
 
-  .load_with_cache(
+  out <- .load_with_cache(
     cache_prefix = "results",
     seasons = seasons,
     fetch_fn = get_afl_results,
     columns = columns,
     use_disk_cache = use_disk_cache
   )
+  if (nrow(out) > 0) out <- .normalise_team_values(out)
+  out
 }
 
 #' Load AFL Player Details Data
@@ -658,7 +668,7 @@ load_results <- function(seasons = get_afl_season(), use_disk_cache = FALSE, col
 load_player_details <- function(seasons = get_afl_season(), use_disk_cache = TRUE, refresh = FALSE, columns = NULL) {
   seasons <- validate_seasons(seasons)
 
-  .load_with_cache(
+  out <- .load_with_cache(
     cache_prefix = "player_details",
     seasons = seasons,
     fetch_fn = get_afl_player_details,
@@ -667,6 +677,8 @@ load_player_details <- function(seasons = get_afl_season(), use_disk_cache = TRU
     use_disk_cache = use_disk_cache,
     refresh = refresh
   )
+  if (nrow(out) > 0) out <- .normalise_team_values(out)
+  out
 }
 
 #' Load AFL Match Predictions Data
@@ -703,6 +715,7 @@ load_predictions <- function(seasons = get_afl_season(), rounds = get_afl_week(t
     out <- tibble::as_tibble(out)
   }
 
+  if (nrow(out) > 0) out <- .normalise_team_values(out)
   return(out)
 }
 
@@ -742,6 +755,7 @@ load_retrodictions <- function(seasons = get_afl_season(), rounds = get_afl_week
     out <- tibble::as_tibble(out)
   }
 
+  if (nrow(out) > 0) out <- .normalise_team_values(out)
   return(out)
 }
 
@@ -773,6 +787,7 @@ load_torp_ratings <- function(columns = NULL) {
   if (nrow(out) == 0) {
     cli::cli_warn("No TORP ratings data loaded. The file may not exist yet or the download failed.")
   }
+  if (nrow(out) > 0) out <- .normalise_team_values(out)
   out
 }
 
@@ -821,6 +836,7 @@ load_player_game_ratings <- function(seasons = get_afl_season(), rounds = TRUE, 
   # Normalise old display column names (total_points → epv_raw, etc.)
   if (nrow(out) > 0) .normalise_columns(out, PLAYER_GAME_RATINGS_COL_MAP)
 
+  if (nrow(out) > 0) out <- .normalise_team_values(out)
   return(out)
 }
 
@@ -860,6 +876,7 @@ load_player_season_ratings <- function(seasons = get_afl_season(), use_disk_cach
   # Normalise old season rating column names
   if (nrow(out) > 0) .normalise_columns(out, PLAYER_GAME_RATINGS_COL_MAP)
 
+  if (nrow(out) > 0) out <- .normalise_team_values(out)
   return(out)
 }
 
@@ -893,6 +910,7 @@ load_team_ratings <- function(columns = NULL) {
   if (nrow(out) == 0) {
     cli::cli_warn("No team ratings data loaded. The file may not exist yet or the download failed.")
   }
+  if (nrow(out) > 0) out <- .normalise_team_values(out)
   out
 }
 
@@ -921,6 +939,7 @@ load_injury_data <- function(seasons = get_afl_season(), columns = NULL) {
   base_url <- paste0("https://github.com/", get_torp_data_repo(), "/releases/download")
   urls <- paste0(base_url, "/injury-data/injury_list_", seasons, ".parquet")
   out <- load_from_url(urls, seasons = seasons, columns = columns)
+  if (nrow(out) > 0) out <- .normalise_team_values(out)
   out
 }
 
@@ -963,6 +982,7 @@ load_ep_wp_charts <- function(seasons = get_afl_season(), rounds = TRUE, use_dis
 
   out <- load_from_url(urls, seasons = seasons, rounds = rounds, use_disk_cache = use_disk_cache, columns = columns)
 
+  if (nrow(out) > 0) out <- .normalise_team_values(out)
   return(out)
 }
 
@@ -1003,6 +1023,7 @@ load_player_stat_ratings <- function(seasons = get_afl_season(), use_disk_cache 
   # Map old *_skill columns to *_rating for backward compat with old parquets
   .normalise_stat_rating_columns(out)
 
+  if (nrow(out) > 0) out <- .normalise_team_values(out)
   return(out)
 }
 
@@ -1044,6 +1065,7 @@ load_psr <- function(seasons = get_afl_season(), use_disk_cache = FALSE, columns
 
   out <- load_from_url(urls, seasons = seasons, use_disk_cache = use_disk_cache, columns = columns)
 
+  if (nrow(out) > 0) out <- .normalise_team_values(out)
   return(out)
 }
 

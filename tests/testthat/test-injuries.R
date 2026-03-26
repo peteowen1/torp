@@ -303,6 +303,7 @@ test_that("build_injury_schedule aggregates same-round returns", {
   )
   result <- build_injury_schedule(injuries, ratings)
   # Both return round 5, should be aggregated into one row per team
-  sydney_r5 <- result[team == "Sydney" & return_round == 5]
+  # build_injury_schedule normalizes team names via torp_replace_teams
+  sydney_r5 <- result[team == "Sydney Swans" & return_round == 5]
   expect_equal(nrow(sydney_r5), 1)
 })

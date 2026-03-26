@@ -2,7 +2,7 @@
 % Please edit documentation in R/cache.R
 \name{get_from_cache}
 \alias{get_from_cache}
-\title{Get data from cache}
+\title{Get data from cache (no TTL check)}
 \usage{
 get_from_cache(cache_key)
 }
@@ -13,6 +13,9 @@ get_from_cache(cache_key)
 Cached data or NULL if not found
 }
 \description{
-Get data from cache
+Returns cached data regardless of age. Use for session-scoped lookups
+(e.g. comp season IDs) where staleness is acceptable. For TTL-aware
+retrieval, use \code{\link[=get_from_cache_ttl]{get_from_cache_ttl()}} or the full \code{\link[=.load_with_cache]{.load_with_cache()}}
+pipeline.
 }
 \keyword{internal}

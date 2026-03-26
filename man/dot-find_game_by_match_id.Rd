@@ -16,6 +16,6 @@ A single-row data.frame of game metadata, or empty data.frame.
 }
 \description{
 Extracts the round number from the match ID structure
-(\verb{CD_M\{year\}\{comp\}\{round\}\{game\}}) and fetches that round's fixtures directly.
+and fetches that round's fixtures directly.
 }
 \keyword{internal}

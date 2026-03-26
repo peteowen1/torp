@@ -27,9 +27,10 @@ calculate_match_xgs <- function(season = get_afl_season(), round = get_afl_week(
     ))
   }
 
-  # Normalise team names so PBP 'team' col (short names) matches home/away names
+  # Normalise team names so PBP 'team' col matches home/away names
   df <- df |>
     dplyr::mutate(
+      team = torp_replace_teams(.data$team),
       home_team_name = torp_replace_teams(.data$home_team_name),
       away_team_name = torp_replace_teams(.data$away_team_name)
     )
@@ -146,6 +147,7 @@ get_xg <- function(match = NULL,
   # --- Summarise to match-level xG (reuse calculate_match_xgs logic) ---
   pbp <- pbp |>
     dplyr::mutate(
+      team = torp_replace_teams(.data$team),
       home_team_name = torp_replace_teams(.data$home_team_name),
       away_team_name = torp_replace_teams(.data$away_team_name)
     )

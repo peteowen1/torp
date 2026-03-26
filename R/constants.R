@@ -836,3 +836,57 @@ AFL_TEAM_ALIASES <- c(
   "West Coast EAGLES"          = "West Coast Eagles",
   "Western BULLDOGS"           = "Western Bulldogs"
 )
+
+#' Primary team colours (hex) for AFL teams
+#'
+#' Named character vector mapping canonical team names to primary brand colour.
+#' @export
+AFL_TEAM_COLORS <- c(
+  "Adelaide Crows"            = "#002B5C",
+  "Brisbane Lions"            = "#A30046",
+  "Carlton Blues"              = "#002B5C",
+
+  "Collingwood Magpies"       = "#000000",
+  "Essendon Bombers"          = "#CC2031",
+
+  "Fremantle Dockers"         = "#2A0D45",
+  "Geelong Cats"              = "#001F3D",
+  "Gold Coast Suns"           = "#D4A843",
+  "GWS Giants"                = "#F15A22",
+  "Hawthorn Hawks"            = "#4D2004",
+  "Melbourne Demons"          = "#CC2031",
+  "North Melbourne Kangaroos" = "#003D8E",
+  "Port Adelaide Power"       = "#008AAB",
+  "Richmond Tigers"           = "#FED102",
+  "St Kilda Saints"           = "#ED1C24",
+  "Sydney Swans"              = "#ED171F",
+
+  "West Coast Eagles"         = "#002B5C",
+  "Western Bulldogs"          = "#014896"
+)
+
+#' Secondary team colours (hex) for AFL teams
+#'
+#' Named character vector mapping canonical team names to secondary brand colour.
+#' Useful for contrast in two-tone plots (e.g., home vs away fills).
+#' @export
+AFL_TEAM_COLORS2 <- c(
+  "Adelaide Crows"            = "#E21937",
+  "Brisbane Lions"            = "#FFB81C",
+  "Carlton Blues"              = "#FFFFFF",
+  "Collingwood Magpies"       = "#FFFFFF",
+  "Essendon Bombers"          = "#000000",
+  "Fremantle Dockers"         = "#FFFFFF",
+  "Geelong Cats"              = "#FFFFFF",
+  "Gold Coast Suns"           = "#E21937",
+  "GWS Giants"                = "#363636",
+  "Hawthorn Hawks"            = "#FBBF15",
+  "Melbourne Demons"          = "#002B5C",
+  "North Melbourne Kangaroos" = "#FFFFFF",
+  "Port Adelaide Power"       = "#000000",
+  "Richmond Tigers"           = "#000000",
+  "St Kilda Saints"           = "#000000",
+  "Sydney Swans"              = "#FFFFFF",
+  "West Coast Eagles"         = "#F2A900",
+  "Western Bulldogs"          = "#E21937"
+)
