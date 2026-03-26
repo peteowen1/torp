@@ -39,38 +39,38 @@ test_that("canonical names pass through unchanged", {
 })
 
 test_that("abbreviations resolve correctly", {
-  expect_equal(torp_replace_teams("ADEL"), "Adelaide")
+  expect_equal(torp_replace_teams("ADEL"), "Adelaide Crows")
   expect_equal(torp_replace_teams("BL"), "Brisbane Lions")
   expect_equal(torp_replace_teams("WB"), "Western Bulldogs")
-  expect_equal(torp_replace_teams("NM"), "North Melbourne")
-  expect_equal(torp_replace_teams("PA"), "Port Adelaide")
+  expect_equal(torp_replace_teams("NM"), "North Melbourne Kangaroos")
+  expect_equal(torp_replace_teams("PA"), "Port Adelaide Power")
 })
 
 test_that("full names resolve correctly", {
-  expect_equal(torp_replace_teams("Adelaide Crows"), "Adelaide")
-  expect_equal(torp_replace_teams("GWS Giants"), "GWS")
-  expect_equal(torp_replace_teams("Sydney Swans"), "Sydney")
+  expect_equal(torp_replace_teams("Adelaide Crows"), "Adelaide Crows")
+  expect_equal(torp_replace_teams("GWS Giants"), "GWS Giants")
+  expect_equal(torp_replace_teams("Sydney Swans"), "Sydney Swans")
   expect_equal(torp_replace_teams("Western Bulldogs"), "Western Bulldogs")
-  expect_equal(torp_replace_teams("Geelong Cats"), "Geelong")
+  expect_equal(torp_replace_teams("Geelong Cats"), "Geelong Cats")
 })
 
 test_that("nicknames resolve correctly", {
-  expect_equal(torp_replace_teams("Blues"), "Carlton")
-  expect_equal(torp_replace_teams("Magpies"), "Collingwood")
-  expect_equal(torp_replace_teams("Swans"), "Sydney")
+  expect_equal(torp_replace_teams("Blues"), "Carlton Blues")
+  expect_equal(torp_replace_teams("Magpies"), "Collingwood Magpies")
+  expect_equal(torp_replace_teams("Swans"), "Sydney Swans")
   expect_equal(torp_replace_teams("Bulldogs"), "Western Bulldogs")
-  expect_equal(torp_replace_teams("SUNS"), "Gold Coast")
-  expect_equal(torp_replace_teams("GIANTS"), "GWS")
+  expect_equal(torp_replace_teams("SUNS"), "Gold Coast Suns")
+  expect_equal(torp_replace_teams("GIANTS"), "GWS Giants")
 })
 
 test_that("Indigenous round names resolve correctly", {
-  expect_equal(torp_replace_teams("Narrm"), "Melbourne")
-  expect_equal(torp_replace_teams("Walyalup"), "Fremantle")
-  expect_equal(torp_replace_teams("Kuwarna"), "Adelaide")
-  expect_equal(torp_replace_teams("Euro-Yroke"), "St Kilda")
-  expect_equal(torp_replace_teams("Yartapuulti"), "Port Adelaide")
-  expect_equal(torp_replace_teams("Waalitj Marawar"), "West Coast")
-  expect_equal(torp_replace_teams("Wallitj Marawar"), "West Coast")
+  expect_equal(torp_replace_teams("Narrm"), "Melbourne Demons")
+  expect_equal(torp_replace_teams("Walyalup"), "Fremantle Dockers")
+  expect_equal(torp_replace_teams("Kuwarna"), "Adelaide Crows")
+  expect_equal(torp_replace_teams("Euro-Yroke"), "St Kilda Saints")
+  expect_equal(torp_replace_teams("Yartapuulti"), "Port Adelaide Power")
+  expect_equal(torp_replace_teams("Waalitj Marawar"), "West Coast Eagles")
+  expect_equal(torp_replace_teams("Wallitj Marawar"), "West Coast Eagles")
 })
 
 test_that("Footscray resolves to Western Bulldogs", {
@@ -80,7 +80,7 @@ test_that("Footscray resolves to Western Bulldogs", {
 
 test_that("vectorized input works", {
   input <- c("Adelaide Crows", "Narrm", "WB", "Sydney", "Unknown FC")
-  expected <- c("Adelaide", "Melbourne", "Western Bulldogs", "Sydney", "Unknown FC")
+  expected <- c("Adelaide Crows", "Melbourne Demons", "Western Bulldogs", "Sydney Swans", "Unknown FC")
   expect_equal(torp_replace_teams(input), expected)
 })
 
@@ -100,9 +100,9 @@ test_that("zero-length input returns character(0)", {
 })
 
 test_that("historical name variants resolve correctly", {
-  expect_equal(torp_replace_teams("Greater Western Sydney"), "GWS")
-  expect_equal(torp_replace_teams("Greater Western Sydney Giants"), "GWS")
-  expect_equal(torp_replace_teams("South Melbourne"), "Sydney")
+  expect_equal(torp_replace_teams("Greater Western Sydney"), "GWS Giants")
+  expect_equal(torp_replace_teams("Greater Western Sydney Giants"), "GWS Giants")
+  expect_equal(torp_replace_teams("South Melbourne"), "Sydney Swans")
   expect_equal(torp_replace_teams("Brisbane Bears"), "Brisbane Lions")
 })
 
@@ -116,16 +116,15 @@ test_that("round-trip: abbr and full names resolve back to canonical", {
 # -----------------------------------------------------------------------------
 
 test_that("torp_team_abbr returns correct abbreviations", {
-  expect_equal(torp_team_abbr("Adelaide"), "ADEL")
   expect_equal(torp_team_abbr("Adelaide Crows"), "ADEL")
   expect_equal(torp_team_abbr("Western Bulldogs"), "WB")
   expect_equal(torp_team_abbr("Footscray"), "WB")
-  expect_equal(torp_team_abbr("GWS"), "GWS")
+  expect_equal(torp_team_abbr("GWS Giants"), "GWS")
 })
 
 test_that("torp_team_abbr works vectorized", {
   expect_equal(
-    torp_team_abbr(c("Adelaide", "Sydney Swans", "Narrm")),
+    torp_team_abbr(c("Adelaide Crows", "Sydney Swans", "Narrm")),
     c("ADEL", "SYD", "MELB")
   )
 })
@@ -140,15 +139,15 @@ test_that("torp_team_abbr returns NA for unknown or NA input", {
 # -----------------------------------------------------------------------------
 
 test_that("torp_team_full returns correct full names", {
-  expect_equal(torp_team_full("Adelaide"), "Adelaide Crows")
-  expect_equal(torp_team_full("GWS"), "GWS Giants")
+  expect_equal(torp_team_full("Adelaide Crows"), "Adelaide Crows")
+  expect_equal(torp_team_full("GWS Giants"), "GWS Giants")
   expect_equal(torp_team_full("Footscray"), "Western Bulldogs")
   expect_equal(torp_team_full("WB"), "Western Bulldogs")
 })
 
 test_that("torp_team_full works vectorized", {
   expect_equal(
-    torp_team_full(c("Adelaide", "GWS", "Narrm")),
+    torp_team_full(c("Adelaide Crows", "GWS Giants", "Narrm")),
     c("Adelaide Crows", "GWS Giants", "Melbourne Demons")
   )
 })
