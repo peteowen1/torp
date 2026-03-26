@@ -23,6 +23,9 @@ save_to_release <- function(df, file_name, release_tag, also_csv = FALSE) {
   tf <- tempfile(fileext = ".parquet")
   on.exit(unlink(tf), add = TRUE)
 
+  # Normalise team name values to canonical forms before saving
+  if (nrow(df) > 0) df <- .normalise_team_values(df)
+
   tryCatch(
     arrow::write_parquet(df, tf),
     error = function(e) {

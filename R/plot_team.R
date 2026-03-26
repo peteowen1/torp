@@ -35,9 +35,6 @@ plot_team_ratings <- function(team_ratings = NULL,
     team_ratings <- team_ratings[team_ratings$round == latest_round, ]
   }
 
-  # Normalise team names to canonical full names for colour matching
-  team_ratings$team <- torp_replace_teams(team_ratings$team)
-
   # Map metric names: epr -> team_epr, recv -> team_recv, etc.
   col_name <- paste0("team_", metric)
   if (!col_name %in% names(team_ratings)) {

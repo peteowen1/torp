@@ -57,9 +57,9 @@ plot_ep_wp <- function(season = get_afl_season(), round = NULL, match_id = NULL,
     match_data <- data
   }
 
-  # Extract team names
-  home_team <- torp_replace_teams(match_data$home_team_name[1])
-  away_team <- torp_replace_teams(match_data$away_team_name[1])
+  # Extract team names (already canonical from load_ep_wp_charts normalization)
+  home_team <- match_data$home_team_name[1]
+  away_team <- match_data$away_team_name[1]
   rd <- match_data$round_number[1]
   szn <- match_data$season[1]
 
