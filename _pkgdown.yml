@@ -30,6 +30,7 @@ articles:
   - title: Guides
     contents:
       - torp-guide
+      - visualizations
 
 reference:
   - title: Data Loading
