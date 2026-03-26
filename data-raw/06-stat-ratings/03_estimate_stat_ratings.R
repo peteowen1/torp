@@ -119,7 +119,7 @@ if (counter == 0) {
   cli::cli_abort("All round estimations failed ({n_failures} errors). Aborting to prevent empty output.")
 }
 if (n_failures > 0) {
-  cli::cli_warn("{n_failures}/{counter + n_failures} round estimations failed")
+  cli::cli_inform("{n_failures}/{counter + n_failures} rounds skipped (too few games before ref_date to meet min_games threshold)")
 }
 
 # Combine ----

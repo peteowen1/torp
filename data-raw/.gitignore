@@ -1,6 +1,7 @@
 # Large generated data files
 outputs/*.rds
 outputs/*.parquet
+*.parquet
 
 # Transient rebuild logs
 rebuild_failures.csv

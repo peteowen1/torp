@@ -73,11 +73,12 @@ scrape_injuries <- function(timeout = 30) {
     if (is.null(inj) || nrow(inj) == 0) return(empty_df)
 
     # Standardise known name mismatches between AFL injury list and player data
-    inj$player <- dplyr::case_match(
-      inj$player,
-      "Cam Zurhaar" ~ "Cameron Zurhaar",
-      .default = inj$player
+    # Add new entries here as they arise (injury_name = canonical_name)
+    injury_name_fixes <- c(
+      "Cam Zurhaar" = "Cameron Zurhaar"
     )
+    fix_idx <- match(inj$player, names(injury_name_fixes))
+    inj$player[!is.na(fix_idx)] <- injury_name_fixes[fix_idx[!is.na(fix_idx)]]
 
     inj$player_norm <- norm_name(inj$player)
     inj

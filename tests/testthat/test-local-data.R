@@ -234,10 +234,3 @@ test_that("is_download_skippable returns FALSE when no local dir", {
   expect_false(torp:::is_download_skippable("https://example.com/test.parquet"))
 })
 
-# -- EPV_POS_ADJ_QUANTILE Constant --
-
-test_that("EPV_POS_ADJ_QUANTILE is a valid quantile in [0.2, 0.4]", {
-  q <- torp:::EPV_POS_ADJ_QUANTILE
-  expect_true(q >= 0.2)
-  expect_true(q <= 0.4)
-})

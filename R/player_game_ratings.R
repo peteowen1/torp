@@ -154,25 +154,29 @@ player_game_ratings <- function(season_val = get_afl_season(),
                                 "MEDIUM_FORWARD", .data$position)
     ) |>
     dplyr::mutate(
+      .total_tog = sum(.data$tog),
       recv_epv = round(.data$recv_epv_raw -
-        sum(.data$recv_epv_raw) / sum(.data$tog) * .data$tog, 1),
+        dplyr::if_else(.data$.total_tog > 0, sum(.data$recv_epv_raw) / .data$.total_tog * .data$tog, 0), 1),
       disp_epv = round(.data$disp_epv_raw -
-        sum(.data$disp_epv_raw) / sum(.data$tog) * .data$tog, 1),
+        dplyr::if_else(.data$.total_tog > 0, sum(.data$disp_epv_raw) / .data$.total_tog * .data$tog, 0), 1),
       spoil_epv = round(.data$spoil_epv_raw -
-        sum(.data$spoil_epv_raw) / sum(.data$tog) * .data$tog, 1),
+        dplyr::if_else(.data$.total_tog > 0, sum(.data$spoil_epv_raw) / .data$.total_tog * .data$tog, 0), 1),
       hitout_epv = round(.data$hitout_epv_raw -
-        sum(.data$hitout_epv_raw) / sum(.data$tog) * .data$tog, 1),
+        dplyr::if_else(.data$.total_tog > 0, sum(.data$hitout_epv_raw) / .data$.total_tog * .data$tog, 0), 1),
       epv = round(.data$recv_epv + .data$disp_epv +
         .data$spoil_epv + .data$hitout_epv, 1),
       .by = c("season", "position")
     ) |>
+    dplyr::select(-".total_tog") |>
     dplyr::mutate(
-      epv_p80 = round(.data$epv / .data$tog, 1),
-      recv_epv_p80 = round(.data$recv_epv / .data$tog, 1),
-      disp_epv_p80 = round(.data$disp_epv / .data$tog, 1),
-      spoil_epv_p80 = round(.data$spoil_epv / .data$tog, 1),
-      hitout_epv_p80 = round(.data$hitout_epv / .data$tog, 1)
+      .safe_tog = pmax(.data$tog, 0.1),
+      epv_p80 = round(.data$epv / .data$.safe_tog, 1),
+      recv_epv_p80 = round(.data$recv_epv / .data$.safe_tog, 1),
+      disp_epv_p80 = round(.data$disp_epv / .data$.safe_tog, 1),
+      spoil_epv_p80 = round(.data$spoil_epv / .data$.safe_tog, 1),
+      hitout_epv_p80 = round(.data$hitout_epv / .data$.safe_tog, 1)
     ) |>
+    dplyr::select(-".safe_tog") |>
     dplyr::select(-"epv_raw", -"recv_epv_raw", -"disp_epv_raw",
                    -"spoil_epv_raw", -"hitout_epv_raw")
 }

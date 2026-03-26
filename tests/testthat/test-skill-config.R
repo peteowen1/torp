@@ -69,9 +69,13 @@ test_that("default_stat_rating_params returns valid hyperparameters", {
                      "prior_attempts", "min_games", "credible_level")
   expect_true(all(expected_keys %in% names(params)))
 
-  # All values are positive
+  # All values are positive (min_games can be 0)
   for (k in expected_keys) {
-    expect_gt(params[[k]], 0)
+    if (k == "min_games") {
+      expect_gte(params[[k]], 0)
+    } else {
+      expect_gt(params[[k]], 0)
+    }
   }
 
   # Credible level is between 0 and 1

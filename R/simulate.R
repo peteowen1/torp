@@ -160,8 +160,9 @@ process_games_dt <- function(sim_teams, sim_games, round_num,
   )]
 
   # Generate individual scores from margin + total
+  has_xtotal <- "pred_xtotal" %in% names(sim_games)
   sim_games[!is.na(result), c("home_score", "away_score") := {
-    base_total <- if ("pred_xtotal" %in% names(sim_games)) {
+    base_total <- if (has_xtotal) {
       data.table::fifelse(is.na(pred_xtotal), SIM_AVG_TOTAL, pred_xtotal)
     } else {
       SIM_AVG_TOTAL

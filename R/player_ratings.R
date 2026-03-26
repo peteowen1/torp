@@ -11,6 +11,44 @@
   plyr_tm_df
 }
 
+#' Normalise skills column names for backwards compatibility
+#'
+#' Remaps legacy `_skill` suffixed columns to canonical `_rating` names.
+#' When `strict = TRUE` (user-supplied data), aborts on missing columns.
+#' When `strict = FALSE` (auto-loaded), warns and returns NULL.
+#'
+#' @param skills A data.frame or NULL.
+#' @param strict Logical. If TRUE, abort on missing required columns.
+#' @return The normalised data.frame, or NULL if unusable.
+#' @keywords internal
+.normalise_skills_columns <- function(skills, strict = FALSE) {
+  if (is.null(skills)) return(NULL)
+
+  # cond_tog_rating: try _skill and time_on_ground_skill as fallbacks
+
+  if (!"cond_tog_rating" %in% names(skills)) {
+    if ("cond_tog_skill" %in% names(skills)) {
+      skills$cond_tog_rating <- skills$cond_tog_skill
+    } else if ("time_on_ground_skill" %in% names(skills)) {
+      skills$cond_tog_rating <- skills$time_on_ground_skill
+    } else if (strict) {
+      cli::cli_abort("{.arg skills} must contain a {.field cond_tog_rating} column.")
+    } else {
+      cli::cli_warn("Skills data missing {.field cond_tog_rating} column, skipping TOG adjustment.")
+      return(NULL)
+    }
+  }
+
+  # squad_selection_rating: try _skill as fallback
+  if (!"squad_selection_rating" %in% names(skills)) {
+    if ("squad_selection_skill" %in% names(skills)) {
+      skills$squad_selection_rating <- skills$squad_selection_skill
+    }
+  }
+
+  skills
+}
+
 #' Calculate EPR (Expected Possession Rating)
 #'
 #' Calculates EPR ratings for players based on their EPV credit contributions,
@@ -85,39 +123,11 @@ calculate_epr <- function(season_val = get_afl_season(type = "current"),
         NULL
       }
     )
-    if (!is.null(skills) && !"cond_tog_rating" %in% names(skills)) {
-      # Backwards compat: accept _skill suffix as _rating
-      if ("cond_tog_skill" %in% names(skills)) {
-        skills$cond_tog_rating <- skills$cond_tog_skill
-      } else if ("time_on_ground_skill" %in% names(skills)) {
-        skills$cond_tog_rating <- skills$time_on_ground_skill
-      } else {
-        cli::cli_warn("Skills data missing {.field cond_tog_rating} column, skipping TOG adjustment.")
-        skills <- NULL
-      }
-    }
-    if (!is.null(skills) && !"squad_selection_rating" %in% names(skills)) {
-      if ("squad_selection_skill" %in% names(skills)) {
-        skills$squad_selection_rating <- skills$squad_selection_skill
-      }
-    }
+    skills <- .normalise_skills_columns(skills, strict = FALSE)
   } else if (isFALSE(skills)) {
     skills <- NULL
   } else if (!is.null(skills)) {
-    if (!"cond_tog_rating" %in% names(skills)) {
-      if ("cond_tog_skill" %in% names(skills)) {
-        skills$cond_tog_rating <- skills$cond_tog_skill
-      } else if ("time_on_ground_skill" %in% names(skills)) {
-        skills$cond_tog_rating <- skills$time_on_ground_skill
-      } else {
-        cli::cli_abort("{.arg skills} must contain a {.field cond_tog_rating} column.")
-      }
-    }
-    if (!"squad_selection_rating" %in% names(skills)) {
-      if ("squad_selection_skill" %in% names(skills)) {
-        skills$squad_selection_rating <- skills$squad_selection_skill
-      }
-    }
+    skills <- .normalise_skills_columns(skills, strict = TRUE)
   }
 
   # Load player team details if not provided
@@ -491,6 +501,46 @@ calculate_epr_stats_batch <- function(player_game_data = NULL,
     dplyr::arrange(-.data$epr)
 }
 
+#' Compute PSR inline from raw data (fallback when pre-computed not available)
+#'
+#' Loads player_game_data and player_stats, prepares stat rating data,
+#' estimates ratings for the target round, then applies PSR coefficients.
+#'
+#' @param season_val Season year.
+#' @param round_val Round number.
+#' @return A data.table with PSR columns, or NULL on failure.
+#' @keywords internal
+.compute_psr_inline <- function(season_val, round_val) {
+  # Load raw data
+  pgd <- load_player_game_data(TRUE)
+  ps <- load_player_stats(TRUE)
+  fixtures <- load_fixtures(TRUE)
+
+  # Get ref_date for this round
+  fix_dt <- data.table::as.data.table(fixtures)
+  ref_date <- fix_dt[season == season_val & round_number == round_val,
+                      min(as.Date(utc_start_time), na.rm = TRUE)]
+  if (is.na(ref_date) || !is.finite(ref_date)) {
+    cli::cli_warn("Cannot determine ref_date for {season_val} round {round_val}")
+    return(NULL)
+  }
+
+  # Prepare stat rating data
+  stat_data <- .prepare_stat_rating_data(pgd, ps)
+
+  # Estimate ratings for this single ref_date
+  skills <- estimate_player_stat_ratings(stat_data, ref_date = ref_date, compute_ci = FALSE)
+  if (nrow(skills) == 0) return(NULL)
+
+  skills[, season := season_val]
+  skills[, round := round_val]
+
+  cli::cli_inform("Inline stat ratings: {nrow(skills)} players")
+
+  .compute_psr_from_stat_ratings(skills)
+}
+
+
 #' Calculate TORP (Total Over Replacement Predictive-value)
 #'
 #' Blends EPR (Expected Possession Rating) with PSR (Player Skill Rating)
@@ -649,16 +699,18 @@ torp_ratings <- function(season_val = get_afl_season(type = "current"),
   epr_df <- suppressMessages(calculate_epr(season_val, round_val, ...))
 
   # Step 2: PSR with osr/dsr decomposition
-  # Load all seasons so players who transferred or lack current-season stat
-
-  # ratings still get PSR from their most recent data (calculate_torp takes
-  # the latest per player via slice_tail)
+  # Try pre-computed stat ratings first (fast); fall back to inline estimation
   psr_df <- tryCatch({
     skills <- load_player_stat_ratings(TRUE)
     .compute_psr_from_stat_ratings(skills)
   }, error = function(e) {
-    cli::cli_warn("Could not compute PSR: {e$message} -- returning EPR-only ratings (no TORP blend)")
-    NULL
+    cli::cli_warn("Pre-computed stat ratings not available ({conditionMessage(e)}), trying inline computation...")
+    tryCatch({
+      .compute_psr_inline(season_val, round_val)
+    }, error = function(e2) {
+      cli::cli_warn("Could not compute PSR: {e2$message} -- returning EPR-only ratings (no TORP blend)")
+      NULL
+    })
   })
 
   if (is.null(psr_df)) {
@@ -673,7 +725,10 @@ torp_ratings <- function(season_val = get_afl_season(type = "current"),
   result <- calculate_torp(epr_df, psr_df)
 
   # Step 4: Join current injuries
-  injuries <- tryCatch(get_all_injuries(season_val, scrape = TRUE), error = function(e) NULL)
+  injuries <- tryCatch(get_all_injuries(season_val, scrape = TRUE), error = function(e) {
+    cli::cli_warn("Could not load injury data: {conditionMessage(e)}")
+    NULL
+  })
   result <- match_injuries(result, injuries)
 
   front_cols <- c("player_id", "player_name", "age", "team", "torp", "epr", "psr",
@@ -682,4 +737,68 @@ torp_ratings <- function(season_val = get_afl_season(type = "current"),
   other_cols <- setdiff(names(result), front_cols)
   result <- result[order(-result$torp), c(front_cols, other_cols)]
   result
+}
+
+
+#' TORP Movers: Biggest Round-Over-Round Rating Changes
+#'
+#' Compares TORP ratings between two rounds and shows which players moved
+#' the most. Uses pre-computed ratings from torpdata releases for speed.
+#'
+#' @param season_val Season year. Default is current season.
+#' @param round_val The "current" round. Default is the latest round.
+#' @param prev_round The "previous" round to compare against. Default is
+#'   \code{round_val - 1}.
+#' @param top_n Number of biggest movers to show in each direction. Default 10.
+#' @param metric Column to compare. Default \code{"torp"}. Can also be
+#'   \code{"epr"}, \code{"psr"}, \code{"recv_epr"}, etc.
+#'
+#' @return A data.table with columns: \code{player_name}, \code{team},
+#'   \code{prev} (previous round value), \code{curr} (current round value),
+#'   \code{change}, \code{direction} ("up" or "down").
+#'
+#' @export
+torp_movers <- function(season_val = get_afl_season(),
+                         round_val = get_afl_week(),
+                         prev_round = round_val - 1L,
+                         top_n = 10,
+                         metric = "torp") {
+  ratings <- data.table::as.data.table(load_torp_ratings())
+
+  curr <- ratings[season == season_val & round == round_val]
+  prev <- ratings[season == season_val & round == prev_round]
+
+  if (nrow(curr) == 0) cli::cli_abort("No ratings found for {season_val} round {round_val}")
+  if (nrow(prev) == 0) cli::cli_abort("No ratings found for {season_val} round {prev_round}")
+
+  if (!metric %in% names(curr)) {
+    cli::cli_abort("Column {.val {metric}} not found in ratings. Available: {paste(names(curr), collapse = ', ')}")
+  }
+
+  merged <- merge(
+    prev[, .(player_id, player_name, team, prev = get(metric))],
+    curr[, .(player_id, curr = get(metric))],
+    by = "player_id"
+  )
+  merged <- merged[!is.na(prev) & !is.na(curr)]
+  merged[, change := round(curr - prev, 2)]
+  data.table::setorderv(merged, "change", order = -1L)
+
+  risers <- head(merged, top_n)
+  risers[, direction := "up"]
+  fallers <- tail(merged, top_n)
+  fallers[, direction := "down"]
+  data.table::setorderv(fallers, "change", order = 1L)
+
+  result <- data.table::rbindlist(list(risers, fallers))
+
+  cli::cli_h2("{metric} movers: Round {prev_round} -> {round_val} ({season_val})")
+  cli::cli_h3("Biggest risers")
+  print(risers[, .(player_name, team, prev = round(prev, 2), curr = round(curr, 2), change)],
+        row.names = FALSE)
+  cli::cli_h3("Biggest fallers")
+  print(fallers[, .(player_name, team, prev = round(prev, 2), curr = round(curr, 2), change)],
+        row.names = FALSE)
+
+  invisible(result)
 }

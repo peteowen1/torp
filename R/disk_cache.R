@@ -43,7 +43,7 @@ generate_disk_cache_key <- function(url) {
 
 
   # Combine prefix with hash for unique but identifiable key
-  paste0(file_prefix, "_", substr(hash, 1, 8))
+  paste0(file_prefix, "_", substr(hash, 1, 16))
 }
 
 #' Get Disk Cache Path for URL
@@ -201,14 +201,20 @@ clear_disk_cache <- function(pattern = NULL, older_than_days = NULL, verbose = F
     return(invisible(0L))
   }
 
-  # Remove files
-  removed <- unlink(cache_files)
+  # Remove files and count actual deletions
+  n_before <- length(cache_files)
+  unlink(cache_files)
+  n_remaining <- sum(file.exists(cache_files))
+  n_removed <- n_before - n_remaining
 
   if (verbose) {
-    cli::cli_inform("Cleared {length(cache_files)} cache file{?s}")
+    cli::cli_inform("Cleared {n_removed} of {n_before} cache file{?s}")
+    if (n_remaining > 0) {
+      cli::cli_warn("{n_remaining} file{?s} could not be deleted (may be locked)")
+    }
   }
 
-  invisible(length(cache_files))
+  invisible(n_removed)
 }
 
 #' Get Disk Cache Information
