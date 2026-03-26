@@ -97,8 +97,8 @@ get_match_chains <- function(season = get_afl_season(), round = NA) {
 
 #' Extract round number from an AFL match ID
 #'
-#' Parses the CD_M format via regex rather than positional substr,
-#' so it handles variable comp-ID lengths safely.
+#' Parses `CD_M{year:4}{comp:3}{round:2}{game:2+}` format via regex.
+#' Assumes 4-digit year + 3-digit comp ID (matches all known AFL formats).
 #'
 #' @param match_id Character match ID.
 #' @return Integer round number, or NA if format does not match.
@@ -120,7 +120,17 @@ get_match_chains <- function(season = get_afl_season(), round = NA) {
 #' @keywords internal
 .find_game_by_match_id <- function(season, match_id) {
   round_num <- .extract_round_from_match_id(match_id)
-  games <- tryCatch(get_round_games(season, round_num, concluded_only = FALSE), error = function(e) data.frame())
+  if (is.na(round_num)) {
+    cli::cli_warn("Could not parse round number from match ID {.val {match_id}}")
+    return(data.frame())
+  }
+  games <- tryCatch(
+    get_round_games(season, round_num, concluded_only = FALSE),
+    error = function(e) {
+      cli::cli_warn("API error fetching round {round_num} for {.val {match_id}}: {conditionMessage(e)}")
+      data.frame()
+    }
+  )
   if (nrow(games) == 0) {
     cli::cli_warn("Could not find game metadata for {.val {match_id}} in season {.val {season}}. Returning chains without game metadata.")
     return(data.frame())
@@ -240,8 +250,11 @@ get_season_games <- function(season, rounds = 28) {
            season, "014/round/CD_R", season, "014", sprintf("%02d", r))
   }, character(1))
 
+  # <<- in callbacks is safe: multi_run() is synchronous (no concurrent mutation)
   pool <- curl::new_pool(total_con = 30L, host_con = 10L)
   results <- vector("list", rounds)
+  n_failed <- 0L
+  n_parse_errors <- 0L
 
   for (i in seq_len(rounds)) {
     h <- curl::new_handle(httpheader = paste0("x-media-mis-token: ", token))
@@ -260,13 +273,27 @@ get_season_games <- function(season, rounds = 28) {
                 results[[idx]] <<- games
               }
             }
-          }, error = function(e) NULL)
+          }, error = function(e) {
+            n_parse_errors <<- n_parse_errors + 1L
+          })
+        } else {
+          n_failed <<- n_failed + 1L
         }
-      }, fail = function(msg) NULL, handle = h, pool = pool)
+      }, fail = function(msg) {
+        n_failed <<- n_failed + 1L
+      }, handle = h, pool = pool)
     })
   }
 
   curl::multi_run(pool = pool)
+
+  if (n_failed > 0) {
+    cli::cli_warn("{n_failed} round{?s} failed to fetch for season {season}")
+  }
+  if (n_parse_errors > 0) {
+    cli::cli_warn("{n_parse_errors} round{?s} returned unparseable data for season {season}")
+  }
+
   out <- dplyr::bind_rows(purrr::compact(results))
   if (nrow(out) == 0) return(data.frame())
   out

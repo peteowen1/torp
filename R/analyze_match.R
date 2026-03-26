@@ -122,6 +122,14 @@ get_player_game_ratings <- function(match = NULL,
     NULL
   })
 
+  # Ensure stable output schema: PSV columns always present (NA on failure)
+  if (is.null(psv_result)) {
+    for (col in c("psv", "osv", "dsv", "torp_value")) {
+      pgr[, (col) := NA_real_]
+      pgr[, (paste0(col, "_p80")) := NA_real_]
+    }
+  }
+
   if (!is.null(psv_result)) {
     psv_cols <- intersect(c("psv", "osv", "dsv"), names(psv_result))
     if (length(psv_cols) > 0 && "player_id" %in% names(psv_result) &&

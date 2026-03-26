@@ -704,7 +704,7 @@ torp_ratings <- function(season_val = get_afl_season(type = "current"),
     skills <- load_player_stat_ratings(TRUE)
     .compute_psr_from_stat_ratings(skills)
   }, error = function(e) {
-    cli::cli_inform("Pre-computed stat ratings not available, computing inline...")
+    cli::cli_warn("Pre-computed stat ratings not available ({conditionMessage(e)}), trying inline computation...")
     tryCatch({
       .compute_psr_inline(season_val, round_val)
     }, error = function(e2) {
@@ -725,7 +725,10 @@ torp_ratings <- function(season_val = get_afl_season(type = "current"),
   result <- calculate_torp(epr_df, psr_df)
 
   # Step 4: Join current injuries
-  injuries <- tryCatch(get_all_injuries(season_val, scrape = TRUE), error = function(e) NULL)
+  injuries <- tryCatch(get_all_injuries(season_val, scrape = TRUE), error = function(e) {
+    cli::cli_warn("Could not load injury data: {conditionMessage(e)}")
+    NULL
+  })
   result <- match_injuries(result, injuries)
 
   front_cols <- c("player_id", "player_name", "age", "team", "torp", "epr", "psr",
