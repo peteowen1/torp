@@ -15,6 +15,6 @@ get_season_games(season, rounds = 28)
 A dataframe containing game data for the entire season.
 }
 \description{
-Retrieves game data for an entire season.
+Retrieves game data for an entire season using parallel HTTP requests.
 }
 \keyword{internal}
