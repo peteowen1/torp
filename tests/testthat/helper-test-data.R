@@ -435,3 +435,119 @@ if (.shared$can_load && identical(Sys.getenv("TESTTHAT"), "true") && curl::has_i
   .shared$player_game_data <- .shared$teams <- NULL
   .shared$match_xgs <- NULL
 }
+
+# -----------------------------------------------------------------------------
+# Mock Data for Plot Testing
+# -----------------------------------------------------------------------------
+
+create_mock_ep_wp_data <- function(n_rows = 200) {
+  data.frame(
+    match_id = rep("CD_M20240140101", n_rows),
+    season = 2024L,
+    round_number = 1L,
+    period = rep(1:4, each = n_rows / 4),
+    total_seconds = seq(0, 7999, length.out = n_rows),
+    home_team_name = "Adelaide Crows",
+    away_team_name = "Brisbane Lions",
+    team = sample(c("Adelaide Crows", "Brisbane Lions"), n_rows, replace = TRUE),
+    exp_pts = cumsum(rnorm(n_rows, 0, 0.3)),
+    wp = plogis(cumsum(rnorm(n_rows, 0, 0.05))),
+    delta_epv = rnorm(n_rows, 0, 0.5),
+    wpa = rnorm(n_rows, 0, 0.02),
+    description = sample(c("Kick", "Handball", "Mark"), n_rows, replace = TRUE),
+    player_name = paste0("Player_", sample(1:40, n_rows, replace = TRUE)),
+    play_type = sample(c("kick", "handball"), n_rows, replace = TRUE),
+    shot_row = sample(c(0, 1), n_rows, replace = TRUE, prob = c(0.95, 0.05)),
+    points_shot = sample(c(NA, 1, 6), n_rows, replace = TRUE, prob = c(0.9, 0.05, 0.05)),
+    stringsAsFactors = FALSE
+  )
+}
+
+create_mock_player_game_ratings <- function(n_games = 50) {
+  data.frame(
+    season = rep(c(2023, 2024), each = n_games / 2),
+    round_number = rep(1:(n_games / 2), 2),
+    match_id = paste0("CD_M2024014", sprintf("%04d", 1:n_games)),
+    player_id = rep("CD_I123456", n_games),
+    player_name = rep("Test Player", n_games),
+    team = rep("Adelaide Crows", n_games),
+    torp_value = rnorm(n_games, 0, 2),
+    epv = rnorm(n_games, 0, 1.5),
+    psv = rnorm(n_games, 0, 1),
+    osv = rnorm(n_games, 0, 0.8),
+    dsv = rnorm(n_games, 0, 0.8),
+    stringsAsFactors = FALSE
+  )
+}
+
+create_mock_sim_results <- function(n_sims = 10) {
+  teams <- torp::AFL_TEAMS$name
+  n_teams <- length(teams)
+
+  ladders <- do.call(rbind, lapply(1:n_sims, function(sim) {
+    w <- sample(2:18, n_teams, replace = TRUE)
+    data.table::data.table(
+      sim_id = sim, team = teams,
+      played = 22L, wins = w, losses = 22L - w, draws = 0L,
+      points_for = w * 90 + sample(-50:50, n_teams),
+      points_against = (22L - w) * 90 + sample(-50:50, n_teams),
+      percentage = 80 + w * 4 + rnorm(n_teams, 0, 5),
+      ladder_points = w * 4L,
+      rank = rank(-w, ties.method = "random")
+    )
+  }))
+
+  finals <- data.table::data.table(
+    sim_id = rep(1:n_sims, each = 8),
+    team = rep(teams[1:8], n_sims),
+    finals_finish = sample(1:4, n_sims * 8, replace = TRUE),
+    finals_wins = sample(0:3, n_sims * 8, replace = TRUE),
+    made_gf = sample(c(TRUE, FALSE), n_sims * 8, replace = TRUE, prob = c(0.2, 0.8)),
+    won_gf = sample(c(TRUE, FALSE), n_sims * 8, replace = TRUE, prob = c(0.1, 0.9))
+  )
+
+  structure(
+    list(
+      season = 2024, n_sims = n_sims,
+      ladders = ladders, finals = finals,
+      games = data.table::data.table(),
+      played_games = data.table::data.table(),
+      original_ratings = NULL
+    ),
+    class = "torp_sim_results"
+  )
+}
+
+create_mock_stat_rating_profile <- function() {
+  stats <- c("goals", "behinds", "disposals", "kicks", "handballs",
+             "marks", "tackles", "hitouts", "inside50s", "clearances")
+  categories <- c("scoring", "scoring", "disposal", "disposal", "disposal",
+                   "possession", "defensive", "ruck", "territory", "clearance")
+
+  profile <- data.frame(
+    stat = stats,
+    category = categories,
+    type = rep("rate", length(stats)),
+    rating = runif(length(stats), 0.5, 3),
+    raw_avg = runif(length(stats), 0.3, 2.5),
+    league_avg = runif(length(stats), 0.8, 2),
+    league_pct = runif(length(stats), 10, 95),
+    pos_avg = runif(length(stats), 0.7, 2.2),
+    pos_pct = runif(length(stats), 10, 95),
+    stringsAsFactors = FALSE
+  )
+
+  structure(
+    list(
+      player_info = data.frame(
+        player_id = "CD_I123456", name = "Test Player",
+        team = "Adelaide Crows", position = "Forward",
+        pos_group = "fwd", stringsAsFactors = FALSE
+      ),
+      stat_ratings = profile,
+      ref_date = as.Date("2024-06-01"),
+      n_games = 50, n_80s = 40, wt_80s = 35
+    ),
+    class = "torp_stat_rating_profile"
+  )
+}

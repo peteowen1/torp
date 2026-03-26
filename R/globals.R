@@ -355,3 +355,16 @@ utils::globalVariables(c(
   "pf", "pa", "loss", "draw", "round", "last_match",
   "..mean_cols", "..sum_cols", "..display_cols"
 ))
+
+# Plot variables (NSE in ggplot2 aes/data manipulation)
+utils::globalVariables(c(
+  "total_seconds", "wp", "exp_pts", "home_wp",
+  "game_date", "game_number", "rolling_avg",
+  "percentile", "stat_name", "category",
+  "avg_wins", "pct", "prob", "ladder_position",
+  "metric_value",
+  # Shot map
+  "goal_prob", "behind_prob", "clanger_prob", "xscore", "outcome",
+  # Player comparison
+  "player_label", "season_fac", "avg_pct"
+))
