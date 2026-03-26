@@ -319,7 +319,7 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
 
   tr_week <- tr |>
     dplyr::filter(!is.na(epr), is.na(injury)) |>
-    dplyr::mutate(team_name = torp_replace_teams(team)) |>
+    dplyr::mutate(team_name = team) |>
     dplyr::group_by(team_name, season, round) |>
     dplyr::mutate(
       n_players = dplyr::n(),

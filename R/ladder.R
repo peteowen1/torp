@@ -70,10 +70,6 @@ prepare_sim_data <- function(season, team_ratings = NULL, fixtures = NULL,
     away_score = if (!is.null(as_col)) as.integer(fix_dt[[as_col]]) else NA_integer_
   )
 
-  # Standardise team names
-  sim_games[, home_team := torp_replace_teams(home_team)]
-  sim_games[, away_team := torp_replace_teams(away_team)]
-
   # Keep only regular season rounds (exclude finals)
   max_round <- AFL_REGULAR_SEASON_ROUNDS[as.character(season)]
   if (is.na(max_round)) max_round <- 24L
@@ -197,9 +193,6 @@ prepare_sim_data <- function(season, team_ratings = NULL, fixtures = NULL,
     sim_teams <- data.table::as.data.table(team_ratings)[, .(team, torp)]
   }
 
-  # Standardise team names in ratings
-  sim_teams[, team := torp_replace_teams(team)]
-
   # --- Injury Return Schedule ---
   # Build a schedule of TORP boosts for when injured players return
   injury_schedule <- NULL
@@ -235,7 +228,6 @@ prepare_sim_data <- function(season, team_ratings = NULL, fixtures = NULL,
     pred_ht  <- resolve_col(pred_dt, c("home_team", "home_team_name"))
 
     if (!is.null(pred_rnd) && !is.null(pred_ht) && "pred_xtotal" %in% names(pred_dt)) {
-      pred_dt[, (pred_ht) := torp_replace_teams(get(pred_ht))]
       sim_games[pred_dt,
         pred_xtotal := i.pred_xtotal,
         on = stats::setNames(c(pred_rnd, pred_ht), c("roundnum", "home_team"))
@@ -248,8 +240,8 @@ prepare_sim_data <- function(season, team_ratings = NULL, fixtures = NULL,
   venue_col <- resolve_col(fix_dt, c("venue_name", "venue"))
   if (!is.null(venue_col)) {
     venue_dt <- data.table::data.table(
-      home_team = torp_replace_teams(as.character(fix_dt[[ht_col]])),
-      away_team = torp_replace_teams(as.character(fix_dt[[at_col]])),
+      home_team = as.character(fix_dt[[ht_col]]),
+      away_team = as.character(fix_dt[[at_col]]),
       venue     = torp_replace_venues(as.character(fix_dt[[venue_col]]))
     )
     # Pivot to team-level rows
@@ -397,8 +389,8 @@ calculate_final_ladder <- function(season = get_afl_season(),
   games <- data.table::data.table(
     match_id   = if (!is.null(mid_col)) as.character(fix_dt[[mid_col]]) else NA_character_,
     roundnum   = as.integer(fix_dt[[rnd_col]]),
-    home_team  = torp_replace_teams(as.character(fix_dt[[ht_col]])),
-    away_team  = torp_replace_teams(as.character(fix_dt[[at_col]])),
+    home_team  = as.character(fix_dt[[ht_col]]),
+    away_team  = as.character(fix_dt[[at_col]]),
     home_score = if (!is.null(hs_col)) as.numeric(fix_dt[[hs_col]]) else NA_real_,
     away_score = if (!is.null(as_col)) as.numeric(fix_dt[[as_col]]) else NA_real_
   )
@@ -424,11 +416,9 @@ calculate_final_ladder <- function(season = get_afl_season(),
   if (!is.null(predictions)) {
     pred_dt <- data.table::as.data.table(predictions)
 
-    # Standardise team names in predictions (coerce factors to character first)
+    # Resolve prediction team columns for join matching
     pred_ht <- resolve_col(pred_dt, c("home_team", "home_team_name"))
     pred_at <- resolve_col(pred_dt, c("away_team", "away_team_name"))
-    if (!is.null(pred_ht)) pred_dt[, (pred_ht) := torp_replace_teams(as.character(get(pred_ht)))]
-    if (!is.null(pred_at)) pred_dt[, (pred_at) := torp_replace_teams(as.character(get(pred_at)))]
 
     # Join on match_id (predictions may have home/away swapped vs fixtures)
     pred_mid <- resolve_col(pred_dt, c("match_id", "providerId"))

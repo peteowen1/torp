@@ -18,8 +18,7 @@
 .build_fixtures_df <- function(fixtures) {
   team_map <- fixtures |>
     dplyr::group_by(team_id = home_team_id) |>
-    dplyr::summarise(team_name = get_mode(home_team_name)) |>
-    dplyr::mutate(team_name = torp_replace_teams(team_name))
+    dplyr::summarise(team_name = get_mode(home_team_name))
 
   fix_df <- fixtures |>
     dplyr::mutate(result = home_score - away_score) |>
@@ -192,7 +191,7 @@
 
   team_rt_df <- team_lineup_df |>
     dplyr::filter(!is.na(player_id)) |>
-    dplyr::mutate(team_name_adj = torp_replace_teams(team_name)) |>
+    dplyr::mutate(team_name_adj = team_name) |>
     dplyr::group_by(match_id, team_id, season, round_number, team_type) |>
     dplyr::summarise(
       team_name_adj = max(team_name_adj),
@@ -281,7 +280,6 @@
 
   # Combine all features
   team_rt_fix_df <- fix_df |>
-    dplyr::mutate(team_name = torp_replace_teams(team_name)) |>
     dplyr::left_join(
       team_dist_df |> dplyr::select(match_id, team_id, log_dist, familiarity),
       by = c("match_id", "team_id")

@@ -422,9 +422,9 @@ build_injury_schedule <- function(injuries_df, player_ratings_dt) {
   matched[, team := torp_replace_teams(team)]
 
   # Get team-level TOG sums from full player ratings for proper weighting
-  pr_dt[, team_std := torp_replace_teams(team)]
+  pr_dt[, team := torp_replace_teams(team)]
   team_tog <- pr_dt[, .(team_tog_sum = sum(pred_tog, na.rm = TRUE),
-                         n_players = .N), by = .(team = team_std)]
+                         n_players = .N), by = .(team)]
 
   matched <- merge(matched, team_tog, by = "team", all.x = TRUE)
 
