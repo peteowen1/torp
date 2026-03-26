@@ -211,9 +211,9 @@ get_round_games <- function(season, round, concluded_only = TRUE) {
   url <- paste0("https://api.afl.com.au/cfs/afl/fixturesAndResults/season/CD_S", season, "014/round/CD_R", season, "014", round)
   api_result <- access_api(url)
 
-  games <- api_result[["items"]]
+  games <- api_result[["fixtures"]] %||% api_result[["items"]]
   if (is.null(games)) {
-    cli::cli_warn("AFL API fixtures response missing {.field items} key for round {.val {round}}")
+    cli::cli_warn("AFL API fixtures response missing fixtures key for round {.val {round}}")
     return(data.frame())
   }
 
@@ -264,7 +264,7 @@ get_season_games <- function(season, rounds = 28) {
         if (resp$status_code == 200L) {
           tryCatch({
             json <- jsonlite::fromJSON(rawToChar(resp$content), flatten = TRUE)
-            games <- json[["items"]]
+            games <- json[["fixtures"]] %||% json[["items"]]
             if (!is.null(games) && length(games) > 0) {
               games <- games[games$status == "CONCLUDED", , drop = FALSE]
               if (nrow(games) > 0) {
@@ -364,9 +364,9 @@ get_game_chains <- function(match_id) {
   url <- paste0("https://sapi.afl.com.au/afl/matchPlays/", match_id)
   api_response <- access_api(url)
 
-  chain_list <- api_response[["chains"]]
+  chain_list <- api_response[["matchChains"]] %||% api_response[["chains"]]
   if (is.null(chain_list)) {
-    cli::cli_warn("AFL API match response missing {.field chains} key for {.val {match_id}}")
+    cli::cli_warn("AFL API match response missing chains key for {.val {match_id}}")
     return(data.frame())
   }
 
@@ -375,7 +375,8 @@ get_game_chains <- function(match_id) {
   }
 
   # Hoist column index lookup (constant across all chains in a match)
-  actions_col <- which(names(chain_list) == "actions")
+  # API renamed "actions" → "stats" circa 2026; support both
+  actions_col <- which(names(chain_list) %in% c("stats", "actions"))
   col_idx <- if (length(actions_col) == 1) actions_col else 6
 
   chains <- data.table::rbindlist(lapply(seq_len(nrow(chain_list)), function(i) {
