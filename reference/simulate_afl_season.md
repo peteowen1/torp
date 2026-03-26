@@ -17,7 +17,7 @@ simulate_afl_season(
   seed = NULL,
   verbose = TRUE,
   keep_games = FALSE,
-  n_cores = max(1L, parallel::detectCores() - 1L)
+  n_cores = max(1L, parallel::detectCores() - 1L, na.rm = TRUE)
 )
 ```
 

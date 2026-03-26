@@ -9,3 +9,5 @@
 
 - [torp Reference
   Guide](https://peteowen1.github.io/torp/articles/torp-guide.md):
+- [Visualization
+  Guide](https://peteowen1.github.io/torp/articles/visualizations.md):

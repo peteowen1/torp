@@ -1,8 +1,7 @@
 # Find game metadata for a match ID
 
-Extracts the round number from the match ID structure
-(`CD_M{year}{comp}{round}{game}`) and fetches that round's fixtures
-directly.
+Extracts the round number from the match ID structure and fetches that
+round's fixtures directly.
 
 ## Usage
 

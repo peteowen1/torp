@@ -46,7 +46,7 @@
 <p>Two-job pipeline that computes TORP ratings and then builds match predictions.</p>
 <p><strong>What it does:</strong></p>
 <ol style="list-style-type: decimal"><li>
-<strong>compute-ratings</strong> – Runs <code>data-raw/03-ratings/run_ratings_pipeline.R</code> to rebuild player game data and TORP ratings, uploads to torpdata</li>
+<strong>compute-ratings</strong> – Runs <code>data-raw/03-ratings/run_epr_pipeline.R</code> to rebuild player game data and EPR ratings, uploads to torpdata</li>
 <li>
 <strong>build-predictions</strong> – Runs <code>data-raw/02-models/build_match_predictions.R</code> to generate weekly match predictions</li>
 </ol><p><strong>Manual trigger:</strong> Actions tab &gt; “Daily Ratings &amp; Predictions” &gt; “Run workflow”</p>

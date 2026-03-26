@@ -43,7 +43,11 @@
 
     <div class="section level2">
     <h2 id="ref-usage">Usage<a class="anchor" aria-label="anchor" href="#ref-usage"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">player_season_ratings</span><span class="op">(</span>season_val <span class="op">=</span> <span class="fu"><a href="get_afl_season.html">get_afl_season</a></span><span class="op">(</span><span class="op">)</span>, round_num <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span></span></code></pre></div>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">player_season_ratings</span><span class="op">(</span></span>
+<span>  season_val <span class="op">=</span> <span class="fu"><a href="get_afl_season.html">get_afl_season</a></span><span class="op">(</span><span class="op">)</span>,</span>
+<span>  per80 <span class="op">=</span> <span class="cn">FALSE</span>,</span>
+<span>  round_num <span class="op">=</span> <span class="cn">NULL</span></span>
+<span><span class="op">)</span></span></code></pre></div>
     </div>
 
     <div class="section level2">
@@ -54,13 +58,18 @@
 <dd><p>The season to calculate ratings for. Default is the current season.</p></dd>
 
 
+<dt id="arg-per-">per80<a class="anchor" aria-label="anchor" href="#arg-per-"></a></dt>
+<dd><p>Logical. If <code>TRUE</code>, return per-80-minute averages instead of
+season totals. Default <code>FALSE</code> (totals).</p></dd>
+
+
 <dt id="arg-round-num">round_num<a class="anchor" aria-label="anchor" href="#arg-round-num"></a></dt>
 <dd><p>Deprecated and ignored. Retained for backwards compatibility.</p></dd>
 
 </dl></div>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
-    <p>A data frame containing player season total ratings.</p>
+    <p>A data frame containing player season ratings.</p>
     </div>
 
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>

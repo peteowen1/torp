@@ -46,7 +46,7 @@ into season totals for release to torpdata.</p>
 
     <div class="section level2">
     <h2 id="ref-usage">Usage<a class="anchor" aria-label="anchor" href="#ref-usage"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">.compute_player_season_ratings</span><span class="op">(</span><span class="va">player_game_ratings_df</span><span class="op">)</span></span></code></pre></div>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">.compute_player_season_ratings</span><span class="op">(</span><span class="va">player_game_ratings_df</span>, per80 <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span></code></pre></div>
     </div>
 
     <div class="section level2">
@@ -57,10 +57,14 @@ into season totals for release to torpdata.</p>
 <dd><p>Player game ratings data frame
 (output of <code><a href="dot-compute_player_game_ratings.html">.compute_player_game_ratings()</a></code>).</p></dd>
 
+
+<dt id="arg-per-">per80<a class="anchor" aria-label="anchor" href="#arg-per-"></a></dt>
+<dd><p>If TRUE, return per-80-minute averages instead of totals.</p></dd>
+
 </dl></div>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
-    <p>A data frame with season-total ratings.</p>
+    <p>A data frame with season ratings.</p>
     </div>
 
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>

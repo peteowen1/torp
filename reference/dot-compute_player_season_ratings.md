@@ -6,7 +6,7 @@ into season totals for release to torpdata.
 ## Usage
 
 ``` r
-.compute_player_season_ratings(player_game_ratings_df)
+.compute_player_season_ratings(player_game_ratings_df, per80 = FALSE)
 ```
 
 ## Arguments
@@ -16,6 +16,10 @@ into season totals for release to torpdata.
   Player game ratings data frame (output of
   [`.compute_player_game_ratings()`](https://peteowen1.github.io/torp/reference/dot-compute_player_game_ratings.md)).
 
+- per80:
+
+  If TRUE, return per-80-minute averages instead of totals.
+
 ## Value
 
-A data frame with season-total ratings.
+A data frame with season ratings.

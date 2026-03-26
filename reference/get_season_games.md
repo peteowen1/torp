@@ -1,6 +1,6 @@
 # Get Season Games
 
-Retrieves game data for an entire season.
+Retrieves game data for an entire season using parallel HTTP requests.
 
 ## Usage
 

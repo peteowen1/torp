@@ -2,7 +2,7 @@
 
 Returns optimized defaults for the Bayesian stat rating estimation
 pipeline. Per-category lambda and prior values come from
-`data-raw/06-skills/02_optimize_skill_params.R`. The global
+`data-raw/06-stat-ratings/02_optimize_skill_params.R`. The global
 `lambda_rate` and `prior_games` are used as fallbacks for any category
 not in `category_params`.
 

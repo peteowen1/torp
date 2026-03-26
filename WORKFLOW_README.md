@@ -12,9 +12,8 @@ predictions.
 
 **What it does:**
 
-1.  **compute-ratings** – Runs
-    `data-raw/03-ratings/run_ratings_pipeline.R` to rebuild player game
-    data and TORP ratings, uploads to torpdata
+1.  **compute-ratings** – Runs `data-raw/03-ratings/run_epr_pipeline.R`
+    to rebuild player game data and EPR ratings, uploads to torpdata
 2.  **build-predictions** – Runs
     `data-raw/02-models/build_match_predictions.R` to generate weekly
     match predictions

@@ -52,7 +52,12 @@ than stored releases.</p>
 
     <div class="section level2">
     <h2 id="ref-usage">Usage<a class="anchor" aria-label="anchor" href="#ref-usage"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">get_player_game_ratings</span><span class="op">(</span>match <span class="op">=</span> <span class="cn">NULL</span>, season <span class="op">=</span> <span class="fu"><a href="get_afl_season.html">get_afl_season</a></span><span class="op">(</span><span class="op">)</span>, round <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span></span></code></pre></div>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">get_player_game_ratings</span><span class="op">(</span></span>
+<span>  match <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  season <span class="op">=</span> <span class="fu"><a href="get_afl_season.html">get_afl_season</a></span><span class="op">(</span><span class="op">)</span>,</span>
+<span>  round <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  per80 <span class="op">=</span> <span class="cn">FALSE</span></span>
+<span><span class="op">)</span></span></code></pre></div>
     </div>
 
     <div class="section level2">
@@ -73,12 +78,16 @@ If <code>NULL</code> (default), uses <code>season</code> and <code>round</code> 
 <dt id="arg-round">round<a class="anchor" aria-label="anchor" href="#arg-round"></a></dt>
 <dd><p>Numeric round number. Only used when <code>match</code> is <code>NULL</code>.</p></dd>
 
+
+<dt id="arg-per-">per80<a class="anchor" aria-label="anchor" href="#arg-per-"></a></dt>
+<dd><p>Logical. If <code>TRUE</code>, return per-80-minute rates instead of
+totals for EPV and PSV columns. Default <code>FALSE</code> (totals).</p></dd>
+
 </dl></div>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
-    <p>A tibble with the same columns as <code><a href="player_game_ratings.html">player_game_ratings()</a></code>:
-identifiers, TOG-weighted centered EPV components, and position-adjusted
-EPV per-80 metrics.</p>
+    <p>A data.table with EPV components, PSV/OSV/DSV, and TORP value.
+If <code>per80 = TRUE</code>, values are divided by TOG (per full game).</p>
     </div>
 
     <div class="section level2">
@@ -90,6 +99,9 @@ EPV per-80 metrics.</p>
 <span class="r-in"><span><span class="co"># From season and round (all matches in the round)</span></span></span>
 <span class="r-in"><span><span class="va">result</span> <span class="op">&lt;-</span> <span class="fu">get_player_game_ratings</span><span class="op">(</span>round <span class="op">=</span> <span class="fl">2</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="va">result</span> <span class="op">&lt;-</span> <span class="fu">get_player_game_ratings</span><span class="op">(</span>season <span class="op">=</span> <span class="fl">2025</span>, round <span class="op">=</span> <span class="fl">14</span><span class="op">)</span></span></span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="co"># Per-80 rates instead of totals</span></span></span>
+<span class="r-in"><span><span class="va">result</span> <span class="op">&lt;-</span> <span class="fu">get_player_game_ratings</span><span class="op">(</span>round <span class="op">=</span> <span class="fl">2</span>, per80 <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="co"># From pre-scraped chains</span></span></span>
 <span class="r-in"><span><span class="va">chains</span> <span class="op">&lt;-</span> <span class="fu"><a href="get_match_chains.html">get_match_chains</a></span><span class="op">(</span><span class="fl">2026</span>, <span class="fl">2</span><span class="op">)</span></span></span>

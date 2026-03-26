@@ -13,6 +13,7 @@ player_game_ratings(
   round_val = get_afl_week(),
   matchid = NULL,
   team = NULL,
+  per80 = FALSE,
   round_num = NULL
 )
 ```
@@ -34,6 +35,11 @@ player_game_ratings(
 - team:
 
   The team to filter by. Default is NULL (no filtering).
+
+- per80:
+
+  Logical. If `TRUE`, return per-80-minute rates instead of totals.
+  Default `FALSE` (totals).
 
 - round_num:
 

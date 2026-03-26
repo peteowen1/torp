@@ -27,7 +27,7 @@ psr_ratings(
 - psr_coef_path:
 
   Optional path to the margin PSR coefficient CSV. If NULL, uses the
-  bundled `inst/extdata/psr_v2_coefficients.csv`.
+  bundled `inst/extdata/psr_coefficients.csv`.
 
 ## Value
 

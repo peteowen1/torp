@@ -44,6 +44,11 @@ A list of class `torp_player_profile` with elements:
   Current TORP rating from
   [`calculate_epr()`](https://peteowen1.github.io/torp/reference/calculate_epr.md).
 
+- psv_season:
+
+  Per-season average PSV/OSV/DSV from
+  [`load_player_game_ratings()`](https://peteowen1.github.io/torp/reference/load_player_game_ratings.md).
+
 ## Examples
 
 ``` r

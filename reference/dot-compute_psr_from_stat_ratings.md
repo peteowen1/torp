@@ -22,7 +22,7 @@ coefficient CSVs from `inst/extdata` and calls
 - psr_coef_path:
 
   Path to the margin PSR coefficient CSV. If NULL, searches
-  `inst/extdata/psr_v2_coefficients.csv`.
+  `inst/extdata/psr_coefficients.csv`.
 
 - center:
 

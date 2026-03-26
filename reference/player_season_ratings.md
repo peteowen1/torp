@@ -7,7 +7,11 @@ with filtering.
 ## Usage
 
 ``` r
-player_season_ratings(season_val = get_afl_season(), round_num = NULL)
+player_season_ratings(
+  season_val = get_afl_season(),
+  per80 = FALSE,
+  round_num = NULL
+)
 ```
 
 ## Arguments
@@ -16,10 +20,15 @@ player_season_ratings(season_val = get_afl_season(), round_num = NULL)
 
   The season to calculate ratings for. Default is the current season.
 
+- per80:
+
+  Logical. If `TRUE`, return per-80-minute averages instead of season
+  totals. Default `FALSE` (totals).
+
 - round_num:
 
   Deprecated and ignored. Retained for backwards compatibility.
 
 ## Value
 
-A data frame containing player season total ratings.
+A data frame containing player season ratings.

@@ -95,6 +95,8 @@ Calculate and view TORP player ratings
   : Get game ratings
 - [`player_season_ratings()`](https://peteowen1.github.io/torp/reference/player_season_ratings.md)
   : Get season total ratings
+- [`player_season_stats()`](https://peteowen1.github.io/torp/reference/player_season_stats.md)
+  : Get player season stats
 - [`player_profile()`](https://peteowen1.github.io/torp/reference/player_profile.md)
   : Get a Player Profile
 - [`print(`*`<torp_player_profile>`*`)`](https://peteowen1.github.io/torp/reference/print.torp_player_profile.md)
@@ -105,6 +107,16 @@ Calculate and view TORP player ratings
   : Create Win Probability Credit Data
 - [`calculate_psr()`](https://peteowen1.github.io/torp/reference/calculate_psr.md)
   : Calculate Player Skill Ratings (PSR)
+- [`explain_epr()`](https://peteowen1.github.io/torp/reference/explain_epr.md)
+  : Explain a Player's EPR Calculation (Per-Game Trace)
+- [`explain_player_rating()`](https://peteowen1.github.io/torp/reference/explain_player_rating.md)
+  : Explain a Player's TORP Rating Decomposition
+- [`explain_player_game()`](https://peteowen1.github.io/torp/reference/explain_player_game.md)
+  : Explain a Player's Game Value (EPV + PSV Breakdown)
+- [`explain_player_plays()`](https://peteowen1.github.io/torp/reference/explain_player_plays.md)
+  : Show a Player's Biggest Plays from PBP
+- [`torp_movers()`](https://peteowen1.github.io/torp/reference/torp_movers.md)
+  : TORP Movers: Biggest Round-Over-Round Rating Changes
 - [`team_profile()`](https://peteowen1.github.io/torp/reference/team_profile.md)
   : Get a Team Profile
 - [`print(`*`<torp_team_profile>`*`)`](https://peteowen1.github.io/torp/reference/print.torp_team_profile.md)
@@ -138,6 +150,32 @@ Estimate and explore player stat rating profiles
 - [`print(`*`<torp_team_stat_rating_profile>`*`)`](https://peteowen1.github.io/torp/reference/print.torp_team_stat_rating_profile.md)
   [`print(`*`<torp_team_skill_profile>`*`)`](https://peteowen1.github.io/torp/reference/print.torp_team_stat_rating_profile.md)
   : Print a team stat rating profile
+
+## Visualization
+
+Plot functions for game flow, player ratings, simulations, and team
+comparisons
+
+- [`plot_ep_wp()`](https://peteowen1.github.io/torp/reference/plot_ep_wp.md)
+  : Plot EP/WP game flow chart
+- [`plot_player_comparison()`](https://peteowen1.github.io/torp/reference/plot_player_comparison.md)
+  : Plot multi-player rating comparison
+- [`plot_player_rating()`](https://peteowen1.github.io/torp/reference/plot_player_rating.md)
+  : Plot player rating trend over time
+- [`plot_shot_map()`](https://peteowen1.github.io/torp/reference/plot_shot_map.md)
+  : Plot shot map for a match or team
+- [`plot_simulation()`](https://peteowen1.github.io/torp/reference/plot_simulation.md)
+  : Plot season simulation results
+- [`plot_stat_rating_profile()`](https://peteowen1.github.io/torp/reference/plot_stat_rating_profile.md)
+  : Plot stat rating profile as bar chart or radar
+- [`plot_team_ratings()`](https://peteowen1.github.io/torp/reference/plot_team_ratings.md)
+  : Plot team ratings comparison
+- [`theme_torp()`](https://peteowen1.github.io/torp/reference/theme_torp.md)
+  : torp ggplot2 theme
+- [`team_color_scale()`](https://peteowen1.github.io/torp/reference/team_color_scale.md)
+  : Team colour scale (colour aesthetic)
+- [`team_fill_scale()`](https://peteowen1.github.io/torp/reference/team_fill_scale.md)
+  : Team colour scale (fill aesthetic)
 
 ## Season Simulation
 
@@ -222,6 +260,10 @@ AFL and model constants
   : Canonical AFL team lookup table
 - [`AFL_TEAM_ALIASES`](https://peteowen1.github.io/torp/reference/AFL_TEAM_ALIASES.md)
   : Named vector mapping team name variants to canonical names
+- [`AFL_TEAM_COLORS`](https://peteowen1.github.io/torp/reference/AFL_TEAM_COLORS.md)
+  : Primary team colours (hex) for AFL teams
+- [`AFL_TEAM_COLORS2`](https://peteowen1.github.io/torp/reference/AFL_TEAM_COLORS2.md)
+  : Secondary team colours (hex) for AFL teams
 
 ## Injuries
 

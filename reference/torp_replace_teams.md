@@ -26,7 +26,7 @@ unchanged.
 
 ``` r
 torp_replace_teams("Adelaide Crows")
-#> [1] "Adelaide"
+#> [1] "Adelaide Crows"
 torp_replace_teams(c("GWS Giants", "Narrm", "WB"))
-#> [1] "GWS"              "Melbourne"        "Western Bulldogs"
+#> [1] "GWS Giants"       "Melbourne Demons" "Western Bulldogs"
 ```
