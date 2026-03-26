@@ -711,3 +711,55 @@ XG_COL_MAP <- c(
   }
   invisible(df)
 }
+
+
+# ============================================================================
+# Team Name Value Normalization
+# ============================================================================
+
+#' Normalise team name values to canonical forms
+#'
+#' Converts team name columns to canonical full names (via
+#' \code{torp_replace_teams}) and abbreviation columns to canonical
+#' abbreviations (via \code{torp_team_abbr}). Idempotent — already-canonical
+#' values pass through unchanged.
+#'
+#' @param df A data.frame, tibble, or data.table.
+#' @return The input, modified in place. Returns invisibly.
+#' @keywords internal
+.normalise_team_values <- function(df) {
+  if (is.null(df) || nrow(df) == 0L) return(df)
+
+  nms <- names(df)
+  is_dt <- data.table::is.data.table(df)
+
+  # Columns that should contain canonical full names
+  full_name_cols <- c(
+    "team", "team_name", "opponent",
+    "home_team", "away_team",
+    "home_team_name", "away_team_name"
+  )
+
+  # Columns that should contain canonical abbreviations
+  abbr_cols <- c("team_abbr", "home_team_abbr", "away_team_abbr")
+
+  for (col in intersect(full_name_cols, nms)) {
+    vals <- df[[col]]
+    if (is.character(vals)) {
+      new_vals <- torp_replace_teams(vals)
+      if (is_dt) data.table::set(df, j = col, value = new_vals)
+      else df[[col]] <- new_vals
+    }
+  }
+
+  for (col in intersect(abbr_cols, nms)) {
+    vals <- df[[col]]
+    if (is.character(vals)) {
+      new_vals <- torp_team_abbr(vals)
+      if (is_dt) data.table::set(df, j = col, value = new_vals)
+      else df[[col]] <- new_vals
+    }
+  }
+
+  df
+}

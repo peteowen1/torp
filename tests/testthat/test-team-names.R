@@ -156,3 +156,89 @@ test_that("torp_team_full returns NA for unknown or NA input", {
   expect_true(is.na(torp_team_full("Unknown FC")))
   expect_true(is.na(torp_team_full(NA_character_)))
 })
+
+# -----------------------------------------------------------------------------
+# .normalise_team_values()
+# -----------------------------------------------------------------------------
+
+test_that(".normalise_team_values converts short names to canonical", {
+  df <- data.frame(
+    team = c("Adelaide", "Geelong", "GWS"),
+    opponent = c("Carlton", "Sydney", "Melbourne"),
+    stringsAsFactors = FALSE
+  )
+  df <- torp:::.normalise_team_values(df)
+  expect_equal(df$team, c("Adelaide Crows", "Geelong Cats", "GWS Giants"))
+  expect_equal(df$opponent, c("Carlton Blues", "Sydney Swans", "Melbourne Demons"))
+})
+
+test_that(".normalise_team_values is idempotent on canonical names", {
+  df <- data.frame(team = AFL_TEAMS$name, stringsAsFactors = FALSE)
+  df <- torp:::.normalise_team_values(df)
+  expect_equal(df$team, AFL_TEAMS$name)
+})
+
+test_that(".normalise_team_values normalizes abbreviation columns", {
+  df <- data.frame(
+    home_team = c("Adelaide", "Geelong"),
+    home_team_abbr = c("Adelaide", "Geelong"),
+    stringsAsFactors = FALSE
+  )
+  df <- torp:::.normalise_team_values(df)
+  expect_equal(df$home_team, c("Adelaide Crows", "Geelong Cats"))
+  expect_equal(df$home_team_abbr, c("ADEL", "GEEL"))
+})
+
+test_that(".normalise_team_values handles empty data frame", {
+  df <- data.frame(team = character(0), stringsAsFactors = FALSE)
+  result <- torp:::.normalise_team_values(df)
+  expect_equal(nrow(result), 0)
+})
+
+test_that(".normalise_team_values preserves non-team columns", {
+  df <- data.frame(
+    team = "Adelaide",
+    goals = 5,
+    player_name = "Test Player",
+    stringsAsFactors = FALSE
+  )
+  df <- torp:::.normalise_team_values(df)
+  expect_equal(df$team, "Adelaide Crows")
+  expect_equal(df$goals, 5)
+  expect_equal(df$player_name, "Test Player")
+})
+
+test_that(".normalise_team_values preserves NAs", {
+  df <- data.frame(
+    team = c("Adelaide", NA_character_),
+    stringsAsFactors = FALSE
+  )
+  df <- torp:::.normalise_team_values(df)
+  expect_equal(df$team[1], "Adelaide Crows")
+  expect_true(is.na(df$team[2]))
+})
+
+test_that(".normalise_team_values handles all team column types", {
+  df <- data.frame(
+    team = "Adelaide",
+    team_name = "Geelong",
+    home_team = "GWS",
+    away_team = "Sydney",
+    home_team_name = "Carlton",
+    away_team_name = "Essendon",
+    stringsAsFactors = FALSE
+  )
+  df <- torp:::.normalise_team_values(df)
+  expect_equal(df$team, "Adelaide Crows")
+  expect_equal(df$team_name, "Geelong Cats")
+  expect_equal(df$home_team, "GWS Giants")
+  expect_equal(df$away_team, "Sydney Swans")
+  expect_equal(df$home_team_name, "Carlton Blues")
+  expect_equal(df$away_team_name, "Essendon Bombers")
+})
+
+test_that(".normalise_team_values works with data.table by reference", {
+  dt <- data.table::data.table(team = c("Adelaide", "GWS"))
+  torp:::.normalise_team_values(dt)
+  expect_equal(dt$team, c("Adelaide Crows", "GWS Giants"))
+})
