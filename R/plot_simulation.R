@@ -24,6 +24,13 @@ plot_simulation <- function(sim_results, type = c("ladder", "position", "finals"
 
   if (!is.null(teams)) {
     summary <- summary[summary$team %in% teams, ]
+    if (nrow(summary) == 0) {
+      all_teams <- summarise_simulations(sim_results)$team
+      cli::cli_abort(c(
+        "No matching teams found in simulation results.",
+        "i" = "Available: {.val {all_teams}}"
+      ))
+    }
   }
 
   if (type == "ladder") {
@@ -57,7 +64,7 @@ plot_simulation <- function(sim_results, type = c("ladder", "position", "finals"
 
   } else if (type == "position") {
     # Position heatmap: team x ladder position probability
-    ladders <- sim_results$ladders
+    ladders <- data.table::as.data.table(sim_results$ladders)
     n <- sim_results$n_sims
 
     # Compute position probabilities

@@ -54,6 +54,9 @@ plot_player_rating <- function(player_name, seasons = TRUE,
 
   # Rolling average
   vals <- pdf[[metric]]
+  if (all(is.na(vals))) {
+    cli::cli_abort("Column {.val {metric}} contains only NA values for {.val {player_name}}")
+  }
   pdf$rolling_avg <- NA_real_
   for (i in seq_along(vals)) {
     start <- max(1, i - rolling + 1)
@@ -213,7 +216,7 @@ plot_stat_rating_profile <- function(x, type = c("bar", "radar"),
     cat_avgs_closed$idx <- seq_len(nrow(cat_avgs_closed))
 
     p <- ggplot2::ggplot(cat_avgs, ggplot2::aes(x = .data$category, y = .data$avg_pct)) +
-      ggplot2::geom_col(fill = AFL_TEAM_COLORS[info$team] %||% "#4292c6", alpha = 0.6, width = 0.8) +
+      ggplot2::geom_col(fill = team_color_lookup(info$team, "#4292c6"), alpha = 0.6, width = 0.8) +
       ggplot2::geom_hline(yintercept = 50, linetype = "dashed", colour = "grey50") +
       ggplot2::coord_polar() +
       ggplot2::scale_y_continuous(limits = c(0, 100)) +

@@ -40,6 +40,18 @@ team_fill_scale <- function(...) {
   ggplot2::scale_fill_manual(values = AFL_TEAM_COLORS, ...)
 }
 
+#' Look up a team colour with NA-safe fallback
+#'
+#' @param team Canonical team name.
+#' @param default Fallback hex colour if team not found.
+#' @param colors Named colour vector (default `AFL_TEAM_COLORS`).
+#' @return A hex colour string.
+#' @keywords internal
+team_color_lookup <- function(team, default = "#808080", colors = AFL_TEAM_COLORS) {
+  col <- colors[team]
+  if (is.na(col) || is.null(col)) default else unname(col)
+}
+
 #' Quarter break positions for game flow charts
 #'
 #' Returns a named numeric vector of quarter boundary seconds for x-axis annotation.

@@ -45,7 +45,14 @@ plot_player_comparison <- function(player_names, seasons = TRUE,
   resolved_names <- character()
 
   for (pname in player_names) {
-    player <- resolve_player(pname, seasons = if (isTRUE(seasons)) TRUE else seasons)
+    player <- tryCatch(
+      resolve_player(pname, seasons = if (isTRUE(seasons)) TRUE else seasons),
+      error = function(e) {
+        cli::cli_warn("Could not resolve player {.val {pname}}: {e$message}")
+        NULL
+      }
+    )
+    if (is.null(player)) next
     pid <- player$player_id
 
     pdf <- data[data$player_id == pid, ]
@@ -82,13 +89,8 @@ plot_player_comparison <- function(player_names, seasons = TRUE,
     # Try to get team colours for each player
     player_colours <- character()
     for (plabel in unique_players) {
-      player_team <- combined$team[combined$player_label == plabel][1]
-      team_col <- AFL_TEAM_COLORS[player_team]
-      if (!is.na(team_col)) {
-        player_colours[plabel] <- team_col
-      } else {
-        player_colours[plabel] <- NA_character_
-      }
+      player_team <- torp_replace_teams(combined$team[combined$player_label == plabel][1])
+      player_colours[plabel] <- team_color_lookup(player_team, NA_character_)
     }
 
     # If there are colour collisions (same team) or NAs, use a fallback palette

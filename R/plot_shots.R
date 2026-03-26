@@ -16,7 +16,7 @@
 #' @return A ggplot2 object.
 #' @export
 #' @importFrom ggplot2 ggplot aes geom_point geom_vline geom_segment
-#'   scale_colour_gradient2 scale_shape_manual labs coord_fixed annotate
+#'   scale_colour_gradient scale_shape_manual labs coord_fixed annotate
 #' @importFrom rlang .data
 plot_shot_map <- function(season = get_afl_season(), round = NULL, match_id = NULL,
                           team = NULL, show_outcome = TRUE,

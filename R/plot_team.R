@@ -23,6 +23,10 @@ plot_team_ratings <- function(team_ratings = NULL,
     team_ratings <- load_team_ratings()
   }
 
+  if (nrow(team_ratings) == 0) {
+    cli::cli_abort("No team ratings data available. Ratings may not have been computed yet.")
+  }
+
   # Filter to latest round per season if multiple rounds exist
   if ("round" %in% names(team_ratings) && "season" %in% names(team_ratings)) {
     latest <- team_ratings$season == max(team_ratings$season, na.rm = TRUE)

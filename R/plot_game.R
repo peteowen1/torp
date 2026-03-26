@@ -41,6 +41,9 @@ plot_ep_wp <- function(season = get_afl_season(), round = NULL, match_id = NULL,
     }
   } else {
     matches <- unique(data$match_id)
+    if (length(matches) == 0) {
+      cli::cli_abort("No matches found in the data for Round {round}")
+    }
     if (length(matches) > 1) {
       match_labels <- vapply(matches, function(mid) {
         row1 <- data[data$match_id == mid, ][1, ]
@@ -55,14 +58,14 @@ plot_ep_wp <- function(season = get_afl_season(), round = NULL, match_id = NULL,
   }
 
   # Extract team names
-  home_team <- match_data$home_team_name[1]
-  away_team <- match_data$away_team_name[1]
+  home_team <- torp_replace_teams(match_data$home_team_name[1])
+  away_team <- torp_replace_teams(match_data$away_team_name[1])
   rd <- match_data$round_number[1]
   szn <- match_data$season[1]
 
-  # Resolve colours
-  if (is.null(home_color)) home_color <- AFL_TEAM_COLORS[home_team] %||% "#1f77b4"
-  if (is.null(away_color)) away_color <- AFL_TEAM_COLORS[away_team] %||% "#ff7f0e"
+  # Resolve colours (NA-safe)
+  if (is.null(home_color)) home_color <- team_color_lookup(home_team, "#1f77b4")
+  if (is.null(away_color)) away_color <- team_color_lookup(away_team, "#ff7f0e")
 
   qtr_breaks <- quarter_breaks()
 
@@ -117,7 +120,6 @@ plot_ep_wp <- function(season = get_afl_season(), round = NULL, match_id = NULL,
   if (show_plays && "shot_row" %in% names(match_data) && "points_shot" %in% names(match_data)) {
     goals <- match_data[!is.na(match_data$points_shot) & match_data$points_shot == 6, ]
     if (nrow(goals) > 0) {
-      y_col <- if (metric == "wp") goals$wp * 100 else goals$exp_pts
       p <- p + ggplot2::geom_point(
         data = goals,
         ggplot2::aes(

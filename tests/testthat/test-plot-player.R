@@ -1,28 +1,69 @@
-test_that("plot_player_rating returns ggplot with mock data", {
+test_that("plot_player_rating returns ggplot with mocked resolve_player", {
   mock <- create_mock_player_game_ratings()
-  # Use data param directly; skip resolve_player by pre-filtering
-  # We test the plot building, not player resolution
-  mock$game_number <- seq_len(nrow(mock))
-  mock$season_fac <- factor(mock$season)
-  vals <- mock$torp_value
-  mock$rolling_avg <- NA_real_
-  for (i in seq_along(vals)) {
-    start <- max(1, i - 5 + 1)
-    mock$rolling_avg[i] <- mean(vals[start:i], na.rm = TRUE)
-  }
 
-  p <- ggplot2::ggplot(mock, ggplot2::aes(x = game_number)) +
-    ggplot2::geom_point(ggplot2::aes(y = torp_value, colour = season_fac), size = 1.5, alpha = 0.4) +
-    ggplot2::geom_line(ggplot2::aes(y = rolling_avg), colour = "grey20") +
-    theme_torp()
+  local_mocked_bindings(
+    resolve_player = function(...) list(
+      player_id = "CD_I123456",
+      player_name = "Test Player",
+      team = "Adelaide Crows",
+      position = "Midfielder"
+    )
+  )
+
+  p <- plot_player_rating("Test Player", data = mock)
   expect_s3_class(p, "ggplot")
+  expect_true(length(p$layers) >= 2) # points + rolling line
+  expect_equal(p$labels$y, "TORP Value")
+})
+
+test_that("plot_player_rating uses correct y-label per metric", {
+  mock <- create_mock_player_game_ratings()
+
+  local_mocked_bindings(
+    resolve_player = function(...) list(
+      player_id = "CD_I123456", player_name = "Test Player",
+      team = "Adelaide Crows", position = "Midfielder"
+    )
+  )
+
+  p <- plot_player_rating("Test Player", metric = "epv", data = mock)
+  expect_equal(p$labels$y, "EPV")
+})
+
+test_that("plot_player_rating errors on missing metric column", {
+  mock <- create_mock_player_game_ratings()
+  mock$nonexistent <- NULL
+
+  local_mocked_bindings(
+    resolve_player = function(...) list(
+      player_id = "CD_I123456", player_name = "Test Player",
+      team = "Adelaide Crows", position = "Midfielder"
+    )
+  )
+
+  expect_error(plot_player_rating("Test Player", metric = "torp_value", data = mock[, c("season", "round_number", "player_id", "player_name", "team")]))
+})
+
+test_that("plot_player_rating errors on no game ratings", {
+  mock <- create_mock_player_game_ratings()
+  mock <- mock[0, ] # empty
+
+  local_mocked_bindings(
+    resolve_player = function(...) list(
+      player_id = "CD_I123456", player_name = "Test Player",
+      team = "Adelaide Crows", position = "Midfielder"
+    )
+  )
+
+  expect_error(plot_player_rating("Test Player", data = mock), "No game ratings")
 })
 
 test_that("plot_stat_rating_profile returns ggplot for bar type", {
   mock_profile <- create_mock_stat_rating_profile()
-  p <- plot_stat_rating_profile(mock_profile, type = "bar")
+  p <- plot_stat_rating_profile(mock_profile)
   expect_s3_class(p, "ggplot")
   expect_true(length(p$layers) >= 1)
+  expect_equal(p$labels$y, "Percentile")
 })
 
 test_that("plot_stat_rating_profile returns ggplot for radar type", {
