@@ -1,11 +1,13 @@
 #' Plot team ratings comparison
 #'
 #' Displays team-level TORP ratings as a horizontal bar chart with team colours.
+#' Automatically uses the latest round from `load_team_ratings()` and maps
+#' column names (`team_epr` -> `epr`, etc.).
 #'
 #' @param team_ratings Optional data frame of team ratings. If NULL (default),
-#'   loads via `load_team_ratings()`.
-#' @param metric Column name to plot. One of `"torp"` (default), `"recv_epr"`,
-#'   `"disp_epr"`, `"spoil_epr"`, `"hitout_epr"`, or `"epr"`.
+#'   loads via `load_team_ratings()` and filters to the latest round.
+#' @param metric One of `"epr"` (default), `"recv"`, `"disp"`, `"spoil"`,
+#'   or `"hitout"`. Mapped to `team_epr`, `team_recv`, etc.
 #' @param season Season year for title. Default: current season.
 #'
 #' @return A ggplot2 object.
@@ -13,8 +15,7 @@
 #' @importFrom ggplot2 ggplot aes geom_col geom_vline coord_flip labs
 #' @importFrom rlang .data
 plot_team_ratings <- function(team_ratings = NULL,
-                              metric = c("torp", "epr", "recv_epr", "disp_epr",
-                                          "spoil_epr", "hitout_epr"),
+                              metric = c("epr", "recv", "disp", "spoil", "hitout"),
                               season = get_afl_season()) {
   metric <- match.arg(metric)
 
@@ -22,32 +23,48 @@ plot_team_ratings <- function(team_ratings = NULL,
     team_ratings <- load_team_ratings()
   }
 
-  if (!metric %in% names(team_ratings)) {
-    available <- intersect(c("torp", "epr", "recv_epr", "disp_epr", "spoil_epr", "hitout_epr"),
-                            names(team_ratings))
-    cli::cli_abort(c(
-      "Column {.val {metric}} not found in team ratings.",
-      "i" = "Available: {.val {available}}"
-    ))
+  # Filter to latest round per season if multiple rounds exist
+  if ("round" %in% names(team_ratings) && "season" %in% names(team_ratings)) {
+    latest <- team_ratings$season == max(team_ratings$season, na.rm = TRUE)
+    team_ratings <- team_ratings[latest, ]
+    latest_round <- max(team_ratings$round, na.rm = TRUE)
+    team_ratings <- team_ratings[team_ratings$round == latest_round, ]
+  }
+
+  # Normalise team names to canonical full names for colour matching
+  team_ratings$team <- torp_replace_teams(team_ratings$team)
+
+  # Map metric names: epr -> team_epr, recv -> team_recv, etc.
+  col_name <- paste0("team_", metric)
+  if (!col_name %in% names(team_ratings)) {
+    # Try without prefix
+    if (metric %in% names(team_ratings)) {
+      col_name <- metric
+    } else {
+      available <- grep("^team_", names(team_ratings), value = TRUE)
+      cli::cli_abort(c(
+        "Column {.val {col_name}} not found in team ratings.",
+        "i" = "Available: {.val {available}}"
+      ))
+    }
   }
 
   # Sort by metric
-  team_ratings <- team_ratings[order(team_ratings[[metric]]), ]
+  team_ratings <- team_ratings[order(team_ratings[[col_name]]), ]
   team_ratings$team <- factor(team_ratings$team, levels = team_ratings$team)
 
   metric_label <- switch(metric,
-    torp = "TORP Rating",
-    epr = "EPR",
-    recv_epr = "Receiving EPR",
-    disp_epr = "Disposal EPR",
-    spoil_epr = "Spoil EPR",
-    hitout_epr = "Hitout EPR",
+    epr = "Team EPR",
+    recv = "Receiving EPR",
+    disp = "Disposal EPR",
+    spoil = "Spoil EPR",
+    hitout = "Hitout EPR",
     metric
   )
 
   p <- ggplot2::ggplot(team_ratings, ggplot2::aes(
     x = .data$team,
-    y = .data[[metric]],
+    y = .data[[col_name]],
     fill = .data$team
   )) +
     ggplot2::geom_col(width = 0.7, show.legend = FALSE) +
