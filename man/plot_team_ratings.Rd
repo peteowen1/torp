@@ -6,16 +6,16 @@
 \usage{
 plot_team_ratings(
   team_ratings = NULL,
-  metric = c("torp", "epr", "recv_epr", "disp_epr", "spoil_epr", "hitout_epr"),
+  metric = c("epr", "recv", "disp", "spoil", "hitout"),
   season = get_afl_season()
 )
 }
 \arguments{
 \item{team_ratings}{Optional data frame of team ratings. If NULL (default),
-loads via \code{load_team_ratings()}.}
+loads via \code{load_team_ratings()} and filters to the latest round.}
 
-\item{metric}{Column name to plot. One of \code{"torp"} (default), \code{"recv_epr"},
-\code{"disp_epr"}, \code{"spoil_epr"}, \code{"hitout_epr"}, or \code{"epr"}.}
+\item{metric}{One of \code{"epr"} (default), \code{"recv"}, \code{"disp"}, \code{"spoil"},
+or \code{"hitout"}. Mapped to \code{team_epr}, \code{team_recv}, etc.}
 
 \item{season}{Season year for title. Default: current season.}
 }
@@ -24,4 +24,6 @@ A ggplot2 object.
 }
 \description{
 Displays team-level TORP ratings as a horizontal bar chart with team colours.
+Automatically uses the latest round from \code{load_team_ratings()} and maps
+column names (\code{team_epr} -> \code{epr}, etc.).
 }
