@@ -79,6 +79,11 @@ reference:
       - team_profile
       - print.torp_team_profile
 
+  - title: Network Centrality
+    desc: Opponent quality adjustment via network analysis
+    contents:
+      - calculate_player_centrality
+
   - title: Player Stat Ratings
     desc: Estimate and explore player stat rating profiles
     contents:
