@@ -228,6 +228,13 @@ Calculate and view TORP player ratings
 - [`print(`*`<torp_team_profile>`*`)`](https://peteowen1.github.io/torp/reference/print.torp_team_profile.md)
   : Print a team profile
 
+## Network Centrality
+
+Opponent quality adjustment via network analysis
+
+- [`calculate_player_centrality()`](https://peteowen1.github.io/torp/reference/calculate_player_centrality.md)
+  : Calculate Player Centrality
+
 ## Player Stat Ratings
 
 Estimate and explore player stat rating profiles

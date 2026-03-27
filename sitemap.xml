@@ -1,5 +1,6 @@
 <urlset xmlns = 'http://www.sitemaps.org/schemas/sitemap/0.9'>
 <url><loc>https://peteowen1.github.io/torp/404.html</loc></url>
+<url><loc>https://peteowen1.github.io/torp/ARCHITECTURE.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/LICENSE-text.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/LICENSE.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/WORKFLOW_README.html</loc></url>
@@ -156,6 +157,7 @@
 <url><loc>https://peteowen1.github.io/torp/reference/analyze_missing_data.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/assess_model_calibration.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/bound_probability.html</loc></url>
+<url><loc>https://peteowen1.github.io/torp/reference/build_adjacency.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/build_h2h_summary.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/build_injury_schedule.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/build_team_mdl_df.html</loc></url>
@@ -171,6 +173,7 @@
 <url><loc>https://peteowen1.github.io/torp/reference/calculate_lagged_goal_x.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/calculate_log_loss.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/calculate_match_xgs.html</loc></url>
+<url><loc>https://peteowen1.github.io/torp/reference/calculate_player_centrality.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/calculate_pos_lead_prob.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/calculate_psr.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/calculate_psr_components.html</loc></url>
@@ -195,6 +198,7 @@
 <url><loc>https://peteowen1.github.io/torp/reference/clear_skip_markers.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/compare_baseline_models.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/compare_models_statistical.html</loc></url>
+<url><loc>https://peteowen1.github.io/torp/reference/compute_centrality_scores.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/create_calibration_plot.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/create_grouped_cv_folds.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/create_model_comparison_report.html</loc></url>
@@ -293,6 +297,7 @@
 <url><loc>https://peteowen1.github.io/torp/reference/filter_game_data.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/filter_relevant_descriptions.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/finals_home_advantage.html</loc></url>
+<url><loc>https://peteowen1.github.io/torp/reference/find_components.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/fixtures.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/format_contest_rows.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/generate_disk_cache_key.html</loc></url>
