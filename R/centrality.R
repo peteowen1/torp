@@ -1,19 +1,19 @@
 # Player Network Centrality
 #
-# PageRank-based quality adjustment for player ratings. Detects "isolated
+# centrality-based quality adjustment for player ratings. Detects "isolated
 # cluster inflation" where a player's rating looks inflated because they
 # only played against weak opponents.
 #
 # Ported from bouncer (cricket) and adapted for AFL's team-based structure.
 # Players are connected through shared matches (teammates + opponents).
-# PageRank measures how well-connected a player is in the competition network.
+# centrality measures how well-connected a player is in the competition network.
 #
 # Reference: Opsahl, Agneessens & Skvoretz (2010) 'Node centrality in weighted networks'
 
 #' Calculate Player Centrality
 #'
 #' Builds a player interaction network from match data and computes
-#' PageRank centrality scores. Players who face diverse, high-quality
+#' centrality centrality scores. Players who face diverse, high-quality
 #' opponents get higher centrality. Players in isolated pools (e.g.,
 #' few games, always same opponents) get lower centrality.
 #'
@@ -23,7 +23,7 @@
 #'   - `match_id` or `matchId`: Match identifier
 #'   - `time_on_ground` (optional): Playing time as weight
 #' @param min_matches Integer. Minimum matches for inclusion. Default 5.
-#' @param damping Numeric. PageRank damping factor (0-1). Default 0.85.
+#' @param damping Numeric. centrality damping factor (0-1). Default 0.85.
 #'
 #' @return Data frame with player_id, centrality (0-1 normalized),
 #'   unique_opponents, matches_played, component_id, component_size
@@ -66,17 +66,17 @@ calculate_player_centrality <- function(player_matches,
 
   pm <- player_matches[player_matches$player_id %in% valid_players, ]
 
-  # Build adjacency, find components, compute PageRank
+  # Build adjacency, find components, compute centrality
   adj <- build_adjacency(pm)
   components <- find_components(adj)
-  pagerank <- compute_pagerank(adj, damping = damping)
+  scores <- compute_centrality_scores(adj, damping = damping)
 
   # Normalize to 0-1
-  pr_range <- range(pagerank)
+  pr_range <- range(scores)
   if (pr_range[2] > pr_range[1]) {
-    centrality <- (pagerank - pr_range[1]) / (pr_range[2] - pr_range[1])
+    centrality <- (scores - pr_range[1]) / (pr_range[2] - pr_range[1])
   } else {
-    centrality <- rep(1, length(pagerank))
+    centrality <- rep(1, length(scores))
   }
 
   # Count unique opponents (teams faced, not individual players)
@@ -192,9 +192,9 @@ find_components <- function(adj) {
 }
 
 
-#' Compute PageRank via Power Iteration
+#' Compute centrality via Power Iteration
 #' @keywords internal
-compute_pagerank <- function(adj, damping = 0.85, max_iter = 100L, tol = 1e-6) {
+compute_centrality_scores <- function(adj, damping = 0.85, max_iter = 100L, tol = 1e-6) {
   n <- nrow(adj)
   ids <- rownames(adj)
   cs <- Matrix::colSums(adj)
