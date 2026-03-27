@@ -138,25 +138,24 @@ build_adjacency <- function(pm) {
   has_tog <- "time_on_ground" %in% names(pm)
 
   matches <- split(pm, pm$match_id)
-  row_i <- integer()
-  col_j <- integer()
-  vals <- numeric()
+  row_chunks <- vector("list", length(matches))
+  col_chunks <- vector("list", length(matches))
+  val_chunks <- vector("list", length(matches))
 
-  for (md in matches) {
-    pids <- unique(md$player_id)
+  for (m_idx in seq_along(matches)) {
+    pids <- unique(matches[[m_idx]]$player_id)
     if (length(pids) < 2) next
     pidx <- idx[pids]
     pairs <- utils::combn(pidx, 2)
     np <- ncol(pairs)
-    row_i <- c(row_i, pairs[1, ], pairs[2, ])
-    col_j <- c(col_j, pairs[2, ], pairs[1, ])
-    vals <- c(vals, rep(1, np * 2))
+    row_chunks[[m_idx]] <- c(pairs[1, ], pairs[2, ])
+    col_chunks[[m_idx]] <- c(pairs[2, ], pairs[1, ])
+    val_chunks[[m_idx]] <- rep(1, np * 2)
   }
 
   Matrix::sparseMatrix(
-    i = row_i, j = col_j, x = vals,
-    dims = c(n, n), dimnames = list(player_ids, player_ids),
-    giveCsparse = TRUE
+    i = unlist(row_chunks), j = unlist(col_chunks), x = unlist(val_chunks),
+    dims = c(n, n), dimnames = list(player_ids, player_ids)
   )
 }
 
@@ -181,7 +180,7 @@ find_components <- function(adj) {
   for (k in seq_len(nrow(s))) {
     ri <- find_root(s$i[k])
     rj <- find_root(s$j[k])
-    if (ri != rj) parent[ri] <<- rj
+    if (ri != rj) parent[ri] <- rj
   }
 
   membership <- vapply(seq_len(n), find_root, integer(1))
