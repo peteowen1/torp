@@ -156,6 +156,7 @@
 <url><loc>https://peteowen1.github.io/torp/reference/analyze_duplicates.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/analyze_missing_data.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/assess_model_calibration.html</loc></url>
+<url><loc>https://peteowen1.github.io/torp/reference/batch_player_attribution.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/bound_probability.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/build_adjacency.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/build_h2h_summary.html</loc></url>
@@ -173,6 +174,7 @@
 <url><loc>https://peteowen1.github.io/torp/reference/calculate_lagged_goal_x.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/calculate_log_loss.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/calculate_match_xgs.html</loc></url>
+<url><loc>https://peteowen1.github.io/torp/reference/calculate_player_attribution.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/calculate_player_centrality.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/calculate_pos_lead_prob.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/calculate_psr.html</loc></url>

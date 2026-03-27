@@ -235,6 +235,15 @@ Opponent quality adjustment via network analysis
 - [`calculate_player_centrality()`](https://peteowen1.github.io/torp/reference/calculate_player_centrality.md)
   : Calculate Player Centrality
 
+## Player Attribution
+
+Zero-ablation player impact measurement
+
+- [`calculate_player_attribution()`](https://peteowen1.github.io/torp/reference/calculate_player_attribution.md)
+  : Calculate Player Attribution for a Match
+- [`batch_player_attribution()`](https://peteowen1.github.io/torp/reference/batch_player_attribution.md)
+  : Batch Player Attribution Across Matches
+
 ## Player Stat Ratings
 
 Estimate and explore player stat rating profiles
