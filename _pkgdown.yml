@@ -84,6 +84,12 @@ reference:
     contents:
       - calculate_player_centrality
 
+  - title: Player Attribution
+    desc: Zero-ablation player impact measurement
+    contents:
+      - calculate_player_attribution
+      - batch_player_attribution
+
   - title: Player Stat Ratings
     desc: Estimate and explore player stat rating profiles
     contents:
