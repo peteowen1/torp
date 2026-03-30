@@ -320,10 +320,24 @@ parse_return_round <- function(estimated_return, season, current_round = 1L) {
       next
     }
 
+    # "Season" (alone) -- out for the season
+    if (val_lower == "season") {
+      result[i] <- Inf
+      next
+    }
+
     # "N-M weeks" range (conservative: use upper bound, ~1 round per week)
     m <- regmatches(val_lower, regexec("(\\d+)\\s*-\\s*(\\d+)\\s*weeks?", val_lower))[[1]]
     if (length(m) == 3) {
       result[i] <- current_round + as.integer(ceiling(as.numeric(m[3])))
+      next
+    }
+
+    # "N-plus weeks" / "N+ weeks" (conservative: treat as N * 1.5 weeks)
+    m <- regmatches(val_lower, regexec("(\\d+)\\s*[-]?plus\\s*weeks?", val_lower))[[1]]
+    if (length(m) == 2) {
+      weeks <- as.numeric(m[2])
+      result[i] <- current_round + as.integer(ceiling(weeks * 1.5))
       next
     }
 
@@ -334,8 +348,25 @@ parse_return_round <- function(estimated_return, season, current_round = 1L) {
       next
     }
 
-    # "TBC" / "Indefinite" / unknown
-    if (val_lower %in% c("tbc", "indefinite", "test", "unknown")) {
+    # "N-M months" range (conservative: upper bound, ~4 weeks per month)
+    m <- regmatches(val_lower, regexec("(\\d+)\\s*-\\s*(\\d+)\\s*months?", val_lower))[[1]]
+    if (length(m) == 3) {
+      weeks <- as.numeric(m[3]) * 4
+      result[i] <- current_round + as.integer(ceiling(weeks))
+      next
+    }
+
+    # "N months" single value (~4 weeks per month)
+    m <- regmatches(val_lower, regexec("^(\\d+)\\s*months?$", val_lower))[[1]]
+    if (length(m) == 2) {
+      weeks <- as.numeric(m[2]) * 4
+      result[i] <- current_round + as.integer(ceiling(weeks))
+      next
+    }
+
+    # "TBC" / "Indefinite" / "Assess" / "Individualised program" / unknown
+    if (val_lower %in% c("tbc", "indefinite", "test", "unknown", "assess",
+                          "individualised program")) {
       result[i] <- current_round + SIM_INJURY_TBC_BUFFER
       next
     }

@@ -238,6 +238,36 @@ test_that("parse_return_round handles single N weeks", {
   expect_equal(parse_return_round("1 week", 2026, current_round = 10), 11)
 })
 
+test_that("parse_return_round handles 'Season' as Inf", {
+  expect_equal(parse_return_round("Season", 2026, current_round = 4), Inf)
+})
+
+test_that("parse_return_round handles N-plus weeks", {
+  # "10-plus weeks" -> 10 * 1.5 = 15 weeks -> current_round + 15
+
+  expect_equal(parse_return_round("10-plus weeks", 2026, current_round = 4), 19)
+  expect_equal(parse_return_round("6-plus weeks", 2026, current_round = 4), 13)
+})
+
+test_that("parse_return_round handles month-based returns", {
+  # "2 months" -> 2 * 4 = 8 weeks -> current_round + 8
+
+  expect_equal(parse_return_round("2 months", 2026, current_round = 4), 12)
+  expect_equal(parse_return_round("5 months", 2026, current_round = 4), 24)
+  # "3-4 months" -> 4 * 4 = 16 weeks -> current_round + 16
+
+  expect_equal(parse_return_round("3-4 months", 2026, current_round = 4), 20)
+})
+
+test_that("parse_return_round handles Assess and Individualised program", {
+  tbc_val <- 4 + SIM_INJURY_TBC_BUFFER
+  expect_equal(parse_return_round("Assess", 2026, current_round = 4), tbc_val)
+  expect_equal(
+    parse_return_round("Individualised program", 2026, current_round = 4),
+    tbc_val
+  )
+})
+
 
 # --- build_injury_schedule() ---
 

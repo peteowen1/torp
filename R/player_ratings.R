@@ -694,7 +694,8 @@ psr_ratings <- function(season_val = get_afl_season(type = "current"),
 #'
 #' @export
 torp_ratings <- function(season_val = get_afl_season(type = "current"),
-                         round_val = get_afl_week(type = "next"), ...) {
+                         round_val = get_afl_week(type = "next"),
+                         injuries = NULL, ...) {
   # Step 1: EPR
   epr_df <- suppressMessages(calculate_epr(season_val, round_val, ...))
 
@@ -724,11 +725,13 @@ torp_ratings <- function(season_val = get_afl_season(type = "current"),
   cli::cli_inform("TORP ratings as at {season_val} round {round_val}")
   result <- calculate_torp(epr_df, psr_df)
 
-  # Step 4: Join current injuries
-  injuries <- tryCatch(get_all_injuries(season_val, scrape = TRUE), error = function(e) {
-    cli::cli_warn("Could not load injury data: {conditionMessage(e)}")
-    NULL
-  })
+  # Step 4: Join current injuries (skip scrape if caller already provided them)
+  if (is.null(injuries)) {
+    injuries <- tryCatch(get_all_injuries(season_val, scrape = TRUE), error = function(e) {
+      cli::cli_warn("Could not load injury data: {conditionMessage(e)}")
+      NULL
+    })
+  }
   result <- match_injuries(result, injuries)
 
   front_cols <- c("player_id", "player_name", "age", "team", "torp", "epr", "psr",

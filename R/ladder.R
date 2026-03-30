@@ -26,10 +26,19 @@ NULL
 #' @param injuries Optional injury data.frame from [get_all_injuries()]. When
 #'   provided, team ratings are built from player-level TORP with injured
 #'   players excluded and a lighter discount ([INJURY_KNOWN_DISCOUNT]) applied.
+#' @param team_residuals Optional data.frame with columns `team`,
+#'   `residual_mean`, `residual_se`. Team-level quality residuals from the
+#'   match GAM random effects, capturing systematic over/under-performance
+#'   not explained by player TORP. If `"auto"`, attempts to extract from the
+#'   match GAM model.
+#' @param models Optional named list of GAM models from
+#'   `run_predictions_pipeline()$models`. Passed to [.extract_team_residuals()]
+#'   to use fresh models instead of the stored torpmodels version.
 #' @return A list with elements `sim_teams`, `sim_games`, `played_games`.
 #' @keywords internal
 prepare_sim_data <- function(season, team_ratings = NULL, fixtures = NULL,
-                             predictions = NULL, injuries = NULL) {
+                             predictions = NULL, injuries = NULL,
+                             team_residuals = NULL, models = NULL) {
 
  # --- Fixtures ---
   if (is.null(fixtures)) {
@@ -133,7 +142,7 @@ prepare_sim_data <- function(season, team_ratings = NULL, fixtures = NULL,
       # Injury-aware path: use torp_ratings() for live computation with full
       # TORP blend (epr + psr). Standard path: download pre-computed release.
       if (use_injury_aware) {
-        pr <- tryCatch(torp_ratings(season), error = function(e) NULL)
+        pr <- tryCatch(torp_ratings(season, injuries = injuries), error = function(e) NULL)
       } else {
         pr <- tryCatch(load_torp_ratings(), error = function(e) NULL)
       }
@@ -208,6 +217,7 @@ prepare_sim_data <- function(season, team_ratings = NULL, fixtures = NULL,
       n_returning <- nrow(injury_schedule)
       cli::cli_alert_info("Injury schedule: {n_returning} team-round return boost{?s} computed")
     }
+    injuries <- inj_with_round
   }
 
   # --- Predictions (optional) ---
@@ -260,13 +270,84 @@ prepare_sim_data <- function(season, team_ratings = NULL, fixtures = NULL,
     )
   }
 
+  # --- Team Residuals (GAM random effects) ---
+  if (identical(team_residuals, "auto")) {
+    team_residuals <- .extract_team_residuals(models = models)
+  }
+  if (!is.null(team_residuals)) {
+    tr_dt <- data.table::as.data.table(team_residuals)[, .(team, residual_mean, residual_se)]
+    sim_teams <- merge(sim_teams, tr_dt, by = "team", all.x = TRUE)
+    # Teams not in GAM (expansion teams etc.) get 0 residual with league-average SE
+    avg_se <- mean(tr_dt$residual_se, na.rm = TRUE)
+    sim_teams[is.na(residual_mean), `:=`(residual_mean = 0, residual_se = avg_se)]
+  } else {
+    sim_teams[, `:=`(residual_mean = 0, residual_se = 0)]
+  }
+
   list(
     sim_teams       = sim_teams,
     sim_games       = sim_games,
     played_games    = played_games,
     gf_familiarity  = gf_familiarity,
-    injury_schedule = injury_schedule
+    injury_schedule = injury_schedule,
+    injuries        = injuries
   )
+}
+
+
+#' Extract team-level quality residuals from match GAM
+#'
+#' Extracts the cross-season `team_name.x` random effects from the
+#' `xscore_diff` GAM. These capture systematic team over/under-performance
+#' not explained by player TORP ratings (e.g. coaching, team system).
+#' Team names are standardised via [torp_replace_teams()] to ensure
+#' consistent merging with simulation team names.
+#'
+#' @param models Optional named list of GAM models (as returned by
+#'   `run_predictions_pipeline()$models`). When provided, uses the
+#'   `xscore_diff` model directly. Otherwise loads from torpmodels.
+#' @return A data.table with columns `team`, `residual_mean`, `residual_se`,
+#'   or NULL if extraction fails.
+#' @keywords internal
+.extract_team_residuals <- function(models = NULL) {
+  if (!requireNamespace("mixedup", quietly = TRUE)) {
+    cli::cli_warn("Package {.pkg mixedup} is needed to extract team residuals. Install with {.code install.packages('mixedup')}.")
+    return(NULL)
+  }
+
+  if (!is.null(models) && !is.null(models[["xscore_diff"]])) {
+    xsd <- models[["xscore_diff"]]
+  } else {
+    match_gams <- tryCatch(
+      torpmodels::load_torp_model("match_gams"),
+      error = function(e) {
+        cli::cli_warn("Could not load match GAMs: {conditionMessage(e)}")
+        NULL
+      }
+    )
+    if (is.null(match_gams) || is.null(match_gams[["xscore_diff"]])) return(NULL)
+    xsd <- match_gams[["xscore_diff"]]
+  }
+
+  re <- tryCatch(
+    mixedup::extract_ranef(xsd),
+    error = function(e) {
+      cli::cli_warn("Could not extract random effects: {conditionMessage(e)}")
+      NULL
+    }
+  )
+  if (is.null(re)) return(NULL)
+
+  team_re <- re[re$group_var == "team_name.x", c("group", "value", "se")]
+  if (nrow(team_re) == 0) return(NULL)
+
+  names(team_re) <- c("team", "residual_mean", "residual_se")
+  result <- data.table::as.data.table(team_re)
+
+  # Standardise team names to canonical form for reliable merging
+  result[, team := torp_replace_teams(team)]
+
+  result
 }
 
 
@@ -284,31 +365,24 @@ prepare_sim_data <- function(season, team_ratings = NULL, fixtures = NULL,
 #' @return A data.table with one row per team, sorted by ladder position.
 #' @export
 calculate_ladder <- function(games_dt) {
-  dt <- data.table::as.data.table(games_dt)
+  if (!data.table::is.data.table(games_dt)) {
+    games_dt <- data.table::as.data.table(games_dt)
+  }
 
-  # Home perspective
- home <- dt[!is.na(result), .(
-    team       = home_team,
-    score_for  = as.numeric(home_score),
-    score_against = as.numeric(away_score),
-    margin     = as.numeric(result)
-  )]
-
-  # Away perspective
-  away <- dt[!is.na(result), .(
-    team       = away_team,
-    score_for  = as.numeric(away_score),
-    score_against = as.numeric(home_score),
-    margin     = -as.numeric(result)
-  )]
-
-  team_rows <- data.table::rbindlist(list(home, away))
+  # Pivot home + away in one filter pass
+  played <- games_dt[!is.na(result)]
+  team_rows <- data.table::data.table(
+    team          = c(played$home_team, played$away_team),
+    score_for     = c(played$home_score, played$away_score),
+    score_against = c(played$away_score, played$home_score),
+    margin        = c(played$result, -played$result)
+  )
 
   ladder <- team_rows[, .(
     played     = .N,
-    wins       = sum(margin > 0),
-    draws      = sum(margin == 0),
-    losses     = sum(margin < 0),
+    wins       = sum(margin > 0L),
+    draws      = sum(margin == 0L),
+    losses     = sum(margin < 0L),
     points_for = sum(score_for),
     points_against = sum(score_against)
   ), by = team]
@@ -704,7 +778,7 @@ simulate_finals <- function(ladder_dt, sim_teams_dt, gf_familiarity = NULL) {
                           home_advantage = ha, allow_draw = FALSE)
 
     # Hot rating adjustment
-    shift <- 0.1 * (res$result - res$estimate)
+    shift <- SIM_RATING_SHIFT * (res$result - res$estimate)
     ratings[home] <<- ratings[home] + shift
     ratings[away] <<- ratings[away] - shift
 
@@ -809,6 +883,16 @@ simulate_finals <- function(ladder_dt, sim_teams_dt, gf_familiarity = NULL) {
 #' @param injuries Injury data.frame from [get_all_injuries()]. By default,
 #'   fetched automatically from the AFL injury list. Pass `FALSE` to disable
 #'   injury-aware simulation, or supply your own data.frame.
+#' @param team_residuals Team quality residuals from the match GAM random
+#'   effects. `"auto"` (default) extracts from the xscore_diff GAM via
+#'   [.extract_team_residuals()]. Pass a data.frame with `team`,
+#'   `residual_mean`, `residual_se` to supply custom values, or `NULL` to
+#'   disable. Residuals are sampled from `N(mean, se)` once per simulation,
+#'   capturing coaching/system quality not explained by player TORP.
+#' @param models Optional named list of GAM models from
+#'   `run_predictions_pipeline()$models`. When provided, team residuals are
+#'   extracted from the fresh `xscore_diff` model instead of the stored
+#'   torpmodels version. Ignored when `team_residuals` is not `"auto"`.
 #' @param seed Optional random seed for reproducibility.
 #' @param verbose Logical; if TRUE, shows a progress bar.
 #' @param keep_games Logical; if TRUE, stores per-sim game results (memory
@@ -835,10 +919,14 @@ simulate_afl_season <- function(season,
                                 fixtures = NULL,
                                 predictions = NULL,
                                 injuries = NULL,
+                                team_residuals = "auto",
+                                models = NULL,
                                 seed = NULL,
                                 verbose = TRUE,
                                 keep_games = FALSE,
                                 n_cores = max(1L, parallel::detectCores() - 1L, na.rm = TRUE)) {
+
+  .pipeline_start <- proc.time()
 
   if (!is.null(seed)) set.seed(seed)
 
@@ -861,11 +949,13 @@ simulate_afl_season <- function(season,
 
   # Prepare data once
   prep <- prepare_sim_data(
-    season      = season,
-    team_ratings = team_ratings,
-    fixtures    = fixtures,
-    predictions = predictions,
-    injuries    = injuries
+    season         = season,
+    team_ratings   = team_ratings,
+    fixtures       = fixtures,
+    predictions    = predictions,
+    injuries       = injuries,
+    team_residuals = team_residuals,
+    models         = models
   )
 
   base_teams <- prep$sim_teams
@@ -873,6 +963,18 @@ simulate_afl_season <- function(season,
   played_games <- prep$played_games
   gf_familiarity <- prep$gf_familiarity
   injury_schedule <- prep$injury_schedule
+  prep <- NULL  # free memory before parallel serialization
+
+  prep_elapsed <- (proc.time() - .pipeline_start)[["elapsed"]]
+  if (verbose) {
+    cli::cli_alert_success("Data preparation [{round(prep_elapsed, 1)}s]")
+  }
+
+  # Report residuals if present
+  if (verbose && any(base_teams$residual_se > 0, na.rm = TRUE)) {
+    n_teams <- sum(base_teams$residual_se > 0, na.rm = TRUE)
+    cli::cli_alert_info("Team quality residuals: {n_teams} teams with GAM random effects (sampled per-sim)")
+  }
 
   # Ensure column types once (so simulate_season doesn't need to per-sim)
   if ("result" %in% names(base_games)) {
@@ -885,102 +987,195 @@ simulate_afl_season <- function(season,
     base_games[, torp_away_round := as.numeric(torp_away_round)]
   }
 
-  # --- Worker function for a single sim ---
-  run_one_sim <- function(sim_id) {
-    sim_result <- simulate_season(base_teams, base_games, return_teams = TRUE,
-                                  injury_sd = sim_injury_sd,
-                                  injury_schedule = injury_schedule)
-    simmed_games <- sim_result$games
-    sim_teams_final <- sim_result$teams
+  # --- Worker function: run a BATCH of sims and return combined results ---
+  # progress_fn is called per sim in sequential mode; no-op in parallel
+  run_sim_batch <- function(sim_ids, progress_fn = NULL) {
+    n_batch <- length(sim_ids)
+    ladders <- vector("list", n_batch)
+    finals_list <- vector("list", n_batch)
+    games_list <- if (keep_games) vector("list", n_batch) else NULL
 
-    all_games <- data.table::rbindlist(
-      list(played_games, simmed_games),
-      use.names = TRUE, fill = TRUE
-    )
+    for (j in seq_along(sim_ids)) {
+      sim_id <- sim_ids[j]
+      sim_result <- simulate_season(base_teams, base_games, return_teams = TRUE,
+                                    injury_sd = sim_injury_sd,
+                                    injury_schedule = injury_schedule)
 
-    ladder <- calculate_ladder(all_games)
-    ladder[, sim_id := sim_id]
+      all_games <- data.table::rbindlist(
+        list(played_games, sim_result$games),
+        use.names = TRUE, fill = TRUE
+      )
 
-    finals <- simulate_finals(ladder, sim_teams_final, gf_familiarity)
-    finals[, sim_id := sim_id]
+      ladder <- calculate_ladder(all_games)
+      ladder[, sim_id := sim_id]
+      ladders[[j]] <- ladder
 
-    out <- list(ladder = ladder, finals = finals)
-    if (keep_games) {
-      all_games[, sim_id := sim_id]
-      out$games <- all_games
+      finals <- simulate_finals(ladder, sim_result$teams, gf_familiarity)
+      finals[, sim_id := sim_id]
+      finals_list[[j]] <- finals
+
+      if (keep_games) {
+        all_games[, sim_id := sim_id]
+        games_list[[j]] <- all_games
+      }
+
+      if (!is.null(progress_fn)) progress_fn()
     }
-    out
+
+    list(
+      ladder = data.table::rbindlist(ladders),
+      finals = data.table::rbindlist(finals_list),
+      games  = if (keep_games) data.table::rbindlist(games_list) else NULL
+    )
   }
 
   # --- Execute: parallel or sequential ---
   n_cores <- as.integer(n_cores)
+  # On Windows, PSOCK cluster startup (~5s) only pays off for large n_sims.
+  # Sequential with optimised vector-based simulate_season runs ~9ms/sim,
+
+  # so parallel break-even is roughly n_sims > 1000.
+  if (.Platform$OS.type == "windows" && n_cores > 1L && n_sims <= 1000L) {
+    n_cores <- 1L
+  }
   if (verbose) {
     cli::cli_inform("Running {n_sims} simulations on {n_cores} core{?s}.")
   }
   if (n_cores > 1L) {
+    # Clean up leaked file connections from pipeline downloads to avoid
+    # collisions with parallel PSOCK cluster connections (Windows)
+    open_cons <- rownames(showConnections(all = FALSE))
+    for (con_id in open_cons) {
+      con_num <- as.integer(con_id)
+      if (con_num > 2L) {  # skip stdin/stdout/stderr
+        tryCatch(close(getConnection(con_num)), error = function(e) NULL)
+      }
+    }
+    gc()
+
     cl <- parallel::makeCluster(n_cores)
     on.exit(parallel::stopCluster(cl), add = TRUE)
 
-    # Export required objects and functions to workers
+    # Load torp in each worker to avoid serializing the full namespace.
+    # devtools::load_all sessions need load_all on workers too (installed
+    # version may be stale). Detect via pkgload::is_dev_package().
+    pkg_src <- getNamespaceInfo("torp", "path")
+    is_dev <- isTRUE(tryCatch(
+      pkgload::is_dev_package("torp"),
+      error = function(e) FALSE
+    ))
+
+    parallel::clusterEvalQ(cl, library(data.table))
+
+    torp_loaded <- FALSE
+    if (is_dev) {
+      # devtools session: workers must load_all from source to get current code
+      parallel::clusterExport(cl, "pkg_src", envir = environment())
+      torp_loaded <- tryCatch({
+        parallel::clusterEvalQ(cl,
+          suppressMessages(devtools::load_all(pkg_src, quiet = TRUE)))
+        TRUE
+      }, error = function(e) FALSE)
+    }
+    if (!torp_loaded) {
+      # Installed package or load_all failed: try library()
+      torp_loaded <- tryCatch({
+        parallel::clusterEvalQ(cl, library(torp))
+        TRUE
+      }, error = function(e) FALSE)
+    }
+    if (!torp_loaded) {
+      # Last resort: export functions directly (slower due to env serialization)
+      parallel::clusterExport(cl, c(
+        "simulate_season", "calculate_ladder",
+        "simulate_finals", "simulate_match",
+        "finals_home_advantage", "gf_home_advantage",
+        "SIM_HOME_ADVANTAGE", "SIM_NOISE_SD", "SIM_WP_SCALING_FACTOR",
+        "SIM_AVG_TOTAL", "SIM_TOTAL_SD", "SIM_GF_FAMILIARITY_SCALE",
+        "SIM_GF_VENUE", "SIM_VICTORIAN_TEAMS", "SIM_RATING_SHIFT",
+        "SIM_INJURY_SD", "SIM_INJURY_SD_KNOWN", "SIM_MEAN_REVERSION"
+      ), envir = environment())
+    }
+
+    # Export only data objects (small, no environment baggage)
     parallel::clusterExport(cl, c(
       "base_teams", "base_games", "played_games", "keep_games",
-      "sim_injury_sd", "gf_familiarity", "injury_schedule",
-      "simulate_season", "process_games_dt", "calculate_ladder",
-      "simulate_finals", "simulate_match",
-      "finals_home_advantage", "gf_home_advantage",
-      "SIM_HOME_ADVANTAGE", "SIM_NOISE_SD", "SIM_WP_SCALING_FACTOR",
-      "SIM_AVG_TOTAL", "SIM_TOTAL_SD", "SIM_GF_FAMILIARITY_SCALE",
-      "SIM_GF_VENUE", "SIM_VICTORIAN_TEAMS",
-      "SIM_INJURY_SD", "SIM_INJURY_SD_KNOWN", "SIM_MEAN_REVERSION"
+      "sim_injury_sd", "gf_familiarity", "injury_schedule"
     ), envir = environment())
-    parallel::clusterEvalQ(cl, library(data.table))
 
     # Reproducible parallel RNG
     if (!is.null(seed)) parallel::clusterSetRNGStream(cl, seed)
 
-    # Run in batches for progress reporting
-    batch_size <- max(n_sims %/% 20L, n_cores)
-    batches <- split(seq_len(n_sims), ceiling(seq_len(n_sims) / batch_size))
+    # Split sims into one chunk per core — one round-trip per worker
+    chunks <- split(seq_len(n_sims), rep(seq_len(n_cores), length.out = n_sims))
 
-    if (verbose) {
-      cli::cli_progress_bar(
-        paste0("Simulating seasons (", n_cores, " cores)"),
-        total = n_sims
-      )
+    chunk_results <- tryCatch(
+      parallel::parLapply(cl, chunks, run_sim_batch),
+      error = function(e) {
+        cli::cli_warn("Parallel cluster failed ({conditionMessage(e)}), falling back to sequential")
+        NULL
+      }
+    )
+
+    if (!is.null(chunk_results)) {
+      all_ladders <- data.table::rbindlist(lapply(chunk_results, `[[`, "ladder"))
+      all_finals  <- data.table::rbindlist(lapply(chunk_results, `[[`, "finals"))
+      all_games   <- if (keep_games) {
+        data.table::rbindlist(lapply(chunk_results, `[[`, "games"))
+      } else {
+        NULL
+      }
+    } else {
+      # Sequential fallback
+      if (verbose) cli::cli_progress_bar("Simulating seasons", total = n_sims)
+      fallback <- run_sim_batch(seq_len(n_sims))
+      all_ladders <- fallback$ladder
+      all_finals  <- fallback$finals
+      all_games   <- fallback$games
+      if (verbose) cli::cli_progress_done()
     }
-
-    sim_results <- vector("list", n_sims)
-    for (batch in batches) {
-      batch_results <- parallel::parLapply(cl, batch, run_one_sim)
-      sim_results[batch] <- batch_results
-      if (verbose) cli::cli_progress_update(set = max(batch))
-    }
-
-    if (verbose) cli::cli_progress_done()
   } else {
-    if (verbose) cli::cli_progress_bar("Simulating seasons", total = n_sims)
-
-    sim_results <- vector("list", n_sims)
-    for (i in seq_len(n_sims)) {
-      sim_results[[i]] <- run_one_sim(i)
-      if (verbose) cli::cli_progress_update()
+    # Sequential: run all sims in a single batch with inline progress
+    if (verbose) {
+      pb_id <- cli::cli_progress_bar("Simulating seasons", total = n_sims)
+      progress_fn <- function() cli::cli_progress_update(id = pb_id)
+    } else {
+      pb_id <- NULL
+      progress_fn <- NULL
     }
 
-    if (verbose) cli::cli_progress_done()
+    batch_result <- run_sim_batch(seq_len(n_sims), progress_fn = progress_fn)
+    all_ladders <- batch_result$ladder
+    all_finals  <- batch_result$finals
+    all_games   <- batch_result$games
+
+    if (verbose) cli::cli_progress_done(id = pb_id)
+  }
+
+  if (verbose) {
+    sim_elapsed <- (proc.time() - .pipeline_start)[["elapsed"]] - prep_elapsed
+    cli::cli_alert_success("Simulation [{round(sim_elapsed, 1)}s]")
   }
 
   # --- Collect results ---
   result <- list(
     season           = season,
     n_sims           = n_sims,
-    ladders          = data.table::rbindlist(lapply(sim_results, `[[`, "ladder")),
-    finals           = data.table::rbindlist(lapply(sim_results, `[[`, "finals")),
-    games            = if (keep_games) data.table::rbindlist(lapply(sim_results, `[[`, "games")) else NULL,
+    ladders          = all_ladders,
+    finals           = all_finals,
+    games            = all_games,
     original_ratings = base_teams,
     played_games     = played_games,
-    injury_schedule  = injury_schedule
+    injury_schedule  = injury_schedule,
+    injuries         = injuries
   )
   class(result) <- "torp_sim_results"
+
+  if (verbose) {
+    total_elapsed <- (proc.time() - .pipeline_start)[["elapsed"]]
+    cli::cli_alert_success("Total [{round(total_elapsed, 1)}s]")
+  }
+
   result
 }
 
@@ -1040,10 +1235,11 @@ summarise_simulations <- function(sim_results) {
                made_gf_pct = 0, won_gf_pct = 0)]
   }
 
-  # Join original TORP ratings
+  # Join original TORP ratings and team residuals
   if (!is.null(sim_results$original_ratings)) {
-    ratings_dt <- data.table::as.data.table(sim_results$original_ratings)[, .(team, torp)]
-    out <- merge(out, ratings_dt, by = "team", all.x = TRUE)
+    rat_dt <- data.table::as.data.table(sim_results$original_ratings)
+    rat_cols <- intersect(c("team", "torp", "residual_mean"), names(rat_dt))
+    out <- merge(out, rat_dt[, ..rat_cols], by = "team", all.x = TRUE)
   }
 
   # Compute current W-L from played games
@@ -1077,6 +1273,13 @@ print.torp_sim_results <- function(x, ...) {
   cli::cli_h2("AFL Season Simulation: {x$season}")
   cli::cli_text("{x$n_sims} simulations")
 
+  # Show team residuals summary if present
+  ratings <- x$original_ratings
+  if (!is.null(ratings) && "residual_mean" %in% names(ratings) &&
+      any(ratings$residual_se > 0, na.rm = TRUE)) {
+    cli::cli_text("Team quality residuals from match GAM (sampled per-sim)")
+  }
+
   # Show injury schedule summary if present
   inj_sched <- x$injury_schedule
   if (!is.null(inj_sched) && nrow(inj_sched) > 0) {
@@ -1095,9 +1298,12 @@ print.torp_sim_results <- function(x, ...) {
   cli::cli_text("")
 
   # Format compact table
+  has_residual <- "residual_mean" %in% names(summary) &&
+    any(summary$residual_mean != 0, na.rm = TRUE)
   display <- summary[, .(
     Team    = team,
     TORP    = if ("torp" %in% names(summary)) sprintf("%.1f", torp) else NA_character_,
+    Resid   = if (has_residual) sprintf("%+.1f", residual_mean) else NA_character_,
     Record  = if ("current_w" %in% names(summary)) {
       sprintf("%d-%d%s", current_w, current_l,
               ifelse(current_d > 0, sprintf("-%d", current_d), ""))
