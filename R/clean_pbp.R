@@ -38,6 +38,7 @@ clean_pbp_dt <- function(df) {
 
   # Normalise column names across API schema versions (CFS vs v2)
   .normalise_pbp_columns(dt)
+  .normalise_team_values(dt)
 
   # Sort by match_id + display_order: all shift/lag/lead operations assume this order.
   # setkey(match_id) sets the key attribute for fast by-group operations while
