@@ -55,25 +55,20 @@ plot_player_comparison <- function(player_names, seasons = TRUE,
     if (is.null(player)) next
     pid <- player$player_id
 
-    pdf <- data[data$player_id == pid, ]
-    if (nrow(pdf) == 0) {
+    player_df <- data[data$player_id == pid, ]
+    if (nrow(player_df) == 0) {
       cli::cli_warn("No game ratings found for {.val {pname}}, skipping")
       next
     }
 
-    pdf <- pdf[order(pdf$season, pdf$round_number), ]
-    pdf$game_number <- seq_len(nrow(pdf))
-    pdf$player_label <- player$player_name
+    player_df <- player_df[order(player_df$season, player_df$round_number), ]
+    player_df$game_number <- seq_len(nrow(player_df))
+    player_df$player_label <- player$player_name
 
     # Rolling average
-    vals <- pdf[[metric]]
-    pdf$rolling_avg <- NA_real_
-    for (i in seq_along(vals)) {
-      start <- max(1, i - rolling + 1)
-      pdf$rolling_avg[i] <- mean(vals[start:i], na.rm = TRUE)
-    }
+    player_df$rolling_avg <- .rolling_mean(player_df[[metric]], rolling)
 
-    all_players[[length(all_players) + 1]] <- pdf
+    all_players[[length(all_players) + 1]] <- player_df
     resolved_names <- c(resolved_names, player$player_name)
   }
 
@@ -85,20 +80,15 @@ plot_player_comparison <- function(player_names, seasons = TRUE,
 
   # Assign colours: use team colours if available, otherwise use a palette
   unique_players <- unique(combined$player_label)
-  if (length(unique_players) <= 5) {
-    # Try to get team colours for each player
-    player_colours <- character()
-    for (plabel in unique_players) {
-      player_team <- torp_replace_teams(combined$team[combined$player_label == plabel][1])
-      player_colours[plabel] <- team_color_lookup(player_team, NA_character_)
-    }
+  # Try to get team colours for each player
+  player_colours <- character()
+  for (plabel in unique_players) {
+    player_team <- torp_replace_teams(combined$team[combined$player_label == plabel][1])
+    player_colours[plabel] <- team_color_lookup(player_team, NA_character_)
+  }
 
-    # If there are colour collisions (same team) or NAs, use a fallback palette
-    if (anyNA(player_colours) || length(unique(player_colours)) < length(player_colours)) {
-      fallback <- c("#1b9e77", "#d95f02", "#7570b3", "#e7298a", "#66a61e")
-      player_colours <- stats::setNames(fallback[seq_along(unique_players)], unique_players)
-    }
-  } else {
+  # If there are colour collisions (same team) or NAs, use a fallback palette
+  if (anyNA(player_colours) || length(unique(player_colours)) < length(player_colours)) {
     fallback <- c("#1b9e77", "#d95f02", "#7570b3", "#e7298a", "#66a61e")
     player_colours <- stats::setNames(fallback[seq_along(unique_players)], unique_players)
   }

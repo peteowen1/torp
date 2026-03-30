@@ -57,7 +57,7 @@ torpmodels_root <- if (file.exists("torpmodels/DESCRIPTION")) {
 }
 
 devtools::load_all(torp_root)
-devtools::load_all(torpmodels_root)
+if (!is.null(torpmodels_root)) devtools::load_all(torpmodels_root)
 
 # Interactive start-from prompt ----
 # When sourcing in RStudio, lets you pick which phase to start from.
@@ -693,11 +693,11 @@ if (run_skills) {
 
   stat_ratings_scripts <- c(
     "01_compute_match_stats.R",
-    "02_optimize_skill_params.R",
-    "03_estimate_skills.R",
-    "04_export_skills.R",
-    "05_train_psr_model.R",
-    "06_train_psr_v2.R"
+    "02_optimize_stat_rating_params.R",
+    "03_estimate_stat_ratings.R",
+    "04_export_stat_ratings.R",
+    "05_compare_psr_models.R",
+    "06_train_psr_model.R"
   )
 
   for (script in stat_ratings_scripts) {

@@ -32,7 +32,7 @@
 
   cli::cli_inform("Fetching {label} for {length(ids)} match{?es} in parallel...")
 
-  pool <- curl::new_pool(total_con = 200L, host_con = 50L)
+  pool <- curl::new_pool(total_con = 30L, host_con = 10L)
   results <- vector("list", length(ids))
   n_failed <- 0L
   n_parse_errors <- 0L

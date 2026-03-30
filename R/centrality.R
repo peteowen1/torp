@@ -79,7 +79,7 @@ calculate_player_centrality <- function(player_matches,
     centrality <- rep(1, length(scores))
   }
 
-  # Count unique opponents (teams faced, not individual players)
+  # Count unique teams the player appeared on (transfers/trades)
   if ("team" %in% names(pm)) {
     opp <- stats::aggregate(
       team ~ player_id, data = pm,
@@ -186,7 +186,9 @@ find_components <- function(adj) {
   membership <- vapply(seq_len(n), find_root, integer(1))
   names(membership) <- ids
   comp_table <- table(membership)
-  list(membership = membership, sizes = as.integer(comp_table),
+  sizes <- as.integer(comp_table)
+  names(sizes) <- names(comp_table)
+  list(membership = membership, sizes = sizes,
        n_components = length(comp_table))
 }
 

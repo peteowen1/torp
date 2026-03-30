@@ -6,22 +6,22 @@
 #'
 #' Validates that the input dataframe has the required columns for WP modeling.
 #'
-#' @param df Input dataframe
+#' @param data Input dataframe
 #' @return Logical indicating if validation passed
 #' @keywords internal
 #' @importFrom cli cli_abort cli_warn
-validate_wp_input <- function(df) {
-  if (!is.data.frame(df)) {
+validate_wp_input <- function(data) {
+  if (!is.data.frame(data)) {
     cli::cli_abort("Input must be a data frame")
   }
 
-  if (nrow(df) == 0) {
+  if (nrow(data) == 0) {
     cli::cli_abort("Input data frame cannot be empty")
   }
 
   required_cols <- c("est_match_elapsed", "est_match_remaining", "shot_row", "home", "points_diff", "xpoints_diff")
 
-  missing_cols <- setdiff(required_cols, names(df))
+  missing_cols <- setdiff(required_cols, names(data))
   if (length(missing_cols) > 0) {
     cli::cli_warn("Missing required columns: {paste(missing_cols, collapse = ', ')}")
     return(FALSE)

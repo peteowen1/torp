@@ -52,6 +52,24 @@ team_color_lookup <- function(team, default = "#808080", colors = AFL_TEAM_COLOR
   if (is.na(col) || is.null(col)) default else unname(col)
 }
 
+#' Trailing rolling mean
+#'
+#' Computes a trailing (right-aligned) rolling mean over a numeric vector.
+#'
+#' @param x Numeric vector.
+#' @param window Integer window size.
+#' @return Numeric vector of same length as `x`.
+#' @keywords internal
+.rolling_mean <- function(x, window) {
+  n <- length(x)
+  out <- numeric(n)
+  for (i in seq_len(n)) {
+    start <- max(1L, i - window + 1L)
+    out[i] <- mean(x[start:i], na.rm = TRUE)
+  }
+  out
+}
+
 #' Quarter break positions for game flow charts
 #'
 #' Returns a named numeric vector of quarter boundary seconds for x-axis annotation.

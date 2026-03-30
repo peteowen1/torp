@@ -60,7 +60,7 @@ player_game_ratings <- function(season_val = get_afl_season(),
   for (col in c("psv", "osv", "dsv")) {
     p80_col <- paste0(col, "_p80")
     if (col %in% names(dt) && !p80_col %in% names(dt)) {
-      dt[, (p80_col) := round(get(col) / tog, 1)]
+      dt[, (p80_col) := round(get(col) / pmax(tog, 0.01), 1)]
     }
   }
 

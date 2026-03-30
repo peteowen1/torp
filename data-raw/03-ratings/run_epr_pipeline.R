@@ -23,8 +23,12 @@ library(piggyback)
 
 devtools::load_all()
 
-# Source daily_release.R for update_player_stats() and update_teams()
-source(here::here("data-raw/01-data/daily_release.R"))
+# Source daily_release.R into a local env to get update_player_stats() and
+# update_teams() without leaking .release_cache and other globals.
+.daily_release_env <- new.env(parent = globalenv())
+source(here::here("data-raw/01-data/daily_release.R"), local = .daily_release_env)
+update_player_stats <- .daily_release_env$update_player_stats
+update_teams <- .daily_release_env$update_teams
 
 # Configuration ----
 # These defaults are only set if not already defined (allows CI to override)

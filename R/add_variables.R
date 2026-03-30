@@ -24,6 +24,11 @@ add_epv_vars <- function(df, reference_date = Sys.Date()) {
   }
   
   base_ep_preds <- get_epv_preds(df)
+
+  if (nrow(base_ep_preds) != nrow(df)) {
+    cli::cli_abort("EP prediction count mismatch: expected {nrow(df)}, got {nrow(base_ep_preds)}")
+  }
+
   pbp_final <- dplyr::bind_cols(df, base_ep_preds)
 
   pbp_final <- pbp_final |>

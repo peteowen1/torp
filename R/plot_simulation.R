@@ -38,19 +38,6 @@ plot_simulation <- function(sim_results, type = c("ladder", "position", "finals"
     summary <- summary[order(summary$avg_wins, decreasing = TRUE), ]
     summary$team <- factor(summary$team, levels = rev(summary$team))
 
-    # Build long-form data for stacked display
-    ladder_long <- data.frame(
-      team = rep(summary$team, 3),
-      metric = rep(c("Top 8", "Top 4", "Premiers"), each = nrow(summary)),
-      pct = c(summary$top_8_pct * 100, summary$top_4_pct * 100, summary$top_1_pct * 100),
-      stringsAsFactors = FALSE
-    )
-    ladder_long$metric <- factor(ladder_long$metric, levels = c("Top 8", "Top 4", "Premiers"))
-
-    # Get team colours for fill
-    team_cols <- AFL_TEAM_COLORS[as.character(summary$team)]
-    names(team_cols) <- as.character(summary$team)
-
     p <- ggplot2::ggplot(summary, ggplot2::aes(x = .data$team, y = .data$avg_wins)) +
       ggplot2::geom_col(ggplot2::aes(fill = .data$team), width = 0.7, show.legend = FALSE) +
       ggplot2::coord_flip() +

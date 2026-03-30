@@ -22,9 +22,14 @@ env:
   GITHUB_PAT: ${{ secrets.WORKFLOW_PAT }}
   R_KEEP_PKG_SOURCE: yes
 
+concurrency:
+  group: ratings-predictions
+  cancel-in-progress: true
+
 jobs:
   compute-ratings:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
 
     permissions:
       contents: write
@@ -61,6 +66,7 @@ jobs:
             devtools
 
       - name: Compute TORP ratings
+        if: github.event.client_payload.release_mode != 'team_only'
         env:
           INPUT_SEASONS: ${{ github.event.inputs.seasons }}
         run: |
@@ -102,6 +108,7 @@ jobs:
   build-predictions:
     needs: compute-ratings
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     permissions:
       contents: write

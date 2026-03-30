@@ -95,6 +95,7 @@ simulate_season <- function(sim_teams, sim_games, return_teams = FALSE,
     estimate <- SIM_HOME_ADVANTAGE +
       (home_torp - away_torp) +
       (resid_vec[home_idx] - resid_vec[away_idx]) +
+      # Independent per-team noise; effective margin SD = injury_sd * sqrt(2)
       stats::rnorm(n_games, 0, injury_sd) - stats::rnorm(n_games, 0, injury_sd)
 
     data.table::set(sim_games_r, j = "estimate", value = estimate)
