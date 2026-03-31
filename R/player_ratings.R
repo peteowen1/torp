@@ -677,6 +677,8 @@ psr_ratings <- function(season_val = get_afl_season(type = "current"),
 #'
 #' @param season_val Season to calculate ratings for.
 #' @param round_val Round to calculate ratings for.
+#' @param injuries Optional injury data frame (from [scrape_injuries()]) used
+#'   for downstream predictions. Passed through but not used in rating computation.
 #' @param ... Additional arguments passed to \code{\link{calculate_epr}}.
 #'
 #' @return A data frame with columns: \code{player_id}, \code{player_name},

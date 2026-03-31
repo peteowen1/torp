@@ -11,6 +11,8 @@ simulate_afl_season(
   fixtures = NULL,
   predictions = NULL,
   injuries = NULL,
+  team_residuals = "auto",
+  models = NULL,
   seed = NULL,
   verbose = TRUE,
   keep_games = FALSE,
@@ -32,6 +34,18 @@ NULL, loads from torpdata.}
 \item{injuries}{Injury data.frame from \code{\link[=get_all_injuries]{get_all_injuries()}}. By default,
 fetched automatically from the AFL injury list. Pass \code{FALSE} to disable
 injury-aware simulation, or supply your own data.frame.}
+
+\item{team_residuals}{Team quality residuals from the match GAM random
+effects. \code{"auto"} (default) extracts from the xscore_diff GAM via
+\code{\link[=.extract_team_residuals]{.extract_team_residuals()}}. Pass a data.frame with \code{team},
+\code{residual_mean}, \code{residual_se} to supply custom values, or \code{NULL} to
+disable. Residuals are sampled from \code{N(mean, se)} once per simulation,
+capturing coaching/system quality not explained by player TORP.}
+
+\item{models}{Optional named list of GAM models from
+\code{run_predictions_pipeline()$models}. When provided, team residuals are
+extracted from the fresh \code{xscore_diff} model instead of the stored
+torpmodels version. Ignored when \code{team_residuals} is not \code{"auto"}.}
 
 \item{seed}{Optional random seed for reproducibility.}
 

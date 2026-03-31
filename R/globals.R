@@ -208,7 +208,7 @@ utils::globalVariables(c(
   "avg_wins", "avg_losses", "avg_draws", "avg_percentage", "avg_rank",
   "avg_pf_pg", "avg_pa_pg", "last_pct",
   "home_torp_eff", "away_torp_eff",
-  "residual", "residual_mean", "residual_se", "home_residual", "away_residual",
+  "residual", "residual_mean", "residual_se", "home_residual", "away_residual", "i.residual",
  "top_8_pct", "top_4_pct", "top_2_pct", "top_1_pct",
   "made_finals_pct", "avg_finals_wins", "made_gf_pct", "won_gf_pct",
   "i.pred_xtotal", "i.torp", "i.torp_boost", "i.pred_home_team",

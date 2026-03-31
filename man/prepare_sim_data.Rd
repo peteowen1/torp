@@ -9,7 +9,9 @@ prepare_sim_data(
   team_ratings = NULL,
   fixtures = NULL,
   predictions = NULL,
-  injuries = NULL
+  injuries = NULL,
+  team_residuals = NULL,
+  models = NULL
 )
 }
 \arguments{
@@ -27,6 +29,16 @@ NULL, attempts to load via \code{\link[=load_predictions]{load_predictions()}}.}
 \item{injuries}{Optional injury data.frame from \code{\link[=get_all_injuries]{get_all_injuries()}}. When
 provided, team ratings are built from player-level TORP with injured
 players excluded and a lighter discount (\link{INJURY_KNOWN_DISCOUNT}) applied.}
+
+\item{team_residuals}{Optional data.frame with columns \code{team},
+\code{residual_mean}, \code{residual_se}. Team-level quality residuals from the
+match GAM random effects, capturing systematic over/under-performance
+not explained by player TORP. If \code{"auto"}, attempts to extract from the
+match GAM model.}
+
+\item{models}{Optional named list of GAM models from
+\code{run_predictions_pipeline()$models}. Passed to \code{\link[=.extract_team_residuals]{.extract_team_residuals()}}
+to use fresh models instead of the stored torpmodels version.}
 }
 \value{
 A list with elements \code{sim_teams}, \code{sim_games}, \code{played_games}.

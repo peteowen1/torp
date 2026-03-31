@@ -7,6 +7,7 @@
 torp_ratings(
   season_val = get_afl_season(type = "current"),
   round_val = get_afl_week(type = "next"),
+  injuries = NULL,
   ...
 )
 }
