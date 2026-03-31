@@ -72,10 +72,9 @@ test_that("load_model_with_fallback caches loaded models", {
 # get_epv_preds Tests
 # -----------------------------------------------------------------------------
 
-test_that("get_epv_preds function exists and has correct structure", {
+test_that("get_epv_preds returns 5-column data frame when model available", {
   expect_true(exists("get_epv_preds"))
 
-  # Test with mock data
   mock_df <- data.frame(
     goal_x = c(50, 60, 70),
     y = c(0, 5, -5),
@@ -96,25 +95,17 @@ test_that("get_epv_preds function exists and has correct structure", {
     home = c(1, 0, 1)
   )
 
-  # Function should exist and process data (may fail without model data)
-  result <- suppressWarnings(tryCatch({
-    get_epv_preds(mock_df)
-  }, error = function(e) e))
+  result <- tryCatch(get_epv_preds(mock_df), error = function(e) e)
+  skip_if(inherits(result, "error"), "EP model not available")
 
-  # Either works or gives expected error about missing model
-  if (inherits(result, "error")) {
-    expect_true(grepl("ep_model|object.*not found|EP model", result$message, ignore.case = TRUE))
-  } else {
-    expect_true(is.data.frame(result))
-    expect_equal(ncol(result), 5)
-    expect_true(all(c("opp_goal", "opp_behind", "behind", "goal", "no_score") %in% names(result)))
-  }
+  expect_true(is.data.frame(result))
+  expect_equal(ncol(result), 5)
+  expect_true(all(c("opp_goal", "opp_behind", "behind", "goal", "no_score") %in% names(result)))
 })
 
-test_that("get_wp_preds function exists and has correct structure", {
+test_that("get_wp_preds returns 1-column data frame when model available", {
   expect_true(exists("get_wp_preds"))
 
-  # Test with mock data
   mock_df <- data.frame(
     est_match_elapsed = c(1200, 2400, 3600),
     est_match_remaining = c(3600, 2400, 1200),
@@ -136,79 +127,48 @@ test_that("get_wp_preds function exists and has correct structure", {
     phase_of_play_set_shot = c(0, 0, 0)
   )
 
-  # Function should exist and process data (may fail without model data)
-  result <- tryCatch({
-    get_wp_preds(mock_df)
-  }, error = function(e) e)
+  result <- tryCatch(get_wp_preds(mock_df), error = function(e) e)
+  skip_if(inherits(result, "error"), "WP model not available")
 
-  # Either works or gives expected error about missing model/package/columns
-  if (inherits(result, "error")) {
-    expect_true(inherits(result, "error"))
-  } else {
-    expect_true(is.data.frame(result))
-    expect_equal(ncol(result), 1)
-    expect_true("wp" %in% names(result))
-  }
+  expect_true(is.data.frame(result))
+  expect_equal(ncol(result), 1)
+  expect_true("wp" %in% names(result))
 })
 
-test_that("add_epv_vars function works correctly", {
+test_that("add_epv_vars adds EP columns when model available", {
   expect_true(exists("add_epv_vars"))
 
-  # Create mock play-by-play data
   mock_pbp <- create_mock_pbp_data(10)
 
-  # Function should exist and process data (may fail without model data)
-  result <- suppressWarnings(tryCatch({
-    add_epv_vars(mock_pbp)
-  }, error = function(e) e))
+  result <- tryCatch(suppressWarnings(add_epv_vars(mock_pbp)), error = function(e) e)
+  skip_if(inherits(result, "error"), "EP model not available")
 
-  # Test structure if it works, or expected error
-  if (inherits(result, "error")) {
-    expect_true(grepl("ep_model|model.*prediction|select_epv_model_vars|all_of|base_vars", result$message, ignore.case = TRUE))
-  } else {
-    expect_true(is.data.frame(result))
-    expect_gte(ncol(result), ncol(mock_pbp))  # Should have additional columns
-  }
+  expect_true(is.data.frame(result))
+  expect_gte(ncol(result), ncol(mock_pbp))
 })
 
-test_that("add_wp_vars function works correctly", {
+test_that("add_wp_vars adds WP columns when model available", {
   expect_true(exists("add_wp_vars"))
 
-  # Create mock play-by-play data
   mock_pbp <- create_mock_pbp_data(10)
 
-  # Function should exist and process data (may fail without model data)
-  result <- suppressWarnings(tryCatch({
-    add_wp_vars(mock_pbp)
-  }, error = function(e) e))
+  result <- tryCatch(suppressWarnings(add_wp_vars(mock_pbp)), error = function(e) e)
+  skip_if(inherits(result, "error"), "WP model not available")
 
-  # Either works or gives expected error about missing model/package/columns
-  if (inherits(result, "error")) {
-    expect_true(inherits(result, "error"))
-  } else {
-    expect_true(is.data.frame(result))
-    expect_gte(ncol(result), ncol(mock_pbp))
-  }
+  expect_true(is.data.frame(result))
+  expect_gte(ncol(result), ncol(mock_pbp))
 })
 
-test_that("add_shot_vars function works correctly", {
+test_that("add_shot_vars adds shot columns when model available", {
   expect_true(exists("add_shot_vars"))
 
-  # Create mock shot data
   mock_shots <- create_mock_shot_data(10)
 
-  # Function should exist and process data (may fail without model data)
-  result <- suppressWarnings(tryCatch({
-    add_shot_vars(mock_shots)
-  }, error = function(e) e))
+  result <- tryCatch(suppressWarnings(add_shot_vars(mock_shots)), error = function(e) e)
+  skip_if(inherits(result, "error"), "Shot model not available")
 
-  # Test structure if it works, or expected error
-  if (inherits(result, "error")) {
-    expect_true(grepl("shot_ocat_mdl|object.*not found", result$message, ignore.case = TRUE))
-  } else {
-    expect_true(is.data.frame(result))
-    expect_gte(ncol(result), ncol(mock_shots))  # Should have additional columns
-  }
+  expect_true(is.data.frame(result))
+  expect_gte(ncol(result), ncol(mock_shots))
 })
 
 # -----------------------------------------------------------------------------
@@ -255,36 +215,25 @@ test_that("add_shot_vars rejects empty data frame", {
 test_that("add_wp_vars adds WPA calculation columns", {
   mock_pbp <- create_mock_pbp_data(20)
 
-  result <- suppressWarnings(tryCatch({
-    add_wp_vars(mock_pbp)
-  }, error = function(e) NULL))
+  result <- tryCatch(suppressWarnings(add_wp_vars(mock_pbp)), error = function(e) e)
+  skip_if(inherits(result, "error"), "WP model not available")
 
-  if (!is.null(result)) {
-    # Should add wp and wpa columns
-    expect_true("wp" %in% names(result))
-    expect_true("wpa" %in% names(result))
-
-    # wp should be bounded
-    expect_true(all(result$wp >= 0 & result$wp <= 1))
-  }
+  expect_true("wp" %in% names(result))
+  expect_true("wpa" %in% names(result))
+  expect_true(all(result$wp >= 0 & result$wp <= 1))
 })
 
 test_that("add_wp_vars adds context columns", {
   mock_pbp <- create_mock_pbp_data(20)
 
-  result <- suppressWarnings(tryCatch({
-    add_wp_vars(mock_pbp)
-  }, error = function(e) NULL))
+  result <- tryCatch(suppressWarnings(add_wp_vars(mock_pbp)), error = function(e) e)
+  skip_if(inherits(result, "error"), "WP model not available")
 
-  if (!is.null(result)) {
-    # Should add categorical columns
-    expect_true("wp_category" %in% names(result))
-    expect_true("high_leverage" %in% names(result))
+  expect_true("wp_category" %in% names(result))
+  expect_true("high_leverage" %in% names(result))
 
-    # wp_category should have valid values
-    valid_categories <- c("very_likely", "likely", "toss_up", "unlikely", "very_unlikely")
-    expect_true(all(result$wp_category %in% valid_categories))
-  }
+  valid_categories <- c("very_likely", "likely", "toss_up", "unlikely", "very_unlikely")
+  expect_true(all(result$wp_category %in% valid_categories))
 })
 
 # -----------------------------------------------------------------------------

@@ -76,7 +76,7 @@ calculate_player_centrality <- function(player_matches,
   if (pr_range[2] > pr_range[1]) {
     centrality <- (scores - pr_range[1]) / (pr_range[2] - pr_range[1])
   } else {
-    centrality <- rep(1, length(scores))
+    centrality <- stats::setNames(rep(1, length(scores)), names(scores))
   }
 
   # Count unique teams the player appeared on (transfers/trades)
@@ -116,13 +116,14 @@ calculate_player_centrality <- function(player_matches,
 
 #' @keywords internal
 empty_centrality_result <- function(players, min_matches) {
+  n <- length(players)
   data.frame(
     player_id = players,
-    centrality = 1,
-    unique_teams = 0L,
-    matches_played = min_matches,
-    component_id = 1L,
-    component_size = length(players),
+    centrality = rep(1, n),
+    unique_teams = rep(0L, n),
+    matches_played = rep(min_matches, n),
+    component_id = rep(1L, n),
+    component_size = rep(n, n),
     stringsAsFactors = FALSE
   )
 }
