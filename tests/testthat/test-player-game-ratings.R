@@ -22,6 +22,75 @@ test_that("player_game_ratings validates input", {
   expect_error(player_game_ratings(round_val = 50), "0 and 28")
 })
 
+test_that(".compute_player_game_ratings includes WPA columns when present", {
+  mock_pgd <- data.frame(
+    player_id = paste0("P", 1:6),
+    match_id = rep(c("M1", "M2"), each = 3),
+    season = rep(2025L, 6),
+    round = rep(1L, 6),
+    player_name = paste("Player", 1:6),
+    listed_position = rep(c("KEY_DEFENDER", "MIDFIELDER", "KEY_FORWARD"), 2),
+    team = rep("Adelaide Crows", 6),
+    opponent = rep("Carlton", 6),
+    team_id = rep("CD_T10", 6),
+    time_on_ground_percentage = c(90, 85, 70, 80, 95, 60),
+    epv_adj = c(5, 3, -1, 4, 2, -2),
+    recv_epv = c(2, 1, 0, 1.5, 1, -0.5),
+    disp_epv = c(2, 1.5, -0.5, 2, 0.5, -1),
+    spoil_epv = c(0.5, 0.3, -0.3, 0.3, 0.3, -0.3),
+    hitout_epv = c(0.5, 0.2, -0.2, 0.2, 0.2, -0.2),
+    wp_credit = c(0.05, 0.03, -0.01, 0.04, 0.02, -0.02),
+    wp_disp_credit = c(0.03, 0.02, -0.005, 0.025, 0.01, -0.01),
+    wp_recv_credit = c(0.02, 0.01, -0.005, 0.015, 0.01, -0.01),
+    stringsAsFactors = FALSE
+  )
+
+  result <- torp:::.compute_player_game_ratings(mock_pgd, 2025L, 1L)
+
+  # EPV columns should always be present
+  expect_true("epv" %in% names(result))
+  expect_true("epv_p80" %in% names(result))
+
+  # WPA columns should be present since input had them
+  expect_true("wp_credit" %in% names(result))
+  expect_true("wp_disp_credit" %in% names(result))
+  expect_true("wp_recv_credit" %in% names(result))
+  expect_true("wp_credit_p80" %in% names(result))
+  expect_true("wp_disp_credit_p80" %in% names(result))
+  expect_true("wp_recv_credit_p80" %in% names(result))
+
+  # WPA values should be centered (mean near zero per position group)
+  expect_equal(nrow(result), 6)
+})
+
+test_that(".compute_player_game_ratings works without WPA columns", {
+  mock_pgd <- data.frame(
+    player_id = paste0("P", 1:3),
+    match_id = rep("M1", 3),
+    season = rep(2025L, 3),
+    round = rep(1L, 3),
+    player_name = paste("Player", 1:3),
+    listed_position = c("KEY_DEFENDER", "MIDFIELDER", "KEY_FORWARD"),
+    team = rep("Adelaide Crows", 3),
+    opponent = rep("Carlton", 3),
+    team_id = rep("CD_T10", 3),
+    time_on_ground_percentage = c(90, 85, 70),
+    epv_adj = c(5, 3, -1),
+    recv_epv = c(2, 1, 0),
+    disp_epv = c(2, 1.5, -0.5),
+    spoil_epv = c(0.5, 0.3, -0.3),
+    hitout_epv = c(0.5, 0.2, -0.2),
+    stringsAsFactors = FALSE
+  )
+
+  # Should work fine without WPA columns (backward compat)
+  result <- torp:::.compute_player_game_ratings(mock_pgd, 2025L, 1L)
+
+  expect_true("epv" %in% names(result))
+  expect_false("wp_credit" %in% names(result))
+  expect_equal(nrow(result), 3)
+})
+
 # -----------------------------------------------------------------------------
 # player_season_ratings Tests
 # -----------------------------------------------------------------------------

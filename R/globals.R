@@ -119,6 +119,13 @@ utils::globalVariables(c(
   "disp_peak_wpa", "disp_peak_do", "recv_peak_wpa", "recv_peak_do"
 ))
 
+# WPA credit pipeline variables (position-adjusted + centered + per-80)
+utils::globalVariables(c(
+  "wp_credit_adj", "wp_disp_credit_adj", "wp_recv_credit_adj",
+  "wp_credit_p80", "wp_disp_credit_p80", "wp_recv_credit_p80",
+  "wp_credit_c", "wp_disp_credit_c", "wp_recv_credit_c"
+))
+
 # Skill estimation variables
 utils::globalVariables(c(
   "avail_only", ".played", "roster_pos_group",

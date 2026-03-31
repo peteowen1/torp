@@ -141,6 +141,20 @@ create_player_game_data <- function(pbp_data = NULL,
     by.y = c("lead_player_id", "match_id"),
     all.x = TRUE, sort = FALSE)
 
+  # --- Step 3b: WPA credit ---
+  wp_dt <- tryCatch({
+    wpc <- create_wp_credit(pbp_data)
+    wpc[, .(player_id, match_id, wp_credit, wp_disp_credit, wp_recv_credit)]
+  }, error = function(e) {
+    cli::cli_warn("WPA credit skipped: {conditionMessage(e)}")
+    data.table::data.table(
+      player_id = character(), match_id = character(),
+      wp_credit = numeric(), wp_disp_credit = numeric(), wp_recv_credit = numeric()
+    )
+  })
+  plyr_gm_df <- merge(plyr_gm_df, wp_dt,
+    by = c("player_id", "match_id"), all.x = TRUE, sort = FALSE)
+
   # --- Step 4: Join spoils/tackles/hitouts from raw player_stats ---
   spoil_hitout_df <- player_stats |>
     dplyr::mutate(
@@ -184,7 +198,10 @@ create_player_game_data <- function(pbp_data = NULL,
                  goals * p$goals_wt + behinds * p$behinds_wt + shots_at_goal * p$shots_at_goal_wt,
       spoil_epv = tidyr::replace_na(spoil_epv, 0),
       hitout_epv = tidyr::replace_na(hitout_epv, 0),
-      epv = recv_epv + disp_epv + spoil_epv + hitout_epv
+      epv = recv_epv + disp_epv + spoil_epv + hitout_epv,
+      wp_credit = tidyr::replace_na(wp_credit, 0),
+      wp_disp_credit = tidyr::replace_na(wp_disp_credit, 0),
+      wp_recv_credit = tidyr::replace_na(wp_recv_credit, 0)
     )
 
   # --- Step 6: Join teams data for position ---
@@ -207,7 +224,10 @@ create_player_game_data <- function(pbp_data = NULL,
       recv_epv_p80 = .data$recv_epv / .data$tog_safe,
       disp_epv_p80 = .data$disp_epv / .data$tog_safe,
       spoil_epv_p80 = .data$spoil_epv / .data$tog_safe,
-      hitout_epv_p80 = .data$hitout_epv / .data$tog_safe
+      hitout_epv_p80 = .data$hitout_epv / .data$tog_safe,
+      wp_credit_p80 = .data$wp_credit / .data$tog_safe,
+      wp_disp_credit_p80 = .data$wp_disp_credit / .data$tog_safe,
+      wp_recv_credit_p80 = .data$wp_recv_credit / .data$tog_safe
     ) |>
     dplyr::group_by(position) |>
     dplyr::mutate(
@@ -215,10 +235,15 @@ create_player_game_data <- function(pbp_data = NULL,
       disp_epv_adj = .data$disp_epv_p80 - stats::weighted.mean(.data$disp_epv_p80, .data$tog_safe, na.rm = TRUE),
       spoil_epv_adj = .data$spoil_epv_p80 - stats::weighted.mean(.data$spoil_epv_p80, .data$tog_safe, na.rm = TRUE),
       hitout_epv_adj = .data$hitout_epv_p80 - stats::weighted.mean(.data$hitout_epv_p80, .data$tog_safe, na.rm = TRUE),
-      epv_adj = .data$recv_epv_adj + .data$disp_epv_adj + .data$spoil_epv_adj + .data$hitout_epv_adj
+      epv_adj = .data$recv_epv_adj + .data$disp_epv_adj + .data$spoil_epv_adj + .data$hitout_epv_adj,
+      wp_credit_adj = .data$wp_credit_p80 - stats::weighted.mean(.data$wp_credit_p80, .data$tog_safe, na.rm = TRUE),
+      wp_disp_credit_adj = .data$wp_disp_credit_p80 - stats::weighted.mean(.data$wp_disp_credit_p80, .data$tog_safe, na.rm = TRUE),
+      wp_recv_credit_adj = .data$wp_recv_credit_p80 - stats::weighted.mean(.data$wp_recv_credit_p80, .data$tog_safe, na.rm = TRUE)
     ) |>
     dplyr::ungroup() |>
-    dplyr::select(-"tog_safe", -"recv_epv_p80", -"disp_epv_p80", -"spoil_epv_p80", -"hitout_epv_p80")
+    dplyr::select(-"tog_safe",
+                  -"recv_epv_p80", -"disp_epv_p80", -"spoil_epv_p80", -"hitout_epv_p80",
+                  -"wp_credit_p80", -"wp_disp_credit_p80", -"wp_recv_credit_p80")
 
   # --- Step 8: Handle duplicate season columns and select final columns ---
   if ("season.x" %in% names(plyr_gm_df)) {
@@ -236,6 +261,10 @@ create_player_game_data <- function(pbp_data = NULL,
       epv_adj, recv_epv_adj, disp_epv_adj, spoil_epv_adj, hitout_epv_adj,
       # EPV (raw)
       epv, recv_epv, disp_epv, spoil_epv, hitout_epv,
+      # WPA (position-adjusted)
+      wp_credit_adj, wp_disp_credit_adj, wp_recv_credit_adj,
+      # WPA (raw)
+      wp_credit, wp_disp_credit, wp_recv_credit,
       # PBP-derived action counts
       disposals_pbp, receptions,
       # EPV model input stats
