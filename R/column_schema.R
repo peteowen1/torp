@@ -31,14 +31,15 @@
         data.table::setnames(dt, from, to)
         nms[nms == from] <- to
       } else if (all(is.na(dt[[to]])) && !all(is.na(dt[[from]]))) {
-        # Target exists but is all-NA; source has real data — replace
-        if (data.table::is.data.table(dt)) {
-          data.table::set(dt, j = to, value = dt[[from]])
-          data.table::set(dt, j = from, value = NULL)
-        } else {
-          dt[[to]] <- dt[[from]]
-          dt[[from]] <- NULL
+        # Target exists but is all-NA; source has real data — replace.
+        # Use data.table::set() for by-reference modification; setnames()
+        # works on data.frames too, but set()/[[<- on a data.frame inside a
+        # function creates a copy the caller never sees.
+        if (!data.table::is.data.table(dt)) {
+          data.table::setDT(dt)
         }
+        data.table::set(dt, j = to, value = dt[[from]])
+        data.table::set(dt, j = from, value = NULL)
         nms <- names(dt)
       }
     }

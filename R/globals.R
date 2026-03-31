@@ -119,6 +119,13 @@ utils::globalVariables(c(
   "disp_peak_wpa", "disp_peak_do", "recv_peak_wpa", "recv_peak_do"
 ))
 
+# WPA credit pipeline variables (position-adjusted + centered + per-80)
+utils::globalVariables(c(
+  "wp_credit_adj", "wp_disp_credit_adj", "wp_recv_credit_adj",
+  "wp_credit_p80", "wp_disp_credit_p80", "wp_recv_credit_p80",
+  "wp_credit_c", "wp_disp_credit_c", "wp_recv_credit_c"
+))
+
 # Skill estimation variables
 utils::globalVariables(c(
   "avail_only", ".played", "roster_pos_group",
@@ -201,10 +208,11 @@ utils::globalVariables(c(
   "avg_wins", "avg_losses", "avg_draws", "avg_percentage", "avg_rank",
   "avg_pf_pg", "avg_pa_pg", "last_pct",
   "home_torp_eff", "away_torp_eff",
+  "residual", "residual_mean", "residual_se", "home_residual", "away_residual", "i.residual",
  "top_8_pct", "top_4_pct", "top_2_pct", "top_1_pct",
   "made_finals_pct", "avg_finals_wins", "made_gf_pct", "won_gf_pct",
   "i.pred_xtotal", "i.torp", "i.torp_boost", "i.pred_home_team",
-  "return_round", "player_boost", "team_std", "..pr_cols", "player",
+  "return_round", "player_boost", "team_std", "..pr_cols", "..rat_cols", "player",
   "injury", "estimated_return", "player_norm", "tm_rnk",
   "tog_frac", "epv_p80", "recv_epv_p80", "disp_epv_p80", "spoil_epv_p80", "hitout_epv_p80",
   "epv_raw", "recv_epv_raw", "disp_epv_raw", "spoil_epv_raw", "hitout_epv_raw",

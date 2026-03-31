@@ -4,10 +4,10 @@
 \alias{validate_wp_input}
 \title{Validate Win Probability Input Data}
 \usage{
-validate_wp_input(df)
+validate_wp_input(data)
 }
 \arguments{
-\item{df}{Input dataframe}
+\item{data}{Input dataframe}
 }
 \value{
 Logical indicating if validation passed

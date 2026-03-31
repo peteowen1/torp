@@ -1,3 +1,43 @@
+#' Summarise shot-level PBP into match-level xG stats
+#' @param pbp Play-by-play data with xscore and shot_row columns
+#' @param quarter Numeric vector of quarters to include
+#' @return Tibble with one row per match
+#' @keywords internal
+.summarise_match_xg <- function(pbp, quarter = 1:4) {
+  shots_df <- pbp |>
+    dplyr::group_by(.data$match_id) |>
+    dplyr::filter(.data$period %in% quarter) |>
+    dplyr::summarise(
+      home_team = max(.data$home_team_name),
+      home_shots_score = sum(dplyr::if_else(.data$team == .data$home_team_name, .data$points_shot, 0), na.rm = TRUE),
+      home_xscore = sum(dplyr::if_else(.data$team == .data$home_team_name, .data$xscore * .data$shot_row, 0), na.rm = TRUE),
+      home_scored_goals = sum(dplyr::if_else(.data$team == .data$home_team_name, dplyr::if_else(.data$points_shot == 6, 1, 0), 0), na.rm = TRUE),
+      home_scored_behinds = sum(dplyr::if_else(.data$team == .data$home_team_name, dplyr::if_else(.data$points_shot == 1, 1, 0), 0), na.rm = TRUE),
+      away_team = max(.data$away_team_name),
+      away_shots_score = sum(dplyr::if_else(.data$team == .data$away_team_name, .data$points_shot, 0), na.rm = TRUE),
+      away_xscore = sum(dplyr::if_else(.data$team == .data$away_team_name, .data$xscore * .data$shot_row, 0), na.rm = TRUE),
+      away_scored_goals = sum(dplyr::if_else(.data$team == .data$away_team_name, dplyr::if_else(.data$points_shot == 6, 1, 0), 0), na.rm = TRUE),
+      away_scored_behinds = sum(dplyr::if_else(.data$team == .data$away_team_name, dplyr::if_else(.data$points_shot == 1, 1, 0), 0), na.rm = TRUE),
+      score_diff = .data$home_shots_score - .data$away_shots_score,
+      xscore_diff = .data$home_xscore - .data$away_xscore,
+      total_points = .data$home_shots_score + .data$away_shots_score,
+      total_xpoints = .data$home_xscore + .data$away_xscore,
+      .groups = "drop"
+    )
+
+  zero_xg <- shots_df$match_id[shots_df$total_xpoints == 0]
+  if (length(zero_xg) > 0) {
+    cli::cli_warn(c(
+      "{length(zero_xg)} match{?es} ha{?s/ve} zero total xscore -- likely a team name mismatch.",
+      "i" = "Check that PBP 'team' col matches 'home_team_name'/'away_team_name'.",
+      "i" = "Affected: {paste(utils::head(zero_xg, 5), collapse = ', ')}"
+    ))
+  }
+
+  shots_df
+}
+
+
 #' Calculate xGs for AFL Matches
 #'
 #' @param season AFL season
@@ -27,37 +67,7 @@ calculate_match_xgs <- function(season = get_afl_season(), round = get_afl_week(
     ))
   }
 
-  shots_df <- df |>
-    dplyr::group_by(.data$match_id) |>
-    dplyr::filter(.data$period %in% quarter) |>
-    dplyr::summarise(
-      home_team = max(.data$home_team_name),
-      home_shots_score = sum(dplyr::if_else(.data$team == .data$home_team_name, .data$points_shot, 0), na.rm = TRUE),
-      home_xscore = sum(dplyr::if_else(.data$team == .data$home_team_name, .data$xscore * .data$shot_row, 0), na.rm = TRUE),
-      home_scored_goals = sum(dplyr::if_else(.data$team == .data$home_team_name, dplyr::if_else(.data$points_shot == 6, 1, 0), 0), na.rm = TRUE),
-      home_scored_behinds = sum(dplyr::if_else(.data$team == .data$home_team_name, dplyr::if_else(.data$points_shot == 1, 1, 0), 0), na.rm = TRUE),
-      away_team = max(.data$away_team_name),
-      away_shots_score = sum(dplyr::if_else(.data$team == .data$away_team_name, .data$points_shot, 0), na.rm = TRUE),
-      away_xscore = sum(dplyr::if_else(.data$team == .data$away_team_name, .data$xscore * .data$shot_row, 0), na.rm = TRUE),
-      away_scored_goals = sum(dplyr::if_else(.data$team == .data$away_team_name, dplyr::if_else(.data$points_shot == 6, 1, 0), 0), na.rm = TRUE),
-      away_scored_behinds = sum(dplyr::if_else(.data$team == .data$away_team_name, dplyr::if_else(.data$points_shot == 1, 1, 0), 0), na.rm = TRUE),
-      score_diff = .data$home_shots_score - .data$away_shots_score,
-      xscore_diff = .data$home_xscore - .data$away_xscore,
-      total_points = .data$home_shots_score + .data$away_shots_score,
-      total_xpoints = .data$home_xscore + .data$away_xscore,
-      .groups = "drop"
-    )
-  # Guard: matches with zero xscores indicate a team name mismatch between
-
-  # the PBP 'team' column and 'home_team_name'/'away_team_name'
-  zero_xg <- shots_df$match_id[shots_df$total_xpoints == 0]
-  if (length(zero_xg) > 0) {
-    cli::cli_warn(c(
-      "{length(zero_xg)} match{?es} ha{?s/ve} zero total xscore -- likely a team name mismatch.",
-      "i" = "Check that PBP 'team' col matches 'home_team_name'/'away_team_name'.",
-      "i" = "Affected: {paste(utils::head(zero_xg, 5), collapse = ', ')}"
-    ))
-  }
+  shots_df <- .summarise_match_xg(df, quarter)
 
   return(shots_df)
 }
@@ -136,36 +146,8 @@ get_xg <- function(match = NULL,
     return(pbp |> dplyr::filter(.data$shot_row == 1, .data$period %in% quarter))
   }
 
-  # --- Summarise to match-level xG (reuse calculate_match_xgs logic) ---
-  shots_df <- pbp |>
-    dplyr::group_by(.data$match_id) |>
-    dplyr::filter(.data$period %in% quarter) |>
-    dplyr::summarise(
-      home_team = max(.data$home_team_name),
-      home_shots_score = sum(dplyr::if_else(.data$team == .data$home_team_name, .data$points_shot, 0), na.rm = TRUE),
-      home_xscore = sum(dplyr::if_else(.data$team == .data$home_team_name, .data$xscore * .data$shot_row, 0), na.rm = TRUE),
-      home_scored_goals = sum(dplyr::if_else(.data$team == .data$home_team_name, dplyr::if_else(.data$points_shot == 6, 1, 0), 0), na.rm = TRUE),
-      home_scored_behinds = sum(dplyr::if_else(.data$team == .data$home_team_name, dplyr::if_else(.data$points_shot == 1, 1, 0), 0), na.rm = TRUE),
-      away_team = max(.data$away_team_name),
-      away_shots_score = sum(dplyr::if_else(.data$team == .data$away_team_name, .data$points_shot, 0), na.rm = TRUE),
-      away_xscore = sum(dplyr::if_else(.data$team == .data$away_team_name, .data$xscore * .data$shot_row, 0), na.rm = TRUE),
-      away_scored_goals = sum(dplyr::if_else(.data$team == .data$away_team_name, dplyr::if_else(.data$points_shot == 6, 1, 0), 0), na.rm = TRUE),
-      away_scored_behinds = sum(dplyr::if_else(.data$team == .data$away_team_name, dplyr::if_else(.data$points_shot == 1, 1, 0), 0), na.rm = TRUE),
-      score_diff = .data$home_shots_score - .data$away_shots_score,
-      xscore_diff = .data$home_xscore - .data$away_xscore,
-      total_points = .data$home_shots_score + .data$away_shots_score,
-      total_xpoints = .data$home_xscore + .data$away_xscore,
-      .groups = "drop"
-    )
-
-  zero_xg <- shots_df$match_id[shots_df$total_xpoints == 0]
-  if (length(zero_xg) > 0) {
-    cli::cli_warn(c(
-      "{length(zero_xg)} match{?es} ha{?s/ve} zero total xscore -- likely a team name mismatch.",
-      "i" = "Check that PBP 'team' col matches 'home_team_name'/'away_team_name'.",
-      "i" = "Affected: {paste(utils::head(zero_xg, 5), collapse = ', ')}"
-    ))
-  }
+  # --- Summarise to match-level xG ---
+  shots_df <- .summarise_match_xg(pbp, quarter)
 
   cli::cli_inform("Done!")
   shots_df

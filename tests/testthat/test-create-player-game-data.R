@@ -38,6 +38,17 @@ test_that("create_player_game_data output contains required columns", {
   }
 
   expect_true(nrow(pgd) > 0)
+
+  # WPA columns should be present when PBP has wpa data
+  wpa_cols <- c("wp_credit", "wp_disp_credit", "wp_recv_credit",
+                "wp_credit_adj", "wp_disp_credit_adj", "wp_recv_credit_adj")
+  if ("wpa" %in% names(.shared$pbp)) {
+    for (col in wpa_cols) {
+      expect_true(col %in% names(pgd), info = paste("Missing WPA column:", col))
+    }
+    # WPA values should not be all zero (at least some plays have non-zero WPA)
+    expect_true(sum(pgd$wp_credit != 0) > 0, info = "All wp_credit values are zero")
+  }
 })
 
 # -----------------------------------------------------------------------------

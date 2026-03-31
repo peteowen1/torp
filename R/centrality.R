@@ -76,10 +76,10 @@ calculate_player_centrality <- function(player_matches,
   if (pr_range[2] > pr_range[1]) {
     centrality <- (scores - pr_range[1]) / (pr_range[2] - pr_range[1])
   } else {
-    centrality <- rep(1, length(scores))
+    centrality <- stats::setNames(rep(1, length(scores)), names(scores))
   }
 
-  # Count unique opponents (teams faced, not individual players)
+  # Count unique teams the player appeared on (transfers/trades)
   if ("team" %in% names(pm)) {
     opp <- stats::aggregate(
       team ~ player_id, data = pm,
@@ -116,13 +116,14 @@ calculate_player_centrality <- function(player_matches,
 
 #' @keywords internal
 empty_centrality_result <- function(players, min_matches) {
+  n <- length(players)
   data.frame(
     player_id = players,
-    centrality = 1,
-    unique_teams = 0L,
-    matches_played = min_matches,
-    component_id = 1L,
-    component_size = length(players),
+    centrality = rep(1, n),
+    unique_teams = rep(0L, n),
+    matches_played = rep(min_matches, n),
+    component_id = rep(1L, n),
+    component_size = rep(n, n),
     stringsAsFactors = FALSE
   )
 }
@@ -186,7 +187,9 @@ find_components <- function(adj) {
   membership <- vapply(seq_len(n), find_root, integer(1))
   names(membership) <- ids
   comp_table <- table(membership)
-  list(membership = membership, sizes = as.integer(comp_table),
+  sizes <- as.integer(comp_table)
+  names(sizes) <- names(comp_table)
+  list(membership = membership, sizes = sizes,
        n_components = length(comp_table))
 }
 

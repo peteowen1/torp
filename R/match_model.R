@@ -137,8 +137,9 @@ build_team_mdl_df <- function(season = NULL, target_weeks = NULL,
 }
 
 
-#' Builds team_mdl_df with injury-adjusted ratings, trains 5 sequential GAMs,
-#' generates predictions for target weeks, and uploads to torpdata releases.
+#' Builds team_mdl_df with injury-adjusted ratings, trains the 5-model sequential
+#' GAM pipeline, generates predictions for target weeks, and uploads to torpdata
+#' releases.
 #'
 #' @param week Single target week (auto-detected if NULL)
 #' @param weeks Vector of weeks, or "all" for all fixture weeks
@@ -412,16 +413,6 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
   gam_result <- .train_match_gams(team_mdl_df)
   team_mdl_df <- gam_result$data
 
-  # Train XGBoost & Blend ----
-  cli::cli_h2("Training XGBoost models on completed matches")
-  xgb_result <- .train_match_xgb(team_mdl_df)
-  team_mdl_df <- xgb_result$data
-
-  # 50/50 blend of GAM and XGBoost predictions
-  team_mdl_df$pred_score_diff <- 0.5 * team_mdl_df$pred_score_diff + 0.5 * team_mdl_df$xgb_pred_score_diff
-  team_mdl_df$pred_win <- 0.5 * team_mdl_df$pred_win + 0.5 * team_mdl_df$xgb_pred_win
-  cli::cli_alert_success("Blended GAM + XGBoost predictions (50/50)")
-
   # Format Predictions ----
   cli::cli_h2("Generating predictions for {length(target_weeks)} week{?s}")
 
@@ -476,7 +467,6 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
       return(invisible(list(
         predictions = all_preds,
         models = gam_result$models,
-        xgb_models = xgb_result$models,
         model_data = team_mdl_df,
         validation_errors = validation_errors
       )))
@@ -608,6 +598,26 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
     cli::cli_alert_success("Retrodictions uploaded for {length(retro_seasons)} season{?s}")
   }
 
+  # Upload GAM models to torpmodels ----
+  tryCatch(
+    {
+      gam_path <- file.path(tempdir(), "match_gams.rds")
+      saveRDS(gam_result$models, gam_path)
+      piggyback::pb_upload(gam_path, repo = "peteowen1/torpmodels", tag = "core-models")
+      # Refresh local torpmodels cache so simulate_afl_season() uses the fresh model
+      cache_dir <- getOption("torpmodels.cache_dir",
+                             file.path(tools::R_user_dir("torpmodels", "cache"), "models"))
+      local_cache <- file.path(cache_dir, "core", "match_gams.rds")
+      if (dir.exists(dirname(local_cache))) {
+        file.copy(gam_path, local_cache, overwrite = TRUE)
+      }
+      cli::cli_alert_success("Uploaded match_gams to torpmodels")
+    },
+    error = function(e) {
+      cli::cli_warn("Could not upload match_gams to torpmodels: {conditionMessage(e)}")
+    }
+  )
+
   elapsed <- (proc.time() - .pipeline_start)[["elapsed"]]
   cli::cli_h2("Pipeline Complete")
   cli::cli_inform("Total elapsed: {round(elapsed, 1)}s")
@@ -615,7 +625,6 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
   invisible(list(
     predictions = all_preds,
     models = gam_result$models,
-    xgb_models = xgb_result$models,
     model_data = team_mdl_df
   ))
 }

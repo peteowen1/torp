@@ -174,14 +174,14 @@ evaluate_model_comprehensive <- function(actual, predicted, model_name = "Model"
   )
 
   cal_summary <- cal_data |>
-    group_by(pred_decile) |>
-    summarise(
+    dplyr::group_by(pred_decile) |>
+    dplyr::summarise(
       pred_mean = mean(predicted),
       actual_mean = mean(actual),
-      n = n(),
+      n = dplyr::n(),
       .groups = "drop"
     ) |>
-    filter(n >= 10)  # Only use deciles with sufficient data
+    dplyr::filter(n >= 10)  # Only use deciles with sufficient data
 
   if (nrow(cal_summary) >= 3) {
     cal_model <- lm(actual_mean ~ pred_mean, data = cal_summary)

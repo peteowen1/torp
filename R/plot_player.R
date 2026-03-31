@@ -33,14 +33,14 @@ plot_player_rating <- function(player_name, seasons = TRUE,
   pid <- player$player_id
 
   # Filter to player
-  pdf <- data[data$player_id == pid, ]
-  if (nrow(pdf) == 0) {
+  player_df <- data[data$player_id == pid, ]
+  if (nrow(player_df) == 0) {
     cli::cli_abort("No game ratings found for {.val {player_name}}")
   }
 
   # Check metric column exists
-  if (!metric %in% names(pdf)) {
-    available <- intersect(c("torp_value", "epv", "psv", "osv", "dsv"), names(pdf))
+  if (!metric %in% names(player_df)) {
+    available <- intersect(c("torp_value", "epv", "psv", "osv", "dsv"), names(player_df))
     cli::cli_abort(c(
       "Column {.val {metric}} not found in game ratings data.",
       "i" = "Available: {.val {available}}"
@@ -48,20 +48,16 @@ plot_player_rating <- function(player_name, seasons = TRUE,
   }
 
   # Sort by game order and compute rolling average
-  pdf <- pdf[order(pdf$season, pdf$round_number), ]
-  pdf$game_number <- seq_len(nrow(pdf))
-  pdf$season_fac <- factor(pdf$season)
+  player_df <- player_df[order(player_df$season, player_df$round_number), ]
+  player_df$game_number <- seq_len(nrow(player_df))
+  player_df$season_fac <- factor(player_df$season)
 
   # Rolling average
-  vals <- pdf[[metric]]
+  vals <- player_df[[metric]]
   if (all(is.na(vals))) {
     cli::cli_abort("Column {.val {metric}} contains only NA values for {.val {player_name}}")
   }
-  pdf$rolling_avg <- NA_real_
-  for (i in seq_along(vals)) {
-    start <- max(1, i - rolling + 1)
-    pdf$rolling_avg[i] <- mean(vals[start:i], na.rm = TRUE)
-  }
+  player_df$rolling_avg <- .rolling_mean(vals, rolling)
 
   metric_label <- switch(metric,
     torp_value = "TORP Value",
@@ -70,7 +66,7 @@ plot_player_rating <- function(player_name, seasons = TRUE,
     metric
   )
 
-  p <- ggplot2::ggplot(pdf, ggplot2::aes(x = .data$game_number)) +
+  p <- ggplot2::ggplot(player_df, ggplot2::aes(x = .data$game_number)) +
     ggplot2::geom_hline(yintercept = 0, linetype = "dashed", colour = "grey50", linewidth = 0.3) +
     ggplot2::geom_point(
       ggplot2::aes(y = .data[[metric]], colour = .data$season_fac),
@@ -91,15 +87,15 @@ plot_player_rating <- function(player_name, seasons = TRUE,
   # Season average segments
   if (show_season_avg) {
     season_avgs <- stats::aggregate(
-      pdf[[metric]],
-      by = list(season = pdf$season),
+      player_df[[metric]],
+      by = list(season = player_df$season),
       FUN = mean, na.rm = TRUE
     )
     names(season_avgs) <- c("season", "avg")
 
     for (i in seq_len(nrow(season_avgs))) {
       szn <- season_avgs$season[i]
-      szn_rows <- pdf[pdf$season == szn, ]
+      szn_rows <- player_df[player_df$season == szn, ]
       if (nrow(szn_rows) > 0) {
         p <- p + ggplot2::annotate(
           "segment",

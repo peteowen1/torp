@@ -50,11 +50,17 @@ has_new_games <- function() {
     }
 
     # Check if any games have been completed in the current round
-    time_aest <- lubridate::with_tz(Sys.time(), tzone = "Australia/Brisbane")
+    # utc_start_time is character from the API — parse to POSIXct in UTC
+    # then compare against current UTC time to avoid timezone mismatch
+    utc_now <- Sys.time()
     completed_games <- fixtures %>%
+      dplyr::mutate(
+        start_utc = as.POSIXct(.data$utc_start_time,
+                                format = "%Y-%m-%dT%H:%M", tz = "UTC")
+      ) %>%
       dplyr::filter(
         .data$round_number == current_round,
-        .data$utc_start_time < time_aest
+        .data$start_utc < utc_now
       )
 
     if (nrow(completed_games) > 0) {

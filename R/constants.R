@@ -367,6 +367,13 @@ SIM_INJURY_SD <- 3
 #' @keywords internal
 SIM_MEAN_REVERSION <- 0.01
 
+#' Rating shift fraction per round
+#' After each simulated game, team ratings are shifted by this fraction of
+#' (actual_result - expected_result). Controls how much in-season results
+#' update the "hot" rating used for subsequent rounds.
+#' @keywords internal
+SIM_RATING_SHIFT <- 0.1
+
 #' TBC/unknown injuries: assume back in ~3 rounds
 #' @keywords internal
 SIM_INJURY_TBC_BUFFER <- 3L

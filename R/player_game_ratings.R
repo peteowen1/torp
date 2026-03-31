@@ -60,15 +60,17 @@ player_game_ratings <- function(season_val = get_afl_season(),
   for (col in c("psv", "osv", "dsv")) {
     p80_col <- paste0(col, "_p80")
     if (col %in% names(dt) && !p80_col %in% names(dt)) {
-      dt[, (p80_col) := round(get(col) / tog, 1)]
+      dt[, (p80_col) := round(get(col) / pmax(tog, 0.01), 1)]
     }
   }
 
   if (per80) {
     val_cols <- c("epv_p80", "recv_epv_p80", "disp_epv_p80", "spoil_epv_p80", "hitout_epv_p80",
+                  "wp_credit_p80", "wp_disp_credit_p80", "wp_recv_credit_p80",
                   "psv_p80", "osv_p80", "dsv_p80", "torp_value_p80")
   } else {
     val_cols <- c("epv", "recv_epv", "disp_epv", "spoil_epv", "hitout_epv",
+                  "wp_credit", "wp_disp_credit", "wp_recv_credit",
                   "psv", "osv", "dsv", "torp_value")
   }
 
@@ -105,7 +107,9 @@ player_game_ratings <- function(season_val = get_afl_season(),
 
   df <- filter_game_data(player_game_data, season_val, round_val, matchid = NULL, team = NULL)
 
-  df |>
+  has_wpa <- "wp_credit" %in% names(df)
+
+  df <- df |>
     dplyr::arrange(-.data$epv_adj) |>
     dplyr::mutate(
       listed_position = dplyr::if_else(.data$listed_position == "MIDFIELDER_FORWARD",
@@ -129,7 +133,29 @@ player_game_ratings <- function(season_val = get_afl_season(),
       disp_epv_p80 = round(.data$disp_epv_c / .data$tog_frac, 1),
       spoil_epv_p80 = round(.data$spoil_epv_c / .data$tog_frac, 1),
       hitout_epv_p80 = round(.data$hitout_epv_c / .data$tog_frac, 1)
-    ) |>
+    )
+
+  # WPA centering (mirrors EPV pattern, guarded for old data)
+  if (has_wpa) {
+    df <- df |>
+      dplyr::mutate(
+        wp_credit_c = round(.data$wp_credit -
+          sum(.data$wp_credit) / sum(.data$tog_frac) * .data$tog_frac, 3),
+        wp_disp_credit_c = round(.data$wp_disp_credit -
+          sum(.data$wp_disp_credit) / sum(.data$tog_frac) * .data$tog_frac, 3),
+        wp_recv_credit_c = round(.data$wp_recv_credit -
+          sum(.data$wp_recv_credit) / sum(.data$tog_frac) * .data$tog_frac, 3),
+        .by = c("season", "listed_position")
+      ) |>
+      dplyr::mutate(
+        wp_credit_p80 = round(.data$wp_credit_c / .data$tog_frac, 3),
+        wp_disp_credit_p80 = round(.data$wp_disp_credit_c / .data$tog_frac, 3),
+        wp_recv_credit_p80 = round(.data$wp_recv_credit_c / .data$tog_frac, 3)
+      )
+  }
+
+  # Final column select
+  df |>
     dplyr::select(
       season = "season", round = "round",
       player_name = "player_name", position = "listed_position", team = "team", opp = "opponent",
@@ -138,6 +164,11 @@ player_game_ratings <- function(season_val = get_afl_season(),
       spoil_epv = "spoil_epv_c", hitout_epv = "hitout_epv_c",
       epv_p80 = "epv_p80", recv_epv_p80 = "recv_epv_p80", disp_epv_p80 = "disp_epv_p80",
       spoil_epv_p80 = "spoil_epv_p80", hitout_epv_p80 = "hitout_epv_p80",
+      dplyr::any_of(c(
+        wp_credit = "wp_credit_c", wp_disp_credit = "wp_disp_credit_c",
+        wp_recv_credit = "wp_recv_credit_c",
+        "wp_credit_p80", "wp_disp_credit_p80", "wp_recv_credit_p80"
+      )),
       player_id = "player_id", team_id = "team_id", match_id = "match_id"
     )
 }
@@ -283,6 +314,10 @@ player_season_ratings <- function(season_val = get_afl_season(),
     for (col in c("epv", "recv_epv", "disp_epv", "spoil_epv", "hitout_epv")) {
       if (col %in% names(.SD)) out[[col]] <- round(sum(get(col), na.rm = TRUE), 1)
     }
+    # WPA columns (optional)
+    for (col in c("wp_credit", "wp_disp_credit", "wp_recv_credit")) {
+      if (col %in% names(.SD)) out[[col]] <- round(sum(get(col), na.rm = TRUE), 3)
+    }
     # PSV columns (optional)
     for (col in c("psv", "osv", "dsv", "torp_value")) {
       if (col %in% names(.SD)) out[[col]] <- round(sum(get(col), na.rm = TRUE), 1)
@@ -292,8 +327,9 @@ player_season_ratings <- function(season_val = get_afl_season(),
 
   # Compute p80 variants
   epv_cols <- intersect(c("epv", "recv_epv", "disp_epv", "spoil_epv", "hitout_epv"), names(result))
+  wp_cols <- intersect(c("wp_credit", "wp_disp_credit", "wp_recv_credit"), names(result))
   psv_cols <- intersect(c("psv", "osv", "dsv", "torp_value"), names(result))
-  all_val_cols <- c(epv_cols, psv_cols)
+  all_val_cols <- c(epv_cols, wp_cols, psv_cols)
 
   for (col in all_val_cols) {
     p80_col <- paste0(col, "_p80")

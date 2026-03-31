@@ -155,7 +155,7 @@ validate_data_schema <- function(data, schema_name, strict = TRUE) {
       cli::cli_abort("Data validation failed for schema {schema_name}:\n{paste(issues, collapse = '\n')}")
     }
   } else {
-    message(paste("Data validation passed for schema", schema_name, "with", nrow(data), "rows"))
+    cli::cli_inform("Data validation passed for schema {schema_name} with {nrow(data)} rows")
   }
   
   return(list(
@@ -214,7 +214,7 @@ validate_data_quality <- function(data, data_type = "unknown") {
   }
   
   # Outlier detection for numeric columns
-  numeric_cols <- sapply(data, is.numeric)
+  numeric_cols <- vapply(data, is.numeric, logical(1))
   if (any(numeric_cols)) {
     outlier_analysis <- detect_outliers(data[, numeric_cols, drop = FALSE])
     if (outlier_analysis$extreme_outliers > 0) {
@@ -446,7 +446,7 @@ validate_model_data_quality <- function(data) {
   }
   
   # Check for constant columns (zero variance)
-  numeric_cols <- sapply(data, is.numeric)
+  numeric_cols <- vapply(data, is.numeric, logical(1))
   if (any(numeric_cols)) {
     constant_cols <- sapply(data[, numeric_cols, drop = FALSE], function(x) {
       var(x, na.rm = TRUE) == 0
@@ -473,7 +473,7 @@ validate_generic_data_quality <- function(data) {
   issues <- list()
   
   # Check for constant columns (zero variance)
-  numeric_cols <- sapply(data, is.numeric)
+  numeric_cols <- vapply(data, is.numeric, logical(1))
   if (any(numeric_cols)) {
     constant_cols <- sapply(data[, numeric_cols, drop = FALSE], function(x) {
       var(x, na.rm = TRUE) == 0 | all(is.na(x))
@@ -544,7 +544,7 @@ validate_data_freshness <- function(data_timestamp, timestamp_col = "utc_start_t
   if (is.data.frame(data_timestamp)) {
     # If data_timestamp is a dataframe, extract timestamp column
     if (!timestamp_col %in% names(data_timestamp)) {
-      warning(paste("Timestamp column", timestamp_col, "not found"))
+      cli::cli_warn("Timestamp column {timestamp_col} not found")
       return(FALSE)
     }
     

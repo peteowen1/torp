@@ -58,29 +58,20 @@ calculate_player_attribution <- function(match_features,
   full_pred <- predict_fn(match_features)
 
   # Ablate each rating column and measure impact
-  results <- data.frame(
-    feature = character(),
-    full_pred = numeric(),
-    ablated_pred = numeric(),
-    contribution = numeric(),
-    stringsAsFactors = FALSE
-  )
-
   available_cols <- intersect(player_rating_cols, names(match_features))
 
-  for (col in available_cols) {
+  results <- do.call(rbind, lapply(available_cols, function(col) {
     ablated <- match_features
     ablated[[col]] <- baseline_value
     ablated_pred <- predict_fn(ablated)
-
-    results <- rbind(results, data.frame(
+    data.frame(
       feature = col,
       full_pred = full_pred,
       ablated_pred = ablated_pred,
       contribution = full_pred - ablated_pred,
       stringsAsFactors = FALSE
-    ))
-  }
+    )
+  }))
 
   # Calculate percentage contribution
   total_contribution <- sum(abs(results$contribution))

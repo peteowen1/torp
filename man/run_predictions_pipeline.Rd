@@ -2,8 +2,9 @@
 % Please edit documentation in R/match_model.R
 \name{run_predictions_pipeline}
 \alias{run_predictions_pipeline}
-\title{Builds team_mdl_df with injury-adjusted ratings, trains 5 sequential GAMs,
-generates predictions for target weeks, and uploads to torpdata releases.}
+\title{Builds team_mdl_df with injury-adjusted ratings, trains the 5-model sequential
+GAM pipeline, generates predictions for target weeks, and uploads to torpdata
+releases.}
 \usage{
 run_predictions_pipeline(week = NULL, weeks = NULL, season = NULL)
 }
@@ -22,7 +23,8 @@ providerId, home_team, away_team, pred_margin, pred_win, margin, etc.)}
 conv_diff, score_diff, win}
 }
 \description{
-Builds team_mdl_df with injury-adjusted ratings, trains 5 sequential GAMs,
-generates predictions for target weeks, and uploads to torpdata releases.
+Builds team_mdl_df with injury-adjusted ratings, trains the 5-model sequential
+GAM pipeline, generates predictions for target weeks, and uploads to torpdata
+releases.
 }
 \keyword{internal}
