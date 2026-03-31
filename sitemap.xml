@@ -116,6 +116,7 @@
 <url><loc>https://peteowen1.github.io/torp/reference/SIM_INJURY_TBC_BUFFER.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/SIM_MEAN_REVERSION.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/SIM_NOISE_SD.html</loc></url>
+<url><loc>https://peteowen1.github.io/torp/reference/SIM_RATING_SHIFT.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/SIM_TOP_N_PLAYERS.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/SIM_TOTAL_SD.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/SIM_VICTORIAN_TEAMS.html</loc></url>
@@ -239,6 +240,7 @@
 <url><loc>https://peteowen1.github.io/torp/reference/dot-estimate_stat_ratings_batch.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/dot-extract_player_cols.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/dot-extract_round_from_match_id.html</loc></url>
+<url><loc>https://peteowen1.github.io/torp/reference/dot-extract_team_residuals.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/dot-fetch_all_player_details.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/dot-fetch_cfs_batch.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/dot-fetch_fixtures_for_season.html</loc></url>
@@ -277,8 +279,10 @@
 <url><loc>https://peteowen1.github.io/torp/reference/dot-read_season_disk_cache.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/dot-resolve_lineup_info.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/dot-resolve_stat_rating_positions.html</loc></url>
+<url><loc>https://peteowen1.github.io/torp/reference/dot-rolling_mean.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/dot-setup_torp_logging.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/dot-stat_rating_params.html</loc></url>
+<url><loc>https://peteowen1.github.io/torp/reference/dot-summarise_match_xg.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/dot-to_snake_case.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/dot-train_match_gams.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/dot-train_match_xgb.html</loc></url>

@@ -55,6 +55,7 @@ together. Returns <code>epr</code>, <code>psr</code>, <code>osr</code>, <code>ds
     <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">torp_ratings</span><span class="op">(</span></span>
 <span>  season_val <span class="op">=</span> <span class="fu"><a href="get_afl_season.html">get_afl_season</a></span><span class="op">(</span>type <span class="op">=</span> <span class="st">"current"</span><span class="op">)</span>,</span>
 <span>  round_val <span class="op">=</span> <span class="fu"><a href="get_afl_week.html">get_afl_week</a></span><span class="op">(</span>type <span class="op">=</span> <span class="st">"next"</span><span class="op">)</span>,</span>
+<span>  injuries <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  <span class="va">...</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
@@ -69,6 +70,11 @@ together. Returns <code>epr</code>, <code>psr</code>, <code>osr</code>, <code>ds
 
 <dt id="arg-round-val">round_val<a class="anchor" aria-label="anchor" href="#arg-round-val"></a></dt>
 <dd><p>Round to calculate ratings for.</p></dd>
+
+
+<dt id="arg-injuries">injuries<a class="anchor" aria-label="anchor" href="#arg-injuries"></a></dt>
+<dd><p>Optional injury data frame (from <code><a href="scrape_injuries.html">scrape_injuries()</a></code>) used
+for downstream predictions. Passed through but not used in rating computation.</p></dd>
 
 
 <dt id="arg--">...<a class="anchor" aria-label="anchor" href="#arg--"></a></dt>

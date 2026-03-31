@@ -53,6 +53,8 @@ to estimate ladder positions, finals probabilities, and premiership odds.</p>
 <span>  fixtures <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  predictions <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  injuries <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  team_residuals <span class="op">=</span> <span class="st">"auto"</span>,</span>
+<span>  models <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  seed <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  verbose <span class="op">=</span> <span class="cn">TRUE</span>,</span>
 <span>  keep_games <span class="op">=</span> <span class="cn">FALSE</span>,</span>
@@ -89,6 +91,22 @@ NULL, loads from torpdata.</p></dd>
 <dd><p>Injury data.frame from <code><a href="get_all_injuries.html">get_all_injuries()</a></code>. By default,
 fetched automatically from the AFL injury list. Pass <code>FALSE</code> to disable
 injury-aware simulation, or supply your own data.frame.</p></dd>
+
+
+<dt id="arg-team-residuals">team_residuals<a class="anchor" aria-label="anchor" href="#arg-team-residuals"></a></dt>
+<dd><p>Team quality residuals from the match GAM random
+effects. <code>"auto"</code> (default) extracts from the xscore_diff GAM via
+<code><a href="dot-extract_team_residuals.html">.extract_team_residuals()</a></code>. Pass a data.frame with <code>team</code>,
+<code>residual_mean</code>, <code>residual_se</code> to supply custom values, or <code>NULL</code> to
+disable. Residuals are sampled from <code>N(mean, se)</code> once per simulation,
+capturing coaching/system quality not explained by player TORP.</p></dd>
+
+
+<dt id="arg-models">models<a class="anchor" aria-label="anchor" href="#arg-models"></a></dt>
+<dd><p>Optional named list of GAM models from
+<code>run_predictions_pipeline()$models</code>. When provided, team residuals are
+extracted from the fresh <code>xscore_diff</code> model instead of the stored
+torpmodels version. Ignored when <code>team_residuals</code> is not <code>"auto"</code>.</p></dd>
 
 
 <dt id="arg-seed">seed<a class="anchor" aria-label="anchor" href="#arg-seed"></a></dt>

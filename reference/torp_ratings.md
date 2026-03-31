@@ -10,6 +10,7 @@ together. Returns `epr`, `psr`, `osr`, `dsr`, and `torp` columns.
 torp_ratings(
   season_val = get_afl_season(type = "current"),
   round_val = get_afl_week(type = "next"),
+  injuries = NULL,
   ...
 )
 ```
@@ -23,6 +24,13 @@ torp_ratings(
 - round_val:
 
   Round to calculate ratings for.
+
+- injuries:
+
+  Optional injury data frame (from
+  [`scrape_injuries()`](https://peteowen1.github.io/torp/reference/scrape_injuries.md))
+  used for downstream predictions. Passed through but not used in rating
+  computation.
 
 - ...:
 

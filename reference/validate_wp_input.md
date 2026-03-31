@@ -6,12 +6,12 @@ modeling.
 ## Usage
 
 ``` r
-validate_wp_input(df)
+validate_wp_input(data)
 ```
 
 ## Arguments
 
-- df:
+- data:
 
   Input dataframe
 

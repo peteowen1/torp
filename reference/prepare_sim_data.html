@@ -51,7 +51,9 @@ played from unplayed games and formats everything for the simulation loop.</p>
 <span>  team_ratings <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  fixtures <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  predictions <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>  injuries <span class="op">=</span> <span class="cn">NULL</span></span>
+<span>  injuries <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  team_residuals <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  models <span class="op">=</span> <span class="cn">NULL</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -82,6 +84,20 @@ NULL, attempts to load via <code><a href="load_predictions.html">load_prediction
 <dd><p>Optional injury data.frame from <code><a href="get_all_injuries.html">get_all_injuries()</a></code>. When
 provided, team ratings are built from player-level TORP with injured
 players excluded and a lighter discount (<a href="INJURY_KNOWN_DISCOUNT.html">INJURY_KNOWN_DISCOUNT</a>) applied.</p></dd>
+
+
+<dt id="arg-team-residuals">team_residuals<a class="anchor" aria-label="anchor" href="#arg-team-residuals"></a></dt>
+<dd><p>Optional data.frame with columns <code>team</code>,
+<code>residual_mean</code>, <code>residual_se</code>. Team-level quality residuals from the
+match GAM random effects, capturing systematic over/under-performance
+not explained by player TORP. If <code>"auto"</code>, attempts to extract from the
+match GAM model.</p></dd>
+
+
+<dt id="arg-models">models<a class="anchor" aria-label="anchor" href="#arg-models"></a></dt>
+<dd><p>Optional named list of GAM models from
+<code>run_predictions_pipeline()$models</code>. Passed to <code><a href="dot-extract_team_residuals.html">.extract_team_residuals()</a></code>
+to use fresh models instead of the stored torpmodels version.</p></dd>
 
 </dl></div>
     <div class="section level2">
