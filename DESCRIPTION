@@ -34,7 +34,6 @@ RoxygenNote: 7.3.3
 Suggests:
     geosphere,
     Matrix,
-    mixedup,
     piggyback (>= 0.1.4),
     pkgload,
     httr2 (>= 1.0.0),
