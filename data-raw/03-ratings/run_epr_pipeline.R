@@ -29,6 +29,8 @@ devtools::load_all()
 source(here::here("data-raw/01-data/daily_release.R"), local = .daily_release_env)
 update_player_stats <- .daily_release_env$update_player_stats
 update_teams <- .daily_release_env$update_teams
+get_start_round <- .daily_release_env$get_start_round
+get_max_round <- .daily_release_env$get_max_round
 
 # Configuration ----
 # These defaults are only set if not already defined (allows CI to override)
