@@ -389,7 +389,7 @@ Reference models for WP evaluation: Naive (always 0.5), Score-Only (logistic on 
 | Component | File | Key Exports |
 |-----------|------|-------------|
 | Constants | `R/constants.R` | `EPR_DECAY_*`, `EPR_PRIOR_*`, `TORP_EPR_WEIGHT`, `SIM_*`, `POSITION_AVG_TOG`, `EPV_RELEVANT_DESCRIPTIONS` |
-| Load Functions | `R/load_data.R` | `load_pbp()`, `load_chains()`, `load_player_stats()`, `load_fixtures()`, `load_teams()`, `load_results()`, `load_torp_ratings()`, `load_team_ratings()` |
+| Load Functions | `R/load_data.R` | `load_pbp()`, `load_chains()`, `load_xg()`, `load_player_stats()`, `load_player_game_data()`, `load_fixtures()`, `load_teams()`, `load_results()`, `load_player_details()`, `load_predictions()`, `load_retrodictions()`, `load_torp_ratings()`, `load_player_game_ratings()`, `load_player_season_ratings()`, `load_team_ratings()`, `load_injury_data()`, `load_ep_wp_charts()`, `load_player_stat_ratings()`, `load_psr()`, `load_weather()` |
 | Load Engines | `R/load_engines.R` | `load_from_url()`, `parquet_from_urls_parallel()` |
 | Load Utilities | `R/load_utils.R` | `validate_seasons()`, `generate_urls()` |
 | Local Data | `R/local_data.R` | `download_torp_data()`, `save_locally()`, `get_local_data_dir()`, `set_local_data_dir()` |
@@ -418,32 +418,77 @@ Reference models for WP evaluation: Naive (always 0.5), Score-Only (logistic on 
 | Team Names | `R/afl_api.R` | `torp_replace_teams()`, `torp_team_abbr()`, `torp_team_full()`, `torp_replace_venues()` |
 | Player Profiles | `R/player_profile.R` | `player_profile()` |
 | Player Game Ratings | `R/player_game_ratings.R` | `player_game_ratings()`, `player_season_ratings()` |
-| Team Profile | `R/team_profile.R` | `team_profile()` |
+| Team Profile | `R/team_profile.R` | `team_profile()`, `team_stat_rating_profile()`, `get_team_stat_ratings()` |
+| Match Analysis | `R/analyze_match.R` | `get_player_game_ratings()` (live match analysis) |
+| Centrality | `R/centrality.R` | `calculate_player_centrality()` |
+| Player Attribution | `R/player_attribution.R` | `calculate_player_attribution()`, `batch_player_attribution()` |
+| Stat Rating Data | `R/player_skills_data.R` | Data preparation for stat rating estimation |
+| Stat Rating Profiles | `R/player_skills_profile.R` | `player_stat_rating_profile()`, `get_player_stat_ratings()` |
+| WP Credit | `R/wp_credit.R` | `create_wp_credit()` (WPA credit allocation) |
+| Win Probability | `R/win_probability.R` | `fit_win_probability()` |
 | Logging | `R/logging.R` | `setup_torp_logging()`, `monitor_model_drift()` |
 | Model Validation | `R/model_validation.R` | `create_grouped_cv_folds()`, `evaluate_model_comprehensive()` |
 | Data Validation | `R/data_validation.R` | Input validation utilities |
 | Utilities | `R/utils.R` | `torp_clean_names()`, `get_afl_season()`, `get_afl_week()`, `clear_all_cache()` |
-| Visualization | `R/plot_*.R` (7 files) | `plot_game()`, `plot_player()`, `plot_shots()`, `plot_simulation()`, `plot_comparison()`, `plot_team()` |
+| Plot: Game Flow | `R/plot_game.R` | `plot_ep_wp()` |
+| Plot: Player | `R/plot_player.R` | `plot_player_rating()`, `plot_stat_rating_profile()` |
+| Plot: Shots | `R/plot_shots.R` | `plot_shot_map()` |
+| Plot: Simulation | `R/plot_simulation.R` | `plot_simulation()` |
+| Plot: Comparison | `R/plot_comparison.R` | `plot_player_comparison()` |
+| Plot: Team | `R/plot_team.R` | `plot_team_ratings()` |
+| Plot: Utilities | `R/plot_utils.R` | `theme_torp()`, `team_color_scale()`, `team_fill_scale()` |
 | Globals | `R/globals.R` | NSE variable declarations for R CMD check |
 | Package Init | `R/zzz.R` | `.onLoad()` / `.onAttach()` |
 | Data Docs | `R/data.R` | Documentation for bundled datasets |
 | Scraper | `R/scraper.R` | Legacy CFS endpoint scraping |
+
+## Column Schema Reference
+
+All data is normalised to canonical `snake_case` at load/fetch time via `R/column_schema.R`. Each data type has a `COL_MAP` constant that maps old/variant column names to canonical names. The `.normalise_*_columns()` wrappers handle multi-step normalisation (prefix stripping, bulk snake_case conversion, derived columns).
+
+### Column Maps by Data Type
+
+| Map | Data Type | Key Renames (old → new) |
+|-----|-----------|------------------------|
+| `FIXTURE_COL_MAP` | Fixtures/results | `providerId` → `match_id`, `compSeason.year` → `season`, `round.roundNumber` → `round_number`, `home.score.totalScore` → `home_score`, `utcStartTime` → `utc_start_time` |
+| `PBP_COL_MAP` | Play-by-play | `home_team_team_name` → `home_team_name`, `home_team_score_total_score` → `home_score`, `home_team_abbreviation` → `home_team_abbr` |
+| `CHAINS_COL_MAP` | Chains | `matchId` → `match_id`, `playerId` → `player_id`, `displayOrder` → `display_order`, `periodSeconds` → `period_seconds` |
+| `PLAYER_STATS_COL_MAP` | Player stats | `extended_stats_spoils` → `spoils`, `clearances_total_clearances` → `clearances`, `provider_id` → `match_id` (also strips `stats_` prefix from v2 API) |
+| `PLAYER_GAME_COL_MAP` | Player game data | `plyr_nm` → `player_name`, `tm` → `team`, `tot_p` → `epv`, `recv_pts` → `recv_epv`, `recv_credits` → `recv_epv` |
+| `TEAMS_COL_MAP` | Teams/lineups | `player.playerId` → `player_id`, `teamName` → `team_name`, `player.playerName.givenName` → `given_name` |
+| `PLAYER_DETAILS_COL_MAP` | Player details | `providerId` → `player_id`, `firstName` → `first_name`, `heightInCm` → `height_cm`, `dateOfBirth` → `date_of_birth` |
+| `TORP_RATINGS_COL_MAP` | TORP ratings | `torp` → `epr`, `torp_recv` → `recv_epr`, `torp_disp` → `disp_epr` |
+| `PLAYER_GAME_RATINGS_COL_MAP` | Game ratings | `total_points` → `epv_raw`, `total_p80` → `epv_p80`, `season_points` → `season_epv` |
+| `PREDICTIONS_COL_MAP` | Predictions | `providerId` → `match_id` |
+| `XG_COL_MAP` | Expected goals | `home_sG` → `home_scored_goals`, `home_sB` → `home_scored_behinds` |
+
+Old parquet files with legacy column names are normalised automatically at load time — no data regeneration required. Any remaining non-snake_case columns are caught by `.bulk_snake_case()` as a fallback.
 
 ## data-raw Pipeline Scripts
 
 | Stage | Directory | Key Script | Purpose |
 |-------|-----------|------------|---------|
 | 01 | `data-raw/01-data/` | `daily_release.R` | Daily data refresh, `has_new_games()` check, parquet release |
+| 01 | `data-raw/01-data/` | `release_data.R` | Manual release helpers: `save_to_release()` for any data type |
+| 01 | `data-raw/01-data/` | `rebuild_all_release_data.R` | Full rebuild of all torpdata releases from scratch |
+| 01 | `data-raw/01-data/` | `create_aggregated_files.R` | Build aggregated parquet files across seasons |
 | 01 | `data-raw/01-data/` | `get_weather_data.R` | Backfill historical weather via Open-Meteo API |
+| 01 | `data-raw/01-data/` | `get_stadium_data.R` | Stadium lat/lon reference data |
+| 01 | `data-raw/01-data/` | `update_fixture_table.R` | Refresh fixture data for current season |
 | 02 | `data-raw/02-models/` | `build_match_predictions.R` | Entry point for `run_predictions_pipeline()` |
+| 02 | `data-raw/02-models/` | `build_match_predictions_xgb.R` | XGBoost-based match predictions (experimental) |
 | 03 | `data-raw/03-ratings/` | `run_epr_pipeline.R` | 6-stage EPR/TORP pipeline (main CI/CD script) |
 | 03 | `data-raw/03-ratings/` | `optimize_epr_ratings.R` | Grid search for EPR decay/prior hyperparameters |
+| 03 | `data-raw/03-ratings/` | `create_player_ratings_table.R` | Build pre-computed ratings table for torpdata |
+| 03 | `data-raw/03-ratings/` | `bayes_rapm.R` | Bayesian RAPM player rating estimation |
 | 04 | `data-raw/04-analysis/` | `simulate_seasons.R` | Season simulation analysis scripts |
 | 05 | `data-raw/05-validation/` | `validate_wp_model.R` | Win probability model validation |
+| 05 | `data-raw/05-validation/` | `compare_model_performance.R` | Cross-model performance comparison |
 | 06 | `data-raw/06-stat-ratings/` | `01_compute_match_stats.R` | Per-player-match stat table assembly |
 | 06 | `data-raw/06-stat-ratings/` | `02_optimize_stat_rating_params.R` | Bayesian prior/decay hyperparameter tuning |
 | 06 | `data-raw/06-stat-ratings/` | `03_estimate_stat_ratings.R` | Batch stat rating estimation by round |
 | 06 | `data-raw/06-stat-ratings/` | `04_export_stat_ratings.R` | Per-season parquet export to torpdata |
+| 06 | `data-raw/06-stat-ratings/` | `05_compare_psr_models.R` | Compare PSR model versions and coefficient stability |
 | 06 | `data-raw/06-stat-ratings/` | `06_train_psr_model.R` | glmnet PSR model: stat ratings -> score prediction |
 
 ## Glossary
@@ -465,5 +510,20 @@ Reference models for WP evaluation: Naive (always 0.5), Score-Only (logistic on 
 | **PSV** | Player Stat Value: per-game PSR analogue from single-match stats |
 | **TOG** | Time on Ground: fraction of match time a player is on field |
 | **I50** | Inside 50: entry into the forward 50m arc |
+| **RAPM** | Regularized Adjusted Plus-Minus: regression-based player rating controlling for teammates/opponents |
 | **GAM** | Generalized Additive Model (via `mgcv::bam()`) |
 | **Parquet** | Columnar storage format used for all data in torpdata releases |
+| **FB** | Full Back |
+| **BPL/BPR** | Back Pocket Left/Right |
+| **CHB** | Centre Half Back |
+| **HBFL/HBFR** | Half Back Flank Left/Right |
+| **C** | Centre |
+| **WL/WR** | Wing Left/Right |
+| **CHF** | Centre Half Forward |
+| **HFFL/HFFR** | Half Forward Flank Left/Right |
+| **FPL/FPR** | Forward Pocket Left/Right |
+| **FF** | Full Forward |
+| **R/RR/RK** | Ruck / Ruck Rover / Ruck positions |
+| **INT** | Interchange |
+| **SUB** | Medical Substitute |
+| **EMERG** | Emergency (non-playing squad member) |

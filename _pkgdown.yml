@@ -30,6 +30,7 @@ articles:
   - title: Guides
     contents:
       - torp-guide
+      - stat-ratings
       - visualizations
 
 reference:
@@ -54,7 +55,6 @@ reference:
   - title: Player Ratings
     desc: Calculate and view TORP player ratings
     contents:
-      - calculate_epr_stats
       - calculate_torp
       - calculate_psr_components
       - calculate_psv
@@ -209,6 +209,7 @@ reference:
     desc: "Internal utilities accessible via torp::: for model training and data scraping"
     contents:
       - access_api
+      - calculate_epr_stats
       - get_players
       - get_round_games
       - get_season_games
