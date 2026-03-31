@@ -16,6 +16,9 @@ torp_ratings(
 
 \item{round_val}{Round to calculate ratings for.}
 
+\item{injuries}{Optional injury data frame (from \code{\link[=scrape_injuries]{scrape_injuries()}}) used
+for downstream predictions. Passed through but not used in rating computation.}
+
 \item{...}{Additional arguments passed to \code{\link{calculate_epr}}.}
 }
 \value{
