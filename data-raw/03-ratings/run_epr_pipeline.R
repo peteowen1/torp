@@ -141,9 +141,13 @@ if (REBUILD_PLAYER_GAME) {
 cli::cli_h2("Stage 3: Compute EPR Ratings")
 tictoc::tic("stage_3_ratings")
 
+# Reload player game data fresh (Stage 2 may have uploaded new files with
+# additional columns like WPA; the in-memory data from Stage 2's load_pbp
+# is stale relative to the new player_game releases)
 cli::cli_progress_step("Loading all player game data")
+clear_all_cache()
 all_pgd <- load_player_game_data(TRUE)
-cli::cli_inform("Player game data loaded: {nrow(all_pgd)} rows")
+cli::cli_inform("Player game data loaded: {nrow(all_pgd)} rows, {ncol(all_pgd)} cols")
 
 # Convert to keyed data.table once — avoids full copy on every round call
 data.table::setDT(all_pgd)
