@@ -310,11 +310,6 @@ prepare_sim_data <- function(season, team_ratings = NULL, fixtures = NULL,
 #'   or NULL if extraction fails.
 #' @keywords internal
 .extract_team_residuals <- function(models = NULL) {
-  if (!requireNamespace("mixedup", quietly = TRUE)) {
-    cli::cli_warn("Package {.pkg mixedup} is needed to extract team residuals. Install with {.code install.packages('mixedup')}.")
-    return(NULL)
-  }
-
   if (!is.null(models) && !is.null(models[["xscore_diff"]])) {
     xsd <- models[["xscore_diff"]]
   } else {
@@ -329,19 +324,28 @@ prepare_sim_data <- function(season, team_ratings = NULL, fixtures = NULL,
     xsd <- match_gams[["xscore_diff"]]
   }
 
-  re <- tryCatch(
-    mixedup::extract_ranef(xsd),
-    error = function(e) {
-      cli::cli_warn("Could not extract random effects: {conditionMessage(e)}")
-      NULL
-    }
-  )
+  # Extract random effects directly from the GAM smooth terms
+  re <- tryCatch({
+    sm <- xsd$smooth
+    re_idx <- which(vapply(sm, function(s) inherits(s, "random.effect"), logical(1)))
+    team_idx <- which(vapply(sm, function(s) {
+      inherits(s, "random.effect") && any(grepl("team_name", s$vn))
+    }, logical(1)))
+    if (length(team_idx) == 0) return(NULL)
+
+    s <- sm[[team_idx[1]]]
+    coef_idx <- s$first.para:s$last.para
+    coefs <- stats::coef(xsd)[coef_idx]
+    se <- sqrt(diag(stats::vcov(xsd)[coef_idx, coef_idx]))
+    team_names <- gsub("^.*\\.", "", names(coefs))
+    data.table::data.table(team = team_names, residual_mean = unname(coefs), residual_se = unname(se))
+  }, error = function(e) {
+    cli::cli_warn("Could not extract random effects: {conditionMessage(e)}")
+    NULL
+  })
   if (is.null(re)) return(NULL)
 
-  team_re <- re[re$group_var == "team_name.x", c("group", "value", "se")]
-  if (nrow(team_re) == 0) return(NULL)
-
-  names(team_re) <- c("team", "residual_mean", "residual_se")
+  team_re <- re
   result <- data.table::as.data.table(team_re)
 
   # Standardise team names to canonical form for reliable merging
