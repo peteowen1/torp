@@ -48,6 +48,8 @@ clean_pbp_dt <- function(df) {
 
   # Apply transformations in sequence (each modifies dt by reference)
   add_torp_ids_dt(dt)
+  add_team_id_mdl_dt(dt)
+  fix_chain_coordinates_dt(dt)
   add_chain_vars_dt(dt)
   add_quarter_vars_dt(dt)
   add_game_vars_dt(dt)
@@ -90,6 +92,101 @@ add_torp_ids_dt <- function(dt) {
       paste(player_name_given_name, player_name_surname), "Other"
     )
   )]
+  invisible(NULL)
+}
+
+#' Add team_id_mdl and goal boundaries (Pass 1.5)
+#'
+#' Computes team_id_mdl (the possessing team for each row, handling throw-ins)
+#' and goal boundary markers needed for coordinate fixing.
+#' Extracted from add_quarter_vars_dt so it runs before fix_chain_coordinates_dt.
+#'
+#' @param dt A data.table to modify
+#' @return Invisible NULL (modifies dt by reference)
+#' @keywords internal
+add_team_id_mdl_dt <- function(dt) {
+  # team_id_mdl: use lead for throw_in rows, then fill NAs
+  dt[, team_id_mdl := data.table::fcase(
+    throw_in == 1L, data.table::shift(team_id, n = 1L, type = "lead"),
+    default = team_id
+  ), by = .(match_id, period)]
+
+  # Compute goal boundaries before filling so fill doesn't cross goal events
+  dt[, is_goal_row := data.table::fifelse(description == "Goal", 1L, 0L)]
+  dt[, tot_goals := cumsum(is_goal_row), by = .(match_id, period)]
+
+  # Fill NAs in team_id_mdl (character column - use nafill_char)
+  dt[, team_id_mdl := nafill_char(team_id_mdl, type = "nocb"), by = .(match_id, period, tot_goals)]
+  dt[, team_id_mdl := nafill_char(team_id_mdl, type = "locf"), by = .(match_id, period, tot_goals)]
+
+  dt[, home := data.table::fifelse(team_id_mdl == home_team_id, 1L, 0L)]
+
+  invisible(NULL)
+}
+
+#' Fix chain coordinate jumps (Pass 1.6)
+#'
+#' Converts coordinates to pitch-relative (home-team) space, fixes unreasonable
+#' jumps around throw-ins and ambiguous possession events, then converts back to
+#' possession-team perspective.
+#'
+#' @param dt A data.table to modify
+#' @return Invisible NULL (modifies dt by reference)
+#' @keywords internal
+fix_chain_coordinates_dt <- function(dt) {
+  # --- A) Convert to pitch-relative (home-team) coordinates ---
+  dt[, `:=`(
+    x_pitch = data.table::fifelse(team_id_mdl == home_team_id, x, -x),
+    y_pitch = data.table::fifelse(team_id_mdl == home_team_id, y, -y)
+  )]
+
+  # --- B) Fix throw-in/stoppage rows ---
+  # For throw-in rows the position should match where play resumes.
+  # Use the lead row's pitch-relative coordinates.
+  dt[, `:=`(
+    lead_x_fix = data.table::shift(x_pitch, 1L, type = "lead"),
+    lead_y_fix = data.table::shift(y_pitch, 1L, type = "lead")
+  ), by = .(match_id, period)]
+
+  dt[throw_in == 1L & !is.na(lead_x_fix), `:=`(
+    x_pitch = lead_x_fix,
+    y_pitch = lead_y_fix
+  )]
+  dt[, c("lead_x_fix", "lead_y_fix") := NULL]
+
+  # --- C) Detect and smooth unreasonable coordinate jumps ---
+  dt[, `:=`(
+    prev_x = data.table::shift(x_pitch, 1L, type = "lag"),
+    prev_y = data.table::shift(y_pitch, 1L, type = "lag"),
+    next_x = data.table::shift(x_pitch, 1L, type = "lead"),
+    next_y = data.table::shift(y_pitch, 1L, type = "lead")
+  ), by = .(match_id, period)]
+
+  dt[, `:=`(
+    jump_dist = sqrt((x_pitch - prev_x)^2 + (y_pitch - prev_y)^2),
+    next_jump = sqrt((next_x - x_pitch)^2 + (next_y - y_pitch)^2)
+  )]
+
+  # If a row jumps too far from BOTH neighbors, interpolate from them
+  dt[jump_dist > COORD_JUMP_THRESHOLD & next_jump > COORD_JUMP_THRESHOLD &
+     !is.na(prev_x) & !is.na(next_x), `:=`(
+    x_pitch = (prev_x + next_x) / 2,
+    y_pitch = (prev_y + next_y) / 2
+  )]
+
+  dt[, c("prev_x", "prev_y", "next_x", "next_y", "jump_dist", "next_jump") := NULL]
+
+  # --- D) Convert back to possession-team perspective ---
+  dt[, `:=`(
+    x = data.table::fifelse(team_id_mdl == home_team_id, x_pitch, -x_pitch),
+    y = data.table::fifelse(team_id_mdl == home_team_id, y_pitch, -y_pitch)
+  )]
+
+  dt[, c("x_pitch", "y_pitch") := NULL]
+
+  # --- E) Recalculate goal_x from fixed coordinates ---
+  dt[, goal_x := venue_length / 2 - x]
+
   invisible(NULL)
 }
 
@@ -145,21 +242,7 @@ add_quarter_vars_dt <- function(dt) {
 
   dt[, points_row_na := data.table::fifelse(is.na(points_row), 0L, points_row)]
 
-  # team_id_mdl: use lead for throw_in, then fill NAs
-  dt[, team_id_mdl := data.table::fcase(
-    throw_in == 1L, data.table::shift(team_id, n = 1L, type = "lead"),
-    default = team_id
-  ), by = .(match_id, period)]
-
-  # Compute goal boundaries before filling so fill doesn't cross goal events
-  dt[, is_goal_row := data.table::fifelse(description == "Goal", 1L, 0L)]
-  dt[, tot_goals := cumsum(is_goal_row), by = .(match_id, period)]
-
-  # Fill NAs in team_id_mdl (character column - use nafill_char)
-  dt[, team_id_mdl := nafill_char(team_id_mdl, type = "nocb"), by = .(match_id, period, tot_goals)]
-  dt[, team_id_mdl := nafill_char(team_id_mdl, type = "locf"), by = .(match_id, period, tot_goals)]
-
-  dt[, home := data.table::fifelse(team_id_mdl == home_team_id, 1L, 0L)]
+  # team_id_mdl, is_goal_row, tot_goals, home already computed in add_team_id_mdl_dt()
 
   # scoring_team_id
   dt[, scoring_team_id := data.table::fifelse(

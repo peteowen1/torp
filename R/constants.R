@@ -547,6 +547,16 @@ EPV_RELEVANT_DESCRIPTIONS <- c(
 )
 
 
+# Coordinate Cleaning Constants
+# ------------------------------
+
+#' Maximum reasonable Euclidean distance between consecutive PBP coordinates (metres).
+#' Jumps exceeding this in pitch-relative space are smoothed via neighbor interpolation.
+#' An AFL field is ~165m long and ~135m wide; 100m covers most realistic play distances.
+#' @keywords internal
+COORD_JUMP_THRESHOLD <- 100
+
+
 # Contest Extraction Constants
 # ----------------------------
 # Based on diagnostic analysis of raw CHAINS data (not cleaned PBP).

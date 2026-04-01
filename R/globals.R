@@ -29,6 +29,8 @@ utils::globalVariables(c(
 
   # Position/location variables
   "x", "y", "goal_x", "venue_length",
+  "x_pitch", "y_pitch", "lead_x_fix", "lead_y_fix",
+  "prev_x", "prev_y", "next_x", "next_y", "jump_dist", "next_jump",
 
   # Time variables
   "period_seconds", "time_remaining", "min_seconds", "max_seconds",
