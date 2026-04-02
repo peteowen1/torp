@@ -82,7 +82,7 @@ fit_win_probability <- function(seasons = 2010:2025, output_path = NULL) {
 
   training_data <- do.call(rbind, training_rows[seq_len(idx - 1)])
 
-  cli::cli_alert_info("Training data: {nrow(training_data)} rows ({nrow(training_data)/4} matches × 4 quarters)")
+  cli::cli_alert_info("Training data: {nrow(training_data)} rows ({nrow(training_data)/4} matches x 4 quarters)")
 
   # Fit logistic regression
   fit <- stats::glm(
