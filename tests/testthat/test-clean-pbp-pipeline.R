@@ -949,10 +949,12 @@ test_that("fix_chain_coordinates_dt clamps extreme jumps", {
   row2 <- result[display_order == 2]
   row4 <- result[display_order == 4]
 
-  # In pitch-relative space, all rows are from home team, so x_pitch = x
-  # The smoothed row3 should be near the average of row2 and row4
-  expect_lt(abs(row3$x - (row2$x + row4$x) / 2), 5)
-  expect_lt(abs(row3$y - (row2$y + row4$y) / 2), 5)
+  # Row 3 had x=-70 (wrong sign for home team). The sign-flip fix detects this
+
+  # (jump >100m, flipped dist <70m) and corrects to x=+70, which is near neighbors.
+  # Verify the extreme jump is gone (row3 should be within 30m of row2)
+  expect_lt(abs(row3$x - row2$x), 30)
+  expect_lt(abs(row3$y - row2$y), 40)
 })
 
 test_that("goal_x is recalculated after coordinate fixing", {

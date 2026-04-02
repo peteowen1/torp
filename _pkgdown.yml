@@ -46,6 +46,7 @@ reference:
       - add_epv_vars
       - add_wp_vars
       - add_shot_vars
+      - fit_win_probability
 
   - title: Data Cleaning
     desc: Clean and prepare AFL data for analysis
@@ -133,6 +134,7 @@ reference:
       - get_player_game_ratings
       - get_xg
       - calculate_match_xgs
+      - extract_player_xg_skill
       - head_to_head
       - print.torp_head_to_head
 
