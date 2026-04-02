@@ -400,7 +400,12 @@ SIM_INJURY_SD_KNOWN <- 2
 #' Lighter than SIM_INJURY_DISCOUNT (0.95) because major absences are already
 #' reflected by removing those players from the rating sum.
 #' @keywords internal
-INJURY_KNOWN_DISCOUNT <- 0.98
+INJURY_KNOWN_DISCOUNT <- 0.99
+
+#' Floor for injury discount scaling
+#' Discount drops 0.01 per week from INJURY_KNOWN_DISCOUNT, floored here.
+#' @keywords internal
+INJURY_DISCOUNT_FLOOR <- 0.90
 
 #' Default number of simulations
 #' @keywords internal

@@ -98,8 +98,8 @@ build_team_mdl_df <- function(season = NULL, target_weeks = NULL,
     dplyr::filter(team_type_fac.x == "home") |>
     dplyr::select(
       season = season.x, round = round_number.x, players = count.x, match_id,
-      home_team = team_name.x, home_rating = epr.x, home_psr = psr.x,
-      away_team = team_name.y, away_rating = epr.y, away_psr = psr.y,
+      home_team = team_name.x, home_epr = epr.x, home_psr = psr.x,
+      away_team = team_name.y, away_epr = epr.y, away_psr = psr.y,
       pred_xtotal = pred_tot_xscore, pred_xmargin = pred_xscore_diff,
       pred_margin = pred_score_diff, pred_win, bits,
       margin = score_diff, start_time = local_start_time_str, venue = venue.x
@@ -114,26 +114,26 @@ build_team_mdl_df <- function(season = NULL, target_weeks = NULL,
     dplyr::filter(team_type_fac.x == "away") |>
     dplyr::select(
       season = season.x, round = round_number.x, players = count.x, match_id,
-      home_team = team_name.y, home_rating = epr.y, home_psr = psr.y,
-      away_team = team_name.x, away_rating = epr.x, away_psr = psr.x,
+      home_team = team_name.y, home_epr = epr.y, home_psr = psr.y,
+      away_team = team_name.x, away_epr = epr.x, away_psr = psr.x,
       pred_xtotal = pred_tot_xscore, pred_xmargin = pred_xscore_diff,
       pred_margin = pred_score_diff, pred_win, bits,
       margin = score_diff, start_time = local_start_time_str, venue = venue.x
     )
   dplyr::bind_rows(home, away) |>
-    dplyr::group_by(season, round, match_id, home_team, home_rating, home_psr,
-                    away_team, away_rating, away_psr, start_time, venue) |>
+    dplyr::group_by(season, round, match_id, home_team, home_epr, home_psr,
+                    away_team, away_epr, away_psr, start_time, venue) |>
     dplyr::summarise(
       players = mean(players), pred_xtotal = mean(pred_xtotal),
       pred_margin = mean(pred_margin), pred_win = mean(pred_win),
       margin = mean(margin), .groups = "drop"
     ) |>
     dplyr::mutate(
-      rating_diff = home_rating - away_rating,
+      epr_diff = home_epr - away_epr,
       psr_diff = home_psr - away_psr
     ) |>
     dplyr::select(season, round, match_id:away_psr, start_time, venue,
-                  rating_diff, psr_diff, players:margin)
+                  epr_diff, psr_diff, players:margin)
 }
 
 
@@ -250,7 +250,8 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
   })
 
   # Strategy 2: Compute from skills + coefficients (with osr/dsr decomposition)
-  if (is.null(psr_df)) {
+  # Also triggered when release PSR lacks osr/dsr columns
+  if (is.null(psr_df) || !all(c("osr", "dsr") %in% names(psr_df))) {
     tryCatch({
       skills <- load_player_stat_ratings(TRUE)
       psr_df <- .compute_psr_from_stat_ratings(skills)
@@ -318,87 +319,79 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
     tr$psr <- PSR_PRIOR_RATE
   }
 
-  tr_week <- tr |>
-    dplyr::filter(!is.na(epr), is.na(injury)) |>
-    dplyr::mutate(team_name = team) |>
-    dplyr::group_by(team_name, season, round) |>
-    dplyr::mutate(
-      n_players = dplyr::n(),
-      team_tog_sum = sum(pred_tog, na.rm = TRUE),
-      tog_wt = dplyr::if_else(team_tog_sum > 0, pred_tog * 18 / team_tog_sum, 18 / n_players)
-    ) |>
-    dplyr::summarise(
-      epr_week = sum(epr * tog_wt, na.rm = TRUE) * INJURY_KNOWN_DISCOUNT,
-      epr_recv_week = sum(recv_epr * tog_wt, na.rm = TRUE) * INJURY_KNOWN_DISCOUNT,
-      epr_disp_week = sum(disp_epr * tog_wt, na.rm = TRUE) * INJURY_KNOWN_DISCOUNT,
-      epr_spoil_week = sum(spoil_epr * tog_wt, na.rm = TRUE) * INJURY_KNOWN_DISCOUNT,
-      epr_hitout_week = sum(hitout_epr * tog_wt, na.rm = TRUE) * INJURY_KNOWN_DISCOUNT,
-      psr_week = sum(psr * tog_wt, na.rm = TRUE) * INJURY_KNOWN_DISCOUNT,
-      .groups = "drop"
-    ) |>
+  # Join return_round from injury data to player ratings
+  if (nrow(inj_df) > 0 && "return_round" %in% names(inj_df)) {
+    inj_return <- inj_df |>
+      dplyr::select(player_norm, return_round) |>
+      dplyr::distinct(player_norm, .keep_all = TRUE)
+    tr <- tr |>
+      dplyr::mutate(player_norm = tolower(trimws(player_name))) |>
+      dplyr::left_join(inj_return, by = "player_norm") |>
+      dplyr::select(-player_norm)
+  } else {
+    tr$return_round <- NA_real_
+  }
+
+  # Build per-week roster ratings: only exclude players still injured for
+  # that week (return_round > week). Players returning by the target week
+  # are included. Discount scales with prediction horizon (0.99 for next
+  # week, dropping 0.01 per week, floor 0.90).
+  .build_week_ratings <- function(tr_data, w) {
+    weeks_ahead <- max(w - min(target_weeks), 0)
+    discount <- max(INJURY_KNOWN_DISCOUNT - 0.01 * weeks_ahead,
+                    INJURY_DISCOUNT_FLOOR)
+
+    tr_data |>
+      dplyr::filter(
+        !is.na(epr),
+        is.na(injury) | (!is.na(return_round) & return_round <= w)
+      ) |>
+      dplyr::mutate(team_name = team) |>
+      dplyr::group_by(team_name, season, round) |>
+      dplyr::mutate(
+        n_players = dplyr::n(),
+        team_tog_sum = sum(pred_tog, na.rm = TRUE),
+        tog_wt = dplyr::if_else(team_tog_sum > 0, pred_tog * 18 / team_tog_sum, 18 / n_players)
+      ) |>
+      dplyr::summarise(
+        epr_week = sum(epr * tog_wt, na.rm = TRUE) * discount,
+        epr_recv_week = sum(recv_epr * tog_wt, na.rm = TRUE) * discount,
+        epr_disp_week = sum(disp_epr * tog_wt, na.rm = TRUE) * discount,
+        epr_spoil_week = sum(spoil_epr * tog_wt, na.rm = TRUE) * discount,
+        epr_hitout_week = sum(hitout_epr * tog_wt, na.rm = TRUE) * discount,
+        psr_week = sum(psr * tog_wt, na.rm = TRUE) * discount,
+        .groups = "drop"
+      ) |>
+      dplyr::mutate(round = w)
+  }
+
+  tr_week <- purrr::map_dfr(target_weeks, function(w) .build_week_ratings(tr, w)) |>
     dplyr::arrange(-epr_week)
 
-  # Expand estimated ratings across all target weeks, adjusting for
-  # injured players returning at different rounds. Players whose
-  # return_round <= week get their TORP contribution added back.
-  # Boosts are distributed proportionally across sub-component columns.
-  has_inj_schedule <- nrow(inj_df) > 0 && "return_round" %in% names(inj_df)
-  inj_schedule <- if (has_inj_schedule) {
-    build_injury_schedule(inj_df, data.table::as.data.table(tr))
-  } else {
-    data.table::data.table(team = character(), torp_boost = numeric(), return_round = numeric())
-  }
-
-  apply_injury_boosts <- function(tw, w) {
-    if (nrow(inj_schedule) == 0) return(tw)
-    boosts <- inj_schedule[return_round <= w,
-                            .(epr_boost = sum(torp_boost, na.rm = TRUE)),
-                            by = team]
-    if (nrow(boosts) == 0) return(tw)
-    tw <- dplyr::left_join(tw, tibble::as_tibble(boosts),
-                            by = c("team_name" = "team"))
-    tw <- dplyr::mutate(tw, epr_boost = tidyr::replace_na(epr_boost, 0))
-    # Distribute boost proportionally across sub-components
-    tw <- dplyr::mutate(tw,
-      total_sub = abs(epr_recv_week) + abs(epr_disp_week) +
-                  abs(epr_spoil_week) + abs(epr_hitout_week),
-      epr_recv_week = dplyr::if_else(total_sub > 0,
-        epr_recv_week + epr_boost * abs(epr_recv_week) / total_sub,
-        epr_recv_week),
-      epr_disp_week = dplyr::if_else(total_sub > 0,
-        epr_disp_week + epr_boost * abs(epr_disp_week) / total_sub,
-        epr_disp_week),
-      epr_spoil_week = dplyr::if_else(total_sub > 0,
-        epr_spoil_week + epr_boost * abs(epr_spoil_week) / total_sub,
-        epr_spoil_week),
-      epr_hitout_week = dplyr::if_else(total_sub > 0,
-        epr_hitout_week + epr_boost * abs(epr_hitout_week) / total_sub,
-        epr_hitout_week),
-      epr_week = epr_week + epr_boost
-    )
-    dplyr::select(tw, -epr_boost, -total_sub)
-  }
-
-  if (length(target_weeks) > 1) {
-    tr_week <- purrr::map_dfr(target_weeks, function(w) {
-      tw <- tr_week |> dplyr::mutate(round = w)
-      apply_injury_boosts(tw, w)
-    })
-  } else if (has_inj_schedule) {
-    tr_week <- apply_injury_boosts(tr_week, target_weeks)
-  }
-
   # Overlay injury-adjusted ratings
+  # When real lineups exist (count > 0), keep lineup-based ratings.
+  # Otherwise use roster + pred_tog + injury-adjusted ratings (epr_week).
   team_rt_fix_df <- team_rt_fix_df |>
     dplyr::left_join(tr_week, by = c("team_name" = "team_name", "season" = "season", "round_number" = "round")) |>
     dplyr::mutate(
-      epr = dplyr::coalesce(epr, epr_week),
-      recv_epr = dplyr::coalesce(recv_epr, epr_recv_week),
-      disp_epr = dplyr::coalesce(disp_epr, epr_disp_week),
-      spoil_epr = dplyr::coalesce(spoil_epr, epr_spoil_week),
-      hitout_epr = dplyr::coalesce(hitout_epr, epr_hitout_week),
-      psr = dplyr::coalesce(psr, psr_week)
+      use_roster = !is.na(epr_week) & (is.na(count) | count == 0),
+      epr = dplyr::if_else(use_roster, epr_week, epr),
+      recv_epr = dplyr::if_else(use_roster, epr_recv_week, recv_epr),
+      disp_epr = dplyr::if_else(use_roster, epr_disp_week, disp_epr),
+      spoil_epr = dplyr::if_else(use_roster, epr_spoil_week, spoil_epr),
+      hitout_epr = dplyr::if_else(use_roster, epr_hitout_week, hitout_epr),
+      psr = dplyr::if_else(use_roster, psr_week, psr),
+      use_roster = NULL
     )
+
+  # Warn if any prediction-week teams still have NA ratings
+  pred_rows <- team_rt_fix_df |>
+    dplyr::filter(season == .env$season, round_number %in% target_weeks)
+  na_epr <- pred_rows |> dplyr::filter(is.na(epr))
+  if (nrow(na_epr) > 0) {
+    na_teams <- unique(na_epr$team_name)
+    cli::cli_warn("Missing EPR for {length(na_teams)} team{?s} in prediction weeks: {paste(na_teams, collapse = ', ')}")
+  }
 
   # Weather ----
   cli::cli_h2("Loading weather")
@@ -412,6 +405,23 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
   cli::cli_h2("Training GAM models on completed matches")
   gam_result <- .train_match_gams(team_mdl_df)
   team_mdl_df <- gam_result$data
+
+  # Train XGBoost & Blend ----
+  xgb_result <- tryCatch({
+    cli::cli_h2("Training XGBoost models")
+    res <- .train_match_xgb(team_mdl_df)
+    team_mdl_df <- res$data
+    # Blend GAM + XGBoost predictions (50/50)
+    team_mdl_df$pred_score_diff <- 0.5 * team_mdl_df$pred_score_diff +
+      0.5 * team_mdl_df$xgb_pred_score_diff
+    team_mdl_df$pred_win <- 0.5 * team_mdl_df$pred_win +
+      0.5 * team_mdl_df$xgb_pred_win
+    cli::cli_alert_success("Blended GAM + XGBoost predictions")
+    res
+  }, error = function(e) {
+    cli::cli_warn("XGBoost training failed ({conditionMessage(e)}), using GAM-only predictions")
+    NULL
+  })
 
   # Format Predictions ----
   cli::cli_h2("Generating predictions for {length(target_weeks)} week{?s}")
@@ -466,7 +476,8 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
       cli::cli_alert_info("Returning models and data for debugging (predictions NOT uploaded)")
       return(invisible(list(
         predictions = all_preds,
-        models = gam_result$models,
+        gam_models = gam_result$models,
+        xgb_models = if (!is.null(xgb_result)) xgb_result$models else NULL,
         model_data = team_mdl_df,
         validation_errors = validation_errors
       )))
@@ -501,6 +512,14 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
     # Backward compat: existing predictions may use old providerId column
     if (!"match_id" %in% names(existing) && "providerId" %in% names(existing)) {
       data.table::setnames(existing, "providerId", "match_id")
+    }
+
+    # Backward compat: rename home_rating/away_rating/rating_diff -> home_epr/away_epr/epr_diff
+    old_to_new <- c(home_rating = "home_epr", away_rating = "away_epr", rating_diff = "epr_diff")
+    for (old_nm in names(old_to_new)) {
+      if (old_nm %in% names(existing) && !old_to_new[old_nm] %in% names(existing)) {
+        names(existing)[names(existing) == old_nm] <- old_to_new[old_nm]
+      }
     }
 
     n_backfilled <- sum(is.na(existing$margin) & existing$match_id %in% completed_margins$match_id)
@@ -598,23 +617,34 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
     cli::cli_alert_success("Retrodictions uploaded for {length(retro_seasons)} season{?s}")
   }
 
-  # Upload GAM models to torpmodels ----
+  # Upload models to torpmodels ----
   tryCatch(
     {
+      cache_dir <- getOption("torpmodels.cache_dir",
+                             file.path(tools::R_user_dir("torpmodels", "cache"), "models"))
+
       gam_path <- file.path(tempdir(), "match_gams.rds")
       saveRDS(gam_result$models, gam_path)
       piggyback::pb_upload(gam_path, repo = "peteowen1/torpmodels", tag = "core-models")
-      # Refresh local torpmodels cache so simulate_afl_season() uses the fresh model
-      cache_dir <- getOption("torpmodels.cache_dir",
-                             file.path(tools::R_user_dir("torpmodels", "cache"), "models"))
       local_cache <- file.path(cache_dir, "core", "match_gams.rds")
       if (dir.exists(dirname(local_cache))) {
         file.copy(gam_path, local_cache, overwrite = TRUE)
       }
       cli::cli_alert_success("Uploaded match_gams to torpmodels")
+
+      if (!is.null(xgb_result)) {
+        xgb_path <- file.path(tempdir(), "match_xgb_pipeline.rds")
+        saveRDS(xgb_result$models, xgb_path)
+        piggyback::pb_upload(xgb_path, repo = "peteowen1/torpmodels", tag = "core-models")
+        local_cache_xgb <- file.path(cache_dir, "core", "match_xgb_pipeline.rds")
+        if (dir.exists(dirname(local_cache_xgb))) {
+          file.copy(xgb_path, local_cache_xgb, overwrite = TRUE)
+        }
+        cli::cli_alert_success("Uploaded match_xgb_pipeline to torpmodels")
+      }
     },
     error = function(e) {
-      cli::cli_warn("Could not upload match_gams to torpmodels: {conditionMessage(e)}")
+      cli::cli_warn("Could not upload models to torpmodels: {conditionMessage(e)}")
     }
   )
 
@@ -624,7 +654,8 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
 
   invisible(list(
     predictions = all_preds,
-    models = gam_result$models,
+    gam_models = gam_result$models,
+    xgb_models = if (!is.null(xgb_result)) xgb_result$models else NULL,
     model_data = team_mdl_df
   ))
 }

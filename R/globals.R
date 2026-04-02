@@ -356,8 +356,11 @@ utils::globalVariables(c(
   "team_name", "team_type", "venue", "match_date", "precipitation",
 
   # Predictions pipeline
-  "home_rating", "away_rating", "start_time", "players",
-  "pred_margin", "rating_diff",
+  "home_epr", "away_epr", "start_time", "players",
+  "pred_margin", "epr_diff", "use_roster",
+  "epr_week", "epr_recv_week", "epr_disp_week", "epr_spoil_week",
+  "epr_hitout_week", "psr_week", "osr_diff", "dsr_diff",
+  "torp_diff", "torp.x", "torp.y",
 
   # Final ladder
   "win_prob", "is_played", "expected_wins", "expected_losses",

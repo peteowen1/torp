@@ -2,10 +2,10 @@
 
 test_that("calculate_player_attribution returns expected structure", {
   features <- data.frame(
-    home_rating = 5.0, away_rating = 3.0, neutral_feature = 10
+    home_epr = 5.0, away_epr = 3.0, neutral_feature = 10
   )
-  predict_fn <- function(x) x$home_rating - x$away_rating
-  rating_cols <- c("home_rating", "away_rating")
+  predict_fn <- function(x) x$home_epr - x$away_epr
+  rating_cols <- c("home_epr", "away_epr")
 
   result <- calculate_player_attribution(features, predict_fn, rating_cols)
 
