@@ -34,6 +34,7 @@ utils::globalVariables(c(
   "dist_as_is", "dist_flipped",
   "flip_prev", "flip_next", "total_asis", "total_flip",
   "next2_x", "next2_y", "flip_pair_to_next2",
+  "n_shots", "player_id_shot",
 
   # Time variables
   "period_seconds", "time_remaining", "min_seconds", "max_seconds",
