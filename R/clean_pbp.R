@@ -134,6 +134,13 @@ add_team_id_mdl_dt <- function(dt) {
 #' @return Invisible NULL (modifies dt by reference)
 #' @keywords internal
 fix_chain_coordinates_dt <- function(dt) {
+  # Warn if any rows have NA team_id_mdl (coordinates can't be fixed for these)
+  na_team_count <- sum(is.na(dt$team_id_mdl))
+  if (na_team_count > 0L) {
+    warning("fix_chain_coordinates_dt: ", na_team_count,
+            " rows have NA team_id_mdl; coordinates for these rows will not be fixed.")
+  }
+
   # --- A) Convert to pitch-relative (home-team) coordinates ---
   # Use as.double() to avoid integer truncation when interpolating later
   dt[, `:=`(
@@ -143,7 +150,7 @@ fix_chain_coordinates_dt <- function(dt) {
 
   # --- B) Fix throw-in/stoppage rows ---
   # For throw-in rows the position should match where play resumes.
-  # Run twice: second pass fixes consecutive throw-in chains (e.g. OOB → Ball Up)
+  # Run twice: second pass fixes consecutive throw-in chains (e.g. OOB -> Ball Up)
   # where the first pass picked up an unfixed neighbor.
   for (pass in 1:2) {
     dt[, `:=`(
@@ -164,9 +171,12 @@ fix_chain_coordinates_dt <- function(dt) {
   # The error can persist for multiple consecutive rows, so iterate until
   # no more flips are needed. A row is flipped when its jump from prev
   # exceeds COORD_JUMP_THRESHOLD (100m) but negating puts it within
-  # COORD_FLIP_TOLERANCE (35m) of the predecessor.
+  # COORD_FLIP_TOLERANCE (70m) of the predecessor.
   n_flipped <- 1L
-  while (n_flipped > 0L) {
+  iter <- 0L
+  max_flip_iters <- 50L
+  while (n_flipped > 0L && iter < max_flip_iters) {
+    iter <- iter + 1L
     dt[, `:=`(
       prev_x = data.table::shift(x_pitch, 1L, type = "lag"),
       prev_y = data.table::shift(y_pitch, 1L, type = "lag")
@@ -190,9 +200,13 @@ fix_chain_coordinates_dt <- function(dt) {
 
     dt[, c("prev_x", "prev_y", "dist_as_is", "dist_flipped") := NULL]
   }
+  if (iter >= max_flip_iters) {
+    warning("fix_chain_coordinates_dt: reached max iterations (", max_flip_iters,
+            ") with ", n_flipped, " rows still flagged. Possible oscillating coordinates.")
+  }
 
   # --- D) Both-neighbor sign-flip (looser tolerance) ---
-  # Catches sign-flips missed by step C due to longer kick distances (35-60m).
+  # Catches sign-flips missed by step C due to longer kick distances.
   # Safe to use looser tolerance because both neighbors must confirm the flip.
   dt[, `:=`(
     prev_x = data.table::shift(x_pitch, 1L, type = "lag"),
@@ -222,7 +236,15 @@ fix_chain_coordinates_dt <- function(dt) {
   dt[, c("flip_prev", "flip_next", "total_asis", "total_flip") := NULL]
 
   # --- E) Smooth remaining outliers via neighbor interpolation ---
-  # Catch any rows still far from BOTH neighbors after sign-flip passes
+  # Recompute neighbors fresh (step D may have flipped some rows)
+  dt[, c("prev_x", "prev_y", "next_x", "next_y") := NULL]
+  dt[, `:=`(
+    prev_x = data.table::shift(x_pitch, 1L, type = "lag"),
+    prev_y = data.table::shift(y_pitch, 1L, type = "lag"),
+    next_x = data.table::shift(x_pitch, 1L, type = "lead"),
+    next_y = data.table::shift(y_pitch, 1L, type = "lead")
+  ), by = .(match_id, period)]
+
   dt[!is.na(prev_x) & !is.na(next_x), `:=`(
     jump_dist = sqrt((x_pitch - prev_x)^2 + (y_pitch - prev_y)^2),
     next_jump = sqrt((next_x - x_pitch)^2 + (next_y - y_pitch)^2)
@@ -241,6 +263,8 @@ fix_chain_coordinates_dt <- function(dt) {
   # Catches cases where TWO consecutive rows are both sign-flipped (e.g.
   # Out On Full + OOF Kick In, or Spoil + Kickin). Flipping the pair together
   # improves the jump from the predecessor without hurting the successor.
+  # The !is.na(next2_x) guard (shift with by=match_id,period) ensures
+  # pair_rows + 1 never crosses a match/period boundary.
   dt[, `:=`(
     prev_x = data.table::shift(x_pitch, 1L, type = "lag"),
     prev_y = data.table::shift(y_pitch, 1L, type = "lag"),
@@ -253,12 +277,9 @@ fix_chain_coordinates_dt <- function(dt) {
   dt[!is.na(prev_x) & !is.na(next2_x), `:=`(
     jump_dist = sqrt((x_pitch - prev_x)^2 + (y_pitch - prev_y)^2),
     flip_prev = sqrt((-x_pitch - prev_x)^2 + (-y_pitch - prev_y)^2),
-    # If we flip both current AND next, does next→next2 stay reasonable?
     flip_pair_to_next2 = sqrt((-next_x - next2_x)^2 + (-next_y - next2_y)^2)
   )]
 
-  # Flip pair: current row is >100m from prev, flipping brings within 60m of prev,
-  # AND flipping the next row keeps it within 60m of next2 (the row after)
   pair_rows <- dt[, which(
     jump_dist > COORD_JUMP_THRESHOLD &
     flip_prev < 60 &
@@ -268,7 +289,6 @@ fix_chain_coordinates_dt <- function(dt) {
 
   if (length(pair_rows) > 0L) {
     dt[pair_rows, `:=`(x_pitch = -x_pitch, y_pitch = -y_pitch)]
-    # Also flip the next row in each pair
     next_rows <- pair_rows + 1L
     next_rows <- next_rows[next_rows <= nrow(dt)]
     if (length(next_rows) > 0L) {

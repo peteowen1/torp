@@ -507,13 +507,19 @@ stale <- showConnections(all = FALSE)
 if (nrow(stale) > 3) {
   cli::cli_inform("Closing {nrow(stale) - 3} stale connections before cluster creation")
   for (conn_id in rownames(stale)[-(1:3)]) {
-    tryCatch(close(getConnection(as.integer(conn_id))), error = function(e) NULL)
+    tryCatch(
+      close(getConnection(as.integer(conn_id))),
+      error = function(e) cli::cli_warn("Failed to close connection {conn_id}: {conditionMessage(e)}")
+    )
   }
 }
 
 cl <- parallel::makeCluster(n_cores)
 raw_results <- tryCatch({
   parallel::parLapply(cl, tasks, optimize_single_stat, shared = shared_data)
+}, error = function(e) {
+  cli::cli_alert_danger("Parallel optimization failed: {conditionMessage(e)}")
+  stop(e)
 }, finally = {
   parallel::stopCluster(cl)
 })
