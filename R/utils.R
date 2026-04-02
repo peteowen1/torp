@@ -405,5 +405,49 @@ utils::globalVariables(c(".data", ".SD", "disp", "season.x", "tm",
                          "i.boost", "torp_boost"))
 
 
+#' Extract random effects from a GAM model
+#'
+#' Extracts coefficient values and standard errors for a random effect smooth
+#' term from an mgcv GAM/BAM model. Recovers actual factor level names from
+#' the model's stored training data (`model$model`).
+#'
+#' @param model A fitted GAM/BAM model from mgcv.
+#' @param variable Character string matching the variable name of the random
+#'   effect smooth (matched via `grepl` against `s$vn`).
+#' @return A data.table with columns `level`, `coefficient`, `se`, or NULL
+#'   if the smooth is not found.
+#' @keywords internal
+extract_gam_random_effects <- function(model, variable) {
+  sm <- model$smooth
+  re_idx <- which(vapply(sm, function(s) {
+    inherits(s, "random.effect") && any(grepl(variable, s$vn))
+  }, logical(1)))
+
+  if (length(re_idx) == 0L) return(NULL)
+
+  s <- sm[[re_idx[1]]]
+  coef_idx <- s$first.para:s$last.para
+  coefs <- stats::coef(model)[coef_idx]
+  se <- sqrt(diag(stats::vcov(model)[coef_idx, coef_idx]))
+
+  # Recover factor level names from model's training data.
+  # Guard against levels/coefs length mismatch (mgcv may drop empty levels).
+  vn <- s$vn[1]
+  level_names <- NULL
+  if (!is.null(model$model) && vn %in% names(model$model) &&
+      is.factor(model$model[[vn]])) {
+    lvls <- levels(model$model[[vn]])
+    if (length(lvls) == length(coefs)) level_names <- lvls
+  }
+  if (is.null(level_names)) {
+    level_names <- gsub("^.*\\.", "", names(coefs))
+  }
+
+  data.table::data.table(
+    level = level_names,
+    coefficient = unname(coefs),
+    se = unname(se)
+  )
+}
 
 

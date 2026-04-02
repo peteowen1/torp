@@ -1,3 +1,48 @@
+# torp 1.2.0 (2026-03-31)
+
+## New Features
+
+* **Player Stat Ratings system** — Bayesian estimation of 48 rate stats + 6 efficiency stats with positional priors and exponential decay. New exported functions:
+  - `estimate_player_stat_ratings()` — batch stat rating estimation
+  - `player_stat_rating_profile()` — per-player stat rating profiles with percentile ranks
+  - `get_player_stat_ratings()` — lookup stat ratings for a player
+  - `team_stat_rating_profile()` — team-aggregated stat rating profiles
+  - `get_team_stat_ratings()` — lookup team stat ratings
+  - `aggregate_team_stat_ratings()` — aggregate player stat ratings to team level
+  - `stat_rating_definitions()`, `default_stat_rating_params()`, `stat_rating_position_map()` — configuration helpers
+
+* **Player Skill Rating (PSR)** — glmnet model mapping stat ratings to predicted margin contribution. New functions: `calculate_psr()`, `calculate_psr_components()`, `calculate_psv()`, `calculate_psv_components()`, `psr_ratings()`.
+
+* **TORP blend** — `torp_ratings()` now combines EPR (50%) + PSR (50%) for a complete player rating. Deprecates `calculate_torp_ratings()`.
+
+* **Win Probability Added (WPA) credit** — `create_wp_credit()` allocates WPA between disposers and receivers.
+
+* **Player attribution** — `calculate_player_attribution()` and `batch_player_attribution()` for zero-ablation player impact measurement.
+
+* **Network centrality** — `calculate_player_centrality()` for opponent quality adjustment.
+
+* **Team profiles** — `team_profile()`, `team_stat_rating_profile()`, `get_team_stat_ratings()` for team-level analysis.
+
+* **Weather data loading** — `load_weather()` for historical weather data from torpdata releases.
+
+* **Injury scheduling** — `build_injury_schedule()` and `load_preseason_injuries()` for simulation-aware injury management.
+
+* **New load functions** — `load_player_stat_ratings()`, `load_psr()`, `load_retrodictions()`.
+
+## Documentation
+
+* Updated README, vignettes, and pkgdown reference to use `torp_ratings()` instead of deprecated `calculate_torp()` / `calculate_torp_ratings()`.
+
+* Expanded CLAUDE.md Key Files section to cover all 52 R files.
+
+* Expanded ARCHITECTURE.md Code References table with 14 previously undocumented components.
+
+* Added position codes and RAPM to ARCHITECTURE.md glossary.
+
+* Added GitHub issue and PR templates.
+
+---
+
 # torp 1.1.0 (2026-03-10)
 
 ## Breaking Changes

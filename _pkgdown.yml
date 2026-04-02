@@ -30,6 +30,7 @@ articles:
   - title: Guides
     contents:
       - torp-guide
+      - stat-ratings
       - visualizations
 
 reference:
@@ -45,6 +46,7 @@ reference:
       - add_epv_vars
       - add_wp_vars
       - add_shot_vars
+      - fit_win_probability
 
   - title: Data Cleaning
     desc: Clean and prepare AFL data for analysis
@@ -54,7 +56,6 @@ reference:
   - title: Player Ratings
     desc: Calculate and view TORP player ratings
     contents:
-      - calculate_epr_stats
       - calculate_torp
       - calculate_psr_components
       - calculate_psv
@@ -133,6 +134,7 @@ reference:
       - get_player_game_ratings
       - get_xg
       - calculate_match_xgs
+      - extract_player_xg_skill
       - head_to_head
       - print.torp_head_to_head
 
@@ -209,6 +211,7 @@ reference:
     desc: "Internal utilities accessible via torp::: for model training and data scraping"
     contents:
       - access_api
+      - calculate_epr_stats
       - get_players
       - get_round_games
       - get_season_games

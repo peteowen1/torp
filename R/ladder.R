@@ -324,29 +324,16 @@ prepare_sim_data <- function(season, team_ratings = NULL, fixtures = NULL,
     xsd <- match_gams[["xscore_diff"]]
   }
 
-  # Extract random effects directly from the GAM smooth terms
-  re <- tryCatch({
-    sm <- xsd$smooth
-    re_idx <- which(vapply(sm, function(s) inherits(s, "random.effect"), logical(1)))
-    team_idx <- which(vapply(sm, function(s) {
-      inherits(s, "random.effect") && any(grepl("team_name", s$vn))
-    }, logical(1)))
-    if (length(team_idx) == 0) return(NULL)
-
-    s <- sm[[team_idx[1]]]
-    coef_idx <- s$first.para:s$last.para
-    coefs <- stats::coef(xsd)[coef_idx]
-    se <- sqrt(diag(stats::vcov(xsd)[coef_idx, coef_idx]))
-    team_names <- gsub("^.*\\.", "", names(coefs))
-    data.table::data.table(team = team_names, residual_mean = unname(coefs), residual_se = unname(se))
-  }, error = function(e) {
-    cli::cli_warn("Could not extract random effects: {conditionMessage(e)}")
-    NULL
-  })
+  re <- tryCatch(
+    extract_gam_random_effects(xsd, "team_name"),
+    error = function(e) {
+      cli::cli_warn("Could not extract team random effects: {conditionMessage(e)}")
+      NULL
+    }
+  )
   if (is.null(re)) return(NULL)
 
-  team_re <- re
-  result <- data.table::as.data.table(team_re)
+  result <- re[, .(team = level, residual_mean = coefficient, residual_se = se)]
 
   # Standardise team names to canonical form for reliable merging
   result[, team := torp_replace_teams(team)]

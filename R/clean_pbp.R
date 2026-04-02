@@ -48,6 +48,8 @@ clean_pbp_dt <- function(df) {
 
   # Apply transformations in sequence (each modifies dt by reference)
   add_torp_ids_dt(dt)
+  add_team_id_mdl_dt(dt)
+  fix_chain_coordinates_dt(dt)
   add_chain_vars_dt(dt)
   add_quarter_vars_dt(dt)
   add_game_vars_dt(dt)
@@ -90,6 +92,224 @@ add_torp_ids_dt <- function(dt) {
       paste(player_name_given_name, player_name_surname), "Other"
     )
   )]
+  invisible(NULL)
+}
+
+#' Add team_id_mdl and goal boundaries (Pass 1.5)
+#'
+#' Computes team_id_mdl (the possessing team for each row, handling throw-ins)
+#' and goal boundary markers needed for coordinate fixing.
+#' Extracted from add_quarter_vars_dt so it runs before fix_chain_coordinates_dt.
+#'
+#' @param dt A data.table to modify
+#' @return Invisible NULL (modifies dt by reference)
+#' @keywords internal
+add_team_id_mdl_dt <- function(dt) {
+  # team_id_mdl: use lead for throw_in rows, then fill NAs
+  dt[, team_id_mdl := data.table::fcase(
+    throw_in == 1L, data.table::shift(team_id, n = 1L, type = "lead"),
+    default = team_id
+  ), by = .(match_id, period)]
+
+  # Compute goal boundaries before filling so fill doesn't cross goal events
+  dt[, is_goal_row := data.table::fifelse(description == "Goal", 1L, 0L)]
+  dt[, tot_goals := cumsum(is_goal_row), by = .(match_id, period)]
+
+  # Fill NAs in team_id_mdl (character column - use nafill_char)
+  dt[, team_id_mdl := nafill_char(team_id_mdl, type = "nocb"), by = .(match_id, period, tot_goals)]
+  dt[, team_id_mdl := nafill_char(team_id_mdl, type = "locf"), by = .(match_id, period, tot_goals)]
+
+  dt[, home := data.table::fifelse(team_id_mdl == home_team_id, 1L, 0L)]
+
+  invisible(NULL)
+}
+
+#' Fix chain coordinate jumps (Pass 1.6)
+#'
+#' Converts coordinates to pitch-relative (home-team) space, fixes unreasonable
+#' jumps around throw-ins and ambiguous possession events, then converts back to
+#' possession-team perspective.
+#'
+#' @param dt A data.table to modify
+#' @return Invisible NULL (modifies dt by reference)
+#' @keywords internal
+fix_chain_coordinates_dt <- function(dt) {
+  # Warn if any rows have NA team_id_mdl (coordinates can't be fixed for these)
+  na_team_count <- sum(is.na(dt$team_id_mdl))
+  if (na_team_count > 0L) {
+    warning("fix_chain_coordinates_dt: ", na_team_count,
+            " rows have NA team_id_mdl; coordinates for these rows will not be fixed.")
+  }
+
+  # --- A) Convert to pitch-relative (home-team) coordinates ---
+  # Use as.double() to avoid integer truncation when interpolating later
+  dt[, `:=`(
+    x_pitch = as.double(data.table::fifelse(team_id_mdl == home_team_id, x, -x)),
+    y_pitch = as.double(data.table::fifelse(team_id_mdl == home_team_id, y, -y))
+  )]
+
+  # --- B) Fix throw-in/stoppage rows ---
+  # For throw-in rows the position should match where play resumes.
+  # Run twice: second pass fixes consecutive throw-in chains (e.g. OOB -> Ball Up)
+  # where the first pass picked up an unfixed neighbor.
+  for (pass in 1:2) {
+    dt[, `:=`(
+      lead_x_fix = data.table::shift(x_pitch, 1L, type = "lead"),
+      lead_y_fix = data.table::shift(y_pitch, 1L, type = "lead")
+    ), by = .(match_id, period)]
+
+    dt[throw_in == 1L & !is.na(lead_x_fix), `:=`(
+      x_pitch = lead_x_fix,
+      y_pitch = lead_y_fix
+    )]
+    dt[, c("lead_x_fix", "lead_y_fix") := NULL]
+  }
+
+  # --- C) Fix sign-flipped coordinates ---
+  # The AFL API sometimes delivers coordinates in the wrong team's frame,
+  # producing coords approximately NEGATED relative to the predecessor.
+  # The error can persist for multiple consecutive rows, so iterate until
+  # no more flips are needed. A row is flipped when its jump from prev
+  # exceeds COORD_JUMP_THRESHOLD (100m) but negating puts it within
+  # COORD_FLIP_TOLERANCE (70m) of the predecessor.
+  n_flipped <- 1L
+  iter <- 0L
+  max_flip_iters <- 50L
+  while (n_flipped > 0L && iter < max_flip_iters) {
+    iter <- iter + 1L
+    dt[, `:=`(
+      prev_x = data.table::shift(x_pitch, 1L, type = "lag"),
+      prev_y = data.table::shift(y_pitch, 1L, type = "lag")
+    ), by = .(match_id, period)]
+
+    dt[!is.na(prev_x), `:=`(
+      dist_as_is = sqrt((x_pitch - prev_x)^2 + (y_pitch - prev_y)^2),
+      dist_flipped = sqrt((-x_pitch - prev_x)^2 + (-y_pitch - prev_y)^2)
+    )]
+
+    flip_rows <- dt[, which(
+      dist_as_is > COORD_JUMP_THRESHOLD &
+      dist_flipped < COORD_FLIP_TOLERANCE &
+      !is.na(prev_x)
+    )]
+    n_flipped <- length(flip_rows)
+
+    if (n_flipped > 0L) {
+      dt[flip_rows, `:=`(x_pitch = -x_pitch, y_pitch = -y_pitch)]
+    }
+
+    dt[, c("prev_x", "prev_y", "dist_as_is", "dist_flipped") := NULL]
+  }
+  if (iter >= max_flip_iters) {
+    warning("fix_chain_coordinates_dt: reached max iterations (", max_flip_iters,
+            ") with ", n_flipped, " rows still flagged. Possible oscillating coordinates.")
+  }
+
+  # --- D) Both-neighbor sign-flip (looser tolerance) ---
+  # Catches sign-flips missed by step C due to longer kick distances.
+  # Safe to use looser tolerance because both neighbors must confirm the flip.
+  dt[, `:=`(
+    prev_x = data.table::shift(x_pitch, 1L, type = "lag"),
+    prev_y = data.table::shift(y_pitch, 1L, type = "lag"),
+    next_x = data.table::shift(x_pitch, 1L, type = "lead"),
+    next_y = data.table::shift(y_pitch, 1L, type = "lead")
+  ), by = .(match_id, period)]
+
+  dt[!is.na(prev_x) & !is.na(next_x), `:=`(
+    jump_dist = sqrt((x_pitch - prev_x)^2 + (y_pitch - prev_y)^2),
+    flip_prev = sqrt((-x_pitch - prev_x)^2 + (-y_pitch - prev_y)^2),
+    flip_next = sqrt((-x_pitch - next_x)^2 + (-y_pitch - next_y)^2),
+    total_asis = sqrt((x_pitch - prev_x)^2 + (y_pitch - prev_y)^2) +
+                 sqrt((x_pitch - next_x)^2 + (y_pitch - next_y)^2),
+    total_flip = sqrt((-x_pitch - prev_x)^2 + (-y_pitch - prev_y)^2) +
+                 sqrt((-x_pitch - next_x)^2 + (-y_pitch - next_y)^2)
+  )]
+
+  dt[jump_dist > COORD_JUMP_THRESHOLD &
+     flip_prev < 60 & flip_next < 60 &
+     total_flip < total_asis &
+     !is.na(prev_x) & !is.na(next_x), `:=`(
+    x_pitch = -x_pitch,
+    y_pitch = -y_pitch
+  )]
+
+  dt[, c("flip_prev", "flip_next", "total_asis", "total_flip") := NULL]
+
+  # --- E) Smooth remaining outliers via neighbor interpolation ---
+  # Recompute neighbors fresh (step D may have flipped some rows)
+  dt[, c("prev_x", "prev_y", "next_x", "next_y") := NULL]
+  dt[, `:=`(
+    prev_x = data.table::shift(x_pitch, 1L, type = "lag"),
+    prev_y = data.table::shift(y_pitch, 1L, type = "lag"),
+    next_x = data.table::shift(x_pitch, 1L, type = "lead"),
+    next_y = data.table::shift(y_pitch, 1L, type = "lead")
+  ), by = .(match_id, period)]
+
+  dt[!is.na(prev_x) & !is.na(next_x), `:=`(
+    jump_dist = sqrt((x_pitch - prev_x)^2 + (y_pitch - prev_y)^2),
+    next_jump = sqrt((next_x - x_pitch)^2 + (next_y - y_pitch)^2)
+  )]
+
+  dt[jump_dist > COORD_JUMP_THRESHOLD & next_jump > COORD_JUMP_THRESHOLD &
+     !is.na(prev_x) & !is.na(next_x), `:=`(
+    x_pitch = (prev_x + next_x) / 2,
+    y_pitch = (prev_y + next_y) / 2
+  )]
+
+  dt[, c("prev_x", "prev_y", "next_x", "next_y",
+         "jump_dist", "next_jump") := NULL]
+
+  # --- F) Paired sign-flip fix ---
+  # Catches cases where TWO consecutive rows are both sign-flipped (e.g.
+  # Out On Full + OOF Kick In, or Spoil + Kickin). Flipping the pair together
+  # improves the jump from the predecessor without hurting the successor.
+  # The !is.na(next2_x) guard (shift with by=match_id,period) ensures
+  # pair_rows + 1 never crosses a match/period boundary.
+  dt[, `:=`(
+    prev_x = data.table::shift(x_pitch, 1L, type = "lag"),
+    prev_y = data.table::shift(y_pitch, 1L, type = "lag"),
+    next_x = data.table::shift(x_pitch, 1L, type = "lead"),
+    next_y = data.table::shift(y_pitch, 1L, type = "lead"),
+    next2_x = data.table::shift(x_pitch, 2L, type = "lead"),
+    next2_y = data.table::shift(y_pitch, 2L, type = "lead")
+  ), by = .(match_id, period)]
+
+  dt[!is.na(prev_x) & !is.na(next2_x), `:=`(
+    jump_dist = sqrt((x_pitch - prev_x)^2 + (y_pitch - prev_y)^2),
+    flip_prev = sqrt((-x_pitch - prev_x)^2 + (-y_pitch - prev_y)^2),
+    flip_pair_to_next2 = sqrt((-next_x - next2_x)^2 + (-next_y - next2_y)^2)
+  )]
+
+  pair_rows <- dt[, which(
+    jump_dist > COORD_JUMP_THRESHOLD &
+    flip_prev < 60 &
+    flip_pair_to_next2 < 60 &
+    !is.na(prev_x) & !is.na(next2_x)
+  )]
+
+  if (length(pair_rows) > 0L) {
+    dt[pair_rows, `:=`(x_pitch = -x_pitch, y_pitch = -y_pitch)]
+    next_rows <- pair_rows + 1L
+    next_rows <- next_rows[next_rows <= nrow(dt)]
+    if (length(next_rows) > 0L) {
+      dt[next_rows, `:=`(x_pitch = -x_pitch, y_pitch = -y_pitch)]
+    }
+  }
+
+  dt[, c("prev_x", "prev_y", "next_x", "next_y", "next2_x", "next2_y",
+         "jump_dist", "flip_prev", "flip_pair_to_next2") := NULL]
+
+  # --- G) Convert back to possession-team perspective ---
+  dt[, `:=`(
+    x = as.integer(round(data.table::fifelse(team_id_mdl == home_team_id, x_pitch, -x_pitch))),
+    y = as.integer(round(data.table::fifelse(team_id_mdl == home_team_id, y_pitch, -y_pitch)))
+  )]
+
+  dt[, c("x_pitch", "y_pitch") := NULL]
+
+  # --- H) Recalculate goal_x from fixed coordinates ---
+  dt[, goal_x := venue_length / 2 - x]
+
   invisible(NULL)
 }
 
@@ -145,21 +365,7 @@ add_quarter_vars_dt <- function(dt) {
 
   dt[, points_row_na := data.table::fifelse(is.na(points_row), 0L, points_row)]
 
-  # team_id_mdl: use lead for throw_in, then fill NAs
-  dt[, team_id_mdl := data.table::fcase(
-    throw_in == 1L, data.table::shift(team_id, n = 1L, type = "lead"),
-    default = team_id
-  ), by = .(match_id, period)]
-
-  # Compute goal boundaries before filling so fill doesn't cross goal events
-  dt[, is_goal_row := data.table::fifelse(description == "Goal", 1L, 0L)]
-  dt[, tot_goals := cumsum(is_goal_row), by = .(match_id, period)]
-
-  # Fill NAs in team_id_mdl (character column - use nafill_char)
-  dt[, team_id_mdl := nafill_char(team_id_mdl, type = "nocb"), by = .(match_id, period, tot_goals)]
-  dt[, team_id_mdl := nafill_char(team_id_mdl, type = "locf"), by = .(match_id, period, tot_goals)]
-
-  dt[, home := data.table::fifelse(team_id_mdl == home_team_id, 1L, 0L)]
+  # team_id_mdl, is_goal_row, tot_goals, home already computed in add_team_id_mdl_dt()
 
   # scoring_team_id
   dt[, scoring_team_id := data.table::fifelse(

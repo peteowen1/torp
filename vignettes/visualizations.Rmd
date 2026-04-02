@@ -107,6 +107,7 @@ a distinct palette when team colours collide.
 ## Stat Rating Profiles
 
 Visualize a player's statistical strengths and weaknesses as percentile ranks.
+See `vignette("stat-ratings")` for details on how stat ratings are computed.
 
 ### Bar Chart (default)
 
