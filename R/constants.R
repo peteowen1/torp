@@ -556,6 +556,14 @@ EPV_RELEVANT_DESCRIPTIONS <- c(
 #' @keywords internal
 COORD_JUMP_THRESHOLD <- 100
 
+#' Maximum distance (metres) after sign-flipping for a row to be considered
+#' a sign-flip error. If negating a row's coordinates puts it within this
+#' distance of the predecessor, the coordinates are likely in the wrong frame.
+#' Set to 55m to cover the longest realistic kick distances (~50m displacement).
+#' Safe because the 100m jump threshold already filters out all legitimate plays.
+#' @keywords internal
+COORD_FLIP_TOLERANCE <- 70
+
 
 # Contest Extraction Constants
 # ----------------------------
