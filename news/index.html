@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">torp</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.2.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.3.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -36,6 +36,35 @@
       <small>Source: <a href="https://github.com/peteowen1/torp/blob/main/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="1.3.0" id="torp-130-2026-04-02">torp 1.3.0 (2026-04-02)<a class="anchor" aria-label="anchor" href="#torp-130-2026-04-02"></a></h2>
+<div class="section level3">
+<h3 id="new-features-1-3-0">New Features<a class="anchor" aria-label="anchor" href="#new-features-1-3-0"></a></h3>
+<ul><li><p><strong>Coordinate sign-flip correction</strong> — <code><a href="../reference/fix_chain_coordinates_dt.html">fix_chain_coordinates_dt()</a></code> detects and corrects AFL API sign-flipped x,y coordinates at possession changes. 8-step pipeline (throw-in fix, iterative sign-flip, both-neighbor confirmation, neighbor interpolation, paired flip) eliminates 99.7% of &gt;100m pitch-relative jumps. New constants <code>COORD_JUMP_THRESHOLD</code> (100m) and <code>COORD_FLIP_TOLERANCE</code> (70m).</p></li>
+<li><p><strong>Player xG skill extraction</strong> — <code><a href="../reference/extract_player_xg_skill.html">extract_player_xg_skill()</a></code> extracts per-player shooting ability from the shot GAM’s random effects. Returns player-level xG skill adjustments, standard errors, and shot counts.</p></li>
+<li><p><strong>Generic GAM random effect extractor</strong> — <code><a href="../reference/extract_gam_random_effects.html">extract_gam_random_effects()</a></code> extracts coefficients and SEs from any mgcv GAM random effect smooth, recovering actual factor level names from the model’s training data.</p></li>
+<li><p><strong>Team quality residuals in simulation</strong> — <code><a href="../reference/simulate_afl_season.html">simulate_afl_season()</a></code> now correctly displays team GAM residuals in the summary table (fixed factor level name extraction).</p></li>
+<li><p><strong>Win probability model fitting</strong> — <code><a href="../reference/fit_win_probability.html">fit_win_probability()</a></code> now exported for custom WP model training.</p></li>
+</ul></div>
+<div class="section level3">
+<h3 id="bug-fixes-1-3-0">Bug Fixes<a class="anchor" aria-label="anchor" href="#bug-fixes-1-3-0"></a></h3>
+<ul><li><p>Fixed AFL API delivering coordinates in the wrong team’s frame for ~12% of PBP rows at possession changes (Spoils, Loose Ball Gets, Contested Marks, etc.).</p></li>
+<li><p>Fixed team residual extraction returning numeric indices instead of team names, causing all residuals to be zero in simulation output.</p></li>
+<li><p>Fixed parallel connection error in stat rating optimization (<code>02_optimize_stat_rating_params.R</code>) caused by stale file handles from prior pipeline phases exhausting R’s connection pool.</p></li>
+<li><p>Fixed non-ASCII character (<code>x</code> instead of <code>×</code>) in <code>win_probability.R</code> that caused R CMD check WARNING.</p></li>
+<li><p>Fixed integer truncation warnings in pitch-relative coordinate conversion by using <code><a href="https://rdrr.io/r/base/double.html" class="external-link">as.double()</a></code>.</p></li>
+</ul></div>
+<div class="section level3">
+<h3 id="model-updates-1-3-0">Model Updates<a class="anchor" aria-label="anchor" href="#model-updates-1-3-0"></a></h3>
+<ul><li><p>Retrained EP model (128 rounds), WP model (50 rounds), shot GAM, and match prediction GAMs on coordinate-corrected data.</p></li>
+<li><p>Re-optimized all 56 stat rating hyperparameters with cleaner coordinate data.</p></li>
+</ul></div>
+<div class="section level3">
+<h3 id="documentation-1-3-0">Documentation<a class="anchor" aria-label="anchor" href="#documentation-1-3-0"></a></h3>
+<ul><li><p>Added Coordinate System section to ARCHITECTURE.md documenting the 8-step sign-flip fix pipeline with step-by-step table.</p></li>
+<li><p>Added Release Workflow section to CLAUDE.md (pre-PR checklist, version bumping, NEWS.md conventions).</p></li>
+</ul><hr></div>
+</div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="1.2.0" id="torp-120-2026-03-31">torp 1.2.0 (2026-03-31)<a class="anchor" aria-label="anchor" href="#torp-120-2026-03-31"></a></h2>
 <div class="section level3">
