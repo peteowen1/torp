@@ -1,3 +1,43 @@
+# torp 1.3.0 (2026-04-02)
+
+## New Features
+
+* **Coordinate sign-flip correction** — `fix_chain_coordinates_dt()` detects and corrects AFL API sign-flipped x,y coordinates at possession changes. 8-step pipeline (throw-in fix, iterative sign-flip, both-neighbor confirmation, neighbor interpolation, paired flip) eliminates 99.7% of >100m pitch-relative jumps. New constants `COORD_JUMP_THRESHOLD` (100m) and `COORD_FLIP_TOLERANCE` (70m).
+
+* **Player xG skill extraction** — `extract_player_xg_skill()` extracts per-player shooting ability from the shot GAM's random effects. Returns player-level xG skill adjustments, standard errors, and shot counts.
+
+* **Generic GAM random effect extractor** — `extract_gam_random_effects()` extracts coefficients and SEs from any mgcv GAM random effect smooth, recovering actual factor level names from the model's training data.
+
+* **Team quality residuals in simulation** — `simulate_afl_season()` now correctly displays team GAM residuals in the summary table (fixed factor level name extraction).
+
+* **Win probability model fitting** — `fit_win_probability()` now exported for custom WP model training.
+
+## Bug Fixes
+
+* Fixed AFL API delivering coordinates in the wrong team's frame for ~12% of PBP rows at possession changes (Spoils, Loose Ball Gets, Contested Marks, etc.).
+
+* Fixed team residual extraction returning numeric indices instead of team names, causing all residuals to be zero in simulation output.
+
+* Fixed parallel connection error in stat rating optimization (`02_optimize_stat_rating_params.R`) caused by stale file handles from prior pipeline phases exhausting R's connection pool.
+
+* Fixed non-ASCII character (`x` instead of `×`) in `win_probability.R` that caused R CMD check WARNING.
+
+* Fixed integer truncation warnings in pitch-relative coordinate conversion by using `as.double()`.
+
+## Model Updates
+
+* Retrained EP model (128 rounds), WP model (50 rounds), shot GAM, and match prediction GAMs on coordinate-corrected data.
+
+* Re-optimized all 56 stat rating hyperparameters with cleaner coordinate data.
+
+## Documentation
+
+* Added Coordinate System section to ARCHITECTURE.md documenting the 8-step sign-flip fix pipeline with step-by-step table.
+
+* Added Release Workflow section to CLAUDE.md (pre-PR checklist, version bumping, NEWS.md conventions).
+
+---
+
 # torp 1.2.0 (2026-03-31)
 
 ## New Features
