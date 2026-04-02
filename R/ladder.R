@@ -324,41 +324,16 @@ prepare_sim_data <- function(season, team_ratings = NULL, fixtures = NULL,
     xsd <- match_gams[["xscore_diff"]]
   }
 
-  # Extract random effects from the GAM smooth terms.
-  # Coefficient names use numeric indices (e.g. s(team_name.x).1), so we
-  # recover actual team names from the factor levels stored in model$model
-  # (the training data frame retained by mgcv).
-  re <- tryCatch({
-    sm <- xsd$smooth
-    team_idx <- which(vapply(sm, function(s) {
-      inherits(s, "random.effect") && any(grepl("team_name", s$vn))
-    }, logical(1)))
-    if (length(team_idx) == 0) return(NULL)
-
-    # Use the first team_name smooth (team_name.x = home team effect)
-    s <- sm[[team_idx[1]]]
-    coef_idx <- s$first.para:s$last.para
-    coefs <- stats::coef(xsd)[coef_idx]
-    se <- sqrt(diag(stats::vcov(xsd)[coef_idx, coef_idx]))
-
-    # Get actual team names from the factor levels in the model's training data
-    vn <- s$vn[1]
-    if (!is.null(xsd$model) && vn %in% names(xsd$model) &&
-        is.factor(xsd$model[[vn]])) {
-      team_names <- levels(xsd$model[[vn]])
-    } else {
-      # Fallback: strip numeric prefix from coefficient names
-      team_names <- gsub("^.*\\.", "", names(coefs))
+  re <- tryCatch(
+    extract_gam_random_effects(xsd, "team_name"),
+    error = function(e) {
+      cli::cli_warn("Could not extract team random effects: {conditionMessage(e)}")
+      NULL
     }
-
-    data.table::data.table(team = team_names, residual_mean = unname(coefs), residual_se = unname(se))
-  }, error = function(e) {
-    cli::cli_warn("Could not extract random effects: {conditionMessage(e)}")
-    NULL
-  })
+  )
   if (is.null(re)) return(NULL)
 
-  result <- data.table::as.data.table(re)
+  result <- re[, .(team = level, residual_mean = coefficient, residual_se = se)]
 
   # Standardise team names to canonical form for reliable merging
   result[, team := torp_replace_teams(team)]

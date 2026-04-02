@@ -162,3 +162,63 @@ match_xgs <- function(season = get_afl_season(), round = get_afl_week(), quarter
   calculate_match_xgs(season = season, round = round, quarter = quarter)
 }
 
+
+#' Extract player shooting skill from the shot model
+#'
+#' Extracts per-player random effects from the shot GAM model, representing
+#' each player's shooting ability relative to average (controlling for shot
+#' location, play type, and position). Positive values = better than average
+#' conversion.
+#'
+#' @param shot_model Optional fitted shot GAM model. If NULL, loads from
+#'   torpmodels via [load_model_with_fallback()].
+#' @return A data.table with columns `player_id`, `player_name`, `xg_skill`
+#'   (random effect coefficient), `xg_skill_se` (standard error), and
+#'   `n_shots` (number of shots in training data, if available). Sorted by
+#'   `xg_skill` descending. Returns NULL if extraction fails.
+#' @export
+extract_player_xg_skill <- function(shot_model = NULL) {
+  if (is.null(shot_model)) {
+    shot_model <- tryCatch(
+      load_model_with_fallback("shot"),
+      error = function(e) {
+        cli::cli_warn("Could not load shot model: {conditionMessage(e)}")
+        NULL
+      }
+    )
+    if (is.null(shot_model)) return(NULL)
+  }
+
+  re <- tryCatch(
+    extract_gam_random_effects(shot_model, "player_id_shot"),
+    error = function(e) {
+      cli::cli_warn("Could not extract player random effects: {conditionMessage(e)}")
+      NULL
+    }
+  )
+  if (is.null(re)) return(NULL)
+
+  result <- re[, .(player_id = level, xg_skill = coefficient, xg_skill_se = se)]
+
+  # Count shots per player from training data if available
+  if (!is.null(shot_model$model) && "player_id_shot" %in% names(shot_model$model)) {
+    shot_counts <- as.data.table(shot_model$model)[, .(n_shots = .N), by = .(player_id = player_id_shot)]
+    shot_counts[, player_id := as.character(player_id)]
+    result <- merge(result, shot_counts, by = "player_id", all.x = TRUE)
+    result[is.na(n_shots), n_shots := 0L]
+  }
+
+  # Join player names from player_details
+  pd <- tryCatch(load_player_details(get_afl_season()), error = function(e) NULL)
+  if (!is.null(pd)) {
+    pd_dt <- data.table::as.data.table(pd)
+    pd_dt <- unique(pd_dt[, .(player_id, player_name)])
+    result <- merge(result, pd_dt, by = "player_id", all.x = TRUE)
+  } else {
+    result[, player_name := NA_character_]
+  }
+
+  data.table::setorder(result, -xg_skill)
+  result[, .(player_id, player_name, xg_skill, xg_skill_se, n_shots)]
+}
+
