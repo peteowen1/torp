@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">torp</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.1.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.2.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -36,6 +36,46 @@
       <small>Source: <a href="https://github.com/peteowen1/torp/blob/main/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="1.2.0" id="torp-120-2026-03-31">torp 1.2.0 (2026-03-31)<a class="anchor" aria-label="anchor" href="#torp-120-2026-03-31"></a></h2>
+<div class="section level3">
+<h3 id="new-features-1-2-0">New Features<a class="anchor" aria-label="anchor" href="#new-features-1-2-0"></a></h3>
+<ul><li>
+<p><strong>Player Stat Ratings system</strong> — Bayesian estimation of 48 rate stats + 6 efficiency stats with positional priors and exponential decay. New exported functions:</p>
+<ul><li>
+<code><a href="../reference/estimate_player_stat_ratings.html">estimate_player_stat_ratings()</a></code> — batch stat rating estimation</li>
+<li>
+<code><a href="../reference/player_stat_rating_profile.html">player_stat_rating_profile()</a></code> — per-player stat rating profiles with percentile ranks</li>
+<li>
+<code><a href="../reference/get_player_stat_ratings.html">get_player_stat_ratings()</a></code> — lookup stat ratings for a player</li>
+<li>
+<code><a href="../reference/team_stat_rating_profile.html">team_stat_rating_profile()</a></code> — team-aggregated stat rating profiles</li>
+<li>
+<code><a href="../reference/get_team_stat_ratings.html">get_team_stat_ratings()</a></code> — lookup team stat ratings</li>
+<li>
+<code><a href="../reference/aggregate_team_stat_ratings.html">aggregate_team_stat_ratings()</a></code> — aggregate player stat ratings to team level</li>
+<li>
+<code><a href="../reference/stat_rating_definitions.html">stat_rating_definitions()</a></code>, <code><a href="../reference/default_stat_rating_params.html">default_stat_rating_params()</a></code>, <code><a href="../reference/stat_rating_position_map.html">stat_rating_position_map()</a></code> — configuration helpers</li>
+</ul></li>
+<li><p><strong>Player Skill Rating (PSR)</strong> — glmnet model mapping stat ratings to predicted margin contribution. New functions: <code><a href="../reference/calculate_psr.html">calculate_psr()</a></code>, <code><a href="../reference/calculate_psr_components.html">calculate_psr_components()</a></code>, <code><a href="../reference/calculate_psv.html">calculate_psv()</a></code>, <code><a href="../reference/calculate_psv_components.html">calculate_psv_components()</a></code>, <code><a href="../reference/psr_ratings.html">psr_ratings()</a></code>.</p></li>
+<li><p><strong>TORP blend</strong> — <code><a href="../reference/torp_ratings.html">torp_ratings()</a></code> now combines EPR (50%) + PSR (50%) for a complete player rating. Deprecates <code><a href="../reference/calculate_torp_ratings.html">calculate_torp_ratings()</a></code>.</p></li>
+<li><p><strong>Win Probability Added (WPA) credit</strong> — <code><a href="../reference/create_wp_credit.html">create_wp_credit()</a></code> allocates WPA between disposers and receivers.</p></li>
+<li><p><strong>Player attribution</strong> — <code><a href="../reference/calculate_player_attribution.html">calculate_player_attribution()</a></code> and <code><a href="../reference/batch_player_attribution.html">batch_player_attribution()</a></code> for zero-ablation player impact measurement.</p></li>
+<li><p><strong>Network centrality</strong> — <code><a href="../reference/calculate_player_centrality.html">calculate_player_centrality()</a></code> for opponent quality adjustment.</p></li>
+<li><p><strong>Team profiles</strong> — <code><a href="../reference/team_profile.html">team_profile()</a></code>, <code><a href="../reference/team_stat_rating_profile.html">team_stat_rating_profile()</a></code>, <code><a href="../reference/get_team_stat_ratings.html">get_team_stat_ratings()</a></code> for team-level analysis.</p></li>
+<li><p><strong>Weather data loading</strong> — <code><a href="../reference/load_weather.html">load_weather()</a></code> for historical weather data from torpdata releases.</p></li>
+<li><p><strong>Injury scheduling</strong> — <code><a href="../reference/build_injury_schedule.html">build_injury_schedule()</a></code> and <code><a href="../reference/load_preseason_injuries.html">load_preseason_injuries()</a></code> for simulation-aware injury management.</p></li>
+<li><p><strong>New load functions</strong> — <code><a href="../reference/load_player_stat_ratings.html">load_player_stat_ratings()</a></code>, <code><a href="../reference/load_psr.html">load_psr()</a></code>, <code><a href="../reference/load_retrodictions.html">load_retrodictions()</a></code>.</p></li>
+</ul></div>
+<div class="section level3">
+<h3 id="documentation-1-2-0">Documentation<a class="anchor" aria-label="anchor" href="#documentation-1-2-0"></a></h3>
+<ul><li><p>Updated README, vignettes, and pkgdown reference to use <code><a href="../reference/torp_ratings.html">torp_ratings()</a></code> instead of deprecated <code><a href="../reference/calculate_torp.html">calculate_torp()</a></code> / <code><a href="../reference/calculate_torp_ratings.html">calculate_torp_ratings()</a></code>.</p></li>
+<li><p>Expanded CLAUDE.md Key Files section to cover all 52 R files.</p></li>
+<li><p>Expanded ARCHITECTURE.md Code References table with 14 previously undocumented components.</p></li>
+<li><p>Added position codes and RAPM to ARCHITECTURE.md glossary.</p></li>
+<li><p>Added GitHub issue and PR templates.</p></li>
+</ul><hr></div>
+</div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="1.1.0" id="torp-110-2026-03-10">torp 1.1.0 (2026-03-10)<a class="anchor" aria-label="anchor" href="#torp-110-2026-03-10"></a></h2>
 <div class="section level3">

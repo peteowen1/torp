@@ -133,7 +133,7 @@ availability metrics are excluded.
 library(torp)
 
 # Career ratings (TORP = EPR + PSR)
-ratings <- calculate_torp()
+ratings <- torp_ratings()
 
 # Per-game values (EPV + PSV + torp_value)
 game_ratings <- player_game_ratings(season_val = 2026)

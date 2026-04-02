@@ -3,9 +3,10 @@ pkgdown: 2.2.0
 pkgdown_sha: ~
 articles:
   getting-started: getting-started.html
+  stat-ratings: stat-ratings.html
   torp-guide: torp-guide.html
   visualizations: visualizations.html
-last_built: 2026-03-31T04:43Z
+last_built: 2026-04-02T03:16Z
 urls:
   reference: https://peteowen1.github.io/torp/reference
   article: https://peteowen1.github.io/torp/articles

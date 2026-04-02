@@ -72,10 +72,10 @@ components.
 
 ``` r
 # Current TORP ratings (defaults to next round)
-ratings <- calculate_torp_ratings()
+ratings <- torp_ratings()
 
 # Ratings at a specific point
-ratings <- calculate_torp_ratings(season_val = 2025, round_val = 15)
+ratings <- torp_ratings(season_val = 2025, round_val = 15)
 
 # Game-level player performance
 game_ratings <- player_game_ratings(season_val = 2025, round_num = 10)
@@ -87,6 +87,23 @@ season_totals <- player_season_ratings(2025)
 See
 [`vignette("torp-guide")`](https://peteowen1.github.io/torp/articles/torp-guide.md)
 for the full methodology.
+
+## Stat Ratings
+
+Bayesian estimation of per-stat player ability, used to compute PSR:
+
+``` r
+# Pre-computed stat ratings (one row per player-round)
+stat_ratings <- load_player_stat_ratings(2025)
+
+# Player stat rating profile with percentile ranks
+profile <- player_stat_rating_profile("Heeney")
+print(profile)
+```
+
+See
+[`vignette("stat-ratings")`](https://peteowen1.github.io/torp/articles/stat-ratings.md)
+for the full stat rating and PSR system.
 
 ## Prediction Models
 

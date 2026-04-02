@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="index.html">torp</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.1.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.2.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -191,7 +191,40 @@
 <h3 id="data-cleaning--feature-engineering">Data Cleaning &amp; Feature Engineering<a class="anchor" aria-label="anchor" href="#data-cleaning--feature-engineering"></a></h3>
 <p><strong>Purpose</strong>: Transform raw chains/API data into standardized play-by-play (PBP), normalize column names, and inject EP/WP model predictions.</p>
 <p><strong>Key Files</strong>: <code>R/clean_pbp.R</code>, <code>R/column_schema.R</code>, <code>R/add_variables.R</code>, <code>R/clean_features.R</code></p>
-<p><strong>PBP Cleaning</strong> (<code><a href="reference/clean_pbp.html">clean_pbp()</a></code> / <code><a href="reference/clean_pbp_dt.html">clean_pbp_dt()</a></code>): - Adds game clock: <code>period_seconds</code>, <code>est_qtr_elapsed</code>, <code>est_match_elapsed</code> - Strips contest-only descriptions – keeps only the 27 ball-movement plays in <code>EPV_RELEVANT_DESCRIPTIONS</code> - Normalizes team names via <code>AFL_TEAM_ALIASES</code> and <code><a href="reference/torp_replace_teams.html">torp_replace_teams()</a></code> - Implemented as data.table operations that modify by reference for performance</p>
+<p><strong>PBP Cleaning</strong> (<code><a href="reference/clean_pbp.html">clean_pbp()</a></code> / <code><a href="reference/clean_pbp_dt.html">clean_pbp_dt()</a></code>): - Fixes coordinate errors via <code><a href="reference/fix_chain_coordinates_dt.html">fix_chain_coordinates_dt()</a></code> (see Coordinate System below) - Adds game clock: <code>period_seconds</code>, <code>est_qtr_elapsed</code>, <code>est_match_elapsed</code> - Strips contest-only descriptions – keeps only the 27 ball-movement plays in <code>EPV_RELEVANT_DESCRIPTIONS</code> - Normalizes team names via <code>AFL_TEAM_ALIASES</code> and <code><a href="reference/torp_replace_teams.html">torp_replace_teams()</a></code> - Implemented as data.table operations that modify by reference for performance</p>
+<p><strong>Coordinate System</strong>:</p>
+<p>The AFL API delivers <code>x,y</code> in a <strong>possession-team-relative</strong> frame: positive x = towards that team’s attacking goal, ranging ±80m (half venue_length). <code>y</code> ranges ±70m (half venue_width). Since teams face opposite directions, the same physical spot has opposite signs for home vs away.</p>
+<p><code><a href="reference/fix_chain_coordinates_dt.html">fix_chain_coordinates_dt()</a></code> converts to <strong>pitch-relative</strong> (<code>x_pitch</code>, <code>y_pitch</code>) – a fixed home-team frame where the same physical location always has the same coordinates regardless of possession. This makes consecutive rows spatially comparable for EP/WP modeling.</p>
+<p>The AFL API frequently delivers coordinates in the <strong>wrong team’s frame</strong> at possession changes (~12% of non-throw-in rows), producing sign-flipped x,y values. The fix pipeline in <code>clean_pbp.R</code> corrects this in 8 steps:</p>
+<table class="table"><colgroup><col width="21%"><col width="17%"><col width="60%"></colgroup><thead><tr class="header"><th>Step</th>
+<th>Fix</th>
+<th>What it catches</th>
+</tr></thead><tbody><tr class="odd"><td>A</td>
+<td>Convert to pitch-relative (<code>as.double</code>)</td>
+<td>Frame alignment + avoids integer truncation</td>
+</tr><tr class="even"><td>B</td>
+<td>Throw-in fix (2 passes)</td>
+<td>Centre Bounce, OOB, Ball Up rows → use next row’s position</td>
+</tr><tr class="odd"><td>C</td>
+<td>Iterative sign-flip (<code>COORD_FLIP_TOLERANCE</code>)</td>
+<td>Single and cascading wrong-frame rows. Flips when jump &gt;100m but negating puts within 70m of predecessor</td>
+</tr><tr class="even"><td>D</td>
+<td>Both-neighbor sign-flip (60m tolerance)</td>
+<td>Longer-distance sign-flips confirmed by both neighbors</td>
+</tr><tr class="odd"><td>E</td>
+<td>Neighbor interpolation</td>
+<td>Remaining outliers far from both neighbors</td>
+</tr><tr class="even"><td>F</td>
+<td>Paired sign-flip</td>
+<td>Two consecutive wrong rows (e.g. Spoil + Kickin)</td>
+</tr><tr class="odd"><td>G</td>
+<td>Convert back to team-relative</td>
+<td>Restores <code>x,y</code> to possession-team frame</td>
+</tr><tr class="even"><td>H</td>
+<td>Recalculate <code>goal_x</code>
+</td>
+<td><code>venue_length / 2 - x</code></td>
+</tr></tbody></table><p>Constants in <code>R/constants.R</code>: <code>COORD_JUMP_THRESHOLD</code> (100m) gates all sign-flip checks. <code>COORD_FLIP_TOLERANCE</code> (70m) is the max flipped distance to classify as a sign error – set to cover the longest realistic kick distances. Together they eliminate ~99.7% of &gt;100m pitch-relative jumps.</p>
 <p><strong>Column Schema</strong> (<code>column_schema.R</code>): - 11 COL_MAP constants (named character vectors) for each data type: <code>PLAYER_STATS_COL_MAP</code>, <code>PBP_COL_MAP</code>, <code>FIXTURE_COL_MAP</code>, <code>TEAMS_COL_MAP</code>, <code>CHAINS_COL_MAP</code>, <code>PLAYER_GAME_COL_MAP</code>, <code>TORP_RATINGS_COL_MAP</code>, <code>PLAYER_GAME_RATINGS_COL_MAP</code>, <code>PLAYER_DETAILS_COL_MAP</code>, <code>PREDICTIONS_COL_MAP</code>, <code>XG_COL_MAP</code> - Each has a <code>.normalise_*_columns()</code> function that applies the map plus bulk snake_case conversion</p>
 <p><strong>Feature Engineering</strong> (<code>add_variables.R</code>): - <code>add_epv_vars(df, reference_date)</code> – Injects EP model predictions. The EP model predicts 4 probabilities (<code>opp_goal</code>, <code>opp_behind</code>, <code>goal</code>, <code>behind</code>) which combine into <code>exp_pts = 6*goal - 6*opp_goal + opp_behind - behind</code>. Also computes <code>delta_epv</code>, <code>xpoints_diff</code>, <code>weight_gm</code> (365-day half-life decay). - <code>add_wp_vars(df)</code> – Injects WP model predictions. Adds <code>wp</code> (home win probability) and <code>wpa</code> (win probability added per play).</p>
 <p><strong>Model Training Data</strong> (<code>clean_features.R</code>): - <code><a href="reference/clean_model_data_epv_dt.html">clean_model_data_epv_dt()</a></code> – Prepares data.table-optimized training data for the EP XGBoost model with lag/lead context and mirrored defensive coordinates</p>
@@ -403,7 +436,7 @@
 </tr><tr class="even"><td>Load Functions</td>
 <td><code>R/load_data.R</code></td>
 <td>
-<code><a href="reference/load_pbp.html">load_pbp()</a></code>, <code><a href="reference/load_chains.html">load_chains()</a></code>, <code><a href="reference/load_player_stats.html">load_player_stats()</a></code>, <code><a href="reference/load_fixtures.html">load_fixtures()</a></code>, <code><a href="reference/load_teams.html">load_teams()</a></code>, <code><a href="reference/load_results.html">load_results()</a></code>, <code><a href="reference/load_torp_ratings.html">load_torp_ratings()</a></code>, <code><a href="reference/load_team_ratings.html">load_team_ratings()</a></code>
+<code><a href="reference/load_pbp.html">load_pbp()</a></code>, <code><a href="reference/load_chains.html">load_chains()</a></code>, <code><a href="reference/load_xg.html">load_xg()</a></code>, <code><a href="reference/load_player_stats.html">load_player_stats()</a></code>, <code><a href="reference/load_player_game_data.html">load_player_game_data()</a></code>, <code><a href="reference/load_fixtures.html">load_fixtures()</a></code>, <code><a href="reference/load_teams.html">load_teams()</a></code>, <code><a href="reference/load_results.html">load_results()</a></code>, <code><a href="reference/load_player_details.html">load_player_details()</a></code>, <code><a href="reference/load_predictions.html">load_predictions()</a></code>, <code><a href="reference/load_retrodictions.html">load_retrodictions()</a></code>, <code><a href="reference/load_torp_ratings.html">load_torp_ratings()</a></code>, <code><a href="reference/load_player_game_ratings.html">load_player_game_ratings()</a></code>, <code><a href="reference/load_player_season_ratings.html">load_player_season_ratings()</a></code>, <code><a href="reference/load_team_ratings.html">load_team_ratings()</a></code>, <code><a href="reference/load_injury_data.html">load_injury_data()</a></code>, <code><a href="reference/load_ep_wp_charts.html">load_ep_wp_charts()</a></code>, <code><a href="reference/load_player_stat_ratings.html">load_player_stat_ratings()</a></code>, <code><a href="reference/load_psr.html">load_psr()</a></code>, <code><a href="reference/load_weather.html">load_weather()</a></code>
 </td>
 </tr><tr class="odd"><td>Load Engines</td>
 <td><code>R/load_engines.R</code></td>
@@ -533,46 +566,159 @@
 </td>
 </tr><tr class="odd"><td>Team Profile</td>
 <td><code>R/team_profile.R</code></td>
-<td><code><a href="reference/team_profile.html">team_profile()</a></code></td>
-</tr><tr class="even"><td>Logging</td>
+<td>
+<code><a href="reference/team_profile.html">team_profile()</a></code>, <code><a href="reference/team_stat_rating_profile.html">team_stat_rating_profile()</a></code>, <code><a href="reference/get_team_stat_ratings.html">get_team_stat_ratings()</a></code>
+</td>
+</tr><tr class="even"><td>Match Analysis</td>
+<td><code>R/analyze_match.R</code></td>
+<td>
+<code><a href="reference/get_player_game_ratings.html">get_player_game_ratings()</a></code> (live match analysis)</td>
+</tr><tr class="odd"><td>Centrality</td>
+<td><code>R/centrality.R</code></td>
+<td><code><a href="reference/calculate_player_centrality.html">calculate_player_centrality()</a></code></td>
+</tr><tr class="even"><td>Player Attribution</td>
+<td><code>R/player_attribution.R</code></td>
+<td>
+<code><a href="reference/calculate_player_attribution.html">calculate_player_attribution()</a></code>, <code><a href="reference/batch_player_attribution.html">batch_player_attribution()</a></code>
+</td>
+</tr><tr class="odd"><td>Stat Rating Data</td>
+<td><code>R/player_skills_data.R</code></td>
+<td>Data preparation for stat rating estimation</td>
+</tr><tr class="even"><td>Stat Rating Profiles</td>
+<td><code>R/player_skills_profile.R</code></td>
+<td>
+<code><a href="reference/player_stat_rating_profile.html">player_stat_rating_profile()</a></code>, <code><a href="reference/get_player_stat_ratings.html">get_player_stat_ratings()</a></code>
+</td>
+</tr><tr class="odd"><td>WP Credit</td>
+<td><code>R/wp_credit.R</code></td>
+<td>
+<code><a href="reference/create_wp_credit.html">create_wp_credit()</a></code> (WPA credit allocation)</td>
+</tr><tr class="even"><td>Win Probability</td>
+<td><code>R/win_probability.R</code></td>
+<td><code><a href="reference/fit_win_probability.html">fit_win_probability()</a></code></td>
+</tr><tr class="odd"><td>Logging</td>
 <td><code>R/logging.R</code></td>
 <td>
 <code><a href="reference/setup_torp_logging.html">setup_torp_logging()</a></code>, <code><a href="reference/monitor_model_drift.html">monitor_model_drift()</a></code>
 </td>
-</tr><tr class="odd"><td>Model Validation</td>
+</tr><tr class="even"><td>Model Validation</td>
 <td><code>R/model_validation.R</code></td>
 <td>
 <code><a href="reference/create_grouped_cv_folds.html">create_grouped_cv_folds()</a></code>, <code><a href="reference/evaluate_model_comprehensive.html">evaluate_model_comprehensive()</a></code>
 </td>
-</tr><tr class="even"><td>Data Validation</td>
+</tr><tr class="odd"><td>Data Validation</td>
 <td><code>R/data_validation.R</code></td>
 <td>Input validation utilities</td>
-</tr><tr class="odd"><td>Utilities</td>
+</tr><tr class="even"><td>Utilities</td>
 <td><code>R/utils.R</code></td>
 <td>
 <code><a href="reference/torp_clean_names.html">torp_clean_names()</a></code>, <code><a href="reference/get_afl_season.html">get_afl_season()</a></code>, <code><a href="reference/get_afl_week.html">get_afl_week()</a></code>, <code><a href="reference/clear_all_cache.html">clear_all_cache()</a></code>
 </td>
-</tr><tr class="even"><td>Visualization</td>
+</tr><tr class="odd"><td>Plot: Game Flow</td>
+<td><code>R/plot_game.R</code></td>
+<td><code><a href="reference/plot_ep_wp.html">plot_ep_wp()</a></code></td>
+</tr><tr class="even"><td>Plot: Player</td>
+<td><code>R/plot_player.R</code></td>
 <td>
-<code>R/plot_*.R</code> (7 files)</td>
-<td>
-<code>plot_game()</code>, <code>plot_player()</code>, <code>plot_shots()</code>, <code><a href="reference/plot_simulation.html">plot_simulation()</a></code>, <code>plot_comparison()</code>, <code>plot_team()</code>
+<code><a href="reference/plot_player_rating.html">plot_player_rating()</a></code>, <code><a href="reference/plot_stat_rating_profile.html">plot_stat_rating_profile()</a></code>
 </td>
-</tr><tr class="odd"><td>Globals</td>
+</tr><tr class="odd"><td>Plot: Shots</td>
+<td><code>R/plot_shots.R</code></td>
+<td><code><a href="reference/plot_shot_map.html">plot_shot_map()</a></code></td>
+</tr><tr class="even"><td>Plot: Simulation</td>
+<td><code>R/plot_simulation.R</code></td>
+<td><code><a href="reference/plot_simulation.html">plot_simulation()</a></code></td>
+</tr><tr class="odd"><td>Plot: Comparison</td>
+<td><code>R/plot_comparison.R</code></td>
+<td><code><a href="reference/plot_player_comparison.html">plot_player_comparison()</a></code></td>
+</tr><tr class="even"><td>Plot: Team</td>
+<td><code>R/plot_team.R</code></td>
+<td><code><a href="reference/plot_team_ratings.html">plot_team_ratings()</a></code></td>
+</tr><tr class="odd"><td>Plot: Utilities</td>
+<td><code>R/plot_utils.R</code></td>
+<td>
+<code><a href="reference/theme_torp.html">theme_torp()</a></code>, <code><a href="reference/team_color_scale.html">team_color_scale()</a></code>, <code><a href="reference/team_fill_scale.html">team_fill_scale()</a></code>
+</td>
+</tr><tr class="even"><td>Globals</td>
 <td><code>R/globals.R</code></td>
 <td>NSE variable declarations for R CMD check</td>
-</tr><tr class="even"><td>Package Init</td>
+</tr><tr class="odd"><td>Package Init</td>
 <td><code>R/zzz.R</code></td>
 <td>
 <code>.onLoad()</code> / <code>.onAttach()</code>
 </td>
-</tr><tr class="odd"><td>Data Docs</td>
+</tr><tr class="even"><td>Data Docs</td>
 <td><code>R/data.R</code></td>
 <td>Documentation for bundled datasets</td>
-</tr><tr class="even"><td>Scraper</td>
+</tr><tr class="odd"><td>Scraper</td>
 <td><code>R/scraper.R</code></td>
 <td>Legacy CFS endpoint scraping</td>
 </tr></tbody></table></div>
+<div class="section level2">
+<h2 id="column-schema-reference">Column Schema Reference<a class="anchor" aria-label="anchor" href="#column-schema-reference"></a></h2>
+<p>All data is normalised to canonical <code>snake_case</code> at load/fetch time via <code>R/column_schema.R</code>. Each data type has a <code>COL_MAP</code> constant that maps old/variant column names to canonical names. The <code>.normalise_*_columns()</code> wrappers handle multi-step normalisation (prefix stripping, bulk snake_case conversion, derived columns).</p>
+<div class="section level3">
+<h3 id="column-maps-by-data-type">Column Maps by Data Type<a class="anchor" aria-label="anchor" href="#column-maps-by-data-type"></a></h3>
+<table class="table"><colgroup><col width="12%"><col width="27%"><col width="60%"></colgroup><thead><tr class="header"><th>Map</th>
+<th>Data Type</th>
+<th>Key Renames (old → new)</th>
+</tr></thead><tbody><tr class="odd"><td><code>FIXTURE_COL_MAP</code></td>
+<td>Fixtures/results</td>
+<td>
+<code>providerId</code> → <code>match_id</code>, <code>compSeason.year</code> → <code>season</code>, <code>round.roundNumber</code> → <code>round_number</code>, <code>home.score.totalScore</code> → <code>home_score</code>, <code>utcStartTime</code> → <code>utc_start_time</code>
+</td>
+</tr><tr class="even"><td><code>PBP_COL_MAP</code></td>
+<td>Play-by-play</td>
+<td>
+<code>home_team_team_name</code> → <code>home_team_name</code>, <code>home_team_score_total_score</code> → <code>home_score</code>, <code>home_team_abbreviation</code> → <code>home_team_abbr</code>
+</td>
+</tr><tr class="odd"><td><code>CHAINS_COL_MAP</code></td>
+<td>Chains</td>
+<td>
+<code>matchId</code> → <code>match_id</code>, <code>playerId</code> → <code>player_id</code>, <code>displayOrder</code> → <code>display_order</code>, <code>periodSeconds</code> → <code>period_seconds</code>
+</td>
+</tr><tr class="even"><td><code>PLAYER_STATS_COL_MAP</code></td>
+<td>Player stats</td>
+<td>
+<code>extended_stats_spoils</code> → <code>spoils</code>, <code>clearances_total_clearances</code> → <code>clearances</code>, <code>provider_id</code> → <code>match_id</code> (also strips <code>stats_</code> prefix from v2 API)</td>
+</tr><tr class="odd"><td><code>PLAYER_GAME_COL_MAP</code></td>
+<td>Player game data</td>
+<td>
+<code>plyr_nm</code> → <code>player_name</code>, <code>tm</code> → <code>team</code>, <code>tot_p</code> → <code>epv</code>, <code>recv_pts</code> → <code>recv_epv</code>, <code>recv_credits</code> → <code>recv_epv</code>
+</td>
+</tr><tr class="even"><td><code>TEAMS_COL_MAP</code></td>
+<td>Teams/lineups</td>
+<td>
+<code>player.playerId</code> → <code>player_id</code>, <code>teamName</code> → <code>team_name</code>, <code>player.playerName.givenName</code> → <code>given_name</code>
+</td>
+</tr><tr class="odd"><td><code>PLAYER_DETAILS_COL_MAP</code></td>
+<td>Player details</td>
+<td>
+<code>providerId</code> → <code>player_id</code>, <code>firstName</code> → <code>first_name</code>, <code>heightInCm</code> → <code>height_cm</code>, <code>dateOfBirth</code> → <code>date_of_birth</code>
+</td>
+</tr><tr class="even"><td><code>TORP_RATINGS_COL_MAP</code></td>
+<td>TORP ratings</td>
+<td>
+<code>torp</code> → <code>epr</code>, <code>torp_recv</code> → <code>recv_epr</code>, <code>torp_disp</code> → <code>disp_epr</code>
+</td>
+</tr><tr class="odd"><td><code>PLAYER_GAME_RATINGS_COL_MAP</code></td>
+<td>Game ratings</td>
+<td>
+<code>total_points</code> → <code>epv_raw</code>, <code>total_p80</code> → <code>epv_p80</code>, <code>season_points</code> → <code>season_epv</code>
+</td>
+</tr><tr class="even"><td><code>PREDICTIONS_COL_MAP</code></td>
+<td>Predictions</td>
+<td>
+<code>providerId</code> → <code>match_id</code>
+</td>
+</tr><tr class="odd"><td><code>XG_COL_MAP</code></td>
+<td>Expected goals</td>
+<td>
+<code>home_sG</code> → <code>home_scored_goals</code>, <code>home_sB</code> → <code>home_scored_behinds</code>
+</td>
+</tr></tbody></table><p>Old parquet files with legacy column names are normalised automatically at load time — no data regeneration required. Any remaining non-snake_case columns are caught by <code><a href="reference/dot-bulk_snake_case.html">.bulk_snake_case()</a></code> as a fallback.</p>
+</div>
+</div>
 <div class="section level2">
 <h2 id="data-raw-pipeline-scripts">data-raw Pipeline Scripts<a class="anchor" aria-label="anchor" href="#data-raw-pipeline-scripts"></a></h2>
 <table class="table"><colgroup><col width="17%"><col width="28%"><col width="30%"><col width="23%"></colgroup><thead><tr class="header"><th>Stage</th>
@@ -585,13 +731,37 @@
 <td>Daily data refresh, <code>has_new_games()</code> check, parquet release</td>
 </tr><tr class="even"><td>01</td>
 <td><code>data-raw/01-data/</code></td>
+<td><code>release_data.R</code></td>
+<td>Manual release helpers: <code><a href="reference/save_to_release.html">save_to_release()</a></code> for any data type</td>
+</tr><tr class="odd"><td>01</td>
+<td><code>data-raw/01-data/</code></td>
+<td><code>rebuild_all_release_data.R</code></td>
+<td>Full rebuild of all torpdata releases from scratch</td>
+</tr><tr class="even"><td>01</td>
+<td><code>data-raw/01-data/</code></td>
+<td><code>create_aggregated_files.R</code></td>
+<td>Build aggregated parquet files across seasons</td>
+</tr><tr class="odd"><td>01</td>
+<td><code>data-raw/01-data/</code></td>
 <td><code>get_weather_data.R</code></td>
 <td>Backfill historical weather via Open-Meteo API</td>
-</tr><tr class="odd"><td>02</td>
+</tr><tr class="even"><td>01</td>
+<td><code>data-raw/01-data/</code></td>
+<td><code>get_stadium_data.R</code></td>
+<td>Stadium lat/lon reference data</td>
+</tr><tr class="odd"><td>01</td>
+<td><code>data-raw/01-data/</code></td>
+<td><code>update_fixture_table.R</code></td>
+<td>Refresh fixture data for current season</td>
+</tr><tr class="even"><td>02</td>
 <td><code>data-raw/02-models/</code></td>
 <td><code>build_match_predictions.R</code></td>
 <td>Entry point for <code><a href="reference/run_predictions_pipeline.html">run_predictions_pipeline()</a></code>
 </td>
+</tr><tr class="odd"><td>02</td>
+<td><code>data-raw/02-models/</code></td>
+<td><code>build_match_predictions_xgb.R</code></td>
+<td>XGBoost-based match predictions (experimental)</td>
 </tr><tr class="even"><td>03</td>
 <td><code>data-raw/03-ratings/</code></td>
 <td><code>run_epr_pipeline.R</code></td>
@@ -600,6 +770,14 @@
 <td><code>data-raw/03-ratings/</code></td>
 <td><code>optimize_epr_ratings.R</code></td>
 <td>Grid search for EPR decay/prior hyperparameters</td>
+</tr><tr class="even"><td>03</td>
+<td><code>data-raw/03-ratings/</code></td>
+<td><code>create_player_ratings_table.R</code></td>
+<td>Build pre-computed ratings table for torpdata</td>
+</tr><tr class="odd"><td>03</td>
+<td><code>data-raw/03-ratings/</code></td>
+<td><code>bayes_rapm.R</code></td>
+<td>Bayesian RAPM player rating estimation</td>
 </tr><tr class="even"><td>04</td>
 <td><code>data-raw/04-analysis/</code></td>
 <td><code>simulate_seasons.R</code></td>
@@ -608,22 +786,30 @@
 <td><code>data-raw/05-validation/</code></td>
 <td><code>validate_wp_model.R</code></td>
 <td>Win probability model validation</td>
-</tr><tr class="even"><td>06</td>
+</tr><tr class="even"><td>05</td>
+<td><code>data-raw/05-validation/</code></td>
+<td><code>compare_model_performance.R</code></td>
+<td>Cross-model performance comparison</td>
+</tr><tr class="odd"><td>06</td>
 <td><code>data-raw/06-stat-ratings/</code></td>
 <td><code>01_compute_match_stats.R</code></td>
 <td>Per-player-match stat table assembly</td>
-</tr><tr class="odd"><td>06</td>
+</tr><tr class="even"><td>06</td>
 <td><code>data-raw/06-stat-ratings/</code></td>
 <td><code>02_optimize_stat_rating_params.R</code></td>
 <td>Bayesian prior/decay hyperparameter tuning</td>
-</tr><tr class="even"><td>06</td>
+</tr><tr class="odd"><td>06</td>
 <td><code>data-raw/06-stat-ratings/</code></td>
 <td><code>03_estimate_stat_ratings.R</code></td>
 <td>Batch stat rating estimation by round</td>
-</tr><tr class="odd"><td>06</td>
+</tr><tr class="even"><td>06</td>
 <td><code>data-raw/06-stat-ratings/</code></td>
 <td><code>04_export_stat_ratings.R</code></td>
 <td>Per-season parquet export to torpdata</td>
+</tr><tr class="odd"><td>06</td>
+<td><code>data-raw/06-stat-ratings/</code></td>
+<td><code>05_compare_psr_models.R</code></td>
+<td>Compare PSR model versions and coefficient stability</td>
 </tr><tr class="even"><td>06</td>
 <td><code>data-raw/06-stat-ratings/</code></td>
 <td><code>06_train_psr_model.R</code></td>
@@ -663,10 +849,40 @@
 <td>Time on Ground: fraction of match time a player is on field</td>
 </tr><tr class="odd"><td><strong>I50</strong></td>
 <td>Inside 50: entry into the forward 50m arc</td>
-</tr><tr class="even"><td><strong>GAM</strong></td>
+</tr><tr class="even"><td><strong>RAPM</strong></td>
+<td>Regularized Adjusted Plus-Minus: regression-based player rating controlling for teammates/opponents</td>
+</tr><tr class="odd"><td><strong>GAM</strong></td>
 <td>Generalized Additive Model (via <code><a href="https://rdrr.io/pkg/mgcv/man/bam.html" class="external-link">mgcv::bam()</a></code>)</td>
-</tr><tr class="odd"><td><strong>Parquet</strong></td>
+</tr><tr class="even"><td><strong>Parquet</strong></td>
 <td>Columnar storage format used for all data in torpdata releases</td>
+</tr><tr class="odd"><td><strong>FB</strong></td>
+<td>Full Back</td>
+</tr><tr class="even"><td><strong>BPL/BPR</strong></td>
+<td>Back Pocket Left/Right</td>
+</tr><tr class="odd"><td><strong>CHB</strong></td>
+<td>Centre Half Back</td>
+</tr><tr class="even"><td><strong>HBFL/HBFR</strong></td>
+<td>Half Back Flank Left/Right</td>
+</tr><tr class="odd"><td><strong>C</strong></td>
+<td>Centre</td>
+</tr><tr class="even"><td><strong>WL/WR</strong></td>
+<td>Wing Left/Right</td>
+</tr><tr class="odd"><td><strong>CHF</strong></td>
+<td>Centre Half Forward</td>
+</tr><tr class="even"><td><strong>HFFL/HFFR</strong></td>
+<td>Half Forward Flank Left/Right</td>
+</tr><tr class="odd"><td><strong>FPL/FPR</strong></td>
+<td>Forward Pocket Left/Right</td>
+</tr><tr class="even"><td><strong>FF</strong></td>
+<td>Full Forward</td>
+</tr><tr class="odd"><td><strong>R/RR/RK</strong></td>
+<td>Ruck / Ruck Rover / Ruck positions</td>
+</tr><tr class="even"><td><strong>INT</strong></td>
+<td>Interchange</td>
+</tr><tr class="odd"><td><strong>SUB</strong></td>
+<td>Medical Substitute</td>
+</tr><tr class="even"><td><strong>EMERG</strong></td>
+<td>Emergency (non-playing squad member)</td>
 </tr></tbody></table></div>
 </div>
 

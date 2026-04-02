@@ -92,7 +92,9 @@ or by a distinct palette when team colours collide.
 ## Stat Rating Profiles
 
 Visualize a player’s statistical strengths and weaknesses as percentile
-ranks.
+ranks. See
+[`vignette("stat-ratings")`](https://peteowen1.github.io/torp/articles/stat-ratings.md)
+for details on how stat ratings are computed.
 
 ### Bar Chart (default)
 

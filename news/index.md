@@ -1,5 +1,99 @@
 # Changelog
 
+## torp 1.2.0 (2026-03-31)
+
+### New Features
+
+- **Player Stat Ratings system** — Bayesian estimation of 48 rate
+  stats + 6 efficiency stats with positional priors and exponential
+  decay. New exported functions:
+
+  - [`estimate_player_stat_ratings()`](https://peteowen1.github.io/torp/reference/estimate_player_stat_ratings.md)
+    — batch stat rating estimation
+  - [`player_stat_rating_profile()`](https://peteowen1.github.io/torp/reference/player_stat_rating_profile.md)
+    — per-player stat rating profiles with percentile ranks
+  - [`get_player_stat_ratings()`](https://peteowen1.github.io/torp/reference/get_player_stat_ratings.md)
+    — lookup stat ratings for a player
+  - [`team_stat_rating_profile()`](https://peteowen1.github.io/torp/reference/team_stat_rating_profile.md)
+    — team-aggregated stat rating profiles
+  - [`get_team_stat_ratings()`](https://peteowen1.github.io/torp/reference/get_team_stat_ratings.md)
+    — lookup team stat ratings
+  - [`aggregate_team_stat_ratings()`](https://peteowen1.github.io/torp/reference/aggregate_team_stat_ratings.md)
+    — aggregate player stat ratings to team level
+  - [`stat_rating_definitions()`](https://peteowen1.github.io/torp/reference/stat_rating_definitions.md),
+    [`default_stat_rating_params()`](https://peteowen1.github.io/torp/reference/default_stat_rating_params.md),
+    [`stat_rating_position_map()`](https://peteowen1.github.io/torp/reference/stat_rating_position_map.md)
+    — configuration helpers
+
+- **Player Skill Rating (PSR)** — glmnet model mapping stat ratings to
+  predicted margin contribution. New functions:
+  [`calculate_psr()`](https://peteowen1.github.io/torp/reference/calculate_psr.md),
+  [`calculate_psr_components()`](https://peteowen1.github.io/torp/reference/calculate_psr_components.md),
+  [`calculate_psv()`](https://peteowen1.github.io/torp/reference/calculate_psv.md),
+  [`calculate_psv_components()`](https://peteowen1.github.io/torp/reference/calculate_psv_components.md),
+  [`psr_ratings()`](https://peteowen1.github.io/torp/reference/psr_ratings.md).
+
+- **TORP blend** —
+  [`torp_ratings()`](https://peteowen1.github.io/torp/reference/torp_ratings.md)
+  now combines EPR (50%) + PSR (50%) for a complete player rating.
+  Deprecates
+  [`calculate_torp_ratings()`](https://peteowen1.github.io/torp/reference/calculate_torp_ratings.md).
+
+- **Win Probability Added (WPA) credit** —
+  [`create_wp_credit()`](https://peteowen1.github.io/torp/reference/create_wp_credit.md)
+  allocates WPA between disposers and receivers.
+
+- **Player attribution** —
+  [`calculate_player_attribution()`](https://peteowen1.github.io/torp/reference/calculate_player_attribution.md)
+  and
+  [`batch_player_attribution()`](https://peteowen1.github.io/torp/reference/batch_player_attribution.md)
+  for zero-ablation player impact measurement.
+
+- **Network centrality** —
+  [`calculate_player_centrality()`](https://peteowen1.github.io/torp/reference/calculate_player_centrality.md)
+  for opponent quality adjustment.
+
+- **Team profiles** —
+  [`team_profile()`](https://peteowen1.github.io/torp/reference/team_profile.md),
+  [`team_stat_rating_profile()`](https://peteowen1.github.io/torp/reference/team_stat_rating_profile.md),
+  [`get_team_stat_ratings()`](https://peteowen1.github.io/torp/reference/get_team_stat_ratings.md)
+  for team-level analysis.
+
+- **Weather data loading** —
+  [`load_weather()`](https://peteowen1.github.io/torp/reference/load_weather.md)
+  for historical weather data from torpdata releases.
+
+- **Injury scheduling** —
+  [`build_injury_schedule()`](https://peteowen1.github.io/torp/reference/build_injury_schedule.md)
+  and
+  [`load_preseason_injuries()`](https://peteowen1.github.io/torp/reference/load_preseason_injuries.md)
+  for simulation-aware injury management.
+
+- **New load functions** —
+  [`load_player_stat_ratings()`](https://peteowen1.github.io/torp/reference/load_player_stat_ratings.md),
+  [`load_psr()`](https://peteowen1.github.io/torp/reference/load_psr.md),
+  [`load_retrodictions()`](https://peteowen1.github.io/torp/reference/load_retrodictions.md).
+
+### Documentation
+
+- Updated README, vignettes, and pkgdown reference to use
+  [`torp_ratings()`](https://peteowen1.github.io/torp/reference/torp_ratings.md)
+  instead of deprecated
+  [`calculate_torp()`](https://peteowen1.github.io/torp/reference/calculate_torp.md)
+  /
+  [`calculate_torp_ratings()`](https://peteowen1.github.io/torp/reference/calculate_torp_ratings.md).
+
+- Expanded CLAUDE.md Key Files section to cover all 52 R files.
+
+- Expanded ARCHITECTURE.md Code References table with 14 previously
+  undocumented components.
+
+- Added position codes and RAPM to ARCHITECTURE.md glossary.
+
+- Added GitHub issue and PR templates.
+
+------------------------------------------------------------------------
+
 ## torp 1.1.0 (2026-03-10)
 
 ### Breaking Changes

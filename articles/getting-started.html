@@ -20,7 +20,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">torp</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.1.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.2.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -134,10 +134,10 @@ demand.</p>
 components.</p>
 <div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Current TORP ratings (defaults to next round)</span></span>
-<span><span class="va">ratings</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/calculate_torp_ratings.html">calculate_torp_ratings</a></span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="va">ratings</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/torp_ratings.html">torp_ratings</a></span><span class="op">(</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Ratings at a specific point</span></span>
-<span><span class="va">ratings</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/calculate_torp_ratings.html">calculate_torp_ratings</a></span><span class="op">(</span>season_val <span class="op">=</span> <span class="fl">2025</span>, round_val <span class="op">=</span> <span class="fl">15</span><span class="op">)</span></span>
+<span><span class="va">ratings</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/torp_ratings.html">torp_ratings</a></span><span class="op">(</span>season_val <span class="op">=</span> <span class="fl">2025</span>, round_val <span class="op">=</span> <span class="fl">15</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Game-level player performance</span></span>
 <span><span class="va">game_ratings</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/player_game_ratings.html">player_game_ratings</a></span><span class="op">(</span>season_val <span class="op">=</span> <span class="fl">2025</span>, round_num <span class="op">=</span> <span class="fl">10</span><span class="op">)</span></span>
@@ -147,10 +147,25 @@ components.</p>
 <p>See <code><a href="../articles/torp-guide.html">vignette("torp-guide")</a></code> for the full methodology.</p>
 </div>
 <div class="section level2">
+<h2 id="stat-ratings">Stat Ratings<a class="anchor" aria-label="anchor" href="#stat-ratings"></a>
+</h2>
+<p>Bayesian estimation of per-stat player ability, used to compute
+PSR:</p>
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># Pre-computed stat ratings (one row per player-round)</span></span>
+<span><span class="va">stat_ratings</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/load_player_stat_ratings.html">load_player_stat_ratings</a></span><span class="op">(</span><span class="fl">2025</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Player stat rating profile with percentile ranks</span></span>
+<span><span class="va">profile</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/player_stat_rating_profile.html">player_stat_rating_profile</a></span><span class="op">(</span><span class="st">"Heeney"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">profile</span><span class="op">)</span></span></code></pre></div>
+<p>See <code><a href="../articles/stat-ratings.html">vignette("stat-ratings")</a></code> for the full stat rating
+and PSR system.</p>
+</div>
+<div class="section level2">
 <h2 id="prediction-models">Prediction Models<a class="anchor" aria-label="anchor" href="#prediction-models"></a>
 </h2>
 <p>torp includes three core models that enrich play-by-play data:</p>
-<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">pbp</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/load_pbp.html">load_pbp</a></span><span class="op">(</span><span class="fl">2025</span>, rounds <span class="op">=</span> <span class="fl">1</span><span class="op">:</span><span class="fl">5</span><span class="op">)</span></span>
 <span><span class="va">pbp_clean</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/clean_pbp.html">clean_pbp</a></span><span class="op">(</span><span class="va">pbp</span><span class="op">)</span></span>
 <span></span>
@@ -174,7 +189,7 @@ model.</p>
 </h3>
 <p>Data downloads are cached to disk so subsequent calls don’t
 re-download:</p>
-<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Cached by default</span></span>
 <span><span class="va">pbp</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/load_pbp.html">load_pbp</a></span><span class="op">(</span><span class="fl">2025</span><span class="op">)</span></span>
 <span></span>
@@ -188,7 +203,7 @@ re-download:</p>
 <h3 id="in-memory-cache">In-Memory Cache<a class="anchor" aria-label="anchor" href="#in-memory-cache"></a>
 </h3>
 <p>Fixtures and models are cached in memory within a session:</p>
-<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">fixtures</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/load_fixtures.html">load_fixtures</a></span><span class="op">(</span>all <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span>  <span class="co"># downloads</span></span>
 <span><span class="va">fixtures</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/load_fixtures.html">load_fixtures</a></span><span class="op">(</span>all <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span>  <span class="co"># instant (cached)</span></span>
 <span></span>

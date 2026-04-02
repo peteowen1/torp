@@ -61,6 +61,8 @@ play-by-play data
   : Add Win Probability Variables
 - [`add_shot_vars()`](https://peteowen1.github.io/torp/reference/add_shot_vars.md)
   : Add Shot Variables
+- [`fit_win_probability()`](https://peteowen1.github.io/torp/reference/fit_win_probability.md)
+  : Fit AFL Win Probability Model
 
 ## Data Cleaning
 
@@ -73,8 +75,6 @@ Clean and prepare AFL data for analysis
 
 Calculate and view TORP player ratings
 
-- [`calculate_epr_stats()`](https://peteowen1.github.io/torp/reference/calculate_epr_stats.md)
-  : Calculate EPR statistics per player
 - [`calculate_torp()`](https://peteowen1.github.io/torp/reference/calculate_torp.md)
   : Calculate TORP (Total Over Replacement Predictive-value)
 - [`calculate_psr_components()`](https://peteowen1.github.io/torp/reference/calculate_psr_components.md)
@@ -236,6 +236,8 @@ Match-level expected goals, predictions, and head-to-head comparisons
 - [`calculate_match_xgs()`](https://peteowen1.github.io/torp/reference/calculate_match_xgs.md)
   [`match_xgs()`](https://peteowen1.github.io/torp/reference/calculate_match_xgs.md)
   : Calculate xGs for AFL Matches
+- [`extract_player_xg_skill()`](https://peteowen1.github.io/torp/reference/extract_player_xg_skill.md)
+  : Extract player shooting skill from the shot model
 - [`head_to_head()`](https://peteowen1.github.io/torp/reference/head_to_head.md)
   : Head-to-Head Contest History Between Two Players
 - [`print(`*`<torp_head_to_head>`*`)`](https://peteowen1.github.io/torp/reference/print.torp_head_to_head.md)
@@ -351,6 +353,8 @@ scraping
 
 - [`access_api()`](https://peteowen1.github.io/torp/reference/access_api.md)
   : Access API
+- [`calculate_epr_stats()`](https://peteowen1.github.io/torp/reference/calculate_epr_stats.md)
+  : Calculate EPR statistics per player
 - [`get_players()`](https://peteowen1.github.io/torp/reference/get_players.md)
   : Get Players
 - [`get_round_games()`](https://peteowen1.github.io/torp/reference/get_round_games.md)

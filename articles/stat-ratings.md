@@ -1,0 +1,202 @@
+# Player Stat Ratings & PSR
+
+## Overview
+
+torp’s stat rating system estimates each AFL player’s “true” per-stat
+ability using Bayesian models, then combines those estimates into a
+single **PSR** (Player Skill Rating) that predicts match margin
+contribution.
+
+The system has two layers:
+
+1.  **Stat ratings** – Bayesian estimates of per-game rates for 48 rate
+    stats (goals, tackles, disposals, …) and 6 efficiency stats (kick %,
+    disposal %). Uses position-specific priors and exponential time
+    decay so recent form matters more.
+
+2.  **PSR** – A glmnet model that maps stat ratings to predicted margin
+    contribution. PSR tells you how much a player’s stat profile is
+    worth in points per game.
+
+&nbsp;
+
+    Raw box-score stats --> Bayesian estimation --> 54 stat ratings per player
+                                                          |
+                                             glmnet coefficients
+                                                          |
+                                                         PSR
+
+## Loading Pre-Computed Stat Ratings
+
+The easiest way to use stat ratings is to load pre-computed values from
+torpdata:
+
+``` r
+library(torp)
+
+# All stat ratings (one row per player-round)
+stat_ratings <- load_player_stat_ratings(2026)
+
+# PSR values (predicted margin contribution)
+psr <- load_psr(2026)
+```
+
+## Player Profiles
+
+View a player’s stat rating profile with within-position percentile
+ranks:
+
+``` r
+# Stat rating profile with percentiles (partial name match)
+profile <- player_stat_rating_profile("Heeney")
+print(profile)
+
+# Full player profile (career stats, TORP ratings, and PSV averages)
+full <- player_profile("Heeney")
+print(full)
+```
+
+[`player_stat_rating_profile()`](https://peteowen1.github.io/torp/reference/player_stat_rating_profile.md)
+returns a list with:
+
+- `player_info` – ID, name, team, position group
+- `skills` – Data frame of stat ratings with league-wide and
+  within-position percentile ranks
+- `ref_date` – The reference date used for estimation
+
+## Team Profiles
+
+Aggregate stat ratings to the team level:
+
+``` r
+# Team stat rating profile
+team <- team_stat_rating_profile("Sydney")
+print(team)
+
+# Raw team-level stat ratings
+team_ratings <- get_team_stat_ratings("Sydney")
+```
+
+## Understanding the Numbers
+
+### Stat ratings
+
+Each `*_rating` column represents a Bayesian posterior mean – the
+model’s best estimate of a player’s per-game rate for that stat,
+adjusted to full TOG (time on ground).
+
+For example, `goals_rating = 2.1` means the model estimates this player
+would kick 2.1 goals per game at full TOG, given their history, with
+more weight on recent games.
+
+### PSR, OSR, DSR
+
+| Rating  | Full Name              | What it measures                                                |
+|---------|------------------------|-----------------------------------------------------------------|
+| **PSR** | Player Skill Rating    | Total predicted margin contribution (points/game above average) |
+| **OSR** | Offensive Skill Rating | PSR from attacking stats only                                   |
+| **DSR** | Defensive Skill Rating | PSR from defensive stats only                                   |
+
+PSR is centered so that the league-average player scores 0. A PSR of
++3.5 means the model predicts this player’s stat profile adds 3.5 points
+per game compared to an average player.
+
+### PSV vs PSR
+
+|           | PSV (Value)               | PSR (Rating)                   |
+|-----------|---------------------------|--------------------------------|
+| **Scope** | Single game               | Career (with decay)            |
+| **Input** | Raw game stats            | Bayesian-smoothed stat ratings |
+| **Use**   | “How good was this game?” | “How good is this player?”     |
+
+## Computing Stat Ratings From Scratch
+
+If you need custom parameters or a specific reference date:
+
+``` r
+# Load raw player stats
+stats <- load_player_stats(TRUE)
+
+# Prepare data for estimation
+prep <- .prepare_stat_rating_data(stats)
+
+# Estimate with default parameters
+ratings <- estimate_player_stat_ratings(prep, ref_date = as.Date("2026-03-15"))
+
+# Custom hyperparameters
+params <- default_stat_rating_params()
+params$decay_days <- 200  # faster decay (more recency bias)
+params$prior_games <- 8   # weaker prior (less regression to position mean)
+
+ratings_custom <- estimate_player_stat_ratings(prep, params = params)
+```
+
+### How the Bayesian Model Works
+
+**Rate stats** (e.g., goals per game) use a Gamma-Poisson conjugate
+model:
+
+- Prior: Gamma distribution centered on the position-group mean (e.g.,
+  forwards’ average goal rate)
+- Likelihood: Poisson counts from each game, decay-weighted by recency
+- Posterior mean: weighted average of prior and observed data
+
+**Efficiency stats** (e.g., kick accuracy %) use a Beta-Binomial model:
+
+- Prior: Beta distribution centered on position-group mean efficiency
+- Likelihood: Binomial successes/attempts, decay-weighted
+- Posterior mean: smoothed efficiency estimate
+
+The `prior_games` parameter controls how strongly players regress toward
+position means. Higher values = more regression (useful for players with
+few games). The `decay_days` parameter controls how quickly old games
+lose influence.
+
+## Stat Categories
+
+The 48 rate stats span these categories:
+
+| Category   | Example Stats                                                           |
+|------------|-------------------------------------------------------------------------|
+| Scoring    | goals, behinds, shots_at_goal, score_involvements, goal_assists         |
+| Disposal   | kicks, handballs, disposals, effective_kicks, effective_disposals       |
+| Possession | marks, contested_possessions, uncontested_possessions                   |
+| Contested  | contested_marks, ground_ball_gets                                       |
+| Clearances | clearances, centre_clearances, stoppage_clearances                      |
+| Inside 50  | inside50s, marks_inside50, rebound50s, metres_gained                    |
+| Defensive  | tackles, spoils, intercepts, one_percenters                             |
+| Pressure   | pressure_acts, def_half_pressure_acts, tackles_inside50                 |
+| Ruck       | hitouts, hitouts_to_advantage, centre_bounce_attendances, ruck_contests |
+| Contests   | contest_def_one_on_ones, contest_off_one_on_ones                        |
+
+The 6 efficiency stats are: kick %, handball %, disposal %, contested
+possession %, mark %, hitout-to-advantage %.
+
+See
+[`stat_rating_definitions()`](https://peteowen1.github.io/torp/reference/stat_rating_definitions.md)
+for the full list.
+
+## Connecting to TORP
+
+TORP is a 50/50 blend of two independent rating systems:
+
+    TORP = 50% EPR + 50% PSR
+
+- **EPR** comes from play-by-play EPV credit (see
+  [`vignette("torp-guide")`](https://peteowen1.github.io/torp/articles/torp-guide.md))
+- **PSR** comes from the stat rating system described here
+
+This separation means EPR captures value from *how* a player uses the
+ball (context-dependent), while PSR captures *what* a player does
+statistically (context-independent). The blend provides robustness – a
+player who looks good on one system but not the other is rated more
+cautiously.
+
+## Next Steps
+
+- [`vignette("torp-guide")`](https://peteowen1.github.io/torp/articles/torp-guide.md)
+  – Full reference: EPR, models, data architecture
+- [`vignette("visualizations")`](https://peteowen1.github.io/torp/articles/visualizations.md)
+  –
+  [`plot_stat_rating_profile()`](https://peteowen1.github.io/torp/reference/plot_stat_rating_profile.md)
+  and other visualizations
