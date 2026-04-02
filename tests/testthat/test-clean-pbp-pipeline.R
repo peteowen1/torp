@@ -841,3 +841,154 @@ test_that(".normalise_pbp_columns handles empty data.table", {
   expect_false("home_score_total_score" %in% names(dt))
   expect_false("away_team_team_name" %in% names(dt))
 })
+
+# -----------------------------------------------------------------------------
+# fix_chain_coordinates_dt() Tests
+# -----------------------------------------------------------------------------
+
+test_that("fix_chain_coordinates_dt smooths throw-in coordinate jumps", {
+  # Simulate a sequence: Team A kicks (x=40), Out of Bounds, Team B gathers (x=30 from B's perspective)
+
+  # In raw API data, OOB row may have coordinates from Team A's perspective.
+
+  # After fixing, the OOB row should not create a huge pitch-relative jump.
+  mock <- data.frame(
+    match_id = rep("CD_M20240140101", 6),
+    display_order = 1:6,
+    period = rep(1L, 6),
+    period_seconds = c(100, 105, 110, 115, 120, 125),
+    chain_number = c(1, 1, 2, 2, 2, 2),
+    team_id = c("1", "1", "1", "2", "2", "2"),
+    home_team_id = rep("1", 6),
+    away_team_id = rep("2", 6),
+    home_team_name = rep("Carlton Blues", 6),
+    away_team_name = rep("Collingwood Magpies", 6),
+    home_team_abbr = rep("CARL", 6),
+    away_team_abbr = rep("COLL", 6),
+    season = rep(2024L, 6),
+    round_number = rep(1L, 6),
+    venue_length = rep(160, 6),
+    x = c(40, 50, 50, 30, 35, 40),
+    y = c(10, 15, 15, -5, -3, 0),
+    description = c("Kick", "Kick", "Out of Bounds", "Kick", "Handball", "Mark"),
+    final_state = rep(NA_character_, 6),
+    shot_at_goal = rep(NA, 6),
+    player_position = rep("MID", 6),
+    player_name_given_name = rep("Test", 6),
+    player_name_surname = rep("Player", 6),
+    home_score = rep(50L, 6),
+    away_score = rep(40L, 6),
+    player_id = rep("P1", 6),
+    disposal = rep(NA_character_, 6),
+    stringsAsFactors = FALSE
+  )
+
+  result <- clean_pbp(mock)
+
+  # The OOB row (display_order=3) should have throw_in=1 and its coordinates
+
+  # should be close to the neighboring rows in pitch-relative space,
+  # not jumping across the field
+  oob_row <- result[description == "Out of Bounds"]
+  prev_row <- result[display_order == 2]
+  next_row <- result[display_order == 4]
+
+  # Convert to pitch-relative for comparison
+  oob_x_pitch <- ifelse(oob_row$team_id_mdl == oob_row$home_team_id,
+                         oob_row$x, -oob_row$x)
+  prev_x_pitch <- ifelse(prev_row$team_id_mdl == prev_row$home_team_id,
+                          prev_row$x, -prev_row$x)
+  next_x_pitch <- ifelse(next_row$team_id_mdl == next_row$home_team_id,
+                          next_row$x, -next_row$x)
+
+  # OOB coordinates should be within reasonable distance of neighbors
+  oob_dist_prev <- sqrt((oob_x_pitch - prev_x_pitch)^2)
+  oob_dist_next <- sqrt((oob_x_pitch - next_x_pitch)^2)
+
+  expect_lt(min(oob_dist_prev, oob_dist_next), 100)
+})
+
+test_that("fix_chain_coordinates_dt clamps extreme jumps", {
+  # Create a sequence where one row has coordinates that jump wildly
+  # Row 3 has x=-70 while neighbors are around x=40 (home team)
+  mock <- data.frame(
+    match_id = rep("CD_M20240140101", 5),
+    display_order = 1:5,
+    period = rep(1L, 5),
+    period_seconds = c(100, 105, 110, 115, 120),
+    chain_number = rep(1, 5),
+    team_id = rep("1", 5),
+    home_team_id = rep("1", 5),
+    away_team_id = rep("2", 5),
+    home_team_name = rep("Carlton Blues", 5),
+    away_team_name = rep("Collingwood Magpies", 5),
+    home_team_abbr = rep("CARL", 5),
+    away_team_abbr = rep("COLL", 5),
+    season = rep(2024L, 5),
+    round_number = rep(1L, 5),
+    venue_length = rep(160, 5),
+    x = c(40, 42, -70, 44, 46),
+    y = c(10, 12, -50, 14, 16),
+    description = c("Kick", "Handball", "Kick", "Mark", "Kick"),
+    final_state = rep(NA_character_, 5),
+    shot_at_goal = rep(NA, 5),
+    player_position = rep("MID", 5),
+    player_name_given_name = rep("Test", 5),
+    player_name_surname = rep("Player", 5),
+    home_score = rep(50L, 5),
+    away_score = rep(40L, 5),
+    player_id = rep("P1", 5),
+    disposal = rep(NA_character_, 5),
+    stringsAsFactors = FALSE
+  )
+
+  result <- clean_pbp(mock)
+
+  # Row 3 should have been smoothed (interpolated from neighbors)
+  row3 <- result[display_order == 3]
+  row2 <- result[display_order == 2]
+  row4 <- result[display_order == 4]
+
+  # In pitch-relative space, all rows are from home team, so x_pitch = x
+  # The smoothed row3 should be near the average of row2 and row4
+  expect_lt(abs(row3$x - (row2$x + row4$x) / 2), 5)
+  expect_lt(abs(row3$y - (row2$y + row4$y) / 2), 5)
+})
+
+test_that("goal_x is recalculated after coordinate fixing", {
+  mock <- data.frame(
+    match_id = rep("CD_M20240140101", 3),
+    display_order = 1:3,
+    period = rep(1L, 3),
+    period_seconds = c(100, 105, 110),
+    chain_number = rep(1, 3),
+    team_id = rep("1", 3),
+    home_team_id = rep("1", 3),
+    away_team_id = rep("2", 3),
+    home_team_name = rep("Carlton Blues", 3),
+    away_team_name = rep("Collingwood Magpies", 3),
+    home_team_abbr = rep("CARL", 3),
+    away_team_abbr = rep("COLL", 3),
+    season = rep(2024L, 3),
+    round_number = rep(1L, 3),
+    venue_length = rep(160, 3),
+    x = c(30, 40, 50),
+    y = c(10, 15, 20),
+    description = c("Kick", "Handball", "Mark"),
+    final_state = rep(NA_character_, 3),
+    shot_at_goal = rep(NA, 3),
+    player_position = rep("MID", 3),
+    player_name_given_name = rep("Test", 3),
+    player_name_surname = rep("Player", 3),
+    home_score = rep(50L, 3),
+    away_score = rep(40L, 3),
+    player_id = rep("P1", 3),
+    disposal = rep(NA_character_, 3),
+    stringsAsFactors = FALSE
+  )
+
+  result <- clean_pbp(mock)
+
+  # goal_x should equal venue_length/2 - x for each row
+  expect_equal(result$goal_x, result$venue_length / 2 - result$x)
+})
