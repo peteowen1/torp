@@ -133,10 +133,32 @@ graph TD
 **Key Files**: `R/clean_pbp.R`, `R/column_schema.R`, `R/add_variables.R`, `R/clean_features.R`
 
 **PBP Cleaning** (`clean_pbp()` / `clean_pbp_dt()`):
+- Fixes coordinate errors via `fix_chain_coordinates_dt()` (see Coordinate System below)
 - Adds game clock: `period_seconds`, `est_qtr_elapsed`, `est_match_elapsed`
 - Strips contest-only descriptions -- keeps only the 27 ball-movement plays in `EPV_RELEVANT_DESCRIPTIONS`
 - Normalizes team names via `AFL_TEAM_ALIASES` and `torp_replace_teams()`
 - Implemented as data.table operations that modify by reference for performance
+
+**Coordinate System**:
+
+The AFL API delivers `x,y` in a **possession-team-relative** frame: positive x = towards that team's attacking goal, ranging ±80m (half venue_length). `y` ranges ±70m (half venue_width). Since teams face opposite directions, the same physical spot has opposite signs for home vs away.
+
+`fix_chain_coordinates_dt()` converts to **pitch-relative** (`x_pitch`, `y_pitch`) -- a fixed home-team frame where the same physical location always has the same coordinates regardless of possession. This makes consecutive rows spatially comparable for EP/WP modeling.
+
+The AFL API frequently delivers coordinates in the **wrong team's frame** at possession changes (~12% of non-throw-in rows), producing sign-flipped x,y values. The fix pipeline in `clean_pbp.R` corrects this in 8 steps:
+
+| Step | Fix | What it catches |
+|------|-----|-----------------|
+| A | Convert to pitch-relative (`as.double`) | Frame alignment + avoids integer truncation |
+| B | Throw-in fix (2 passes) | Centre Bounce, OOB, Ball Up rows → use next row's position |
+| C | Iterative sign-flip (`COORD_FLIP_TOLERANCE`) | Single and cascading wrong-frame rows. Flips when jump >100m but negating puts within 70m of predecessor |
+| D | Both-neighbor sign-flip (60m tolerance) | Longer-distance sign-flips confirmed by both neighbors |
+| E | Neighbor interpolation | Remaining outliers far from both neighbors |
+| F | Paired sign-flip | Two consecutive wrong rows (e.g. Spoil + Kickin) |
+| G | Convert back to team-relative | Restores `x,y` to possession-team frame |
+| H | Recalculate `goal_x` | `venue_length / 2 - x` |
+
+Constants in `R/constants.R`: `COORD_JUMP_THRESHOLD` (100m) gates all sign-flip checks. `COORD_FLIP_TOLERANCE` (70m) is the max flipped distance to classify as a sign error -- set to cover the longest realistic kick distances. Together they eliminate ~99.7% of >100m pitch-relative jumps.
 
 **Column Schema** (`column_schema.R`):
 - 11 COL_MAP constants (named character vectors) for each data type: `PLAYER_STATS_COL_MAP`, `PBP_COL_MAP`, `FIXTURE_COL_MAP`, `TEAMS_COL_MAP`, `CHAINS_COL_MAP`, `PLAYER_GAME_COL_MAP`, `TORP_RATINGS_COL_MAP`, `PLAYER_GAME_RATINGS_COL_MAP`, `PLAYER_DETAILS_COL_MAP`, `PREDICTIONS_COL_MAP`, `XG_COL_MAP`

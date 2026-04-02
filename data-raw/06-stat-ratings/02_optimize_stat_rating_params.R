@@ -500,13 +500,23 @@ n_cores <- max(1L, parallel::detectCores() - 2L)
 cli::cli_h1("Optimizing {length(tasks)} stats on {n_cores} cores")
 t0 <- proc.time()
 
+# Close stale connections from prior pipeline phases to avoid exhausting
+# R's connection pool (limit ~128) when creating parallel cluster workers
+gc()
+stale <- showConnections(all = FALSE)
+if (nrow(stale) > 3) {
+  cli::cli_inform("Closing {nrow(stale) - 3} stale connections before cluster creation")
+  for (conn_id in rownames(stale)[-(1:3)]) {
+    tryCatch(close(getConnection(as.integer(conn_id))), error = function(e) NULL)
+  }
+}
+
 cl <- parallel::makeCluster(n_cores)
-on.exit(parallel::stopCluster(cl), add = TRUE)
-
-raw_results <- parallel::parLapply(cl, tasks, optimize_single_stat, shared = shared_data)
-
-parallel::stopCluster(cl)
-on.exit(NULL)  # already stopped
+raw_results <- tryCatch({
+  parallel::parLapply(cl, tasks, optimize_single_stat, shared = shared_data)
+}, finally = {
+  parallel::stopCluster(cl)
+})
 
 elapsed <- (proc.time() - t0)["elapsed"]
 cli::cli_inform("Parallel optimization done in {round(elapsed, 1)}s")
