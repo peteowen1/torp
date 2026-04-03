@@ -76,14 +76,24 @@
     # Compute decay-weighted average EPV allowed per defending team
     prior[, decay_wt := exp(-lambda_decay * as.numeric(mdate - game_date))]
 
+    # League average (guarded against zero weights)
+    total_prior_wt <- sum(prior$decay_wt, na.rm = TRUE)
+    league_avg_val <- if (total_prior_wt > 0) {
+      sum(prior$epv_allowed * prior$decay_wt, na.rm = TRUE) / total_prior_wt
+    } else {
+      0
+    }
+
     team_profiles <- prior[, {
-      wt_sum <- sum(decay_wt)
-      wt_mean <- sum(epv_allowed * decay_wt) / wt_sum
+      wt_sum <- sum(decay_wt, na.rm = TRUE)
       n_games <- .N
-      # Shrink toward league average
-      league_avg <- sum(prior$epv_allowed * prior$decay_wt) / sum(prior$decay_wt)
-      shrunk <- (wt_sum * wt_mean + prior_games * league_avg) / (wt_sum + prior_games)
-      .(epv_allowed_avg = shrunk, n_def_games = n_games)
+      if (wt_sum == 0) {
+        .(epv_allowed_avg = league_avg_val, n_def_games = n_games)
+      } else {
+        wt_mean <- sum(epv_allowed * decay_wt, na.rm = TRUE) / wt_sum
+        shrunk <- (wt_sum * wt_mean + prior_games * league_avg_val) / (wt_sum + prior_games)
+        .(epv_allowed_avg = shrunk, n_def_games = n_games)
+      }
     }, by = defending_team]
 
     team_profiles[, match_id := mid]
@@ -168,6 +178,10 @@ adjust_epv_for_opponents <- function(player_game_data,
   dt[, .tog_share := .tog_safe / .team_tog]
 
   # Distribute adjustment by TOG share
+  n_no_profile <- sum(is.na(dt$epv_opp_adj))
+  if (n_no_profile > 0) {
+    cli::cli_inform("{n_no_profile} player-games had no opponent profile (no adjustment applied)")
+  }
   dt[is.na(epv_opp_adj), epv_opp_adj := 0]
   dt[, .player_adj := epv_opp_adj * .tog_share]
 

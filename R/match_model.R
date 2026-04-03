@@ -411,9 +411,16 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
     cli::cli_h2("Training XGBoost models")
     res <- .train_match_xgb(team_mdl_df)
     team_mdl_df <- res$data
-    # Blend GAM + XGBoost intermediate predictions (Models 1-4),
-    # then derive win prob from blended inputs via GAM WP model
-    # for a consistent margin -> win probability mapping
+    res
+  }, error = function(e) {
+    cli::cli_warn("XGBoost training failed ({conditionMessage(e)}), using GAM-only predictions")
+    NULL
+  })
+
+  # Blend GAM + XGBoost if XGBoost succeeded (kept outside tryCatch so
+  # GAM predict failures are not misattributed to XGBoost and data is
+  # never left in a half-blended state)
+  if (!is.null(xgb_result)) {
     team_mdl_df$pred_tot_xscore <- 0.5 * team_mdl_df$pred_tot_xscore +
       0.5 * team_mdl_df$xgb_pred_tot_xscore
     team_mdl_df$pred_xscore_diff <- 0.5 * team_mdl_df$pred_xscore_diff +
@@ -424,11 +431,7 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
       gam_result$models$win, newdata = team_mdl_df, type = "response"
     )
     cli::cli_alert_success("Blended GAM + XGBoost inputs, derived WP from GAM model")
-    res
-  }, error = function(e) {
-    cli::cli_warn("XGBoost training failed ({conditionMessage(e)}), using GAM-only predictions")
-    NULL
-  })
+  }
 
   # Format Predictions ----
   cli::cli_h2("Generating predictions for {length(target_weeks)} week{?s}")

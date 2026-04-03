@@ -177,7 +177,7 @@ adjust_stats_for_opponents <- function(player_stats,
 
   cli::cli_inform("Computing team defensive profiles for per-game stat adjustment...")
   team_profiles <- .compute_team_defensive_profiles(
-    dt, ref_date, lambda_decay, available_stats, cap
+    dt, ref_date, lambda_decay, available_stats, cap, prior_games = prior_games
   )
 
   if (nrow(team_profiles) == 0) {
@@ -224,10 +224,11 @@ adjust_stats_for_opponents <- function(player_stats,
 #' @param lambda_decay Numeric. Decay rate per day.
 #' @param rate_sources Named character vector: stat_name -> source_col.
 #' @param cap Numeric vector of length 2: floor/ceiling for adj_factor.
+#' @param prior_games Numeric. Pseudo-games at league average for shrinkage.
 #' @return data.table with one row per team, containing `{stat}_adj_factor`.
 #' @keywords internal
 .compute_team_defensive_profiles <- function(dt_played, ref_date, lambda_decay,
-                                              rate_sources, cap) {
+                                              rate_sources, cap, prior_games = 5) {
   # Aggregate player stats to team-match level
   # Each team-match row's stats are what the opponent conceded
   stat_cols <- intersect(unname(rate_sources), names(dt_played))
@@ -252,8 +253,12 @@ adjust_stats_for_opponents <- function(player_stats,
   allowed[, days_since := as.numeric(ref_date - match_date_rating)]
   allowed[, decay_wt := exp(-lambda_decay * days_since)]
 
-  # Prior: add pseudo-games at league average rate
-  prior_games <- 5
+  # League average (weighted): guard against all-NA or zero weights
+  total_wt <- sum(allowed$decay_wt, na.rm = TRUE)
+  if (total_wt == 0) {
+    cli::cli_warn("All decay weights are zero — returning empty profiles")
+    return(data.table::data.table(team = character(0)))
+  }
   league_avg <- allowed[, lapply(.SD, function(x) {
     stats::weighted.mean(x, w = decay_wt, na.rm = TRUE)
   }), .SDcols = stat_cols]
@@ -283,8 +288,11 @@ adjust_stats_for_opponents <- function(player_stats,
     for (fc in factor_col) {
       team_allowed[, (fc) := {
         avg <- league_avg[[col]]
-        raw_factor <- avg / get(col)
-        # Cap the adjustment factor
+        val <- get(col)
+        # Guard: if denominator or league avg is zero/NA, no adjustment
+        raw_factor <- data.table::fifelse(
+          val == 0 | is.na(val) | avg == 0 | is.na(avg), 1.0, avg / val
+        )
         pmin(pmax(raw_factor, cap[1]), cap[2])
       }]
     }

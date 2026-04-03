@@ -139,7 +139,10 @@ simulate_match_mc <- function(home_team, away_team,
 
   # Try loading predictions from torpdata
   if (is.null(estimate)) {
-    preds <- tryCatch(load_predictions(season), error = function(e) NULL)
+    preds <- tryCatch(load_predictions(season), error = function(e) {
+      cli::cli_warn("Could not load predictions: {conditionMessage(e)}. Falling back to team ratings.")
+      NULL
+    })
     if (!is.null(preds) && nrow(preds) > 0) {
       pred_row <- preds[preds$home_team == home_team & preds$away_team == away_team, ]
       if (nrow(pred_row) > 0) {
@@ -155,7 +158,10 @@ simulate_match_mc <- function(home_team, away_team,
   # Fall back to team TORP ratings
   if (is.null(estimate)) {
     if (is.null(team_ratings)) {
-      team_ratings <- tryCatch(load_team_ratings(), error = function(e) NULL)
+      team_ratings <- tryCatch(load_team_ratings(), error = function(e) {
+        cli::cli_warn("Could not load team ratings: {conditionMessage(e)}")
+        NULL
+      })
     }
     if (!is.null(team_ratings) && nrow(team_ratings) > 0) {
       # Use latest rating per team
@@ -219,42 +225,24 @@ simulate_match_mc <- function(home_team, away_team,
   idx <- 0L
 
   for (sim in seq_len(n_sims)) {
-    cum_home <- 0L
-    cum_away <- 0L
-
     for (qtr in 1:4) {
-      # Home team events
       h_events <- .simulate_quarter_events(
-        qtr_score = home_qtr[sim, qtr],
-        conv_rate = home_conv,
-        quarter = qtr,
-        sim_id = sim,
-        team_label = "home"
+        qtr_score = home_qtr[sim, qtr], conv_rate = home_conv,
+        quarter = qtr, sim_id = sim, team_label = "home"
       )
       if (!is.null(h_events)) {
-        h_events[, cum_home := cum_home + cumsum(score_value)]
-        h_events[, cum_away := cum_away]
         idx <- idx + 1L
         events_list[[idx]] <- h_events
       }
 
-      # Away team events
       a_events <- .simulate_quarter_events(
-        qtr_score = away_qtr[sim, qtr],
-        conv_rate = away_conv,
-        quarter = qtr,
-        sim_id = sim,
-        team_label = "away"
+        qtr_score = away_qtr[sim, qtr], conv_rate = away_conv,
+        quarter = qtr, sim_id = sim, team_label = "away"
       )
       if (!is.null(a_events)) {
-        a_events[, cum_home := cum_home + home_qtr[sim, qtr]]
-        a_events[, cum_away := cum_away + cumsum(score_value)]
         idx <- idx + 1L
         events_list[[idx]] <- a_events
       }
-
-      cum_home <- cum_home + home_qtr[sim, qtr]
-      cum_away <- cum_away + away_qtr[sim, qtr]
     }
   }
 
@@ -425,51 +413,58 @@ simulate_match_mc <- function(home_team, away_team,
 #' @return data.table with time_pct and WP percentile columns.
 #' @keywords internal
 .compute_wp_trajectory <- function(events_dt, pred_total, n_sims) {
-  # Evaluate WP at fixed time points
   time_points <- seq(0, 1, by = 0.05)
   n_times <- length(time_points)
 
-  # For each sim, compute margin at each time point
-  wp_matrix <- matrix(NA_real_, nrow = n_sims, ncol = n_times)
-
-  for (sim in seq_len(n_sims)) {
-    sim_events <- events_dt[events_dt$sim_id == sim]
-    # Final margin for this sim (used as "expected" margin at start)
-    if (nrow(sim_events) > 0) {
-      final_row <- sim_events[nrow(sim_events)]
-      final_margin <- final_row$cum_home - final_row$cum_away
-    } else {
-      final_margin <- 0
-    }
-
-    for (t_idx in seq_len(n_times)) {
-      t <- time_points[t_idx]
-
-      if (nrow(sim_events) == 0 || t == 0) {
-        current_margin <- 0
-      } else {
-        # Find last event before or at this time
-        prior <- sim_events[sim_events$time_pct <= t]
-        if (nrow(prior) == 0) {
-          current_margin <- 0
-        } else {
-          last_row <- prior[nrow(prior)]
-          current_margin <- last_row$cum_home - last_row$cum_away
-        }
-      }
-
-      # WP = f(margin, time_elapsed)
-      # Blend pre-game expected margin with observed margin:
-      # At t=0, use expected margin (from this sim's final result as proxy)
-      # At t=1, use only observed margin. Smooth transition via t.
-      blended_margin <- t * current_margin + (1 - t) * (final_margin * 0.3)
-      # Scale by time: later margins are more predictive
-      effective_margin <- blended_margin * (1 + sqrt(t))
-      wp_matrix[sim, t_idx] <- 1 / (10^(-effective_margin / SIM_WP_SCALING_FACTOR) + 1)
-    }
+  if (nrow(events_dt) == 0) {
+    # No events: WP stays at 0.5 throughout
+    return(data.table::data.table(
+      time_pct = time_points,
+      wp_mean = 0.5, wp_p10 = 0.5, wp_p25 = 0.5,
+      wp_median = 0.5, wp_p75 = 0.5, wp_p90 = 0.5
+    ))
   }
 
-  # Compute percentile bands
+  # Vectorized approach: for each time point, find margin at that time
+  # across all sims simultaneously using data.table rolling joins
+
+  # Pre-compute final margin per sim (for blending with pre-game expectation)
+  final_margins <- events_dt[, .(final_margin = cum_home[.N] - cum_away[.N]),
+                              by = sim_id]
+  # Fill in sims with no events
+  all_sims <- data.table::data.table(sim_id = seq_len(n_sims))
+  final_margins <- merge(all_sims, final_margins, by = "sim_id", all.x = TRUE)
+  final_margins[is.na(final_margin), final_margin := 0L]
+
+  # Add margin column to events
+  events_dt[, margin := cum_home - cum_away]
+
+  # For each time point, find the last event <= t for each sim
+  # using data.table rolling join
+  data.table::setkey(events_dt, sim_id, time_pct)
+
+  wp_matrix <- matrix(NA_real_, nrow = n_sims, ncol = n_times)
+
+  for (t_idx in seq_len(n_times)) {
+    t <- time_points[t_idx]
+
+    if (t == 0) {
+      current_margins <- rep(0, n_sims)
+    } else {
+      # Rolling join: for each sim, find last event at or before time t
+      lookup <- data.table::data.table(sim_id = seq_len(n_sims), time_pct = t)
+      rolled <- events_dt[lookup, .(sim_id, margin = x.margin),
+                           on = .(sim_id, time_pct), roll = TRUE]
+      current_margins <- rolled$margin
+      current_margins[is.na(current_margins)] <- 0
+    }
+
+    fm <- final_margins$final_margin
+    blended <- t * current_margins + (1 - t) * (fm * 0.3)
+    effective <- blended * (1 + sqrt(t))
+    wp_matrix[, t_idx] <- 1 / (10^(-effective / SIM_WP_SCALING_FACTOR) + 1)
+  }
+
   data.table::data.table(
     time_pct = time_points,
     wp_mean = colMeans(wp_matrix),
