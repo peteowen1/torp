@@ -174,6 +174,7 @@
   keep_cols <- unique(c(
     "player_id", "match_id", "player_name", "season", "round",
     "match_date_rating", "tog", "pos_group", "position",
+    "opponent",
     intersect(all_stat_cols, names(pgd)),
     "disposal_efficiency_pct_x_disposals"
   ))

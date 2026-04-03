@@ -215,8 +215,13 @@ calculate_psv <- function(player_stats, coef_df, tog_adjust = TRUE, center = TRU
   stat_cols <- stat_cols[available]
   betas <- coef_df$beta
 
-  # Extract raw stat values
-  mat <- as.matrix(dt[, stat_cols, with = FALSE])
+  # Use _oadj (opponent-adjusted) columns when available, fall back to raw
+  oadj_cols <- paste0(stat_cols, "_oadj")
+  has_oadj <- all(oadj_cols %in% names(dt))
+  use_cols <- if (has_oadj) oadj_cols else stat_cols
+
+  # Extract stat values
+  mat <- as.matrix(dt[, use_cols, with = FALSE])
   mat[is.na(mat)] <- 0
 
   # TOG-adjust: divide counts by TOG to get per-full-game rates

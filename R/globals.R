@@ -356,8 +356,11 @@ utils::globalVariables(c(
   "team_name", "team_type", "venue", "match_date", "precipitation",
 
   # Predictions pipeline
-  "home_rating", "away_rating", "start_time", "players",
-  "pred_margin", "rating_diff",
+  "home_epr", "away_epr", "start_time", "players",
+  "pred_margin", "epr_diff", "use_roster",
+  "epr_week", "epr_recv_week", "epr_disp_week", "epr_spoil_week",
+  "epr_hitout_week", "psr_week", "osr_diff", "dsr_diff",
+  "torp_diff", "torp.x", "torp.y",
 
   # Final ladder
   "win_prob", "is_played", "expected_wins", "expected_losses",
@@ -373,6 +376,27 @@ utils::globalVariables(c(
 
 # torp_movers variables
 utils::globalVariables(c("change", "direction", "prev", "curr"))
+
+# Opponent adjustment variables
+utils::globalVariables(c(
+  "team_conceding", "opp_wt", "avail_only",
+  # EPV opponent adjustment
+  "epv_opp_adj", "defending_team", "attacking_team",
+  "epv_allowed", "epv_allowed_avg", "n_def_games",
+  "league_avg", ".tog_safe", ".team_tog", ".tog_share",
+  ".player_adj", ".abs_total", "game_date", "decay_wt",
+  # EPV _oadj columns
+  "recv_epv_oadj", "disp_epv_oadj", "spoil_epv_oadj", "hitout_epv_oadj", "epv_oadj"
+))
+
+# Match simulation variables
+utils::globalVariables(c(
+  "score_value", "time_pct", "score_type",
+  "cum_home", "cum_away",
+  "home_qtr_score", "away_qtr_score",
+  "wp_p10", "wp_p25", "wp_median", "wp_p75", "wp_p90", "wp_mean",
+  "score", "team_label"
+))
 
 # Plot variables (NSE in ggplot2 aes/data manipulation)
 utils::globalVariables(c(

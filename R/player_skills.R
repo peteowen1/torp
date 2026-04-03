@@ -35,6 +35,9 @@
 #' @param compute_ci Logical. If TRUE (default), compute credible intervals
 #'   (\code{_lower}/\code{_upper} columns) using qgamma/qbeta. Set to FALSE
 #'   to skip interval computation for faster batch processing.
+#' @param adjust_opponents Logical. If TRUE, applies opponent quality adjustment
+#'   via \code{\link{adjust_stat_ratings_for_opponents}} after estimation,
+#'   adding \code{{stat}_adj_rating} columns. Default FALSE.
 #'
 #' @return A data.table with one row per player containing:
 #'   \code{player_id}, \code{player_name}, \code{pos_group},
@@ -46,7 +49,8 @@
 #' @export
 estimate_player_stat_ratings <- function(stat_rating_data, ref_date = NULL,
                                     params = NULL, stat_defs = NULL,
-                                    compute_ci = TRUE) {
+                                    compute_ci = TRUE,
+                                    adjust_opponents = FALSE) {
   if (is.null(params)) params <- default_stat_rating_params()
   if (is.null(stat_defs)) stat_defs <- stat_rating_definitions()
 
@@ -360,6 +364,14 @@ estimate_player_stat_ratings <- function(stat_rating_data, ref_date = NULL,
 
   # Filter to min games
   result <- result[wt_games >= params$min_games]
+
+  # Opponent quality adjustment (post-processing on finished ratings)
+  if (isTRUE(adjust_opponents)) {
+    result <- adjust_stat_ratings_for_opponents(
+      result, stat_rating_data, ref_date,
+      stat_defs = stat_defs
+    )
+  }
 
   data.table::setorder(result, -wt_games)
   result

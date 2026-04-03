@@ -296,7 +296,8 @@
       by = c("match_id", "team_id", "season", "round_number")
     ) |>
     dplyr::group_by(team_id) |>
-    tidyr::fill(epr, recv_epr, disp_epr, spoil_epr, hitout_epr, psr) |>
+    tidyr::fill(epr, recv_epr, disp_epr, spoil_epr, hitout_epr, psr,
+                dplyr::any_of(c("osr", "dsr"))) |>
     dplyr::mutate(
       def = ifelse(def == 0, dplyr::lag(def), def),
       mid = ifelse(mid == 0, dplyr::lag(mid), mid),
@@ -564,6 +565,7 @@
   opp_cols <- c(
     "match_id", "team_type",
     "epr", "recv_epr", "disp_epr", "spoil_epr", "hitout_epr", "psr",
+    intersect(c("osr", "dsr"), names(team_rt_fix_df)),
     "def", "mid", "fwd", "int", MATCH_INDIVIDUAL_POS,
     "team_name", "team_name_season",
     "log_dist", "familiarity", "days_rest",
@@ -595,7 +597,12 @@
       epr_disp_diff = disp_epr.x - disp_epr.y,
       epr_spoil_diff = spoil_epr.x - spoil_epr.y,
       epr_hitout_diff = hitout_epr.x - hitout_epr.y,
-      psr_diff = psr.x - psr.y
+      psr_diff = psr.x - psr.y,
+      osr_diff = if ("osr.x" %in% names(team_mdl_df_tot)) osr.x - osr.y else NA_real_,
+      dsr_diff = if ("dsr.x" %in% names(team_mdl_df_tot)) dsr.x - dsr.y else NA_real_,
+      torp.x = TORP_EPR_WEIGHT * epr.x + (1 - TORP_EPR_WEIGHT) * psr.x,
+      torp.y = TORP_EPR_WEIGHT * epr.y + (1 - TORP_EPR_WEIGHT) * psr.y,
+      torp_diff = torp.x - torp.y
     ) |>
     dplyr::left_join(
       .normalise_results_schema(results),

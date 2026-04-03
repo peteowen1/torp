@@ -301,7 +301,7 @@ Default priors: `prior_games = 3.0` for all components; `prior_rate` = -0.4 (rec
 
 **Simulation Mechanics** (per round, per simulation):
 1. Add back TORP from returning injured players (via `build_injury_schedule()`)
-2. For each unplayed game: `home_margin = home_rating - away_rating + home_advantage + noise`
+2. For each unplayed game: `home_margin = home_epr - away_epr + home_advantage + noise`
    - Home advantage: `SIM_HOME_ADVANTAGE = 6` points
    - Noise: N(0, `SIM_NOISE_SD = 26`) + N(0, `SIM_INJURY_SD = 3`)
    - Mean reversion: 1% gap to league mean closes each round (`SIM_MEAN_REVERSION = 0.01`)

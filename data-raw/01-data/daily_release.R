@@ -595,8 +595,7 @@ update_psr <- function(season) {
       return(NULL)
     }
 
-    coef_df <- utils::read.csv(psr_coef_path)
-    calculate_psr(stat_ratings, coef_df)
+    .compute_psr_from_stat_ratings(stat_ratings, psr_coef_path)
   }, error = function(e) {
     cli::cli_alert_danger("Failed to compute PSR: {conditionMessage(e)}")
     return(NULL)

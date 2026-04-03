@@ -41,8 +41,15 @@
     "s(log_precip, bs = \"ts\", k = 5)"      = list(var = "log_precip", k = 5),
     "s(temp_avg, bs = \"ts\", k = 5)"        = list(var = "temp_avg", k = 5),
     "s(humidity_avg, bs = \"ts\", k = 5)"     = list(var = "humidity_avg", k = 5),
-    # Models 2-4 optional term
-    "s(psr_diff, bs = \"ts\", k = 5)"        = list(var = "psr_diff", k = 5)
+    # Model 1 abs() terms
+    "s(abs(psr_diff), bs = \"ts\", k = 5)"   = list(var = "psr_diff", k = 5),
+    "s(abs(osr_diff), bs = \"ts\", k = 5)"   = list(var = "osr_diff", k = 5),
+    "s(abs(dsr_diff), bs = \"ts\", k = 5)"   = list(var = "dsr_diff", k = 5),
+    # Models 2-4 optional terms
+    "s(psr_diff, bs = \"ts\", k = 5)"        = list(var = "psr_diff", k = 5),
+    "s(osr_diff, bs = \"ts\", k = 5)"        = list(var = "osr_diff", k = 5),
+    "s(dsr_diff, bs = \"ts\", k = 5)"        = list(var = "dsr_diff", k = 5),
+    "ti(psr_diff, pred_tot_xscore, bs = c(\"ts\", \"ts\"), k = 4)" = list(var = "psr_diff", k = 4)
   )
   drop_terms <- character(0)
   for (term_str in names(optional_smooth_terms)) {
@@ -83,6 +90,8 @@
     "+ s(abs(epr_spoil_diff), bs = \"ts\", k = 5)",
     "+ s(abs(epr_hitout_diff), bs = \"ts\", k = 5)",
     "+ s(epr.x, bs = \"ts\", k = 5) + s(epr.y, bs = \"ts\", k = 5)",
+    "+ s(abs(torp_diff), bs = \"ts\", k = 5)",
+    "+ s(torp.x, bs = \"ts\", k = 5) + s(torp.y, bs = \"ts\", k = 5)",
     "+ s(venue_fac, bs = \"re\")",
     "+ s(log_dist.x, bs = \"ts\", k = 5) + s(log_dist.y, bs = \"ts\", k = 5)",
     "+ s(familiarity.x, bs = \"ts\", k = 5) + s(familiarity.y, bs = \"ts\", k = 5)",
@@ -92,6 +101,8 @@
   )
   m1_optional <- c(
     "s(psr.x, bs = \"ts\", k = 5)", "s(psr.y, bs = \"ts\", k = 5)",
+    "s(abs(psr_diff), bs = \"ts\", k = 5)",
+    "s(abs(osr_diff), bs = \"ts\", k = 5)", "s(abs(dsr_diff), bs = \"ts\", k = 5)",
     "s(log_wind, bs = \"ts\", k = 5)", "s(log_precip, bs = \"ts\", k = 5)",
     "s(temp_avg, bs = \"ts\", k = 5)", "s(humidity_avg, bs = \"ts\", k = 5)"
   )
@@ -120,10 +131,15 @@
     "+ s(epr_disp_diff, bs = \"ts\", k = 5)",
     "+ s(epr_spoil_diff, bs = \"ts\", k = 5)",
     "+ s(epr_hitout_diff, bs = \"ts\", k = 5)",
+    "+ s(torp_diff, bs = \"ts\", k = 5)",
+    "+ ti(torp_diff, pred_tot_xscore, bs = c(\"ts\", \"ts\"), k = 4)",
     "+ s(log_dist_diff, bs = \"ts\", k = 5) + s(familiarity_diff, bs = \"ts\", k = 5)",
     "+ s(days_rest_diff_fac, bs = \"re\")"
   )
-  m2_formula <- stats::as.formula(.add_optional(m2_base, "s(psr_diff, bs = \"ts\", k = 5)"))
+  m2_optional <- c("s(psr_diff, bs = \"ts\", k = 5)",
+                    "ti(psr_diff, pred_tot_xscore, bs = c(\"ts\", \"ts\"), k = 4)",
+                    "s(osr_diff, bs = \"ts\", k = 5)", "s(dsr_diff, bs = \"ts\", k = 5)")
+  m2_formula <- stats::as.formula(.add_optional(m2_base, m2_optional))
 
   afl_xscore_diff_mdl <- mgcv::bam(
     m2_formula,
@@ -152,13 +168,18 @@
     "+ s(epr_disp_diff, bs = \"ts\", k = 5)",
     "+ s(epr_spoil_diff, bs = \"ts\", k = 5)",
     "+ s(epr_hitout_diff, bs = \"ts\", k = 5)",
+    "+ s(torp_diff, bs = \"ts\", k = 5)",
+    "+ ti(torp_diff, pred_tot_xscore, bs = c(\"ts\", \"ts\"), k = 4)",
     "+ s(pred_tot_xscore, bs = \"ts\", k = 5)",
     "+ s(pred_xscore_diff, bs = \"ts\", k = 5)",
     "+ s(venue_fac, bs = \"re\")",
     "+ s(log_dist_diff, bs = \"ts\", k = 5) + s(familiarity_diff, bs = \"ts\", k = 5)",
     "+ s(days_rest_diff_fac, bs = \"re\")"
   )
-  m3_formula <- stats::as.formula(.add_optional(m3_base, "s(psr_diff, bs = \"ts\", k = 5)"))
+  m3_optional <- c("s(psr_diff, bs = \"ts\", k = 5)",
+                    "ti(psr_diff, pred_tot_xscore, bs = c(\"ts\", \"ts\"), k = 4)",
+                    "s(osr_diff, bs = \"ts\", k = 5)", "s(dsr_diff, bs = \"ts\", k = 5)")
+  m3_formula <- stats::as.formula(.add_optional(m3_base, m3_optional))
 
   afl_conv_mdl <- mgcv::bam(
     m3_formula,
@@ -176,13 +197,24 @@
     "s(team_type_fac, bs = \"re\")",
     "+ s(team_name.x, bs = \"re\") + s(team_name.y, bs = \"re\")",
     "+ s(team_name_season.x, bs = \"re\") + s(team_name_season.y, bs = \"re\")",
+    "+ ti(epr_diff, pred_tot_xscore, bs = c(\"ts\", \"ts\"), k = 4)",
     "+ ti(pred_xscore_diff, pred_conv_diff, bs = \"ts\", k = 5)",
     "+ ti(pred_tot_xscore, pred_conv_diff, bs = \"ts\", k = 5)",
     "+ s(pred_xscore_diff)",
+    "+ s(epr_diff, bs = \"ts\", k = 5)",
+    "+ s(epr_recv_diff, bs = \"ts\", k = 5)",
+    "+ s(epr_disp_diff, bs = \"ts\", k = 5)",
+    "+ s(epr_spoil_diff, bs = \"ts\", k = 5)",
+    "+ s(epr_hitout_diff, bs = \"ts\", k = 5)",
+    "+ s(torp_diff, bs = \"ts\", k = 5)",
+    "+ ti(torp_diff, pred_tot_xscore, bs = c(\"ts\", \"ts\"), k = 4)",
     "+ s(log_dist_diff, bs = \"ts\", k = 5) + s(familiarity_diff, bs = \"ts\", k = 5)",
     "+ s(days_rest_diff_fac, bs = \"re\")"
   )
-  m4_formula <- stats::as.formula(.add_optional(m4_base, "s(psr_diff, bs = \"ts\", k = 5)"))
+  m4_optional <- c("s(psr_diff, bs = \"ts\", k = 5)",
+                    "ti(psr_diff, pred_tot_xscore, bs = c(\"ts\", \"ts\"), k = 4)",
+                    "s(osr_diff, bs = \"ts\", k = 5)", "s(dsr_diff, bs = \"ts\", k = 5)")
+  m4_formula <- stats::as.formula(.add_optional(m4_base, m4_optional))
 
   afl_score_mdl <- mgcv::bam(
     m4_formula,
@@ -231,8 +263,8 @@
     dplyr::filter(n == 2)
 
   if (nrow(sym_check) > 0) {
-    max_score_asym <- max(abs(sym_check$score_sum))
-    max_win_asym <- max(abs(sym_check$win_sum - 1))
+    max_score_asym <- max(abs(sym_check$score_sum), na.rm = TRUE)
+    max_win_asym <- max(abs(sym_check$win_sum - 1), na.rm = TRUE)
     if (max_score_asym > 5) {
       cli::cli_abort(c(
         "Home/away prediction asymmetry detected (max score_diff sum: {round(max_score_asym, 1)}).",
@@ -305,13 +337,20 @@
 
   # Feature columns — diffs only for rating/context features (no .x/.y splits)
   # to enforce symmetry. Temporal .x features are shared per match, not team-specific.
+  # Include osr_diff/dsr_diff only if available (requires PSR decomposition)
+  osr_dsr_cols <- character(0)
+  if (all(c("osr_diff", "dsr_diff") %in% names(team_mdl_df)) &&
+      !all(is.na(team_mdl_df$osr_diff))) {
+    osr_dsr_cols <- c("osr_diff", "dsr_diff")
+  }
+
   base_cols <- c(
     "team_type_fac",
     "game_year_decimal.x", "game_prop_through_year.x",
     "game_prop_through_month.x", "game_prop_through_day.x",
     "epr_diff", "epr_recv_diff", "epr_disp_diff",
     "epr_spoil_diff", "epr_hitout_diff",
-    "psr_diff",
+    "torp_diff", "psr_diff", osr_dsr_cols,
     "log_dist_diff",
     "familiarity_diff",
     "days_rest_diff_fac"

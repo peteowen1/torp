@@ -10,7 +10,8 @@ estimate_player_stat_ratings(
   ref_date = NULL,
   params = NULL,
   stat_defs = NULL,
-  compute_ci = TRUE
+  compute_ci = TRUE,
+  adjust_opponents = FALSE
 )
 
 estimate_player_skills(
@@ -18,7 +19,8 @@ estimate_player_skills(
   ref_date = NULL,
   params = NULL,
   stat_defs = NULL,
-  compute_ci = TRUE
+  compute_ci = TRUE,
+  adjust_opponents = FALSE
 )
 }
 \arguments{
