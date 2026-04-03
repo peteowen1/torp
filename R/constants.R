@@ -112,19 +112,19 @@ EPR_PRIOR_GAMES_HITOUT <- 3.0000
 
 #' Prior rate for receiving component (shrinkage target per weighted game)
 #' @keywords internal
-EPR_PRIOR_RATE_RECV <- -0.4000
+EPR_PRIOR_RATE_RECV <- -0.5000
 
 #' Prior rate for disposal component (shrinkage target per weighted game)
 #' @keywords internal
-EPR_PRIOR_RATE_DISP <- -0.3000
+EPR_PRIOR_RATE_DISP <- -0.5000
 
 #' Prior rate for spoil component (shrinkage target per weighted game)
 #' @keywords internal
-EPR_PRIOR_RATE_SPOIL <- 0.0000
+EPR_PRIOR_RATE_SPOIL <- -0.1000
 
 #' Prior rate for hitout component (shrinkage target per weighted game)
 #' @keywords internal
-EPR_PRIOR_RATE_HITOUT <- 0.0000
+EPR_PRIOR_RATE_HITOUT <- -0.1000
 
 #' Weight of EPR in TORP blend (0.5 = equal blend of EPR + PSR)
 #' @keywords internal
@@ -140,6 +140,10 @@ PSR_PRIOR_RATE <- -2
 
 # EPV (Expected Possession Value) Assignment Constants
 # -----------------------------------------------------
+
+#' Bounce weight in disposal credit
+#' @keywords internal
+EPV_BOUNCE_WT <- 0.0000
 
 #' Disposal EPV offset when defending (pos_team == -1)
 #' @keywords internal
@@ -410,6 +414,51 @@ INJURY_DISCOUNT_FLOOR <- 0.90
 #' Default number of simulations
 #' @keywords internal
 SIM_DEFAULT_N <- 1000
+
+# Match-Level Simulation Constants
+# ---------------------------------
+
+#' Dirichlet concentration parameters for quarter scoring proportions.
+#' Derived from empirical AFL quarter-by-quarter scoring distributions:
+#' Q1 ~22%, Q2 ~27%, Q3 ~25%, Q4 ~26%.
+#' @keywords internal
+MATCH_SIM_QUARTER_ALPHA <- c(22, 27, 25, 26)
+
+#' Default number of Monte Carlo simulations for match simulation
+#' @keywords internal
+MATCH_SIM_DEFAULT_N <- 10000L
+
+#' Average shots per team per quarter (empirical from 2021-2025 PBP)
+#' @keywords internal
+MATCH_SIM_AVG_SHOTS_PER_QTR <- 7.5
+
+#' Average goal conversion rate (goals / shots, empirical 2021-2025)
+#' @keywords internal
+MATCH_SIM_AVG_CONV_RATE <- 0.52
+
+
+# Opponent Adjustment Constants
+# ------------------------------
+
+#' Decay rate (per day) for opponent defensive profile recency weighting.
+#' ~231-day half-life, slightly faster than stat rating decay.
+#' @keywords internal
+OPP_ADJ_LAMBDA_DECAY <- 0.003
+
+#' Floor and ceiling for opponent adjustment factor.
+#' Prevents extreme adjustments from small samples.
+#' @keywords internal
+OPP_ADJ_FACTOR_CAP <- c(0.7, 1.4)
+
+#' Decay rate (per day) for EPV opponent defensive profile weighting.
+#' ~231-day half-life, matching the stat rating opponent decay.
+#' @keywords internal
+EPV_OPP_LAMBDA_DECAY <- 0.003
+
+#' Pseudo-games at league average for EPV opponent profile shrinkage.
+#' Pulls early-season teams toward league average.
+#' @keywords internal
+EPV_OPP_PRIOR_GAMES <- 5
 
 #' Regular season rounds by year (excludes finals)
 #' 2022 and earlier: 23 rounds; 2023 onwards: 24 rounds

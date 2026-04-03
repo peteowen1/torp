@@ -153,6 +153,11 @@ cli::cli_inform("Player game data loaded: {nrow(all_pgd)} rows, {ncol(all_pgd)} 
 
 # Convert to keyed data.table once — avoids full copy on every round call
 data.table::setDT(all_pgd)
+
+# Apply EPV opponent adjustment — adds _oadj columns used by EPR
+cli::cli_progress_step("Applying EPV opponent adjustment")
+all_pgd <- adjust_epv_for_opponents(all_pgd)
+
 data.table::setkey(all_pgd, match_id)
 
 # Pre-load shared data once — avoids ~145 redundant loads per full rebuild
@@ -449,6 +454,13 @@ for (s in seasons) {
       if (!"tog" %in% names(pstats_season) && "time_on_ground_percentage" %in% names(pstats_season)) {
         pstats_season[, tog := pmax(time_on_ground_percentage / 100, 0.1)]
       }
+      # Apply per-game stat opponent adjustment before PSV
+      pstats_season <- tryCatch({
+        adjust_stats_for_opponents(pstats_season)
+      }, error = function(e) {
+        cli::cli_warn("Stat opponent adjustment failed for {s}: {conditionMessage(e)}")
+        pstats_season
+      })
       psv_result <- tryCatch({
         .compute_psv(pstats_season)
       }, error = function(e) {

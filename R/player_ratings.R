@@ -260,6 +260,22 @@ calculate_epr_stats <- function(player_game_data = NULL, match_ref, date_val, de
     data.table::setkey(dt, match_id)
     dt <- dt[match_id <= match_ref]
   }
+
+  # Use _oadj (opponent-adjusted) columns when available, fall back to _adj
+  has_oadj <- all(c("recv_epv_oadj", "disp_epv_oadj",
+                     "spoil_epv_oadj", "hitout_epv_oadj") %in% names(dt))
+  if (has_oadj) {
+    epv_recv_col <- "recv_epv_oadj"
+    epv_disp_col <- "disp_epv_oadj"
+    epv_spoil_col <- "spoil_epv_oadj"
+    epv_hitout_col <- "hitout_epv_oadj"
+  } else {
+    epv_recv_col <- "recv_epv_adj"
+    epv_disp_col <- "disp_epv_adj"
+    epv_spoil_col <- "spoil_epv_adj"
+    epv_hitout_col <- "hitout_epv_adj"
+  }
+
   dt[, days_diff := as.numeric(as.Date(date_val) - as.Date(utc_start_time))]
   n_future <- sum(dt$days_diff < 0, na.rm = TRUE)
   if (n_future > 0) {
@@ -279,11 +295,10 @@ calculate_epr_stats <- function(player_game_data = NULL, match_ref, date_val, de
   }
 
   # Aggregate by player_id using data.table syntax
-  # _adj columns are per-80-min position-adjusted rates. We convert back to
-
-  # game totals (* tog) so the shrinkage denominator is in weighted minutes
-  # (wt * tog), not weighted games. This ensures low-TOG games (noisier rates)
-  # contribute proportionally less to the posterior.
+  # EPV columns are per-80-min position-adjusted (and optionally opponent-adjusted)
+  # rates. We convert back to game totals (* tog) so the shrinkage denominator
+  # is in weighted minutes (wt * tog), not weighted games. This ensures low-TOG
+  # games (noisier rates) contribute proportionally less to the posterior.
   dt[, tog_safe := pmax(data.table::fifelse(is.na(time_on_ground_percentage), 100, time_on_ground_percentage) / 100, 0.1)]
   result <- dt[, .(
     player_name = max(player_name),
@@ -294,10 +309,10 @@ calculate_epr_stats <- function(player_game_data = NULL, match_ref, date_val, de
     wt_gms_hitout = sum(wt_hitout * tog_safe, na.rm = TRUE),
     tog_sum    = sum(time_on_ground_percentage * wt_recv, na.rm = TRUE),
     wt_gms_raw = sum(wt_recv, na.rm = TRUE),
-    recv_sum   = sum(recv_epv_adj * tog_safe * wt_recv, na.rm = TRUE),
-    disp_sum   = sum(disp_epv_adj * tog_safe * wt_disp, na.rm = TRUE),
-    spoil_sum  = sum(spoil_epv_adj * tog_safe * wt_spoil, na.rm = TRUE),
-    hitout_sum = sum(hitout_epv_adj * tog_safe * wt_hitout, na.rm = TRUE),
+    recv_sum   = sum(get(epv_recv_col) * tog_safe * wt_recv, na.rm = TRUE),
+    disp_sum   = sum(get(epv_disp_col) * tog_safe * wt_disp, na.rm = TRUE),
+    spoil_sum  = sum(get(epv_spoil_col) * tog_safe * wt_spoil, na.rm = TRUE),
+    hitout_sum = sum(get(epv_hitout_col) * tog_safe * wt_hitout, na.rm = TRUE),
     posn = data.table::last(listed_position)
   ), by = player_id]
 
@@ -392,6 +407,21 @@ calculate_epr_stats_batch <- function(player_game_data = NULL,
     cross[, player_name := paste(player_given_name, player_surname)]
   }
 
+  # Use _oadj (opponent-adjusted) columns when available, fall back to _adj
+  has_oadj <- all(c("recv_epv_oadj", "disp_epv_oadj",
+                     "spoil_epv_oadj", "hitout_epv_oadj") %in% names(cross))
+  if (has_oadj) {
+    epv_recv_col <- "recv_epv_oadj"
+    epv_disp_col <- "disp_epv_oadj"
+    epv_spoil_col <- "spoil_epv_oadj"
+    epv_hitout_col <- "hitout_epv_oadj"
+  } else {
+    epv_recv_col <- "recv_epv_adj"
+    epv_disp_col <- "disp_epv_adj"
+    epv_spoil_col <- "spoil_epv_adj"
+    epv_hitout_col <- "hitout_epv_adj"
+  }
+
   # Aggregate by (round_val, player_id) — all rounds in one pass
   # Weight by TOG so low-TOG games contribute proportionally less
   cross[, tog_safe := pmax(data.table::fifelse(is.na(time_on_ground_percentage), 100, time_on_ground_percentage) / 100, 0.1)]
@@ -404,10 +434,10 @@ calculate_epr_stats_batch <- function(player_game_data = NULL,
     wt_gms_hitout = sum(wt_hitout * tog_safe, na.rm = TRUE),
     tog_sum    = sum(time_on_ground_percentage * wt_recv, na.rm = TRUE),
     wt_gms_raw = sum(wt_recv, na.rm = TRUE),
-    recv_sum   = sum(recv_epv_adj * tog_safe * wt_recv, na.rm = TRUE),
-    disp_sum   = sum(disp_epv_adj * tog_safe * wt_disp, na.rm = TRUE),
-    spoil_sum  = sum(spoil_epv_adj * tog_safe * wt_spoil, na.rm = TRUE),
-    hitout_sum = sum(hitout_epv_adj * tog_safe * wt_hitout, na.rm = TRUE),
+    recv_sum   = sum(get(epv_recv_col) * tog_safe * wt_recv, na.rm = TRUE),
+    disp_sum   = sum(get(epv_disp_col) * tog_safe * wt_disp, na.rm = TRUE),
+    spoil_sum  = sum(get(epv_spoil_col) * tog_safe * wt_spoil, na.rm = TRUE),
+    hitout_sum = sum(get(epv_hitout_col) * tog_safe * wt_hitout, na.rm = TRUE),
     posn = data.table::last(listed_position)
   ), by = .(round_val, player_id)]
 

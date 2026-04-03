@@ -53,9 +53,24 @@ stat_ratings[, round := as.integer(round)]
 stat_defs <- stat_rating_definitions()
 exclude_stats <- c("cond_tog", "squad_selection", "dream_team_points", "rating_points")
 all_rating_names <- setdiff(stat_defs$stat_name, exclude_stats)
-rating_cols <- intersect(paste0(all_rating_names, "_rating"), names(stat_ratings))
 
-cli::cli_inform("Using {length(rating_cols)} stat rating columns")
+# Prefer _adj_rating (opponent-adjusted) when available, fall back to _rating
+adj_rating_cols <- intersect(paste0(all_rating_names, "_adj_rating"), names(stat_ratings))
+raw_rating_cols <- intersect(paste0(all_rating_names, "_rating"), names(stat_ratings))
+
+if (length(adj_rating_cols) >= length(raw_rating_cols) * 0.8) {
+  # Use adjusted ratings — copy _adj_rating into _rating columns for
+  # downstream compatibility (glmnet coef names, PSR coefficient export)
+  for (i in seq_along(adj_rating_cols)) {
+    raw_col <- sub("_adj_rating$", "_rating", adj_rating_cols[i])
+    if (raw_col %in% names(stat_ratings)) {
+      stat_ratings[, (raw_col) := get(adj_rating_cols[i])]
+    }
+  }
+  cli::cli_inform("Using opponent-adjusted stat ratings ({length(adj_rating_cols)} stats, copied into _rating columns)")
+}
+rating_cols <- intersect(paste0(all_rating_names, "_rating"), names(stat_ratings))
+cli::cli_inform("{length(rating_cols)} stat rating columns for PSR training")
 
 ratings_join <- stat_ratings[, c("player_id", "season", "round", "pos_group", rating_cols), with = FALSE]
 merged <- merge(teams, ratings_join, by = c("player_id", "season", "round"), all.x = TRUE)

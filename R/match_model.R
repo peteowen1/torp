@@ -411,12 +411,19 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
     cli::cli_h2("Training XGBoost models")
     res <- .train_match_xgb(team_mdl_df)
     team_mdl_df <- res$data
-    # Blend GAM + XGBoost predictions (50/50)
+    # Blend GAM + XGBoost intermediate predictions (Models 1-4),
+    # then derive win prob from blended inputs via GAM WP model
+    # for a consistent margin -> win probability mapping
+    team_mdl_df$pred_tot_xscore <- 0.5 * team_mdl_df$pred_tot_xscore +
+      0.5 * team_mdl_df$xgb_pred_tot_xscore
+    team_mdl_df$pred_xscore_diff <- 0.5 * team_mdl_df$pred_xscore_diff +
+      0.5 * team_mdl_df$xgb_pred_xscore_diff
     team_mdl_df$pred_score_diff <- 0.5 * team_mdl_df$pred_score_diff +
       0.5 * team_mdl_df$xgb_pred_score_diff
-    team_mdl_df$pred_win <- 0.5 * team_mdl_df$pred_win +
-      0.5 * team_mdl_df$xgb_pred_win
-    cli::cli_alert_success("Blended GAM + XGBoost predictions")
+    team_mdl_df$pred_win <- predict(
+      gam_result$models$win, newdata = team_mdl_df, type = "response"
+    )
+    cli::cli_alert_success("Blended GAM + XGBoost inputs, derived WP from GAM model")
     res
   }, error = function(e) {
     cli::cli_warn("XGBoost training failed ({conditionMessage(e)}), using GAM-only predictions")
