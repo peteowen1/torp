@@ -7,6 +7,7 @@
 #' @keywords internal
 default_epv_params <- function() {
   list(
+    bounce_wt         = EPV_BOUNCE_WT,
     disp_neg_offset   = EPV_DISP_NEG_OFFSET,
     disp_pos_offset   = EPV_DISP_POS_OFFSET,
     disp_scale        = EPV_DISP_SCALE,
@@ -34,7 +35,6 @@ default_epv_params <- function() {
     one_percenters_wt      = EPV_ONE_PERCENTERS_WT,
     rebound50s_wt          = EPV_REBOUND50S_WT,
     frees_against_wt       = EPV_FREES_AGAINST_WT,
-    clearances_wt          = EPV_CLEARANCES_WT,
     frees_for_wt           = EPV_FREES_FOR_WT,
     goals_wt               = EPV_GOALS_WT,
     behinds_wt             = EPV_BEHINDS_WT,
@@ -161,8 +161,7 @@ create_player_game_data <- function(pbp_data = NULL,
       weight_gm = exp(as.numeric(-(ref_date - as.Date(utc_start_time))) / decay),
       spoil_epv = spoils * p$spoil_wt + tackles * p$tackle_wt + pressure_acts * p$pressure_wt + def_half_pressure_acts * p$def_pressure_wt +
                   intercepts * p$intercepts_wt + one_percenters * p$one_percenters_wt + rebound50s * p$rebound50s_wt + frees_against * p$frees_against_wt,
-      hitout_epv = hitouts * p$hitout_wt + hitouts_to_advantage * p$hitout_adv_wt + ruck_contests * p$ruck_contest_wt +
-                   clearances * p$clearances_wt
+      hitout_epv = hitouts * p$hitout_wt + hitouts_to_advantage * p$hitout_adv_wt + ruck_contests * p$ruck_contest_wt
     ) |>
     dplyr::select(-dplyr::any_of(c("utc_start_time", "player_name", "given_name", "surname",
                                    "player_captain", "player_jumper_number", "player_photo_url",

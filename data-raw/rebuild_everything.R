@@ -32,11 +32,11 @@
 
 # Phase 0: Setup ----
 
+library(tictoc)
 library(dplyr)
 library(data.table)
 library(mgcv)
 library(xgboost)
-library(tictoc)
 library(cli)
 library(piggyback)
 
@@ -128,7 +128,7 @@ if (start_from > 2)  skip_chains <- TRUE
 if (start_from > 3)  skip_pbp    <- TRUE
 if (start_from > 4)  skip_models <- TRUE
 # Phase 5 (rebuild PBP) is auto-gated by run_pbp && run_models
-if (start_from > 6)  skip_skills <- TRUE  # Phase 7 maps to stat ratings
+if (start_from > 7)  skip_skills <- TRUE  # Phase 7 maps to stat ratings
 if (start_from > 10) skip_sim    <- TRUE
 
 # Derive phase booleans

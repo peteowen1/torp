@@ -141,6 +141,7 @@ parquet_from_urls_parallel <- function(urls, use_cache = FALSE, max_age_days = 7
         ds <- dplyr::select(ds, dplyr::any_of(columns))
       }
       out <- dplyr::collect(ds)
+      rm(ds)
       data.table::setDT(out)
       out
     }, error = function(e) {

@@ -39,6 +39,10 @@ cli::cli_inform("Stat rating data: {nrow(stat_rating_data)} rows, {length(unique
 cli::cli_inform("Date range: {min(stat_rating_data$match_date_rating)} to {max(stat_rating_data$match_date_rating)}")
 cli::cli_inform("Position groups: {paste(sort(unique(stat_rating_data$pos_group)), collapse = ', ')}")
 
+# Opponent-adjust rate stats at the game level (rolling causal profiles) ----
+cli::cli_h1("Opponent-adjusting per-game stats")
+stat_rating_data <- adjust_stats_for_opponents(stat_rating_data, rolling = TRUE)
+
 # Save ----
 saveRDS(stat_rating_data, file.path(cache_dir, "01_stat_rating_data.rds"))
 cli::cli_alert_success("Saved to {file.path(cache_dir, '01_stat_rating_data.rds')}")

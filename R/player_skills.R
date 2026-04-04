@@ -141,12 +141,16 @@ estimate_player_stat_ratings <- function(stat_rating_data, ref_date = NULL,
       next
     }
 
+    # Use opponent-adjusted values when available (e.g. disposals_oadj)
+    oadj_col <- paste0(src_col, "_oadj")
+    use_col <- if (oadj_col %in% names(dt)) oadj_col else src_col
+
     # Per-stat lambda and prior strength
     rp <- .resolve_rate_params(stat_nm, stat_cat)
     stat_lambda <- rp$lambda
     prior_str <- rp$prior
 
-    vals <- as.numeric(dt[[src_col]])
+    vals <- as.numeric(dt[[use_col]])
     vals[is.na(vals)] <- 0
 
     # Use TOG as exposure denominator unless stat is not TOG-adjusted
