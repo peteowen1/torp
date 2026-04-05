@@ -281,6 +281,19 @@ print(head(dsr_coef_df[order(-abs(dsr_coef_df$beta)), c("stat_name", "beta")], 1
 cat("\n--- PSR Top 10 Coefficients ---\n")
 print(head(psr_coef_df[order(-abs(psr_coef_df$beta)), c("stat_name", "beta")], 10), row.names = FALSE)
 
+# 4b. Mask cross-model stat leakage ----
+# Zero out scoring-category stats from DSR (defensive model should not reward
+# attacking output) and defensive-category stats from OSR (offensive model
+# should not reward defensive actions). The additive reconciliation in
+# calculate_psr_components() ensures osr + dsr = psr regardless.
+scoring_stats <- c("goals", "behinds", "shots_at_goal", "score_involvements",
+                    "goal_assists", "goal_accuracy")
+defensive_stats <- c("tackles", "spoils", "intercepts", "one_percenters",
+                      "intercept_marks", "tackles_inside50")
+
+dsr_coef_df$beta[dsr_coef_df$stat_name %in% scoring_stats] <- 0
+osr_coef_df$beta[osr_coef_df$stat_name %in% defensive_stats] <- 0
+
 # 5. Calculate player ratings ----
 cli::cli_h1("Player ratings")
 
