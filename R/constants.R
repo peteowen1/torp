@@ -72,19 +72,19 @@ EPV_WEIGHT_DECAY_DAYS <- 365
 
 #' Decay factor (in days) for receiving component weighting
 #' @keywords internal
-EPR_DECAY_RECV <- 301
+EPR_DECAY_RECV <- 273
 
 #' Decay factor (in days) for disposal component weighting
 #' @keywords internal
-EPR_DECAY_DISP <- 506
+EPR_DECAY_DISP <- 630
 
 #' Decay factor (in days) for spoil component weighting
 #' @keywords internal
-EPR_DECAY_SPOIL <- 700
+EPR_DECAY_SPOIL <- 523
 
 #' Decay factor (in days) for hitout component weighting
 #' @keywords internal
-EPR_DECAY_HITOUT <- 700
+EPR_DECAY_HITOUT <- 545
 
 #' Default decay factor (in days) — legacy alias for backwards compatibility
 #' @keywords internal
@@ -108,7 +108,7 @@ EPR_PRIOR_GAMES_SPOIL <- 3.0000
 
 #' Prior games constant for hitout ratings
 #' @keywords internal
-EPR_PRIOR_GAMES_HITOUT <- 8.5658
+EPR_PRIOR_GAMES_HITOUT <- 3.0013
 
 #' Prior rate for receiving component (shrinkage target per weighted game)
 #' @keywords internal
@@ -125,6 +125,19 @@ EPR_PRIOR_RATE_SPOIL <- -0.3000
 #' Prior rate for hitout component (shrinkage target per weighted game)
 #' @keywords internal
 EPR_PRIOR_RATE_HITOUT <- -0.3000
+
+#' Decay factor (in days) for contest component weighting
+#' @keywords internal
+EPR_DECAY_CONTEST <- EPR_DECAY_RECV
+
+#' Prior games constant for contest ratings
+#' @keywords internal
+EPR_PRIOR_GAMES_CONTEST <- 3.0000
+
+#' Prior rate for contest component (shrinkage target per weighted game).
+#' Zero because contest credit is zero-sum — average player should be 0.
+#' @keywords internal
+EPR_PRIOR_RATE_CONTEST <- 0.0000
 
 #' Weight of EPR in TORP blend (0.5 = equal blend of EPR + PSR)
 #' @keywords internal
@@ -179,123 +192,132 @@ EPV_RECV_SCALE <- 0.5000
 
 #' Reception scaling factor for intercept marks (pos_team == -1 AND mark in PBP)
 #' @keywords internal
-EPV_RECV_INTERCEPT_MARK_SCALE <- 1.5000
+EPV_RECV_INTERCEPT_MARK_SCALE <- 1.0000
+
+#' Penalty scale for failed aerial contest receptions (target who lost)
+#' Applied per failed contest; negative credit = share of kicker's lost EPV
+#' @keywords internal
+EPV_RECV_FAILED_CONTEST_WT <- -0.3000
 
 #' Spoil weight per spoil
 #' @keywords internal
-EPV_SPOIL_WT <- 0.0525
+EPV_SPOIL_WT <- 0.0737
 
 #' Tackle weight per tackle
 #' @keywords internal
-EPV_TACKLE_WT <- 0.5151
+EPV_TACKLE_WT <- 0.2980
 
 #' Pressure act weight
 #' @keywords internal
-EPV_PRESSURE_WT <- -0.0370
+EPV_PRESSURE_WT <- -0.0024
 
 #' Defensive half pressure act weight (spoil component)
 #' @keywords internal
-EPV_DEF_PRESSURE_WT <- -0.4137
+EPV_DEF_PRESSURE_WT <- -0.1882
 
 #' Hitout weight per hitout
 #' @keywords internal
-EPV_HITOUT_WT <- 0.0379
+EPV_HITOUT_WT <- 0.0510
 
 #' Hitout to advantage weight
 #' @keywords internal
-EPV_HITOUT_ADV_WT <- 0.1514
+EPV_HITOUT_ADV_WT <- 0.1748
 
 #' Ruck contest weight (hitout component)
 #' @keywords internal
-EPV_RUCK_CONTEST_WT <- 0.0188
+EPV_RUCK_CONTEST_WT <- 0.0232
+
+#' Clearances weight (hitout component, currently disabled pending re-optimization)
+#' @keywords internal
+EPV_CLEARANCES_WT <- 0.1094
 
 #' Contested possessions weight (recv component)
 #' @keywords internal
-EPV_CONTESTED_POSS_WT <- 0.1657
+EPV_CONTESTED_POSS_WT <- 0.1642
 
 #' Contested marks weight (recv component)
 #' @keywords internal
-EPV_CONTESTED_MARKS_WT <- 0.0665
+EPV_CONTESTED_MARKS_WT <- 0.0259
 
 #' Ground ball gets weight (recv component)
 #' @keywords internal
-EPV_GROUND_BALL_GETS_WT <- 0.2238
+EPV_GROUND_BALL_GETS_WT <- 0.2165
 
 #' Marks inside 50 weight (recv component)
 #' @keywords internal
-EPV_MARKS_INSIDE50_WT <- 0.4003
+EPV_MARKS_INSIDE50_WT <- 0.3464
 
 #' Inside 50s weight (disp component)
 #' @keywords internal
-EPV_INSIDE50S_WT <- 0.2527
+EPV_INSIDE50S_WT <- 0.2429
 
 #' Clangers weight (disp component)
 #' @keywords internal
-EPV_CLANGERS_WT <- -0.0050
+EPV_CLANGERS_WT <- -0.0094
 
 #' Score involvements weight (disp component)
 #' @keywords internal
-EPV_SCORE_INVOLVEMENTS_WT <- 0.3126
+EPV_SCORE_INVOLVEMENTS_WT <- 0.2916
 
 #' Intercepts weight (spoil component)
 #' @keywords internal
-EPV_INTERCEPTS_WT <- 0.1640
+EPV_INTERCEPTS_WT <- 0.0166
 
 #' One percenters weight (spoil component)
 #' @keywords internal
-EPV_ONE_PERCENTERS_WT <- 0.1929
+EPV_ONE_PERCENTERS_WT <- 0.1260
 
 #' Rebound 50s weight (spoil component)
 #' @keywords internal
-EPV_REBOUND50S_WT <- -0.2935
+EPV_REBOUND50S_WT <- -0.1763
 
 #' Frees against weight (spoil component)
 #' @keywords internal
-EPV_FREES_AGAINST_WT <- -0.0246
+EPV_FREES_AGAINST_WT <- 0.0428
 
 #' Frees for weight (recv component)
 #' @keywords internal
-EPV_FREES_FOR_WT <- 0.1825
+EPV_FREES_FOR_WT <- 0.2331
 
 #' Goals weight (disp component)
 #' @keywords internal
-EPV_GOALS_WT <- 0.4357
+EPV_GOALS_WT <- 0.4262
 
 #' Behinds weight (disp component)
 #' @keywords internal
-EPV_BEHINDS_WT <- 1.0779
+EPV_BEHINDS_WT <- 1.0899
 
 #' Total marks weight (recv component)
 #' @keywords internal
-EPV_MARKS_WT <- 0.0216
+EPV_MARKS_WT <- 0.0160
 
 #' Uncontested possessions weight (recv component)
 #' @keywords internal
-EPV_UNCONTESTED_POSS_WT <- 0.0233
+EPV_UNCONTESTED_POSS_WT <- 0.0344
 
 #' Shots at goal weight (disp component)
 #' @keywords internal
-EPV_SHOTS_AT_GOAL_WT <- 0.4530
+EPV_SHOTS_AT_GOAL_WT <- 0.4419
 
 #' Kicks weight (disp component)
 #' @keywords internal
-EPV_KICKS_WT <- 0.0623
+EPV_KICKS_WT <- 0.0680
 
 #' Handballs weight (disp component)
 #' @keywords internal
-EPV_HANDBALLS_WT <- 0.0597
+EPV_HANDBALLS_WT <- 0.0629
 
 #' Metres gained weight (disp component)
 #' @keywords internal
-EPV_METRES_GAINED_WT <- 0.0008
+EPV_METRES_GAINED_WT <- 0.0010
 
 #' Turnovers weight (disp component)
 #' @keywords internal
-EPV_TURNOVERS_WT <- -0.1138
+EPV_TURNOVERS_WT <- -0.0856
 
 #' Goal assists weight (disp component)
 #' @keywords internal
-EPV_GOAL_ASSISTS_WT <- 0.3186
+EPV_GOAL_ASSISTS_WT <- 0.2240
 
 #' L2 (ridge) regularization lambda for count-based stat weights
 #' @keywords internal

@@ -20,7 +20,8 @@ calculate_epr_stats(
   prior_rate_recv = EPR_PRIOR_RATE_RECV,
   prior_rate_disp = EPR_PRIOR_RATE_DISP,
   prior_rate_spoil = EPR_PRIOR_RATE_SPOIL,
-  prior_rate_hitout = EPR_PRIOR_RATE_HITOUT
+  prior_rate_hitout = EPR_PRIOR_RATE_HITOUT,
+  ...
 )
 }
 \arguments{

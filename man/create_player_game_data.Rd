@@ -8,6 +8,7 @@ create_player_game_data(
   pbp_data = NULL,
   player_stats = NULL,
   teams = NULL,
+  chains = NULL,
   decay = EPR_DECAY_DEFAULT_DAYS,
   epv_params = NULL
 )
@@ -18,6 +19,9 @@ create_player_game_data(
 \item{player_stats}{Raw player stats from \code{load_player_stats()}. If NULL, loads all available.}
 
 \item{teams}{Team lineup data from \code{load_teams()}. If NULL, loads all available.}
+
+\item{chains}{Raw chains data from \code{load_chains()}. If NULL, loads all
+available. Used to compute failed reception credit from aerial contests.}
 
 \item{decay}{Decay factor for time-weighting games. Default is \code{EPR_DECAY_DEFAULT_DAYS} (486).}
 

@@ -245,7 +245,7 @@ calculate_epr <- function(season_val = get_afl_season(type = "current"),
 #' @return A data frame with calculated EPR statistics per player
 #'
 #' @importFrom data.table as.data.table uniqueN setDT
-calculate_epr_stats <- function(player_game_data = NULL, match_ref, date_val, decay_recv = EPR_DECAY_RECV, decay_disp = EPR_DECAY_DISP, decay_spoil = EPR_DECAY_SPOIL, decay_hitout = EPR_DECAY_HITOUT, loading = EPR_LOADING_DEFAULT, prior_games_recv = EPR_PRIOR_GAMES_RECV, prior_games_disp = EPR_PRIOR_GAMES_DISP, prior_games_spoil = EPR_PRIOR_GAMES_SPOIL, prior_games_hitout = EPR_PRIOR_GAMES_HITOUT, prior_rate_recv = EPR_PRIOR_RATE_RECV, prior_rate_disp = EPR_PRIOR_RATE_DISP, prior_rate_spoil = EPR_PRIOR_RATE_SPOIL, prior_rate_hitout = EPR_PRIOR_RATE_HITOUT) {
+calculate_epr_stats <- function(player_game_data = NULL, match_ref, date_val, decay_recv = EPR_DECAY_RECV, decay_disp = EPR_DECAY_DISP, decay_spoil = EPR_DECAY_SPOIL, decay_hitout = EPR_DECAY_HITOUT, loading = EPR_LOADING_DEFAULT, prior_games_recv = EPR_PRIOR_GAMES_RECV, prior_games_disp = EPR_PRIOR_GAMES_DISP, prior_games_spoil = EPR_PRIOR_GAMES_SPOIL, prior_games_hitout = EPR_PRIOR_GAMES_HITOUT, prior_rate_recv = EPR_PRIOR_RATE_RECV, prior_rate_disp = EPR_PRIOR_RATE_DISP, prior_rate_spoil = EPR_PRIOR_RATE_SPOIL, prior_rate_hitout = EPR_PRIOR_RATE_HITOUT, ...) {
   if (is.null(player_game_data)) {
     player_game_data <- load_player_game_data(TRUE)
   }
@@ -421,33 +421,32 @@ calculate_epr_stats_batch <- function(player_game_data = NULL,
     epv_spoil_col <- "spoil_epv_adj"
     epv_hitout_col <- "hitout_epv_adj"
   }
-
   # Aggregate by (round_val, player_id) — all rounds in one pass
   # Weight by TOG so low-TOG games contribute proportionally less
   cross[, tog_safe := pmax(data.table::fifelse(is.na(time_on_ground_percentage), 100, time_on_ground_percentage) / 100, 0.1)]
   result <- cross[, .(
     player_name = max(player_name),
     gms = .N,
-    wt_gms_recv   = sum(wt_recv * tog_safe, na.rm = TRUE),
-    wt_gms_disp   = sum(wt_disp * tog_safe, na.rm = TRUE),
-    wt_gms_spoil  = sum(wt_spoil * tog_safe, na.rm = TRUE),
-    wt_gms_hitout = sum(wt_hitout * tog_safe, na.rm = TRUE),
+    wt_gms_recv    = sum(wt_recv * tog_safe, na.rm = TRUE),
+    wt_gms_disp    = sum(wt_disp * tog_safe, na.rm = TRUE),
+    wt_gms_spoil   = sum(wt_spoil * tog_safe, na.rm = TRUE),
+    wt_gms_hitout  = sum(wt_hitout * tog_safe, na.rm = TRUE),
     tog_sum    = sum(time_on_ground_percentage * wt_recv, na.rm = TRUE),
     wt_gms_raw = sum(wt_recv, na.rm = TRUE),
-    recv_sum   = sum(get(epv_recv_col) * tog_safe * wt_recv, na.rm = TRUE),
-    disp_sum   = sum(get(epv_disp_col) * tog_safe * wt_disp, na.rm = TRUE),
-    spoil_sum  = sum(get(epv_spoil_col) * tog_safe * wt_spoil, na.rm = TRUE),
-    hitout_sum = sum(get(epv_hitout_col) * tog_safe * wt_hitout, na.rm = TRUE),
+    recv_sum    = sum(get(epv_recv_col) * tog_safe * wt_recv, na.rm = TRUE),
+    disp_sum    = sum(get(epv_disp_col) * tog_safe * wt_disp, na.rm = TRUE),
+    spoil_sum   = sum(get(epv_spoil_col) * tog_safe * wt_spoil, na.rm = TRUE),
+    hitout_sum  = sum(get(epv_hitout_col) * tog_safe * wt_hitout, na.rm = TRUE),
     posn = data.table::last(listed_position)
   ), by = .(round_val, player_id)]
 
   result[, `:=`(
     wt_gms = wt_gms_recv,
     wt_tog = round(tog_sum / pmax(wt_gms_raw, 1e-10), 1),
-    recv_epr   = .bayesian_shrink(recv_sum,   wt_gms_recv,   loading, prior_games_recv,   prior_rate_recv),
-    disp_epr   = .bayesian_shrink(disp_sum,   wt_gms_disp,   loading, prior_games_disp,   prior_rate_disp),
-    spoil_epr  = .bayesian_shrink(spoil_sum,  wt_gms_spoil,  loading, prior_games_spoil,  prior_rate_spoil),
-    hitout_epr = .bayesian_shrink(hitout_sum, wt_gms_hitout, loading, prior_games_hitout, prior_rate_hitout)
+    recv_epr    = .bayesian_shrink(recv_sum,    wt_gms_recv,    loading, prior_games_recv,    prior_rate_recv),
+    disp_epr    = .bayesian_shrink(disp_sum,    wt_gms_disp,    loading, prior_games_disp,    prior_rate_disp),
+    spoil_epr   = .bayesian_shrink(spoil_sum,   wt_gms_spoil,   loading, prior_games_spoil,   prior_rate_spoil),
+    hitout_epr  = .bayesian_shrink(hitout_sum,  wt_gms_hitout,  loading, prior_games_hitout,  prior_rate_hitout)
   )]
 
   result[, epr := round(recv_epr + disp_epr + spoil_epr + hitout_epr, 2)]

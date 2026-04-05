@@ -138,9 +138,10 @@ tictoc::toc(log= TRUE)
 tictoc::tic('player game data')
 get_player_game_data <- function(season) {
   pbp <- load_pbp(season, rounds = TRUE)
+  chains <- load_chains(season, rounds = TRUE)
   pstats <- load_player_stats(season)
   teams <- load_teams(season)
-  pgd <- create_player_game_data(pbp, pstats, teams)
+  pgd <- create_player_game_data(pbp, pstats, teams, chains = chains)
 
   file_name <- glue::glue("player_game_{season}")
 

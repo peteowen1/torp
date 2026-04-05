@@ -245,9 +245,10 @@ if (run_derived) {
     # Player Game Data
     safe_run(paste0("player_game_", season), {
       pbp <- load_pbp(season, rounds = TRUE)
+      chains <- load_chains(season, rounds = TRUE)
       pstats <- load_player_stats(season)
       teams_data <- load_teams(season)
-      pgd <- create_player_game_data(pbp, pstats, teams_data)
+      pgd <- create_player_game_data(pbp, pstats, teams_data, chains = chains)
       save_to_release(pgd, paste0("player_game_", season), "player_game-data")
       cli::cli_inform("  player_game_{season}: {nrow(pgd)} rows")
     })

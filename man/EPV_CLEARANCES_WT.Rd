@@ -3,7 +3,7 @@
 \docType{data}
 \name{EPV_CLEARANCES_WT}
 \alias{EPV_CLEARANCES_WT}
-\title{Clearances weight (hitout component)}
+\title{Clearances weight (hitout component, currently disabled pending re-optimization)}
 \format{
 An object of class \code{numeric} of length 1.
 }
@@ -11,6 +11,6 @@ An object of class \code{numeric} of length 1.
 EPV_CLEARANCES_WT
 }
 \description{
-Clearances weight (hitout component)
+Clearances weight (hitout component, currently disabled pending re-optimization)
 }
 \keyword{internal}
