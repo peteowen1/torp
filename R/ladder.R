@@ -272,7 +272,7 @@ prepare_sim_data <- function(season, team_ratings = NULL, fixtures = NULL,
 
   # --- Team Residuals (GAM random effects) ---
   if (identical(team_residuals, "auto")) {
-    team_residuals <- .extract_team_residuals(models = models)
+    team_residuals <- .extract_team_residuals(models = models, season = season)
   }
   if (!is.null(team_residuals)) {
     tr_dt <- data.table::as.data.table(team_residuals)[, .(team, residual_mean, residual_se)]
@@ -297,19 +297,24 @@ prepare_sim_data <- function(season, team_ratings = NULL, fixtures = NULL,
 
 #' Extract team-level quality residuals from match GAM
 #'
-#' Extracts the cross-season `team_name.x` random effects from the
-#' `xscore_diff` GAM. These capture systematic team over/under-performance
-#' not explained by player TORP ratings (e.g. coaching, team system).
+#' Extracts both cross-season `team_name` and within-season `team_name_season`
+#' random effects from the `xscore_diff` GAM and combines them. These capture
+#' systematic team over/under-performance not explained by player TORP ratings
+#' (e.g. coaching, team system, season-specific form).
 #' Team names are standardised via [torp_replace_teams()] to ensure
 #' consistent merging with simulation team names.
 #'
 #' @param models Optional named list of GAM models (as returned by
 #'   `run_predictions_pipeline()$models`). When provided, uses the
 #'   `xscore_diff` model directly. Otherwise loads from torpmodels.
+#' @param season Integer season year used to filter `team_name_season` effects
+#'   to the relevant season. Defaults to the current year.
 #' @return A data.table with columns `team`, `residual_mean`, `residual_se`,
 #'   or NULL if extraction fails.
 #' @keywords internal
-.extract_team_residuals <- function(models = NULL) {
+.extract_team_residuals <- function(models = NULL, season = NULL) {
+  if (is.null(season)) season <- as.integer(format(Sys.Date(), "%Y"))
+
   if (!is.null(models) && !is.null(models[["xscore_diff"]])) {
     xsd <- models[["xscore_diff"]]
   } else {
@@ -324,19 +329,43 @@ prepare_sim_data <- function(season, team_ratings = NULL, fixtures = NULL,
     xsd <- match_gams[["xscore_diff"]]
   }
 
-  re <- tryCatch(
-    extract_gam_random_effects(xsd, "team_name"),
+  # Cross-season team random effects (use anchored pattern to avoid matching
+  # team_name_season)
+  re_team <- tryCatch(
+    extract_gam_random_effects(xsd, "^team_name\\."),
     error = function(e) {
       cli::cli_warn("Could not extract team random effects: {conditionMessage(e)}")
       NULL
     }
   )
-  if (is.null(re)) return(NULL)
+  if (is.null(re_team)) return(NULL)
 
-  result <- re[, .(team = level, residual_mean = coefficient, residual_se = se)]
-
-  # Standardise team names to canonical form for reliable merging
+  result <- re_team[, .(team = level, residual_mean = coefficient, residual_se = se)]
   result[, team := torp_replace_teams(team)]
+
+  # Within-season team random effects (team_name_season levels are "TeamName YYYY")
+  re_season <- tryCatch(
+    extract_gam_random_effects(xsd, "team_name_season"),
+    error = function(e) NULL
+  )
+
+  if (!is.null(re_season)) {
+    season_suffix <- paste0(" ", season, "$")
+    re_cur <- re_season[grepl(season_suffix, level)]
+
+    if (nrow(re_cur) > 0) {
+      re_cur[, team := sub(paste0(" ", season, "$"), "", level)]
+      re_cur[, team := torp_replace_teams(team)]
+      re_cur <- re_cur[, .(season_coef = coefficient, season_se = se), by = team]
+
+      result <- merge(result, re_cur, by = "team", all.x = TRUE)
+      result[!is.na(season_coef), `:=`(
+        residual_mean = residual_mean + season_coef,
+        residual_se   = sqrt(residual_se^2 + season_se^2)
+      )]
+      result[, c("season_coef", "season_se") := NULL]
+    }
+  }
 
   result
 }
