@@ -116,7 +116,7 @@
       disp_epr = tidyr::replace_na(disp_epr, EPR_PRIOR_RATE_DISP),
       spoil_epr = tidyr::replace_na(spoil_epr, EPR_PRIOR_RATE_SPOIL),
       hitout_epr = tidyr::replace_na(hitout_epr, EPR_PRIOR_RATE_HITOUT),
-      lineup_tog = tidyr::replace_na(POSITION_AVG_TOG[position.x], 0.75),
+      lineup_tog = tidyr::replace_na(POSITION_AVG_TOG[position.x], POSITION_AVG_TOG_DEFAULT),
       .unknown_pos = !is.na(position.x) & is.na(POSITION_AVG_TOG[position.x]),
       epr = epr * lineup_tog,
       recv_epr = recv_epr * lineup_tog,
@@ -276,7 +276,7 @@
     dplyr::group_by(team_id, season) |>
     dplyr::mutate(days_rest = as.numeric(difftime(utc_dt, dplyr::lag(utc_dt), units = "days"))) |>
     dplyr::ungroup() |>
-    dplyr::mutate(days_rest = tidyr::replace_na(days_rest, 21))
+    dplyr::mutate(days_rest = tidyr::replace_na(days_rest, MATCH_DEFAULT_REST_DAYS))
 
   # Combine all features
   team_rt_fix_df <- fix_df |>
@@ -428,7 +428,7 @@
       NULL
     })
     if (!is.null(hourly)) all_hourly[[i]] <- hourly
-    Sys.sleep(0.3)
+    Sys.sleep(OPEN_METEO_RATE_LIMIT_SECONDS)
   }
 
   n_failed <- nrow(venue_dates) - length(all_hourly)
@@ -454,7 +454,7 @@
       precipitation_total = sum(precipitation, na.rm = TRUE),
       wind_avg = mean(wind_speed_10m, na.rm = TRUE),
       humidity_avg = mean(relative_humidity_2m, na.rm = TRUE),
-      is_roof = dplyr::first(venue) == "Docklands",
+      is_roof = dplyr::first(venue) %in% AFL_ROOF_VENUES,
       .groups = "drop"
     )
 }

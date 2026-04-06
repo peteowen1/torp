@@ -121,7 +121,7 @@ simulate_season <- function(sim_teams, sim_games, return_teams = FALSE,
     } else {
       rep(SIM_AVG_TOTAL, n_games)
     }
-    total <- pmax(stats::rnorm(n_games, base_total, SIM_TOTAL_SD), 40)
+    total <- pmax(stats::rnorm(n_games, base_total, SIM_TOTAL_SD), SIM_MIN_TOTAL)
     data.table::set(sim_games_r, j = "home_score",
                     value = as.integer(pmax(round((total + result_vec) / 2), 0)))
     data.table::set(sim_games_r, j = "away_score",
@@ -158,42 +158,6 @@ simulate_season <- function(sim_teams, sim_games, return_teams = FALSE,
   return(simmed_games)
 }
 
-
-#' Process games for a single round
-#'
-#' @description
-#' `r lifecycle::badge("deprecated")`
-#'
-#' Thin wrapper around [process_games_dt()] that converts results back to
-#' data.frames. Use [process_games_dt()] directly for better performance.
-#'
-#' @param sim_teams A data frame containing team ratings.
-#' @param sim_games A data frame containing fixture data.
-#' @param round_num The round number to process.
-#' @param injury_sd Standard deviation for injury impact.
-#' @return A list containing updated sim_teams and sim_games data frames.
-#' @importFrom data.table as.data.table setkey copy fifelse fcase
-#' @importFrom stats rnorm
-#' @keywords internal
-process_games <- function(sim_teams, sim_games, round_num,
-                          injury_sd = SIM_INJURY_SD) {
-  # Convert to data.table if needed
-  sim_teams_dt <- data.table::as.data.table(sim_teams)
-  sim_games_dt <- data.table::as.data.table(sim_games)
-
-  # Filter to current round's unplayed games (process_games_dt expects this)
-  round_games <- sim_games_dt[roundnum == round_num & is.na(result)]
-
-  # Call optimized version
-  result <- process_games_dt(sim_teams_dt, round_games, round_num,
-                             injury_sd = injury_sd)
-
-  # Return as data.frames for backwards compatibility
-  return(list(
-    sim_teams = as.data.frame(result$sim_teams),
-    sim_games = as.data.frame(result$sim_games)
-  ))
-}
 
 #' Process games for a single round (data.table optimized)
 #'

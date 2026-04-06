@@ -538,7 +538,8 @@ XG_COL_MAP <- c(
   nms <- names(dt)
   missing_ext <- expected_ext[!expected_ext %in% nms]
   if (length(missing_ext) > 0) {
-    dt[, (missing_ext) := lapply(missing_ext, function(x) 0L)]
+    safe_log_info(paste0("Zero-filling missing API columns: ", paste(missing_ext, collapse = ", ")))
+    dt[, (missing_ext) := 0L]
   }
 
   invisible(dt)
@@ -599,9 +600,13 @@ XG_COL_MAP <- c(
     df[["team_name"]] <- resolved
   }
 
+
   # Derive round_number from match_id when absent (AFL API data lacks it)
+  # Format: CD_M{year:4}{comp:3}{round:2}{game:2+} — extract round via regex
   if (!"round_number" %in% names(df) && "match_id" %in% names(df)) {
-    df[["round_number"]] <- as.integer(substr(df[["match_id"]], 12L, 13L))
+    df[["round_number"]] <- as.integer(
+      sub("^CD_M\\d{7}(\\d{2}).*", "\\1", df[["match_id"]])
+    )
   }
 
   df

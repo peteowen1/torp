@@ -433,6 +433,11 @@ INJURY_DISCOUNT_FLOOR <- 0.90
 #' @keywords internal
 SIM_DEFAULT_N <- 1000
 
+#' Minimum combined score floor for simulated matches (points).
+#' Prevents unrealistically low totals from extreme rnorm draws.
+#' @keywords internal
+SIM_MIN_TOTAL <- 40
+
 # Match-Level Simulation Constants
 # ---------------------------------
 
@@ -769,6 +774,58 @@ MATCH_MIN_DATA_SEASON <- 2021
 #' Earliest round in MATCH_MIN_DATA_SEASON with reliable data
 #' @keywords internal
 MATCH_MIN_DATA_ROUND <- 14
+
+
+# AFL Structural Constants
+# -------------------------
+
+#' Number of on-field players per team in a standard AFL match
+#' @keywords internal
+AFL_TEAM_SIZE <- 18L
+
+#' Default days rest when rest data is unavailable
+#' @keywords internal
+MATCH_DEFAULT_REST_DAYS <- 21
+
+#' Default TOG fraction for unknown field positions
+#' @keywords internal
+POSITION_AVG_TOG_DEFAULT <- 0.75
+
+#' Venues with a closed roof (weather features set to neutral)
+#' @keywords internal
+AFL_ROOF_VENUES <- c("Docklands")
+
+#' Default timezone for AFL matches
+#' @keywords internal
+AFL_DEFAULT_TIMEZONE <- "Australia/Melbourne"
+
+#' Maximum round number fallback when AFL_REGULAR_SEASON_ROUNDS lookup fails
+#' @keywords internal
+AFL_MAX_REGULAR_ROUNDS <- 24L
+
+
+# API & External Service Constants
+# ---------------------------------
+
+#' AFL public API base URL (v2)
+#' @keywords internal
+AFL_API_BASE_URL <- "https://aflapi.afl.com.au/afl/v2/"
+
+#' AFL CFS API base URL (fixtures, results, players)
+#' @keywords internal
+AFL_CFS_API_BASE_URL <- "https://api.afl.com.au/cfs/afl/"
+
+#' AFL chain/play data API base URL
+#' @keywords internal
+AFL_SAPI_BASE_URL <- "https://sapi.afl.com.au/afl/"
+
+#' Rate limit delay in seconds for Open-Meteo API calls
+#' @keywords internal
+OPEN_METEO_RATE_LIMIT_SECONDS <- 0.3
+
+#' Default disk cache max age in days
+#' @keywords internal
+DISK_CACHE_DEFAULT_AGE_DAYS <- 7
 
 
 # Team Name Constants

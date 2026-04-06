@@ -27,7 +27,8 @@ Imports:
     stringr (>= 1.4.0),
     tibble (>= 3.0.0),
     tidyr (>= 1.2.0),
-    tidyselect (>= 1.2.0)
+    tidyselect (>= 1.2.0),
+    withr (>= 2.5.0)
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.3
@@ -44,7 +45,6 @@ Suggests:
     splitTools,
     rmarkdown,
     testthat (>= 3.0.0),
-    withr,
     torpmodels,
     xgboost (>= 2.0.0),
     zoo (>= 1.8.0)

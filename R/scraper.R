@@ -162,7 +162,7 @@ get_token <- function() {
       difftime(now, .torp_token_cache$fetched, units = "mins") < 5) {
     return(.torp_token_cache$token)
   }
-  response <- httr::POST("https://api.afl.com.au/cfs/afl/WMCTok")
+  response <- httr::POST(paste0(AFL_CFS_API_BASE_URL, "WMCTok"))
   httr::stop_for_status(response, task = "authenticate with AFL API")
   token <- httr::content(response)$token
   if (is.null(token) || !nzchar(token)) {
@@ -208,7 +208,7 @@ access_api <- function(url) {
 #' @importFrom dplyr filter mutate
 get_round_games <- function(season, round, concluded_only = TRUE) {
   round <- sprintf("%02d", round)
-  url <- paste0("https://api.afl.com.au/cfs/afl/fixturesAndResults/season/CD_S", season, "014/round/CD_R", season, "014", round)
+  url <- paste0(AFL_CFS_API_BASE_URL, "fixturesAndResults/season/CD_S", season, "014/round/CD_R", season, "014", round)
   api_result <- access_api(url)
 
   games <- api_result[["fixtures"]] %||% api_result[["items"]]
@@ -246,7 +246,7 @@ get_round_games <- function(season, round, concluded_only = TRUE) {
 get_season_games <- function(season, rounds = 28) {
   token <- get_token()
   urls <- vapply(seq_len(rounds), function(r) {
-    paste0("https://api.afl.com.au/cfs/afl/fixturesAndResults/season/CD_S",
+    paste0(AFL_CFS_API_BASE_URL, "fixturesAndResults/season/CD_S",
            season, "014/round/CD_R", season, "014", sprintf("%02d", r))
   }, character(1))
 
@@ -312,7 +312,7 @@ get_season_games <- function(season, rounds = 28) {
 #' @importFrom dplyr mutate select
 get_players <- function(season = TRUE, use_api = FALSE) {
   if (use_api) {
-    url <- "https://api.afl.com.au/cfs/afl/players"
+    url <- paste0(AFL_CFS_API_BASE_URL, "players")
     api_result <- access_api(url)
     players <- api_result[["players"]]
     if (is.null(players)) {
@@ -361,7 +361,7 @@ get_many_game_chains <- function(games_vector) {
 #' @keywords internal
 #'
 get_game_chains <- function(match_id) {
-  url <- paste0("https://sapi.afl.com.au/afl/matchPlays/", match_id)
+  url <- paste0(AFL_SAPI_BASE_URL, "matchPlays/", match_id)
   api_response <- access_api(url)
 
   chain_list <- api_response[["matchChains"]] %||% api_response[["chains"]]

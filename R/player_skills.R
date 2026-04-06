@@ -54,7 +54,7 @@ estimate_player_stat_ratings <- function(stat_rating_data, ref_date = NULL,
   if (is.null(params)) params <- default_stat_rating_params()
   if (is.null(stat_defs)) stat_defs <- stat_rating_definitions()
 
-  dt <- data.table::as.data.table(stat_rating_data)
+  dt <- data.table::copy(data.table::as.data.table(stat_rating_data))
 
   # Ensure date column
   if (!inherits(dt$match_date_rating, "Date")) {
@@ -67,7 +67,7 @@ estimate_player_stat_ratings <- function(stat_rating_data, ref_date = NULL,
   }
   ref_date <- as.Date(ref_date)
 
-  # Filter to matches before ref_date (creates a copy — no prior copy needed)
+  # Filter to matches before ref_date
   dt <- dt[match_date_rating < ref_date]
 
   if (nrow(dt) == 0) {
@@ -414,7 +414,7 @@ estimate_player_stat_ratings <- function(stat_rating_data, ref_date = NULL,
 
   # === One-time setup ===
   t_batch_start <- proc.time()
-  dt <- data.table::as.data.table(stat_rating_data)
+  dt <- data.table::copy(data.table::as.data.table(stat_rating_data))
   if (!inherits(dt$match_date_rating, "Date"))
     dt[, match_date_rating := as.Date(match_date_rating)]
   if (!"avail_only" %in% names(dt)) dt[, avail_only := FALSE]

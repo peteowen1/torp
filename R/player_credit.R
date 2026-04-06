@@ -222,6 +222,18 @@ create_player_game_data <- function(pbp_data = NULL,
   }
 
   # --- Step 5: Replace NAs and compute totals ---
+  # Zero-fill all box-score stats before weighted sums to prevent NA propagation
+  box_score_cols <- c(
+    "contested_possessions", "contested_marks", "ground_ball_gets",
+    "marks_inside50", "marks", "uncontested_possessions", "frees_for",
+    "inside50s", "clangers", "score_involvements", "kicks", "handballs",
+    "metres_gained", "turnovers", "goal_assists", "goals", "behinds",
+    "shots_at_goal"
+  )
+  for (col in intersect(box_score_cols, names(plyr_gm_df))) {
+    plyr_gm_df[[col]] <- tidyr::replace_na(plyr_gm_df[[col]], 0)
+  }
+
   plyr_gm_df <- plyr_gm_df |>
     dplyr::mutate(
       contest_epv = tidyr::replace_na(contest_epv, 0),

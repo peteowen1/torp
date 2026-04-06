@@ -5,6 +5,32 @@
 # PSR = "predicted margin contribution points" above league average.
 
 
+#' Resolve path to PSR coefficient CSV
+#'
+#' Checks inst/extdata first, then falls back to data-raw/cache-stat-ratings/.
+#' @param coef_file Filename (default "psr_coefficients.csv")
+#' @return Absolute path to the CSV, or "" if not found
+#' @keywords internal
+.find_psr_coef_path <- function(coef_file = "psr_coefficients.csv") {
+  path <- system.file("extdata", coef_file, package = "torp")
+  if (path == "") {
+    path <- file.path(
+      find.package("torp", quiet = TRUE)[1] %||% ".",
+      "data-raw", "cache-stat-ratings", coef_file
+    )
+  }
+  if (!file.exists(path)) return("")
+  path
+}
+
+
+# Stats excluded from PSV calculation: efficiency ratios (not rate stats),
+# bounces (negative coefficient, not causal), and availability metrics
+.PSV_EXCLUDE <- c("disposal_efficiency", "goal_accuracy", "contested_poss_rate",
+                   "hitout_win_pct", "kick_efficiency", "bounces",
+                   "cond_tog", "squad_selection")
+
+
 #' Calculate Player Skill Ratings (PSR)
 #'
 #' Computes PSR for each player-round by applying glmnet coefficients to
@@ -77,17 +103,22 @@ calculate_psr <- function(skills, coef_df, center = TRUE) {
 
   dt[, psr_raw := as.numeric(mat %*% betas)]
 
-  # Center
-  if (center) {
-    league_mean <- mean(dt$psr_raw, na.rm = TRUE)
-    dt[, psr := psr_raw - league_mean]
+  # Center by pos_group (wt_80s-weighted mean subtraction)
+  if (center && "pos_group" %in% names(dt) && "wt_80s" %in% names(dt)) {
+    dt[!is.na(pos_group), psr := psr_raw - weighted.mean(psr_raw, wt_80s, na.rm = TRUE), by = pos_group]
+    dt[is.na(pos_group), psr := psr_raw - weighted.mean(psr_raw, wt_80s, na.rm = TRUE)]
+  } else if (center && "pos_group" %in% names(dt)) {
+    dt[!is.na(pos_group), psr := psr_raw - mean(psr_raw, na.rm = TRUE), by = pos_group]
+    dt[is.na(pos_group), psr := psr_raw - mean(psr_raw, na.rm = TRUE)]
+  } else if (center) {
+    dt[, psr := psr_raw - mean(psr_raw, na.rm = TRUE)]
   } else {
     dt[, psr := psr_raw]
   }
 
   id_cols <- intersect(
     c("player_id", "player_name", "season", "round", "pos_group",
-      "team", "n_games", "wt_games"),
+      "team", "n_games", "wt_games", "wt_80s"),
     names(dt)
   )
 
@@ -194,9 +225,7 @@ calculate_psv <- function(player_stats, coef_df, tog_adjust = TRUE, center = TRU
   #  - Efficiency %s (redundant — numerator + denominator already in as rate stats)
   #  - bounces (negative coefficient, not causal)
   #  - cond_tog, squad_selection (availability metrics, not performance)
-  psv_exclude <- c("disposal_efficiency", "goal_accuracy", "contested_poss_rate",
-                    "hitout_win_pct", "kick_efficiency", "bounces",
-                    "cond_tog", "squad_selection")
+  psv_exclude <- .PSV_EXCLUDE
   keep <- !stat_cols %in% psv_exclude
   coef_df <- coef_df[keep, , drop = FALSE]
   stat_cols <- stat_cols[keep]
@@ -240,14 +269,17 @@ calculate_psv <- function(player_stats, coef_df, tog_adjust = TRUE, center = TRU
 
   dt[, psv_raw := as.numeric(mat %*% betas)]
 
-  if (center) {
-    # Center within each round (so PSV = contribution above average that round)
-    group_cols <- intersect(c("season", "round"), names(dt))
-    if (length(group_cols) > 0) {
-      dt[, psv := psv_raw - mean(psv_raw, na.rm = TRUE), by = group_cols]
-    } else {
-      dt[, psv := psv_raw - mean(psv_raw, na.rm = TRUE)]
-    }
+  # Center by pos_group (TOG-weighted mean subtraction)
+  if (center && "pos_group" %in% names(dt) && "tog" %in% names(dt)) {
+    dt[, .tog_wt := pmax(as.numeric(tog), 0.1)]
+    dt[!is.na(pos_group), psv := psv_raw - weighted.mean(psv_raw, .tog_wt, na.rm = TRUE), by = pos_group]
+    dt[is.na(pos_group), psv := psv_raw - weighted.mean(psv_raw, .tog_wt, na.rm = TRUE)]
+    dt[, .tog_wt := NULL]
+  } else if (center && "pos_group" %in% names(dt)) {
+    dt[!is.na(pos_group), psv := psv_raw - mean(psv_raw, na.rm = TRUE), by = pos_group]
+    dt[is.na(pos_group), psv := psv_raw - mean(psv_raw, na.rm = TRUE)]
+  } else if (center) {
+    dt[, psv := psv_raw - mean(psv_raw, na.rm = TRUE)]
   } else {
     dt[, psv := psv_raw]
   }
@@ -313,16 +345,10 @@ calculate_psv_components <- function(player_stats, coef_df, osr_coef_df,
 .compute_psv <- function(player_stats, psr_coef_path = NULL, tog_adjust = TRUE,
                           center = TRUE) {
   if (is.null(psr_coef_path)) {
-    psr_coef_path <- system.file("extdata", "psr_coefficients.csv", package = "torp")
-    if (psr_coef_path == "") {
-      psr_coef_path <- file.path(
-        find.package("torp", quiet = TRUE)[1] %||% ".",
-        "data-raw", "cache-stat-ratings", "psr_coefficients.csv"
-      )
-    }
+    psr_coef_path <- .find_psr_coef_path()
   }
 
-  if (!file.exists(psr_coef_path)) {
+  if (!nzchar(psr_coef_path) || !file.exists(psr_coef_path)) {
     cli::cli_warn("PSR coefficient file not found: {psr_coef_path}")
     return(NULL)
   }
@@ -483,14 +509,8 @@ explain_player_game <- function(player_id, match_id, player_stats = NULL,
   cli::cli_h3("PSV{suffix} -- stat-by-stat breakdown")
 
   # Load coefficients
-  psr_path <- system.file("extdata", "psr_coefficients.csv", package = "torp")
-  if (psr_path == "") {
-    psr_path <- file.path(
-      find.package("torp", quiet = TRUE)[1] %||% ".",
-      "data-raw", "cache-stat-ratings", "psr_coefficients.csv"
-    )
-  }
-  if (!file.exists(psr_path)) cli::cli_abort("PSR coefficient file not found")
+  psr_path <- .find_psr_coef_path()
+  if (!nzchar(psr_path)) cli::cli_abort("PSR coefficient file not found")
 
   coef_df <- utils::read.csv(psr_path)
   coef_dir <- dirname(psr_path)
@@ -503,9 +523,7 @@ explain_player_game <- function(player_id, match_id, player_stats = NULL,
   }
 
   # PSV exclude list
-  psv_exclude <- c("disposal_efficiency", "goal_accuracy", "contested_poss_rate",
-                    "hitout_win_pct", "kick_efficiency", "bounces",
-                    "cond_tog", "squad_selection")
+  psv_exclude <- .PSV_EXCLUDE
 
   # Build breakdown for a single coefficient set
   .breakdown <- function(cdf, label) {
@@ -966,16 +984,10 @@ explain_player_rating <- function(player,
   # --- 3. PSR decomposition ---
   cli::cli_h2("PSR Breakdown (stat rating contributions to predicted margin)")
 
-  psr_path <- system.file("extdata", "psr_coefficients.csv", package = "torp")
-  if (psr_path == "") {
-    psr_path <- file.path(
-      find.package("torp", quiet = TRUE)[1] %||% ".",
-      "data-raw", "cache-stat-ratings", "psr_coefficients.csv"
-    )
-  }
+  psr_path <- .find_psr_coef_path()
 
   psr_breakdown <- NULL
-  if (file.exists(psr_path)) {
+  if (nzchar(psr_path)) {
     coef_df <- utils::read.csv(psr_path)
     coef_df <- coef_df[coef_df$beta != 0, , drop = FALSE]
 
@@ -1126,16 +1138,10 @@ explain_player_rating <- function(player,
   # Resolve margin coefficient path
 
   if (is.null(psr_coef_path)) {
-    psr_coef_path <- system.file("extdata", "psr_coefficients.csv", package = "torp")
-    if (psr_coef_path == "") {
-      psr_coef_path <- file.path(
-        find.package("torp", quiet = TRUE)[1] %||% ".",
-        "data-raw", "cache-stat-ratings", "psr_coefficients.csv"
-      )
-    }
+    psr_coef_path <- .find_psr_coef_path()
   }
 
-  if (!file.exists(psr_coef_path)) {
+  if (!nzchar(psr_coef_path) || !file.exists(psr_coef_path)) {
     cli::cli_warn("PSR coefficient file not found: {psr_coef_path}")
     return(NULL)
   }

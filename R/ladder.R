@@ -7,6 +7,16 @@
 NULL
 
 
+# Resolve first matching column name from a vector of candidates
+# Used by prepare_sim_data() and calculate_final_ladder()
+.resolve_col <- function(dt, candidates) {
+  for (cand in candidates) {
+    if (cand %in% names(dt)) return(cand)
+  }
+  NULL
+}
+
+
 # --------------------------------------------------------------------------
 # Data preparation
 # --------------------------------------------------------------------------
@@ -54,18 +64,11 @@ prepare_sim_data <- function(season, team_ratings = NULL, fixtures = NULL,
   # Build sim_games from canonical fixture columns
   # Fixtures are normalised at load time via .normalise_fixture_columns(),
   # but keep minimal fallbacks for directly-passed user data
-  resolve_col <- function(dt, candidates) {
-    for (cand in candidates) {
-      if (cand %in% names(dt)) return(cand)
-    }
-    NULL
-  }
-
-  rnd_col  <- resolve_col(fix_dt, c("round_number", "roundnum"))
-  ht_col   <- resolve_col(fix_dt, c("home_team_name", "home_team"))
-  at_col   <- resolve_col(fix_dt, c("away_team_name", "away_team"))
-  hs_col   <- resolve_col(fix_dt, c("home_score", "home_points"))
-  as_col   <- resolve_col(fix_dt, c("away_score", "away_points"))
+  rnd_col  <- .resolve_col(fix_dt, c("round_number", "roundnum"))
+  ht_col   <- .resolve_col(fix_dt, c("home_team_name", "home_team"))
+  at_col   <- .resolve_col(fix_dt, c("away_team_name", "away_team"))
+  hs_col   <- .resolve_col(fix_dt, c("home_score", "home_points"))
+  as_col   <- .resolve_col(fix_dt, c("away_score", "away_points"))
 
   if (is.null(rnd_col) || is.null(ht_col) || is.null(at_col)) {
     cli::cli_abort("Could not find required fixture columns (round_number, home_team_name, away_team_name).")
@@ -81,7 +84,7 @@ prepare_sim_data <- function(season, team_ratings = NULL, fixtures = NULL,
 
   # Keep only regular season rounds (exclude finals)
   max_round <- AFL_REGULAR_SEASON_ROUNDS[as.character(season)]
-  if (is.na(max_round)) max_round <- 24L
+  if (is.na(max_round)) max_round <- AFL_MAX_REGULAR_ROUNDS
   sim_games <- sim_games[roundnum <= max_round]
 
   # Determine played vs unplayed
@@ -460,19 +463,11 @@ calculate_final_ladder <- function(season = get_afl_season(),
     fix_dt <- fix_dt[get("season") == season]
   }
 
-  # Resolve columns (same helper logic as prepare_sim_data)
-  resolve_col <- function(dt, candidates) {
-    for (cand in candidates) {
-      if (cand %in% names(dt)) return(cand)
-    }
-    NULL
-  }
-
-  rnd_col <- resolve_col(fix_dt, c("round_number", "roundnum"))
-  ht_col  <- resolve_col(fix_dt, c("home_team_name", "home_team"))
-  at_col  <- resolve_col(fix_dt, c("away_team_name", "away_team"))
-  hs_col  <- resolve_col(fix_dt, c("home_score", "home_points"))
-  as_col  <- resolve_col(fix_dt, c("away_score", "away_points"))
+  rnd_col <- .resolve_col(fix_dt, c("round_number", "roundnum"))
+  ht_col  <- .resolve_col(fix_dt, c("home_team_name", "home_team"))
+  at_col  <- .resolve_col(fix_dt, c("away_team_name", "away_team"))
+  hs_col  <- .resolve_col(fix_dt, c("home_score", "home_points"))
+  as_col  <- .resolve_col(fix_dt, c("away_score", "away_points"))
 
   if (is.null(rnd_col) || is.null(ht_col) || is.null(at_col)) {
     cli::cli_abort("Could not find required fixture columns.")
@@ -491,7 +486,7 @@ calculate_final_ladder <- function(season = get_afl_season(),
 
   # Keep only regular season
   max_round <- AFL_REGULAR_SEASON_ROUNDS[as.character(season)]
-  if (is.na(max_round)) max_round <- 24L
+  if (is.na(max_round)) max_round <- AFL_MAX_REGULAR_ROUNDS
   games <- games[roundnum <= max_round]
 
   games[, played := !is.na(home_score) & !is.na(away_score)]
@@ -948,7 +943,7 @@ simulate_afl_season <- function(season,
 
   .pipeline_start <- proc.time()
 
-  if (!is.null(seed)) set.seed(seed)
+  if (!is.null(seed)) withr::local_seed(seed)
 
   # Default: fetch current injury list from AFL. Pass FALSE to skip.
   if (isFALSE(injuries)) {

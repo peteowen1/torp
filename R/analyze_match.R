@@ -182,6 +182,27 @@ get_player_game_ratings <- function(match = NULL,
 }
 
 
+#' Fetch Player Game Stats from AFL API
+#'
+#' Fetches live player statistics for one or more matches directly from the
+#' AFL API. Returns normalised snake_case columns.
+#'
+#' @param match_ids Character vector of match IDs (e.g. `"CD_M20260140405"`).
+#' @return A data.table of player stats with normalised column names.
+#'
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' stats <- get_player_game_stats("CD_M20260140405")
+#' stats <- get_player_game_stats(c("CD_M20260140401", "CD_M20260140402"))
+#' }
+get_player_game_stats <- function(match_ids) {
+  result <- .fetch_match_player_stats(match_ids)
+  result[]
+}
+
+
 #' Fetch player stats for specific match IDs
 #'
 #' @param match_ids Character vector of match IDs.
@@ -191,7 +212,7 @@ get_player_game_ratings <- function(match = NULL,
   token <- get_token()
   result <- .fetch_cfs_batch(
     ids = match_ids,
-    url_template = "https://api.afl.com.au/cfs/afl/playerStats/match/%s",
+    url_template = paste0(AFL_CFS_API_BASE_URL, "playerStats/match/%s"),
     token = token,
     parse_fn = .parse_match_stats,
     label = "player stats"
@@ -222,7 +243,7 @@ get_player_game_ratings <- function(match = NULL,
   token <- get_token()
   result <- .fetch_cfs_batch(
     ids = match_ids,
-    url_template = "https://api.afl.com.au/cfs/afl/matchRoster/full/%s",
+    url_template = paste0(AFL_CFS_API_BASE_URL, "matchRoster/full/%s"),
     token = token,
     parse_fn = .parse_match_roster,
     label = "lineups"

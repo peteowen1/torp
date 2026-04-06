@@ -487,8 +487,8 @@ build_injury_schedule <- function(injuries_df, player_ratings_dt) {
   if ("pred_tog" %in% names(matched) && !all(is.na(matched$pred_tog))) {
     matched[, tog_wt := data.table::fifelse(
       team_tog_sum > 0 & !is.na(pred_tog),
-      pred_tog * 18 / team_tog_sum,
-      18 / n_players
+      pred_tog * AFL_TEAM_SIZE / team_tog_sum,
+      AFL_TEAM_SIZE / n_players
     )]
     matched[, player_boost := torp * tog_wt]
   } else {
