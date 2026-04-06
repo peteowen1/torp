@@ -448,6 +448,65 @@ add_contest_vars_dt <- function(dt) {
     dt[, (lag_cols) := NULL]
   }
 
+  # --- Second pass: Detect same-team Mark Fumbled events and propagate to Kick rows ---
+  # Mark Fumbled is the primary drop event. Mark Dropped always follows Mark
+  # Fumbled from the same player (duplicate), so we only detect Mark Fumbled.
+  # Only same-team fumbles are tagged: kicker delivered well, teammate dropped.
+  # Opponent fumbles (~40%) are left to normal disp/recv credit — the kicker
+  # kicked to the wrong team and deserves the blame via disp_epv.
+  fumble_idx <- dt[
+    description == "Mark Fumbled" &
+    !is.na(player_id),
+    which = TRUE
+  ]
+
+  if (length(fumble_idx) > 0) {
+    # Look backward for the preceding Kick (within 5 rows)
+    kick_descs_drop <- c("Kick", "Ground Kick")
+    dt[, `:=`(
+      .lag1_desc = data.table::shift(description, 1L, type = "lag"),
+      .lag2_desc = data.table::shift(description, 2L, type = "lag"),
+      .lag3_desc = data.table::shift(description, 3L, type = "lag"),
+      .lag4_desc = data.table::shift(description, 4L, type = "lag"),
+      .lag5_desc = data.table::shift(description, 5L, type = "lag")
+    ), by = match_id]
+
+    offsets_drop <- data.table::fcase(
+      dt$.lag1_desc[fumble_idx] %chin% kick_descs_drop, 1L,
+      dt$.lag2_desc[fumble_idx] %chin% kick_descs_drop, 2L,
+      dt$.lag3_desc[fumble_idx] %chin% kick_descs_drop, 3L,
+      dt$.lag4_desc[fumble_idx] %chin% kick_descs_drop, 4L,
+      dt$.lag5_desc[fumble_idx] %chin% kick_descs_drop, 5L,
+      default = NA_integer_
+    )
+
+    valid_drop <- !is.na(offsets_drop)
+    if (any(valid_drop)) {
+      valid_fi <- fumble_idx[valid_drop]
+      kick_rows_drop <- valid_fi - offsets_drop[valid_drop]
+
+      # Only same-team: fumbler team must match kicker team
+      same_team <- dt$team_id[valid_fi] == dt$team_id[kick_rows_drop]
+      valid_fi <- valid_fi[same_team]
+      kick_rows_drop <- kick_rows_drop[same_team]
+
+      # Only set on Kick rows that don't already have a contest outcome
+      # (avoid overwriting spoil/intercept_mark from first pass)
+      already_set <- !is.na(dt$contest_outcome[kick_rows_drop])
+      valid_fi <- valid_fi[!already_set]
+      kick_rows_drop <- kick_rows_drop[!already_set]
+
+      if (length(kick_rows_drop) > 0) {
+        data.table::set(dt, kick_rows_drop, "contest_target_id", dt$player_id[valid_fi])
+        data.table::set(dt, kick_rows_drop, "contest_target_team_id", dt$team_id[valid_fi])
+        data.table::set(dt, kick_rows_drop, "contest_outcome", rep("mark_drop", length(kick_rows_drop)))
+      }
+    }
+
+    lag_cols_drop <- c(".lag1_desc", ".lag2_desc", ".lag3_desc", ".lag4_desc", ".lag5_desc")
+    dt[, (lag_cols_drop) := NULL]
+  }
+
   # Clean up temp columns
   temp_cols <- c(".next_desc", ".next_pid", ".next_tid", ".next_x", ".next_y",
                  ".prev_desc", ".prev_do")

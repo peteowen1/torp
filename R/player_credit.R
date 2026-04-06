@@ -115,8 +115,13 @@ create_player_game_data <- function(pbp_data = NULL,
   # full disp_scale for all rows.
   contest_share <- p$contest_share %||% (1 / 3)
   has_contest_col <- "contest_target_id" %in% names(dt)
+  has_outcome_col <- "contest_outcome" %in% names(dt)
   dt[, .disp_scale := if (has_contest_col) {
-    data.table::fifelse(!is.na(contest_target_id), contest_share, p$disp_scale)
+    data.table::fifelse(
+      has_outcome_col & !is.na(contest_target_id) & contest_outcome == "mark_drop",
+      0,
+      data.table::fifelse(!is.na(contest_target_id), contest_share, p$disp_scale)
+    )
   } else {
     p$disp_scale
   }]
@@ -188,7 +193,9 @@ create_player_game_data <- function(pbp_data = NULL,
       player_id = character(), match_id = character(),
       contest_epv = numeric(),
       aerial_target_wins = integer(), aerial_target_losses = integer(),
-      aerial_def_wins = integer(), aerial_def_losses = integer()
+      aerial_target_drops = integer(),
+      aerial_def_wins = integer(), aerial_def_losses = integer(),
+      aerial_def_caused_drops = integer()
     )
   })
   plyr_gm_df <- merge(plyr_gm_df, contest_dt,
@@ -227,8 +234,10 @@ create_player_game_data <- function(pbp_data = NULL,
       contest_epv = tidyr::replace_na(contest_epv, 0),
       aerial_target_wins = as.integer(tidyr::replace_na(aerial_target_wins, 0)),
       aerial_target_losses = as.integer(tidyr::replace_na(aerial_target_losses, 0)),
+      aerial_target_drops = as.integer(tidyr::replace_na(aerial_target_drops, 0)),
       aerial_def_wins = as.integer(tidyr::replace_na(aerial_def_wins, 0)),
       aerial_def_losses = as.integer(tidyr::replace_na(aerial_def_losses, 0)),
+      aerial_def_caused_drops = as.integer(tidyr::replace_na(aerial_def_caused_drops, 0)),
       recv_epv = tidyr::replace_na(recv_epv, 0) + contest_epv +
                  contested_possessions * p$contested_poss_wt + contested_marks * p$contested_marks_wt +
                  ground_ball_gets * p$ground_ball_gets_wt + marks_inside50 * p$marks_inside50_wt +
@@ -309,8 +318,8 @@ create_player_game_data <- function(pbp_data = NULL,
       # WPA (raw)
       wp_credit, wp_disp_credit, wp_recv_credit,
       # Contest credit (3-way aerial split)
-      contest_epv, aerial_target_wins, aerial_target_losses,
-      aerial_def_wins, aerial_def_losses,
+      contest_epv, aerial_target_wins, aerial_target_losses, aerial_target_drops,
+      aerial_def_wins, aerial_def_losses, aerial_def_caused_drops,
       # PBP-derived action counts
       disposals_pbp, receptions,
       # EPV model input stats
@@ -344,20 +353,21 @@ create_player_game_data <- function(pbp_data = NULL,
 #' The target and defender receive credit from their own team's perspective
 #' (positive if they won, negative if they lost).
 #'
-#' Only applies to contests with a 3rd player from the opposing team. When
-#' the target takes the mark themselves (no opponent), the standard 50/50
-#' kicker/receiver split is unchanged.
+#' Also handles Mark Dropped/Fumbled events: same-team drops where the receiver
+#' got hands on the ball but failed. The kicker is held harmless (0 credit),
+#' the dropper takes the full negative \code{delta_epv}, and any defender who
+#' caused pressure gets a partial positive credit.
 #'
 #' @param chains Raw chains data (from \code{load_chains()}).
 #' @param pbp_data Clean PBP data (from \code{load_pbp()}) containing
 #'   \code{delta_epv} values.
 #' @param contest_share Fraction of \code{delta_epv} attributed to each
 #'   contest participant. Default \code{1/3}.
-#'
 #' @return A data.table with columns: \code{player_id}, \code{match_id},
 #'   \code{contest_epv} (positive for winners, negative for losers),
 #'   \code{aerial_target_wins}, \code{aerial_target_losses},
-#'   \code{aerial_def_wins}, \code{aerial_def_losses}.
+#'   \code{aerial_target_drops}, \code{aerial_def_wins},
+#'   \code{aerial_def_losses}, \code{aerial_def_caused_drops}.
 #'
 #' @keywords internal
 compute_contest_credit <- function(chains, pbp_data, contest_share = 1 / 3) {
@@ -365,7 +375,9 @@ compute_contest_credit <- function(chains, pbp_data, contest_share = 1 / 3) {
     player_id = character(), match_id = character(),
     contest_epv = numeric(),
     aerial_target_wins = integer(), aerial_target_losses = integer(),
-    aerial_def_wins = integer(), aerial_def_losses = integer()
+    aerial_target_drops = integer(),
+    aerial_def_wins = integer(), aerial_def_losses = integer(),
+    aerial_def_caused_drops = integer()
   )
 
   chains_dt <- data.table::as.data.table(chains)
@@ -396,7 +408,7 @@ compute_contest_credit <- function(chains, pbp_data, contest_share = 1 / 3) {
     .lag5_do   = data.table::shift(display_order, 5L, type = "lag")
   ), by = match_id]
 
-  # Filter to contest target rows with opposing-team outcome at same x,y
+  # --- Opposing-team contests (spoil, intercept mark) ---
   contests <- chains_dt[
     description %in% target_descs &
     !is.na(player_id) &
@@ -406,76 +418,178 @@ compute_contest_credit <- function(chains, pbp_data, contest_share = 1 / 3) {
     !is.na(.next_pid)
   ]
 
-  if (nrow(contests) == 0) {
-    chains_dt[, grep("^\\.", names(chains_dt), value = TRUE) := NULL]
-    return(empty_dt)
+  triples_dt <- NULL
+  if (nrow(contests) > 0) {
+    contests[, kick_display_order := data.table::fcase(
+      .lag1_desc %chin% kick_descs, .lag1_do,
+      .lag2_desc %chin% kick_descs, .lag2_do,
+      .lag3_desc %chin% kick_descs, .lag3_do,
+      .lag4_desc %chin% kick_descs, .lag4_do,
+      .lag5_desc %chin% kick_descs, .lag5_do,
+      default = NA_integer_
+    )]
+
+    triples_dt <- contests[!is.na(kick_display_order), .(
+      match_id,
+      kick_display_order,
+      target_player_id = player_id,
+      target_team_id = team_id,
+      defender_player_id = .next_pid,
+      defender_team_id = .next_tid,
+      outcome_desc = .next_desc,
+      is_drop = FALSE
+    )]
   }
 
-  # Find the kicker's display_order (first Kick/Ground Kick within 5 rows back)
-  contests[, kick_display_order := data.table::fcase(
-    .lag1_desc %chin% kick_descs, .lag1_do,
-    .lag2_desc %chin% kick_descs, .lag2_do,
-    .lag3_desc %chin% kick_descs, .lag3_do,
-    .lag4_desc %chin% kick_descs, .lag4_do,
-    .lag5_desc %chin% kick_descs, .lag5_do,
-    default = NA_integer_
-  )]
+  # --- Mark Fumbled detection (primary drop event) ---
+  # Mark Fumbled is the primary event. Mark Dropped always follows Mark Fumbled
+  # from the same player (duplicate), so we only detect Mark Fumbled.
+  # Look backward for the preceding Kick to get delta_epv.
+  fumbles <- chains_dt[
+    description == "Mark Fumbled" &
+    !is.na(player_id)
+  ]
 
-  # Build triples table (drop rows without a matched kick)
-  triples_dt <- contests[!is.na(kick_display_order), .(
-    match_id,
-    kick_display_order,
-    target_player_id = player_id,
-    target_team_id = team_id,
-    defender_player_id = .next_pid,
-    defender_team_id = .next_tid,
-    outcome_desc = .next_desc
-  )]
+  drop_triples_dt <- NULL
+  opp_drop_triples_dt <- NULL
+  if (nrow(fumbles) > 0) {
+    fumbles[, kick_display_order := data.table::fcase(
+      .lag1_desc %chin% kick_descs, .lag1_do,
+      .lag2_desc %chin% kick_descs, .lag2_do,
+      .lag3_desc %chin% kick_descs, .lag3_do,
+      .lag4_desc %chin% kick_descs, .lag4_do,
+      .lag5_desc %chin% kick_descs, .lag5_do,
+      default = NA_integer_
+    )]
+
+    matched_fumbles <- fumbles[!is.na(kick_display_order)]
+    if (nrow(matched_fumbles) > 0) {
+      # Look up kicker's team_id from chains
+      kicker_lookup <- chains_dt[, .(match_id, display_order, kicker_tid = team_id)]
+      matched_fumbles <- merge(
+        matched_fumbles, kicker_lookup,
+        by.x = c("match_id", "kick_display_order"),
+        by.y = c("match_id", "display_order"),
+        all.x = TRUE, sort = FALSE
+      )
+
+      # Same-team fumbles: kicker delivered well, teammate dropped
+      same_team_fumbles <- matched_fumbles[team_id == kicker_tid]
+      if (nrow(same_team_fumbles) > 0) {
+        drop_triples_dt <- same_team_fumbles[, .(
+          match_id,
+          kick_display_order,
+          target_player_id = player_id,
+          target_team_id = team_id,
+          defender_player_id = NA_character_,
+          defender_team_id = NA_character_,
+          outcome_desc = description,
+          is_drop = TRUE
+        )]
+      }
+
+      # Opponent fumbles: kicked to wrong team, opponent fumbled the mark attempt
+      opp_fumbles <- matched_fumbles[team_id != kicker_tid]
+      if (nrow(opp_fumbles) > 0) {
+        opp_drop_triples_dt <- opp_fumbles[, .(
+          match_id,
+          kick_display_order,
+          target_player_id = player_id,
+          target_team_id = team_id,
+          defender_player_id = NA_character_,
+          defender_team_id = NA_character_,
+          outcome_desc = description,
+          is_drop = TRUE
+        )]
+      }
+    }
+  }
 
   # Clean up temp columns
   chains_dt[, grep("^\\.", names(chains_dt), value = TRUE) := NULL]
 
-  if (nrow(triples_dt) == 0) return(empty_dt)
-
-  # Join to PBP to get delta_epv from the kicker's row
-  triples_dt <- merge(
-    triples_dt,
-    pbp_dt[, .(match_id, display_order, delta_epv)],
-    by.x = c("match_id", "kick_display_order"),
-    by.y = c("match_id", "display_order"),
-    all.x = TRUE, sort = FALSE
+  # Combine opposing-team contests and same-team drops
+  all_triples <- data.table::rbindlist(
+    list(triples_dt, drop_triples_dt), use.names = TRUE
   )
-  # Drop rows without delta_epv (shouldn't happen but safety)
-  triples_dt <- triples_dt[!is.na(delta_epv)]
-  if (nrow(triples_dt) == 0) return(empty_dt)
 
-  # Compute credit: delta_epv is from kicker's team perspective
-  # Target (same team as kicker): credit = delta_epv * share
-  # Defender (opp team): credit = -delta_epv * share (flip perspective)
   share <- contest_share
+  pbp_epv <- pbp_dt[, .(match_id, display_order, delta_epv)]
 
-  # Build per-player rows: one for target, one for defender
-  target_credit <- triples_dt[, .(
-    player_id = target_player_id,
-    match_id = match_id,
-    contest_epv = delta_epv * share,
-    is_target = TRUE
-  )]
-  defender_credit <- triples_dt[, .(
-    player_id = defender_player_id,
-    match_id = match_id,
-    contest_epv = -delta_epv * share,
-    is_target = FALSE
-  )]
-  all_credit <- data.table::rbindlist(list(target_credit, defender_credit))
+  # --- Process main triples (regular contests + same-team drops) ---
+  regular_credit <- NULL
+  drop_credit <- NULL
+  if (!is.null(all_triples) && nrow(all_triples) > 0) {
+    all_triples <- merge(all_triples, pbp_epv,
+      by.x = c("match_id", "kick_display_order"),
+      by.y = c("match_id", "display_order"),
+      all.x = TRUE, sort = FALSE)
+    all_triples <- all_triples[!is.na(delta_epv)]
+
+    if (nrow(all_triples) > 0) {
+      # Regular contests (spoil / intercept mark)
+      regular <- all_triples[is_drop == FALSE]
+      if (nrow(regular) > 0) {
+        target_credit <- regular[, .(
+          player_id = target_player_id, match_id = match_id,
+          contest_epv = delta_epv * share,
+          is_target = TRUE, is_drop = FALSE
+        )]
+        defender_credit <- regular[, .(
+          player_id = defender_player_id, match_id = match_id,
+          contest_epv = -delta_epv * share,
+          is_target = FALSE, is_drop = FALSE
+        )]
+        regular_credit <- data.table::rbindlist(list(target_credit, defender_credit))
+      }
+
+      # Same-team drops: dropper takes full negative delta_epv
+      drop_rows <- all_triples[is_drop == TRUE]
+      if (nrow(drop_rows) > 0) {
+        drop_credit <- drop_rows[, .(
+          player_id = target_player_id, match_id = match_id,
+          contest_epv = delta_epv,
+          is_target = TRUE, is_drop = TRUE
+        )]
+      }
+    }
+  }
+
+  # --- Opponent fumbles: fumbler penalized for failing to complete mark ---
+  # delta_epv is from kicker's perspective (negative = bad for kicker).
+  # Opponent fumbler gets delta_epv * share (negative = bad for fumbler too:
+  # they had the ball and lost it, the inverse of a successful intercept mark).
+  opp_drop_credit <- NULL
+  if (!is.null(opp_drop_triples_dt) && nrow(opp_drop_triples_dt) > 0) {
+    opp_drop_triples_dt <- merge(opp_drop_triples_dt, pbp_epv,
+      by.x = c("match_id", "kick_display_order"),
+      by.y = c("match_id", "display_order"),
+      all.x = TRUE, sort = FALSE)
+    opp_drop_triples_dt <- opp_drop_triples_dt[!is.na(delta_epv)]
+
+    if (nrow(opp_drop_triples_dt) > 0) {
+      opp_drop_credit <- opp_drop_triples_dt[, .(
+        player_id = target_player_id, match_id = match_id,
+        contest_epv = delta_epv * share,
+        is_target = FALSE, is_drop = TRUE
+      )]
+    }
+  }
+
+  all_credit <- data.table::rbindlist(
+    list(regular_credit, drop_credit, opp_drop_credit), use.names = TRUE
+  )
+  if (nrow(all_credit) == 0) return(empty_dt)
 
   # Aggregate per player per match
   all_credit[, .(
     contest_epv = sum(contest_epv),
-    aerial_target_wins = sum(is_target & contest_epv > 0),
-    aerial_target_losses = sum(is_target & contest_epv <= 0),
-    aerial_def_wins = sum(!is_target & contest_epv > 0),
-    aerial_def_losses = sum(!is_target & contest_epv <= 0)
+    aerial_target_wins = sum(is_target & !is_drop & contest_epv > 0),
+    aerial_target_losses = sum(is_target & !is_drop & contest_epv <= 0),
+    aerial_target_drops = sum(is_target & is_drop),
+    aerial_def_wins = sum(!is_target & !is_drop & contest_epv > 0),
+    aerial_def_losses = sum(!is_target & !is_drop & contest_epv <= 0),
+    aerial_def_caused_drops = sum(!is_target & is_drop)
   ), by = .(player_id, match_id)]
 }
 

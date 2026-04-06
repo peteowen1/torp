@@ -5,12 +5,12 @@
 # Uses camelCase column names matching raw chains data from load_chains()
 create_mock_contest_chains <- function() {
   data.table::data.table(
-    matchId = rep("CD_M20240101", 22),
-    season = rep(2024L, 22),
-    round_number = rep(1L, 22),
-    displayOrder = 1:22,
-    period = rep(1L, 22),
-    periodSeconds = as.integer(seq(100, 2200, length.out = 22)),
+    matchId = rep("CD_M20240101", 26),
+    season = rep(2024L, 26),
+    round_number = rep(1L, 26),
+    displayOrder = 1:26,
+    period = rep(1L, 26),
+    periodSeconds = as.integer(seq(100, 2600, length.out = 26)),
     x = c(
       -62L, -21L, -21L, -25L,  # rows 1-4: kick, contest target, spoil, knock on
        30L,  30L,               # rows 5-6: contest target (T1) -> contested mark (T2) = INTERCEPT MARK
@@ -21,7 +21,9 @@ create_mock_contest_chains <- function() {
        60L,  60L,               # rows 15-16: contest target (T1) -> mark on lead (T2) = INTERCEPT MARK
        20L,  20L,               # rows 17-18: hard ball get, hard ball get (same team, NOT contest)
        35L,  35L,               # rows 19-20: kick inside 50 result (T1) -> contested mark (T2) = INTERCEPT MARK
-       45L,  45L                # rows 21-22: contest target (T1) -> contested mark (T1) = MARK (same team!)
+       45L,  45L,               # rows 21-22: contest target (T1) -> contested mark (T1) = MARK (same team!)
+       55L,  55L,               # rows 23-24: contest target (T1) -> mark dropped (T1) = MARK_DROPPED
+       25L,  25L                # rows 25-26: contest target (T1) -> mark fumbled (T1) = MARK_DROPPED
     ),
     y = c(
       -17L, -35L, -35L, -35L,  # rows 1-4
@@ -33,7 +35,9 @@ create_mock_contest_chains <- function() {
       -20L, -20L,               # rows 15-16
         0L,   0L,               # rows 17-18
        15L,  15L,               # rows 19-20
-       30L,  30L                # rows 21-22
+       30L,  30L,               # rows 21-22
+        8L,   8L,               # rows 23-24
+      -12L, -12L                # rows 25-26
     ),
     teamId = c(
       "T001", "T001", "T002", "T002",  # 1-4: kick -> contest target (T1) -> spoil (T2)
@@ -45,7 +49,9 @@ create_mock_contest_chains <- function() {
       "T001", "T002",                    # 15-16: contest target (T1) -> mark on lead (T2) = INTERCEPT MARK
       "T001", "T001",                    # 17-18: same team ground ball, NOT a contest
       "T001", "T002",                    # 19-20: kick inside 50 result (T1) -> contested mark (T2) = INTERCEPT MARK
-      "T001", "T001"                     # 21-22: contest target (T1) -> contested mark (T1) = MARK (same team wins)
+      "T001", "T001",                    # 21-22: contest target (T1) -> contested mark (T1) = MARK (same team wins)
+      "T001", "T001",                    # 23-24: contest target (T1) -> mark dropped (T1) = MARK DROPPED
+      "T001", "T001"                     # 25-26: contest target (T1) -> mark fumbled (T1) = MARK DROPPED
     ),
     description = c(
       "Kick", "Contest Target", "Spoil", "Contested Knock On",       # 1-4 (spoil at same xy)
@@ -57,7 +63,9 @@ create_mock_contest_chains <- function() {
       "Contest Target", "Mark On Lead",                                # 15-16 INTERCEPT MARK
       "Hard Ball Get", "Hard Ball Get",                                # 17-18 (same team)
       "Kick Inside 50 Result", "Contested Mark",                       # 19-20 INTERCEPT MARK
-      "Contest Target", "Contested Mark"                               # 21-22 MARK (same team)
+      "Contest Target", "Contested Mark",                              # 21-22 MARK (same team)
+      "Contest Target", "Mark Dropped",                                # 23-24 MARK DROPPED (same team)
+      "Contest Target", "Mark Fumbled"                                 # 25-26 MARK DROPPED (same team)
     ),
     playerId = c(
       "P001", "P002", "P003", "P004",
@@ -69,13 +77,15 @@ create_mock_contest_chains <- function() {
       "P015", "P016",
       "P017", "P018",
       "P019", "P020",
-      "P021", "P022"
+      "P021", "P022",
+      "P023", "P024",
+      "P025", "P026"
     ),
-    disposal = rep(NA_character_, 22),
-    shotAtGoal = rep(NA, 22),
-    behindInfo = rep(NA_character_, 22),
-    venueWidth = rep(136L, 22),
-    venueLength = rep(155L, 22)
+    disposal = rep(NA_character_, 26),
+    shotAtGoal = rep(NA, 26),
+    behindInfo = rep(NA_character_, 26),
+    venueWidth = rep(136L, 26),
+    venueLength = rep(155L, 26)
   )
 }
 
@@ -142,16 +152,35 @@ test_that("extract_contests finds ground ball contests via same x,y", {
   expect_equal(result$player2_id, "P008")
 })
 
+test_that("extract_contests finds mark_dropped outcomes (same team drop)", {
+  chains <- create_mock_contest_chains()
+  result <- extract_contests(chains = chains, type = "aerial")
+
+  drops <- result[outcome == "mark_dropped"]
+  # Row 23->24: Contest Target (T1) -> Mark Dropped (T1) at (55,8)
+  # Row 25->26: Contest Target (T1) -> Mark Fumbled (T1) at (25,-12)
+  expect_equal(nrow(drops), 2)
+  expect_true(all(drops$contest_type == "aerial"))
+  expect_true(all(drops$winner == "player2"))
+
+  first <- drops[1]
+  expect_equal(first$player1_id, "P023")
+  expect_equal(first$player2_id, "P024")
+  expect_equal(first$player1_desc, "Contest Target")
+  expect_equal(first$player2_desc, "Mark Dropped")
+  expect_equal(first$team1_id, first$team2_id)  # same team
+})
+
 test_that("extract_contests type='all' returns all contest types", {
   chains <- create_mock_contest_chains()
   result <- extract_contests(chains = chains, type = "all")
 
-  # 2 spoils + 4 intercept marks + 1 mark + 1 ground ball = 8
-  expect_equal(nrow(result), 8)
+  # 2 spoils + 4 intercept marks + 1 mark + 2 mark_dropped + 1 ground ball = 10
+  expect_equal(nrow(result), 10)
   expect_setequal(unique(result$contest_type), c("aerial", "ground_ball"))
   expect_setequal(
     unique(result$outcome[!is.na(result$outcome)]),
-    c("spoil", "intercept_mark", "mark")
+    c("spoil", "intercept_mark", "mark", "mark_dropped")
   )
 })
 
@@ -211,7 +240,7 @@ test_that("extract_contests works with snake_case columns (PBP-style)", {
   ))
 
   result <- extract_contests(chains = chains, type = "all")
-  expect_equal(nrow(result), 8)
+  expect_equal(nrow(result), 10)
 })
 
 

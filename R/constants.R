@@ -654,6 +654,10 @@ CHAINS_CONTEST_TARGET_DESCS <- c("Contest Target", "Kick Inside 50 Result")
 #' @keywords internal
 CHAINS_MARK_WIN_DESCS <- c("Contested Mark", "Uncontested Mark", "Mark On Lead")
 
+#' Chains descriptions for a dropped or fumbled mark (receiver got hands on ball but failed)
+#' @keywords internal
+CHAINS_MARK_DROP_DESCS <- c("Mark Dropped", "Mark Fumbled")
+
 #' Descriptions for ground ball contests (present in both chains and PBP)
 #' Adjacent ground ball rows from opposing teams at same x,y indicate a contest
 #' @keywords internal

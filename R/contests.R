@@ -143,6 +143,17 @@ extract_contests <- function(chains = NULL, type = "all", seasons = TRUE,
         marks, contest_type = "aerial", outcome = "mark", winner = "player1"
       )
     }
+
+    # Mark dropped/fumbled: same team receiver got hands on it but failed
+    mark_drops <- aerial_rows[
+      .next_desc %in% CHAINS_MARK_DROP_DESCS & team_id == .next_team_id
+    ]
+    if (nrow(mark_drops) > 0) {
+      results[["mark_dropped"]] <- format_contest_rows(
+        mark_drops, contest_type = "aerial", outcome = "mark_dropped",
+        winner = "player2"
+      )
+    }
   }
 
   # --- Ground ball contests ---
