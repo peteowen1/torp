@@ -109,20 +109,28 @@ player_game_ratings <- function(season_val = get_afl_season(),
 
   has_wpa <- "wp_credit" %in% names(df)
 
+  # Use _oadj (opponent-adjusted) columns when available, fall back to raw
+  has_oadj <- all(c("recv_epv_oadj", "disp_epv_oadj",
+                     "spoil_epv_oadj", "hitout_epv_oadj") %in% names(df))
+  recv_col <- if (has_oadj) "recv_epv_oadj" else "recv_epv"
+  disp_col <- if (has_oadj) "disp_epv_oadj" else "disp_epv"
+  spoil_col <- if (has_oadj) "spoil_epv_oadj" else "spoil_epv"
+  hitout_col <- if (has_oadj) "hitout_epv_oadj" else "hitout_epv"
+
   df <- df |>
     dplyr::arrange(-.data$epv_adj) |>
     dplyr::mutate(
       listed_position = dplyr::if_else(.data$listed_position == "MIDFIELDER_FORWARD",
                                        "MEDIUM_FORWARD", .data$listed_position),
       tog_frac = pmax(.data$time_on_ground_percentage / 100, 0.1),
-      recv_epv_c = round(.data$recv_epv -
-        sum(.data$recv_epv) / sum(.data$tog_frac) * .data$tog_frac, 1),
-      disp_epv_c = round(.data$disp_epv -
-        sum(.data$disp_epv) / sum(.data$tog_frac) * .data$tog_frac, 1),
-      spoil_epv_c = round(.data$spoil_epv -
-        sum(.data$spoil_epv) / sum(.data$tog_frac) * .data$tog_frac, 1),
-      hitout_epv_c = round(.data$hitout_epv -
-        sum(.data$hitout_epv) / sum(.data$tog_frac) * .data$tog_frac, 1),
+      recv_epv_c = round(.data[[recv_col]] -
+        sum(.data[[recv_col]]) / sum(.data$tog_frac) * .data$tog_frac, 1),
+      disp_epv_c = round(.data[[disp_col]] -
+        sum(.data[[disp_col]]) / sum(.data$tog_frac) * .data$tog_frac, 1),
+      spoil_epv_c = round(.data[[spoil_col]] -
+        sum(.data[[spoil_col]]) / sum(.data$tog_frac) * .data$tog_frac, 1),
+      hitout_epv_c = round(.data[[hitout_col]] -
+        sum(.data[[hitout_col]]) / sum(.data$tog_frac) * .data$tog_frac, 1),
       epv_c = round(.data$recv_epv_c + .data$disp_epv_c +
         .data$spoil_epv_c + .data$hitout_epv_c, 1),
       .by = c("season", "listed_position")

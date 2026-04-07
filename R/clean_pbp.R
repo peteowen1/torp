@@ -51,6 +51,7 @@ clean_pbp_dt <- function(df) {
   add_team_id_mdl_dt(dt)
   fix_chain_coordinates_dt(dt)
   add_chain_vars_dt(dt)
+  add_contest_vars_dt(dt)
   add_quarter_vars_dt(dt)
   add_game_vars_dt(dt)
   add_score_vars_dt(dt)
@@ -344,6 +345,129 @@ add_chain_vars_dt <- function(dt) {
   )]
   invisible(NULL)
 }
+
+
+#' Add contest variables (Pass 2b)
+#'
+#' Collapses aerial contest information from adjacent rows onto the preceding
+#' Kick row. Contest target rows ("Contest Target", "Kick Inside 50 Result")
+#' and their outcome rows (Spoil, Mark, etc.) will be filtered out downstream
+#' by \code{clean_model_data_epv_dt()}, but their information is preserved on
+#' the Kick row via these columns.
+#'
+#' @param dt A data.table to modify (sorted by match_id, display_order)
+#' @return Invisible NULL (modifies dt by reference)
+#' @keywords internal
+add_contest_vars_dt <- function(dt) {
+  target_descs <- CHAINS_CONTEST_TARGET_DESCS
+
+  # Initialise contest columns
+  dt[, `:=`(
+    contest_target_id = NA_character_,
+    contest_target_team_id = NA_character_,
+    contest_defender_id = NA_character_,
+    contest_defender_team_id = NA_character_,
+    contest_outcome = NA_character_
+  )]
+
+  # Build adjacent-row info within each match
+  dt[, `:=`(
+    .next_desc = data.table::shift(description, 1L, type = "lead"),
+    .next_pid  = data.table::shift(player_id, 1L, type = "lead"),
+    .next_tid  = data.table::shift(team_id, 1L, type = "lead"),
+    .next_x    = data.table::shift(x, 1L, type = "lead"),
+    .next_y    = data.table::shift(y, 1L, type = "lead"),
+    .prev_desc = data.table::shift(description, 1L, type = "lag"),
+    .prev_do   = data.table::shift(display_order, 1L, type = "lag")
+  ), by = match_id]
+
+  # Find contest target rows where the next row is at same location from opposing team.
+  # AFL API uses team-relative coordinates — opponent x,y are negated, so compare
+  # with sign flip: x == -.next_x && y == -.next_y.
+  contest_idx <- dt[
+    description %in% target_descs &
+    !is.na(.next_tid) &
+    x == -.next_x & y == -.next_y &
+    team_id != .next_tid,
+    which = TRUE
+  ]
+
+  if (length(contest_idx) > 0) {
+    # Determine contest outcome from the next row's description
+    dt[contest_idx, contest_outcome := data.table::fcase(
+      .next_desc == "Spoil", "spoil",
+      .next_desc %in% CHAINS_MARK_WIN_DESCS, "intercept_mark",
+      default = "other"
+    )]
+
+    # Store target and defender info on the contest target row itself
+    dt[contest_idx, `:=`(
+      contest_target_id = player_id,
+      contest_target_team_id = team_id,
+      contest_defender_id = .next_pid,
+      contest_defender_team_id = .next_tid
+    )]
+
+    # Propagate contest info BACKWARDS onto the preceding Kick row (vectorized).
+    # Use lag columns (already computed: .prev_desc) and build more for deeper lookback.
+    kick_descs <- c("Kick", "Ground Kick")
+    dt[, `:=`(
+      .lag1_desc = data.table::shift(description, 1L, type = "lag"),
+      .lag2_desc = data.table::shift(description, 2L, type = "lag"),
+      .lag3_desc = data.table::shift(description, 3L, type = "lag"),
+      .lag4_desc = data.table::shift(description, 4L, type = "lag"),
+      .lag5_desc = data.table::shift(description, 5L, type = "lag")
+    ), by = match_id]
+
+    # For each contest target row, find how many rows back the kick is
+    # Use global row index arithmetic: contest row at index ci → kick at ci - offset
+    offsets <- data.table::fcase(
+      dt$.lag1_desc[contest_idx] %chin% kick_descs, 1L,
+      dt$.lag2_desc[contest_idx] %chin% kick_descs, 2L,
+      dt$.lag3_desc[contest_idx] %chin% kick_descs, 3L,
+      dt$.lag4_desc[contest_idx] %chin% kick_descs, 4L,
+      dt$.lag5_desc[contest_idx] %chin% kick_descs, 5L,
+      default = NA_integer_
+    )
+
+    valid <- !is.na(offsets)
+    if (any(valid)) {
+      valid_ci <- contest_idx[valid]
+      kick_rows <- valid_ci - offsets[valid]
+
+      # Guard against out-of-bounds or cross-match indices
+      ok <- kick_rows > 0L
+      if (any(ok)) {
+        ok[ok] <- dt$match_id[kick_rows[ok]] == dt$match_id[valid_ci[ok]]
+      }
+      if (!all(ok)) {
+        kick_rows <- kick_rows[ok]
+        valid_ci <- valid_ci[ok]
+      }
+
+      if (length(kick_rows) > 0L) {
+        # Batch-set contest info on the Kick rows
+        data.table::set(dt, kick_rows, "contest_target_id", dt$contest_target_id[valid_ci])
+        data.table::set(dt, kick_rows, "contest_target_team_id", dt$contest_target_team_id[valid_ci])
+        data.table::set(dt, kick_rows, "contest_defender_id", dt$contest_defender_id[valid_ci])
+        data.table::set(dt, kick_rows, "contest_defender_team_id", dt$contest_defender_team_id[valid_ci])
+        data.table::set(dt, kick_rows, "contest_outcome", dt$contest_outcome[valid_ci])
+      }
+    }
+
+    # Clean up lag columns
+    lag_cols <- c(".lag1_desc", ".lag2_desc", ".lag3_desc", ".lag4_desc", ".lag5_desc")
+    dt[, (lag_cols) := NULL]
+  }
+
+  # Clean up temp columns
+  temp_cols <- c(".next_desc", ".next_pid", ".next_tid", ".next_x", ".next_y",
+                 ".prev_desc", ".prev_do")
+  dt[, (temp_cols) := NULL]
+
+  invisible(NULL)
+}
+
 
 #' Add quarter variables (Pass 3)
 #'

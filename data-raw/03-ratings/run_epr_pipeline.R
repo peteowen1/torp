@@ -98,15 +98,17 @@ if (REBUILD_PLAYER_GAME) {
   # Batch load all seasons at once (parallel download via curl::multi_download)
   cli::cli_progress_step("Batch loading PBP, player_stats, teams for {length(seasons)} seasons")
   all_pbp <- load_pbp(seasons, rounds = TRUE)
+  all_chains <- load_chains(seasons, rounds = TRUE)
   all_pstats <- load_player_stats(seasons)
   all_teams <- load_teams(seasons)
-  cli::cli_inform("  Loaded: PBP {nrow(all_pbp)} | player_stats {nrow(all_pstats)} | teams {nrow(all_teams)}")
+  cli::cli_inform("  Loaded: PBP {nrow(all_pbp)} | chains {nrow(all_chains)} | player_stats {nrow(all_pstats)} | teams {nrow(all_teams)}")
 
   for (s in seasons) {
     tryCatch({
       cli::cli_progress_step("Building player game data for {s}")
 
       pbp <- all_pbp[all_pbp$season == s, ]
+      chains <- all_chains[all_chains$season == s, ]
       pstats <- all_pstats[all_pstats$season == s, ]
       teams_data <- all_teams[all_teams$season == s, ]
 
@@ -117,7 +119,7 @@ if (REBUILD_PLAYER_GAME) {
         next
       }
 
-      pgd <- create_player_game_data(pbp, pstats, teams_data)
+      pgd <- create_player_game_data(pbp, pstats, teams_data, chains = chains)
       cli::cli_inform("  Player game data: {nrow(pgd)} rows")
 
       file_name <- paste0("player_game_", s)

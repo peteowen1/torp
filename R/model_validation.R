@@ -65,7 +65,7 @@ calculate_auc_base <- function(actual, predicted) {
 #' @importFrom dplyr distinct pull filter mutate group_by summarise
 #' @importFrom rlang sym
 create_grouped_cv_folds <- function(data, group_var = "match_id", k = 5, seed = 42) {
-  set.seed(seed)
+  withr::local_seed(seed)
 
   # Get unique groups (matches)
   unique_groups <- data |>

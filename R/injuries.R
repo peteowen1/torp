@@ -241,10 +241,19 @@ match_injuries <- function(ratings_df, injuries_df) {
   ratings_df$player_norm <- norm_name(ratings_df$player_name)
 
   # Keep only the columns we need for the join
-  inj_join <- injuries_df[, c("player_norm", "injury", "estimated_return"), drop = FALSE]
-  inj_join <- inj_join[!duplicated(inj_join$player_norm), ]
+  # Use (player_norm, team) as join key when both sides have team to handle
 
-  merged <- merge(ratings_df, inj_join, by = "player_norm", all.x = TRUE)
+  # same-name players (e.g., Max King at different teams)
+  has_team <- "team" %in% names(ratings_df) && "team" %in% names(injuries_df)
+  if (has_team) {
+    inj_join <- injuries_df[, c("player_norm", "team", "injury", "estimated_return"), drop = FALSE]
+    inj_join <- inj_join[!duplicated(paste(inj_join$player_norm, inj_join$team)), ]
+    merged <- merge(ratings_df, inj_join, by = c("player_norm", "team"), all.x = TRUE)
+  } else {
+    inj_join <- injuries_df[, c("player_norm", "injury", "estimated_return"), drop = FALSE]
+    inj_join <- inj_join[!duplicated(inj_join$player_norm), ]
+    merged <- merge(ratings_df, inj_join, by = "player_norm", all.x = TRUE)
+  }
 
   # Remove the temporary join column
   merged$player_norm <- NULL
@@ -412,11 +421,13 @@ build_injury_schedule <- function(injuries_df, player_ratings_dt) {
     ))
   }
 
-  # Normalise player names for joining
+  # Normalise player and team names for joining
   if (!"player_norm" %in% names(inj_dt)) {
     inj_dt[, player_norm := norm_name(player)]
   }
   pr_dt[, player_norm := norm_name(player_name)]
+  if ("team" %in% names(inj_dt)) inj_dt[, team := torp_replace_teams(team)]
+  pr_dt[, team := torp_replace_teams(team)]
 
   # Resolve the rating column name (torp or epr depending on data source)
   torp_col <- if ("torp" %in% names(pr_dt)) "torp" else if ("epr" %in% names(pr_dt)) "epr" else NULL
@@ -429,16 +440,31 @@ build_injury_schedule <- function(injuries_df, player_ratings_dt) {
   if (torp_col != "torp") data.table::setnames(pr_dt, torp_col, "torp")
 
   # Join injured players to their ratings
+  # Use (player_norm, team) when available to distinguish same-name players
   pr_cols <- c("player_norm", "team", "torp")
   if ("pred_tog" %in% names(pr_dt)) pr_cols <- c(pr_cols, "pred_tog")
-  matched <- merge(inj_dt[, .(player_norm, return_round)],
+  inj_merge_cols <- c("player_norm", "player", "return_round")
+  inj_merge_cols <- intersect(inj_merge_cols, names(inj_dt))
+
+  has_team <- "team" %in% names(inj_dt) && !all(is.na(inj_dt$team))
+  if (has_team) {
+    inj_merge_cols <- union(inj_merge_cols, "team")
+    join_by <- c("player_norm", "team")
+  } else {
+    join_by <- "player_norm"
+  }
+  matched <- merge(inj_dt[, ..inj_merge_cols],
                    pr_dt[, ..pr_cols],
-                   by = "player_norm", all.x = TRUE)
+                   by = join_by, all.x = TRUE)
 
   # Drop unmatched (players not in ratings)
   n_unmatched <- sum(is.na(matched$torp))
   if (n_unmatched > 0) {
-    unmatched_names <- matched[is.na(torp), player_norm]
+    unmatched_names <- if ("player" %in% names(matched)) {
+      matched[is.na(torp), player]
+    } else {
+      matched[is.na(torp), player_norm]
+    }
     cli::cli_warn("Dropped {n_unmatched} injured player{?s} not found in ratings: {paste(utils::head(unmatched_names, 5), collapse = ', ')}")
   }
   matched <- matched[!is.na(torp)]
@@ -450,10 +476,9 @@ build_injury_schedule <- function(injuries_df, player_ratings_dt) {
   }
 
   # Compute TOG-weighted TORP contribution (same logic as prepare_sim_data)
-  matched[, team := torp_replace_teams(team)]
+  # Team names already normalised via torp_replace_teams() before the join
 
   # Get team-level TOG sums from full player ratings for proper weighting
-  pr_dt[, team := torp_replace_teams(team)]
   team_tog <- pr_dt[, .(team_tog_sum = sum(pred_tog, na.rm = TRUE),
                          n_players = .N), by = .(team)]
 
@@ -462,8 +487,8 @@ build_injury_schedule <- function(injuries_df, player_ratings_dt) {
   if ("pred_tog" %in% names(matched) && !all(is.na(matched$pred_tog))) {
     matched[, tog_wt := data.table::fifelse(
       team_tog_sum > 0 & !is.na(pred_tog),
-      pred_tog * 18 / team_tog_sum,
-      18 / n_players
+      pred_tog * AFL_TEAM_SIZE / team_tog_sum,
+      AFL_TEAM_SIZE / n_players
     )]
     matched[, player_boost := torp * tog_wt]
   } else {

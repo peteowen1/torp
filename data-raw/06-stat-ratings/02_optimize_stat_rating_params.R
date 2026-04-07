@@ -466,7 +466,7 @@ for (i in seq_len(nrow(eff_defs))) {
     pred_att = pred_att, eff_pred_ok = eff_pred_ok,
     eff_actual = eff_actual, eff_total_wt = eff_total_wt,
     starts = eff_starts,
-    lower = c(0.00001, 0.1),
+    lower = c(1e-7, 0.1),
     upper = c(0.05, 500),
     old_par = old_par
   )
@@ -585,14 +585,14 @@ if (length(stat_results) > 0) {
 
   # Bound-proximity warnings ----
   # Rate bounds: lambda [0.0001, 0.04], prior [0.01, 100]
-  # Efficiency bounds: lambda [0.00001, 0.02], prior [0.5, 500]
+  # Efficiency bounds: lambda [1e-7, 0.05], prior [0.1, 500]
   # Use log-scale proximity: flag if within 2x of lower or upper bound
   bound_warnings <- character(0)
   for (x in stat_results) {
     if (x$type == "rate") {
       lam_lo <- 0.0001; lam_hi <- 0.04; pri_lo <- 0.01; pri_hi <- 100
     } else {
-      lam_lo <- 0.00001; lam_hi <- 0.05; pri_lo <- 0.1; pri_hi <- 500
+      lam_lo <- 1e-7; lam_hi <- 0.05; pri_lo <- 0.1; pri_hi <- 500
     }
     if (x$lambda <= lam_lo * 2) {
       bound_warnings <- c(bound_warnings, paste0("  ", x$stat_name, ": lambda=", round(x$lambda, 6), " near lower bound (", lam_lo, ")"))
@@ -659,13 +659,13 @@ if (length(stat_results) > 0) {
       for (nm in all_names) {
         res <- stat_results[[nm]]
         padded <- formatC(nm, width = -max_len, flag = "-")
-        # Format lambda: use scientific for very small values
+        # Format with enough precision to avoid Groundhog Day re-optimization
         lam_str <- if (res$lambda < 0.0001) {
-          formatC(res$lambda, format = "e", digits = 0)
+          formatC(res$lambda, format = "e", digits = 2)
         } else {
-          formatC(res$lambda, format = "f", digits = 5)
+          formatC(signif(res$lambda, 6), format = "f", digits = 7)
         }
-        pri_str <- formatC(res$prior_strength, format = "f", digits = 2)
+        pri_str <- formatC(signif(res$prior_strength, 5), format = "f", digits = 5)
         line <- paste0("    ", padded, " = list(lambda = ", lam_str, ", prior_strength = ", pri_str, ")")
 
         if (res$type == "rate") {

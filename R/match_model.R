@@ -634,8 +634,14 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
                              file.path(tools::R_user_dir("torpmodels", "cache"), "models"))
 
       gam_path <- file.path(tempdir(), "match_gams.rds")
-      saveRDS(gam_result$models, gam_path)
+      t0 <- proc.time()[["elapsed"]]
+      saveRDS(.strip_gam_models(gam_result$models), gam_path)
+      t1 <- proc.time()[["elapsed"]]
+      gam_size <- file.size(gam_path) / 1e6
+      cli::cli_alert_info("match_gams saveRDS: {round(t1 - t0, 1)}s ({round(gam_size, 1)} MB)")
       piggyback::pb_upload(gam_path, repo = "peteowen1/torpmodels", tag = "core-models")
+      t2 <- proc.time()[["elapsed"]]
+      cli::cli_alert_info("match_gams pb_upload: {round(t2 - t1, 1)}s")
       local_cache <- file.path(cache_dir, "core", "match_gams.rds")
       if (dir.exists(dirname(local_cache))) {
         file.copy(gam_path, local_cache, overwrite = TRUE)
@@ -644,8 +650,14 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
 
       if (!is.null(xgb_result)) {
         xgb_path <- file.path(tempdir(), "match_xgb_pipeline.rds")
+        t3 <- proc.time()[["elapsed"]]
         saveRDS(xgb_result$models, xgb_path)
+        t4 <- proc.time()[["elapsed"]]
+        xgb_size <- file.size(xgb_path) / 1e6
+        cli::cli_alert_info("match_xgb saveRDS: {round(t4 - t3, 1)}s ({round(xgb_size, 1)} MB)")
         piggyback::pb_upload(xgb_path, repo = "peteowen1/torpmodels", tag = "core-models")
+        t5 <- proc.time()[["elapsed"]]
+        cli::cli_alert_info("match_xgb pb_upload: {round(t5 - t4, 1)}s")
         local_cache_xgb <- file.path(cache_dir, "core", "match_xgb_pipeline.rds")
         if (dir.exists(dirname(local_cache_xgb))) {
           file.copy(xgb_path, local_cache_xgb, overwrite = TRUE)

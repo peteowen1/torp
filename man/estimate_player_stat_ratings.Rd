@@ -37,6 +37,10 @@ to one day after the latest match in the data).}
 \item{compute_ci}{Logical. If TRUE (default), compute credible intervals
 (\code{_lower}/\code{_upper} columns) using qgamma/qbeta. Set to FALSE
 to skip interval computation for faster batch processing.}
+
+\item{adjust_opponents}{Logical. If TRUE, applies opponent quality adjustment
+via \code{\link{adjust_stat_ratings_for_opponents}} after estimation,
+adding \code{{stat}_adj_rating} columns. Default FALSE.}
 }
 \value{
 A data.table with one row per player containing:

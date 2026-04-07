@@ -7,6 +7,7 @@
 #' @keywords internal
 default_epv_params <- function() {
   list(
+    bounce_wt         = EPV_BOUNCE_WT,
     disp_neg_offset   = EPV_DISP_NEG_OFFSET,
     disp_pos_offset   = EPV_DISP_POS_OFFSET,
     disp_scale        = EPV_DISP_SCALE,
@@ -16,6 +17,7 @@ default_epv_params <- function() {
     recv_pos_offset   = EPV_RECV_POS_OFFSET,
     recv_scale        = EPV_RECV_SCALE,
     recv_intercept_mark_scale = EPV_RECV_INTERCEPT_MARK_SCALE,
+    recv_failed_contest_wt = EPV_RECV_FAILED_CONTEST_WT,
     spoil_wt          = EPV_SPOIL_WT,
     tackle_wt         = EPV_TACKLE_WT,
     pressure_wt       = EPV_PRESSURE_WT,
@@ -34,7 +36,6 @@ default_epv_params <- function() {
     one_percenters_wt      = EPV_ONE_PERCENTERS_WT,
     rebound50s_wt          = EPV_REBOUND50S_WT,
     frees_against_wt       = EPV_FREES_AGAINST_WT,
-    clearances_wt          = EPV_CLEARANCES_WT,
     frees_for_wt           = EPV_FREES_FOR_WT,
     goals_wt               = EPV_GOALS_WT,
     behinds_wt             = EPV_BEHINDS_WT,
@@ -60,6 +61,8 @@ default_epv_params <- function() {
 #' @param pbp_data Play-by-play data from \code{load_pbp()}. If NULL, loads all available.
 #' @param player_stats Raw player stats from \code{load_player_stats()}. If NULL, loads all available.
 #' @param teams Team lineup data from \code{load_teams()}. If NULL, loads all available.
+#' @param chains Raw chains data from \code{load_chains()}. If NULL, loads all
+#'   available. Used to compute failed reception credit from aerial contests.
 #' @param decay Decay factor for time-weighting games. Default is \code{EPR_DECAY_DEFAULT_DAYS} (486).
 #' @param epv_params Named list of EPV assignment parameters. If NULL,
 #'   uses \code{default_epv_params()}.
@@ -82,6 +85,7 @@ default_epv_params <- function() {
 create_player_game_data <- function(pbp_data = NULL,
                                     player_stats = NULL,
                                     teams = NULL,
+                                    chains = NULL,
                                     decay = EPR_DECAY_DEFAULT_DAYS,
                                     epv_params = NULL) {
 
@@ -105,11 +109,22 @@ create_player_game_data <- function(pbp_data = NULL,
   )]
 
   # Step 1: Disposal points (grouped by player_id + match_id)
+  # For contested kicks (contest_target_id is non-NA), reduce disposal scale
+  # from 50% to contest_share (1/3) — the remaining credit goes to target/defender.
+  # Backward compat: if contest_target_id column doesn't exist in older PBP, use
+  # full disp_scale for all rows.
+  contest_share <- p$contest_share %||% (1 / 3)
+  has_contest_col <- "contest_target_id" %in% names(dt)
+  dt[, .disp_scale := if (has_contest_col) {
+    data.table::fifelse(!is.na(contest_target_id), contest_share, p$disp_scale)
+  } else {
+    p$disp_scale
+  }]
   disp_dt <- dt[, .(
     player_name = max(player_name, na.rm = TRUE),
     utc_start_time = max(utc_start_time),
     weight_gm = max(weight_gm),
-    disp_epv = sum(data.table::fifelse(pos_team == -1, delta_epv + p$disp_neg_offset, delta_epv + p$disp_pos_offset) * p$disp_scale),
+    disp_epv = sum(data.table::fifelse(pos_team == -1, delta_epv + p$disp_neg_offset, delta_epv + p$disp_pos_offset) * .disp_scale),
     disposals_pbp = floor(.N / 2L),
     team = team[.N],
     opponent = opp_tm[.N],
@@ -117,11 +132,18 @@ create_player_game_data <- function(pbp_data = NULL,
     round = as.numeric(round_week[.N]),
     season = lubridate::year(utc_start_time[.N])
   ), by = .(player_id, match_id)]
+  dt[, .disp_scale := NULL]
 
   # Step 2: Reception points (grouped by lead_player_id + match_id)
-  # Intercept marks (pos_team == -1 AND mark description) get a separate scale
+  # Exclude rows where lead_desc is a contest target — those plays are credited
+  # via contest_epv instead (avoids double-counting the 3-way split)
+  # Exclude contested kicks from recv_epv: if contest_target_id is set on a row,
+
+  # it's a 3-player contest handled by contest_epv instead
+  has_contest_col <- "contest_target_id" %in% names(dt)
+  dt[, is_contest_target_recv := has_contest_col & !is.na(contest_target_id)]
   dt[, is_intercept_mark := pos_team == -1L & grepl("ted Mark|Mark On", lead_desc_tot)]
-  recv_dt <- dt[, .(
+  recv_dt <- dt[is_contest_target_recv == FALSE, .(
     recv_epv = sum(data.table::fifelse(
       is_intercept_mark,
       ((p$recv_neg_mult * delta_epv * pos_team) + p$recv_neg_offset) * p$recv_intercept_mark_scale,
@@ -133,7 +155,7 @@ create_player_game_data <- function(pbp_data = NULL,
     )),
     receptions = .N
   ), by = .(lead_player_id, match_id)]
-  dt[, is_intercept_mark := NULL]
+  dt[, c("is_intercept_mark", "is_contest_target_recv") := NULL]
 
   # Step 3: Join disposal + reception
   plyr_gm_df <- merge(disp_dt, recv_dt,
@@ -155,14 +177,37 @@ create_player_game_data <- function(pbp_data = NULL,
   plyr_gm_df <- merge(plyr_gm_df, wp_dt,
     by = c("player_id", "match_id"), all.x = TRUE, sort = FALSE)
 
+  # --- Step 3c: Contest credit from aerial contests (3-way EPV split) ---
+  contest_dt <- tryCatch({
+    if (is.null(chains)) chains <- load_chains(TRUE)
+    compute_contest_credit(chains, pbp_data,
+                           contest_share = p$contest_share %||% (1 / 3))
+  }, error = function(e) {
+    is_data_unavailable <- grepl(
+      "load_chains|download|HTTP|connection|404|timeout",
+      conditionMessage(e), ignore.case = TRUE
+    )
+    if (!is_data_unavailable) {
+      cli::cli_abort("Contest credit computation failed: {conditionMessage(e)}")
+    }
+    cli::cli_warn("Contest credit skipped (data unavailable): {conditionMessage(e)}")
+    data.table::data.table(
+      player_id = character(), match_id = character(),
+      contest_epv = numeric(),
+      aerial_target_wins = integer(), aerial_target_losses = integer(),
+      aerial_def_wins = integer(), aerial_def_losses = integer()
+    )
+  })
+  plyr_gm_df <- merge(plyr_gm_df, contest_dt,
+    by = c("player_id", "match_id"), all.x = TRUE, sort = FALSE)
+
   # --- Step 4: Join spoils/tackles/hitouts from raw player_stats ---
   spoil_hitout_df <- player_stats |>
     dplyr::mutate(
       weight_gm = exp(as.numeric(-(ref_date - as.Date(utc_start_time))) / decay),
       spoil_epv = spoils * p$spoil_wt + tackles * p$tackle_wt + pressure_acts * p$pressure_wt + def_half_pressure_acts * p$def_pressure_wt +
                   intercepts * p$intercepts_wt + one_percenters * p$one_percenters_wt + rebound50s * p$rebound50s_wt + frees_against * p$frees_against_wt,
-      hitout_epv = hitouts * p$hitout_wt + hitouts_to_advantage * p$hitout_adv_wt + ruck_contests * p$ruck_contest_wt +
-                   clearances * p$clearances_wt
+      hitout_epv = hitouts * p$hitout_wt + hitouts_to_advantage * p$hitout_adv_wt + ruck_contests * p$ruck_contest_wt
     ) |>
     dplyr::select(-dplyr::any_of(c("utc_start_time", "player_name", "given_name", "surname",
                                    "player_captain", "player_jumper_number", "player_photo_url",
@@ -184,9 +229,26 @@ create_player_game_data <- function(pbp_data = NULL,
   }
 
   # --- Step 5: Replace NAs and compute totals ---
+  # Zero-fill all box-score stats before weighted sums to prevent NA propagation
+  box_score_cols <- c(
+    "contested_possessions", "contested_marks", "ground_ball_gets",
+    "marks_inside50", "marks", "uncontested_possessions", "frees_for",
+    "inside50s", "clangers", "score_involvements", "kicks", "handballs",
+    "metres_gained", "turnovers", "goal_assists", "goals", "behinds",
+    "shots_at_goal"
+  )
+  for (col in intersect(box_score_cols, names(plyr_gm_df))) {
+    plyr_gm_df[[col]] <- tidyr::replace_na(plyr_gm_df[[col]], 0)
+  }
+
   plyr_gm_df <- plyr_gm_df |>
     dplyr::mutate(
-      recv_epv = tidyr::replace_na(recv_epv, 0) +
+      contest_epv = tidyr::replace_na(contest_epv, 0),
+      aerial_target_wins = as.integer(tidyr::replace_na(aerial_target_wins, 0)),
+      aerial_target_losses = as.integer(tidyr::replace_na(aerial_target_losses, 0)),
+      aerial_def_wins = as.integer(tidyr::replace_na(aerial_def_wins, 0)),
+      aerial_def_losses = as.integer(tidyr::replace_na(aerial_def_losses, 0)),
+      recv_epv = tidyr::replace_na(recv_epv, 0) + contest_epv +
                  contested_possessions * p$contested_poss_wt + contested_marks * p$contested_marks_wt +
                  ground_ball_gets * p$ground_ball_gets_wt + marks_inside50 * p$marks_inside50_wt +
                  marks * p$marks_wt + uncontested_possessions * p$uncontested_poss_wt +
@@ -265,6 +327,9 @@ create_player_game_data <- function(pbp_data = NULL,
       wp_credit_adj, wp_disp_credit_adj, wp_recv_credit_adj,
       # WPA (raw)
       wp_credit, wp_disp_credit, wp_recv_credit,
+      # Contest credit (3-way aerial split)
+      contest_epv, aerial_target_wins, aerial_target_losses,
+      aerial_def_wins, aerial_def_losses,
       # PBP-derived action counts
       disposals_pbp, receptions,
       # EPV model input stats
@@ -289,6 +354,174 @@ create_player_game_data <- function(pbp_data = NULL,
 
   return(plyr_gm_df)
 }
+
+#' Compute Contest Credit from Aerial Contests
+#'
+#' Joins aerial contest data back to PBP to get the kicker's \code{delta_epv},
+#' then splits credit three ways: kicker, target, and defender. When an opponent
+#' is involved (spoil, intercept mark), each gets 1/3 of the EPV at stake.
+#' The target and defender receive credit from their own team's perspective
+#' (positive if they won, negative if they lost).
+#'
+#' Only applies to contests with a 3rd player from the opposing team. When
+#' the target takes the mark themselves (no opponent), the standard 50/50
+#' kicker/receiver split is unchanged.
+#'
+#' @param chains Raw chains data (from \code{load_chains()}).
+#' @param pbp_data Clean PBP data (from \code{load_pbp()}) containing
+#'   \code{delta_epv} values.
+#' @param contest_share Fraction of \code{delta_epv} attributed to each
+#'   contest participant. Default \code{1/3}.
+#'
+#' @return A data.table with columns: \code{player_id}, \code{match_id},
+#'   \code{contest_epv} (positive for winners, negative for losers),
+#'   \code{aerial_target_wins}, \code{aerial_target_losses},
+#'   \code{aerial_def_wins}, \code{aerial_def_losses}.
+#'
+#' @keywords internal
+compute_contest_credit <- function(chains, pbp_data, contest_share = 1 / 3) {
+  empty_dt <- data.table::data.table(
+    player_id = character(), match_id = character(),
+    contest_epv = numeric(),
+    aerial_target_wins = integer(), aerial_target_losses = integer(),
+    aerial_def_wins = integer(), aerial_def_losses = integer()
+  )
+
+  chains_dt <- data.table::as.data.table(chains)
+  pbp_dt <- data.table::as.data.table(pbp_data)
+
+  detect_chains_columns(chains_dt)
+
+  target_descs <- CHAINS_CONTEST_TARGET_DESCS
+  kick_descs <- c("Kick", "Ground Kick")
+  data.table::setorder(chains_dt, match_id, display_order)
+
+  # Build shift columns for forward (outcome) and backward (kicker) lookup
+  chains_dt[, `:=`(
+    .next_desc = data.table::shift(description, 1L, type = "lead"),
+    .next_pid  = data.table::shift(player_id, 1L, type = "lead"),
+    .next_tid  = data.table::shift(team_id, 1L, type = "lead"),
+    .next_x    = data.table::shift(x, 1L, type = "lead"),
+    .next_y    = data.table::shift(y, 1L, type = "lead"),
+    .lag1_desc = data.table::shift(description, 1L, type = "lag"),
+    .lag2_desc = data.table::shift(description, 2L, type = "lag"),
+    .lag3_desc = data.table::shift(description, 3L, type = "lag"),
+    .lag4_desc = data.table::shift(description, 4L, type = "lag"),
+    .lag5_desc = data.table::shift(description, 5L, type = "lag"),
+    .lag1_do   = data.table::shift(display_order, 1L, type = "lag"),
+    .lag2_do   = data.table::shift(display_order, 2L, type = "lag"),
+    .lag3_do   = data.table::shift(display_order, 3L, type = "lag"),
+    .lag4_do   = data.table::shift(display_order, 4L, type = "lag"),
+    .lag5_do   = data.table::shift(display_order, 5L, type = "lag")
+  ), by = match_id]
+
+  # Filter to contest target rows with opposing-team outcome at same x,y
+  contests <- chains_dt[
+    description %in% target_descs &
+    !is.na(player_id) &
+    !is.na(.next_tid) &
+    x == .next_x & y == .next_y &
+    team_id != .next_tid &
+    !is.na(.next_pid)
+  ]
+
+  if (nrow(contests) == 0) {
+    chains_dt[, grep("^\\.", names(chains_dt), value = TRUE) := NULL]
+    return(empty_dt)
+  }
+
+  # Find the kicker's display_order (first Kick/Ground Kick within 5 rows back)
+  contests[, kick_display_order := data.table::fcase(
+    .lag1_desc %chin% kick_descs, .lag1_do,
+    .lag2_desc %chin% kick_descs, .lag2_do,
+    .lag3_desc %chin% kick_descs, .lag3_do,
+    .lag4_desc %chin% kick_descs, .lag4_do,
+    .lag5_desc %chin% kick_descs, .lag5_do,
+    default = NA_integer_
+  )]
+
+  # Build triples table (drop rows without a matched kick)
+  triples_dt <- contests[!is.na(kick_display_order), .(
+    match_id,
+    kick_display_order,
+    target_player_id = player_id,
+    target_team_id = team_id,
+    defender_player_id = .next_pid,
+    defender_team_id = .next_tid,
+    outcome_desc = .next_desc
+  )]
+
+  # Clean up temp columns
+  chains_dt[, grep("^\\.", names(chains_dt), value = TRUE) := NULL]
+
+  if (nrow(triples_dt) == 0) return(empty_dt)
+
+  # Join to PBP to get delta_epv from the kicker's row
+  triples_dt <- merge(
+    triples_dt,
+    pbp_dt[, .(match_id, display_order, delta_epv)],
+    by.x = c("match_id", "kick_display_order"),
+    by.y = c("match_id", "display_order"),
+    all.x = TRUE, sort = FALSE
+  )
+  # Drop rows without delta_epv (shouldn't happen but safety)
+  triples_dt <- triples_dt[!is.na(delta_epv)]
+  if (nrow(triples_dt) == 0) return(empty_dt)
+
+  # Compute credit: delta_epv is from kicker's team perspective
+  # Target (same team as kicker): credit = delta_epv * share
+  # Defender (opp team): credit = -delta_epv * share (flip perspective)
+  share <- contest_share
+
+  # Build per-player rows: one for target, one for defender
+  target_credit <- triples_dt[, .(
+    player_id = target_player_id,
+    match_id = match_id,
+    contest_epv = delta_epv * share,
+    is_target = TRUE
+  )]
+  defender_credit <- triples_dt[, .(
+    player_id = defender_player_id,
+    match_id = match_id,
+    contest_epv = -delta_epv * share,
+    is_target = FALSE
+  )]
+  all_credit <- data.table::rbindlist(list(target_credit, defender_credit))
+
+  # Aggregate per player per match
+  all_credit[, .(
+    contest_epv = sum(contest_epv),
+    aerial_target_wins = sum(is_target & contest_epv > 0),
+    aerial_target_losses = sum(is_target & contest_epv <= 0),
+    aerial_def_wins = sum(!is_target & contest_epv > 0),
+    aerial_def_losses = sum(!is_target & contest_epv <= 0)
+  ), by = .(player_id, match_id)]
+}
+
+
+#' Backward-compatible wrapper (deprecated)
+#' @keywords internal
+compute_failed_recv_credit <- function(chains,
+                                       weight_per_loss = EPV_RECV_FAILED_CONTEST_WT) {
+  cli::cli_warn("Use {.fn compute_contest_credit} instead of {.fn compute_failed_recv_credit}")
+  contests <- extract_contests(chains = chains, type = "aerial")
+  if (nrow(contests) == 0) {
+    return(data.table::data.table(
+      player_id = character(), match_id = character(),
+      failed_recv_epv = numeric(), failed_receptions = integer()
+    ))
+  }
+  failed <- contests[outcome %in% c("spoil", "intercept_mark") & winner == "player2"]
+  if (nrow(failed) == 0) {
+    return(data.table::data.table(
+      player_id = character(), match_id = character(),
+      failed_recv_epv = numeric(), failed_receptions = integer()
+    ))
+  }
+  failed[, .(failed_recv_epv = .N * weight_per_loss, failed_receptions = .N),
+         by = .(player_id = player1_id, match_id)]
+}
+
 
 #' @rdname default_epv_params
 #' @keywords internal

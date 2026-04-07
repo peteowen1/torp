@@ -2,6 +2,7 @@
 # =================================
 
 #' @importFrom utils packageVersion
+#' @importFrom withr local_seed
 .onAttach <- function(libname, pkgname) {
   version <- tryCatch(
     as.character(utils::packageVersion("torp")),

@@ -203,7 +203,7 @@ NULL
 
   # Build URLs and download all in one parallel batch
   urls <- vapply(team_season_info, function(x) {
-    paste0("https://aflapi.afl.com.au/afl/v2/squads?teamId=", x$team_id,
+    paste0(AFL_API_BASE_URL, "squads?teamId=", x$team_id,
            "&compSeasonId=", x$season_id)
   }, character(1))
 
@@ -298,7 +298,7 @@ NULL
 
   # Step 1: Get AFLM competition ID
   comp_resp <- tryCatch(
-    httr::GET("https://aflapi.afl.com.au/afl/v2/competitions"),
+    httr::GET(paste0(AFL_API_BASE_URL, "competitions")),
     error = function(e) NULL
   )
   if (is.null(comp_resp) || httr::http_error(comp_resp)) {
@@ -331,7 +331,7 @@ NULL
 
   # Step 2: Get all comp seasons for this competition
   cs_resp <- tryCatch(
-    httr::GET(paste0("https://aflapi.afl.com.au/afl/v2/competitions/", comp_id, "/compseasons")),
+    httr::GET(paste0(AFL_API_BASE_URL, "competitions/", comp_id, "/compseasons")),
     error = function(e) NULL
   )
   if (is.null(cs_resp) || httr::http_error(cs_resp)) {
@@ -576,7 +576,7 @@ get_afl_fixtures <- function(season = NULL) {
 #' @keywords internal
 .fetch_fixtures_for_season_id <- function(season_id) {
   url <- paste0(
-    "https://aflapi.afl.com.au/afl/v2/matches?compSeasonId=", season_id,
+    AFL_API_BASE_URL, "matches?compSeasonId=", season_id,
     "&pageSize=1000"
   )
 
@@ -721,7 +721,7 @@ get_afl_lineups <- function(season = NULL, round = NULL) {
 
   result <- .fetch_cfs_batch(
     ids = match_ids,
-    url_template = "https://api.afl.com.au/cfs/afl/matchRoster/full/%s",
+    url_template = paste0(AFL_CFS_API_BASE_URL, "matchRoster/full/%s"),
     token = token,
     parse_fn = .parse_match_roster,
     label = "roster"
@@ -776,7 +776,7 @@ get_afl_player_stats <- function(season = NULL) {
 
   result <- .fetch_cfs_batch(
     ids = match_ids,
-    url_template = "https://api.afl.com.au/cfs/afl/playerStats/match/%s",
+    url_template = paste0(AFL_CFS_API_BASE_URL, "playerStats/match/%s"),
     token = token,
     parse_fn = .parse_match_stats,
     label = "player stats"
@@ -842,7 +842,7 @@ get_afl_player_details <- function(season = NULL) {
   cli::cli_inform("Fetching player details for {length(team_ids)} team{?s} in parallel...")
 
   urls <- paste0(
-    "https://aflapi.afl.com.au/afl/v2/squads?teamId=", team_ids,
+    AFL_API_BASE_URL, "squads?teamId=", team_ids,
     "&compSeasonId=", season_id
   )
 

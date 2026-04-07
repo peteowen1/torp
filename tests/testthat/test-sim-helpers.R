@@ -14,8 +14,8 @@ test_that("sim_season deprecated alias has been removed", {
   expect_false("sim_season" %in% getNamespaceExports("torp"))
 })
 
-test_that("process_games is available as internal function", {
-  expect_true(exists("process_games", envir = asNamespace("torp")))
+test_that("process_games_dt is available as internal function", {
+  expect_true(exists("process_games_dt", envir = asNamespace("torp")))
 })
 
 test_that("simulate_season has correct function signature", {
@@ -82,30 +82,26 @@ test_that("simulation uses SIM_WP_SCALING_FACTOR constant", {
   expect_equal(torp:::SIM_WP_SCALING_FACTOR, 50)
 })
 
-test_that("process_games handles single round correctly", {
-  process_games <- torp:::process_games
+test_that("process_games_dt handles single round correctly", {
+  process_games_dt <- torp:::process_games_dt
 
-  # Create minimal mock data
-  sim_teams <- data.frame(
+  # Create minimal mock data as data.tables
+  sim_teams <- data.table::data.table(
     team = c("Team A", "Team B"),
-    torp = c(10, -5),
-    stringsAsFactors = FALSE
+    torp = c(10, -5)
   )
 
-  sim_games <- data.frame(
-    roundnum = c(1),
-    home_team = c("Team A"),
-    away_team = c("Team B"),
+  sim_games <- data.table::data.table(
+    roundnum = 1L,
+    home_team = "Team A",
+    away_team = "Team B",
     result = NA_integer_,
     torp_home_round = NA_real_,
-    torp_away_round = NA_real_,
-    stringsAsFactors = FALSE
+    torp_away_round = NA_real_
   )
 
   set.seed(123)
-  result <- process_games(sim_teams, sim_games, round_num = 1)
-
-  # Result should be a list with sim_teams and sim_games
+  result <- process_games_dt(sim_teams, sim_games, round_num = 1)
 
   expect_type(result, "list")
   expect_true("sim_teams" %in% names(result))
@@ -117,29 +113,26 @@ test_that("process_games handles single round correctly", {
 
 test_that("simulation win probability follows expected pattern", {
   # Team with higher TORP should have higher win probability on average
-  sim_teams <- data.frame(
+  sim_teams <- data.table::data.table(
     team = c("Strong Team", "Weak Team"),
-    torp = c(30, -30),  # Large TORP difference
-    stringsAsFactors = FALSE
+    torp = c(30, -30)
   )
 
-  sim_games <- data.frame(
-    roundnum = rep(1, 100),
+  sim_games <- data.table::data.table(
+    roundnum = rep(1L, 100),
     home_team = rep("Strong Team", 100),
     away_team = rep("Weak Team", 100),
     result = NA_integer_,
     torp_home_round = NA_real_,
-    torp_away_round = NA_real_,
-    stringsAsFactors = FALSE
+    torp_away_round = NA_real_
   )
 
-  # Simulate multiple times
   set.seed(42)
-  process_games <- torp:::process_games
-  result <- process_games(sim_teams, sim_games, round_num = 1)
+  process_games_dt <- torp:::process_games_dt
+  result <- process_games_dt(sim_teams, sim_games, round_num = 1)
 
   # Strong team should have high win probability
-  expect_gt(mean(result$sim_games$wp), 0.7)  # Should be heavily favored
+  expect_gt(mean(result$sim_games$wp), 0.7)
 
   # More wins than losses for strong team
   wins <- sum(result$sim_games$result > 0)
@@ -225,26 +218,23 @@ test_that("simulate_season works with empty injury_schedule", {
 })
 
 test_that("simulation respects home ground advantage", {
-  # Create teams with equal ratings
-  sim_teams <- data.frame(
+  sim_teams <- data.table::data.table(
     team = c("Home Team", "Away Team"),
-    torp = c(0, 0),  # Equal ratings
-    stringsAsFactors = FALSE
+    torp = c(0, 0)
   )
 
-  sim_games <- data.frame(
-    roundnum = rep(1, 1000),
+  sim_games <- data.table::data.table(
+    roundnum = rep(1L, 1000),
     home_team = rep("Home Team", 1000),
     away_team = rep("Away Team", 1000),
     result = NA_integer_,
     torp_home_round = NA_real_,
-    torp_away_round = NA_real_,
-    stringsAsFactors = FALSE
+    torp_away_round = NA_real_
   )
 
   set.seed(42)
-  process_games <- torp:::process_games
-  result <- process_games(sim_teams, sim_games, round_num = 1)
+  process_games_dt <- torp:::process_games_dt
+  result <- process_games_dt(sim_teams, sim_games, round_num = 1)
 
   # Home team should have > 50% win probability due to home advantage
   avg_wp <- mean(result$sim_games$wp)

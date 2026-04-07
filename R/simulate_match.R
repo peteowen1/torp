@@ -44,7 +44,7 @@ simulate_match_mc <- function(home_team, away_team,
                               predictions = NULL,
                               home_advantage = SIM_HOME_ADVANTAGE,
                               seed = NULL) {
-  if (!is.null(seed)) set.seed(seed)
+  if (!is.null(seed)) withr::local_seed(seed)
 
   home_team <- torp_replace_teams(home_team)
   away_team <- torp_replace_teams(away_team)
@@ -203,7 +203,7 @@ simulate_match_mc <- function(home_team, away_team,
   margins <- as.integer(round(
     stats::rnorm(n_sims, estimate, SIM_NOISE_SD + abs(estimate) / 3)
   ))
-  totals <- pmax(stats::rnorm(n_sims, pred_total, SIM_TOTAL_SD), 40)
+  totals <- pmax(stats::rnorm(n_sims, pred_total, SIM_TOTAL_SD), SIM_MIN_TOTAL)
   home_totals <- pmax(round((totals + margins) / 2), 0)
   away_totals <- pmax(round((totals - margins) / 2), 0)
 

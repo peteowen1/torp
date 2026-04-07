@@ -134,7 +134,8 @@
 #' @param prior_games Pseudo-games at league average for shrinkage.
 #' @return The input data with additional \code{_oadj} columns appended:
 #'   \code{recv_epv_oadj}, \code{disp_epv_oadj}, \code{spoil_epv_oadj},
-#'   \code{hitout_epv_oadj}, \code{epv_oadj}. Original columns unchanged.
+#'   \code{hitout_epv_oadj}, \code{contest_epv_oadj} (if present),
+#'   \code{epv_oadj}. Original columns unchanged.
 #' @export
 adjust_epv_for_opponents <- function(player_game_data,
                                       lambda_decay = EPV_OPP_LAMBDA_DECAY,
@@ -161,6 +162,9 @@ adjust_epv_for_opponents <- function(player_game_data,
       spoil_epv_oadj = spoil_epv_adj, hitout_epv_oadj = hitout_epv_adj,
       epv_oadj = epv_adj
     )]
+    if ("contest_epv_adj" %in% names(dt)) {
+      dt[, contest_epv_oadj := contest_epv_adj]
+    }
     return(dt)
   }
 
@@ -188,19 +192,19 @@ adjust_epv_for_opponents <- function(player_game_data,
   # Create _oadj columns = _adj + opponent adjustment
   # Split adjustment across components by their absolute magnitude share
   epv_comps <- c("recv_epv", "disp_epv", "spoil_epv", "hitout_epv")
+  if ("contest_epv_adj" %in% names(dt)) epv_comps <- c(epv_comps, "contest_epv")
   adj_comps <- paste0(epv_comps, "_adj")
   oadj_comps <- paste0(epv_comps, "_oadj")
 
   if (all(adj_comps %in% names(dt))) {
-    dt[, .abs_total := abs(recv_epv_adj) + abs(disp_epv_adj) +
-                        abs(spoil_epv_adj) + abs(hitout_epv_adj)]
+    dt[, .abs_total := Reduce(`+`, lapply(adj_comps, function(col) abs(get(col))))]
     dt[.abs_total == 0, .abs_total := 1]
 
     for (i in seq_along(adj_comps)) {
       dt[, (oadj_comps[i]) := get(adj_comps[i]) +
            .player_adj * abs(get(adj_comps[i])) / .abs_total]
     }
-    dt[, epv_oadj := recv_epv_oadj + disp_epv_oadj + spoil_epv_oadj + hitout_epv_oadj]
+    dt[, epv_oadj := Reduce(`+`, lapply(oadj_comps, function(col) get(col)))]
   } else {
     dt[, epv_oadj := epv_adj + .player_adj]
   }

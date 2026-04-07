@@ -39,7 +39,23 @@ save_to_release <- function(df, file_name, release_tag, also_csv = FALSE) {
                          tag = release_tag,
                          name = f_name),
     error = function(e) {
-      cli::cli_abort("Failed to upload {.val {f_name}} to release {.val {release_tag}}: {conditionMessage(e)}")
+      # Retry once on 404 — piggyback's delete-then-upload can fail if the
+      # asset ID changed between listing and deletion (concurrent upload or
+      # stale cache). A fresh attempt re-fetches the asset list.
+      if (grepl("404", conditionMessage(e), fixed = TRUE)) {
+        cli::cli_warn("Upload 404 for {.val {f_name}}, retrying once...")
+        tryCatch(
+          piggyback::pb_upload(tf,
+                               repo = get_torp_data_repo(),
+                               tag = release_tag,
+                               name = f_name),
+          error = function(e2) {
+            cli::cli_abort("Failed to upload {.val {f_name}} to release {.val {release_tag}} (after retry): {conditionMessage(e2)}")
+          }
+        )
+      } else {
+        cli::cli_abort("Failed to upload {.val {f_name}} to release {.val {release_tag}}: {conditionMessage(e)}")
+      }
     }
   )
 

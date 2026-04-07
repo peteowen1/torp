@@ -418,6 +418,13 @@ utils::globalVariables(c(".data", ".SD", "disp", "season.x", "tm",
 #'   if the smooth is not found.
 #' @keywords internal
 extract_gam_random_effects <- function(model, variable) {
+  # Check for pre-extracted random effects (set by .strip_gam before removing
+  # $Vp and $model). This allows extraction from stripped/serialised models.
+  if (!is.null(model$pre_extracted_re)) {
+    matching <- names(model$pre_extracted_re)[grepl(variable, names(model$pre_extracted_re))]
+    if (length(matching) > 0) return(model$pre_extracted_re[[matching[1]]])
+  }
+
   sm <- model$smooth
   re_idx <- which(vapply(sm, function(s) {
     inherits(s, "random.effect") && any(grepl(variable, s$vn))

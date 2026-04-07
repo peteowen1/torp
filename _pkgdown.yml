@@ -80,10 +80,13 @@ reference:
       - team_profile
       - print.torp_team_profile
 
-  - title: Network Centrality
-    desc: Opponent quality adjustment via network analysis
+  - title: Network Centrality & Opponent Adjustment
+    desc: Opponent quality adjustment via network analysis and defensive profiles
     contents:
       - calculate_player_centrality
+      - adjust_epv_for_opponents
+      - adjust_stats_for_opponents
+      - adjust_stat_ratings_for_opponents
 
   - title: Player Attribution
     desc: Zero-ablation player impact measurement
@@ -132,6 +135,7 @@ reference:
     desc: Match-level expected goals, predictions, and head-to-head comparisons
     contents:
       - get_player_game_ratings
+      - get_player_game_stats
       - get_xg
       - calculate_match_xgs
       - extract_player_xg_skill

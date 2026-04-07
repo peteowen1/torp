@@ -97,7 +97,7 @@ for (szn in future_seasons) {
 
   result <- tryCatch(
     estimate_player_stat_ratings(stat_rating_data, ref_date = ref_date, params = params,
-                           compute_ci = FALSE, adjust_opponents = TRUE),
+                           compute_ci = FALSE),
     error = function(e) {
       cli::cli_warn("Failed for {szn} R{rnd}: {conditionMessage(e)}")
       n_failures <<- n_failures + 1
@@ -129,30 +129,9 @@ all_stat_ratings <- data.table::rbindlist(all_results[seq_len(counter)], fill = 
 all_seasons <- sort(unique(all_stat_ratings$season))
 cli::cli_inform("Total: {nrow(all_stat_ratings)} player-round rows across {length(all_seasons)} seasons")
 
-# Opponent quality adjustment ----
-cli::cli_h1("Applying opponent quality adjustment")
-t_opp <- proc.time()
-
-# Apply per season-round to use the correct ref_date for each snapshot
-adj_results <- vector("list", nrow(ref_date_map))
-for (i in seq_len(nrow(ref_date_map))) {
-  s <- ref_date_map$season[i]
-  r <- ref_date_map$round[i]
-  rd <- ref_date_map$ref_date[i]
-  chunk <- all_stat_ratings[season == s & round == r]
-  if (nrow(chunk) == 0) next
-  adj_results[[i]] <- tryCatch(
-    adjust_stat_ratings_for_opponents(chunk, stat_rating_data, ref_date = rd),
-    error = function(e) {
-      cli::cli_warn("Opponent adjustment failed for {s} R{r}: {conditionMessage(e)}")
-      chunk
-    }
-  )
-}
-all_stat_ratings <- data.table::rbindlist(
-  Filter(Negate(is.null), adj_results), fill = TRUE
-)
-cli::cli_inform("Opponent adjustment completed in {round((proc.time() - t_opp)[['elapsed']], 1)}s")
+# Note: opponent adjustment is now applied at the game level in 01_compute_match_stats.R
+# (rolling causal profiles via adjust_stats_for_opponents(rolling = TRUE)).
+# The Bayesian estimation reads _oadj columns automatically.
 
 # Save ----
 saveRDS(all_stat_ratings, file.path(cache_dir, "03_player_stat_ratings.rds"))

@@ -7,6 +7,16 @@
 NULL
 
 
+# Resolve first matching column name from a vector of candidates
+# Used by prepare_sim_data() and calculate_final_ladder()
+.resolve_col <- function(dt, candidates) {
+  for (cand in candidates) {
+    if (cand %in% names(dt)) return(cand)
+  }
+  NULL
+}
+
+
 # --------------------------------------------------------------------------
 # Data preparation
 # --------------------------------------------------------------------------
@@ -54,18 +64,11 @@ prepare_sim_data <- function(season, team_ratings = NULL, fixtures = NULL,
   # Build sim_games from canonical fixture columns
   # Fixtures are normalised at load time via .normalise_fixture_columns(),
   # but keep minimal fallbacks for directly-passed user data
-  resolve_col <- function(dt, candidates) {
-    for (cand in candidates) {
-      if (cand %in% names(dt)) return(cand)
-    }
-    NULL
-  }
-
-  rnd_col  <- resolve_col(fix_dt, c("round_number", "roundnum"))
-  ht_col   <- resolve_col(fix_dt, c("home_team_name", "home_team"))
-  at_col   <- resolve_col(fix_dt, c("away_team_name", "away_team"))
-  hs_col   <- resolve_col(fix_dt, c("home_score", "home_points"))
-  as_col   <- resolve_col(fix_dt, c("away_score", "away_points"))
+  rnd_col  <- .resolve_col(fix_dt, c("round_number", "roundnum"))
+  ht_col   <- .resolve_col(fix_dt, c("home_team_name", "home_team"))
+  at_col   <- .resolve_col(fix_dt, c("away_team_name", "away_team"))
+  hs_col   <- .resolve_col(fix_dt, c("home_score", "home_points"))
+  as_col   <- .resolve_col(fix_dt, c("away_score", "away_points"))
 
   if (is.null(rnd_col) || is.null(ht_col) || is.null(at_col)) {
     cli::cli_abort("Could not find required fixture columns (round_number, home_team_name, away_team_name).")
@@ -81,7 +84,7 @@ prepare_sim_data <- function(season, team_ratings = NULL, fixtures = NULL,
 
   # Keep only regular season rounds (exclude finals)
   max_round <- AFL_REGULAR_SEASON_ROUNDS[as.character(season)]
-  if (is.na(max_round)) max_round <- 24L
+  if (is.na(max_round)) max_round <- AFL_MAX_REGULAR_ROUNDS
   sim_games <- sim_games[roundnum <= max_round]
 
   # Determine played vs unplayed
@@ -234,8 +237,8 @@ prepare_sim_data <- function(season, team_ratings = NULL, fixtures = NULL,
   if (!is.null(predictions)) {
     pred_dt <- data.table::as.data.table(predictions)
     # Find matching columns for join
-    pred_rnd <- resolve_col(pred_dt, c("round_number", "roundnum", "round", "week"))
-    pred_ht  <- resolve_col(pred_dt, c("home_team", "home_team_name"))
+    pred_rnd <- .resolve_col(pred_dt, c("round_number", "roundnum", "round", "week"))
+    pred_ht  <- .resolve_col(pred_dt, c("home_team", "home_team_name"))
 
     if (!is.null(pred_rnd) && !is.null(pred_ht) && "pred_xtotal" %in% names(pred_dt)) {
       sim_games[pred_dt,
@@ -247,7 +250,7 @@ prepare_sim_data <- function(season, team_ratings = NULL, fixtures = NULL,
 
   # --- GF Venue Familiarity ---
   # Compute each team's proportion of games at the GF venue (MCG)
-  venue_col <- resolve_col(fix_dt, c("venue_name", "venue"))
+  venue_col <- .resolve_col(fix_dt, c("venue_name", "venue"))
   if (!is.null(venue_col)) {
     venue_dt <- data.table::data.table(
       home_team = as.character(fix_dt[[ht_col]]),
@@ -272,7 +275,7 @@ prepare_sim_data <- function(season, team_ratings = NULL, fixtures = NULL,
 
   # --- Team Residuals (GAM random effects) ---
   if (identical(team_residuals, "auto")) {
-    team_residuals <- .extract_team_residuals(models = models)
+    team_residuals <- .extract_team_residuals(models = models, season = season)
   }
   if (!is.null(team_residuals)) {
     tr_dt <- data.table::as.data.table(team_residuals)[, .(team, residual_mean, residual_se)]
@@ -297,19 +300,24 @@ prepare_sim_data <- function(season, team_ratings = NULL, fixtures = NULL,
 
 #' Extract team-level quality residuals from match GAM
 #'
-#' Extracts the cross-season `team_name.x` random effects from the
-#' `xscore_diff` GAM. These capture systematic team over/under-performance
-#' not explained by player TORP ratings (e.g. coaching, team system).
+#' Extracts both cross-season `team_name` and within-season `team_name_season`
+#' random effects from the `xscore_diff` GAM and combines them. These capture
+#' systematic team over/under-performance not explained by player TORP ratings
+#' (e.g. coaching, team system, season-specific form).
 #' Team names are standardised via [torp_replace_teams()] to ensure
 #' consistent merging with simulation team names.
 #'
 #' @param models Optional named list of GAM models (as returned by
 #'   `run_predictions_pipeline()$models`). When provided, uses the
 #'   `xscore_diff` model directly. Otherwise loads from torpmodels.
+#' @param season Integer season year used to filter `team_name_season` effects
+#'   to the relevant season. Defaults to the current year.
 #' @return A data.table with columns `team`, `residual_mean`, `residual_se`,
 #'   or NULL if extraction fails.
 #' @keywords internal
-.extract_team_residuals <- function(models = NULL) {
+.extract_team_residuals <- function(models = NULL, season = NULL) {
+  if (is.null(season)) season <- as.integer(format(Sys.Date(), "%Y"))
+
   if (!is.null(models) && !is.null(models[["xscore_diff"]])) {
     xsd <- models[["xscore_diff"]]
   } else {
@@ -324,19 +332,45 @@ prepare_sim_data <- function(season, team_ratings = NULL, fixtures = NULL,
     xsd <- match_gams[["xscore_diff"]]
   }
 
-  re <- tryCatch(
-    extract_gam_random_effects(xsd, "team_name"),
+  # Cross-season team random effects (exact match to avoid team_name_season)
+  re_team <- tryCatch(
+    extract_gam_random_effects(xsd, "^team_name$"),
     error = function(e) {
       cli::cli_warn("Could not extract team random effects: {conditionMessage(e)}")
       NULL
     }
   )
-  if (is.null(re)) return(NULL)
+  if (is.null(re_team)) return(NULL)
 
-  result <- re[, .(team = level, residual_mean = coefficient, residual_se = se)]
-
-  # Standardise team names to canonical form for reliable merging
+  result <- re_team[, .(team = level, residual_mean = coefficient, residual_se = se)]
   result[, team := torp_replace_teams(team)]
+
+  # Within-season team random effects (team_name_season levels are "TeamName YYYY")
+  re_season <- tryCatch(
+    extract_gam_random_effects(xsd, "team_name_season"),
+    error = function(e) {
+      cli::cli_warn("Could not extract season-level team random effects: {conditionMessage(e)}")
+      NULL
+    }
+  )
+
+  if (!is.null(re_season)) {
+    season_suffix <- paste0(" ", season, "$")
+    re_cur <- re_season[grepl(season_suffix, level)]
+
+    if (nrow(re_cur) > 0) {
+      re_cur[, team := sub(paste0(" ", season, "$"), "", level)]
+      re_cur[, team := torp_replace_teams(team)]
+      re_cur <- re_cur[, .(season_coef = coefficient, season_se = se), by = team]
+
+      result <- merge(result, re_cur, by = "team", all.x = TRUE)
+      result[!is.na(season_coef), `:=`(
+        residual_mean = residual_mean + season_coef,
+        residual_se   = sqrt(residual_se^2 + season_se^2)
+      )]
+      result[, c("season_coef", "season_se") := NULL]
+    }
+  }
 
   result
 }
@@ -431,25 +465,17 @@ calculate_final_ladder <- function(season = get_afl_season(),
     fix_dt <- fix_dt[get("season") == season]
   }
 
-  # Resolve columns (same helper logic as prepare_sim_data)
-  resolve_col <- function(dt, candidates) {
-    for (cand in candidates) {
-      if (cand %in% names(dt)) return(cand)
-    }
-    NULL
-  }
-
-  rnd_col <- resolve_col(fix_dt, c("round_number", "roundnum"))
-  ht_col  <- resolve_col(fix_dt, c("home_team_name", "home_team"))
-  at_col  <- resolve_col(fix_dt, c("away_team_name", "away_team"))
-  hs_col  <- resolve_col(fix_dt, c("home_score", "home_points"))
-  as_col  <- resolve_col(fix_dt, c("away_score", "away_points"))
+  rnd_col <- .resolve_col(fix_dt, c("round_number", "roundnum"))
+  ht_col  <- .resolve_col(fix_dt, c("home_team_name", "home_team"))
+  at_col  <- .resolve_col(fix_dt, c("away_team_name", "away_team"))
+  hs_col  <- .resolve_col(fix_dt, c("home_score", "home_points"))
+  as_col  <- .resolve_col(fix_dt, c("away_score", "away_points"))
 
   if (is.null(rnd_col) || is.null(ht_col) || is.null(at_col)) {
     cli::cli_abort("Could not find required fixture columns.")
   }
 
-  mid_col <- resolve_col(fix_dt, c("match_id", "providerId"))
+  mid_col <- .resolve_col(fix_dt, c("match_id", "providerId"))
 
   games <- data.table::data.table(
     match_id   = if (!is.null(mid_col)) as.character(fix_dt[[mid_col]]) else NA_character_,
@@ -462,7 +488,7 @@ calculate_final_ladder <- function(season = get_afl_season(),
 
   # Keep only regular season
   max_round <- AFL_REGULAR_SEASON_ROUNDS[as.character(season)]
-  if (is.na(max_round)) max_round <- 24L
+  if (is.na(max_round)) max_round <- AFL_MAX_REGULAR_ROUNDS
   games <- games[roundnum <= max_round]
 
   games[, played := !is.na(home_score) & !is.na(away_score)]
@@ -482,11 +508,11 @@ calculate_final_ladder <- function(season = get_afl_season(),
     pred_dt <- data.table::as.data.table(predictions)
 
     # Resolve prediction team columns for join matching
-    pred_ht <- resolve_col(pred_dt, c("home_team", "home_team_name"))
-    pred_at <- resolve_col(pred_dt, c("away_team", "away_team_name"))
+    pred_ht <- .resolve_col(pred_dt, c("home_team", "home_team_name"))
+    pred_at <- .resolve_col(pred_dt, c("away_team", "away_team_name"))
 
     # Join on match_id (predictions may have home/away swapped vs fixtures)
-    pred_mid <- resolve_col(pred_dt, c("match_id", "providerId"))
+    pred_mid <- .resolve_col(pred_dt, c("match_id", "providerId"))
 
     if (!is.null(pred_mid) && !is.null(mid_col)) {
       # Build a lookup with the prediction's home_team for flip detection
@@ -919,7 +945,7 @@ simulate_afl_season <- function(season,
 
   .pipeline_start <- proc.time()
 
-  if (!is.null(seed)) set.seed(seed)
+  if (!is.null(seed)) withr::local_seed(seed)
 
   # Default: fetch current injury list from AFL. Pass FALSE to skip.
   if (isFALSE(injuries)) {

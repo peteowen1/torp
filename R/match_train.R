@@ -3,6 +3,106 @@
 # GAM and XGBoost training pipelines for match predictions.
 # Called by run_predictions_pipeline() in match_model.R.
 
+# .pre_extract_random_effects ----
+
+#' Pre-extract all random effects from a GAM before stripping
+#'
+#' Extracts coefficients and SEs for every `bs = "re"` smooth in the model,
+#' storing them as a named list of data.tables keyed by variable name.
+#' This allows `.strip_gam()` to safely remove `$Vp` and `$model` while
+#' preserving the random effect information needed by
+#' [extract_gam_random_effects()].
+#'
+#' @param model A fitted gam/bam object
+#' @return Named list of data.tables (one per random effect variable), or
+#'   empty list if extraction fails
+#' @keywords internal
+.pre_extract_random_effects <- function(model) {
+  if (is.null(model$smooth)) return(list())
+
+  re_smooths <- Filter(function(s) inherits(s, "random.effect"), model$smooth)
+  if (length(re_smooths) == 0L) return(list())
+
+  result <- list()
+  for (s in re_smooths) {
+    vn <- s$vn[1]
+    coef_idx <- s$first.para:s$last.para
+    coefs <- tryCatch(stats::coef(model)[coef_idx], error = function(e) {
+      cli::cli_warn("Failed to extract RE coefficients for smooth '{vn}': {conditionMessage(e)}")
+      NULL
+    })
+    se <- tryCatch(sqrt(diag(stats::vcov(model)[coef_idx, coef_idx, drop = FALSE])),
+                   error = function(e) {
+      cli::cli_warn("Failed to extract RE std errors for smooth '{vn}': {conditionMessage(e)}")
+      NULL
+    })
+    if (is.null(coefs)) next
+
+    # Recover level names from model frame
+    level_names <- NULL
+    if (!is.null(model$model) && vn %in% names(model$model) &&
+        is.factor(model$model[[vn]])) {
+      lvls <- levels(model$model[[vn]])
+      if (length(lvls) == length(coefs)) level_names <- lvls
+    }
+    if (is.null(level_names)) level_names <- gsub("^.*\\.", "", names(coefs))
+
+    result[[vn]] <- data.table::data.table(
+      level = level_names,
+      coefficient = unname(coefs),
+      se = if (!is.null(se)) unname(se) else rep(NA_real_, length(coefs))
+    )
+  }
+  result
+}
+
+# .strip_gam ----
+
+#' Strip a GAM model to prediction-only components
+#'
+#' Removes large components (model frame, residuals, fitted values, etc.)
+#' that are not needed for predict.gam(). Typically shrinks models 5-10x.
+#'
+#' @param model A fitted gam/bam object
+#' @return The same model with bulky diagnostic components removed
+#' @keywords internal
+.strip_gam <- function(model) {
+  # Pre-extract random effects before removing $Vp and $model
+  # (both are needed by extract_gam_random_effects but are bulky)
+  re_tables <- .pre_extract_random_effects(model)
+  if (length(re_tables) > 0) model$pre_extracted_re <- re_tables
+
+  model$y <- NULL
+  model$model <- NULL
+  model$residuals <- NULL
+  model$fitted.values <- NULL
+  model$linear.predictors <- NULL
+  model$weights <- NULL
+  model$prior.weights <- NULL
+  model$working.weights <- NULL
+  model$hat <- NULL
+  model$offset <- NULL
+  model$R <- NULL
+  model$Ve <- NULL
+  model$Vp <- NULL
+  model$qrx <- NULL
+  model$db.drho <- NULL
+  model$gcv.ubre <- NULL
+  if (!is.null(model$family$data)) model$family$data <- NULL
+  attr(model, "predict.gam.env") <- NULL
+  model
+}
+
+#' Strip a list of GAM models for compact serialisation
+#' @param models Named list of gam/bam objects
+#' @return Same list with stripped models
+#' @keywords internal
+.strip_gam_models <- function(models) {
+  lapply(models, function(m) {
+    if (inherits(m, c("gam", "bam"))) .strip_gam(m) else m
+  })
+}
+
 # .train_match_gams ----
 
 #' Train the 5-model sequential GAM pipeline
@@ -376,7 +476,7 @@
     fmat <- stats::model.matrix(~ . - 1, data = df[, feature_cols, drop = FALSE])
     dtrain <- xgboost::xgb.DMatrix(data = fmat, label = label, weight = weights)
 
-    set.seed(1234)
+    withr::local_seed(1234)
     cv <- xgboost::xgb.cv(
       params = params, data = dtrain, nrounds = 1000, folds = folds,
       early_stopping_rounds = 30, print_every_n = 0, verbose = 0
@@ -385,7 +485,7 @@
     best_n <- which.min(cv$evaluation_log[[metric_col]])
     cv_score <- min(cv$evaluation_log[[metric_col]])
 
-    set.seed(1234)
+    withr::local_seed(1234)
     model <- xgboost::xgb.train(
       params = params, data = dtrain, nrounds = best_n,
       print_every_n = 0, verbose = 0

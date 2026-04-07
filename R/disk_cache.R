@@ -66,7 +66,7 @@ get_disk_cache_path <- function(url) {
 #'   Default is 7 days. Set to NULL for no expiration.
 #' @return Logical indicating if valid cache exists
 #' @keywords internal
-is_disk_cached <- function(url, max_age_days = 7) {
+is_disk_cached <- function(url, max_age_days = DISK_CACHE_DEFAULT_AGE_DAYS) {
   cache_path <- get_disk_cache_path(url)
 
   if (!file.exists(cache_path)) {
@@ -314,7 +314,7 @@ get_disk_cache_size <- function() {
 #' # Set cache to expire after 30 days
 #' set_disk_cache_options(max_age_days = 30)
 #' }
-set_disk_cache_options <- function(enabled = TRUE, max_age_days = 7) {
+set_disk_cache_options <- function(enabled = TRUE, max_age_days = DISK_CACHE_DEFAULT_AGE_DAYS) {
   .torp_disk_cache_env$enabled <- enabled
   .torp_disk_cache_env$max_age_days <- max_age_days
 

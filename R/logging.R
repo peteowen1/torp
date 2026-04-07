@@ -8,6 +8,16 @@
 .torp_logging_env$log_level <- "INFO"
 .torp_logging_env$console_output <- FALSE
 
+# Numeric severity levels for comparison (higher = more severe)
+.LOG_LEVELS <- c(DEBUG = 1L, INFO = 2L, WARN = 3L, ERROR = 4L)
+
+#' Check if a message at the given severity should be emitted
+#' @keywords internal
+.should_log <- function(msg_level) {
+  isTRUE(.torp_logging_env$console_output) &&
+    .LOG_LEVELS[[msg_level]] >= .LOG_LEVELS[[.torp_logging_env$log_level]]
+}
+
 # -----------------------------------------------------------------------------
 # Core Logging Setup
 # -----------------------------------------------------------------------------
@@ -52,7 +62,7 @@ setup_torp_logging <- function(level = "INFO", log_file = NULL, console_output =
 #' @param ... Additional named parameters (ignored)
 #' @keywords internal
 safe_log_info <- function(message, ...) {
-  if (isTRUE(.torp_logging_env$console_output)) {
+  if (.should_log("INFO")) {
     message(paste("INFO:", message))
   }
 }
@@ -63,7 +73,7 @@ safe_log_info <- function(message, ...) {
 #' @param ... Additional named parameters (ignored)
 #' @keywords internal
 safe_log_warn <- function(message, ...) {
-  if (isTRUE(.torp_logging_env$console_output)) {
+  if (.should_log("WARN")) {
     warning(paste("WARN:", message), call. = FALSE)
   }
 }
@@ -74,8 +84,8 @@ safe_log_warn <- function(message, ...) {
 #' @param ... Additional named parameters (ignored)
 #' @keywords internal
 safe_log_error <- function(message, ...) {
-  if (isTRUE(.torp_logging_env$console_output)) {
-    message(paste("ERROR:", message))
+  if (.should_log("ERROR")) {
+    warning(paste("ERROR:", message), call. = FALSE)
   }
 }
 
@@ -85,9 +95,7 @@ safe_log_error <- function(message, ...) {
 #' @param ... Additional named parameters (ignored)
 #' @keywords internal
 safe_log_debug <- function(message, ...) {
-  if (isTRUE(.torp_logging_env$console_output) &&
-      .torp_logging_env$log_level == "DEBUG" &&
-      interactive()) {
+  if (.should_log("DEBUG") && interactive()) {
     message(paste("DEBUG:", message))
   }
 }
@@ -174,6 +182,12 @@ log_prediction_event <- function(model_name, input_hash, n_predictions, summary 
 #' @param drift_threshold Threshold for triggering drift alert (default: 0.05)
 #' @keywords internal
 monitor_model_drift <- function(model_name, current_metrics, baseline_metrics, drift_threshold = 0.05) {
+  if (is.null(current_metrics$auc) || is.null(baseline_metrics$auc)) {
+    cli::cli_warn("Cannot compute drift for {model_name}: missing AUC in metrics")
+    return(list(model_name = model_name, drift_detected = NA, auc_drift = NA,
+                threshold = drift_threshold, current_auc = current_metrics$auc,
+                baseline_auc = baseline_metrics$auc, drift_details = list()))
+  }
   auc_drift <- abs(current_metrics$auc - baseline_metrics$auc)
   drift_detected <- auc_drift > drift_threshold
 

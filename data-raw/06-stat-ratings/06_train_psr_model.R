@@ -51,7 +51,8 @@ stat_ratings[, season := as.integer(season)]
 stat_ratings[, round := as.integer(round)]
 
 stat_defs <- stat_rating_definitions()
-exclude_stats <- c("cond_tog", "squad_selection", "dream_team_points", "rating_points")
+exclude_stats <- c("cond_tog", "squad_selection", "dream_team_points", "rating_points",
+                    "centre_bounce_attendances", "ruck_contests", "kickins")  # role/selection, not skill
 all_rating_names <- setdiff(stat_defs$stat_name, exclude_stats)
 
 # Prefer _adj_rating (opponent-adjusted) when available, fall back to _rating
@@ -164,18 +165,43 @@ train_seasons <- match_df$season[train_idx]
 foldid <- as.integer(factor(train_seasons, levels = sort(unique(train_seasons))))
 
 # 3. Fit models ----
-cli::cli_h1("Fitting models (104 features)")
+
+# Define stats to exclude from each model BEFORE training
+# OSR should not see defensive stats; DSR should not see scoring stats
+scoring_stats <- c("goals", "behinds", "shots_at_goal", "score_involvements",
+                    "goal_assists", "goal_accuracy", "score_launches")
+defensive_stats <- c("tackles", "spoils", "intercepts", "one_percenters",
+                      "intercept_marks", "tackles_inside50")
+
+# Build excluded column indices for OSR and DSR
+osr_exclude_cols <- which(colnames(X) %in% c(
+  paste0("home_", defensive_stats, "_rating"),
+  paste0("away_", defensive_stats, "_rating")
+))
+dsr_exclude_cols <- which(colnames(X) %in% c(
+  paste0("home_", scoring_stats, "_rating"),
+  paste0("away_", scoring_stats, "_rating")
+))
+
+# Separate feature matrices
+X_train_osr <- X_train[, -osr_exclude_cols, drop = FALSE]
+X_test_osr <- X_test[, -osr_exclude_cols, drop = FALSE]
+X_train_dsr <- X_train[, -dsr_exclude_cols, drop = FALSE]
+X_test_dsr <- X_test[, -dsr_exclude_cols, drop = FALSE]
+
+cli::cli_h1("Fitting models")
+cli::cli_inform("Margin: {ncol(X_train)} features | OSR: {ncol(X_train_osr)} features (excl {length(osr_exclude_cols)} defensive) | DSR: {ncol(X_train_dsr)} features (excl {length(dsr_exclude_cols)} scoring)")
 
 alpha_grid <- c(0, 0.25, 0.5, 0.75, 1)
 
-fit_model <- function(y_tr, y_te, label) {
+fit_model <- function(X_tr, X_te, y_tr, y_te, label) {
   best_cvm <- Inf
   best_fit <- NULL
   best_a <- NULL
 
   for (a in alpha_grid) {
     set.seed(42)
-    cv_f <- cv.glmnet(X_train, y_tr, weights = w_train, alpha = a,
+    cv_f <- cv.glmnet(X_tr, y_tr, weights = w_train, alpha = a,
                        foldid = foldid, type.measure = "mse", standardize = FALSE)
     if (min(cv_f$cvm) < best_cvm) {
       best_cvm <- min(cv_f$cvm)
@@ -184,23 +210,23 @@ fit_model <- function(y_tr, y_te, label) {
     }
   }
 
-  mdl <- glmnet(X_train, y_tr, weights = w_train, alpha = best_a,
+  mdl <- glmnet(X_tr, y_tr, weights = w_train, alpha = best_a,
                  lambda = best_fit$lambda.min, standardize = FALSE)
 
-  p_tr <- as.numeric(predict(mdl, X_train))
-  p_te <- as.numeric(predict(mdl, X_test))
+  p_tr <- as.numeric(predict(mdl, X_tr))
+  p_te <- as.numeric(predict(mdl, X_te))
 
   cli::cli_inform("{label}: alpha={best_a}, CV RMSE={round(sqrt(best_cvm), 2)}, Train RMSE={round(rmse(y_tr, p_tr), 2)}, Test RMSE={round(rmse(y_te, p_te), 2)}, Test R2={round(r2(y_te, p_te), 3)}")
 
   cs <- as.matrix(coef(mdl))
 
   list(model = mdl, coefs = cs, best_alpha = best_a, pred_test = p_te,
-       test_rmse = rmse(y_te, p_te))
+       test_rmse = rmse(y_te, p_te), feature_cols = colnames(X_tr))
 }
 
-margin_fit <- fit_model(y_margin_train, y_margin_test, "Margin (PSR)")
-off_fit <- fit_model(y_off_train, y_off_test, "Offense (OSR)")
-def_fit <- fit_model(y_def_train, y_def_test, "Defense (DSR)")
+margin_fit <- fit_model(X_train, X_test, y_margin_train, y_margin_test, "Margin (PSR)")
+off_fit <- fit_model(X_train_osr, X_test_osr, y_off_train, y_off_test, "Offense (OSR)")
+def_fit <- fit_model(X_train_dsr, X_test_dsr, y_def_train, y_def_test, "Defense (DSR)")
 
 # PSR match prediction (off - def as margin proxy)
 pred_psr_combined <- off_fit$pred_test - def_fit$pred_test
@@ -212,34 +238,40 @@ cat(sprintf("\nPSR (off - def): Test RMSE=%.2f, MAE=%.2f, R2=%.3f\n",
 # 4. Extract offense/defense coefficients ----
 cli::cli_h1("Extracting player-level coefficients")
 
+# Helper: extract coefficients from a model, returning 0 for stats not in the model
+extract_betas <- function(coefs, prefix, rating_cols) {
+  full_names <- paste0(prefix, rating_cols)
+  coef_names <- rownames(coefs)
+  betas <- numeric(length(full_names))
+  names(betas) <- full_names
+  for (i in seq_along(full_names)) {
+    if (full_names[i] %in% coef_names) {
+      betas[i] <- coefs[full_names[i], 1]
+    }
+  }
+  betas
+}
+
 # Offensive model coefficients
 off_cs <- off_fit$coefs
-# home_* coefficients = "own ratings → own score" = OSR
-# away_* coefficients = "opponent ratings → own score" = opponent's defensive impact
-off_home_beta <- off_cs[paste0("home_", rating_cols), 1]
-off_away_beta <- off_cs[paste0("away_", rating_cols), 1]
+off_home_beta <- extract_betas(off_cs, "home_", rating_cols)
+off_away_beta <- extract_betas(off_cs, "away_", rating_cols)
 
 # Defensive model coefficients
 def_cs <- def_fit$coefs
-# home_* coefficients = "own ratings → opponent score" = own defensive impact
-# away_* coefficients = "opponent ratings → opponent score" = opponent's OSR
-def_home_beta <- def_cs[paste0("home_", rating_cols), 1]
-def_away_beta <- def_cs[paste0("away_", rating_cols), 1]
+def_home_beta <- extract_betas(def_cs, "home_", rating_cols)
+def_away_beta <- extract_betas(def_cs, "away_", rating_cols)
 
-# For a player on the HOME team:
-#   OSR = off_home_beta × rating (my ratings → my team scores more)
-#   DSR = -def_home_beta × rating (my ratings → opponent scores less; negate so positive = good)
-#
-# For a player on the AWAY team:
-#   OSR = def_away_beta × rating (my ratings → my team scores more)
-#   DSR = -off_away_beta × rating (my ratings → opponent scores less; negate so positive = good)
-#
-# For symmetric attribution, average the home and away perspectives:
-#   OSR_beta = (off_home_beta + def_away_beta) / 2
-#   DSR_beta = -(def_home_beta + off_away_beta) / 2
-
+# Symmetric attribution: average home and away perspectives.
+# OSR: "how do my stats predict my team scoring?" (averaged across home/away)
+# DSR: "how do my stats predict opponent scoring less?" (negated, averaged)
 osr_beta <- (off_home_beta + def_away_beta) / 2
 dsr_beta <- -(def_home_beta + off_away_beta) / 2
+
+# The cross-model average leaks excluded stats back in — e.g., off_away_beta
+# (from OSR model) has scoring stats, which leak into dsr_beta. Zero them out.
+osr_beta[paste0("home_", defensive_stats, "_rating")] <- 0
+dsr_beta[paste0("home_", scoring_stats, "_rating")] <- 0
 
 # SDs for the home_ columns (player stat ratings get divided by these)
 home_sds <- train_sds[paste0("home_", rating_cols)]
@@ -281,36 +313,26 @@ print(head(dsr_coef_df[order(-abs(dsr_coef_df$beta)), c("stat_name", "beta")], 1
 cat("\n--- PSR Top 10 Coefficients ---\n")
 print(head(psr_coef_df[order(-abs(psr_coef_df$beta)), c("stat_name", "beta")], 10), row.names = FALSE)
 
-# 5. Calculate player ratings ----
+# 5. Calculate player ratings (matching production: calculate_psr_components) ----
 cli::cli_h1("Player ratings")
 
-osr <- calculate_psr(stat_ratings, osr_coef_df, center = TRUE)
-setnames(osr, c("psr_raw", "psr"), c("osr_raw", "osr"))
+# Use calculate_psr_components() — same as production pipeline.
+# PSR = margin model (gold standard total), OSR/DSR reconciled so osr + dsr = psr.
+all_ratings <- calculate_psr_components(stat_ratings, psr_coef_df, osr_coef_df, dsr_coef_df, center = TRUE)
 
-dsr <- calculate_psr(stat_ratings, dsr_coef_df, center = TRUE)
-setnames(dsr, c("psr_raw", "psr"), c("dsr_raw", "dsr"))
-
-psr_margin <- calculate_psr(stat_ratings, psr_coef_df, center = TRUE)
-setnames(psr_margin, c("psr_raw", "psr"), c("margin_psr_raw", "margin_psr"))
-
-id_cols <- intersect(names(osr), names(dsr))
-id_cols <- setdiff(id_cols, c("osr_raw", "osr", "dsr_raw", "dsr"))
-all_ratings <- merge(merge(psr_margin, osr, by = id_cols, all = TRUE),
-                     dsr, by = id_cols, all = TRUE)
-all_ratings[, psr := osr + dsr]
-
-latest <- all_ratings[, .SD[round == max(round)], by = season]
+latest <- as.data.table(all_ratings)
+latest <- latest[, .SD[round == max(round)], by = season]
 latest <- latest[season == max(season)]
 
-cat("\n--- Top 20 by PSR ---\n")
+cat("\n--- Top 20 by PSR (osr + dsr = psr, reconciled to margin model) ---\n")
 print(head(latest[order(-psr),
   .(player_name, pos_group, osr = round(osr, 2), dsr = round(dsr, 2),
-    psr = round(psr, 2), margin_psr = round(margin_psr, 2))], 20), row.names = FALSE)
+    psr = round(psr, 2))], 20), row.names = FALSE)
 
 cat("\n--- Bottom 20 by PSR ---\n")
 print(tail(latest[order(-psr),
   .(player_name, pos_group, osr = round(osr, 2), dsr = round(dsr, 2),
-    psr = round(psr, 2), margin_psr = round(margin_psr, 2))], 20), row.names = FALSE)
+    psr = round(psr, 2))], 20), row.names = FALSE)
 
 cat(sprintf("\nOSR vs DSR correlation: %.3f\n",
   cor(latest$osr, latest$dsr, use = "complete.obs")))
@@ -327,12 +349,30 @@ print(head(latest[order(-dsr),
   .(player_name, pos_group, osr = round(osr, 2), dsr = round(dsr, 2))], 10),
   row.names = FALSE)
 
+# Position centering check: weighted mean by pos_group should be ~0
+cat("\n--- Position centering check (wt_80s-weighted mean by pos_group) ---\n")
+if ("wt_80s" %in% names(latest)) {
+  pos_check <- latest[!is.na(pos_group), .(
+    n = .N,
+    mean_psr = round(weighted.mean(psr, wt_80s, na.rm = TRUE), 6),
+    mean_osr = round(weighted.mean(osr, wt_80s, na.rm = TRUE), 6),
+    mean_dsr = round(weighted.mean(dsr, wt_80s, na.rm = TRUE), 6)
+  ), by = pos_group][order(-n)]
+  print(pos_check)
+} else {
+  cat("wt_80s not available in stat_ratings — centering uses unweighted mean\n")
+}
+
 # 6. Save outputs ----
 cli::cli_h1("Saving outputs")
 
+# Save to cache (development) and inst/extdata (production — used by calculate_psr())
 write.csv(osr_coef_df, file.path(cache_dir, "osr_coefficients.csv"), row.names = FALSE)
 write.csv(dsr_coef_df, file.path(cache_dir, "dsr_coefficients.csv"), row.names = FALSE)
 write.csv(psr_coef_df, file.path(cache_dir, "psr_coefficients.csv"), row.names = FALSE)
+write.csv(osr_coef_df, "inst/extdata/osr_coefficients.csv", row.names = FALSE)
+write.csv(dsr_coef_df, "inst/extdata/dsr_coefficients.csv", row.names = FALSE)
+write.csv(psr_coef_df, "inst/extdata/psr_coefficients.csv", row.names = FALSE)
 
 model_out <- list(
   margin_model = margin_fit$model, off_model = off_fit$model, def_model = def_fit$model,

@@ -20,7 +20,8 @@ calculate_epr_stats(
   prior_rate_recv = EPR_PRIOR_RATE_RECV,
   prior_rate_disp = EPR_PRIOR_RATE_DISP,
   prior_rate_spoil = EPR_PRIOR_RATE_SPOIL,
-  prior_rate_hitout = EPR_PRIOR_RATE_HITOUT
+  prior_rate_hitout = EPR_PRIOR_RATE_HITOUT,
+  ...
 )
 }
 \arguments{
@@ -55,6 +56,8 @@ calculate_epr_stats(
 \item{prior_rate_spoil}{Prior rate for spoil shrinkage target. Default is \code{EPR_PRIOR_RATE_SPOIL}.}
 
 \item{prior_rate_hitout}{Prior rate for hitout shrinkage target. Default is \code{EPR_PRIOR_RATE_HITOUT}.}
+
+\item{...}{Additional arguments (currently unused, reserved for future parameters).}
 }
 \value{
 A data frame with calculated EPR statistics per player

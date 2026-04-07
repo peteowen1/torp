@@ -464,9 +464,10 @@ update_player_game_data <- function(season) {
 
   pgd <- tryCatch({
     pbp <- load_pbp(season, rounds = TRUE)
+    chains <- load_chains(season, rounds = TRUE)
     pstats <- load_player_stats(season)
     teams_data <- load_teams(season)
-    create_player_game_data(pbp, pstats, teams_data)
+    create_player_game_data(pbp, pstats, teams_data, chains = chains)
   }, error = function(e) {
     cli::cli_alert_danger("Failed to create player game data: {conditionMessage(e)}")
     return(NULL)

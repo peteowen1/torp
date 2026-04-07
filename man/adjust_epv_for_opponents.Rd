@@ -21,7 +21,8 @@ recv_epv_adj, disp_epv_adj, spoil_epv_adj, hitout_epv_adj columns.}
 \value{
 The input data with additional \code{_oadj} columns appended:
 \code{recv_epv_oadj}, \code{disp_epv_oadj}, \code{spoil_epv_oadj},
-\code{hitout_epv_oadj}, \code{epv_oadj}. Original columns unchanged.
+\code{hitout_epv_oadj}, \code{contest_epv_oadj} (if present),
+\code{epv_oadj}. Original columns unchanged.
 }
 \description{
 For each player-game, computes opponent-quality-adjusted EPV columns

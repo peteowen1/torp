@@ -205,12 +205,14 @@ compute_centrality_scores <- function(adj, damping = 0.85, max_iter = 100L, tol 
   pr <- rep(1 / n, n)
   teleport <- (1 - damping) / n
 
+  converged <- FALSE
   for (iter in seq_len(max_iter)) {
     pr_new <- as.numeric(damping * (trans %*% pr)) + teleport
     pr_new <- pr_new / sum(pr_new)
-    if (max(abs(pr_new - pr)) < tol) break
+    if (max(abs(pr_new - pr)) < tol) { converged <- TRUE; break }
     pr <- pr_new
   }
+  if (!converged) cli::cli_warn("Power iteration did not converge in {max_iter} iterations")
   names(pr) <- ids
   pr
 }
