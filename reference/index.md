@@ -122,12 +122,18 @@ Calculate and view TORP player ratings
 - [`print(`*`<torp_team_profile>`*`)`](https://peteowen1.github.io/torp/reference/print.torp_team_profile.md)
   : Print a team profile
 
-## Network Centrality
+## Network Centrality & Opponent Adjustment
 
-Opponent quality adjustment via network analysis
+Opponent quality adjustment via network analysis and defensive profiles
 
 - [`calculate_player_centrality()`](https://peteowen1.github.io/torp/reference/calculate_player_centrality.md)
   : Calculate Player Centrality
+- [`adjust_epv_for_opponents()`](https://peteowen1.github.io/torp/reference/adjust_epv_for_opponents.md)
+  : Apply additive EPV opponent adjustment to player game data
+- [`adjust_stats_for_opponents()`](https://peteowen1.github.io/torp/reference/adjust_stats_for_opponents.md)
+  : Adjust per-game player stats for opponent quality
+- [`adjust_stat_ratings_for_opponents()`](https://peteowen1.github.io/torp/reference/adjust_stat_ratings_for_opponents.md)
+  : Adjust player stat ratings for opponent quality
 
 ## Player Attribution
 
@@ -174,6 +180,8 @@ comparisons
 
 - [`plot_ep_wp()`](https://peteowen1.github.io/torp/reference/plot_ep_wp.md)
   : Plot EP/WP game flow chart
+- [`plot_match_simulation()`](https://peteowen1.github.io/torp/reference/plot_match_simulation.md)
+  : Plot match simulation results
 - [`plot_player_comparison()`](https://peteowen1.github.io/torp/reference/plot_player_comparison.md)
   : Plot multi-player rating comparison
 - [`plot_player_rating()`](https://peteowen1.github.io/torp/reference/plot_player_rating.md)
@@ -199,6 +207,8 @@ Simulate AFL seasons and predict match outcomes
 
 - [`simulate_afl_season()`](https://peteowen1.github.io/torp/reference/simulate_afl_season.md)
   : Simulate a full AFL season
+- [`simulate_match_mc()`](https://peteowen1.github.io/torp/reference/simulate_match_mc.md)
+  : Monte Carlo match simulation
 - [`simulate_season()`](https://peteowen1.github.io/torp/reference/simulate_season.md)
   : Simulate a season of games
 - [`summarise_simulations()`](https://peteowen1.github.io/torp/reference/summarise_simulations.md)
@@ -231,6 +241,8 @@ Match-level expected goals, predictions, and head-to-head comparisons
 
 - [`get_player_game_ratings()`](https://peteowen1.github.io/torp/reference/get_player_game_ratings.md)
   : Get Player Game Ratings (Live)
+- [`get_player_game_stats()`](https://peteowen1.github.io/torp/reference/get_player_game_stats.md)
+  : Fetch Player Game Stats from AFL API
 - [`get_xg()`](https://peteowen1.github.io/torp/reference/get_xg.md) :
   Get Live xG for a Match or Round
 - [`calculate_match_xgs()`](https://peteowen1.github.io/torp/reference/calculate_match_xgs.md)

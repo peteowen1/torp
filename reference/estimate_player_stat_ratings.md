@@ -12,7 +12,8 @@ estimate_player_stat_ratings(
   ref_date = NULL,
   params = NULL,
   stat_defs = NULL,
-  compute_ci = TRUE
+  compute_ci = TRUE,
+  adjust_opponents = FALSE
 )
 
 estimate_player_skills(
@@ -20,7 +21,8 @@ estimate_player_skills(
   ref_date = NULL,
   params = NULL,
   stat_defs = NULL,
-  compute_ci = TRUE
+  compute_ci = TRUE,
+  adjust_opponents = FALSE
 )
 ```
 
@@ -53,6 +55,12 @@ estimate_player_skills(
   Logical. If TRUE (default), compute credible intervals
   (`_lower`/`_upper` columns) using qgamma/qbeta. Set to FALSE to skip
   interval computation for faster batch processing.
+
+- adjust_opponents:
+
+  Logical. If TRUE, applies opponent quality adjustment via
+  [`adjust_stat_ratings_for_opponents`](https://peteowen1.github.io/torp/reference/adjust_stat_ratings_for_opponents.md)
+  after estimation, adding `{stat}_adj_rating` columns. Default FALSE.
 
 ## Value
 

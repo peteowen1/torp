@@ -10,6 +10,7 @@ create_player_game_data(
   pbp_data = NULL,
   player_stats = NULL,
   teams = NULL,
+  chains = NULL,
   decay = EPR_DECAY_DEFAULT_DAYS,
   epv_params = NULL
 )
@@ -34,6 +35,13 @@ create_player_game_data(
   Team lineup data from
   [`load_teams()`](https://peteowen1.github.io/torp/reference/load_teams.md).
   If NULL, loads all available.
+
+- chains:
+
+  Raw chains data from
+  [`load_chains()`](https://peteowen1.github.io/torp/reference/load_chains.md).
+  If NULL, loads all available. Used to compute failed reception credit
+  from aerial contests.
 
 - decay:
 

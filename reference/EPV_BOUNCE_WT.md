@@ -1,6 +1,6 @@
-# Bounce weight per bounce (disp component)
+# Bounce weight in disposal credit
 
-Bounce weight per bounce (disp component)
+Bounce weight in disposal credit
 
 ## Usage
 

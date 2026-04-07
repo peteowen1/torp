@@ -5,7 +5,7 @@ Check if URL is Cached on Disk
 ## Usage
 
 ``` r
-is_disk_cached(url, max_age_days = 7)
+is_disk_cached(url, max_age_days = DISK_CACHE_DEFAULT_AGE_DAYS)
 ```
 
 ## Arguments

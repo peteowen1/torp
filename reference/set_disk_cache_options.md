@@ -6,7 +6,10 @@ future release. Configure disk cache behavior for the current session.
 ## Usage
 
 ``` r
-set_disk_cache_options(enabled = TRUE, max_age_days = 7)
+set_disk_cache_options(
+  enabled = TRUE,
+  max_age_days = DISK_CACHE_DEFAULT_AGE_DAYS
+)
 ```
 
 ## Arguments
