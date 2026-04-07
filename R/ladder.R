@@ -237,8 +237,8 @@ prepare_sim_data <- function(season, team_ratings = NULL, fixtures = NULL,
   if (!is.null(predictions)) {
     pred_dt <- data.table::as.data.table(predictions)
     # Find matching columns for join
-    pred_rnd <- resolve_col(pred_dt, c("round_number", "roundnum", "round", "week"))
-    pred_ht  <- resolve_col(pred_dt, c("home_team", "home_team_name"))
+    pred_rnd <- .resolve_col(pred_dt, c("round_number", "roundnum", "round", "week"))
+    pred_ht  <- .resolve_col(pred_dt, c("home_team", "home_team_name"))
 
     if (!is.null(pred_rnd) && !is.null(pred_ht) && "pred_xtotal" %in% names(pred_dt)) {
       sim_games[pred_dt,
@@ -250,7 +250,7 @@ prepare_sim_data <- function(season, team_ratings = NULL, fixtures = NULL,
 
   # --- GF Venue Familiarity ---
   # Compute each team's proportion of games at the GF venue (MCG)
-  venue_col <- resolve_col(fix_dt, c("venue_name", "venue"))
+  venue_col <- .resolve_col(fix_dt, c("venue_name", "venue"))
   if (!is.null(venue_col)) {
     venue_dt <- data.table::data.table(
       home_team = as.character(fix_dt[[ht_col]]),
@@ -475,7 +475,7 @@ calculate_final_ladder <- function(season = get_afl_season(),
     cli::cli_abort("Could not find required fixture columns.")
   }
 
-  mid_col <- resolve_col(fix_dt, c("match_id", "providerId"))
+  mid_col <- .resolve_col(fix_dt, c("match_id", "providerId"))
 
   games <- data.table::data.table(
     match_id   = if (!is.null(mid_col)) as.character(fix_dt[[mid_col]]) else NA_character_,
@@ -508,11 +508,11 @@ calculate_final_ladder <- function(season = get_afl_season(),
     pred_dt <- data.table::as.data.table(predictions)
 
     # Resolve prediction team columns for join matching
-    pred_ht <- resolve_col(pred_dt, c("home_team", "home_team_name"))
-    pred_at <- resolve_col(pred_dt, c("away_team", "away_team_name"))
+    pred_ht <- .resolve_col(pred_dt, c("home_team", "home_team_name"))
+    pred_at <- .resolve_col(pred_dt, c("away_team", "away_team_name"))
 
     # Join on match_id (predictions may have home/away swapped vs fixtures)
-    pred_mid <- resolve_col(pred_dt, c("match_id", "providerId"))
+    pred_mid <- .resolve_col(pred_dt, c("match_id", "providerId"))
 
     if (!is.null(pred_mid) && !is.null(mid_col)) {
       # Build a lookup with the prediction's home_team for flip detection
