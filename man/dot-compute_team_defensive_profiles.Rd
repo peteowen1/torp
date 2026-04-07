@@ -9,7 +9,8 @@
   ref_date,
   lambda_decay,
   rate_sources,
-  cap
+  cap,
+  prior_games = 5
 )
 }
 \arguments{
@@ -22,6 +23,8 @@
 \item{rate_sources}{Named character vector: stat_name -> source_col.}
 
 \item{cap}{Numeric vector of length 2: floor/ceiling for adj_factor.}
+
+\item{prior_games}{Numeric. Pseudo-games at league average for shrinkage.}
 }
 \value{
 data.table with one row per team, containing \verb{\{stat\}_adj_factor}.

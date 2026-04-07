@@ -4,7 +4,7 @@
 \alias{is_disk_cached}
 \title{Check if URL is Cached on Disk}
 \usage{
-is_disk_cached(url, max_age_days = 7)
+is_disk_cached(url, max_age_days = DISK_CACHE_DEFAULT_AGE_DAYS)
 }
 \arguments{
 \item{url}{Character URL to check}

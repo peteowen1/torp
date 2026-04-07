@@ -286,11 +286,19 @@ adjust_stats_for_opponents <- function(player_stats,
     prior_idx <- which(allowed$match_date_rating < mdate)
 
     if (length(prior_idx) == 0) {
-      # No prior data — no adjustment possible for this match
-      profiles_list[[i]] <- data.table::data.table(
-        match_id = mid,
-        team_conceding = character(0)
+      # No prior data -- use neutral adjustment (factor = 1.0) for all teams
+      teams_this_match <- unique(allowed[match_id == mid, team_conceding])
+      neutral <- data.table::data.table(
+        match_id = rep(mid, length(teams_this_match)),
+        team_conceding = teams_this_match
       )
+      for (j in seq_along(stat_cols)) {
+        stat_nm <- names(rate_sources)[rate_sources == stat_cols[j]]
+        for (fc in paste0(stat_nm, "_adj_factor")) {
+          data.table::set(neutral, j = fc, value = 1.0)
+        }
+      }
+      profiles_list[[i]] <- neutral
       next
     }
 
@@ -392,7 +400,7 @@ adjust_stats_for_opponents <- function(player_stats,
   # League average (weighted): guard against all-NA or zero weights
   total_wt <- sum(allowed$decay_wt, na.rm = TRUE)
   if (total_wt == 0) {
-    cli::cli_warn("All decay weights are zero — returning empty profiles")
+    cli::cli_warn("All decay weights are zero -- returning empty profiles")
     return(data.table::data.table(team = character(0)))
   }
   league_avg <- allowed[, lapply(.SD, function(x) {

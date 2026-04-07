@@ -113,17 +113,12 @@ spoil_hitout_raw <- ps_dt[
 
 ## 2c3. Contest credit raw components ----
 # Pre-compute contest_epv at default 1/3 share; optimizer scales via contest_scale
-contest_raw <- tryCatch({
-  compute_contest_credit(chains_data, pbp_data, contest_share = 1 / 3)
-}, error = function(e) {
-  cat(sprintf("  Contest credit skipped: %s\n", e$message))
-  data.table::data.table(
-    player_id = character(), match_id = character(),
-    contest_epv = numeric(),
-    aerial_target_wins = integer(), aerial_target_losses = integer(),
-    aerial_def_wins = integer(), aerial_def_losses = integer()
-  )
-})
+# Hard-fail here: optimizing without contest credit produces mismatched parameters
+contest_raw <- compute_contest_credit(chains_data, pbp_data, contest_share = 1 / 3)
+if (nrow(contest_raw) == 0 && nrow(chains_data) > 1000) {
+  stop("Contest credit returned 0 rows from ", nrow(chains_data),
+       " chain rows -- cannot optimize with contest_scale parameter")
+}
 cat(sprintf("  Contest credit rows: %d\n", nrow(contest_raw)))
 
 ## 2d. Merge all raw components ----
@@ -412,7 +407,8 @@ L2_PARAM_NAMES <- c("spoil_wt", "tackle_wt", "pressure_wt", "def_pressure_wt",
                      "contested_poss_wt", "contested_marks_wt", "ground_ball_gets_wt",
                      "marks_inside50_wt", "inside50s_wt", "clangers_wt",
                      "score_involvements_wt", "intercepts_wt", "one_percenters_wt",
-                     "rebound50s_wt", "frees_against_wt", "clearances_wt", "frees_for_wt",
+                     "rebound50s_wt", "frees_against_wt",
+                     "frees_for_wt",
                      "goals_wt", "behinds_wt", "marks_wt", "uncontested_poss_wt",
                      "shots_at_goal_wt", "kicks_wt", "handballs_wt",
                      "metres_gained_wt", "turnovers_wt", "goal_assists_wt")
@@ -524,8 +520,7 @@ compute_epv <- function(pgr, params, verbose = FALSE) {
 
   # Hitout EPV
   out[, hitout_epv := hitouts * p["hitout_wt"] + hitouts_adv * p["hitout_adv_wt"] +
-                      ruck_contests * p["ruck_contest_wt"] +
-                      clearances * p["clearances_wt"]]
+                      ruck_contests * p["ruck_contest_wt"]]
 
   # Contest EPV (pre-computed, scaled by optimizer)
   contest_sc <- if ("contest_scale" %in% names(p)) p["contest_scale"] else 1.0
@@ -698,8 +693,7 @@ objective_fn_fast <- function(par, env) {
 
   hitout_epv <- env$hitouts * p["hitout_wt"] +
                 env$hitouts_adv * p["hitout_adv_wt"] +
-                env$ruck_contests * p["ruck_contest_wt"] +
-                env$clearances * p["clearances_wt"]
+                env$ruck_contests * p["ruck_contest_wt"]
 
   # Contest EPV (pre-computed, scaled by optimizer)
   contest_sc <- if ("contest_scale" %in% names(p)) p["contest_scale"] else 1.0
@@ -1011,7 +1005,6 @@ par_defaults <- c(
   hitout_wt              = EPV_HITOUT_WT,
   hitout_adv_wt          = EPV_HITOUT_ADV_WT,
   ruck_contest_wt        = EPV_RUCK_CONTEST_WT,
-  clearances_wt          = EPV_CLEARANCES_WT,
   frees_for_wt           = EPV_FREES_FOR_WT,
   # --- Contest credit scale ---
   contest_scale          = 1.0,
@@ -1042,7 +1035,7 @@ param_stat_map <- c(
   inside50s_wt = "inside50s", clangers_wt = "clangers", score_involvements_wt = "score_inv",
   intercepts_wt = "intercepts", one_percenters_wt = "one_percenters",
   rebound50s_wt = "rebound50s", frees_against_wt = "frees_against",
-  clearances_wt = "clearances", frees_for_wt = "frees_for",
+  frees_for_wt = "frees_for",
   goals_wt = "goals", behinds_wt = "behinds", marks_wt = "marks_total",
   uncontested_poss_wt = "uncontested_poss", shots_at_goal_wt = "shots_at_goal",
   kicks_wt = "kicks", handballs_wt = "handballs", metres_gained_wt = "metres_gained",
@@ -1097,7 +1090,6 @@ par_lower <- c(
   hitout_wt              = -10,
   hitout_adv_wt          = -10,
   ruck_contest_wt        = -10,
-  clearances_wt          = -10,
   frees_for_wt           = -10,
   # --- Contest credit scale (fixed) ---
   contest_scale          = 1,
@@ -1161,7 +1153,6 @@ par_upper <- c(
   hitout_wt              = 10,
   hitout_adv_wt          = 10,
   ruck_contest_wt        = 10,
-  clearances_wt          = 10,
   frees_for_wt           = 10,
   # --- Contest credit scale (fixed) ---
   contest_scale          = 1,
@@ -1686,7 +1677,7 @@ stat_categories <- list(
                          "marks_inside50_wt", "inside50s_wt",
                          "score_involvements_wt", "goal_assists_wt"),
   "Contested/Ground" = c("contested_poss_wt", "contested_marks_wt",
-                          "ground_ball_gets_wt", "clearances_wt"),
+                          "ground_ball_gets_wt"),
   "Defence" = c("spoil_wt", "tackle_wt", "pressure_wt", "def_pressure_wt",
                 "intercepts_wt", "one_percenters_wt", "rebound50s_wt"),
   "Ruck" = c("hitout_wt", "hitout_adv_wt", "ruck_contest_wt"),
@@ -1767,7 +1758,6 @@ param_to_constant <- c(
   one_percenters_wt      = "EPV_ONE_PERCENTERS_WT",
   rebound50s_wt          = "EPV_REBOUND50S_WT",
   frees_against_wt       = "EPV_FREES_AGAINST_WT",
-  clearances_wt          = "EPV_CLEARANCES_WT",
   frees_for_wt           = "EPV_FREES_FOR_WT",
   goals_wt               = "EPV_GOALS_WT",
   behinds_wt             = "EPV_BEHINDS_WT",

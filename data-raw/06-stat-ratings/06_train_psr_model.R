@@ -349,6 +349,20 @@ print(head(latest[order(-dsr),
   .(player_name, pos_group, osr = round(osr, 2), dsr = round(dsr, 2))], 10),
   row.names = FALSE)
 
+# Position centering check: weighted mean by pos_group should be ~0
+cat("\n--- Position centering check (wt_80s-weighted mean by pos_group) ---\n")
+if ("wt_80s" %in% names(latest)) {
+  pos_check <- latest[!is.na(pos_group), .(
+    n = .N,
+    mean_psr = round(weighted.mean(psr, wt_80s, na.rm = TRUE), 6),
+    mean_osr = round(weighted.mean(osr, wt_80s, na.rm = TRUE), 6),
+    mean_dsr = round(weighted.mean(dsr, wt_80s, na.rm = TRUE), 6)
+  ), by = pos_group][order(-n)]
+  print(pos_check)
+} else {
+  cat("wt_80s not available in stat_ratings — centering uses unweighted mean\n")
+}
+
 # 6. Save outputs ----
 cli::cli_h1("Saving outputs")
 

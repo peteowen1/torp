@@ -2,20 +2,22 @@
 % Please edit documentation in R/opponent_adjustment.R
 \name{adjust_stats_for_opponents}
 \alias{adjust_stats_for_opponents}
-\title{Adjust per-game player stats for opponent quality (for PSV)}
+\title{Adjust per-game player stats for opponent quality}
 \usage{
 adjust_stats_for_opponents(
   player_stats,
   lambda_decay = OPP_ADJ_LAMBDA_DECAY,
   prior_games = 5,
   cap = OPP_ADJ_FACTOR_CAP,
-  stat_defs = NULL
+  stat_defs = NULL,
+  rolling = FALSE
 )
 }
 \arguments{
 \item{player_stats}{data.table of player stats with per-game stat counts.
-Must have \code{home_team_name}, \code{away_team_name}, \code{team_status}, \code{match_id},
-\code{utc_start_time} columns.}
+Must have \code{team}, \code{opponent}, \code{match_id}, and either \code{match_date_rating}
+or \code{utc_start_time} columns. If \code{team}/\code{opponent} are missing, derives
+them from \code{home_team_name}, \code{away_team_name}, \code{team_status}.}
 
 \item{lambda_decay}{Decay rate per day for opponent profiles.}
 
@@ -24,12 +26,16 @@ Must have \code{home_team_name}, \code{away_team_name}, \code{team_status}, \cod
 \item{cap}{Floor/ceiling for adjustment factors.}
 
 \item{stat_defs}{Output of \code{\link[=stat_rating_definitions]{stat_rating_definitions()}}. If NULL, uses default.}
+
+\item{rolling}{Logical. If TRUE, computes causal rolling profiles (each game
+uses only prior games for its opponent profile). If FALSE (default),
+computes a single snapshot profile at the latest date.}
 }
 \value{
 The input data with additional \verb{\{stat\}_oadj} columns for each rate stat.
 }
 \description{
 For each player-game and each rate stat, computes an opponent adjustment
-factor based on rolling decay-weighted team defensive profiles.
+factor based on decay-weighted team defensive profiles.
 Creates \verb{\{stat\}_oadj} columns alongside the originals.
 }

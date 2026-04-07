@@ -227,10 +227,6 @@ EPV_HITOUT_ADV_WT <- 0.1748
 #' @keywords internal
 EPV_RUCK_CONTEST_WT <- 0.0232
 
-#' Clearances weight (hitout component, currently disabled pending re-optimization)
-#' @keywords internal
-EPV_CLEARANCES_WT <- 0.1094
-
 #' Contested possessions weight (recv component)
 #' @keywords internal
 EPV_CONTESTED_POSS_WT <- 0.1642

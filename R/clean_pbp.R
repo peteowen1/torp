@@ -435,12 +435,24 @@ add_contest_vars_dt <- function(dt) {
       valid_ci <- contest_idx[valid]
       kick_rows <- valid_ci - offsets[valid]
 
-      # Batch-set contest info on the Kick rows
-      data.table::set(dt, kick_rows, "contest_target_id", dt$contest_target_id[valid_ci])
-      data.table::set(dt, kick_rows, "contest_target_team_id", dt$contest_target_team_id[valid_ci])
-      data.table::set(dt, kick_rows, "contest_defender_id", dt$contest_defender_id[valid_ci])
-      data.table::set(dt, kick_rows, "contest_defender_team_id", dt$contest_defender_team_id[valid_ci])
-      data.table::set(dt, kick_rows, "contest_outcome", dt$contest_outcome[valid_ci])
+      # Guard against out-of-bounds or cross-match indices
+      ok <- kick_rows > 0L
+      if (any(ok)) {
+        ok[ok] <- dt$match_id[kick_rows[ok]] == dt$match_id[valid_ci[ok]]
+      }
+      if (!all(ok)) {
+        kick_rows <- kick_rows[ok]
+        valid_ci <- valid_ci[ok]
+      }
+
+      if (length(kick_rows) > 0L) {
+        # Batch-set contest info on the Kick rows
+        data.table::set(dt, kick_rows, "contest_target_id", dt$contest_target_id[valid_ci])
+        data.table::set(dt, kick_rows, "contest_target_team_id", dt$contest_target_team_id[valid_ci])
+        data.table::set(dt, kick_rows, "contest_defender_id", dt$contest_defender_id[valid_ci])
+        data.table::set(dt, kick_rows, "contest_defender_team_id", dt$contest_defender_team_id[valid_ci])
+        data.table::set(dt, kick_rows, "contest_outcome", dt$contest_outcome[valid_ci])
+      }
     }
 
     # Clean up lag columns

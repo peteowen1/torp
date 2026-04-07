@@ -332,10 +332,9 @@ prepare_sim_data <- function(season, team_ratings = NULL, fixtures = NULL,
     xsd <- match_gams[["xscore_diff"]]
   }
 
-  # Cross-season team random effects (use anchored pattern to avoid matching
-  # team_name_season)
+  # Cross-season team random effects (exact match to avoid team_name_season)
   re_team <- tryCatch(
-    extract_gam_random_effects(xsd, "^team_name\\."),
+    extract_gam_random_effects(xsd, "^team_name$"),
     error = function(e) {
       cli::cli_warn("Could not extract team random effects: {conditionMessage(e)}")
       NULL
@@ -349,7 +348,10 @@ prepare_sim_data <- function(season, team_ratings = NULL, fixtures = NULL,
   # Within-season team random effects (team_name_season levels are "TeamName YYYY")
   re_season <- tryCatch(
     extract_gam_random_effects(xsd, "team_name_season"),
-    error = function(e) NULL
+    error = function(e) {
+      cli::cli_warn("Could not extract season-level team random effects: {conditionMessage(e)}")
+      NULL
+    }
   )
 
   if (!is.null(re_season)) {

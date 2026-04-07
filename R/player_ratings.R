@@ -241,6 +241,7 @@ calculate_epr <- function(season_val = get_afl_season(type = "current"),
 #' @param prior_rate_disp Prior rate for disposal shrinkage target. Default is \code{EPR_PRIOR_RATE_DISP}.
 #' @param prior_rate_spoil Prior rate for spoil shrinkage target. Default is \code{EPR_PRIOR_RATE_SPOIL}.
 #' @param prior_rate_hitout Prior rate for hitout shrinkage target. Default is \code{EPR_PRIOR_RATE_HITOUT}.
+#' @param ... Additional arguments (currently unused, reserved for future parameters).
 #'
 #' @return A data frame with calculated EPR statistics per player
 #'

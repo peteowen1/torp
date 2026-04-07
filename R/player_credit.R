@@ -183,7 +183,14 @@ create_player_game_data <- function(pbp_data = NULL,
     compute_contest_credit(chains, pbp_data,
                            contest_share = p$contest_share %||% (1 / 3))
   }, error = function(e) {
-    cli::cli_warn("Contest credit skipped: {conditionMessage(e)}")
+    is_data_unavailable <- grepl(
+      "load_chains|download|HTTP|connection|404|timeout",
+      conditionMessage(e), ignore.case = TRUE
+    )
+    if (!is_data_unavailable) {
+      cli::cli_abort("Contest credit computation failed: {conditionMessage(e)}")
+    }
+    cli::cli_warn("Contest credit skipped (data unavailable): {conditionMessage(e)}")
     data.table::data.table(
       player_id = character(), match_id = character(),
       contest_epv = numeric(),

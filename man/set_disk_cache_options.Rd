@@ -4,7 +4,10 @@
 \alias{set_disk_cache_options}
 \title{Set Disk Cache Options}
 \usage{
-set_disk_cache_options(enabled = TRUE, max_age_days = 7)
+set_disk_cache_options(
+  enabled = TRUE,
+  max_age_days = DISK_CACHE_DEFAULT_AGE_DAYS
+)
 }
 \arguments{
 \item{enabled}{Logical. Enable or disable disk caching.}

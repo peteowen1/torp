@@ -4,21 +4,25 @@
 \alias{.extract_team_residuals}
 \title{Extract team-level quality residuals from match GAM}
 \usage{
-.extract_team_residuals(models = NULL)
+.extract_team_residuals(models = NULL, season = NULL)
 }
 \arguments{
 \item{models}{Optional named list of GAM models (as returned by
 \code{run_predictions_pipeline()$models}). When provided, uses the
 \code{xscore_diff} model directly. Otherwise loads from torpmodels.}
+
+\item{season}{Integer season year used to filter \code{team_name_season} effects
+to the relevant season. Defaults to the current year.}
 }
 \value{
 A data.table with columns \code{team}, \code{residual_mean}, \code{residual_se},
 or NULL if extraction fails.
 }
 \description{
-Extracts the cross-season \code{team_name.x} random effects from the
-\code{xscore_diff} GAM. These capture systematic team over/under-performance
-not explained by player TORP ratings (e.g. coaching, team system).
+Extracts both cross-season \code{team_name} and within-season \code{team_name_season}
+random effects from the \code{xscore_diff} GAM and combines them. These capture
+systematic team over/under-performance not explained by player TORP ratings
+(e.g. coaching, team system, season-specific form).
 Team names are standardised via \code{\link[=torp_replace_teams]{torp_replace_teams()}} to ensure
 consistent merging with simulation team names.
 }

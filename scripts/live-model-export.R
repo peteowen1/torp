@@ -56,6 +56,11 @@ tryCatch({
   if (!requireNamespace("mgcv", quietly = TRUE)) stop("mgcv required")
   if (!"mgcv" %in% .packages()) attachNamespace("mgcv")
 
+  if (is.null(shot_model$model)) {
+    stop("Shot model has been stripped ($model is NULL). ",
+         "Re-load unstripped model for factor level extraction.")
+  }
+
   # Build prediction grid: goal_x (5-65m) × abs_y (0-35m)
   # 1m resolution = ~2000 cells, small enough for JSON
   grid <- expand.grid(
@@ -143,44 +148,41 @@ cat("  2. Keep only weights for stats in LIVE_STATS\n")
 cat("  3. Optionally re-calibrate weights to compensate for missing stats\n")
 cat("  4. Export to inst/extdata/epv_live_weights.json\n\n")
 
-# Current EPV weights that ARE available live:
+# Current EPV weights that ARE available live (from R/constants.R):
 epv_live_weights <- list(
   # Spoil/Tackle component (partial)
-  tackles = 0.3090,
-  intercepts = 0.0653,
-  one_percenters = 0.1574,
-  rebound50s = -0.1900,
-  frees_against = 0.0353,
-  # Missing: spoils (0.0833), pressure_acts (-0.0085),
-  #          def_half_pressure_acts (-0.2079)
+  tackles = EPV_TACKLE_WT,
+  intercepts = EPV_INTERCEPTS_WT,
+  one_percenters = EPV_ONE_PERCENTERS_WT,
+  rebound50s = EPV_REBOUND50S_WT,
+  frees_against = EPV_FREES_AGAINST_WT,
+  # Missing: spoils, pressure_acts, def_half_pressure_acts
 
   # Hitout component (partial)
-  hitouts = 0.0516,
-  clearances = 0.1143,
-  # Missing: hitouts_to_advantage (0.1714), ruck_contests (0.0228)
+  hitouts = EPV_HITOUT_WT,
+  # Missing: hitouts_to_advantage, ruck_contests
 
   # Disposal component (partial)
-  inside50s = 0.2527,
-  clangers = -0.0050,
-  score_involvements = 0.3126,
-  kicks = 0.0623,
-  handballs = 0.0597,
-  metres_gained = 0.0008,
-  turnovers = -0.1138,
-  goal_assists = 0.3186,
-  goals = 0.4357,
-  behinds = 1.0779,
-  shots_at_goal = 0.4530,
-  # Missing: none from disposal component!
+  inside50s = EPV_INSIDE50S_WT,
+  clangers = EPV_CLANGERS_WT,
+  score_involvements = EPV_SCORE_INVOLVEMENTS_WT,
+  kicks = EPV_KICKS_WT,
+  handballs = EPV_HANDBALLS_WT,
+  metres_gained = EPV_METRES_GAINED_WT,
+  turnovers = EPV_TURNOVERS_WT,
+  goal_assists = EPV_GOAL_ASSISTS_WT,
+  goals = EPV_GOALS_WT,
+  behinds = EPV_BEHINDS_WT,
+  shots_at_goal = EPV_SHOTS_AT_GOAL_WT,
 
   # Reception component (partial)
-  contested_possessions = 0.1657,
-  contested_marks = 0.0665,
-  marks_inside50 = 0.4003,
-  marks = 0.0216,
-  uncontested_possessions = 0.0233,
-  frees_for = 0.1825
-  # Missing: ground_ball_gets (0.2238)
+  contested_possessions = EPV_CONTESTED_POSS_WT,
+  contested_marks = EPV_CONTESTED_MARKS_WT,
+  marks_inside50 = EPV_MARKS_INSIDE50_WT,
+  marks = EPV_MARKS_WT,
+  uncontested_possessions = EPV_UNCONTESTED_POSS_WT,
+  frees_for = EPV_FREES_FOR_WT
+  # Missing: ground_ball_gets
 )
 
 cat("  Available EPV weights:", length(epv_live_weights), "stats\n")

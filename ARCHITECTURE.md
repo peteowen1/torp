@@ -398,6 +398,55 @@ Functions: `torp_replace_teams()`, `torp_team_abbr()`, `torp_team_full()`, `torp
 #### Visualization (7 files)
 `plot_game.R` (EP/WP flow charts), `plot_player.R` (rating profiles), `plot_shots.R` (shot maps), `plot_simulation.R` (season sim results), `plot_comparison.R` (player/team comparisons), `plot_team.R` (team-level plots), `plot_utils.R` (shared utilities).
 
+#### Opponent Adjustment
+
+**Purpose**: Adjust player ratings and per-game stats for opponent defensive quality. Players who perform well against strong defences get boosted; those who pad stats against weak teams get deflated.
+
+**Key Files**: `R/opponent_adjustment.R`, `R/epv_opponent_adjustment.R`
+
+**Two adjustment systems**:
+
+| System | Function | Input | Output | Method |
+|--------|----------|-------|--------|--------|
+| Stat rating | `adjust_stat_ratings_for_opponents()` | Bayesian stat ratings | `{stat}_adj_rating` columns | Multiplicative factor from opponent concession rates |
+| Per-game stats | `adjust_stats_for_opponents()` | Raw per-game stats | `{stat}_oadj` columns | Multiplicative factor per player-game |
+| EPV | `adjust_epv_for_opponents()` | Player game data with `epv_adj` | `{component}_oadj` columns | Additive adjustment from rolling team defensive profiles |
+
+**EPV adjustment pipeline** (`epv_opponent_adjustment.R`):
+1. `.compute_rolling_epv_profiles()` — For each team at each match date, computes decay-weighted average total EPV conceded, shrunk toward league mean via pseudo-games
+2. `adjust_epv_for_opponents()` — Applies additive correction: `{component}_oadj = {component}_adj + opponent_adjustment * tog_share`
+
+**Stat adjustment pipeline** (`opponent_adjustment.R`):
+1. Computes per-team decay-weighted concession rates for each rate stat (efficiency stats excluded — they're player-intrinsic)
+2. Adjustment factor = opponent's concession rate / league average, capped by `OPP_ADJ_FACTOR_CAP`
+3. `{stat}_oadj = raw_stat * adjustment_factor`
+
+---
+
+#### Match Simulation
+
+**Purpose**: Monte Carlo simulation of individual match scoring sequences, producing score distributions, quarter breakdowns, and win probability fan charts.
+
+**Key File**: `R/simulate_match.R`
+
+**Entry Point**: `simulate_match_mc(home_team, away_team, season, n_sims, team_ratings, predictions, home_advantage, seed)`
+
+**Simulation Mechanics** (per simulation):
+1. Resolve match parameters from predictions or team ratings (expected margin + expected total)
+2. Generate scoring events per quarter: individual goals and behinds with timing
+3. Accumulate scores and compute running WP via logistic function (scaling factor: `SIM_WP_SCALING_FACTOR`)
+
+**Output**: S3 object `torp_match_sim` with:
+- `scores` — data.table of final scores per simulation
+- `quarters` — per-quarter breakdown
+- `events` — individual scoring events with timing
+- `wp_trajectory` — WP fan chart data (mean, p10, p25, median, p75, p90)
+- `summary` — win/draw/loss probabilities, score quantiles
+
+**Distinct from `simulate_season()`**: Season simulation (`simulate.R`) simulates margins for remaining games to project ladders. Match simulation simulates individual scoring sequences within a single game for richer in-game analysis.
+
+---
+
 #### Baseline Models (`R/baseline_models.R`)
 Reference models for WP evaluation: Naive (always 0.5), Score-Only (logistic on margin), Time-Score (GLM interaction), EP-Based (expected points margin).
 
@@ -432,6 +481,7 @@ Reference models for WP evaluation: Naive (always 0.5), Score-Only (logistic on 
 | WP Utilities | `R/wp_utils.R` | WP input validation, model health checks |
 | Baseline Models | `R/baseline_models.R` | Score-only, time-score, EP-based baselines |
 | Simulation | `R/simulate.R` | `simulate_season()`, `process_games()`, `process_games_dt()` |
+| Match Simulation | `R/simulate_match.R` | `simulate_match_mc()` |
 | Ladder | `R/ladder.R` | `calculate_ladder()`, `calculate_final_ladder()`, `simulate_finals()`, `simulate_afl_season()`, `summarise_simulations()` |
 | Injuries | `R/injuries.R` | `scrape_injuries()`, `get_all_injuries()`, `match_injuries()`, `build_injury_schedule()`, `parse_return_round()` |
 | Expected Goals | `R/xg.R` | `calculate_match_xgs()`, `get_xg()` |
@@ -443,6 +493,8 @@ Reference models for WP evaluation: Naive (always 0.5), Score-Only (logistic on 
 | Team Profile | `R/team_profile.R` | `team_profile()`, `team_stat_rating_profile()`, `get_team_stat_ratings()` |
 | Match Analysis | `R/analyze_match.R` | `get_player_game_ratings()` (live match analysis) |
 | Centrality | `R/centrality.R` | `calculate_player_centrality()` |
+| Opponent Adj (Stats) | `R/opponent_adjustment.R` | `adjust_stat_ratings_for_opponents()`, `adjust_stats_for_opponents()` |
+| Opponent Adj (EPV) | `R/epv_opponent_adjustment.R` | `adjust_epv_for_opponents()` |
 | Player Attribution | `R/player_attribution.R` | `calculate_player_attribution()`, `batch_player_attribution()` |
 | Stat Rating Data | `R/player_skills_data.R` | Data preparation for stat rating estimation |
 | Stat Rating Profiles | `R/player_skills_profile.R` | `player_stat_rating_profile()`, `get_player_stat_ratings()` |

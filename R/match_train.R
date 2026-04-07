@@ -27,9 +27,15 @@
   for (s in re_smooths) {
     vn <- s$vn[1]
     coef_idx <- s$first.para:s$last.para
-    coefs <- tryCatch(stats::coef(model)[coef_idx], error = function(e) NULL)
+    coefs <- tryCatch(stats::coef(model)[coef_idx], error = function(e) {
+      cli::cli_warn("Failed to extract RE coefficients for smooth '{vn}': {conditionMessage(e)}")
+      NULL
+    })
     se <- tryCatch(sqrt(diag(stats::vcov(model)[coef_idx, coef_idx, drop = FALSE])),
-                   error = function(e) NULL)
+                   error = function(e) {
+      cli::cli_warn("Failed to extract RE std errors for smooth '{vn}': {conditionMessage(e)}")
+      NULL
+    })
     if (is.null(coefs)) next
 
     # Recover level names from model frame
