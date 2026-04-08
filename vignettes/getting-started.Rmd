@@ -40,10 +40,10 @@ torp loads processed AFL data from [torpdata](https://github.com/peteowen1/torpd
 library(torp)
 
 # Current season
-pbp <- load_pbp(2025)
+pbp <- load_pbp(2026)
 
 # Specific rounds
-pbp <- load_pbp(2025, rounds = 1:10)
+pbp <- load_pbp(2026, rounds = 1:10)
 
 # All available data (2021+)
 pbp_all <- load_pbp(TRUE, rounds = TRUE)
@@ -53,7 +53,7 @@ pbp_all <- load_pbp(TRUE, rounds = TRUE)
 
 ```{r player-stats}
 # Current season
-stats <- load_player_stats(2025)
+stats <- load_player_stats(2026)
 
 # All seasons
 stats_all <- load_player_stats(TRUE)
@@ -63,19 +63,19 @@ stats_all <- load_player_stats(TRUE)
 
 ```{r other-data}
 # Possession chains
-chains <- load_chains(2025)
+chains <- load_chains(2026)
 
 # Match results
-results <- load_results(2025)
+results <- load_results(2026)
 
 # Fixtures and schedule
 fixtures <- load_fixtures(all = TRUE)
 
 # Player biographical details
-details <- load_player_details(2025)
+details <- load_player_details(2026)
 
 # Expected goals
-xg <- load_xg(2025)
+xg <- load_xg(2026)
 ```
 
 ## Player Ratings
@@ -84,16 +84,16 @@ TORP (Total Overall Rating Points) evaluates players across four components.
 
 ```{r ratings}
 # Current TORP ratings (defaults to next round)
-ratings <- calculate_torp_ratings()
+ratings <- torp_ratings()
 
 # Ratings at a specific point
-ratings <- calculate_torp_ratings(season_val = 2025, round_val = 15)
+ratings <- torp_ratings(season_val = 2026, round_val = 15)
 
 # Game-level player performance
-game_ratings <- player_game_ratings(season_val = 2025, round_num = 10)
+game_ratings <- player_game_ratings(season_val = 2026, round_num = 10)
 
 # Season totals
-season_totals <- player_season_ratings(2025)
+season_totals <- player_season_ratings(2026)
 ```
 
 See `vignette("torp-guide")` for the full methodology.
@@ -103,7 +103,7 @@ See `vignette("torp-guide")` for the full methodology.
 torp includes three core models that enrich play-by-play data:
 
 ```{r models}
-pbp <- load_pbp(2025, rounds = 1:5)
+pbp <- load_pbp(2026, rounds = 1:5)
 pbp_clean <- clean_pbp(pbp)
 
 # Expected Points -- predicts point value of each possession
@@ -127,7 +127,7 @@ Data downloads are cached to disk so subsequent calls don't re-download:
 
 ```{r disk-cache}
 # Cached by default
-pbp <- load_pbp(2025)
+pbp <- load_pbp(2026)
 
 # Cache location
 get_disk_cache_dir()

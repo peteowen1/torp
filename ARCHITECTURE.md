@@ -424,6 +424,11 @@ Reference models for WP evaluation: Naive (always 0.5), Score-Only (logistic on 
 | Data Validation | `R/data_validation.R` | Input validation utilities |
 | Utilities | `R/utils.R` | `torp_clean_names()`, `get_afl_season()`, `get_afl_week()`, `clear_all_cache()` |
 | Visualization | `R/plot_*.R` (7 files) | `plot_game()`, `plot_player()`, `plot_shots()`, `plot_simulation()`, `plot_comparison()`, `plot_team()` |
+| Player Attribution | `R/player_attribution.R` | `calculate_player_attribution()`, `batch_player_attribution()` |
+| Centrality | `R/centrality.R` | `calculate_player_centrality()` |
+| Stat Rating Data | `R/player_skills_data.R` | `.map_position_group()`, `.resolve_stat_rating_positions()`, `.prepare_stat_rating_data()` |
+| Stat Rating Profiles | `R/player_skills_profile.R` | `player_stat_rating_profile()`, `aggregate_team_stat_ratings()`, `team_stat_rating_profile()` |
+| Match Analysis | `R/analyze_match.R` | Post-match analysis from live chain data |
 | Globals | `R/globals.R` | NSE variable declarations for R CMD check |
 | Package Init | `R/zzz.R` | `.onLoad()` / `.onAttach()` |
 | Data Docs | `R/data.R` | Documentation for bundled datasets |
@@ -444,6 +449,7 @@ Reference models for WP evaluation: Naive (always 0.5), Score-Only (logistic on 
 | 06 | `data-raw/06-stat-ratings/` | `02_optimize_stat_rating_params.R` | Bayesian prior/decay hyperparameter tuning |
 | 06 | `data-raw/06-stat-ratings/` | `03_estimate_stat_ratings.R` | Batch stat rating estimation by round |
 | 06 | `data-raw/06-stat-ratings/` | `04_export_stat_ratings.R` | Per-season parquet export to torpdata |
+| 06 | `data-raw/06-stat-ratings/` | `05_compare_psr_models.R` | Compare PSR model formulations |
 | 06 | `data-raw/06-stat-ratings/` | `06_train_psr_model.R` | glmnet PSR model: stat ratings -> score prediction |
 
 ## Glossary
@@ -467,3 +473,9 @@ Reference models for WP evaluation: Naive (always 0.5), Score-Only (logistic on 
 | **I50** | Inside 50: entry into the forward 50m arc |
 | **GAM** | Generalized Additive Model (via `mgcv::bam()`) |
 | **Parquet** | Columnar storage format used for all data in torpdata releases |
+
+## See Also
+
+- `torpverse/ARCHITECTURE.md` -- Ecosystem overview, CI/CD orchestration, cross-repo data flow
+- `torpdata/ARCHITECTURE.md` -- Data distribution and blog aggregation pipeline
+- `torpmodels/ARCHITECTURE.md` -- Model lifecycle and cache architecture

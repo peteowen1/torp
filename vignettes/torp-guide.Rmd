@@ -63,8 +63,8 @@ AFL API (get_afl_*) --> torp (clean + enrich) --> torpdata (store)
 
 ```{r loading}
 library(torp)
-pbp <- load_pbp(2025)
-pbp <- load_pbp(2025, rounds = 1:10)
+pbp <- load_pbp(2026)
+pbp <- load_pbp(2026, rounds = 1:10)
 pbp_all <- load_pbp(TRUE, rounds = TRUE)
 ```
 
@@ -178,7 +178,7 @@ Three core models enrich play-by-play data. Models load from [torpmodels](https:
 
 ```{r pipeline}
 library(torp)
-pbp <- load_pbp(2025, rounds = 1:10)
+pbp <- load_pbp(2026, rounds = 1:10)
 pbp_clean <- clean_pbp(pbp)
 pbp_ep <- add_epv_vars(pbp_clean)        # Expected Points
 pbp_wp <- add_wp_vars(pbp_ep)            # Win Probability

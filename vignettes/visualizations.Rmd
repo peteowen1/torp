@@ -37,16 +37,16 @@ play-by-play.
 
 ```{r wp-chart}
 # Win probability chart for a specific match
-plot_ep_wp(2025, round = 1, match_id = "CD_M20250140101")
+plot_ep_wp(2026, round = 1, match_id = "CD_M20260140101")
 
 # Auto-selects match if only one in the round
-plot_ep_wp(2025, round = 1)
+plot_ep_wp(2026, round = 1)
 ```
 
 ### Expected Points
 
 ```{r ep-chart}
-plot_ep_wp(2025, round = 1, match_id = "CD_M20250140101", metric = "ep")
+plot_ep_wp(2026, round = 1, match_id = "CD_M20260140101", metric = "ep")
 ```
 
 ## Team Ratings
@@ -69,10 +69,10 @@ as colour.
 
 ```{r shot-map}
 # All shots in a round
-plot_shot_map(2025, round = 1)
+plot_shot_map(2026, round = 1)
 
 # Filter to a specific team
-plot_shot_map(2025, round = 1, team = "Geelong")
+plot_shot_map(2026, round = 1, team = "Geelong")
 ```
 
 Shapes indicate actual outcomes (circle = goal, triangle = behind, X = miss)

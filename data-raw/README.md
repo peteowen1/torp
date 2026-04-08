@@ -1,21 +1,22 @@
 # data-raw/
 
-This folder contains scripts for generating package data, training models, and computing player ratings. The numbered folders indicate the general workflow order.
+This folder contains scripts for collecting data, training models, computing player ratings, and running analysis. The numbered folders indicate the general workflow order.
 
 ## Folder Structure
 
 ```
 data-raw/
-├── 01-data/        # Data collection & preparation
-├── 02-models/      # Model training scripts
-├── 03-ratings/     # Player rating systems
-├── 04-analysis/    # Analysis & simulation
-├── 05-validation/  # Model validation & comparison
-├── archive/        # Deprecated/experimental scripts
-├── outputs/        # Generated data files (gitignored)
-├── stat-models/    # Pre-trained GAM models
-├── rsconnect/      # Shiny deployment config
-└── utils/          # Helper scripts
+├── 01-data/           # Data collection & preparation
+├── 02-models/         # Match prediction scripts
+├── 03-ratings/        # EPR/TORP rating pipeline
+├── 04-analysis/       # Analysis & simulation
+├── 05-validation/     # Model validation & comparison
+├── 06-stat-ratings/   # Stat rating estimation pipeline
+├── cache-skills/      # Cached skill estimation data
+├── stat-models/       # Pre-trained stat GAM models (RDS)
+├── utils/             # Helper scripts
+├── rebuild_everything.R  # Master rebuild script (CLI flags for phase selection)
+└── README.md
 ```
 
 ## Workflow
@@ -24,42 +25,69 @@ data-raw/
 
 | Script | Purpose |
 |--------|---------|
-| `get_stadium_data.R` | Scrape and process AFL stadium information |
-| `update_fixture_table.R` | Update fixture data from fitzRoy |
+| `create_aggregated_files.R` | Create per-season aggregated parquet files |
+| `daily_release.R` | Daily PBP data extraction and release to torpdata |
+| `get_stadium_data.R` | Scrape AFL stadium lat/lon and capacity |
+| `get_weather_data.R` | Fetch historical weather from Open-Meteo API |
+| `rebuild_all_release_data.R` | Full historical data rebuild (2021+) |
 | `release_data.R` | Package data for torpdata GitHub releases |
+| `update_fixture_table.R` | Fetch fixtures from fitzRoy, normalize |
 
-### 2. Model Training (`02-models/`)
+### 2. Match Predictions (`02-models/`)
+
+These scripts build match-level predictions using the torp package's GAM/XGBoost pipeline. **Note:** Core model training (EP, WP, shot) lives in `torpmodels/data-raw/`, not here.
 
 | Script | Purpose |
 |--------|---------|
-| `create_ep_model.R` | Train Expected Points GAM model |
-| `create_wp_model.R` | Train Win Probability model |
-| `create_shot_model.R` | Train shot outcome classification model |
-| `build_match_predictions.R` | Build GAM-based match predictions |
-| `build_match_predictions_xgb.R` | Build XGBoost match predictions |
+| `build_match_predictions.R` | Build weekly GAM-based match predictions (entry point: `run_predictions_pipeline()`) |
+| `build_match_predictions_xgb.R` | Build XGBoost match predictions (alternative) |
 
 ### 3. Player Ratings (`03-ratings/`)
 
 | Script | Purpose |
 |--------|---------|
 | `bayes_rapm.R` | Bayesian Regularized Adjusted Plus-Minus |
-| `build_player_ratings.R` | Calculate TORP player ratings |
-| `create_player_ratings_table.R` | Generate player ratings tables |
+| `create_player_ratings_table.R` | Generate player ratings tables for release |
+| `optimize_epr_ratings.R` | Grid search for EPV/EPR decay and prior hyperparameters |
+| `run_epr_pipeline.R` | Main 6-stage EPR/TORP pipeline (daily CI entry point) |
 
 ### 4. Analysis (`04-analysis/`)
 
 | Script | Purpose |
 |--------|---------|
 | `rankings.R` | Team and player rankings |
-| `simming_seasons.R` | Season simulation scripts |
-| `wt_av_modelling.R` | Weighted average modelling |
+| `simming_seasons.R` | Season simulation exploration |
+| `simulate_seasons.R` | Season simulation scripts |
+| `weather_eda.R` | Weather impact analysis |
+| `wt_av_modelling.R` | Weighted average modelling experiments |
 
 ### 5. Validation (`05-validation/`)
 
 | Script | Purpose |
 |--------|---------|
-| `validate_wp_model.R` | Validate win probability model |
 | `compare_model_performance.R` | Compare model performance metrics |
+| `validate_wp_model.R` | Win probability model diagnostics |
+
+### 6. Stat Rating Pipeline (`06-stat-ratings/`)
+
+Sequential pipeline for computing Bayesian per-stat player ratings and training the PSR model:
+
+| Script | Purpose |
+|--------|---------|
+| `01_compute_match_stats.R` | Compute raw per-player-match stats from PBP |
+| `02_optimize_stat_rating_params.R` | Tune Bayesian prior and decay hyperparameters |
+| `03_estimate_stat_ratings.R` | Estimate player stat ratings by round (entry point) |
+| `04_export_stat_ratings.R` | Export stat ratings to per-season parquets for torpdata |
+| `05_compare_psr_models.R` | Compare PSR model formulations |
+| `06_train_psr_model.R` | Train glmnet PSR model: stat ratings -> margin prediction |
+
+## Supporting Directories
+
+| Directory | Contents |
+|-----------|----------|
+| `stat-models/` | Pre-trained stat GAM model files (RDS format) |
+| `cache-skills/` | Cached intermediate data for skill estimation |
+| `utils/` | Shared helper scripts (e.g., `useful_paths.R`) |
 
 ## Running Scripts
 
@@ -67,7 +95,7 @@ Use `rebuild_everything.R` for a full end-to-end rebuild. It supports CLI flags 
 
 ```bash
 # Full rebuild
-powershell.exe -Command 'Rscript "torp/data-raw/rebuild_everything.R"'
+Rscript rebuild_everything.R
 
 # Specific season range
 Rscript rebuild_everything.R 2024 2026
@@ -85,28 +113,7 @@ Most scripts assume:
 2. Required data is available from torpdata releases
 3. Previous steps in the workflow have been completed
 
-## Output Files
+## File Formats
 
-Large generated files are stored in `outputs/` and gitignored:
-
-- `bayes_od_rapm_*.rds` - RAPM model outputs (RDS format required for R model objects that cannot be serialized to Parquet)
-- `stadium_data.parquet` - Stadium information
-- `stat_pred_df.parquet` - Statistical prediction data
-
-**Note on file formats:**
-- **Parquet** (`.parquet`): Used for all data frames and tabular data. This is the primary data format for the package, providing better compression and cross-language compatibility (Python, etc.).
-- **RDS** (`.rds`): Used only for R-specific model objects (GAM, brms, glmnet) that cannot be serialized to Parquet format. These are stored in `stat-models/` and `outputs/`.
-
-## Archive
-
-The `archive/` folder contains deprecated scripts kept for reference:
-
-- `rapm_build.R` - Superseded by `bayes_rapm.R`
-- `off_def_bayes_rapm.R` - Superseded by `bayes_rapm.R`
-- `season_sim.R` - Empty placeholder
-
-## Notes
-
-- Scripts use snake_case naming convention
-- Pre-trained GAM models are in `stat-models/` (70+ models)
-- Shiny deployment config is in `rsconnect/`
+- **Parquet** (`.parquet`): Used for all data frames and tabular data. Primary data format for the package.
+- **RDS** (`.rds`): Used only for R-specific model objects (GAM, brms, glmnet) that cannot be serialized to Parquet. Found in `stat-models/`.

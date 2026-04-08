@@ -38,13 +38,13 @@ loaded on demand.
 library(torp)
 
 # Play-by-play data
-pbp <- load_pbp(2025, rounds = 1:10)
+pbp <- load_pbp(2026, rounds = 1:10)
 
 # Player statistics
-player_stats <- load_player_stats(2025)
+player_stats <- load_player_stats(2026)
 
 # Match results and fixtures
-results <- load_results(2025)
+results <- load_results(2026)
 fixtures <- load_fixtures(all = TRUE)
 
 # All available data (2021+)
@@ -78,7 +78,7 @@ Three core models add expected points, win probability, and shot outcome
 predictions to play-by-play data.
 
 ``` r
-pbp <- load_pbp(2025, rounds = 1:5)
+pbp <- load_pbp(2026, rounds = 1:5)
 pbp_clean <- clean_pbp(pbp)
 
 # Add model predictions
