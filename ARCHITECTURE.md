@@ -711,6 +711,8 @@ as a fallback.
 | 06    | `data-raw/06-stat-ratings/` | `04_export_stat_ratings.R`         | Per-season parquet export to torpdata                                                                                          |
 | 06    | `data-raw/06-stat-ratings/` | `05_compare_psr_models.R`          | Compare PSR model versions and coefficient stability                                                                           |
 | 06    | `data-raw/06-stat-ratings/` | `06_train_psr_model.R`             | glmnet PSR model: stat ratings -\> score prediction                                                                            |
+| –     | `scripts/`                  | `live-model-export.R`              | Export xG lookup + EPV weights as JSON for inthegame-blog                                                                      |
+| –     | `scripts/`                  | `ep-var-importance.R`              | EP model variable importance analysis                                                                                          |
 
 ## Glossary
 
