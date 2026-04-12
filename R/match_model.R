@@ -524,11 +524,17 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
       data.table::setnames(existing, "providerId", "match_id")
     }
 
-    # Backward compat: rename home_rating/away_rating/rating_diff -> home_epr/away_epr/epr_diff
+    # Backward compat: merge home_rating/away_rating/rating_diff -> home_epr/away_epr/epr_diff
     old_to_new <- c(home_rating = "home_epr", away_rating = "away_epr", rating_diff = "epr_diff")
     for (old_nm in names(old_to_new)) {
-      if (old_nm %in% names(existing) && !old_to_new[old_nm] %in% names(existing)) {
-        names(existing)[names(existing) == old_nm] <- old_to_new[old_nm]
+      new_nm <- old_to_new[old_nm]
+      if (old_nm %in% names(existing)) {
+        if (new_nm %in% names(existing)) {
+          existing[[new_nm]] <- dplyr::coalesce(existing[[new_nm]], existing[[old_nm]])
+          existing[[old_nm]] <- NULL
+        } else {
+          names(existing)[names(existing) == old_nm] <- new_nm
+        }
       }
     }
 
