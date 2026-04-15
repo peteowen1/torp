@@ -417,20 +417,28 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
     NULL
   })
 
-  # Blend GAM + XGBoost if XGBoost succeeded (kept outside tryCatch so
-  # GAM predict failures are not misattributed to XGBoost and data is
-  # never left in a half-blended state)
+  # Blend GAM + XGBoost if XGBoost succeeded. The bare pred_* columns hold
+  # the final values used downstream; gam_pred_* and xgb_pred_* remain on
+  # team_mdl_df for inspection. pred_win is re-derived by feeding the blended
+  # margin back through the GAM win model (xgb_pred_win is intentionally not
+  # used). Kept outside tryCatch so GAM predict failures are not misattributed
+  # to XGBoost and data is never left in a half-blended state.
   if (!is.null(xgb_result)) {
-    team_mdl_df$pred_tot_xscore <- 0.5 * team_mdl_df$pred_tot_xscore +
+    team_mdl_df$pred_tot_xscore  <- 0.5 * team_mdl_df$gam_pred_tot_xscore  +
       0.5 * team_mdl_df$xgb_pred_tot_xscore
-    team_mdl_df$pred_xscore_diff <- 0.5 * team_mdl_df$pred_xscore_diff +
+    team_mdl_df$pred_xscore_diff <- 0.5 * team_mdl_df$gam_pred_xscore_diff +
       0.5 * team_mdl_df$xgb_pred_xscore_diff
-    team_mdl_df$pred_score_diff <- 0.5 * team_mdl_df$pred_score_diff +
+    team_mdl_df$pred_score_diff  <- 0.5 * team_mdl_df$gam_pred_score_diff  +
       0.5 * team_mdl_df$xgb_pred_score_diff
     team_mdl_df$pred_win <- predict(
       gam_result$models$win, newdata = team_mdl_df, type = "response"
     )
     cli::cli_alert_success("Blended GAM + XGBoost inputs, derived WP from GAM model")
+  } else {
+    team_mdl_df$pred_tot_xscore  <- team_mdl_df$gam_pred_tot_xscore
+    team_mdl_df$pred_xscore_diff <- team_mdl_df$gam_pred_xscore_diff
+    team_mdl_df$pred_score_diff  <- team_mdl_df$gam_pred_score_diff
+    team_mdl_df$pred_win         <- team_mdl_df$gam_pred_win
   }
 
   # Format Predictions ----

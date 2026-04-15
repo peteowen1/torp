@@ -149,7 +149,7 @@
     "s(psr_diff, bs = \"ts\", k = 5)"        = list(var = "psr_diff", k = 5),
     "s(osr_diff, bs = \"ts\", k = 5)"        = list(var = "osr_diff", k = 5),
     "s(dsr_diff, bs = \"ts\", k = 5)"        = list(var = "dsr_diff", k = 5),
-    "ti(psr_diff, pred_tot_xscore, bs = c(\"ts\", \"ts\"), k = 4)" = list(var = "psr_diff", k = 4)
+    "ti(psr_diff, gam_pred_tot_xscore, bs = c(\"ts\", \"ts\"), k = 4)" = list(var = "psr_diff", k = 4)
   )
   drop_terms <- character(0)
   for (term_str in names(optional_smooth_terms)) {
@@ -214,30 +214,30 @@
     family = gaussian(), nthreads = nthreads, select = TRUE, discrete = TRUE,
     drop.unused.levels = FALSE
   )
-  team_mdl_df$pred_tot_xscore <- predict(afl_total_xpoints_mdl, newdata = team_mdl_df, type = "response")
+  team_mdl_df$gam_pred_tot_xscore <- predict(afl_total_xpoints_mdl, newdata = team_mdl_df, type = "response")
 
   # Model 2: xScore differential
   cli::cli_progress_step("Training xScore diff model")
-  gam_df$pred_tot_xscore <- team_mdl_df$pred_tot_xscore[train_mask]
+  gam_df$gam_pred_tot_xscore <- team_mdl_df$gam_pred_tot_xscore[train_mask]
   m2_base <- paste(
     "xscore_diff ~",
     "s(team_type_fac, bs = \"re\")",
     "+ s(team_name.x, bs = \"re\") + s(team_name.y, bs = \"re\")",
     "+ s(team_name_season.x, bs = \"re\") + s(team_name_season.y, bs = \"re\")",
-    "+ ti(epr_diff, pred_tot_xscore, bs = c(\"ts\", \"ts\"), k = 4)",
-    "+ s(pred_tot_xscore, bs = \"ts\", k = 5)",
+    "+ ti(epr_diff, gam_pred_tot_xscore, bs = c(\"ts\", \"ts\"), k = 4)",
+    "+ s(gam_pred_tot_xscore, bs = \"ts\", k = 5)",
     "+ s(epr_diff, bs = \"ts\", k = 5)",
     "+ s(epr_recv_diff, bs = \"ts\", k = 5)",
     "+ s(epr_disp_diff, bs = \"ts\", k = 5)",
     "+ s(epr_spoil_diff, bs = \"ts\", k = 5)",
     "+ s(epr_hitout_diff, bs = \"ts\", k = 5)",
     "+ s(torp_diff, bs = \"ts\", k = 5)",
-    "+ ti(torp_diff, pred_tot_xscore, bs = c(\"ts\", \"ts\"), k = 4)",
+    "+ ti(torp_diff, gam_pred_tot_xscore, bs = c(\"ts\", \"ts\"), k = 4)",
     "+ s(log_dist_diff, bs = \"ts\", k = 5) + s(familiarity_diff, bs = \"ts\", k = 5)",
     "+ s(days_rest_diff_fac, bs = \"re\")"
   )
   m2_optional <- c("s(psr_diff, bs = \"ts\", k = 5)",
-                    "ti(psr_diff, pred_tot_xscore, bs = c(\"ts\", \"ts\"), k = 4)",
+                    "ti(psr_diff, gam_pred_tot_xscore, bs = c(\"ts\", \"ts\"), k = 4)",
                     "s(osr_diff, bs = \"ts\", k = 5)", "s(dsr_diff, bs = \"ts\", k = 5)")
   m2_formula <- stats::as.formula(.add_optional(m2_base, m2_optional))
 
@@ -247,11 +247,11 @@
     family = gaussian(), nthreads = nthreads, select = TRUE, discrete = TRUE,
     drop.unused.levels = FALSE
   )
-  team_mdl_df$pred_xscore_diff <- predict(afl_xscore_diff_mdl, newdata = team_mdl_df, type = "response")
+  team_mdl_df$gam_pred_xscore_diff <- predict(afl_xscore_diff_mdl, newdata = team_mdl_df, type = "response")
 
   # Model 3: Conversion differential
   cli::cli_progress_step("Training conversion model")
-  gam_df$pred_xscore_diff <- team_mdl_df$pred_xscore_diff[train_mask]
+  gam_df$gam_pred_xscore_diff <- team_mdl_df$gam_pred_xscore_diff[train_mask]
   m3_base <- paste(
     "shot_conv_diff ~",
     "s(team_type_fac, bs = \"re\")",
@@ -262,22 +262,22 @@
     "+ s(game_prop_through_day.x, bs = \"cc\")",
     "+ s(team_name.x, bs = \"re\") + s(team_name.y, bs = \"re\")",
     "+ s(team_name_season.x, bs = \"re\") + s(team_name_season.y, bs = \"re\")",
-    "+ ti(epr_diff, pred_tot_xscore, bs = c(\"ts\", \"ts\"), k = 4)",
+    "+ ti(epr_diff, gam_pred_tot_xscore, bs = c(\"ts\", \"ts\"), k = 4)",
     "+ s(epr_diff, bs = \"ts\", k = 5)",
     "+ s(epr_recv_diff, bs = \"ts\", k = 5)",
     "+ s(epr_disp_diff, bs = \"ts\", k = 5)",
     "+ s(epr_spoil_diff, bs = \"ts\", k = 5)",
     "+ s(epr_hitout_diff, bs = \"ts\", k = 5)",
     "+ s(torp_diff, bs = \"ts\", k = 5)",
-    "+ ti(torp_diff, pred_tot_xscore, bs = c(\"ts\", \"ts\"), k = 4)",
-    "+ s(pred_tot_xscore, bs = \"ts\", k = 5)",
-    "+ s(pred_xscore_diff, bs = \"ts\", k = 5)",
+    "+ ti(torp_diff, gam_pred_tot_xscore, bs = c(\"ts\", \"ts\"), k = 4)",
+    "+ s(gam_pred_tot_xscore, bs = \"ts\", k = 5)",
+    "+ s(gam_pred_xscore_diff, bs = \"ts\", k = 5)",
     "+ s(venue_fac, bs = \"re\")",
     "+ s(log_dist_diff, bs = \"ts\", k = 5) + s(familiarity_diff, bs = \"ts\", k = 5)",
     "+ s(days_rest_diff_fac, bs = \"re\")"
   )
   m3_optional <- c("s(psr_diff, bs = \"ts\", k = 5)",
-                    "ti(psr_diff, pred_tot_xscore, bs = c(\"ts\", \"ts\"), k = 4)",
+                    "ti(psr_diff, gam_pred_tot_xscore, bs = c(\"ts\", \"ts\"), k = 4)",
                     "s(osr_diff, bs = \"ts\", k = 5)", "s(dsr_diff, bs = \"ts\", k = 5)")
   m3_formula <- stats::as.formula(.add_optional(m3_base, m3_optional))
 
@@ -287,32 +287,32 @@
     family = gaussian(), nthreads = nthreads, select = TRUE, discrete = TRUE,
     drop.unused.levels = FALSE
   )
-  team_mdl_df$pred_conv_diff <- predict(afl_conv_mdl, newdata = team_mdl_df, type = "response")
+  team_mdl_df$gam_pred_conv_diff <- predict(afl_conv_mdl, newdata = team_mdl_df, type = "response")
 
   # Model 4: Score differential
   cli::cli_progress_step("Training score diff model")
-  gam_df$pred_conv_diff <- team_mdl_df$pred_conv_diff[train_mask]
+  gam_df$gam_pred_conv_diff <- team_mdl_df$gam_pred_conv_diff[train_mask]
   m4_base <- paste(
     "score_diff ~",
     "s(team_type_fac, bs = \"re\")",
     "+ s(team_name.x, bs = \"re\") + s(team_name.y, bs = \"re\")",
     "+ s(team_name_season.x, bs = \"re\") + s(team_name_season.y, bs = \"re\")",
-    "+ ti(epr_diff, pred_tot_xscore, bs = c(\"ts\", \"ts\"), k = 4)",
-    "+ ti(pred_xscore_diff, pred_conv_diff, bs = \"ts\", k = 5)",
-    "+ ti(pred_tot_xscore, pred_conv_diff, bs = \"ts\", k = 5)",
-    "+ s(pred_xscore_diff)",
+    "+ ti(epr_diff, gam_pred_tot_xscore, bs = c(\"ts\", \"ts\"), k = 4)",
+    "+ ti(gam_pred_xscore_diff, gam_pred_conv_diff, bs = \"ts\", k = 5)",
+    "+ ti(gam_pred_tot_xscore, gam_pred_conv_diff, bs = \"ts\", k = 5)",
+    "+ s(gam_pred_xscore_diff)",
     "+ s(epr_diff, bs = \"ts\", k = 5)",
     "+ s(epr_recv_diff, bs = \"ts\", k = 5)",
     "+ s(epr_disp_diff, bs = \"ts\", k = 5)",
     "+ s(epr_spoil_diff, bs = \"ts\", k = 5)",
     "+ s(epr_hitout_diff, bs = \"ts\", k = 5)",
     "+ s(torp_diff, bs = \"ts\", k = 5)",
-    "+ ti(torp_diff, pred_tot_xscore, bs = c(\"ts\", \"ts\"), k = 4)",
+    "+ ti(torp_diff, gam_pred_tot_xscore, bs = c(\"ts\", \"ts\"), k = 4)",
     "+ s(log_dist_diff, bs = \"ts\", k = 5) + s(familiarity_diff, bs = \"ts\", k = 5)",
     "+ s(days_rest_diff_fac, bs = \"re\")"
   )
   m4_optional <- c("s(psr_diff, bs = \"ts\", k = 5)",
-                    "ti(psr_diff, pred_tot_xscore, bs = c(\"ts\", \"ts\"), k = 4)",
+                    "ti(psr_diff, gam_pred_tot_xscore, bs = c(\"ts\", \"ts\"), k = 4)",
                     "s(osr_diff, bs = \"ts\", k = 5)", "s(dsr_diff, bs = \"ts\", k = 5)")
   m4_formula <- stats::as.formula(.add_optional(m4_base, m4_optional))
 
@@ -322,11 +322,13 @@
     family = "gaussian", nthreads = nthreads, select = TRUE, discrete = TRUE,
     drop.unused.levels = FALSE
   )
-  team_mdl_df$pred_score_diff <- predict(afl_score_mdl, newdata = team_mdl_df, type = "response")
+  team_mdl_df$gam_pred_score_diff <- predict(afl_score_mdl, newdata = team_mdl_df, type = "response")
 
-  # Model 5: Win probability
+  # Model 5: Win probability — trained on bare pred_* names so the blend step
+  # can re-feed the same model with blended values via newdata.
   cli::cli_progress_step("Training win probability model")
-  gam_df$pred_score_diff <- team_mdl_df$pred_score_diff[train_mask]
+  gam_df$pred_tot_xscore  <- gam_df$gam_pred_tot_xscore
+  gam_df$pred_score_diff  <- team_mdl_df$gam_pred_score_diff[train_mask]
   afl_win_mdl <- mgcv::bam(
     win ~
       +s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
@@ -339,7 +341,17 @@
     family = "binomial", nthreads = nthreads, select = TRUE, discrete = TRUE,
     drop.unused.levels = FALSE
   )
-  team_mdl_df$pred_win <- predict(afl_win_mdl, newdata = team_mdl_df, type = "response")
+  # Seed bare pred_* columns on team_mdl_df with GAM-only values so the
+  # win-model predict() below has the columns it expects, and so downstream
+  # consumers (and the blend step in run_predictions_pipeline) start from a
+  # well-defined GAM baseline.
+  team_mdl_df$pred_tot_xscore  <- team_mdl_df$gam_pred_tot_xscore
+  team_mdl_df$pred_xscore_diff <- team_mdl_df$gam_pred_xscore_diff
+  team_mdl_df$pred_conv_diff   <- team_mdl_df$gam_pred_conv_diff
+  team_mdl_df$pred_score_diff  <- team_mdl_df$gam_pred_score_diff
+
+  team_mdl_df$gam_pred_win <- predict(afl_win_mdl, newdata = team_mdl_df, type = "response")
+  team_mdl_df$pred_win     <- team_mdl_df$gam_pred_win
 
   # Validation
   if (any(is.na(team_mdl_df$pred_win[!is.na(team_mdl_df$win)]))) {
@@ -523,7 +535,12 @@
   xgb_df$xgb_pred_score_diff <- s4$preds
   team_mdl_df$xgb_pred_score_diff <- predict_all(s4$model, team_mdl_df, s4_cols)
 
-  # Step 5: win probability — slim features to avoid overfitting binary target
+  # Step 5: win probability — computed for diagnostics only. Not used in
+  # final pred_win: tree models can't represent the smooth saturating logit
+  # shape that AFL margins follow (XGB tends to overconfidence at moderate
+  # margins, e.g. ~0.72 at +11pts vs GAM's ~0.62, implying a residual SD of
+  # ~19 pts when AFL's true value is ~35). The blended margin is fed back
+  # through the GAM win head instead — see match_model.R blend block.
   s5_cols <- c(
     "team_type_fac",
     "xgb_pred_tot_xscore", "xgb_pred_score_diff",
