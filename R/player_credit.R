@@ -291,16 +291,20 @@ create_player_game_data <- function(pbp_data = NULL,
       wp_disp_credit_p80 = .data$wp_disp_credit / .data$tog_safe,
       wp_recv_credit_p80 = .data$wp_recv_credit / .data$tog_safe
     ) |>
-    dplyr::group_by(position) |>
     dplyr::mutate(
-      recv_epv_adj = .data$recv_epv_p80 - stats::weighted.mean(.data$recv_epv_p80, .data$tog_safe, na.rm = TRUE),
-      disp_epv_adj = .data$disp_epv_p80 - stats::weighted.mean(.data$disp_epv_p80, .data$tog_safe, na.rm = TRUE),
-      spoil_epv_adj = .data$spoil_epv_p80 - stats::weighted.mean(.data$spoil_epv_p80, .data$tog_safe, na.rm = TRUE),
-      hitout_epv_adj = .data$hitout_epv_p80 - stats::weighted.mean(.data$hitout_epv_p80, .data$tog_safe, na.rm = TRUE),
+      listed_position = dplyr::if_else(.data$listed_position == "MIDFIELDER_FORWARD",
+                                       "MEDIUM_FORWARD", .data$listed_position)
+    ) |>
+    dplyr::group_by(listed_position) |>
+    dplyr::mutate(
+      recv_epv_adj = (.data$recv_epv_p80 - stats::weighted.mean(.data$recv_epv_p80, .data$tog_safe, na.rm = TRUE)) * .data$tog_safe,
+      disp_epv_adj = (.data$disp_epv_p80 - stats::weighted.mean(.data$disp_epv_p80, .data$tog_safe, na.rm = TRUE)) * .data$tog_safe,
+      spoil_epv_adj = (.data$spoil_epv_p80 - stats::weighted.mean(.data$spoil_epv_p80, .data$tog_safe, na.rm = TRUE)) * .data$tog_safe,
+      hitout_epv_adj = (.data$hitout_epv_p80 - stats::weighted.mean(.data$hitout_epv_p80, .data$tog_safe, na.rm = TRUE)) * .data$tog_safe,
       epv_adj = .data$recv_epv_adj + .data$disp_epv_adj + .data$spoil_epv_adj + .data$hitout_epv_adj,
-      wp_credit_adj = .data$wp_credit_p80 - stats::weighted.mean(.data$wp_credit_p80, .data$tog_safe, na.rm = TRUE),
-      wp_disp_credit_adj = .data$wp_disp_credit_p80 - stats::weighted.mean(.data$wp_disp_credit_p80, .data$tog_safe, na.rm = TRUE),
-      wp_recv_credit_adj = .data$wp_recv_credit_p80 - stats::weighted.mean(.data$wp_recv_credit_p80, .data$tog_safe, na.rm = TRUE)
+      wp_credit_adj = (.data$wp_credit_p80 - stats::weighted.mean(.data$wp_credit_p80, .data$tog_safe, na.rm = TRUE)) * .data$tog_safe,
+      wp_disp_credit_adj = (.data$wp_disp_credit_p80 - stats::weighted.mean(.data$wp_disp_credit_p80, .data$tog_safe, na.rm = TRUE)) * .data$tog_safe,
+      wp_recv_credit_adj = (.data$wp_recv_credit_p80 - stats::weighted.mean(.data$wp_recv_credit_p80, .data$tog_safe, na.rm = TRUE)) * .data$tog_safe
     ) |>
     dplyr::ungroup() |>
     dplyr::select(-"tog_safe",
