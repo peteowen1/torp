@@ -65,7 +65,7 @@ test_that("calculate_epr_stats helper function works", {
     spoil_epv_adj = c(10, 12, 8, 9),
     hitout_epv_adj = c(5, 8, 0, 0),
     time_on_ground_percentage = c(82, 78, 90, 85),
-    listed_position = c("Midfielder", "Midfielder", "Forward", "Forward"),
+    position_group = c("Midfielder", "Midfielder", "Forward", "Forward"),
     stringsAsFactors = FALSE
   )
 
@@ -105,7 +105,7 @@ test_that("calculate_epr_stats returns expected structure with valid data", {
     spoil_epv_adj = runif(20, 0, 20),
     hitout_epv_adj = runif(20, 0, 30),
     time_on_ground_percentage = runif(20, 60, 95),
-    listed_position = sample(c("FWD", "MID", "DEF", "RUC"), 20, replace = TRUE),
+    position_group = sample(c("FWD", "MID", "DEF", "RUC"), 20, replace = TRUE),
     stringsAsFactors = FALSE
   )
 
@@ -142,7 +142,7 @@ test_that("calculate_epr_stats respects decay parameter", {
     spoil_epv_adj = c(10, 10, 10),
     hitout_epv_adj = c(5, 5, 5),
     time_on_ground_percentage = c(80, 85, 75),
-    listed_position = rep("MID", 3),
+    position_group = rep("MID", 3),
     stringsAsFactors = FALSE
   )
 
@@ -231,7 +231,7 @@ test_that("wt_gms sums per-match weights correctly for same-day games", {
     spoil_epv_adj = c(10, 8),
     hitout_epv_adj = c(5, 3),
     time_on_ground_percentage = c(88, 76),
-    listed_position = rep("MID", 2),
+    position_group = rep("MID", 2),
     stringsAsFactors = FALSE
   )
 
@@ -278,7 +278,7 @@ test_that("TOG-weighted average adjustment produces correct math", {
     spoil_epv_adj = c(10, 10, 8, 8, 5, 5),
     hitout_epv_adj = c(5, 5, 3, 3, 0, 0),
     time_on_ground_percentage = c(85, 80, 75, 70, 90, 88),
-    listed_position = rep("MID", 6),
+    position_group = rep("MID", 6),
     stringsAsFactors = FALSE
   )
 
@@ -334,7 +334,7 @@ test_that("TOG adjustment is skipped when all tog_rating values are zero", {
     spoil_epv_adj = c(10, 10, 8, 8),
     hitout_epv_adj = c(5, 5, 0, 0),
     time_on_ground_percentage = c(82, 79, 88, 84),
-    listed_position = rep("MID", 4),
+    position_group = rep("MID", 4),
     stringsAsFactors = FALSE
   )
 

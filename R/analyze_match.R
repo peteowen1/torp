@@ -161,13 +161,13 @@ get_player_game_ratings <- function(match = NULL,
   }
 
   col_order <- c(
-    "season", "round", "player_name", "position", "team", "opp", "tog",
+    "season", "round", "player_name", "position_group", "team", "opp", "tog",
     val_cols,
     "player_id", "team_id", "match_id"
   )
   col_order <- intersect(col_order, names(pgr))
   # Drop the other set (totals if per80, p80s if not)
-  keep_cols <- c("season", "round", "player_name", "position", "team", "opp", "tog",
+  keep_cols <- c("season", "round", "player_name", "position_group", "team", "opp", "tog",
                  col_order[col_order %in% val_cols],
                  "player_id", "team_id", "match_id")
   pgr <- pgr[, intersect(keep_cols, names(pgr)), with = FALSE]

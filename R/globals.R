@@ -58,7 +58,8 @@ utils::globalVariables(c(
 
   # Player variables
   "player_id", "player_given_name", "player_surname",
-  "player_name_given_name", "player_name_surname", "player_position", "listed_position",
+  "player_name_given_name", "player_name_surname", "player_position",
+  "position_group", "lineup_position", "listed_position",
 
   # TORP rating variables
   "torp", "torp_shift", "epr", "recv_epr", "disp_epr", "spoil_epr", "hitout_epr",
@@ -297,6 +298,8 @@ utils::globalVariables(c(
   # GAM prediction columns
   "pred_tot_xscore", "pred_xscore_diff", "pred_conv_diff",
   "pred_score_diff", "pred_win",
+  "gam_pred_tot_xscore", "gam_pred_xscore_diff", "gam_pred_conv_diff",
+  "gam_pred_score_diff", "gam_pred_win",
   "bits", "tips", "mae",
 
   # Aggregation/join columns

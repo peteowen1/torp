@@ -30,7 +30,8 @@ test_that("create_player_game_data output contains required columns", {
   required_cols <- c(
     "match_id", "player_id", "epv_adj", "recv_epv_adj",
     "disp_epv_adj", "spoil_epv_adj", "hitout_epv_adj",
-    "team", "opponent", "season", "round"
+    "team", "opponent", "season", "round",
+    "position_group", "lineup_position"
   )
 
   for (col in required_cols) {
@@ -48,6 +49,65 @@ test_that("create_player_game_data output contains required columns", {
     }
     # WPA values should not be all zero (at least some plays have non-zero WPA)
     expect_true(sum(pgd$wp_credit != 0) > 0, info = "All wp_credit values are zero")
+  }
+})
+
+test_that("create_player_game_data *_adj columns are game-value scale (regression test for #79)", {
+  # Regression test: epv_adj was previously stored as a centered per-80 rate
+  # while downstream consumers treated it as a game value, inflating low-TOG
+  # players' epv_adj by ~1/tog (e.g. Zac Williams R7 2025 showed epv_adj=71
+  # vs raw epv=8 with tog=0.10). Fix multiplies by tog_safe after centering
+  # so *_adj is a position-adjusted game value. This test asserts that
+  # invariant so the bug can't silently return.
+  skip_if(is.null(.shared$pbp) || is.null(.shared$player_stats) || is.null(.shared$teams),
+          "Could not load required data")
+
+  pgd <- tryCatch(
+    create_player_game_data(.shared$pbp, .shared$player_stats, .shared$teams),
+    error = function(e) NULL
+  )
+  skip_if(is.null(pgd), "Could not create player game data")
+  skip_if(nrow(pgd) == 0, "Empty player game data")
+
+  # Game-value magnitude invariant: max |epv_adj| should not exceed ~50.
+  # Under the bug, low-TOG cameos blew up to |epv_adj| ~= |epv|/tog
+  # (Zac Williams R7 2025: 10% TOG, raw epv 8.14, broken epv_adj 71.3).
+  # On the fix, max |epv_adj| sits around 34 (a full-game star's game).
+  # A 50 cap cleanly discriminates with ~15 points of headroom for future
+  # exceptional games. If this ever false-fails on legitimate data, something
+  # extraordinary happened (60+ point EPV game) and we should investigate,
+  # not just bump the threshold.
+  max_abs_adj <- max(abs(pgd$epv_adj), na.rm = TRUE)
+  expect_lt(max_abs_adj, 50,
+            label = sprintf("max|epv_adj| (= %.2f)", max_abs_adj))
+
+  # Per-position_group, TOG-weighted mean of *_adj should be ~0 (centering).
+  # This catches the groupby bug: if adjustment happens on the wrong
+  # grouping variable, within-group means won't be zero.
+  if ("position_group" %in% names(pgd) && "time_on_ground_percentage" %in% names(pgd)) {
+    dt <- data.table::as.data.table(pgd)[
+      !is.na(position_group) & !is.na(epv_adj) & !is.na(time_on_ground_percentage),
+      .(wm = stats::weighted.mean(epv_adj, pmax(time_on_ground_percentage / 100, 0.1),
+                                  na.rm = TRUE)),
+      by = position_group
+    ]
+    expect_true(all(abs(dt$wm) < 1),
+                info = sprintf("Largest per-group weighted mean of epv_adj: %.3f",
+                               max(abs(dt$wm), na.rm = TRUE)))
+  }
+
+  # Semantic guards: position_group is the 6-way class, lineup_position is the
+  # ~20-way AFL lineup role. If someone swaps their values in a future
+  # refactor, these cardinality bounds fire immediately.
+  expect_false(any(pgd$position_group == "MIDFIELDER_FORWARD", na.rm = TRUE),
+               info = "MIDFIELDER_FORWARD should be collapsed to MEDIUM_FORWARD")
+  pg_n <- dplyr::n_distinct(pgd$position_group, na.rm = TRUE)
+  expect_lte(pg_n, 7,
+             label = sprintf("n_distinct(position_group) (= %d)", pg_n))
+  if ("lineup_position" %in% names(pgd)) {
+    lp_n <- dplyr::n_distinct(pgd$lineup_position, na.rm = TRUE)
+    expect_gte(lp_n, 15,
+               label = sprintf("n_distinct(lineup_position) (= %d)", lp_n))
   }
 })
 

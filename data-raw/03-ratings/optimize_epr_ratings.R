@@ -43,7 +43,7 @@ disp_raw <- data.table::as.data.table(pbp_data)[
     sum_depv_pos = sum(delta_epv[pos_team == 1], na.rm = TRUE),
     n_pos        = sum(pos_team == 1, na.rm = TRUE),
     team         = data.table::last(team),
-    listed_position = data.table::last(player_position)
+    position_group = data.table::last(player_position)
   ),
   by = .(player_id, match_id)
 ]
@@ -339,13 +339,19 @@ pgr <- player_game_raw[match_id %in% unique(c(
 data.table::setorder(pgr, player_id, date)
 data.table::setkey(pgr, player_id, match_id)
 
-# Also get position info from teams_data for position-group means
-pos_dt <- data.table::as.data.table(teams_data)[
-  , .(player_id, match_id, position)
+# Also join lineup_position (20-way AFL lineup role: HBFR, INT, SUB, ...)
+# from teams_data for any consumers that want the granular role. NOTE: position
+# adjustment uses position_group (6-way class, already set from PBP's
+# player_position at disp_raw step), NOT lineup_position — the 20-way groups
+# are too granular for meaningful TOG-weighted centering.
+lineup_dt <- data.table::as.data.table(teams_data)[
+  , .(player_id, match_id, lineup_position = position)
 ]
-pos_dt <- pos_dt[!is.na(position) & !(position %in% c("EMERG", "SUB"))]
-pos_dt[position == "MIDFIELDER_FORWARD", position := "MEDIUM_FORWARD"]
-pgr <- merge(pgr, pos_dt, by = c("player_id", "match_id"), all.x = TRUE)
+pgr <- merge(pgr, lineup_dt, by = c("player_id", "match_id"), all.x = TRUE)
+
+# Collapse MIDFIELDER_FORWARD → MEDIUM_FORWARD in position_group to match
+# create_player_game_data() (keeps both pipelines on the same 6-way enum).
+pgr[position_group == "MIDFIELDER_FORWARD", position_group := "MEDIUM_FORWARD"]
 
 tictoc::toc()
 
@@ -543,27 +549,30 @@ compute_epv <- function(pgr, params, verbose = FALSE) {
   Position mean adjustment on per-80 rates:
 "))
     cat(sprintf("  %-18s %8s %8s %8s %8s
-", "Position", "recv", "disp", "spoil", "hitout"))
-    for (pos in sort(unique(out$position[!is.na(out$position)]))) {
-      idx <- out$position == pos & !is.na(out$position)
+", "position_group", "recv", "disp", "spoil", "hitout"))
+    for (pg in sort(unique(out$position_group[!is.na(out$position_group)]))) {
+      idx <- out$position_group == pg & !is.na(out$position_group)
       cat(sprintf("  %-18s %+8.3f %+8.3f %+8.3f %+8.3f
-", pos,
+", pg,
         mean(out$recv_epv[idx], na.rm = TRUE),
         mean(out$disp_epv[idx], na.rm = TRUE),
         mean(out$spoil_epv[idx], na.rm = TRUE),
         mean(out$hitout_epv[idx], na.rm = TRUE)))
     }
   }
-  # TOG-weighted centering by (position, season) to match create_player_game_data()
-  # which is called per-season in the production pipeline. Weighting by tog_safe
-  # prevents low-TOG players with noisy per-80 rates from swinging the mean.
-  out[!is.na(position), `:=`(
+  # TOG-weighted centering by (position_group, season) to match
+  # create_player_game_data(). Groups on the 6-way position class
+  # (KEY_DEFENDER, MIDFIELDER, ...), NOT the 20-way lineup_position
+  # (HBFR, INT, SUB, ...) which is too granular for meaningful centering.
+  # Weighting by tog_safe prevents low-TOG players with noisy per-80 rates
+  # from swinging the mean.
+  out[!is.na(position_group), `:=`(
     recv_epv   = recv_epv   - weighted.mean(recv_epv, tog_safe, na.rm = TRUE),
     disp_epv   = disp_epv   - weighted.mean(disp_epv, tog_safe, na.rm = TRUE),
     spoil_epv  = spoil_epv  - weighted.mean(spoil_epv, tog_safe, na.rm = TRUE),
     hitout_epv = hitout_epv - weighted.mean(hitout_epv, tog_safe, na.rm = TRUE),
     contest_epv_scaled = contest_epv_scaled - weighted.mean(contest_epv_scaled, tog_safe, na.rm = TRUE)
-  ), by = .(position, season)]
+  ), by = .(position_group, season)]
 
   return(out)
 }

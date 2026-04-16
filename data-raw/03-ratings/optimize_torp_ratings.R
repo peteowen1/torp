@@ -42,7 +42,7 @@ disp_raw <- data.table::as.data.table(pbp_data)[
     sum_depv_pos = sum(delta_epv[pos_team == 1], na.rm = TRUE),
     n_pos        = sum(pos_team == 1, na.rm = TRUE),
     team         = data.table::last(team),
-    listed_position = data.table::last(player_position)
+    position_group = data.table::last(player_position)
   ),
   by = .(player_id, match_id)
 ]

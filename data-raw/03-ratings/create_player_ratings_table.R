@@ -51,7 +51,7 @@ plyr_gm_df <-
     disposals_pbp = floor(dplyr::n() / 2),
     team = dplyr::last(team),
     opponent = dplyr::last(opp_tm),
-    listed_position = dplyr::last(player_position),
+    position_group = dplyr::last(player_position),
     round = as.numeric(dplyr::last(round_week)),
     season = dplyr::last(lubridate::year(utc_start_time))
   ) %>%

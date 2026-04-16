@@ -320,7 +320,8 @@ PLAYER_GAME_COL_MAP <- c(
   "plyr_nm"         = "player_name",
   "tm"              = "team",
   "opp"             = "opponent",
-  "pos"             = "listed_position",
+  "pos"             = "position_group",
+  "listed_position" = "position_group",
   "tot_p"           = "epv",
   "tot_p_adj"       = "epv_adj",
   "recv_pts"        = "recv_epv",
@@ -357,7 +358,11 @@ TORP_RATINGS_COL_MAP <- c(
   "torp_recv"    = "recv_epr",
   "torp_disp"    = "disp_epr",
   "torp_spoil"   = "spoil_epr",
-  "torp_hitout"  = "hitout_epr"
+  "torp_hitout"  = "hitout_epr",
+  # Position column rename: old releases had `position` (the 6-way class);
+  # now called `position_group`. .normalise_columns() safely no-ops if
+  # `position_group` already exists in the frame.
+  "position"     = "position_group"
 )
 
 
@@ -367,6 +372,8 @@ TORP_RATINGS_COL_MAP <- c(
 
 #' @keywords internal
 PLAYER_GAME_RATINGS_COL_MAP <- c(
+  # Position column rename (old releases had `position` = 6-way class)
+  "position"       = "position_group",
   # Raw points → EPV raw (pre-centering names, kept for torpdata compat)
   "total_points"   = "epv_raw",
   "recv_points"    = "recv_epv_raw",

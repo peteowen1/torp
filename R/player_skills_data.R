@@ -39,9 +39,11 @@
 #' @return The data.table with added `pos_group` column.
 #' @keywords internal
 .resolve_stat_rating_positions <- function(dt) {
-  # Use 'listed_position' column (listed position: KEY_DEFENDER, MIDFIELDER, etc.)
-  # Fallback to 'position' if 'listed_position' not available
-  pos_col <- if ("listed_position" %in% names(dt)) "listed_position" else "position"
+  # Prefer 'position_group' (6-way: KEY_DEFENDER, MIDFIELDER, MEDIUM_FORWARD, ...);
+  # fall back to legacy 'listed_position' then raw 'position' for older callers.
+  pos_col <- if ("position_group" %in% names(dt)) "position_group"
+             else if ("listed_position" %in% names(dt)) "listed_position"
+             else "position"
   dt[, pos_group := .map_position_group(get(pos_col))]
 
   na_idx <- which(is.na(dt$pos_group))
