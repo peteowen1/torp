@@ -189,7 +189,7 @@ create_test_player_game_data <- function(n_rows = 200) {
     season = rep(2024, n_rows),
     round = sample(1:24, n_rows, replace = TRUE),
     utc_start_time = as.Date("2024-04-01") + sample(0:100, n_rows, replace = TRUE),
-    listed_position = sample(c("FWD", "MID", "DEF", "RUC"), n_rows, replace = TRUE),
+    position_group = sample(c("FWD", "MID", "DEF", "RUC"), n_rows, replace = TRUE),
     team = sample(c("Adelaide Crows", "Brisbane Lions", "Carlton"), n_rows, replace = TRUE),
     opponent = sample(c("Collingwood", "Essendon", "Fremantle"), n_rows, replace = TRUE),
     epv_adj = runif(n_rows, -5, 15),

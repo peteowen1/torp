@@ -69,7 +69,7 @@ default_epv_params <- function() {
 #'
 #' @return A data.table with one row per player per match, containing:
 #'   identifiers (\code{player_id}, \code{match_id}, \code{season}, \code{round},
-#'   \code{player_name}, \code{team}, \code{opponent}, \code{listed_position}, \code{position}, \code{team_id},
+#'   \code{player_name}, \code{team}, \code{opponent}, \code{position_group}, \code{lineup_position}, \code{team_id},
 #'   \code{utc_start_time}), position-adjusted EPV (\code{epv_adj},
 #'   \code{recv_epv_adj}, \code{disp_epv_adj}, \code{spoil_epv_adj}, \code{hitout_epv_adj}),
 #'   raw EPV (\code{epv}, \code{recv_epv}, \code{disp_epv}, \code{spoil_epv},
@@ -128,7 +128,7 @@ create_player_game_data <- function(pbp_data = NULL,
     disposals_pbp = floor(.N / 2L),
     team = team[.N],
     opponent = opp_tm[.N],
-    listed_position = player_position[.N],
+    position_group = player_position[.N],
     round = as.numeric(round_week[.N]),
     season = lubridate::year(utc_start_time[.N])
   ), by = .(player_id, match_id)]
@@ -266,23 +266,29 @@ create_player_game_data <- function(pbp_data = NULL,
       wp_recv_credit = tidyr::replace_na(wp_recv_credit, 0)
     )
 
-  # --- Step 6: Join teams data for position ---
+  # --- Step 6: Join teams data for lineup_position (20-way AFL lineup role) ---
+  # teams_data$position is the ~20-way lineup role (HBFR, FB, INT, SUB, ...),
+  # distinct from position_group (6-way KEY_DEFENDER / MIDFIELDER / etc.) set
+  # at line 131 from PBP's player_position.
   teams_pos <- teams |>
-    dplyr::select(match_id, player_id, position) |>
+    dplyr::select(match_id, player_id, lineup_position = "position") |>
     dplyr::distinct()
   plyr_gm_df <- plyr_gm_df |>
-    dplyr::select(-dplyr::any_of("position")) |>
+    dplyr::select(-dplyr::any_of(c("position", "lineup_position"))) |>
     dplyr::left_join(teams_pos, by = c("match_id", "player_id")) |>
     dplyr::mutate(
-      position = dplyr::if_else(position == "MIDFIELDER_FORWARD", "MEDIUM_FORWARD", position)
+      position_group = dplyr::if_else(.data$position_group == "MIDFIELDER_FORWARD",
+                                      "MEDIUM_FORWARD", .data$position_group)
     )
 
-  # --- Step 7: Per-80 normalisation then position-group quantile adjustment ---
-  # Normalise to per-full-game rate BEFORE position adjustment so the quantile
+  # --- Step 7: Per-80 normalisation then position-group adjustment ---
+  # Normalise to per-full-game rate BEFORE position adjustment so the adjustment
   # compares like-for-like rates, not raw totals that mix ability with TOG.
+  # Group on position_group (6-way class), NOT lineup_position (20-way role) —
+  # the 20-way groups are too granular and produce noisy / singleton means.
   plyr_gm_df <- plyr_gm_df |>
     dplyr::mutate(
-      tog_safe = pmax(.data$time_on_ground_percentage / 100, 0.1),
+      tog_safe = pmax(dplyr::coalesce(.data$time_on_ground_percentage / 100, 0.1), 0.1),
       recv_epv_p80 = .data$recv_epv / .data$tog_safe,
       disp_epv_p80 = .data$disp_epv / .data$tog_safe,
       spoil_epv_p80 = .data$spoil_epv / .data$tog_safe,
@@ -291,11 +297,7 @@ create_player_game_data <- function(pbp_data = NULL,
       wp_disp_credit_p80 = .data$wp_disp_credit / .data$tog_safe,
       wp_recv_credit_p80 = .data$wp_recv_credit / .data$tog_safe
     ) |>
-    dplyr::mutate(
-      listed_position = dplyr::if_else(.data$listed_position == "MIDFIELDER_FORWARD",
-                                       "MEDIUM_FORWARD", .data$listed_position)
-    ) |>
-    dplyr::group_by(listed_position) |>
+    dplyr::group_by(position_group) |>
     dplyr::mutate(
       recv_epv_adj = (.data$recv_epv_p80 - stats::weighted.mean(.data$recv_epv_p80, .data$tog_safe, na.rm = TRUE)) * .data$tog_safe,
       disp_epv_adj = (.data$disp_epv_p80 - stats::weighted.mean(.data$disp_epv_p80, .data$tog_safe, na.rm = TRUE)) * .data$tog_safe,
@@ -321,7 +323,7 @@ create_player_game_data <- function(pbp_data = NULL,
     dplyr::select(
       # Identifiers
       player_id, match_id, season, round,
-      player_name, team, opponent, listed_position, position, team_id,
+      player_name, team, opponent, position_group, lineup_position, team_id,
       utc_start_time,
       # EPV (position-adjusted)
       epv_adj, recv_epv_adj, disp_epv_adj, spoil_epv_adj, hitout_epv_adj,

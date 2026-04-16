@@ -314,7 +314,7 @@ calculate_epr_stats <- function(player_game_data = NULL, match_ref, date_val, de
     disp_sum   = sum(get(epv_disp_col) * tog_safe * wt_disp, na.rm = TRUE),
     spoil_sum  = sum(get(epv_spoil_col) * tog_safe * wt_spoil, na.rm = TRUE),
     hitout_sum = sum(get(epv_hitout_col) * tog_safe * wt_hitout, na.rm = TRUE),
-    posn = data.table::last(listed_position)
+    posn = data.table::last(position_group)
   ), by = player_id]
 
   # Derive per-component EPR with TOG-weighted games
@@ -438,7 +438,7 @@ calculate_epr_stats_batch <- function(player_game_data = NULL,
     disp_sum    = sum(get(epv_disp_col) * tog_safe * wt_disp, na.rm = TRUE),
     spoil_sum   = sum(get(epv_spoil_col) * tog_safe * wt_spoil, na.rm = TRUE),
     hitout_sum  = sum(get(epv_hitout_col) * tog_safe * wt_hitout, na.rm = TRUE),
-    posn = data.table::last(listed_position)
+    posn = data.table::last(position_group)
   ), by = .(round_val, player_id)]
 
   result[, `:=`(
@@ -521,7 +521,7 @@ calculate_epr_stats_batch <- function(player_game_data = NULL,
       player_id = "player_id", player_name = "player_name.x", age = "age", team = "team",
       epr = "epr", recv_epr = "recv_epr", disp_epr = "disp_epr",
       spoil_epr = "spoil_epr", hitout_epr = "hitout_epr",
-      position = "position", season = "season", round = "round", gms = "gms", wt_gms = "wt_gms", wt_tog = "wt_tog",
+      position_group = "position", season = "season", round = "round", gms = "gms", wt_gms = "wt_gms", wt_tog = "wt_tog",
       wt_gms_recv = "wt_gms_recv", wt_gms_disp = "wt_gms_disp",
       wt_gms_spoil = "wt_gms_spoil", wt_gms_hitout = "wt_gms_hitout",
       pred_tog = "pred_tog",

@@ -474,7 +474,7 @@ explain_player_game <- function(player_id, match_id, player_stats = NULL,
       )
 
       # Add position context: percentile among same-position players that round
-      position_col <- intersect(c("position", "listed_position"), names(epv_row))
+      position_col <- intersect(c("position_group", "position"), names(epv_row))
       if (length(position_col) > 0) {
         pos <- epv_row[[position_col[1]]]
         pos_peers <- pgr_dt[pgr_dt$season == season &

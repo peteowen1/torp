@@ -75,7 +75,7 @@ player_game_ratings <- function(season_val = get_afl_season(),
   }
 
   col_order <- c(
-    "season", "round", "player_name", "position", "team", "opp", "tog",
+    "season", "round", "player_name", "position_group", "team", "opp", "tog",
     val_cols,
     "player_id", "team_id", "match_id"
   )
@@ -120,9 +120,9 @@ player_game_ratings <- function(season_val = get_afl_season(),
   df <- df |>
     dplyr::arrange(-.data$epv_adj) |>
     dplyr::mutate(
-      listed_position = dplyr::if_else(.data$listed_position == "MIDFIELDER_FORWARD",
-                                       "MEDIUM_FORWARD", .data$listed_position),
-      tog_frac = pmax(.data$time_on_ground_percentage / 100, 0.1),
+      position_group = dplyr::if_else(.data$position_group == "MIDFIELDER_FORWARD",
+                                      "MEDIUM_FORWARD", .data$position_group),
+      tog_frac = pmax(dplyr::coalesce(.data$time_on_ground_percentage / 100, 0.1), 0.1),
       recv_epv_c = round(.data[[recv_col]] -
         sum(.data[[recv_col]]) / sum(.data$tog_frac) * .data$tog_frac, 1),
       disp_epv_c = round(.data[[disp_col]] -
@@ -133,7 +133,7 @@ player_game_ratings <- function(season_val = get_afl_season(),
         sum(.data[[hitout_col]]) / sum(.data$tog_frac) * .data$tog_frac, 1),
       epv_c = round(.data$recv_epv_c + .data$disp_epv_c +
         .data$spoil_epv_c + .data$hitout_epv_c, 1),
-      .by = c("season", "listed_position")
+      .by = c("season", "position_group")
     ) |>
     dplyr::mutate(
       epv_p80 = round(.data$epv_c / .data$tog_frac, 1),
@@ -153,7 +153,7 @@ player_game_ratings <- function(season_val = get_afl_season(),
           sum(.data$wp_disp_credit) / sum(.data$tog_frac) * .data$tog_frac, 3),
         wp_recv_credit_c = round(.data$wp_recv_credit -
           sum(.data$wp_recv_credit) / sum(.data$tog_frac) * .data$tog_frac, 3),
-        .by = c("season", "listed_position")
+        .by = c("season", "position_group")
       ) |>
       dplyr::mutate(
         wp_credit_p80 = round(.data$wp_credit_c / .data$tog_frac, 3),
@@ -166,7 +166,7 @@ player_game_ratings <- function(season_val = get_afl_season(),
   df |>
     dplyr::select(
       season = "season", round = "round",
-      player_name = "player_name", position = "listed_position", team = "team", opp = "opponent",
+      player_name = "player_name", position_group = "position_group", team = "team", opp = "opponent",
       tog = "tog_frac",
       epv = "epv_c", recv_epv = "recv_epv_c", disp_epv = "disp_epv_c",
       spoil_epv = "spoil_epv_c", hitout_epv = "hitout_epv_c",
@@ -189,8 +189,8 @@ player_game_ratings <- function(season_val = get_afl_season(),
 .center_epv_raw <- function(df) {
   df |>
     dplyr::mutate(
-      position = dplyr::if_else(.data$position == "MIDFIELDER_FORWARD",
-                                "MEDIUM_FORWARD", .data$position)
+      position_group = dplyr::if_else(.data$position_group == "MIDFIELDER_FORWARD",
+                                      "MEDIUM_FORWARD", .data$position_group)
     ) |>
     dplyr::mutate(
       .total_tog = sum(.data$tog),
@@ -204,7 +204,7 @@ player_game_ratings <- function(season_val = get_afl_season(),
         dplyr::if_else(.data$.total_tog > 0, sum(.data$hitout_epv_raw) / .data$.total_tog * .data$tog, 0), 1),
       epv = round(.data$recv_epv + .data$disp_epv +
         .data$spoil_epv + .data$hitout_epv, 1),
-      .by = c("season", "position")
+      .by = c("season", "position_group")
     ) |>
     dplyr::select(-".total_tog") |>
     dplyr::mutate(
@@ -314,7 +314,7 @@ player_season_ratings <- function(season_val = get_afl_season(),
   result <- df[, {
     out <- list(
       team = get_mode(team),
-      position = get_mode(position),
+      position_group = get_mode(position_group),
       games = .N,
       avg_tog = round(mean(tog, na.rm = TRUE), 2)
     )
@@ -352,7 +352,7 @@ player_season_ratings <- function(season_val = get_afl_season(),
   }
 
   col_order <- c(
-    "season", "player_name", "position", "team", "games", "avg_tog",
+    "season", "player_name", "position_group", "team", "games", "avg_tog",
     val_select,
     "player_id", "team_id"
   )

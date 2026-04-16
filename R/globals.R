@@ -58,7 +58,8 @@ utils::globalVariables(c(
 
   # Player variables
   "player_id", "player_given_name", "player_surname",
-  "player_name_given_name", "player_name_surname", "player_position", "listed_position",
+  "player_name_given_name", "player_name_surname", "player_position",
+  "position_group", "lineup_position", "listed_position",
 
   # TORP rating variables
   "torp", "torp_shift", "epr", "recv_epr", "disp_epr", "spoil_epr", "hitout_epr",
