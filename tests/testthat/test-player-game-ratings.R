@@ -30,6 +30,7 @@ test_that(".compute_player_game_ratings includes WPA columns when present", {
     round = rep(1L, 6),
     player_name = paste("Player", 1:6),
     position_group = rep(c("KEY_DEFENDER", "MIDFIELDER", "KEY_FORWARD"), 2),
+    lineup_position = rep(c("FB", "C", "FF"), 2),
     team = rep("Adelaide Crows", 6),
     opponent = rep("Carlton", 6),
     team_id = rep("CD_T10", 6),
@@ -71,6 +72,7 @@ test_that(".compute_player_game_ratings works without WPA columns", {
     round = rep(1L, 3),
     player_name = paste("Player", 1:3),
     position_group = c("KEY_DEFENDER", "MIDFIELDER", "KEY_FORWARD"),
+    lineup_position = c("FB", "C", "FF"),
     team = rep("Adelaide Crows", 3),
     opponent = rep("Carlton", 3),
     team_id = rep("CD_T10", 3),
@@ -89,6 +91,22 @@ test_that(".compute_player_game_ratings works without WPA columns", {
   expect_true("epv" %in% names(result))
   expect_false("wp_credit" %in% names(result))
   expect_equal(nrow(result), 3)
+})
+
+# -----------------------------------------------------------------------------
+# get_lineup_ratings Tests
+# -----------------------------------------------------------------------------
+
+test_that("get_lineup_ratings is exported", {
+  expect_true("get_lineup_ratings" %in% getNamespaceExports("torp"))
+})
+
+test_that("get_lineup_ratings validates match_id format", {
+  # match_id validation should warn on malformed IDs
+  expect_warning(
+    tryCatch(get_lineup_ratings(match_id = "BAD_ID"), error = function(e) NULL),
+    "should start with"
+  )
 })
 
 # -----------------------------------------------------------------------------

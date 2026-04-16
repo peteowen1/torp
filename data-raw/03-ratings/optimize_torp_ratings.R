@@ -202,10 +202,10 @@ data.table::setorder(match_dt, date, match_id)
 # --- Lineups per team per match ---
 teams_dt <- data.table::as.data.table(teams_data)
 # Filter out EMERG/SUB
-teams_dt <- teams_dt[is.na(position) | !(position %in% c("EMERG", "SUB"))]
+teams_dt <- teams_dt[is.na(lineup_position) | !(lineup_position %in% c("EMERG", "SUB"))]
 
 lineups <- teams_dt[, .(player_ids = list(player_id),
-                       position_xs = list(position)),
+                       position_xs = list(lineup_position)),
                     by = .(match_id, teamId = team_id)]
 
 # --- Home ground / distance / familiarity ---
@@ -324,10 +324,9 @@ data.table::setkey(pgr, player_id, match_id)
 
 # Also get position info from teams_data for position-group means
 pos_dt <- data.table::as.data.table(teams_data)[
-  , .(player_id, match_id, position)
+  , .(player_id, match_id, lineup_position)
 ]
-pos_dt <- pos_dt[!is.na(position) & !(position %in% c("EMERG", "SUB"))]
-pos_dt[position == "MIDFIELDER_FORWARD", position := "MEDIUM_FORWARD"]
+pos_dt <- pos_dt[!is.na(lineup_position) & !(lineup_position %in% c("EMERG", "SUB"))]
 pgr <- merge(pgr, pos_dt, by = c("player_id", "match_id"), all.x = TRUE)
 
 tictoc::toc()
@@ -361,11 +360,11 @@ cat(sprintf("  Lineup expansion: %d player-match rows for %d matches\n",
 ## 2h. Pre-compute lineup-level role positions (for balance penalty) ----
 cat("  Pre-computing lineup positions for balance penalty...
 ")
-pgr_pos_lookup <- pgr[!is.na(position), .(player_id, date_num = as.numeric(date), position)]
+pgr_pos_lookup <- pgr[!is.na(lineup_position), .(player_id, date_num = as.numeric(date), lineup_position)]
 data.table::setkey(pgr_pos_lookup, player_id, date_num)
-lu_pos_joined <- pgr_pos_lookup[lineup_dt_all, .(position = x.position),
+lu_pos_joined <- pgr_pos_lookup[lineup_dt_all, .(lineup_position = x.lineup_position),
                                  on = .(player_id, date_num), roll = TRUE]
-lineup_dt_all[, role_position := lu_pos_joined$position]
+lineup_dt_all[, role_position := lu_pos_joined$lineup_position]
 rm(pgr_pos_lookup, lu_pos_joined)
 
 # Pre-compute position group indices for lineup rows (reused in all stages)
@@ -511,12 +510,12 @@ compute_credits <- function(pgr, params, verbose = FALSE) {
         mean(out$hitout_credits[idx], na.rm = TRUE)))
     }
   }
-  out[!is.na(position), `:=`(
+  out[!is.na(lineup_position), `:=`(
     recv_credits   = recv_credits   - mean(recv_credits, na.rm = TRUE),
     disp_credits   = disp_credits   - mean(disp_credits, na.rm = TRUE),
     spoil_credits  = spoil_credits  - mean(spoil_credits, na.rm = TRUE),
     hitout_credits = hitout_credits - mean(hitout_credits, na.rm = TRUE)
-  ), by = position]
+  ), by = lineup_position]
 
   return(out)
 }

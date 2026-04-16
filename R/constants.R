@@ -668,7 +668,7 @@ CONTEST_GROUND_BALL_DESCS <- c(
 # Position-Based TOG Constants
 # -----------------------------
 
-#' Average time-on-ground fraction by field position (position.x from load_teams())
+#' Average time-on-ground fraction by lineup_position (from load_teams())
 #' Computed from historical data (2021-2025). Used to estimate per-player TOG
 #' when lineups are announced but games haven't started.
 #' EMERG/SUB are currently filtered upstream but kept here for future use.
@@ -689,7 +689,7 @@ POSITION_AVG_TOG <- c(
 # ----------------------
 
 #' Phase groupings for match model position columns
-#' Maps field position (position.x) to broad phase categories
+#' Maps lineup_position to broad phase categories
 #' @keywords internal
 MATCH_PHASE_MAP <- list(
   def = c("BPL", "BPR", "FB", "CHB", "HBFL", "HBFR"),
@@ -730,7 +730,7 @@ MATCH_COMBO_POS_MAP <- list(
   CF   = c("FF", "CHF")
 )
 
-#' Listed position map for match models (position.y from load_teams())
+#' Listed position map for match models (position_group from torp ratings)
 #' Combines MEDIUM_FORWARD and MIDFIELDER_FORWARD into med_fwd.
 #' Entries are vectors so matching must use %in%, not ==.
 #' @keywords internal

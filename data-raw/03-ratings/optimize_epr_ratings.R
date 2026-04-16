@@ -219,10 +219,10 @@ data.table::setorder(match_dt, date, match_id)
 # --- Lineups per team per match ---
 teams_dt <- data.table::as.data.table(teams_data)
 # Filter out EMERG/SUB
-teams_dt <- teams_dt[is.na(position) | !(position %in% c("EMERG", "SUB"))]
+teams_dt <- teams_dt[is.na(lineup_position) | !(lineup_position %in% c("EMERG", "SUB"))]
 
 lineups <- teams_dt[, .(player_ids = list(player_id),
-                       position_xs = list(position)),
+                       position_xs = list(lineup_position)),
                     by = .(match_id, teamId = team_id)]
 
 # --- Home ground / distance / familiarity ---
@@ -345,7 +345,7 @@ data.table::setkey(pgr, player_id, match_id)
 # player_position at disp_raw step), NOT lineup_position — the 20-way groups
 # are too granular for meaningful TOG-weighted centering.
 lineup_dt <- data.table::as.data.table(teams_data)[
-  , .(player_id, match_id, lineup_position = position)
+  , .(player_id, match_id, lineup_position)
 ]
 pgr <- merge(pgr, lineup_dt, by = c("player_id", "match_id"), all.x = TRUE)
 

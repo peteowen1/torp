@@ -107,6 +107,10 @@ player_game_ratings <- function(season_val = get_afl_season(),
 
   df <- filter_game_data(player_game_data, season_val, round_val, matchid = NULL, team = NULL)
 
+  if (!"lineup_position" %in% names(df)) {
+    cli::cli_abort("Column {.val lineup_position} required for position centering but not found in player_game_data.")
+  }
+
   has_wpa <- "wp_credit" %in% names(df)
 
   # Use _oadj (opponent-adjusted) columns when available, fall back to raw
@@ -133,7 +137,7 @@ player_game_ratings <- function(season_val = get_afl_season(),
         sum(.data[[hitout_col]]) / sum(.data$tog_frac) * .data$tog_frac, 1),
       epv_c = round(.data$recv_epv_c + .data$disp_epv_c +
         .data$spoil_epv_c + .data$hitout_epv_c, 1),
-      .by = c("season", "position_group")
+      .by = c("season", "lineup_position")
     ) |>
     dplyr::mutate(
       epv_p80 = round(.data$epv_c / .data$tog_frac, 1),
@@ -153,7 +157,7 @@ player_game_ratings <- function(season_val = get_afl_season(),
           sum(.data$wp_disp_credit) / sum(.data$tog_frac) * .data$tog_frac, 3),
         wp_recv_credit_c = round(.data$wp_recv_credit -
           sum(.data$wp_recv_credit) / sum(.data$tog_frac) * .data$tog_frac, 3),
-        .by = c("season", "position_group")
+        .by = c("season", "lineup_position")
       ) |>
       dplyr::mutate(
         wp_credit_p80 = round(.data$wp_credit_c / .data$tog_frac, 3),
@@ -166,7 +170,9 @@ player_game_ratings <- function(season_val = get_afl_season(),
   df |>
     dplyr::select(
       season = "season", round = "round",
-      player_name = "player_name", position_group = "position_group", team = "team", opp = "opponent",
+      player_name = "player_name", position_group = "position_group",
+      lineup_position = "lineup_position",
+      team = "team", opp = "opponent",
       tog = "tog_frac",
       epv = "epv_c", recv_epv = "recv_epv_c", disp_epv = "disp_epv_c",
       spoil_epv = "spoil_epv_c", hitout_epv = "hitout_epv_c",
@@ -187,11 +193,10 @@ player_game_ratings <- function(season_val = get_afl_season(),
 #' @return Data frame with centered EPV and per-80 columns.
 #' @keywords internal
 .center_epv_raw <- function(df) {
+  if (!"lineup_position" %in% names(df)) {
+    cli::cli_abort("Column {.val lineup_position} required for EPV centering but not found. Ensure teams data is joined upstream.")
+  }
   df |>
-    dplyr::mutate(
-      position_group = dplyr::if_else(.data$position_group == "MIDFIELDER_FORWARD",
-                                      "MEDIUM_FORWARD", .data$position_group)
-    ) |>
     dplyr::mutate(
       .total_tog = sum(.data$tog),
       recv_epv = round(.data$recv_epv_raw -
@@ -204,7 +209,7 @@ player_game_ratings <- function(season_val = get_afl_season(),
         dplyr::if_else(.data$.total_tog > 0, sum(.data$hitout_epv_raw) / .data$.total_tog * .data$tog, 0), 1),
       epv = round(.data$recv_epv + .data$disp_epv +
         .data$spoil_epv + .data$hitout_epv, 1),
-      .by = c("season", "position_group")
+      .by = c("season", "lineup_position")
     ) |>
     dplyr::select(-".total_tog") |>
     dplyr::mutate(

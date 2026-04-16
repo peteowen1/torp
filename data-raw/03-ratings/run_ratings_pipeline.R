@@ -1,13 +1,16 @@
-# EPR Ratings Pipeline
+# Ratings Pipeline
 #
-# End-to-end script for computing EPR ratings:
+# End-to-end script for computing all TORP ratings:
 #   Stage 1: Refresh upstream data (player_stats, teams) from AFL API
 #   Stage 2: Build player game data from PBP + player_stats + teams
 #   Stage 3: Compute EPR ratings per season/round and release
+#   Stage 4: Compute team ratings
+#   Stage 5: Player game & season ratings (EPV + PSV → torp_value)
+#   Stage 6: Compute & release PSR
 #
 # Usage:
-#   Rscript data-raw/03-ratings/run_epr_pipeline.R
-#   Or: source("data-raw/03-ratings/run_epr_pipeline.R")
+#   Rscript data-raw/03-ratings/run_ratings_pipeline.R
+#   Or: source("data-raw/03-ratings/run_ratings_pipeline.R")
 #
 # CI Usage (from GitHub Actions):
 #   Set config variables before sourcing:

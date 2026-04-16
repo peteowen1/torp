@@ -4,7 +4,7 @@
 \name{MATCH_PHASE_MAP}
 \alias{MATCH_PHASE_MAP}
 \title{Phase groupings for match model position columns
-Maps field position (position.x) to broad phase categories}
+Maps lineup_position to broad phase categories}
 \format{
 An object of class \code{list} of length 4.
 }
@@ -13,6 +13,6 @@ MATCH_PHASE_MAP
 }
 \description{
 Phase groupings for match model position columns
-Maps field position (position.x) to broad phase categories
+Maps lineup_position to broad phase categories
 }
 \keyword{internal}

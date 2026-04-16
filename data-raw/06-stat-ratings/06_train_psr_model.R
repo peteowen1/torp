@@ -42,7 +42,7 @@ fixtures_margin <- fixtures[
     match_date = as.Date(substr(utc_start_time, 1, 10)))
 ]
 
-teams <- teams[is.na(position) | (position != "EMERG" & position != "SUB")]
+teams <- teams[is.na(lineup_position) | (lineup_position != "EMERG" & lineup_position != "SUB")]
 teams[, round := as.integer(round_number)]
 teams[, player_id := as.character(player_id)]
 teams[, season := as.integer(season)]
