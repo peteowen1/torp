@@ -3,7 +3,7 @@
 \docType{data}
 \name{MATCH_LISTED_POS_MAP}
 \alias{MATCH_LISTED_POS_MAP}
-\title{Listed position map for match models (position.y from load_teams())
+\title{Listed position map for match models (position_group from torp ratings)
 Combines MEDIUM_FORWARD and MIDFIELDER_FORWARD into med_fwd.
 Entries are vectors so matching must use \%in\%, not ==.}
 \format{
@@ -13,7 +13,7 @@ An object of class \code{list} of length 6.
 MATCH_LISTED_POS_MAP
 }
 \description{
-Listed position map for match models (position.y from load_teams())
+Listed position map for match models (position_group from torp ratings)
 Combines MEDIUM_FORWARD and MIDFIELDER_FORWARD into med_fwd.
 Entries are vectors so matching must use \%in\%, not ==.
 }

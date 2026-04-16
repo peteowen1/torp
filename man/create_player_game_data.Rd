@@ -31,7 +31,7 @@ uses \code{default_epv_params()}.}
 \value{
 A data.table with one row per player per match, containing:
 identifiers (\code{player_id}, \code{match_id}, \code{season}, \code{round},
-\code{player_name}, \code{team}, \code{opponent}, \code{listed_position}, \code{position}, \code{team_id},
+\code{player_name}, \code{team}, \code{opponent}, \code{position_group}, \code{lineup_position}, \code{team_id},
 \code{utc_start_time}), position-adjusted EPV (\code{epv_adj},
 \code{recv_epv_adj}, \code{disp_epv_adj}, \code{spoil_epv_adj}, \code{hitout_epv_adj}),
 raw EPV (\code{epv}, \code{recv_epv}, \code{disp_epv}, \code{spoil_epv},

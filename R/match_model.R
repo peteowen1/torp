@@ -79,6 +79,130 @@ build_team_mdl_df <- function(season = NULL, target_weeks = NULL,
 }
 
 
+# get_lineup_ratings ----
+
+#' Get player-level ratings for match lineups
+#'
+#' Returns individual player EPR, PSR, and TORP ratings for selected lineups,
+#' with TOG-weighting applied (same logic as match predictions).
+#'
+#' @param season Season year (default: current via get_afl_season())
+#' @param round Round number (default: next week via get_afl_week("next"))
+#' @param match_id Optional match ID to filter to a single match
+#' @return Tibble with one row per player, columns: season, round, match_id,
+#'   team_name, player_name, lineup_position, position_group, epr, recv_epr,
+#'   disp_epr, spoil_epr, hitout_epr, psr, torp (blended EPR+PSR)
+#' @export
+get_lineup_ratings <- function(season = NULL, round = NULL, match_id = NULL) {
+  # Allow positional match_id: get_lineup_ratings("CD_M20260140601")
+  if (!is.null(season) && is.character(season) && all(grepl("^CD_M", season))) {
+    match_id <- season
+    season <- NULL
+  }
+  if (is.null(season)) season <- get_afl_season()
+  if (is.null(round) && is.null(match_id)) round <- get_afl_week("next")
+
+  teams <- load_teams(TRUE)
+  torp_df <- load_torp_ratings()
+
+  # Load PSR
+  psr_df <- tryCatch({
+    skills <- load_player_stat_ratings(TRUE)
+    .compute_psr_from_stat_ratings(skills)
+  }, error = function(e) {
+    cli::cli_warn("Failed to compute PSR: {conditionMessage(e)}")
+    NULL
+  })
+
+  torp_prior_total <- EPR_PRIOR_RATE_RECV + EPR_PRIOR_RATE_DISP +
+    EPR_PRIOR_RATE_SPOIL + EPR_PRIOR_RATE_HITOUT
+
+  # Drop PSR columns from torp_df to avoid collision
+  torp_df <- torp_df |> dplyr::select(-dplyr::any_of(c("psr", "osr", "dsr")))
+
+  lineup_df <- teams |>
+    dplyr::left_join(
+      torp_df,
+      by = c("player_id" = "player_id", "season" = "season", "round_number" = "round")
+    ) |>
+    dplyr::filter((lineup_position != "EMERG" & lineup_position != "SUB") | is.na(lineup_position))
+
+  # Impute missing EPR with priors
+  lineup_df <- lineup_df |>
+    dplyr::mutate(
+      epr = tidyr::replace_na(epr, torp_prior_total),
+      recv_epr = tidyr::replace_na(recv_epr, EPR_PRIOR_RATE_RECV),
+      disp_epr = tidyr::replace_na(disp_epr, EPR_PRIOR_RATE_DISP),
+      spoil_epr = tidyr::replace_na(spoil_epr, EPR_PRIOR_RATE_SPOIL),
+      hitout_epr = tidyr::replace_na(hitout_epr, EPR_PRIOR_RATE_HITOUT),
+      lineup_tog = tidyr::replace_na(POSITION_AVG_TOG[lineup_position], POSITION_AVG_TOG_DEFAULT),
+      epr = epr * lineup_tog,
+      recv_epr = recv_epr * lineup_tog,
+      disp_epr = disp_epr * lineup_tog,
+      spoil_epr = spoil_epr * lineup_tog,
+      hitout_epr = hitout_epr * lineup_tog
+    )
+
+  # Join PSR (latest per player)
+  if (!is.null(psr_df)) {
+    has_osr_dsr <- all(c("osr", "dsr") %in% names(psr_df))
+    latest_psr <- psr_df |>
+      dplyr::select(dplyr::any_of(c("player_id", "season", "round", "psr", "osr", "dsr"))) |>
+      dplyr::arrange(player_id, season, round) |>
+      dplyr::group_by(player_id) |>
+      dplyr::slice_tail(n = 1) |>
+      dplyr::ungroup() |>
+      dplyr::select(-season, -round)
+
+    lineup_df <- lineup_df |>
+      dplyr::left_join(latest_psr, by = "player_id") |>
+      dplyr::mutate(psr = tidyr::replace_na(psr, PSR_PRIOR_RATE) * lineup_tog)
+
+    if (has_osr_dsr) {
+      lineup_df <- lineup_df |>
+        dplyr::mutate(
+          osr = tidyr::replace_na(osr, PSR_PRIOR_RATE / 2) * lineup_tog,
+          dsr = tidyr::replace_na(dsr, PSR_PRIOR_RATE / 2) * lineup_tog
+        )
+    }
+  } else {
+    lineup_df$psr <- PSR_PRIOR_RATE
+  }
+
+  # Compute blended TORP
+  lineup_df <- lineup_df |>
+    dplyr::mutate(
+      torp = TORP_EPR_WEIGHT * epr + (1 - TORP_EPR_WEIGHT) * psr,
+      player_name = paste(given_name, surname)
+    )
+
+  # Filter to requested season/round/match
+  if (!is.null(match_id)) {
+    lineup_df <- lineup_df |> dplyr::filter(match_id %in% .env$match_id)
+  } else {
+    lineup_df <- lineup_df |>
+      dplyr::filter(season == .env$season, round_number == .env$round)
+  }
+
+  if (nrow(lineup_df) == 0) {
+    cli::cli_warn("No lineup data found for the requested filters")
+    return(tibble::tibble())
+  }
+
+  select_cols <- c(
+    "season", "round_number", "match_id", "team_name", "player_name",
+    "lineup_position", "position_group", "lineup_tog",
+    "epr", "recv_epr", "disp_epr", "spoil_epr", "hitout_epr",
+    "psr", "torp"
+  )
+  if ("osr" %in% names(lineup_df)) select_cols <- c(select_cols, "osr", "dsr")
+
+  lineup_df |>
+    dplyr::select(dplyr::any_of(select_cols)) |>
+    dplyr::arrange(match_id, team_name, dplyr::desc(torp))
+}
+
+
 # run_predictions_pipeline ----
 
 #' Run weekly match predictions pipeline

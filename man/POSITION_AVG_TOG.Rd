@@ -3,7 +3,7 @@
 \docType{data}
 \name{POSITION_AVG_TOG}
 \alias{POSITION_AVG_TOG}
-\title{Average time-on-ground fraction by field position (position.x from load_teams())
+\title{Average time-on-ground fraction by lineup_position (from load_teams())
 Computed from historical data (2021-2025). Used to estimate per-player TOG
 when lineups are announced but games haven't started.
 EMERG/SUB are currently filtered upstream but kept here for future use.
@@ -16,7 +16,7 @@ An object of class \code{numeric} of length 21.
 POSITION_AVG_TOG
 }
 \description{
-Average time-on-ground fraction by field position (position.x from load_teams())
+Average time-on-ground fraction by lineup_position (from load_teams())
 Computed from historical data (2021-2025). Used to estimate per-player TOG
 when lineups are announced but games haven't started.
 EMERG/SUB are currently filtered upstream but kept here for future use.

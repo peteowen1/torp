@@ -103,13 +103,17 @@ calculate_psr <- function(skills, coef_df, center = TRUE) {
 
   dt[, psr_raw := as.numeric(mat %*% betas)]
 
-  # Center by pos_group (wt_80s-weighted mean subtraction)
-  if (center && "pos_group" %in% names(dt) && "wt_80s" %in% names(dt)) {
-    dt[!is.na(pos_group), psr := psr_raw - weighted.mean(psr_raw, wt_80s, na.rm = TRUE), by = pos_group]
-    dt[is.na(pos_group), psr := psr_raw - weighted.mean(psr_raw, wt_80s, na.rm = TRUE)]
-  } else if (center && "pos_group" %in% names(dt)) {
-    dt[!is.na(pos_group), psr := psr_raw - mean(psr_raw, na.rm = TRUE), by = pos_group]
-    dt[is.na(pos_group), psr := psr_raw - mean(psr_raw, na.rm = TRUE)]
+  # Center by position (wt_80s-weighted mean subtraction)
+  # Prefer lineup_position (20-way), fall back to pos_group (6-way)
+  psr_pos_col <- if ("lineup_position" %in% names(dt)) "lineup_position"
+                 else if ("pos_group" %in% names(dt)) "pos_group"
+                 else NULL
+  if (center && !is.null(psr_pos_col) && "wt_80s" %in% names(dt)) {
+    dt[!is.na(get(psr_pos_col)), psr := psr_raw - weighted.mean(psr_raw, wt_80s, na.rm = TRUE), by = c(psr_pos_col)]
+    dt[is.na(get(psr_pos_col)), psr := psr_raw - weighted.mean(psr_raw, wt_80s, na.rm = TRUE)]
+  } else if (center && !is.null(psr_pos_col)) {
+    dt[!is.na(get(psr_pos_col)), psr := psr_raw - mean(psr_raw, na.rm = TRUE), by = c(psr_pos_col)]
+    dt[is.na(get(psr_pos_col)), psr := psr_raw - mean(psr_raw, na.rm = TRUE)]
   } else if (center) {
     dt[, psr := psr_raw - mean(psr_raw, na.rm = TRUE)]
   } else {
@@ -269,12 +273,11 @@ calculate_psv <- function(player_stats, coef_df, tog_adjust = TRUE, center = TRU
 
   dt[, psv_raw := as.numeric(mat %*% betas)]
 
-  # Resolve position column: prefer position_group, fall back to pos_group
-  pos_col <- if ("position_group" %in% names(dt)) "position_group"
-             else if ("pos_group" %in% names(dt)) "pos_group"
+  # Resolve position column for centering
+  pos_col <- if ("lineup_position" %in% names(dt)) "lineup_position"
              else NULL
 
-  # Center by position_group then scale back to game-level totals — mirrors
+  # Center by position then scale back to game-level totals — mirrors
   # the EPV approach in player_credit.R Step 7:
   #   1. psv_raw is a per-full-game rate (stats already divided by TOG)
   #   2. subtract TOG-weighted positional mean → centered rate

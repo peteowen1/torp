@@ -289,7 +289,8 @@ TEAMS_COL_MAP <- c(
   "player.captain"               = "captain",
   "player.playerJumperNumber"    = "jumper_number",
   "player.playerName.givenName"  = "given_name",
-  "player.playerName.surname"    = "surname"
+  "player.playerName.surname"    = "surname",
+  "position"                     = "lineup_position"
 )
 
 

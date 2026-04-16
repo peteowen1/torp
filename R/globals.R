@@ -335,7 +335,7 @@ utils::globalVariables(c(
 
   # Lineup processing
   "lineup_tog", ".unknown_pos", "teamName", "teamType",
-  "player.playerId", "position.x", "position.y",
+  "player.playerId", "lineup_position", "position_group",
 
   # Weather forecast
   "Latitude", "Longitude", "temperature_2m", "wind_speed_10m",

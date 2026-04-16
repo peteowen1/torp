@@ -116,7 +116,12 @@ get_player_game_ratings <- function(match = NULL,
   if ("round" %in% names(player_epv) && !"round" %in% names(ps_dt)) {
     ps_dt[, round := as.integer(round_val[1])]
   }
-  # Carry position_group from EPV (6-way class) so PSV can center by position
+  # Carry lineup_position from EPV so PSV can center by position (prefer 20-way
+  # lineup_position over 6-way position_group for more accurate centering)
+  if (!"lineup_position" %in% names(ps_dt) && "lineup_position" %in% names(pgr)) {
+    lp_map <- unique(pgr[, .(player_id, match_id, lineup_position)])
+    ps_dt <- merge(ps_dt, lp_map, by = intersect(c("player_id", "match_id"), names(ps_dt)), all.x = TRUE)
+  }
   if (!"position_group" %in% names(ps_dt) && "position_group" %in% names(pgr)) {
     pg_map <- unique(pgr[, .(player_id, match_id, position_group)])
     ps_dt <- merge(ps_dt, pg_map, by = intersect(c("player_id", "match_id"), names(ps_dt)), all.x = TRUE)

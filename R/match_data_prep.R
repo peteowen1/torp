@@ -98,7 +98,7 @@
       torp_df,
       by = c("player_id" = "player_id", "season" = "season", "round_number" = "round")
     ) |>
-    dplyr::filter((position.x != "EMERG" & position.x != "SUB") | is.na(position.x))
+    dplyr::filter((lineup_position != "EMERG" & lineup_position != "SUB") | is.na(lineup_position))
 
   # Impute missing ratings with per-component priors
   na_torp_count <- sum(is.na(team_lineup_df$epr))
@@ -116,8 +116,8 @@
       disp_epr = tidyr::replace_na(disp_epr, EPR_PRIOR_RATE_DISP),
       spoil_epr = tidyr::replace_na(spoil_epr, EPR_PRIOR_RATE_SPOIL),
       hitout_epr = tidyr::replace_na(hitout_epr, EPR_PRIOR_RATE_HITOUT),
-      lineup_tog = tidyr::replace_na(POSITION_AVG_TOG[position.x], POSITION_AVG_TOG_DEFAULT),
-      .unknown_pos = !is.na(position.x) & is.na(POSITION_AVG_TOG[position.x]),
+      lineup_tog = tidyr::replace_na(POSITION_AVG_TOG[lineup_position], POSITION_AVG_TOG_DEFAULT),
+      .unknown_pos = !is.na(lineup_position) & is.na(POSITION_AVG_TOG[lineup_position]),
       epr = epr * lineup_tog,
       recv_epr = recv_epr * lineup_tog,
       disp_epr = disp_epr * lineup_tog,
@@ -127,7 +127,7 @@
 
   n_unknown <- sum(team_lineup_df$.unknown_pos, na.rm = TRUE)
   if (n_unknown > 0) {
-    unknown_codes <- unique(team_lineup_df$position.x[team_lineup_df$.unknown_pos])
+    unknown_codes <- unique(team_lineup_df$lineup_position[team_lineup_df$.unknown_pos])
     cli::cli_warn("Unknown position code{?s} not in POSITION_AVG_TOG: {paste(unknown_codes, collapse = ', ')} ({n_unknown} row{?s} defaulted to TOG=0.75)")
   }
   team_lineup_df$.unknown_pos <- NULL
@@ -168,16 +168,16 @@
 
   # Generate position columns from lookup tables
   for (col in names(MATCH_PHASE_MAP))
-    team_lineup_df[[col]] <- ifelse(team_lineup_df$position.x %in% MATCH_PHASE_MAP[[col]], team_lineup_df$epr, NA)
+    team_lineup_df[[col]] <- ifelse(team_lineup_df$lineup_position %in% MATCH_PHASE_MAP[[col]], team_lineup_df$epr, NA)
   for (col in names(MATCH_POS_GROUP_MAP))
-    team_lineup_df[[col]] <- ifelse(team_lineup_df$position.x %in% MATCH_POS_GROUP_MAP[[col]], team_lineup_df$epr, NA)
+    team_lineup_df[[col]] <- ifelse(team_lineup_df$lineup_position %in% MATCH_POS_GROUP_MAP[[col]], team_lineup_df$epr, NA)
   for (pos in MATCH_INDIVIDUAL_POS)
-    team_lineup_df[[pos]] <- ifelse(team_lineup_df$position.x == pos, team_lineup_df$epr, NA)
+    team_lineup_df[[pos]] <- ifelse(team_lineup_df$lineup_position == pos, team_lineup_df$epr, NA)
   for (col in names(MATCH_COMBO_POS_MAP))
-    team_lineup_df[[col]] <- ifelse(team_lineup_df$position.x %in% MATCH_COMBO_POS_MAP[[col]], team_lineup_df$epr, NA)
+    team_lineup_df[[col]] <- ifelse(team_lineup_df$lineup_position %in% MATCH_COMBO_POS_MAP[[col]], team_lineup_df$epr, NA)
   for (col in names(MATCH_LISTED_POS_MAP))
-    team_lineup_df[[col]] <- ifelse(team_lineup_df$position.y %in% MATCH_LISTED_POS_MAP[[col]], team_lineup_df$epr, NA)
-  team_lineup_df$other_pos <- ifelse(is.na(team_lineup_df$position.y), team_lineup_df$epr, NA)
+    team_lineup_df[[col]] <- ifelse(team_lineup_df$position_group %in% MATCH_LISTED_POS_MAP[[col]], team_lineup_df$epr, NA)
+  team_lineup_df$other_pos <- ifelse(is.na(team_lineup_df$position_group), team_lineup_df$epr, NA)
 
   # Verify position columns exist
   missing_pos <- setdiff(MATCH_POS_COLS, names(team_lineup_df))

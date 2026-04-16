@@ -22,13 +22,26 @@
 #' @keywords internal
 .map_position_group <- function(pos) {
   pm <- stat_rating_position_map()
-  # Build reverse lookup: position -> group
+  # Build reverse lookup: 6-way position values -> group
   lookup <- character(0)
   for (grp in names(pm)) {
     for (p in pm[[grp]]) {
       lookup[p] <- grp
     }
   }
+  # Also map 20-way lineup positions to 6-way groups
+  lineup_map <- c(
+    FB   = "KEY_DEFENDER",
+    BPL  = "MEDIUM_DEFENDER", BPR  = "MEDIUM_DEFENDER",
+    CHB  = "MEDIUM_DEFENDER", HBFL = "MEDIUM_DEFENDER", HBFR = "MEDIUM_DEFENDER",
+    C    = "MIDFIELDER", WL   = "MIDFIELDER", WR   = "MIDFIELDER",
+    R    = "MIDFIELDER", RR   = "MIDFIELDER",
+    RK   = "RUCK",
+    HFFL = "MEDIUM_FORWARD", HFFR = "MEDIUM_FORWARD", CHF  = "MEDIUM_FORWARD",
+    FPL  = "KEY_FORWARD", FPR  = "KEY_FORWARD", FF   = "KEY_FORWARD",
+    INT  = NA_character_, SUB  = NA_character_, EMERG = NA_character_
+  )
+  lookup <- c(lookup, lineup_map)
   unname(lookup[pos])
 }
 
@@ -39,9 +52,10 @@
 #' @return The data.table with added `pos_group` column.
 #' @keywords internal
 .resolve_stat_rating_positions <- function(dt) {
-  # Prefer 'position_group' (6-way: KEY_DEFENDER, MIDFIELDER, MEDIUM_FORWARD, ...);
-  # fall back to legacy 'listed_position' then raw 'position' for older callers.
-  pos_col <- if ("position_group" %in% names(dt)) "position_group"
+  # Prefer lineup_position (20-way from teams API), fall back to position_group
+  # (6-way from PBP) or legacy columns for older callers.
+  pos_col <- if ("lineup_position" %in% names(dt)) "lineup_position"
+             else if ("position_group" %in% names(dt)) "position_group"
              else if ("listed_position" %in% names(dt)) "listed_position"
              else "position"
   dt[, pos_group := .map_position_group(get(pos_col))]
