@@ -69,16 +69,20 @@ test_that("create_player_game_data *_adj columns are game-value scale (regressio
   skip_if(is.null(pgd), "Could not create player game data")
   skip_if(nrow(pgd) == 0, "Empty player game data")
 
-  # Game-value invariant: mean |epv_adj| should be roughly the same magnitude
-  # as mean |epv|, NOT ~1/avg_tog times larger. If *_adj leaked to per-80 the
-  # ratio would be ~2x+ for typical AFL TOG distributions.
-  ratio <- mean(abs(pgd$epv_adj), na.rm = TRUE) /
-           mean(abs(pgd$epv), na.rm = TRUE)
-  expect_lt(ratio, 2,
-            label = sprintf("mean|epv_adj|/mean|epv| (= %.2f)", ratio))
+  # Game-value magnitude invariant: max |epv_adj| should not exceed ~50.
+  # Under the bug, low-TOG cameos blew up to |epv_adj| ~= |epv|/tog
+  # (Zac Williams R7 2025: 10% TOG, raw epv 8.14, broken epv_adj 71.3).
+  # On the fix, max |epv_adj| sits around 34 (a full-game star's game).
+  # A 50 cap cleanly discriminates with ~15 points of headroom for future
+  # exceptional games. If this ever false-fails on legitimate data, something
+  # extraordinary happened (60+ point EPV game) and we should investigate,
+  # not just bump the threshold.
+  max_abs_adj <- max(abs(pgd$epv_adj), na.rm = TRUE)
+  expect_lt(max_abs_adj, 50,
+            label = sprintf("max|epv_adj| (= %.2f)", max_abs_adj))
 
-  # Per-position-group, TOG-weighted mean of *_adj should be ~0 (centering).
-  # This catches the groupby bug too: if adjustment happens on the wrong
+  # Per-position_group, TOG-weighted mean of *_adj should be ~0 (centering).
+  # This catches the groupby bug: if adjustment happens on the wrong
   # grouping variable, within-group means won't be zero.
   if ("position_group" %in% names(pgd) && "time_on_ground_percentage" %in% names(pgd)) {
     dt <- data.table::as.data.table(pgd)[
@@ -90,6 +94,20 @@ test_that("create_player_game_data *_adj columns are game-value scale (regressio
     expect_true(all(abs(dt$wm) < 1),
                 info = sprintf("Largest per-group weighted mean of epv_adj: %.3f",
                                max(abs(dt$wm), na.rm = TRUE)))
+  }
+
+  # Semantic guards: position_group is the 6-way class, lineup_position is the
+  # ~20-way AFL lineup role. If someone swaps their values in a future
+  # refactor, these cardinality bounds fire immediately.
+  expect_false(any(pgd$position_group == "MIDFIELDER_FORWARD", na.rm = TRUE),
+               info = "MIDFIELDER_FORWARD should be collapsed to MEDIUM_FORWARD")
+  pg_n <- dplyr::n_distinct(pgd$position_group, na.rm = TRUE)
+  expect_lte(pg_n, 7,
+             label = sprintf("n_distinct(position_group) (= %d)", pg_n))
+  if ("lineup_position" %in% names(pgd)) {
+    lp_n <- dplyr::n_distinct(pgd$lineup_position, na.rm = TRUE)
+    expect_gte(lp_n, 15,
+               label = sprintf("n_distinct(lineup_position) (= %d)", lp_n))
   }
 })
 
