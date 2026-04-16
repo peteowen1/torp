@@ -310,6 +310,13 @@ player_season_ratings <- function(season_val = get_afl_season(),
 .compute_player_season_ratings <- function(player_game_ratings_df, per80 = FALSE) {
   df <- data.table::as.data.table(player_game_ratings_df)
 
+  # Backward compat: older player_game_ratings parquets on torpdata have a
+  # `position` column (the 6-way class); it was renamed to `position_group`
+  # on the producer side. Remap on load so old releases still work.
+  if (!"position_group" %in% names(df) && "position" %in% names(df)) {
+    data.table::setnames(df, "position", "position_group")
+  }
+
   # Base aggregation
   result <- df[, {
     out <- list(
