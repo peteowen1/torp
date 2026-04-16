@@ -116,6 +116,11 @@ get_player_game_ratings <- function(match = NULL,
   if ("round" %in% names(player_epv) && !"round" %in% names(ps_dt)) {
     ps_dt[, round := as.integer(round_val[1])]
   }
+  # Carry position_group from EPV (6-way class) so PSV can center by position
+  if (!"position_group" %in% names(ps_dt) && "position_group" %in% names(pgr)) {
+    pg_map <- unique(pgr[, .(player_id, match_id, position_group)])
+    ps_dt <- merge(ps_dt, pg_map, by = intersect(c("player_id", "match_id"), names(ps_dt)), all.x = TRUE)
+  }
 
   psv_result <- tryCatch(.compute_psv(ps_dt), error = function(e) {
     cli::cli_warn("PSV computation skipped: {conditionMessage(e)}")
@@ -137,7 +142,7 @@ get_player_game_ratings <- function(match = NULL,
       psv_slim <- psv_result[, c("player_id", "match_id", psv_cols), with = FALSE]
       pgr <- merge(pgr, psv_slim, by = c("player_id", "match_id"), all.x = TRUE)
 
-      # PSV per-80 rates
+      # PSV is now game-level (calculate_psv centers then * tog, like EPV)
       for (col in psv_cols) {
         p80_col <- paste0(col, "_p80")
         pgr[, (p80_col) := round(get(col) / tog, 1)]
