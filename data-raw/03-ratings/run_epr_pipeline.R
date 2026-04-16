@@ -456,6 +456,13 @@ for (s in seasons) {
       if (!"tog" %in% names(pstats_season) && "time_on_ground_percentage" %in% names(pstats_season)) {
         pstats_season[, tog := pmax(time_on_ground_percentage / 100, 0.1)]
       }
+      # Carry position_group from EPV so PSV can center by position
+      if (!"position_group" %in% names(pstats_season) && "position_group" %in% names(pgr)) {
+        pg_map <- unique(data.table::as.data.table(pgr)[, .(player_id, match_id, position_group)])
+        pstats_season <- merge(pstats_season, pg_map,
+                               by = intersect(c("player_id", "match_id"), names(pstats_season)),
+                               all.x = TRUE)
+      }
       # Apply per-game stat opponent adjustment before PSV
       pstats_season <- tryCatch({
         adjust_stats_for_opponents(pstats_season)
@@ -475,6 +482,7 @@ for (s in seasons) {
             "match_id" %in% names(psv_result)) {
           psv_slim <- psv_result[, c("player_id", "match_id", psv_cols), with = FALSE]
           pgr <- merge(pgr, psv_slim, by = c("player_id", "match_id"), all.x = TRUE)
+          # PSV is now game-level (calculate_psv centers then * tog, like EPV)
           cli::cli_inform("  Added PSV columns to game ratings ({sum(!is.na(pgr$psv))} matched)")
         }
       }

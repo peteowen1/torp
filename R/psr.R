@@ -269,15 +269,25 @@ calculate_psv <- function(player_stats, coef_df, tog_adjust = TRUE, center = TRU
 
   dt[, psv_raw := as.numeric(mat %*% betas)]
 
-  # Center by pos_group (TOG-weighted mean subtraction)
-  if (center && "pos_group" %in% names(dt) && "tog" %in% names(dt)) {
+  # Resolve position column: prefer position_group, fall back to pos_group
+  pos_col <- if ("position_group" %in% names(dt)) "position_group"
+             else if ("pos_group" %in% names(dt)) "pos_group"
+             else NULL
+
+  # Center by position_group then scale back to game-level totals — mirrors
+  # the EPV approach in player_credit.R Step 7:
+  #   1. psv_raw is a per-full-game rate (stats already divided by TOG)
+  #   2. subtract TOG-weighted positional mean → centered rate
+  #   3. multiply by TOG → game-level adjusted value
+  if (center && !is.null(pos_col) && "tog" %in% names(dt)) {
     dt[, .tog_wt := pmax(as.numeric(tog), 0.1)]
-    dt[!is.na(pos_group), psv := psv_raw - weighted.mean(psv_raw, .tog_wt, na.rm = TRUE), by = pos_group]
-    dt[is.na(pos_group), psv := psv_raw - weighted.mean(psv_raw, .tog_wt, na.rm = TRUE)]
+    dt[!is.na(get(pos_col)), psv := (psv_raw - weighted.mean(psv_raw, .tog_wt, na.rm = TRUE)) * .tog_wt,
+       by = c(pos_col)]
+    dt[is.na(get(pos_col)), psv := (psv_raw - weighted.mean(psv_raw, .tog_wt, na.rm = TRUE)) * .tog_wt]
     dt[, .tog_wt := NULL]
-  } else if (center && "pos_group" %in% names(dt)) {
-    dt[!is.na(pos_group), psv := psv_raw - mean(psv_raw, na.rm = TRUE), by = pos_group]
-    dt[is.na(pos_group), psv := psv_raw - mean(psv_raw, na.rm = TRUE)]
+  } else if (center && !is.null(pos_col)) {
+    dt[!is.na(get(pos_col)), psv := psv_raw - mean(psv_raw, na.rm = TRUE), by = c(pos_col)]
+    dt[is.na(get(pos_col)), psv := psv_raw - mean(psv_raw, na.rm = TRUE)]
   } else if (center) {
     dt[, psv := psv_raw - mean(psv_raw, na.rm = TRUE)]
   } else {
@@ -286,7 +296,7 @@ calculate_psv <- function(player_stats, coef_df, tog_adjust = TRUE, center = TRU
 
   id_cols <- intersect(
     c("player_id", "player_name", "season", "round", "match_id",
-      "team", "opponent", "tog"),
+      "team", "opponent", "position_group", "tog"),
     names(dt)
   )
 
