@@ -326,7 +326,7 @@ Default priors: `prior_games = 3.0` for all components; `prior_rate` = -0.4 (rec
 
 **Purpose**: Automated daily pipeline that detects new AFL games, rebuilds ratings, generates predictions, and publishes data.
 
-**Key Files**: `data-raw/03-ratings/run_epr_pipeline.R`, `.github/workflows/daily-ratings-predictions.yml`
+**Key Files**: `data-raw/03-ratings/run_ratings_pipeline.R`, `.github/workflows/daily-ratings-predictions.yml`
 
 ```mermaid
 sequenceDiagram
@@ -356,7 +356,7 @@ sequenceDiagram
     Note over TORP: On failure: auto-create GitHub issue
 ```
 
-**EPR Pipeline Stages** (`run_epr_pipeline.R`):
+**Ratings Pipeline Stages** (`run_ratings_pipeline.R`):
 
 | Stage | Name | Description |
 |-------|------|-------------|
@@ -551,7 +551,7 @@ Old parquet files with legacy column names are normalised automatically at load 
 | 01 | `data-raw/01-data/` | `update_fixture_table.R` | Refresh fixture data for current season |
 | 02 | `data-raw/02-models/` | `build_match_predictions.R` | Entry point for `run_predictions_pipeline()` |
 | 02 | `data-raw/02-models/` | `build_match_predictions_xgb.R` | XGBoost-based match predictions (experimental) |
-| 03 | `data-raw/03-ratings/` | `run_epr_pipeline.R` | 6-stage EPR/TORP pipeline (main CI/CD script) |
+| 03 | `data-raw/03-ratings/` | `run_ratings_pipeline.R` | 6-stage ratings pipeline: EPR, team, game/season, PSR (main CI/CD script) |
 | 03 | `data-raw/03-ratings/` | `optimize_epr_ratings.R` | Grid search for EPR decay/prior hyperparameters |
 | 03 | `data-raw/03-ratings/` | `create_player_ratings_table.R` | Build pre-computed ratings table for torpdata |
 | 03 | `data-raw/03-ratings/` | `bayes_rapm.R` | Bayesian RAPM player rating estimation |
