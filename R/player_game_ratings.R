@@ -107,6 +107,10 @@ player_game_ratings <- function(season_val = get_afl_season(),
 
   df <- filter_game_data(player_game_data, season_val, round_val, matchid = NULL, team = NULL)
 
+  if (!"lineup_position" %in% names(df)) {
+    cli::cli_abort("Column {.val lineup_position} required for position centering but not found in player_game_data.")
+  }
+
   has_wpa <- "wp_credit" %in% names(df)
 
   # Use _oadj (opponent-adjusted) columns when available, fall back to raw
@@ -189,6 +193,9 @@ player_game_ratings <- function(season_val = get_afl_season(),
 #' @return Data frame with centered EPV and per-80 columns.
 #' @keywords internal
 .center_epv_raw <- function(df) {
+  if (!"lineup_position" %in% names(df)) {
+    cli::cli_abort("Column {.val lineup_position} required for EPV centering but not found. Ensure teams data is joined upstream.")
+  }
   df |>
     dplyr::mutate(
       .total_tog = sum(.data$tog),

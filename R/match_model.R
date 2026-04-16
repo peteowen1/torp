@@ -99,10 +99,20 @@ get_lineup_ratings <- function(season = NULL, round = NULL, match_id = NULL) {
     match_id <- season
     season <- NULL
   }
+  if (!is.null(match_id) && any(!grepl("^CD_M\\d+$", match_id))) {
+    cli::cli_warn("match_id values should start with {.val CD_M} followed by digits (e.g. {.val CD_M20260140601})")
+  }
   if (is.null(season)) season <- get_afl_season()
   if (is.null(round) && is.null(match_id)) round <- get_afl_week("next")
 
-  teams <- load_teams(TRUE)
+  # Filter teams early to avoid processing all seasons
+  if (!is.null(match_id)) {
+    # Extract season from match_id (e.g. CD_M20260140601 → 2026)
+    target_season <- as.integer(unique(substr(match_id, 5, 8)))
+    teams <- load_teams(target_season)
+  } else {
+    teams <- load_teams(season)
+  }
   torp_df <- load_torp_ratings()
 
   # Load PSR
@@ -166,7 +176,7 @@ get_lineup_ratings <- function(season = NULL, round = NULL, match_id = NULL) {
         )
     }
   } else {
-    lineup_df$psr <- PSR_PRIOR_RATE
+    lineup_df$psr <- PSR_PRIOR_RATE * lineup_df$lineup_tog
   }
 
   # Compute blended TORP

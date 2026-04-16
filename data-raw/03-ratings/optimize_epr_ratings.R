@@ -222,7 +222,7 @@ teams_dt <- data.table::as.data.table(teams_data)
 teams_dt <- teams_dt[is.na(lineup_position) | !(lineup_position %in% c("EMERG", "SUB"))]
 
 lineups <- teams_dt[, .(player_ids = list(player_id),
-                       position_xs = list(position)),
+                       position_xs = list(lineup_position)),
                     by = .(match_id, teamId = team_id)]
 
 # --- Home ground / distance / familiarity ---

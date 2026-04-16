@@ -108,6 +108,9 @@ calculate_psr <- function(skills, coef_df, center = TRUE) {
   psr_pos_col <- if ("lineup_position" %in% names(dt)) "lineup_position"
                  else if ("pos_group" %in% names(dt)) "pos_group"
                  else NULL
+  if (center && is.null(psr_pos_col)) {
+    cli::cli_warn("No position column found for PSR centering; using global mean subtraction")
+  }
   if (center && !is.null(psr_pos_col) && "wt_80s" %in% names(dt)) {
     dt[!is.na(get(psr_pos_col)), psr := psr_raw - weighted.mean(psr_raw, wt_80s, na.rm = TRUE), by = c(psr_pos_col)]
     dt[is.na(get(psr_pos_col)), psr := psr_raw - weighted.mean(psr_raw, wt_80s, na.rm = TRUE)]
@@ -275,7 +278,12 @@ calculate_psv <- function(player_stats, coef_df, tog_adjust = TRUE, center = TRU
 
   # Resolve position column for centering
   pos_col <- if ("lineup_position" %in% names(dt)) "lineup_position"
+             else if ("position_group" %in% names(dt)) "position_group"
+             else if ("pos_group" %in% names(dt)) "pos_group"
              else NULL
+  if (center && is.null(pos_col)) {
+    cli::cli_warn("No position column found for PSV centering; using global mean subtraction")
+  }
 
   # Center by position then scale back to game-level totals — mirrors
   # the EPV approach in player_credit.R Step 7:
