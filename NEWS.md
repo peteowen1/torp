@@ -1,3 +1,21 @@
+# torp 1.3.2 (2026-04-18)
+
+## Bug Fixes
+
+* **Player position groups now derived from PBP playstyle, not lineup role** — `.resolve_stat_rating_positions()` prefers `position_group` (6-way PBP-derived classification) over `lineup_position` (20-way AFL API named role). Previously, players named in the forward pocket — e.g. tall forwards rotating through FPL — were classified as small/medium forwards based on their lineup, when their actual ball-contest behavior was key-position. Adds a teams-table fallback for fringe players who never registered a PBP `position_group`.
+
+## Model Updates
+
+* **Removed `bounces` from PSR feature set** — coefficient was non-causal (bouncers are ball carriers in transition, often correlated with losing teams rather than causing losses). Refit PSR/OSR/DSR coefficients on the reduced feature set. The defensive transition signal now concentrates correctly into `def_half_pressure_acts`.
+
+## Internal
+
+* `.prepare_stat_rating_data()` and `.resolve_stat_rating_positions()` accept a new `teams` parameter for fallback `pos_group` assignment from `lineup_position` modal.
+
+* PSR training script (`06_train_psr_model.R`) now filters leaderboard displays to `wt_80s >= 5` to suppress fringe low-sample players from top-N lists.
+
+---
+
 # torp 1.3.0 (2026-04-02)
 
 ## New Features

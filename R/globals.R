@@ -149,6 +149,7 @@ utils::globalVariables(c(
   ".raw_num", ".raw_den", ".raw_succ", ".raw_att", ".wt_att",
   ".raw_vals", ".raw_tog",
   "pos_group", "modal_pos", "i.pos_group", "i.modal_pos",
+  "lineup_position", "lp_pos_group", "team_pos_group", "i.team_pos_group",
   "i.n_games", "i.wt_games", "ref_date",
   "..keep_cols", "..skill_cols", "..rating_cols", "..lower_cols", "..upper_cols",
   "..lower_present", "..upper_present", "..raw_cols",
