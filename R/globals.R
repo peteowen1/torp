@@ -3,7 +3,7 @@
 # This file declares variables used in non-standard evaluation (NSE) contexts
 # such as data.table and dplyr operations to avoid "no visible binding" NOTEs.
 
-#' @importFrom stats binomial coef complete.cases gaussian lm pchisq quantile sd var setNames
+#' @importFrom stats binomial coef complete.cases gaussian lm pchisq quantile sd var setNames weighted.mean
 #' @importFrom utils head tail
 #' @importFrom lubridate tz
 NULL
@@ -412,4 +412,29 @@ utils::globalVariables(c(
   "goal_prob", "behind_prob", "clanger_prob", "xscore", "outcome",
   # Player comparison
   "player_label", "season_fac", "avg_pct"
+))
+
+# Opponent adjustment, contest credit, rolling EPV profiles, PSV/PSR
+# (data.table NSE column names and ..cols env-variable patterns)
+utils::globalVariables(c(
+  # Opponent-adjusted stats and EPV (adjust_stats_for_opponents / adjust_epv_for_opponents)
+  "..join_cols", "..inj_merge_cols", "osr.x", "osr.y", "dsr.x", "dsr.y",
+  "contest_epv_adj", "contest_epv_oadj",
+  # Rolling EPV profiles and team residuals
+  "team_epv", "season_coef", "season_se",
+  # WP trajectory
+  "final_margin", "x.margin",
+  # Contest credit (aerial 3-way split) in compute_contest_credit / add_contest_vars_dt
+  ".next_tid", ".next_pid", "contest_outcome", "contest_epv", "is_target",
+  "kick_display_order", "target_player_id", "defender_player_id",
+  ".lag1_desc", ".lag1_do", ".lag2_desc", ".lag2_do",
+  ".lag3_desc", ".lag3_do", ".lag4_desc", ".lag4_do",
+  ".lag5_desc", ".lag5_do",
+  # Player game data contest/aerial columns
+  "contest_target_id", "is_contest_target_recv",
+  "aerial_target_wins", "aerial_target_losses",
+  "aerial_def_wins", "aerial_def_losses",
+  ".disp_scale",
+  # PSR/PSV NSE weights
+  "wt_80s", ".tog_wt"
 ))
