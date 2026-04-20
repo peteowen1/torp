@@ -132,7 +132,7 @@
   }
   team_lineup_df$.unknown_pos <- NULL
 
-  # Join PSR if provided — use each player's most recent PSR value
+  # Join PSR if provided - use each player's most recent PSR value
 
   if (!is.null(psr_df)) {
     has_osr_dsr <- all(c("osr", "dsr") %in% names(psr_df))
@@ -549,7 +549,7 @@
       "Results normalisation produced an invalid tibble.",
       "i" = "Input: {nrow(results)} row{?s}, cols: {paste(names(results), collapse = ', ')}",
       "i" = "Output: {nrow(out)} row{?s}, cols: {paste(names(out), collapse = ', ')}",
-      "!" = "Check load_results() — likely a transient upstream failure."
+      "!" = "Check load_results() - likely a transient upstream failure."
     ))
   }
 

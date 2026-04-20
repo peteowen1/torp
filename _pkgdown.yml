@@ -46,6 +46,7 @@ reference:
       - add_epv_vars
       - add_wp_vars
       - add_shot_vars
+      - add_weather_to_preds
       - fit_win_probability
 
   - title: Data Cleaning
@@ -134,6 +135,7 @@ reference:
   - title: Match Analysis
     desc: Match-level expected goals, predictions, and head-to-head comparisons
     contents:
+      - get_lineup_ratings
       - get_player_game_ratings
       - get_player_game_stats
       - get_xg
