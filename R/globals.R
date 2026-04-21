@@ -223,6 +223,7 @@ utils::globalVariables(c(
   "i.pred_xtotal", "i.torp", "i.torp_boost", "i.pred_home_team",
   "return_round", "player_boost", "team_std", "..pr_cols", "..rat_cols", "player",
   "injury", "estimated_return", "player_norm", "tm_rnk",
+  "scraped_at", "updated", "round_start", "key",
   "tog_frac", "epv_p80", "recv_epv_p80", "disp_epv_p80", "spoil_epv_p80", "hitout_epv_p80",
   "epv_raw", "recv_epv_raw", "disp_epv_raw", "spoil_epv_raw", "hitout_epv_raw",
   "epv_c", "recv_epv_c", "disp_epv_c", "spoil_epv_c", "hitout_epv_c",

@@ -50,7 +50,7 @@ scrape_injuries <- function(timeout = 30) {
 
       if (nrow(tbl) == 0) next
 
-      # Last row contains "Updated: March 17, 2026" — extract and remove it
+      # Last row contains "Updated: March 17, 2026" -- extract and remove it
       last_vals <- as.character(tbl[nrow(tbl), 1])
       updated_date <- NA
       if (grepl("^Updated:", last_vals, ignore.case = TRUE)) {
@@ -508,15 +508,145 @@ build_injury_schedule <- function(injuries_df, player_ratings_dt) {
 
 #' Save Injury Data to GitHub Release
 #'
-#' Saves a timestamped snapshot of injury data to the torpdata repository
-#' as a parquet file for historical tracking.
+#' Appends the current scrape to the season's injury history on torpdata,
+#' deduping to one row per state change. Weekly-source rows are collapsed
+#' on (player_norm, team, injury, estimated_return, updated) so you get
+#' one row each time a player's status changes (e.g. Test -> Out). Preseason
+#' rows are collapsed on (player_norm, team).
 #'
 #' @param injuries_df A data.frame of injuries (e.g., from [get_all_injuries()]).
 #' @param season Numeric season year (e.g. 2026).
 #' @return Invisible NULL. Called for side effects (upload).
 #' @keywords internal
 save_injury_data <- function(injuries_df, season) {
-  injuries_df$scraped_date <- Sys.Date()
-  save_to_release(injuries_df, paste0("injury_list_", season), "injury-data")
+  if (is.null(injuries_df) || nrow(injuries_df) == 0) {
+    cli::cli_inform("No injuries to save for {season}")
+    return(invisible(NULL))
+  }
+
+  now <- Sys.time()
+  injuries_df$scraped_at   <- now
+  injuries_df$scraped_date <- as.Date(now)
+
+  existing <- tryCatch(load_injury_data(season), error = function(e) NULL)
+
+  if (!is.null(existing) && nrow(existing) > 0) {
+    # Backfill scraped_at on pre-upgrade rows that only have scraped_date
+    if (!"scraped_at" %in% names(existing)) {
+      existing$scraped_at <- as.POSIXct(
+        paste(existing$scraped_date, "00:00:00"), tz = "UTC"
+      )
+    }
+    combined <- dplyr::bind_rows(existing, injuries_df)
+  } else {
+    combined <- injuries_df
+  }
+
+  combined <- dplyr::arrange(combined, scraped_at)
+
+  weekly <- combined |>
+    dplyr::filter(source == "weekly") |>
+    dplyr::distinct(player_norm, team, injury, estimated_return, updated,
+                    .keep_all = TRUE)
+
+  preseason <- combined |>
+    dplyr::filter(source == "preseason") |>
+    dplyr::distinct(player_norm, team, .keep_all = TRUE)
+
+  combined <- dplyr::bind_rows(weekly, preseason) |>
+    dplyr::arrange(player_norm, scraped_at)
+
+  n_prev <- if (is.null(existing)) 0L else nrow(existing)
+  n_new  <- nrow(combined) - n_prev
+  cli::cli_inform("Injury history: {nrow(combined)} rows ({n_new} new state change{?s} this scrape)")
+
+  save_to_release(combined, paste0("injury_list_", season), "injury-data")
   invisible(NULL)
+}
+
+
+#' TEST Listing Played-Rate
+#'
+#' For each completed round, finds players listed as "Test" on the weekly
+#' injury list at the latest scrape before the round's first match, and
+#' checks whether they were named in the selected 22 (non-EMERG/SUB). Useful
+#' for validating whether the model's TEST-as-TBC assumption is too harsh.
+#'
+#' Requires accumulated injury snapshots from [save_injury_data()] -- returns
+#' an empty tibble if the release predates `scraped_at` tracking or if no
+#' TEST listings have been captured yet.
+#'
+#' @param season Season year. Defaults to current via [get_afl_season()].
+#' @param round Optional round number (or vector) to filter to. If `NULL`,
+#'   analyses all rounds with injury history and lineup data available.
+#' @return A tibble with one row per TEST listing: `round`, `player`,
+#'   `team`, `injury`, `scraped_at`, `played` (logical).
+#' @export
+test_played_rate <- function(season = NULL, round = NULL) {
+  if (is.null(season)) season <- get_afl_season()
+
+  inj_hist <- tryCatch(load_injury_data(season), error = function(e) NULL)
+  if (is.null(inj_hist) || nrow(inj_hist) == 0) {
+    cli::cli_alert_info("No injury history for {season} yet")
+    return(tibble::tibble())
+  }
+  if (!"scraped_at" %in% names(inj_hist)) {
+    cli::cli_alert_info("Injury history for {season} predates scraped_at tracking -- waiting on fresh snapshots")
+    return(tibble::tibble())
+  }
+
+  fixtures <- load_fixtures(all = TRUE) |>
+    dplyr::filter(season == .env$season)
+  teams <- load_teams(season)
+  if (nrow(teams) == 0) {
+    cli::cli_alert_info("No lineup data for {season}")
+    return(tibble::tibble())
+  }
+
+  round_starts <- fixtures |>
+    dplyr::mutate(
+      utc_dt = as.POSIXct(utc_start_time, format = "%Y-%m-%dT%H:%M", tz = "UTC")
+    ) |>
+    dplyr::group_by(round_number) |>
+    dplyr::summarise(round_start = min(utc_dt, na.rm = TRUE), .groups = "drop") |>
+    dplyr::filter(round_start < Sys.time())
+
+  if (!is.null(round)) {
+    round_starts <- dplyr::filter(round_starts, round_number %in% round)
+  }
+  if (nrow(round_starts) == 0) {
+    cli::cli_alert_info("No completed rounds to analyse")
+    return(tibble::tibble())
+  }
+
+  played_keys <- teams |>
+    dplyr::filter(!lineup_position %in% c("EMERG", "SUB") | is.na(lineup_position)) |>
+    dplyr::mutate(player_norm = norm_name(paste(given_name, surname)),
+                  key = paste(round_number, player_norm)) |>
+    dplyr::pull(key)
+
+  tests <- purrr::map_dfr(seq_len(nrow(round_starts)), function(i) {
+    r  <- round_starts$round_number[i]
+    rs <- round_starts$round_start[i]
+    inj_hist |>
+      dplyr::filter(source == "weekly",
+                    scraped_at < rs,
+                    tolower(trimws(estimated_return)) == "test") |>
+      dplyr::arrange(player_norm, scraped_at) |>
+      dplyr::group_by(player_norm) |>
+      dplyr::slice_tail(n = 1) |>
+      dplyr::ungroup() |>
+      dplyr::mutate(round_number = r)
+  })
+
+  if (nrow(tests) == 0) {
+    cli::cli_alert_info("No TEST listings captured yet -- give it a few rounds of scrapes")
+    return(tibble::tibble())
+  }
+
+  tests |>
+    dplyr::mutate(played = paste(round_number, player_norm) %in% played_keys) |>
+    dplyr::transmute(round = round_number, player, team, injury,
+                     scraped_at, played) |>
+    dplyr::arrange(round, team, player)
 }
