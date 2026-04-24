@@ -48,6 +48,8 @@ reference:
       - add_shot_vars
       - add_weather_to_preds
       - fit_win_probability
+      - format_predictions_blog
+      - xg_to_blog_lookup
 
   - title: Data Cleaning
     desc: Clean and prepare AFL data for analysis
@@ -178,7 +180,7 @@ reference:
       - starts_with("CREDIT_")
 
   - title: Injuries
-    desc: Injury data access, matching, and simulation scheduling
+    desc: Injury data access, matching, simulation scheduling, and return-rate calibration
     contents:
       - injuries
       - get_all_injuries
@@ -186,6 +188,10 @@ reference:
       - scrape_injuries
       - build_injury_schedule
       - load_injury_data
+      - test_played_rate
+      - tbc_played_rate
+      - injury_return_accuracy
+      - tbc_return_survival
 
   - title: Utilities
     desc: Helper and convenience functions
