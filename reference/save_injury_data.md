@@ -1,7 +1,10 @@
 # Save Injury Data to GitHub Release
 
-Saves a timestamped snapshot of injury data to the torpdata repository
-as a parquet file for historical tracking.
+Appends the current scrape to the season's injury history on torpdata,
+deduping to one row per state change. Weekly-source rows are collapsed
+on (player_norm, team, injury, estimated_return, updated) so you get one
+row each time a player's status changes (e.g. Test -\> Out). Preseason
+rows are collapsed on (player_norm, team).
 
 ## Usage
 

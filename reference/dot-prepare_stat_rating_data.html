@@ -9,7 +9,7 @@ all required columns for the stat rating estimation pipeline."><meta property="o
 
     <a class="navbar-brand me-2" href="../index.html">torp</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.3.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.3.3</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -50,7 +50,8 @@ all required columns for the stat rating estimation pipeline.</p>
 <span>  <span class="va">player_game_data</span>,</span>
 <span>  <span class="va">player_stats</span>,</span>
 <span>  rosters <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>  fixtures <span class="op">=</span> <span class="cn">NULL</span></span>
+<span>  fixtures <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  teams <span class="op">=</span> <span class="cn">NULL</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -72,6 +73,13 @@ all required columns for the stat rating estimation pipeline.</p>
 
 <dt id="arg-fixtures">fixtures<a class="anchor" aria-label="anchor" href="#arg-fixtures"></a></dt>
 <dd><p>Optional fixture data. If NULL, loads from torpdata.</p></dd>
+
+
+<dt id="arg-teams">teams<a class="anchor" aria-label="anchor" href="#arg-teams"></a></dt>
+<dd><p>Optional teams/lineup data. Used as a final fallback for
+<code>pos_group</code> assignment of rostered-but-never-played players whose
+roster <code>position</code> doesn't map (e.g. fringe bench players with only
+one FPL appearance).</p></dd>
 
 </dl></div>
     <div class="section level2">

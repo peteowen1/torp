@@ -61,8 +61,14 @@ play-by-play data
   : Add Win Probability Variables
 - [`add_shot_vars()`](https://peteowen1.github.io/torp/reference/add_shot_vars.md)
   : Add Shot Variables
+- [`add_weather_to_preds()`](https://peteowen1.github.io/torp/reference/add_weather_to_preds.md)
+  : Add weather to a predictions tibble
 - [`fit_win_probability()`](https://peteowen1.github.io/torp/reference/fit_win_probability.md)
   : Fit AFL Win Probability Model
+- [`format_predictions_blog()`](https://peteowen1.github.io/torp/reference/format_predictions_blog.md)
+  : Format match predictions for the blog / R2 parquet
+- [`xg_to_blog_lookup()`](https://peteowen1.github.io/torp/reference/xg_to_blog_lookup.md)
+  : Convert xG release / live data into a blog-ready xscore lookup
 
 ## Data Cleaning
 
@@ -239,6 +245,8 @@ Access and analyse possession chains
 
 Match-level expected goals, predictions, and head-to-head comparisons
 
+- [`get_lineup_ratings()`](https://peteowen1.github.io/torp/reference/get_lineup_ratings.md)
+  : Get player-level ratings for match lineups
 - [`get_player_game_ratings()`](https://peteowen1.github.io/torp/reference/get_player_game_ratings.md)
   : Get Player Game Ratings (Live)
 - [`get_player_game_stats()`](https://peteowen1.github.io/torp/reference/get_player_game_stats.md)
@@ -297,7 +305,8 @@ AFL and model constants
 
 ## Injuries
 
-Injury data access, matching, and simulation scheduling
+Injury data access, matching, simulation scheduling, and return-rate
+calibration
 
 - [`injuries`](https://peteowen1.github.io/torp/reference/injuries.md) :
   AFL Injury Data Functions
@@ -311,6 +320,14 @@ Injury data access, matching, and simulation scheduling
   : Build Injury Return Schedule for Simulation
 - [`load_injury_data()`](https://peteowen1.github.io/torp/reference/load_injury_data.md)
   : Load Injury Data from GitHub Releases
+- [`test_played_rate()`](https://peteowen1.github.io/torp/reference/test_played_rate.md)
+  : TEST Listing Played-Rate
+- [`tbc_played_rate()`](https://peteowen1.github.io/torp/reference/tbc_played_rate.md)
+  : TBC Listing Played-Rate
+- [`injury_return_accuracy()`](https://peteowen1.github.io/torp/reference/injury_return_accuracy.md)
+  : Injury-Return Accuracy (Predicted vs Actual Rounds Out)
+- [`tbc_return_survival()`](https://peteowen1.github.io/torp/reference/tbc_return_survival.md)
+  : Empirical Return Distribution for TBC Listings
 
 ## Utilities
 

@@ -1,7 +1,7 @@
-# Phase groupings for match model position columns Maps field position (position.x) to broad phase categories
+# Phase groupings for match model position columns Maps lineup_position to broad phase categories
 
-Phase groupings for match model position columns Maps field position
-(position.x) to broad phase categories
+Phase groupings for match model position columns Maps lineup_position to
+broad phase categories
 
 ## Usage
 

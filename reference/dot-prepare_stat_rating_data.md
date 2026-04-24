@@ -10,7 +10,8 @@ all required columns for the stat rating estimation pipeline.
   player_game_data,
   player_stats,
   rosters = NULL,
-  fixtures = NULL
+  fixtures = NULL,
+  teams = NULL
 )
 ```
 
@@ -31,6 +32,13 @@ all required columns for the stat rating estimation pipeline.
 - fixtures:
 
   Optional fixture data. If NULL, loads from torpdata.
+
+- teams:
+
+  Optional teams/lineup data. Used as a final fallback for `pos_group`
+  assignment of rostered-but-never-played players whose roster
+  `position` doesn't map (e.g. fringe bench players with only one FPL
+  appearance).
 
 ## Value
 

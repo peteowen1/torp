@@ -1,6 +1,6 @@
-# Listed position map for match models (position.y from load_teams()) Combines MEDIUM_FORWARD and MIDFIELDER_FORWARD into med_fwd. Entries are vectors so matching must use %in%, not ==.
+# Listed position map for match models (position_group from torp ratings) Combines MEDIUM_FORWARD and MIDFIELDER_FORWARD into med_fwd. Entries are vectors so matching must use %in%, not ==.
 
-Listed position map for match models (position.y from load_teams())
+Listed position map for match models (position_group from torp ratings)
 Combines MEDIUM_FORWARD and MIDFIELDER_FORWARD into med_fwd. Entries are
 vectors so matching must use %in%, not ==.
 

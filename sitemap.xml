@@ -129,6 +129,7 @@
 <url><loc>https://peteowen1.github.io/torp/reference/OPP_ADJ_LAMBDA_DECAY.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/POSITION_AVG_TOG.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/POSITION_AVG_TOG_DEFAULT.html</loc></url>
+<url><loc>https://peteowen1.github.io/torp/reference/PREDICTIONS_BLOG_COLS.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/PSR_PRIOR_RATE.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/SIM_AVG_TOTAL.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/SIM_DEFAULT_N.html</loc></url>
@@ -146,6 +147,7 @@
 <url><loc>https://peteowen1.github.io/torp/reference/SIM_MIN_TOTAL.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/SIM_NOISE_SD.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/SIM_RATING_SHIFT.html</loc></url>
+<url><loc>https://peteowen1.github.io/torp/reference/SIM_RESIDUAL_SE_MULT.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/SIM_TOP_N_PLAYERS.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/SIM_TOTAL_SD.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/SIM_VICTORIAN_TEAMS.html</loc></url>
@@ -181,6 +183,7 @@
 <url><loc>https://peteowen1.github.io/torp/reference/add_shot_vars.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/add_team_id_mdl_dt.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/add_torp_ids_dt.html</loc></url>
+<url><loc>https://peteowen1.github.io/torp/reference/add_weather_to_preds.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/add_wp_vars.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/adjust_epv_for_opponents.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/adjust_stat_ratings_for_opponents.html</loc></url>
@@ -288,6 +291,7 @@
 <url><loc>https://peteowen1.github.io/torp/reference/dot-find_game_by_match_id.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/dot-find_psr_coef_path.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/dot-format_match_preds.html</loc></url>
+<url><loc>https://peteowen1.github.io/torp/reference/dot-format_weather_summary.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/dot-get_chains_by_match_id.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/dot-get_latest_lineup_ids.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/dot-load_match_weather.html</loc></url>
@@ -356,6 +360,7 @@
 <url><loc>https://peteowen1.github.io/torp/reference/fix_chain_coordinates_dt.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/fixtures.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/format_contest_rows.html</loc></url>
+<url><loc>https://peteowen1.github.io/torp/reference/format_predictions_blog.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/generate_disk_cache_key.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/generate_urls.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/get_afl_data_schemas.html</loc></url>
@@ -378,6 +383,7 @@
 <url><loc>https://peteowen1.github.io/torp/reference/get_from_cache.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/get_from_cache_ttl.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/get_game_chains.html</loc></url>
+<url><loc>https://peteowen1.github.io/torp/reference/get_lineup_ratings.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/get_local_data_dir.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/get_local_path.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/get_many_game_chains.html</loc></url>
@@ -403,6 +409,7 @@
 <url><loc>https://peteowen1.github.io/torp/reference/head_to_head.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/index.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/injuries.html</loc></url>
+<url><loc>https://peteowen1.github.io/torp/reference/injury_return_accuracy.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/is_cache_valid.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/is_disk_cached.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/is_download_skippable.html</loc></url>
@@ -511,11 +518,14 @@
 <url><loc>https://peteowen1.github.io/torp/reference/stat_rating_position_map.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/store_in_cache.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/summarise_simulations.html</loc></url>
+<url><loc>https://peteowen1.github.io/torp/reference/tbc_played_rate.html</loc></url>
+<url><loc>https://peteowen1.github.io/torp/reference/tbc_return_survival.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/team_color_lookup.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/team_color_scale.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/team_fill_scale.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/team_profile.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/team_stat_rating_profile.html</loc></url>
+<url><loc>https://peteowen1.github.io/torp/reference/test_played_rate.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/theme_torp.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/torp_clean_names.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/torp_dummy_cols.html</loc></url>
@@ -537,5 +547,6 @@
 <url><loc>https://peteowen1.github.io/torp/reference/validate_wp_input.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/write_disk_cache.html</loc></url>
 <url><loc>https://peteowen1.github.io/torp/reference/write_local_parquet.html</loc></url>
+<url><loc>https://peteowen1.github.io/torp/reference/xg_to_blog_lookup.html</loc></url>
 </urlset>
 

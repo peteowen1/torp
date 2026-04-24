@@ -57,10 +57,11 @@ create_player_game_data(
 
 A data.table with one row per player per match, containing: identifiers
 (`player_id`, `match_id`, `season`, `round`, `player_name`, `team`,
-`opponent`, `listed_position`, `position`, `team_id`, `utc_start_time`),
-position-adjusted EPV (`epv_adj`, `recv_epv_adj`, `disp_epv_adj`,
-`spoil_epv_adj`, `hitout_epv_adj`), raw EPV (`epv`, `recv_epv`,
-`disp_epv`, `spoil_epv`, `hitout_epv`), and key box-score stats.
+`opponent`, `position_group`, `lineup_position`, `team_id`,
+`utc_start_time`), position-adjusted EPV (`epv_adj`, `recv_epv_adj`,
+`disp_epv_adj`, `spoil_epv_adj`, `hitout_epv_adj`), raw EPV (`epv`,
+`recv_epv`, `disp_epv`, `spoil_epv`, `hitout_epv`), and key box-score
+stats.
 
 ## Details
 

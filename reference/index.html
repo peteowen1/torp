@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">torp</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.3.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.3.3</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -231,10 +231,31 @@
 
         <dt>
 
+          <code><a href="add_weather_to_preds.html">add_weather_to_preds()</a></code>
+
+        </dt>
+        <dd>Add weather to a predictions tibble</dd>
+
+        <dt>
+
           <code><a href="fit_win_probability.html">fit_win_probability()</a></code>
 
         </dt>
         <dd>Fit AFL Win Probability Model</dd>
+
+        <dt>
+
+          <code><a href="format_predictions_blog.html">format_predictions_blog()</a></code>
+
+        </dt>
+        <dd>Format match predictions for the blog / R2 parquet</dd>
+
+        <dt>
+
+          <code><a href="xg_to_blog_lookup.html">xg_to_blog_lookup()</a></code>
+
+        </dt>
+        <dd>Convert xG release / live data into a blog-ready xscore lookup</dd>
       </dl></div><div class="section level2">
       <h2 id="data-cleaning">Data Cleaning<a class="anchor" aria-label="anchor" href="#data-cleaning"></a></h2>
 
@@ -746,6 +767,13 @@
 
       <dl><dt>
 
+          <code><a href="get_lineup_ratings.html">get_lineup_ratings()</a></code>
+
+        </dt>
+        <dd>Get player-level ratings for match lineups</dd>
+
+        <dt>
+
           <code><a href="get_player_game_ratings.html">get_player_game_ratings()</a></code>
 
         </dt>
@@ -914,7 +942,7 @@
       </dl></div><div class="section level2">
       <h2 id="injuries">Injuries<a class="anchor" aria-label="anchor" href="#injuries"></a></h2>
 
-      <div class="section-desc"><p>Injury data access, matching, and simulation scheduling</p></div>
+      <div class="section-desc"><p>Injury data access, matching, simulation scheduling, and return-rate calibration</p></div>
 
       <dl></dl></div><div class="section level2">
 
@@ -962,6 +990,34 @@
 
         </dt>
         <dd>Load Injury Data from GitHub Releases</dd>
+
+        <dt>
+
+          <code><a href="test_played_rate.html">test_played_rate()</a></code>
+
+        </dt>
+        <dd>TEST Listing Played-Rate</dd>
+
+        <dt>
+
+          <code><a href="tbc_played_rate.html">tbc_played_rate()</a></code>
+
+        </dt>
+        <dd>TBC Listing Played-Rate</dd>
+
+        <dt>
+
+          <code><a href="injury_return_accuracy.html">injury_return_accuracy()</a></code>
+
+        </dt>
+        <dd>Injury-Return Accuracy (Predicted vs Actual Rounds Out)</dd>
+
+        <dt>
+
+          <code><a href="tbc_return_survival.html">tbc_return_survival()</a></code>
+
+        </dt>
+        <dd>Empirical Return Distribution for TBC Listings</dd>
       </dl></div><div class="section level2">
       <h2 id="utilities">Utilities<a class="anchor" aria-label="anchor" href="#utilities"></a></h2>
 
