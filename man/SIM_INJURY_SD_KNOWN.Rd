@@ -5,7 +5,10 @@
 \alias{SIM_INJURY_SD_KNOWN}
 \title{Reduced injury noise SD when known injuries are excluded (points)
 When specific injured players are removed from team ratings, the remaining
-per-round noise can be smaller since a major source of variation is gone.}
+per-round noise can be smaller since a major source of variation is gone.
+Set to match \code{SIM_INJURY_SD} because scraped injury lists only capture
+officially-listed absences — form slumps, minor niggles, and game-day
+late-outs still contribute meaningful week-to-week jitter.}
 \format{
 An object of class \code{numeric} of length 1.
 }
@@ -16,5 +19,8 @@ SIM_INJURY_SD_KNOWN
 Reduced injury noise SD when known injuries are excluded (points)
 When specific injured players are removed from team ratings, the remaining
 per-round noise can be smaller since a major source of variation is gone.
+Set to match \code{SIM_INJURY_SD} because scraped injury lists only capture
+officially-listed absences — form slumps, minor niggles, and game-day
+late-outs still contribute meaningful week-to-week jitter.
 }
 \keyword{internal}

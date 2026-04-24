@@ -52,7 +52,8 @@ stat_ratings[, round := as.integer(round)]
 
 stat_defs <- stat_rating_definitions()
 exclude_stats <- c("cond_tog", "squad_selection", "dream_team_points", "rating_points",
-                    "centre_bounce_attendances", "ruck_contests", "kickins")  # role/selection, not skill
+                    "centre_bounce_attendances", "ruck_contests", "kickins",  # role/selection, not skill
+                    "bounces")  # non-causal: correlated with transition/losing teams, overfits as large negative coef
 all_rating_names <- setdiff(stat_defs$stat_name, exclude_stats)
 
 # Prefer _adj_rating (opponent-adjusted) when available, fall back to _rating
@@ -324,13 +325,26 @@ latest <- as.data.table(all_ratings)
 latest <- latest[, .SD[round == max(round)], by = season]
 latest <- latest[season == max(season)]
 
+# Filter low-sample players from leaderboards: wt_80s < 5 (fewer than ~5
+# full-TOG games of decayed exposure) produces high-variance ratings that
+# aren't meaningful signal. Doesn't change the model — just display.
+LEADERBOARD_MIN_WT80S <- 5
+if ("wt_80s" %in% names(latest)) {
+  n_filtered <- sum(latest$wt_80s < LEADERBOARD_MIN_WT80S, na.rm = TRUE)
+  cat(sprintf("Leaderboard filter: wt_80s >= %d (excludes %d low-sample players)\n",
+              LEADERBOARD_MIN_WT80S, n_filtered))
+  latest_lb <- latest[wt_80s >= LEADERBOARD_MIN_WT80S]
+} else {
+  latest_lb <- latest
+}
+
 cat("\n--- Top 20 by PSR (osr + dsr = psr, reconciled to margin model) ---\n")
-print(head(latest[order(-psr),
+print(head(latest_lb[order(-psr),
   .(player_name, pos_group, osr = round(osr, 2), dsr = round(dsr, 2),
     psr = round(psr, 2))], 20), row.names = FALSE)
 
 cat("\n--- Bottom 20 by PSR ---\n")
-print(tail(latest[order(-psr),
+print(tail(latest_lb[order(-psr),
   .(player_name, pos_group, osr = round(osr, 2), dsr = round(dsr, 2),
     psr = round(psr, 2))], 20), row.names = FALSE)
 
@@ -339,13 +353,13 @@ cat(sprintf("\nOSR vs DSR correlation: %.3f\n",
 
 # Best offensive players
 cat("\n--- Top 10 by OSR ---\n")
-print(head(latest[order(-osr),
+print(head(latest_lb[order(-osr),
   .(player_name, pos_group, osr = round(osr, 2), dsr = round(dsr, 2))], 10),
   row.names = FALSE)
 
 # Best defensive players
 cat("\n--- Top 10 by DSR ---\n")
-print(head(latest[order(-dsr),
+print(head(latest_lb[order(-dsr),
   .(player_name, pos_group, osr = round(osr, 2), dsr = round(dsr, 2))], 10),
   row.names = FALSE)
 

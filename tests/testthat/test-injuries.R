@@ -104,7 +104,10 @@ test_that("get_all_injuries deduplicates with weekly taking precedence", {
 
   local_mocked_bindings(
     scrape_injuries = function(timeout = 30) weekly_data,
-    load_preseason_injuries = function(season) preseason_data
+    load_preseason_injuries = function(season) preseason_data,
+    load_player_stats = function(...) {
+      data.frame(player_name = character(), stringsAsFactors = FALSE)
+    }
   )
 
   result <- get_all_injuries(2026, scrape = TRUE)
@@ -114,6 +117,95 @@ test_that("get_all_injuries deduplicates with weekly taking precedence", {
   expect_equal(nrow(john_rows), 1)
   expect_equal(john_rows$source, "weekly")
   expect_equal(john_rows$injury, "Hamstring")
+})
+
+test_that("get_all_injuries dedupes across short and full team-name variants", {
+  # Same player listed on weekly (full name) and preseason (short name) --
+  # torp_replace_teams() should canonicalise both so dedup catches them.
+  weekly_data <- data.frame(
+    player = "Cody Angove",
+    team = "GWS Giants",
+    injury = "Hamstring",
+    estimated_return = "4-5 weeks",
+    player_norm = "cody angove",
+    stringsAsFactors = FALSE
+  )
+  preseason_data <- data.frame(
+    player = "Cody Angove",
+    team = "Greater Western Sydney",
+    injury = "Hamstring",
+    estimated_return = "TBC",
+    player_norm = "cody angove",
+    stringsAsFactors = FALSE
+  )
+
+  local_mocked_bindings(
+    scrape_injuries = function(timeout = 30) weekly_data,
+    load_preseason_injuries = function(season) preseason_data,
+    load_player_stats = function(...) {
+      data.frame(player_name = character(), stringsAsFactors = FALSE)
+    }
+  )
+
+  result <- get_all_injuries(2026, scrape = TRUE)
+  # Should be one row (weekly wins), and team should be canonical
+  expect_equal(nrow(result), 1)
+  expect_equal(result$source, "weekly")
+  expect_equal(result$estimated_return, "4-5 weeks")
+  expect_equal(result$team, "GWS Giants")
+})
+
+test_that("match_injuries matches across short and full team-name variants", {
+  ratings <- data.frame(
+    player_name = "Cody Angove",
+    team = "GWS Giants",
+    torp = 5.0,
+    stringsAsFactors = FALSE
+  )
+  injuries <- data.frame(
+    player = "Cody Angove",
+    team = "Greater Western Sydney",
+    player_norm = "cody angove",
+    injury = "Hamstring",
+    estimated_return = "TBC",
+    stringsAsFactors = FALSE
+  )
+
+  result <- match_injuries(ratings, injuries)
+  expect_equal(nrow(result), 1)
+  expect_equal(result$injury, "Hamstring")
+  expect_equal(result$estimated_return, "TBC")
+})
+
+test_that("get_all_injuries drops preseason entries for players who have played", {
+  preseason_data <- data.frame(
+    player = c("Stale Player", "Genuine ACL"),
+    team = c("TeamA", "TeamB"),
+    injury = c("Calf", "Knee"),
+    estimated_return = c("TBC", "2027"),
+    player_norm = c("stale player", "genuine acl"),
+    stringsAsFactors = FALSE
+  )
+
+  local_mocked_bindings(
+    scrape_injuries = function(timeout = 30) {
+      data.frame(player = character(), team = character(),
+                 injury = character(), estimated_return = character(),
+                 player_norm = character(), stringsAsFactors = FALSE)
+    },
+    load_preseason_injuries = function(season) preseason_data,
+    load_player_stats = function(...) {
+      data.frame(player_name = "Stale Player", stringsAsFactors = FALSE)
+    }
+  )
+
+  result <- get_all_injuries(2026, scrape = TRUE)
+  expect_equal(nrow(result), 1)
+  expect_equal(result$player_norm, "genuine acl")
+
+  # Opt-out preserves the stale entry for inspection
+  result_raw <- get_all_injuries(2026, scrape = TRUE, drop_played_preseason = FALSE)
+  expect_equal(nrow(result_raw), 2)
 })
 
 test_that("get_all_injuries with scrape=FALSE uses only preseason", {
@@ -127,7 +219,10 @@ test_that("get_all_injuries with scrape=FALSE uses only preseason", {
   )
 
   local_mocked_bindings(
-    load_preseason_injuries = function(season) preseason_data
+    load_preseason_injuries = function(season) preseason_data,
+    load_player_stats = function(...) {
+      data.frame(player_name = character(), stringsAsFactors = FALSE)
+    }
   )
 
   result <- get_all_injuries(2026, scrape = FALSE)
@@ -146,6 +241,9 @@ test_that("get_all_injuries returns empty df when no injuries", {
       data.frame(player = character(), team = character(),
                  injury = character(), estimated_return = character(),
                  player_norm = character(), stringsAsFactors = FALSE)
+    },
+    load_player_stats = function(...) {
+      data.frame(player_name = character(), stringsAsFactors = FALSE)
     }
   )
 
@@ -336,4 +434,185 @@ test_that("build_injury_schedule aggregates same-round returns", {
   # build_injury_schedule normalizes team names via torp_replace_teams
   sydney_r5 <- result[team == "Sydney Swans" & return_round == 5]
   expect_equal(nrow(sydney_r5), 1)
+})
+
+
+# --- injury accuracy helpers (tbc_played_rate / injury_return_accuracy /
+# tbc_return_survival) ---
+
+# Shared fixture builder. Round 1 started 2026-03-14, round 2 2026-03-21,
+# round 3 2026-03-28; round 4 is in the future so not "completed".
+.mock_injury_accuracy_bindings <- function() {
+  inj_hist <- tibble::tibble(
+    player = c("Alice One",      "Bob Two",        "Cara Three",     "Dan Four",       "Eve Five"),
+    team = c("Sydney Swans",     "Sydney Swans",   "Geelong Cats",   "Geelong Cats",   "Hawthorn Hawks"),
+    injury = c("Hamstring",      "Calf",           "Concussion",     "Knee",           "Ankle"),
+    estimated_return = c("1-2 weeks", "TBC",       "TBC",            "Test",           "Round 3"),
+    player_norm = c("alice one",  "bob two",       "cara three",     "dan four",       "eve five"),
+    source = rep("weekly", 5),
+    updated = as.Date(rep("2026-03-13", 5)),
+    scraped_at = as.POSIXct(rep("2026-03-13 12:00:00", 5), tz = "UTC")
+  )
+
+  fixtures <- tibble::tibble(
+    season = rep(2026L, 4),
+    round_number = 1:4,
+    utc_start_time = c("2026-03-14T07:00", "2026-03-21T07:00",
+                       "2026-03-28T07:00", "2099-04-04T07:00")
+  )
+
+  # Rounds 1-3 are "played"; round 4 is in the future.
+  # Lineups: Dan (Test) plays R1; Bob (TBC) plays R2; Alice (1-2 weeks) plays R3;
+  # Eve (Round 3) plays R3; Cara (TBC) never plays (censored).
+  teams <- tibble::tibble(
+    round_number = c(1L, 2L, 3L, 3L),
+    given_name = c("Dan", "Bob", "Alice", "Eve"),
+    surname = c("Four", "Two", "One", "Five"),
+    lineup_position = c("FF", "MID", "DEF", "MID")
+  )
+
+  list(
+    inj_hist = inj_hist,
+    fixtures = fixtures,
+    teams = teams
+  )
+}
+
+test_that("tbc_played_rate computes per-round and overall played rates", {
+  mocks <- .mock_injury_accuracy_bindings()
+
+  local_mocked_bindings(
+    load_injury_data = function(...) mocks$inj_hist,
+    load_fixtures = function(...) mocks$fixtures,
+    load_teams = function(...) mocks$teams
+  )
+
+  out <- tbc_played_rate(2026)
+  # 2 TBC listings (Bob, Cara) × 3 completed rounds = 6 rows
+  expect_equal(nrow(out), 6)
+  expect_true(all(c("round", "player", "team", "injury", "scraped_at", "played")
+                  %in% names(out)))
+
+  # Overall: 1 played (Bob R2) out of 6 = 1/6
+  summary <- attr(out, "summary")
+  expect_equal(summary$n_listings, 6)
+  expect_equal(summary$overall_played_pct, 1 / 6)
+  expect_equal(nrow(summary$per_round), 3)
+})
+
+test_that("tbc_played_rate returns empty tibble when no TBC listings", {
+  mocks <- .mock_injury_accuracy_bindings()
+  # Strip TBC rows
+  inj_no_tbc <- mocks$inj_hist[mocks$inj_hist$estimated_return != "TBC", ]
+
+  local_mocked_bindings(
+    load_injury_data = function(...) inj_no_tbc,
+    load_fixtures = function(...) mocks$fixtures,
+    load_teams = function(...) mocks$teams
+  )
+
+  out <- tbc_played_rate(2026)
+  expect_equal(nrow(out), 0)
+})
+
+test_that("injury_return_accuracy reports predicted vs actual rounds-out", {
+  mocks <- .mock_injury_accuracy_bindings()
+
+  local_mocked_bindings(
+    load_injury_data = function(...) mocks$inj_hist,
+    load_fixtures = function(...) mocks$fixtures,
+    load_teams = function(...) mocks$teams
+  )
+
+  out <- injury_return_accuracy(2026)
+  expect_true(nrow(out) > 0)
+  expect_true(all(c("round", "player", "estimated_return",
+                    "predicted_return_round", "predicted_rounds_out", "played")
+                  %in% names(out)))
+
+  # Alice "1-2 weeks" at scrape before R1 -> predicted return R3 (1+2), plays R3.
+  alice_r3 <- out[out$player == "Alice One" & out$round == 3, ]
+  expect_equal(alice_r3$predicted_return_round, 3)
+  expect_equal(alice_r3$predicted_rounds_out, 0)
+  expect_true(alice_r3$played)
+
+  # Eve "Round 3" -> predicted return round 3; plays R3 -> played=TRUE, 0 out.
+  eve_r3 <- out[out$player == "Eve Five" & out$round == 3, ]
+  expect_equal(eve_r3$predicted_return_round, 3)
+  expect_true(eve_r3$played)
+
+  band <- attr(out, "by_band")
+  expect_s3_class(band, "data.frame")
+  expect_true(all(c("band", "n", "mean_predicted_out", "played_pct")
+                  %in% names(band)))
+
+  # TBC band: Bob + Cara evaluated across 3 completed rounds = 6 listing-rounds.
+  # Bob plays R2 (1 played); Cara never plays. So played_pct = 1/6.
+  tbc_band <- band[band$band == "tbc", ]
+  expect_equal(tbc_band$n, 6L)
+  expect_equal(tbc_band$played_pct, 1 / 6)
+
+  # "1-2 weeks" band: Alice only, across 3 rounds -> 3 listing-rounds.
+  # Plays R3 -> played_pct = 1/3. predicted_return_round = scrape_round + 2 = 3
+  # (scrape_round is 1 since scrape was pre-R1), so predicted_rounds_out at
+  # R1=2, R2=1, R3=0. Mean = 1.
+  weeks_band <- band[band$band == "1-2 weeks", ]
+  expect_equal(weeks_band$n, 3L)
+  expect_equal(weeks_band$played_pct, 1 / 3)
+  expect_equal(weeks_band$mean_predicted_out, 1)
+})
+
+test_that("tbc_return_survival returns CDF with correct censoring", {
+  mocks <- .mock_injury_accuracy_bindings()
+
+  local_mocked_bindings(
+    load_injury_data = function(...) mocks$inj_hist,
+    load_fixtures = function(...) mocks$fixtures,
+    load_teams = function(...) mocks$teams
+  )
+
+  out <- tbc_return_survival(2026)
+  # Two TBC episodes: Bob (returned R2) + Cara (censored)
+  expect_equal(nrow(out), 2)
+  expect_true(all(c("player", "first_tbc_round", "return_round",
+                    "rounds_out", "censored") %in% names(out)))
+
+  bob <- out[out$player == "Bob Two", ]
+  expect_equal(bob$first_tbc_round, 1L)
+  expect_equal(bob$return_round, 2L)
+  expect_equal(bob$rounds_out, 1L)
+  expect_false(bob$censored)
+
+  cara <- out[out$player == "Cara Three", ]
+  expect_true(cara$censored)
+  expect_true(is.na(cara$return_round))
+
+  cdf <- attr(out, "cdf")
+  expect_s3_class(cdf, "data.frame")
+  # CDF contract: starts at 0 (no one returns in the same round they're
+  # listed), plateaus at n_returned / total = 1/2 = 0.5, monotone
+  # non-decreasing throughout.
+  expect_equal(cdf$p_returned[cdf$offset == 0L], 0)
+  expect_equal(cdf$p_returned[cdf$offset == 1L], 0.5)
+  expect_equal(max(cdf$p_returned), 0.5)
+  expect_true(all(diff(cdf$p_returned) >= 0))
+
+  expect_equal(attr(out, "n_returned"), 1L)
+  expect_equal(attr(out, "n_censored"), 1L)
+})
+
+test_that("accuracy helpers return empty tibble when inj_hist lacks scraped_at", {
+  mocks <- .mock_injury_accuracy_bindings()
+  legacy_hist <- mocks$inj_hist
+  legacy_hist$scraped_at <- NULL
+
+  local_mocked_bindings(
+    load_injury_data = function(...) legacy_hist,
+    load_fixtures = function(...) mocks$fixtures,
+    load_teams = function(...) mocks$teams
+  )
+
+  expect_equal(nrow(tbc_played_rate(2026)), 0)
+  expect_equal(nrow(injury_return_accuracy(2026)), 0)
+  expect_equal(nrow(tbc_return_survival(2026)), 0)
 })

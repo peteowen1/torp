@@ -132,7 +132,7 @@
   }
   team_lineup_df$.unknown_pos <- NULL
 
-  # Join PSR if provided — use each player's most recent PSR value
+  # Join PSR if provided - use each player's most recent PSR value
 
   if (!is.null(psr_df)) {
     has_osr_dsr <- all(c("osr", "dsr") %in% names(psr_df))
@@ -489,7 +489,7 @@
       ))
   }
 
-  if (has_cfs && has_fix) {
+  out <- if (has_cfs && has_fix) {
     is_fix_row <- !is.na(results[["home.score.totalScore"]])
     parts <- list()
     if (any(!is_fix_row)) {
@@ -542,6 +542,18 @@
   } else {
     cli::cli_abort("Results data has unrecognised schema. Expected match_id, match.matchId, or home.score.totalScore columns.")
   }
+
+  # Guard against silent empty output (bind_rows(list()) yields a 0-col tibble when upstream flakes).
+  if (!"match_id" %in% names(out) || nrow(out) == 0) {
+    cli::cli_abort(c(
+      "Results normalisation produced an invalid tibble.",
+      "i" = "Input: {nrow(results)} row{?s}, cols: {paste(names(results), collapse = ', ')}",
+      "i" = "Output: {nrow(out)} row{?s}, cols: {paste(names(out), collapse = ', ')}",
+      "!" = "Check load_results() - likely a transient upstream failure."
+    ))
+  }
+
+  out
 }
 
 

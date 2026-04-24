@@ -411,8 +411,20 @@ SIM_INJURY_SECOND_HALF <- 13L
 #' Reduced injury noise SD when known injuries are excluded (points)
 #' When specific injured players are removed from team ratings, the remaining
 #' per-round noise can be smaller since a major source of variation is gone.
+#' Set to match `SIM_INJURY_SD` because scraped injury lists only capture
+#' officially-listed absences — form slumps, minor niggles, and game-day
+#' late-outs still contribute meaningful week-to-week jitter.
 #' @keywords internal
-SIM_INJURY_SD_KNOWN <- 2
+SIM_INJURY_SD_KNOWN <- 3
+
+#' Multiplier applied to team-quality residual SE before per-sim sampling.
+#' Widens season-long team uncertainty drawn from the xscore_diff GAM random
+#' effects. Values > 1 make the ladder and finals distribution less confident
+#' (e.g. fewer 80%+ Premier probabilities, wider Top-N bands). Calibrated
+#' empirically — the raw GAM SE under-states true team uncertainty because
+#' random effects are shrunk toward the league mean.
+#' @keywords internal
+SIM_RESIDUAL_SE_MULT <- 1.5
 
 #' Injury discount for teams with known injuries excluded
 #' Lighter than SIM_INJURY_DISCOUNT (0.95) because major absences are already

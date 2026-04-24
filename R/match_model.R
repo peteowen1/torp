@@ -824,6 +824,7 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
 
   invisible(list(
     predictions = all_preds,
+    locked_predictions = combined,
     gam_models = gam_result$models,
     xgb_models = if (!is.null(xgb_result)) xgb_result$models else NULL,
     model_data = team_mdl_df
@@ -966,6 +967,113 @@ show_predictions <- function(season = get_afl_season(),
   preds$start_time_utc <- NULL
   preds$is_complete <- NULL
   invisible(preds)
+}
+
+
+#' Add weather to a predictions tibble
+#'
+#' Joins historical or forecast weather onto an existing predictions tibble
+#' by `match_id`. Adds a compact `weather` summary string (e.g.
+#' `"18\u00B0C, wind 22kph, rain 2.4mm"`, or `"Indoor"` for roofed games),
+#' positioned after `venue`. Optionally also returns raw weather columns.
+#'
+#' For completed matches, weather comes from the Open-Meteo archive via the
+#' torpdata `weather-data` release. For upcoming matches, the Open-Meteo
+#' forecast API is queried per venue.
+#'
+#' @param preds Predictions tibble with `match_id`, `season`, `round` columns
+#'   (typically the `$predictions` slot of `run_predictions_pipeline()`, or
+#'   the output of `load_predictions()`).
+#' @param raw_cols If `TRUE`, also include raw `temp_avg`, `wind_avg`,
+#'   `precipitation_total`, `humidity_avg`, and `is_roof` columns.
+#' @return `preds` with a `weather` column (and optionally raw weather
+#'   columns) joined by `match_id`.
+#' @export
+#' @examples
+#' \dontrun{
+#' result <- run_predictions_pipeline()
+#' result$predictions |>
+#'   dplyr::filter(season == 2026, round == 6) |>
+#'   add_weather_to_preds() |>
+#'   print()
+#' }
+add_weather_to_preds <- function(preds, raw_cols = FALSE) {
+  required <- c("match_id", "season", "round")
+  missing_cols <- setdiff(required, names(preds))
+  if (length(missing_cols) > 0) {
+    cli::cli_abort("{.arg preds} is missing required column{?s}: {.field {missing_cols}}")
+  }
+  if (nrow(preds) == 0) return(preds)
+
+  fixtures <- load_fixtures(all = TRUE)
+  all_grounds <- file_reader("stadium_data", "reference-data")
+
+  seasons <- unique(preds$season)
+  weather_df <- dplyr::bind_rows(lapply(seasons, function(s) {
+    rounds_s <- unique(preds$round[preds$season == s])
+    .load_match_weather(
+      fixtures = fixtures, all_grounds = all_grounds,
+      target_weeks = rounds_s, season = s
+    )
+  }))
+
+  if (nrow(weather_df) == 0) {
+    cli::cli_warn("No weather data available -- adding all-NA {.field weather} column")
+    preds$weather <- NA_character_
+    return(preds)
+  }
+
+  weather_df$weather <- .format_weather_summary(
+    weather_df$temp_avg, weather_df$wind_avg,
+    weather_df$precipitation_total, weather_df$is_roof
+  )
+
+  keep <- c("match_id", "weather")
+  if (isTRUE(raw_cols)) {
+    keep <- c(keep, "temp_avg", "wind_avg", "precipitation_total",
+              "humidity_avg", "is_roof")
+  }
+
+  out <- preds |>
+    dplyr::left_join(weather_df[, intersect(keep, names(weather_df))], by = "match_id")
+
+  added <- setdiff(keep, "match_id")
+  if (length(added) > 0 && "venue" %in% names(out)) {
+    out <- dplyr::relocate(out, dplyr::any_of(added), .after = "venue")
+  }
+  out
+}
+
+
+#' Format weather values into a compact human-readable summary
+#'
+#' @param temp_avg Numeric vector of avg temperature (degrees C)
+#' @param wind_avg Numeric vector of avg wind speed (kph)
+#' @param precipitation_total Numeric vector of total precipitation (mm)
+#' @param is_roof Logical vector indicating roofed venues
+#' @return Character vector of weather summary strings
+#' @keywords internal
+.format_weather_summary <- function(temp_avg, wind_avg, precipitation_total, is_roof) {
+  n <- length(temp_avg)
+  out <- character(n)
+  for (i in seq_len(n)) {
+    if (!is.na(is_roof[i]) && isTRUE(is_roof[i])) {
+      out[i] <- "Indoor"
+      next
+    }
+    parts <- character(0)
+    if (!is.na(temp_avg[i])) {
+      parts <- c(parts, sprintf("%.0f\u00B0C", temp_avg[i]))
+    }
+    if (!is.na(wind_avg[i])) {
+      parts <- c(parts, sprintf("wind %.0fkph", wind_avg[i]))
+    }
+    if (!is.na(precipitation_total[i]) && precipitation_total[i] >= 0.1) {
+      parts <- c(parts, sprintf("rain %.1fmm", precipitation_total[i]))
+    }
+    out[i] <- if (length(parts) == 0) NA_character_ else paste(parts, collapse = ", ")
+  }
+  out
 }
 
 

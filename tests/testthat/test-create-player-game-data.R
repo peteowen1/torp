@@ -81,19 +81,25 @@ test_that("create_player_game_data *_adj columns are game-value scale (regressio
   expect_lt(max_abs_adj, 50,
             label = sprintf("max|epv_adj| (= %.2f)", max_abs_adj))
 
-  # Per-position_group, TOG-weighted mean of *_adj should be ~0 (centering).
-  # This catches the groupby bug: if adjustment happens on the wrong
-  # grouping variable, within-group means won't be zero.
-  if ("position_group" %in% names(pgd) && "time_on_ground_percentage" %in% names(pgd)) {
+  # Per-lineup_position, unweighted mean of epv_adj must be ~0.
+  # epv_adj = (epv_p80 - wm_L) * tog_safe is centered per lineup_position L with
+  # weights tog_safe, so sum_L((epv_p80 - wm_L) * tog_safe) = 0 by construction
+  # and the unweighted mean within L is zero up to floating-point noise. If
+  # someone groups the centering on the wrong variable (e.g. season, team,
+  # position_group), within-lineup_position means drift well away from zero.
+  # NB: grouping this test by position_group would be wrong — position_group
+  # comes from PBP player_position (6-way) and is not a strict refinement of
+  # the teams-API lineup_position (20-way), so means within position_group are
+  # not mathematically guaranteed to be zero.
+  if ("lineup_position" %in% names(pgd)) {
     dt <- data.table::as.data.table(pgd)[
-      !is.na(position_group) & !is.na(epv_adj) & !is.na(time_on_ground_percentage),
-      .(wm = stats::weighted.mean(epv_adj, pmax(time_on_ground_percentage / 100, 0.1),
-                                  na.rm = TRUE)),
-      by = position_group
+      !is.na(lineup_position) & !is.na(epv_adj),
+      .(m = mean(epv_adj, na.rm = TRUE)),
+      by = lineup_position
     ]
-    expect_true(all(abs(dt$wm) < 1),
-                info = sprintf("Largest per-group weighted mean of epv_adj: %.3f",
-                               max(abs(dt$wm), na.rm = TRUE)))
+    expect_true(all(abs(dt$m) < 1e-6),
+                info = sprintf("Largest per-lineup_position mean of epv_adj: %.3e",
+                               max(abs(dt$m), na.rm = TRUE)))
   }
 
   # Semantic guards: position_group is the 6-way class, lineup_position is the

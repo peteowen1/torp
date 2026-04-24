@@ -385,6 +385,10 @@ prepare_sim_data <- function(season, team_ratings = NULL, fixtures = NULL,
     }
   }
 
+  # Inflate SE to widen season-long team uncertainty (GAM random effects are
+  # shrunk toward the league mean and tend to under-state real uncertainty).
+  result[, residual_se := residual_se * SIM_RESIDUAL_SE_MULT]
+
   result
 }
 
@@ -1072,80 +1076,106 @@ simulate_afl_season <- function(season,
     cli::cli_inform("Running {n_sims} simulations on {n_cores} core{?s}.")
   }
   if (n_cores > 1L) {
-    # Clean up leaked file connections from pipeline downloads to avoid
-    # collisions with parallel PSOCK cluster connections (Windows)
-    open_cons <- rownames(showConnections(all = FALSE))
-    for (con_id in open_cons) {
-      con_num <- as.integer(con_id)
-      if (con_num > 2L) {  # skip stdin/stdout/stderr
-        tryCatch(close(getConnection(con_num)), error = function(e) NULL)
-      }
-    }
+    # Aggressive cleanup before spawning workers: leaked file connections from
+    # pipeline downloads can collide with PSOCK sockets on Windows and surface
+    # as "Error in serialize(data, node$con)" during clusterExport. Close all
+    # non-stdio connections unconditionally — safer than the selective pass.
+    tryCatch(closeAllConnections(), error = function(e) NULL)
     gc()
 
-    cl <- parallel::makeCluster(n_cores)
-    on.exit(parallel::stopCluster(cl), add = TRUE)
+    # Wrap the entire parallel pipeline (cluster creation, worker setup,
+    # exports, parLapply) in one tryCatch. Any failure — socket death, missing
+    # dep, OOM — cleanly falls through to the sequential branch below.
+    cl <- NULL
+    chunk_results <- tryCatch({
+      cl <- parallel::makeCluster(n_cores)
 
-    # Load torp in each worker to avoid serializing the full namespace.
-    # devtools::load_all sessions need load_all on workers too (installed
-    # version may be stale). Detect via pkgload::is_dev_package().
-    pkg_src <- getNamespaceInfo("torp", "path")
-    is_dev <- isTRUE(tryCatch(
-      pkgload::is_dev_package("torp"),
-      error = function(e) FALSE
-    ))
+      # Load torp in each worker to avoid serializing the full namespace.
+      # devtools::load_all sessions need load_all on workers too (installed
+      # version may be stale). Detect via pkgload::is_dev_package().
+      pkg_src <- getNamespaceInfo("torp", "path")
+      is_dev <- isTRUE(tryCatch(
+        pkgload::is_dev_package("torp"),
+        error = function(e) FALSE
+      ))
 
-    parallel::clusterEvalQ(cl, library(data.table))
+      parallel::clusterEvalQ(cl, library(data.table))
 
-    torp_loaded <- FALSE
-    if (is_dev) {
-      # devtools session: workers must load_all from source to get current code
-      parallel::clusterExport(cl, "pkg_src", envir = environment())
-      torp_loaded <- tryCatch({
-        parallel::clusterEvalQ(cl,
-          suppressMessages(devtools::load_all(pkg_src, quiet = TRUE)))
-        TRUE
-      }, error = function(e) FALSE)
-    }
-    if (!torp_loaded) {
-      # Installed package or load_all failed: try library()
-      torp_loaded <- tryCatch({
-        parallel::clusterEvalQ(cl, library(torp))
-        TRUE
-      }, error = function(e) FALSE)
-    }
-    if (!torp_loaded) {
-      # Last resort: export functions directly (slower due to env serialization)
-      parallel::clusterExport(cl, c(
-        "simulate_season", "calculate_ladder",
-        "simulate_finals", "simulate_match",
-        "finals_home_advantage", "gf_home_advantage",
-        "SIM_HOME_ADVANTAGE", "SIM_NOISE_SD", "SIM_WP_SCALING_FACTOR",
-        "SIM_AVG_TOTAL", "SIM_TOTAL_SD", "SIM_GF_FAMILIARITY_SCALE",
-        "SIM_GF_VENUE", "SIM_VICTORIAN_TEAMS", "SIM_RATING_SHIFT",
-        "SIM_INJURY_SD", "SIM_INJURY_SD_KNOWN", "SIM_MEAN_REVERSION"
-      ), envir = environment())
-    }
-
-    # Export only data objects (small, no environment baggage)
-    parallel::clusterExport(cl, c(
-      "base_teams", "base_games", "played_games", "keep_games",
-      "sim_injury_sd", "gf_familiarity", "injury_schedule"
-    ), envir = environment())
-
-    # Reproducible parallel RNG
-    if (!is.null(seed)) parallel::clusterSetRNGStream(cl, seed)
-
-    # Split sims into one chunk per core — one round-trip per worker
-    chunks <- split(seq_len(n_sims), rep(seq_len(n_cores), length.out = n_sims))
-
-    chunk_results <- tryCatch(
-      parallel::parLapply(cl, chunks, run_sim_batch),
-      error = function(e) {
-        cli::cli_warn("Parallel cluster failed ({conditionMessage(e)}), falling back to sequential")
-        NULL
+      torp_loaded <- FALSE
+      if (is_dev) {
+        # devtools session: workers must load_all from source to get current code
+        parallel::clusterExport(cl, "pkg_src", envir = environment())
+        torp_loaded <- tryCatch({
+          parallel::clusterEvalQ(cl,
+            suppressMessages(devtools::load_all(pkg_src, quiet = TRUE)))
+          TRUE
+        }, error = function(e) FALSE)
       }
-    )
+      if (!torp_loaded) {
+        # Installed package or load_all failed: try library()
+        torp_loaded <- tryCatch({
+          parallel::clusterEvalQ(cl, library(torp))
+          TRUE
+        }, error = function(e) FALSE)
+      }
+      if (!torp_loaded) {
+        # Last resort: export functions directly (slower due to env serialization)
+        parallel::clusterExport(cl, c(
+          "simulate_season", "calculate_ladder",
+          "simulate_finals", "simulate_match",
+          "finals_home_advantage", "gf_home_advantage",
+          "SIM_HOME_ADVANTAGE", "SIM_NOISE_SD", "SIM_WP_SCALING_FACTOR",
+          "SIM_AVG_TOTAL", "SIM_TOTAL_SD", "SIM_GF_FAMILIARITY_SCALE",
+          "SIM_GF_VENUE", "SIM_VICTORIAN_TEAMS", "SIM_RATING_SHIFT",
+          "SIM_INJURY_SD", "SIM_INJURY_SD_KNOWN", "SIM_MEAN_REVERSION"
+        ), envir = environment())
+      }
+
+      # Export only data objects (small, no environment baggage)
+      parallel::clusterExport(cl, c(
+        "base_teams", "base_games", "played_games", "keep_games",
+        "sim_injury_sd", "gf_familiarity", "injury_schedule"
+      ), envir = environment())
+
+      # Reproducible parallel RNG
+      if (!is.null(seed)) parallel::clusterSetRNGStream(cl, seed)
+
+      # Split sims into one chunk per core — one round-trip per worker
+      chunks <- split(seq_len(n_sims), rep(seq_len(n_cores), length.out = n_sims))
+
+      parallel::parLapply(cl, chunks, run_sim_batch)
+    },
+    error = function(e) {
+      cli::cli_warn("Parallel cluster failed ({conditionMessage(e)}), falling back to sequential")
+      NULL
+    })
+
+    # Always stop the cluster, even if setup or parLapply failed. Explicit
+    # stopCluster is cleaner than on.exit (which wouldn't fire until the whole
+    # simulate_afl_season() call returns, leaving workers hanging during the
+    # sequential fallback).
+    if (!is.null(cl)) {
+      tryCatch(parallel::stopCluster(cl), error = function(e) NULL)
+    }
+
+    # Defensive chunk validation: a worker returning NULL or a malformed list
+    # (e.g. silent recovery from a data.table issue, a future refactor in
+    # run_sim_batch that silently short-circuits) would otherwise pass
+    # through rbindlist and yield ladder results from fewer sims than
+    # requested. Cheap to check, and the sequential fallback is already
+    # wired up below.
+    if (!is.null(chunk_results)) {
+      required <- c("ladder", "finals", if (keep_games) "games")
+      malformed <- vapply(chunk_results, function(x) {
+        is.null(x) || !is.list(x) || !all(required %in% names(x))
+      }, logical(1))
+      if (any(malformed)) {
+        cli::cli_warn(
+          "Parallel run produced {sum(malformed)}/{length(malformed)} malformed chunk{?s}; falling back to sequential"
+        )
+        chunk_results <- NULL
+      }
+    }
 
     if (!is.null(chunk_results)) {
       all_ladders <- data.table::rbindlist(lapply(chunk_results, `[[`, "ladder"))
@@ -1155,14 +1185,36 @@ simulate_afl_season <- function(season,
       } else {
         NULL
       }
-    } else {
-      # Sequential fallback
-      if (verbose) cli::cli_progress_bar("Simulating seasons", total = n_sims)
-      fallback <- run_sim_batch(seq_len(n_sims))
+
+      # Second-order sanity check: total ladder rows should be n_sims * n_teams.
+      # A silently-dropped chunk that still looked well-formed (empty frames)
+      # would slip past the malformed check above; this catches that.
+      expected_ladder_rows <- n_sims * nrow(base_teams)
+      if (nrow(all_ladders) != expected_ladder_rows) {
+        cli::cli_warn(c(
+          "Parallel run produced {nrow(all_ladders)} ladder rows, expected {expected_ladder_rows}",
+          "i" = "Falling back to sequential"
+        ))
+        chunk_results <- NULL
+      }
+    }
+
+    if (is.null(chunk_results)) {
+      # Sequential fallback — show progress so the run isn't silent when
+      # verbose = TRUE (a 3000-sim fallback is ~30 s, long enough to look hung).
+      if (verbose) {
+        pb_id <- cli::cli_progress_bar(
+          "Simulating seasons (sequential fallback)", total = n_sims)
+        progress_fn <- function() cli::cli_progress_update(id = pb_id)
+      } else {
+        pb_id <- NULL
+        progress_fn <- NULL
+      }
+      fallback <- run_sim_batch(seq_len(n_sims), progress_fn = progress_fn)
       all_ladders <- fallback$ladder
       all_finals  <- fallback$finals
       all_games   <- fallback$games
-      if (verbose) cli::cli_progress_done()
+      if (verbose) cli::cli_progress_done(id = pb_id)
     }
   } else {
     # Sequential: run all sims in a single batch with inline progress
@@ -1226,6 +1278,9 @@ summarise_simulations <- function(sim_results) {
   n <- sim_results$n_sims
 
   # Ladder summary
+  # w10 / w90 are 10th and 90th percentile of wins across sims (downside/upside
+  # bounds for a team's likely season total, roughly a "bad year / good year").
+  # Top-6 and Top-10 added for the expanded 2026 finals structure.
   ladder_sum <- sim_results$ladders[, .(
     avg_wins       = mean(wins),
     avg_losses     = mean(losses),
@@ -1234,7 +1289,11 @@ summarise_simulations <- function(sim_results) {
     avg_pf_pg      = mean(points_for / played),
     avg_pa_pg      = mean(points_against / played),
     avg_rank       = mean(rank),
+    w10            = stats::quantile(wins, 0.1, names = FALSE),
+    w90            = stats::quantile(wins, 0.9, names = FALSE),
+    top_10_pct     = mean(rank <= 10),
     top_8_pct      = mean(rank <= 8),
+    top_6_pct      = mean(rank <= 6),
     top_4_pct      = mean(rank <= 4),
     top_2_pct      = mean(rank <= 2),
     top_1_pct      = mean(rank == 1),
@@ -1339,12 +1398,16 @@ print.torp_sim_results <- function(x, ...) {
               ifelse(current_d > 0, sprintf("-%d", current_d), ""))
     } else NA_character_,
     W       = sprintf("%.1f", avg_wins),
+    W10     = sprintf("%.1f", w10),
+    W90     = sprintf("%.1f", w90),
     PF      = sprintf("%.1f", avg_pf_pg),
     PA      = sprintf("%.1f", avg_pa_pg),
     Pct     = sprintf("%.1f", avg_percentage),
     `1st`   = sprintf("%.1f%%", top_1_pct * 100),
     Top4    = sprintf("%.0f%%", top_4_pct * 100),
+    Top6    = sprintf("%.0f%%", top_6_pct * 100),
     Top8    = sprintf("%.0f%%", top_8_pct * 100),
+    Top10   = sprintf("%.0f%%", top_10_pct * 100),
     GF      = sprintf("%.0f%%", made_gf_pct * 100),
     Premier = sprintf("%.1f%%", won_gf_pct * 100),
     Last    = sprintf("%.1f%%", last_pct * 100)

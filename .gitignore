@@ -39,6 +39,9 @@ _ul
 data-raw/debug/
 debug/
 
+# Local R2 upload script (contains no secrets but not part of the package)
+data-raw/02-models/push_predictions_to_r2.R
+
 # Development files
 .vscode/
 .idea/
@@ -49,3 +52,6 @@ docs/
 # Claude Code files
 .claude/
 CLAUDE.md
+
+# Cloudflare Wrangler CLI local cache
+.wrangler/
