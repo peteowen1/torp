@@ -52,3 +52,6 @@ docs/
 # Claude Code files
 .claude/
 CLAUDE.md
+
+# Cloudflare Wrangler CLI local cache
+.wrangler/
