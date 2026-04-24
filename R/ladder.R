@@ -1158,6 +1158,25 @@ simulate_afl_season <- function(season,
       tryCatch(parallel::stopCluster(cl), error = function(e) NULL)
     }
 
+    # Defensive chunk validation: a worker returning NULL or a malformed list
+    # (e.g. silent recovery from a data.table issue, a future refactor in
+    # run_sim_batch that silently short-circuits) would otherwise pass
+    # through rbindlist and yield ladder results from fewer sims than
+    # requested. Cheap to check, and the sequential fallback is already
+    # wired up below.
+    if (!is.null(chunk_results)) {
+      required <- c("ladder", "finals", if (keep_games) "games")
+      malformed <- vapply(chunk_results, function(x) {
+        is.null(x) || !is.list(x) || !all(required %in% names(x))
+      }, logical(1))
+      if (any(malformed)) {
+        cli::cli_warn(
+          "Parallel run produced {sum(malformed)}/{length(malformed)} malformed chunk{?s}; falling back to sequential"
+        )
+        chunk_results <- NULL
+      }
+    }
+
     if (!is.null(chunk_results)) {
       all_ladders <- data.table::rbindlist(lapply(chunk_results, `[[`, "ladder"))
       all_finals  <- data.table::rbindlist(lapply(chunk_results, `[[`, "finals"))
@@ -1166,7 +1185,21 @@ simulate_afl_season <- function(season,
       } else {
         NULL
       }
-    } else {
+
+      # Second-order sanity check: total ladder rows should be n_sims * n_teams.
+      # A silently-dropped chunk that still looked well-formed (empty frames)
+      # would slip past the malformed check above; this catches that.
+      expected_ladder_rows <- n_sims * nrow(base_teams)
+      if (nrow(all_ladders) != expected_ladder_rows) {
+        cli::cli_warn(c(
+          "Parallel run produced {nrow(all_ladders)} ladder rows, expected {expected_ladder_rows}",
+          "i" = "Falling back to sequential"
+        ))
+        chunk_results <- NULL
+      }
+    }
+
+    if (is.null(chunk_results)) {
       # Sequential fallback — show progress so the run isn't silent when
       # verbose = TRUE (a 3000-sim fallback is ~30 s, long enough to look hung).
       if (verbose) {

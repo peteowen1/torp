@@ -12,9 +12,17 @@ tbc_return_survival(season = NULL)
 \value{
 A tibble with one row per TBC listing episode:
 \code{player}, \code{team}, \code{injury}, \code{first_tbc_round} (round at scrape),
-\code{return_round} (first lineup appearance, NA if censored),
+\code{return_round} (first lineup appearance, \code{NA} if censored),
 \code{rounds_out} (observed, with censoring flag), \code{censored} (logical).
-Attached \code{cdf} attribute: offset, returned, total, cumulative P(return).
+Attached attributes:
+\itemize{
+\item \code{cdf} — tibble of \code{offset}, \code{returned}, \code{total}, \code{p_returned}
+(cumulative empirical P(returned by +offset rounds))
+\item \code{median_rounds_out} — median of observed (non-censored) returns,
+\code{NA_real_} when fewer than half of episodes have returned
+\item \code{n_returned} — count of episodes where the player has returned
+\item \code{n_censored} — count of episodes still out at \code{last_completed}
+}
 }
 \description{
 For every weekly TBC listing in the season's injury history, measures

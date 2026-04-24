@@ -764,7 +764,10 @@ test_played_rate <- function(season = NULL, round = NULL) {
 #' @param round Optional round number (or vector) to filter to.
 #' @return A tibble with one row per TBC listing: `round`, `player`, `team`,
 #'   `injury`, `scraped_at`, `played` (logical). Attached `summary` attribute
-#'   contains overall and per-round rates.
+#'   is a list with elements:
+#'   * `n_listings` — total listing-round rows
+#'   * `overall_played_pct` — fraction of listings where the player played
+#'   * `per_round` — tibble of `round`, `n`, `played`, `played_pct`
 #' @export
 tbc_played_rate <- function(season = NULL, round = NULL) {
   if (is.null(season)) season <- get_afl_season()
@@ -809,10 +812,14 @@ tbc_played_rate <- function(season = NULL, round = NULL) {
 #' (`attr(x, "by_band")`) showing calibration of each `estimated_return` band
 #' (e.g. "1-2 weeks", "TBC", "Test").
 #'
-#' Interpretation: for listings predicted to be unavailable that round
-#' (`predicted_rounds_out > 0`), `played_pct` is a false-positive rate -- the
-#' fraction incorrectly flagged as out. For listings predicted back
-#' (`predicted_rounds_out <= 0`), it's the true-positive rate.
+#' Interpretation of `played_pct` varies by the sign of
+#' `predicted_rounds_out`:
+#' * Among rows with `predicted_rounds_out > 0` (model says "still out"),
+#'   `played_pct` is a **false-positive rate** — fraction who played despite
+#'   being flagged out.
+#' * Among rows with `predicted_rounds_out <= 0` (model says "back this
+#'   round"), `played_pct` is a **true-positive rate** — recall of
+#'   predicted-back listings.
 #'
 #' @param season Season year. Defaults to current via [get_afl_season()].
 #' @param round Optional round number (or vector) to filter to.
@@ -821,8 +828,13 @@ tbc_played_rate <- function(season = NULL, round = NULL) {
 #'   `predicted_return_round` (may be `Inf` = out for season),
 #'   `predicted_rounds_out` (predicted - round, `Inf` for season-out),
 #'   `played` (actual appearance in selected 22), `scraped_at`.
-#'   Attached `by_band` attribute summarises accuracy per
-#'   `estimated_return` value.
+#'   Attached `by_band` attribute is a tibble of calibration stats per
+#'   `estimated_return` value, with columns:
+#'   * `band` — lowercased trimmed estimate string (e.g. `"1-2 weeks"`,
+#'     `"tbc"`, `"test"`)
+#'   * `n` — count of listing-rounds in this band
+#'   * `mean_predicted_out` — mean `predicted_rounds_out` (finite only)
+#'   * `played_pct` — fraction where the player actually played
 #' @export
 injury_return_accuracy <- function(season = NULL, round = NULL) {
   if (is.null(season)) season <- get_afl_season()
@@ -895,9 +907,15 @@ injury_return_accuracy <- function(season = NULL, round = NULL) {
 #' @param season Season year. Defaults to current via [get_afl_season()].
 #' @return A tibble with one row per TBC listing episode:
 #'   `player`, `team`, `injury`, `first_tbc_round` (round at scrape),
-#'   `return_round` (first lineup appearance, NA if censored),
+#'   `return_round` (first lineup appearance, `NA` if censored),
 #'   `rounds_out` (observed, with censoring flag), `censored` (logical).
-#'   Attached `cdf` attribute: offset, returned, total, cumulative P(return).
+#'   Attached attributes:
+#'   * `cdf` — tibble of `offset`, `returned`, `total`, `p_returned`
+#'     (cumulative empirical P(returned by +offset rounds))
+#'   * `median_rounds_out` — median of observed (non-censored) returns,
+#'     `NA_real_` when fewer than half of episodes have returned
+#'   * `n_returned` — count of episodes where the player has returned
+#'   * `n_censored` — count of episodes still out at `last_completed`
 #' @export
 tbc_return_survival <- function(season = NULL) {
   if (is.null(season)) season <- get_afl_season()

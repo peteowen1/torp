@@ -14,7 +14,12 @@ tbc_played_rate(season = NULL, round = NULL)
 \value{
 A tibble with one row per TBC listing: \code{round}, \code{player}, \code{team},
 \code{injury}, \code{scraped_at}, \code{played} (logical). Attached \code{summary} attribute
-contains overall and per-round rates.
+is a list with elements:
+\itemize{
+\item \code{n_listings} — total listing-round rows
+\item \code{overall_played_pct} — fraction of listings where the player played
+\item \code{per_round} — tibble of \code{round}, \code{n}, \code{played}, \code{played_pct}
+}
 }
 \description{
 Per-round analogue of \code{\link[=test_played_rate]{test_played_rate()}} for players listed as "TBC"

@@ -17,8 +17,15 @@ A tibble with one row per listing-round:
 \code{predicted_return_round} (may be \code{Inf} = out for season),
 \code{predicted_rounds_out} (predicted - round, \code{Inf} for season-out),
 \code{played} (actual appearance in selected 22), \code{scraped_at}.
-Attached \code{by_band} attribute summarises accuracy per
-\code{estimated_return} value.
+Attached \code{by_band} attribute is a tibble of calibration stats per
+\code{estimated_return} value, with columns:
+\itemize{
+\item \code{band} — lowercased trimmed estimate string (e.g. \code{"1-2 weeks"},
+\code{"tbc"}, \code{"test"})
+\item \code{n} — count of listing-rounds in this band
+\item \code{mean_predicted_out} — mean \code{predicted_rounds_out} (finite only)
+\item \code{played_pct} — fraction where the player actually played
+}
 }
 \description{
 For every round with injury-history coverage, take the latest pre-kickoff
@@ -29,8 +36,14 @@ that round. Produces a listing-level tibble plus a per-band summary
 (e.g. "1-2 weeks", "TBC", "Test").
 }
 \details{
-Interpretation: for listings predicted to be unavailable that round
-(\code{predicted_rounds_out > 0}), \code{played_pct} is a false-positive rate -- the
-fraction incorrectly flagged as out. For listings predicted back
-(\code{predicted_rounds_out <= 0}), it's the true-positive rate.
+Interpretation of \code{played_pct} varies by the sign of
+\code{predicted_rounds_out}:
+\itemize{
+\item Among rows with \code{predicted_rounds_out > 0} (model says "still out"),
+\code{played_pct} is a \strong{false-positive rate} — fraction who played despite
+being flagged out.
+\item Among rows with \code{predicted_rounds_out <= 0} (model says "back this
+round"), \code{played_pct} is a \strong{true-positive rate} — recall of
+predicted-back listings.
+}
 }

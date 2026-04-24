@@ -543,7 +543,23 @@ test_that("injury_return_accuracy reports predicted vs actual rounds-out", {
 
   band <- attr(out, "by_band")
   expect_s3_class(band, "data.frame")
-  expect_true("played_pct" %in% names(band))
+  expect_true(all(c("band", "n", "mean_predicted_out", "played_pct")
+                  %in% names(band)))
+
+  # TBC band: Bob + Cara evaluated across 3 completed rounds = 6 listing-rounds.
+  # Bob plays R2 (1 played); Cara never plays. So played_pct = 1/6.
+  tbc_band <- band[band$band == "tbc", ]
+  expect_equal(tbc_band$n, 6L)
+  expect_equal(tbc_band$played_pct, 1 / 6)
+
+  # "1-2 weeks" band: Alice only, across 3 rounds -> 3 listing-rounds.
+  # Plays R3 -> played_pct = 1/3. predicted_return_round = scrape_round + 2 = 3
+  # (scrape_round is 1 since scrape was pre-R1), so predicted_rounds_out at
+  # R1=2, R2=1, R3=0. Mean = 1.
+  weeks_band <- band[band$band == "1-2 weeks", ]
+  expect_equal(weeks_band$n, 3L)
+  expect_equal(weeks_band$played_pct, 1 / 3)
+  expect_equal(weeks_band$mean_predicted_out, 1)
 })
 
 test_that("tbc_return_survival returns CDF with correct censoring", {
@@ -573,9 +589,13 @@ test_that("tbc_return_survival returns CDF with correct censoring", {
 
   cdf <- attr(out, "cdf")
   expect_s3_class(cdf, "data.frame")
-  # P(returned by +1) = 1/2 = 0.5 (Bob only; Cara censored)
-  p1 <- cdf$p_returned[cdf$offset == 1L]
-  expect_equal(p1, 0.5)
+  # CDF contract: starts at 0 (no one returns in the same round they're
+  # listed), plateaus at n_returned / total = 1/2 = 0.5, monotone
+  # non-decreasing throughout.
+  expect_equal(cdf$p_returned[cdf$offset == 0L], 0)
+  expect_equal(cdf$p_returned[cdf$offset == 1L], 0.5)
+  expect_equal(max(cdf$p_returned), 0.5)
+  expect_true(all(diff(cdf$p_returned) >= 0))
 
   expect_equal(attr(out, "n_returned"), 1L)
   expect_equal(attr(out, "n_censored"), 1L)

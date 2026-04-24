@@ -59,7 +59,26 @@ format_predictions_blog <- function(preds, xg = NULL) {
       out, tibble::as_tibble(xg)[, xg_req],
       by = c("season", "round", "home_team", "away_team")
     )
+
+    # If nothing joined, the user almost certainly has a team-name or
+    # season/round mismatch between preds and xg -- a silent cascade of
+    # NA xscores on the blog is the usual downstream symptom.
+    matched <- sum(!is.na(out$xscore_home))
+    if (matched == 0 && nrow(out) > 0) {
+      cli::cli_warn(c(
+        "Zero xg rows joined against {nrow(out)} predictions -- blog xscore columns will all be NA",
+        "i" = "Check season/round/home_team/away_team alignment between {.arg preds} and {.arg xg}"
+      ))
+    }
   } else {
+    # Distinguish "no xg requested" from "xg requested but empty". The empty
+    # case usually means upstream chain scraping returned zero rows and the
+    # blog would silently ship all-NA xscores; warn so there's a trail.
+    if (!is.null(xg) && nrow(xg) == 0) {
+      cli::cli_warn(
+        "{.arg xg} was non-NULL but empty -- blog xscore columns will all be NA"
+      )
+    }
     out$xscore_home <- NA_real_
     out$xscore_away <- NA_real_
   }
@@ -87,7 +106,14 @@ format_predictions_blog <- function(preds, xg = NULL) {
 #' @return Tibble with canonical lookup columns, or `NULL` if `xg` is empty.
 #' @export
 xg_to_blog_lookup <- function(xg, season_val) {
-  if (is.null(xg) || nrow(xg) == 0) return(NULL)
+  if (is.null(xg)) return(NULL)
+  if (nrow(xg) == 0) {
+    # Non-NULL but empty usually means upstream chain scraping partially
+    # failed. Surface it so the cascade (NULL -> format_predictions_blog
+    # NA-fill -> blank xscore column on the blog) has a log trail.
+    cli::cli_alert_info("{.arg xg} has 0 rows -- returning NULL lookup")
+    return(NULL)
+  }
   req <- c("match_id", "home_team", "away_team", "home_xscore", "away_xscore")
   missing <- setdiff(req, names(xg))
   if (length(missing) > 0) {
@@ -96,12 +122,14 @@ xg_to_blog_lookup <- function(xg, season_val) {
   xg |>
     dplyr::mutate(
       season = as.integer(season_val),
-      round = as.integer(substr(.data$match_id, 12L, 13L)),
+      # match_id format is CD_MYYYYRRWMMM: positions 12-13 encode the round.
+      round_num = as.integer(substr(.data$match_id, 12L, 13L)),
       home_team = torp_replace_teams(.data$home_team),
       away_team = torp_replace_teams(.data$away_team),
-      xscore_home = round(.data$home_xscore, 1),
-      xscore_away = round(.data$away_xscore, 1)
+      xscore_home = base::round(.data$home_xscore, 1),
+      xscore_away = base::round(.data$away_xscore, 1)
     ) |>
+    dplyr::rename(round = "round_num") |>
     dplyr::select("season", "round", "home_team", "away_team",
                   "xscore_home", "xscore_away")
 }
