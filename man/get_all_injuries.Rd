@@ -4,13 +4,17 @@
 \alias{get_all_injuries}
 \title{Get All Injuries (Weekly + Preseason)}
 \usage{
-get_all_injuries(season, scrape = TRUE)
+get_all_injuries(season, scrape = TRUE, drop_played_preseason = TRUE)
 }
 \arguments{
 \item{season}{Numeric season year (e.g. 2026).}
 
 \item{scrape}{Logical; if TRUE (default), scrapes the live AFL injury list.
 Set to FALSE for pre-season use or testing when the AFL page is empty.}
+
+\item{drop_played_preseason}{Logical; if TRUE (default), drops preseason
+entries for players who appear in this season's \code{load_player_stats()}.
+Set to FALSE to inspect the raw merged list.}
 }
 \value{
 A data.frame with columns: \code{player}, \code{team}, \code{injury},
@@ -21,5 +25,9 @@ from the AFL injury page (Date class; NA for preseason entries).
 \description{
 Combines the live AFL weekly injury list with the curated preseason
 injury list. Weekly entries take precedence when a player appears in both
-sources (deduplicated by normalized name).
+sources (deduplicated by normalized name). Preseason entries for players
+who have already played a senior game this season are dropped — otherwise
+stale "TBC" entries linger indefinitely and exclude healthy players from
+team ratings (e.g. a preseason concussion listing for someone who has
+played every round since).
 }
