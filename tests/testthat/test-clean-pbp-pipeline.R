@@ -409,6 +409,28 @@ test_that("add_shot_geometry_variables handles edge cases", {
   expect_true(result$angle[1] >= 0)
 })
 
+test_that("add_shot_geometry_variables folds goal_x for shots from negative-x", {
+  # Player at x = -30 on a 165m field shoots at the far-positive goal —
+  # actual distance to NEAR goal (the one being attacked) = halfLen - |x| = 52.5.
+  # Pre-fix this returned goal_x = halfLen - x = 112.5 (distance to OPPOSITE
+  # goal), which surfaced on the blog as e.g. a 126m behind from Toby Greene
+  # in R6 2026 SYD v GWS that should have been ~40m.
+  mock_data <- data.frame(
+    x = c(50, -30),
+    y = c(0, 0),
+    goal_x = c(32.5, 112.5),  # halfLen - x with halfLen = 82.5
+    venue_length = c(165, 165),
+    stringsAsFactors = FALSE
+  )
+
+  result <- torp:::add_shot_geometry_variables(mock_data, goal_width = 6.4)
+
+  # Positive-x shot: unchanged (32.5m)
+  expect_equal(result$distance[1], 32.5, tolerance = 0.1)
+  # Negative-x shot: folded to the near goal (52.5m, not the buggy 112.5m)
+  expect_equal(result$distance[2], 52.5, tolerance = 0.1)
+})
+
 # -----------------------------------------------------------------------------
 # add_shot_type_variables() Tests
 # -----------------------------------------------------------------------------
