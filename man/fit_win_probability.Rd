@@ -4,12 +4,17 @@
 \alias{fit_win_probability}
 \title{Fit AFL Win Probability Model}
 \usage{
-fit_win_probability(seasons = 2010:2025, output_path = NULL)
+fit_win_probability(seasons = 2010:2025, output_path = NULL, seed = 20250101L)
 }
 \arguments{
 \item{seasons}{Numeric vector of seasons to include (default: 2010-2025)}
 
 \item{output_path}{Path to write the JSON coefficients file (NULL = return only)}
+
+\item{seed}{Integer seed used to make the synthetic quarter-break noise
+reproducible. The fitted coefficients are exported to JSON for browser
+inference; without a fixed seed each retraining produces a different model.
+Scoped via \code{\link[withr:with_seed]{withr::local_seed()}} so the caller's RNG stream is not affected.}
 }
 \value{
 A list with: coefficients (named list), model (glm object), data (training data)

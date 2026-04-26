@@ -169,6 +169,9 @@ find_components <- function(adj) {
   parent <- seq_len(n)
 
   find_root <- function(i) {
+    # Union-find with path compression: parent[] is mutated in place via <<-
+    # so subsequent find_root() calls collapse to O(alpha(n)). Closure-scoped
+    # to find_components(); not visible outside this function.
     root <- i
     while (parent[root] != root) root <- parent[root]
     while (parent[i] != root) {

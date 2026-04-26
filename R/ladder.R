@@ -788,8 +788,12 @@ simulate_match <- function(home_torp, away_torp,
 #'   or 5 for premier), `finals_wins`, `made_gf`, `won_gf`.
 #' @keywords internal
 simulate_finals <- function(ladder_dt, sim_teams_dt, gf_familiarity = NULL) {
-  # Build lookup: team -> torp rating
-  ratings <- stats::setNames(sim_teams_dt$torp, sim_teams_dt$team)
+  # Mutable state held in an environment so play_final() can update hot ratings
+  # between matches without using <<- (project convention: prefer environments
+  # over scope-climbing assignment, see CLAUDE.md "Package State").
+  state <- new.env(parent = emptyenv())
+  state$ratings <- stats::setNames(sim_teams_dt$torp, sim_teams_dt$team)
+
   # Original ladder positions for home advantage
   ladder_pos <- stats::setNames(ladder_dt$rank, ladder_dt$team)
 
@@ -805,16 +809,16 @@ simulate_finals <- function(ladder_dt, sim_teams_dt, gf_familiarity = NULL) {
     cli::cli_abort("Need at least 8 teams for finals simulation, got {length(top8)}.")
   }
 
-  # Helper: play a finals match, update ratings, return winner/loser
+  # Helper: play a finals match, update ratings in `state`, return winner/loser
   play_final <- function(home, away, gf = FALSE) {
     ha <- finals_home_advantage(home, away, fam_lookup, gf = gf)
-    res <- simulate_match(ratings[home], ratings[away],
+    res <- simulate_match(state$ratings[home], state$ratings[away],
                           home_advantage = ha, allow_draw = FALSE)
 
-    # Hot rating adjustment
+    # Hot rating adjustment — env mutation, not <<-
     shift <- SIM_RATING_SHIFT * (res$result - res$estimate)
-    ratings[home] <<- ratings[home] + shift
-    ratings[away] <<- ratings[away] - shift
+    state$ratings[home] <- state$ratings[home] + shift
+    state$ratings[away] <- state$ratings[away] - shift
 
     if (res$result > 0) list(winner = home, loser = away)
     else list(winner = away, loser = home)

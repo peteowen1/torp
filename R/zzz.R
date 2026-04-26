@@ -23,8 +23,19 @@
     .torp_logging_env$console_output <- FALSE
   }
 
-  # Attach mgcv early so GAM/BAM predict() finds its internal Xbd function.
-  # This avoids repeated attachNamespace() calls in get_shot_result_preds().
+  # Attach mgcv early so GAM/BAM predict() finds its internal Xbd C function.
+  # mgcv requires its namespace to be ON THE SEARCH PATH (not just loaded) for
+  # predict.bam/predict.gam to resolve internal helpers — `loadNamespace()`
+  # alone is NOT sufficient. The attach is also done lazily inside
+  # `get_shot_result_preds()` (R/add_variables.R) as a defensive fallback;
+  # this .onLoad path is purely a perf optimisation that avoids paying the
+  # attachNamespace cost on every shot prediction call.
+  #
+  # If you want to remove this side effect on the user's search path, the
+  # cleanest alternative is to move mgcv from Imports to Depends in
+  # DESCRIPTION (which makes the dependency truthful AND auto-attaches);
+  # the current approach achieves the same runtime behaviour without the
+  # CRAN-policy implications of Depends.
   if (requireNamespace("mgcv", quietly = TRUE) && !"mgcv" %in% .packages()) {
     tryCatch(
       attachNamespace("mgcv"),
