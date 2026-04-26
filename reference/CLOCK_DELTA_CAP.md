@@ -1,7 +1,7 @@
-# Maximum seconds between consecutive plays counted as playing time. Gaps larger than this indicate unrecorded stoppages (injuries, reviews, etc.)
+# Maximum reasonable seconds between consecutive in-play chain events Used to cap clock deltas when reconstructing play time.
 
-Maximum seconds between consecutive plays counted as playing time. Gaps
-larger than this indicate unrecorded stoppages (injuries, reviews, etc.)
+Maximum reasonable seconds between consecutive in-play chain events Used
+to cap clock deltas when reconstructing play time.
 
 ## Usage
 

@@ -1,6 +1,6 @@
-# Nominal total playing time per AFL match in seconds (4 x 1200)
+# Nominal playing time per AFL match in seconds (excludes stoppages)
 
-Nominal total playing time per AFL match in seconds (4 x 1200)
+Nominal playing time per AFL match in seconds (excludes stoppages)
 
 ## Usage
 

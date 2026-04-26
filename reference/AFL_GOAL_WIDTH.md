@@ -1,6 +1,6 @@
-# AFL goal post width in meters
+# Width of an AFL goal in metres (between the goal posts)
 
-AFL goal post width in meters
+Width of an AFL goal in metres (between the goal posts)
 
 ## Usage
 

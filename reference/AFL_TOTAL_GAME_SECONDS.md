@@ -1,6 +1,6 @@
-# Total game duration in game seconds (4 quarters)
+# Default total game seconds (4 quarters \* 2000s)
 
-Total game duration in game seconds (4 quarters)
+Default total game seconds (4 quarters \* 2000s)
 
 ## Usage
 

@@ -1,7 +1,6 @@
-# Descriptions after which the clock stops (scoring resets, ball out of play)
+# Events that stop the play clock (chain `description` values)
 
-Descriptions after which the clock stops (scoring resets, ball out of
-play)
+Events that stop the play clock (chain `description` values)
 
 ## Usage
 

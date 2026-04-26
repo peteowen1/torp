@@ -49,7 +49,7 @@ AFL data with quarter-by-quarter scores.</p>
 
     <div class="section level2">
     <h2 id="ref-usage">Usage<a class="anchor" aria-label="anchor" href="#ref-usage"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">fit_win_probability</span><span class="op">(</span>seasons <span class="op">=</span> <span class="fl">2010</span><span class="op">:</span><span class="fl">2025</span>, output_path <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span></span></code></pre></div>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">fit_win_probability</span><span class="op">(</span>seasons <span class="op">=</span> <span class="fl">2010</span><span class="op">:</span><span class="fl">2025</span>, output_path <span class="op">=</span> <span class="cn">NULL</span>, seed <span class="op">=</span> <span class="fl">20250101L</span><span class="op">)</span></span></code></pre></div>
     </div>
 
     <div class="section level2">
@@ -62,6 +62,13 @@ AFL data with quarter-by-quarter scores.</p>
 
 <dt id="arg-output-path">output_path<a class="anchor" aria-label="anchor" href="#arg-output-path"></a></dt>
 <dd><p>Path to write the JSON coefficients file (NULL = return only)</p></dd>
+
+
+<dt id="arg-seed">seed<a class="anchor" aria-label="anchor" href="#arg-seed"></a></dt>
+<dd><p>Integer seed used to make the synthetic quarter-break noise
+reproducible. The fitted coefficients are exported to JSON for browser
+inference; without a fixed seed each retraining produces a different model.
+Scoped via <code><a href="https://withr.r-lib.org/reference/with_seed.html" class="external-link">withr::local_seed()</a></code> so the caller's RNG stream is not affected.</p></dd>
 
 </dl></div>
     <div class="section level2">

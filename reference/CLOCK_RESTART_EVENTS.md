@@ -1,7 +1,6 @@
-# Descriptions that always follow dead time (restarts after clock stoppage)
+# Events that restart the play clock (chain `description` values)
 
-Descriptions that always follow dead time (restarts after clock
-stoppage)
+Events that restart the play clock (chain `description` values)
 
 ## Usage
 
@@ -11,4 +10,4 @@ CLOCK_RESTART_EVENTS
 
 ## Format
 
-An object of class `character` of length 9.
+An object of class `character` of length 13.

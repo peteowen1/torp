@@ -1,6 +1,6 @@
-# Number of quarters in a standard AFL match
+# Number of regulation quarters in an AFL match
 
-Number of quarters in a standard AFL match
+Number of regulation quarters in an AFL match
 
 ## Usage
 

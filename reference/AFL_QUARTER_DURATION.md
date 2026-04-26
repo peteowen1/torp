@@ -1,8 +1,7 @@
-# Duration of AFL quarter in game seconds Median max period_seconds per quarter is ~1862 across 2021-2025 data. Set to 2000 as a safe upper bound covering P95 (~2100) without outliers.
+# Default duration of one AFL quarter in seconds (including stoppages) Used as fallback when match-specific quarter durations are unavailable.
 
-Duration of AFL quarter in game seconds Median max period_seconds per
-quarter is ~1862 across 2021-2025 data. Set to 2000 as a safe upper
-bound covering P95 (~2100) without outliers.
+Default duration of one AFL quarter in seconds (including stoppages)
+Used as fallback when match-specific quarter durations are unavailable.
 
 ## Usage
 

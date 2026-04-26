@@ -290,6 +290,8 @@ Estimate and explore player stat rating profiles
 Plot functions for game flow, player ratings, simulations, and team
 comparisons
 
+- [`plot_defaults()`](https://peteowen1.github.io/torp/reference/plot_defaults.md)
+  : Default visual constants for torp plots
 - [`plot_ep_wp()`](https://peteowen1.github.io/torp/reference/plot_ep_wp.md)
   : Plot EP/WP game flow chart
 - [`plot_match_simulation()`](https://peteowen1.github.io/torp/reference/plot_match_simulation.md)
@@ -330,7 +332,7 @@ Simulate AFL seasons and predict match outcomes
 - [`print(`*`<torp_sim_results>`*`)`](https://peteowen1.github.io/torp/reference/print.torp_sim_results.md)
   : Print simulation results
 - [`ladder`](https://peteowen1.github.io/torp/reference/ladder.md) : AFL
-  Season Simulation System
+  Ladder Calculation
 - [`calculate_ladder()`](https://peteowen1.github.io/torp/reference/calculate_ladder.md)
   : Calculate AFL ladder from game results
 - [`calculate_final_ladder()`](https://peteowen1.github.io/torp/reference/calculate_final_ladder.md)

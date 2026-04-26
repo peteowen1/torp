@@ -1,6 +1,6 @@
-# Maximum value for time left scaler calculation
+# Maximum value for time-decay scaler in EPR weighting
 
-Maximum value for time left scaler calculation
+Maximum value for time-decay scaler in EPR weighting
 
 ## Usage
 
