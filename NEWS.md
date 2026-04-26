@@ -10,9 +10,13 @@
 
 * **Team-quality residual SE widening in season simulation** — `simulate_afl_season()` now multiplies the xscore-diff GAM random-effect SE by `SIM_RESIDUAL_SE_MULT` (default 1.5) before per-sim sampling. The raw GAM SE understates true team uncertainty because random effects are shrunk toward the league mean; the multiplier produces wider, better-calibrated Premier and Top-N bands.
 
-* **Parallel pipeline hardened** — clears stale file handles between phases that were exhausting R's connection pool.
+* **`SIM_INJURY_SD_KNOWN` raised from 2 → 3** to match `SIM_INJURY_SD`. Scraped injury lists only capture officially-listed absences — form slumps, minor niggles, and game-day late-outs still contribute meaningful week-to-week jitter, so the "we already excluded the known injured" discount was over-tight.
 
-* **Blog data formatter** — `format_predictions_blog()` produces a canonical schema for predictions consumed by inthegame-blog; `xg_to_blog_lookup()` exposes the xG GAM grid for browser-side rendering.
+* **New simulation summary bands** — `summarise_simulations()` adds `top_6_pct` and `top_10_pct` (matching the 2026 finals structure: top-6 home-finals, top-10 finals qualification) plus `w10` / `w90` — 10th/90th percentile of season wins per team — for a cheap summary of the full ladder distribution.
+
+* **Parallel pipeline hardened** — `closeAllConnections()` runs unconditionally before PSOCK workers spawn (the prior selective cleanup missed leaks from arrow/piggyback that surfaced intermittently on Windows as `serialize(...)` errors during `clusterExport`). The full parallel pipeline now sits inside one tryCatch so any worker-setup failure cleanly falls through to the sequential branch instead of leaving an orphaned cluster.
+
+* **Blog data formatter** — `format_predictions_blog()` produces a canonical schema for predictions consumed by inthegame-blog (with new `PREDICTIONS_BLOG_COLS` exported as the column-order source of truth); `xg_to_blog_lookup()` reshapes `get_xg()` / `load_xg()` output for the formatter. Both replace duplicate schema definitions that previously lived in two producer paths and drifted apart.
 
 ## Bug Fixes
 
