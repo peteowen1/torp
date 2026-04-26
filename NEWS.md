@@ -28,6 +28,8 @@
 
 * **`injuries.R` (1012 LOC) split into 4 themed files** — `injuries_scrape.R`, `injuries_match.R`, `injuries_schedule.R`, `injuries_validation.R`. Same 13 functions, organised by concern.
 
+* **`ladder.R` (1426 LOC) split into 3 themed files** — `ladder.R` keeps `calculate_ladder()` / `calculate_final_ladder()`; `finals_sim.R` houses the top-8 bracket (`simulate_finals()`, `simulate_match()`, finals home advantage); `season_sim.R` covers data prep, residual extraction, the `simulate_afl_season()` entry point, and the print method. Same 12 functions, organised along the section-header boundaries the file already had.
+
 * **`R/globals.R` pruned** — removed ~84 orphan `utils::globalVariables()` declarations (per-position `_diff` / `.x` / `.y` columns refactored away, plus a long tail of one-off renames). New helper script `data-raw/debug/find_orphan_globals.R` re-runnable against any future drift.
 
 * **`plot_defaults()` exported** — new helper in `R/plot_utils.R` returning a named list of recurring visual constants (line weights, point sizes, reference greys) so future plots have a single source of truth. Existing `plot_*.R` functions still hardcode these values inline; migration is opportunistic.
