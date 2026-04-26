@@ -158,7 +158,7 @@ The AFL API frequently delivers coordinates in the **wrong team's frame** at pos
 | G | Convert back to team-relative | Restores `x,y` to possession-team frame |
 | H | Recalculate `goal_x` | `venue_length / 2 - x` |
 
-Constants in `R/constants.R`: `COORD_JUMP_THRESHOLD` (100m) gates all sign-flip checks. `COORD_FLIP_TOLERANCE` (70m) is the max flipped distance to classify as a sign error -- set to cover the longest realistic kick distances. Together they eliminate ~99.7% of >100m pitch-relative jumps.
+Constants in `R/constants_data.R`: `COORD_JUMP_THRESHOLD` (100m) gates all sign-flip checks. `COORD_FLIP_TOLERANCE` (70m) is the max flipped distance to classify as a sign error -- set to cover the longest realistic kick distances. Together they eliminate ~99.7% of >100m pitch-relative jumps.
 
 **Column Schema** (`column_schema.R`):
 - 11 COL_MAP constants (named character vectors) for each data type: `PLAYER_STATS_COL_MAP`, `PBP_COL_MAP`, `FIXTURE_COL_MAP`, `TEAMS_COL_MAP`, `CHAINS_COL_MAP`, `PLAYER_GAME_COL_MAP`, `TORP_RATINGS_COL_MAP`, `PLAYER_GAME_RATINGS_COL_MAP`, `PLAYER_DETAILS_COL_MAP`, `PREDICTIONS_COL_MAP`, `XG_COL_MAP`
@@ -177,7 +177,7 @@ Constants in `R/constants.R`: `COORD_JUMP_THRESHOLD` (100m) gates all sign-flip 
 
 **Purpose**: Allocate expected points value (EPV) credit to individual players for each match, forming the foundation for player ratings.
 
-**Key Files**: `R/player_credit.R`, `R/constants.R`
+**Key Files**: `R/player_credit.R`, `R/constants_ratings.R`
 
 **Entry Point**: `create_player_game_data(pbp_data, player_stats, teams, decay, epv_params)`
 
@@ -295,7 +295,7 @@ Default priors: `prior_games = 3.0` for all components; `prior_rate` = -0.4 (rec
 
 **Purpose**: Monte Carlo simulation of remaining AFL season games, producing ladder probabilities and premiership odds.
 
-**Key Files**: `R/simulate.R`, `R/ladder.R`, `R/injuries.R`
+**Key Files**: `R/simulate.R`, `R/ladder.R`, `R/finals_sim.R`, `R/season_sim.R`, `R/injuries_scrape.R`, `R/injuries_match.R`, `R/injuries_schedule.R`
 
 **Entry Point**: `simulate_afl_season(season, n_sims, team_ratings, fixtures, predictions, injuries, seed, verbose, keep_games, n_cores)`
 
@@ -459,7 +459,7 @@ Reference models for WP evaluation: Naive (always 0.5), Score-Only (logistic on 
 
 | Component | File | Key Exports |
 |-----------|------|-------------|
-| Constants | `R/constants.R` | `EPR_DECAY_*`, `EPR_PRIOR_*`, `TORP_EPR_WEIGHT`, `SIM_*`, `POSITION_AVG_TOG`, `EPV_RELEVANT_DESCRIPTIONS` |
+| Constants | `R/constants_afl.R`, `R/constants_ratings.R`, `R/constants_sim.R`, `R/constants_match.R`, `R/constants_data.R` | `AFL_TEAMS`/`AFL_TEAM_*` (afl), `EPR_*`/`EPV_*`/`TORP_EPR_WEIGHT`/`POSITION_AVG_TOG` (ratings), `SIM_*`/`MATCH_SIM_*`/`OPP_ADJ_*` (sim), `MATCH_*`/`WP_*`/`FIELD_*` (match), `VALIDATION_*`/`COORD_*`/`CONTEST_*`/`EPV_RELEVANT_DESCRIPTIONS` (data) |
 | Load Functions | `R/load_data.R` | `load_pbp()`, `load_chains()`, `load_xg()`, `load_player_stats()`, `load_player_game_data()`, `load_fixtures()`, `load_teams()`, `load_results()`, `load_player_details()`, `load_predictions()`, `load_retrodictions()`, `load_torp_ratings()`, `load_player_game_ratings()`, `load_player_season_ratings()`, `load_team_ratings()`, `load_injury_data()`, `load_ep_wp_charts()`, `load_player_stat_ratings()`, `load_psr()`, `load_weather()` |
 | Load Engines | `R/load_engines.R` | `load_from_url()`, `parquet_from_urls_parallel()` |
 | Load Utilities | `R/load_utils.R` | `validate_seasons()`, `generate_urls()` |
@@ -482,8 +482,13 @@ Reference models for WP evaluation: Naive (always 0.5), Score-Only (logistic on 
 | Baseline Models | `R/baseline_models.R` | Score-only, time-score, EP-based baselines |
 | Simulation | `R/simulate.R` | `simulate_season()`, `process_games()`, `process_games_dt()` |
 | Match Simulation | `R/simulate_match.R` | `simulate_match_mc()` |
-| Ladder | `R/ladder.R` | `calculate_ladder()`, `calculate_final_ladder()`, `simulate_finals()`, `simulate_afl_season()`, `summarise_simulations()` |
-| Injuries | `R/injuries.R` | `scrape_injuries()`, `get_all_injuries()`, `match_injuries()`, `build_injury_schedule()`, `parse_return_round()` |
+| Ladder | `R/ladder.R` | `calculate_ladder()`, `calculate_final_ladder()` |
+| Finals Simulation | `R/finals_sim.R` | `simulate_finals()`, `simulate_match()`, `finals_home_advantage()` |
+| Season Simulation | `R/season_sim.R` | `simulate_afl_season()`, `prepare_sim_data()`, `summarise_simulations()` |
+| Injury Scraping | `R/injuries_scrape.R` | `scrape_injuries()`, `load_preseason_injuries()` |
+| Injury Matching | `R/injuries_match.R` | `get_all_injuries()`, `match_injuries()`, `parse_return_round()` |
+| Injury Schedule | `R/injuries_schedule.R` | `build_injury_schedule()`, `save_injury_data()` |
+| Injury Validation | `R/injuries_validation.R` | `test_played_rate()`, `tbc_played_rate()`, `injury_return_accuracy()`, `tbc_return_survival()` |
 | Expected Goals | `R/xg.R` | `calculate_match_xgs()`, `get_xg()` |
 | Contests | `R/contests.R` | `extract_contests()`, `head_to_head()` |
 | AFL API | `R/afl_api.R` | `get_afl_fixtures()`, `get_afl_results()`, `get_afl_ladder()`, `get_afl_lineups()`, `get_afl_player_stats()`, `get_afl_player_details()` |

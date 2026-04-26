@@ -1,3 +1,18 @@
+# AFL Chain Scraping
+# ==================
+# Despite the generic name, this file is the *chains* fetcher only:
+#   - get_match_chains() / get_many_game_chains() / get_game_chains()
+#       chain-level PBP data (the only public export — `@export get_match_chains`)
+#   - get_round_games() / get_season_games() / get_players()
+#       internal helpers needed to enumerate matches before scraping chains
+#   - get_token() / access_api()
+#       shared HTTP infrastructure ALSO used by R/afl_api.R — do not move.
+#
+# Structured fixture/result/ladder/lineup/player-stats endpoints live in
+# R/afl_api.R, not here. If you're adding a new endpoint, decide first which
+# file owns it: chains -> here, anything else -> afl_api.R.
+
+
 #' Get Match Chains
 #'
 #' Retrieves match chain data for a given season and round, or for a specific

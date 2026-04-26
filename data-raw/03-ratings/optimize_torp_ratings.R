@@ -1561,12 +1561,25 @@ for (nm in names(param_stat_map)) {
   best_par_raw[nm] <- best_par[nm] / stat_sds[param_stat_map[nm]]
 }
 
-## 9b. Write optimized params back to R/constants.R ----
-constants_path <- "R/constants.R"
-cat(sprintf("\nUpdating %s with optimized parameters...\n", constants_path))
+## 9b. Write optimized params back to R/constants_*.R ----
+# constants.R was split into themed files in 1.3.3 (constants_afl,
+# constants_ratings, constants_sim, constants_match, constants_data).
+# Scan all of them so this script doesn't have to know which file owns
+# which constant — robust against future re-organisation.
+constants_files <- list.files("R", pattern = "^constants(_[a-z]+)?\\.R$",
+                              full.names = TRUE)
+if (length(constants_files) == 0) {
+  stop("No R/constants*.R files found")
+}
+cat(sprintf("\nScanning %d constants file(s) for parameter updates...\n",
+            length(constants_files)))
 
-lines <- readLines(constants_path)
-n_updated <- 0
+# Read every file once
+file_lines <- lapply(constants_files, readLines)
+names(file_lines) <- constants_files
+file_dirty <- setNames(rep(FALSE, length(constants_files)), constants_files)
+n_updated <- 0L
+
 for (par_name in names(param_to_constant)) {
   const_name <- param_to_constant[par_name]
   new_val <- best_par_raw[par_name]
@@ -1575,32 +1588,42 @@ for (par_name in names(param_to_constant)) {
   if (is.na(new_val)) next
 
   # Format: integer-like values (decay_*) as integer, rest as 4-decimal
-  if (grepl("^decay_", par_name)) {
-    val_str <- sprintf("%.0f", new_val)
-  } else {
-    val_str <- sprintf("%.4f", new_val)
+  val_str <- if (grepl("^decay_", par_name)) sprintf("%.0f", new_val)
+             else sprintf("%.4f", new_val)
+
+  # Find which file holds this constant (must be exactly one)
+  pattern <- paste0("^(", const_name, "\\s*<-\\s*).*$")
+  hits <- vapply(file_lines, function(L) sum(grepl(pattern, L)), integer(1))
+  total_hits <- sum(hits)
+
+  if (total_hits == 0) {
+    warning(sprintf("No definition found for %s in any constants_*.R file", const_name))
+    next
+  }
+  if (total_hits > 1) {
+    warning(sprintf("Multiple definitions of %s across constants_*.R files (%d hits)",
+                    const_name, total_hits))
+    next
   }
 
-  # Match the line: CONSTANT_NAME <- <value>
-  pattern <- paste0("^(", const_name, "\\s*<-\\s*).*$")
-  match_idx <- grep(pattern, lines)
-
-  if (length(match_idx) == 1) {
-    old_line <- lines[match_idx]
-    new_line <- sub(pattern, paste0("\\1", val_str), old_line)
-    if (old_line != new_line) {
-      lines[match_idx] <- new_line
-      n_updated <- n_updated + 1
-      cat(sprintf("  %s: %s -> %s\n", const_name,
-                  sub(paste0(const_name, "\\s*<-\\s*"), "", old_line), val_str))
-    }
-  } else {
-    warning(sprintf("Could not find unique match for %s in %s", const_name, constants_path))
+  target_file <- names(hits)[hits == 1L]
+  L <- file_lines[[target_file]]
+  match_idx <- grep(pattern, L)
+  old_line <- L[match_idx]
+  new_line <- sub(pattern, paste0("\\1", val_str), old_line)
+  if (old_line != new_line) {
+    file_lines[[target_file]][match_idx] <- new_line
+    file_dirty[target_file] <- TRUE
+    n_updated <- n_updated + 1L
+    cat(sprintf("  %s [%s]: %s -> %s\n", const_name, basename(target_file),
+                sub(paste0(const_name, "\\s*<-\\s*"), "", old_line), val_str))
   }
 }
 
-writeLines(lines, constants_path)
-cat(sprintf("Updated %d constants in %s\n", n_updated, constants_path))
+# Write back only files that changed
+for (f in names(file_dirty)[file_dirty]) writeLines(file_lines[[f]], f)
+cat(sprintf("Updated %d constants across %d file(s)\n",
+            n_updated, sum(file_dirty)))
 
 ## 9c. Save params as CSV backup ----
 optimized_params_df <- data.frame(

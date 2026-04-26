@@ -6,6 +6,10 @@
 #'
 #' @param seasons Numeric vector of seasons to include (default: 2010-2025)
 #' @param output_path Path to write the JSON coefficients file (NULL = return only)
+#' @param seed Integer seed used to make the synthetic quarter-break noise
+#'   reproducible. The fitted coefficients are exported to JSON for browser
+#'   inference; without a fixed seed each retraining produces a different model.
+#'   Scoped via [withr::local_seed()] so the caller's RNG stream is not affected.
 #'
 #' @return A list with: coefficients (named list), model (glm object), data (training data)
 #' @export
@@ -16,7 +20,10 @@
 #' # Coefficients for browser JS:
 #' result$coefficients
 #' }
-fit_win_probability <- function(seasons = 2010:2025, output_path = NULL) {
+fit_win_probability <- function(seasons = 2010:2025,
+                                output_path = NULL,
+                                seed = 20250101L) {
+  withr::local_seed(seed)
   cli::cli_h1("Fitting AFL Win Probability Model")
 
   # Fetch historical fixtures from AFL API (all seasons)

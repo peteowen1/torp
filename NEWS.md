@@ -1,3 +1,57 @@
+# torp 1.3.3 (2026-04-26)
+
+## New Features
+
+* **Injury listing-accuracy validation** — `test_played_rate()`, `tbc_played_rate()`, `injury_return_accuracy()`, and `tbc_return_survival()` quantify how often listed-as-injured players actually play, how accurate the estimated return rounds are, and how long TBC listings persist. Calibration after R10+ once there's enough history.
+
+* **Stale preseason injury filter** — `get_all_injuries()` now drops preseason CSV entries for players who have already played a senior game this season, preventing phantom "TBC" listings from lingering after a player has clearly returned. Includes team-name dedup so weekly + preseason sources merge on a normalised key.
+
+* **Historical injury snapshot log** — preseason and weekly scrapes are now appended to a per-season history file, enabling backwards-looking accuracy validation.
+
+* **Team-quality residual SE widening in season simulation** — `simulate_afl_season()` now multiplies the xscore-diff GAM random-effect SE by `SIM_RESIDUAL_SE_MULT` (default 1.5) before per-sim sampling. The raw GAM SE understates true team uncertainty because random effects are shrunk toward the league mean; the multiplier produces wider, better-calibrated Premier and Top-N bands.
+
+* **`SIM_INJURY_SD_KNOWN` raised from 2 → 3** to match `SIM_INJURY_SD`. Scraped injury lists only capture officially-listed absences — form slumps, minor niggles, and game-day late-outs still contribute meaningful week-to-week jitter, so the "we already excluded the known injured" discount was over-tight.
+
+* **New simulation summary bands** — `summarise_simulations()` adds `top_6_pct` and `top_10_pct` (matching the 2026 finals structure: top-6 home-finals, top-10 finals qualification) plus `w10` / `w90` — 10th/90th percentile of season wins per team — for a cheap summary of the full ladder distribution.
+
+* **Parallel pipeline hardened** — `closeAllConnections()` runs unconditionally before PSOCK workers spawn (the prior selective cleanup missed leaks from arrow/piggyback that surfaced intermittently on Windows as `serialize(...)` errors during `clusterExport`). The full parallel pipeline now sits inside one tryCatch so any worker-setup failure cleanly falls through to the sequential branch instead of leaving an orphaned cluster.
+
+* **Blog data formatter** — `format_predictions_blog()` produces a canonical schema for predictions consumed by inthegame-blog (with new `PREDICTIONS_BLOG_COLS` exported as the column-order source of truth); `xg_to_blog_lookup()` reshapes `get_xg()` / `load_xg()` output for the formatter. Both replace duplicate schema definitions that previously lived in two producer paths and drifted apart.
+
+## Bug Fixes
+
+* **`fit_win_probability()` is now reproducible** — quarter-break training data was synthesised via `rnorm()` with no seed, so each retraining produced different coefficients. Now seeded via `withr::local_seed()` (new `seed` parameter, defaults to `20250101L`), so the JSON exported for browser inference is stable across runs. The caller's RNG stream is unaffected.
+
+* **`EPR_PRIOR_GAMES_HITOUT` rounded from 3.0013 → 3.0** — the trailing precision was an optimizer artifact; the other four EPR priors are exactly 3.0000. Companion test now `expect_identical` rather than `tolerance = 0.01` so future drift won't pass.
+
+* **`.normalise_results_schema()` no longer silently empties results** — added a guard that detects and rejects malformed input that previously slipped through as zero rows.
+
+## Internal
+
+* **`constants.R` (1054 LOC) split into 5 themed files** — `constants_afl.R` (league/team/colours/API), `constants_ratings.R` (EPR/EPV/PSR/TORP composition), `constants_sim.R` (simulation parameters), `constants_match.R` (match prediction model), `constants_data.R` (validation + coord/contest extraction). Pure file-organisation change; no constants renamed or removed. 160 declarations confirmed across the new files.
+
+* **`injuries.R` (1012 LOC) split into 4 themed files** — `injuries_scrape.R`, `injuries_match.R`, `injuries_schedule.R`, `injuries_validation.R`. Same 13 functions, organised by concern.
+
+* **`ladder.R` (1426 LOC) split into 3 themed files** — `ladder.R` keeps `calculate_ladder()` / `calculate_final_ladder()`; `finals_sim.R` houses the top-8 bracket (`simulate_finals()`, `simulate_match()`, finals home advantage); `season_sim.R` covers data prep, residual extraction, the `simulate_afl_season()` entry point, and the print method. Same 12 functions, organised along the section-header boundaries the file already had.
+
+* **`R/globals.R` pruned** — removed ~84 orphan `utils::globalVariables()` declarations (per-position `_diff` / `.x` / `.y` columns refactored away, plus a long tail of one-off renames). New helper script `data-raw/debug/find_orphan_globals.R` re-runnable against any future drift.
+
+* **`plot_defaults()` exported** — new helper in `R/plot_utils.R` returning a named list of recurring visual constants (line weights, point sizes, reference greys) so future plots have a single source of truth. Existing `plot_*.R` functions still hardcode these values inline; migration is opportunistic.
+
+* **`ladder.R simulate_finals()` refactored** — closure `<<-` mutation of the `ratings` vector replaced with explicit environment-held state, matching CLAUDE.md's "use environments instead of `<<-`" rule.
+
+* **`download_model_from_release()` (torpmodels)** — error-message accumulation via `<<-` replaced with `tryCatch` return values. Same semantics, more idiomatic R.
+
+* **GAM smooth-basis `k=` convention documented** in `match_train.R` (k=5 for `bs="ts"` thin-plate splines, k=4 for `ti(...)` tensor interactions, with rationale).
+
+* **Documentation** — `scraper.R` now has a clear header declaring its scope (chains-only) versus the broader endpoints in `afl_api.R`. `centrality.R find_components()` documents the deliberate `<<-` in its union-find path-compression. `zzz.R` clarifies that the `attachNamespace("mgcv")` is a perf optimisation rather than a correctness requirement (the function-level guard in `get_shot_result_preds()` covers correctness).
+
+* **PR#86 review response** — chunk validation, empty-xG guards, format_blog tests, attr docs.
+
+* **CI** — pkgdown.yml now registers all exported functions; cleared dev-branch test failures.
+
+---
+
 # torp 1.3.2 (2026-04-18)
 
 ## Bug Fixes
