@@ -267,25 +267,22 @@ create_player_game_data <- function(pbp_data = NULL,
     )
 
   # --- Step 6: Join teams data for lineup_position (20-way AFL lineup role) ---
-  # teams_data$position is the ~20-way lineup role (HBFR, FB, INT, SUB, ...),
-  # distinct from position_group (6-way KEY_DEFENDER / MIDFIELDER / etc.) set
-  # at line 131 from PBP's player_position.
   teams_pos <- teams |>
-    dplyr::select(match_id, player_id, lineup_position = "position") |>
+    dplyr::select(match_id, player_id, lineup_position) |>
     dplyr::distinct()
   plyr_gm_df <- plyr_gm_df |>
-    dplyr::select(-dplyr::any_of(c("position", "lineup_position"))) |>
+    dplyr::select(-dplyr::any_of(c("lineup_position"))) |>
     dplyr::left_join(teams_pos, by = c("match_id", "player_id")) |>
     dplyr::mutate(
       position_group = dplyr::if_else(.data$position_group == "MIDFIELDER_FORWARD",
                                       "MEDIUM_FORWARD", .data$position_group)
     )
 
-  # --- Step 7: Per-80 normalisation then position-group adjustment ---
+  # --- Step 7: Per-80 normalisation then position adjustment ---
   # Normalise to per-full-game rate BEFORE position adjustment so the adjustment
   # compares like-for-like rates, not raw totals that mix ability with TOG.
-  # Group on position_group (6-way class), NOT lineup_position (20-way role) —
-  # the 20-way groups are too granular and produce noisy / singleton means.
+  # Group on lineup_position (20-way role from teams API) — more reliable than
+  # position_group (6-way from PBP) which can be inconsistent with actual role.
   plyr_gm_df <- plyr_gm_df |>
     dplyr::mutate(
       tog_safe = pmax(dplyr::coalesce(.data$time_on_ground_percentage / 100, 0.1), 0.1),
@@ -297,7 +294,7 @@ create_player_game_data <- function(pbp_data = NULL,
       wp_disp_credit_p80 = .data$wp_disp_credit / .data$tog_safe,
       wp_recv_credit_p80 = .data$wp_recv_credit / .data$tog_safe
     ) |>
-    dplyr::group_by(position_group) |>
+    dplyr::group_by(lineup_position) |>
     dplyr::mutate(
       recv_epv_adj = (.data$recv_epv_p80 - stats::weighted.mean(.data$recv_epv_p80, .data$tog_safe, na.rm = TRUE)) * .data$tog_safe,
       disp_epv_adj = (.data$disp_epv_p80 - stats::weighted.mean(.data$disp_epv_p80, .data$tog_safe, na.rm = TRUE)) * .data$tog_safe,

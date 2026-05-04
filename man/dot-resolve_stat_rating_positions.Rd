@@ -4,10 +4,15 @@
 \alias{.resolve_stat_rating_positions}
 \title{Resolve position groups, filling NAs with each player's modal position}
 \usage{
-.resolve_stat_rating_positions(dt)
+.resolve_stat_rating_positions(dt, teams = NULL)
 }
 \arguments{
 \item{dt}{A data.table with player_id and position columns.}
+
+\item{teams}{Optional teams/lineup data. Used as a final fallback for
+players whose primary position source is always NA-mapping (e.g. a
+player whose only PBP appearances were with \code{lineup_position = INT}).
+Filtered to on-field roles before modal aggregation.}
 }
 \value{
 The data.table with added \code{pos_group} column.

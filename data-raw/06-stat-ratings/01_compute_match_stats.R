@@ -30,10 +30,15 @@ cli::cli_inform("Rosters: {nrow(rosters)} player-seasons across {length(seasons)
 fixtures <- load_fixtures(all = TRUE, use_disk_cache = TRUE)
 cli::cli_inform("Fixtures: {nrow(fixtures)} rows")
 
+# Load teams for lineup_position fallback (pos_group rescue for fringe players)
+teams <- load_teams(TRUE)
+cli::cli_inform("Teams: {nrow(teams)} lineup rows")
+
 # Prepare ----
 cli::cli_h1("Preparing stat rating data")
 
-stat_rating_data <- .prepare_stat_rating_data(pgd, ps, rosters = rosters, fixtures = fixtures)
+stat_rating_data <- .prepare_stat_rating_data(pgd, ps, rosters = rosters,
+                                              fixtures = fixtures, teams = teams)
 
 cli::cli_inform("Stat rating data: {nrow(stat_rating_data)} rows, {length(unique(stat_rating_data$player_id))} players")
 cli::cli_inform("Date range: {min(stat_rating_data$match_date_rating)} to {max(stat_rating_data$match_date_rating)}")

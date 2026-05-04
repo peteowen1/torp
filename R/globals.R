@@ -3,7 +3,7 @@
 # This file declares variables used in non-standard evaluation (NSE) contexts
 # such as data.table and dplyr operations to avoid "no visible binding" NOTEs.
 
-#' @importFrom stats binomial coef complete.cases gaussian lm pchisq quantile sd var setNames
+#' @importFrom stats binomial coef complete.cases gaussian lm pchisq quantile sd var setNames weighted.mean
 #' @importFrom utils head tail
 #' @importFrom lubridate tz
 NULL
@@ -122,7 +122,7 @@ utils::globalVariables(c(
   "wp_credit", "wp_disp_credit", "wp_recv_credit",
   "n_disposals", "n_receptions",
   "max_play_wpa", "max_play_display_order", "max_play_role",
-  "abs_wpa", "disp_share",
+  "disp_share",
   "has_receiver", "disp_wpa", "recv_wpa",
   "disp_peak_wpa", "disp_peak_do", "recv_peak_wpa", "recv_peak_do"
 ))
@@ -139,16 +139,17 @@ utils::globalVariables(c(
   "avail_only", ".played", "roster_pos_group",
   "round_idx", "first_season", "first_round",
   "tog", "tog_denominator", "match_date_rating", "days_since", "decay_wt",
-  "wt_events", "wt_exposure", "wt_successes", "wt_attempts",
-  "alpha_post", "beta_post", "skill_estimate", "skill_lower", "skill_upper",
-  "position_group", "wt_games_rating", "n_games_rating", "wt_games",
-  "disposal_efficiency_pct_x_disposals", "disposal_efficiency_ps",
+  "wt_attempts",
+  "alpha_post", "beta_post",
+  "position_group", "wt_games",
+  "disposal_efficiency_pct_x_disposals",
   "mu0", "alpha0", "w_num", "w_den",
   ".wnum", ".wden", ".w_col", ".w_rate", ".total_rating",
   ".eff_successes", ".eff_attempts", ".eff_w",
   ".raw_num", ".raw_den", ".raw_succ", ".raw_att", ".wt_att",
   ".raw_vals", ".raw_tog",
   "pos_group", "modal_pos", "i.pos_group", "i.modal_pos",
+  "lineup_position", "lp_pos_group", "team_pos_group", "i.team_pos_group",
   "i.n_games", "i.wt_games", "ref_date",
   "..keep_cols", "..skill_cols", "..rating_cols", "..lower_cols", "..upper_cols",
   "..lower_present", "..upper_present", "..raw_cols",
@@ -215,13 +216,14 @@ utils::globalVariables(c(
   "pred_xtotal",
   "avg_wins", "avg_losses", "avg_draws", "avg_percentage", "avg_rank",
   "avg_pf_pg", "avg_pa_pg", "last_pct",
-  "home_torp_eff", "away_torp_eff",
   "residual", "residual_mean", "residual_se", "home_residual", "away_residual", "i.residual",
- "top_8_pct", "top_4_pct", "top_2_pct", "top_1_pct",
+ "top_10_pct", "top_8_pct", "top_6_pct", "top_4_pct", "top_2_pct", "top_1_pct",
+  "w10", "w90",
   "made_finals_pct", "avg_finals_wins", "made_gf_pct", "won_gf_pct",
   "i.pred_xtotal", "i.torp", "i.torp_boost", "i.pred_home_team",
-  "return_round", "player_boost", "team_std", "..pr_cols", "..rat_cols", "player",
+  "return_round", "player_boost", "..pr_cols", "..rat_cols", "player",
   "injury", "estimated_return", "player_norm", "tm_rnk",
+  "scraped_at", "updated", "round_start", "key",
   "tog_frac", "epv_p80", "recv_epv_p80", "disp_epv_p80", "spoil_epv_p80", "hitout_epv_p80",
   "epv_raw", "recv_epv_raw", "disp_epv_raw", "spoil_epv_raw", "hitout_epv_raw",
   "epv_c", "recv_epv_c", "disp_epv_c", "spoil_epv_c", "hitout_epv_c",
@@ -238,10 +240,8 @@ utils::globalVariables(c(
   "game_prop_through_day", "game_year_decimal",
   "compSeason.year", "team_name_season",
 
-  # Position diff columns
-  "BPL_diff", "BPR_diff", "FB_diff", "HBFL_diff", "HBFR_diff", "CHB_diff",
-  "WL_diff", "WR_diff", "C_diff", "R_diff", "RR_diff", "RK_diff",
-  "HFFL_diff", "HFFR_diff", "CHF_diff", "FPL_diff", "FPR_diff", "FF_diff",
+  # Position diff columns (only int_diff is referenced; the per-position
+  # _diff names have all been refactored away into vectorised access)
   "int_diff",
 
   # Phase/group position columns
@@ -311,31 +311,26 @@ utils::globalVariables(c(
   "disp_epr.x", "disp_epr.y", "spoil_epr.x", "spoil_epr.y",
   "hitout_epr.x", "hitout_epr.y",
   "def.x", "def.y", "mid.x", "mid.y", "fwd.x", "fwd.y", "int.x", "int.y",
-  "BPL.x", "BPL.y", "BPR.x", "BPR.y", "FB.x", "FB.y",
-  "HBFL.x", "HBFL.y", "HBFR.x", "HBFR.y", "CHB.x", "CHB.y",
-  "WL.x", "WL.y", "WR.x", "WR.y", "C.x", "C.y",
-  "R.x", "R.y", "RR.x", "RR.y", "RK.x", "RK.y",
-  "HFFL.x", "HFFL.y", "HFFR.x", "HFFR.y", "CHF.x", "CHF.y",
-  "FPL.x", "FPL.y", "FPR.x", "FPR.y", "FF.x", "FF.y",
+  # Per-position .x/.y merge columns are unused (vectorised access replaced
+  # them); only the position aggregates above are still referenced.
   "team_name.x", "team_name.y",
   "team_name_season.x", "team_name_season.y",
   "log_dist.x", "log_dist.y",
   "familiarity.x", "familiarity.y",
   "days_rest.x", "days_rest.y",
-  "team_type_fac.x", "team_type_fac.y",
-  "season.x", "season.y",
-  "round.roundNumber.x", "round.roundNumber.y",
-  "venue.x", "venue.y",
-  "count.x", "count.y",
-  "game_year_decimal.x", "game_year_decimal.y",
-  "game_prop_through_year.x", "game_prop_through_year.y",
-  "game_prop_through_month.x", "game_prop_through_month.y",
-  "game_wday_fac.x", "game_wday_fac.y",
-  "game_prop_through_day.x", "game_prop_through_day.y",
+  "team_type_fac.x",
+  "season.x",
+  "venue.x",
+  "count.x",
+  "game_year_decimal.x",
+  "game_prop_through_year.x",
+  "game_prop_through_month.x",
+  "game_wday_fac.x",
+  "game_prop_through_day.x",
 
   # Lineup processing
   "lineup_tog", ".unknown_pos", "teamName", "teamType",
-  "player.playerId", "position.x", "position.y",
+  "player.playerId", "lineup_position", "position_group",
 
   # Weather forecast
   "Latitude", "Longitude", "temperature_2m", "wind_speed_10m",
@@ -343,7 +338,7 @@ utils::globalVariables(c(
 
   # Predictions pipeline specific
   "epr_week", "epr_recv_week", "epr_disp_week",
-  "epr_spoil_week", "epr_hitout_week", "epr_boost", "total_sub",
+  "epr_spoil_week", "epr_hitout_week",
   "n_players", "team_tog_sum",
   "home_boost", "away_boost", "boost",
   "type_anti", "Ground",
@@ -403,13 +398,37 @@ utils::globalVariables(c(
 
 # Plot variables (NSE in ggplot2 aes/data manipulation)
 utils::globalVariables(c(
-  "total_seconds", "wp", "exp_pts", "home_wp",
+  "total_seconds", "wp", "exp_pts",
   "game_date", "game_number", "rolling_avg",
   "percentile", "stat_name", "category",
-  "avg_wins", "pct", "prob", "ladder_position",
-  "metric_value",
+  "avg_wins", "pct", "prob",
   # Shot map
   "goal_prob", "behind_prob", "clanger_prob", "xscore", "outcome",
   # Player comparison
   "player_label", "season_fac", "avg_pct"
+))
+
+# Opponent adjustment, contest credit, rolling EPV profiles, PSV/PSR
+# (data.table NSE column names and ..cols env-variable patterns)
+utils::globalVariables(c(
+  # Opponent-adjusted stats and EPV (adjust_stats_for_opponents / adjust_epv_for_opponents)
+  "..join_cols", "..inj_merge_cols", "osr.x", "osr.y", "dsr.x", "dsr.y",
+  "contest_epv_adj", "contest_epv_oadj",
+  # Rolling EPV profiles and team residuals
+  "team_epv", "season_coef", "season_se",
+  # WP trajectory
+  "final_margin", "x.margin",
+  # Contest credit (aerial 3-way split) in compute_contest_credit / add_contest_vars_dt
+  ".next_tid", ".next_pid", "contest_outcome", "contest_epv", "is_target",
+  "kick_display_order", "target_player_id", "defender_player_id",
+  ".lag1_desc", ".lag1_do", ".lag2_desc", ".lag2_do",
+  ".lag3_desc", ".lag3_do", ".lag4_desc", ".lag4_do",
+  ".lag5_desc", ".lag5_do",
+  # Player game data contest/aerial columns
+  "contest_target_id", "is_contest_target_recv",
+  "aerial_target_wins", "aerial_target_losses",
+  "aerial_def_wins", "aerial_def_losses",
+  ".disp_scale",
+  # PSR/PSV NSE weights
+  "wt_80s", ".tog_wt"
 ))

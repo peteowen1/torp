@@ -244,16 +244,24 @@ test_that("summarise_simulations produces valid summary", {
   expect_s3_class(summary, "data.table")
   expect_equal(nrow(summary), 18)
 
-  # top_8_pct should sum to approximately 8/18 * 18 = 8
-  expect_equal(sum(summary$top_8_pct), 8, tolerance = 0.01)
+  # top_N_pct columns should sum to N across teams (N teams finish top-N per sim)
+  expect_equal(sum(summary$top_4_pct),  4, tolerance = 0.01)
+  expect_equal(sum(summary$top_6_pct),  6, tolerance = 0.01)
+  expect_equal(sum(summary$top_8_pct),  8, tolerance = 0.01)
+  expect_equal(sum(summary$top_10_pct), 10, tolerance = 0.01)
 
   # won_gf_pct should sum to 1 (exactly 1 premier per sim)
   expect_equal(sum(summary$won_gf_pct), 1, tolerance = 0.01)
 
-  # Position distribution: each team's top_1 + ... sums correctly
-  # (top_1 is already a subset of top_4 which is subset of top_8)
+  # Monotonic nesting: top_1 ⊆ top_4 ⊆ top_6 ⊆ top_8 ⊆ top_10
   expect_true(all(summary$top_1_pct <= summary$top_4_pct))
-  expect_true(all(summary$top_4_pct <= summary$top_8_pct))
+  expect_true(all(summary$top_4_pct <= summary$top_6_pct))
+  expect_true(all(summary$top_6_pct <= summary$top_8_pct))
+  expect_true(all(summary$top_8_pct <= summary$top_10_pct))
+
+  # W10/W90 bounds: 10th pct <= mean <= 90th pct for every team
+  expect_true(all(summary$w10 <= summary$avg_wins + 1e-8))
+  expect_true(all(summary$avg_wins <= summary$w90 + 1e-8))
 })
 
 test_that("simulate_season backward compat: returns data.table without return_teams", {

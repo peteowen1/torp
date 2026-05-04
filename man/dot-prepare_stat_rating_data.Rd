@@ -8,7 +8,8 @@
   player_game_data,
   player_stats,
   rosters = NULL,
-  fixtures = NULL
+  fixtures = NULL,
+  teams = NULL
 )
 }
 \arguments{
@@ -19,6 +20,11 @@
 \item{rosters}{Optional roster data. If NULL, loads from torpdata.}
 
 \item{fixtures}{Optional fixture data. If NULL, loads from torpdata.}
+
+\item{teams}{Optional teams/lineup data. Used as a final fallback for
+\code{pos_group} assignment of rostered-but-never-played players whose
+roster \code{position} doesn't map (e.g. fringe bench players with only
+one FPL appearance).}
 }
 \value{
 A data.table with one row per player-match containing:

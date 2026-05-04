@@ -438,7 +438,7 @@ test_that("player_stat_rating_profile produces correct output structure", {
   expect_no_error(capture.output(print(profile)))
 })
 
-test_that(".map_position_group maps correctly", {
+test_that(".map_position_group maps 6-way position_group correctly", {
   expect_equal(.map_position_group("KEY_DEFENDER"), "KEY_DEFENDER")
   expect_equal(.map_position_group("MEDIUM_DEFENDER"), "MEDIUM_DEFENDER")
   expect_equal(.map_position_group("MIDFIELDER"), "MIDFIELDER")
@@ -447,4 +447,35 @@ test_that(".map_position_group maps correctly", {
   expect_equal(.map_position_group("MEDIUM_FORWARD"), "MEDIUM_FORWARD")
   expect_equal(.map_position_group("RUCK"), "RUCK")
   expect_true(is.na(.map_position_group("UNKNOWN")))
+})
+
+test_that(".map_position_group maps 20-way lineup_position correctly", {
+  # KEY_DEFENDER
+  expect_equal(.map_position_group("FB"), "KEY_DEFENDER")
+  # MEDIUM_DEFENDER
+  expect_equal(.map_position_group("BPL"), "MEDIUM_DEFENDER")
+  expect_equal(.map_position_group("BPR"), "MEDIUM_DEFENDER")
+  expect_equal(.map_position_group("CHB"), "MEDIUM_DEFENDER")
+  expect_equal(.map_position_group("HBFL"), "MEDIUM_DEFENDER")
+  expect_equal(.map_position_group("HBFR"), "MEDIUM_DEFENDER")
+  # MIDFIELDER
+  expect_equal(.map_position_group("C"), "MIDFIELDER")
+  expect_equal(.map_position_group("WL"), "MIDFIELDER")
+  expect_equal(.map_position_group("WR"), "MIDFIELDER")
+  expect_equal(.map_position_group("R"), "MIDFIELDER")
+  expect_equal(.map_position_group("RR"), "MIDFIELDER")
+  # RUCK
+  expect_equal(.map_position_group("RK"), "RUCK")
+  # MEDIUM_FORWARD
+  expect_equal(.map_position_group("HFFL"), "MEDIUM_FORWARD")
+  expect_equal(.map_position_group("HFFR"), "MEDIUM_FORWARD")
+  expect_equal(.map_position_group("CHF"), "MEDIUM_FORWARD")
+  # KEY_FORWARD
+  expect_equal(.map_position_group("FPL"), "KEY_FORWARD")
+  expect_equal(.map_position_group("FPR"), "KEY_FORWARD")
+  expect_equal(.map_position_group("FF"), "KEY_FORWARD")
+  # INT/SUB/EMERG → NA
+  expect_true(is.na(.map_position_group("INT")))
+  expect_true(is.na(.map_position_group("SUB")))
+  expect_true(is.na(.map_position_group("EMERG")))
 })

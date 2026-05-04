@@ -22,13 +22,26 @@
 #' @keywords internal
 .map_position_group <- function(pos) {
   pm <- stat_rating_position_map()
-  # Build reverse lookup: position -> group
+  # Build reverse lookup: 6-way position values -> group
   lookup <- character(0)
   for (grp in names(pm)) {
     for (p in pm[[grp]]) {
       lookup[p] <- grp
     }
   }
+  # Also map 20-way lineup positions to 6-way groups
+  lineup_map <- c(
+    FB   = "KEY_DEFENDER",
+    BPL  = "MEDIUM_DEFENDER", BPR  = "MEDIUM_DEFENDER",
+    CHB  = "MEDIUM_DEFENDER", HBFL = "MEDIUM_DEFENDER", HBFR = "MEDIUM_DEFENDER",
+    C    = "MIDFIELDER", WL   = "MIDFIELDER", WR   = "MIDFIELDER",
+    R    = "MIDFIELDER", RR   = "MIDFIELDER",
+    RK   = "RUCK",
+    HFFL = "MEDIUM_FORWARD", HFFR = "MEDIUM_FORWARD", CHF  = "MEDIUM_FORWARD",
+    FPL  = "KEY_FORWARD", FPR  = "KEY_FORWARD", FF   = "KEY_FORWARD",
+    INT  = NA_character_, SUB  = NA_character_, EMERG = NA_character_
+  )
+  lookup <- c(lookup, lineup_map)
   unname(lookup[pos])
 }
 
@@ -36,12 +49,19 @@
 #' Resolve position groups, filling NAs with each player's modal position
 #'
 #' @param dt A data.table with player_id and position columns.
+#' @param teams Optional teams/lineup data. Used as a final fallback for
+#'   players whose primary position source is always NA-mapping (e.g. a
+#'   player whose only PBP appearances were with \code{lineup_position = INT}).
+#'   Filtered to on-field roles before modal aggregation.
 #' @return The data.table with added `pos_group` column.
 #' @keywords internal
-.resolve_stat_rating_positions <- function(dt) {
-  # Prefer 'position_group' (6-way: KEY_DEFENDER, MIDFIELDER, MEDIUM_FORWARD, ...);
-  # fall back to legacy 'listed_position' then raw 'position' for older callers.
+.resolve_stat_rating_positions <- function(dt, teams = NULL) {
+  # Prefer position_group (PBP-derived 6-way playstyle) — reflects how a player
+  # actually plays, not just where they were named. lineup_position (20-way from
+  # teams API) is a secondary signal because a player's named role can diverge
+  # from their playstyle (e.g. a tall forward rotating through the pocket).
   pos_col <- if ("position_group" %in% names(dt)) "position_group"
+             else if ("lineup_position" %in% names(dt)) "lineup_position"
              else if ("listed_position" %in% names(dt)) "listed_position"
              else "position"
   dt[, pos_group := .map_position_group(get(pos_col))]
@@ -62,6 +82,25 @@
     }
   }
 
+  # Teams-based fallback: rescues players whose primary-column values all
+  # map to NA (e.g. dt.lineup_position is always INT). Uses teams data's
+  # on-field lineup_position modal.
+  if (!is.null(teams) && any(is.na(dt$pos_group))) {
+    teams_dt <- data.table::as.data.table(teams)
+    onfield <- teams_dt[!is.na(lineup_position) &
+                        !lineup_position %in% c("INT", "EMERG", "SUB")]
+    if (nrow(onfield) > 0) {
+      onfield[, lp_pos_group := .map_position_group(lineup_position)]
+      onfield <- onfield[!is.na(lp_pos_group)]
+      if (nrow(onfield) > 0) {
+        team_pos <- onfield[, .(team_pos_group = names(which.max(table(lp_pos_group)))),
+                            by = player_id]
+        dt[team_pos, on = "player_id",
+           pos_group := fifelse(is.na(pos_group), i.team_pos_group, pos_group)]
+      }
+    }
+  }
+
   dt
 }
 
@@ -79,6 +118,10 @@
 #' @param player_stats Player stats from \code{load_player_stats(TRUE)}.
 #' @param rosters Optional roster data. If NULL, loads from torpdata.
 #' @param fixtures Optional fixture data. If NULL, loads from torpdata.
+#' @param teams Optional teams/lineup data. Used as a final fallback for
+#'   \code{pos_group} assignment of rostered-but-never-played players whose
+#'   roster \code{position} doesn't map (e.g. fringe bench players with only
+#'   one FPL appearance).
 #'
 #' @return A data.table with one row per player-match containing:
 #'   identifiers (player_id, match_id, player_name, season, round, team),
@@ -88,7 +131,7 @@
 #' @importFrom data.table as.data.table
 #' @keywords internal
 .prepare_stat_rating_data <- function(player_game_data, player_stats, rosters = NULL,
-                               fixtures = NULL) {
+                               fixtures = NULL, teams = NULL) {
   pgd <- data.table::as.data.table(player_game_data)
   ps <- data.table::as.data.table(player_stats)
 
@@ -159,7 +202,7 @@
   }
 
   # Map positions to groups
-  pgd <- .resolve_stat_rating_positions(pgd)
+  pgd <- .resolve_stat_rating_positions(pgd, teams = teams)
 
   # Select essential columns + all stat source columns
   stat_defs <- stat_rating_definitions()
@@ -269,6 +312,7 @@
       player_pos[is.na(pos_group), pos_group := roster_pos_group]
       player_pos[, roster_pos_group := NULL]
     }
+
     zero_rows <- merge(zero_rows, player_pos, by = "player_id", all.x = TRUE)
 
     out <- data.table::rbindlist(list(out, zero_rows), fill = TRUE)

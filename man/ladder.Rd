@@ -2,8 +2,10 @@
 % Please edit documentation in R/ladder.R
 \name{ladder}
 \alias{ladder}
-\title{AFL Season Simulation System}
+\title{AFL Ladder Calculation}
 \description{
-Functions for simulating complete AFL seasons including regular season,
-ladder calculation with AFL tiebreak rules, and finals bracket simulation.
+Functions for constructing the AFL ladder from game results, applying
+standard tiebreak rules (ladder points, then percentage). Used as the
+input to finals simulation (R/finals_sim.R) and the season Monte Carlo
+(R/season_sim.R).
 }

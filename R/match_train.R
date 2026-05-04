@@ -117,6 +117,18 @@
 #' @return List with $models (named list of 5 GAMs) and $data (team_mdl_df with predictions)
 #' @keywords internal
 .train_match_gams <- function(team_mdl_df, train_filter = NULL, nthreads = 4L) {
+  # Smooth-term basis size convention used throughout this file:
+  #   bs = "ts" thin-plate splines: k = 5
+  #     ~5K-team-game training rows / ~16K when including upcoming fixtures,
+  #     and shrinkage smooths (`ts`) penalise unused dimensions to zero — so
+  #     k = 5 gives effective DF in the 2–4 range without overfitting.
+  #   ti(...) tensor interactions: k = 4 (per marginal)
+  #     k=4 caps the interaction grid at 16 basis functions before penalisation,
+  #     which is enough to capture monotone curvature in the joint EPR x xScore
+  #     surface without exploding rank.
+  # If you change either constant, change both the m{1..5}_base/optional blocks
+  # below AND the entries in optional_smooth_terms so the unique-value guard
+  # still matches.
   loadNamespace("mgcv")
 
   if (is.null(train_filter)) {
@@ -468,6 +480,16 @@
     "days_rest_diff_fac"
   )
 
+  # Weather enters Step 1 only, matching the GAM structure (Model 1 has
+  # weather smooths, Models 2-5 inherit the signal via gam_pred_tot_xscore).
+  # Downstream XGBoost steps likewise consume xgb_pred_tot_xscore.
+  weather_cols <- character(0)
+  weather_candidates <- c("log_wind", "log_precip", "temp_avg", "humidity_avg", "is_roof")
+  if (all(weather_candidates %in% names(team_mdl_df))) {
+    weather_cols <- weather_candidates
+  }
+  s1_cols <- c(base_cols, weather_cols)
+
   reg_params <- list(
     objective = "reg:squarederror", eval_metric = "rmse",
     tree_method = "hist", eta = 0.05, subsample = 0.7,
@@ -512,10 +534,10 @@
     predict(model, xgboost::xgb.DMatrix(data = mat))
   }
 
-  # Step 1: total xPoints
-  s1 <- train_step(xgb_df, xgb_df$total_xpoints_adj, xgb_df$weightz, base_cols, reg_params, "total_xpoints")
+  # Step 1: total xPoints (includes weather features)
+  s1 <- train_step(xgb_df, xgb_df$total_xpoints_adj, xgb_df$weightz, s1_cols, reg_params, "total_xpoints")
   xgb_df$xgb_pred_tot_xscore <- s1$preds
-  team_mdl_df$xgb_pred_tot_xscore <- predict_all(s1$model, team_mdl_df, base_cols)
+  team_mdl_df$xgb_pred_tot_xscore <- predict_all(s1$model, team_mdl_df, s1_cols)
 
   # Step 2: xScore diff
   s2_cols <- c(base_cols, "xgb_pred_tot_xscore")

@@ -208,8 +208,8 @@ test_that("calculate_epr works with pre-loaded data", {
 # -----------------------------------------------------------------------------
 
 test_that("calculate_epr_stats uses prior_games_spoil and prior_games_hitout constants", {
-  expect_equal(torp:::EPR_PRIOR_GAMES_SPOIL, 3.0000, tolerance = 0.01)
-  expect_equal(torp:::EPR_PRIOR_GAMES_HITOUT, 3.0000, tolerance = 0.01)
+  expect_identical(torp:::EPR_PRIOR_GAMES_SPOIL, 3.0000)
+  expect_identical(torp:::EPR_PRIOR_GAMES_HITOUT, 3.0000)
 })
 
 # -----------------------------------------------------------------------------

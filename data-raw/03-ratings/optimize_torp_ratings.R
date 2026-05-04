@@ -202,10 +202,10 @@ data.table::setorder(match_dt, date, match_id)
 # --- Lineups per team per match ---
 teams_dt <- data.table::as.data.table(teams_data)
 # Filter out EMERG/SUB
-teams_dt <- teams_dt[is.na(position) | !(position %in% c("EMERG", "SUB"))]
+teams_dt <- teams_dt[is.na(lineup_position) | !(lineup_position %in% c("EMERG", "SUB"))]
 
 lineups <- teams_dt[, .(player_ids = list(player_id),
-                       position_xs = list(position)),
+                       position_xs = list(lineup_position)),
                     by = .(match_id, teamId = team_id)]
 
 # --- Home ground / distance / familiarity ---
@@ -324,10 +324,9 @@ data.table::setkey(pgr, player_id, match_id)
 
 # Also get position info from teams_data for position-group means
 pos_dt <- data.table::as.data.table(teams_data)[
-  , .(player_id, match_id, position)
+  , .(player_id, match_id, lineup_position)
 ]
-pos_dt <- pos_dt[!is.na(position) & !(position %in% c("EMERG", "SUB"))]
-pos_dt[position == "MIDFIELDER_FORWARD", position := "MEDIUM_FORWARD"]
+pos_dt <- pos_dt[!is.na(lineup_position) & !(lineup_position %in% c("EMERG", "SUB"))]
 pgr <- merge(pgr, pos_dt, by = c("player_id", "match_id"), all.x = TRUE)
 
 tictoc::toc()
@@ -361,11 +360,11 @@ cat(sprintf("  Lineup expansion: %d player-match rows for %d matches\n",
 ## 2h. Pre-compute lineup-level role positions (for balance penalty) ----
 cat("  Pre-computing lineup positions for balance penalty...
 ")
-pgr_pos_lookup <- pgr[!is.na(position), .(player_id, date_num = as.numeric(date), position)]
+pgr_pos_lookup <- pgr[!is.na(lineup_position), .(player_id, date_num = as.numeric(date), lineup_position)]
 data.table::setkey(pgr_pos_lookup, player_id, date_num)
-lu_pos_joined <- pgr_pos_lookup[lineup_dt_all, .(position = x.position),
+lu_pos_joined <- pgr_pos_lookup[lineup_dt_all, .(lineup_position = x.lineup_position),
                                  on = .(player_id, date_num), roll = TRUE]
-lineup_dt_all[, role_position := lu_pos_joined$position]
+lineup_dt_all[, role_position := lu_pos_joined$lineup_position]
 rm(pgr_pos_lookup, lu_pos_joined)
 
 # Pre-compute position group indices for lineup rows (reused in all stages)
@@ -511,12 +510,12 @@ compute_credits <- function(pgr, params, verbose = FALSE) {
         mean(out$hitout_credits[idx], na.rm = TRUE)))
     }
   }
-  out[!is.na(position), `:=`(
+  out[!is.na(lineup_position), `:=`(
     recv_credits   = recv_credits   - mean(recv_credits, na.rm = TRUE),
     disp_credits   = disp_credits   - mean(disp_credits, na.rm = TRUE),
     spoil_credits  = spoil_credits  - mean(spoil_credits, na.rm = TRUE),
     hitout_credits = hitout_credits - mean(hitout_credits, na.rm = TRUE)
-  ), by = position]
+  ), by = lineup_position]
 
   return(out)
 }
@@ -1562,12 +1561,25 @@ for (nm in names(param_stat_map)) {
   best_par_raw[nm] <- best_par[nm] / stat_sds[param_stat_map[nm]]
 }
 
-## 9b. Write optimized params back to R/constants.R ----
-constants_path <- "R/constants.R"
-cat(sprintf("\nUpdating %s with optimized parameters...\n", constants_path))
+## 9b. Write optimized params back to R/constants_*.R ----
+# constants.R was split into themed files in 1.3.3 (constants_afl,
+# constants_ratings, constants_sim, constants_match, constants_data).
+# Scan all of them so this script doesn't have to know which file owns
+# which constant — robust against future re-organisation.
+constants_files <- list.files("R", pattern = "^constants(_[a-z]+)?\\.R$",
+                              full.names = TRUE)
+if (length(constants_files) == 0) {
+  stop("No R/constants*.R files found")
+}
+cat(sprintf("\nScanning %d constants file(s) for parameter updates...\n",
+            length(constants_files)))
 
-lines <- readLines(constants_path)
-n_updated <- 0
+# Read every file once
+file_lines <- lapply(constants_files, readLines)
+names(file_lines) <- constants_files
+file_dirty <- setNames(rep(FALSE, length(constants_files)), constants_files)
+n_updated <- 0L
+
 for (par_name in names(param_to_constant)) {
   const_name <- param_to_constant[par_name]
   new_val <- best_par_raw[par_name]
@@ -1576,32 +1588,42 @@ for (par_name in names(param_to_constant)) {
   if (is.na(new_val)) next
 
   # Format: integer-like values (decay_*) as integer, rest as 4-decimal
-  if (grepl("^decay_", par_name)) {
-    val_str <- sprintf("%.0f", new_val)
-  } else {
-    val_str <- sprintf("%.4f", new_val)
+  val_str <- if (grepl("^decay_", par_name)) sprintf("%.0f", new_val)
+             else sprintf("%.4f", new_val)
+
+  # Find which file holds this constant (must be exactly one)
+  pattern <- paste0("^(", const_name, "\\s*<-\\s*).*$")
+  hits <- vapply(file_lines, function(L) sum(grepl(pattern, L)), integer(1))
+  total_hits <- sum(hits)
+
+  if (total_hits == 0) {
+    warning(sprintf("No definition found for %s in any constants_*.R file", const_name))
+    next
+  }
+  if (total_hits > 1) {
+    warning(sprintf("Multiple definitions of %s across constants_*.R files (%d hits)",
+                    const_name, total_hits))
+    next
   }
 
-  # Match the line: CONSTANT_NAME <- <value>
-  pattern <- paste0("^(", const_name, "\\s*<-\\s*).*$")
-  match_idx <- grep(pattern, lines)
-
-  if (length(match_idx) == 1) {
-    old_line <- lines[match_idx]
-    new_line <- sub(pattern, paste0("\\1", val_str), old_line)
-    if (old_line != new_line) {
-      lines[match_idx] <- new_line
-      n_updated <- n_updated + 1
-      cat(sprintf("  %s: %s -> %s\n", const_name,
-                  sub(paste0(const_name, "\\s*<-\\s*"), "", old_line), val_str))
-    }
-  } else {
-    warning(sprintf("Could not find unique match for %s in %s", const_name, constants_path))
+  target_file <- names(hits)[hits == 1L]
+  L <- file_lines[[target_file]]
+  match_idx <- grep(pattern, L)
+  old_line <- L[match_idx]
+  new_line <- sub(pattern, paste0("\\1", val_str), old_line)
+  if (old_line != new_line) {
+    file_lines[[target_file]][match_idx] <- new_line
+    file_dirty[target_file] <- TRUE
+    n_updated <- n_updated + 1L
+    cat(sprintf("  %s [%s]: %s -> %s\n", const_name, basename(target_file),
+                sub(paste0(const_name, "\\s*<-\\s*"), "", old_line), val_str))
   }
 }
 
-writeLines(lines, constants_path)
-cat(sprintf("Updated %d constants in %s\n", n_updated, constants_path))
+# Write back only files that changed
+for (f in names(file_dirty)[file_dirty]) writeLines(file_lines[[f]], f)
+cat(sprintf("Updated %d constants across %d file(s)\n",
+            n_updated, sum(file_dirty)))
 
 ## 9c. Save params as CSV backup ----
 optimized_params_df <- data.frame(

@@ -16,3 +16,6 @@
 ^docs$
 ^pkgdown$
 ^\.positai$
+^\.wrangler$
+^ARCHITECTURE\.md$
+^scripts$

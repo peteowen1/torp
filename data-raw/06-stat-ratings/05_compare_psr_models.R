@@ -52,7 +52,7 @@ n_with_xg <- sum(!is.na(fixtures_margin$xscore_diff))
 cli::cli_inform("Matches with xscore_diff: {n_with_xg}/{nrow(fixtures_margin)}")
 
 # Filter teams
-teams <- teams[is.na(position) | (position != "EMERG" & position != "SUB")]
+teams <- teams[is.na(lineup_position) | (lineup_position != "EMERG" & lineup_position != "SUB")]
 teams[, round := as.integer(round_number)]
 teams[, player_id := as.character(player_id)]
 teams[, season := as.integer(season)]
@@ -279,7 +279,7 @@ team_psr_diff <- function(psr_dt, psr_col, test_match_ids) {
   psr_dt[, round := as.integer(round)]
 
   teams_dt <- as.data.table(load_teams(TRUE))
-  teams_dt <- teams_dt[is.na(position) | (position != "EMERG" & position != "SUB")]
+  teams_dt <- teams_dt[is.na(lineup_position) | (lineup_position != "EMERG" & lineup_position != "SUB")]
   teams_dt[, round := as.integer(round_number)]
   teams_dt[, player_id := as.character(player_id)]
   teams_dt[, season := as.integer(season)]

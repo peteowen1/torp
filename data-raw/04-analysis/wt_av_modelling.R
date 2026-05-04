@@ -113,7 +113,7 @@ wav_data <- function(df, fil_val, model_col, decay = 365) {
       date_numeric = as.numeric(aest_start),
       aest_hour = (hour(aest_start) * 60 + minute(aest_start)) / 60,
       aest_day = wday(aest_start, label = TRUE),
-      position = as.factor(substr(position, 1, 2)),
+      position = as.factor(substr(lineup_position, 1, 2)),
       home_away = as.factor(team_status),
       player_name = paste(given_name, surname)
     ) %>%

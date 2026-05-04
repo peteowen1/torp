@@ -1,13 +1,16 @@
-# EPR Ratings Pipeline
+# Ratings Pipeline
 #
-# End-to-end script for computing EPR ratings:
+# End-to-end script for computing all TORP ratings:
 #   Stage 1: Refresh upstream data (player_stats, teams) from AFL API
 #   Stage 2: Build player game data from PBP + player_stats + teams
 #   Stage 3: Compute EPR ratings per season/round and release
+#   Stage 4: Compute team ratings
+#   Stage 5: Player game & season ratings (EPV + PSV → torp_value)
+#   Stage 6: Compute & release PSR
 #
 # Usage:
-#   Rscript data-raw/03-ratings/run_epr_pipeline.R
-#   Or: source("data-raw/03-ratings/run_epr_pipeline.R")
+#   Rscript data-raw/03-ratings/run_ratings_pipeline.R
+#   Or: source("data-raw/03-ratings/run_ratings_pipeline.R")
 #
 # CI Usage (from GitHub Actions):
 #   Set config variables before sourcing:
@@ -456,6 +459,13 @@ for (s in seasons) {
       if (!"tog" %in% names(pstats_season) && "time_on_ground_percentage" %in% names(pstats_season)) {
         pstats_season[, tog := pmax(time_on_ground_percentage / 100, 0.1)]
       }
+      # Carry position_group from EPV so PSV can center by position
+      if (!"position_group" %in% names(pstats_season) && "position_group" %in% names(pgr)) {
+        pg_map <- unique(data.table::as.data.table(pgr)[, .(player_id, match_id, position_group)])
+        pstats_season <- merge(pstats_season, pg_map,
+                               by = intersect(c("player_id", "match_id"), names(pstats_season)),
+                               all.x = TRUE)
+      }
       # Apply per-game stat opponent adjustment before PSV
       pstats_season <- tryCatch({
         adjust_stats_for_opponents(pstats_season)
@@ -475,6 +485,7 @@ for (s in seasons) {
             "match_id" %in% names(psv_result)) {
           psv_slim <- psv_result[, c("player_id", "match_id", psv_cols), with = FALSE]
           pgr <- merge(pgr, psv_slim, by = c("player_id", "match_id"), all.x = TRUE)
+          # PSV is now game-level (calculate_psv centers then * tog, like EPV)
           cli::cli_inform("  Added PSV columns to game ratings ({sum(!is.na(pgr$psv))} matched)")
         }
       }

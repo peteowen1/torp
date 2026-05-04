@@ -79,6 +79,140 @@ build_team_mdl_df <- function(season = NULL, target_weeks = NULL,
 }
 
 
+# get_lineup_ratings ----
+
+#' Get player-level ratings for match lineups
+#'
+#' Returns individual player EPR, PSR, and TORP ratings for selected lineups,
+#' with TOG-weighting applied (same logic as match predictions).
+#'
+#' @param season Season year (default: current via get_afl_season())
+#' @param round Round number (default: next week via get_afl_week("next"))
+#' @param match_id Optional match ID to filter to a single match
+#' @return Tibble with one row per player, columns: season, round, match_id,
+#'   team_name, player_name, lineup_position, position_group, epr, recv_epr,
+#'   disp_epr, spoil_epr, hitout_epr, psr, torp (blended EPR+PSR)
+#' @export
+get_lineup_ratings <- function(season = NULL, round = NULL, match_id = NULL) {
+  # Allow positional match_id: get_lineup_ratings("CD_M20260140601")
+  if (!is.null(season) && is.character(season) && all(grepl("^CD_M", season))) {
+    match_id <- season
+    season <- NULL
+  }
+  if (!is.null(match_id) && any(!grepl("^CD_M\\d+$", match_id))) {
+    cli::cli_warn("match_id values should start with {.val CD_M} followed by digits (e.g. {.val CD_M20260140601})")
+  }
+  if (is.null(season)) season <- get_afl_season()
+  if (is.null(round) && is.null(match_id)) round <- get_afl_week("next")
+
+  # Filter teams early to avoid processing all seasons
+  if (!is.null(match_id)) {
+    # Extract season from match_id (e.g. CD_M20260140601 → 2026)
+    target_season <- as.integer(unique(substr(match_id, 5, 8)))
+    teams <- load_teams(target_season)
+  } else {
+    teams <- load_teams(season)
+  }
+  torp_df <- load_torp_ratings()
+
+  # Load PSR
+  psr_df <- tryCatch({
+    skills <- load_player_stat_ratings(TRUE)
+    .compute_psr_from_stat_ratings(skills)
+  }, error = function(e) {
+    cli::cli_warn("Failed to compute PSR: {conditionMessage(e)}")
+    NULL
+  })
+
+  torp_prior_total <- EPR_PRIOR_RATE_RECV + EPR_PRIOR_RATE_DISP +
+    EPR_PRIOR_RATE_SPOIL + EPR_PRIOR_RATE_HITOUT
+
+  # Drop PSR columns from torp_df to avoid collision
+  torp_df <- torp_df |> dplyr::select(-dplyr::any_of(c("psr", "osr", "dsr")))
+
+  lineup_df <- teams |>
+    dplyr::left_join(
+      torp_df,
+      by = c("player_id" = "player_id", "season" = "season", "round_number" = "round")
+    ) |>
+    dplyr::filter((lineup_position != "EMERG" & lineup_position != "SUB") | is.na(lineup_position))
+
+  # Impute missing EPR with priors
+  lineup_df <- lineup_df |>
+    dplyr::mutate(
+      epr = tidyr::replace_na(epr, torp_prior_total),
+      recv_epr = tidyr::replace_na(recv_epr, EPR_PRIOR_RATE_RECV),
+      disp_epr = tidyr::replace_na(disp_epr, EPR_PRIOR_RATE_DISP),
+      spoil_epr = tidyr::replace_na(spoil_epr, EPR_PRIOR_RATE_SPOIL),
+      hitout_epr = tidyr::replace_na(hitout_epr, EPR_PRIOR_RATE_HITOUT),
+      lineup_tog = tidyr::replace_na(POSITION_AVG_TOG[lineup_position], POSITION_AVG_TOG_DEFAULT),
+      epr = epr * lineup_tog,
+      recv_epr = recv_epr * lineup_tog,
+      disp_epr = disp_epr * lineup_tog,
+      spoil_epr = spoil_epr * lineup_tog,
+      hitout_epr = hitout_epr * lineup_tog
+    )
+
+  # Join PSR (latest per player)
+  if (!is.null(psr_df)) {
+    has_osr_dsr <- all(c("osr", "dsr") %in% names(psr_df))
+    latest_psr <- psr_df |>
+      dplyr::select(dplyr::any_of(c("player_id", "season", "round", "psr", "osr", "dsr"))) |>
+      dplyr::arrange(player_id, season, round) |>
+      dplyr::group_by(player_id) |>
+      dplyr::slice_tail(n = 1) |>
+      dplyr::ungroup() |>
+      dplyr::select(-season, -round)
+
+    lineup_df <- lineup_df |>
+      dplyr::left_join(latest_psr, by = "player_id") |>
+      dplyr::mutate(psr = tidyr::replace_na(psr, PSR_PRIOR_RATE) * lineup_tog)
+
+    if (has_osr_dsr) {
+      lineup_df <- lineup_df |>
+        dplyr::mutate(
+          osr = tidyr::replace_na(osr, PSR_PRIOR_RATE / 2) * lineup_tog,
+          dsr = tidyr::replace_na(dsr, PSR_PRIOR_RATE / 2) * lineup_tog
+        )
+    }
+  } else {
+    lineup_df$psr <- PSR_PRIOR_RATE * lineup_df$lineup_tog
+  }
+
+  # Compute blended TORP
+  lineup_df <- lineup_df |>
+    dplyr::mutate(
+      torp = TORP_EPR_WEIGHT * epr + (1 - TORP_EPR_WEIGHT) * psr,
+      player_name = paste(given_name, surname)
+    )
+
+  # Filter to requested season/round/match
+  if (!is.null(match_id)) {
+    lineup_df <- lineup_df |> dplyr::filter(match_id %in% .env$match_id)
+  } else {
+    lineup_df <- lineup_df |>
+      dplyr::filter(season == .env$season, round_number == .env$round)
+  }
+
+  if (nrow(lineup_df) == 0) {
+    cli::cli_warn("No lineup data found for the requested filters")
+    return(tibble::tibble())
+  }
+
+  select_cols <- c(
+    "season", "round_number", "match_id", "team_name", "player_name",
+    "lineup_position", "position_group", "lineup_tog",
+    "epr", "recv_epr", "disp_epr", "spoil_epr", "hitout_epr",
+    "psr", "torp"
+  )
+  if ("osr" %in% names(lineup_df)) select_cols <- c(select_cols, "osr", "dsr")
+
+  lineup_df |>
+    dplyr::select(dplyr::any_of(select_cols)) |>
+    dplyr::arrange(match_id, team_name, dplyr::desc(torp))
+}
+
+
 # run_predictions_pipeline ----
 
 #' Run weekly match predictions pipeline
@@ -690,6 +824,7 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
 
   invisible(list(
     predictions = all_preds,
+    locked_predictions = combined,
     gam_models = gam_result$models,
     xgb_models = if (!is.null(xgb_result)) xgb_result$models else NULL,
     model_data = team_mdl_df
@@ -832,6 +967,113 @@ show_predictions <- function(season = get_afl_season(),
   preds$start_time_utc <- NULL
   preds$is_complete <- NULL
   invisible(preds)
+}
+
+
+#' Add weather to a predictions tibble
+#'
+#' Joins historical or forecast weather onto an existing predictions tibble
+#' by `match_id`. Adds a compact `weather` summary string (e.g.
+#' `"18\u00B0C, wind 22kph, rain 2.4mm"`, or `"Indoor"` for roofed games),
+#' positioned after `venue`. Optionally also returns raw weather columns.
+#'
+#' For completed matches, weather comes from the Open-Meteo archive via the
+#' torpdata `weather-data` release. For upcoming matches, the Open-Meteo
+#' forecast API is queried per venue.
+#'
+#' @param preds Predictions tibble with `match_id`, `season`, `round` columns
+#'   (typically the `$predictions` slot of `run_predictions_pipeline()`, or
+#'   the output of `load_predictions()`).
+#' @param raw_cols If `TRUE`, also include raw `temp_avg`, `wind_avg`,
+#'   `precipitation_total`, `humidity_avg`, and `is_roof` columns.
+#' @return `preds` with a `weather` column (and optionally raw weather
+#'   columns) joined by `match_id`.
+#' @export
+#' @examples
+#' \dontrun{
+#' result <- run_predictions_pipeline()
+#' result$predictions |>
+#'   dplyr::filter(season == 2026, round == 6) |>
+#'   add_weather_to_preds() |>
+#'   print()
+#' }
+add_weather_to_preds <- function(preds, raw_cols = FALSE) {
+  required <- c("match_id", "season", "round")
+  missing_cols <- setdiff(required, names(preds))
+  if (length(missing_cols) > 0) {
+    cli::cli_abort("{.arg preds} is missing required column{?s}: {.field {missing_cols}}")
+  }
+  if (nrow(preds) == 0) return(preds)
+
+  fixtures <- load_fixtures(all = TRUE)
+  all_grounds <- file_reader("stadium_data", "reference-data")
+
+  seasons <- unique(preds$season)
+  weather_df <- dplyr::bind_rows(lapply(seasons, function(s) {
+    rounds_s <- unique(preds$round[preds$season == s])
+    .load_match_weather(
+      fixtures = fixtures, all_grounds = all_grounds,
+      target_weeks = rounds_s, season = s
+    )
+  }))
+
+  if (nrow(weather_df) == 0) {
+    cli::cli_warn("No weather data available -- adding all-NA {.field weather} column")
+    preds$weather <- NA_character_
+    return(preds)
+  }
+
+  weather_df$weather <- .format_weather_summary(
+    weather_df$temp_avg, weather_df$wind_avg,
+    weather_df$precipitation_total, weather_df$is_roof
+  )
+
+  keep <- c("match_id", "weather")
+  if (isTRUE(raw_cols)) {
+    keep <- c(keep, "temp_avg", "wind_avg", "precipitation_total",
+              "humidity_avg", "is_roof")
+  }
+
+  out <- preds |>
+    dplyr::left_join(weather_df[, intersect(keep, names(weather_df))], by = "match_id")
+
+  added <- setdiff(keep, "match_id")
+  if (length(added) > 0 && "venue" %in% names(out)) {
+    out <- dplyr::relocate(out, dplyr::any_of(added), .after = "venue")
+  }
+  out
+}
+
+
+#' Format weather values into a compact human-readable summary
+#'
+#' @param temp_avg Numeric vector of avg temperature (degrees C)
+#' @param wind_avg Numeric vector of avg wind speed (kph)
+#' @param precipitation_total Numeric vector of total precipitation (mm)
+#' @param is_roof Logical vector indicating roofed venues
+#' @return Character vector of weather summary strings
+#' @keywords internal
+.format_weather_summary <- function(temp_avg, wind_avg, precipitation_total, is_roof) {
+  n <- length(temp_avg)
+  out <- character(n)
+  for (i in seq_len(n)) {
+    if (!is.na(is_roof[i]) && isTRUE(is_roof[i])) {
+      out[i] <- "Indoor"
+      next
+    }
+    parts <- character(0)
+    if (!is.na(temp_avg[i])) {
+      parts <- c(parts, sprintf("%.0f\u00B0C", temp_avg[i]))
+    }
+    if (!is.na(wind_avg[i])) {
+      parts <- c(parts, sprintf("wind %.0fkph", wind_avg[i]))
+    }
+    if (!is.na(precipitation_total[i]) && precipitation_total[i] >= 0.1) {
+      parts <- c(parts, sprintf("rain %.1fmm", precipitation_total[i]))
+    }
+    out[i] <- if (length(parts) == 0) NA_character_ else paste(parts, collapse = ", ")
+  }
+  out
 }
 
 
