@@ -2,7 +2,9 @@
 
 ## Bug Fixes
 
-* **PSR forward-leakage in match prediction features** — `.build_team_ratings_df()` previously joined PSR via `slice_tail(n = 1)` per `player_id`, applying each player's *latest available* PSR to **every** historical lineup row. This leaked future skill information into past games used for GAM/XGB training. Replaced with `dplyr::join_by(closest(.lineup_key > psr_key))`, so each lineup row gets the most recent PSR strictly *before* its `(season, round_number)`. Production behaviour at prediction time is preserved (still picks the latest PSR available before the target week); only historical training rows shift. Discovered while comparing rolling-OOS evaluation metrics against actual Squiggle leaderboard rank.
+* **PSR forward-leakage in match prediction features** — `.build_team_ratings_df()` previously joined PSR via `slice_tail(n = 1)` per `player_id`, applying each player's *latest available* PSR to **every** historical lineup row. This leaked future skill information into past games used for GAM/XGB training. Replaced with `dplyr::join_by(closest(.lineup_key >= psr_key))`, so each lineup row gets the most recent PSR with `(season, round) <= (lineup season, round_number)`. PSR(s, r) is itself computed using `match_date_rating < first_utc_start_time(round_r)`, so it's snapshot-as-of-start-of-round-r and safe to use when predicting round r. Production prediction behaviour is preserved (predicting round R picks PSR(s, R) when present, falling back to PSR(s, R-1) otherwise — identical to the prior `slice_tail(n=1)` latest-PSR behaviour for unscheduled rounds); only historical training rows shift. Discovered while comparing rolling-OOS evaluation metrics against actual Squiggle leaderboard rank.
+
+  Also adds defensive guards on the join: aborts on NA `season`/`round_number` instead of silently falling back to `PSR_PRIOR_RATE`, dedups duplicate `(player_id, season, round)` PSR rows with a warning (otherwise `closest()` with default `multiple = "all"` would duplicate lineup rows and silently inflate team aggregates), and emits coverage telemetry mirroring the existing EPR diagnostic block (`cli_inform` on missing-PSR rate, `cli_warn` >25%, `cli_abort` >50%).
 
 * **`torp_replace_teams()` scrambled factor inputs** — `AFL_TEAM_ALIASES[factor_var]` indexes by the factor's underlying integer level codes, not by label, so factor inputs got silently mapped to whichever names happened to occupy the early alias slots. Function now coerces `as.character(team)` before lookup. Affected any caller passing a factor — most commonly downstream consumers of `load_predictions()`, which was the only loader returning factor team columns.
 
@@ -12,7 +14,7 @@
 
 ## Tests
 
-* New `test-match-data-prep.R` — five regression tests pinning the PSR rolling-join semantics: round 0 has no prior PSR (falls back to `PSR_PRIOR_RATE`); round-N lineups pick PSR from round N−1 (no forward leakage); future-round prediction picks the latest available prior PSR; works without `osr`/`dsr` columns; works when `psr_df = NULL`.
+* New `test-match-data-prep.R` — eight regression tests pinning the PSR rolling-join semantics: round 0 picks PSR(s, 0) when present (same-round non-strict match); round N lineups pick PSR(s, N) and not the global tail; future-round prediction picks the latest available prior PSR; missing PSR for a player falls back to `PSR_PRIOR_RATE`; duplicate `(player, season, round)` rows are deduped with a warning; NA in `season`/`round_number` aborts; works without `osr`/`dsr` columns; works when `psr_df = NULL`.
 
 * `test-team-names.R` — added factor-handling regression tests for `torp_replace_teams()`, `torp_team_abbr()`, `torp_team_full()`, and `.normalise_team_values()` covering the integer-level-code coercion bug.
 

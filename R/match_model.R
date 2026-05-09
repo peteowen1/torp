@@ -265,6 +265,11 @@ get_lineup_ratings <- function(season = NULL, round = NULL, match_id = NULL) {
     dplyr::mutate(
       epr_diff = home_epr - away_epr,
       psr_diff = home_psr - away_psr,
+      # team_name.x / team_name.y are factors (set in .build_team_mdl_df for
+      # GAM categorical predictors). Coerce here so the predictions parquet
+      # stores character columns -- factor home_team / away_team round-trip
+      # through arrow and break torp_replace_teams() lookups in any caller
+      # that doesn't go through .normalise_team_values(). Do NOT remove.
       home_team = as.character(home_team),
       away_team = as.character(away_team)
     ) |>
