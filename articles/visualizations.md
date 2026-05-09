@@ -10,6 +10,7 @@ colouring. Since they return standard ggplot objects, you can further
 customize with `+`.
 
 ``` r
+
 library(torp)
 ```
 
@@ -21,6 +22,7 @@ unfolded play-by-play.
 ### Win Probability
 
 ``` r
+
 # Win probability chart for a specific match
 plot_ep_wp(2025, round = 1, match_id = "CD_M20250140101")
 
@@ -31,6 +33,7 @@ plot_ep_wp(2025, round = 1)
 ### Expected Points
 
 ``` r
+
 plot_ep_wp(2025, round = 1, match_id = "CD_M20250140101", metric = "ep")
 ```
 
@@ -40,6 +43,7 @@ Compare all 18 teams by their EPR rating (or component: recv, disp,
 spoil, hitout).
 
 ``` r
+
 # Overall team EPR
 plot_team_ratings()
 
@@ -53,6 +57,7 @@ Visualize shot locations on a half-field layout with expected goal
 probability as colour.
 
 ``` r
+
 # All shots in a round
 plot_shot_map(2025, round = 1)
 
@@ -68,6 +73,7 @@ miss) when `show_outcome = TRUE` (the default).
 Track a player’s per-game TORP value over time with a rolling average.
 
 ``` r
+
 # Default: torp_value with 5-game rolling average
 plot_player_rating("Nick Daicos")
 
@@ -80,6 +86,7 @@ plot_player_rating("Nick Daicos", metric = "epv", rolling = 10)
 Overlay 2-5 players on a single chart to compare form.
 
 ``` r
+
 plot_player_comparison(
   c("Nick Daicos", "Marcus Bontempelli", "Lachie Neale"),
   rolling = 10
@@ -99,6 +106,7 @@ for details on how stat ratings are computed.
 ### Bar Chart (default)
 
 ``` r
+
 profile <- player_stat_rating_profile("Nick Daicos")
 plot_stat_rating_profile(profile)
 
@@ -109,6 +117,7 @@ plot_stat_rating_profile(profile, categories = c("disposal", "scoring"))
 ### Radar Chart
 
 ``` r
+
 plot_stat_rating_profile(profile, type = "radar")
 ```
 
@@ -120,6 +129,7 @@ Visualize the output of
 ### Ladder Probabilities
 
 ``` r
+
 sim <- simulate_afl_season(n_sims = 1000)
 plot_simulation(sim, type = "ladder")
 ```
@@ -127,12 +137,14 @@ plot_simulation(sim, type = "ladder")
 ### Position Heatmap
 
 ``` r
+
 plot_simulation(sim, type = "position")
 ```
 
 ### Finals Probabilities
 
 ``` r
+
 plot_simulation(sim, type = "finals")
 ```
 
@@ -141,6 +153,7 @@ plot_simulation(sim, type = "finals")
 All functions return ggplot2 objects, so you can customize further:
 
 ``` r
+
 plot_team_ratings() +
   ggplot2::labs(caption = "Data: torp package") +
   ggplot2::theme(plot.title = ggplot2::element_text(size = 16))
@@ -151,6 +164,7 @@ plot_team_ratings() +
 Use the built-in colour constants and scales in your own plots:
 
 ``` r
+
 # Named vectors
 AFL_TEAM_COLORS["Adelaide Crows"]   # "#002B5C"
 AFL_TEAM_COLORS2["Adelaide Crows"]  # "#E21937" (secondary)

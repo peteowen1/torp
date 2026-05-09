@@ -32,6 +32,7 @@ The easiest way to use stat ratings is to load pre-computed values from
 torpdata:
 
 ``` r
+
 library(torp)
 
 # All stat ratings (one row per player-round)
@@ -47,6 +48,7 @@ View a player’s stat rating profile with within-position percentile
 ranks:
 
 ``` r
+
 # Stat rating profile with percentiles (partial name match)
 profile <- player_stat_rating_profile("Heeney")
 print(profile)
@@ -69,6 +71,7 @@ returns a list with:
 Aggregate stat ratings to the team level:
 
 ``` r
+
 # Team stat rating profile
 team <- team_stat_rating_profile("Sydney")
 print(team)
@@ -91,11 +94,11 @@ more weight on recent games.
 
 ### PSR, OSR, DSR
 
-| Rating  | Full Name              | What it measures                                                |
-|---------|------------------------|-----------------------------------------------------------------|
-| **PSR** | Player Skill Rating    | Total predicted margin contribution (points/game above average) |
-| **OSR** | Offensive Skill Rating | PSR from attacking stats only                                   |
-| **DSR** | Defensive Skill Rating | PSR from defensive stats only                                   |
+| Rating | Full Name | What it measures |
+|----|----|----|
+| **PSR** | Player Skill Rating | Total predicted margin contribution (points/game above average) |
+| **OSR** | Offensive Skill Rating | PSR from attacking stats only |
+| **DSR** | Defensive Skill Rating | PSR from defensive stats only |
 
 PSR is centered so that the league-average player scores 0. A PSR of
 +3.5 means the model predicts this player’s stat profile adds 3.5 points
@@ -114,6 +117,7 @@ per game compared to an average player.
 If you need custom parameters or a specific reference date:
 
 ``` r
+
 # Load raw player stats
 stats <- load_player_stats(TRUE)
 
@@ -156,18 +160,18 @@ lose influence.
 
 The 48 rate stats span these categories:
 
-| Category   | Example Stats                                                           |
-|------------|-------------------------------------------------------------------------|
-| Scoring    | goals, behinds, shots_at_goal, score_involvements, goal_assists         |
-| Disposal   | kicks, handballs, disposals, effective_kicks, effective_disposals       |
-| Possession | marks, contested_possessions, uncontested_possessions                   |
-| Contested  | contested_marks, ground_ball_gets                                       |
-| Clearances | clearances, centre_clearances, stoppage_clearances                      |
-| Inside 50  | inside50s, marks_inside50, rebound50s, metres_gained                    |
-| Defensive  | tackles, spoils, intercepts, one_percenters                             |
-| Pressure   | pressure_acts, def_half_pressure_acts, tackles_inside50                 |
-| Ruck       | hitouts, hitouts_to_advantage, centre_bounce_attendances, ruck_contests |
-| Contests   | contest_def_one_on_ones, contest_off_one_on_ones                        |
+| Category | Example Stats |
+|----|----|
+| Scoring | goals, behinds, shots_at_goal, score_involvements, goal_assists |
+| Disposal | kicks, handballs, disposals, effective_kicks, effective_disposals |
+| Possession | marks, contested_possessions, uncontested_possessions |
+| Contested | contested_marks, ground_ball_gets |
+| Clearances | clearances, centre_clearances, stoppage_clearances |
+| Inside 50 | inside50s, marks_inside50, rebound50s, metres_gained |
+| Defensive | tackles, spoils, intercepts, one_percenters |
+| Pressure | pressure_acts, def_half_pressure_acts, tackles_inside50 |
+| Ruck | hitouts, hitouts_to_advantage, centre_bounce_attendances, ruck_contests |
+| Contests | contest_def_one_on_ones, contest_off_one_on_ones |
 
 The 6 efficiency stats are: kick %, handball %, disposal %, contested
 possession %, mark %, hitout-to-advantage %.

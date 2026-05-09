@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">torp</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.3.3</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.3.4</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -36,6 +36,29 @@
       <small>Source: <a href="https://github.com/peteowen1/torp/blob/main/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="1.3.4" id="torp-134-2026-05-09">torp 1.3.4 (2026-05-09)<a class="anchor" aria-label="anchor" href="#torp-134-2026-05-09"></a></h2>
+<div class="section level3">
+<h3 id="bug-fixes-1-3-4">Bug Fixes<a class="anchor" aria-label="anchor" href="#bug-fixes-1-3-4"></a></h3>
+<ul><li>
+<p><strong>PSR forward-leakage in match prediction features</strong> — <code><a href="../reference/dot-build_team_ratings_df.html">.build_team_ratings_df()</a></code> previously joined PSR via <code>slice_tail(n = 1)</code> per <code>player_id</code>, applying each player’s <em>latest available</em> PSR to <strong>every</strong> historical lineup row. This leaked future skill information into past games used for GAM/XGB training. Replaced with <code>dplyr::join_by(closest(.lineup_key &gt;= psr_key))</code>, so each lineup row gets the most recent PSR with <code>(season, round) &lt;= (lineup season, round_number)</code>. PSR(s, r) is itself computed using <code>match_date_rating &lt; first_utc_start_time(round_r)</code>, so it’s snapshot-as-of-start-of-round-r and safe to use when predicting round r. Production prediction behaviour is preserved (predicting round R picks PSR(s, R) when present, falling back to PSR(s, R-1) otherwise — identical to the prior <code>slice_tail(n=1)</code> latest-PSR behaviour for unscheduled rounds); only historical training rows shift. Discovered while comparing rolling-OOS evaluation metrics against actual Squiggle leaderboard rank.</p>
+<p>Also adds defensive guards on the join: aborts on NA <code>season</code>/<code>round_number</code> instead of silently falling back to <code>PSR_PRIOR_RATE</code>, dedups duplicate <code>(player_id, season, round)</code> PSR rows with a warning (otherwise <code>closest()</code> with default <code>multiple = "all"</code> would duplicate lineup rows and silently inflate team aggregates), and emits coverage telemetry mirroring the existing EPR diagnostic block (<code>cli_inform</code> on missing-PSR rate, <code>cli_warn</code> &gt;25%, <code>cli_abort</code> &gt;50%).</p>
+</li>
+<li><p><strong><code><a href="../reference/torp_replace_teams.html">torp_replace_teams()</a></code> scrambled factor inputs</strong> — <code>AFL_TEAM_ALIASES[factor_var]</code> indexes by the factor’s underlying integer level codes, not by label, so factor inputs got silently mapped to whichever names happened to occupy the early alias slots. Function now coerces <code>as.character(team)</code> before lookup. Affected any caller passing a factor — most commonly downstream consumers of <code><a href="../reference/load_predictions.html">load_predictions()</a></code>, which was the only loader returning factor team columns.</p></li>
+<li><p><strong><code><a href="../reference/dot-normalise_team_values.html">.normalise_team_values()</a></code> silently skipped factor columns</strong> — the <code>is.character(vals)</code> guard prevented factor columns from being normalised at all (they passed through un-mapped). Now also handles <code>is.factor(vals)</code> and emits character output, aligning <code><a href="../reference/load_predictions.html">load_predictions()</a></code> schema with every other loader.</p></li>
+<li><p><strong>Predictions parquet stored factor <code>home_team</code> / <code>away_team</code></strong> — <code>team_name.x = as.factor(...)</code> in <code><a href="../reference/dot-build_team_mdl_df.html">.build_team_mdl_df()</a></code> (needed for GAM categorical predictors) propagated through <code><a href="../reference/dot-format_match_preds.html">.format_match_preds()</a></code>’s <code>home_team = team_name.x</code> assignment, so factor types round-tripped through every parquet write/read cycle. Added explicit <code><a href="https://rdrr.io/r/base/character.html" class="external-link">as.character()</a></code> coercion in the formatter so future writes store character columns.</p></li>
+</ul></div>
+<div class="section level3">
+<h3 id="tests-1-3-4">Tests<a class="anchor" aria-label="anchor" href="#tests-1-3-4"></a></h3>
+<ul><li><p>New <code>test-match-data-prep.R</code> — eight regression tests pinning the PSR rolling-join semantics: round 0 picks PSR(s, 0) when present (same-round non-strict match); round N lineups pick PSR(s, N) and not the global tail; future-round prediction picks the latest available prior PSR; missing PSR for a player falls back to <code>PSR_PRIOR_RATE</code>; duplicate <code>(player, season, round)</code> rows are deduped with a warning; NA in <code>season</code>/<code>round_number</code> aborts; works without <code>osr</code>/<code>dsr</code> columns; works when <code>psr_df = NULL</code>.</p></li>
+<li><p><code>test-team-names.R</code> — added factor-handling regression tests for <code><a href="../reference/torp_replace_teams.html">torp_replace_teams()</a></code>, <code><a href="../reference/torp_team_abbr.html">torp_team_abbr()</a></code>, <code><a href="../reference/torp_team_full.html">torp_team_full()</a></code>, and <code><a href="../reference/dot-normalise_team_values.html">.normalise_team_values()</a></code> covering the integer-level-code coercion bug.</p></li>
+</ul></div>
+<div class="section level3">
+<h3 id="internal-1-3-4">Internal<a class="anchor" aria-label="anchor" href="#internal-1-3-4"></a></h3>
+<ul><li>
+<code>R/globals.R</code> — declared <code>.lineup_key</code>, <code>psr_key</code>, and the <code>closest</code> <code>join_by()</code> token to silence the new R CMD check globals NOTE.</li>
+</ul></div>
+</div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="1.3.3" id="torp-133-2026-04-26">torp 1.3.3 (2026-04-26)<a class="anchor" aria-label="anchor" href="#torp-133-2026-04-26"></a></h2>
 <div class="section level3">

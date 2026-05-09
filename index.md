@@ -7,6 +7,7 @@ and easy access to processed AFL data.
 ## Installation
 
 ``` r
+
 # install.packages("devtools")
 devtools::install_github("peteowen1/torp")
 
@@ -23,6 +24,7 @@ All data is stored as parquet files on
 loaded on demand.
 
 ``` r
+
 library(torp)
 
 # Play-by-play data
@@ -47,6 +49,7 @@ glmnet). Per-game equivalents **EPV** and **PSV** measure single-game
 contribution.
 
 ``` r
+
 # Career TORP ratings (EPR + PSR blend)
 ratings <- torp_ratings()
 
@@ -66,6 +69,7 @@ Three core models add expected points, win probability, and shot outcome
 predictions to play-by-play data.
 
 ``` r
+
 pbp <- load_pbp(2025, rounds = 1:5)
 pbp_clean <- clean_pbp(pbp)
 
@@ -77,17 +81,18 @@ pbp_wp <- add_wp_vars(pbp_ep)         # Win probability
 ### Season Simulation
 
 ``` r
+
 # Simulate remaining matches based on TORP ratings
 sim_result <- simulate_season(sim_teams, sim_games)
 ```
 
 ## Package Ecosystem
 
-| Package                                                   | Role                                             | Links                                             |
-|-----------------------------------------------------------|--------------------------------------------------|---------------------------------------------------|
-| **torp**                                                  | Core analytics, data loading, ratings, models    | [GitHub](https://github.com/peteowen1/torp)       |
-| **[torpdata](https://github.com/peteowen1/torpdata)**     | Processed AFL data via GitHub releases (parquet) | [GitHub](https://github.com/peteowen1/torpdata)   |
-| **[torpmodels](https://github.com/peteowen1/torpmodels)** | Pre-trained models via GitHub releases (RDS)     | [GitHub](https://github.com/peteowen1/torpmodels) |
+| Package | Role | Links |
+|----|----|----|
+| **torp** | Core analytics, data loading, ratings, models | [GitHub](https://github.com/peteowen1/torp) |
+| **[torpdata](https://github.com/peteowen1/torpdata)** | Processed AFL data via GitHub releases (parquet) | [GitHub](https://github.com/peteowen1/torpdata) |
+| **[torpmodels](https://github.com/peteowen1/torpmodels)** | Pre-trained models via GitHub releases (RDS) | [GitHub](https://github.com/peteowen1/torpmodels) |
 
 Data flows from the AFL API (via torp’s `get_afl_*()` functions) through
 torp’s cleaning pipeline into torpdata, with models stored in

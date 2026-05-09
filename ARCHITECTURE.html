@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="index.html">torp</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.3.3</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.3.4</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -117,46 +117,46 @@
 <p><strong>Purpose</strong>: Download parquet files from torpdata GitHub Releases and AFL API data, with three-layer caching for performance.</p>
 <p><strong>Key Files</strong>: <code>R/load_data.R</code>, <code>R/load_engines.R</code>, <code>R/load_utils.R</code>, <code>R/cache.R</code>, <code>R/disk_cache.R</code>, <code>R/local_data.R</code></p>
 <p><strong>Load Functions</strong> (all return tibbles):</p>
-<table class="table"><colgroup><col width="33%"><col width="26%"><col width="40%"></colgroup><thead><tr class="header"><th>Function</th>
+<table class="table"><colgroup><col width="33%"><col width="26%"><col width="40%"></colgroup><thead><tr><th>Function</th>
 <th>Source</th>
 <th>Parameters</th>
-</tr></thead><tbody><tr class="odd"><td><code><a href="reference/load_pbp.html">load_pbp()</a></code></td>
+</tr></thead><tbody><tr><td><code><a href="reference/load_pbp.html">load_pbp()</a></code></td>
 <td>Parquet</td>
 <td><code>seasons, rounds, use_disk_cache, columns</code></td>
-</tr><tr class="even"><td><code><a href="reference/load_chains.html">load_chains()</a></code></td>
+</tr><tr><td><code><a href="reference/load_chains.html">load_chains()</a></code></td>
 <td>Parquet</td>
 <td><code>seasons, rounds, use_disk_cache, columns</code></td>
-</tr><tr class="odd"><td><code><a href="reference/load_player_game_data.html">load_player_game_data()</a></code></td>
+</tr><tr><td><code><a href="reference/load_player_game_data.html">load_player_game_data()</a></code></td>
 <td>Parquet</td>
 <td><code>seasons, use_disk_cache, columns</code></td>
-</tr><tr class="even"><td><code><a href="reference/load_player_stats.html">load_player_stats()</a></code></td>
+</tr><tr><td><code><a href="reference/load_player_stats.html">load_player_stats()</a></code></td>
 <td>API</td>
 <td><code>seasons, use_disk_cache, refresh, columns</code></td>
-</tr><tr class="odd"><td><code><a href="reference/load_fixtures.html">load_fixtures()</a></code></td>
+</tr><tr><td><code><a href="reference/load_fixtures.html">load_fixtures()</a></code></td>
 <td>API</td>
 <td><code>seasons, all, use_disk_cache, columns, use_cache</code></td>
-</tr><tr class="even"><td><code><a href="reference/load_teams.html">load_teams()</a></code></td>
+</tr><tr><td><code><a href="reference/load_teams.html">load_teams()</a></code></td>
 <td>API</td>
 <td><code>seasons, use_disk_cache, refresh, columns</code></td>
-</tr><tr class="odd"><td><code><a href="reference/load_results.html">load_results()</a></code></td>
+</tr><tr><td><code><a href="reference/load_results.html">load_results()</a></code></td>
 <td>Parquet</td>
 <td><code>seasons, use_disk_cache, columns</code></td>
-</tr><tr class="even"><td><code><a href="reference/load_player_details.html">load_player_details()</a></code></td>
+</tr><tr><td><code><a href="reference/load_player_details.html">load_player_details()</a></code></td>
 <td>API</td>
 <td><code>seasons, use_disk_cache, refresh, columns</code></td>
-</tr><tr class="odd"><td><code><a href="reference/load_torp_ratings.html">load_torp_ratings()</a></code></td>
+</tr><tr><td><code><a href="reference/load_torp_ratings.html">load_torp_ratings()</a></code></td>
 <td>Parquet</td>
 <td><code>columns</code></td>
-</tr><tr class="even"><td><code><a href="reference/load_team_ratings.html">load_team_ratings()</a></code></td>
+</tr><tr><td><code><a href="reference/load_team_ratings.html">load_team_ratings()</a></code></td>
 <td>Parquet</td>
 <td><code>columns</code></td>
-</tr><tr class="odd"><td><code><a href="reference/load_player_season_ratings.html">load_player_season_ratings()</a></code></td>
+</tr><tr><td><code><a href="reference/load_player_season_ratings.html">load_player_season_ratings()</a></code></td>
 <td>Parquet</td>
 <td><code>seasons, use_disk_cache, columns</code></td>
-</tr><tr class="even"><td><code><a href="reference/load_xg.html">load_xg()</a></code></td>
+</tr><tr><td><code><a href="reference/load_xg.html">load_xg()</a></code></td>
 <td>Parquet</td>
 <td><code>seasons, rounds, use_disk_cache, columns</code></td>
-</tr><tr class="odd"><td><code><a href="reference/load_ep_wp_charts.html">load_ep_wp_charts()</a></code></td>
+</tr><tr><td><code><a href="reference/load_ep_wp_charts.html">load_ep_wp_charts()</a></code></td>
 <td>Parquet</td>
 <td><code>seasons, rounds, use_disk_cache, columns</code></td>
 </tr></tbody></table><p><strong>Cache Resolution Order</strong>:</p>
@@ -168,19 +168,19 @@
     DISK --&gt;|"miss"| DOWNLOAD["Download from&lt;br/&gt;GitHub Release"]
     DOWNLOAD --&gt; SAVE["Save to cache"]
     SAVE --&gt; RETURN</code></pre>
-<table class="table"><colgroup><col width="24%"><col width="34%"><col width="24%"><col width="17%"></colgroup><thead><tr class="header"><th>Layer</th>
+<table class="table"><colgroup><col width="24%"><col width="34%"><col width="24%"><col width="17%"></colgroup><thead><tr><th>Layer</th>
 <th>Location</th>
 <th>Scope</th>
 <th>TTL</th>
-</tr></thead><tbody><tr class="odd"><td>Local storage</td>
+</tr></thead><tbody><tr><td>Local storage</td>
 <td><code>torpdata/data/</code></td>
 <td>Workspace</td>
 <td>Never expires (historical); 1 day (current season)</td>
-</tr><tr class="even"><td>Disk cache</td>
+</tr><tr><td>Disk cache</td>
 <td><code>~/.torp/cache/</code></td>
 <td>Machine</td>
 <td>7 days (URL-hashed parquet files)</td>
-</tr><tr class="odd"><td>In-memory cache</td>
+</tr><tr><td>In-memory cache</td>
 <td>
 <code>.torp_cache</code> env</td>
 <td>Session</td>
@@ -196,31 +196,31 @@
 <p>The AFL API delivers <code>x,y</code> in a <strong>possession-team-relative</strong> frame: positive x = towards that team’s attacking goal, ranging ±80m (half venue_length). <code>y</code> ranges ±70m (half venue_width). Since teams face opposite directions, the same physical spot has opposite signs for home vs away.</p>
 <p><code><a href="reference/fix_chain_coordinates_dt.html">fix_chain_coordinates_dt()</a></code> converts to <strong>pitch-relative</strong> (<code>x_pitch</code>, <code>y_pitch</code>) – a fixed home-team frame where the same physical location always has the same coordinates regardless of possession. This makes consecutive rows spatially comparable for EP/WP modeling.</p>
 <p>The AFL API frequently delivers coordinates in the <strong>wrong team’s frame</strong> at possession changes (~12% of non-throw-in rows), producing sign-flipped x,y values. The fix pipeline in <code>clean_pbp.R</code> corrects this in 8 steps:</p>
-<table class="table"><colgroup><col width="21%"><col width="17%"><col width="60%"></colgroup><thead><tr class="header"><th>Step</th>
+<table class="table"><colgroup><col width="21%"><col width="17%"><col width="60%"></colgroup><thead><tr><th>Step</th>
 <th>Fix</th>
 <th>What it catches</th>
-</tr></thead><tbody><tr class="odd"><td>A</td>
+</tr></thead><tbody><tr><td>A</td>
 <td>Convert to pitch-relative (<code>as.double</code>)</td>
 <td>Frame alignment + avoids integer truncation</td>
-</tr><tr class="even"><td>B</td>
+</tr><tr><td>B</td>
 <td>Throw-in fix (2 passes)</td>
 <td>Centre Bounce, OOB, Ball Up rows → use next row’s position</td>
-</tr><tr class="odd"><td>C</td>
+</tr><tr><td>C</td>
 <td>Iterative sign-flip (<code>COORD_FLIP_TOLERANCE</code>)</td>
 <td>Single and cascading wrong-frame rows. Flips when jump &gt;100m but negating puts within 70m of predecessor</td>
-</tr><tr class="even"><td>D</td>
+</tr><tr><td>D</td>
 <td>Both-neighbor sign-flip (60m tolerance)</td>
 <td>Longer-distance sign-flips confirmed by both neighbors</td>
-</tr><tr class="odd"><td>E</td>
+</tr><tr><td>E</td>
 <td>Neighbor interpolation</td>
 <td>Remaining outliers far from both neighbors</td>
-</tr><tr class="even"><td>F</td>
+</tr><tr><td>F</td>
 <td>Paired sign-flip</td>
 <td>Two consecutive wrong rows (e.g. Spoil + Kickin)</td>
-</tr><tr class="odd"><td>G</td>
+</tr><tr><td>G</td>
 <td>Convert back to team-relative</td>
 <td>Restores <code>x,y</code> to possession-team frame</td>
-</tr><tr class="even"><td>H</td>
+</tr><tr><td>H</td>
 <td>Recalculate <code>goal_x</code>
 </td>
 <td><code>venue_length / 2 - x</code></td>
@@ -235,19 +235,19 @@
 <p><strong>Key Files</strong>: <code>R/player_credit.R</code>, <code>R/constants_ratings.R</code></p>
 <p><strong>Entry Point</strong>: <code>create_player_game_data(pbp_data, player_stats, teams, decay, epv_params)</code></p>
 <p><strong>Four-Component Credit System</strong>:</p>
-<table class="table"><colgroup><col width="15%"><col width="59%"><col width="25%"></colgroup><thead><tr class="header"><th>Component</th>
+<table class="table"><colgroup><col width="15%"><col width="59%"><col width="25%"></colgroup><thead><tr><th>Component</th>
 <th>Key Weights (from <code><a href="reference/default_epv_params.html">default_epv_params()</a></code>)</th>
 <th>What It Measures</th>
-</tr></thead><tbody><tr class="odd"><td>Disposal EPV</td>
+</tr></thead><tbody><tr><td>Disposal EPV</td>
 <td>Goals (0.44), Behinds (1.08), Inside 50s (0.25), Score involvements (0.31), Clangers (-0.005), Turnovers (-0.11)</td>
 <td>Value created by kicking/handballing</td>
-</tr><tr class="even"><td>Reception EPV</td>
+</tr><tr><td>Reception EPV</td>
 <td>Marks inside 50 (0.40), Ground ball gets (0.22), Contested marks (0.07), Frees for (0.18)</td>
 <td>Value created by receiving the ball</td>
-</tr><tr class="odd"><td>Spoil EPV</td>
+</tr><tr><td>Spoil EPV</td>
 <td>Tackles (0.31), One-percenters (0.16), Spoils (0.083), Intercepts (0.065), Rebound 50s (-0.19)</td>
 <td>Defensive value</td>
-</tr><tr class="even"><td>Hitout EPV</td>
+</tr><tr><td>Hitout EPV</td>
 <td>Hitouts to advantage (0.17), Clearances (0.11), Hitouts (0.052), Ruck contests (0.023)</td>
 <td>Ruck value</td>
 </tr></tbody></table><p><strong>Bayesian Shrinkage</strong>: Each component uses the formula:</p>
@@ -263,19 +263,19 @@
 <h4 id="epr-expected-points-rating">EPR (Expected Points Rating)<a class="anchor" aria-label="anchor" href="#epr-expected-points-rating"></a></h4>
 <p><strong>Function</strong>: <code>calculate_epr(season_val, round_val, decay_*, prior_*, skills, ...)</code></p>
 <p><strong>Algorithm</strong>: 1. Load all player game data up to the reference date 2. Apply exponential decay weighting per component (different half-lives reflect how quickly each skill changes):</p>
-<table class="table"><thead><tr class="header"><th>Component</th>
+<table class="table"><thead><tr><th>Component</th>
 <th>Decay (days)</th>
 <th>Approx Half-Life</th>
-</tr></thead><tbody><tr class="odd"><td>Reception</td>
+</tr></thead><tbody><tr><td>Reception</td>
 <td>282</td>
 <td>~392 days</td>
-</tr><tr class="even"><td>Hitout</td>
+</tr><tr><td>Hitout</td>
 <td>456</td>
 <td>~633 days</td>
-</tr><tr class="odd"><td>Disposal</td>
+</tr><tr><td>Disposal</td>
 <td>573</td>
 <td>~796 days</td>
-</tr><tr class="even"><td>Spoil</td>
+</tr><tr><td>Spoil</td>
 <td>577</td>
 <td>~802 days</td>
 </tr></tbody></table><ol start="3" style="list-style-type: decimal"><li>Aggregate by player with weighted sums and weighted game counts</li>
@@ -287,15 +287,15 @@
 <h4 id="stat-ratings-bayesian-conjugate-models">Stat Ratings (Bayesian Conjugate Models)<a class="anchor" aria-label="anchor" href="#stat-ratings-bayesian-conjugate-models"></a></h4>
 <p><strong>Function</strong>: <code>estimate_player_stat_ratings(stat_rating_data, ref_date, params, stat_defs, compute_ci)</code></p>
 <p><strong>Coverage</strong>: 48 rate stats + 6 efficiency stats, defined in <code><a href="reference/stat_rating_definitions.html">stat_rating_definitions()</a></code>.</p>
-<table class="table"><colgroup><col width="34%"><col width="21%"><col width="21%"><col width="21%"></colgroup><thead><tr class="header"><th>Stat Type</th>
+<table class="table"><colgroup><col width="34%"><col width="21%"><col width="21%"><col width="21%"></colgroup><thead><tr><th>Stat Type</th>
 <th>Model</th>
 <th>Prior</th>
 <th>Decay</th>
-</tr></thead><tbody><tr class="odd"><td>Rate stats (goals, disposals, marks, tackles, …)</td>
+</tr></thead><tbody><tr><td>Rate stats (goals, disposals, marks, tackles, …)</td>
 <td>Gamma-Poisson</td>
 <td>Position mean, strength = <code>prior_games</code> (default 5)</td>
 <td>lambda = 0.0019/day (~365-day half-life)</td>
-</tr><tr class="even"><td>Efficiency stats (disposal efficiency, mark %, …)</td>
+</tr><tr><td>Efficiency stats (disposal efficiency, mark %, …)</td>
 <td>Beta-Binomial</td>
 <td>Position mean, strength = <code>prior_attempts</code> (default 30)</td>
 <td>lambda = 0.0013/day (~533-day half-life)</td>
@@ -363,28 +363,28 @@
     end
     Note over TORP: On failure: auto-create GitHub issue</code></pre>
 <p><strong>Ratings Pipeline Stages</strong> (<code>run_ratings_pipeline.R</code>):</p>
-<table class="table"><colgroup><col width="26%"><col width="23%"><col width="50%"></colgroup><thead><tr class="header"><th>Stage</th>
+<table class="table"><colgroup><col width="26%"><col width="23%"><col width="50%"></colgroup><thead><tr><th>Stage</th>
 <th>Name</th>
 <th>Description</th>
-</tr></thead><tbody><tr class="odd"><td>1</td>
+</tr></thead><tbody><tr><td>1</td>
 <td>Refresh Upstream Data</td>
 <td>Re-fetch <code>player_stats</code> + <code>teams</code> from AFL API (skippable via <code>REFRESH_UPSTREAM</code>)</td>
-</tr><tr class="even"><td>2</td>
+</tr><tr><td>2</td>
 <td>Build Player Game Data</td>
 <td>
 <code><a href="reference/create_player_game_data.html">create_player_game_data()</a></code> from PBP + stats + teams; release to <code>player_game-data</code>
 </td>
-</tr><tr class="odd"><td>3</td>
+</tr><tr><td>3</td>
 <td>Compute EPR Ratings</td>
 <td>
 <code><a href="reference/calculate_epr_stats_batch.html">calculate_epr_stats_batch()</a></code> per season/round; blend with PSR for TORP</td>
-</tr><tr class="even"><td>4</td>
+</tr><tr><td>4</td>
 <td>Compute Team Ratings</td>
 <td>TOG-weighted aggregation of player ratings to team level</td>
-</tr><tr class="odd"><td>5</td>
+</tr><tr><td>5</td>
 <td>Player Game &amp; Season Ratings</td>
 <td>Per-game EPV + PSV; season aggregates</td>
-</tr><tr class="even"><td>6</td>
+</tr><tr><td>6</td>
 <td>Compute &amp; Release PSR</td>
 <td>
 <code><a href="reference/calculate_psr.html">calculate_psr()</a></code> using precomputed glmnet coefficients</td>
@@ -418,24 +418,24 @@
 <p><strong>Purpose</strong>: Adjust player ratings and per-game stats for opponent defensive quality. Players who perform well against strong defences get boosted; those who pad stats against weak teams get deflated.</p>
 <p><strong>Key Files</strong>: <code>R/opponent_adjustment.R</code>, <code>R/epv_opponent_adjustment.R</code></p>
 <p><strong>Two adjustment systems</strong>:</p>
-<table class="table"><colgroup><col width="19%"><col width="24%"><col width="17%"><col width="19%"><col width="19%"></colgroup><thead><tr class="header"><th>System</th>
+<table class="table"><colgroup><col width="19%"><col width="24%"><col width="17%"><col width="19%"><col width="19%"></colgroup><thead><tr><th>System</th>
 <th>Function</th>
 <th>Input</th>
 <th>Output</th>
 <th>Method</th>
-</tr></thead><tbody><tr class="odd"><td>Stat rating</td>
+</tr></thead><tbody><tr><td>Stat rating</td>
 <td><code><a href="reference/adjust_stat_ratings_for_opponents.html">adjust_stat_ratings_for_opponents()</a></code></td>
 <td>Bayesian stat ratings</td>
 <td>
 <code>{stat}_adj_rating</code> columns</td>
 <td>Multiplicative factor from opponent concession rates</td>
-</tr><tr class="even"><td>Per-game stats</td>
+</tr><tr><td>Per-game stats</td>
 <td><code><a href="reference/adjust_stats_for_opponents.html">adjust_stats_for_opponents()</a></code></td>
 <td>Raw per-game stats</td>
 <td>
 <code>{stat}_oadj</code> columns</td>
 <td>Multiplicative factor per player-game</td>
-</tr><tr class="odd"><td>EPV</td>
+</tr><tr><td>EPV</td>
 <td><code><a href="reference/adjust_epv_for_opponents.html">adjust_epv_for_opponents()</a></code></td>
 <td>Player game data with <code>epv_adj</code>
 </td>
@@ -466,269 +466,269 @@
 </div>
 <div class="section level2">
 <h2 id="code-references">Code References<a class="anchor" aria-label="anchor" href="#code-references"></a></h2>
-<table class="table"><colgroup><col width="36%"><col width="20%"><col width="43%"></colgroup><thead><tr class="header"><th>Component</th>
+<table class="table"><colgroup><col width="36%"><col width="20%"><col width="43%"></colgroup><thead><tr><th>Component</th>
 <th>File</th>
 <th>Key Exports</th>
-</tr></thead><tbody><tr class="odd"><td>Constants</td>
+</tr></thead><tbody><tr><td>Constants</td>
 <td>
 <code>R/constants_afl.R</code>, <code>R/constants_ratings.R</code>, <code>R/constants_sim.R</code>, <code>R/constants_match.R</code>, <code>R/constants_data.R</code>
 </td>
 <td>
 <code>AFL_TEAMS</code>/<code>AFL_TEAM_*</code> (afl), <code>EPR_*</code>/<code>EPV_*</code>/<code>TORP_EPR_WEIGHT</code>/<code>POSITION_AVG_TOG</code> (ratings), <code>SIM_*</code>/<code>MATCH_SIM_*</code>/<code>OPP_ADJ_*</code> (sim), <code>MATCH_*</code>/<code>WP_*</code>/<code>FIELD_*</code> (match), <code>VALIDATION_*</code>/<code>COORD_*</code>/<code>CONTEST_*</code>/<code>EPV_RELEVANT_DESCRIPTIONS</code> (data)</td>
-</tr><tr class="even"><td>Load Functions</td>
+</tr><tr><td>Load Functions</td>
 <td><code>R/load_data.R</code></td>
 <td>
 <code><a href="reference/load_pbp.html">load_pbp()</a></code>, <code><a href="reference/load_chains.html">load_chains()</a></code>, <code><a href="reference/load_xg.html">load_xg()</a></code>, <code><a href="reference/load_player_stats.html">load_player_stats()</a></code>, <code><a href="reference/load_player_game_data.html">load_player_game_data()</a></code>, <code><a href="reference/load_fixtures.html">load_fixtures()</a></code>, <code><a href="reference/load_teams.html">load_teams()</a></code>, <code><a href="reference/load_results.html">load_results()</a></code>, <code><a href="reference/load_player_details.html">load_player_details()</a></code>, <code><a href="reference/load_predictions.html">load_predictions()</a></code>, <code><a href="reference/load_retrodictions.html">load_retrodictions()</a></code>, <code><a href="reference/load_torp_ratings.html">load_torp_ratings()</a></code>, <code><a href="reference/load_player_game_ratings.html">load_player_game_ratings()</a></code>, <code><a href="reference/load_player_season_ratings.html">load_player_season_ratings()</a></code>, <code><a href="reference/load_team_ratings.html">load_team_ratings()</a></code>, <code><a href="reference/load_injury_data.html">load_injury_data()</a></code>, <code><a href="reference/load_ep_wp_charts.html">load_ep_wp_charts()</a></code>, <code><a href="reference/load_player_stat_ratings.html">load_player_stat_ratings()</a></code>, <code><a href="reference/load_psr.html">load_psr()</a></code>, <code><a href="reference/load_weather.html">load_weather()</a></code>
 </td>
-</tr><tr class="odd"><td>Load Engines</td>
+</tr><tr><td>Load Engines</td>
 <td><code>R/load_engines.R</code></td>
 <td>
 <code><a href="reference/load_from_url.html">load_from_url()</a></code>, <code><a href="reference/parquet_from_urls_parallel.html">parquet_from_urls_parallel()</a></code>
 </td>
-</tr><tr class="even"><td>Load Utilities</td>
+</tr><tr><td>Load Utilities</td>
 <td><code>R/load_utils.R</code></td>
 <td>
 <code><a href="reference/validate_seasons.html">validate_seasons()</a></code>, <code><a href="reference/generate_urls.html">generate_urls()</a></code>
 </td>
-</tr><tr class="odd"><td>Local Data</td>
+</tr><tr><td>Local Data</td>
 <td><code>R/local_data.R</code></td>
 <td>
 <code><a href="reference/download_torp_data.html">download_torp_data()</a></code>, <code><a href="reference/save_locally.html">save_locally()</a></code>, <code><a href="reference/get_local_data_dir.html">get_local_data_dir()</a></code>, <code><a href="reference/set_local_data_dir.html">set_local_data_dir()</a></code>
 </td>
-</tr><tr class="even"><td>In-Memory Cache</td>
+</tr><tr><td>In-Memory Cache</td>
 <td><code>R/cache.R</code></td>
 <td>
 <code><a href="reference/clear_data_cache.html">clear_data_cache()</a></code>, <code><a href="reference/get_cache_info.html">get_cache_info()</a></code>
 </td>
-</tr><tr class="odd"><td>Disk Cache</td>
+</tr><tr><td>Disk Cache</td>
 <td><code>R/disk_cache.R</code></td>
 <td>
 <code><a href="reference/is_disk_cached.html">is_disk_cached()</a></code>, <code><a href="reference/read_disk_cache.html">read_disk_cache()</a></code>, <code><a href="reference/write_disk_cache.html">write_disk_cache()</a></code>, <code><a href="reference/get_disk_cache_dir.html">get_disk_cache_dir()</a></code>
 </td>
-</tr><tr class="even"><td>PBP Cleaning</td>
+</tr><tr><td>PBP Cleaning</td>
 <td><code>R/clean_pbp.R</code></td>
 <td>
 <code><a href="reference/clean_pbp.html">clean_pbp()</a></code>, <code><a href="reference/clean_pbp_dt.html">clean_pbp_dt()</a></code>
 </td>
-</tr><tr class="odd"><td>Column Schema</td>
+</tr><tr><td>Column Schema</td>
 <td><code>R/column_schema.R</code></td>
 <td>11 <code>*_COL_MAP</code> constants, <code>.normalise_*_columns()</code> functions</td>
-</tr><tr class="even"><td>Feature Engineering</td>
+</tr><tr><td>Feature Engineering</td>
 <td><code>R/add_variables.R</code></td>
 <td>
 <code><a href="reference/add_epv_vars.html">add_epv_vars()</a></code>, <code><a href="reference/add_wp_vars.html">add_wp_vars()</a></code>, <code><a href="reference/load_model_with_fallback.html">load_model_with_fallback()</a></code>
 </td>
-</tr><tr class="odd"><td>Model Data Prep</td>
+</tr><tr><td>Model Data Prep</td>
 <td><code>R/clean_features.R</code></td>
 <td><code><a href="reference/clean_model_data_epv_dt.html">clean_model_data_epv_dt()</a></code></td>
-</tr><tr class="even"><td>Player Credit</td>
+</tr><tr><td>Player Credit</td>
 <td><code>R/player_credit.R</code></td>
 <td>
 <code><a href="reference/create_player_game_data.html">create_player_game_data()</a></code>, <code><a href="reference/default_epv_params.html">default_epv_params()</a></code>
 </td>
-</tr><tr class="odd"><td>EPR Ratings</td>
+</tr><tr><td>EPR Ratings</td>
 <td><code>R/player_ratings.R</code></td>
 <td>
 <code><a href="reference/calculate_epr.html">calculate_epr()</a></code>, <code><a href="reference/calculate_epr_stats.html">calculate_epr_stats()</a></code>
 </td>
-</tr><tr class="even"><td>Stat Ratings</td>
+</tr><tr><td>Stat Ratings</td>
 <td><code>R/player_skills.R</code></td>
 <td><code><a href="reference/estimate_player_stat_ratings.html">estimate_player_stat_ratings()</a></code></td>
-</tr><tr class="odd"><td>Stat Config</td>
+</tr><tr><td>Stat Config</td>
 <td><code>R/skill_config.R</code></td>
 <td>
 <code><a href="reference/stat_rating_definitions.html">stat_rating_definitions()</a></code>, <code><a href="reference/default_stat_rating_params.html">default_stat_rating_params()</a></code>, <code><a href="reference/stat_rating_position_map.html">stat_rating_position_map()</a></code>
 </td>
-</tr><tr class="even"><td>PSR Ratings</td>
+</tr><tr><td>PSR Ratings</td>
 <td><code>R/psr.R</code></td>
 <td>
 <code><a href="reference/calculate_psr.html">calculate_psr()</a></code>, <code><a href="reference/calculate_psr_components.html">calculate_psr_components()</a></code>, <code><a href="reference/calculate_psv.html">calculate_psv()</a></code>
 </td>
-</tr><tr class="odd"><td>Match Prediction</td>
+</tr><tr><td>Match Prediction</td>
 <td><code>R/match_model.R</code></td>
 <td>
 <code><a href="reference/run_predictions_pipeline.html">run_predictions_pipeline()</a></code>, <code><a href="reference/build_team_mdl_df.html">build_team_mdl_df()</a></code>
 </td>
-</tr><tr class="even"><td>Match Data Prep</td>
+</tr><tr><td>Match Data Prep</td>
 <td><code>R/match_data_prep.R</code></td>
 <td>
 <code><a href="reference/dot-build_fixtures_df.html">.build_fixtures_df()</a></code>, <code><a href="reference/dot-build_team_ratings_df.html">.build_team_ratings_df()</a></code>, <code><a href="reference/dot-build_match_features.html">.build_match_features()</a></code>, <code><a href="reference/dot-load_match_weather.html">.load_match_weather()</a></code>
 </td>
-</tr><tr class="odd"><td>Match Training</td>
+</tr><tr><td>Match Training</td>
 <td><code>R/match_train.R</code></td>
 <td>GAM fitting functions</td>
-</tr><tr class="even"><td>WP Utilities</td>
+</tr><tr><td>WP Utilities</td>
 <td><code>R/wp_utils.R</code></td>
 <td>WP input validation, model health checks</td>
-</tr><tr class="odd"><td>Baseline Models</td>
+</tr><tr><td>Baseline Models</td>
 <td><code>R/baseline_models.R</code></td>
 <td>Score-only, time-score, EP-based baselines</td>
-</tr><tr class="even"><td>Simulation</td>
+</tr><tr><td>Simulation</td>
 <td><code>R/simulate.R</code></td>
 <td>
 <code><a href="reference/simulate_season.html">simulate_season()</a></code>, <code>process_games()</code>, <code><a href="reference/process_games_dt.html">process_games_dt()</a></code>
 </td>
-</tr><tr class="odd"><td>Match Simulation</td>
+</tr><tr><td>Match Simulation</td>
 <td><code>R/simulate_match.R</code></td>
 <td><code><a href="reference/simulate_match_mc.html">simulate_match_mc()</a></code></td>
-</tr><tr class="even"><td>Ladder</td>
+</tr><tr><td>Ladder</td>
 <td><code>R/ladder.R</code></td>
 <td>
 <code><a href="reference/calculate_ladder.html">calculate_ladder()</a></code>, <code><a href="reference/calculate_final_ladder.html">calculate_final_ladder()</a></code>
 </td>
-</tr><tr class="odd"><td>Finals Simulation</td>
+</tr><tr><td>Finals Simulation</td>
 <td><code>R/finals_sim.R</code></td>
 <td>
 <code><a href="reference/simulate_finals.html">simulate_finals()</a></code>, <code><a href="reference/simulate_match.html">simulate_match()</a></code>, <code><a href="reference/finals_home_advantage.html">finals_home_advantage()</a></code>
 </td>
-</tr><tr class="even"><td>Season Simulation</td>
+</tr><tr><td>Season Simulation</td>
 <td><code>R/season_sim.R</code></td>
 <td>
 <code><a href="reference/simulate_afl_season.html">simulate_afl_season()</a></code>, <code><a href="reference/prepare_sim_data.html">prepare_sim_data()</a></code>, <code><a href="reference/summarise_simulations.html">summarise_simulations()</a></code>
 </td>
-</tr><tr class="odd"><td>Injury Scraping</td>
+</tr><tr><td>Injury Scraping</td>
 <td><code>R/injuries_scrape.R</code></td>
 <td>
 <code><a href="reference/scrape_injuries.html">scrape_injuries()</a></code>, <code><a href="reference/load_preseason_injuries.html">load_preseason_injuries()</a></code>
 </td>
-</tr><tr class="even"><td>Injury Matching</td>
+</tr><tr><td>Injury Matching</td>
 <td><code>R/injuries_match.R</code></td>
 <td>
 <code><a href="reference/get_all_injuries.html">get_all_injuries()</a></code>, <code><a href="reference/match_injuries.html">match_injuries()</a></code>, <code><a href="reference/parse_return_round.html">parse_return_round()</a></code>
 </td>
-</tr><tr class="odd"><td>Injury Schedule</td>
+</tr><tr><td>Injury Schedule</td>
 <td><code>R/injuries_schedule.R</code></td>
 <td>
 <code><a href="reference/build_injury_schedule.html">build_injury_schedule()</a></code>, <code><a href="reference/save_injury_data.html">save_injury_data()</a></code>
 </td>
-</tr><tr class="even"><td>Injury Validation</td>
+</tr><tr><td>Injury Validation</td>
 <td><code>R/injuries_validation.R</code></td>
 <td>
 <code><a href="reference/test_played_rate.html">test_played_rate()</a></code>, <code><a href="reference/tbc_played_rate.html">tbc_played_rate()</a></code>, <code><a href="reference/injury_return_accuracy.html">injury_return_accuracy()</a></code>, <code><a href="reference/tbc_return_survival.html">tbc_return_survival()</a></code>
 </td>
-</tr><tr class="odd"><td>Expected Goals</td>
+</tr><tr><td>Expected Goals</td>
 <td><code>R/xg.R</code></td>
 <td>
 <code><a href="reference/calculate_match_xgs.html">calculate_match_xgs()</a></code>, <code><a href="reference/get_xg.html">get_xg()</a></code>
 </td>
-</tr><tr class="even"><td>Contests</td>
+</tr><tr><td>Contests</td>
 <td><code>R/contests.R</code></td>
 <td>
 <code><a href="reference/extract_contests.html">extract_contests()</a></code>, <code><a href="reference/head_to_head.html">head_to_head()</a></code>
 </td>
-</tr><tr class="odd"><td>AFL API</td>
+</tr><tr><td>AFL API</td>
 <td><code>R/afl_api.R</code></td>
 <td>
 <code><a href="reference/get_afl_fixtures.html">get_afl_fixtures()</a></code>, <code><a href="reference/get_afl_results.html">get_afl_results()</a></code>, <code><a href="reference/get_afl_ladder.html">get_afl_ladder()</a></code>, <code><a href="reference/get_afl_lineups.html">get_afl_lineups()</a></code>, <code><a href="reference/get_afl_player_stats.html">get_afl_player_stats()</a></code>, <code><a href="reference/get_afl_player_details.html">get_afl_player_details()</a></code>
 </td>
-</tr><tr class="even"><td>Team Names</td>
+</tr><tr><td>Team Names</td>
 <td><code>R/afl_api.R</code></td>
 <td>
 <code><a href="reference/torp_replace_teams.html">torp_replace_teams()</a></code>, <code><a href="reference/torp_team_abbr.html">torp_team_abbr()</a></code>, <code><a href="reference/torp_team_full.html">torp_team_full()</a></code>, <code><a href="reference/torp_replace_venues.html">torp_replace_venues()</a></code>
 </td>
-</tr><tr class="odd"><td>Player Profiles</td>
+</tr><tr><td>Player Profiles</td>
 <td><code>R/player_profile.R</code></td>
 <td><code><a href="reference/player_profile.html">player_profile()</a></code></td>
-</tr><tr class="even"><td>Player Game Ratings</td>
+</tr><tr><td>Player Game Ratings</td>
 <td><code>R/player_game_ratings.R</code></td>
 <td>
 <code><a href="reference/player_game_ratings.html">player_game_ratings()</a></code>, <code><a href="reference/player_season_ratings.html">player_season_ratings()</a></code>
 </td>
-</tr><tr class="odd"><td>Team Profile</td>
+</tr><tr><td>Team Profile</td>
 <td><code>R/team_profile.R</code></td>
 <td>
 <code><a href="reference/team_profile.html">team_profile()</a></code>, <code><a href="reference/team_stat_rating_profile.html">team_stat_rating_profile()</a></code>, <code><a href="reference/get_team_stat_ratings.html">get_team_stat_ratings()</a></code>
 </td>
-</tr><tr class="even"><td>Match Analysis</td>
+</tr><tr><td>Match Analysis</td>
 <td><code>R/analyze_match.R</code></td>
 <td>
 <code><a href="reference/get_player_game_ratings.html">get_player_game_ratings()</a></code> (live match analysis)</td>
-</tr><tr class="odd"><td>Centrality</td>
+</tr><tr><td>Centrality</td>
 <td><code>R/centrality.R</code></td>
 <td><code><a href="reference/calculate_player_centrality.html">calculate_player_centrality()</a></code></td>
-</tr><tr class="even"><td>Opponent Adj (Stats)</td>
+</tr><tr><td>Opponent Adj (Stats)</td>
 <td><code>R/opponent_adjustment.R</code></td>
 <td>
 <code><a href="reference/adjust_stat_ratings_for_opponents.html">adjust_stat_ratings_for_opponents()</a></code>, <code><a href="reference/adjust_stats_for_opponents.html">adjust_stats_for_opponents()</a></code>
 </td>
-</tr><tr class="odd"><td>Opponent Adj (EPV)</td>
+</tr><tr><td>Opponent Adj (EPV)</td>
 <td><code>R/epv_opponent_adjustment.R</code></td>
 <td><code><a href="reference/adjust_epv_for_opponents.html">adjust_epv_for_opponents()</a></code></td>
-</tr><tr class="even"><td>Player Attribution</td>
+</tr><tr><td>Player Attribution</td>
 <td><code>R/player_attribution.R</code></td>
 <td>
 <code><a href="reference/calculate_player_attribution.html">calculate_player_attribution()</a></code>, <code><a href="reference/batch_player_attribution.html">batch_player_attribution()</a></code>
 </td>
-</tr><tr class="odd"><td>Stat Rating Data</td>
+</tr><tr><td>Stat Rating Data</td>
 <td><code>R/player_skills_data.R</code></td>
 <td>Data preparation for stat rating estimation</td>
-</tr><tr class="even"><td>Stat Rating Profiles</td>
+</tr><tr><td>Stat Rating Profiles</td>
 <td><code>R/player_skills_profile.R</code></td>
 <td>
 <code><a href="reference/player_stat_rating_profile.html">player_stat_rating_profile()</a></code>, <code><a href="reference/get_player_stat_ratings.html">get_player_stat_ratings()</a></code>
 </td>
-</tr><tr class="odd"><td>WP Credit</td>
+</tr><tr><td>WP Credit</td>
 <td><code>R/wp_credit.R</code></td>
 <td>
 <code><a href="reference/create_wp_credit.html">create_wp_credit()</a></code> (WPA credit allocation)</td>
-</tr><tr class="even"><td>Win Probability</td>
+</tr><tr><td>Win Probability</td>
 <td><code>R/win_probability.R</code></td>
 <td><code><a href="reference/fit_win_probability.html">fit_win_probability()</a></code></td>
-</tr><tr class="odd"><td>Logging</td>
+</tr><tr><td>Logging</td>
 <td><code>R/logging.R</code></td>
 <td>
 <code><a href="reference/setup_torp_logging.html">setup_torp_logging()</a></code>, <code><a href="reference/monitor_model_drift.html">monitor_model_drift()</a></code>
 </td>
-</tr><tr class="even"><td>Model Validation</td>
+</tr><tr><td>Model Validation</td>
 <td><code>R/model_validation.R</code></td>
 <td>
 <code><a href="reference/create_grouped_cv_folds.html">create_grouped_cv_folds()</a></code>, <code><a href="reference/evaluate_model_comprehensive.html">evaluate_model_comprehensive()</a></code>
 </td>
-</tr><tr class="odd"><td>Data Validation</td>
+</tr><tr><td>Data Validation</td>
 <td><code>R/data_validation.R</code></td>
 <td>Input validation utilities</td>
-</tr><tr class="even"><td>Utilities</td>
+</tr><tr><td>Utilities</td>
 <td><code>R/utils.R</code></td>
 <td>
 <code><a href="reference/torp_clean_names.html">torp_clean_names()</a></code>, <code><a href="reference/get_afl_season.html">get_afl_season()</a></code>, <code><a href="reference/get_afl_week.html">get_afl_week()</a></code>, <code><a href="reference/clear_all_cache.html">clear_all_cache()</a></code>
 </td>
-</tr><tr class="odd"><td>Plot: Game Flow</td>
+</tr><tr><td>Plot: Game Flow</td>
 <td><code>R/plot_game.R</code></td>
 <td><code><a href="reference/plot_ep_wp.html">plot_ep_wp()</a></code></td>
-</tr><tr class="even"><td>Plot: Player</td>
+</tr><tr><td>Plot: Player</td>
 <td><code>R/plot_player.R</code></td>
 <td>
 <code><a href="reference/plot_player_rating.html">plot_player_rating()</a></code>, <code><a href="reference/plot_stat_rating_profile.html">plot_stat_rating_profile()</a></code>
 </td>
-</tr><tr class="odd"><td>Plot: Shots</td>
+</tr><tr><td>Plot: Shots</td>
 <td><code>R/plot_shots.R</code></td>
 <td><code><a href="reference/plot_shot_map.html">plot_shot_map()</a></code></td>
-</tr><tr class="even"><td>Plot: Simulation</td>
+</tr><tr><td>Plot: Simulation</td>
 <td><code>R/plot_simulation.R</code></td>
 <td><code><a href="reference/plot_simulation.html">plot_simulation()</a></code></td>
-</tr><tr class="odd"><td>Plot: Comparison</td>
+</tr><tr><td>Plot: Comparison</td>
 <td><code>R/plot_comparison.R</code></td>
 <td><code><a href="reference/plot_player_comparison.html">plot_player_comparison()</a></code></td>
-</tr><tr class="even"><td>Plot: Team</td>
+</tr><tr><td>Plot: Team</td>
 <td><code>R/plot_team.R</code></td>
 <td><code><a href="reference/plot_team_ratings.html">plot_team_ratings()</a></code></td>
-</tr><tr class="odd"><td>Plot: Utilities</td>
+</tr><tr><td>Plot: Utilities</td>
 <td><code>R/plot_utils.R</code></td>
 <td>
 <code><a href="reference/theme_torp.html">theme_torp()</a></code>, <code><a href="reference/team_color_scale.html">team_color_scale()</a></code>, <code><a href="reference/team_fill_scale.html">team_fill_scale()</a></code>
 </td>
-</tr><tr class="even"><td>Globals</td>
+</tr><tr><td>Globals</td>
 <td><code>R/globals.R</code></td>
 <td>NSE variable declarations for R CMD check</td>
-</tr><tr class="odd"><td>Package Init</td>
+</tr><tr><td>Package Init</td>
 <td><code>R/zzz.R</code></td>
 <td>
 <code>.onLoad()</code> / <code>.onAttach()</code>
 </td>
-</tr><tr class="even"><td>Data Docs</td>
+</tr><tr><td>Data Docs</td>
 <td><code>R/data.R</code></td>
 <td>Documentation for bundled datasets</td>
-</tr><tr class="odd"><td>Scraper</td>
+</tr><tr><td>Scraper</td>
 <td><code>R/scraper.R</code></td>
 <td>Legacy CFS endpoint scraping</td>
 </tr></tbody></table></div>
@@ -737,59 +737,59 @@
 <p>All data is normalised to canonical <code>snake_case</code> at load/fetch time via <code>R/column_schema.R</code>. Each data type has a <code>COL_MAP</code> constant that maps old/variant column names to canonical names. The <code>.normalise_*_columns()</code> wrappers handle multi-step normalisation (prefix stripping, bulk snake_case conversion, derived columns).</p>
 <div class="section level3">
 <h3 id="column-maps-by-data-type">Column Maps by Data Type<a class="anchor" aria-label="anchor" href="#column-maps-by-data-type"></a></h3>
-<table class="table"><colgroup><col width="12%"><col width="27%"><col width="60%"></colgroup><thead><tr class="header"><th>Map</th>
+<table class="table"><colgroup><col width="12%"><col width="27%"><col width="60%"></colgroup><thead><tr><th>Map</th>
 <th>Data Type</th>
 <th>Key Renames (old → new)</th>
-</tr></thead><tbody><tr class="odd"><td><code>FIXTURE_COL_MAP</code></td>
+</tr></thead><tbody><tr><td><code>FIXTURE_COL_MAP</code></td>
 <td>Fixtures/results</td>
 <td>
 <code>providerId</code> → <code>match_id</code>, <code>compSeason.year</code> → <code>season</code>, <code>round.roundNumber</code> → <code>round_number</code>, <code>home.score.totalScore</code> → <code>home_score</code>, <code>utcStartTime</code> → <code>utc_start_time</code>
 </td>
-</tr><tr class="even"><td><code>PBP_COL_MAP</code></td>
+</tr><tr><td><code>PBP_COL_MAP</code></td>
 <td>Play-by-play</td>
 <td>
 <code>home_team_team_name</code> → <code>home_team_name</code>, <code>home_team_score_total_score</code> → <code>home_score</code>, <code>home_team_abbreviation</code> → <code>home_team_abbr</code>
 </td>
-</tr><tr class="odd"><td><code>CHAINS_COL_MAP</code></td>
+</tr><tr><td><code>CHAINS_COL_MAP</code></td>
 <td>Chains</td>
 <td>
 <code>matchId</code> → <code>match_id</code>, <code>playerId</code> → <code>player_id</code>, <code>displayOrder</code> → <code>display_order</code>, <code>periodSeconds</code> → <code>period_seconds</code>
 </td>
-</tr><tr class="even"><td><code>PLAYER_STATS_COL_MAP</code></td>
+</tr><tr><td><code>PLAYER_STATS_COL_MAP</code></td>
 <td>Player stats</td>
 <td>
 <code>extended_stats_spoils</code> → <code>spoils</code>, <code>clearances_total_clearances</code> → <code>clearances</code>, <code>provider_id</code> → <code>match_id</code> (also strips <code>stats_</code> prefix from v2 API)</td>
-</tr><tr class="odd"><td><code>PLAYER_GAME_COL_MAP</code></td>
+</tr><tr><td><code>PLAYER_GAME_COL_MAP</code></td>
 <td>Player game data</td>
 <td>
 <code>plyr_nm</code> → <code>player_name</code>, <code>tm</code> → <code>team</code>, <code>tot_p</code> → <code>epv</code>, <code>recv_pts</code> → <code>recv_epv</code>, <code>recv_credits</code> → <code>recv_epv</code>
 </td>
-</tr><tr class="even"><td><code>TEAMS_COL_MAP</code></td>
+</tr><tr><td><code>TEAMS_COL_MAP</code></td>
 <td>Teams/lineups</td>
 <td>
 <code>player.playerId</code> → <code>player_id</code>, <code>teamName</code> → <code>team_name</code>, <code>player.playerName.givenName</code> → <code>given_name</code>
 </td>
-</tr><tr class="odd"><td><code>PLAYER_DETAILS_COL_MAP</code></td>
+</tr><tr><td><code>PLAYER_DETAILS_COL_MAP</code></td>
 <td>Player details</td>
 <td>
 <code>providerId</code> → <code>player_id</code>, <code>firstName</code> → <code>first_name</code>, <code>heightInCm</code> → <code>height_cm</code>, <code>dateOfBirth</code> → <code>date_of_birth</code>
 </td>
-</tr><tr class="even"><td><code>TORP_RATINGS_COL_MAP</code></td>
+</tr><tr><td><code>TORP_RATINGS_COL_MAP</code></td>
 <td>TORP ratings</td>
 <td>
 <code>torp</code> → <code>epr</code>, <code>torp_recv</code> → <code>recv_epr</code>, <code>torp_disp</code> → <code>disp_epr</code>
 </td>
-</tr><tr class="odd"><td><code>PLAYER_GAME_RATINGS_COL_MAP</code></td>
+</tr><tr><td><code>PLAYER_GAME_RATINGS_COL_MAP</code></td>
 <td>Game ratings</td>
 <td>
 <code>total_points</code> → <code>epv_raw</code>, <code>total_p80</code> → <code>epv_p80</code>, <code>season_points</code> → <code>season_epv</code>
 </td>
-</tr><tr class="even"><td><code>PREDICTIONS_COL_MAP</code></td>
+</tr><tr><td><code>PREDICTIONS_COL_MAP</code></td>
 <td>Predictions</td>
 <td>
 <code>providerId</code> → <code>match_id</code>
 </td>
-</tr><tr class="odd"><td><code>XG_COL_MAP</code></td>
+</tr><tr><td><code>XG_COL_MAP</code></td>
 <td>Expected goals</td>
 <td>
 <code>home_sG</code> → <code>home_scored_goals</code>, <code>home_sB</code> → <code>home_scored_behinds</code>
@@ -799,175 +799,175 @@
 </div>
 <div class="section level2">
 <h2 id="data-raw-pipeline-scripts">data-raw Pipeline Scripts<a class="anchor" aria-label="anchor" href="#data-raw-pipeline-scripts"></a></h2>
-<table class="table"><colgroup><col width="17%"><col width="28%"><col width="30%"><col width="23%"></colgroup><thead><tr class="header"><th>Stage</th>
+<table class="table"><colgroup><col width="17%"><col width="28%"><col width="30%"><col width="23%"></colgroup><thead><tr><th>Stage</th>
 <th>Directory</th>
 <th>Key Script</th>
 <th>Purpose</th>
-</tr></thead><tbody><tr class="odd"><td>01</td>
+</tr></thead><tbody><tr><td>01</td>
 <td><code>data-raw/01-data/</code></td>
 <td><code>daily_release.R</code></td>
 <td>Daily data refresh, <code>has_new_games()</code> check, parquet release</td>
-</tr><tr class="even"><td>01</td>
+</tr><tr><td>01</td>
 <td><code>data-raw/01-data/</code></td>
 <td><code>release_data.R</code></td>
 <td>Manual release helpers: <code><a href="reference/save_to_release.html">save_to_release()</a></code> for any data type</td>
-</tr><tr class="odd"><td>01</td>
+</tr><tr><td>01</td>
 <td><code>data-raw/01-data/</code></td>
 <td><code>rebuild_all_release_data.R</code></td>
 <td>Full rebuild of all torpdata releases from scratch</td>
-</tr><tr class="even"><td>01</td>
+</tr><tr><td>01</td>
 <td><code>data-raw/01-data/</code></td>
 <td><code>create_aggregated_files.R</code></td>
 <td>Build aggregated parquet files across seasons</td>
-</tr><tr class="odd"><td>01</td>
+</tr><tr><td>01</td>
 <td><code>data-raw/01-data/</code></td>
 <td><code>get_weather_data.R</code></td>
 <td>Backfill historical weather via Open-Meteo API</td>
-</tr><tr class="even"><td>01</td>
+</tr><tr><td>01</td>
 <td><code>data-raw/01-data/</code></td>
 <td><code>get_stadium_data.R</code></td>
 <td>Stadium lat/lon reference data</td>
-</tr><tr class="odd"><td>01</td>
+</tr><tr><td>01</td>
 <td><code>data-raw/01-data/</code></td>
 <td><code>update_fixture_table.R</code></td>
 <td>Refresh fixture data for current season</td>
-</tr><tr class="even"><td>02</td>
+</tr><tr><td>02</td>
 <td><code>data-raw/02-models/</code></td>
 <td><code>build_match_predictions.R</code></td>
 <td>Entry point for <code><a href="reference/run_predictions_pipeline.html">run_predictions_pipeline()</a></code>
 </td>
-</tr><tr class="odd"><td>02</td>
+</tr><tr><td>02</td>
 <td><code>data-raw/02-models/</code></td>
 <td><code>build_match_predictions_xgb.R</code></td>
 <td>XGBoost-based match predictions (experimental)</td>
-</tr><tr class="even"><td>03</td>
+</tr><tr><td>03</td>
 <td><code>data-raw/03-ratings/</code></td>
 <td><code>run_ratings_pipeline.R</code></td>
 <td>6-stage ratings pipeline: EPR, team, game/season, PSR (main CI/CD script)</td>
-</tr><tr class="odd"><td>03</td>
+</tr><tr><td>03</td>
 <td><code>data-raw/03-ratings/</code></td>
 <td><code>optimize_epr_ratings.R</code></td>
 <td>Grid search for EPR decay/prior hyperparameters</td>
-</tr><tr class="even"><td>03</td>
+</tr><tr><td>03</td>
 <td><code>data-raw/03-ratings/</code></td>
 <td><code>create_player_ratings_table.R</code></td>
 <td>Build pre-computed ratings table for torpdata</td>
-</tr><tr class="odd"><td>03</td>
+</tr><tr><td>03</td>
 <td><code>data-raw/03-ratings/</code></td>
 <td><code>bayes_rapm.R</code></td>
 <td>Bayesian RAPM player rating estimation</td>
-</tr><tr class="even"><td>04</td>
+</tr><tr><td>04</td>
 <td><code>data-raw/04-analysis/</code></td>
 <td><code>simulate_seasons.R</code></td>
 <td>Season simulation analysis scripts</td>
-</tr><tr class="odd"><td>05</td>
+</tr><tr><td>05</td>
 <td><code>data-raw/05-validation/</code></td>
 <td><code>validate_wp_model.R</code></td>
 <td>Win probability model validation</td>
-</tr><tr class="even"><td>05</td>
+</tr><tr><td>05</td>
 <td><code>data-raw/05-validation/</code></td>
 <td><code>compare_model_performance.R</code></td>
 <td>Cross-model performance comparison</td>
-</tr><tr class="odd"><td>06</td>
+</tr><tr><td>06</td>
 <td><code>data-raw/06-stat-ratings/</code></td>
 <td><code>01_compute_match_stats.R</code></td>
 <td>Per-player-match stat table assembly</td>
-</tr><tr class="even"><td>06</td>
+</tr><tr><td>06</td>
 <td><code>data-raw/06-stat-ratings/</code></td>
 <td><code>02_optimize_stat_rating_params.R</code></td>
 <td>Bayesian prior/decay hyperparameter tuning</td>
-</tr><tr class="odd"><td>06</td>
+</tr><tr><td>06</td>
 <td><code>data-raw/06-stat-ratings/</code></td>
 <td><code>03_estimate_stat_ratings.R</code></td>
 <td>Batch stat rating estimation by round</td>
-</tr><tr class="even"><td>06</td>
+</tr><tr><td>06</td>
 <td><code>data-raw/06-stat-ratings/</code></td>
 <td><code>04_export_stat_ratings.R</code></td>
 <td>Per-season parquet export to torpdata</td>
-</tr><tr class="odd"><td>06</td>
+</tr><tr><td>06</td>
 <td><code>data-raw/06-stat-ratings/</code></td>
 <td><code>05_compare_psr_models.R</code></td>
 <td>Compare PSR model versions and coefficient stability</td>
-</tr><tr class="even"><td>06</td>
+</tr><tr><td>06</td>
 <td><code>data-raw/06-stat-ratings/</code></td>
 <td><code>06_train_psr_model.R</code></td>
 <td>glmnet PSR model: stat ratings -&gt; score prediction</td>
-</tr><tr class="odd"><td>–</td>
+</tr><tr><td>–</td>
 <td><code>scripts/</code></td>
 <td><code>live-model-export.R</code></td>
 <td>Export xG lookup + EPV weights as JSON for inthegame-blog</td>
-</tr><tr class="even"><td>–</td>
+</tr><tr><td>–</td>
 <td><code>scripts/</code></td>
 <td><code>ep-var-importance.R</code></td>
 <td>EP model variable importance analysis</td>
 </tr></tbody></table></div>
 <div class="section level2">
 <h2 id="glossary">Glossary<a class="anchor" aria-label="anchor" href="#glossary"></a></h2>
-<table class="table"><colgroup><col width="33%"><col width="66%"></colgroup><thead><tr class="header"><th>Term</th>
+<table class="table"><colgroup><col width="33%"><col width="66%"></colgroup><thead><tr><th>Term</th>
 <th>Definition</th>
-</tr></thead><tbody><tr class="odd"><td><strong>PBP</strong></td>
+</tr></thead><tbody><tr><td><strong>PBP</strong></td>
 <td>Play-by-play: one row per ball movement event in a match</td>
-</tr><tr class="even"><td><strong>Chains</strong></td>
+</tr><tr><td><strong>Chains</strong></td>
 <td>Raw possession sequences from AFL API before cleaning</td>
-</tr><tr class="odd"><td><strong>EPV</strong></td>
+</tr><tr><td><strong>EPV</strong></td>
 <td>Expected Points Value: predicted point value of a game state</td>
-</tr><tr class="even"><td><strong>EP</strong></td>
+</tr><tr><td><strong>EP</strong></td>
 <td>Expected Points model: XGBoost model predicting next-score probabilities</td>
-</tr><tr class="odd"><td><strong>WP</strong></td>
+</tr><tr><td><strong>WP</strong></td>
 <td>Win Probability model: XGBoost model predicting home team win probability</td>
-</tr><tr class="even"><td><strong>WPA</strong></td>
+</tr><tr><td><strong>WPA</strong></td>
 <td>Win Probability Added: change in WP caused by a single play</td>
-</tr><tr class="odd"><td><strong>xG</strong></td>
+</tr><tr><td><strong>xG</strong></td>
 <td>Expected Goals: shot outcome prediction from field position</td>
-</tr><tr class="even"><td><strong>EPR</strong></td>
+</tr><tr><td><strong>EPR</strong></td>
 <td>Expected Points Rating: player rating from play-by-play EPV credit with decay</td>
-</tr><tr class="odd"><td><strong>PSR</strong></td>
+</tr><tr><td><strong>PSR</strong></td>
 <td>Player Skill Rating: player rating from stat ratings via glmnet coefficients</td>
-</tr><tr class="even"><td><strong>OSR</strong></td>
+</tr><tr><td><strong>OSR</strong></td>
 <td>Offensive Skill Rating: PSR decomposition for attacking stats</td>
-</tr><tr class="odd"><td><strong>DSR</strong></td>
+</tr><tr><td><strong>DSR</strong></td>
 <td>Defensive Skill Rating: PSR decomposition for defensive stats</td>
-</tr><tr class="even"><td><strong>TORP</strong></td>
+</tr><tr><td><strong>TORP</strong></td>
 <td>Team Offensive Rating Points: 50/50 blend of EPR + PSR</td>
-</tr><tr class="odd"><td><strong>PSV</strong></td>
+</tr><tr><td><strong>PSV</strong></td>
 <td>Player Stat Value: per-game PSR analogue from single-match stats</td>
-</tr><tr class="even"><td><strong>TOG</strong></td>
+</tr><tr><td><strong>TOG</strong></td>
 <td>Time on Ground: fraction of match time a player is on field</td>
-</tr><tr class="odd"><td><strong>I50</strong></td>
+</tr><tr><td><strong>I50</strong></td>
 <td>Inside 50: entry into the forward 50m arc</td>
-</tr><tr class="even"><td><strong>RAPM</strong></td>
+</tr><tr><td><strong>RAPM</strong></td>
 <td>Regularized Adjusted Plus-Minus: regression-based player rating controlling for teammates/opponents</td>
-</tr><tr class="odd"><td><strong>GAM</strong></td>
+</tr><tr><td><strong>GAM</strong></td>
 <td>Generalized Additive Model (via <code><a href="https://rdrr.io/pkg/mgcv/man/bam.html" class="external-link">mgcv::bam()</a></code>)</td>
-</tr><tr class="even"><td><strong>Parquet</strong></td>
+</tr><tr><td><strong>Parquet</strong></td>
 <td>Columnar storage format used for all data in torpdata releases</td>
-</tr><tr class="odd"><td><strong>FB</strong></td>
+</tr><tr><td><strong>FB</strong></td>
 <td>Full Back</td>
-</tr><tr class="even"><td><strong>BPL/BPR</strong></td>
+</tr><tr><td><strong>BPL/BPR</strong></td>
 <td>Back Pocket Left/Right</td>
-</tr><tr class="odd"><td><strong>CHB</strong></td>
+</tr><tr><td><strong>CHB</strong></td>
 <td>Centre Half Back</td>
-</tr><tr class="even"><td><strong>HBFL/HBFR</strong></td>
+</tr><tr><td><strong>HBFL/HBFR</strong></td>
 <td>Half Back Flank Left/Right</td>
-</tr><tr class="odd"><td><strong>C</strong></td>
+</tr><tr><td><strong>C</strong></td>
 <td>Centre</td>
-</tr><tr class="even"><td><strong>WL/WR</strong></td>
+</tr><tr><td><strong>WL/WR</strong></td>
 <td>Wing Left/Right</td>
-</tr><tr class="odd"><td><strong>CHF</strong></td>
+</tr><tr><td><strong>CHF</strong></td>
 <td>Centre Half Forward</td>
-</tr><tr class="even"><td><strong>HFFL/HFFR</strong></td>
+</tr><tr><td><strong>HFFL/HFFR</strong></td>
 <td>Half Forward Flank Left/Right</td>
-</tr><tr class="odd"><td><strong>FPL/FPR</strong></td>
+</tr><tr><td><strong>FPL/FPR</strong></td>
 <td>Forward Pocket Left/Right</td>
-</tr><tr class="even"><td><strong>FF</strong></td>
+</tr><tr><td><strong>FF</strong></td>
 <td>Full Forward</td>
-</tr><tr class="odd"><td><strong>R/RR/RK</strong></td>
+</tr><tr><td><strong>R/RR/RK</strong></td>
 <td>Ruck / Ruck Rover / Ruck positions</td>
-</tr><tr class="even"><td><strong>INT</strong></td>
+</tr><tr><td><strong>INT</strong></td>
 <td>Interchange</td>
-</tr><tr class="odd"><td><strong>SUB</strong></td>
+</tr><tr><td><strong>SUB</strong></td>
 <td>Medical Substitute</td>
-</tr><tr class="even"><td><strong>EMERG</strong></td>
+</tr><tr><td><strong>EMERG</strong></td>
 <td>Emergency (non-playing squad member)</td>
 </tr></tbody></table></div>
 </div>

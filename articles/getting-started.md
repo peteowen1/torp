@@ -5,6 +5,7 @@
 Install the development version from GitHub:
 
 ``` r
+
 # install.packages("devtools")
 devtools::install_github("peteowen1/torp")
 ```
@@ -12,6 +13,7 @@ devtools::install_github("peteowen1/torp")
 For the latest pre-trained models, also install torpmodels:
 
 ``` r
+
 devtools::install_github("peteowen1/torpmodels")
 ```
 
@@ -24,6 +26,7 @@ data is stored as parquet files and downloaded on demand.
 ### Play-by-Play
 
 ``` r
+
 library(torp)
 
 # Current season
@@ -39,6 +42,7 @@ pbp_all <- load_pbp(TRUE, rounds = TRUE)
 ### Player Statistics
 
 ``` r
+
 # Current season
 stats <- load_player_stats(2025)
 
@@ -49,6 +53,7 @@ stats_all <- load_player_stats(TRUE)
 ### Other Data
 
 ``` r
+
 # Possession chains
 chains <- load_chains(2025)
 
@@ -71,6 +76,7 @@ TORP (Total Overall Rating Points) evaluates players across four
 components.
 
 ``` r
+
 # Current TORP ratings (defaults to next round)
 ratings <- torp_ratings()
 
@@ -93,6 +99,7 @@ for the full methodology.
 Bayesian estimation of per-stat player ability, used to compute PSR:
 
 ``` r
+
 # Pre-computed stat ratings (one row per player-round)
 stat_ratings <- load_player_stat_ratings(2025)
 
@@ -110,6 +117,7 @@ for the full stat rating and PSR system.
 torp includes three core models that enrich play-by-play data:
 
 ``` r
+
 pbp <- load_pbp(2025, rounds = 1:5)
 pbp_clean <- clean_pbp(pbp)
 
@@ -135,6 +143,7 @@ for details on each model.
 Data downloads are cached to disk so subsequent calls don’t re-download:
 
 ``` r
+
 # Cached by default
 pbp <- load_pbp(2025)
 
@@ -150,6 +159,7 @@ clear_disk_cache()
 Fixtures and models are cached in memory within a session:
 
 ``` r
+
 fixtures <- load_fixtures(all = TRUE)  # downloads
 fixtures <- load_fixtures(all = TRUE)  # instant (cached)
 
