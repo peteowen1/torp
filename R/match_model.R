@@ -264,7 +264,9 @@ get_lineup_ratings <- function(season = NULL, round = NULL, match_id = NULL) {
     ) |>
     dplyr::mutate(
       epr_diff = home_epr - away_epr,
-      psr_diff = home_psr - away_psr
+      psr_diff = home_psr - away_psr,
+      home_team = as.character(home_team),
+      away_team = as.character(away_team)
     ) |>
     dplyr::select(season, round, match_id:away_psr, start_time, venue,
                   epr_diff, psr_diff, players:margin)
