@@ -759,7 +759,7 @@ XG_COL_MAP <- c(
 
   for (col in intersect(full_name_cols, nms)) {
     vals <- df[[col]]
-    if (is.character(vals)) {
+    if (is.character(vals) || is.factor(vals)) {
       new_vals <- torp_replace_teams(vals)
       if (is_dt) data.table::set(df, j = col, value = new_vals)
       else df[[col]] <- new_vals
@@ -768,7 +768,7 @@ XG_COL_MAP <- c(
 
   for (col in intersect(abbr_cols, nms)) {
     vals <- df[[col]]
-    if (is.character(vals)) {
+    if (is.character(vals) || is.factor(vals)) {
       new_vals <- torp_team_abbr(vals)
       if (is_dt) data.table::set(df, j = col, value = new_vals)
       else df[[col]] <- new_vals

@@ -897,6 +897,7 @@ get_afl_player_details <- function(season = NULL) {
 #' torp_replace_teams(c("GWS Giants", "Narrm", "WB"))
 torp_replace_teams <- function(team) {
   if (length(team) == 0L) return(character(0))
+  team <- as.character(team)
   mapped <- unname(AFL_TEAM_ALIASES[team])
   ifelse(!is.na(mapped), mapped, team)
 }
