@@ -132,22 +132,32 @@
   }
   team_lineup_df$.unknown_pos <- NULL
 
-  # Join PSR if provided - use each player's most recent PSR value
-
+  # Join PSR as-of each lineup row's (season, round_number).
+  # For each (player_id, lineup_season, lineup_round), pick the most recent
+  # psr_df row for that player with (season, round) STRICTLY before the
+  # lineup row -- because PSR(s, r) is computed using stat ratings whose
+  # ref_date includes round r, so it is not knowable until after round r.
+  # For future-prediction targets (e.g. predicting round R when we have PSR
+  # through R-1), the most recent prior PSR is automatically selected, so
+  # this matches the previous slice_tail(n=1) behavior at prediction time
+  # while removing forward leakage from historical training rows.
   if (!is.null(psr_df)) {
     has_osr_dsr <- all(c("osr", "dsr") %in% names(psr_df))
-    select_cols <- if (has_osr_dsr) c("player_id", "season", "round", "psr", "osr", "dsr") else c("player_id", "season", "round", "psr")
+    psr_value_cols <- if (has_osr_dsr) c("psr", "osr", "dsr") else "psr"
+    select_cols <- c("player_id", "season", "round", psr_value_cols)
 
-    latest_psr <- psr_df |>
+    psr_for_join <- psr_df |>
       dplyr::select(dplyr::any_of(select_cols)) |>
-      dplyr::arrange(player_id, season, round) |>
-      dplyr::group_by(player_id) |>
-      dplyr::slice_tail(n = 1) |>
-      dplyr::ungroup() |>
-      dplyr::select(-season, -round)
+      dplyr::mutate(psr_key = season * 100L + as.integer(round)) |>
+      dplyr::select(player_id, psr_key, dplyr::all_of(psr_value_cols))
 
     team_lineup_df <- team_lineup_df |>
-      dplyr::left_join(latest_psr, by = "player_id") |>
+      dplyr::mutate(.lineup_key = season * 100L + as.integer(round_number)) |>
+      dplyr::left_join(
+        psr_for_join,
+        by = dplyr::join_by(player_id, closest(.lineup_key > psr_key))
+      ) |>
+      dplyr::select(-.lineup_key, -psr_key) |>
       dplyr::mutate(
         psr = tidyr::replace_na(psr, PSR_PRIOR_RATE),
         psr = psr * lineup_tog
