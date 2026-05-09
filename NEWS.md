@@ -1,3 +1,25 @@
+# torp 1.3.4 (2026-05-09)
+
+## Bug Fixes
+
+* **PSR forward-leakage in match prediction features** — `.build_team_ratings_df()` previously joined PSR via `slice_tail(n = 1)` per `player_id`, applying each player's *latest available* PSR to **every** historical lineup row. This leaked future skill information into past games used for GAM/XGB training. Replaced with `dplyr::join_by(closest(.lineup_key > psr_key))`, so each lineup row gets the most recent PSR strictly *before* its `(season, round_number)`. Production behaviour at prediction time is preserved (still picks the latest PSR available before the target week); only historical training rows shift. Discovered while comparing rolling-OOS evaluation metrics against actual Squiggle leaderboard rank.
+
+* **`torp_replace_teams()` scrambled factor inputs** — `AFL_TEAM_ALIASES[factor_var]` indexes by the factor's underlying integer level codes, not by label, so factor inputs got silently mapped to whichever names happened to occupy the early alias slots. Function now coerces `as.character(team)` before lookup. Affected any caller passing a factor — most commonly downstream consumers of `load_predictions()`, which was the only loader returning factor team columns.
+
+* **`.normalise_team_values()` silently skipped factor columns** — the `is.character(vals)` guard prevented factor columns from being normalised at all (they passed through un-mapped). Now also handles `is.factor(vals)` and emits character output, aligning `load_predictions()` schema with every other loader.
+
+* **Predictions parquet stored factor `home_team` / `away_team`** — `team_name.x = as.factor(...)` in `.build_team_mdl_df()` (needed for GAM categorical predictors) propagated through `.format_match_preds()`'s `home_team = team_name.x` assignment, so factor types round-tripped through every parquet write/read cycle. Added explicit `as.character()` coercion in the formatter so future writes store character columns.
+
+## Tests
+
+* New `test-match-data-prep.R` — five regression tests pinning the PSR rolling-join semantics: round 0 has no prior PSR (falls back to `PSR_PRIOR_RATE`); round-N lineups pick PSR from round N−1 (no forward leakage); future-round prediction picks the latest available prior PSR; works without `osr`/`dsr` columns; works when `psr_df = NULL`.
+
+* `test-team-names.R` — added factor-handling regression tests for `torp_replace_teams()`, `torp_team_abbr()`, `torp_team_full()`, and `.normalise_team_values()` covering the integer-level-code coercion bug.
+
+## Internal
+
+* `R/globals.R` — declared `.lineup_key`, `psr_key`, and the `closest` `join_by()` token to silence the new R CMD check globals NOTE.
+
 # torp 1.3.3 (2026-04-26)
 
 ## New Features
