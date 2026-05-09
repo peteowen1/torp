@@ -430,5 +430,8 @@ utils::globalVariables(c(
   "aerial_def_wins", "aerial_def_losses",
   ".disp_scale",
   # PSR/PSV NSE weights
-  "wt_80s", ".tog_wt"
+  "wt_80s", ".tog_wt",
+  # Match data prep: PSR rolling-join keys (closest is a join_by() token,
+  # not a real function -- declared here to silence R CMD check globals NOTE)
+  ".lineup_key", "psr_key", "closest"
 ))
