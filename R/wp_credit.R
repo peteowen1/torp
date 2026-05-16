@@ -38,7 +38,7 @@ create_wp_credit <- function(pbp_data = NULL,
 
   required_cols <- c("wpa", "player_id", "player_name", "lead_player_id",
                      "pos_team", "display_order", "match_id", "team",
-                     "utc_start_time", "round_number")
+                     "utc_start_time", "round_number", "description")
   missing <- setdiff(required_cols, names(pbp_data))
   if (length(missing) > 0) {
     cli::cli_abort("Missing required columns: {.val {missing}}")
@@ -46,9 +46,19 @@ create_wp_credit <- function(pbp_data = NULL,
 
   dt <- data.table::setDT(data.table::copy(pbp_data))
 
-  # Filter to rows with a valid player and non-NA wpa
+  # Filter to rows with a valid player and non-NA wpa, AND exclude descriptive
+  # scoring rows ("Goal" / "Behind" / "Rushed"). Those rows are chain
+  # bookkeeping — the actual scoring action (Kick with shot_at_goal == 1) is
+  # the previous row and already gets full WPA credit through the next-row
+  # WP delta. Including them would double-count the scoring player and import
+  # their anomalous post-score wp (computed against a half-updated score state)
+  # into the credit aggregation. The worker's per-row WPA pipeline
+  # (worker/src/score-tracker.js::attachAflWpa in inthegame-blog) filters to
+  # "relevant" rows the same way, so excluding here aligns torp parquet WPA
+  # with the chain-summed WPA the blog renders for live/CFS-fallback matches.
 
-  dt <- dt[!is.na(player_id) & !is.na(wpa)]
+  dt <- dt[!is.na(player_id) & !is.na(wpa) &
+           !(description %in% c("Goal", "Behind", "Rushed"))]
 
   # Determine if receiver exists and is different from disposer
   # No receiver when: lead_player_id is NA, equals player_id, or is a shot/OOB
