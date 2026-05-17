@@ -38,7 +38,7 @@ create_wp_credit <- function(pbp_data = NULL,
 
   required_cols <- c("wpa", "player_id", "player_name", "lead_player_id",
                      "pos_team", "display_order", "match_id", "team",
-                     "utc_start_time", "round_number")
+                     "utc_start_time", "round_number", "description")
   missing <- setdiff(required_cols, names(pbp_data))
   if (length(missing) > 0) {
     cli::cli_abort("Missing required columns: {.val {missing}}")
@@ -46,9 +46,16 @@ create_wp_credit <- function(pbp_data = NULL,
 
   dt <- data.table::setDT(data.table::copy(pbp_data))
 
-  # Filter to rows with a valid player and non-NA wpa
-
-  dt <- dt[!is.na(player_id) & !is.na(wpa)]
+  # Defensive: descriptive scoring rows ("Goal" / "Behind" / "Rushed") would
+  # over-credit the scorer if they reached this aggregation, but the standard
+  # pipeline strips them upstream in clean_model_data_epv() via the
+  # EPV_RELEVANT_DESCRIPTIONS whitelist. This guard exists for direct callers
+  # that bypass that step. See project_wpa_reconciliation_b4 in memory for the
+  # full investigation -- the chain-sum vs parquet WPA gap is a WP-model
+  # divergence (worker's chain-aware features produce larger per-row deltas),
+  # not a filter or attribution issue.
+  dt <- dt[!is.na(player_id) & !is.na(wpa) &
+           !(description %in% c("Goal", "Behind", "Rushed"))]
 
   # Determine if receiver exists and is different from disposer
   # No receiver when: lead_player_id is NA, equals player_id, or is a shot/OOB
