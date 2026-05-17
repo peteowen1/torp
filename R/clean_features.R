@@ -597,20 +597,23 @@ add_shot_result_variables <- function(df) {
 #' near-goal distance via `pmin(goal_x, venue_length - goal_x)` before the
 #' geometry calculation. This is NOT a coordinate-frame fix — it works around
 #' an upstream issue where `clean_pbp::fix_chain_coordinates_dt` mis-flips
-#' ~7% of shot_at_goal rows from positive to negative `x` (the iterative
-#' neighbour-based sign-flip cascades from a wrong anchor row when there's
-#' API noise in the chain). Without the fold, those rows render as e.g. 126m
-#' behinds when the truth is ~40m. The fold only corrects user-facing
-#' `distance` / `angle`; the underlying `x` and `goal_x` columns remain
-#' wrong for those rows, which is fine because the EP/WP/shot models were
-#' trained on the same buggy `x` and are internally consistent with it.
-#' See `project_clean_pbp_sign_flip_cascade` in memory for the full
-#' investigation and the path to a proper upstream fix (model retraining
-#' required).
+#' a small fraction of shot_at_goal rows from positive to negative `x` (the
+#' iterative neighbour-based sign-flip cascades from a wrong anchor row when
+#' there's API noise in the chain). On 2026 R1 chain data the mis-flip rate
+#' on shots was ~7% post-`clean_pbp` vs ~0.2% in raw chains. Without the
+#' fold, those rows render as e.g. 126m behinds when the truth is ~40m. The
+#' fold only corrects user-facing `distance` / `angle`; the underlying `x`
+#' and `goal_x` columns remain wrong for those rows, which is fine because
+#' the EP/WP/shot models were trained on the same buggy `x` and are
+#' internally consistent with it. The full investigation and path to a
+#' proper upstream fix (model retraining required) is tracked in the
+#' internal `project_clean_pbp_sign_flip_cascade` notes; root-cause file
+#' is `R/clean_pbp.R::fix_chain_coordinates_dt`.
 #'
-#' Side effect: the rare ~0.2% of genuine long-range shots from own half
-#' (real `x < 0` cases per CLAUDE.md's team-relative coords) will also be
-#' folded to near-goal distance. Acceptable trade-off vs the 7% mis-flip.
+#' Side effect: genuine long-range shots from own half (real `x < 0` cases
+#' per CLAUDE.md's team-relative coords; ~0.2% of shots in measured data)
+#' also get folded to near-goal distance. Acceptable trade-off vs the
+#' mis-flip case.
 #'
 #' @param df A dataframe containing shot data. Pass `venue_length` to enable
 #'   the near-goal fold (recommended for any production caller). Without it,
@@ -628,12 +631,14 @@ add_shot_geometry_variables <- function(df, goal_width) {
       )
     # NA venue_length silently propagates through pmin → NaN angle → NA
     # distance, poisoning every downstream shot feature. Warn so the upstream
-    # data defect is visible instead of swallowed.
-    n_poisoned <- sum(is.na(df$goal_x_near) & !is.na(df$goal_x))
-    if (n_poisoned > 0L) {
+    # data defect is visible instead of swallowed. Predicate isolates the
+    # venue_length defect specifically (not NA goal_x from other causes) so
+    # the warning message is provably accurate.
+    n_bad_venue <- sum(is.na(df$venue_length) & !is.na(df$goal_x))
+    if (n_bad_venue > 0L) {
       cli::cli_warn(
-        "{.fn add_shot_geometry_variables}: {n_poisoned} row{?s} have NA \\
-         {.code venue_length} — shot {.code distance} and {.code angle} \\
+        "{.fn add_shot_geometry_variables}: {n_bad_venue} row{?s} {?has/have} \\
+         NA {.code venue_length} — shot {.code distance} and {.code angle} \\
          will be NA. Check upstream data."
       )
     }
