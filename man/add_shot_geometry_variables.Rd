@@ -26,19 +26,22 @@ BAND-AID: when \code{venue_length} is in \code{names(df)}, \code{goal_x} is fold
 near-goal distance via \code{pmin(goal_x, venue_length - goal_x)} before the
 geometry calculation. This is NOT a coordinate-frame fix — it works around
 an upstream issue where \code{clean_pbp::fix_chain_coordinates_dt} mis-flips
-~7\% of shot_at_goal rows from positive to negative \code{x} (the iterative
-neighbour-based sign-flip cascades from a wrong anchor row when there's
-API noise in the chain). Without the fold, those rows render as e.g. 126m
-behinds when the truth is ~40m. The fold only corrects user-facing
-\code{distance} / \code{angle}; the underlying \code{x} and \code{goal_x} columns remain
-wrong for those rows, which is fine because the EP/WP/shot models were
-trained on the same buggy \code{x} and are internally consistent with it.
-See \code{project_clean_pbp_sign_flip_cascade} in memory for the full
-investigation and the path to a proper upstream fix (model retraining
-required).
+a small fraction of shot_at_goal rows from positive to negative \code{x} (the
+iterative neighbour-based sign-flip cascades from a wrong anchor row when
+there's API noise in the chain). On 2026 R1 chain data the mis-flip rate
+on shots was ~7\% post-\code{clean_pbp} vs ~0.2\% in raw chains. Without the
+fold, those rows render as e.g. 126m behinds when the truth is ~40m. The
+fold only corrects user-facing \code{distance} / \code{angle}; the underlying \code{x}
+and \code{goal_x} columns remain wrong for those rows, which is fine because
+the EP/WP/shot models were trained on the same buggy \code{x} and are
+internally consistent with it. The full investigation and path to a
+proper upstream fix (model retraining required) is tracked in the
+internal \code{project_clean_pbp_sign_flip_cascade} notes; root-cause file
+is \code{R/clean_pbp.R::fix_chain_coordinates_dt}.
 
-Side effect: the rare ~0.2\% of genuine long-range shots from own half
-(real \code{x < 0} cases per CLAUDE.md's team-relative coords) will also be
-folded to near-goal distance. Acceptable trade-off vs the 7\% mis-flip.
+Side effect: genuine long-range shots from own half (real \code{x < 0} cases
+per CLAUDE.md's team-relative coords; ~0.2\% of shots in measured data)
+also get folded to near-goal distance. Acceptable trade-off vs the
+mis-flip case.
 }
 \keyword{internal}

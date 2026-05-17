@@ -441,9 +441,13 @@ test_that("add_shot_geometry_variables warns on NA venue_length", {
     stringsAsFactors = FALSE
   )
 
+  # Match on the specific message AND pin the count to "1" so a regression in
+  # the predicate (e.g., double-counting unrelated NA goal_x rows) would
+  # change the count and fail the test instead of slipping through a loose
+  # "NA" substring match.
   expect_warning(
     result <- torp:::add_shot_geometry_variables(mock_data, goal_width = 6.4),
-    "NA"
+    "1 row has NA.*venue_length"
   )
   expect_equal(result$distance[1], 32.5)
   expect_true(is.na(result$distance[2]))
