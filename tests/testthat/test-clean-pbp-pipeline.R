@@ -430,6 +430,25 @@ test_that("add_shot_geometry_variables folds goal_x for shots from negative-x", 
   expect_equal(result$distance[2], 52.5)
 })
 
+test_that("add_shot_geometry_variables warns on NA venue_length", {
+  # NA venue_length silently produces NA goal_x_near → NaN angle → NA distance,
+  # poisoning every downstream feature. Warn rather than swallow.
+  mock_data <- data.frame(
+    x = c(50, -30),
+    y = c(0, 0),
+    goal_x = c(32.5, 112.5),
+    venue_length = c(165, NA_real_),
+    stringsAsFactors = FALSE
+  )
+
+  expect_warning(
+    result <- torp:::add_shot_geometry_variables(mock_data, goal_width = 6.4),
+    "NA"
+  )
+  expect_equal(result$distance[1], 32.5)
+  expect_true(is.na(result$distance[2]))
+})
+
 test_that("add_shot_geometry_variables falls through without venue_length", {
   # Legacy callers pass pre-mirrored coordinates (always positive goal_x);
   # without venue_length the function should use raw goal_x unchanged.
