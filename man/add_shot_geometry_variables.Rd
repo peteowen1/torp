@@ -7,7 +7,10 @@
 add_shot_geometry_variables(df, goal_width)
 }
 \arguments{
-\item{df}{A dataframe containing shot data.}
+\item{df}{A dataframe containing shot data. Pass \code{venue_length} to enable
+the near-goal fold (recommended for any production caller). Without it,
+\code{goal_x} is used as-is, which assumes the caller has already mirrored
+coordinates to be positive — only suitable for synthetic test fixtures.}
 
 \item{goal_width}{The width of the goal.}
 }
@@ -15,14 +18,27 @@ add_shot_geometry_variables(df, goal_width)
 A dataframe with additional shot geometry variables.
 }
 \description{
-Computes side_b, side_c, angle, and distance to the attacking goal.
-Internally folds \code{goal_x} to the near-goal distance: a player at x = -30
-on a 165m field has goal_x = halfLen - x = 112.5 (signed), but the actual
-distance to the goal they're attacking is 52.5m. Pre-fold, shots from
-negative-x reported distance to the FAR goal — visible on the blog as e.g.
-a 126m behind that should have been 40m. The fold uses venue_length when
-available; tests / legacy callers without venue_length fall through to
-the raw goal_x (which assumes coords are already pre-mirrored to be
-positive).
+Computes shot \code{angle} and \code{distance} to the attacking goal (plus
+intermediate trig legs \code{side_b} / \code{side_c}).
+}
+\details{
+BAND-AID: when \code{venue_length} is in \code{names(df)}, \code{goal_x} is folded to the
+near-goal distance via \code{pmin(goal_x, venue_length - goal_x)} before the
+geometry calculation. This is NOT a coordinate-frame fix — it works around
+an upstream issue where \code{clean_pbp::fix_chain_coordinates_dt} mis-flips
+~7\% of shot_at_goal rows from positive to negative \code{x} (the iterative
+neighbour-based sign-flip cascades from a wrong anchor row when there's
+API noise in the chain). Without the fold, those rows render as e.g. 126m
+behinds when the truth is ~40m. The fold only corrects user-facing
+\code{distance} / \code{angle}; the underlying \code{x} and \code{goal_x} columns remain
+wrong for those rows, which is fine because the EP/WP/shot models were
+trained on the same buggy \code{x} and are internally consistent with it.
+See \code{project_clean_pbp_sign_flip_cascade} in memory for the full
+investigation and the path to a proper upstream fix (model retraining
+required).
+
+Side effect: the rare ~0.2\% of genuine long-range shots from own half
+(real \code{x < 0} cases per CLAUDE.md's team-relative coords) will also be
+folded to near-goal distance. Acceptable trade-off vs the 7\% mis-flip.
 }
 \keyword{internal}
