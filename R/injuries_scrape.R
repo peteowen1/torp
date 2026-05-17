@@ -36,8 +36,13 @@ scrape_injuries <- function(timeout = 30) {
       cli::cli_abort("Package {.pkg rvest} is required to scrape injuries.")
     }
     url <- "https://www.afl.com.au/matches/injury-list"
-    session <- rvest::session(url, httr::timeout(timeout))
-    raw_tables <- rvest::html_table(session)
+    raw_tables <- .with_retry(
+      function() {
+        session <- rvest::session(url, httr::timeout(timeout))
+        rvest::html_table(session)
+      },
+      label = "Injury-list scrape"
+    )
 
     # AFL page has 18 tables in alphabetical team order
     team_names <- sort(AFL_TEAMS$name)

@@ -132,22 +132,32 @@
   }
   team_lineup_df$.unknown_pos <- NULL
 
-  # Join PSR if provided - use each player's most recent PSR value
-
+  # Join PSR as-of each lineup row's (season, round_number).
+  # For each (player_id, lineup_season, lineup_round), pick the most recent
+  # psr_df row for that player with (season, round) STRICTLY before the
+  # lineup row -- because PSR(s, r) is computed using stat ratings whose
+  # ref_date includes round r, so it is not knowable until after round r.
+  # For future-prediction targets (e.g. predicting round R when we have PSR
+  # through R-1), the most recent prior PSR is automatically selected, so
+  # this matches the previous slice_tail(n=1) behavior at prediction time
+  # while removing forward leakage from historical training rows.
   if (!is.null(psr_df)) {
     has_osr_dsr <- all(c("osr", "dsr") %in% names(psr_df))
-    select_cols <- if (has_osr_dsr) c("player_id", "season", "round", "psr", "osr", "dsr") else c("player_id", "season", "round", "psr")
+    psr_value_cols <- if (has_osr_dsr) c("psr", "osr", "dsr") else "psr"
+    select_cols <- c("player_id", "season", "round", psr_value_cols)
 
-    latest_psr <- psr_df |>
+    psr_for_join <- psr_df |>
       dplyr::select(dplyr::any_of(select_cols)) |>
-      dplyr::arrange(player_id, season, round) |>
-      dplyr::group_by(player_id) |>
-      dplyr::slice_tail(n = 1) |>
-      dplyr::ungroup() |>
-      dplyr::select(-season, -round)
+      dplyr::mutate(psr_key = season * 100L + as.integer(round)) |>
+      dplyr::select(player_id, psr_key, dplyr::all_of(psr_value_cols))
 
     team_lineup_df <- team_lineup_df |>
-      dplyr::left_join(latest_psr, by = "player_id") |>
+      dplyr::mutate(.lineup_key = season * 100L + as.integer(round_number)) |>
+      dplyr::left_join(
+        psr_for_join,
+        by = dplyr::join_by(player_id, closest(.lineup_key > psr_key))
+      ) |>
+      dplyr::select(-.lineup_key, -psr_key) |>
       dplyr::mutate(
         psr = tidyr::replace_na(psr, PSR_PRIOR_RATE),
         psr = psr * lineup_tog
@@ -404,6 +414,9 @@
   for (i in seq_len(nrow(venue_dates))) {
     vd <- venue_dates[i, ]
     hourly <- tryCatch({
+      # max_tries = 5 with backoff covers ~30s of transient-failure window.
+      # req_timeout(30) per attempt prevents a single slow response from
+      # eating the whole retry budget.
       resp <- httr2::request("https://api.open-meteo.com/v1/forecast") |>
         httr2::req_url_query(
           latitude = vd$Latitude, longitude = vd$Longitude,
@@ -412,7 +425,8 @@
           hourly = "temperature_2m,precipitation,wind_speed_10m,relative_humidity_2m",
           timezone = "UTC"
         ) |>
-        httr2::req_retry(max_tries = 3, backoff = ~ 2) |>
+        httr2::req_timeout(30) |>
+        httr2::req_retry(max_tries = 5, backoff = ~ 2) |>
         httr2::req_perform() |>
         httr2::resp_body_json()
       tibble::tibble(
@@ -424,16 +438,26 @@
         venue = vd$venue
       )
     }, error = function(e) {
-      cli::cli_warn("Forecast failed for {vd$venue}: {conditionMessage(e)}")
+      # cli_inform (not cli_warn): per-venue failure is not actionable —
+      # downstream code falls back to median weather imputation. Aggregate
+      # cli_warn below still fires if a meaningful share of venues failed.
+      cli::cli_inform("Forecast failed for {vd$venue}: {conditionMessage(e)}")
       NULL
     })
     if (!is.null(hourly)) all_hourly[[i]] <- hourly
     Sys.sleep(OPEN_METEO_RATE_LIMIT_SECONDS)
   }
 
+  # Drop NULL slots from per-venue failures so length(all_hourly) reflects
+  # successful fetches, not the pre-allocated vector size.
+  all_hourly <- Filter(Negate(is.null), all_hourly)
   n_failed <- nrow(venue_dates) - length(all_hourly)
-  if (n_failed > 0) {
+  # Only warn if a meaningful share of venues failed — single-venue blips
+  # are handled by median imputation downstream.
+  if (n_failed > nrow(venue_dates) / 2) {
     cli::cli_warn("Weather forecast failed for {n_failed} of {nrow(venue_dates)} venue{?s}")
+  } else if (n_failed > 0) {
+    cli::cli_inform("Weather forecast failed for {n_failed} of {nrow(venue_dates)} venue{?s} (median imputation will be used)")
   }
   if (length(all_hourly) == 0) {
     cli::cli_warn("All weather forecasts failed -- predictions will use median weather imputation")

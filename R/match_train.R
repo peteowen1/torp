@@ -341,6 +341,10 @@
   cli::cli_progress_step("Training win probability model")
   gam_df$pred_tot_xscore  <- gam_df$gam_pred_tot_xscore
   gam_df$pred_score_diff  <- team_mdl_df$gam_pred_score_diff[train_mask]
+  # quasibinomial gives the same logit fit as binomial for 0/1 responses but
+  # skips the integer-successes check that emits "non-integer #successes in
+  # a binomial glm!" when fractional `weights =` are applied (which we want —
+  # weights are decay-weighted).
   afl_win_mdl <- mgcv::bam(
     win ~
       +s(team_name.x, bs = "re") + s(team_name.y, bs = "re")
@@ -350,7 +354,7 @@
       + s(log_dist_diff, bs = "ts", k = 5) + s(familiarity_diff, bs = "ts", k = 5)
       + s(days_rest_diff_fac, bs = "re"),
     data = gam_df, weights = gam_df$weightz,
-    family = "binomial", nthreads = nthreads, select = TRUE, discrete = TRUE,
+    family = stats::quasibinomial(), nthreads = nthreads, select = TRUE, discrete = TRUE,
     drop.unused.levels = FALSE
   )
   # Seed bare pred_* columns on team_mdl_df with GAM-only values so the

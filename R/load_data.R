@@ -19,9 +19,23 @@
 #' }
 save_to_release <- function(df, file_name, release_tag, also_csv = FALSE) {
   rlang::check_installed("piggyback", version = "0.1.4", reason = "to upload data to GitHub releases")
+  # Localised warn = -1: piggyback's pb_upload internally registers tempfile
+  # connections that R's auto-gc reaps with "closing unused connection N (...)"
+  # warnings later in the run. closeAllConnections() doesn't catch them
+  # (they're held by gh:: response objects until those go out of scope, then
+  # auto-gc emits the warning from a C-level path that R-level handlers
+  # cannot intercept). save_to_release is pure I/O — no application-level
+  # warnings should originate here — so suppressing during this function is
+  # safe and the cleanest way to silence the noise. We restore the previous
+  # `warn` option on exit so caller-visible warnings work normally afterward.
+  old_opts <- options(warn = -1)
   f_name <- paste0(file_name, ".parquet")
   tf <- tempfile(fileext = ".parquet")
-  on.exit(unlink(tf), add = TRUE)
+  on.exit({
+    unlink(tf)
+    .close_extra_connections()
+    options(old_opts)
+  }, add = TRUE)
 
   # Normalise team name values to canonical forms before saving
   if (nrow(df) > 0) df <- .normalise_team_values(df)
@@ -33,22 +47,27 @@ save_to_release <- function(df, file_name, release_tag, also_csv = FALSE) {
     }
   )
 
+  # suppressMessages: piggyback's internal httr::RETRY prints
+  # "Request failed [ERROR]. Retrying in Xs..." style messages to stderr
+  # whenever it retries a transient failure. Pure noise — the upload either
+  # succeeds (no extra signal needed) or raises a final error which we
+  # surface via the tryCatch error handler.
   tryCatch(
-    piggyback::pb_upload(tf,
-                         repo = get_torp_data_repo(),
-                         tag = release_tag,
-                         name = f_name),
+    suppressMessages(piggyback::pb_upload(tf,
+                                          repo = get_torp_data_repo(),
+                                          tag = release_tag,
+                                          name = f_name)),
     error = function(e) {
       # Retry once on 404 — piggyback's delete-then-upload can fail if the
       # asset ID changed between listing and deletion (concurrent upload or
       # stale cache). A fresh attempt re-fetches the asset list.
       if (grepl("404", conditionMessage(e), fixed = TRUE)) {
-        cli::cli_warn("Upload 404 for {.val {f_name}}, retrying once...")
+        cli::cli_inform("Upload 404 for {.val {f_name}}, retrying once...")
         tryCatch(
-          piggyback::pb_upload(tf,
-                               repo = get_torp_data_repo(),
-                               tag = release_tag,
-                               name = f_name),
+          suppressMessages(piggyback::pb_upload(tf,
+                                                repo = get_torp_data_repo(),
+                                                tag = release_tag,
+                                                name = f_name)),
           error = function(e2) {
             cli::cli_abort("Failed to upload {.val {f_name}} to release {.val {release_tag}} (after retry): {conditionMessage(e2)}")
           }
@@ -66,10 +85,10 @@ save_to_release <- function(df, file_name, release_tag, also_csv = FALSE) {
 
     tryCatch({
       utils::write.csv(df, tf_csv, row.names = FALSE)
-      piggyback::pb_upload(tf_csv,
-                           repo = get_torp_data_repo(),
-                           tag = release_tag,
-                           name = csv_name)
+      suppressMessages(piggyback::pb_upload(tf_csv,
+                                            repo = get_torp_data_repo(),
+                                            tag = release_tag,
+                                            name = csv_name))
     }, error = function(e) {
       cli::cli_warn("Parquet uploaded but CSV copy failed for {.val {csv_name}}: {conditionMessage(e)}")
     })
@@ -128,9 +147,25 @@ update_player_stats <- function(season) {
 #' Read a Parquet File from a GitHub Release via Piggyback
 #'
 #' Downloads and reads a `.parquet` file from a GitHub release using the `piggyback` package.
+#' Transparently retries on transient network failures (`piggyback::pb_download`
+#' itself does not retry, unlike `pb_upload`).
 #'
 #' @param file_name The base name of the file (without `.parquet` extension).
 #' @param release_tag The GitHub release tag the file is associated with.
+#' @param cache Logical. If TRUE, stores the result in the package-level
+#'   in-memory cache (`.torp_cache`) so repeat calls within the same R
+#'   session reuse the download. Use only for static reference assets that
+#'   don't change mid-session (e.g. `stadium_data`, `weather_data`). Leave
+#'   FALSE for assets the current pipeline writes back to (e.g.
+#'   `predictions_<season>`). Default FALSE.
+#' @param refresh Logical. If TRUE, ignores any cached copy and forces a
+#'   fresh download (then repopulates the cache when `cache = TRUE`).
+#'   Default FALSE. Ignored when `cache = FALSE`.
+#' @param max_attempts Integer. Maximum number of download attempts before
+#'   giving up. Default 3.
+#' @param initial_delay Numeric. Seconds to wait before the second attempt;
+#'   delay doubles on each subsequent retry (exponential backoff with jitter).
+#'   Default 1.5.
 #'
 #' @return A data frame read from the downloaded `.parquet` file.
 #' @keywords internal
@@ -138,21 +173,39 @@ update_player_stats <- function(season) {
 #' @examples
 #' \dontrun{
 #' df <- file_reader("latest_data", "v1.0.0")
+#' grounds <- file_reader("stadium_data", "reference-data", cache = TRUE)
 #' }
-file_reader <- function(file_name, release_tag) {
+file_reader <- function(file_name, release_tag, cache = FALSE, refresh = FALSE,
+                        max_attempts = 3L, initial_delay = 1.5) {
   rlang::check_installed("piggyback", version = "0.1.4", reason = "to download data from GitHub releases")
+
+  cache_key <- paste0("static_", release_tag, "_", file_name)
+  if (cache && !refresh && exists(cache_key, envir = .torp_cache, inherits = FALSE)) {
+    return(get(cache_key, envir = .torp_cache, inherits = FALSE))
+  }
+
   f_name <- paste0(file_name, ".parquet")
   tf <- tempfile(fileext = ".parquet")
   on.exit(unlink(tf), add = TRUE)
 
   tryCatch(
-    piggyback::pb_download(f_name,
-                           repo = get_torp_data_repo(),
-                           tag = release_tag,
-                           dest = dirname(tf),
-                           overwrite = TRUE),
+    .with_retry(
+      function() {
+        suppressMessages(piggyback::pb_download(f_name,
+                                                repo = get_torp_data_repo(),
+                                                tag = release_tag,
+                                                dest = dirname(tf),
+                                                overwrite = TRUE))
+      },
+      max_attempts = max_attempts,
+      initial_delay = initial_delay,
+      label = paste0("Download of ", f_name)
+    ),
     error = function(e) {
-      cli::cli_abort("Failed to download {.val {f_name}} from release {.val {release_tag}}: {conditionMessage(e)}")
+      cli::cli_abort(c(
+        "Failed to download {.val {f_name}} from release {.val {release_tag}} after {max_attempts} attempt{?s}.",
+        "x" = "Last error: {conditionMessage(e)}"
+      ))
     }
   )
 
@@ -160,12 +213,36 @@ file_reader <- function(file_name, release_tag) {
   downloaded_path <- file.path(dirname(tf), f_name)
   on.exit(unlink(downloaded_path), add = TRUE)
 
-  tryCatch(
+  data <- tryCatch(
     arrow::read_parquet(downloaded_path),
     error = function(e) {
       cli::cli_abort("Failed to read {.val {f_name}} after download: {conditionMessage(e)}")
     }
   )
+
+  # Close any leaked tempfile connections (piggyback's gh::gh response
+  # parsing can leave them registered in R's connection table). Otherwise
+  # R's automatic gc() warns "closing unused connection N (...)" later.
+  # showConnections() returns built-in stdin/stdout/stderr at indices 0-2;
+  # we close anything beyond that.
+  .close_extra_connections()
+
+  if (cache) assign(cache_key, data, envir = .torp_cache)
+  data
+}
+
+# Internal helper: close all non-default R connections. Used after operations
+# that leak tempfile readers (piggyback downloads, arrow parquet reads,
+# torpmodels readRDS) to keep R's auto-gc() from emitting "closing unused
+# connection N (...)" warnings later.
+#
+# closeAllConnections() both closes AND destroys the connections (removes
+# them from R's connection table), so the subsequent gc() finds nothing to
+# warn about. Custom close-by-index loops were unreliable because they only
+# closed without destroying — gc would still see and reap the slot.
+.close_extra_connections <- function() {
+  suppressWarnings(tryCatch(closeAllConnections(), error = function(e) NULL))
+  invisible(NULL)
 }
 
 
@@ -257,10 +334,16 @@ file_reader <- function(file_name, release_tag) {
         if (!is.null(disk_data)) return(disk_data)
       }
 
-      data <- tryCatch(suppressMessages(fetch_fn(s)), error = function(e) {
-        cli::cli_alert_danger("Failed to fetch {cache_prefix} for {s}: {conditionMessage(e)}")
-        NULL
-      })
+      data <- tryCatch(
+        suppressMessages(.with_retry(
+          function() fetch_fn(s),
+          label = paste0(cache_prefix, " for ", s)
+        )),
+        error = function(e) {
+          cli::cli_alert_danger("Failed to fetch {cache_prefix} for {s}: {conditionMessage(e)}")
+          NULL
+        }
+      )
 
       # Save to per-season disk cache (past seasons only)
       if (use_disk_cache && s < current_year && !is.null(data) && nrow(data) > 0) {
@@ -1106,5 +1189,5 @@ load_psr <- function(seasons = get_afl_season(), use_disk_cache = FALSE, columns
 #' }
 #' @export
 load_weather <- function() {
-  file_reader("weather_data", "weather-data")
+  file_reader("weather_data", "weather-data", cache = TRUE)
 }

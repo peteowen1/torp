@@ -80,7 +80,14 @@ build_injury_schedule <- function(injuries_df, player_ratings_dt) {
     } else {
       matched[is.na(torp), player_norm]
     }
-    cli::cli_warn("Dropped {n_unmatched} injured player{?s} not found in ratings: {paste(utils::head(unmatched_names, 5), collapse = ', ')}")
+    # Informational, not a correctness issue: new draftees / debutants don't
+    # have ratings yet, and players whose ratings are sub-replacement get
+    # dropped during rating construction. Empirically ~25% of injured
+    # players are unmatched in any given week. Escalate only if it's a
+    # large share (>40% suggests a join-key bug worth flagging).
+    drop_pct <- n_unmatched / nrow(matched)
+    msg <- "Dropped {n_unmatched} injured player{?s} not found in ratings: {paste(utils::head(unmatched_names, 5), collapse = ', ')}"
+    if (drop_pct > 0.4) cli::cli_warn(msg) else cli::cli_inform(msg)
   }
   matched <- matched[!is.na(torp)]
 

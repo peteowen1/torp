@@ -103,6 +103,7 @@ calculate_match_xgs <- function(season = get_afl_season(), round = get_afl_week(
 #'
 #' # From season and round (all matches in the round)
 #' get_xg(round = 2)
+#' get_xg(2025, 14)               # positional: (season, round)
 #' get_xg(season = 2025, round = 14)
 #'
 #' # Debug: return shot-level data
@@ -117,6 +118,25 @@ get_xg <- function(match = NULL,
                    round = NULL,
                    quarter = 1:4,
                    detail = FALSE) {
+  # --- Smart dispatch: numeric first arg means (season[, round]) ---
+  # Lets users call get_xg(2026, 3) positionally instead of always naming
+  # season/round. match=, "CD_M..." IDs, and chains data.frames are unaffected.
+  if (is.numeric(match) && length(match) == 1) {
+    if (!missing(season) && is.numeric(season) && length(season) == 1) {
+      round <- season
+      season <- match
+      match <- NULL
+    } else if (!is.null(round)) {
+      season <- match
+      match <- NULL
+    } else {
+      cli::cli_abort(c(
+        "Numeric first arg ({.val {match}}) but no {.arg round} provided.",
+        "i" = "Did you mean {.code get_xg(season = {match}, round = N)} or {.code get_xg(\"CD_M...\")}?"
+      ))
+    }
+  }
+
   # --- Resolve input: match ID, season+round, or pre-scraped chains ---
   if (is.null(match)) {
     if (is.null(round)) {

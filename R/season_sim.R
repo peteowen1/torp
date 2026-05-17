@@ -568,7 +568,10 @@ simulate_afl_season <- function(season,
     # as "Error in serialize(data, node$con)" during clusterExport. Close all
     # non-stdio connections unconditionally — safer than the selective pass.
     tryCatch(closeAllConnections(), error = function(e) NULL)
-    gc()
+    # suppressWarnings: gc() may report R's auto-closure of unused tempfile
+    # connections left over by piggyback/arrow reads upstream — cleanup
+    # noise, not actionable.
+    invisible(suppressWarnings(gc(verbose = FALSE)))
 
     # Wrap the entire parallel pipeline (cluster creation, worker setup,
     # exports, parLapply) in one tryCatch. Any failure — socket death, missing

@@ -616,3 +616,30 @@ test_that("accuracy helpers return empty tibble when inj_hist lacks scraped_at",
   expect_equal(nrow(injury_return_accuracy(2026)), 0)
   expect_equal(nrow(tbc_return_survival(2026)), 0)
 })
+
+
+# --- parse_return_round() ---
+
+test_that("parse_return_round handles N+ weeks symbol form", {
+  # "6+ weeks" should map to current_round + ceiling(6 * 1.5) = 9, not TBC.
+  out <- parse_return_round("6+ weeks", season = 2026, current_round = 5L)
+  expect_equal(out, 5 + 9)
+})
+
+test_that("parse_return_round still handles plus-word form", {
+  expect_equal(parse_return_round("6 plus weeks", 2026, 5L), 5 + 9)
+  expect_equal(parse_return_round("6-plus weeks", 2026, 5L), 5 + 9)
+})
+
+test_that("parse_return_round maps Concussion protocols to +2 rounds", {
+  out <- parse_return_round("Concussion protocols", season = 2026, current_round = 5L)
+  expect_equal(out, 5 + SIM_INJURY_CONCUSSION_BUFFER)
+})
+
+test_that("parse_return_round vectorises across mixed estimates", {
+  out <- parse_return_round(
+    c("6+ weeks", "Concussion protocols", "Round 14", "TBC"),
+    season = 2026, current_round = 5L
+  )
+  expect_equal(out, c(5 + 9, 5 + 2, 14, 5 + SIM_INJURY_TBC_BUFFER))
+})

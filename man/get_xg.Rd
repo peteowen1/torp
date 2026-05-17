@@ -45,6 +45,7 @@ get_xg("CD_M20260140201")
 
 # From season and round (all matches in the round)
 get_xg(round = 2)
+get_xg(2025, 14)               # positional: (season, round)
 get_xg(season = 2025, round = 14)
 
 # Debug: return shot-level data

@@ -18,3 +18,4 @@
 ^\.wrangler$
 ^ARCHITECTURE\.md$
 ^scripts$
+^\.positai$

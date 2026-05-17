@@ -99,6 +99,32 @@ test_that("zero-length input returns character(0)", {
   expect_identical(torp_team_full(character(0)), character(0))
 })
 
+test_that("factor input resolves by label, not by integer level code", {
+  # Regression test: factor inputs were silently coerced to their underlying
+  # integer level codes by AFL_TEAM_ALIASES[factor], scrambling labels.
+  expect_equal(torp_replace_teams(factor("Brisbane Lions")), "Brisbane Lions")
+  expect_equal(torp_replace_teams(factor("WB")), "Western Bulldogs")
+  expect_equal(torp_replace_teams(factor("Narrm")), "Melbourne Demons")
+  fct <- factor(c("Adelaide Crows", "GWS Giants", "Sydney Swans"))
+  expect_equal(torp_replace_teams(fct),
+               c("Adelaide Crows", "GWS Giants", "Sydney Swans"))
+})
+
+test_that("factor input with extra levels is handled correctly", {
+  # The integer-code bug was most visible when the factor had levels in a
+  # different order than its values (e.g. arrow returns dictionary-encoded
+  # columns whose level order is the dictionary order, not value order).
+  fct <- factor(c("Sydney Swans", "Brisbane Lions"),
+                levels = c("Adelaide Crows", "Brisbane Lions",
+                          "Carlton Blues", "Sydney Swans"))
+  expect_equal(torp_replace_teams(fct), c("Sydney Swans", "Brisbane Lions"))
+})
+
+test_that("torp_team_abbr / torp_team_full handle factor input", {
+  expect_equal(torp_team_abbr(factor("Brisbane Lions")), "BL")
+  expect_equal(torp_team_full(factor("BL")), "Brisbane Lions")
+})
+
 test_that("historical name variants resolve correctly", {
   expect_equal(torp_replace_teams("Greater Western Sydney"), "GWS Giants")
   expect_equal(torp_replace_teams("Greater Western Sydney Giants"), "GWS Giants")
@@ -241,4 +267,30 @@ test_that(".normalise_team_values works with data.table by reference", {
   dt <- data.table::data.table(team = c("Adelaide", "GWS"))
   torp:::.normalise_team_values(dt)
   expect_equal(dt$team, c("Adelaide Crows", "GWS Giants"))
+})
+
+test_that(".normalise_team_values normalises factor team columns", {
+  # Regression test: previously the is.character() guard silently skipped
+  # factor columns, leaving them un-normalised (and arrow returns
+  # dictionary-encoded string columns as factors).
+  df <- data.frame(
+    home_team = factor(c("Adelaide", "GWS")),
+    away_team = factor(c("WB", "Narrm")),
+    stringsAsFactors = FALSE
+  )
+  df <- torp:::.normalise_team_values(df)
+  expect_equal(df$home_team, c("Adelaide Crows", "GWS Giants"))
+  expect_equal(df$away_team, c("Western Bulldogs", "Melbourne Demons"))
+  expect_type(df$home_team, "character")
+  expect_type(df$away_team, "character")
+})
+
+test_that(".normalise_team_values normalises factor abbreviation columns", {
+  df <- data.frame(
+    home_team_abbr = factor(c("Adelaide", "GWS")),
+    stringsAsFactors = FALSE
+  )
+  df <- torp:::.normalise_team_values(df)
+  expect_equal(df$home_team_abbr, c("ADEL", "GWS"))
+  expect_type(df$home_team_abbr, "character")
 })

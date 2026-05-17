@@ -142,6 +142,12 @@ parquet_from_urls_parallel <- function(urls, use_cache = FALSE, max_age_days = 7
       }
       out <- dplyr::collect(ds)
       rm(ds)
+      # Force release of memory-mapped readers — on Windows, lingering mmaps
+      # prevent later overwrite of these files (error 1224 "user-mapped
+      # section open"). Close lingering R-level tempfile connections first
+      # so the subsequent gc() doesn't warn about reaping them.
+      .close_extra_connections()
+      invisible(suppressWarnings(gc(verbose = FALSE)))
       data.table::setDT(out)
       out
     }, error = function(e) {

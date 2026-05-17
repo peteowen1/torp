@@ -19,7 +19,7 @@ build_team_mdl_df <- function(season = NULL, target_weeks = NULL,
   if (is.null(season)) season <- get_afl_season()
 
   cli::cli_h2("Loading data")
-  all_grounds <- file_reader("stadium_data", "reference-data")
+  all_grounds <- file_reader("stadium_data", "reference-data", cache = TRUE)
   xg_df <- load_xg(TRUE)
   fixtures <- load_fixtures(TRUE)
   results <- load_results(TRUE)
@@ -264,7 +264,9 @@ get_lineup_ratings <- function(season = NULL, round = NULL, match_id = NULL) {
     ) |>
     dplyr::mutate(
       epr_diff = home_epr - away_epr,
-      psr_diff = home_psr - away_psr
+      psr_diff = home_psr - away_psr,
+      home_team = as.character(home_team),
+      away_team = as.character(away_team)
     ) |>
     dplyr::select(season, round, match_id:away_psr, start_time, venue,
                   epr_diff, psr_diff, players:margin)
@@ -299,7 +301,7 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
   # Load Data ----
   cli::cli_h2("Loading data")
 
-  all_grounds <- file_reader("stadium_data", "reference-data")
+  all_grounds <- file_reader("stadium_data", "reference-data", cache = TRUE)
   xg_df <- load_xg(TRUE)
   fixtures <- load_fixtures(TRUE)
   results <- load_results(TRUE)
@@ -319,25 +321,19 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
 
   teams <- load_teams(TRUE)
 
-  # Load TORP ratings with compute-from-scratch fallback
-  torp_df_total <- tryCatch(load_torp_ratings(), error = function(e) {
-    cli::cli_warn("Could not load TORP ratings from release: {e$message}")
-    NULL
-  })
-  if (is.null(torp_df_total) || nrow(torp_df_total) < 100) {
-    cli::cli_warn("TORP ratings unavailable or too small from release - computing from scratch (this may be slow)")
-    torp_df_total <- tryCatch(
-      calculate_epr(season_val = season, round_val = get_afl_week(type = "next")),
-      error = function(e) {
-        cli::cli_abort("Failed to compute TORP ratings from scratch: {e$message}")
-      }
-    )
+  # Load TORP ratings from torpdata release (required)
+  torp_df_total <- load_torp_ratings()
+  if (nrow(torp_df_total) < 100) {
+    cli::cli_abort(c(
+      "TORP ratings unavailable or too small ({nrow(torp_df_total)} rows).",
+      "i" = "Check connectivity to GitHub and re-run.",
+      "i" = "If downloads time out, set {.code options(timeout = 300)} before re-running."
+    ))
   }
 
   cli::cli_inform("Loaded: fixtures={nrow(fixtures)}, results={nrow(results)}, teams={nrow(teams)}, ratings={nrow(torp_df_total)}")
 
   if (nrow(fixtures) < 100) cli::cli_abort("Fixtures too small ({nrow(fixtures)} rows)")
-  if (nrow(torp_df_total) < 100) cli::cli_abort("Ratings too small ({nrow(torp_df_total)} rows)")
   if (nrow(teams) < 100) cli::cli_abort("Teams too small ({nrow(teams)} rows)")
 
   # Resolve target weeks
@@ -787,7 +783,7 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
       t1 <- proc.time()[["elapsed"]]
       gam_size <- file.size(gam_path) / 1e6
       cli::cli_alert_info("match_gams saveRDS: {round(t1 - t0, 1)}s ({round(gam_size, 1)} MB)")
-      piggyback::pb_upload(gam_path, repo = "peteowen1/torpmodels", tag = "core-models")
+      suppressMessages(piggyback::pb_upload(gam_path, repo = "peteowen1/torpmodels", tag = "core-models"))
       t2 <- proc.time()[["elapsed"]]
       cli::cli_alert_info("match_gams pb_upload: {round(t2 - t1, 1)}s")
       local_cache <- file.path(cache_dir, "core", "match_gams.rds")
@@ -803,7 +799,7 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
         t4 <- proc.time()[["elapsed"]]
         xgb_size <- file.size(xgb_path) / 1e6
         cli::cli_alert_info("match_xgb saveRDS: {round(t4 - t3, 1)}s ({round(xgb_size, 1)} MB)")
-        piggyback::pb_upload(xgb_path, repo = "peteowen1/torpmodels", tag = "core-models")
+        suppressMessages(piggyback::pb_upload(xgb_path, repo = "peteowen1/torpmodels", tag = "core-models"))
         t5 <- proc.time()[["elapsed"]]
         cli::cli_alert_info("match_xgb pb_upload: {round(t5 - t4, 1)}s")
         local_cache_xgb <- file.path(cache_dir, "core", "match_xgb_pipeline.rds")
@@ -1006,7 +1002,7 @@ add_weather_to_preds <- function(preds, raw_cols = FALSE) {
   if (nrow(preds) == 0) return(preds)
 
   fixtures <- load_fixtures(all = TRUE)
-  all_grounds <- file_reader("stadium_data", "reference-data")
+  all_grounds <- file_reader("stadium_data", "reference-data", cache = TRUE)
 
   seasons <- unique(preds$season)
   weather_df <- dplyr::bind_rows(lapply(seasons, function(s) {

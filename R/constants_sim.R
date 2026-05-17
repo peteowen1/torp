@@ -71,6 +71,14 @@ SIM_RATING_SHIFT <- 0.1
 #' @keywords internal
 SIM_INJURY_TBC_BUFFER <- 3L
 
+#' Concussion protocols: ~12-day return window per AFL protocol
+#' AFL concussion protocols mandate a minimum 12-day window from incident to
+#' senior match return — typically two rounds out (the round of the head
+#' knock plus one more). Used by [parse_return_round()] when the injury list
+#' shows "Concussion protocols" instead of a numeric estimate.
+#' @keywords internal
+SIM_INJURY_CONCUSSION_BUFFER <- 2L
+
 #' "Mid-season" estimated return maps to round 12
 #' @keywords internal
 SIM_INJURY_SEASON_MID <- 12L

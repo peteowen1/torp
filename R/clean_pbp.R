@@ -202,8 +202,13 @@ fix_chain_coordinates_dt <- function(dt) {
     dt[, c("prev_x", "prev_y", "dist_as_is", "dist_flipped") := NULL]
   }
   if (iter >= max_flip_iters) {
-    warning("fix_chain_coordinates_dt: reached max iterations (", max_flip_iters,
-            ") with ", n_flipped, " rows still flagged. Possible oscillating coordinates.")
+    # Single-digit oscillating rows are normal API noise (~10 in ~800K rows).
+    # Only warn if it's a meaningful share that suggests a coordinate-system
+    # change worth investigating.
+    if (n_flipped > 50L) {
+      warning("fix_chain_coordinates_dt: reached max iterations (", max_flip_iters,
+              ") with ", n_flipped, " rows still flagged. Possible oscillating coordinates.")
+    }
   }
 
   # --- D) Both-neighbor sign-flip (looser tolerance) ---

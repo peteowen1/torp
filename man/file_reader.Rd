@@ -4,22 +4,50 @@
 \alias{file_reader}
 \title{Read a Parquet File from a GitHub Release via Piggyback}
 \usage{
-file_reader(file_name, release_tag)
+file_reader(
+  file_name,
+  release_tag,
+  cache = FALSE,
+  refresh = FALSE,
+  max_attempts = 3L,
+  initial_delay = 1.5
+)
 }
 \arguments{
 \item{file_name}{The base name of the file (without \code{.parquet} extension).}
 
 \item{release_tag}{The GitHub release tag the file is associated with.}
+
+\item{cache}{Logical. If TRUE, stores the result in the package-level
+in-memory cache (\code{.torp_cache}) so repeat calls within the same R
+session reuse the download. Use only for static reference assets that
+don't change mid-session (e.g. \code{stadium_data}, \code{weather_data}). Leave
+FALSE for assets the current pipeline writes back to (e.g.
+\verb{predictions_<season>}). Default FALSE.}
+
+\item{refresh}{Logical. If TRUE, ignores any cached copy and forces a
+fresh download (then repopulates the cache when \code{cache = TRUE}).
+Default FALSE. Ignored when \code{cache = FALSE}.}
+
+\item{max_attempts}{Integer. Maximum number of download attempts before
+giving up. Default 3.}
+
+\item{initial_delay}{Numeric. Seconds to wait before the second attempt;
+delay doubles on each subsequent retry (exponential backoff with jitter).
+Default 1.5.}
 }
 \value{
 A data frame read from the downloaded \code{.parquet} file.
 }
 \description{
 Downloads and reads a \code{.parquet} file from a GitHub release using the \code{piggyback} package.
+Transparently retries on transient network failures (\code{piggyback::pb_download}
+itself does not retry, unlike \code{pb_upload}).
 }
 \examples{
 \dontrun{
 df <- file_reader("latest_data", "v1.0.0")
+grounds <- file_reader("stadium_data", "reference-data", cache = TRUE)
 }
 }
 \keyword{internal}

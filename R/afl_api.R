@@ -580,10 +580,14 @@ get_afl_fixtures <- function(season = NULL) {
     "&pageSize=1000"
   )
 
-  resp <- tryCatch(httr::GET(url), error = function(e) {
-    cli::cli_alert_danger("HTTP request failed for season {season_id}: {conditionMessage(e)}")
-    NULL
-  })
+  resp <- tryCatch(
+    .with_retry(function() httr::GET(url),
+                label = paste0("Fixtures for season ", season_id)),
+    error = function(e) {
+      cli::cli_alert_danger("HTTP request failed for season {season_id}: {conditionMessage(e)}")
+      NULL
+    }
+  )
   if (is.null(resp) || httr::http_error(resp)) {
     if (!is.null(resp)) {
       cli::cli_alert_danger("AFL API returned HTTP {httr::status_code(resp)} for season {season_id}")
@@ -897,6 +901,7 @@ get_afl_player_details <- function(season = NULL) {
 #' torp_replace_teams(c("GWS Giants", "Narrm", "WB"))
 torp_replace_teams <- function(team) {
   if (length(team) == 0L) return(character(0))
+  team <- as.character(team)
   mapped <- unname(AFL_TEAM_ALIASES[team])
   ifelse(!is.na(mapped), mapped, team)
 }

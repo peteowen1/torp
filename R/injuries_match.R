@@ -254,7 +254,9 @@ parse_return_round <- function(estimated_return, season, current_round = 1L) {
     }
 
     # "N-plus weeks" / "N+ weeks" (conservative: treat as N * 1.5 weeks)
-    m <- regmatches(val_lower, regexec("(\\d+)\\s*[-]?plus\\s*weeks?", val_lower))[[1]]
+    # Matches both literal "plus" / "-plus" and the symbol "+" (AFL injury
+    # list typically writes "6+ weeks").
+    m <- regmatches(val_lower, regexec("(\\d+)\\s*(?:-?plus|\\+)\\s*weeks?", val_lower))[[1]]
     if (length(m) == 2) {
       weeks <- as.numeric(m[2])
       result[i] <- current_round + as.integer(ceiling(weeks * 1.5))
@@ -281,6 +283,13 @@ parse_return_round <- function(estimated_return, season, current_round = 1L) {
     if (length(m) == 2) {
       weeks <- as.numeric(m[2]) * 4
       result[i] <- current_round + as.integer(ceiling(weeks))
+      next
+    }
+
+    # "Concussion protocols" -- AFL mandates a minimum 12-day window from
+    # incident to senior return, which is typically two rounds away.
+    if (grepl("concussion", val_lower) && grepl("protocol", val_lower)) {
+      result[i] <- current_round + SIM_INJURY_CONCUSSION_BUFFER
       next
     }
 

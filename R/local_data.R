@@ -198,14 +198,46 @@ save_locally <- function(df, file_name) {
 
   path <- file.path(local_dir, paste0(file_name, ".parquet"))
 
+  # On Windows, arrow::open_dataset() leaves a memory-mapped reader on past
+  # reads of this file — overwriting it raises "[error 1224] user-mapped
+  # section open". Close any lingering tempfile connections first so the
+  # subsequent gc() doesn't warn about reaping them, then GC to release
+  # mmaps before write.
+  .close_extra_connections()
+  invisible(suppressWarnings(gc(verbose = FALSE)))
+
+  write_with_retry <- function() {
+    last_err <- NULL
+    for (attempt in seq_len(3L)) {
+      ok <- tryCatch({
+        arrow::write_parquet(df, path)
+        TRUE
+      }, error = function(e) {
+        last_err <<- e
+        FALSE
+      })
+      if (isTRUE(ok)) return(TRUE)
+
+      # Only retry the Windows file-lock variant; other failures (disk full,
+      # permission denied) won't recover from a GC + sleep.
+      if (!grepl("user-mapped section|error 1224|access is denied",
+                 conditionMessage(last_err), ignore.case = TRUE)) {
+        stop(last_err)
+      }
+      invisible(suppressWarnings(gc(verbose = FALSE)))
+      Sys.sleep(0.3)
+    }
+    stop(last_err)
+  }
+
   tryCatch({
-    arrow::write_parquet(df, path)
+    write_with_retry()
     cli::cli_inform("Saved locally: {basename(path)}")
     invisible(TRUE)
   }, error = function(e) {
     cli::cli_warn("Failed to save locally: {conditionMessage(e)}")
     # Remove stale local file so load functions don't serve outdated data
-    if (unlink(path) != 0L) {
+    if (file.exists(path) && unlink(path) != 0L) {
       cli::cli_warn("Could not remove stale local file: {.path {basename(path)}}")
     }
     invisible(FALSE)
