@@ -46,17 +46,14 @@ create_wp_credit <- function(pbp_data = NULL,
 
   dt <- data.table::setDT(data.table::copy(pbp_data))
 
-  # Filter to rows with a valid player and non-NA wpa, AND exclude descriptive
-  # scoring rows ("Goal" / "Behind" / "Rushed"). Those rows are chain
-  # bookkeeping — the actual scoring action (Kick with shot_at_goal == 1) is
-  # the previous row and already gets full WPA credit through the next-row
-  # WP delta. Including them would double-count the scoring player and import
-  # their anomalous post-score wp (computed against a half-updated score state)
-  # into the credit aggregation. The worker's per-row WPA pipeline
-  # (worker/src/score-tracker.js::attachAflWpa in inthegame-blog) filters to
-  # "relevant" rows the same way, so excluding here aligns torp parquet WPA
-  # with the chain-summed WPA the blog renders for live/CFS-fallback matches.
-
+  # Defensive: descriptive scoring rows ("Goal" / "Behind" / "Rushed") would
+  # over-credit the scorer if they reached this aggregation, but the standard
+  # pipeline strips them upstream in clean_model_data_epv() via the
+  # EPV_RELEVANT_DESCRIPTIONS whitelist. This guard exists for direct callers
+  # that bypass that step. See project_wpa_reconciliation_b4 in memory for the
+  # full investigation — the chain-sum vs parquet WPA gap is a WP-model
+  # divergence (worker's chain-aware features produce larger per-row deltas),
+  # not a filter or attribution issue.
   dt <- dt[!is.na(player_id) & !is.na(wpa) &
            !(description %in% c("Goal", "Behind", "Rushed"))]
 
