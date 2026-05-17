@@ -425,10 +425,25 @@ test_that("add_shot_geometry_variables folds goal_x for shots from negative-x", 
 
   result <- torp:::add_shot_geometry_variables(mock_data, goal_width = 6.4)
 
-  # Positive-x shot: unchanged (32.5m)
-  expect_equal(result$distance[1], 32.5, tolerance = 0.1)
-  # Negative-x shot: folded to the near goal (52.5m, not the buggy 112.5m)
-  expect_equal(result$distance[2], 52.5, tolerance = 0.1)
+  # With y = 0, distance = goal_x_near exactly (no trig, exact arithmetic)
+  expect_equal(result$distance[1], 32.5)
+  expect_equal(result$distance[2], 52.5)
+})
+
+test_that("add_shot_geometry_variables falls through without venue_length", {
+  # Legacy callers pass pre-mirrored coordinates (always positive goal_x);
+  # without venue_length the function should use raw goal_x unchanged.
+  mock_data <- data.frame(
+    goal_x = c(32.5, 52.5),
+    y = c(0, 0),
+    stringsAsFactors = FALSE
+  )
+
+  result <- torp:::add_shot_geometry_variables(mock_data, goal_width = 6.4)
+
+  expect_equal(result$distance[1], 32.5)
+  expect_equal(result$distance[2], 52.5)
+  expect_false("goal_x_near" %in% names(result))
 })
 
 # -----------------------------------------------------------------------------
