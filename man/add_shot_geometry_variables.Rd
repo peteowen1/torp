@@ -10,7 +10,7 @@ add_shot_geometry_variables(df, goal_width)
 \item{df}{A dataframe containing shot data. Pass \code{venue_length} to enable
 the near-goal fold (recommended for any production caller). Without it,
 \code{goal_x} is used as-is, which assumes the caller has already mirrored
-coordinates to be positive — only suitable for synthetic test fixtures.}
+coordinates to be positive -- only suitable for synthetic test fixtures.}
 
 \item{goal_width}{The width of the goal.}
 }
@@ -24,7 +24,7 @@ intermediate trig legs \code{side_b} / \code{side_c}).
 \details{
 BAND-AID: when \code{venue_length} is in \code{names(df)}, \code{goal_x} is folded to the
 near-goal distance via \code{pmin(goal_x, venue_length - goal_x)} before the
-geometry calculation. This is NOT a coordinate-frame fix — it works around
+geometry calculation. This is NOT a coordinate-frame fix -- it works around
 an upstream issue where \code{clean_pbp::fix_chain_coordinates_dt} mis-flips
 a small fraction of shot_at_goal rows from positive to negative \code{x} (the
 iterative neighbour-based sign-flip cascades from a wrong anchor row when

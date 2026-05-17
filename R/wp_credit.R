@@ -51,7 +51,7 @@ create_wp_credit <- function(pbp_data = NULL,
   # pipeline strips them upstream in clean_model_data_epv() via the
   # EPV_RELEVANT_DESCRIPTIONS whitelist. This guard exists for direct callers
   # that bypass that step. See project_wpa_reconciliation_b4 in memory for the
-  # full investigation — the chain-sum vs parquet WPA gap is a WP-model
+  # full investigation -- the chain-sum vs parquet WPA gap is a WP-model
   # divergence (worker's chain-aware features produce larger per-row deltas),
   # not a filter or attribution issue.
   dt <- dt[!is.na(player_id) & !is.na(wpa) &

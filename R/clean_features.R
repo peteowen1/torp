@@ -595,7 +595,7 @@ add_shot_result_variables <- function(df) {
 #'
 #' BAND-AID: when `venue_length` is in `names(df)`, `goal_x` is folded to the
 #' near-goal distance via `pmin(goal_x, venue_length - goal_x)` before the
-#' geometry calculation. This is NOT a coordinate-frame fix — it works around
+#' geometry calculation. This is NOT a coordinate-frame fix -- it works around
 #' an upstream issue where `clean_pbp::fix_chain_coordinates_dt` mis-flips
 #' a small fraction of shot_at_goal rows from positive to negative `x` (the
 #' iterative neighbour-based sign-flip cascades from a wrong anchor row when
@@ -618,7 +618,7 @@ add_shot_result_variables <- function(df) {
 #' @param df A dataframe containing shot data. Pass `venue_length` to enable
 #'   the near-goal fold (recommended for any production caller). Without it,
 #'   `goal_x` is used as-is, which assumes the caller has already mirrored
-#'   coordinates to be positive — only suitable for synthetic test fixtures.
+#'   coordinates to be positive -- only suitable for synthetic test fixtures.
 #' @param goal_width The width of the goal.
 #' @return A dataframe with additional shot geometry variables.
 #' @keywords internal
@@ -629,7 +629,7 @@ add_shot_geometry_variables <- function(df, goal_width) {
       dplyr::mutate(
         goal_x_near = pmin(.data$goal_x, .data$venue_length - .data$goal_x)
       )
-    # NA venue_length silently propagates through pmin → NaN angle → NA
+    # NA venue_length silently propagates through pmin -> NaN angle -> NA
     # distance, poisoning every downstream shot feature. Warn so the upstream
     # data defect is visible instead of swallowed. Predicate isolates the
     # venue_length defect specifically (not NA goal_x from other causes) so
@@ -638,7 +638,7 @@ add_shot_geometry_variables <- function(df, goal_width) {
     if (n_bad_venue > 0L) {
       cli::cli_warn(
         "{.fn add_shot_geometry_variables}: {n_bad_venue} row{?s} {?has/have} \\
-         NA {.code venue_length} — shot {.code distance} and {.code angle} \\
+         NA {.code venue_length} -- shot {.code distance} and {.code angle} \\
          will be NA. Check upstream data."
       )
     }
