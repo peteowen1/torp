@@ -12,7 +12,8 @@ make_wp_pbp <- function(n = 10) {
     match_id = "M001",
     team = "TeamA",
     utc_start_time = "2025-04-01T14:00",
-    round_number = 1L
+    round_number = 1L,
+    description = "Kick"
   )
 }
 
@@ -40,7 +41,8 @@ test_that("create_wp_credit splits credit by disp_share", {
     match_id = "M001",
     team = "TeamA",
     utc_start_time = "2025-04-01T14:00",
-    round_number = 1L
+    round_number = 1L,
+    description = "Handball"
   )
 
   result <- create_wp_credit(pbp, disp_share = 0.6)
@@ -62,7 +64,8 @@ test_that("create_wp_credit gives 100% to disposer when no receiver", {
     match_id = "M001",
     team = "TeamA",
     utc_start_time = "2025-04-01T14:00",
-    round_number = 1L
+    round_number = 1L,
+    description = "Kick"
   )
 
   result <- create_wp_credit(pbp, disp_share = 0.5)
@@ -84,7 +87,8 @@ test_that("create_wp_credit flips receiver credit on turnovers", {
     match_id = "M001",
     team = "TeamA",
     utc_start_time = "2025-04-01T14:00",
-    round_number = 1L
+    round_number = 1L,
+    description = "Kick"
   )
 
   result <- create_wp_credit(pbp, disp_share = 0.5)
@@ -121,7 +125,8 @@ test_that("create_wp_credit identifies peak play correctly", {
     match_id = "M001",
     team = "TeamA",
     utc_start_time = "2025-04-01T14:00",
-    round_number = 1L
+    round_number = 1L,
+    description = "Kick"
   )
 
   result <- create_wp_credit(pbp)
@@ -142,7 +147,8 @@ test_that("create_wp_credit aggregates across multiple games", {
     match_id = c("M001", "M002"),
     team = "TeamA",
     utc_start_time = c("2025-04-01T14:00", "2025-04-08T14:00"),
-    round_number = c(1L, 2L)
+    round_number = c(1L, 2L),
+    description = "Kick"
   )
 
   result <- create_wp_credit(pbp)
@@ -150,4 +156,46 @@ test_that("create_wp_credit aggregates across multiple games", {
   expect_equal(nrow(result), 2L)
   expect_equal(result[match_id == "M001"]$wp_credit, 0.10)
   expect_equal(result[match_id == "M002"]$wp_credit, 0.20)
+})
+
+test_that("create_wp_credit excludes descriptive Goal/Behind/Rushed rows", {
+  # B4 defensive filter: descriptive scoring rows should not contribute to
+  # credit. The standard pipeline strips them upstream via
+  # EPV_RELEVANT_DESCRIPTIONS, but this guard handles direct callers.
+  pbp <- data.table::data.table(
+    wpa = c(0.10, 0.05, 0.07),
+    player_id = c("P1", "P1", "P1"),
+    player_name = "Alice",
+    lead_player_id = c(NA_character_, NA_character_, NA_character_),
+    pos_team = c(1L, 1L, 1L),
+    display_order = c(1L, 2L, 3L),
+    match_id = "M001",
+    team = "TeamA",
+    utc_start_time = "2025-04-01T14:00",
+    round_number = 1L,
+    description = c("Kick", "Goal", "Behind")
+  )
+
+  result <- create_wp_credit(pbp)
+
+  # Only the Kick row should be credited; Goal + Behind rows excluded.
+  expect_equal(result$wp_credit, 0.10)
+  expect_equal(result$n_disposals, 1L)
+})
+
+test_that("create_wp_credit errors when description column missing", {
+  pbp <- data.table::data.table(
+    wpa = 0.10,
+    player_id = "P1",
+    player_name = "Alice",
+    lead_player_id = NA_character_,
+    pos_team = 1L,
+    display_order = 1L,
+    match_id = "M001",
+    team = "TeamA",
+    utc_start_time = "2025-04-01T14:00",
+    round_number = 1L
+  )
+
+  expect_error(create_wp_credit(pbp), "description")
 })
