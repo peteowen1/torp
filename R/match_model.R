@@ -311,7 +311,13 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
   fixtures <- load_fixtures(TRUE)
   results <- load_results(TRUE)
 
-  # Refresh current season results from AFL API
+  # Refresh current season results from AFL API.
+  # cli_progress_done() is REQUIRED here: cli progress steps auto-close only
+  # when a sibling progress_step starts in the same frame OR the frame exits.
+  # The match_train.R progress_steps live in nested function frames, so they
+  # don't supersede this one — without an explicit done(), this spinner stays
+  # alive for the entire pipeline and its line state interleaves with later
+  # cli_inform() prints (you see "from AFL API" smeared into other messages).
   tryCatch({
     cli::cli_progress_step("Refreshing {season} results from AFL API")
     fresh_results <- get_afl_results(season)
@@ -320,6 +326,7 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
       results <- load_results(TRUE)
       cli::cli_inform("Refreshed results: {nrow(fresh_results)} rows for {season}")
     }
+    cli::cli_progress_done()
   }, error = function(e) {
     cli::cli_warn("Could not refresh {season} results: {e$message}")
   })
