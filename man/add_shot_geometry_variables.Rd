@@ -18,17 +18,6 @@ coordinates to be positive -- only suitable for synthetic test fixtures.}
 A dataframe with additional shot geometry variables.
 }
 \description{
-<<<<<<< HEAD
-Computes side_b, side_c, angle, and distance to the attacking goal.
-Internally folds \code{goal_x} to the near-goal distance: a player at x = -30
-on a 165m field has goal_x = halfLen - x = 112.5 (signed), but the actual
-distance to the goal they're attacking is 52.5m. Pre-fold, shots from
-negative-x reported distance to the FAR goal — visible on the blog as e.g.
-a 126m behind that should have been 40m. The fold uses venue_length when
-available; tests / legacy callers without venue_length fall through to
-the raw goal_x (which assumes coords are already pre-mirrored to be
-positive).
-=======
 Computes shot \code{angle} and \code{distance} to the attacking goal (plus
 intermediate trig legs \code{side_b} / \code{side_c}).
 }
@@ -54,6 +43,5 @@ Side effect: genuine long-range shots from own half (real \code{x < 0} cases
 per CLAUDE.md's team-relative coords; ~0.2\% of shots in measured data)
 also get folded to near-goal distance. Acceptable trade-off vs the
 mis-flip case.
->>>>>>> 47bc397c8ae8bed650c21af3a512b2b61b88ffc2
 }
 \keyword{internal}

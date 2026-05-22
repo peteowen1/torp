@@ -590,19 +590,6 @@ add_shot_result_variables <- function(df) {
 
 #' Add Shot Geometry Variables
 #'
-<<<<<<< HEAD
-#' Computes side_b, side_c, angle, and distance to the attacking goal.
-#' Internally folds `goal_x` to the near-goal distance: a player at x = -30
-#' on a 165m field has goal_x = halfLen - x = 112.5 (signed), but the actual
-#' distance to the goal they're attacking is 52.5m. Pre-fold, shots from
-#' negative-x reported distance to the FAR goal — visible on the blog as e.g.
-#' a 126m behind that should have been 40m. The fold uses venue_length when
-#' available; tests / legacy callers without venue_length fall through to
-#' the raw goal_x (which assumes coords are already pre-mirrored to be
-#' positive).
-#'
-#' @param df A dataframe containing shot data.
-=======
 #' Computes shot `angle` and `distance` to the attacking goal (plus
 #' intermediate trig legs `side_b` / `side_c`).
 #'
@@ -632,7 +619,6 @@ add_shot_result_variables <- function(df) {
 #'   the near-goal fold (recommended for any production caller). Without it,
 #'   `goal_x` is used as-is, which assumes the caller has already mirrored
 #'   coordinates to be positive -- only suitable for synthetic test fixtures.
->>>>>>> 47bc397c8ae8bed650c21af3a512b2b61b88ffc2
 #' @param goal_width The width of the goal.
 #' @return A dataframe with additional shot geometry variables.
 #' @keywords internal
@@ -643,8 +629,6 @@ add_shot_geometry_variables <- function(df, goal_width) {
       dplyr::mutate(
         goal_x_near = pmin(.data$goal_x, .data$venue_length - .data$goal_x)
       )
-<<<<<<< HEAD
-=======
     # NA venue_length silently propagates through pmin -> NaN angle -> NA
     # distance, poisoning every downstream shot feature. Warn so the upstream
     # data defect is visible instead of swallowed. Predicate isolates the
@@ -658,7 +642,6 @@ add_shot_geometry_variables <- function(df, goal_width) {
          will be NA. Check upstream data."
       )
     }
->>>>>>> 47bc397c8ae8bed650c21af3a512b2b61b88ffc2
   } else {
     df <- df |>
       dplyr::mutate(goal_x_near = .data$goal_x)
