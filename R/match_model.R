@@ -264,7 +264,14 @@ get_lineup_ratings <- function(season = NULL, round = NULL, match_id = NULL) {
     ) |>
     dplyr::mutate(
       epr_diff = home_epr - away_epr,
-      psr_diff = home_psr - away_psr
+      psr_diff = home_psr - away_psr,
+      # team_name.x / team_name.y are factors (set in .build_team_mdl_df for
+      # GAM categorical predictors). Coerce here so the predictions parquet
+      # stores character columns -- factor home_team / away_team round-trip
+      # through arrow and break torp_replace_teams() lookups in any caller
+      # that doesn't go through .normalise_team_values(). Do NOT remove.
+      home_team = as.character(home_team),
+      away_team = as.character(away_team)
     ) |>
     dplyr::select(season, round, match_id:away_psr, start_time, venue,
                   epr_diff, psr_diff, players:margin)
@@ -304,7 +311,13 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
   fixtures <- load_fixtures(TRUE)
   results <- load_results(TRUE)
 
-  # Refresh current season results from AFL API
+  # Refresh current season results from AFL API.
+  # cli_progress_done() is REQUIRED here: cli progress steps auto-close only
+  # when a sibling progress_step starts in the same frame OR the frame exits.
+  # The match_train.R progress_steps live in nested function frames, so they
+  # don't supersede this one — without an explicit done(), this spinner stays
+  # alive for the entire pipeline and its line state interleaves with later
+  # cli_inform() prints (you see "from AFL API" smeared into other messages).
   tryCatch({
     cli::cli_progress_step("Refreshing {season} results from AFL API")
     fresh_results <- get_afl_results(season)
@@ -313,6 +326,7 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
       results <- load_results(TRUE)
       cli::cli_inform("Refreshed results: {nrow(fresh_results)} rows for {season}")
     }
+    cli::cli_progress_done()
   }, error = function(e) {
     cli::cli_warn("Could not refresh {season} results: {e$message}")
   })

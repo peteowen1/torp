@@ -425,10 +425,55 @@ test_that("add_shot_geometry_variables folds goal_x for shots from negative-x", 
 
   result <- torp:::add_shot_geometry_variables(mock_data, goal_width = 6.4)
 
+<<<<<<< HEAD
   # Positive-x shot: unchanged (32.5m)
   expect_equal(result$distance[1], 32.5, tolerance = 0.1)
   # Negative-x shot: folded to the near goal (52.5m, not the buggy 112.5m)
   expect_equal(result$distance[2], 52.5, tolerance = 0.1)
+=======
+  # With y = 0, distance = goal_x_near exactly (no trig, exact arithmetic)
+  expect_equal(result$distance[1], 32.5)
+  expect_equal(result$distance[2], 52.5)
+})
+
+test_that("add_shot_geometry_variables warns on NA venue_length", {
+  # NA venue_length silently produces NA goal_x_near → NaN angle → NA distance,
+  # poisoning every downstream feature. Warn rather than swallow.
+  mock_data <- data.frame(
+    x = c(50, -30),
+    y = c(0, 0),
+    goal_x = c(32.5, 112.5),
+    venue_length = c(165, NA_real_),
+    stringsAsFactors = FALSE
+  )
+
+  # Match on the specific message AND pin the count to "1" so a regression in
+  # the predicate (e.g., double-counting unrelated NA goal_x rows) would
+  # change the count and fail the test instead of slipping through a loose
+  # "NA" substring match.
+  expect_warning(
+    result <- torp:::add_shot_geometry_variables(mock_data, goal_width = 6.4),
+    "1 row has NA.*venue_length"
+  )
+  expect_equal(result$distance[1], 32.5)
+  expect_true(is.na(result$distance[2]))
+})
+
+test_that("add_shot_geometry_variables falls through without venue_length", {
+  # Legacy callers pass pre-mirrored coordinates (always positive goal_x);
+  # without venue_length the function should use raw goal_x unchanged.
+  mock_data <- data.frame(
+    goal_x = c(32.5, 52.5),
+    y = c(0, 0),
+    stringsAsFactors = FALSE
+  )
+
+  result <- torp:::add_shot_geometry_variables(mock_data, goal_width = 6.4)
+
+  expect_equal(result$distance[1], 32.5)
+  expect_equal(result$distance[2], 52.5)
+  expect_false("goal_x_near" %in% names(result))
+>>>>>>> 47bc397c8ae8bed650c21af3a512b2b61b88ffc2
 })
 
 # -----------------------------------------------------------------------------

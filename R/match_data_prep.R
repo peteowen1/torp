@@ -132,22 +132,74 @@
   }
   team_lineup_df$.unknown_pos <- NULL
 
-  # Join PSR if provided - use each player's most recent PSR value
-
+  # Join PSR as-of each lineup row's (season, round_number).
+  # PSR(s, r) is computed at start of round r using stat ratings filtered
+  # to match_date_rating < ref_date, where ref_date = first utc_start_time
+  # of round r (see player_skills.R: estimate_player_stat_ratings and
+  # player_ratings.R: .compute_psr_inline). It is therefore safe to use
+  # PSR(s, r) when predicting round r -- using PSR(s, r) is NOT leakage.
+  # We pick the latest psr_df row with (season, round) <= the lineup row
+  # for each player_id (rolling join with closest), which:
+  #   - Preserves production prediction behaviour (predicting round R picks
+  #     PSR(s, R) when present, falling back to PSR(s, R-1) otherwise --
+  #     identical to the prior slice_tail(n=1) latest-PSR behaviour).
+  #   - Removes the leakage that slice_tail(n=1) introduced for historical
+  #     training rows, where the latest-globally PSR (e.g. season-end) was
+  #     applied to every game played by that player earlier in the season.
   if (!is.null(psr_df)) {
     has_osr_dsr <- all(c("osr", "dsr") %in% names(psr_df))
-    select_cols <- if (has_osr_dsr) c("player_id", "season", "round", "psr", "osr", "dsr") else c("player_id", "season", "round", "psr")
+    psr_value_cols <- if (has_osr_dsr) c("psr", "osr", "dsr") else "psr"
+    select_cols <- c("player_id", "season", "round", psr_value_cols)
 
-    latest_psr <- psr_df |>
+    psr_for_join <- psr_df |>
       dplyr::select(dplyr::any_of(select_cols)) |>
-      dplyr::arrange(player_id, season, round) |>
-      dplyr::group_by(player_id) |>
-      dplyr::slice_tail(n = 1) |>
-      dplyr::ungroup() |>
-      dplyr::select(-season, -round)
+      dplyr::mutate(psr_key = season * 100L + as.integer(round)) |>
+      dplyr::select(player_id, psr_key, dplyr::all_of(psr_value_cols))
+
+    # Validate join keys are populated -- NA on either side silently produces
+    # PSR_PRIOR_RATE fallback through the join, which can mask data corruption.
+    bad_lineup <- is.na(team_lineup_df$season) |
+      is.na(suppressWarnings(as.integer(team_lineup_df$round_number)))
+    if (any(bad_lineup)) {
+      cli::cli_abort(c(
+        "Cannot build PSR join key for {sum(bad_lineup)} lineup row{?s}",
+        "i" = "season NA: {sum(is.na(team_lineup_df$season))}",
+        "i" = "round_number NA/non-integer: {sum(is.na(suppressWarnings(as.integer(team_lineup_df$round_number))))}"
+      ))
+    }
+    if (any(is.na(psr_for_join$psr_key))) {
+      cli::cli_abort("psr_df has {sum(is.na(psr_for_join$psr_key))} row{?s} with NA season/round")
+    }
+
+    # Dedup duplicate (player_id, psr_key) rows with a warning -- otherwise
+    # closest() with default `multiple = \"all\"` would duplicate lineup rows
+    # and silently inflate the per-team sum aggregation downstream.
+    n_before <- nrow(psr_for_join)
+    psr_for_join <- psr_for_join |>
+      dplyr::distinct(player_id, psr_key, .keep_all = TRUE)
+    n_dropped <- n_before - nrow(psr_for_join)
+    if (n_dropped > 0) {
+      cli::cli_warn("Dropped {n_dropped} duplicate (player, season, round) PSR row{?s} -- check upstream pipeline")
+    }
 
     team_lineup_df <- team_lineup_df |>
-      dplyr::left_join(latest_psr, by = "player_id") |>
+      dplyr::mutate(.lineup_key = season * 100L + as.integer(round_number)) |>
+      dplyr::left_join(
+        psr_for_join,
+        by = dplyr::join_by(player_id, closest(.lineup_key >= psr_key))
+      ) |>
+      dplyr::select(-.lineup_key, -psr_key)
+
+    # PSR coverage telemetry -- mirrors the EPR diagnostic block above.
+    n_psr_missing <- sum(is.na(team_lineup_df$psr))
+    if (n_psr_missing > 0) {
+      pct <- round(100 * n_psr_missing / nrow(team_lineup_df), 1)
+      cli::cli_inform("Replacing {n_psr_missing} ({pct}%) NA PSR ratings with prior ({PSR_PRIOR_RATE})")
+      if (pct > 25) cli::cli_warn("High proportion of missing PSR ({pct}%)")
+      if (pct > 50) cli::cli_abort("More than 50% of PSR missing ({pct}%) -- check psr_df")
+    }
+
+    team_lineup_df <- team_lineup_df |>
       dplyr::mutate(
         psr = tidyr::replace_na(psr, PSR_PRIOR_RATE),
         psr = psr * lineup_tog

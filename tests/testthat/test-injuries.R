@@ -347,6 +347,13 @@ test_that("parse_return_round handles N-plus weeks", {
   expect_equal(parse_return_round("6-plus weeks", 2026, current_round = 4), 13)
 })
 
+test_that("parse_return_round handles N+ weeks symbol form", {
+  # "6+ weeks" -> 6 * 1.5 = 9 weeks -> current_round + 9 (same as "6-plus weeks")
+  expect_equal(parse_return_round("6+ weeks", 2026, current_round = 4), 13)
+  expect_equal(parse_return_round("10+ weeks", 2026, current_round = 4), 19)
+  expect_equal(parse_return_round("4+ week", 2026, current_round = 1), 7)
+})
+
 test_that("parse_return_round handles month-based returns", {
   # "2 months" -> 2 * 4 = 8 weeks -> current_round + 8
 
