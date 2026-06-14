@@ -82,13 +82,13 @@ Common loaders (see `?load_data` for the full list):
 ## data-raw/ Pipeline
 
 ```
-01-data/        # Scraping + daily release (daily_release.R is the GHA entry point)
+01-data/        # Scraping + daily release (daily_release.R is the GHA entry point — calls run_daily_release())
 02-models/      # EP/WP/xG/shot training (not the live JSON exports — those live in torpmodels)
 03-ratings/     # TORP/EPR/PSR computation
 04-analysis/    # Ad-hoc analysis
 05-validation/  # Cross-release sanity checks
 06-stat-ratings/ # Per-stat Bayesian rating training
-stat-models/    # 58 per-stat GAMs (also released via torpmodels stat-models tag)
+stat-models/    # Cached artifacts (2 .rds) + README only — the 58 per-stat GAMs are released via torpmodels' stat-models tag, not committed here
 ```
 
 `rebuild_everything.R` re-runs the full data-raw pipeline end-to-end.
