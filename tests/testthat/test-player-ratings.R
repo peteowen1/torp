@@ -365,3 +365,89 @@ test_that("TOG adjustment is skipped when all tog_rating values are zero", {
   # Values unchanged when tot_tog == 0
   expect_equal(adj$recv_epr, unadj$recv_epr)
 })
+
+# -----------------------------------------------------------------------------
+# calculate_torp Tests (PSR blend) — issue #88: historical PSR per round
+# -----------------------------------------------------------------------------
+
+test_that("calculate_torp joins PSR historically per (player_id, season, round)", {
+  # Two players, two rounds each, with PSR changing between rounds.
+  epr_df <- data.frame(
+    player_id = c("A", "A", "B", "B"),
+    player_name = c("A", "A", "B", "B"),
+    epr = c(2, 4, 1, 3),
+    season = c(2024L, 2024L, 2024L, 2024L),
+    round = c(1L, 2L, 1L, 2L),
+    stringsAsFactors = FALSE
+  )
+  psr_df <- data.frame(
+    player_id = c("A", "A", "B", "B"),
+    season = c(2024L, 2024L, 2024L, 2024L),
+    round = c(1L, 2L, 1L, 2L),
+    psr = c(10, 20, 5, 15),
+    osr = c(6, 12, 3, 9),
+    dsr = c(4, 8, 2, 6),
+    stringsAsFactors = FALSE
+  )
+
+  res <- calculate_torp(epr_df, psr_df)
+  res <- res[order(res$player_id, res$round), ]
+
+  # Each row gets its own round's PSR, not a single broadcast snapshot
+  expect_equal(res$psr, c(10, 20, 5, 15))
+  expect_equal(res$osr, c(6, 12, 3, 9))
+  expect_equal(res$dsr, c(4, 8, 2, 6))
+  # torp = 0.5*epr + 0.5*psr
+  expect_equal(res$torp, round(0.5 * c(2, 4, 1, 3) + 0.5 * c(10, 20, 5, 15), 2))
+  # PSR varies across rounds for a single player (the #88 regression guard)
+  expect_equal(length(unique(res$psr[res$player_id == "A"])), 2L)
+})
+
+test_that("calculate_torp falls back to latest snapshot for unmatched rows", {
+  # epr_df has a round with no PSR history -> latest snapshot used
+  epr_df <- data.frame(
+    player_id = c("A", "A"),
+    player_name = c("A", "A"),
+    epr = c(2, 4),
+    season = c(2024L, 2024L),
+    round = c(1L, 99L),
+    stringsAsFactors = FALSE
+  )
+  psr_df <- data.frame(
+    player_id = c("A", "A"),
+    season = c(2024L, 2024L),
+    round = c(1L, 2L),
+    psr = c(10, 20),
+    osr = c(6, 12),
+    dsr = c(4, 8),
+    stringsAsFactors = FALSE
+  )
+
+  res <- calculate_torp(epr_df, psr_df)
+  res <- res[order(res$round), ]
+
+  expect_false(any(is.na(res$psr)))
+  # Round 1 matches history (10); round 99 has no match -> latest snapshot (20)
+  expect_equal(res$psr, c(10, 20))
+})
+
+test_that("calculate_torp uses snapshot when season/round absent", {
+  epr_df <- data.frame(
+    player_id = c("A", "B"),
+    player_name = c("A", "B"),
+    epr = c(2, 4),
+    stringsAsFactors = FALSE
+  )
+  psr_df <- data.frame(
+    player_id = c("A", "A", "B"),
+    season = c(2024L, 2024L, 2024L),
+    round = c(1L, 2L, 1L),
+    psr = c(10, 20, 5),
+    stringsAsFactors = FALSE
+  )
+
+  res <- calculate_torp(epr_df, psr_df)
+  res <- res[order(res$player_id), ]
+  # A's latest snapshot is round 2 (psr 20); B has psr 5
+  expect_equal(res$psr, c(20, 5))
+})

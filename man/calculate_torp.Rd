@@ -20,3 +20,13 @@ A data frame with all EPR columns plus \code{psr} and \code{torp} (blended).
 Blends EPR (Expected Possession Rating) with PSR (Player Skill Rating)
 to produce the final TORP rating. TORP = w * epr + (1 - w) * psr.
 }
+\details{
+When both \code{epr_df} and \code{psr_df} carry \code{season} and
+\code{round} columns, PSR/OSR/DSR are joined per
+\code{(player_id, season, round)} so each historical rating row receives the
+PSR as it stood at that point in time. Rows with no matching historical PSR
+(e.g. the current round in live computation, or seasons outside the PSR
+history) fall back to the player's latest available PSR snapshot. When
+either frame lacks season/round, the latest-per-player snapshot is used for
+all rows.
+}
