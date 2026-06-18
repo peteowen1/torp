@@ -136,6 +136,23 @@ add_team_id_mdl_dt <- function(dt) {
     dt[, coord_team_id := team_id_mdl]
   }
 
+  # coord_home_team_id: the home-end reference for coordinate orientation. The
+  # AFL API's matchPlays response carries homeTeamId in the SAME id-space as
+  # chain_team_id, so when the scraper captured it, prefer it — making the
+  # orientation comparison (coord_team_id vs home end) fully self-contained from
+  # the response that defines (x, y), rather than depending on the home_team_id
+  # joined in from results-data. Falls back to the joined home_team_id for legacy
+  # parquets / missing values. A no-op whenever the two agree (every correctly-
+  # sourced match), so it only ever corrects a results/chains home-away mismatch.
+  # See issue #92 (API field audit).
+  if ("homeTeamId" %in% names(dt)) {
+    dt[, coord_home_team_id := data.table::fifelse(
+      is.na(homeTeamId), home_team_id, homeTeamId
+    )]
+  } else {
+    dt[, coord_home_team_id := home_team_id]
+  }
+
   invisible(NULL)
 }
 
@@ -183,8 +200,8 @@ fix_chain_coordinates_dt <- function(dt) {
   # the steps C-F cascade would mis-flip. See issue #92.
   # Use as.double() to avoid integer truncation when interpolating later
   dt[, `:=`(
-    x_pitch = as.double(data.table::fifelse(coord_team_id == home_team_id, x, -x)),
-    y_pitch = as.double(data.table::fifelse(coord_team_id == home_team_id, y, -y))
+    x_pitch = as.double(data.table::fifelse(coord_team_id == coord_home_team_id, x, -x)),
+    y_pitch = as.double(data.table::fifelse(coord_team_id == coord_home_team_id, y, -y))
   )]
 
   # --- B) Fix throw-in/stoppage rows ---
@@ -348,8 +365,8 @@ fix_chain_coordinates_dt <- function(dt) {
   # identity; only genuine opponent-actor rows are intentionally negated here.
   # See issue #92.
   dt[, `:=`(
-    x = as.integer(round(data.table::fifelse(team_id_mdl == home_team_id, x_pitch, -x_pitch))),
-    y = as.integer(round(data.table::fifelse(team_id_mdl == home_team_id, y_pitch, -y_pitch)))
+    x = as.integer(round(data.table::fifelse(team_id_mdl == coord_home_team_id, x_pitch, -x_pitch))),
+    y = as.integer(round(data.table::fifelse(team_id_mdl == coord_home_team_id, y_pitch, -y_pitch)))
   )]
 
   dt[, c("x_pitch", "y_pitch") := NULL]
