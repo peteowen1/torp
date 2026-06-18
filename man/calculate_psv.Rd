@@ -23,8 +23,9 @@ on). If FALSE, use raw counts directly.}
 so PSV represents contribution above the average player that round.}
 }
 \value{
-A data.table with identifier columns plus \code{psv_raw} and
-\code{psv}.
+A data.table with identifier columns plus \code{psv_raw},
+\code{psv_p80} (centered per-full-game rate) and \code{psv}
+(per-game value = \code{psv_p80 * tog}, matching the \code{epv} scale).
 }
 \description{
 Applies the same glmnet coefficients used by PSR to raw single-game stats

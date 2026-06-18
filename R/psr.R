@@ -205,8 +205,9 @@ calculate_psr_components <- function(skills, coef_df, osr_coef_df, dsr_coef_df,
 #' @param center Logical. If TRUE (default), subtract the per-round league mean
 #'   so PSV represents contribution above the average player that round.
 #'
-#' @return A data.table with identifier columns plus \code{psv_raw} and
-#'   \code{psv}.
+#' @return A data.table with identifier columns plus \code{psv_raw},
+#'   \code{psv_p80} (centered per-full-game rate) and \code{psv}
+#'   (per-game value = \code{psv_p80 * tog}, matching the \code{epv} scale).
 #'
 #' @export
 calculate_psv <- function(player_stats, coef_df, tog_adjust = TRUE, center = TRUE) {
@@ -219,9 +220,9 @@ calculate_psv <- function(player_stats, coef_df, tog_adjust = TRUE, center = TRU
   coef_df <- coef_df[coef_df$beta != 0, , drop = FALSE]
 
   if (nrow(coef_df) == 0) {
-    dt[, c("psv_raw", "psv") := 0]
+    dt[, c("psv_raw", "psv_p80", "psv") := 0]
     id_cols <- intersect(c("player_id", "player_name", "season", "round", "match_id", "team"), names(dt))
-    return(dt[, c(id_cols, "psv_raw", "psv"), with = FALSE])
+    return(dt[, c(id_cols, "psv_raw", "psv_p80", "psv"), with = FALSE])
   }
 
   # Map stat_name to raw stat columns (direct column names, not _rating)
@@ -285,24 +286,33 @@ calculate_psv <- function(player_stats, coef_df, tog_adjust = TRUE, center = TRU
     cli::cli_warn("No position column found for PSV centering; using global mean subtraction")
   }
 
-  # Center by position then scale back to game-level totals — mirrors
-  # the EPV approach in player_credit.R Step 7:
+  # Center by position to produce psv_p80, a centered per-full-game (per-80)
+  # rate — mirrors the EPV approach in player_credit.R Step 7:
   #   1. psv_raw is a per-full-game rate (stats already divided by TOG)
-  #   2. subtract TOG-weighted positional mean → centered rate
-  #   3. multiply by TOG → game-level adjusted value
+  #   2. subtract TOG-weighted positional mean → centered per-80 rate (psv_p80)
+  # The per-game value (psv = psv_p80 * tog) is derived below so that psv is on
+  # the same scale as epv (per-game), keeping torp_value = 0.5*epv + 0.5*psv
+  # apples-to-apples (issue #80).
   if (center && !is.null(pos_col) && "tog" %in% names(dt)) {
     dt[, .tog_wt := pmax(as.numeric(tog), 0.1)]
-    dt[!is.na(get(pos_col)), psv := (psv_raw - weighted.mean(psv_raw, .tog_wt, na.rm = TRUE)) * .tog_wt,
+    dt[!is.na(get(pos_col)), psv_p80 := psv_raw - weighted.mean(psv_raw, .tog_wt, na.rm = TRUE),
        by = c(pos_col)]
-    dt[is.na(get(pos_col)), psv := (psv_raw - weighted.mean(psv_raw, .tog_wt, na.rm = TRUE)) * .tog_wt]
+    dt[is.na(get(pos_col)), psv_p80 := psv_raw - weighted.mean(psv_raw, .tog_wt, na.rm = TRUE)]
     dt[, .tog_wt := NULL]
   } else if (center && !is.null(pos_col)) {
-    dt[!is.na(get(pos_col)), psv := psv_raw - mean(psv_raw, na.rm = TRUE), by = c(pos_col)]
-    dt[is.na(get(pos_col)), psv := psv_raw - mean(psv_raw, na.rm = TRUE)]
+    dt[!is.na(get(pos_col)), psv_p80 := psv_raw - mean(psv_raw, na.rm = TRUE), by = c(pos_col)]
+    dt[is.na(get(pos_col)), psv_p80 := psv_raw - mean(psv_raw, na.rm = TRUE)]
   } else if (center) {
-    dt[, psv := psv_raw - mean(psv_raw, na.rm = TRUE)]
+    dt[, psv_p80 := psv_raw - mean(psv_raw, na.rm = TRUE)]
   } else {
-    dt[, psv := psv_raw]
+    dt[, psv_p80 := psv_raw]
+  }
+
+  # Derive per-game value: psv = psv_p80 * tog (per-game scale, matches epv).
+  if ("tog" %in% names(dt)) {
+    dt[, psv := psv_p80 * pmax(as.numeric(tog), 0.1)]
+  } else {
+    dt[, psv := psv_p80]
   }
 
   id_cols <- intersect(
@@ -311,7 +321,7 @@ calculate_psv <- function(player_stats, coef_df, tog_adjust = TRUE, center = TRU
     names(dt)
   )
 
-  dt[, c(id_cols, "psv_raw", "psv"), with = FALSE]
+  dt[, c(id_cols, "psv_raw", "psv_p80", "psv"), with = FALSE]
 }
 
 
@@ -326,7 +336,9 @@ calculate_psv <- function(player_stats, coef_df, tog_adjust = TRUE, center = TRU
 #' @param dsr_coef_df Coefficient data.frame for the defensive model.
 #'
 #' @return A data.table with identifier columns plus \code{psv_raw},
-#'   \code{psv}, \code{osv}, \code{dsv}.
+#'   \code{psv_p80}, \code{psv}, \code{osv_p80}, \code{osv}, \code{dsv_p80},
+#'   \code{dsv}. The \code{*_p80} columns are centered per-full-game rates and
+#'   the unsuffixed columns are per-game values (\code{*_p80 * tog}).
 #'
 #' @export
 calculate_psv_components <- function(player_stats, coef_df, osr_coef_df,
@@ -339,13 +351,23 @@ calculate_psv_components <- function(player_stats, coef_df, osr_coef_df,
   dsv_result <- calculate_psv(player_stats, dsr_coef_df, tog_adjust = tog_adjust,
                                center = center)
 
-  # Additive shift so osv + dsv = psv
-  raw_osv <- osv_result$psv
-  raw_dsv <- dsv_result$psv
-  delta <- (psv_result$psv - raw_osv - raw_dsv) / 2
+  # Decompose on the per-80 (psv_p80) scale so osv_p80 + dsv_p80 = psv_p80,
+  # using an additive shift, then derive the per-game values via * tog.
+  raw_osv <- osv_result$psv_p80
+  raw_dsv <- dsv_result$psv_p80
+  delta <- (psv_result$psv_p80 - raw_osv - raw_dsv) / 2
 
-  psv_result[, osv := raw_osv + delta]
-  psv_result[, dsv := raw_dsv + delta]
+  psv_result[, osv_p80 := raw_osv + delta]
+  psv_result[, dsv_p80 := raw_dsv + delta]
+
+  if ("tog" %in% names(psv_result)) {
+    tog_mult <- pmax(as.numeric(psv_result$tog), 0.1)
+    psv_result[, osv := osv_p80 * tog_mult]
+    psv_result[, dsv := dsv_p80 * tog_mult]
+  } else {
+    psv_result[, osv := osv_p80]
+    psv_result[, dsv := dsv_p80]
+  }
 
   psv_result
 }

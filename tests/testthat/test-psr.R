@@ -189,7 +189,7 @@ test_that("calculate_psv returns expected structure", {
   result <- calculate_psv(stats, coef_df)
 
   expect_s3_class(result, "data.table")
-  expect_true(all(c("psv", "psv_raw") %in% names(result)))
+  expect_true(all(c("psv", "psv_p80", "psv_raw") %in% names(result)))
   expect_true("player_id" %in% names(result))
   expect_equal(nrow(result), 3)
 })
@@ -208,9 +208,12 @@ test_that("calculate_psv applies TOG adjustment to rate stats", {
 
   result <- calculate_psv(stats, coef_df, center = FALSE)
 
-  # P1: 10/1.0 * 1 = 10; P2: 10/0.5 * 1 = 20
+  # psv_p80 is the per-full-game rate: P1: 10/1.0 = 10; P2: 10/0.5 = 20
+  expect_equal(result[player_id == "P1"]$psv_p80, 10)
+  expect_equal(result[player_id == "P2"]$psv_p80, 20)
+  # psv is the per-game value (psv_p80 * tog): P1: 10*1.0 = 10; P2: 20*0.5 = 10
   expect_equal(result[player_id == "P1"]$psv, 10)
-  expect_equal(result[player_id == "P2"]$psv, 20)
+  expect_equal(result[player_id == "P2"]$psv, 10)
 })
 
 test_that("calculate_psv excludes efficiency stats and bounces", {
@@ -294,6 +297,69 @@ test_that("calculate_psv_components ensures osv + dsv = psv", {
 
   expect_true(all(c("psv", "osv", "dsv") %in% names(result)))
   expect_equal(result$osv + result$dsv, result$psv, tolerance = 1e-10)
+})
+
+test_that("calculate_psv: psv is per-game (psv_p80 * tog) for low- and full-TOG players (issue #80)", {
+  # One low-TOG player and one full-TOG player with identical full-game
+  # production. psv_p80 (the centered per-80 rate) should be equal for both,
+  # while psv (the per-game value) must be scaled down by the low-TOG player's
+  # actual time on ground.
+  stats <- data.table::data.table(
+    player_id = c("LOW", "FULL"),
+    player_name = c("LowTog", "FullTog"),
+    season = 2025L, round = 1L,
+    match_id = c("M1", "M1"),
+    lineup_position = c("MID", "MID"),
+    tog = c(0.10, 1.00),
+    kicks = c(1, 10) # same per-80 rate: 1/0.1 = 10, 10/1.0 = 10
+  )
+
+  coef_df <- data.frame(stat_name = "kicks", beta = 1, stringsAsFactors = FALSE)
+
+  result <- calculate_psv(stats, coef_df, center = TRUE)
+
+  low <- result[player_id == "LOW"]
+  full <- result[player_id == "FULL"]
+
+  # Identical per-80 rate -> identical centered psv_p80 (both zero after
+  # centering within the single MID position group).
+  expect_equal(low$psv_p80, full$psv_p80)
+
+  # Per-game psv == psv_p80 * tog for every player.
+  expect_equal(result$psv, result$psv_p80 * result$tog, tolerance = 1e-10)
+
+  # The low-TOG per-game value is 10x smaller than its per-80 extrapolation
+  # would be (0.10 tog), which is the core of the bug being fixed.
+  expect_equal(low$psv, low$psv_p80 * 0.10, tolerance = 1e-10)
+})
+
+test_that("calculate_psv_components emits *_p80 columns and osv/dsv per-game (issue #80)", {
+  stats <- data.table::data.table(
+    player_id = c("P1", "P2"),
+    player_name = c("Alice", "Bob"),
+    season = 2025L, round = 1L,
+    match_id = c("M1", "M1"),
+    lineup_position = c("MID", "FWD"),
+    tog = c(0.50, 1.00),
+    kicks = c(6, 10),
+    tackles = c(2, 4)
+  )
+
+  margin_coef <- data.frame(stat_name = c("kicks", "tackles"), beta = c(0.5, 0.3))
+  off_coef <- data.frame(stat_name = c("kicks", "tackles"), beta = c(0.8, 0.1))
+  def_coef <- data.frame(stat_name = c("kicks", "tackles"), beta = c(0.1, 0.7))
+
+  result <- calculate_psv_components(stats, margin_coef, off_coef, def_coef,
+                                      center = TRUE)
+
+  expect_true(all(c("psv_p80", "osv_p80", "dsv_p80",
+                    "psv", "osv", "dsv") %in% names(result)))
+  # Decomposition holds on both scales.
+  expect_equal(result$osv_p80 + result$dsv_p80, result$psv_p80, tolerance = 1e-10)
+  expect_equal(result$osv + result$dsv, result$psv, tolerance = 1e-10)
+  # Per-game columns are *_p80 * tog.
+  expect_equal(result$osv, result$osv_p80 * result$tog, tolerance = 1e-10)
+  expect_equal(result$dsv, result$dsv_p80 * result$tog, tolerance = 1e-10)
 })
 
 test_that("calculate_psv excludes efficiency stats, bounces, and availability stats", {
