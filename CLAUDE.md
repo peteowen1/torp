@@ -27,7 +27,7 @@ powershell.exe -Command 'Rscript "path/to/script.R"'
 | Domain | Key files | Purpose |
 |--------|-----------|---------|
 | **Data loading** | `load_data.R`, `load_utils.R`, `load_engines.R`, `local_data.R` | `load_*()` family (load_pbp, load_results, load_torp_ratings, ...) — fetch from GitHub Releases or `get_local_data_dir()` |
-| **Scraping** | `afl_api.R`, `scraper.R`, `injuries_scrape.R` | In-house AFL API (replaced fitzRoy), injury scraping |
+| **Scraping** | `afl_api.R`, `scraper.R`, `injuries_scrape.R` | In-house AFL API (replaced fitzRoy), injury scraping — see [`AFL-API-REFERENCE.md`](AFL-API-REFERENCE.md) for the full endpoint/field dictionary |
 | **EP / WP / xG** | `add_variables.R`, `win_probability.R`, `wp_credit.R`, `wp_utils.R`, `xg.R` | `add_epv_vars()`, `add_wp_vars()`, `add_shot_vars()` — feature engineering and credit assignment |
 | **TORP / EPR / PSR** | `player_ratings.R`, `player_skills.R`, `psr.R`, `player_credit.R`, `player_attribution.R` | Core rating composition. `TORP_EPR_WEIGHT = 0.5` blends EPV+PSV; WPA tracked separately |
 | **Per-game ratings** | `player_game_ratings.R`, `player_skills_data.R`, `player_skills_profile.R` | `get_player_game_ratings()` returns EPV+WPA+PSV per game |
@@ -122,6 +122,7 @@ Live EP/WP/xG models are trained in **torpmodels** (`data-raw/01-ep-model/train_
 - **Shot distance bug** — `shots.parquet` computes distance with signed x (`halfLen - x`) instead of `halfLen - |x|`, so negative-x shots show distance to the *far* goal. inthegame-blog overrides client-side; fix in torp would let the override become a no-op.
 - **Team name canonicalisation** — `save_to_release()` calls `.normalise_team_values()` before write; outside that path you may see raw API names (Footscray, GWS) vs full names (Western Bulldogs, GWS Giants). Use `AFL_TEAM_ALIASES` to translate.
 - **Off-season `run_daily_release()` returns FALSE** — by design, so the GHA workflow can skip release/dispatch steps. Don't treat FALSE as an error.
+- **`load_*()` loaders default to the *current* season** — `load_player_stat_ratings()`, `load_player_stats()`, etc. default `seasons = get_afl_season()`, and `seasons = TRUE` means *all* seasons (`AFL_MIN_SEASON:current`). But `torp_ratings.parquet` (`ratings-data`) is **full-history** — it's upserted into the existing release each run. So any pipeline stage that blends per-round data into the full table must pass `TRUE`, or historical rows silently fall back to a current-season snapshot. This was the #88 PSR/OSR/DSR "flat across history" bug: `run_ratings_pipeline.R` fed `calculate_torp()` a current-season-only PSR frame.
 
 ## Tests
 

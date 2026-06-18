@@ -418,6 +418,14 @@ NULL
     players$teamName <- team_name
     players$teamType <- team_type
     players$providerId <- match_id
+
+    # Bring through team-level lineup status (e.g. "FINAL_TEAM") for posterity
+    # (issue #92 API audit). Distinguishes confirmed final lineups from
+    # provisional/extended squads. Other matchRoster fields (weather, umpires,
+    # ins/outs, milestones, recentMatches) are match-level, not player-grained,
+    # so they belong in the chains/results tables, not this roster table.
+    players$teamStatus <- as.character(team_data$teamStatus)[1] %||% NA_character_
+
     players
   }
 
@@ -488,6 +496,19 @@ NULL
 
   players$team.name <- json$squad$team$name %||% NA_character_
   players$team.providerId <- json$squad$team$providerId %||% NA_character_
+
+  # Bring through additional team-identity fields from squad$team for posterity
+  # (issue #92 API audit). team.id is the numeric team id (same id-space as the
+  # public matches endpoint's home/away.team.id); abbreviation/nickname/teamType
+  # round out the team identity. squad$team$club.* and squad$team$metadata.*
+  # (social media URLs, captainIds) are intentionally NOT captured — club is
+  # redundant with team for AFL and metadata is non-analytical noise. squad$
+  # compSeason is intentionally skipped — fully redundant with the `season`
+  # column derived downstream.
+  players$team.id <- json$squad$team$id %||% NA_integer_
+  players$team.abbreviation <- json$squad$team$abbreviation %||% NA_character_
+  players$team.nickname <- json$squad$team$nickname %||% NA_character_
+  players$team.teamType <- json$squad$team$teamType %||% NA_character_
 
   # Drop list-columns
   players <- .drop_list_cols(players)
@@ -603,6 +624,23 @@ get_afl_fixtures <- function(season = NULL) {
 
   matches <- json$matches
   if (is.null(matches) || length(matches) == 0) return(NULL)
+
+  # Capture round.byes (a list-column of per-match data.frames of teams on the
+  # bye that round) as a flat comma-separated abbreviation string before it is
+  # dropped by .drop_list_cols(). Faithfully archives which teams had a bye for
+  # each fixture's round (issue #92 API audit). Empty/absent byes -> NA.
+  if ("round.byes" %in% names(matches)) {
+    matches$round_byes <- vapply(matches$round.byes, function(b) {
+      if (is.null(b) || length(b) == 0) return(NA_character_)
+      if (is.data.frame(b)) {
+        col <- intersect(c("abbreviation", "name", "providerId"), names(b))[1]
+        if (is.na(col) || nrow(b) == 0) return(NA_character_)
+        paste(b[[col]], collapse = ", ")
+      } else {
+        paste(unlist(b), collapse = ", ")
+      }
+    }, character(1))
+  }
 
   # Drop list-columns (nested structs) that arrow can't serialize
   matches <- .drop_list_cols(matches)

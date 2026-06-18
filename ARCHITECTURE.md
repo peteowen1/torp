@@ -145,20 +145,17 @@ The AFL API delivers `x,y` in a **possession-team-relative** frame: positive x =
 
 `fix_chain_coordinates_dt()` converts to **pitch-relative** (`x_pitch`, `y_pitch`) -- a fixed home-team frame where the same physical location always has the same coordinates regardless of possession. This makes consecutive rows spatially comparable for EP/WP modeling.
 
-The AFL API frequently delivers coordinates in the **wrong team's frame** at possession changes (~12% of non-throw-in rows), producing sign-flipped x,y values. The fix pipeline in `clean_pbp.R` corrects this in 8 steps:
+**Orientation at the source (issue #92).** The AFL API records coordinates in the **possessing chain's attacking frame** (`matchChains[i].teamId`), not the acting player's team. The old pipeline oriented off the actor, mis-flipping ~7% of shots (and ~12% of possession-change rows). The fix captures `chain_team_id` + `mp_home_team_id` in the scraper and orients **step A** off the chain frame (`coord_team_id` vs `coord_home_team_id`). With orientation correct at the source, the former neighbour-cascade sign-flip net (old steps D/E/F) modifies **zero rows** (verified by ablation over two full seasons) and has been **removed** — it was a symptom treatment for jumps the orientation bug itself generated. The remaining pipeline:
 
 | Step | Fix | What it catches |
 |------|-----|-----------------|
-| A | Convert to pitch-relative (`as.double`) | Frame alignment + avoids integer truncation |
+| A | Convert to pitch-relative off `coord_team_id`/`coord_home_team_id` (`as.double`) | Frame alignment from the chain's attacking frame (**the #92 fix**) |
 | B | Throw-in fix (2 passes) | Centre Bounce, OOB, Ball Up rows → use next row's position |
-| C | Iterative sign-flip (`COORD_FLIP_TOLERANCE`) | Single and cascading wrong-frame rows. Flips when jump >100m but negating puts within 70m of predecessor |
-| D | Both-neighbor sign-flip (60m tolerance) | Longer-distance sign-flips confirmed by both neighbors |
-| E | Neighbor interpolation | Remaining outliers far from both neighbors |
-| F | Paired sign-flip | Two consecutive wrong rows (e.g. Spoil + Kickin) |
+| C | Single conservative prev-based flip (shot-protected) | The few genuinely ambiguous stoppage/possession-boundary rows (~10/season); `shot_at_goal` rows are never flipped |
 | G | Convert back to team-relative | Restores `x,y` to possession-team frame |
 | H | Recalculate `goal_x` | `venue_length / 2 - x` |
 
-Constants in `R/constants_data.R`: `COORD_JUMP_THRESHOLD` (100m) gates all sign-flip checks. `COORD_FLIP_TOLERANCE` (70m) is the max flipped distance to classify as a sign error -- set to cover the longest realistic kick distances. Together they eliminate ~99.7% of >100m pitch-relative jumps.
+Constants in `R/constants_data.R`: `COORD_JUMP_THRESHOLD` (100m) gates the step-C flip check; `COORD_FLIP_TOLERANCE` (70m) is the max flipped distance to classify as a sign error. Post-#92 the jump-detection is near-inert — coordinate correctness is delivered by step A's orientation, not by the cascade.
 
 **Column Schema** (`column_schema.R`):
 - 11 COL_MAP constants (named character vectors) for each data type: `PLAYER_STATS_COL_MAP`, `PBP_COL_MAP`, `FIXTURE_COL_MAP`, `TEAMS_COL_MAP`, `CHAINS_COL_MAP`, `PLAYER_GAME_COL_MAP`, `TORP_RATINGS_COL_MAP`, `PLAYER_GAME_RATINGS_COL_MAP`, `PLAYER_DETAILS_COL_MAP`, `PREDICTIONS_COL_MAP`, `XG_COL_MAP`

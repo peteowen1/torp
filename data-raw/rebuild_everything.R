@@ -107,6 +107,7 @@ skip_sim    <- "--skip-sim" %in% flag_args
 models_only      <- "--models-only" %in% flag_args
 ratings_only     <- "--ratings-only" %in% flag_args
 predictions_only <- "--predictions-only" %in% flag_args
+data_only        <- "--data-only" %in% flag_args  # Phases 1-3 only: re-scrape + PBP, then stop
 
 # "only" flags disable everything else
 if (models_only) {
@@ -119,6 +120,15 @@ if (ratings_only) {
 }
 if (predictions_only) {
   skip_api <- TRUE; skip_chains <- TRUE; skip_pbp <- TRUE
+  skip_models <- TRUE; skip_skills <- TRUE; skip_sim <- TRUE
+}
+if (data_only) {
+  # Re-scrape + rebuild PBP only (Phases 1-3), publish chains/pbp, then stop —
+  # deliberately NOT recomputing models/derived/ratings/predictions, so a
+  # coordinate re-scrape can be verified before any retrain (see BACKFILL-PLAN.md).
+  # Pin start_from = 1 so Phases 1-3 actually run non-interactively (the default
+  # is 6, and start_from is otherwise only lowerable via the interactive prompt).
+  start_from <- 1L
   skip_models <- TRUE; skip_skills <- TRUE; skip_sim <- TRUE
 }
 
@@ -136,10 +146,10 @@ run_api         <- !skip_api && !models_only && !ratings_only && !predictions_on
 run_chains      <- !skip_chains && !models_only && !ratings_only && !predictions_only
 run_pbp         <- !skip_pbp && !models_only && !ratings_only && !predictions_only
 run_models      <- !skip_models && !ratings_only && !predictions_only
-run_derived     <- !models_only && !predictions_only && start_from <= 6
+run_derived     <- !models_only && !predictions_only && !data_only && start_from <= 6
 run_skills      <- !skip_skills && !models_only && !predictions_only
-run_ratings     <- !models_only && !predictions_only && start_from <= 8
-run_predictions <- !models_only && start_from <= 9
+run_ratings     <- !models_only && !predictions_only && !data_only && start_from <= 8
+run_predictions <- !models_only && !data_only && start_from <= 9
 run_sim         <- !skip_sim && !models_only && !ratings_only && !predictions_only
 
 # Season range

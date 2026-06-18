@@ -1076,6 +1076,56 @@ test_that("chain_team_id orientation prevents sign-flip cascade (issue #92)", {
   expect_true(all(team1_rows$x > 0))
 })
 
+test_that("coord_home_team_id prefers API homeTeamId over results-joined home_team_id (issue #92)", {
+  # Same fixture as the sign-flip test, but the results-data join got home/away
+  # BACKWARDS (home_team_id = "2", the actual away team). The matchPlays response
+  # carries the correct homeTeamId = "1" in the same id-space as chain_team_id, so
+  # orientation must follow homeTeamId and still land the team-1 shot on +x. If
+  # the orientation keyed off the wrong joined home_team_id it would flip the
+  # whole team-1 sequence to the defensive half.
+  mock <- data.frame(
+    match_id = rep("CD_M20240140101", 6),
+    display_order = 1:6,
+    period = rep(1L, 6),
+    period_seconds = c(100, 101, 102, 103, 104, 105),
+    chain_number = c(1, 2, 2, 2, 2, 2),
+    team_id = rep("1", 6),
+    chain_team_id = c("2", "1", "1", "1", "1", "1"),
+    home_team_id    = rep("2", 6),   # WRONG: games join had home/away swapped
+    mp_home_team_id = rep("1", 6),   # RIGHT: from matchPlays, same id-space as chain_team_id
+    away_team_id = rep("1", 6),
+    home_team_name = rep("Carlton Blues", 6),
+    away_team_name = rep("Collingwood Magpies", 6),
+    home_team_abbr = rep("CARL", 6),
+    away_team_abbr = rep("COLL", 6),
+    season = rep(2024L, 6),
+    round_number = rep(1L, 6),
+    venue_length = rep(160, 6),
+    x = c(-45, 45, 45, 46, 46, 46),
+    y = c(44, -44, -40, -33, -30, -30),
+    description = c("Loose Ball Get", "Loose Ball Get", "Handball",
+                    "Handball Received", "Kick", "Behind"),
+    final_state = c(NA, NA, NA, NA, "behind", "behind"),
+    shot_at_goal = c(NA, NA, NA, NA, TRUE, NA),
+    player_position = rep("MID", 6),
+    player_name_given_name = rep("Test", 6),
+    player_name_surname = rep("Player", 6),
+    home_score = rep(50L, 6),
+    away_score = rep(40L, 6),
+    player_id = rep("P1", 6),
+    disposal = rep(NA_character_, 6),
+    stringsAsFactors = FALSE
+  )
+
+  result <- clean_pbp(mock)
+
+  # Orientation followed homeTeamId ("1"), not the swapped home_team_id ("2"):
+  # the team-1 shot stays on the attacking (+x) side near goal.
+  shot <- result[display_order == 5]
+  expect_gt(shot$x, 0)
+  expect_lt(shot$goal_x, shot$venue_length / 2)
+})
+
 test_that("goal_x is recalculated after coordinate fixing", {
   mock <- data.frame(
     match_id = rep("CD_M20240140101", 3),

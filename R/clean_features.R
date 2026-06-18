@@ -35,7 +35,7 @@ clean_model_data_epv_dt <- function(df) {
   dt <- dt[lag_ti_flt == 0L | lead_ti_flt == 0L | throw_in == 0L]
   dt[, c("lag_ti_flt", "lead_ti_flt") := NULL]
 
-  # Team vars, mirror, coordinate transform
+  # Team vars (mirror neutralised post-#92 — see add_epv_team_vars_dt)
   add_epv_team_vars_dt(dt, grp)
 
   # Lagged variables + speed
@@ -48,9 +48,10 @@ clean_model_data_epv_dt <- function(df) {
 
 #' Add EPV team variables (data.table, by reference)
 #'
-#' Computes team_id_mdl, home, points, mirror, and coordinate transform.
-#' All shift operations for the mirror calculation are batched into a single
-#' := call for performance.
+#' Computes team_id_mdl, home, and points. The legacy `mirror` coordinate
+#' flip is neutralised post-#92 (set to constant 1) — clean_pbp now leaves
+#' coordinates in the correct action-team attacking frame, so the second
+#' normalisation here double-corrected. See the inline note for the ablation.
 #'
 #' @param dt A data.table to modify by reference.
 #' @param grp Character vector of grouping columns.
@@ -73,67 +74,26 @@ add_epv_team_vars_dt <- function(dt, grp) {
   )]
   dt[, points_diff := pos_points - opp_points]
 
-  # Batch all 11 shifts needed for mirror (single pass over group index)
-  dt[, c("tmp_lag1_ti", "tmp_lag2_ti",
-         "tmp_lag1_tm", "tmp_lag2_tm", "tmp_lag3_tm",
-         "tmp_lag1_x", "tmp_lag2_x",
-         "tmp_lead1_x", "tmp_lead2_x",
-         "tmp_lead1_tm", "tmp_lead2_tm") := .(
-    data.table::shift(throw_in, 1L, type = "lag"),
-    data.table::shift(throw_in, 2L, type = "lag"),
-    data.table::shift(team_id_mdl, 1L, type = "lag"),
-    data.table::shift(team_id_mdl, 2L, type = "lag"),
-    data.table::shift(team_id_mdl, 3L, type = "lag"),
-    data.table::shift(x, 1L, type = "lag"),
-    data.table::shift(x, 2L, type = "lag"),
-    data.table::shift(x, 1L, type = "lead"),
-    data.table::shift(x, 2L, type = "lead"),
-    data.table::shift(team_id_mdl, 1L, type = "lead"),
-    data.table::shift(team_id_mdl, 2L, type = "lead")
-  ), by = grp]
-
-  # Pre-compute sign() values to avoid repeated evaluation over 1.6M rows.
-  # sign(x) is used in 6 of the 7 conditions; sign(tmp_lag1_x) in 3.
-  dt[, c("s_x", "s_lag1_x", "s_lag2_x", "s_lead1_x", "s_lead2_x") := .(
-    sign(x), sign(tmp_lag1_x), sign(tmp_lag2_x), sign(tmp_lead1_x), sign(tmp_lead2_x)
-  )]
-
-  # Mirror via fcase (same 7 conditions as the original dplyr calculate_mirror,
-  # NAs treated as FALSE)
-  dt[, mirror := data.table::fcase(
-    # 1. Current throw-in with team change
-    throw_in == 1L & tmp_lag1_ti != 1L & tmp_lag1_tm != team_id_mdl, -1,
-    # 2. Consecutive throw-ins on same side with different team
-    throw_in == 1L & tmp_lag1_ti == 1L & tmp_lag2_tm != team_id_mdl &
-      s_lag1_x == s_x, -1,
-    # 3. Consecutive throw-ins with same team but different side
-    throw_in == 1L & tmp_lag1_ti == 1L & tmp_lag2_tm == team_id_mdl &
-      s_lag1_x != s_x, -1,
-    # 4. Previous throw-in affecting current play
-    tmp_lag1_ti == 1L & s_lag1_x == s_x &
-      tmp_lag1_tm == team_id_mdl & tmp_lag2_tm != team_id_mdl, -1,
-    # 5. Throw-in two plays ago affecting current play
-    tmp_lag2_ti == 1L & s_lag2_x == s_x &
-      tmp_lag2_tm == team_id_mdl & tmp_lag3_tm != team_id_mdl, -1,
-    # 6. Previous throw-in with future position considerations
-    tmp_lag1_ti == 1L & s_lead2_x == s_x &
-      tmp_lead2_tm != team_id_mdl, -1,
-    # 7. Two plays ago throw-in with future considerations
-    tmp_lag2_ti == 1L & s_lead1_x == s_x &
-      tmp_lead1_tm != team_id_mdl, -1,
-    default = 1
-  )]
-
-  # Clean up mirror temp columns
-  dt[, c("tmp_lag1_ti", "tmp_lag2_ti",
-         "tmp_lag1_tm", "tmp_lag2_tm", "tmp_lag3_tm",
-         "tmp_lag1_x", "tmp_lag2_x",
-         "tmp_lead1_x", "tmp_lead2_x",
-         "tmp_lead1_tm", "tmp_lead2_tm",
-         "s_x", "s_lag1_x", "s_lag2_x", "s_lead1_x", "s_lead2_x") := NULL]
-
-  # Apply coordinate transform (x, y must be updated before goal_x)
-  dt[, `:=`(x = mirror * x, y = mirror * y)]
+  # --- Mirror neutralised (issue #92 sweep) ---
+  # The `mirror` was a SECOND frame-normalisation heuristic: 7 throw-in-based
+  # fcase conditions keyed on sign(x) vs neighbouring throw-ins that flipped a
+  # row's (x, y) to renormalise it into the EP-model attacking frame. It was
+  # built for the PRE-#92 era when clean_pbp's coordinates were unreliable.
+  #
+  # Post-#92, clean_pbp already leaves every row in the action-team (team_id_mdl)
+  # attacking frame: step A orients off the captured chain frame
+  # (coord_team_id / coord_home_team_id) and step B fixes throw-in/stoppage rows
+  # to where play resumes. So this mirror now double-corrects what clean_pbp has
+  # already handled — exactly like the clean_pbp neighbour-cascade (former steps
+  # D/E/F) we removed. An ablation over post-#92 2021 data showed the flip fires
+  # on ~17k rows yet HARMS ~99.5% of those that have a same-team predecessor
+  # (median jump 0m -> 103m away from the same-team neighbour) while helping a
+  # handful, and flips ~67 already-correct shots (x>0 -> x<0), reintroducing the
+  # residual ~0.7% mis-orientation. It corrects zero shots. Neutralised to the
+  # identity. `mirror` is retained as a constant 1 column for downstream
+  # compatibility. If a future API schema reintroduces frame errors, restore the
+  # 7-condition heuristic from git history and re-measure. See issue #92.
+  dt[, mirror := 1]
   dt[, goal_x := venue_length / 2 - x]
 
   invisible(NULL)

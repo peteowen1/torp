@@ -136,6 +136,23 @@ add_team_id_mdl_dt <- function(dt) {
     dt[, coord_team_id := team_id_mdl]
   }
 
+  # coord_home_team_id: the home-end reference for coordinate orientation. The
+  # AFL API's matchPlays response carries the home team id (captured as
+  # mp_home_team_id) in the SAME id-space as chain_team_id, so when the scraper
+  # captured it, prefer it — making the orientation comparison (coord_team_id vs
+  # home end) fully self-contained from the response that defines (x, y), rather
+  # than depending on the home_team_id joined in from the games/results data.
+  # Falls back to the joined home_team_id for legacy parquets / missing values.
+  # A no-op whenever the two agree (every correctly-sourced match), so it only
+  # ever corrects a games/chains home-away mismatch. See issue #92 (API audit).
+  if ("mp_home_team_id" %in% names(dt)) {
+    dt[, coord_home_team_id := data.table::fifelse(
+      is.na(mp_home_team_id), home_team_id, mp_home_team_id
+    )]
+  } else {
+    dt[, coord_home_team_id := home_team_id]
+  }
+
   invisible(NULL)
 }
 
@@ -151,9 +168,11 @@ add_team_id_mdl_dt <- function(dt) {
 #' Step A now orients to the pitch using `coord_team_id` (the captured
 #' chain-level team), so opponent-actor rows and the trailing event of the
 #' previous chain land in a consistent frame and no longer present as ~90m
-#' jumps that the steps C-F neighbour cascade would mis-flip. The C-F steps are
-#' retained as a defensive net for residual API noise but should rarely fire on
-#' correctly-oriented data.
+#' jumps. The old neighbour-cascade sign-flip net (former steps D/E/F) was a
+#' symptom treatment for the pre-fix orientation bug; with orientation correct
+#' it modifies zero rows (verified by ablation over two full seasons) and has
+#' been removed. Step B (throw-in fix) and step C (a single conservative
+#' prev-based flip catch, with shot rows protected) remain.
 #'
 #' Backward compatibility: parquets scraped before `chain_team_id` was captured
 #' fall back to `team_id_mdl` for orientation, reproducing the prior (buggy)
@@ -183,8 +202,8 @@ fix_chain_coordinates_dt <- function(dt) {
   # the steps C-F cascade would mis-flip. See issue #92.
   # Use as.double() to avoid integer truncation when interpolating later
   dt[, `:=`(
-    x_pitch = as.double(data.table::fifelse(coord_team_id == home_team_id, x, -x)),
-    y_pitch = as.double(data.table::fifelse(coord_team_id == home_team_id, y, -y))
+    x_pitch = as.double(data.table::fifelse(coord_team_id == coord_home_team_id, x, -x)),
+    y_pitch = as.double(data.table::fifelse(coord_team_id == coord_home_team_id, y, -y))
   )]
 
   # --- B) Fix throw-in/stoppage rows ---
@@ -229,7 +248,14 @@ fix_chain_coordinates_dt <- function(dt) {
     flip_rows <- dt[, which(
       dist_as_is > COORD_JUMP_THRESHOLD &
       dist_flipped < COORD_FLIP_TOLERANCE &
-      !is.na(prev_x)
+      !is.na(prev_x) &
+      # Never flip a shot_at_goal row — a shot is a reliable anchor near the
+      # attacking goal and shouldn't be repositioned by a noisy neighbour.
+      # Defensive only: post-#92 step C rarely fires on shots. (The ~0.7%
+      # residual mis-orientation found in the Stage-1 backfill turned out to be
+      # the EPV `mirror` transform in clean_features.R, since neutralised — NOT
+      # this cascade.) Shots can still anchor the flip of other rows. See #92.
+      shot_row != 1L
     )]
     n_flipped <- length(flip_rows)
 
@@ -244,99 +270,17 @@ fix_chain_coordinates_dt <- function(dt) {
             ") with ", n_flipped, " rows still flagged. Possible oscillating coordinates.")
   }
 
-  # --- D) Both-neighbor sign-flip (looser tolerance) ---
-  # Catches sign-flips missed by step C due to longer kick distances.
-  # Safe to use looser tolerance because both neighbors must confirm the flip.
-  dt[, `:=`(
-    prev_x = data.table::shift(x_pitch, 1L, type = "lag"),
-    prev_y = data.table::shift(y_pitch, 1L, type = "lag"),
-    next_x = data.table::shift(x_pitch, 1L, type = "lead"),
-    next_y = data.table::shift(y_pitch, 1L, type = "lead")
-  ), by = .(match_id, period)]
-
-  dt[!is.na(prev_x) & !is.na(next_x), `:=`(
-    jump_dist = sqrt((x_pitch - prev_x)^2 + (y_pitch - prev_y)^2),
-    flip_prev = sqrt((-x_pitch - prev_x)^2 + (-y_pitch - prev_y)^2),
-    flip_next = sqrt((-x_pitch - next_x)^2 + (-y_pitch - next_y)^2),
-    total_asis = sqrt((x_pitch - prev_x)^2 + (y_pitch - prev_y)^2) +
-                 sqrt((x_pitch - next_x)^2 + (y_pitch - next_y)^2),
-    total_flip = sqrt((-x_pitch - prev_x)^2 + (-y_pitch - prev_y)^2) +
-                 sqrt((-x_pitch - next_x)^2 + (-y_pitch - next_y)^2)
-  )]
-
-  dt[jump_dist > COORD_JUMP_THRESHOLD &
-     flip_prev < 60 & flip_next < 60 &
-     total_flip < total_asis &
-     !is.na(prev_x) & !is.na(next_x), `:=`(
-    x_pitch = -x_pitch,
-    y_pitch = -y_pitch
-  )]
-
-  dt[, c("flip_prev", "flip_next", "total_asis", "total_flip") := NULL]
-
-  # --- E) Smooth remaining outliers via neighbor interpolation ---
-  # Recompute neighbors fresh (step D may have flipped some rows)
-  dt[, c("prev_x", "prev_y", "next_x", "next_y") := NULL]
-  dt[, `:=`(
-    prev_x = data.table::shift(x_pitch, 1L, type = "lag"),
-    prev_y = data.table::shift(y_pitch, 1L, type = "lag"),
-    next_x = data.table::shift(x_pitch, 1L, type = "lead"),
-    next_y = data.table::shift(y_pitch, 1L, type = "lead")
-  ), by = .(match_id, period)]
-
-  dt[!is.na(prev_x) & !is.na(next_x), `:=`(
-    jump_dist = sqrt((x_pitch - prev_x)^2 + (y_pitch - prev_y)^2),
-    next_jump = sqrt((next_x - x_pitch)^2 + (next_y - y_pitch)^2)
-  )]
-
-  dt[jump_dist > COORD_JUMP_THRESHOLD & next_jump > COORD_JUMP_THRESHOLD &
-     !is.na(prev_x) & !is.na(next_x), `:=`(
-    x_pitch = (prev_x + next_x) / 2,
-    y_pitch = (prev_y + next_y) / 2
-  )]
-
-  dt[, c("prev_x", "prev_y", "next_x", "next_y",
-         "jump_dist", "next_jump") := NULL]
-
-  # --- F) Paired sign-flip fix ---
-  # Catches cases where TWO consecutive rows are both sign-flipped (e.g.
-  # Out On Full + OOF Kick In, or Spoil + Kickin). Flipping the pair together
-  # improves the jump from the predecessor without hurting the successor.
-  # The !is.na(next2_x) guard (shift with by=match_id,period) ensures
-  # pair_rows + 1 never crosses a match/period boundary.
-  dt[, `:=`(
-    prev_x = data.table::shift(x_pitch, 1L, type = "lag"),
-    prev_y = data.table::shift(y_pitch, 1L, type = "lag"),
-    next_x = data.table::shift(x_pitch, 1L, type = "lead"),
-    next_y = data.table::shift(y_pitch, 1L, type = "lead"),
-    next2_x = data.table::shift(x_pitch, 2L, type = "lead"),
-    next2_y = data.table::shift(y_pitch, 2L, type = "lead")
-  ), by = .(match_id, period)]
-
-  dt[!is.na(prev_x) & !is.na(next2_x), `:=`(
-    jump_dist = sqrt((x_pitch - prev_x)^2 + (y_pitch - prev_y)^2),
-    flip_prev = sqrt((-x_pitch - prev_x)^2 + (-y_pitch - prev_y)^2),
-    flip_pair_to_next2 = sqrt((-next_x - next2_x)^2 + (-next_y - next2_y)^2)
-  )]
-
-  pair_rows <- dt[, which(
-    jump_dist > COORD_JUMP_THRESHOLD &
-    flip_prev < 60 &
-    flip_pair_to_next2 < 60 &
-    !is.na(prev_x) & !is.na(next2_x)
-  )]
-
-  if (length(pair_rows) > 0L) {
-    dt[pair_rows, `:=`(x_pitch = -x_pitch, y_pitch = -y_pitch)]
-    next_rows <- pair_rows + 1L
-    next_rows <- next_rows[next_rows <= nrow(dt)]
-    if (length(next_rows) > 0L) {
-      dt[next_rows, `:=`(x_pitch = -x_pitch, y_pitch = -y_pitch)]
-    }
-  }
-
-  dt[, c("prev_x", "prev_y", "next_x", "next_y", "next2_x", "next2_y",
-         "jump_dist", "flip_prev", "flip_pair_to_next2") := NULL]
+  # --- (former steps D/E/F removed — issue #92 sweep) ---
+  # The both-neighbour flip (D), outlier interpolation (E), and paired flip (F)
+  # were a sign-flip defensive net for the PRE-#92 orientation bug, which
+  # *generated* the >100m jumps they "fixed". With coordinates now oriented
+  # correctly off the chain frame in step A (coord_team_id / coord_home_team_id),
+  # an ablation over two full seasons (2021, 2024) showed D/E/F modify ZERO rows
+  # — disabling them is byte-identical to running them — while still carrying the
+  # false-flip risk that mis-oriented ~0.7% of shots. Removed. Step B (throw-in
+  # fix) and step C (single conservative prev-based flip catch, shot-protected)
+  # remain. If a future API schema reintroduces frame errors, restore from git
+  # history and re-measure. See issue #92.
 
   # --- G) Convert back to action-team perspective ---
   # IMPORTANT: step A oriented to pitch using coord_team_id (chain frame), but
@@ -348,8 +292,8 @@ fix_chain_coordinates_dt <- function(dt) {
   # identity; only genuine opponent-actor rows are intentionally negated here.
   # See issue #92.
   dt[, `:=`(
-    x = as.integer(round(data.table::fifelse(team_id_mdl == home_team_id, x_pitch, -x_pitch))),
-    y = as.integer(round(data.table::fifelse(team_id_mdl == home_team_id, y_pitch, -y_pitch)))
+    x = as.integer(round(data.table::fifelse(team_id_mdl == coord_home_team_id, x_pitch, -x_pitch))),
+    y = as.integer(round(data.table::fifelse(team_id_mdl == coord_home_team_id, y_pitch, -y_pitch)))
   )]
 
   dt[, c("x_pitch", "y_pitch") := NULL]
