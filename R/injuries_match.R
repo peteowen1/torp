@@ -253,7 +253,16 @@ parse_return_round <- function(estimated_return, season, current_round = 1L) {
       next
     }
 
-    # "N-plus weeks" / "N+ weeks" (conservative: treat as N * 1.5 weeks)
+    # "N+ weeks" -- literal "+" symbol (e.g. "6+ weeks"). Same semantics as
+    # the "N-plus weeks" word form below: conservative N * 1.5 weeks.
+    m <- regmatches(val_lower, regexec("^(\\d+)\\+\\s*weeks?$", val_lower))[[1]]
+    if (length(m) == 2) {
+      weeks <- as.numeric(m[2])
+      result[i] <- current_round + as.integer(ceiling(weeks * 1.5))
+      next
+    }
+
+    # "N-plus weeks" word form (conservative: treat as N * 1.5 weeks)
     m <- regmatches(val_lower, regexec("(\\d+)\\s*[-]?plus\\s*weeks?", val_lower))[[1]]
     if (length(m) == 2) {
       weeks <- as.numeric(m[2])

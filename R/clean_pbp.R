@@ -122,6 +122,20 @@ add_team_id_mdl_dt <- function(dt) {
 
   dt[, home := data.table::fifelse(team_id_mdl == home_team_id, 1L, 0L)]
 
+  # coord_team_id: the team whose attacking frame defines (x, y) for this row.
+  # The AFL API records every action's coordinates in the possessing chain's
+  # attacking frame (matchChains[i].teamId), NOT the acting player's team
+  # (stats[j].teamId). When the scraper captured chain_team_id (post-#92 data)
+  # use it directly. For older parquets that predate the capture, fall back to
+  # team_id_mdl so historical behaviour is unchanged. See issue #92.
+  if ("chain_team_id" %in% names(dt)) {
+    dt[, coord_team_id := data.table::fifelse(
+      is.na(chain_team_id), team_id_mdl, chain_team_id
+    )]
+  } else {
+    dt[, coord_team_id := team_id_mdl]
+  }
+
   invisible(NULL)
 }
 
@@ -131,27 +145,28 @@ add_team_id_mdl_dt <- function(dt) {
 #' jumps around throw-ins and ambiguous possession events, then converts back to
 #' possession-team perspective.
 #'
-#' Known limitation: the iterative neighbour-based sign-flip routine in
-#' steps C-F can cascade from a wrong anchor row when there's API noise
-#' (duplicate / oscillating chain rows), wrongly flipping a chain of
-#' correctly-positioned rows to match an outlier predecessor. Empirically
-#' affects ~7% of shot_at_goal rows. `R/clean_features.R::add_shot_geometry_variables`
-#' folds the resulting bad `goal_x` to a near-goal distance as a downstream
-#' band-aid for user-facing display, but the underlying `x` is still wrong
-#' for those rows (consumed by EP/WP/shot models). A proper fix needs
-#' rework of the correction algorithm AND retraining of the EP, WP, and
-#' shot models. Tracked in internal project notes
-#' (`project_clean_pbp_sign_flip_cascade`) and the corresponding GitHub
-#' issue.
+#' Root cause of the historical sign-flip cascade (issue #92): coordinates are
+#' recorded in the attacking frame of the chain's possessing team
+#' (`matchChains[i].teamId`), not the acting player's team (`stats[j].teamId`).
+#' Step A now orients to the pitch using `coord_team_id` (the captured
+#' chain-level team), so opponent-actor rows and the trailing event of the
+#' previous chain land in a consistent frame and no longer present as ~90m
+#' jumps that the steps C-F neighbour cascade would mis-flip. The C-F steps are
+#' retained as a defensive net for residual API noise but should rarely fire on
+#' correctly-oriented data.
+#'
+#' Backward compatibility: parquets scraped before `chain_team_id` was captured
+#' fall back to `team_id_mdl` for orientation, reproducing the prior (buggy)
+#' behaviour exactly so historical releases and the models trained on them are
+#' unchanged. `R/clean_features.R::add_shot_geometry_variables` still folds bad
+#' `goal_x` to near-goal distance as a display band-aid for that legacy data.
+#' Retraining EP/WP/shot models on freshly-corrected chains remains a separate
+#' follow-up.
 #'
 #' @param dt A data.table to modify
 #' @return Invisible NULL (modifies dt by reference)
 #' @keywords internal
 fix_chain_coordinates_dt <- function(dt) {
-  # TODO(clean_pbp-sign-flip-cascade): see roxygen above. Iterative
-  # corrections below can mis-flip ~7% of shot rows from positive to
-  # negative x. Band-aid lives in add_shot_geometry_variables for display
-  # purposes only; real fix needs algorithm rework + model retraining.
   # Warn if any rows have NA team_id_mdl (coordinates can't be fixed for these)
   na_team_count <- sum(is.na(dt$team_id_mdl))
   if (na_team_count > 0L) {
@@ -160,10 +175,16 @@ fix_chain_coordinates_dt <- function(dt) {
   }
 
   # --- A) Convert to pitch-relative (home-team) coordinates ---
+  # Orientation is decided by coord_team_id (the chain-level possessing team,
+  # matchChains[i].teamId, when available; team_id_mdl fallback otherwise).
+  # Using the chain-level team puts every row of a possession into a single
+  # consistent frame, so opponent-actor rows (spoils, contests, the trailing
+  # event of the previous chain) no longer look like 90m coordinate jumps that
+  # the steps C-F cascade would mis-flip. See issue #92.
   # Use as.double() to avoid integer truncation when interpolating later
   dt[, `:=`(
-    x_pitch = as.double(data.table::fifelse(team_id_mdl == home_team_id, x, -x)),
-    y_pitch = as.double(data.table::fifelse(team_id_mdl == home_team_id, y, -y))
+    x_pitch = as.double(data.table::fifelse(coord_team_id == home_team_id, x, -x)),
+    y_pitch = as.double(data.table::fifelse(coord_team_id == home_team_id, y, -y))
   )]
 
   # --- B) Fix throw-in/stoppage rows ---
@@ -317,7 +338,15 @@ fix_chain_coordinates_dt <- function(dt) {
   dt[, c("prev_x", "prev_y", "next_x", "next_y", "next2_x", "next2_y",
          "jump_dist", "flip_prev", "flip_pair_to_next2") := NULL]
 
-  # --- G) Convert back to possession-team perspective ---
+  # --- G) Convert back to action-team perspective ---
+  # IMPORTANT: step A oriented to pitch using coord_team_id (chain frame), but
+  # the stored `x`/`y` must go back to the ACTION team's frame (team_id_mdl) to
+  # preserve the downstream contract that opponent-actor rows are negated
+  # relative to the possessing team (relied on by add_contest_vars_dt, which
+  # detects contests via `x == -.next_x`). For the common case where the actor
+  # IS the possessing team (coord_team_id == team_id_mdl) the round trip is
+  # identity; only genuine opponent-actor rows are intentionally negated here.
+  # See issue #92.
   dt[, `:=`(
     x = as.integer(round(data.table::fifelse(team_id_mdl == home_team_id, x_pitch, -x_pitch))),
     y = as.integer(round(data.table::fifelse(team_id_mdl == home_team_id, y_pitch, -y_pitch)))

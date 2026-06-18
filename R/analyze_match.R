@@ -141,19 +141,21 @@ get_player_game_ratings <- function(match = NULL,
   }
 
   if (!is.null(psv_result)) {
-    psv_cols <- intersect(c("psv", "osv", "dsv"), names(psv_result))
+    # calculate_psv() supplies both per-game (psv/osv/dsv) and centered
+    # per-80 (psv_p80/osv_p80/dsv_p80) columns directly (issue #80).
+    psv_cols <- intersect(
+      c("psv", "osv", "dsv", "psv_p80", "osv_p80", "dsv_p80"),
+      names(psv_result)
+    )
     if (length(psv_cols) > 0 && "player_id" %in% names(psv_result) &&
         "match_id" %in% names(psv_result)) {
       psv_slim <- psv_result[, c("player_id", "match_id", psv_cols), with = FALSE]
       pgr <- merge(pgr, psv_slim, by = c("player_id", "match_id"), all.x = TRUE)
-
-      # PSV is now game-level (calculate_psv centers then * tog, like EPV)
-      for (col in psv_cols) {
-        p80_col <- paste0(col, "_p80")
-        pgr[, (p80_col) := round(get(col) / tog, 1)]
+      for (col in intersect(c("psv", "osv", "dsv", "psv_p80", "osv_p80", "dsv_p80"), names(pgr))) {
+        pgr[, (col) := round(get(col), 1)]
       }
 
-      # TORP value: 50% EPV + 50% PSV
+      # TORP value: 50% EPV + 50% PSV (both per-game)
       if (all(c("epv", "psv") %in% names(pgr))) {
         pgr[, torp_value := round(TORP_EPR_WEIGHT * epv + (1 - TORP_EPR_WEIGHT) * psv, 1)]
         pgr[, torp_value_p80 := round(torp_value / tog, 1)]

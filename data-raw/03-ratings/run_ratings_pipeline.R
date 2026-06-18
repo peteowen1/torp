@@ -480,12 +480,17 @@ for (s in seasons) {
         NULL
       })
       if (!is.null(psv_result)) {
-        psv_cols <- intersect(c("psv", "osv", "dsv"), names(psv_result))
+        # Per-game (psv/osv/dsv) + centered per-80 (psv_p80/osv_p80/dsv_p80),
+        # both supplied directly by calculate_psv() (issue #80).
+        psv_cols <- intersect(
+          c("psv", "osv", "dsv", "psv_p80", "osv_p80", "dsv_p80"),
+          names(psv_result)
+        )
         if (length(psv_cols) > 0 && "player_id" %in% names(psv_result) &&
             "match_id" %in% names(psv_result)) {
           psv_slim <- psv_result[, c("player_id", "match_id", psv_cols), with = FALSE]
           pgr <- merge(pgr, psv_slim, by = c("player_id", "match_id"), all.x = TRUE)
-          # PSV is now game-level (calculate_psv centers then * tog, like EPV)
+          # psv is per-game (psv_p80 * tog), on the same scale as epv
           cli::cli_inform("  Added PSV columns to game ratings ({sum(!is.na(pgr$psv))} matched)")
         }
       }

@@ -402,7 +402,13 @@ get_game_chains <- function(match_id) {
       finalState = chain_list$finalState[i],
       initialState = chain_list$initialState[i],
       period = chain_list$period[i],
-      chain_number = i
+      chain_number = i,
+      # Chain-level possessing team (matchChains[i].teamId). This defines the
+      # attacking coordinate frame for EVERY action row in the chain. The
+      # action-level stats[j].teamId only says who performed the event (e.g. a
+      # spoil/contest by the opponent), so it must NOT be used to decide
+      # coordinate orientation. See fix_chain_coordinates_dt() and issue #92.
+      chain_team_id = chain_list$teamId[i]
     )]
     dt
   }), fill = TRUE)

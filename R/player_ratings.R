@@ -580,19 +580,24 @@ calculate_epr_stats_batch <- function(player_game_data = NULL,
 #' @param psr_df Data frame with PSR ratings (must contain \code{player_id}, \code{psr}).
 #' @param epr_weight Weight for EPR in the blend. Default is \code{TORP_EPR_WEIGHT} (0.5).
 #'
+#' @details When both \code{epr_df} and \code{psr_df} carry \code{season} and
+#'   \code{round} columns, PSR/OSR/DSR are joined per
+#'   \code{(player_id, season, round)} so each historical rating row receives the
+#'   PSR as it stood at that point in time. Rows with no matching historical PSR
+#'   (e.g. the current round in live computation, or seasons outside the PSR
+#'   history) fall back to the player's latest available PSR snapshot. When
+#'   either frame lacks season/round, the latest-per-player snapshot is used for
+#'   all rows.
+#'
 #' @return A data frame with all EPR columns plus \code{psr} and \code{torp} (blended).
 #' @export
 calculate_torp <- function(epr_df, psr_df, epr_weight = TORP_EPR_WEIGHT) {
-  psr_cols <- intersect(c("player_id", "season", "round", "psr", "osr", "dsr"), names(psr_df))
+  # Coerce to plain data.frame: data.table `[` has non-standard column-subset
+  # semantics that silently mangle the stale-column strip / joins below.
+  if (data.table::is.data.table(epr_df)) epr_df <- as.data.frame(epr_df)
 
-  # Take latest PSR per player to avoid duplicate joins
-  latest_psr <- psr_df |>
-    dplyr::select(dplyr::all_of(psr_cols)) |>
-    dplyr::arrange(player_id, season, round) |>
-    dplyr::group_by(player_id) |>
-    dplyr::slice_tail(n = 1) |>
-    dplyr::ungroup() |>
-    dplyr::select(-dplyr::any_of(c("season", "round")))
+  psr_cols <- intersect(c("player_id", "season", "round", "psr", "osr", "dsr"), names(psr_df))
+  val_cols <- intersect(c("psr", "osr", "dsr"), psr_cols)
 
   # Remove pre-existing psr/osr/dsr/torp columns (and any .x/.y suffixed
   # duplicates from prior joins) to prevent column name collisions when
@@ -602,7 +607,53 @@ calculate_torp <- function(epr_df, psr_df, epr_weight = TORP_EPR_WEIGHT) {
     epr_df <- epr_df[, setdiff(names(epr_df), stale_cols), drop = FALSE]
   }
 
-  result <- dplyr::left_join(epr_df, latest_psr, by = "player_id")
+  # Latest PSR per player (snapshot fallback for rows with no matching
+  # (player_id, season, round) — e.g. the current-round live case, or rows
+  # outside the PSR history's season coverage).
+  latest_psr <- psr_df |>
+    dplyr::select(dplyr::all_of(psr_cols)) |>
+    dplyr::arrange(player_id, season, round) |>
+    dplyr::group_by(player_id) |>
+    dplyr::slice_tail(n = 1) |>
+    dplyr::ungroup() |>
+    dplyr::select(-dplyr::any_of(c("season", "round")))
+
+  # Historical join: when both frames carry (season, round), join PSR per
+  # (player_id, season, round) so each historical rating row gets the PSR as
+  # it stood at that point in time (issue #88). Fall back to the per-player
+  # latest snapshot only for rows that don't match a historical PSR row.
+  can_join_historical <- all(c("season", "round") %in% psr_cols) &&
+    all(c("season", "round") %in% names(epr_df))
+
+  if (can_join_historical) {
+    hist_psr <- psr_df |>
+      as.data.frame() |>
+      dplyr::select(dplyr::all_of(psr_cols)) |>
+      dplyr::distinct(player_id, season, round, .keep_all = TRUE)
+
+    # Align join-key types (epr_df$season may be numeric, psr_df$season integer)
+    join_epr <- epr_df
+    join_epr$season <- as.integer(join_epr$season)
+    join_epr$round <- as.integer(join_epr$round)
+    hist_psr$season <- as.integer(hist_psr$season)
+    hist_psr$round <- as.integer(hist_psr$round)
+
+    result <- dplyr::left_join(join_epr, hist_psr,
+                               by = c("player_id", "season", "round"))
+    result$season <- epr_df$season
+    result$round <- epr_df$round
+
+    # Backfill rows with no historical PSR match using the latest snapshot
+    unmatched <- is.na(result$psr)
+    if (any(unmatched)) {
+      fb_keys <- data.frame(player_id = result$player_id[unmatched],
+                            stringsAsFactors = FALSE)
+      fb <- dplyr::left_join(fb_keys, as.data.frame(latest_psr), by = "player_id")
+      for (vc in val_cols) result[[vc]][unmatched] <- fb[[vc]]
+    }
+  } else {
+    result <- dplyr::left_join(epr_df, latest_psr, by = "player_id")
+  }
 
   # Ensure psr column exists even if join didn't add it
   if (!"psr" %in% names(result)) {

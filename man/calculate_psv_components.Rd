@@ -35,7 +35,9 @@ so PSV represents contribution above the average player that round.}
 }
 \value{
 A data.table with identifier columns plus \code{psv_raw},
-\code{psv}, \code{osv}, \code{dsv}.
+\code{psv_p80}, \code{psv}, \code{osv_p80}, \code{osv}, \code{dsv_p80},
+\code{dsv}. The \code{*_p80} columns are centered per-full-game rates and
+the unsuffixed columns are per-game values (\code{*_p80 * tog}).
 }
 \description{
 Applies offensive and defensive coefficient models to per-game stats,

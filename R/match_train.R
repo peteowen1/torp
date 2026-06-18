@@ -114,9 +114,14 @@
 #' @param team_mdl_df Complete model dataset from .build_team_mdl_df()
 #' @param train_filter Logical vector indicating training rows (NULL = all completed matches)
 #' @param nthreads Number of threads for mgcv::bam() (default 4)
+#' @param gamma_arg Smoothness penalty multiplier passed to every mgcv::bam()
+#'   call (default 1.4). 1.0 = fREML's own choice; >1 forces smoother fits.
+#'   Tuned via rolling-eval sweep on 2025+2026 (n=306) where 1.4 improved MAE
+#'   (−0.44), Brier (−0.003), and bits (+4.1 total) over baseline 1.0 with no
+#'   regressions on either season — see data-raw/debug/gamma_full_pipeline_rolling.R.
 #' @return List with $models (named list of 5 GAMs) and $data (team_mdl_df with predictions)
 #' @keywords internal
-.train_match_gams <- function(team_mdl_df, train_filter = NULL, nthreads = 4L) {
+.train_match_gams <- function(team_mdl_df, train_filter = NULL, nthreads = 4L, gamma_arg = 1.4) {
   # Smooth-term basis size convention used throughout this file:
   #   bs = "ts" thin-plate splines: k = 5
   #     ~5K-team-game training rows / ~16K when including upcoming fixtures,
@@ -224,7 +229,8 @@
     m1_formula,
     data = gam_df, weights = gam_df$weightz,
     family = gaussian(), nthreads = nthreads, select = TRUE, discrete = TRUE,
-    drop.unused.levels = FALSE
+    drop.unused.levels = FALSE,
+    gamma = gamma_arg
   )
   team_mdl_df$gam_pred_tot_xscore <- predict(afl_total_xpoints_mdl, newdata = team_mdl_df, type = "response")
 
@@ -257,7 +263,8 @@
     m2_formula,
     data = gam_df, weights = gam_df$weightz,
     family = gaussian(), nthreads = nthreads, select = TRUE, discrete = TRUE,
-    drop.unused.levels = FALSE
+    drop.unused.levels = FALSE,
+    gamma = gamma_arg
   )
   team_mdl_df$gam_pred_xscore_diff <- predict(afl_xscore_diff_mdl, newdata = team_mdl_df, type = "response")
 
@@ -297,7 +304,8 @@
     m3_formula,
     data = gam_df, weights = gam_df$shot_weightz,
     family = gaussian(), nthreads = nthreads, select = TRUE, discrete = TRUE,
-    drop.unused.levels = FALSE
+    drop.unused.levels = FALSE,
+    gamma = gamma_arg
   )
   team_mdl_df$gam_pred_conv_diff <- predict(afl_conv_mdl, newdata = team_mdl_df, type = "response")
 
@@ -332,7 +340,8 @@
     m4_formula,
     data = gam_df, weights = gam_df$weightz,
     family = "gaussian", nthreads = nthreads, select = TRUE, discrete = TRUE,
-    drop.unused.levels = FALSE
+    drop.unused.levels = FALSE,
+    gamma = gamma_arg
   )
   team_mdl_df$gam_pred_score_diff <- predict(afl_score_mdl, newdata = team_mdl_df, type = "response")
 
@@ -351,7 +360,8 @@
       + s(days_rest_diff_fac, bs = "re"),
     data = gam_df, weights = gam_df$weightz,
     family = "binomial", nthreads = nthreads, select = TRUE, discrete = TRUE,
-    drop.unused.levels = FALSE
+    drop.unused.levels = FALSE,
+    gamma = gamma_arg
   )
   # Seed bare pred_* columns on team_mdl_df with GAM-only values so the
   # win-model predict() below has the columns it expects, and so downstream
