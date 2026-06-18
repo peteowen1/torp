@@ -249,11 +249,12 @@ fix_chain_coordinates_dt <- function(dt) {
       dist_as_is > COORD_JUMP_THRESHOLD &
       dist_flipped < COORD_FLIP_TOLERANCE &
       !is.na(prev_x) &
-      # Never flip a shot_at_goal row. Post-#92 its coordinates are already
-      # correctly oriented (step A), and a shot is a reliable anchor near the
-      # attacking goal — flipping it to match a noisy neighbour from an adjacent
-      # chain was the residual ~0.7% mis-orientation. Shots can still anchor the
-      # flip of OTHER rows; they just can't be the flipped row. See issue #92.
+      # Never flip a shot_at_goal row — a shot is a reliable anchor near the
+      # attacking goal and shouldn't be repositioned by a noisy neighbour.
+      # Defensive only: post-#92 step C rarely fires on shots. (The ~0.7%
+      # residual mis-orientation found in the Stage-1 backfill turned out to be
+      # the EPV `mirror` transform in clean_features.R, since neutralised — NOT
+      # this cascade.) Shots can still anchor the flip of other rows. See #92.
       shot_row != 1L
     )]
     n_flipped <- length(flip_rows)
