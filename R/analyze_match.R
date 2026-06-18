@@ -95,10 +95,10 @@ get_player_game_ratings <- function(match = NULL,
   player_epv <- data.table::as.data.table(player_epv)
   player_epv[, `:=`(
     epv_adj = epv,
-    recv_epv_adj = recv_epv,
-    disp_epv_adj = disp_epv,
-    spoil_epv_adj = spoil_epv,
-    hitout_epv_adj = hitout_epv
+    epv_recv_adj = epv_recv,
+    epv_disp_adj = epv_disp,
+    epv_spoil_adj = epv_spoil,
+    epv_hitout_adj = epv_hitout
   )]
 
   # --- Step 4: Format as game ratings (same output as player_game_ratings) ---
@@ -165,10 +165,10 @@ get_player_game_ratings <- function(match = NULL,
 
   # Select totals or p80 columns based on per80 parameter
   if (per80) {
-    val_cols <- c("epv_p80", "recv_epv_p80", "disp_epv_p80", "spoil_epv_p80", "hitout_epv_p80",
+    val_cols <- c("epv_p80", "epv_recv_p80", "epv_disp_p80", "epv_spoil_p80", "epv_hitout_p80",
                   "psv_p80", "osv_p80", "dsv_p80", "torp_value_p80")
   } else {
-    val_cols <- c("epv", "recv_epv", "disp_epv", "spoil_epv", "hitout_epv",
+    val_cols <- c("epv", "epv_recv", "epv_disp", "epv_spoil", "epv_hitout",
                   "psv", "osv", "dsv", "torp_value")
   }
 

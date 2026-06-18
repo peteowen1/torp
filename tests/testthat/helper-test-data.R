@@ -193,10 +193,10 @@ create_test_player_game_data <- function(n_rows = 200) {
     team = sample(c("Adelaide Crows", "Brisbane Lions", "Carlton"), n_rows, replace = TRUE),
     opponent = sample(c("Collingwood", "Essendon", "Fremantle"), n_rows, replace = TRUE),
     epv_adj = runif(n_rows, -5, 15),
-    recv_epv_adj = runif(n_rows, -2, 8),
-    disp_epv_adj = runif(n_rows, -2, 8),
-    spoil_epv_adj = runif(n_rows, -1, 3),
-    hitout_epv_adj = runif(n_rows, 0, 5),
+    epv_recv_adj = runif(n_rows, -2, 8),
+    epv_disp_adj = runif(n_rows, -2, 8),
+    epv_spoil_adj = runif(n_rows, -1, 3),
+    epv_hitout_adj = runif(n_rows, 0, 5),
     stringsAsFactors = FALSE
   )
 }

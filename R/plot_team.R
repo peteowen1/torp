@@ -7,7 +7,7 @@
 #' @param team_ratings Optional data frame of team ratings. If NULL (default),
 #'   loads via `load_team_ratings()` and filters to the latest round.
 #' @param metric One of `"epr"` (default), `"recv"`, `"disp"`, `"spoil"`,
-#'   or `"hitout"`. Mapped to `team_epr`, `team_recv`, etc.
+#'   or `"hitout"`. Mapped to `team_epr`, `team_epr_recv`, etc.
 #' @param season Season year for title. Default: current season.
 #'
 #' @return A ggplot2 object.
@@ -35,8 +35,8 @@ plot_team_ratings <- function(team_ratings = NULL,
     team_ratings <- team_ratings[team_ratings$round == latest_round, ]
   }
 
-  # Map metric names: epr -> team_epr, recv -> team_recv, etc.
-  col_name <- paste0("team_", metric)
+  # Map metric names: epr -> team_epr, recv -> team_epr_recv, etc.
+  col_name <- if (metric == "epr") "team_epr" else paste0("team_epr_", metric)
   if (!col_name %in% names(team_ratings)) {
     # Try without prefix
     if (metric %in% names(team_ratings)) {

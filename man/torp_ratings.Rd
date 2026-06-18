@@ -23,8 +23,8 @@ for downstream predictions. Passed through but not used in rating computation.}
 }
 \value{
 A data frame with columns: \code{player_id}, \code{player_name},
-\code{epr}, \code{recv_epr}, \code{disp_epr}, \code{spoil_epr},
-\code{hitout_epr}, \code{psr}, \code{osr}, \code{dsr}, \code{torp},
+\code{epr}, \code{epr_recv}, \code{epr_disp}, \code{epr_spoil},
+\code{epr_hitout}, \code{psr}, \code{osr}, \code{dsr}, \code{torp},
 plus metadata columns.
 }
 \description{

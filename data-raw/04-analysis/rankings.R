@@ -56,7 +56,7 @@ view(ssn_25)
 # # view(ssn_21)
 
 # Team Rankings ----
-sd(tr$hitout_epr, na.rm = T)
+sd(tr$epr_hitout, na.rm = T)
 
 tr %>%
   group_by(position) %>%
