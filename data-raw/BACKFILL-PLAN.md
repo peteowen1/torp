@@ -1,6 +1,13 @@
 # Backfill Plan — corrected shot coordinates everywhere (#92)
 
-**Status:** staged / gated. **Owner trigger required for Stages 1–4** (publishing event).
+**Status:** ✅ **COMPLETE — 2026-06-18.** All stages executed and verified end to end:
+Stage 0 (clean_pbp orientation) → Stage 1 (re-scrape chains + rebuild PBP, 0–1
+mis-oriented shots/season) → Stage 2 (retrain EP/WP/shot, verified better on 2026
+holdout, published) → Stage 3 (rebuild PBP with new models + recompute ratings/
+predictions, aggregate-stable) → Stage 4 (build-blog-data → R2 refreshed). Along the
+way: removed the redundant sign-flip cascade (steps D/E/F) and the EPV `mirror`
+transform, made the chains archive field-complete, and documented the AFL API
+(`AFL-API-REFERENCE.md`). Incumbent models backed up at `/c/tmp_model_backup`.
 **Created:** 2026-06-18.
 
 ## Why
