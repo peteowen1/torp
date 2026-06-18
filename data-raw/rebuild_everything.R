@@ -108,9 +108,13 @@ models_only      <- "--models-only" %in% flag_args
 ratings_only     <- "--ratings-only" %in% flag_args
 predictions_only <- "--predictions-only" %in% flag_args
 data_only        <- "--data-only" %in% flag_args  # Phases 1-3 only: re-scrape + PBP, then stop
+skip_model_upload <- "--skip-model-upload" %in% flag_args  # train + saveRDS locally, HOLD the pb_upload
 
 # "only" flags disable everything else
 if (models_only) {
+  # Pin start_from = 4 so Phase 4 (models) runs non-interactively (default is 6,
+  # and start_from > 4 would force skip_models). Mirrors the --data-only fix.
+  start_from <- 4L
   skip_api <- TRUE; skip_chains <- TRUE; skip_pbp <- TRUE
   skip_skills <- TRUE; skip_sim <- TRUE
 }
@@ -415,7 +419,7 @@ if (run_models) {
 
     ep_path <- file.path(model_output_dir, "ep_model.rds")
     saveRDS(ep_model, ep_path)
-    piggyback::pb_upload(ep_path, repo = "peteowen1/torpmodels", tag = "core-models")
+    if (!skip_model_upload) piggyback::pb_upload(ep_path, repo = "peteowen1/torpmodels", tag = "core-models")
 
     # Keep model_data_epv and ep_model in memory — WP training needs them
     rm(full_train, epv_vars, X_train, y_train, cv_result, chains_train, pbp_train)
@@ -501,7 +505,7 @@ if (run_models) {
 
     wp_path <- file.path(model_output_dir, "wp_model.rds")
     saveRDS(wp_model, wp_path)
-    piggyback::pb_upload(wp_path, repo = "peteowen1/torpmodels", tag = "core-models")
+    if (!skip_model_upload) piggyback::pb_upload(wp_path, repo = "peteowen1/torpmodels", tag = "core-models")
 
     rm(full_train_wp, wp_vars, X_train_wp, y_train_wp, cv_result_wp,
        model_data_epv, model_data_wp)
@@ -563,11 +567,11 @@ if (run_models) {
 
     shot_path <- file.path(model_output_dir, "shot_ocat_mdl.rds")
     saveRDS(shot_ocat_mdl, shot_path)
-    piggyback::pb_upload(shot_path, repo = "peteowen1/torpmodels", tag = "core-models")
+    if (!skip_model_upload) piggyback::pb_upload(shot_path, repo = "peteowen1/torpmodels", tag = "core-models")
 
     player_path <- file.path(model_output_dir, "shot_player_df.rds")
     saveRDS(shot_player_df, player_path)
-    piggyback::pb_upload(player_path, repo = "peteowen1/torpmodels", tag = "core-models")
+    if (!skip_model_upload) piggyback::pb_upload(player_path, repo = "peteowen1/torpmodels", tag = "core-models")
 
     rm(shots_prep, shots, shot_ocat_mdl, shot_player_df)
     gc()
