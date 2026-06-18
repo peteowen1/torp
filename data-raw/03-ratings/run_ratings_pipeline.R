@@ -367,9 +367,13 @@ if (nrow(torp_new) > 0) {
     torp_df_total <- torp_new
   }
 
-  # Blend PSR into ratings so the release has torp/psr/osr/dsr columns
+  # Blend PSR into ratings so the release has torp/psr/osr/dsr columns.
+  # torp_df_total is always the full historical table (upserted into the
+  # existing release above), so PSR must cover ALL seasons too -- otherwise
+  # historical rows find no per-round match in calculate_torp() and fall back
+  # to the current snapshot, leaving psr/osr/dsr flat across history (#88).
   psr_df <- tryCatch({
-    stat_ratings <- load_player_stat_ratings()
+    stat_ratings <- load_player_stat_ratings(TRUE)
     .compute_psr_from_stat_ratings(stat_ratings)
   }, error = function(e) {
     cli::cli_warn("Could not compute PSR for release: {e$message}")
