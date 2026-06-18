@@ -69,7 +69,7 @@
 <td>
 <code>afl_api.R</code>, <code>scraper.R</code>, <code>injuries_scrape.R</code>
 </td>
-<td>In-house AFL API (replaced fitzRoy), injury scraping</td>
+<td>In-house AFL API (replaced fitzRoy), injury scraping — see <a href="AFL-API-REFERENCE.html"><code>AFL-API-REFERENCE.md</code></a> for the full endpoint/field dictionary</td>
 </tr><tr><td><strong>EP / WP / xG</strong></td>
 <td>
 <code>add_variables.R</code>, <code>win_probability.R</code>, <code>wp_credit.R</code>, <code>wp_utils.R</code>, <code>xg.R</code>
@@ -228,6 +228,8 @@ stat-models/    # Cached artifacts (2 .rds) + README only — the 58 per-stat GA
 <strong>Team name canonicalisation</strong> — <code><a href="reference/save_to_release.html">save_to_release()</a></code> calls <code><a href="reference/dot-normalise_team_values.html">.normalise_team_values()</a></code> before write; outside that path you may see raw API names (Footscray, GWS) vs full names (Western Bulldogs, GWS Giants). Use <code>AFL_TEAM_ALIASES</code> to translate.</li>
 <li>
 <strong>Off-season <code>run_daily_release()</code> returns FALSE</strong> — by design, so the GHA workflow can skip release/dispatch steps. Don’t treat FALSE as an error.</li>
+<li>
+<strong><code>load_*()</code> loaders default to the <em>current</em> season</strong> — <code><a href="reference/load_player_stat_ratings.html">load_player_stat_ratings()</a></code>, <code><a href="reference/load_player_stats.html">load_player_stats()</a></code>, etc. default <code>seasons = get_afl_season()</code>, and <code>seasons = TRUE</code> means <em>all</em> seasons (<code>AFL_MIN_SEASON:current</code>). But <code>torp_ratings.parquet</code> (<code>ratings-data</code>) is <strong>full-history</strong> — it’s upserted into the existing release each run. So any pipeline stage that blends per-round data into the full table must pass <code>TRUE</code>, or historical rows silently fall back to a current-season snapshot. This was the #88 PSR/OSR/DSR “flat across history” bug: <code>run_ratings_pipeline.R</code> fed <code><a href="reference/calculate_torp.html">calculate_torp()</a></code> a current-season-only PSR frame.</li>
 </ul></div>
 <div class="section level2">
 <h2 id="tests">Tests<a class="anchor" aria-label="anchor" href="#tests"></a></h2>

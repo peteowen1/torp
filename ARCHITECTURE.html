@@ -195,28 +195,19 @@
 <p><strong>Coordinate System</strong>:</p>
 <p>The AFL API delivers <code>x,y</code> in a <strong>possession-team-relative</strong> frame: positive x = towards that team’s attacking goal, ranging ±80m (half venue_length). <code>y</code> ranges ±70m (half venue_width). Since teams face opposite directions, the same physical spot has opposite signs for home vs away.</p>
 <p><code><a href="reference/fix_chain_coordinates_dt.html">fix_chain_coordinates_dt()</a></code> converts to <strong>pitch-relative</strong> (<code>x_pitch</code>, <code>y_pitch</code>) – a fixed home-team frame where the same physical location always has the same coordinates regardless of possession. This makes consecutive rows spatially comparable for EP/WP modeling.</p>
-<p>The AFL API frequently delivers coordinates in the <strong>wrong team’s frame</strong> at possession changes (~12% of non-throw-in rows), producing sign-flipped x,y values. The fix pipeline in <code>clean_pbp.R</code> corrects this in 8 steps:</p>
+<p><strong>Orientation at the source (issue #92).</strong> The AFL API records coordinates in the <strong>possessing chain’s attacking frame</strong> (<code>matchChains[i].teamId</code>), not the acting player’s team. The old pipeline oriented off the actor, mis-flipping ~7% of shots (and ~12% of possession-change rows). The fix captures <code>chain_team_id</code> + <code>mp_home_team_id</code> in the scraper and orients <strong>step A</strong> off the chain frame (<code>coord_team_id</code> vs <code>coord_home_team_id</code>). With orientation correct at the source, the former neighbour-cascade sign-flip net (old steps D/E/F) modifies <strong>zero rows</strong> (verified by ablation over two full seasons) and has been <strong>removed</strong> — it was a symptom treatment for jumps the orientation bug itself generated. The remaining pipeline:</p>
 <table class="table"><colgroup><col width="21%"><col width="17%"><col width="60%"></colgroup><thead><tr><th>Step</th>
 <th>Fix</th>
 <th>What it catches</th>
 </tr></thead><tbody><tr><td>A</td>
-<td>Convert to pitch-relative (<code>as.double</code>)</td>
-<td>Frame alignment + avoids integer truncation</td>
+<td>Convert to pitch-relative off <code>coord_team_id</code>/<code>coord_home_team_id</code> (<code>as.double</code>)</td>
+<td>Frame alignment from the chain’s attacking frame (<strong>the #92 fix</strong>)</td>
 </tr><tr><td>B</td>
 <td>Throw-in fix (2 passes)</td>
 <td>Centre Bounce, OOB, Ball Up rows → use next row’s position</td>
 </tr><tr><td>C</td>
-<td>Iterative sign-flip (<code>COORD_FLIP_TOLERANCE</code>)</td>
-<td>Single and cascading wrong-frame rows. Flips when jump &gt;100m but negating puts within 70m of predecessor</td>
-</tr><tr><td>D</td>
-<td>Both-neighbor sign-flip (60m tolerance)</td>
-<td>Longer-distance sign-flips confirmed by both neighbors</td>
-</tr><tr><td>E</td>
-<td>Neighbor interpolation</td>
-<td>Remaining outliers far from both neighbors</td>
-</tr><tr><td>F</td>
-<td>Paired sign-flip</td>
-<td>Two consecutive wrong rows (e.g. Spoil + Kickin)</td>
+<td>Single conservative prev-based flip (shot-protected)</td>
+<td>The few genuinely ambiguous stoppage/possession-boundary rows (~10/season); <code>shot_at_goal</code> rows are never flipped</td>
 </tr><tr><td>G</td>
 <td>Convert back to team-relative</td>
 <td>Restores <code>x,y</code> to possession-team frame</td>
@@ -224,7 +215,7 @@
 <td>Recalculate <code>goal_x</code>
 </td>
 <td><code>venue_length / 2 - x</code></td>
-</tr></tbody></table><p>Constants in <code>R/constants_data.R</code>: <code>COORD_JUMP_THRESHOLD</code> (100m) gates all sign-flip checks. <code>COORD_FLIP_TOLERANCE</code> (70m) is the max flipped distance to classify as a sign error – set to cover the longest realistic kick distances. Together they eliminate ~99.7% of &gt;100m pitch-relative jumps.</p>
+</tr></tbody></table><p>Constants in <code>R/constants_data.R</code>: <code>COORD_JUMP_THRESHOLD</code> (100m) gates the step-C flip check; <code>COORD_FLIP_TOLERANCE</code> (70m) is the max flipped distance to classify as a sign error. Post-#92 the jump-detection is near-inert — coordinate correctness is delivered by step A’s orientation, not by the cascade.</p>
 <p><strong>Column Schema</strong> (<code>column_schema.R</code>): - 11 COL_MAP constants (named character vectors) for each data type: <code>PLAYER_STATS_COL_MAP</code>, <code>PBP_COL_MAP</code>, <code>FIXTURE_COL_MAP</code>, <code>TEAMS_COL_MAP</code>, <code>CHAINS_COL_MAP</code>, <code>PLAYER_GAME_COL_MAP</code>, <code>TORP_RATINGS_COL_MAP</code>, <code>PLAYER_GAME_RATINGS_COL_MAP</code>, <code>PLAYER_DETAILS_COL_MAP</code>, <code>PREDICTIONS_COL_MAP</code>, <code>XG_COL_MAP</code> - Each has a <code>.normalise_*_columns()</code> function that applies the map plus bulk snake_case conversion</p>
 <p><strong>Feature Engineering</strong> (<code>add_variables.R</code>): - <code>add_epv_vars(df, reference_date)</code> – Injects EP model predictions. The EP model predicts 4 probabilities (<code>opp_goal</code>, <code>opp_behind</code>, <code>goal</code>, <code>behind</code>) which combine into <code>exp_pts = 6*goal - 6*opp_goal + opp_behind - behind</code>. Also computes <code>delta_epv</code>, <code>xpoints_diff</code>, <code>weight_gm</code> (365-day half-life decay). - <code>add_wp_vars(df)</code> – Injects WP model predictions. Adds <code>wp</code> (home win probability) and <code>wpa</code> (win probability added per play).</p>
 <p><strong>Model Training Data</strong> (<code>clean_features.R</code>): - <code><a href="reference/clean_model_data_epv_dt.html">clean_model_data_epv_dt()</a></code> – Prepares data.table-optimized training data for the EP XGBoost model with lag/lead context and mirrored defensive coordinates</p>
