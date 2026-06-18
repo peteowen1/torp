@@ -2,10 +2,10 @@ test_that("plot_team_ratings returns ggplot with mock data", {
   mock_ratings <- data.frame(
     team = torp::AFL_TEAMS$name,
     team_epr = rnorm(18, 0, 3),
-    team_recv = rnorm(18, 0, 1),
-    team_disp = rnorm(18, 0, 1),
-    team_spoil = rnorm(18, 0, 0.5),
-    team_hitout = rnorm(18, 0, 0.3),
+    team_epr_recv = rnorm(18, 0, 1),
+    team_epr_disp = rnorm(18, 0, 1),
+    team_epr_spoil = rnorm(18, 0, 0.5),
+    team_epr_hitout = rnorm(18, 0, 0.3),
     stringsAsFactors = FALSE
   )
   p <- plot_team_ratings(mock_ratings, metric = "epr")
@@ -16,9 +16,9 @@ test_that("plot_team_ratings returns ggplot with mock data", {
 test_that("plot_team_ratings works with different metrics", {
   mock_ratings <- data.frame(
     team = torp::AFL_TEAMS$name,
-    team_epr = rnorm(18), team_recv = rnorm(18),
-    team_disp = rnorm(18), team_spoil = rnorm(18),
-    team_hitout = rnorm(18),
+    team_epr = rnorm(18), team_epr_recv = rnorm(18),
+    team_epr_disp = rnorm(18), team_epr_spoil = rnorm(18),
+    team_epr_hitout = rnorm(18),
     stringsAsFactors = FALSE
   )
   p <- plot_team_ratings(mock_ratings, metric = "recv")

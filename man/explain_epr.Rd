@@ -26,7 +26,7 @@ and \code{shrinkage} (named list of component calculations).
 }
 \description{
 Traces the exact per-game inputs to the EPR calculation: shows each game's
-\code{recv_epv_adj}, \code{disp_epv_adj}, etc. (position-adjusted per-80-min
+\code{epv_recv_adj}, \code{epv_disp_adj}, etc. (position-adjusted per-80-min
 rates), the decay weight for each game, and how Bayesian shrinkage produces
 the final EPR components.
 }

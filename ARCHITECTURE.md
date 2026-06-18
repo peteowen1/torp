@@ -225,7 +225,7 @@ Default priors: `prior_games = 3.0` for all components; `prior_rate` = -0.4 (rec
 4. Apply Bayesian shrinkage per component
 5. (Optional) TOG-weighted centering using conditional TOG and squad selection ratings from stat ratings
 
-**Output**: `epr = recv_epr + disp_epr + spoil_epr + hitout_epr`
+**Output**: `epr = epr_recv + epr_disp + epr_spoil + epr_hitout`
 
 #### Stat Ratings (Bayesian Conjugate Models)
 
@@ -533,10 +533,10 @@ All data is normalised to canonical `snake_case` at load/fetch time via `R/colum
 | `PBP_COL_MAP` | Play-by-play | `home_team_team_name` → `home_team_name`, `home_team_score_total_score` → `home_score`, `home_team_abbreviation` → `home_team_abbr` |
 | `CHAINS_COL_MAP` | Chains | `matchId` → `match_id`, `playerId` → `player_id`, `displayOrder` → `display_order`, `periodSeconds` → `period_seconds` |
 | `PLAYER_STATS_COL_MAP` | Player stats | `extended_stats_spoils` → `spoils`, `clearances_total_clearances` → `clearances`, `provider_id` → `match_id` (also strips `stats_` prefix from v2 API) |
-| `PLAYER_GAME_COL_MAP` | Player game data | `plyr_nm` → `player_name`, `tm` → `team`, `tot_p` → `epv`, `recv_pts` → `recv_epv`, `recv_credits` → `recv_epv` |
+| `PLAYER_GAME_COL_MAP` | Player game data | `plyr_nm` → `player_name`, `tm` → `team`, `tot_p` → `epv`, `recv_pts` → `epv_recv`, `recv_credits` → `epv_recv` |
 | `TEAMS_COL_MAP` | Teams/lineups | `player.playerId` → `player_id`, `teamName` → `team_name`, `player.playerName.givenName` → `given_name` |
 | `PLAYER_DETAILS_COL_MAP` | Player details | `providerId` → `player_id`, `firstName` → `first_name`, `heightInCm` → `height_cm`, `dateOfBirth` → `date_of_birth` |
-| `TORP_RATINGS_COL_MAP` | TORP ratings | `torp` → `epr`, `torp_recv` → `recv_epr`, `torp_disp` → `disp_epr` |
+| `TORP_RATINGS_COL_MAP` | TORP ratings | `torp` → `epr`, `torp_recv` → `epr_recv`, `torp_disp` → `epr_disp` |
 | `PLAYER_GAME_RATINGS_COL_MAP` | Game ratings | `total_points` → `epv_raw`, `total_p80` → `epv_p80`, `season_points` → `season_epv` |
 | `PREDICTIONS_COL_MAP` | Predictions | `providerId` → `match_id` |
 | `XG_COL_MAP` | Expected goals | `home_sG` → `home_scored_goals`, `home_sB` → `home_scored_behinds` |

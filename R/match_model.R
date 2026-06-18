@@ -90,8 +90,8 @@ build_team_mdl_df <- function(season = NULL, target_weeks = NULL,
 #' @param round Round number (default: next week via get_afl_week("next"))
 #' @param match_id Optional match ID to filter to a single match
 #' @return Tibble with one row per player, columns: season, round, match_id,
-#'   team_name, player_name, lineup_position, position_group, epr, recv_epr,
-#'   disp_epr, spoil_epr, hitout_epr, psr, torp (blended EPR+PSR)
+#'   team_name, player_name, lineup_position, position_group, epr, epr_recv,
+#'   epr_disp, epr_spoil, epr_hitout, psr, torp (blended EPR+PSR)
 #' @export
 get_lineup_ratings <- function(season = NULL, round = NULL, match_id = NULL) {
   # Allow positional match_id: get_lineup_ratings("CD_M20260140601")
@@ -141,16 +141,16 @@ get_lineup_ratings <- function(season = NULL, round = NULL, match_id = NULL) {
   lineup_df <- lineup_df |>
     dplyr::mutate(
       epr = tidyr::replace_na(epr, torp_prior_total),
-      recv_epr = tidyr::replace_na(recv_epr, EPR_PRIOR_RATE_RECV),
-      disp_epr = tidyr::replace_na(disp_epr, EPR_PRIOR_RATE_DISP),
-      spoil_epr = tidyr::replace_na(spoil_epr, EPR_PRIOR_RATE_SPOIL),
-      hitout_epr = tidyr::replace_na(hitout_epr, EPR_PRIOR_RATE_HITOUT),
+      epr_recv = tidyr::replace_na(epr_recv, EPR_PRIOR_RATE_RECV),
+      epr_disp = tidyr::replace_na(epr_disp, EPR_PRIOR_RATE_DISP),
+      epr_spoil = tidyr::replace_na(epr_spoil, EPR_PRIOR_RATE_SPOIL),
+      epr_hitout = tidyr::replace_na(epr_hitout, EPR_PRIOR_RATE_HITOUT),
       lineup_tog = tidyr::replace_na(POSITION_AVG_TOG[lineup_position], POSITION_AVG_TOG_DEFAULT),
       epr = epr * lineup_tog,
-      recv_epr = recv_epr * lineup_tog,
-      disp_epr = disp_epr * lineup_tog,
-      spoil_epr = spoil_epr * lineup_tog,
-      hitout_epr = hitout_epr * lineup_tog
+      epr_recv = epr_recv * lineup_tog,
+      epr_disp = epr_disp * lineup_tog,
+      epr_spoil = epr_spoil * lineup_tog,
+      epr_hitout = epr_hitout * lineup_tog
     )
 
   # Join PSR (latest per player)
@@ -202,7 +202,7 @@ get_lineup_ratings <- function(season = NULL, round = NULL, match_id = NULL) {
   select_cols <- c(
     "season", "round_number", "match_id", "team_name", "player_name",
     "lineup_position", "position_group", "lineup_tog",
-    "epr", "recv_epr", "disp_epr", "spoil_epr", "hitout_epr",
+    "epr", "epr_recv", "epr_disp", "epr_spoil", "epr_hitout",
     "psr", "torp"
   )
   if ("osr" %in% names(lineup_df)) select_cols <- c(select_cols, "osr", "dsr")
@@ -503,10 +503,10 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
       ) |>
       dplyr::summarise(
         epr_week = sum(epr * tog_wt, na.rm = TRUE) * discount,
-        epr_recv_week = sum(recv_epr * tog_wt, na.rm = TRUE) * discount,
-        epr_disp_week = sum(disp_epr * tog_wt, na.rm = TRUE) * discount,
-        epr_spoil_week = sum(spoil_epr * tog_wt, na.rm = TRUE) * discount,
-        epr_hitout_week = sum(hitout_epr * tog_wt, na.rm = TRUE) * discount,
+        epr_recv_week = sum(epr_recv * tog_wt, na.rm = TRUE) * discount,
+        epr_disp_week = sum(epr_disp * tog_wt, na.rm = TRUE) * discount,
+        epr_spoil_week = sum(epr_spoil * tog_wt, na.rm = TRUE) * discount,
+        epr_hitout_week = sum(epr_hitout * tog_wt, na.rm = TRUE) * discount,
         psr_week = sum(psr * tog_wt, na.rm = TRUE) * discount,
         .groups = "drop"
       ) |>
@@ -524,10 +524,10 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
     dplyr::mutate(
       use_roster = !is.na(epr_week) & (is.na(count) | count == 0),
       epr = dplyr::if_else(use_roster, epr_week, epr),
-      recv_epr = dplyr::if_else(use_roster, epr_recv_week, recv_epr),
-      disp_epr = dplyr::if_else(use_roster, epr_disp_week, disp_epr),
-      spoil_epr = dplyr::if_else(use_roster, epr_spoil_week, spoil_epr),
-      hitout_epr = dplyr::if_else(use_roster, epr_hitout_week, hitout_epr),
+      epr_recv = dplyr::if_else(use_roster, epr_recv_week, epr_recv),
+      epr_disp = dplyr::if_else(use_roster, epr_disp_week, epr_disp),
+      epr_spoil = dplyr::if_else(use_roster, epr_spoil_week, epr_spoil),
+      epr_hitout = dplyr::if_else(use_roster, epr_hitout_week, epr_hitout),
       psr = dplyr::if_else(use_roster, psr_week, psr),
       use_roster = NULL
     )

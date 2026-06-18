@@ -43,10 +43,10 @@
     season = 2026L,
     round = c(0L, 1L, 0L, 1L),
     epr = 10,
-    recv_epr = 2.5,
-    disp_epr = 2.5,
-    spoil_epr = 2.5,
-    hitout_epr = 2.5,
+    epr_recv = 2.5,
+    epr_disp = 2.5,
+    epr_spoil = 2.5,
+    epr_hitout = 2.5,
     stringsAsFactors = FALSE
   )
 }
@@ -135,8 +135,8 @@ test_that("future round (no PSR yet) picks the latest available prior PSR", {
   torp_extra <- rbind(
     .tdp_make_torp(),
     data.frame(player_id = c("P1", "P2"), season = 2026L, round = 2L,
-               epr = 10, recv_epr = 2.5, disp_epr = 2.5,
-               spoil_epr = 2.5, hitout_epr = 2.5,
+               epr = 10, epr_recv = 2.5, epr_disp = 2.5,
+               epr_spoil = 2.5, epr_hitout = 2.5,
                stringsAsFactors = FALSE)
   )
   psr_df  <- .tdp_make_psr()  # only rounds 0 and 1
