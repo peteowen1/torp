@@ -52,5 +52,7 @@ calculate_psv_components(
 
 ## Value
 
-A data.table with identifier columns plus `psv_raw`, `psv`, `osv`,
-`dsv`.
+A data.table with identifier columns plus `psv_raw`, `psv_p80`, `psv`,
+`osv_p80`, `osv`, `dsv_p80`, `dsv`. The `*_p80` columns are centered
+per-full-game rates and the unsuffixed columns are per-game values
+(`*_p80 * tog`).

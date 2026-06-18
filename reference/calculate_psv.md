@@ -39,4 +39,6 @@ calculate_psv(player_stats, coef_df, tog_adjust = TRUE, center = TRUE)
 
 ## Value
 
-A data.table with identifier columns plus `psv_raw` and `psv`.
+A data.table with identifier columns plus `psv_raw`, `psv_p80` (centered
+per-full-game rate) and `psv` (per-game value = `psv_p80 * tog`,
+matching the `epv` scale).

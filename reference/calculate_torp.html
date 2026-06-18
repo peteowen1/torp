@@ -69,6 +69,17 @@ to produce the final TORP rating. TORP = w * epr + (1 - w) * psr.</p>
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
     <p>A data frame with all EPR columns plus <code>psr</code> and <code>torp</code> (blended).</p>
     </div>
+    <div class="section level2">
+    <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
+    <p>When both <code>epr_df</code> and <code>psr_df</code> carry <code>season</code> and
+<code>round</code> columns, PSR/OSR/DSR are joined per
+<code>(player_id, season, round)</code> so each historical rating row receives the
+PSR as it stood at that point in time. Rows with no matching historical PSR
+(e.g. the current round in live computation, or seasons outside the PSR
+history) fall back to the player's latest available PSR snapshot. When
+either frame lacks season/round, the latest-per-player snapshot is used for
+all rows.</p>
+    </div>
 
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
     </nav></aside></div>

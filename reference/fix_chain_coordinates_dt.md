@@ -22,16 +22,21 @@ Invisible NULL (modifies dt by reference)
 
 ## Details
 
-Known limitation: the iterative neighbour-based sign-flip routine in
-steps C-F can cascade from a wrong anchor row when there's API noise
-(duplicate / oscillating chain rows), wrongly flipping a chain of
-correctly-positioned rows to match an outlier predecessor. Empirically
-affects ~7% of shot_at_goal rows.
-`R/clean_features.R::add_shot_geometry_variables` folds the resulting
-bad `goal_x` to a near-goal distance as a downstream band-aid for
-user-facing display, but the underlying `x` is still wrong for those
-rows (consumed by EP/WP/shot models). A proper fix needs rework of the
-correction algorithm AND retraining of the EP, WP, and shot models.
-Tracked in internal project notes
-(`project_clean_pbp_sign_flip_cascade`) and the corresponding GitHub
-issue.
+Root cause of the historical sign-flip cascade (issue \#92): coordinates
+are recorded in the attacking frame of the chain's possessing team
+(`matchChains[i].teamId`), not the acting player's team
+(`stats[j].teamId`). Step A now orients to the pitch using
+`coord_team_id` (the captured chain-level team), so opponent-actor rows
+and the trailing event of the previous chain land in a consistent frame
+and no longer present as ~90m jumps that the steps C-F neighbour cascade
+would mis-flip. The C-F steps are retained as a defensive net for
+residual API noise but should rarely fire on correctly-oriented data.
+
+Backward compatibility: parquets scraped before `chain_team_id` was
+captured fall back to `team_id_mdl` for orientation, reproducing the
+prior (buggy) behaviour exactly so historical releases and the models
+trained on them are unchanged.
+`R/clean_features.R::add_shot_geometry_variables` still folds bad
+`goal_x` to near-goal distance as a display band-aid for that legacy
+data. Retraining EP/WP/shot models on freshly-corrected chains remains a
+separate follow-up.
