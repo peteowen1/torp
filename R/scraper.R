@@ -408,7 +408,11 @@ get_game_chains <- function(match_id) {
       # action-level stats[j].teamId only says who performed the event (e.g. a
       # spoil/contest by the opponent), so it must NOT be used to decide
       # coordinate orientation. See fix_chain_coordinates_dt() and issue #92.
-      chain_team_id = chain_list$teamId[i]
+      chain_team_id = chain_list$teamId[i],
+      # Chain-level timestamp (seconds into the period). Distinct from the
+      # action-level periodSeconds already on each stats row; named to avoid
+      # collision. Captured for posterity (issue #92 API audit).
+      chain_period_seconds = chain_list$periodSeconds[i]
     )]
     dt
   }), fill = TRUE)
@@ -419,7 +423,14 @@ get_game_chains <- function(match_id) {
     matchId = api_response$matchId,
     venueWidth = api_response$venueWidth,
     venueLength = api_response$venueLength,
-    homeTeamDirectionQtr1 = api_response$homeTeamDirectionQtr1
+    homeTeamDirectionQtr1 = api_response$homeTeamDirectionQtr1,
+    # Home/away team ids in the SAME id-space as chain_team_id. Captured so the
+    # coordinate frame's home/away reference is self-contained from the same
+    # response that defines (x, y), rather than joined in from results-data
+    # (issue #92 API audit). `filter` is the API's empty query-echo (all NULL),
+    # intentionally not captured.
+    homeTeamId = api_response$homeTeamId,
+    awayTeamId = api_response$awayTeamId
   )]
 
   chains[]

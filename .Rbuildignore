@@ -18,4 +18,6 @@
 ^\.positai$
 ^\.wrangler$
 ^ARCHITECTURE\.md$
+^AFL-API-REFERENCE\.md$
 ^scripts$
+^\.positai$

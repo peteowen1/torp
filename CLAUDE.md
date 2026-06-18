@@ -27,7 +27,7 @@ powershell.exe -Command 'Rscript "path/to/script.R"'
 | Domain | Key files | Purpose |
 |--------|-----------|---------|
 | **Data loading** | `load_data.R`, `load_utils.R`, `load_engines.R`, `local_data.R` | `load_*()` family (load_pbp, load_results, load_torp_ratings, ...) — fetch from GitHub Releases or `get_local_data_dir()` |
-| **Scraping** | `afl_api.R`, `scraper.R`, `injuries_scrape.R` | In-house AFL API (replaced fitzRoy), injury scraping |
+| **Scraping** | `afl_api.R`, `scraper.R`, `injuries_scrape.R` | In-house AFL API (replaced fitzRoy), injury scraping — see [`AFL-API-REFERENCE.md`](AFL-API-REFERENCE.md) for the full endpoint/field dictionary |
 | **EP / WP / xG** | `add_variables.R`, `win_probability.R`, `wp_credit.R`, `wp_utils.R`, `xg.R` | `add_epv_vars()`, `add_wp_vars()`, `add_shot_vars()` — feature engineering and credit assignment |
 | **TORP / EPR / PSR** | `player_ratings.R`, `player_skills.R`, `psr.R`, `player_credit.R`, `player_attribution.R` | Core rating composition. `TORP_EPR_WEIGHT = 0.5` blends EPV+PSV; WPA tracked separately |
 | **Per-game ratings** | `player_game_ratings.R`, `player_skills_data.R`, `player_skills_profile.R` | `get_player_game_ratings()` returns EPV+WPA+PSV per game |
