@@ -472,6 +472,8 @@ match-level context to every row.
 | `filter` | list (NULL×4) | Query echo: teamId/period/outcome/playerId (all NULL) | `NULL` | No — empty NULL query-echo, intentionally skipped |
 
 > **Naming note:** captured under the `mp_` (matchPlays) prefix, NOT bare `homeTeamId` — `get_match_chains` joins `homeTeamId` in from the games/fixtures data (`inner_join(games, by="matchId")`), so a bare capture collides and suffixes both to `home_team_id_x`/`_y`, breaking `home_team_id` resolution. `mp_home_team_id`/`mp_away_team_id` stay distinct; `clean_pbp` prefers them for coordinate orientation (#92).
+>
+> **Completeness guarantee:** `get_game_chains` captures fields at all three levels *generically*, not by allow-list: action-level via `as.data.table(stats)`, and **every** other chain-level scalar field (prefixed `chain_`) and match-level scalar field (prefixed `mp_`). The known fields above keep fixed names for the pipeline; anything an older/future schema adds is archived automatically. So `chains-data` is a complete archive of every matchPlays scalar column — a missing column never forces a re-scrape; only a genuine API *schema change* does. (The exploded `matchChains`/`stats` arrays and the empty `filter` echo are the only exclusions.)
 
 ### Chain-level fields (`matchChains` rows → attached per action)
 
