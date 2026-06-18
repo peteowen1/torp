@@ -1017,6 +1017,65 @@ test_that("fix_chain_coordinates_dt clamps extreme jumps", {
   expect_lt(abs(row3$y - row2$y), 40)
 })
 
+test_that("chain_team_id orientation prevents sign-flip cascade (issue #92)", {
+  # Reproduces the #92 failure mode: the trailing event of the PREVIOUS chain
+  # (possessed by team "2") is recorded in team 2's attacking frame, so its raw
+  # coords are the negation of the following team-1 possession. The acting
+  # player on that outlier row is a team-1 player (team_id == "1"), so the old
+  # team_id_mdl-based orientation could not tell it apart from the team-1 chain
+  # and the neighbour cascade would flip the whole (correct) team-1 sequence to
+  # match the outlier. With chain_team_id present, orientation keys off the
+  # possessing team and the cascade never fires.
+  mock <- data.frame(
+    match_id = rep("CD_M20240140101", 6),
+    display_order = 1:6,
+    period = rep(1L, 6),
+    period_seconds = c(100, 101, 102, 103, 104, 105),
+    chain_number = c(1, 2, 2, 2, 2, 2),
+    # Acting player team: the outlier (row 1) was performed by a team-1 player
+    team_id = rep("1", 6),
+    # Possessing team per chain: row 1 belongs to team 2's chain, rest to team 1
+    chain_team_id = c("2", "1", "1", "1", "1", "1"),
+    home_team_id = rep("1", 6),
+    away_team_id = rep("2", 6),
+    home_team_name = rep("Carlton Blues", 6),
+    away_team_name = rep("Collingwood Magpies", 6),
+    home_team_abbr = rep("CARL", 6),
+    away_team_abbr = rep("COLL", 6),
+    season = rep(2024L, 6),
+    round_number = rep(1L, 6),
+    venue_length = rep(160, 6),
+    # Row 1 raw coords are the negation of the team-1 possession (opposite frame)
+    x = c(-45, 45, 45, 46, 46, 46),
+    y = c(44, -44, -40, -33, -30, -30),
+    description = c("Loose Ball Get", "Loose Ball Get", "Handball",
+                    "Handball Received", "Kick", "Behind"),
+    final_state = c(NA, NA, NA, NA, "behind", "behind"),
+    shot_at_goal = c(NA, NA, NA, NA, TRUE, NA),
+    player_position = rep("MID", 6),
+    player_name_given_name = rep("Test", 6),
+    player_name_surname = rep("Player", 6),
+    home_score = rep(50L, 6),
+    away_score = rep(40L, 6),
+    player_id = rep("P1", 6),
+    disposal = rep(NA_character_, 6),
+    stringsAsFactors = FALSE
+  )
+
+  result <- clean_pbp(mock)
+
+  # The shot (display_order 5) belongs to team 1 attacking +x; it must stay on
+  # the attacking (+x) side with a near-goal goal_x, NOT be flipped to the
+  # defensive half (the #92 symptom: x ~ -46, goal_x ~ 123).
+  shot <- result[display_order == 5]
+  expect_gt(shot$x, 0)
+  expect_lt(shot$goal_x, shot$venue_length / 2)
+
+  # No team-1 possession row should be mis-flipped to negative x
+  team1_rows <- result[display_order %in% 2:6]
+  expect_true(all(team1_rows$x > 0))
+})
+
 test_that("goal_x is recalculated after coordinate fixing", {
   mock <- data.frame(
     match_id = rep("CD_M20240140101", 3),
