@@ -467,9 +467,11 @@ match-level context to every row.
 | `venueWidth` | int | Ground width (m) → `venue_width` | `136` | Yes |
 | `venueLength` | int | Ground length (m) → `venue_length` | `155` | Yes |
 | `homeTeamDirectionQtr1` | chr | Home attacking direction in Q1 (`left`/`right`) → `home_team_direction_qtr1` | `right` | Yes |
-| `homeTeamId` | chr | Home team id (same id-space as chain `teamId`) → `home_team_id` | `CD_T160` | **Captured (this audit)** |
-| `awayTeamId` | chr | Away team id → `away_team_id` | `CD_T1010` | **Captured (this audit)** |
+| `homeTeamId` | chr | Home team id (same id-space as chain `teamId`) → captured as `mp_home_team_id` | `CD_T160` | **Captured (this audit)** |
+| `awayTeamId` | chr | Away team id → captured as `mp_away_team_id` | `CD_T1010` | **Captured (this audit)** |
 | `filter` | list (NULL×4) | Query echo: teamId/period/outcome/playerId (all NULL) | `NULL` | No — empty NULL query-echo, intentionally skipped |
+
+> **Naming note:** captured under the `mp_` (matchPlays) prefix, NOT bare `homeTeamId` — `get_match_chains` joins `homeTeamId` in from the games/fixtures data (`inner_join(games, by="matchId")`), so a bare capture collides and suffixes both to `home_team_id_x`/`_y`, breaking `home_team_id` resolution. `mp_home_team_id`/`mp_away_team_id` stay distinct; `clean_pbp` prefers them for coordinate orientation (#92).
 
 ### Chain-level fields (`matchChains` rows → attached per action)
 

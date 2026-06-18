@@ -1091,8 +1091,8 @@ test_that("coord_home_team_id prefers API homeTeamId over results-joined home_te
     chain_number = c(1, 2, 2, 2, 2, 2),
     team_id = rep("1", 6),
     chain_team_id = c("2", "1", "1", "1", "1", "1"),
-    home_team_id = rep("2", 6),   # WRONG: results join had home/away swapped
-    homeTeamId   = rep("1", 6),   # RIGHT: from matchPlays, same id-space as chain_team_id
+    home_team_id    = rep("2", 6),   # WRONG: games join had home/away swapped
+    mp_home_team_id = rep("1", 6),   # RIGHT: from matchPlays, same id-space as chain_team_id
     away_team_id = rep("1", 6),
     home_team_name = rep("Carlton Blues", 6),
     away_team_name = rep("Collingwood Magpies", 6),

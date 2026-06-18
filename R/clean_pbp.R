@@ -137,17 +137,17 @@ add_team_id_mdl_dt <- function(dt) {
   }
 
   # coord_home_team_id: the home-end reference for coordinate orientation. The
-  # AFL API's matchPlays response carries homeTeamId in the SAME id-space as
-  # chain_team_id, so when the scraper captured it, prefer it — making the
-  # orientation comparison (coord_team_id vs home end) fully self-contained from
-  # the response that defines (x, y), rather than depending on the home_team_id
-  # joined in from results-data. Falls back to the joined home_team_id for legacy
-  # parquets / missing values. A no-op whenever the two agree (every correctly-
-  # sourced match), so it only ever corrects a results/chains home-away mismatch.
-  # See issue #92 (API field audit).
-  if ("homeTeamId" %in% names(dt)) {
+  # AFL API's matchPlays response carries the home team id (captured as
+  # mp_home_team_id) in the SAME id-space as chain_team_id, so when the scraper
+  # captured it, prefer it — making the orientation comparison (coord_team_id vs
+  # home end) fully self-contained from the response that defines (x, y), rather
+  # than depending on the home_team_id joined in from the games/results data.
+  # Falls back to the joined home_team_id for legacy parquets / missing values.
+  # A no-op whenever the two agree (every correctly-sourced match), so it only
+  # ever corrects a games/chains home-away mismatch. See issue #92 (API audit).
+  if ("mp_home_team_id" %in% names(dt)) {
     dt[, coord_home_team_id := data.table::fifelse(
-      is.na(homeTeamId), home_team_id, homeTeamId
+      is.na(mp_home_team_id), home_team_id, mp_home_team_id
     )]
   } else {
     dt[, coord_home_team_id := home_team_id]

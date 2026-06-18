@@ -424,13 +424,16 @@ get_game_chains <- function(match_id) {
     venueWidth = api_response$venueWidth,
     venueLength = api_response$venueLength,
     homeTeamDirectionQtr1 = api_response$homeTeamDirectionQtr1,
-    # Home/away team ids in the SAME id-space as chain_team_id. Captured so the
-    # coordinate frame's home/away reference is self-contained from the same
-    # response that defines (x, y), rather than joined in from results-data
-    # (issue #92 API audit). `filter` is the API's empty query-echo (all NULL),
-    # intentionally not captured.
-    homeTeamId = api_response$homeTeamId,
-    awayTeamId = api_response$awayTeamId
+    # Home/away team ids from the matchPlays response, in the SAME id-space as
+    # chain_team_id. Captured so the coordinate frame's home/away reference is
+    # self-contained from the response that defines (x, y), rather than relying
+    # on the games-join home_team_id (issue #92 API audit). NB: prefixed `mp_`
+    # (matchPlays) so they do NOT collide with the `homeTeamId`/`awayTeamId` that
+    # get_match_chains joins in from the games/fixtures data — a bare homeTeamId
+    # here would suffix to home_team_id_x/_y and break home_team_id resolution.
+    # `filter` is the API's empty query-echo (all NULL), intentionally not captured.
+    mp_home_team_id = api_response$homeTeamId,
+    mp_away_team_id = api_response$awayTeamId
   )]
 
   chains[]
