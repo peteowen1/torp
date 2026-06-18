@@ -393,6 +393,18 @@ get_game_chains <- function(match_id) {
   # API renamed "actions" → "stats" circa 2026; support both
   actions_col <- which(names(chain_list) %in% c("stats", "actions"))
   col_idx <- if (length(actions_col) == 1) actions_col else 6
+  stats_col_name <- names(chain_list)[col_idx]
+
+  # Chain-level fields captured below under fixed names that the downstream
+  # pipeline depends on. EVERYTHING else the matchPlays response exposes at chain
+  # level — including any field an older or future API schema adds — is captured
+  # generically with a `chain_` prefix, so the chains archive is complete and a
+  # missing column never forces a re-scrape (issue #92 API audit). teamId and
+  # periodSeconds get fixed renames because they collide with the action-level
+  # columns of the same name.
+  known_chain <- c("teamId", "periodSeconds", "initialState", "finalState",
+                   "period", stats_col_name)
+  extra_chain <- setdiff(names(chain_list), known_chain)
 
   chains <- data.table::rbindlist(lapply(seq_len(nrow(chain_list)), function(i) {
     acts <- chain_list[[i, col_idx]]
@@ -403,38 +415,51 @@ get_game_chains <- function(match_id) {
       initialState = chain_list$initialState[i],
       period = chain_list$period[i],
       chain_number = i,
-      # Chain-level possessing team (matchChains[i].teamId). This defines the
+      # Chain-level possessing team (matchChains[i].teamId): defines the
       # attacking coordinate frame for EVERY action row in the chain. The
-      # action-level stats[j].teamId only says who performed the event (e.g. a
-      # spoil/contest by the opponent), so it must NOT be used to decide
-      # coordinate orientation. See fix_chain_coordinates_dt() and issue #92.
+      # action-level stats[j].teamId only says who performed the event, so it
+      # must NOT decide coordinate orientation. See fix_chain_coordinates_dt(),
+      # issue #92. (renamed from teamId — collides with the action-level teamId.)
       chain_team_id = chain_list$teamId[i],
-      # Chain-level timestamp (seconds into the period). Distinct from the
-      # action-level periodSeconds already on each stats row; named to avoid
-      # collision. Captured for posterity (issue #92 API audit).
+      # Chain-level timestamp; renamed from periodSeconds (action rows already
+      # carry their own periodSeconds).
       chain_period_seconds = chain_list$periodSeconds[i]
     )]
+    # Catch-all: any other chain-level scalar field, prefixed chain_ (no-op when
+    # the schema only has the known fields, e.g. 2026).
+    for (cc in extra_chain) {
+      v <- chain_list[[cc]][i]
+      if (is.atomic(v) && length(v) == 1L) dt[, (paste0("chain_", cc)) := v]
+    }
     dt
   }), fill = TRUE)
 
   if (nrow(chains) == 0) return(data.frame())
 
+  # Match-level fields under fixed names; homeTeamId/awayTeamId get an `mp_`
+  # (matchPlays) prefix so they don't collide with the homeTeamId/awayTeamId that
+  # get_match_chains later joins in from the games/fixtures data (a bare homeTeamId
+  # would suffix to home_team_id_x/_y and break home_team_id resolution). They are
+  # in the SAME id-space as chain_team_id, so clean_pbp can use them as a
+  # self-contained home-end reference for coordinate orientation (issue #92).
   chains[, `:=`(
     matchId = api_response$matchId,
     venueWidth = api_response$venueWidth,
     venueLength = api_response$venueLength,
     homeTeamDirectionQtr1 = api_response$homeTeamDirectionQtr1,
-    # Home/away team ids from the matchPlays response, in the SAME id-space as
-    # chain_team_id. Captured so the coordinate frame's home/away reference is
-    # self-contained from the response that defines (x, y), rather than relying
-    # on the games-join home_team_id (issue #92 API audit). NB: prefixed `mp_`
-    # (matchPlays) so they do NOT collide with the `homeTeamId`/`awayTeamId` that
-    # get_match_chains joins in from the games/fixtures data — a bare homeTeamId
-    # here would suffix to home_team_id_x/_y and break home_team_id resolution.
-    # `filter` is the API's empty query-echo (all NULL), intentionally not captured.
     mp_home_team_id = api_response$homeTeamId,
     mp_away_team_id = api_response$awayTeamId
   )]
+
+  # Catch-all: every other top-level matchPlays scalar field, prefixed mp_, so the
+  # archive is complete and new/older-schema columns never force a re-scrape. The
+  # exploded matchChains array and the empty `filter` query-echo are excluded.
+  known_match <- c("matchId", "venueWidth", "venueLength", "homeTeamDirectionQtr1",
+                   "homeTeamId", "awayTeamId", "matchChains", "chains", "filter")
+  for (mc in setdiff(names(api_response), known_match)) {
+    v <- api_response[[mc]]
+    if (is.atomic(v) && length(v) == 1L) chains[, (paste0("mp_", mc)) := v]
+  }
 
   chains[]
 }
