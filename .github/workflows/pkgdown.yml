@@ -9,15 +9,15 @@ on:
 
 name: pkgdown
 
-permissions: read-all
+# Native GitHub Pages deployment (Pages source = "GitHub Actions").
+permissions:
+  contents: read
+  pages: write
+  id-token: write
 
 jobs:
-  pkgdown:
+  build:
     runs-on: ubuntu-latest
-    concurrency:
-      group: pkgdown-${{ github.event_name == 'pull_request' && github.run_id || 'docs' }}
-    permissions:
-      contents: write
     steps:
       - uses: actions/checkout@v6
 
@@ -36,10 +36,23 @@ jobs:
         run: pkgdown::build_site_github_pages(new_process = FALSE, install = FALSE)
         shell: Rscript {0}
 
-      - name: Deploy to GitHub pages
-        if: github.event_name != 'pull_request'
-        uses: JamesIves/github-pages-deploy-action@v4
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
         with:
-          clean: false
-          branch: gh-pages
-          folder: docs
+          path: docs
+
+  # Deploy only on push/release/dispatch -- never on pull_request (PRs just build).
+  deploy:
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
