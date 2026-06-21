@@ -225,6 +225,18 @@ ggplot(data.frame(g = null_gaps), aes(g)) +
 
 The observed gap (green line, **`r sprintf("%+.1f", 100*gap_raw)` pts**) sits comfortably inside the cloud of random shuffles — **p = `r sprintf("%.2f", p_perm)`**, nowhere near significant. And notice the null is *not* centred on zero: it holds steady at **`r sprintf("%+.2f", 100*mean(null_gaps))` pts** across `r format(length(null_gaps), big.mark = ",")` shuffles. Pooling games of differing goal rates manufactures a small positive after-goal/after-miss gap on its own — higher-scoring games contribute proportionally more "after a goal" shots, lower-scoring games more "after a miss" shots. So Test 1's raw gap is essentially that sampling artifact: shuffle the order at random and the very same gap shows up.
 
+<details>
+<summary><strong>Why isn't the chance baseline zero?</strong> — unpacking the `r sprintf("%+.2f", 100*mean(null_gaps))` pts</summary>
+
+<p>Pool every shot together and the two buckets aren't sampled evenly across games:</p>
+<ul>
+<li><strong>"after a goal"</strong> shots come disproportionately from <strong>high-scoring games</strong> — more goals means more shots that <em>follow</em> a goal.</li>
+<li><strong>"after a miss"</strong> shots come disproportionately from <strong>low-scoring games</strong>.</li>
+</ul>
+<p>High-scoring games have higher accuracy almost by definition, so the after-goal bucket is quietly tilted toward good-shooting games and the after-miss bucket toward bad-shooting ones. That manufactures a small positive gap with <strong>no momentum involved at all</strong> — a textbook aggregation (Simpson's-paradox) effect. It's why the honest baseline for the observed `r sprintf("%+.1f", 100*gap_raw)` pts is `r sprintf("%+.2f", 100*mean(null_gaps))`, not zero.</p>
+
+</details>
+
 ## Verdict
 
 > **So, are the commentators right? No.** Across `r format(nrow(shots), big.mark = ",")` shots, once you account for *which* shots a team takes, a recent miss carries **no predictive signal** for the next shot. The cold-streak effect — the strongest form of the claim — is statistically dead flat (p ≈ `r sprintf("%.2f", cc["Pr(>|z|)"])`). And the faint lag-1 wobble doesn't survive a proper empirical null.
