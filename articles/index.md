@@ -13,3 +13,12 @@
   PSR](https://peteowen1.github.io/torp/articles/stat-ratings.md):
 - [Visualization
   Guide](https://peteowen1.github.io/torp/articles/visualizations.md):
+
+### Worked Examples
+
+- [Do missed shots beget missed
+  shots?](https://peteowen1.github.io/torp/articles/shot-accuracy-streaks.md):
+
+  A worked example with torpdata: pulling five seasons of shots and
+  testing AFL’s favourite commentary cliché — that missing leads to more
+  missing — properly.

@@ -82,7 +82,8 @@
 ### Internal
 
 - `R/globals.R` — declared `.lineup_key`, `psr_key`, and the `closest`
-  `join_by()` token to silence the new R CMD check globals NOTE.
+  [`join_by()`](https://dplyr.tidyverse.org/reference/join_by.html)
+  token to silence the new R CMD check globals NOTE.
 
 ## torp 1.3.3 (2026-04-26)
 
@@ -628,7 +629,9 @@
   by using pre-allocated lists with
   [`dplyr::bind_rows()`](https://dplyr.tidyverse.org/reference/bind_rows.html).
 
-- Fixed `mutate_all()` performance issue in data validation using
+- Fixed
+  [`mutate_all()`](https://dplyr.tidyverse.org/reference/mutate_all.html)
+  performance issue in data validation using
   [`lapply()`](https://rdrr.io/r/base/lapply.html) for column-wise
   operations.
 
