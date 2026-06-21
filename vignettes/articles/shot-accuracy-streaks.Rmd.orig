@@ -57,6 +57,21 @@ shots <- load_pbp(
   filter(!is.na(xg))
 ```
 
+```{r guard, include = FALSE}
+# Build-time gate. This article is precompiled, so a silent partial load (a
+# missing season, a renamed/empty column, a failed release fetch) would
+# otherwise be frozen into the published numbers. Fail the knit loudly instead.
+needed <- c("match_id", "season", "period", "period_seconds", "display_order",
+            "team", "points_shot", "goal_prob", "shot_row")
+stopifnot(
+  "load_pbp() dropped requested column(s) -- torpdata schema change?" =
+    all(needed %in% names(shots)),
+  "load_pbp() returned too few rows -- partial or failed load?" = nrow(shots) > 10000,
+  "expected every season 2021:2025" = setequal(sort(unique(shots$season)), 2021:2025),
+  "made must be 0/1 with both classes present" = setequal(unique(shots$made), c(0L, 1L))
+)
+```
+
 That gives us **`r format(nrow(shots), big.mark = ",")`** shots at goal across **`r min(SEASONS)`–`r max(SEASONS)`**, spanning `r format(n_distinct(paste(shots$match_id, shots$team)), big.mark = ",")` team-games (a "team-game" = one team's shots in one match, the natural unit for a streak). Accuracy is defined as **P(goal)** — a behind *or* a complete miss both count as failing to convert, exactly the event the commentator means.
 
 The streak features come next: order each team's shots chronologically *within its game*, then look back.
@@ -80,6 +95,10 @@ shots <- shots |>
 
 ```{r derived, include = FALSE}
 goalrate <- mean(shots$made); meanxg <- mean(shots$xg)
+# Make the calibration line below a real guard, not decoration: if the xG model
+# were broken we refuse to publish rather than narrate a calibration that's false.
+stopifnot("xG miscalibrated vs realised goal rate (>1.5pp) -- model broken?" =
+            abs(goalrate - meanxg) < 0.015)
 ```
 
 A quick sanity check that the xG model isn't lying to us:
@@ -129,7 +148,7 @@ data.frame(
 ) |> knitr::kable(align = "lrr", row.names = FALSE)
 ```
 
-An odds ratio of **`r sprintf("%.3f", exp(co["Estimate"]))`** (p = **`r sprintf("%.3f", co["Pr(>|z|)"])`**), sitting right on the 0.05 borderline. The *direction* is the momentum one — a touch more accurate after a goal, a touch worse after a miss — so taken at face value this is a faint nod toward the cliché. But emphasis on faint: a ~`r sprintf("%.0f%%", 100*(exp(co["Estimate"])-1))` shift in the odds, barely separable from zero, and (as Test 4 will show) fully explained by a statistical artifact that makes even a *random* shooter look this streaky. So: the right direction, but a whisper. The truly demanding test is the one commentators actually invoke — not the single previous shot, but a *cold streak*.
+An odds ratio of **`r sprintf("%.3f", exp(co["Estimate"]))`** (p = **`r sprintf("%.3f", co["Pr(>|z|)"])`**), sitting right on the 0.05 borderline. The *direction* is the momentum one — a touch more accurate after a goal, a touch worse after a miss — so taken at face value this is a faint nod toward the cliché. But emphasis on faint: a ~`r sprintf("%.0f%%", 100*(exp(co["Estimate"])-1))` shift in the odds, barely separable from zero — and, as Test 4 confirms, a gap this size turns up just by shuffling the shot order at random. So: the right direction, but a whisper. The truly demanding test is the one commentators actually invoke — not the single previous shot, but a *cold streak*.
 
 ## Test 3 — the cold streak
 
@@ -148,7 +167,7 @@ cold |>
   knitr::kable(align = "lrrrr")
 ```
 
-The xG-adjusted cold-streak effect: odds ratio **`r sprintf("%.3f", exp(cc["Estimate"]))`**, p = **`r sprintf("%.2f", cc["Pr(>|z|)"])`**. That is as close to *nothing* as a result gets. A team that has just missed three straight converts its next shot at **precisely** its expected rate. The drought lives entirely in the highlight reel.
+The xG-adjusted cold-streak effect: odds ratio **`r sprintf("%.3f", exp(cc["Estimate"]))`**, p = **`r sprintf("%.2f", cc["Pr(>|z|)"])`**. That is as close to *nothing* as a result gets. A team that has just missed three straight converts its next shot at **precisely** its expected rate. The drought lives entirely in the highlight reel. (By construction this compares only shots taken once a team already has three on the board, so each game's opening trio sits out — a smaller, later-in-game sample than Tests 1–2.)
 
 The dose-response view makes it visual — accuracy is flat no matter how many of the last three shots were missed:
 
@@ -161,7 +180,7 @@ shots |> filter(!is.na(prev_misses_k)) |>
   geom_line(aes(y = xg, group = 1), linetype = 2) +
   geom_point(aes(y = xg), size = 2) +
   geom_text(aes(y = Accuracy, label = format(n, big.mark = ",")), vjust = -0.6, size = 3.2) +
-  scale_y_continuous(labels = scales::percent, limits = c(0, 0.55)) +
+  scale_y_continuous(labels = pct, limits = c(0, 0.55)) +
   labs(x = "Misses in the previous 3 shots", y = "Goal conversion",
        title = "Accuracy doesn't budge as the misses pile up",
        subtitle = "Bars = actual goal rate · dashed = expected (xG) · n shots above each bar") +
@@ -169,9 +188,9 @@ shots |> filter(!is.na(prev_misses_k)) |>
   theme(panel.grid.minor = element_blank(), plot.title = element_text(face = "bold"))
 ```
 
-## Test 4 — the streakiness illusion (Miller–Sanjurjo)
+## Test 4 — the streakiness illusion (a shuffled null)
 
-There's a subtle trap here, famous enough to have rewritten the academic literature. [Miller & Sanjurjo (2018)](https://doi.org/10.3982/ECTA14943) showed that "accuracy after a miss" is a **biased** estimator in finite sequences: even a perfectly random shooter will, on average, *look* like they shoot worse after a miss. The original 1985 "hot hand fallacy" paper got this wrong, and the correction partly resurrected the hot hand in basketball.
+There's a subtle trap here, famous enough to have rewritten the academic literature: naive *conditional* rates are biased in finite samples. [Miller & Sanjurjo (2018)](https://doi.org/10.3982/ECTA14943) is the famous case — even a perfectly random shooter tends to *look* worse right after a make, which is how the original 1985 "hot hand fallacy" study fooled itself. The general moral holds beyond that one effect: a finite, pooled dataset can manufacture an apparent conditional gap with no real streak behind it. So you don't eyeball the raw gap — you measure what chance alone produces.
 
 So a clean test shuffles each team's shots *within its own game* — destroying any real streak while preserving that game's mix of shot difficulties — and rebuilds the null distribution of the raw gap empirically.
 
@@ -183,8 +202,9 @@ perm_gap <- function() {
     filter(!is.na(prev_s))
   mean(s$made_s[s$prev_s == 1]) - mean(s$made_s[s$prev_s == 0])
 }
-null_gaps <- replicate(300, perm_gap())
+null_gaps <- replicate(2000, perm_gap())
 p_perm <- mean(abs(null_gaps) >= abs(gap_raw))
+stopifnot("degenerate permutation null" = !is.na(p_perm))   # guard against NaN baking in
 ```
 
 ```{r perm-plot, echo = FALSE}
@@ -194,19 +214,20 @@ ggplot(data.frame(g = null_gaps), aes(g)) +
   geom_vline(xintercept = 0, linetype = 3) +
   annotate("text", x = gap_raw, y = Inf, label = "  observed", hjust = 0, vjust = 2,
            colour = ACCENT, fontface = "bold") +
-  scale_x_continuous(labels = scales::percent) +
+  scale_x_continuous(labels = pct) +
   labs(x = "after-goal minus after-miss accuracy gap", y = "shuffled samples",
        title = "The observed gap is indistinguishable from pure chance",
-       subtitle = sprintf("300 within-game shuffles · two-sided p = %.2f", p_perm)) +
+       subtitle = sprintf("%s within-game shuffles · two-sided p = %.2f",
+                          format(length(null_gaps), big.mark = ","), p_perm)) +
   theme_minimal(base_size = 12) +
   theme(panel.grid.minor = element_blank(), plot.title = element_text(face = "bold"))
 ```
 
-Two things to notice. First, the observed gap (green line) sits comfortably inside the cloud of random shuffles — **p = `r sprintf("%.2f", p_perm)`**, nowhere near significant. Second, and more interesting: the shuffled null isn't centred on zero, it's centred at **`r sprintf("%+.1f", 100*mean(null_gaps))` pts**. That offset *is* the Miller–Sanjurjo bias made visible — random shooting genuinely produces a small positive gap by construction. Which means the borderline p = `r sprintf("%.3f", co["Pr(>|z|)"])` from Test 2 is, if anything, *overstating* the effect.
+The observed gap (green line, **`r sprintf("%+.1f", 100*gap_raw)` pts**) sits comfortably inside the cloud of random shuffles — **p = `r sprintf("%.2f", p_perm)`**, nowhere near significant. And notice the null is *not* centred on zero: it holds steady at **`r sprintf("%+.2f", 100*mean(null_gaps))` pts** across `r format(length(null_gaps), big.mark = ",")` shuffles. Pooling games of differing goal rates manufactures a small positive after-goal/after-miss gap on its own — higher-scoring games contribute proportionally more "after a goal" shots, lower-scoring games more "after a miss" shots. So Test 1's raw gap is essentially that sampling artifact: shuffle the order at random and the very same gap shows up.
 
 ## Verdict
 
-> **So, are the commentators right? No.** Across `r format(nrow(shots), big.mark = ",")` shots, once you account for *which* shots a team takes, a recent miss carries **no predictive signal** for the next shot. The cold-streak effect — the strongest form of the claim — is statistically dead flat (p ≈ 1.0). The faint lag-1 wobble dissolves the moment you correct for the finite-sequence bias.
+> **So, are the commentators right? No.** Across `r format(nrow(shots), big.mark = ",")` shots, once you account for *which* shots a team takes, a recent miss carries **no predictive signal** for the next shot. The cold-streak effect — the strongest form of the claim — is statistically dead flat (p ≈ `r sprintf("%.2f", cc["Pr(>|z|)"])`). And the faint lag-1 wobble doesn't survive a proper empirical null.
 
 Missing shots do **not** beget missing shots. Each set shot is, to a very good approximation, an independent attempt at its own difficulty. The "they can't buy a goal" narrative is humans doing what humans do best: finding stories in noise.
 

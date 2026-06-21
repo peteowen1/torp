@@ -48,6 +48,8 @@ shots <- load_pbp(
   filter(!is.na(xg))
 ```
 
+
+
 That gives us **52,813** shots at goal across **2021–2025**, spanning 2,122 team-games (a "team-game" = one team's shots in one match, the natural unit for a streak). Accuracy is defined as **P(goal)** — a behind *or* a complete miss both count as failing to convert, exactly the event the commentator means.
 
 The streak features come next: order each team's shots chronologically *within its game*, then look back.
@@ -119,7 +121,7 @@ co <- summary(m)$coefficients["prev_made", ]
 
 
 
-An odds ratio of **1.039** (p = **0.050**), sitting right on the 0.05 borderline. The *direction* is the momentum one — a touch more accurate after a goal, a touch worse after a miss — so taken at face value this is a faint nod toward the cliché. But emphasis on faint: a ~4% shift in the odds, barely separable from zero, and (as Test 4 will show) fully explained by a statistical artifact that makes even a *random* shooter look this streaky. So: the right direction, but a whisper. The truly demanding test is the one commentators actually invoke — not the single previous shot, but a *cold streak*.
+An odds ratio of **1.039** (p = **0.050**), sitting right on the 0.05 borderline. The *direction* is the momentum one — a touch more accurate after a goal, a touch worse after a miss — so taken at face value this is a faint nod toward the cliché. But emphasis on faint: a ~4% shift in the odds, barely separable from zero — and, as Test 4 confirms, a gap this size turns up just by shuffling the shot order at random. So: the right direction, but a whisper. The truly demanding test is the one commentators actually invoke — not the single previous shot, but a *cold streak*.
 
 ## Test 3 — the cold streak
 
@@ -134,7 +136,7 @@ An odds ratio of **1.039** (p = **0.050**), sitting right on the 0.05 borderline
 
 
 
-The xG-adjusted cold-streak effect: odds ratio **1.001**, p = **0.98**. That is as close to *nothing* as a result gets. A team that has just missed three straight converts its next shot at **precisely** its expected rate. The drought lives entirely in the highlight reel.
+The xG-adjusted cold-streak effect: odds ratio **1.001**, p = **0.98**. That is as close to *nothing* as a result gets. A team that has just missed three straight converts its next shot at **precisely** its expected rate. The drought lives entirely in the highlight reel. (By construction this compares only shots taken once a team already has three on the board, so each game's opening trio sits out — a smaller, later-in-game sample than Tests 1–2.)
 
 The dose-response view makes it visual — accuracy is flat no matter how many of the last three shots were missed:
 
@@ -143,9 +145,9 @@ The dose-response view makes it visual — accuracy is flat no matter how many o
 <p class="caption">plot of chunk plot-dose</p>
 </div>
 
-## Test 4 — the streakiness illusion (Miller–Sanjurjo)
+## Test 4 — the streakiness illusion (a shuffled null)
 
-There's a subtle trap here, famous enough to have rewritten the academic literature. [Miller & Sanjurjo (2018)](https://doi.org/10.3982/ECTA14943) showed that "accuracy after a miss" is a **biased** estimator in finite sequences: even a perfectly random shooter will, on average, *look* like they shoot worse after a miss. The original 1985 "hot hand fallacy" paper got this wrong, and the correction partly resurrected the hot hand in basketball.
+There's a subtle trap here, famous enough to have rewritten the academic literature: naive *conditional* rates are biased in finite samples. [Miller & Sanjurjo (2018)](https://doi.org/10.3982/ECTA14943) is the famous case — even a perfectly random shooter tends to *look* worse right after a make, which is how the original 1985 "hot hand fallacy" study fooled itself. The general moral holds beyond that one effect: a finite, pooled dataset can manufacture an apparent conditional gap with no real streak behind it. So you don't eyeball the raw gap — you measure what chance alone produces.
 
 So a clean test shuffles each team's shots *within its own game* — destroying any real streak while preserving that game's mix of shot difficulties — and rebuilds the null distribution of the raw gap empirically.
 
@@ -158,8 +160,9 @@ perm_gap <- function() {
     filter(!is.na(prev_s))
   mean(s$made_s[s$prev_s == 1]) - mean(s$made_s[s$prev_s == 0])
 }
-null_gaps <- replicate(300, perm_gap())
+null_gaps <- replicate(2000, perm_gap())
 p_perm <- mean(abs(null_gaps) >= abs(gap_raw))
+stopifnot("degenerate permutation null" = !is.na(p_perm))   # guard against NaN baking in
 ```
 
 <div class="figure" style="text-align: center">
@@ -167,11 +170,11 @@ p_perm <- mean(abs(null_gaps) >= abs(gap_raw))
 <p class="caption">plot of chunk perm-plot</p>
 </div>
 
-Two things to notice. First, the observed gap (green line) sits comfortably inside the cloud of random shuffles — **p = 0.40**, nowhere near significant. Second, and more interesting: the shuffled null isn't centred on zero, it's centred at **+0.3 pts**. That offset *is* the Miller–Sanjurjo bias made visible — random shooting genuinely produces a small positive gap by construction. Which means the borderline p = 0.050 from Test 2 is, if anything, *overstating* the effect.
+The observed gap (green line, **+0.5 pts**) sits comfortably inside the cloud of random shuffles — **p = 0.38**, nowhere near significant. And notice the null is *not* centred on zero: it holds steady at **+0.34 pts** across 2,000 shuffles. Pooling games of differing goal rates manufactures a small positive after-goal/after-miss gap on its own — higher-scoring games contribute proportionally more "after a goal" shots, lower-scoring games more "after a miss" shots. So Test 1's raw gap is essentially that sampling artifact: shuffle the order at random and the very same gap shows up.
 
 ## Verdict
 
-> **So, are the commentators right? No.** Across 52,813 shots, once you account for *which* shots a team takes, a recent miss carries **no predictive signal** for the next shot. The cold-streak effect — the strongest form of the claim — is statistically dead flat (p ≈ 1.0). The faint lag-1 wobble dissolves the moment you correct for the finite-sequence bias.
+> **So, are the commentators right? No.** Across 52,813 shots, once you account for *which* shots a team takes, a recent miss carries **no predictive signal** for the next shot. The cold-streak effect — the strongest form of the claim — is statistically dead flat (p ≈ 0.98). And the faint lag-1 wobble doesn't survive a proper empirical null.
 
 Missing shots do **not** beget missing shots. Each set shot is, to a very good approximation, an independent attempt at its own difficulty. The "they can't buy a goal" narrative is humans doing what humans do best: finding stories in noise.
 
