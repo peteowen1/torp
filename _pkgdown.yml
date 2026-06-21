@@ -32,6 +32,9 @@ articles:
       - torp-guide
       - stat-ratings
       - visualizations
+  - title: Worked Examples
+    contents:
+      - articles/shot-accuracy-streaks
 
 reference:
   - title: Data Loading

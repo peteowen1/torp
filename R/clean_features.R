@@ -553,22 +553,21 @@ add_shot_result_variables <- function(df) {
 #' Computes shot `angle` and `distance` to the attacking goal (plus
 #' intermediate trig legs `side_b` / `side_c`).
 #'
-#' BAND-AID: when `venue_length` is in `names(df)`, `goal_x` is folded to the
-#' near-goal distance via `pmin(goal_x, venue_length - goal_x)` before the
-#' geometry calculation. This is NOT a coordinate-frame fix -- it works around
-#' an upstream issue where `clean_pbp::fix_chain_coordinates_dt` mis-flips
-#' a small fraction of shot_at_goal rows from positive to negative `x` (the
-#' iterative neighbour-based sign-flip cascades from a wrong anchor row when
-#' there's API noise in the chain). On 2026 R1 chain data the mis-flip rate
-#' on shots was ~7% post-`clean_pbp` vs ~0.2% in raw chains. Without the
-#' fold, those rows render as e.g. 126m behinds when the truth is ~40m. The
-#' fold only corrects user-facing `distance` / `angle`; the underlying `x`
-#' and `goal_x` columns remain wrong for those rows, which is fine because
-#' the EP/WP/shot models were trained on the same buggy `x` and are
-#' internally consistent with it. The full investigation and path to a
-#' proper upstream fix (model retraining required) is tracked in the
-#' internal `project_clean_pbp_sign_flip_cascade` notes; root-cause file
-#' is `R/clean_pbp.R::fix_chain_coordinates_dt`.
+#' Near-goal fold (post-#92 safety net): when `venue_length` is in `names(df)`,
+#' `goal_x` is folded to the near-goal distance via
+#' `pmin(goal_x, venue_length - goal_x)` before the geometry calc. ORIGIN: this
+#' was a band-aid for the pre-#92 orientation bug, which mis-flipped ~7% of
+#' shot_at_goal rows to the far goal. Issue #92 fixed orientation at the source
+#' (`clean_pbp` orients off the chain frame; the redundant sign-flip cascade and
+#' EPV mirror were removed), so post-fix shot mis-orientation is **0-1 per
+#' season (~0.01%)** — a genuine residual AFL-API frame glitch, not a systematic
+#' bug. The fold is now a no-op for correctly-oriented shots and a residual
+#' safety net for that rare glitch (and for genuine long-range own-half shots,
+#' ~0.2%, which fold to near-goal — acceptable since a real shot-at-goal from
+#' own half is physically implausible). NB: the (post-#92) EP/WP/shot models
+#' were retrained on the CORRECTED coordinates with this fold in the feature
+#' pipeline, so it is consistent with them and removing it would require another
+#' retrain for marginal gain. Root cause: `R/clean_pbp.R::fix_chain_coordinates_dt`.
 #'
 #' Side effect: genuine long-range shots from own half (real `x < 0` cases
 #' per CLAUDE.md's team-relative coords; ~0.2% of shots in measured data)

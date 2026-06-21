@@ -1,2 +1,4 @@
 *.html
 *.R
+# but keep the precompile runner for the articles/ worked examples
+!articles/precompile.R
