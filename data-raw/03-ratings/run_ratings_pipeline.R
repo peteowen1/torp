@@ -251,12 +251,12 @@ get_epr_df <- function(year, rounds, pgd, stat_ratings, fixtures) {
         n_teams <- length(unique(final_df$team))
         target_tog <- n_teams * 18L
         final_df$pred_tog <- final_df$pred_tog * (target_tog / tot_tog)
-        comps <- c("recv_epr", "disp_epr", "spoil_epr", "hitout_epr")
+        comps <- c("epr_recv", "epr_disp", "epr_spoil", "epr_hitout")
         for (comp in comps) {
           avg_val <- sum(final_df[[comp]] * final_df$pred_tog, na.rm = TRUE) / sum(final_df$pred_tog)
           final_df[[comp]] <- final_df[[comp]] - avg_val
         }
-        final_df$epr <- round(final_df$recv_epr + final_df$disp_epr + final_df$spoil_epr + final_df$hitout_epr, 2)
+        final_df$epr <- round(final_df$epr_recv + final_df$epr_disp + final_df$epr_spoil + final_df$epr_hitout, 2)
         for (comp in comps) {
           final_df[[comp]] <- round(final_df[[comp]], 2)
         }
@@ -421,10 +421,10 @@ tryCatch({
     ) |>
     dplyr::summarise(
       team_epr     = round(sum(.data$epr * .data$tog_wt, na.rm = TRUE), 2),
-      team_recv    = round(sum(.data$recv_epr * .data$tog_wt, na.rm = TRUE), 2),
-      team_disp    = round(sum(.data$disp_epr * .data$tog_wt, na.rm = TRUE), 2),
-      team_spoil   = round(sum(.data$spoil_epr * .data$tog_wt, na.rm = TRUE), 2),
-      team_hitout  = round(sum(.data$hitout_epr * .data$tog_wt, na.rm = TRUE), 2),
+      team_epr_recv    = round(sum(.data$epr_recv * .data$tog_wt, na.rm = TRUE), 2),
+      team_epr_disp    = round(sum(.data$epr_disp * .data$tog_wt, na.rm = TRUE), 2),
+      team_epr_spoil   = round(sum(.data$epr_spoil * .data$tog_wt, na.rm = TRUE), 2),
+      team_epr_hitout  = round(sum(.data$epr_hitout * .data$tog_wt, na.rm = TRUE), 2),
       top_player   = .data$player_name[which.max(.data$epr)],
       top_epr      = round(max(.data$epr, na.rm = TRUE), 2),
       n_players    = sum(.data$pred_tog > 0),

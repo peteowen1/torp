@@ -188,12 +188,12 @@ calculate_epr <- function(season_val = get_afl_season(type = "current"),
         target_tog <- n_teams * 18L
         final_df$pred_tog <- final_df$pred_tog * (target_tog / tot_tog)
 
-        comps <- c("recv_epr", "disp_epr", "spoil_epr", "hitout_epr")
+        comps <- c("epr_recv", "epr_disp", "epr_spoil", "epr_hitout")
         for (comp in comps) {
           avg_val <- sum(final_df[[comp]] * final_df$pred_tog, na.rm = TRUE) / sum(final_df$pred_tog)
           final_df[[comp]] <- final_df[[comp]] - avg_val
         }
-        final_df$epr <- round(final_df$recv_epr + final_df$disp_epr + final_df$spoil_epr + final_df$hitout_epr, 2)
+        final_df$epr <- round(final_df$epr_recv + final_df$epr_disp + final_df$epr_spoil + final_df$epr_hitout, 2)
         for (comp in comps) {
           final_df[[comp]] <- round(final_df[[comp]], 2)
         }
@@ -263,18 +263,18 @@ calculate_epr_stats <- function(player_game_data = NULL, match_ref, date_val, de
   }
 
   # Use _oadj (opponent-adjusted) columns when available, fall back to _adj
-  has_oadj <- all(c("recv_epv_oadj", "disp_epv_oadj",
-                     "spoil_epv_oadj", "hitout_epv_oadj") %in% names(dt))
+  has_oadj <- all(c("epv_recv_oadj", "epv_disp_oadj",
+                     "epv_spoil_oadj", "epv_hitout_oadj") %in% names(dt))
   if (has_oadj) {
-    epv_recv_col <- "recv_epv_oadj"
-    epv_disp_col <- "disp_epv_oadj"
-    epv_spoil_col <- "spoil_epv_oadj"
-    epv_hitout_col <- "hitout_epv_oadj"
+    epv_recv_col <- "epv_recv_oadj"
+    epv_disp_col <- "epv_disp_oadj"
+    epv_spoil_col <- "epv_spoil_oadj"
+    epv_hitout_col <- "epv_hitout_oadj"
   } else {
-    epv_recv_col <- "recv_epv_adj"
-    epv_disp_col <- "disp_epv_adj"
-    epv_spoil_col <- "spoil_epv_adj"
-    epv_hitout_col <- "hitout_epv_adj"
+    epv_recv_col <- "epv_recv_adj"
+    epv_disp_col <- "epv_disp_adj"
+    epv_spoil_col <- "epv_spoil_adj"
+    epv_hitout_col <- "epv_hitout_adj"
   }
 
   dt[, days_diff := as.numeric(as.Date(date_val) - as.Date(utc_start_time))]
@@ -321,14 +321,14 @@ calculate_epr_stats <- function(player_game_data = NULL, match_ref, date_val, de
   result[, `:=`(
     wt_gms = wt_gms_recv,  # backwards-compat alias; per-component cols are canonical
     wt_tog = round(tog_sum / pmax(wt_gms_raw, 1e-10), 1),
-    recv_epr   = .bayesian_shrink(recv_sum,   wt_gms_recv,   loading, prior_games_recv,   prior_rate_recv),
-    disp_epr   = .bayesian_shrink(disp_sum,   wt_gms_disp,   loading, prior_games_disp,   prior_rate_disp),
-    spoil_epr  = .bayesian_shrink(spoil_sum,  wt_gms_spoil,  loading, prior_games_spoil,  prior_rate_spoil),
-    hitout_epr = .bayesian_shrink(hitout_sum, wt_gms_hitout, loading, prior_games_hitout, prior_rate_hitout)
+    epr_recv   = .bayesian_shrink(recv_sum,   wt_gms_recv,   loading, prior_games_recv,   prior_rate_recv),
+    epr_disp   = .bayesian_shrink(disp_sum,   wt_gms_disp,   loading, prior_games_disp,   prior_rate_disp),
+    epr_spoil  = .bayesian_shrink(spoil_sum,  wt_gms_spoil,  loading, prior_games_spoil,  prior_rate_spoil),
+    epr_hitout = .bayesian_shrink(hitout_sum, wt_gms_hitout, loading, prior_games_hitout, prior_rate_hitout)
   )]
 
   # Compute final epr
-  result[, epr := round(recv_epr + disp_epr + spoil_epr + hitout_epr, 2)]
+  result[, epr := round(epr_recv + epr_disp + epr_spoil + epr_hitout, 2)]
 
   # Remove intermediate columns
   result[, c("tog_sum", "wt_gms_raw", "recv_sum", "disp_sum", "spoil_sum", "hitout_sum") := NULL]
@@ -409,18 +409,18 @@ calculate_epr_stats_batch <- function(player_game_data = NULL,
   }
 
   # Use _oadj (opponent-adjusted) columns when available, fall back to _adj
-  has_oadj <- all(c("recv_epv_oadj", "disp_epv_oadj",
-                     "spoil_epv_oadj", "hitout_epv_oadj") %in% names(cross))
+  has_oadj <- all(c("epv_recv_oadj", "epv_disp_oadj",
+                     "epv_spoil_oadj", "epv_hitout_oadj") %in% names(cross))
   if (has_oadj) {
-    epv_recv_col <- "recv_epv_oadj"
-    epv_disp_col <- "disp_epv_oadj"
-    epv_spoil_col <- "spoil_epv_oadj"
-    epv_hitout_col <- "hitout_epv_oadj"
+    epv_recv_col <- "epv_recv_oadj"
+    epv_disp_col <- "epv_disp_oadj"
+    epv_spoil_col <- "epv_spoil_oadj"
+    epv_hitout_col <- "epv_hitout_oadj"
   } else {
-    epv_recv_col <- "recv_epv_adj"
-    epv_disp_col <- "disp_epv_adj"
-    epv_spoil_col <- "spoil_epv_adj"
-    epv_hitout_col <- "hitout_epv_adj"
+    epv_recv_col <- "epv_recv_adj"
+    epv_disp_col <- "epv_disp_adj"
+    epv_spoil_col <- "epv_spoil_adj"
+    epv_hitout_col <- "epv_hitout_adj"
   }
   # Aggregate by (round_val, player_id) — all rounds in one pass
   # Weight by TOG so low-TOG games contribute proportionally less
@@ -444,13 +444,13 @@ calculate_epr_stats_batch <- function(player_game_data = NULL,
   result[, `:=`(
     wt_gms = wt_gms_recv,
     wt_tog = round(tog_sum / pmax(wt_gms_raw, 1e-10), 1),
-    recv_epr    = .bayesian_shrink(recv_sum,    wt_gms_recv,    loading, prior_games_recv,    prior_rate_recv),
-    disp_epr    = .bayesian_shrink(disp_sum,    wt_gms_disp,    loading, prior_games_disp,    prior_rate_disp),
-    spoil_epr   = .bayesian_shrink(spoil_sum,   wt_gms_spoil,   loading, prior_games_spoil,   prior_rate_spoil),
-    hitout_epr  = .bayesian_shrink(hitout_sum,  wt_gms_hitout,  loading, prior_games_hitout,  prior_rate_hitout)
+    epr_recv    = .bayesian_shrink(recv_sum,    wt_gms_recv,    loading, prior_games_recv,    prior_rate_recv),
+    epr_disp    = .bayesian_shrink(disp_sum,    wt_gms_disp,    loading, prior_games_disp,    prior_rate_disp),
+    epr_spoil   = .bayesian_shrink(spoil_sum,   wt_gms_spoil,   loading, prior_games_spoil,   prior_rate_spoil),
+    epr_hitout  = .bayesian_shrink(hitout_sum,  wt_gms_hitout,  loading, prior_games_hitout,  prior_rate_hitout)
   )]
 
-  result[, epr := round(recv_epr + disp_epr + spoil_epr + hitout_epr, 2)]
+  result[, epr := round(epr_recv + epr_disp + epr_spoil + epr_hitout, 2)]
   result[, c("tog_sum", "wt_gms_raw", "recv_sum", "disp_sum", "spoil_sum", "hitout_sum") := NULL]
 
   return(result)
@@ -519,8 +519,8 @@ calculate_epr_stats_batch <- function(player_game_data = NULL,
     ) |>
     dplyr::select(
       player_id = "player_id", player_name = "player_name.x", age = "age", team = "team",
-      epr = "epr", recv_epr = "recv_epr", disp_epr = "disp_epr",
-      spoil_epr = "spoil_epr", hitout_epr = "hitout_epr",
+      epr = "epr", epr_recv = "epr_recv", epr_disp = "epr_disp",
+      epr_spoil = "epr_spoil", epr_hitout = "epr_hitout",
       position_group = "position", season = "season", round = "round", gms = "gms", wt_gms = "wt_gms", wt_tog = "wt_tog",
       wt_gms_recv = "wt_gms_recv", wt_gms_disp = "wt_gms_disp",
       wt_gms_spoil = "wt_gms_spoil", wt_gms_hitout = "wt_gms_hitout",
@@ -677,8 +677,8 @@ calculate_torp <- function(epr_df, psr_df, epr_weight = TORP_EPR_WEIGHT) {
 #' @inheritParams calculate_epr
 #'
 #' @return A data frame with columns: \code{player_id}, \code{player_name},
-#'   \code{epr}, \code{recv_epr}, \code{disp_epr}, \code{spoil_epr},
-#'   \code{hitout_epr}, plus metadata columns.
+#'   \code{epr}, \code{epr_recv}, \code{epr_disp}, \code{epr_spoil},
+#'   \code{epr_hitout}, plus metadata columns.
 #'
 #' @seealso \code{\link{torp_ratings}} for the full blended rating,
 #'   \code{\link{psr_ratings}} for skill ratings only.
@@ -763,8 +763,8 @@ psr_ratings <- function(season_val = get_afl_season(type = "current"),
 #' @param ... Additional arguments passed to \code{\link{calculate_epr}}.
 #'
 #' @return A data frame with columns: \code{player_id}, \code{player_name},
-#'   \code{epr}, \code{recv_epr}, \code{disp_epr}, \code{spoil_epr},
-#'   \code{hitout_epr}, \code{psr}, \code{osr}, \code{dsr}, \code{torp},
+#'   \code{epr}, \code{epr_recv}, \code{epr_disp}, \code{epr_spoil},
+#'   \code{epr_hitout}, \code{psr}, \code{osr}, \code{dsr}, \code{torp},
 #'   plus metadata columns.
 #'
 #' @seealso \code{\link{epr_ratings}} for possession-value ratings only,
@@ -837,7 +837,7 @@ torp_ratings <- function(season_val = get_afl_season(type = "current"),
 #'   \code{round_val - 1}.
 #' @param top_n Number of biggest movers to show in each direction. Default 10.
 #' @param metric Column to compare. Default \code{"torp"}. Can also be
-#'   \code{"epr"}, \code{"psr"}, \code{"recv_epr"}, etc.
+#'   \code{"epr"}, \code{"psr"}, \code{"epr_recv"}, etc.
 #'
 #' @return A data.table with columns: \code{player_name}, \code{team},
 #'   \code{prev} (previous round value), \code{curr} (current round value),

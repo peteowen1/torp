@@ -71,9 +71,9 @@ default_epv_params <- function() {
 #'   identifiers (\code{player_id}, \code{match_id}, \code{season}, \code{round},
 #'   \code{player_name}, \code{team}, \code{opponent}, \code{position_group}, \code{lineup_position}, \code{team_id},
 #'   \code{utc_start_time}), position-adjusted EPV (\code{epv_adj},
-#'   \code{recv_epv_adj}, \code{disp_epv_adj}, \code{spoil_epv_adj}, \code{hitout_epv_adj}),
-#'   raw EPV (\code{epv}, \code{recv_epv}, \code{disp_epv}, \code{spoil_epv},
-#'   \code{hitout_epv}), and key box-score stats.
+#'   \code{epv_recv_adj}, \code{epv_disp_adj}, \code{epv_spoil_adj}, \code{epv_hitout_adj}),
+#'   raw EPV (\code{epv}, \code{epv_recv}, \code{epv_disp}, \code{epv_spoil},
+#'   \code{epv_hitout}), and key box-score stats.
 #'
 #' @export
 #'
@@ -124,7 +124,7 @@ create_player_game_data <- function(pbp_data = NULL,
     player_name = max(player_name, na.rm = TRUE),
     utc_start_time = max(utc_start_time),
     weight_gm = max(weight_gm),
-    disp_epv = sum(data.table::fifelse(pos_team == -1, delta_epv + p$disp_neg_offset, delta_epv + p$disp_pos_offset) * .disp_scale),
+    epv_disp = sum(data.table::fifelse(pos_team == -1, delta_epv + p$disp_neg_offset, delta_epv + p$disp_pos_offset) * .disp_scale),
     disposals_pbp = floor(.N / 2L),
     team = team[.N],
     opponent = opp_tm[.N],
@@ -137,14 +137,14 @@ create_player_game_data <- function(pbp_data = NULL,
   # Step 2: Reception points (grouped by lead_player_id + match_id)
   # Exclude rows where lead_desc is a contest target — those plays are credited
   # via contest_epv instead (avoids double-counting the 3-way split)
-  # Exclude contested kicks from recv_epv: if contest_target_id is set on a row,
+  # Exclude contested kicks from epv_recv: if contest_target_id is set on a row,
 
   # it's a 3-player contest handled by contest_epv instead
   has_contest_col <- "contest_target_id" %in% names(dt)
   dt[, is_contest_target_recv := has_contest_col & !is.na(contest_target_id)]
   dt[, is_intercept_mark := pos_team == -1L & grepl("ted Mark|Mark On", lead_desc_tot)]
   recv_dt <- dt[is_contest_target_recv == FALSE, .(
-    recv_epv = sum(data.table::fifelse(
+    epv_recv = sum(data.table::fifelse(
       is_intercept_mark,
       ((p$recv_neg_mult * delta_epv * pos_team) + p$recv_neg_offset) * p$recv_intercept_mark_scale,
       data.table::fifelse(
@@ -205,9 +205,9 @@ create_player_game_data <- function(pbp_data = NULL,
   spoil_hitout_df <- player_stats |>
     dplyr::mutate(
       weight_gm = exp(as.numeric(-(ref_date - as.Date(utc_start_time))) / decay),
-      spoil_epv = spoils * p$spoil_wt + tackles * p$tackle_wt + pressure_acts * p$pressure_wt + def_half_pressure_acts * p$def_pressure_wt +
+      epv_spoil = spoils * p$spoil_wt + tackles * p$tackle_wt + pressure_acts * p$pressure_wt + def_half_pressure_acts * p$def_pressure_wt +
                   intercepts * p$intercepts_wt + one_percenters * p$one_percenters_wt + rebound50s * p$rebound50s_wt + frees_against * p$frees_against_wt,
-      hitout_epv = hitouts * p$hitout_wt + hitouts_to_advantage * p$hitout_adv_wt + ruck_contests * p$ruck_contest_wt
+      epv_hitout = hitouts * p$hitout_wt + hitouts_to_advantage * p$hitout_adv_wt + ruck_contests * p$ruck_contest_wt
     ) |>
     dplyr::select(-dplyr::any_of(c("utc_start_time", "player_name", "given_name", "surname",
                                    "player_captain", "player_jumper_number", "player_photo_url",
@@ -221,7 +221,7 @@ create_player_game_data <- function(pbp_data = NULL,
     )
 
   # Assert join produced matches (catches upstream schema changes)
-  if (all(is.na(plyr_gm_df$spoil_epv))) {
+  if (all(is.na(plyr_gm_df$epv_spoil))) {
     cli::cli_abort(c(
       "Player stats join produced no matches - all spoil/hitout points are zero.",
       "i" = "Check that {.fn load_player_stats} returns the expected column names."
@@ -248,19 +248,19 @@ create_player_game_data <- function(pbp_data = NULL,
       aerial_target_losses = as.integer(tidyr::replace_na(aerial_target_losses, 0)),
       aerial_def_wins = as.integer(tidyr::replace_na(aerial_def_wins, 0)),
       aerial_def_losses = as.integer(tidyr::replace_na(aerial_def_losses, 0)),
-      recv_epv = tidyr::replace_na(recv_epv, 0) + contest_epv +
+      epv_recv = tidyr::replace_na(epv_recv, 0) + contest_epv +
                  contested_possessions * p$contested_poss_wt + contested_marks * p$contested_marks_wt +
                  ground_ball_gets * p$ground_ball_gets_wt + marks_inside50 * p$marks_inside50_wt +
                  marks * p$marks_wt + uncontested_possessions * p$uncontested_poss_wt +
                  frees_for * p$frees_for_wt,
-      disp_epv = tidyr::replace_na(disp_epv, 0) +
+      epv_disp = tidyr::replace_na(epv_disp, 0) +
                  inside50s * p$inside50s_wt + clangers * p$clangers_wt + score_involvements * p$score_involvements_wt +
                  kicks * p$kicks_wt + handballs * p$handballs_wt + metres_gained * p$metres_gained_wt +
                  turnovers * p$turnovers_wt + goal_assists * p$goal_assists_wt +
                  goals * p$goals_wt + behinds * p$behinds_wt + shots_at_goal * p$shots_at_goal_wt,
-      spoil_epv = tidyr::replace_na(spoil_epv, 0),
-      hitout_epv = tidyr::replace_na(hitout_epv, 0),
-      epv = recv_epv + disp_epv + spoil_epv + hitout_epv,
+      epv_spoil = tidyr::replace_na(epv_spoil, 0),
+      epv_hitout = tidyr::replace_na(epv_hitout, 0),
+      epv = epv_recv + epv_disp + epv_spoil + epv_hitout,
       wp_credit = tidyr::replace_na(wp_credit, 0),
       wp_disp_credit = tidyr::replace_na(wp_disp_credit, 0),
       wp_recv_credit = tidyr::replace_na(wp_recv_credit, 0)
@@ -286,28 +286,28 @@ create_player_game_data <- function(pbp_data = NULL,
   plyr_gm_df <- plyr_gm_df |>
     dplyr::mutate(
       tog_safe = pmax(dplyr::coalesce(.data$time_on_ground_percentage / 100, 0.1), 0.1),
-      recv_epv_p80 = .data$recv_epv / .data$tog_safe,
-      disp_epv_p80 = .data$disp_epv / .data$tog_safe,
-      spoil_epv_p80 = .data$spoil_epv / .data$tog_safe,
-      hitout_epv_p80 = .data$hitout_epv / .data$tog_safe,
+      epv_recv_p80 = .data$epv_recv / .data$tog_safe,
+      epv_disp_p80 = .data$epv_disp / .data$tog_safe,
+      epv_spoil_p80 = .data$epv_spoil / .data$tog_safe,
+      epv_hitout_p80 = .data$epv_hitout / .data$tog_safe,
       wp_credit_p80 = .data$wp_credit / .data$tog_safe,
       wp_disp_credit_p80 = .data$wp_disp_credit / .data$tog_safe,
       wp_recv_credit_p80 = .data$wp_recv_credit / .data$tog_safe
     ) |>
     dplyr::group_by(lineup_position) |>
     dplyr::mutate(
-      recv_epv_adj = (.data$recv_epv_p80 - stats::weighted.mean(.data$recv_epv_p80, .data$tog_safe, na.rm = TRUE)) * .data$tog_safe,
-      disp_epv_adj = (.data$disp_epv_p80 - stats::weighted.mean(.data$disp_epv_p80, .data$tog_safe, na.rm = TRUE)) * .data$tog_safe,
-      spoil_epv_adj = (.data$spoil_epv_p80 - stats::weighted.mean(.data$spoil_epv_p80, .data$tog_safe, na.rm = TRUE)) * .data$tog_safe,
-      hitout_epv_adj = (.data$hitout_epv_p80 - stats::weighted.mean(.data$hitout_epv_p80, .data$tog_safe, na.rm = TRUE)) * .data$tog_safe,
-      epv_adj = .data$recv_epv_adj + .data$disp_epv_adj + .data$spoil_epv_adj + .data$hitout_epv_adj,
+      epv_recv_adj = (.data$epv_recv_p80 - stats::weighted.mean(.data$epv_recv_p80, .data$tog_safe, na.rm = TRUE)) * .data$tog_safe,
+      epv_disp_adj = (.data$epv_disp_p80 - stats::weighted.mean(.data$epv_disp_p80, .data$tog_safe, na.rm = TRUE)) * .data$tog_safe,
+      epv_spoil_adj = (.data$epv_spoil_p80 - stats::weighted.mean(.data$epv_spoil_p80, .data$tog_safe, na.rm = TRUE)) * .data$tog_safe,
+      epv_hitout_adj = (.data$epv_hitout_p80 - stats::weighted.mean(.data$epv_hitout_p80, .data$tog_safe, na.rm = TRUE)) * .data$tog_safe,
+      epv_adj = .data$epv_recv_adj + .data$epv_disp_adj + .data$epv_spoil_adj + .data$epv_hitout_adj,
       wp_credit_adj = (.data$wp_credit_p80 - stats::weighted.mean(.data$wp_credit_p80, .data$tog_safe, na.rm = TRUE)) * .data$tog_safe,
       wp_disp_credit_adj = (.data$wp_disp_credit_p80 - stats::weighted.mean(.data$wp_disp_credit_p80, .data$tog_safe, na.rm = TRUE)) * .data$tog_safe,
       wp_recv_credit_adj = (.data$wp_recv_credit_p80 - stats::weighted.mean(.data$wp_recv_credit_p80, .data$tog_safe, na.rm = TRUE)) * .data$tog_safe
     ) |>
     dplyr::ungroup() |>
     dplyr::select(-"tog_safe",
-                  -"recv_epv_p80", -"disp_epv_p80", -"spoil_epv_p80", -"hitout_epv_p80",
+                  -"epv_recv_p80", -"epv_disp_p80", -"epv_spoil_p80", -"epv_hitout_p80",
                   -"wp_credit_p80", -"wp_disp_credit_p80", -"wp_recv_credit_p80")
 
   # --- Step 8: Handle duplicate season columns and select final columns ---
@@ -323,9 +323,9 @@ create_player_game_data <- function(pbp_data = NULL,
       player_name, team, opponent, position_group, lineup_position, team_id,
       utc_start_time,
       # EPV (position-adjusted)
-      epv_adj, recv_epv_adj, disp_epv_adj, spoil_epv_adj, hitout_epv_adj,
+      epv_adj, epv_recv_adj, epv_disp_adj, epv_spoil_adj, epv_hitout_adj,
       # EPV (raw)
-      epv, recv_epv, disp_epv, spoil_epv, hitout_epv,
+      epv, epv_recv, epv_disp, epv_spoil, epv_hitout,
       # WPA (position-adjusted)
       wp_credit_adj, wp_disp_credit_adj, wp_recv_credit_adj,
       # WPA (raw)
@@ -511,17 +511,17 @@ compute_failed_recv_credit <- function(chains,
   if (nrow(contests) == 0) {
     return(data.table::data.table(
       player_id = character(), match_id = character(),
-      failed_recv_epv = numeric(), failed_receptions = integer()
+      failed_epv_recv = numeric(), failed_receptions = integer()
     ))
   }
   failed <- contests[outcome %in% c("spoil", "intercept_mark") & winner == "player2"]
   if (nrow(failed) == 0) {
     return(data.table::data.table(
       player_id = character(), match_id = character(),
-      failed_recv_epv = numeric(), failed_receptions = integer()
+      failed_epv_recv = numeric(), failed_receptions = integer()
     ))
   }
-  failed[, .(failed_recv_epv = .N * weight_per_loss, failed_receptions = .N),
+  failed[, .(failed_epv_recv = .N * weight_per_loss, failed_receptions = .N),
          by = .(player_id = player1_id, match_id)]
 }
 

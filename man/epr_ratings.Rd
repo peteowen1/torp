@@ -79,8 +79,8 @@ average, but still have the average subtracted).}
 }
 \value{
 A data frame with columns: \code{player_id}, \code{player_name},
-\code{epr}, \code{recv_epr}, \code{disp_epr}, \code{spoil_epr},
-\code{hitout_epr}, plus metadata columns.
+\code{epr}, \code{epr_recv}, \code{epr_disp}, \code{epr_spoil},
+\code{epr_hitout}, plus metadata columns.
 }
 \description{
 Convenience alias for \code{\link{calculate_epr}}. Returns possession-value

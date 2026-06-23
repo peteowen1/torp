@@ -492,12 +492,12 @@ explain_player_game <- function(player_id, match_id, player_stats = NULL,
 
       # Pick total or p80 columns based on per80 flag
       if (per80) {
-        comp_cols <- c(recv_epv = "recv_epv_p80", disp_epv = "disp_epv_p80",
-                       spoil_epv = "spoil_epv_p80", hitout_epv = "hitout_epv_p80")
+        comp_cols <- c(epv_recv = "epv_recv_p80", epv_disp = "epv_disp_p80",
+                       epv_spoil = "epv_spoil_p80", epv_hitout = "epv_hitout_p80")
         epv_total_col <- "epv_p80"
       } else {
-        comp_cols <- c(recv_epv = "recv_epv", disp_epv = "disp_epv",
-                       spoil_epv = "spoil_epv", hitout_epv = "hitout_epv")
+        comp_cols <- c(epv_recv = "epv_recv", epv_disp = "epv_disp",
+                       epv_spoil = "epv_spoil", epv_hitout = "epv_hitout")
         epv_total_col <- "epv"
       }
 
@@ -810,7 +810,7 @@ explain_player_plays <- function(player,
 #' Explain a Player's EPR Calculation (Per-Game Trace)
 #'
 #' Traces the exact per-game inputs to the EPR calculation: shows each game's
-#' \code{recv_epv_adj}, \code{disp_epv_adj}, etc. (position-adjusted per-80-min
+#' \code{epv_recv_adj}, \code{epv_disp_adj}, etc. (position-adjusted per-80-min
 #' rates), the decay weight for each game, and how Bayesian shrinkage produces
 #' the final EPR components.
 #'
@@ -872,11 +872,11 @@ explain_epr <- function(player,
 
   show_dt <- dt[order(-season, -round), .(
     season, round, team, opponent, tog,
-    recv_adj = round(recv_epv_adj, 2),
-    disp_adj = round(disp_epv_adj, 2),
-    spoil_adj = round(spoil_epv_adj, 2),
-    hitout_adj = round(hitout_epv_adj, 2),
-    recv_total = round(recv_epv_adj * tog, 2),
+    recv_adj = round(epv_recv_adj, 2),
+    disp_adj = round(epv_disp_adj, 2),
+    spoil_adj = round(epv_spoil_adj, 2),
+    hitout_adj = round(epv_hitout_adj, 2),
+    recv_total = round(epv_recv_adj * tog, 2),
     days_ago = days_diff,
     wt_recv = round(wt_recv, 3)
   )]
@@ -886,10 +886,10 @@ explain_epr <- function(player,
 
   # Compute the aggregates (same as calculate_epr_stats — TOG-weighted)
   # _adj is per-80 rate; multiply by tog to get game total, weight by decay
-  recv_sum   <- sum(dt$recv_epv_adj * dt$tog * dt$wt_recv, na.rm = TRUE)
-  disp_sum   <- sum(dt$disp_epv_adj * dt$tog * dt$wt_disp, na.rm = TRUE)
-  spoil_sum  <- sum(dt$spoil_epv_adj * dt$tog * dt$wt_spoil, na.rm = TRUE)
-  hitout_sum <- sum(dt$hitout_epv_adj * dt$tog * dt$wt_hitout, na.rm = TRUE)
+  recv_sum   <- sum(dt$epv_recv_adj * dt$tog * dt$wt_recv, na.rm = TRUE)
+  disp_sum   <- sum(dt$epv_disp_adj * dt$tog * dt$wt_disp, na.rm = TRUE)
+  spoil_sum  <- sum(dt$epv_spoil_adj * dt$tog * dt$wt_spoil, na.rm = TRUE)
+  hitout_sum <- sum(dt$epv_hitout_adj * dt$tog * dt$wt_hitout, na.rm = TRUE)
 
   # Denominator is weighted minutes (wt * tog), not weighted games
   wt_gms_recv   <- sum(dt$wt_recv * dt$tog, na.rm = TRUE)
@@ -901,10 +901,10 @@ explain_epr <- function(player,
   loading <- EPR_LOADING_DEFAULT
   prior_gms <- c(recv = EPR_PRIOR_GAMES_RECV, disp = EPR_PRIOR_GAMES_DISP,
                   spoil = EPR_PRIOR_GAMES_SPOIL, hitout = EPR_PRIOR_GAMES_HITOUT)
-  recv_epr   <- (loading * recv_sum   + prior_gms["recv"]   * EPR_PRIOR_RATE_RECV)   / (wt_gms_recv   + prior_gms["recv"])
-  disp_epr   <- (loading * disp_sum   + prior_gms["disp"]   * EPR_PRIOR_RATE_DISP)   / (wt_gms_disp   + prior_gms["disp"])
-  spoil_epr  <- (loading * spoil_sum  + prior_gms["spoil"]  * EPR_PRIOR_RATE_SPOIL)  / (wt_gms_spoil  + prior_gms["spoil"])
-  hitout_epr <- (loading * hitout_sum + prior_gms["hitout"] * EPR_PRIOR_RATE_HITOUT) / (wt_gms_hitout + prior_gms["hitout"])
+  epr_recv   <- (loading * recv_sum   + prior_gms["recv"]   * EPR_PRIOR_RATE_RECV)   / (wt_gms_recv   + prior_gms["recv"])
+  epr_disp   <- (loading * disp_sum   + prior_gms["disp"]   * EPR_PRIOR_RATE_DISP)   / (wt_gms_disp   + prior_gms["disp"])
+  epr_spoil  <- (loading * spoil_sum  + prior_gms["spoil"]  * EPR_PRIOR_RATE_SPOIL)  / (wt_gms_spoil  + prior_gms["spoil"])
+  epr_hitout <- (loading * hitout_sum + prior_gms["hitout"] * EPR_PRIOR_RATE_HITOUT) / (wt_gms_hitout + prior_gms["hitout"])
 
   cli::cli_h2("Shrinkage Calculation (pre-centering, TOG-weighted)")
 
@@ -915,17 +915,17 @@ explain_epr <- function(player,
     decay_days = c(EPR_DECAY_RECV, EPR_DECAY_DISP, EPR_DECAY_SPOIL, EPR_DECAY_HITOUT),
     prior_games = unname(prior_gms),
     prior_rate = c(EPR_PRIOR_RATE_RECV, EPR_PRIOR_RATE_DISP, EPR_PRIOR_RATE_SPOIL, EPR_PRIOR_RATE_HITOUT),
-    epr_raw = round(c(recv_epr, disp_epr, spoil_epr, hitout_epr), 2)
+    epr_raw = round(c(epr_recv, epr_disp, epr_spoil, epr_hitout), 2)
   )
   print(components, row.names = FALSE)
 
   cat(sprintf("\n  Formula: EPR_i = (%.1f * sum_i + prior_i * rate_i) / (wt_mins_i + prior_i)\n", loading))
-  cat(sprintf("  recv_epr = (%.1f * %.2f + %.1f * %.1f) / (%.2f + %.1f) = %.2f\n",
-              loading, recv_sum, prior_gms["recv"], EPR_PRIOR_RATE_RECV, wt_gms_recv, prior_gms["recv"], recv_epr))
-  cat(sprintf("  disp_epr = (%.1f * %.2f + %.1f * %.1f) / (%.2f + %.1f) = %.2f\n",
-              loading, disp_sum, prior_gms["disp"], EPR_PRIOR_RATE_DISP, wt_gms_disp, prior_gms["disp"], disp_epr))
+  cat(sprintf("  epr_recv = (%.1f * %.2f + %.1f * %.1f) / (%.2f + %.1f) = %.2f\n",
+              loading, recv_sum, prior_gms["recv"], EPR_PRIOR_RATE_RECV, wt_gms_recv, prior_gms["recv"], epr_recv))
+  cat(sprintf("  epr_disp = (%.1f * %.2f + %.1f * %.1f) / (%.2f + %.1f) = %.2f\n",
+              loading, disp_sum, prior_gms["disp"], EPR_PRIOR_RATE_DISP, wt_gms_disp, prior_gms["disp"], epr_disp))
 
-  # Weighted average recv rate (what recv_epr approximates before shrinkage)
+  # Weighted average recv rate (what epr_recv approximates before shrinkage)
   avg_recv <- if (wt_gms_recv > 0) recv_sum / wt_gms_recv else 0
   cat(sprintf("\n  Weighted avg recv rate: %.2f (shrinkage pulls toward %.1f)\n",
               avg_recv, EPR_PRIOR_RATE_RECV))
@@ -945,8 +945,8 @@ explain_epr <- function(player,
       spoil_sum = spoil_sum, hitout_sum = hitout_sum,
       wt_mins = c(recv = wt_gms_recv, disp = wt_gms_disp,
                    spoil = wt_gms_spoil, hitout = wt_gms_hitout),
-      epr_raw = c(recv = recv_epr, disp = disp_epr,
-                   spoil = spoil_epr, hitout = hitout_epr)
+      epr_raw = c(recv = epr_recv, disp = epr_disp,
+                   spoil = epr_spoil, hitout = epr_hitout)
     )
   ))
 }
@@ -996,7 +996,7 @@ explain_player_rating <- function(player,
 
   # --- 2. EPR decomposition ---
   cli::cli_h2("EPR Breakdown (recv + disp + spoil + hitout)")
-  epr_cols <- c("recv_epr", "disp_epr", "spoil_epr", "hitout_epr")
+  epr_cols <- c("epr_recv", "epr_disp", "epr_spoil", "epr_hitout")
   epr_vals <- vapply(epr_cols, function(col) {
     if (col %in% names(pr)) round(as.numeric(pr[[col]]), 2) else NA_real_
   }, numeric(1))
@@ -1106,8 +1106,8 @@ explain_player_rating <- function(player,
     game_log <- pgr_dt[pgr_dt$player_id == pid]
     if (nrow(game_log) > 0) {
       show_cols <- intersect(
-        c("season", "round", "team", "opp", "tog", "epv", "recv_epv",
-          "disp_epv", "spoil_epv", "hitout_epv", "psv", "osv", "dsv",
+        c("season", "round", "team", "opp", "tog", "epv", "epv_recv",
+          "epv_disp", "epv_spoil", "epv_hitout", "psv", "osv", "dsv",
           "torp_value"),
         names(game_log)
       )
@@ -1119,7 +1119,7 @@ explain_player_rating <- function(player,
   # --- 5. Visual: percentile among all players ---
   cli::cli_h2("Percentile Ranks (vs all players)")
   pctile_metrics <- c("torp", "epr", "psr", "osr", "dsr",
-                       "recv_epr", "disp_epr", "spoil_epr", "hitout_epr")
+                       "epr_recv", "epr_disp", "epr_spoil", "epr_hitout")
   pctile_metrics <- intersect(pctile_metrics, names(tr))
   pctiles <- vapply(pctile_metrics, function(col) {
     round(mean(tr[[col]] <= as.numeric(pr[[col]]), na.rm = TRUE) * 100)

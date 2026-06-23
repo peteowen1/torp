@@ -33,9 +33,9 @@ A data.table with one row per player per match, containing:
 identifiers (\code{player_id}, \code{match_id}, \code{season}, \code{round},
 \code{player_name}, \code{team}, \code{opponent}, \code{position_group}, \code{lineup_position}, \code{team_id},
 \code{utc_start_time}), position-adjusted EPV (\code{epv_adj},
-\code{recv_epv_adj}, \code{disp_epv_adj}, \code{spoil_epv_adj}, \code{hitout_epv_adj}),
-raw EPV (\code{epv}, \code{recv_epv}, \code{disp_epv}, \code{spoil_epv},
-\code{hitout_epv}), and key box-score stats.
+\code{epv_recv_adj}, \code{epv_disp_adj}, \code{epv_spoil_adj}, \code{epv_hitout_adj}),
+raw EPV (\code{epv}, \code{epv_recv}, \code{epv_disp}, \code{epv_spoil},
+\code{epv_hitout}), and key box-score stats.
 }
 \description{
 Transforms raw play-by-play data and player stats into processed per-game

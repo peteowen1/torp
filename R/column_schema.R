@@ -325,27 +325,37 @@ PLAYER_GAME_COL_MAP <- c(
   "listed_position" = "position_group",
   "tot_p"           = "epv",
   "tot_p_adj"       = "epv_adj",
-  "recv_pts"        = "recv_epv",
-  "disp_pts"        = "disp_epv",
-  "spoil_pts"       = "spoil_epv",
-  "hitout_pts"      = "hitout_epv",
-  "recv_pts_adj"    = "recv_epv_adj",
-  "disp_pts_adj"    = "disp_epv_adj",
-  "spoil_pts_adj"   = "spoil_epv_adj",
-  "hitout_pts_adj"  = "hitout_epv_adj",
+  "recv_pts"        = "epv_recv",
+  "disp_pts"        = "epv_disp",
+  "spoil_pts"       = "epv_spoil",
+  "hitout_pts"      = "epv_hitout",
+  "recv_pts_adj"    = "epv_recv_adj",
+  "disp_pts_adj"    = "epv_disp_adj",
+  "spoil_pts_adj"   = "epv_spoil_adj",
+  "hitout_pts_adj"  = "epv_hitout_adj",
   "recvs"           = "receptions",
   "disp"            = "disposals_pbp",
   # Second-hop: credits → epv (for parquets already using credits names)
-  "recv_credits"        = "recv_epv",
-  "disp_credits"        = "disp_epv",
-  "spoil_credits"       = "spoil_epv",
-  "hitout_credits"      = "hitout_epv",
+  "recv_credits"        = "epv_recv",
+  "disp_credits"        = "epv_disp",
+  "spoil_credits"       = "epv_spoil",
+  "hitout_credits"      = "epv_hitout",
   "total_credits"       = "epv",
-  "recv_credits_adj"    = "recv_epv_adj",
-  "disp_credits_adj"    = "disp_epv_adj",
-  "spoil_credits_adj"   = "spoil_epv_adj",
-  "hitout_credits_adj"  = "hitout_epv_adj",
-  "total_credits_adj"   = "epv_adj"
+  "recv_credits_adj"    = "epv_recv_adj",
+  "disp_credits_adj"    = "epv_disp_adj",
+  "spoil_credits_adj"   = "epv_spoil_adj",
+  "hitout_credits_adj"  = "epv_hitout_adj",
+  "total_credits_adj"   = "epv_adj",
+  # Back-compat: parquets published before the metric-first rename (torp#81)
+  # carried component-first names; upgrade them to the new canonical names.
+  "recv_epv"            = "epv_recv",
+  "disp_epv"            = "epv_disp",
+  "spoil_epv"           = "epv_spoil",
+  "hitout_epv"          = "epv_hitout",
+  "recv_epv_adj"        = "epv_recv_adj",
+  "disp_epv_adj"        = "epv_disp_adj",
+  "spoil_epv_adj"       = "epv_spoil_adj",
+  "hitout_epv_adj"      = "epv_hitout_adj"
 )
 
 
@@ -356,10 +366,16 @@ PLAYER_GAME_COL_MAP <- c(
 #' @keywords internal
 TORP_RATINGS_COL_MAP <- c(
   "torp"         = "epr",
-  "torp_recv"    = "recv_epr",
-  "torp_disp"    = "disp_epr",
-  "torp_spoil"   = "spoil_epr",
-  "torp_hitout"  = "hitout_epr",
+  "torp_recv"    = "epr_recv",
+  "torp_disp"    = "epr_disp",
+  "torp_spoil"   = "epr_spoil",
+  "torp_hitout"  = "epr_hitout",
+  # Back-compat: parquets published in the interim component-first scheme
+  # (recv_epr/disp_epr/...) upgrade to the new metric-first canonical names.
+  "recv_epr"     = "epr_recv",
+  "disp_epr"     = "epr_disp",
+  "spoil_epr"    = "epr_spoil",
+  "hitout_epr"   = "epr_hitout",
   # Position column rename: old releases had `position` (the 6-way class);
   # now called `position_group`. .normalise_columns() safely no-ops if
   # `position_group` already exists in the frame.
@@ -377,24 +393,37 @@ PLAYER_GAME_RATINGS_COL_MAP <- c(
   "position"       = "position_group",
   # Raw points → EPV raw (pre-centering names, kept for torpdata compat)
   "total_points"   = "epv_raw",
-  "recv_points"    = "recv_epv_raw",
-  "disp_points"    = "disp_epv_raw",
-  "spoil_points"   = "spoil_epv_raw",
-  "hitout_points"  = "hitout_epv_raw",
+  "recv_points"    = "epv_recv_raw",
+  "disp_points"    = "epv_disp_raw",
+  "spoil_points"   = "epv_spoil_raw",
+  "hitout_points"  = "epv_hitout_raw",
   # Per-80 → EPV per-80
   "total_p80"      = "epv_p80",
-  "recv_p80"       = "recv_epv_p80",
-  "disp_p80"       = "disp_epv_p80",
-  "spoil_p80"      = "spoil_epv_p80",
-  "hitout_p80"     = "hitout_epv_p80",
+  "recv_p80"       = "epv_recv_p80",
+  "disp_p80"       = "epv_disp_p80",
+  "spoil_p80"      = "epv_spoil_p80",
+  "hitout_p80"     = "epv_hitout_p80",
   # Season aggregates
   "season_points"  = "season_epv",
-  "season_recv"    = "season_recv_epv",
-  "season_disp"    = "season_disp_epv",
-  "season_spoil"   = "season_spoil_epv",
-  "season_hitout"  = "season_hitout_epv",
+  "season_recv"    = "season_epv_recv",
+  "season_disp"    = "season_epv_disp",
+  "season_spoil"   = "season_epv_spoil",
+  "season_hitout"  = "season_epv_hitout",
   "avg_p80"        = "epv_p80",
-  "ppg"            = "epv_pg"
+  "ppg"            = "epv_pg",
+  # Back-compat: interim component-first names (pre torp#81) → metric-first
+  "recv_epv_raw"   = "epv_recv_raw",
+  "disp_epv_raw"   = "epv_disp_raw",
+  "spoil_epv_raw"  = "epv_spoil_raw",
+  "hitout_epv_raw" = "epv_hitout_raw",
+  "recv_epv_p80"   = "epv_recv_p80",
+  "disp_epv_p80"   = "epv_disp_p80",
+  "spoil_epv_p80"  = "epv_spoil_p80",
+  "hitout_epv_p80" = "epv_hitout_p80",
+  "season_recv_epv"   = "season_epv_recv",
+  "season_disp_epv"   = "season_epv_disp",
+  "season_spoil_epv"  = "season_epv_spoil",
+  "season_hitout_epv" = "season_epv_hitout"
 )
 
 
