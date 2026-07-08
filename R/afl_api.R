@@ -954,7 +954,12 @@ torp_replace_teams <- function(team) {
 #' torp_team_abbr(c("Narrm", "Western Bulldogs", "CARL"))
 torp_team_abbr <- function(team) {
   canonical <- torp_replace_teams(team)
-  AFL_TEAMS$abbr[match(canonical, AFL_TEAMS$name)]
+  idx <- match(canonical, AFL_TEAMS$name)
+  if (anyNA(idx)) {
+    unmatched <- team[is.na(idx)]
+    cli::cli_warn("{length(unmatched)} unrecognised team name{?s}: {.val {unmatched}}")
+  }
+  AFL_TEAMS$abbr[idx]
 }
 
 
@@ -971,7 +976,12 @@ torp_team_abbr <- function(team) {
 #' torp_team_full(c("WB", "Narrm", "Cats"))
 torp_team_full <- function(team) {
   canonical <- torp_replace_teams(team)
-  AFL_TEAMS$full[match(canonical, AFL_TEAMS$name)]
+  idx <- match(canonical, AFL_TEAMS$name)
+  if (anyNA(idx)) {
+    unmatched <- team[is.na(idx)]
+    cli::cli_warn("{length(unmatched)} unrecognised team name{?s}: {.val {unmatched}}")
+  }
+  AFL_TEAMS$full[idx]
 }
 
 

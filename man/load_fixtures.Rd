@@ -36,7 +36,7 @@ load_fixtures(
 A data frame containing AFL fixture and schedule data.
 }
 \description{
-Loads AFL fixture and schedule data from the \href{https://github.com/peteowen1/torpdata}{torpdata repository}
+Loads AFL fixture and schedule data from the AFL API (cached to disk, not fetched from a torpdata release)
 }
 \examples{
 \dontrun{

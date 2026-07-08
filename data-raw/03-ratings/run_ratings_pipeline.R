@@ -445,6 +445,12 @@ tictoc::toc(log = TRUE)
 cli::cli_h2("Stage 5: Player Game & Season Ratings")
 tictoc::tic("stage_5_derived_ratings")
 
+# all_pstats is only batch-loaded in Stage 2 (REBUILD_PLAYER_GAME); load it
+# here too so Stage 5 doesn't fail when that stage was skipped.
+if (!exists("all_pstats")) {
+  all_pstats <- load_player_stats(seasons)
+}
+
 for (s in seasons) {
   tryCatch({
     start_round <- get_start_round(s)

@@ -213,10 +213,10 @@ Default priors: `prior_games = 3.0` for all components; `prior_rate` = -0.4 (rec
 
 | Component | Decay (days) | Approx Half-Life |
 |-----------|-------------|-------------------|
-| Reception | 282 | ~392 days |
-| Hitout | 456 | ~633 days |
-| Disposal | 573 | ~796 days |
-| Spoil | 577 | ~802 days |
+| Reception | 273 | ~189 days |
+| Hitout | 545 | ~378 days |
+| Disposal | 630 | ~437 days |
+| Spoil | 523 | ~363 days |
 
 3. Aggregate by player with weighted sums and weighted game counts
 4. Apply Bayesian shrinkage per component

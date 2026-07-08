@@ -219,7 +219,7 @@ update_season_chains <- function(season, round) {
       NULL
     }
     if (!is.null(round_col)) {
-      existing <- existing[existing[[round_col]] != round, ]
+      existing <- existing[is.na(existing[[round_col]]) | existing[[round_col]] != round, ]
     } else {
       cli::cli_warn("No round column found in existing chains data - cannot de-duplicate round {round}")
     }
@@ -287,7 +287,7 @@ update_season_pbp <- function(season, round) {
 
   if (!is.null(existing) && nrow(existing) > 0) {
     existing <- data.table::as.data.table(existing)
-    existing <- existing[round_number != round]
+    existing <- existing[is.na(round_number) | round_number != round]
     cli::cli_inform("Existing data: {nrow(existing)} rows (after removing round {round})")
   }
 
@@ -975,7 +975,9 @@ run_daily_release <- function(force = FALSE) {
   }
   tictoc::tic.clearlog()
 
-  invisible(release_mode)
+  result <- release_mode
+  attr(result, "failures") <- all_failures
+  invisible(result)
 }
 
 # Execute if run as script ----

@@ -27,7 +27,7 @@ from the API for all seasons. Default is FALSE.}
 A data frame containing player stats data.
 }
 \description{
-Loads player stats data from the \href{https://github.com/peteowen1/torpdata}{torpdata repository}
+Loads player stats data from the AFL API (cached to disk, not fetched from a torpdata release)
 }
 \examples{
 \dontrun{

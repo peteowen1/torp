@@ -933,7 +933,7 @@ show_predictions <- function(season = get_afl_season(),
 
   tips_correct <- 0
   tips_total <- 0
-  abs_errors <- c()
+  abs_errors <- rep(NA_real_, nrow(preds))
 
   for (i in seq_len(nrow(preds))) {
     row <- preds[i, ]
@@ -950,7 +950,7 @@ show_predictions <- function(season = get_afl_season(),
       result_display <- paste(result_str, icon)
       tips_total <- tips_total + 1
       tips_correct <- tips_correct + as.integer(tip_ok)
-      abs_errors <- c(abs_errors, abs(row$pred_margin - row$margin))
+      abs_errors[i] <- abs(row$pred_margin - row$margin)
     } else if (isTRUE(row$is_complete)) {
       result_display <- "?"
     } else {
@@ -972,7 +972,7 @@ show_predictions <- function(season = get_afl_season(),
   parts <- c()
   if (tips_total > 0) {
     parts <- c(parts, paste0("Tips: ", tips_correct, "/", tips_total, " correct"))
-    parts <- c(parts, paste0("MAE: ", sprintf("%.1f", mean(abs_errors))))
+    parts <- c(parts, paste0("MAE: ", sprintf("%.1f", mean(abs_errors, na.rm = TRUE))))
   }
   n_complete <- sum(preds$is_complete | !is.na(preds$margin))
   parts <- c(parts, paste0("Completed: ", n_complete, "/", nrow(preds)))

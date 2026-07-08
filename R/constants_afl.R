@@ -128,6 +128,10 @@ OPEN_METEO_RATE_LIMIT_SECONDS <- 0.3
 #' @keywords internal
 DISK_CACHE_DEFAULT_AGE_DAYS <- 7
 
+#' Default release-asset listing cache TTL in seconds
+#' @keywords internal
+RELEASE_ASSET_CACHE_TTL_SECS <- 300
+
 
 # Team Name Constants
 # -------------------

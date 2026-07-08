@@ -65,11 +65,11 @@ calculate_ladder <- function(games_dt) {
   ladder[, `:=`(
     percentage    = data.table::fifelse(points_against > 0,
                                         points_for / points_against * 100,
-                                        0),
+                                        data.table::fifelse(points_for > 0, Inf, 0)),
     ladder_points = wins * 4L + draws * 2L
   )]
 
-  data.table::setorder(ladder, -ladder_points, -percentage)
+  data.table::setorder(ladder, -ladder_points, -percentage, -points_for)
   ladder[, rank := seq_len(.N)]
 
   ladder[]
@@ -320,11 +320,12 @@ calculate_final_ladder <- function(season = get_afl_season(),
 
   ladder[, `:=`(
     percentage    = data.table::fifelse(points_against > 0,
-                                        points_for / points_against * 100, 0),
+                                        points_for / points_against * 100,
+                                        data.table::fifelse(points_for > 0, Inf, 0)),
     ladder_points = round(expected_wins * 4)
   )]
 
-  data.table::setorder(ladder, -ladder_points, -percentage)
+  data.table::setorder(ladder, -ladder_points, -percentage, -points_for)
   ladder[, rank := seq_len(.N)]
 
   ladder[]

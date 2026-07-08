@@ -15,8 +15,9 @@ add_epv_team_vars_dt(dt, grp)
 Invisible NULL (modifies dt by reference).
 }
 \description{
-Computes team_id_mdl, home, points, mirror, and coordinate transform.
-All shift operations for the mirror calculation are batched into a single
-:= call for performance.
+Computes team_id_mdl, home, and points. The legacy \code{mirror} coordinate
+flip is neutralised post-#92 (set to constant 1) — clean_pbp now leaves
+coordinates in the correct action-team attacking frame, so the second
+normalisation here double-corrected. See the inline note for the ablation.
 }
 \keyword{internal}

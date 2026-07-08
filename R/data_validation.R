@@ -448,16 +448,16 @@ validate_model_data_quality <- function(data) {
   # Check for constant columns (zero variance)
   numeric_cols <- vapply(data, is.numeric, logical(1))
   if (any(numeric_cols)) {
-    constant_cols <- sapply(data[, numeric_cols, drop = FALSE], function(x) {
-      var(x, na.rm = TRUE) == 0
-    })
-    
+    constant_cols <- vapply(data[, numeric_cols, drop = FALSE], function(x) {
+      var(x, na.rm = TRUE) == 0 | all(is.na(x))
+    }, logical(1))
+
     if (any(constant_cols)) {
-      issues$constant_columns <- paste("Zero-variance columns:", 
+      issues$constant_columns <- paste("Zero-variance columns:",
                                       paste(names(constant_cols)[constant_cols], collapse = ", "))
     }
   }
-  
+
   return(issues)
 }
 

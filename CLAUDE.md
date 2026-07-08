@@ -22,7 +22,7 @@ powershell.exe -Command 'Rscript "path/to/script.R"'
 
 ## Code Organization
 
-141 exports across ~70 R files. Grouped by domain:
+141 exports across ~65 R files. Grouped by domain:
 
 | Domain | Key files | Purpose |
 |--------|-----------|---------|
@@ -67,15 +67,17 @@ Common loaders (see `?load_data` for the full list):
 |----------|-------------|---------|
 | `load_pbp()` | `pbp-data` | Play-by-play |
 | `load_chains()` | `chains-data` | Possession chains |
-| `load_results()` | `results-data` | Match results |
-| `load_fixtures()` | `fixtures-data` | Upcoming fixtures |
+| `load_results()` | API (not a release)* | Match results |
+| `load_fixtures()` | API (not a release)* | Upcoming fixtures |
 | `load_torp_ratings()` | `ratings-data` | Player ratings |
 | `load_team_ratings()` | `team_ratings-data` | Team ratings |
 | `load_predictions()` | `predictions` | Match predictions |
 | `load_player_game_ratings()` | `player_game_ratings-data` | Per-game EPV/WPA/PSV |
 | `load_player_skills()` | `player_skills-data` | Per-stat skill ratings |
-| `load_player_stats()` | `player_stats-data` | Box-score stats |
+| `load_player_stats()` | API (not a release)* | Box-score stats |
 | `load_weather()` | `weather-data` | Historical weather features |
+
+\* `load_results()`, `load_fixtures()`, `load_player_stats()`, and `load_teams()` fetch live from the AFL API (via `.load_with_cache()`), not from a torpdata release — despite their roxygen historically implying otherwise.
 
 `save_to_release()` (internal) handles uploads from `data-raw/01-data/` scripts; uses `piggyback` with a 404 retry for concurrent-upload races.
 
@@ -106,9 +108,9 @@ When changing a column or release, update the schema declaration alongside the d
 
 Two layers:
 - **In-memory** (`cache.R`): Loaded data + models kept in a package-level env. Inspect with `get_cache_info()` / `get_model_cache_info()`.
-- **Disk** (`disk_cache.R`): Persistent cache at `tools::R_user_dir("torp", "cache")`. Use `get_disk_cache_info()` / `get_disk_cache_size()`. Survives session restarts.
+- **Disk** (`disk_cache.R`): Persistent cache at `~/.torp/cache`. Use `get_disk_cache_info()` / `get_disk_cache_size()`. Survives session restarts.
 
-Pass `force = TRUE` to most loaders to bypass both caches and re-fetch.
+Pass `refresh = TRUE` to bypass caches and re-fetch — only `load_player_stats()`, `load_teams()`, and `load_player_details()` currently expose it; most other loaders have no cache-bypass argument.
 
 ## Live Model Exports (for inthegame-blog Worker)
 
@@ -121,17 +123,17 @@ Live EP/WP/xG models are trained in **torpmodels** (`data-raw/01-ep-model/train_
 - **Weather imputation** — `add_weather_to_preds()` uses median imputation for missing weather; the `total_xpoints` GAM expects this neutral fallback rather than NA.
 - **Shot distance bug** — `shots.parquet` computes distance with signed x (`halfLen - x`) instead of `halfLen - |x|`, so negative-x shots show distance to the *far* goal. inthegame-blog overrides client-side; fix in torp would let the override become a no-op.
 - **Team name canonicalisation** — `save_to_release()` calls `.normalise_team_values()` before write; outside that path you may see raw API names (Footscray, GWS) vs full names (Western Bulldogs, GWS Giants). Use `AFL_TEAM_ALIASES` to translate.
-- **Off-season `run_daily_release()` returns FALSE** — by design, so the GHA workflow can skip release/dispatch steps. Don't treat FALSE as an error.
+- **Off-season `run_daily_release()` returns `'none'`** — by design, so the GHA workflow can skip release/dispatch steps (`release_done <- result != 'none'`). Don't treat `'none'` as an error.
 - **`load_*()` loaders default to the *current* season** — `load_player_stat_ratings()`, `load_player_stats()`, etc. default `seasons = get_afl_season()`, and `seasons = TRUE` means *all* seasons (`AFL_MIN_SEASON:current`). But `torp_ratings.parquet` (`ratings-data`) is **full-history** — it's upserted into the existing release each run. So any pipeline stage that blends per-round data into the full table must pass `TRUE`, or historical rows silently fall back to a current-season snapshot. This was the #88 PSR/OSR/DSR "flat across history" bug: `run_ratings_pipeline.R` fed `calculate_torp()` a current-season-only PSR frame.
 
 ## Tests
 
 ~50 test files in `tests/testthat/`. Key ones:
 - `test-load_torp_data.R` — loader contracts
-- `test-add_variables.R` — EP/WP/xG feature engineering
-- `test-player_ratings.R` — TORP composition math
-- `test-match_model.R` — match prediction pipeline
-- `test-simulate.R` — Monte Carlo simulation
+- `test-add-model-variables.R` — EP/WP/xG feature engineering
+- `test-player-ratings.R` — TORP composition math
+- `test-sim-helpers.R` — Monte Carlo simulation
+- `match_model.R` (published predictions) has no dedicated test file — zero test coverage today
 
 Run a single file with `testthat::test_file("tests/testthat/test-NAME.R")`.
 

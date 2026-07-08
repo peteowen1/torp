@@ -14,8 +14,10 @@
 
 devtools::load_all()
 
-result <- run_predictions_pipeline()
-result$predictions %>% filter(season == get_afl_season(), round == get_afl_week('next'))
+if (sys.nframe() == 0) {
+  result <- run_predictions_pipeline()
+  result$predictions %>% filter(season == get_afl_season(), round == get_afl_week('next'))
+}
 
 # sim_results <- simulate_afl_season(get_afl_season(), n_sims = 5000, seed = 42, n_cores = parallel::detectCores() - 2)
 # print(sim_results)

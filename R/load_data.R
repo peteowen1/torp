@@ -39,11 +39,13 @@ save_to_release <- function(df, file_name, release_tag, also_csv = FALSE) {
                          tag = release_tag,
                          name = f_name),
     error = function(e) {
-      # Retry once on 404 — piggyback's delete-then-upload can fail if the
+      # Retry once on 404/422 — piggyback's delete-then-upload can fail if the
       # asset ID changed between listing and deletion (concurrent upload or
-      # stale cache). A fresh attempt re-fetches the asset list.
-      if (grepl("404", conditionMessage(e), fixed = TRUE)) {
-        cli::cli_warn("Upload 404 for {.val {f_name}}, retrying once...")
+      # stale cache), or if a concurrent create raced us (422). A short
+      # backoff then a fresh attempt re-fetches the asset list.
+      if (grepl("404|422", conditionMessage(e))) {
+        cli::cli_warn("Upload error for {.val {f_name}}, retrying once...")
+        Sys.sleep(2)
         tryCatch(
           piggyback::pb_upload(tf,
                                repo = get_torp_data_repo(),
@@ -58,6 +60,8 @@ save_to_release <- function(df, file_name, release_tag, also_csv = FALSE) {
       }
     }
   )
+
+  invalidate_release_cache(release_tag)
 
   if (also_csv) {
     csv_name <- paste0(file_name, ".csv")
@@ -445,10 +449,10 @@ load_xg <- function(seasons = get_afl_season(), rounds = NULL, use_disk_cache = 
     .normalise_columns(out, XG_COL_MAP)
   }
 
-  # Filter by round if requested (round parsed from match_id chars 12-13)
+  # Filter by round if requested (round parsed from match_id)
   if (!is.null(rounds) && nrow(out) > 0) {
     if (!data.table::is.data.table(out)) out <- data.table::as.data.table(out)
-    out[, round_number := as.integer(substr(match_id, 12L, 13L))]
+    out[, round_number := .extract_round_from_match_id(match_id)]
     out <- out[round_number %in% as.integer(rounds)]
   }
 
@@ -458,7 +462,7 @@ load_xg <- function(seasons = get_afl_season(), rounds = NULL, use_disk_cache = 
 
 #' Load Player Stats Data
 #'
-#' @description Loads player stats data from the [torpdata repository](https://github.com/peteowen1/torpdata)
+#' @description Loads player stats data from the AFL API (cached to disk, not fetched from a torpdata release)
 #'
 #' @param seasons A numeric vector of 4-digit years associated with given AFL seasons - defaults to latest season. If set to `TRUE`, returns all available data since 2021.
 #' @param use_disk_cache Logical. If TRUE (default), caches completed past seasons
@@ -531,7 +535,7 @@ load_player_game_data <- function(seasons = get_afl_season(), use_disk_cache = F
 
 #' Load AFL Fixture Data
 #'
-#' @description Loads AFL fixture and schedule data from the [torpdata repository](https://github.com/peteowen1/torpdata)
+#' @description Loads AFL fixture and schedule data from the AFL API (cached to disk, not fetched from a torpdata release)
 #'
 #' @param seasons A numeric vector of 4-digit years associated with given AFL seasons - defaults to latest season. If set to `TRUE`, returns all available data since 2021.
 #' @param all Deprecated. Use `seasons = TRUE` instead (consistent with other `load_*()` functions).
@@ -589,7 +593,7 @@ load_fixtures <- function(seasons = NULL, all = FALSE, use_disk_cache = FALSE,
 
 #' Load AFL Team and Lineup Data
 #'
-#' @description Loads AFL team roster and lineup data from the [torpdata repository](https://github.com/peteowen1/torpdata)
+#' @description Loads AFL team roster and lineup data from the AFL API (cached to disk, not fetched from a torpdata release)
 #'
 #' @param seasons A numeric vector of 4-digit years associated with given AFL seasons - defaults to latest season. If set to `TRUE`, returns all available data since 2021.
 #' @param use_disk_cache Logical. If TRUE (default), caches completed past seasons
@@ -624,7 +628,7 @@ load_teams <- function(seasons = get_afl_season(), use_disk_cache = TRUE, refres
   if (nrow(out) > 0 && "match_id" %in% names(out)) {
     needs_round <- !"round_number" %in% names(out) || anyNA(out$round_number)
     if (needs_round) {
-      out$round_number <- as.integer(substr(out$match_id, 12L, 13L))
+      out$round_number <- .extract_round_from_match_id(out$match_id)
     }
   }
 
@@ -634,7 +638,7 @@ load_teams <- function(seasons = get_afl_season(), use_disk_cache = TRUE, refres
 
 #' Load AFL Match Results Data
 #'
-#' @description Loads AFL match results and scores from the [torpdata repository](https://github.com/peteowen1/torpdata)
+#' @description Loads AFL match results and scores from the AFL API (cached to disk, not fetched from a torpdata release)
 #'
 #' @param seasons A numeric vector of 4-digit years associated with given AFL seasons - defaults to latest season. If set to `TRUE`, returns all available data since 2021.
 #' @param use_disk_cache Logical. If TRUE, uses persistent disk cache for faster repeated loads. Default is FALSE.
@@ -1034,7 +1038,6 @@ load_ep_wp_charts <- function(seasons = get_afl_season(), rounds = TRUE, use_dis
 load_player_stat_ratings <- function(seasons = get_afl_season(), use_disk_cache = FALSE, columns = NULL) {
   seasons <- validate_seasons(seasons)
 
-  # Try new release tag first, fall back to old for backward compat
   urls <- generate_urls("player_stat_ratings-data", "player_stat_ratings", seasons)
 
   out <- load_from_url(urls, seasons = seasons, use_disk_cache = use_disk_cache, columns = columns)

@@ -21,10 +21,11 @@ on:
 env:
   GITHUB_PAT: ${{ secrets.WORKFLOW_PAT }}
   R_KEEP_PKG_SOURCE: yes
+  piggyback_cache_duration: 1
 
 concurrency:
   group: ratings-predictions
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   compute-ratings:
