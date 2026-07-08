@@ -128,9 +128,10 @@ simulate_season <- function(sim_teams, sim_games, return_teams = FALSE,
                     value = as.integer(pmax(round((total - result_vec) / 2), 0)))
 
     # Update team ratings via direct vector assignment
+    # (home gains when it beats the expected margin — matches finals_sim.R)
     shifts <- SIM_RATING_SHIFT * (result_vec - estimate)
-    torp_vec[home_idx] <- torp_vec[home_idx] - shifts
-    torp_vec[away_idx] <- torp_vec[away_idx] + shifts
+    torp_vec[home_idx] <- torp_vec[home_idx] + shifts
+    torp_vec[away_idx] <- torp_vec[away_idx] - shifts
 
     # Mean reversion: pull ratings toward league average each round
     league_mean <- mean(torp_vec)
