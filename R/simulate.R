@@ -228,13 +228,14 @@ process_games_dt <- function(sim_teams, sim_games, round_num,
   )]
 
   # Update team ratings: direct vector assignment avoids join overhead
+  # (home gains when it beats the expected margin — matches finals_sim.R)
   home_idx <- match(sim_games$home_team, sim_teams$team)
   away_idx <- match(sim_games$away_team, sim_teams$team)
   shifts <- sim_games$torp_shift
   data.table::set(sim_teams, i = home_idx, j = "torp",
-                  value = sim_teams$torp[home_idx] - shifts)
+                  value = sim_teams$torp[home_idx] + shifts)
   data.table::set(sim_teams, i = away_idx, j = "torp",
-                  value = sim_teams$torp[away_idx] + shifts)
+                  value = sim_teams$torp[away_idx] - shifts)
 
   # Mean reversion: pull ratings toward league average each round
   league_mean <- mean(sim_teams$torp)
