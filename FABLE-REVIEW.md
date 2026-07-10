@@ -16,11 +16,17 @@
 
 - Pipeline robustness pass (completed late in the session, findings in Section 7): `torp/data-raw/01-data/daily_release.R`, `release_data.R`, `03-ratings/run_ratings_pipeline.R`, `02-models/build_match_predictions.R`, `torpdata/scripts/build_blog_data.R`, all GHA workflow YAMLs in torp + torpdata, torpmodels `*_run.R` training wrappers.
 
-**NOT covered (resume here in a follow-up review):**
-- torpmodels `data-raw/` training script *internals* (only pipeline coupling/wrappers reviewed).
-- `afl_api.R` endpoint/auth correctness (only silent-failure patterns reviewed).
-- Empirical verification of C1 (simulation sign) — code-level confirmed, not run.
+**Covered in the 2026-07-10 follow-up review (Section 9):**
+- torpmodels `data-raw/` training script *internals*, code-correctness only (methodology is FABLE-METHODOLOGY.md's remit): `01-ep-model/` (train, run wrapper, live v2), `02-wp-model/` (train, run wrapper, cv_ep, validate_cv_ep_wp), `03-shot-model/` (train + wrapper), `04-match-model/` (train_match_models, eval_squiggle_rank), `05-live-wp-model/` (chain v4, lookup GAM), `convert_rda_to_rds.R`.
+- `afl_api.R` endpoint/auth correctness — full read, plus the `get_token()`/`access_api()` layer in `scraper.R:160-300`.
+- Empirical verification of C1 — **run 2026-07-10 on the fixed code, passed** (see §9.1).
 - `rebuild_everything.R` / `rebuild_all_release_data.R` internals.
+
+**Still NOT covered:**
+- torpmodels `data-raw/debug/` scratch scripts (per torpmodels CLAUDE.md: not part of the pipeline).
+- Superseded/experimental live scripts (`train_ep_model_live.R` v1, `train_live_wp_chain.R`/`_v2`/`_v3`, `train_live_wp_xgb.R`) — red-flag grep skim only.
+- Worker/browser-side inference consuming the live JSON exports (`inthegame-blog/worker/src/ep-model.js`, win-prob.js) — base_score/margin-accumulation correctness of the consumers is unverified.
+- `torp/data-raw/06-stat-ratings/` script internals (only their orchestration from `rebuild_everything.R` Phase 7 reviewed).
 
 Severity counts: **5 Critical, 14 High, 21 Medium, 12 Low** (52 findings; Sections 1–5 = package/tests, Section 7 = pipeline/workflows). Quick wins are tagged `[QUICK WIN]` — each is <30 min for a Sonnet-class session.
 
@@ -339,3 +345,112 @@ The core write pattern — re-fetch the whole current round, drop that round fro
 Additional pipeline quick wins: P5 (concurrency block on lineup-predictions), P6 (piggyback cache duration + backoff), P7 (`sys.nframe()` guard on build_match_predictions.R), P11 (fail on non-empty failures list), P14 (hoist `all_pstats`), P17 (NA-round dedupe), P19 (fix/delete stale template), P20 (WORKFLOW_PAT for torpmodels fetch). Plus P2's `cancel-in-progress: false` — a 2-line YAML change with Critical-level payoff.
 
 Deeper refactors (do NOT hand to a cheap model without design review): C2/P1/H1 (read-modify-write protocol + row-count floors for all release upserts), P3 (verify-gate redesign + failure propagation), P4/P9 (release-state-based new-game detection), H2 (strict-mode loader failure semantics), H3 (skip-marker policy), H6 (loader API standardisation), H8 (move daily-release logic into `R/`), P13 (atomic R2 publish via manifest), P16 (model version stamping), M8 (O(n²) → running sums/non-equi joins), M14/T1-T6 (test infrastructure with mocked fixtures).
+
+---
+
+## 9. Follow-up review (2026-07-10)
+
+**Reviewer:** Claude Fable 5. **Scope:** exactly the four items deferred by the 2026-07-08 review (see updated coverage disclosure). Training scripts were reviewed for *code correctness only* — data-handling bugs, silent failures, wrong joins, stale-cache traps — not modelling design (that's FABLE-METHODOLOGY.md). Findings numbered F1+ to avoid colliding with Sections 1-7.
+
+Severity counts for this section: **0 Critical, 4 High, 6 Medium, 10 Low** (20 findings), plus one empirical verification closing C1.
+
+### 9.1 C1 empirical verification — PASSED (on the fixed code)
+
+C1's sign inversion was fixed after the first review in commits `b2fa0d8` (simulate_season) and `6376abe` (process_games_dt), and regression tests now exist at `C:\dev\torpverse\torp\tests\testthat\test-sim-helpers.R:115-176`. I independently ran a synthetic, network-free experiment (R 4.5.1, `devtools::load_all` of dev torp, 2026-07-10):
+
+1. **Deterministic `process_games_dt`**: teams A/B at torp 0, `injury_sd = 0`, pre-set `result = 60` (home blowout vs estimate = `SIM_HOME_ADVANTAGE` = 6) → A `+5.346`, B `-5.346`. Over-performer **rises**. ✔
+2. **`simulate_season` single game** (seed 42): simulated result 44, estimate 6.00 → Δ(A) = `+3.762`; `sign(Δ) == sign(result − estimate)`. ✔
+3. **50 rounds × 4 teams** (seed 7): correlation between each team's cumulative over-performance `Σ(result − estimate)` and final rating = **0.994**. ✔
+
+Conclusion: regular-season and finals simulation now share the Elo-correct update direction. C1 can be considered closed. (Experiment script: 3 synthetic data.tables + the three assertions above; the committed regression tests in `test-sim-helpers.R` supersede it.)
+
+Also verified fixed in passing (quick-win commit `9bce523` and neighbours): H5 (`save_to_release()` now calls `invalidate_release_cache()`, `R/load_data.R:64`), skip markers now 404-only (`R/load_engines.R:227-234, 304-308`), P6 retry now matches 404|422 (`R/load_data.R:46`), L3 (`torp_team_abbr`/`torp_team_full` now warn, `R/afl_api.R:958-961, 980-983`).
+
+### 9.2 High
+
+**F1. `rebuild_everything.R` trains the WP model with a stale 15-length monotone-constraint vector against 18 features — silently mis-constrained (empirically confirmed)**
+**Files:** `C:\dev\torpverse\torp\data-raw\rebuild_everything.R:470` (`"(0,0,0,1,1,1,0,1,0,0,0,0,0,0,0)"`, 15 entries) vs `C:\dev\torpverse\torp\R\clean_features.R:252-261` (`select_wp_model_vars()` returns **18** columns) and the canonical scripts' 18-length vector (`torpmodels/data-raw/02-wp-model/train_wp_model.R:53`, `train_wp_model_cv_ep.R:154`).
+I tested this locally: **xgboost 3.2.1 trains without error or warning** when `monotone_constraints` is shorter than the feature count. In `select_wp_model_vars()` order, the rebuild's `+1`s land on `home` (pos 4), `points_diff` (5), `xpoints_diff` (6) and `time_left_scaler` (8) — while the intended monotone features `pos_lead_prob` (7), `diff_time_ratio` (9), `score_urgency` (10) are unconstrained. The rebuild also uses `eta = 0.1` vs the canonical `0.025`, `na.action = na.pass` in `model.matrix` (`:388, :474`) where the canonical scripts omit it, and a WP prep pipeline that inserts `clean_shots_data() |> add_shot_vars()` (`:458-462`) where `train_wp_model.R:41-43` does not. A `--models-only` rebuild therefore uploads a *differently-specified* `wp_model.rds` than the torpmodels scripts produce, with wrong monotonicity, silently.
+**Fix:** delete the inlined Phase 4a/4b training and `source()` the canonical torpmodels scripts (as Phase 4d already does), or generate the constraint string programmatically from `names(select_wp_model_vars(...))`. Never hand-maintain a positional constraint vector in two places.
+
+**F2. `rebuild_everything.R` "nuclear option" silently starts at Phase 6 — documented usage never rescrapes or retrains**
+**File:** `C:\dev\torpverse\torp\data-raw\rebuild_everything.R:79` (`start_from <- 6L`), `:86-90`, header usage `:9-11`.
+Non-interactively, `Rscript rebuild_everything.R 2021 2025` (the documented full-rebuild invocation) runs Phases 6-10 only: `start_from = 6` force-sets `skip_api/skip_chains/skip_pbp/skip_models` (`:140-143`). Interactively the prompt displays `"Start from phase [1]: "` but pressing Enter keeps 6 — the shown default is a lie. Either way the operator believes they re-scraped and retrained; in fact derived data was rebuilt from the *existing* releases. Deceptive-success failure mode.
+**Fix:** default `start_from <- 1L`, or print a loud banner of skipped phases and make the prompt default honest. `[QUICK WIN]`
+
+**F3. `train_shot_model.R` uploads the shot model but not its companion `shot_player_df` — released pair goes out of sync**
+**File:** `C:\dev\torpverse\torpmodels\data-raw\03-shot-model\train_shot_model.R:88-102` (saves `shot_player_df.rds` locally at `:89-90`; the `pb_upload` block at `:94-102` uploads only `shot_ocat_mdl.rds`). The `_run.R` wrapper sources this script, so it inherits the gap. `rebuild_everything.R:568-574` uploads both — so the pair is only coherent when retrained via the rebuild path.
+The GAM's `player_id_shot` random-effect levels and the released name-mapping (`load_torp_model("shot_player_df")`) drift apart after any retrain via the torpmodels script: xG/shot attributions join against the wrong or missing player set with no error.
+**Fix:** add a second `pb_upload(player_path, ...)` in the same `if` block. `[QUICK WIN]`
+
+**F4. Three EP/WP training entry points, three different training windows, one artifact name — prod model provenance is unknowable**
+**Files:** `torpmodels/data-raw/01-ep-model/train_ep_model.R:30` (`load_chains(TRUE, TRUE)` — all seasons *including the in-progress one*), `train_ep_model_run.R:19` (`load_chains(2021:2025)` — hardcoded, already excludes 2026 and will silently rot), `torp/data-raw/rebuild_everything.R:180-184` (`2021:(current-1)`). Same for WP (`train_wp_model.R:29` vs `train_wp_model_run.R:16`). All save to the same `ep_model.rds`/`wp_model.rds` on `core-models` with zero metadata.
+Extends P16: not just torp-version skew, but *training-window* skew — whichever script ran last defines production EP/WP, and nothing records which one it was. The wrapper's hardcoded `2021:2025` is the worst offender: torpmodels CLAUDE.md recommends the wrappers, so following the docs trains on a frozen window forever.
+**Fix:** single parameterised training function (window as argument, default `2021:(current-1)`); stamp `attr(model, "torp_meta") <- list(seasons, torp_sha, trained_at)` before `saveRDS` and print it at load (same mechanism as P16's fix).
+
+### 9.3 Medium
+
+**F5. `rebuild_everything.R` Phase 4d's injected config is dead on arrival — `train_match_models.R` clobbers `UPLOAD_TO_GITHUB` and never reads `HOLDOUT_SEASON`**
+**Files:** `C:\dev\torpverse\torp\data-raw\rebuild_everything.R:593-598` injects `match_env$HOLDOUT_SEASON <- Inf; match_env$UPLOAD_TO_GITHUB <- TRUE` then sources the script in `match_env` — but `torpmodels/data-raw/04-match-model/train_match_models.R:14` unconditionally reassigns `UPLOAD_TO_GITHUB <- FALSE` (evaluated in `match_env`, overwriting the injection), and `HOLDOUT_SEASON` appears nowhere in the script (it was replaced by `TEST_SEASONS <- 2025:2026` at `:13`).
+Net effect: the rebuild's match-GAM phase trains, evaluates ~48 rolling rounds (slow), saves locally, and **never uploads** — while reporting success. Mitigated because the daily predictions pipeline retrains and uploads `match_gams.rds` anyway, but the rebuild's stated intent silently fails, and torpmodels `CLAUDE.md:32` documents a `HOLDOUT_SEASON` knob that no longer exists.
+**Fix:** in the script, guard the default: `if (!exists("UPLOAD_TO_GITHUB", inherits = FALSE)) UPLOAD_TO_GITHUB <- FALSE` (same for `TEST_SEASONS`); update both docs. `[QUICK WIN]`
+
+**F6. `train_ep_model_live_v2.R` runs brittle hardcoded diagnostics *before* saving — a failed comparison discards 30+ min of training**
+**File:** `C:\dev\torpverse\torpmodels\data-raw\01-ep-model\train_ep_model_live_v2.R:139` (`dt[season == 2026 & round_number == 6 & grepl("Carl", home_team_name)][1, match_id]` — one specific Carlton match), `:157-159` (`readRDS` of a hardcoded absolute path to a local `ep_model.rds`), vs the save/JSON-export at `:210-233`.
+Section 7 (Daicos comparison) executes before Section 8 (persist + export). If that match is absent from chains, the local full model file is missing, or `cor()` hits an empty subset, the script errors *after* both CV runs and *before* anything is written — the trained live model is lost. The exported artifact is what the Cloudflare Worker consumes, so a blocked export path means a silent failure to refresh live EP.
+**Fix:** move Section 8 before Section 7, or wrap the diagnostics in `tryCatch` + existence guards.
+
+**F7. `eval_squiggle_rank.R` mixes 2025 rolling predictions into a 2026 Squiggle leaderboard — rankings not comparable**
+**File:** `C:\dev\torpverse\torpmodels\data-raw\04-match-model\eval_squiggle_rank.R:80-96`. `train_match_models.R` produces `gam_preds` etc. for `TEST_SEASONS <- 2025:2026`, but `.rolling_to_sq()` keeps only `(source, round, hteam_norm, ...)` — no season column, no filter to `TEST_YEAR`. `build_board()` filters by round only (`:121`), so torp variants' `n` and summed `bits_total` include 2025 rounds 1-10 while every Squiggle source has 2026 rows only — roughly doubling the torp sample and making the bits ranking (a sum, not a mean) meaningless. Also `:151-155` hardcodes buckets to R1-10, silently discarding later rounds as the season progresses.
+**Fix:** `filter(season == TEST_YEAR)` in `.rolling_to_sq()`; derive the round cap from `max(.done_games$round)`.
+
+**F8. Rebuild chains phase uploads `_all` files with silently missing rounds — full-rebuild variant of P1**
+**Files:** `C:\dev\torpverse\torp\data-raw\01-data\rebuild_all_release_data.R:181-200` and `rebuild_everything.R:290-307`. A per-round `get_match_chains()` failure is downgraded to `cli_warn` + `NULL`, then the season's `chains_data_{season}_all` is uploaded anyway — **replacing** the previous complete release asset with one missing that round. Unlike the daily pipeline (which only merges the current round), the rebuild overwrites whole-season history, so one 30-second API blip during a backfill permanently drops a round from chains (and then PBP, player_game, ratings) until someone notices and re-runs.
+**Fix:** count distinct rounds fetched vs requested and abort the season's upload on a shortfall (reuse the row-count-floor guard proposed in P1); at minimum compare `nrow(chains)` against the existing release asset before overwrite.
+
+**F9. `.afl_all_comp_seasons()` falls back to "first competition" without warning — one schema drift poisons every season-ID lookup for the session**
+**File:** `C:\dev\torpverse\torp\R\afl_api.R:324-328`. If the competitions response loses its `code` column (or the codes change), `comps[1, ]` is silently selected — which may be AFLW or any other competition — and the result is cached for the session (`:356`). Every `get_afl_fixtures()`/`get_afl_player_details()` call then resolves season IDs against the wrong competition, producing plausible-but-wrong data rather than an error.
+**Fix:** `cli_warn` naming the fallback competition; verify `grepl("AFL", aflm$name[1])` before accepting; don't cache a fallback result. `[QUICK WIN]`
+
+**F10. `score_ep()` in the live-EP script reshapes predictions with `byrow = FALSE` — scrambles class probabilities under pre-3.x xgboost**
+**File:** `C:\dev\torpverse\torpmodels\data-raw\01-ep-model\train_ep_model_live_v2.R:144-148`: `matrix(p, ncol = 5, byrow = FALSE)`. Correct only when `predict()` already returns a matrix (xgboost ≥ 3.x; refilling column-major reproduces it). Under older xgboost the return is a flat **row-major** vector and `byrow = FALSE` interleaves classes across rows. Every other site handles this correctly (`is.matrix()` guard + `byrow = TRUE`: `rebuild_everything.R:442-446`, `train_wp_model_cv_ep.R:114-118`, `validate_cv_ep_wp.R:69-73`). Affects only the printed v1/v2/full comparison, not the exported model — but that comparison is the evidence used to promote v2.
+**Fix:** copy the `is.matrix()` guard. `[QUICK WIN]`
+
+### 9.4 Low
+
+**F11.** `.post_process_squad_result()` duplicate-name repair is order-dependent — `C:\dev\torpverse\torp\R\afl_api.R:132-138`. When a bare column (e.g. `foo`) precedes its `player.foo` sibling, both end up named `foo` (the `new_names != names(result)` test is FALSE for the unchanged later duplicate) and `tibble::as_tibble()` at `:171` aborts on `check_unique`. Repair with `make.unique()` or `vctrs::vec_as_names(..., repair = "unique")` instead.
+
+**F12.** `get_afl_lineups()` parses season by fixed position — `afl_api.R:776`: `as.numeric(substr(result$providerId, 5, 8))`. M9 family, new site missed by the first review; reuse the anchored-regex extractor. `[QUICK WIN]`
+
+**F13.** `.parse_match_stats()` drops flatten-induced duplicate columns keeping the *first* occurrence, silently — `afl_api.R:471-475`. If the wanted variant sorts second (e.g. `teamId` at player vs team level), the wrong one wins with no message.
+
+**F14.** `.parse_match_roster()` distinguishes "position groups" from "player rows" via `nrow(positions) <= 10` — `afl_api.R:386`. A future 11-group response silently flips the parse mode. Test for the nested `players` list-column alone, warn when ambiguous.
+
+**F15.** `rebuild_all_release_data.R` PSR coefficient fallback path omits `torp_root` — `:312-316`: `file.path("data-raw", "cache-stat-ratings", "psr_coefficients.csv")` resolves against cwd, so running from `torpverse/` (the documented invocation) hits the "not found - skipping PSR" branch even when the file exists. Prefix with `torp_root`. `[QUICK WIN]`
+
+**F16.** `rebuild_everything.R` `--training-seasons` parsing grabs *all* subsequent non-flag args — `:173-184`. Positional season args placed after the flag are swallowed into the training range; a bare flag with no values yields `NA:NA` → crash at `:184`. Take exactly two values and validate.
+
+**F17.** `safe_run()`'s lazily-evaluated `expr` writes phase objects into the global env — `rebuild_everything.R:208-220`. Phase 4b (`:435-462`) consumes `model_data_epv`/`ep_model` created by Phase 4a's block; in an interactive session with leftovers from a previous run, a failed Phase 4a lets 4b silently train WP against a *stale* EP model instead of erroring. Guard 4b with a freshness check (e.g. `exists(..., inherits = FALSE)` on a sentinel set by 4a's success path).
+
+**F18.** `train_live_wp_model.R` output dir assumes cwd = script dir — `:149`: `file.path(dirname(dirname(getwd())), "inst", "models", "core")`. Run from the torpmodels root (the convention every sibling script assumes via `file.path(getwd(), "inst", ...)`), it silently creates and writes to `C:\dev\inst\models\core`. The blog copy at `:200-202` still succeeds, masking the misplacement. Standardise output-path resolution across the training scripts. `[QUICK WIN]`
+
+**F19.** `get_afl_results()` score-based fallback counts in-progress games as completed — `afl_api.R:679-688`: when `status` is absent, `home_score > 0` admits live games (and excludes a genuinely scoreless concluded side). Fallback-only path; add a `utcStartTime`-based guard or warn louder.
+
+**F20.** `train_live_wp_model.R` infers draws from the last PBP row — `:52-67`: `last(points_diff) == 0` per match relabels *all* rows of that match as `label_wp = 0.5`. `points_diff` is possession-POV and the final recorded chain action isn't guaranteed to reflect the final score, so a match whose last action happened at level scores is mislabeled wholesale. Derive draws from `home_score == away_score` (already required columns in the v4 script) instead.
+
+### 9.5 afl_api.R endpoint/auth verification (no finding — recorded for coverage)
+
+`get_token()` (`scraper.R:174-189`): unauthenticated POST to `{CFS}/WMCTok`, 5-min session cache, aborts loudly on HTTP error or empty token — correct. `access_api()` and both curl-pool paths send the same `x-media-mis-token` header; the public `aflapi.afl.com.au/afl/v2/` endpoints (`squads`, `competitions`, `compseasons`, `matches`) correctly send *no* auth header. Endpoint templates verified mutually consistent: `fixturesAndResults/season/CD_S{yyyy}014/round/CD_R{yyyy}014{rr}`, `matchRoster/full/{match_id}`, `playerStats/match/{match_id}`, `squads?teamId={id}&compSeasonId={id}`. The hardcoded `014` comp code (AFLM) is the same convention risk as M9. Batch fetches acquire one token per batch (fine at ~200 requests/batch; token expiry mid-batch degrades into H7's silent-partial problem, already filed). No secrets in code.
+
+### 9.6 Follow-up quick-win checklist
+
+1. F2 — honest `start_from` default/prompt in `rebuild_everything.R:79-90`.
+2. F3 — upload `shot_player_df.rds` in `train_shot_model.R:94-102`.
+3. F5 — `exists()` guards for `UPLOAD_TO_GITHUB`/`TEST_SEASONS` in `train_match_models.R:13-14`; fix `HOLDOUT_SEASON` references in rebuild + both CLAUDE.mds.
+4. F9 — warn + verify on the `comps[1, ]` fallback (`afl_api.R:324-328`).
+5. F10 — `is.matrix()` guard in `score_ep()` (`train_ep_model_live_v2.R:144-148`).
+6. F12 — regex season extractor in `get_afl_lineups()` (`afl_api.R:776`).
+7. F15 — `torp_root` prefix on the PSR fallback path (`rebuild_all_release_data.R:312-316`).
+8. F18 — standardise output dir in `train_live_wp_model.R:149`.
+
+Deeper work (design review first): F1/F4 (single-source training definitions + model metadata stamping — fold into P16's fix), F6 (persist-before-diagnose restructure), F7 (season-aware Squiggle eval), F8 (round-coverage floor for rebuild uploads — fold into P1's guard), F17 (phase-dependency contract in `rebuild_everything.R`).
