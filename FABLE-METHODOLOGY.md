@@ -478,3 +478,30 @@ usability without retraining, and would let WPA be re-evaluated for the TORP ble
 
 *Review completed 2026-07-10 by Fable 5 (methodology pass). Companion doc:
 `torp/FABLE-REVIEW.md` (pipeline/caching/release). No code was modified.*
+
+---
+
+## Adversarial verification (2026-07-10)
+
+Each Critical finding was independently re-examined by a fresh-context adversarial verifier instructed to refute it. Verdicts:
+
+### C1 (EP→WP leak) — PARTIALLY CONFIRMED; **downgrade from Critical**. Confidence acting on it: 55/100
+- Leak structure confirmed at every step: 3 of 18 WP features are EP-derived (`xpoints_diff`, `pos_lead_prob`, `diff_time_ratio`); debug/OOS scripts all consumed the same leaked `wp_compare_base.rds` cache.
+- **Factual error in the finding**: the leak WAS measured. torpmodels commit `7e27bdc` (2026-03-26, the commit adding `validate_cv_ep_wp.R`) records "0.01% difference (0.456241 vs 0.456275 logloss)" — ~150-250x smaller than the in-code "~1-2%" claim. EP's regularization (min_child_weight=25) prevents meaningful memorization. The review searched for log files but not git history.
+- The leak→steepness mechanism is largely redundant with the review's own High findings: `time_left_scaler = exp(pmin(elapsed/1200,4))` saturating at ~54.6 under a +1 monotone constraint with min_child_weight=1 produces steep close/late gradients on its own.
+- Action guidance: temporal holdout well justified (~85) — but by H1, not the leak. CV-EP retrain is cheap hygiene (~30) that recorded evidence says will not move metrics.
+
+### C2 (CV-EP fix not shipped) — CONFIRMED and strengthened. Confidence: 98/100
+- **Smoking gun (mtime-independent)**: the shipped `wp_model.rds`'s stored params and training call use `params_wp` / `full_train_wp` / `optimal_rounds_wp` — variable names that exist only in `torp/data-raw/rebuild_everything.R`. eta=0.1 (vs the documented 0.025), subsample 0.85, and the **15-entry monotone constraint string misaligned against 18 features** are all present in the production artifact (47 trees, consistent with eta=0.1).
+- Mechanism correction: the 2026-06-18 artifact came from rebuild_everything.R phases 4a/4b (in-memory EP→WP, hence the 56s gap) with `--skip-model-upload`, batch-uploaded 11:33:45Z — not from `train_wp_model.R`. The docs are doubly wrong: no documented script trained the shipped model.
+- CV-EP WAS shipped once (2026-03-26, per commit and a settings.local.json remnant), then silently overwritten by the June rebuild.
+- Net effect: follow-up finding F1 (misaligned constraints) is proven present in the LIVE model, not just latent in the rebuild script. This is now the sharpest defect in the WP family.
+
+### C3 (live WP v4 train/serve skew) — CONFIRMED mechanically; materiality tempered. Confidence: 70/100
+- (a) Confirmed: trained with core 19-feature EP `exp_pts` (in-sample), served with live EP v2 (**14 features — citation fix, not 13**). No exported core values on the live path.
+- (b) The `exp_pts=0` fallback (wp-model.js:363) fires on dozens of rows per match (all non-EPV_RELEVANT rows). BUT all current WPA consumers filter to rows with `player_credit`/`delta_ep`, which only exist on rows with real live-EP values — so the fallback is a landmine for future consumers, not a live distortion today. The match-page WP worm uses the separate browser GAM, not worker wp.
+- (c) The log numbers are real, but "tied with possession = 39.5%" overstates: in-distribution xm=0-with-possession is a below-average state (mean xmargin +1.42). Honest estimate: ~10-13pt miscalibration at tied late centre bounces and a ~2x-too-steep gradient — a real defect, not the caricature.
+- (d) Confirmed and worse: no AFL parity harness; `worker/test-ep-model.mjs` is validation theater (not in CI, feeds v1 features, compares nothing to R).
+- Fair summary: material where it matters most (close/late, where per-event WPA is most scrutinized), muted elsewhere.
+
+**Verification-pass conclusion**: the artifact-plumbing defects (C2/F1) hardened; the statistical-leak narrative (C1) softened to minor. Priority order for fixes: (1) retrain+ship WP from a canonical script with correct 18-entry constraints and eta, (2) temporal holdout + close/late calibration gates, (3) AFL worker parity harness, (4) CV-EP as hygiene.
