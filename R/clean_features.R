@@ -221,6 +221,31 @@ clean_model_data_wp <- function(df) {
     )
 }
 
+# Order is load-bearing: xgboost monotone constraints and the serving path
+# (get_epv_preds/get_wp_preds -> model.matrix) both consume this order.
+EPV_MODEL_FEATURES <- c(
+  "goal_x", "y", "lag_goal_x", "lag_goal_x5", "lag_y",
+  "period_seconds", "period", "play_type_handball", "play_type_kick",
+  "play_type_reception", "phase_of_play_handball_received",
+  "phase_of_play_hard_ball", "phase_of_play_loose_ball",
+  "phase_of_play_set_shot", "shot_row", "speed5", "home",
+  "est_qtr_remaining", "est_match_remaining"
+)
+
+WP_MODEL_FEATURES <- c(
+  "est_match_elapsed", "est_match_remaining", "shot_row", "home", "points_diff",
+  "xpoints_diff", "pos_lead_prob", "time_left_scaler", "diff_time_ratio", "score_urgency",
+  "goal_x",
+  "play_type_handball", "play_type_kick", "play_type_reception",
+  "phase_of_play_handball_received", "phase_of_play_hard_ball",
+  "phase_of_play_loose_ball", "phase_of_play_set_shot"
+)
+
+# Monotone-increasing WP features, BY NAME (never by position).
+WP_MONOTONE_INCREASING <- c(
+  "points_diff", "xpoints_diff", "pos_lead_prob", "diff_time_ratio", "score_urgency"
+)
+
 #' Select EPV Model Variables
 #'
 #' @param df A dataframe containing cleaned play-by-play data.
@@ -228,20 +253,8 @@ clean_model_data_wp <- function(df) {
 #' @return A dataframe with selected variables for EPV modeling.
 #' @keywords internal
 select_epv_model_vars <- function(df, label = FALSE) {
-  base_vars <- c(
-    "goal_x", "y", "lag_goal_x", "lag_goal_x5", "lag_y",
-    "period_seconds", "period", "play_type_handball", "play_type_kick",
-    "play_type_reception", "phase_of_play_handball_received",
-    "phase_of_play_hard_ball", "phase_of_play_loose_ball",
-    "phase_of_play_set_shot", "shot_row", "speed5", "home",
-    "est_qtr_remaining", "est_match_remaining"
-  )
-  
-  if (label) {
-    base_vars <- c(base_vars, "label_ep")
-  }
-  
-  df |> dplyr::select(dplyr::all_of(base_vars))
+  vars <- if (label) c(EPV_MODEL_FEATURES, "label_ep") else EPV_MODEL_FEATURES
+  df |> dplyr::select(dplyr::all_of(vars))
 }
 
 #' Select WP Model Variables
@@ -250,14 +263,19 @@ select_epv_model_vars <- function(df, label = FALSE) {
 #' @return A dataframe with selected variables for WP modeling.
 #' @keywords internal
 select_wp_model_vars <- function(df) {
-  df |>
-    dplyr::select(
-      "est_match_elapsed", "est_match_remaining", "shot_row", "home", "points_diff",
-      "xpoints_diff", "pos_lead_prob", "time_left_scaler", "diff_time_ratio", "score_urgency",
-      "goal_x",
-      "play_type_handball", "play_type_kick", "play_type_reception", "phase_of_play_handball_received",
-      "phase_of_play_hard_ball", "phase_of_play_loose_ball", "phase_of_play_set_shot"
-    )
+  df |> dplyr::select(dplyr::all_of(WP_MODEL_FEATURES))
+}
+
+#' Derive the xgboost monotone-constraint string for the WP model.
+#' Length and positions always track WP_MODEL_FEATURES — F1 cannot recur.
+#' @keywords internal
+wp_monotone_constraints <- function() {
+  missing <- setdiff(WP_MONOTONE_INCREASING, WP_MODEL_FEATURES)
+  if (length(missing) > 0) {
+    cli::cli_abort("WP_MONOTONE_INCREASING names not in WP_MODEL_FEATURES: {missing}")
+  }
+  paste0("(", paste(as.integer(WP_MODEL_FEATURES %in% WP_MONOTONE_INCREASING),
+                    collapse = ","), ")")
 }
 
 #' Select AFL Match Prediction Model Variables
