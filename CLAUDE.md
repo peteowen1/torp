@@ -4,17 +4,6 @@ Core AFL analytics package: EP/WP/xG models, TORP/EPR/PSR player ratings, match 
 
 See [`ARCHITECTURE.md`](ARCHITECTURE.md) for full pipeline and module details. For the verse-level overview and cross-repo workflows, see `../CLAUDE.md`.
 
-## Development Commands
-
-```r
-devtools::load_all()                                  # Iterative dev
-devtools::document()                                  # Regenerate NAMESPACE + man/ from roxygen
-devtools::test()                                      # All tests
-testthat::test_file("tests/testthat/test-load_torp_data.R")  # Single test
-devtools::check()                                     # Full R CMD check
-pkgdown::build_site()                                 # Docs site
-```
-
 **WSL/Bash workaround**: `arrow` segfaults under Git Bash R. Run via PowerShell wrapper:
 ```bash
 powershell.exe -Command 'Rscript "path/to/script.R"'
@@ -144,3 +133,5 @@ Run a single file with `testthat::test_file("tests/testthat/test-NAME.R")`.
 | `daily-ratings-predictions.yml` | Repository dispatch (from torpdata) or manual | Compute ratings + match predictions, upload to `predictions` / `ratings-data` |
 | `test-package.yml` | Push/PR | R CMD check + coverage |
 | `pkgdown.yml` | Push to main | Deploy docs to GitHub Pages |
+
+`pre-game-data-update.yml.template` is an inactive template (`.template` suffix = not run by GitHub Actions); rename to drop the suffix to enable.
