@@ -26,6 +26,13 @@ library(piggyback)
 
 devtools::load_all()
 
+# versebus §1.5: pipeline entry points run strict + disable piggyback's
+# asset-list memoisation (torp P6) + clear negative-cache markers so a
+# previous run's transient failure can't suppress this run's re-check.
+Sys.setenv(VERSEBUS_STRICT = "1")
+Sys.setenv(piggyback_cache_duration = 1)
+clear_skip_markers()
+
 # Source daily_release.R into a local env to get update_player_stats() and
 # update_teams() without leaking .release_cache and other globals.
 .daily_release_env <- new.env(parent = globalenv())
@@ -332,17 +339,24 @@ if (nrow(torp_new) == 0 && length(failed_seasons) == 0) {
 }
 
 if (nrow(torp_new) > 0) {
-  if (!REBUILD_ALL_RATINGS) {
-    cli::cli_progress_step("Incremental update: loading existing ratings")
-    existing <- tryCatch(
-      load_torp_ratings(),
-      error = function(e) {
-        cli::cli_alert_danger("No existing ratings found, doing full build: {conditionMessage(e)}")
-        NULL
-      }
-    )
+  # Load existing full-history ratings unconditionally (needed both for the
+  # incremental upsert AND as a floor-guard reference when REBUILD_ALL_RATINGS
+  # is set). A transient read failure must never be treated as "no existing
+  # ratings" -- torp P1/P8: that collapses to overwriting full-history
+  # ratings-data with just the seasons computed this run.
+  existing <- tryCatch(
+    load_torp_ratings(),
+    vb_error_absent = function(e) NULL,
+    error = function(e) {
+      cli::cli_abort("Could not load existing torp_ratings ({conditionMessage(e)}) - aborting to avoid overwriting full-history ratings-data", parent = e)
+    }
+  )
+  if (!is.null(existing) && nrow(existing) == 0) existing <- NULL
 
-    if (!is.null(existing) && nrow(existing) > 0) {
+  if (!REBUILD_ALL_RATINGS) {
+    cli::cli_progress_step("Incremental update: upserting into existing ratings")
+
+    if (!is.null(existing)) {
       # Deduplicate both sides by row_id (keeps first occurrence)
       n_dup_existing <- sum(duplicated(existing$row_id))
       n_dup_new <- sum(duplicated(torp_new$row_id))
@@ -361,10 +375,27 @@ if (nrow(torp_new) > 0) {
       }
       cli::cli_inform("Upserted into existing: {nrow(torp_df_total)} total rows (was {nrow(existing)})")
     } else {
+      # Confirmed absent (first-ever publish) -- fresh build is legitimate.
+      is_absent <- tryCatch(
+        vb_confirm_absent(get_torp_data_repo(), "ratings-data", "torp_ratings.parquet"),
+        error = function(e) {
+          cli::cli_abort("Could not verify torp_ratings.parquet is absent before a fresh upload: {conditionMessage(e)}")
+        }
+      )
+      if (!isTRUE(is_absent)) {
+        cli::cli_abort("Refusing fresh ratings upload: torp_ratings.parquet was not confirmed absent from ratings-data.")
+      }
       torp_df_total <- torp_new
     }
   } else {
+    # REBUILD_ALL_RATINGS: torp_new is expected to already cover full history
+    # (SEASONS == TRUE). Floor-guard against the existing release regardless
+    # -- a shrink here means the just-computed "full" set is actually partial.
     torp_df_total <- torp_new
+  }
+
+  if (!is.null(existing)) {
+    vb_guard_accumulate(existing, torp_df_total, floor = 0.9)
   }
 
   # Blend PSR into ratings so the release has torp/psr/osr/dsr columns.
