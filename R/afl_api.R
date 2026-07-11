@@ -68,7 +68,14 @@
   curl::multi_run(pool = pool)
 
   n_ok <- length(ids) - n_failed - n_parse_errors
-  cli::cli_inform("Fetched {label} for {n_ok} of {length(ids)} match{?es}.")
+  if (n_ok < length(ids)) {
+    # torp H7: partial batch fetches (token expiry mid-batch, rate limiting)
+    # must not slip by as an inform-level byline -- this is the signal a
+    # caller like update_player_stats() needs to gate an upload on.
+    cli::cli_warn("Fetched {label} for {n_ok} of {length(ids)} match{?es}.")
+  } else {
+    cli::cli_inform("Fetched {label} for {n_ok} of {length(ids)} match{?es}.")
+  }
 
   out <- purrr::list_rbind(purrr::compact(results))
   if (is.null(out) || nrow(out) == 0) return(tibble::tibble())
