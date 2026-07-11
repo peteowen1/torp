@@ -795,9 +795,29 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
       cache_dir <- getOption("torpmodels.cache_dir",
                              file.path(tools::R_user_dir("torpmodels", "cache"), "models"))
 
+      # torpmodels is a Suggests, not a hard dependency (DESCRIPTION:48) --
+      # stamp provenance + update the manifest when available, but never let
+      # its absence break the daily run: fall back to an unstamped upload.
+      has_torpmodels <- requireNamespace("torpmodels", quietly = TRUE)
+      if (!has_torpmodels) {
+        cli::cli_warn("torpmodels not available -- uploading match_gams/match_xgb_pipeline without a provenance stamp")
+      }
+      match_seasons <- sort(unique(team_mdl_df$season.x))
+      match_seasons_range <- if (length(match_seasons) > 0) paste(range(match_seasons), collapse = "-") else NA_character_
+      uploaded_files <- character(0)
+
       gam_path <- file.path(tempdir(), "match_gams.rds")
       t0 <- proc.time()[["elapsed"]]
-      saveRDS(.strip_gam_models(gam_result$models), gam_path)
+      match_gams_out <- .strip_gam_models(gam_result$models)
+      if (has_torpmodels) {
+        gam_meta <- torpmodels:::build_model_meta(
+          "match_gams", match_seasons_range, list(), NA_character_,
+          n_matches = nrow(team_mdl_df) / 2,
+          extra = list(script = "run_predictions_pipeline")
+        )
+        match_gams_out <- torpmodels:::stamp_model_meta(match_gams_out, gam_meta)
+      }
+      saveRDS(match_gams_out, gam_path)
       t1 <- proc.time()[["elapsed"]]
       gam_size <- file.size(gam_path) / 1e6
       cli::cli_alert_info("match_gams saveRDS: {round(t1 - t0, 1)}s ({round(gam_size, 1)} MB)")
@@ -809,11 +829,21 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
         file.copy(gam_path, local_cache, overwrite = TRUE)
       }
       cli::cli_alert_success("Uploaded match_gams to torpmodels")
+      uploaded_files <- c(uploaded_files, "match_gams.rds")
 
       if (!is.null(xgb_result)) {
         xgb_path <- file.path(tempdir(), "match_xgb_pipeline.rds")
         t3 <- proc.time()[["elapsed"]]
-        saveRDS(xgb_result$models, xgb_path)
+        match_xgb_out <- xgb_result$models
+        if (has_torpmodels) {
+          xgb_meta <- torpmodels:::build_model_meta(
+            "match_xgb_pipeline", match_seasons_range, list(), NA_character_,
+            n_matches = nrow(team_mdl_df) / 2,
+            extra = list(script = "run_predictions_pipeline")
+          )
+          match_xgb_out <- torpmodels:::stamp_model_meta(match_xgb_out, xgb_meta)
+        }
+        saveRDS(match_xgb_out, xgb_path)
         t4 <- proc.time()[["elapsed"]]
         xgb_size <- file.size(xgb_path) / 1e6
         cli::cli_alert_info("match_xgb saveRDS: {round(t4 - t3, 1)}s ({round(xgb_size, 1)} MB)")
@@ -825,6 +855,11 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
           file.copy(xgb_path, local_cache_xgb, overwrite = TRUE)
         }
         cli::cli_alert_success("Uploaded match_xgb_pipeline to torpmodels")
+        uploaded_files <- c(uploaded_files, "match_xgb_pipeline.rds")
+      }
+
+      if (has_torpmodels) {
+        torpmodels::update_models_manifest(uploaded_files, tempdir(), "peteowen1/torpmodels", "core-models")
       }
     },
     error = function(e) {
