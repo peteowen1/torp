@@ -278,6 +278,117 @@ get_lineup_ratings <- function(season = NULL, round = NULL, match_id = NULL) {
 }
 
 
+#' Merge new-week predictions into the locked full-season predictions file
+#'
+#' Encapsulates torp C2's overwrite guard (ECOSYSTEM-FIX-PLAN.md T3): a
+#' transient read of the existing locked-predictions file (any error other
+#' than a confirmed-absent 404) aborts rather than being treated as "no
+#' existing file" -- that collapse is exactly what let one week's data
+#' silently replace a full season of locked history. A fresh, non-accumulating
+#' upload is only permitted after independently confirming via
+#' [vb_confirm_absent()] that the release asset really is absent. An
+#' accumulating merge is floor-guarded against a >10% shrink via
+#' [vb_guard_accumulate()].
+#'
+#' @param pred_file_name Base file name (no extension), e.g. "predictions_2026".
+#' @param season Season year.
+#' @param week_gms This run's freshly-computed predictions for `target_weeks`.
+#' @param team_mdl_df Full model data frame (used to find already-started matches).
+#' @param target_weeks Numeric vector of round numbers being (re)computed.
+#' @param completed_margins Data frame of match_id/.actual_margin for completed matches.
+#' @return The combined data frame to upload.
+#' @keywords internal
+.build_locked_predictions <- function(pred_file_name, season, week_gms, team_mdl_df,
+                                      target_weeks, completed_margins) {
+  pred_repo <- get_torp_data_repo()
+  existing <- tryCatch(
+    file_reader(pred_file_name, "predictions"),
+    vb_error_absent = function(e) NULL,
+    error = function(e) {
+      cli::cli_abort(c(
+        "Could not load existing locked predictions for {season} ({conditionMessage(e)}).",
+        "x" = "Refusing to upload -- this was not a confirmed-absent (404) error."
+      ), parent = e)
+    }
+  )
+
+  if (!is.null(existing) && nrow(existing) > 0) {
+    # Backward compat: existing predictions may use old providerId column
+    if (!"match_id" %in% names(existing) && "providerId" %in% names(existing)) {
+      data.table::setnames(existing, "providerId", "match_id")
+    }
+
+    # Backward compat: merge home_rating/away_rating/rating_diff -> home_epr/away_epr/epr_diff
+    old_to_new <- c(home_rating = "home_epr", away_rating = "away_epr", rating_diff = "epr_diff")
+    for (old_nm in names(old_to_new)) {
+      new_nm <- old_to_new[old_nm]
+      if (old_nm %in% names(existing)) {
+        if (new_nm %in% names(existing)) {
+          existing[[new_nm]] <- dplyr::coalesce(existing[[new_nm]], existing[[old_nm]])
+          existing[[old_nm]] <- NULL
+        } else {
+          names(existing)[names(existing) == old_nm] <- new_nm
+        }
+      }
+    }
+
+    n_backfilled <- sum(is.na(existing$margin) & existing$match_id %in% completed_margins$match_id)
+    if (n_backfilled > 0) {
+      existing <- existing |>
+        dplyr::left_join(completed_margins, by = "match_id") |>
+        dplyr::mutate(margin = dplyr::coalesce(margin, .actual_margin)) |>
+        dplyr::select(-.actual_margin)
+      cli::cli_alert_success("Backfilled {n_backfilled} match margin{?s} from results")
+    }
+
+    # Only replace predictions for games that haven't started yet
+    started_ids <- team_mdl_df |>
+      dplyr::filter(
+        season.x == season,
+        round_number.x %in% target_weeks,
+        team_type_fac.x == "home",
+        utc_dt <= Sys.time()
+      ) |>
+      dplyr::pull(match_id)
+
+    week_gms <- week_gms |>
+      dplyr::filter(!match_id %in% started_ids)
+
+    if (length(started_ids) > 0) {
+      cli::cli_alert_info("Keeping locked predictions for {length(started_ids)} already-started match{?es}")
+    }
+
+    combined <- existing |>
+      dplyr::ungroup() |>
+      dplyr::filter(!match_id %in% week_gms$match_id) |>
+      dplyr::bind_rows(dplyr::ungroup(week_gms)) |>
+      dplyr::arrange(week)
+
+    vb_guard_accumulate(existing, combined, floor = 0.9)
+  } else {
+    # existing is NULL only when file_reader() confirmed absence (404) above,
+    # or the file genuinely has 0 rows (loaded fine). Independently confirm
+    # the release asset really is absent before doing a fresh, non-accumulating
+    # upload -- this is the mandatory guard before any "start fresh" branch.
+    is_absent <- tryCatch(
+      vb_confirm_absent(pred_repo, "predictions", paste0(pred_file_name, ".parquet")),
+      error = function(e) {
+        cli::cli_abort("Could not verify {.val {pred_file_name}.parquet} is absent from the predictions release before a fresh upload: {conditionMessage(e)}")
+      }
+    )
+    if (!isTRUE(is_absent)) {
+      cli::cli_abort(c(
+        "Refusing fresh upload of {.val {pred_file_name}}: the file is present on the predictions release but was not readable as non-empty.",
+        "x" = "This should not happen without a prior error -- aborting rather than risk overwriting locked history."
+      ))
+    }
+    combined <- week_gms
+  }
+
+  combined
+}
+
+
 #' Builds team_mdl_df with injury-adjusted ratings, trains the 5-model sequential
 #' GAM pipeline, generates predictions for target weeks, and uploads to torpdata
 #' releases.
@@ -660,13 +771,6 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
 
   # --- Locked predictions: frozen at game start, never overwritten ---
   pred_file_name <- paste0("predictions_", season)
-  existing <- tryCatch(
-    file_reader(pred_file_name, "predictions"),
-    error = function(e) {
-      cli::cli_warn("Could not load existing predictions ({conditionMessage(e)}). Uploading current weeks only.")
-      NULL
-    }
-  )
 
   # Actual margins from completed matches (shared by locked preds + retrodictions)
   completed_margins <- team_mdl_df |>
@@ -674,60 +778,9 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
     dplyr::distinct(match_id, .keep_all = TRUE) |>
     dplyr::transmute(match_id, .actual_margin = score_diff)
 
-  if (!is.null(existing) && nrow(existing) > 0) {
-    # Backward compat: existing predictions may use old providerId column
-    if (!"match_id" %in% names(existing) && "providerId" %in% names(existing)) {
-      data.table::setnames(existing, "providerId", "match_id")
-    }
-
-    # Backward compat: merge home_rating/away_rating/rating_diff -> home_epr/away_epr/epr_diff
-    old_to_new <- c(home_rating = "home_epr", away_rating = "away_epr", rating_diff = "epr_diff")
-    for (old_nm in names(old_to_new)) {
-      new_nm <- old_to_new[old_nm]
-      if (old_nm %in% names(existing)) {
-        if (new_nm %in% names(existing)) {
-          existing[[new_nm]] <- dplyr::coalesce(existing[[new_nm]], existing[[old_nm]])
-          existing[[old_nm]] <- NULL
-        } else {
-          names(existing)[names(existing) == old_nm] <- new_nm
-        }
-      }
-    }
-
-    n_backfilled <- sum(is.na(existing$margin) & existing$match_id %in% completed_margins$match_id)
-    if (n_backfilled > 0) {
-      existing <- existing |>
-        dplyr::left_join(completed_margins, by = "match_id") |>
-        dplyr::mutate(margin = dplyr::coalesce(margin, .actual_margin)) |>
-        dplyr::select(-.actual_margin)
-      cli::cli_alert_success("Backfilled {n_backfilled} match margin{?s} from results")
-    }
-
-    # Only replace predictions for games that haven't started yet
-    started_ids <- team_mdl_df |>
-      dplyr::filter(
-        season.x == season,
-        round_number.x %in% target_weeks,
-        team_type_fac.x == "home",
-        utc_dt <= Sys.time()
-      ) |>
-      dplyr::pull(match_id)
-
-    week_gms <- week_gms |>
-      dplyr::filter(!match_id %in% started_ids)
-
-    if (length(started_ids) > 0) {
-      cli::cli_alert_info("Keeping locked predictions for {length(started_ids)} already-started match{?es}")
-    }
-
-    combined <- existing |>
-      dplyr::ungroup() |>
-      dplyr::filter(!match_id %in% week_gms$match_id) |>
-      dplyr::bind_rows(dplyr::ungroup(week_gms)) |>
-      dplyr::arrange(week)
-  } else {
-    combined <- week_gms
-  }
+  combined <- .build_locked_predictions(
+    pred_file_name, season, week_gms, team_mdl_df, target_weeks, completed_margins
+  )
 
   tryCatch(
     {
