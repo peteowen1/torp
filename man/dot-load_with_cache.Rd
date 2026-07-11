@@ -14,7 +14,8 @@
   columns = NULL,
   fetch_all_fn = NULL,
   use_disk_cache = FALSE,
-  refresh = FALSE
+  refresh = FALSE,
+  strict = isTRUE(Sys.getenv("VERSEBUS_STRICT") == "1")
 )
 }
 \arguments{
@@ -43,6 +44,12 @@ completed past seasons. Default is FALSE.}
 
 \item{refresh}{Logical. If TRUE, clears all caches and fetches fresh
 data from the API. Default is FALSE.}
+
+\item{strict}{Logical. If TRUE, abort when any requested season fails to
+fetch instead of silently returning a partial result. Defaults to
+\code{VERSEBUS_STRICT=1} (set by pipeline entry scripts); interactive
+sessions stay lenient. Regardless of \code{strict}, a result with any failed
+season is never written to the in-memory cache (torp H2).}
 }
 \value{
 A tibble.

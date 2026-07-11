@@ -15,7 +15,16 @@ file_reader(file_name, release_tag)
 A data frame read from the downloaded \code{.parquet} file.
 }
 \description{
-Downloads and reads a \code{.parquet} file from a GitHub release using the \code{piggyback} package.
+Downloads and reads a \code{.parquet} file from a GitHub release. Routes the
+download through \code{\link[=vb_download]{vb_download()}} (verified, atomic write). On any download
+failure, the error is independently reclassified via \code{\link[=vb_confirm_absent]{vb_confirm_absent()}}
+-- a real listing call -- rather than trusted from the raw piggyback error:
+only a positively-confirmed absence is re-signalled as \code{vb_error_absent},
+everything else (including listing failures) propagates as
+\code{vb_error_transient} (or the original error). This is the versebus
+404-vs-transient discipline (ECOSYSTEM-FIX-PLAN.md §1.3/§1.5) -- callers
+MUST NOT collapse a caught error here into "file doesn't exist" without
+checking its class first.
 }
 \examples{
 \dontrun{

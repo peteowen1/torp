@@ -16,4 +16,13 @@ Invisible NULL
 Writes a tiny \code{.skip} marker so future calls don't re-download a
 known-invalid file.
 }
+\details{
+Never marks a current-season (or year-unparseable) URL skippable (torp
+H3/H1): those files are actively upserted by the same pipeline that reads
+them, so a 404 today (round not yet published) becomes a false negative
+cache tomorrow, silently dropping the newest data for up to a day. Only
+historical files -- which never expire in \code{\link[=local_max_age_for_url]{local_max_age_for_url()}} and
+therefore can't heal via the normal freshness check -- get a marker at
+all, and it's capped at 3h in \code{\link[=is_download_skippable]{is_download_skippable()}}.
+}
 \keyword{internal}

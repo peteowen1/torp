@@ -4,7 +4,13 @@
 \alias{save_to_release}
 \title{Save a Data Frame to a GitHub Release via Piggyback}
 \usage{
-save_to_release(df, file_name, release_tag, also_csv = FALSE)
+save_to_release(
+  df,
+  file_name,
+  release_tag,
+  also_csv = FALSE,
+  prev_rows_floor = NULL
+)
 }
 \arguments{
 \item{df}{A data frame to save.}
@@ -14,6 +20,14 @@ save_to_release(df, file_name, release_tag, also_csv = FALSE)
 \item{release_tag}{The GitHub release tag to associate with the uploaded file.}
 
 \item{also_csv}{Logical. If TRUE, also upload a \code{.csv} copy alongside parquet.}
+
+\item{prev_rows_floor}{Optional numeric in (0, 1]. When set, aborts BEFORE
+uploading if \code{nrow(df)} is under this fraction of the row count recorded
+for this asset in the tag's \code{bus_manifest.json} (if any). Best-effort:
+a manifest read failure or absent manifest never blocks the upload --
+this is a secondary safety net, not the primary accumulate guard (use
+\code{\link[=vb_guard_accumulate]{vb_guard_accumulate()}} against the actually-loaded \code{existing} data for
+that).}
 }
 \value{
 No return value. Used for side effects (file upload).
