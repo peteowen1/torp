@@ -235,6 +235,7 @@ reference:
       - starts_with("prepare_shot")
       - starts_with("create_shot_model")
       - predict_shot_probabilities
+      - starts_with("vb_")
 
 footer:
   structure:
