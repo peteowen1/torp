@@ -14,6 +14,12 @@
 
 devtools::load_all()
 
+# versebus §1.5: pipeline entry points run strict + disable piggyback's
+# asset-list memoisation (torp P6) + clear negative-cache markers.
+Sys.setenv(VERSEBUS_STRICT = "1")
+Sys.setenv(piggyback_cache_duration = 1)
+clear_skip_markers()
+
 if (sys.nframe() == 0) {
   result <- run_predictions_pipeline()
   result$predictions %>% filter(season == get_afl_season(), round == get_afl_week('next'))
