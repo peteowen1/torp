@@ -74,7 +74,8 @@ Common loaders (see `?load_data` for the full list):
 
 ```
 01-data/        # Scraping + daily release (daily_release.R is the GHA entry point — calls run_daily_release())
-02-models/      # EP/WP/xG/shot training (not the live JSON exports — those live in torpmodels)
+02-models/      # match-prediction builders (build_match_predictions*.R, push_predictions_to_r2.R) —
+                #   EP/WP/shot training lives in torpmodels/data-raw/train_models.R, not here
 03-ratings/     # TORP/EPR/PSR computation
 04-analysis/    # Ad-hoc analysis
 05-validation/  # Cross-release sanity checks
@@ -103,7 +104,7 @@ Pass `refresh = TRUE` to bypass caches and re-fetch — only `load_player_stats(
 
 ## Live Model Exports (for inthegame-blog Worker)
 
-Live EP/WP/xG models are trained in **torpmodels** (`data-raw/01-ep-model/train_ep_model_live_v2.R`, etc.) and exported as JSON. Worker tree-walk lives in `inthegame-blog/worker/src/ep-model.js`. torp itself does not export these — `torp/scripts/live-model-export.R` only handles xG lookup grid generation.
+Live EP/WP/xG models are trained in **torpmodels** — one script per artifact: `data-raw/01-ep-model/train_ep_model_live_v2.R` (EP), `data-raw/05-live-wp-model/train_live_wp_chain_v4.R` and `train_live_wp_model.R` (WP) — and exported as JSON. Worker tree-walk lives in `inthegame-blog/worker/src/ep-model.js`. torp itself does not export these — `torp/scripts/live-model-export.R` only handles xG lookup grid generation.
 
 ## Gotchas
 
