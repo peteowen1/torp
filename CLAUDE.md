@@ -44,7 +44,7 @@ EPV_WEIGHT_DECAY_DAYS # 365 — PBP-level recency decay
 TOTAL_PRED_TOG        # 324L (18 teams * 18 players) — league centering fallback
 ```
 
-WPA is intentionally **not** folded into `torp_value` — surfaced as a parallel metric because the WP gradient is too steep in close/late situations.
+WPA is intentionally **not** folded into `torp_value` — surfaced as a parallel metric. (The original "WP gradient too steep in close/late" rationale was measured **false** in 2026-07: the WP family is actually *flat* there — see `FABLE-WP-EXPERIMENTS.md` §7. Decision 2026-07-11: exclusion stands until (a) a light recalibration layer fitted on recent-season OOS predictions ships, and (b) a temporal Q4/close slope release gate exists — the canonical model still runs slope ~1.14/1.26 on temporal holdout.)
 
 ## Data Loaders
 
