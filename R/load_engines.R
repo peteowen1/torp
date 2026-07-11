@@ -185,7 +185,8 @@ parquet_from_urls_parallel <- function(urls, use_cache = FALSE, max_age_days = 7
       curl::multi_download(urls_to_dl, destfiles = tmp_files),
       error = function(e) {
         if (nrow(local_dt) == 0) {
-          cli::cli_abort("Download failed and no local data available: {conditionMessage(e)}")
+          .vb_abort("Download failed and no local data available: {conditionMessage(e)}",
+                    "vb_error_transient", .envir = environment())
         }
         cli::cli_warn("Download failed (using local data only): {conditionMessage(e)}")
         NULL
@@ -194,6 +195,7 @@ parquet_from_urls_parallel <- function(urls, use_cache = FALSE, max_age_days = 7
 
     if (!is.null(dl)) {
       dl_parts <- list()
+      transient_failed <- character(0)
 
       for (j in seq_along(download_indices)) {
         idx <- download_indices[j]
@@ -225,15 +227,16 @@ parquet_from_urls_parallel <- function(urls, use_cache = FALSE, max_age_days = 7
           }, error = function(e) {
             cli::cli_warn("Failed to read downloaded file {.url {basename(urls[idx])}}: {conditionMessage(e)}")
             # Do NOT mark as skippable -- this was a read error, not a missing file (404)
+            transient_failed[[length(transient_failed) + 1L]] <<- urls[idx]
           })
         } else {
           # Only mark as skippable for HTTP 404, not transient errors
           status <- dl$status_code[j]
           if (!is.na(status) && status == 404) {
             mark_download_skippable(urls[idx])
-          }
-          if (!isTRUE(dl$success[j])) {
+          } else if (!isTRUE(dl$success[j])) {
             cli::cli_warn("Failed to download {.url {urls[idx]}}")
+            transient_failed <- c(transient_failed, urls[idx])
           }
         }
       }
@@ -242,6 +245,17 @@ parquet_from_urls_parallel <- function(urls, use_cache = FALSE, max_age_days = 7
 
       if (length(dl_parts) > 0) {
         dl_dt <- data.table::rbindlist(dl_parts, use.names = TRUE, fill = TRUE)
+      }
+
+      # torp H2: a non-404 download/read failure is ambiguous (transient),
+      # never "this file has zero rows". Raise rather than silently return
+      # the URLs that DID succeed -- callers must not cache a partial result.
+      if (length(transient_failed) > 0) {
+        .vb_abort(
+          "Failed to download {length(transient_failed)} file{?s} (non-404/transient): {.url {basename(transient_failed)}}",
+          "vb_error_transient",
+          .envir = environment()
+        )
       }
     }
   }
@@ -364,22 +378,25 @@ parquet_from_url <- function(url) {
 
   }, error = function(e) {
     error_msg <- conditionMessage(e)
-    result <- data.table::data.table()
 
     if (grepl("404|Not Found", error_msg, ignore.case = TRUE)) {
+      # Confirmed absent -- legitimate (e.g. a round not yet published).
+      # Empty frame here really does mean "nothing to load", not "unknown".
       cli::cli_warn("Data file not found at {.url {url}} - file may not exist for this season/round combination")
+      result <- data.table::data.table()
       attr(result, "skip_reason") <- "not_found"
-    } else if (grepl("timeout|timed out", error_msg, ignore.case = TRUE)) {
-      cli::cli_warn("Connection timeout while downloading from {.url {url}} - please try again")
-      attr(result, "skip_reason") <- "transient"
-    } else if (grepl("cannot open|connection", error_msg, ignore.case = TRUE)) {
-      cli::cli_warn("Failed to connect to {.url {url}} - check internet connection")
-      attr(result, "skip_reason") <- "transient"
-    } else {
-      cli::cli_warn("Failed to load data from {.url {url}}: {error_msg}")
-      attr(result, "skip_reason") <- "transient"
+      return(result)
     }
 
-    return(result)
+    # Any other failure (timeout, connection, unexpected) is ambiguous.
+    # torp H2/P1: never silently collapse this to an empty data.frame -- a
+    # caller mistaking "network blip" for "genuinely zero rows" is exactly
+    # what turns a transient GitHub hiccup into permanent data loss upstream
+    # (accumulator merges, in-memory caching of the hole). Raise instead.
+    .vb_abort(
+      "Failed to load data from {.url {url}}: {error_msg}",
+      "vb_error_transient",
+      .envir = environment()
+    )
   })
 }
