@@ -21,6 +21,13 @@ library(piggyback)
 
 devtools::load_all()
 
+# versebus §1.5: pipeline entry points run strict (abort on ambiguous loader
+# failures instead of silently computing against partial data) and disable
+# piggyback's asset-list memoisation so a just-uploaded file is never
+# invisible to a read later in the same run (torp P6).
+Sys.setenv(VERSEBUS_STRICT = "1")
+Sys.setenv(piggyback_cache_duration = 1)
+
 # Configuration ----
 
 #' Get TORP data repository name
@@ -200,13 +207,32 @@ update_season_chains <- function(season, round) {
 
   cli::cli_inform("Fetched {nrow(new_chains)} new chain rows for round {round}")
 
-  # Load existing _all file
+  # Load existing _all file. A transient read failure must never be treated
+  # as "file doesn't exist" (torp P1) -- only a confirmed-absent (404) result
+  # is legitimate grounds for starting fresh.
+  chains_all_name <- glue::glue("chains_data_{season}_all")
   existing <- tryCatch({
-    file_reader(glue::glue("chains_data_{season}_all"), "chains-data")
-  }, error = function(e) {
+    file_reader(chains_all_name, "chains-data")
+  }, vb_error_absent = function(e) {
     cli::cli_inform("No existing _all file for {season} - creating fresh")
     NULL
+  }, error = function(e) {
+    cli::cli_abort("Could not load existing chains_data_{season}_all ({conditionMessage(e)}) - aborting to avoid overwriting season history with round {round} alone", parent = e)
   })
+
+  if (is.null(existing)) {
+    is_absent <- tryCatch(
+      vb_confirm_absent(get_torpdata_repo(), "chains-data", paste0(chains_all_name, ".parquet")),
+      error = function(e) {
+        cli::cli_abort("Could not verify {.val {chains_all_name}.parquet} is absent from chains-data before a fresh upload: {conditionMessage(e)}")
+      }
+    )
+    if (!isTRUE(is_absent)) {
+      cli::cli_abort("Refusing fresh upload of {.val {chains_all_name}}: not confirmed absent from the chains-data release.")
+    }
+  }
+
+  n_existing_before <- if (!is.null(existing)) nrow(existing) else 0L
 
   if (!is.null(existing) && nrow(existing) > 0) {
     # Remove stale data for this round (handles re-runs)
@@ -236,10 +262,16 @@ update_season_chains <- function(season, round) {
     use.names = TRUE, fill = TRUE
   )
 
-  file_name <- glue::glue("chains_data_{season}_all")
-  save_to_release(df = combined, file_name = file_name, release_tag = "chains-data")
+  # Floor guard (torp P1): the round we just replaced should be a small slice
+  # of the total -- a combined result under 90% of what existed before this
+  # round's rows were stripped means the "existing" read was likely partial.
+  if (n_existing_before > 0L) {
+    vb_guard_accumulate(data.table::data.table(row = seq_len(n_existing_before)), combined, floor = 0.9)
+  }
 
-  cli::cli_alert_success("Saved {file_name} ({nrow(combined)} rows)")
+  save_to_release(df = combined, file_name = chains_all_name, release_tag = "chains-data")
+
+  cli::cli_alert_success("Saved {chains_all_name} ({nrow(combined)} rows)")
   invisible(NULL)
 }
 
@@ -277,13 +309,30 @@ update_season_pbp <- function(season, round) {
 
   cli::cli_inform("Processed {nrow(new_pbp)} new PBP rows for round {round}")
 
-  # Load existing _all file
+  # Load existing _all file. Same 404-vs-transient discipline as chains above.
+  pbp_all_name <- glue::glue("pbp_data_{season}_all")
   existing <- tryCatch({
-    file_reader(glue::glue("pbp_data_{season}_all"), "pbp-data")
-  }, error = function(e) {
+    file_reader(pbp_all_name, "pbp-data")
+  }, vb_error_absent = function(e) {
     cli::cli_inform("No existing _all file for {season} - creating fresh")
     NULL
+  }, error = function(e) {
+    cli::cli_abort("Could not load existing pbp_data_{season}_all ({conditionMessage(e)}) - aborting to avoid overwriting season history with round {round} alone", parent = e)
   })
+
+  if (is.null(existing)) {
+    is_absent <- tryCatch(
+      vb_confirm_absent(get_torpdata_repo(), "pbp-data", paste0(pbp_all_name, ".parquet")),
+      error = function(e) {
+        cli::cli_abort("Could not verify {.val {pbp_all_name}.parquet} is absent from pbp-data before a fresh upload: {conditionMessage(e)}")
+      }
+    )
+    if (!isTRUE(is_absent)) {
+      cli::cli_abort("Refusing fresh upload of {.val {pbp_all_name}}: not confirmed absent from the pbp-data release.")
+    }
+  }
+
+  n_existing_before <- if (!is.null(existing)) nrow(existing) else 0L
 
   if (!is.null(existing) && nrow(existing) > 0) {
     existing <- data.table::as.data.table(existing)
@@ -297,10 +346,13 @@ update_season_pbp <- function(season, round) {
     use.names = TRUE, fill = TRUE
   )
 
-  file_name <- glue::glue("pbp_data_{season}_all")
-  save_to_release(df = combined, file_name = file_name, release_tag = "pbp-data")
+  if (n_existing_before > 0L) {
+    vb_guard_accumulate(data.table::data.table(row = seq_len(n_existing_before)), combined, floor = 0.9)
+  }
 
-  cli::cli_alert_success("Saved {file_name} ({nrow(combined)} rows)")
+  save_to_release(df = combined, file_name = pbp_all_name, release_tag = "pbp-data")
+
+  cli::cli_alert_success("Saved {pbp_all_name} ({nrow(combined)} rows)")
   invisible(NULL)
 }
 
@@ -838,6 +890,10 @@ update_injury_data <- function(season) {
 #' @export
 run_daily_release <- function(force = FALSE) {
   cli::cli_h1("Daily Data Release")
+
+  # torp H3: stale skip markers from a previous run (or a shared torpdata/data/
+  # checkout) must not suppress this run's re-check of previously-failed URLs.
+  clear_skip_markers()
 
   # Ensure cache is cleaned up on exit (even on error)
   on.exit({
