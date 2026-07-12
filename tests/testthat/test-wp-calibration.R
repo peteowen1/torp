@@ -1,4 +1,4 @@
-# FABLE-RECAL-PLAN.md Step 3 -- WP recalibration applied in get_wp_preds()
+# torpverse/docs/plans/FABLE-RECAL-PLAN.md Step 3 -- WP recalibration applied in get_wp_preds()
 # (D4). Network-free: both "wp" and "wp_calibration" are mocked via
 # load_model_with_fallback(), never hitting torpmodels/the network. The
 # "wp" fixture is a tiny xgboost booster built the same way

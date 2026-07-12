@@ -317,7 +317,7 @@ get_shot_result_preds <- function(df) {
 #' Install torpmodels via `devtools::install_github("peteowen1/torpmodels")`.
 #'
 #' `"wp_calibration"` is the one exception to the usual abort-on-failure
-#' contract: it's an optional sidecar (FABLE-RECAL-PLAN.md D3/D4), so a
+#' contract: it's an optional sidecar (torpverse/docs/plans/FABLE-RECAL-PLAN.md D3/D4), so a
 #' 404/absence/network failure degrades to a single `cli_warn()` and a
 #' cached `NULL` -- never an error, and never more than one warning per
 #' session (the `NULL` is cached like any other model, so subsequent calls

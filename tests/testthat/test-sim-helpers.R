@@ -115,7 +115,7 @@ test_that("process_games_dt handles single round correctly", {
 # Regression: rating-shift direction (over/under-performance)
 # -----------------------------------------------------------------------------
 # An over-performing team (actual result beats its pre-game estimate) must
-# gain rating, not lose it — see FABLE-REVIEW.md C1. With two teams starting
+# gain rating, not lose it — see torpverse/docs/reviews/FABLE-REVIEW.md C1. With two teams starting
 # at equal torp, the home/away shifts are equal and opposite so the league
 # mean is unchanged by the shift step; mean-reversion then scales both teams'
 # post-shift torp toward that unchanged mean by the same factor, so the sign

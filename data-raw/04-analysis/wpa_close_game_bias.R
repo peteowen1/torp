@@ -1,5 +1,5 @@
 # wpa_close_game_bias.R — WPA close-game exposure bias, calibrated vs uncalibrated
-# FABLE-RECAL-PLAN.md Step 6 (§2). Manual script, NOT wired to any pipeline
+# torpverse/docs/plans/FABLE-RECAL-PLAN.md Step 6 (§2). Manual script, NOT wired to any pipeline
 # (data-raw/rebuild_everything.R does not source this). Run from the torp
 # package root:
 #   Rscript data-raw/04-analysis/wpa_close_game_bias.R
@@ -24,10 +24,10 @@ suppressMessages({
 devtools::load_all()
 
 SEASONS <- (torp::get_afl_season() - 3):(torp::get_afl_season() - 1)  # 3 most recent COMPLETED seasons
-CLOSE_MARGIN <- 12          # matches FABLE-WP-EXPERIMENTS.md's Q4/close convention
+CLOSE_MARGIN <- 12          # matches torpverse/docs/reviews/FABLE-WP-EXPERIMENTS.md's Q4/close convention
 MIN_GAMES <- 5              # drop tiny-sample player-seasons from the regression/leaderboard
 
-cli::cli_h1("WPA close-game exposure bias -- FABLE-RECAL-PLAN.md Step 6")
+cli::cli_h1("WPA close-game exposure bias -- torpverse/docs/plans/FABLE-RECAL-PLAN.md Step 6")
 cli::cli_inform("Seasons: {paste(SEASONS, collapse = ', ')} | close margin: |{CLOSE_MARGIN}| | min games: {MIN_GAMES}")
 
 # --- Script-local calibration bypass ---------------------------------------
@@ -189,7 +189,7 @@ print(lb_cal)
 cal_dominated <- mean(lb_cal$close_share > 0.5) > 0.5
 cli::cli_inform("Calibrated top-20 dominated by close-game exposure: {if (cal_dominated) 'YES' else 'no'}")
 
-# --- Decision memo (FABLE-RECAL-PLAN.md Step 6.4) ---------------------------
+# --- Decision memo (torpverse/docs/plans/FABLE-RECAL-PLAN.md Step 6.4) ---------------------------
 # Does NOT pre-commit the blend weight -- produces the evidence for Pete.
 decision_defensible <- isTRUE(shrink_pct > 50) && !cal_dominated
 
@@ -199,7 +199,7 @@ memo <- c(
   sprintf("**Generated:** %s by `data-raw/04-analysis/wpa_close_game_bias.R`", format(Sys.Date())),
   sprintf("**Seasons analysed:** %s", paste(SEASONS, collapse = ", ")),
   "",
-  "## Decision rule (FABLE-RECAL-PLAN.md Step 6.4)",
+  "## Decision rule (torpverse/docs/plans/FABLE-RECAL-PLAN.md Step 6.4)",
   "",
   "Reinstatement (as a blend component or continued parallel display -- Pete's call)",
   "becomes *defensible* if the close-game exposure coefficient shrinks materially",

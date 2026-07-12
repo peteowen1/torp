@@ -1,4 +1,4 @@
-# Design plans — deeper refactors from FABLE-REVIEW.md
+# Design plans — deeper refactors from ../docs/reviews/FABLE-REVIEW.md
 
 Date: 2026-07-09. These are plans only — no code changes. Each needs your go/no-go before implementation.
 
