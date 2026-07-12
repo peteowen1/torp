@@ -44,7 +44,7 @@ EPV_WEIGHT_DECAY_DAYS # 365 — PBP-level recency decay
 TOTAL_PRED_TOG        # 324L (18 teams * 18 players) — league centering fallback
 ```
 
-WPA is intentionally **not** folded into `torp_value` — surfaced as a parallel metric. (The original "WP gradient too steep in close/late" rationale was measured **false** in 2026-07: the WP family is actually *flat* there — see `FABLE-WP-EXPERIMENTS.md` §7. Decision 2026-07-11: exclusion stands until (a) a light recalibration layer fitted on recent-season OOS predictions ships, and (b) a temporal Q4/close slope release gate exists — the canonical model still runs slope ~1.14/1.26 on temporal holdout.)
+WPA is intentionally **not** folded into `torp_value` — surfaced as a parallel metric. (The original "WP gradient too steep in close/late" rationale was measured **false** in 2026-07: the WP family is actually *flat* there — see `FABLE-WP-EXPERIMENTS.md` §7. Decision 2026-07-11: exclusion stood until (a) a light recalibration layer fitted on recent-season OOS predictions ships, and (b) a temporal Q4/close slope release gate exists — the canonical model still ran slope ~1.14/1.26 on temporal holdout. Update 2026-07-12: recalibration layer shipped (`FABLE-RECAL-PLAN.md` — `get_wp_preds()` applies the `wp_calibration` sidecar, `torpmodels::train_core_models()` gates every WP release on the calibrated temporal slope); WPA reinstatement is now pending the `FABLE-RECAL-PLAN.md` §2 Step 6 bias re-measurement (the plan's own D6 cross-reference to "§5" for this protocol is stale -- Step 6 is where it actually lives, §5 is Non-goals), not a separate design decision.)
 
 ## Data Loaders
 
