@@ -239,12 +239,20 @@ get_epv_preds <- function(df) {
 #' Get Win Probability Predictions
 #'
 #' This function generates win probability predictions for the input data.
+#' Applies the WP recalibration sidecar (`wp_calibration`, FABLE-RECAL-
+#' PLAN.md D1-D4) immediately after the raw model prediction, so every
+#' caller of this function -- not just [add_wp_vars()] -- serves calibrated
+#' WP: `add_wp_vars()`'s downstream `wp`/`wpa`, `create_wp_credit()`,
+#' `player_credit.R`, `player_game_ratings.R`, released parquets. If the
+#' sidecar is unavailable (old deployment, not yet published, network
+#' down), [load_model_with_fallback()] returns `NULL` and this degrades to
+#' the identity function -- never an error.
 #'
 #' @param df A dataframe containing play-by-play data.
 #'
 #' @return A dataframe with win probability predictions.
 #' @keywords internal
-#' @importFrom stats predict model.matrix
+#' @importFrom stats predict model.matrix qlogis plogis
 #' @importFrom utils data
 get_wp_preds <- function(df) {
   wp_model <- load_model_with_fallback("wp")
@@ -260,6 +268,14 @@ get_wp_preds <- function(df) {
   # xgboost 3.x may return a matrix; flatten to vector for binary prediction
   if (is.matrix(preds_raw)) {
     preds_raw <- as.vector(preds_raw)
+  }
+
+  # D4: two-parameter Platt-on-logit recalibration, identity fallback when
+  # the sidecar is absent (load_model_with_fallback() has already
+  # warn-once'd in that case -- see its own docs).
+  calib <- load_model_with_fallback("wp_calibration")
+  if (!is.null(calib) && is.finite(calib$a) && is.finite(calib$b)) {
+    preds_raw <- stats::plogis(calib$a + calib$b * stats::qlogis(preds_raw))
   }
 
   preds <- data.frame(wp = preds_raw)
@@ -300,8 +316,18 @@ get_shot_result_preds <- function(df) {
 #' Loads a model from the torpmodels package with in-memory caching.
 #' Install torpmodels via `devtools::install_github("peteowen1/torpmodels")`.
 #'
-#' @param model_name Short model name: "ep", "wp", "shot", "match_gams", or "xgb_win"
-#' @return The loaded model object.
+#' `"wp_calibration"` is the one exception to the usual abort-on-failure
+#' contract: it's an optional sidecar (FABLE-RECAL-PLAN.md D3/D4), so a
+#' 404/absence/network failure degrades to a single `cli_warn()` and a
+#' cached `NULL` -- never an error, and never more than one warning per
+#' session (the `NULL` is cached like any other model, so subsequent calls
+#' return it from cache before reaching the network/warning code at all).
+#' Every other model name keeps the hard-abort contract.
+#'
+#' @param model_name Short model name: "ep", "wp", "wp_calibration", "shot",
+#'   "match_gams", or "xgb_win"
+#' @return The loaded model object, or `NULL` for `"wp_calibration"` when
+#'   unavailable.
 #' @keywords internal
 load_model_with_fallback <- function(model_name) {
   # Check cache first
@@ -309,12 +335,19 @@ load_model_with_fallback <- function(model_name) {
     return(get(model_name, envir = .torp_model_cache))
   }
 
-  valid_models <- c("ep", "wp", "shot", "xgb_win", "match_gams", "shot_player_df")
+  valid_models <- c("ep", "wp", "wp_calibration", "shot", "xgb_win", "match_gams", "shot_player_df")
   if (!model_name %in% valid_models) {
     cli::cli_abort("Unknown model name: {model_name}. Must be one of: {paste(valid_models, collapse = ', ')}")
   }
 
+  is_optional_calibration <- identical(model_name, "wp_calibration")
+
   if (!requireNamespace("torpmodels", quietly = TRUE)) {
+    if (is_optional_calibration) {
+      cli::cli_warn("torpmodels package not available -- serving uncalibrated WP (wp_calibration unavailable)")
+      assign(model_name, NULL, envir = .torp_model_cache)
+      return(NULL)
+    }
     cli::cli_abort(c(
       "torpmodels package is required but not installed.",
       "i" = 'Install with: devtools::install_github("peteowen1/torpmodels")'
@@ -324,6 +357,13 @@ load_model_with_fallback <- function(model_name) {
   model <- tryCatch(
     torpmodels::load_torp_model(model_name, verbose = FALSE),
     error = function(e) {
+      if (is_optional_calibration) {
+        cli::cli_warn(c(
+          "wp_calibration unavailable -- serving uncalibrated WP",
+          "x" = e$message
+        ))
+        return(NULL)
+      }
       cli::cli_abort(c(
         "Failed to load {model_name} model from torpmodels.",
         "x" = e$message,

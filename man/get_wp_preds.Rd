@@ -14,5 +14,13 @@ A dataframe with win probability predictions.
 }
 \description{
 This function generates win probability predictions for the input data.
+Applies the WP recalibration sidecar (\code{wp_calibration}, FABLE-RECAL-
+PLAN.md D1-D4) immediately after the raw model prediction, so every
+caller of this function -- not just \code{\link[=add_wp_vars]{add_wp_vars()}} -- serves calibrated
+WP: \code{add_wp_vars()}'s downstream \code{wp}/\code{wpa}, \code{create_wp_credit()},
+\code{player_credit.R}, \code{player_game_ratings.R}, released parquets. If the
+sidecar is unavailable (old deployment, not yet published, network
+down), \code{\link[=load_model_with_fallback]{load_model_with_fallback()}} returns \code{NULL} and this degrades to
+the identity function -- never an error.
 }
 \keyword{internal}
