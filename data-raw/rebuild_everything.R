@@ -29,6 +29,8 @@
 #
 #   # Model training season override
 #   --training-seasons 2021 2025   # override training range (default 2021:current-1)
+#
+#   Plain invocation (no flags) = full nuclear rebuild, all phases from 1.
 
 # Phase 0: Setup ----
 
@@ -76,7 +78,7 @@ phase_menu <- c(
   "10 - Season Simulation"
 )
 
-start_from <- 6L
+start_from <- 1L
 
 if (interactive()) {
   if (exists("START_FROM", envir = .GlobalEnv)) {
@@ -356,252 +358,44 @@ if (run_pbp) {
 if (run_models) {
   cli::cli_h1("Phase 4: Train Models")
 
-  model_output_dir <- if (!is.null(torpmodels_root)) {
-    file.path(torpmodels_root, "inst", "models", "core")
-  } else {
-    file.path(torp_root, "data-raw", "models")
+  if (is.null(torpmodels_root)) {
+    cli::cli_abort(paste(
+      "torpmodels not found (checked torpmodels/DESCRIPTION, ../torpmodels/DESCRIPTION).",
+      "Training without torpmodels/data-raw/lib/train_lib.R is no longer supported.",
+      "Run from torpverse/, or pass --skip-models."
+    ))
   }
+
+  model_output_dir <- file.path(torpmodels_root, "inst", "models", "core")
   if (!dir.exists(model_output_dir)) dir.create(model_output_dir, recursive = TRUE)
 
-  # --- 4a: EP Model ---
-  cli::cli_h2("Phase 4a: EP Model")
-  tic("phase_4a_ep")
+  # Delegates to the SAME lib/train_lib.R the manual `train_models.R` CLI
+  # uses -- one canonical trainer, no hand-inlined hyperparameters/constraints
+  # to drift out of sync (this was F1: a 15-entry constraint string against
+  # 18 WP features, eta 0.1 vs canonical 0.025). Accepted cost: WP training
+  # here now runs full CV-EP (5 extra fold-EP trainings) instead of reusing
+  # the in-memory EP model from 4a -- slower, correct, identical to the
+  # manual path.
+  cli::cli_h2("Phase 4: Core Model Training (EP/WP/Shot)")
+  tic("phase_4_core_models")
 
-  safe_run("ep_model_training", {
-    cli::cli_inform("Loading chains {training_start}-{training_end}...")
-    chains_train <- load_chains(seasons = training_seasons, rounds = TRUE)
-    cli::cli_inform("Chains: {nrow(chains_train)} rows")
+  source(file.path(torpmodels_root, "data-raw", "lib", "train_lib.R"))
 
-    pbp_train <- clean_pbp(chains_train)
-    model_data_epv <- clean_model_data_epv(pbp_train)
-    cli::cli_inform("EP model data: {nrow(model_data_epv)} rows")
-
-    params_ep <- list(
-      booster = "gbtree", objective = "multi:softprob",
-      eval_metric = "mlogloss", tree_method = "hist",
-      num_class = 5, eta = 0.1, gamma = 0,
-      subsample = 0.85, colsample_bytree = 0.85,
-      max_depth = 6, min_child_weight = 25
+  safe_run("core_model_training", {
+    train_core_models(
+      c("ep", "wp", "shot"),
+      seasons = training_seasons,
+      upload = !skip_model_upload,
+      output_dir = model_output_dir
     )
-
-    epv_vars <- model_data_epv |> select_epv_model_vars()
-    X_train <- stats::model.matrix(~ . + 0, data = epv_vars, na.action = na.pass)
-    y_train <- model_data_epv$label_ep
-    full_train <- xgboost::xgb.DMatrix(data = X_train, label = y_train)
-
-    # Match-grouped CV folds
-    match_ids <- unique(model_data_epv$torp_match_id)
-    set.seed(1234)
-    match_folds <- sample(rep(1:5, length.out = length(match_ids)))
-    names(match_folds) <- match_ids
-    row_folds <- match_folds[model_data_epv$torp_match_id]
-    folds <- lapply(1:5, function(k) which(row_folds == k))
-
-    cli::cli_inform("Running 5-fold CV...")
-    set.seed(1234)
-    cv_result <- xgboost::xgb.cv(
-      params = params_ep, data = full_train, nrounds = 500,
-      folds = folds, early_stopping_rounds = 20,
-      print_every_n = 20, verbose = 1
-    )
-
-    optimal_rounds_ep <- cv_result$best_iteration
-    if (is.null(optimal_rounds_ep) || length(optimal_rounds_ep) == 0) {
-      optimal_rounds_ep <- which.min(cv_result$evaluation_log$test_mlogloss_mean)
-    }
-    cli::cli_inform("EP optimal rounds: {optimal_rounds_ep}")
-
-    set.seed(1234)
-    ep_model <- xgboost::xgb.train(
-      params = params_ep, data = full_train,
-      nrounds = optimal_rounds_ep, print_every_n = 10
-    )
-
-    ep_path <- file.path(model_output_dir, "ep_model.rds")
-    saveRDS(ep_model, ep_path)
-    if (!skip_model_upload) piggyback::pb_upload(ep_path, repo = "peteowen1/torpmodels", tag = "core-models")
-
-    # Keep model_data_epv and ep_model in memory — WP training needs them
-    rm(full_train, epv_vars, X_train, y_train, cv_result, chains_train, pbp_train)
-    gc()
   })
 
   toc(log = TRUE)
 
-  # --- 4b: WP Model ---
-  cli::cli_h2("Phase 4b: WP Model")
-  tic("phase_4b_wp")
-
-  safe_run("wp_model_training", {
-    # Custom EP predictor using in-memory model
-    add_epv_custom <- function(df, ep_mdl) {
-      epv_vars <- df |> select_epv_model_vars()
-      epv_matrix <- stats::model.matrix(~ . + 0, data = epv_vars)
-      preds_raw <- predict(ep_mdl, xgboost::xgb.DMatrix(data = epv_matrix))
-
-      if (is.matrix(preds_raw)) {
-        preds_matrix <- preds_raw
-      } else {
-        preds_matrix <- matrix(preds_raw, ncol = 5, byrow = TRUE)
-      }
-
-      epv_lookup <- c(-6, -1, 1, 6, 0)
-      df$exp_pts <- as.vector(preds_matrix %*% epv_lookup)
-      df$opp_goal <- preds_matrix[, 1]
-      df$opp_behind <- preds_matrix[, 2]
-      df$behind <- preds_matrix[, 3]
-      df$goal <- preds_matrix[, 4]
-      df$no_score <- preds_matrix[, 5]
-      df
-    }
-
-    model_data_wp <- model_data_epv |>
-      clean_shots_data() |>
-      add_shot_vars() |>
-      add_epv_custom(ep_model) |>
-      clean_model_data_wp()
-    cli::cli_inform("WP model data: {nrow(model_data_wp)} rows")
-
-    params_wp <- list(
-      booster = "gbtree", objective = "binary:logistic",
-      eval_metric = "logloss", tree_method = "hist",
-      eta = 0.1, gamma = 0, subsample = 0.85,
-      colsample_bytree = 0.85, max_depth = 6, min_child_weight = 1,
-      monotone_constraints = "(0,0,0,1,1,1,0,1,0,0,0,0,0,0,0)"
-    )
-
-    wp_vars <- model_data_wp |> select_wp_model_vars()
-    X_train_wp <- stats::model.matrix(~ . + 0, data = wp_vars, na.action = na.pass)
-    y_train_wp <- model_data_wp$label_wp
-    full_train_wp <- xgboost::xgb.DMatrix(data = X_train_wp, label = y_train_wp)
-
-    # Match-grouped CV
-    match_ids_wp <- unique(model_data_wp$torp_match_id)
-    set.seed(1234)
-    match_folds_wp <- sample(rep(1:5, length.out = length(match_ids_wp)))
-    names(match_folds_wp) <- match_ids_wp
-    row_folds_wp <- match_folds_wp[model_data_wp$torp_match_id]
-    folds_wp <- lapply(1:5, function(k) which(row_folds_wp == k))
-
-    cli::cli_inform("Running 5-fold CV...")
-    set.seed(1234)
-    cv_result_wp <- xgboost::xgb.cv(
-      params = params_wp, data = full_train_wp, nrounds = 500,
-      folds = folds_wp, early_stopping_rounds = 20,
-      print_every_n = 20, verbose = 1
-    )
-
-    optimal_rounds_wp <- cv_result_wp$best_iteration
-    if (is.null(optimal_rounds_wp) || length(optimal_rounds_wp) == 0) {
-      optimal_rounds_wp <- which.min(cv_result_wp$evaluation_log$test_logloss_mean)
-    }
-    cli::cli_inform("WP optimal rounds: {optimal_rounds_wp}")
-
-    set.seed(1234)
-    wp_model <- xgboost::xgb.train(
-      params = params_wp, data = full_train_wp,
-      nrounds = optimal_rounds_wp, print_every_n = 10
-    )
-
-    wp_path <- file.path(model_output_dir, "wp_model.rds")
-    saveRDS(wp_model, wp_path)
-    if (!skip_model_upload) piggyback::pb_upload(wp_path, repo = "peteowen1/torpmodels", tag = "core-models")
-
-    rm(full_train_wp, wp_vars, X_train_wp, y_train_wp, cv_result_wp,
-       model_data_epv, model_data_wp)
-    gc()
-  })
-
-  toc(log = TRUE)
-
-  # --- 4c: Shot Model ---
-  cli::cli_h2("Phase 4c: Shot Model")
-  tic("phase_4c_shot")
-
-  safe_run("shot_model_training", {
-    shots_prep <- load_pbp(seasons = training_seasons, rounds = TRUE)
-
-    shots <- shots_prep |>
-      dplyr::filter(!is.na(shot_at_goal), x > 0, goal_x < 65, abs_y < 45) |>
-      dplyr::mutate(
-        scored_shot = ifelse(!is.na(points_shot), 1, 0),
-        shot_cat = dplyr::case_when(
-          is.na(points_shot) ~ 1,
-          points_shot == 1 ~ 2,
-          points_shot == 6 ~ 3
-        )
-      )
-
-    shots$player_id_shot <- forcats::fct_lump_min(shots$player_id, 10, other_level = "Other")
-
-    player_name_mapping <- shots |>
-      dplyr::group_by(player_id_shot = player_id) |>
-      dplyr::summarise(player_name_shot = dplyr::last(player_name))
-
-    shot_player_df <- tibble::tibble(
-      player_id_shot = levels(shots$player_id_shot)
-    ) |>
-      dplyr::left_join(player_name_mapping)
-
-    cli::cli_inform("Training shot model ({nrow(shots)} shots)...")
-    shot_ocat_mdl <- mgcv::bam(
-      shot_cat ~
-        ti(goal_x, abs_y, by = phase_of_play, bs = "ts")
-        + ti(goal_x, abs_y, bs = "ts")
-        + s(goal_x, bs = "ts")
-        + s(abs_y, bs = "ts")
-        + ti(lag_goal_x, lag_y)
-        + s(lag_goal_x, bs = "ts")
-        + s(lag_y, bs = "ts")
-        + s(play_type, bs = "re")
-        + s(phase_of_play, bs = "re")
-        + s(player_position_fac, bs = "re")
-        + s(player_id_shot, bs = "re"),
-      data = shots,
-      family = ocat(R = 3),
-      nthreads = 4,
-      select = TRUE,
-      discrete = TRUE,
-      drop.unused.levels = FALSE
-    )
-
-    shot_path <- file.path(model_output_dir, "shot_ocat_mdl.rds")
-    saveRDS(shot_ocat_mdl, shot_path)
-    if (!skip_model_upload) piggyback::pb_upload(shot_path, repo = "peteowen1/torpmodels", tag = "core-models")
-
-    player_path <- file.path(model_output_dir, "shot_player_df.rds")
-    saveRDS(shot_player_df, player_path)
-    if (!skip_model_upload) piggyback::pb_upload(player_path, repo = "peteowen1/torpmodels", tag = "core-models")
-
-    rm(shots_prep, shots, shot_ocat_mdl, shot_player_df)
-    gc()
-  })
-
-  toc(log = TRUE)
-
-  # --- 4d: Match GAMs ---
-  cli::cli_h2("Phase 4d: Match GAMs")
-  tic("phase_4d_match_gams")
-
-  match_model_script <- if (!is.null(torpmodels_root)) {
-    file.path(torpmodels_root, "data-raw", "04-match-model", "train_match_models.R")
-  } else {
-    NULL
-  }
-
-  if (!is.null(match_model_script) && file.exists(match_model_script)) {
-    safe_run("match_gam_training", {
-      # Source with production settings (no holdout, upload to GitHub)
-      match_env <- new.env(parent = globalenv())
-      match_env$HOLDOUT_SEASON <- Inf
-      match_env$UPLOAD_TO_GITHUB <- TRUE
-      source(match_model_script, local = match_env)
-    })
-  } else {
-    cli::cli_alert_info("Match model script not found - match GAMs will train in Phase 9 via run_predictions_pipeline()")
-  }
-
-  toc(log = TRUE)
+  # Match GAMs are NOT trained here. run_predictions_pipeline() (Phase 9) is
+  # the sole match-GAM publisher -- the former Phase 4d was dead on arrival
+  # (it injected HOLDOUT_SEASON into train_match_models.R, which no longer
+  # reads that variable at all) and redundant besides.
 
   # Clear model cache so subsequent phases pick up fresh models
   clear_model_cache()

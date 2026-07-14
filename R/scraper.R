@@ -114,14 +114,14 @@ get_match_chains <- function(season = get_afl_season(), round = NA) {
 #'
 #' Parses `CD_M{year:4}{comp:3}{round:2}{game:2+}` format via regex.
 #' Assumes 4-digit year + 3-digit comp ID (matches all known AFL formats).
+#' Vectorised over `match_id`.
 #'
-#' @param match_id Character match ID.
-#' @return Integer round number, or NA if format does not match.
+#' @param match_id Character match ID (scalar or vector).
+#' @return Integer round number(s), NA where the format does not match.
 #' @keywords internal
 .extract_round_from_match_id <- function(match_id) {
   m <- regmatches(match_id, regexec("^CD_M\\d{4}\\d{3}(\\d{2})", match_id))
-  if (length(m[[1]]) < 2) return(NA_integer_)
-  as.integer(m[[1]][2])
+  vapply(m, function(x) if (length(x) < 2) NA_integer_ else as.integer(x[2]), integer(1))
 }
 
 #' Find game metadata for a match ID
@@ -385,14 +385,20 @@ get_game_chains <- function(match_id) {
     return(data.frame())
   }
 
-  if (is.null(dim(chain_list)) || nrow(chain_list) == 0 || length(chain_list) <= 5) {
+  if (is.null(dim(chain_list)) || nrow(chain_list) == 0) {
+    cli::cli_warn("AFL API returned no chain rows for {.val {match_id}}")
     return(data.frame())
   }
 
   # Hoist column index lookup (constant across all chains in a match)
   # API renamed "actions" → "stats" circa 2026; support both
   actions_col <- which(names(chain_list) %in% c("stats", "actions"))
-  col_idx <- if (length(actions_col) == 1) actions_col else 6
+  if (length(actions_col) == 1) {
+    col_idx <- actions_col
+  } else {
+    cli::cli_warn("AFL API chain response has ambiguous or missing actions/stats column for {.val {match_id}} -- possible schema drift, falling back to positional column 6")
+    col_idx <- 6
+  }
   stats_col_name <- names(chain_list)[col_idx]
 
   # Chain-level fields captured below under fixed names that the downstream

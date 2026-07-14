@@ -21,7 +21,7 @@ load_results(
 A data frame containing AFL match results and final scores.
 }
 \description{
-Loads AFL match results and scores from the \href{https://github.com/peteowen1/torpdata}{torpdata repository}
+Loads AFL match results and scores from the AFL API (cached to disk, not fetched from a torpdata release)
 }
 \examples{
 \dontrun{

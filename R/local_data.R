@@ -218,6 +218,11 @@ save_locally <- function(df, file_name) {
 #' a `.skip` marker is written next to the expected local path. This avoids
 #' re-downloading known-bad files every call.
 #'
+#' Markers are only ever written for historical (never-expiring-by-season)
+#' URLs -- see [mark_download_skippable()] -- so a fresh marker here is
+#' always historical too; a flat 3h expiry (torp H3) is the safety net in
+#' case a "gone" historical asset reappears (re-release, corrected upload).
+#'
 #' @param url Character URL to check
 #' @return Logical — TRUE if a fresh `.skip` marker exists
 #' @keywords internal
@@ -228,12 +233,9 @@ is_download_skippable <- function(url) {
   skip_path <- paste0(local_path, ".skip")
   if (!file.exists(skip_path)) return(FALSE)
 
-  max_age <- local_max_age_for_url(url)
-  if (is.null(max_age)) max_age <- 30  # historical = cap at 30 days
-
-  file_age <- as.numeric(difftime(Sys.time(), file.info(skip_path)$mtime, units = "days"))
-  if (is.na(file_age)) return(FALSE)
-  file_age <= max_age
+  file_age_hours <- as.numeric(difftime(Sys.time(), file.info(skip_path)$mtime, units = "hours"))
+  if (is.na(file_age_hours)) return(FALSE)
+  file_age_hours <= 3
 }
 
 #' Mark a URL as Skippable (Negative Cache)
@@ -241,12 +243,21 @@ is_download_skippable <- function(url) {
 #' Writes a tiny `.skip` marker so future calls don't re-download a
 #' known-invalid file.
 #'
+#' Never marks a current-season (or year-unparseable) URL skippable (torp
+#' H3/H1): those files are actively upserted by the same pipeline that reads
+#' them, so a 404 today (round not yet published) becomes a false negative
+#' cache tomorrow, silently dropping the newest data for up to a day. Only
+#' historical files -- which never expire in [local_max_age_for_url()] and
+#' therefore can't heal via the normal freshness check -- get a marker at
+#' all, and it's capped at 3h in [is_download_skippable()].
+#'
 #' @param url Character URL
 #' @return Invisible NULL
 #' @keywords internal
 mark_download_skippable <- function(url) {
   local_path <- get_local_path(url)
   if (is.null(local_path)) return(invisible(NULL))
+  if (!is.null(local_max_age_for_url(url))) return(invisible(NULL))  # current-season/unparseable -- never negative-cache
   skip_path <- paste0(local_path, ".skip")
   tryCatch(writeLines("skip", skip_path), error = function(e) {
     cli::cli_warn("Could not write skip marker for {.url {basename(url)}}: {conditionMessage(e)}")

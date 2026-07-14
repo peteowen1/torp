@@ -14,7 +14,9 @@ Character vector of filenames, or NULL if the query fails.
 }
 \description{
 Queries the GitHub API via piggyback for the list of assets attached to a
-release tag. Results are cached per tag for the session so repeated calls
-(e.g. across multiple \verb{load_*()} calls) don't hit the network.
+release tag. Results are cached per tag with a short TTL
+(\code{RELEASE_ASSET_CACHE_TTL_SECS}) so repeated calls (e.g. across multiple
+\verb{load_*()} calls) don't hit the network, while still picking up assets
+uploaded elsewhere during a long-lived session.
 }
 \keyword{internal}

@@ -7,13 +7,14 @@
 .extract_round_from_match_id(match_id)
 }
 \arguments{
-\item{match_id}{Character match ID.}
+\item{match_id}{Character match ID (scalar or vector).}
 }
 \value{
-Integer round number, or NA if format does not match.
+Integer round number(s), NA where the format does not match.
 }
 \description{
 Parses \verb{CD_M\{year:4\}\{comp:3\}\{round:2\}\{game:2+\}} format via regex.
 Assumes 4-digit year + 3-digit comp ID (matches all known AFL formats).
+Vectorised over \code{match_id}.
 }
 \keyword{internal}

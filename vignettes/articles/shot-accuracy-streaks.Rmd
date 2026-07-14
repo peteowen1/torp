@@ -172,6 +172,18 @@ stopifnot("degenerate permutation null" = !is.na(p_perm))   # guard against NaN 
 
 The observed gap (green line, **+0.5 pts**) sits comfortably inside the cloud of random shuffles — **p = 0.38**, nowhere near significant. And notice the null is *not* centred on zero: it holds steady at **+0.34 pts** across 2,000 shuffles. Pooling games of differing goal rates manufactures a small positive after-goal/after-miss gap on its own — higher-scoring games contribute proportionally more "after a goal" shots, lower-scoring games more "after a miss" shots. So Test 1's raw gap is essentially that sampling artifact: shuffle the order at random and the very same gap shows up.
 
+<details>
+<summary><strong>Why isn't the chance baseline zero?</strong> — unpacking the +0.34 pts</summary>
+
+<p>Pool every shot together and the two buckets aren't sampled evenly across games:</p>
+<ul>
+<li><strong>"after a goal"</strong> shots come disproportionately from <strong>high-scoring games</strong> — more goals means more shots that <em>follow</em> a goal.</li>
+<li><strong>"after a miss"</strong> shots come disproportionately from <strong>low-scoring games</strong>.</li>
+</ul>
+<p>High-scoring games have higher accuracy almost by definition, so the after-goal bucket is quietly tilted toward good-shooting games and the after-miss bucket toward bad-shooting ones. That manufactures a small positive gap with <strong>no momentum involved at all</strong> — a textbook aggregation (Simpson's-paradox) effect. It's why the honest baseline for the observed +0.5 pts is +0.34, not zero.</p>
+
+</details>
+
 ## Verdict
 
 > **So, are the commentators right? No.** Across 52,813 shots, once you account for *which* shots a team takes, a recent miss carries **no predictive signal** for the next shot. The cold-streak effect — the strongest form of the claim — is statistically dead flat (p ≈ 0.98). And the faint lag-1 wobble doesn't survive a proper empirical null.

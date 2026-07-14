@@ -741,6 +741,9 @@ psr_ratings <- function(season_val = get_afl_season(type = "current"),
       pos_group = character(), psr = numeric(), osr = numeric(), dsr = numeric()
     ))
   }
+  if (!is.null(season_val)) {
+    result <- result[result$season == season_val, ]
+  }
   if (!is.null(round_val)) {
     result <- result[result$round == round_val, ]
   }

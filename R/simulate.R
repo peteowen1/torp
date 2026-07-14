@@ -128,9 +128,10 @@ simulate_season <- function(sim_teams, sim_games, return_teams = FALSE,
                     value = as.integer(pmax(round((total - result_vec) / 2), 0)))
 
     # Update team ratings via direct vector assignment
+    # (home gains when it beats the expected margin — matches finals_sim.R)
     shifts <- SIM_RATING_SHIFT * (result_vec - estimate)
-    torp_vec[home_idx] <- torp_vec[home_idx] - shifts
-    torp_vec[away_idx] <- torp_vec[away_idx] + shifts
+    torp_vec[home_idx] <- torp_vec[home_idx] + shifts
+    torp_vec[away_idx] <- torp_vec[away_idx] - shifts
 
     # Mean reversion: pull ratings toward league average each round
     league_mean <- mean(torp_vec)
@@ -227,13 +228,14 @@ process_games_dt <- function(sim_teams, sim_games, round_num,
   )]
 
   # Update team ratings: direct vector assignment avoids join overhead
+  # (home gains when it beats the expected margin — matches finals_sim.R)
   home_idx <- match(sim_games$home_team, sim_teams$team)
   away_idx <- match(sim_games$away_team, sim_teams$team)
   shifts <- sim_games$torp_shift
   data.table::set(sim_teams, i = home_idx, j = "torp",
-                  value = sim_teams$torp[home_idx] - shifts)
+                  value = sim_teams$torp[home_idx] + shifts)
   data.table::set(sim_teams, i = away_idx, j = "torp",
-                  value = sim_teams$torp[away_idx] + shifts)
+                  value = sim_teams$torp[away_idx] - shifts)
 
   # Mean reversion: pull ratings toward league average each round
   league_mean <- mean(sim_teams$torp)

@@ -67,6 +67,29 @@ test_that("validate_data_quality detects issues", {
   expect_true(length(result$issues) > 0)
 })
 
+test_that("validate_model_data_quality handles single-non-NA numeric columns without error", {
+  # Column with exactly one non-NA value: var() is NA, all(is.na()) is FALSE,
+  # so a naive OR check would leak NA into constant_cols and crash any().
+  single_value_data <- data.frame(
+    points_diff = c(NA, NA, 3, NA, NA),
+    label_wp = c(0.2, 0.5, 0.8, 0.1, 0.9)
+  )
+
+  expect_no_error(result <- validate_model_data_quality(single_value_data))
+  expect_true(is.list(result))
+
+  # A genuinely constant column alongside the single-value column should still
+  # be flagged, with no stray NA in the reported names.
+  mixed_data <- data.frame(
+    points_diff = c(NA, NA, 3, NA, NA),
+    constant_col = rep(1, 5)
+  )
+  result_mixed <- validate_model_data_quality(mixed_data)
+  expect_true("constant_columns" %in% names(result_mixed))
+  expect_true(grepl("constant_col", result_mixed$constant_columns))
+  expect_false(grepl("NA", result_mixed$constant_columns))
+})
+
 test_that("analyze_missing_data works correctly", {
   # Create data with missing values
   test_data <- data.frame(

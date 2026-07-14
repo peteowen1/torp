@@ -111,6 +111,73 @@ test_that("process_games_dt handles single round correctly", {
   expect_true(!is.na(result$sim_games$result[1]))
 })
 
+# -----------------------------------------------------------------------------
+# Regression: rating-shift direction (over/under-performance)
+# -----------------------------------------------------------------------------
+# An over-performing team (actual result beats its pre-game estimate) must
+# gain rating, not lose it — see torpverse/docs/reviews/FABLE-REVIEW.md C1. With two teams starting
+# at equal torp, the home/away shifts are equal and opposite so the league
+# mean is unchanged by the shift step; mean-reversion then scales both teams'
+# post-shift torp toward that unchanged mean by the same factor, so the sign
+# of (final_home_torp - final_away_torp) must match the sign of
+# (result - estimate) regardless of the random draw.
+
+test_that("simulate_season raises an over-performing home team's rating", {
+  for (seed in 1:5) {
+    sim_teams <- data.table::data.table(team = c("Team A", "Team B"), torp = c(0, 0))
+    sim_games <- data.table::data.table(
+      roundnum = 1L,
+      home_team = "Team A",
+      away_team = "Team B",
+      result = NA_integer_,
+      torp_home_round = NA_real_,
+      torp_away_round = NA_real_
+    )
+
+    set.seed(seed)
+    result <- simulate_season(sim_teams, sim_games, return_teams = TRUE)
+    games_dt <- result$games
+    teams_dt <- result$teams
+
+    shift_sign <- sign(games_dt$result[1] - games_dt$estimate[1])
+    if (shift_sign == 0) next  # exact tie, not informative
+
+    torp_a <- teams_dt[teams_dt$team == "Team A", ]$torp
+    torp_b <- teams_dt[teams_dt$team == "Team B", ]$torp
+
+    expect_equal(sign(torp_a - torp_b), shift_sign,
+                info = paste("seed =", seed))
+  }
+})
+
+test_that("process_games_dt raises an over-performing home team's rating", {
+  process_games_dt <- torp:::process_games_dt
+
+  for (seed in 1:5) {
+    sim_teams <- data.table::data.table(team = c("Team A", "Team B"), torp = c(0, 0))
+    sim_games <- data.table::data.table(
+      roundnum = 1L,
+      home_team = "Team A",
+      away_team = "Team B",
+      result = NA_integer_,
+      torp_home_round = NA_real_,
+      torp_away_round = NA_real_
+    )
+
+    set.seed(seed)
+    result <- process_games_dt(sim_teams, sim_games, round_num = 1)
+
+    shift_sign <- sign(result$sim_games$result[1] - result$sim_games$estimate[1])
+    if (shift_sign == 0) next  # exact tie, not informative
+
+    torp_a <- result$sim_teams[team == "Team A", torp]
+    torp_b <- result$sim_teams[team == "Team B", torp]
+
+    expect_equal(sign(torp_a - torp_b), shift_sign,
+                info = paste("seed =", seed))
+  }
+})
+
 test_that("simulation win probability follows expected pattern", {
   # Team with higher TORP should have higher win probability on average
   sim_teams <- data.table::data.table(

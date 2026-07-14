@@ -278,6 +278,117 @@ get_lineup_ratings <- function(season = NULL, round = NULL, match_id = NULL) {
 }
 
 
+#' Merge new-week predictions into the locked full-season predictions file
+#'
+#' Encapsulates torp C2's overwrite guard (ECOSYSTEM-FIX-PLAN.md T3): a
+#' transient read of the existing locked-predictions file (any error other
+#' than a confirmed-absent 404) aborts rather than being treated as "no
+#' existing file" -- that collapse is exactly what let one week's data
+#' silently replace a full season of locked history. A fresh, non-accumulating
+#' upload is only permitted after independently confirming via
+#' [vb_confirm_absent()] that the release asset really is absent. An
+#' accumulating merge is floor-guarded against a >10% shrink via
+#' [vb_guard_accumulate()].
+#'
+#' @param pred_file_name Base file name (no extension), e.g. "predictions_2026".
+#' @param season Season year.
+#' @param week_gms This run's freshly-computed predictions for `target_weeks`.
+#' @param team_mdl_df Full model data frame (used to find already-started matches).
+#' @param target_weeks Numeric vector of round numbers being (re)computed.
+#' @param completed_margins Data frame of match_id/.actual_margin for completed matches.
+#' @return The combined data frame to upload.
+#' @keywords internal
+.build_locked_predictions <- function(pred_file_name, season, week_gms, team_mdl_df,
+                                      target_weeks, completed_margins) {
+  pred_repo <- get_torp_data_repo()
+  existing <- tryCatch(
+    file_reader(pred_file_name, "predictions"),
+    vb_error_absent = function(e) NULL,
+    error = function(e) {
+      cli::cli_abort(c(
+        "Could not load existing locked predictions for {season} ({conditionMessage(e)}).",
+        "x" = "Refusing to upload -- this was not a confirmed-absent (404) error."
+      ), parent = e)
+    }
+  )
+
+  if (!is.null(existing) && nrow(existing) > 0) {
+    # Backward compat: existing predictions may use old providerId column
+    if (!"match_id" %in% names(existing) && "providerId" %in% names(existing)) {
+      data.table::setnames(existing, "providerId", "match_id")
+    }
+
+    # Backward compat: merge home_rating/away_rating/rating_diff -> home_epr/away_epr/epr_diff
+    old_to_new <- c(home_rating = "home_epr", away_rating = "away_epr", rating_diff = "epr_diff")
+    for (old_nm in names(old_to_new)) {
+      new_nm <- old_to_new[old_nm]
+      if (old_nm %in% names(existing)) {
+        if (new_nm %in% names(existing)) {
+          existing[[new_nm]] <- dplyr::coalesce(existing[[new_nm]], existing[[old_nm]])
+          existing[[old_nm]] <- NULL
+        } else {
+          names(existing)[names(existing) == old_nm] <- new_nm
+        }
+      }
+    }
+
+    n_backfilled <- sum(is.na(existing$margin) & existing$match_id %in% completed_margins$match_id)
+    if (n_backfilled > 0) {
+      existing <- existing |>
+        dplyr::left_join(completed_margins, by = "match_id") |>
+        dplyr::mutate(margin = dplyr::coalesce(margin, .actual_margin)) |>
+        dplyr::select(-.actual_margin)
+      cli::cli_alert_success("Backfilled {n_backfilled} match margin{?s} from results")
+    }
+
+    # Only replace predictions for games that haven't started yet
+    started_ids <- team_mdl_df |>
+      dplyr::filter(
+        season.x == season,
+        round_number.x %in% target_weeks,
+        team_type_fac.x == "home",
+        utc_dt <= Sys.time()
+      ) |>
+      dplyr::pull(match_id)
+
+    week_gms <- week_gms |>
+      dplyr::filter(!match_id %in% started_ids)
+
+    if (length(started_ids) > 0) {
+      cli::cli_alert_info("Keeping locked predictions for {length(started_ids)} already-started match{?es}")
+    }
+
+    combined <- existing |>
+      dplyr::ungroup() |>
+      dplyr::filter(!match_id %in% week_gms$match_id) |>
+      dplyr::bind_rows(dplyr::ungroup(week_gms)) |>
+      dplyr::arrange(week)
+
+    vb_guard_accumulate(existing, combined, floor = 0.9)
+  } else {
+    # existing is NULL only when file_reader() confirmed absence (404) above,
+    # or the file genuinely has 0 rows (loaded fine). Independently confirm
+    # the release asset really is absent before doing a fresh, non-accumulating
+    # upload -- this is the mandatory guard before any "start fresh" branch.
+    is_absent <- tryCatch(
+      vb_confirm_absent(pred_repo, "predictions", paste0(pred_file_name, ".parquet")),
+      error = function(e) {
+        cli::cli_abort("Could not verify {.val {pred_file_name}.parquet} is absent from the predictions release before a fresh upload: {conditionMessage(e)}")
+      }
+    )
+    if (!isTRUE(is_absent)) {
+      cli::cli_abort(c(
+        "Refusing fresh upload of {.val {pred_file_name}}: the file is present on the predictions release but was not readable as non-empty.",
+        "x" = "This should not happen without a prior error -- aborting rather than risk overwriting locked history."
+      ))
+    }
+    combined <- week_gms
+  }
+
+  combined
+}
+
+
 #' Builds team_mdl_df with injury-adjusted ratings, trains the 5-model sequential
 #' GAM pipeline, generates predictions for target weeks, and uploads to torpdata
 #' releases.
@@ -589,6 +700,15 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
     team_mdl_df$pred_win         <- team_mdl_df$gam_pred_win
   }
 
+  # Margin recalibration (2026-07, FABLE-MATCH-MAE-PLAN.md WS1 "V1a"):
+  # applied to the FINAL served margin only, AFTER pred_win has already been
+  # derived from the raw (uncalibrated) blended margin above -- this exactly
+  # mirrors how the "C6" candidate was validated (recalibration never fed
+  # back into win-probability). Identity fallback (scale=1) when the sidecar
+  # is absent -- see match_calibration.R.
+  margin_calib <- load_match_margin_calibration()
+  team_mdl_df$pred_score_diff <- apply_match_margin_calibration(team_mdl_df$pred_score_diff, margin_calib)
+
   # Format Predictions ----
   cli::cli_h2("Generating predictions for {length(target_weeks)} week{?s}")
 
@@ -660,13 +780,6 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
 
   # --- Locked predictions: frozen at game start, never overwritten ---
   pred_file_name <- paste0("predictions_", season)
-  existing <- tryCatch(
-    file_reader(pred_file_name, "predictions"),
-    error = function(e) {
-      cli::cli_warn("Could not load existing predictions ({conditionMessage(e)}). Uploading current weeks only.")
-      NULL
-    }
-  )
 
   # Actual margins from completed matches (shared by locked preds + retrodictions)
   completed_margins <- team_mdl_df |>
@@ -674,60 +787,9 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
     dplyr::distinct(match_id, .keep_all = TRUE) |>
     dplyr::transmute(match_id, .actual_margin = score_diff)
 
-  if (!is.null(existing) && nrow(existing) > 0) {
-    # Backward compat: existing predictions may use old providerId column
-    if (!"match_id" %in% names(existing) && "providerId" %in% names(existing)) {
-      data.table::setnames(existing, "providerId", "match_id")
-    }
-
-    # Backward compat: merge home_rating/away_rating/rating_diff -> home_epr/away_epr/epr_diff
-    old_to_new <- c(home_rating = "home_epr", away_rating = "away_epr", rating_diff = "epr_diff")
-    for (old_nm in names(old_to_new)) {
-      new_nm <- old_to_new[old_nm]
-      if (old_nm %in% names(existing)) {
-        if (new_nm %in% names(existing)) {
-          existing[[new_nm]] <- dplyr::coalesce(existing[[new_nm]], existing[[old_nm]])
-          existing[[old_nm]] <- NULL
-        } else {
-          names(existing)[names(existing) == old_nm] <- new_nm
-        }
-      }
-    }
-
-    n_backfilled <- sum(is.na(existing$margin) & existing$match_id %in% completed_margins$match_id)
-    if (n_backfilled > 0) {
-      existing <- existing |>
-        dplyr::left_join(completed_margins, by = "match_id") |>
-        dplyr::mutate(margin = dplyr::coalesce(margin, .actual_margin)) |>
-        dplyr::select(-.actual_margin)
-      cli::cli_alert_success("Backfilled {n_backfilled} match margin{?s} from results")
-    }
-
-    # Only replace predictions for games that haven't started yet
-    started_ids <- team_mdl_df |>
-      dplyr::filter(
-        season.x == season,
-        round_number.x %in% target_weeks,
-        team_type_fac.x == "home",
-        utc_dt <= Sys.time()
-      ) |>
-      dplyr::pull(match_id)
-
-    week_gms <- week_gms |>
-      dplyr::filter(!match_id %in% started_ids)
-
-    if (length(started_ids) > 0) {
-      cli::cli_alert_info("Keeping locked predictions for {length(started_ids)} already-started match{?es}")
-    }
-
-    combined <- existing |>
-      dplyr::ungroup() |>
-      dplyr::filter(!match_id %in% week_gms$match_id) |>
-      dplyr::bind_rows(dplyr::ungroup(week_gms)) |>
-      dplyr::arrange(week)
-  } else {
-    combined <- week_gms
-  }
+  combined <- .build_locked_predictions(
+    pred_file_name, season, week_gms, team_mdl_df, target_weeks, completed_margins
+  )
 
   tryCatch(
     {
@@ -795,9 +857,29 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
       cache_dir <- getOption("torpmodels.cache_dir",
                              file.path(tools::R_user_dir("torpmodels", "cache"), "models"))
 
+      # torpmodels is a Suggests, not a hard dependency (DESCRIPTION:48) --
+      # stamp provenance + update the manifest when available, but never let
+      # its absence break the daily run: fall back to an unstamped upload.
+      has_torpmodels <- requireNamespace("torpmodels", quietly = TRUE)
+      if (!has_torpmodels) {
+        cli::cli_warn("torpmodels not available -- uploading match_gams/match_xgb_pipeline without a provenance stamp")
+      }
+      match_seasons <- sort(unique(team_mdl_df$season.x))
+      match_seasons_range <- if (length(match_seasons) > 0) paste(range(match_seasons), collapse = "-") else NA_character_
+      uploaded_files <- character(0)
+
       gam_path <- file.path(tempdir(), "match_gams.rds")
       t0 <- proc.time()[["elapsed"]]
-      saveRDS(.strip_gam_models(gam_result$models), gam_path)
+      match_gams_out <- .strip_gam_models(gam_result$models)
+      if (has_torpmodels) {
+        gam_meta <- torpmodels:::build_model_meta(
+          "match_gams", match_seasons_range, list(), NA_character_,
+          n_matches = nrow(team_mdl_df) / 2,
+          extra = list(script = "run_predictions_pipeline")
+        )
+        match_gams_out <- torpmodels:::stamp_model_meta(match_gams_out, gam_meta)
+      }
+      saveRDS(match_gams_out, gam_path)
       t1 <- proc.time()[["elapsed"]]
       gam_size <- file.size(gam_path) / 1e6
       cli::cli_alert_info("match_gams saveRDS: {round(t1 - t0, 1)}s ({round(gam_size, 1)} MB)")
@@ -809,11 +891,21 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
         file.copy(gam_path, local_cache, overwrite = TRUE)
       }
       cli::cli_alert_success("Uploaded match_gams to torpmodels")
+      uploaded_files <- c(uploaded_files, "match_gams.rds")
 
       if (!is.null(xgb_result)) {
         xgb_path <- file.path(tempdir(), "match_xgb_pipeline.rds")
         t3 <- proc.time()[["elapsed"]]
-        saveRDS(xgb_result$models, xgb_path)
+        match_xgb_out <- xgb_result$models
+        if (has_torpmodels) {
+          xgb_meta <- torpmodels:::build_model_meta(
+            "match_xgb_pipeline", match_seasons_range, list(), NA_character_,
+            n_matches = nrow(team_mdl_df) / 2,
+            extra = list(script = "run_predictions_pipeline")
+          )
+          match_xgb_out <- torpmodels:::stamp_model_meta(match_xgb_out, xgb_meta)
+        }
+        saveRDS(match_xgb_out, xgb_path)
         t4 <- proc.time()[["elapsed"]]
         xgb_size <- file.size(xgb_path) / 1e6
         cli::cli_alert_info("match_xgb saveRDS: {round(t4 - t3, 1)}s ({round(xgb_size, 1)} MB)")
@@ -825,6 +917,73 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
           file.copy(xgb_path, local_cache_xgb, overwrite = TRUE)
         }
         cli::cli_alert_success("Uploaded match_xgb_pipeline to torpmodels")
+        uploaded_files <- c(uploaded_files, "match_xgb_pipeline.rds")
+      }
+
+      # Margin calibration sidecar (2026-07, FABLE-MATCH-MAE-PLAN.md WS1) --
+      # fit fresh each retrain via a temporal holdout. Release gate (mirrors
+      # the WP temporal slope gate): a raw OOS slope outside
+      # MATCH_MARGIN_SLOPE_GATE, OR a cold-start identity fit (calib_fit$b
+      # forced to 1 because fit_match_margin_calibration()'s n_oos fell below
+      # MATCH_RECAL_MIN_N -- a coincidentally in-range slope_raw must NOT
+      # count as a pass in that case), skips uploading a new sidecar (keeps
+      # whatever was previously published, or identity if none exists yet)
+      # rather than aborting the whole pipeline -- weekly predictions still
+      # need to ship even when this diagnostic signal is off; graceful
+      # degradation matches this function's existing house style (xgb
+      # failure -> GAM-only, PSR failure -> warn+continue, etc.), not a
+      # hard-fail research gate.
+      calib_fit <- tryCatch(
+        fit_match_margin_calibration(team_mdl_df),
+        error = function(e) {
+          cli::cli_warn("Margin calibration fit failed: {conditionMessage(e)}")
+          NULL
+        }
+      )
+      if (!is.null(calib_fit)) {
+        gate <- MATCH_MARGIN_SLOPE_GATE
+        slope_ok <- is.na(calib_fit$slope_raw) || (calib_fit$slope_raw >= gate[1] && calib_fit$slope_raw <= gate[2])
+        if (isTRUE(calib_fit$cold_start)) {
+          cli::cli_warn(c(
+            "Margin calibration cold start: only {calib_fit$n_oos} OOS holdout matches (< {MATCH_RECAL_MIN_N}) -- b was forced to identity.",
+            "i" = "Skipping match_margin_calibration upload this run -- serving will fall back to the previously published sidecar (or identity if none exists)."
+          ))
+        } else if (!slope_ok) {
+          cli::cli_warn(c(
+            "Margin calibration slope gate breached: raw OOS slope {round(calib_fit$slope_raw, 3)} outside [{gate[1]}, {gate[2]}].",
+            "i" = "Skipping match_margin_calibration upload this run -- serving will fall back to the previously published sidecar (or identity if none exists)."
+          ))
+        } else {
+          calib_path <- file.path(tempdir(), "match_margin_calibration.rds")
+          calib_out <- calib_fit
+          if (has_torpmodels) {
+            calib_meta <- torpmodels:::build_model_meta(
+              "match_margin_calibration", match_seasons_range, list(), NA_character_,
+              n_matches = calib_fit$n_oos,
+              extra = list(script = "run_predictions_pipeline", holdout_season = calib_fit$holdout_season)
+            )
+            calib_out <- torpmodels:::stamp_model_meta(calib_out, calib_meta)
+          }
+          saveRDS(calib_out, calib_path)
+          piggyback::pb_upload(calib_path, repo = "peteowen1/torpmodels", tag = "core-models")
+          local_cache_calib <- file.path(cache_dir, "core", "match_margin_calibration.rds")
+          if (dir.exists(dirname(local_cache_calib))) {
+            file.copy(calib_path, local_cache_calib, overwrite = TRUE)
+          }
+          cli::cli_alert_success("Uploaded match_margin_calibration to torpmodels (b={round(calib_fit$b, 3)})")
+          uploaded_files <- c(uploaded_files, "match_margin_calibration.rds")
+          # Invalidate this session's cached sidecar so the recalibrated
+          # margin above (already computed with the PREVIOUS sidecar, or
+          # identity) doesn't silently diverge from what just got published --
+          # next call in this session picks up the fresh one.
+          if (exists("match_margin_calibration", envir = .torp_model_cache)) {
+            rm("match_margin_calibration", envir = .torp_model_cache)
+          }
+        }
+      }
+
+      if (has_torpmodels) {
+        torpmodels::update_models_manifest(uploaded_files, tempdir(), "peteowen1/torpmodels", "core-models")
       }
     },
     error = function(e) {
@@ -933,7 +1092,7 @@ show_predictions <- function(season = get_afl_season(),
 
   tips_correct <- 0
   tips_total <- 0
-  abs_errors <- c()
+  abs_errors <- rep(NA_real_, nrow(preds))
 
   for (i in seq_len(nrow(preds))) {
     row <- preds[i, ]
@@ -950,7 +1109,7 @@ show_predictions <- function(season = get_afl_season(),
       result_display <- paste(result_str, icon)
       tips_total <- tips_total + 1
       tips_correct <- tips_correct + as.integer(tip_ok)
-      abs_errors <- c(abs_errors, abs(row$pred_margin - row$margin))
+      abs_errors[i] <- abs(row$pred_margin - row$margin)
     } else if (isTRUE(row$is_complete)) {
       result_display <- "?"
     } else {
@@ -972,7 +1131,7 @@ show_predictions <- function(season = get_afl_season(),
   parts <- c()
   if (tips_total > 0) {
     parts <- c(parts, paste0("Tips: ", tips_correct, "/", tips_total, " correct"))
-    parts <- c(parts, paste0("MAE: ", sprintf("%.1f", mean(abs_errors))))
+    parts <- c(parts, paste0("MAE: ", sprintf("%.1f", mean(abs_errors, na.rm = TRUE))))
   }
   n_complete <- sum(preds$is_complete | !is.na(preds$margin))
   parts <- c(parts, paste0("Completed: ", n_complete, "/", nrow(preds)))

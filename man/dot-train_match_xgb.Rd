@@ -4,12 +4,22 @@
 \alias{.train_match_xgb}
 \title{Train the 5-model sequential XGBoost pipeline}
 \usage{
-.train_match_xgb(team_mdl_df, train_filter = NULL)
+.train_match_xgb(
+  team_mdl_df,
+  train_filter = NULL,
+  xgb_nthread = MATCH_XGB_NTHREAD
+)
 }
 \arguments{
 \item{team_mdl_df}{Complete model dataset (with GAM predictions already added)}
 
 \item{train_filter}{Logical vector indicating training rows (NULL = all completed matches)}
+
+\item{xgb_nthread}{Thread cap for every xgb.train()/xgb.cv() call (default
+MATCH_XGB_NTHREAD = 4L). XGBoost's \code{tree_method = "hist"} is not
+deterministic across different thread counts even with a fixed seed, so
+pinning this makes retrains reproducible across machines/CI runners with
+different core counts (see docs/plans/FABLE-MATCH-MAE-PLAN.md §8).}
 }
 \value{
 List with $models (named list of 5 XGBoost models) and $data (team_mdl_df

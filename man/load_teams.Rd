@@ -27,7 +27,7 @@ from the API for all seasons. Default is FALSE.}
 A data frame containing AFL team and player lineup data.
 }
 \description{
-Loads AFL team roster and lineup data from the \href{https://github.com/peteowen1/torpdata}{torpdata repository}
+Loads AFL team roster and lineup data from the AFL API (cached to disk, not fetched from a torpdata release)
 }
 \examples{
 \dontrun{

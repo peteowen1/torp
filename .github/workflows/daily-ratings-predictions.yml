@@ -21,10 +21,11 @@ on:
 env:
   GITHUB_PAT: ${{ secrets.WORKFLOW_PAT }}
   R_KEEP_PKG_SOURCE: yes
+  piggyback_cache_duration: 1
 
 concurrency:
   group: ratings-predictions
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   compute-ratings:
@@ -83,7 +84,14 @@ jobs:
             }
             REFRESH_UPSTREAM <- FALSE
             REBUILD_PLAYER_GAME <- TRUE
-            REBUILD_ALL_RATINGS <- !is.null(SEASONS)
+            # torp P8: REBUILD_ALL_RATINGS=TRUE overwrites the full-history
+            # ratings-data release with only the seasons just computed. That
+            # is only safe when SEASONS covers the whole history (SEASONS ==
+            # TRUE, i.e. all seasons 2021+). A partial seasons input (e.g.
+            # '2026') or the default (NULL -> current season only) must use
+            # the incremental upsert path instead, or every earlier season
+            # silently vanishes from the release.
+            REBUILD_ALL_RATINGS <- identical(SEASONS, TRUE)
             source('data-raw/03-ratings/run_ratings_pipeline.R')
           "
 

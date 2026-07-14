@@ -17,4 +17,10 @@ When a URL previously produced an invalid file (too small / read error),
 a \code{.skip} marker is written next to the expected local path. This avoids
 re-downloading known-bad files every call.
 }
+\details{
+Markers are only ever written for historical (never-expiring-by-season)
+URLs -- see \code{\link[=mark_download_skippable]{mark_download_skippable()}} -- so a fresh marker here is
+always historical too; a flat 3h expiry (torp H3) is the safety net in
+case a "gone" historical asset reappears (re-release, corrected upload).
+}
 \keyword{internal}

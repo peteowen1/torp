@@ -90,10 +90,10 @@ get_cache_info <- function() {
 #' @return Logical indicating if cache is valid
 #' @keywords internal
 is_cache_valid <- function(cache_entry, cache_ttl) {
-  if (is.null(cache_entry)) {
+  if (is.null(cache_entry) || is.null(cache_entry$timestamp)) {
     return(FALSE)
   }
-  
+
   age_seconds <- as.numeric(difftime(Sys.time(), cache_entry$timestamp, units = "secs"))
   return(age_seconds <= cache_ttl)
 }

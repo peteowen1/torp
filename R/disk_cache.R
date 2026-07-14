@@ -76,6 +76,11 @@ is_disk_cached <- function(url, max_age_days = DISK_CACHE_DEFAULT_AGE_DAYS) {
   # Check age if max_age_days is specified
 
   if (!is.null(max_age_days)) {
+    season_cap <- local_max_age_for_url(url)
+    if (!is.null(season_cap)) {
+      max_age_days <- min(max_age_days, season_cap)
+    }
+
     file_info <- file.info(cache_path)
     age_days <- as.numeric(difftime(Sys.time(), file_info$mtime, units = "days"))
 

@@ -24,9 +24,11 @@ recorded in the attacking frame of the chain's possessing team
 Step A now orients to the pitch using \code{coord_team_id} (the captured
 chain-level team), so opponent-actor rows and the trailing event of the
 previous chain land in a consistent frame and no longer present as ~90m
-jumps that the steps C-F neighbour cascade would mis-flip. The C-F steps are
-retained as a defensive net for residual API noise but should rarely fire on
-correctly-oriented data.
+jumps. The old neighbour-cascade sign-flip net (former steps D/E/F) was a
+symptom treatment for the pre-fix orientation bug; with orientation correct
+it modifies zero rows (verified by ablation over two full seasons) and has
+been removed. Step B (throw-in fix) and step C (a single conservative
+prev-based flip catch, with shot rows protected) remain.
 
 Backward compatibility: parquets scraped before \code{chain_team_id} was captured
 fall back to \code{team_id_mdl} for orientation, reproducing the prior (buggy)

@@ -30,21 +30,27 @@ set_torp_data_repo <- function(repo) {
   cli::cli_inform("TORP data repository set to: {repo}")
 }
 
-# Release asset cache (session-scoped, no TTL needed)
+# Release asset cache (session-scoped, short TTL)
 .torp_release_cache <- new.env(parent = emptyenv())
 
 #' Get filenames available in a GitHub release
 #'
 #' Queries the GitHub API via piggyback for the list of assets attached to a
-#' release tag. Results are cached per tag for the session so repeated calls
-#' (e.g. across multiple `load_*()` calls) don't hit the network.
+#' release tag. Results are cached per tag with a short TTL
+#' (`RELEASE_ASSET_CACHE_TTL_SECS`) so repeated calls (e.g. across multiple
+#' `load_*()` calls) don't hit the network, while still picking up assets
+#' uploaded elsewhere during a long-lived session.
 #'
 #' @param release_tag Character. The release tag name (e.g. "predictions-data").
 #' @return Character vector of filenames, or NULL if the query fails.
 #' @keywords internal
 get_release_assets <- function(release_tag) {
   if (exists(release_tag, envir = .torp_release_cache)) {
-    return(get(release_tag, envir = .torp_release_cache))
+    cached <- get(release_tag, envir = .torp_release_cache)
+    age_secs <- as.numeric(difftime(Sys.time(), cached$time, units = "secs"))
+    if (age_secs < RELEASE_ASSET_CACHE_TTL_SECS) {
+      return(cached$assets)
+    }
   }
 
   repo_parts <- strsplit(get_torp_data_repo(), "/")[[1]]
@@ -63,10 +69,25 @@ get_release_assets <- function(release_tag) {
   })
 
   if (!is.null(assets)) {
-    assign(release_tag, assets, envir = .torp_release_cache)
+    assign(release_tag, list(assets = assets, time = Sys.time()), envir = .torp_release_cache)
   }
 
   assets
+}
+
+#' Invalidate the cached release-asset listing for a tag
+#'
+#' Call after uploading to a release so the next `get_release_assets()` call
+#' sees the new asset instead of a pre-upload snapshot.
+#'
+#' @param release_tag Character. The release tag name.
+#' @return Invisible NULL.
+#' @keywords internal
+invalidate_release_cache <- function(release_tag) {
+  if (exists(release_tag, envir = .torp_release_cache)) {
+    rm(list = release_tag, envir = .torp_release_cache)
+  }
+  invisible(NULL)
 }
 
 # Helper functions

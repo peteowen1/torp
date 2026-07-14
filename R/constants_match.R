@@ -125,3 +125,71 @@ MATCH_MIN_DATA_SEASON <- 2021
 #' Earliest round in MATCH_MIN_DATA_SEASON with reliable data
 #' @keywords internal
 MATCH_MIN_DATA_ROUND <- 14
+
+
+# XGBoost Training Constants
+# --------------------------
+
+#' Thread cap for every xgboost::xgb.train()/xgb.cv() call in match model
+#' training (2026-07, reproducibility fix). XGBoost's `tree_method = "hist"`
+#' is not deterministic across different thread counts even with a fixed
+#' seed (confirmed empirically -- see docs/plans/FABLE-MATCH-MAE-PLAN.md §8)
+#' -- left unset, a retrain on a machine/CI runner with a different core
+#' count than whatever last built the shipped model can shift the resulting
+#' trees for reasons unrelated to data or code changes. Matches
+#' mgcv::bam()'s existing `nthreads = 4` convention used throughout
+#' match_train.R.
+#' @keywords internal
+MATCH_XGB_NTHREAD <- 4L
+
+
+# Team Elo Constants
+# ------------------
+# Feature added to the match model (2026-07, FABLE-MATCH-MAE-PLAN.md WS2/WS5
+# "C6" candidate) -- a dynamic, results-based team-strength signal the
+# player-rating-derived features (epr/psr/torp_diff) structurally lack.
+# Hyperparameters tuned via grid search on pre-2025 data only (walk-forward,
+# no leakage into the confirmation window): k in {15,20,30}, hga in
+# {25,35,45}, carryover in {0.6,0.75,0.9}, scored on in-sample MAE of the
+# resulting Elo-implied margin (honest since elo_pre is inherently
+# point-in-time).
+
+#' Elo update rate (K-factor)
+#' @keywords internal
+ELO_K <- 20
+
+#' Elo home-ground advantage, in Elo points
+#' @keywords internal
+ELO_HGA <- 45
+
+#' Elo season-boundary carryover (fraction of rating retained; 1 = no
+#' regression to the 1500 mean, 0 = full reset)
+#' @keywords internal
+ELO_CARRYOVER <- 0.75
+
+
+# Margin Recalibration Constants
+# ------------------------------
+# Post-hoc scaling of the blended match-model margin prediction (2026-07,
+# FABLE-MATCH-MAE-PLAN.md WS1 "V1a" -- a leak-safe expanding-window slope
+# fit on temporal-holdout OOS predictions). Mirrors the WP calibration
+# sidecar pattern (wp_calibration.rds): fit once per retrain, applied at
+# serve time with an identity (b=1) fallback when absent or when there's
+# insufficient OOS history.
+
+#' Minimum OOS history MATCH count required before fitting a real
+#' recalibration scale (below this, use the identity fallback b=1 -- matches
+#' WS1's cold-start guard). Compared against
+#' \code{fit_match_margin_calibration()}'s \code{n_oos}, which is a match
+#' count (that function's underlying \code{team_mdl_df} is long -- two rows
+#' per match -- so it halves the raw OOS row count before comparing here).
+#' @keywords internal
+MATCH_RECAL_MIN_N <- 30
+
+#' Safe band for the fitted margin recalibration slope AND the raw (pre-
+#' calibration) rolling-OOS margin slope -- a production retrain aborts if
+#' either leaves this band (mirrors the WP temporal slope gate). Chosen per
+#' FABLE-MATCH-MAE-PLAN.md's expected end-state (slope 0.93-1.05 was the
+#' target; widened slightly for a release gate vs. a research target).
+#' @keywords internal
+MATCH_MARGIN_SLOPE_GATE <- c(0.85, 1.10)

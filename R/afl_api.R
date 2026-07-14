@@ -68,7 +68,14 @@
   curl::multi_run(pool = pool)
 
   n_ok <- length(ids) - n_failed - n_parse_errors
-  cli::cli_inform("Fetched {label} for {n_ok} of {length(ids)} match{?es}.")
+  if (n_ok < length(ids)) {
+    # torp H7: partial batch fetches (token expiry mid-batch, rate limiting)
+    # must not slip by as an inform-level byline -- this is the signal a
+    # caller like update_player_stats() needs to gate an upload on.
+    cli::cli_warn("Fetched {label} for {n_ok} of {length(ids)} match{?es}.")
+  } else {
+    cli::cli_inform("Fetched {label} for {n_ok} of {length(ids)} match{?es}.")
+  }
 
   out <- purrr::list_rbind(purrr::compact(results))
   if (is.null(out) || nrow(out) == 0) return(tibble::tibble())
@@ -954,7 +961,12 @@ torp_replace_teams <- function(team) {
 #' torp_team_abbr(c("Narrm", "Western Bulldogs", "CARL"))
 torp_team_abbr <- function(team) {
   canonical <- torp_replace_teams(team)
-  AFL_TEAMS$abbr[match(canonical, AFL_TEAMS$name)]
+  idx <- match(canonical, AFL_TEAMS$name)
+  if (anyNA(idx)) {
+    unmatched <- team[is.na(idx)]
+    cli::cli_warn("{length(unmatched)} unrecognised team name{?s}: {.val {unmatched}}")
+  }
+  AFL_TEAMS$abbr[idx]
 }
 
 
@@ -971,7 +983,12 @@ torp_team_abbr <- function(team) {
 #' torp_team_full(c("WB", "Narrm", "Cats"))
 torp_team_full <- function(team) {
   canonical <- torp_replace_teams(team)
-  AFL_TEAMS$full[match(canonical, AFL_TEAMS$name)]
+  idx <- match(canonical, AFL_TEAMS$name)
+  if (anyNA(idx)) {
+    unmatched <- team[is.na(idx)]
+    cli::cli_warn("{length(unmatched)} unrecognised team name{?s}: {.val {unmatched}}")
+  }
+  AFL_TEAMS$full[idx]
 }
 
 

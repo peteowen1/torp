@@ -7,6 +7,13 @@
 #' @param file_name A string for the file name (without extension).
 #' @param release_tag The GitHub release tag to associate with the uploaded file.
 #' @param also_csv Logical. If TRUE, also upload a `.csv` copy alongside parquet.
+#' @param prev_rows_floor Optional numeric in (0, 1]. When set, aborts BEFORE
+#'   uploading if `nrow(df)` is under this fraction of the row count recorded
+#'   for this asset in the tag's `bus_manifest.json` (if any). Best-effort:
+#'   a manifest read failure or absent manifest never blocks the upload --
+#'   this is a secondary safety net, not the primary accumulate guard (use
+#'   [vb_guard_accumulate()] against the actually-loaded `existing` data for
+#'   that).
 #'
 #' @return No return value. Used for side effects (file upload).
 #' @keywords internal
@@ -17,14 +24,31 @@
 #' save_to_release(my_df, "my_data", "v1.0.0")
 #' save_to_release(my_df, "my_data", "v1.0.0", also_csv = TRUE)
 #' }
-save_to_release <- function(df, file_name, release_tag, also_csv = FALSE) {
+save_to_release <- function(df, file_name, release_tag, also_csv = FALSE, prev_rows_floor = NULL) {
   rlang::check_installed("piggyback", version = "0.1.4", reason = "to upload data to GitHub releases")
   f_name <- paste0(file_name, ".parquet")
+  repo <- get_torp_data_repo()
   tf <- tempfile(fileext = ".parquet")
   on.exit(unlink(tf), add = TRUE)
 
   # Normalise team name values to canonical forms before saving
   if (nrow(df) > 0) df <- .normalise_team_values(df)
+
+  # T12: optional manifest-backed row-count floor, checked before spending an
+  # upload attempt. Best-effort -- never blocks on a manifest read failure.
+  if (!is.null(prev_rows_floor)) {
+    prev_manifest <- tryCatch(vb_read_prev_manifest(repo, release_tag), error = function(e) NULL)
+    prev_entry <- if (!is.null(prev_manifest)) .vb_manifest_entry_for(prev_manifest, f_name) else NULL
+    if (!is.null(prev_entry) && !is.null(prev_entry$rows) && !is.na(prev_entry$rows)) {
+      prev_rows <- as.numeric(prev_entry$rows)
+      if (prev_rows > 0 && nrow(df) < prev_rows_floor * prev_rows) {
+        cli::cli_abort(
+          "save_to_release: {.val {f_name}} has {nrow(df)} rows, under {prev_rows_floor * 100}% of the {prev_rows} rows recorded in bus_manifest.json - refusing to upload",
+          class = c("vb_error_integrity", "vb_error")
+        )
+      }
+    }
+  }
 
   tryCatch(
     arrow::write_parquet(df, tf),
@@ -35,18 +59,20 @@ save_to_release <- function(df, file_name, release_tag, also_csv = FALSE) {
 
   tryCatch(
     piggyback::pb_upload(tf,
-                         repo = get_torp_data_repo(),
+                         repo = repo,
                          tag = release_tag,
                          name = f_name),
     error = function(e) {
-      # Retry once on 404 — piggyback's delete-then-upload can fail if the
+      # Retry once on 404/422 — piggyback's delete-then-upload can fail if the
       # asset ID changed between listing and deletion (concurrent upload or
-      # stale cache). A fresh attempt re-fetches the asset list.
-      if (grepl("404", conditionMessage(e), fixed = TRUE)) {
-        cli::cli_warn("Upload 404 for {.val {f_name}}, retrying once...")
+      # stale cache), or if a concurrent create raced us (422). A short
+      # backoff then a fresh attempt re-fetches the asset list.
+      if (grepl("404|422", conditionMessage(e))) {
+        cli::cli_warn("Upload error for {.val {f_name}}, retrying once...")
+        Sys.sleep(2)
         tryCatch(
           piggyback::pb_upload(tf,
-                               repo = get_torp_data_repo(),
+                               repo = repo,
                                tag = release_tag,
                                name = f_name),
           error = function(e2) {
@@ -59,6 +85,52 @@ save_to_release <- function(df, file_name, release_tag, also_csv = FALSE) {
     }
   )
 
+  # pb_upload() above already returned success -- that's the actual
+  # correctness signal. invalidate_release_cache() and the manifest publish
+  # below must not be gated on the post-upload verify further down: that
+  # verify makes its own network call (vb_list_assets) and a TRANSIENT
+  # failure there says nothing about whether the real upload worked, but
+  # used to abort save_to_release() entirely, silently skipping both steps
+  # even though the data was safely on the release.
+  invalidate_release_cache(release_tag)
+
+  # T13: keep bus_manifest.json current for this tag (manifest-last, best
+  # effort). The data upload above already succeeded; a manifest publish
+  # failure must not undo that or fail the caller -- absent consumers just
+  # stay in legacy mode (versebus §1.2) until the next successful publish.
+  tryCatch(
+    .publish_bus_manifest(release_tag, f_name, tf, rows = if (is.data.frame(df)) nrow(df) else NA_integer_),
+    error = function(e) {
+      cli::cli_warn("Could not update bus_manifest.json for {.val {release_tag}}: {conditionMessage(e)}")
+    }
+  )
+
+  # T12: post-upload verify -- confirm the asset is actually on the release
+  # with the size we just wrote, via an uncached listing call. Catches races
+  # / silent-drop scenarios that a 2xx from pb_upload alone wouldn't
+  # surface. A failure to even LIST (vb_error_transient from vb_list_assets
+  # itself) only warns -- it's evidence the verify call flaked, not that
+  # the upload did. A listing that succeeds but confirms the asset is
+  # genuinely missing or wrong-sized is a real integrity signal and still
+  # aborts, now as a loud diagnostic after cache invalidation/manifest
+  # publish have already run rather than silently skipping them.
+  listed <- tryCatch(vb_list_assets(repo, release_tag), error = function(e) {
+    cli::cli_warn("Post-upload verify could not list {repo}@{release_tag} ({conditionMessage(e)}) -- upload itself already succeeded, proceeding")
+    NULL
+  })
+  if (!is.null(listed)) {
+    row <- listed[listed$name == f_name, , drop = FALSE]
+    if (nrow(row) == 0L) {
+      cli::cli_abort("Post-upload verify: {.val {f_name}} missing from {repo}@{release_tag} listing after upload",
+                     class = c("vb_error_transient", "vb_error"))
+    }
+    local_bytes <- as.numeric(file.size(tf))
+    if (!isTRUE(all.equal(as.numeric(row$size[1L]), local_bytes))) {
+      cli::cli_abort("Post-upload verify: {.val {f_name}} listed size {row$size[1L]} != local {local_bytes}",
+                     class = c("vb_error_integrity", "vb_error"))
+    }
+  }
+
   if (also_csv) {
     csv_name <- paste0(file_name, ".csv")
     tf_csv <- tempfile(fileext = ".csv")
@@ -67,7 +139,7 @@ save_to_release <- function(df, file_name, release_tag, also_csv = FALSE) {
     tryCatch({
       utils::write.csv(df, tf_csv, row.names = FALSE)
       piggyback::pb_upload(tf_csv,
-                           repo = get_torp_data_repo(),
+                           repo = repo,
                            tag = release_tag,
                            name = csv_name)
     }, error = function(e) {
@@ -84,6 +156,40 @@ save_to_release <- function(df, file_name, release_tag, also_csv = FALSE) {
       }
     )
   }
+}
+
+#' Publish/refresh `bus_manifest.json` for one uploaded asset (T13)
+#'
+#' Reads the tag's previous manifest (legacy mode -- NULL -- when absent),
+#' replaces this asset's entry, carries every other entry forward unchanged
+#' (so the manifest always describes the whole tag, per
+#' ECOSYSTEM-FIX-PLAN.md §1.2's partial-tag-publish rule), and uploads the
+#' result as `bus_manifest.json` LAST. Called from [save_to_release()] after
+#' its own upload has already succeeded and been verified -- this function's
+#' only job is to keep the commit record current, never to gate the upload.
+#'
+#' @param tag Release tag.
+#' @param name Asset file name (e.g. `"chains_data_2026_all.parquet"`).
+#' @param local_path Local path to the just-uploaded file (still on disk).
+#' @param rows Optional row count for the manifest entry.
+#' @return Invisible manifest list.
+#' @keywords internal
+.publish_bus_manifest <- function(tag, name, local_path, rows = NULL) {
+  repo <- get_torp_data_repo()
+  entry <- vb_asset_entry(local_path, rows = rows)
+  entry$name <- name  # local_path is a tempfile; use the canonical asset name
+
+  prev <- tryCatch(vb_read_prev_manifest(repo, tag), error = function(e) NULL)
+  merged <- .vb_merge_entries(prev, stats::setNames(list(entry), name))
+
+  tmp <- file.path(tempdir(), paste0(".bus_manifest_", tag, ".json"))
+  on.exit(unlink(tmp), add = TRUE)
+  manifest <- vb_write_manifest(merged, tag, tmp)
+
+  up <- function() piggyback::pb_upload(tmp, repo = repo, tag = tag, name = "bus_manifest.json", overwrite = TRUE)
+  tryCatch(up(), error = function(e) { Sys.sleep(5); up() })
+
+  invisible(manifest)
 }
 
 #' Update Player Stats Release
@@ -118,6 +224,28 @@ update_player_stats <- function(season) {
     player_stats$season <- as.integer(season)
   }
 
+  # torp H7: .fetch_cfs_batch() can silently return a partial batch (token
+  # expiry, rate limiting mid-fetch). Compare fetched match coverage against
+  # the season's concluded-match fixture count and refuse to upload a
+  # player_stats file that's missing more than 5% of matches -- an unattended
+  # daily run would otherwise happily re-upload (and re-poison) a partial file.
+  if ("match_id" %in% names(player_stats)) {
+    fixtures <- tryCatch(get_afl_fixtures(season), error = function(e) NULL)
+    if (!is.null(fixtures) && nrow(fixtures) > 0 && "status" %in% names(fixtures)) {
+      expected_matches <- sum(fixtures$status == "CONCLUDED", na.rm = TRUE)
+      fetched_matches <- dplyr::n_distinct(player_stats$match_id)
+      if (expected_matches > 0) {
+        missing_frac <- 1 - (fetched_matches / expected_matches)
+        if (missing_frac > 0.05) {
+          cli::cli_abort(c(
+            "Partial player stats fetch for {season}: {fetched_matches} of {expected_matches} concluded matches ({round(missing_frac * 100, 1)}% missing).",
+            "x" = "Refusing to upload -- would poison player_stats_{season}.parquet until manually re-run."
+          ))
+        }
+      }
+    }
+  }
+
   file_name <- paste0("player_stats_", season)
   save_to_release(df = player_stats, file_name = file_name, release_tag = "player_stats-data")
 
@@ -127,7 +255,16 @@ update_player_stats <- function(season) {
 
 #' Read a Parquet File from a GitHub Release via Piggyback
 #'
-#' Downloads and reads a `.parquet` file from a GitHub release using the `piggyback` package.
+#' Downloads and reads a `.parquet` file from a GitHub release. Routes the
+#' download through [vb_download()] (verified, atomic write). On any download
+#' failure, the error is independently reclassified via [vb_confirm_absent()]
+#' -- a real listing call -- rather than trusted from the raw piggyback error:
+#' only a positively-confirmed absence is re-signalled as `vb_error_absent`,
+#' everything else (including listing failures) propagates as
+#' `vb_error_transient` (or the original error). This is the versebus
+#' 404-vs-transient discipline (ECOSYSTEM-FIX-PLAN.md §1.3/§1.5) -- callers
+#' MUST NOT collapse a caught error here into "file doesn't exist" without
+#' checking its class first.
 #'
 #' @param file_name The base name of the file (without `.parquet` extension).
 #' @param release_tag The GitHub release tag the file is associated with.
@@ -142,26 +279,36 @@ update_player_stats <- function(season) {
 file_reader <- function(file_name, release_tag) {
   rlang::check_installed("piggyback", version = "0.1.4", reason = "to download data from GitHub releases")
   f_name <- paste0(file_name, ".parquet")
+  repo <- get_torp_data_repo()
   tf <- tempfile(fileext = ".parquet")
   on.exit(unlink(tf), add = TRUE)
 
   tryCatch(
-    piggyback::pb_download(f_name,
-                           repo = get_torp_data_repo(),
-                           tag = release_tag,
-                           dest = dirname(tf),
-                           overwrite = TRUE),
+    vb_download(repo, release_tag, f_name, tf),
+    vb_error_absent = function(e) stop(e),
+    vb_error_integrity = function(e) stop(e),
     error = function(e) {
-      cli::cli_abort("Failed to download {.val {f_name}} from release {.val {release_tag}}: {conditionMessage(e)}")
+      # vb_download's own dispatch is fail-safe-transient by default (it has
+      # no manifest/listing evidence of its own for a bare piggyback error).
+      # Independently confirm absence via a real listing call before
+      # re-classifying -- never trust the raw error message alone.
+      confirmed_absent <- tryCatch(
+        vb_confirm_absent(repo, release_tag, f_name),
+        error = function(e2) FALSE
+      )
+      if (isTRUE(confirmed_absent)) {
+        cli::cli_abort(
+          "{.val {f_name}} confirmed absent from release {.val {release_tag}}",
+          class = c("vb_error_absent", "vb_error"),
+          parent = e
+        )
+      }
+      stop(e)
     }
   )
 
-  # pb_download saves with the original filename in the dest directory
-  downloaded_path <- file.path(dirname(tf), f_name)
-  on.exit(unlink(downloaded_path), add = TRUE)
-
   tryCatch(
-    arrow::read_parquet(downloaded_path),
+    arrow::read_parquet(tf),
     error = function(e) {
       cli::cli_abort("Failed to read {.val {f_name}} after download: {conditionMessage(e)}")
     }
@@ -196,6 +343,11 @@ file_reader <- function(file_name, release_tag) {
 #'   completed past seasons. Default is FALSE.
 #' @param refresh Logical. If TRUE, clears all caches and fetches fresh
 #'   data from the API. Default is FALSE.
+#' @param strict Logical. If TRUE, abort when any requested season fails to
+#'   fetch instead of silently returning a partial result. Defaults to
+#'   `VERSEBUS_STRICT=1` (set by pipeline entry scripts); interactive
+#'   sessions stay lenient. Regardless of `strict`, a result with any failed
+#'   season is never written to the in-memory cache (torp H2).
 #' @return A tibble.
 #' @keywords internal
 .load_with_cache <- function(cache_prefix, seasons, fetch_fn,
@@ -203,7 +355,8 @@ file_reader <- function(file_name, release_tag) {
                              verbose = FALSE, columns = NULL,
                              fetch_all_fn = NULL,
                              use_disk_cache = FALSE,
-                             refresh = FALSE) {
+                             refresh = FALSE,
+                             strict = isTRUE(Sys.getenv("VERSEBUS_STRICT") == "1")) {
   cache_key <- paste0(cache_prefix, "_", paste(sort(seasons), collapse = "_"))
 
   # Force refresh: clear in-memory and disk caches
@@ -239,13 +392,15 @@ file_reader <- function(file_name, release_tag) {
   }
 
   current_year <- as.numeric(format(Sys.Date(), "%Y"))
+  failed_seasons <- character(0)
 
   # Fetch data — use bulk fetcher if available and multi-season, else per-season
   if (!is.null(fetch_all_fn) && length(seasons) > 1) {
     results <- list(tryCatch(
       suppressMessages(fetch_all_fn(seasons)),
       error = function(e) {
-        cli::cli_alert_danger("Bulk fetch failed for {cache_prefix}: {conditionMessage(e)}")
+        cli::cli_warn("Bulk fetch failed for {cache_prefix}: {conditionMessage(e)}")
+        failed_seasons <<- as.character(seasons)
         NULL
       }
     ))
@@ -258,7 +413,8 @@ file_reader <- function(file_name, release_tag) {
       }
 
       data <- tryCatch(suppressMessages(fetch_fn(s)), error = function(e) {
-        cli::cli_alert_danger("Failed to fetch {cache_prefix} for {s}: {conditionMessage(e)}")
+        cli::cli_warn("Failed to fetch {cache_prefix} for {s}: {conditionMessage(e)}")
+        failed_seasons <<- c(failed_seasons, as.character(s))
         NULL
       })
 
@@ -272,6 +428,20 @@ file_reader <- function(file_name, release_tag) {
   }
   results <- Filter(Negate(is.null), results)
 
+  # torp H2: failed seasons are dropped silently no more -- surface loudly,
+  # and abort outright in strict (pipeline) mode rather than compute
+  # downstream ratings/models against a season-shaped hole.
+  if (length(failed_seasons) > 0) {
+    failed_seasons <- unique(failed_seasons)
+    if (strict) {
+      cli::cli_abort(
+        "{cache_prefix}: failed to fetch season(s) {paste(failed_seasons, collapse = ', ')} - aborting (VERSEBUS_STRICT)",
+        class = c("vb_error_transient", "vb_error")
+      )
+    }
+    cli::cli_warn("{cache_prefix}: proceeding with partial data -- season(s) {paste(failed_seasons, collapse = ', ')} failed to fetch")
+  }
+
   if (length(results) == 0) {
     cli::cli_warn("No {cache_prefix} data returned for seasons: {paste(seasons, collapse = ', ')}")
     return(tibble::tibble())
@@ -281,8 +451,10 @@ file_reader <- function(file_name, release_tag) {
   out <- data.table::rbindlist(lapply(results, data.table::as.data.table), fill = TRUE)
   out <- tibble::as_tibble(out)
 
-  # Store in in-memory cache before column selection
-  if (use_cache && nrow(out) > 0) {
+  # Store in in-memory cache before column selection -- but never a partial
+  # result (torp H2): a season-hole cached for cache_ttl silently poisons
+  # every later loader call in the same session/pipeline run.
+  if (use_cache && nrow(out) > 0 && length(failed_seasons) == 0) {
     store_in_cache(cache_key, out)
     if (verbose) cli::cli_inform("Stored {cache_prefix} in cache ({nrow(out)} rows)")
   }
@@ -445,10 +617,10 @@ load_xg <- function(seasons = get_afl_season(), rounds = NULL, use_disk_cache = 
     .normalise_columns(out, XG_COL_MAP)
   }
 
-  # Filter by round if requested (round parsed from match_id chars 12-13)
+  # Filter by round if requested (round parsed from match_id)
   if (!is.null(rounds) && nrow(out) > 0) {
     if (!data.table::is.data.table(out)) out <- data.table::as.data.table(out)
-    out[, round_number := as.integer(substr(match_id, 12L, 13L))]
+    out[, round_number := .extract_round_from_match_id(match_id)]
     out <- out[round_number %in% as.integer(rounds)]
   }
 
@@ -458,7 +630,7 @@ load_xg <- function(seasons = get_afl_season(), rounds = NULL, use_disk_cache = 
 
 #' Load Player Stats Data
 #'
-#' @description Loads player stats data from the [torpdata repository](https://github.com/peteowen1/torpdata)
+#' @description Loads player stats data from the AFL API (cached to disk, not fetched from a torpdata release)
 #'
 #' @param seasons A numeric vector of 4-digit years associated with given AFL seasons - defaults to latest season. If set to `TRUE`, returns all available data since 2021.
 #' @param use_disk_cache Logical. If TRUE (default), caches completed past seasons
@@ -531,7 +703,7 @@ load_player_game_data <- function(seasons = get_afl_season(), use_disk_cache = F
 
 #' Load AFL Fixture Data
 #'
-#' @description Loads AFL fixture and schedule data from the [torpdata repository](https://github.com/peteowen1/torpdata)
+#' @description Loads AFL fixture and schedule data from the AFL API (cached to disk, not fetched from a torpdata release)
 #'
 #' @param seasons A numeric vector of 4-digit years associated with given AFL seasons - defaults to latest season. If set to `TRUE`, returns all available data since 2021.
 #' @param all Deprecated. Use `seasons = TRUE` instead (consistent with other `load_*()` functions).
@@ -589,7 +761,7 @@ load_fixtures <- function(seasons = NULL, all = FALSE, use_disk_cache = FALSE,
 
 #' Load AFL Team and Lineup Data
 #'
-#' @description Loads AFL team roster and lineup data from the [torpdata repository](https://github.com/peteowen1/torpdata)
+#' @description Loads AFL team roster and lineup data from the AFL API (cached to disk, not fetched from a torpdata release)
 #'
 #' @param seasons A numeric vector of 4-digit years associated with given AFL seasons - defaults to latest season. If set to `TRUE`, returns all available data since 2021.
 #' @param use_disk_cache Logical. If TRUE (default), caches completed past seasons
@@ -624,7 +796,7 @@ load_teams <- function(seasons = get_afl_season(), use_disk_cache = TRUE, refres
   if (nrow(out) > 0 && "match_id" %in% names(out)) {
     needs_round <- !"round_number" %in% names(out) || anyNA(out$round_number)
     if (needs_round) {
-      out$round_number <- as.integer(substr(out$match_id, 12L, 13L))
+      out$round_number <- .extract_round_from_match_id(out$match_id)
     }
   }
 
@@ -634,7 +806,7 @@ load_teams <- function(seasons = get_afl_season(), use_disk_cache = TRUE, refres
 
 #' Load AFL Match Results Data
 #'
-#' @description Loads AFL match results and scores from the [torpdata repository](https://github.com/peteowen1/torpdata)
+#' @description Loads AFL match results and scores from the AFL API (cached to disk, not fetched from a torpdata release)
 #'
 #' @param seasons A numeric vector of 4-digit years associated with given AFL seasons - defaults to latest season. If set to `TRUE`, returns all available data since 2021.
 #' @param use_disk_cache Logical. If TRUE, uses persistent disk cache for faster repeated loads. Default is FALSE.
@@ -1034,7 +1206,6 @@ load_ep_wp_charts <- function(seasons = get_afl_season(), rounds = TRUE, use_dis
 load_player_stat_ratings <- function(seasons = get_afl_season(), use_disk_cache = FALSE, columns = NULL) {
   seasons <- validate_seasons(seasons)
 
-  # Try new release tag first, fall back to old for backward compat
   urls <- generate_urls("player_stat_ratings-data", "player_stat_ratings", seasons)
 
   out <- load_from_url(urls, seasons = seasons, use_disk_cache = use_disk_cache, columns = columns)

@@ -7,13 +7,26 @@
 load_model_with_fallback(model_name)
 }
 \arguments{
-\item{model_name}{Short model name: "ep", "wp", "shot", "match_gams", or "xgb_win"}
+\item{model_name}{Short model name: "ep", "wp", "wp_calibration", "shot",
+"match_gams", or "xgb_win"}
 }
 \value{
-The loaded model object.
+The loaded model object, or \code{NULL} for \code{"wp_calibration"} when
+unavailable.
 }
 \description{
 Loads a model from the torpmodels package with in-memory caching.
 Install torpmodels via \code{devtools::install_github("peteowen1/torpmodels")}.
+}
+\details{
+\code{"wp_calibration"} is the one exception to the usual abort-on-failure
+contract: it's an optional sidecar (torpverse/docs/plans/FABLE-RECAL-PLAN.md D3/D4), so a
+404/absence/network failure degrades to a \code{cli_warn()} and \code{NULL} --
+never an error. Unlike a successful load, a failed load is deliberately
+NOT written to the model cache slot, so the next call retries the real
+load instead of a one-off transient failure permanently downgrading the
+rest of the session to uncalibrated WP; the warning itself is still
+deduped to once per session via a separate cache key so retries don't
+spam the log. Every other model name keeps the hard-abort contract.
 }
 \keyword{internal}
