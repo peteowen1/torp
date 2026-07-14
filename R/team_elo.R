@@ -37,10 +37,11 @@
 
 #' Sequential team-Elo rating, pre-match ratings only
 #'
-#' Standard Elo with home-ground advantage and a 538-style margin-of-victory
-#' multiplier that dampens updates when the pre-match rating gap is already
-#' large (prevents runaway ratings for dominant teams). Applies partial
-#' regression-to-mean at each team's first match of a new season.
+#' Standard Elo with home-ground advantage and a 538-style, winner-relative
+#' margin-of-victory multiplier: it dampens updates when the favourite wins
+#' as expected (prevents runaway ratings for dominant teams) and amplifies
+#' them on an upset, so ratings correct faster after a form change. Applies
+#' partial regression-to-mean at each team's first match of a new season.
 #'
 #' @param matches data.frame with columns match_id, date, season, home_team,
 #'   away_team, home_margin (home_score - away_score), sorted by date
@@ -101,7 +102,13 @@ build_team_elo <- function(matches, k = ELO_K, hga = ELO_HGA, carryover = ELO_CA
     result <- if (is.na(m)) 0.5 else if (m > 0) 1 else if (m < 0) 0 else 0.5
 
     mov <- if (isTRUE(mov_mult) && !is.na(m) && m != 0) {
-      log(abs(m) + 1) * (2.2 / (0.001 * abs(elo_h - elo_a) + 2.2))
+      # 538-style: winner-relative, NOT abs() -- (winner_elo - loser_elo) is
+      # positive for a favourite win (dampens it) and NEGATIVE for an upset
+      # (amplifies the correction), which is the actual autocorrelation-of-
+      # era adjustment. abs() collapses that asymmetry and dampens upsets
+      # the same as favourite blowouts.
+      elo_diff_winner <- if (m > 0) elo_h - elo_a else elo_a - elo_h
+      log(abs(m) + 1) * (2.2 / (0.001 * elo_diff_winner + 2.2))
     } else {
       1
     }

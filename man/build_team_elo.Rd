@@ -41,9 +41,10 @@ upcoming/unplayed fixtures, where there is no historical elo_pre to
 look up (see \code{join_elo_diff_to_team_mdl_df()}).}
 }
 \description{
-Standard Elo with home-ground advantage and a 538-style margin-of-victory
-multiplier that dampens updates when the pre-match rating gap is already
-large (prevents runaway ratings for dominant teams). Applies partial
-regression-to-mean at each team's first match of a new season.
+Standard Elo with home-ground advantage and a 538-style, winner-relative
+margin-of-victory multiplier: it dampens updates when the favourite wins
+as expected (prevents runaway ratings for dominant teams) and amplifies
+them on an upset, so ratings correct faster after a form change. Applies
+partial regression-to-mean at each team's first match of a new season.
 }
 \keyword{internal}
