@@ -283,7 +283,11 @@ get_wp_preds <- function(df) {
   # form), identity fallback when the sidecar is absent
   # (load_model_with_fallback() has already warn-once'd in that case).
   calib <- load_model_with_fallback("wp_calibration")
-  if (!is.null(calib) && is.finite(calib$a) && is.finite(calib$b)) {
+  calib_a <- calib$a
+  calib_b <- calib$b
+  calib_a_ok <- is.numeric(calib_a) && length(calib_a) == 1 && is.finite(calib_a)
+  calib_b_ok <- is.numeric(calib_b) && length(calib_b) == 1 && is.finite(calib_b)
+  if (!is.null(calib) && calib_a_ok && calib_b_ok) {
     a_q4c <- calib$a_q4c
     if (is.null(a_q4c) || length(a_q4c) != 1 || !is.finite(a_q4c)) a_q4c <- 0
     b_q4c <- calib$b_q4c
@@ -304,7 +308,7 @@ get_wp_preds <- function(df) {
       I <- as.numeric(flag)
     }
 
-    preds_raw <- stats::plogis((calib$a + a_q4c * I) + (calib$b + b_q4c * I) * stats::qlogis(preds_raw))
+    preds_raw <- stats::plogis((calib_a + a_q4c * I) + (calib_b + b_q4c * I) * stats::qlogis(preds_raw))
   }
 
   preds <- data.frame(wp = preds_raw)
@@ -347,11 +351,13 @@ get_shot_result_preds <- function(df) {
 #'
 #' `"wp_calibration"` is the one exception to the usual abort-on-failure
 #' contract: it's an optional sidecar (torpverse/docs/plans/FABLE-RECAL-PLAN.md D3/D4), so a
-#' 404/absence/network failure degrades to a single `cli_warn()` and a
-#' cached `NULL` -- never an error, and never more than one warning per
-#' session (the `NULL` is cached like any other model, so subsequent calls
-#' return it from cache before reaching the network/warning code at all).
-#' Every other model name keeps the hard-abort contract.
+#' 404/absence/network failure degrades to a `cli_warn()` and `NULL` --
+#' never an error. Unlike a successful load, a failed load is deliberately
+#' NOT written to the model cache slot, so the next call retries the real
+#' load instead of a one-off transient failure permanently downgrading the
+#' rest of the session to uncalibrated WP; the warning itself is still
+#' deduped to once per session via a separate cache key so retries don't
+#' spam the log. Every other model name keeps the hard-abort contract.
 #'
 #' @param model_name Short model name: "ep", "wp", "wp_calibration", "shot",
 #'   "match_gams", or "xgb_win"
@@ -371,10 +377,25 @@ load_model_with_fallback <- function(model_name) {
 
   is_optional_calibration <- identical(model_name, "wp_calibration")
 
+  # Warn-once dedup lives on its own key, separate from the model cache slot
+  # itself -- a failed load must NEVER populate `model_name`'s cache slot
+  # (see below), so gating the warning on that slot would silently
+  # reintroduce the "one transient failure permanently serves uncalibrated
+  # WP" bug it's meant to avoid. Deliberately NOT dot-prefixed: ls()
+  # (used by clear_model_cache()/get_model_cache_info()) defaults to
+  # all.names = FALSE and would silently skip a dot-prefixed key, leaking
+  # warn-once state across a clear_model_cache() call.
+  warned_key <- paste0(model_name, "__warned")
+  warn_once <- function(msg) {
+    if (!exists(warned_key, envir = .torp_model_cache)) {
+      cli::cli_warn(msg)
+      assign(warned_key, TRUE, envir = .torp_model_cache)
+    }
+  }
+
   if (!requireNamespace("torpmodels", quietly = TRUE)) {
     if (is_optional_calibration) {
-      cli::cli_warn("torpmodels package not available -- serving uncalibrated WP (wp_calibration unavailable)")
-      assign(model_name, NULL, envir = .torp_model_cache)
+      warn_once("torpmodels package not available -- serving uncalibrated WP (wp_calibration unavailable)")
       return(NULL)
     }
     cli::cli_abort(c(
@@ -387,7 +408,7 @@ load_model_with_fallback <- function(model_name) {
     torpmodels::load_torp_model(model_name, verbose = FALSE),
     error = function(e) {
       if (is_optional_calibration) {
-        cli::cli_warn(c(
+        warn_once(c(
           "wp_calibration unavailable -- serving uncalibrated WP",
           "x" = e$message
         ))
@@ -401,6 +422,13 @@ load_model_with_fallback <- function(model_name) {
     }
   )
 
-  assign(model_name, model, envir = .torp_model_cache)
+  # Only cache a successful load. A failed optional-calibration load returns
+  # NULL here without ever being written to `model_name`'s cache slot, so
+  # the NEXT get_wp_preds() call retries the real load instead of a single
+  # transient network blip permanently downgrading the whole session to
+  # uncalibrated WP.
+  if (!is.null(model)) {
+    assign(model_name, model, envir = .torp_model_cache)
+  }
   model
 }

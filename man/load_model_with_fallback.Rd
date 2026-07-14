@@ -21,10 +21,12 @@ Install torpmodels via \code{devtools::install_github("peteowen1/torpmodels")}.
 \details{
 \code{"wp_calibration"} is the one exception to the usual abort-on-failure
 contract: it's an optional sidecar (torpverse/docs/plans/FABLE-RECAL-PLAN.md D3/D4), so a
-404/absence/network failure degrades to a single \code{cli_warn()} and a
-cached \code{NULL} -- never an error, and never more than one warning per
-session (the \code{NULL} is cached like any other model, so subsequent calls
-return it from cache before reaching the network/warning code at all).
-Every other model name keeps the hard-abort contract.
+404/absence/network failure degrades to a \code{cli_warn()} and \code{NULL} --
+never an error. Unlike a successful load, a failed load is deliberately
+NOT written to the model cache slot, so the next call retries the real
+load instead of a one-off transient failure permanently downgrading the
+rest of the session to uncalibrated WP; the warning itself is still
+deduped to once per session via a separate cache key so retries don't
+spam the log. Every other model name keeps the hard-abort contract.
 }
 \keyword{internal}

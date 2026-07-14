@@ -249,6 +249,24 @@ test_that("(g) explicit-zero interaction fields and absent cell spec behave as g
   expect_equal(got$wp, stats::plogis(0.2 * I + (1 + 0.1 * I) * stats::qlogis(raw)))
 })
 
+test_that("(h) sidecar list missing $a/$b does not crash get_wp_preds() -- identity fallback", {
+  fixture <- .wp_calib_test_fixture_model()
+  df <- .wp_calib_test_mock_df()
+
+  testthat::local_mocked_bindings(
+    load_model_with_fallback = function(model_name) {
+      if (model_name == "wp") return(fixture)
+      if (model_name == "wp_calibration") return(list(form = "global"))
+      stop("unexpected model_name in mock: ", model_name)
+    },
+    .package = "torp"
+  )
+
+  raw <- .wp_calib_raw_preds(fixture, df)
+  got <- expect_no_error(torp:::get_wp_preds(df))
+  expect_identical(got$wp, raw)
+})
+
 test_that("load_model_with_fallback('wp_calibration') never aborts on a load failure -- warns once, returns NULL", {
   clear_model_cache()
   testthat::local_mocked_bindings(
