@@ -32,17 +32,22 @@
 #' @return A list: \code{b} (recalibration scale, 1 = identity),
 #'   \code{slope_raw} (the OOS margin calibration slope BEFORE recalibration
 #'   -- feeds the release gate, see \code{MATCH_MARGIN_SLOPE_GATE}),
-#'   \code{n_oos} (holdout match count), \code{holdout_season}, and
-#'   \code{fitted_at} (timestamp). \code{b = 1} (identity) if
+#'   \code{n_oos} (holdout MATCH count -- \code{team_mdl_df} is long, two rows
+#'   per match, so this is the OOS row count halved), \code{cold_start}
+#'   (\code{TRUE} when \code{b} was forced to identity because
 #'   \code{n_oos < MATCH_RECAL_MIN_N} or fewer than 2 seasons of history
-#'   exist to hold one out.
+#'   exist -- lets callers, e.g. \code{run_predictions_pipeline()}'s upload
+#'   gate, distinguish a low-confidence cold-start identity fit from a
+#'   genuine slope-gate breach), \code{holdout_season}, and \code{fitted_at}
+#'   (timestamp). \code{b = 1} (identity) if \code{n_oos < MATCH_RECAL_MIN_N}
+#'   or fewer than 2 seasons of history exist to hold one out.
 #' @keywords internal
 fit_match_margin_calibration <- function(team_mdl_df, nthreads = 4L) {
   seasons <- sort(unique(team_mdl_df$season.x[!is.na(team_mdl_df$win)]))
   if (length(seasons) < 2) {
     cli::cli_warn("fit_match_margin_calibration: fewer than 2 completed seasons available -- identity fallback (b=1)")
-    return(list(b = 1, slope_raw = NA_real_, n_oos = 0L, holdout_season = NA_integer_,
-                fitted_at = Sys.time()))
+    return(list(b = 1, slope_raw = NA_real_, n_oos = 0L, cold_start = TRUE,
+                holdout_season = NA_integer_, fitted_at = Sys.time()))
   }
 
   holdout_season <- max(seasons)
@@ -64,7 +69,11 @@ fit_match_margin_calibration <- function(team_mdl_df, nthreads = 4L) {
     margin      = xgb_data$score_diff[test_mask]
   )
   oos <- oos[stats::complete.cases(oos), ]
-  n_oos <- nrow(oos)
+  # team_mdl_df (and therefore xgb_data) is long -- one row per team per
+  # match -- so nrow(oos) is a ROW count. n_oos must mean MATCH count
+  # everywhere below (MATCH_RECAL_MIN_N and the release gate are both
+  # documented in match counts), so halve it here, once, at the source.
+  n_oos <- nrow(oos) / 2
 
   slope_raw <- if (n_oos >= 2) {
     tryCatch(unname(stats::coef(stats::lm(margin ~ pred_margin, data = oos))[["pred_margin"]]),
@@ -73,8 +82,9 @@ fit_match_margin_calibration <- function(team_mdl_df, nthreads = 4L) {
     NA_real_
   }
 
-  if (n_oos < MATCH_RECAL_MIN_N) {
-    cli::cli_warn("fit_match_margin_calibration: only {n_oos} OOS holdout rows (< {MATCH_RECAL_MIN_N}) -- identity fallback (b=1)")
+  cold_start <- n_oos < MATCH_RECAL_MIN_N
+  if (cold_start) {
+    cli::cli_warn("fit_match_margin_calibration: only {n_oos} OOS holdout matches (< {MATCH_RECAL_MIN_N}) -- identity fallback (b=1)")
     b <- 1
   } else {
     b <- tryCatch(
@@ -92,8 +102,8 @@ fit_match_margin_calibration <- function(team_mdl_df, nthreads = 4L) {
 
   cli::cli_inform("fit_match_margin_calibration: b={round(b, 3)}, raw OOS slope={round(slope_raw, 3)}, n_oos={n_oos}")
 
-  list(b = b, slope_raw = slope_raw, n_oos = n_oos, holdout_season = holdout_season,
-       fitted_at = Sys.time())
+  list(b = b, slope_raw = slope_raw, n_oos = n_oos, cold_start = cold_start,
+       holdout_season = holdout_season, fitted_at = Sys.time())
 }
 
 # apply_match_margin_calibration ----
@@ -118,10 +128,14 @@ apply_match_margin_calibration <- function(pred_margin, calib) {
 #'
 #' Mirrors \code{load_model_with_fallback("wp_calibration")}'s contract:
 #' absence, a network failure, or torpmodels not being installed all
-#' degrade to a single \code{cli_warn()} and `NULL` (identity fallback at
-#' the call site) -- never an error. Cached per session so repeated calls
-#' (e.g. across several weeks' predictions in one session) don't re-hit the
-#' network.
+#' degrade to a \code{cli_warn()} and `NULL` (identity fallback at the call
+#' site) -- never an error. A successful load is cached per session so
+#' repeated calls (e.g. across several weeks' predictions in one session)
+#' don't re-hit the network; a failed load is deliberately NOT cached, so
+#' the next call retries rather than a one-off transient failure
+#' permanently downgrading the rest of the session to uncalibrated margins.
+#' The warning itself is still deduped to once per session via a separate
+#' cache key.
 #'
 #' @return The calibration list (see \code{fit_match_margin_calibration()}),
 #'   or `NULL` if unavailable.
@@ -131,16 +145,31 @@ load_match_margin_calibration <- function() {
     return(get("match_margin_calibration", envir = .torp_model_cache))
   }
 
+  # Warn-once dedup lives on its own key, separate from the model cache slot
+  # itself -- a failed load must NEVER populate the "match_margin_calibration"
+  # cache slot (see below), so gating the warning on that slot would silently
+  # turn a one-off transient failure into "sidecar absent" for the rest of
+  # the session. Deliberately NOT dot-prefixed: ls() (used by
+  # clear_model_cache()/get_model_cache_info()) defaults to
+  # all.names = FALSE and would silently skip a dot-prefixed key, leaking
+  # warn-once state across a clear_model_cache() call.
+  warned_key <- "match_margin_calibration__warned"
+  warn_once <- function(msg) {
+    if (!exists(warned_key, envir = .torp_model_cache)) {
+      cli::cli_warn(msg)
+      assign(warned_key, TRUE, envir = .torp_model_cache)
+    }
+  }
+
   if (!requireNamespace("torpmodels", quietly = TRUE)) {
-    cli::cli_warn("torpmodels package not available -- serving uncalibrated match margins (match_margin_calibration unavailable)")
-    assign("match_margin_calibration", NULL, envir = .torp_model_cache)
+    warn_once("torpmodels package not available -- serving uncalibrated match margins (match_margin_calibration unavailable)")
     return(NULL)
   }
 
   calib <- tryCatch(
     torpmodels::load_torp_model("match_margin_calibration", verbose = FALSE),
     error = function(e) {
-      cli::cli_warn(c(
+      warn_once(c(
         "match_margin_calibration unavailable -- serving uncalibrated match margins",
         "x" = e$message
       ))
@@ -148,6 +177,10 @@ load_match_margin_calibration <- function() {
     }
   )
 
-  assign("match_margin_calibration", calib, envir = .torp_model_cache)
+  # Only cache a successful load -- see load_model_with_fallback()'s wp_calibration
+  # path in add_variables.R for the identical fix and rationale.
+  if (!is.null(calib)) {
+    assign("match_margin_calibration", calib, envir = .torp_model_cache)
+  }
   calib
 }

@@ -15,10 +15,15 @@ fit_match_margin_calibration(team_mdl_df, nthreads = 4L)
 A list: \code{b} (recalibration scale, 1 = identity),
 \code{slope_raw} (the OOS margin calibration slope BEFORE recalibration
 -- feeds the release gate, see \code{MATCH_MARGIN_SLOPE_GATE}),
-\code{n_oos} (holdout match count), \code{holdout_season}, and
-\code{fitted_at} (timestamp). \code{b = 1} (identity) if
+\code{n_oos} (holdout MATCH count -- \code{team_mdl_df} is long, two rows
+per match, so this is the OOS row count halved), \code{cold_start}
+(\code{TRUE} when \code{b} was forced to identity because
 \code{n_oos < MATCH_RECAL_MIN_N} or fewer than 2 seasons of history
-exist to hold one out.
+exist -- lets callers, e.g. \code{run_predictions_pipeline()}'s upload
+gate, distinguish a low-confidence cold-start identity fit from a
+genuine slope-gate breach), \code{holdout_season}, and \code{fitted_at}
+(timestamp). \code{b = 1} (identity) if \code{n_oos < MATCH_RECAL_MIN_N}
+or fewer than 2 seasons of history exist to hold one out.
 }
 \description{
 Trains the GAM+XGBoost chain on all seasons strictly before the most

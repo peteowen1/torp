@@ -13,9 +13,13 @@ or \code{NULL} if unavailable.
 \description{
 Mirrors \code{load_model_with_fallback("wp_calibration")}'s contract:
 absence, a network failure, or torpmodels not being installed all
-degrade to a single \code{cli_warn()} and \code{NULL} (identity fallback at
-the call site) -- never an error. Cached per session so repeated calls
-(e.g. across several weeks' predictions in one session) don't re-hit the
-network.
+degrade to a \code{cli_warn()} and \code{NULL} (identity fallback at the call
+site) -- never an error. A successful load is cached per session so
+repeated calls (e.g. across several weeks' predictions in one session)
+don't re-hit the network; a failed load is deliberately NOT cached, so
+the next call retries rather than a one-off transient failure
+permanently downgrading the rest of the session to uncalibrated margins.
+The warning itself is still deduped to once per session via a separate
+cache key.
 }
 \keyword{internal}

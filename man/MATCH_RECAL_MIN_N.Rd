@@ -3,9 +3,12 @@
 \docType{data}
 \name{MATCH_RECAL_MIN_N}
 \alias{MATCH_RECAL_MIN_N}
-\title{Minimum OOS history rows required before fitting a real recalibration
-scale (below this, use the identity fallback b=1 -- matches WS1's
-cold-start guard)}
+\title{Minimum OOS history MATCH count required before fitting a real
+recalibration scale (below this, use the identity fallback b=1 -- matches
+WS1's cold-start guard). Compared against
+\code{fit_match_margin_calibration()}'s \code{n_oos}, which is a match
+count (that function's underlying \code{team_mdl_df} is long -- two rows
+per match -- so it halves the raw OOS row count before comparing here).}
 \format{
 An object of class \code{numeric} of length 1.
 }
@@ -13,8 +16,11 @@ An object of class \code{numeric} of length 1.
 MATCH_RECAL_MIN_N
 }
 \description{
-Minimum OOS history rows required before fitting a real recalibration
-scale (below this, use the identity fallback b=1 -- matches WS1's
-cold-start guard)
+Minimum OOS history MATCH count required before fitting a real
+recalibration scale (below this, use the identity fallback b=1 -- matches
+WS1's cold-start guard). Compared against
+\code{fit_match_margin_calibration()}'s \code{n_oos}, which is a match
+count (that function's underlying \code{team_mdl_df} is long -- two rows
+per match -- so it halves the raw OOS row count before comparing here).
 }
 \keyword{internal}

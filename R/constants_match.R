@@ -177,9 +177,12 @@ ELO_CARRYOVER <- 0.75
 # serve time with an identity (b=1) fallback when absent or when there's
 # insufficient OOS history.
 
-#' Minimum OOS history rows required before fitting a real recalibration
-#' scale (below this, use the identity fallback b=1 -- matches WS1's
-#' cold-start guard)
+#' Minimum OOS history MATCH count required before fitting a real
+#' recalibration scale (below this, use the identity fallback b=1 -- matches
+#' WS1's cold-start guard). Compared against
+#' \code{fit_match_margin_calibration()}'s \code{n_oos}, which is a match
+#' count (that function's underlying \code{team_mdl_df} is long -- two rows
+#' per match -- so it halves the raw OOS row count before comparing here).
 #' @keywords internal
 MATCH_RECAL_MIN_N <- 30
 

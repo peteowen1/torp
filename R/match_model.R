@@ -923,12 +923,16 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
       # Margin calibration sidecar (2026-07, FABLE-MATCH-MAE-PLAN.md WS1) --
       # fit fresh each retrain via a temporal holdout. Release gate (mirrors
       # the WP temporal slope gate): a raw OOS slope outside
-      # MATCH_MARGIN_SLOPE_GATE skips uploading a new sidecar (keeps whatever
-      # was previously published, or identity if none exists yet) rather than
-      # aborting the whole pipeline -- weekly predictions still need to ship
-      # even when this diagnostic signal is off; graceful degradation matches
-      # this function's existing house style (xgb failure -> GAM-only, PSR
-      # failure -> warn+continue, etc.), not a hard-fail research gate.
+      # MATCH_MARGIN_SLOPE_GATE, OR a cold-start identity fit (calib_fit$b
+      # forced to 1 because fit_match_margin_calibration()'s n_oos fell below
+      # MATCH_RECAL_MIN_N -- a coincidentally in-range slope_raw must NOT
+      # count as a pass in that case), skips uploading a new sidecar (keeps
+      # whatever was previously published, or identity if none exists yet)
+      # rather than aborting the whole pipeline -- weekly predictions still
+      # need to ship even when this diagnostic signal is off; graceful
+      # degradation matches this function's existing house style (xgb
+      # failure -> GAM-only, PSR failure -> warn+continue, etc.), not a
+      # hard-fail research gate.
       calib_fit <- tryCatch(
         fit_match_margin_calibration(team_mdl_df),
         error = function(e) {
@@ -939,7 +943,12 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
       if (!is.null(calib_fit)) {
         gate <- MATCH_MARGIN_SLOPE_GATE
         slope_ok <- is.na(calib_fit$slope_raw) || (calib_fit$slope_raw >= gate[1] && calib_fit$slope_raw <= gate[2])
-        if (!slope_ok) {
+        if (isTRUE(calib_fit$cold_start)) {
+          cli::cli_warn(c(
+            "Margin calibration cold start: only {calib_fit$n_oos} OOS holdout matches (< {MATCH_RECAL_MIN_N}) -- b was forced to identity.",
+            "i" = "Skipping match_margin_calibration upload this run -- serving will fall back to the previously published sidecar (or identity if none exists)."
+          ))
+        } else if (!slope_ok) {
           cli::cli_warn(c(
             "Margin calibration slope gate breached: raw OOS slope {round(calib_fit$slope_raw, 3)} outside [{gate[1]}, {gate[2]}].",
             "i" = "Skipping match_margin_calibration upload this run -- serving will fall back to the previously published sidecar (or identity if none exists)."
