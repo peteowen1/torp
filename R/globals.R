@@ -197,6 +197,18 @@ utils::globalVariables(c(
 # rlang .env pronoun
 utils::globalVariables(c(".env"))
 
+# team_elo.R — join_elo_diff_to_team_mdl_df() (C6 elo_diff feature, 2026-07)
+utils::globalVariables(c(
+  "team_name_x_chr", "team_name_y_chr",
+  "elo_pre_x", "elo_pre_y", "elo_current_x", "elo_current_y"
+))
+
+# clean_pbp.R — chain-team coordinate orientation backward-compat
+utils::globalVariables(c(
+  "chain_team_id", "coord_team_id", "mp_home_team_id", "coord_home_team_id",
+  "shot_row"
+))
+
 # Contest extraction variables
 utils::globalVariables(c(
   ".next_desc", ".next_player_id", ".next_team_id", ".next_x", ".next_y",
