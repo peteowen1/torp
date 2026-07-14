@@ -393,11 +393,12 @@ get_game_chains <- function(match_id) {
   # Hoist column index lookup (constant across all chains in a match)
   # API renamed "actions" → "stats" circa 2026; support both
   actions_col <- which(names(chain_list) %in% c("stats", "actions"))
-  if (length(actions_col) != 1) {
-    cli::cli_warn("AFL API chain response missing actions/stats column for {.val {match_id}} -- possible schema drift")
-    return(data.frame())
+  if (length(actions_col) == 1) {
+    col_idx <- actions_col
+  } else {
+    cli::cli_warn("AFL API chain response has ambiguous or missing actions/stats column for {.val {match_id}} -- possible schema drift, falling back to positional column 6")
+    col_idx <- 6
   }
-  col_idx <- actions_col
   stats_col_name <- names(chain_list)[col_idx]
 
   # Chain-level fields captured below under fixed names that the downstream

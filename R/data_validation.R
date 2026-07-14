@@ -449,7 +449,8 @@ validate_model_data_quality <- function(data) {
   numeric_cols <- vapply(data, is.numeric, logical(1))
   if (any(numeric_cols)) {
     constant_cols <- vapply(data[, numeric_cols, drop = FALSE], function(x) {
-      var(x, na.rm = TRUE) == 0 | all(is.na(x))
+      n_valid <- sum(!is.na(x))
+      n_valid <= 1 || isTRUE(var(x, na.rm = TRUE) == 0)
     }, logical(1))
 
     if (any(constant_cols)) {
@@ -476,7 +477,8 @@ validate_generic_data_quality <- function(data) {
   numeric_cols <- vapply(data, is.numeric, logical(1))
   if (any(numeric_cols)) {
     constant_cols <- sapply(data[, numeric_cols, drop = FALSE], function(x) {
-      var(x, na.rm = TRUE) == 0 | all(is.na(x))
+      n_valid <- sum(!is.na(x))
+      n_valid <= 1 || isTRUE(var(x, na.rm = TRUE) == 0)
     })
     
     if (any(constant_cols)) {

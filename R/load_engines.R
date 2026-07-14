@@ -237,6 +237,14 @@ parquet_from_urls_parallel <- function(urls, use_cache = FALSE, max_age_days = 7
           } else if (!isTRUE(dl$success[j])) {
             cli::cli_warn("Failed to download {.url {urls[idx]}}")
             transient_failed <- c(transient_failed, urls[idx])
+          } else {
+            # curl reported success but the destination file is missing or
+            # undersized (e.g. connection reset after headers, disk-full
+            # write, proxy truncation). This is neither "already have it"
+            # nor a confirmed-absent 404 -- treat it the same as any other
+            # transient download failure rather than silently dropping it.
+            cli::cli_warn("Downloaded file for {.url {urls[idx]}} is missing or truncated (< {MIN_PARQUET_BYTES} bytes)")
+            transient_failed <- c(transient_failed, urls[idx])
           }
         }
       }
@@ -250,11 +258,20 @@ parquet_from_urls_parallel <- function(urls, use_cache = FALSE, max_age_days = 7
       # torp H2: a non-404 download/read failure is ambiguous (transient),
       # never "this file has zero rows". Raise rather than silently return
       # the URLs that DID succeed -- callers must not cache a partial result.
+      # VERSEBUS_STRICT=1 (pipeline/CI entry scripts) keeps that hard abort;
+      # interactive/non-strict sessions fall back to warn-and-skip so a
+      # multi-URL call doesn't hard-fail entirely over one flaky file,
+      # mirroring the `strict` gate in .load_with_cache().
       if (length(transient_failed) > 0) {
-        .vb_abort(
-          "Failed to download {length(transient_failed)} file{?s} (non-404/transient): {.url {basename(transient_failed)}}",
-          "vb_error_transient",
-          .envir = environment()
+        if (isTRUE(Sys.getenv("VERSEBUS_STRICT") == "1")) {
+          .vb_abort(
+            "Failed to download {length(transient_failed)} file{?s} (non-404/transient): {.url {basename(transient_failed)}}",
+            "vb_error_transient",
+            .envir = environment()
+          )
+        }
+        cli::cli_warn(
+          "Failed to download {length(transient_failed)} file{?s} (non-404/transient), proceeding with partial data: {.url {basename(transient_failed)}}"
         )
       }
     }
@@ -392,11 +409,21 @@ parquet_from_url <- function(url) {
     # torp H2/P1: never silently collapse this to an empty data.frame -- a
     # caller mistaking "network blip" for "genuinely zero rows" is exactly
     # what turns a transient GitHub hiccup into permanent data loss upstream
-    # (accumulator merges, in-memory caching of the hole). Raise instead.
-    .vb_abort(
-      "Failed to load data from {.url {url}}: {error_msg}",
-      "vb_error_transient",
-      .envir = environment()
-    )
+    # (accumulator merges, in-memory caching of the hole). Raise instead --
+    # except outside strict/CI mode (VERSEBUS_STRICT=1), where we match
+    # .load_with_cache()'s leniency and degrade to an empty, tagged result
+    # instead of hard-aborting a single interactive/multi-season call.
+    if (isTRUE(Sys.getenv("VERSEBUS_STRICT") == "1")) {
+      .vb_abort(
+        "Failed to load data from {.url {url}}: {error_msg}",
+        "vb_error_transient",
+        .envir = environment()
+      )
+    }
+
+    cli::cli_warn("Failed to load data from {.url {url}}: {error_msg}")
+    result <- data.table::data.table()
+    attr(result, "skip_reason") <- "transient"
+    return(result)
   })
 }
