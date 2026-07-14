@@ -453,10 +453,15 @@
 #'
 #' @param team_mdl_df Complete model dataset (with GAM predictions already added)
 #' @param train_filter Logical vector indicating training rows (NULL = all completed matches)
+#' @param xgb_nthread Thread cap for every xgb.train()/xgb.cv() call (default
+#'   MATCH_XGB_NTHREAD = 4L). XGBoost's `tree_method = "hist"` is not
+#'   deterministic across different thread counts even with a fixed seed, so
+#'   pinning this makes retrains reproducible across machines/CI runners with
+#'   different core counts (see docs/plans/FABLE-MATCH-MAE-PLAN.md §8).
 #' @return List with $models (named list of 5 XGBoost models) and $data (team_mdl_df
 #'   with xgb_pred_score_diff and xgb_pred_win columns added)
 #' @keywords internal
-.train_match_xgb <- function(team_mdl_df, train_filter = NULL) {
+.train_match_xgb <- function(team_mdl_df, train_filter = NULL, xgb_nthread = MATCH_XGB_NTHREAD) {
   loadNamespace("xgboost")
 
   if (is.null(train_filter)) {
@@ -515,12 +520,14 @@
   reg_params <- list(
     objective = "reg:squarederror", eval_metric = "rmse",
     tree_method = "hist", eta = 0.05, subsample = 0.7,
-    colsample_bytree = 0.8, max_depth = 3, min_child_weight = 15
+    colsample_bytree = 0.8, max_depth = 3, min_child_weight = 15,
+    nthread = xgb_nthread
   )
   cls_params <- list(
     objective = "binary:logistic", eval_metric = "logloss",
     tree_method = "hist", eta = 0.05, subsample = 0.7,
-    colsample_bytree = 0.8, max_depth = 3, min_child_weight = 15
+    colsample_bytree = 0.8, max_depth = 3, min_child_weight = 15,
+    nthread = xgb_nthread
   )
 
   # Season-grouped CV folds

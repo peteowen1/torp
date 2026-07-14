@@ -127,6 +127,22 @@ MATCH_MIN_DATA_SEASON <- 2021
 MATCH_MIN_DATA_ROUND <- 14
 
 
+# XGBoost Training Constants
+# --------------------------
+
+#' Thread cap for every xgboost::xgb.train()/xgb.cv() call in match model
+#' training (2026-07, reproducibility fix). XGBoost's `tree_method = "hist"`
+#' is not deterministic across different thread counts even with a fixed
+#' seed (confirmed empirically -- see docs/plans/FABLE-MATCH-MAE-PLAN.md §8)
+#' -- left unset, a retrain on a machine/CI runner with a different core
+#' count than whatever last built the shipped model can shift the resulting
+#' trees for reasons unrelated to data or code changes. Matches
+#' mgcv::bam()'s existing `nthreads = 4` convention used throughout
+#' match_train.R.
+#' @keywords internal
+MATCH_XGB_NTHREAD <- 4L
+
+
 # Team Elo Constants
 # ------------------
 # Feature added to the match model (2026-07, FABLE-MATCH-MAE-PLAN.md WS2/WS5
