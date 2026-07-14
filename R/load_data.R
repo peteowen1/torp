@@ -85,11 +85,40 @@ save_to_release <- function(df, file_name, release_tag, also_csv = FALSE, prev_r
     }
   )
 
+  # pb_upload() above already returned success -- that's the actual
+  # correctness signal. invalidate_release_cache() and the manifest publish
+  # below must not be gated on the post-upload verify further down: that
+  # verify makes its own network call (vb_list_assets) and a TRANSIENT
+  # failure there says nothing about whether the real upload worked, but
+  # used to abort save_to_release() entirely, silently skipping both steps
+  # even though the data was safely on the release.
+  invalidate_release_cache(release_tag)
+
+  # T13: keep bus_manifest.json current for this tag (manifest-last, best
+  # effort). The data upload above already succeeded; a manifest publish
+  # failure must not undo that or fail the caller -- absent consumers just
+  # stay in legacy mode (versebus §1.2) until the next successful publish.
+  tryCatch(
+    .publish_bus_manifest(release_tag, f_name, tf, rows = if (is.data.frame(df)) nrow(df) else NA_integer_),
+    error = function(e) {
+      cli::cli_warn("Could not update bus_manifest.json for {.val {release_tag}}: {conditionMessage(e)}")
+    }
+  )
+
   # T12: post-upload verify -- confirm the asset is actually on the release
   # with the size we just wrote, via an uncached listing call. Catches races
-  # / silent-drop scenarios that a 2xx from pb_upload alone wouldn't surface.
-  tryCatch({
-    listed <- vb_list_assets(repo, release_tag)
+  # / silent-drop scenarios that a 2xx from pb_upload alone wouldn't
+  # surface. A failure to even LIST (vb_error_transient from vb_list_assets
+  # itself) only warns -- it's evidence the verify call flaked, not that
+  # the upload did. A listing that succeeds but confirms the asset is
+  # genuinely missing or wrong-sized is a real integrity signal and still
+  # aborts, now as a loud diagnostic after cache invalidation/manifest
+  # publish have already run rather than silently skipping them.
+  listed <- tryCatch(vb_list_assets(repo, release_tag), error = function(e) {
+    cli::cli_warn("Post-upload verify could not list {repo}@{release_tag} ({conditionMessage(e)}) -- upload itself already succeeded, proceeding")
+    NULL
+  })
+  if (!is.null(listed)) {
     row <- listed[listed$name == f_name, , drop = FALSE]
     if (nrow(row) == 0L) {
       cli::cli_abort("Post-upload verify: {.val {f_name}} missing from {repo}@{release_tag} listing after upload",
@@ -100,21 +129,7 @@ save_to_release <- function(df, file_name, release_tag, also_csv = FALSE, prev_r
       cli::cli_abort("Post-upload verify: {.val {f_name}} listed size {row$size[1L]} != local {local_bytes}",
                      class = c("vb_error_integrity", "vb_error"))
     }
-  }, vb_error = function(e) stop(e))
-
-  invalidate_release_cache(release_tag)
-
-  # T13: keep bus_manifest.json current for this tag (manifest-last, best
-  # effort). The data upload above already succeeded and was verified; a
-  # manifest publish failure must not undo that or fail the caller -- absent
-  # consumers just stay in legacy mode (versebus §1.2) until the next
-  # successful publish.
-  tryCatch(
-    .publish_bus_manifest(release_tag, f_name, tf, rows = if (is.data.frame(df)) nrow(df) else NA_integer_),
-    error = function(e) {
-      cli::cli_warn("Could not update bus_manifest.json for {.val {release_tag}}: {conditionMessage(e)}")
-    }
-  )
+  }
 
   if (also_csv) {
     csv_name <- paste0(file_name, ".csv")

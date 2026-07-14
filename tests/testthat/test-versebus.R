@@ -58,7 +58,47 @@ test_that("vb_publish aborts on a data-asset failure and never uploads the manif
   expect_true("a.rds" %in% upload_log)               # data upload was attempted
 })
 
-test_that("vb_download sha mismatch raises vb_error_integrity and leaves prior dest untouched", {
+test_that("vb_download sha mismatch vs manifest warns and trusts the download when no live listing contradicts it", {
+  # A manifest sha256 mismatch is far more often a stale manifest (upload
+  # succeeded, the LAST manifest publish didn't) than real corruption --
+  # vb_download() downgrades this to a warning and falls back to
+  # verify-by-size against a live listing. With no listing available here
+  # (no gh::gh mock -- vb_list_assets fails, caught, treated as
+  # "can't corroborate either way"), the download is trusted and completes.
+  dir <- withr::local_tempdir()
+  dest <- file.path(dir, "model.parquet")
+  writeLines("PRIOR-GOOD-CONTENT", dest)
+
+  entry <- list(name = "model.parquet",
+                sha256 = strrep("0", 64),  # will never match
+                bytes = 16, rows = NA_integer_)
+  manifest <- make_fake_manifest(assets = list(entry))
+
+  testthat::local_mocked_bindings(
+    pb_download = function(file, dest, repo, tag, overwrite = TRUE, ...) {
+      con <- file(file.path(dest, file), "wb")
+      writeBin(charToRaw("PAR1........PAR1"), con)
+      close(con)
+      invisible(NULL)
+    },
+    .package = "piggyback"
+  )
+
+  expect_warning(
+    vb_download("test/fixture", "test-tag", "model.parquet", dest,
+                manifest = manifest),
+    "sha256 mismatch"
+  )
+  expect_identical(readLines(dest), "PAR1........PAR1")  # new content served
+  leftovers <- list.files(dir, pattern = "^\\.vb_dl_", all.files = TRUE)
+  expect_length(leftovers, 0)                            # temp cleaned up
+})
+
+test_that("vb_download sha mismatch vs manifest still raises vb_error_integrity when a live listing confirms a size mismatch too", {
+  # Real corruption isn't only caught by sha256 -- when a live listing IS
+  # available and shows the asset's actual size disagrees with the
+  # download, that's independent corroborating evidence, not just a stale
+  # manifest, and vb_download() still aborts.
   dir <- withr::local_tempdir()
   dest <- file.path(dir, "model.parquet")
   writeLines("PRIOR-GOOD-CONTENT", dest)
@@ -78,10 +118,17 @@ test_that("vb_download sha mismatch raises vb_error_integrity and leaves prior d
     },
     .package = "piggyback"
   )
+  testthat::local_mocked_bindings(
+    gh = function(endpoint, ..., owner, repo, tag) {
+      list(assets = list(list(name = "model.parquet", size = 999999,
+                              updated_at = "2026-01-01T00:00:00Z", id = 1)))
+    },
+    .package = "gh"
+  )
 
   expect_error(
-    vb_download("test/fixture", "test-tag", "model.parquet", dest,
-                manifest = manifest),
+    suppressWarnings(vb_download("test/fixture", "test-tag", "model.parquet", dest,
+                                 manifest = manifest)),
     class = "vb_error_integrity"
   )
   expect_identical(readLines(dest), prior)          # dest untouched

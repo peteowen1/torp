@@ -128,9 +128,13 @@ vb_atomic_write <- function(write_fn, dest) {
   if (!file.exists(tmp)) {
     .vb_abort("Atomic write produced no file for {.path {dest}}", "vb_error_integrity")
   }
-  if (file.exists(dest)) unlink(dest)
-  if (!file.rename(tmp, dest)) {
-    .vb_abort("Atomic rename failed for {.path {dest}}", "vb_error_integrity")
+  # Never unlink(dest) before the swap: file.rename() replaces an existing
+  # destination in place without needing that, and if it fails (cross-device,
+  # a transient lock) file.copy(overwrite=TRUE) still swaps the CONTENT
+  # without ever leaving `dest` briefly missing. A pre-emptive unlink would
+  # destroy the previous good file the moment the swap itself fails.
+  if (!isTRUE(file.rename(tmp, dest)) && !isTRUE(file.copy(tmp, dest, overwrite = TRUE))) {
+    .vb_abort("Atomic rename/copy failed for {.path {dest}}", "vb_error_integrity")
   }
   ok <- TRUE
   invisible(dest)
@@ -210,7 +214,11 @@ vb_confirm_absent <- function(repo, tag, name) {
 #'
 #' Applies the momentary-absence rule: if this session has previously seen a
 #' manifest on the tag and it now looks absent (piggyback delete-then-upload
-#' window), retry once after 10 s before declaring legacy mode.
+#' window), retry once after 10 s before declaring legacy mode. A tag never
+#' having a manifest is always legacy mode, never an error — `required` is
+#' accepted for caller compatibility but does not abort on absence; a caller
+#' that needs to refuse an *uncommitted* asset checks the returned manifest
+#' itself (see `vb_download()`'s own require_manifest handling).
 #' @keywords internal
 #' @export
 vb_read_manifest <- function(repo, tag, required = FALSE) {
@@ -235,10 +243,13 @@ vb_read_manifest <- function(repo, tag, required = FALSE) {
     m <- tryCatch(fetch(), error = function(e) NULL)
   }
   if (is.null(m)) {
-    if (required) {
-      .vb_abort("tag {.val {tag}} on {.val {repo}} has no bus_manifest.json
-                 (required in strict mode)", "vb_error_absent")
-    }
+    # A tag with no manifest at all is a bootstrap/legacy state, not an
+    # integrity failure — `required` (strict mode) only means "verify
+    # sha256 against the manifest when one exists"; it must not treat
+    # every not-yet-adopted tag as a hard error, or the very first read of
+    # any legacy tag (reference-data, stadium_data, ...) permanently
+    # deadlocks strict-mode callers, since nothing re-uploads those tags
+    # to ever produce a manifest.
     warn_key <- paste0("warned_", key)
     if (!isTRUE(.vb_state[[warn_key]])) {
       cli::cli_warn("tag {.val {tag}} on {.val {repo}} has no bus_manifest.json — running unverified (legacy mode)")
@@ -348,14 +359,7 @@ vb_download <- function(repo, tag, name, dest,
     .vb_abort("{.val {name}}: parquet magic bytes missing — corrupt download",
               "vb_error_integrity")
   }
-  if (!is.null(entry)) {
-    got <- vb_sha256(tmp)
-    if (!identical(got, entry$sha256)) {
-      .vb_abort("{.val {name}}: sha256 mismatch vs manifest
-                 (got {substr(got, 1, 12)}…, want {substr(entry$sha256, 1, 12)}…)",
-                "vb_error_integrity")
-    }
-  } else {
+  verify_by_size <- function() {
     listed <- tryCatch(vb_list_assets(repo, tag), error = function(e) NULL)
     if (!is.null(listed) && name %in% listed$name) {
       want <- listed$size[listed$name == name][1L]
@@ -365,20 +369,43 @@ vb_download <- function(repo, tag, name, dest,
       }
     }
   }
-
-  if (file.exists(dest)) unlink(dest)
-  if (!file.rename(tmp, dest)) {
-    # cross-device fallback (tmpdir is inside dirname(dest), so rare)
-    if (!file.copy(tmp, dest, overwrite = TRUE)) {
-      .vb_abort("Could not move verified download into {.path {dest}}",
-                "vb_error_integrity")
+  if (!is.null(entry)) {
+    got <- vb_sha256(tmp)
+    if (!identical(got, entry$sha256)) {
+      # A stale manifest entry (upload succeeded, the LAST manifest publish
+      # didn't) is indistinguishable here from real corruption, and is far
+      # more common in practice — a hard abort would permanently brick the
+      # asset until someone manually republishes the manifest. Downgrade to
+      # a warning and fall back to the live-listing size check (the same
+      # verification an unmanifested asset already gets); only a genuine
+      # corruption signal (parquet magic bytes, checked above) still aborts.
+      cli::cli_warn("{.val {name}}: sha256 mismatch vs manifest
+                     (got {substr(got, 1, 12)}…, want {substr(entry$sha256, 1, 12)}…)
+                     — manifest may be stale, verifying by size instead")
+      verify_by_size()
     }
+  } else {
+    verify_by_size()
+  }
+
+  # Never unlink(dest) before the swap — see vb_atomic_write()'s comment;
+  # same reasoning applies here to avoid destroying a good cached file if
+  # the swap itself fails partway.
+  if (!isTRUE(file.rename(tmp, dest)) && !isTRUE(file.copy(tmp, dest, overwrite = TRUE))) {
+    .vb_abort("Could not move verified download into {.path {dest}}",
+              "vb_error_integrity")
   }
   writeLines(vb_sha256(dest), paste0(dest, ".sha256"))
   invisible(dest)
 }
 
 #' Cache validity = sidecar sha matches the manifest entry
+#'
+#' Trusts the `.sha256` sidecar rather than rehashing `local_path` on every
+#' call (rehashing a multi-GB model on every load would defeat the point of
+#' caching). As a cheap corroborating check, a `local_path` modified more
+#' recently than its sidecar is treated as invalid — the sidecar can only
+#' describe content at-or-before its own write time.
 #' @keywords internal
 #' @export
 vb_cache_validate <- function(local_path, manifest_entry) {
@@ -386,6 +413,7 @@ vb_cache_validate <- function(local_path, manifest_entry) {
   if (!file.exists(local_path)) return(FALSE)
   sidecar <- paste0(local_path, ".sha256")
   sha <- if (file.exists(sidecar)) {
+    if (file.info(local_path)$mtime > file.info(sidecar)$mtime) return(FALSE)
     trimws(readLines(sidecar, n = 1L, warn = FALSE))
   } else {
     s <- vb_sha256(local_path)
@@ -438,7 +466,8 @@ vb_publish <- function(paths, repo, tag,
 
   # 1. Hash first.
   entries <- lapply(paths, function(p) {
-    vb_asset_entry(p, rows = if (!is.null(rows)) rows[[basename(p)]] else NULL)
+    row_n <- if (!is.null(rows) && basename(p) %in% names(rows)) rows[[basename(p)]] else NULL
+    vb_asset_entry(p, rows = row_n)
   })
   names(entries) <- vapply(entries, `[[`, character(1), "name")
 
