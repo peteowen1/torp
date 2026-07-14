@@ -248,6 +248,15 @@ get_epv_preds <- function(df) {
 #' down), [load_model_with_fallback()] returns `NULL` and this degrades to
 #' the identity function -- never an error.
 #'
+#' Supports both calibration forms (mirrors torpmodels train_lib.R's
+#' `apply_wp_calibration()` exactly):
+#' `plogis((a + a_q4c*I) + (b + b_q4c*I) * qlogis(p))` where
+#' `I = is_q4close` (the D1 escalation cell, `period == cell$period &
+#' abs(points_diff) <= cell$margin_abs_max`, defaults 4/12). A global-form
+#' or pre-escalation 2-param artifact has no (or zero) `a_q4c`/`b_q4c` and
+#' collapses to the global formula. Rows with `NA` period/points_diff --
+#' or a `df` missing those columns entirely -- get the global arm.
+#'
 #' @param df A dataframe containing play-by-play data.
 #'
 #' @return A dataframe with win probability predictions.
@@ -270,12 +279,32 @@ get_wp_preds <- function(df) {
     preds_raw <- as.vector(preds_raw)
   }
 
-  # D4: two-parameter Platt-on-logit recalibration, identity fallback when
-  # the sidecar is absent (load_model_with_fallback() has already
-  # warn-once'd in that case -- see its own docs).
+  # D1/D4: Platt-on-logit recalibration (global or Q4/close-interaction
+  # form), identity fallback when the sidecar is absent
+  # (load_model_with_fallback() has already warn-once'd in that case).
   calib <- load_model_with_fallback("wp_calibration")
   if (!is.null(calib) && is.finite(calib$a) && is.finite(calib$b)) {
-    preds_raw <- stats::plogis(calib$a + calib$b * stats::qlogis(preds_raw))
+    a_q4c <- calib$a_q4c
+    if (is.null(a_q4c) || length(a_q4c) != 1 || !is.finite(a_q4c)) a_q4c <- 0
+    b_q4c <- calib$b_q4c
+    if (is.null(b_q4c) || length(b_q4c) != 1 || !is.finite(b_q4c)) b_q4c <- 0
+
+    cell_period <- calib$cell$period
+    if (is.null(cell_period) || length(cell_period) != 1 || !is.finite(cell_period)) cell_period <- 4
+    cell_margin <- calib$cell$margin_abs_max
+    if (is.null(cell_margin) || length(cell_margin) != 1 || !is.finite(cell_margin)) cell_margin <- 12
+
+    # Cell flag per row: needs period + points_diff on df (points_diff is a
+    # WP feature; period rides on the pbp frame). Missing columns or NA
+    # values -> out-of-cell -> global arm.
+    I <- rep(0, length(preds_raw))
+    if ((a_q4c != 0 || b_q4c != 0) && all(c("period", "points_diff") %in% names(df))) {
+      flag <- df$period == cell_period & abs(df$points_diff) <= cell_margin
+      flag[is.na(flag)] <- FALSE
+      I <- as.numeric(flag)
+    }
+
+    preds_raw <- stats::plogis((calib$a + a_q4c * I) + (calib$b + b_q4c * I) * stats::qlogis(preds_raw))
   }
 
   preds <- data.frame(wp = preds_raw)

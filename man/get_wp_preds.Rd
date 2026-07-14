@@ -23,4 +23,13 @@ sidecar is unavailable (old deployment, not yet published, network
 down), \code{\link[=load_model_with_fallback]{load_model_with_fallback()}} returns \code{NULL} and this degrades to
 the identity function -- never an error.
 }
+\details{
+Supports both calibration forms (mirrors torpmodels train_lib.R's
+\code{apply_wp_calibration()} exactly):
+\code{plogis((a + a_q4c*I) + (b + b_q4c*I) * qlogis(p))} where
+\code{I = is_q4close} (the D1 escalation cell, \code{period == cell$period & abs(points_diff) <= cell$margin_abs_max}, defaults 4/12). A global-form
+or pre-escalation 2-param artifact has no (or zero) \code{a_q4c}/\code{b_q4c} and
+collapses to the global formula. Rows with \code{NA} period/points_diff --
+or a \code{df} missing those columns entirely -- get the global arm.
+}
 \keyword{internal}

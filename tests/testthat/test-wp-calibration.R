@@ -142,6 +142,113 @@ test_that("(d) WPA regression: wpa is still the calibrated wp lead-difference (n
   expect_equal(ordered$wpa, expected_wpa)
 })
 
+test_that("(e) interaction form: serve-time application matches the fit-side formula on both cell sides", {
+  fixture <- .wp_calib_test_fixture_model()
+  df <- .wp_calib_test_mock_df(n = 12)
+  # Explicit cell mix: rows 1-4 in cell (Q4, close), 5-8 out by period,
+  # 9-12 out by margin. points_diff is a WP feature, so raw preds shift
+  # too -- expected values are computed from the same df's raw preds.
+  df$period <- rep(c(4L, 4L, 1L, 3L, 4L, 4L), 2)
+  df$points_diff <- rep(c(3, -12, 5, 0, 13, -40), 2)
+  in_cell <- df$period == 4 & abs(df$points_diff) <= 12
+
+  calib <- list(a = 0.1, b = 1.2, a_q4c = 0.3, b_q4c = 0.25,
+                form = "q4close_interaction",
+                cell = list(period = 4, margin_abs_max = 12))
+  testthat::local_mocked_bindings(
+    load_model_with_fallback = function(model_name) {
+      if (model_name == "wp") return(fixture)
+      if (model_name == "wp_calibration") return(calib)
+      stop("unexpected model_name in mock: ", model_name)
+    },
+    .package = "torp"
+  )
+
+  raw <- .wp_calib_raw_preds(fixture, df)
+  I <- as.numeric(in_cell)
+  expected <- stats::plogis((0.1 + 0.3 * I) + (1.2 + 0.25 * I) * stats::qlogis(raw))
+  got <- torp:::get_wp_preds(df)
+
+  expect_equal(got$wp, expected)
+  # the two arms genuinely differ (interaction did something in-cell only)
+  global_only <- stats::plogis(0.1 + 1.2 * stats::qlogis(raw))
+  expect_equal(got$wp[!in_cell], global_only[!in_cell])
+  expect_false(isTRUE(all.equal(got$wp[in_cell], global_only[in_cell])))
+})
+
+test_that("(f) NA period/points_diff rows get the global arm; a df without those columns is all-global", {
+  fixture <- .wp_calib_test_fixture_model()
+  calib <- list(a = 0.1, b = 1.2, a_q4c = 0.3, b_q4c = 0.25,
+                form = "q4close_interaction",
+                cell = list(period = 4, margin_abs_max = 12))
+  testthat::local_mocked_bindings(
+    load_model_with_fallback = function(model_name) {
+      if (model_name == "wp") return(fixture)
+      if (model_name == "wp_calibration") return(calib)
+      stop("unexpected model_name in mock: ", model_name)
+    },
+    .package = "torp"
+  )
+
+  # NA rows -> global arm. period is NOT a WP feature (points_diff is), so
+  # NA period never reaches the model matrix; NA points_diff would, so we
+  # only inject NA period here and keep points_diff in-cell-valued.
+  df <- .wp_calib_test_mock_df(n = 8)
+  df$points_diff <- rep(2, 8)
+  df$period <- c(4L, NA, 4L, NA, 4L, NA, 4L, NA)
+  raw <- .wp_calib_raw_preds(fixture, df)
+  got <- torp:::get_wp_preds(df)
+  global_only <- stats::plogis(0.1 + 1.2 * stats::qlogis(raw))
+  in_only <- stats::plogis((0.1 + 0.3) + (1.2 + 0.25) * stats::qlogis(raw))
+  expect_equal(got$wp[is.na(df$period)], global_only[is.na(df$period)])
+  expect_equal(got$wp[!is.na(df$period)], in_only[!is.na(df$period)])
+
+  # df missing the period column entirely -> every row global
+  df2 <- .wp_calib_test_mock_df(n = 6)
+  df2$period <- NULL
+  raw2 <- .wp_calib_raw_preds(fixture, df2)
+  got2 <- torp:::get_wp_preds(df2)
+  expect_equal(got2$wp, stats::plogis(0.1 + 1.2 * stats::qlogis(raw2)))
+})
+
+test_that("(g) explicit-zero interaction fields and absent cell spec behave as global with default cell", {
+  fixture <- .wp_calib_test_fixture_model()
+  df <- .wp_calib_test_mock_df(n = 10)
+
+  # a_q4c = b_q4c = 0 (the global form as shipped by the trainer) must be
+  # numerically identical to the plain 2-param application
+  calib_zero <- list(a = -0.05, b = 1.15, a_q4c = 0, b_q4c = 0, form = "global",
+                     cell = list(period = 4, margin_abs_max = 12))
+  testthat::local_mocked_bindings(
+    load_model_with_fallback = function(model_name) {
+      if (model_name == "wp") return(fixture)
+      if (model_name == "wp_calibration") return(calib_zero)
+      stop("unexpected model_name in mock: ", model_name)
+    },
+    .package = "torp"
+  )
+  raw <- .wp_calib_raw_preds(fixture, df)
+  got <- torp:::get_wp_preds(df)
+  expect_equal(got$wp, stats::plogis(-0.05 + 1.15 * stats::qlogis(raw)))
+
+  # interaction fields present but NO cell spec -> defaults (4, 12) used
+  calib_nocell <- list(a = 0, b = 1, a_q4c = 0.2, b_q4c = 0.1, form = "q4close_interaction")
+  testthat::local_mocked_bindings(
+    load_model_with_fallback = function(model_name) {
+      if (model_name == "wp") return(fixture)
+      if (model_name == "wp_calibration") return(calib_nocell)
+      stop("unexpected model_name in mock: ", model_name)
+    },
+    .package = "torp"
+  )
+  df$period <- rep(c(4L, 2L), 5)
+  df$points_diff <- rep(1, 10)
+  raw <- .wp_calib_raw_preds(fixture, df)
+  I <- as.numeric(df$period == 4)
+  got <- torp:::get_wp_preds(df)
+  expect_equal(got$wp, stats::plogis(0.2 * I + (1 + 0.1 * I) * stats::qlogis(raw)))
+})
+
 test_that("load_model_with_fallback('wp_calibration') never aborts on a load failure -- warns once, returns NULL", {
   clear_model_cache()
   testthat::local_mocked_bindings(
