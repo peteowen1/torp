@@ -1,8 +1,8 @@
-# versebus vendored helper — canonical copy: torpverse/torp/R/versebus.R
+# versebus vendored helper -- canonical copy: torpverse/torp/R/versebus.R
 # VERSEBUS_VERSION below must match across verses; sync by file diff, e.g.:
 #   diff torpverse/torp/R/versebus.R pannaverse/panna/R/versebus.R
-# Pattern spec: C:\dev\ECOSYSTEM-FIX-PLAN.md §1. Repo-specific glue (repo/tag
-# resolution, cache invalidation) stays OUT of this file — callers pass
+# Pattern spec: C:\dev\ECOSYSTEM-FIX-PLAN.md S1. Repo-specific glue (repo/tag
+# resolution, cache invalidation) stays OUT of this file -- callers pass
 # repo/tag explicitly and register hooks via options() (see vb_publish).
 VERSEBUS_VERSION <- "1.0.0"
 
@@ -51,7 +51,7 @@ vb_classify_error <- function(e) {
   # gh errors carry http_error_<status> classes; trust them first.
   if (any(grepl("^http_error_404$", cls))) return("absent")
   if (any(grepl("^http_error_(5[0-9]{2}|429)$", cls))) return("transient")
-  # piggyback/curl string fallback — DEFAULT IS TRANSIENT (fail-safe).
+  # piggyback/curl string fallback -- DEFAULT IS TRANSIENT (fail-safe).
   "transient"
 }
 
@@ -144,7 +144,7 @@ vb_atomic_write <- function(write_fn, dest) {
 #'
 #' Call immediately before uploading an accumulated table over an existing
 #' one. Shrinkage beyond `floor` means the "existing" read was partial or the
-#' merge dropped history — abort rather than wipe.
+#' merge dropped history -- abort rather than wipe.
 #' @keywords internal
 #' @export
 vb_guard_accumulate <- function(existing_df, combined_df, floor = 0.9) {
@@ -154,7 +154,7 @@ vb_guard_accumulate <- function(existing_df, combined_df, floor = 0.9) {
     .vb_abort(
       c("Accumulate guard tripped: combined has {n_new} rows vs {n_old} existing
          (floor {floor * 100}%).",
-        "x" = "Refusing to overwrite — the existing read was likely partial."),
+        "x" = "Refusing to overwrite -- the existing read was likely partial."),
       "vb_error_integrity"
     )
   }
@@ -196,7 +196,7 @@ vb_list_assets <- function(repo, tag) {
 #'
 #' TRUE only when the asset list was fetched successfully AND the name is not
 #' in it (or the tag itself is confirmed 404). A listing failure raises
-#' `vb_error_transient` — callers MUST NOT catch that into a default. This is
+#' `vb_error_transient` -- callers MUST NOT catch that into a default. This is
 #' THE mandatory guard before any "start fresh / overwrite full-history"
 #' branch.
 #' @keywords internal
@@ -215,7 +215,7 @@ vb_confirm_absent <- function(repo, tag, name) {
 #' Applies the momentary-absence rule: if this session has previously seen a
 #' manifest on the tag and it now looks absent (piggyback delete-then-upload
 #' window), retry once after 10 s before declaring legacy mode. A tag never
-#' having a manifest is always legacy mode, never an error — `required` is
+#' having a manifest is always legacy mode, never an error -- `required` is
 #' accepted for caller compatibility but does not abort on absence; a caller
 #' that needs to refuse an *uncommitted* asset checks the returned manifest
 #' itself (see `vb_download()`'s own require_manifest handling).
@@ -244,7 +244,7 @@ vb_read_manifest <- function(repo, tag, required = FALSE) {
   }
   if (is.null(m)) {
     # A tag with no manifest at all is a bootstrap/legacy state, not an
-    # integrity failure — `required` (strict mode) only means "verify
+    # integrity failure -- `required` (strict mode) only means "verify
     # sha256 against the manifest when one exists"; it must not treat
     # every not-yet-adopted tag as a hard error, or the very first read of
     # any legacy tag (reference-data, stadium_data, ...) permanently
@@ -252,7 +252,7 @@ vb_read_manifest <- function(repo, tag, required = FALSE) {
     # to ever produce a manifest.
     warn_key <- paste0("warned_", key)
     if (!isTRUE(.vb_state[[warn_key]])) {
-      cli::cli_warn("tag {.val {tag}} on {.val {repo}} has no bus_manifest.json — running unverified (legacy mode)")
+      cli::cli_warn("tag {.val {tag}} on {.val {repo}} has no bus_manifest.json -- running unverified (legacy mode)")
       .vb_state[[warn_key]] <- TRUE
     }
     return(NULL)
@@ -300,7 +300,7 @@ vb_read_prev_manifest <- function(repo, tag) {
 #' bytes; sha256 vs manifest when available, size vs asset list otherwise),
 #' then atomically renames into place and writes a `<dest>.sha256` sidecar.
 #' ON ANY FAILURE the temp is deleted and a pre-existing `dest` is left
-#' untouched — but it is NEVER silently served as a fallback: the typed error
+#' untouched -- but it is NEVER silently served as a fallback: the typed error
 #' propagates and the caller must opt in to "serve stale + warn" explicitly.
 #' @param manifest pass a manifest to verify sha256; NULL fetches it
 #'   (legacy mode when the tag has none)
@@ -326,7 +326,7 @@ vb_download <- function(repo, tag, name, dest,
   }
   entry <- .vb_manifest_entry_for(manifest, name)
   if (!is.null(manifest) && is.null(entry)) {
-    cli::cli_warn("{.val {name}} is on {repo}@{tag} but not in bus_manifest.json — uncommitted asset")
+    cli::cli_warn("{.val {name}} is on {repo}@{tag} but not in bus_manifest.json -- uncommitted asset")
     if (require_manifest) {
       .vb_abort("Refusing uncommitted asset {.val {name}} in strict mode",
                 "vb_error_integrity")
@@ -356,7 +356,7 @@ vb_download <- function(repo, tag, name, dest,
 
   if (grepl("\\.parquet$", name, ignore.case = TRUE) &&
       !.vb_check_parquet_magic(tmp)) {
-    .vb_abort("{.val {name}}: parquet magic bytes missing — corrupt download",
+    .vb_abort("{.val {name}}: parquet magic bytes missing -- corrupt download",
               "vb_error_integrity")
   }
   verify_by_size <- function() {
@@ -374,21 +374,21 @@ vb_download <- function(repo, tag, name, dest,
     if (!identical(got, entry$sha256)) {
       # A stale manifest entry (upload succeeded, the LAST manifest publish
       # didn't) is indistinguishable here from real corruption, and is far
-      # more common in practice — a hard abort would permanently brick the
+      # more common in practice -- a hard abort would permanently brick the
       # asset until someone manually republishes the manifest. Downgrade to
       # a warning and fall back to the live-listing size check (the same
       # verification an unmanifested asset already gets); only a genuine
       # corruption signal (parquet magic bytes, checked above) still aborts.
       cli::cli_warn("{.val {name}}: sha256 mismatch vs manifest
-                     (got {substr(got, 1, 12)}…, want {substr(entry$sha256, 1, 12)}…)
-                     — manifest may be stale, verifying by size instead")
+                     (got {substr(got, 1, 12)}..., want {substr(entry$sha256, 1, 12)}...)
+                     -- manifest may be stale, verifying by size instead")
       verify_by_size()
     }
   } else {
     verify_by_size()
   }
 
-  # Never unlink(dest) before the swap — see vb_atomic_write()'s comment;
+  # Never unlink(dest) before the swap -- see vb_atomic_write()'s comment;
   # same reasoning applies here to avoid destroying a good cached file if
   # the swap itself fails partway.
   if (!isTRUE(file.rename(tmp, dest)) && !isTRUE(file.copy(tmp, dest, overwrite = TRUE))) {
@@ -404,7 +404,7 @@ vb_download <- function(repo, tag, name, dest,
 #' Trusts the `.sha256` sidecar rather than rehashing `local_path` on every
 #' call (rehashing a multi-GB model on every load would defeat the point of
 #' caching). As a cheap corroborating check, a `local_path` modified more
-#' recently than its sidecar is treated as invalid — the sidecar can only
+#' recently than its sidecar is treated as invalid -- the sidecar can only
 #' describe content at-or-before its own write time.
 #' @keywords internal
 #' @export
@@ -437,10 +437,10 @@ vb_generation <- function(repo, tag) {
 
 #' Manifest-last atomic publish (the versebus producer pattern)
 #'
-#' Ordered: hash → floor-check → upload data assets (bounded retries, collect
-#' failures) → gate (any failure aborts BEFORE the manifest, so consumers
-#' keep the last consistent snapshot) → verify live asset list → upload
-#' bus_manifest.json LAST → fire the cache-invalidation hook
+#' Ordered: hash -> floor-check -> upload data assets (bounded retries, collect
+#' failures) -> gate (any failure aborts BEFORE the manifest, so consumers
+#' keep the last consistent snapshot) -> verify live asset list -> upload
+#' bus_manifest.json LAST -> fire the cache-invalidation hook
 #' (`options(versebus.on_publish = function(repo, tag) ...)`).
 #'
 #' @param paths character vector of local files to upload
@@ -482,7 +482,7 @@ vb_publish <- function(paths, repo, tag,
       if (!is.null(pe) && !is.na(e$rows) && !is.null(pe$rows) && !is.na(pe$rows) &&
           e$rows < min_row_frac * as.numeric(pe$rows)) {
         .vb_abort("{.val {e$name}}: {e$rows} rows < {min_row_frac * 100}% of
-                   previous {pe$rows} — refusing to publish", "vb_error_integrity")
+                   previous {pe$rows} -- refusing to publish", "vb_error_integrity")
       }
     }
   }
@@ -514,12 +514,12 @@ vb_publish <- function(paths, repo, tag,
     if (!ok) failures <- c(failures, basename(p))
   }
 
-  # 4. Gate: the manifest is NOT uploaded on any failure — the previous
+  # 4. Gate: the manifest is NOT uploaded on any failure -- the previous
   # manifest remains the commit record.
   if (length(failures) > 0L) {
     .vb_abort(c("vb_publish: {length(failures)} upload(s) failed for {repo}@{tag}:
                  {.val {failures}}",
-                "x" = "bus_manifest.json NOT updated — consumers keep the last consistent snapshot."),
+                "x" = "bus_manifest.json NOT updated -- consumers keep the last consistent snapshot."),
               "vb_error_transient")
   }
 
