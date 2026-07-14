@@ -166,7 +166,7 @@
     "s(psr_diff, bs = \"ts\", k = 5)"        = list(var = "psr_diff", k = 5),
     "s(osr_diff, bs = \"ts\", k = 5)"        = list(var = "osr_diff", k = 5),
     "s(dsr_diff, bs = \"ts\", k = 5)"        = list(var = "dsr_diff", k = 5),
-    "ti(psr_diff, gam_pred_tot_xscore, bs = c(\"ts\", \"ts\"), k = 4)" = list(var = "psr_diff", k = 4)
+    "s(elo_diff, bs = \"ts\", k = 5)"        = list(var = "elo_diff", k = 5)
   )
   drop_terms <- character(0)
   for (term_str in names(optional_smooth_terms)) {
@@ -237,12 +237,20 @@
   # Model 2: xScore differential
   cli::cli_progress_step("Training xScore diff model")
   gam_df$gam_pred_tot_xscore <- team_mdl_df$gam_pred_tot_xscore[train_mask]
+  # Formula simplification (2026-07, FABLE-MATCH-MAE-PLAN.md WS4/WS5 "V4b"):
+  # models 2-4 previously included ti(epr_diff/torp_diff/psr_diff,
+  # gam_pred_tot_xscore) interaction tensors on the theory that they'd
+  # capture rating-diff x total-score amplification effects. Rolling-OOS
+  # ablation testing showed they were a "clean null" (no measurable slope or
+  # MAE effect) -- dropping them, plus model 4's second-order stack tensors
+  # below, was the single best-performing structural simplification tested,
+  # and is part of the confirmed "C6" ship-gate win. Do not re-add without
+  # re-running the rolling harness ablation.
   m2_base <- paste(
     "xscore_diff ~",
     "s(team_type_fac, bs = \"re\")",
     "+ s(team_name.x, bs = \"re\") + s(team_name.y, bs = \"re\")",
     "+ s(team_name_season.x, bs = \"re\") + s(team_name_season.y, bs = \"re\")",
-    "+ ti(epr_diff, gam_pred_tot_xscore, bs = c(\"ts\", \"ts\"), k = 4)",
     "+ s(gam_pred_tot_xscore, bs = \"ts\", k = 5)",
     "+ s(epr_diff, bs = \"ts\", k = 5)",
     "+ s(epr_recv_diff, bs = \"ts\", k = 5)",
@@ -250,13 +258,12 @@
     "+ s(epr_spoil_diff, bs = \"ts\", k = 5)",
     "+ s(epr_hitout_diff, bs = \"ts\", k = 5)",
     "+ s(torp_diff, bs = \"ts\", k = 5)",
-    "+ ti(torp_diff, gam_pred_tot_xscore, bs = c(\"ts\", \"ts\"), k = 4)",
     "+ s(log_dist_diff, bs = \"ts\", k = 5) + s(familiarity_diff, bs = \"ts\", k = 5)",
     "+ s(days_rest_diff_fac, bs = \"re\")"
   )
   m2_optional <- c("s(psr_diff, bs = \"ts\", k = 5)",
-                    "ti(psr_diff, gam_pred_tot_xscore, bs = c(\"ts\", \"ts\"), k = 4)",
-                    "s(osr_diff, bs = \"ts\", k = 5)", "s(dsr_diff, bs = \"ts\", k = 5)")
+                    "s(osr_diff, bs = \"ts\", k = 5)", "s(dsr_diff, bs = \"ts\", k = 5)",
+                    "s(elo_diff, bs = \"ts\", k = 5)")
   m2_formula <- stats::as.formula(.add_optional(m2_base, m2_optional))
 
   afl_xscore_diff_mdl <- mgcv::bam(
@@ -271,6 +278,8 @@
   # Model 3: Conversion differential
   cli::cli_progress_step("Training conversion model")
   gam_df$gam_pred_xscore_diff <- team_mdl_df$gam_pred_xscore_diff[train_mask]
+  # V4b simplification (see model 2's comment); model 3 does not get elo_diff
+  # (round 1's WS2(b) only added it to models 2 and 4 -- kept identical here).
   m3_base <- paste(
     "shot_conv_diff ~",
     "s(team_type_fac, bs = \"re\")",
@@ -281,14 +290,12 @@
     "+ s(game_prop_through_day.x, bs = \"cc\")",
     "+ s(team_name.x, bs = \"re\") + s(team_name.y, bs = \"re\")",
     "+ s(team_name_season.x, bs = \"re\") + s(team_name_season.y, bs = \"re\")",
-    "+ ti(epr_diff, gam_pred_tot_xscore, bs = c(\"ts\", \"ts\"), k = 4)",
     "+ s(epr_diff, bs = \"ts\", k = 5)",
     "+ s(epr_recv_diff, bs = \"ts\", k = 5)",
     "+ s(epr_disp_diff, bs = \"ts\", k = 5)",
     "+ s(epr_spoil_diff, bs = \"ts\", k = 5)",
     "+ s(epr_hitout_diff, bs = \"ts\", k = 5)",
     "+ s(torp_diff, bs = \"ts\", k = 5)",
-    "+ ti(torp_diff, gam_pred_tot_xscore, bs = c(\"ts\", \"ts\"), k = 4)",
     "+ s(gam_pred_tot_xscore, bs = \"ts\", k = 5)",
     "+ s(gam_pred_xscore_diff, bs = \"ts\", k = 5)",
     "+ s(venue_fac, bs = \"re\")",
@@ -296,7 +303,6 @@
     "+ s(days_rest_diff_fac, bs = \"re\")"
   )
   m3_optional <- c("s(psr_diff, bs = \"ts\", k = 5)",
-                    "ti(psr_diff, gam_pred_tot_xscore, bs = c(\"ts\", \"ts\"), k = 4)",
                     "s(osr_diff, bs = \"ts\", k = 5)", "s(dsr_diff, bs = \"ts\", k = 5)")
   m3_formula <- stats::as.formula(.add_optional(m3_base, m3_optional))
 
@@ -312,14 +318,15 @@
   # Model 4: Score differential
   cli::cli_progress_step("Training score diff model")
   gam_df$gam_pred_conv_diff <- team_mdl_df$gam_pred_conv_diff[train_mask]
+  # V4b simplification (see model 2's comment) -- also drops model 4's
+  # second-order stack tensors (ti(gam_pred_xscore_diff, gam_pred_conv_diff),
+  # ti(gam_pred_tot_xscore, gam_pred_conv_diff)), keeping only the main-effect
+  # s(gam_pred_xscore_diff). Plus elo_diff (added to models 2 and 4 only).
   m4_base <- paste(
     "score_diff ~",
     "s(team_type_fac, bs = \"re\")",
     "+ s(team_name.x, bs = \"re\") + s(team_name.y, bs = \"re\")",
     "+ s(team_name_season.x, bs = \"re\") + s(team_name_season.y, bs = \"re\")",
-    "+ ti(epr_diff, gam_pred_tot_xscore, bs = c(\"ts\", \"ts\"), k = 4)",
-    "+ ti(gam_pred_xscore_diff, gam_pred_conv_diff, bs = \"ts\", k = 5)",
-    "+ ti(gam_pred_tot_xscore, gam_pred_conv_diff, bs = \"ts\", k = 5)",
     "+ s(gam_pred_xscore_diff)",
     "+ s(epr_diff, bs = \"ts\", k = 5)",
     "+ s(epr_recv_diff, bs = \"ts\", k = 5)",
@@ -327,13 +334,12 @@
     "+ s(epr_spoil_diff, bs = \"ts\", k = 5)",
     "+ s(epr_hitout_diff, bs = \"ts\", k = 5)",
     "+ s(torp_diff, bs = \"ts\", k = 5)",
-    "+ ti(torp_diff, gam_pred_tot_xscore, bs = c(\"ts\", \"ts\"), k = 4)",
     "+ s(log_dist_diff, bs = \"ts\", k = 5) + s(familiarity_diff, bs = \"ts\", k = 5)",
     "+ s(days_rest_diff_fac, bs = \"re\")"
   )
   m4_optional <- c("s(psr_diff, bs = \"ts\", k = 5)",
-                    "ti(psr_diff, gam_pred_tot_xscore, bs = c(\"ts\", \"ts\"), k = 4)",
-                    "s(osr_diff, bs = \"ts\", k = 5)", "s(dsr_diff, bs = \"ts\", k = 5)")
+                    "s(osr_diff, bs = \"ts\", k = 5)", "s(dsr_diff, bs = \"ts\", k = 5)",
+                    "s(elo_diff, bs = \"ts\", k = 5)")
   m4_formula <- stats::as.formula(.add_optional(m4_base, m4_optional))
 
   afl_score_mdl <- mgcv::bam(
@@ -478,6 +484,11 @@
     osr_dsr_cols <- c("osr_diff", "dsr_diff")
   }
 
+  # elo_diff (2026-07, FABLE-MATCH-MAE-PLAN.md WS2/WS5 "C6"): dynamic,
+  # results-based team-strength signal, absent from the player-rating diffs
+  # above. Included here unconditionally (not behind an availability check
+  # like osr_dsr_cols) because .build_team_mdl_df() always adds it, with a
+  # neutral 0 fallback on failure -- see match_data_prep.R.
   base_cols <- c(
     "team_type_fac",
     "game_year_decimal.x", "game_prop_through_year.x",
@@ -485,6 +496,7 @@
     "epr_diff", "epr_recv_diff", "epr_disp_diff",
     "epr_spoil_diff", "epr_hitout_diff",
     "torp_diff", "psr_diff", osr_dsr_cols,
+    "elo_diff",
     "log_dist_diff",
     "familiarity_diff",
     "days_rest_diff_fac"

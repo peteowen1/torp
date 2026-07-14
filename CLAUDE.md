@@ -20,7 +20,7 @@ powershell.exe -Command 'Rscript "path/to/script.R"'
 | **EP / WP / xG** | `add_variables.R`, `win_probability.R`, `wp_credit.R`, `wp_utils.R`, `xg.R` | `add_epv_vars()`, `add_wp_vars()`, `add_shot_vars()` — feature engineering and credit assignment |
 | **TORP / EPR / PSR** | `player_ratings.R`, `player_skills.R`, `psr.R`, `player_credit.R`, `player_attribution.R` | Core rating composition. `TORP_EPR_WEIGHT = 0.5` blends EPV+PSV; WPA tracked separately |
 | **Per-game ratings** | `player_game_ratings.R`, `player_skills_data.R`, `player_skills_profile.R` | `get_player_game_ratings()` returns EPV+WPA+PSV per game |
-| **Match model** | `match_model.R`, `match_train.R`, `match_data_prep.R` | 5-GAM sequential match prediction; XGBoost holdout comparison via `HOLDOUT_SEASON` |
+| **Match model** | `match_model.R`, `match_train.R`, `match_data_prep.R`, `team_elo.R`, `match_calibration.R` | 5-GAM + XGBoost sequential match prediction, 50/50 Input Blend (`run_predictions_pipeline()`). Features: player-rating diffs (EPR/PSR/TORP) + `elo_diff` (sequential team-Elo, `team_elo.R` — added 2026-07, FABLE-MATCH-MAE-PLAN.md). Final margin passes through a post-hoc recalibration sidecar (`match_calibration.R`, mirrors `wp_calibration`) before serving; identity fallback when the sidecar is absent. Rolling week-by-week OOS eval (not a fixed `HOLDOUT_SEASON`) lives in `torpmodels/data-raw/04-match-model/train_match_models.R` / `experiments/rolling_lib.R`. |
 | **Simulation** | `simulate.R`, `simulate_match.R`, `season_sim.R`, `finals_sim.R`, `ladder.R` | Monte Carlo ladder and finals |
 | **Opponent adj** | `opponent_adjustment.R`, `epv_opponent_adjustment.R` | EPV opponent strength adjustment in daily pipeline |
 | **Validation** | `data_validation.R`, `model_validation.R`, `injuries_validation.R` | Pre-release data integrity checks |
@@ -31,18 +31,9 @@ powershell.exe -Command 'Rscript "path/to/script.R"'
 | **Format** | `format_blog.R` | Blog parquet shapes consumed by torpdata `build_blog_data.R` |
 | **Logging** | `logging.R` | Internal cli wrappers |
 
-## Key Constants (R/constants_ratings.R)
+## Key Constants
 
-```r
-TORP_EPR_WEIGHT       # 0.5 — blend weight in torp_value = 0.5*EPV + 0.5*PSV
-EPR_DECAY_RECV        # 273 days — receiving decay
-EPR_DECAY_DISP        # 630 days — disposal decay
-EPR_DECAY_SPOIL       # 523 days
-EPR_DECAY_HITOUT      # 545 days
-EPR_PRIOR_GAMES_RECV  # 3.0 — Bayesian prior
-EPV_WEIGHT_DECAY_DAYS # 365 — PBP-level recency decay
-TOTAL_PRED_TOG        # 324L (18 teams * 18 players) — league centering fallback
-```
+All rating-blend weights and decay parameters (`TORP_EPR_WEIGHT`, `EPR_DECAY_RECV`, `EPR_DECAY_DISP`, `EPR_DECAY_SPOIL`, `EPR_DECAY_HITOUT`, `EPR_PRIOR_GAMES_RECV`, `EPV_WEIGHT_DECAY_DAYS`, `TOTAL_PRED_TOG`) live in `R/constants_ratings.R` — see the source for current values.
 
 WPA is intentionally **not** folded into `torp_value` — surfaced as a parallel metric. (The original "WP gradient too steep in close/late" rationale was measured **false** in 2026-07: the WP family is actually *flat* there — see [`../docs/reviews/FABLE-WP-EXPERIMENTS.md`](../docs/reviews/FABLE-WP-EXPERIMENTS.md) §7. Decision 2026-07-11: exclusion stood until (a) a light recalibration layer fitted on recent-season OOS predictions ships, and (b) a temporal Q4/close slope release gate exists — the canonical model still ran slope ~1.14/1.26 on temporal holdout. Update 2026-07-12: recalibration layer shipped ([`../docs/plans/FABLE-RECAL-PLAN.md`](../docs/plans/FABLE-RECAL-PLAN.md) — `get_wp_preds()` applies the `wp_calibration` sidecar, `torpmodels::train_core_models()` gates every WP release on the calibrated temporal slope); WPA reinstatement is now pending the `../docs/plans/FABLE-RECAL-PLAN.md` §2 Step 6 bias re-measurement (the plan's own D6 cross-reference to "§5" for this protocol is stale -- Step 6 is where it actually lives, §5 is Non-goals), not a separate design decision.)
 

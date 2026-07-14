@@ -700,6 +700,15 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
     team_mdl_df$pred_win         <- team_mdl_df$gam_pred_win
   }
 
+  # Margin recalibration (2026-07, FABLE-MATCH-MAE-PLAN.md WS1 "V1a"):
+  # applied to the FINAL served margin only, AFTER pred_win has already been
+  # derived from the raw (uncalibrated) blended margin above -- this exactly
+  # mirrors how the "C6" candidate was validated (recalibration never fed
+  # back into win-probability). Identity fallback (scale=1) when the sidecar
+  # is absent -- see match_calibration.R.
+  margin_calib <- load_match_margin_calibration()
+  team_mdl_df$pred_score_diff <- apply_match_margin_calibration(team_mdl_df$pred_score_diff, margin_calib)
+
   # Format Predictions ----
   cli::cli_h2("Generating predictions for {length(target_weeks)} week{?s}")
 
@@ -909,6 +918,59 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
         }
         cli::cli_alert_success("Uploaded match_xgb_pipeline to torpmodels")
         uploaded_files <- c(uploaded_files, "match_xgb_pipeline.rds")
+      }
+
+      # Margin calibration sidecar (2026-07, FABLE-MATCH-MAE-PLAN.md WS1) --
+      # fit fresh each retrain via a temporal holdout. Release gate (mirrors
+      # the WP temporal slope gate): a raw OOS slope outside
+      # MATCH_MARGIN_SLOPE_GATE skips uploading a new sidecar (keeps whatever
+      # was previously published, or identity if none exists yet) rather than
+      # aborting the whole pipeline -- weekly predictions still need to ship
+      # even when this diagnostic signal is off; graceful degradation matches
+      # this function's existing house style (xgb failure -> GAM-only, PSR
+      # failure -> warn+continue, etc.), not a hard-fail research gate.
+      calib_fit <- tryCatch(
+        fit_match_margin_calibration(team_mdl_df),
+        error = function(e) {
+          cli::cli_warn("Margin calibration fit failed: {conditionMessage(e)}")
+          NULL
+        }
+      )
+      if (!is.null(calib_fit)) {
+        gate <- MATCH_MARGIN_SLOPE_GATE
+        slope_ok <- is.na(calib_fit$slope_raw) || (calib_fit$slope_raw >= gate[1] && calib_fit$slope_raw <= gate[2])
+        if (!slope_ok) {
+          cli::cli_warn(c(
+            "Margin calibration slope gate breached: raw OOS slope {round(calib_fit$slope_raw, 3)} outside [{gate[1]}, {gate[2]}].",
+            "i" = "Skipping match_margin_calibration upload this run -- serving will fall back to the previously published sidecar (or identity if none exists)."
+          ))
+        } else {
+          calib_path <- file.path(tempdir(), "match_margin_calibration.rds")
+          calib_out <- calib_fit
+          if (has_torpmodels) {
+            calib_meta <- torpmodels:::build_model_meta(
+              "match_margin_calibration", match_seasons_range, list(), NA_character_,
+              n_matches = calib_fit$n_oos,
+              extra = list(script = "run_predictions_pipeline", holdout_season = calib_fit$holdout_season)
+            )
+            calib_out <- torpmodels:::stamp_model_meta(calib_out, calib_meta)
+          }
+          saveRDS(calib_out, calib_path)
+          piggyback::pb_upload(calib_path, repo = "peteowen1/torpmodels", tag = "core-models")
+          local_cache_calib <- file.path(cache_dir, "core", "match_margin_calibration.rds")
+          if (dir.exists(dirname(local_cache_calib))) {
+            file.copy(calib_path, local_cache_calib, overwrite = TRUE)
+          }
+          cli::cli_alert_success("Uploaded match_margin_calibration to torpmodels (b={round(calib_fit$b, 3)})")
+          uploaded_files <- c(uploaded_files, "match_margin_calibration.rds")
+          # Invalidate this session's cached sidecar so the recalibrated
+          # margin above (already computed with the PREVIOUS sidecar, or
+          # identity) doesn't silently diverge from what just got published --
+          # next call in this session picks up the fresh one.
+          if (exists("match_margin_calibration", envir = .torp_model_cache)) {
+            rm("match_margin_calibration", envir = .torp_model_cache)
+          }
+        }
       }
 
       if (has_torpmodels) {

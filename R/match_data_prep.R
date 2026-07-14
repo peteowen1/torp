@@ -772,5 +772,18 @@
     cli::cli_warn("Low weather coverage ({round(weather_pct, 1)}%) -- median imputation may affect predictions")
   }
 
+  # Team Elo feature (2026-07, FABLE-MATCH-MAE-PLAN.md WS2/WS5 "C6"): a
+  # dynamic, results-based team-strength signal the player-rating-derived
+  # features above structurally lack. Leak-safe by construction (elo_pre is
+  # a function only of strictly-prior matches); see team_elo.R.
+  team_mdl_df <- tryCatch(
+    build_elo_diff(team_mdl_df),
+    error = function(e) {
+      cli::cli_warn("Failed to build elo_diff feature ({conditionMessage(e)}) -- falling back to neutral elo_diff=0")
+      team_mdl_df$elo_diff <- 0
+      team_mdl_df
+    }
+  )
+
   team_mdl_df
 }
