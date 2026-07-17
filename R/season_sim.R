@@ -788,27 +788,43 @@ summarise_simulations <- function(sim_results) {
   ), by = team]
 
   # Finals summary
+  # finals_finish (simulate_finals(), Final Ten System): 0 = lost Wildcard,
+  # 1 = lost Elimination Final, 2 = lost Semi Final, 3 = lost Preliminary
+  # Final, 4 = runner-up, 5 = premier (docs/reference/afl-season-rules.md,
+  # inthegame-blog repo). Per-stage pcts computed here (not left to
+  # downstream consumers to re-derive from raw finals_finish) so the sim's
+  # own summary carries the full finals breakdown.
   if (nrow(sim_results$finals) > 0) {
     finals_sum <- sim_results$finals[, .(
-      made_finals_pct = .N / n,
-      avg_finals_wins = mean(finals_wins),
-      made_gf_pct     = sum(made_gf) / n,
-      won_gf_pct      = sum(won_gf) / n
+      made_finals_pct  = .N / n,
+      avg_finals_wins  = mean(finals_wins),
+      made_gf_pct      = sum(made_gf) / n,
+      won_gf_pct       = sum(won_gf) / n,
+      lose_wildcard_pct = sum(finals_finish == 0) / n,
+      lose_elim_pct     = sum(finals_finish == 1) / n,
+      lose_semi_pct     = sum(finals_finish == 2) / n,
+      lose_prelim_pct   = sum(finals_finish == 3) / n
     ), by = team]
 
     out <- merge(ladder_sum, finals_sum, by = "team", all.x = TRUE)
 
     # Teams that never made finals
     out[is.na(made_finals_pct), `:=`(
-      made_finals_pct = 0,
-      avg_finals_wins = 0,
-      made_gf_pct     = 0,
-      won_gf_pct      = 0
+      made_finals_pct   = 0,
+      avg_finals_wins   = 0,
+      made_gf_pct       = 0,
+      won_gf_pct        = 0,
+      lose_wildcard_pct = 0,
+      lose_elim_pct     = 0,
+      lose_semi_pct     = 0,
+      lose_prelim_pct   = 0
     )]
   } else {
     out <- ladder_sum
     out[, `:=`(made_finals_pct = 0, avg_finals_wins = 0,
-               made_gf_pct = 0, won_gf_pct = 0)]
+               made_gf_pct = 0, won_gf_pct = 0,
+               lose_wildcard_pct = 0, lose_elim_pct = 0,
+               lose_semi_pct = 0, lose_prelim_pct = 0)]
   }
 
   # Join original TORP ratings and team residuals

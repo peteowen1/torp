@@ -18,11 +18,21 @@ columns (proportion of games played at GF venue). When provided, the Grand
 Final home advantage is based on familiarity difference between teams.}
 }
 \value{
-A data.table with columns: \code{team}, \code{finals_finish} (week eliminated
-or 5 for premier), \code{finals_wins}, \code{made_gf}, \code{won_gf}.
+A data.table with columns: \code{team}, \code{finals_finish} (0 = lost
+Wildcard, 1 = lost Elimination Final, 2 = lost Semi Final, 3 = lost
+Preliminary Final, 4 = runner-up, 5 = premier), \code{finals_wins},
+\code{made_gf}, \code{won_gf}.
 }
 \description{
-Implements the full AFL top-8 finals bracket: qualifying finals, elimination
-finals, semi-finals, preliminary finals, and grand final.
+Implements the 2026 Final Ten System finals bracket (AFL Regulations,
+Reg 2.6(a) + Annexure 1): a sudden-death Wildcard Round (7th v 10th,
+8th v 9th), whose two winners are reseeded into the Elimination Final
+7th/8th slots (higher-ORIGINAL-rank winner takes 7th), then qualifying
+finals, elimination finals, semi-finals, a crossed preliminary final pair
+(QF1 winner v SF2 winner; QF2 winner v SF1 winner — avoids a Qualifying
+Final rematch, Annexure 1 footnote), and the grand final. Grand Final
+home-club status and all other hosting decisions use each team's
+ORIGINAL end-of-H&A ladder rank throughout (Reg 2.9(a)-(b)) — the
+Wildcard reseed only changes bracket \emph{placement}, never \code{ladder_pos}.
 }
 \keyword{internal}
