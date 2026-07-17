@@ -309,8 +309,13 @@ Default priors: `prior_games = 3.0` for all components; `prior_rate` = -0.4 (rec
 - Tiebreak order: ladder points > percentage (for/against) > points for
 
 **Finals Bracket** (`simulate_finals()`):
-- 8-team AFL finals system with home advantage modifiers
-- Grand Final venue familiarity adjustment
+- 2026 Final Ten System (top 10, Reg 2.6(a)/Annexure 1): Wildcard Round
+  (7th v 10th, 8th v 9th) reseeds its winners into the 7th/8th Elimination
+  Final slots by original H&A rank, then QF/EF -> SF -> crossed PF
+  (QF1 winner v SF2 winner; QF2 winner v SF1 winner) -> GF
+- Home advantage modifiers; Grand Final venue familiarity adjustment; GF
+  hosting/all hosting decisions use each team's original end-of-H&A rank
+  throughout (Reg 2.9), never the reseeded bracket slot
 
 **Injury Pipeline**:
 - `scrape_injuries()` -- Scrapes afl.com.au injury list

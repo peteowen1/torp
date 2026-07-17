@@ -1,16 +1,19 @@
 # AFL Ladder Calculation
 # ======================
 # Pure ladder construction from game results: pivots fixtures into per-team
-# rows and applies AFL tiebreak rules (points, percentage). Companion
-# simulation files: R/season_sim.R drives Monte Carlo seasons that consume
-# this; R/finals_sim.R simulates the top-8 bracket on top of the ladder.
+# rows and applies the full Reg 2.5(c) tiebreak chain (points -> percentage
+# -> H2H points -> H2H percentage -> lot, docs/reference/afl-season-rules.md
+# S1.3, inthegame-blog repo). Companion simulation files: R/season_sim.R
+# drives Monte Carlo seasons that consume this; R/finals_sim.R simulates the
+# Final Ten System bracket on top of the ladder.
 
 #' AFL Ladder Calculation
 #'
 #' Functions for constructing the AFL ladder from game results, applying
-#' standard tiebreak rules (ladder points, then percentage). Used as the
-#' input to finals simulation (R/finals_sim.R) and the season Monte Carlo
-#' (R/season_sim.R).
+#' the official tiebreak chain (ladder points, then percentage, then head-
+#' to-head points/percentage between tied clubs, then lot -- Reg 2.5(c)).
+#' Used as the input to finals simulation (R/finals_sim.R) and the season
+#' Monte Carlo (R/season_sim.R).
 #'
 #' @name ladder
 NULL
@@ -23,6 +26,103 @@ NULL
     if (cand %in% names(dt)) return(cand)
   }
   NULL
+}
+
+
+# --------------------------------------------------------------------------
+# Ladder tiebreak chain (Reg 2.5(c), docs/reference/afl-season-rules.md S1.3)
+# --------------------------------------------------------------------------
+
+#' Break ties within an AFL ladder using the official Reg 2.5(c) chain
+#'
+#' `ladder` must already be sorted by `-ladder_points, -percentage`. Any
+#' maximal block of 2+ consecutive teams tied on BOTH is re-ordered by: (A)
+#' head-to-head premiership points from just the H&A meetings between the
+#' tied clubs; (B) if still tied, head-to-head percentage from those same
+#' meetings; (C) if still tied, drawn by lot. AFL is not round-robin (each
+#' club plays 23 of 17 possible opponents, some twice, some once, some
+#' zero), so a pair of tied clubs may have 0, 1, or 2 meetings -- whichever
+#' actually happened are summed. Ported from the same rule
+#' `inthegame-blog/afl/season-sim.js`'s `rankLadder()` implements (torp#106);
+#' here as a one-pass `setorder()` (h2h_pts, h2h_pct, lot) rather than that
+#' function's recursive mini-table, since a single per-team random `lot`
+#' draw up front is sufficient to fully resolve a tied block in one sort.
+#'
+#' "Drawn by lot" (Reg 2.5(c)(iv)(C)) is implemented as a `stats::runif()`
+#' draw per team in the residual tied block -- callers that need
+#' reproducible output across repeated calls with identical `games_dt`
+#' (e.g. the season Monte Carlo, which already wraps its own call in
+#' `withr::local_seed()`/`set.seed()`) should seed beforehand. A genuine
+#' full tie through percentage is vanishingly rare in real results but not
+#' negligible in simulation (exact-tie odds are higher over integer-sampled
+#' scores) -- see the rules doc's severity note.
+#'
+#' @param ladder A data.table with `team`, `ladder_points`, `percentage`,
+#'   already sorted by `-ladder_points, -percentage`.
+#' @param played_games A data.table of completed games with `home_team`,
+#'   `away_team`, `home_score`, `away_score`.
+#' @return `ladder`, re-ordered so any tied block satisfies the full
+#'   tiebreak chain.
+#' @keywords internal
+.resolve_ladder_ties <- function(ladder, played_games) {
+  n <- nrow(ladder)
+  if (n < 2L) return(ladder)
+
+  tied_next <- c(
+    ladder$ladder_points[-n] == ladder$ladder_points[-1] &
+      ladder$percentage[-n]   == ladder$percentage[-1],
+    FALSE
+  )
+  if (!any(tied_next)) return(ladder)
+
+  # Team-perspective rows of every completed game, for intra-block H2H sums.
+  h2h_rows <- data.table::rbindlist(list(
+    played_games[, .(team = home_team, opp = away_team,
+                     gf = home_score, ga = away_score)],
+    played_games[, .(team = away_team, opp = home_team,
+                     gf = away_score, ga = home_score)]
+  ))
+
+  out_order <- integer(0)
+  i <- 1L
+  while (i <= n) {
+    j <- i
+    while (j < n && tied_next[j]) j <- j + 1L
+    if (j == i) {
+      out_order <- c(out_order, i)
+    } else {
+      block_teams <- ladder$team[i:j]
+      out_order <- c(out_order, (i - 1L) + .rank_tied_block(block_teams, h2h_rows))
+    }
+    i <- j + 1L
+  }
+
+  ladder[out_order]
+}
+
+# Order (as an index into `block_teams`) one tied block via H2H points ->
+# H2H percentage -> lot. `h2h_rows` is the full team-perspective game log;
+# filtered here to just meetings BETWEEN block members.
+.rank_tied_block <- function(block_teams, h2h_rows) {
+  bl <- length(block_teams)
+  sub <- h2h_rows[team %in% block_teams & opp %in% block_teams]
+
+  agg <- sub[, .(
+    h2h_pts = sum(data.table::fifelse(gf > ga, 4L,
+                  data.table::fifelse(gf == ga, 2L, 0L))),
+    h2h_pf  = sum(gf),
+    h2h_pa  = sum(ga)
+  ), by = team]
+
+  full <- merge(data.table::data.table(team = block_teams), agg,
+                by = "team", all.x = TRUE)
+  full[is.na(h2h_pts), `:=`(h2h_pts = 0L, h2h_pf = 0, h2h_pa = 0)]
+  full[, h2h_pct := data.table::fifelse(h2h_pa > 0, h2h_pf / h2h_pa * 100,
+                                        data.table::fifelse(h2h_pf > 0, Inf, 0))]
+  full[, lot := stats::runif(.N)]
+
+  data.table::setorder(full, -h2h_pts, -h2h_pct, -lot)
+  match(full$team, block_teams)
 }
 
 
@@ -69,7 +169,11 @@ calculate_ladder <- function(games_dt) {
     ladder_points = wins * 4L + draws * 2L
   )]
 
-  data.table::setorder(ladder, -ladder_points, -percentage, -points_for)
+  # Tiebreak order: ladder points -> percentage -> H2H points -> H2H
+  # percentage -> lot (Reg 2.5(c), docs/reference/afl-season-rules.md S1.3).
+  # Points-for is NOT an official tiebreaker anywhere in the regulation.
+  data.table::setorder(ladder, -ladder_points, -percentage)
+  ladder <- .resolve_ladder_ties(ladder, played)
   ladder[, rank := seq_len(.N)]
 
   ladder[]
@@ -325,7 +429,14 @@ calculate_final_ladder <- function(season = get_afl_season(),
     ladder_points = round(expected_wins * 4)
   )]
 
-  data.table::setorder(ladder, -ladder_points, -percentage, -points_for)
+  # Tiebreak: ladder points -> percentage. Points-for was dropped (it is not
+  # an official Reg 2.5(c) criterion -- see calculate_ladder()); the full
+  # H2H tiebreak chain is NOT applied here (disclosed simplification) since
+  # this ladder blends real results with fractional predicted-win scores
+  # for unplayed games, and a meaningful H2H-points tiebreak needs
+  # deterministic W/L, not a win probability. A residual tie here (points
+  # AND percentage both equal) falls back to insertion order.
+  data.table::setorder(ladder, -ladder_points, -percentage)
   ladder[, rank := seq_len(.N)]
 
   ladder[]
