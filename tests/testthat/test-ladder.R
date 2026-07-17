@@ -32,6 +32,57 @@ test_that("calculate_ladder produces correct results for known fixture", {
   expect_equal(sort(ladder$rank), 1:4)
 })
 
+test_that("calculate_ladder resolves points/percentage ties via H2H, not points-for", {
+  # A and B finish tied on BOTH ladder_points (4) and percentage (91.667%),
+  # but B has the higher points_for (220 vs 110) -- the pre-fix (illegitimate,
+  # not an actual Reg 2.5(c) criterion) 3rd tiebreak would have ranked B
+  # above A. A beat B 70-20 head-to-head, so the correct chain (H2H points
+  # first) must rank A above B instead.
+  games <- data.table::data.table(
+    home_team  = c("A", "A", "B"),
+    away_team  = c("B", "C", "D"),
+    home_score = c(70L, 40L, 200L),
+    away_score = c(20L, 100L, 170L),
+    result     = c(50L, -60L, 30L)
+  )
+
+  set.seed(1)
+  ladder <- calculate_ladder(games)
+
+  team_a <- ladder[team == "A"]
+  team_b <- ladder[team == "B"]
+
+  expect_equal(team_a$ladder_points, team_b$ladder_points)
+  expect_equal(team_a$percentage, team_b$percentage)
+  expect_gt(team_b$points_for, team_a$points_for)
+  expect_lt(team_a$rank, team_b$rank)
+})
+
+test_that("calculate_ladder falls back to lot (reproducibly) when tied teams never met", {
+  # E/F are tied on ladder_points (4) and percentage (200%) but never played
+  # each other (E only played G, F only played H) -- no H2H meetings to
+  # resolve the tie, so it falls through to "drawn by lot". G/H form a
+  # second, independent tied block (0 pts, 50% each), also with no mutual
+  # meeting -- exercises two simultaneous tied blocks in one ladder.
+  games <- data.table::data.table(
+    home_team  = c("E", "F"),
+    away_team  = c("G", "H"),
+    home_score = c(100L, 100L),
+    away_score = c(50L, 50L),
+    result     = c(50L, 50L)
+  )
+
+  set.seed(2)
+  ladder1 <- calculate_ladder(games)
+  set.seed(2)
+  ladder2 <- calculate_ladder(games)
+
+  expect_equal(nrow(ladder1), 4)
+  expect_setequal(ladder1$team, c("E", "F", "G", "H"))
+  # Same seed -> same "drawn by lot" resolution (reproducible)
+  expect_equal(ladder1$team, ladder2$team)
+})
+
 test_that("calculate_ladder handles draws correctly", {
   games <- data.table::data.table(
     home_team  = c("A", "A"),
