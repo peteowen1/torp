@@ -21,12 +21,24 @@
 #' @param drop_played_preseason Logical; if TRUE (default), drops preseason
 #'   entries for players who appear in this season's `load_player_stats()`.
 #'   Set to FALSE to inspect the raw merged list.
+#' @param current_round Optional integer current round number. Used to (a)
+#'   drop preseason entries whose parsed `return_round` has lapsed more than
+#'   one round in the past, and (b) decide whether a 0-row weekly scrape
+#'   deserves a loud warning (mid-season, not preseason/off-season). Defaults
+#'   to [get_afl_week()] when NULL.
 #' @return A data.frame with columns: `player`, `team`, `injury`,
 #'   `estimated_return`, `updated`, `player_norm`, `source`. The `source`
 #'   column is `"weekly"` or `"preseason"`. `updated` is the per-team date
 #'   from the AFL injury page (Date class; NA for preseason entries).
 #' @export
-get_all_injuries <- function(season, scrape = TRUE, drop_played_preseason = TRUE) {
+get_all_injuries <- function(season, scrape = TRUE, drop_played_preseason = TRUE,
+                              current_round = NULL) {
+  if (is.null(current_round)) {
+    current_round <- tryCatch(get_afl_week("current"), error = function(e) NA_integer_)
+  }
+  current_round <- suppressWarnings(as.integer(current_round))
+  in_season <- isTRUE(is.finite(current_round) && current_round >= 1)
+
   preseason <- load_preseason_injuries(season)
   if (nrow(preseason) > 0) {
     preseason$source <- "preseason"
@@ -59,10 +71,43 @@ get_all_injuries <- function(season, scrape = TRUE, drop_played_preseason = TRUE
         }
       }
     }
+
+    # Drop preseason entries whose predicted return round has lapsed by more
+    # than one round. Preseason estimates like "Mid-season" parse to a fixed
+    # absolute round (SIM_INJURY_SEASON_MID etc, see parse_return_round())
+    # that doesn't track how the season has actually unfolded -- once we're
+    # well past it the player has either quietly returned (without showing
+    # up in played_norms above, e.g. a reserves-only game) or is still out
+    # and should now be picked up by the fresh weekly scrape instead of a
+    # stale, misleadingly-precise round number lingering indefinitely
+    # (e.g. torp#105: a "Mid-season"/round-12 entry surviving to round 19).
+    if (nrow(preseason) > 0 && in_season) {
+      preseason_return_round <- parse_return_round(preseason$estimated_return, season, current_round)
+      lapsed <- is.finite(preseason_return_round) & (current_round - preseason_return_round > 1)
+      if (any(lapsed)) {
+        cli::cli_alert_info(
+          "Dropped {sum(lapsed)} lapsed preseason injur{?y/ies} whose estimated return round is more than 1 round in the past: {paste(preseason$player[lapsed], collapse = ', ')}"
+        )
+        preseason <- preseason[!lapsed, , drop = FALSE]
+      }
+    }
   }
 
   if (scrape) {
     weekly <- scrape_injuries()
+    if (nrow(weekly) == 0 && in_season) {
+      # torp#105: the weekly scrape silently returned nothing for months
+      # (missing 'rvest' in the CI dependency list) and nobody noticed
+      # because the fallback to preseason-only data is graceful. There are
+      # almost always some injuries mid-season, so a 0-row weekly result
+      # here is far more likely to be a scraper failure than a fact about
+      # the league -- make it loud rather than silently degrading.
+      cli::cli_warn(c(
+        "!" = "Weekly AFL injury scrape returned 0 rows in round {current_round} of {season}.",
+        "i" = "There are almost always some injuries mid-season -- this usually means {.fn scrape_injuries} is silently failing (missing the {.pkg rvest}/{.pkg xml2} packages, AFL site markup drift, or a network/bot block), not that the league is genuinely injury-free.",
+        "i" = "Falling back to preseason-only injury data for this run."
+      ))
+    }
     if (nrow(weekly) > 0) {
       weekly$source <- "weekly"
       if (!"team" %in% names(weekly)) weekly$team <- NA_character_
