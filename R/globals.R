@@ -450,3 +450,9 @@ utils::globalVariables(c(
   # not a real function -- declared here to silence R CMD check globals NOTE)
   ".lineup_key", "psr_key", "closest"
 ))
+
+# matchup_table.R -- directed matchup table (torp#108)
+utils::globalVariables(c(
+  "n_total", "n_venue", "host", "visitor", "tier", "match_venue",
+  "matchup_id", "away", "p_home", "pred_total"
+))
