@@ -193,3 +193,24 @@ MATCH_RECAL_MIN_N <- 30
 #' target; widened slightly for a release gate vs. a research target).
 #' @keywords internal
 MATCH_MARGIN_SLOPE_GATE <- c(0.85, 1.10)
+
+
+# Directed Matchup Table Constants
+# ---------------------------------
+# build_matchup_table() (torp#108) fabricates hypothetical fixture rows for
+# every (host, visitor, venue-tier) combination and scores them with the
+# real GAM+XGBoost match model. Only `days_rest_diff_fac` (the ROUNDED
+# DIFFERENCE between the two teams' days_rest) is a model feature -- no
+# formula uses raw days_rest.x/.y -- so any constant works numerically as
+# long as it is EQUAL for both teams (days_rest_diff = 0). The value below
+# is chosen only for documentation/plausibility (a finals matchup is never a
+# season-opener), not because its magnitude affects predictions.
+
+#' Assumed days' rest for BOTH teams in a fabricated matchup-table row
+#'
+#' A "sensible GF-era constant" (torp#108): the historical gap from a
+#' Preliminary Final to the Grand Final under standard AFL finals scheduling.
+#' Applied symmetrically (both host and visitor), so it only ever produces
+#' \code{days_rest_diff_fac = "0"} -- the actual number is cosmetic.
+#' @keywords internal
+MATCHUP_TABLE_DAYS_REST <- 13
