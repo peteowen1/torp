@@ -4,7 +4,12 @@
 \alias{get_all_injuries}
 \title{Get All Injuries (Weekly + Preseason)}
 \usage{
-get_all_injuries(season, scrape = TRUE, drop_played_preseason = TRUE)
+get_all_injuries(
+  season,
+  scrape = TRUE,
+  drop_played_preseason = TRUE,
+  current_round = NULL
+)
 }
 \arguments{
 \item{season}{Numeric season year (e.g. 2026).}
@@ -15,6 +20,12 @@ Set to FALSE for pre-season use or testing when the AFL page is empty.}
 \item{drop_played_preseason}{Logical; if TRUE (default), drops preseason
 entries for players who appear in this season's \code{load_player_stats()}.
 Set to FALSE to inspect the raw merged list.}
+
+\item{current_round}{Optional integer current round number. Used to (a)
+drop preseason entries whose parsed \code{return_round} has lapsed more than
+one round in the past, and (b) decide whether a 0-row weekly scrape
+deserves a loud warning (mid-season, not preseason/off-season). Defaults
+to \code{\link[=get_afl_week]{get_afl_week()}} when NULL.}
 }
 \value{
 A data.frame with columns: \code{player}, \code{team}, \code{injury},

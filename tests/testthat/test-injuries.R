@@ -199,12 +199,16 @@ test_that("get_all_injuries drops preseason entries for players who have played"
     }
   )
 
-  result <- get_all_injuries(2026, scrape = TRUE)
+  # current_round = 0 (preseason): deterministic, no live get_afl_week()
+  # network call, and keeps this test focused on drop_played_preseason
+  # rather than the separate 0-row-weekly-scrape warning (see below).
+  result <- get_all_injuries(2026, scrape = TRUE, current_round = 0)
   expect_equal(nrow(result), 1)
   expect_equal(result$player_norm, "genuine acl")
 
   # Opt-out preserves the stale entry for inspection
-  result_raw <- get_all_injuries(2026, scrape = TRUE, drop_played_preseason = FALSE)
+  result_raw <- get_all_injuries(2026, scrape = TRUE, drop_played_preseason = FALSE,
+                                  current_round = 0)
   expect_equal(nrow(result_raw), 2)
 })
 
@@ -247,9 +251,131 @@ test_that("get_all_injuries returns empty df when no injuries", {
     }
   )
 
-  result <- get_all_injuries(2026, scrape = TRUE)
+  # current_round = 0 (preseason): avoids the 0-row-weekly-scrape warning
+  # tested separately below.
+  result <- get_all_injuries(2026, scrape = TRUE, current_round = 0)
   expect_equal(nrow(result), 0)
   expect_true(all(c("player", "injury", "estimated_return", "player_norm", "source") %in% names(result)))
+})
+
+
+# --- get_all_injuries() loud 0-row weekly scrape warning (torp#105) ---
+
+test_that("get_all_injuries warns when weekly scrape returns 0 rows mid-season", {
+  local_mocked_bindings(
+    scrape_injuries = function(timeout = 30) {
+      data.frame(player = character(), team = character(),
+                 injury = character(), estimated_return = character(),
+                 updated = as.Date(character()), player_norm = character(),
+                 stringsAsFactors = FALSE)
+    },
+    load_preseason_injuries = function(season) {
+      data.frame(player = character(), team = character(),
+                 injury = character(), estimated_return = character(),
+                 player_norm = character(), stringsAsFactors = FALSE)
+    },
+    load_player_stats = function(...) {
+      data.frame(player_name = character(), stringsAsFactors = FALSE)
+    }
+  )
+
+  expect_warning(
+    result <- get_all_injuries(2026, scrape = TRUE, current_round = 19),
+    "0 rows"
+  )
+  expect_equal(nrow(result), 0)
+})
+
+test_that("get_all_injuries does not warn on a 0-row weekly scrape preseason", {
+  local_mocked_bindings(
+    scrape_injuries = function(timeout = 30) {
+      data.frame(player = character(), team = character(),
+                 injury = character(), estimated_return = character(),
+                 updated = as.Date(character()), player_norm = character(),
+                 stringsAsFactors = FALSE)
+    },
+    load_preseason_injuries = function(season) {
+      data.frame(player = character(), team = character(),
+                 injury = character(), estimated_return = character(),
+                 player_norm = character(), stringsAsFactors = FALSE)
+    },
+    load_player_stats = function(...) {
+      data.frame(player_name = character(), stringsAsFactors = FALSE)
+    }
+  )
+
+  # current_round = 0 signals preseason (get_afl_week()'s convention) --
+  # a genuinely-empty weekly list is expected then, not suspicious.
+  expect_no_warning(get_all_injuries(2026, scrape = TRUE, current_round = 0))
+  # current_round unresolvable (e.g. no fixtures / network failure) must
+  # also stay silent rather than false-alarm.
+  expect_no_warning(get_all_injuries(2026, scrape = TRUE, current_round = NA))
+})
+
+
+# --- get_all_injuries() lapsed preseason return_round drop (torp#105) ---
+
+test_that("get_all_injuries drops preseason entries whose return round has lapsed", {
+  preseason_data <- data.frame(
+    player = c("Lapsed Mid Season", "Lapsed Round", "Fresh TBC", "Future Year", "Boundary Round"),
+    team = rep("TeamA", 5),
+    injury = rep("Knee", 5),
+    # current_round = 19: "Mid-season" -> SIM_INJURY_SEASON_MID (12), lapsed
+    # by 7 rounds; "Round 10" lapsed by 9 rounds; "TBC" is relative to
+    # current_round so never lapses under this check; "2027" -> Inf, never
+    # lapses; "Round 18" is exactly 1 round lapsed -- kept (not > 1).
+    estimated_return = c("Mid-season", "Round 10", "TBC", "2027", "Round 18"),
+    player_norm = c("lapsed mid season", "lapsed round", "fresh tbc",
+                     "future year", "boundary round"),
+    stringsAsFactors = FALSE
+  )
+
+  local_mocked_bindings(
+    scrape_injuries = function(timeout = 30) {
+      data.frame(player = character(), team = character(),
+                 injury = character(), estimated_return = character(),
+                 updated = as.Date(character()), player_norm = character(),
+                 stringsAsFactors = FALSE)
+    },
+    load_preseason_injuries = function(season) preseason_data,
+    load_player_stats = function(...) {
+      data.frame(player_name = character(), stringsAsFactors = FALSE)
+    }
+  )
+
+  result <- suppressWarnings(get_all_injuries(2026, scrape = TRUE, current_round = 19))
+
+  expect_false("lapsed mid season" %in% result$player_norm)
+  expect_false("lapsed round" %in% result$player_norm)
+  expect_true("fresh tbc" %in% result$player_norm)
+  expect_true("future year" %in% result$player_norm)
+  expect_true("boundary round" %in% result$player_norm)
+})
+
+test_that("get_all_injuries keeps lapsed preseason entries when current_round is unknown", {
+  preseason_data <- data.frame(
+    player = "Mid Season Player", team = "TeamA", injury = "Knee",
+    estimated_return = "Mid-season", player_norm = "mid season player",
+    stringsAsFactors = FALSE
+  )
+
+  local_mocked_bindings(
+    scrape_injuries = function(timeout = 30) {
+      data.frame(player = character(), team = character(),
+                 injury = character(), estimated_return = character(),
+                 updated = as.Date(character()), player_norm = character(),
+                 stringsAsFactors = FALSE)
+    },
+    load_preseason_injuries = function(season) preseason_data,
+    load_player_stats = function(...) {
+      data.frame(player_name = character(), stringsAsFactors = FALSE)
+    }
+  )
+
+  # No current_round signal (e.g. off-season / fixtures unavailable) --
+  # can't tell if the estimate has lapsed, so keep it rather than guess.
+  result <- get_all_injuries(2026, scrape = TRUE, current_round = NA)
+  expect_true("mid season player" %in% result$player_norm)
 })
 
 
