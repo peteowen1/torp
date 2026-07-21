@@ -196,6 +196,41 @@ test_that("vb_atomic_write never leaves a partial dest", {
   expect_length(list.files(dir, pattern = "^\\.vb_", all.files = TRUE), 0)
 })
 
+test_that(".vb_retry succeeds after transient failures within the attempt budget", {
+  calls <- 0L
+  result <- .vb_retry(function() {
+    calls <<- calls + 1L
+    if (calls < 3L) stop("simulated transient failure")
+    "ok"
+  }, times = 3L, delays = c(0, 0))
+  expect_identical(result, "ok")
+  expect_identical(calls, 3L)
+})
+
+test_that(".vb_retry gives up after exhausting attempts and raises the last error", {
+  calls <- 0L
+  expect_error(
+    .vb_retry(function() {
+      calls <<- calls + 1L
+      stop("simulated transient failure")
+    }, times = 3L, delays = c(0, 0)),
+    "simulated transient failure"
+  )
+  expect_identical(calls, 3L)
+})
+
+test_that(".vb_retry does not retry when should_retry returns FALSE", {
+  calls <- 0L
+  expect_error(
+    .vb_retry(function() {
+      calls <<- calls + 1L
+      stop("confirmed absent")
+    }, times = 3L, delays = c(0, 0), should_retry = function(e) FALSE),
+    "confirmed absent"
+  )
+  expect_identical(calls, 1L)
+})
+
 test_that("manifest merge carries forward previous entries on partial publish", {
   prev <- make_fake_manifest(assets = list(
     list(name = "old.parquet", sha256 = strrep("a", 64), bytes = 5, rows = 10L)

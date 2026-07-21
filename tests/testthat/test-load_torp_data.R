@@ -6,6 +6,35 @@ test_that("parquet_from_url validates input correctly", {
   expect_error(torp:::parquet_from_url("ftp://example.com"), "must start with http")
 })
 
+test_that("parquet_from_url retries a transient failure and succeeds", {
+  calls <- 0L
+  local_mocked_bindings(
+    read_parquet = function(...) {
+      calls <<- calls + 1L
+      if (calls < 2L) stop("simulated 500 from release CDN")
+      data.table::data.table(x = 1L)
+    },
+    .package = "arrow"
+  )
+  result <- torp:::parquet_from_url("https://example.com/file.parquet")
+  expect_identical(calls, 2L)
+  expect_equal(nrow(result), 1L)
+})
+
+test_that("parquet_from_url does not retry a confirmed 404", {
+  calls <- 0L
+  local_mocked_bindings(
+    read_parquet = function(...) {
+      calls <<- calls + 1L
+      stop("HTTP 404 Not Found")
+    },
+    .package = "arrow"
+  )
+  result <- suppressWarnings(torp:::parquet_from_url("https://example.com/missing.parquet"))
+  expect_identical(calls, 1L)
+  expect_equal(nrow(result), 0L)
+})
+
 test_that("generate_urls creates correct URLs", {
   urls <- torp:::generate_urls("test-data", "test_file", seasons = c(2021, 2022))
 
