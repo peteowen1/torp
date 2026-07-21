@@ -381,8 +381,13 @@ parquet_from_url <- function(url) {
   }
 
   tryCatch({
-    # Arrow can read parquet directly from URL
-    load <- arrow::read_parquet(url)
+    # Arrow can read parquet directly from URL. Retries transient failures
+    # (GitHub's release-asset CDN throws sporadic 5xx errors -- torpdata#66/
+    # #68) with a short backoff; a confirmed 404 is never worth retrying.
+    load <- .vb_retry(
+      function() arrow::read_parquet(url),
+      should_retry = function(e) !grepl("404|Not Found", conditionMessage(e), ignore.case = TRUE)
+    )
 
     # Validate that we got actual data
     if (is.null(load)) {

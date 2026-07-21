@@ -229,8 +229,11 @@ vb_read_manifest <- function(repo, tag, required = FALSE) {
     tmpdir <- tempfile("vb_manifest_")
     dir.create(tmpdir)
     on.exit(unlink(tmpdir, recursive = TRUE), add = TRUE)
-    piggyback::pb_download("bus_manifest.json", dest = tmpdir,
-                           repo = repo, tag = tag, overwrite = TRUE)
+    .vb_retry(
+      function() piggyback::pb_download("bus_manifest.json", dest = tmpdir,
+                                        repo = repo, tag = tag, overwrite = TRUE),
+      should_retry = function(e) vb_classify_error(e) != "absent"
+    )
     jsonlite::fromJSON(file.path(tmpdir, "bus_manifest.json"),
                        simplifyVector = TRUE, simplifyDataFrame = TRUE)
   }
@@ -294,6 +297,34 @@ vb_read_prev_manifest <- function(repo, tag) {
   identical(rawToChar(head), "PAR1") && identical(rawToChar(tail), "PAR1")
 }
 
+#' Retry a fallible operation with short exponential backoff
+#'
+#' GitHub's release-asset CDN throws sporadic 5xx errors (torpdata#66/#68)
+#' that usually clear on a second or third attempt with no code change --
+#' this mirrors the backoff style `save_to_release()` already uses for its
+#' upload-side 404/422 retry. Retries up to `times` attempts total, sleeping
+#' `delays[i]` seconds before each retry (recycled if `times - 1` exceeds
+#' `length(delays)`). `should_retry` lets the caller exclude confirmed-absent
+#' failures (e.g. a real 404) -- those never resolve by waiting.
+#' @param fn zero-arg function to attempt
+#' @param times maximum attempts (default 3: one try + 2 retries)
+#' @param delays seconds to sleep before each retry (default 2, then 5)
+#' @param should_retry function(error) -> logical; FALSE re-raises immediately
+#' @keywords internal
+.vb_retry <- function(fn, times = 3L, delays = c(2, 5), should_retry = function(e) TRUE) {
+  last_err <- NULL
+  for (attempt in seq_len(times)) {
+    out <- tryCatch(list(ok = TRUE, value = fn()), error = function(e) list(ok = FALSE, err = e))
+    if (isTRUE(out$ok)) return(out$value)
+    last_err <- out$err
+    if (attempt >= times || !should_retry(last_err)) break
+    d <- delays[min(attempt, length(delays))]
+    cli::cli_warn("Attempt {attempt} failed ({conditionMessage(last_err)}); retrying in {d}s...")
+    Sys.sleep(d)
+  }
+  stop(last_err)
+}
+
 #' Verified, atomic release-asset download
 #'
 #' Downloads to a tempfile in `dest`'s directory, verifies (parquet magic
@@ -339,8 +370,11 @@ vb_download <- function(repo, tag, name, dest,
   on.exit(unlink(tmpdir, recursive = TRUE), add = TRUE)
 
   tryCatch(
-    piggyback::pb_download(name, dest = tmpdir, repo = repo, tag = tag,
-                           overwrite = TRUE),
+    .vb_retry(
+      function() piggyback::pb_download(name, dest = tmpdir, repo = repo, tag = tag,
+                                        overwrite = TRUE),
+      should_retry = function(e) vb_classify_error(e) != "absent"
+    ),
     error = function(e) {
       .vb_abort("Download of {.val {name}} from {repo}@{tag} failed:
                  {conditionMessage(e)}",

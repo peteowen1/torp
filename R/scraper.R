@@ -163,6 +163,23 @@ get_match_chains <- function(season = get_afl_season(), round = NA) {
 # re-auth on every call during batch scraping sessions.
 .torp_token_cache <- new.env(parent = emptyenv())
 
+#' Detect an HTML error/maintenance page returned where structured data was expected
+#'
+#' AFL's API gateways occasionally return an HTML error page (transient
+#' upstream 5xx/maintenance) with a 200 status and/or a JSON content-type
+#' header, so `httr::stop_for_status()` doesn't catch it and the raw markup
+#' gets thrown straight into `jsonlite::fromJSON()`, whose lexer error
+#' embeds a chunk of the document verbatim (torpdata#71 -- the raw error was
+#' literally `<!DOCTYPE html...`). Sniff the body itself instead: a real API
+#' response never starts with a doctype/html tag.
+#' @param body Character. Response body already read as text.
+#' @return Logical
+#' @keywords internal
+.is_html_error_page <- function(body) {
+  if (is.null(body) || !nzchar(body)) return(FALSE)
+  grepl("^<!DOCTYPE\\s+html|^<html", trimws(body), ignore.case = TRUE)
+}
+
 #' Get API Token
 #'
 #' Retrieves an authentication token for the AFL API, caching it for 5 minutes.
@@ -177,12 +194,27 @@ get_token <- function() {
       difftime(now, .torp_token_cache$fetched, units = "mins") < 5) {
     return(.torp_token_cache$token)
   }
-  response <- httr::POST(paste0(AFL_CFS_API_BASE_URL, "WMCTok"))
-  httr::stop_for_status(response, task = "authenticate with AFL API")
-  token <- httr::content(response)$token
-  if (is.null(token) || !nzchar(token)) {
-    cli::cli_abort("AFL API returned empty or missing token (HTTP 200 but no token in body)")
+  fetch_token <- function() {
+    response <- httr::POST(paste0(AFL_CFS_API_BASE_URL, "WMCTok"))
+    httr::stop_for_status(response, task = "authenticate with AFL API")
+    body <- httr::content(response, as = "text", encoding = "UTF-8")
+    if (.is_html_error_page(body)) {
+      cli::cli_abort(
+        "AFL API auth endpoint returned an HTML error page (likely transient upstream error)",
+        class = "torp_html_error_page"
+      )
+    }
+    parsed <- jsonlite::fromJSON(body)
+    token <- parsed$token
+    if (is.null(token) || !nzchar(token)) {
+      cli::cli_abort("AFL API returned empty or missing token (HTTP 200 but no token in body)")
+    }
+    token
   }
+  token <- .vb_retry(
+    fetch_token,
+    should_retry = function(e) !grepl("404|Not Found", conditionMessage(e), ignore.case = TRUE)
+  )
   .torp_token_cache$token <- token
   .torp_token_cache$fetched <- now
   token
@@ -201,13 +233,25 @@ get_token <- function() {
 #' @importFrom jsonlite fromJSON
 access_api <- function(url) {
   token <- get_token()
-  response <- httr::GET(
-    url = url,
-    httr::add_headers("x-media-mis-token" = token)
+  fetch_and_parse <- function() {
+    response <- httr::GET(
+      url = url,
+      httr::add_headers("x-media-mis-token" = token)
+    )
+    httr::stop_for_status(response, task = paste("fetch data from", url))
+    body <- httr::content(response, as = "text", encoding = "UTF-8")
+    if (.is_html_error_page(body)) {
+      cli::cli_abort(
+        "AFL API returned an HTML error page for {.url {url}} (likely transient upstream error)",
+        class = "torp_html_error_page"
+      )
+    }
+    jsonlite::fromJSON(body, flatten = TRUE)
+  }
+  .vb_retry(
+    fetch_and_parse,
+    should_retry = function(e) !grepl("404|Not Found", conditionMessage(e), ignore.case = TRUE)
   )
-  httr::stop_for_status(response, task = paste("fetch data from", url))
-  httr::content(response, as = "text", encoding = "UTF-8") |>
-    jsonlite::fromJSON(flatten = TRUE)
 }
 
 #' Get Round Games
