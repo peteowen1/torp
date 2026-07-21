@@ -239,23 +239,30 @@ get_epv_preds <- function(df) {
 #' Get Win Probability Predictions
 #'
 #' This function generates win probability predictions for the input data.
-#' Applies the WP recalibration sidecar (`wp_calibration`, FABLE-RECAL-
-#' PLAN.md D1-D4) immediately after the raw model prediction, so every
-#' caller of this function -- not just [add_wp_vars()] -- serves calibrated
-#' WP: `add_wp_vars()`'s downstream `wp`/`wpa`, `create_wp_credit()`,
-#' `player_credit.R`, `player_game_ratings.R`, released parquets. If the
-#' sidecar is unavailable (old deployment, not yet published, network
-#' down), [load_model_with_fallback()] returns `NULL` and this degrades to
-#' the identity function -- never an error.
+#' Applies the WP recalibration sidecar (`wp_calibration`) immediately after
+#' the raw model prediction, so every caller of this function -- not just
+#' [add_wp_vars()] -- serves calibrated WP: `add_wp_vars()`'s downstream
+#' `wp`/`wpa`, `create_wp_credit()`, `player_credit.R`,
+#' `player_game_ratings.R`, released parquets. If the sidecar is unavailable
+#' (old deployment, not yet published, network down),
+#' [load_model_with_fallback()] returns `NULL` and this degrades to the
+#' identity function -- never an error.
 #'
-#' Supports both calibration forms (mirrors torpmodels train_lib.R's
-#' `apply_wp_calibration()` exactly):
-#' `plogis((a + a_q4c*I) + (b + b_q4c*I) * qlogis(p))` where
-#' `I = is_q4close` (the D1 escalation cell, `period == cell$period &
-#' abs(points_diff) <= cell$margin_abs_max`, defaults 4/12). A global-form
-#' or pre-escalation 2-param artifact has no (or zero) `a_q4c`/`b_q4c` and
-#' collapses to the global formula. Rows with `NA` period/points_diff --
-#' or a `df` missing those columns entirely -- get the global arm.
+#' Form dispatch (FABLE-RECAL-PLAN.md \enc{§}{Section}7): the sidecar's `$form` field
+#' selects the calibration formula. Missing `$form` or `"global_v1"` --
+#' the legacy 2-param Platt-on-logit, `plogis(a + b * qlogis(p))`.
+#' `"leverage_interaction_v1"` (\enc{§}{Section}7 Path B, current as of 2026-07-21) --
+#' `plogis(a + (b + c*w) * qlogis(p))`, where `w` is the continuous leverage
+#' weight `pmax(0, 1 - minutes_remaining/ramp_mins) * pmax(0, 1 -
+#' abs(points_diff)/margin_cap)`, `minutes_remaining = est_match_remaining /
+#' 60` (`est_match_remaining` is a `WP_MODEL_FEATURES` column, the same
+#' match-time-remaining variable the WP model itself trains on;
+#' `ramp_mins`/`margin_cap` come from the sidecar, defaulting to 20/18 if
+#' absent). Any OTHER `$form` value aborts loudly -- an applier that can't
+#' interpret a sidecar's schema must fail the load, never silently serve
+#' uncalibrated or misapplied WP. Within a recognized form, missing/
+#' non-finite numeric fields (`a`/`b`/`c`/etc.) still degrade gracefully to
+#' identity (transient corruption, not a schema mismatch).
 #'
 #' @param df A dataframe containing play-by-play data.
 #'
@@ -279,36 +286,50 @@ get_wp_preds <- function(df) {
     preds_raw <- as.vector(preds_raw)
   }
 
-  # D1/D4: Platt-on-logit recalibration (global or Q4/close-interaction
-  # form), identity fallback when the sidecar is absent
-  # (load_model_with_fallback() has already warn-once'd in that case).
+  # Platt-on-logit recalibration, identity fallback when the sidecar is
+  # absent (load_model_with_fallback() has already warn-once'd in that
+  # case). Form dispatch per FABLE-RECAL-PLAN.md \enc{§}{Section}7 -- see roxygen above.
   calib <- load_model_with_fallback("wp_calibration")
-  calib_a <- calib$a
-  calib_b <- calib$b
-  calib_a_ok <- is.numeric(calib_a) && length(calib_a) == 1 && is.finite(calib_a)
-  calib_b_ok <- is.numeric(calib_b) && length(calib_b) == 1 && is.finite(calib_b)
-  if (!is.null(calib) && calib_a_ok && calib_b_ok) {
-    a_q4c <- calib$a_q4c
-    if (is.null(a_q4c) || length(a_q4c) != 1 || !is.finite(a_q4c)) a_q4c <- 0
-    b_q4c <- calib$b_q4c
-    if (is.null(b_q4c) || length(b_q4c) != 1 || !is.finite(b_q4c)) b_q4c <- 0
+  if (!is.null(calib)) {
+    form <- calib$form
+    calib_a <- calib$a
+    calib_b <- calib$b
+    calib_a_ok <- is.numeric(calib_a) && length(calib_a) == 1 && is.finite(calib_a)
+    calib_b_ok <- is.numeric(calib_b) && length(calib_b) == 1 && is.finite(calib_b)
 
-    cell_period <- calib$cell$period
-    if (is.null(cell_period) || length(cell_period) != 1 || !is.finite(cell_period)) cell_period <- 4
-    cell_margin <- calib$cell$margin_abs_max
-    if (is.null(cell_margin) || length(cell_margin) != 1 || !is.finite(cell_margin)) cell_margin <- 12
+    if (is.null(form) || identical(form, "global_v1")) {
+      if (calib_a_ok && calib_b_ok) {
+        preds_raw <- stats::plogis(calib_a + calib_b * stats::qlogis(preds_raw))
+      }
+    } else if (identical(form, "leverage_interaction_v1")) {
+      if (calib_a_ok && calib_b_ok) {
+        calib_c <- calib$c
+        if (!is.numeric(calib_c) || length(calib_c) != 1 || !is.finite(calib_c)) calib_c <- 0
+        ramp_mins <- calib$ramp_mins
+        if (is.null(ramp_mins) || length(ramp_mins) != 1 || !is.finite(ramp_mins)) ramp_mins <- 20
+        margin_cap <- calib$margin_cap
+        if (is.null(margin_cap) || length(margin_cap) != 1 || !is.finite(margin_cap)) margin_cap <- 18
 
-    # Cell flag per row: needs period + points_diff on df (points_diff is a
-    # WP feature; period rides on the pbp frame). Missing columns or NA
-    # values -> out-of-cell -> global arm.
-    I <- rep(0, length(preds_raw))
-    if ((a_q4c != 0 || b_q4c != 0) && all(c("period", "points_diff") %in% names(df))) {
-      flag <- df$period == cell_period & abs(df$points_diff) <= cell_margin
-      flag[is.na(flag)] <- FALSE
-      I <- as.numeric(flag)
+        # w per row: needs est_match_remaining + points_diff on df (both are
+        # WP_MODEL_FEATURES, so guaranteed present whenever model_matrix
+        # above succeeded) -- missing columns fall back to w = 0 (global
+        # arm), same defensive style as the retired q4close_interaction cell
+        # flag.
+        w <- rep(0, length(preds_raw))
+        if (all(c("est_match_remaining", "points_diff") %in% names(df))) {
+          minutes_remaining <- df$est_match_remaining / 60
+          w <- pmax(0, 1 - minutes_remaining / ramp_mins) * pmax(0, 1 - abs(df$points_diff) / margin_cap)
+          w[is.na(w)] <- 0
+        }
+
+        preds_raw <- stats::plogis(calib_a + (calib_b + calib_c * w) * stats::qlogis(preds_raw))
+      }
+    } else {
+      cli::cli_abort(c(
+        "wp_calibration sidecar has an unrecognized form: {.val {form}}",
+        "i" = "Known forms: missing/\"global_v1\" (legacy a + b*qlogis(p)) and \"leverage_interaction_v1\" (FABLE-RECAL-PLAN.md §7 Path B). Refusing to silently serve uncalibrated or misapplied WP -- update torp's applier (get_wp_preds()) or check the published sidecar."
+      ))
     }
-
-    preds_raw <- stats::plogis((calib_a + a_q4c * I) + (calib_b + b_q4c * I) * stats::qlogis(preds_raw))
   }
 
   preds <- data.frame(wp = preds_raw)
