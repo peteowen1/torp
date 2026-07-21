@@ -77,6 +77,7 @@ reference:
       - print.torp_player_profile
       - create_player_game_data
       - create_wp_credit
+      - attach_per_row_wpa_split
       - calculate_psr
       - explain_epr
       - explain_player_rating
