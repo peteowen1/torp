@@ -142,19 +142,58 @@ test_that("(d) WPA regression: wpa is still the calibrated wp lead-difference (n
   expect_equal(ordered$wpa, expected_wpa)
 })
 
-test_that("(e) interaction form: serve-time application matches the fit-side formula on both cell sides", {
+test_that("(d2) §7 acceptance (b): WPA telescopes to (final - opening) calibrated WP on a mock match under the leverage form", {
+  # Simplification, documented: real matches switch team_id_mdl on turnover,
+  # and add_wp_vars()'s per-row wpa is defined in the ACTING team's own
+  # shifting perspective (verified in test (d) above) plus a same-team-only
+  # boundary rule for the last row (wpa = 0 there, no code models the final
+  # event -> actual W/L transition -- that lives in wp_credit.R, out of
+  # scope for this applier). Holding team_id_mdl constant for every row
+  # removes the perspective-flip and boundary-transition complications and
+  # isolates exactly what this change can affect: does the NEW leverage
+  # form's calibrated wp sequence still telescope cleanly (no double-count/
+  # sign error introduced by the w-dependent term)? With one team
+  # throughout, wpa[i] = wp[i+1] - wp[i] for all but the last row (0 there
+  # by construction), so sum(wpa) collapses to wp[n] - wp[1] exactly --
+  # "WPA sums to (final - opening) WP" in its simplest, provable form.
+  fixture <- .wp_calib_test_fixture_model()
+  n <- 15
+  df <- .wp_calib_test_mock_df(n = n)
+  df$team_id_mdl <- rep(1L, n)   # single team throughout -- no perspective flips
+  df$points_diff <- seq(-20, 20, length.out = n)
+  df$est_match_remaining <- seq(2000, 100, length.out = n)
+
+  calib <- list(a = 0.05, b = 1.1, c = 0.6, form = "leverage_interaction_v1")
+  testthat::local_mocked_bindings(
+    load_model_with_fallback = function(model_name) {
+      if (model_name == "wp") return(fixture)
+      if (model_name == "wp_calibration") return(calib)
+      stop("unexpected model_name in mock: ", model_name)
+    },
+    .package = "torp"
+  )
+
+  result <- add_wp_vars(df)
+  ordered <- result[order(result$period, result$period_seconds), ]
+
+  expect_true(all(ordered$team_id_mdl == 1L))
+  expect_equal(ordered$wpa[n], 0)   # boundary row: no next event
+  expect_equal(sum(ordered$wpa), ordered$wp[n] - ordered$wp[1], tolerance = 1e-8)
+})
+
+test_that("(e) leverage_interaction_v1 form: serve-time application matches the fit-side formula", {
   fixture <- .wp_calib_test_fixture_model()
   df <- .wp_calib_test_mock_df(n = 12)
-  # Explicit cell mix: rows 1-4 in cell (Q4, close), 5-8 out by period,
-  # 9-12 out by margin. points_diff is a WP feature, so raw preds shift
-  # too -- expected values are computed from the same df's raw preds.
-  df$period <- rep(c(4L, 4L, 1L, 3L, 4L, 4L), 2)
+  # Explicit spread of (est_match_remaining, points_diff) so w covers a real
+  # range, not just 0/1 -- points_diff is a WP feature (raw preds shift
+  # too), est_match_remaining is also a WP feature.
   df$points_diff <- rep(c(3, -12, 5, 0, 13, -40), 2)
-  in_cell <- df$period == 4 & abs(df$points_diff) <= 12
+  df$est_match_remaining <- rep(c(300, 900, 1800, 0, 600, 4000), 2)
+  minutes_remaining <- df$est_match_remaining / 60
+  w <- pmax(0, 1 - minutes_remaining / 20) * pmax(0, 1 - abs(df$points_diff) / 18)
 
-  calib <- list(a = 0.1, b = 1.2, a_q4c = 0.3, b_q4c = 0.25,
-                form = "q4close_interaction",
-                cell = list(period = 4, margin_abs_max = 12))
+  calib <- list(a = 0.1, b = 1.0, c = 0.5, form = "leverage_interaction_v1",
+                ramp_mins = 20, margin_cap = 18)
   testthat::local_mocked_bindings(
     load_model_with_fallback = function(model_name) {
       if (model_name == "wp") return(fixture)
@@ -165,22 +204,33 @@ test_that("(e) interaction form: serve-time application matches the fit-side for
   )
 
   raw <- .wp_calib_raw_preds(fixture, df)
-  I <- as.numeric(in_cell)
-  expected <- stats::plogis((0.1 + 0.3 * I) + (1.2 + 0.25 * I) * stats::qlogis(raw))
+  expected <- stats::plogis(0.1 + (1.0 + 0.5 * w) * stats::qlogis(raw))
   got <- torp:::get_wp_preds(df)
 
   expect_equal(got$wp, expected)
-  # the two arms genuinely differ (interaction did something in-cell only)
-  global_only <- stats::plogis(0.1 + 1.2 * stats::qlogis(raw))
-  expect_equal(got$wp[!in_cell], global_only[!in_cell])
-  expect_false(isTRUE(all.equal(got$wp[in_cell], global_only[in_cell])))
+  # w genuinely varies across rows (not silently collapsing to the global arm)
+  global_only <- stats::plogis(0.1 + 1.0 * stats::qlogis(raw))
+  expect_false(isTRUE(all.equal(got$wp, global_only)))
 })
 
-test_that("(f) NA period/points_diff rows get the global arm; a df without those columns is all-global", {
+test_that("(f) w spans its full [0, 1] range correctly at the ramp/margin boundaries", {
+  # Unlike the retired q4close_interaction form (gated on `period`, which is
+  # NOT a WP model feature -- so injecting NA there was safe and left raw
+  # preds/row-count untouched), leverage_interaction_v1's `w` is built from
+  # points_diff AND est_match_remaining, which ARE both WP_MODEL_FEATURES.
+  # An NA in either would already be dropped by model.matrix()'s na.omit
+  # default (or abort entirely if the column is missing) before reaching
+  # calibration -- so the "NA/missing -> w = 0" defensive branches in
+  # get_wp_preds() are unreachable via its normal (df -> preds) contract;
+  # kept as belt-and-braces, not exercised here. Instead: verify w's
+  # boundary behaviour (0 at/beyond the ramp or margin edge, positive just
+  # inside it) end to end.
   fixture <- .wp_calib_test_fixture_model()
-  calib <- list(a = 0.1, b = 1.2, a_q4c = 0.3, b_q4c = 0.25,
-                form = "q4close_interaction",
-                cell = list(period = 4, margin_abs_max = 12))
+  df <- .wp_calib_test_mock_df(n = 6)
+  df$est_match_remaining <- c(1200, 1199, 0, 300, 300, 300)   # min -> at/just-inside ramp edge
+  df$points_diff <- c(5, 5, 5, 18, 17.9, 0)                   # at/just-inside margin edge
+
+  calib <- list(a = 0, b = 1.0, c = 0.6, form = "leverage_interaction_v1")
   testthat::local_mocked_bindings(
     load_model_with_fallback = function(model_name) {
       if (model_name == "wp") return(fixture)
@@ -190,39 +240,26 @@ test_that("(f) NA period/points_diff rows get the global arm; a df without those
     .package = "torp"
   )
 
-  # NA rows -> global arm. period is NOT a WP feature (points_diff is), so
-  # NA period never reaches the model matrix; NA points_diff would, so we
-  # only inject NA period here and keep points_diff in-cell-valued.
-  df <- .wp_calib_test_mock_df(n = 8)
-  df$points_diff <- rep(2, 8)
-  df$period <- c(4L, NA, 4L, NA, 4L, NA, 4L, NA)
   raw <- .wp_calib_raw_preds(fixture, df)
-  got <- torp:::get_wp_preds(df)
-  global_only <- stats::plogis(0.1 + 1.2 * stats::qlogis(raw))
-  in_only <- stats::plogis((0.1 + 0.3) + (1.2 + 0.25) * stats::qlogis(raw))
-  expect_equal(got$wp[is.na(df$period)], global_only[is.na(df$period)])
-  expect_equal(got$wp[!is.na(df$period)], in_only[!is.na(df$period)])
+  minutes_remaining <- df$est_match_remaining / 60
+  w <- pmax(0, 1 - minutes_remaining / 20) * pmax(0, 1 - abs(df$points_diff) / 18)
+  expect_equal(w[c(1, 4)], c(0, 0))          # exactly at the ramp/margin edge -> 0
+  expect_true(all(w[c(2, 3, 5, 6)] > 0))     # just inside either edge -> positive
 
-  # df missing the period column entirely -> every row global
-  df2 <- .wp_calib_test_mock_df(n = 6)
-  df2$period <- NULL
-  raw2 <- .wp_calib_raw_preds(fixture, df2)
-  got2 <- torp:::get_wp_preds(df2)
-  expect_equal(got2$wp, stats::plogis(0.1 + 1.2 * stats::qlogis(raw2)))
+  got <- torp:::get_wp_preds(df)
+  expect_equal(got$wp, stats::plogis(0 + (1.0 + 0.6 * w) * stats::qlogis(raw)))
 })
 
-test_that("(g) explicit-zero interaction fields and absent cell spec behave as global with default cell", {
+test_that("(g) missing form or \"global_v1\" is the legacy arm; leverage form defaults ramp_mins/margin_cap when absent", {
   fixture <- .wp_calib_test_fixture_model()
   df <- .wp_calib_test_mock_df(n = 10)
 
-  # a_q4c = b_q4c = 0 (the global form as shipped by the trainer) must be
-  # numerically identical to the plain 2-param application
-  calib_zero <- list(a = -0.05, b = 1.15, a_q4c = 0, b_q4c = 0, form = "global",
-                     cell = list(period = 4, margin_abs_max = 12))
+  # missing $form -> legacy 2-param
+  calib_missing <- list(a = -0.05, b = 1.15)
   testthat::local_mocked_bindings(
     load_model_with_fallback = function(model_name) {
       if (model_name == "wp") return(fixture)
-      if (model_name == "wp_calibration") return(calib_zero)
+      if (model_name == "wp_calibration") return(calib_missing)
       stop("unexpected model_name in mock: ", model_name)
     },
     .package = "torp"
@@ -231,32 +268,45 @@ test_that("(g) explicit-zero interaction fields and absent cell spec behave as g
   got <- torp:::get_wp_preds(df)
   expect_equal(got$wp, stats::plogis(-0.05 + 1.15 * stats::qlogis(raw)))
 
-  # interaction fields present but NO cell spec -> defaults (4, 12) used
-  calib_nocell <- list(a = 0, b = 1, a_q4c = 0.2, b_q4c = 0.1, form = "q4close_interaction")
+  # form = "global_v1" -> numerically identical legacy arm
+  calib_v1 <- list(a = -0.05, b = 1.15, form = "global_v1")
   testthat::local_mocked_bindings(
     load_model_with_fallback = function(model_name) {
       if (model_name == "wp") return(fixture)
-      if (model_name == "wp_calibration") return(calib_nocell)
+      if (model_name == "wp_calibration") return(calib_v1)
       stop("unexpected model_name in mock: ", model_name)
     },
     .package = "torp"
   )
-  df$period <- rep(c(4L, 2L), 5)
+  got_v1 <- torp:::get_wp_preds(df)
+  expect_equal(got_v1$wp, got$wp)
+
+  # leverage form with NO ramp_mins/margin_cap fields -> defaults (20, 18)
+  calib_nodefaults <- list(a = 0, b = 1, c = 0.3, form = "leverage_interaction_v1")
+  testthat::local_mocked_bindings(
+    load_model_with_fallback = function(model_name) {
+      if (model_name == "wp") return(fixture)
+      if (model_name == "wp_calibration") return(calib_nodefaults)
+      stop("unexpected model_name in mock: ", model_name)
+    },
+    .package = "torp"
+  )
   df$points_diff <- rep(1, 10)
+  df$est_match_remaining <- rep(300, 10)
   raw <- .wp_calib_raw_preds(fixture, df)
-  I <- as.numeric(df$period == 4)
+  w <- pmax(0, 1 - (300 / 60) / 20) * pmax(0, 1 - 1 / 18)
   got <- torp:::get_wp_preds(df)
-  expect_equal(got$wp, stats::plogis(0.2 * I + (1 + 0.1 * I) * stats::qlogis(raw)))
+  expect_equal(got$wp, stats::plogis(0 + (1 + 0.3 * w) * stats::qlogis(raw)))
 })
 
-test_that("(h) sidecar list missing $a/$b does not crash get_wp_preds() -- identity fallback", {
+test_that("(h) sidecar list missing $a/$b does not crash get_wp_preds() -- identity fallback (recognized form, incomplete fields)", {
   fixture <- .wp_calib_test_fixture_model()
   df <- .wp_calib_test_mock_df()
 
   testthat::local_mocked_bindings(
     load_model_with_fallback = function(model_name) {
       if (model_name == "wp") return(fixture)
-      if (model_name == "wp_calibration") return(list(form = "global"))
+      if (model_name == "wp_calibration") return(list(form = "global_v1"))
       stop("unexpected model_name in mock: ", model_name)
     },
     .package = "torp"
@@ -265,6 +315,35 @@ test_that("(h) sidecar list missing $a/$b does not crash get_wp_preds() -- ident
   raw <- .wp_calib_raw_preds(fixture, df)
   got <- expect_no_error(torp:::get_wp_preds(df))
   expect_identical(got$wp, raw)
+
+  # same for the leverage form
+  testthat::local_mocked_bindings(
+    load_model_with_fallback = function(model_name) {
+      if (model_name == "wp") return(fixture)
+      if (model_name == "wp_calibration") return(list(form = "leverage_interaction_v1"))
+      stop("unexpected model_name in mock: ", model_name)
+    },
+    .package = "torp"
+  )
+  got2 <- expect_no_error(torp:::get_wp_preds(df))
+  expect_identical(got2$wp, raw)
+})
+
+test_that("(i) an unrecognized sidecar $form aborts loudly -- never silently serves uncalibrated/misapplied WP", {
+  fixture <- .wp_calib_test_fixture_model()
+  df <- .wp_calib_test_mock_df()
+
+  for (bad_form in c("global", "q4close_interaction", "some_future_form")) {
+    testthat::local_mocked_bindings(
+      load_model_with_fallback = function(model_name) {
+        if (model_name == "wp") return(fixture)
+        if (model_name == "wp_calibration") return(list(a = 0, b = 1.2, form = bad_form))
+        stop("unexpected model_name in mock: ", model_name)
+      },
+      .package = "torp"
+    )
+    expect_error(torp:::get_wp_preds(df), "unrecognized form")
+  }
 })
 
 test_that("load_model_with_fallback('wp_calibration') never aborts on a load failure -- warns once, returns NULL", {

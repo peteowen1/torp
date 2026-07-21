@@ -14,22 +14,28 @@ A dataframe with win probability predictions.
 }
 \description{
 This function generates win probability predictions for the input data.
-Applies the WP recalibration sidecar (\code{wp_calibration}, FABLE-RECAL-
-PLAN.md D1-D4) immediately after the raw model prediction, so every
-caller of this function -- not just \code{\link[=add_wp_vars]{add_wp_vars()}} -- serves calibrated
-WP: \code{add_wp_vars()}'s downstream \code{wp}/\code{wpa}, \code{create_wp_credit()},
-\code{player_credit.R}, \code{player_game_ratings.R}, released parquets. If the
-sidecar is unavailable (old deployment, not yet published, network
-down), \code{\link[=load_model_with_fallback]{load_model_with_fallback()}} returns \code{NULL} and this degrades to
-the identity function -- never an error.
+Applies the WP recalibration sidecar (\code{wp_calibration}) immediately after
+the raw model prediction, so every caller of this function -- not just
+\code{\link[=add_wp_vars]{add_wp_vars()}} -- serves calibrated WP: \code{add_wp_vars()}'s downstream
+\code{wp}/\code{wpa}, \code{create_wp_credit()}, \code{player_credit.R},
+\code{player_game_ratings.R}, released parquets. If the sidecar is unavailable
+(old deployment, not yet published, network down),
+\code{\link[=load_model_with_fallback]{load_model_with_fallback()}} returns \code{NULL} and this degrades to the
+identity function -- never an error.
 }
 \details{
-Supports both calibration forms (mirrors torpmodels train_lib.R's
-\code{apply_wp_calibration()} exactly):
-\code{plogis((a + a_q4c*I) + (b + b_q4c*I) * qlogis(p))} where
-\code{I = is_q4close} (the D1 escalation cell, \code{period == cell$period & abs(points_diff) <= cell$margin_abs_max}, defaults 4/12). A global-form
-or pre-escalation 2-param artifact has no (or zero) \code{a_q4c}/\code{b_q4c} and
-collapses to the global formula. Rows with \code{NA} period/points_diff --
-or a \code{df} missing those columns entirely -- get the global arm.
+Form dispatch (FABLE-RECAL-PLAN.md Section 7): the sidecar's \verb{$form} field
+selects the calibration formula. Missing \verb{$form} or \code{"global_v1"} --
+the legacy 2-param Platt-on-logit, \code{plogis(a + b * qlogis(p))}.
+\code{"leverage_interaction_v1"} (Section 7 Path B, current as of 2026-07-21) --
+\code{plogis(a + (b + c*w) * qlogis(p))}, where \code{w} is the continuous leverage
+weight \code{pmax(0, 1 - minutes_remaining/ramp_mins) * pmax(0, 1 - abs(points_diff)/margin_cap)}, \code{minutes_remaining = est_match_remaining / 60} (\code{est_match_remaining} is a \code{WP_MODEL_FEATURES} column, the same
+match-time-remaining variable the WP model itself trains on;
+\code{ramp_mins}/\code{margin_cap} come from the sidecar, defaulting to 20/18 if
+absent). Any OTHER \verb{$form} value aborts loudly -- an applier that can't
+interpret a sidecar's schema must fail the load, never silently serve
+uncalibrated or misapplied WP. Within a recognized form, missing/
+non-finite numeric fields (\code{a}/\code{b}/\code{c}/etc.) still degrade gracefully to
+identity (transient corruption, not a schema mismatch).
 }
 \keyword{internal}
