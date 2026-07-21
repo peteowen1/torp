@@ -148,6 +148,7 @@ reference:
       - extract_player_xg_skill
       - head_to_head
       - print.torp_head_to_head
+      - build_matchup_table
 
   - title: Model Validation
     desc: Evaluate model performance, calibration, and drift
