@@ -140,6 +140,87 @@ test_that("access_api handles connection errors", {
 })
 
 # -----------------------------------------------------------------------------
+# HTML error page guard (torpdata#71): the AFL API gateway occasionally
+# returns an HTML maintenance/error page with a 200 status where JSON is
+# expected. Sniffing + retrying must happen before the raw markup ever
+# reaches jsonlite::fromJSON().
+# -----------------------------------------------------------------------------
+
+test_that(".is_html_error_page detects doctype/html bodies but not JSON", {
+  expect_true(.is_html_error_page("<!DOCTYPE html><html><body>502 Bad Gateway</body></html>"))
+  expect_true(.is_html_error_page("  <html><head></head></html>"))
+  expect_false(.is_html_error_page('{"token": "abc123"}'))
+  expect_false(.is_html_error_page(""))
+  expect_false(.is_html_error_page(NULL))
+})
+
+test_that("access_api retries an HTML error page and succeeds once the body is valid JSON", {
+  calls <- 0L
+  local_mocked_bindings(
+    GET = function(url, ...) {
+      calls <<- calls + 1L
+      structure(list(status_code = 200L), class = "response")
+    },
+    stop_for_status = function(...) invisible(TRUE),
+    content = function(response, as, encoding) {
+      if (calls < 2L) "<!DOCTYPE html><html><body>502 Bad Gateway</body></html>"
+      else '{"fixtures": []}'
+    },
+    add_headers = function(...) list(),
+    .package = "httr"
+  )
+  local_mocked_bindings(get_token = function() "fake-token")
+
+  result <- suppressWarnings(access_api("https://example.com/fixtures"))
+  expect_identical(calls, 2L)
+  expect_true(is.list(result))
+  expect_true("fixtures" %in% names(result))
+})
+
+test_that("access_api does not retry a confirmed 404", {
+  calls <- 0L
+  local_mocked_bindings(
+    GET = function(url, ...) {
+      calls <<- calls + 1L
+      structure(list(status_code = 404L), class = "response")
+    },
+    stop_for_status = function(response, task) {
+      cli::cli_abort("HTTP 404 Not Found ({task})")
+    },
+    content = function(...) stop("content() should not be called after a 404"),
+    add_headers = function(...) list(),
+    .package = "httr"
+  )
+  local_mocked_bindings(get_token = function() "fake-token")
+
+  expect_error(access_api("https://example.com/missing"), "404")
+  expect_identical(calls, 1L)
+})
+
+test_that("get_token retries an HTML error page and succeeds once the body is valid JSON", {
+  withr::defer(assign("token", NULL, envir = torp:::.torp_token_cache))
+  assign("token", NULL, envir = torp:::.torp_token_cache)
+
+  calls <- 0L
+  local_mocked_bindings(
+    POST = function(url, ...) {
+      calls <<- calls + 1L
+      structure(list(status_code = 200L), class = "response")
+    },
+    stop_for_status = function(...) invisible(TRUE),
+    content = function(response, as, encoding) {
+      if (calls < 2L) "<!DOCTYPE html><html><body>Maintenance</body></html>"
+      else '{"token": "abc123"}'
+    },
+    .package = "httr"
+  )
+
+  tok <- suppressWarnings(get_token())
+  expect_identical(tok, "abc123")
+  expect_identical(calls, 2L)
+})
+
+# -----------------------------------------------------------------------------
 # Mock API Response Structure Tests
 # -----------------------------------------------------------------------------
 
