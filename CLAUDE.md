@@ -99,6 +99,7 @@ Live EP/WP/xG models are trained in **torpmodels** — one script per artifact: 
 
 ## Gotchas
 
+- **Every new exported function MUST be added to `_pkgdown.yml`'s `reference:` index** — `pkgdown::check_pkgdown()` runs in both CI workflows and fails the build otherwise (bit twice on 2026-07-21: #111, PR #114).
 - **EP must be trained before WP** — WP uses EP predictions as features. Same for live variants.
 - **Arrow + Git Bash R = segfault** — wrap in PowerShell (see top of file).
 - **Weather imputation** — `add_weather_to_preds()` uses median imputation for missing weather; the `total_xpoints` GAM expects this neutral fallback rather than NA.
