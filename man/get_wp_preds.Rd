@@ -24,10 +24,10 @@ the raw model prediction, so every caller of this function -- not just
 identity function -- never an error.
 }
 \details{
-Form dispatch (FABLE-RECAL-PLAN.md \enc{§}{Section}7): the sidecar's \verb{$form} field
+Form dispatch (FABLE-RECAL-PLAN.md Section 7): the sidecar's \verb{$form} field
 selects the calibration formula. Missing \verb{$form} or \code{"global_v1"} --
 the legacy 2-param Platt-on-logit, \code{plogis(a + b * qlogis(p))}.
-\code{"leverage_interaction_v1"} (\enc{§}{Section}7 Path B, current as of 2026-07-21) --
+\code{"leverage_interaction_v1"} (Section 7 Path B, current as of 2026-07-21) --
 \code{plogis(a + (b + c*w) * qlogis(p))}, where \code{w} is the continuous leverage
 weight \code{pmax(0, 1 - minutes_remaining/ramp_mins) * pmax(0, 1 - abs(points_diff)/margin_cap)}, \code{minutes_remaining = est_match_remaining / 60} (\code{est_match_remaining} is a \code{WP_MODEL_FEATURES} column, the same
 match-time-remaining variable the WP model itself trains on;

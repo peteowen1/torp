@@ -248,10 +248,10 @@ get_epv_preds <- function(df) {
 #' [load_model_with_fallback()] returns `NULL` and this degrades to the
 #' identity function -- never an error.
 #'
-#' Form dispatch (FABLE-RECAL-PLAN.md \enc{§}{Section}7): the sidecar's `$form` field
+#' Form dispatch (FABLE-RECAL-PLAN.md Section 7): the sidecar's `$form` field
 #' selects the calibration formula. Missing `$form` or `"global_v1"` --
 #' the legacy 2-param Platt-on-logit, `plogis(a + b * qlogis(p))`.
-#' `"leverage_interaction_v1"` (\enc{§}{Section}7 Path B, current as of 2026-07-21) --
+#' `"leverage_interaction_v1"` (Section 7 Path B, current as of 2026-07-21) --
 #' `plogis(a + (b + c*w) * qlogis(p))`, where `w` is the continuous leverage
 #' weight `pmax(0, 1 - minutes_remaining/ramp_mins) * pmax(0, 1 -
 #' abs(points_diff)/margin_cap)`, `minutes_remaining = est_match_remaining /
@@ -288,7 +288,7 @@ get_wp_preds <- function(df) {
 
   # Platt-on-logit recalibration, identity fallback when the sidecar is
   # absent (load_model_with_fallback() has already warn-once'd in that
-  # case). Form dispatch per FABLE-RECAL-PLAN.md \enc{§}{Section}7 -- see roxygen above.
+  # case). Form dispatch per FABLE-RECAL-PLAN.md Section 7 -- see roxygen above.
   calib <- load_model_with_fallback("wp_calibration")
   if (!is.null(calib)) {
     form <- calib$form
@@ -327,7 +327,7 @@ get_wp_preds <- function(df) {
     } else {
       cli::cli_abort(c(
         "wp_calibration sidecar has an unrecognized form: {.val {form}}",
-        "i" = "Known forms: missing/\"global_v1\" (legacy a + b*qlogis(p)) and \"leverage_interaction_v1\" (FABLE-RECAL-PLAN.md §7 Path B). Refusing to silently serve uncalibrated or misapplied WP -- update torp's applier (get_wp_preds()) or check the published sidecar."
+        "i" = "Known forms: missing/\"global_v1\" (legacy a + b*qlogis(p)) and \"leverage_interaction_v1\" (FABLE-RECAL-PLAN.md Section 7 Path B). Refusing to silently serve uncalibrated or misapplied WP -- update torp's applier (get_wp_preds()) or check the published sidecar."
       ))
     }
   }
@@ -350,7 +350,7 @@ get_wp_preds <- function(df) {
 get_shot_result_preds <- function(df) {
   shot_ocat_mdl <- load_model_with_fallback("shot")
 
-  # mgcv must be attached (not just loaded) for GAM/BAM predict() — its
+  # mgcv must be attached (not just loaded) for GAM/BAM predict() -- its
   # internal Xbd C function is only available on the search path when attached.
   # Attachment is done once in .onLoad(); this guard handles edge cases where
   # the package is loaded outside the normal path.
