@@ -624,7 +624,7 @@ was reopened, with a pre-registered bar: if a better-calibrated WP model
 
 It didn't clear that bar -- and the direction of the miss is the
 interesting part. Calibration *dropped the correlation* between a player's
-WPA rate and how much of their court time was played in close games
+WPA rate and how much of their time on ground came in close games
 (0.164 to 0.116), but the *regression coefficient* on that exposure -- how
 big the effect actually is per unit of exposure -- went the other way,
 **up** 47%, from 0.0284 to 0.0418. In other words: a sharper, better-behaved
