@@ -57,6 +57,19 @@ test_that("generate_urls keeps fixture URLs regardless of round", {
   expect_true(grepl("fixtures_2025", urls))
 })
 
+test_that("generate_urls warns (not just informs) when URLs are dropped as not-in-release", {
+  local_mocked_bindings(
+    get_release_assets = function(...) c("player_stats_2021.parquet")
+  )
+
+  expect_warning(
+    urls <- torp:::generate_urls("player_stats-data", "player_stats", seasons = c(2021, 2022)),
+    "Filtered 1 URL not found in .player_stats-data. release"
+  )
+  expect_length(urls, 1)
+  expect_true(grepl("player_stats_2021", urls))
+})
+
 test_that("generate_urls keeps _all aggregated files for current season", {
   local_mocked_bindings(
     get_afl_season = function(...) 2025,

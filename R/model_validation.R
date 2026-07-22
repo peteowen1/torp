@@ -166,7 +166,17 @@ evaluate_model_comprehensive <- function(actual, predicted, model_name = "Model"
   log_loss <- calculate_log_loss(actual, predicted)
   brier_score <- calculate_brier_score(actual, predicted)
 
-  # Calibration slope (should be close to 1.0)
+  # Calibration slope (should be close to 1.0). Uses the GLM logit
+  # convention -- coef(glm(actual ~ qlogis(predicted), binomial))[2] -- to
+  # match the experiments/trainer convention used elsewhere (e.g.
+  # torpmodels' train_lib.R wp_gate_slope()), rather than the previous
+  # decile-binned OLS (lm(actual_mean ~ pred_mean) over deciles), which
+  # measures a related but distinct quantity. `cal_summary` (the per-decile
+  # breakdown) is retained unchanged for callers/diagnostics -- it no longer
+  # feeds the slope/intercept calculation. No threshold in this package
+  # gates a numeric value against calibration_slope/_intercept/_r2 from this
+  # function (only ever displayed as "(ideal: 1.0)"), so there was no
+  # OLS-scale threshold to translate.
   cal_data <- data.frame(
     actual = actual,
     predicted = predicted,
@@ -183,11 +193,15 @@ evaluate_model_comprehensive <- function(actual, predicted, model_name = "Model"
     ) |>
     dplyr::filter(n >= 10)  # Only use deciles with sufficient data
 
-  if (nrow(cal_summary) >= 3) {
-    cal_model <- lm(actual_mean ~ pred_mean, data = cal_summary)
-    calibration_slope <- coef(cal_model)[2]
-    calibration_intercept <- coef(cal_model)[1]
-    calibration_r2 <- summary(cal_model)$r.squared
+  if (length(unique(actual)) >= 2) {
+    p_clamped <- pmin(pmax(predicted, 1e-6), 1 - 1e-6)
+    cal_model <- glm(actual ~ qlogis(p_clamped), family = binomial())
+    co <- unname(coef(cal_model))
+    calibration_slope <- co[2]
+    calibration_intercept <- co[1]
+    # McFadden pseudo-R^2 -- the GLM analog of lm's R^2 (not directly
+    # comparable in scale); informational only, nothing gates on it.
+    calibration_r2 <- 1 - cal_model$deviance / cal_model$null.deviance
   } else {
     calibration_slope <- NA
     calibration_intercept <- NA

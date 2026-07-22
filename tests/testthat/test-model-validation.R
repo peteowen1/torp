@@ -78,6 +78,26 @@ test_that("evaluate_model_comprehensive works correctly", {
   expect_true(!is.na(results_boot$auc_ci_upper))
 })
 
+test_that("evaluate_model_comprehensive's calibration_slope uses the GLM logit convention", {
+  # coef(glm(actual ~ qlogis(predicted), binomial))[2] -- matches
+  # torpmodels' train_lib.R wp_gate_slope() convention, not the old
+  # decile-binned OLS slope.
+  set.seed(7)
+  n <- 2000
+  true_probs <- runif(n, 0.05, 0.95)
+  actual <- rbinom(n, 1, true_probs)
+  predicted <- true_probs
+
+  results <- evaluate_model_comprehensive(actual, predicted, "Test Model", bootstrap_ci = FALSE)
+
+  p_clamped <- pmin(pmax(predicted, 1e-6), 1 - 1e-6)
+  expected_slope <- unname(coef(glm(actual ~ qlogis(p_clamped), family = binomial()))[2])
+
+  expect_equal(results$calibration_slope, expected_slope)
+  # Well-calibrated predictions should yield a slope near 1.
+  expect_true(abs(results$calibration_slope - 1) < 0.15)
+})
+
 test_that("compare_models_statistical works correctly", {
   # Create mock evaluation results
   set.seed(42)

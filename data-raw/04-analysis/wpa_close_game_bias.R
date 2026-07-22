@@ -23,6 +23,27 @@ suppressMessages({
 })
 devtools::load_all()
 
+# Also load dev torpmodels (sibling repo), not just dev torp. Root cause of a
+# real incident (2026-07-22): with only `devtools::load_all()` for torp,
+# get_wp_preds()'s calibration lookup goes through the *installed* library
+# copy of torpmodels, which can be stale relative to what's actually
+# published (e.g. predates load_torp_model() recognizing "wp_calibration" as
+# a valid model name). load_model_with_fallback() then hits an error inside
+# torpmodels::load_torp_model(), catches it, warns once, and returns NULL --
+# so the "calibrated" arm silently degrades to identity and produces a
+# bit-identical memo against the "uncalibrated" arm without any error.
+# Mirrors torpmodels/data-raw/train_models.R's own load_all(torp) +
+# load_all(torpmodels) pattern.
+torpmodels_path <- "../torpmodels"
+if (!dir.exists(torpmodels_path)) {
+  cli::cli_abort(c(
+    "Cannot find dev torpmodels at {.path {torpmodels_path}}.",
+    "i" = "Run this script from the torp package root inside the torpverse sibling layout (torpverse/torp, torpverse/torpmodels)."
+  ))
+}
+cli::cli_inform("Loading dev torpmodels from {torpmodels_path}...")
+devtools::load_all(torpmodels_path)
+
 SEASONS <- (torp::get_afl_season() - 3):(torp::get_afl_season() - 1)  # 3 most recent COMPLETED seasons
 CLOSE_MARGIN <- 12          # matches torpverse/docs/reviews/FABLE-WP-EXPERIMENTS.md's Q4/close convention
 MIN_GAMES <- 5              # drop tiny-sample player-seasons from the regression/leaderboard
@@ -66,21 +87,59 @@ build_wp_credit <- function(bypass_calibration, chains) {
     torp:::clean_model_data_wp() |>
     torp::add_wp_vars()
 
-  torp::create_wp_credit(pbp)
+  # wp is returned alongside the aggregated credit table so the caller can
+  # hard-check that the two variants actually diverge (see sanity check
+  # below) -- wp_credit alone (post-aggregation) obscures a bug where both
+  # arms silently compute the same per-row wp.
+  list(credit = torp::create_wp_credit(pbp), wp = pbp$wp)
 }
 
 cli::cli_inform("Loading chains for {paste(SEASONS, collapse = ', ')}...")
 chains <- torp::load_chains(seasons = SEASONS, rounds = TRUE)
 cli::cli_inform("chains rows: {nrow(chains)}")
 
-credit_uncalibrated <- build_wp_credit(bypass_calibration = TRUE, chains = chains)
-credit_calibrated   <- build_wp_credit(bypass_calibration = FALSE, chains = chains)
+build_uncal <- build_wp_credit(bypass_calibration = TRUE, chains = chains)
+build_cal   <- build_wp_credit(bypass_calibration = FALSE, chains = chains)
 set_wp_calibration_bypass(FALSE)  # leave the session in the normal (calibrated) state
+
+credit_uncalibrated <- build_uncal$credit
+credit_calibrated   <- build_cal$credit
 
 cli::cli_inform("player-games: uncalibrated {nrow(credit_uncalibrated)}, calibrated {nrow(credit_calibrated)}")
 if (nrow(credit_uncalibrated) != nrow(credit_calibrated)) {
   cli::cli_warn("Row-count mismatch between variants -- the calibration bypass may not have taken effect. Check torp:::.torp_model_cache state before trusting the results below.")
 }
+
+# --- Print the loaded calibration sidecar (CALIBRATED arm) -----------------
+# Confirms which sidecar actually got applied -- form/a/b/c plus the
+# temporal Q4/close slope gate this sidecar shipped with.
+calib_sidecar <- torp:::load_model_with_fallback("wp_calibration")
+if (is.null(calib_sidecar)) {
+  cli::cli_abort(c(
+    "wp_calibration sidecar failed to load for the CALIBRATED arm -- get_wp_preds() degraded to identity.",
+    "i" = "Check that dev torpmodels (not a stale installed copy) is loaded and that the wp_calibration sidecar has actually been published (core-models release)."
+  ))
+}
+cli::cli_h2("Loaded wp_calibration sidecar")
+cli::cli_inform("form = {calib_sidecar$form %||% 'global_v1'} | a = {round(calib_sidecar$a, 4)} | b = {round(calib_sidecar$b, 4)} | c = {if (is.null(calib_sidecar$c)) NA else round(calib_sidecar$c, 4)}")
+cli::cli_inform("slope_q4close_before = {round(calib_sidecar$slope_q4close_before, 4)} | slope_q4close_after = {round(calib_sidecar$slope_q4close_after, 4)}")
+cli::cli_inform("slope_before (all rows) = {round(calib_sidecar$slope_before, 4)} | slope_after (all rows) = {round(calib_sidecar$slope_after, 4)}")
+
+# --- Hard sanity check: the two arms must genuinely differ ------------------
+# This is the exact bug class that produced a bit-identical uncalibrated vs
+# calibrated memo on 2026-07-22 (root cause: stale installed torpmodels, see
+# the load_all() comment above) -- never let that happen silently again.
+if (length(build_uncal$wp) != length(build_cal$wp)) {
+  cli::cli_abort("Uncalibrated and calibrated raw wp vectors have different lengths ({length(build_uncal$wp)} vs {length(build_cal$wp)}) -- cannot sanity-check divergence. Something upstream of get_wp_preds() differs between the two builds.")
+}
+wp_max_abs_diff <- max(abs(build_uncal$wp - build_cal$wp))
+if (!is.finite(wp_max_abs_diff) || wp_max_abs_diff < 1e-12) {
+  cli::cli_abort(c(
+    "Uncalibrated and calibrated WP vectors are bit-identical (max abs diff = {wp_max_abs_diff}).",
+    "i" = "The calibration bypass/apply mechanism did not take effect -- refusing to write a memo that would misreport zero shrinkage. Check torp:::.torp_model_cache, and confirm dev torpmodels (not an installed library copy) is loaded (see the load_all() comment near the top of this script)."
+  ))
+}
+cli::cli_inform("Sanity check passed: max abs diff between uncalibrated and calibrated raw wp = {signif(wp_max_abs_diff, 6)}")
 
 # --- Per-player-game close/margin flag --------------------------------------
 # team_margin is signed from the credited player's own team's perspective
@@ -198,6 +257,13 @@ memo <- c(
   "",
   sprintf("**Generated:** %s by `data-raw/04-analysis/wpa_close_game_bias.R`", format(Sys.Date())),
   sprintf("**Seasons analysed:** %s", paste(SEASONS, collapse = ", ")),
+  "",
+  sprintf("**Applied wp_calibration sidecar:** form = %s, a = %.4f, b = %.4f, c = %s (slope_q4close_before = %.4f, slope_q4close_after = %.4f)",
+          if (is.null(calib_sidecar$form)) "global_v1" else calib_sidecar$form,
+          calib_sidecar$a, calib_sidecar$b,
+          if (is.null(calib_sidecar$c)) "NA" else sprintf("%.4f", calib_sidecar$c),
+          calib_sidecar$slope_q4close_before, calib_sidecar$slope_q4close_after),
+  sprintf("**Sanity check:** max abs diff between uncalibrated and calibrated raw wp = %.6g (must be >= 1e-12 or the script aborts before reaching this point)", wp_max_abs_diff),
   "",
   "## Decision rule (torpverse/docs/plans/FABLE-RECAL-PLAN.md Step 6.4)",
   "",
