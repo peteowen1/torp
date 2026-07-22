@@ -12,7 +12,7 @@ adjust_epv_for_opponents(
 }
 \arguments{
 \item{player_game_data}{data.table of player game data with epv_adj,
-recv_epv_adj, disp_epv_adj, spoil_epv_adj, hitout_epv_adj columns.}
+epv_recv_adj, epv_disp_adj, epv_spoil_adj, epv_hitout_adj columns.}
 
 \item{lambda_decay}{Decay rate per day for opponent defensive profiles.}
 
@@ -20,8 +20,8 @@ recv_epv_adj, disp_epv_adj, spoil_epv_adj, hitout_epv_adj columns.}
 }
 \value{
 The input data with additional \code{_oadj} columns appended:
-\code{recv_epv_oadj}, \code{disp_epv_oadj}, \code{spoil_epv_oadj},
-\code{hitout_epv_oadj}, \code{contest_epv_oadj} (if present),
+\code{epv_recv_oadj}, \code{epv_disp_oadj}, \code{epv_spoil_oadj},
+\code{epv_hitout_oadj}, \code{contest_epv_oadj} (if present),
 \code{epv_oadj}. Original columns unchanged.
 }
 \description{
@@ -33,8 +33,8 @@ specific opponent's EPV conceded, distributed by player TOG share.
 \details{
 The full adjustment chain visible in output:
 \itemize{
-\item \code{recv_epv} — raw credit from PBP
-\item \code{recv_epv_adj} — position-centered (per-80-min)
-\item \code{recv_epv_oadj} — position + opponent adjusted
+\item \code{epv_recv} — raw credit from PBP
+\item \code{epv_recv_adj} — position-centered (per-80-min)
+\item \code{epv_recv_oadj} — position + opponent adjusted
 }
 }

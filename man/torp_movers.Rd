@@ -23,7 +23,7 @@ torp_movers(
 \item{top_n}{Number of biggest movers to show in each direction. Default 10.}
 
 \item{metric}{Column to compare. Default \code{"torp"}. Can also be
-\code{"epr"}, \code{"psr"}, \code{"recv_epr"}, etc.}
+\code{"epr"}, \code{"psr"}, \code{"epr_recv"}, etc.}
 }
 \value{
 A data.table with columns: \code{player_name}, \code{team},

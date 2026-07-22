@@ -15,8 +15,8 @@ get_lineup_ratings(season = NULL, round = NULL, match_id = NULL)
 }
 \value{
 Tibble with one row per player, columns: season, round, match_id,
-team_name, player_name, lineup_position, position_group, epr, recv_epr,
-disp_epr, spoil_epr, hitout_epr, psr, torp (blended EPR+PSR)
+team_name, player_name, lineup_position, position_group, epr, epr_recv,
+epr_disp, epr_spoil, epr_hitout, psr, torp (blended EPR+PSR)
 }
 \description{
 Returns individual player EPR, PSR, and TORP ratings for selected lineups,

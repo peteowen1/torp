@@ -192,10 +192,10 @@
       ) |>
       dplyr::summarise(
         epr_week = sum(epr * tog_wt, na.rm = TRUE) * discount,
-        epr_recv_week = sum(recv_epr * tog_wt, na.rm = TRUE) * discount,
-        epr_disp_week = sum(disp_epr * tog_wt, na.rm = TRUE) * discount,
-        epr_spoil_week = sum(spoil_epr * tog_wt, na.rm = TRUE) * discount,
-        epr_hitout_week = sum(hitout_epr * tog_wt, na.rm = TRUE) * discount,
+        epr_recv_week = sum(epr_recv * tog_wt, na.rm = TRUE) * discount,
+        epr_disp_week = sum(epr_disp * tog_wt, na.rm = TRUE) * discount,
+        epr_spoil_week = sum(epr_spoil * tog_wt, na.rm = TRUE) * discount,
+        epr_hitout_week = sum(epr_hitout * tog_wt, na.rm = TRUE) * discount,
         psr_week = sum(psr * tog_wt, na.rm = TRUE) * discount,
         .groups = "drop"
       ) |>
@@ -209,10 +209,10 @@
     dplyr::mutate(
       use_roster = !is.na(epr_week) & (is.na(count) | count == 0),
       epr = dplyr::if_else(use_roster, epr_week, epr),
-      recv_epr = dplyr::if_else(use_roster, epr_recv_week, recv_epr),
-      disp_epr = dplyr::if_else(use_roster, epr_disp_week, disp_epr),
-      spoil_epr = dplyr::if_else(use_roster, epr_spoil_week, spoil_epr),
-      hitout_epr = dplyr::if_else(use_roster, epr_hitout_week, hitout_epr),
+      epr_recv = dplyr::if_else(use_roster, epr_recv_week, epr_recv),
+      epr_disp = dplyr::if_else(use_roster, epr_disp_week, epr_disp),
+      epr_spoil = dplyr::if_else(use_roster, epr_spoil_week, epr_spoil),
+      epr_hitout = dplyr::if_else(use_roster, epr_hitout_week, epr_hitout),
       psr = dplyr::if_else(use_roster, psr_week, psr),
       use_roster = NULL
     )
@@ -291,7 +291,7 @@
     dplyr::filter(season == .env$season, round_number == .env$week) |>
     dplyr::distinct(team_id, .keep_all = TRUE) |>
     dplyr::select(
-      team_id, team_name, epr, recv_epr, disp_epr, spoil_epr, hitout_epr,
+      team_id, team_name, epr, epr_recv, epr_disp, epr_spoil, epr_hitout,
       psr, dplyr::any_of(c("osr", "dsr"))
     ) |>
     dplyr::filter(!is.na(team_name))
@@ -356,7 +356,7 @@
   n_teams <- length(team_names)
   if (n_teams < 2) cli::cli_abort("build_matchup_table: fewer than 2 teams in frozen snapshot")
 
-  rating_cols <- intersect(c("epr", "recv_epr", "disp_epr", "spoil_epr", "hitout_epr", "psr", "osr", "dsr"),
+  rating_cols <- intersect(c("epr", "epr_recv", "epr_disp", "epr_spoil", "epr_hitout", "psr", "osr", "dsr"),
                             names(snapshot))
   rating_vec <- stats::setNames(
     lapply(rating_cols, function(col) stats::setNames(snapshot[[col]], team_names)),
@@ -519,10 +519,10 @@
   }
 
   df$epr_diff <- df$epr.x - df$epr.y
-  df$epr_recv_diff <- df$recv_epr.x - df$recv_epr.y
-  df$epr_disp_diff <- df$disp_epr.x - df$disp_epr.y
-  df$epr_spoil_diff <- df$spoil_epr.x - df$spoil_epr.y
-  df$epr_hitout_diff <- df$hitout_epr.x - df$hitout_epr.y
+  df$epr_recv_diff <- df$epr_recv.x - df$epr_recv.y
+  df$epr_disp_diff <- df$epr_disp.x - df$epr_disp.y
+  df$epr_spoil_diff <- df$epr_spoil.x - df$epr_spoil.y
+  df$epr_hitout_diff <- df$epr_hitout.x - df$epr_hitout.y
   df$psr_diff <- df$psr.x - df$psr.y
   if (all(c("osr.x", "osr.y") %in% names(df))) df$osr_diff <- df$osr.x - df$osr.y
   if (all(c("dsr.x", "dsr.y") %in% names(df))) df$dsr_diff <- df$dsr.x - df$dsr.y

@@ -278,7 +278,7 @@ print.torp_team_profile <- function(x, ...) {
     cat("--- Top Players (TORP) ---\n")
     # Show a compact view
     display_cols <- intersect(
-      c("player_name", "epr", "recv_epr", "disp_epr", "spoil_epr", "hitout_epr"),
+      c("player_name", "epr", "epr_recv", "epr_disp", "epr_spoil", "epr_hitout"),
       names(x$top_players)
     )
     if (length(display_cols) > 0) {
