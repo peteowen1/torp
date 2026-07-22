@@ -1,0 +1,705 @@
+---
+title: "How TORP works"
+subtitle: "From raw AFL play-by-play to 'who actually added value?'"
+author: "Pete Owen"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 2
+    code-fold: true
+    code-summary: "Show the code"
+    theme: cosmo
+    fig-width: 9
+    fig-height: 5.5
+    embed-resources: true
+    smart: false
+execute:
+  warning: false
+  message: false
+---
+
+::: {.callout-note}
+## The one-paragraph version
+
+**TORP** (Total Over Replacement Predictive-value) is a single number for "how
+much did this player add?" It's built from two independent views blended
+50/50. **EPV** (Expected Possession Value) reads the actual play-by-play: a
+machine-learning model scores every action by how many points it's worth
+having the ball *right now*, and the change in that score is credited to
+whoever caused it. **PSV** (Player Skill Value) reads the box score instead:
+a regression learns which per-stat skills actually predict match margin, then
+apportions that margin back to individual players. Win probability (**WP**)
+is tracked as a third, parallel view -- it knows the score, EPV deliberately
+doesn't -- but it is *not* blended into TORP, for reasons the FAQ at the
+bottom explains. Sum a season of credit and you get a rating that says not
+just *who* was good, but *how*.
+:::
+
+```{mermaid}
+%%| fig-cap: "The pipeline at a glance."
+flowchart LR
+  A["AFL API play-by-play<br/>(daily scrape)"] --> B["Cleaned, standardised PBP<br/>(description whitelist)"]
+  B --> C["EP / WP / xG models<br/>(XGBoost + GAM)"]
+  C --> D["Credit assignment<br/>(who caused the change?)"]
+  D --> E["EPV player ratings"]
+  F["Box-score stats"] --> G["Per-stat skill ratings<br/>(Bayesian GAMs)"]
+  G --> H["Margin regression<br/>(glmnet -> PSV)"]
+  E --> I["TORP = 0.5 x EPV + 0.5 x PSV"]
+  H --> I
+```
+
+```{r}
+#| label: setup
+#| output: false
+devtools::load_all("../..", quiet = TRUE)
+suppressPackageStartupMessages({
+  library(data.table)
+  library(dplyr)
+  library(ggplot2)
+  library(ggrepel)
+})
+theme_set(theme_torp())
+
+# quarto executes chunks with the .qmd's own directory as the working
+# directory, so torp's normal getwd()-relative local-data auto-detect
+# (get_local_data_dir()) doesn't find the torpdata/ sibling from here --
+# point it there explicitly (torp/data-raw/explainer -> torpverse/torpdata/data).
+set_local_data_dir(normalizePath("../../../torpdata/data", mustWork = TRUE))
+
+SEASON <- 2026
+ROUND  <- 19
+MATCH_ID <- "CD_M20260141903"
+
+# One real match, loaded from the local torpdata sibling (zero-network dev):
+# Geelong Cats 102 d St Kilda Saints 75, Round 19 2026, GMHBA Stadium.
+pbp_round   <- load_pbp(SEASON, rounds = ROUND)
+chains_round <- as.data.table(arrow::read_parquet(
+  file.path(get_local_data_dir(), "chains_data_2026_all.parquet")
+))
+
+pbp_match    <- as.data.table(pbp_round)[match_id == MATCH_ID]
+chains_match <- chains_round[match_id == MATCH_ID]
+data.table::setorder(pbp_match, display_order)
+data.table::setorder(chains_match, display_order)
+chains_match[, player_name := paste(player_name_given_name, player_name_surname)]
+
+home_team <- pbp_match$home_team_name[1]
+away_team <- pbp_match$away_team_name[1]
+final_home <- tail(pbp_match$home_score, 1)
+final_away <- tail(pbp_match$away_score, 1)
+```
+
+# Step 1 -- The raw data
+
+Everything starts with the **AFL API's play-by-play feed**: a row for every
+notable touch of the ball in a match, with a text description, pitch
+coordinates and a timestamp. torp's daily scraper pulls this for every match
+and publishes it as parquet. In the 2026 season alone that's
+`r format(nrow(chains_round), big.mark = ",")` raw rows across
+`r uniqueN(chains_round$match_id)` matches -- this document uses one of them,
+**`r home_team` `r final_home` d `r away_team` `r final_away`**
+(Round `r ROUND`, GMHBA Stadium), which alone contributes
+`r nrow(chains_match)` rows.
+
+Here is what the feed actually looks like -- the passage that sets up the
+goal this document follows all the way through:
+
+```{r}
+#| label: tbl-raw
+#| tbl-cap: "Raw play-by-play rows: a turnover deep in defence, intercepted, and worked forward. description is free text; x/y are pitch coordinates."
+raw_cols <- c("display_order", "period", "period_seconds", "player_name",
+              "description", "x", "y")
+raw_window <- chains_match[display_order %between% c(1826, 1841), ..raw_cols]
+knitr::kable(raw_window)
+```
+
+No sense yet of what any of this is *worth* -- a description string and a
+dot on the field. Not something you can model directly. Two things are worth
+knowing before any of the field plots later in this document: coordinates
+are in real metres from the centre of the ground (this venue is
+`r chains_match$venue_length[1]`m x `r chains_match$venue_width[1]`m), and
+they are **absolute**, not team-relative -- unlike some sports' event feeds,
+the same patch of grass has the same x/y no matter who touches it there.
+
+# Step 2 -- A standard language for actions
+
+Raw description text is noisy -- hundreds of distinct strings, many of them
+bookkeeping (subs, timekeeping, video review) rather than an actual passage
+of play. torp cleans this down to a whitelist of
+`r length(EPV_RELEVANT_DESCRIPTIONS)` play-relevant description types (kicks,
+handballs, marks, hard-ball gets, bounces, stoppages...) and engineers a
+consistent feature set on top: which quarter, how much time is left, what
+kind of play this is, where the ball was a moment ago. This cleaned,
+feature-complete table is what the models actually see.
+
+```{r}
+#| label: tbl-clean
+#| tbl-cap: "The same passage, now modelled. exp_pts is the target the EP model predicts (Step 3): the expected points swing still to come in this quarter, signed from the acting player's team's perspective."
+clean_cols <- c("display_order", "player_name", "description", "pos_team",
+                "exp_pts", "delta_epv")
+clean_window <- pbp_match[display_order %between% c(1832, 1841), ..clean_cols]
+knitr::kable(clean_window, digits = c(0, 0, 0, 0, 3, 3))
+```
+
+Watch `exp_pts` at the top of that table: `r round(pbp_match[display_order == 1832]$exp_pts, 2)`
+on Tobie Travaglia's kick (a St Kilda player, mid-possession) becomes
+`r round(pbp_match[display_order == 1833]$exp_pts, 2)` one row later on Jack
+Henry's mark -- a **different sign convention is doing the work here**: each
+row's `exp_pts` is signed from *that action's own team's* perspective, so the
+instant possession changes hands from St Kilda to Geelong, "good news for
+St Kilda" flips to "good news for Geelong" even though it's describing
+adjacent moments of the same passage. Sit with that sign flip; it's the
+entire reason the credit-assignment rules in Step 4 exist.
+
+# Step 3 -- The goal, step by step
+
+Two rows after that intercept, Geelong worked the ball forward in three
+touches and scored. This is the single moment this whole document follows
+through every remaining stage.
+
+```{r}
+#| label: fig-chain
+#| fig-cap: "Each numbered label is one action: who did it and what it was. The dotted line is the ball's path; the ground outline is an approximation (torp has no purpose-built ground-drawing helper yet) drawn from this venue's real dimensions."
+chain_dt <- pbp_match[chain_number == 231 & period == 4][order(display_order)]
+chain_dt[, step := .I]
+chain_dt[, clock := sprintf("%d:%02d", period_seconds %/% 60, period_seconds %% 60)]
+scorer <- chain_dt[.N, player_name]
+assist <- chain_dt[.N - 2, player_name]
+goal_clock <- chain_dt[.N, clock]
+
+# Minimal AFL ground outline: an ellipse sized to the real venue dimensions.
+# No draw_pitch()/draw_oval() helper exists in torp's plot_*.R yet (checked
+# plot_game.R, plot_shots.R) -- plot_shot_map() only draws a half-field with
+# reference lines, so this is a deliberately minimal from-scratch outline.
+ground_outline <- function(length_m, width_m, n = 200) {
+  theta <- seq(0, 2 * pi, length.out = n)
+  data.frame(x = (length_m / 2) * cos(theta), y = (width_m / 2) * sin(theta))
+}
+ground <- ground_outline(chains_match$venue_length[1], chains_match$venue_width[1])
+
+ggplot() +
+  geom_path(data = ground, aes(x, y), colour = "grey70", linewidth = 0.6) +
+  geom_vline(xintercept = 0, colour = "grey85", linetype = "dashed") +
+  geom_path(data = chain_dt, aes(x, y), colour = "grey50",
+            linetype = "dotted", linewidth = 0.5,
+            arrow = arrow(length = unit(0.15, "cm"), type = "closed")) +
+  geom_point(data = chain_dt, aes(x, y), size = 3, colour = "#1B3F8B") +
+  ggrepel::geom_text_repel(
+    data = chain_dt,
+    aes(x, y, label = sprintf("%d. %s\n%s", step, player_name, description)),
+    size = 3.2, fontface = "bold", lineheight = 0.95,
+    box.padding = 0.7, point.padding = 0.4,
+    min.segment.length = 0, seed = 42
+  ) +
+  coord_fixed() +
+  labs(
+    title = sprintf("%s's goal, assisted by %s (Q4, %s)", scorer, assist, goal_clock),
+    subtitle = sprintf("%s v %s, Round %d %d -- a %d-action passage from turnover to score",
+                        home_team, away_team, ROUND, SEASON, nrow(chain_dt)),
+    x = NULL, y = NULL
+  ) +
+  theme_void() +
+  theme(plot.title = element_text(face = "bold"), legend.position = "none")
+```
+
+The model's job is to put a number on every one of those six actions. Watch
+`exp_pts` climb through the passage, then fall straight back to the
+post-goal baseline the instant the ball is bounced back to the centre -- the
+"cash-in" moment:
+
+```{r}
+#| label: fig-epv-timeline
+#| fig-cap: "exp_pts through the goal: each action nudges the number up, the goal cashes it in, and the reset after the centre bounce shows just how much of that value was 'used up' by scoring."
+timeline_dt <- pbp_match[display_order %between% c(1834, 1843)][order(display_order)]
+timeline_dt <- timeline_dt[chain_number == 231 | description == "Centre Bounce"]
+timeline_dt[, step := .I]
+timeline_dt[, lbl := ifelse(description == "Centre Bounce", "Centre Bounce", player_name)]
+
+ggplot(timeline_dt, aes(step, exp_pts)) +
+  geom_step(linewidth = 0.9, colour = "grey40") +
+  geom_point(aes(colour = description), size = 3) +
+  geom_text(aes(label = lbl), angle = 30, hjust = -0.05, vjust = -0.7, size = 3) +
+  scale_x_continuous(breaks = timeline_dt$step, labels = timeline_dt$description,
+                      expand = expansion(mult = c(0.05, 0.25))) +
+  scale_y_continuous(expand = expansion(mult = c(0.1, 0.2))) +
+  labs(x = NULL, y = "exp_pts (expected points still to come this quarter)") +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1), legend.position = "none")
+```
+
+Zooming out to the whole match: every action, coloured by `exp_pts`. Value
+is low in defence, climbs through the midfield, and is highest in each
+forward 50 -- exactly where a football fan would expect it, which is the
+first sanity check on any model like this.
+
+```{r}
+#| label: fig-epv-field
+#| fig-cap: "Every action of the match, coloured by exp_pts. Both forward-50s glow -- the model has learned field position without being told anything about football."
+ggplot() +
+  geom_path(data = ground, aes(x, y), colour = "grey70", linewidth = 0.6) +
+  geom_vline(xintercept = 0, colour = "grey85", linetype = "dashed") +
+  geom_point(data = pbp_match[!is.na(exp_pts)],
+             aes(x, y, colour = pmin(exp_pts, 4)),
+             size = 1.4, alpha = 0.65) +
+  scale_colour_viridis_c(option = "inferno", name = "exp_pts") +
+  coord_fixed() +
+  labs(title = sprintf("%s v %s -- where is possession worth something?", home_team, away_team)) +
+  theme_void() +
+  theme(legend.position = "right")
+```
+
+# The model itself
+
+`exp_pts` comes from the **EP (Expected Points) model**: an XGBoost
+multiclass classifier that predicts five outcomes for "what's the next score
+in this quarter" -- the team in possession kicks a goal or a behind, the
+opponent does, or nobody scores again before quarter's end -- and combines
+them into a single signed points figure:
+`exp_pts = 6 x P(goal) + P(behind) - P(opp behind) - 6 x P(opp goal)`.
+It sees 19 features per action:
+
+```{r}
+#| label: tbl-features
+#| tbl-cap: "The 19 features the EP model sees for every action."
+features <- data.frame(
+  Feature = c("goal_x, y", "lag_goal_x, lag_goal_x5, lag_y",
+              "period_seconds, period", "est_qtr_remaining, est_match_remaining",
+              "play_type_kick / handball / reception",
+              "phase_of_play_set_shot / hard_ball / loose_ball / handball_received",
+              "shot_row", "speed5", "home"),
+  `Plain English` = c(
+    "Where on the ground the action happens (distance to goal, lateral position)",
+    "Where the ball was one and five touches ago",
+    "Seconds and quarter number -- which part of the game this is",
+    "Time left in the quarter, and in the match",
+    "What kind of touch this is",
+    "The situation the touch arose from (stoppage, loose ball, general play)",
+    "Is this action a shot at goal?",
+    "How fast the ball has moved over the last five touches",
+    "Is the team in possession the home team?"
+  ),
+  check.names = FALSE
+)
+knitr::kable(features)
+```
+
+And what the trained model actually leans on:
+
+```{r}
+#| label: fig-importance
+#| fig-cap: "Feature importance from the live EP model. Time remaining in the quarter dwarfs everything else -- more on why below."
+ep_model <- torp:::load_model_with_fallback("ep")
+imp <- xgboost::xgb.importance(model = ep_model)
+ggplot(as.data.table(imp)[order(Gain)][, Feature := factor(Feature, levels = Feature)],
+       aes(Gain, Feature)) +
+  geom_col(fill = "#2c7fb8") +
+  labs(x = "Share of model gain", y = NULL)
+```
+
+`est_qtr_remaining` alone accounts for over half the model's gain -- by far
+the single biggest feature, well ahead of field position. That's a genuinely
+different story from most possession-value models (which tend to be
+dominated by location), and it's worth sitting with rather than glossing
+over.
+
+::: {.callout-tip}
+## Why "next score in the quarter" and not "final margin"?
+
+Final scores are rare (two teams, one result, once per match) and swamped by
+luck late in a blowout. Scores *within a quarter* happen several times per
+team per term -- order-of-magnitude more often -- and each one is still a
+real, points-denominated outcome. Bounding the target to "this quarter"
+rather than "rest of the match" is also what makes the target
+*learnable*: a stoppage with 90 seconds left in a quarter genuinely carries
+less expected value than the same stoppage with 15 minutes left, because
+there is mechanically less time left for a score to happen at all. Training
+on the full-match version would blur that real, quarter-shaped signal with
+whatever happens after the next break.
+:::
+
+::: {.callout-important}
+## Isn't `est_qtr_remaining` dominating the model cheating?
+
+It looks suspicious that one clock feature explains over half the model's
+predictive power -- shouldn't *football* (field position, what just
+happened) be doing more of the work? It isn't cheating, because of what the
+target actually is. `exp_pts` is bounded to "before this quarter ends," so
+as the clock runs down, the ceiling on how much scoring is even
+mechanically possible shrinks toward zero -- regardless of where the ball is.
+A model that *didn't* lean heavily on time-remaining would be a worse model,
+not a fairer one; it would systematically over-value late-quarter
+possessions that have nowhere left to go. What actually isolates one
+player's contribution is never the raw level -- it's `delta_epv`, the
+*change* from one action to the next. The clock-driven baseline is present
+in both the before and after state of every action, so it cancels out of
+the difference. This is the same principle as the leakage question in the
+football version of this document: what matters is not whether a feature
+looks suspicious, but whether it's genuinely settled *before* the thing
+being predicted.
+:::
+
+# Step 4 -- Giving the value to players
+
+`delta_epv` has to be *earned by someone*. There are four credit rules;
+each one below is caught in the act in this actual match, with the row it
+applies to marked **&rarr;**.
+
+```{r}
+#| label: credit-helper
+show_window <- function(rows, cols) {
+  win <- pbp_match[display_order %in% rows, ..cols][order(match(display_order, rows))]
+  num <- names(win)[vapply(win, is.numeric, logical(1))]
+  win[, (num) := lapply(.SD, round, 3), .SDcols = num]
+  win
+}
+```
+
+**Normal disposal + reception** -- no turnover, no contest: the disposer and
+the receiver simply split `delta_epv` 50/50 (`EPV_DISP_SCALE` =
+`EPV_RECV_SCALE` = `r EPV_DISP_SCALE`). This is the *middle* of our featured
+goal: Jack Henry's kick found Gryan Miers on the lead.
+
+```{r}
+#| label: tbl-credit-normal
+#| tbl-cap: "player_credit = delta_epv x 0.5 for both the kicker and the mark -- an even split because there's no way to say one mattered more than the other."
+cols1 <- c("display_order", "player_name", "description", "delta_epv")
+win1 <- show_window(c(1835, 1836), cols1)
+win1[, role := c("Disposer (kicker)", "Receiver (mark)")]
+win1[, credit := round(win1$delta_epv[1] * c(EPV_DISP_SCALE, EPV_RECV_SCALE), 3)]
+knitr::kable(win1)
+```
+
+**Turnover + intercept mark** -- when the acting player's team *loses* the
+ball, torp doesn't split the blame. The player who gave it away eats the
+usual 50% disposal share (now strongly negative). But the opponent who reads
+the intercept and marks it gets **full** credit for the swing, not half -- 
+`EPV_RECV_INTERCEPT_MARK_SCALE` = `r EPV_RECV_INTERCEPT_MARK_SCALE`, not
+`r EPV_RECV_SCALE`. Reading the play and taking the mark is treated as
+entirely that player's doing. This is the turnover, two rows earlier, that
+handed Geelong the ball in the first place:
+
+```{r}
+#| label: tbl-credit-turnover
+#| tbl-cap: "The kicker's own disposal credit is halved as normal; the intercepting mark gets the FULL swing, not half -- a deliberate asymmetry that rewards reading the play."
+win2 <- show_window(c(1832, 1833), cols1)
+win2[, role := c("Disposer (turned it over)", "Receiver (intercept mark)")]
+win2[, credit := c(round(win2$delta_epv[1] * EPV_DISP_SCALE, 3),
+                    round(win2$delta_epv[1] * -1 * EPV_RECV_INTERCEPT_MARK_SCALE, 3))]
+knitr::kable(win2)
+```
+
+**Three-way aerial contest** -- a kick contested in the air is a genuinely
+three-player event (kicker, target, defender), so `compute_contest_credit()`
+splits it three ways instead of two: kicker, target and defender each take a
+1/3 share (`contest_share`) of the kicker's `delta_epv`, with the target and
+defender's shares mirror-signed (one won it, one didn't). Earlier in the
+same term, Geelong's James Worpel put one up to Oliver Henry -- this time it
+didn't come off:
+
+```{r}
+#| label: tbl-credit-contest
+#| tbl-cap: "Kicker, target and defender each take a third of the swing. When the target loses the contest (as here), their third is negative and the defender's is positive."
+worpel_kick <- pbp_match[display_order == 134]
+contest_rows <- data.frame(
+  role = c("Kicker (James Worpel)", "Target (Oliver Henry)", "Defender (Jack Silvagni)"),
+  credit = round(c(worpel_kick$delta_epv * (1 / 3),
+                    worpel_kick$delta_epv * (1 / 3),
+                    -worpel_kick$delta_epv * (1 / 3)), 3)
+)
+knitr::kable(contest_rows)
+```
+
+**Box-score credit** -- spoils, tackles, hitouts and a handful of other
+defensive/ruck stats never show up as their own row in the modelled
+play-by-play at all (`"Spoil"` isn't even in the description whitelist from
+Step 2) -- they're credited directly from the official box score, at fixed
+weights (`EPV_SPOIL_WT`, `EPV_TACKLE_WT`, `EPV_HITOUT_WT`, ...). Jack
+Silvagni again, for his whole game:
+
+```{r}
+#| label: tbl-credit-boxscore
+#| tbl-cap: "epv_spoil for Jack Silvagni's full match: eight separate defensive box-score stats, each at its own fixed weight, no play-by-play row required."
+silvagni <- as.data.table(load_player_stats(SEASON))[match_id == MATCH_ID & grepl("Silvagni", player_name)]
+box_tbl <- data.frame(
+  stat = c("spoils", "tackles", "pressure_acts", "def_half_pressure_acts",
+           "intercepts", "one_percenters", "rebound50s", "frees_against"),
+  weight = c(EPV_SPOIL_WT, EPV_TACKLE_WT, EPV_PRESSURE_WT, EPV_DEF_PRESSURE_WT,
+             EPV_INTERCEPTS_WT, EPV_ONE_PERCENTERS_WT, EPV_REBOUND50S_WT, EPV_FREES_AGAINST_WT),
+  count = as.numeric(silvagni[1, c("spoils", "tackles", "pressure_acts", "def_half_pressure_acts",
+                                    "intercepts", "one_percenters", "rebound50s", "frees_against")])
+)
+box_tbl$contribution <- round(box_tbl$weight * box_tbl$count, 3)
+knitr::kable(box_tbl, digits = 4)
+cat(sprintf("Total epv_spoil: %.3f points\n", sum(box_tbl$contribution)))
+```
+
+Ruck credit works the same way, just off different stats:
+
+```{r}
+#| label: tbl-credit-hitout
+#| tbl-cap: "epv_hitout for St Kilda's Rowan Marshall, this match: three ruck stats, no play-by-play row required."
+marshall <- as.data.table(load_player_stats(SEASON))[match_id == MATCH_ID & grepl("Marshall", player_name)]
+hitout_tbl <- data.frame(
+  stat = c("hitouts", "hitouts_to_advantage", "ruck_contests"),
+  weight = c(EPV_HITOUT_WT, EPV_HITOUT_ADV_WT, EPV_RUCK_CONTEST_WT),
+  count = as.numeric(marshall[1, c("hitouts", "hitouts_to_advantage", "ruck_contests")])
+)
+hitout_tbl$contribution <- round(hitout_tbl$weight * hitout_tbl$count, 3)
+knitr::kable(hitout_tbl, digits = 4)
+cat(sprintf("Total epv_hitout: %.3f points\n", sum(hitout_tbl$contribution)))
+```
+
+Put the whole featured chain back together, and this is what each player
+actually banked from it:
+
+```{r}
+#| label: tbl-credit-chain
+#| tbl-cap: "The featured goal, fully credited. The disposer/receiver split shares value along the chain; the scorer's own kick banks the shot's full delta_epv."
+chain_credit <- chain_dt[, .(player_name, description,
+                             exp_pts = round(exp_pts, 3),
+                             delta_epv = round(delta_epv, 3))]
+knitr::kable(chain_credit)
+```
+
+# The other half: PSV and player skills
+
+EPV reads the play; **PSV** reads the box score. torp fits ~58 Bayesian
+per-stat models (one goals model, one tackles model, one intercepts model...)
+that turn each player's raw counting stats into a skill rating, then fits a
+single regularised regression (`glmnet`) predicting match margin from a
+team's aggregated skill ratings. Each stat's regression coefficient
+(`beta`) says how much that skill actually moves the scoreboard; apportioning
+those coefficients back to individual players is PSV -- "predicted margin
+contribution, in points, above a replacement player."
+
+The coefficients currently shipped were fit on 2024 data. A 2026 research
+pass refit them on 2025 to check for drift -- which stats the margin model
+leans on *did* move, meaningfully, for some stats:
+
+```{r}
+#| label: fig-beta-drift
+#| fig-cap: "The 15 stats whose PSR coefficient moved most between the 2024 and 2025 refits. Positive delta = the stat became more heavily rewarded in the newer fit."
+beta_path <- "../../../torpmodels/data-raw/04-match-model/experiments/results/ws1_beta_drift.csv"
+beta_drift <- as.data.table(read.csv(beta_path))
+top_drift <- beta_drift[order(-abs_delta)][1:15]
+top_drift[, stat_name := factor(stat_name, levels = stat_name[order(delta)])]
+ggplot(top_drift, aes(delta, stat_name, fill = delta > 0)) +
+  geom_col(show.legend = FALSE) +
+  scale_fill_manual(values = c(`TRUE` = "#1B9E77", `FALSE` = "#D95F02")) +
+  labs(x = "beta_v2025 - beta_v2024", y = NULL,
+       title = "Which stats moved most in a 2025 PSR refit")
+```
+
+The biggest mover is `intercepts` -- its 2024 coefficient (6.77) roughly
+halved in the 2025 refit -- while stats like `metres_gained`, `behinds` and
+`marks_inside50` went from *zero* weight (excluded by the regulariser
+entirely) to real, positive coefficients. This was a real, measured finding
+from a 2026 research pass (`WS1`) -- but per that investigation's own
+conclusion, the drift isn't costing measurable match-prediction accuracy
+this season, so the shipped coefficients stayed on the 2024 vintage rather
+than triggering an annual-refresh policy. It's included here because "which
+stats does the model value, and is that stable" is exactly the kind of
+question this document exists to make answerable.
+
+# Win probability: a parallel view
+
+Every action also gets a **WP** (win probability) and **WPA** (win
+probability added) figure, from a separate GAM/XGBoost model that -- unlike
+EPV -- is allowed to see the score. WP is served **calibrated**: a
+leverage-interaction sidecar fitted on temporal holdout data, which brought
+the model's late-game/close-game slope from roughly 1.75 down to about 0.95
+(i.e. corrected a real overconfidence problem in tight finishes).
+
+```{r}
+#| label: fig-wp
+#| fig-cap: "Win probability across the whole match. Home = Geelong Cats."
+plot_ep_wp(SEASON, ROUND, MATCH_ID, metric = "wp")
+```
+
+WPA is credited the same disposer/receiver way as EPV
+(`WP_CREDIT_DISP_SHARE` = `r WP_CREDIT_DISP_SHARE`), but it is tracked
+**only as a parallel display metric** -- it is not one of the two halves that
+make up `torp_value`. The FAQ below explains exactly why, because the
+reasoning changed in 2026 and it's a better story than it used to be.
+
+# Step 5 -- A season of credit: player value profiles
+
+Sum a season of EPV credit per player, split by channel, normalise per game
+ -- and two players who both rate well can look completely different. Here's
+an actual 2026 archetype contrast: **Max Gawn**, a ruck (2nd in the league
+by hitout credit), against **Charlie Cameron**, a small forward (top-5 by
+total EPV among medium forwards).
+
+```{r}
+#| label: fig-profiles
+#| fig-cap: "Two very different ways to add value. Gawn's value is concentrated in hitouts (a channel Cameron barely touches); Cameron's comes almost entirely from receiving and disposing the ball inside attacking 50."
+pgd_season <- create_player_game_data(
+  pbp_data = load_pbp(SEASON, rounds = TRUE),
+  player_stats = as.data.table(load_player_stats(SEASON)),
+  teams = as.data.table(load_teams(SEASON)),
+  chains = as.data.table(arrow::read_parquet(
+    file.path(get_local_data_dir(), "chains_data_2026_all.parquet")
+  ))
+)
+pgd_season <- as.data.table(pgd_season)
+
+two_players <- c("Max Gawn", "Charlie Cameron")
+season_totals <- pgd_season[player_name %in% two_players,
+  .(games = .N, recv = sum(epv_recv), disp = sum(epv_disp),
+    spoil = sum(epv_spoil), hitout = sum(epv_hitout)),
+  by = player_name]
+long <- data.table::melt(season_totals, id.vars = c("player_name", "games"),
+                         variable.name = "area", value.name = "credit")
+long[, credit_pg := credit / games]
+
+# shared area order + shared x scale across both facets, so the two profiles
+# read across for comparison
+area_order <- long[, .(total = sum(credit_pg)), by = area][order(total), area]
+long[, area := factor(area, levels = area_order)]
+
+ggplot(long, aes(credit_pg, area, fill = player_name)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~player_name) +
+  scale_fill_manual(values = c("Max Gawn" = team_color_lookup("Melbourne Demons"),
+                                "Charlie Cameron" = team_color_lookup("Brisbane Lions"))) +
+  labs(x = "EPV credit per game (points)", y = NULL,
+       title = sprintf("Where does each player's value come from? (%d season)", SEASON),
+       subtitle = "Same four channels, same order, same scale -- read across to compare")
+```
+
+All four bars are **EPV credit channels**, not raw action types -- `recv`
+and `disp` are the disposer/receiver split from Step 4, `spoil` is the
+box-score defensive channel, `hitout` is the ruck channel. The units
+throughout are **points**: Gawn's ~`r round(season_totals[player_name == "Max Gawn"]$hitout / season_totals[player_name == "Max Gawn"]$games, 2)`
+points of hitout credit per game is a real, if modest, points swing his
+ruck work is worth on average, every game, on top of everything else he
+does with ball in hand.
+
+# The questions you should be asking
+
+Two of the best ones -- *why next-score-in-quarter instead of final margin*,
+and *isn't `est_qtr_remaining` dominating cheating* -- are answered up in the
+model section. Here are the rest.
+
+::: {.callout-note collapse="true"}
+## How do you know the model is any good?
+
+Three layers, the same as any serious rating system. First, standard ML
+hygiene: EP and WP are trained and release-gated on out-of-sample data -- 
+WP specifically has to pass a temporal-holdout slope gate
+(`|calibrated slope - 1| <= 0.10`, both overall and in the Q4/close-game
+cell specifically) before a retrain is even allowed to publish. Second,
+sanity: the feature-importance chart and the field heatmap both reproduce
+football intuition (forward-50 is valuable, time matters) without being
+told anything about the sport. Third, and the one that matters most: the
+same EPV/PSV ratings feed a match-prediction model that is scored against
+real results every single week. A rating system that wasn't measuring real
+value would wash out there.
+:::
+
+::: {.callout-note collapse="true"}
+## Does the model know the score?
+
+Depends which model. **EP is deliberately score-blind** -- look back at the
+feature list, there's a clock but no `points_diff`. A team already up big
+stops attacking normal-game-state footy, and if EP conditioned on score,
+every player's actions in a blowout would be re-valued by context they
+don't control. **WP is the opposite on purpose** -- it exists specifically
+to answer "given the score and the clock, who's going to win," so
+`points_diff` and friends are core features. That's the real reason WPA
+stays out of `torp_value` even though it's a perfectly good model in its
+own right -- see the next question.
+:::
+
+::: {.callout-important collapse="true"}
+## Why isn't WPA blended into TORP, if it's already built?
+
+This used to be answered with a claim that turned out to be false: "the WP
+gradient is too steep late/close, so blending it in would distort things."
+Measured directly in mid-2026, that wasn't true -- the calibrated WP family
+is actually *flat* in exactly that region. So the door to reinstating WPA
+was reopened, with a pre-registered bar: if a better-calibrated WP model
+*shrank* the tendency for WPA to reward close-game exposure by more than
+50%, blending it back in would become defensible.
+
+It didn't clear that bar -- and the direction of the miss is the
+interesting part. Calibration *dropped the correlation* between a player's
+WPA rate and how much of their time on ground came in close games
+(0.164 to 0.116), but the *regression coefficient* on that exposure -- how
+big the effect actually is per unit of exposure -- went the other way,
+**up** 47%, from 0.0284 to 0.0418. In other words: a sharper, better-behaved
+WP model didn't shrink the close-game-exposure pattern in WPA, it sharpened
+it. That's the tell that this isn't a calibration artifact at all -- it's
+structural. WPA, by construction, measures more when the game is live and
+close; that's not a bug to be calibrated away, it's what the metric *is*.
+Blending it into a season-long, context-neutral rating like TORP would mean
+systematically rewarding players who happened to get more high-leverage
+minutes, which is closer to noise than skill. WPA stays exactly where it
+is: a genuinely useful parallel display metric, not a TORP ingredient -- and
+the decision now rests on a measurement, not the disproven gradient story.
+:::
+
+::: {.callout-note collapse="true"}
+## Couldn't a player farm value by just having a shot from anywhere?
+
+No -- a shot's value is judged against the situation it came from, the same
+as any other action. A speculative snap from the boundary carries a low
+`exp_pts` of its own; missing it produces a strongly negative `delta_epv`
+that the shooter banks in full (Step 4's "normal disposal" rule -- nobody
+shares the blame for a bad shot). The shooting leaderboard rewards
+**selection and finishing position**, not volume: a player who shoots less
+often but only from good position out-earns a high-volume speculator every
+time.
+:::
+
+::: {.callout-note collapse="true"}
+## Why XGBoost, and why glmnet for PSR?
+
+Different jobs, different tools. EP/WP/xG are tabular, few-hundred-thousand
+row problems where gradient-boosted trees are still the thing to beat -- 
+fast to retrain, no GPU needed, and the feature-importance chart above is a
+free byproduct. PSR is a different shape of problem: ~50 correlated skill
+ratings predicting one number (match margin) per team per round, where the
+goal is stable, interpretable *coefficients* rather than raw predictive
+power -- that's exactly what a regularised linear model (`glmnet`) is built
+for, and it's also why the WS1 beta-drift comparison above is even a
+meaningful thing to plot.
+:::
+
+::: {.callout-note collapse="true"}
+## What can event data not see at all?
+
+Anything off the ball. The play-by-play records who touched it and where -- 
+it has no idea about a defender's positioning that made a pass impossible
+to attempt, a lead that dragged two opponents out of a contest, or a
+tackler running down a play 30 metres away that never shows up in a stat
+line. The box-score-driven PSV channel closes some of this gap (pressure
+acts, one-percenters, defensive half pressure are all rewarded even without
+a corresponding play-by-play row), but torp doesn't currently have a
+plus-minus layer analogous to panna's RAPM to catch what's left. That's a
+real, acknowledged limitation, not a hidden one.
+:::
+
+# Where this goes next
+
+EPV and PSV are already blended, live, every day -- `torp_value = 0.5 x epv +
+0.5 x psv` (`TORP_EPR_WEIGHT`). Downstream of that:
+
+- **Match predictions** use team-aggregated TORP/EPR/PSR differentials plus a
+  sequential team-Elo feature, recalibrated against real results every
+  retrain;
+- **WPA** keeps improving in its own right (the calibration sidecar above
+  shipped in July 2026) even while it stays out of the blend;
+- Everything here is republished automatically, every day, from the same
+  pipeline this document just walked through.
+
+::: {.callout-note collapse="true"}
+## Reproducing this document
+
+Everything here runs from the torp repo against the local torpdata sibling
+(`../../../torpdata/data` from this file, zero network calls beyond the model
+download and one live box-score refresh) -- no committed fixtures, just the same daily
+data the production pipeline uses. Render with
+`quarto render data-raw/explainer/torp_explainer.qmd` from the `torp/` root
+(via PowerShell -- arrow segfaults under Git Bash R on Windows).
+:::
