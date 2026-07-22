@@ -210,7 +210,7 @@ generate_urls <- function(data_type, file_prefix, seasons, rounds = NULL, prefer
     keep <- requested_files %in% assets
     n_dropped <- sum(!keep)
     if (n_dropped > 0) {
-      cli::cli_inform("Filtered {n_dropped} URL{?s} not found in {.val {data_type}} release.")
+      cli::cli_warn("Filtered {n_dropped} URL{?s} not found in {.val {data_type}} release.")
     }
     return(as.character(urls[keep]))
   }
