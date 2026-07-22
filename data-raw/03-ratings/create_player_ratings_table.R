@@ -45,8 +45,8 @@ plyr_gm_df <-
     # wt_gms = sum(unique(weight_gm), na.rm = TRUE),
     utc_start_time = max(utc_start_time),
     weight_gm = max(weight_gm),
-    disp_epv = sum(dplyr::if_else(pos_team == -1, delta_epv - 0.04, delta_epv + 0.08) / 2),
-    disp_epv_wt = sum((dplyr::if_else(pos_team == -1, delta_epv - 0.04, delta_epv + 0.08) * max(weight_gm)) / 2),
+    epv_disp = sum(dplyr::if_else(pos_team == -1, delta_epv - 0.04, delta_epv + 0.08) / 2),
+    epv_disp_wt = sum((dplyr::if_else(pos_team == -1, delta_epv - 0.04, delta_epv + 0.08) * max(weight_gm)) / 2),
     disp_wpa = sum((wpa) / 2),
     disposals_pbp = floor(dplyr::n() / 2),
     team = dplyr::last(team),
@@ -65,8 +65,8 @@ plyr_gm_df <-
       dplyr::mutate(weight_gm = exp(as.numeric(-(max(as.Date(utc_start_time)) - as.Date(utc_start_time))) / decay)) %>%
       dplyr::group_by(lead_player, lead_player_id, match_id) %>%
       dplyr::summarise(
-        recv_epv = sum(dplyr::if_else(pos_team == -1, (1.5 * delta_epv * pos_team) + 0.1, (1 * delta_epv * pos_team) + 0.05) / 2),
-        recv_epv_wt = sum((dplyr::if_else(pos_team == -1, (1.5 * delta_epv * pos_team) + 0.1, ((1 * delta_epv * pos_team) + 0.05)) * max(weight_gm)) / 2),
+        epv_recv = sum(dplyr::if_else(pos_team == -1, (1.5 * delta_epv * pos_team) + 0.1, (1 * delta_epv * pos_team) + 0.05) / 2),
+        epv_recv_wt = sum((dplyr::if_else(pos_team == -1, (1.5 * delta_epv * pos_team) + 0.1, ((1 * delta_epv * pos_team) + 0.05)) * max(weight_gm)) / 2),
         recv_wpa = sum((wpa) / 2),
         receptions = dplyr::n()
       ),
@@ -79,8 +79,8 @@ plyr_gm_df <-
   #               dplyr::group_by(playerId, matchId) %>%
   #               #dplyr::mutate() %>%
   #               dplyr::summarise(spoils = dplyr::n(),
-  #                         spoil_epv = spoils * 0.5,
-  #                         spoil_epv_wt = spoil_epv * max(weight_gm)),
+  #                         epv_spoil = spoils * 0.5,
+  #                         epv_spoil_wt = epv_spoil * max(weight_gm)),
   #             by = c("player_id" = "playerId","match_id"="matchId")) %>%
   ##### HITOUTS + SPOILS
   dplyr::left_join(
@@ -91,25 +91,25 @@ plyr_gm_df <-
       # ) %>%
       dplyr::mutate(
         weight_gm = exp(as.numeric(-(max(as.Date(utc_start_time)) - as.Date(utc_start_time))) / decay),
-        spoil_epv = spoils * 0.6 + tackles * 0.1 + pressure_acts * 0.1 - def_half_pressure_acts * 0.2,
-        spoil_epv_wt = spoil_epv * max(weight_gm),
-        hitout_epv = hitouts * 0.15 + hitouts_to_advantage * 0.25 - ruck_contests * 0.06,
-        hitout_epv_wt = hitout_epv * max(weight_gm)
+        epv_spoil = spoils * 0.6 + tackles * 0.1 + pressure_acts * 0.1 - def_half_pressure_acts * 0.2,
+        epv_spoil_wt = epv_spoil * max(weight_gm),
+        epv_hitout = hitouts * 0.15 + hitouts_to_advantage * 0.25 - ruck_contests * 0.06,
+        epv_hitout_wt = epv_hitout * max(weight_gm)
       ) %>%
       dplyr::select(-utc_start_time),
     by = c("player_id" = "player_id", "match_id" = "match_id")
   ) %>%
   dplyr::mutate(
-    recv_epv = tidyr::replace_na(recv_epv, 0), # + 0.15 * effective_disposals - bounces * 0.5,
-    recv_epv_wt = tidyr::replace_na(recv_epv_wt, 0),
-    disp_epv = tidyr::replace_na(disp_epv, 0) - (bounces * 0.2),
-    disp_epv_wt = tidyr::replace_na(disp_epv_wt, 0),
-    spoil_epv = tidyr::replace_na(spoil_epv, 0),
-    spoil_epv_wt = tidyr::replace_na(spoil_epv_wt, 0),
-    hitout_epv = tidyr::replace_na(hitout_epv, 0),
-    hitout_epv_wt = tidyr::replace_na(hitout_epv_wt, 0),
-    epv = recv_epv + disp_epv + spoil_epv + hitout_epv,
-    epv_wt = recv_epv_wt + disp_epv_wt + spoil_epv_wt + hitout_epv_wt,
+    epv_recv = tidyr::replace_na(epv_recv, 0), # + 0.15 * effective_disposals - bounces * 0.5,
+    epv_recv_wt = tidyr::replace_na(epv_recv_wt, 0),
+    epv_disp = tidyr::replace_na(epv_disp, 0) - (bounces * 0.2),
+    epv_disp_wt = tidyr::replace_na(epv_disp_wt, 0),
+    epv_spoil = tidyr::replace_na(epv_spoil, 0),
+    epv_spoil_wt = tidyr::replace_na(epv_spoil_wt, 0),
+    epv_hitout = tidyr::replace_na(epv_hitout, 0),
+    epv_hitout_wt = tidyr::replace_na(epv_hitout_wt, 0),
+    epv = epv_recv + epv_disp + epv_spoil + epv_hitout,
+    epv_wt = epv_recv_wt + epv_disp_wt + epv_spoil_wt + epv_hitout_wt,
     tot_wpa = recv_wpa + disp_wpa
   ) %>%
   dplyr::left_join(
@@ -120,15 +120,15 @@ plyr_gm_df <-
   dplyr::group_by(position) %>%
   dplyr::mutate(
     # epv_adj = epv - quantile(epv, 0.3, na.rm = T),
-    recv_epv_adj = recv_epv - quantile(recv_epv, 0.4, na.rm = T),
-    disp_epv_adj = disp_epv - quantile(disp_epv, 0.4, na.rm = T),
-    spoil_epv_adj = spoil_epv - quantile(spoil_epv, 0.4, na.rm = T),
-    hitout_epv_adj = hitout_epv - quantile(hitout_epv, 0.4, na.rm = T),
-    epv_adj = recv_epv_adj + disp_epv_adj + spoil_epv_adj + hitout_epv_adj
+    epv_recv_adj = epv_recv - quantile(epv_recv, 0.4, na.rm = T),
+    epv_disp_adj = epv_disp - quantile(epv_disp, 0.4, na.rm = T),
+    epv_spoil_adj = epv_spoil - quantile(epv_spoil, 0.4, na.rm = T),
+    epv_hitout_adj = epv_hitout - quantile(epv_hitout, 0.4, na.rm = T),
+    epv_adj = epv_recv_adj + epv_disp_adj + epv_spoil_adj + epv_hitout_adj
   ) %>%
   ungroup() %>%
   mutate(season = season.x) %>%
-  dplyr::relocate(epv_adj, disposals_pbp, recv_epv_adj, disp_epv_adj, spoil_epv_adj, hitout_epv_adj) %>%
+  dplyr::relocate(epv_adj, disposals_pbp, epv_recv_adj, epv_disp_adj, epv_spoil_adj, epv_hitout_adj) %>%
   dplyr::filter(!is.na(team))
 
 tictoc::toc()

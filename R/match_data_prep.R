@@ -112,17 +112,17 @@
   team_lineup_df <- team_lineup_df |>
     dplyr::mutate(
       epr = tidyr::replace_na(epr, torp_prior_total),
-      recv_epr = tidyr::replace_na(recv_epr, EPR_PRIOR_RATE_RECV),
-      disp_epr = tidyr::replace_na(disp_epr, EPR_PRIOR_RATE_DISP),
-      spoil_epr = tidyr::replace_na(spoil_epr, EPR_PRIOR_RATE_SPOIL),
-      hitout_epr = tidyr::replace_na(hitout_epr, EPR_PRIOR_RATE_HITOUT),
+      epr_recv = tidyr::replace_na(epr_recv, EPR_PRIOR_RATE_RECV),
+      epr_disp = tidyr::replace_na(epr_disp, EPR_PRIOR_RATE_DISP),
+      epr_spoil = tidyr::replace_na(epr_spoil, EPR_PRIOR_RATE_SPOIL),
+      epr_hitout = tidyr::replace_na(epr_hitout, EPR_PRIOR_RATE_HITOUT),
       lineup_tog = tidyr::replace_na(POSITION_AVG_TOG[lineup_position], POSITION_AVG_TOG_DEFAULT),
       .unknown_pos = !is.na(lineup_position) & is.na(POSITION_AVG_TOG[lineup_position]),
       epr = epr * lineup_tog,
-      recv_epr = recv_epr * lineup_tog,
-      disp_epr = disp_epr * lineup_tog,
-      spoil_epr = spoil_epr * lineup_tog,
-      hitout_epr = hitout_epr * lineup_tog
+      epr_recv = epr_recv * lineup_tog,
+      epr_disp = epr_disp * lineup_tog,
+      epr_spoil = epr_spoil * lineup_tog,
+      epr_hitout = epr_hitout * lineup_tog
     )
 
   n_unknown <- sum(team_lineup_df$.unknown_pos, na.rm = TRUE)
@@ -238,7 +238,7 @@
   }
 
   # Aggregate to team level
-  torp_sum_cols <- c("epr", "recv_epr", "disp_epr", "spoil_epr", "hitout_epr", "psr")
+  torp_sum_cols <- c("epr", "epr_recv", "epr_disp", "epr_spoil", "epr_hitout", "psr")
   if ("osr" %in% names(team_lineup_df)) torp_sum_cols <- c(torp_sum_cols, "osr", "dsr")
 
   team_rt_df <- team_lineup_df |>
@@ -267,7 +267,7 @@
 #' @keywords internal
 #' @importFrom purrr pmap_dbl
 .build_match_features <- function(fix_df, team_rt_df, all_grounds) {
-  torp_sum_cols <- c("epr", "recv_epr", "disp_epr", "spoil_epr", "hitout_epr", "psr")
+  torp_sum_cols <- c("epr", "epr_recv", "epr_disp", "epr_spoil", "epr_hitout", "psr")
   if ("osr" %in% names(team_rt_df)) torp_sum_cols <- c(torp_sum_cols, "osr", "dsr")
 
   # Add venue from fixtures (teams data doesn't carry venue)
@@ -348,7 +348,7 @@
       by = c("match_id", "team_id", "season", "round_number")
     ) |>
     dplyr::group_by(team_id) |>
-    tidyr::fill(epr, recv_epr, disp_epr, spoil_epr, hitout_epr, psr,
+    tidyr::fill(epr, epr_recv, epr_disp, epr_spoil, epr_hitout, psr,
                 dplyr::any_of(c("osr", "dsr"))) |>
     dplyr::mutate(
       def = ifelse(def == 0, dplyr::lag(def), def),
@@ -628,7 +628,7 @@
   # Opponent columns for self-join
   opp_cols <- c(
     "match_id", "team_type",
-    "epr", "recv_epr", "disp_epr", "spoil_epr", "hitout_epr", "psr",
+    "epr", "epr_recv", "epr_disp", "epr_spoil", "epr_hitout", "psr",
     intersect(c("osr", "dsr"), names(team_rt_fix_df)),
     "def", "mid", "fwd", "int", MATCH_INDIVIDUAL_POS,
     "team_name", "team_name_season",
@@ -657,10 +657,10 @@
     dplyr::mutate(
       epr_diff = epr.x - epr.y,
       epr_ratio = log(pmax(epr.x, 0.01) / pmax(epr.y, 0.01)),
-      epr_recv_diff = recv_epr.x - recv_epr.y,
-      epr_disp_diff = disp_epr.x - disp_epr.y,
-      epr_spoil_diff = spoil_epr.x - spoil_epr.y,
-      epr_hitout_diff = hitout_epr.x - hitout_epr.y,
+      epr_recv_diff = epr_recv.x - epr_recv.y,
+      epr_disp_diff = epr_disp.x - epr_disp.y,
+      epr_spoil_diff = epr_spoil.x - epr_spoil.y,
+      epr_hitout_diff = epr_hitout.x - epr_hitout.y,
       psr_diff = psr.x - psr.y,
       osr_diff = if ("osr.x" %in% names(team_mdl_df_tot)) osr.x - osr.y else NA_real_,
       dsr_diff = if ("dsr.x" %in% names(team_mdl_df_tot)) dsr.x - dsr.y else NA_real_,

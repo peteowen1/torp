@@ -27,7 +27,7 @@
       "Ground B", "Ground B", "M.C.G.",
       "M.C.G.", "M.C.G.", "M.C.G."
     ),
-    epr = 10, recv_epr = 2.5, disp_epr = 2.5, spoil_epr = 2.5, hitout_epr = 2.5,
+    epr = 10, epr_recv = 2.5, epr_disp = 2.5, epr_spoil = 2.5, epr_hitout = 2.5,
     psr = 5, count = 22L,
     stringsAsFactors = FALSE
   )
@@ -36,8 +36,8 @@
     team_name = c("Team A", "Team B", "Team C"),
     season = 2026L, round_number = 4L,
     venue = c("Ground A", "Ground B", "M.C.G."),
-    epr = c(12, 8, 6), recv_epr = c(3, 2, 1.5), disp_epr = c(3, 2, 1.5),
-    spoil_epr = c(3, 2, 1.5), hitout_epr = c(3, 2, 1.5),
+    epr = c(12, 8, 6), epr_recv = c(3, 2, 1.5), epr_disp = c(3, 2, 1.5),
+    epr_spoil = c(3, 2, 1.5), epr_hitout = c(3, 2, 1.5),
     psr = c(6, 4, 2), count = 22L,
     stringsAsFactors = FALSE
   )

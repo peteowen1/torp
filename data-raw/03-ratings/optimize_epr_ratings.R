@@ -426,10 +426,10 @@ cat("Compiling Rcpp cumulative decay kernel...\n")
 Rcpp::cppFunction('
 Rcpp::List cumulative_decay_cpp(Rcpp::IntegerVector pids,
                                 Rcpp::NumericVector dnums,
-                                Rcpp::NumericVector recv_epv,
-                                Rcpp::NumericVector disp_epv,
-                                Rcpp::NumericVector spoil_epv,
-                                Rcpp::NumericVector hitout_epv,
+                                Rcpp::NumericVector epv_recv,
+                                Rcpp::NumericVector epv_disp,
+                                Rcpp::NumericVector epv_spoil,
+                                Rcpp::NumericVector epv_hitout,
                                 Rcpp::NumericVector tog,
                                 double decay_r, double decay_d,
                                 double decay_s, double decay_h) {
@@ -440,8 +440,8 @@ Rcpp::List cumulative_decay_cpp(Rcpp::IntegerVector pids,
   // TOG-weighted: sums accumulate epv * tog (game total),
   // weights accumulate tog (weighted minutes)
   double t0 = tog[0];
-  cr[0] = recv_epv[0] * t0; cd[0] = disp_epv[0] * t0;
-  cs[0] = spoil_epv[0] * t0; ch[0] = hitout_epv[0] * t0;
+  cr[0] = epv_recv[0] * t0; cd[0] = epv_disp[0] * t0;
+  cs[0] = epv_spoil[0] * t0; ch[0] = epv_hitout[0] * t0;
   cw_r[0] = t0; cw_d[0] = t0; cw_s[0] = t0; cw_h[0] = t0;
 
   for (int i = 1; i < n; i++) {
@@ -452,17 +452,17 @@ Rcpp::List cumulative_decay_cpp(Rcpp::IntegerVector pids,
       double df_d = std::exp(-gap / decay_d);
       double df_s = std::exp(-gap / decay_s);
       double df_h = std::exp(-gap / decay_h);
-      cr[i] = cr[i-1] * df_r + recv_epv[i] * ti;
-      cd[i] = cd[i-1] * df_d + disp_epv[i] * ti;
-      cs[i] = cs[i-1] * df_s + spoil_epv[i] * ti;
-      ch[i] = ch[i-1] * df_h + hitout_epv[i] * ti;
+      cr[i] = cr[i-1] * df_r + epv_recv[i] * ti;
+      cd[i] = cd[i-1] * df_d + epv_disp[i] * ti;
+      cs[i] = cs[i-1] * df_s + epv_spoil[i] * ti;
+      ch[i] = ch[i-1] * df_h + epv_hitout[i] * ti;
       cw_r[i] = cw_r[i-1] * df_r + ti;
       cw_d[i] = cw_d[i-1] * df_d + ti;
       cw_s[i] = cw_s[i-1] * df_s + ti;
       cw_h[i] = cw_h[i-1] * df_h + ti;
     } else {
-      cr[i] = recv_epv[i] * ti; cd[i] = disp_epv[i] * ti;
-      cs[i] = spoil_epv[i] * ti; ch[i] = hitout_epv[i] * ti;
+      cr[i] = epv_recv[i] * ti; cd[i] = epv_disp[i] * ti;
+      cs[i] = epv_spoil[i] * ti; ch[i] = epv_hitout[i] * ti;
       cw_r[i] = ti; cw_d[i] = ti; cw_s[i] = ti; cw_h[i] = ti;
     }
   }
@@ -492,14 +492,14 @@ soft_quantile <- function(x, q, bandwidth = 0.05) {
 
 
 #' Compute EPV (expected point value) from raw components given params
-#' Returns a data.table with player_id, match_id, date, disp_epv, recv_epv,
-#' spoil_epv, hitout_epv (before position adjustment)
+#' Returns a data.table with player_id, match_id, date, epv_disp, epv_recv,
+#' epv_spoil, epv_hitout (before position adjustment)
 compute_epv <- function(pgr, params, verbose = FALSE) {
   out <- data.table::copy(pgr)
   p <- params
 
   # Disposal EPV
-  out[, disp_epv := (sum_depv_neg + n_neg * p["disp_neg_offset"]) * p["disp_scale"] +
+  out[, epv_disp := (sum_depv_neg + n_neg * p["disp_neg_offset"]) * p["disp_scale"] +
                     (sum_depv_pos + n_pos * p["disp_pos_offset"]) * p["disp_scale"] +
                     inside50s * p["inside50s_wt"] + clangers * p["clangers_wt"] +
                     score_inv * p["score_involvements_wt"] +
@@ -510,7 +510,7 @@ compute_epv <- function(pgr, params, verbose = FALSE) {
                     shots_at_goal * p["shots_at_goal_wt"]]
 
   # Reception EPV (intercept marks get separate scale)
-  out[, recv_epv := (p["recv_neg_mult"] * sum_depv_pt_neg + n_recv_neg * p["recv_neg_offset"]) * p["recv_scale"] +
+  out[, epv_recv := (p["recv_neg_mult"] * sum_depv_pt_neg + n_recv_neg * p["recv_neg_offset"]) * p["recv_scale"] +
                     (p["recv_neg_mult"] * sum_depv_pt_neg_im + n_recv_neg_im * p["recv_neg_offset"]) * p["recv_intercept_mark_scale"] +
                     (p["recv_pos_mult"] * sum_depv_pt_pos + n_recv_pos * p["recv_pos_offset"]) * p["recv_scale"] +
                     contested_poss * p["contested_poss_wt"] + contested_marks * p["contested_marks_wt"] +
@@ -519,13 +519,13 @@ compute_epv <- function(pgr, params, verbose = FALSE) {
                     frees_for * p["frees_for_wt"]]
 
   # Spoil EPV
-  out[, spoil_epv := spoils * p["spoil_wt"] + tackles * p["tackle_wt"] +
+  out[, epv_spoil := spoils * p["spoil_wt"] + tackles * p["tackle_wt"] +
                      pressure_acts * p["pressure_wt"] + def_pressure * p["def_pressure_wt"] +
                      intercepts * p["intercepts_wt"] + one_percenters * p["one_percenters_wt"] +
                      rebound50s * p["rebound50s_wt"] + frees_against * p["frees_against_wt"]]
 
   # Hitout EPV
-  out[, hitout_epv := hitouts * p["hitout_wt"] + hitouts_adv * p["hitout_adv_wt"] +
+  out[, epv_hitout := hitouts * p["hitout_wt"] + hitouts_adv * p["hitout_adv_wt"] +
                       ruck_contests * p["ruck_contest_wt"]]
 
   # Contest EPV (pre-computed, scaled by optimizer)
@@ -536,10 +536,10 @@ compute_epv <- function(pgr, params, verbose = FALSE) {
   # Must happen BEFORE position adjustment so it operates on per-80 rates
   # (otherwise low-TOG players have the per-game adjustment amplified by 1/tog_safe).
   out[, `:=`(
-    recv_epv   = recv_epv   / tog_safe,
-    disp_epv   = disp_epv   / tog_safe,
-    spoil_epv  = spoil_epv  / tog_safe,
-    hitout_epv = hitout_epv / tog_safe,
+    epv_recv   = epv_recv   / tog_safe,
+    epv_disp   = epv_disp   / tog_safe,
+    epv_spoil  = epv_spoil  / tog_safe,
+    epv_hitout = epv_hitout / tog_safe,
     contest_epv_scaled = contest_epv_scaled / tog_safe
   )]
 
@@ -554,10 +554,10 @@ compute_epv <- function(pgr, params, verbose = FALSE) {
       idx <- out$position_group == pg & !is.na(out$position_group)
       cat(sprintf("  %-18s %+8.3f %+8.3f %+8.3f %+8.3f
 ", pg,
-        mean(out$recv_epv[idx], na.rm = TRUE),
-        mean(out$disp_epv[idx], na.rm = TRUE),
-        mean(out$spoil_epv[idx], na.rm = TRUE),
-        mean(out$hitout_epv[idx], na.rm = TRUE)))
+        mean(out$epv_recv[idx], na.rm = TRUE),
+        mean(out$epv_disp[idx], na.rm = TRUE),
+        mean(out$epv_spoil[idx], na.rm = TRUE),
+        mean(out$epv_hitout[idx], na.rm = TRUE)))
     }
   }
   # TOG-weighted centering by (position_group, season) to match
@@ -567,10 +567,10 @@ compute_epv <- function(pgr, params, verbose = FALSE) {
   # Weighting by tog_safe prevents low-TOG players with noisy per-80 rates
   # from swinging the mean.
   out[!is.na(position_group), `:=`(
-    recv_epv   = recv_epv   - weighted.mean(recv_epv, tog_safe, na.rm = TRUE),
-    disp_epv   = disp_epv   - weighted.mean(disp_epv, tog_safe, na.rm = TRUE),
-    spoil_epv  = spoil_epv  - weighted.mean(spoil_epv, tog_safe, na.rm = TRUE),
-    hitout_epv = hitout_epv - weighted.mean(hitout_epv, tog_safe, na.rm = TRUE),
+    epv_recv   = epv_recv   - weighted.mean(epv_recv, tog_safe, na.rm = TRUE),
+    epv_disp   = epv_disp   - weighted.mean(epv_disp, tog_safe, na.rm = TRUE),
+    epv_spoil  = epv_spoil  - weighted.mean(epv_spoil, tog_safe, na.rm = TRUE),
+    epv_hitout = epv_hitout - weighted.mean(epv_hitout, tog_safe, na.rm = TRUE),
     contest_epv_scaled = contest_epv_scaled - weighted.mean(contest_epv_scaled, tog_safe, na.rm = TRUE)
   ), by = .(position_group, season)]
 
@@ -579,7 +579,7 @@ compute_epv <- function(pgr, params, verbose = FALSE) {
 
 #' Compute cumulative decay-weighted sums per player
 #'
-#' @param epv_dt EPV-assigned player-game data (with recv_epv, disp_epv, etc.)
+#' @param epv_dt EPV-assigned player-game data (with epv_recv, epv_disp, etc.)
 #' @param decay_recv Decay factor in days for receiving
 #' @param decay_disp Decay factor in days for disposal
 #' @param decay_spoil Decay factor in days for spoil
@@ -603,8 +603,8 @@ compute_cumulative <- function(epv_dt, decay_recv, decay_disp = decay_recv,
     for (i in seq_len(n)) {
       ti <- tog_safe[i]
       if (i == 1) {
-        cr[i] <- recv_epv[i] * ti; cd[i] <- disp_epv[i] * ti
-        cs[i] <- spoil_epv[i] * ti; ch[i] <- hitout_epv[i] * ti
+        cr[i] <- epv_recv[i] * ti; cd[i] <- epv_disp[i] * ti
+        cs[i] <- epv_spoil[i] * ti; ch[i] <- epv_hitout[i] * ti
         cc[i] <- contest_epv_scaled[i] * ti
         cw_r[i] <- ti; cw_d[i] <- ti; cw_s[i] <- ti; cw_h[i] <- ti; cw_c[i] <- ti
       } else {
@@ -614,10 +614,10 @@ compute_cumulative <- function(epv_dt, decay_recv, decay_disp = decay_recv,
         df_s <- exp(-gap / decay_spoil)
         df_h <- exp(-gap / decay_hitout)
         df_c <- exp(-gap / decay_contest)
-        cr[i] <- cr[i - 1] * df_r + recv_epv[i] * ti
-        cd[i] <- cd[i - 1] * df_d + disp_epv[i] * ti
-        cs[i] <- cs[i - 1] * df_s + spoil_epv[i] * ti
-        ch[i] <- ch[i - 1] * df_h + hitout_epv[i] * ti
+        cr[i] <- cr[i - 1] * df_r + epv_recv[i] * ti
+        cd[i] <- cd[i - 1] * df_d + epv_disp[i] * ti
+        cs[i] <- cs[i - 1] * df_s + epv_spoil[i] * ti
+        ch[i] <- ch[i - 1] * df_h + epv_hitout[i] * ti
         cc[i] <- cc[i - 1] * df_c + contest_epv_scaled[i] * ti
         cw_r[i] <- cw_r[i - 1] * df_r + ti
         cw_d[i] <- cw_d[i - 1] * df_d + ti
@@ -666,7 +666,7 @@ objective_fn_fast <- function(par, env) {
   p <- par
 
   # --- Compute per-game EPV directly on sorted vectors (no copy) ---
-  disp_epv <- (env$sum_depv_neg + env$n_neg * p["disp_neg_offset"]) * p["disp_scale"] +
+  epv_disp <- (env$sum_depv_neg + env$n_neg * p["disp_neg_offset"]) * p["disp_scale"] +
               (env$sum_depv_pos + env$n_pos * p["disp_pos_offset"]) * p["disp_scale"] +
               env$inside50s * p["inside50s_wt"] +
               env$clangers * p["clangers_wt"] +
@@ -680,7 +680,7 @@ objective_fn_fast <- function(par, env) {
               env$behinds * p["behinds_wt"] +
               env$shots_at_goal * p["shots_at_goal_wt"]
 
-  recv_epv <- (p["recv_neg_mult"] * env$sum_depv_pt_neg + env$n_recv_neg * p["recv_neg_offset"]) * p["recv_scale"] +
+  epv_recv <- (p["recv_neg_mult"] * env$sum_depv_pt_neg + env$n_recv_neg * p["recv_neg_offset"]) * p["recv_scale"] +
               (p["recv_neg_mult"] * env$sum_depv_pt_neg_im + env$n_recv_neg_im * p["recv_neg_offset"]) * p["recv_intercept_mark_scale"] +
               (p["recv_pos_mult"] * env$sum_depv_pt_pos + env$n_recv_pos * p["recv_pos_offset"]) * p["recv_scale"] +
               env$contested_poss * p["contested_poss_wt"] +
@@ -691,7 +691,7 @@ objective_fn_fast <- function(par, env) {
               env$uncontested_poss * p["uncontested_poss_wt"] +
               env$frees_for * p["frees_for_wt"]
 
-  spoil_epv <- env$spoils * p["spoil_wt"] +
+  epv_spoil <- env$spoils * p["spoil_wt"] +
                env$tackles * p["tackle_wt"] +
                env$pressure_acts * p["pressure_wt"] +
                env$def_pressure * p["def_pressure_wt"] +
@@ -700,7 +700,7 @@ objective_fn_fast <- function(par, env) {
                env$intercepts * p["intercepts_wt"] +
                env$rebound50s * p["rebound50s_wt"]
 
-  hitout_epv <- env$hitouts * p["hitout_wt"] +
+  epv_hitout <- env$hitouts * p["hitout_wt"] +
                 env$hitouts_adv * p["hitout_adv_wt"] +
                 env$ruck_contests * p["ruck_contest_wt"]
 
@@ -710,13 +710,13 @@ objective_fn_fast <- function(par, env) {
 
   # Per-80 normalisation first (before position adjustment, so adjustment
   # operates on per-80 rates rather than inflating per-game adjustments)
-  disp_epv <- disp_epv / env$tog_safe; recv_epv <- recv_epv / env$tog_safe
-  spoil_epv <- spoil_epv / env$tog_safe; hitout_epv <- hitout_epv / env$tog_safe
+  epv_disp <- epv_disp / env$tog_safe; epv_recv <- epv_recv / env$tog_safe
+  epv_spoil <- epv_spoil / env$tog_safe; epv_hitout <- epv_hitout / env$tog_safe
   contest_epv <- contest_epv / env$tog_safe
 
   # Replace any NaN/NA EPV with 0
-  disp_epv[is.na(disp_epv)] <- 0; recv_epv[is.na(recv_epv)] <- 0
-  spoil_epv[is.na(spoil_epv)] <- 0; hitout_epv[is.na(hitout_epv)] <- 0
+  epv_disp[is.na(epv_disp)] <- 0; epv_recv[is.na(epv_recv)] <- 0
+  epv_spoil[is.na(epv_spoil)] <- 0; epv_hitout[is.na(epv_hitout)] <- 0
   contest_epv[is.na(contest_epv)] <- 0
 
   # TOG-weighted position-season mean subtraction
@@ -725,10 +725,10 @@ objective_fn_fast <- function(par, env) {
     if (length(idx) > 0) {
       w <- env$tog_safe[idx]
       ws <- sum(w)
-      recv_epv[idx]   <- recv_epv[idx]   - sum(recv_epv[idx] * w) / ws
-      disp_epv[idx]   <- disp_epv[idx]   - sum(disp_epv[idx] * w) / ws
-      spoil_epv[idx]  <- spoil_epv[idx]  - sum(spoil_epv[idx] * w) / ws
-      hitout_epv[idx] <- hitout_epv[idx] - sum(hitout_epv[idx] * w) / ws
+      epv_recv[idx]   <- epv_recv[idx]   - sum(epv_recv[idx] * w) / ws
+      epv_disp[idx]   <- epv_disp[idx]   - sum(epv_disp[idx] * w) / ws
+      epv_spoil[idx]  <- epv_spoil[idx]  - sum(epv_spoil[idx] * w) / ws
+      epv_hitout[idx] <- epv_hitout[idx] - sum(epv_hitout[idx] * w) / ws
       contest_epv[idx] <- contest_epv[idx] - sum(contest_epv[idx] * w) / ws
     }
   }
@@ -739,8 +739,8 @@ objective_fn_fast <- function(par, env) {
   pids <- env$pgr_s$player_id
   dnums <- env$pgr_s$date_num
 
-  cum <- cumulative_decay_cpp(pids, dnums, recv_epv, disp_epv,
-                              spoil_epv, hitout_epv, env$tog_safe,
+  cum <- cumulative_decay_cpp(pids, dnums, epv_recv, epv_disp,
+                              epv_spoil, epv_hitout, env$tog_safe,
                               decay_r, decay_d, decay_s, decay_h)
   cr <- cum$cr; cd <- cum$cd; cs <- cum$cs; ch <- cum$ch
   cw_r <- cum$cw_r; cw_d <- cum$cw_d; cw_s <- cum$cw_s; cw_h <- cum$cw_h

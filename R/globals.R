@@ -62,11 +62,11 @@ utils::globalVariables(c(
   "position_group", "lineup_position", "listed_position",
 
   # TORP rating variables
-  "torp", "torp_shift", "epr", "recv_epr", "disp_epr", "spoil_epr", "hitout_epr",
+  "torp", "torp_shift", "epr", "epr_recv", "epr_disp", "epr_spoil", "epr_hitout",
   "torp_home_round", "torp_away_round", "home_torp", "away_torp",
-  "epv_adj", "recv_epv_adj", "recv_sum",
-  "disp_epv_adj", "disp_sum", "spoil_epv_adj", "spoil_sum",
-  "hitout_epv_adj", "hitout_sum", "weight_gm", "wt_gms", "wt_tog", "tog_sum", "utc_start_time",
+  "epv_adj", "epv_recv_adj", "recv_sum",
+  "epv_disp_adj", "disp_sum", "epv_spoil_adj", "spoil_sum",
+  "epv_hitout_adj", "hitout_sum", "weight_gm", "wt_gms", "wt_tog", "tog_sum", "utc_start_time",
   "days_diff", "wt_recv", "wt_disp", "wt_spoil", "wt_hitout",
   "wt_gms_recv", "wt_gms_disp", "wt_gms_spoil", "wt_gms_hitout",
   "pred_tog", "pred_selection", "pred_cond_tog",
@@ -92,7 +92,7 @@ utils::globalVariables(c(
 
   # create_player_game_data variables
   "delta_epv", "pos_team", "wpa", "home_away", "lead_player", "lead_player_id", "is_intercept_mark", "lead_desc_tot",
-  "round_week", "opp_tm", "recv_epv", "disp_epv", "spoil_epv", "hitout_epv",
+  "round_week", "opp_tm", "epv_recv", "epv_disp", "epv_spoil", "epv_hitout",
   "epv", "receptions", "disposals_pbp", "opponent",
   "bounces", "hitouts",
   "position", "round_number",
@@ -239,9 +239,9 @@ utils::globalVariables(c(
   "return_round", "player_boost", "..pr_cols", "..rat_cols", "player",
   "injury", "estimated_return", "player_norm", "tm_rnk",
   "scraped_at", "updated", "round_start", "key",
-  "tog_frac", "epv_p80", "recv_epv_p80", "disp_epv_p80", "spoil_epv_p80", "hitout_epv_p80",
-  "epv_raw", "recv_epv_raw", "disp_epv_raw", "spoil_epv_raw", "hitout_epv_raw",
-  "epv_c", "recv_epv_c", "disp_epv_c", "spoil_epv_c", "hitout_epv_c",
+  "tog_frac", "epv_p80", "epv_recv_p80", "epv_disp_p80", "epv_spoil_p80", "epv_hitout_p80",
+  "epv_raw", "epv_recv_raw", "epv_disp_raw", "epv_spoil_raw", "epv_hitout_raw",
+  "epv_c", "epv_recv_c", "epv_disp_c", "epv_spoil_c", "epv_hitout_c",
   "epv_pg", "avg_tog"
 ))
 
@@ -322,9 +322,9 @@ utils::globalVariables(c(
   "team_name_adj", "home_ground", "venue_adj",
 
   # .x/.y suffixed columns from self-join
-  "epr.x", "epr.y", "recv_epr.x", "recv_epr.y",
-  "disp_epr.x", "disp_epr.y", "spoil_epr.x", "spoil_epr.y",
-  "hitout_epr.x", "hitout_epr.y",
+  "epr.x", "epr.y", "epr_recv.x", "epr_recv.y",
+  "epr_disp.x", "epr_disp.y", "epr_spoil.x", "epr_spoil.y",
+  "epr_hitout.x", "epr_hitout.y",
   "def.x", "def.y", "mid.x", "mid.y", "fwd.x", "fwd.y", "int.x", "int.y",
   # Per-position .x/.y merge columns are unused (vectorised access replaced
   # them); only the position aggregates above are still referenced.
@@ -399,7 +399,7 @@ utils::globalVariables(c(
   "league_avg", ".tog_safe", ".team_tog", ".tog_share",
   ".player_adj", ".abs_total", "game_date", "decay_wt",
   # EPV _oadj columns
-  "recv_epv_oadj", "disp_epv_oadj", "spoil_epv_oadj", "hitout_epv_oadj", "epv_oadj"
+  "epv_recv_oadj", "epv_disp_oadj", "epv_spoil_oadj", "epv_hitout_oadj", "epv_oadj"
 ))
 
 # Match simulation variables

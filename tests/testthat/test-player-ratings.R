@@ -60,10 +60,10 @@ test_that("calculate_epr_stats helper function works", {
     match_id = c("CD_M2024014101", "CD_M2024014102", "CD_M2024014101", "CD_M2024014102"),
     utc_start_time = rep(as.Date("2024-04-01"), 4),
     epv_adj = c(100, 120, 80, 90),
-    recv_epv_adj = c(20, 25, 15, 18),
-    disp_epv_adj = c(40, 45, 35, 38),
-    spoil_epv_adj = c(10, 12, 8, 9),
-    hitout_epv_adj = c(5, 8, 0, 0),
+    epv_recv_adj = c(20, 25, 15, 18),
+    epv_disp_adj = c(40, 45, 35, 38),
+    epv_spoil_adj = c(10, 12, 8, 9),
+    epv_hitout_adj = c(5, 8, 0, 0),
     time_on_ground_percentage = c(82, 78, 90, 85),
     position_group = c("Midfielder", "Midfielder", "Forward", "Forward"),
     stringsAsFactors = FALSE
@@ -100,10 +100,10 @@ test_that("calculate_epr_stats returns expected structure with valid data", {
     match_id = rep(c("CD_M2024014101", "CD_M2024014102", "CD_M2024014103", "CD_M2024014104"), 5),
     utc_start_time = rep(as.Date("2024-04-01") + c(0, 7, 14, 21), 5),
     epv_adj = runif(20, 50, 150),
-    recv_epv_adj = runif(20, 10, 50),
-    disp_epv_adj = runif(20, 20, 80),
-    spoil_epv_adj = runif(20, 0, 20),
-    hitout_epv_adj = runif(20, 0, 30),
+    epv_recv_adj = runif(20, 10, 50),
+    epv_disp_adj = runif(20, 20, 80),
+    epv_spoil_adj = runif(20, 0, 20),
+    epv_hitout_adj = runif(20, 0, 30),
     time_on_ground_percentage = runif(20, 60, 95),
     position_group = sample(c("FWD", "MID", "DEF", "RUC"), 20, replace = TRUE),
     stringsAsFactors = FALSE
@@ -122,8 +122,8 @@ test_that("calculate_epr_stats returns expected structure with valid data", {
   expect_true(is.data.frame(result) || data.table::is.data.table(result))
   expect_true("player_id" %in% names(result))
   expect_true("epr" %in% names(result))
-  expect_true("recv_epr" %in% names(result) || "recv_epr_adj" %in% names(result))
-  expect_true("disp_epr" %in% names(result) || "disp_epr_adj" %in% names(result))
+  expect_true("epr_recv" %in% names(result) || "epr_recv_adj" %in% names(result))
+  expect_true("epr_disp" %in% names(result) || "epr_disp_adj" %in% names(result))
 
   # Should have 5 unique players
   expect_equal(nrow(result), 5)
@@ -137,10 +137,10 @@ test_that("calculate_epr_stats respects decay parameter", {
     match_id = c("CD_M2024014101", "CD_M2024014102", "CD_M2024014103"),
     utc_start_time = as.Date("2024-04-01") + c(0, 30, 60),  # 0, 30, 60 days apart
     epv_adj = c(100, 100, 100),
-    recv_epv_adj = c(50, 50, 50),
-    disp_epv_adj = c(50, 50, 50),
-    spoil_epv_adj = c(10, 10, 10),
-    hitout_epv_adj = c(5, 5, 5),
+    epv_recv_adj = c(50, 50, 50),
+    epv_disp_adj = c(50, 50, 50),
+    epv_spoil_adj = c(10, 10, 10),
+    epv_hitout_adj = c(5, 5, 5),
     time_on_ground_percentage = c(80, 85, 75),
     position_group = rep("MID", 3),
     stringsAsFactors = FALSE
@@ -226,10 +226,10 @@ test_that("wt_gms sums per-match weights correctly for same-day games", {
     match_id = c("CD_M2024014101", "CD_M2024014102"),
     utc_start_time = rep(as.Date("2024-04-01"), 2),
     epv_adj = c(100, 80),
-    recv_epv_adj = c(20, 15),
-    disp_epv_adj = c(40, 35),
-    spoil_epv_adj = c(10, 8),
-    hitout_epv_adj = c(5, 3),
+    epv_recv_adj = c(20, 15),
+    epv_disp_adj = c(40, 35),
+    epv_spoil_adj = c(10, 8),
+    epv_hitout_adj = c(5, 3),
     time_on_ground_percentage = c(88, 76),
     position_group = rep("MID", 2),
     stringsAsFactors = FALSE
@@ -273,10 +273,10 @@ test_that("TOG-weighted average adjustment produces correct math", {
     match_id = rep(c("CD_M2024014101", "CD_M2024014102"), 3),
     utc_start_time = rep(as.Date("2024-04-01"), 6),
     epv_adj = c(100, 100, 80, 80, 60, 60),
-    recv_epv_adj = c(30, 30, 20, 20, 10, 10),
-    disp_epv_adj = c(40, 40, 30, 30, 20, 20),
-    spoil_epv_adj = c(10, 10, 8, 8, 5, 5),
-    hitout_epv_adj = c(5, 5, 3, 3, 0, 0),
+    epv_recv_adj = c(30, 30, 20, 20, 10, 10),
+    epv_disp_adj = c(40, 40, 30, 30, 20, 20),
+    epv_spoil_adj = c(10, 10, 8, 8, 5, 5),
+    epv_hitout_adj = c(5, 5, 3, 3, 0, 0),
     time_on_ground_percentage = c(85, 80, 75, 70, 90, 88),
     position_group = rep("MID", 6),
     stringsAsFactors = FALSE
@@ -305,7 +305,7 @@ test_that("TOG-weighted average adjustment produces correct math", {
   adj[is.na(tog_rating), tog_rating := 0]
 
   tot_tog <- sum(adj$tog_rating)
-  comps <- c("recv_epr", "disp_epr", "spoil_epr", "hitout_epr")
+  comps <- c("epr_recv", "epr_disp", "epr_spoil", "epr_hitout")
   for (comp in comps) {
     avg_val <- sum(adj[[comp]] * adj$tog_rating) / tot_tog
     data.table::set(adj, j = comp, value = adj[[comp]] - avg_val)
@@ -319,7 +319,7 @@ test_that("TOG-weighted average adjustment produces correct math", {
   }
 
   # Verify: adjustment shifts values (high-TOG player 1 should still be highest)
-  expect_true(adj$recv_epr[adj$player_id == 1] > adj$recv_epr[adj$player_id == 3])
+  expect_true(adj$epr_recv[adj$player_id == 1] > adj$epr_recv[adj$player_id == 3])
 })
 
 test_that("TOG adjustment is skipped when all tog_rating values are zero", {
@@ -329,10 +329,10 @@ test_that("TOG adjustment is skipped when all tog_rating values are zero", {
     match_id = rep(c("CD_M2024014101", "CD_M2024014102"), 2),
     utc_start_time = rep(as.Date("2024-04-01"), 4),
     epv_adj = c(100, 100, 80, 80),
-    recv_epv_adj = c(30, 30, 20, 20),
-    disp_epv_adj = c(40, 40, 30, 30),
-    spoil_epv_adj = c(10, 10, 8, 8),
-    hitout_epv_adj = c(5, 5, 0, 0),
+    epv_recv_adj = c(30, 30, 20, 20),
+    epv_disp_adj = c(40, 40, 30, 30),
+    epv_spoil_adj = c(10, 10, 8, 8),
+    epv_hitout_adj = c(5, 5, 0, 0),
     time_on_ground_percentage = c(82, 79, 88, 84),
     position_group = rep("MID", 4),
     stringsAsFactors = FALSE
@@ -363,7 +363,7 @@ test_that("TOG adjustment is skipped when all tog_rating values are zero", {
   expect_equal(tot_tog, 0)
 
   # Values unchanged when tot_tog == 0
-  expect_equal(adj$recv_epr, unadj$recv_epr)
+  expect_equal(adj$epr_recv, unadj$epr_recv)
 })
 
 # -----------------------------------------------------------------------------

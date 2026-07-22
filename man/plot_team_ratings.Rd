@@ -15,7 +15,7 @@ plot_team_ratings(
 loads via \code{load_team_ratings()} and filters to the latest round.}
 
 \item{metric}{One of \code{"epr"} (default), \code{"recv"}, \code{"disp"}, \code{"spoil"},
-or \code{"hitout"}. Mapped to \code{team_epr}, \code{team_recv}, etc.}
+or \code{"hitout"}. Mapped to \code{team_epr}, \code{team_epr_recv}, etc.}
 
 \item{season}{Season year for title. Default: current season.}
 }
