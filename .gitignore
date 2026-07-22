@@ -20,6 +20,9 @@ data-raw/rsconnect/
 # Generated model outputs
 data-raw/outputs/
 
+# Rendered explainer HTML (self-contained, ~5MB embedded)
+data-raw/explainer/*.html
+
 # Cached model files (from torpmodels)
 inst/models/
 
