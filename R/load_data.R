@@ -108,28 +108,46 @@ save_to_release <- function(df, file_name, release_tag, also_csv = FALSE, prev_r
   # T12: post-upload verify -- confirm the asset is actually on the release
   # with the size we just wrote, via an uncached listing call. Catches races
   # / silent-drop scenarios that a 2xx from pb_upload alone wouldn't
-  # surface. A failure to even LIST (vb_error_transient from vb_list_assets
-  # itself) only warns -- it's evidence the verify call flaked, not that
-  # the upload did. A listing that succeeds but confirms the asset is
-  # genuinely missing or wrong-sized is a real integrity signal and still
-  # aborts, now as a loud diagnostic after cache invalidation/manifest
-  # publish have already run rather than silently skipping them.
-  listed <- tryCatch(vb_list_assets(repo, release_tag), error = function(e) {
-    cli::cli_warn("Post-upload verify could not list {repo}@{release_tag} ({conditionMessage(e)}) -- upload itself already succeeded, proceeding")
-    NULL
-  })
-  if (!is.null(listed)) {
+  # surface. Retried via .vb_retry() (torpdata#74): GitHub's release-asset
+  # listing can lag the upload by a few seconds (eventual consistency),
+  # which otherwise reads as a spurious missing/wrong-sized asset on the
+  # very next call even though the upload itself was fine. A failure to
+  # even LIST after retries (vb_error_transient from vb_list_assets itself)
+  # only warns -- it's evidence the verify call flaked, not that the upload
+  # did. A listing that still confirms the asset is genuinely missing or
+  # wrong-sized after retries is a real integrity signal and still aborts,
+  # now as a loud diagnostic after cache invalidation/manifest publish have
+  # already run rather than silently skipping them.
+  verify_upload <- function() {
+    listed <- tryCatch(
+      vb_list_assets(repo, release_tag),
+      error = function(e) {
+        .vb_abort("Post-upload verify could not list {repo}@{release_tag}: {conditionMessage(e)}",
+                  c("vb_error_transient", "vb_verify_list_failed"), parent = e)
+      }
+    )
     row <- listed[listed$name == f_name, , drop = FALSE]
     if (nrow(row) == 0L) {
-      cli::cli_abort("Post-upload verify: {.val {f_name}} missing from {repo}@{release_tag} listing after upload",
-                     class = c("vb_error_transient", "vb_error"))
+      .vb_abort("Post-upload verify: {.val {f_name}} missing from {repo}@{release_tag} listing after upload",
+                "vb_error_transient")
     }
     local_bytes <- as.numeric(file.size(tf))
     if (!isTRUE(all.equal(as.numeric(row$size[1L]), local_bytes))) {
-      cli::cli_abort("Post-upload verify: {.val {f_name}} listed size {row$size[1L]} != local {local_bytes}",
-                     class = c("vb_error_integrity", "vb_error"))
+      .vb_abort("Post-upload verify: {.val {f_name}} listed size {row$size[1L]} != local {local_bytes}",
+                "vb_error_integrity")
     }
+    invisible(TRUE)
   }
+  tryCatch(
+    .vb_retry(verify_upload, should_retry = function(e) vb_classify_error(e) != "absent"),
+    error = function(e) {
+      if (inherits(e, "vb_verify_list_failed")) {
+        cli::cli_warn("Post-upload verify could not list {repo}@{release_tag} after retries ({conditionMessage(e)}) -- upload itself already succeeded, proceeding")
+      } else {
+        stop(e)
+      }
+    }
+  )
 
   if (also_csv) {
     csv_name <- paste0(file_name, ".csv")
