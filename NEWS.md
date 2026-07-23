@@ -1,3 +1,9 @@
+# torp 1.3.6 (2026-07-23)
+
+## Bug Fixes
+
+* **`save_to_release()` post-upload verify aborted on GitHub release-asset listing lag (torpdata#74)** — the daily data release failed two days running (2026-07-21, 2026-07-22) when a fresh listing call right after upload reported a slightly different asset size than what was just written. Both deltas were small and non-data-shaped, consistent with GitHub's release-asset listing lagging the upload rather than real corruption. The verify now retries the listing + compare through `.vb_retry()` (same backoff already used for download-side flakes, #66/#68) before treating a mismatch as a real integrity failure.
+
 # torp 1.3.4 (2026-05-09)
 
 ## Bug Fixes
