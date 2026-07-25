@@ -6,7 +6,7 @@
 
 ## Chores
 
-* **`versebus.R` sync check now actually runs in CI.** `test-versebus-sync.R` (added 2026-07-22) compares the vendored `R/versebus.R` against torpmodels' copy, but is local-dev-only by design — it skips silently when no sibling `../torpmodels` checkout is present, which was true on every CI run since it shipped. New `versebus-sync` job in `test-package.yml` checks out both repos as siblings so the guard actually executes.
+* **`versebus.R` sync check now actually runs in CI.** `test-versebus-sync.R` (added 2026-07-22) compares the vendored `R/versebus.R` against torpmodels' copy, but is local-dev-only by design — it skips silently when no sibling `../torpmodels` checkout is present, which was true on every CI run since it shipped. New `versebus-sync` job in `test-package.yml` checks out both repos as siblings so the guard actually executes (confirmed clean on the real dependency-drift check: 25/25 pass); the job also installs torp itself (`R CMD INSTALL`), not just its dependencies, since every test file's `setup-test-env.R` requires `library(torp)` to succeed.
 
 # torp 1.3.7 (2026-07-25)
 
