@@ -345,13 +345,26 @@ assess_model_calibration <- function(actual, predicted, n_bins = 10) {
     ) |>
     filter(n >= 10)  # Only use bins with sufficient data
   
-  # Calibration slope and intercept
-  if (nrow(calibration_data) >= 3) {
-    cal_model <- lm(mean_actual ~ mean_predicted, data = calibration_data)
-    cal_slope <- coef(cal_model)[2]
-    cal_intercept <- coef(cal_model)[1]
-    cal_r2 <- summary(cal_model)$r.squared
-    
+  # Calibration slope and intercept. Uses the GLM logit convention --
+  # coef(glm(actual ~ qlogis(predicted), binomial))[2] -- fit on the raw
+  # observations, matching model_validation.R's `evaluate_predictions()` and
+  # the experiments/trainer convention used elsewhere (e.g. torpmodels'
+  # train_lib.R wp_gate_slope()), rather than the previous decile-binned OLS
+  # (lm(mean_actual ~ mean_predicted) over `calibration_data`'s bins), which
+  # measures a related but distinct quantity. `calibration_data` (the
+  # per-bin breakdown) is retained unchanged for the Hosmer-Lemeshow test and
+  # reliability/resolution/uncertainty decomposition below -- it no longer
+  # feeds the slope/intercept calculation.
+  if (length(unique(actual)) >= 2) {
+    p_clamped <- pmin(pmax(predicted, 1e-6), 1 - 1e-6)
+    cal_model <- glm(actual ~ qlogis(p_clamped), family = binomial())
+    co <- unname(coef(cal_model))
+    cal_slope <- co[2]
+    cal_intercept <- co[1]
+    # McFadden pseudo-R^2 -- the GLM analog of lm's R^2 (not directly
+    # comparable in scale); informational only.
+    cal_r2 <- 1 - cal_model$deviance / cal_model$null.deviance
+
     # Perfect calibration would have slope = 1, intercept = 0
   } else {
     cal_slope <- cal_intercept <- cal_r2 <- NA
