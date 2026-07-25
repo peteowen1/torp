@@ -1,3 +1,13 @@
+# torp 1.3.8 (2026-07-25)
+
+## Bug Fixes
+
+* **`assess_model_calibration()`'s slope/intercept now use the GLM logit convention**, matching `evaluate_model_comprehensive()` (`model_validation.R`, unified 2026-07-22) instead of the old decile-binned OLS fit. The two had drifted apart — this function was left on the old convention when the other was unified — so a caller comparing `calibration_slope` output from both functions was comparing two related-but-distinct quantities without knowing it. `calibration_data` (the per-bin breakdown) is retained unchanged for the Hosmer-Lemeshow test and reliability/resolution/uncertainty decomposition, which are legitimately bin-based statistics uninvolved in this convention.
+
+## Chores
+
+* **`versebus.R` sync check now actually runs in CI.** `test-versebus-sync.R` (added 2026-07-22) compares the vendored `R/versebus.R` against torpmodels' copy, but is local-dev-only by design — it skips silently when no sibling `../torpmodels` checkout is present, which was true on every CI run since it shipped. New `versebus-sync` job in `test-package.yml` checks out both repos as siblings so the guard actually executes.
+
 # torp 1.3.7 (2026-07-25)
 
 ## Bug Fixes

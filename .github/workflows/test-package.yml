@@ -76,10 +76,15 @@ jobs:
         with:
           use-public-rspm: true
 
+      # needs: none -- this job only needs `testthat` to run test_file(); it
+      # must NOT resolve torp's full R-CMD-check dependency graph (`needs:
+      # check` would also pull in Suggests/Remotes, including installing
+      # torpmodels from GitHub -- unnecessary network weight and time for a
+      # job whose only job is parsing/diffing two .R files' source text).
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
           extra-packages: any::testthat
-          needs: check
+          needs: none
           working-directory: torp
 
       # test-versebus-sync.R's own .locate_from_pkg_root() walks "." / ".." /

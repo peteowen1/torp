@@ -166,13 +166,19 @@ test_that("assess_model_calibration works correctly", {
   # Create test predictions and outcomes
   set.seed(123)
   n <- 1000
-  
-  # Well-calibrated predictions
+
+  # Well-calibrated predictions. calibration_slope now uses the GLM logit
+  # convention (coef(glm(actual ~ qlogis(predicted), binomial))[2]), fit on
+  # raw observations rather than decile-binned means -- it's sensitive to
+  # individual-level prediction noise in a way the old decile-binned OLS
+  # slope wasn't (averaging into bins washes that noise out), so predicted
+  # is set to true_probs directly (no injected noise) to get a genuinely
+  # well-calibrated slope near 1, matching model_validation.R's equivalent
+  # test (test-model-validation.R, "uses the GLM logit convention").
   true_probs <- runif(n, 0.1, 0.9)
   actual <- rbinom(n, 1, true_probs)
-  predicted <- true_probs + rnorm(n, 0, 0.1)  # Add small noise
-  predicted <- pmax(0.01, pmin(0.99, predicted))  # Bound predictions
-  
+  predicted <- pmax(0.01, pmin(0.99, true_probs))  # Bound predictions
+
   result <- assess_model_calibration(actual, predicted)
   
   expect_true(is.list(result))
