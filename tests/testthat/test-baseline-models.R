@@ -180,13 +180,21 @@ test_that("assess_model_calibration works correctly", {
   predicted <- pmax(0.01, pmin(0.99, true_probs))  # Bound predictions
 
   result <- assess_model_calibration(actual, predicted)
-  
+
   expect_true(is.list(result))
   expect_true("calibration_slope" %in% names(result))
   expect_true("calibration_intercept" %in% names(result))
   expect_true("hosmer_lemeshow_p" %in% names(result))
   expect_true("calibration_in_large" %in% names(result))
-  
+
+  # Pins down the GLM logit formula itself (not just a plausible-looking
+  # slope) -- mirrors test-model-validation.R's equivalent exact-formula
+  # check, so a regression back to decile-binned OLS (or any other
+  # plausible-but-wrong replacement) fails here.
+  p_clamped <- pmin(pmax(predicted, 1e-6), 1 - 1e-6)
+  expected_slope <- unname(coef(glm(actual ~ qlogis(p_clamped), family = binomial()))[2])
+  expect_equal(result$calibration_slope, expected_slope)
+
   # Well-calibrated model should have slope near 1, intercept near 0
   expect_true(abs(result$calibration_slope - 1) < 0.2)
   expect_true(abs(result$calibration_intercept) < 0.2)
