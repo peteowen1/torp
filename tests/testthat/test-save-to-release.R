@@ -1,7 +1,9 @@
 # save_to_release()'s post-upload verify (T12) regression coverage.
 # See torpdata#74: GitHub's release-asset listing can lag the upload by a
 # few seconds (eventual consistency), which the verify used to treat as a
-# hard integrity failure on the very first check.
+# hard integrity failure on the very first check. Retry budget widened
+# 2026-07-25 (3 attempts/~7s -> 5 attempts/~20s, c(2,3,5,10) delays) after
+# the original budget still wasn't enough during live-game upload bursts.
 
 test_that("save_to_release retries the post-upload size verify through a stale GitHub listing, then succeeds", {
   uploaded_bytes <- NULL
@@ -67,7 +69,7 @@ test_that("save_to_release aborts when the post-upload size mismatch persists af
     save_to_release(df, "widget", "test-tag"),
     class = "vb_error_integrity"
   )
-  expect_equal(call_count, 3L)  # exhausted all .vb_retry attempts
+  expect_equal(call_count, 5L)  # exhausted all .vb_retry attempts
 })
 
 test_that("save_to_release warns (not aborts) when the post-upload listing call itself keeps failing", {
