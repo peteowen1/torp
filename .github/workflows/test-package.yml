@@ -76,16 +76,28 @@ jobs:
         with:
           use-public-rspm: true
 
-      # needs: none -- this job only needs `testthat` to run test_file(); it
-      # must NOT resolve torp's full R-CMD-check dependency graph (`needs:
-      # check` would also pull in Suggests/Remotes, including installing
-      # torpmodels from GitHub -- unnecessary network weight and time for a
-      # job whose only job is parsing/diffing two .R files' source text).
+      # needs: build (Imports/LinkingTo only, no Suggests/Remotes) -- must
+      # NOT resolve torp's full R-CMD-check dependency graph (`needs: check`
+      # would also install Suggests/Remotes, including torpmodels from
+      # GitHub -- unnecessary network weight for a job whose only job is
+      # parsing/diffing two .R files' source text), but every test file's
+      # tests/testthat/setup-test-env.R unconditionally does `library(torp)`
+      # (testthat::test_file() always sources setup*.R first), so torp's
+      # actual Imports must be installed, not just `testthat` itself.
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
           extra-packages: any::testthat
-          needs: none
+          needs: build
           working-directory: torp
+
+      # setup-r-dependencies installs torp's DEPENDENCIES, not torp itself --
+      # setup-test-env.R's library(torp) needs the package actually
+      # installed, which devtools::load_all() (the convention used
+      # elsewhere in this verse) doesn't provide (it's an attach-into-env
+      # shortcut, not a real library() install).
+      - name: Install torp
+        working-directory: torp
+        run: R CMD INSTALL --no-docs --no-byte-compile --no-help .
 
       # test-versebus-sync.R's own .locate_from_pkg_root() walks "." / ".." /
       # "../.." relative to cwd, matching devtools::test()'s pkg-root cwd when
