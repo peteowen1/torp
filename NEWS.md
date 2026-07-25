@@ -1,3 +1,9 @@
+# torp 1.3.7 (2026-07-25)
+
+## Bug Fixes
+
+* **`save_to_release()` post-upload verify retry budget widened (torpdata#74 follow-up)** — the 1.3.6 fix retried the post-upload listing check through `.vb_retry()`'s default budget (3 attempts, 2s+5s delays, ~7s total), but the failure kept recurring on live game days (2026-07-23, 2026-07-24): the listed size was consistently *smaller* than the just-uploaded local size, consistent with GitHub's listing lag outlasting 7s during high-frequency upload bursts, not real corruption. Widened to 5 attempts with 2+3+5+10s delays (~20s total) for this specific verify call.
+
 # torp 1.3.6 (2026-07-23)
 
 ## Bug Fixes

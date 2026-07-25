@@ -111,7 +111,13 @@ save_to_release <- function(df, file_name, release_tag, also_csv = FALSE, prev_r
   # surface. Retried via .vb_retry() (torpdata#74): GitHub's release-asset
   # listing can lag the upload by a few seconds (eventual consistency),
   # which otherwise reads as a spurious missing/wrong-sized asset on the
-  # very next call even though the upload itself was fine. A failure to
+  # very next call even though the upload itself was fine. Widened from the
+  # .vb_retry() default (3 attempts / 2s+5s, ~7s total) to 5 attempts /
+  # 2+3+5+10s (~20s total) after torpdata#74's fix still recurred on live
+  # game days: 2026-07-23/24 failures showed the listed size consistently
+  # SMALLER than the just-uploaded local size (stale-listing lag, not real
+  # corruption) and outlasted the original 7s budget during high-frequency
+  # upload bursts. A failure to
   # even LIST after retries (vb_error_transient from vb_list_assets itself)
   # only warns -- it's evidence the verify call flaked, not that the upload
   # did. A listing that still confirms the asset is genuinely missing or
@@ -139,7 +145,8 @@ save_to_release <- function(df, file_name, release_tag, also_csv = FALSE, prev_r
     invisible(TRUE)
   }
   tryCatch(
-    .vb_retry(verify_upload, should_retry = function(e) vb_classify_error(e) != "absent"),
+    .vb_retry(verify_upload, times = 5L, delays = c(2, 3, 5, 10),
+              should_retry = function(e) vb_classify_error(e) != "absent"),
     error = function(e) {
       if (inherits(e, "vb_verify_list_failed")) {
         cli::cli_warn("Post-upload verify could not list {repo}@{release_tag} after retries ({conditionMessage(e)}) -- upload itself already succeeded, proceeding")
