@@ -143,20 +143,22 @@ a <- merge(res[, .(match_id, away_team_id)], w,
            by.x = c("match_id", "away_team_id"), by.y = c("match_id", "team_id"))
 vc <- setdiff(names(w), c("match_id", "team_id")); setnames(a, vc, paste0("a_", vc))
 m <- merge(m, a, by = "match_id")
-D <- data.table(margin = m$margin)
+D <- data.table(margin = m$margin, match_id = m$match_id)
 for (v in vc) D[[v]] <- m[[v]] - m[[paste0("a_", v)]]
+D <- merge(D, unique(L[, .(match_id, season)]), by = "match_id")
 cat(sprintf("design: %d matches\n", nrow(D)))
+saveRDS(D, file.path(DATA_DIR, "..", "recv_reprice_design.rds"))
 
 EW <- TORP_EPR_WEIGHT
-calib <- function(s_im, share) {
+calib <- function(s_im, share, dat = D) {
   d_im <- s_im - 1
   d_ce <- share / (1 / 3) - 1
   X <- vapply(BUCKETS, function(b)
-    D[[paste0("T_pub_", b)]] + EW * (d_im * D[[paste0("S_im_", b)]] +
-                                     d_ce * D[[paste0("S_ce_", b)]]),
-    numeric(nrow(D)))
+    dat[[paste0("T_pub_", b)]] + EW * (d_im * dat[[paste0("S_im_", b)]] +
+                                       d_ce * dat[[paste0("S_ce_", b)]]),
+    numeric(nrow(dat)))
   colnames(X) <- BUCKETS
-  co <- coef(lm(D$margin ~ X))[-1]; names(co) <- BUCKETS
+  co <- coef(lm(dat$margin ~ X))[-1]; names(co) <- BUCKETS
   co
 }
 
@@ -199,3 +201,56 @@ print(round(co, 2))
 cat(sprintf("  spread %.2fx   KD/KF %.2f   (baseline %.2fx / %.2f)\n",
             max(co)/min(co), co[["KEY_DEFENDER"]]/co[["KEY_FORWARD"]],
             max(c0)/min(c0), c0[["KEY_DEFENDER"]]/c0[["KEY_FORWARD"]]))
+
+# =========================================================================
+# WALK-FORWARD VALIDATION
+# Everything above is fitted and scored on the same matches. Two conclusions
+# today were already overturned by in-sample effects (plan 6.4 -> 6.5, and
+# 6.9 -> 6.10), so the scale is only believable if it (a) is stable across
+# independent fitting windows and (b) improves KD/KF on data it never saw.
+# =========================================================================
+cat("\n\n================ WALK-FORWARD VALIDATION ================\n")
+cat("Fit the scale on seasons < S, score season S only.\n\n")
+# Bounded. An unconstrained fit returned contest shares of 1.85-3.03, which
+# is meaningless: contest_share is one participant's cut of a single kick's
+# delta_epv in a 3-way split, so anything above 1 gives the defender more
+# than the entire kick was worth. The optimiser was using contest_epv as a
+# free regressor rather than estimating a share. Bounds keep both parameters
+# inside their physical interpretation.
+fit_scale <- function(dat) {
+  o <- optim(c(1, 1/3), function(p) {
+    co <- calib(p[1], p[2], dat)
+    if (any(!is.finite(co)) || any(co <= 0)) return(1e6)
+    abs(co[["KEY_DEFENDER"]] / co[["KEY_FORWARD"]] - 1)
+  }, method = "L-BFGS-B",
+     lower = c(0.5, 0.05), upper = c(10, 1.0),
+     control = list(maxit = 500))
+  o$par
+}
+rows <- list()
+for (S in sort(unique(D$season))) {
+  tr_d <- D[season < S]; te_d <- D[season == S]
+  if (nrow(tr_d) < 250 || nrow(te_d) < 40) next
+  p <- fit_scale(tr_d)
+  co_base <- calib(1, 1/3, te_d)
+  co_fit  <- calib(p[1], p[2], te_d)
+  rows[[as.character(S)]] <- data.table(
+    test_season = S, n_train = nrow(tr_d), n_test = nrow(te_d),
+    im_scale = round(p[1], 2), share = round(p[2], 3),
+    kd_kf_base = round(co_base[["KEY_DEFENDER"]] / co_base[["KEY_FORWARD"]], 2),
+    kd_kf_fit  = round(co_fit[["KEY_DEFENDER"]] / co_fit[["KEY_FORWARD"]], 2))
+}
+wf <- rbindlist(rows)
+print(wf)
+if (nrow(wf)) {
+  wf[, improved := abs(kd_kf_fit - 1) < abs(kd_kf_base - 1)]
+  cat(sprintf("\n  fitted intercept-mark scale across windows: %s  (mean %.2f, sd %.2f)\n",
+              paste(wf$im_scale, collapse = ", "), mean(wf$im_scale), sd(wf$im_scale)))
+  cat(sprintf("  |KD/KF - 1| improved out of sample in %d of %d windows\n",
+              sum(wf$improved), nrow(wf)))
+  cat(sprintf("  mean |KD/KF - 1|: baseline %.2f -> fitted %.2f\n",
+              mean(abs(wf$kd_kf_base - 1)), mean(abs(wf$kd_kf_fit - 1))))
+  cat("\n  A stable scale that improves out of sample is real. A scale that\n")
+  cat("  swings wildly between windows is curve-fitting, exactly like the\n")
+  cat("  contextual-spoil measure that passed face validity and failed here.\n")
+}
