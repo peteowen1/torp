@@ -52,7 +52,6 @@ data-raw/
 |--------|---------|
 | `rankings.R` | Team and player rankings |
 | `simming_seasons.R` | Season simulation scripts |
-| `wt_av_modelling.R` | Weighted average modelling |
 
 ### 5. Validation (`05-validation/`)
 
@@ -60,6 +59,12 @@ data-raw/
 |--------|---------|
 | `validate_wp_model.R` | Validate win probability model |
 | `compare_model_performance.R` | Compare model performance metrics |
+
+### 7. Stat Models (`07-stat-models/`)
+
+| Script | Purpose |
+|--------|---------|
+| `wt_av_modelling.R` | Trains + publishes the ~50 per-stat GAMs (`stat-models` release tag) — weighted-average features, temporal-holdout CV metric, provenance-stamped via `stamp_model_meta()`/`publish_stat_models()` |
 
 ## Running Scripts
 

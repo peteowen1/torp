@@ -1,0 +1,110 @@
+name: Train Stat Models
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: train-stat-models
+  cancel-in-progress: false
+
+env:
+  GITHUB_PAT: ${{ secrets.WORKFLOW_PAT }}
+  R_KEEP_PKG_SOURCE: yes
+
+jobs:
+  train:
+    runs-on: ubuntu-latest
+    # ~50 stats x ~2 mgcv::bam() fits each (temporal-holdout CV + production)
+    # took ~2.4 hours locally (2026-07-26) -- generous margin above that.
+    timeout-minutes: 240
+
+    permissions:
+      contents: write
+      issues: write
+
+    steps:
+      - name: Checkout torp
+        uses: actions/checkout@v7
+        with:
+          path: torp
+
+      # No token needed -- torpmodels is public and this checkout is only
+      # for its R source (devtools::load_all(torpmodels_root) in the
+      # training script), matching test-package.yml's versebus-sync job
+      # sibling-checkout pattern. Actual publish auth to torpmodels'
+      # releases flows separately through piggyback via the job-level
+      # GITHUB_PAT env var (secrets.WORKFLOW_PAT), not through git
+      # credentials on this checkout.
+      - name: Checkout torpmodels
+        uses: actions/checkout@v7
+        with:
+          repository: peteowen1/torpmodels
+          path: torpmodels
+
+      - name: Setup R
+        uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true
+
+      # needs: check (not build/none) -- this is a rare, manually-triggered
+      # job (not per-push CI), so the extra install time from torp's full
+      # dependency graph is an acceptable trade for reliability on a job
+      # that otherwise runs for hours; tidyverse/glue/tictoc/devtools aren't
+      # in torp's own Imports/Suggests and are needed directly (the script
+      # itself library()s tidyverse/purrr and calls devtools::load_all()
+      # as its first executable lines -- omitting devtools here fails the
+      # job before training even starts).
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          needs: check
+          working-directory: torp
+          extra-packages: |
+            any::devtools
+            any::tidyverse
+            any::glue
+            any::tictoc
+
+      - name: Train + publish stat models
+        working-directory: torp
+        run: Rscript data-raw/07-stat-models/wt_av_modelling.R
+
+      - name: Notify on failure
+        if: failure()
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const title = 'Stat Model Training Failed';
+            const body = `The stat-model training workflow failed on ${new Date().toISOString()}.
+
+            Please check the [workflow run](${context.payload.repository.html_url}/actions/runs/${context.runId}) for details.
+
+            **Manual Recovery:**
+            - Re-run \`Rscript data-raw/07-stat-models/wt_av_modelling.R\` locally or via workflow_dispatch
+            - If some stats already trained before the failure, their .rds files are on disk locally --
+              publish_stat_models() can be called directly without re-training everything`;
+
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'automation,bug'
+            });
+
+            const existingIssue = issues.data.find(i => i.title === title);
+
+            if (existingIssue) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existingIssue.number,
+                body: `Workflow failed again on ${new Date().toISOString()}.\n\n[View run](${context.payload.repository.html_url}/actions/runs/${context.runId})`
+              });
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: title,
+                body: body,
+                labels: ['bug', 'automation']
+              });
+            }
