@@ -370,9 +370,17 @@ for (i in cols_binom) {
 tictoc::toc()
 
 # Publish stat models (provenance + manifest) ----
-.n_expected <- length(cols_pois) + length(cols_binom)
-if (length(stat_model_files) < .n_expected) {
-  cli::cli_warn("{length(stat_model_files)}/{.n_expected} stats actually trained -- {.n_expected - length(stat_model_files)} skipped due to a per-stat fitting failure (see warnings above).")
+# NOTE: n_expected deliberately has no leading dot -- cli::cli_warn()'s
+# glue-style interpolation reserves {.foo} for its own inline-markup classes
+# (e.g. {.val}, {.file}), so a variable named with a leading dot inside a
+# cli string is misparsed as an unknown style and hard-errors ("Invalid cli
+# literal") instead of interpolating. This crashed a real ~2.4-hour run
+# AFTER all 53 stats had already trained successfully, right before the
+# publish step -- costing nothing to retrain (files were all on disk) but
+# wasting the whole run's wall time until noticed.
+n_expected <- length(cols_pois) + length(cols_binom)
+if (length(stat_model_files) < n_expected) {
+  cli::cli_warn("{length(stat_model_files)}/{n_expected} stats actually trained -- {n_expected - length(stat_model_files)} skipped due to a per-stat fitting failure (see warnings above).")
 }
 
 # publish_stat_models() warns-and-continues on individual upload failures
@@ -380,12 +388,12 @@ if (length(stat_model_files) < .n_expected) {
 # sidecar-pair group) -- but that means a partial failure is easy to miss
 # among ~58 stats' worth of tic/toc/print(i) console output unless the
 # caller actually checks the result, so check it here. This only compares
-# against stat_model_files (what was actually trained), not .n_expected --
+# against stat_model_files (what was actually trained), not n_expected --
 # a training skip above is already warned about, this catches a SEPARATE
 # upload failure on top of that.
-.uploaded_stat_models <- publish_stat_models(stat_model_files, dir = "./data-raw/stat-models")
-if (length(.uploaded_stat_models) < length(stat_model_files)) {
-  cli::cli_abort("Only {length(.uploaded_stat_models)}/{length(stat_model_files)} trained stat models actually published -- see warnings above for which failed.")
+uploaded_stat_models <- publish_stat_models(stat_model_files, dir = "./data-raw/stat-models")
+if (length(uploaded_stat_models) < length(stat_model_files)) {
+  cli::cli_abort("Only {length(uploaded_stat_models)}/{length(stat_model_files)} trained stat models actually published -- see warnings above for which failed.")
 }
 
 # Combine Predictions ----
