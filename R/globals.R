@@ -444,6 +444,12 @@ utils::globalVariables(c(
   "aerial_target_wins", "aerial_target_losses",
   "aerial_def_wins", "aerial_def_losses",
   ".disp_scale",
+  # Contextual spoil credit (compute_spoil_credit)
+  "spoil_epv_ctx", "spoils_priced",
+  ".prev_desc", ".prev_tid", ".prev_x", ".prev_y",
+  ".lag1_tid", ".lag2_tid", ".lag3_tid", ".lag4_tid", ".lag5_tid",
+  ".kick_lag", ".credit", "kick_team_id",
+  ".clear2", ".clear3", ".clear4", ".clear5",
   # PSR/PSV NSE weights
   "wt_80s", ".tog_wt",
   # Match data prep: PSR rolling-join keys (closest is a join_by() token,

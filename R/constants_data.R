@@ -63,6 +63,25 @@ COORD_FLIP_TOLERANCE <- 70
 #' @keywords internal
 CHAINS_CONTEST_TARGET_DESCS <- c("Contest Target", "Kick Inside 50 Result")
 
+#' Chains descriptions that may sit between a kick and its contest outcome
+#'
+#' These are annotation rows the AFL feed emits while the ball is still in
+#' flight -- they do not represent anyone gaining possession. A backward scan
+#' from a Spoil to the kick that produced it may pass through these and no
+#' others; hitting a possession event (Handball, Mark, Loose Ball Get, an
+#' earlier Spoil, ...) means the kick found further back is a different play
+#' and must not be credited.
+#'
+#' Derived empirically from 2024 chains: every row observed between a kick and
+#' a spoil at lags 2-5 is in this set.
+#' @keywords internal
+CHAINS_INFLIGHT_DESCS <- c(
+  "Contest Target", "Kick Inside 50 Result", "Kick Into F50",
+  "Shot At Goal", "Inside 50", "Rebound 50",
+  "Kick In Ineffective", "Kickin long", "Kickin short", "Kickin play on",
+  "Clearance (Operator)"
+)
+
 #' Chains descriptions indicating the opponent won the mark
 #' @keywords internal
 CHAINS_MARK_WIN_DESCS <- c("Contested Mark", "Uncontested Mark", "Mark On Lead")
