@@ -80,6 +80,26 @@ cols_binom <- c(
   "kick_efficiency", "contested_possession_rate", "hitout_win_percentage",
   "hitout_to_advantage_rate", "contest_def_loss_percentage", "contest_off_wins_percentage"
 )
+
+# Guard against columns with no usable data at all (e.g. "ranking" is 100%
+# NA/logical in the current AFL API response, confirmed live 2026-07-26) --
+# mgcv::bam() hard-errors ("Not enough (non-NA) data to do anything
+# meaningful") rather than degrading gracefully, which previously crashed
+# the whole run partway through the loop with zero models published (the
+# publish step only runs after both loops fully complete). Drop any column
+# below a minimal non-NA threshold before the loop starts, rather than
+# discovering it mid-run. Applied to cols_binom too (a separate hardcoded
+# literal, not derived from cols) -- a filter that only reached cols_pois
+# would silently do nothing if one of the 9 binomial stats went all-NA.
+.insufficient_data <- function(col_names) vapply(col_names, function(col) sum(!is.na(pstot[[col]])) < 100, logical(1))
+.bad_cols <- .insufficient_data(cols)
+.bad_binom <- .insufficient_data(cols_binom)
+if (any(.bad_cols) || any(.bad_binom)) {
+  cli::cli_warn("Excluding stat column(s) with insufficient non-NA data: {paste(c(cols[.bad_cols], cols_binom[.bad_binom]), collapse = ', ')}")
+  cols <- cols[!.bad_cols]
+  cols_binom <- cols_binom[!.bad_binom]
+}
+
 cols_pois <- setdiff(cols, cols_binom)
 
 # Weighted Average Function ----
@@ -187,72 +207,79 @@ stat_feature_names <- c(
 
 tictoc::tic()
 for (i in cols_pois) {
-  df_mdl <- purrr::map(
-    paste0(rep(szns, each = 29), rep(sprintf("%02d", 0:28), times = length(szns))),
-    ~ wav_data(pstot,
-      fil_val = .,
-      model_col = i
-    )
-  ) %>%
-    purrr::list_rbind()
+  # One stat's failure (e.g. the "ranking" all-NA landmine that crashed a
+  # prior real run 2026-07-26 with zero models published, since publish only
+  # runs after the whole loop completes) must not take down the other ~57.
+  tryCatch({
+    df_mdl <- purrr::map(
+      paste0(rep(szns, each = 29), rep(sprintf("%02d", 0:28), times = length(szns))),
+      ~ wav_data(pstot,
+        fil_val = .,
+        model_col = i
+      )
+    ) %>%
+      purrr::list_rbind()
 
-  fml <- as.formula(sprintf(stat_formula_str, i))
+    fml <- as.formula(sprintf(stat_formula_str, i))
 
-  # Temporal-holdout CV metric (mirrors the pattern already established for
-  # WP/match-margin): fit on all-but-holdout_season, score the held-out
-  # season OOS. A second, separate fit from the production model below --
-  # this is why the loop roughly doubles in runtime vs the pre-provenance
-  # version.
-  train_df <- df_mdl %>% dplyr::filter(as.integer(as.character(season)) < holdout_season)
-  test_df <- df_mdl %>% dplyr::filter(as.integer(as.character(season)) == holdout_season)
-  cv_metric <- tryCatch({
-    if (nrow(train_df) == 0 || nrow(test_df) == 0) {
+    # Temporal-holdout CV metric (mirrors the pattern already established for
+    # WP/match-margin): fit on all-but-holdout_season, score the held-out
+    # season OOS. A second, separate fit from the production model below --
+    # this is why the loop roughly doubles in runtime vs the pre-provenance
+    # version.
+    train_df <- df_mdl %>% dplyr::filter(as.integer(as.character(season)) < holdout_season)
+    test_df <- df_mdl %>% dplyr::filter(as.integer(as.character(season)) == holdout_season)
+    cv_metric <- tryCatch({
+      if (nrow(train_df) == 0 || nrow(test_df) == 0) {
+        NA_real_
+      } else {
+        mdl_cv <- mgcv::bam(fml, data = train_df, family = poisson(), select = T, discrete = T, nthreads = 4)
+        preds_cv <- mgcv::predict.bam(mdl_cv, newdata = test_df, type = "response")
+        .safe_rmse(test_df[[i]], preds_cv)
+      }
+    }, error = function(e) {
+      cli::cli_warn("Temporal-holdout CV fit failed for {i}: {conditionMessage(e)}")
       NA_real_
-    } else {
-      mdl_cv <- mgcv::bam(fml, data = train_df, family = poisson(), select = T, discrete = T, nthreads = 4)
-      preds_cv <- mgcv::predict.bam(mdl_cv, newdata = test_df, type = "response")
-      .safe_rmse(test_df[[i]], preds_cv)
-    }
+    })
+
+    mdl <- mgcv::bam(
+      fml,
+      data = df_mdl, family = poisson(),
+      select = T, discrete = T, nthreads = 4,
+    )
+    mdl <- stamp_model_meta(mdl, build_model_meta(
+      model_name = i, seasons = szns,
+      params = list(family = "poisson", select = TRUE, discrete = TRUE, decay = decay),
+      feature_names = stat_feature_names, cv_metric = cv_metric,
+      n_rows = nrow(df_mdl), n_matches = length(unique(df_mdl$match_id)),
+      extra = list(script = "data-raw/04-analysis/wt_av_modelling.R", cv_metric_type = "temporal_holdout_rmse")
+    ))
+
+    model_preds <- tibble(
+      player_id = df_mdl$player_id,
+      player_name = df_mdl$player_name,
+      player_position = df_mdl$position,
+      match_id = df_mdl$match_id,
+      round = df_mdl$round_number,
+      home_away = df_mdl$home_away,
+      team_name = df_mdl$team_name,
+      opp_name = df_mdl$opponent_name,
+      "{i}" := df_mdl[[i]],
+      "pred_{i}" := mgcv::predict.bam(mdl, newdata = df_mdl, type = "response"),
+      "wt_avg_{i}" := df_mdl$wt_avg,
+      "wt_gms_{i}" := df_mdl$wt_gms,
+      "wt_avg_team_{i}" := df_mdl$wt_avg_team,
+      "wt_avg_opp_{i}" := df_mdl$wt_avg_opp
+    )
+
+    stat_list[[i]] <- model_preds
+
+    saveRDS(mdl, glue::glue("./data-raw/stat-models/{i}.rds"))
+    stat_model_files <- c(stat_model_files, paste0(i, ".rds"))
+    print(i)
   }, error = function(e) {
-    cli::cli_warn("Temporal-holdout CV fit failed for {i}: {conditionMessage(e)}")
-    NA_real_
+    cli::cli_warn("Skipping stat {.val {i}} -- fitting failed: {conditionMessage(e)}")
   })
-
-  mdl <- mgcv::bam(
-    fml,
-    data = df_mdl, family = poisson(),
-    select = T, discrete = T, nthreads = 4,
-  )
-  mdl <- stamp_model_meta(mdl, build_model_meta(
-    model_name = i, seasons = szns,
-    params = list(family = "poisson", select = TRUE, discrete = TRUE, decay = decay),
-    feature_names = stat_feature_names, cv_metric = cv_metric,
-    n_rows = nrow(df_mdl), n_matches = length(unique(df_mdl$match_id)),
-    extra = list(script = "data-raw/04-analysis/wt_av_modelling.R", cv_metric_type = "temporal_holdout_rmse")
-  ))
-
-  model_preds <- tibble(
-    player_id = df_mdl$player_id,
-    player_name = df_mdl$player_name,
-    player_position = df_mdl$position,
-    match_id = df_mdl$match_id,
-    round = df_mdl$round_number,
-    home_away = df_mdl$home_away,
-    team_name = df_mdl$team_name,
-    opp_name = df_mdl$opponent_name,
-    "{i}" := df_mdl[[i]],
-    "pred_{i}" := mgcv::predict.bam(mdl, newdata = df_mdl, type = "response"),
-    "wt_avg_{i}" := df_mdl$wt_avg,
-    "wt_gms_{i}" := df_mdl$wt_gms,
-    "wt_avg_team_{i}" := df_mdl$wt_avg_team,
-    "wt_avg_opp_{i}" := df_mdl$wt_avg_opp
-  )
-
-  stat_list[[i]] <- model_preds
-
-  saveRDS(mdl, glue::glue("./data-raw/stat-models/{i}.rds"))
-  stat_model_files <- c(stat_model_files, paste0(i, ".rds"))
-  print(i)
 }
 
 tictoc::toc()
@@ -268,83 +295,97 @@ stat_formula_str_binom <- paste0(
 
 tictoc::tic()
 for (i in cols_binom) {
-  df_mdl <- purrr::map(
-    paste0(rep(szns, each = 29), rep(sprintf("%02d", 0:28), times = length(szns))),
-    ~ wav_data(
-      pstot %>%
-        mutate("{i}" := .data[[i]] / 100),
-      fil_val = .,
-      model_col = i
-    )
-  ) %>%
-    purrr::list_rbind()
+  # See the Poisson loop above -- one stat's failure must not take down the
+  # other ~57.
+  tryCatch({
+    df_mdl <- purrr::map(
+      paste0(rep(szns, each = 29), rep(sprintf("%02d", 0:28), times = length(szns))),
+      ~ wav_data(
+        pstot %>%
+          mutate("{i}" := .data[[i]] / 100),
+        fil_val = .,
+        model_col = i
+      )
+    ) %>%
+      purrr::list_rbind()
 
-  fml <- as.formula(sprintf(stat_formula_str_binom, i))
+    fml <- as.formula(sprintf(stat_formula_str_binom, i))
 
-  # Temporal-holdout CV metric -- see the Poisson loop above for rationale.
-  train_df <- df_mdl %>% dplyr::filter(as.integer(as.character(season)) < holdout_season)
-  test_df <- df_mdl %>% dplyr::filter(as.integer(as.character(season)) == holdout_season)
-  cv_metric <- tryCatch({
-    if (nrow(train_df) == 0 || nrow(test_df) == 0) {
+    # Temporal-holdout CV metric -- see the Poisson loop above for rationale.
+    train_df <- df_mdl %>% dplyr::filter(as.integer(as.character(season)) < holdout_season)
+    test_df <- df_mdl %>% dplyr::filter(as.integer(as.character(season)) == holdout_season)
+    cv_metric <- tryCatch({
+      if (nrow(train_df) == 0 || nrow(test_df) == 0) {
+        NA_real_
+      } else {
+        mdl_cv <- mgcv::bam(fml, data = train_df, family = binomial(), select = T, discrete = T, nthreads = 4)
+        preds_cv <- mgcv::predict.bam(mdl_cv, newdata = test_df, type = "response")
+        .safe_rmse(test_df[[i]], preds_cv)
+      }
+    }, error = function(e) {
+      cli::cli_warn("Temporal-holdout CV fit failed for {i}: {conditionMessage(e)}")
       NA_real_
-    } else {
-      mdl_cv <- mgcv::bam(fml, data = train_df, family = binomial(), select = T, discrete = T, nthreads = 4)
-      preds_cv <- mgcv::predict.bam(mdl_cv, newdata = test_df, type = "response")
-      .safe_rmse(test_df[[i]], preds_cv)
-    }
+    })
+
+    mdl <- mgcv::bam(
+      fml,
+      data = df_mdl, family = binomial(),
+      select = T, discrete = T, nthreads = 4,
+    )
+    mdl <- stamp_model_meta(mdl, build_model_meta(
+      model_name = i, seasons = szns,
+      params = list(family = "binomial", select = TRUE, discrete = TRUE, decay = decay),
+      feature_names = stat_feature_names, cv_metric = cv_metric,
+      n_rows = nrow(df_mdl), n_matches = length(unique(df_mdl$match_id)),
+      extra = list(script = "data-raw/04-analysis/wt_av_modelling.R", cv_metric_type = "temporal_holdout_rmse")
+    ))
+
+    model_preds <- tibble(
+      player_id = df_mdl$player_id,
+      player_name = df_mdl$player_name,
+      player_position = df_mdl$position,
+      match_id = df_mdl$match_id,
+      round = df_mdl$round_number,
+      home_away = df_mdl$home_away,
+      team_name = df_mdl$team_name,
+      opp_name = df_mdl$opponent_name,
+      "{i}" := df_mdl[[i]],
+      "pred_{i}" := mgcv::predict.bam(mdl, newdata = df_mdl, type = "response"),
+      "wt_avg_{i}" := df_mdl$wt_avg,
+      "wt_gms_{i}" := df_mdl$wt_gms,
+      "wt_avg_team_{i}" := df_mdl$wt_avg_team,
+      "wt_avg_opp_{i}" := df_mdl$wt_avg_opp
+    )
+
+    stat_list[[i]] <- model_preds
+
+    saveRDS(mdl, glue::glue("./data-raw/stat-models/{i}.rds"))
+    stat_model_files <- c(stat_model_files, paste0(i, ".rds"))
+    print(i)
   }, error = function(e) {
-    cli::cli_warn("Temporal-holdout CV fit failed for {i}: {conditionMessage(e)}")
-    NA_real_
+    cli::cli_warn("Skipping stat {.val {i}} -- fitting failed: {conditionMessage(e)}")
   })
-
-  mdl <- mgcv::bam(
-    fml,
-    data = df_mdl, family = binomial(),
-    select = T, discrete = T, nthreads = 4,
-  )
-  mdl <- stamp_model_meta(mdl, build_model_meta(
-    model_name = i, seasons = szns,
-    params = list(family = "binomial", select = TRUE, discrete = TRUE, decay = decay),
-    feature_names = stat_feature_names, cv_metric = cv_metric,
-    n_rows = nrow(df_mdl), n_matches = length(unique(df_mdl$match_id)),
-    extra = list(script = "data-raw/04-analysis/wt_av_modelling.R", cv_metric_type = "temporal_holdout_rmse")
-  ))
-
-  model_preds <- tibble(
-    player_id = df_mdl$player_id,
-    player_name = df_mdl$player_name,
-    player_position = df_mdl$position,
-    match_id = df_mdl$match_id,
-    round = df_mdl$round_number,
-    home_away = df_mdl$home_away,
-    team_name = df_mdl$team_name,
-    opp_name = df_mdl$opponent_name,
-    "{i}" := df_mdl[[i]],
-    "pred_{i}" := mgcv::predict.bam(mdl, newdata = df_mdl, type = "response"),
-    "wt_avg_{i}" := df_mdl$wt_avg,
-    "wt_gms_{i}" := df_mdl$wt_gms,
-    "wt_avg_team_{i}" := df_mdl$wt_avg_team,
-    "wt_avg_opp_{i}" := df_mdl$wt_avg_opp
-  )
-
-  stat_list[[i]] <- model_preds
-
-  saveRDS(mdl, glue::glue("./data-raw/stat-models/{i}.rds"))
-  stat_model_files <- c(stat_model_files, paste0(i, ".rds"))
-  print(i)
 }
 
 tictoc::toc()
 
 # Publish stat models (provenance + manifest) ----
+.n_expected <- length(cols_pois) + length(cols_binom)
+if (length(stat_model_files) < .n_expected) {
+  cli::cli_warn("{length(stat_model_files)}/{.n_expected} stats actually trained -- {.n_expected - length(stat_model_files)} skipped due to a per-stat fitting failure (see warnings above).")
+}
+
 # publish_stat_models() warns-and-continues on individual upload failures
 # rather than aborting the whole batch (58 independent files, not an atomic
 # sidecar-pair group) -- but that means a partial failure is easy to miss
 # among ~58 stats' worth of tic/toc/print(i) console output unless the
-# caller actually checks the result, so check it here.
+# caller actually checks the result, so check it here. This only compares
+# against stat_model_files (what was actually trained), not .n_expected --
+# a training skip above is already warned about, this catches a SEPARATE
+# upload failure on top of that.
 .uploaded_stat_models <- publish_stat_models(stat_model_files, dir = "./data-raw/stat-models")
 if (length(.uploaded_stat_models) < length(stat_model_files)) {
-  cli::cli_abort("Only {length(.uploaded_stat_models)}/{length(stat_model_files)} stat models published -- see warnings above for which failed.")
+  cli::cli_abort("Only {length(.uploaded_stat_models)}/{length(stat_model_files)} trained stat models actually published -- see warnings above for which failed.")
 }
 
 # Combine Predictions ----
