@@ -26,6 +26,12 @@ data-raw/explainer/*.html
 # Cached model files (from torpmodels)
 inst/models/
 
+# Locally-trained stat models awaiting/already published via
+# publish_stat_models() (torpmodels stat-models release tag) -- models stay
+# out of git, same convention as inst/models/ above. Pre-existing tracked
+# files here (extended_stats_kickins*.rds) are untouched by this rule.
+data-raw/stat-models/*.rds
+
 # Obsolete scripts
 data-raw/archive/
 
