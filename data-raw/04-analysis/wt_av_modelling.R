@@ -1,10 +1,43 @@
 # Setup ----
+# Canonical trainer for the 58 per-stat GAMs (stat-models release tag) --
+# TRAINING-CONSOLIDATION-PLAN.md Non-goal 3's deferred provenance/manifest
+# extension, closed 2026-07-26. Everything below "Combine Predictions" is
+# unrelated exploratory/manual analysis, left as-is.
 library(purrr)
 library(tidyverse)
 # library(fitzRoy)  # replaced by internal AFL API functions
 devtools::load_all()
 
+torpmodels_root <- if (file.exists("torpmodels/DESCRIPTION")) {
+  "torpmodels"
+} else if (file.exists("../torpmodels/DESCRIPTION")) {
+  "../torpmodels"
+} else {
+  NULL
+}
+if (is.null(torpmodels_root)) {
+  cli::cli_abort("torpmodels not found (checked torpmodels/DESCRIPTION, ../torpmodels/DESCRIPTION) -- required for stamp_model_meta()/publish_stat_models().")
+}
+devtools::load_all(torpmodels_root)
+
 szns <- 2021:get_afl_season()
+# temporal-holdout CV metric: train on seasons before this, score on it.
+# Deliberately the CURRENT (possibly in-progress) season, not "the last
+# COMPLETED season" the way WP/match-margin do it -- this script is re-run
+# ad hoc through a season, and holding out whatever of the current season
+# has been played so far is more useful than a stale prior-season number.
+# The nrow()==0 guard in each loop degrades to cv_metric=NA if the current
+# season has no rows yet (e.g. run in the off-season).
+holdout_season <- get_afl_season()
+
+# RMSE that tolerates the NA predictions a re/factor-smooth term can produce
+# for an unseen level in the held-out season (e.g. a venue/day not present
+# pre-holdout) -- ModelMetrics::rmse() has no na.rm.
+.safe_rmse <- function(actual, predicted) {
+  ok <- !is.na(actual) & !is.na(predicted)
+  if (!any(ok)) return(NA_real_)
+  sqrt(mean((actual[ok] - predicted[ok])^2))
+}
 
 minmax <- function(x, na.rm = TRUE) {
   return((x - min(x, na.rm = TRUE)) / (max(x, na.rm = TRUE) - min(x, na.rm = TRUE)))
@@ -54,6 +87,10 @@ wav_data <- function(df, fil_val, model_col, decay = 365) {
   df$season_round <- paste0(substr(df$match_id, 5, 8), substr(df$match_id, 12, 13))
 
   df$opponent_name <- ifelse(df$team_status == "home", df$away_team_name, df$home_team_name)
+  # team_name no longer comes back directly from load_player_stats() (schema
+  # drift since this script was last run) -- derive it the same way as
+  # opponent_name, just the other side of team_status.
+  df$team_name <- ifelse(df$team_status == "home", df$home_team_name, df$away_team_name)
 
   df_old <- df %>%
     filter(season_round < fil_val) %>%
@@ -113,7 +150,14 @@ wav_data <- function(df, fil_val, model_col, decay = 365) {
       date_numeric = as.numeric(aest_start),
       aest_hour = (hour(aest_start) * 60 + minute(aest_start)) / 60,
       aest_day = wday(aest_start, label = TRUE),
-      position = as.factor(substr(lineup_position, 1, 2)),
+      # lineup_position no longer comes back from load_player_stats() either
+      # (same schema drift as team_name above), but position is the same raw
+      # granular lineup code lineup_position used to be (BPL/BPR/CHB/CHF/...,
+      # plus EMERG/INT/SUB -- confirmed via a live table() check), so the
+      # same substr(.,1,2) truncation applies to the new field name and
+      # reproduces the exact old collapsing (EMERG->EM, INT->IN, etc),
+      # including what the position != "EM" filter below depends on.
+      position = as.factor(substr(position, 1, 2)),
       home_away = as.factor(team_status),
       player_name = paste(given_name, surname)
     ) %>%
@@ -129,9 +173,20 @@ wav_data <- function(df, fil_val, model_col, decay = 365) {
 
 # Fit Poisson Models ----
 stat_list <- list()
+stat_model_files <- character(0)
+
+stat_formula_str <- paste0(
+  "%s ~ ti(log_wt_avg,wt_gms, bs = 'ts') + s(log_wt_avg, bs='ts') + s(wt_gms, bs='ts')",
+  "+ s(position,bs='re') + s(log_wt_avg_team, bs='ts') + s(log_wt_avg_opp, bs='ts') + s(home_away, bs='re')",
+  "+ s(venue, bs='re') + s(round, bs='ts') + s(date_numeric, bs='ts', m=1) + s(aest_day, bs='re') + s(aest_hour, bs='ts')"
+)
+stat_feature_names <- c(
+  "log_wt_avg", "wt_gms", "position", "log_wt_avg_team", "log_wt_avg_opp",
+  "home_away", "venue", "round", "date_numeric", "aest_day", "aest_hour"
+)
 
 tictoc::tic()
-for (i in cols_pois[1:length(cols_pois)]) { ############### DO 30 LATER!!!!!!!
+for (i in cols_pois) {
   df_mdl <- purrr::map(
     paste0(rep(szns, each = 29), rep(sprintf("%02d", 0:28), times = length(szns))),
     ~ wav_data(pstot,
@@ -141,17 +196,40 @@ for (i in cols_pois[1:length(cols_pois)]) { ############### DO 30 LATER!!!!!!!
   ) %>%
     purrr::list_rbind()
 
+  fml <- as.formula(sprintf(stat_formula_str, i))
+
+  # Temporal-holdout CV metric (mirrors the pattern already established for
+  # WP/match-margin): fit on all-but-holdout_season, score the held-out
+  # season OOS. A second, separate fit from the production model below --
+  # this is why the loop roughly doubles in runtime vs the pre-provenance
+  # version.
+  train_df <- df_mdl %>% dplyr::filter(as.integer(as.character(season)) < holdout_season)
+  test_df <- df_mdl %>% dplyr::filter(as.integer(as.character(season)) == holdout_season)
+  cv_metric <- tryCatch({
+    if (nrow(train_df) == 0 || nrow(test_df) == 0) {
+      NA_real_
+    } else {
+      mdl_cv <- mgcv::bam(fml, data = train_df, family = poisson(), select = T, discrete = T, nthreads = 4)
+      preds_cv <- mgcv::predict.bam(mdl_cv, newdata = test_df, type = "response")
+      .safe_rmse(test_df[[i]], preds_cv)
+    }
+  }, error = function(e) {
+    cli::cli_warn("Temporal-holdout CV fit failed for {i}: {conditionMessage(e)}")
+    NA_real_
+  })
 
   mdl <- mgcv::bam(
-    as.formula(paste0(
-      i,
-      " ~ ti(log_wt_avg,wt_gms, bs = 'ts') + s(log_wt_avg, bs='ts') + s(wt_gms, bs='ts')",
-      "+ s(position,bs='re') + s(log_wt_avg_team, bs='ts') + s(log_wt_avg_opp, bs='ts') + s(home_away, bs='re')",
-      "+ s(venue, bs='re') + s(round, bs='ts') + s(date_numeric, bs='ts', m=1) + s(aest_day, bs='re') + s(aest_hour, bs='ts')"
-    )),
+    fml,
     data = df_mdl, family = poisson(),
     select = T, discrete = T, nthreads = 4,
   )
+  mdl <- stamp_model_meta(mdl, build_model_meta(
+    model_name = i, seasons = szns,
+    params = list(family = "poisson", select = TRUE, discrete = TRUE, decay = decay),
+    feature_names = stat_feature_names, cv_metric = cv_metric,
+    n_rows = nrow(df_mdl), n_matches = length(unique(df_mdl$match_id)),
+    extra = list(script = "data-raw/04-analysis/wt_av_modelling.R", cv_metric_type = "temporal_holdout_rmse")
+  ))
 
   model_preds <- tibble(
     player_id = df_mdl$player_id,
@@ -173,6 +251,7 @@ for (i in cols_pois[1:length(cols_pois)]) { ############### DO 30 LATER!!!!!!!
   stat_list[[i]] <- model_preds
 
   saveRDS(mdl, glue::glue("./data-raw/stat-models/{i}.rds"))
+  stat_model_files <- c(stat_model_files, paste0(i, ".rds"))
   print(i)
 }
 
@@ -181,8 +260,14 @@ tictoc::toc()
 # Fit Binomial Models ----
 # stat_list_binom <- list()
 
+stat_formula_str_binom <- paste0(
+  "%s ~ ti(log_wt_avg,wt_gms, bs = 'ts') + s(log_wt_avg, bs='ts') + s(wt_gms, bs='ts')",
+  "+ s(position,bs='re') + s(log_wt_avg_team, bs='ts', k=4) + s(log_wt_avg_opp, bs='ts', k=4) + s(home_away, bs='re')",
+  "+ s(venue, bs='re') + s(round, bs='ts') + s(date_numeric, bs='ts', m=1) + s(aest_day, bs='re') + s(aest_hour, bs='ts')"
+)
+
 tictoc::tic()
-for (i in cols_binom[1:length(cols_binom)]) {
+for (i in cols_binom) {
   df_mdl <- purrr::map(
     paste0(rep(szns, each = 29), rep(sprintf("%02d", 0:28), times = length(szns))),
     ~ wav_data(
@@ -194,17 +279,36 @@ for (i in cols_binom[1:length(cols_binom)]) {
   ) %>%
     purrr::list_rbind()
 
+  fml <- as.formula(sprintf(stat_formula_str_binom, i))
+
+  # Temporal-holdout CV metric -- see the Poisson loop above for rationale.
+  train_df <- df_mdl %>% dplyr::filter(as.integer(as.character(season)) < holdout_season)
+  test_df <- df_mdl %>% dplyr::filter(as.integer(as.character(season)) == holdout_season)
+  cv_metric <- tryCatch({
+    if (nrow(train_df) == 0 || nrow(test_df) == 0) {
+      NA_real_
+    } else {
+      mdl_cv <- mgcv::bam(fml, data = train_df, family = binomial(), select = T, discrete = T, nthreads = 4)
+      preds_cv <- mgcv::predict.bam(mdl_cv, newdata = test_df, type = "response")
+      .safe_rmse(test_df[[i]], preds_cv)
+    }
+  }, error = function(e) {
+    cli::cli_warn("Temporal-holdout CV fit failed for {i}: {conditionMessage(e)}")
+    NA_real_
+  })
 
   mdl <- mgcv::bam(
-    as.formula(paste0(
-      i,
-      " ~ ti(log_wt_avg,wt_gms, bs = 'ts') + s(log_wt_avg, bs='ts') + s(wt_gms, bs='ts')",
-      "+ s(position,bs='re') + s(log_wt_avg_team, bs='ts', k=4) + s(log_wt_avg_opp, bs='ts', k=4) + s(home_away, bs='re')",
-      "+ s(venue, bs='re') + s(round, bs='ts') + s(date_numeric, bs='ts', m=1) + s(aest_day, bs='re') + s(aest_hour, bs='ts')"
-    )),
+    fml,
     data = df_mdl, family = binomial(),
     select = T, discrete = T, nthreads = 4,
   )
+  mdl <- stamp_model_meta(mdl, build_model_meta(
+    model_name = i, seasons = szns,
+    params = list(family = "binomial", select = TRUE, discrete = TRUE, decay = decay),
+    feature_names = stat_feature_names, cv_metric = cv_metric,
+    n_rows = nrow(df_mdl), n_matches = length(unique(df_mdl$match_id)),
+    extra = list(script = "data-raw/04-analysis/wt_av_modelling.R", cv_metric_type = "temporal_holdout_rmse")
+  ))
 
   model_preds <- tibble(
     player_id = df_mdl$player_id,
@@ -226,10 +330,22 @@ for (i in cols_binom[1:length(cols_binom)]) {
   stat_list[[i]] <- model_preds
 
   saveRDS(mdl, glue::glue("./data-raw/stat-models/{i}.rds"))
+  stat_model_files <- c(stat_model_files, paste0(i, ".rds"))
   print(i)
 }
 
 tictoc::toc()
+
+# Publish stat models (provenance + manifest) ----
+# publish_stat_models() warns-and-continues on individual upload failures
+# rather than aborting the whole batch (58 independent files, not an atomic
+# sidecar-pair group) -- but that means a partial failure is easy to miss
+# among ~58 stats' worth of tic/toc/print(i) console output unless the
+# caller actually checks the result, so check it here.
+.uploaded_stat_models <- publish_stat_models(stat_model_files, dir = "./data-raw/stat-models")
+if (length(.uploaded_stat_models) < length(stat_model_files)) {
+  cli::cli_abort("Only {length(.uploaded_stat_models)}/{length(stat_model_files)} stat models published -- see warnings above for which failed.")
+}
 
 # Combine Predictions ----
 pred_df <- stat_list %>% reduce(left_join, by = c(
