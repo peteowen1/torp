@@ -252,7 +252,7 @@ for (i in cols_pois) {
       params = list(family = "poisson", select = TRUE, discrete = TRUE, decay = decay),
       feature_names = stat_feature_names, cv_metric = cv_metric,
       n_rows = nrow(df_mdl), n_matches = length(unique(df_mdl$match_id)),
-      extra = list(script = "data-raw/04-analysis/wt_av_modelling.R", cv_metric_type = "temporal_holdout_rmse")
+      extra = list(script = "data-raw/07-stat-models/wt_av_modelling.R", cv_metric_type = "temporal_holdout_rmse")
     ))
 
     model_preds <- tibble(
@@ -337,7 +337,7 @@ for (i in cols_binom) {
       params = list(family = "binomial", select = TRUE, discrete = TRUE, decay = decay),
       feature_names = stat_feature_names, cv_metric = cv_metric,
       n_rows = nrow(df_mdl), n_matches = length(unique(df_mdl$match_id)),
-      extra = list(script = "data-raw/04-analysis/wt_av_modelling.R", cv_metric_type = "temporal_holdout_rmse")
+      extra = list(script = "data-raw/07-stat-models/wt_av_modelling.R", cv_metric_type = "temporal_holdout_rmse")
     ))
 
     model_preds <- tibble(
@@ -390,10 +390,30 @@ if (length(stat_model_files) < n_expected) {
 # caller actually checks the result, so check it here. This only compares
 # against stat_model_files (what was actually trained), not n_expected --
 # a training skip above is already warned about, this catches a SEPARATE
-# upload failure on top of that.
+# upload failure on top of that. Deliberate quality-gate skips (attr
+# "gated") don't count as a failure here -- see publish_stat_models()'s own
+# gating docs -- so they're subtracted before comparing.
 uploaded_stat_models <- publish_stat_models(stat_model_files, dir = "./data-raw/stat-models")
-if (length(uploaded_stat_models) < length(stat_model_files)) {
-  cli::cli_abort("Only {length(uploaded_stat_models)}/{length(stat_model_files)} trained stat models actually published -- see warnings above for which failed.")
+n_gated <- length(attr(uploaded_stat_models, "gated"))
+if (n_gated > 0) {
+  cli::cli_inform("{n_gated} stat model(s) skipped by the quality gate (regressed vs previous version) -- previous versions stay live.")
+}
+if (length(uploaded_stat_models) + n_gated < length(stat_model_files)) {
+  cli::cli_abort("Only {length(uploaded_stat_models)}/{length(stat_model_files)} trained stat models actually published ({n_gated} intentionally gated) -- see warnings above for which failed.")
+}
+
+cli::cli_alert_success("Training + publish complete: {length(uploaded_stat_models)} published, {n_gated} gated, {length(stat_model_files)}/{n_expected} attempted.")
+
+# Everything below this point (pred_df combination, model validation
+# diagnostics, team/player-level exploratory analysis) is unrelated to the
+# training+publish pipeline above and is separately broken (undefined
+# team_mdl_df, interactive View() calls -- see the file header). An
+# unattended non-interactive run (Rscript, CI) must stop here rather than
+# crash on that dead code after the actual work already succeeded;
+# interactive users can still run the rest manually line-by-line.
+if (!interactive()) {
+  cli::cli_inform("Non-interactive session -- stopping here. The rest of this script is exploratory/manual only (not part of the pipeline).")
+  quit(save = "no", status = 0)
 }
 
 # Combine Predictions ----
