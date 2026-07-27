@@ -80,6 +80,44 @@ test_that(".add_lineup_pos_group maps weekly roles and leaves bench rows NA", {
   expect_identical(.add_lineup_pos_group(bare), bare)
 })
 
+test_that("estimate_player_stat_ratings carries the weekly lineup group", {
+  # The whole PSR half of the change is inert unless this column survives the
+  # aggregation, so assert it end-to-end rather than trusting the wiring.
+  base <- data.table::data.table(
+    player_id = rep(c("a", "b"), each = 3),
+    player_name = rep(c("A", "B"), each = 3),
+    match_id = rep(c("m1", "m2", "m3"), 2),
+    match_date_rating = rep(as.Date("2025-04-01") + c(0, 7, 14), 2),
+    pos_group = "MIDFIELDER",
+    tog = 0.9,
+    avail_only = FALSE,
+    disposals = 20,
+    # player a finishes the window named at CHF, player b on the bench
+    lineup_position = c("C", "C", "CHF", "C", "C", "INT")
+  )
+  out <- estimate_player_stat_ratings(base, ref_date = as.Date("2025-05-01"),
+                                      compute_ci = FALSE)
+  expect_true("lineup_pos_group" %in% names(out))
+  expect_equal(out$lineup_pos_group[out$player_id == "a"], "KEY_FORWARD")
+  # bench code maps to NA so calculate_psr falls back to pos_group
+  expect_true(is.na(out$lineup_pos_group[out$player_id == "b"]))
+  # and pos_group is still the modal label, unchanged
+  expect_equal(unique(out$pos_group), "MIDFIELDER")
+})
+
+test_that("estimate_player_stat_ratings works without a lineup column", {
+  # Older cached frames have no lineup_position; that must not error.
+  base <- data.table::data.table(
+    player_id = "a", player_name = "A", match_id = "m1",
+    match_date_rating = as.Date("2025-04-01"),
+    pos_group = "MIDFIELDER", tog = 0.9, avail_only = FALSE, disposals = 20
+  )
+  out <- estimate_player_stat_ratings(base, ref_date = as.Date("2025-05-01"),
+                                      compute_ci = FALSE)
+  expect_false("lineup_pos_group" %in% names(out))
+  expect_equal(out$pos_group, "MIDFIELDER")
+})
+
 test_that("calculate_psr prefers the weekly lineup group over pos_group", {
   # Two players with identical raw profiles but different weekly roles must be
   # centred against different groups; that is the whole point of §7.15.
