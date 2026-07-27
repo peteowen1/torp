@@ -1,3 +1,53 @@
+# torp (development version)
+
+## Rating changes — NOT yet reflected in published ratings
+
+These change how EPR and PSR are computed. Published `ratings-data` is untouched
+until a full-history regeneration runs, which per decision D-DEF3 will ship as a
+**new rating vintage alongside the existing one**, not an in-place overwrite.
+Evidence for every item is in `../docs/plans/FABLE-DEFENDER-VALUE-PLAN.md` §7.
+
+* **The EPV position adjustment now rescales as well as recentres**
+  (`EPV_POSITION_STANDARDISE`). It previously subtracted a within-position mean
+  and stopped, which corrects positional *level* but leaves positional *spread*
+  alone — and the measured defect in key-defender ratings is under-dispersion,
+  not under-levelling. Key-defender rating SD moves 1.40 → 1.60 and the best
+  key-defender season 3.42 → 4.04, narrowing the best-forward-to-best-key-defender
+  gap from 1.96× to 1.55×. Paired bootstrap on positional calibration:
+  Δ mean|β−1| −0.095, 95% CI [−0.160, −0.016], P(improves) 0.987 — the first
+  result in this program whose interval excludes zero.
+
+* **`hitout` is deliberately excluded from that rescaling**
+  (`EPV_STANDARDISE_CHANNELS`). Rescaling divides by a within-position SD, which
+  is only meaningful for a channel every position participates in. Hitouts are
+  ruck-exclusive, so outfield positions carry a near-zero hitout SD and rescaling
+  amplified their deviations 4–9× (and 1.24 million-fold for `EMERG`, where the
+  SD is exactly zero). Left unguarded this put a ruck named at nine different
+  lineup positions into the overall top 10 at 4.06 against his true 1.12.
+  Excluding the channel scores strictly better than capping the amplifier.
+
+* **The 20-way lineup-position map is corrected** (`LINEUP_POSITION_GROUP_MAP`,
+  previously inline in `player_skills_data.R`). An audit of all 18 on-field codes
+  against player height, the clubs' listed positions, PBP-derived position groups
+  and each code's on-field statistical profile found three assignments
+  contradicted by every source: `CHF` was MEDIUM_FORWARD (a centre half forward
+  averages 190.8cm and is listed KEY_FORWARD; PBP disagreed 67% of the time), and
+  `FPL`/`FPR` were KEY_FORWARD (the pockets average 187cm, are listed
+  MEDIUM_FORWARD, and PBP disagreed 72% and 69% — the highest rates in the
+  table). `CHB` is also now grouped with `FB`; that one is a football judgement
+  on genuinely ambiguous evidence rather than a correction, and is flagged as
+  the taxonomy's softest call.
+
+* **`calculate_psr()` now prefers a weekly position group** (`lineup_pos_group`)
+  over `pos_group`. What drives positional calibration is temporal resolution,
+  not granularity: `pos_group` is effectively season-constant (it varies in 0.6%
+  of player-seasons) while the team sheet varies for 77.8%, and moving to a
+  weekly 6-way role improved mean|β−1| by 0.138 (P 0.956) where going finer than
+  6-way added nothing (P 0.417). **This is inert until the `06-stat-ratings`
+  pipeline joins `lineup_position` into the stat-ratings frame** — that frame
+  carries no lineup column today, which is exactly why production has silently
+  centred on the season-constant label for years.
+
 # torp 1.3.8 (2026-07-25)
 
 ## Bug Fixes

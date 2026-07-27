@@ -90,6 +90,79 @@ EPR_PRIOR_RATE_CONTEST <- 0.0000
 #' @keywords internal
 TORP_EPR_WEIGHT <- 0.5
 
+#' Whether the EPV position adjustment rescales as well as recentres
+#'
+#' The position adjustment in \code{create_player_game_data()} historically
+#' subtracted a within-position mean and stopped, which fixes positional
+#' *level* but leaves positional *spread* untouched. Since key defenders are
+#' under-dispersed rather than under-levelled, rescaling is the layer where
+#' that defect actually lives. When TRUE the adjustment becomes
+#' \code{(p80 - mean_pos) / sd_pos * S * tog}, where \code{S} is the pooled
+#' weighted SD for the channel, so overall units are preserved and only
+#' between-position spread differences change.
+#'
+#' Evidence: FABLE-DEFENDER-VALUE-PLAN.md §7.18 — key-defender rating SD
+#' 1.40 -> 1.60, max 3.42 -> 4.04, best-forward gap 1.96x -> 1.55x, and the
+#' first paired bootstrap CI in that program to exclude zero.
+#'
+#' Assumption, stated because it is load-bearing: this asserts that every
+#' position group *should* have the same spread of player value.
+#' @keywords internal
+EPV_POSITION_STANDARDISE <- TRUE
+
+#' Map from the 20-way team-sheet lineup position to a 6-way position group
+#'
+#' Corrected 2026-07-27 after an audit of all 18 on-field codes against player
+#' height, the clubs' listed positions, PBP-derived position groups and each
+#' code's on-field statistical profile
+#' (\code{data-raw/04-analysis/lineup_position_taxonomy_audit.R},
+#' \code{position_source_provenance.R}). Three of the previous assignments were
+#' contradicted by every source:
+#'
+#' \itemize{
+#'   \item \code{CHF} was MEDIUM_FORWARD. A centre half forward averages 190.8cm
+#'     and his club lists him KEY_FORWARD; PBP disagreed with the old mapping
+#'     67% of the time. Now KEY_FORWARD.
+#'   \item \code{FPL}/\code{FPR} were KEY_FORWARD. The forward pockets average
+#'     187.0-187.3cm and are listed MEDIUM_FORWARD; PBP disagreed 72% and 69% of
+#'     the time — the highest rates in the table. Now MEDIUM_FORWARD.
+#'   \item \code{CHB} was MEDIUM_DEFENDER. This one is genuinely ambiguous —
+#'     play profile places a CHB nearer the back pockets than the full-back,
+#'     but the two central defensive posts are a coherent role pairing and the
+#'     calibration evidence cannot separate the options (§7.15b). Grouped with
+#'     FB as a football judgement, flagged as the taxonomy's softest call.
+#' }
+#'
+#' Bench codes map to NA so they fall through to the modal-position resolution
+#' in \code{.resolve_stat_rating_positions()}.
+#' @keywords internal
+LINEUP_POSITION_GROUP_MAP <- c(
+  FB   = "KEY_DEFENDER",  CHB  = "KEY_DEFENDER",
+  BPL  = "MEDIUM_DEFENDER", BPR  = "MEDIUM_DEFENDER",
+  HBFL = "MEDIUM_DEFENDER", HBFR = "MEDIUM_DEFENDER",
+  C    = "MIDFIELDER", WL   = "MIDFIELDER", WR   = "MIDFIELDER",
+  R    = "MIDFIELDER", RR   = "MIDFIELDER",
+  RK   = "RUCK",
+  FF   = "KEY_FORWARD", CHF  = "KEY_FORWARD",
+  FPL  = "MEDIUM_FORWARD", FPR  = "MEDIUM_FORWARD",
+  HFFL = "MEDIUM_FORWARD", HFFR = "MEDIUM_FORWARD",
+  INT  = NA_character_, SUB  = NA_character_, EMERG = NA_character_
+)
+
+#' EPV channels the position adjustment rescales (see EPV_POSITION_STANDARDISE)
+#'
+#' \code{hitout} is deliberately excluded. Standardising divides by the
+#' within-position SD, which is only meaningful for a channel every position
+#' participates in. Hitouts are ruck-exclusive: outfield positions carry hitout
+#' SD 0.14-0.32 against a pooled SD of 1.241, so rescaling that channel
+#' amplifies an outfield player's hitout deviation 4-9x (and 1.24 million-fold
+#' for EMERG, where the within-position SD is exactly zero). In testing this
+#' put a ruck named at nine different lineup positions into the overall top 10
+#' at 4.06 against his true 1.12. Excluding the channel scores strictly better
+#' than capping the amplifier (§7.18c).
+#' @keywords internal
+EPV_STANDARDISE_CHANNELS <- c("recv", "disp", "spoil")
+
 #' PSR prior rate for replacement-level players
 #'
 #' Players without enough skill history to compute PSR are assigned this

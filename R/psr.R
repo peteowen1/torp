@@ -103,9 +103,21 @@ calculate_psr <- function(skills, coef_df, center = TRUE) {
 
   dt[, psr_raw := as.numeric(mat %*% betas)]
 
-  # Center by position (wt_80s-weighted mean subtraction)
-  # Prefer lineup_position (20-way), fall back to pos_group (6-way)
-  psr_pos_col <- if ("lineup_position" %in% names(dt)) "lineup_position"
+  # Center by position (wt_80s-weighted mean subtraction).
+  #
+  # Preference order matters and is evidence-based (FABLE-DEFENDER-VALUE-PLAN
+  # §7.15). What drives calibration is TEMPORAL RESOLUTION, not granularity:
+  #   - lineup_pos_group  6-way, from the WEEKLY team sheet   <- best
+  #   - lineup_position   20-way, weekly but unnecessarily fine
+  #   - pos_group         6-way, but effectively season-constant (it varies in
+  #                       only 0.6% of player-seasons), which is what production
+  #                       silently used for years because the stat-ratings frame
+  #                       carries no lineup column at all
+  # Moving from pos_group to a weekly 6-way role improved overall positional
+  # calibration by 0.138 on mean|beta-1| with P(improves) 0.956; going finer
+  # than 6-way added nothing (P 0.417).
+  psr_pos_col <- if ("lineup_pos_group" %in% names(dt)) "lineup_pos_group"
+                 else if ("lineup_position" %in% names(dt)) "lineup_position"
                  else if ("pos_group" %in% names(dt)) "pos_group"
                  else NULL
   if (center && is.null(psr_pos_col)) {

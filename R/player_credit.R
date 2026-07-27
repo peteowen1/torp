@@ -50,6 +50,44 @@ default_epv_params <- function() {
   )
 }
 
+#' TOG-weighted standard deviation
+#'
+#' @param x Numeric vector.
+#' @param w Numeric weights (time on ground).
+#' @return Weighted SD, or \code{NA_real_} when nothing is observed.
+#' @keywords internal
+.wtd_sd <- function(x, w) {
+  ok <- !is.na(x) & !is.na(w)
+  if (!any(ok)) return(NA_real_)
+  m <- stats::weighted.mean(x[ok], w[ok])
+  sqrt(sum(w[ok] * (x[ok] - m)^2) / sum(w[ok]))
+}
+
+#' Position-adjust a per-80 EPV channel
+#'
+#' Recentres within position, and — when \code{standardise} is TRUE —
+#' rescales to the pooled cross-position spread as well, so the channel's
+#' overall units are preserved while between-position spread differences are
+#' removed. See \code{EPV_POSITION_STANDARDISE}.
+#'
+#' Falls back to centre-only when the within-position SD is absent or
+#' degenerate; dividing by a near-zero SD amplifies without bound, which is
+#' exactly the failure mode that excludes the hitout channel.
+#'
+#' @param p80 Per-80 channel value.
+#' @param tog Time-on-ground weight.
+#' @param pooled_sd Pooled (all-position) weighted SD for this channel.
+#' @param standardise Logical; rescale as well as recentre.
+#' @return Position-adjusted, TOG-scaled channel value.
+#' @keywords internal
+.position_adjust <- function(p80, tog, pooled_sd, standardise) {
+  centred <- p80 - stats::weighted.mean(p80, tog, na.rm = TRUE)
+  if (!isTRUE(standardise)) return(centred * tog)
+  s <- .wtd_sd(p80, tog)
+  if (is.na(s) || s < 1e-6 || is.na(pooled_sd)) return(centred * tog)
+  centred / s * pooled_sd * tog
+}
+
 #' Create Player Game Data
 #'
 #' Transforms raw play-by-play data and player stats into processed per-game
@@ -322,13 +360,27 @@ create_player_game_data <- function(pbp_data = NULL,
       wp_credit_p80 = .data$wp_credit / .data$tog_safe,
       wp_disp_credit_p80 = .data$wp_disp_credit / .data$tog_safe,
       wp_recv_credit_p80 = .data$wp_recv_credit / .data$tog_safe
-    ) |>
+    )
+
+  # Pooled (all-position) spread per channel — the scale the standardised
+  # adjustment restores, so the metric keeps its units and only the
+  # BETWEEN-position spread differences change. Computed before grouping.
+  .epv_ch <- c("recv", "disp", "spoil", "hitout")
+  .pooled_sd <- vapply(.epv_ch, function(ch)
+    .wtd_sd(plyr_gm_df[[paste0("epv_", ch, "_p80")]], plyr_gm_df$tog_safe),
+    numeric(1))
+  .std <- stats::setNames(
+    isTRUE(EPV_POSITION_STANDARDISE) & .epv_ch %in% EPV_STANDARDISE_CHANNELS,
+    .epv_ch
+  )
+
+  plyr_gm_df <- plyr_gm_df |>
     dplyr::group_by(lineup_position) |>
     dplyr::mutate(
-      epv_recv_adj = (.data$epv_recv_p80 - stats::weighted.mean(.data$epv_recv_p80, .data$tog_safe, na.rm = TRUE)) * .data$tog_safe,
-      epv_disp_adj = (.data$epv_disp_p80 - stats::weighted.mean(.data$epv_disp_p80, .data$tog_safe, na.rm = TRUE)) * .data$tog_safe,
-      epv_spoil_adj = (.data$epv_spoil_p80 - stats::weighted.mean(.data$epv_spoil_p80, .data$tog_safe, na.rm = TRUE)) * .data$tog_safe,
-      epv_hitout_adj = (.data$epv_hitout_p80 - stats::weighted.mean(.data$epv_hitout_p80, .data$tog_safe, na.rm = TRUE)) * .data$tog_safe,
+      epv_recv_adj = .position_adjust(.data$epv_recv_p80, .data$tog_safe, .pooled_sd[["recv"]], .std[["recv"]]),
+      epv_disp_adj = .position_adjust(.data$epv_disp_p80, .data$tog_safe, .pooled_sd[["disp"]], .std[["disp"]]),
+      epv_spoil_adj = .position_adjust(.data$epv_spoil_p80, .data$tog_safe, .pooled_sd[["spoil"]], .std[["spoil"]]),
+      epv_hitout_adj = .position_adjust(.data$epv_hitout_p80, .data$tog_safe, .pooled_sd[["hitout"]], .std[["hitout"]]),
       epv_adj = .data$epv_recv_adj + .data$epv_disp_adj + .data$epv_spoil_adj + .data$epv_hitout_adj,
       wp_credit_adj = (.data$wp_credit_p80 - stats::weighted.mean(.data$wp_credit_p80, .data$tog_safe, na.rm = TRUE)) * .data$tog_safe,
       wp_disp_credit_adj = (.data$wp_disp_credit_p80 - stats::weighted.mean(.data$wp_disp_credit_p80, .data$tog_safe, na.rm = TRUE)) * .data$tog_safe,
