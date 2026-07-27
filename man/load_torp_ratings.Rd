@@ -4,10 +4,19 @@
 \alias{load_torp_ratings}
 \title{Load TORP Ratings Data}
 \usage{
-load_torp_ratings(columns = NULL)
+load_torp_ratings(columns = NULL, version = NULL)
 }
 \arguments{
 \item{columns}{Optional character vector of column names to read. If NULL (default), reads all columns.}
+
+\item{version}{Rating vintage to load. \code{NULL} (default) loads the canonical
+ratings, which is what every existing caller gets and what will keep
+working unchanged. Pass a label such as \code{"v2"} to load a candidate vintage
+published alongside it (decision D-DEF3 — see
+\code{docs/plans/RATING-VERSIONING-PLAN.md}). An unrecognised label is an error
+rather than a silent fall back to canonical, because quietly serving a
+different vintage than the caller asked for is the exact failure this
+mechanism exists to prevent.}
 }
 \value{
 A data frame containing TORP ratings with columns including

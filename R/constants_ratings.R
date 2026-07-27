@@ -110,6 +110,19 @@ TORP_EPR_WEIGHT <- 0.5
 #' @keywords internal
 EPV_POSITION_STANDARDISE <- TRUE
 
+#' Rating vintage produced by the current constants
+#'
+#' Bumped whenever a change alters historical ratings. Per decision D-DEF3 a
+#' new vintage is published *alongside* the canonical one rather than
+#' overwriting it, so a published number can always be traced to the definition
+#' that produced it. See \code{docs/plans/RATING-VERSIONING-PLAN.md}.
+#'
+#' \code{"v1"} is every rating published before 2026-07-27. \code{"v2"} adds the
+#' EPV position-variance standardisation, the corrected lineup taxonomy and
+#' weekly PSR centring.
+#' @keywords internal
+RATING_VINTAGE <- "v2"
+
 #' Map from the 20-way team-sheet lineup position to a 6-way position group
 #'
 #' Corrected 2026-07-27 after an audit of all 18 on-field codes against player
