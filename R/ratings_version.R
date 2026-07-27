@@ -88,17 +88,23 @@
 #' Build a rating-vintage manifest entry
 #'
 #' @param n_rows Row count of the published ratings frame.
-#' @param version Vintage label. Defaults to \code{RATING_VINTAGE}.
+#' @param version Vintage label of the CONSTANTS that produced this data.
+#'   Defaults to \code{RATING_VINTAGE}.
+#' @param file Filename actually written. Must be passed explicitly: the
+#'   vintage label and the filename are independent. Regenerating canonical
+#'   under new constants writes \code{torp_ratings.parquet} while the vintage
+#'   is \code{"v2"}, and deriving one from the other mislabels the manifest.
 #' @param generated_utc Timestamp; defaults to now. Injectable for tests.
 #' @return A named list describing this vintage.
 #' @keywords internal
 .build_rating_vintage_entry <- function(n_rows, version = RATING_VINTAGE,
-                                        generated_utc = NULL) {
+                                        file = NULL, generated_utc = NULL) {
   if (is.null(generated_utc)) {
     generated_utc <- format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC")
   }
+  if (is.null(file)) file <- .rating_vintage_file(if (identical(version, "v1")) NULL else version)
   list(
-    file = .rating_vintage_file(if (identical(version, "v1")) NULL else version),
+    file = file,
     torp_version = as.character(utils::packageVersion("torp")),
     generated_utc = generated_utc,
     rows = as.integer(n_rows),
@@ -133,12 +139,20 @@
 #' \code{.merge_rating_manifest()}.
 #'
 #' @param n_rows Row count of the ratings frame just published.
-#' @param version Vintage label. Defaults to \code{RATING_VINTAGE}.
+#' @param version Vintage label of the constants that produced the data.
+#'   Defaults to \code{RATING_VINTAGE}.
+#' @param file Filename actually written (see
+#'   \code{.build_rating_vintage_entry()}).
+#' @param set_canonical If TRUE, record this vintage as canonical. Only ever
+#'   TRUE when the run wrote \code{torp_ratings.parquet} itself; a run that
+#'   publishes a candidate alongside must leave canonical alone.
 #' @return Invisibly, the manifest that was uploaded.
 #' @keywords internal
-publish_ratings_manifest <- function(n_rows, version = RATING_VINTAGE) {
-  entry <- .build_rating_vintage_entry(n_rows, version = version)
+publish_ratings_manifest <- function(n_rows, version = RATING_VINTAGE,
+                                     file = NULL, set_canonical = FALSE) {
+  entry <- .build_rating_vintage_entry(n_rows, version = version, file = file)
   manifest <- .merge_rating_manifest(read_ratings_manifest(), version, entry)
+  if (isTRUE(set_canonical)) manifest$canonical <- version
 
   tf <- file.path(tempdir(), "ratings_manifest.json")
   writeLines(jsonlite::toJSON(manifest, auto_unbox = TRUE, pretty = TRUE, null = "null"), tf)

@@ -39,6 +39,28 @@ test_that("a vintage entry records provenance and row count", {
   expect_true(e$defining_constants$EPV_POSITION_STANDARDISE)
 })
 
+test_that("vintage label and filename are independent", {
+  # The switch-straight-away path writes torp_ratings.parquet under v2
+  # constants. Deriving the label from the filename would record the new data
+  # as v1 -- labelling it as the data it replaced.
+  e <- .build_rating_vintage_entry(10, version = "v2",
+                                   file = "torp_ratings.parquet",
+                                   generated_utc = "x")
+  expect_equal(e$file, "torp_ratings.parquet")
+  expect_true(e$defining_constants$EPV_POSITION_STANDARDISE)
+  m <- .merge_rating_manifest(NULL, "v2", e)
+  expect_named(m$vintages, "v2")
+  expect_equal(m$vintages$v2$file, "torp_ratings.parquet")
+})
+
+test_that("only an explicit set_canonical changes canonical", {
+  # .merge_rating_manifest never promotes; publish_ratings_manifest promotes
+  # only when the run actually wrote canonical.
+  expect_false(isTRUE(formals(publish_ratings_manifest)$set_canonical))
+  e <- .build_rating_vintage_entry(1, "v2", "torp_ratings.parquet", "x")
+  expect_equal(.merge_rating_manifest(NULL, "v2", e)$canonical, "v1")
+})
+
 test_that("the v1 entry points at the canonical filename", {
   e <- .build_rating_vintage_entry(n_rows = 1, version = "v1",
                                    generated_utc = "2026-07-27T00:00:00Z")

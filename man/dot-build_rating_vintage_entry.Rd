@@ -7,13 +7,20 @@
 .build_rating_vintage_entry(
   n_rows,
   version = RATING_VINTAGE,
+  file = NULL,
   generated_utc = NULL
 )
 }
 \arguments{
 \item{n_rows}{Row count of the published ratings frame.}
 
-\item{version}{Vintage label. Defaults to \code{RATING_VINTAGE}.}
+\item{version}{Vintage label of the CONSTANTS that produced this data.
+Defaults to \code{RATING_VINTAGE}.}
+
+\item{file}{Filename actually written. Must be passed explicitly: the
+vintage label and the filename are independent. Regenerating canonical
+under new constants writes \code{torp_ratings.parquet} while the vintage
+is \code{"v2"}, and deriving one from the other mislabels the manifest.}
 
 \item{generated_utc}{Timestamp; defaults to now. Injectable for tests.}
 }

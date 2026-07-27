@@ -446,9 +446,16 @@ if (nrow(torp_new) > 0) {
   # Provenance: record which constants produced this vintage. Never sets
   # `canonical` -- promotion is deliberate and separate.
   tryCatch(
+    # The vintage label comes from the CONSTANTS (RATING_VINTAGE), not from the
+    # filename. Regenerating canonical under new constants writes
+    # torp_ratings.parquet while the vintage is "v2" -- deriving the label from
+    # the filename would record that file as v1, i.e. label the new data as the
+    # data it replaced. canonical is set only when this run wrote canonical.
     torp:::publish_ratings_manifest(
       nrow(torp_df_total),
-      version = if (is.null(RATINGS_VINTAGE)) "v1" else RATINGS_VINTAGE
+      version = torp:::RATING_VINTAGE,
+      file = vintage_file,
+      set_canonical = is.null(RATINGS_VINTAGE)
     ),
     error = function(e) cli::cli_warn("Could not publish ratings manifest: {conditionMessage(e)}")
   )

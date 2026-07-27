@@ -4,12 +4,25 @@
 \alias{publish_ratings_manifest}
 \title{Publish (or refresh) this vintage's entry in the ratings manifest}
 \usage{
-publish_ratings_manifest(n_rows, version = RATING_VINTAGE)
+publish_ratings_manifest(
+  n_rows,
+  version = RATING_VINTAGE,
+  file = NULL,
+  set_canonical = FALSE
+)
 }
 \arguments{
 \item{n_rows}{Row count of the ratings frame just published.}
 
-\item{version}{Vintage label. Defaults to \code{RATING_VINTAGE}.}
+\item{version}{Vintage label of the constants that produced the data.
+Defaults to \code{RATING_VINTAGE}.}
+
+\item{file}{Filename actually written (see
+\code{.build_rating_vintage_entry()}).}
+
+\item{set_canonical}{If TRUE, record this vintage as canonical. Only ever
+TRUE when the run wrote \code{torp_ratings.parquet} itself; a run that
+publishes a candidate alongside must leave canonical alone.}
 }
 \value{
 Invisibly, the manifest that was uploaded.
