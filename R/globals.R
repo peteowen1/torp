@@ -462,3 +462,14 @@ utils::globalVariables(c(
   "n_total", "n_venue", "host", "visitor", "tier", "match_venue",
   "matchup_id", "away", "p_home", "pred_total"
 ))
+
+# ratings v2 (FABLE-DEFENDER-VALUE-PLAN.md §7) -- data.table NSE columns
+# introduced by the PSR position standardisation and the weekly lineup group.
+# R CMD check flags these as "no visible binding"; devtools::test() does not,
+# which is why they were missed until the first full check.
+# wpa_disp/wpa_recv are pre-existing (wp_credit.R's split of wpa across the
+# disposer and receiver); cleared here so the NOTE goes to zero rather than
+# leaving a known-benign remainder that future runs learn to ignore.
+utils::globalVariables(c(
+  ".psr_sd", ".psr_w", "lineup_pos_group", "wpa_disp", "wpa_recv"
+))

@@ -440,7 +440,12 @@ SKILL_CREDIBLE_LEVEL <- STAT_RATING_CREDIBLE_LEVEL
 #' Average time-on-ground fraction by lineup_position (from load_teams())
 #' Computed from historical data (2021-2025). Used to estimate per-player TOG
 #' when lineups are announced but games haven't started.
-#' EMERG/SUB are currently filtered upstream but kept here for future use.
+#' `SUB = 0.33` is LIVE as of 2026-07-27: the team-rating build now keeps the
+#' medical sub (previously filtered out, so this entry did nothing), and 0.33
+#' matches his measured 32.5-32.7% TOG through 2025. From 2026 the AFL codes
+#' that player `INT` instead, so he is weighted 0.73 — higher, but his measured
+#' TOG also rises to ~55.6%, so it remains the closer of the two. `EMERG = 0.05`
+#' is still unused: emergencies are filtered upstream.
 #' Unknown positions fall back to 0.75 with a warning.
 #' Run data-raw/debug/compute_position_tog.R to regenerate from current data.
 #' @keywords internal

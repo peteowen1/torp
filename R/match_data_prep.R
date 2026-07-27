@@ -98,7 +98,17 @@
       torp_df,
       by = c("player_id" = "player_id", "season" = "season", "round_number" = "round")
     ) |>
-    dplyr::filter((lineup_position != "EMERG" & lineup_position != "SUB") | is.na(lineup_position))
+    # Keep every NAMED player, emergencies excepted. The medical sub used to be
+    # dropped here, which was inconsistent two ways: he plays a real shift
+    # (32.5-32.7% TOG through 2025), and from 2026 the AFL codes him `INT`
+    # rather than `SUB`, so the old filter silently kept 23 players per team in
+    # 2026 and 22 before it. Gated: both consistent alternatives beat that
+    # status quo on Brier, and keeping everyone was the better of the two
+    # (dBrier -0.0025 [-0.0058, +0.0008], dMAE neutral) --
+    # FABLE-DEFENDER-VALUE-PLAN.md §7.30. `POSITION_AVG_TOG["SUB"] = 0.33`
+    # weights the pre-2026 sub's part-game correctly and is live for the first
+    # time as a result.
+    dplyr::filter(lineup_position != "EMERG" | is.na(lineup_position))
 
   # Impute missing ratings with per-component priors
   na_torp_count <- sum(is.na(team_lineup_df$epr))
