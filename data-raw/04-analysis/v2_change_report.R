@@ -87,6 +87,16 @@ sr[, psr_v1 := psr_raw - wmean(psr_raw, wt_80s), by=pos_group]
 sr[, psr_v2 := NA_real_]
 sr[!is.na(lpg), psr_v2 := psr_raw - wmean(psr_raw, wt_80s), by=lpg]
 sr[is.na(lpg),  psr_v2 := psr_raw - wmean(psr_raw, wt_80s), by=pos_group]
+# PSR_POSITION_STANDARDISE: rescale within the SAME group used for centring,
+# with the degenerate-SD fallback. Omitting this is what made the first
+# implementation differ from the arm that was actually scored (§7.24).
+if (isTRUE(PSR_POSITION_STANDARDISE)) {
+  pooled_psr <- wsd(sr$psr_v2, sr$wt_80s)
+  sr[!is.na(lpg), .g_sd := wsd(psr_v2, wt_80s), by = lpg]
+  sr[!is.na(lpg) & !is.na(.g_sd) & .g_sd > 1e-6,
+     psr_v2 := psr_v2 / .g_sd * pooled_psr]
+  sr[, .g_sd := NULL]
+}
 
 L <- merge(pg[position_group %in% BK, .(player_id, season, round, player_name,
                                         pos=position_group, epr_v1, epr_v2)],
