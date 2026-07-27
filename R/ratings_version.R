@@ -40,6 +40,26 @@
   sub("\\.parquet$", "", .rating_vintage_file(version))
 }
 
+#' Release asset stem for any vintage-dependent rating artifact
+#'
+#' A vintage is a property of the **whole rating set**, not of one file.
+#' `torp_ratings`, `player_game_ratings`, `player_season_ratings`, `psr` and
+#' `team_ratings` all derive from the same constants, so publishing a v2
+#' `torp_ratings` beside a v1 `player_game_ratings` would leave two artifacts
+#' that disagree with each other and nothing recording why — the exact
+#' inconsistency D-DEF3 exists to prevent. Versioning them partially is
+#' therefore not a cheaper option, it is a broken one.
+#'
+#' @param base Asset stem, e.g. `"player_game_ratings_2025"`.
+#' @param version Vintage label, or NULL for canonical.
+#' @return The stem, suffixed when a vintage is given.
+#' @keywords internal
+.vintage_asset_stem <- function(base, version = NULL) {
+  if (is.null(version)) return(base)
+  .rating_vintage_file(version)   # validates the label, aborts on nonsense
+  paste0(base, "_", version)
+}
+
 #' The constants that define the current rating vintage
 #'
 #' Generated from the live constants rather than hand-maintained. A

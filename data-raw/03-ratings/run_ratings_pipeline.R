@@ -151,7 +151,7 @@ if (REBUILD_PLAYER_GAME) {
       cli::cli_inform("  Player game data: {nrow(pgd)} rows")
 
       file_name <- paste0("player_game_", s)
-      save_to_release(pgd, file_name, "player_game-data")
+      save_to_release(pgd, torp:::.vintage_asset_stem(file_name, RATINGS_VINTAGE), "player_game-data")
       cli::cli_alert_success("Released {file_name} ({nrow(pgd)} rows)")
     }, error = function(e) {
       cli::cli_alert_danger("Failed to build player game data for {s}: {conditionMessage(e)}")
@@ -493,7 +493,7 @@ tryCatch({
     ) |>
     dplyr::arrange(.data$season, .data$round, -.data$team_epr)
 
-  save_to_release(team_ratings, "team_ratings", "team_ratings-data")
+  save_to_release(team_ratings, torp:::.vintage_asset_stem("team_ratings", RATINGS_VINTAGE), "team_ratings-data")
   cli::cli_alert_success("Released team_ratings ({nrow(team_ratings)} rows)")
 }, error = function(e) {
   cli::cli_alert_danger("Failed to compute team ratings: {conditionMessage(e)}")
@@ -577,13 +577,13 @@ for (s in seasons) {
     }
 
     file_name <- paste0("player_game_ratings_", s)
-    save_to_release(pgr, file_name, "player_game_ratings-data")
+    save_to_release(pgr, torp:::.vintage_asset_stem(file_name, RATINGS_VINTAGE), "player_game_ratings-data")
     cli::cli_alert_success("Released {file_name} ({nrow(pgr)} rows)")
 
     # Player season ratings
     psr <- .compute_player_season_ratings(pgr)
     file_name <- paste0("player_season_ratings_", s)
-    save_to_release(psr, file_name, "player_season_ratings-data")
+    save_to_release(psr, torp:::.vintage_asset_stem(file_name, RATINGS_VINTAGE), "player_season_ratings-data")
     cli::cli_alert_success("Released {file_name} ({nrow(psr)} rows)")
   }, error = function(e) {
     cli::cli_alert_danger("Failed derived ratings for {s}: {conditionMessage(e)}")
@@ -611,7 +611,7 @@ tryCatch({
     for (s in sort(unique(psr_all$season))) {
       psr_season <- psr_all[psr_all$season == s, ]
       file_name <- paste0("psr_", s)
-      save_to_release(psr_season, file_name, "psr-data")
+      save_to_release(psr_season, torp:::.vintage_asset_stem(file_name, RATINGS_VINTAGE), "psr-data")
       cli::cli_alert_success("Released {file_name} ({nrow(psr_season)} rows)")
     }
   } else {
