@@ -29,6 +29,17 @@
   sprintf("torp_ratings_%s.parquet", version)
 }
 
+#' Release asset stem (no extension) for a rating vintage
+#'
+#' \code{save_to_release()} takes a stem rather than a filename.
+#'
+#' @param version Vintage label, or NULL for canonical.
+#' @return A character stem.
+#' @keywords internal
+.rating_vintage_stem <- function(version = NULL) {
+  sub("\\.parquet$", "", .rating_vintage_file(version))
+}
+
 #' The constants that define the current rating vintage
 #'
 #' Generated from the live constants rather than hand-maintained. A
@@ -93,6 +104,30 @@
   manifest$vintages[[version]] <- entry
   # canonical is deliberately left untouched
   manifest
+}
+
+#' Publish (or refresh) this vintage's entry in the ratings manifest
+#'
+#' Reads the live manifest, merges this vintage's entry and uploads the result.
+#' Deliberately does NOT set \code{canonical} — see
+#' \code{.merge_rating_manifest()}.
+#'
+#' @param n_rows Row count of the ratings frame just published.
+#' @param version Vintage label. Defaults to \code{RATING_VINTAGE}.
+#' @return Invisibly, the manifest that was uploaded.
+#' @keywords internal
+publish_ratings_manifest <- function(n_rows, version = RATING_VINTAGE) {
+  entry <- .build_rating_vintage_entry(n_rows, version = version)
+  manifest <- .merge_rating_manifest(read_ratings_manifest(), version, entry)
+
+  tf <- file.path(tempdir(), "ratings_manifest.json")
+  writeLines(jsonlite::toJSON(manifest, auto_unbox = TRUE, pretty = TRUE, null = "null"), tf)
+  piggyback::pb_upload(tf, repo = get_torp_data_repo(), tag = "ratings-data",
+                       overwrite = TRUE)
+  cli::cli_alert_success(
+    "Published ratings_manifest.json (vintage {.val {version}}, canonical {.val {manifest$canonical}})"
+  )
+  invisible(manifest)
 }
 
 #' Read the ratings manifest from the data release

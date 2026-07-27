@@ -65,6 +65,15 @@ test_that("re-writing the same vintage replaces its entry in place", {
   expect_equal(m$vintages$v2$rows, 99L)
 })
 
+test_that("vintage stems match what save_to_release expects", {
+  expect_equal(.rating_vintage_stem(NULL), "torp_ratings")
+  expect_equal(.rating_vintage_stem("v2"), "torp_ratings_v2")
+  # stem and file must stay in lockstep, since the pipeline writes with one
+  # and verifies with the other
+  expect_equal(paste0(.rating_vintage_stem("v2"), ".parquet"),
+               .rating_vintage_file("v2"))
+})
+
 test_that("RATING_VINTAGE tracks the adopted constants", {
   # v2 is defined as "standardisation on"; if someone turns it off without
   # bumping the label the manifest would misdescribe the output.

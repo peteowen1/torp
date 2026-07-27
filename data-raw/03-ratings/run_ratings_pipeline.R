@@ -60,6 +60,24 @@ if (!exists("REBUILD_PLAYER_GAME", envir = .GlobalEnv)) REBUILD_PLAYER_GAME <- T
 # Full rebuild vs incremental (only configured seasons)
 if (!exists("REBUILD_ALL_RATINGS", envir = .GlobalEnv)) REBUILD_ALL_RATINGS <- TRUE
 
+# Which rating vintage this run publishes (decision D-DEF3, see
+# docs/plans/RATING-VERSIONING-PLAN.md). NULL = the canonical
+# torp_ratings.parquet, i.e. exactly today's behaviour and the safe default.
+# Set to a label such as "v2" to publish a CANDIDATE vintage alongside
+# canonical without touching it. Promotion is a separate, deliberate act --
+# this script must never promote.
+if (!exists("RATINGS_VINTAGE", envir = .GlobalEnv)) RATINGS_VINTAGE <- NULL
+# NOTE: these must NOT be dot-prefixed. A variable named `.foo` interpolated
+# into cli::cli_abort()/cli_warn() collides with cli's own `{.val}`-style
+# markup and hard-errors at runtime -- it crashed a real production run once.
+vintage_file <- torp:::.rating_vintage_file(RATINGS_VINTAGE)
+vintage_stem <- torp:::.rating_vintage_stem(RATINGS_VINTAGE)
+if (!is.null(RATINGS_VINTAGE)) {
+  cli::cli_alert_info(
+    "Publishing CANDIDATE rating vintage {.val {RATINGS_VINTAGE}} to {.file {vintage_file}} -- canonical torp_ratings.parquet is untouched"
+  )
+}
+
 # Resolve seasons ----
 
 resolve_seasons <- function(seasons) {
@@ -345,7 +363,7 @@ if (nrow(torp_new) > 0) {
   # ratings" -- torp P1/P8: that collapses to overwriting full-history
   # ratings-data with just the seasons computed this run.
   existing <- tryCatch(
-    load_torp_ratings(),
+    load_torp_ratings(version = RATINGS_VINTAGE),
     vb_error_absent = function(e) NULL,
     error = function(e) {
       cli::cli_abort("Could not load existing torp_ratings ({conditionMessage(e)}) - aborting to avoid overwriting full-history ratings-data", parent = e)
@@ -377,13 +395,15 @@ if (nrow(torp_new) > 0) {
     } else {
       # Confirmed absent (first-ever publish) -- fresh build is legitimate.
       is_absent <- tryCatch(
-        vb_confirm_absent(get_torp_data_repo(), "ratings-data", "torp_ratings.parquet"),
+        # Per-VINTAGE, not per-tag: publishing a candidate must neither trip
+        # the guard protecting canonical nor bypass its own.
+        vb_confirm_absent(get_torp_data_repo(), "ratings-data", vintage_file),
         error = function(e) {
-          cli::cli_abort("Could not verify torp_ratings.parquet is absent before a fresh upload: {conditionMessage(e)}")
+          cli::cli_abort("Could not verify {vintage_file} is absent before a fresh upload: {conditionMessage(e)}")
         }
       )
       if (!isTRUE(is_absent)) {
-        cli::cli_abort("Refusing fresh ratings upload: torp_ratings.parquet was not confirmed absent from ratings-data.")
+        cli::cli_abort("Refusing fresh ratings upload: {vintage_file} was not confirmed absent from ratings-data.")
       }
       torp_df_total <- torp_new
     }
@@ -415,13 +435,23 @@ if (nrow(torp_new) > 0) {
     cli::cli_alert_success("Blended PSR into ratings ({sum(!is.na(torp_df_total$torp))} rows with torp)")
   }
 
-  save_to_release(torp_df_total, "torp_ratings", "ratings-data")
+  save_to_release(torp_df_total, vintage_stem, "ratings-data")
 
-  uploaded <- tryCatch(load_torp_ratings(), error = function(e) NULL)
+  uploaded <- tryCatch(load_torp_ratings(version = RATINGS_VINTAGE), error = function(e) NULL)
   if (is.null(uploaded) || nrow(uploaded) != nrow(torp_df_total)) {
     cli::cli_alert_danger("Upload verification failed - piggyback cache delay may be the cause")
   }
-  cli::cli_alert_success("Released torp_ratings ({nrow(torp_df_total)} rows)")
+  cli::cli_alert_success("Released {vintage_stem} ({nrow(torp_df_total)} rows)")
+
+  # Provenance: record which constants produced this vintage. Never sets
+  # `canonical` -- promotion is deliberate and separate.
+  tryCatch(
+    torp:::publish_ratings_manifest(
+      nrow(torp_df_total),
+      version = if (is.null(RATINGS_VINTAGE)) "v1" else RATINGS_VINTAGE
+    ),
+    error = function(e) cli::cli_warn("Could not publish ratings manifest: {conditionMessage(e)}")
+  )
 }
 
 tictoc::toc(log = TRUE)
