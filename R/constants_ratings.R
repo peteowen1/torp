@@ -110,6 +110,24 @@ TORP_EPR_WEIGHT <- 0.5
 #' @keywords internal
 EPV_POSITION_STANDARDISE <- TRUE
 
+#' Whether PSR position centring rescales as well as recentres
+#'
+#' The mirror of \code{EPV_POSITION_STANDARDISE} on the PSR side.
+#' \code{calculate_psr()} historically subtracted a positional mean and stopped,
+#' so PSR carried the same under-dispersion defect as EPV.
+#'
+#' This is load-bearing and was missed once: FABLE-DEFENDER-VALUE-PLAN §7.18
+#' scored its recommended arm with PSR standardised, but the first
+#' implementation shipped only the EPV half plus weekly PSR centring — a
+#' configuration that had never been scored. It left key-defender max at 3.74
+#' against the 4.06 the scored arm produced, and the best-forward gap at 1.80×
+#' against 1.52× (§7.24).
+#'
+#' Same degenerate-SD guard as the EPV side: a group whose within-position SD
+#' is absent or ~zero falls back to centre-only rather than dividing by it.
+#' @keywords internal
+PSR_POSITION_STANDARDISE <- TRUE
+
 #' Rating vintage produced by the current constants
 #'
 #' Bumped whenever a change alters historical ratings. Per decision D-DEF3 a

@@ -80,6 +80,39 @@ test_that(".add_lineup_pos_group maps weekly roles and leaves bench rows NA", {
   expect_identical(.add_lineup_pos_group(bare), bare)
 })
 
+test_that("calculate_psr rescales as well as recentres", {
+  # This was MISSED in the first implementation: §7.18's recommended arm had
+  # PSR standardised, the code shipped only centring, and the shipped
+  # configuration had never been scored. It cost key-defender max 4.02 -> 3.74.
+  expect_true(PSR_POSITION_STANDARDISE)
+  skills <- data.frame(
+    player_id = as.character(1:6), season = 2025L, round = 1L,
+    lineup_pos_group = rep(c("KEY_DEFENDER", "KEY_FORWARD"), each = 3),
+    wt_80s = 1,
+    # defenders tightly bunched, forwards widely spread -- exactly the
+    # under-dispersion the rescale exists to remove
+    disposals_rating = c(9, 10, 11, 4, 10, 16)
+  )
+  out <- calculate_psr(skills, data.frame(stat_name = "disposals", beta = 1))
+  sd_def <- sd(out$psr[1:3]); sd_fwd <- sd(out$psr[4:6])
+  expect_equal(sd_def, sd_fwd, tolerance = 1e-6)   # equal spread after rescaling
+  expect_equal(sum(out$psr[1:3]), 0, tolerance = 1e-8)  # still centred
+  expect_equal(sum(out$psr[4:6]), 0, tolerance = 1e-8)
+})
+
+test_that("calculate_psr falls back to centre-only on a degenerate SD", {
+  # A group with no within-group variance must not be divided by ~zero.
+  skills <- data.frame(
+    player_id = as.character(1:4), season = 2025L, round = 1L,
+    lineup_pos_group = rep(c("RUCK", "KEY_FORWARD"), each = 2),
+    wt_80s = 1,
+    disposals_rating = c(7, 7, 4, 12)   # rucks identical
+  )
+  out <- calculate_psr(skills, data.frame(stat_name = "disposals", beta = 1))
+  expect_true(all(is.finite(out$psr)))
+  expect_equal(out$psr[1:2], c(0, 0))
+})
+
 test_that("estimate_player_stat_ratings carries the weekly lineup group", {
   # The whole PSR half of the change is inert unless this column survives the
   # aggregation, so assert it end-to-end rather than trusting the wiring.

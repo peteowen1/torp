@@ -135,6 +135,23 @@ calculate_psr <- function(skills, coef_df, center = TRUE) {
     dt[, psr := psr_raw]
   }
 
+  # Rescale to the pooled cross-position spread as well as recentring, so PSR
+  # stops carrying the between-position spread differences that under-disperse
+  # key defenders. Mirrors EPV_POSITION_STANDARDISE; see
+  # PSR_POSITION_STANDARDISE for why this is separately flagged.
+  if (center && isTRUE(PSR_POSITION_STANDARDISE) && !is.null(psr_pos_col)) {
+    w <- if ("wt_80s" %in% names(dt)) dt$wt_80s else rep(1, nrow(dt))
+    pooled <- .wtd_sd(dt$psr, w)
+    dt[, .psr_w := w]
+    dt[!is.na(get(psr_pos_col)), .psr_sd := .wtd_sd(psr, .psr_w), by = c(psr_pos_col)]
+    dt[is.na(get(psr_pos_col)), .psr_sd := NA_real_]
+    # degenerate or missing within-group SD -> leave the row centred only,
+    # never divide by ~zero (the failure mode that excluded hitout on the EPV side)
+    dt[!is.na(.psr_sd) & .psr_sd > 1e-6 & !is.na(pooled),
+       psr := psr / .psr_sd * pooled]
+    dt[, c(".psr_w", ".psr_sd") := NULL]
+  }
+
   id_cols <- intersect(
     c("player_id", "player_name", "season", "round", "pos_group",
       "team", "n_games", "wt_games", "wt_80s"),
