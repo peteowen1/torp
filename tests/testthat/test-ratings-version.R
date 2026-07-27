@@ -74,6 +74,19 @@ test_that("vintage stems match what save_to_release expects", {
                .rating_vintage_file("v2"))
 })
 
+test_that("preserve_rating_vintage defaults to dry_run", {
+  # A function that writes to a release by default is one that writes to a
+  # release by accident. Asserted rather than trusted, because the default is
+  # the only thing standing between a typo and an overwritten vintage.
+  expect_true(isTRUE(formals(preserve_rating_vintage)$dry_run))
+})
+
+test_that("preserve_rating_vintage validates the label before touching anything", {
+  # Label validation must happen before any network call, so a bad label is a
+  # fast local error rather than a partial release operation.
+  expect_error(preserve_rating_vintage("latest"), "Unrecognised rating vintage")
+})
+
 test_that("RATING_VINTAGE tracks the adopted constants", {
   # v2 is defined as "standardisation on"; if someone turns it off without
   # bumping the label the manifest would misdescribe the output.

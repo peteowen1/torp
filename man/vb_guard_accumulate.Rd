@@ -9,6 +9,6 @@ vb_guard_accumulate(existing_df, combined_df, floor = 0.9)
 \description{
 Call immediately before uploading an accumulated table over an existing
 one. Shrinkage beyond \code{floor} means the "existing" read was partial or the
-merge dropped history — abort rather than wipe.
+merge dropped history -- abort rather than wipe.
 }
 \keyword{internal}

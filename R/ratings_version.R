@@ -150,6 +150,68 @@ publish_ratings_manifest <- function(n_rows, version = RATING_VINTAGE) {
   invisible(manifest)
 }
 
+#' Preserve the current canonical ratings under a vintage label
+#'
+#' The one irreversible-by-omission step in the whole versioning scheme. Once
+#' `run_ratings_pipeline.R` overwrites `torp_ratings.parquet` under new
+#' constants, the previous vintage is gone unless a copy was taken first —
+#' and D-DEF3's entire purpose is that a published number stays traceable to
+#' the definition that produced it.
+#'
+#' Run this BEFORE regenerating when promoting a new vintage directly into
+#' canonical (the "switch straight away" path, as opposed to publishing a
+#' candidate alongside and promoting after a soak).
+#'
+#' @param label Vintage label to preserve the current canonical file as,
+#'   e.g. `"v1"`.
+#' @param repo Data repo. Defaults to `get_torp_data_repo()`.
+#' @param dry_run If TRUE (default), report what would happen and upload
+#'   nothing. **Deliberately defaults to TRUE**: this function writes to a
+#'   release, and a function that publishes by default is one that publishes
+#'   by accident.
+#' @return Invisibly, a list describing the action.
+#' @keywords internal
+preserve_rating_vintage <- function(label, repo = get_torp_data_repo(),
+                                    dry_run = TRUE) {
+  target <- .rating_vintage_file(label)          # validates the label
+  current <- .rating_vintage_file(NULL)
+
+  existing <- tryCatch(load_torp_ratings(version = label),
+                       error = function(e) NULL)
+  if (!is.null(existing) && nrow(existing) > 0) {
+    cli::cli_abort(c(
+      "{.file {target}} already exists in {.val ratings-data} ({nrow(existing)} rows).",
+      "i" = "Refusing to overwrite a preserved vintage -- pick an unused label."
+    ))
+  }
+
+  canon <- tryCatch(load_torp_ratings(), error = function(e) NULL)
+  if (is.null(canon) || nrow(canon) == 0) {
+    cli::cli_abort("Could not read the current canonical ratings; refusing to proceed.")
+  }
+
+  cli::cli_inform(c(
+    "Preserve plan:",
+    "*" = "copy {.file {current}} ({nrow(canon)} rows) -> {.file {target}}",
+    "*" = "{.file {current}} itself is left untouched"
+  ))
+  if (dry_run) {
+    cli::cli_alert_info("dry_run = TRUE -- nothing uploaded. Re-run with dry_run = FALSE to apply.")
+    return(invisible(list(rows = nrow(canon), target = target, applied = FALSE)))
+  }
+
+  save_to_release(canon, .rating_vintage_stem(label), "ratings-data")
+  verify <- tryCatch(load_torp_ratings(version = label), error = function(e) NULL)
+  if (is.null(verify) || nrow(verify) != nrow(canon)) {
+    cli::cli_alert_danger(
+      "Verification failed: {.file {target}} did not read back at {nrow(canon)} rows. \\
+       Do NOT regenerate canonical until this is resolved.")
+  } else {
+    cli::cli_alert_success("Preserved {nrow(canon)} rows as {.file {target}}")
+  }
+  invisible(list(rows = nrow(canon), target = target, applied = TRUE))
+}
+
 #' Read the ratings manifest from the data release
 #'
 #' @return A manifest list, or NULL when the tag carries no manifest yet

@@ -28,7 +28,7 @@ Downloads to a tempfile in \code{dest}'s directory, verifies (parquet magic
 bytes; sha256 vs manifest when available, size vs asset list otherwise),
 then atomically renames into place and writes a \verb{<dest>.sha256} sidecar.
 ON ANY FAILURE the temp is deleted and a pre-existing \code{dest} is left
-untouched — but it is NEVER silently served as a fallback: the typed error
+untouched -- but it is NEVER silently served as a fallback: the typed error
 propagates and the caller must opt in to "serve stale + warn" explicitly.
 }
 \keyword{internal}
