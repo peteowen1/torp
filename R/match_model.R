@@ -346,6 +346,69 @@ get_lineup_ratings <- function(season = NULL, round = NULL, match_id = NULL) {
   invisible(n)
 }
 
+#' Flag predictions about to be locked without real team lists
+#'
+#' `players` is `count.x` -- the number of named players aggregated per team.
+#' When the AFL has not yet published team lists for a round, the lineup join
+#' produces no rows, `players` is NA, and every player's EPR falls back to the
+#' position prior. The prediction is still computed and still published; it is
+#' just built on a generic squad rather than the actual 22.
+#'
+#' This went undetected for three rounds. Rounds 19, 20 and 21 of 2026 were all
+#' locked with `players = NA` while rounds 13-18 carried 23, and nothing said so.
+#' It surfaced only via a paired audit against Squiggle's record of our submitted
+#' tips, weeks later: on rounds 19-20 the served predictions disagreed with a
+#' correctly-fed model by a mean of 8.73 points per game (vs 4.15 on rounds where
+#' lineups were present) and cost roughly 3.2 MAE.
+#'
+#' Warns rather than aborts, deliberately. A prior-based prediction beats no
+#' prediction -- tips have a submission deadline -- and the started-game lock in
+#' [.build_locked_predictions()] already lets a later run replace any match that
+#' has not started. The failure mode worth preventing is silence, not publication.
+#'
+#' @param week_gms The new-week prediction rows about to be merged.
+#' @return Invisibly, the number of rows lacking a lineup.
+#' @keywords internal
+.warn_missing_lineups <- function(week_gms) {
+  if (!"players" %in% names(week_gms)) {
+    # Say so rather than returning silently. This function exists because a
+    # lineup failure went unnoticed for three rounds; a version of it that can
+    # stop checking without saying so reintroduces the same blind spot in a new
+    # place. `players` has no column_schema.R entry to catch its removal.
+    cli::cli_inform("Lineup check skipped: no {.field players} column on the prediction frame.")
+    return(invisible(0L))
+  }
+  if (nrow(week_gms) == 0) return(invisible(0L))
+
+  # NA means the lineup join found nothing at all. But `players` is a COUNT
+  # (count.x, named players per team), so a PARTIALLY published team sheet --
+  # the AFL sometimes releases ins/outs before the full 22 -- yields a small
+  # non-NA number instead. Checking only for NA would miss that, and it degrades
+  # predictions the same way: most of the side still on position priors.
+  # Published rounds 13-18 of 2026 all carried exactly 23.
+  n_named <- suppressWarnings(as.numeric(week_gms$players))
+  missing <- is.na(n_named)
+  partial <- !missing & n_named < MIN_PLAUSIBLE_LINEUP
+
+  if (any(missing)) {
+    wk <- sort(unique(week_gms$week[missing]))
+    cli::cli_warn(c(
+      "{sum(missing)} prediction{?s} being locked with NO team list (round{?s} {.val {as.character(wk)}}).",
+      "!" = "Every player fell back to the position prior, so these are squad-average predictions, not team-specific ones.",
+      "i" = "Re-run once the AFL publishes team lists -- the started-game lock replaces any match that has not yet started."
+    ))
+  }
+  if (any(partial)) {
+    wk <- sort(unique(week_gms$week[partial]))
+    cli::cli_warn(c(
+      "{sum(partial)} prediction{?s} being locked with only PART of a team list (round{?s} {.val {as.character(wk)}}; fewest named: {min(n_named[partial])}).",
+      "!" = "A full named side is {MIN_PLAUSIBLE_LINEUP}+; the unnamed remainder fell back to the position prior.",
+      "i" = "Re-run once the full teams are published."
+    ))
+  }
+  invisible(sum(missing) + sum(partial))
+}
+
 #' Merge new-week predictions into the locked full-season predictions file
 #'
 #' Encapsulates torp C2's overwrite guard (ECOSYSTEM-FIX-PLAN.md T3): a
@@ -368,6 +431,12 @@ get_lineup_ratings <- function(season = NULL, round = NULL, match_id = NULL) {
 #' @keywords internal
 .build_locked_predictions <- function(pred_file_name, season, week_gms, team_mdl_df,
                                       target_weeks, completed_margins) {
+  # Check the INCOMING rows, before the started-game filter below drops any.
+  # A match that has already started keeps its locked prediction, so filtering
+  # first would hide exactly the case worth reporting: a round locked without
+  # team lists that is now beyond the point where a re-run could fix it.
+  .warn_missing_lineups(week_gms)
+
   pred_repo <- get_torp_data_repo()
   existing <- tryCatch(
     file_reader(pred_file_name, "predictions"),

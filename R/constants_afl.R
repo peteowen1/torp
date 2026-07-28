@@ -84,6 +84,18 @@ AFL_REGULAR_SEASON_ROUNDS <- c(
 #' @keywords internal
 AFL_TEAM_SIZE <- 18L
 
+#' Fewest named players a plausibly-complete team sheet contains
+#'
+#' A published AFL team list is 22 plus the medical sub; every 2026 prediction
+#' written with real lineups carried exactly 23. Set below that, not equal to
+#' it, so ordinary variation (a withdrawal before the sheet is finalised) does
+#' not cry wolf while a genuinely partial announcement -- ins/outs released
+#' ahead of the full side -- still trips the check in
+#' [.warn_missing_lineups()]. Anything under this leaves most of the side on
+#' position priors, which is the degradation worth reporting.
+#' @keywords internal
+MIN_PLAUSIBLE_LINEUP <- 20L
+
 #' Default days rest when rest data is unavailable
 #' @keywords internal
 MATCH_DEFAULT_REST_DAYS <- 21

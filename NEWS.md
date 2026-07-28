@@ -2,6 +2,40 @@
 
 ## Bug Fixes
 
+* **Match predictions are no longer locked before AFL team lists exist.** Rounds 19,
+  20 and 21 of 2026 were all published with `players = NA` -- no team sheet available,
+  so every player fell back to the position prior and the predictions were
+  squad-average rather than team-specific. Rounds 13-18 carried 23. Nothing reported
+  it; a paired comparison against Squiggle's record of our submitted tips put the cost
+  at roughly 3.2 MAE on rounds 19-20 (mean per-game disagreement 8.73 points against a
+  correctly-fed model, versus 4.15 on rounds with lineups).
+
+  The cause was structural rather than a transient failure. The predictions workflow's
+  only automatic trigger was the `repository_dispatch` torpdata fires after a data
+  release, and data releases only happen when there are new games. The AFL publishes
+  team lists *between* rounds, so the pipeline could never run in the window between
+  team-naming and first bounce, and every round was locked using the previous round's
+  lineup state: none.
+
+  Three changes: the predictions workflow gains its own pre-game schedule (Thu/Fri
+  06:00 UTC, Sat/Sun 00:00 UTC); `.warn_missing_lineups()` reports at write time when
+  a prediction is being locked without a full team sheet; and
+  `data-raw/05-validation/check_prediction_lineups.R` answers on demand whether the
+  upcoming round is safe, how long until first bounce, and whether a re-run would
+  help. The guards check *completeness*, not mere presence -- `players` is a count, so
+  a partially published sheet yields a small non-`NA` number that a presence-only
+  check would miss (`MIN_PLAUSIBLE_LINEUP`).
+
+## New Features
+
+* **Locked predictions record when they were computed** (`generated_utc`). Previously
+  "is this row genuinely pre-game?" could only be answered by reconstructing against
+  Squiggle's submitted tips, which is how three rounds of stored-versus-submitted
+  divergence became an open forensic question rather than a lookup. The check is now
+  `generated_utc < utc_start_time`, and `.warn_post_hoc_predictions()` surfaces
+  violations at write time. Rows published before stamping existed carry `NA` and are
+  skipped rather than flagged.
+
 * **The post-upload verify no longer aborts the daily release on a stale-but-larger
   asset listing** (torpdata#74, third iteration). The first two iterations assumed a
   lagging listing and widened the retry budget (~7s, then ~20s); neither worked --

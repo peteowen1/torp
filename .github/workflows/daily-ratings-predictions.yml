@@ -3,6 +3,34 @@ name: Daily Ratings & Predictions
 on:
   repository_dispatch:
     types: [ratings-trigger]
+
+  # Pre-game refresh, so predictions are built on real team lists.
+  #
+  # Until 2026-07-28 the ONLY automatic trigger was the repository_dispatch
+  # above, which torpdata fires after a data release. Data releases only happen
+  # when there are NEW GAMES -- run_daily_release() returns 'none' and the
+  # dispatch is skipped otherwise. But the AFL publishes team lists BETWEEN
+  # rounds, precisely when there are no new games, so the pipeline could never
+  # run in the window between team-naming and first bounce. Every round was
+  # locked using the lineup state left over from the previous round: none.
+  #
+  # Rounds 19, 20 and 21 of 2026 were all published with `players = NA` as a
+  # result -- every player on the position prior rather than the actual 22. A
+  # paired audit against Squiggle's record of our submitted tips put the cost at
+  # ~3.2 MAE on rounds 19-20 (mean disagreement 8.73 pts/game vs 4.15 on rounds
+  # with lineups). Nothing failed; the predictions were simply worse.
+  #
+  # Times are UTC and chosen to sit a few hours BEFORE the earliest bounce of
+  # each game day (round 21's first game is Thu 09:30 UTC), by which point team
+  # lists for that day are published. The started-game lock in
+  # .build_locked_predictions() means a re-run only ever replaces matches that
+  # have not started, so extra runs are safe.
+  schedule:
+    - cron: '0 6 * * 4'   # Thu 06:00 UTC -- before Thursday-night games
+    - cron: '0 6 * * 5'   # Fri 06:00 UTC -- before Friday-night games
+    - cron: '0 0 * * 6'   # Sat 00:00 UTC -- before Saturday afternoon games
+    - cron: '0 0 * * 0'   # Sun 00:00 UTC -- before Sunday afternoon games
+
   workflow_dispatch:
     inputs:
       force:
