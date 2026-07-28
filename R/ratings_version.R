@@ -201,6 +201,21 @@ preserve_rating_vintage <- function(label, repo = get_torp_data_repo(),
   target <- .rating_vintage_file(label)          # validates the label
   current <- .rating_vintage_file(NULL)
 
+  # Force strict loading for every read in this function.
+  #
+  # Without this the abort below is decorative: outside VERSEBUS_STRICT=1,
+  # parquet_from_url() deliberately does NOT rethrow non-404 failures (network
+  # blip, CDN 5xx, auth, malformed parquet). It warns and returns a 0-row
+  # data.table tagged skip_reason = "transient" (load_engines.R). So the
+  # existence probe would see 0 rows, conclude "vintage absent, safe to write",
+  # and overwrite a real preserved vintage -- precisely the failure this
+  # function exists to prevent.
+  #
+  # That leniency is right for casual interactive/multi-season loads. It is
+  # wrong here: this is the one irreversible-by-omission step in the scheme,
+  # and it is invoked manually, so it does not inherit a pipeline's strict env.
+  withr::local_envvar(c(VERSEBUS_STRICT = "1"))
+
   # A genuinely-absent vintage does NOT error: parquet_from_url_cached()
   # returns a 0-row frame on a confirmed 404, which the nrow() check below
   # handles. So anything that DOES throw here is unexpected -- network, auth,
@@ -221,6 +236,17 @@ preserve_rating_vintage <- function(label, repo = get_torp_data_repo(),
       ), parent = e)
     }
   )
+  # Second line of defence: even under strict mode, a 0-row result carrying a
+  # non-"not_found" skip_reason means the probe degraded rather than confirmed
+  # absence. Only a confirmed 404 licenses "safe to write".
+  probe_skip <- attr(existing, "skip_reason")
+  if (!is.null(probe_skip) && !identical(probe_skip, "not_found")) {
+    cli::cli_abort(c(
+      "Existence probe for {.file {target}} degraded ({.val {probe_skip}}) instead of confirming absence.",
+      "i" = "Refusing to proceed -- only a confirmed 404 means the vintage is genuinely absent."
+    ))
+  }
+
   if (!is.null(existing) && nrow(existing) > 0) {
     cli::cli_abort(c(
       "{.file {target}} already exists in {.val ratings-data} ({nrow(existing)} rows).",
