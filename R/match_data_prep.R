@@ -734,6 +734,7 @@
   #
   # 0 is the honest fill: with no team list there is no known positional
   # advantage either way, matching how the rating join prior-imputes upstream.
+  pos_na_counts <- list()
   for (pos in names(MATCH_LISTED_POS_MAP)) {
     diff_col <- paste0(pos, "_diff")
     x_col <- paste0(pos, ".x")
@@ -748,7 +749,32 @@
       ))
     }
     v <- team_mdl_df_tot[[x_col]] - team_mdl_df_tot[[y_col]]
-    team_mdl_df_tot[[diff_col]] <- dplyr::coalesce(v, 0)
+
+    # 0 is the right fill ONLY for a fixture whose teams are not named yet. For
+    # a completed match an NA means a real data gap, and filling it teaches the
+    # model a fabricated "no positional advantage" on a row that enters
+    # training. Distinguish the two rather than absorbing both into one bucket.
+    na_v <- is.na(v)
+    if (any(na_v)) {
+      played <- !is.na(team_mdl_df_tot$score_diff)
+      n_bad <- sum(na_v & played)
+      if (n_bad > 0) {
+        ids <- utils::head(unique(team_mdl_df_tot$match_id[na_v & played]), 3)
+        cli::cli_abort(c(
+          "{n_bad} COMPLETED match{?es} {?has/have} no {.field {pos}} sum -- that is a data gap, not an unnamed team.",
+          "i" = "Affected: {paste(ids, collapse = ', ')}",
+          "x" = "Filling these with 0 would train the model on a fabricated tie."
+        ))
+      }
+      team_mdl_df_tot[[diff_col]] <- dplyr::coalesce(v, 0)
+      pos_na_counts[[pos]] <- sum(na_v)
+    } else {
+      team_mdl_df_tot[[diff_col]] <- v
+    }
+  }
+  if (length(pos_na_counts) > 0) {
+    cli::cli_inform(
+      "Listed-position diffs: filled 0 for {max(unlist(pos_na_counts))} unplayed fixture{?s} with no team list")
   }
 
   team_mdl_df_tot <- team_mdl_df_tot |>

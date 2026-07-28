@@ -86,15 +86,68 @@ test_that("rows with no position group are left alone rather than pooled", {
   expect_equal(out$epr_recv[1], d$epr_recv[1])
 })
 
-test_that("a frame without position_group warns and returns unchanged", {
+test_that("a frame without position_group ABORTS rather than returning uncentred", {
+  # Previously this warned and returned unchanged. The pipeline guard could not
+  # catch it either -- with no position_group its own filter leaves zero rows to
+  # check, so it passed and shipped uncentred ratings labelled as centred.
   d <- .epr_frame(); d$position_group <- NULL
-  expect_warning(out <- torp:::centre_epr_by_position(d), "position_group")
-  expect_equal(out$epr_recv, d$epr_recv)
+  expect_error(torp:::centre_epr_by_position(d), "position_group")
 })
 
-test_that("a missing TOG column falls back to equal weights rather than failing", {
+test_that("a PARTIAL channel set aborts, because it would silently redefine epr", {
+  # The dangerous case: epr gets rebuilt from only the channels found, dropping
+  # a whole rating dimension for every player while still looking
+  # self-consistent (mean-zero per position, summing to itself).
+  d <- .epr_frame(); d$epr_hitout <- NULL
+  expect_error(torp:::centre_epr_by_position(d), "channel")
+})
+
+test_that("a missing TOG column warns loudly before falling back to equal weights", {
+  # The fallback is acceptable; doing it silently is not. The function's whole
+  # contract is a TOG-WEIGHTED mean.
   d <- .epr_frame(); d$pred_tog <- NULL
-  out <- torp:::centre_epr_by_position(d)
+  expect_warning(out <- torp:::centre_epr_by_position(d), "UNWEIGHTED")
   s <- out[out$round == 1 & out$position_group == "MIDFIELDER", ]
+  expect_equal(mean(s$epr_recv), 0, tolerance = 1e-10)
+})
+
+test_that("a row with a missing channel gets NA epr, not a partial sum", {
+  # rowSums(na.rm = TRUE) alone would make such a row equal the sum of its
+  # remaining channels -- i.e. a player with no data would read as exactly
+  # average, the worst possible representation of "unknown".
+  d <- .epr_frame()
+  d$epr_recv[1] <- NA_real_
+  expect_warning(out <- torp:::centre_epr_by_position(d), "non-finite channel")
+  expect_true(is.na(out$epr[1]))
+  expect_false(any(is.na(out$epr[-1])))
+})
+
+test_that("an all-NA position cell does not fabricate values for its members", {
+  d <- .epr_frame()
+  d$epr_recv[d$round == 1 & d$position_group == "KEY_DEFENDER"] <- NA_real_
+  expect_warning(out <- torp:::centre_epr_by_position(d), "non-finite channel")
+  aff <- out$round == 1 & out$position_group == "KEY_DEFENDER"
+  expect_true(all(is.na(out$epr[aff])))
+})
+
+test_that("one NA weight excludes that row, it does not blank the whole position", {
+  # weighted.mean()'s na.rm drops NA VALUES, not NA WEIGHTS -- and pmax(NA, 0.01)
+  # is NA, so the usual floor does not rescue it. Left unhandled, a single
+  # player missing pred_tog turns an entire (season, round, position) cell to NA.
+  d <- .epr_frame()
+  d$pred_tog[d$round == 1 & d$position_group == "MIDFIELDER"][1] <- NA_real_
+  expect_warning(out <- torp:::centre_epr_by_position(d), "no .*pred_tog")
+  s <- out[out$round == 1 & out$position_group == "MIDFIELDER", ]
+  expect_false(any(is.na(s$epr_recv)))          # the cell survives
+  # Centred on the ONE remaining weighted row, so that row sits at 0.
+  expect_equal(s$epr_recv[2], 0, tolerance = 1e-10)
+})
+
+test_that("a cell with no usable weights at all falls back to an unweighted mean", {
+  d <- .epr_frame()
+  d$pred_tog[d$round == 1 & d$position_group == "MIDFIELDER"] <- NA_real_
+  expect_warning(out <- torp:::centre_epr_by_position(d), "no .*pred_tog")
+  s <- out[out$round == 1 & out$position_group == "MIDFIELDER", ]
+  expect_false(any(is.na(s$epr_recv)))
   expect_equal(mean(s$epr_recv), 0, tolerance = 1e-10)
 })

@@ -488,17 +488,42 @@ if (nrow(torp_new) > 0) {
   # leave torp derived from uncentred EPR and silently inconsistent with it.
   if (isTRUE(EPR_POSITION_CENTRE)) {
     torp_df_total <- centre_epr_by_position(torp_df_total)
+
+    # Check EVERY (season, round, position) cell, not just the latest. Centring
+    # runs across all history, so sampling one round would let an earlier round
+    # fail silently -- and it is the historical rounds that feed model training.
     chk <- data.table::as.data.table(torp_df_total)[
-      !is.na(position_group) & season == max(season, na.rm = TRUE)]
-    chk <- chk[round == max(round, na.rm = TRUE),
-               .(wmean = stats::weighted.mean(epr, pmax(pred_tog, 0.01), na.rm = TRUE)),
-               by = position_group]
-    if (nrow(chk) > 0 && max(abs(chk$wmean), na.rm = TRUE) > 1e-6) {
+      !is.na(position_group),
+      .(wmean = stats::weighted.mean(epr, pmax(pred_tog, 0.01), na.rm = TRUE), n = .N),
+      by = .(season, round, position_group)]
+
+    # Fail CLOSED. An empty check is not a pass: zero rows here means nothing
+    # had a position group, which is exactly the state in which centring cannot
+    # have happened.
+    if (nrow(chk) == 0) {
       cli::cli_abort(c(
-        "EPR position centring did not take: max |weighted mean| = {signif(max(abs(chk$wmean)), 3)}",
+        "Cannot verify EPR position centring: no rows carry a {.field position_group}.",
+        "x" = "Refusing to publish ratings whose centring cannot be checked."
+      ))
+    }
+    if (!all(is.finite(chk$wmean))) {
+      bad <- chk[!is.finite(wmean)]
+      cli::cli_abort(c(
+        "EPR position centring produced {nrow(bad)} non-finite cell mean{?s}.",
+        "i" = "First: season {bad$season[1]} round {bad$round[1]} {bad$position_group[1]}"
+      ))
+    }
+    worst <- max(abs(chk$wmean))
+    if (worst > 1e-6) {
+      b <- chk[which.max(abs(wmean))]
+      cli::cli_abort(c(
+        "EPR position centring did not take: max |weighted mean| = {signif(worst, 3)}",
+        "i" = "Worst cell: season {b$season} round {b$round} {b$position_group} (n = {b$n})",
         "x" = "Refusing to publish ratings whose positions are not centred as claimed."
       ))
     }
+    cli::cli_alert_success(
+      "Position centring verified across {nrow(chk)} (season, round, position) cell{?s}")
   }
 
   if (!is.null(psr_df) && nrow(psr_df) > 0 && "psr" %in% names(psr_df)) {
