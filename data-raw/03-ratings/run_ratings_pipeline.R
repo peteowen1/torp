@@ -492,17 +492,47 @@ if (nrow(torp_new) > 0) {
     # Check EVERY (season, round, position) cell, not just the latest. Centring
     # runs across all history, so sampling one round would let an earlier round
     # fail silently -- and it is the historical rounds that feed model training.
+    #
+    # This checks the weighted mean of `epr` (the total) while centring is
+    # applied per CHANNEL. Those agree exactly only because the four channels
+    # are finite together or NA together (verified 2026-07-28: 107,448 rows all
+    # finite, 23,480 all NA, ZERO partial), so every channel's mean is taken
+    # over the same players and their sum is the total's mean. That invariant
+    # holds by data, not by contract. If partial-NA rows ever appear the check
+    # fails loud rather than passing something wrong -- the skew would exceed
+    # the tolerance below -- but the message would be misleading, so start here.
     chk <- data.table::as.data.table(torp_df_total)[
       !is.na(position_group),
-      .(wmean = stats::weighted.mean(epr, pmax(pred_tog, 0.01), na.rm = TRUE), n = .N),
+      .(wmean = stats::weighted.mean(epr, pmax(pred_tog, 0.01), na.rm = TRUE),
+        n = .N, n_rated = sum(is.finite(epr))),
       by = .(season, round, position_group)]
+
+    # A cell where NOBODY is rated yet has nothing to centre and no mean to
+    # check -- that is the start of the dataset, not a failure. 23,480 rows
+    # (~18%) carry an NA channel and therefore an NA epr, which is pre-existing
+    # published behaviour; in early 2021 a few whole position-rounds are NA.
+    # Skip those, but COUNT them, so "nothing was checkable" can never be
+    # mistaken for "everything checked out".
+    unrated <- chk[n_rated == 0]
+    if (nrow(unrated) > 0) {
+      cli::cli_inform(
+        "Position centring: {nrow(unrated)} cell{?s} have no rated players (earliest: season {unrated$season[1]} round {unrated$round[1]} {unrated$position_group[1]}) -- nothing to verify there")
+    }
+    # Known, accepted limitation: a cell with n_rated == 1 passes vacuously --
+    # the weighted mean of one point IS that point, so subtracting it leaves
+    # exactly 0 whatever the grouping logic did. Early rounds are where such
+    # cells live, so the guard's power is weakest precisely where this filter
+    # newly admits cells. Left as-is because the failure this guard exists to
+    # catch (a whole taxonomy or channel not centring) shows up across many
+    # cells at once, not in a single-player one.
+    chk <- chk[n_rated > 0]
 
     # Fail CLOSED. An empty check is not a pass: zero rows here means nothing
     # had a position group, which is exactly the state in which centring cannot
     # have happened.
     if (nrow(chk) == 0) {
       cli::cli_abort(c(
-        "Cannot verify EPR position centring: no rows carry a {.field position_group}.",
+        "Cannot verify EPR position centring: no {.field position_group} cell has a single rated player.",
         "x" = "Refusing to publish ratings whose centring cannot be checked."
       ))
     }
