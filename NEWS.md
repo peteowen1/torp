@@ -8,11 +8,24 @@
   Daily Data Release failed 33 times between 2026-07-14 and 2026-07-27. The actual
   failures had the sign backwards from the earlier diagnosis: the listed size was
   *larger* than local (the previous, bigger asset) and byte-identical on all five
-  attempts, so no amount of waiting could converge it. Truncation -- the failure
-  worth aborting for -- makes the listing *smaller*, so that direction stays fatal
-  while a larger listing now warns and proceeds. Each aborted release also skipped
-  the downstream dispatch to torp, collapsing its game-day prediction refresh from
-  ~6 runs to 1-2 and staling its submitted tips for two weeks.
+  attempts, so no amount of waiting could converge it. Each aborted release also
+  skipped the downstream dispatch to torp, collapsing its game-day prediction
+  refresh from ~6 runs to 1-2 and staling its submitted tips for two weeks.
+
+  Truncation -- the failure worth aborting for -- makes the listing *smaller*, so
+  that direction stays fatal. A *larger* listing is decided on the listing's own
+  `updated_at`: stamped before our upload means a lagging read (retry, then warn
+  and proceed); stamped at or after it means a different write replaced ours, or
+  the replace failed and the old asset is still live, and stays fatal.
+
+  **Correction:** the first version of this fix decided the larger-than case on
+  size direction alone, justified by a claim that truncation was "independently
+  guarded by the row-count floor against `bus_manifest.json`". That claim was
+  **false** -- `prev_rows_floor` defaults to `NULL` and none of the ~80
+  `save_to_release()` call sites pass it, so that check is inert in production.
+  Size direction alone cannot separate a lagging listing from a failed replace
+  (piggyback's delete-then-upload is not atomic) or a concurrent writer, which is
+  why the decision now rests on a real staleness signal instead.
 
 ## Rating changes — NOT yet reflected in published ratings
 
