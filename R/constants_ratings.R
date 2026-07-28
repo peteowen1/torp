@@ -121,7 +121,9 @@ EPV_POSITION_STANDARDISE <- TRUE
 #' (FABLE-DEFENDER-VALUE-PLAN.md §8.2).
 #'
 #' This closes that gap directly, on the published rating, per channel, keyed on
-#' \code{position_group} within each \code{(season, round)} cross-section.
+#' \code{position_group} within each \code{(season, round)} cross-section --
+#' collapsed first onto \code{MATCH_LISTED_POS_MAP}'s 6 buckets, the same
+#' taxonomy the match model's position features use.
 #'
 #' \strong{This is a NORMALISATION, not a measurement.} Position levels are
 #' unidentifiable from match margins -- on-field structure is rigid (every team

@@ -451,3 +451,86 @@ test_that("calculate_torp uses snapshot when season/round absent", {
   # A's latest snapshot is round 2 (psr 20); B has psr 5
   expect_equal(res$psr, c(20, 5))
 })
+
+
+# EPR position centring -------------------------------------------------------
+
+.centre_fixture <- function(n = 400, seed = 42) {
+  set.seed(seed)
+  pg <- unlist(MATCH_LISTED_POS_MAP, use.names = FALSE)
+  d <- data.frame(
+    season = 2026L, round = 21L,
+    position_group = sample(pg, n, replace = TRUE),
+    pred_tog = runif(n, 0.4, 1),
+    epr_recv = rnorm(n, 1, 2), epr_disp = rnorm(n),
+    epr_spoil = rnorm(n), epr_hitout = rnorm(n),
+    stringsAsFactors = FALSE
+  )
+  # Push the two merged forward groups apart so a 7-way centring and a 6-way
+  # one cannot produce the same answer.
+  d$epr_recv <- d$epr_recv +
+    ifelse(d$position_group == "MEDIUM_FORWARD", -3,
+           ifelse(d$position_group == "MIDFIELDER_FORWARD", 3, 0))
+  d$epr <- d$epr_recv + d$epr_disp + d$epr_spoil + d$epr_hitout
+  d
+}
+
+test_that("centring keys on the same taxonomy the match features use", {
+  # The invariant this whole helper exists to protect: ratings are centred on
+  # exactly the buckets the model differences. They diverged once (7-way
+  # centring vs 6-way features, 2026-07-28) and nothing downstream noticed.
+  d <- .centre_fixture()
+  out <- suppressMessages(centre_epr_by_position(d))
+  out$bucket <- .collapse_listed_position(out$position_group)
+
+  # as.vector, not unname: tapply returns a 1-d array, so expect_equal fails on
+  # dim() alone against a plain numeric even when every value is exactly 0.
+  by_bucket <- as.vector(tapply(seq_len(nrow(out)), out$bucket, function(i)
+    stats::weighted.mean(out$epr[i], out$pred_tog[i])))
+  expect_equal(by_bucket, rep(0, length(by_bucket)))
+
+  # ...and NOT on raw position_group: the merged forwards must retain their
+  # real level difference, or the merge silently isn't happening.
+  fwd <- out[out$position_group %in% c("MEDIUM_FORWARD", "MIDFIELDER_FORWARD"), ]
+  lv <- as.vector(tapply(seq_len(nrow(fwd)), fwd$position_group, function(i)
+    stats::weighted.mean(fwd$epr[i], fwd$pred_tog[i])))
+  expect_gt(abs(diff(lv)), 1)
+})
+
+test_that("centring rebuilds epr from its channels and drops helper columns", {
+  d <- .centre_fixture()
+  out <- suppressMessages(centre_epr_by_position(d))
+  expect_equal(out$epr,
+               out$epr_recv + out$epr_disp + out$epr_spoil + out$epr_hitout)
+  expect_false(any(c(".cw", ".cpg") %in% names(out)))
+  expect_s3_class(out, "data.frame")
+})
+
+test_that("centring aborts rather than silently returning uncentred ratings", {
+  d <- .centre_fixture()
+  expect_error(centre_epr_by_position(d[, setdiff(names(d), "position_group")]),
+               "position_group")
+  # A partial channel set would redefine epr as the sum of whatever was found.
+  expect_error(suppressWarnings(
+    centre_epr_by_position(d[, setdiff(names(d), "epr_hitout")])), "channel")
+})
+
+test_that("unmapped and missing position groups are left alone, not lumped", {
+  d <- .centre_fixture()
+  d$position_group[1:10] <- NA_character_
+  d$position_group[11:20] <- "NEW_AFL_LABEL"
+  before <- d$epr[1:20]
+  out <- suppressWarnings(suppressMessages(centre_epr_by_position(d)))
+  expect_equal(out$epr[1:20], before)
+})
+
+test_that("an NA weight excludes only that player, not their whole position", {
+  # weighted.mean()'s na.rm drops NA values but not NA weights, so one missing
+  # pred_tog used to blank an entire (season, round, position) cell.
+  d <- .centre_fixture()
+  d$pred_tog[1] <- NA_real_
+  out <- suppressWarnings(suppressMessages(centre_epr_by_position(d)))
+  peers <- .collapse_listed_position(d$position_group) ==
+    .collapse_listed_position(d$position_group[1])
+  expect_true(all(is.finite(out$epr[peers])))
+})

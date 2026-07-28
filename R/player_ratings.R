@@ -573,7 +573,7 @@ calculate_epr_stats_batch <- function(player_game_data = NULL,
 
 #' Centre each EPR channel on its position's TOG-weighted mean
 #'
-#' Subtracts, within every \code{(season, round, position_group)} cell, that
+#' Subtracts, within every \code{(season, round, position bucket)} cell, that
 #' cell's TOG-weighted mean of each channel in \code{EPR_CENTRE_CHANNELS}, then
 #' rebuilds \code{epr} as the sum of the centred channels. A published rating
 #' then reads "points above the average player in your position".
@@ -591,7 +591,14 @@ calculate_epr_stats_batch <- function(player_game_data = NULL,
 #' week. The two agree closely in practice (r = 0.985) but the key-defender
 #' correction differs by ~75%, so it is a real choice.
 #'
-#' Rows with a missing \code{position_group} are left untouched -- there is no
+#' The 7 \code{position_group} values are collapsed to the 6 buckets of
+#' \code{MATCH_LISTED_POS_MAP} via \code{.collapse_listed_position()} -- the
+#' same taxonomy the match model's position features use. Do not swap in the raw
+#' column: centring on 7 groups while the model differences 6 means
+#' \code{med_fwd_diff} pools two groups that were separated upstream, which is
+#' how it shipped on 2026-07-28.
+#'
+#' Rows with a missing or unmapped \code{position_group} are left untouched -- there is no
 #' defensible group mean to subtract, and silently lumping them together would
 #' invent one.
 #'
@@ -653,7 +660,10 @@ centre_epr_by_position <- function(epr_df,
     w <- rep(1, nrow(dt))
   }
   dt[, .cw := w]
-  n_ungrouped <- sum(is.na(dt$position_group))
+  # Collapse to the shared 6-way taxonomy BEFORE grouping. `.cpg`, not
+  # `position_group`, is the centring key from here down.
+  dt[, .cpg := .collapse_listed_position(position_group)]
+  n_ungrouped <- sum(is.na(dt$.cpg))
 
   # A cell where every row has zero weight falls back to the unweighted mean
   # rather than returning NaN -- better to centre a small cell imperfectly than
@@ -667,9 +677,9 @@ centre_epr_by_position <- function(epr_df,
     sum(xx * ww) / sum(ww)
   }
   for (cc in have) {
-    dt[!is.na(position_group),
+    dt[!is.na(.cpg),
        (cc) := get(cc) - .wmean_cell(get(cc), .cw),
-       by = .(season, round, position_group)]
+       by = .(season, round, .cpg)]
   }
 
   # Rebuild the total from its parts so epr and its channels cannot disagree.
@@ -687,7 +697,7 @@ centre_epr_by_position <- function(epr_df,
     cli::cli_warn(
       "EPR position centring: {n_incomplete} row{?s} {?has/have} a non-finite channel; {.field epr} set to NA rather than a partial sum.")
   }
-  dt[, .cw := NULL]
+  dt[, c(".cw", ".cpg") := NULL]
 
   cli::cli_alert_success(
     "Centred {length(have)} EPR channel{?s} on position means ({nrow(dt)} rows{?, / , }{n_ungrouped} without a position group left as-is)")

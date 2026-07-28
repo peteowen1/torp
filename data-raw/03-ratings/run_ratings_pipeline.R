@@ -501,11 +501,18 @@ if (nrow(torp_new) > 0) {
     # holds by data, not by contract. If partial-NA rows ever appear the check
     # fails loud rather than passing something wrong -- the skew would exceed
     # the tolerance below -- but the message would be misleading, so start here.
-    chk <- data.table::as.data.table(torp_df_total)[
-      !is.na(position_group),
+    # Group by the SAME collapsed bucket centre_epr_by_position() used. Keying
+    # this on raw position_group while centring uses the 6-way map would fail
+    # every run for the two merged forward groups -- each is only mean-zero
+    # jointly. A guard that groups differently from the code it guards is not a
+    # guard.
+    chk <- data.table::as.data.table(torp_df_total)
+    chk[, pos_bucket := torp:::.collapse_listed_position(position_group)]
+    chk <- chk[
+      !is.na(pos_bucket),
       .(wmean = stats::weighted.mean(epr, pmax(pred_tog, 0.01), na.rm = TRUE),
         n = .N, n_rated = sum(is.finite(epr))),
-      by = .(season, round, position_group)]
+      by = .(season, round, pos_bucket)]
 
     # A cell where NOBODY is rated yet has nothing to centre and no mean to
     # check -- that is the start of the dataset, not a failure. 23,480 rows
@@ -516,7 +523,7 @@ if (nrow(torp_new) > 0) {
     unrated <- chk[n_rated == 0]
     if (nrow(unrated) > 0) {
       cli::cli_inform(
-        "Position centring: {nrow(unrated)} cell{?s} have no rated players (earliest: season {unrated$season[1]} round {unrated$round[1]} {unrated$position_group[1]}) -- nothing to verify there")
+        "Position centring: {nrow(unrated)} cell{?s} have no rated players (earliest: season {unrated$season[1]} round {unrated$round[1]} {unrated$pos_bucket[1]}) -- nothing to verify there")
     }
     # Known, accepted limitation: a cell with n_rated == 1 passes vacuously --
     # the weighted mean of one point IS that point, so subtracting it leaves
@@ -532,7 +539,7 @@ if (nrow(torp_new) > 0) {
     # have happened.
     if (nrow(chk) == 0) {
       cli::cli_abort(c(
-        "Cannot verify EPR position centring: no {.field position_group} cell has a single rated player.",
+        "Cannot verify EPR position centring: no position bucket has a single rated player.",
         "x" = "Refusing to publish ratings whose centring cannot be checked."
       ))
     }
@@ -540,7 +547,7 @@ if (nrow(torp_new) > 0) {
       bad <- chk[!is.finite(wmean)]
       cli::cli_abort(c(
         "EPR position centring produced {nrow(bad)} non-finite cell mean{?s}.",
-        "i" = "First: season {bad$season[1]} round {bad$round[1]} {bad$position_group[1]}"
+        "i" = "First: season {bad$season[1]} round {bad$round[1]} {bad$pos_bucket[1]}"
       ))
     }
     worst <- max(abs(chk$wmean))
@@ -548,7 +555,7 @@ if (nrow(torp_new) > 0) {
       b <- chk[which.max(abs(wmean))]
       cli::cli_abort(c(
         "EPR position centring did not take: max |weighted mean| = {signif(worst, 3)}",
-        "i" = "Worst cell: season {b$season} round {b$round} {b$position_group} (n = {b$n})",
+        "i" = "Worst cell: season {b$season} round {b$round} {b$pos_bucket} (n = {b$n})",
         "x" = "Refusing to publish ratings whose positions are not centred as claimed."
       ))
     }

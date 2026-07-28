@@ -2,6 +2,24 @@
 
 ## Bug Fixes
 
+* **EPR position centring and the match model's position features now use one
+  taxonomy.** They shipped on different ones: the features collapse
+  `position_group` to 6 buckets via `MATCH_LISTED_POS_MAP` (combining
+  `MEDIUM_FORWARD` and `MIDFIELDER_FORWARD`), while centring keyed on the raw
+  7-value column. So `med_fwd_diff` pooled two groups the ratings had already
+  been centred apart, and the pooling carried whichever level difference
+  centring had just removed. Both now go through
+  `.collapse_listed_position()`, the single place a `position_group` becomes a
+  bucket name. Ratings rebuilt after this change differ for forwards only, by
+  roughly +-0.05 to +0.14 EPR per player.
+
+* **`check_predictions_csv.R`**: `predictions_<season>.csv` -- the file
+  squiggle.com.au actually reads -- is now verifiable against the parquet every
+  other loader reads. A failed CSV upload only warns (deliberately: the parquet
+  has already landed by then), so nothing inside torp could previously detect
+  that Squiggle was serving the previous round's tips. `save_to_release()`'s
+  warning now names that consequence.
+
 * **Match predictions are no longer locked before AFL team lists exist.** Rounds 19,
   20 and 21 of 2026 were all published with `players = NA` -- no team sheet available,
   so every player fell back to the position prior and the predictions were
