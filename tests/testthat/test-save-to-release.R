@@ -140,8 +140,44 @@ test_that("save_to_release ABORTS when a LARGER listing is stamped AFTER our upl
   )
 
   df <- data.frame(x = 1:3, y = c("a", "b", "c"))
+  # Match the message too, not just the class: `vb_error_integrity` is shared
+  # with the SMALLER/truncation branch and with the unparseable-timestamp
+  # branch, so class alone would not prove we reached THIS one.
   expect_error(
     save_to_release(df, "widget", "test-tag"),
+    regexp = "at or after our upload",
+    class = "vb_error_integrity"
+  )
+})
+
+test_that("save_to_release aborts, citing the parse failure, when updated_at is unparseable", {
+  # Fail closed on an untrustworthy staleness signal -- but the message must
+  # name the real cause rather than asserting a temporal relationship that was
+  # never evaluated.
+  uploaded_bytes <- NULL
+  testthat::local_mocked_bindings(
+    pb_upload = function(file, repo, tag, overwrite = TRUE, ...) {
+      uploaded_bytes <<- file.size(file)
+      invisible(NULL)
+    },
+    .package = "piggyback"
+  )
+  testthat::local_mocked_bindings(
+    gh = function(endpoint, ...) {
+      list(assets = list(list(name = "widget.parquet", size = uploaded_bytes + 249,
+                              updated_at = "not-a-timestamp", id = 1)))
+    },
+    .package = "gh"
+  )
+  testthat::local_mocked_bindings(
+    .publish_bus_manifest = function(...) invisible(NULL),
+    save_locally = function(...) invisible(NULL)
+  )
+
+  df <- data.frame(x = 1:3, y = c("a", "b", "c"))
+  expect_error(
+    save_to_release(df, "widget", "test-tag"),
+    regexp = "could not be parsed",
     class = "vb_error_integrity"
   )
 })

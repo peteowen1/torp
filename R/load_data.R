@@ -77,6 +77,11 @@ save_to_release <- function(df, file_name, release_tag, also_csv = FALSE, prev_r
       if (grepl("404|422", conditionMessage(e))) {
         cli::cli_warn("Upload error for {.val {f_name}}, retrying once...")
         Sys.sleep(2)
+        # Re-stamp: it is THIS attempt whose result the verify below checks, so
+        # the staleness cutoff must reference it and not the abandoned first
+        # attempt. Matters most precisely here -- the 404/422 path is the
+        # concurrent-upload case the staleness check exists to disambiguate.
+        upload_started_at <<- as.POSIXct(Sys.time(), tz = "UTC")
         tryCatch(
           piggyback::pb_upload(tf,
                                repo = repo,
@@ -191,8 +196,16 @@ save_to_release <- function(df, file_name, release_tag, also_csv = FALSE, prev_r
       listed_at <- suppressWarnings(
         as.POSIXct(row$updated_at[1L], format = "%Y-%m-%dT%H:%M:%SZ", tz = "UTC")
       )
-      stale_read <- !is.na(listed_at) &&
-        listed_at < (upload_started_at - VB_VERIFY_CLOCK_SKEW_SECS)
+      # An unparseable timestamp means the signal we decide on is untrustworthy,
+      # so fail closed -- but say THAT, rather than asserting a temporal
+      # relationship we never actually evaluated. An operator chasing the
+      # "a different write replaced ours" message would otherwise hunt a
+      # phantom concurrent writer instead of an API shape change.
+      if (is.na(listed_at)) {
+        .vb_abort("Post-upload verify: {.val {f_name}} listed size {listed_bytes} > local {local_bytes}, and updated_at {.val {row$updated_at[1L]}} could not be parsed -- treating the staleness signal as untrusted",
+                  "vb_error_integrity")
+      }
+      stale_read <- listed_at < (upload_started_at - VB_VERIFY_CLOCK_SKEW_SECS)
       if (stale_read) {
         .vb_abort("Post-upload verify: {.val {f_name}} listed size {listed_bytes} > local {local_bytes}, listing stamped {row$updated_at[1L]} (before our upload) -- lagging listing",
                   c("vb_error_transient", "vb_verify_stale_listing"))

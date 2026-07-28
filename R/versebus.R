@@ -186,7 +186,13 @@ vb_list_assets <- function(repo, tag) {
   data.frame(
     name = vapply(assets, function(a) a$name, character(1)),
     size = vapply(assets, function(a) as.numeric(a$size), numeric(1)),
-    updated_at = vapply(assets, function(a) a$updated_at, character(1)),
+    # NULL-guarded: save_to_release()'s post-upload verify now decides
+    # fatal-vs-warn on this field, so one malformed OTHER asset on the release
+    # must not throw here and take down verification of the file we care about
+    # (that error would be reclassified transient and silently skip the check).
+    updated_at = vapply(assets,
+                        function(a) if (is.null(a$updated_at)) NA_character_ else a$updated_at,
+                        character(1)),
     id = vapply(assets, function(a) as.numeric(a$id), numeric(1)),
     stringsAsFactors = FALSE
   )
