@@ -13,7 +13,29 @@ local_max_age_for_url(url)
 Numeric max age in days, or NULL for no expiration
 }
 \description{
-Historical seasons (before current year) never expire. Current season files
-expire after 1 day to pick up mid-season updates.
+Current-season files expire after 1 day to pick up mid-season updates.
+Historical seasons expire after \code{LOCAL_HISTORICAL_MAX_AGE_DAYS} --
+generously, but NOT never.
+}
+\details{
+Historical files used to return NULL here, meaning "never expires", on the
+reasoning that past seasons do not change. Past \emph{results} do not; the
+published \emph{files} very much do:
+\itemize{
+\item a schema change rewrites them (the metric-first rename, 2026-07-22,
+turned \code{recv_epv_adj} into \code{epv_recv_adj});
+\item a rating-vintage regenerate rewrites them (v1 -> v2, 2026-07-27).
+}
+
+Both happened within a week, and the never-expire rule meant a local copy
+from April was still served in July. That is how two published rating
+seasons were silently corrupted: a stale \code{player_game_2022}/\verb{_2025} carried
+the old column names, their \verb{_adj} columns read as all-NA, and EPR deflated
+both seasons. See \code{adjust_epv_for_opponents()}'s guards.
+
+A finite age makes the local mirror self-healing: a regenerated history
+propagates within the window instead of never. Tune with
+\code{options(torp.local_historical_max_age_days = N)}; \code{Inf} restores
+the old never-expire behaviour if you genuinely need it for offline work.
 }
 \keyword{internal}

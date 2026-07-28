@@ -21,8 +21,12 @@ Never marks a current-season (or year-unparseable) URL skippable (torp
 H3/H1): those files are actively upserted by the same pipeline that reads
 them, so a 404 today (round not yet published) becomes a false negative
 cache tomorrow, silently dropping the newest data for up to a day. Only
-historical files -- which never expire in \code{\link[=local_max_age_for_url]{local_max_age_for_url()}} and
-therefore can't heal via the normal freshness check -- get a marker at
-all, and it's capped at 3h in \code{\link[=is_download_skippable]{is_download_skippable()}}.
+historical files get a marker at all, and it is capped at 3h in
+\code{\link[=is_download_skippable]{is_download_skippable()}}.
+
+Tests \code{.is_historical_url()} directly rather than
+\code{is.null(local_max_age_for_url(url))}. Those were the same test while
+historical files never expired; once they gained a finite age the NULL check
+silently stopped matching anything and disabled the negative cache outright.
 }
 \keyword{internal}
