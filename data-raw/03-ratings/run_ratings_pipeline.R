@@ -178,8 +178,46 @@ tictoc::tic("stage_3_ratings")
 # is stale relative to the new player_game releases)
 cli::cli_progress_step("Loading all player game data")
 clear_all_cache()
+
+# Stage 2 just wrote these files to the release, so Stage 3 must read what it
+# wrote. load_player_game_data() prefers a local torpdata/data sibling when one
+# exists (get_local_data_dir()), which on a developer machine can be months
+# stale for some seasons -- and a stale season silently destroys its ratings
+# (see adjust_epv_for_opponents()'s guard, and the 2026-07-27 incident where
+# local 2022/2025 were three months old and both seasons' ratings deflated).
+#
+# Point the loader at the release for the duration of this stage.
+.prev_local_dir <- getOption("torp.local_data_dir")
+.local_dir <- get_local_data_dir()
+if (!is.null(.local_dir)) {
+  cli::cli_alert_info(
+    "Bypassing local data dir {.path {.local_dir}} for Stage 3 -- reading the release Stage 2 just wrote")
+  options(torp.local_data_dir = tempfile("no_local_"))  # non-existent -> falls back to release
+}
+on.exit(options(torp.local_data_dir = .prev_local_dir), add = TRUE)
+
 all_pgd <- load_player_game_data(TRUE)
+options(torp.local_data_dir = .prev_local_dir)
 cli::cli_inform("Player game data loaded: {nrow(all_pgd)} rows, {ncol(all_pgd)} cols")
+
+# Schema-consistency check across seasons: a mixed-vintage load (some seasons
+# pre-rename, some post) is exactly what produced the 2026-07-27 incident, and
+# it is invisible in row counts.
+.adj_cols <- grep("_adj$", names(all_pgd), value = TRUE)
+if (length(.adj_cols) > 0 && "season" %in% names(all_pgd)) {
+  .cov <- data.table::as.data.table(all_pgd)[
+    , lapply(.SD, function(x) mean(!is.na(x))), by = "season", .SDcols = .adj_cols]
+  .mixed <- .adj_cols[vapply(.adj_cols, function(cc) {
+    v <- .cov[[cc]]; any(v < 0.01) && any(v > 0.99)
+  }, logical(1))]
+  if (length(.mixed) > 0) {
+    cli::cli_abort(c(
+      "Mixed-vintage player game data: column{?s} {.val {.mixed}} {?is/are} populated for some seasons and empty for others.",
+      "x" = "Rebuilding on this would silently deflate the empty seasons' ratings.",
+      "i" = "Per-season coverage:\n{paste(utils::capture.output(print(.cov)), collapse = '\n')}"
+    ))
+  }
+}
 
 # Convert to keyed data.table once — avoids full copy on every round call
 data.table::setDT(all_pgd)

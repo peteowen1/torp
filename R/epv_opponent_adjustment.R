@@ -150,6 +150,44 @@ adjust_epv_for_opponents <- function(player_game_data,
     cli::cli_abort("Missing columns: {paste(missing, collapse = ', ')}")
   }
 
+  # Guard: a season whose _adj components are entirely NA silently destroys that
+  # season's ratings. `.abs_total` below is a sum of abs() across components, so
+  # ONE all-NA component makes every _oadj for those rows NA -- and EPR then
+  # counts the game toward wt_gms while contributing nothing to the numerator,
+  # deflating every player in that season as 1/wt_gms.
+  #
+  # This is not hypothetical. It is what happened to published 2022 and 2025 on
+  # 2026-07-27: the ratings rebuild's Stage 3 read a LOCAL torpdata/data copy
+  # that was stale for exactly those two seasons (2026-04-16, predating the
+  # metric-first column rename), so they carried `recv_epv_adj` where the fresh
+  # seasons carried `epv_recv_adj`. Their epr SD collapsed 2.43 -> 1.09 and
+  # 2.40 -> 1.25 with cor(sd, 1/wt_gms) = +0.99, and nothing warned.
+  #
+  # Fail loudly and name the seasons, rather than emit a plausible-looking
+  # rating set that is silently wrong.
+  comp_cols <- intersect(c("epv_recv_adj", "epv_disp_adj", "epv_spoil_adj",
+                           "epv_hitout_adj", "contest_epv_adj"), names(dt))
+  if (length(comp_cols) > 0 && "season" %in% names(dt)) {
+    bad <- dt[, lapply(.SD, function(x) all(is.na(x))), by = "season", .SDcols = comp_cols]
+    flagged <- as.character(bad[["season"]][Reduce(`|`, lapply(comp_cols, function(cc) bad[[cc]]))])
+    if (length(flagged) > 0) {
+      legacy <- intersect(c("recv_epv_adj", "disp_epv_adj", "spoil_epv_adj",
+                            "hitout_epv_adj"), names(dt))
+      why <- if (length(legacy) > 0) {
+        "Pre-rename columns are present ({.val {legacy}}), so these rows are almost certainly a STALE player_game vintage -- refresh them before rebuilding."
+      } else {
+        "Check the player_game inputs for those seasons."
+      }
+      cli::cli_abort(
+        c("{length(flagged)} season{?s} ({.val {flagged}}) {?has/have} an all-NA EPV component column.",
+          "x" = "Proceeding would make every _oadj NA there and silently deflate those seasons' ratings.",
+          "i" = why,
+          "i" = "Columns checked: {.val {comp_cols}}"),
+        class = c("torp_error_stale_input", "vb_error_integrity")
+      )
+    }
+  }
+
   cli::cli_inform("Computing rolling team EPV defensive profiles...")
 
   # Compute opponent profiles
@@ -165,6 +203,9 @@ adjust_epv_for_opponents <- function(player_game_data,
     if ("contest_epv_adj" %in% names(dt)) {
       dt[, contest_epv_oadj := contest_epv_adj]
     }
+    # This early return copies _adj straight through, so NA _adj becomes NA
+    # _oadj here just as surely as on the main path -- run the same backstop.
+    .assert_no_na_oadj(dt)
     return(dt)
   }
 
@@ -214,7 +255,44 @@ adjust_epv_for_opponents <- function(player_game_data,
                  ".player_adj", ".abs_total")
   dt[, (intersect(temp_cols, names(dt))) := NULL]
 
+  .assert_no_na_oadj(dt)
+
   cli::cli_inform("EPV opponent adjustment: {nrow(dt)} player-games, _oadj columns added")
 
   dt[]
+}
+
+# .assert_no_na_oadj ----
+
+#' Abort if the opponent adjustment produced any NA epv_oadj
+#'
+#' The backstop behind \code{adjust_epv_for_opponents()}'s input guard. The
+#' input guard catches the known cause (a stale/renamed player_game vintage);
+#' this catches every other route to the same outcome, on BOTH exit paths --
+#' including the no-profiles early return, which copies \code{_adj} straight
+#' through and so propagates NA just as readily.
+#'
+#' Worth failing loudly for: EPR counts a game toward \code{wt_gms} while an NA
+#' contributes nothing to the numerator, so the affected seasons deflate as
+#' \code{1/wt_gms} and look like a plausible rating set rather than a broken one.
+#'
+#' @param dt data.table with an \code{epv_oadj} column.
+#' @return Invisibly TRUE; aborts otherwise.
+#' @keywords internal
+.assert_no_na_oadj <- function(dt) {
+  if (!"epv_oadj" %in% names(dt)) return(invisible(TRUE))
+  n_na <- sum(is.na(dt$epv_oadj))
+  if (n_na == 0) return(invisible(TRUE))
+
+  by_season <- if ("season" %in% names(dt)) {
+    s <- dt[is.na(epv_oadj), .N, by = "season"]
+    paste(sprintf("%s (%d)", s[["season"]], s[["N"]]), collapse = ", ")
+  } else "unknown"
+
+  cli::cli_abort(
+    c("EPV opponent adjustment produced {n_na} NA {.field epv_oadj} value{?s}.",
+      "x" = "EPR would count these games toward wt_gms while adding nothing to the numerator, deflating the affected seasons.",
+      "i" = "Affected by season: {by_season}"),
+    class = c("torp_error_na_oadj", "vb_error_integrity")
+  )
 }
