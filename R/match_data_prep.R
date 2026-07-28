@@ -795,5 +795,25 @@
     }
   )
 
+  # xScore team power rating (2026-07-28, FABLE-MATCH-FEATURES-PLAN.md WS1b):
+  # replaces elo_diff as the model's team-strength feature. Updates on expected
+  # rather than actual score margin, which strips out AFL's large conversion
+  # variance -- measured better than elo_diff both standalone (MAE 26.38 vs
+  # 27.15) and in-model on all six headline metrics. elo_diff is still built
+  # above: it is no longer consumed by the GAM/XGB formulas, but is retained as
+  # a published column for comparison and as a fallback if this feature fails.
+  # See xscore_rating.R.
+  team_mdl_df <- tryCatch(
+    build_xrating_diff(team_mdl_df),
+    error = function(e) {
+      cli::cli_warn(c(
+        "Failed to build xelo_diff feature ({conditionMessage(e)}) -- falling back to neutral xelo_diff=0",
+        "i" = "Deliberately NOT falling back to elo_diff: the two live on scales ~100x apart (Elo points vs points of expected margin), so a model trained on xelo_diff would produce wild predictions, not merely degraded ones. Neutral 0 loses the signal but stays in-distribution."
+      ))
+      team_mdl_df$xelo_diff <- 0
+      team_mdl_df
+    }
+  )
+
   team_mdl_df
 }

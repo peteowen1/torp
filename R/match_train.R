@@ -166,7 +166,7 @@
     "s(psr_diff, bs = \"ts\", k = 5)"        = list(var = "psr_diff", k = 5),
     "s(osr_diff, bs = \"ts\", k = 5)"        = list(var = "osr_diff", k = 5),
     "s(dsr_diff, bs = \"ts\", k = 5)"        = list(var = "dsr_diff", k = 5),
-    "s(elo_diff, bs = \"ts\", k = 5)"        = list(var = "elo_diff", k = 5)
+    "s(xelo_diff, bs = \"ts\", k = 5)"       = list(var = "xelo_diff", k = 5)
   )
   drop_terms <- character(0)
   for (term_str in names(optional_smooth_terms)) {
@@ -263,7 +263,7 @@
   )
   m2_optional <- c("s(psr_diff, bs = \"ts\", k = 5)",
                     "s(osr_diff, bs = \"ts\", k = 5)", "s(dsr_diff, bs = \"ts\", k = 5)",
-                    "s(elo_diff, bs = \"ts\", k = 5)")
+                    "s(xelo_diff, bs = \"ts\", k = 5)")
   m2_formula <- stats::as.formula(.add_optional(m2_base, m2_optional))
 
   afl_xscore_diff_mdl <- mgcv::bam(
@@ -339,7 +339,7 @@
   )
   m4_optional <- c("s(psr_diff, bs = \"ts\", k = 5)",
                     "s(osr_diff, bs = \"ts\", k = 5)", "s(dsr_diff, bs = \"ts\", k = 5)",
-                    "s(elo_diff, bs = \"ts\", k = 5)")
+                    "s(xelo_diff, bs = \"ts\", k = 5)")
   m4_formula <- stats::as.formula(.add_optional(m4_base, m4_optional))
 
   afl_score_mdl <- mgcv::bam(
@@ -489,11 +489,13 @@
     osr_dsr_cols <- c("osr_diff", "dsr_diff")
   }
 
-  # elo_diff (2026-07, FABLE-MATCH-MAE-PLAN.md WS2/WS5 "C6"): dynamic,
-  # results-based team-strength signal, absent from the player-rating diffs
-  # above. Included here unconditionally (not behind an availability check
-  # like osr_dsr_cols) because .build_team_mdl_df() always adds it, with a
-  # neutral 0 fallback on failure -- see match_data_prep.R.
+  # xelo_diff (2026-07-28, FABLE-MATCH-FEATURES-PLAN.md WS1b): the xScore team
+  # power rating, replacing the win-based elo_diff that shipped with C6 -- a
+  # dynamic team-strength signal absent from the player-rating diffs above, now
+  # driven by expected rather than actual score. Included unconditionally (not
+  # behind an availability check like osr_dsr_cols) because
+  # .build_team_mdl_df() always adds it, with a neutral 0 fallback on failure
+  # -- see match_data_prep.R and xscore_rating.R.
   base_cols <- c(
     "team_type_fac",
     "game_year_decimal.x", "game_prop_through_year.x",
@@ -501,7 +503,7 @@
     "epr_diff", "epr_recv_diff", "epr_disp_diff",
     "epr_spoil_diff", "epr_hitout_diff",
     "torp_diff", "psr_diff", osr_dsr_cols,
-    "elo_diff",
+    "xelo_diff",
     "log_dist_diff",
     "familiarity_diff",
     "days_rest_diff_fac"
