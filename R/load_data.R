@@ -238,6 +238,18 @@ save_to_release <- function(df, file_name, release_tag, also_csv = FALSE, prev_r
     tf_csv <- tempfile(fileext = ".csv")
     on.exit(unlink(tf_csv), add = TRUE)
 
+    # The CSV is NOT a convenience mirror for `predictions`: squiggle.com.au
+    # reads predictions_<season>.csv to pick up torp's tips. If it fails here
+    # while the parquet succeeds, everything downstream looks healthy -- the
+    # release is updated, the run goes green, our own loaders (which read
+    # parquet) see fresh data -- and Squiggle silently keeps serving the
+    # PREVIOUS round's tips. Observed 2026-07-28: parquet at 14:03, CSV still
+    # at 05:53, caught only by eyeballing asset timestamps.
+    #
+    # Still a warning rather than an abort: the parquet upload has already
+    # succeeded by this point, and discarding a good data release because a
+    # secondary copy failed is the wrong trade. But it must be impossible to
+    # miss, and it must name the consequence.
     tryCatch({
       utils::write.csv(df, tf_csv, row.names = FALSE)
       piggyback::pb_upload(tf_csv,
@@ -245,7 +257,13 @@ save_to_release <- function(df, file_name, release_tag, also_csv = FALSE, prev_r
                            tag = release_tag,
                            name = csv_name)
     }, error = function(e) {
-      cli::cli_warn("Parquet uploaded but CSV copy failed for {.val {csv_name}}: {conditionMessage(e)}")
+      cli::cli_warn(c(
+        "!" = "CSV copy FAILED for {.val {csv_name}} (parquet uploaded fine): {conditionMessage(e)}",
+        "x" = if (release_tag == "predictions")
+          "squiggle.com.au reads this CSV -- it will keep serving the PREVIOUS tips until this succeeds."
+        else "Consumers reading the CSV rather than the parquet will see stale data.",
+        "i" = "Re-run the pipeline, or re-upload the CSV, before the next round starts."
+      ))
     })
   }
 
