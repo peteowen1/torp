@@ -54,8 +54,11 @@
 }
 
 .mt_make_team_mdl_df <- function() {
-  # Minimal frame satisfying .matches_from_team_mdl_df() (Elo) plus the
-  # factor-level universe .build_matchup_newdata() validates against.
+  # Minimal frame satisfying .xscore_matches_from_team_mdl_df() (the xScore
+  # team power rating) plus the factor-level universe
+  # .build_matchup_newdata() validates against. `xscore_diff` is required:
+  # the match model's team-strength feature has been driven by expected rather
+  # than actual score since 2026-07-28 (FABLE-MATCH-FEATURES-PLAN.md WS1b).
   # game_wday_fac.x = "6": .gf_anchor_date() always lands on a Saturday
   # (wday(week_start=1) == 6), for ANY season -- not season-dependent here.
   data.frame(
@@ -67,6 +70,7 @@
     team_name.x = c("Team A", "Team B"),
     team_name.y = c("Team B", "Team C"),
     score_diff = c(10, -5),
+    xscore_diff = c(8, -3),
     win = c(1, 0),
     venue_fac = factor(c("Ground A", "Ground B"), levels = c("Ground A", "Ground B", "M.C.G.")),
     days_rest_diff_fac = factor(c("0", "0"), levels = as.character(-4:4)),
@@ -127,7 +131,7 @@ test_that(".build_matchup_newdata fabricates n*(n-1)*2*2 rows with no NAs in cor
   expect_equal(nrow(nd), 3 * 2 * 2 * 2)
   expect_setequal(unique(nd$tier), c("home", "mcg"))
 
-  core_cols <- c("epr_diff", "log_dist_diff", "familiarity_diff", "elo_diff",
+  core_cols <- c("epr_diff", "log_dist_diff", "familiarity_diff", "xelo_diff",
                  "torp_diff", "psr_diff")
   for (col in core_cols) {
     expect_true(all(!is.na(nd[[col]])), info = col)

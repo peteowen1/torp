@@ -168,6 +168,34 @@ ELO_HGA <- 45
 ELO_CARRYOVER <- 0.75
 
 
+# xScore Team Power Rating Constants
+# ----------------------------------
+# Replaces the win-based Elo above as the match model's team-strength feature
+# (2026-07-28, FABLE-MATCH-FEATURES-PLAN.md WS1/WS1b). Lives in POINTS space and
+# updates on expected-score margin error rather than win/loss -- see
+# xscore_rating.R for the full rationale and measured evidence.
+#
+# k was selected by an expanding-window tuner over {0.04,...,0.24} that chose
+# each test season's value using strictly prior seasons only; 0.08 is the value
+# chosen for the 2025 test season, i.e. fitted on 2021-2024. It is deliberately
+# NOT the value 2026 preferred (0.06), which would be tuned on a window it is
+# then scored on. Do not "update" this to a later season's preference without
+# moving the evaluation window too.
+
+#' xScore rating update rate, in points of rating per point of prediction error
+#' @keywords internal
+XRATING_K <- 0.08
+
+#' xScore rating home-ground advantage, in points of expected margin
+#' @keywords internal
+XRATING_HGA <- 8
+
+#' xScore rating season-boundary carryover (fraction retained; 0 = full reset
+#' to the league-average 0)
+#' @keywords internal
+XRATING_CARRYOVER <- 0.75
+
+
 # Margin Recalibration Constants
 # ------------------------------
 # Post-hoc scaling of the blended match-model margin prediction (2026-07,

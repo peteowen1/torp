@@ -1,3 +1,37 @@
+# torp (development version)
+
+## Match model
+
+* **The team-strength feature is now an xScore power rating (`xelo_diff`),
+  replacing the win-based team Elo (`elo_diff`)** -- new `R/xscore_rating.R`.
+  The old feature updated on a binary win/loss with a margin multiplier; the new
+  one lives in points space and updates on the error of an *expected*-score
+  margin. AFL conversion variance is large enough that a side can dominate
+  territory and shots and still lose, so updating on expected score strips that
+  noise out -- and it is signal no competitor can construct, since xScore is
+  torp's own. Standalone on an identical 695-match set (2023-2026): MAE
+  27.15 -> 26.38, cor 0.524 -> 0.559, and the new rating renders the Elo
+  redundant (beta(elo) 0.09, p 9e-10) rather than the reverse. In-model, rolling
+  week-by-week OOS on 2025-2026 (n=387), swapping only this feature improved
+  **all six** headline metrics: MAE 25.622 -> 25.510, RMSE 32.646 -> 32.525,
+  Brier 0.17891 -> 0.17696, bits 0.23135 -> 0.23701, slope 0.959 -> 0.982,
+  cor 0.610 -> 0.613. Adopted under the EXPLORE tier of the new signal gate
+  (decision D-M1) rather than as a bootstrap-confirmed win: the MAE 95% CI is
+  [-0.442, +0.219] and spans zero, because the effect is smaller than the
+  measured XGBoost retraining noise floor (~0.157) on the largest window
+  available. Evidence: `../docs/plans/FABLE-MATCH-FEATURES-PLAN.md`
+  sections 6.1/6.4/6.6.
+
+  `elo_diff` is still computed and published for comparison -- it is simply no
+  longer consumed by the GAM or XGBoost feature sets. **`match_gams.rds` and
+  `match_xgb_pipeline.rds` must be retrained and republished together with this
+  change**: models trained on `elo_diff` cannot score a frame carrying
+  `xelo_diff`.
+
+  `build_matchup_table()` was switched over in the same commit -- it hand-builds
+  a feature frame that is fed straight to the trained models, so leaving it on
+  the old feature would have silently produced an unscoreable frame.
+
 # torp 1.3.8 (2026-07-25)
 
 ## Bug Fixes
