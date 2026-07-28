@@ -522,6 +522,14 @@ test_that("unmapped and missing position groups are left alone, not lumped", {
   before <- d$epr[1:20]
   out <- suppressWarnings(suppressMessages(centre_epr_by_position(d)))
   expect_equal(out$epr[1:20], before)
+
+  # An unmapped label means a whole position ships uncentred, so it must be
+  # visible immediately -- not folded into the ungrouped count alongside the
+  # routine missing-position rows, and not left to R's deferred warning buffer
+  # (capped at nwarnings, which a full rebuild can blow past).
+  msgs <- suppressWarnings(testthat::capture_messages(centre_epr_by_position(d)))
+  expect_match(paste(msgs, collapse = " "), "UNMAPPED", fixed = TRUE)
+  expect_match(paste(msgs, collapse = " "), "10 unmapped", fixed = TRUE)
 })
 
 test_that("an NA weight excludes only that player, not their whole position", {

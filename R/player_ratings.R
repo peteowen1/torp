@@ -663,7 +663,27 @@ centre_epr_by_position <- function(epr_df,
   # Collapse to the shared 6-way taxonomy BEFORE grouping. `.cpg`, not
   # `position_group`, is the centring key from here down.
   dt[, .cpg := .collapse_listed_position(position_group)]
-  n_ungrouped <- sum(is.na(dt$.cpg))
+
+  # Two very different populations end up ungrouped, and folding them into one
+  # count hides the dangerous one inside a routine one. A missing
+  # position_group is pre-existing, understood, and ~18% of rows. A *mapped*
+  # taxonomy that suddenly does not recognise a label means a whole position is
+  # being published uncentred -- and it would show only as this number ticking
+  # from 23,480 to 23,530 inside a success message nobody baselines.
+  #
+  # cli_alert_danger, not just the warning .collapse_listed_position() already
+  # raised: R defers warnings to the end of an Rscript run and drops the text
+  # entirely past getOption("nwarnings") (50), which a full-history rebuild can
+  # exceed from unrelated sources. An alert prints immediately.
+  n_missing  <- sum(is.na(dt$position_group))
+  n_unmapped <- sum(!is.na(dt$position_group) & is.na(dt$.cpg))
+  if (n_unmapped > 0) {
+    cli::cli_alert_danger(
+      "{n_unmapped} row{?s} carr{?ies/y} an UNMAPPED {.field position_group} and {?was/were} published UNCENTRED.")
+    cli::cli_alert_danger(
+      "Add the missing label to {.code MATCH_LISTED_POS_MAP} -- until then those players are not comparable to their position.")
+  }
+  n_ungrouped <- n_missing + n_unmapped
 
   # A cell where every row has zero weight falls back to the unweighted mean
   # rather than returning NaN -- better to centre a small cell imperfectly than
@@ -700,7 +720,7 @@ centre_epr_by_position <- function(epr_df,
   dt[, c(".cw", ".cpg") := NULL]
 
   cli::cli_alert_success(
-    "Centred {length(have)} EPR channel{?s} on position means ({nrow(dt)} rows{?, / , }{n_ungrouped} without a position group left as-is)")
+    "Centred {length(have)} EPR channel{?s} on position means ({nrow(dt)} rows; {n_missing} with no position group, {n_unmapped} unmapped, left as-is)")
   if (is.data.frame(epr_df) && !data.table::is.data.table(epr_df)) as.data.frame(dt) else dt[]
 }
 
