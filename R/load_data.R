@@ -107,23 +107,41 @@ save_to_release <- function(df, file_name, release_tag, also_csv = FALSE, prev_r
 
   # T12: post-upload verify -- confirm the asset is actually on the release
   # with the size we just wrote, via an uncached listing call. Catches races
-  # / silent-drop scenarios that a 2xx from pb_upload alone wouldn't
-  # surface. Retried via .vb_retry() (torpdata#74): GitHub's release-asset
-  # listing can lag the upload by a few seconds (eventual consistency),
-  # which otherwise reads as a spurious missing/wrong-sized asset on the
-  # very next call even though the upload itself was fine. Widened from the
-  # .vb_retry() default (3 attempts / 2s+5s, ~7s total) to 5 attempts /
-  # 2+3+5+10s (~20s total) after torpdata#74's fix still recurred on live
-  # game days: 2026-07-23/24 failures showed the listed size consistently
-  # SMALLER than the just-uploaded local size (stale-listing lag, not real
-  # corruption) and outlasted the original 7s budget during high-frequency
-  # upload bursts. A failure to
-  # even LIST after retries (vb_error_transient from vb_list_assets itself)
-  # only warns -- it's evidence the verify call flaked, not that the upload
-  # did. A listing that still confirms the asset is genuinely missing or
-  # wrong-sized after retries is a real integrity signal and still aborts,
-  # now as a loud diagnostic after cache invalidation/manifest publish have
-  # already run rather than silently skipping them.
+  # / silent-drop scenarios that a 2xx from pb_upload alone wouldn't surface.
+  #
+  # torpdata#74, THIRD iteration (2026-07-28). The previous two both assumed
+  # "stale listing lag" and responded by widening the retry budget (default
+  # ~7s, then 5 attempts / ~20s). Neither worked: the release failed 33 times
+  # between 2026-07-14 and 2026-07-27. Re-reading the actual failures showed
+  # the earlier diagnosis had the sign backwards:
+  #
+  #   Post-upload verify: "pbp_data_2026_all.parquet"
+  #     listed size 69283638 != local 69283389
+  #
+  # The listed size is LARGER than local (the previous, bigger asset), where
+  # the earlier fix note recorded it as consistently SMALLER. And it is
+  # byte-identical on all five attempts -- a lagging listing converges as you
+  # wait, a stale read of an older asset never does, which is exactly why more
+  # retries changed nothing.
+  #
+  # The asymmetry this now exploits: the failure mode worth aborting for is
+  # TRUNCATION, and truncation makes the listing SMALLER than what we wrote.
+  # A listing LARGER than local means we are looking at an older, bigger
+  # version of the asset -- a stale read of a successful upload, not
+  # corruption of it. So:
+  #   listed <  local  -> integrity error, retried then fatal (unchanged)
+  #   listed >  local  -> warn and proceed (the upload already returned 2xx)
+  # Real truncation is independently guarded upstream anyway, by the row-count
+  # floor against bus_manifest.json (prev_rows_floor, above).
+  #
+  # This is deliberately trading a small amount of detection for availability:
+  # a whole daily release aborting -- which stops the downstream dispatch to
+  # torp and staled its match predictions for two weeks -- is far more damage
+  # than the stale-read case it was firing on.
+  #
+  # A failure to even LIST after retries (vb_error_transient from
+  # vb_list_assets itself) only warns -- evidence the verify call flaked, not
+  # that the upload did.
   verify_upload <- function() {
     listed <- tryCatch(
       vb_list_assets(repo, release_tag),
@@ -138,9 +156,14 @@ save_to_release <- function(df, file_name, release_tag, also_csv = FALSE, prev_r
                 "vb_error_transient")
     }
     local_bytes <- as.numeric(file.size(tf))
-    if (!isTRUE(all.equal(as.numeric(row$size[1L]), local_bytes))) {
-      .vb_abort("Post-upload verify: {.val {f_name}} listed size {row$size[1L]} != local {local_bytes}",
-                "vb_error_integrity")
+    listed_bytes <- as.numeric(row$size[1L])
+    if (!isTRUE(all.equal(listed_bytes, local_bytes))) {
+      if (listed_bytes < local_bytes) {
+        .vb_abort("Post-upload verify: {.val {f_name}} listed size {listed_bytes} < local {local_bytes} -- possible truncated upload",
+                  "vb_error_integrity")
+      }
+      .vb_abort("Post-upload verify: {.val {f_name}} listed size {listed_bytes} > local {local_bytes} -- stale listing of an older, larger asset",
+                c("vb_error_transient", "vb_verify_stale_listing"))
     }
     invisible(TRUE)
   }
@@ -150,6 +173,11 @@ save_to_release <- function(df, file_name, release_tag, also_csv = FALSE, prev_r
     error = function(e) {
       if (inherits(e, "vb_verify_list_failed")) {
         cli::cli_warn("Post-upload verify could not list {repo}@{release_tag} after retries ({conditionMessage(e)}) -- upload itself already succeeded, proceeding")
+      } else if (inherits(e, "vb_verify_stale_listing")) {
+        cli::cli_warn(c(
+          "Post-upload verify still reading a larger asset for {.val {f_name}} after retries ({conditionMessage(e)}) -- proceeding.",
+          "i" = "pb_upload() returned success and a larger listing cannot indicate truncation; the row-count floor against bus_manifest.json guards that case."
+        ))
       } else {
         stop(e)
       }
