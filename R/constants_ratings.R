@@ -138,8 +138,8 @@ EPV_POSITION_STANDARDISE <- TRUE
 #' assumption beats an accidental, asymmetric one.
 #'
 #' Cost: measured, and near zero. Alone it is dMAE +0.121, 95% CI
-#' [-0.250, +0.485]; paired with the position-split match features it enables
-#' (\code{MATCH_LISTED_POS_MAP} diffs) it is dMAE -0.026, CI [-0.413, +0.358] --
+#' `[-0.250, +0.485]`; paired with the position-split match features it enables
+#' (\code{MATCH_LISTED_POS_MAP} diffs) it is dMAE -0.026, CI `[-0.413, +0.358]` --
 #' MAE-neutral (WS4/WS5, 2025-26 pooled, 387 games).
 #' @keywords internal
 EPR_POSITION_CENTRE <- TRUE

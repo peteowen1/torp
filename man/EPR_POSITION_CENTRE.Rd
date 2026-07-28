@@ -38,8 +38,8 @@ the pipeline rather than a value judgement. A deliberate, symmetric
 assumption beats an accidental, asymmetric one.
 
 Cost: measured, and near zero. Alone it is dMAE +0.121, 95\% CI
-\link{-0.250, +0.485}; paired with the position-split match features it enables
-(\code{MATCH_LISTED_POS_MAP} diffs) it is dMAE -0.026, CI \link{-0.413, +0.358} --
+\verb{[-0.250, +0.485]}; paired with the position-split match features it enables
+(\code{MATCH_LISTED_POS_MAP} diffs) it is dMAE -0.026, CI \verb{[-0.413, +0.358]} --
 MAE-neutral (WS4/WS5, 2025-26 pooled, 387 games).
 }
 \keyword{internal}

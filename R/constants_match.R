@@ -115,7 +115,7 @@ MATCH_POS_COLS <- c(
 #' position-agnostic.
 #'
 #' Measured contribution is real but small and not individually significant:
-#' dMAE -0.026 alongside position-centred ratings, 95% CI [-0.413, +0.358]
+#' dMAE -0.026 alongside position-centred ratings, 95% CI `[-0.413, +0.358]`
 #' (WS5, 2025-26 pooled). It is included because it makes the centring
 #' MAE-neutral rather than a +0.121 cost, not because it stands alone.
 #'
