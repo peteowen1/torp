@@ -178,8 +178,61 @@ tictoc::tic("stage_3_ratings")
 # is stale relative to the new player_game releases)
 cli::cli_progress_step("Loading all player game data")
 clear_all_cache()
-all_pgd <- load_player_game_data(TRUE)
+
+# Stage 2 just wrote these files to the release, so Stage 3 must read what it
+# wrote. load_player_game_data() prefers a local torpdata/data sibling when one
+# exists (get_local_data_dir()), which on a developer machine can be months
+# stale for some seasons -- and a stale season silently destroys its ratings
+# (see adjust_epv_for_opponents()'s guard, and the 2026-07-27 incident where
+# local 2022/2025 were three months old and both seasons' ratings deflated).
+#
+# Point the loader at the release for the duration of this stage.
+# Wrapped in a function deliberately: on.exit() only attaches to a function
+# frame. Registered at script top level it never fires, so an error inside the
+# load would leave torp.local_data_dir pointing somewhere wrong for the rest of
+# the session -- silently disabling local data for every later call, with
+# nothing pointing at the cause. This script is documented as source()-able, so
+# that leak is a realistic path.
+#
+# NA is the explicit disable sentinel (see get_local_data_dir()). Setting a
+# non-existent path does NOT work: it falls through to the sibling auto-detect
+# and re-finds the same directory.
+.load_pgd_from_release <- function() {
+  local_dir <- get_local_data_dir()
+  if (!is.null(local_dir)) {
+    cli::cli_alert_info(
+      "Ignoring local data dir {.path {local_dir}} for Stage 3 -- reading the release Stage 2 just wrote")
+  }
+  withr::local_options(list(torp.local_data_dir = NA))
+  stopifnot(is.null(get_local_data_dir()))   # assert the bypass actually took
+  load_player_game_data(TRUE)
+}
+all_pgd <- .load_pgd_from_release()
 cli::cli_inform("Player game data loaded: {nrow(all_pgd)} rows, {ncol(all_pgd)} cols")
+
+# Schema-consistency check across seasons: a mixed-vintage load (some seasons
+# pre-rename, some post) is exactly what produced the 2026-07-27 incident, and
+# it is invisible in row counts.
+.adj_cols <- grep("_adj$", names(all_pgd), value = TRUE)
+if (length(.adj_cols) > 0 && "season" %in% names(all_pgd)) {
+  .cov <- data.table::as.data.table(all_pgd)[
+    , lapply(.SD, function(x) mean(!is.na(x))), by = "season", .SDcols = .adj_cols]
+  .mixed <- .adj_cols[vapply(.adj_cols, function(cc) {
+    v <- .cov[[cc]]; any(v < 0.01) && any(v > 0.99)
+  }, logical(1))]
+  if (length(.mixed) > 0) {
+    # Assumption worth knowing if this ever false-positives: today every
+    # _adj-suffixed column is produced together in one mutate() block in
+    # create_player_game_data(), so none is legitimately season-limited. If a
+    # metric is ever added that only exists from some season onward, this
+    # generic threshold would abort every rebuild and needs an allowlist.
+    cli::cli_abort(c(
+      "Mixed-vintage player game data: column{?s} {.val {.mixed}} {?is/are} populated for some seasons and empty for others.",
+      "x" = "Rebuilding on this would silently deflate the empty seasons' ratings.",
+      "i" = "Per-season coverage:\n{paste(utils::capture.output(print(.cov)), collapse = '\n')}"
+    ), class = c("torp_error_stale_input", "vb_error_integrity"))
+  }
+}
 
 # Convert to keyed data.table once — avoids full copy on every round call
 data.table::setDT(all_pgd)

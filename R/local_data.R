@@ -26,8 +26,19 @@ MIN_PARQUET_BYTES <- 100
 #' get_local_data_dir()
 #' }
 get_local_data_dir <- function() {
-  # Explicit option takes precedence
   dir <- getOption("torp.local_data_dir")
+
+  # Explicit disable, checked BEFORE auto-detect. Without this there is no way
+  # to turn local data off: pointing the option at a non-existent path merely
+  # fails the dir.exists() test below and falls through to the sibling probe,
+  # re-finding the very directory the caller was trying to avoid. That made an
+  # earlier "bypass local data" attempt in run_ratings_pipeline.R a silent
+  # no-op on precisely the machine it was written for -- see the 2026-07-27
+  # stale-vintage incident, where Stage 3 read months-old local files instead
+  # of the release Stage 2 had just written.
+  if (length(dir) == 1L && is.na(dir)) return(NULL)
+
+  # Explicit option takes precedence
   if (!is.null(dir) && dir.exists(dir)) return(normalizePath(dir, winslash = "/"))
 
   # Auto-detect: check common workspace locations
