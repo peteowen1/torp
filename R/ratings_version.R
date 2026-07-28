@@ -266,7 +266,10 @@ preserve_rating_vintage <- function(label, repo = get_torp_data_repo(),
   ))
   if (dry_run) {
     cli::cli_alert_info("dry_run = TRUE -- nothing uploaded. Re-run with dry_run = FALSE to apply.")
-    return(invisible(list(rows = nrow(canon), target = target, applied = FALSE)))
+    # Same keys as the applied path, so a programmatic caller reading
+    # $manifest_recorded gets FALSE rather than NULL in dry-run.
+    return(invisible(list(rows = nrow(canon), target = target, applied = FALSE,
+                          manifest_recorded = FALSE)))
   }
 
   save_to_release(canon, .rating_vintage_stem(label), "ratings-data")
@@ -301,8 +304,12 @@ preserve_rating_vintage <- function(label, repo = get_torp_data_repo(),
                              defining_constants = NULL),
     error = function(e) {
       manifest_ok <<- FALSE
+      # Include the condition class: this plumbing is new, so on its first real
+      # use a defect in it must be distinguishable from routine upload
+      # flakiness rather than reading as the same "could not record" either way.
       cli::cli_warn(c(
         "Preserved {.file {target}} but could not record it in ratings_manifest.json: {conditionMessage(e)}",
+        "i" = "Error class: {.val {paste(class(e), collapse = '/')}} -- a non-network class here suggests a defect in the manifest path, not flakiness.",
         "i" = "The data is safe; the provenance entry is missing. Re-run publish_ratings_manifest(n_rows = {nrow(canon)}, version = {.val {label}}, file = {.val {target}}, set_canonical = FALSE, defining_constants = NULL)."
       ))
     }
