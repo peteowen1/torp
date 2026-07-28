@@ -364,16 +364,22 @@
   )
   team_id_vec <- stats::setNames(snapshot$team_id, team_names)
 
-  # Elo (current rating after each team's most recent completed match) --
-  # same fallback semantics join_elo_diff_to_team_mdl_df() uses for
-  # upcoming/unplayed fixtures.
-  elo_matches <- .matches_from_team_mdl_df(state$team_mdl_df)
-  elo_result <- build_team_elo(elo_matches)
-  elo_vec <- stats::setNames(elo_result$current$elo_current, elo_result$current$team_name)
+  # xScore team power rating (current rating after each team's most recent
+  # completed match) -- same fallback semantics
+  # join_xrating_diff_to_team_mdl_df() uses for upcoming/unplayed fixtures.
+  # Swapped from the win-based Elo 2026-07-28 to stay in lockstep with the
+  # match model's feature set (FABLE-MATCH-FEATURES-PLAN.md WS1b): this frame
+  # is fed straight to the trained GAM/XGB models, so it must carry exactly the
+  # features they were trained on. Neutral fallback is 0, not 1500 -- this
+  # rating is centred on a league-average 0 in points space.
+  xrating_matches <- .xscore_matches_from_team_mdl_df(state$team_mdl_df)
+  xrating_result <- build_xscore_rating(xrating_matches)
+  elo_vec <- stats::setNames(xrating_result$current$rating_current,
+                              xrating_result$current$team_name)
   missing_elo <- setdiff(team_names, names(elo_vec))
   if (length(missing_elo) > 0) {
-    cli::cli_warn("build_matchup_table: {length(missing_elo)} team(s) have no Elo history, using neutral 1500: {paste(missing_elo, collapse = ', ')}")
-    elo_vec[missing_elo] <- 1500
+    cli::cli_warn("build_matchup_table: {length(missing_elo)} team(s) have no xScore-rating history, using neutral 0: {paste(missing_elo, collapse = ', ')}")
+    elo_vec[missing_elo] <- 0
   }
 
   # home_venue is keyed by team_id; re-key by team_name for lookup below
@@ -509,7 +515,7 @@
     log_dist.y = .log_dist_of(persp$opp, persp$match_venue),
     familiarity.x = .familiarity_of(persp$self, persp$match_venue),
     familiarity.y = .familiarity_of(persp$opp, persp$match_venue),
-    elo_diff = unname(elo_vec[persp$self] - elo_vec[persp$opp]),
+    xelo_diff = unname(elo_vec[persp$self] - elo_vec[persp$opp]),
     stringsAsFactors = FALSE
   )
 
@@ -570,7 +576,7 @@
       "game_prop_through_month.x", "game_prop_through_day.x",
       "epr_diff", "epr_recv_diff", "epr_disp_diff", "epr_spoil_diff", "epr_hitout_diff",
       "torp_diff", "psr_diff", state$xgb_osr_dsr_cols,
-      "elo_diff", "log_dist_diff", "familiarity_diff", "days_rest_diff_fac"
+      "xelo_diff", "log_dist_diff", "familiarity_diff", "days_rest_diff_fac"
     )
 
     xgb_levels <- list(
