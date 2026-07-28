@@ -1,4 +1,18 @@
-# torp 1.3.9 (2026-07-28)
+# torp (development version)
+
+## Bug Fixes
+
+* **The post-upload verify no longer aborts the daily release on a stale-but-larger
+  asset listing** (torpdata#74, third iteration). The first two iterations assumed a
+  lagging listing and widened the retry budget (~7s, then ~20s); neither worked --
+  Daily Data Release failed 33 times between 2026-07-14 and 2026-07-27. The actual
+  failures had the sign backwards from the earlier diagnosis: the listed size was
+  *larger* than local (the previous, bigger asset) and byte-identical on all five
+  attempts, so no amount of waiting could converge it. Truncation -- the failure
+  worth aborting for -- makes the listing *smaller*, so that direction stays fatal
+  while a larger listing now warns and proceeds. Each aborted release also skipped
+  the downstream dispatch to torp, collapsing its game-day prediction refresh from
+  ~6 runs to 1-2 and staling its submitted tips for two weeks.
 
 ## Rating changes — NOT yet reflected in published ratings
 
@@ -47,6 +61,8 @@ Evidence for every item is in `../docs/plans/FABLE-DEFENDER-VALUE-PLAN.md` §7.
   pipeline joins `lineup_position` into the stat-ratings frame** — that frame
   carries no lineup column today, which is exactly why production has silently
   centred on the season-constant label for years.
+
+# torp 1.3.9 (2026-07-28)
 
 ## Match model
 
