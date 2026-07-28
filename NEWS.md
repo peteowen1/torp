@@ -1,4 +1,4 @@
-# torp (development version)
+# torp 1.3.9 (2026-07-28)
 
 ## Rating changes — NOT yet reflected in published ratings
 
