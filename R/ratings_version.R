@@ -155,6 +155,12 @@
 #' @param set_canonical If TRUE, record this vintage as canonical. Only ever
 #'   TRUE when the run wrote \code{torp_ratings.parquet} itself; a run that
 #'   publishes a candidate alongside must leave canonical alone.
+#' @param defining_constants The constant values that produced this vintage.
+#'   Defaults to the currently loaded constants. Pass \code{NULL} when
+#'   recording a vintage the running code did NOT generate (preserving an
+#'   outgoing vintage), so the entry carries an explicit gap rather than a
+#'   definition the data was never built under. See
+#'   \code{.build_rating_vintage_entry()}.
 #' @return Invisibly, the manifest that was uploaded.
 #' @keywords internal
 publish_ratings_manifest <- function(n_rows, version = RATING_VINTAGE,
