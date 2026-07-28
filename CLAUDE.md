@@ -123,8 +123,25 @@ Run a single file with `testthat::test_file("tests/testthat/test-NAME.R")`.
 
 | Workflow | Trigger | Purpose |
 |----------|---------|---------|
-| `daily-ratings-predictions.yml` | Repository dispatch (from torpdata) or manual | Compute ratings + match predictions, upload to `predictions` / `ratings-data` |
+| `daily-ratings-predictions.yml` | Repository dispatch (from torpdata), **pre-game schedule**, or manual | Compute ratings + match predictions, upload to `predictions` / `ratings-data` |
 | `test-package.yml` | Push/PR | R CMD check + coverage |
 | `pkgdown.yml` | Push to main | Deploy docs to GitHub Pages |
 
 `pre-game-data-update.yml.template` is an inactive template (`.template` suffix = not run by GitHub Actions); rename to drop the suffix to enable.
+
+**The pre-game schedule on `daily-ratings-predictions.yml` is load-bearing — do not remove it.**
+Until 2026-07-28 the only automatic trigger was the torpdata `repository_dispatch`, which fires
+after a **data release**, which happens only when there are **new games**. The AFL publishes team
+lists *between* rounds, so the pipeline could never run in the window between team-naming and
+first bounce, and every round was locked using the previous round's lineup state — none. Rounds
+19, 20 and 21 of 2026 all published with `players = NA` (every player on the position prior),
+costing ~0.50 MAE season-wide and 4.75 on the affected rounds. Nothing failed; the predictions
+were just worse. Note GitHub only fires `schedule` from the **default branch**, so the crons are
+inert on any other ref.
+
+Two guards back it up: `.warn_missing_lineups()` reports at write time, and
+`data-raw/05-validation/check_prediction_lineups.R` answers on demand whether the upcoming round
+is safe, how long until first bounce, and whether a re-run would help (exit 1 = action needed).
+Both check lineup **completeness**, not mere presence — `players` is a *count*, so a partially
+published team sheet yields a small non-`NA` number that a presence-only check misses
+(`MIN_PLAUSIBLE_LINEUP`).
