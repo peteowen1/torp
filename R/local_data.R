@@ -96,24 +96,61 @@ get_local_path <- function(url) {
 
 #' Determine Max Age for a Local File Based on URL
 #'
-#' Historical seasons (before current year) never expire. Current season files
-#' expire after 1 day to pick up mid-season updates.
+#' Current-season files expire after 1 day to pick up mid-season updates.
+#' Historical seasons expire after \code{LOCAL_HISTORICAL_MAX_AGE_DAYS} --
+#' generously, but NOT never.
+#'
+#' Historical files used to return NULL here, meaning "never expires", on the
+#' reasoning that past seasons do not change. Past *results* do not; the
+#' published *files* very much do:
+#'   - a schema change rewrites them (the metric-first rename, 2026-07-22,
+#'     turned `recv_epv_adj` into `epv_recv_adj`);
+#'   - a rating-vintage regenerate rewrites them (v1 -> v2, 2026-07-27).
+#'
+#' Both happened within a week, and the never-expire rule meant a local copy
+#' from April was still served in July. That is how two published rating
+#' seasons were silently corrupted: a stale `player_game_2022`/`_2025` carried
+#' the old column names, their `_adj` columns read as all-NA, and EPR deflated
+#' both seasons. See \code{adjust_epv_for_opponents()}'s guards.
+#'
+#' A finite age makes the local mirror self-healing: a regenerated history
+#' propagates within the window instead of never. Tune with
+#' \code{options(torp.local_historical_max_age_days = N)}; \code{Inf} restores
+#' the old never-expire behaviour if you genuinely need it for offline work.
 #'
 #' @param url Character URL of the remote parquet file
 #' @return Numeric max age in days, or NULL for no expiration
 #' @keywords internal
 local_max_age_for_url <- function(url) {
-  current_year <- as.numeric(format(Sys.Date(), "%Y"))
+  if (!.is_historical_url(url)) return(1)
+  age <- getOption("torp.local_historical_max_age_days",
+                   LOCAL_HISTORICAL_MAX_AGE_DAYS)
+  if (is.infinite(age)) return(NULL)
+  age
+}
+
+# .is_historical_url ----
+
+#' Is this URL for a season before the current one?
+#'
+#' Split out deliberately. "Is historical" and "never expires" used to be the
+#' same test -- callers asked \code{is.null(local_max_age_for_url(url))} to mean
+#' "historical", which silently coupled the negative-cache policy to the
+#' freshness policy. Giving historical files a finite age then disabled the
+#' negative cache entirely, with nothing but a test failure to say so.
+#'
+#' A filename with no parseable season counts as NOT historical: unknown means
+#' treat it as live data, never as immutable.
+#'
+#' @param url Character URL of the remote parquet file
+#' @return TRUE when the filename encodes a season before the current year
+#' @keywords internal
+.is_historical_url <- function(url) {
   fname <- basename(url)
-
-  # Extract year from patterns like pbp_data_2024_all.parquet or fixtures_2024.parquet
   year_match <- regmatches(fname, regexpr("_(20[0-9]{2})(_|\\.|$)", fname))
-  if (length(year_match) == 0 || nchar(year_match) == 0) return(1)
-
+  if (length(year_match) == 0 || nchar(year_match) == 0) return(FALSE)
   file_year <- as.numeric(sub("^_(20[0-9]{2}).*", "\\1", year_match))
-
-  if (file_year < current_year) return(NULL)  # historical = never expire
-  1  # current season = expire after 1 day
+  file_year < as.numeric(format(Sys.Date(), "%Y"))
 }
 
 #' Check if a File Exists Locally and is Fresh
@@ -258,9 +295,13 @@ is_download_skippable <- function(url) {
 #' H3/H1): those files are actively upserted by the same pipeline that reads
 #' them, so a 404 today (round not yet published) becomes a false negative
 #' cache tomorrow, silently dropping the newest data for up to a day. Only
-#' historical files -- which never expire in [local_max_age_for_url()] and
-#' therefore can't heal via the normal freshness check -- get a marker at
-#' all, and it's capped at 3h in [is_download_skippable()].
+#' historical files get a marker at all, and it is capped at 3h in
+#' [is_download_skippable()].
+#'
+#' Tests \code{.is_historical_url()} directly rather than
+#' \code{is.null(local_max_age_for_url(url))}. Those were the same test while
+#' historical files never expired; once they gained a finite age the NULL check
+#' silently stopped matching anything and disabled the negative cache outright.
 #'
 #' @param url Character URL
 #' @return Invisible NULL
@@ -268,7 +309,7 @@ is_download_skippable <- function(url) {
 mark_download_skippable <- function(url) {
   local_path <- get_local_path(url)
   if (is.null(local_path)) return(invisible(NULL))
-  if (!is.null(local_max_age_for_url(url))) return(invisible(NULL))  # current-season/unparseable -- never negative-cache
+  if (!.is_historical_url(url)) return(invisible(NULL))  # current-season/unparseable -- never negative-cache
   skip_path <- paste0(local_path, ".skip")
   tryCatch(writeLines("skip", skip_path), error = function(e) {
     cli::cli_warn("Could not write skip marker for {.url {basename(url)}}: {conditionMessage(e)}")

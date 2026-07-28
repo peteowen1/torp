@@ -15,6 +15,21 @@ VALIDATION_HIGH_MISSING_THRESHOLD <- 0.5
 #' @keywords internal
 VALIDATION_MIN_CALIBRATION_BIN_SIZE <- 10
 
+#' How long a local copy of a HISTORICAL season stays usable, in days
+#'
+#' Historical files previously never expired, on the reasoning that past
+#' seasons do not change. The published files do change -- a schema rename or a
+#' rating-vintage regenerate rewrites them -- and a never-expire rule let an
+#' April copy be served in July, silently corrupting two published rating
+#' seasons (2026-07-27). See \code{local_max_age_for_url()}.
+#'
+#' 30 days trades a periodic re-download of unchanged history for the guarantee
+#' that a regenerated history propagates at all. Override with
+#' \code{options(torp.local_historical_max_age_days = N)}; \code{Inf} restores
+#' never-expire for genuinely offline work.
+#' @keywords internal
+LOCAL_HISTORICAL_MAX_AGE_DAYS <- 30
+
 #' Clock-skew tolerance (seconds) when comparing a GitHub release-asset
 #' listing's `updated_at` against our own upload start time
 #'

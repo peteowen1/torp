@@ -199,7 +199,50 @@ test_that("write_local_parquet silently returns NULL when no local dir", {
 
 # -- local_max_age_for_url --
 
-test_that("local_max_age_for_url returns NULL for historical seasons", {
+test_that("local_max_age_for_url expires historical seasons -- they are NOT immortal", {
+  # Historical files used to return NULL ("never expires"), on the reasoning
+  # that past seasons do not change. The published FILES do: a schema rename
+  # (2026-07-22) and a rating-vintage regenerate (2026-07-27) both rewrote
+  # them within a week, and the never-expire rule meant an April copy was
+  # still served in July -- which silently corrupted two published rating
+  # seasons. A finite age makes the mirror self-healing.
+  url <- "https://example.com/releases/download/pbp-data/pbp_data_2023_all.parquet"
+  age <- torp:::local_max_age_for_url(url)
+  expect_false(is.null(age))
+  expect_true(is.finite(age))
+  expect_equal(age, LOCAL_HISTORICAL_MAX_AGE_DAYS)
+})
+
+test_that("a three-month-old historical file is treated as stale (the actual incident)", {
+  # The concrete regression: player_game_2022 was 2026-04-16 and still served
+  # on 2026-07-27. Assert that a file of that age no longer qualifies.
+  tmp <- file.path(tempdir(), paste0("stale_", as.integer(runif(1, 1, 1e6))))
+  dir.create(tmp, showWarnings = FALSE)
+  withr::local_options(torp.local_data_dir = tmp)
+  f <- file.path(tmp, "player_game_2022.parquet")
+  writeLines("x", f)
+  Sys.setFileTime(f, Sys.time() - 92 * 86400)   # ~3 months old
+
+  url <- "https://example.com/releases/download/player_game-data/player_game_2022.parquet"
+  age <- torp:::local_max_age_for_url(url)
+  expect_false(torp:::is_locally_stored(url, max_age_days = age))
+})
+
+test_that("a recently-refreshed historical file is still served", {
+  # The guard must not defeat the point of a local mirror.
+  tmp <- file.path(tempdir(), paste0("fresh_", as.integer(runif(1, 1, 1e6))))
+  dir.create(tmp, showWarnings = FALSE)
+  withr::local_options(torp.local_data_dir = tmp)
+  f <- file.path(tmp, "player_game_2022.parquet")
+  writeLines("x", f)
+
+  url <- "https://example.com/releases/download/player_game-data/player_game_2022.parquet"
+  age <- torp:::local_max_age_for_url(url)
+  expect_true(torp:::is_locally_stored(url, max_age_days = age))
+})
+
+test_that("Inf restores never-expire for deliberate offline work", {
+  withr::local_options(torp.local_historical_max_age_days = Inf)
   url <- "https://example.com/releases/download/pbp-data/pbp_data_2023_all.parquet"
   expect_null(torp:::local_max_age_for_url(url))
 })
@@ -217,7 +260,21 @@ test_that("local_max_age_for_url returns 1 for files without year", {
 
 test_that("local_max_age_for_url handles season-only filenames", {
   url <- "https://example.com/fixtures_2023.parquet"
-  expect_null(torp:::local_max_age_for_url(url))
+  expect_equal(torp:::local_max_age_for_url(url), LOCAL_HISTORICAL_MAX_AGE_DAYS)
+})
+
+test_that("the negative cache still keys on 'is historical', not on 'never expires'", {
+  # These were the same test while historical files returned NULL. Once they
+  # gained a finite age, `is.null(local_max_age_for_url(url))` matched nothing
+  # and silently disabled negative caching for every file -- caught only by the
+  # skip-marker tests. Assert the two policies stay decoupled.
+  expect_true(torp:::.is_historical_url("https://example.com/x_2023.parquet"))
+  expect_false(torp:::.is_historical_url(
+    paste0("https://example.com/x_", format(Sys.Date(), "%Y"), ".parquet")))
+  # Unparseable season must NOT be treated as historical: unknown means live.
+  expect_false(torp:::.is_historical_url("https://example.com/torp_ratings.parquet"))
+  # And a historical file still has a finite age.
+  expect_true(is.finite(torp:::local_max_age_for_url("https://example.com/x_2023.parquet")))
 })
 
 # -- Skip Markers (Negative Cache) --
