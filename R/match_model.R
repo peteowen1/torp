@@ -240,7 +240,8 @@ get_lineup_ratings <- function(season = NULL, round = NULL, match_id = NULL) {
       away_team = team_name.y, away_epr = epr.y, away_psr = psr.y,
       pred_xtotal = pred_tot_xscore, pred_xmargin = pred_xscore_diff,
       pred_margin = pred_score_diff, pred_win, bits,
-      margin = score_diff, start_time = local_start_time_str, venue = venue.x
+      margin = score_diff, start_time = local_start_time_str,
+      utc_start_time, venue = venue.x
     )
   away <- df |>
     dplyr::mutate(
@@ -256,7 +257,8 @@ get_lineup_ratings <- function(season = NULL, round = NULL, match_id = NULL) {
       away_team = team_name.x, away_epr = epr.x, away_psr = psr.x,
       pred_xtotal = pred_tot_xscore, pred_xmargin = pred_xscore_diff,
       pred_margin = pred_score_diff, pred_win, bits,
-      margin = score_diff, start_time = local_start_time_str, venue = venue.x
+      margin = score_diff, start_time = local_start_time_str,
+      utc_start_time, venue = venue.x
     )
   dplyr::bind_rows(home, away) |>
     dplyr::group_by(season, round, match_id, home_team, home_epr, home_psr,
@@ -282,6 +284,131 @@ get_lineup_ratings <- function(season = NULL, round = NULL, match_id = NULL) {
 }
 
 
+#' Parse the AFL API's UTC start-time strings
+#'
+#' The API emits "2026-06-04T09:00:00.000+0000". Base R's default parse of an
+#' ISO string containing "T" silently yields MIDNIGHT rather than erroring, so
+#' the format has to be explicit or the comparison it feeds is quietly wrong.
+#'
+#' @param x Character vector of UTC start times.
+#' @return POSIXct in UTC; NA where unparseable.
+#' @keywords internal
+.parse_utc_start <- function(x) {
+  x <- as.character(x)
+  # Strip fractional seconds and any trailing offset, then parse as UTC.
+  cleaned <- sub("\\.[0-9]+", "", x)
+  cleaned <- sub("([+-][0-9]{4}|Z)$", "", cleaned)
+  cleaned <- trimws(sub("T", " ", cleaned))
+  as.POSIXct(cleaned, format = "%Y-%m-%d %H:%M:%S", tz = "UTC")
+}
+
+#' Flag locked predictions that were computed after their game started
+#'
+#' The point of the `generated_utc` stamp: a locked prediction whose
+#' computation time is after its own game start is a retrodiction sitting in
+#' the locked-predictions release, where consumers reasonably assume everything
+#' is as-at. Retrodictions have their own release; they do not belong here.
+#'
+#' Warns rather than aborts. The upload has already been judged safe by the
+#' accumulate guard, the offending rows are historical fact by the time this
+#' runs, and refusing to publish would discard genuinely-locked rows alongside
+#' the bad ones. Loud enough to notice, cheap enough not to block a release.
+#'
+#' Rows with no stamp (published before stamping existed) are skipped -- absent
+#' is not the same as post-hoc, and treating it as such would cry wolf over
+#' every pre-2026-07-28 row forever.
+#'
+#' @param combined The prediction frame about to be uploaded.
+#' @return Invisibly, the number of post-hoc rows found.
+#' @keywords internal
+.warn_post_hoc_predictions <- function(combined) {
+  # Compare against utc_start_time, never start_time. The latter is LOCAL venue
+  # time carrying a timezone abbreviation ("2026-06-04 19:00:00 ACST"), which
+  # varies by venue (ACST/AEST/AWST, plus daylight saving) -- comparing a UTC
+  # stamp against it is wrong by up to 11 hours. Worse, as.POSIXct() on an
+  # ISO-with-T string silently parses to MIDNIGHT rather than failing, so a
+  # naive version of this check flagged almost every legitimate prediction as
+  # post-hoc. Both were caught only by testing against the real column values.
+  if (!all(c("generated_utc", "utc_start_time") %in% names(combined))) return(invisible(0L))
+  gen <- suppressWarnings(as.POSIXct(combined$generated_utc,
+                                     format = "%Y-%m-%dT%H:%M:%SZ", tz = "UTC"))
+  start <- suppressWarnings(.parse_utc_start(combined$utc_start_time))
+  bad <- !is.na(gen) & !is.na(start) & gen > start
+  n <- sum(bad)
+  if (n > 0) {
+    wk <- sort(unique(combined$week[bad]))
+    cli::cli_warn(c(
+      "{n} locked prediction{?s} {?was/were} computed AFTER {?its/their} game started (round{?s} {.val {as.character(wk)}}).",
+      "!" = "Those rows are retrodictions in the locked-predictions release; consumers assume everything here is as-at.",
+      "i" = "Check the started-game lock in .build_locked_predictions() -- it should have kept the original rows."
+    ))
+  }
+  invisible(n)
+}
+
+#' Flag predictions about to be locked without real team lists
+#'
+#' `players` is `count.x` -- the number of named players aggregated per team.
+#' When the AFL has not yet published team lists for a round, the lineup join
+#' produces no rows, `players` is NA, and every player's EPR falls back to the
+#' position prior. The prediction is still computed and still published; it is
+#' just built on a generic squad rather than the actual 22.
+#'
+#' This went undetected for three rounds. Rounds 19, 20 and 21 of 2026 were all
+#' locked with `players = NA` while rounds 13-18 carried 23, and nothing said so.
+#' It surfaced only via a paired audit against Squiggle's record of our submitted
+#' tips, weeks later: on rounds 19-20 the served predictions disagreed with a
+#' correctly-fed model by a mean of 8.73 points per game (vs 4.15 on rounds where
+#' lineups were present) and cost roughly 3.2 MAE.
+#'
+#' Warns rather than aborts, deliberately. A prior-based prediction beats no
+#' prediction -- tips have a submission deadline -- and the started-game lock in
+#' [.build_locked_predictions()] already lets a later run replace any match that
+#' has not started. The failure mode worth preventing is silence, not publication.
+#'
+#' @param week_gms The new-week prediction rows about to be merged.
+#' @return Invisibly, the number of rows lacking a lineup.
+#' @keywords internal
+.warn_missing_lineups <- function(week_gms) {
+  if (!"players" %in% names(week_gms)) {
+    # Say so rather than returning silently. This function exists because a
+    # lineup failure went unnoticed for three rounds; a version of it that can
+    # stop checking without saying so reintroduces the same blind spot in a new
+    # place. `players` has no column_schema.R entry to catch its removal.
+    cli::cli_inform("Lineup check skipped: no {.field players} column on the prediction frame.")
+    return(invisible(0L))
+  }
+  if (nrow(week_gms) == 0) return(invisible(0L))
+
+  # NA means the lineup join found nothing at all. But `players` is a COUNT
+  # (count.x, named players per team), so a PARTIALLY published team sheet --
+  # the AFL sometimes releases ins/outs before the full 22 -- yields a small
+  # non-NA number instead. Checking only for NA would miss that, and it degrades
+  # predictions the same way: most of the side still on position priors.
+  # Published rounds 13-18 of 2026 all carried exactly 23.
+  n_named <- suppressWarnings(as.numeric(week_gms$players))
+  missing <- is.na(n_named)
+  partial <- !missing & n_named < MIN_PLAUSIBLE_LINEUP
+
+  if (any(missing)) {
+    wk <- sort(unique(week_gms$week[missing]))
+    cli::cli_warn(c(
+      "{sum(missing)} prediction{?s} being locked with NO team list (round{?s} {.val {as.character(wk)}}).",
+      "!" = "Every player fell back to the position prior, so these are squad-average predictions, not team-specific ones.",
+      "i" = "Re-run once the AFL publishes team lists -- the started-game lock replaces any match that has not yet started."
+    ))
+  }
+  if (any(partial)) {
+    wk <- sort(unique(week_gms$week[partial]))
+    cli::cli_warn(c(
+      "{sum(partial)} prediction{?s} being locked with only PART of a team list (round{?s} {.val {as.character(wk)}}; fewest named: {min(n_named[partial])}).",
+      "!" = "A full named side is {MIN_PLAUSIBLE_LINEUP}+; the unnamed remainder fell back to the position prior.",
+      "i" = "Re-run once the full teams are published."
+    ))
+  }
+  invisible(sum(missing) + sum(partial))
+}
+
 #' Merge new-week predictions into the locked full-season predictions file
 #'
 #' Encapsulates torp C2's overwrite guard (ECOSYSTEM-FIX-PLAN.md T3): a
@@ -304,6 +431,12 @@ get_lineup_ratings <- function(season = NULL, round = NULL, match_id = NULL) {
 #' @keywords internal
 .build_locked_predictions <- function(pred_file_name, season, week_gms, team_mdl_df,
                                       target_weeks, completed_margins) {
+  # Check the INCOMING rows, before the started-game filter below drops any.
+  # A match that has already started keeps its locked prediction, so filtering
+  # first would hide exactly the case worth reporting: a round locked without
+  # team lists that is now beyond the point where a re-run could fix it.
+  .warn_missing_lineups(week_gms)
+
   pred_repo <- get_torp_data_repo()
   existing <- tryCatch(
     file_reader(pred_file_name, "predictions"),
@@ -362,6 +495,11 @@ get_lineup_ratings <- function(season = NULL, round = NULL, match_id = NULL) {
       cli::cli_alert_info("Keeping locked predictions for {length(started_ids)} already-started match{?es}")
     }
 
+    # Rows not being replaced keep whatever generated_utc they already carry;
+    # bind_rows fills NA for pre-stamp history, which is honest -- those rows
+    # genuinely have no recorded computation time.
+    if (!"generated_utc" %in% names(existing)) existing$generated_utc <- NA_character_
+
     combined <- existing |>
       dplyr::ungroup() |>
       dplyr::filter(!match_id %in% week_gms$match_id) |>
@@ -369,6 +507,7 @@ get_lineup_ratings <- function(season = NULL, round = NULL, match_id = NULL) {
       dplyr::arrange(week)
 
     vb_guard_accumulate(existing, combined, floor = 0.9)
+    .warn_post_hoc_predictions(combined)
   } else {
     # existing is NULL only when file_reader() confirmed absence (404) above,
     # or the file genuinely has 0 rows (loaded fine). Independently confirm
@@ -781,6 +920,20 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
   # Upload ----
   cli::cli_h2("Uploading predictions")
   week_gms <- week_gms |> dplyr::ungroup() |> dplyr::rename(week = round) |> dplyr::relocate(week)
+
+  # Stamp when each prediction was actually computed.
+  #
+  # Without this, "was this row genuinely predicted before the game?" is not
+  # answerable from the artifact -- it has to be reconstructed by comparing
+  # against Squiggle's submitted tips, which is how three rounds of
+  # stored-vs-submitted divergence (13, 19, 20) ended up an open forensic
+  # question. With it, the check is `generated_utc < start_time`.
+  #
+  # Rows carried over from a previous run KEEP their original stamp (see
+  # .build_locked_predictions()) -- that is the point. A stamp that updated on
+  # every write would record when the file was last touched, not when the
+  # prediction was made, and would be worthless for exactly this question.
+  week_gms$generated_utc <- format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC")
 
   # --- Locked predictions: frozen at game start, never overwritten ---
   pred_file_name <- paste0("predictions_", season)
