@@ -483,6 +483,24 @@ if (nrow(torp_new) > 0) {
     cli::cli_warn("Could not compute PSR for release: {e$message}")
     NULL
   })
+  # Position-centre EPR BEFORE blending, so `torp` is built from the same
+  # centred channels it will be published alongside. Centring afterwards would
+  # leave torp derived from uncentred EPR and silently inconsistent with it.
+  if (isTRUE(EPR_POSITION_CENTRE)) {
+    torp_df_total <- centre_epr_by_position(torp_df_total)
+    chk <- data.table::as.data.table(torp_df_total)[
+      !is.na(position_group) & season == max(season, na.rm = TRUE)]
+    chk <- chk[round == max(round, na.rm = TRUE),
+               .(wmean = stats::weighted.mean(epr, pmax(pred_tog, 0.01), na.rm = TRUE)),
+               by = position_group]
+    if (nrow(chk) > 0 && max(abs(chk$wmean), na.rm = TRUE) > 1e-6) {
+      cli::cli_abort(c(
+        "EPR position centring did not take: max |weighted mean| = {signif(max(abs(chk$wmean)), 3)}",
+        "x" = "Refusing to publish ratings whose positions are not centred as claimed."
+      ))
+    }
+  }
+
   if (!is.null(psr_df) && nrow(psr_df) > 0 && "psr" %in% names(psr_df)) {
     torp_df_total <- calculate_torp(torp_df_total, psr_df)
     cli::cli_alert_success("Blended PSR into ratings ({sum(!is.na(torp_df_total$torp))} rows with torp)")

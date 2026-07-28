@@ -571,6 +571,72 @@ calculate_epr_stats_batch <- function(player_game_data = NULL,
 }
 
 
+#' Centre each EPR channel on its position's TOG-weighted mean
+#'
+#' Subtracts, within every \code{(season, round, position_group)} cell, that
+#' cell's TOG-weighted mean of each channel in \code{EPR_CENTRE_CHANNELS}, then
+#' rebuilds \code{epr} as the sum of the centred channels. A published rating
+#' then reads "points above the average player in your position".
+#'
+#' Grouped by \code{(season, round)} and never across rounds: the group mean is
+#' a contemporaneous cross-sectional statistic, so a rating for round r uses only
+#' ratings as they stood entering round r. Centring against a full-history mean
+#' would leak later rounds into earlier ones.
+#'
+#' Keyed on \code{position_group} (season-constant listed position) rather than
+#' \code{lineup_position} (weekly role). Three reasons: the weekly taxonomy has
+#' zero count variation between teams so nothing about it is estimable; ~26% of
+#' players have no modal on-field role and would need a fallback, making it a
+#' hybrid; and a season-constant key keeps a player's baseline stable week to
+#' week. The two agree closely in practice (r = 0.985) but the key-defender
+#' correction differs by ~75%, so it is a real choice.
+#'
+#' Rows with a missing \code{position_group} are left untouched -- there is no
+#' defensible group mean to subtract, and silently lumping them together would
+#' invent one.
+#'
+#' @param epr_df Ratings frame with EPR channels, \code{position_group}, and a
+#'   TOG weight column.
+#' @param channels Channels to centre. Defaults to \code{EPR_CENTRE_CHANNELS}.
+#' @param weight_col TOG weight column name.
+#' @return \code{epr_df} with centred channels and a rebuilt \code{epr}.
+#' @keywords internal
+centre_epr_by_position <- function(epr_df,
+                                   channels = EPR_CENTRE_CHANNELS,
+                                   weight_col = "pred_tog") {
+  dt <- data.table::as.data.table(epr_df)
+  have <- intersect(channels, names(dt))
+  if (!"position_group" %in% names(dt) || length(have) == 0) {
+    cli::cli_warn(c(
+      "EPR position centring skipped.",
+      "!" = "Needs {.field position_group} and at least one of {.val {channels}}.",
+      "i" = "Present: {.val {intersect(c('position_group', channels), names(dt))}}"
+    ))
+    return(epr_df)
+  }
+  missing_ch <- setdiff(channels, have)
+  if (length(missing_ch) > 0) {
+    cli::cli_warn("EPR position centring: {length(missing_ch)} channel{?s} absent: {.val {missing_ch}}")
+  }
+
+  w <- if (weight_col %in% names(dt)) pmax(as.numeric(dt[[weight_col]]), 0.01) else rep(1, nrow(dt))
+  dt[, .cw := w]
+  n_ungrouped <- sum(is.na(dt$position_group))
+
+  for (cc in have) {
+    dt[!is.na(position_group),
+       (cc) := get(cc) - stats::weighted.mean(get(cc), .cw, na.rm = TRUE),
+       by = .(season, round, position_group)]
+  }
+  # Rebuild the total from its parts so epr and its channels cannot disagree.
+  dt[, epr := rowSums(as.matrix(.SD), na.rm = TRUE), .SDcols = have]
+  dt[, .cw := NULL]
+
+  cli::cli_alert_success(
+    "Centred {length(have)} EPR channel{?s} on position means ({nrow(dt)} rows{?, / , }{n_ungrouped} without a position group left as-is)")
+  if (is.data.frame(epr_df) && !data.table::is.data.table(epr_df)) as.data.frame(dt) else dt[]
+}
+
 #' Calculate TORP (Total Over Replacement Predictive-value)
 #'
 #' Blends EPR (Expected Possession Rating) with PSR (Player Skill Rating)
@@ -589,6 +655,7 @@ calculate_epr_stats_batch <- function(player_game_data = NULL,
 #'   either frame lacks season/round, the latest-per-player snapshot is used for
 #'   all rows.
 #'
+
 #' @return A data frame with all EPR columns plus \code{psr} and \code{torp} (blended).
 #' @export
 calculate_torp <- function(epr_df, psr_df, epr_weight = TORP_EPR_WEIGHT) {

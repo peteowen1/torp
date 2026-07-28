@@ -28,6 +28,48 @@
 
 ## New Features
 
+* **EPR is position-centred, and the match model gets listed-position splits.**
+  A published EPR now reads "points above the average player in your position":
+  each channel is centred on its position's TOG-weighted mean within every
+  `(season, round)` cross-section, keyed on `position_group`
+  (`EPR_POSITION_CENTRE`, `centre_epr_by_position()`). The match model gains the
+  six listed-position differentials as features (`MATCH_LISTED_POS_DIFF_COLS`).
+
+  **Why.** `EPV_POSITION_STANDARDISE` equalises between-position *spread* at the
+  player-game level and works exactly there -- the TOG-weighted mean of
+  `epv_recv_adj` is 0.000 in all 20 lineup positions -- but the correction does
+  not survive to the published rating, because the TOG weighting, opponent
+  adjustment, decay and global prior that follow are all position-blind. Read on
+  the listed taxonomy, key defenders sat at median EPR **-2.18** against medium
+  forwards' **+0.66**, which is pipeline residue rather than a value judgement.
+
+  **This is a normalisation, not a measurement, and that distinction is
+  load-bearing.** Position *levels* are unidentifiable from match margins: the
+  on-field structure is rigid (every team fields exactly one full-back), and
+  although listed-position counts do vary (teams field 2-9 midfielders), holding
+  total EPR constant the positional mix explains nothing -- F(5, 1113) = 0.47,
+  p = 0.80, every CI spanning roughly +/-3 points. Setting each position's mean
+  to zero therefore *asserts* that an average key defender and an average
+  midfielder contribute equally. That cannot be checked against results. It is
+  preferred anyway because the status quo also embeds an assumption -- that the
+  uncentred levels are right -- and those levels are an accident of the
+  pipeline. A deliberate, symmetric assumption beats an accidental one.
+
+  **Cost: measured, and neutral.** Centring alone is dMAE +0.121, 95% CI
+  [-0.250, +0.485]; the position splits it enables bring that to **-0.026**, CI
+  [-0.413, +0.358] (2025-26 pooled, 387 games). The splits are included because
+  they make the centring free, not because they stand alone -- their own CI
+  spans zero too, and they cost about 0.003 bits.
+
+  Position *slopes* are separately identifiable (medium defenders convert EPR to
+  points at 0.46 against midfielders' 1.12, the only group differing from 1
+  after Bonferroni, p = 0.0005) -- that is what the splits let the model exploit.
+
+  Ratings keep the **v2** vintage: this changes the published numbers but the
+  site has no live audience today, so a vintage bump would cost more in
+  cross-reference churn than it buys.
+
+
 * **Locked predictions record when they were computed** (`generated_utc`). Previously
   "is this row genuinely pre-game?" could only be answered by reconstructing against
   Squiggle's submitted tips, which is how three rounds of stored-versus-submitted

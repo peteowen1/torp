@@ -105,6 +105,25 @@ MATCH_POS_COLS <- c(
   names(MATCH_COMBO_POS_MAP), names(MATCH_LISTED_POS_MAP), "other_pos"
 )
 
+#' Listed-position-group differential columns used as match-model features
+#'
+#' The one position taxonomy that enters the model. Positions convert EPR to
+#' scoreboard points at genuinely different rates -- medium defenders at 0.46
+#' against midfielders' 1.12, the only group differing from 1 after Bonferroni
+#' (p = 0.0005, FABLE-DEFENDER-VALUE-PLAN.md §8.3) -- so splitting the team sum
+#' lets the model weight them rather than treating a rating point as
+#' position-agnostic.
+#'
+#' Measured contribution is real but small and not individually significant:
+#' dMAE -0.026 alongside position-centred ratings, 95% CI [-0.413, +0.358]
+#' (WS5, 2025-26 pooled). It is included because it makes the centring
+#' MAE-neutral rather than a +0.121 cost, not because it stands alone.
+#'
+#' The 18 individual-position diffs are deliberately NOT features: at one
+#' player per role per team they carry almost no between-team variation.
+#' @keywords internal
+MATCH_LISTED_POS_DIFF_COLS <- paste0(names(MATCH_LISTED_POS_MAP), "_diff")
+
 #' Exponential decay half-life in days for match model time-weighting
 #' @keywords internal
 MATCH_WEIGHT_DECAY_DAYS <- 1000

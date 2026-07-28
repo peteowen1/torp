@@ -504,6 +504,10 @@
     "epr_spoil_diff", "epr_hitout_diff",
     "torp_diff", "psr_diff", osr_dsr_cols,
     "xelo_diff",
+    # Listed-position splits. Only usable as features because the published EPR
+    # is position-centred (EPR_POSITION_CENTRE); uncentred bucket sums encode
+    # roster shape, and teams differ in bucket counts in 40-76% of matches.
+    MATCH_LISTED_POS_DIFF_COLS,
     "log_dist_diff",
     "familiarity_diff",
     "days_rest_diff_fac"
