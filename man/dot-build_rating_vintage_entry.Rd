@@ -8,7 +8,8 @@
   n_rows,
   version = RATING_VINTAGE,
   file = NULL,
-  generated_utc = NULL
+  generated_utc = NULL,
+  defining_constants = .rating_defining_constants()
 )
 }
 \arguments{
@@ -23,6 +24,15 @@ under new constants writes \code{torp_ratings.parquet} while the vintage
 is \code{"v2"}, and deriving one from the other mislabels the manifest.}
 
 \item{generated_utc}{Timestamp; defaults to now. Injectable for tests.}
+
+\item{defining_constants}{The constant values that produced this vintage.
+Defaults to the CURRENTLY LOADED constants, which is correct only when the
+running code is what generated the data. When preserving an OUTGOING
+vintage (\code{preserve_rating_vintage()}), the code has already moved on, so
+the live constants describe the \emph{new} vintage — pass \code{NULL} there rather
+than stamping a definition the preserved data was not built under. A
+missing entry is a gap; a wrong one is a lie, and this manifest exists to
+be trusted.}
 }
 \value{
 A named list describing this vintage.

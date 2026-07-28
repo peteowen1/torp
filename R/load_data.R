@@ -57,6 +57,13 @@ save_to_release <- function(df, file_name, release_tag, also_csv = FALSE, prev_r
     }
   )
 
+  # Stamped before the upload so the post-upload verify can tell a listing that
+  # simply has not caught up yet (updated_at older than our own write) from one
+  # that reflects a DIFFERENT, later write (updated_at newer than ours) -- see
+  # the verify block below. Small tolerance applied there for clock skew between
+  # this runner and GitHub.
+  upload_started_at <- as.POSIXct(Sys.time(), tz = "UTC")
+
   tryCatch(
     piggyback::pb_upload(tf,
                          repo = repo,
@@ -70,6 +77,11 @@ save_to_release <- function(df, file_name, release_tag, also_csv = FALSE, prev_r
       if (grepl("404|422", conditionMessage(e))) {
         cli::cli_warn("Upload error for {.val {f_name}}, retrying once...")
         Sys.sleep(2)
+        # Re-stamp: it is THIS attempt whose result the verify below checks, so
+        # the staleness cutoff must reference it and not the abandoned first
+        # attempt. Matters most precisely here -- the 404/422 path is the
+        # concurrent-upload case the staleness check exists to disambiguate.
+        upload_started_at <<- as.POSIXct(Sys.time(), tz = "UTC")
         tryCatch(
           piggyback::pb_upload(tf,
                                repo = repo,
@@ -124,20 +136,35 @@ save_to_release <- function(df, file_name, release_tag, also_csv = FALSE, prev_r
   # wait, a stale read of an older asset never does, which is exactly why more
   # retries changed nothing.
   #
-  # The asymmetry this now exploits: the failure mode worth aborting for is
-  # TRUNCATION, and truncation makes the listing SMALLER than what we wrote.
-  # A listing LARGER than local means we are looking at an older, bigger
-  # version of the asset -- a stale read of a successful upload, not
-  # corruption of it. So:
-  #   listed <  local  -> integrity error, retried then fatal (unchanged)
-  #   listed >  local  -> warn and proceed (the upload already returned 2xx)
-  # Real truncation is independently guarded upstream anyway, by the row-count
-  # floor against bus_manifest.json (prev_rows_floor, above).
+  # What we key the decision on: TRUNCATION is the failure worth aborting for,
+  # and truncation makes the listing SMALLER than what we wrote. That direction
+  # stays fatal.
   #
-  # This is deliberately trading a small amount of detection for availability:
-  # a whole daily release aborting -- which stops the downstream dispatch to
-  # torp and staled its match predictions for two weeks -- is far more damage
-  # than the stale-read case it was firing on.
+  # A LARGER listing is ambiguous, and an earlier version of this fix got it
+  # wrong by treating "larger" as self-evidently a stale read. It is equally
+  # consistent with a FAILED REPLACE (piggyback's delete-then-upload is not
+  # atomic -- if the delete loses a race the old, bigger asset stays live while
+  # pb_upload() still returns 2xx) or with a CONCURRENT WRITER overwriting us.
+  # Size direction alone cannot separate those from a lagging listing.
+  #
+  # So the larger-than case is decided on a real staleness signal instead --
+  # the listing's own updated_at versus when we started our upload:
+  #   listed <  local                          -> integrity error, fatal
+  #   listed >  local, updated_at OLDER than us -> listing has not caught up
+  #                                                yet; retry, then warn+proceed
+  #   listed >  local, updated_at NEWER than us -> something else wrote this
+  #                                                asset after we did; fatal
+  #
+  # Note the previous iteration of this comment claimed truncation was
+  # "independently guarded by the row-count floor against bus_manifest.json".
+  # That was FALSE: prev_rows_floor defaults to NULL and none of the ~80
+  # save_to_release() call sites pass it, so that check is inert in production.
+  # Do not cite it as a backstop again without wiring it into real callers.
+  #
+  # The availability motivation still stands -- a whole daily release aborting
+  # stops the downstream dispatch to torp and staled its match predictions for
+  # two weeks -- but it does not license waving through a write we cannot
+  # distinguish from a lost one.
   #
   # A failure to even LIST after retries (vb_error_transient from
   # vb_list_assets itself) only warns -- evidence the verify call flaked, not
@@ -162,8 +189,29 @@ save_to_release <- function(df, file_name, release_tag, also_csv = FALSE, prev_r
         .vb_abort("Post-upload verify: {.val {f_name}} listed size {listed_bytes} < local {local_bytes} -- possible truncated upload",
                   "vb_error_integrity")
       }
-      .vb_abort("Post-upload verify: {.val {f_name}} listed size {listed_bytes} > local {local_bytes} -- stale listing of an older, larger asset",
-                c("vb_error_transient", "vb_verify_stale_listing"))
+      # Larger than ours: only a listing that predates our own upload is
+      # evidence of a lagging read. One stamped at or after our upload is
+      # evidence of a different, later write -- a failed replace or a
+      # concurrent writer -- and must stay fatal.
+      listed_at <- suppressWarnings(
+        as.POSIXct(row$updated_at[1L], format = "%Y-%m-%dT%H:%M:%SZ", tz = "UTC")
+      )
+      # An unparseable timestamp means the signal we decide on is untrustworthy,
+      # so fail closed -- but say THAT, rather than asserting a temporal
+      # relationship we never actually evaluated. An operator chasing the
+      # "a different write replaced ours" message would otherwise hunt a
+      # phantom concurrent writer instead of an API shape change.
+      if (is.na(listed_at)) {
+        .vb_abort("Post-upload verify: {.val {f_name}} listed size {listed_bytes} > local {local_bytes}, and updated_at {.val {row$updated_at[1L]}} could not be parsed -- treating the staleness signal as untrusted",
+                  "vb_error_integrity")
+      }
+      stale_read <- listed_at < (upload_started_at - VB_VERIFY_CLOCK_SKEW_SECS)
+      if (stale_read) {
+        .vb_abort("Post-upload verify: {.val {f_name}} listed size {listed_bytes} > local {local_bytes}, listing stamped {row$updated_at[1L]} (before our upload) -- lagging listing",
+                  c("vb_error_transient", "vb_verify_stale_listing"))
+      }
+      .vb_abort("Post-upload verify: {.val {f_name}} listed size {listed_bytes} > local {local_bytes}, listing stamped {row$updated_at[1L]} (at or after our upload) -- a different write replaced ours, or the replace failed and the old asset is still live",
+                "vb_error_integrity")
     }
     invisible(TRUE)
   }
@@ -175,8 +223,9 @@ save_to_release <- function(df, file_name, release_tag, also_csv = FALSE, prev_r
         cli::cli_warn("Post-upload verify could not list {repo}@{release_tag} after retries ({conditionMessage(e)}) -- upload itself already succeeded, proceeding")
       } else if (inherits(e, "vb_verify_stale_listing")) {
         cli::cli_warn(c(
-          "Post-upload verify still reading a larger asset for {.val {f_name}} after retries ({conditionMessage(e)}) -- proceeding.",
-          "i" = "pb_upload() returned success and a larger listing cannot indicate truncation; the row-count floor against bus_manifest.json guards that case."
+          "Post-upload verify still reading a larger, older-stamped asset for {.val {f_name}} after retries ({conditionMessage(e)}) -- proceeding.",
+          "i" = "pb_upload() returned success and the listing predates our own upload, so this is a lagging read rather than a lost write.",
+          "!" = "This is not a proof of correctness. If it recurs on the same file, check the asset's real bytes rather than trusting the listing."
         ))
       } else {
         stop(e)

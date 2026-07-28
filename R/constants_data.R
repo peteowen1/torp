@@ -15,6 +15,16 @@ VALIDATION_HIGH_MISSING_THRESHOLD <- 0.5
 #' @keywords internal
 VALIDATION_MIN_CALIBRATION_BIN_SIZE <- 10
 
+#' Clock-skew tolerance (seconds) when comparing a GitHub release-asset
+#' listing's `updated_at` against our own upload start time
+#'
+#' `save_to_release()`'s post-upload verify decides whether a larger-than-local
+#' listing is a lagging read (stamped before our write) or a different write
+#' that replaced ours (stamped at or after it). The two timestamps come from
+#' different clocks, so allow a margin before calling a listing "newer than us".
+#' @keywords internal
+VB_VERIFY_CLOCK_SKEW_SECS <- 120
+
 
 # EPV Model Constants
 # -------------------

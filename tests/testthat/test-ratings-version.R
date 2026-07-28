@@ -115,3 +115,106 @@ test_that("RATING_VINTAGE tracks the adopted constants", {
   expect_match(RATING_VINTAGE, "^v[0-9]+$")
   if (isTRUE(EPV_POSITION_STANDARDISE)) expect_false(RATING_VINTAGE == "v1")
 })
+
+test_that("an existence probe that THROWS aborts rather than assuming 'absent'", {
+  testthat::local_mocked_bindings(
+    load_torp_ratings = function(...) stop("simulated network failure")
+  )
+  expect_error(
+    preserve_rating_vintage("v1", dry_run = FALSE),
+    "Could not determine whether"
+  )
+})
+
+test_that("an existence probe that DEGRADES to a tagged 0-row frame also aborts", {
+  # This is the shape production actually produces, and the reason the throw
+  # test above is not sufficient on its own: outside VERSEBUS_STRICT=1,
+  # parquet_from_url() does not rethrow a network/CDN failure -- it warns and
+  # returns 0 rows tagged skip_reason = "transient". A probe that only caught
+  # thrown errors would read that as "absent, safe to write" and overwrite a
+  # real preserved vintage.
+  degraded <- data.table::data.table()
+  attr(degraded, "skip_reason") <- "transient"
+  testthat::local_mocked_bindings(
+    load_torp_ratings = function(...) degraded
+  )
+  expect_error(
+    preserve_rating_vintage("v1", dry_run = FALSE),
+    "degraded"
+  )
+})
+
+test_that("a CONFIRMED-absent probe (404) still proceeds", {
+  # The guard must not be so strict it blocks the legitimate first-ever
+  # preservation. skip_reason = "not_found" is a real 404 and means absent.
+  absent <- data.table::data.table()
+  attr(absent, "skip_reason") <- "not_found"
+  canon <- data.frame(player_id = c("a", "b"), epr = c(1, 2))
+  calls <- 0
+  testthat::local_mocked_bindings(
+    load_torp_ratings = function(version = NULL, ...) {
+      calls <<- calls + 1
+      if (calls == 1) return(absent)   # probe: confirmed absent
+      canon                            # canonical, then verify
+    },
+    save_to_release = function(...) invisible(NULL),
+    publish_ratings_manifest = function(...) invisible(NULL)
+  )
+  res <- preserve_rating_vintage("v1", dry_run = FALSE)
+  expect_true(res$applied)
+  expect_equal(res$rows, 2L)
+})
+
+test_that("preserve_rating_vintage forces strict loading", {
+  # The aborts above are decorative without this: strict mode is what makes the
+  # underlying load stack throw instead of degrading. Asserted directly so the
+  # coupling cannot be removed silently.
+  seen <- NA_character_
+  testthat::local_mocked_bindings(
+    load_torp_ratings = function(...) {
+      seen <<- Sys.getenv("VERSEBUS_STRICT")
+      stop("stop here -- we only care about the env var")
+    }
+  )
+  withr::with_envvar(c(VERSEBUS_STRICT = ""), {
+    try(preserve_rating_vintage("v1", dry_run = FALSE), silent = TRUE)
+  })
+  expect_equal(seen, "1")
+})
+
+test_that("preserve_rating_vintage aborts when the preserved copy fails to verify", {
+  # The caller's next step is overwriting canonical, so a normal return means
+  # "the old vintage is safe, go ahead". A console print would let a scripted
+  # caller proceed on a preservation that did not work.
+  canon <- data.frame(player_id = c("a", "b"), epr = c(1, 2))
+  calls <- 0
+  testthat::local_mocked_bindings(
+    load_torp_ratings = function(version = NULL, ...) {
+      calls <<- calls + 1
+      if (calls == 1) return(canon[0, ])          # target vintage absent
+      if (calls == 2) return(canon)               # current canonical
+      canon[1, , drop = FALSE]                    # verify: wrong row count
+    },
+    save_to_release = function(...) invisible(NULL)
+  )
+  expect_error(
+    preserve_rating_vintage("v1", dry_run = FALSE),
+    "Verification failed"
+  )
+})
+
+test_that("a preserved vintage records NO defining_constants", {
+  # By preservation time the loaded constants describe the INCOMING vintage.
+  # Stamping them against the outgoing data would misattribute it, and a
+  # manifest that lies is worse than one with a gap.
+  entry <- .build_rating_vintage_entry(100, version = "v1",
+                                       file = "torp_ratings_v1.parquet",
+                                       defining_constants = NULL)
+  expect_null(entry$defining_constants)
+  expect_equal(entry$rows, 100L)
+  expect_equal(entry$file, "torp_ratings_v1.parquet")
+
+  # ...while a normally-generated vintage still captures them.
+  live <- .build_rating_vintage_entry(100, version = "v2")
+  expect_false(is.null(live$defining_constants))
+})

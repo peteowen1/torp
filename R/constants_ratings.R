@@ -136,8 +136,23 @@ PSR_POSITION_STANDARDISE <- TRUE
 #' that produced it. See \code{docs/plans/RATING-VERSIONING-PLAN.md}.
 #'
 #' \code{"v1"} is every rating published before 2026-07-27. \code{"v2"} adds the
-#' EPV position-variance standardisation, the corrected lineup taxonomy and
-#' weekly PSR centring.
+#' EPV position-variance standardisation and PSR standardisation.
+#'
+#' **Weekly PSR centring is NOT part of what v2 actually shipped**, despite
+#' earlier descriptions of v2 (including this docstring and the published
+#' manifest) saying so. The code is wired — \code{calculate_psr()} prefers
+#' \code{lineup_pos_group} when present — but the released
+#' \code{player_stat_ratings} frame carries no \code{lineup_position} column, so
+#' the preference has never resolved and PSR still centres on the
+#' season-constant \code{pos_group}. It activates by itself once the
+#' \code{06-stat-ratings} pipeline joins \code{lineup_position} upstream, and
+#' that will change historical ratings — so it needs its own vintage bump when
+#' it does, not a silent activation under the v2 label.
+#'
+#' Likewise the corrected \code{LINEUP_POSITION_GROUP_MAP} has a narrower blast
+#' radius than "v2 adds the corrected taxonomy" implies: EPV standardisation
+#' groups on the raw 20-way \code{lineup_position}, not through the 6-way map,
+#' so the correction reaches only \code{pos_group} derivations.
 #' @keywords internal
 RATING_VINTAGE <- "v2"
 

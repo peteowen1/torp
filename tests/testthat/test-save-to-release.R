@@ -73,11 +73,11 @@ test_that("save_to_release aborts when the listing stays SMALLER than local (pos
   expect_equal(call_count, 5L)  # exhausted all .vb_retry attempts
 })
 
-test_that("save_to_release warns (not aborts) when the listing stays LARGER than local (stale read)", {
-  # torpdata#74, third iteration: a listing LARGER than what we just wrote is
-  # a stale read of an older, bigger asset -- it cannot indicate truncation,
-  # and treating it as fatal aborted 33 daily releases between 2026-07-14 and
-  # 2026-07-27, staling torp's downstream match predictions for two weeks.
+test_that("save_to_release warns when a LARGER listing is stamped BEFORE our upload (lagging read)", {
+  # torpdata#74, third iteration: a larger listing whose updated_at predates our
+  # own write is a lagging read. Treating that as fatal aborted 33 daily
+  # releases between 2026-07-14 and 2026-07-27, staling torp's downstream match
+  # predictions for two weeks.
   uploaded_bytes <- NULL
   testthat::local_mocked_bindings(
     pb_upload = function(file, repo, tag, overwrite = TRUE, ...) {
@@ -91,8 +91,9 @@ test_that("save_to_release warns (not aborts) when the listing stays LARGER than
   testthat::local_mocked_bindings(
     gh = function(endpoint, ...) {
       call_count <<- call_count + 1
+      # Stamped well in the past -> predates this run's upload.
       list(assets = list(list(name = "widget.parquet", size = uploaded_bytes + 249,
-                              updated_at = "2026-07-22T00:00:00Z", id = 1)))
+                              updated_at = "2020-01-01T00:00:00Z", id = 1)))
     },
     .package = "gh"
   )
@@ -104,9 +105,81 @@ test_that("save_to_release warns (not aborts) when the listing stays LARGER than
   df <- data.frame(x = 1:3, y = c("a", "b", "c"))
   expect_warning(
     save_to_release(df, "widget", "test-tag"),
-    "stale listing|larger asset"
+    "lagging|older-stamped"
   )
   expect_equal(call_count, 5L)  # still retried the full budget before giving up
+})
+
+test_that("save_to_release ABORTS when a LARGER listing is stamped AFTER our upload (lost write)", {
+  # The case the previous iteration waved through on a false premise: a larger
+  # asset stamped at or after our own upload is not a lagging read. It is a
+  # failed replace (piggyback's delete-then-upload is not atomic) or a
+  # concurrent writer -- i.e. our data is NOT what is live. Must stay fatal.
+  uploaded_bytes <- NULL
+  testthat::local_mocked_bindings(
+    pb_upload = function(file, repo, tag, overwrite = TRUE, ...) {
+      uploaded_bytes <<- file.size(file)
+      invisible(NULL)
+    },
+    .package = "piggyback"
+  )
+
+  testthat::local_mocked_bindings(
+    gh = function(endpoint, ...) {
+      # Stamped in the future -> unambiguously at/after our upload, beyond any
+      # clock-skew tolerance.
+      future_stamp <- format(Sys.time() + 86400, "%Y-%m-%dT%H:%M:%SZ", tz = "UTC")
+      list(assets = list(list(name = "widget.parquet", size = uploaded_bytes + 249,
+                              updated_at = future_stamp, id = 1)))
+    },
+    .package = "gh"
+  )
+  testthat::local_mocked_bindings(
+    .publish_bus_manifest = function(...) invisible(NULL),
+    save_locally = function(...) invisible(NULL)
+  )
+
+  df <- data.frame(x = 1:3, y = c("a", "b", "c"))
+  # Match the message too, not just the class: `vb_error_integrity` is shared
+  # with the SMALLER/truncation branch and with the unparseable-timestamp
+  # branch, so class alone would not prove we reached THIS one.
+  expect_error(
+    save_to_release(df, "widget", "test-tag"),
+    regexp = "at or after our upload",
+    class = "vb_error_integrity"
+  )
+})
+
+test_that("save_to_release aborts, citing the parse failure, when updated_at is unparseable", {
+  # Fail closed on an untrustworthy staleness signal -- but the message must
+  # name the real cause rather than asserting a temporal relationship that was
+  # never evaluated.
+  uploaded_bytes <- NULL
+  testthat::local_mocked_bindings(
+    pb_upload = function(file, repo, tag, overwrite = TRUE, ...) {
+      uploaded_bytes <<- file.size(file)
+      invisible(NULL)
+    },
+    .package = "piggyback"
+  )
+  testthat::local_mocked_bindings(
+    gh = function(endpoint, ...) {
+      list(assets = list(list(name = "widget.parquet", size = uploaded_bytes + 249,
+                              updated_at = "not-a-timestamp", id = 1)))
+    },
+    .package = "gh"
+  )
+  testthat::local_mocked_bindings(
+    .publish_bus_manifest = function(...) invisible(NULL),
+    save_locally = function(...) invisible(NULL)
+  )
+
+  df <- data.frame(x = 1:3, y = c("a", "b", "c"))
+  expect_error(
+    save_to_release(df, "widget", "test-tag"),
+    regexp = "could not be parsed",
+    class = "vb_error_integrity"
+  )
 })
 
 test_that("save_to_release warns (not aborts) when the post-upload listing call itself keeps failing", {

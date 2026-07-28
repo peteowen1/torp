@@ -97,8 +97,17 @@
 #' @param generated_utc Timestamp; defaults to now. Injectable for tests.
 #' @return A named list describing this vintage.
 #' @keywords internal
+#' @param defining_constants The constant values that produced this vintage.
+#'   Defaults to the CURRENTLY LOADED constants, which is correct only when the
+#'   running code is what generated the data. When preserving an OUTGOING
+#'   vintage (`preserve_rating_vintage()`), the code has already moved on, so
+#'   the live constants describe the *new* vintage — pass `NULL` there rather
+#'   than stamping a definition the preserved data was not built under. A
+#'   missing entry is a gap; a wrong one is a lie, and this manifest exists to
+#'   be trusted.
 .build_rating_vintage_entry <- function(n_rows, version = RATING_VINTAGE,
-                                        file = NULL, generated_utc = NULL) {
+                                        file = NULL, generated_utc = NULL,
+                                        defining_constants = .rating_defining_constants()) {
   if (is.null(generated_utc)) {
     generated_utc <- format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC")
   }
@@ -108,7 +117,7 @@
     torp_version = as.character(utils::packageVersion("torp")),
     generated_utc = generated_utc,
     rows = as.integer(n_rows),
-    defining_constants = .rating_defining_constants()
+    defining_constants = defining_constants
   )
 }
 
@@ -146,11 +155,19 @@
 #' @param set_canonical If TRUE, record this vintage as canonical. Only ever
 #'   TRUE when the run wrote \code{torp_ratings.parquet} itself; a run that
 #'   publishes a candidate alongside must leave canonical alone.
+#' @param defining_constants The constant values that produced this vintage.
+#'   Defaults to the currently loaded constants. Pass \code{NULL} when
+#'   recording a vintage the running code did NOT generate (preserving an
+#'   outgoing vintage), so the entry carries an explicit gap rather than a
+#'   definition the data was never built under. See
+#'   \code{.build_rating_vintage_entry()}.
 #' @return Invisibly, the manifest that was uploaded.
 #' @keywords internal
 publish_ratings_manifest <- function(n_rows, version = RATING_VINTAGE,
-                                     file = NULL, set_canonical = FALSE) {
-  entry <- .build_rating_vintage_entry(n_rows, version = version, file = file)
+                                     file = NULL, set_canonical = FALSE,
+                                     defining_constants = .rating_defining_constants()) {
+  entry <- .build_rating_vintage_entry(n_rows, version = version, file = file,
+                                       defining_constants = defining_constants)
   manifest <- .merge_rating_manifest(read_ratings_manifest(), version, entry)
   if (isTRUE(set_canonical)) manifest$canonical <- version
 
@@ -190,8 +207,52 @@ preserve_rating_vintage <- function(label, repo = get_torp_data_repo(),
   target <- .rating_vintage_file(label)          # validates the label
   current <- .rating_vintage_file(NULL)
 
-  existing <- tryCatch(load_torp_ratings(version = label),
-                       error = function(e) NULL)
+  # Force strict loading for every read in this function.
+  #
+  # Without this the abort below is decorative: outside VERSEBUS_STRICT=1,
+  # parquet_from_url() deliberately does NOT rethrow non-404 failures (network
+  # blip, CDN 5xx, auth, malformed parquet). It warns and returns a 0-row
+  # data.table tagged skip_reason = "transient" (load_engines.R). So the
+  # existence probe would see 0 rows, conclude "vintage absent, safe to write",
+  # and overwrite a real preserved vintage -- precisely the failure this
+  # function exists to prevent.
+  #
+  # That leniency is right for casual interactive/multi-season loads. It is
+  # wrong here: this is the one irreversible-by-omission step in the scheme,
+  # and it is invoked manually, so it does not inherit a pipeline's strict env.
+  withr::local_envvar(c(VERSEBUS_STRICT = "1"))
+
+  # A genuinely-absent vintage does NOT error: parquet_from_url_cached()
+  # returns a 0-row frame on a confirmed 404, which the nrow() check below
+  # handles. So anything that DOES throw here is unexpected -- network, auth,
+  # a malformed parquet -- and mapping that to "absent, safe to write" would
+  # invert the codebase's own rule (versebus.R: when classification is
+  # uncertain the answer is transient/abort, never absent/overwrite). Given
+  # this function exists to stop an irreversible overwrite, an unreadable
+  # probe must abort, not wave us through.
+  existing <- tryCatch(
+    load_torp_ratings(version = label),
+    error = function(e) {
+      # NB: interpolate `target`, not a call to `.rating_vintage_file()` --
+      # a dot-prefixed name inside cli's braces collides with its own
+      # `{.val}`-style markup and hard-errors.
+      cli::cli_abort(c(
+        "Could not determine whether {.file {target}} already exists: {conditionMessage(e)}",
+        "i" = "Refusing to proceed -- an unreadable probe cannot be treated as 'absent', and writing over a preserved vintage is irreversible."
+      ), parent = e)
+    }
+  )
+  # Second line of defence: even under strict mode, a 0-row result carrying a
+  # non-"not_found" skip_reason means the probe degraded rather than confirmed
+  # absence. Only a confirmed 404 licenses "safe to write".
+  probe_skip <- attr(existing, "skip_reason")
+  if (!is.null(probe_skip) && !identical(probe_skip, "not_found")) {
+    cli::cli_abort(c(
+      "Existence probe for {.file {target}} degraded ({.val {probe_skip}}) instead of confirming absence.",
+      "i" = "Refusing to proceed -- only a confirmed 404 means the vintage is genuinely absent."
+    ))
+  }
+
   if (!is.null(existing) && nrow(existing) > 0) {
     cli::cli_abort(c(
       "{.file {target}} already exists in {.val ratings-data} ({nrow(existing)} rows).",
@@ -211,19 +272,57 @@ preserve_rating_vintage <- function(label, repo = get_torp_data_repo(),
   ))
   if (dry_run) {
     cli::cli_alert_info("dry_run = TRUE -- nothing uploaded. Re-run with dry_run = FALSE to apply.")
-    return(invisible(list(rows = nrow(canon), target = target, applied = FALSE)))
+    # Same keys as the applied path, so a programmatic caller reading
+    # $manifest_recorded gets FALSE rather than NULL in dry-run.
+    return(invisible(list(rows = nrow(canon), target = target, applied = FALSE,
+                          manifest_recorded = FALSE)))
   }
 
   save_to_release(canon, .rating_vintage_stem(label), "ratings-data")
+
+  # Verification failure must ABORT, not print. This function's whole purpose
+  # is to make the next step (regenerating canonical) safe, so callers treat a
+  # normal return as "the old vintage is preserved, go ahead". A cli_alert_danger
+  # is a console print: not catchable, invisible to a scripted caller, and it
+  # does not fail a CI exit code -- so the pipeline would proceed to overwrite
+  # canonical on the strength of a preservation that did not actually work.
   verify <- tryCatch(load_torp_ratings(version = label), error = function(e) NULL)
   if (is.null(verify) || nrow(verify) != nrow(canon)) {
-    cli::cli_alert_danger(
-      "Verification failed: {.file {target}} did not read back at {nrow(canon)} rows. \\
-       Do NOT regenerate canonical until this is resolved.")
-  } else {
-    cli::cli_alert_success("Preserved {nrow(canon)} rows as {.file {target}}")
+    cli::cli_abort(c(
+      "Verification failed: {.file {target}} did not read back at {nrow(canon)} rows (got {if (is.null(verify)) 'unreadable' else nrow(verify)}).",
+      "x" = "Do NOT regenerate canonical until this is resolved -- the previous vintage may not be preserved."
+    ))
   }
-  invisible(list(rows = nrow(canon), target = target, applied = TRUE))
+  cli::cli_alert_success("Preserved {nrow(canon)} rows as {.file {target}}")
+
+  # Record the preserved vintage in the manifest -- otherwise the file sits on
+  # the release with nothing describing it, and the provenance trail D-DEF3
+  # exists to provide does not cover the vintage just preserved.
+  #
+  # defining_constants = NULL deliberately: by the time an outgoing vintage is
+  # preserved, the loaded constants are the INCOMING vintage's. Stamping those
+  # against this data would misattribute it. `set_canonical = FALSE` because
+  # preserving is never promotion.
+  manifest_ok <- TRUE
+  tryCatch(
+    publish_ratings_manifest(n_rows = nrow(canon), version = label,
+                             file = target, set_canonical = FALSE,
+                             defining_constants = NULL),
+    error = function(e) {
+      manifest_ok <<- FALSE
+      # Include the condition class: this plumbing is new, so on its first real
+      # use a defect in it must be distinguishable from routine upload
+      # flakiness rather than reading as the same "could not record" either way.
+      cli::cli_warn(c(
+        "Preserved {.file {target}} but could not record it in ratings_manifest.json: {conditionMessage(e)}",
+        "i" = "Error class: {.val {paste(class(e), collapse = '/')}} -- a non-network class here suggests a defect in the manifest path, not flakiness.",
+        "i" = "The data is safe; the provenance entry is missing. Re-run publish_ratings_manifest(n_rows = {nrow(canon)}, version = {.val {label}}, file = {.val {target}}, set_canonical = FALSE, defining_constants = NULL)."
+      ))
+    }
+  )
+
+  invisible(list(rows = nrow(canon), target = target, applied = TRUE,
+                 manifest_recorded = manifest_ok))
 }
 
 #' Read the ratings manifest from the data release
