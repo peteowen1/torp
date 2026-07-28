@@ -23,5 +23,13 @@ through and so propagates NA just as readily.
 Worth failing loudly for: EPR counts a game toward \code{wt_gms} while an NA
 contributes nothing to the numerator, so the affected seasons deflate as
 \code{1/wt_gms} and look like a plausible rating set rather than a broken one.
+
+\strong{Deliberately fails closed on a single NA row}, not just a wiped season.
+Being row-level rather than per-season is what lets it catch a PARTIALLY-NA
+season, which the per-season \code{all(is.na())} input guard cannot see. The
+cost is that one genuinely-isolated missing input aborts a whole rebuild;
+that trade is intentional given this failure mode published two seasons of
+silently wrong ratings. Do not relax it to a warning without replacing the
+partial-season coverage.
 }
 \keyword{internal}

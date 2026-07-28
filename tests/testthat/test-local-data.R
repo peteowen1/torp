@@ -44,6 +44,40 @@ test_that("get_local_data_dir ignores non-existent option path", {
   expect_null(get_local_data_dir())
 })
 
+# The two tests below exercise the case the one above cannot: a working
+# directory that DOES have a torpdata/data sibling, i.e. a developer machine.
+# That distinction is not academic -- it is why the 2026-07-27 stale-vintage
+# incident's first attempted fix was a silent no-op.
+
+.with_sibling <- function(code) {
+  root <- file.path(tempdir(), paste0("sib_", as.integer(runif(1, 1, 1e6))))
+  dir.create(file.path(root, "torpdata", "data"), recursive = TRUE, showWarnings = FALSE)
+  wd <- file.path(root, "pkg")
+  dir.create(wd, showWarnings = FALSE)
+  withr::local_dir(wd, .local_envir = parent.frame())
+  force(code)
+}
+
+test_that("a non-existent option path does NOT disable local data when a sibling exists", {
+  # Documents the trap: the option check fails, execution falls through to the
+  # sibling auto-detect, and the very directory the caller wanted to avoid is
+  # found anyway. Asserting the real behaviour so nobody "fixes" bypassing by
+  # pointing the option at a temp path again.
+  .with_sibling({
+    withr::local_options(torp.local_data_dir = file.path(tempdir(), "definitely_not_here"))
+    expect_false(is.null(get_local_data_dir()))
+  })
+})
+
+test_that("NA explicitly disables local data even when a sibling exists", {
+  # The actual bypass. This is what run_ratings_pipeline.R's Stage 3 relies on
+  # to read the release it just wrote rather than a stale local copy.
+  .with_sibling({
+    withr::local_options(torp.local_data_dir = NA)
+    expect_null(get_local_data_dir())
+  })
+})
+
 # -- get_local_path --
 
 test_that("get_local_path returns NULL when no local dir configured", {

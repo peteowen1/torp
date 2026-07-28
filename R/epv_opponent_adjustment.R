@@ -165,6 +165,22 @@ adjust_epv_for_opponents <- function(player_game_data,
   #
   # Fail loudly and name the seasons, rather than emit a plausible-looking
   # rating set that is silently wrong.
+  # A wholly-legacy frame (e.g. a single stale season loaded on its own, so the
+  # rbind never creates the new-named columns at all) would skip the per-season
+  # check below on `length(comp_cols) > 0` and fall through to the composite
+  # `epv_adj + .player_adj` branch -- silently using a different adjustment
+  # formula rather than the component split. Values would not be NA, so the
+  # backstop would not catch it either. Name it here instead.
+  legacy_only <- c("recv_epv_adj", "disp_epv_adj", "spoil_epv_adj", "hitout_epv_adj")
+  if (!any(c("epv_recv_adj", "epv_disp_adj") %in% names(dt)) &&
+      any(legacy_only %in% names(dt))) {
+    cli::cli_abort(c(
+      "Player game data uses the pre-rename EPV column names ({.val {intersect(legacy_only, names(dt))}}).",
+      "x" = "This is a stale player_game vintage; the component-split adjustment cannot run on it.",
+      "i" = "Refresh the inputs from the release before rebuilding."
+    ), class = c("torp_error_stale_input", "vb_error_integrity"))
+  }
+
   comp_cols <- intersect(c("epv_recv_adj", "epv_disp_adj", "epv_spoil_adj",
                            "epv_hitout_adj", "contest_epv_adj"), names(dt))
   if (length(comp_cols) > 0 && "season" %in% names(dt)) {
@@ -275,6 +291,14 @@ adjust_epv_for_opponents <- function(player_game_data,
 #' Worth failing loudly for: EPR counts a game toward \code{wt_gms} while an NA
 #' contributes nothing to the numerator, so the affected seasons deflate as
 #' \code{1/wt_gms} and look like a plausible rating set rather than a broken one.
+#'
+#' **Deliberately fails closed on a single NA row**, not just a wiped season.
+#' Being row-level rather than per-season is what lets it catch a PARTIALLY-NA
+#' season, which the per-season \code{all(is.na())} input guard cannot see. The
+#' cost is that one genuinely-isolated missing input aborts a whole rebuild;
+#' that trade is intentional given this failure mode published two seasons of
+#' silently wrong ratings. Do not relax it to a warning without replacing the
+#' partial-season coverage.
 #'
 #' @param dt data.table with an \code{epv_oadj} column.
 #' @return Invisibly TRUE; aborts otherwise.
