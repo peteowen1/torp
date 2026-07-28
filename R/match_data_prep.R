@@ -641,6 +641,12 @@
     "epr", "epr_recv", "epr_disp", "epr_spoil", "epr_hitout", "psr",
     intersect(c("osr", "dsr"), names(team_rt_fix_df)),
     "def", "mid", "fwd", "int", MATCH_INDIVIDUAL_POS,
+    # Listed position groups must be carried for the OPPONENT too, or their
+    # differentials cannot be formed. Without this they appear on one side only,
+    # stay unsuffixed, and the diff loop below silently skips them -- which is
+    # exactly what happened on the first attempt. Adding them here means they
+    # arrive as key_def.x / key_def.y like every other joined column.
+    names(MATCH_LISTED_POS_MAP),
     "team_name", "team_name_season",
     "log_dist", "familiarity", "days_rest",
     "team_type_fac", "season", "round_number", "venue", "count",
@@ -716,6 +722,59 @@
     x_col <- paste0(pos, ".x")
     y_col <- paste0(pos, ".y")
     team_mdl_df_tot[[diff_col]] <- team_mdl_df_tot[[x_col]] - team_mdl_df_tot[[y_col]]
+  }
+
+  # Listed-position-group diffs (key_def, med_def, midfield, med_fwd, key_fwd,
+  # rucks). These are model features, unlike the 18 individual-position diffs
+  # above, so their NA handling matters: a match with no published team list has
+  # NA position sums, and model.matrix() DROPS NA rows silently rather than
+  # erroring -- it returns fewer predictions than rows and surfaces much later
+  # as a row-count mismatch on an unrelated column. Every upcoming fixture is in
+  # that state until teams are named, which is exactly when predictions are made.
+  #
+  # 0 is the honest fill: with no team list there is no known positional
+  # advantage either way, matching how the rating join prior-imputes upstream.
+  pos_na_counts <- list()
+  for (pos in names(MATCH_LISTED_POS_MAP)) {
+    diff_col <- paste0(pos, "_diff")
+    x_col <- paste0(pos, ".x")
+    y_col <- paste0(pos, ".y")
+    if (!all(c(x_col, y_col) %in% names(team_mdl_df_tot))) {
+      # Abort rather than skip. A silent `next` here produced a frame missing
+      # every listed-position feature while everything downstream still ran,
+      # and the model simply trained without them.
+      cli::cli_abort(c(
+        "Cannot build {.field {diff_col}}: {.field {x_col}}/{.field {y_col}} absent after the self-join.",
+        "i" = "Is {.field {pos}} listed in {.code opp_cols}?"
+      ))
+    }
+    v <- team_mdl_df_tot[[x_col]] - team_mdl_df_tot[[y_col]]
+
+    # 0 is the right fill ONLY for a fixture whose teams are not named yet. For
+    # a completed match an NA means a real data gap, and filling it teaches the
+    # model a fabricated "no positional advantage" on a row that enters
+    # training. Distinguish the two rather than absorbing both into one bucket.
+    na_v <- is.na(v)
+    if (any(na_v)) {
+      played <- !is.na(team_mdl_df_tot$score_diff)
+      n_bad <- sum(na_v & played)
+      if (n_bad > 0) {
+        ids <- utils::head(unique(team_mdl_df_tot$match_id[na_v & played]), 3)
+        cli::cli_abort(c(
+          "{n_bad} COMPLETED match{?es} {?has/have} no {.field {pos}} sum -- that is a data gap, not an unnamed team.",
+          "i" = "Affected: {paste(ids, collapse = ', ')}",
+          "x" = "Filling these with 0 would train the model on a fabricated tie."
+        ))
+      }
+      team_mdl_df_tot[[diff_col]] <- dplyr::coalesce(v, 0)
+      pos_na_counts[[pos]] <- sum(na_v)
+    } else {
+      team_mdl_df_tot[[diff_col]] <- v
+    }
+  }
+  if (length(pos_na_counts) > 0) {
+    cli::cli_inform(
+      "Listed-position diffs: filled 0 for {max(unlist(pos_na_counts))} unplayed fixture{?s} with no team list")
   }
 
   team_mdl_df_tot <- team_mdl_df_tot |>

@@ -110,6 +110,49 @@ TORP_EPR_WEIGHT <- 0.5
 #' @keywords internal
 EPV_POSITION_STANDARDISE <- TRUE
 
+#' Centre each EPR channel on its position's TOG-weighted mean
+#'
+#' \code{EPV_POSITION_STANDARDISE} equalises between-position *spread*, at the
+#' player-game level, grouped by \code{lineup_position}. It does not equalise
+#' *level*, and the correction it does make does not survive to the published
+#' rating: the TOG weighting, opponent adjustment, decay and global prior that
+#' follow are all position-blind. Read on the listed-position taxonomy, key
+#' defenders still sat at median EPR -2.18 against medium forwards' +0.66
+#' (FABLE-DEFENDER-VALUE-PLAN.md §8.2).
+#'
+#' This closes that gap directly, on the published rating, per channel, keyed on
+#' \code{position_group} within each \code{(season, round)} cross-section.
+#'
+#' \strong{This is a NORMALISATION, not a measurement.} Position levels are
+#' unidentifiable from match margins -- on-field structure is rigid (every team
+#' fields exactly one full-back), and although listed-position counts do vary
+#' (2-9 midfielders), holding total EPR constant the positional mix explains
+#' nothing: F(5, 1113) = 0.47, p = 0.80, every CI spanning about +/-3 points
+#' (§8.3). Setting each position's mean to zero therefore ASSERTS that an
+#' average key defender and an average midfielder contribute equally. That claim
+#' cannot be checked against results.
+#'
+#' It is preferred anyway because the status quo embeds an assumption too --
+#' that the uncentred levels are right -- and those levels are an artefact of
+#' the pipeline rather than a value judgement. A deliberate, symmetric
+#' assumption beats an accidental, asymmetric one.
+#'
+#' Cost: measured, and near zero. Alone it is dMAE +0.121, 95% CI
+#' `[-0.250, +0.485]`; paired with the position-split match features it enables
+#' (\code{MATCH_LISTED_POS_MAP} diffs) it is dMAE -0.026, CI `[-0.413, +0.358]` --
+#' MAE-neutral (WS4/WS5, 2025-26 pooled, 387 games).
+#' @keywords internal
+EPR_POSITION_CENTRE <- TRUE
+
+#' EPR channels the position centring applies to
+#'
+#' All four. Unlike the standardise step -- which divides by a within-position
+#' SD and so had to exclude the ruck-exclusive \code{hitout} channel to avoid
+#' amplifying near-zero outfield spreads -- centring only subtracts a mean, so
+#' no channel can blow up and none needs excluding.
+#' @keywords internal
+EPR_CENTRE_CHANNELS <- c("epr_recv", "epr_disp", "epr_spoil", "epr_hitout")
+
 #' Whether PSR position centring rescales as well as recentres
 #'
 #' The mirror of \code{EPV_POSITION_STANDARDISE} on the PSR side.
