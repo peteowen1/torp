@@ -10,7 +10,7 @@ vb_read_manifest(repo, tag, required = FALSE)
 Applies the momentary-absence rule: if this session has previously seen a
 manifest on the tag and it now looks absent (piggyback delete-then-upload
 window), retry once after 10 s before declaring legacy mode. A tag never
-having a manifest is always legacy mode, never an error — \code{required} is
+having a manifest is always legacy mode, never an error -- \code{required} is
 accepted for caller compatibility but does not abort on absence; a caller
 that needs to refuse an \emph{uncommitted} asset checks the returned manifest
 itself (see \code{vb_download()}'s own require_manifest handling).

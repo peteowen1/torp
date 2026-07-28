@@ -35,7 +35,9 @@ identifiers (\code{player_id}, \code{match_id}, \code{season}, \code{round},
 \code{utc_start_time}), position-adjusted EPV (\code{epv_adj},
 \code{epv_recv_adj}, \code{epv_disp_adj}, \code{epv_spoil_adj}, \code{epv_hitout_adj}),
 raw EPV (\code{epv}, \code{epv_recv}, \code{epv_disp}, \code{epv_spoil},
-\code{epv_hitout}), and key box-score stats.
+\code{epv_hitout}), contextual spoil credit (\code{spoil_epv_ctx},
+\code{spoils_priced} — see \code{compute_spoil_credit()}; not folded into
+\code{epv_spoil}), and key box-score stats.
 }
 \description{
 Transforms raw play-by-play data and player stats into processed per-game

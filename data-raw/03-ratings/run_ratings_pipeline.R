@@ -60,6 +60,24 @@ if (!exists("REBUILD_PLAYER_GAME", envir = .GlobalEnv)) REBUILD_PLAYER_GAME <- T
 # Full rebuild vs incremental (only configured seasons)
 if (!exists("REBUILD_ALL_RATINGS", envir = .GlobalEnv)) REBUILD_ALL_RATINGS <- TRUE
 
+# Which rating vintage this run publishes (decision D-DEF3, see
+# docs/plans/RATING-VERSIONING-PLAN.md). NULL = the canonical
+# torp_ratings.parquet, i.e. exactly today's behaviour and the safe default.
+# Set to a label such as "v2" to publish a CANDIDATE vintage alongside
+# canonical without touching it. Promotion is a separate, deliberate act --
+# this script must never promote.
+if (!exists("RATINGS_VINTAGE", envir = .GlobalEnv)) RATINGS_VINTAGE <- NULL
+# NOTE: these must NOT be dot-prefixed. A variable named `.foo` interpolated
+# into cli::cli_abort()/cli_warn() collides with cli's own `{.val}`-style
+# markup and hard-errors at runtime -- it crashed a real production run once.
+vintage_file <- torp:::.rating_vintage_file(RATINGS_VINTAGE)
+vintage_stem <- torp:::.rating_vintage_stem(RATINGS_VINTAGE)
+if (!is.null(RATINGS_VINTAGE)) {
+  cli::cli_alert_info(
+    "Publishing CANDIDATE rating vintage {.val {RATINGS_VINTAGE}} to {.file {vintage_file}} -- canonical torp_ratings.parquet is untouched"
+  )
+}
+
 # Resolve seasons ----
 
 resolve_seasons <- function(seasons) {
@@ -133,7 +151,7 @@ if (REBUILD_PLAYER_GAME) {
       cli::cli_inform("  Player game data: {nrow(pgd)} rows")
 
       file_name <- paste0("player_game_", s)
-      save_to_release(pgd, file_name, "player_game-data")
+      save_to_release(pgd, torp:::.vintage_asset_stem(file_name, RATINGS_VINTAGE), "player_game-data")
       cli::cli_alert_success("Released {file_name} ({nrow(pgd)} rows)")
     }, error = function(e) {
       cli::cli_alert_danger("Failed to build player game data for {s}: {conditionMessage(e)}")
@@ -345,7 +363,7 @@ if (nrow(torp_new) > 0) {
   # ratings" -- torp P1/P8: that collapses to overwriting full-history
   # ratings-data with just the seasons computed this run.
   existing <- tryCatch(
-    load_torp_ratings(),
+    load_torp_ratings(version = RATINGS_VINTAGE),
     vb_error_absent = function(e) NULL,
     error = function(e) {
       cli::cli_abort("Could not load existing torp_ratings ({conditionMessage(e)}) - aborting to avoid overwriting full-history ratings-data", parent = e)
@@ -377,13 +395,15 @@ if (nrow(torp_new) > 0) {
     } else {
       # Confirmed absent (first-ever publish) -- fresh build is legitimate.
       is_absent <- tryCatch(
-        vb_confirm_absent(get_torp_data_repo(), "ratings-data", "torp_ratings.parquet"),
+        # Per-VINTAGE, not per-tag: publishing a candidate must neither trip
+        # the guard protecting canonical nor bypass its own.
+        vb_confirm_absent(get_torp_data_repo(), "ratings-data", vintage_file),
         error = function(e) {
-          cli::cli_abort("Could not verify torp_ratings.parquet is absent before a fresh upload: {conditionMessage(e)}")
+          cli::cli_abort("Could not verify {vintage_file} is absent before a fresh upload: {conditionMessage(e)}")
         }
       )
       if (!isTRUE(is_absent)) {
-        cli::cli_abort("Refusing fresh ratings upload: torp_ratings.parquet was not confirmed absent from ratings-data.")
+        cli::cli_abort("Refusing fresh ratings upload: {vintage_file} was not confirmed absent from ratings-data.")
       }
       torp_df_total <- torp_new
     }
@@ -415,13 +435,30 @@ if (nrow(torp_new) > 0) {
     cli::cli_alert_success("Blended PSR into ratings ({sum(!is.na(torp_df_total$torp))} rows with torp)")
   }
 
-  save_to_release(torp_df_total, "torp_ratings", "ratings-data")
+  save_to_release(torp_df_total, vintage_stem, "ratings-data")
 
-  uploaded <- tryCatch(load_torp_ratings(), error = function(e) NULL)
+  uploaded <- tryCatch(load_torp_ratings(version = RATINGS_VINTAGE), error = function(e) NULL)
   if (is.null(uploaded) || nrow(uploaded) != nrow(torp_df_total)) {
     cli::cli_alert_danger("Upload verification failed - piggyback cache delay may be the cause")
   }
-  cli::cli_alert_success("Released torp_ratings ({nrow(torp_df_total)} rows)")
+  cli::cli_alert_success("Released {vintage_stem} ({nrow(torp_df_total)} rows)")
+
+  # Provenance: record which constants produced this vintage. Never sets
+  # `canonical` -- promotion is deliberate and separate.
+  tryCatch(
+    # The vintage label comes from the CONSTANTS (RATING_VINTAGE), not from the
+    # filename. Regenerating canonical under new constants writes
+    # torp_ratings.parquet while the vintage is "v2" -- deriving the label from
+    # the filename would record that file as v1, i.e. label the new data as the
+    # data it replaced. canonical is set only when this run wrote canonical.
+    torp:::publish_ratings_manifest(
+      nrow(torp_df_total),
+      version = torp:::RATING_VINTAGE,
+      file = vintage_file,
+      set_canonical = is.null(RATINGS_VINTAGE)
+    ),
+    error = function(e) cli::cli_warn("Could not publish ratings manifest: {conditionMessage(e)}")
+  )
 }
 
 tictoc::toc(log = TRUE)
@@ -463,7 +500,7 @@ tryCatch({
     ) |>
     dplyr::arrange(.data$season, .data$round, -.data$team_epr)
 
-  save_to_release(team_ratings, "team_ratings", "team_ratings-data")
+  save_to_release(team_ratings, torp:::.vintage_asset_stem("team_ratings", RATINGS_VINTAGE), "team_ratings-data")
   cli::cli_alert_success("Released team_ratings ({nrow(team_ratings)} rows)")
 }, error = function(e) {
   cli::cli_alert_danger("Failed to compute team ratings: {conditionMessage(e)}")
@@ -547,13 +584,13 @@ for (s in seasons) {
     }
 
     file_name <- paste0("player_game_ratings_", s)
-    save_to_release(pgr, file_name, "player_game_ratings-data")
+    save_to_release(pgr, torp:::.vintage_asset_stem(file_name, RATINGS_VINTAGE), "player_game_ratings-data")
     cli::cli_alert_success("Released {file_name} ({nrow(pgr)} rows)")
 
     # Player season ratings
     psr <- .compute_player_season_ratings(pgr)
     file_name <- paste0("player_season_ratings_", s)
-    save_to_release(psr, file_name, "player_season_ratings-data")
+    save_to_release(psr, torp:::.vintage_asset_stem(file_name, RATINGS_VINTAGE), "player_season_ratings-data")
     cli::cli_alert_success("Released {file_name} ({nrow(psr)} rows)")
   }, error = function(e) {
     cli::cli_alert_danger("Failed derived ratings for {s}: {conditionMessage(e)}")
@@ -581,7 +618,7 @@ tryCatch({
     for (s in sort(unique(psr_all$season))) {
       psr_season <- psr_all[psr_all$season == s, ]
       file_name <- paste0("psr_", s)
-      save_to_release(psr_season, file_name, "psr-data")
+      save_to_release(psr_season, torp:::.vintage_asset_stem(file_name, RATINGS_VINTAGE), "psr-data")
       cli::cli_alert_success("Released {file_name} ({nrow(psr_season)} rows)")
     }
   } else {

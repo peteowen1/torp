@@ -50,6 +50,44 @@ default_epv_params <- function() {
   )
 }
 
+#' TOG-weighted standard deviation
+#'
+#' @param x Numeric vector.
+#' @param w Numeric weights (time on ground).
+#' @return Weighted SD, or \code{NA_real_} when nothing is observed.
+#' @keywords internal
+.wtd_sd <- function(x, w) {
+  ok <- !is.na(x) & !is.na(w)
+  if (!any(ok)) return(NA_real_)
+  m <- stats::weighted.mean(x[ok], w[ok])
+  sqrt(sum(w[ok] * (x[ok] - m)^2) / sum(w[ok]))
+}
+
+#' Position-adjust a per-80 EPV channel
+#'
+#' Recentres within position, and — when \code{standardise} is TRUE —
+#' rescales to the pooled cross-position spread as well, so the channel's
+#' overall units are preserved while between-position spread differences are
+#' removed. See \code{EPV_POSITION_STANDARDISE}.
+#'
+#' Falls back to centre-only when the within-position SD is absent or
+#' degenerate; dividing by a near-zero SD amplifies without bound, which is
+#' exactly the failure mode that excludes the hitout channel.
+#'
+#' @param p80 Per-80 channel value.
+#' @param tog Time-on-ground weight.
+#' @param pooled_sd Pooled (all-position) weighted SD for this channel.
+#' @param standardise Logical; rescale as well as recentre.
+#' @return Position-adjusted, TOG-scaled channel value.
+#' @keywords internal
+.position_adjust <- function(p80, tog, pooled_sd, standardise) {
+  centred <- p80 - stats::weighted.mean(p80, tog, na.rm = TRUE)
+  if (!isTRUE(standardise)) return(centred * tog)
+  s <- .wtd_sd(p80, tog)
+  if (is.na(s) || s < 1e-6 || is.na(pooled_sd)) return(centred * tog)
+  centred / s * pooled_sd * tog
+}
+
 #' Create Player Game Data
 #'
 #' Transforms raw play-by-play data and player stats into processed per-game
@@ -73,7 +111,9 @@ default_epv_params <- function() {
 #'   \code{utc_start_time}), position-adjusted EPV (\code{epv_adj},
 #'   \code{epv_recv_adj}, \code{epv_disp_adj}, \code{epv_spoil_adj}, \code{epv_hitout_adj}),
 #'   raw EPV (\code{epv}, \code{epv_recv}, \code{epv_disp}, \code{epv_spoil},
-#'   \code{epv_hitout}), and key box-score stats.
+#'   \code{epv_hitout}), contextual spoil credit (\code{spoil_epv_ctx},
+#'   \code{spoils_priced} — see \code{compute_spoil_credit()}; not folded into
+#'   \code{epv_spoil}), and key box-score stats.
 #'
 #' @export
 #'
@@ -201,6 +241,31 @@ create_player_game_data <- function(pbp_data = NULL,
   plyr_gm_df <- merge(plyr_gm_df, contest_dt,
     by = c("player_id", "match_id"), all.x = TRUE, sort = FALSE)
 
+  # --- Step 3d: Contextual spoil credit (WS2a) ---
+  # Prices the ~72% of spoils compute_contest_credit() misses. Emitted as a
+  # standalone column only — epv_spoil still uses the flat EPV_SPOIL_WT, so
+  # published ratings are unchanged until WS2b decides how this enters.
+  spoil_ctx_dt <- tryCatch({
+    if (is.null(chains)) chains <- load_chains(TRUE)
+    compute_spoil_credit(chains, pbp_data,
+                         contest_share = p$contest_share %||% (1 / 3))
+  }, error = function(e) {
+    is_data_unavailable <- grepl(
+      "load_chains|download|HTTP|connection|404|timeout",
+      conditionMessage(e), ignore.case = TRUE
+    )
+    if (!is_data_unavailable) {
+      cli::cli_abort("Contextual spoil credit computation failed: {conditionMessage(e)}")
+    }
+    cli::cli_warn("Contextual spoil credit skipped (data unavailable): {conditionMessage(e)}")
+    data.table::data.table(
+      player_id = character(), match_id = character(),
+      spoil_epv_ctx = numeric(), spoils_priced = integer()
+    )
+  })
+  plyr_gm_df <- merge(plyr_gm_df, spoil_ctx_dt,
+    by = c("player_id", "match_id"), all.x = TRUE, sort = FALSE)
+
   # --- Step 4: Join spoils/tackles/hitouts from raw player_stats ---
   spoil_hitout_df <- player_stats |>
     dplyr::mutate(
@@ -248,6 +313,8 @@ create_player_game_data <- function(pbp_data = NULL,
       aerial_target_losses = as.integer(tidyr::replace_na(aerial_target_losses, 0)),
       aerial_def_wins = as.integer(tidyr::replace_na(aerial_def_wins, 0)),
       aerial_def_losses = as.integer(tidyr::replace_na(aerial_def_losses, 0)),
+      spoil_epv_ctx = tidyr::replace_na(spoil_epv_ctx, 0),
+      spoils_priced = as.integer(tidyr::replace_na(spoils_priced, 0)),
       epv_recv = tidyr::replace_na(epv_recv, 0) + contest_epv +
                  contested_possessions * p$contested_poss_wt + contested_marks * p$contested_marks_wt +
                  ground_ball_gets * p$ground_ball_gets_wt + marks_inside50 * p$marks_inside50_wt +
@@ -293,13 +360,27 @@ create_player_game_data <- function(pbp_data = NULL,
       wp_credit_p80 = .data$wp_credit / .data$tog_safe,
       wp_disp_credit_p80 = .data$wp_disp_credit / .data$tog_safe,
       wp_recv_credit_p80 = .data$wp_recv_credit / .data$tog_safe
-    ) |>
+    )
+
+  # Pooled (all-position) spread per channel — the scale the standardised
+  # adjustment restores, so the metric keeps its units and only the
+  # BETWEEN-position spread differences change. Computed before grouping.
+  .epv_ch <- c("recv", "disp", "spoil", "hitout")
+  .pooled_sd <- vapply(.epv_ch, function(ch)
+    .wtd_sd(plyr_gm_df[[paste0("epv_", ch, "_p80")]], plyr_gm_df$tog_safe),
+    numeric(1))
+  .std <- stats::setNames(
+    isTRUE(EPV_POSITION_STANDARDISE) & .epv_ch %in% EPV_STANDARDISE_CHANNELS,
+    .epv_ch
+  )
+
+  plyr_gm_df <- plyr_gm_df |>
     dplyr::group_by(lineup_position) |>
     dplyr::mutate(
-      epv_recv_adj = (.data$epv_recv_p80 - stats::weighted.mean(.data$epv_recv_p80, .data$tog_safe, na.rm = TRUE)) * .data$tog_safe,
-      epv_disp_adj = (.data$epv_disp_p80 - stats::weighted.mean(.data$epv_disp_p80, .data$tog_safe, na.rm = TRUE)) * .data$tog_safe,
-      epv_spoil_adj = (.data$epv_spoil_p80 - stats::weighted.mean(.data$epv_spoil_p80, .data$tog_safe, na.rm = TRUE)) * .data$tog_safe,
-      epv_hitout_adj = (.data$epv_hitout_p80 - stats::weighted.mean(.data$epv_hitout_p80, .data$tog_safe, na.rm = TRUE)) * .data$tog_safe,
+      epv_recv_adj = .position_adjust(.data$epv_recv_p80, .data$tog_safe, .pooled_sd[["recv"]], .std[["recv"]]),
+      epv_disp_adj = .position_adjust(.data$epv_disp_p80, .data$tog_safe, .pooled_sd[["disp"]], .std[["disp"]]),
+      epv_spoil_adj = .position_adjust(.data$epv_spoil_p80, .data$tog_safe, .pooled_sd[["spoil"]], .std[["spoil"]]),
+      epv_hitout_adj = .position_adjust(.data$epv_hitout_p80, .data$tog_safe, .pooled_sd[["hitout"]], .std[["hitout"]]),
       epv_adj = .data$epv_recv_adj + .data$epv_disp_adj + .data$epv_spoil_adj + .data$epv_hitout_adj,
       wp_credit_adj = (.data$wp_credit_p80 - stats::weighted.mean(.data$wp_credit_p80, .data$tog_safe, na.rm = TRUE)) * .data$tog_safe,
       wp_disp_credit_adj = (.data$wp_disp_credit_p80 - stats::weighted.mean(.data$wp_disp_credit_p80, .data$tog_safe, na.rm = TRUE)) * .data$tog_safe,
@@ -333,6 +414,8 @@ create_player_game_data <- function(pbp_data = NULL,
       # Contest credit (3-way aerial split)
       contest_epv, aerial_target_wins, aerial_target_losses,
       aerial_def_wins, aerial_def_losses,
+      # Contextual spoil credit (WS2a — not yet folded into epv_spoil)
+      spoil_epv_ctx, spoils_priced,
       # PBP-derived action counts
       disposals_pbp, receptions,
       # EPV model input stats
@@ -498,6 +581,158 @@ compute_contest_credit <- function(chains, pbp_data, contest_share = 1 / 3) {
     aerial_target_losses = sum(is_target & contest_epv <= 0),
     aerial_def_wins = sum(!is_target & contest_epv > 0),
     aerial_def_losses = sum(!is_target & contest_epv <= 0)
+  ), by = .(player_id, match_id)]
+}
+
+
+#' Compute Contextual Spoil Credit
+#'
+#' Prices every spoil by the expected-points swing of the kick it defused,
+#' rather than by a flat per-spoil weight.
+#'
+#' \code{compute_contest_credit()} already prices contests contextually, but its
+#' filter keys on \code{CHAINS_CONTEST_TARGET_DESCS}, which matches only ~28\% of
+#' spoils — the largest group of spoils simply follows a plain \code{"Kick"} row.
+#' This function reaches the rest: it locates every \code{"Spoil"} in chains, scans
+#' back up to 5 rows for the kick that produced it (the same scan
+#' \code{compute_contest_credit()} uses), and credits the spoiler
+#' \code{-delta_epv * contest_share} — the identical sign convention, so the two
+#' quantities are on the same scale and can be summed.
+#'
+#' Spoils already captured as contest triples are excluded, so this never
+#' double-counts against \code{contest_epv}.
+#'
+#' The credit is \strong{signed}: a spoil on a kick that was still good for the
+#' attacking team earns negative credit. About 40\% of spoils fall in that group,
+#' which is the discrimination a flat weight cannot express.
+#'
+#' @param chains Raw chains data (from \code{load_chains()}).
+#' @param pbp_data Clean PBP data (from \code{load_pbp()}) containing
+#'   \code{delta_epv} values.
+#' @param contest_share Fraction of \code{delta_epv} attributed to the spoiler.
+#'   Default \code{1/3}, matching \code{compute_contest_credit()}.
+#'
+#' @return A data.table with columns: \code{player_id}, \code{match_id},
+#'   \code{spoil_epv_ctx} (signed contextual credit, summed per player-match),
+#'   \code{spoils_priced} (spoils this function valued).
+#'
+#' @keywords internal
+compute_spoil_credit <- function(chains, pbp_data, contest_share = 1 / 3) {
+  empty_dt <- data.table::data.table(
+    player_id = character(), match_id = character(),
+    spoil_epv_ctx = numeric(), spoils_priced = integer()
+  )
+
+  chains_dt <- data.table::as.data.table(chains)
+  pbp_dt <- data.table::as.data.table(pbp_data)
+
+  detect_chains_columns(chains_dt)
+
+  target_descs <- CHAINS_CONTEST_TARGET_DESCS
+  kick_descs <- c("Kick", "Ground Kick")
+  data.table::setorder(chains_dt, match_id, display_order)
+
+  chains_dt[, `:=`(
+    .prev_desc = data.table::shift(description, 1L, type = "lag"),
+    .prev_tid  = data.table::shift(team_id, 1L, type = "lag"),
+    .prev_x    = data.table::shift(x, 1L, type = "lag"),
+    .prev_y    = data.table::shift(y, 1L, type = "lag"),
+    .lag1_desc = data.table::shift(description, 1L, type = "lag"),
+    .lag2_desc = data.table::shift(description, 2L, type = "lag"),
+    .lag3_desc = data.table::shift(description, 3L, type = "lag"),
+    .lag4_desc = data.table::shift(description, 4L, type = "lag"),
+    .lag5_desc = data.table::shift(description, 5L, type = "lag"),
+    .lag1_do   = data.table::shift(display_order, 1L, type = "lag"),
+    .lag2_do   = data.table::shift(display_order, 2L, type = "lag"),
+    .lag3_do   = data.table::shift(display_order, 3L, type = "lag"),
+    .lag4_do   = data.table::shift(display_order, 4L, type = "lag"),
+    .lag5_do   = data.table::shift(display_order, 5L, type = "lag"),
+    .lag1_tid  = data.table::shift(team_id, 1L, type = "lag"),
+    .lag2_tid  = data.table::shift(team_id, 2L, type = "lag"),
+    .lag3_tid  = data.table::shift(team_id, 3L, type = "lag"),
+    .lag4_tid  = data.table::shift(team_id, 4L, type = "lag"),
+    .lag5_tid  = data.table::shift(team_id, 5L, type = "lag")
+  ), by = match_id]
+
+  # Exclude spoils compute_contest_credit() already priced: those are the
+  # outcome row of a contest triple (previous row is a contest target at the
+  # same coordinates, logged to the opposing team).
+  spoils <- chains_dt[
+    description == "Spoil" &
+    !is.na(player_id) &
+    !(.prev_desc %chin% target_descs &
+      x == .prev_x & y == .prev_y &
+      !is.na(.prev_tid) & team_id != .prev_tid)
+  ]
+
+  cleanup <- function() {
+    chains_dt[, grep("^\\.", names(chains_dt), value = TRUE) := NULL]
+  }
+  if (nrow(spoils) == 0) {
+    cleanup()
+    return(empty_dt)
+  }
+
+  # First Kick/Ground Kick within 5 rows back, and the team that kicked it.
+  # The scan may only pass through in-flight annotation rows: if a possession
+  # event (Handball, Mark, an earlier Spoil, ...) sits in between, the kick
+  # further back belongs to a different play and crediting it would attribute
+  # a spoil to a kick it never touched.
+  inflight <- CHAINS_INFLIGHT_DESCS
+  spoils[, `:=`(
+    .clear2 = .lag1_desc %chin% inflight,
+    .clear3 = .lag1_desc %chin% inflight & .lag2_desc %chin% inflight,
+    .clear4 = .lag1_desc %chin% inflight & .lag2_desc %chin% inflight &
+              .lag3_desc %chin% inflight,
+    .clear5 = .lag1_desc %chin% inflight & .lag2_desc %chin% inflight &
+              .lag3_desc %chin% inflight & .lag4_desc %chin% inflight
+  )]
+  spoils[, .kick_lag := data.table::fcase(
+    .lag1_desc %chin% kick_descs, 1L,
+    .clear2 & .lag2_desc %chin% kick_descs, 2L,
+    .clear3 & .lag3_desc %chin% kick_descs, 3L,
+    .clear4 & .lag4_desc %chin% kick_descs, 4L,
+    .clear5 & .lag5_desc %chin% kick_descs, 5L,
+    default = NA_integer_
+  )]
+  spoils[, `:=`(
+    kick_display_order = data.table::fcase(
+      .kick_lag == 1L, .lag1_do, .kick_lag == 2L, .lag2_do,
+      .kick_lag == 3L, .lag3_do, .kick_lag == 4L, .lag4_do,
+      .kick_lag == 5L, .lag5_do
+    ),
+    kick_team_id = data.table::fcase(
+      .kick_lag == 1L, .lag1_tid, .kick_lag == 2L, .lag2_tid,
+      .kick_lag == 3L, .lag3_tid, .kick_lag == 4L, .lag4_tid,
+      .kick_lag == 5L, .lag5_tid
+    )
+  )]
+
+  # A spoil is only meaningful against an opponent's kick. Same-team matches are
+  # chain-logging artifacts (~16%) and are dropped rather than credited.
+  spoils <- spoils[!is.na(kick_display_order) &
+                   !is.na(kick_team_id) &
+                   team_id != kick_team_id,
+                   .(match_id, player_id, kick_display_order)]
+  cleanup()
+  if (nrow(spoils) == 0) return(empty_dt)
+
+  spoils <- merge(
+    spoils,
+    pbp_dt[, .(match_id, display_order, delta_epv)],
+    by.x = c("match_id", "kick_display_order"),
+    by.y = c("match_id", "display_order"),
+    all.x = TRUE, sort = FALSE
+  )
+  spoils <- spoils[!is.na(delta_epv)]
+  if (nrow(spoils) == 0) return(empty_dt)
+
+  # delta_epv is from the kicking team's perspective; flip it for the spoiler,
+  # matching compute_contest_credit()'s defender convention exactly.
+  spoils[, .credit := -delta_epv * contest_share]
+  spoils[, .(
+    spoil_epv_ctx = sum(.credit),
+    spoils_priced = .N
   ), by = .(player_id, match_id)]
 }
 

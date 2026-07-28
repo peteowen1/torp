@@ -135,7 +135,11 @@ get_lineup_ratings <- function(season = NULL, round = NULL, match_id = NULL) {
       torp_df,
       by = c("player_id" = "player_id", "season" = "season", "round_number" = "round")
     ) |>
-    dplyr::filter((lineup_position != "EMERG" & lineup_position != "SUB") | is.na(lineup_position))
+    # Keep every named player bar emergencies -- see the note in
+    # match_data_prep.R's .build_team_ratings_df(). These two filters must stay
+    # in step: one builds the training frame and the other the serving frame,
+    # so a divergence would be a silent train/serve skew.
+    dplyr::filter(lineup_position != "EMERG" | is.na(lineup_position))
 
   # Impute missing EPR with priors
   lineup_df <- lineup_df |>

@@ -450,12 +450,15 @@ test_that(".map_position_group maps 6-way position_group correctly", {
 })
 
 test_that(".map_position_group maps 20-way lineup_position correctly", {
-  # KEY_DEFENDER
+  # Corrected 2026-07-27 by the taxonomy audit (FABLE-DEFENDER-VALUE-PLAN
+  # §7.13/§7.14). CHF, FPL and FPR moved; CHB joined FB. The previous
+  # expectations encoded the pre-audit map and are recorded in the plan.
+  # KEY_DEFENDER — the two central defensive posts
   expect_equal(.map_position_group("FB"), "KEY_DEFENDER")
+  expect_equal(.map_position_group("CHB"), "KEY_DEFENDER")
   # MEDIUM_DEFENDER
   expect_equal(.map_position_group("BPL"), "MEDIUM_DEFENDER")
   expect_equal(.map_position_group("BPR"), "MEDIUM_DEFENDER")
-  expect_equal(.map_position_group("CHB"), "MEDIUM_DEFENDER")
   expect_equal(.map_position_group("HBFL"), "MEDIUM_DEFENDER")
   expect_equal(.map_position_group("HBFR"), "MEDIUM_DEFENDER")
   # MIDFIELDER
@@ -466,13 +469,16 @@ test_that(".map_position_group maps 20-way lineup_position correctly", {
   expect_equal(.map_position_group("RR"), "MIDFIELDER")
   # RUCK
   expect_equal(.map_position_group("RK"), "RUCK")
-  # MEDIUM_FORWARD
+  # MEDIUM_FORWARD — the pockets are smalls (187.0-187.3cm), listed
+  # MEDIUM_FORWARD by their clubs; PBP disagreed with the old KEY_FORWARD
+  # assignment 72% and 69% of the time
   expect_equal(.map_position_group("HFFL"), "MEDIUM_FORWARD")
   expect_equal(.map_position_group("HFFR"), "MEDIUM_FORWARD")
-  expect_equal(.map_position_group("CHF"), "MEDIUM_FORWARD")
-  # KEY_FORWARD
-  expect_equal(.map_position_group("FPL"), "KEY_FORWARD")
-  expect_equal(.map_position_group("FPR"), "KEY_FORWARD")
+  expect_equal(.map_position_group("FPL"), "MEDIUM_FORWARD")
+  expect_equal(.map_position_group("FPR"), "MEDIUM_FORWARD")
+  # KEY_FORWARD — centre half forward is a key post (190.8cm, listed
+  # KEY_FORWARD), which the old map had as MEDIUM_FORWARD
+  expect_equal(.map_position_group("CHF"), "KEY_FORWARD")
   expect_equal(.map_position_group("FF"), "KEY_FORWARD")
   # INT/SUB/EMERG → NA
   expect_true(is.na(.map_position_group("INT")))

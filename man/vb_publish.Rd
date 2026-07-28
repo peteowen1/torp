@@ -28,10 +28,10 @@ still describe the whole tag}
 \item{dry_run}{build + return the manifest without uploading anything}
 }
 \description{
-Ordered: hash → floor-check → upload data assets (bounded retries, collect
-failures) → gate (any failure aborts BEFORE the manifest, so consumers
-keep the last consistent snapshot) → verify live asset list → upload
-bus_manifest.json LAST → fire the cache-invalidation hook
+Ordered: hash -> floor-check -> upload data assets (bounded retries, collect
+failures) -> gate (any failure aborts BEFORE the manifest, so consumers
+keep the last consistent snapshot) -> verify live asset list -> upload
+bus_manifest.json LAST -> fire the cache-invalidation hook
 (\code{options(versebus.on_publish = function(repo, tag) ...)}).
 }
 \keyword{internal}

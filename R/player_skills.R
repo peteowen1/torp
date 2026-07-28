@@ -41,7 +41,10 @@
 #'
 #' @return A data.table with one row per player containing:
 #'   \code{player_id}, \code{player_name}, \code{pos_group},
-#'   \code{n_games}, \code{wt_games}, \code{ref_date},
+#'   \code{lineup_pos_group} (the 6-way group of the role he was NAMED in for
+#'   his most recent match, when the input carries \code{lineup_position};
+#'   \code{NA} for bench codes), \code{n_games}, \code{wt_games},
+#'   \code{ref_date},
 #'   and for each stat: \code{{stat}_rating}, \code{{stat}_rating_lower}, \code{{stat}_rating_upper}.
 #'
 #' @importFrom data.table as.data.table copy
@@ -88,14 +91,34 @@ estimate_player_stat_ratings <- function(stat_rating_data, ref_date = NULL,
 
   # Player metadata and game counts: exclude availability-only rows
   dt_played <- dt[avail_only == FALSE]
-  player_meta <- dt_played[, .(
-    player_name = data.table::last(player_name),
-    pos_group = {
-      pg <- pos_group[!is.na(pos_group)]
-      if (length(pg) == 0) NA_character_
-      else { tt <- table(pg); names(tt)[which.max(tt)] }
+  has_lineup <- "lineup_position" %in% names(dt_played)
+  player_meta <- dt_played[, {
+    out <- list(
+      player_name = data.table::last(player_name),
+      # Career/window-MODAL position. Stable by construction, which is why it
+      # varies in only 0.6% of player-seasons and cannot track a mid-season
+      # role change (FABLE-DEFENDER-VALUE-PLAN §7.14a).
+      pos_group = {
+        pg <- pos_group[!is.na(pos_group)]
+        if (length(pg) == 0) NA_character_
+        else { tt <- table(pg); names(tt)[which.max(tt)] }
+      }
+    )
+    if (has_lineup) {
+      # The role he was NAMED in for his most recent match at this ref_date --
+      # a weekly signal, not a modal one. This is what calculate_psr() centres
+      # on when present (§7.15: weekly resolution improved positional
+      # calibration by 0.138 on mean|beta-1|, P 0.956, where finer buckets
+      # added nothing). NA for bench codes, which correctly falls back to
+      # pos_group -- a player on the bench has no named on-field role.
+      out$lineup_position <- lineup_position[which.max(match_date_rating)]
     }
-  ), by = player_id]
+    out
+  }, by = player_id]
+  if (has_lineup) {
+    player_meta[, lineup_pos_group := unname(LINEUP_POSITION_GROUP_MAP[lineup_position])]
+    player_meta[, lineup_position := NULL]
+  }
 
   game_counts <- dt_played[, {
     first <- !duplicated(match_id)

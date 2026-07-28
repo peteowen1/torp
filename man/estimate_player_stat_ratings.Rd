@@ -45,7 +45,10 @@ adding \code{{stat}_adj_rating} columns. Default FALSE.}
 \value{
 A data.table with one row per player containing:
 \code{player_id}, \code{player_name}, \code{pos_group},
-\code{n_games}, \code{wt_games}, \code{ref_date},
+\code{lineup_pos_group} (the 6-way group of the role he was NAMED in for
+his most recent match, when the input carries \code{lineup_position};
+\code{NA} for bench codes), \code{n_games}, \code{wt_games},
+\code{ref_date},
 and for each stat: \code{{stat}_rating}, \code{{stat}_rating_lower}, \code{{stat}_rating_upper}.
 }
 \description{

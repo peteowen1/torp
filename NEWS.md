@@ -1,36 +1,99 @@
+# torp (development version)
+
+## Bug Fixes
+
+* **The post-upload verify no longer aborts the daily release on a stale-but-larger
+  asset listing** (torpdata#74, third iteration). The first two iterations assumed a
+  lagging listing and widened the retry budget (~7s, then ~20s); neither worked --
+  Daily Data Release failed 33 times between 2026-07-14 and 2026-07-27. The actual
+  failures had the sign backwards from the earlier diagnosis: the listed size was
+  *larger* than local (the previous, bigger asset) and byte-identical on all five
+  attempts, so no amount of waiting could converge it. Truncation -- the failure
+  worth aborting for -- makes the listing *smaller*, so that direction stays fatal
+  while a larger listing now warns and proceeds. Each aborted release also skipped
+  the downstream dispatch to torp, collapsing its game-day prediction refresh from
+  ~6 runs to 1-2 and staling its submitted tips for two weeks.
+
+## Rating changes — NOT yet reflected in published ratings
+
+These change how EPR and PSR are computed. Published `ratings-data` is untouched
+until a full-history regeneration runs, which per decision D-DEF3 will ship as a
+**new rating vintage alongside the existing one**, not an in-place overwrite.
+Evidence for every item is in `../docs/plans/FABLE-DEFENDER-VALUE-PLAN.md` §7.
+
+* **The EPV position adjustment now rescales as well as recentres**
+  (`EPV_POSITION_STANDARDISE`). It previously subtracted a within-position mean
+  and stopped, which corrects positional *level* but leaves positional *spread*
+  alone — and the measured defect in key-defender ratings is under-dispersion,
+  not under-levelling. Key-defender rating SD moves 1.40 → 1.60 and the best
+  key-defender season 3.42 → 4.04, narrowing the best-forward-to-best-key-defender
+  gap from 1.96× to 1.55×. Paired bootstrap on positional calibration:
+  Δ mean|β−1| −0.095, 95% CI [−0.160, −0.016], P(improves) 0.987 — the first
+  result in this program whose interval excludes zero.
+
+* **`hitout` is deliberately excluded from that rescaling**
+  (`EPV_STANDARDISE_CHANNELS`). Rescaling divides by a within-position SD, which
+  is only meaningful for a channel every position participates in. Hitouts are
+  ruck-exclusive, so outfield positions carry a near-zero hitout SD and rescaling
+  amplified their deviations 4–9× (and 1.24 million-fold for `EMERG`, where the
+  SD is exactly zero). Left unguarded this put a ruck named at nine different
+  lineup positions into the overall top 10 at 4.06 against his true 1.12.
+  Excluding the channel scores strictly better than capping the amplifier.
+
+* **The 20-way lineup-position map is corrected** (`LINEUP_POSITION_GROUP_MAP`,
+  previously inline in `player_skills_data.R`). An audit of all 18 on-field codes
+  against player height, the clubs' listed positions, PBP-derived position groups
+  and each code's on-field statistical profile found three assignments
+  contradicted by every source: `CHF` was MEDIUM_FORWARD (a centre half forward
+  averages 190.8cm and is listed KEY_FORWARD; PBP disagreed 67% of the time), and
+  `FPL`/`FPR` were KEY_FORWARD (the pockets average 187cm, are listed
+  MEDIUM_FORWARD, and PBP disagreed 72% and 69% — the highest rates in the
+  table). `CHB` is also now grouped with `FB`; that one is a football judgement
+  on genuinely ambiguous evidence rather than a correction, and is flagged as
+  the taxonomy's softest call.
+
+* **`calculate_psr()` now prefers a weekly position group** (`lineup_pos_group`)
+  over `pos_group`. What drives positional calibration is temporal resolution,
+  not granularity: `pos_group` is effectively season-constant (it varies in 0.6%
+  of player-seasons) while the team sheet varies for 77.8%, and moving to a
+  weekly 6-way role improved mean|β−1| by 0.138 (P 0.956) where going finer than
+  6-way added nothing (P 0.417). **This is inert until the `06-stat-ratings`
+  pipeline joins `lineup_position` into the stat-ratings frame** — that frame
+  carries no lineup column today, which is exactly why production has silently
+  centred on the season-constant label for years.
+
 # torp 1.3.9 (2026-07-28)
 
 ## Match model
 
 * **The team-strength feature is now an xScore power rating (`xelo_diff`),
-  replacing the win-based team Elo (`elo_diff`)** -- new `R/xscore_rating.R`.
+  replacing the win-based team Elo (`elo_diff`)** — new `R/xscore_rating.R`.
   The old feature updated on a binary win/loss with a margin multiplier; the new
   one lives in points space and updates on the error of an *expected*-score
   margin. AFL conversion variance is large enough that a side can dominate
   territory and shots and still lose, so updating on expected score strips that
-  noise out -- and it is signal no competitor can construct, since xScore is
-  torp's own. Standalone on an identical 695-match set (2023-2026): MAE
-  27.15 -> 26.38, cor 0.524 -> 0.559, and the new rating renders the Elo
-  redundant (beta(elo) 0.09, p 9e-10) rather than the reverse. In-model, rolling
-  week-by-week OOS on 2025-2026 (n=387), swapping only this feature improved
-  **all six** headline metrics: MAE 25.622 -> 25.510, RMSE 32.646 -> 32.525,
-  Brier 0.17891 -> 0.17696, bits 0.23135 -> 0.23701, slope 0.959 -> 0.982,
-  cor 0.610 -> 0.613. Adopted under the EXPLORE tier of the new signal gate
-  (decision D-M1) rather than as a bootstrap-confirmed win: the MAE 95% CI is
-  [-0.442, +0.219] and spans zero, because the effect is smaller than the
-  measured XGBoost retraining noise floor (~0.157) on the largest window
-  available. Evidence: `../docs/plans/FABLE-MATCH-FEATURES-PLAN.md`
-  sections 6.1/6.4/6.6.
+  noise out — and it is signal no competitor can construct, since xScore is
+  torp's own. Standalone on an identical 695-match set (2023–2026): MAE
+  27.15 → 26.38, cor 0.524 → 0.559, and the new rating renders the Elo redundant
+  (β(elo) 0.09, p 9e-10) rather than the reverse. In-model, rolling week-by-week
+  OOS on 2025–2026 (n=387), swapping only this feature improved **all six**
+  headline metrics: MAE 25.622 → 25.510, RMSE 32.646 → 32.525, Brier 0.17891 →
+  0.17696, bits 0.23135 → 0.23701, slope 0.959 → 0.982, cor 0.610 → 0.613.
+  Adopted under the EXPLORE tier of the new signal gate (decision D-M1) rather
+  than as a bootstrap-confirmed win: the MAE 95% CI is [−0.442, +0.219] and spans
+  zero, because the effect is smaller than the measured XGBoost retraining noise
+  floor (~0.157) on the largest window available. Evidence:
+  `../docs/plans/FABLE-MATCH-FEATURES-PLAN.md` §6.1/§6.4/§6.6.
 
-  `elo_diff` is still computed and published for comparison -- it is simply no
+  `elo_diff` is still computed and published for comparison — it is simply no
   longer consumed by the GAM or XGBoost feature sets. **`match_gams.rds` and
   `match_xgb_pipeline.rds` must be retrained and republished together with this
   change**: models trained on `elo_diff` cannot score a frame carrying
   `xelo_diff`.
 
-  `build_matchup_table()` was switched over in the same commit -- it hand-builds
-  a feature frame that is fed straight to the trained models, so leaving it on
-  the old feature would have silently produced an unscoreable frame.
+  `build_matchup_table()` was switched over in the same commit — it hand-builds a
+  feature frame that is fed straight to the trained models, so leaving it on the
+  old feature would have silently produced an unscoreable frame.
 
 # torp 1.3.8 (2026-07-25)
 

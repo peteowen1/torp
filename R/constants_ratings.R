@@ -90,6 +90,110 @@ EPR_PRIOR_RATE_CONTEST <- 0.0000
 #' @keywords internal
 TORP_EPR_WEIGHT <- 0.5
 
+#' Whether the EPV position adjustment rescales as well as recentres
+#'
+#' The position adjustment in \code{create_player_game_data()} historically
+#' subtracted a within-position mean and stopped, which fixes positional
+#' *level* but leaves positional *spread* untouched. Since key defenders are
+#' under-dispersed rather than under-levelled, rescaling is the layer where
+#' that defect actually lives. When TRUE the adjustment becomes
+#' \code{(p80 - mean_pos) / sd_pos * S * tog}, where \code{S} is the pooled
+#' weighted SD for the channel, so overall units are preserved and only
+#' between-position spread differences change.
+#'
+#' Evidence: FABLE-DEFENDER-VALUE-PLAN.md §7.18 — key-defender rating SD
+#' 1.40 -> 1.60, max 3.42 -> 4.04, best-forward gap 1.96x -> 1.55x, and the
+#' first paired bootstrap CI in that program to exclude zero.
+#'
+#' Assumption, stated because it is load-bearing: this asserts that every
+#' position group *should* have the same spread of player value.
+#' @keywords internal
+EPV_POSITION_STANDARDISE <- TRUE
+
+#' Whether PSR position centring rescales as well as recentres
+#'
+#' The mirror of \code{EPV_POSITION_STANDARDISE} on the PSR side.
+#' \code{calculate_psr()} historically subtracted a positional mean and stopped,
+#' so PSR carried the same under-dispersion defect as EPV.
+#'
+#' This is load-bearing and was missed once: FABLE-DEFENDER-VALUE-PLAN §7.18
+#' scored its recommended arm with PSR standardised, but the first
+#' implementation shipped only the EPV half plus weekly PSR centring — a
+#' configuration that had never been scored. It left key-defender max at 3.74
+#' against the 4.06 the scored arm produced, and the best-forward gap at 1.80×
+#' against 1.52× (§7.24).
+#'
+#' Same degenerate-SD guard as the EPV side: a group whose within-position SD
+#' is absent or ~zero falls back to centre-only rather than dividing by it.
+#' @keywords internal
+PSR_POSITION_STANDARDISE <- TRUE
+
+#' Rating vintage produced by the current constants
+#'
+#' Bumped whenever a change alters historical ratings. Per decision D-DEF3 a
+#' new vintage is published *alongside* the canonical one rather than
+#' overwriting it, so a published number can always be traced to the definition
+#' that produced it. See \code{docs/plans/RATING-VERSIONING-PLAN.md}.
+#'
+#' \code{"v1"} is every rating published before 2026-07-27. \code{"v2"} adds the
+#' EPV position-variance standardisation, the corrected lineup taxonomy and
+#' weekly PSR centring.
+#' @keywords internal
+RATING_VINTAGE <- "v2"
+
+#' Map from the 20-way team-sheet lineup position to a 6-way position group
+#'
+#' Corrected 2026-07-27 after an audit of all 18 on-field codes against player
+#' height, the clubs' listed positions, PBP-derived position groups and each
+#' code's on-field statistical profile
+#' (\code{data-raw/04-analysis/lineup_position_taxonomy_audit.R},
+#' \code{position_source_provenance.R}). Three of the previous assignments were
+#' contradicted by every source:
+#'
+#' \itemize{
+#'   \item \code{CHF} was MEDIUM_FORWARD. A centre half forward averages 190.8cm
+#'     and his club lists him KEY_FORWARD; PBP disagreed with the old mapping
+#'     67% of the time. Now KEY_FORWARD.
+#'   \item \code{FPL}/\code{FPR} were KEY_FORWARD. The forward pockets average
+#'     187.0-187.3cm and are listed MEDIUM_FORWARD; PBP disagreed 72% and 69% of
+#'     the time — the highest rates in the table. Now MEDIUM_FORWARD.
+#'   \item \code{CHB} was MEDIUM_DEFENDER. This one is genuinely ambiguous —
+#'     play profile places a CHB nearer the back pockets than the full-back,
+#'     but the two central defensive posts are a coherent role pairing and the
+#'     calibration evidence cannot separate the options (§7.15b). Grouped with
+#'     FB as a football judgement, flagged as the taxonomy's softest call.
+#' }
+#'
+#' Bench codes map to NA so they fall through to the modal-position resolution
+#' in \code{.resolve_stat_rating_positions()}.
+#' @keywords internal
+LINEUP_POSITION_GROUP_MAP <- c(
+  FB   = "KEY_DEFENDER",  CHB  = "KEY_DEFENDER",
+  BPL  = "MEDIUM_DEFENDER", BPR  = "MEDIUM_DEFENDER",
+  HBFL = "MEDIUM_DEFENDER", HBFR = "MEDIUM_DEFENDER",
+  C    = "MIDFIELDER", WL   = "MIDFIELDER", WR   = "MIDFIELDER",
+  R    = "MIDFIELDER", RR   = "MIDFIELDER",
+  RK   = "RUCK",
+  FF   = "KEY_FORWARD", CHF  = "KEY_FORWARD",
+  FPL  = "MEDIUM_FORWARD", FPR  = "MEDIUM_FORWARD",
+  HFFL = "MEDIUM_FORWARD", HFFR = "MEDIUM_FORWARD",
+  INT  = NA_character_, SUB  = NA_character_, EMERG = NA_character_
+)
+
+#' EPV channels the position adjustment rescales (see EPV_POSITION_STANDARDISE)
+#'
+#' \code{hitout} is deliberately excluded. Standardising divides by the
+#' within-position SD, which is only meaningful for a channel every position
+#' participates in. Hitouts are ruck-exclusive: outfield positions carry hitout
+#' SD 0.14-0.32 against a pooled SD of 1.241, so rescaling that channel
+#' amplifies an outfield player's hitout deviation 4-9x (and 1.24 million-fold
+#' for EMERG, where the within-position SD is exactly zero). In testing this
+#' put a ruck named at nine different lineup positions into the overall top 10
+#' at 4.06 against his true 1.12. Excluding the channel scores strictly better
+#' than capping the amplifier (§7.18c).
+#' @keywords internal
+EPV_STANDARDISE_CHANNELS <- c("recv", "disp", "spoil")
+
 #' PSR prior rate for replacement-level players
 #'
 #' Players without enough skill history to compute PSR are assigned this
@@ -336,7 +440,12 @@ SKILL_CREDIBLE_LEVEL <- STAT_RATING_CREDIBLE_LEVEL
 #' Average time-on-ground fraction by lineup_position (from load_teams())
 #' Computed from historical data (2021-2025). Used to estimate per-player TOG
 #' when lineups are announced but games haven't started.
-#' EMERG/SUB are currently filtered upstream but kept here for future use.
+#' `SUB = 0.33` is LIVE as of 2026-07-27: the team-rating build now keeps the
+#' medical sub (previously filtered out, so this entry did nothing), and 0.33
+#' matches his measured 32.5-32.7% TOG through 2025. From 2026 the AFL codes
+#' that player `INT` instead, so he is weighted 0.73 — higher, but his measured
+#' TOG also rises to ~55.6%, so it remains the closer of the two. `EMERG = 0.05`
+#' is still unused: emergencies are filtered upstream.
 #' Unknown positions fall back to 0.75 with a warning.
 #' Run data-raw/debug/compute_position_tog.R to regenerate from current data.
 #' @keywords internal

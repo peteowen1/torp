@@ -64,3 +64,6 @@ docs/
 
 # Cloudflare Wrangler CLI local cache
 .wrangler/
+
+# Pipeline run logs (local artifacts, not source)
+data-raw/**/log_*.txt

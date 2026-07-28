@@ -10,7 +10,7 @@ vb_cache_validate(local_path, manifest_entry)
 Trusts the \code{.sha256} sidecar rather than rehashing \code{local_path} on every
 call (rehashing a multi-GB model on every load would defeat the point of
 caching). As a cheap corroborating check, a \code{local_path} modified more
-recently than its sidecar is treated as invalid — the sidecar can only
+recently than its sidecar is treated as invalid -- the sidecar can only
 describe content at-or-before its own write time.
 }
 \keyword{internal}

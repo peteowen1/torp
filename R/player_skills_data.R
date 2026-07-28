@@ -29,19 +29,7 @@
       lookup[p] <- grp
     }
   }
-  # Also map 20-way lineup positions to 6-way groups
-  lineup_map <- c(
-    FB   = "KEY_DEFENDER",
-    BPL  = "MEDIUM_DEFENDER", BPR  = "MEDIUM_DEFENDER",
-    CHB  = "MEDIUM_DEFENDER", HBFL = "MEDIUM_DEFENDER", HBFR = "MEDIUM_DEFENDER",
-    C    = "MIDFIELDER", WL   = "MIDFIELDER", WR   = "MIDFIELDER",
-    R    = "MIDFIELDER", RR   = "MIDFIELDER",
-    RK   = "RUCK",
-    HFFL = "MEDIUM_FORWARD", HFFR = "MEDIUM_FORWARD", CHF  = "MEDIUM_FORWARD",
-    FPL  = "KEY_FORWARD", FPR  = "KEY_FORWARD", FF   = "KEY_FORWARD",
-    INT  = NA_character_, SUB  = NA_character_, EMERG = NA_character_
-  )
-  lookup <- c(lookup, lineup_map)
+  lookup <- c(lookup, LINEUP_POSITION_GROUP_MAP)
   unname(lookup[pos])
 }
 
@@ -101,6 +89,36 @@
     }
   }
 
+  # Weekly 6-way role, when the source frame carries a team sheet. This is a
+  # no-op today: the released player_stat_ratings frame has no lineup_position
+  # column, which is precisely why calculate_psr() has always fallen back to the
+  # season-constant pos_group (FABLE-DEFENDER-VALUE-PLAN §7.7). Wired here so
+  # the weekly centring activates automatically once the 06-stat-ratings
+  # pipeline joins lineup_position upstream.
+  dt <- .add_lineup_pos_group(dt)
+
+  dt
+}
+
+#' Attach the weekly 6-way lineup position group
+#'
+#' \code{pos_group} is effectively season-constant (it varies in only 0.6% of
+#' player-seasons), so centring PSR on it cannot track a player whose role
+#' changes mid-season. \code{lineup_position} is a weekly team-sheet role and
+#' varies for 77.8% of player-seasons; collapsed to 6 groups it is what
+#' \code{calculate_psr()} should centre on (FABLE-DEFENDER-VALUE-PLAN §7.15).
+#'
+#' Bench codes map to NA, and those rows fall back to \code{pos_group} inside
+#' \code{calculate_psr()} — which is correct, since a player on the bench has no
+#' named on-field role that week.
+#'
+#' @param dt A data.table that may carry \code{lineup_position}.
+#' @return \code{dt} with a \code{lineup_pos_group} column when the source
+#'   column is present; unchanged otherwise.
+#' @keywords internal
+.add_lineup_pos_group <- function(dt) {
+  if (!"lineup_position" %in% names(dt)) return(dt)
+  dt[, lineup_pos_group := unname(LINEUP_POSITION_GROUP_MAP[lineup_position])]
   dt
 }
 
