@@ -12,6 +12,23 @@
 # measurement: position levels are unidentifiable from match margins
 # (F(5,1113) = 0.47, p = 0.80).
 
+# EVERY test below asserts the FULL correction -- "each position's TOG-weighted
+# mean is exactly zero". Since 2026-07-29 EPR_POSITION_SHRINK is TRUE, which
+# deliberately leaves ~10% of the position mean behind, so these would all fail
+# on correct code. Pin the whole file to the full correction: the invariant it
+# protects is the centring KEY and the arithmetic, not the magnitude. Shrinkage
+# has its own test in test-player-ratings.R.
+#
+# File-scoped via teardown_env() so the namespace is restored even if a test
+# errors partway through -- leaving a mutated constant behind would silently
+# change every test file sourced after this one.
+local({
+  .old_shrink <- get("EPR_POSITION_SHRINK", envir = asNamespace("torp"))
+  assignInNamespace("EPR_POSITION_SHRINK", FALSE, ns = "torp")
+  withr::defer(assignInNamespace("EPR_POSITION_SHRINK", .old_shrink, ns = "torp"),
+               envir = testthat::teardown_env())
+})
+
 .epr_frame <- function() {
   # Two positions, two rounds, deliberately different means and TOG spreads.
   data.frame(

@@ -643,6 +643,16 @@ test_that("EPV centring aborts rather than silently returning uncentred values",
 
 
 test_that("EPR_POSITION_SHRINK holds back thin cells and leaves fat ones alone", {
+  # Pin the flag ON rather than relying on the production default. This test
+  # passed in isolation and FAILED in the full run, because
+  # test-epr-position-centring.R pins the whole file to the full correction and
+  # its teardown does not necessarily restore before this file is sourced. A
+  # test that depends on ambient global state is a test that passes or fails on
+  # file ordering.
+  .old <- get("EPR_POSITION_SHRINK", envir = asNamespace("torp"))
+  assignInNamespace("EPR_POSITION_SHRINK", TRUE, ns = "torp")
+  withr::defer(assignInNamespace("EPR_POSITION_SHRINK", .old, ns = "torp"))
+
   # Shipped 2026-07-29 on correctness, not MAE: a (season, round, position)
   # cell at 2021 round 1 carries a weight of ~0.7 because nobody has history
   # yet, and the FULL correction subtracts a "position average" computed from
