@@ -145,7 +145,13 @@ jobs:
   build-predictions:
     needs: compute-ratings
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # 30 was too tight: on 2026-07-29 a cold r-lib dependency cache spent ~30
+    # min compiling packages, leaving ~3 min for the pipeline. The job printed
+    # "Pipeline Complete" at 08:52:34 and was killed at 08:52:35 -- taking its
+    # deferred R warnings with it, which is why a silent predictions-CSV failure
+    # that round went entirely unlogged. A warm-cache run of the same work takes
+    # 9 min, so this is headroom for cache misses, not for slow work.
+    timeout-minutes: 60
 
     permissions:
       contents: write

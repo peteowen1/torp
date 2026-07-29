@@ -31,8 +31,9 @@
 #'   no-op, because no key is needed.
 #' @return \code{dt}, with \code{.listed_bucket} added when available.
 #' @keywords internal
-.attach_listed_pos <- function(dt, listed_pos, center = TRUE) {
-  if (!isTRUE(center) || !isTRUE(PSR_CENTRE_ON_LISTED)) return(dt)
+.attach_listed_pos <- function(dt, listed_pos, center = TRUE,
+                               centre_on_listed = PSR_CENTRE_ON_LISTED) {
+  if (!isTRUE(center) || !isTRUE(centre_on_listed)) return(dt)
 
   # Self-load when the caller did not supply one. This is deliberate: making
   # listed_pos a REQUIRED argument would abort ~15 existing call sites across
@@ -144,7 +145,8 @@
 #' @export
 calculate_psr <- function(skills, coef_df, center = TRUE,
                           centre_by_round = PSR_CENTRE_BY_ROUND,
-                          listed_pos = NULL) {
+                          listed_pos = NULL,
+                          centre_on_listed = PSR_CENTRE_ON_LISTED) {
   dt <- data.table::as.data.table(skills)
 
   # Validate coef_df
@@ -156,7 +158,7 @@ calculate_psr <- function(skills, coef_df, center = TRUE,
   # network via load_player_details(), and a caller who passed a malformed
   # coef_df should get the coef_df error rather than a centring one raised
   # while fetching data for a call that was never going to succeed.
-  dt <- .attach_listed_pos(dt, listed_pos, center)
+  dt <- .attach_listed_pos(dt, listed_pos, center, centre_on_listed)
 
   # Filter to non-zero coefficients
   coef_df <- coef_df[coef_df$beta != 0, , drop = FALSE]
@@ -324,16 +326,17 @@ calculate_psr <- function(skills, coef_df, center = TRUE,
 calculate_psr_components <- function(skills, coef_df, osr_coef_df, dsr_coef_df,
                                      center = TRUE,
                                      centre_by_round = PSR_CENTRE_BY_ROUND,
-                                     listed_pos = NULL) {
+                                     listed_pos = NULL,
+                                     centre_on_listed = PSR_CENTRE_ON_LISTED) {
   # All three arms MUST get the same listed_pos. osr + dsr are shifted to sum to
   # psr below, so centring them on different keys would push the discrepancy
   # into that shift and silently distort the decomposition rather than erroring.
   # Margin PSR (the authoritative total)
-  psr_result <- calculate_psr(skills, coef_df, center = center, centre_by_round = centre_by_round, listed_pos = listed_pos)
+  psr_result <- calculate_psr(skills, coef_df, center = center, centre_by_round = centre_by_round, listed_pos = listed_pos, centre_on_listed = centre_on_listed)
 
   # Raw offensive and defensive scores
-  osr_result <- calculate_psr(skills, osr_coef_df, center = center, centre_by_round = centre_by_round, listed_pos = listed_pos)
-  dsr_result <- calculate_psr(skills, dsr_coef_df, center = center, centre_by_round = centre_by_round, listed_pos = listed_pos)
+  osr_result <- calculate_psr(skills, osr_coef_df, center = center, centre_by_round = centre_by_round, listed_pos = listed_pos, centre_on_listed = centre_on_listed)
+  dsr_result <- calculate_psr(skills, dsr_coef_df, center = center, centre_by_round = centre_by_round, listed_pos = listed_pos, centre_on_listed = centre_on_listed)
 
   # Additive shift: distribute residual evenly so osr + dsr = psr
   raw_osr <- osr_result$psr
@@ -1423,13 +1426,14 @@ explain_player_rating <- function(player,
 #' @keywords internal
 .compute_psr_from_stat_ratings <- function(skills, psr_coef_path = NULL, center = TRUE,
                                           centre_by_round = PSR_CENTRE_BY_ROUND,
-                                          listed_pos = NULL) {
+                                          listed_pos = NULL,
+                                          centre_on_listed = PSR_CENTRE_ON_LISTED) {
   # This is already the I/O boundary for the PSR path (it reads the coefficient
   # CSVs), so it is also the right place to source listed positions when the
   # caller has not. Doing it here rather than in calculate_psr() keeps that
   # function pure and testable, while making it hard for a caller to
   # accidentally centre on the wrong taxonomy by forgetting an argument.
-  if (is.null(listed_pos) && isTRUE(center) && isTRUE(PSR_CENTRE_ON_LISTED)) {
+  if (is.null(listed_pos) && isTRUE(center) && isTRUE(centre_on_listed)) {
     listed_pos <- .load_listed_positions(unique(data.table::as.data.table(skills)$season))
   }
 
@@ -1455,11 +1459,11 @@ explain_player_rating <- function(player,
     osr_coef_df <- utils::read.csv(osr_path)
     dsr_coef_df <- utils::read.csv(dsr_path)
     calculate_psr_components(skills, coef_df, osr_coef_df, dsr_coef_df, center = center,
-                             centre_by_round = centre_by_round, listed_pos = listed_pos)
+                             centre_by_round = centre_by_round, listed_pos = listed_pos, centre_on_listed = centre_on_listed)
   } else {
     cli::cli_inform("OSR/DSR coefficient files not found -- computing PSR only (no osr/dsr decomposition)")
     calculate_psr(skills, coef_df, center = center, centre_by_round = centre_by_round,
-                  listed_pos = listed_pos)
+                  listed_pos = listed_pos, centre_on_listed = centre_on_listed)
   }
 }
 

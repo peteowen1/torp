@@ -956,6 +956,15 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
     error = function(e) {
       local_path <- file.path("data-raw", paste0(pred_file_name, ".parquet"))
       arrow::write_parquet(combined, local_path)
+      # cli_alert_danger FIRST, because it prints immediately. R defers warnings
+      # to the end of the script, and on 2026-07-29 the job was killed by its
+      # timeout one second after the pipeline finished -- so this warning never
+      # printed and a predictions/CSV divergence that fed Squiggle stale tips
+      # left no trace anywhere in the log.
+      cli::cli_alert_danger(
+        "FAILED to upload locked predictions for {pred_file_name}: {conditionMessage(e)}")
+      cli::cli_alert_danger(
+        "squiggle.com.au may now be serving the PREVIOUS round's tips. Verify predictions_<season>.csv and .parquet timestamps agree before first bounce.")
       cli::cli_warn(c(
         "Failed to upload locked predictions: {conditionMessage(e)}",
         "i" = "Saved locally to {local_path}",
