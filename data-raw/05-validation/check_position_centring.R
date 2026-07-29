@@ -10,6 +10,13 @@
 #
 # Usage:  Rscript torp/data-raw/05-validation/check_position_centring.R
 # Exit 0 = centred as claimed, 1 = not.
+#
+# EXPECTED TO FAIL ON SECTION 5 UNTIL THE FIRST RATINGS REBUILD AFTER
+# 2026-07-29. The PSR per-round centring shipped that day; the currently
+# published artifact predates it and still shows a ~0.42 served-round spread.
+# That failure is this script working, not production breaking -- the fix is
+# held on dev until after round 21, and the rebuild is what will clear it. If it
+# is still failing after that rebuild, THEN it is a real finding.
 
 suppressMessages({
   library(data.table); library(arrow)
@@ -90,11 +97,50 @@ cat("\n=== 4. within-position spread (must be intact, ~2.5-3.3) ===\n")
 sp <- lat[!is.na(pos_bucket), .(sd = round(sd(epr, na.rm = TRUE), 2)), by = pos_bucket]
 print(sp[order(-sd)], row.names = FALSE)
 
-cat("\n=== VERDICT ===\n")
-bad <- max(mx, na.rm = TRUE) > CENTRE_TOL
-if (bad) {
-  cli::cli_alert_danger("NOT centred: worst channel mean {signif(max(mx), 3)} exceeds {CENTRE_TOL}")
+# ---- 5. PSR, the OTHER half of torp -----------------------------------------
+# Added 2026-07-29 with the PSR per-round centring. Until then this script
+# checked EPR only, so two of the four layers that carry a positional level
+# (EPV, EPR, PSV, PSR) shipped with no post-publish verification at all -- and
+# this session showed twice that an unverified normalisation can silently skip
+# (the PSV guard testing for `round` when the column is `round_number`, and the
+# pipeline guard grouping on a taxonomy the centring no longer used).
+#
+# PSR is centred on pos_group, which has no MIDFIELDER_FORWARD and so already
+# matches the 6-way bucket; checking on the bucket is therefore the same
+# partition, not a looser one.
+psr_bad <- FALSE
+if ("psr" %in% names(r)) {
+  psr_w <- if ("wt_80s" %in% names(r)) pmax(dplyr::coalesce(r$wt_80s, 1), 0.01) else r$.w
+  r[, .psrw := psr_w]
+  pc <- r[!is.na(pos_bucket) & is.finite(psr),
+          .(wmean = stats::weighted.mean(psr, .psrw, na.rm = TRUE), n = .N),
+          by = .(season, round, pos_bucket)]
+  psr_worst <- if (nrow(pc)) max(abs(pc$wmean), na.rm = TRUE) else NA_real_
+  cat(sprintf("\n=== 5. PSR per (season, round, position): worst |weighted mean| = %s ===\n",
+              format(psr_worst, scientific = TRUE)))
+  print(lat[!is.na(pos_bucket) & is.finite(psr),
+            .(n = .N, wmean = round(stats::weighted.mean(psr, .w, na.rm = TRUE), 4),
+              sd = round(sd(psr, na.rm = TRUE), 2)), by = pos_bucket][order(-sd)],
+        row.names = FALSE)
+  if (!is.finite(psr_worst) || psr_worst > CENTRE_TOL) {
+    cli::cli_alert_danger("PSR is NOT position-centred per round: worst cell mean {signif(psr_worst, 3)}")
+    psr_bad <- TRUE
+  }
+} else {
+  cli::cli_alert_warning("No {.field psr} column -- PSR centring UNVERIFIED (not the same as verified).")
 }
+
+cat("\n=== VERDICT ===\n")
+# Each failure reports its OWN cause. Folding PSR into `bad` before this block
+# made a PSR failure print the EPR message -- "NOT centred: worst channel mean
+# 3.37e-16 exceeds 0.01", a danger alert quoting a number that passes. A
+# checker that names the wrong cause is barely better than one that says
+# nothing, because the first thing you do is go look at the wrong layer.
+epr_bad <- max(mx, na.rm = TRUE) > CENTRE_TOL
+if (epr_bad) {
+  cli::cli_alert_danger("EPR NOT centred: worst channel mean {signif(max(mx), 3)} exceeds {CENTRE_TOL}")
+}
+bad <- epr_bad || psr_bad
 if (d_epr > SUM_TOL) {
   cli::cli_alert_danger("epr does not equal the sum of its channels (max diff {signif(d_epr, 3)}, tolerance {SUM_TOL})")
   bad <- TRUE
@@ -104,5 +150,5 @@ if (min(sp$sd, na.rm = TRUE) < 1) {
   bad <- TRUE
 }
 if (bad) quit(status = 1)
-cli::cli_alert_success("Published ratings are position-centred, channels sum to epr, spread intact.")
+cli::cli_alert_success("Published ratings are position-centred (EPR and PSR), channels sum to epr, spread intact.")
 quit(status = 0)
