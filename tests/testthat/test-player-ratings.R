@@ -475,10 +475,21 @@ test_that("calculate_torp uses snapshot when season/round absent", {
   d
 }
 
+# Pin the correction to FULL for tests about the centring KEY. Since
+# 2026-07-29 EPR_POSITION_SHRINK is TRUE, which deliberately leaves a residual
+# -- that is a separate property, tested on its own below. Mixing the two would
+# make a taxonomy bug and a shrinkage change indistinguishable.
+.local_full_correction <- function(env = parent.frame()) {
+  old <- get("EPR_POSITION_SHRINK", envir = asNamespace("torp"))
+  assignInNamespace("EPR_POSITION_SHRINK", FALSE, ns = "torp")
+  withr::defer(assignInNamespace("EPR_POSITION_SHRINK", old, ns = "torp"), envir = env)
+}
+
 test_that("centring keys on the same taxonomy the match features use", {
   # The invariant this whole helper exists to protect: ratings are centred on
   # exactly the buckets the model differences. They diverged once (7-way
   # centring vs 6-way features, 2026-07-28) and nothing downstream noticed.
+  .local_full_correction()
   d <- .centre_fixture()
   out <- suppressMessages(centre_epr_by_position(d))
   out$bucket <- .collapse_listed_position(out$position_group)
@@ -628,4 +639,37 @@ test_that("EPV centring aborts rather than silently returning uncentred values",
   d <- .epv_fixture()
   expect_error(centre_epv_by_position(d[, !"position_group"]), "position_group")
   expect_error(centre_epv_by_position(d[, !"epv_hitout_oadj"]), "channel")
+})
+
+
+test_that("EPR_POSITION_SHRINK holds back thin cells and leaves fat ones alone", {
+  # Shipped 2026-07-29 on correctness, not MAE: a (season, round, position)
+  # cell at 2021 round 1 carries a weight of ~0.7 because nobody has history
+  # yet, and the FULL correction subtracts a "position average" computed from
+  # essentially no evidence. Measured cell weights: median 43, 5th pctile 18.
+  mk <- function(w) data.frame(
+    player_id = as.character(1:6), season = 2025L, round = 1L,
+    position_group = rep(c("KEY_DEFENDER", "KEY_FORWARD"), each = 3),
+    pred_tog = w,
+    epr_recv = c(3, 4, 5, 10, 11, 12), epr_disp = 0, epr_spoil = 0, epr_hitout = 0)
+
+  resid <- function(d) {
+    o <- suppressMessages(centre_epr_by_position(d))
+    abs(stats::weighted.mean(o$epr_recv[1:3], o$pred_tog[1:3]))
+  }
+
+  thin <- resid(mk(0.2))    # cell weight 0.6 -- almost no evidence
+  fat  <- resid(mk(20))     # cell weight 60 -- a normal cell
+
+  # A thin cell keeps most of its level (correction held back); a fat cell is
+  # corrected nearly in full.
+  expect_gt(thin, fat)
+  expect_lt(fat, 0.6)
+  expect_gt(thin, 2.0)
+
+  # Shrinkage must NOT touch within-position spread -- it scales the subtracted
+  # constant, not the values.
+  o_thin <- suppressMessages(centre_epr_by_position(mk(0.2)))
+  o_fat  <- suppressMessages(centre_epr_by_position(mk(20)))
+  expect_equal(sd(o_thin$epr_recv[1:3]), sd(o_fat$epr_recv[1:3]), tolerance = 1e-8)
 })

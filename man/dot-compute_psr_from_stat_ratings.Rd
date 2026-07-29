@@ -8,7 +8,9 @@
   skills,
   psr_coef_path = NULL,
   center = TRUE,
-  centre_by_round = PSR_CENTRE_BY_ROUND
+  centre_by_round = PSR_CENTRE_BY_ROUND,
+  listed_pos = NULL,
+  centre_on_listed = PSR_CENTRE_ON_LISTED
 )
 }
 \arguments{
@@ -27,6 +29,15 @@ PSR = contribution above average player.}
 \code{PSR_CENTRE_BY_ROUND}. FALSE reproduces the pre-2026-07-29
 pooled-over-all-history behaviour, and exists so that arm can be
 scored on the match harness from production code rather than a replica.}
+
+\item{listed_pos}{Optional data frame of player_id plus a listed position
+column. Passed through to calculate_psr(); loaded from
+load_player_details() when NULL and centring on listed is requested.}
+
+\item{centre_on_listed}{Logical. Centre on the LISTED position taxonomy
+rather than the stat-ratings frame's own pos_group. Defaults to
+PSR_CENTRE_ON_LISTED (FALSE -- the listed arm was measured and
+regressed, dMAE +0.382).}
 }
 \value{
 A data.table with \code{psr}, \code{osr}, \code{dsr} columns.

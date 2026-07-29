@@ -142,6 +142,12 @@
 #'   taxonomy EPV, EPR and PSV use. Required when
 #'   \code{PSR_CENTRE_ON_LISTED} is TRUE; see the note in the function body for
 #'   why a missing frame aborts rather than falling back.
+#' @param centre_on_listed Logical. Centre on the LISTED position taxonomy that
+#'   EPV/EPR/PSV use, rather than the stat-ratings frame's own \code{pos_group}.
+#'   Defaults to \code{PSR_CENTRE_ON_LISTED}, which is FALSE: the listed arm was
+#'   scored on 2026-07-29 and REGRESSED (dMAE +0.382, CI entirely above zero).
+#'   Exists so that arm stays reachable from production code rather than a
+#'   replica.
 #' @return A data.table with columns: \code{player_id}, \code{player_name},
 #'   \code{season}, \code{round}, \code{pos_group}, \code{psr_raw}, \code{psr}.
 #'
@@ -311,6 +317,13 @@ calculate_psr <- function(skills, coef_df, center = TRUE,
 #'   \code{PSR_CENTRE_BY_ROUND}. FALSE reproduces the pre-2026-07-29
 #'   pooled-over-all-history behaviour, and exists so that arm can be
 #'   scored on the match harness from production code rather than a replica.
+#' @param centre_on_listed Logical. Centre on the LISTED position taxonomy
+#'   rather than the stat-ratings frame's own pos_group. Defaults to
+#'   PSR_CENTRE_ON_LISTED (FALSE -- the listed arm was measured and
+#'   regressed, dMAE +0.382).
+#' @param listed_pos Optional data frame of player_id plus a listed position
+#'   column. Passed through to calculate_psr(); loaded from
+#'   load_player_details() when NULL and centring on listed is requested.
 #' @return A data.table with columns: \code{player_id}, \code{player_name},
 #'   \code{season}, \code{round}, \code{pos_group}, \code{psr_raw}, \code{psr},
 #'   \code{osr}, \code{dsr}.
@@ -1480,6 +1493,13 @@ explain_player_rating <- function(player,
 #'   \code{PSR_CENTRE_BY_ROUND}. FALSE reproduces the pre-2026-07-29
 #'   pooled-over-all-history behaviour, and exists so that arm can be
 #'   scored on the match harness from production code rather than a replica.
+#' @param centre_on_listed Logical. Centre on the LISTED position taxonomy
+#'   rather than the stat-ratings frame's own pos_group. Defaults to
+#'   PSR_CENTRE_ON_LISTED (FALSE -- the listed arm was measured and
+#'   regressed, dMAE +0.382).
+#' @param listed_pos Optional data frame of player_id plus a listed position
+#'   column. Passed through to calculate_psr(); loaded from
+#'   load_player_details() when NULL and centring on listed is requested.
 #' @return A data.table with \code{psr}, \code{osr}, \code{dsr} columns.
 #' @keywords internal
 .compute_psr_from_stat_ratings <- function(skills, psr_coef_path = NULL, center = TRUE,

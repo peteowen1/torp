@@ -200,6 +200,7 @@ EPV_LEVEL_CENTRE <- TRUE
 #' one; it already has one (`psr.R`, the `pos_col` block), keyed on the same raw
 #' `lineup_position`. The two value layers are already symmetric; the open
 #' question is only whether the mirrors should be merged.
+#' @keywords internal
 ROLE_USE_LINEUP_GROUP <- FALSE
 
 #' Group PSV's role centring by `(season, round)` rather than pooling history
@@ -210,6 +211,7 @@ ROLE_USE_LINEUP_GROUP <- FALSE
 #' position averages zero across the dataset while any individual round stays
 #' skewed, and a 2021 round-1 value is centred using 2026 games -- a backtest
 #' leak. Found 2026-07-29 while checking whether PSV had a weekly stage at all.
+#' @keywords internal
 PSV_ROLE_CENTRE_BY_ROUND <- FALSE
 
 #' Shrink the EPR position adjustment instead of applying it in full
@@ -222,15 +224,37 @@ PSV_ROLE_CENTRE_BY_ROUND <- FALSE
 #' Shrinkage is `n / (n + EPR_POSITION_SHRINK_PRIOR)` on the cell's weight, so a
 #' well-populated cell is adjusted nearly in full and a thin one barely at all.
 #' FALSE reproduces the full correction exactly.
-EPR_POSITION_SHRINK <- FALSE
+#' @keywords internal
+EPR_POSITION_SHRINK <- TRUE
 
 #' Prior weight for `EPR_POSITION_SHRINK`, in the cell's own weight units
 #'
 #' A cell carrying this much weight gets half its measured position mean
-#' subtracted. Set from the typical (season, round, position) cell size --
-#' roughly 100-200 TOG-weighted player-games -- so a normal cell lands near
-#' full correction and only genuinely thin cells are held back.
-EPR_POSITION_SHRINK_PRIOR <- 25
+#' subtracted. Set to 5 on MEASURED cell weights (2026-07-29), not the estimate
+#' the first draft used -- that guessed 100-200 TOG-weighted player-games and
+#' was wrong by ~3x. Actual distribution: median 43, 5th pctile 18, max 92.
+#'
+#' What 5 does, on the real distribution:
+#'
+#'   cell weight | fraction of the position mean subtracted
+#'   18 (5th)    | 0.787
+#'   43 (median) | 0.896
+#'   82 (95th)   | 0.942
+#'
+#' So a normal cell keeps ~90% of the correction and only 0.6% of cells drop
+#' below half. The cells it genuinely bites are the ones that deserve it --
+#' 2021 round 1 carries cell weights of 0.7-2.1 because nobody has history yet
+#' and pred_tog is near zero, and TODAY those get the FULL correction computed
+#' off 0.7 units of evidence. Shrinkage cuts that to ~12%.
+#'
+#' \strong{Chosen on correctness, not on MAE.} A six-point sweep
+#' (`ws11_shrink_prior_sweep.R`) put every arm inside the ~0.157 XGBoost noise
+#' floor and produced a NON-MONOTONIC MAE curve (-0.162, -0.069, -0.150,
+#' -0.122, +0.082, -0.021 for priors 5/10/25/50/100/250). A real effect would
+#' show a smooth optimum; a scatter means the differences are noise. Do not
+#' quote any of those deltas as a gain.
+#' @keywords internal
+EPR_POSITION_SHRINK_PRIOR <- 5
 
 #' EPV channel stems the level centring applies to
 #'
@@ -348,6 +372,7 @@ PSR_CENTRE_BY_ROUND <- TRUE
 #' The positional level this was meant to remove (~0.30 in TORP) is real and
 #' still there. The fix is the value/rating split in NEXT-STEPS.md, not this
 #' flag. Setting this TRUE ships a measured regression.
+#' @keywords internal
 PSR_CENTRE_ON_LISTED <- FALSE
 
 #' Whether PSR position centring rescales as well as recentres
@@ -458,6 +483,7 @@ LINEUP_POSITION_GROUP_MAP <- c(
 #' the kind of silent shift that has cost this repo real MAE.
 #'
 #' 21 slots -> 16 groups (13 on-field + INT + SUB + EMERG).
+#' @keywords internal
 LINEUP_GROUP_MAP <- c(
   FB   = "FB",
   BPL  = "BP",   BPR  = "BP",
