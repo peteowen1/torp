@@ -36,6 +36,26 @@ options(torp.local_data_dir = NA)   # the release, never a local mirror
 # every correct run is worse than none -- it trains you to ignore it.
 CENTRE_TOL <- 0.01
 SUM_TOL    <- 0.03
+
+# EPR_POSITION_SHRINK (shipped 2026-07-29) deliberately leaves a residual: it
+# subtracts n/(n+prior) of the position mean, not all of it. At prior 5 on the
+# measured cell-weight distribution that is ~90% of the correction, so bucket
+# means land near 0.1 rather than 1e-17 -- and the strict tolerance above would
+# fail on every correct run. A checker that cries wolf gets ignored, which is
+# the failure this file's own header warns about.
+#
+# So the tolerance becomes conditional. When shrinkage is ON we are no longer
+# asserting "zero"; we are asserting "centring still did nearly all of its job".
+# 0.5 sits well above the ~0.1 expected residual and far below the 1.7-2.9
+# UNCENTRED level, so it still catches centring silently not happening at all
+# -- which is the thing this section exists to detect.
+EPR_SHRINK_ON <- isTRUE(tryCatch(torp:::EPR_POSITION_SHRINK, error = function(e) FALSE))
+EPR_TOL <- if (EPR_SHRINK_ON) 0.50 else CENTRE_TOL
+if (EPR_SHRINK_ON) {
+  cat(sprintf("NOTE: EPR_POSITION_SHRINK is ON (prior %s) -- bucket means are expected to be\n",
+              tryCatch(torp:::EPR_POSITION_SHRINK_PRIOR, error = function(e) "?")))
+  cat("      NEAR zero, not AT zero. Section 1 tolerance relaxed accordingly.\n\n")
+}
 # PSR is stored to more decimal places than EPR and is centred over a much
 # larger population, so it lands ~2e-04 rather than ~1e-16. Set well above the
 # observed value but two orders below the ~0.76 spread an uncentred PSR shows.
@@ -214,9 +234,9 @@ cat("\n=== VERDICT ===\n")
 # 3.37e-16 exceeds 0.01", a danger alert quoting a number that passes. A
 # checker that names the wrong cause is barely better than one that says
 # nothing, because the first thing you do is go look at the wrong layer.
-epr_bad <- max(mx, na.rm = TRUE) > CENTRE_TOL
+epr_bad <- max(mx, na.rm = TRUE) > EPR_TOL
 if (epr_bad) {
-  cli::cli_alert_danger("EPR NOT centred: worst channel mean {signif(max(mx), 3)} exceeds {CENTRE_TOL}")
+  cli::cli_alert_danger("EPR NOT centred: worst channel mean {signif(max(mx), 3)} exceeds {EPR_TOL}{if (EPR_SHRINK_ON) ' (shrinkage-adjusted tolerance)' else ''}")
 }
 bad <- epr_bad || psr_bad
 if (d_epr > SUM_TOL) {
