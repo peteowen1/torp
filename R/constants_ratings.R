@@ -493,6 +493,12 @@ LINEUP_GROUP_MAP <- c(
     # quantity in the SAME string, and that line has none, so it errors rather
     # than pluralising. Third time this shape has bitten today -- see also the
     # `{.checked}` dot-prefix crash that took down the ratings pipeline.
+    # alert_danger, not warn: an unmapped slot drops those rows out of centring
+    # entirely, and a deferred warning is the reporting path that lost the
+    # 2026-07-29 CSV divergence. Latent today (the flag defaults FALSE) -- so
+    # was that bug, until it wasn't.
+    cli::cli_alert_danger(
+      "{length(unmapped)} unmapped lineup_position value{?s} left UNCENTRED: {paste(unmapped, collapse = ', ')}")
     cli::cli_warn(c(
       "{length(unmapped)} unmapped {.field lineup_position} value{?s}: {.val {unmapped}}",
       "i" = "Add them to {.code LINEUP_GROUP_MAP} -- unmapped rows are left uncentred."

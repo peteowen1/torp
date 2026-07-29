@@ -272,6 +272,18 @@ save_to_release <- function(df, file_name, release_tag, also_csv = FALSE, prev_r
                            tag = release_tag,
                            name = csv_name)
     }, error = function(e) {
+      # cli_alert_danger FIRST: it prints immediately. A bare cli_warn is
+      # deferred to the end of an Rscript run and dropped past
+      # getOption("nwarnings"), which is exactly how the 2026-07-29 CSV
+      # divergence left no trace in the log. The verify path above was fixed
+      # for that; THIS handler -- the one that fires when the CSV upload itself
+      # fails -- was left on the weak path in the same commit.
+      cli::cli_alert_danger(
+        "CSV copy FAILED for {csv_name} (parquet uploaded fine): {conditionMessage(e)}")
+      if (release_tag == "predictions") {
+        cli::cli_alert_danger(
+          "squiggle.com.au reads this CSV -- it will keep serving the PREVIOUS round's tips until this succeeds.")
+      }
       cli::cli_warn(c(
         "!" = "CSV copy FAILED for {.val {csv_name}} (parquet uploaded fine): {conditionMessage(e)}",
         "x" = if (release_tag == "predictions")

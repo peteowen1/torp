@@ -80,8 +80,11 @@
     ))
   }
   if (matched < 0.9 * nrow(out)) {
-    cli::cli_warn(
-      "Only {matched} of {nrow(out)} stat-rating rows matched a listed position; the rest fall back to the global mean.")
+    # alert_danger, not warn: this means PSR centring has quietly degraded to a
+    # global-mean fallback for >10% of rows, i.e. a wrong published number, and
+    # a deferred warning is the reporting path that already failed once today.
+    cli::cli_alert_danger(
+      "Only {matched} of {nrow(out)} stat-rating rows matched a listed position -- the rest fall back to the GLOBAL mean, not their position's.")
   }
   out
 }
@@ -454,6 +457,25 @@ calculate_psv <- function(player_stats, coef_df, tog_adjust = TRUE, center = TRU
 
   dt[, psv_raw := as.numeric(mat %*% betas)]
 
+  # A MISSING position_group used to skip centring in silence: the guard below
+  # tests `"position_group" %in% names(dt)`, so a frame without it fell straight
+  # through with no abort and no warning. That is the same shape as the bug this
+  # whole guard was written for -- the original PSV check tested for `round`
+  # when the frame carries `round_number`, quietly centred nothing, and left the
+  # spread unchanged at 0.812 while every downstream check passed.
+  #
+  # It is a live risk, not theoretical: load_player_stats() returns `position`,
+  # NOT `position_group`, so a caller passing that frame directly gets silently
+  # uncentred PSV. Fail loud instead, and name the column we actually looked for.
+  if (center && isTRUE(PSV_LEVEL_CENTRE) && !"position_group" %in% names(dt)) {
+    cli::cli_abort(c(
+      "Cannot centre PSV by position: no {.field position_group} column.",
+      "i" = "Found position-ish columns: {.val {grep('^pos|position', names(dt), value = TRUE)}}",
+      "i" = "{.fun load_player_stats} returns {.field position}, not {.field position_group} -- join the roster first.",
+      "x" = "Refusing to return uncentred PSV that callers will treat as centred."
+    ))
+  }
+
   # Resolve position column for centering
   pos_col <- if ("lineup_position" %in% names(dt)) "lineup_position"
              else if ("position_group" %in% names(dt)) "position_group"
@@ -490,7 +512,11 @@ calculate_psv <- function(player_stats, coef_df, tog_adjust = TRUE, center = TRU
     pos_col
   }
   if (center && is.null(pos_col)) {
-    cli::cli_warn("No position column found for PSV centering; using global mean subtraction")
+    # Reachable only when PSV_LEVEL_CENTRE is FALSE -- the abort above already
+    # rejected a centring request with no position_group. Previously this
+    # printed "using global mean subtraction" and then the function aborted
+    # anyway, advertising a fallback the code no longer allows to complete.
+    cli::cli_warn("No position column found for PSV role centering; using global mean subtraction")
   }
 
   # Center by position to produce psv_p80, a centered per-full-game (per-80)
@@ -540,24 +566,6 @@ calculate_psv <- function(player_stats, coef_df, tog_adjust = TRUE, center = TRU
   # ABORT rather than skip if centring was asked for and cannot be done.
   .psv_round_col <- intersect(c("round", "round_number"), names(dt))[1]
 
-  # A MISSING position_group used to skip centring in silence: the guard below
-  # tests `"position_group" %in% names(dt)`, so a frame without it fell straight
-  # through with no abort and no warning. That is the same shape as the bug this
-  # whole guard was written for -- the original PSV check tested for `round`
-  # when the frame carries `round_number`, quietly centred nothing, and left the
-  # spread unchanged at 0.812 while every downstream check passed.
-  #
-  # It is a live risk, not theoretical: load_player_stats() returns `position`,
-  # NOT `position_group`, so a caller passing that frame directly gets silently
-  # uncentred PSV. Fail loud instead, and name the column we actually looked for.
-  if (center && isTRUE(PSV_LEVEL_CENTRE) && !"position_group" %in% names(dt)) {
-    cli::cli_abort(c(
-      "Cannot centre PSV by position: no {.field position_group} column.",
-      "i" = "Found position-ish columns: {.val {grep('^pos|position', names(dt), value = TRUE)}}",
-      "i" = "{.fun load_player_stats} returns {.field position}, not {.field position_group} -- join the roster first.",
-      "x" = "Refusing to return uncentred PSV that callers will treat as centred."
-    ))
-  }
   if (center && isTRUE(PSV_LEVEL_CENTRE) && "position_group" %in% names(dt) &&
       (is.na(.psv_round_col) || !"season" %in% names(dt))) {
     cli::cli_abort(c(
@@ -1533,8 +1541,15 @@ explain_player_rating <- function(player,
   if (length(seasons) == 0) return(NULL)
 
   got <- lapply(seasons, function(s) {
+    # Name the season AND the reason. Swallowing this silently means a single
+    # season vanishing from the join shows up only as a lower match rate
+    # downstream -- a symptom with no cause attached, which is not debuggable.
     d <- tryCatch(data.table::as.data.table(load_player_details(s)),
-                  error = function(e) NULL)
+                  error = function(e) {
+                    cli::cli_alert_danger(
+                      "Listed positions for season {s} failed to load: {conditionMessage(e)}")
+                    NULL
+                  })
     if (is.null(d) || nrow(d) == 0) return(NULL)
     pcol <- intersect(c("position_group", "position"), names(d))[1]
     if (is.na(pcol) || !"player_id" %in% names(d)) return(NULL)

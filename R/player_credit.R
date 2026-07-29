@@ -488,11 +488,11 @@ create_player_game_data <- function(pbp_data = NULL,
   )
 
   # The role-adjustment key. Raw `lineup_position` (21 slots) by default; with
-  # EPV_ROLE_USE_LINEUP_GROUP, the mirror-merged `lineup_group` (16). Assigned to
+  # ROLE_USE_LINEUP_GROUP, the mirror-merged `lineup_group` (16). Assigned to
   # a column rather than switched inside group_by() so the key that was actually
   # used is inspectable on the returned frame -- an arm you cannot verify from
   # the output is an arm you cannot trust you scored.
-  plyr_gm_df$.role_key <- if (isTRUE(EPV_ROLE_USE_LINEUP_GROUP)) {
+  plyr_gm_df$.role_key <- if (isTRUE(ROLE_USE_LINEUP_GROUP)) {
     .collapse_lineup_group(plyr_gm_df$lineup_position)
   } else {
     as.character(plyr_gm_df$lineup_position)
@@ -502,7 +502,7 @@ create_player_game_data <- function(pbp_data = NULL,
   if (all(is.na(plyr_gm_df$.role_key))) {
     cli::cli_abort(c(
       "EPV role adjustment key is entirely NA.",
-      "i" = "EPV_ROLE_USE_LINEUP_GROUP = {EPV_ROLE_USE_LINEUP_GROUP}",
+      "i" = "ROLE_USE_LINEUP_GROUP = {ROLE_USE_LINEUP_GROUP}",
       "x" = "Refusing to centre every player against one global cell."
     ))
   }
