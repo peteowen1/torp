@@ -252,6 +252,24 @@ PSV_LEVEL_CENTRE <- TRUE
 #' @keywords internal
 PSR_CENTRE_BY_ROUND <- TRUE
 
+#' Centre PSR on the LISTED position taxonomy
+#'
+#' TRUE centres PSR on `.collapse_listed_position()` of a player's listed
+#' position -- the same key EPV, EPR and PSV use -- instead of the stat-ratings
+#' frame's `pos_group`, which is a PBP-derived PLAYSTYLE label.
+#'
+#' The two are different facts, not different vintages of one fact: the mappers
+#' were verified to produce an identical partition of the same seven raw labels,
+#' so the disagreement is entirely in the source data. They differ for 13.2% of
+#' player-rounds overall and 20.3% in 2026. Centring on playstyle while TORP
+#' reads the result under listed put ~0.30 of positional level back into TORP,
+#' undoing half of what the 2026-07-29 program removed at EPV/EPR. 2021, where
+#' the labels agree 100%, showed exactly 0.000 spread.
+#'
+#' FALSE reproduces the pre-2026-07-29 playstyle behaviour so that arm stays
+#' scoreable on the match harness from production code rather than a replica.
+PSR_CENTRE_ON_LISTED <- TRUE
+
 #' Whether PSR position centring rescales as well as recentres
 #'
 #' The mirror of \code{EPV_POSITION_STANDARDISE} on the PSR side.

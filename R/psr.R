@@ -5,6 +5,86 @@
 # PSR = "predicted margin contribution points" above league average.
 
 
+#' Attach the listed-position centring key to a PSR input frame
+#'
+#' Adds \code{.listed_bucket}, the 6-way LISTED taxonomy that EPV, EPR and PSV
+#' already centre on, so PSR can be centred on the same key rather than on the
+#' PBP-derived playstyle label the stat-ratings frame happens to carry.
+#'
+#' Why this exists as a join rather than a column preference: the released
+#' \code{player_stat_ratings} frame carries \code{pos_group} and \code{wt_80s}
+#' and no listed position at all, so there is nothing local to prefer.
+#'
+#' Why a missing frame ABORTS instead of falling back: a silent fallback here
+#' reproduces the exact defect this change is fixing. The old preference chain
+#' fell through to \code{pos_group} without comment, and the resulting
+#' centred-on-A-read-as-B mismatch survived every existing check for months. The
+#' same shape took down the PSV guard (tested \code{round}, frame had
+#' \code{round_number}, silently centred nothing, spread unchanged at 0.812).
+#' A normalisation that quietly does the wrong thing is worse than one that
+#' stops.
+#'
+#' @param dt Data.table of stat ratings.
+#' @param listed_pos Data frame with \code{player_id} plus one of
+#'   \code{position_group} / \code{position}; or NULL.
+#' @param center Whether centring was requested at all. When FALSE this is a
+#'   no-op, because no key is needed.
+#' @return \code{dt}, with \code{.listed_bucket} added when available.
+#' @keywords internal
+.attach_listed_pos <- function(dt, listed_pos, center = TRUE) {
+  if (!isTRUE(center) || !isTRUE(PSR_CENTRE_ON_LISTED)) return(dt)
+
+  # Self-load when the caller did not supply one. This is deliberate: making
+  # listed_pos a REQUIRED argument would abort ~15 existing call sites across
+  # torp's pipeline, the stat-rating trainers, the tests and seven torpmodels
+  # harness scripts -- and every one of them wants listed centring. Defaulting
+  # to "load it" fixes them all at once; defaulting to "abort" would have made
+  # the correct behaviour the one you must remember to ask for, which is how
+  # the playstyle key survived unnoticed in the first place.
+  if (is.null(listed_pos)) {
+    listed_pos <- .load_listed_positions(unique(dt$season))
+  }
+
+  if (is.null(listed_pos)) {
+    cli::cli_abort(c(
+      "PSR_CENTRE_ON_LISTED is TRUE but no listed positions are available.",
+      "i" = "Pass {.arg listed_pos} explicitly, or make {.fun load_player_details} reachable.",
+      "x" = "Refusing to centre PSR on a playstyle label while TORP reads it as a listed one.",
+      "i" = "Set {.code PSR_CENTRE_ON_LISTED <- FALSE} to deliberately score the old arm."
+    ))
+  }
+
+  lp <- data.table::as.data.table(listed_pos)
+  pcol <- intersect(c("position_group", "position"), names(lp))[1]
+  if (is.na(pcol) || !"player_id" %in% names(lp)) {
+    cli::cli_abort(c(
+      "{.arg listed_pos} must have {.field player_id} and one of {.field position_group} / {.field position}.",
+      "i" = "Got: {.val {names(lp)}}"
+    ))
+  }
+
+  # One listed position per player. Take the LAST non-missing value, matching
+  # how player_details resolves a mid-season relisting.
+  lp <- lp[!is.na(get(pcol)), .(.lp_raw = get(pcol)[.N]), by = player_id]
+  lp[, .listed_bucket := .collapse_listed_position(.lp_raw)]
+
+  out <- merge(dt, lp[, .(player_id, .listed_bucket)], by = "player_id",
+               all.x = TRUE, sort = FALSE)
+
+  matched <- sum(!is.na(out$.listed_bucket))
+  if (matched == 0L) {
+    cli::cli_abort(c(
+      "No row matched a listed position -- PSR centring key would be entirely NA.",
+      "x" = "An empty join is not a successful one."
+    ))
+  }
+  if (matched < 0.9 * nrow(out)) {
+    cli::cli_warn(
+      "Only {matched} of {nrow(out)} stat-rating rows matched a listed position; the rest fall back to the global mean.")
+  }
+  out
+}
+
 #' Resolve path to PSR coefficient CSV
 #'
 #' Checks inst/extdata first, then falls back to data-raw/cache-stat-ratings/.
@@ -52,18 +132,31 @@
 #'   \code{PSR_CENTRE_BY_ROUND}. FALSE reproduces the pre-2026-07-29
 #'   pooled-over-all-history behaviour, and exists so that arm can be
 #'   scored on the match harness from production code rather than a replica.
+#' @param listed_pos Optional data frame carrying each player's LISTED position:
+#'   \code{player_id} plus one of \code{position_group} / \code{position}. Supply
+#'   it (from \code{load_player_details()}) to centre PSR on the same listed
+#'   taxonomy EPV, EPR and PSV use. Required when
+#'   \code{PSR_CENTRE_ON_LISTED} is TRUE; see the note in the function body for
+#'   why a missing frame aborts rather than falling back.
 #' @return A data.table with columns: \code{player_id}, \code{player_name},
 #'   \code{season}, \code{round}, \code{pos_group}, \code{psr_raw}, \code{psr}.
 #'
 #' @export
 calculate_psr <- function(skills, coef_df, center = TRUE,
-                          centre_by_round = PSR_CENTRE_BY_ROUND) {
+                          centre_by_round = PSR_CENTRE_BY_ROUND,
+                          listed_pos = NULL) {
   dt <- data.table::as.data.table(skills)
 
   # Validate coef_df
   if (!all(c("stat_name", "beta") %in% names(coef_df))) {
     cli::cli_abort("{.arg coef_df} must have columns {.val stat_name} and {.val beta}")
   }
+
+  # AFTER argument validation, deliberately: .attach_listed_pos() can hit the
+  # network via load_player_details(), and a caller who passed a malformed
+  # coef_df should get the coef_df error rather than a centring one raised
+  # while fetching data for a call that was never going to succeed.
+  dt <- .attach_listed_pos(dt, listed_pos, center)
 
   # Filter to non-zero coefficients
   coef_df <- coef_df[coef_df$beta != 0, , drop = FALSE]
@@ -131,7 +224,17 @@ calculate_psr <- function(skills, coef_df, center = TRUE,
   # Moving from pos_group to a weekly 6-way role improved overall positional
   # calibration by 0.138 on mean|beta-1| with P(improves) 0.956; going finer
   # than 6-way added nothing (P 0.417).
-  psr_pos_col <- if ("lineup_pos_group" %in% names(dt)) "lineup_pos_group"
+  # `.listed_bucket` first: it is the LISTED taxonomy that EPV, EPR and PSV all
+  # centre on, attached by .attach_listed_pos(). Until 2026-07-29 this list
+  # started at lineup_pos_group and, since the released stat-ratings frame
+  # carries none of the weekly columns, always fell through to `pos_group` --
+  # a PBP-derived PLAYSTYLE label, not a listed one. Measured against
+  # torp_ratings' listed position the two disagree for 13.2% of player-rounds
+  # (20.3% in 2026), and centring on one while TORP reads the other put ~0.30 of
+  # positional level straight back into TORP. 2021, where the labels agree 100%,
+  # showed exactly 0.000 spread -- the control that identified the mechanism.
+  psr_pos_col <- if (".listed_bucket" %in% names(dt)) ".listed_bucket"
+                 else if ("lineup_pos_group" %in% names(dt)) "lineup_pos_group"
                  else if ("lineup_position" %in% names(dt)) "lineup_position"
                  else if ("pos_group" %in% names(dt)) "pos_group"
                  else NULL
@@ -220,13 +323,17 @@ calculate_psr <- function(skills, coef_df, center = TRUE,
 #' @export
 calculate_psr_components <- function(skills, coef_df, osr_coef_df, dsr_coef_df,
                                      center = TRUE,
-                                     centre_by_round = PSR_CENTRE_BY_ROUND) {
+                                     centre_by_round = PSR_CENTRE_BY_ROUND,
+                                     listed_pos = NULL) {
+  # All three arms MUST get the same listed_pos. osr + dsr are shifted to sum to
+  # psr below, so centring them on different keys would push the discrepancy
+  # into that shift and silently distort the decomposition rather than erroring.
   # Margin PSR (the authoritative total)
-  psr_result <- calculate_psr(skills, coef_df, center = center, centre_by_round = centre_by_round)
+  psr_result <- calculate_psr(skills, coef_df, center = center, centre_by_round = centre_by_round, listed_pos = listed_pos)
 
   # Raw offensive and defensive scores
-  osr_result <- calculate_psr(skills, osr_coef_df, center = center, centre_by_round = centre_by_round)
-  dsr_result <- calculate_psr(skills, dsr_coef_df, center = center, centre_by_round = centre_by_round)
+  osr_result <- calculate_psr(skills, osr_coef_df, center = center, centre_by_round = centre_by_round, listed_pos = listed_pos)
+  dsr_result <- calculate_psr(skills, dsr_coef_df, center = center, centre_by_round = centre_by_round, listed_pos = listed_pos)
 
   # Additive shift: distribute residual evenly so osr + dsr = psr
   raw_osr <- osr_result$psr
@@ -1315,7 +1422,17 @@ explain_player_rating <- function(player,
 #' @return A data.table with \code{psr}, \code{osr}, \code{dsr} columns.
 #' @keywords internal
 .compute_psr_from_stat_ratings <- function(skills, psr_coef_path = NULL, center = TRUE,
-                                          centre_by_round = PSR_CENTRE_BY_ROUND) {
+                                          centre_by_round = PSR_CENTRE_BY_ROUND,
+                                          listed_pos = NULL) {
+  # This is already the I/O boundary for the PSR path (it reads the coefficient
+  # CSVs), so it is also the right place to source listed positions when the
+  # caller has not. Doing it here rather than in calculate_psr() keeps that
+  # function pure and testable, while making it hard for a caller to
+  # accidentally centre on the wrong taxonomy by forgetting an argument.
+  if (is.null(listed_pos) && isTRUE(center) && isTRUE(PSR_CENTRE_ON_LISTED)) {
+    listed_pos <- .load_listed_positions(unique(data.table::as.data.table(skills)$season))
+  }
+
   # Resolve margin coefficient path
 
   if (is.null(psr_coef_path)) {
@@ -1338,9 +1455,45 @@ explain_player_rating <- function(player,
     osr_coef_df <- utils::read.csv(osr_path)
     dsr_coef_df <- utils::read.csv(dsr_path)
     calculate_psr_components(skills, coef_df, osr_coef_df, dsr_coef_df, center = center,
-                             centre_by_round = centre_by_round)
+                             centre_by_round = centre_by_round, listed_pos = listed_pos)
   } else {
     cli::cli_inform("OSR/DSR coefficient files not found -- computing PSR only (no osr/dsr decomposition)")
-    calculate_psr(skills, coef_df, center = center, centre_by_round = centre_by_round)
+    calculate_psr(skills, coef_df, center = center, centre_by_round = centre_by_round,
+                  listed_pos = listed_pos)
   }
+}
+
+#' Load listed positions for a set of seasons
+#'
+#' Sources the SAME column EPR keys on -- \code{load_player_details()} -- so PSR
+#' and EPR agree by construction rather than by coincidence. Measured 2026-07-29:
+#' \code{player_details} position vs \code{torp_ratings$position_group} agree
+#' 100.0%.
+#'
+#' @param seasons Integer vector of seasons.
+#' @return A data.table of \code{player_id}, \code{position}, or NULL when no
+#'   season yielded rows.
+#' @keywords internal
+.load_listed_positions <- function(seasons) {
+  seasons <- sort(unique(seasons[!is.na(seasons)]))
+  if (length(seasons) == 0) return(NULL)
+
+  got <- lapply(seasons, function(s) {
+    d <- tryCatch(data.table::as.data.table(load_player_details(s)),
+                  error = function(e) NULL)
+    if (is.null(d) || nrow(d) == 0) return(NULL)
+    pcol <- intersect(c("position_group", "position"), names(d))[1]
+    if (is.na(pcol) || !"player_id" %in% names(d)) return(NULL)
+    d[!is.na(get(pcol)), .(player_id, position = as.character(get(pcol)), season = s)]
+  })
+  got <- got[!vapply(got, is.null, logical(1))]
+  if (length(got) == 0) {
+    # Not a warning. The caller aborts on NULL when centring is required, and a
+    # warning here would read as "handled" for a condition that is not.
+    return(NULL)
+  }
+  out <- data.table::rbindlist(got, use.names = TRUE, fill = TRUE)
+  # Latest season's listing wins for a player who changed position across years.
+  data.table::setorder(out, player_id, season)
+  out[, .(position = position[.N]), by = player_id]
 }

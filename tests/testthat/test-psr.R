@@ -1,5 +1,26 @@
 # Tests for calculate_psr()
 
+# Since 2026-07-29 calculate_psr() centres on the LISTED taxonomy and aborts
+# rather than silently falling back (see PSR_CENTRE_ON_LISTED). These fixtures
+# use synthetic player_ids that match no real roster, so supply the key here.
+# Mapping each distinct pos_group to a distinct listed label preserves the exact
+# partition these tests were written against, so every assertion below still
+# measures what it originally measured.
+.listed_for <- function(skills) {
+  lab <- c("MIDFIELDER", "MEDIUM_FORWARD", "MEDIUM_DEFENDER",
+           "KEY_FORWARD", "KEY_DEFENDER", "RUCK")
+  pos <- if (is.null(skills$pos_group)) {
+    # No pos_group: the old code centred these fixtures as ONE global group, so
+    # give every player the same listed label to preserve that partition.
+    rep(lab[1], length(skills$player_id))
+  } else {
+    pg <- as.character(skills$pos_group)
+    lab[match(pg, unique(pg))]
+  }
+  data.frame(player_id = skills$player_id, position = pos,
+             stringsAsFactors = FALSE)
+}
+
 test_that("calculate_psr returns expected structure", {
   skills <- data.table::data.table(
     player_id = c("P1", "P2", "P3"),
@@ -17,7 +38,7 @@ test_that("calculate_psr returns expected structure", {
     stringsAsFactors = FALSE
   )
 
-  result <- calculate_psr(skills, coef_df)
+  result <- calculate_psr(skills, coef_df, listed_pos = .listed_for(skills))
 
   expect_s3_class(result, "data.table")
   expect_true("psr" %in% names(result))
@@ -65,7 +86,7 @@ test_that("calculate_psr centers by default", {
     stringsAsFactors = FALSE
   )
 
-  result <- calculate_psr(skills, coef_df, center = TRUE)
+  result <- calculate_psr(skills, coef_df, center = TRUE, listed_pos = .listed_for(skills))
 
   # Raw: P1=10, P2=0; mean=5; centered: P1=5, P2=-5
   expect_equal(result[player_id == "P1"]$psr, 5 * PSV_POINTS_SCALE)
@@ -139,7 +160,7 @@ test_that("calculate_psr handles all-zero coefficients", {
   coef_df <- data.frame(stat_name = "kicks", beta = 0)
 
   expect_warning(
-    result <- calculate_psr(skills, coef_df),
+    result <- calculate_psr(skills, coef_df, listed_pos = .listed_for(skills)),
     "zero"
   )
   expect_equal(result$psr, 0)
