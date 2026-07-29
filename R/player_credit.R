@@ -135,6 +135,19 @@ centre_epv_by_position <- function(pgd, channels = EPV_LEVEL_CENTRE_CHANNELS) {
        by = .(season, round, .cpg)]
   }
 
+  # Points-scale calibration, applied at the VALUE layer so it flows into the
+  # rating (Pete's call 2026-07-29 -- the same principle as the level fix).
+  # EPR converted at 0.919 points per rating point, so new = 0.919 * old.
+  #
+  # Scaling here is NOT sufficient on its own: .bayesian_shrink() adds
+  # prior_games * prior_rate AFTER the value, so an unscaled prior would leave
+  # EPR a blend of scaled and unscaled parts rather than a clean rescale. The
+  # EPR_PRIOR_RATE_* constants carry the same factor for exactly that reason --
+  # if you change one, change both.
+  if (is.finite(EPV_POINTS_SCALE) && !isTRUE(all.equal(EPV_POINTS_SCALE, 1))) {
+    for (cc in cols) dt[, (cc) := get(cc) * EPV_POINTS_SCALE]
+  }
+
   # Rebuild the total from its parts, exactly as the EPR centring does, so the
   # total and its channels cannot disagree.
   total_col <- paste0("epv", suffix)

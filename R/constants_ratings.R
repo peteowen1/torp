@@ -57,21 +57,57 @@ EPR_PRIOR_GAMES_SPOIL <- 3.0000
 #' @keywords internal
 EPR_PRIOR_GAMES_HITOUT <- 3.0000
 
+# NOTE: these scale constants must stay ABOVE the EPR_PRIOR_RATE_* definitions
+# that reference them. R sources a package file top to bottom, so defining them
+# later gives 'object not found' at build time, not a runtime surprise.
+#' Points-scale calibration for the EPV/EPR family
+#'
+#' One rating point should mean one scoreboard point. Measured on 1121 matches
+#' (one row per match; team rows are mirrored pairs that double n without
+#' adding information), regressing actual margin on the team rating difference:
+#' EPR converted at 0.919 `[0.842, 0.996]` and PSR at 1.579 `[1.443, 1.715]`.
+#' A nominal 0.5/0.5 TORP blend was therefore ~37/63 in scoreboard terms.
+#'
+#' Applied at the VALUE layer so it flows into the rating, per Pete
+#' 2026-07-29 -- the same principle as the level fix. `new = slope * old`, so
+#' EPV shrinks ~8% and PSV grows ~58%.
+#'
+#' \strong{This cannot be validated by match MAE, by construction.} A linear
+#' rescale of a feature is a no-op for the model: the GAM absorbs it into its
+#' coefficient and XGBoost splits are monotone-invariant. The change is about
+#' what a published number MEANS, not about prediction.
+#'
+#' Caveat recorded because it bounds how much the constant is worth: the slope
+#' wanders by season (EPR 0.87-1.02 excluding a thin 2021 at 0.579; PSR
+#' 1.26-1.80). A single global constant is a deliberate simplification --
+#' per-season calibration would be fitting noise.
+#' @keywords internal
+EPV_POINTS_SCALE <- 0.919
+
+#' Points-scale calibration for the PSV/PSR family
+#'
+#' See \code{EPV_POINTS_SCALE}. Applied to the shared coefficient vector, which
+#' is what makes one constant reach BOTH products: PSR is not downstream of PSV
+#' (they are parallel applications of the same betas to rated vs actual stats),
+#' so scaling the betas is the only single point that moves them together.
+#' @keywords internal
+PSV_POINTS_SCALE <- 1.579
+
 #' Prior rate for receiving component (shrinkage target per weighted game)
 #' @keywords internal
-EPR_PRIOR_RATE_RECV <- -0.7000
+EPR_PRIOR_RATE_RECV <- -0.7000 * EPV_POINTS_SCALE
 
 #' Prior rate for disposal component (shrinkage target per weighted game)
 #' @keywords internal
-EPR_PRIOR_RATE_DISP <- -0.7000
+EPR_PRIOR_RATE_DISP <- -0.7000 * EPV_POINTS_SCALE
 
 #' Prior rate for spoil component (shrinkage target per weighted game)
 #' @keywords internal
-EPR_PRIOR_RATE_SPOIL <- -0.3000
+EPR_PRIOR_RATE_SPOIL <- -0.3000 * EPV_POINTS_SCALE
 
 #' Prior rate for hitout component (shrinkage target per weighted game)
 #' @keywords internal
-EPR_PRIOR_RATE_HITOUT <- -0.3000
+EPR_PRIOR_RATE_HITOUT <- -0.3000 * EPV_POINTS_SCALE
 
 #' Decay factor (in days) for contest component weighting
 #' @keywords internal
@@ -200,7 +236,6 @@ EPR_CENTRE_CHANNELS <- c("epr_recv", "epr_disp", "epr_spoil", "epr_hitout")
 #' \code{EPR_POSITION_CENTRE} does for EPR.
 #' @keywords internal
 PSV_LEVEL_CENTRE <- TRUE
-
 #' Centre PSR within each (season, round) rather than pooled over all history
 #'
 #' PSR's position centring was grouped by position ALONE, so every position

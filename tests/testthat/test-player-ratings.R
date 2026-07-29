@@ -611,7 +611,12 @@ test_that("EPV centring preserves within-position spread and rebuilds the total"
   sd_before <- d[, .(s = sd(epv_recv_oadj)), by = key][order(round, position_group)]$s
   out <- suppressMessages(centre_epv_by_position(d))
   sd_after <- out[, .(s = sd(epv_recv_oadj)), by = key][order(round, position_group)]$s
-  expect_equal(sd_after, sd_before, tolerance = 1e-8)
+  # centre_epv_by_position() now applies EPV_POINTS_SCALE as well as centring,
+  # so spread is preserved UP TO that factor rather than exactly. Comparing raw
+  # sds would fail for a correct reason and hide a genuine collapse behind a
+  # known one.
+  expect_equal(sd_after, sd_before * EPV_POINTS_SCALE, tolerance = 1e-8)
+  expect_gt(min(sd_after), 0)   # a real collapse would still be caught
 
   expect_equal(out$epv_oadj,
                out$epv_recv_oadj + out$epv_disp_oadj +

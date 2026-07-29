@@ -45,9 +45,9 @@ test_that("calculate_psr applies coefficients correctly", {
   result <- calculate_psr(skills, coef_df, center = FALSE)
 
   # P1: 10*2 + 0*3 = 20
-  expect_equal(result[player_id == "P1"]$psr, 20)
+  expect_equal(result[player_id == "P1"]$psr, 20 * PSV_POINTS_SCALE)
   # P2: 0*2 + 5*3 = 15
-  expect_equal(result[player_id == "P2"]$psr, 15)
+  expect_equal(result[player_id == "P2"]$psr, 15 * PSV_POINTS_SCALE)
 })
 
 test_that("calculate_psr centers by default", {
@@ -68,10 +68,10 @@ test_that("calculate_psr centers by default", {
   result <- calculate_psr(skills, coef_df, center = TRUE)
 
   # Raw: P1=10, P2=0; mean=5; centered: P1=5, P2=-5
-  expect_equal(result[player_id == "P1"]$psr, 5)
-  expect_equal(result[player_id == "P2"]$psr, -5)
+  expect_equal(result[player_id == "P1"]$psr, 5 * PSV_POINTS_SCALE)
+  expect_equal(result[player_id == "P2"]$psr, -5 * PSV_POINTS_SCALE)
   # psr_raw should be uncentered
-  expect_equal(result[player_id == "P1"]$psr_raw, 10)
+  expect_equal(result[player_id == "P1"]$psr_raw, 10 * PSV_POINTS_SCALE)
 })
 
 test_that("calculate_psr handles SD normalization", {
@@ -94,7 +94,7 @@ test_that("calculate_psr handles SD normalization", {
 
   # 10/5 * 2 = 4
 
-  expect_equal(result$psr, 4)
+  expect_equal(result$psr, 4 * PSV_POINTS_SCALE)
 })
 
 test_that("calculate_psr handles missing stat rating columns gracefully", {
@@ -117,7 +117,7 @@ test_that("calculate_psr handles missing stat rating columns gracefully", {
     "not found"
   )
   # Should still compute for available columns
-  expect_equal(result$psr, 10)
+  expect_equal(result$psr, 10 * PSV_POINTS_SCALE)
 })
 
 test_that("calculate_psr errors on missing required coef_df columns", {
@@ -158,7 +158,7 @@ test_that("calculate_psr treats NA stat ratings as zero", {
 
   result <- calculate_psr(skills, coef_df, center = FALSE)
 
-  expect_equal(result[player_id == "P1"]$psr, 10)
+  expect_equal(result[player_id == "P1"]$psr, 10 * PSV_POINTS_SCALE)
   expect_equal(result[player_id == "P2"]$psr, 0)
 })
 
@@ -209,11 +209,11 @@ test_that("calculate_psv applies TOG adjustment to rate stats", {
   result <- calculate_psv(stats, coef_df, center = FALSE)
 
   # psv_p80 is the per-full-game rate: P1: 10/1.0 = 10; P2: 10/0.5 = 20
-  expect_equal(result[player_id == "P1"]$psv_p80, 10)
-  expect_equal(result[player_id == "P2"]$psv_p80, 20)
+  expect_equal(result[player_id == "P1"]$psv_p80, 10 * PSV_POINTS_SCALE)
+  expect_equal(result[player_id == "P2"]$psv_p80, 20 * PSV_POINTS_SCALE)
   # psv is the per-game value (psv_p80 * tog): P1: 10*1.0 = 10; P2: 20*0.5 = 10
-  expect_equal(result[player_id == "P1"]$psv, 10)
-  expect_equal(result[player_id == "P2"]$psv, 10)
+  expect_equal(result[player_id == "P1"]$psv, 10 * PSV_POINTS_SCALE)
+  expect_equal(result[player_id == "P2"]$psv, 10 * PSV_POINTS_SCALE)
 })
 
 test_that("calculate_psv excludes efficiency stats and bounces", {
@@ -237,7 +237,7 @@ test_that("calculate_psv excludes efficiency stats and bounces", {
   result <- calculate_psv(stats, coef_df, center = FALSE)
 
   # Only kicks should contribute (efficiency + bounces excluded)
-  expect_equal(result$psv, 10)
+  expect_equal(result$psv, 10 * PSV_POINTS_SCALE)
 })
 
 test_that("calculate_psv handles SD normalization", {
@@ -255,7 +255,7 @@ test_that("calculate_psv handles SD normalization", {
   result <- calculate_psv(stats, coef_df, center = FALSE)
 
   # 10/1.0 (tog adj) / 5 (sd) * 2 (beta) = 4
-  expect_equal(result$psv, 4)
+  expect_equal(result$psv, 4 * PSV_POINTS_SCALE)
 })
 
 test_that("calculate_psv centers within round by default", {
@@ -273,8 +273,8 @@ test_that("calculate_psv centers within round by default", {
   result <- calculate_psv(stats, coef_df, center = TRUE)
 
   # Raw: P1=10, P2=0; mean=5; centered: P1=5, P2=-5
-  expect_equal(result[player_id == "P1"]$psv, 5)
-  expect_equal(result[player_id == "P2"]$psv, -5)
+  expect_equal(result[player_id == "P1"]$psv, 5 * PSV_POINTS_SCALE)
+  expect_equal(result[player_id == "P2"]$psv, -5 * PSV_POINTS_SCALE)
 })
 
 test_that("calculate_psv_components ensures osv + dsv = psv", {
@@ -386,5 +386,5 @@ test_that("calculate_psv excludes efficiency stats, bounces, and availability st
   result <- calculate_psv(stats, coef_df, center = FALSE)
 
   # Only kicks (10/1.0 = 10) should contribute — all others excluded
-  expect_equal(result$psv, 10)
+  expect_equal(result$psv, 10 * PSV_POINTS_SCALE)
 })

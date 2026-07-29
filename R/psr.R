@@ -90,6 +90,15 @@ calculate_psr <- function(skills, coef_df, center = TRUE,
   coef_df <- coef_df[available, , drop = FALSE]
   skill_cols <- skill_cols[available]
   betas <- coef_df$beta
+  # Points-scale calibration on the SHARED coefficient vector. PSR is not
+  # downstream of PSV -- they are parallel applications of these same betas to
+  # rated vs actual stats -- so the betas are the single point that moves both
+  # together. PSR converted at 1.579 points per rating point, so new = 1.579*old.
+  # Centring and standardisation downstream are both scale-equivariant
+  # ((k*x - k*m)/(k*sd)*(k*pooled) = k * result), so the factor survives intact.
+  if (is.finite(PSV_POINTS_SCALE) && !isTRUE(all.equal(PSV_POINTS_SCALE, 1))) {
+    betas <- betas * PSV_POINTS_SCALE
+  }
 
   # Compute PSR: sum of beta_i * (skill_i / sd_i) for each player-round
   mat <- as.matrix(dt[, skill_cols, with = FALSE])
@@ -290,6 +299,15 @@ calculate_psv <- function(player_stats, coef_df, tog_adjust = TRUE, center = TRU
   coef_df <- coef_df[available, , drop = FALSE]
   stat_cols <- stat_cols[available]
   betas <- coef_df$beta
+  # Points-scale calibration on the SHARED coefficient vector. PSR is not
+  # downstream of PSV -- they are parallel applications of these same betas to
+  # rated vs actual stats -- so the betas are the single point that moves both
+  # together. PSR converted at 1.579 points per rating point, so new = 1.579*old.
+  # Centring and standardisation downstream are both scale-equivariant
+  # ((k*x - k*m)/(k*sd)*(k*pooled) = k * result), so the factor survives intact.
+  if (is.finite(PSV_POINTS_SCALE) && !isTRUE(all.equal(PSV_POINTS_SCALE, 1))) {
+    betas <- betas * PSV_POINTS_SCALE
+  }
 
   # Use _oadj (opponent-adjusted) columns when available, fall back to raw
   oadj_cols <- paste0(stat_cols, "_oadj")
