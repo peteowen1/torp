@@ -355,6 +355,72 @@ LINEUP_POSITION_GROUP_MAP <- c(
   INT  = NA_character_, SUB  = NA_character_, EMERG = NA_character_
 )
 
+#' Lineup group: `lineup_position` with the left/right mirrors merged
+#'
+#' The middle rung between `lineup_position` (21 raw slots) and
+#' `LINEUP_POSITION_GROUP_MAP` (6 broad groups). Five of the 21 slots are
+#' arbitrary left/right mirrors of the same job -- BPL/BPR, HBFL/HBFR, WL/WR,
+#' HFFL/HFFR, FPL/FPR. Left wing and right wing are the same role, and which
+#' one a player is named in carries no information.
+#'
+#' Why merging them is the right default for centring: grouping by raw
+#' `lineup_position` forces the left and right wing to average zero
+#' INDEPENDENTLY. That silently erases any real difference between the two
+#' sides instead of treating them as one role, and halves the cell size for
+#' nothing. Merging gives 13 on-field groups.
+#'
+#' INT / SUB / EMERG are KEPT as their own groups here, unlike
+#' `LINEUP_POSITION_GROUP_MAP` which sends them to NA. `INT` is the single most
+#' common value in the teams data (10,305 rows vs ~2,468 for each on-field
+#' slot), and `.position_adjust()` currently centres interchange players against
+#' each other by grouping on raw `lineup_position`. Mapping them to NA would
+#' change that behaviour as a side effect of a naming change, which is exactly
+#' the kind of silent shift that has cost this repo real MAE.
+#'
+#' 21 slots -> 16 groups (13 on-field + INT + SUB + EMERG).
+LINEUP_GROUP_MAP <- c(
+  FB   = "FB",
+  BPL  = "BP",   BPR  = "BP",
+  CHB  = "CHB",
+  HBFL = "HBF",  HBFR = "HBF",
+  C    = "C",
+  WL   = "W",    WR   = "W",
+  R    = "R",
+  RR   = "RR",
+  RK   = "RK",
+  CHF  = "CHF",
+  HFFL = "HFF",  HFFR = "HFF",
+  FF   = "FF",
+  FPL  = "FP",   FPR  = "FP",
+  INT  = "INT",  SUB  = "SUB", EMERG = "EMERG"
+)
+
+#' Collapse `lineup_position` to the mirror-merged lineup group
+#'
+#' Mirrors \code{.collapse_listed_position()}: one place where a raw slot
+#' becomes a group, and a loud warning for anything unmapped rather than a
+#' silent NA. An unmapped slot means the AFL added or renamed a position, and
+#' the rows would otherwise drop out of centring without anyone noticing.
+#'
+#' @param x Character vector of `lineup_position` values.
+#' @return Character vector of lineup groups; NA for unmapped input.
+#' @keywords internal
+.collapse_lineup_group <- function(x) {
+  xc <- as.character(x)
+  unmapped <- setdiff(unique(xc[!is.na(xc)]), names(LINEUP_GROUP_MAP))
+  if (length(unmapped) > 0) {
+    # No bare `{?it/them}` on the second line: cli resolves a plural against a
+    # quantity in the SAME string, and that line has none, so it errors rather
+    # than pluralising. Third time this shape has bitten today -- see also the
+    # `{.checked}` dot-prefix crash that took down the ratings pipeline.
+    cli::cli_warn(c(
+      "{length(unmapped)} unmapped {.field lineup_position} value{?s}: {.val {unmapped}}",
+      "i" = "Add them to {.code LINEUP_GROUP_MAP} -- unmapped rows are left uncentred."
+    ))
+  }
+  unname(LINEUP_GROUP_MAP[xc])
+}
+
 #' EPV channels the position adjustment rescales (see EPV_POSITION_STANDARDISE)
 #'
 #' \code{hitout} is deliberately excluded. Standardising divides by the
