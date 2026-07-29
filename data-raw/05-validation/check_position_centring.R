@@ -11,12 +11,14 @@
 # Usage:  Rscript torp/data-raw/05-validation/check_position_centring.R
 # Exit 0 = centred as claimed, 1 = not.
 #
-# EXPECTED TO FAIL ON SECTION 5 UNTIL THE FIRST RATINGS REBUILD AFTER
-# 2026-07-29. The PSR per-round centring shipped that day; the currently
-# published artifact predates it and still shows a ~0.42 served-round spread.
-# That failure is this script working, not production breaking -- the fix is
-# held on dev until after round 21, and the rebuild is what will clear it. If it
-# is still failing after that rebuild, THEN it is a real finding.
+# Section 5 history, worth reading before trusting a red result here:
+# the PSR per-round centring shipped 2026-07-29 and the full-history rebuild
+# that day confirmed it (worst cell 2.09e-04 over 984 cells). Section 5's FIRST
+# version still reported a failure at 0.922 against that correct file, because
+# it read `psr` off torp_ratings -- the rated-roster SUBSET -- with pred_tog
+# weights, while the centring runs over all of psr-data with wt_80s weights.
+# Wrong population, wrong weights. It now checks psr-data on its own key, and
+# reports the roster-level PSR separately as 5b, informational only.
 
 suppressMessages({
   library(data.table); library(arrow)
@@ -34,6 +36,10 @@ options(torp.local_data_dir = NA)   # the release, never a local mirror
 # every correct run is worse than none -- it trains you to ignore it.
 CENTRE_TOL <- 0.01
 SUM_TOL    <- 0.03
+# PSR is stored to more decimal places than EPR and is centred over a much
+# larger population, so it lands ~2e-04 rather than ~1e-16. Set well above the
+# observed value but two orders below the ~0.76 spread an uncentred PSR shows.
+PSR_CENTRE_TOL <- 0.01
 CH  <- c("epr_recv", "epr_disp", "epr_spoil", "epr_hitout")
 
 r <- as.data.table(load_torp_ratings())
@@ -117,25 +123,64 @@ print(sp[order(-sd)], row.names = FALSE)
 # matches the 6-way bucket; checking on the bucket is therefore the same
 # partition, not a looser one.
 psr_bad <- FALSE
-if ("psr" %in% names(r)) {
-  psr_w <- if ("wt_80s" %in% names(r)) pmax(dplyr::coalesce(r$wt_80s, 1), 0.01) else r$.w
-  r[, .psrw := psr_w]
-  pc <- r[!is.na(pos_bucket) & is.finite(psr),
-          .(wmean = stats::weighted.mean(psr, .psrw, na.rm = TRUE), n = .N),
-          by = .(season, round, pos_bucket)]
-  psr_worst <- if (nrow(pc)) max(abs(pc$wmean), na.rm = TRUE) else NA_real_
-  cat(sprintf("\n=== 5. PSR per (season, round, position): worst |weighted mean| = %s ===\n",
-              format(psr_worst, scientific = TRUE)))
-  print(lat[!is.na(pos_bucket) & is.finite(psr),
-            .(n = .N, wmean = round(stats::weighted.mean(psr, .w, na.rm = TRUE), 4),
-              sd = round(sd(psr, na.rm = TRUE), 2)), by = pos_bucket][order(-sd)],
-        row.names = FALSE)
-  if (!is.finite(psr_worst) || psr_worst > CENTRE_TOL) {
-    cli::cli_alert_danger("PSR is NOT position-centred per round: worst cell mean {signif(psr_worst, 3)}")
+psr_rel <- tryCatch(as.data.table(load_psr(TRUE)), error = function(e) NULL)
+if (!is.null(psr_rel) && nrow(psr_rel) > 0 && "psr" %in% names(psr_rel)) {
+  # Check PSR on the POPULATION IT WAS CENTRED OVER, with the SAME WEIGHTS.
+  #
+  # The first version of this section read `psr` off torp_ratings and grouped by
+  # pos_bucket with pred_tog weights. It reported "worst cell mean 0.922" on a
+  # correctly-centred file, for two independent reasons, and I nearly acted on it:
+  #
+  #   1. WRONG POPULATION. calculate_psr() centres over every player-round in
+  #      psr-data (176,055 rows). torp_ratings holds the rated-roster subset
+  #      (130,928). A mean-zero set stays mean-zero only under a random subset,
+  #      and "was this player rated this round" is emphatically not random --
+  #      it is selection. Non-zero group means in the subset are arithmetic,
+  #      not a centring failure.
+  #   2. WRONG WEIGHTS. Centring is wt_80s-weighted; that check's printed table
+  #      was pred_tog-weighted. Re-weighting a weighted mean does not preserve
+  #      the zero.
+  #
+  # So it tested neither the population nor the statistic that the invariant is
+  # about. Checking the release on its own key and weights gives 2.09e-04.
+  psr_key <- if ("lineup_pos_group" %in% names(psr_rel)) "lineup_pos_group"
+             else if ("lineup_position" %in% names(psr_rel)) "lineup_position"
+             else if ("pos_group" %in% names(psr_rel)) "pos_group" else NULL
+  if (is.null(psr_key)) {
+    cli::cli_alert_danger("psr-data carries no position column -- PSR centring cannot be checked.")
     psr_bad <- TRUE
+  } else {
+    psr_rel[, .psrw := if ("wt_80s" %in% names(psr_rel))
+                         pmax(dplyr::coalesce(wt_80s, 1), 0.01) else 1]
+    pc <- psr_rel[!is.na(get(psr_key)) & is.finite(psr),
+                  .(wmean = stats::weighted.mean(psr, .psrw, na.rm = TRUE), n = .N),
+                  by = c("season", "round", psr_key)]
+    # Empty is not a pass -- same trap section 1 fell into.
+    psr_worst <- if (nrow(pc)) max(abs(pc$wmean), na.rm = TRUE) else NA_real_
+    cat(sprintf("\n=== 5. PSR per (season, round, %s), wt_80s-weighted, on psr-data ===\n", psr_key))
+    cat(sprintf("  %d rows, %d cells, worst |weighted mean| = %s\n",
+                nrow(psr_rel), nrow(pc), format(psr_worst, scientific = TRUE)))
+    if (!is.finite(psr_worst) || psr_worst > PSR_CENTRE_TOL) {
+      cli::cli_alert_danger("PSR is NOT position-centred per round: worst cell mean {signif(psr_worst, 3)}")
+      psr_bad <- TRUE
+    }
   }
 } else {
-  cli::cli_alert_warning("No {.field psr} column -- PSR centring UNVERIFIED (not the same as verified).")
+  cli::cli_alert_warning("Could not load psr-data -- PSR centring UNVERIFIED (not the same as verified).")
+}
+
+# ---- 5b. the PSR level torp_ratings actually inherits (informational) --------
+# NOT a pass/fail. This is the selection effect described above, and TORP does
+# genuinely inherit half of it -- so it is worth watching even though it is not
+# a centring bug. If it grows large, the question is whether TORP should blend
+# a PSR re-centred on the rated roster, which is a rating-definition change and
+# needs its own MAE measurement, not a checker tweak.
+if ("psr" %in% names(r)) {
+  cat("\n=== 5b. PSR level within the rated roster, latest round (informational) ===\n")
+  print(lat[!is.na(pos_bucket) & is.finite(psr),
+            .(n = .N, wmean = round(stats::weighted.mean(psr, .w, na.rm = TRUE), 4),
+              sd = round(sd(psr, na.rm = TRUE), 2)), by = pos_bucket][order(-wmean)],
+        row.names = FALSE)
 }
 
 cat("\n=== VERDICT ===\n")
