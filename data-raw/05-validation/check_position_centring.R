@@ -53,6 +53,14 @@ have <- intersect(CH, names(r))
 worst <- r[!is.na(pos_bucket), c(
     lapply(.SD, function(x) stats::weighted.mean(x, .w, na.rm = TRUE)), .(n = .N)),
     by = .(season, round, pos_bucket), .SDcols = have]
+# An empty frame is NOT a pass. max(abs(numeric(0)), na.rm = TRUE) is -Inf, and
+# -Inf > CENTRE_TOL is FALSE, so an artifact with no mapped position bucket
+# would sail through section 1 and print the success line. Section 5 already
+# guards this; section 1 did not.
+if (nrow(worst) == 0) {
+  cli::cli_alert_danger("No (season, round, position) cell has a mapped bucket -- nothing was checked.")
+  quit(status = 1)
+}
 mx <- vapply(have, function(cc) max(abs(worst[[cc]]), na.rm = TRUE), numeric(1))
 cat("=== 1. TOG-weighted mean per channel, worst cell across ALL rounds ===\n")
 for (cc in have) cat(sprintf("  %-11s max |wmean| = %s\n", cc, format(mx[[cc]], scientific = TRUE)))

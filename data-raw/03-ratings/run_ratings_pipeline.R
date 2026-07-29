@@ -260,12 +260,31 @@ if (isTRUE(EPV_LEVEL_CENTRE)) {
   .chk[, `:=`(pos_bucket = torp:::.collapse_listed_position(position_group),
               w = pmax(dplyr::coalesce(time_on_ground_percentage / 100, 0.1), 0.1))]
   .chk <- .chk[!is.na(pos_bucket)]
+  # Fail CLOSED. .worst starts at 0 and is only ever RAISED, so if every cell
+  # is empty -- position_group missing or renamed, or every value unmapped --
+  # the loop never runs, .worst stays 0, the abort below is skipped, and the
+  # script reports "verified (max |cell mean| = 0)" having verified nothing.
+  # That is the same shape as the bugs this guard exists to catch, one level up:
+  # the GUARD degrading to a no-op rather than the normalisation.
+  if (nrow(.chk) == 0) {
+    cli::cli_abort(c(
+      "Cannot verify EPV level centring: no row has a mapped position bucket.",
+      "x" = "Refusing to build ratings on EPV whose centring cannot be checked."
+    ))
+  }
   .worst <- 0
+  .checked <- 0L
   for (cc in paste0(EPV_LEVEL_CENTRE_CHANNELS, .lc)) {
     m <- .chk[is.finite(get(cc)),
               .(wm = stats::weighted.mean(get(cc), w)),
               by = .(season, round, pos_bucket)]
-    if (nrow(m) > 0) .worst <- max(.worst, max(abs(m$wm), na.rm = TRUE))
+    if (nrow(m) > 0) { .worst <- max(.worst, max(abs(m$wm), na.rm = TRUE)); .checked <- .checked + nrow(m) }
+  }
+  if (.checked == 0L) {
+    cli::cli_abort(c(
+      "Cannot verify EPV level centring: zero cells had a finite channel value.",
+      "x" = "An empty check is not a pass."
+    ))
   }
   if (!is.finite(.worst) || .worst > 1e-8) {
     cli::cli_abort(c(
@@ -273,8 +292,8 @@ if (isTRUE(EPV_LEVEL_CENTRE)) {
       "x" = "Refusing to build ratings on EPV that is not centred as claimed."
     ))
   }
-  cli::cli_alert_success("EPV level centring verified (max |cell mean| = {signif(.worst, 3)})")
-  rm(.chk, .worst, .lc)
+  cli::cli_alert_success("EPV level centring verified across {.checked} cell{?s} (max |cell mean| = {signif(.worst, 3)})")
+  rm(.chk, .worst, .checked, .lc)
 }
 
 data.table::setkey(all_pgd, match_id)

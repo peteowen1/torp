@@ -410,7 +410,16 @@ calculate_psv <- function(player_stats, coef_df, tog_adjust = TRUE, center = TRU
       dt[!is.na(.lc_bucket), (cc) := get(cc) - .lc_wmean(get(cc), .lc_w),
          by = .(season, .lc_round, .lc_bucket)]
     }
+    # Count BOTH populations, like centre_epv_by_position() does. A join that
+    # silently loses position_group leaves those rows at role-level centring
+    # only -- the second, player-type correction never reaches them -- and
+    # counting only the unmapped ones reports nothing at all in that case.
+    n_missing  <- sum(is.na(dt$position_group))
     n_unmapped <- sum(!is.na(dt$position_group) & is.na(dt$.lc_bucket))
+    if (n_missing > 0) {
+      cli::cli_alert_danger(
+        "{n_missing} player-game{?s} {?has/have} no {.field position_group} and {?was/were} left UNCENTRED at the PSV layer.")
+    }
     if (n_unmapped > 0) {
       cli::cli_alert_danger(
         "{n_unmapped} player-game{?s} carr{?ies/y} an UNMAPPED {.field position_group} and {?was/were} left UNCENTRED at the PSV layer.")

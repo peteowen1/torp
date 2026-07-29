@@ -101,6 +101,21 @@ get_player_game_ratings <- function(match = NULL,
     epv_hitout_adj = epv_hitout
   )]
 
+  # Points-scale calibration still applies, even though position centring does
+  # not. These are two different corrections that happen to live in the same
+  # function (centre_epv_by_position), and skipping that function for a good
+  # reason -- too few players per position in one game -- silently skipped this
+  # one too. PSV carries PSV_POINTS_SCALE unconditionally inside
+  # calculate_psv(), so without this the torp_value below blended an EPV at
+  # scale 1.0 against a PSV at 1.579 and meant something different from the
+  # published pipeline's torp_value, with nothing to signal it.
+  if (is.finite(EPV_POINTS_SCALE) && !isTRUE(all.equal(EPV_POINTS_SCALE, 1))) {
+    for (cc in c("epv_adj", "epv_recv_adj", "epv_disp_adj",
+                 "epv_spoil_adj", "epv_hitout_adj")) {
+      player_epv[, (cc) := get(cc) * EPV_POINTS_SCALE]
+    }
+  }
+
   # --- Step 4: Format as game ratings (same output as player_game_ratings) ---
   round_val <- unique(player_epv$round)
   pgr <- .compute_player_game_ratings(player_epv, season, round_val)
