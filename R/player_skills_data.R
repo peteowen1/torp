@@ -44,10 +44,22 @@
 #' @return The data.table with added `pos_group` column.
 #' @keywords internal
 .resolve_stat_rating_positions <- function(dt, teams = NULL) {
-  # Prefer position_group (PBP-derived 6-way playstyle) — reflects how a player
-  # actually plays, not just where they were named. lineup_position (20-way from
-  # teams API) is a secondary signal because a player's named role can diverge
-  # from their playstyle (e.g. a tall forward rotating through the pocket).
+  # CORRECTED 2026-07-29. This comment previously claimed position_group was a
+  # "PBP-derived 6-way playstyle" reflecting "how a player actually plays, not
+  # just where they were named". That is WRONG, and believing it sent two
+  # separate investigations down the wrong path in one session.
+  #
+  # position_group is PBP-SOURCED, not PBP-DERIVED. Traced to source:
+  #   column_schema.R:134   "player_player_position" = "position"
+  #   player_credit.R:284   position_group = player_position[.N]
+  # It is a nested field on the AFL API's player object, stamped on every
+  # play-by-play row -- the club's registered position, arriving via a different
+  # endpoint than player_details. It records where he is NAMED, not what he did.
+  #
+  # So the preference order below is not playstyle-over-name; it is
+  # per-match-listing over weekly-slot over season-listing. All three are the
+  # same underlying fact at different time resolutions. See
+  # docs/reference/POSITIONS.md before changing any of this.
   pos_col <- if ("position_group" %in% names(dt)) "position_group"
              else if ("lineup_position" %in% names(dt)) "lineup_position"
              else if ("listed_position" %in% names(dt)) "listed_position"

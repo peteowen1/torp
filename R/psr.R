@@ -509,6 +509,25 @@ calculate_psv <- function(player_stats, coef_df, tog_adjust = TRUE, center = TRU
   # every downstream check would have passed. Hence: resolve both spellings, and
   # ABORT rather than skip if centring was asked for and cannot be done.
   .psv_round_col <- intersect(c("round", "round_number"), names(dt))[1]
+
+  # A MISSING position_group used to skip centring in silence: the guard below
+  # tests `"position_group" %in% names(dt)`, so a frame without it fell straight
+  # through with no abort and no warning. That is the same shape as the bug this
+  # whole guard was written for -- the original PSV check tested for `round`
+  # when the frame carries `round_number`, quietly centred nothing, and left the
+  # spread unchanged at 0.812 while every downstream check passed.
+  #
+  # It is a live risk, not theoretical: load_player_stats() returns `position`,
+  # NOT `position_group`, so a caller passing that frame directly gets silently
+  # uncentred PSV. Fail loud instead, and name the column we actually looked for.
+  if (center && isTRUE(PSV_LEVEL_CENTRE) && !"position_group" %in% names(dt)) {
+    cli::cli_abort(c(
+      "Cannot centre PSV by position: no {.field position_group} column.",
+      "i" = "Found position-ish columns: {.val {grep('^pos|position', names(dt), value = TRUE)}}",
+      "i" = "{.fun load_player_stats} returns {.field position}, not {.field position_group} -- join the roster first.",
+      "x" = "Refusing to return uncentred PSV that callers will treat as centred."
+    ))
+  }
   if (center && isTRUE(PSV_LEVEL_CENTRE) && "position_group" %in% names(dt) &&
       (is.na(.psv_round_col) || !"season" %in% names(dt))) {
     cli::cli_abort(c(

@@ -186,6 +186,18 @@ test_that("calculate_psr treats NA stat ratings as zero", {
 
 # ==========================================================================
 # Tests for calculate_psv()
+
+# calculate_psv() aborts since 2026-07-29 when centring is requested but the
+# frame has no position_group -- it used to skip centring in silence. These
+# fixtures predate that and are about PSV structure/TOG, not positions, so give
+# every row the SAME group: one global group reproduces the old global-mean
+# fallback exactly, leaving every assertion below measuring what it always did.
+.with_pos <- function(d) {
+  d <- data.table::copy(data.table::as.data.table(d))
+  if (!"position_group" %in% names(d)) d[, position_group := "MIDFIELDER"]
+  d
+}
+
 # ==========================================================================
 
 test_that("calculate_psv returns expected structure", {
@@ -207,7 +219,7 @@ test_that("calculate_psv returns expected structure", {
     stringsAsFactors = FALSE
   )
 
-  result <- calculate_psv(stats, coef_df)
+  result <- calculate_psv(.with_pos(stats), coef_df)
 
   expect_s3_class(result, "data.table")
   expect_true(all(c("psv", "psv_p80", "psv_raw") %in% names(result)))
@@ -291,7 +303,7 @@ test_that("calculate_psv centers within round by default", {
 
   coef_df <- data.frame(stat_name = "kicks", beta = 1, stringsAsFactors = FALSE)
 
-  result <- calculate_psv(stats, coef_df, center = TRUE)
+  result <- calculate_psv(.with_pos(stats), coef_df, center = TRUE)
 
   # Raw: P1=10, P2=0; mean=5; centered: P1=5, P2=-5
   expect_equal(result[player_id == "P1"]$psv, 5 * PSV_POINTS_SCALE)
@@ -337,7 +349,7 @@ test_that("calculate_psv: psv is per-game (psv_p80 * tog) for low- and full-TOG 
 
   coef_df <- data.frame(stat_name = "kicks", beta = 1, stringsAsFactors = FALSE)
 
-  result <- calculate_psv(stats, coef_df, center = TRUE)
+  result <- calculate_psv(.with_pos(stats), coef_df, center = TRUE)
 
   low <- result[player_id == "LOW"]
   full <- result[player_id == "FULL"]
@@ -370,8 +382,8 @@ test_that("calculate_psv_components emits *_p80 columns and osv/dsv per-game (is
   off_coef <- data.frame(stat_name = c("kicks", "tackles"), beta = c(0.8, 0.1))
   def_coef <- data.frame(stat_name = c("kicks", "tackles"), beta = c(0.1, 0.7))
 
-  result <- calculate_psv_components(stats, margin_coef, off_coef, def_coef,
-                                      center = TRUE)
+  result <- calculate_psv_components(.with_pos(stats), margin_coef, off_coef,
+                                     def_coef, center = TRUE)
 
   expect_true(all(c("psv_p80", "osv_p80", "dsv_p80",
                     "psv", "osv", "dsv") %in% names(result)))
