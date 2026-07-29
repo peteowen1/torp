@@ -305,97 +305,11 @@ if (!is.null(shared_stat_ratings)) {
 }
 shared_fixtures <- load_fixtures(TRUE)
 
-get_epr_df <- function(year, rounds, pgd, stat_ratings, fixtures) {
-  plyr_tm_df <- load_player_details(year)
-  if (nrow(plyr_tm_df) == 0 || !"season" %in% names(plyr_tm_df)) {
-    plyr_tm_df <- load_player_details(year - 1)
-  }
-
-  # Build round_info with dates from fixtures
-  fix_dt <- data.table::as.data.table(fixtures)
-  fix_dates <- fix_dt[
-    season == year & round_number %in% rounds,
-    .(date_val = lubridate::as_date(min(utc_start_time))),
-    by = .(round_val = round_number)
-  ]
-
-  round_info <- data.table::data.table(
-    round_val = rounds,
-    match_ref = paste0("CD_M", year, "014", sprintf("%02d", rounds))
-  )
-  round_info <- round_info[fix_dates, on = "round_val", nomatch = NULL]
-
-  if (nrow(round_info) == 0) {
-    cli::cli_alert_danger("No fixtures found for {year}")
-    return(data.frame())
-  }
-
-  # Batch compute all rounds' player stats in one data.table pass
-  batch_stats <- calculate_epr_stats_batch(pgd, round_info)
-
-  # Attach decomposed TOG from stat ratings
-  batch_stats[, pred_tog := NA_real_]
-  batch_stats[, pred_selection := NA_real_]
-  batch_stats[, pred_cond_tog := NA_real_]
-  if (!is.null(stat_ratings)) {
-    stat_ratings_dt <- data.table::as.data.table(stat_ratings)
-    batch_stats[stat_ratings_dt, `:=`(
-      pred_selection = i.squad_selection_rating,
-      pred_cond_tog = i.cond_tog_rating
-    ), on = "player_id"]
-    batch_stats[is.na(pred_selection), pred_selection := 0]
-    batch_stats[is.na(pred_cond_tog), pred_cond_tog := 0]
-    batch_stats[, pred_tog := pred_selection * pred_cond_tog]
-  }
-
-  # Pre-compute fixtures summary once (avoids re-summarising 6K rows per round)
-  fix_summary <- fixtures |>
-    dplyr::group_by(season = .data$season, round = .data$round_number) |>
-    dplyr::summarise(ref_date = lubridate::as_date(min(.data$utc_start_time)), .groups = "drop")
-
-  # Per-round: roster join + TOG centering (lightweight ~700 rows per round)
-  results <- lapply(round_info$round_val, function(rv) {
-    round_dt <- batch_stats[round_val == rv]
-    final_df <- .prepare_final_dataframe(plyr_tm_df, round_dt, year, rv, fixtures, fix_summary = fix_summary)
-
-    if (!is.null(stat_ratings) && nrow(final_df) > 0) {
-      final_df$pred_tog[is.na(final_df$pred_tog)] <- 0
-      tot_tog <- sum(final_df$pred_tog)
-      if (tot_tog > 0) {
-        n_teams <- length(unique(final_df$team))
-        target_tog <- n_teams * 18L
-        final_df$pred_tog <- final_df$pred_tog * (target_tog / tot_tog)
-        comps <- c("epr_recv", "epr_disp", "epr_spoil", "epr_hitout")
-        for (comp in comps) {
-          avg_val <- sum(final_df[[comp]] * final_df$pred_tog, na.rm = TRUE) / sum(final_df$pred_tog)
-          final_df[[comp]] <- final_df[[comp]] - avg_val
-        }
-        final_df$epr <- round(final_df$epr_recv + final_df$epr_disp + final_df$epr_spoil + final_df$epr_hitout, 2)
-        for (comp in comps) {
-          final_df[[comp]] <- round(final_df[[comp]], 2)
-        }
-      }
-    }
-
-    final_df
-  })
-
-  n_empty <- sum(vapply(results, function(x) nrow(x) == 0, logical(1)))
-  if (n_empty == length(round_info$round_val) && length(round_info$round_val) > 1) {
-    cli::cli_abort("All {length(round_info$round_val)} rounds empty for {year}")
-  }
-
-  results |>
-    dplyr::bind_rows() |>
-    (\(df) {
-      if (nrow(df) == 0) return(df)
-      if (!"player_id" %in% names(df)) {
-        cli::cli_alert_danger("player_id column missing from ratings output for {year} - row_id cannot be computed")
-        return(df)
-      }
-      dplyr::mutate(df, row_id = paste0(player_id, season, sprintf("%02d", round)))
-    })()
-}
+# Stage 3's per-season builder now lives in the package as
+# torp:::.build_epr_season() so it can be called WITHOUT publishing --
+# see R/ratings_build.R and build_ratings_history(). It was defined here,
+# inside a script that writes to GitHub Releases, which meant the only way
+# to get a ratings history was to publish one.
 
 torp_season_list <- list()
 failed_seasons <- character()
@@ -413,7 +327,7 @@ for (s in seasons) {
     cli::cli_h3("Computing ratings for {s} (rounds {start_round}-{max_round})")
     tictoc::tic(paste0("ratings_", s))
 
-    torp_df <- get_epr_df(s, start_round:max_round, all_pgd, shared_stat_ratings, shared_fixtures)
+    torp_df <- torp:::.build_epr_season(s, start_round:max_round, all_pgd, shared_stat_ratings, shared_fixtures)
     cli::cli_inform("  {s}: {nrow(torp_df)} rating rows")
 
     if (nrow(torp_df) == 0) {
