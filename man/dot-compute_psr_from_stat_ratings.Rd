@@ -21,6 +21,12 @@ searches \code{inst/extdata/psr_coefficients.csv}.}
 
 \item{center}{Logical. If TRUE (default), subtract the league mean so
 PSR = contribution above average player.}
+
+\item{centre_by_round}{Logical. Group the position centring by
+\code{(season, round)} as well as position. Defaults to
+\code{PSR_CENTRE_BY_ROUND}. FALSE reproduces the pre-2026-07-29
+pooled-over-all-history behaviour, and exists so that arm can be
+scored on the match harness from production code rather than a replica.}
 }
 \value{
 A data.table with \code{psr}, \code{osr}, \code{dsr} columns.

@@ -47,6 +47,11 @@
 #' @param center Logical. If TRUE (default), subtract the league mean so
 #'   PSR = contribution above average player.
 #'
+#' @param centre_by_round Logical. Group the position centring by
+#'   \code{(season, round)} as well as position. Defaults to
+#'   \code{PSR_CENTRE_BY_ROUND}. FALSE reproduces the pre-2026-07-29
+#'   pooled-over-all-history behaviour, and exists so that arm can be
+#'   scored on the match harness from production code rather than a replica.
 #' @return A data.table with columns: \code{player_id}, \code{player_name},
 #'   \code{season}, \code{round}, \code{pos_group}, \code{psr_raw}, \code{psr}.
 #'
@@ -193,6 +198,11 @@ calculate_psr <- function(skills, coef_df, center = TRUE,
 #'   optionally \code{sd}).
 #' @param dsr_coef_df Coefficient data.frame for the defensive model.
 #'
+#' @param centre_by_round Logical. Group the position centring by
+#'   \code{(season, round)} as well as position. Defaults to
+#'   \code{PSR_CENTRE_BY_ROUND}. FALSE reproduces the pre-2026-07-29
+#'   pooled-over-all-history behaviour, and exists so that arm can be
+#'   scored on the match harness from production code rather than a replica.
 #' @return A data.table with columns: \code{player_id}, \code{player_name},
 #'   \code{season}, \code{round}, \code{pos_group}, \code{psr_raw}, \code{psr},
 #'   \code{osr}, \code{dsr}.
@@ -1297,6 +1307,11 @@ explain_player_rating <- function(player,
 #' @param psr_coef_path Path to the margin PSR coefficient CSV. If NULL,
 #'   searches \code{inst/extdata/psr_coefficients.csv}.
 #'
+#' @param centre_by_round Logical. Group the position centring by
+#'   \code{(season, round)} as well as position. Defaults to
+#'   \code{PSR_CENTRE_BY_ROUND}. FALSE reproduces the pre-2026-07-29
+#'   pooled-over-all-history behaviour, and exists so that arm can be
+#'   scored on the match harness from production code rather than a replica.
 #' @return A data.table with \code{psr}, \code{osr}, \code{dsr} columns.
 #' @keywords internal
 .compute_psr_from_stat_ratings <- function(skills, psr_coef_path = NULL, center = TRUE,
