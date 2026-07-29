@@ -51,7 +51,8 @@
 #'   \code{season}, \code{round}, \code{pos_group}, \code{psr_raw}, \code{psr}.
 #'
 #' @export
-calculate_psr <- function(skills, coef_df, center = TRUE) {
+calculate_psr <- function(skills, coef_df, center = TRUE,
+                          centre_by_round = PSR_CENTRE_BY_ROUND) {
   dt <- data.table::as.data.table(skills)
 
   # Validate coef_df
@@ -129,7 +130,8 @@ calculate_psr <- function(skills, coef_df, center = TRUE) {
   # sat +0.451 and key forwards -0.030, a 0.481 spread that TORP inherited half
   # of. It is also a backtest leak: a 2021 round-1 rating centred with 2026
   # games. Mirrors the (season, round) grouping EPR has always used.
-  .psr_by <- c(intersect(c("season", "round"), names(dt)), psr_pos_col)
+  .psr_by <- c(if (isTRUE(centre_by_round)) intersect(c("season", "round"), names(dt)),
+               psr_pos_col)
   if (center && !is.null(psr_pos_col) && "wt_80s" %in% names(dt)) {
     dt[!is.na(get(psr_pos_col)), psr := psr_raw - weighted.mean(psr_raw, wt_80s, na.rm = TRUE), by = c(.psr_by)]
     dt[is.na(get(psr_pos_col)), psr := psr_raw - weighted.mean(psr_raw, wt_80s, na.rm = TRUE)]
@@ -198,13 +200,14 @@ calculate_psr <- function(skills, coef_df, center = TRUE) {
 #'
 #' @export
 calculate_psr_components <- function(skills, coef_df, osr_coef_df, dsr_coef_df,
-                                     center = TRUE) {
+                                     center = TRUE,
+                                     centre_by_round = PSR_CENTRE_BY_ROUND) {
   # Margin PSR (the authoritative total)
-  psr_result <- calculate_psr(skills, coef_df, center = center)
+  psr_result <- calculate_psr(skills, coef_df, center = center, centre_by_round = centre_by_round)
 
   # Raw offensive and defensive scores
-  osr_result <- calculate_psr(skills, osr_coef_df, center = center)
-  dsr_result <- calculate_psr(skills, dsr_coef_df, center = center)
+  osr_result <- calculate_psr(skills, osr_coef_df, center = center, centre_by_round = centre_by_round)
+  dsr_result <- calculate_psr(skills, dsr_coef_df, center = center, centre_by_round = centre_by_round)
 
   # Additive shift: distribute residual evenly so osr + dsr = psr
   raw_osr <- osr_result$psr
@@ -1269,7 +1272,8 @@ explain_player_rating <- function(player,
 #'
 #' @return A data.table with \code{psr}, \code{osr}, \code{dsr} columns.
 #' @keywords internal
-.compute_psr_from_stat_ratings <- function(skills, psr_coef_path = NULL, center = TRUE) {
+.compute_psr_from_stat_ratings <- function(skills, psr_coef_path = NULL, center = TRUE,
+                                          centre_by_round = PSR_CENTRE_BY_ROUND) {
   # Resolve margin coefficient path
 
   if (is.null(psr_coef_path)) {
@@ -1291,9 +1295,10 @@ explain_player_rating <- function(player,
   if (file.exists(osr_path) && file.exists(dsr_path)) {
     osr_coef_df <- utils::read.csv(osr_path)
     dsr_coef_df <- utils::read.csv(dsr_path)
-    calculate_psr_components(skills, coef_df, osr_coef_df, dsr_coef_df, center = center)
+    calculate_psr_components(skills, coef_df, osr_coef_df, dsr_coef_df, center = center,
+                             centre_by_round = centre_by_round)
   } else {
     cli::cli_inform("OSR/DSR coefficient files not found -- computing PSR only (no osr/dsr decomposition)")
-    calculate_psr(skills, coef_df, center = center)
+    calculate_psr(skills, coef_df, center = center, centre_by_round = centre_by_round)
   }
 }

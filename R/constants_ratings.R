@@ -201,6 +201,22 @@ EPR_CENTRE_CHANNELS <- c("epr_recv", "epr_disp", "epr_spoil", "epr_hitout")
 #' @keywords internal
 PSV_LEVEL_CENTRE <- TRUE
 
+#' Centre PSR within each (season, round) rather than pooled over all history
+#'
+#' PSR's position centring was grouped by position ALONE, so every position
+#' averaged zero across the whole dataset while any individual round stayed
+#' skewed -- on the served round, rucks sat +0.451 and key forwards -0.030, a
+#' 0.481 spread that TORP inherited half of. Pooling is also a backtest leak: a
+#' 2021 round-1 rating centred using games from 2026.
+#'
+#' Exposed as a flag rather than hardcoded so the old behaviour can be scored on
+#' the match harness from the PRODUCTION code path, instead of a replica of it.
+#' Every gate we have asks "is the new arm better"; none asks "is the arm I
+#' scored the thing production runs", and a hand-rolled reconstruction of the
+#' old centring is exactly where that gap opens.
+#' @keywords internal
+PSR_CENTRE_BY_ROUND <- TRUE
+
 #' Whether PSR position centring rescales as well as recentres
 #'
 #' The mirror of \code{EPV_POSITION_STANDARDISE} on the PSR side.
