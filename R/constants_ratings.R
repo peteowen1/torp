@@ -225,7 +225,7 @@ PSV_ROLE_CENTRE_BY_ROUND <- FALSE
 #' well-populated cell is adjusted nearly in full and a thin one barely at all.
 #' FALSE reproduces the full correction exactly.
 #' @keywords internal
-EPR_POSITION_SHRINK <- TRUE
+EPR_POSITION_SHRINK <- FALSE
 
 #' Prior weight for `EPR_POSITION_SHRINK`, in the cell's own weight units
 #'
@@ -247,7 +247,34 @@ EPR_POSITION_SHRINK <- TRUE
 #' and pred_tog is near zero, and TODAY those get the FULL correction computed
 #' off 0.7 units of evidence. Shrinkage cuts that to ~12%.
 #'
-#' \strong{Chosen on correctness, not on MAE.} A six-point sweep
+#' \strong{FALSE -- shrinkage is right in principle but this is the WRONG
+#' LAYER.} Measured 2026-07-29, correction size per (season, round, position)
+#' cell:
+#'
+#'   EPV level centring (PRIMARY)  median 0.526, 90th 1.379, max 4.078
+#'   EPR centring       (BACKSTOP) ~0.002
+#'
+#' The EPR correction is ~250x smaller because EPV_LEVEL_CENTRE has already
+#' zeroed the level upstream -- this layer only mops up the residual
+#' .bayesian_shrink() reintroduces. Shrinking a correction that is already
+#' ~0.002 cannot do any work: enabling it moved published TORP by a mean of
+#' 0.0044, left the served-round top 20 in an IDENTICAL order, and moved 2021
+#' (the thinnest cells) LEAST of any season -- the opposite of the thin-cell
+#' argument used to justify it.
+#'
+#' It is not free, either: it converts "bucket means are exactly zero" from a
+#' checkable invariant into a tolerance judgement, which forced widening the
+#' check_position_centring.R section 1 guard. Paying that for a 0.004 effect is
+#' a bad trade.
+#'
+#' \strong{Where it DOES belong is the EPV layer}, where the correction is
+#' median 0.526 and up to 4.078, and the thinnest cell carries weight 1.45 --
+#' i.e. several points subtracted from every player in a cell on the strength
+#' of 1.45 units of evidence. That is the real candidate; see NEXT-STEPS.md.
+#'
+#' The flag, the sweep and the tests are kept so the EPV version can reuse them.
+#'
+#' \strong{Not chosen on MAE either way.} A six-point sweep
 #' (`ws11_shrink_prior_sweep.R`) put every arm inside the ~0.157 XGBoost noise
 #' floor and produced a NON-MONOTONIC MAE curve (-0.162, -0.069, -0.150,
 #' -0.122, +0.082, -0.021 for priors 5/10/25/50/100/250). A real effect would

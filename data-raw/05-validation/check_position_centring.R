@@ -50,7 +50,10 @@ SUM_TOL    <- 0.03
 # UNCENTRED level, so it still catches centring silently not happening at all
 # -- which is the thing this section exists to detect.
 EPR_SHRINK_ON <- isTRUE(tryCatch(torp:::EPR_POSITION_SHRINK, error = function(e) FALSE))
-EPR_TOL <- if (EPR_SHRINK_ON) 0.50 else CENTRE_TOL
+# 0.05, not the 0.50 first guessed: the MEASURED residual with shrinkage on is
+# ~0.013, not ~0.1. A 50x loosening of a production guard to accommodate a
+# 0.004 effect was the wrong trade; 5x is defensible if the flag is ever on.
+EPR_TOL <- if (EPR_SHRINK_ON) 0.05 else CENTRE_TOL
 if (EPR_SHRINK_ON) {
   cat(sprintf("NOTE: EPR_POSITION_SHRINK is ON (prior %s) -- bucket means are expected to be\n",
               tryCatch(torp:::EPR_POSITION_SHRINK_PRIOR, error = function(e) "?")))
