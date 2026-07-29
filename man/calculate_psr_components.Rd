@@ -9,7 +9,8 @@ calculate_psr_components(
   coef_df,
   osr_coef_df,
   dsr_coef_df,
-  center = TRUE
+  center = TRUE,
+  centre_by_round = PSR_CENTRE_BY_ROUND
 )
 }
 \arguments{

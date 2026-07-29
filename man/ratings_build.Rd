@@ -15,3 +15,4 @@ centring work had no MAE number.
 Nothing here writes anywhere. The pipeline now calls the same function, so
 the offline path and production cannot drift.
 }
+\keyword{internal}

@@ -4,7 +4,12 @@
 \alias{calculate_psr}
 \title{Calculate Player Skill Ratings (PSR)}
 \usage{
-calculate_psr(skills, coef_df, center = TRUE)
+calculate_psr(
+  skills,
+  coef_df,
+  center = TRUE,
+  centre_by_round = PSR_CENTRE_BY_ROUND
+)
 }
 \arguments{
 \item{skills}{A data.table/data.frame from \code{load_player_stat_ratings()},

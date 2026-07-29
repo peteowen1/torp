@@ -11,6 +11,7 @@
 #' the offline path and production cannot drift.
 #'
 #' @name ratings_build
+#' @keywords internal
 NULL
 
 #' Compute one season's EPR ratings

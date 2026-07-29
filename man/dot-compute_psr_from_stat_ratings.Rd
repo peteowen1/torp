@@ -4,7 +4,12 @@
 \alias{.compute_psr_from_stat_ratings}
 \title{Load PSR Coefficient Files and Compute Components}
 \usage{
-.compute_psr_from_stat_ratings(skills, psr_coef_path = NULL, center = TRUE)
+.compute_psr_from_stat_ratings(
+  skills,
+  psr_coef_path = NULL,
+  center = TRUE,
+  centre_by_round = PSR_CENTRE_BY_ROUND
+)
 }
 \arguments{
 \item{skills}{A data.table/data.frame from \code{load_player_stat_ratings()},
