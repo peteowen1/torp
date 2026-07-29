@@ -164,6 +164,74 @@ EPV_POSITION_STANDARDISE <- TRUE
 #' @keywords internal
 EPV_LEVEL_CENTRE <- TRUE
 
+# ---------------------------------------------------------------------------
+# The value/rating split (2026-07-29, Pete's design). All FALSE = production.
+#
+# The principle: the VALUE layer (EPV, PSV) describes one game, so it centres on
+# the WEEKLY role -- he played CHF that day, judge him against the other CHFs
+# that day. The RATING layer (EPR, PSR) accumulates across a season, so it takes
+# a small SHRUNK adjustment on the STABLE listed position -- a rating must not
+# lurch because a player was moved for one week.
+#
+# Today neither layer does exactly one job: EPV is adjusted TWICE (weekly role,
+# then the per-match listing), PSV has no weekly stage at all, and the rating
+# layer applies a FULL not shrunk correction. See docs/reference/POSITIONS.md.
+#
+# Each flag is separately scoreable so the arms can be attributed rather than
+# shipped as one lump -- the mistake that let round 2's composite ship with
+# individually-null parts.
+# ---------------------------------------------------------------------------
+
+#' Group the EPV role adjustment on `lineup_group` instead of raw `lineup_position`
+#'
+#' `.position_adjust()` groups by all 21 raw slots. Five of those are arbitrary
+#' left/right mirrors (BPL/BPR, HBFL/HBFR, WL/WR, HFFL/HFFR, FPL/FPR) -- left
+#' wing and right wing are the same job. Grouping them separately forces each
+#' side to average zero INDEPENDENTLY, erasing any real difference between them
+#' and halving the cell size for nothing. See `LINEUP_GROUP_MAP`.
+#'
+#' Note this is NOT the granularity question §7.15 closed. That compared a 6-way
+#' vs 9-way collapse at the RATING layer and found nothing (Δ +0.013, P 0.417).
+#' The value layer collapses nothing today, so it has never been measured.
+#'
+#' Applies to BOTH value layers -- EPV's `.position_adjust()` grouping and PSV's
+#' role-centring pass -- because they must stay built the same way. An earlier
+#' draft of this work assumed PSV had no weekly stage at all and tried to add
+#' one; it already has one (`psr.R`, the `pos_col` block), keyed on the same raw
+#' `lineup_position`. The two value layers are already symmetric; the open
+#' question is only whether the mirrors should be merged.
+ROLE_USE_LINEUP_GROUP <- FALSE
+
+#' Group PSV's role centring by `(season, round)` rather than pooling history
+#'
+#' PSV's role stage centres with `by = lineup_position` and NO season/round, so
+#' every wing across all six seasons is centred against one pooled mean. That is
+#' the same defect fixed for PSR in 2026-07-29's `PSR_CENTRE_BY_ROUND`: each
+#' position averages zero across the dataset while any individual round stays
+#' skewed, and a 2021 round-1 value is centred using 2026 games -- a backtest
+#' leak. Found 2026-07-29 while checking whether PSV had a weekly stage at all.
+PSV_ROLE_CENTRE_BY_ROUND <- FALSE
+
+#' Shrink the EPR position adjustment instead of applying it in full
+#'
+#' `centre_epr_by_position()` subtracts the full cell mean. Under the
+#' value/rating split the rating layer should apply a SMALL adjustment on the
+#' stable label, not a full one -- the value layer has already removed the role
+#' effect, so a full second correction over-fits thin cells.
+#'
+#' Shrinkage is `n / (n + EPR_POSITION_SHRINK_PRIOR)` on the cell's weight, so a
+#' well-populated cell is adjusted nearly in full and a thin one barely at all.
+#' FALSE reproduces the full correction exactly.
+EPR_POSITION_SHRINK <- FALSE
+
+#' Prior weight for `EPR_POSITION_SHRINK`, in the cell's own weight units
+#'
+#' A cell carrying this much weight gets half its measured position mean
+#' subtracted. Set from the typical (season, round, position) cell size --
+#' roughly 100-200 TOG-weighted player-games -- so a normal cell lands near
+#' full correction and only genuinely thin cells are held back.
+EPR_POSITION_SHRINK_PRIOR <- 25
+
 #' EPV channel stems the level centring applies to
 #'
 #' All four, unlike \code{EPV_STANDARDISE_CHANNELS} which excludes hitout --

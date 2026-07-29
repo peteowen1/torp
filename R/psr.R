@@ -459,6 +459,36 @@ calculate_psv <- function(player_stats, coef_df, tog_adjust = TRUE, center = TRU
              else if ("position_group" %in% names(dt)) "position_group"
              else if ("pos_group" %in% names(dt)) "pos_group"
              else NULL
+
+  # Optionally merge the arbitrary left/right mirrors, so the role stage groups
+  # on `lineup_group` (16) rather than raw `lineup_position` (21). Must match
+  # EPV's `.position_adjust()` grouping -- the two value layers have to be built
+  # the same way or TORP blends halves that disagree about what a role is.
+  if (isTRUE(ROLE_USE_LINEUP_GROUP) && identical(pos_col, "lineup_position")) {
+    dt[, .role_grp := .collapse_lineup_group(lineup_position)]
+    if (all(is.na(dt$.role_grp))) {
+      cli::cli_abort("PSV role key is entirely NA after collapsing -- nothing would be centred.")
+    }
+    pos_col <- ".role_grp"
+  }
+
+  # PSV's role stage pools across ALL history: `by = pos_col` with no season or
+  # round. Every wing across six seasons is centred against one mean, so each
+  # position averages zero across the dataset while any single round stays
+  # skewed -- and a 2021 value is centred using 2026 games. Same defect as the
+  # one PSR_CENTRE_BY_ROUND fixed. This flag adds the (season, round) grouping.
+  .psv_role_by <- if (isTRUE(PSV_ROLE_CENTRE_BY_ROUND)) {
+    rc <- intersect(c("round", "round_number"), names(dt))[1]
+    if (is.na(rc) || !"season" %in% names(dt)) {
+      cli::cli_abort(c(
+        "PSV_ROLE_CENTRE_BY_ROUND is TRUE but the frame lacks season/round.",
+        "x" = "Refusing to pool history while claiming to centre per round."
+      ))
+    }
+    c("season", rc, pos_col)
+  } else {
+    pos_col
+  }
   if (center && is.null(pos_col)) {
     cli::cli_warn("No position column found for PSV centering; using global mean subtraction")
   }
@@ -473,11 +503,11 @@ calculate_psv <- function(player_stats, coef_df, tog_adjust = TRUE, center = TRU
   if (center && !is.null(pos_col) && "tog" %in% names(dt)) {
     dt[, .tog_wt := pmax(as.numeric(tog), 0.1)]
     dt[!is.na(get(pos_col)), psv_p80 := psv_raw - weighted.mean(psv_raw, .tog_wt, na.rm = TRUE),
-       by = c(pos_col)]
+       by = c(.psv_role_by)]
     dt[is.na(get(pos_col)), psv_p80 := psv_raw - weighted.mean(psv_raw, .tog_wt, na.rm = TRUE)]
     dt[, .tog_wt := NULL]
   } else if (center && !is.null(pos_col)) {
-    dt[!is.na(get(pos_col)), psv_p80 := psv_raw - mean(psv_raw, na.rm = TRUE), by = c(pos_col)]
+    dt[!is.na(get(pos_col)), psv_p80 := psv_raw - mean(psv_raw, na.rm = TRUE), by = c(.psv_role_by)]
     dt[is.na(get(pos_col)), psv_p80 := psv_raw - mean(psv_raw, na.rm = TRUE)]
   } else if (center) {
     dt[, psv_p80 := psv_raw - mean(psv_raw, na.rm = TRUE)]
@@ -545,6 +575,7 @@ calculate_psv <- function(player_stats, coef_df, tog_adjust = TRUE, center = TRU
       if (!any(ok)) return(NA_real_)
       sum(x[ok] * w[ok]) / sum(w[ok])
     }
+
     for (cc in intersect(c("psv_p80", "osv_p80", "dsv_p80"), names(dt))) {
       dt[!is.na(.lc_bucket), (cc) := get(cc) - .lc_wmean(get(cc), .lc_w),
          by = .(season, .lc_round, .lc_bucket)]
