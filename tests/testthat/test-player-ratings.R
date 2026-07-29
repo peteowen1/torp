@@ -542,3 +542,85 @@ test_that("an NA weight excludes only that player, not their whole position", {
     .collapse_listed_position(d$position_group[1])
   expect_true(all(is.finite(out$epr[peers])))
 })
+
+
+# EPV position level centring --------------------------------------------------
+
+.epv_fixture <- function(n = 500, seed = 7, suffix = "_oadj") {
+  set.seed(seed)
+  pg <- unlist(MATCH_LISTED_POS_MAP, use.names = FALSE)
+  d <- data.table::data.table(
+    season = 2026L,
+    round = sample(1:5, n, replace = TRUE),
+    position_group = sample(pg, n, replace = TRUE),
+    time_on_ground_percentage = runif(n, 30, 100)
+  )
+  # set(), not [[<-, which shallow-copies and makes data.table warn on the next
+  # := in the function under test.
+  for (ch in EPV_LEVEL_CENTRE_CHANNELS) {
+    data.table::set(d, j = paste0(ch, suffix), value = rnorm(n))
+  }
+  # Give each listed bucket a genuinely different level, which is the thing
+  # lineup_position centring leaves behind.
+  off <- stats::setNames(seq(-2, 2, length.out = length(pg)), pg)
+  data.table::set(d, j = paste0("epv_recv", suffix),
+                  value = d[[paste0("epv_recv", suffix)]] + off[d$position_group])
+  data.table::set(d, j = paste0("epv", suffix), value = Reduce(`+`, lapply(
+    paste0(EPV_LEVEL_CENTRE_CHANNELS, suffix), function(cc) d[[cc]])))
+  d[]
+}
+
+test_that("EPV centring zeroes the TOG-weighted cell mean, which is what EPR sums", {
+  # EPR forms sum(x * tog_safe * decay); decay is ~constant within a round, so
+  # the TOG-weighted mean is the quantity that must vanish. An unweighted mean
+  # would look centred while EPR stayed skewed.
+  d <- .epv_fixture()
+  out <- suppressMessages(centre_epv_by_position(d))
+  out[, `:=`(bucket = .collapse_listed_position(position_group),
+             w = pmax(time_on_ground_percentage / 100, 0.1))]
+  for (cc in paste0(EPV_LEVEL_CENTRE_CHANNELS, "_oadj")) {
+    wm <- out[, stats::weighted.mean(get(cc), w), by = .(season, round, bucket)]$V1
+    expect_equal(wm, rep(0, length(wm)))
+  }
+})
+
+test_that("EPV centring targets the channel set EPR actually reads", {
+  # Centring _adj while EPR consumes _oadj would be a silent no-op: every check
+  # would pass and nothing downstream would move.
+  d <- .epv_fixture(suffix = "_oadj")
+  d[, epv_recv_adj := 99]           # a stale _adj set must be ignored
+  out <- suppressMessages(centre_epv_by_position(d))
+  expect_true(all(out$epv_recv_adj == 99))
+  expect_false(isTRUE(all.equal(out$epv_recv_oadj, d$epv_recv_oadj)))
+
+  # ...and falls back to _adj when no _oadj exists.
+  d2 <- .epv_fixture(suffix = "_adj")
+  out2 <- suppressMessages(centre_epv_by_position(d2))
+  out2[, `:=`(bucket = .collapse_listed_position(position_group),
+              w = pmax(time_on_ground_percentage / 100, 0.1))]
+  wm <- out2[, stats::weighted.mean(epv_recv_adj, w), by = .(season, round, bucket)]$V1
+  expect_equal(wm, rep(0, length(wm)))
+})
+
+test_that("EPV centring preserves within-position spread and rebuilds the total", {
+  # Spread is preserved WITHIN a round, which is the cell a constant is
+  # subtracted from. Pooled across rounds it legitimately moves, because each
+  # round gets its own offset -- checking it pooled would fail on correct code.
+  d <- .epv_fixture()
+  key <- c("round", "position_group")
+  sd_before <- d[, .(s = sd(epv_recv_oadj)), by = key][order(round, position_group)]$s
+  out <- suppressMessages(centre_epv_by_position(d))
+  sd_after <- out[, .(s = sd(epv_recv_oadj)), by = key][order(round, position_group)]$s
+  expect_equal(sd_after, sd_before, tolerance = 1e-8)
+
+  expect_equal(out$epv_oadj,
+               out$epv_recv_oadj + out$epv_disp_oadj +
+                 out$epv_spoil_oadj + out$epv_hitout_oadj)
+  expect_false(any(c(".cpg", ".ctog") %in% names(out)))
+})
+
+test_that("EPV centring aborts rather than silently returning uncentred values", {
+  d <- .epv_fixture()
+  expect_error(centre_epv_by_position(d[, !"position_group"]), "position_group")
+  expect_error(centre_epv_by_position(d[, !"epv_hitout_oadj"]), "channel")
+})

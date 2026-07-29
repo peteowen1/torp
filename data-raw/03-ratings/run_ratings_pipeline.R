@@ -241,6 +241,42 @@ data.table::setDT(all_pgd)
 cli::cli_progress_step("Applying EPV opponent adjustment")
 all_pgd <- adjust_epv_for_opponents(all_pgd)
 
+# Positional LEVEL correction, applied here and not earlier. It has to run
+# after the opponent adjustment (which would otherwise reintroduce a level on
+# top of it) and before both consumers -- EPR aggregation below and
+# .compute_player_game_ratings() in stage 5 -- so a single call covers the
+# published ratings and the per-game displays.
+if (isTRUE(EPV_LEVEL_CENTRE)) {
+  cli::cli_progress_step("Centring EPV on listed-position levels")
+  all_pgd <- centre_epv_by_position(all_pgd)
+
+  # Verify the invariant that makes this worth doing: the TOG-weighted sum per
+  # (season, round, bucket) is what EPR's numerator accumulates, so it is the
+  # thing that must vanish -- not the unweighted mean, which would look centred
+  # while EPR stayed skewed.
+  .lc <- if (all(paste0(EPV_LEVEL_CENTRE_CHANNELS, "_oadj") %in% names(all_pgd)))
+    "_oadj" else "_adj"
+  .chk <- data.table::as.data.table(all_pgd)
+  .chk[, `:=`(pos_bucket = torp:::.collapse_listed_position(position_group),
+              w = pmax(dplyr::coalesce(time_on_ground_percentage / 100, 0.1), 0.1))]
+  .chk <- .chk[!is.na(pos_bucket)]
+  .worst <- 0
+  for (cc in paste0(EPV_LEVEL_CENTRE_CHANNELS, .lc)) {
+    m <- .chk[is.finite(get(cc)),
+              .(wm = stats::weighted.mean(get(cc), w)),
+              by = .(season, round, pos_bucket)]
+    if (nrow(m) > 0) .worst <- max(.worst, max(abs(m$wm), na.rm = TRUE))
+  }
+  if (!is.finite(.worst) || .worst > 1e-8) {
+    cli::cli_abort(c(
+      "EPV level centring did not take: max |TOG-weighted cell mean| = {signif(.worst, 3)}",
+      "x" = "Refusing to build ratings on EPV that is not centred as claimed."
+    ))
+  }
+  cli::cli_alert_success("EPV level centring verified (max |cell mean| = {signif(.worst, 3)})")
+  rm(.chk, .worst, .lc)
+}
+
 data.table::setkey(all_pgd, match_id)
 
 # Pre-load shared data once — avoids ~145 redundant loads per full rebuild

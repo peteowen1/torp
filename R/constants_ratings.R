@@ -110,6 +110,32 @@ TORP_EPR_WEIGHT <- 0.5
 #' @keywords internal
 EPV_POSITION_STANDARDISE <- TRUE
 
+#' Centre EPV channels on their listed position's level, per round
+#'
+#' The positional level correction, at the layer that creates it. Turned on
+#' 2026-07-29 after measurement showed the level gap originates at EPV:
+#' \code{.position_adjust()} centres every channel to machine-precision zero by
+#' \code{lineup_position}, yet on the listed taxonomy everything downstream uses,
+#' \code{epv_adj} still spans 2.94 points (key_def -2.17, key_fwd +0.77 on 2026
+#' per-game data). Role-centring removes the role effect; the player-type effect
+#' survives it.
+#'
+#' Fixing it here flows to EPR, PSV blending, the match features and
+#' \code{get_player_game_ratings()} at once. \code{EPR_POSITION_CENTRE} stays on
+#' as a backstop rather than being replaced: \code{.bayesian_shrink()} pulls
+#' toward a NON-ZERO \code{prior_rate} (-0.7 / -0.3) by an amount that depends on
+#' \code{wt_gms}, so a zero EPV sum does not produce a zero EPR level.
+#' @keywords internal
+EPV_LEVEL_CENTRE <- TRUE
+
+#' EPV channel stems the level centring applies to
+#'
+#' All four, unlike \code{EPV_STANDARDISE_CHANNELS} which excludes hitout --
+#' dividing by a near-zero within-position SD amplifies without bound, but
+#' subtracting a mean is safe at any spread.
+#' @keywords internal
+EPV_LEVEL_CENTRE_CHANNELS <- c("epv_recv", "epv_disp", "epv_spoil", "epv_hitout")
+
 #' Centre each EPR channel on its position's TOG-weighted mean
 #'
 #' \code{EPV_POSITION_STANDARDISE} equalises between-position *spread*, at the

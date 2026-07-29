@@ -2,6 +2,35 @@
 
 ## Bug Fixes
 
+* **The positional level correction moved to EPV, where the gap is actually
+  created.** `.position_adjust()` already centred every EPV channel to
+  machine-precision zero — but by `lineup_position`, the weekly on-field role.
+  That removes the role effect and leaves the player-type one: key defenders
+  are a subset of the players filling full-back and centre-half-back and sit
+  below those roles' own means. Measured on 2026 per-game data, `epv_adj` spanned
+  2.94 points across listed buckets (key_def −2.17, key_fwd +0.77) while all 20
+  lineup positions read exactly 0.
+
+  `centre_epv_by_position()` (`EPV_LEVEL_CENTRE`) now centres the channel set EPR
+  consumes on its listed bucket, TOG-weighted, per `(season, round)`. TOG
+  weighting is what makes EPR's numerator vanish — EPR forms
+  `sum(x * tog_safe * decay)` and decay is ~constant within a round, so zeroing
+  the *unweighted* mean would look centred while EPR stayed skewed. Per-round
+  grouping keeps it leak-safe.
+
+  Measured effect on the round-20 EPR cross-section: positional spread falls
+  from **1.725 to 0.420** (−76%), within-position spread and player ordering
+  intact (`cor` = 0.965 before/after).
+
+  **`EPR_POSITION_CENTRE` stays on as a backstop, not replaced.**
+  `.bayesian_shrink()` pulls toward a non-zero `prior_rate` (−0.7 / −0.3) by an
+  amount set by each player's `wt_gms`, so a zeroed EPV sum does not produce a
+  zeroed EPR level. With both layers the residual spread is 0.0000.
+
+  Because it runs after `adjust_epv_for_opponents()` and before both consumers,
+  it also reaches `get_player_game_ratings()`, whose per-game EPV display was
+  uncentred while the season rating was not.
+
 * **EPR position centring and the match model's position features now use one
   taxonomy.** They shipped on different ones: the features collapse
   `position_group` to 6 buckets via `MATCH_LISTED_POS_MAP` (combining
