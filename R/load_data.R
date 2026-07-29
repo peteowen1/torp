@@ -215,6 +215,21 @@ save_to_release <- function(df, file_name, release_tag, also_csv = FALSE, prev_r
     }
     invisible(TRUE)
   }
+  # DEFERRED, not raised here. The `also_csv` block below MUST still run even
+  # when the parquet verify fails.
+  #
+  # Observed 2026-07-29 (run 30434581586): the parquet uploaded at 08:51:15, the
+  # verify threw, this handler re-raised, and the CSV never uploaded -- leaving
+  # predictions_2026.parquet on the new rating vintage and predictions_2026.csv
+  # 15 hours stale. squiggle.com.au reads the CSV, so it served the previous
+  # round's tips while every internal check looked healthy. The caller's own
+  # tryCatch caught the re-raise, but its cli_warn is deferred to end-of-script
+  # and was lost when the job hit its timeout, so NOTHING was logged.
+  #
+  # The parquet is already live by this point, so a verify failure is a reason
+  # to shout, not a reason to also skip the copy Squiggle depends on. The error
+  # is preserved and re-raised after the CSV attempt.
+  verify_err <- NULL
   tryCatch(
     .vb_retry(verify_upload, times = 5L, delays = c(2, 3, 5, 10),
               should_retry = function(e) vb_classify_error(e) != "absent"),
@@ -228,7 +243,7 @@ save_to_release <- function(df, file_name, release_tag, also_csv = FALSE, prev_r
           "!" = "This is not a proof of correctness. If it recurs on the same file, check the asset's real bytes rather than trusting the listing."
         ))
       } else {
-        stop(e)
+        verify_err <<- e
       }
     }
   )
@@ -257,6 +272,18 @@ save_to_release <- function(df, file_name, release_tag, also_csv = FALSE, prev_r
                            tag = release_tag,
                            name = csv_name)
     }, error = function(e) {
+      # cli_alert_danger FIRST: it prints immediately. A bare cli_warn is
+      # deferred to the end of an Rscript run and dropped past
+      # getOption("nwarnings"), which is exactly how the 2026-07-29 CSV
+      # divergence left no trace in the log. The verify path above was fixed
+      # for that; THIS handler -- the one that fires when the CSV upload itself
+      # fails -- was left on the weak path in the same commit.
+      cli::cli_alert_danger(
+        "CSV copy FAILED for {csv_name} (parquet uploaded fine): {conditionMessage(e)}")
+      if (release_tag == "predictions") {
+        cli::cli_alert_danger(
+          "squiggle.com.au reads this CSV -- it will keep serving the PREVIOUS round's tips until this succeeds.")
+      }
       cli::cli_warn(c(
         "!" = "CSV copy FAILED for {.val {csv_name}} (parquet uploaded fine): {conditionMessage(e)}",
         "x" = if (release_tag == "predictions")
@@ -275,6 +302,16 @@ save_to_release <- function(df, file_name, release_tag, also_csv = FALSE, prev_r
         cli::cli_warn("Remote upload succeeded but local save failed: {conditionMessage(e)}")
       }
     )
+  }
+
+  # Now re-raise the deferred verify failure, with the CSV already attempted.
+  # cli_alert_danger prints IMMEDIATELY; a bare warning would be deferred to
+  # end-of-script and is exactly what went missing on 2026-07-29 when the job
+  # was killed by its timeout a second after finishing.
+  if (!is.null(verify_err)) {
+    cli::cli_alert_danger(
+      "Post-upload verify FAILED for {.val {f_name}} -- the upload itself succeeded and the CSV copy was still attempted, but treat this asset as unconfirmed.")
+    stop(verify_err)
   }
 }
 

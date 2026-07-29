@@ -696,9 +696,28 @@ centre_epr_by_position <- function(epr_df,
     if (sum(ww) <= 0) return(mean(xx))
     sum(xx * ww) / sum(ww)
   }
+  # Optionally SHRINK the correction instead of applying it in full.
+  #
+  # Under the value/rating split the value layer has already removed the role
+  # effect, so a full second correction at the rating layer over-fits thin
+  # cells -- a (season, round, position) cell with three players has a "position
+  # mean" that is mostly those three players' noise, and subtracting it in full
+  # writes that noise into everyone's rating.
+  #
+  # Shrinkage factor n / (n + prior) on the cell's own WEIGHT, not its row
+  # count: a cell of 20 fringe players carrying almost no TOG should be trusted
+  # about as much as a cell of two regulars, and weight says that where a row
+  # count does not. FALSE reproduces the full correction exactly (factor 1).
+  .shrink_cell <- function(w) {
+    if (!isTRUE(EPR_POSITION_SHRINK)) return(1)
+    ww <- w[is.finite(w) & w > 0]
+    n <- sum(ww)
+    if (!is.finite(n) || n <= 0) return(0)   # no weight -> no evidence -> no adjustment
+    n / (n + EPR_POSITION_SHRINK_PRIOR)
+  }
   for (cc in have) {
     dt[!is.na(.cpg),
-       (cc) := get(cc) - .wmean_cell(get(cc), .cw),
+       (cc) := get(cc) - .shrink_cell(.cw) * .wmean_cell(get(cc), .cw),
        by = .(season, round, .cpg)]
   }
 

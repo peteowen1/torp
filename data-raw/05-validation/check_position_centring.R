@@ -11,12 +11,14 @@
 # Usage:  Rscript torp/data-raw/05-validation/check_position_centring.R
 # Exit 0 = centred as claimed, 1 = not.
 #
-# EXPECTED TO FAIL ON SECTION 5 UNTIL THE FIRST RATINGS REBUILD AFTER
-# 2026-07-29. The PSR per-round centring shipped that day; the currently
-# published artifact predates it and still shows a ~0.42 served-round spread.
-# That failure is this script working, not production breaking -- the fix is
-# held on dev until after round 21, and the rebuild is what will clear it. If it
-# is still failing after that rebuild, THEN it is a real finding.
+# Section 5 history, worth reading before trusting a red result here:
+# the PSR per-round centring shipped 2026-07-29 and the full-history rebuild
+# that day confirmed it (worst cell 2.09e-04 over 984 cells). Section 5's FIRST
+# version still reported a failure at 0.922 against that correct file, because
+# it read `psr` off torp_ratings -- the rated-roster SUBSET -- with pred_tog
+# weights, while the centring runs over all of psr-data with wt_80s weights.
+# Wrong population, wrong weights. It now checks psr-data on its own key, and
+# reports the roster-level PSR separately as 5b, informational only.
 
 suppressMessages({
   library(data.table); library(arrow)
@@ -34,6 +36,33 @@ options(torp.local_data_dir = NA)   # the release, never a local mirror
 # every correct run is worse than none -- it trains you to ignore it.
 CENTRE_TOL <- 0.01
 SUM_TOL    <- 0.03
+
+# EPR_POSITION_SHRINK (shipped 2026-07-29) deliberately leaves a residual: it
+# subtracts n/(n+prior) of the position mean, not all of it. At prior 5 on the
+# measured cell-weight distribution that is ~90% of the correction, so bucket
+# means land near 0.1 rather than 1e-17 -- and the strict tolerance above would
+# fail on every correct run. A checker that cries wolf gets ignored, which is
+# the failure this file's own header warns about.
+#
+# So the tolerance becomes conditional. When shrinkage is ON we are no longer
+# asserting "zero"; we are asserting "centring still did nearly all of its job".
+# 0.5 sits well above the ~0.1 expected residual and far below the 1.7-2.9
+# UNCENTRED level, so it still catches centring silently not happening at all
+# -- which is the thing this section exists to detect.
+EPR_SHRINK_ON <- isTRUE(tryCatch(torp:::EPR_POSITION_SHRINK, error = function(e) FALSE))
+# 0.05, not the 0.50 first guessed: the MEASURED residual with shrinkage on is
+# ~0.013, not ~0.1. A 50x loosening of a production guard to accommodate a
+# 0.004 effect was the wrong trade; 5x is defensible if the flag is ever on.
+EPR_TOL <- if (EPR_SHRINK_ON) 0.05 else CENTRE_TOL
+if (EPR_SHRINK_ON) {
+  cat(sprintf("NOTE: EPR_POSITION_SHRINK is ON (prior %s) -- bucket means are expected to be\n",
+              tryCatch(torp:::EPR_POSITION_SHRINK_PRIOR, error = function(e) "?")))
+  cat("      NEAR zero, not AT zero. Section 1 tolerance relaxed accordingly.\n\n")
+}
+# PSR is stored to more decimal places than EPR and is centred over a much
+# larger population, so it lands ~2e-04 rather than ~1e-16. Set well above the
+# observed value but two orders below the ~0.76 spread an uncentred PSR shows.
+PSR_CENTRE_TOL <- 0.01
 CH  <- c("epr_recv", "epr_disp", "epr_spoil", "epr_hitout")
 
 r <- as.data.table(load_torp_ratings())
@@ -117,25 +146,89 @@ print(sp[order(-sd)], row.names = FALSE)
 # matches the 6-way bucket; checking on the bucket is therefore the same
 # partition, not a looser one.
 psr_bad <- FALSE
-if ("psr" %in% names(r)) {
-  psr_w <- if ("wt_80s" %in% names(r)) pmax(dplyr::coalesce(r$wt_80s, 1), 0.01) else r$.w
-  r[, .psrw := psr_w]
-  pc <- r[!is.na(pos_bucket) & is.finite(psr),
-          .(wmean = stats::weighted.mean(psr, .psrw, na.rm = TRUE), n = .N),
-          by = .(season, round, pos_bucket)]
-  psr_worst <- if (nrow(pc)) max(abs(pc$wmean), na.rm = TRUE) else NA_real_
-  cat(sprintf("\n=== 5. PSR per (season, round, position): worst |weighted mean| = %s ===\n",
-              format(psr_worst, scientific = TRUE)))
-  print(lat[!is.na(pos_bucket) & is.finite(psr),
-            .(n = .N, wmean = round(stats::weighted.mean(psr, .w, na.rm = TRUE), 4),
-              sd = round(sd(psr, na.rm = TRUE), 2)), by = pos_bucket][order(-sd)],
-        row.names = FALSE)
-  if (!is.finite(psr_worst) || psr_worst > CENTRE_TOL) {
-    cli::cli_alert_danger("PSR is NOT position-centred per round: worst cell mean {signif(psr_worst, 3)}")
+psr_rel <- tryCatch(as.data.table(load_psr(TRUE)), error = function(e) NULL)
+if (!is.null(psr_rel) && nrow(psr_rel) > 0 && "psr" %in% names(psr_rel)) {
+  # Check PSR on the POPULATION IT WAS CENTRED OVER, with the SAME WEIGHTS.
+  #
+  # The first version of this section read `psr` off torp_ratings and grouped by
+  # pos_bucket with pred_tog weights. It reported "worst cell mean 0.922" on a
+  # correctly-centred file, for two independent reasons, and I nearly acted on it:
+  #
+  #   1. WRONG POPULATION. calculate_psr() centres over every player-round in
+  #      psr-data (176,055 rows). torp_ratings holds the rated-roster subset
+  #      (130,928). A mean-zero set stays mean-zero only under a random subset,
+  #      and "was this player rated this round" is emphatically not random --
+  #      it is selection. Non-zero group means in the subset are arithmetic,
+  #      not a centring failure.
+  #   2. WRONG WEIGHTS. Centring is wt_80s-weighted; that check's printed table
+  #      was pred_tog-weighted. Re-weighting a weighted mean does not preserve
+  #      the zero.
+  #
+  # So it tested neither the population nor the statistic that the invariant is
+  # about. Checking the release on its own key and weights gives 2.09e-04.
+  psr_key <- if ("lineup_pos_group" %in% names(psr_rel)) "lineup_pos_group"
+             else if ("lineup_position" %in% names(psr_rel)) "lineup_position"
+             else if ("pos_group" %in% names(psr_rel)) "pos_group" else NULL
+  if (is.null(psr_key)) {
+    cli::cli_alert_danger("psr-data carries no position column -- PSR centring cannot be checked.")
     psr_bad <- TRUE
+  } else {
+    psr_rel[, .psrw := if ("wt_80s" %in% names(psr_rel))
+                         pmax(dplyr::coalesce(wt_80s, 1), 0.01) else 1]
+    pc <- psr_rel[!is.na(get(psr_key)) & is.finite(psr),
+                  .(wmean = stats::weighted.mean(psr, .psrw, na.rm = TRUE), n = .N),
+                  by = c("season", "round", psr_key)]
+    # Empty is not a pass -- same trap section 1 fell into.
+    psr_worst <- if (nrow(pc)) max(abs(pc$wmean), na.rm = TRUE) else NA_real_
+    cat(sprintf("\n=== 5. PSR per (season, round, %s), wt_80s-weighted, on psr-data ===\n", psr_key))
+    cat(sprintf("  %d rows, %d cells, worst |weighted mean| = %s\n",
+                nrow(psr_rel), nrow(pc), format(psr_worst, scientific = TRUE)))
+    if (!is.finite(psr_worst) || psr_worst > PSR_CENTRE_TOL) {
+      cli::cli_alert_danger("PSR is NOT position-centred per round: worst cell mean {signif(psr_worst, 3)}")
+      psr_bad <- TRUE
+    }
   }
 } else {
-  cli::cli_alert_warning("No {.field psr} column -- PSR centring UNVERIFIED (not the same as verified).")
+  cli::cli_alert_warning("Could not load psr-data -- PSR centring UNVERIFIED (not the same as verified).")
+}
+
+# ---- 5b. the PSR level torp_ratings actually inherits (informational) --------
+# NOT a pass/fail.
+#
+# This MUST use wt_80s, joined from psr-data. torp_ratings does not carry
+# wt_80s, and an earlier version of this section silently fell back to pred_tog
+# -- a different weight vector entirely. That reported a 0.759 positional
+# spread on a correctly-centred file and produced a written claim that TORP
+# still carried ~0.38 of positional level. Measured properly the answer is:
+#
+#   full psr population, wt_80s (the invariant)  0.000
+#   rated subset,        wt_80s                  0.096   <- the real number
+#   full psr population, unweighted              0.306
+#   rated subset,        unweighted              0.357
+#
+# So ~0.10 of the apparent 0.76 was the player set and ~0.66 was the weights.
+# The dropped rows are 4.6% of total game time with median wt_80s 0.044 --
+# fringe players who barely played -- which is exactly why re-weighting, not
+# re-populating, is what moves this number. Re-centring PSR on the rated roster
+# would buy ~0.05 in TORP and is not worth a rating-definition change.
+if ("psr" %in% names(r) && !is.null(psr_rel) && "wt_80s" %in% names(psr_rel)) {
+  wj <- unique(psr_rel[, .(player_id, season, round, wt_80s)])
+  lat_w <- merge(lat[!is.na(pos_bucket) & is.finite(psr)], wj,
+                 by = c("player_id", "season", "round"), all.x = TRUE,
+                 suffixes = c("", ".psr"))
+  wcol <- if ("wt_80s.psr" %in% names(lat_w)) "wt_80s.psr" else "wt_80s"
+  lat_w[, .ww := pmax(dplyr::coalesce(get(wcol), 0), 1e-9)]
+  matched <- sum(!is.na(lat_w[[wcol]]))
+  cat(sprintf("\n=== 5b. PSR level within the rated roster, latest round (informational) ===\n"))
+  cat(sprintf("  wt_80s-weighted, %d of %d rows matched to psr-data\n", matched, nrow(lat_w)))
+  if (matched < 0.9 * nrow(lat_w)) {
+    cli::cli_alert_warning("Under 90% of rated rows matched psr-data -- 5b's weighting is unreliable.")
+  }
+  print(lat_w[, .(n = .N, wmean = round(stats::weighted.mean(psr, .ww, na.rm = TRUE), 4),
+                  sd = round(sd(psr, na.rm = TRUE), 2)), by = pos_bucket][order(-wmean)],
+        row.names = FALSE)
+} else if ("psr" %in% names(r)) {
+  cli::cli_alert_warning("Skipping 5b: no wt_80s available to weight it correctly. An unweighted or pred_tog-weighted version of this table is misleading -- see the comment above.")
 }
 
 cat("\n=== VERDICT ===\n")
@@ -144,9 +237,9 @@ cat("\n=== VERDICT ===\n")
 # 3.37e-16 exceeds 0.01", a danger alert quoting a number that passes. A
 # checker that names the wrong cause is barely better than one that says
 # nothing, because the first thing you do is go look at the wrong layer.
-epr_bad <- max(mx, na.rm = TRUE) > CENTRE_TOL
+epr_bad <- max(mx, na.rm = TRUE) > EPR_TOL
 if (epr_bad) {
-  cli::cli_alert_danger("EPR NOT centred: worst channel mean {signif(max(mx), 3)} exceeds {CENTRE_TOL}")
+  cli::cli_alert_danger("EPR NOT centred: worst channel mean {signif(max(mx), 3)} exceeds {EPR_TOL}{if (EPR_SHRINK_ON) ' (shrinkage-adjusted tolerance)' else ''}")
 }
 bad <- epr_bad || psr_bad
 if (d_epr > SUM_TOL) {

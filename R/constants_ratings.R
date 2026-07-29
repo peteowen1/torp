@@ -164,6 +164,125 @@ EPV_POSITION_STANDARDISE <- TRUE
 #' @keywords internal
 EPV_LEVEL_CENTRE <- TRUE
 
+# ---------------------------------------------------------------------------
+# The value/rating split (2026-07-29, Pete's design). All FALSE = production.
+#
+# The principle: the VALUE layer (EPV, PSV) describes one game, so it centres on
+# the WEEKLY role -- he played CHF that day, judge him against the other CHFs
+# that day. The RATING layer (EPR, PSR) accumulates across a season, so it takes
+# a small SHRUNK adjustment on the STABLE listed position -- a rating must not
+# lurch because a player was moved for one week.
+#
+# Today neither layer does exactly one job: EPV is adjusted TWICE (weekly role,
+# then the per-match listing), PSV has no weekly stage at all, and the rating
+# layer applies a FULL not shrunk correction. See docs/reference/POSITIONS.md.
+#
+# Each flag is separately scoreable so the arms can be attributed rather than
+# shipped as one lump -- the mistake that let round 2's composite ship with
+# individually-null parts.
+# ---------------------------------------------------------------------------
+
+#' Group the EPV role adjustment on `lineup_group` instead of raw `lineup_position`
+#'
+#' `.position_adjust()` groups by all 21 raw slots. Five of those are arbitrary
+#' left/right mirrors (BPL/BPR, HBFL/HBFR, WL/WR, HFFL/HFFR, FPL/FPR) -- left
+#' wing and right wing are the same job. Grouping them separately forces each
+#' side to average zero INDEPENDENTLY, erasing any real difference between them
+#' and halving the cell size for nothing. See `LINEUP_GROUP_MAP`.
+#'
+#' Note this is NOT the granularity question §7.15 closed. That compared a 6-way
+#' vs 9-way collapse at the RATING layer and found nothing (Δ +0.013, P 0.417).
+#' The value layer collapses nothing today, so it has never been measured.
+#'
+#' Applies to BOTH value layers -- EPV's `.position_adjust()` grouping and PSV's
+#' role-centring pass -- because they must stay built the same way. An earlier
+#' draft of this work assumed PSV had no weekly stage at all and tried to add
+#' one; it already has one (`psr.R`, the `pos_col` block), keyed on the same raw
+#' `lineup_position`. The two value layers are already symmetric; the open
+#' question is only whether the mirrors should be merged.
+#' @keywords internal
+ROLE_USE_LINEUP_GROUP <- FALSE
+
+#' Group PSV's role centring by `(season, round)` rather than pooling history
+#'
+#' PSV's role stage centres with `by = lineup_position` and NO season/round, so
+#' every wing across all six seasons is centred against one pooled mean. That is
+#' the same defect fixed for PSR in 2026-07-29's `PSR_CENTRE_BY_ROUND`: each
+#' position averages zero across the dataset while any individual round stays
+#' skewed, and a 2021 round-1 value is centred using 2026 games -- a backtest
+#' leak. Found 2026-07-29 while checking whether PSV had a weekly stage at all.
+#' @keywords internal
+PSV_ROLE_CENTRE_BY_ROUND <- FALSE
+
+#' Shrink the EPR position adjustment instead of applying it in full
+#'
+#' `centre_epr_by_position()` subtracts the full cell mean. Under the
+#' value/rating split the rating layer should apply a SMALL adjustment on the
+#' stable label, not a full one -- the value layer has already removed the role
+#' effect, so a full second correction over-fits thin cells.
+#'
+#' Shrinkage is `n / (n + EPR_POSITION_SHRINK_PRIOR)` on the cell's weight, so a
+#' well-populated cell is adjusted nearly in full and a thin one barely at all.
+#' FALSE reproduces the full correction exactly.
+#' @keywords internal
+EPR_POSITION_SHRINK <- FALSE
+
+#' Prior weight for `EPR_POSITION_SHRINK`, in the cell's own weight units
+#'
+#' A cell carrying this much weight gets half its measured position mean
+#' subtracted. Set to 5 on MEASURED cell weights (2026-07-29), not the estimate
+#' the first draft used -- that guessed 100-200 TOG-weighted player-games and
+#' was wrong by ~3x. Actual distribution: median 43, 5th pctile 18, max 92.
+#'
+#' What 5 does, on the real distribution:
+#'
+#'   cell weight | fraction of the position mean subtracted
+#'   18 (5th)    | 0.787
+#'   43 (median) | 0.896
+#'   82 (95th)   | 0.942
+#'
+#' So a normal cell keeps ~90% of the correction and only 0.6% of cells drop
+#' below half. The cells it genuinely bites are the ones that deserve it --
+#' 2021 round 1 carries cell weights of 0.7-2.1 because nobody has history yet
+#' and pred_tog is near zero, and TODAY those get the FULL correction computed
+#' off 0.7 units of evidence. Shrinkage cuts that to ~12%.
+#'
+#' \strong{FALSE -- shrinkage is right in principle but this is the WRONG
+#' LAYER.} Measured 2026-07-29, correction size per (season, round, position)
+#' cell:
+#'
+#'   EPV level centring (PRIMARY)  median 0.526, 90th 1.379, max 4.078
+#'   EPR centring       (BACKSTOP) ~0.002
+#'
+#' The EPR correction is ~250x smaller because EPV_LEVEL_CENTRE has already
+#' zeroed the level upstream -- this layer only mops up the residual
+#' .bayesian_shrink() reintroduces. Shrinking a correction that is already
+#' ~0.002 cannot do any work: enabling it moved published TORP by a mean of
+#' 0.0044, left the served-round top 20 in an IDENTICAL order, and moved 2021
+#' (the thinnest cells) LEAST of any season -- the opposite of the thin-cell
+#' argument used to justify it.
+#'
+#' It is not free, either: it converts "bucket means are exactly zero" from a
+#' checkable invariant into a tolerance judgement, which forced widening the
+#' check_position_centring.R section 1 guard. Paying that for a 0.004 effect is
+#' a bad trade.
+#'
+#' \strong{Where it DOES belong is the EPV layer}, where the correction is
+#' median 0.526 and up to 4.078, and the thinnest cell carries weight 1.45 --
+#' i.e. several points subtracted from every player in a cell on the strength
+#' of 1.45 units of evidence. That is the real candidate; see NEXT-STEPS.md.
+#'
+#' The flag, the sweep and the tests are kept so the EPV version can reuse them.
+#'
+#' \strong{Not chosen on MAE either way.} A six-point sweep
+#' (`ws11_shrink_prior_sweep.R`) put every arm inside the ~0.157 XGBoost noise
+#' floor and produced a NON-MONOTONIC MAE curve (-0.162, -0.069, -0.150,
+#' -0.122, +0.082, -0.021 for priors 5/10/25/50/100/250). A real effect would
+#' show a smooth optimum; a scatter means the differences are noise. Do not
+#' quote any of those deltas as a gain.
+#' @keywords internal
+EPR_POSITION_SHRINK_PRIOR <- 5
+
 #' EPV channel stems the level centring applies to
 #'
 #' All four, unlike \code{EPV_STANDARDISE_CHANNELS} which excludes hitout --
@@ -252,6 +371,37 @@ PSV_LEVEL_CENTRE <- TRUE
 #' @keywords internal
 PSR_CENTRE_BY_ROUND <- TRUE
 
+#' Centre PSR on the LISTED position taxonomy
+#'
+#' TRUE centres PSR on `.collapse_listed_position()` of a player's listed
+#' position -- the same key EPV, EPR and PSV use -- instead of the stat-ratings
+#' frame's `pos_group`, which is a PBP-derived PLAYSTYLE label.
+#'
+#' The two are different facts, not different vintages of one fact: the mappers
+#' were verified to produce an identical partition of the same seven raw labels,
+#' so the disagreement is entirely in the source data. They differ for 13.2% of
+#' player-rounds overall and 20.3% in 2026. Centring on playstyle while TORP
+#' reads the result under listed put ~0.30 of positional level back into TORP,
+#' undoing half of what the 2026-07-29 program removed at EPV/EPR. 2021, where
+#' the labels agree 100%, showed exactly 0.000 spread.
+#'
+#' **FALSE, and it must stay FALSE until something overturns the measurement.**
+#' The listed arm was scored on 2026-07-29 (`ws9_psr_listed_centring.R`) and
+#' REGRESSED: MAE 25.4335 -> 25.8152, dMAE +0.382 `[+0.081, +0.684]`, CI
+#' entirely above zero. That is a real cost, not a null.
+#'
+#' Why it lost, most likely: the career-modal label PSR used is the most STABLE
+#' of the three resolutions, and a rating's position key wants stability. Moving
+#' it to the season listing made it lurch more, and centring PSR on the listed
+#' label while EPV stayed on the per-match one made the two halves of TORP
+#' agree LESS, not more.
+#'
+#' The positional level this was meant to remove (~0.30 in TORP) is real and
+#' still there. The fix is the value/rating split in NEXT-STEPS.md, not this
+#' flag. Setting this TRUE ships a measured regression.
+#' @keywords internal
+PSR_CENTRE_ON_LISTED <- FALSE
+
 #' Whether PSR position centring rescales as well as recentres
 #'
 #' The mirror of \code{EPV_POSITION_STANDARDISE} on the PSR side.
@@ -336,6 +486,79 @@ LINEUP_POSITION_GROUP_MAP <- c(
   HFFL = "MEDIUM_FORWARD", HFFR = "MEDIUM_FORWARD",
   INT  = NA_character_, SUB  = NA_character_, EMERG = NA_character_
 )
+
+#' Lineup group: `lineup_position` with the left/right mirrors merged
+#'
+#' The middle rung between `lineup_position` (21 raw slots) and
+#' `LINEUP_POSITION_GROUP_MAP` (6 broad groups). Five of the 21 slots are
+#' arbitrary left/right mirrors of the same job -- BPL/BPR, HBFL/HBFR, WL/WR,
+#' HFFL/HFFR, FPL/FPR. Left wing and right wing are the same role, and which
+#' one a player is named in carries no information.
+#'
+#' Why merging them is the right default for centring: grouping by raw
+#' `lineup_position` forces the left and right wing to average zero
+#' INDEPENDENTLY. That silently erases any real difference between the two
+#' sides instead of treating them as one role, and halves the cell size for
+#' nothing. Merging gives 13 on-field groups.
+#'
+#' INT / SUB / EMERG are KEPT as their own groups here, unlike
+#' `LINEUP_POSITION_GROUP_MAP` which sends them to NA. `INT` is the single most
+#' common value in the teams data (10,305 rows vs ~2,468 for each on-field
+#' slot), and `.position_adjust()` currently centres interchange players against
+#' each other by grouping on raw `lineup_position`. Mapping them to NA would
+#' change that behaviour as a side effect of a naming change, which is exactly
+#' the kind of silent shift that has cost this repo real MAE.
+#'
+#' 21 slots -> 16 groups (13 on-field + INT + SUB + EMERG).
+#' @keywords internal
+LINEUP_GROUP_MAP <- c(
+  FB   = "FB",
+  BPL  = "BP",   BPR  = "BP",
+  CHB  = "CHB",
+  HBFL = "HBF",  HBFR = "HBF",
+  C    = "C",
+  WL   = "W",    WR   = "W",
+  R    = "R",
+  RR   = "RR",
+  RK   = "RK",
+  CHF  = "CHF",
+  HFFL = "HFF",  HFFR = "HFF",
+  FF   = "FF",
+  FPL  = "FP",   FPR  = "FP",
+  INT  = "INT",  SUB  = "SUB", EMERG = "EMERG"
+)
+
+#' Collapse `lineup_position` to the mirror-merged lineup group
+#'
+#' Mirrors \code{.collapse_listed_position()}: one place where a raw slot
+#' becomes a group, and a loud warning for anything unmapped rather than a
+#' silent NA. An unmapped slot means the AFL added or renamed a position, and
+#' the rows would otherwise drop out of centring without anyone noticing.
+#'
+#' @param x Character vector of `lineup_position` values.
+#' @return Character vector of lineup groups; NA for unmapped input.
+#' @keywords internal
+.collapse_lineup_group <- function(x) {
+  xc <- as.character(x)
+  unmapped <- setdiff(unique(xc[!is.na(xc)]), names(LINEUP_GROUP_MAP))
+  if (length(unmapped) > 0) {
+    # No bare `{?it/them}` on the second line: cli resolves a plural against a
+    # quantity in the SAME string, and that line has none, so it errors rather
+    # than pluralising. Third time this shape has bitten today -- see also the
+    # `{.checked}` dot-prefix crash that took down the ratings pipeline.
+    # alert_danger, not warn: an unmapped slot drops those rows out of centring
+    # entirely, and a deferred warning is the reporting path that lost the
+    # 2026-07-29 CSV divergence. Latent today (the flag defaults FALSE) -- so
+    # was that bug, until it wasn't.
+    cli::cli_alert_danger(
+      "{length(unmapped)} unmapped lineup_position value{?s} left UNCENTRED: {paste(unmapped, collapse = ', ')}")
+    cli::cli_warn(c(
+      "{length(unmapped)} unmapped {.field lineup_position} value{?s}: {.val {unmapped}}",
+      "i" = "Add them to {.code LINEUP_GROUP_MAP} -- unmapped rows are left uncentred."
+    ))
+  }
+  unname(LINEUP_GROUP_MAP[xc])
+}
 
 #' EPV channels the position adjustment rescales (see EPV_POSITION_STANDARDISE)
 #'

@@ -8,7 +8,9 @@ calculate_psr(
   skills,
   coef_df,
   center = TRUE,
-  centre_by_round = PSR_CENTRE_BY_ROUND
+  centre_by_round = PSR_CENTRE_BY_ROUND,
+  listed_pos = NULL,
+  centre_on_listed = PSR_CENTRE_ON_LISTED
 )
 }
 \arguments{
@@ -29,6 +31,20 @@ PSR = contribution above average player.}
 \code{PSR_CENTRE_BY_ROUND}. FALSE reproduces the pre-2026-07-29
 pooled-over-all-history behaviour, and exists so that arm can be
 scored on the match harness from production code rather than a replica.}
+
+\item{listed_pos}{Optional data frame carrying each player's LISTED position:
+\code{player_id} plus one of \code{position_group} / \code{position}. Supply
+it (from \code{load_player_details()}) to centre PSR on the same listed
+taxonomy EPV, EPR and PSV use. Required when
+\code{PSR_CENTRE_ON_LISTED} is TRUE; see the note in the function body for
+why a missing frame aborts rather than falling back.}
+
+\item{centre_on_listed}{Logical. Centre on the LISTED position taxonomy that
+EPV/EPR/PSV use, rather than the stat-ratings frame's own \code{pos_group}.
+Defaults to \code{PSR_CENTRE_ON_LISTED}, which is FALSE: the listed arm was
+scored on 2026-07-29 and REGRESSED (dMAE +0.382, CI entirely above zero).
+Exists so that arm stays reachable from production code rather than a
+replica.}
 }
 \value{
 A data.table with columns: \code{player_id}, \code{player_name},

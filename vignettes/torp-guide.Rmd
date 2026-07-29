@@ -154,7 +154,11 @@ season <- player_season_ratings(2026)
 # Player stat ratings (Bayesian estimates)
 stat_ratings <- load_player_stat_ratings(2026)
 
-# PSV from raw stats
+# PSV from raw stats.
+# Note calculate_psv() centres on `position_group`, which load_player_stats()
+# does NOT return -- it returns `position`. Join the listed position on first,
+# or the call aborts rather than quietly returning uncentred values.
+player_stats$position_group <- player_stats$position
 psv <- calculate_psv(player_stats, coef_df)
 ```
 

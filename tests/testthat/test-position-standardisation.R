@@ -93,7 +93,14 @@ test_that("calculate_psr rescales as well as recentres", {
     # under-dispersion the rescale exists to remove
     disposals_rating = c(9, 10, 11, 4, 10, 16)
   )
-  out <- calculate_psr(skills, data.frame(stat_name = "disposals", beta = 1))
+  # Since 2026-07-29 PSR centres on the LISTED taxonomy, so supply it directly
+  # rather than letting .attach_listed_pos() reach for load_player_details() --
+  # these are synthetic player_ids and would match nothing. Same partition as
+  # the lineup_pos_group above, so the property under test is unchanged.
+  lp <- data.frame(player_id = as.character(1:6),
+                   position = rep(c("KEY_DEFENDER", "KEY_FORWARD"), each = 3))
+  out <- calculate_psr(skills, data.frame(stat_name = "disposals", beta = 1),
+                       listed_pos = lp, centre_on_listed = TRUE)
   sd_def <- sd(out$psr[1:3]); sd_fwd <- sd(out$psr[4:6])
   expect_equal(sd_def, sd_fwd, tolerance = 1e-6)   # equal spread after rescaling
   expect_equal(sum(out$psr[1:3]), 0, tolerance = 1e-8)  # still centred
@@ -108,7 +115,10 @@ test_that("calculate_psr falls back to centre-only on a degenerate SD", {
     wt_80s = 1,
     disposals_rating = c(7, 7, 4, 12)   # rucks identical
   )
-  out <- calculate_psr(skills, data.frame(stat_name = "disposals", beta = 1))
+  lp <- data.frame(player_id = as.character(1:4),
+                   position = rep(c("RUCK", "KEY_FORWARD"), each = 2))
+  out <- calculate_psr(skills, data.frame(stat_name = "disposals", beta = 1),
+                       listed_pos = lp, centre_on_listed = TRUE)
   expect_true(all(is.finite(out$psr)))
   expect_equal(out$psr[1:2], c(0, 0))
 })
@@ -151,23 +161,57 @@ test_that("estimate_player_stat_ratings works without a lineup column", {
   expect_equal(out$pos_group, "MIDFIELDER")
 })
 
-test_that("calculate_psr prefers the weekly lineup group over pos_group", {
-  # Two players with identical raw profiles but different weekly roles must be
-  # centred against different groups; that is the whole point of §7.15.
+test_that("calculate_psr centres on the LISTED position, over pos_group and lineup_pos_group", {
+  # SUPERSEDES "prefers the weekly lineup group over pos_group" (2026-07-29).
+  #
+  # The old contract was never actually exercised in production: the released
+  # stat-ratings frame carries no weekly columns, so the preference chain always
+  # fell through to pos_group -- a PBP-derived PLAYSTYLE label -- while EPV, EPR
+  # and PSV all centre on the LISTED taxonomy. The two disagree for 13.2% of
+  # player-rounds (20.3% in 2026), and centring on one while TORP reads the
+  # other put ~0.30 of positional level back into TORP.
+  #
+  # This fixture makes all three keys disagree, so the assertion can only pass
+  # if listed genuinely wins -- the previous version could not distinguish
+  # "prefers weekly" from "prefers listed" because it had no listed column.
   skills <- data.frame(
     player_id = c("a", "b", "c", "d"),
     season = 2025L, round = 1L,
-    pos_group = "MIDFIELDER",                       # season label: all the same
-    lineup_pos_group = c("KEY_DEFENDER", "KEY_DEFENDER",
-                         "KEY_FORWARD", "KEY_FORWARD"),
+    pos_group = "MIDFIELDER",                        # playstyle: all the same
+    lineup_pos_group = c("RUCK", "KEY_FORWARD",      # weekly: crosses the pairs
+                         "RUCK", "KEY_FORWARD"),
     wt_80s = 1,
     disposals_rating = c(1, 3, 10, 12)
   )
+  listed <- data.frame(player_id = c("a", "b", "c", "d"),
+                       position = c("KEY_DEFENDER", "KEY_DEFENDER",
+                                    "KEY_FORWARD", "KEY_FORWARD"))
   coefs <- data.frame(stat_name = "disposals", beta = 1)
-  out <- calculate_psr(skills, coefs, center = TRUE)
-  # centred within the WEEKLY group, so each pair sums to zero
+  out <- calculate_psr(skills, coefs, center = TRUE, listed_pos = listed,
+                       centre_on_listed = TRUE)
+
+  # Centred within the LISTED group, so each listed pair sums to zero.
   expect_equal(sum(out$psr[1:2]), 0, tolerance = 1e-10)
   expect_equal(sum(out$psr[3:4]), 0, tolerance = 1e-10)
-  # had it centred on pos_group, the forwards would both be strongly positive
-  expect_lt(out$psr[3], out$psr[4])
+  # Had it centred on lineup_pos_group, the zero-sum pairs would be (a,c) and
+  # (b,d) instead -- so this is the assertion that discriminates the two.
+  expect_false(isTRUE(all.equal(sum(out$psr[c(1, 3)]), 0, tolerance = 1e-10)))
+})
+
+test_that("calculate_psr refuses to centre when no listed position is reachable", {
+  # A silent fallback to pos_group is the exact defect this change removes, and
+  # the PSV guard that tested the wrong column name silently centred nothing for
+  # weeks. Assert the abort so a future refactor cannot quietly reinstate it.
+  skills <- data.frame(
+    player_id = c("zz_no_such_player_1", "zz_no_such_player_2"),
+    season = 2025L, round = 1L, pos_group = "MIDFIELDER", wt_80s = 1,
+    disposals_rating = c(1, 3)
+  )
+  coefs <- data.frame(stat_name = "disposals", beta = 1)
+  expect_error(
+    calculate_psr(skills, coefs, center = TRUE, centre_on_listed = TRUE,
+                  listed_pos = data.frame(player_id = character(),
+                                          position = character())),
+    regexp = "listed|empty join|No row matched"
+  )
 })

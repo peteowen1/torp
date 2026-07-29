@@ -97,6 +97,24 @@ Pass `refresh = TRUE` to bypass caches and re-fetch — only `load_player_stats(
 
 Live EP/WP/xG models are trained in **torpmodels** — one script per artifact: `data-raw/01-ep-model/train_ep_model_live_v2.R` (EP), `data-raw/05-live-wp-model/train_live_wp_chain_v4.R` and `train_live_wp_model.R` (WP) — and exported as JSON. Worker tree-walk lives in `inthegame-blog/worker/src/ep-model.js`. torp itself does not export these — `torp/scripts/live-model-export.R` only handles xG lookup grid generation.
 
+## Positions — read the reference first
+
+**Anything that groups, centres or adjusts by position: read
+[`../docs/reference/POSITIONS.md`](../docs/reference/POSITIONS.md) BEFORE writing code.**
+
+The short version, because getting this wrong has cost real MAE more than once:
+
+- There are two real things — `lineup_position` (where he lined up this match, 21 slots) and
+  the club's listing (what he's listed as, season-stable).
+- **`position_group` means two different things depending on the frame.** In `torp_ratings`
+  it is the season listing (7 levels, has `MIDFIELDER_FORWARD`). In `player_game_data` it is
+  the per-match listing (6 levels, never has it). Same name, different source. **Count the
+  levels to tell which one you're holding.**
+- **`pos_group` (stat ratings / psr) is NOT "playstyle"**, despite the comment in
+  `player_skills_data.R` saying so. It is the same AFL-registered position, aggregated to a
+  career modal, and it is 20% NA.
+- Never trust a position variable name or a comment about positions. Trace to source.
+
 ## Gotchas
 
 - **Every new exported function MUST be added to `_pkgdown.yml`'s `reference:` index** — `pkgdown::check_pkgdown()` runs in both CI workflows and fails the build otherwise (bit twice on 2026-07-21: #111, PR #114).

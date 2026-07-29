@@ -487,8 +487,28 @@ create_player_game_data <- function(pbp_data = NULL,
     .epv_ch
   )
 
+  # The role-adjustment key. Raw `lineup_position` (21 slots) by default; with
+  # ROLE_USE_LINEUP_GROUP, the mirror-merged `lineup_group` (16). Assigned to
+  # a column rather than switched inside group_by() so the key that was actually
+  # used is inspectable on the returned frame -- an arm you cannot verify from
+  # the output is an arm you cannot trust you scored.
+  plyr_gm_df$.role_key <- if (isTRUE(ROLE_USE_LINEUP_GROUP)) {
+    .collapse_lineup_group(plyr_gm_df$lineup_position)
+  } else {
+    as.character(plyr_gm_df$lineup_position)
+  }
+  # A wholly-NA key would silently centre every player against the same global
+  # cell -- the "guard degrades to a no-op" failure this repo keeps hitting.
+  if (all(is.na(plyr_gm_df$.role_key))) {
+    cli::cli_abort(c(
+      "EPV role adjustment key is entirely NA.",
+      "i" = "ROLE_USE_LINEUP_GROUP = {ROLE_USE_LINEUP_GROUP}",
+      "x" = "Refusing to centre every player against one global cell."
+    ))
+  }
+
   plyr_gm_df <- plyr_gm_df |>
-    dplyr::group_by(lineup_position) |>
+    dplyr::group_by(.data$.role_key) |>
     dplyr::mutate(
       epv_recv_adj = .position_adjust(.data$epv_recv_p80, .data$tog_safe, .pooled_sd[["recv"]], .std[["recv"]]),
       epv_disp_adj = .position_adjust(.data$epv_disp_p80, .data$tog_safe, .pooled_sd[["disp"]], .std[["disp"]]),
@@ -500,7 +520,11 @@ create_player_game_data <- function(pbp_data = NULL,
       wp_recv_credit_adj = (.data$wp_recv_credit_p80 - stats::weighted.mean(.data$wp_recv_credit_p80, .data$tog_safe, na.rm = TRUE)) * .data$tog_safe
     ) |>
     dplyr::ungroup() |>
-    dplyr::select(-"tog_safe",
+    # .role_key is dropped here, not kept for inspection: player_game_data is a
+    # RELEASED artifact with a declared column schema, and an extra column would
+    # fail validation downstream. The arms are distinguished by asserting they
+    # differ numerically, which is the stronger check anyway.
+    dplyr::select(-"tog_safe", -".role_key",
                   -"epv_recv_p80", -"epv_disp_p80", -"epv_spoil_p80", -"epv_hitout_p80",
                   -"wp_credit_p80", -"wp_disp_credit_p80", -"wp_recv_credit_p80")
 
