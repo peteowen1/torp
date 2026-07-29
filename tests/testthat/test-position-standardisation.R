@@ -100,7 +100,7 @@ test_that("calculate_psr rescales as well as recentres", {
   lp <- data.frame(player_id = as.character(1:6),
                    position = rep(c("KEY_DEFENDER", "KEY_FORWARD"), each = 3))
   out <- calculate_psr(skills, data.frame(stat_name = "disposals", beta = 1),
-                       listed_pos = lp)
+                       listed_pos = lp, centre_on_listed = TRUE)
   sd_def <- sd(out$psr[1:3]); sd_fwd <- sd(out$psr[4:6])
   expect_equal(sd_def, sd_fwd, tolerance = 1e-6)   # equal spread after rescaling
   expect_equal(sum(out$psr[1:3]), 0, tolerance = 1e-8)  # still centred
@@ -118,7 +118,7 @@ test_that("calculate_psr falls back to centre-only on a degenerate SD", {
   lp <- data.frame(player_id = as.character(1:4),
                    position = rep(c("RUCK", "KEY_FORWARD"), each = 2))
   out <- calculate_psr(skills, data.frame(stat_name = "disposals", beta = 1),
-                       listed_pos = lp)
+                       listed_pos = lp, centre_on_listed = TRUE)
   expect_true(all(is.finite(out$psr)))
   expect_equal(out$psr[1:2], c(0, 0))
 })
@@ -187,7 +187,8 @@ test_that("calculate_psr centres on the LISTED position, over pos_group and line
                        position = c("KEY_DEFENDER", "KEY_DEFENDER",
                                     "KEY_FORWARD", "KEY_FORWARD"))
   coefs <- data.frame(stat_name = "disposals", beta = 1)
-  out <- calculate_psr(skills, coefs, center = TRUE, listed_pos = listed)
+  out <- calculate_psr(skills, coefs, center = TRUE, listed_pos = listed,
+                       centre_on_listed = TRUE)
 
   # Centred within the LISTED group, so each listed pair sums to zero.
   expect_equal(sum(out$psr[1:2]), 0, tolerance = 1e-10)
@@ -208,7 +209,7 @@ test_that("calculate_psr refuses to centre when no listed position is reachable"
   )
   coefs <- data.frame(stat_name = "disposals", beta = 1)
   expect_error(
-    calculate_psr(skills, coefs, center = TRUE,
+    calculate_psr(skills, coefs, center = TRUE, centre_on_listed = TRUE,
                   listed_pos = data.frame(player_id = character(),
                                           position = character())),
     regexp = "listed|empty join|No row matched"

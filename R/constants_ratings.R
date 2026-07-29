@@ -266,9 +266,21 @@ PSR_CENTRE_BY_ROUND <- TRUE
 #' undoing half of what the 2026-07-29 program removed at EPV/EPR. 2021, where
 #' the labels agree 100%, showed exactly 0.000 spread.
 #'
-#' FALSE reproduces the pre-2026-07-29 playstyle behaviour so that arm stays
-#' scoreable on the match harness from production code rather than a replica.
-PSR_CENTRE_ON_LISTED <- TRUE
+#' **FALSE, and it must stay FALSE until something overturns the measurement.**
+#' The listed arm was scored on 2026-07-29 (`ws9_psr_listed_centring.R`) and
+#' REGRESSED: MAE 25.4335 -> 25.8152, dMAE +0.382 `[+0.081, +0.684]`, CI
+#' entirely above zero. That is a real cost, not a null.
+#'
+#' Why it lost, most likely: the career-modal label PSR used is the most STABLE
+#' of the three resolutions, and a rating's position key wants stability. Moving
+#' it to the season listing made it lurch more, and centring PSR on the listed
+#' label while EPV stayed on the per-match one made the two halves of TORP
+#' agree LESS, not more.
+#'
+#' The positional level this was meant to remove (~0.30 in TORP) is real and
+#' still there. The fix is the value/rating split in NEXT-STEPS.md, not this
+#' flag. Setting this TRUE ships a measured regression.
+PSR_CENTRE_ON_LISTED <- FALSE
 
 #' Whether PSR position centring rescales as well as recentres
 #'
