@@ -85,9 +85,22 @@ MATCH_COMBO_POS_MAP <- list(
   CF   = c("FF", "CHF")
 )
 
-#' Listed position map for match models (position_group from torp ratings)
-#' Combines MEDIUM_FORWARD and MIDFIELDER_FORWARD into med_fwd.
-#' Entries are vectors so matching must use %in%, not ==.
+#' Listed position map: the one position taxonomy in the codebase
+#'
+#' Collapses the 7 `position_group` values into 6 buckets by combining
+#' MEDIUM_FORWARD and MIDFIELDER_FORWARD into `med_fwd`. Entries are vectors so
+#' matching must use %in%, not ==.
+#'
+#' Used by BOTH the match-model position features and the EPR position centring
+#' (`centre_epr_by_position()`). They keyed on different taxonomies until
+#' 2026-07-29 -- features on this 6-way map, centring on raw `position_group`'s
+#' 7 -- so the model's `med_fwd_diff` pooled two groups the ratings had already
+#' been centred apart. One map now, via `.collapse_listed_position()`.
+#'
+#' The merge is a deliberate choice, not an approximation: the two forward
+#' groups' 2026 EPR means do differ (-0.029 vs +0.157, t = 4.65), but the split
+#' is a listed-position label rather than a role difference the model can act
+#' on, and one taxonomy end-to-end is worth more than the separation.
 #' @keywords internal
 MATCH_LISTED_POS_MAP <- list(
   key_def  = "KEY_DEFENDER",
@@ -97,6 +110,38 @@ MATCH_LISTED_POS_MAP <- list(
   key_fwd  = "KEY_FORWARD",
   rucks    = "RUCK"
 )
+
+#' Collapse `position_group` onto the shared listed-position taxonomy
+#'
+#' The single place a `position_group` value becomes a bucket name. Anything
+#' that groups players by listed position -- match features, EPR centring,
+#' validation checks -- goes through here, so the taxonomy cannot drift apart
+#' again by one caller being updated and another not.
+#'
+#' Unmapped non-NA values warn rather than abort: they are almost certainly a
+#' new AFL position label, and blocking a rating rebuild over one is worse than
+#' leaving those players ungrouped. But they must be visible -- silently
+#' returning NA would drop a whole position out of centring while every
+#' downstream check still passed.
+#'
+#' @param x Character vector of `position_group` values.
+#' @return Character vector of bucket names; NA where `x` is NA or unmapped.
+#' @keywords internal
+.collapse_listed_position <- function(x) {
+  lookup <- stats::setNames(
+    rep(names(MATCH_LISTED_POS_MAP), lengths(MATCH_LISTED_POS_MAP)),
+    unlist(MATCH_LISTED_POS_MAP, use.names = FALSE)
+  )
+  xc <- as.character(x)
+  unmapped <- setdiff(unique(xc[!is.na(xc)]), names(lookup))
+  if (length(unmapped) > 0) {
+    cli::cli_warn(c(
+      "{length(unmapped)} unmapped {.field position_group} value{?s}: {.val {unmapped}}",
+      "!" = "Those players are left ungrouped. Add them to {.code MATCH_LISTED_POS_MAP}."
+    ))
+  }
+  unname(lookup[xc])
+}
 
 #' All generated position column names for match model aggregation
 #' @keywords internal

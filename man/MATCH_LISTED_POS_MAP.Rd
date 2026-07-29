@@ -3,9 +3,7 @@
 \docType{data}
 \name{MATCH_LISTED_POS_MAP}
 \alias{MATCH_LISTED_POS_MAP}
-\title{Listed position map for match models (position_group from torp ratings)
-Combines MEDIUM_FORWARD and MIDFIELDER_FORWARD into med_fwd.
-Entries are vectors so matching must use \%in\%, not ==.}
+\title{Listed position map: the one position taxonomy in the codebase}
 \format{
 An object of class \code{list} of length 6.
 }
@@ -13,8 +11,20 @@ An object of class \code{list} of length 6.
 MATCH_LISTED_POS_MAP
 }
 \description{
-Listed position map for match models (position_group from torp ratings)
-Combines MEDIUM_FORWARD and MIDFIELDER_FORWARD into med_fwd.
-Entries are vectors so matching must use \%in\%, not ==.
+Collapses the 7 \code{position_group} values into 6 buckets by combining
+MEDIUM_FORWARD and MIDFIELDER_FORWARD into \code{med_fwd}. Entries are vectors so
+matching must use \%in\%, not ==.
+}
+\details{
+Used by BOTH the match-model position features and the EPR position centring
+(\code{centre_epr_by_position()}). They keyed on different taxonomies until
+2026-07-29 -- features on this 6-way map, centring on raw \code{position_group}'s
+7 -- so the model's \code{med_fwd_diff} pooled two groups the ratings had already
+been centred apart. One map now, via \code{.collapse_listed_position()}.
+
+The merge is a deliberate choice, not an approximation: the two forward
+groups' 2026 EPR means do differ (-0.029 vs +0.157, t = 4.65), but the split
+is a listed-position label rather than a role difference the model can act
+on, and one taxonomy end-to-end is worth more than the separation.
 }
 \keyword{internal}

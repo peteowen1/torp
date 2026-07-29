@@ -662,11 +662,39 @@
       by = c("match_id" = "match_id", "team_type" = "type_anti")
     )
 
-  # Validate self-join completeness
-  na_opp <- sum(is.na(team_mdl_df_tot$epr.y))
+  # Validate self-join completeness.
+  #
+  # A row with no opponent gets NA features, and predict_all() -> model.matrix()
+  # DROPS NA rows silently rather than erroring: the prediction vector comes back
+  # shorter than the frame, and the assignment fails much later with a recycling
+  # error naming neither NAs nor the matches involved ("Existing data has 2336
+  # rows, assigned data has 2314"). Worse, anything that recycles instead of
+  # erroring misaligns predictions with rows without complaining at all.
+  #
+  # This is not hypothetical or rare: it fires every year once the AFL publishes
+  # the finals schedule, because those fixtures carry placeholder teams with no
+  # rating history. It cost two debugging cycles on 2026-07-29. So say WHY, and
+  # say whether it is benign.
+  na_mask <- is.na(team_mdl_df_tot$epr.y)
+  na_opp <- sum(na_mask)
   if (na_opp > 0) {
-    bad_ids <- unique(team_mdl_df_tot$match_id[is.na(team_mdl_df_tot$epr.y)])
-    cli::cli_warn("{na_opp} row{?s} have no opponent data after self-join. Affected matches: {paste(utils::head(bad_ids, 5), collapse = ', ')}")
+    bad_ids <- unique(team_mdl_df_tot$match_id[na_mask])
+    # A future fixture with unnamed teams is expected. A COMPLETED match with no
+    # opponent is a real join failure and must not be waved through as one.
+    completed <- if ("score_diff" %in% names(team_mdl_df_tot)) {
+      sum(na_mask & !is.na(team_mdl_df_tot$score_diff))
+    } else 0L
+    cli::cli_warn(c(
+      "{na_opp} row{?s} have no opponent after the self-join; their rating features are NA.",
+      "i" = "Affected matches: {paste(utils::head(bad_ids, 5), collapse = ', ')}",
+      "!" = "model.matrix() drops NA rows silently -- filter these before predicting, or the prediction vector will not line up with the frame."
+    ))
+    if (completed > 0) {
+      cli::cli_abort(c(
+        "{completed} COMPLETED match-row{?s} have no opponent after the self-join.",
+        "x" = "That is a join failure, not an unnamed future fixture. Refusing to build a model frame on it."
+      ))
+    }
   }
 
   team_mdl_df_tot <- team_mdl_df_tot |>

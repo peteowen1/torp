@@ -451,3 +451,181 @@ test_that("calculate_torp uses snapshot when season/round absent", {
   # A's latest snapshot is round 2 (psr 20); B has psr 5
   expect_equal(res$psr, c(20, 5))
 })
+
+
+# EPR position centring -------------------------------------------------------
+
+.centre_fixture <- function(n = 400, seed = 42) {
+  set.seed(seed)
+  pg <- unlist(MATCH_LISTED_POS_MAP, use.names = FALSE)
+  d <- data.frame(
+    season = 2026L, round = 21L,
+    position_group = sample(pg, n, replace = TRUE),
+    pred_tog = runif(n, 0.4, 1),
+    epr_recv = rnorm(n, 1, 2), epr_disp = rnorm(n),
+    epr_spoil = rnorm(n), epr_hitout = rnorm(n),
+    stringsAsFactors = FALSE
+  )
+  # Push the two merged forward groups apart so a 7-way centring and a 6-way
+  # one cannot produce the same answer.
+  d$epr_recv <- d$epr_recv +
+    ifelse(d$position_group == "MEDIUM_FORWARD", -3,
+           ifelse(d$position_group == "MIDFIELDER_FORWARD", 3, 0))
+  d$epr <- d$epr_recv + d$epr_disp + d$epr_spoil + d$epr_hitout
+  d
+}
+
+test_that("centring keys on the same taxonomy the match features use", {
+  # The invariant this whole helper exists to protect: ratings are centred on
+  # exactly the buckets the model differences. They diverged once (7-way
+  # centring vs 6-way features, 2026-07-28) and nothing downstream noticed.
+  d <- .centre_fixture()
+  out <- suppressMessages(centre_epr_by_position(d))
+  out$bucket <- .collapse_listed_position(out$position_group)
+
+  # as.vector, not unname: tapply returns a 1-d array, so expect_equal fails on
+  # dim() alone against a plain numeric even when every value is exactly 0.
+  by_bucket <- as.vector(tapply(seq_len(nrow(out)), out$bucket, function(i)
+    stats::weighted.mean(out$epr[i], out$pred_tog[i])))
+  expect_equal(by_bucket, rep(0, length(by_bucket)))
+
+  # ...and NOT on raw position_group: the merged forwards must retain their
+  # real level difference, or the merge silently isn't happening.
+  fwd <- out[out$position_group %in% c("MEDIUM_FORWARD", "MIDFIELDER_FORWARD"), ]
+  lv <- as.vector(tapply(seq_len(nrow(fwd)), fwd$position_group, function(i)
+    stats::weighted.mean(fwd$epr[i], fwd$pred_tog[i])))
+  expect_gt(abs(diff(lv)), 1)
+})
+
+test_that("centring rebuilds epr from its channels and drops helper columns", {
+  d <- .centre_fixture()
+  out <- suppressMessages(centre_epr_by_position(d))
+  expect_equal(out$epr,
+               out$epr_recv + out$epr_disp + out$epr_spoil + out$epr_hitout)
+  expect_false(any(c(".cw", ".cpg") %in% names(out)))
+  expect_s3_class(out, "data.frame")
+})
+
+test_that("centring aborts rather than silently returning uncentred ratings", {
+  d <- .centre_fixture()
+  expect_error(centre_epr_by_position(d[, setdiff(names(d), "position_group")]),
+               "position_group")
+  # A partial channel set would redefine epr as the sum of whatever was found.
+  expect_error(suppressWarnings(
+    centre_epr_by_position(d[, setdiff(names(d), "epr_hitout")])), "channel")
+})
+
+test_that("unmapped and missing position groups are left alone, not lumped", {
+  d <- .centre_fixture()
+  d$position_group[1:10] <- NA_character_
+  d$position_group[11:20] <- "NEW_AFL_LABEL"
+  before <- d$epr[1:20]
+  out <- suppressWarnings(suppressMessages(centre_epr_by_position(d)))
+  expect_equal(out$epr[1:20], before)
+
+  # An unmapped label means a whole position ships uncentred, so it must be
+  # visible immediately -- not folded into the ungrouped count alongside the
+  # routine missing-position rows, and not left to R's deferred warning buffer
+  # (capped at nwarnings, which a full rebuild can blow past).
+  msgs <- suppressWarnings(testthat::capture_messages(centre_epr_by_position(d)))
+  expect_match(paste(msgs, collapse = " "), "UNMAPPED", fixed = TRUE)
+  expect_match(paste(msgs, collapse = " "), "10 unmapped", fixed = TRUE)
+})
+
+test_that("an NA weight excludes only that player, not their whole position", {
+  # weighted.mean()'s na.rm drops NA values but not NA weights, so one missing
+  # pred_tog used to blank an entire (season, round, position) cell.
+  d <- .centre_fixture()
+  d$pred_tog[1] <- NA_real_
+  out <- suppressWarnings(suppressMessages(centre_epr_by_position(d)))
+  peers <- .collapse_listed_position(d$position_group) ==
+    .collapse_listed_position(d$position_group[1])
+  expect_true(all(is.finite(out$epr[peers])))
+})
+
+
+# EPV position level centring --------------------------------------------------
+
+.epv_fixture <- function(n = 500, seed = 7, suffix = "_oadj") {
+  set.seed(seed)
+  pg <- unlist(MATCH_LISTED_POS_MAP, use.names = FALSE)
+  d <- data.table::data.table(
+    season = 2026L,
+    round = sample(1:5, n, replace = TRUE),
+    position_group = sample(pg, n, replace = TRUE),
+    time_on_ground_percentage = runif(n, 30, 100)
+  )
+  # set(), not [[<-, which shallow-copies and makes data.table warn on the next
+  # := in the function under test.
+  for (ch in EPV_LEVEL_CENTRE_CHANNELS) {
+    data.table::set(d, j = paste0(ch, suffix), value = rnorm(n))
+  }
+  # Give each listed bucket a genuinely different level, which is the thing
+  # lineup_position centring leaves behind.
+  off <- stats::setNames(seq(-2, 2, length.out = length(pg)), pg)
+  data.table::set(d, j = paste0("epv_recv", suffix),
+                  value = d[[paste0("epv_recv", suffix)]] + off[d$position_group])
+  data.table::set(d, j = paste0("epv", suffix), value = Reduce(`+`, lapply(
+    paste0(EPV_LEVEL_CENTRE_CHANNELS, suffix), function(cc) d[[cc]])))
+  d[]
+}
+
+test_that("EPV centring zeroes the TOG-weighted cell mean, which is what EPR sums", {
+  # EPR forms sum(x * tog_safe * decay); decay is ~constant within a round, so
+  # the TOG-weighted mean is the quantity that must vanish. An unweighted mean
+  # would look centred while EPR stayed skewed.
+  d <- .epv_fixture()
+  out <- suppressMessages(centre_epv_by_position(d))
+  out[, `:=`(bucket = .collapse_listed_position(position_group),
+             w = pmax(time_on_ground_percentage / 100, 0.1))]
+  for (cc in paste0(EPV_LEVEL_CENTRE_CHANNELS, "_oadj")) {
+    wm <- out[, stats::weighted.mean(get(cc), w), by = .(season, round, bucket)]$V1
+    expect_equal(wm, rep(0, length(wm)))
+  }
+})
+
+test_that("EPV centring targets the channel set EPR actually reads", {
+  # Centring _adj while EPR consumes _oadj would be a silent no-op: every check
+  # would pass and nothing downstream would move.
+  d <- .epv_fixture(suffix = "_oadj")
+  d[, epv_recv_adj := 99]           # a stale _adj set must be ignored
+  out <- suppressMessages(centre_epv_by_position(d))
+  expect_true(all(out$epv_recv_adj == 99))
+  expect_false(isTRUE(all.equal(out$epv_recv_oadj, d$epv_recv_oadj)))
+
+  # ...and falls back to _adj when no _oadj exists.
+  d2 <- .epv_fixture(suffix = "_adj")
+  out2 <- suppressMessages(centre_epv_by_position(d2))
+  out2[, `:=`(bucket = .collapse_listed_position(position_group),
+              w = pmax(time_on_ground_percentage / 100, 0.1))]
+  wm <- out2[, stats::weighted.mean(epv_recv_adj, w), by = .(season, round, bucket)]$V1
+  expect_equal(wm, rep(0, length(wm)))
+})
+
+test_that("EPV centring preserves within-position spread and rebuilds the total", {
+  # Spread is preserved WITHIN a round, which is the cell a constant is
+  # subtracted from. Pooled across rounds it legitimately moves, because each
+  # round gets its own offset -- checking it pooled would fail on correct code.
+  d <- .epv_fixture()
+  key <- c("round", "position_group")
+  sd_before <- d[, .(s = sd(epv_recv_oadj)), by = key][order(round, position_group)]$s
+  out <- suppressMessages(centre_epv_by_position(d))
+  sd_after <- out[, .(s = sd(epv_recv_oadj)), by = key][order(round, position_group)]$s
+  # centre_epv_by_position() now applies EPV_POINTS_SCALE as well as centring,
+  # so spread is preserved UP TO that factor rather than exactly. Comparing raw
+  # sds would fail for a correct reason and hide a genuine collapse behind a
+  # known one.
+  expect_equal(sd_after, sd_before * EPV_POINTS_SCALE, tolerance = 1e-8)
+  expect_gt(min(sd_after), 0)   # a real collapse would still be caught
+
+  expect_equal(out$epv_oadj,
+               out$epv_recv_oadj + out$epv_disp_oadj +
+                 out$epv_spoil_oadj + out$epv_hitout_oadj)
+  expect_false(any(c(".cpg", ".ctog") %in% names(out)))
+})
+
+test_that("EPV centring aborts rather than silently returning uncentred values", {
+  d <- .epv_fixture()
+  expect_error(centre_epv_by_position(d[, !"position_group"]), "position_group")
+  expect_error(centre_epv_by_position(d[, !"epv_hitout_oadj"]), "channel")
+})

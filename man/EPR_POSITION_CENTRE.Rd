@@ -21,7 +21,9 @@ defenders still sat at median EPR -2.18 against medium forwards' +0.66
 }
 \details{
 This closes that gap directly, on the published rating, per channel, keyed on
-\code{position_group} within each \code{(season, round)} cross-section.
+\code{position_group} within each \code{(season, round)} cross-section --
+collapsed first onto \code{MATCH_LISTED_POS_MAP}'s 6 buckets, the same
+taxonomy the match model's position features use.
 
 \strong{This is a NORMALISATION, not a measurement.} Position levels are
 unidentifiable from match margins -- on-field structure is rigid (every team

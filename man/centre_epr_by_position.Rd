@@ -22,7 +22,7 @@ TOG weight column.}
 \code{epr_df} with centred channels and a rebuilt \code{epr}.
 }
 \description{
-Subtracts, within every \code{(season, round, position_group)} cell, that
+Subtracts, within every \code{(season, round, position bucket)} cell, that
 cell's TOG-weighted mean of each channel in \code{EPR_CENTRE_CHANNELS}, then
 rebuilds \code{epr} as the sum of the centred channels. A published rating
 then reads "points above the average player in your position".
@@ -41,7 +41,14 @@ hybrid; and a season-constant key keeps a player's baseline stable week to
 week. The two agree closely in practice (r = 0.985) but the key-defender
 correction differs by ~75\%, so it is a real choice.
 
-Rows with a missing \code{position_group} are left untouched -- there is no
+The 7 \code{position_group} values are collapsed to the 6 buckets of
+\code{MATCH_LISTED_POS_MAP} via \code{.collapse_listed_position()} -- the
+same taxonomy the match model's position features use. Do not swap in the raw
+column: centring on 7 groups while the model differences 6 means
+\code{med_fwd_diff} pools two groups that were separated upstream, which is
+how it shipped on 2026-07-28.
+
+Rows with a missing or unmapped \code{position_group} are left untouched -- there is no
 defensible group mean to subtract, and silently lumping them together would
 invent one.
 }

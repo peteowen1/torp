@@ -57,21 +57,57 @@ EPR_PRIOR_GAMES_SPOIL <- 3.0000
 #' @keywords internal
 EPR_PRIOR_GAMES_HITOUT <- 3.0000
 
+# NOTE: these scale constants must stay ABOVE the EPR_PRIOR_RATE_* definitions
+# that reference them. R sources a package file top to bottom, so defining them
+# later gives 'object not found' at build time, not a runtime surprise.
+#' Points-scale calibration for the EPV/EPR family
+#'
+#' One rating point should mean one scoreboard point. Measured on 1121 matches
+#' (one row per match; team rows are mirrored pairs that double n without
+#' adding information), regressing actual margin on the team rating difference:
+#' EPR converted at 0.919 `[0.842, 0.996]` and PSR at 1.579 `[1.443, 1.715]`.
+#' A nominal 0.5/0.5 TORP blend was therefore ~37/63 in scoreboard terms.
+#'
+#' Applied at the VALUE layer so it flows into the rating, per Pete
+#' 2026-07-29 -- the same principle as the level fix. `new = slope * old`, so
+#' EPV shrinks ~8% and PSV grows ~58%.
+#'
+#' \strong{This cannot be validated by match MAE, by construction.} A linear
+#' rescale of a feature is a no-op for the model: the GAM absorbs it into its
+#' coefficient and XGBoost splits are monotone-invariant. The change is about
+#' what a published number MEANS, not about prediction.
+#'
+#' Caveat recorded because it bounds how much the constant is worth: the slope
+#' wanders by season (EPR 0.87-1.02 excluding a thin 2021 at 0.579; PSR
+#' 1.26-1.80). A single global constant is a deliberate simplification --
+#' per-season calibration would be fitting noise.
+#' @keywords internal
+EPV_POINTS_SCALE <- 0.919
+
+#' Points-scale calibration for the PSV/PSR family
+#'
+#' See \code{EPV_POINTS_SCALE}. Applied to the shared coefficient vector, which
+#' is what makes one constant reach BOTH products: PSR is not downstream of PSV
+#' (they are parallel applications of the same betas to rated vs actual stats),
+#' so scaling the betas is the only single point that moves them together.
+#' @keywords internal
+PSV_POINTS_SCALE <- 1.579
+
 #' Prior rate for receiving component (shrinkage target per weighted game)
 #' @keywords internal
-EPR_PRIOR_RATE_RECV <- -0.7000
+EPR_PRIOR_RATE_RECV <- -0.7000 * EPV_POINTS_SCALE
 
 #' Prior rate for disposal component (shrinkage target per weighted game)
 #' @keywords internal
-EPR_PRIOR_RATE_DISP <- -0.7000
+EPR_PRIOR_RATE_DISP <- -0.7000 * EPV_POINTS_SCALE
 
 #' Prior rate for spoil component (shrinkage target per weighted game)
 #' @keywords internal
-EPR_PRIOR_RATE_SPOIL <- -0.3000
+EPR_PRIOR_RATE_SPOIL <- -0.3000 * EPV_POINTS_SCALE
 
 #' Prior rate for hitout component (shrinkage target per weighted game)
 #' @keywords internal
-EPR_PRIOR_RATE_HITOUT <- -0.3000
+EPR_PRIOR_RATE_HITOUT <- -0.3000 * EPV_POINTS_SCALE
 
 #' Decay factor (in days) for contest component weighting
 #' @keywords internal
@@ -110,6 +146,32 @@ TORP_EPR_WEIGHT <- 0.5
 #' @keywords internal
 EPV_POSITION_STANDARDISE <- TRUE
 
+#' Centre EPV channels on their listed position's level, per round
+#'
+#' The positional level correction, at the layer that creates it. Turned on
+#' 2026-07-29 after measurement showed the level gap originates at EPV:
+#' \code{.position_adjust()} centres every channel to machine-precision zero by
+#' \code{lineup_position}, yet on the listed taxonomy everything downstream uses,
+#' \code{epv_adj} still spans 2.94 points (key_def -2.17, key_fwd +0.77 on 2026
+#' per-game data). Role-centring removes the role effect; the player-type effect
+#' survives it.
+#'
+#' Fixing it here flows to EPR, PSV blending, the match features and
+#' \code{get_player_game_ratings()} at once. \code{EPR_POSITION_CENTRE} stays on
+#' as a backstop rather than being replaced: \code{.bayesian_shrink()} pulls
+#' toward a NON-ZERO \code{prior_rate} (-0.7 / -0.3) by an amount that depends on
+#' \code{wt_gms}, so a zero EPV sum does not produce a zero EPR level.
+#' @keywords internal
+EPV_LEVEL_CENTRE <- TRUE
+
+#' EPV channel stems the level centring applies to
+#'
+#' All four, unlike \code{EPV_STANDARDISE_CHANNELS} which excludes hitout --
+#' dividing by a near-zero within-position SD amplifies without bound, but
+#' subtracting a mean is safe at any spread.
+#' @keywords internal
+EPV_LEVEL_CENTRE_CHANNELS <- c("epv_recv", "epv_disp", "epv_spoil", "epv_hitout")
+
 #' Centre each EPR channel on its position's TOG-weighted mean
 #'
 #' \code{EPV_POSITION_STANDARDISE} equalises between-position *spread*, at the
@@ -121,7 +183,9 @@ EPV_POSITION_STANDARDISE <- TRUE
 #' (FABLE-DEFENDER-VALUE-PLAN.md §8.2).
 #'
 #' This closes that gap directly, on the published rating, per channel, keyed on
-#' \code{position_group} within each \code{(season, round)} cross-section.
+#' \code{position_group} within each \code{(season, round)} cross-section --
+#' collapsed first onto \code{MATCH_LISTED_POS_MAP}'s 6 buckets, the same
+#' taxonomy the match model's position features use.
 #'
 #' \strong{This is a NORMALISATION, not a measurement.} Position levels are
 #' unidentifiable from match margins -- on-field structure is rigid (every team
@@ -152,6 +216,41 @@ EPR_POSITION_CENTRE <- TRUE
 #' no channel can blow up and none needs excluding.
 #' @keywords internal
 EPR_CENTRE_CHANNELS <- c("epr_recv", "epr_disp", "epr_spoil", "epr_hitout")
+
+#' Centre PSV on its listed position's level, per round
+#'
+#' The PSV-side twin of \code{EPV_LEVEL_CENTRE}, and the same finding one layer
+#' across. \code{calculate_psv()} already centres to machine precision by
+#' \code{lineup_position} (1.7e-15 across all 20 roles), but on the listed
+#' taxonomy that PSR, TORP and the match model use, 2026 \code{psv_p80} still
+#' spans 0.812 (key_fwd +0.517, med_def -0.295).
+#'
+#' Turned on 2026-07-29, immediately after the EPV fix, because fixing EPV alone
+#' left per-game \code{torp_value = 0.5*epv + 0.5*psv} carrying ~0.41 of
+#' positional bias sourced entirely from PSV. The two are NOT the same shape:
+#' EPV penalised key defenders hardest, PSV penalises medium defenders and
+#' rewards key forwards, so correcting one and not the other skews the blend
+#' rather than halving the error.
+#'
+#' PSR's own centring stays on as the backstop, exactly as
+#' \code{EPR_POSITION_CENTRE} does for EPR.
+#' @keywords internal
+PSV_LEVEL_CENTRE <- TRUE
+#' Centre PSR within each (season, round) rather than pooled over all history
+#'
+#' PSR's position centring was grouped by position ALONE, so every position
+#' averaged zero across the whole dataset while any individual round stayed
+#' skewed -- on the served round, rucks sat +0.451 and key forwards -0.030, a
+#' 0.481 spread that TORP inherited half of. Pooling is also a backtest leak: a
+#' 2021 round-1 rating centred using games from 2026.
+#'
+#' Exposed as a flag rather than hardcoded so the old behaviour can be scored on
+#' the match harness from the PRODUCTION code path, instead of a replica of it.
+#' Every gate we have asks "is the new arm better"; none asks "is the arm I
+#' scored the thing production runs", and a hand-rolled reconstruction of the
+#' old centring is exactly where that gap opens.
+#' @keywords internal
+PSR_CENTRE_BY_ROUND <- TRUE
 
 #' Whether PSR position centring rescales as well as recentres
 #'

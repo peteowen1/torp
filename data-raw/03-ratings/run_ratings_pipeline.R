@@ -241,6 +241,61 @@ data.table::setDT(all_pgd)
 cli::cli_progress_step("Applying EPV opponent adjustment")
 all_pgd <- adjust_epv_for_opponents(all_pgd)
 
+# Positional LEVEL correction, applied here and not earlier. It has to run
+# after the opponent adjustment (which would otherwise reintroduce a level on
+# top of it) and before both consumers -- EPR aggregation below and
+# .compute_player_game_ratings() in stage 5 -- so a single call covers the
+# published ratings and the per-game displays.
+if (isTRUE(EPV_LEVEL_CENTRE)) {
+  cli::cli_progress_step("Centring EPV on listed-position levels")
+  all_pgd <- centre_epv_by_position(all_pgd)
+
+  # Verify the invariant that makes this worth doing: the TOG-weighted sum per
+  # (season, round, bucket) is what EPR's numerator accumulates, so it is the
+  # thing that must vanish -- not the unweighted mean, which would look centred
+  # while EPR stayed skewed.
+  .lc <- if (all(paste0(EPV_LEVEL_CENTRE_CHANNELS, "_oadj") %in% names(all_pgd)))
+    "_oadj" else "_adj"
+  .chk <- data.table::as.data.table(all_pgd)
+  .chk[, `:=`(pos_bucket = torp:::.collapse_listed_position(position_group),
+              w = pmax(dplyr::coalesce(time_on_ground_percentage / 100, 0.1), 0.1))]
+  .chk <- .chk[!is.na(pos_bucket)]
+  # Fail CLOSED. .worst starts at 0 and is only ever RAISED, so if every cell
+  # is empty -- position_group missing or renamed, or every value unmapped --
+  # the loop never runs, .worst stays 0, the abort below is skipped, and the
+  # script reports "verified (max |cell mean| = 0)" having verified nothing.
+  # That is the same shape as the bugs this guard exists to catch, one level up:
+  # the GUARD degrading to a no-op rather than the normalisation.
+  if (nrow(.chk) == 0) {
+    cli::cli_abort(c(
+      "Cannot verify EPV level centring: no row has a mapped position bucket.",
+      "x" = "Refusing to build ratings on EPV whose centring cannot be checked."
+    ))
+  }
+  .worst <- 0
+  .checked <- 0L
+  for (cc in paste0(EPV_LEVEL_CENTRE_CHANNELS, .lc)) {
+    m <- .chk[is.finite(get(cc)),
+              .(wm = stats::weighted.mean(get(cc), w)),
+              by = .(season, round, pos_bucket)]
+    if (nrow(m) > 0) { .worst <- max(.worst, max(abs(m$wm), na.rm = TRUE)); .checked <- .checked + nrow(m) }
+  }
+  if (.checked == 0L) {
+    cli::cli_abort(c(
+      "Cannot verify EPV level centring: zero cells had a finite channel value.",
+      "x" = "An empty check is not a pass."
+    ))
+  }
+  if (!is.finite(.worst) || .worst > 1e-8) {
+    cli::cli_abort(c(
+      "EPV level centring did not take: max |TOG-weighted cell mean| = {signif(.worst, 3)}",
+      "x" = "Refusing to build ratings on EPV that is not centred as claimed."
+    ))
+  }
+  cli::cli_alert_success("EPV level centring verified across {.checked} cell{?s} (max |cell mean| = {signif(.worst, 3)})")
+  rm(.chk, .worst, .checked, .lc)
+}
+
 data.table::setkey(all_pgd, match_id)
 
 # Pre-load shared data once — avoids ~145 redundant loads per full rebuild
@@ -269,97 +324,11 @@ if (!is.null(shared_stat_ratings)) {
 }
 shared_fixtures <- load_fixtures(TRUE)
 
-get_epr_df <- function(year, rounds, pgd, stat_ratings, fixtures) {
-  plyr_tm_df <- load_player_details(year)
-  if (nrow(plyr_tm_df) == 0 || !"season" %in% names(plyr_tm_df)) {
-    plyr_tm_df <- load_player_details(year - 1)
-  }
-
-  # Build round_info with dates from fixtures
-  fix_dt <- data.table::as.data.table(fixtures)
-  fix_dates <- fix_dt[
-    season == year & round_number %in% rounds,
-    .(date_val = lubridate::as_date(min(utc_start_time))),
-    by = .(round_val = round_number)
-  ]
-
-  round_info <- data.table::data.table(
-    round_val = rounds,
-    match_ref = paste0("CD_M", year, "014", sprintf("%02d", rounds))
-  )
-  round_info <- round_info[fix_dates, on = "round_val", nomatch = NULL]
-
-  if (nrow(round_info) == 0) {
-    cli::cli_alert_danger("No fixtures found for {year}")
-    return(data.frame())
-  }
-
-  # Batch compute all rounds' player stats in one data.table pass
-  batch_stats <- calculate_epr_stats_batch(pgd, round_info)
-
-  # Attach decomposed TOG from stat ratings
-  batch_stats[, pred_tog := NA_real_]
-  batch_stats[, pred_selection := NA_real_]
-  batch_stats[, pred_cond_tog := NA_real_]
-  if (!is.null(stat_ratings)) {
-    stat_ratings_dt <- data.table::as.data.table(stat_ratings)
-    batch_stats[stat_ratings_dt, `:=`(
-      pred_selection = i.squad_selection_rating,
-      pred_cond_tog = i.cond_tog_rating
-    ), on = "player_id"]
-    batch_stats[is.na(pred_selection), pred_selection := 0]
-    batch_stats[is.na(pred_cond_tog), pred_cond_tog := 0]
-    batch_stats[, pred_tog := pred_selection * pred_cond_tog]
-  }
-
-  # Pre-compute fixtures summary once (avoids re-summarising 6K rows per round)
-  fix_summary <- fixtures |>
-    dplyr::group_by(season = .data$season, round = .data$round_number) |>
-    dplyr::summarise(ref_date = lubridate::as_date(min(.data$utc_start_time)), .groups = "drop")
-
-  # Per-round: roster join + TOG centering (lightweight ~700 rows per round)
-  results <- lapply(round_info$round_val, function(rv) {
-    round_dt <- batch_stats[round_val == rv]
-    final_df <- .prepare_final_dataframe(plyr_tm_df, round_dt, year, rv, fixtures, fix_summary = fix_summary)
-
-    if (!is.null(stat_ratings) && nrow(final_df) > 0) {
-      final_df$pred_tog[is.na(final_df$pred_tog)] <- 0
-      tot_tog <- sum(final_df$pred_tog)
-      if (tot_tog > 0) {
-        n_teams <- length(unique(final_df$team))
-        target_tog <- n_teams * 18L
-        final_df$pred_tog <- final_df$pred_tog * (target_tog / tot_tog)
-        comps <- c("epr_recv", "epr_disp", "epr_spoil", "epr_hitout")
-        for (comp in comps) {
-          avg_val <- sum(final_df[[comp]] * final_df$pred_tog, na.rm = TRUE) / sum(final_df$pred_tog)
-          final_df[[comp]] <- final_df[[comp]] - avg_val
-        }
-        final_df$epr <- round(final_df$epr_recv + final_df$epr_disp + final_df$epr_spoil + final_df$epr_hitout, 2)
-        for (comp in comps) {
-          final_df[[comp]] <- round(final_df[[comp]], 2)
-        }
-      }
-    }
-
-    final_df
-  })
-
-  n_empty <- sum(vapply(results, function(x) nrow(x) == 0, logical(1)))
-  if (n_empty == length(round_info$round_val) && length(round_info$round_val) > 1) {
-    cli::cli_abort("All {length(round_info$round_val)} rounds empty for {year}")
-  }
-
-  results |>
-    dplyr::bind_rows() |>
-    (\(df) {
-      if (nrow(df) == 0) return(df)
-      if (!"player_id" %in% names(df)) {
-        cli::cli_alert_danger("player_id column missing from ratings output for {year} - row_id cannot be computed")
-        return(df)
-      }
-      dplyr::mutate(df, row_id = paste0(player_id, season, sprintf("%02d", round)))
-    })()
-}
+# Stage 3's per-season builder now lives in the package as
+# torp:::.build_epr_season() so it can be called WITHOUT publishing --
+# see R/ratings_build.R and build_ratings_history(). It was defined here,
+# inside a script that writes to GitHub Releases, which meant the only way
+# to get a ratings history was to publish one.
 
 torp_season_list <- list()
 failed_seasons <- character()
@@ -377,7 +346,7 @@ for (s in seasons) {
     cli::cli_h3("Computing ratings for {s} (rounds {start_round}-{max_round})")
     tictoc::tic(paste0("ratings_", s))
 
-    torp_df <- get_epr_df(s, start_round:max_round, all_pgd, shared_stat_ratings, shared_fixtures)
+    torp_df <- torp:::.build_epr_season(s, start_round:max_round, all_pgd, shared_stat_ratings, shared_fixtures)
     cli::cli_inform("  {s}: {nrow(torp_df)} rating rows")
 
     if (nrow(torp_df) == 0) {
@@ -501,11 +470,18 @@ if (nrow(torp_new) > 0) {
     # holds by data, not by contract. If partial-NA rows ever appear the check
     # fails loud rather than passing something wrong -- the skew would exceed
     # the tolerance below -- but the message would be misleading, so start here.
-    chk <- data.table::as.data.table(torp_df_total)[
-      !is.na(position_group),
+    # Group by the SAME collapsed bucket centre_epr_by_position() used. Keying
+    # this on raw position_group while centring uses the 6-way map would fail
+    # every run for the two merged forward groups -- each is only mean-zero
+    # jointly. A guard that groups differently from the code it guards is not a
+    # guard.
+    chk <- data.table::as.data.table(torp_df_total)
+    chk[, pos_bucket := torp:::.collapse_listed_position(position_group)]
+    chk <- chk[
+      !is.na(pos_bucket),
       .(wmean = stats::weighted.mean(epr, pmax(pred_tog, 0.01), na.rm = TRUE),
         n = .N, n_rated = sum(is.finite(epr))),
-      by = .(season, round, position_group)]
+      by = .(season, round, pos_bucket)]
 
     # A cell where NOBODY is rated yet has nothing to centre and no mean to
     # check -- that is the start of the dataset, not a failure. 23,480 rows
@@ -516,7 +492,7 @@ if (nrow(torp_new) > 0) {
     unrated <- chk[n_rated == 0]
     if (nrow(unrated) > 0) {
       cli::cli_inform(
-        "Position centring: {nrow(unrated)} cell{?s} have no rated players (earliest: season {unrated$season[1]} round {unrated$round[1]} {unrated$position_group[1]}) -- nothing to verify there")
+        "Position centring: {nrow(unrated)} cell{?s} have no rated players (earliest: season {unrated$season[1]} round {unrated$round[1]} {unrated$pos_bucket[1]}) -- nothing to verify there")
     }
     # Known, accepted limitation: a cell with n_rated == 1 passes vacuously --
     # the weighted mean of one point IS that point, so subtracting it leaves
@@ -526,13 +502,12 @@ if (nrow(torp_new) > 0) {
     # catch (a whole taxonomy or channel not centring) shows up across many
     # cells at once, not in a single-player one.
     chk <- chk[n_rated > 0]
-
     # Fail CLOSED. An empty check is not a pass: zero rows here means nothing
     # had a position group, which is exactly the state in which centring cannot
     # have happened.
     if (nrow(chk) == 0) {
       cli::cli_abort(c(
-        "Cannot verify EPR position centring: no {.field position_group} cell has a single rated player.",
+        "Cannot verify EPR position centring: no position bucket has a single rated player.",
         "x" = "Refusing to publish ratings whose centring cannot be checked."
       ))
     }
@@ -540,7 +515,7 @@ if (nrow(torp_new) > 0) {
       bad <- chk[!is.finite(wmean)]
       cli::cli_abort(c(
         "EPR position centring produced {nrow(bad)} non-finite cell mean{?s}.",
-        "i" = "First: season {bad$season[1]} round {bad$round[1]} {bad$position_group[1]}"
+        "i" = "First: season {bad$season[1]} round {bad$round[1]} {bad$pos_bucket[1]}"
       ))
     }
     worst <- max(abs(chk$wmean))
@@ -548,7 +523,7 @@ if (nrow(torp_new) > 0) {
       b <- chk[which.max(abs(wmean))]
       cli::cli_abort(c(
         "EPR position centring did not take: max |weighted mean| = {signif(worst, 3)}",
-        "i" = "Worst cell: season {b$season} round {b$round} {b$position_group} (n = {b$n})",
+        "i" = "Worst cell: season {b$season} round {b$round} {b$pos_bucket} (n = {b$n})",
         "x" = "Refusing to publish ratings whose positions are not centred as claimed."
       ))
     }

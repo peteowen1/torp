@@ -50,6 +50,119 @@ default_epv_params <- function() {
   )
 }
 
+#' Centre EPV channels on their listed position's level, per round
+#'
+#' The positional level correction, applied at the layer that creates it.
+#' \code{.position_adjust()} already centres every channel to machine-precision
+#' zero -- but by \code{lineup_position}, the weekly on-field role. That removes
+#' the ROLE effect and leaves the PLAYER-TYPE one: key defenders are a subset of
+#' the players filling full-back and centre-half-back, and they sit below those
+#' roles' own means. Measured on 2026 per-game data, \code{epv_adj} spans 2.94
+#' points across listed buckets (key_def -2.17, key_fwd +0.77) even though every
+#' one of the 20 lineup positions reads exactly 0.
+#'
+#' That is the whole gap \code{centre_epr_by_position()} was subtracting one
+#' layer downstream. Correcting it here flows to EPR, to PSV blending and to the
+#' per-game displays in \code{get_player_game_ratings()} at once, instead of
+#' each needing its own correction.
+#'
+#' \strong{Weighted by TOG, and grouped per \code{(season, round)}, because that
+#' is what makes EPR's numerator vanish.} EPR forms
+#' \code{sum(x * tog_safe * decay)} over past games; the decay factor is
+#' effectively constant within a round, so zeroing the TOG-weighted mean of
+#' \code{x} in each round drives that sum to zero for the whole bucket. An
+#' unweighted mean would not. Per-round grouping is also the leak-safe choice:
+#' a full-history mean would centre early rounds using games that had not
+#' happened yet.
+#'
+#' \strong{This does not make EPR exactly centred, and is not meant to.}
+#' \code{.bayesian_shrink()} pulls each player toward \code{prior_rate}
+#' (-0.7 / -0.3, not zero) by an amount set by their \code{wt_gms}, so positions
+#' that differ in games played and time on ground keep a small residual level.
+#' \code{EPR_POSITION_CENTRE} remains as the backstop that removes it.
+#'
+#' Operates on the \code{_oadj} (opponent-adjusted) channels when they exist and
+#' \code{_adj} otherwise -- matching whichever set EPR actually consumes. Order
+#' matters: this must run AFTER \code{adjust_epv_for_opponents()}, or the
+#' opponent adjustment reintroduces a level on top of the correction.
+#'
+#' @param pgd Player game data, after opponent adjustment.
+#' @param channels Channel stems to centre. Defaults to
+#'   \code{EPV_LEVEL_CENTRE_CHANNELS}.
+#' @return \code{pgd} with the live channel set centred and its total rebuilt.
+#' @keywords internal
+centre_epv_by_position <- function(pgd, channels = EPV_LEVEL_CENTRE_CHANNELS) {
+  dt <- data.table::as.data.table(pgd)
+
+  if (!"position_group" %in% names(dt)) {
+    cli::cli_abort(c(
+      "Cannot centre EPV by position: no {.field position_group} column.",
+      "x" = "Refusing to return uncentred values that callers will treat as centred."
+    ))
+  }
+
+  # Use the same channel set EPR does. Centring _adj while EPR reads _oadj would
+  # be a silent no-op: every check here would pass and nothing downstream would
+  # change.
+  suffix <- if (all(paste0(channels, "_oadj") %in% names(dt))) "_oadj" else "_adj"
+  cols <- paste0(channels, suffix)
+  missing_cols <- setdiff(cols, names(dt))
+  if (length(missing_cols) > 0) {
+    cli::cli_abort(c(
+      "Cannot centre EPV by position: {length(missing_cols)} channel{?s} absent: {.val {missing_cols}}",
+      "x" = "A partial channel set would rebuild the total from part of its parts."
+    ))
+  }
+
+  dt[, .cpg := .collapse_listed_position(position_group)]
+  n_missing  <- sum(is.na(dt$position_group))
+  n_unmapped <- sum(!is.na(dt$position_group) & is.na(dt$.cpg))
+  if (n_unmapped > 0) {
+    cli::cli_alert_danger(
+      "{n_unmapped} player-game{?s} carr{?ies/y} an UNMAPPED {.field position_group} and {?was/were} left UNCENTRED at the EPV layer.")
+  }
+
+  dt[, .ctog := pmax(dplyr::coalesce(time_on_ground_percentage / 100, 0.1), 0.1)]
+
+  .wmean_cell <- function(x, w) {
+    ok <- is.finite(x) & is.finite(w) & w > 0
+    if (!any(ok)) return(NA_real_)
+    sum(x[ok] * w[ok]) / sum(w[ok])
+  }
+  for (cc in cols) {
+    dt[!is.na(.cpg),
+       (cc) := get(cc) - .wmean_cell(get(cc), .ctog),
+       by = .(season, round, .cpg)]
+  }
+
+  # Points-scale calibration, applied at the VALUE layer so it flows into the
+  # rating (Pete's call 2026-07-29 -- the same principle as the level fix).
+  # EPR converted at 0.919 points per rating point, so new = 0.919 * old.
+  #
+  # Scaling here is NOT sufficient on its own: .bayesian_shrink() adds
+  # prior_games * prior_rate AFTER the value, so an unscaled prior would leave
+  # EPR a blend of scaled and unscaled parts rather than a clean rescale. The
+  # EPR_PRIOR_RATE_* constants carry the same factor for exactly that reason --
+  # if you change one, change both.
+  if (is.finite(EPV_POINTS_SCALE) && !isTRUE(all.equal(EPV_POINTS_SCALE, 1))) {
+    for (cc in cols) dt[, (cc) := get(cc) * EPV_POINTS_SCALE]
+  }
+
+  # Rebuild the total from its parts, exactly as the EPR centring does, so the
+  # total and its channels cannot disagree.
+  total_col <- paste0("epv", suffix)
+  if (total_col %in% names(dt)) {
+    finite_all <- Reduce(`&`, lapply(cols, function(cc) is.finite(dt[[cc]])))
+    dt[, (total_col) := rowSums(as.matrix(.SD), na.rm = TRUE), .SDcols = cols]
+    if (sum(!finite_all) > 0) dt[!finite_all, (total_col) := NA_real_]
+  }
+
+  dt[, c(".cpg", ".ctog") := NULL]
+  cli::cli_alert_success(
+    "Centred {length(cols)} EPV channel{?s} ({suffix}) on listed-position levels per round ({nrow(dt)} player-games; {n_missing} with no position group, {n_unmapped} unmapped)")
+  dt[]
+}
+
 #' TOG-weighted standard deviation
 #'
 #' @param x Numeric vector.
