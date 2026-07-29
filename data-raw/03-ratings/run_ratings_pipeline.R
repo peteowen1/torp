@@ -483,7 +483,6 @@ if (nrow(torp_new) > 0) {
     # catch (a whole taxonomy or channel not centring) shows up across many
     # cells at once, not in a single-player one.
     chk <- chk[n_rated > 0]
-
     # Fail CLOSED. An empty check is not a pass: zero rows here means nothing
     # had a position group, which is exactly the state in which centring cannot
     # have happened.
