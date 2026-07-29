@@ -123,11 +123,18 @@ calculate_psr <- function(skills, coef_df, center = TRUE) {
   if (center && is.null(psr_pos_col)) {
     cli::cli_warn("No position column found for PSR centering; using global mean subtraction")
   }
+  # Group per (season, round) when those columns exist, not pooled over all
+  # history. Pooling makes every position average zero ACROSS the dataset while
+  # leaving any individual round skewed -- measured on the served round, rucks
+  # sat +0.451 and key forwards -0.030, a 0.481 spread that TORP inherited half
+  # of. It is also a backtest leak: a 2021 round-1 rating centred with 2026
+  # games. Mirrors the (season, round) grouping EPR has always used.
+  .psr_by <- c(intersect(c("season", "round"), names(dt)), psr_pos_col)
   if (center && !is.null(psr_pos_col) && "wt_80s" %in% names(dt)) {
-    dt[!is.na(get(psr_pos_col)), psr := psr_raw - weighted.mean(psr_raw, wt_80s, na.rm = TRUE), by = c(psr_pos_col)]
+    dt[!is.na(get(psr_pos_col)), psr := psr_raw - weighted.mean(psr_raw, wt_80s, na.rm = TRUE), by = c(.psr_by)]
     dt[is.na(get(psr_pos_col)), psr := psr_raw - weighted.mean(psr_raw, wt_80s, na.rm = TRUE)]
   } else if (center && !is.null(psr_pos_col)) {
-    dt[!is.na(get(psr_pos_col)), psr := psr_raw - mean(psr_raw, na.rm = TRUE), by = c(psr_pos_col)]
+    dt[!is.na(get(psr_pos_col)), psr := psr_raw - mean(psr_raw, na.rm = TRUE), by = c(.psr_by)]
     dt[is.na(get(psr_pos_col)), psr := psr_raw - mean(psr_raw, na.rm = TRUE)]
   } else if (center) {
     dt[, psr := psr_raw - mean(psr_raw, na.rm = TRUE)]
@@ -337,7 +344,63 @@ calculate_psv <- function(player_stats, coef_df, tog_adjust = TRUE, center = TRU
     dt[, psv_p80 := psv_raw]
   }
 
+  # Second pass: centre on the LISTED position bucket, per (season, round).
+  #
+  # The block above centres on lineup_position -- the weekly on-field role --
+  # and does it to machine precision (1.7e-15 across all 20 roles). But that
+  # removes the ROLE effect, not the PLAYER-TYPE one: key forwards are a subset
+  # of the players filling forward roles and sit above those roles' own means.
+  # Measured on 2026, psv_p80 still spans 0.812 across the six listed buckets
+  # (key_fwd +0.517, med_def -0.295) with every lineup_position at zero. This is
+  # the exact defect found at the EPV layer on 2026-07-29, at ~28% the size, and
+  # it is why fixing EPV alone left per-game torp_value carrying ~0.41 of
+  # positional bias -- all of it from here.
+  #
+  # TOG-weighted and per-round for the same reasons as centre_epv_by_position():
+  # psv is psv_p80 * tog, so the TOG-weighted mean is the quantity aggregation
+  # actually sees, and a full-history mean would centre early rounds with games
+  # that had not been played.
+  #
+  # The round column is `round` in player_game data but `round_number` in
+  # player_stats, which is what this function is actually fed. The first version
+  # of this guard tested only for "round", so it silently did nothing and the
+  # measured spread came back unchanged at 0.812 -- a skipped normalisation that
+  # every downstream check would have passed. Hence: resolve both spellings, and
+  # ABORT rather than skip if centring was asked for and cannot be done.
+  .psv_round_col <- intersect(c("round", "round_number"), names(dt))[1]
+  if (center && isTRUE(PSV_LEVEL_CENTRE) && "position_group" %in% names(dt) &&
+      (is.na(.psv_round_col) || !"season" %in% names(dt))) {
+    cli::cli_abort(c(
+      "Cannot centre PSV by listed position: need {.field season} and {.field round}/{.field round_number}.",
+      "i" = "Found: {.val {intersect(c('season','round','round_number'), names(dt))}}",
+      "x" = "Refusing to return uncentred PSV that callers will treat as centred."
+    ))
+  }
+  if (center && isTRUE(PSV_LEVEL_CENTRE) && "position_group" %in% names(dt)) {
+    data.table::setnames(dt, .psv_round_col, ".lc_round")
+    dt[, .lc_bucket := .collapse_listed_position(position_group)]
+    dt[, .lc_w := if ("tog" %in% names(dt)) pmax(as.numeric(tog), 0.1) else 1]
+    .lc_wmean <- function(x, w) {
+      ok <- is.finite(x) & is.finite(w) & w > 0
+      if (!any(ok)) return(NA_real_)
+      sum(x[ok] * w[ok]) / sum(w[ok])
+    }
+    for (cc in intersect(c("psv_p80", "osv_p80", "dsv_p80"), names(dt))) {
+      dt[!is.na(.lc_bucket), (cc) := get(cc) - .lc_wmean(get(cc), .lc_w),
+         by = .(season, .lc_round, .lc_bucket)]
+    }
+    n_unmapped <- sum(!is.na(dt$position_group) & is.na(dt$.lc_bucket))
+    if (n_unmapped > 0) {
+      cli::cli_alert_danger(
+        "{n_unmapped} player-game{?s} carr{?ies/y} an UNMAPPED {.field position_group} and {?was/were} left UNCENTRED at the PSV layer.")
+    }
+    dt[, c(".lc_bucket", ".lc_w") := NULL]
+    data.table::setnames(dt, ".lc_round", .psv_round_col)
+  }
+
   # Derive per-game value: psv = psv_p80 * tog (per-game scale, matches epv).
+  # Must stay AFTER the centring above, or psv keeps the uncentred level while
+  # psv_p80 looks corrected.
   if ("tog" %in% names(dt)) {
     dt[, psv := psv_p80 * pmax(as.numeric(tog), 0.1)]
   } else {

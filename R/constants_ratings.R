@@ -181,6 +181,26 @@ EPR_POSITION_CENTRE <- TRUE
 #' @keywords internal
 EPR_CENTRE_CHANNELS <- c("epr_recv", "epr_disp", "epr_spoil", "epr_hitout")
 
+#' Centre PSV on its listed position's level, per round
+#'
+#' The PSV-side twin of \code{EPV_LEVEL_CENTRE}, and the same finding one layer
+#' across. \code{calculate_psv()} already centres to machine precision by
+#' \code{lineup_position} (1.7e-15 across all 20 roles), but on the listed
+#' taxonomy that PSR, TORP and the match model use, 2026 \code{psv_p80} still
+#' spans 0.812 (key_fwd +0.517, med_def -0.295).
+#'
+#' Turned on 2026-07-29, immediately after the EPV fix, because fixing EPV alone
+#' left per-game \code{torp_value = 0.5*epv + 0.5*psv} carrying ~0.41 of
+#' positional bias sourced entirely from PSV. The two are NOT the same shape:
+#' EPV penalised key defenders hardest, PSV penalises medium defenders and
+#' rewards key forwards, so correcting one and not the other skews the blend
+#' rather than halving the error.
+#'
+#' PSR's own centring stays on as the backstop, exactly as
+#' \code{EPR_POSITION_CENTRE} does for EPR.
+#' @keywords internal
+PSV_LEVEL_CENTRE <- TRUE
+
 #' Whether PSR position centring rescales as well as recentres
 #'
 #' The mirror of \code{EPV_POSITION_STANDARDISE} on the PSR side.
