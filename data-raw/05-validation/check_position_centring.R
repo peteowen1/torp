@@ -170,17 +170,42 @@ if (!is.null(psr_rel) && nrow(psr_rel) > 0 && "psr" %in% names(psr_rel)) {
 }
 
 # ---- 5b. the PSR level torp_ratings actually inherits (informational) --------
-# NOT a pass/fail. This is the selection effect described above, and TORP does
-# genuinely inherit half of it -- so it is worth watching even though it is not
-# a centring bug. If it grows large, the question is whether TORP should blend
-# a PSR re-centred on the rated roster, which is a rating-definition change and
-# needs its own MAE measurement, not a checker tweak.
-if ("psr" %in% names(r)) {
-  cat("\n=== 5b. PSR level within the rated roster, latest round (informational) ===\n")
-  print(lat[!is.na(pos_bucket) & is.finite(psr),
-            .(n = .N, wmean = round(stats::weighted.mean(psr, .w, na.rm = TRUE), 4),
-              sd = round(sd(psr, na.rm = TRUE), 2)), by = pos_bucket][order(-wmean)],
+# NOT a pass/fail.
+#
+# This MUST use wt_80s, joined from psr-data. torp_ratings does not carry
+# wt_80s, and an earlier version of this section silently fell back to pred_tog
+# -- a different weight vector entirely. That reported a 0.759 positional
+# spread on a correctly-centred file and produced a written claim that TORP
+# still carried ~0.38 of positional level. Measured properly the answer is:
+#
+#   full psr population, wt_80s (the invariant)  0.000
+#   rated subset,        wt_80s                  0.096   <- the real number
+#   full psr population, unweighted              0.306
+#   rated subset,        unweighted              0.357
+#
+# So ~0.10 of the apparent 0.76 was the player set and ~0.66 was the weights.
+# The dropped rows are 4.6% of total game time with median wt_80s 0.044 --
+# fringe players who barely played -- which is exactly why re-weighting, not
+# re-populating, is what moves this number. Re-centring PSR on the rated roster
+# would buy ~0.05 in TORP and is not worth a rating-definition change.
+if ("psr" %in% names(r) && !is.null(psr_rel) && "wt_80s" %in% names(psr_rel)) {
+  wj <- unique(psr_rel[, .(player_id, season, round, wt_80s)])
+  lat_w <- merge(lat[!is.na(pos_bucket) & is.finite(psr)], wj,
+                 by = c("player_id", "season", "round"), all.x = TRUE,
+                 suffixes = c("", ".psr"))
+  wcol <- if ("wt_80s.psr" %in% names(lat_w)) "wt_80s.psr" else "wt_80s"
+  lat_w[, .ww := pmax(dplyr::coalesce(get(wcol), 0), 1e-9)]
+  matched <- sum(!is.na(lat_w[[wcol]]))
+  cat(sprintf("\n=== 5b. PSR level within the rated roster, latest round (informational) ===\n"))
+  cat(sprintf("  wt_80s-weighted, %d of %d rows matched to psr-data\n", matched, nrow(lat_w)))
+  if (matched < 0.9 * nrow(lat_w)) {
+    cli::cli_alert_warning("Under 90% of rated rows matched psr-data -- 5b's weighting is unreliable.")
+  }
+  print(lat_w[, .(n = .N, wmean = round(stats::weighted.mean(psr, .ww, na.rm = TRUE), 4),
+                  sd = round(sd(psr, na.rm = TRUE), 2)), by = pos_bucket][order(-wmean)],
         row.names = FALSE)
+} else if ("psr" %in% names(r)) {
+  cli::cli_alert_warning("Skipping 5b: no wt_80s available to weight it correctly. An unweighted or pred_tog-weighted version of this table is misleading -- see the comment above.")
 }
 
 cat("\n=== VERDICT ===\n")
