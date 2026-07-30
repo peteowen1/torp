@@ -642,6 +642,186 @@ test_that("EPV centring aborts rather than silently returning uncentred values",
 })
 
 
+# EPV position shrinkage -------------------------------------------------------
+#
+# The thin cells this protects are real and they are September: the 2025 Grand
+# Final key-forward cell has four players and was having 7.05 points subtracted
+# from each of them on the strength of the other three. It shrinks toward the
+# bucket's EARLIER mean rather than toward zero, so no positional level is
+# handed back -- the failure that got the EPR-layer version reverted.
+
+.with_epv_shrink <- function(prior, code, rule = "prior", floor = 8) {
+  old_on <- get("EPV_POSITION_SHRINK", envir = asNamespace("torp"))
+  old_pr <- get("EPV_POSITION_SHRINK_PRIOR", envir = asNamespace("torp"))
+  old_rl <- get("EPV_POSITION_SHRINK_RULE", envir = asNamespace("torp"))
+  old_fl <- get("EPV_POSITION_SHRINK_FLOOR", envir = asNamespace("torp"))
+  assignInNamespace("EPV_POSITION_SHRINK", TRUE, ns = "torp")
+  assignInNamespace("EPV_POSITION_SHRINK_PRIOR", prior, ns = "torp")
+  assignInNamespace("EPV_POSITION_SHRINK_RULE", rule, ns = "torp")
+  assignInNamespace("EPV_POSITION_SHRINK_FLOOR", floor, ns = "torp")
+  on.exit({
+    assignInNamespace("EPV_POSITION_SHRINK", old_on, ns = "torp")
+    assignInNamespace("EPV_POSITION_SHRINK_PRIOR", old_pr, ns = "torp")
+    assignInNamespace("EPV_POSITION_SHRINK_RULE", old_rl, ns = "torp")
+    assignInNamespace("EPV_POSITION_SHRINK_FLOOR", old_fl, ns = "torp")
+  }, add = TRUE)
+  force(code)
+}
+
+# Rounds 1-4 are well populated; round 5 has a two-player cell in one bucket
+# whose mean is wildly off -- the Grand Final shape.
+.epv_thin_fixture <- function(seed = 11) {
+  set.seed(seed)
+  buckets <- c("KEY_DEFENDER", "MIDFIELDER")
+  # 50 players per bucket-round at 80% TOG gives cell weight 40, which is the
+  # MEASURED median across 2021-2026 (40.91). Sizing the fixture off the real
+  # distribution matters here: a 20-player cell has weight 16 and lambda 0.889,
+  # so a test built on it would claim shrinkage disturbs normal cells when it is
+  # the fixture that is thin.
+  fat <- data.table::CJ(round = 1:4, position_group = buckets, i = 1:50)[, i := NULL]
+  thin <- data.table::data.table(round = 5L, position_group = c(buckets[1], buckets[1],
+                                                               rep(buckets[2], 50)))
+  d <- rbind(fat, thin)[, `:=`(season = 2026L,
+                               time_on_ground_percentage = 80)]
+  for (ch in EPV_LEVEL_CENTRE_CHANNELS) {
+    data.table::set(d, j = paste0(ch, "_oadj"), value = rnorm(nrow(d), sd = 0.1))
+  }
+  # A genuine bucket level, plus an extreme offset on the two-player cell.
+  d[, epv_recv_oadj := epv_recv_oadj +
+      ifelse(position_group == buckets[1], -2, 2) +
+      ifelse(round == 5L & position_group == buckets[1], 6, 0)]
+  data.table::set(d, j = "epv_oadj", value = Reduce(`+`, lapply(
+    paste0(EPV_LEVEL_CENTRE_CHANNELS, "_oadj"), function(cc) d[[cc]])))
+  d[]
+}
+
+.epv_cell_resid <- function(out) {
+  d <- data.table::as.data.table(out)
+  d[, `:=`(bucket = .collapse_listed_position(position_group),
+           w = pmax(time_on_ground_percentage / 100, 0.1))]
+  cells <- data.table::as.data.table(attr(out, "epv_level_centring"))
+  res <- data.table::rbindlist(lapply(paste0(EPV_LEVEL_CENTRE_CHANNELS, "_oadj"), function(cc) {
+    m <- d[is.finite(get(cc)), .(observed = stats::weighted.mean(get(cc), w)),
+           by = .(season, round, bucket)]
+    m[, channel := cc]
+    m[cells[channel == cc], `:=`(expected = i.resid_expected, lam = i.lam,
+                                 m_round = i.m_round, m_prior = i.m_prior),
+      on = .(season, round, bucket = pos_bucket)]
+    m
+  }))
+  res
+}
+
+test_that("EPV centring records per-cell corrections that reduce to a no-op when shrinkage is off", {
+  # The pipeline guard reads this attribute. With the flag off it must say
+  # "full correction, zero residual", so the guard behaves exactly as before.
+  out <- suppressMessages(centre_epv_by_position(.epv_thin_fixture()))
+  cells <- data.table::as.data.table(attr(out, "epv_level_centring"))
+  expect_gt(nrow(cells), 0)
+  expect_true(all(cells$lam == 1))
+  expect_equal(cells$corr, cells$m_round)
+  expect_equal(cells$resid_expected, rep(0, nrow(cells)))
+})
+
+test_that("shrunk EPV cells land on EXACTLY the residual the attribute predicts", {
+  # This is the invariant that lets the pipeline guard stay at 1e-8 instead of
+  # being loosened to accommodate the feature.
+  out <- .with_epv_shrink(2, suppressMessages(centre_epv_by_position(.epv_thin_fixture())))
+  res <- .epv_cell_resid(out)
+  expect_false(anyNA(res$expected))
+  expect_equal(res$observed, res$expected, tolerance = 1e-10)
+  # ...and the prediction is the shrinkage formula, not a fitted fudge.
+  ok <- !is.na(res$m_prior)
+  expect_equal(res$expected[ok],
+               ((1 - res$lam[ok]) * (res$m_round[ok] - res$m_prior[ok])) * EPV_POINTS_SCALE,
+               tolerance = 1e-10)
+})
+
+test_that("EPV shrinkage bites thin cells and leaves well-populated ones alone", {
+  out <- .with_epv_shrink(2, suppressMessages(centre_epv_by_position(.epv_thin_fixture())))
+  cells <- data.table::as.data.table(attr(out, "epv_level_centring"))
+  thin <- cells[round == 5 & pos_bucket == .collapse_listed_position("KEY_DEFENDER") &
+                  channel == "epv_recv_oadj"]
+  fat  <- cells[round == 3 & pos_bucket == .collapse_listed_position("KEY_DEFENDER") &
+                  channel == "epv_recv_oadj"]
+  expect_lt(thin$lam, 0.6)     # two players at 80% TOG -> weight 1.6
+  expect_gt(fat$lam, 0.94)     # fifty players -> weight 40, the measured median
+  # The thin cell's correction is pulled toward its bucket's earlier mean, so it
+  # is strictly smaller in magnitude than the +6 offset its own round measured.
+  expect_lt(abs(thin$corr), abs(thin$m_round))
+  expect_true(abs(thin$corr - thin$m_prior) < abs(thin$m_round - thin$m_prior))
+})
+
+test_that("the EPV shrinkage prior uses only EARLIER rounds, never later ones", {
+  # A whole-season mean would be the obvious prior and would centre round 1 on
+  # games not yet played -- the backtest leak the per-round grouping exists to
+  # avoid. Round 1 must therefore have no prior at all and take the full
+  # correction, leaving exactly zero residual.
+  out <- .with_epv_shrink(2, suppressMessages(centre_epv_by_position(.epv_thin_fixture())))
+  res <- .epv_cell_resid(out)
+  first <- res[round == min(round)]
+  expect_true(all(is.na(first$m_prior)))
+  expect_equal(first$observed, rep(0, nrow(first)), tolerance = 1e-10)
+  expect_true(all(first$lam == 1 | first$expected == 0))
+  # Later rounds do have a prior, so shrinkage can actually happen.
+  expect_false(anyNA(res[round == max(round)]$m_prior))
+})
+
+test_that("the FLOOR rule leaves cells at or above the floor BIT-IDENTICAL", {
+  # This is the entire claim of the floor rule, and the reason it can ship on a
+  # correctness argument: the smooth "prior" rule moved 55,758 of 56,162 real
+  # rows and failed its MAE gate on the dilution. `expect_identical`, not
+  # `expect_equal` -- "close enough" is exactly what is not being claimed.
+  d <- .epv_thin_fixture()
+  base <- suppressMessages(centre_epv_by_position(copy(d)))
+  # Fixture: rounds 1-4 have weight 40 per cell, round 5's thin cell has 1.6.
+  out <- .with_epv_shrink(NA, suppressMessages(centre_epv_by_position(copy(d))),
+                          rule = "floor", floor = 8)
+  cells <- data.table::as.data.table(attr(out, "epv_level_centring"))
+  expect_true(all(cells[wt >= 8]$lam == 1))
+  expect_true(all(cells[wt < 8]$lam < 1))
+
+  b <- data.table::as.data.table(base); o <- data.table::as.data.table(out)
+  b[, bucket := .collapse_listed_position(position_group)]
+  thin_bucket <- .collapse_listed_position("KEY_DEFENDER")
+  above <- which(!(b$round == 5L & b$bucket == thin_bucket))
+  for (cc in c(paste0(EPV_LEVEL_CENTRE_CHANNELS, "_oadj"), "epv_oadj")) {
+    expect_identical(b[[cc]][above], o[[cc]][above])
+  }
+  # ...and the thin cell genuinely did move, or the test above proves nothing.
+  thin <- which(b$round == 5L & b$bucket == thin_bucket)
+  expect_false(isTRUE(all.equal(b$epv_recv_oadj[thin], o$epv_recv_oadj[thin])))
+})
+
+test_that("an unknown shrinkage rule aborts rather than silently picking one", {
+  d <- .epv_thin_fixture()
+  expect_error(
+    .with_epv_shrink(2, suppressMessages(centre_epv_by_position(d)), rule = "bayes"),
+    "EPV_POSITION_SHRINK_RULE"
+  )
+})
+
+test_that("EPV shrinkage does not hand the positional level back", {
+  # The reverted EPR version shrank toward ZERO, which withholds correction and
+  # restores level. Shrinking toward the bucket's own history must not: pooled
+  # over rounds, the bucket means stay near zero despite a 4-point injected gap.
+  d <- .epv_thin_fixture()
+  gap_before <- {
+    x <- data.table::as.data.table(d)
+    x[, bucket := .collapse_listed_position(position_group)]
+    bm <- x[, .(m = mean(epv_recv_oadj)), by = bucket]$m
+    max(bm) - min(bm)
+  }
+  out <- .with_epv_shrink(2, suppressMessages(centre_epv_by_position(d)))
+  x <- data.table::as.data.table(out)
+  x[, `:=`(bucket = .collapse_listed_position(position_group),
+           w = pmax(time_on_ground_percentage / 100, 0.1))]
+  bm <- x[, .(m = stats::weighted.mean(epv_recv_oadj, w)), by = bucket]$m
+  expect_gt(gap_before, 3)                       # the fixture really is skewed
+  expect_lt(max(bm) - min(bm), 0.1 * gap_before) # and it is still removed
+})
+
+
 test_that("EPR_POSITION_SHRINK holds back thin cells and leaves fat ones alone", {
   # Pin the flag ON rather than relying on the production default. This test
   # passed in isolation and FAILED in the full run, because

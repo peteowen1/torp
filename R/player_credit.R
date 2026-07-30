@@ -86,10 +86,25 @@ default_epv_params <- function() {
 #' matters: this must run AFTER \code{adjust_epv_for_opponents()}, or the
 #' opponent adjustment reintroduces a level on top of the correction.
 #'
+#' \strong{Thin cells.} A (season, round, bucket) cell can be very small -- the
+#' Grand Final has two rucks and four key forwards -- and a full correction then
+#' subtracts those few players' own noise from each of them (2025 round 28
+#' key_fwd: -7.05 points off four players). \code{EPV_POSITION_SHRINK} blends the
+#' round's mean with the bucket's mean over strictly EARLIER rounds in
+#' proportion to cell weight, so a thin cell is judged mostly on the position's
+#' history and a normal cell is essentially unchanged. It shrinks toward that
+#' history rather than toward zero precisely so that no positional level is
+#' handed back; see the constant's own documentation for the measurement.
+#'
 #' @param pgd Player game data, after opponent adjustment.
 #' @param channels Channel stems to centre. Defaults to
 #'   \code{EPV_LEVEL_CENTRE_CHANNELS}.
-#' @return \code{pgd} with the live channel set centred and its total rebuilt.
+#' @return \code{pgd} with the live channel set centred and its total rebuilt,
+#'   carrying an \code{"epv_level_centring"} attribute: one row per
+#'   (cell, channel) with the round mean, the prior mean, the shrinkage weight,
+#'   the correction applied and \code{resid_expected}, the residual the cell
+#'   should be left with. The pipeline guard checks observed residuals against
+#'   that column, so shrinkage never requires loosening its tolerance.
 #' @keywords internal
 centre_epv_by_position <- function(pgd, channels = EPV_LEVEL_CENTRE_CHANNELS) {
   dt <- data.table::as.data.table(pgd)
@@ -124,15 +139,81 @@ centre_epv_by_position <- function(pgd, channels = EPV_LEVEL_CENTRE_CHANNELS) {
 
   dt[, .ctog := pmax(dplyr::coalesce(time_on_ground_percentage / 100, 0.1), 0.1)]
 
-  .wmean_cell <- function(x, w) {
-    ok <- is.finite(x) & is.finite(w) & w > 0
-    if (!any(ok)) return(NA_real_)
-    sum(x[ok] * w[ok]) / sum(w[ok])
+  # Per-cell sufficient statistics, one channel at a time. Built as a table
+  # rather than inside a by-group expression because the correction needs a
+  # SECOND cell's mean (the shrinkage prior) that a by-group cannot see.
+  shrink_on <- isTRUE(EPV_POSITION_SHRINK)
+  .cell_stats <- function(cc) {
+    s <- dt[!is.na(.cpg) & is.finite(get(cc)) & is.finite(.ctog) & .ctog > 0,
+            .(sx = sum(get(cc) * .ctog), sw = sum(.ctog)),
+            by = .(season, round, .cpg)]
+    if (nrow(s) == 0) return(s)
+    s[, m_round := sx / sw]
+    data.table::setorder(s, .cpg, season, round)
+
+    # The shrinkage prior is the bucket's own mean over every STRICTLY EARLIER
+    # (season, round) -- never the same round, never a later one. A whole-season
+    # mean would be the obvious choice and is wrong for the same reason the
+    # grouping above is per-round: it would centre a round-1 value using games
+    # that had not been played yet.
+    s[, `:=`(px = cumsum(sx) - sx, pw = cumsum(sw) - sw), by = .cpg]
+    s[, m_prior := data.table::fifelse(pw > 0, px / pw, NA_real_)]
+
+    # Shrink toward that prior, not toward zero. Weight, not row count, is the
+    # evidence: a cell of 20 fringe players carrying almost no TOG deserves the
+    # same scepticism as a cell of two regulars.
+    #
+    # Toward the PRIOR rather than toward zero is the whole point (measured
+    # 2026-07-30, measure_epv_shrink_priors.R). Shrinking toward zero withholds
+    # correction, and every point withheld is a point of positional level handed
+    # back -- at prior 5 that restored a spread of 0.477 against the 2.94 the v2
+    # fix removed, and most of it came from NORMAL cells, not the thin ones.
+    # Shrinking toward the bucket's own history still subtracts a full position
+    # level; it only stops a Grand Final key forward being judged against the
+    # three other key forwards who happened to play that day.
+    s[, lam := if (!shrink_on) {
+      1
+    } else if (identical(EPV_POSITION_SHRINK_RULE, "floor")) {
+      # Cells at or above the floor keep the FULL correction, bit-identical to
+      # production. Only thinner cells ramp. The smooth "prior" rule below
+      # touches every cell instead, which is why it failed its gate -- it
+      # diluted 55,758 of 56,162 rows to reach the 22 that needed it.
+      pmin(1, sw / EPV_POSITION_SHRINK_FLOOR)
+    } else if (identical(EPV_POSITION_SHRINK_RULE, "prior")) {
+      sw / (sw + EPV_POSITION_SHRINK_PRIOR)
+    } else {
+      cli::cli_abort(c(
+        "Unknown {.code EPV_POSITION_SHRINK_RULE}: {.val {EPV_POSITION_SHRINK_RULE}}",
+        "x" = "Refusing to guess a shrinkage rule -- expected {.val floor} or {.val prior}."
+      ))
+    }]
+    # No earlier history at all (the first round in the frame) means there is
+    # nothing to shrink toward. Apply the round mean in full rather than
+    # silently leaving the cell uncentred -- an uncentred cell is the failure
+    # this function exists to prevent.
+    s[, corr := data.table::fifelse(is.na(m_prior), m_round, lam * m_round + (1 - lam) * m_prior)]
+    s
   }
+
+  # Kept so the pipeline guard can check the EXACT residual each cell should
+  # have been left with, instead of loosening its tolerance to accommodate
+  # shrinkage. Widening a production guard to fit a change is how the EPR
+  # version of this got shipped and reverted.
+  centring_cells <- vector("list", length(cols))
+  names(centring_cells) <- cols
+
   for (cc in cols) {
-    dt[!is.na(.cpg),
-       (cc) := get(cc) - .wmean_cell(get(cc), .ctog),
-       by = .(season, round, .cpg)]
+    s <- .cell_stats(cc)
+    if (nrow(s) == 0) {
+      cli::cli_alert_danger(
+        "No cell of {.field {cc}} had a finite value and a mapped position -- channel left UNCENTRED.")
+      next
+    }
+    dt[s, .corr := i.corr, on = .(season, round, .cpg)]
+    dt[!is.na(.cpg) & !is.na(.corr), (cc) := get(cc) - .corr]
+    dt[, .corr := NULL]
+    centring_cells[[cc]] <- s[, .(season, round, pos_bucket = .cpg, channel = cc,
+                                  wt = sw, m_round, m_prior, lam, corr)]
   }
 
   # Points-scale calibration, applied at the VALUE layer so it flows into the
@@ -158,8 +239,29 @@ centre_epv_by_position <- function(pgd, channels = EPV_LEVEL_CENTRE_CHANNELS) {
   }
 
   dt[, c(".cpg", ".ctog") := NULL]
+
+  # The residual each cell SHOULD be left with, in the units the caller will
+  # measure it in (i.e. after the points scale above). Full correction leaves
+  # exactly zero; a shrunk correction leaves (1 - lam) * (m_round - m_prior),
+  # which is just as exactly checkable -- so the pipeline guard never has to
+  # trade its tolerance for this feature.
+  cells <- data.table::rbindlist(centring_cells)
+  if (nrow(cells) > 0) {
+    scale <- if (is.finite(EPV_POINTS_SCALE)) EPV_POINTS_SCALE else 1
+    cells[, resid_expected := (m_round - corr) * scale]
+  }
+  data.table::setattr(dt, "epv_level_centring", cells)
+
   cli::cli_alert_success(
     "Centred {length(cols)} EPV channel{?s} ({suffix}) on listed-position levels per round ({nrow(dt)} player-games; {n_missing} with no position group, {n_unmapped} unmapped)")
+  if (shrink_on && nrow(cells) > 0) {
+    n_bit <- cells[lam < 1, .N]
+    knob <- if (identical(EPV_POSITION_SHRINK_RULE, "floor"))
+      paste("floor", EPV_POSITION_SHRINK_FLOOR) else
+      paste("prior", EPV_POSITION_SHRINK_PRIOR)
+    cli::cli_alert_info(
+      "EPV position shrinkage ON ({knob}): {n_bit} of {nrow(cells)} cell-channels shrunk at all toward their bucket's earlier mean; thinnest lambda {signif(min(cells$lam), 3)}")
+  }
   dt[]
 }
 

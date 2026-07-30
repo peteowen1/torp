@@ -13,7 +13,12 @@ centre_epv_by_position(pgd, channels = EPV_LEVEL_CENTRE_CHANNELS)
 \code{EPV_LEVEL_CENTRE_CHANNELS}.}
 }
 \value{
-\code{pgd} with the live channel set centred and its total rebuilt.
+\code{pgd} with the live channel set centred and its total rebuilt,
+carrying an \code{"epv_level_centring"} attribute: one row per
+(cell, channel) with the round mean, the prior mean, the shrinkage weight,
+the correction applied and \code{resid_expected}, the residual the cell
+should be left with. The pipeline guard checks observed residuals against
+that column, so shrinkage never requires loosening its tolerance.
 }
 \description{
 The positional level correction, applied at the layer that creates it.
@@ -50,5 +55,15 @@ Operates on the \code{_oadj} (opponent-adjusted) channels when they exist and
 \code{_adj} otherwise -- matching whichever set EPR actually consumes. Order
 matters: this must run AFTER \code{adjust_epv_for_opponents()}, or the
 opponent adjustment reintroduces a level on top of the correction.
+
+\strong{Thin cells.} A (season, round, bucket) cell can be very small -- the
+Grand Final has two rucks and four key forwards -- and a full correction then
+subtracts those few players' own noise from each of them (2025 round 28
+key_fwd: -7.05 points off four players). \code{EPV_POSITION_SHRINK} blends the
+round's mean with the bucket's mean over strictly EARLIER rounds in
+proportion to cell weight, so a thin cell is judged mostly on the position's
+history and a normal cell is essentially unchanged. It shrinks toward that
+history rather than toward zero precisely so that no positional level is
+handed back; see the constant's own documentation for the measurement.
 }
 \keyword{internal}

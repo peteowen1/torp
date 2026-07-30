@@ -84,6 +84,54 @@ EPR_PRIOR_GAMES_HITOUT <- 3.0000
 #' @keywords internal
 EPV_POINTS_SCALE <- 0.919
 
+#' Correction factor sizing the ruck channel to the swing it stands in for
+#'
+#' \strong{1 = production, i.e. inert.} Set to 3.14 to apply the correction below.
+#'
+#' A ruck contest (`Centre Bounce` / `Ball Up Call`) carries a real EPV swing --
+#' mean **0.3925** per contest, measured on 34,016 contests 2024-2026 -- and those
+#' chain rows carry \strong{no \code{player_id}}, so that swing is credited to
+#' NOBODY through the chain path. The three ruck box weights
+#' (\code{EPV_RUCK_CONTEST_WT}, \code{EPV_HITOUT_WT}, \code{EPV_HITOUT_ADV_WT}) are
+#' the substitute for it, and together they pay **0.1249** for both rucks --
+#' \strong{31.8\% of the swing} (`audit_swing_allocation.R`).
+#'
+#' Compare with events where both sides ARE chain rows: `disp_scale` 0.5 +
+#' `recv_scale` 0.5 = 1.0, so aerial marks allocate exactly 100\% (measured 100.0\%
+#' for both attacking and intercept marks). Rucks are the one case where a flat
+#' constant is not a compromise but the CORRECT instrument -- the swing is wholly
+#' unallocated, so the constant simply has to equal it. 0.3925 / 0.1249 = 3.14.
+#'
+#' \strong{Why this reaches the published rating rather than being centred away.}
+#' `EPV_POSITION_STANDARDISE` equalises between-position spread WITHIN a channel, at
+#' that channel's pooled SD -- and the channels have very different scales
+#' (measured post-standardisation: disp 7.69, recv 5.34, spoil 1.14). Raising a
+#' channel's level raises its pooled SD, which standardisation then propagates to
+#' every position. Note `hitout` is excluded from
+#' `EPV_STANDARDISE_CHANNELS` anyway, so this channel is not rescaled at all.
+#'
+#' \strong{Four independent routes agree on direction and rough size:} this ledger
+#' 3.14x, the duel price at 1/3 share 4.0x and at 1/2 share 6.0x, and ws13's
+#' regression slope on the hitout channel 7.22x.
+#'
+#' \strong{Caveats that must be settled before this goes live.}
+#' \itemize{
+#'   \item \strong{Not scoreable by the offline harness.} These weights act in
+#'     \code{add_player_credit()} during pgd CONSTRUCTION, upstream of
+#'     \code{build_ratings_history()}. Scoring it needs a pgd rebuild from PBP, the
+#'     same limitation that made `ROLE_USE_LINEUP_GROUP` unreachable in ws10.
+#'   \item \strong{The internal split is unmeasured.} Scaling all three keeps the
+#'     plain-vs-to-advantage ratio as it is. A to-advantage tap probably is worth more
+#'     than an average contest, but by how much has not been measured, and at 3.14x a
+#'     to-advantage tap earns 0.709 against an average contest swing of 0.3925.
+#'   \item \strong{`adjust_epv_for_opponents()` is not linear in one channel} -- it
+#'     forms `.abs_total` as a sum of `abs()` across components -- so the
+#'     "scaling a channel scales its rating by exactly k" shortcut (plan §6.6) is an
+#'     approximation here, not an identity.
+#' }
+#' @keywords internal
+EPV_RUCK_SWING_SCALE <- 1
+
 #' Points-scale calibration for the PSV/PSR family
 #'
 #' See \code{EPV_POINTS_SCALE}. Applied to the shared coefficient vector, which
@@ -106,8 +154,14 @@ EPR_PRIOR_RATE_DISP <- -0.7000 * EPV_POINTS_SCALE
 EPR_PRIOR_RATE_SPOIL <- -0.3000 * EPV_POINTS_SCALE
 
 #' Prior rate for hitout component (shrinkage target per weighted game)
+#'
+#' Carries \code{EPV_RUCK_SWING_SCALE} for the same reason the others carry
+#' \code{EPV_POINTS_SCALE}: \code{.bayesian_shrink()} adds
+#' \code{prior_games * prior_rate} AFTER the value, so an unscaled prior would leave
+#' the hitout rating a blend of scaled and unscaled parts rather than a clean
+#' rescale. If you change one, change both.
 #' @keywords internal
-EPR_PRIOR_RATE_HITOUT <- -0.3000 * EPV_POINTS_SCALE
+EPR_PRIOR_RATE_HITOUT <- -0.3000 * EPV_POINTS_SCALE * EPV_RUCK_SWING_SCALE
 
 #' Decay factor (in days) for contest component weighting
 #' @keywords internal
@@ -282,6 +336,97 @@ EPR_POSITION_SHRINK <- FALSE
 #' quote any of those deltas as a gain.
 #' @keywords internal
 EPR_POSITION_SHRINK_PRIOR <- 5
+
+#' Shrink the EPV level correction toward the bucket's earlier mean
+#'
+#' The EPV layer is where the position-level correction is actually large:
+#' measured per (season, round, listed bucket) cell on 2021-2026, the total
+#' across the four channels has median 1.065 and reaches 8.178, against ~0.002
+#' at the EPR layer. It is also where the evidence is thinnest -- and the thin
+#' cells are not a smooth tail, they are the finals series and round 0:
+#'
+#'   season round bucket   players weight correction applied in FULL today
+#'   2025   28    key_fwd  4       3.19   -7.046
+#'   2023   28    rucks    3       2.14   -5.875
+#'   2024   28    key_def  4       3.56   -2.911
+#'
+#' So a Grand Final key forward has seven points subtracted from him because the
+#' other three key forwards on the ground that day happened to average high.
+#' Only 22 of 966 cells carry weight below 5, but they are September.
+#'
+#' \strong{Shrinks toward the bucket's own earlier mean, NOT toward zero.} That
+#' distinction is the whole design and it was measured, not assumed
+#' (\code{data-raw/04-analysis/measure_epv_shrink_priors.R}, 2026-07-30).
+#' Shrinking toward zero -- what the reverted \code{EPR_POSITION_SHRINK} did --
+#' withholds correction, and every point withheld is a point of positional level
+#' handed back to the published rating. At prior 5 that restored a spread of
+#' 0.477 against the 2.94 the v2 level fix removed, and most of it came from
+#' NORMAL cells (a median cell keeps only 0.891 of its correction), not from the
+#' thin ones the shrinkage was for. Shrinking toward the earlier mean still
+#' subtracts a full position level, so nothing is handed back; it only changes
+#' WHICH games the level is measured on when the round's own cell is too thin to
+#' measure it.
+#'
+#' The prior mean uses strictly EARLIER (season, round) cells. A whole-season
+#' mean is the obvious choice and is wrong for the same reason the correction is
+#' grouped per round: it would centre a round-1 value on games not yet played.
+#' @keywords internal
+EPV_POSITION_SHRINK <- FALSE
+
+#' Which shrinkage rule `EPV_POSITION_SHRINK` uses: `"floor"` or `"prior"`
+#'
+#' \code{"prior"} is the smooth Bayesian blend, `lambda = wt / (wt + prior)`.
+#' \strong{It FAILED its match-MAE gate on 2026-07-30} (`ws12_epv_shrink_prior.R`:
+#' ΔMAE +0.232 / −0.051 / +0.090 at priors 1/2/5, non-monotonic, every arm inside
+#' the ~0.157 noise floor, and every arm costing bits). The diagnosis is the
+#' useful part: at prior 2 the blend moved \strong{55,758 of 56,162 rows}. It is
+#' not a thin-cell fix -- it dilutes every normal cell by ~4.7% (lambda 0.953 at
+#' the median cell weight) in order to reach the 22 cells that need it, so the
+#' gate was measuring the dilution rather than the fix.
+#'
+#' \code{"floor"} is the answer to that: `lambda = min(1, wt / floor)`. Cells at
+#' or above the floor are \strong{bit-identical to production}, and only cells
+#' below it ramp toward their bucket's earlier mean. The change is then confined
+#' to cells carrying ~0.5% of total weight -- i.e. the finals series and round 0 --
+#' so match MAE cannot see it either way and it stands or falls on whether a Grand
+#' Final key forward should be centred against the three other key forwards who
+#' happened to play that day.
+#'
+#' Continuous at the boundary by construction (`lambda(floor) = 1`), so there is
+#' no cliff between a cell just under and just over the threshold.
+#' @keywords internal
+EPV_POSITION_SHRINK_RULE <- "floor"
+
+#' Cell weight at which `"floor"` shrinkage stops biting, in TOG-weighted games
+#'
+#' Set to 8 against the measured distribution: cell weights are min 1.45, 1st
+#' pctile 3.57, \strong{5th pctile 8.17}, median 40.91. So a floor of 8 ramps
+#' roughly the thinnest 5% of cells and leaves the other 95% untouched, which is
+#' the region the finals cells occupy (2025 r28 key_fwd carries 3.19, giving
+#' lambda 0.40; 2024 r28 rucks carries 1.45, giving 0.18).
+#' @keywords internal
+EPV_POSITION_SHRINK_FLOOR <- 8
+
+#' Prior weight for `EPV_POSITION_SHRINK` under the `"prior"` rule
+#'
+#' A cell carrying this much time-on-ground splits its correction half from its
+#' own round and half from the bucket's earlier history. \strong{Not comparable
+#' to `EPR_POSITION_SHRINK_PRIOR`} -- that one is in accumulated rating weight.
+#'
+#' Measured EPV cell weights (2021-2026, 966 cells): min 1.45, 1st pctile 3.57,
+#' 5th 8.17, median 40.91, max 89.87. What a prior does at those weights:
+#'
+#'   prior | weight 3.2 (a GF cell) | weight 40.9 (median round) |
+#'   1     | 0.762                  | 0.976                      |
+#'   2     | 0.615                  | 0.953                      |
+#'   5     | 0.390                  | 0.891                      |
+#'
+#' Unlike the toward-zero version, a prior that touches normal cells is not
+#' automatically a level cost here -- it just measures a normal cell's level
+#' partly on earlier rounds. But it is still dilution, so prefer the smallest
+#' prior that meaningfully damps a finals cell.
+#' @keywords internal
+EPV_POSITION_SHRINK_PRIOR <- 2
 
 #' EPV channel stems the level centring applies to
 #'
@@ -648,15 +793,15 @@ EPV_DEF_PRESSURE_WT <- -0.1882
 
 #' Hitout weight per hitout
 #' @keywords internal
-EPV_HITOUT_WT <- 0.0510
+EPV_HITOUT_WT <- 0.0510 * EPV_RUCK_SWING_SCALE
 
 #' Hitout to advantage weight
 #' @keywords internal
-EPV_HITOUT_ADV_WT <- 0.1748
+EPV_HITOUT_ADV_WT <- 0.1748 * EPV_RUCK_SWING_SCALE
 
 #' Ruck contest weight (hitout component)
 #' @keywords internal
-EPV_RUCK_CONTEST_WT <- 0.0232
+EPV_RUCK_CONTEST_WT <- 0.0232 * EPV_RUCK_SWING_SCALE
 
 #' Contested possessions weight (recv component)
 #' @keywords internal
