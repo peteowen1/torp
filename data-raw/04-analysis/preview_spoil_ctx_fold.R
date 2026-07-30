@@ -36,18 +36,26 @@ cli::cli_alert_info("{nrow(d)} player-games, seasons {min(d$season)}-{max(d$seas
 
 SHARE_SCALE <- 1.5   # 1/3 -> 1/2, to match disp_scale and close the ledger
 
-# THE FALLBACK BASE IS NOT (spoils - spoils_priced). Measured in
-# audit_spoil_pricing_dropouts.R, spoils leave compute_spoil_credit() for four
-# reasons and they do not mean the same thing:
-#   contest triple, already priced via contest_epv   28.0% of all spoils
-#   same-team kick (chain-logging artifact)          15.0%
-#   no kick within 5 rows                             0.0%  (14 spoils in 3 seasons)
-#   priced                                           56.9%
-# Contest triples are 65.1% of the unpriced group and are ALREADY PAID, in the RECV
-# channel. Filling them here pays them twice. Only the same-team/no-kick group --
-# 34.9% of the unpriced group -- is a genuine gap.
-# (Also note the 5-row scan is NOT the coverage limit, so widening it buys nothing.)
-FALLBACK_FRACTION <- 0.349
+# THE FALLBACK BASE IS NOT (spoils - spoils_priced), AND IT IS NOT A GLOBAL FRACTION
+# EITHER. Spoils leave compute_spoil_credit() for four reasons and they do not mean
+# the same thing: contest triples (28.0% of all spoils) are ALREADY PAID via
+# contest_epv in the RECV channel, so filling them pays twice; only same-team-kick and
+# no-kick spoils are genuine gaps.
+#
+# A global 34.9% fraction was tried and is BADLY position-biased -- measured range
+# 0.039 to 0.934 (check_fallback_fraction_bias.R):
+#   KEY_DEFENDER 0.039 | MEDIUM_DEFENDER 0.046 | MIDFIELDER 0.468
+#   RUCK 0.617 | MEDIUM_FORWARD 0.882 | KEY_FORWARD 0.934
+# A key defender spoiling is usually contesting a mark, logged as a 3-player triple;
+# a key forward's "spoil" is overwhelmingly a same-team-kick artifact. So a global
+# constant OVER-fills key defenders ~9x -- and they are exactly the players this fix
+# targets, which inflated the first result.
+#
+# Fixed exactly rather than with a better constant: build_exact_spoil_gap_counts.R
+# classifies every spoil from chains and aggregates GENUINE GAPS per (player_id,
+# match_id). Validated to reproduce production's spoils_priced on 100% of
+# player-matches (cor 0.9999).
+GAPS <- "C:/Users/peteo/AppData/Local/Temp/claude/C--dev-torpverse/92e2b422-0dee-4727-90de-364d23375767/scratchpad/spoil_gap_counts.parquet"
 OTHER <- c(tackles = "tackle_wt", pressure_acts = "pressure_wt",
            def_half_pressure_acts = "def_pressure_wt", intercepts = "intercepts_wt",
            one_percenters = "one_percenters_wt", rebound50s = "rebound50s_wt",
@@ -63,7 +71,13 @@ FALLBACK <- per_priced * SHARE_SCALE
 
 cli::cli_h1("2. rebuild the channel from published columns")
 d[, other_box := Reduce(`+`, lapply(names(OTHER), function(s) get(s) * p[[OTHER[[s]]]]))]
-d[, spoils_unpriced := pmax(spoils - spoils_priced, 0) * FALLBACK_FRACTION]
+if (!file.exists(GAPS)) cli::cli_abort("Run build_exact_spoil_gap_counts.R first -- refusing to fall back to a biased global fraction.")
+gp <- as.data.table(arrow::read_parquet(GAPS))
+d[, `:=`(.pid = as.character(player_id), .mid = as.character(match_id))]
+d[gp, spoils_gap := i.spoils_gap, on = c(.pid = "player_id", .mid = "match_id")]
+d[is.na(spoils_gap), spoils_gap := 0L]
+cli::cli_alert_info("exact gaps joined: {sum(d$spoils_gap)} genuine gap spoils vs {sum(pmax(d$spoils - d$spoils_priced, 0))} unpriced total")
+d[, spoils_unpriced := spoils_gap]
 d[, spoil_term_old := spoils * p$spoil_wt]
 d[, spoil_term_new := spoil_epv_ctx * SHARE_SCALE + spoils_unpriced * FALLBACK]
 d[, epv_spoil_new := other_box + spoil_term_new]
