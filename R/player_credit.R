@@ -342,7 +342,16 @@ create_player_game_data <- function(pbp_data = NULL,
                                     teams = NULL,
                                     chains = NULL,
                                     decay = EPR_DECAY_DEFAULT_DAYS,
-                                    epv_params = NULL) {
+                                    epv_params = NULL,
+                                    epv_engine = EPV_ENGINE) {
+
+  if (!epv_engine %in% c("v2", "v3")) {
+    cli::cli_abort(c(
+      "Unknown {.arg epv_engine}: {.val {epv_engine}}",
+      "x" = "Refusing to guess an engine -- expected {.val v2} or {.val v3}."
+    ))
+  }
+  v3 <- identical(epv_engine, "v3")
 
   p <- if (is.null(epv_params)) default_epv_params() else epv_params
 
@@ -363,6 +372,26 @@ create_player_game_data <- function(pbp_data = NULL,
     opp_tm = data.table::fifelse(home_away == "Home", away_team_name, home_team_name)
   )]
 
+  # --- v3: aerial contests, computed before the disposer/receiver split ---
+  # Every kick resolved in the air is removed from that split and paid instead as
+  # disposal (V_pre - exp_pts, to the kicker) plus a zero-sum contest term
+  # (winner/loser). Skipping the exclusion would pay the same swing twice.
+  aerial <- NULL
+  aerial_keys <- NULL
+  if (v3) {
+    if (is.null(chains)) chains <- load_chains(TRUE)
+    aerial <- compute_aerial_credit(chains, pbp_data, player_stats = player_stats)
+    aerial_keys <- attr(aerial, "aerial_kick_keys")
+    dt[, .is_aerial_kick := FALSE]
+    if (!is.null(aerial_keys) && nrow(aerial_keys) > 0) {
+      dt[aerial_keys, .is_aerial_kick := TRUE, on = .(match_id, display_order)]
+    }
+    cli::cli_alert_info(
+      "EPV v3: {format(nrow(aerial_keys), big.mark = ',')} aerial contests removed from the disposer/receiver split ({round(100 * mean(dt$.is_aerial_kick), 1)}% of PBP rows)")
+  } else {
+    dt[, .is_aerial_kick := FALSE]
+  }
+
   # Step 1: Disposal points (grouped by player_id + match_id)
   # For contested kicks (contest_target_id is non-NA), reduce disposal scale
   # from 50% to contest_share (1/3) — the remaining credit goes to target/defender.
@@ -375,6 +404,9 @@ create_player_game_data <- function(pbp_data = NULL,
   } else {
     p$disp_scale
   }]
+  # Under v3 an aerial kick's disposal credit is V_pre - exp_pts, not a fixed
+  # share of the swing, so it is zeroed here and added back from `aerial`.
+  if (v3) dt[.is_aerial_kick == TRUE, .disp_scale := 0]
   disp_dt <- dt[, .(
     player_name = max(player_name, na.rm = TRUE),
     utc_start_time = max(utc_start_time),
@@ -398,7 +430,10 @@ create_player_game_data <- function(pbp_data = NULL,
   has_contest_col <- "contest_target_id" %in% names(dt)
   dt[, is_contest_target_recv := has_contest_col & !is.na(contest_target_id)]
   dt[, is_intercept_mark := pos_team == -1L & grepl("ted Mark|Mark On", lead_desc_tot)]
-  recv_dt <- dt[is_contest_target_recv == FALSE, .(
+  # v3 also drops aerial-kick rows here: the player who marks the ball is paid by
+  # the contest channel, and paying him a reception share as well would be the
+  # double count kick-anchoring exists to remove.
+  recv_dt <- dt[is_contest_target_recv == FALSE & .is_aerial_kick == FALSE, .(
     epv_recv = sum(data.table::fifelse(
       is_intercept_mark,
       ((p$recv_neg_mult * delta_epv * pos_team) + p$recv_neg_offset) * p$recv_intercept_mark_scale,
@@ -433,7 +468,17 @@ create_player_game_data <- function(pbp_data = NULL,
     by = c("player_id", "match_id"), all.x = TRUE, sort = FALSE)
 
   # --- Step 3c: Contest credit from aerial contests (3-way EPV split) ---
-  contest_dt <- tryCatch({
+  # v2 only. v3 supersedes this with the surprise-weighted contest in Step 0 and
+  # does not read `contest_epv` at all -- so running it under v3 would burn ~2
+  # minutes AND emit a column that looks meaningful and is not. An unused column
+  # that a reader will reasonably assume is live is worse than a missing one.
+  empty_contest <- data.table::data.table(
+    player_id = character(), match_id = character(),
+    contest_epv = numeric(),
+    aerial_target_wins = integer(), aerial_target_losses = integer(),
+    aerial_def_wins = integer(), aerial_def_losses = integer()
+  )
+  contest_dt <- if (v3) empty_contest else tryCatch({
     if (is.null(chains)) chains <- load_chains(TRUE)
     compute_contest_credit(chains, pbp_data,
                            contest_share = p$contest_share %||% (1 / 3))
@@ -460,7 +505,16 @@ create_player_game_data <- function(pbp_data = NULL,
   # Prices the ~72% of spoils compute_contest_credit() misses. Emitted as a
   # standalone column only — epv_spoil still uses the flat EPV_SPOIL_WT, so
   # published ratings are unchanged until WS2b decides how this enters.
-  spoil_ctx_dt <- tryCatch({
+  #
+  # v2 only, for the same reason as Step 3c. v3 prices every spoil inside the
+  # aerial contest itself, so this whole workstream is superseded there: the
+  # question it was built to answer ("how do we fold contextual spoil value in?")
+  # stops existing when the contest channel IS contextual.
+  empty_spoil_ctx <- data.table::data.table(
+    player_id = character(), match_id = character(),
+    spoil_epv_ctx = numeric(), spoils_priced = integer()
+  )
+  spoil_ctx_dt <- if (v3) empty_spoil_ctx else tryCatch({
     if (is.null(chains)) chains <- load_chains(TRUE)
     compute_spoil_credit(chains, pbp_data,
                          contest_share = p$contest_share %||% (1 / 3))
@@ -521,6 +575,79 @@ create_player_game_data <- function(pbp_data = NULL,
     plyr_gm_df[[col]] <- tidyr::replace_na(plyr_gm_df[[col]], 0)
   }
 
+  # --- v3 channel assembly ---
+  # The thirty box-score weights are gone. Grouped by why each is safe to drop:
+  #
+  #  (a) already priced by the chain event itself, so v2 paid twice: kicks,
+  #      handballs, marks, contested_marks, uncontested/contested_possessions,
+  #      ground_ball_gets, inside50s, marks_inside50, metres_gained, rebound50s,
+  #      intercepts, goals, behinds, shots_at_goal, goal_assists,
+  #      score_involvements, turnovers, clangers, frees_for/against. Every one is
+  #      a chain row carrying a delta_epv (Kick 100%, Handball 99.9%,
+  #      Loose Ball Get 99.9%, Contested Mark 100% present in PBP).
+  #
+  #  (b) genuinely absent from chains, so the VALUE survives but the ATTRIBUTION
+  #      does not: tackles (chains logs 0.49 Tackle rows per match against ~60
+  #      real ones), pressure_acts, def_half_pressure_acts, one_percenters. A
+  #      tackle's expected-points effect is in the chain as the turnover the
+  #      opponent concedes -- credited to whoever next wins the ball, not to the
+  #      tackler. This is v3's single biggest known cost and it is not hidden:
+  #      tacklers are under-credited inside EPV, and PSV carries tackling.
+  #
+  # epv_hitout keeps its box formula. That is the one permitted carve-out and it
+  # is not convenience: Centre Bounce and Ball Up Call rows carry a player_id
+  # 0.0% of the time, so the ruckmen are simply not in the data.
+  if (v3) {
+    aerial_dt <- aerial[, .(player_id, match_id, epv_cont_aerial,
+                            epv_disp_aerial, contests_won, contests_lost)]
+    plyr_gm_df <- plyr_gm_df |>
+      dplyr::left_join(as.data.frame(aerial_dt), by = c("player_id", "match_id")) |>
+      dplyr::mutate(
+        contest_epv = tidyr::replace_na(contest_epv, 0),
+        aerial_target_wins = as.integer(tidyr::replace_na(aerial_target_wins, 0)),
+        aerial_target_losses = as.integer(tidyr::replace_na(aerial_target_losses, 0)),
+        aerial_def_wins = as.integer(tidyr::replace_na(aerial_def_wins, 0)),
+        aerial_def_losses = as.integer(tidyr::replace_na(aerial_def_losses, 0)),
+        spoil_epv_ctx = tidyr::replace_na(spoil_epv_ctx, 0),
+        spoils_priced = as.integer(tidyr::replace_na(spoils_priced, 0)),
+        contests_won = as.integer(tidyr::replace_na(contests_won, 0)),
+        contests_lost = as.integer(tidyr::replace_na(contests_lost, 0)),
+        epv_recv = tidyr::replace_na(epv_recv, 0),
+        epv_disp = tidyr::replace_na(epv_disp, 0) +
+                   tidyr::replace_na(epv_disp_aerial, 0),
+        epv_cont_aerial = tidyr::replace_na(epv_cont_aerial, 0),
+        # cont_stop is the one channel that is not credit/debit: the v2 formula
+        # pays EPV_RUCK_CONTEST_WT for every contest ATTENDED, won or lost. With
+        # EPV3_STOP_ZERO_SUM the attendance term becomes a win/loss ledger --
+        # `ruck_contests - hitouts` is what this ruck lost, since a contest has
+        # exactly two rucks and `hitouts` counts the ones he won.
+        epv_cont_stop = if (isTRUE(EPV3_STOP_ZERO_SUM)) {
+          hitouts * p$hitout_wt +
+            hitouts_to_advantage * p$hitout_adv_wt +
+            hitouts * p$ruck_contest_wt -
+            pmax(0, ruck_contests - hitouts) * EPV_RUCK_LOSS_WT
+        } else {
+          tidyr::replace_na(epv_hitout, 0)
+        },
+        # The downstream stack (EPR channels, column schema, blog shapes) is
+        # keyed on the v2 names. Aliasing rather than renaming keeps v3 to one
+        # file; if it ships, the rename is the follow-up.
+        #
+        # Under EPV3_CHANNELS = 3 the two contest channels share one slot and the
+        # hitout slot is emptied. `epv` is IDENTICAL either way -- the whole
+        # 3-vs-4 difference is how EPR aggregates, since each slot carries its own
+        # decay and shrinkage prior. EPR_PRIOR_RATE_HITOUT is zeroed to match, so
+        # the empty slot contributes exactly zero instead of shrinking toward a
+        # prior for a channel that no longer exists.
+        epv_spoil = if (identical(EPV3_CHANNELS, 3L)) {
+          epv_cont_aerial + epv_cont_stop
+        } else {
+          epv_cont_aerial
+        },
+        epv_hitout = if (identical(EPV3_CHANNELS, 3L)) 0 else epv_cont_stop,
+        epv = epv_recv + epv_disp + epv_cont_aerial + epv_cont_stop
+      )
+  } else {
   plyr_gm_df <- plyr_gm_df |>
     dplyr::mutate(
       contest_epv = tidyr::replace_na(contest_epv, 0),
@@ -543,6 +670,15 @@ create_player_game_data <- function(pbp_data = NULL,
       epv_spoil = tidyr::replace_na(epv_spoil, 0),
       epv_hitout = tidyr::replace_na(epv_hitout, 0),
       epv = epv_recv + epv_disp + epv_spoil + epv_hitout,
+      wp_credit = tidyr::replace_na(wp_credit, 0),
+      wp_disp_credit = tidyr::replace_na(wp_disp_credit, 0),
+      wp_recv_credit = tidyr::replace_na(wp_recv_credit, 0)
+    )
+  }
+
+  # WPA is engine-independent -- it reads the WP model, not the EPV channels.
+  plyr_gm_df <- plyr_gm_df |>
+    dplyr::mutate(
       wp_credit = tidyr::replace_na(wp_credit, 0),
       wp_disp_credit = tidyr::replace_na(wp_disp_credit, 0),
       wp_recv_credit = tidyr::replace_na(wp_recv_credit, 0)
@@ -655,6 +791,10 @@ create_player_game_data <- function(pbp_data = NULL,
       aerial_def_wins, aerial_def_losses,
       # Contextual spoil credit (WS2a — not yet folded into epv_spoil)
       spoil_epv_ctx, spoils_priced,
+      # v3 only. Kept under any_of() so v2 output keeps its declared schema
+      # exactly — column_schema.R would reject the extras on a released frame.
+      dplyr::any_of(c("epv_cont_aerial", "epv_cont_stop",
+                      "contests_won", "contests_lost")),
       # PBP-derived action counts
       disposals_pbp, receptions,
       # EPV model input stats

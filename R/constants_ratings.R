@@ -84,6 +84,144 @@ EPR_PRIOR_GAMES_HITOUT <- 3.0000
 #' @keywords internal
 EPV_POINTS_SCALE <- 0.919
 
+#' Which EPV engine computes the channels
+#'
+#' \code{"v2"} is production and is the default: box-score weights plus a
+#' chain-derived part, four channels \code{recv / disp / spoil / hitout}.
+#'
+#' \code{"v3"} is the chain-native rebuild -- \code{delta_epv} arithmetic only,
+#' with the ruck/hitout box terms as the single permitted carve-out because
+#' \code{Centre Bounce} and \code{Ball Up Call} rows carry a \code{player_id}
+#' 0.0\% of the time. Four channels \code{recv / disp / cont_aerial / cont_stop}.
+#' See \code{../docs/plans/EPV-V3-CHAIN-NATIVE.md}.
+#'
+#' \strong{Flipping this changes every published rating.} It is a flag, not a
+#' tunable: v3 has to clear the gates in that plan's section 6 first.
+#' @keywords internal
+EPV_ENGINE <- "v2"
+
+#' How v3 distributes contest debits whose loser chains never names
+#'
+#' Chains names the beaten aerial opponent in only ~12\% of contests -- never
+#' when the attack retains, and only when a \code{Contest Target} row happened to
+#' be logged when the defence wins. So ~86\% of the contest credit mass carries a
+#' debit with no name on it, and it has to go somewhere or the channel becomes
+#' upside-only.
+#'
+#' Five rules were measured against each other (\code{epv3_compare_alloc.R},
+#' 2026-08-03, 57,145 player-games). \code{"team"} wins and is the default.
+#'
+#' \tabular{lrrrrr}{
+#'   \tab \strong{none} \tab \strong{contested} \tab \strong{wide} \tab \strong{team} \tab \strong{ledger} \cr
+#'   cor contested_marks \tab  0.451 \tab -0.165 \tab  0.242 \tab  0.440 \tab  0.027 \cr
+#'   cor spoils          \tab  0.576 \tab -0.046 \tab  0.238 \tab  0.582 \tab  0.001 \cr
+#'   cor disposals       \tab  0.104 \tab  0.123 \tab -0.114 \tab  0.073 \tab  0.163 \cr
+#'   \strong{r year-over-year} \tab 0.819 \tab 0.490 \tab 0.578 \tab \strong{0.819} \tab 0.485 \cr
+#'   conserves           \tab  no    \tab  yes   \tab  yes   \tab  yes   \tab  yes   \cr
+#' }
+#'
+#' \describe{
+#'   \item{\code{"team"}}{Equal share across every player who appeared for the
+#'     losing team. Makes no claim about WHICH opponent was beaten, only that the
+#'     team was -- so it cannot reorder players within a team, which is the
+#'     distortion every exposure-weighted rule introduced in one direction or the
+#'     other. Conserves exactly and is the most repeatable.}
+#'   \item{\code{"prorata"}}{Weight by aerial exposure in the zone. Rejected: the
+#'     contested-only base is nearly a win count and INVERTS the channel (Harris
+#'     Andrews, the best intercept defender in the competition, reads -284), and
+#'     the wide base charges mark-and-kick rebounders for duels they never
+#'     entered (Caleb Daniel -202).}
+#'   \item{\code{"none"}}{Leave it unallocated. Scores as well as \code{"team"}
+#'     but the channel becomes upside-only and it does not conserve -- 153,428
+#'     points of debit simply vanish.}
+#'   \item{\code{"ledger"}}{Weight by the player's OWN recorded one-on-one losses
+#'     from the AFL API. Theoretically the best key and it is why the API dig
+#'     happened -- \strong{but measurement rejected it.} Its near-zero
+#'     correlations looked at first like "measures ability, not volume"; the
+#'     persistence test says otherwise, at r = 0.485 year-over-year against
+#'     \code{"team"}'s 0.819. Netting a player's wins against his own losses
+#'     cancels most of the signal and leaves noise. Kept implemented because the
+#'     reasoning was sound and only the data settled it.}
+#' }
+#' @keywords internal
+EPV_CONT_LOSS_ALLOC <- "team"
+
+#' How many channels v3 splits EPV into: 4 (default) or 3
+#'
+#' Pete's original framing was "3 subsections, maaaybe 4". Both are built.
+#'
+#' \code{4} keeps aerial contests and stoppage contests apart:
+#' \code{recv / disp / cont_aerial / cont_stop}. \code{3} merges the two contest
+#' channels into one: \code{recv / disp / cont}.
+#'
+#' \strong{The merge does not change \code{epv_adj} at all} -- the total is the
+#' same sum either way. The entire difference is in EPR aggregation, because each
+#' channel carries its own \code{EPR_DECAY_*}, \code{EPR_PRIOR_GAMES_*} and
+#' \code{EPR_PRIOR_RATE_*}, so merging changes the decay and Bayesian shrinkage a
+#' ruckman's stoppage value receives. That is the question, and it is why this
+#' cannot be settled by looking at the columns.
+#'
+#' The prior evidence favours keeping them apart, but it is an argument rather
+#' than a result: \code{cor(cont_aerial, cont_stop) = 0.004} (orthogonal, so
+#' merging loses information rather than removing duplication), and
+#' \code{cont_stop} is a ruck channel -- sd 1.480 for rucks against 0.112-0.504
+#' everywhere else, versus \code{cont_aerial}'s 2.57 across the board. Merged, a
+#' ruck's stoppage signal is swamped by a channel five times its size.
+#'
+#' Under \code{3}, the \code{hitout} slot is zeroed and
+#' \code{EPR_PRIOR_RATE_HITOUT} goes to 0 so the empty slot contributes exactly
+#' zero rather than shrinking toward a non-zero prior.
+#'
+#' \strong{Currently 4 on UNTUNED evidence, and under active comparison.} The
+#' untuned gate favoured 4 on RMSE (32.535 vs 32.704), bits (0.2448 vs 0.2389),
+#' Brier and tips, with MAE tied (+0.0057, CI spanning zero). The mechanism is
+#' understood: merging buries \code{cont_stop}, the most predictive channel per
+#' sd in the whole rating (+5.73 points of margin per sd, coefficient 9.60),
+#' inside \code{cont_aerial}, which is fully redundant (-0.06 per sd, p = 0.954).
+#'
+#' \strong{But that comparison is not yet fair.} Both arms inherited decay and
+#' shrinkage priors tuned for v2's box-score channels, and the 3-channel arm
+#' inherits parameters shaped around a 4-channel structure. The optimiser
+#' (\code{epv3_optimise_epr.R}) re-runs 3-vs-4 with each structure tuned on its
+#' own terms, which is the only version of this comparison worth deciding on.
+#' @keywords internal
+EPV3_CHANNELS <- 4L
+
+#' Per-channel points constants for v3 (1 unit = 1 point of margin)
+#'
+#' v3's channels are separately calibrated, replacing the single global
+#' \code{EPV_POINTS_SCALE}.
+#'
+#' \strong{Fitted 2026-08-03 but deliberately NOT applied yet:}
+#' \code{c(recv = 0.5969, disp = 0.6095, cont_aerial = 0.2656, cont_stop = 1.7680)}
+#' (\code{epv3_calibrate_points.R}; the refit returns 1.0000 on every channel, so
+#' the constants are what they claim). Left at 1 so the match-model gate compares
+#' \emph{engines} with one variable moving, not engine-plus-rescale. Applying
+#' them also requires threading each constant into its \code{EPR_PRIOR_RATE_*}
+#' twin, exactly as \code{EPV_POINTS_SCALE} is -- \code{.bayesian_shrink()} adds
+#' \code{prior_games * prior_rate} after the value, so a scaled channel with an
+#' unscaled prior leaves EPR a blend of the two.
+#'
+#' \strong{The headline finding, which is not what was hoped for.} In raw EPV
+#' units the contest channel carries 15.7\% of variance; converted to margin
+#' points it carries \strong{3.3\%}, because a unit of contest is worth 0.27
+#' points against a unit of disposal's 0.61. Contest value is real and much
+#' larger than v2 allowed, but it converts to scoreboard margin at less than half
+#' the rate possession value does. Equal thirds and "1 unit = 1 point" are not
+#' simultaneously achievable, and per Pete's call the points constraint wins.
+#'
+#' \code{cont_stop} converts at 1.77 -- the highest of the four -- so calibration
+#' would AMPLIFY the ruck channel 1.77x and take it from 0.5\% to 4.6\% of
+#' variance.
+#'
+#' \strong{Prior warning.} Per-channel constants were tried on the v2 structure
+#' on 2026-07-30 and failed: they reshuffled 5 of the served top 20, NARROWED
+#' defender spread and dragged every position's thin-evidence quartile down
+#' ~0.25. Under v3 this is the natural move, but it is a re-test, not a given,
+#' and those are the three symptoms to look for.
+#' @keywords internal
+EPV3_POINTS_SCALE <- c(recv = 1, disp = 1, cont_aerial = 1, cont_stop = 1)
+
 #' Correction factor sizing the ruck channel to the swing it stands in for
 #'
 #' \strong{1 = production, i.e. inert.} Set to 3.14 to apply the correction below.
@@ -161,7 +299,15 @@ EPR_PRIOR_RATE_SPOIL <- -0.3000 * EPV_POINTS_SCALE
 #' the hitout rating a blend of scaled and unscaled parts rather than a clean
 #' rescale. If you change one, change both.
 #' @keywords internal
-EPR_PRIOR_RATE_HITOUT <- -0.3000 * EPV_POINTS_SCALE * EPV_RUCK_SWING_SCALE
+#' Zeroed under the 3-channel v3 arm, where the hitout slot holds nothing. A
+#' non-zero prior on an all-zero channel would shrink toward it and reintroduce a
+#' level for a channel that does not exist. Conditioned on BOTH constants so v2
+#' is untouched whatever `EPV3_CHANNELS` says.
+EPR_PRIOR_RATE_HITOUT <- if (identical(EPV_ENGINE, "v3") && identical(EPV3_CHANNELS, 3L)) {
+  0
+} else {
+  -0.3000 * EPV_POINTS_SCALE * EPV_RUCK_SWING_SCALE
+}
 
 #' Decay factor (in days) for contest component weighting
 #' @keywords internal
@@ -802,6 +948,39 @@ EPV_HITOUT_ADV_WT <- 0.1748 * EPV_RUCK_SWING_SCALE
 #' Ruck contest weight (hitout component)
 #' @keywords internal
 EPV_RUCK_CONTEST_WT <- 0.0232 * EPV_RUCK_SWING_SCALE
+
+#' Make v3's stoppage channel zero-sum instead of pay-to-attend
+#'
+#' \strong{FALSE = v2 behaviour, i.e. inert.} Only read when
+#' \code{EPV_ENGINE == "v3"}.
+#'
+#' Every other v3 channel is credit/debit: somebody gains and somebody sheds the
+#' same amount. \code{cont_stop} is not. It pays
+#' \code{hitouts * 0.0510 + hitouts_to_advantage * 0.1748 + ruck_contests * 0.0232},
+#' and because \code{EPV_RUCK_CONTEST_WT} is POSITIVE a ruckman is paid 0.0232
+#' for every contest he \emph{attends}, including the ones he loses. That is the
+#' one place v3's own logic does not hold.
+#'
+#' A ruck contest has exactly two rucks and \code{hitouts} counts the ones this
+#' ruck won, so \code{ruck_contests - hitouts} is how many he LOST. Turning that
+#' term into a debit makes the channel behave like the other three without
+#' leaving the hitout carve-out -- it is the same three box fields, read as a
+#' win/loss ledger rather than an attendance count.
+#'
+#' \strong{Not enabled by default.} It is a real change to what the channel
+#' means, so it clears its own gate first; the level also interacts with
+#' \code{EPV3_POINTS_SCALE["cont_stop"]}, which calibration puts at 1.77 -- the
+#' highest of the four channels.
+#' @keywords internal
+EPV3_STOP_ZERO_SUM <- FALSE
+
+#' Debit per ruck contest lost, under \code{EPV3_STOP_ZERO_SUM}
+#'
+#' Defaults to the magnitude of \code{EPV_RUCK_CONTEST_WT} so that attending and
+#' splitting contests 50/50 is worth zero rather than positive. Kept separate so
+#' the win and loss sides can be gated apart if the symmetric version fails.
+#' @keywords internal
+EPV_RUCK_LOSS_WT <- 0.0232 * EPV_RUCK_SWING_SCALE
 
 #' Contested possessions weight (recv component)
 #' @keywords internal
