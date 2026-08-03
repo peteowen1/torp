@@ -185,7 +185,7 @@ EPV_CONT_LOSS_ALLOC <- "team"
 #' (\code{epv3_optimise_epr.R}) re-runs 3-vs-4 with each structure tuned on its
 #' own terms, which is the only version of this comparison worth deciding on.
 #' @keywords internal
-EPV3_CHANNELS <- 4L
+EPV3_CHANNELS <- 3L
 
 #' Per-channel points constants for v3 (1 unit = 1 point of margin)
 #'

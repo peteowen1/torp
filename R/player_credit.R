@@ -225,7 +225,28 @@ centre_epv_by_position <- function(pgd, channels = EPV_LEVEL_CENTRE_CHANNELS) {
   # EPR a blend of scaled and unscaled parts rather than a clean rescale. The
   # EPR_PRIOR_RATE_* constants carry the same factor for exactly that reason --
   # if you change one, change both.
-  if (is.finite(EPV_POINTS_SCALE) && !isTRUE(all.equal(EPV_POINTS_SCALE, 1))) {
+  #
+  # Under v3 the scale is PER CHANNEL (`EPV3_POINTS_SCALE`), because the whole
+  # point of v3's channels is that one unit of each is one point of margin --
+  # and they convert at very different rates, so a single global factor cannot
+  # deliver that. v2 keeps the global `EPV_POINTS_SCALE` unchanged.
+  # Keyed on the ENGINE ACTUALLY IN USE, not the global default. Keying it on
+  # EPV_ENGINE meant a caller passing epv_engine = "v3" while the constant still
+  # read "v2" would silently get no per-channel scaling -- which is exactly how
+  # every arm in this session was run.
+  use_v3_scale <- identical(attr(pgd, "epv_engine"), "v3") &&
+    exists("EPV3_POINTS_SCALE") && !all(EPV3_POINTS_SCALE == 1)
+  if (use_v3_scale) {
+    lbl <- c(epv_recv = "recv", epv_disp = "disp",
+             epv_spoil = "cont_aerial", epv_hitout = "cont_stop")
+    for (cc in cols) {
+      stem <- sub("_(oadj|adj)$", "", cc)
+      k <- EPV3_POINTS_SCALE[[lbl[[stem]]]]
+      if (is.finite(k)) dt[, (cc) := get(cc) * k]
+    }
+    cli::cli_alert_info(
+      "Applied per-channel points scale: {paste(names(EPV3_POINTS_SCALE), round(EPV3_POINTS_SCALE, 4), sep = '=', collapse = ', ')}")
+  } else if (is.finite(EPV_POINTS_SCALE) && !isTRUE(all.equal(EPV_POINTS_SCALE, 1))) {
     for (cc in cols) dt[, (cc) := get(cc) * EPV_POINTS_SCALE]
   }
 
@@ -622,10 +643,17 @@ create_player_game_data <- function(pbp_data = NULL,
         # `ruck_contests - hitouts` is what this ruck lost, since a contest has
         # exactly two rucks and `hitouts` counts the ones he won.
         epv_cont_stop = if (isTRUE(EPV3_STOP_ZERO_SUM)) {
-          hitouts * p$hitout_wt +
-            hitouts_to_advantage * p$hitout_adv_wt +
-            hitouts * p$ruck_contest_wt -
-            pmax(0, ruck_contests - hitouts) * EPV_RUCK_LOSS_WT
+          # These three come straight off the player_stats join and are NOT in
+          # the box_score_cols zero-fill above, so a player with no stats row
+          # would otherwise produce NA here and silently drop out of the
+          # channel. The v2 path never hit this because it zero-fills
+          # epv_hitout after summing.
+          .ho  <- tidyr::replace_na(hitouts, 0)
+          .hta <- tidyr::replace_na(hitouts_to_advantage, 0)
+          .rc  <- tidyr::replace_na(ruck_contests, 0)
+          .ho * p$hitout_wt + .hta * p$hitout_adv_wt +
+            .ho * p$ruck_contest_wt -
+            pmax(0, .rc - .ho) * EPV_RUCK_LOSS_WT
         } else {
           tidyr::replace_na(epv_hitout, 0)
         },
@@ -817,6 +845,12 @@ create_player_game_data <- function(pbp_data = NULL,
                        "disposal_efficiency", "kick_efficiency"))
     )
 
+  # Tag the frame with the engine that produced it. Downstream steps
+  # (centre_epv_by_position) need to know which points-scale convention applies,
+  # and reading the global EPV_ENGINE there is wrong: a caller passing
+  # epv_engine = "v3" while the constant still reads "v2" would silently get v2
+  # scaling, which is exactly how every arm in this session was run.
+  attr(plyr_gm_df, "epv_engine") <- epv_engine
   return(plyr_gm_df)
 }
 
