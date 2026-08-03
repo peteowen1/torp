@@ -239,9 +239,23 @@ objective <- function(theta, spec, report = FALSE) {
 # Bounds are PHYSICAL, and a parameter landing on one is a bug signal.
 BOUNDS <- list(
   decay       = c(90, 1500),
-  prior_games = c(0.5, 20),
-  prior_rate  = c(-1.5, 0.5)
+  prior_games = c(0.5, 20)
+  # prior_rate is bounded PER CHANNEL below -- see PRIOR_RATE_SD_K.
 )
+
+# The prior rate is "what a player with no evidence is worth in this channel".
+# Channels are centred, so it should sit slightly below zero. A FLAT bound of
+# [-1.5, 0.5] let the first run pin prior_rate_hitout to -1.5 on a channel whose
+# EPR sd is 0.146 -- TEN standard deviations below the mean. Paired with
+# prior_games_hitout rising 3 -> 13.3 that turns the ruck channel into a
+# positional-and-experience dummy (debutant ~ -1.30, regular non-ruck ~ -0.70,
+# ruck ~ -0.35) rather than a measure of ruck contribution. It fits the target
+# through a back door and would not generalise as a ruck rating.
+#
+# So the bound is expressed in each channel's OWN units: +/- K sd of that
+# channel's EPR at default parameters. That makes it impossible to use any
+# channel as a free intercept, whatever its scale.
+PRIOR_RATE_SD_K <- 3
 # Penalty pulls each parameter to its production default. Strength is set by a
 # stated rule -- equivalent to PSEUDO_N matches of evidence -- and is NEVER tuned
 # against the objective, which would be circular.
@@ -251,10 +265,18 @@ make_spec <- function(merge3, floored) {
   chans <- if (merge3) c("recv", "disp", "spoil") else CH
   names_v <- c(paste0("decay_", chans), paste0("prior_games_", chans),
                paste0("prior_rate_", chans))
-  lo <- c(rep(BOUNDS$decay[1], length(chans)), rep(BOUNDS$prior_games[1], length(chans)),
-          rep(BOUNDS$prior_rate[1], length(chans)))
-  hi <- c(rep(BOUNDS$decay[2], length(chans)), rep(BOUNDS$prior_games[2], length(chans)),
-          rep(BOUNDS$prior_rate[2], length(chans)))
+  # Per-channel prior_rate bounds in that channel's own EPR sd units.
+  pr_lo <- vapply(chans, function(c) -PRIOR_RATE_SD_K * CHAN_SD[[c]], numeric(1))
+  pr_hi <- vapply(chans, function(c)  PRIOR_RATE_SD_K * CHAN_SD[[c]], numeric(1))
+  # The production default must remain reachable, or the "optimised" value is
+  # just the nearest legal point and the comparison is meaningless.
+  for (i in seq_along(chans)) {
+    d0 <- DEFAULTS[[paste0("prior_rate_", chans[i])]]
+    pr_lo[i] <- min(pr_lo[i], d0 * 1.2)
+    pr_hi[i] <- max(pr_hi[i], d0 * 0.8)
+  }
+  lo <- c(rep(BOUNDS$decay[1], length(chans)), rep(BOUNDS$prior_games[1], length(chans)), pr_lo)
+  hi <- c(rep(BOUNDS$decay[2], length(chans)), rep(BOUNDS$prior_games[2], length(chans)), pr_hi)
   init <- vapply(names_v, function(n) DEFAULTS[[n]], numeric(1))
   # Scale each parameter to ~[0,1] so the optimiser treats a day of decay and a
   # unit of prior_rate comparably.
@@ -298,6 +320,20 @@ say("epr sd ", round(sd(r_def$epr, na.rm = TRUE), 4))
 
 SKEL <- build_team_skeleton()
 say("team skeleton rows ", format(nrow(SKEL), big.mark = ","))
+
+# Per-channel EPR sd at default parameters -- the units the prior_rate bounds
+# are expressed in.
+CHAN_SD <- vapply(CH, function(c) sd(r_def[[paste0("epr_", c)]], na.rm = TRUE),
+                  numeric(1))
+say("")
+say("--- per-channel EPR sd at defaults (units for the prior_rate bounds) ---")
+say_dt(data.table(channel = CH, epr_sd = round(CHAN_SD, 4),
+                  prior_rate_bound = paste0("+/-", round(PRIOR_RATE_SD_K * CHAN_SD, 3)),
+                  default = round(vapply(CH, function(c)
+                    DEFAULTS[[paste0("prior_rate_", c)]], numeric(1)), 4)), 6)
+say("A flat bound let the first run pin prior_rate_hitout to -1.5 on a channel")
+say("with sd ", round(CHAN_SD[["hitout"]], 3), " -- ten sd below the mean, which")
+say("makes the channel a positional dummy rather than a rating.")
 
 say("")
 say("--- ANCHOR: lean team aggregation == .build_team_ratings_df() ---")
