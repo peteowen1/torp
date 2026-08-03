@@ -256,6 +256,31 @@ BOUNDS <- list(
 # channel's EPR at default parameters. That makes it impossible to use any
 # channel as a free intercept, whatever its scale.
 PRIOR_RATE_SD_K <- 3
+
+# ---- prior_rate is PINNED, and this is the whole point ----------------------
+# The free-prior_rate run (preserved as epv3_optimiser_freeprior_contaminated.txt)
+# improved train MAE by 1.018 -- and did it by driving prior_rate to its limit in
+# three channels at once: recv -2.290 (bound -2.292), disp -3.870 (ON BOUND),
+# hitout -0.506 (ON BOUND). Three channels pushing the same direction to their
+# bounds is ONE artefact, not three findings (stats-discipline rule 2).
+#
+# What the artefact is: epr = (sum + prior_games * prior_rate)/(wt_gms +
+# prior_games), so a large negative prior_rate with a raised prior_games applies
+# a penalty in proportion to how LITTLE evidence a player has. Summed over a
+# lineup that becomes a measure of how established the team is -- which really
+# does predict margin, but is a team-composition feature wearing a player
+# rating's clothes. Tightening the bound did not stop it because the bound was
+# never the problem; prior_rate being a free per-channel INTERCEPT was.
+#
+# The tell: prior_rate_spoil -- the contest channel, the only one with a
+# documented reason to be wrong -- barely moved and sat nowhere near its bound.
+# The gain was not coming from channel parameters at all.
+#
+# So prior_rate is fixed at production values and only decay and prior_games are
+# optimised. That asks the question actually worth asking: does the contest
+# channel need different MEMORY and SHRINKAGE than the flat spoil count it
+# replaced?
+OPTIMISE_PRIOR_RATE <- FALSE
 # Penalty pulls each parameter to its production default. Strength is set by a
 # stated rule -- equivalent to PSEUDO_N matches of evidence -- and is NEVER tuned
 # against the objective, which would be circular.
@@ -263,8 +288,10 @@ PSEUDO_N <- 150
 
 make_spec <- function(merge3, floored) {
   chans <- if (merge3) c("recv", "disp", "spoil") else CH
-  names_v <- c(paste0("decay_", chans), paste0("prior_games_", chans),
-               paste0("prior_rate_", chans))
+  names_v <- c(paste0("decay_", chans), paste0("prior_games_", chans))
+  if (isTRUE(OPTIMISE_PRIOR_RATE)) {
+    names_v <- c(names_v, paste0("prior_rate_", chans))
+  }
   # Per-channel prior_rate bounds in that channel's own EPR sd units.
   pr_lo <- vapply(chans, function(c) -PRIOR_RATE_SD_K * CHAN_SD[[c]], numeric(1))
   pr_hi <- vapply(chans, function(c)  PRIOR_RATE_SD_K * CHAN_SD[[c]], numeric(1))
@@ -275,8 +302,9 @@ make_spec <- function(merge3, floored) {
     pr_lo[i] <- min(pr_lo[i], d0 * 1.2)
     pr_hi[i] <- max(pr_hi[i], d0 * 0.8)
   }
-  lo <- c(rep(BOUNDS$decay[1], length(chans)), rep(BOUNDS$prior_games[1], length(chans)), pr_lo)
-  hi <- c(rep(BOUNDS$decay[2], length(chans)), rep(BOUNDS$prior_games[2], length(chans)), pr_hi)
+  lo <- c(rep(BOUNDS$decay[1], length(chans)), rep(BOUNDS$prior_games[1], length(chans)))
+  hi <- c(rep(BOUNDS$decay[2], length(chans)), rep(BOUNDS$prior_games[2], length(chans)))
+  if (isTRUE(OPTIMISE_PRIOR_RATE)) { lo <- c(lo, pr_lo); hi <- c(hi, pr_hi) }
   init <- vapply(names_v, function(n) DEFAULTS[[n]], numeric(1))
   # Scale each parameter to ~[0,1] so the optimiser treats a day of decay and a
   # unit of prior_rate comparably.
@@ -390,7 +418,8 @@ results <- list()
 for (nm in names(arms)) {
   spec <- arms[[nm]]
   say("")
-  say("=== arm: ", nm, " (", length(spec$names), " params) ===")
+  say("=== arm: ", nm, " (", length(spec$names), " params",
+      if (!isTRUE(OPTIMISE_PRIOR_RATE)) ", prior_rate PINNED" else "", ") ===")
   t0 <- Sys.time()
   base <- objective(spec$init_z, spec, report = TRUE)
   say("baseline (production params) train MAE on xmargin: ", round(base$mae, 4))
