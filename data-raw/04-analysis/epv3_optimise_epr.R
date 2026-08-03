@@ -394,9 +394,11 @@ for (nm in names(arms)) {
   t0 <- Sys.time()
   base <- objective(spec$init_z, spec, report = TRUE)
   say("baseline (production params) train MAE on xmargin: ", round(base$mae, 4))
+  # maxit 25 rather than 60: arm 1 converged in 8 gradient steps under the loose
+  # factr, so 60 was buying nothing but wall-clock and a timeout risk.
   opt <- optim(spec$init_z, objective, spec = spec, method = "L-BFGS-B",
                lower = rep(0, length(spec$init_z)), upper = rep(1, length(spec$init_z)),
-               control = list(maxit = 60, factr = 1e10))
+               control = list(maxit = 25, factr = 1e10))
   fin <- objective(opt$par, spec, report = TRUE)
   say("optimised train MAE: ", round(fin$mae, 4),
       "  (improvement ", round(base$mae - fin$mae, 4), ")")
@@ -415,6 +417,15 @@ for (nm in names(arms)) {
   }
   results[[nm]] <- list(spec = spec, opt = opt, fin = fin, tab = tab,
                         base_mae = base$mae)
+  # Save after EVERY arm. The first run of this script was killed by a timeout
+  # part-way through arm 2 and lost arm 1's result with it -- 22 minutes of
+  # compute for nothing. Four arms at ~25 minutes each is long enough that the
+  # run must survive being interrupted.
+  saveRDS(lapply(results, function(r) list(params = r$fin$params, tab = r$tab,
+                                           base_mae = r$base_mae,
+                                           opt_mae = r$fin$mae)),
+          file.path(OUT_DIR, "epv3_optimised_params.rds"))
+  say("  [checkpointed ", length(results), " of ", length(arms), " arms]")
 }
 
 say("")
@@ -432,9 +443,8 @@ say("of each structure goes through ws17 on 2025-26 margin/bits/Brier, which")
 say("theta has never seen. Optimising and gating on the same quantity is how a")
 say("metric-forcing fix gets through.")
 
-saveRDS(lapply(results, function(r) list(params = r$fin$params, tab = r$tab)),
-        file.path(OUT_DIR, "epv3_optimised_params.rds"))
 say("")
-say("wrote optimised parameter sets to epv3_optimised_params.rds")
+say("optimised parameter sets checkpointed to epv3_optimised_params.rds after")
+say("every arm, so an interrupted run keeps whatever finished.")
 close(con)
 cat("\nDone\n")
