@@ -35,6 +35,21 @@ say <- function(...) { m <- paste0(...); cat(m, "\n", sep = ""); cat(m, "\n", se
 say_dt <- function(x, n = 40) for (l in capture.output(print(utils::head(x, n)))) say(l)
 
 CH <- c("recv", "disp", "spoil", "hitout")
+
+# Display labels. The v3 channel names are ALIASES inherited from v2 and they
+# lie: `spoil` holds aerial contest value and contains no spoil weight, `hitout`
+# holds stoppage value. Renaming the actual symbols touches 18 R files and two
+# released artifacts that inthegame-blog consumes, so it waits until v3 is
+# chosen -- but every table this script prints should still say what it means.
+CH_LABEL <- c(recv = "recv", disp = "disp",
+              spoil = "cont_aerial", hitout = "cont_stop")
+relabel <- function(x) {
+  for (i in seq_along(CH_LABEL)) {
+    x <- gsub(paste0("_", names(CH_LABEL)[i], "$"), paste0("_", CH_LABEL[i]), x)
+  }
+  x
+}
+
 TRAIN_SEASONS <- 2021:2024
 GATE_SEASONS  <- 2025:2026
 
@@ -355,7 +370,7 @@ CHAN_SD <- vapply(CH, function(c) sd(r_def[[paste0("epr_", c)]], na.rm = TRUE),
                   numeric(1))
 say("")
 say("--- per-channel EPR sd at defaults (units for the prior_rate bounds) ---")
-say_dt(data.table(channel = CH, epr_sd = round(CHAN_SD, 4),
+say_dt(data.table(channel = CH_LABEL[CH], epr_sd = round(CHAN_SD, 4),
                   prior_rate_bound = paste0("+/-", round(PRIOR_RATE_SD_K * CHAN_SD, 3)),
                   default = round(vapply(CH, function(c)
                     DEFAULTS[[paste0("prior_rate_", c)]], numeric(1)), 4)), 6)
@@ -437,8 +452,9 @@ for (nm in names(arms)) {
   v <- vapply(spec$names, function(n) fin$params[[n]], numeric(1))
   d0 <- vapply(spec$names, function(n) DEFAULTS[[n]], numeric(1))
   at_bound <- abs(opt$par) < 1e-6 | abs(opt$par - 1) < 1e-6
-  tab <- data.table(param = spec$names, default = round(d0, 4),
-                    optimised = round(v, 4), on_bound = at_bound)
+  tab <- data.table(param = relabel(spec$names), default = round(d0, 4),
+                    optimised = round(v, 4), on_bound = at_bound,
+                    symbol = spec$names)
   say_dt(tab, 20)
   if (any(at_bound)) {
     say("!! ", sum(at_bound), " parameter(s) ON A BOUND -- treat as a bug signal,")
