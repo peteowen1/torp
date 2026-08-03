@@ -1,5 +1,52 @@
 # torp (development version)
 
+## New Features
+
+* **EPV v3: a chain-native rebuild of the credit system, behind `EPV_ENGINE`
+  (default `"v2"`).** Nothing about published ratings changes — that is proven,
+  not asserted: `data-raw/04-analysis/epv3_verify_v2_unchanged.R` regenerates the
+  v2 arm with current code and compares all 73 columns across 56,576
+  player-games, all identical.
+
+  v2 stapled together a chain-derived part that conserves the expected-points
+  swing exactly and thirty box-score weights that do not. v3 prices every event
+  from `delta_epv`, via one decomposition of a kick's swing:
+
+  ```
+  delta_epv = (V_pre    - exp_pts )   disposal, to the kicker
+            + (V_branch - V_pre   )   contest surprise, split zero-sum
+            + (V_after  - V_branch)   subsequent play, paid by the next row
+  ```
+
+  with `V_pre = (1-p) V_att + p V_def`, so the contest term is `+p*Delta` when
+  the attack retains and `-(1-p)*Delta` when the defence wins. The winner banks
+  it and the loser sheds it — no share parameter, and the payout scales with the
+  **surprise**, so beating a contest you were expected to lose is worth far more
+  than winning a gimme.
+
+  Contest value goes from **1.6% to 15.7%** of EPV variance and **1.3% to 19.8%**
+  of EPR variance. `Delta` averages **2.06 points** per aerial contest against
+  v2's flat `EPV_SPOIL_WT = 0.0737`, and 57.6% of player-games now carry a
+  *negative* contest value, which a flat weight cannot express. The key-defender
+  positional level closes from **−2.176 to −0.405** with no centring fix,
+  because it was largely an artefact of the box weights.
+
+  **Costs, measured rather than assumed.** Tackles leave EPV entirely — chains
+  logs 0.49 `Tackle` rows per match against ~60 real ones — moving tackle
+  quintile 5 down 1.06 monotonically; PSV carries them. And the match gate says
+  v3 costs **0.184 MAE** (95% CI [−0.378, +0.746], not significant) because the
+  contest channel adds nothing *incremental* at team level (multivariate
+  t = −0.06, p = 0.954). It is redundant to recv/disp/cont_stop, not noisy.
+
+  Channel contents formula by formula, and the naming warning that the v3 column
+  names are aliases describing the v2 quantity:
+  `../docs/reference/EPV-V3-CHANNELS.md`. Design and every gate:
+  `../docs/plans/EPV-V3-CHAIN-NATIVE.md`.
+
+* **`.build_epr_season()` accepts `epr_params`**, passed straight through to
+  `calculate_epr_stats_batch()`. Lets an optimiser vary the aggregation
+  constants without a second implementation of the logic to drift.
+
 ## Bug Fixes
 
 * **The positional level correction moved to EPV, where the gap is actually
