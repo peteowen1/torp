@@ -141,7 +141,14 @@ build_aerial_contests <- function(chains, pbp_data) {
   }
   kk[, target_pid := tpid]
 
-  cst <- kk[out_desc %chin% EPV3_AERIAL_OUT & !is.na(out_tid) & !is.na(out_pid), .(
+  # Which outcomes count as a contest. Under EPV3_CONTEST_POPULATION = "duel"
+  # this drops Uncontested Mark and Mark On Lead -- 68.5% of the rows and 53.9%
+  # of the credit mass -- because they are receptions, not duels. See
+  # epv_v3_duels.R. Kicks that stop being contests are NOT lost: they fall back
+  # to the ordinary disposer/receiver split, because `aerial_kick_keys` (which
+  # is what excludes them from that split) is built from this same table.
+  .out_set <- epv3_aerial_out()
+  cst <- kk[out_desc %chin% .out_set & !is.na(out_tid) & !is.na(out_pid), .(
     match_id, kick_do = display_order, kick_pid = player_id, kick_tid = team_id,
     kick_x = x, kick_y = y, out_desc, out_pid, out_tid, out_x, out_y, target_pid
   )]
