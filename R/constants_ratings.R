@@ -222,23 +222,66 @@ EPV3_CHANNELS <- 3L
 #' @keywords internal
 EPV3_POINTS_SCALE <- c(recv = 1, disp = 1, cont_aerial = 1, cont_stop = 1)
 
+#' Sub-component scales applied BEFORE the two contest channels merge
+#'
+#' Only used when \code{EPV3_CHANNELS == 3L}. Pete's construction, and it is not
+#' obvious: calibrate \code{cont_aerial} and \code{cont_stop} to one-point-per-
+#' unit \emph{individually}, then add them. The sum then reads one point per
+#' unit too, so the merged contest channel lands on the spec by construction
+#' rather than by luck.
+#'
+#' Merging the RAW components does not get there. A raw sum blends by VARIANCE,
+#' and the aerial part has roughly three times the spread while carrying no
+#' margin signal of its own (t 0.91 against stoppage's 4.29) -- so the ruck
+#' signal is diluted rather than carried, and the merged channel reads 0.570 at
+#' t 1.87. Scaling first makes the merge blend by POINTS: 1.000 at t 4.43.
+#'
+#' This is also why the 3-channel arm previously lost the 3-vs-4 comparison on
+#' bits. That comparison merged the raw components. Merging calibrated ones is a
+#' different operation and has to be re-gated, not inherited.
+#'
+#' Fitted at the EPR layer against xmargin on the FOUR-channel build (the only
+#' structure where the two components are separately visible to EPR), then
+#' applied at the EPV layer, which is linear in each component so the ratio
+#' carries. The overall level is re-fitted afterwards as
+#' \code{EPV3_POINTS_SCALE["cont_aerial"]}, which scales the merged channel.
+#' @keywords internal
+EPV3_SUB_SCALE <- c(cont_aerial = 1, cont_stop = 1)
+
 #' Correction factor sizing the ruck channel to the swing it stands in for
 #'
-#' \strong{1 = production, i.e. inert.} Set to 3.14 to apply the correction below.
+#' \strong{1 = production, i.e. inert. KEEP IT AT 1 -- the 3.14 below is
+#' refuted.} Left documented rather than deleted because the refutation is the
+#' useful part.
 #'
-#' A ruck contest (`Centre Bounce` / `Ball Up Call`) carries a real EPV swing --
-#' mean **0.3925** per contest, measured on 34,016 contests 2024-2026 -- and those
-#' chain rows carry \strong{no \code{player_id}}, so that swing is credited to
-#' NOBODY through the chain path. The three ruck box weights
-#' (\code{EPV_RUCK_CONTEST_WT}, \code{EPV_HITOUT_WT}, \code{EPV_HITOUT_ADV_WT}) are
-#' the substitute for it, and together they pay **0.1249** for both rucks --
-#' \strong{31.8\% of the swing} (`audit_swing_allocation.R`).
+#' \strong{*** THE 0.3925 SWING FIGURE IS AN ARTIFACT (measured 2026-08-04,
+#' \code{epv3_stoppage_swing.R}). ***} \code{exp_pts} is set to \strong{exactly
+#' 0.0000} on every \code{Centre Bounce} row -- it is a reset state -- so that
+#' row's \code{delta_epv} is purely the step back off an artificial zero. It
+#' reads +0.7912 and is positive on \strong{99.6\%} of bounces. \code{Ball Up
+#' Call}, a real stoppage in live play, reads +0.0566 and is positive 52.6\% of
+#' the time, which is what a genuine contest looks like.
 #'
-#' Compare with events where both sides ARE chain rows: `disp_scale` 0.5 +
-#' `recv_scale` 0.5 = 1.0, so aerial marks allocate exactly 100\% (measured 100.0\%
-#' for both attacking and intercept marks). Rucks are the one case where a flat
-#' constant is not a compromise but the CORRECT instrument -- the swing is wholly
-#' unallocated, so the constant simply has to equal it. 0.3925 / 0.1249 = 3.14.
+#' Weighting the two by count: (0.7912 x 31,392 + 0.0566 x 35,492) / 66,884 =
+#' \strong{0.401}, i.e. the 0.3925 figure is ~93\% centre-bounce reset. Nobody
+#' created that value, so no ruck can be paid for it.
+#'
+#' \strong{What a stoppage IS worth.} The resulting state is worth +0.661 to the
+#' team that wins it (\code{Ball Up Call}, sd 0.916), so the swing is ~1.32
+#' points, against the 0.0742 the box weights pay a tap-winning ruck. That is
+#' still not a licence to amplify: the tap only partly decides possession --
+#' \code{Gather From Hitout} is 24.7\% of the 66,853 resolved stoppages against
+#' \code{Loose Ball Get} 30.5\% and \code{Hard Ball Get} 19.6\%. Three quarters
+#' are settled on the ground by midfielders. The ruck owns only the INCREMENT in
+#' possession probability that winning the tap buys, times 1.32, and that
+#' increment has not been measured. Measure it before touching this constant.
+#'
+#' The old reasoning, kept because the comparison is still the right frame:
+#' where both sides ARE chain rows, `disp_scale` 0.5 + `recv_scale` 0.5 = 1.0,
+#' so aerial marks allocate exactly 100\%. Rucks are the one case where the
+#' swing is wholly unallocated and a flat constant is the correct instrument --
+#' the constant simply has to equal the swing. The error was in what the swing
+#' was measured as, not in the shape of the argument.
 #'
 #' \strong{Why this reaches the published rating rather than being centred away.}
 #' `EPV_POSITION_STANDARDISE` equalises between-position spread WITHIN a channel, at
@@ -248,9 +291,21 @@ EPV3_POINTS_SCALE <- c(recv = 1, disp = 1, cont_aerial = 1, cont_stop = 1)
 #' every position. Note `hitout` is excluded from
 #' `EPV_STANDARDISE_CHANNELS` anyway, so this channel is not rescaled at all.
 #'
-#' \strong{Four independent routes agree on direction and rough size:} this ledger
-#' 3.14x, the duel price at 1/3 share 4.0x and at 1/2 share 6.0x, and ws13's
-#' regression slope on the hitout channel 7.22x.
+#' \strong{The "four independent routes agree" claim no longer stands.} It read:
+#' this ledger 3.14x, the duel price at 1/3 share 4.0x and at 1/2 share 6.0x, and
+#' ws13's regression slope 7.22x. Two of the four are now known to be unsound:
+#' \itemize{
+#'   \item the 3.14x ledger is the artifact above;
+#'   \item the regression route (7.22x, and 7.50x when refitted 2026-08-04) falls
+#'     to 4.39 the moment PSR is in the regression, so ~40\% of it is team
+#'     strength the ruck merely travels with. It also reads 4.94 on the first
+#'     half of the matches and 10.09 on the second -- a 2x swing, i.e. a fit
+#'     rather than a constant. And \code{epv_cont_stop} is a linear function of
+#'     hitout COUNTS by construction, so amplifying it 7.5x made raw hitout
+#'     volume 12\% of the rating and filled the contest leaderboard with
+#'     high-volume ruckmen rather than good ones.
+#' }
+#' Agreement between routes that share a confound is not independent evidence.
 #'
 #' \strong{Caveats that must be settled before this goes live.}
 #' \itemize{
@@ -279,17 +334,50 @@ EPV_RUCK_SWING_SCALE <- 1
 #' @keywords internal
 PSV_POINTS_SCALE <- 1.579
 
+#' The points factor a channel's shrinkage prior has to carry
+#'
+#' \code{.bayesian_shrink()} adds \code{prior_games * prior_rate} AFTER the
+#' channel value, so a scaled channel with an unscaled prior leaves EPR a blend
+#' of scaled and unscaled parts rather than a clean rescale. Every
+#' \code{EPR_PRIOR_RATE_*} therefore carries the same factor its channel does.
+#'
+#' Under v2 that factor is the single global \code{EPV_POINTS_SCALE}. Under v3
+#' it is per channel, because v3's whole point is that one unit of each channel
+#' is one point of margin and they convert at very different rates.
+#'
+#' \strong{Keyed on the constant, not on a per-call argument}, so a script that
+#' passes \code{epv_engine = "v3"} while \code{EPV_ENGINE} still reads
+#' \code{"v2"} gets v2 priors. That is the right default for production and the
+#' wrong one for a two-engine gate, so gate scripts must
+#' \code{assignInNamespace()} the prior rates for their v3 arm. The alternative
+#' -- resolving the prior inside \code{.build_epr_season()} -- would make the
+#' constant no longer a constant.
+#' @keywords internal
+.epr_prior_points_scale <- function(slot) {
+  if (identical(EPV_ENGINE, "v3") && exists("EPV3_POINTS_SCALE")) {
+    EPV3_POINTS_SCALE[[slot]]
+  } else {
+    EPV_POINTS_SCALE
+  }
+}
+
 #' Prior rate for receiving component (shrinkage target per weighted game)
 #' @keywords internal
-EPR_PRIOR_RATE_RECV <- -0.7000 * EPV_POINTS_SCALE
+EPR_PRIOR_RATE_RECV <- -0.7000 * .epr_prior_points_scale("recv")
 
 #' Prior rate for disposal component (shrinkage target per weighted game)
 #' @keywords internal
-EPR_PRIOR_RATE_DISP <- -0.7000 * EPV_POINTS_SCALE
+EPR_PRIOR_RATE_DISP <- -0.7000 * .epr_prior_points_scale("disp")
 
 #' Prior rate for spoil component (shrinkage target per weighted game)
+#'
+#' Under v3 this slot holds CONTEST value. The shape (-0.3 against recv/disp's
+#' -0.7) is inherited unchanged and only the points factor is threaded, which is
+#' deliberate: whether a mostly zero-sum channel wants a negative prior at all
+#' is a real question, but it is a separate change with its own effect and
+#' bundling it here would make the calibration unattributable.
 #' @keywords internal
-EPR_PRIOR_RATE_SPOIL <- -0.3000 * EPV_POINTS_SCALE
+EPR_PRIOR_RATE_SPOIL <- -0.3000 * .epr_prior_points_scale("cont_aerial")
 
 #' Prior rate for hitout component (shrinkage target per weighted game)
 #'
@@ -306,7 +394,7 @@ EPR_PRIOR_RATE_SPOIL <- -0.3000 * EPV_POINTS_SCALE
 EPR_PRIOR_RATE_HITOUT <- if (identical(EPV_ENGINE, "v3") && identical(EPV3_CHANNELS, 3L)) {
   0
 } else {
-  -0.3000 * EPV_POINTS_SCALE * EPV_RUCK_SWING_SCALE
+  -0.3000 * .epr_prior_points_scale("cont_stop") * EPV_RUCK_SWING_SCALE
 }
 
 #' Decay factor (in days) for contest component weighting
@@ -862,8 +950,26 @@ LINEUP_GROUP_MAP <- c(
 #' put a ruck named at nine different lineup positions into the overall top 10
 #' at 4.06 against his true 1.12. Excluding the channel scores strictly better
 #' than capping the amplifier (§7.18c).
+#'
+#' \strong{Under v3 the contest channel is excluded for the same reason}, and it
+#' took a measurement to see it. Under \code{EPV3_CHANNELS = 3L} the
+#' \code{spoil} slot holds aerial contest value MERGED with stoppage value, so
+#' it is partly ruck-exclusive -- exactly the shape that made \code{hitout}
+#' unstandardisable. Standardising it normalises away the only thing it
+#' measures: with the two contest parts merged in points, the channel came out
+#' at 0.023 points per unit, t 0.27, carrying \strong{0.0\%} of the rating's
+#' variance. It had been standardised out of existence. Excluding it takes the
+#' contest channel from t 1.83 to 2.24 and from 1.7\% of value to 2.6\%.
+#'
+#' Keyed on \code{EPV_ENGINE} rather than on \code{EPV3_CHANNELS} because v2's
+#' \code{spoil} channel is a genuine all-position quantity (spoils, tackles,
+#' pressure acts) that should keep being standardised.
 #' @keywords internal
-EPV_STANDARDISE_CHANNELS <- c("recv", "disp", "spoil")
+EPV_STANDARDISE_CHANNELS <- if (identical(EPV_ENGINE, "v3")) {
+  c("recv", "disp")
+} else {
+  c("recv", "disp", "spoil")
+}
 
 #' PSR prior rate for replacement-level players
 #'
@@ -893,6 +999,42 @@ EPV_DISP_POS_OFFSET <- 0.0000
 EPV_DISP_SCALE <- 0.5000
 
 #' Reception multiplier when defending (pos_team == -1)
+#'
+#' \strong{Stays at 1.0. Setting it to 0 was tried on 2026-08-04 and reverted
+#' the same session} -- the case for 0 was real but incomplete, and the thing it
+#' missed is worth recording.
+#'
+#' The multiplier sits on the \code{pos_team == -1} branch, so it is the
+#' INTERCEPT branch. The case for zeroing it was that the term is noise:
+#' game-to-game reception reliability rises 0.2507 -> 0.3086 (+23\%) while
+#' count-dependence FALLS 0.53 -> 0.297.
+#'
+#' \strong{What that missed is what the term contains.} Interception is the
+#' highest-value receiving act in the game by a factor of eight -- 168 per match
+#' at mean +0.625 against ordinary receptions' 1,453 per match at +0.079. It is
+#' 10\% of receiving events, 31\% of gross reception value and roughly half the
+#' channel's net (\code{docs/reference/EPV-VALUE-ANATOMY.md} §4). So "drop a
+#' noisy term" was actually "stop crediting interceptions".
+#'
+#' Three measurements, all against (\code{epv3_recv_neg_reexamine.R}):
+#' \itemize{
+#'   \item \strong{Conservation breaks.} Total EPV allocated per team-match falls
+#'     +72.26 -> +38.69. The disposer is still CHARGED for the turnover and
+#'     nobody is CREDITED the gain, so the metric systematically under-rates
+#'     whoever does the gaining.
+#'   \item \strong{The margin fit is worse}, recv t 9.65 -> 6.76.
+#'   \item \strong{The two reliability measures disagree and the deciding one
+#'     says no.} Game-to-game reliability rises, which removing any volatile term
+#'     will do; YEAR-OVER-YEAR repeatability falls 0.6804 -> 0.6533. Persistence
+#'     is the test that separates ability from noise, and it says signal was
+#'     deleted. Named intercept defenders bear it out -- Tom Stewart 3.18 ->
+#'     1.56, Jeremy Howe 4.14 -> 3.80, Steven May 3.54 -> 3.33.
+#' }
+#'
+#' \strong{Also read the formula before assuming what this touches.} The
+#' multiplier sits inside BOTH defensive branches, so at 0 the intercept-MARK
+#' branch is zeroed as well and \code{EPV_RECV_INTERCEPT_MARK_SCALE} multiplies
+#' a term that is now zero.
 #' @keywords internal
 EPV_RECV_NEG_MULT <- 1.0000
 

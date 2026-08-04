@@ -234,11 +234,21 @@ centre_epv_by_position <- function(pgd, channels = EPV_LEVEL_CENTRE_CHANNELS) {
   # EPV_ENGINE meant a caller passing epv_engine = "v3" while the constant still
   # read "v2" would silently get no per-channel scaling -- which is exactly how
   # every arm in this session was run.
+  #
+  # NOT also conditioned on the vector being non-trivial, and that matters. An
+  # earlier version fell through to the global EPV_POINTS_SCALE whenever
+  # EPV3_POINTS_SCALE was all 1s, so a v3 build with the scale not yet fitted
+  # silently got v2's 0.919 -- and a constant fitted against THAT baseline then
+  # verified at 0.919 instead of 1.000 when applied, because the 0.919 had
+  # disappeared underneath it. Under v3 the per-channel vector is authoritative
+  # even when it is all 1s; all 1s means no scaling, not "fall back to v2's".
   use_v3_scale <- identical(attr(pgd, "epv_engine"), "v3") &&
-    exists("EPV3_POINTS_SCALE") && !all(EPV3_POINTS_SCALE == 1)
+    exists("EPV3_POINTS_SCALE")
+  # Defined unconditionally so the residual-expectation block below can use it
+  # without depending on which branch ran.
+  lbl <- c(epv_recv = "recv", epv_disp = "disp",
+           epv_spoil = "cont_aerial", epv_hitout = "cont_stop")
   if (use_v3_scale) {
-    lbl <- c(epv_recv = "recv", epv_disp = "disp",
-             epv_spoil = "cont_aerial", epv_hitout = "cont_stop")
     for (cc in cols) {
       stem <- sub("_(oadj|adj)$", "", cc)
       k <- EPV3_POINTS_SCALE[[lbl[[stem]]]]
@@ -268,8 +278,19 @@ centre_epv_by_position <- function(pgd, channels = EPV_LEVEL_CENTRE_CHANNELS) {
   # trade its tolerance for this feature.
   cells <- data.table::rbindlist(centring_cells)
   if (nrow(cells) > 0) {
-    scale <- if (is.finite(EPV_POINTS_SCALE)) EPV_POINTS_SCALE else 1
-    cells[, resid_expected := (m_round - corr) * scale]
+    # The residual has to be quoted in the units the caller measures it in,
+    # which under v3 means the channel's OWN factor -- a single global scale
+    # here would put the guard's expectation on a different scale from the data
+    # for three of the four channels. Harmless today only because full centring
+    # leaves exactly zero either way; it stops being harmless the moment
+    # EPV_POSITION_SHRINK is turned on.
+    scale_of <- function(cc) {
+      if (use_v3_scale) {
+        k <- EPV3_POINTS_SCALE[[lbl[[sub("_(oadj|adj)$", "", cc)]]]]
+        if (is.finite(k)) k else 1
+      } else if (is.finite(EPV_POINTS_SCALE)) EPV_POINTS_SCALE else 1
+    }
+    cells[, resid_expected := (m_round - corr) * vapply(channel, scale_of, numeric(1))]
   }
   data.table::setattr(dt, "epv_level_centring", cells)
 
@@ -667,13 +688,24 @@ create_player_game_data <- function(pbp_data = NULL,
         # decay and shrinkage prior. EPR_PRIOR_RATE_HITOUT is zeroed to match, so
         # the empty slot contributes exactly zero instead of shrinking toward a
         # prior for a channel that no longer exists.
+        #
+        # The two contest components are put on a common footing BEFORE they are
+        # added (`EPV3_SUB_SCALE`). A raw sum blends them by VARIANCE, and the
+        # aerial part has ~3x the spread while carrying no margin signal of its
+        # own, so the ruck signal gets swamped rather than carried. Scaling each
+        # to one-point-per-unit first makes the merge blend by POINTS. Under 4
+        # channels the two never meet, so no sub-scale is needed or applied.
         epv_spoil = if (identical(EPV3_CHANNELS, 3L)) {
-          epv_cont_aerial + epv_cont_stop
+          epv_cont_aerial * EPV3_SUB_SCALE[["cont_aerial"]] +
+            epv_cont_stop * EPV3_SUB_SCALE[["cont_stop"]]
         } else {
           epv_cont_aerial
         },
         epv_hitout = if (identical(EPV3_CHANNELS, 3L)) 0 else epv_cont_stop,
-        epv = epv_recv + epv_disp + epv_cont_aerial + epv_cont_stop
+        # Built from the SLOTS, not from the raw components, so the total and
+        # its parts cannot disagree once a sub-scale is live. Identical to the
+        # old expression whenever EPV3_SUB_SCALE is all 1s.
+        epv = epv_recv + epv_disp + epv_spoil + epv_hitout
       )
   } else {
   plyr_gm_df <- plyr_gm_df |>

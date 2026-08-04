@@ -42,8 +42,25 @@ unchanged — proven, not asserted: `data-raw/04-analysis/epv3_verify_v2_unchang
 compares all 73 columns across 56,576 player-games.
 
 **Before touching anything EPV- or contest-related, read
-[`../docs/reference/EPV-V3-CHANNELS.md`](../docs/reference/EPV-V3-CHANNELS.md)** —
-it lists formula by formula what is in each channel, and the two traps below.
+[`../docs/reference/EPV-V3-CHANNELS.md`](../docs/reference/EPV-V3-CHANNELS.md)**
+(formula by formula, what is in each channel) **and
+[`../docs/reference/EPV-VALUE-ANATOMY.md`](../docs/reference/EPV-VALUE-ANATOMY.md)**
+(where the value actually comes from, measured over 2.05M PBP rows).
+
+**Read the anatomy doc before proposing any credit weight change.** Two live
+constants were refuted by it in one session, and both had converging evidence
+behind them beforehand:
+
+- `EPV_RUCK_SWING_SCALE`'s 3.14× justification is **~93% centre-bounce reset
+  artifact** — `exp_pts` is exactly 0.0000 on every `Centre Bounce` row.
+- `EPV_RECV_NEG_MULT = 0` deletes the **intercept** branch, which is the
+  highest-value receiving act in the game (+0.625/event against +0.079).
+
+The general shape: **when a change improves a summary statistic, ask what events
+it removed before banking it.** Both of those looked like noise reduction and
+were signal deletion. And note game-to-game reliability and year-over-year
+repeatability can move in *opposite* directions — quote which one you mean; the
+second is the one that separates ability from noise.
 
 - **The v3 channel names are ALIASES and they lie.** `epv_spoil` /
   `epr_spoil` hold *aerial contest* value and contain no spoil weight;

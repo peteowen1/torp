@@ -109,11 +109,19 @@ get_player_game_ratings <- function(match = NULL,
   # calculate_psv(), so without this the torp_value below blended an EPV at
   # scale 1.0 against a PSV at 1.579 and meant something different from the
   # published pipeline's torp_value, with nothing to signal it.
-  if (is.finite(EPV_POINTS_SCALE) && !isTRUE(all.equal(EPV_POINTS_SCALE, 1))) {
-    for (cc in c("epv_adj", "epv_recv_adj", "epv_disp_adj",
-                 "epv_spoil_adj", "epv_hitout_adj")) {
-      player_epv[, (cc) := get(cc) * EPV_POINTS_SCALE]
-    }
+  # Under v3 the scale is PER CHANNEL, so a single global factor here would
+  # reproduce the published numbers for neither the channels nor the total.
+  # Applied to the channels and the total rebuilt from them, rather than scaled
+  # separately, so the parts always sum to the whole.
+  .ch <- c("epv_recv_adj", "epv_disp_adj", "epv_spoil_adj", "epv_hitout_adj")
+  if (identical(EPV_ENGINE, "v3") && exists("EPV3_POINTS_SCALE") &&
+      !all(EPV3_POINTS_SCALE == 1)) {
+    .lbl <- c(epv_recv_adj = "recv", epv_disp_adj = "disp",
+              epv_spoil_adj = "cont_aerial", epv_hitout_adj = "cont_stop")
+    for (cc in .ch) player_epv[, (cc) := get(cc) * EPV3_POINTS_SCALE[[.lbl[[cc]]]]]
+    player_epv[, epv_adj := rowSums(as.matrix(.SD), na.rm = TRUE), .SDcols = .ch]
+  } else if (is.finite(EPV_POINTS_SCALE) && !isTRUE(all.equal(EPV_POINTS_SCALE, 1))) {
+    for (cc in c("epv_adj", .ch)) player_epv[, (cc) := get(cc) * EPV_POINTS_SCALE]
   }
 
   # --- Step 4: Format as game ratings (same output as player_game_ratings) ---
