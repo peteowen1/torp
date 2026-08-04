@@ -63,9 +63,13 @@ test_that("uncontested marks are excluded from the contested exposure base", {
   expect_true("Uncontested Mark" %in% EPV3_AERIAL_EXPOSURE_WIDE)
 })
 
-test_that("the stoppage zero-sum change is inert by default", {
-  # It changes what cont_stop MEANS, so it clears its own gate before shipping.
-  expect_false(EPV3_STOP_ZERO_SUM)
+test_that("the stoppage term is a win/loss ledger, not an attendance count", {
+  # ON since 2026-08-04, having cleared its gate. Paying a ruckman for contests
+  # he LOST is indefensible, and the measured case is that turning the term into
+  # a differential cuts count-dependence -- cor(contest, hitouts) 0.370 -> 0.252
+  # -- while year-over-year repeatability holds at 0.79. A COUNT can be padded by
+  # volume; a DIFFERENTIAL cannot.
+  expect_true(EPV3_STOP_ZERO_SUM)
 })
 
 test_that("zero-sum stoppage pays nothing for splitting contests 50/50", {
@@ -80,7 +84,20 @@ test_that("zero-sum stoppage pays nothing for splitting contests 50/50", {
   expect_gt(wins * EPV_RUCK_CONTEST_WT - max(0, contests - wins) * EPV_RUCK_LOSS_WT, 0)
 })
 
-test_that("v3 points constants start at 1 so an uncalibrated run is visible", {
-  expect_true(all(EPV3_POINTS_SCALE == 1))
+test_that("v3 points constants are engine-conditioned, not a bare vector", {
+  # They were fitted and applied on 2026-08-04, so "all 1" is no longer a
+  # property of the constant -- it is a property of the ENGINE being v2. Keeping
+  # the old bare `all(... == 1)` assertion here would pass today and start
+  # failing the moment the engine flag flips, for no reason.
+  #
+  # The full contract -- inert under v2, exactly the fitted values under v3, and
+  # each EPR_PRIOR_RATE_* carrying its own channel's factor -- is enforced in
+  # test-epv3-constants.R.
   expect_named(EPV3_POINTS_SCALE, c("recv", "disp", "cont_aerial", "cont_stop"))
+  if (identical(EPV_ENGINE, "v2")) {
+    expect_true(all(EPV3_POINTS_SCALE == 1))
+  } else {
+    expect_true(all(EPV3_POINTS_SCALE > 0))
+    expect_false(all(EPV3_POINTS_SCALE == 1))
+  }
 })
