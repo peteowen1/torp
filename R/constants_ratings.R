@@ -41,17 +41,6 @@ EPR_DECAY_DEFAULT_DAYS <- EPR_DECAY_RECV
 #' @keywords internal
 EPR_LOADING_DEFAULT <- 1.0000
 
-#' Prior games constant for receiving ratings
-#' @keywords internal
-EPR_PRIOR_GAMES_RECV <- 3.0000
-
-#' Prior games constant for disposal ratings
-#' @keywords internal
-EPR_PRIOR_GAMES_DISP <- 3.0000
-
-#' Prior games constant for spoil ratings
-#' @keywords internal
-EPR_PRIOR_GAMES_SPOIL <- 3.0000
 
 #' Prior games constant for hitout ratings
 #' @keywords internal
@@ -219,8 +208,74 @@ EPV3_CHANNELS <- 3L
 #' defender spread and dragged every position's thin-evidence quartile down
 #' ~0.25. Under v3 this is the natural move, but it is a re-test, not a given,
 #' and those are the three symptoms to look for.
+#' \strong{FITTED AND APPLIED 2026-08-04}, on the structure that ships: 3
+#' channels, raw contest merge, contest not standardised, ledger stoppage term,
+#' measured shrinkage. Refitting was not optional -- a points constant is only
+#' valid for the structure it was fitted on, and every one of those changed.
+#'
+#' Verified by REBUILD, not analytically, and iterated to a fixed point
+#' (\code{epv3_verify_shipping_constants.R}): \strong{recv 1.00002, disp
+#' 1.00016, contest 0.99599} -- worst residual 0.4\%.
+#'
+#' \strong{Do not chase that last 0.4\%.} The contest coefficient carries a
+#' standard error of roughly 87\% of itself (t 1.12), so 0.4\% is orders of
+#' magnitude below its own noise floor; earlier iterations oscillated between
+#' 0.989 and 1.016 for exactly that reason. Two real causes:
+#' \itemize{
+#'   \item \code{adjust_epv_for_opponents()} is NOT linear in one channel -- it
+#'     forms \code{.abs_total} as a sum of \code{abs()} ACROSS channels, so
+#'     scaling channels by factors as different as 3.34 / 2.61 / 0.53 shifts the
+#'     denominator. "Scaling a channel scales its rating by exactly k" is an
+#'     approximation here, not an identity.
+#'   \item contest value barely predicts team margin at all, which is a property
+#'     of the game rather than a defect -- see \code{EPV3_CHANNELS} and
+#'     \code{docs/reference/EPV-VALUE-ANATOMY.md} §5.
+#' }
 #' @keywords internal
-EPV3_POINTS_SCALE <- c(recv = 1, disp = 1, cont_aerial = 1, cont_stop = 1)
+EPV3_POINTS_SCALE <- if (identical(EPV_ENGINE, "v3")) {
+  c(recv = 3.3413, disp = 2.6078, cont_aerial = 0.5226, cont_stop = 1)
+} else {
+  c(recv = 1, disp = 1, cont_aerial = 1, cont_stop = 1)
+}
+
+# NOTE: EPR_PRIOR_GAMES_* live HERE, below EPV_ENGINE, and not up with the other
+# EPR_* constants. They are engine-conditioned, R sources a package file top to
+# bottom, and EPV_ENGINE is defined further down the file than their natural
+# home -- putting them there gives "object 'EPV_ENGINE' not found" at BUILD
+# time. Same hazard the note above EPV_POINTS_SCALE warns about.
+#' How much evidence a channel needs before it stops being shrunk
+#'
+#' \code{prior_games} is the number of weighted games at which a player's own
+#' record is worth as much as the prior. Production has run \strong{3.0} on every
+#' channel, against a MEASURED requirement several times that -- it is a
+#' within/between variance ratio (\code{sigma^2_within / tau^2_between}), and
+#' v3's chain-delta channels are far noisier than v2's box-score counts, so they
+#' need much more shrinkage.
+#'
+#' \strong{Keyed on \code{EPV_ENGINE}, and that is deliberate.} The v3 numbers
+#' were measured on v3's channels and are meaningless for v2's; applying them to
+#' v2 would change every published rating today for no reason. v2 keeps 3.0 so
+#' production is byte-for-byte untouched while the engine flag stays at
+#' \code{"v2"}.
+#'
+#' v2's own measured values are 7.75 / 9.12 / 12.19 / 4.18 -- also well above
+#' 3.0, so production is under-shrinking too. That is a separate shippable
+#' change and it has not been gated; do not fold it in here.
+#'
+#' Measured 2026-08-04 on the finished v3 structure over 1,032 players with 3+
+#' games at TOG > 50 (\code{epv3_finalise.R} stage 4). An independent earlier
+#' measurement on the 4-channel v3 build gave 14.38 / 24.35 / 11.37, so these
+#' are stable to the structure change.
+#' @keywords internal
+EPR_PRIOR_GAMES_RECV <- if (identical(EPV_ENGINE, "v3")) 14.38 else 3.0000
+
+#' Prior games constant for disposal ratings. See \code{EPR_PRIOR_GAMES_RECV}.
+#' @keywords internal
+EPR_PRIOR_GAMES_DISP <- if (identical(EPV_ENGINE, "v3")) 24.33 else 3.0000
+
+#' Prior games constant for the spoil/contest slot. See \code{EPR_PRIOR_GAMES_RECV}.
+#' @keywords internal
+EPR_PRIOR_GAMES_SPOIL <- if (identical(EPV_ENGINE, "v3")) 11.09 else 3.0000
 
 #' Sub-component scales applied BEFORE the two contest channels merge
 #'
@@ -1109,12 +1164,28 @@ EPV_RUCK_CONTEST_WT <- 0.0232 * EPV_RUCK_SWING_SCALE
 #' leaving the hitout carve-out -- it is the same three box fields, read as a
 #' win/loss ledger rather than an attendance count.
 #'
-#' \strong{Not enabled by default.} It is a real change to what the channel
-#' means, so it clears its own gate first; the level also interacts with
-#' \code{EPV3_POINTS_SCALE["cont_stop"]}, which calibration puts at 1.77 -- the
-#' highest of the four channels.
+#' \strong{ON since 2026-08-04.} Gated on channel quality rather than on match
+#' MAE, which cannot see it -- the match model consumes every channel diff
+#' separately and reweights them itself, so a cleaner channel carrying the same
+#' information is absorbed.
+#'
+#' What it buys, against the attendance-count version:
+#' \itemize{
+#'   \item \strong{count-dependence falls}, \code{cor(contest, hitouts)} 0.370 ->
+#'     0.252. This is the point of it: a COUNT can be padded by volume, a
+#'     DIFFERENTIAL cannot, and that is what makes the channel safe to scale.
+#'   \item year-over-year repeatability holds, 0.789 -> 0.792.
+#'   \item two rucks in the 2026 top 40 rather than one.
+#' }
+#'
+#' \strong{The reason for turning it on is not the reason previously written
+#' here.} That said it would let the channel be amplified; measurement killed the
+#' amplification instead (see \code{EPV_RUCK_SWING_SCALE} -- its justifying swing
+#' figure is ~93\% centre-bounce reset artifact, and the regression route is
+#' ~40\% team quality). The ledger stands on its own: paying a ruckman for
+#' contests he LOST is indefensible whatever the channel is worth.
 #' @keywords internal
-EPV3_STOP_ZERO_SUM <- FALSE
+EPV3_STOP_ZERO_SUM <- TRUE
 
 #' Debit per ruck contest lost, under \code{EPV3_STOP_ZERO_SUM}
 #'
