@@ -321,15 +321,39 @@ EPV3_SUB_SCALE <- c(cont_aerial = 1, cont_stop = 1)
 #' \strong{0.401}, i.e. the 0.3925 figure is ~93\% centre-bounce reset. Nobody
 #' created that value, so no ruck can be paid for it.
 #'
-#' \strong{What a stoppage IS worth.} The resulting state is worth +0.661 to the
-#' team that wins it (\code{Ball Up Call}, sd 0.916), so the swing is ~1.32
-#' points, against the 0.0742 the box weights pay a tap-winning ruck. That is
-#' still not a licence to amplify: the tap only partly decides possession --
-#' \code{Gather From Hitout} is 24.7\% of the 66,853 resolved stoppages against
-#' \code{Loose Ball Get} 30.5\% and \code{Hard Ball Get} 19.6\%. Three quarters
-#' are settled on the ground by midfielders. The ruck owns only the INCREMENT in
-#' possession probability that winning the tap buys, times 1.32, and that
-#' increment has not been measured. Measure it before touching this constant.
+#' \strong{What a stoppage IS worth, and why 1 is right.} The resulting state is
+#' worth +0.661 to the team that wins it (\code{Ball Up Call}, sd 0.916), so the
+#' swing is ~1.32 points against the 0.0742 the box pays a tap-winning ruck. That
+#' looks like an 18x under-payment and is not, because the tap does not decide
+#' possession: \code{Gather From Hitout} is only 24.7\% of the 66,853 resolved
+#' stoppages, against \code{Loose Ball Get} 30.5\% and \code{Hard Ball Get}
+#' 19.6\%. Three quarters are settled on the ground. The ruck owns only the
+#' INCREMENT in possession probability that winning the tap buys.
+#'
+#' \strong{That increment is now measured (2026-08-04,
+#' \code{epv3_ruck_increment.R}), and it says the weights are already about
+#' right.} Two routes that bound it from opposite sides:
+#' \itemize{
+#'   \item \emph{team}: regressing clearance differential on hitout differential
+#'     over 1,242 matches gives 0.0453 extra clearances per extra hitout (t 2.90,
+#'     and 0.0451 controlling for disposal differential). Half the swing per
+#'     clearance puts a tap at \strong{0.030} points -- \strong{0.4x} what is
+#'     paid. This is an UPPER bound: a good midfield wins hitouts and clearances
+#'     for reasons unrelated to its ruck.
+#'   \item \emph{stoppage}: even granting the ruck every clean tap and netting
+#'     off the half his team would have won anyway, the ceiling is 0.0817 per
+#'     ruck per stoppage -- \strong{1.1x} what is paid.
+#' }
+#' So the honest range is \strong{0.4x to 1.1x}: the box weights are correct to
+#' within their own uncertainty and possibly slightly generous. The striking
+#' number underneath is \code{cor(hitout differential, clearance differential) =
+#' 0.082} -- winning the ruck barely relates to winning the clearance.
+#'
+#' \strong{This constant is therefore CLOSED at 1, not merely unproven.} Both
+#' inflationary routes (3.14x, 7.4x) are refuted and the direct measurement says
+#' no correction is due. Do not re-open without a data source that names the ruck
+#' at the contest -- chains does not, 0.0\% of \code{Centre Bounce} rows carry a
+#' \code{player_id}.
 #'
 #' The old reasoning, kept because the comparison is still the right frame:
 #' where both sides ARE chain rows, `disp_scale` 0.5 + `recv_scale` 0.5 = 1.0,
