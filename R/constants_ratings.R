@@ -77,9 +77,20 @@ EPV_POINTS_SCALE <- 0.919
 #'
 #' \code{EPV_POINTS_SCALE} is ONE global factor for all four v2 channels, and
 #' one factor cannot make each channel read one point per unit when they convert
-#' at very different rates. Measured 2026-08-05 on the v2 frame: recv 0.893,
-#' disp 1.556, contest 0.344 -- and raw v2 \code{epv} conserves to margin at
-#' only \strong{0.4778} as a result. Per-channel scaling takes it to 1.0000.
+#' at very different rates. Raw v2 \code{epv} conserves to margin at only
+#' \strong{0.4778} as a result; the fitted per-channel EPR-layer scales are
+#' recv 0.870, disp 0.502, spoil 2.892, hitout 4.033, and applying them takes
+#' conservation to 1.0000.
+#'
+#' \strong{Correction 2026-08-06.} An earlier version of this note quoted
+#' 0.893 / 1.556 / 0.344 as "the v2 frame". Those are the \emph{v3 ship} frame's
+#' RAW-layer scales and do not belong here. v2's own raw-layer fit is
+#' recv 0.611, disp 0.552, spoil \strong{-0.481} -- and that negative is real,
+#' matching the long-recorded v2 contest coefficient of -0.41 (t -10.47).
+#' \strong{It also means the raw-layer calibration cannot be applied to v2 as
+#' fitted}: multiplying the spoil channel by a negative flips its sign, so a
+#' spoil would subtract value from a player. Raw-layer calibration on v2 needs
+#' that channel fixed or bounded first.
 #'
 #' \code{TRUE} makes \code{centre_epv_by_position()} read
 #' \code{EPV3_POINTS_SCALE} regardless of engine, so the v2 channels get their
@@ -942,6 +953,46 @@ LINEUP_POSITION_GROUP_MAP <- c(
 #'
 #' 21 slots -> 16 groups (13 on-field + INT + SUB + EMERG).
 #' @keywords internal
+#' Remap bench starting slots to the role a player actually filled
+#'
+#' \code{lineup_position} is where a player STARTED, not what he did.
+#' \code{INT} is not a position, and using it as a centring cell compares a
+#' bench-starting specialist with the bench.
+#'
+#' Measured 2026-08-06 (\code{docs/reviews/INT-CENTRING-BUG-2026-08-06.md}):
+#' the \code{INT} cell has a mean per-80 hitout of 0.378 against \code{RK}'s
+#' 5.158. Sean Darcy rucks at 5.44 per 80 -- a normal ruck rate, near Max Gawn's
+#' 5.96 -- but measured against the bench he lands 4.1 standard deviations above
+#' the mean where Gawn lands 0.43 above his. Production has Darcy's
+#' \code{epr_hitout} at 1.018 and Gawn's at −0.152 as a direct result.
+#'
+#' 1,798 interchange player-games in 2026, roughly a quarter of the total, sit in
+#' that cell. Any bench-starting specialist is inflated the same way.
+#'
+#' \strong{This is step ONE only.} \code{centre_epv_by_position()} already
+#' centres on the listed position, but it subtracts a MEAN -- a level shift
+#' cannot undo a within-group ordering error created by standardising against
+#' the wrong cell's sd. The two steps are independent and only this one is wrong.
+#' @keywords internal
+ROLE_REMAP_BENCH <- FALSE
+
+#' Starting slots that are not roles
+#' @keywords internal
+ROLE_BENCH_SLOTS <- c("INT", "SUB", "EMERG")
+
+#' Last-resort slot for a player with no non-bench game on record
+#'
+#' Only reached when a player has never started on the ground in any season. It
+#' collapses such players onto one slot per listed position, which is its own
+#' small distortion -- so the count reaching this tier is reported rather than
+#' hidden.
+#' @keywords internal
+ROLE_FALLBACK_SLOT <- c(
+  KEY_DEFENDER = "FB", MEDIUM_DEFENDER = "BPL", MIDFIELDER = "C",
+  MIDFIELDER_FORWARD = "HFFL", MEDIUM_FORWARD = "HFFL",
+  KEY_FORWARD = "FF", RUCK = "RK"
+)
+
 LINEUP_GROUP_MAP <- c(
   FB   = "FB",
   BPL  = "BP",   BPR  = "BP",

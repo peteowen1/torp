@@ -344,6 +344,86 @@ centre_epv_by_position <- function(pgd, channels = EPV_LEVEL_CENTRE_CHANNELS) {
 #' @param standardise Logical; rescale as well as recentre.
 #' @return Position-adjusted, TOG-scaled channel value.
 #' @keywords internal
+#' Replace a bench starting slot with the role the player actually filled
+#'
+#' \code{lineup_position} records where a player STARTED. \code{INT} is not a
+#' role, and using it as a centring cell measures a bench-starting specialist
+#' against the bench -- see
+#' \code{docs/reviews/INT-CENTRING-BUG-2026-08-06.md}.
+#'
+#' Resolution order, most specific first:
+#' \enumerate{
+#'   \item his modal non-bench slot \strong{this season}
+#'   \item his modal non-bench slot in \strong{any} season
+#'   \item a representative slot for his listed position (\code{ROLE_FALLBACK_SLOT})
+#'   \item unchanged, if even that is unavailable
+#' }
+#'
+#' \strong{Tier 1 uses the whole season, including later rounds.} That is a mild
+#' look-ahead and it is deliberate: the output is a role LABEL, not a
+#' performance measure, and a player's role is close to fixed within a season.
+#' The alternative -- prior rounds only -- leaves every round-1 bench start
+#' unresolvable, which is the case the fix exists for. Stated rather than hidden;
+#' if it ever needs to be leak-free, tier 1 becomes prior-rounds-only and tier 2
+#' absorbs the rest.
+#'
+#' @param slot Character vector of `lineup_position`.
+#' @param player_id,season Same length as `slot`.
+#' @param listed Listed `position_group`, for the tier-3 fallback.
+#' @return `slot` with bench entries replaced where a role could be resolved.
+#' @keywords internal
+.remap_bench_role <- function(slot, player_id, season, listed) {
+  bench <- slot %in% ROLE_BENCH_SLOTS
+  if (!any(bench)) return(slot)
+  # Fail on the actual problem rather than letting a NULL reach data.table's
+  # `by`, which reports "column of 'by' is type NULL" and names neither the
+  # argument nor the caller.
+  for (nm in c("player_id", "season", "listed")) {
+    v <- switch(nm, player_id = player_id, season = season, listed = listed)
+    if (is.null(v) || length(v) != length(slot)) {
+      cli::cli_abort(c(
+        "{.arg {nm}} must be non-NULL and the same length as {.arg slot}.",
+        "x" = "got {if (is.null(v)) 'NULL' else paste0('length ', length(v))} against {length(slot)}."))
+    }
+  }
+  d <- data.table::data.table(i = seq_along(slot), slot = slot,
+                              pid = as.character(player_id),
+                              season = season, listed = as.character(listed),
+                              bench = bench)
+  # Mode of the non-bench slots, computed once per grouping.
+  .mode <- function(x) { x <- x[!is.na(x)]; if (!length(x)) NA_character_ else
+    names(sort(table(x), decreasing = TRUE))[1] }
+  on_ground <- d[bench == FALSE]
+  by_ps <- on_ground[, .(m = .mode(slot)), by = .(pid, season)]
+  by_p  <- on_ground[, .(m = .mode(slot)), by = .(pid)]
+
+  d <- merge(d, by_ps, by = c("pid", "season"), all.x = TRUE, sort = FALSE)
+  data.table::setnames(d, "m", "m_season")
+  d <- merge(d, by_p, by = "pid", all.x = TRUE, sort = FALSE)
+  data.table::setnames(d, "m", "m_career")
+  d[, m_listed := unname(ROLE_FALLBACK_SLOT[listed])]
+
+  d[, out := slot]
+  d[bench == TRUE & !is.na(m_season), out := m_season]
+  d[bench == TRUE & is.na(m_season) & !is.na(m_career), out := m_career]
+  d[bench == TRUE & is.na(m_season) & is.na(m_career) & !is.na(m_listed), out := m_listed]
+  data.table::setorder(d, i)
+
+  n <- sum(bench)
+  t1 <- d[bench == TRUE & !is.na(m_season), .N]
+  t2 <- d[bench == TRUE & is.na(m_season) & !is.na(m_career), .N]
+  t3 <- d[bench == TRUE & is.na(m_season) & is.na(m_career) & !is.na(m_listed), .N]
+  t4 <- n - t1 - t2 - t3
+  cli::cli_alert_info(paste0(
+    "Bench-role remap: {n} bench player-game{?s} ",
+    "({round(100 * n / length(slot), 1)}% of all) -> ",
+    "{t1} by season role, {t2} by career role, {t3} by listed position, ",
+    "{t4} left unresolved."))
+  if (t4 > 0) cli::cli_alert_warning(
+    "{t4} bench player-game{?s} still centred against the bench -- no role on record.")
+  d$out
+}
+
 .position_adjust <- function(p80, tog, pooled_sd, standardise) {
   centred <- p80 - stats::weighted.mean(p80, tog, na.rm = TRUE)
   if (!isTRUE(standardise)) return(centred * tog)
@@ -852,10 +932,20 @@ create_player_game_data <- function(pbp_data = NULL,
   # a column rather than switched inside group_by() so the key that was actually
   # used is inspectable on the returned frame -- an arm you cannot verify from
   # the output is an arm you cannot trust you scored.
+  .slot <- as.character(plyr_gm_df$lineup_position)
+  if (isTRUE(ROLE_REMAP_BENCH)) {
+    # `season` does not exist yet here -- it is created ~40 lines below from
+    # `season.x`, a leftover of an earlier merge. Resolve it rather than reading
+    # a NULL, which surfaced as an opaque data.table "by is type NULL" error.
+    .season <- plyr_gm_df[["season"]] %||% plyr_gm_df[["season.x"]] %||%
+      lubridate::year(plyr_gm_df[["utc_start_time"]])
+    .slot <- .remap_bench_role(.slot, plyr_gm_df$player_id, .season,
+                               plyr_gm_df$position_group)
+  }
   plyr_gm_df$.role_key <- if (isTRUE(ROLE_USE_LINEUP_GROUP)) {
-    .collapse_lineup_group(plyr_gm_df$lineup_position)
+    .collapse_lineup_group(.slot)
   } else {
-    as.character(plyr_gm_df$lineup_position)
+    .slot
   }
   # A wholly-NA key would silently centre every player against the same global
   # cell -- the "guard degrades to a no-op" failure this repo keeps hitting.
