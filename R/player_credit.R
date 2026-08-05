@@ -928,10 +928,15 @@ create_player_game_data <- function(pbp_data = NULL,
   )
 
   # The role-adjustment key. Raw `lineup_position` (21 slots) by default; with
-  # ROLE_USE_LINEUP_GROUP, the mirror-merged `lineup_group` (16). Assigned to
-  # a column rather than switched inside group_by() so the key that was actually
-  # used is inspectable on the returned frame -- an arm you cannot verify from
-  # the output is an arm you cannot trust you scored.
+  # ROLE_USE_LINEUP_GROUP, the mirror-merged `lineup_group` (16); and with
+  # ROLE_REMAP_BENCH, bench starts replaced by the role actually filled.
+  #
+  # NOTE: it is assigned to a column for the group_by, then DROPPED before the
+  # frame is returned -- see the select() below, which explains why. An earlier
+  # version of this comment claimed it stayed "inspectable on the returned
+  # frame"; it does not, and believing that cost a diagnostic on 2026-08-06.
+  # To recover it outside the pipeline, call .remap_bench_role() on the frame's
+  # own lineup_position / player_id / season / position_group.
   .slot <- as.character(plyr_gm_df$lineup_position)
   if (isTRUE(ROLE_REMAP_BENCH)) {
     # `season` does not exist yet here -- it is created ~40 lines below from
