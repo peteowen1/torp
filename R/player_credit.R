@@ -434,6 +434,25 @@ create_player_game_data <- function(pbp_data = NULL,
     dt[, .is_aerial_kick := FALSE]
   }
 
+  # --- Difficulty-weighted disposals, computed before the flat split ---
+  # Same shape as the aerial block: the covered disposals are removed from the
+  # flat EPV_DISP_SCALE/EPV_RECV_SCALE split and paid instead from `difficulty`,
+  # where the share follows P(turnover) rather than being fixed at half. Aerial
+  # contests are excluded because they already have their own surprise term.
+  difficulty <- NULL
+  dt[, .is_diff_disp := FALSE]
+  if (isTRUE(EPV_DIFFICULTY_SPLIT)) {
+    if (is.null(chains)) chains <- load_chains(TRUE)
+    difficulty <- compute_difficulty_credit(chains, pbp_data,
+                                            exclude_keys = aerial_keys)
+    diff_keys <- attr(difficulty, "disposal_keys")
+    if (!is.null(diff_keys) && nrow(diff_keys) > 0) {
+      dt[diff_keys, .is_diff_disp := TRUE, on = .(match_id, display_order)]
+    }
+    cli::cli_alert_info(
+      "Difficulty split: {format(nrow(diff_keys), big.mark = ',')} disposals paid by P(turnover) ({round(100 * mean(dt$.is_diff_disp), 1)}% of PBP rows)")
+  }
+
   # Step 1: Disposal points (grouped by player_id + match_id)
   # For contested kicks (contest_target_id is non-NA), reduce disposal scale
   # from 50% to contest_share (1/3) — the remaining credit goes to target/defender.
@@ -449,6 +468,7 @@ create_player_game_data <- function(pbp_data = NULL,
   # Under v3 an aerial kick's disposal credit is V_pre - exp_pts, not a fixed
   # share of the swing, so it is zeroed here and added back from `aerial`.
   if (v3) dt[.is_aerial_kick == TRUE, .disp_scale := 0]
+  dt[.is_diff_disp == TRUE, .disp_scale := 0]
   disp_dt <- dt[, .(
     player_name = max(player_name, na.rm = TRUE),
     utc_start_time = max(utc_start_time),
@@ -475,7 +495,8 @@ create_player_game_data <- function(pbp_data = NULL,
   # v3 also drops aerial-kick rows here: the player who marks the ball is paid by
   # the contest channel, and paying him a reception share as well would be the
   # double count kick-anchoring exists to remove.
-  recv_dt <- dt[is_contest_target_recv == FALSE & .is_aerial_kick == FALSE, .(
+  recv_dt <- dt[is_contest_target_recv == FALSE & .is_aerial_kick == FALSE &
+                  .is_diff_disp == FALSE, .(
     epv_recv = sum(data.table::fifelse(
       is_intercept_mark,
       ((p$recv_neg_mult * delta_epv * pos_team) + p$recv_neg_offset) * p$recv_intercept_mark_scale,
@@ -508,6 +529,19 @@ create_player_game_data <- function(pbp_data = NULL,
   })
   plyr_gm_df <- merge(plyr_gm_df, wp_dt,
     by = c("player_id", "match_id"), all.x = TRUE, sort = FALSE)
+
+  # --- Step 3b2: difficulty-weighted disposal credit ---
+  # Left-joined like every other channel, so a player who ONLY appears as a
+  # receiver is dropped here exactly as he already is by the Step 3 join. The
+  # columns are always present so the two mutate branches below can add them
+  # unconditionally; they are identically zero when the flag is off.
+  if (is.null(difficulty)) {
+    data.table::set(plyr_gm_df, j = "epv_disp_diff", value = 0)
+    data.table::set(plyr_gm_df, j = "epv_recv_diff", value = 0)
+  } else {
+    plyr_gm_df <- merge(plyr_gm_df, difficulty,
+      by = c("player_id", "match_id"), all.x = TRUE, sort = FALSE)
+  }
 
   # --- Step 3c: Contest credit from aerial contests (3-way EPV split) ---
   # v2 only. v3 supersedes this with the surprise-weighted contest in Step 0 and
@@ -654,9 +688,11 @@ create_player_game_data <- function(pbp_data = NULL,
         spoils_priced = as.integer(tidyr::replace_na(spoils_priced, 0)),
         contests_won = as.integer(tidyr::replace_na(contests_won, 0)),
         contests_lost = as.integer(tidyr::replace_na(contests_lost, 0)),
-        epv_recv = tidyr::replace_na(epv_recv, 0),
+        epv_recv = tidyr::replace_na(epv_recv, 0) +
+                   tidyr::replace_na(epv_recv_diff, 0),
         epv_disp = tidyr::replace_na(epv_disp, 0) +
-                   tidyr::replace_na(epv_disp_aerial, 0),
+                   tidyr::replace_na(epv_disp_aerial, 0) +
+                   tidyr::replace_na(epv_disp_diff, 0),
         epv_cont_aerial = tidyr::replace_na(epv_cont_aerial, 0),
         # cont_stop is the one channel that is not credit/debit: the v2 formula
         # pays EPV_RUCK_CONTEST_WT for every contest ATTENDED, won or lost. With
@@ -717,12 +753,14 @@ create_player_game_data <- function(pbp_data = NULL,
       aerial_def_losses = as.integer(tidyr::replace_na(aerial_def_losses, 0)),
       spoil_epv_ctx = tidyr::replace_na(spoil_epv_ctx, 0),
       spoils_priced = as.integer(tidyr::replace_na(spoils_priced, 0)),
-      epv_recv = tidyr::replace_na(epv_recv, 0) + contest_epv +
+      epv_recv = tidyr::replace_na(epv_recv, 0) +
+                 tidyr::replace_na(epv_recv_diff, 0) + contest_epv +
                  contested_possessions * p$contested_poss_wt + contested_marks * p$contested_marks_wt +
                  ground_ball_gets * p$ground_ball_gets_wt + marks_inside50 * p$marks_inside50_wt +
                  marks * p$marks_wt + uncontested_possessions * p$uncontested_poss_wt +
                  frees_for * p$frees_for_wt,
       epv_disp = tidyr::replace_na(epv_disp, 0) +
+                 tidyr::replace_na(epv_disp_diff, 0) +
                  inside50s * p$inside50s_wt + clangers * p$clangers_wt + score_involvements * p$score_involvements_wt +
                  kicks * p$kicks_wt + handballs * p$handballs_wt + metres_gained * p$metres_gained_wt +
                  turnovers * p$turnovers_wt + goal_assists * p$goal_assists_wt +

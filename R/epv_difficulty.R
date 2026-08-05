@@ -16,11 +16,15 @@
 # credit belongs to the participant whose part was harder, and the counterfactual
 # probability is what says which that was.
 #
-# THE IDENTITY, unchanged from the aerial path -- only its domain widens:
+# THE IDENTITY. Two terms, and they close the row exactly:
 #
-#   delta_epv = (V_pre    - exp_pts )   the DECISION      -> disposer
-#             + (V_branch - V_pre   )   the SURPRISE      -> whoever resolved it
-#             + (V_after  - V_branch)   subsequent play   -> the next row
+#   delta_epv = (V_pre   - exp_pts)   the DECISION   -> disposer
+#             + (V_after - V_pre  )   the SURPRISE   -> split disposer/resolver
+#
+# The aerial path writes this as three terms, splitting the surprise at the
+# fitted branch value and calling the remainder "subsequent play". That third
+# term has no recipient here -- see the long note in score_disposals() -- so it
+# is not split out.
 #
 # with V_pre = (1-p) * V_ret + p * V_turn and p = P(turnover). Difficulty
 # weighting is not added on top; it falls out. On an easy disposal p is small, so
@@ -52,14 +56,68 @@ EPV_DIFFICULTY_DESCS <- c("Kick", "Handball", "Ground Kick")
 #' whole surprise to the receiver is winner-take-all on the only term carrying
 #' skill.
 #'
-#' \strong{0.5 is a placeholder and is the next thing to fit, not a finding.}
-#' Oliver's simultaneous-team formula puts it at
-#' \code{(p_disposer - p_receiver + 1) / 2}, i.e. the participant whose part was
-#' harder takes more. We do not yet estimate the two participants' separate
-#' success probabilities, only the joint one, so a flat half is the honest
-#' interim. Fitting it is worth doing; asserting it is not.
+#' A scalar here keeps the old flat behaviour. Use
+#' \code{EPV_DIFFICULTY_SURPRISE_TABLE} for the measured, non-constant shape.
 #' @keywords internal
 EPV_DIFFICULTY_SURPRISE_SHARE <- 0.5
+
+#' Measured resolver share, by branch and disposal type
+#'
+#' \strong{Not enabled by default}: \code{EPV_DIFFICULTY_SURPRISE_BY_TYPE} gates
+#' it, and while that is \code{FALSE} the scalar above is used unchanged.
+#'
+#' \strong{Where these came from, and what was thrown away to get them.} A first
+#' attempt estimated the share from each role's split-half repeatability of the
+#' whole surprise and returned 0.885 / 0.752. Both are \strong{withdrawn}. The
+#' surprise is signed in the disposing team's frame, so the "receiver" pool
+#' mixes intended teammates (positive) with intercepting opponents (negative),
+#' and a player's mean is dominated by which of those he usually is. Measured
+#' directly: \code{cor(intercept share, mean surprise as receiver) = -0.81},
+#' \eqn{R^2} 0.656. That estimate was a position classifier.
+#'
+#' The numbers below are measured \emph{within} branch, on the residual against
+#' that branch's own fitted value (\code{V_after - V_ret_hat} or
+#' \code{V_after - V_trn_hat}), which has conditional mean zero -- so neither the
+#' situation nor the branch mix can drive them. Two independent estimators,
+#' split-half repeatability and crossed-random-effect variance components, and
+#' the pair is averaged:
+#'
+#' \tabular{lrrr}{
+#'   \strong{cell} \tab \strong{split-half} \tab \strong{var comp} \tab \strong{used} \cr
+#'   retained, handball \tab 0.471 \tab -- \tab 0.50 \cr
+#'   retained, kick     \tab 0.684 \tab -- \tab 0.69 \cr
+#'   turnover, handball \tab 0.524 \tab -- \tab 0.52 \cr
+#'   turnover, kick     \tab 0.801 \tab -- \tab 0.80 \cr
+#'   retained, pooled   \tab 0.659 \tab 0.704 \tab -- \cr
+#'   turnover, pooled   \tab 0.792 \tab 0.819 \tab -- \cr
+#' }
+#'
+#' The handball cells sit at ~0.5 and the kick cells well above it, which is
+#' why this is a table and not a better scalar: a handball's post-state is
+#' essentially settled by the handball, whereas a kick's depends heavily on what
+#' the receiver does in the air. One constant is the wrong \emph{shape}, not
+#' merely the wrong value.
+#'
+#' \strong{Known limitation.} The residual is situation-free only with respect to
+#' what the branch models see (position, kick length, forward gain, goal
+#' distance, \code{exp_pts}, handball flag, inside-50 flag). A player who
+#' habitually receives in contexts those terms under-predict -- leading into
+#' space, one-out -- earns a repeatable positive residual that is context rather
+#' than skill. That inflates the resolver side of every cell by an unknown
+#' amount, so these are upper-ish estimates, not point truth.
+#'
+#' Changing the share is a pure transfer between \code{epv_disp} and
+#' \code{epv_recv} within a row, so it cannot affect conservation -- it is
+#' settled on player separation, not on the margin.
+#' @keywords internal
+EPV_DIFFICULTY_SURPRISE_TABLE <- c(
+  retained_handball = 0.50, retained_kick = 0.69,
+  turnover_handball = 0.52, turnover_kick = 0.80
+)
+
+#' Use the measured share table rather than the flat scalar
+#' @keywords internal
+EPV_DIFFICULTY_SURPRISE_BY_TYPE <- FALSE
 
 #' Build the disposal-outcome table from chains
 #'
@@ -190,8 +248,40 @@ score_disposals <- function(de, models) {
   # So the surprise is SPLIT rather than handed whole to whoever resolved it.
   # Giving it all to the resolver is winner-take-all on the one term that
   # carries the skill, which is the specific error Oliver's essays are about.
-  d[, surprise := data.table::fifelse(turnover, V_trn_hat - V_pre, V_ret_hat - V_pre)]
-  ss <- EPV_DIFFICULTY_SURPRISE_SHARE
+  # The surprise is measured against what ACTUALLY happened (`V_after`), not
+  # against the fitted value of the branch that occurred (`V_ret_hat` /
+  # `V_trn_hat`).
+  #
+  # *** THIS IS A CORRECTION, AND IT IS THE WHOLE REASON THE FIRST BUILD DID NOT
+  # CONSERVE. *** Using the branch fit leaves a third term, `V_after - V_branch`,
+  # unpaid. The design comment above calls that "subsequent play -> the next
+  # row", and that is simply not what it is: `V_after` is `exp_pts + delta_epv`,
+  # which is the state at the NEXT event, so the next row's own decomposition
+  # starts from `V_after` and never touches this gap. Nothing downstream ever
+  # collects it. Measured, it was 64.2% of gross |delta_epv| with sd 0.790 --
+  # the largest of the three terms, paid to nobody, which is why the disposal
+  # channel converted to margin at -0.400.
+  #
+  # Against `V_after` the row closes exactly:
+  #   (V_pre - exp_pts) + (V_after - V_pre) = delta_epv
+  # and the difficulty weighting is untouched, because it lives entirely in
+  # `V_pre` -- the branch models are still what produce it.
+  d[, surprise := V_after - V_pre]
+  # `ss` is a per-row vector, not a scalar, whenever the measured table is on.
+  # Ground Kick has no measured cell of its own -- it is 1.8% of disposals and
+  # the split-half n there is too small to fit one -- so it takes the kick cell,
+  # which is what it is.
+  ss <- if (isTRUE(EPV_DIFFICULTY_SURPRISE_BY_TYPE)) {
+    tb <- EPV_DIFFICULTY_SURPRISE_TABLE
+    key <- paste0(data.table::fifelse(d$turnover, "turnover", "retained"), "_",
+                  data.table::fifelse(d$description == "Handball", "handball", "kick"))
+    unname(tb[key])
+  } else {
+    EPV_DIFFICULTY_SURPRISE_SHARE
+  }
+  if (anyNA(ss)) {
+    cli::cli_abort("EPV_DIFFICULTY_SURPRISE_TABLE is missing {sum(is.na(ss))} cell{?s} the data needs.")
+  }
   d[, `:=`(
     disp_credit = (V_pre - exp_pts) + (1 - ss) * surprise,
     # Sign matters here and it was wrong on the first build. `V_after` and every
@@ -210,12 +300,23 @@ score_disposals <- function(de, models) {
 #' @param chains Raw chains.
 #' @param pbp_data Clean PBP.
 #' @param leak_safe Fit each season on strictly earlier seasons.
+#' @param exclude_keys Optional \code{(match_id, display_order)} table of
+#'   disposals already paid by another channel -- under v3 the aerial contests,
+#'   which have their own surprise term. Leaving them in would pay the same
+#'   swing twice.
 #' @return A data.table of \code{player_id}, \code{match_id},
 #'   \code{epv_disp_diff}, \code{epv_recv_diff}, plus the keys of the disposals
 #'   consumed so the caller can exclude them from the flat split.
 #' @keywords internal
-compute_difficulty_credit <- function(chains, pbp_data, leak_safe = TRUE) {
+compute_difficulty_credit <- function(chains, pbp_data, leak_safe = TRUE,
+                                      exclude_keys = NULL) {
   de <- build_disposal_events(chains, pbp_data)
+  if (!is.null(exclude_keys) && nrow(exclude_keys) > 0 && nrow(de) > 0) {
+    n0 <- nrow(de)
+    de <- de[!exclude_keys, on = .(match_id, display_order)]
+    cli::cli_alert_info(
+      "Difficulty split: {format(n0 - nrow(de), big.mark = ',')} disposal{?s} left to the aerial-contest channel.")
+  }
   if (nrow(de) == 0) {
     return(data.table::data.table(player_id = character(), match_id = character(),
                                   epv_disp_diff = numeric(), epv_recv_diff = numeric()))
