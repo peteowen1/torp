@@ -305,102 +305,55 @@ EPV3_SUB_SCALE <- c(cont_aerial = 1, cont_stop = 1)
 
 #' Correction factor sizing the ruck channel to the swing it stands in for
 #'
-#' \strong{1 = production, i.e. inert. KEEP IT AT 1 -- the 3.14 below is
-#' refuted.} Left documented rather than deleted because the refutation is the
-#' useful part.
+#' \strong{1 = production. The 3.14x correction is NOT applied, but the reason
+#' is NOT the one written here on 2026-08-04 -- that entry was wrong and is
+#' retracted below.}
 #'
-#' \strong{*** THE 0.3925 SWING FIGURE IS AN ARTIFACT (measured 2026-08-04,
-#' \code{epv3_stoppage_swing.R}). ***} \code{exp_pts} is set to \strong{exactly
-#' 0.0000} on every \code{Centre Bounce} row -- it is a reset state -- so that
-#' row's \code{delta_epv} is purely the step back off an artificial zero. It
-#' reads +0.7912 and is positive on \strong{99.6\%} of bounces. \code{Ball Up
-#' Call}, a real stoppage in live play, reads +0.0566 and is positive 52.6\% of
-#' the time, which is what a genuine contest looks like.
+#' \strong{RETRACTION (2026-08-05).} This constant was documented on 2026-08-04
+#' as resting on an artifact: \code{exp_pts} is exactly 0.0000 on every
+#' \code{Centre Bounce} row, and the +0.7912 \code{delta_epv} was called a
+#' "scoreboard reset" that nobody created. Pete pushed back and he was right.
 #'
-#' Weighting the two by count: (0.7912 x 31,392 + 0.0566 x 35,492) / 66,884 =
-#' \strong{0.401}, i.e. the 0.3925 figure is ~93\% centre-bounce reset. Nobody
-#' created that value, so no ruck can be paid for it.
+#' A centre bounce IS a neutral state -- neither team has the ball -- so
+#' \code{exp_pts = 0} is the correct value by symmetry, and winning the
+#' clearance genuinely moves the winning team to +0.79. The value is real. The
+#' gatherer correctly receives \code{EPV_RECV_SCALE} of it (0.3956 per bounce,
+#' 10.01 points per match), and the DISPOSER half has nobody to go to because
+#' the ball came from the umpire. Measured unallocated remainder:
+#' \strong{0.3956 per centre bounce} against the documented 0.3925. The premise
+#' behind 3.14x is sound; the "artifact" verdict was not.
 #'
-#' \strong{What a stoppage IS worth, and why 1 is right.} The resulting state is
-#' worth +0.661 to the team that wins it (\code{Ball Up Call}, sd 0.916), so the
-#' swing is ~1.32 points against the 0.0742 the box pays a tap-winning ruck. That
-#' looks like an 18x under-payment and is not, because the tap does not decide
-#' possession: \code{Gather From Hitout} is only 24.7\% of the 66,853 resolved
-#' stoppages, against \code{Loose Ball Get} 30.5\% and \code{Hard Ball Get}
-#' 19.6\%. Three quarters are settled on the ground. The ruck owns only the
-#' INCREMENT in possession probability that winning the tap buys.
+#' The one nuance that survives: \code{exp_pts} on \code{Centre Bounce} is
+#' hard-coded (sd exactly 0, 100\% exactly zero) where every other description
+#' has a distribution -- \code{Ball Up Call} reads sd 0.84. So the 0 is a
+#' pipeline convention rather than an EP-model estimate. Defensible, but the
+#' +0.79 depends on it.
 #'
-#' \strong{That increment is now measured (2026-08-04,
-#' \code{epv3_ruck_increment.R}), and it says the weights are already about
-#' right.} Two routes that bound it from opposite sides:
-#' \itemize{
-#'   \item \emph{team}: regressing clearance differential on hitout differential
-#'     over 1,242 matches gives 0.0453 extra clearances per extra hitout (t 2.90,
-#'     and 0.0451 controlling for disposal differential). Half the swing per
-#'     clearance puts a tap at \strong{0.030} points -- \strong{0.4x} what is
-#'     paid. This is an UPPER bound: a good midfield wins hitouts and clearances
-#'     for reasons unrelated to its ruck.
-#'   \item \emph{stoppage}: even granting the ruck every clean tap and netting
-#'     off the half his team would have won anyway, the ceiling is 0.0817 per
-#'     ruck per stoppage -- \strong{1.1x} what is paid.
-#' }
-#' So the honest range is \strong{0.4x to 1.1x}: the box weights are correct to
-#' within their own uncertainty and possibly slightly generous. The striking
-#' number underneath is \code{cor(hitout differential, clearance differential) =
-#' 0.082} -- winning the ruck barely relates to winning the clearance.
+#' \strong{So why is the constant still 1?} Because "there is 0.3956 per bounce
+#' unallocated" and "the RUCK should be paid it" are different claims, and only
+#' the first is established. The increment measurement
+#' (\code{epv3_ruck_increment.R}) says the ruck causes little of the outcome:
+#' 0.0453 extra clearances per extra hitout over 1,242 matches (t 2.90, and
+#' 0.0451 controlling for disposal differential), which prices a tap at
+#' \strong{0.030 points against the 0.0742 already paid -- 0.4x}. The most
+#' generous stoppage-side bound is 1.1x. Underneath it,
+#' \code{cor(hitout differential, clearance differential) = 0.082}: winning the
+#' ruck barely relates to winning the clearance.
 #'
-#' \strong{This constant is therefore CLOSED at 1, not merely unproven.} Both
-#' inflationary routes (3.14x, 7.4x) are refuted and the direct measurement says
-#' no correction is due. Do not re-open without a data source that names the ruck
-#' at the contest -- chains does not, 0.0\% of \code{Centre Bounce} rows carry a
-#' \code{player_id}.
+#' \strong{The reconciliation, and it points somewhere else entirely.} There is
+#' ~10 points per match of genuinely unallocated stoppage value. It is real, and
+#' it mostly does NOT belong to the ruck -- it belongs to the MIDFIELDER who
+#' actually wins the ball, who today receives only the receiver's 50\% because a
+#' stoppage has no disposer to pay the other half. Raising this constant would
+#' hand the midfielder's share to the ruck. The open question is not "how much
+#' more should rucks get" but "should a stoppage clearance pay 100\% to the
+#' winner rather than 50\%".
 #'
-#' The old reasoning, kept because the comparison is still the right frame:
-#' where both sides ARE chain rows, `disp_scale` 0.5 + `recv_scale` 0.5 = 1.0,
-#' so aerial marks allocate exactly 100\%. Rucks are the one case where the
-#' swing is wholly unallocated and a flat constant is the correct instrument --
-#' the constant simply has to equal the swing. The error was in what the swing
-#' was measured as, not in the shape of the argument.
-#'
-#' \strong{Why this reaches the published rating rather than being centred away.}
-#' `EPV_POSITION_STANDARDISE` equalises between-position spread WITHIN a channel, at
-#' that channel's pooled SD -- and the channels have very different scales
-#' (measured post-standardisation: disp 7.69, recv 5.34, spoil 1.14). Raising a
-#' channel's level raises its pooled SD, which standardisation then propagates to
-#' every position. Note `hitout` is excluded from
-#' `EPV_STANDARDISE_CHANNELS` anyway, so this channel is not rescaled at all.
-#'
-#' \strong{The "four independent routes agree" claim no longer stands.} It read:
-#' this ledger 3.14x, the duel price at 1/3 share 4.0x and at 1/2 share 6.0x, and
-#' ws13's regression slope 7.22x. Two of the four are now known to be unsound:
-#' \itemize{
-#'   \item the 3.14x ledger is the artifact above;
-#'   \item the regression route (7.22x, and 7.50x when refitted 2026-08-04) falls
-#'     to 4.39 the moment PSR is in the regression, so ~40\% of it is team
-#'     strength the ruck merely travels with. It also reads 4.94 on the first
-#'     half of the matches and 10.09 on the second -- a 2x swing, i.e. a fit
-#'     rather than a constant. And \code{epv_cont_stop} is a linear function of
-#'     hitout COUNTS by construction, so amplifying it 7.5x made raw hitout
-#'     volume 12\% of the rating and filled the contest leaderboard with
-#'     high-volume ruckmen rather than good ones.
-#' }
-#' Agreement between routes that share a confound is not independent evidence.
-#'
-#' \strong{Caveats that must be settled before this goes live.}
-#' \itemize{
-#'   \item \strong{Not scoreable by the offline harness.} These weights act in
-#'     \code{add_player_credit()} during pgd CONSTRUCTION, upstream of
-#'     \code{build_ratings_history()}. Scoring it needs a pgd rebuild from PBP, the
-#'     same limitation that made `ROLE_USE_LINEUP_GROUP` unreachable in ws10.
-#'   \item \strong{The internal split is unmeasured.} Scaling all three keeps the
-#'     plain-vs-to-advantage ratio as it is. A to-advantage tap probably is worth more
-#'     than an average contest, but by how much has not been measured, and at 3.14x a
-#'     to-advantage tap earns 0.709 against an average contest swing of 0.3925.
-#'   \item \strong{`adjust_epv_for_opponents()` is not linear in one channel} -- it
-#'     forms `.abs_total` as a sum of `abs()` across components -- so the
-#'     "scaling a channel scales its rating by exactly k" shortcut (plan §6.6) is an
-#'     approximation here, not an identity.
-#' }
+#' The regression route to a larger constant (7.22x historically, 7.50x refitted
+#' 2026-08-04) remains rejected on its own evidence: it falls to 4.39 under PSR
+#' control, reads 4.94 then 10.09 split-half, and \code{epv_cont_stop} is a
+#' linear function of hitout COUNTS (\code{cor 0.9900}), so applying it made raw
+#' hitout volume 12\% of the rating.
 #' @keywords internal
 EPV_RUCK_SWING_SCALE <- 1
 

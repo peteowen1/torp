@@ -136,7 +136,7 @@ build_aerial_contests <- function(chains, pbp_data) {
   for (k in 1:5) {
     d <- kk[[paste0(".f", k, "_description")]]
     hit <- !is.na(kk$.olag) & k < kk$.olag & is.na(tpid) &
-      d %chin% CHAINS_CONTEST_TARGET_DESCS
+      d %chin% EPV3_CONTEST_TARGET_DESCS
     tpid[hit] <- kk[[paste0(".f", k, "_player_id")]][hit]
   }
   kk[, target_pid := tpid]
