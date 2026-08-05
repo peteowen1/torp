@@ -496,7 +496,18 @@ compute_aerial_credit <- function(chains, pbp_data, leak_safe = TRUE,
 
   parts <- list(win[, .(player_id, match_id, cont, won, lost = 0L)],
                 los[, .(player_id, match_id, cont, won = 0L, lost)])
-  if (alloc %in% c("team", "prorata", "ledger")) {
+  if (identical(alloc, "mirror")) {
+    # Positional matchup rather than a flat smear. The weights are estimated
+    # from the duels chains DOES name and symmetrised, because only the
+    # defence-win direction is ever logged. See epv_v3_mirror.R.
+    pos_key <- unique(data.table::as.data.table(chains)[
+      !is.na(player_id) & !is.na(player_position),
+      .(match_id, player_id, pos = player_position)])
+    wts <- build_mirror_weights(scored, pos_key)
+    al <- allocate_by_mirror(scored, chains, wts)
+    parts <- c(parts, list(al[, .(player_id, match_id, cont = cont_alloc,
+                                  won = 0L, lost = 0L)]))
+  } else if (alloc %in% c("team", "prorata", "ledger")) {
     descs <- switch(alloc, team = "team", ledger = "ledger", exposure_descs)
     al <- allocate_contest_losses(scored, chains, half, descs, player_stats)
     parts <- c(parts, list(al[, .(player_id, match_id, cont = cont_alloc,
