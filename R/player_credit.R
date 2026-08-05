@@ -242,7 +242,14 @@ centre_epv_by_position <- function(pgd, channels = EPV_LEVEL_CENTRE_CHANNELS) {
   # verified at 0.919 instead of 1.000 when applied, because the 0.919 had
   # disappeared underneath it. Under v3 the per-channel vector is authoritative
   # even when it is all 1s; all 1s means no scaling, not "fall back to v2's".
-  use_v3_scale <- identical(attr(pgd, "epv_engine"), "v3") &&
+  #
+  # EPV_PER_CHANNEL_POINTS_SCALE opens the same path to v2. v2's one global
+  # 0.919 cannot make four channels that convert at 0.893 / 1.556 / 0.344 each
+  # read one point per unit, and raw v2 `epv` conserves at only 0.4778 because
+  # of it. The vector is engine-agnostic despite its name, and `lbl` below
+  # already maps all four v2 channels onto it.
+  use_v3_scale <- (identical(attr(pgd, "epv_engine"), "v3") ||
+                     isTRUE(EPV_PER_CHANNEL_POINTS_SCALE)) &&
     exists("EPV3_POINTS_SCALE")
   # Defined unconditionally so the residual-expectation block below can use it
   # without depending on which branch ran.

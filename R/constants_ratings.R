@@ -73,6 +73,26 @@ EPR_PRIOR_GAMES_HITOUT <- 3.0000
 #' @keywords internal
 EPV_POINTS_SCALE <- 0.919
 
+#' Use per-channel points scaling under v2 as well as v3
+#'
+#' \code{EPV_POINTS_SCALE} is ONE global factor for all four v2 channels, and
+#' one factor cannot make each channel read one point per unit when they convert
+#' at very different rates. Measured 2026-08-05 on the v2 frame: recv 0.893,
+#' disp 1.556, contest 0.344 -- and raw v2 \code{epv} conserves to margin at
+#' only \strong{0.4778} as a result. Per-channel scaling takes it to 1.0000.
+#'
+#' \code{TRUE} makes \code{centre_epv_by_position()} read
+#' \code{EPV3_POINTS_SCALE} regardless of engine, so the v2 channels get their
+#' own factors. The name says v3 for historical reasons; the vector is engine
+#' agnostic and \code{lbl} already maps all four v2 channels onto it.
+#'
+#' \strong{Set \code{EPR_PRIOR_RATE_*} to match.} Shrinkage pulls toward those
+#' priors, so scaling a channel without scaling its prior changes the amount of
+#' shrinkage rather than just the units -- the same coupling
+#' \code{EPV_POINTS_SCALE} already documents.
+#' @keywords internal
+EPV_PER_CHANNEL_POINTS_SCALE <- FALSE
+
 #' Which EPV engine computes the channels
 #'
 #' \code{"v2"} is production and is the default: box-score weights plus a
