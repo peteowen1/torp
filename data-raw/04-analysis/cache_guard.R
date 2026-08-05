@@ -41,12 +41,39 @@ code_fingerprint <- function(pkg_dir = "C:/dev/torpverse/torp") {
   substr(digest::digest(paste(basename(files), body, collapse = "\n\n"), algo = "sha1"), 1, 12)
 }
 
+#' Fingerprint this run pinned to, set on the first cached_frame() call
+#' @keywords internal
+.run_fingerprint <- local({ v <- NULL; function(set = NULL) {
+  if (!is.null(set)) v <<- set
+  v
+} })
+
 cached_frame <- function(tag, builder, on_stale = c("rebuild", "warn", "abort"),
                          dir = .cache_dir()) {
   on_stale <- match.arg(on_stale)
   f <- file.path(dir, paste0(tag, ".parquet"))
   stamp_f <- file.path(dir, paste0(tag, ".fingerprint"))
   now <- code_fingerprint()
+
+  # A GAP THE ORIGINAL VERSION HAD. The stamp check only fires when a cached
+  # file already exists, so it protects against reusing a stale frame -- and not
+  # at all against a multi-arm run whose arms are BUILT by different code. A
+  # three-arm gate takes ~100 minutes; editing anything under torp/R/ while it
+  # runs silently gives arm 3 a different engine from arms 1 and 2, every file
+  # is freshly built, and nothing above would say a word.
+  #
+  # So the first call pins the run's fingerprint and every later call must match
+  # it. This is a hard abort regardless of `on_stale`: `on_stale` is about
+  # trusting old data, and this is about a run contradicting itself.
+  pinned <- .run_fingerprint()
+  if (is.null(pinned)) {
+    .run_fingerprint(now)
+  } else if (!identical(pinned, now)) {
+    cli::cli_abort(c(
+      "Code changed mid-run: this run started on fingerprint {pinned}, '{tag}' is being built on {now}.",
+      "x" = "Arms built by different code cannot be compared. Restart the run.",
+      "i" = "Editing anything under torp/R/ while a multi-arm gate is running causes this."))
+  }
 
   if (file.exists(f)) {
     was <- if (file.exists(stamp_f)) readLines(stamp_f, warn = FALSE)[1] else NA_character_
