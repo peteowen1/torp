@@ -39,8 +39,6 @@
 
 suppressMessages({ library(data.table) })
 
-BM_BROWNLOW_CSV <- "C:/dev/brownlow/data/brownlow_datathon_dataset.csv"
-
 #' Per-player-season value, and the position it belongs to
 #'
 #' Everything downstream centres within (position, season). Pooled versions of
@@ -113,34 +111,19 @@ BM_BROWNLOW_CSV <- "C:/dev/brownlow/data/brownlow_datathon_dataset.csv"
        cor_cposs = cnt("epv_recv", "contested_possessions"))
 }
 
-#' C. EXTERNAL — Brownlow votes
-#'
-#' INDEPENDENT of our data-generating process, which is its whole value, and
-#' HEAVILY BIASED toward midfielders and disposal-winners, which is why it must
-#' never be an objective: optimising toward it would directly undo the defender
-#' work. Reported pooled AND within position, because the gap between the two is
-#' the bias showing.
-#'
-#' Joined on name + season because torp and the datathon set use different
-#' player_id spaces. The match rate is reported; below 60% the result is
-#' suppressed rather than quoted.
-.bm_brownlow <- function(s, csv = BM_BROWNLOW_CSV) {
-  if (!file.exists(csv)) return(list(available = FALSE, why = "csv not found"))
-  b <- tryCatch(fread(csv, select = c("season", "player_first_name",
-                                      "player_last_name", "brownlow_votes")),
-                error = function(e) NULL)
-  if (is.null(b)) return(list(available = FALSE, why = "unreadable"))
-  b[, nm := tolower(paste(player_first_name, player_last_name))]
-  bv <- b[, .(votes = sum(brownlow_votes, na.rm = TRUE)), by = .(nm, season)]
-  x <- copy(s)[, nm := tolower(player_name)]
-  m <- merge(x, bv, by = c("nm", "season"))
-  rate <- nrow(m) / nrow(x)
-  if (rate < 0.6) return(list(available = FALSE,
-                              why = sprintf("only %.0f%% of player-seasons matched by name", 100 * rate)))
-  list(available = TRUE, n = nrow(m), match_rate = round(rate, 3),
-       spearman_pooled = round(stats::cor(m$rate, m$votes, method = "spearman"), 4),
-       spearman_within = round(stats::cor(m$rate_c, m$votes, method = "spearman"), 4))
-}
+# C. EXTERNAL — REMOVED 2026-08-05, at Pete's instruction, and he is right.
+#
+# Brownlow votes are three umpires' opinion of who played well. That is not a
+# measurement of a player's contribution to his team's score, and this metric
+# exists to measure exactly that. Worse, the votes are heavily midfielder- and
+# disposal-biased, so any weight on them pulls directly against the defender
+# work this program exists to do. The block said so in its own comment and kept
+# the metric anyway, which was the wrong call.
+#
+# Replaced by bm_epr_gate() in benchmark_epr_gate.R: does a team's lineup
+# rating predict that team's points, with team fixed effects, so the question is
+# "when THIS club fields better-rated players, does it score more" rather than
+# "do good clubs win".
 
 #' D. FACE VALIDITY — who is on top, and is every position represented
 .bm_faces <- function(s) {
@@ -174,7 +157,7 @@ benchmark_rating <- function(pgd, label, results = NULL, value_col = "epv",
   out <- list(label = label, n_player_games = nrow(pgd), n_player_seasons = nrow(s),
               descriptive = .bm_conservation(pgd, results),
               skill = .bm_skill(s), stability = .bm_stability(pgd, s),
-              external = .bm_brownlow(s), faces = .bm_faces(s))
+              faces = .bm_faces(s))
   class(out) <- c("torp_benchmark", "list")
   out
 }
@@ -201,14 +184,6 @@ print.torp_benchmark <- function(x, ...) {
   cat(sprintf("    count-dependence disposals %.3f  marks %.3f  cont.poss %.3f\n",
               x$stability$cor_disposals, x$stability$cor_marks, x$stability$cor_cposs))
   cat("                     (nearer zero is better -- an event count is not a skill)\n")
-  e <- x$external
-  cat("\n  EXTERNAL (Brownlow votes -- independent, midfielder-biased)\n")
-  if (isTRUE(e$available)) {
-    cat(sprintf("    spearman pooled  %.4f   within position %.4f   (n %d, %.0f%% matched)\n",
-                e$spearman_pooled, e$spearman_within, e$n, 100 * e$match_rate))
-    cat("                     A change that lifts pooled but not within-position\n")
-    cat("                     has moved toward the umpires' bias, not toward truth.\n")
-  } else cat("    unavailable:", e$why, "\n")
   cat("\n  FACE VALIDITY (current season)\n")
   cat("    top 10:", paste(x$faces$top10, collapse = ", "), "\n")
   cat("    top 40 by position:\n")
@@ -232,12 +207,10 @@ compare_benchmarks <- function(a, b) {
   }
   PATHS <- list(c("descriptive", "total"), c("descriptive", "share_contest"),
                 c("skill", "skill"), c("stability", "within_r"),
-                c("stability", "cor_disposals"), c("stability", "cor_cposs"),
-                c("external", "spearman_within"))
+                c("stability", "cor_disposals"), c("stability", "cor_cposs"))
   rows <- data.table(
     metric = c("conservation total", "contest signal share %", "skill score",
-               "within-position r", "cor(disp, disposals)", "cor(recv, cont.poss)",
-               "brownlow spearman (within pos)"),
+               "within-position r", "cor(disp, disposals)", "cor(recv, cont.poss)"),
     a = vapply(PATHS, function(p) f(a, p), 0),
     b = vapply(PATHS, function(p) f(b, p), 0))
   setnames(rows, c("a", "b"), c(a$label, b$label))
