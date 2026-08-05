@@ -48,6 +48,20 @@ code_fingerprint <- function(pkg_dir = "C:/dev/torpverse/torp") {
   v
 } })
 
+#' Read a parquet without leaving it memory-mapped
+#'
+#' `arrow::read_parquet()` memory-maps by default, and on Windows a mapped file
+#' cannot be overwritten -- "the requested operation cannot be performed on a
+#' file with a user-mapped section open". That bites exactly here: reuse a frame
+#' early in a session, then rebuild the same tag after a fingerprint change, and
+#' the write fails with an IO error that looks nothing like a cache problem.
+#' @keywords internal
+.read_unmapped <- function(f) {
+  con <- arrow::ReadableFile$create(f)
+  on.exit(con$close(), add = TRUE)
+  arrow::read_parquet(con)
+}
+
 cached_frame <- function(tag, builder, on_stale = c("rebuild", "warn", "abort"),
                          dir = .cache_dir()) {
   on_stale <- match.arg(on_stale)
@@ -79,7 +93,7 @@ cached_frame <- function(tag, builder, on_stale = c("rebuild", "warn", "abort"),
     was <- if (file.exists(stamp_f)) readLines(stamp_f, warn = FALSE)[1] else NA_character_
     if (!is.na(was) && identical(was, now)) {
       cli::cli_alert_success("Reusing {tag} (code fingerprint {now} matches)")
-      return(arrow::read_parquet(f))
+      return(.read_unmapped(f))
     }
     msg <- if (is.na(was)) {
       paste0("Cached frame '", tag, "' has NO fingerprint -- it predates this guard ",
@@ -93,7 +107,7 @@ cached_frame <- function(tag, builder, on_stale = c("rebuild", "warn", "abort"),
     }
     if (on_stale == "warn") {
       cli::cli_warn(c(msg, "!" = "Reusing it anyway -- any comparison against a freshly built arm is CONFOUNDED."))
-      return(arrow::read_parquet(f))
+      return(.read_unmapped(f))
     }
     cli::cli_alert_warning(paste0(msg, " Rebuilding."))
   }
