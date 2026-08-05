@@ -443,8 +443,25 @@ create_player_game_data <- function(pbp_data = NULL,
   dt[, .is_diff_disp := FALSE]
   if (isTRUE(EPV_DIFFICULTY_SPLIT)) {
     if (is.null(chains)) chains <- load_chains(TRUE)
+    # WHAT IS ALREADY PAID DIFFERS BY ENGINE, and getting this wrong
+    # double-counts silently rather than erroring.
+    #
+    #   v3  aerial contests carry their own surprise term (`aerial`)
+    #   v2  contested kicks are paid by `contest_epv`, a 3-way split added into
+    #       epv_recv further down -- and v2 ALSO reduces .disp_scale to 1/3 on
+    #       those rows for the same reason
+    #
+    # Either way the covered rows must not also be paid by the difficulty
+    # split. Under v2 that exclusion did not exist until 2026-08-05, because
+    # the split had only ever been run under v3.
+    .excl <- aerial_keys
+    if (!v3 && "contest_target_id" %in% names(dt)) {
+      .excl <- unique(dt[!is.na(contest_target_id), .(match_id, display_order)])
+      cli::cli_alert_info(
+        "Difficulty split (v2): {format(nrow(.excl), big.mark = ',')} contested kick{?s} left to `contest_epv`.")
+    }
     difficulty <- compute_difficulty_credit(chains, pbp_data,
-                                            exclude_keys = aerial_keys)
+                                            exclude_keys = .excl)
     diff_keys <- attr(difficulty, "disposal_keys")
     if (!is.null(diff_keys) && nrow(diff_keys) > 0) {
       dt[diff_keys, .is_diff_disp := TRUE, on = .(match_id, display_order)]
