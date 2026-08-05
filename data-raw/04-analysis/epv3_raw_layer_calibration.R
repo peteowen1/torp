@@ -1,4 +1,4 @@
-# Can raw EPV be calibrated per channel AND still conserve?
+# Calibrating raw EPV per channel: what it costs, and who it moves.
 #
 # THE TENSION THIS TESTS. Pete's second criterion is "1 point ~ 1 point". Under
 # the difficulty split the TOTAL is there -- raw epv converts to margin at
@@ -15,16 +15,22 @@
 # The raw per-game frame, which is the natural descriptive product ("what did
 # this player do in this game, in points"), has never been calibrated.
 #
-# THE CATCH, and it is the whole question. Rescaling each channel by 1/coef makes
-# every channel read 1.000 by construction. It does NOT follow that the SUM still
-# converts at 1: the multivariate fit is over three correlated regressors, and
-# summing rescaled channels is a different quantity from the fitted value. If
-# per-channel calibration costs total conservation, the two criteria are in
-# conflict and Pete has a choice to make rather than a fix to apply.
+# THE CATCH -- AND THE FIRST VERSION OF THIS SCRIPT GOT IT BACKWARDS. The scale
+# that makes a channel read 1.000 is its COEFFICIENT, not the reciprocal. If
+# margin = b*x then x' = b*x gives margin = x', coefficient exactly 1. Dividing
+# by b does the opposite: it inflates whichever channel already under-converts.
+# Contest went UP 2.72x, the sum became 89% contest, and the resulting
+# "per-channel calibration destroys the total, 0.9936 -> 0.3063" was an artifact
+# of running the inverse of the intended operation. That conclusion is withdrawn.
 #
-# Reported both ways, plus what the rescale does to each channel's spread --
-# a channel scaled up 2.7x is 2.7x more prominent in any leaderboard built from
-# it, which is a product decision, not just an arithmetic one.
+# With the right scale there is NO tension to test: the sum of coefficient-scaled
+# channels IS the OLS fitted value, and regressing an outcome on its own fitted
+# values gives 1.000 by construction. Both criteria hold at once.
+#
+# So the real question is not conservation but what the rescale does to the
+# RANKING. Contest scales DOWN by its coefficient -- it has the most spread and
+# the least margin signal -- and that changes who tops the leaderboard, which is
+# a product decision rather than an arithmetic one.
 #
 # ~2 min, cached frames only.
 
@@ -80,7 +86,18 @@ for (nm in names(ARMS)) {
   c_raw <- coef(stats::lm(margin ~ 0 + tot_raw, data = m))[[1]]
 
   # Total, with each channel rescaled to read 1.000.
-  s <- 1 / co
+  #
+  # THE SCALE IS THE COEFFICIENT, NOT ITS RECIPROCAL, and the first version of
+  # this script had it backwards. If margin = b*x, then defining x' = b*x gives
+  # margin = x', i.e. a coefficient of exactly 1. Dividing by b instead inflates
+  # the channels that already under-convert -- contest went UP 2.72x, the sum
+  # became 89% contest, and the "per-channel calibration destroys the total"
+  # conclusion was an artifact of doing the inverse of the intended operation.
+  #
+  # With the right scale the sum IS the OLS fitted value, and regressing the
+  # outcome on its own fitted values gives 1.000 by construction. So the two
+  # criteria cannot conflict -- they are satisfied by the same numbers.
+  s <- co
   m[, tot_cal := Reduce(`+`, lapply(CH, function(v) s[[v]] * m[[paste0("d_", v)]]))]
   c_cal <- coef(stats::lm(margin ~ 0 + tot_cal, data = m))[[1]]
 
@@ -129,10 +146,10 @@ for (nm in names(ARMS)) {
 
 say("")
 say("=== HOW TO DECIDE ===")
-say("If the calibrated total still converts near 1, per-channel calibration is")
-say("free and should be applied to the descriptive product -- a contest number")
-say("that is not in points is a number nobody can interpret.")
-say("If it does not, 'every channel reads 1' and 'the total reads 1' are")
-say("genuinely different products and the choice is Pete's, not a bug to fix.")
+say("The calibrated total converts at 1.000 BY CONSTRUCTION -- the sum of")
+say("coefficient-scaled channels is the OLS fitted value. So the real question")
+say("is not whether it conserves but what the rescale does to the RANKING.")
+say("Contest scales DOWN by its coefficient, which is the point: it is the")
+say("channel with the most spread and the least margin signal.")
 
 close(con); cat("\nDone\n")
