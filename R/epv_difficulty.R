@@ -45,6 +45,22 @@ EPV_DIFFICULTY_SPLIT <- FALSE
 #' @keywords internal
 EPV_DIFFICULTY_DESCS <- c("Kick", "Handball", "Ground Kick")
 
+#' Share of the SURPRISE paid to whoever resolved the disposal
+#'
+#' The rest goes to the disposer. Both contributed to beating expectation -- a
+#' 50m pass hit on the chest is a good kick AND a good mark -- so handing the
+#' whole surprise to the receiver is winner-take-all on the only term carrying
+#' skill.
+#'
+#' \strong{0.5 is a placeholder and is the next thing to fit, not a finding.}
+#' Oliver's simultaneous-team formula puts it at
+#' \code{(p_disposer - p_receiver + 1) / 2}, i.e. the participant whose part was
+#' harder takes more. We do not yet estimate the two participants' separate
+#' success probabilities, only the joint one, so a flat half is the honest
+#' interim. Fitting it is worth doing; asserting it is not.
+#' @keywords internal
+EPV_DIFFICULTY_SURPRISE_SHARE <- 0.5
+
 #' Build the disposal-outcome table from chains
 #'
 #' One row per disposal, carrying what was knowable BEFORE it resolved plus the
@@ -160,13 +176,31 @@ score_disposals <- function(de, models) {
     V_trn_hat = as.numeric(stats::predict(models$trn, newdata = d))
   )]
   d[, V_pre := (1 - p_hat) * V_ret_hat + p_hat * V_trn_hat]
-  # The disposer is paid for the DECISION -- the expected state he created,
-  # before anyone resolved it. The player who ends up with the ball is paid the
-  # SURPRISE: how much better the actual branch was than expectation. On an easy
-  # disposal that surprise is near zero, which is the whole point.
+
+  # The DECISION term, V_pre - exp_pts, is the expected state the disposal
+  # created before anyone resolved it.
+  #
+  # *** IT IS SITUATIONAL, NOT A SKILL TERM, AND GIVING THE DISPOSER ONLY THIS
+  # DESTROYS HIS CHANNEL. *** Measured on the first build: any player kicking
+  # from that spot with those options gets the same credit, so the channel
+  # converted to margin at 0.100 (t 0.9) and carried 0.1% of the share. The
+  # disposer's SKILL is in whether the disposal actually beat expectation --
+  # which lives in the surprise term.
+  #
+  # So the surprise is SPLIT rather than handed whole to whoever resolved it.
+  # Giving it all to the resolver is winner-take-all on the one term that
+  # carries the skill, which is the specific error Oliver's essays are about.
+  d[, surprise := data.table::fifelse(turnover, V_trn_hat - V_pre, V_ret_hat - V_pre)]
+  ss <- EPV_DIFFICULTY_SURPRISE_SHARE
   d[, `:=`(
-    disp_credit = V_pre - exp_pts,
-    recv_credit = data.table::fifelse(turnover, V_trn_hat - V_pre, V_ret_hat - V_pre)
+    disp_credit = (V_pre - exp_pts) + (1 - ss) * surprise,
+    # Sign matters here and it was wrong on the first build. `V_after` and every
+    # branch value are in the DISPOSING team's frame, so a turnover's surprise is
+    # negative -- and `out_pid` on a turnover is the OPPONENT who intercepted.
+    # Assigning it unflipped charged interceptors for intercepting, which cost
+    # key defenders 7.2 points a game. The resolver's credit is always in HIS
+    # frame: he gains when he takes it and gains when he wins it back.
+    recv_credit = data.table::fifelse(turnover, -ss * surprise, ss * surprise)
   )]
   d
 }
