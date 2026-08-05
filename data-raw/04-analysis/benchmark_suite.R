@@ -150,10 +150,26 @@ BM_BROWNLOW_CSV <- "C:/dev/brownlow/data/brownlow_datathon_dataset.csv"
        top40_positions = cur[1:40, .N, by = pos][order(-N)])
 }
 
+#' @param calibrate Score the CALIBRATED frame -- each channel scaled by its own
+#'   margin coefficient. This is the version that would ship as the descriptive
+#'   product, and it changes the picture a lot: uncalibrated, the contest channel
+#'   carries ~43% of the variance for ~6% of the signal and dominates the
+#'   leaderboard. Judging an uncalibrated frame answers a question nobody is
+#'   asking. Each arm fits its OWN scale, which is the point -- a scale borrowed
+#'   from another build is the staleness trap.
 benchmark_rating <- function(pgd, label, results = NULL, value_col = "epv",
-                             min_games = 8) {
+                             min_games = 8, calibrate = FALSE) {
   pgd <- as.data.table(pgd)
   if (is.null(results)) results <- load_results(TRUE)
+  if (isTRUE(calibrate)) {
+    pgd <- as.data.table(calibrate_epv_channels(pgd, results = results))
+    # Swap the channel columns for their calibrated twins so every block below
+    # -- conservation, skill, count-dependence, faces -- reads the same frame.
+    for (cc in c("epv_recv", "epv_disp", "epv_spoil", "epv")) {
+      data.table::set(pgd, j = cc, value = pgd[[paste0(cc, "_cal")]])
+    }
+    label <- paste0(label, " (calibrated)")
+  }
   s <- .bm_player_seasons(pgd, value_col, min_games)
   out <- list(label = label, n_player_games = nrow(pgd), n_player_seasons = nrow(s),
               descriptive = .bm_conservation(pgd, results),

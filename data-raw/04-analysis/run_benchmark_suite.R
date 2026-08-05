@@ -26,12 +26,31 @@ cat("\nNOTE: the ship frame predates three contest-changing commits (handover §
     "\ndifficulty frame was built from it -- but do not read its absolute numbers",
     "\nas current v3.\n")
 
+# Uncalibrated first, then calibrated. The calibrated pair is the one that
+# matters -- it is what would ship -- but both are shown because the gap between
+# them IS the contest channel's over-dispersion, and that is worth seeing rather
+# than quietly fixing.
 a <- benchmark_rating(ship, "ship", results = res)
 b <- benchmark_rating(diff, "difficulty", results = res)
-print(a); print(b)
-compare_benchmarks(a, b)
+ac <- benchmark_rating(ship, "ship", results = res, calibrate = TRUE)
+bc <- benchmark_rating(diff, "difficulty", results = res, calibrate = TRUE)
+print(a); print(b); print(ac); print(bc)
 
-saveRDS(list(ship = a, difficulty = b), file.path(OUT_DIR, "benchmark_suite_run.rds"))
+cat("
+########## UNCALIBRATED ##########
+")
+compare_benchmarks(a, b)
+cat("
+########## CALIBRATED -- this is the one that would ship ##########
+")
+compare_benchmarks(ac, bc)
+cat("
+########## what calibration alone does, on the difficulty build ##########
+")
+compare_benchmarks(b, bc)
+
+saveRDS(list(ship = a, difficulty = b, ship_cal = ac, difficulty_cal = bc),
+        file.path(OUT_DIR, "benchmark_suite_run.rds"))
 cat("done", format(Sys.time()), "\n")
 sink()
 cat("\nDone\n")
