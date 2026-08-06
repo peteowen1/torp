@@ -102,8 +102,7 @@ epr_prepare <- function(pgd, round_info) {
     src <- if (has_oadj) paste0("epv_", c, "_oadj") else paste0("epv_", c, "_adj")
     cr[, (paste0(".x_", c)) := get(src)]
   }
-  cr[, tog_safe := pmax(fifelse(is.na(time_on_ground_percentage), 100,
-                                time_on_ground_percentage) / 100, 0.1)]
+  cr[, tog_safe := pmax(fcoalesce(time_on_ground_percentage / 100, 0.1), 0.1)]
   for (c in CH) cr[, (paste0(".xt_", c)) := get(paste0(".x_", c)) * tog_safe]
   cr[]
 }

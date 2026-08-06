@@ -51,8 +51,7 @@ epr_prepare <- function(pgd, round_info) {
   # so a half-game counts half. Omitting tog_safe put the worst channel 0.997
   # away from production, which is enormous on an epr_disp whose sd is 1.07.
   cross[, tog_safe := pmax(
-    data.table::fifelse(is.na(time_on_ground_percentage), 100,
-                        time_on_ground_percentage) / 100, 0.1)]
+    data.table::fcoalesce(time_on_ground_percentage / 100, 0.1), 0.1)]
   # Pre-multiply once; it is parameter-independent.
   for (c in CH) cross[, (paste0(".xt_", c)) := get(paste0(".x_", c)) * tog_safe]
   data.table::setattr(cross, "has_oadj", has_oadj)

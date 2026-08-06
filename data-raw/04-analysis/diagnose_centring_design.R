@@ -21,8 +21,7 @@ sink(file.path(OUT_DIR, "centring_design.txt"), split = TRUE)
 cat("=== Positional adjustment: group, method, order ===\nrun at", format(Sys.time()), "\n")
 
 d <- as.data.table(read_parquet(file.path(OUT_DIR, "v2_benchremap_pgd.parquet")))
-d[, tog_safe := pmax(fifelse(is.na(time_on_ground_percentage), 100,
-                             time_on_ground_percentage) / 100, 0.1)]
+d[, tog_safe := pmax(fcoalesce(time_on_ground_percentage / 100, 0.1), 0.1)]
 d[, p80 := epv_hitout / tog_safe]
 S <- max(d$season, na.rm = TRUE)
 

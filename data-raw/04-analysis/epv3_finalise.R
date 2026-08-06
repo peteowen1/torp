@@ -169,8 +169,7 @@ say("=== measured shrinkage on the finished structure ===")
 d <- adjust_epv_for_opponents(as.data.table(copy(pgd)))
 setattr(d, "epv_engine", "v3")
 d <- centre_epv_by_position(d)
-d[, tog_safe := pmax(fifelse(is.na(time_on_ground_percentage), 100,
-                             time_on_ground_percentage) / 100, 0.1)]
+d[, tog_safe := pmax(fcoalesce(time_on_ground_percentage / 100, 0.1), 0.1)]
 sfx <- if (all(paste0("epv_", c("recv", "disp", "spoil"), "_oadj") %in% names(d))) "_oadj" else "_adj"
 hi <- d[time_on_ground_percentage > 50]
 PG <- rbindlist(lapply(c("recv", "disp", "spoil"), function(c) {

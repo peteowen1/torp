@@ -30,8 +30,7 @@ cat("=== Why does the spoil adjustment invert the channel? ===\nrun at",
 
 d <- as.data.table(read_parquet(file.path(OUT_DIR, "v2_schemec_pgd.parquet")))
 S <- max(d$season, na.rm = TRUE)
-d[, tog_safe := pmax(fifelse(is.na(time_on_ground_percentage), 100,
-                             time_on_ground_percentage) / 100, 0.1)]
+d[, tog_safe := pmax(fcoalesce(time_on_ground_percentage / 100, 0.1), 0.1)]
 d[, p80 := epv_spoil / tog_safe]
 
 cat("\n########## 0. IS IT STANDARDISED? ##########\n")

@@ -31,8 +31,7 @@ pgd <- as.data.table(arrow::read_parquet(file.path(OUT_DIR, "epv3_player_game_v3
 pgd <- adjust_epv_for_opponents(pgd)
 if (isTRUE(EPV_LEVEL_CENTRE)) pgd <- centre_epv_by_position(pgd)
 sfx <- if (all(paste0("epv_", CH, "_oadj") %in% names(pgd))) "_oadj" else "_adj"
-pgd[, tog_safe := pmax(fifelse(is.na(time_on_ground_percentage), 100,
-                               time_on_ground_percentage) / 100, 0.1)]
+pgd[, tog_safe := pmax(fcoalesce(time_on_ground_percentage / 100, 0.1), 0.1)]
 pgd[, .date := as.Date(utc_start_time)]
 setorder(pgd, player_id, .date)
 

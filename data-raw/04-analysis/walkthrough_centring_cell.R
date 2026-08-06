@@ -39,8 +39,7 @@ setorder(k, player_name, -N)
 print(k)
 
 cat("\n########## PER-80 RATES, THE THING ACTUALLY CENTRED ##########\n")
-cur[, tog_safe := pmax(fifelse(is.na(time_on_ground_percentage), 100,
-                               time_on_ground_percentage) / 100, 0.1)]
+cur[, tog_safe := pmax(fcoalesce(time_on_ground_percentage / 100, 0.1), 0.1)]
 cur[, hitout_p80 := epv_hitout / tog_safe]
 p <- cur[player_name %chin% WHO, .(games = .N,
         tog = round(mean(tog_safe), 3),

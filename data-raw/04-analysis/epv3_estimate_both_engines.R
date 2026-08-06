@@ -39,8 +39,7 @@ prep <- function(f) {
   d <- as.data.table(arrow::read_parquet(file.path(OUT_DIR, f)))
   d <- adjust_epv_for_opponents(d)
   if (isTRUE(EPV_LEVEL_CENTRE)) d <- centre_epv_by_position(d)
-  d[, tog_safe := pmax(fifelse(is.na(time_on_ground_percentage), 100,
-                               time_on_ground_percentage) / 100, 0.1)]
+  d[, tog_safe := pmax(fcoalesce(time_on_ground_percentage / 100, 0.1), 0.1)]
   d[, .date := as.Date(utc_start_time)]
   setorder(d, player_id, .date)
   d

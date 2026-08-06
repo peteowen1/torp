@@ -49,8 +49,7 @@ cat("than fixing it -- a ruck/forward swingman gets sent to a FORWARD cell,\n")
 cat("where the mean hitout output is near zero.\n")
 
 cat("\n########## 2. THE INPUTS ##########\n")
-cur[, tog_safe := pmax(fifelse(is.na(time_on_ground_percentage), 100,
-                               time_on_ground_percentage) / 100, 0.1)]
+cur[, tog_safe := pmax(fcoalesce(time_on_ground_percentage / 100, 0.1), 0.1)]
 cur[, p80 := epv_hitout / tog_safe]
 b <- cur[player_name %chin% WHO, .(
   games = .N, tog = round(mean(tog_safe), 3),
@@ -66,8 +65,7 @@ cat("standardised; raw is not.\n")
 
 cat("\n########## 3. THE CELLS, ACROSS ALL SEASONS (what centring actually uses) ##########\n")
 all <- copy(d)
-all[, tog_safe := pmax(fifelse(is.na(time_on_ground_percentage), 100,
-                               time_on_ground_percentage) / 100, 0.1)]
+all[, tog_safe := pmax(fcoalesce(time_on_ground_percentage / 100, 0.1), 0.1)]
 all[, p80 := epv_hitout / tog_safe]
 cells <- all[, .(n = .N, mean_p80 = round(mean(p80, na.rm = TRUE), 3),
                  sd_p80 = round(sd(p80, na.rm = TRUE), 3)), by = .(key = get(kc))]

@@ -152,8 +152,7 @@ suppressMessages({ library(data.table) })
     all(c(paste0("epv_", c), paste0("epv_", c, "_adj")) %in% names(pgd)), logical(1))]
   if (!length(have)) return(NULL)
   d <- data.table::as.data.table(pgd)
-  tog <- pmax(data.table::fifelse(is.na(d$time_on_ground_percentage), 100,
-                                  d$time_on_ground_percentage) / 100, 0.1)
+  tog <- pmax(data.table::fcoalesce(d$time_on_ground_percentage / 100, 0.1), 0.1)
   cur <- d$season == max(d$season, na.rm = TRUE)
   rows <- data.table::rbindlist(lapply(have, function(c) {
     raw <- d[[paste0("epv_", c)]]; adj <- d[[paste0("epv_", c, "_adj")]]

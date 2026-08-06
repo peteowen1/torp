@@ -63,8 +63,7 @@ if (isTRUE(EPV_LEVEL_CENTRE)) pgd <- centre_epv_by_position(pgd)
 # minutes are not what the shrinkage is protecting against.
 sfx <- if (all(paste0("epv_", CH, "_oadj") %in% names(pgd))) "_oadj" else "_adj"
 say("channel suffix in use: ", sfx)
-pgd[, tog_safe := pmax(fifelse(is.na(time_on_ground_percentage), 100,
-                               time_on_ground_percentage) / 100, 0.1)]
+pgd[, tog_safe := pmax(fcoalesce(time_on_ground_percentage / 100, 0.1), 0.1)]
 for (c in CH) pgd[, (paste0("r_", c)) := get(paste0("epv_", c, sfx)) / tog_safe]
 
 pgd[, .date := as.Date(utc_start_time)]
