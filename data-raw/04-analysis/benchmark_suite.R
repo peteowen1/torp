@@ -167,7 +167,11 @@ suppressMessages({ library(data.table) })
     if (nrow(pl) < 20) return(NULL)
     # Restrict to players who actually do this thing. A channel most players
     # score zero in has its correlation set by the zeros, not by the contest.
-    act <- pl[abs(raw) > stats::quantile(abs(pl$raw), 0.75, na.rm = TRUE)]
+    # Top quartile by SIGNED raw, not by abs(raw). On a channel where 59% of
+    # players are negative -- spoil, thanks to the negative
+    # def_half_pressure_acts and rebound50s weights -- abs() selects both tails
+    # and correlates a bimodal mixture.
+    act <- pl[raw > stats::quantile(pl$raw, 0.75, na.rm = TRUE)]
     t5r <- utils::head(act[order(-raw)]$p, 5); t5a <- utils::head(act[order(-adj)]$p, 5)
     bypos <- pl[!is.na(pos), .(m = mean(adj)), by = pos]
     data.table::data.table(
@@ -201,6 +205,16 @@ benchmark_rating <- function(pgd, label, results = NULL, value_col = "epv",
                              min_games = 8, calibrate = FALSE) {
   pgd <- as.data.table(pgd)
   if (is.null(results)) results <- load_results(TRUE)
+  # The adjustment-layer view must see the UNCALIBRATED channels.
+  #
+  # It compares `epv_<ch>` against `epv_<ch>_adj`, and the calibration below
+  # rewrites the first while never touching the second -- so with a NEGATIVE
+  # channel scale the comparison flips sign and reports an inversion that is
+  # not there. That is exactly what happened on 2026-08-06: v2's spoil scale is
+  # -0.4812, the view printed cor(adj, raw) = -0.902, and I reported a
+  # production bug. The true correlation is +0.902. Nothing was wrong with the
+  # adjustment; the two sides of the comparison were on different scales.
+  pgd_unscaled <- data.table::copy(pgd)
   if (isTRUE(calibrate)) {
     pgd <- as.data.table(calibrate_epv_channels(pgd, results = results))
     # Swap the channel columns for their calibrated twins so every block below
@@ -214,7 +228,7 @@ benchmark_rating <- function(pgd, label, results = NULL, value_col = "epv",
   out <- list(label = label, n_player_games = nrow(pgd), n_player_seasons = nrow(s),
               descriptive = .bm_conservation(pgd, results),
               skill = .bm_skill(s), stability = .bm_stability(pgd, s),
-              adj = .bm_adj(pgd), faces = .bm_faces(s))
+              adj = .bm_adj(pgd_unscaled), faces = .bm_faces(s))
   class(out) <- c("torp_benchmark", "list")
   out
 }
