@@ -960,7 +960,7 @@ LINEUP_POSITION_GROUP_MAP <- c(
 #' (KEY_DEFENDER, 29.2 a game), Mark Blicavs (MIDFIELDER, 23.9) -- so it leaves
 #' them centred against defenders and midfielders. Involvement fixes those too.
 #' @keywords internal
-EPV_HITOUT_CENTRE_ON_RUCK <- FALSE
+EPV_HITOUT_CENTRE_ON_RUCK <- TRUE
 
 #' Ruck contests per game that count as "this player rucks"
 #'
@@ -990,7 +990,7 @@ EPV_RUCK_INVOLVEMENT_MIN <- 10
 #' is the honest description of a ruck-forward and the thing every scheme so far
 #' has failed to express.
 #' @keywords internal
-EPV_RUCK_BLEND_WIDTH <- 0
+EPV_RUCK_BLEND_WIDTH <- 10
 
 #' Remap bench starting slots to the role a player actually filled
 #'
@@ -1013,7 +1013,7 @@ EPV_RUCK_BLEND_WIDTH <- 0
 #' cannot undo a within-group ordering error created by standardising against
 #' the wrong cell's sd. The two steps are independent and only this one is wrong.
 #' @keywords internal
-ROLE_REMAP_BENCH <- FALSE
+ROLE_REMAP_BENCH <- TRUE
 
 #' Starting slots that are not roles
 #' @keywords internal

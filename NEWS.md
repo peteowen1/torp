@@ -1,5 +1,33 @@
 # torp (development version)
 
+## Rating changes
+
+* **The centring cell is now the job a player did, not the slot he started in.**
+  This CHANGES PUBLISHED RATINGS. `lineup_position` records where a player
+  started, so every bench-starting specialist was being centred against
+  benchwarmers: the `INT` cell averages 0.378 per-80 hitout against `RK`'s 5.158,
+  which put Sean Darcy — rucking at an ordinary 5.44 — 4.1 standard deviations
+  above his cell and 5th in the competition, while Max Gawn's ruck channel read
+  negative. Three constants change together, and they are not separable:
+
+  - `ROLE_REMAP_BENCH` (now `TRUE`) resolves a bench start to the role the player
+    actually filled — season role, then career role, then listed position, with
+    the count reaching each tier reported.
+  - `EPV_HITOUT_CENTRE_ON_RUCK` (now `TRUE`) cells the hitout channel on ruck
+    involvement rather than a position label. Listed position does not fix this:
+    11 of the 44 players averaging 15+ ruck contests a game are not listed as
+    rucks (Rory Lobb is a KEY_DEFENDER at 29.2 a game).
+  - `EPV_RUCK_BLEND_WIDTH` (now `10`) blends the reference across the involvement
+    threshold instead of switching at it, so a part-time ruck gets a part-time
+    cell and there is no cliff.
+
+  Verified two ways, because no single check can see both halves. Match gate:
+  dMAE +0.0534, 95% CI [−0.4980, +0.6049] on 396 paired matches — a null, which
+  is the pass for a change that reallocates credit within a team. Leaderboard:
+  position mix in the top 40 identical before and after, Spearman 0.9636, Gawn's
+  hitout channel −0.15 → +0.65, and the biggest fallers are exactly the
+  ruck-forwards who had been credited against forwards.
+
 ## New Features
 
 * **EPV v3: a chain-native rebuild of the credit system, behind `EPV_ENGINE`
