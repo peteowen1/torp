@@ -176,7 +176,18 @@ suppressMessages({ library(data.table) })
     data.table::data.table(
       channel = c, n_active = nrow(act),
       cor_adj_raw = round(stats::cor(act$raw, act$adj), 3),
+      # cor(adj, tog) is NOT to be judged against zero. Raw channels carry their
+      # own minutes structure -- hitout -0.301 because specialist rucks play
+      # fewer minutes, spoil +0.246 because tacklers accumulate with time on
+      # ground -- so a channel can be perfectly sound and still read far from
+      # zero. What matters is whether the adjustment REDUCES what it inherited.
+      #
+      # Judging against zero cost a retracted false alarm and a wasted
+      # investigation on 2026-08-06, both on spoil, both from this one line.
+      cor_raw_tog = round(stats::cor(act$raw, act$tog), 3),
       cor_adj_tog = round(stats::cor(act$adj, act$tog), 3),
+      tog_removed = round(abs(stats::cor(act$raw, act$tog)) -
+                            abs(stats::cor(act$adj, act$tog)), 3),
       top5_overlap = length(intersect(t5r, t5a)),
       pos_dominant = bypos[which.max(abs(m))]$pos,
       pos_gap_sd = round((max(bypos$m) - stats::median(bypos$m)) /
@@ -258,13 +269,20 @@ print.torp_benchmark <- function(x, ...) {
   if (!is.null(a) && nrow(a)) {
     cat("\n  ADJUSTMENT LAYER (what positional centring did to each channel)\n")
     for (i in seq_len(nrow(a))) cat(sprintf(
-      "    %-7s cor(adj,raw) %+.3f | cor(adj,tog) %+.3f | top5 overlap %d/5 | %s leads by %.2f sd\n",
-      a$channel[i], a$cor_adj_raw[i], a$cor_adj_tog[i], a$top5_overlap[i],
-      a$pos_dominant[i], a$pos_gap_sd[i]))
-    cat("                     cor(adj,raw) near 1 = ordering preserved.\n")
-    cat("                     cor(adj,tog) near 0 = not a minutes artefact.\n")
-    cat("                     A low overlap with a large positional gap is the\n")
-    cat("                     signature of a channel celled on the wrong group.\n")
+      "    %-7s cor(adj,raw) %+.3f | TOG raw %+.3f -> adj %+.3f (removed %+.3f) | top5 %d/5 | %s +%.2f sd\n",
+      a$channel[i], a$cor_adj_raw[i], a$cor_raw_tog[i], a$cor_adj_tog[i],
+      a$tog_removed[i], a$top5_overlap[i], a$pos_dominant[i], a$pos_gap_sd[i]))
+    cat("\n    TOG: read the REMOVED column, never the adj column alone. Raw\n")
+    cat("    channels carry their own minutes structure (hitout -0.301, spoil\n")
+    cat("    +0.246), so 'adj far from zero' is not a fault. Positive removed =\n")
+    cat("    the adjustment took some out; NEGATIVE = it added some, and that is\n")
+    cat("    the real fault condition.\n")
+    cat("\n    cor(adj,raw): high is good ONLY where every player in the channel\n")
+    cat("    does the same job, as in hitout. For recv, disp and spoil every\n")
+    cat("    position scores at a different rate and the adjustment is SUPPOSED\n")
+    cat("    to reorder -- a low value there is the design working, not failing.\n")
+    cat("\n    A low top-5 overlap WITH a large positional gap is the signature\n")
+    cat("    of a channel celled on the wrong group.\n")
   }
   cat("\n  FACE VALIDITY (current season)\n")
   cat("    top 10:", paste(x$faces$top10, collapse = ", "), "\n")
@@ -296,13 +314,16 @@ compare_benchmarks <- function(a, b) {
   worst <- function(x) {
     z <- x$adj
     if (is.null(z) || !nrow(z)) return(c(NA_real_, NA_real_))
-    c(min(z$cor_adj_raw, na.rm = TRUE), max(abs(z$cor_adj_tog), na.rm = TRUE))
+    # Worst REDUCTION across channels, not worst absolute. Negative means some
+    # channel's adjustment ADDED minutes dependence rather than removing it,
+    # which is the genuine fault -- a large |cor(adj, tog)| on its own is not.
+    c(min(z$cor_adj_raw, na.rm = TRUE), min(z$tog_removed, na.rm = TRUE))
   }
   wa <- worst(a); wb <- worst(b)
   rows <- data.table(
     metric = c("conservation total", "contest signal share %", "skill score",
                "within-position r", "cor(disp, disposals)", "cor(recv, cont.poss)",
-               "WORST cor(adj, raw)", "WORST |cor(adj, tog)|"),
+               "WORST cor(adj, raw)", "WORST TOG removed"),
     a = c(vapply(PATHS, function(p) f(a, p), 0), wa),
     b = c(vapply(PATHS, function(p) f(b, p), 0), wb))
   setnames(rows, c("a", "b"), c(a$label, b$label))
