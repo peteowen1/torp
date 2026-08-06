@@ -125,6 +125,63 @@ suppressMessages({ library(data.table) })
 # "when THIS club fields better-rated players, does it score more" rather than
 # "do good clubs win".
 
+#' C2. THE ADJUSTMENT LAYER — what the positional adjustment did to each channel
+#'
+#' \strong{Added 2026-08-06 after THREE consecutive changes were invisible here.}
+#' Everything above scores the RAW channels. The bench remap, the channel-specific
+#' centring key and the rating-layer points scale all touch only the \code{_adj}
+#' columns, so the panel read a delta of exactly zero on every row for all three
+#' — while one of them was moving Mason Cox 427 places up the leaderboard.
+#'
+#' Each channel is passed through \code{.position_adjust()} inside a cell, and
+#' the two ways that goes wrong are:
+#' \itemize{
+#'   \item \strong{the ordering breaks} — a player with less raw production rates
+#'     above one with more, because they sit in different cells. Caught by
+#'     \code{cor(adj, raw)} falling.
+#'   \item \strong{it becomes a minutes artefact} — per-80 rewards part-timers.
+#'     Caught by \code{cor(adj, tog)} moving away from zero.
+#' }
+#'
+#' Both are measured WITHIN the cells that matter, and the top-5 overlap is a
+#' blunt human-readable version: if the five biggest raw producers are not the
+#' five highest rated, something in between reordered them.
+.bm_adj <- function(pgd) {
+  CH <- c("recv", "disp", "spoil", "hitout")
+  have <- CH[vapply(CH, function(c)
+    all(c(paste0("epv_", c), paste0("epv_", c, "_adj")) %in% names(pgd)), logical(1))]
+  if (!length(have)) return(NULL)
+  d <- data.table::as.data.table(pgd)
+  tog <- pmax(data.table::fifelse(is.na(d$time_on_ground_percentage), 100,
+                                  d$time_on_ground_percentage) / 100, 0.1)
+  cur <- d$season == max(d$season, na.rm = TRUE)
+  rows <- data.table::rbindlist(lapply(have, function(c) {
+    raw <- d[[paste0("epv_", c)]]; adj <- d[[paste0("epv_", c, "_adj")]]
+    ok <- is.finite(raw) & is.finite(adj)
+    # Per-player season means -- a per-game correlation is dominated by
+    # game-to-game noise and would look fine no matter what the cell did.
+    pl <- data.table::data.table(p = d$player_name, raw = raw, adj = adj,
+                                 tog = tog, pos = d$position_group)[ok & cur]
+    pl <- pl[, .(raw = mean(raw), adj = mean(adj), tog = mean(tog), n = .N,
+                 pos = pos[1]), by = p][n >= 6]
+    if (nrow(pl) < 20) return(NULL)
+    # Restrict to players who actually do this thing. A channel most players
+    # score zero in has its correlation set by the zeros, not by the contest.
+    act <- pl[abs(raw) > stats::quantile(abs(pl$raw), 0.75, na.rm = TRUE)]
+    t5r <- utils::head(act[order(-raw)]$p, 5); t5a <- utils::head(act[order(-adj)]$p, 5)
+    bypos <- pl[!is.na(pos), .(m = mean(adj)), by = pos]
+    data.table::data.table(
+      channel = c, n_active = nrow(act),
+      cor_adj_raw = round(stats::cor(act$raw, act$adj), 3),
+      cor_adj_tog = round(stats::cor(act$adj, act$tog), 3),
+      top5_overlap = length(intersect(t5r, t5a)),
+      pos_dominant = bypos[which.max(abs(m))]$pos,
+      pos_gap_sd = round((max(bypos$m) - stats::median(bypos$m)) /
+                           max(stats::sd(pl$adj), 1e-9), 2))
+  }))
+  rows
+}
+
 #' D. FACE VALIDITY — who is on top, and is every position represented
 .bm_faces <- function(s) {
   cur <- s[season == max(season, na.rm = TRUE)]
@@ -157,7 +214,7 @@ benchmark_rating <- function(pgd, label, results = NULL, value_col = "epv",
   out <- list(label = label, n_player_games = nrow(pgd), n_player_seasons = nrow(s),
               descriptive = .bm_conservation(pgd, results),
               skill = .bm_skill(s), stability = .bm_stability(pgd, s),
-              faces = .bm_faces(s))
+              adj = .bm_adj(pgd), faces = .bm_faces(s))
   class(out) <- c("torp_benchmark", "list")
   out
 }
@@ -184,6 +241,18 @@ print.torp_benchmark <- function(x, ...) {
   cat(sprintf("    count-dependence disposals %.3f  marks %.3f  cont.poss %.3f\n",
               x$stability$cor_disposals, x$stability$cor_marks, x$stability$cor_cposs))
   cat("                     (nearer zero is better -- an event count is not a skill)\n")
+  a <- x$adj
+  if (!is.null(a) && nrow(a)) {
+    cat("\n  ADJUSTMENT LAYER (what positional centring did to each channel)\n")
+    for (i in seq_len(nrow(a))) cat(sprintf(
+      "    %-7s cor(adj,raw) %+.3f | cor(adj,tog) %+.3f | top5 overlap %d/5 | %s leads by %.2f sd\n",
+      a$channel[i], a$cor_adj_raw[i], a$cor_adj_tog[i], a$top5_overlap[i],
+      a$pos_dominant[i], a$pos_gap_sd[i]))
+    cat("                     cor(adj,raw) near 1 = ordering preserved.\n")
+    cat("                     cor(adj,tog) near 0 = not a minutes artefact.\n")
+    cat("                     A low overlap with a large positional gap is the\n")
+    cat("                     signature of a channel celled on the wrong group.\n")
+  }
   cat("\n  FACE VALIDITY (current season)\n")
   cat("    top 10:", paste(x$faces$top10, collapse = ", "), "\n")
   cat("    top 40 by position:\n")
@@ -208,11 +277,21 @@ compare_benchmarks <- function(a, b) {
   PATHS <- list(c("descriptive", "total"), c("descriptive", "share_contest"),
                 c("skill", "skill"), c("stability", "within_r"),
                 c("stability", "cor_disposals"), c("stability", "cor_cposs"))
+  # The two adjustment-layer numbers that would have caught all three of the
+  # changes this panel could not previously see. WORST channel, not the mean --
+  # one broken channel is the failure mode and averaging hides it.
+  worst <- function(x) {
+    z <- x$adj
+    if (is.null(z) || !nrow(z)) return(c(NA_real_, NA_real_))
+    c(min(z$cor_adj_raw, na.rm = TRUE), max(abs(z$cor_adj_tog), na.rm = TRUE))
+  }
+  wa <- worst(a); wb <- worst(b)
   rows <- data.table(
     metric = c("conservation total", "contest signal share %", "skill score",
-               "within-position r", "cor(disp, disposals)", "cor(recv, cont.poss)"),
-    a = vapply(PATHS, function(p) f(a, p), 0),
-    b = vapply(PATHS, function(p) f(b, p), 0))
+               "within-position r", "cor(disp, disposals)", "cor(recv, cont.poss)",
+               "WORST cor(adj, raw)", "WORST |cor(adj, tog)|"),
+    a = c(vapply(PATHS, function(p) f(a, p), 0), wa),
+    b = c(vapply(PATHS, function(p) f(b, p), 0), wb))
   setnames(rows, c("a", "b"), c(a$label, b$label))
   rows[, delta := round(get(b$label) - get(a$label), 4)]
   cat("\n=== ", a$label, " vs ", b$label, " ===\n", sep = "")
