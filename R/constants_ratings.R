@@ -1005,6 +1005,27 @@ EPV_HITOUT_CENTRE_ON_RUCK <- FALSE
 #' @keywords internal
 EPV_RUCK_INVOLVEMENT_MIN <- 10
 
+#' Width of the ramp between the two hitout cells
+#'
+#' \strong{0 keeps the hard threshold} at \code{EPV_RUCK_INVOLVEMENT_MIN},
+#' which is the behaviour measured on 2026-08-06. A positive width blends the
+#' two cell means instead of switching between them, ramping linearly from
+#' \code{MIN - width/2} to \code{MIN + width/2}.
+#'
+#' \strong{Why.} A threshold puts a cliff exactly where players are densest.
+#' Measured: mean \code{epv_hitout_adj} is \strong{+0.437} at nine contests a
+#' game and \strong{−2.164} at ten — a swing of 2.6 for one extra contest.
+#'
+#' The two continuous alternatives both removed the cliff and cost the channel
+#' its link to production, because they conditioned on a variable correlated
+#' with output (contests, or share of contests) and so conditioned the output
+#' away. Blending does not: the reference is still just two fixed cell means, and
+#' only the WEIGHT between them varies. A partial ruck gets a partial cell, which
+#' is the honest description of a ruck-forward and the thing every scheme so far
+#' has failed to express.
+#' @keywords internal
+EPV_RUCK_BLEND_WIDTH <- 0
+
 ROLE_REMAP_BENCH <- FALSE
 
 #' Starting slots that are not roles

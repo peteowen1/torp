@@ -327,6 +327,48 @@ centre_epv_by_position <- function(pgd, channels = EPV_LEVEL_CENTRE_CHANNELS) {
   sqrt(sum(w[ok] * (x[ok] - m)^2) / sum(w[ok]))
 }
 
+#' Positional adjustment with a BLENDED reference between two cells
+#'
+#' The hard-threshold version asks "are you a ruck, yes or no" and compares you
+#' with one cell mean or the other. This asks "how much of a ruck are you" and
+#' compares you with a weighted mix, the weight ramping linearly across
+#' \code{lo} to \code{hi} contests.
+#'
+#' It removes the threshold cliff WITHOUT conditioning on anything correlated
+#' with output. Both continuous alternatives tried on 2026-08-06 -- smoothing on
+#' contest volume, and on share of contests -- killed the cliff and also killed
+#' the channel's link to production, because the conditioning variable carried
+#' the output. Here the references are two fixed cell means; only the weight
+#' between them moves.
+#'
+#' @param p80 Per-80 channel values.
+#' @param tog Time-on-ground fraction, same length.
+#' @param involvement The role measure the blend ramps on (ruck contests).
+#' @param lo,hi Involvement at which the weight is 0 and 1.
+#' @param pooled_sd,standardise As \code{.position_adjust()}.
+#' @return Adjusted values, same length as \code{p80}.
+#' @keywords internal
+.blend_adjust <- function(p80, tog, involvement, lo, hi, pooled_sd, standardise) {
+  w <- pmin(pmax((involvement - lo) / max(hi - lo, 1e-9), 0), 1)
+  hi_grp <- w > 0.5
+  # The two reference cells are the CLEAR cases at each end, not the blended
+  # middle -- estimating a cell mean from rows that are themselves half-weighted
+  # would fold the blend back into its own reference.
+  m_hi <- stats::weighted.mean(p80[hi_grp], tog[hi_grp], na.rm = TRUE)
+  m_lo <- stats::weighted.mean(p80[!hi_grp], tog[!hi_grp], na.rm = TRUE)
+  if (!is.finite(m_hi)) m_hi <- 0
+  if (!is.finite(m_lo)) m_lo <- 0
+  centred <- p80 - (w * m_hi + (1 - w) * m_lo)
+  if (!isTRUE(standardise)) return(centred * tog)
+  s_hi <- .wtd_sd(p80[hi_grp], tog[hi_grp])
+  s_lo <- .wtd_sd(p80[!hi_grp], tog[!hi_grp])
+  s <- w * s_hi + (1 - w) * s_lo
+  bad <- !is.finite(s) | s < 1e-6 | !is.finite(pooled_sd)
+  out <- centred * tog
+  out[!bad] <- (centred[!bad] / s[!bad]) * pooled_sd * tog[!bad]
+  out
+}
+
 #' Position-adjust a per-80 EPV channel
 #'
 #' Recentres within position, and — when \code{standardise} is TRUE —
@@ -978,12 +1020,33 @@ create_player_game_data <- function(pbp_data = NULL,
       "Hitout centred on ruck involvement: {sum(plyr_gm_df$.hitout_key == 'RUCKS')} of {nrow(plyr_gm_df)} player-games in the RUCKS cell (>= {EPV_RUCK_INVOLVEMENT_MIN} contests).")
   }
 
+  # Hitout: blended reference if a width is set, otherwise the hard cell.
+  .blend_on <- isTRUE(EPV_HITOUT_CENTRE_ON_RUCK) && EPV_RUCK_BLEND_WIDTH > 0
+  if (.blend_on) {
+    .lo <- EPV_RUCK_INVOLVEMENT_MIN - EPV_RUCK_BLEND_WIDTH / 2
+    .hi <- EPV_RUCK_INVOLVEMENT_MIN + EPV_RUCK_BLEND_WIDTH / 2
+    plyr_gm_df$epv_hitout_adj <- .blend_adjust(
+      plyr_gm_df$epv_hitout_p80, plyr_gm_df$tog_safe,
+      dplyr::coalesce(as.numeric(plyr_gm_df$ruck_contests), 0),
+      .lo, .hi, .pooled_sd[["hitout"]], .std[["hitout"]])
+    # Non-dot names for the message: cli reads `{.lo}` as inline markup, the
+    # same class as `{.code}` or `{.val}`, and hard-errors with "Invalid cli
+    # literal". Documented in this repo and hit again on 2026-08-06.
+    ramp_lo <- .lo; ramp_hi <- .hi
+    n_ramp <- sum(dplyr::between(
+      dplyr::coalesce(as.numeric(plyr_gm_df$ruck_contests), 0), .lo, .hi))
+    cli::cli_alert_info(
+      "Hitout reference BLENDED across {ramp_lo}-{ramp_hi} ruck contests ({n_ramp} player-games in the ramp).")
+  } else {
+    plyr_gm_df <- plyr_gm_df |>
+      dplyr::group_by(.data$.hitout_key) |>
+      dplyr::mutate(
+        epv_hitout_adj = .position_adjust(.data$epv_hitout_p80, .data$tog_safe, .pooled_sd[["hitout"]], .std[["hitout"]])
+      ) |>
+      dplyr::ungroup()
+  }
+
   plyr_gm_df <- plyr_gm_df |>
-    dplyr::group_by(.data$.hitout_key) |>
-    dplyr::mutate(
-      epv_hitout_adj = .position_adjust(.data$epv_hitout_p80, .data$tog_safe, .pooled_sd[["hitout"]], .std[["hitout"]])
-    ) |>
-    dplyr::ungroup() |>
     dplyr::group_by(.data$.role_key) |>
     dplyr::mutate(
       epv_recv_adj = .position_adjust(.data$epv_recv_p80, .data$tog_safe, .pooled_sd[["recv"]], .std[["recv"]]),
