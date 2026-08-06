@@ -962,13 +962,33 @@ create_player_game_data <- function(pbp_data = NULL,
     ))
   }
 
+  # The hitout channel gets its OWN cell when EPV_HITOUT_CENTRE_ON_RUCK is on.
+  # It is the one channel that only exists for players who ruck, so celling it
+  # on a position label compares a part-time ruck with people who never contest
+  # a bounce -- see docs/reviews/INT-CENTRING-BUG-2026-08-06.md. The other three
+  # channels keep the positional key, where it is doing real work.
+  plyr_gm_df$.hitout_key <- if (isTRUE(EPV_HITOUT_CENTRE_ON_RUCK)) {
+    .rc <- dplyr::coalesce(as.numeric(plyr_gm_df$ruck_contests), 0)
+    ifelse(.rc >= EPV_RUCK_INVOLVEMENT_MIN, "RUCKS", "OTHER")
+  } else {
+    plyr_gm_df$.role_key
+  }
+  if (isTRUE(EPV_HITOUT_CENTRE_ON_RUCK)) {
+    cli::cli_alert_info(
+      "Hitout centred on ruck involvement: {sum(plyr_gm_df$.hitout_key == 'RUCKS')} of {nrow(plyr_gm_df)} player-games in the RUCKS cell (>= {EPV_RUCK_INVOLVEMENT_MIN} contests).")
+  }
+
   plyr_gm_df <- plyr_gm_df |>
+    dplyr::group_by(.data$.hitout_key) |>
+    dplyr::mutate(
+      epv_hitout_adj = .position_adjust(.data$epv_hitout_p80, .data$tog_safe, .pooled_sd[["hitout"]], .std[["hitout"]])
+    ) |>
+    dplyr::ungroup() |>
     dplyr::group_by(.data$.role_key) |>
     dplyr::mutate(
       epv_recv_adj = .position_adjust(.data$epv_recv_p80, .data$tog_safe, .pooled_sd[["recv"]], .std[["recv"]]),
       epv_disp_adj = .position_adjust(.data$epv_disp_p80, .data$tog_safe, .pooled_sd[["disp"]], .std[["disp"]]),
       epv_spoil_adj = .position_adjust(.data$epv_spoil_p80, .data$tog_safe, .pooled_sd[["spoil"]], .std[["spoil"]]),
-      epv_hitout_adj = .position_adjust(.data$epv_hitout_p80, .data$tog_safe, .pooled_sd[["hitout"]], .std[["hitout"]]),
       epv_adj = .data$epv_recv_adj + .data$epv_disp_adj + .data$epv_spoil_adj + .data$epv_hitout_adj,
       wp_credit_adj = (.data$wp_credit_p80 - stats::weighted.mean(.data$wp_credit_p80, .data$tog_safe, na.rm = TRUE)) * .data$tog_safe,
       wp_disp_credit_adj = (.data$wp_disp_credit_p80 - stats::weighted.mean(.data$wp_disp_credit_p80, .data$tog_safe, na.rm = TRUE)) * .data$tog_safe,
@@ -979,7 +999,7 @@ create_player_game_data <- function(pbp_data = NULL,
     # RELEASED artifact with a declared column schema, and an extra column would
     # fail validation downstream. The arms are distinguished by asserting they
     # differ numerically, which is the stronger check anyway.
-    dplyr::select(-"tog_safe", -".role_key",
+    dplyr::select(-"tog_safe", -".role_key", -".hitout_key",
                   -"epv_recv_p80", -"epv_disp_p80", -"epv_spoil_p80", -"epv_hitout_p80",
                   -"wp_credit_p80", -"wp_disp_credit_p80", -"wp_recv_credit_p80")
 

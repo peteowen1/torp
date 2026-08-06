@@ -974,6 +974,37 @@ LINEUP_POSITION_GROUP_MAP <- c(
 #' cannot undo a within-group ordering error created by standardising against
 #' the wrong cell's sd. The two steps are independent and only this one is wrong.
 #' @keywords internal
+#' Centre the hitout channel on ruck involvement rather than position
+#'
+#' \strong{Scheme C.} A channel's centring cell should be based on
+#' PARTICIPATION IN THAT CHANNEL, not on a position label. The hitout channel
+#' only exists for players who ruck, so celling it on where a player lined up
+#' compares a part-time ruck with people who never contest a bounce.
+#'
+#' Measured 2026-08-06 on Grundy / Gawn / Cox, same method, three cells:
+#' 	abular{lrrr}{
+#'   \strong{scheme} 	ab \strong{Grundy} 	ab \strong{Gawn} 	ab \strong{Cox} \cr
+#'   lineup slot (current) 	ab 1.310 	ab 0.588 	ab \strong{1.920} \cr
+#'   listed position_group 	ab 1.636 	ab 0.925 	ab −0.624 \cr
+#'   \strong{ruck involvement} 	ab \strong{2.668} 	ab 1.994 	ab 0.103 \cr
+#' }
+#'
+#' Listed position also fixes these three, but \strong{11 of the 44 players
+#' averaging 15+ ruck contests a game are not listed as rucks} -- Rory Lobb
+#' (KEY_DEFENDER, 29.2 a game), Mark Blicavs (MIDFIELDER, 23.9) -- so it leaves
+#' them centred against defenders and midfielders. Involvement fixes those too.
+#' @keywords internal
+EPV_HITOUT_CENTRE_ON_RUCK <- FALSE
+
+#' Ruck contests per game that count as "this player rucks"
+#'
+#' Splits the hitout centring into two cells rather than many. 10 is a
+#' deliberately low bar: the point is to separate players who contest bounces at
+#' all from those who never do, not to grade rucks against each other -- that is
+#' what the centring itself does.
+#' @keywords internal
+EPV_RUCK_INVOLVEMENT_MIN <- 10
+
 ROLE_REMAP_BENCH <- FALSE
 
 #' Starting slots that are not roles
