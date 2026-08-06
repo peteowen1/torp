@@ -197,11 +197,141 @@ suppressMessages({ library(data.table) })
 }
 
 #' D. FACE VALIDITY — who is on top, and is every position represented
-.bm_faces <- function(s) {
+.bm_faces <- function(s, value_col = "epv") {
   cur <- s[season == max(season, na.rm = TRUE)]
   setorder(cur, -tot)
+  ranked <- cur[, .(player_id, player_name, position_group = pos, epr = tot)]
+  # Which column this leaderboard is OF. Load-bearing: the panel defaults to raw
+  # `epv`, and a change that acts on `epv_*_adj` (all the centring work) leaves
+  # raw `epv` untouched -- so face_validity() correctly reports a no-op and a
+  # reader could take that "pass" for more than it is. Printed, not hidden.
+  data.table::setattr(ranked, "value_col", value_col)
   list(top10 = cur$player_name[1:10],
-       top40_positions = cur[1:40, .N, by = pos][order(-N)])
+       top40_positions = cur[1:40, .N, by = pos][order(-N)],
+       # Kept so compare_benchmarks() can run face_validity() across two arms.
+       # The position table above cannot support it -- rank movement needs the
+       # players, not their counts.
+       ranked = ranked)
+}
+
+#' D2. FACE VALIDITY AS A CHECK, not a printout
+#'
+#' Three times on 2026-08-06 a change passed every metric in this panel and
+#' failed on inspection of the top 40. Twice it was the same per-channel scale,
+#' failing in OPPOSITE directions -- rucks rising absurdly at one set of
+#' constants (Mason Cox 506 -> 79), key defenders collapsing at another (5 of the
+#' top 40 down to 1). Each was caught by eye, after a 50-minute run.
+#'
+#' \strong{Calibration of the thresholds.} They are set so the change that
+#' SHIPPED passes and both that were rejected fail. That is the only honest way
+#' to set them -- a check tuned only against failures will reject good work, and
+#' this panel's whole problem has been measuring things that do not decide
+#' anything. Re-run \code{verify_face_validity.R} after ANY threshold edit; it
+#' fails loudly if the separation breaks. Measured 2026-08-06:
+#'
+#' \tabular{lllll}{
+#'   \strong{case} \tab \strong{mix} \tab \strong{Spearman} \tab \strong{nowhere} \tab \strong{climb} \cr
+#'   centring (shipped) \tab 0 \tab 0.9636 \tab 0 \tab +104 \cr
+#'   combined arm (rejected) \tab \strong{4} \tab \strong{0.8673} \tab 1 \tab +95 \cr
+#'   ws26 per-channel (rejected) \tab 3 \tab \strong{0.8981} \tab \strong{2} \tab \strong{+427} \cr
+#' }
+#'
+#' Two things that table says and the verdict alone does not. \strong{No single
+#' row catches both failures} -- the combined arm fails on mix and rank
+#' stability, ws26 passes mix and fails on the other two. They were bad in
+#' different ways, so the set is load-bearing and dropping a row is not free.
+#' And \strong{Spearman is the tightest threshold}: ws26 missed it by 0.002. It
+#' fails two other rows as well so nothing hangs on that margin, but do not
+#' treat 0.90 as a robust separator on its own evidence.
+#'
+#' \strong{What this cannot do.} It cannot tell a correction from a defect. A
+#' targeted fix SHOULD move one position group -- the centring work deliberately
+#' moved rucks, in both directions and modestly. So the mover-concentration row
+#' reports and never fails; it is there to be read, not to gate.
+#'
+#' @param before,after Frames with \code{player_id}, \code{player_name},
+#'   \code{position_group} and a score column.
+#' @param score Name of the score column, default \code{"epr"}.
+#' @param n_top Size of the leaderboard being judged.
+#' @return A \code{data.table} of checks, one row each, with a verdict.
+face_validity <- function(before, after, score = "epr", n_top = 40) {
+  b <- as.data.table(before); a <- as.data.table(after)
+  for (d in list(b, a)) {
+    if (!score %in% names(d)) cli::cli_abort("No {.field {score}} column.")
+    data.table::setnames(d, score, ".sc")
+  }
+  m <- merge(b[, .(player_id, player_name, position_group, sc_b = .sc)],
+             a[, .(player_id, sc_a = .sc)], by = "player_id")
+  m <- m[is.finite(sc_b) & is.finite(sc_a)]
+  if (!nrow(m)) cli::cli_abort("No players in common.")
+  m[, `:=`(rk_b = data.table::frank(-sc_b), rk_a = data.table::frank(-sc_a))]
+  m[, gain := rk_b - rk_a]
+
+  # 1. Position mix. The ws28 signature: KEY_DEFENDER 5 -> 1.
+  mix <- merge(m[rk_b <= n_top, .(before = .N), by = position_group],
+               m[rk_a <= n_top, .(after = .N), by = position_group],
+               by = "position_group", all = TRUE)
+  mix[is.na(before), before := 0L][is.na(after), after := 0L]
+  mix_worst <- max(abs(mix$after - mix$before))
+  mix_who <- mix[which.max(abs(after - before)), position_group]
+
+  # 2. Rank stability across the whole rated population.
+  sp <- stats::cor(m$rk_b, m$rk_a, method = "spearman")
+
+  # 3. Appear-from-nowhere: into the top N from outside 3N. The ws26 signature
+  #    was Sean Darcy 125 -> 5. A player climbing from just outside is normal
+  #    form; one arriving from three leaderboards away is a repricing artifact.
+  nowhere <- m[rk_a <= n_top & rk_b > 3 * n_top]
+
+  # 4. Biggest single climb among players who FINISH near the top. Restricted to
+  #    the top 100 because a rise from 700th to 500th moves nobody's opinion.
+  climb <- m[rk_a <= 100][order(-gain)]
+  climb_max <- if (nrow(climb)) climb$gain[1] else 0
+  climb_who <- if (nrow(climb)) climb$player_name[1] else NA_character_
+
+  # Reported, never failed -- see the note above.
+  risers <- m[order(-gain)][1:min(10, nrow(m))]
+  conc <- risers[, .N, by = position_group][order(-N)]
+
+  out <- data.table::data.table(
+    check = c("position mix in top N", "rank stability (Spearman)",
+              "appears from nowhere", "biggest climb into top 100",
+              "riser concentration"),
+    value = c(sprintf("%d (%s)", mix_worst, mix_who),
+              sprintf("%.4f", sp),
+              sprintf("%d player%s", nrow(nowhere), if (nrow(nowhere) == 1) "" else "s"),
+              sprintf("%+d (%s)", as.integer(climb_max), climb_who),
+              sprintf("%d of 10 are %s", conc$N[1], conc$position_group[1])),
+    limit = c("<= 3", ">= 0.90", "<= 1", "<= +200", "reported only"),
+    verdict = c(
+      if (mix_worst <= 3) "pass" else "FAIL",
+      if (is.finite(sp) && sp >= 0.90) "pass" else "FAIL",
+      if (nrow(nowhere) <= 1) "pass" else "FAIL",
+      if (climb_max <= 200) "pass" else "FAIL",
+      "-"))
+  data.table::setattr(out, "detail",
+                      list(mix = mix, nowhere = nowhere, risers = risers, conc = conc))
+  data.table::setattr(out, "overall", if (any(out$verdict == "FAIL")) "FAIL" else "pass")
+  class(out) <- c("torp_face_validity", class(out))
+  out
+}
+
+print.torp_face_validity <- function(x, ...) {
+  cat("\n=== FACE VALIDITY ===\n")
+  print(data.table::as.data.table(x))
+  cat("\n  OVERALL: ", attr(x, "overall"), "\n", sep = "")
+  if (identical(attr(x, "overall"), "FAIL")) {
+    d <- attr(x, "detail")
+    cat("\n  position mix:\n"); print(d$mix[order(-after)])
+    if (nrow(d$nowhere)) {
+      cat("\n  from nowhere:\n")
+      print(d$nowhere[, .(player_name, position_group,
+                          was = as.integer(rk_b), now = as.integer(rk_a))])
+    }
+  }
+  cat("\n  This gates the DISPLAY, not the prediction. A change can pass every\n")
+  cat("  predictive row in the panel and still fail here -- that is the point.\n\n")
+  invisible(x)
 }
 
 #' @param calibrate Score the CALIBRATED frame -- each channel scaled by its own
@@ -238,7 +368,7 @@ benchmark_rating <- function(pgd, label, results = NULL, value_col = "epv",
   out <- list(label = label, n_player_games = nrow(pgd), n_player_seasons = nrow(s),
               descriptive = .bm_conservation(pgd, results),
               skill = .bm_skill(s), stability = .bm_stability(pgd, s),
-              adj = .bm_adj(pgd_unscaled), faces = .bm_faces(s))
+              adj = .bm_adj(pgd_unscaled), faces = .bm_faces(s, value_col))
   class(out) <- c("torp_benchmark", "list")
   out
 }
@@ -330,8 +460,41 @@ compare_benchmarks <- function(a, b) {
   rows[, delta := round(get(b$label) - get(a$label), 4)]
   cat("\n=== ", a$label, " vs ", b$label, " ===\n", sep = "")
   print(rows)
-  cat("\nNo single verdict. Descriptive and predictive rows want different things\n")
-  cat("from a noisy channel, and the Brownlow row is biased by construction.\n")
-  cat("A change worth making does not lose on any row and wins on more than one.\n\n")
+  cat("\nNo single verdict on the rows above. Descriptive and predictive rows want\n")
+  cat("different things from a noisy channel, and the Brownlow row is biased by\n")
+  cat("construction. A change worth making does not lose on any row and wins on\n")
+  cat("more than one.\n")
+
+  # The face-validity block DOES have a verdict, and it is the one row on this
+  # page that would have stopped 2026-08-06's two rejected changes before a
+  # 50-minute run rather than after.
+  fv <- NULL
+  if (!is.null(a$faces$ranked) && !is.null(b$faces$ranked)) {
+    fv <- tryCatch(face_validity(a$faces$ranked, b$faces$ranked),
+                   error = function(e) { cat("\n  face validity unavailable: ",
+                                             conditionMessage(e), "\n", sep = ""); NULL })
+    if (!is.null(fv)) {
+      vc <- attr(a$faces$ranked, "value_col")
+      if (is.null(vc)) vc <- "epv"
+      data.table::setattr(fv, "value_col", vc)
+      print(fv)
+      if (identical(vc, "epv")) {
+        cat("  ^ computed on RAW `epv`. Every centring/adjustment change acts on\n")
+        cat("    `epv_*_adj`, which leaves raw `epv` untouched -- so a `pass` here\n")
+        cat("    means \"this column did not move\", NOT \"the leaderboard is fine\".\n")
+        cat("    Gate those by calling face_validity() on the two RATING frames,\n")
+        cat("    the way verify_face_validity.R does.\n")
+      }
+    }
+  } else {
+    cat("\n  NOTE: no face-validity check -- one arm predates `faces$ranked`.\n")
+    cat("  Rebuild both arms before trusting this comparison; three changes on\n")
+    cat("  2026-08-06 passed every numeric row above and failed on inspection.\n")
+  }
+  cat("\n")
+  # Returns `rows` unchanged -- callers that saved this before still get the
+  # same object. The face-validity result rides along as an attribute rather
+  # than changing the shape.
+  data.table::setattr(rows, "face_validity", fv)
   invisible(rows)
 }
