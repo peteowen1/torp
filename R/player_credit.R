@@ -50,6 +50,31 @@ default_epv_params <- function() {
   )
 }
 
+#' Should the per-channel points scale apply?
+#'
+#' The single decision point for "per-channel or one global factor", so the two
+#' places that scale EPV into points cannot drift apart. They already had:
+#' \code{get_player_game_ratings()} carried its own copy that keyed on the
+#' \code{EPV_ENGINE} global, ignored \code{EPV_PER_CHANNEL_POINTS_SCALE}, and
+#' kept an \code{!all(scale == 1)} fall-through that had been removed here as a
+#' bug. All three made it disagree with the published pipeline silently.
+#'
+#' Keyed on the engine ACTUALLY IN USE (the attribute the frame carries), not
+#' the global default -- a caller passing \code{epv_engine = "v3"} while the
+#' constant still reads \code{"v2"} would otherwise get no per-channel scaling.
+#'
+#' Deliberately NOT also conditioned on the vector being non-trivial: under v3
+#' the per-channel vector is authoritative even when it is all 1s. All 1s means
+#' no scaling, not "fall back to v2's 0.919".
+#'
+#' @param engine_attr The frame's \code{epv_engine} attribute, or NULL.
+#' @return TRUE if \code{EPV3_POINTS_SCALE} should be applied per channel.
+#' @keywords internal
+.use_per_channel_scale <- function(engine_attr) {
+  (identical(engine_attr, "v3") || isTRUE(EPV_PER_CHANNEL_POINTS_SCALE)) &&
+    exists("EPV3_POINTS_SCALE")
+}
+
 #' Centre EPV channels on their listed position's level, per round
 #'
 #' The positional level correction, applied at the layer that creates it.
@@ -248,13 +273,10 @@ centre_epv_by_position <- function(pgd, channels = EPV_LEVEL_CENTRE_CHANNELS) {
   # read one point per unit, and raw v2 `epv` conserves at only 0.4778 because
   # of it. The vector is engine-agnostic despite its name, and `lbl` below
   # already maps all four v2 channels onto it.
-  use_v3_scale <- (identical(attr(pgd, "epv_engine"), "v3") ||
-                     isTRUE(EPV_PER_CHANNEL_POINTS_SCALE)) &&
-    exists("EPV3_POINTS_SCALE")
+  use_v3_scale <- .use_per_channel_scale(attr(pgd, "epv_engine"))
   # Defined unconditionally so the residual-expectation block below can use it
   # without depending on which branch ran.
-  lbl <- c(epv_recv = "recv", epv_disp = "disp",
-           epv_spoil = "cont_aerial", epv_hitout = "cont_stop")
+  lbl <- EPV_CHANNEL_SCALE_KEYS
   if (use_v3_scale) {
     for (cc in cols) {
       stem <- sub("_(oadj|adj)$", "", cc)
@@ -362,6 +384,12 @@ centre_epv_by_position <- function(pgd, channels = EPV_LEVEL_CENTRE_CHANNELS) {
   if (!isTRUE(standardise)) return(centred * tog)
   s_hi <- .wtd_sd(p80[hi_grp], tog[hi_grp])
   s_lo <- .wtd_sd(p80[!hi_grp], tog[!hi_grp])
+  # Same NA guard the two means get above, and for a sharper reason: `0 * NA` is
+  # NA in R, not 0, so an empty group on ONE side of the ramp would otherwise
+  # make `s` NA for every row -- including rows whose weight gives that side no
+  # say at all -- and silently drop standardisation for the whole vector.
+  if (!is.finite(s_hi)) s_hi <- 0
+  if (!is.finite(s_lo)) s_lo <- 0
   s <- w * s_hi + (1 - w) * s_lo
   bad <- !is.finite(s) | s < 1e-6 | !is.finite(pooled_sd)
   out <- centred * tog
@@ -369,23 +397,6 @@ centre_epv_by_position <- function(pgd, channels = EPV_LEVEL_CENTRE_CHANNELS) {
   out
 }
 
-#' Position-adjust a per-80 EPV channel
-#'
-#' Recentres within position, and — when \code{standardise} is TRUE —
-#' rescales to the pooled cross-position spread as well, so the channel's
-#' overall units are preserved while between-position spread differences are
-#' removed. See \code{EPV_POSITION_STANDARDISE}.
-#'
-#' Falls back to centre-only when the within-position SD is absent or
-#' degenerate; dividing by a near-zero SD amplifies without bound, which is
-#' exactly the failure mode that excludes the hitout channel.
-#'
-#' @param p80 Per-80 channel value.
-#' @param tog Time-on-ground weight.
-#' @param pooled_sd Pooled (all-position) weighted SD for this channel.
-#' @param standardise Logical; rescale as well as recentre.
-#' @return Position-adjusted, TOG-scaled channel value.
-#' @keywords internal
 #' Replace a bench starting slot with the role the player actually filled
 #'
 #' \code{lineup_position} records where a player STARTED. \code{INT} is not a
@@ -466,6 +477,23 @@ centre_epv_by_position <- function(pgd, channels = EPV_LEVEL_CENTRE_CHANNELS) {
   d$out
 }
 
+#' Position-adjust a per-80 EPV channel
+#'
+#' Recentres within position, and -- when \code{standardise} is TRUE --
+#' rescales to the pooled cross-position spread as well, so the channel's
+#' overall units are preserved while between-position spread differences are
+#' removed. See \code{EPV_POSITION_STANDARDISE}.
+#'
+#' Falls back to centre-only when the within-position SD is absent or
+#' degenerate; dividing by a near-zero SD amplifies without bound, which is
+#' exactly the failure mode that excludes the hitout channel.
+#'
+#' @param p80 Per-80 channel value.
+#' @param tog Time-on-ground weight.
+#' @param pooled_sd Pooled (all-position) weighted SD for this channel.
+#' @param standardise Logical; rescale as well as recentre.
+#' @return Position-adjusted, TOG-scaled channel value.
+#' @keywords internal
 .position_adjust <- function(p80, tog, pooled_sd, standardise) {
   centred <- p80 - stats::weighted.mean(p80, tog, na.rm = TRUE)
   if (!isTRUE(standardise)) return(centred * tog)

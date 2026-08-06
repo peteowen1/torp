@@ -19,7 +19,7 @@
 Position-adjusted, TOG-scaled channel value.
 }
 \description{
-Recentres within position, and — when \code{standardise} is TRUE —
+Recentres within position, and -- when \code{standardise} is TRUE --
 rescales to the pooled cross-position spread as well, so the channel's
 overall units are preserved while between-position spread differences are
 removed. See \code{EPV_POSITION_STANDARDISE}.

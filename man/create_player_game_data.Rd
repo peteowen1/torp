@@ -10,7 +10,8 @@ create_player_game_data(
   teams = NULL,
   chains = NULL,
   decay = EPR_DECAY_DEFAULT_DAYS,
-  epv_params = NULL
+  epv_params = NULL,
+  epv_engine = EPV_ENGINE
 )
 }
 \arguments{

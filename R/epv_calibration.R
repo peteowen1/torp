@@ -76,6 +76,17 @@ fit_epv_channel_scale <- function(pgd, results) {
   for (v in ch) m[, (paste0("d_", v)) := get(paste0(v, "_h")) - get(paste0(v, "_a"))]
   fml <- stats::as.formula(paste("margin ~ 0 +", paste0("d_", ch, collapse = " + ")))
   co <- stats::coef(stats::lm(fml, data = m))
+  # lm() returns NA for an aliased coefficient instead of erroring -- a channel
+  # with no variance across teams (a thin sample, a single round, a season
+  # before that channel accrues) comes back NA. That NA then multiplies into
+  # the channel and, because the total sums all channels, makes epv_cal NA for
+  # EVERY row while the function still reports success. Fail here instead.
+  if (anyNA(co)) {
+    cli::cli_abort(c(
+      "Channel scale did not fit: {paste(ch[is.na(co)], collapse = ', ')} came back NA.",
+      "i" = "lm() aliases a coefficient when its channel has no variance across teams.",
+      "x" = "Refusing to return a scale that would make every calibrated total NA."))
+  }
   out <- stats::setNames(as.numeric(co), ch)
   data.table::setattr(out, "n_matches", nrow(m))
   out

@@ -269,6 +269,17 @@ EPV3_POINTS_SCALE <- if (identical(EPV_ENGINE, "v3")) {
   c(recv = 1, disp = 1, cont_aerial = 1, cont_stop = 1)
 }
 
+#' Which EPV channel maps onto which entry of EPV3_POINTS_SCALE
+#'
+#' The v3 scale vector is named for v3's channels, but the mapping is
+#' engine-agnostic -- \code{EPV_PER_CHANNEL_POINTS_SCALE} uses it for v2's four
+#' channels too. Named once here because every site that scales EPV into points
+#' needs the identical mapping, and a second hand-written copy is how
+#' \code{get_player_game_ratings()} drifted from the published pipeline.
+#' @keywords internal
+EPV_CHANNEL_SCALE_KEYS <- c(epv_recv = "recv", epv_disp = "disp",
+                            epv_spoil = "cont_aerial", epv_hitout = "cont_stop")
+
 # NOTE: EPR_PRIOR_GAMES_* live HERE, below EPV_ENGINE, and not up with the other
 # EPR_* constants. They are engine-conditioned, R sources a package file top to
 # bottom, and EPV_ENGINE is defined further down the file than their natural
@@ -929,51 +940,6 @@ LINEUP_POSITION_GROUP_MAP <- c(
   INT  = NA_character_, SUB  = NA_character_, EMERG = NA_character_
 )
 
-#' Lineup group: `lineup_position` with the left/right mirrors merged
-#'
-#' The middle rung between `lineup_position` (21 raw slots) and
-#' `LINEUP_POSITION_GROUP_MAP` (6 broad groups). Five of the 21 slots are
-#' arbitrary left/right mirrors of the same job -- BPL/BPR, HBFL/HBFR, WL/WR,
-#' HFFL/HFFR, FPL/FPR. Left wing and right wing are the same role, and which
-#' one a player is named in carries no information.
-#'
-#' Why merging them is the right default for centring: grouping by raw
-#' `lineup_position` forces the left and right wing to average zero
-#' INDEPENDENTLY. That silently erases any real difference between the two
-#' sides instead of treating them as one role, and halves the cell size for
-#' nothing. Merging gives 13 on-field groups.
-#'
-#' INT / SUB / EMERG are KEPT as their own groups here, unlike
-#' `LINEUP_POSITION_GROUP_MAP` which sends them to NA. `INT` is the single most
-#' common value in the teams data (10,305 rows vs ~2,468 for each on-field
-#' slot), and `.position_adjust()` currently centres interchange players against
-#' each other by grouping on raw `lineup_position`. Mapping them to NA would
-#' change that behaviour as a side effect of a naming change, which is exactly
-#' the kind of silent shift that has cost this repo real MAE.
-#'
-#' 21 slots -> 16 groups (13 on-field + INT + SUB + EMERG).
-#' @keywords internal
-#' Remap bench starting slots to the role a player actually filled
-#'
-#' \code{lineup_position} is where a player STARTED, not what he did.
-#' \code{INT} is not a position, and using it as a centring cell compares a
-#' bench-starting specialist with the bench.
-#'
-#' Measured 2026-08-06 (\code{docs/reviews/INT-CENTRING-BUG-2026-08-06.md}):
-#' the \code{INT} cell has a mean per-80 hitout of 0.378 against \code{RK}'s
-#' 5.158. Sean Darcy rucks at 5.44 per 80 -- a normal ruck rate, near Max Gawn's
-#' 5.96 -- but measured against the bench he lands 4.1 standard deviations above
-#' the mean where Gawn lands 0.43 above his. Production has Darcy's
-#' \code{epr_hitout} at 1.018 and Gawn's at −0.152 as a direct result.
-#'
-#' 1,798 interchange player-games in 2026, roughly a quarter of the total, sit in
-#' that cell. Any bench-starting specialist is inflated the same way.
-#'
-#' \strong{This is step ONE only.} \code{centre_epv_by_position()} already
-#' centres on the listed position, but it subtracts a MEAN -- a level shift
-#' cannot undo a within-group ordering error created by standardising against
-#' the wrong cell's sd. The two steps are independent and only this one is wrong.
-#' @keywords internal
 #' Centre the hitout channel on ruck involvement rather than position
 #'
 #' \strong{Scheme C.} A channel's centring cell should be based on
@@ -982,11 +948,11 @@ LINEUP_POSITION_GROUP_MAP <- c(
 #' compares a part-time ruck with people who never contest a bounce.
 #'
 #' Measured 2026-08-06 on Grundy / Gawn / Cox, same method, three cells:
-#' 	abular{lrrr}{
-#'   \strong{scheme} 	ab \strong{Grundy} 	ab \strong{Gawn} 	ab \strong{Cox} \cr
-#'   lineup slot (current) 	ab 1.310 	ab 0.588 	ab \strong{1.920} \cr
-#'   listed position_group 	ab 1.636 	ab 0.925 	ab −0.624 \cr
-#'   \strong{ruck involvement} 	ab \strong{2.668} 	ab 1.994 	ab 0.103 \cr
+#' \tabular{lrrr}{
+#'   \strong{scheme} \tab \strong{Grundy} \tab \strong{Gawn} \tab \strong{Cox} \cr
+#'   lineup slot (current) \tab 1.310 \tab 0.588 \tab \strong{1.920} \cr
+#'   listed position_group \tab 1.636 \tab 0.925 \tab -0.624 \cr
+#'   \strong{ruck involvement} \tab \strong{2.668} \tab 1.994 \tab 0.103 \cr
 #' }
 #'
 #' Listed position also fixes these three, but \strong{11 of the 44 players
@@ -1026,6 +992,27 @@ EPV_RUCK_INVOLVEMENT_MIN <- 10
 #' @keywords internal
 EPV_RUCK_BLEND_WIDTH <- 0
 
+#' Remap bench starting slots to the role a player actually filled
+#'
+#' \code{lineup_position} is where a player STARTED, not what he did.
+#' \code{INT} is not a position, and using it as a centring cell compares a
+#' bench-starting specialist with the bench.
+#'
+#' Measured 2026-08-06 (\code{docs/reviews/INT-CENTRING-BUG-2026-08-06.md}):
+#' the \code{INT} cell has a mean per-80 hitout of 0.378 against \code{RK}'s
+#' 5.158. Sean Darcy rucks at 5.44 per 80 -- a normal ruck rate, near Max Gawn's
+#' 5.96 -- but measured against the bench he lands 4.1 standard deviations above
+#' the mean where Gawn lands 0.43 above his. Production has Darcy's
+#' \code{epr_hitout} at 1.018 and Gawn's at -0.152 as a direct result.
+#'
+#' 1,798 interchange player-games in 2026, roughly a quarter of the total, sit in
+#' that cell. Any bench-starting specialist is inflated the same way.
+#'
+#' \strong{This is step ONE only.} \code{centre_epv_by_position()} already
+#' centres on the listed position, but it subtracts a MEAN -- a level shift
+#' cannot undo a within-group ordering error created by standardising against
+#' the wrong cell's sd. The two steps are independent and only this one is wrong.
+#' @keywords internal
 ROLE_REMAP_BENCH <- FALSE
 
 #' Starting slots that are not roles
@@ -1045,6 +1032,30 @@ ROLE_FALLBACK_SLOT <- c(
   KEY_FORWARD = "FF", RUCK = "RK"
 )
 
+#' Lineup group: `lineup_position` with the left/right mirrors merged
+#'
+#' The middle rung between `lineup_position` (21 raw slots) and
+#' `LINEUP_POSITION_GROUP_MAP` (6 broad groups). Five of the 21 slots are
+#' arbitrary left/right mirrors of the same job -- BPL/BPR, HBFL/HBFR, WL/WR,
+#' HFFL/HFFR, FPL/FPR. Left wing and right wing are the same role, and which
+#' one a player is named in carries no information.
+#'
+#' Why merging them is the right default for centring: grouping by raw
+#' `lineup_position` forces the left and right wing to average zero
+#' INDEPENDENTLY. That silently erases any real difference between the two
+#' sides instead of treating them as one role, and halves the cell size for
+#' nothing. Merging gives 13 on-field groups.
+#'
+#' INT / SUB / EMERG are KEPT as their own groups here, unlike
+#' `LINEUP_POSITION_GROUP_MAP` which sends them to NA. `INT` is the single most
+#' common value in the teams data (10,305 rows vs ~2,468 for each on-field
+#' slot), and `.position_adjust()` currently centres interchange players against
+#' each other by grouping on raw `lineup_position`. Mapping them to NA would
+#' change that behaviour as a side effect of a naming change, which is exactly
+#' the kind of silent shift that has cost this repo real MAE.
+#'
+#' 21 slots -> 16 groups (13 on-field + INT + SUB + EMERG).
+#' @keywords internal
 LINEUP_GROUP_MAP <- c(
   FB   = "FB",
   BPL  = "BP",   BPR  = "BP",

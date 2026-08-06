@@ -113,13 +113,26 @@ get_player_game_ratings <- function(match = NULL,
   # reproduce the published numbers for neither the channels nor the total.
   # Applied to the channels and the total rebuilt from them, rather than scaled
   # separately, so the parts always sum to the whole.
+  # The branch decision and the channel->scale mapping are SHARED with
+  # centre_epv_by_position() rather than restated here. This block previously
+  # carried its own copy, and all three ways it had drifted made this function
+  # disagree with the published pipeline without saying so: it keyed on the
+  # EPV_ENGINE global instead of the engine the frame was actually built with,
+  # it ignored EPV_PER_CHANNEL_POINTS_SCALE entirely (so enabling the v2
+  # per-channel calibration would have scaled the pipeline and not this), and it
+  # kept an `!all(scale == 1)` fall-through that had already been removed as a
+  # bug from the copy in player_credit.R.
   .ch <- c("epv_recv_adj", "epv_disp_adj", "epv_spoil_adj", "epv_hitout_adj")
-  if (identical(EPV_ENGINE, "v3") && exists("EPV3_POINTS_SCALE") &&
-      !all(EPV3_POINTS_SCALE == 1)) {
-    .lbl <- c(epv_recv_adj = "recv", epv_disp_adj = "disp",
-              epv_spoil_adj = "cont_aerial", epv_hitout_adj = "cont_stop")
-    for (cc in .ch) player_epv[, (cc) := get(cc) * EPV3_POINTS_SCALE[[.lbl[[cc]]]]]
+  if (.use_per_channel_scale(attr(player_epv, "epv_engine"))) {
+    for (cc in .ch) {
+      k <- EPV3_POINTS_SCALE[[EPV_CHANNEL_SCALE_KEYS[[sub("_adj$", "", cc)]]]]
+      if (is.finite(k)) player_epv[, (cc) := get(cc) * k]
+    }
+    # Rebuild the total from its parts, with the same finiteness rule the
+    # pipeline uses: a channel that is NA must not read as a legitimate zero.
+    .finite_all <- Reduce(`&`, lapply(.ch, function(cc) is.finite(player_epv[[cc]])))
     player_epv[, epv_adj := rowSums(as.matrix(.SD), na.rm = TRUE), .SDcols = .ch]
+    if (sum(!.finite_all) > 0) player_epv[!.finite_all, epv_adj := NA_real_]
   } else if (is.finite(EPV_POINTS_SCALE) && !isTRUE(all.equal(EPV_POINTS_SCALE, 1))) {
     for (cc in c("epv_adj", .ch)) player_epv[, (cc) := get(cc) * EPV_POINTS_SCALE]
   }

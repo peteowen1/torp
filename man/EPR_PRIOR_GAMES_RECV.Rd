@@ -3,7 +3,7 @@
 \docType{data}
 \name{EPR_PRIOR_GAMES_RECV}
 \alias{EPR_PRIOR_GAMES_RECV}
-\title{Prior games constant for receiving ratings}
+\title{How much evidence a channel needs before it stops being shrunk}
 \format{
 An object of class \code{numeric} of length 1.
 }
@@ -11,6 +11,27 @@ An object of class \code{numeric} of length 1.
 EPR_PRIOR_GAMES_RECV
 }
 \description{
-Prior games constant for receiving ratings
+\code{prior_games} is the number of weighted games at which a player's own
+record is worth as much as the prior. Production has run \strong{3.0} on every
+channel, against a MEASURED requirement several times that -- it is a
+within/between variance ratio (\code{sigma^2_within / tau^2_between}), and
+v3's chain-delta channels are far noisier than v2's box-score counts, so they
+need much more shrinkage.
+}
+\details{
+\strong{Keyed on \code{EPV_ENGINE}, and that is deliberate.} The v3 numbers
+were measured on v3's channels and are meaningless for v2's; applying them to
+v2 would change every published rating today for no reason. v2 keeps 3.0 so
+production is byte-for-byte untouched while the engine flag stays at
+\code{"v2"}.
+
+v2's own measured values are 7.75 / 9.12 / 12.19 / 4.18 -- also well above
+3.0, so production is under-shrinking too. That is a separate shippable
+change and it has not been gated; do not fold it in here.
+
+Measured 2026-08-04 on the finished v3 structure over 1,032 players with 3+
+games at TOG > 50 (\code{epv3_finalise.R} stage 4). An independent earlier
+measurement on the 4-channel v3 build gave 14.38 / 24.35 / 11.37, so these
+are stable to the structure change.
 }
 \keyword{internal}

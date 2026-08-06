@@ -3,7 +3,7 @@
 \docType{data}
 \name{EPV_POSITION_SHRINK_PRIOR}
 \alias{EPV_POSITION_SHRINK_PRIOR}
-\title{Prior weight for \code{EPV_POSITION_SHRINK}, in TOG-weighted player-games}
+\title{Prior weight for \code{EPV_POSITION_SHRINK} under the \code{"prior"} rule}
 \format{
 An object of class \code{numeric} of length 1.
 }
