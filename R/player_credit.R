@@ -882,8 +882,14 @@ create_player_game_data <- function(pbp_data = NULL,
           .ho  <- tidyr::replace_na(hitouts, 0)
           .hta <- tidyr::replace_na(hitouts_to_advantage, 0)
           .rc  <- tidyr::replace_na(ruck_contests, 0)
+          # abs() on the contest weight, and it is load-bearing. HERE that term
+          # multiplies `hitouts`, so it is the credit for a contest WON, with
+          # EPV_RUCK_LOSS_WT carrying the debit on the next line. v2 uses the
+          # same constant against `ruck_contests` -- attendance -- where it is a
+          # DEBIT and went negative on 2026-08-07. Reading it signed would make
+          # v3 charge a ruck for winning. Same idea, opposite sign convention.
           .ho * p$hitout_wt + .hta * p$hitout_adv_wt +
-            .ho * p$ruck_contest_wt -
+            .ho * abs(p$ruck_contest_wt) -
             pmax(0, .rc - .ho) * EPV_RUCK_LOSS_WT
         } else {
           tidyr::replace_na(epv_hitout, 0)

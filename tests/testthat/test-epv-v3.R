@@ -73,15 +73,41 @@ test_that("the stoppage term is a win/loss ledger, not an attendance count", {
 })
 
 test_that("zero-sum stoppage pays nothing for splitting contests 50/50", {
-  # The defect it fixes: EPV_RUCK_CONTEST_WT is positive, so v2 pays a ruckman
-  # for every contest he ATTENDS, including the ones he loses.
+  # v3's ledger: a credit per contest WON, a debit per contest LOST. Split them
+  # 50/50 and the two cancel.
+  #
+  # abs() because that is exactly what the production branch does
+  # (player_credit.R, the EPV3_STOP_ZERO_SUM arm). v2 uses the same constant
+  # against `ruck_contests` -- attendance -- where it is a DEBIT and went
+  # negative on 2026-08-07. The previous version of this test hardcoded the
+  # SIGNED constant and broke on that flip while production was untouched, which
+  # is precisely the failure mode of a test that restates a formula in its own
+  # body instead of exercising the code.
+  w <- abs(EPV_RUCK_CONTEST_WT)
   wins <- 10; contests <- 20
-  attendance_term <- wins * EPV_RUCK_CONTEST_WT -
-    max(0, contests - wins) * EPV_RUCK_LOSS_WT
-  expect_equal(attendance_term, 0)
+  expect_equal(wins * w - max(0, contests - wins) * EPV_RUCK_LOSS_WT, 0)
   # And a ruck who wins more than he loses is still paid.
   wins <- 15
-  expect_gt(wins * EPV_RUCK_CONTEST_WT - max(0, contests - wins) * EPV_RUCK_LOSS_WT, 0)
+  expect_gt(wins * w - max(0, contests - wins) * EPV_RUCK_LOSS_WT, 0)
+})
+
+test_that("v2's attendance debit cannot invert v3's credit for winning", {
+  # One constant, two opposite sign conventions:
+  #   v2  EPV_RUCK_CONTEST_WT * ruck_contests   -- per contest ATTENDED, a debit
+  #   v3  abs(...)            * hitouts         -- per contest WON, a credit
+  # Drop the abs() in the v3 branch and a ruck starts being charged for winning,
+  # silently, with the v2 arm still looking correct.
+  #
+  # What this can check is the contract the two engines rely on; it cannot check
+  # that the v3 branch still calls abs(), which would need a full engine build.
+  # Stated so nobody reads it as more coverage than it is.
+  expect_lt(EPV_RUCK_CONTEST_WT, 0)        # v2 side: attending must cost
+  expect_gt(abs(EPV_RUCK_CONTEST_WT), 0)   # v3 side: winning must still pay
+  expect_gt(EPV_RUCK_LOSS_WT, 0)           # and the v3 debit stays a debit
+  # Break-even for v2 sits at the league average win rate, which is the whole
+  # basis for EPV_HITOUT_WT's value -- pin it so a later edit to either constant
+  # has to face the intent rather than just the number.
+  expect_equal(abs(EPV_RUCK_CONTEST_WT) / EPV_HITOUT_WT, 0.377, tolerance = 0.02)
 })
 
 test_that("v3 points constants are engine-conditioned, not a bare vector", {

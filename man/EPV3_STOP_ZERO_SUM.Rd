@@ -16,11 +16,19 @@ EPV3_STOP_ZERO_SUM
 }
 \details{
 Every other v3 channel is credit/debit: somebody gains and somebody sheds the
-same amount. \code{cont_stop} is not. It pays
+same amount. \code{cont_stop} was not. It paid
 \code{hitouts * 0.0510 + hitouts_to_advantage * 0.1748 + ruck_contests * 0.0232},
-and because \code{EPV_RUCK_CONTEST_WT} is POSITIVE a ruckman is paid 0.0232
-for every contest he \emph{attends}, including the ones he loses. That is the
-one place v3's own logic does not hold.
+and because \code{EPV_RUCK_CONTEST_WT} was POSITIVE a ruckman was paid 0.0232
+for every contest he \emph{attended}, including the ones he lost. That was the
+one place v3's own logic did not hold.
+
+\strong{Update 2026-08-07: v2 now does the same thing by a different route.}
+\code{EPV_RUCK_CONTEST_WT} is \strong{-0.0232}, so v2's attendance term is a
+debit and its channel is a win/loss ledger too -- algebraically the same
+family as this one. The contrast this flag was named for has narrowed to a
+choice of which variable carries the penalty: v2 charges per contest
+ATTENDED, v3 charges per contest LOST. They differ only in how much a win is
+worth relative to a loss.
 
 A ruck contest has exactly two rucks and \code{hitouts} counts the ones this
 ruck won, so \code{ruck_contests - hitouts} is how many he LOST. Turning that

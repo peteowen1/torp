@@ -2,6 +2,34 @@
 
 ## Rating changes
 
+* **The ruck must now win contests to gain points.** This CHANGES PUBLISHED
+  RATINGS. `EPV_RUCK_CONTEST_WT` goes **+0.0232 → −0.0232**: it used to pay for
+  every contest *attended*, won or lost, so a ruck banked roughly +0.70 a game
+  for turning up — most of the "the channel over-pays rucks ~11×" finding.
+  `EPV_HITOUT_WT` goes **0.0510 → 0.0615**, which sets break-even at the actual
+  league average win rate of **37.7%**: an average ruck's contest work is worth
+  about nothing, a better one positive, and a ruck who attends 30 and wins 10
+  without direction now goes negative. `EPV_HITOUT_ADV_WT` is unchanged at
+  0.1748 — direction is the ruck's skill and carries 70.5% of the channel's
+  variance.
+
+  Judged on the fast EPR gate (1,194 matches, rating as the only feature):
+  **better on all five of MAE, RMSE, Brier, logloss and bits**, with the
+  within-team coefficient moving toward 1.0. Tips is fractionally down, about
+  two across 1,005 matches. Face validity passes on all four rows — position mix
+  +1, Spearman 0.9991, nobody appears from nowhere, biggest climb +10.
+
+  The production match gate read dMAE +0.2194 and is **not** the basis for this;
+  it was overturned by the EPR gate and by the channel's own signal, which
+  roughly doubled (correlation with margin 0.089 → 0.169). See
+  `docs/HOW-WE-WORK.md`.
+
+  One weight is set against the measurement, deliberately and on the record: the
+  fit puts an undirected tap at −0.0209 per ruck (t −3.5, stable across halves),
+  and it ships positive. Attendance, by contrast, **cannot** be priced from
+  margin at all — both teams attend the same contests, so its differential has an
+  sd of 0.59 on a level of 92.1.
+
 * **The centring cell is now the job a player did, not the slot he started in.**
   This CHANGES PUBLISHED RATINGS. `lineup_position` records where a player
   started, so every bench-starting specialist was being centred against

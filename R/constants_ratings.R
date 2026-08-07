@@ -1246,16 +1246,65 @@ EPV_PRESSURE_WT <- -0.0024
 EPV_DEF_PRESSURE_WT <- -0.1882
 
 #' Hitout weight per hitout
+#'
+#' \strong{Repriced 2026-08-07, 0.0510 -> 0.0615.} With
+#' \code{EPV_RUCK_CONTEST_WT} now a debit, a contest WON nets
+#' \code{0.0615 - 0.0232 = +0.0383} and one LOST costs \code{-0.0232}, which puts
+#' break-even at a \strong{37.7\%} win rate -- the actual league average. An
+#' average ruck's contest work is therefore worth about nothing, a better one
+#' positive.
+#'
+#' \strong{This weight is positive against the measurement, deliberately.} The
+#' fit (\code{data-raw/04-analysis/epv3_ruck_three_way.R}, 1,242 matches) puts an
+#' undirected tap at \strong{-0.0209} per ruck (t -3.5), stable across halves at
+#' -0.0586 / -0.0299: winning a tap you do not direct is worth slightly less than
+#' nothing, because you have committed your ruck and the ball drops into a
+#' scrap. Pete's judgement is that a won tap should not be priced negative.
+#' Recorded rather than reconciled so it can be re-opened.
 #' @keywords internal
-EPV_HITOUT_WT <- 0.0510 * EPV_RUCK_SWING_SCALE
+EPV_HITOUT_WT <- 0.0615 * EPV_RUCK_SWING_SCALE
 
 #' Hitout to advantage weight
+#'
+#' The one term the measurement and the design agree on, and the one that should
+#' dominate: the ruck's skill is DIRECTION, not elevation. Left at 0.1748 in the
+#' 2026-08-07 repricing although the fit says +0.1013 per ruck (t 6.4) -- at
+#' 0.1748 direction carries 70.5\% of the channel's variance, at 0.1015 only
+#' 55.6\%, and dropping it costs a third of the channel's remaining spread on top
+#' of what the attendance debit already costs. If the channel is too loud that is
+#' a points-SCALE decision, not a reason to underweight the skill.
 #' @keywords internal
 EPV_HITOUT_ADV_WT <- 0.1748 * EPV_RUCK_SWING_SCALE
 
-#' Ruck contest weight (hitout component)
+#' Ruck contest weight (hitout component) -- a DEBIT since 2026-08-07
+#'
+#' \strong{Sign flipped, +0.0232 -> -0.0232.} It used to pay for every contest
+#' \emph{attended}, won or lost, so a ruck banked roughly +0.70 a game for
+#' turning up and never had to win anything -- most of the "the channel over-pays
+#' rucks ~11x" finding. You must now win contests to gain points.
+#'
+#' \strong{Its sign is a design choice and cannot be otherwise.}
+#' \code{ruck_contests} averages 92.1 per team-match with a differential sd of
+#' \strong{0.59} -- both teams attend the same contests, because a contest has
+#' two rucks in it. There is almost no variation for a margin regression to fit
+#' (t 0.65, sign flips between halves), so the data cannot price this term either
+#' way. Do not "correct" it to a fitted value; there isn't one.
+#'
+#' \strong{An attendance debit IS a loss ledger}, verified to ten decimal places:
+#' \code{h*w_h + rc*w_c} equals \code{h*(w_h - w_c) - (rc - h)*(-w_c)}. There is
+#' no separate loss term to add for v2, and the only real free parameter is how
+#' much a won contest is worth against a lost one -- which is
+#' \code{EPV_HITOUT_WT} above.
+#'
+#' \strong{v3 reads the MAGNITUDE of this, not the signed value}
+#' (\code{player_credit.R}, the \code{EPV3_STOP_ZERO_SUM} branch). There the term
+#' multiplies \emph{hitouts}, i.e. it is the credit for a contest WON, with
+#' \code{EPV_RUCK_LOSS_WT} carrying the debit separately -- so a negative value
+#' here would charge a v3 ruck for winning. The two engines express the same
+#' idea with opposite sign conventions; changing one must not silently invert the
+#' other.
 #' @keywords internal
-EPV_RUCK_CONTEST_WT <- 0.0232 * EPV_RUCK_SWING_SCALE
+EPV_RUCK_CONTEST_WT <- -0.0232 * EPV_RUCK_SWING_SCALE
 
 #' Make v3's stoppage channel zero-sum instead of pay-to-attend
 #'
@@ -1263,11 +1312,19 @@ EPV_RUCK_CONTEST_WT <- 0.0232 * EPV_RUCK_SWING_SCALE
 #' \code{EPV_ENGINE == "v3"}.
 #'
 #' Every other v3 channel is credit/debit: somebody gains and somebody sheds the
-#' same amount. \code{cont_stop} is not. It pays
+#' same amount. \code{cont_stop} was not. It paid
 #' \code{hitouts * 0.0510 + hitouts_to_advantage * 0.1748 + ruck_contests * 0.0232},
-#' and because \code{EPV_RUCK_CONTEST_WT} is POSITIVE a ruckman is paid 0.0232
-#' for every contest he \emph{attends}, including the ones he loses. That is the
-#' one place v3's own logic does not hold.
+#' and because \code{EPV_RUCK_CONTEST_WT} was POSITIVE a ruckman was paid 0.0232
+#' for every contest he \emph{attended}, including the ones he lost. That was the
+#' one place v3's own logic did not hold.
+#'
+#' \strong{Update 2026-08-07: v2 now does the same thing by a different route.}
+#' \code{EPV_RUCK_CONTEST_WT} is \strong{-0.0232}, so v2's attendance term is a
+#' debit and its channel is a win/loss ledger too -- algebraically the same
+#' family as this one. The contrast this flag was named for has narrowed to a
+#' choice of which variable carries the penalty: v2 charges per contest
+#' ATTENDED, v3 charges per contest LOST. They differ only in how much a win is
+#' worth relative to a loss.
 #'
 #' A ruck contest has exactly two rucks and \code{hitouts} counts the ones this
 #' ruck won, so \code{ruck_contests - hitouts} is how many he LOST. Turning that
