@@ -105,10 +105,33 @@ bm_epr_gate <- function(pgd, ratings, results, label, rating_col = "epr",
     oos <- rbindlist(lapply(seasons[-1], function(s) {
       tr <- m[season < s]; te <- m[season == s]
       if (nrow(tr) < 100 || nrow(te) < 20) return(NULL)
-      p <- stats::predict(stats::lm(margin ~ d, data = tr), newdata = te)
+      f <- stats::lm(margin ~ d, data = tr)
+      p <- stats::predict(f, newdata = te)
+      # Probability metrics as well as error ones, because they answer a
+      # different question and have disagreed before: a change can shorten the
+      # average miss while making the model worse-calibrated about who wins.
+      # Quoting MAE alone once made a position-split arm look like a winner
+      # when it was worst of five on Brier, logloss and bits.
+      #
+      # The margin model has no probability of its own, so one is derived the
+      # standard way: P(home win) = Phi(pred / sigma) with sigma the TRAINING
+      # residual sd. Training, not test -- using the test spread would leak the
+      # season being scored into its own forecast.
+      sigma <- stats::sd(stats::residuals(f))
+      pw <- stats::pnorm(p / sigma)
+      pw <- pmin(pmax(pw, 1e-6), 1 - 1e-6)
+      # Draws are 0.5, matching the production gate's convention rather than
+      # dropping them -- a drawn game is not a missing observation.
+      hw <- data.table::fifelse(te$margin > 0, 1, data.table::fifelse(te$margin < 0, 0, 0.5))
       data.table(season = s, n = nrow(te), mae = mean(abs(p - te$margin)),
                  rmse = sqrt(mean((p - te$margin)^2)),
-                 tips = mean((p > 0) == (te$margin > 0)))
+                 tips = mean((p > 0) == (te$margin > 0)),
+                 brier = mean((pw - hw)^2),
+                 logloss = -mean(hw * log(pw) + (1 - hw) * log(1 - pw)),
+                 bits = mean(data.table::fifelse(
+                   hw == 1, 1 + log2(pw),
+                   data.table::fifelse(hw == 0, 1 + log2(1 - pw),
+                                       1 + 0.5 * log2(pw * (1 - pw))))))
     }))
   }
 
@@ -131,7 +154,13 @@ bm_epr_gate <- function(pgd, ratings, results, label, rating_col = "epr",
   out <- list(label = label, lineup_coverage = round(cov, 3),
               n_matches = nrow(m), mean_players = round(mean(tm$n_players), 1),
               pooled = pooled, fixed_effects = fe,
-              oos = oos, oos_mae = if (!is.null(oos)) round(mean(oos$mae), 4) else NA_real_,
+              oos = oos,
+              oos_mae     = if (!is.null(oos)) round(mean(oos$mae), 4) else NA_real_,
+              oos_rmse    = if (!is.null(oos)) round(mean(oos$rmse), 4) else NA_real_,
+              oos_tips    = if (!is.null(oos)) round(mean(oos$tips), 4) else NA_real_,
+              oos_brier   = if (!is.null(oos)) round(mean(oos$brier), 5) else NA_real_,
+              oos_logloss = if (!is.null(oos)) round(mean(oos$logloss), 5) else NA_real_,
+              oos_bits    = if (!is.null(oos)) round(mean(oos$bits), 5) else NA_real_,
               attack = att, defence = def,
               attack_fe = att_fe, defence_fe = def_fe)
   class(out) <- c("torp_epr_gate", "list"); out
@@ -153,9 +182,15 @@ print.torp_epr_gate <- function(x, ...) {
   cat("     A coefficient that collapses here was measuring which club, not who played.\n")
   if (!is.null(x$oos)) {
     cat("\n  3. OUT OF SAMPLE  fit on earlier seasons, score the next\n")
-    cat(sprintf("     mean MAE %.3f across %d seasons\n", x$oos_mae, nrow(x$oos)))
+    cat(sprintf("     across %d seasons: MAE %.3f | RMSE %.3f | tips %.3f | Brier %.5f | logloss %.5f | bits %.5f\n",
+                nrow(x$oos), x$oos_mae, x$oos_rmse, x$oos_tips,
+                x$oos_brier, x$oos_logloss, x$oos_bits))
     print(x$oos[, .(season, n, mae = round(mae, 2), rmse = round(rmse, 2),
-                    tips = round(tips, 3))])
+                    tips = round(tips, 3), brier = round(brier, 4),
+                    logloss = round(logloss, 4), bits = round(bits, 4))])
+    cat("     MAE/RMSE lower better; tips/bits HIGHER better; Brier/logloss lower.\n")
+    cat("     Win probability is Phi(pred / training residual sd) -- the margin\n")
+    cat("     model has none of its own. Draws count as 0.5, not dropped.\n")
   }
   cat("\n  4. FOR AND AGAINST\n")
   cat(sprintf("     points scored   ~ own attack rating    raw %+.4f (t %5.1f) | +FE %+.4f (t %5.1f)\n",
@@ -172,18 +207,38 @@ print.torp_epr_gate <- function(x, ...) {
 }
 
 compare_epr_gates <- function(a, b) {
+  # All four OOS metrics, always. Error metrics and probability metrics answer
+  # different questions and have disagreed here before -- a change that shortens
+  # the average miss can still be worse at saying who wins. `better` states the
+  # direction per row so nobody has to remember which way Brier runs.
   rows <- data.table(
     metric = c("pooled coef", "pooled R2", "within-team coef", "within-team t",
-               "within-team R2", "OOS mean MAE", "points-conceded coef (+FE)"),
+               "within-team R2",
+               "OOS MAE", "OOS RMSE", "OOS tips", "OOS Brier", "OOS logloss", "OOS bits",
+               "points-conceded coef (+FE)"),
+    better = c("nearer 1.0", "higher", "nearer 1.0", "higher", "higher",
+               "lower", "lower", "higher", "lower", "lower", "higher",
+               "more negative"),
     a = c(a$pooled$coef, a$pooled$r2, a$fixed_effects$coef, a$fixed_effects$t,
-          a$fixed_effects$r2, a$oos_mae, a$defence_fe$coef),
+          a$fixed_effects$r2, a$oos_mae, a$oos_rmse, a$oos_tips,
+          a$oos_brier, a$oos_logloss, a$oos_bits, a$defence_fe$coef),
     b = c(b$pooled$coef, b$pooled$r2, b$fixed_effects$coef, b$fixed_effects$t,
-          b$fixed_effects$r2, b$oos_mae, b$defence_fe$coef))
+          b$fixed_effects$r2, b$oos_mae, b$oos_rmse, b$oos_tips,
+          b$oos_brier, b$oos_logloss, b$oos_bits, b$defence_fe$coef))
   setnames(rows, c("a", "b"), c(a$label, b$label))
-  rows[, delta := round(get(b$label) - get(a$label), 4)]
+  rows[, delta := round(get(b$label) - get(a$label), 5)]
   cat("\n=== EPR gate: ", a$label, " vs ", b$label, " ===\n", sep = "")
   print(rows)
-  cat("\nOOS MAE lower is better. Within-team coefficient nearer 1.0 and a higher t\n")
-  cat("mean the rating tracks WHO IS PLAYING rather than which club it is.\n\n")
+
+  # A one-line verdict across the four OOS metrics, because reading six rows and
+  # forming an impression is how "wins on MAE" got quoted as "better" before.
+  o <- rows[metric %chin% c("OOS MAE", "OOS RMSE", "OOS Brier", "OOS logloss", "OOS bits")]
+  dir <- data.table::fifelse(o$better == "higher", 1, -1)
+  imp <- sum(dir * o$delta > 0); wor <- sum(dir * o$delta < 0)
+  cat(sprintf("\nOOS metrics: %d better, %d worse, %d unchanged (of %d).\n",
+              imp, wor, nrow(o) - imp - wor, nrow(o)))
+  cat("A change worth making does not lose on any of them and wins on more than one.\n")
+  cat("Within-team coefficient nearer 1.0 with a higher t means the rating tracks\n")
+  cat("WHO IS PLAYING rather than which club it is.\n\n")
   invisible(rows)
 }
