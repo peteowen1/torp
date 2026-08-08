@@ -402,7 +402,22 @@ allocate_contest_losses <- function(scored, chains, half,
     a <- merge(expo, unnamed, by = c("match_id", "team_id"), allow.cartesian = TRUE)
     a[, share := expo / sum(expo), by = .(match_id, team_id)]
     a[, cont_alloc := debit * share]
-    return(a[, .(cont_alloc = sum(cont_alloc)), by = .(player_id, match_id)])
+    out <- a[, .(cont_alloc = sum(cont_alloc)), by = .(player_id, match_id)]
+
+    # "Conserves exactly" was asserted in the comment above and nowhere else.
+    # The merge is an inner join: a losing team_id present in `unnamed` but
+    # absent from `expo` drops its whole debit silently. The ledger branch 20
+    # lines up already checks this, and so does allocate_by_mirror(); this
+    # branch is the shipped default and had no check at all.
+    allocated <- sum(out$cont_alloc)
+    owed <- sum(unnamed$debit)
+    if (abs(allocated - owed) > max(1e-6, 0.001 * abs(owed))) {
+      cli::cli_abort(c(
+        "Team-equal allocation did not conserve: owed {round(owed, 2)}, allocated {round(allocated, 2)}.",
+        "x" = "The point of allocating at all is that the debit lands somewhere."
+      ))
+    }
+    return(out)
   }
 
   expo <- ch[!is.na(player_id) & !is.na(team_id) &

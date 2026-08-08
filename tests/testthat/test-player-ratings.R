@@ -136,9 +136,12 @@ test_that("calculate_epr_stats respects decay parameter", {
     player_name = rep("First Last", 3),
     match_id = c("CD_M2024014101", "CD_M2024014102", "CD_M2024014103"),
     utc_start_time = as.Date("2024-04-01") + c(0, 30, 60),  # 0, 30, 60 days apart
-    epv_adj = c(100, 100, 100),
-    epv_recv_adj = c(50, 50, 50),
-    epv_disp_adj = c(50, 50, 50),
+    # Values must VARY over time or decay cannot change the answer: a weighted
+    # mean of three identical numbers is that number for every weighting.
+    # Ascending, so a short decay (recent-heavy) must land above a long one.
+    epv_adj = c(40, 100, 160),
+    epv_recv_adj = c(20, 50, 80),
+    epv_disp_adj = c(20, 50, 80),
     epv_spoil_adj = c(10, 10, 10),
     epv_hitout_adj = c(5, 5, 5),
     time_on_ground_percentage = c(80, 85, 75),
@@ -171,6 +174,22 @@ test_that("calculate_epr_stats respects decay parameter", {
   # Both should return results
   expect_equal(nrow(result_short), 1)
   expect_equal(nrow(result_long), 1)
+
+  # The point of the test. Previously it stopped at the two nrow() checks, so a
+  # calculate_epr_stats() that ignored decay entirely passed unchanged -- and
+  # the fixture used identical values at every date, which made the comparison
+  # impossible even if it had been written.
+  expect_false(isTRUE(all.equal(result_short$epr_recv, result_long$epr_recv)),
+               info = "decay_recv had no effect on epr_recv")
+  # And the effect has to be material, not floating-point noise.
+  expect_gt(abs(result_short$epr_recv - result_long$epr_recv), 1)
+
+  # Direction is deliberately NOT asserted. Two forces compete: a short decay
+  # weights the recent (higher) games more, which pushes epr_recv UP, but it
+  # also shrinks the effective sample size, which pulls harder toward
+  # prior_games_recv and pushes it DOWN. Measured on this fixture the prior
+  # wins by 5.65, so asserting "short > long" would encode a fixture accident
+  # as if it were a property of the decay parameter.
 })
 
 # -----------------------------------------------------------------------------
