@@ -3,7 +3,7 @@
 \docType{data}
 \name{EPV_RUCK_CONTEST_WT}
 \alias{EPV_RUCK_CONTEST_WT}
-\title{Ruck contest weight (hitout component)}
+\title{Ruck contest weight (hitout component) -- a DEBIT since 2026-08-07}
 \format{
 An object of class \code{numeric} of length 1.
 }
@@ -11,6 +11,31 @@ An object of class \code{numeric} of length 1.
 EPV_RUCK_CONTEST_WT
 }
 \description{
-Ruck contest weight (hitout component)
+\strong{Sign flipped, +0.0232 -> -0.0232.} It used to pay for every contest
+\emph{attended}, won or lost, so a ruck banked roughly +0.70 a game for
+turning up and never had to win anything -- most of the "the channel over-pays
+rucks ~11x" finding. You must now win contests to gain points.
+}
+\details{
+\strong{Its sign is a design choice and cannot be otherwise.}
+\code{ruck_contests} averages 92.1 per team-match with a differential sd of
+\strong{0.59} -- both teams attend the same contests, because a contest has
+two rucks in it. There is almost no variation for a margin regression to fit
+(t 0.65, sign flips between halves), so the data cannot price this term either
+way. Do not "correct" it to a fitted value; there isn't one.
+
+\strong{An attendance debit IS a loss ledger}, verified to ten decimal places:
+\code{h*w_h + rc*w_c} equals \code{h*(w_h - w_c) - (rc - h)*(-w_c)}. There is
+no separate loss term to add for v2, and the only real free parameter is how
+much a won contest is worth against a lost one -- which is
+\code{EPV_HITOUT_WT} above.
+
+\strong{v3 reads the MAGNITUDE of this, not the signed value}
+(\code{player_credit.R}, the \code{EPV3_STOP_ZERO_SUM} branch). There the term
+multiplies \emph{hitouts}, i.e. it is the credit for a contest WON, with
+\code{EPV_RUCK_LOSS_WT} carrying the debit separately -- so a negative value
+here would charge a v3 ruck for winning. The two engines express the same
+idea with opposite sign conventions; changing one must not silently invert the
+other.
 }
 \keyword{internal}

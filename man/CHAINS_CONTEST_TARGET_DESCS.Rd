@@ -13,8 +13,23 @@ An object of class \code{character} of length 2.
 CHAINS_CONTEST_TARGET_DESCS
 }
 \description{
-Chains descriptions for the contest target / kick result side
-These appear in the row BEFORE the contest outcome (Spoil, Mark, etc.)
-at the same x,y coordinates.
+\strong{\verb{Kick Inside 50 Result} does not belong here and is left anyway.}
+It is an ANNOTATION of where an inside-50 entry ended up, not a player who
+contested anything: 90.4 rows per match of which \strong{34.7\\% carry no
+\code{player_id} at all}, against \verb{Contest Target}'s 26.0 per match at 100\\%. The
+volume comparison is the tell -- \verb{Contest Target} at 26.0 lines up almost
+exactly with the AFL API's 26 defensive one-on-ones per match, two
+independent sources counting the same thing, and an annotation firing 3.5x as
+often can only dilute it.
+}
+\details{
+It is NOT removed here because this constant is read by FIVE call sites and
+four of them are v2 production paths -- \code{clean_pbp()} (which sets
+\code{contest_target_id}, feeding v2's \code{contest_epv} and the reduced disposal
+scale), \code{contests.R}, and two in \code{player_credit.R}. Changing it would move
+every published v2 rating with no gate. v3 uses
+\code{EPV3_CONTEST_TARGET_DESCS} instead.
+
+\strong{Fixing it for v2 is a real candidate and needs its own gate.}
 }
 \keyword{internal}

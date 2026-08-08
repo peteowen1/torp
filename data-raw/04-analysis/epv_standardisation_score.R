@@ -56,8 +56,7 @@ wsd <- function(x,w) { m <- wmean(x,w)
 
 pg <- rdp("player_game_%d.parquet", SEASONS)
 pg[, round := as.numeric(round)]
-pg[, tog_safe := pmax(fifelse(is.na(time_on_ground_percentage), 100,
-                              time_on_ground_percentage)/100, 0.1)]
+pg[, tog_safe := pmax(data.table::fcoalesce(time_on_ground_percentage / 100, 0.1), 0.1)]
 
 # GUARD (added 2026-07-27 after the absurdity check fired). Standardising by
 # dividing by sd_pos is unsafe for a channel that is positionally EXCLUSIVE.

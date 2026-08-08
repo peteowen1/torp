@@ -176,16 +176,40 @@ Constants in `R/constants_data.R`: `COORD_JUMP_THRESHOLD` (100m) gates the step-
 
 **Key Files**: `R/player_credit.R`, `R/constants_ratings.R`
 
-**Entry Point**: `create_player_game_data(pbp_data, player_stats, teams, decay, epv_params)`
+**Entry Point**: `create_player_game_data(pbp_data, player_stats, teams, decay, epv_params, epv_engine)`
 
-**Four-Component Credit System**:
+**Two engines.** `EPV_ENGINE` selects which. `"v2"` is production and the
+default; `"v3"` is the chain-native rebuild, gated but not shipped. Full v3
+channel contents, formula by formula:
+[`../docs/reference/EPV-V3-CHANNELS.md`](../docs/reference/EPV-V3-CHANNELS.md).
 
-| Component | Key Weights (from `default_epv_params()`) | What It Measures |
-|-----------|-------------------------------------------|------------------|
-| Disposal EPV | Goals (0.44), Behinds (1.08), Inside 50s (0.25), Score involvements (0.31), Clangers (-0.005), Turnovers (-0.11) | Value created by kicking/handballing |
-| Reception EPV | Marks inside 50 (0.40), Ground ball gets (0.22), Contested marks (0.07), Frees for (0.18) | Value created by receiving the ball |
-| Spoil EPV | Tackles (0.31), One-percenters (0.16), Spoils (0.083), Intercepts (0.065), Rebound 50s (-0.19) | Defensive value |
-| Hitout EPV | Hitouts to advantage (0.17), Clearances (0.11), Hitouts (0.052), Ruck contests (0.023) | Ruck value |
+**v2 — Four-Component Credit System** (chain-derived part plus box-score weights):
+
+| Component | Weights (from `default_epv_params()`) | What It Measures |
+|-----------|---------------------------------------|------------------|
+| Disposal EPV | chain `delta_epv * 0.5`, plus goals (0.4262), behinds (1.0899), shots at goal (0.4419), inside 50s (0.2429), score involvements (0.2916), kicks (0.0680), handballs (0.0629), metres gained (0.0010), goal assists (0.2240), turnovers (-0.0856), clangers (-0.0094) | Value created by kicking/handballing |
+| Reception EPV | chain `delta_epv * 0.5`, plus `contest_epv`, contested possessions (0.1642), ground ball gets (0.2165), marks inside 50 (0.3464), uncontested possessions (0.0344), contested marks (0.0259), marks (0.0160), frees for (0.2331) | Value created by receiving the ball |
+| Spoil EPV | tackles (0.2980), one-percenters (0.1260), spoils (0.0737), frees against (0.0428), intercepts (0.0166), pressure acts (-0.0024), def-half pressure acts (-0.1882), rebound 50s (-0.1763) | Defensive value |
+| Hitout EPV | hitouts to advantage (0.1748), hitouts (0.0510), ruck contests (0.0232) | Ruck value |
+
+*(Corrected 2026-08-03: this table previously listed a `Clearances (0.11)` term
+that is not in the formula, and several weights had drifted from the constants.)*
+
+**v3 — Four-Component Chain-Native System**. Thirty box weights removed; only
+the ruck carve-out remains, because `Centre Bounce` / `Ball Up Call` rows carry a
+`player_id` 0.0% of the time.
+
+| Component | Source | Box stats |
+|-----------|--------|-----------|
+| `epv_recv` | `delta_epv * pos_team * 0.5` on non-aerial possession gains | none |
+| `epv_disp` | `delta_epv * 0.5` on non-aerial disposals, plus `V_pre - exp_pts` to the kicker on aerial kicks | none |
+| `epv_spoil` *(aliases `epv_cont_aerial`)* | surprise-weighted aerial contest, `±p*Delta` split zero-sum between contestants | none |
+| `epv_hitout` *(aliases `epv_cont_stop`)* | identical to v2's hitout formula | **all of it** |
+
+**The v3 column names are aliases and are misleading** — `epv_spoil` holds
+aerial contest value and contains no spoil weight. Kept only to avoid a rename
+across 18 R files and two released artifacts before v3 is chosen. See the
+reference doc §5.
 
 **Bayesian Shrinkage**: Each component uses the formula:
 ```

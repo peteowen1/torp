@@ -11,6 +11,51 @@ An object of class \code{numeric} of length 1.
 EPR_PRIOR_RATE_HITOUT
 }
 \description{
-Prior rate for hitout component (shrinkage target per weighted game)
+Carries \code{EPV_RUCK_SWING_SCALE} for the same reason the others carry
+\code{EPV_POINTS_SCALE}: \code{.bayesian_shrink()} adds
+\code{prior_games * prior_rate} AFTER the value, so an unscaled prior would leave
+the hitout rating a blend of scaled and unscaled parts rather than a clean
+rescale. If you change one, change both.
 }
+\keyword{3-channel}
+\keyword{A}
+\keyword{BOTH}
+\keyword{Conditioned}
+\keyword{Zeroed}
+\keyword{`EPV3_CHANNELS`}
+\keyword{a}
+\keyword{all-zero}
+\keyword{an}
+\keyword{and}
+\keyword{arm,}
+\keyword{channel}
+\keyword{constants}
+\keyword{does}
+\keyword{exist.}
+\keyword{for}
+\keyword{hitout}
+\keyword{holds}
 \keyword{internal}
+\keyword{is}
+\keyword{it}
+\keyword{level}
+\keyword{non-zero}
+\keyword{not}
+\keyword{nothing.}
+\keyword{on}
+\keyword{prior}
+\keyword{reintroduce}
+\keyword{says.}
+\keyword{shrink}
+\keyword{slot}
+\keyword{so}
+\keyword{that}
+\keyword{the}
+\keyword{toward}
+\keyword{under}
+\keyword{untouched}
+\keyword{v2}
+\keyword{v3}
+\keyword{whatever}
+\keyword{where}
+\keyword{would}

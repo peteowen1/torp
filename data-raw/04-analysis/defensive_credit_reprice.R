@@ -61,8 +61,7 @@ pg <- rbindlist(lapply(SEASONS, function(s)
   as.data.table(read_parquet(file.path(DATA_DIR, sprintf("player_game_%d.parquet", s))))),
   use.names = TRUE, fill = TRUE)
 pg[, round := as.numeric(round)]
-pg[, tog_safe := pmax(fifelse(is.na(time_on_ground_percentage), 100,
-                              time_on_ground_percentage) / 100, 0.1)]
+pg[, tog_safe := pmax(fcoalesce(time_on_ground_percentage / 100, 0.1), 0.1)]
 for (s in STATS) set(pg, which(is.na(pg[[s]])), s, 0)
 
 # Step 7 of create_player_game_data: per-80 normalise, then centre within

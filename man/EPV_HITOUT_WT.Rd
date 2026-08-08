@@ -11,6 +11,15 @@ An object of class \code{numeric} of length 1.
 EPV_HITOUT_WT
 }
 \description{
-Hitout weight per hitout
+
+}
+\details{
+\strong{This weight is positive against the measurement, deliberately.} The
+fit (\code{data-raw/04-analysis/epv3_ruck_three_way.R}, 1,242 matches) puts an
+undirected tap at \strong{-0.0209} per ruck (t -3.5), stable across halves at
+-0.0586 / -0.0299: winning a tap you do not direct is worth slightly less than
+nothing, because you have committed your ruck and the ball drops into a
+scrap. Pete's judgement is that a won tap should not be priced negative.
+Recorded rather than reconciled so it can be re-opened.
 }
 \keyword{internal}

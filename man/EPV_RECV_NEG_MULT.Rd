@@ -11,6 +11,41 @@ An object of class \code{numeric} of length 1.
 EPV_RECV_NEG_MULT
 }
 \description{
-Reception multiplier when defending (pos_team == -1)
+\strong{Stays at 1.0. Setting it to 0 was tried on 2026-08-04 and reverted
+the same session} -- the case for 0 was real but incomplete, and the thing it
+missed is worth recording.
+}
+\details{
+The multiplier sits on the \code{pos_team == -1} branch, so it is the
+INTERCEPT branch. The case for zeroing it was that the term is noise:
+game-to-game reception reliability rises 0.2507 -> 0.3086 (+23\\%) while
+count-dependence FALLS 0.53 -> 0.297.
+
+\strong{What that missed is what the term contains.} Interception is the
+highest-value receiving act in the game by a factor of eight -- 168 per match
+at mean +0.625 against ordinary receptions' 1,453 per match at +0.079. It is
+10\\% of receiving events, 31\\% of gross reception value and roughly half the
+channel's net (\code{docs/reference/EPV-VALUE-ANATOMY.md} §4). So "drop a
+noisy term" was actually "stop crediting interceptions".
+
+Three measurements, all against (\code{epv3_recv_neg_reexamine.R}):
+\itemize{
+\item \strong{Conservation breaks.} Total EPV allocated per team-match falls
++72.26 -> +38.69. The disposer is still CHARGED for the turnover and
+nobody is CREDITED the gain, so the metric systematically under-rates
+whoever does the gaining.
+\item \strong{The margin fit is worse}, recv t 9.65 -> 6.76.
+\item \strong{The two reliability measures disagree and the deciding one
+says no.} Game-to-game reliability rises, which removing any volatile term
+will do; YEAR-OVER-YEAR repeatability falls 0.6804 -> 0.6533. Persistence
+is the test that separates ability from noise, and it says signal was
+deleted. Named intercept defenders bear it out -- Tom Stewart 3.18 ->
+1.56, Jeremy Howe 4.14 -> 3.80, Steven May 3.54 -> 3.33.
+}
+
+\strong{Also read the formula before assuming what this touches.} The
+multiplier sits inside BOTH defensive branches, so at 0 the intercept-MARK
+branch is zeroed as well and \code{EPV_RECV_INTERCEPT_MARK_SCALE} multiplies
+a term that is now zero.
 }
 \keyword{internal}

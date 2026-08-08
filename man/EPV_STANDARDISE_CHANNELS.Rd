@@ -21,4 +21,7 @@ put a ruck named at nine different lineup positions into the overall top 10
 at 4.06 against his true 1.12. Excluding the channel scores strictly better
 than capping the amplifier (§7.18c).
 }
+\details{
+
+}
 \keyword{internal}
