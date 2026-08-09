@@ -185,7 +185,7 @@ build_aerial_contests <- function(chains, pbp_data) {
 #' Fit the three contest branch models
 #'
 #' \code{p} = P(defence wins), and the two branch values \code{V_att} /
-#' \code{V_def} = E[post-event state | that side won]. \code{exp_pts} (the
+#' \code{V_def} = \code{E[post-event state | that side won]}. \code{exp_pts} (the
 #' pre-kick state) is a legitimate and by far the strongest feature: it describes
 #' the situation BEFORE the kick, nothing about how the contest resolved. Without
 #' it the fit missed badly in the tails while reading fine through the middle.

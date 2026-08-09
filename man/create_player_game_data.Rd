@@ -28,6 +28,12 @@ available. Used to compute failed reception credit from aerial contests.}
 
 \item{epv_params}{Named list of EPV assignment parameters. If NULL,
 uses \code{default_epv_params()}.}
+
+\item{epv_engine}{Which EPV engine to run: \code{"v2"} (production) or
+\code{"v3"} (chain-native, held). Defaults to the \code{EPV_ENGINE}
+constant. Passed explicitly rather than read from the constant inside, so
+a caller can select an engine the global default does not name; the choice
+is recorded on the returned frame as its \code{epv_engine} attribute.}
 }
 \value{
 A data.table with one row per player per match, containing:

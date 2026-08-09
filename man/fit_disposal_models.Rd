@@ -15,7 +15,7 @@ fit_disposal_models(de, train_idx = rep(TRUE, nrow(de)))
 A list of three \code{bam} fits.
 }
 \description{
-\code{p} = P(turnover), and the two branch values = E\link{post-state | branch}.
+\code{p} = P(turnover), and the two branch values = \code{E[post-state | branch]}.
 Every term must be knowable BEFORE the disposal resolves -- \code{exp_pts}
 describes the situation beforehand and is legitimate; the outcome
 description is not and must never appear.
