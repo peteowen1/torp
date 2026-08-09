@@ -171,9 +171,12 @@ save_to_release <- function(df, file_name, release_tag, also_csv = FALSE, prev_r
   #
   # Note the previous iteration of this comment claimed truncation was
   # "independently guarded by the row-count floor against bus_manifest.json".
-  # That was FALSE: prev_rows_floor defaults to NULL and none of the ~80
-  # save_to_release() call sites pass it, so that check is inert in production.
-  # Do not cite it as a backstop again without wiring it into real callers.
+  # That was FALSE twice over. `prev_rows_floor` defaults to NULL and none of the
+  # ~80 save_to_release() call sites pass it, so it is inert -- and even wired up
+  # it would not help, because it compares `nrow(df)` IN MEMORY and aborts before
+  # write_parquet(). It guards bad INPUT, not a bad TRANSFER. Do not cite it as a
+  # truncation backstop again. The transport-side backstop is
+  # `.vb_asset_true_size()`, on the stale-listing path below.
   #
   # The availability motivation still stands -- a whole daily release aborting
   # stops the downstream dispatch to torp and staled its match predictions for
@@ -256,11 +259,38 @@ save_to_release <- function(df, file_name, release_tag, also_csv = FALSE, prev_r
       if (inherits(e, "vb_verify_list_failed")) {
         cli::cli_warn("Post-upload verify could not list {repo}@{release_tag} after retries ({conditionMessage(e)}) -- upload itself already succeeded, proceeding")
       } else if (inherits(e, "vb_verify_stale_listing")) {
-        cli::cli_warn(c(
-          "Post-upload verify still reading an older-stamped asset for {.val {f_name}} after retries ({conditionMessage(e)}) -- proceeding.",
-          "i" = "pb_upload() returned success and the listing predates our own upload, so this is a lagging read rather than a lost write.",
-          "!" = "This is not a proof of correctness. If it recurs on the same file, check the asset's real bytes rather than trusting the listing."
-        ))
+        # The listing never caught up, so stop asking it. Until 2026-08-09 this
+        # branch warned and moved on, which is the one hole the 4th iteration
+        # knowingly left: a genuinely short upload whose listing ALSO lags looks
+        # identical here to a lagging read of a good one.
+        #
+        # `.vb_asset_true_size()` closes it by resolving the asset by NAME on the
+        # download path, which cannot return the previous asset the way a stale
+        # listing row can. It costs one byte. The old warning text told an
+        # operator to "check the asset's real bytes rather than trusting the
+        # listing" -- this does that automatically.
+        local_bytes <- as.numeric(file.size(tf))
+        true_bytes <- .vb_asset_true_size(repo, release_tag, f_name)
+        if (is.finite(true_bytes) && isTRUE(all.equal(true_bytes, local_bytes))) {
+          cli::cli_alert_success(
+            "Post-upload verify: {.val {f_name}} confirmed at {true_bytes} bytes on the download path -- the listing was simply lagging.")
+        } else if (is.finite(true_bytes) && true_bytes < local_bytes) {
+          # Now this IS evidence, not an ambiguity: the stored object is short.
+          verify_err <<- tryCatch(
+            cli::cli_abort(
+              "Post-upload verify: {.val {f_name}} is {true_bytes} bytes on the download path against {local_bytes} written -- a genuinely short asset, not a lagging listing",
+              class = c("vb_error_integrity", "vb_error")),
+            error = function(x) x)
+        } else {
+          # Unreachable answer (private-repo redirect, network, an unexpected
+          # status): fall back to exactly the previous behaviour rather than
+          # inventing a verdict from a failed measurement.
+          cli::cli_warn(c(
+            "Post-upload verify still reading an older-stamped asset for {.val {f_name}} after retries ({conditionMessage(e)}) -- proceeding.",
+            "i" = "pb_upload() returned success and the listing predates our own upload, so this is a lagging read rather than a lost write.",
+            "!" = "The authoritative size read did not return a usable answer either, so this is not a proof of correctness."
+          ))
+        }
       } else {
         verify_err <<- e
       }
