@@ -198,6 +198,63 @@ vb_list_assets <- function(repo, tag) {
   )
 }
 
+#' Read an asset's true stored size, bypassing the release listing
+#'
+#' The release-listing endpoint can serve the PREVIOUS asset's row for a few
+#' seconds after an upload (torpdata#74). When that happens there is no way to
+#' tell a lagging read from a lost write out of the listing alone, because every
+#' field in it — size, `updated_at`, even the asset `id` — belongs to the stale
+#' row. Asking by `id` therefore just re-confirms the stale answer.
+#'
+#' The release DOWNLOAD path resolves by **name**, so it cannot hand back the
+#' previous asset. A one-byte ranged GET against it costs a single byte on the
+#' wire and reports the object's real length in `Content-Range`.
+#'
+#' Best-effort by contract: **every** failure path returns `NA_real_`, including
+#' a private repo whose download redirect needs credentials we do not have. This
+#' must never become the reason an upload that succeeded is reported as failed —
+#' callers fall back to whatever they did before.
+#'
+#' @param repo "owner/name".
+#' @param tag Release tag.
+#' @param file_name Asset file name, including extension.
+#' @return Size in bytes, or `NA_real_` if it could not be determined.
+#' @keywords internal
+.vb_asset_true_size <- function(repo, tag, file_name) {
+  tryCatch({
+    url <- sprintf("https://github.com/%s/releases/download/%s/%s",
+                   repo, utils::URLencode(tag, reserved = TRUE),
+                   utils::URLencode(file_name, reserved = TRUE))
+    h <- curl::new_handle()
+    hdrs <- list(Range = "bytes=0-0", `User-Agent` = "torp-postupload-verify")
+    tok <- Sys.getenv("GITHUB_PAT", Sys.getenv("GITHUB_TOKEN", ""))
+    if (nzchar(tok)) hdrs$Authorization <- paste("token", tok)
+    curl::handle_setheaders(h, .list = hdrs)
+    curl::handle_setopt(h, followlocation = TRUE,
+                        timeout = VB_TRUE_SIZE_TIMEOUT_SECS)
+    resp <- curl::curl_fetch_memory(url, handle = h)
+    hh <- curl::parse_headers_list(resp$headers)
+    # 206 is the expected answer: "bytes 0-0/<total>".
+    cr <- hh[["content-range"]]
+    if (!is.null(cr) && grepl("/", cr[1L], fixed = TRUE)) {
+      n <- suppressWarnings(as.numeric(sub(".*/", "", cr[1L])))
+      if (is.finite(n)) return(n)
+    }
+    # A server that ignored the range answers 200 with the WHOLE object, and
+    # then content-length is the full size. Only trust that on a 200 -- on a 206
+    # content-length is the length of the range (1), which would read as a
+    # catastrophically truncated file.
+    if (identical(as.integer(resp$status_code), 200L)) {
+      cl <- hh[["content-length"]]
+      if (!is.null(cl)) {
+        n <- suppressWarnings(as.numeric(cl[1L]))
+        if (is.finite(n)) return(n)
+      }
+    }
+    NA_real_
+  }, error = function(e) NA_real_)
+}
+
 #' Positively confirm an asset is absent from a release
 #'
 #' TRUE only when the asset list was fetched successfully AND the name is not
