@@ -105,6 +105,18 @@
 
 ## Bug Fixes
 
+* **A lagging listing is now resolved rather than shrugged at** (torpdata#74,
+  fifth iteration). The fourth iteration made the stale-listing path warn and
+  proceed, which knowingly left one hole: a genuinely short upload whose listing
+  *also* lags looked identical to a lagging read of a good one. `save_to_release()`
+  now asks storage directly via `.vb_asset_true_size()` — a one-byte ranged GET on
+  the release **download** path, which resolves the asset by name and so cannot
+  return the previous asset the way a stale listing row can. Matches what we
+  wrote → confirmed, and the warning disappears entirely; genuinely short → fatal;
+  unavailable → the previous warn-and-proceed, unchanged. Note `prev_rows_floor` is
+  **not** a truncation backstop and never was: it compares `nrow(df)` in memory and
+  aborts before the write, so it guards bad input, not a bad transfer.
+
 * **The post-upload verify no longer reads a growing file as a truncated one**
   (torpdata#74, fourth iteration). `save_to_release()` treated any listing
   smaller than the local file as a possible truncation and aborted, which failed
