@@ -18,6 +18,12 @@
 # comment explaining why, rather than silently letting the identity check
 # start failing. To update after a real change: diff the two R/versebus.R
 # files, re-sync any unintentional drift, then edit this vector to match.
+# 2026-08-09: `vb_publish` removed from this vector. The FABLE-VERSEBUS-RESYNC
+# resync ported panna's post-upload-verify retry (commits 39e413c/387ea96/
+# 6ddff96) into torp's canonical vb_publish, but torpmodels was deliberately
+# NOT resynced in that pass (see plan doc) -- the two copies now legitimately
+# differ in vb_publish's body. Re-add once torpmodels also receives the
+# retry port.
 SHARED_VERSEBUS_FUNCTIONS <- c(
   ".vb_now_utc", ".vb_generation_stamp", ".vb_split_repo", ".vb_abort",
   "vb_classify_error", "vb_sha256", "vb_asset_entry", "vb_producer_info",
@@ -25,7 +31,7 @@ SHARED_VERSEBUS_FUNCTIONS <- c(
   "vb_list_assets", "vb_confirm_absent", "vb_read_manifest",
   "vb_read_prev_manifest", ".vb_manifest_entry_for", ".vb_check_parquet_magic",
   ".vb_retry", "vb_download", "vb_cache_validate", "vb_generation",
-  "vb_publish", ".vb_merge_entries"
+  ".vb_merge_entries"
 )
 
 # Parse a versebus.R file into name -> deparsed function-body text, for every
