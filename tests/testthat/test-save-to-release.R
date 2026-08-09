@@ -39,7 +39,9 @@ test_that("save_to_release retries the post-upload size verify through a stale G
   expect_equal(call_count, 2)
 })
 
-test_that("save_to_release aborts when the listing stays SMALLER than local (possible truncation)", {
+test_that("save_to_release ABORTS when a SMALLER listing is stamped AFTER our upload (truncation)", {
+  # The row is stamped at/after our own write, so it IS our write and it is
+  # short. That is the truncation signature and must stay fatal.
   uploaded_bytes <- NULL
   testthat::local_mocked_bindings(
     pb_upload = function(file, repo, tag, overwrite = TRUE, ...) {
@@ -53,10 +55,9 @@ test_that("save_to_release aborts when the listing stays SMALLER than local (pos
   testthat::local_mocked_bindings(
     gh = function(endpoint, ...) {
       call_count <<- call_count + 1
-      # Persistently SMALLER than what we wrote -- the truncation signature,
-      # which must stay fatal (torpdata#74 third iteration).
+      # Far-future stamp -> unambiguously at or after this run's upload.
       list(assets = list(list(name = "widget.parquet", size = uploaded_bytes - 4,
-                              updated_at = "2026-07-22T00:00:00Z", id = 1)))
+                              updated_at = "2099-01-01T00:00:00Z", id = 1)))
     },
     .package = "gh"
   )
@@ -71,6 +72,48 @@ test_that("save_to_release aborts when the listing stays SMALLER than local (pos
     class = "vb_error_integrity"
   )
   expect_equal(call_count, 5L)  # exhausted all .vb_retry attempts
+})
+
+test_that("save_to_release warns when a SMALLER listing is stamped BEFORE our upload (lagging read)", {
+  # torpdata#74, FOURTH iteration (2026-08-09). The third kept every
+  # smaller-than-local listing fatal on the reasoning that truncation makes a
+  # file short. But the season files GROW on each round, so a listing that has
+  # not caught up serves the previous, smaller asset. On 2026-08-08 that failed
+  # 5 of 8 daily releases: listed 73694060 < local 74776757 while adding round
+  # 22, and the live asset afterwards read 75153518 -- every write had landed.
+  # Size direction carries no information here; only the timestamp does.
+  uploaded_bytes <- NULL
+  testthat::local_mocked_bindings(
+    pb_upload = function(file, repo, tag, overwrite = TRUE, ...) {
+      uploaded_bytes <<- file.size(file)
+      invisible(NULL)
+    },
+    .package = "piggyback"
+  )
+
+  call_count <- 0
+  testthat::local_mocked_bindings(
+    gh = function(endpoint, ...) {
+      call_count <<- call_count + 1
+      # Smaller AND stamped well in the past -> the previous asset. (Scaled
+      # down from the real 1,082,697-byte gap; the fixture frame is tiny and a
+      # negative size would be testing an impossible listing.)
+      list(assets = list(list(name = "widget.parquet", size = uploaded_bytes - 4,
+                              updated_at = "2020-01-01T00:00:00Z", id = 1)))
+    },
+    .package = "gh"
+  )
+  testthat::local_mocked_bindings(
+    .publish_bus_manifest = function(...) invisible(NULL),
+    save_locally = function(...) invisible(NULL)
+  )
+
+  df <- data.frame(x = 1:3, y = c("a", "b", "c"))
+  expect_warning(
+    save_to_release(df, "widget", "test-tag"),
+    "lagging|older-stamped"
+  )
+  expect_equal(call_count, 5L)  # still retried the full budget before giving up
 })
 
 test_that("save_to_release warns when a LARGER listing is stamped BEFORE our upload (lagging read)", {

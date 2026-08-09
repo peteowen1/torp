@@ -136,24 +136,38 @@ save_to_release <- function(df, file_name, release_tag, also_csv = FALSE, prev_r
   # wait, a stale read of an older asset never does, which is exactly why more
   # retries changed nothing.
   #
-  # What we key the decision on: TRUNCATION is the failure worth aborting for,
-  # and truncation makes the listing SMALLER than what we wrote. That direction
-  # stays fatal.
+  # FOURTH iteration (2026-08-09). The third kept "listed SMALLER than local"
+  # fatal, on the reasoning that truncation makes a file short and that
+  # direction is therefore unambiguous. It is not, and the release failed 5 of
+  # 8 runs on 2026-08-08 proving it:
   #
-  # A LARGER listing is ambiguous, and an earlier version of this fix got it
-  # wrong by treating "larger" as self-evidently a stale read. It is equally
-  # consistent with a FAILED REPLACE (piggyback's delete-then-upload is not
-  # atomic -- if the delete loses a race the old, bigger asset stays live while
-  # pb_upload() still returns 2xx) or with a CONCURRENT WRITER overwriting us.
-  # Size direction alone cannot separate those from a lagging listing.
+  #   Post-upload verify: "pbp_data_2026_all.parquet"
+  #     listed size 73694060 < local 74776757 -- possible truncated upload
   #
-  # So the larger-than case is decided on a real staleness signal instead --
-  # the listing's own updated_at versus when we started our upload:
-  #   listed <  local                          -> integrity error, fatal
-  #   listed >  local, updated_at OLDER than us -> listing has not caught up
-  #                                                yet; retry, then warn+proceed
-  #   listed >  local, updated_at NEWER than us -> something else wrote this
-  #                                                asset after we did; fatal
+  # That run was "Updating pbp_data_2026_all with round 22". 73694060 is the
+  # PRE-round-22 asset; the live asset now reads 75153518, i.e. every one of
+  # those writes landed. The season file GROWS on each round, so a listing that
+  # has not caught up serves the previous, SMALLER asset -- the same lagging
+  # read the third iteration diagnosed, arriving from the other direction. The
+  # third iteration saw LARGER because it was reading same-round re-writes,
+  # where a re-encoded parquet differs by a few hundred bytes either way.
+  #
+  # So size direction carries no information about which failure this is, in
+  # EITHER direction, and the decision belongs entirely to the staleness signal
+  # the third iteration already introduced -- the listing's own updated_at
+  # versus when we started our upload:
+  #   updated_at OLDER than us -> the row is a previous asset and the listing
+  #                               has not caught up; retry, then warn+proceed
+  #   updated_at AT/AFTER us   -> the row IS our write, so the size mismatch is
+  #                               real: short means truncation, long means a
+  #                               failed replace or a concurrent writer. Fatal.
+  #
+  # A LARGER listing was never self-evidently a stale read either. It is
+  # equally consistent with a FAILED REPLACE (piggyback's delete-then-upload is
+  # not atomic -- if the delete loses a race the old, bigger asset stays live
+  # while pb_upload() still returns 2xx) or with a CONCURRENT WRITER. Same
+  # applies to smaller. That is the whole point: only the timestamp separates
+  # them.
   #
   # Note the previous iteration of this comment claimed truncation was
   # "independently guarded by the row-count floor against bus_manifest.json".
@@ -185,14 +199,10 @@ save_to_release <- function(df, file_name, release_tag, also_csv = FALSE, prev_r
     local_bytes <- as.numeric(file.size(tf))
     listed_bytes <- as.numeric(row$size[1L])
     if (!isTRUE(all.equal(listed_bytes, local_bytes))) {
-      if (listed_bytes < local_bytes) {
-        .vb_abort("Post-upload verify: {.val {f_name}} listed size {listed_bytes} < local {local_bytes} -- possible truncated upload",
-                  "vb_error_integrity")
-      }
-      # Larger than ours: only a listing that predates our own upload is
-      # evidence of a lagging read. One stamped at or after our upload is
-      # evidence of a different, later write -- a failed replace or a
-      # concurrent writer -- and must stay fatal.
+      # Same phrase in every branch below, so the direction is always visible in
+      # the log even when the decision did not turn on it.
+      direction <- if (listed_bytes < local_bytes) "<" else ">"
+      sizes <- paste("listed size", listed_bytes, direction, "local", local_bytes)
       listed_at <- suppressWarnings(
         as.POSIXct(row$updated_at[1L], format = "%Y-%m-%dT%H:%M:%SZ", tz = "UTC")
       )
@@ -202,15 +212,24 @@ save_to_release <- function(df, file_name, release_tag, also_csv = FALSE, prev_r
       # "a different write replaced ours" message would otherwise hunt a
       # phantom concurrent writer instead of an API shape change.
       if (is.na(listed_at)) {
-        .vb_abort("Post-upload verify: {.val {f_name}} listed size {listed_bytes} > local {local_bytes}, and updated_at {.val {row$updated_at[1L]}} could not be parsed -- treating the staleness signal as untrusted",
+        .vb_abort("Post-upload verify: {.val {f_name}} {sizes}, and updated_at {.val {row$updated_at[1L]}} could not be parsed -- treating the staleness signal as untrusted",
                   "vb_error_integrity")
       }
+      # A row stamped before our own upload is a previous asset, whichever way
+      # its size falls: the season files grow on each round, so a lagging
+      # listing reads SMALLER, and a same-round re-encode reads either way.
       stale_read <- listed_at < (upload_started_at - VB_VERIFY_CLOCK_SKEW_SECS)
       if (stale_read) {
-        .vb_abort("Post-upload verify: {.val {f_name}} listed size {listed_bytes} > local {local_bytes}, listing stamped {row$updated_at[1L]} (before our upload) -- lagging listing",
+        .vb_abort("Post-upload verify: {.val {f_name}} {sizes}, listing stamped {row$updated_at[1L]} (before our upload) -- lagging listing",
                   c("vb_error_transient", "vb_verify_stale_listing"))
       }
-      .vb_abort("Post-upload verify: {.val {f_name}} listed size {listed_bytes} > local {local_bytes}, listing stamped {row$updated_at[1L]} (at or after our upload) -- a different write replaced ours, or the replace failed and the old asset is still live",
+      # Stamped at or after our upload, so this row IS our write and the size
+      # mismatch is real.
+      if (listed_bytes < local_bytes) {
+        .vb_abort("Post-upload verify: {.val {f_name}} {sizes}, listing stamped {row$updated_at[1L]} (at or after our upload) -- our own write is short, i.e. a truncated upload",
+                  "vb_error_integrity")
+      }
+      .vb_abort("Post-upload verify: {.val {f_name}} {sizes}, listing stamped {row$updated_at[1L]} (at or after our upload) -- a different write replaced ours, or the replace failed and the old asset is still live",
                 "vb_error_integrity")
     }
     invisible(TRUE)
@@ -238,7 +257,7 @@ save_to_release <- function(df, file_name, release_tag, also_csv = FALSE, prev_r
         cli::cli_warn("Post-upload verify could not list {repo}@{release_tag} after retries ({conditionMessage(e)}) -- upload itself already succeeded, proceeding")
       } else if (inherits(e, "vb_verify_stale_listing")) {
         cli::cli_warn(c(
-          "Post-upload verify still reading a larger, older-stamped asset for {.val {f_name}} after retries ({conditionMessage(e)}) -- proceeding.",
+          "Post-upload verify still reading an older-stamped asset for {.val {f_name}} after retries ({conditionMessage(e)}) -- proceeding.",
           "i" = "pb_upload() returned success and the listing predates our own upload, so this is a lagging read rather than a lost write.",
           "!" = "This is not a proof of correctness. If it recurs on the same file, check the asset's real bytes rather than trusting the listing."
         ))
