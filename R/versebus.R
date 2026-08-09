@@ -620,18 +620,59 @@ vb_publish <- function(paths, repo, tag,
               "vb_error_transient")
   }
 
-  # 5. Verify the live asset list agrees before committing.
-  listed <- vb_list_assets(repo, tag)
-  for (e in entries) {
-    row <- listed[listed$name == e$name, , drop = FALSE]
-    if (nrow(row) == 0L) {
-      .vb_abort("Post-upload verify: {.val {e$name}} missing from {repo}@{tag}",
-                "vb_error_transient")
+  # 5. Verify the live asset list agrees before committing. GitHub's release
+  # API can report a stale size immediately after upload (observed in
+  # production 2026-07-16, panna: a 6-byte mismatch on predictions.parquet
+  # that resolved within 2s -- pure listing race, not corruption). A LONGER
+  # stale window was also observed same day/tag (predictions.parquet +
+  # predictions.csv BOTH still mismatched after 3 attempts / 17s total) --
+  # widened budget to 6 attempts / ~95s total. Report actual byte deltas on
+  # final failure so a persistent (not just slow-to-settle) mismatch is
+  # diagnosable, since that would indicate real corruption rather than API
+  # lag. Ported from panna R/versebus.R (39e413c/387ea96/6ddff96).
+  verify_delays <- c(2, 5, 10, 20, 30, 30)
+  missing <- character(0)
+  mismatched <- character(0)
+  verify_detail <- character(0)
+  for (verify_attempt in seq_along(c(verify_delays, NA))) {
+    listed <- vb_list_assets(repo, tag)
+    missing <- character(0)
+    mismatched <- character(0)
+    verify_detail <- character(0)
+    for (e in entries) {
+      row <- listed[listed$name == e$name, , drop = FALSE]
+      if (nrow(row) == 0L) {
+        missing <- c(missing, e$name)
+        verify_detail <- c(verify_detail, sprintf("%s: missing from listing", e$name))
+      } else if (!isTRUE(all.equal(row$size[1L], e$bytes))) {
+        mismatched <- c(mismatched, e$name)
+        verify_detail <- c(verify_detail,
+          sprintf("%s: live=%s local=%s", e$name, row$size[1L], e$bytes))
+      }
     }
-    if (!isTRUE(all.equal(row$size[1L], e$bytes))) {
-      .vb_abort("Post-upload verify: {.val {e$name}} size {row$size[1L]} != local {e$bytes}",
-                "vb_error_integrity")
+    if (length(missing) == 0L && length(mismatched) == 0L) break
+    if (verify_attempt <= length(verify_delays)) {
+      # Build the detail text as a plain variable and reference it via {}
+      # rather than splicing raw asset names/values in as their own msg
+      # vector element -- cli glue-templates every element of a cli_*() msg,
+      # so a literal '{'/'}' in an asset name would otherwise be evaluated
+      # as R code instead of printed.
+      detail_text <- paste(verify_detail, collapse = "; ")
+      cli::cli_alert_warning(
+        "Post-upload verify race (attempt {verify_attempt}/{length(verify_delays)}): {detail_text} -- retrying in {verify_delays[verify_attempt]}s")
+      Sys.sleep(verify_delays[verify_attempt])
     }
+  }
+  if (length(missing) > 0L || length(mismatched) > 0L) {
+    # Report BOTH failure kinds together -- reporting only the first
+    # (missing before mismatched) would silently drop the byte-delta detail
+    # for a genuinely corrupted asset whenever a DIFFERENT asset in the same
+    # publish is also missing.
+    detail_text <- paste(verify_detail, collapse = "; ")
+    subclass <- if (length(mismatched) > 0L) "vb_error_integrity" else "vb_error_transient"
+    .vb_abort(c("Post-upload verify failed at {repo}@{tag} (persisted after retries)",
+               "x" = "{detail_text}"),
+              subclass)
   }
 
   # 6. Manifest last (merge for partial publishes), with one retry.
