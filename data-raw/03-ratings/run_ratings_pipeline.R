@@ -33,6 +33,11 @@ Sys.setenv(VERSEBUS_STRICT = "1")
 Sys.setenv(piggyback_cache_duration = 1)
 clear_skip_markers()
 
+# FABLE-VINTAGE-GUARD-PLAN: refuse to write ratings when the deployed code's
+# vintage/constants disagree with what the manifest already published as
+# canonical (torp 2026-07-27/28 incident 1).
+torp:::check_vintage_alignment(strict = TRUE)
+
 # Source daily_release.R into a local env to get update_player_stats() and
 # update_teams() without leaking .release_cache and other globals.
 .daily_release_env <- new.env(parent = globalenv())
