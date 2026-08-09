@@ -105,6 +105,17 @@
 
 ## Bug Fixes
 
+* **The post-upload verify no longer reads a growing file as a truncated one**
+  (torpdata#74, fourth iteration). `save_to_release()` treated any listing
+  smaller than the local file as a possible truncation and aborted, which failed
+  5 of 8 daily releases on 2026-08-08 — every one of them adding a new round to
+  `pbp_data_2026_all.parquet`, where the season file grows and a lagging listing
+  therefore serves the previous, *smaller* asset. Size direction turns out to
+  carry no information in either direction, so the decision now rests entirely
+  on the listing's own `updated_at`: a row stamped before our upload is a
+  previous asset (retry, then warn and proceed), and a row stamped at or after
+  it is our write, so short means truncation and long means a failed replace.
+
 * **The positional level correction moved to EPV, where the gap is actually
   created.** `.position_adjust()` already centred every EPV channel to
   machine-precision zero — but by `lineup_position`, the weekly on-field role.
