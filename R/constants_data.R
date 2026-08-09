@@ -40,6 +40,15 @@ LOCAL_HISTORICAL_MAX_AGE_DAYS <- 30
 #' @keywords internal
 VB_VERIFY_CLOCK_SKEW_SECS <- 120
 
+#' Timeout for the authoritative asset-size read
+#'
+#' `.vb_asset_true_size()` transfers one byte, so this bounds connection and
+#' redirect time, not download time. Kept short deliberately: it runs only after
+#' the post-upload verify has already exhausted its retries, and a slow answer
+#' there must not extend a release job that is already late.
+#' @keywords internal
+VB_TRUE_SIZE_TIMEOUT_SECS <- 20
+
 
 # EPV Model Constants
 # -------------------

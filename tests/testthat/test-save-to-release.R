@@ -245,3 +245,128 @@ test_that("save_to_release warns (not aborts) when the post-upload listing call 
     "Post-upload verify could not list"
   )
 })
+
+# ---- .vb_asset_true_size(), the transport-side backstop ---------------------
+# Added 2026-08-09. The 4th iteration of torpdata#74 made the stale-listing path
+# warn-and-proceed, which knowingly left one hole: a genuinely short upload whose
+# listing ALSO lags is indistinguishable from a lagging read of a good one. These
+# cover the three ways that now resolves. The stale-listing mock returns a
+# LARGER, older-stamped row so it reaches this path (either direction does).
+
+.mock_stale_listing <- function() {
+  testthat::local_mocked_bindings(
+    gh = function(endpoint, ...) {
+      list(assets = list(list(name = "widget.parquet", size = 1e9,
+                              updated_at = "2020-01-01T00:00:00Z", id = 1)))
+    },
+    .package = "gh",
+    .env = parent.frame()
+  )
+}
+
+test_that("a lagging listing is CONFIRMED CLEAN when the download path matches what we wrote", {
+  uploaded_bytes <- NULL
+  testthat::local_mocked_bindings(
+    pb_upload = function(file, repo, tag, overwrite = TRUE, ...) {
+      uploaded_bytes <<- file.size(file)
+      invisible(NULL)
+    },
+    .package = "piggyback"
+  )
+  .mock_stale_listing()
+  testthat::local_mocked_bindings(
+    .publish_bus_manifest = function(...) invisible(NULL),
+    save_locally = function(...) invisible(NULL),
+    .vb_asset_true_size = function(repo, tag, file_name) uploaded_bytes
+  )
+
+  df <- data.frame(x = 1:3, y = c("a", "b", "c"))
+  # NOT expect_no_warning: .vb_retry warns once per attempt, so retry chatter is
+  # expected on any path that reaches here. What must be absent is the
+  # "unconfirmed" verdict — the object is provably correct, so the caller should
+  # not be told to go and check it by hand.
+  warns <- character()
+  msgs <- character()
+  withCallingHandlers(
+    save_to_release(df, "widget", "test-tag"),
+    warning = function(cnd) {
+      warns <<- c(warns, conditionMessage(cnd)); invokeRestart("muffleWarning")
+    },
+    message = function(cnd) {
+      msgs <<- c(msgs, conditionMessage(cnd)); invokeRestart("muffleMessage")
+    }
+  )
+  expect_false(any(grepl("proof of correctness|usable answer", warns)))
+  expect_true(any(grepl("confirmed at", msgs)))
+  # Sanity: assert we really did take the stale-listing path, so this cannot
+  # pass by silently never reaching it.
+  expect_true(any(grepl("Attempt", warns)))
+})
+
+test_that("a lagging listing ABORTS when the download path shows a genuinely short asset", {
+  uploaded_bytes <- NULL
+  testthat::local_mocked_bindings(
+    pb_upload = function(file, repo, tag, overwrite = TRUE, ...) {
+      uploaded_bytes <<- file.size(file)
+      invisible(NULL)
+    },
+    .package = "piggyback"
+  )
+  .mock_stale_listing()
+  testthat::local_mocked_bindings(
+    .publish_bus_manifest = function(...) invisible(NULL),
+    save_locally = function(...) invisible(NULL),
+    .vb_asset_true_size = function(repo, tag, file_name) uploaded_bytes - 4
+  )
+
+  df <- data.frame(x = 1:3, y = c("a", "b", "c"))
+  expect_error(
+    suppressWarnings(save_to_release(df, "widget", "test-tag")),
+    regexp = "genuinely short asset",
+    class = "vb_error_integrity"
+  )
+})
+
+test_that("an UNAVAILABLE authoritative size falls back to the old warn-and-proceed, inventing nothing", {
+  # The contract that matters most: .vb_asset_true_size() returns NA on every
+  # failure path, and NA must never be read as either a pass or a truncation.
+  testthat::local_mocked_bindings(
+    pb_upload = function(file, repo, tag, overwrite = TRUE, ...) invisible(NULL),
+    .package = "piggyback"
+  )
+  .mock_stale_listing()
+  testthat::local_mocked_bindings(
+    .publish_bus_manifest = function(...) invisible(NULL),
+    save_locally = function(...) invisible(NULL),
+    .vb_asset_true_size = function(repo, tag, file_name) NA_real_
+  )
+
+  df <- data.frame(x = 1:3, y = c("a", "b", "c"))
+  expect_warning(
+    save_to_release(df, "widget", "test-tag"),
+    "did not return a usable answer"
+  )
+})
+
+test_that(".vb_asset_true_size returns NA rather than propagating a transport failure", {
+  testthat::local_mocked_bindings(
+    curl_fetch_memory = function(url, handle) stop("simulated DNS failure"),
+    .package = "curl"
+  )
+  expect_true(is.na(torp:::.vb_asset_true_size("owner/repo", "tag", "f.parquet")))
+})
+
+test_that(".vb_asset_true_size reads the total off Content-Range, not the range length", {
+  # A 206 reports content-length: 1 for a one-byte range. Reading THAT as the
+  # size would make every healthy asset look catastrophically truncated.
+  testthat::local_mocked_bindings(
+    curl_fetch_memory = function(url, handle) {
+      list(status_code = 206L, headers = charToRaw(paste0(
+        "HTTP/1.1 206 Partial Content\r\n",
+        "content-range: bytes 0-0/75153518\r\n",
+        "content-length: 1\r\n\r\n")), content = raw(1))
+    },
+    .package = "curl"
+  )
+  expect_equal(torp:::.vb_asset_true_size("owner/repo", "tag", "f.parquet"), 75153518)
+})
