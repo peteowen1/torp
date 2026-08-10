@@ -62,12 +62,18 @@ NULL
   batch_stats <- if (is.null(epr_params)) {
     calculate_epr_stats_batch(pgd, round_info)
   } else {
-    ok <- names(formals(calculate_epr_stats_batch))
+    # `player_game_data` and `round_info` are passed explicitly by the do.call
+    # below, so they are NOT settable through epr_params -- checking against the
+    # unfiltered formals let one through to a base-R "matched by multiple actual
+    # arguments" error instead of this abort, which is exactly the silent-ish
+    # failure the message below says it refuses.
+    ok <- setdiff(names(formals(calculate_epr_stats_batch)),
+                  c("player_game_data", "round_info"))
     bad <- setdiff(names(epr_params), ok)
     if (length(bad) > 0) {
       cli::cli_abort(c(
         "Unknown {.arg epr_params}: {.val {bad}}",
-        "i" = "Accepted: {.val {setdiff(ok, c('player_game_data', 'round_info'))}}",
+        "i" = "Accepted: {.val {ok}}",
         "x" = "Refusing to silently ignore a parameter the caller meant to set."
       ))
     }

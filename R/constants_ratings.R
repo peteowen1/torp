@@ -460,11 +460,17 @@ EPR_PRIOR_RATE_SPOIL <- -0.3000 * .epr_prior_points_scale("cont_aerial")
 #' \code{prior_games * prior_rate} AFTER the value, so an unscaled prior would leave
 #' the hitout rating a blend of scaled and unscaled parts rather than a clean
 #' rescale. If you change one, change both.
-#' @keywords internal
+#'
 #' Zeroed under the 3-channel v3 arm, where the hitout slot holds nothing. A
 #' non-zero prior on an all-zero channel would shrink toward it and reintroduce a
 #' level for a channel that does not exist. Conditioned on BOTH constants so v2
-#' is untouched whatever `EPV3_CHANNELS` says.
+#' is untouched whatever \code{EPV3_CHANNELS} says.
+#'
+#' (This paragraph sat AFTER `@keywords internal` with no blank line, so roxygen
+#' folded all of it into the keywords tag: the rendered help lost the
+#' explanation entirely and gained ~40 junk entries like `\keyword{Zeroed}`.
+#' Prose must precede the tag block.)
+#' @keywords internal
 EPR_PRIOR_RATE_HITOUT <- if (identical(EPV_ENGINE, "v3") && identical(EPV3_CHANNELS, 3L)) {
   0
 } else {

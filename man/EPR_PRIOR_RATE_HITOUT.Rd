@@ -17,45 +17,15 @@ Carries \code{EPV_RUCK_SWING_SCALE} for the same reason the others carry
 the hitout rating a blend of scaled and unscaled parts rather than a clean
 rescale. If you change one, change both.
 }
-\keyword{3-channel}
-\keyword{A}
-\keyword{BOTH}
-\keyword{Conditioned}
-\keyword{Zeroed}
-\keyword{`EPV3_CHANNELS`}
-\keyword{a}
-\keyword{all-zero}
-\keyword{an}
-\keyword{and}
-\keyword{arm,}
-\keyword{channel}
-\keyword{constants}
-\keyword{does}
-\keyword{exist.}
-\keyword{for}
-\keyword{hitout}
-\keyword{holds}
+\details{
+Zeroed under the 3-channel v3 arm, where the hitout slot holds nothing. A
+non-zero prior on an all-zero channel would shrink toward it and reintroduce a
+level for a channel that does not exist. Conditioned on BOTH constants so v2
+is untouched whatever \code{EPV3_CHANNELS} says.
+
+(This paragraph sat AFTER \verb{@keywords internal} with no blank line, so roxygen
+folded all of it into the keywords tag: the rendered help lost the
+explanation entirely and gained ~40 junk entries like \verb{\\keyword\{Zeroed\}}.
+Prose must precede the tag block.)
+}
 \keyword{internal}
-\keyword{is}
-\keyword{it}
-\keyword{level}
-\keyword{non-zero}
-\keyword{not}
-\keyword{nothing.}
-\keyword{on}
-\keyword{prior}
-\keyword{reintroduce}
-\keyword{says.}
-\keyword{shrink}
-\keyword{slot}
-\keyword{so}
-\keyword{that}
-\keyword{the}
-\keyword{toward}
-\keyword{under}
-\keyword{untouched}
-\keyword{v2}
-\keyword{v3}
-\keyword{whatever}
-\keyword{where}
-\keyword{would}

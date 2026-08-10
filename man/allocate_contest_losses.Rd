@@ -18,6 +18,12 @@ allocate_contest_losses(
 \item{chains}{Raw chains data.}
 
 \item{half}{Half-ground extent.}
+
+\item{exposure_descs}{Chains descriptions counted as aerial exposure.
+Defaults to \code{EPV3_AERIAL_EXPOSURE_DESCS}.}
+
+\item{player_stats}{Optional player stats frame; when NULL the exposure
+denominator is taken from \code{chains} alone.}
 }
 \value{
 A data.table of \code{player_id}, \code{match_id}, \code{cont_alloc}.

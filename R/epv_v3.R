@@ -290,6 +290,10 @@ score_contests <- function(cst, models) {
 #' @param scored Output of \code{score_contests()}.
 #' @param chains Raw chains data.
 #' @param half Half-ground extent.
+#' @param exposure_descs Chains descriptions counted as aerial exposure.
+#'   Defaults to \code{EPV3_AERIAL_EXPOSURE_DESCS}.
+#' @param player_stats Optional player stats frame; when NULL the exposure
+#'   denominator is taken from \code{chains} alone.
 #' @return A data.table of \code{player_id}, \code{match_id}, \code{cont_alloc}.
 #' @keywords internal
 allocate_contest_losses <- function(scored, chains, half,

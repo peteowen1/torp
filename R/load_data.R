@@ -37,7 +37,19 @@ save_to_release <- function(df, file_name, release_tag, also_csv = FALSE, prev_r
   # T12: optional manifest-backed row-count floor, checked before spending an
   # upload attempt. Best-effort -- never blocks on a manifest read failure.
   if (!is.null(prev_rows_floor)) {
-    prev_manifest <- tryCatch(vb_read_prev_manifest(repo, release_tag), error = function(e) NULL)
+    # Swallowing this silently means "floor checked and passed" and "floor never
+    # ran" look identical in the log. `vb_read_prev_manifest()` deliberately
+    # re-raises anything not classified "absent", so a real fault (auth, a parse
+    # bug, a transient) would otherwise take this second-opinion guard dark on
+    # exactly the production writes that now depend on it. Still non-fatal: a
+    # manifest we cannot read must not block a release.
+    prev_manifest <- tryCatch(vb_read_prev_manifest(repo, release_tag), error = function(e) {
+      cli::cli_warn(c(
+        "prev_rows_floor: could not read the previous manifest for {repo}@{release_tag} ({conditionMessage(e)}).",
+        "!" = "The row-count floor did NOT run for {.val {f_name}} -- proceeding unguarded."
+      ))
+      NULL
+    })
     prev_entry <- if (!is.null(prev_manifest)) .vb_manifest_entry_for(prev_manifest, f_name) else NULL
     if (!is.null(prev_entry) && !is.null(prev_entry$rows) && !is.na(prev_entry$rows)) {
       prev_rows <- as.numeric(prev_entry$rows)

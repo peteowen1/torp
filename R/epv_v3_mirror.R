@@ -139,10 +139,18 @@ allocate_by_mirror <- function(scored, chains, weights) {
   a <- merge(agg, roster, by = c("match_id", "team_id"), allow.cartesian = TRUE)
   a <- merge(a, weights, by.x = c("winner_pos", "pos"),
              by.y = c("winner_pos", "loser_pos"), all.x = TRUE)
-  # A position with no weight for this winner still shares -- at the smallest
-  # weight present -- so nobody is exempt from a team failure. That is Oliver's
-  # point about collective outcomes, and it also stops a debit vanishing when a
-  # roster carries an unmapped position.
+  # Unmapped positions are all-or-nothing, NOT "shared at the smallest weight".
+  # An earlier version of this comment claimed the latter ("nobody is exempt
+  # from a team failure"); the code does the opposite in the common case. Read
+  # the two lines together:
+  #   - a player whose position has no weight for this winner gets w = 0, i.e.
+  #     genuinely exempt, whenever ANY teammate in the group does have weight;
+  #   - only if the WHOLE (match, team, winner_pos) group has zero weight does
+  #     the fallback fire, and it is flat (w = 1 each), not "smallest present".
+  # Conservation still holds either way — the debit is redistributed across
+  # whoever retains weight rather than lost — so this is a description bug, not
+  # a leak. Fix the comment or the behaviour deliberately; do not assume the
+  # collective-outcome property holds today, because it does not.
   a[is.na(w), w := 0]
   a[, wsum := sum(w), by = .(match_id, team_id, winner_pos)]
   a[wsum <= 0, w := 1]

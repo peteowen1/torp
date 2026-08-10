@@ -111,12 +111,36 @@ KNOWN_NON_DEFINING <- c(
 # Scanners
 # ---------------------------------------------------------------------------
 
-#' Path to the source file the completeness scan parses. `test_path()`
-#' resolves relative to tests/testthat/ under both devtools::test() and
-#' R CMD check; walking up two levels reaches the package root.
+#' Path to the source file the completeness scan parses, or NA if it is not
+#' reachable.
+#'
+#' An earlier version of this comment claimed `test_path()` reaches the package
+#' root "under both devtools::test() and R CMD check". It does not: `R CMD check`
+#' runs tests against a BUILT package from `<pkg>.Rcheck/tests/`, where no `R/`
+#' source tree exists, and the installed package stores code in a lazy-load
+#' database rather than as `.R` files. So `readLines()` threw
+#' `cannot open the connection` and both tests below ERRORed on every CI run.
+#'
+#' Returns NA rather than a non-existent path so callers skip explicitly,
+#' matching `test-versebus-sync.R`'s local-dev-only precedent. This is a
+#' source-text scan by design (see `vintage_scan_family_constants()`), so it
+#' cannot fall back to the loaded namespace without losing the property that
+#' makes it correct.
 vintage_constants_source_path <- function() {
-  normalizePath(testthat::test_path("..", "..", "R", "constants_ratings.R"),
-               winslash = "/", mustWork = FALSE)
+  candidates <- c(
+    testthat::test_path("..", "..", "R", "constants_ratings.R"),
+    testthat::test_path("..", "R", "constants_ratings.R"),
+    file.path("R", "constants_ratings.R")
+  )
+  hit <- candidates[file.exists(candidates)]
+  if (length(hit) == 0L) return(NA_character_)
+  normalizePath(hit[[1]], winslash = "/", mustWork = FALSE)
+}
+
+#' Skip helper: these scans need the package SOURCE, not the installed package.
+skip_if_no_constants_source <- function() {
+  testthat::skip_if(is.na(vintage_constants_source_path()),
+                    "R/constants_ratings.R not reachable (R CMD check runs against a built package)")
 }
 
 #' Every top-level constant NAME in R/constants_ratings.R matching the
@@ -161,6 +185,7 @@ test_that("the constants scan and the defining-constants flatten find something 
   # constants file would produce. Floors are set well below the current
   # counts (86 family constants, 38 flattened leaves) so a real deletion
   # trips them rather than every routine edit.
+  skip_if_no_constants_source()
   scanned <- vintage_scan_family_constants()
   expect_gte(length(scanned), 15L)
 
@@ -169,6 +194,7 @@ test_that("the constants scan and the defining-constants flatten find something 
 })
 
 test_that("every rating-defining-family constant is wired or registered", {
+  skip_if_no_constants_source()
   scanned <- vintage_scan_family_constants()
   src <- vintage_defining_constants_source()
   wired <- vapply(scanned, vintage_is_wired, logical(1), source_text = src)

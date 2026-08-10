@@ -268,11 +268,17 @@ centre_epv_by_position <- function(pgd, channels = EPV_LEVEL_CENTRE_CHANNELS) {
   # disappeared underneath it. Under v3 the per-channel vector is authoritative
   # even when it is all 1s; all 1s means no scaling, not "fall back to v2's".
   #
-  # EPV_PER_CHANNEL_POINTS_SCALE opens the same path to v2. v2's one global
-  # 0.919 cannot make four channels that convert at 0.893 / 1.556 / 0.344 each
-  # read one point per unit, and raw v2 `epv` conserves at only 0.4778 because
-  # of it. The vector is engine-agnostic despite its name, and `lbl` below
-  # already maps all four v2 channels onto it.
+  # EPV_PER_CHANNEL_POINTS_SCALE opens the same path to v2: one global 0.919
+  # cannot make four channels that each convert at a different rate read one
+  # point per unit, and raw v2 `epv` conserves at only 0.4778 because of it.
+  # The vector is engine-agnostic despite its name, and `lbl` below already
+  # maps all four v2 channels onto it.
+  #
+  # Deliberately no per-channel figures here. This comment previously quoted
+  # 0.893 / 1.556 / 0.344 as v2's, which the `EPV_PER_CHANNEL_POINTS_SCALE`
+  # docstring in constants_ratings.R retracted on 2026-08-06 -- those are the v3
+  # ship frame's RAW-layer scales, and v2's own raw-layer fit is recv 0.611,
+  # disp 0.552, spoil -0.481. Numbers live in one place; read them there.
   use_v3_scale <- .use_per_channel_scale(attr(pgd, "epv_engine"))
   # Defined unconditionally so the residual-expectation block below can use it
   # without depending on which branch ran.
@@ -378,6 +384,14 @@ centre_epv_by_position <- function(pgd, channels = EPV_LEVEL_CENTRE_CHANNELS) {
   # would fold the blend back into its own reference.
   m_hi <- stats::weighted.mean(p80[hi_grp], tog[hi_grp], na.rm = TRUE)
   m_lo <- stats::weighted.mean(p80[!hi_grp], tog[!hi_grp], na.rm = TRUE)
+  # An empty reference cell yields NaN, and substituting 0 silently centres
+  # against an ASSUMED zero that is indistinguishable downstream from a measured
+  # one. `centre_epv_by_position()` shouts in the same situation; match it, so a
+  # missing side shows up in the log instead of as a plausible number.
+  if (!is.finite(m_hi) || !is.finite(m_lo)) {
+    cli::cli_alert_danger(
+      "Blend reference cell empty ({sum(hi_grp)} above / {sum(!hi_grp)} below the ramp) -- that side is centred against an ASSUMED zero, not a measurement.")
+  }
   if (!is.finite(m_hi)) m_hi <- 0
   if (!is.finite(m_lo)) m_lo <- 0
   centred <- p80 - (w * m_hi + (1 - w) * m_lo)
@@ -1049,6 +1063,19 @@ create_player_game_data <- function(pbp_data = NULL,
   # a bounce -- see docs/reviews/INT-CENTRING-BUG-2026-08-06.md. The other three
   # channels keep the positional key, where it is doing real work.
   plyr_gm_df$.hitout_key <- if (isTRUE(EPV_HITOUT_CENTRE_ON_RUCK)) {
+    # Same failure this file already guards against for `.role_key`, one key
+    # along: `coalesce(..., 0)` cannot produce NA, so a missing or all-NA
+    # `ruck_contests` does not fail -- it puts EVERY player in "OTHER" and
+    # quietly centres the ruck channel against one global cell, which is the
+    # exact defect celling on involvement was introduced to fix. The info line
+    # below would read "0 of N in the RUCKS cell" and nothing reads it.
+    if (!"ruck_contests" %in% names(plyr_gm_df) ||
+        !any(is.finite(suppressWarnings(as.numeric(plyr_gm_df$ruck_contests))))) {
+      cli::cli_abort(c(
+        "EPV_HITOUT_CENTRE_ON_RUCK is on but {.field ruck_contests} is absent or has no finite values.",
+        "x" = "Refusing to centre the hitout channel against a single global cell."
+      ))
+    }
     .rc <- dplyr::coalesce(as.numeric(plyr_gm_df$ruck_contests), 0)
     ifelse(.rc >= EPV_RUCK_INVOLVEMENT_MIN, "RUCKS", "OTHER")
   } else {
