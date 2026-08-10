@@ -81,25 +81,85 @@ test_that("create_player_game_data *_adj columns are game-value scale (regressio
   expect_lt(max_abs_adj, 50,
             label = sprintf("max|epv_adj| (= %.2f)", max_abs_adj))
 
-  # Per-lineup_position, unweighted mean of epv_adj must be ~0.
-  # epv_adj = (epv_p80 - wm_L) * tog_safe is centered per lineup_position L with
-  # weights tog_safe, so sum_L((epv_p80 - wm_L) * tog_safe) = 0 by construction
-  # and the unweighted mean within L is zero up to floating-point noise. If
-  # someone groups the centering on the wrong variable (e.g. season, team,
-  # position_group), within-lineup_position means drift well away from zero.
-  # NB: grouping this test by position_group would be wrong — position_group
-  # comes from PBP player_position (6-way) and is not a strict refinement of
-  # the teams-API lineup_position (20-way), so means within position_group are
-  # not mathematically guaranteed to be zero.
+  # Per-CELL, unweighted mean of each centered channel must be ~0.
+  # adj = (p80 - wm_K) * tog_safe is centered per cell K with weights tog_safe,
+  # so sum_K((p80 - wm_K) * tog_safe) = 0 by construction and the unweighted
+  # mean within K is zero up to floating-point noise. If someone groups the
+  # centering on the wrong variable (e.g. season, team, position_group), the
+  # within-cell means drift well away from zero.
+  #
+  # The cell is NOT raw lineup_position — that was true until 2026-08-06, when
+  # `6a27aba1` shipped ROLE_REMAP_BENCH and EPV_HITOUT_CENTRE_ON_RUCK. Bench
+  # starts are now centered against the role they actually filled, so ~20% of
+  # rows sit in a different cell than their lineup_position says, and this test
+  # failed for two days asserting a premise the code had deliberately dropped.
+  # Reconstruct the key the way `create_player_game_data()` builds it — reading
+  # the same constants, so a future flag flip moves the test with the code.
+  # NB: grouping by position_group would be wrong — position_group comes from
+  # PBP player_position (6-way) and is not a strict refinement of the teams-API
+  # lineup_position (20-way), so means within it are not guaranteed to be zero.
   if ("lineup_position" %in% names(pgd)) {
-    dt <- data.table::as.data.table(pgd)[
-      !is.na(lineup_position) & !is.na(epv_adj),
-      .(m = mean(epv_adj, na.rm = TRUE)),
-      by = lineup_position
-    ]
-    expect_true(all(abs(dt$m) < 1e-6),
-                info = sprintf("Largest per-lineup_position mean of epv_adj: %.3e",
-                               max(abs(dt$m), na.rm = TRUE)))
+    raw_slot <- as.character(pgd$lineup_position)
+    slot <- raw_slot
+    if (isTRUE(ROLE_REMAP_BENCH)) {
+      slot <- torp:::.remap_bench_role(slot, pgd$player_id, pgd$season,
+                                       pgd$position_group)
+    }
+    role_key <- if (isTRUE(ROLE_USE_LINEUP_GROUP)) {
+      torp:::.collapse_lineup_group(slot)
+    } else {
+      slot
+    }
+
+    # Non-vacuity guards. Without these the test passes loudest exactly when it
+    # has stopped checking anything: an empty grouping makes all() TRUE, and a
+    # remap that silently degraded to a no-op would leave role_key equal to
+    # lineup_position, i.e. this would drift back to asserting the pre-2026-08-06
+    # premise while still reading green. Compare `slot` to the raw value BEFORE
+    # any lineup_group collapse, so this measures the remap and nothing else.
+    expect_gt(sum(!is.na(role_key)), 0)
+    if (isTRUE(ROLE_REMAP_BENCH)) {
+      expect_gt(sum(slot != raw_slot, na.rm = TRUE), 0)
+    }
+
+    # The three positional channels. epv_adj itself is excluded: it also carries
+    # epv_hitout_adj, which is centered on a different key entirely (below).
+    # `[[`-extraction rather than get() inside dt[i, j] — get() there breaks
+    # data.table's fast column-reference path, which this repo has paid for.
+    cell_means <- function(v, key) {
+      keep <- !is.na(key) & !is.na(v)
+      vapply(split(v[keep], key[keep]), mean, numeric(1))
+    }
+    for (ch in c("epv_recv_adj", "epv_disp_adj", "epv_spoil_adj")) {
+      m <- cell_means(pgd[[ch]], role_key)
+      expect_true(all(abs(m) < 1e-6),
+                  info = sprintf("Largest per-cell mean of %s: %.3e", ch,
+                                 max(abs(m), na.rm = TRUE)))
+    }
+
+    # Hitout is the one channel that only exists for players who ruck, so since
+    # 2026-08-06 it is celled on ruck INVOLVEMENT, not on any positional slot
+    # (docs/reviews/INT-CENTRING-BUG-2026-08-06.md). With a blend width set, the
+    # reference is a smooth function of ruck_contests rather than a per-cell
+    # mean, so exact zero is not expected and asserting it would be wrong.
+    # Bound it against the channel's own SD instead: on 2024 R1 the worst cell
+    # sits at 0.05 SD, while celling hitout on the WRONG key put it at 2.26 SD.
+    # 0.25 leaves 5x headroom and still fails an order of magnitude short of a
+    # real mis-keying.
+    hitout_key <- if (isTRUE(EPV_HITOUT_CENTRE_ON_RUCK)) {
+      ifelse(dplyr::coalesce(as.numeric(pgd$ruck_contests), 0) >=
+               EPV_RUCK_INVOLVEMENT_MIN, "RUCKS", "OTHER")
+    } else {
+      role_key
+    }
+    hm <- cell_means(pgd$epv_hitout_adj, hitout_key)
+    hitout_sd <- stats::sd(pgd$epv_hitout_adj, na.rm = TRUE)
+    blended <- isTRUE(EPV_HITOUT_CENTRE_ON_RUCK) && EPV_RUCK_BLEND_WIDTH > 0
+    tol <- if (blended) 0.25 * hitout_sd else 1e-6
+    expect_true(all(abs(hm) < tol),
+                info = sprintf(
+                  "Largest per-cell mean of epv_hitout_adj: %.3e (tol %.3e, blended = %s)",
+                  max(abs(hm), na.rm = TRUE), tol, blended))
   }
 
   # Semantic guards: position_group is the 6-way class, lineup_position is the

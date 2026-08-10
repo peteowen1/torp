@@ -336,3 +336,201 @@ read_ratings_manifest <- function() {
   tryCatch(jsonlite::fromJSON(url, simplifyVector = FALSE),
            error = function(e) NULL)
 }
+
+# Published-vintage vs deployed-code guard
+# =========================================
+# D-DEF3 stamps and reads a manifest, but until now nothing compared it to the
+# running code before a production write. torp 2026-07-27/28: v2 was published
+# as canonical while `main` still computed v1, and the daily pipeline rewrote
+# 2026 rows with v1 logic into the v2 table -- silently, because publishing a
+# vintage and deploying the code that produces it are separate acts and
+# nothing checked they agreed. Design: docs/plans/FABLE-VINTAGE-GUARD-PLAN.md.
+
+#' Recursively flatten a nested named list into single-level leaves
+#'
+#' Leaf names are dotted paths (e.g. `"LINEUP_POSITION_GROUP_MAP.CHF"`), which
+#' is what makes a manifest entry that survived a JSON round-trip (see
+#' \code{.round_trip_constants()}) comparable to the live constants leaf by
+#' leaf, regardless of how deep the nesting is.
+#'
+#' @param x A (possibly nested) list.
+#' @param prefix Internal recursion accumulator.
+#' @return A flat named list; every element is a leaf value (which may itself
+#'   be \code{NULL} -- a JSON \code{null} round-trips to an explicit NULL
+#'   element, not a dropped one, because assignment here always uses
+#'   single-bracket `[<-` with a length-1 list on the right, which is the one
+#'   assignment form that does not delete a NULL from a list).
+#' @keywords internal
+.flatten_named_list <- function(x, prefix = "") {
+  if (!is.list(x)) {
+    out <- list(x)
+    names(out) <- if (nzchar(prefix)) prefix else "value"
+    return(out)
+  }
+  nms <- names(x)
+  if (is.null(nms)) nms <- rep("", length(x))
+  out <- list()
+  for (i in seq_along(x)) {
+    key <- nms[i]
+    if (is.na(key) || !nzchar(key)) key <- as.character(i)
+    child_prefix <- if (nzchar(prefix)) paste0(prefix, ".", key) else key
+    child <- x[[i]]
+    if (is.list(child)) {
+      out <- c(out, .flatten_named_list(child, child_prefix))
+    } else {
+      out[child_prefix] <- list(child)
+    }
+  }
+  out
+}
+
+#' Put a constants list through the exact JSON round-trip the manifest uses
+#'
+#' `read_ratings_manifest()` parses with `simplifyVector = FALSE`, and
+#' `publish_ratings_manifest()` writes with `auto_unbox = TRUE, null = "null"`.
+#' Comparing live constants to a manifest entry is only meaningful if BOTH
+#' sides went through the identical coercion -- integers becoming doubles,
+#' `NA_character_` becoming JSON `null` becoming R `NULL`, a named atomic
+#' vector becoming a list of scalars. Skipping this step and comparing raw R
+#' structures with `identical()` would false-alarm on every run.
+#'
+#' @param x A (possibly nested) list.
+#' @return The same structure after `toJSON()` then `fromJSON()`.
+#' @keywords internal
+.round_trip_constants <- function(x) {
+  raw <- jsonlite::toJSON(x, auto_unbox = TRUE, null = "null")
+  jsonlite::fromJSON(raw, simplifyVector = FALSE)
+}
+
+#' Render one flattened leaf value as a stable, comparable string
+#'
+#' Two leaves that already went through the SAME round-trip (see
+#' `.round_trip_constants()`) are equal iff their JSON text is equal --
+#' `digits = NA` keeps full numeric precision, and `NULL` is handled
+#' explicitly because `toJSON(NULL)` renders `"{}"`, not `"null"`.
+#'
+#' @param v A leaf value.
+#' @return A length-1 character string.
+#' @keywords internal
+.normalise_constant_leaf <- function(v) {
+  if (is.null(v)) return("null")
+  as.character(jsonlite::toJSON(v, auto_unbox = TRUE, null = "null", digits = NA))
+}
+
+#' Diff a manifest vintage's `defining_constants` against the live constants
+#'
+#' Both sides are flattened and every leaf normalised through the same JSON
+#' text form, so a leaf present on only one side reports as `"<absent>"`
+#' rather than crashing, and a leaf whose VALUE differs (a decay constant
+#' edited without a vintage bump) is reported by name with both values.
+#'
+#' @param manifest_constants The canonical vintage's `defining_constants`
+#'   entry, already JSON-round-tripped by virtue of having come from
+#'   `read_ratings_manifest()` (or an equivalently round-tripped test fixture).
+#' @param live_constants The currently loaded constants. Defaults to
+#'   `.rating_defining_constants()`; injectable for tests.
+#' @return A named list of differing leaves, each `list(manifest = ..., live = ...)`.
+#'   Empty when every leaf agrees.
+#' @keywords internal
+.diff_defining_constants <- function(manifest_constants,
+                                     live_constants = .rating_defining_constants()) {
+  live_rt <- .round_trip_constants(live_constants)
+  manifest_flat <- .flatten_named_list(manifest_constants)
+  live_flat <- .flatten_named_list(live_rt)
+  all_names <- union(names(manifest_flat), names(live_flat))
+
+  diffs <- list()
+  for (nm in all_names) {
+    mv <- if (nm %in% names(manifest_flat)) .normalise_constant_leaf(manifest_flat[[nm]]) else "<absent>"
+    lv <- if (nm %in% names(live_flat)) .normalise_constant_leaf(live_flat[[nm]]) else "<absent>"
+    if (!identical(mv, lv)) diffs[[nm]] <- list(manifest = mv, live = lv)
+  }
+  diffs
+}
+
+#' Refuse a ratings write when the running code disagrees with what is
+#' published as canonical
+#'
+#' The border check `preserve_rating_vintage()` and `publish_ratings_manifest()`
+#' set up but never enforced: this is the choke point that would have stopped
+#' the 2026-07-27/28 incident on day one. Three checks, each a distinct failure
+#' mode:
+#'
+#' 1. The manifest itself must be readable (or the run must be non-strict and
+#'    accept the grandfather case of a pre-manifest release).
+#' 2. The manifest's `canonical` label must match the running code's
+#'    `RATING_VINTAGE` -- a mismatch means a write would silently relabel rows
+#'    (incident 1, exactly).
+#' 3. The canonical vintage's recorded `defining_constants` must match the
+#'    live constants after a JSON round-trip -- catching the subtler failure
+#'    where a rating-defining constant was edited without bumping
+#'    `RATING_VINTAGE`, so the label still matches while the maths changed.
+#'
+#' @param strict If TRUE, an unreadable manifest or an undefined canonical
+#'   vintage aborts rather than warning. Defaults to whether
+#'   `VERSEBUS_STRICT` is set, matching every other pipeline entry point's
+#'   convention (versebus §1.5). Production call sites pass `TRUE` explicitly
+#'   regardless of the environment.
+#' @param manifest The ratings manifest to check against. Defaults to
+#'   `read_ratings_manifest()`; injectable so this function's tests run
+#'   offline.
+#' @return Invisibly, `list(aligned = TRUE, canonical = canon)` on success, or
+#'   `list(aligned = NA)` / `list(aligned = NA, canonical = canon)` when a
+#'   non-strict run grandfathers a gap it could not verify.
+#' @keywords internal
+check_vintage_alignment <- function(strict = nzchar(Sys.getenv("VERSEBUS_STRICT")),
+                                    manifest = read_ratings_manifest()) {
+  branch <- Sys.getenv("GITHUB_REF_NAME", "local")
+
+  if (is.null(manifest)) {
+    if (isTRUE(strict)) {
+      cli::cli_abort(c(
+        "ratings_manifest.json is unreadable or absent.",
+        "x" = "An unreadable manifest cannot license a production write (branch {.val {branch}})."
+      ), class = "torp_error_vintage_manifest_unreadable")
+    }
+    cli::cli_warn(c(
+      "ratings_manifest.json is unreadable or absent.",
+      "i" = "Grandfathering a pre-manifest release -- proceeding without an alignment check (branch {.val {branch}})."
+    ))
+    return(invisible(list(aligned = NA)))
+  }
+
+  canon <- manifest$canonical
+  if (!identical(canon, RATING_VINTAGE)) {
+    cli::cli_abort(c(
+      "Deployed code computes rating vintage {.val {RATING_VINTAGE}}, but the published manifest's canonical vintage is {.val {canon}}.",
+      "x" = "Writing now would silently relabel {.val {canon}}-labelled rows with {.val {RATING_VINTAGE}} logic (branch {.val {branch}}) -- this is the 2026-07-27/28 incident.",
+      "i" = "Either publish {.val {RATING_VINTAGE}} as a candidate vintage first, or fix RATING_VINTAGE to match {.val {canon}}, before this run proceeds."
+    ), class = "torp_error_vintage_mismatch")
+  }
+
+  canon_entry <- manifest$vintages[[canon]]
+  canon_constants <- if (is.null(canon_entry)) NULL else canon_entry$defining_constants
+  if (is.null(canon_constants)) {
+    if (isTRUE(strict)) {
+      cli::cli_abort(c(
+        "The manifest's canonical vintage {.val {canon}} has no recorded defining_constants.",
+        "x" = "Canonical-with-no-definition is a provenance gap, not a licence to write (branch {.val {branch}})."
+      ), class = "torp_error_vintage_undefined")
+    }
+    cli::cli_warn(c(
+      "The manifest's canonical vintage {.val {canon}} has no recorded defining_constants.",
+      "i" = "Proceeding without a defining-constants check (branch {.val {branch}})."
+    ))
+    return(invisible(list(aligned = NA, canonical = canon)))
+  }
+
+  diffs <- .diff_defining_constants(canon_constants)
+  if (length(diffs) > 0) {
+    lines <- vapply(names(diffs), function(nm) {
+      sprintf("%s: manifest %s vs live %s", nm, diffs[[nm]]$manifest, diffs[[nm]]$live)
+    }, character(1))
+    cli::cli_abort(c(
+      "Rating-defining constants have drifted from vintage {.val {canon}}'s published definition without a vintage bump (branch {.val {branch}}).",
+      stats::setNames(lines, rep("x", length(lines)))
+    ), class = "torp_error_vintage_constants_drift")
+  }
+
+  invisible(list(aligned = TRUE, canonical = canon))
+}

@@ -23,7 +23,17 @@ NULL
 #' @param fixtures Fixtures frame.
 #' @return Ratings rows for that season.
 #' @keywords internal
-.build_epr_season <- function(year, rounds, pgd, stat_ratings, fixtures) {
+#' @param epr_params Optional named list of EPR aggregation parameters
+#'   (\code{decay_*}, \code{prior_games_*}, \code{prior_rate_*}, \code{loading}),
+#'   passed straight to \code{calculate_epr_stats_batch()}. NULL uses the live
+#'   constants, so the default call is byte-identical to production. Exists so an
+#'   optimiser can vary these WITHOUT a second implementation of the aggregation
+#'   -- every gate in this repo asks "is it better" and none ask "is it the same
+#'   thing", so the cheapest way not to need that question is to reuse the
+#'   production code path.
+#' @noRd
+.build_epr_season <- function(year, rounds, pgd, stat_ratings, fixtures,
+                              epr_params = NULL) {
   plyr_tm_df <- load_player_details(year)
   if (nrow(plyr_tm_df) == 0 || !"season" %in% names(plyr_tm_df)) {
     plyr_tm_df <- load_player_details(year - 1)
@@ -49,7 +59,27 @@ NULL
   }
 
   # Batch compute all rounds' player stats in one data.table pass
-  batch_stats <- calculate_epr_stats_batch(pgd, round_info)
+  batch_stats <- if (is.null(epr_params)) {
+    calculate_epr_stats_batch(pgd, round_info)
+  } else {
+    # `player_game_data` and `round_info` are passed explicitly by the do.call
+    # below, so they are NOT settable through epr_params -- checking against the
+    # unfiltered formals let one through to a base-R "matched by multiple actual
+    # arguments" error instead of this abort, which is exactly the silent-ish
+    # failure the message below says it refuses.
+    ok <- setdiff(names(formals(calculate_epr_stats_batch)),
+                  c("player_game_data", "round_info"))
+    bad <- setdiff(names(epr_params), ok)
+    if (length(bad) > 0) {
+      cli::cli_abort(c(
+        "Unknown {.arg epr_params}: {.val {bad}}",
+        "i" = "Accepted: {.val {ok}}",
+        "x" = "Refusing to silently ignore a parameter the caller meant to set."
+      ))
+    }
+    do.call(calculate_epr_stats_batch,
+            c(list(player_game_data = pgd, round_info = round_info), epr_params))
+  }
 
   # Attach decomposed TOG from stat ratings
   batch_stats[, pred_tog := NA_real_]

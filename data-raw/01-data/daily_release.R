@@ -269,7 +269,15 @@ update_season_chains <- function(season, round) {
     vb_guard_accumulate(data.table::data.table(row = seq_len(n_existing_before)), combined, floor = 0.9)
   }
 
-  save_to_release(df = combined, file_name = chains_all_name, release_tag = "chains-data")
+  # The guard above cannot see the failure its own comment describes. It compares
+  # `combined` against `n_existing_before`, which is derived from the same read --
+  # so if that read came back partial, the baseline is already small and the ratio
+  # passes. `prev_rows_floor` checks against bus_manifest.json instead, i.e. what
+  # was actually PUBLISHED last run, which is the only baseline a bad local read
+  # cannot move. No-ops safely when the manifest is absent or has no row count,
+  # and at season rollover (a new asset name has no prior entry).
+  save_to_release(df = combined, file_name = chains_all_name, release_tag = "chains-data",
+                  prev_rows_floor = 0.9)
 
   cli::cli_alert_success("Saved {chains_all_name} ({nrow(combined)} rows)")
   invisible(NULL)
@@ -350,7 +358,10 @@ update_season_pbp <- function(season, round) {
     vb_guard_accumulate(data.table::data.table(row = seq_len(n_existing_before)), combined, floor = 0.9)
   }
 
-  save_to_release(df = combined, file_name = pbp_all_name, release_tag = "pbp-data")
+  # Manifest-backed second opinion — see the note at the chains-data save above:
+  # the in-process guard's baseline comes from the same read it is checking.
+  save_to_release(df = combined, file_name = pbp_all_name, release_tag = "pbp-data",
+                  prev_rows_floor = 0.9)
 
   cli::cli_alert_success("Saved {pbp_all_name} ({nrow(combined)} rows)")
   invisible(NULL)

@@ -35,8 +35,7 @@ wsd <- function(x,w){ m <- wmean(x,w); sqrt(sum(w*(x-m)^2, na.rm=TRUE)/sum(w[!is
 
 pg <- rdp("player_game_%d.parquet", SEASONS)
 pg[, round := as.numeric(round)]
-pg[, tog_safe := pmax(fifelse(is.na(time_on_ground_percentage), 100,
-                              time_on_ground_percentage)/100, 0.1)]
+pg[, tog_safe := pmax(data.table::fcoalesce(time_on_ground_percentage / 100, 0.1), 0.1)]
 
 # ---- EPR under both vintages ------------------------------------------------
 for (ch in CH) {

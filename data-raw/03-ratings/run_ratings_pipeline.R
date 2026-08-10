@@ -33,6 +33,11 @@ Sys.setenv(VERSEBUS_STRICT = "1")
 Sys.setenv(piggyback_cache_duration = 1)
 clear_skip_markers()
 
+# FABLE-VINTAGE-GUARD-PLAN: refuse to write ratings when the deployed code's
+# vintage/constants disagree with what the manifest already published as
+# canonical (torp 2026-07-27/28 incident 1).
+torp:::check_vintage_alignment(strict = TRUE)
+
 # Source daily_release.R into a local env to get update_player_stats() and
 # update_teams() without leaking .release_cache and other globals.
 .daily_release_env <- new.env(parent = globalenv())
@@ -282,13 +287,44 @@ if (isTRUE(EPV_LEVEL_CENTRE)) {
       "x" = "Refusing to build ratings on EPV whose centring cannot be checked."
     ))
   }
+  # With EPV_POSITION_SHRINK on, a cell is NOT left at zero -- it is left at
+  # (1 - lambda) * (its round mean - its bucket's earlier mean). That is still
+  # an exact quantity, so this guard checks the residual against what the
+  # centring RECORDED it should be, rather than loosening its tolerance to
+  # accommodate the feature. Loosening the equivalent guard 50x for a 0.004
+  # effect is what got the EPR version of this reverted.
+  .cells <- attr(all_pgd, "epv_level_centring")
+  epv_shrink_on <- isTRUE(torp:::EPV_POSITION_SHRINK)
+  if (epv_shrink_on && (is.null(.cells) || nrow(.cells) == 0)) {
+    cli::cli_abort(c(
+      "EPV_POSITION_SHRINK is ON but centre_epv_by_position() recorded no per-cell corrections.",
+      "x" = "Without them a shrunk residual is indistinguishable from centring having failed."
+    ))
+  }
   chk_worst <- 0
   chk_cells <- 0L
   for (cc in paste0(EPV_LEVEL_CENTRE_CHANNELS, .lc)) {
     m <- .chk[is.finite(get(cc)),
               .(wm = stats::weighted.mean(get(cc), w)),
               by = .(season, round, pos_bucket)]
-    if (nrow(m) > 0) { chk_worst <- max(chk_worst, max(abs(m$wm), na.rm = TRUE)); chk_cells <- chk_cells + nrow(m) }
+    if (nrow(m) == 0) next
+    m[, expected := 0]
+    if (!is.null(.cells) && nrow(.cells) > 0) {
+      .ce <- data.table::as.data.table(.cells)[channel == cc,
+                                               .(season, round, pos_bucket, resid_expected)]
+      if (nrow(.ce) > 0) {
+        m[.ce, expected := i.resid_expected, on = .(season, round, pos_bucket)]
+        # A cell the centring never recorded is a cell it never corrected.
+        if (anyNA(m$expected)) {
+          cli::cli_abort(c(
+            "{sum(is.na(m$expected))} cell{?s} of {.field {cc}} have no recorded correction.",
+            "x" = "Refusing to treat an uncorrected cell as if it had been centred."
+          ))
+        }
+      }
+    }
+    chk_worst <- max(chk_worst, max(abs(m$wm - m$expected), na.rm = TRUE))
+    chk_cells <- chk_cells + nrow(m)
   }
   if (chk_cells == 0L) {
     cli::cli_abort(c(
@@ -298,12 +334,12 @@ if (isTRUE(EPV_LEVEL_CENTRE)) {
   }
   if (!is.finite(chk_worst) || chk_worst > 1e-8) {
     cli::cli_abort(c(
-      "EPV level centring did not take: max |TOG-weighted cell mean| = {signif(chk_worst, 3)}",
+      "EPV level centring did not take: max |cell mean - expected residual| = {signif(chk_worst, 3)}",
       "x" = "Refusing to build ratings on EPV that is not centred as claimed."
     ))
   }
-  cli::cli_alert_success("EPV level centring verified across {chk_cells} cell{?s} (max |cell mean| = {signif(chk_worst, 3)})")
-  rm(.chk, chk_worst, chk_cells, .lc)
+  cli::cli_alert_success("EPV level centring verified across {chk_cells} cell{?s} (max deviation from expected = {signif(chk_worst, 3)}; shrinkage {epv_shrink_on})")
+  rm(.chk, chk_worst, chk_cells, .lc, .cells, epv_shrink_on)
 }
 
 data.table::setkey(all_pgd, match_id)
@@ -546,7 +582,14 @@ if (nrow(torp_new) > 0) {
     cli::cli_alert_success("Blended PSR into ratings ({sum(!is.na(torp_df_total$torp))} rows with torp)")
   }
 
-  save_to_release(torp_df_total, vintage_stem, "ratings-data")
+  # Manifest-backed second opinion on top of the vb_guard_accumulate() above.
+  # That one compares against `existing` as loaded in this process; if the load
+  # itself came back partial — the failure mode that corrupted two published
+  # rating seasons on 2026-07-27, when a stale local dir shadowed the release —
+  # its baseline shrinks with it and the check passes. bus_manifest.json records
+  # what was published, so a bad local read cannot move it. Inert (by design)
+  # when the vintage stem changes, since a new asset name has no prior entry.
+  save_to_release(torp_df_total, vintage_stem, "ratings-data", prev_rows_floor = 0.9)
 
   uploaded <- tryCatch(load_torp_ratings(version = RATINGS_VINTAGE), error = function(e) NULL)
   if (is.null(uploaded) || nrow(uploaded) != nrow(torp_df_total)) {

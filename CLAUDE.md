@@ -35,6 +35,53 @@ powershell.exe -Command 'Rscript "path/to/script.R"'
 
 All rating-blend weights and decay parameters (`TORP_EPR_WEIGHT`, `EPR_DECAY_RECV`, `EPR_DECAY_DISP`, `EPR_DECAY_SPOIL`, `EPR_DECAY_HITOUT`, `EPR_PRIOR_GAMES_RECV`, `EPV_WEIGHT_DECAY_DAYS`, `TOTAL_PRED_TOG`) live in `R/constants_ratings.R` — see the source for current values.
 
+### EPV v3 (built 2026-08-03, NOT shipped)
+
+`EPV_ENGINE` selects the engine and defaults to `"v2"`, so published ratings are
+unchanged — proven, not asserted: `data-raw/04-analysis/epv3_verify_v2_unchanged.R`
+compares all 73 columns across 56,576 player-games.
+
+**Before touching anything EPV- or contest-related, read
+[`../docs/reference/EPV-V3-CHANNELS.md`](../docs/reference/EPV-V3-CHANNELS.md)**
+(formula by formula, what is in each channel) **and
+[`../docs/reference/EPV-VALUE-ANATOMY.md`](../docs/reference/EPV-VALUE-ANATOMY.md)**
+(where the value actually comes from, measured over 2.05M PBP rows).
+
+**Read the anatomy doc before proposing any credit weight change.** Two live
+constants were refuted by it in one session, and both had converging evidence
+behind them beforehand:
+
+- `EPV_RUCK_SWING_SCALE`'s 3.14× justification is **~93% centre-bounce reset
+  artifact** — `exp_pts` is exactly 0.0000 on every `Centre Bounce` row.
+- `EPV_RECV_NEG_MULT = 0` deletes the **intercept** branch, which is the
+  highest-value receiving act in the game (+0.625/event against +0.079).
+
+The general shape: **when a change improves a summary statistic, ask what events
+it removed before banking it.** Both of those looked like noise reduction and
+were signal deletion. And note game-to-game reliability and year-over-year
+repeatability can move in *opposite* directions — quote which one you mean; the
+second is the one that separates ability from noise.
+
+- **The v3 channel names are ALIASES and they lie.** `epv_spoil` /
+  `epr_spoil` hold *aerial contest* value and contain no spoil weight;
+  `epv_hitout` / `epr_hitout` hold stoppage value. Same for
+  `EPR_DECAY_SPOIL`, `EPR_PRIOR_GAMES_SPOIL`, `EPR_PRIOR_RATE_SPOIL` and their
+  hitout twins. Renaming touches 18 R files and two released artifacts, so it
+  waits until v3 is chosen.
+- **Two different contest coefficients exist and both are valid.** At the EPV
+  layer (value accrued *in* a match → that match's margin) v2 reads −0.41 and v3
+  +0.27; at the EPR layer (historical rating → margin) v2 reads +3.2 to +4.05 and
+  v3 −0.02. They answer different questions. Quote which layer you mean.
+- **`player_game_data` is lineup-correct by construction** (22.79 players per
+  team-match) and `epv_*_adj` is already TOG-scaled. Summing it per (match, team)
+  needs no lineup filter and no `POSITION_AVG_TOG` weighting — adding either
+  double-counts. Summing EPR *ratings* per team-round is the opposite: those exist
+  for every listed player, so that path must go through
+  `.build_team_ratings_df()`.
+
+Design, gates and the dead ends not to re-open:
+[`../docs/plans/EPV-V3-CHAIN-NATIVE.md`](../docs/plans/EPV-V3-CHAIN-NATIVE.md).
+
 WPA is intentionally **not** folded into `torp_value` — surfaced as a parallel metric. (The original "WP gradient too steep in close/late" rationale was measured **false** in 2026-07: the WP family is actually *flat* there — see [`../docs/reviews/FABLE-WP-EXPERIMENTS.md`](../docs/reviews/FABLE-WP-EXPERIMENTS.md) §7. Decision 2026-07-11: exclusion stood until (a) a light recalibration layer fitted on recent-season OOS predictions ships, and (b) a temporal Q4/close slope release gate exists — the canonical model still ran slope ~1.14/1.26 on temporal holdout. Update 2026-07-12: recalibration layer shipped ([`../docs/plans/FABLE-RECAL-PLAN.md`](../docs/plans/FABLE-RECAL-PLAN.md) — `get_wp_preds()` applies the `wp_calibration` sidecar, `torpmodels::train_core_models()` gates every WP release on the calibrated temporal slope); WPA reinstatement is now pending the `../docs/plans/FABLE-RECAL-PLAN.md` §2 Step 6 bias re-measurement (the plan's own D6 cross-reference to "§5" for this protocol is stale -- Step 6 is where it actually lives, §5 is Non-goals), not a separate design decision.)
 
 ## Data Loaders

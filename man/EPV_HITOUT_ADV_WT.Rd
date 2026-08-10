@@ -11,6 +11,12 @@ An object of class \code{numeric} of length 1.
 EPV_HITOUT_ADV_WT
 }
 \description{
-Hitout to advantage weight
+The one term the measurement and the design agree on, and the one that should
+dominate: the ruck's skill is DIRECTION, not elevation. Left at 0.1748 in the
+2026-08-07 repricing although the fit says +0.1013 per ruck (t 6.4) -- at
+0.1748 direction carries 70.5\\% of the channel's variance, at 0.1015 only
+55.6\\%, and dropping it costs a third of the channel's remaining spread on top
+of what the attendance debit already costs. If the channel is too loud that is
+a points-SCALE decision, not a reason to underweight the skill.
 }
 \keyword{internal}

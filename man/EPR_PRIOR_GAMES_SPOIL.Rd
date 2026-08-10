@@ -3,7 +3,7 @@
 \docType{data}
 \name{EPR_PRIOR_GAMES_SPOIL}
 \alias{EPR_PRIOR_GAMES_SPOIL}
-\title{Prior games constant for spoil ratings}
+\title{Prior games constant for the spoil/contest slot. See \code{EPR_PRIOR_GAMES_RECV}.}
 \format{
 An object of class \code{numeric} of length 1.
 }
@@ -11,6 +11,6 @@ An object of class \code{numeric} of length 1.
 EPR_PRIOR_GAMES_SPOIL
 }
 \description{
-Prior games constant for spoil ratings
+Prior games constant for the spoil/contest slot. See \code{EPR_PRIOR_GAMES_RECV}.
 }
 \keyword{internal}

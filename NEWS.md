@@ -1,5 +1,108 @@
 # torp (development version)
 
+## Rating changes
+
+* **The ruck must now win contests to gain points.** This CHANGES PUBLISHED
+  RATINGS. `EPV_RUCK_CONTEST_WT` goes **+0.0232 → −0.0232**: it used to pay for
+  every contest *attended*, won or lost, so a ruck banked roughly +0.70 a game
+  for turning up — most of the "the channel over-pays rucks ~11×" finding.
+  `EPV_HITOUT_WT` goes **0.0510 → 0.0615**, which sets break-even at the actual
+  league average win rate of **37.7%**: an average ruck's contest work is worth
+  about nothing, a better one positive, and a ruck who attends 30 and wins 10
+  without direction now goes negative. `EPV_HITOUT_ADV_WT` is unchanged at
+  0.1748 — direction is the ruck's skill and carries 70.5% of the channel's
+  variance.
+
+  Judged on the fast EPR gate (1,194 matches, rating as the only feature):
+  **better on all five of MAE, RMSE, Brier, logloss and bits**, with the
+  within-team coefficient moving toward 1.0. Tips is fractionally down, about
+  two across 1,005 matches. Face validity passes on all four rows — position mix
+  +1, Spearman 0.9991, nobody appears from nowhere, biggest climb +10.
+
+  The production match gate read dMAE +0.2194 and is **not** the basis for this;
+  it was overturned by the EPR gate and by the channel's own signal, which
+  roughly doubled (correlation with margin 0.089 → 0.169). See
+  `docs/HOW-WE-WORK.md`.
+
+  One weight is set against the measurement, deliberately and on the record: the
+  fit puts an undirected tap at −0.0209 per ruck (t −3.5, stable across halves),
+  and it ships positive. Attendance, by contrast, **cannot** be priced from
+  margin at all — both teams attend the same contests, so its differential has an
+  sd of 0.59 on a level of 92.1.
+
+* **The centring cell is now the job a player did, not the slot he started in.**
+  This CHANGES PUBLISHED RATINGS. `lineup_position` records where a player
+  started, so every bench-starting specialist was being centred against
+  benchwarmers: the `INT` cell averages 0.378 per-80 hitout against `RK`'s 5.158,
+  which put Sean Darcy — rucking at an ordinary 5.44 — 4.1 standard deviations
+  above his cell and 5th in the competition, while Max Gawn's ruck channel read
+  negative. Three constants change together, and they are not separable:
+
+  - `ROLE_REMAP_BENCH` (now `TRUE`) resolves a bench start to the role the player
+    actually filled — season role, then career role, then listed position, with
+    the count reaching each tier reported.
+  - `EPV_HITOUT_CENTRE_ON_RUCK` (now `TRUE`) cells the hitout channel on ruck
+    involvement rather than a position label. Listed position does not fix this:
+    11 of the 44 players averaging 15+ ruck contests a game are not listed as
+    rucks (Rory Lobb is a KEY_DEFENDER at 29.2 a game).
+  - `EPV_RUCK_BLEND_WIDTH` (now `10`) blends the reference across the involvement
+    threshold instead of switching at it, so a part-time ruck gets a part-time
+    cell and there is no cliff.
+
+  Verified two ways, because no single check can see both halves. Match gate:
+  dMAE +0.0534, 95% CI [−0.4980, +0.6049] on 396 paired matches — a null, which
+  is the pass for a change that reallocates credit within a team. Leaderboard:
+  position mix in the top 40 identical before and after, Spearman 0.9636, Gawn's
+  hitout channel −0.15 → +0.65, and the biggest fallers are exactly the
+  ruck-forwards who had been credited against forwards.
+
+## New Features
+
+* **EPV v3: a chain-native rebuild of the credit system, behind `EPV_ENGINE`
+  (default `"v2"`).** Nothing about published ratings changes — that is proven,
+  not asserted: `data-raw/04-analysis/epv3_verify_v2_unchanged.R` regenerates the
+  v2 arm with current code and compares all 73 columns across 56,576
+  player-games, all identical.
+
+  v2 stapled together a chain-derived part that conserves the expected-points
+  swing exactly and thirty box-score weights that do not. v3 prices every event
+  from `delta_epv`, via one decomposition of a kick's swing:
+
+  ```
+  delta_epv = (V_pre    - exp_pts )   disposal, to the kicker
+            + (V_branch - V_pre   )   contest surprise, split zero-sum
+            + (V_after  - V_branch)   subsequent play, paid by the next row
+  ```
+
+  with `V_pre = (1-p) V_att + p V_def`, so the contest term is `+p*Delta` when
+  the attack retains and `-(1-p)*Delta` when the defence wins. The winner banks
+  it and the loser sheds it — no share parameter, and the payout scales with the
+  **surprise**, so beating a contest you were expected to lose is worth far more
+  than winning a gimme.
+
+  Contest value goes from **1.6% to 15.7%** of EPV variance and **1.3% to 19.8%**
+  of EPR variance. `Delta` averages **2.06 points** per aerial contest against
+  v2's flat `EPV_SPOIL_WT = 0.0737`, and 57.6% of player-games now carry a
+  *negative* contest value, which a flat weight cannot express. The key-defender
+  positional level closes from **−2.176 to −0.405** with no centring fix,
+  because it was largely an artefact of the box weights.
+
+  **Costs, measured rather than assumed.** Tackles leave EPV entirely — chains
+  logs 0.49 `Tackle` rows per match against ~60 real ones — moving tackle
+  quintile 5 down 1.06 monotonically; PSV carries them. And the match gate says
+  v3 costs **0.184 MAE** (95% CI [−0.378, +0.746], not significant) because the
+  contest channel adds nothing *incremental* at team level (multivariate
+  t = −0.06, p = 0.954). It is redundant to recv/disp/cont_stop, not noisy.
+
+  Channel contents formula by formula, and the naming warning that the v3 column
+  names are aliases describing the v2 quantity:
+  `../docs/reference/EPV-V3-CHANNELS.md`. Design and every gate:
+  `../docs/plans/EPV-V3-CHAIN-NATIVE.md`.
+
+* **`.build_epr_season()` accepts `epr_params`**, passed straight through to
+  `calculate_epr_stats_batch()`. Lets an optimiser vary the aggregation
+  constants without a second implementation of the logic to drift.
+
 ## Bug Fixes
 
 * **`vb_publish()` retries its post-upload verify instead of failing on a listing

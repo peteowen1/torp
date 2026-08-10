@@ -94,8 +94,33 @@ COORD_FLIP_TOLERANCE <- 70
 #' Chains descriptions for the contest target / kick result side
 #' These appear in the row BEFORE the contest outcome (Spoil, Mark, etc.)
 #' at the same x,y coordinates.
+#'
+#' \strong{`Kick Inside 50 Result` does not belong here and is left anyway.}
+#' It is an ANNOTATION of where an inside-50 entry ended up, not a player who
+#' contested anything: 90.4 rows per match of which \strong{34.7\% carry no
+#' `player_id` at all}, against `Contest Target`'s 26.0 per match at 100\%. The
+#' volume comparison is the tell -- `Contest Target` at 26.0 lines up almost
+#' exactly with the AFL API's 26 defensive one-on-ones per match, two
+#' independent sources counting the same thing, and an annotation firing 3.5x as
+#' often can only dilute it.
+#'
+#' It is NOT removed here because this constant is read by FIVE call sites and
+#' four of them are v2 production paths -- `clean_pbp()` (which sets
+#' `contest_target_id`, feeding v2's `contest_epv` and the reduced disposal
+#' scale), `contests.R`, and two in `player_credit.R`. Changing it would move
+#' every published v2 rating with no gate. v3 uses
+#' \code{EPV3_CONTEST_TARGET_DESCS} instead.
+#'
+#' \strong{Fixing it for v2 is a real candidate and needs its own gate.}
 #' @keywords internal
 CHAINS_CONTEST_TARGET_DESCS <- c("Contest Target", "Kick Inside 50 Result")
+
+#' Chains descriptions v3 accepts as naming the beaten player in a duel
+#'
+#' `Contest Target` only. See \code{CHAINS_CONTEST_TARGET_DESCS} for why the
+#' i50 annotation is excluded here and retained there.
+#' @keywords internal
+EPV3_CONTEST_TARGET_DESCS <- c("Contest Target")
 
 #' Chains descriptions that may sit between a kick and its contest outcome
 #'

@@ -67,8 +67,7 @@ cat(sprintf("player-games with a D50 negative component: %s\n",
 
 pg <- rdp("player_game_%d.parquet", SEASONS)
 pg[, round := as.numeric(round)]
-pg[, tog_safe := pmax(fifelse(is.na(time_on_ground_percentage), 100,
-                              time_on_ground_percentage)/100, 0.1)]
+pg[, tog_safe := pmax(data.table::fcoalesce(time_on_ground_percentage / 100, 0.1), 0.1)]
 pg <- merge(pg, comp, by = c("player_id","match_id"), all.x = TRUE)
 pg[is.na(d50neg), d50neg := 0]
 cat(sprintf("mean D50 negative component by bucket:\n"))

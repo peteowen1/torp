@@ -370,3 +370,86 @@ test_that(".vb_asset_true_size reads the total off Content-Range, not the range 
   )
   expect_equal(torp:::.vb_asset_true_size("owner/repo", "tag", "f.parquet"), 75153518)
 })
+
+# ---- prev_rows_floor, the manifest-backed accumulate guard ------------------
+# Wired into the three accumulating saves on 2026-08-09 (chains-data, pbp-data,
+# ratings-data). It is NOT redundant with vb_guard_accumulate(): that one
+# compares against `existing` as loaded in-process, so a partial READ shrinks
+# its baseline too and the ratio passes. bus_manifest.json records what was
+# actually published, which a bad local read cannot move. Untested until now,
+# which is how a guard quietly becomes a no-op.
+
+test_that("prev_rows_floor ABORTS before uploading when the frame is far under the published row count", {
+  uploaded <- FALSE
+  testthat::local_mocked_bindings(
+    pb_upload = function(...) { uploaded <<- TRUE; invisible(NULL) },
+    .package = "piggyback"
+  )
+  testthat::local_mocked_bindings(
+    .publish_bus_manifest = function(...) invisible(NULL),
+    save_locally = function(...) invisible(NULL),
+    vb_read_prev_manifest = function(repo, tag) {
+      list(assets = list(list(name = "widget.parquet", rows = 1000)))
+    }
+  )
+
+  df <- data.frame(x = 1:3, y = c("a", "b", "c"))  # 3 rows vs 1000 published
+  expect_error(
+    save_to_release(df, "widget", "test-tag", prev_rows_floor = 0.9),
+    regexp = "refusing to upload",
+    class = "vb_error_integrity"
+  )
+  # The point of checking BEFORE the write: nothing should have been sent.
+  expect_false(uploaded)
+})
+
+test_that("prev_rows_floor allows a frame at or above the floor", {
+  testthat::local_mocked_bindings(
+    pb_upload = function(...) invisible(NULL),
+    .package = "piggyback"
+  )
+  testthat::local_mocked_bindings(
+    gh = function(endpoint, ...) list(assets = list(list(
+      name = "widget.parquet", size = 1e9,
+      updated_at = "2020-01-01T00:00:00Z", id = 1))),
+    .package = "gh"
+  )
+  testthat::local_mocked_bindings(
+    .publish_bus_manifest = function(...) invisible(NULL),
+    save_locally = function(...) invisible(NULL),
+    .vb_asset_true_size = function(...) NA_real_,
+    vb_read_prev_manifest = function(repo, tag) {
+      list(assets = list(list(name = "widget.parquet", rows = 3)))
+    }
+  )
+
+  df <- data.frame(x = 1:3, y = c("a", "b", "c"))  # 3 vs 3 published — at floor
+  expect_no_error(suppressWarnings(save_to_release(df, "widget", "test-tag",
+                                                   prev_rows_floor = 0.9)))
+})
+
+test_that("prev_rows_floor no-ops rather than blocking when the manifest cannot be read", {
+  # Best-effort by contract: a missing/unreadable manifest, or an entry with no
+  # row count, must never be the reason a good release is refused.
+  for (mf in list(NULL,
+                  list(assets = list()),
+                  list(assets = list(list(name = "widget.parquet", rows = NA))))) {
+    local({
+      manifest <- mf
+      testthat::local_mocked_bindings(
+        pb_upload = function(...) invisible(NULL), .package = "piggyback")
+      testthat::local_mocked_bindings(
+        gh = function(endpoint, ...) list(assets = list(list(
+          name = "widget.parquet", size = 1e9,
+          updated_at = "2020-01-01T00:00:00Z", id = 1))), .package = "gh")
+      testthat::local_mocked_bindings(
+        .publish_bus_manifest = function(...) invisible(NULL),
+        save_locally = function(...) invisible(NULL),
+        .vb_asset_true_size = function(...) NA_real_,
+        vb_read_prev_manifest = function(repo, tag) manifest)
+      df <- data.frame(x = 1:3, y = c("a", "b", "c"))
+      expect_no_error(suppressWarnings(
+        save_to_release(df, "widget", "test-tag", prev_rows_floor = 0.9)))
+    })
+  }
+})

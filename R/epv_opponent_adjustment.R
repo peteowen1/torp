@@ -226,10 +226,18 @@ adjust_epv_for_opponents <- function(player_game_data,
   }
 
   # Join: for each player-game, look up their opponent's defensive profile
+  .engine <- attr(dt, "epv_engine")
   dt <- merge(dt, profiles[, .(match_id, defending_team, epv_opp_adj)],
               by.x = c("match_id", "opponent"),
               by.y = c("match_id", "defending_team"),
               all.x = TRUE)
+  # merge.data.table DROPS custom attributes (as.data.table, `:=` and
+  # dplyr::left_join all keep them, which is why this went unnoticed). The
+  # standard build order is create_player_game_data -> adjust_epv_for_opponents
+  # -> centre_epv_by_position, and centre_epv_by_position decides the points
+  # scale from `epv_engine`. Without this line a v3 frame arrives there
+  # engine-less and silently falls back to v2's single global factor.
+  if (!is.null(.engine)) data.table::setattr(dt, "epv_engine", .engine)
 
   # Compute each player's TOG share within their team for this game
   dt[, .tog_safe := pmax(data.table::fifelse(

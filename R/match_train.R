@@ -166,7 +166,29 @@
     "s(psr_diff, bs = \"ts\", k = 5)"        = list(var = "psr_diff", k = 5),
     "s(osr_diff, bs = \"ts\", k = 5)"        = list(var = "osr_diff", k = 5),
     "s(dsr_diff, bs = \"ts\", k = 5)"        = list(var = "dsr_diff", k = 5),
-    "s(xelo_diff, bs = \"ts\", k = 5)"       = list(var = "xelo_diff", k = 5)
+    "s(xelo_diff, bs = \"ts\", k = 5)"       = list(var = "xelo_diff", k = 5),
+    # The EPR CHANNEL smooths. These used to sit in the base formulas, outside
+    # this guard, and that made a whole engine untrainable: under
+    # EPV3_CHANNELS = 3L the hitout slot is zeroed, so epr_hitout_diff is
+    # IDENTICALLY CONSTANT and mgcv aborts the entire fit with "a term has fewer
+    # unique covariate combinations than specified maximum degrees of freedom".
+    # A channel that does not exist should not be a model term; it should drop
+    # out the same way an absent psr_diff does.
+    #
+    # Under v2 every one of these has thousands of unique values, so nothing is
+    # dropped and the fitted formulas are unchanged -- the terms simply move
+    # from the base string to the optional list, and a sum of smooths does not
+    # care about order.
+    "s(abs(epr_diff), bs = \"ts\", k = 5)"        = list(var = "epr_diff", k = 5),
+    "s(abs(epr_recv_diff), bs = \"ts\", k = 5)"   = list(var = "epr_recv_diff", k = 5),
+    "s(abs(epr_disp_diff), bs = \"ts\", k = 5)"   = list(var = "epr_disp_diff", k = 5),
+    "s(abs(epr_spoil_diff), bs = \"ts\", k = 5)"  = list(var = "epr_spoil_diff", k = 5),
+    "s(abs(epr_hitout_diff), bs = \"ts\", k = 5)" = list(var = "epr_hitout_diff", k = 5),
+    "s(epr_diff, bs = \"ts\", k = 5)"             = list(var = "epr_diff", k = 5),
+    "s(epr_recv_diff, bs = \"ts\", k = 5)"        = list(var = "epr_recv_diff", k = 5),
+    "s(epr_disp_diff, bs = \"ts\", k = 5)"        = list(var = "epr_disp_diff", k = 5),
+    "s(epr_spoil_diff, bs = \"ts\", k = 5)"       = list(var = "epr_spoil_diff", k = 5),
+    "s(epr_hitout_diff, bs = \"ts\", k = 5)"      = list(var = "epr_hitout_diff", k = 5)
   )
   drop_terms <- character(0)
   for (term_str in names(optional_smooth_terms)) {
@@ -201,11 +223,6 @@
     "+ s(game_prop_through_day.x, bs = \"cc\")",
     "+ s(team_name.x, bs = \"re\") + s(team_name.y, bs = \"re\")",
     "+ s(team_name_season.x, bs = \"re\") + s(team_name_season.y, bs = \"re\")",
-    "+ s(abs(epr_diff), bs = \"ts\", k = 5)",
-    "+ s(abs(epr_recv_diff), bs = \"ts\", k = 5)",
-    "+ s(abs(epr_disp_diff), bs = \"ts\", k = 5)",
-    "+ s(abs(epr_spoil_diff), bs = \"ts\", k = 5)",
-    "+ s(abs(epr_hitout_diff), bs = \"ts\", k = 5)",
     "+ s(epr.x, bs = \"ts\", k = 5) + s(epr.y, bs = \"ts\", k = 5)",
     "+ s(abs(torp_diff), bs = \"ts\", k = 5)",
     "+ s(torp.x, bs = \"ts\", k = 5) + s(torp.y, bs = \"ts\", k = 5)",
@@ -217,6 +234,11 @@
     "+ s(days_rest_diff_fac, bs = \"re\")"
   )
   m1_optional <- c(
+    "s(abs(epr_diff), bs = \"ts\", k = 5)",
+    "s(abs(epr_recv_diff), bs = \"ts\", k = 5)",
+    "s(abs(epr_disp_diff), bs = \"ts\", k = 5)",
+    "s(abs(epr_spoil_diff), bs = \"ts\", k = 5)",
+    "s(abs(epr_hitout_diff), bs = \"ts\", k = 5)",
     "s(psr.x, bs = \"ts\", k = 5)", "s(psr.y, bs = \"ts\", k = 5)",
     "s(abs(psr_diff), bs = \"ts\", k = 5)",
     "s(abs(osr_diff), bs = \"ts\", k = 5)", "s(abs(dsr_diff), bs = \"ts\", k = 5)",
@@ -252,16 +274,17 @@
     "+ s(team_name.x, bs = \"re\") + s(team_name.y, bs = \"re\")",
     "+ s(team_name_season.x, bs = \"re\") + s(team_name_season.y, bs = \"re\")",
     "+ s(gam_pred_tot_xscore, bs = \"ts\", k = 5)",
-    "+ s(epr_diff, bs = \"ts\", k = 5)",
-    "+ s(epr_recv_diff, bs = \"ts\", k = 5)",
-    "+ s(epr_disp_diff, bs = \"ts\", k = 5)",
-    "+ s(epr_spoil_diff, bs = \"ts\", k = 5)",
-    "+ s(epr_hitout_diff, bs = \"ts\", k = 5)",
     "+ s(torp_diff, bs = \"ts\", k = 5)",
     "+ s(log_dist_diff, bs = \"ts\", k = 5) + s(familiarity_diff, bs = \"ts\", k = 5)",
     "+ s(days_rest_diff_fac, bs = \"re\")"
   )
-  m2_optional <- c("s(psr_diff, bs = \"ts\", k = 5)",
+  m2_optional <- c(
+    "s(epr_diff, bs = \"ts\", k = 5)",
+    "s(epr_recv_diff, bs = \"ts\", k = 5)",
+    "s(epr_disp_diff, bs = \"ts\", k = 5)",
+    "s(epr_spoil_diff, bs = \"ts\", k = 5)",
+    "s(epr_hitout_diff, bs = \"ts\", k = 5)",
+    "s(psr_diff, bs = \"ts\", k = 5)",
                     "s(osr_diff, bs = \"ts\", k = 5)", "s(dsr_diff, bs = \"ts\", k = 5)",
                     "s(xelo_diff, bs = \"ts\", k = 5)")
   m2_formula <- stats::as.formula(.add_optional(m2_base, m2_optional))
@@ -290,11 +313,6 @@
     "+ s(game_prop_through_day.x, bs = \"cc\")",
     "+ s(team_name.x, bs = \"re\") + s(team_name.y, bs = \"re\")",
     "+ s(team_name_season.x, bs = \"re\") + s(team_name_season.y, bs = \"re\")",
-    "+ s(epr_diff, bs = \"ts\", k = 5)",
-    "+ s(epr_recv_diff, bs = \"ts\", k = 5)",
-    "+ s(epr_disp_diff, bs = \"ts\", k = 5)",
-    "+ s(epr_spoil_diff, bs = \"ts\", k = 5)",
-    "+ s(epr_hitout_diff, bs = \"ts\", k = 5)",
     "+ s(torp_diff, bs = \"ts\", k = 5)",
     "+ s(gam_pred_tot_xscore, bs = \"ts\", k = 5)",
     "+ s(gam_pred_xscore_diff, bs = \"ts\", k = 5)",
@@ -302,7 +320,13 @@
     "+ s(log_dist_diff, bs = \"ts\", k = 5) + s(familiarity_diff, bs = \"ts\", k = 5)",
     "+ s(days_rest_diff_fac, bs = \"re\")"
   )
-  m3_optional <- c("s(psr_diff, bs = \"ts\", k = 5)",
+  m3_optional <- c(
+    "s(epr_diff, bs = \"ts\", k = 5)",
+    "s(epr_recv_diff, bs = \"ts\", k = 5)",
+    "s(epr_disp_diff, bs = \"ts\", k = 5)",
+    "s(epr_spoil_diff, bs = \"ts\", k = 5)",
+    "s(epr_hitout_diff, bs = \"ts\", k = 5)",
+    "s(psr_diff, bs = \"ts\", k = 5)",
                     "s(osr_diff, bs = \"ts\", k = 5)", "s(dsr_diff, bs = \"ts\", k = 5)")
   m3_formula <- stats::as.formula(.add_optional(m3_base, m3_optional))
 
@@ -328,16 +352,17 @@
     "+ s(team_name.x, bs = \"re\") + s(team_name.y, bs = \"re\")",
     "+ s(team_name_season.x, bs = \"re\") + s(team_name_season.y, bs = \"re\")",
     "+ s(gam_pred_xscore_diff)",
-    "+ s(epr_diff, bs = \"ts\", k = 5)",
-    "+ s(epr_recv_diff, bs = \"ts\", k = 5)",
-    "+ s(epr_disp_diff, bs = \"ts\", k = 5)",
-    "+ s(epr_spoil_diff, bs = \"ts\", k = 5)",
-    "+ s(epr_hitout_diff, bs = \"ts\", k = 5)",
     "+ s(torp_diff, bs = \"ts\", k = 5)",
     "+ s(log_dist_diff, bs = \"ts\", k = 5) + s(familiarity_diff, bs = \"ts\", k = 5)",
     "+ s(days_rest_diff_fac, bs = \"re\")"
   )
-  m4_optional <- c("s(psr_diff, bs = \"ts\", k = 5)",
+  m4_optional <- c(
+    "s(epr_diff, bs = \"ts\", k = 5)",
+    "s(epr_recv_diff, bs = \"ts\", k = 5)",
+    "s(epr_disp_diff, bs = \"ts\", k = 5)",
+    "s(epr_spoil_diff, bs = \"ts\", k = 5)",
+    "s(epr_hitout_diff, bs = \"ts\", k = 5)",
+    "s(psr_diff, bs = \"ts\", k = 5)",
                     "s(osr_diff, bs = \"ts\", k = 5)", "s(dsr_diff, bs = \"ts\", k = 5)",
                     "s(xelo_diff, bs = \"ts\", k = 5)")
   m4_formula <- stats::as.formula(.add_optional(m4_base, m4_optional))

@@ -72,8 +72,7 @@ pg <- rbindlist(lapply(SEASONS, function(s)
   as.data.table(read_parquet(file.path(DATA_DIR, sprintf("player_game_%d.parquet", s))))),
   use.names = TRUE, fill = TRUE)
 pg[, round := as.numeric(round)]
-pg[, tog_safe := pmax(fifelse(is.na(time_on_ground_percentage), 100,
-                              time_on_ground_percentage) / 100, 0.1)]
+pg[, tog_safe := pmax(fcoalesce(time_on_ground_percentage / 100, 0.1), 0.1)]
 pg <- merge(pg, IM, by = c("player_id", "match_id"), all.x = TRUE)
 set(pg, which(is.na(pg$im_base)), "im_base", 0)
 set(pg, which(is.na(pg$n_im)), "n_im", 0L)
