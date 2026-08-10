@@ -18,6 +18,9 @@
 # comment explaining why, rather than silently letting the identity check
 # start failing. To update after a real change: diff the two R/versebus.R
 # files, re-sync any unintentional drift, then edit this vector to match.
+# 2026-08-10: `vb_publish` re-added -- torpmodels received the retry port
+# (panna 39e413c/387ea96/6ddff96 via canonical), so the two copies are fully
+# shared again and the function with the worst drift history stays guarded.
 SHARED_VERSEBUS_FUNCTIONS <- c(
   ".vb_now_utc", ".vb_generation_stamp", ".vb_split_repo", ".vb_abort",
   "vb_classify_error", "vb_sha256", "vb_asset_entry", "vb_producer_info",
