@@ -105,6 +105,16 @@
 
 ## Bug Fixes
 
+* **`vb_publish()` retries its post-upload verify instead of failing on a listing
+  race.** Ported from panna (`39e413c`/`387ea96`/`6ddff96`), where a 6-byte mismatch on
+  `predictions.parquet` resolved within 2s — a pure listing race, not corruption — and a
+  longer stale window was seen the same day on two assets still mismatched after 3
+  attempts. Budget is now 6 attempts / ~95s, and the final failure reports the actual byte
+  deltas so a persistent mismatch (real corruption) is distinguishable from API lag. Same
+  failure family as the `save_to_release()` work above, in the other publish path. Landed
+  alongside torpmodels#28 so the two vendored copies of `versebus.R` stay in sync — torp's
+  CI guards `vb_publish` function-by-function against torpmodels' copy.
+
 * **A lagging listing is now resolved rather than shrugged at** (torpdata#74,
   fifth iteration). The fourth iteration made the stale-listing path warn and
   proceed, which knowingly left one hole: a genuinely short upload whose listing
