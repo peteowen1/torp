@@ -582,7 +582,14 @@ if (nrow(torp_new) > 0) {
     cli::cli_alert_success("Blended PSR into ratings ({sum(!is.na(torp_df_total$torp))} rows with torp)")
   }
 
-  save_to_release(torp_df_total, vintage_stem, "ratings-data")
+  # Manifest-backed second opinion on top of the vb_guard_accumulate() above.
+  # That one compares against `existing` as loaded in this process; if the load
+  # itself came back partial — the failure mode that corrupted two published
+  # rating seasons on 2026-07-27, when a stale local dir shadowed the release —
+  # its baseline shrinks with it and the check passes. bus_manifest.json records
+  # what was published, so a bad local read cannot move it. Inert (by design)
+  # when the vintage stem changes, since a new asset name has no prior entry.
+  save_to_release(torp_df_total, vintage_stem, "ratings-data", prev_rows_floor = 0.9)
 
   uploaded <- tryCatch(load_torp_ratings(version = RATINGS_VINTAGE), error = function(e) NULL)
   if (is.null(uploaded) || nrow(uploaded) != nrow(torp_df_total)) {
