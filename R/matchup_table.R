@@ -27,20 +27,25 @@
 #      as .format_match_preds() does for real fixtures, and returns the
 #      final 612-row table.
 #
-# Step 1 duplicates a meaningful slice of run_predictions_pipeline()'s
-# fixtures->team_mdl_df->trained-models pipeline (match_model.R) rather than
-# calling that function directly, because run_predictions_pipeline() has no
-# dry-run mode (it always attempts save_to_release()/torpmodels uploads) and
-# carries zero test coverage (torp/CLAUDE.md) -- extracting a shared
-# pre-upload core was judged riskier than this bounded duplication. If
-# run_predictions_pipeline() gains a shared core helper later, this file
-# should be the first caller migrated onto it.
+# Step 1 does NOT duplicate the pipeline any more. It calls
+# build_prediction_state() (match_model.R) -- production's own state builder --
+# with refresh_results = FALSE.
 #
-# 2026-08-11: two pieces of that duplication have already been retired -- the
-# per-week roster aggregation is now the shared .build_week_ratings()
-# (match_data_prep.R) and the blend is the shared .blend_gam_xgb()
-# (match_model.R). What remains duplicated in .freeze_match_state() is the
-# load/feature/injury-overlay sequence itself.
+# It used to, and the reason is worth keeping because it was a good one:
+# run_predictions_pipeline() had no dry-run mode (it always attempted
+# save_to_release()/torpmodels uploads) and carried zero test coverage, so
+# extracting a shared pre-upload core was judged riskier than a bounded
+# duplication. That trade-off held until the core existed. It now does, and
+# this file said it should be the first caller migrated onto it -- so it was,
+# on 2026-08-11, along with the per-week roster aggregation
+# (.build_week_ratings(), match_data_prep.R) and the GAM/XGBoost blend
+# (.blend_gam_xgb(), match_model.R).
+#
+# Measured before migrating, not assumed: the duplicate and production agreed
+# on 243 of 244 columns and on every fitted GAM coefficient exactly, and the
+# 612-row output table is byte-identical across the change apart from its
+# build timestamp. See data-raw/05-validation/compare_matchup_state_to_pipeline.R
+# and matchup_table_equality.R.
 
 # .gf_anchor_date ----
 
@@ -129,6 +134,24 @@
     cli::cli_abort(c(
       "build_matchup_table: no match-model state for {season} R{week}.",
       "i" = "build_prediction_state() found no TORP ratings for that round (pre-season, or fixtures not published)."
+    ))
+  }
+
+  # build_prediction_state() has a SECOND failure mode that is not NULL. On a
+  # non-interactive run it aborts when its own prediction validation fails --
+  # NA or out-of-range pred_win, NA pred_margin, margin/win-probability sign
+  # disagreement, implausible pred_xtotal. On an INTERACTIVE run it does not:
+  # it returns the state with validation_errors populated, so a human can
+  # inspect it. Nothing here read that, which meant a console run -- the way
+  # this function is actually invoked ahead of finals -- would price all 612
+  # ties off a state production had just declared invalid, and say nothing.
+  #
+  # There is no useful degraded matchup table, so this aborts.
+  if (length(state$validation_errors) > 0) {
+    cli::cli_abort(c(
+      "build_matchup_table: the match-model state failed its own validation ({length(state$validation_errors)} issue{?s}).",
+      stats::setNames(state$validation_errors, rep("x", length(state$validation_errors))),
+      "i" = "Refusing to price 612 ties off a state run_predictions_pipeline() would not publish."
     ))
   }
 

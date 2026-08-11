@@ -4,30 +4,46 @@
 \alias{.freeze_match_state}
 \title{Build one real pipeline-equivalent match-model state, frozen for reuse}
 \usage{
-.freeze_match_state(season = NULL, week = NULL, nthreads = 4L)
+.freeze_match_state(season = NULL, week = NULL)
 }
 \arguments{
 \item{season}{Season year (default: current via \code{get_afl_season()})}
 
 \item{week}{Round number used for the roster/injury-adjusted snapshot
 (default: next round via \code{get_afl_week("next")})}
-
-\item{nthreads}{Threads for \code{mgcv::bam()} (default 4, matches
-\code{run_predictions_pipeline()})}
 }
 \value{
 A list with \code{team_mdl_df} (fully featured + blended +
-calibrated), \code{team_rt_fix_df} (post roster/injury overlay),
-\code{all_grounds}, \code{gam_models}, \code{xgb_models} (possibly
-\code{NULL}), \code{margin_calib}, \code{xgb_osr_dsr_cols},
-\code{xgb_weather_cols}, \code{season}, \code{week}
+calibrated -- and it genuinely is calibrated now; before the migration
+this docstring said so while the frame was not, because the sidecar was
+applied later, to the synthetic rows), \code{team_rt_fix_df} (post
+roster/injury overlay), \code{all_grounds}, \code{gam_models},
+\code{xgb_models} (possibly \code{NULL}), \code{margin_calib},
+\code{xgb_osr_dsr_cols}, \code{xgb_weather_cols}, \code{season},
+\code{week}.
+
+Note \code{team_mdl_df$pred_score_diff} arrives already calibrated.
+Nothing reads it today -- \code{.predict_match_model()} predicts fresh
+onto synthetic rows and calibrates those -- but anything that starts
+reading it must not calibrate again.
 }
 \description{
-Mirrors \code{run_predictions_pipeline()} (match_model.R) through the
-trained GAM+XGBoost chain -- data loads, fixture/team-rating features,
-the roster/injury overlay for hypothetical (unannounced-lineup) fixtures,
-weather, \code{.build_team_mdl_df()}, and both model families -- but
-stops before predictions are formatted/validated/uploaded. Read-only: no
-\code{save_to_release()} or torpmodels upload call is made.
+Calls \code{build_prediction_state()} (match_model.R) -- production's own
+state builder -- and reshapes what it returns into the frozen snapshot the
+matchup table works from. Read-only: \code{refresh_results = FALSE}, so no
+\code{save_to_release()} or torpmodels upload happens.
+}
+\details{
+Until 2026-08-11 this function re-implemented that whole sequence instead,
+because \code{run_predictions_pipeline()} could not be called without
+uploading. Measured before the migration: the two builders agreed on 243 of
+244 columns and on every fitted GAM coefficient exactly, with the one
+differing column explained to zero residual by \emph{when} the margin
+sidecar is applied -- see
+\code{data-raw/05-validation/compare_matchup_state_to_pipeline.R}. So this
+is a de-duplication, not a change of model.
+
+\code{nthreads} is gone: GAM threading is now whatever the shared builder
+uses. Both were 4 by default, so nothing moves.
 }
 \keyword{internal}

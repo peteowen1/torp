@@ -80,7 +80,7 @@ if (mode == "capture") {
   }
 
   if (nrow(a) != nrow(b)) {
-    cat("VERDICT: DIFFERENT -- row counts differ\n"); quit(status = 0)
+    cat("VERDICT: DIFFERENT -- row counts differ\n"); quit(status = 1)
   }
 
   worst <- 0
@@ -96,16 +96,23 @@ if (mode == "capture") {
                 if (is.na(m)) "(non-numeric)" else format(m, digits = 8)))
   }
 
+  # Exit status must match the verdict. Every other script in this directory
+  # uses status 1 for failure, and this one lives here precisely so it can be
+  # wired into a gate later -- printing "DIFFERENT" while returning success to
+  # the shell is how a real drift gets a green tick.
   cat("\n=========================================================\n")
   if (ndiff_total == 0 && length(only_a) == 0 && length(only_b) == 0) {
     cat("VERDICT: IDENTICAL -- the migration did not move a single served\n")
     cat("number across all", nrow(a), "rows.\n")
+    cat("=========================================================\n")
+    quit(status = 0)
   } else {
     cat("VERDICT: DIFFERENT --", ndiff_total, "differing cells, worst |diff| =",
         format(worst, digits = 8), "\n")
     cat("These are numbers the blog serves. Do not ship until explained.\n")
+    cat("=========================================================\n")
+    quit(status = 1)
   }
-  cat("=========================================================\n")
 
 } else {
   stop("mode must be 'capture' or 'compare'")

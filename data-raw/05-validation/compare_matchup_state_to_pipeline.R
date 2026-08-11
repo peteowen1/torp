@@ -85,7 +85,7 @@ cat("comparing", length(shared), "shared columns\n\n")
 if (nrow(a) != nrow(b)) {
   cat("!! ROW COUNTS DIFFER -- cell comparison skipped\n")
   cat("VERDICT: DIFFERENT\n")
-  quit(status = 0)
+  quit(status = 1)
 }
 
 cat("--- per-column differences ---\n")
@@ -168,11 +168,17 @@ if (length(diffs) == 0 && length(only_a) == 0 && length(only_b) == 0) {
     cat("team_mdl_df$pred_score_diff and then calibrates it would apply the\n")
     cat("~10% shrink twice, and nothing would fail.\n")
   }
+  cat("=========================================================\n")
+  quit(status = 0)
 } else {
   cat("VERDICT: DIFFERENT, beyond the known calibration-stage difference.\n")
   cat("The blog's matchup table is priced off a different model state than\n")
   cat("the published predictions. Investigate the columns above BEFORE\n")
   cat("refactoring; the refactor would change served numbers and that must\n")
   cat("be a decision, not a side effect.\n")
+  cat("=========================================================\n")
+  # Exit status matches the verdict -- see the note in
+  # matchup_table_equality.R. A drift that prints DIFFERENT and returns
+  # success is how a real regression gets a green tick.
+  quit(status = 1)
 }
-cat("=========================================================\n")

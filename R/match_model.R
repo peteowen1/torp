@@ -579,7 +579,8 @@ get_lineup_ratings <- function(season = NULL, round = NULL, match_id = NULL) {
 #'   saying it was stale. Fine for a same-day dry run, wrong for anything
 #'   whose numbers get compared against production.
 #' @return A list with `season`, `target_weeks`, `is_backfill`, `all_preds`,
-#'   `week_gms`, `team_mdl_df`, `gam_result`, `xgb_result`,
+#'   `week_gms`, `team_mdl_df`, `team_rt_fix_df` (the feature frame *after*
+#'   the roster/injury overlay), `all_grounds`, `gam_result`, `xgb_result`,
 #'   `validation_errors` and `pipeline_start` — **or `NULL`** when there is
 #'   nothing to predict (no TORP ratings for the target week yet: pre-season,
 #'   or fixtures not published). Callers MUST handle the `NULL`;
