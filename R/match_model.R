@@ -603,6 +603,13 @@ build_prediction_state <- function(week = NULL, weeks = NULL, season = NULL,
       all_preds         = all_preds,
       week_gms          = week_gms,
       team_mdl_df       = team_mdl_df,
+      # Two intermediates that only build_matchup_table() needs: the
+      # post-roster/injury-overlay feature frame it snapshots per team, and
+      # the ground reference table it recomputes venue distances from.
+      # Returned rather than rebuilt so the matchup table cannot end up
+      # snapshotting a different frame than the one the models were fitted on.
+      team_rt_fix_df    = team_rt_fix_df,
+      all_grounds       = all_grounds,
       gam_result        = gam_result,
       xgb_result        = xgb_result,
       validation_errors = validation_errors,

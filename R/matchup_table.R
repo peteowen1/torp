@@ -68,156 +68,71 @@
 
 #' Build one real pipeline-equivalent match-model state, frozen for reuse
 #'
-#' Mirrors \code{run_predictions_pipeline()} (match_model.R) through the
-#' trained GAM+XGBoost chain -- data loads, fixture/team-rating features,
-#' the roster/injury overlay for hypothetical (unannounced-lineup) fixtures,
-#' weather, \code{.build_team_mdl_df()}, and both model families -- but
-#' stops before predictions are formatted/validated/uploaded. Read-only: no
-#' \code{save_to_release()} or torpmodels upload call is made.
+#' Calls \code{build_prediction_state()} (match_model.R) -- production's own
+#' state builder -- and reshapes what it returns into the frozen snapshot the
+#' matchup table works from. Read-only: \code{refresh_results = FALSE}, so no
+#' \code{save_to_release()} or torpmodels upload happens.
+#'
+#' Until 2026-08-11 this function re-implemented that whole sequence instead,
+#' because \code{run_predictions_pipeline()} could not be called without
+#' uploading. Measured before the migration: the two builders agreed on 243 of
+#' 244 columns and on every fitted GAM coefficient exactly, with the one
+#' differing column explained to zero residual by \emph{when} the margin
+#' sidecar is applied -- see
+#' \code{data-raw/05-validation/compare_matchup_state_to_pipeline.R}. So this
+#' is a de-duplication, not a change of model.
+#'
+#' \code{nthreads} is gone: GAM threading is now whatever the shared builder
+#' uses. Both were 4 by default, so nothing moves.
 #'
 #' @param season Season year (default: current via \code{get_afl_season()})
 #' @param week Round number used for the roster/injury-adjusted snapshot
 #'   (default: next round via \code{get_afl_week("next")})
-#' @param nthreads Threads for \code{mgcv::bam()} (default 4, matches
-#'   \code{run_predictions_pipeline()})
 #' @return A list with \code{team_mdl_df} (fully featured + blended +
-#'   calibrated), \code{team_rt_fix_df} (post roster/injury overlay),
-#'   \code{all_grounds}, \code{gam_models}, \code{xgb_models} (possibly
-#'   \code{NULL}), \code{margin_calib}, \code{xgb_osr_dsr_cols},
-#'   \code{xgb_weather_cols}, \code{season}, \code{week}
+#'   calibrated -- and it genuinely is calibrated now; before the migration
+#'   this docstring said so while the frame was not, because the sidecar was
+#'   applied later, to the synthetic rows), \code{team_rt_fix_df} (post
+#'   roster/injury overlay), \code{all_grounds}, \code{gam_models},
+#'   \code{xgb_models} (possibly \code{NULL}), \code{margin_calib},
+#'   \code{xgb_osr_dsr_cols}, \code{xgb_weather_cols}, \code{season},
+#'   \code{week}.
+#'
+#'   Note \code{team_mdl_df$pred_score_diff} arrives already calibrated.
+#'   Nothing reads it today -- \code{.predict_match_model()} predicts fresh
+#'   onto synthetic rows and calibrates those -- but anything that starts
+#'   reading it must not calibrate again.
 #' @keywords internal
-.freeze_match_state <- function(season = NULL, week = NULL, nthreads = 4L) {
+.freeze_match_state <- function(season = NULL, week = NULL) {
   if (is.null(season)) season <- get_afl_season()
   if (is.null(week)) week <- get_afl_week(type = "next")
-  target_weeks <- week
 
   cli::cli_h2("build_matchup_table: freezing match-model state ({season} R{week})")
 
-  all_grounds <- file_reader("stadium_data", "reference-data")
-  xg_df <- load_xg(TRUE)
-  fixtures <- load_fixtures(TRUE)
-  results <- load_results(TRUE)
-  teams <- load_teams(TRUE)
+  # Delegate to production's own state builder instead of re-implementing
+  # it. Until 2026-08-11 this function duplicated the whole
+  # load -> feature -> injury-overlay -> train sequence because
+  # run_predictions_pipeline() could not be called without uploading; that
+  # is no longer true.
+  #
+  # refresh_results = FALSE preserves what this function has always done:
+  # it never refreshed results from the AFL API, so passing TRUE would be
+  # a behaviour change, not a migration.
+  state <- build_prediction_state(week = week, season = season,
+                                  refresh_results = FALSE)
 
-  torp_df_total <- tryCatch(load_torp_ratings(), error = function(e) NULL)
-  if (is.null(torp_df_total) || nrow(torp_df_total) < 100) {
-    cli::cli_abort("build_matchup_table: TORP ratings unavailable or too small ({if (is.null(torp_df_total)) 0 else nrow(torp_df_total)} rows)")
-  }
-  if (nrow(fixtures) < 100) cli::cli_abort("build_matchup_table: fixtures too small ({nrow(fixtures)} rows)")
-  if (nrow(teams) < 100) cli::cli_abort("build_matchup_table: teams too small ({nrow(teams)} rows)")
-
-  target_fixtures <- fixtures |> dplyr::filter(season == .env$season, round_number %in% target_weeks)
-  weight_anchor_date <- if (nrow(target_fixtures) > 0) as.Date(min(target_fixtures$utc_start_time)) else Sys.Date()
-
-  cli::cli_h2("Building fixture features")
-  fix_df <- .build_fixtures_df(fixtures)
-
-  cli::cli_h2("Loading PSR")
-  psr_df <- NULL
-  tryCatch({
-    psr_df <- load_psr(TRUE)
-    if (nrow(psr_df) == 0) psr_df <- NULL
-  }, error = function(e) {
-    cli::cli_warn("Could not load PSR from release: {conditionMessage(e)}")
-  })
-  if (is.null(psr_df) || !all(c("osr", "dsr") %in% names(psr_df))) {
-    tryCatch({
-      skills <- load_player_stat_ratings(TRUE)
-      psr_df <- .compute_psr_from_stat_ratings(skills)
-    }, error = function(e) {
-      cli::cli_warn("Failed to compute PSR: {conditionMessage(e)}")
-    })
+  # NULL means no TORP ratings for that round yet. Exactly the contract
+  # that bit run_predictions_pipeline() on 2026-08-11: NULL$anything is
+  # NULL, so an unchecked caller carries empty frames onward and fails
+  # somewhere unrelated. The matchup table has no useful no-op, so this
+  # is an abort rather than a quiet return.
+  if (is.null(state)) {
+    cli::cli_abort(c(
+      "build_matchup_table: no match-model state for {season} R{week}.",
+      "i" = "build_prediction_state() found no TORP ratings for that round (pre-season, or fixtures not published)."
+    ))
   }
 
-  cli::cli_h2("Processing lineups")
-  team_rt_df <- .build_team_ratings_df(teams, torp_df_total, psr_df)
-
-  cli::cli_h2("Computing features")
-  team_rt_fix_df <- .build_match_features(fix_df, team_rt_df, all_grounds)
-
-  # Injury / roster overlay -- duplicated from run_predictions_pipeline()
-  # (match_model.R:535-653), minus the save_injury_data() upload. This is
-  # exactly the "lineup fallback" the torp#108 investigation identified as
-  # already solving the hypothetical-fixture case: when a team has no
-  # announced lineup (count NA/0) for the target week, roster + injury-
-  # adjusted ratings (epr_week etc) are used instead of lineup-summed ones.
-  cli::cli_h2("Loading injuries")
-  inj_df <- get_all_injuries(season)
-  if (nrow(inj_df) > 0) {
-    inj_df$return_round <- parse_return_round(inj_df$estimated_return, season, min(target_weeks))
-  }
-
-  tr <- torp_ratings(season, min(target_weeks))
-  if (nrow(tr) == 0 || !"player_name" %in% names(tr)) {
-    cli::cli_abort("build_matchup_table: no TORP ratings available for {season} R{min(target_weeks)}")
-  }
-  tr[c("injury", "estimated_return")] <- NULL
-  tr <- match_injuries(tr, inj_df)
-  if (!"estimated_return" %in% names(tr)) tr$estimated_return <- NA_character_
-  tr <- dplyr::mutate(tr, estimated_return = tidyr::replace_na(estimated_return, "None"))
-
-  if (!is.null(psr_df)) {
-    tr <- tr |>
-      dplyr::select(-dplyr::any_of("psr")) |>
-      dplyr::left_join(
-        psr_df |> dplyr::select(player_id, season, round, psr),
-        by = c("player_id", "season", "round")
-      ) |>
-      dplyr::mutate(psr = tidyr::replace_na(psr, PSR_PRIOR_RATE))
-  } else {
-    tr$psr <- PSR_PRIOR_RATE
-  }
-
-  if (nrow(inj_df) > 0 && "return_round" %in% names(inj_df)) {
-    inj_return <- inj_df |>
-      dplyr::select(player_norm, return_round) |>
-      dplyr::distinct(player_norm, .keep_all = TRUE)
-    tr <- tr |>
-      dplyr::mutate(player_norm = tolower(trimws(player_name))) |>
-      dplyr::left_join(inj_return, by = "player_norm") |>
-      dplyr::select(-player_norm)
-  } else {
-    tr$return_round <- NA_real_
-  }
-
-  # Shared with run_predictions_pipeline() -- see .build_week_ratings() in
-  # match_data_prep.R.
-  tr_week <- purrr::map_dfr(
-    target_weeks, function(w) .build_week_ratings(tr, w, target_weeks)
-  )
-
-  team_rt_fix_df <- team_rt_fix_df |>
-    dplyr::left_join(tr_week, by = c("team_name" = "team_name", "season" = "season", "round_number" = "round")) |>
-    dplyr::mutate(
-      use_roster = !is.na(epr_week) & (is.na(count) | count == 0),
-      epr = dplyr::if_else(use_roster, epr_week, epr),
-      epr_recv = dplyr::if_else(use_roster, epr_recv_week, epr_recv),
-      epr_disp = dplyr::if_else(use_roster, epr_disp_week, epr_disp),
-      epr_spoil = dplyr::if_else(use_roster, epr_spoil_week, epr_spoil),
-      epr_hitout = dplyr::if_else(use_roster, epr_hitout_week, epr_hitout),
-      psr = dplyr::if_else(use_roster, psr_week, psr),
-      use_roster = NULL
-    )
-
-  cli::cli_h2("Loading weather")
-  weather_df <- .load_match_weather(fixtures, all_grounds, target_weeks, season)
-
-  cli::cli_h2("Building model dataset")
-  team_mdl_df <- .build_team_mdl_df(team_rt_fix_df, results, xg_df, weather_df, weight_anchor_date)
-
-  cli::cli_h2("Training GAM models")
-  gam_result <- .train_match_gams(team_mdl_df, nthreads = nthreads)
-  team_mdl_df <- gam_result$data
-
-  cli::cli_h2("Training XGBoost models")
-  xgb_result <- tryCatch(
-    .train_match_xgb(team_mdl_df),
-    error = function(e) {
-      cli::cli_warn("build_matchup_table: XGBoost training failed ({conditionMessage(e)}), falling back to GAM-only")
-      NULL
-    }
-  )
-  if (!is.null(xgb_result)) team_mdl_df <- xgb_result$data
+  team_mdl_df <- state$team_mdl_df
 
   # Same availability checks .train_match_xgb() used to decide its own
   # feature-column set -- must be reproduced exactly here (not re-derived
@@ -238,10 +153,10 @@
 
   list(
     team_mdl_df = team_mdl_df,
-    team_rt_fix_df = team_rt_fix_df,
-    all_grounds = all_grounds,
-    gam_models = gam_result$models,
-    xgb_models = if (!is.null(xgb_result)) xgb_result$models else NULL,
+    team_rt_fix_df = state$team_rt_fix_df,
+    all_grounds = state$all_grounds,
+    gam_models = state$gam_result$models,
+    xgb_models = if (!is.null(state$xgb_result)) state$xgb_result$models else NULL,
     margin_calib = margin_calib,
     xgb_osr_dsr_cols = xgb_osr_dsr_cols,
     xgb_weather_cols = xgb_weather_cols,
