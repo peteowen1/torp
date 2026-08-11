@@ -7,44 +7,8 @@
 # test-versebus-sync.R: R CMD check runs tests against an installed package
 # with no R/ source tree beside them, so they skip rather than fail there.
 
-# Locate the package's R/ SOURCE dir, or NULL when there isn't one here.
-#
-# Existence of a directory named "R" is NOT enough, and assuming it was made
-# the coverage job red on 2026-08-11 while R CMD check stayed green. An
-# INSTALLED package also has an R/ -- holding the lazy-load database
-# (torp.rdb/.rdx), no .R files at all -- and covr runs the tests right beside
-# one. The scan then found zero source files, which is indistinguishable from
-# "no violations" unless we check first. Require the actual files the guards
-# read, so a wrong directory returns NULL and every guard skips instead of
-# passing vacuously.
-.r_source_dir <- function() {
-  sentinels <- c("versebus.R", "match_model.R", "load_utils.R",
-                 "match_data_prep.R")
-  for (d in c("R", file.path("..", "..", "R"), file.path("..", "R"))) {
-    if (dir.exists(d) && all(file.exists(file.path(d, sentinels)))) {
-      return(normalizePath(d))
-    }
-  }
-  NULL
-}
-
-# Non-comment lines of every R/ source file, named by basename. NULL rather
-# than an empty list when there is nothing to scan -- an empty result must
-# reach skip_if(), not sail through the guards as zero violations.
-.r_source_code <- function(exclude = character(0)) {
-  d <- .r_source_dir()
-  if (is.null(d)) return(NULL)
-  files <- list.files(d, pattern = "[.]R$", full.names = TRUE)
-  files <- files[!basename(files) %in% exclude]
-  if (length(files) == 0) return(NULL)
-  stats::setNames(
-    lapply(files, function(f) {
-      lines <- readLines(f, warn = FALSE)
-      lines[!grepl("^\\s*#", lines)]
-    }),
-    basename(files)
-  )
-}
+# `.r_source_dir()` / `.r_source_code()` live in helper-source-scan.R, shared
+# with test-prediction-state.R rather than copied into both.
 
 # .strict_mode() ----
 

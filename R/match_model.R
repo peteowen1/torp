@@ -553,20 +553,63 @@ get_lineup_ratings <- function(season = NULL, round = NULL, match_id = NULL) {
 }
 
 
-#' Builds team_mdl_df with injury-adjusted ratings, trains the 5-model sequential
-#' GAM pipeline, generates predictions for target weeks, and uploads to torpdata
-#' releases.
+#' Build everything a match prediction needs, and publish nothing
+#'
+#' The whole of `run_predictions_pipeline()` except the uploads: loads data,
+#' builds fixture/rating/injury features, trains the GAM + XGBoost chain,
+#' generates and validates predictions, and hands the lot back.
+#'
+#' Split out 2026-08-11. `run_predictions_pipeline()` bundled an upload it
+#' could not opt out of, and that single fact caused three separate problems:
+#' `build_matchup_table()` re-implemented this sequence rather than call it
+#' (see `matchup_table.R`'s own header), the orchestration had no test
+#' coverage because exercising it published, and the margin-calibration
+#' sidecar scored its own copy of the blend. Callers that want the state
+#' without the side effects now have a seam to use.
 #'
 #' @param week Single target week (auto-detected if NULL)
 #' @param weeks Vector of weeks, or "all" for all fixture weeks
 #' @param season Season year (default: current via get_afl_season())
-#' @return A list (invisibly) with:
-#'   \item{predictions}{All match predictions across all seasons (season, round,
-#'     providerId, home_team, away_team, pred_margin, pred_win, margin, etc.)}
-#'   \item{models}{Named list of 5 GAM models: total_xpoints, xscore_diff,
-#'     conv_diff, score_diff, win}
+#' @param refresh_results If TRUE (production default), refresh the season's
+#'   results from the AFL API and publish them to the `results-data` release
+#'   before building. This is the ONE side effect inside the state half; pass
+#'   FALSE for a read-only build. **Note what FALSE costs:** `results` feeds
+#'   `.build_team_mdl_df()` and therefore GAM training, so a read-only build
+#'   trains on whatever the release already held, with nothing at runtime
+#'   saying it was stale. Fine for a same-day dry run, wrong for anything
+#'   whose numbers get compared against production.
+#' @return A list with `season`, `target_weeks`, `is_backfill`, `all_preds`,
+#'   `week_gms`, `team_mdl_df`, `gam_result`, `xgb_result`,
+#'   `validation_errors` and `pipeline_start` — **or `NULL`** when there is
+#'   nothing to predict (no TORP ratings for the target week yet: pre-season,
+#'   or fixtures not published). Callers MUST handle the `NULL`;
+#'   `NULL$anything` is `NULL` in R, so an unchecked caller reads every field
+#'   as empty and fails much later somewhere unrelated.
+#'
+#'   `validation_errors` is non-empty only on an interactive run; a
+#'   non-interactive run aborts instead, exactly as the pipeline did before
+#'   the split.
 #' @keywords internal
-run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
+build_prediction_state <- function(week = NULL, weeks = NULL, season = NULL,
+                                   refresh_results = TRUE) {
+
+  # Assembled in two places (early return on validation failure, and the
+  # normal path), so it is built once here to keep them identical.
+  .prediction_state <- function(early = FALSE) {
+    list(
+      season            = season,
+      target_weeks      = target_weeks,
+      is_backfill       = is_backfill,
+      all_preds         = all_preds,
+      week_gms          = week_gms,
+      team_mdl_df       = team_mdl_df,
+      gam_result        = gam_result,
+      xgb_result        = xgb_result,
+      validation_errors = validation_errors,
+      pipeline_start    = .pipeline_start
+    )
+  }
+
 
   if (is.null(season)) season <- get_afl_season()
 
@@ -593,7 +636,7 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
   # don't supersede this one -- without an explicit done(), this spinner stays
   # alive for the entire pipeline and its line state interleaves with later
   # cli_inform() prints (you see "from AFL API" smeared into other messages).
-  tryCatch({
+  if (isTRUE(refresh_results)) tryCatch({
     cli::cli_progress_step("Refreshing {season} results from AFL API")
     fresh_results <- get_afl_results(season)
     if (!is.null(fresh_results) && nrow(fresh_results) > 0) {
@@ -899,19 +942,72 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
     if (interactive()) {
       cli::cli_warn(c("Prediction validation failed ({length(validation_errors)} issue{?s}):", validation_errors))
       cli::cli_alert_info("Returning models and data for debugging (predictions NOT uploaded)")
-      return(invisible(list(
-        predictions = all_preds,
-        gam_models = gam_result$models,
-        xgb_models = if (!is.null(xgb_result)) xgb_result$models else NULL,
-        model_data = team_mdl_df,
-        validation_errors = validation_errors
-      )))
+      return(.prediction_state(early = TRUE))
     } else {
       cli::cli_abort(c("Prediction validation failed ({length(validation_errors)} issue{?s}):", validation_errors))
     }
   }
 
   cli::cli_alert_success("Validation passed: {nrow(week_gms)} matches")
+
+  .prediction_state()
+}
+
+
+#' Builds team_mdl_df with injury-adjusted ratings, trains the 5-model sequential
+#' GAM pipeline, generates predictions for target weeks, and uploads to torpdata
+#' releases.
+#'
+#' @param week Single target week (auto-detected if NULL)
+#' @param weeks Vector of weeks, or "all" for all fixture weeks
+#' @param season Season year (default: current via get_afl_season())
+#' @return A list (invisibly) with:
+#'   \item{predictions}{All match predictions across all seasons (season, round,
+#'     providerId, home_team, away_team, pred_margin, pred_win, margin, etc.)}
+#'   \item{models}{Named list of 5 GAM models: total_xpoints, xscore_diff,
+#'     conv_diff, score_diff, win}
+#' @keywords internal
+run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
+
+  state <- build_prediction_state(week = week, weeks = weeks, season = season)
+
+  # NULL means there was nothing to predict -- no TORP ratings for the target
+  # week yet (pre-season, or fixtures not published). Before the state/upload
+  # split this was a bare `return(invisible(NULL))` from the middle of one
+  # function; now it has to cross a seam, and without this check `state$x`
+  # silently yields NULL for every field (NULL$anything is NULL, and
+  # length(NULL) == 0 slips past the validation gate below) until the upload
+  # half dies on `NULL |> dplyr::ungroup()` -- an unhandled crash in place of a
+  # clean, expected no-op, with the real cause already scrolled past.
+  if (is.null(state)) return(invisible(NULL))
+
+  season         <- state$season
+  target_weeks   <- state$target_weeks
+  is_backfill    <- state$is_backfill
+  all_preds      <- state$all_preds
+  week_gms       <- state$week_gms
+  team_mdl_df    <- state$team_mdl_df
+  gam_result     <- state$gam_result
+  xgb_result     <- state$xgb_result
+  .pipeline_start <- state$pipeline_start
+
+  # Interactive validation failure: build_prediction_state() returns rather
+  # than aborting (a non-interactive run has already aborted inside it), and
+  # the caller reports and bails without uploading -- same shape and same
+  # order of output as before the split.
+  if (length(state$validation_errors) > 0) {
+    cli::cli_warn(c("Prediction validation failed ({length(state$validation_errors)} issue{?s}):",
+                    state$validation_errors))
+    cli::cli_alert_info("Returning models and data for debugging (predictions NOT uploaded)")
+    return(invisible(list(
+      predictions = all_preds,
+      gam_models = gam_result$models,
+      xgb_models = if (!is.null(xgb_result)) xgb_result$models else NULL,
+      model_data = team_mdl_df,
+      validation_errors = state$validation_errors
+    )))
+  }
+
 
   # Upload ----
   cli::cli_h2("Uploading predictions")
