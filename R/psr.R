@@ -1179,30 +1179,48 @@ explain_epr <- function(player,
     tog = pmax(time_on_ground_percentage / 100, 0.1)
   )]
 
+  # Pick the SAME columns calculate_epr_stats() picks (player_ratings.R:265).
+  # It prefers the opponent-adjusted `_oadj` channels when the frame carries
+  # them and falls back to `_adj`; the production pipeline runs
+  # adjust_epv_for_opponents() before EPR, so the published numbers ARE
+  # opponent-adjusted. This function hardcoded `_adj`, which meant its trace
+  # silently omitted that adjustment while a comment two lines down claimed it
+  # was "same as calculate_epr_stats". Same claim, now true.
+  has_oadj <- all(c("epv_recv_oadj", "epv_disp_oadj",
+                    "epv_spoil_oadj", "epv_hitout_oadj") %in% names(dt))
+  sfx <- if (has_oadj) "_oadj" else "_adj"
+  c_recv   <- paste0("epv_recv", sfx)
+  c_disp   <- paste0("epv_disp", sfx)
+  c_spoil  <- paste0("epv_spoil", sfx)
+  c_hitout <- paste0("epv_hitout", sfx)
+
   # Show per-game trace
   cli::cli_h1("{pname} | EPR Calculation Trace")
   cli::cli_h2("Per-game inputs (position-adjusted per-80-min rates)")
 
   show_dt <- dt[order(-season, -round), .(
     season, round, team, opponent, tog,
-    recv_adj = round(epv_recv_adj, 2),
-    disp_adj = round(epv_disp_adj, 2),
-    spoil_adj = round(epv_spoil_adj, 2),
-    hitout_adj = round(epv_hitout_adj, 2),
-    recv_total = round(epv_recv_adj * tog, 2),
+    recv_adj = round(get(c_recv), 2),
+    disp_adj = round(get(c_disp), 2),
+    spoil_adj = round(get(c_spoil), 2),
+    hitout_adj = round(get(c_hitout), 2),
+    recv_total = round(get(c_recv) * tog, 2),
     days_ago = days_diff,
     wt_recv = round(wt_recv, 3)
   )]
 
   cat(sprintf("  Showing %d of %d career games:\n", min(top_n, nrow(show_dt)), nrow(dt)))
+  cat(sprintf("  Channels: %s%s\n", sfx,
+              if (has_oadj) " (opponent-adjusted, as production uses)" else
+                " (NOT opponent-adjusted -- frame carries no _oadj columns)"))
   print(head(show_dt, top_n), row.names = FALSE)
 
-  # Compute the aggregates (same as calculate_epr_stats — TOG-weighted)
-  # _adj is per-80 rate; multiply by tog to get game total, weight by decay
-  recv_sum   <- sum(dt$epv_recv_adj * dt$tog * dt$wt_recv, na.rm = TRUE)
-  disp_sum   <- sum(dt$epv_disp_adj * dt$tog * dt$wt_disp, na.rm = TRUE)
-  spoil_sum  <- sum(dt$epv_spoil_adj * dt$tog * dt$wt_spoil, na.rm = TRUE)
-  hitout_sum <- sum(dt$epv_hitout_adj * dt$tog * dt$wt_hitout, na.rm = TRUE)
+  # Compute the aggregates (same as calculate_epr_stats -- TOG-weighted)
+  # the channel is a per-80 rate; multiply by tog for the game total, weight by decay
+  recv_sum   <- sum(dt[[c_recv]]   * dt$tog * dt$wt_recv,   na.rm = TRUE)
+  disp_sum   <- sum(dt[[c_disp]]   * dt$tog * dt$wt_disp,   na.rm = TRUE)
+  spoil_sum  <- sum(dt[[c_spoil]]  * dt$tog * dt$wt_spoil,  na.rm = TRUE)
+  hitout_sum <- sum(dt[[c_hitout]] * dt$tog * dt$wt_hitout, na.rm = TRUE)
 
   # Denominator is weighted minutes (wt * tog), not weighted games
   wt_gms_recv   <- sum(dt$wt_recv * dt$tog, na.rm = TRUE)

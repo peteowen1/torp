@@ -69,6 +69,37 @@ test_that("the explainer says its numbers are pre-centring", {
   expect_match(psr, "PUBLISHED EPR", fixed = TRUE)
 })
 
+test_that("explain_epr() selects channels the way calculate_epr_stats() does", {
+  # Second divergence, found in review of the first. Production prefers the
+  # opponent-adjusted `_oadj` channels when present and falls back to `_adj`;
+  # the pipeline runs adjust_epv_for_opponents() before EPR, so published
+  # numbers ARE opponent-adjusted. explain_epr() hardcoded `_adj` while a
+  # comment claimed it matched calculate_epr_stats(). It now does the same
+  # has_oadj selection.
+  code <- .r_source_code()
+  skip_if(is.null(code), "R/ source tree not present (installed build)")
+
+  psr <- paste(code[["psr.R"]], collapse = " ")
+  expect_match(psr, "has_oadj", fixed = TRUE)
+
+  # And the selection rule must be the same one, not a lookalike: both files
+  # gate on all four _oadj channels being present.
+  pr <- paste(code[["player_ratings.R"]], collapse = " ")
+  for (ch in c("epv_recv_oadj", "epv_disp_oadj", "epv_spoil_oadj", "epv_hitout_oadj")) {
+    expect_match(psr, ch, fixed = TRUE)
+    expect_match(pr, ch, fixed = TRUE)
+  }
+})
+
+test_that("explain_epr() no longer hardcodes the _adj channels in its aggregates", {
+  # The specific line shape that was wrong: sum(dt$epv_<ch>_adj * ...).
+  code <- .r_source_code()
+  skip_if(is.null(code), "R/ source tree not present (installed build)")
+  psr <- paste(code[["psr.R"]], collapse = " ")
+  expect_false(grepl("sum\\(dt\\$epv_[a-z]+_adj \\*", psr),
+               info = "aggregate channels must follow the has_oadj selection")
+})
+
 test_that("the note names the ACTUAL callers of centre_epr_by_position()", {
   # A first draft of that note said the centring happens "via calculate_epr()".
   # It does not -- calculate_epr() never calls it. The real callers are
