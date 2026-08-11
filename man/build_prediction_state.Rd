@@ -29,7 +29,8 @@ whose numbers get compared against production.}
 }
 \value{
 A list with \code{season}, \code{target_weeks}, \code{is_backfill}, \code{all_preds},
-\code{week_gms}, \code{team_mdl_df}, \code{gam_result}, \code{xgb_result},
+\code{week_gms}, \code{team_mdl_df}, \code{team_rt_fix_df} (the feature frame \emph{after}
+the roster/injury overlay), \code{all_grounds}, \code{gam_result}, \code{xgb_result},
 \code{validation_errors} and \code{pipeline_start} — \strong{or \code{NULL}} when there is
 nothing to predict (no TORP ratings for the target week yet: pre-season,
 or fixtures not published). Callers MUST handle the \code{NULL};
