@@ -1,5 +1,36 @@
 # torp (development version)
 
+## Chores
+
+* **Building a match prediction no longer implies publishing one.**
+  `run_predictions_pipeline()` bundled an upload it could not opt out of, and
+  that single fact caused three separate problems: `build_matchup_table()`
+  re-implemented the load → feature → injury-overlay sequence rather than call
+  it (and said so in its own header), the orchestration had no test coverage
+  because exercising it published, and the margin-calibration sidecar scored
+  its own copy of the blend. The state half is now
+  `build_prediction_state()`; `run_predictions_pipeline()` is that plus the
+  uploads, with identical arguments and identical behaviour.
+
+  **Verified as a move, not a rewrite:** of the 345 lines relocated, 338 are
+  byte-identical. The only edits are the results refresh gaining an
+  `isTRUE(refresh_results)` guard (one line, default `TRUE`, so production is
+  unchanged) and the interactive validation-failure return being rebuilt from
+  the shared state list instead of being written out inline. A mechanical diff
+  of old-span against new-span is what establishes this, not review by eye.
+
+  `refresh_results` exists because publishing the season's results to the
+  `results-data` release is the one side effect that lives inside the state
+  half. Production keeps it; a read-only caller passes `FALSE`.
+
+* **Four tests on the new seam**, including a contract guard for the failure
+  mode this refactor actually risks: the uploader reading a `state$` field the
+  builder does not return, which today would surface as "object not found" in
+  production. Both new guards were mutation-tested — dropping `team_mdl_df`
+  from the state list and planting a `.build_team_mdl_df()` call back in the
+  upload half are each detected. The source-scanning helpers moved to
+  `helper-source-scan.R` rather than being copied into a second test file.
+
 ## Rating changes
 
 * **The ruck must now win contests to gain points.** This CHANGES PUBLISHED
