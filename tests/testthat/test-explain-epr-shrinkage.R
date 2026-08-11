@@ -91,6 +91,40 @@ test_that("explain_epr() selects channels the way calculate_epr_stats() does", {
   }
 })
 
+test_that("the base-order rewrite reproduces the data.table i-slot ordering", {
+  # The get() removal replaced `dt[order(-season, -round), .(...)]` with an
+  # explicit `order(-dt$season, -dt$round)` index plus [[ ]] extraction. Every
+  # other test in this file is a source scan or a formula check -- none of them
+  # EXECUTE that block, so without this the rewrite ships unrun. Ties matter:
+  # many player-games share a (season, round), and if the two forms broke ties
+  # differently the printed trace would reorder for no reason.
+  set.seed(5)
+  n <- 60
+  dt <- data.table::data.table(
+    season = sample(c(2024L, 2025L, 2026L), n, TRUE),
+    round  = sample(1:6, n, TRUE),
+    team = sample(letters[1:4], n, TRUE),
+    tog = round(stats::runif(n, 0.1, 1), 3),
+    epv_recv_adj = round(stats::rnorm(n), 4)
+  )
+
+  old <- dt[order(-season, -round), .(
+    season, round, team, tog,
+    recv_adj = round(epv_recv_adj, 2),
+    recv_total = round(epv_recv_adj * tog, 2))]
+
+  ord <- order(-dt$season, -dt$round)
+  v_recv <- dt[["epv_recv_adj"]][ord]
+  v_tog <- dt$tog[ord]
+  new <- data.table::data.table(
+    season = dt$season[ord], round = dt$round[ord],
+    team = dt$team[ord], tog = v_tog,
+    recv_adj = round(v_recv, 2),
+    recv_total = round(v_recv * v_tog, 2))
+
+  expect_identical(old, new)
+})
+
 test_that("explain_epr() imputes a missing TOG the way production does", {
   # Third divergence of the same kind. production's tog_safe
   # (player_ratings.R:303) imputes NA -> 100 before flooring at 0.1; the
