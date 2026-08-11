@@ -6,16 +6,18 @@
 published as canonical}
 \usage{
 check_vintage_alignment(
-  strict = nzchar(Sys.getenv("VERSEBUS_STRICT")),
+  strict = .strict_mode(),
   manifest = read_ratings_manifest()
 )
 }
 \arguments{
 \item{strict}{If TRUE, an unreadable manifest or an undefined canonical
-vintage aborts rather than warning. Defaults to whether
-\code{VERSEBUS_STRICT} is set, matching every other pipeline entry point's
-convention (versebus §1.5). Production call sites pass \code{TRUE} explicitly
-regardless of the environment.}
+vintage aborts rather than warning. Defaults to \code{VERSEBUS_STRICT=1} via
+\code{.strict_mode()}, matching every other pipeline entry point's convention
+(versebus §1.5). Until 2026-08-11 this tested \code{nzchar()} instead, so it
+was the one site where \code{VERSEBUS_STRICT="0"} still went strict.
+Production call sites pass \code{TRUE} explicitly regardless of the
+environment.}
 
 \item{manifest}{The ratings manifest to check against. Defaults to
 \code{read_ratings_manifest()}; injectable so this function's tests run

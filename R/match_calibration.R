@@ -61,8 +61,12 @@ fit_match_margin_calibration <- function(team_mdl_df, nthreads = 4L) {
   xgb_result <- suppressMessages(.train_match_xgb(gam_data, train_filter = train_filter))
   xgb_data <- xgb_result$data
 
-  # Same 50/50 Input Blend as run_predictions_pipeline()'s blend block
-  xgb_data$pred_score_diff_blend <- 0.5 * xgb_data$gam_pred_score_diff + 0.5 * xgb_data$xgb_pred_score_diff
+  # The Input Blend itself, not a copy of it -- see .blend_gam_xgb() in
+  # match_model.R. This sidecar gates what gets served, so it must calibrate
+  # against exactly the arithmetic run_predictions_pipeline() publishes.
+  xgb_data$pred_score_diff_blend <- .blend_gam_xgb(
+    xgb_data$gam_pred_score_diff, xgb_data$xgb_pred_score_diff
+  )
 
   oos <- data.frame(
     pred_margin = xgb_data$pred_score_diff_blend[test_mask],

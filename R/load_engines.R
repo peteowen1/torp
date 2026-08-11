@@ -263,7 +263,7 @@ parquet_from_urls_parallel <- function(urls, use_cache = FALSE, max_age_days = 7
       # multi-URL call doesn't hard-fail entirely over one flaky file,
       # mirroring the `strict` gate in .load_with_cache().
       if (length(transient_failed) > 0) {
-        if (isTRUE(Sys.getenv("VERSEBUS_STRICT") == "1")) {
+        if (.strict_mode()) {
           .vb_abort(
             "Failed to download {length(transient_failed)} file{?s} (non-404/transient): {.url {basename(transient_failed)}}",
             "vb_error_transient",
@@ -418,7 +418,7 @@ parquet_from_url <- function(url) {
     # except outside strict/CI mode (VERSEBUS_STRICT=1), where we match
     # .load_with_cache()'s leniency and degrade to an empty, tagged result
     # instead of hard-aborting a single interactive/multi-season call.
-    if (isTRUE(Sys.getenv("VERSEBUS_STRICT") == "1")) {
+    if (.strict_mode()) {
       .vb_abort(
         "Failed to load data from {.url {url}}: {error_msg}",
         "vb_error_transient",

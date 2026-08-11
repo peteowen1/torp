@@ -1,5 +1,31 @@
 # Package Configuration
 
+#' Is this a strict pipeline run?
+#'
+#' Single parse rule for `VERSEBUS_STRICT`, the environment variable that turns
+#' fetch/manifest problems from warnings into aborts. It is set to `"1"` by the
+#' three pipeline entry scripts (`data-raw/01-data/daily_release.R`,
+#' `02-models/build_match_predictions.R`, `03-ratings/run_ratings_pipeline.R`)
+#' and by the release workflows in this repo and torpdata; nothing sets it to
+#' any other value.
+#'
+#' Exists because the rule was written out at five call sites and one of them
+#' disagreed: `check_vintage_alignment()` tested `nzchar()`, so
+#' `VERSEBUS_STRICT="0"` went strict there and lenient at the other four,
+#' despite its own roxygen claiming it matched "every other pipeline entry
+#' point's convention".
+#'
+#' `R/versebus.R` deliberately keeps its own inline copy: that file is vendored
+#' into torpmodels and guarded function-by-function by `test-versebus-sync.R`,
+#' so it cannot call a torp-local helper without the sibling repo gaining one
+#' first.
+#'
+#' @return `TRUE` when `VERSEBUS_STRICT` is exactly `"1"`.
+#' @noRd
+.strict_mode <- function() {
+  isTRUE(Sys.getenv("VERSEBUS_STRICT") == "1")
+}
+
 #' Get TORP Data Repository
 #'
 #' Returns the repository used for TORP data downloads. Can be configured

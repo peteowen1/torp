@@ -15,7 +15,7 @@
   fetch_all_fn = NULL,
   use_disk_cache = FALSE,
   refresh = FALSE,
-  strict = isTRUE(Sys.getenv("VERSEBUS_STRICT") == "1")
+  strict = .strict_mode()
 )
 }
 \arguments{
