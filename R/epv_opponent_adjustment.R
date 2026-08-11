@@ -226,7 +226,7 @@ adjust_epv_for_opponents <- function(player_game_data,
   }
 
   # Join: for each player-game, look up their opponent's defensive profile
-  .engine <- attr(dt, "epv_engine")
+  .engine <- .frame_epv_engine(dt, "EPV frame entering the opponent adjustment")
   dt <- merge(dt, profiles[, .(match_id, defending_team, epv_opp_adj)],
               by.x = c("match_id", "opponent"),
               by.y = c("match_id", "defending_team"),

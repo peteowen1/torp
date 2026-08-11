@@ -75,6 +75,52 @@ default_epv_params <- function() {
     exists("EPV3_POINTS_SCALE")
 }
 
+#' Read the engine a frame was priced with
+#'
+#' The single place the `epv_engine` attribute is read. There were three
+#' (`analyze_match.R`, `centre_epv_by_position()`, `adjust_epv_for_opponents()`),
+#' each spelling out `attr(x, "epv_engine")` and each independently responsible
+#' for noticing when it came back NULL. None did.
+#'
+#' **Why an attribute at all, and why it is a trap.** `create_player_game_data()`
+#' stamps the engine onto the frame it returns, and R drops attributes on
+#' `merge()`, `rbind()` and most dplyr verbs -- which is why
+#' `adjust_epv_for_opponents()` has to re-attach it by hand after its own merge,
+#' and why the v3 experiment scripts in `data-raw/04-analysis/` call
+#' `setattr(d, "epv_engine", "v3")` six-plus times. A frame that loses the stamp
+#' is priced as v2 with nothing said.
+#'
+#' **This does not change what is returned** -- NULL still means v2, exactly as
+#' before. It makes the fallback AUDIBLE, and only in the case where it is
+#' wrong: when `EPV_ENGINE` is `"v3"` a missing stamp is almost certainly a lost
+#' attribute rather than a genuine v2 frame. While `EPV_ENGINE` is `"v2"` a
+#' missing stamp and a v2 stamp mean the same thing, so warning would be noise.
+#'
+#' The fuller fix -- carrying the engine as a column, which survives every
+#' transform -- is deliberately NOT done here: `player_game_data` is a published
+#' artifact and adding a column changes its released schema. That is a decision,
+#' not a refactor.
+#'
+#' @param x A frame produced by `create_player_game_data()`, possibly after
+#'   transforms that dropped attributes.
+#' @param what Label used in the warning to say which frame lost its stamp.
+#' @param configured The engine the package is configured for. An argument
+#'   rather than a direct read of the constant so the warning path is testable
+#'   without rewriting a locked namespace binding; production never passes it.
+#' @return The engine string, or NULL. NULL is the v2 answer.
+#' @keywords internal
+.frame_epv_engine <- function(x, what = "frame", configured = EPV_ENGINE) {
+  eng <- attr(x, "epv_engine")
+  if (is.null(eng) && identical(configured, "v3")) {
+    cli::cli_warn(c(
+      "The {what} carries no {.field epv_engine} attribute while {.code EPV_ENGINE} is {.val v3}.",
+      "x" = "It will be priced as v2. R drops attributes on {.code merge()}/{.code rbind()}/most dplyr verbs, so this is far more likely a lost stamp than a genuine v2 frame.",
+      "i" = "Re-attach after the transform that dropped it: {.code data.table::setattr(x, \"epv_engine\", \"v3\")}."
+    ))
+  }
+  eng
+}
+
 #' Centre EPV channels on their listed position's level, per round
 #'
 #' The positional level correction, applied at the layer that creates it.
@@ -279,7 +325,7 @@ centre_epv_by_position <- function(pgd, channels = EPV_LEVEL_CENTRE_CHANNELS) {
   # docstring in constants_ratings.R retracted on 2026-08-06 -- those are the v3
   # ship frame's RAW-layer scales, and v2's own raw-layer fit is recv 0.611,
   # disp 0.552, spoil -0.481. Numbers live in one place; read them there.
-  use_v3_scale <- .use_per_channel_scale(attr(pgd, "epv_engine"))
+  use_v3_scale <- .use_per_channel_scale(.frame_epv_engine(pgd, "player-game frame"))
   # Defined unconditionally so the residual-expectation block below can use it
   # without depending on which branch ran.
   lbl <- EPV_CHANNEL_SCALE_KEYS
