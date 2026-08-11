@@ -38,9 +38,64 @@ test_that(".strict_mode() is TRUE only for exactly \"1\"", {
   withr::with_envvar(c(VERSEBUS_STRICT = ""), expect_false(.strict_mode()))
   # The whole reason the helper exists: check_vintage_alignment() used
   # nzchar(), which made every one of these strict at that site alone.
-  withr::with_envvar(c(VERSEBUS_STRICT = "0"), expect_false(.strict_mode()))
-  withr::with_envvar(c(VERSEBUS_STRICT = "true"), expect_false(.strict_mode()))
-  withr::with_envvar(c(VERSEBUS_STRICT = "false"), expect_false(.strict_mode()))
+  withr::with_envvar(
+    c(VERSEBUS_STRICT = "0"), expect_false(suppressWarnings(.strict_mode())))
+  withr::with_envvar(
+    c(VERSEBUS_STRICT = "true"), expect_false(suppressWarnings(.strict_mode())))
+  withr::with_envvar(
+    c(VERSEBUS_STRICT = "false"), expect_false(suppressWarnings(.strict_mode())))
+})
+
+test_that(".strict_mode() warns rather than silently reading a bad value as off", {
+  # The rule is fail-open, so a plausible VERSEBUS_STRICT=true would leave
+  # every abort path as a warning. Silence there is the failure mode this
+  # whole commit is about, so it has to be audible.
+  withr::with_envvar(c(VERSEBUS_STRICT = "true"), {
+    expect_warning(.strict_mode(), "not.*1")
+  })
+  # The two legitimate values must stay quiet -- .strict_mode() is called on
+  # every load, so a warning on the normal path would be unusable.
+  withr::with_envvar(c(VERSEBUS_STRICT = "1"), expect_silent(.strict_mode()))
+  withr::with_envvar(c(VERSEBUS_STRICT = ""), expect_silent(.strict_mode()))
+})
+
+test_that("versebus.R's inline copy still implements the same rule", {
+  # versebus.R cannot call .strict_mode() (vendored + guarded, see above), so
+  # nothing structural keeps the two equal. test-versebus-sync.R guards
+  # torp-vs-torpmodels, not torp-vs-.strict_mode(). This is the missing edge:
+  # if .strict_mode() is ever changed to accept more values, this fails and
+  # points at the copy that has to move with it.
+  d <- .r_source_dir()
+  skip_if(is.null(d), "R/ source tree not present (installed build)")
+
+  # Read the default off the PARSED expression -- no eval(). For a `function`
+  # call object, [[2]] is the formals pairlist. Same approach as
+  # test-versebus-sync.R's .parse_versebus_functions().
+  exprs <- parse(file.path(d, "versebus.R"), keep.source = FALSE)
+  formals_of <- NULL
+  for (e in exprs) {
+    if (is.call(e) && identical(e[[1]], as.name("<-")) &&
+        length(e) == 3 && is.name(e[[2]]) &&
+        identical(as.character(e[[2]]), "vb_download") &&
+        is.call(e[[3]]) && identical(e[[3]][[1]], as.name("function"))) {
+      formals_of <- e[[3]][[2]]
+    }
+  }
+  expect_false(is.null(formals_of))
+
+  inline <- paste(deparse(formals_of$require_manifest), collapse = " ")
+  expect_equal(inline, "isTRUE(Sys.getenv(\"VERSEBUS_STRICT\") == \"1\")")
+
+  # And the helper must agree with that literal on every value that matters.
+  for (v in c("1", "", "0", "true")) {
+    withr::with_envvar(c(VERSEBUS_STRICT = v), {
+      expect_equal(
+        suppressWarnings(.strict_mode()),
+        isTRUE(Sys.getenv("VERSEBUS_STRICT") == "1"),
+        info = paste("VERSEBUS_STRICT =", encodeString(v, quote = '"'))
+      )
+    })
+  }
 })
 
 test_that("VERSEBUS_STRICT is parsed in one place (versebus.R excepted)", {

@@ -20,10 +20,25 @@
 #' so it cannot call a torp-local helper without the sibling repo gaining one
 #' first.
 #'
+#' The rule is fail-open: only the exact string `"1"` enables strict mode, so
+#' a plausible-looking `VERSEBUS_STRICT=true` would silently leave every abort
+#' path as a warning. That is the convention four of the five call sites
+#' already used and it is not being changed here, but a set-but-unrecognised
+#' value now warns rather than being read as "off" in silence -- the whole
+#' point of the flag is that a bad read must not pass quietly.
+#'
 #' @return `TRUE` when `VERSEBUS_STRICT` is exactly `"1"`.
 #' @noRd
 .strict_mode <- function() {
-  isTRUE(Sys.getenv("VERSEBUS_STRICT") == "1")
+  raw <- Sys.getenv("VERSEBUS_STRICT")
+  if (!identical(raw, "") && !identical(raw, "1")) {
+    cli::cli_warn(c(
+      "{.envvar VERSEBUS_STRICT} is set to {.val {raw}}, which is not {.val 1}.",
+      "x" = "Strict mode is OFF -- fetch and manifest problems will warn, not abort.",
+      "i" = "Use {.code VERSEBUS_STRICT=1} to enable it."
+    ))
+  }
+  identical(raw, "1")
 }
 
 #' Get TORP Data Repository
