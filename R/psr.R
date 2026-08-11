@@ -1259,8 +1259,9 @@ explain_epr <- function(player,
 
   cat(sprintf("\n  Note: sums use game totals (per80 * tog), denominator is weighted minutes\n"))
   cat(sprintf("  (wt * tog). These are epr_RAW: the PUBLISHED EPR is this, then\n"))
-  cat(sprintf("  position-centred by centre_epr_by_position() (via calculate_epr()),\n"))
-  cat(sprintf("  so it will not match the leaderboard exactly.\n"))
+  cat(sprintf("  position-centred by centre_epr_by_position() -- called from\n"))
+  cat(sprintf("  build_ratings_history() and run_ratings_pipeline.R, NOT from\n"))
+  cat(sprintf("  calculate_epr() -- so it will not match the leaderboard exactly.\n"))
 
   invisible(list(
     game_trace = dt,

@@ -68,3 +68,32 @@ test_that("the explainer says its numbers are pre-centring", {
   expect_match(psr, "centre_epr_by_position", fixed = TRUE)
   expect_match(psr, "PUBLISHED EPR", fixed = TRUE)
 })
+
+test_that("the note names the ACTUAL callers of centre_epr_by_position()", {
+  # A first draft of that note said the centring happens "via calculate_epr()".
+  # It does not -- calculate_epr() never calls it. The real callers are
+  # build_ratings_history() (ratings_build.R:210) and run_ratings_pipeline.R.
+  # Pointing a reader at the wrong function is worse than the vague note it
+  # replaced, so this pins the call graph rather than the prose.
+  code <- .r_source_code()
+  skip_if(is.null(code), "R/ source tree not present (installed build)")
+
+  callers <- names(code)[vapply(code, function(x) {
+    any(grepl("(?<!function\\()\\bcentre_epr_by_position\\(", x, perl = TRUE)) &&
+      !any(grepl("^centre_epr_by_position <- function", x))
+  }, logical(1))]
+  # ratings_build.R is where the package-internal call lives.
+  expect_true("ratings_build.R" %in% callers)
+
+  # And calculate_epr() must NOT be claimed as the caller while it isn't one.
+  pr <- code[["player_ratings.R"]]
+  start <- grep("^calculate_epr <- function", pr)
+  if (length(start) == 1) {
+    end <- start + which(grepl("^}", pr[start:length(pr)]))[1] - 1
+    body_txt <- paste(pr[start:end], collapse = " ")
+    calls_it <- grepl("centre_epr_by_position\\(", body_txt)
+    psr_txt <- paste(code[["psr.R"]], collapse = " ")
+    claims_it <- grepl("via calculate_epr", psr_txt)
+    expect_false(claims_it && !calls_it)
+  }
+})
