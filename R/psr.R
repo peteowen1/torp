@@ -1214,10 +1214,20 @@ explain_epr <- function(player,
   loading <- EPR_LOADING_DEFAULT
   prior_gms <- c(recv = EPR_PRIOR_GAMES_RECV, disp = EPR_PRIOR_GAMES_DISP,
                   spoil = EPR_PRIOR_GAMES_SPOIL, hitout = EPR_PRIOR_GAMES_HITOUT)
-  epr_recv   <- (loading * recv_sum   + prior_gms["recv"]   * EPR_PRIOR_RATE_RECV)   / (wt_gms_recv   + prior_gms["recv"])
-  epr_disp   <- (loading * disp_sum   + prior_gms["disp"]   * EPR_PRIOR_RATE_DISP)   / (wt_gms_disp   + prior_gms["disp"])
-  epr_spoil  <- (loading * spoil_sum  + prior_gms["spoil"]  * EPR_PRIOR_RATE_SPOIL)  / (wt_gms_spoil  + prior_gms["spoil"])
-  epr_hitout <- (loading * hitout_sum + prior_gms["hitout"] * EPR_PRIOR_RATE_HITOUT) / (wt_gms_hitout + prior_gms["hitout"])
+  # Call the production shrinkage, do not retype it. These four lines used to
+  # spell out `(loading * sum + prior * rate) / (wt + prior)` by hand -- the
+  # exact body of `.bayesian_shrink()` (player_ratings.R). An explainer that
+  # reimplements the thing it explains will keep printing a confident,
+  # plausible trace of the OLD formula the day the real one changes, and
+  # nothing would fail.
+  epr_recv   <- .bayesian_shrink(recv_sum,   wt_gms_recv,   loading,
+                                 prior_gms[["recv"]],   EPR_PRIOR_RATE_RECV)
+  epr_disp   <- .bayesian_shrink(disp_sum,   wt_gms_disp,   loading,
+                                 prior_gms[["disp"]],   EPR_PRIOR_RATE_DISP)
+  epr_spoil  <- .bayesian_shrink(spoil_sum,  wt_gms_spoil,  loading,
+                                 prior_gms[["spoil"]],  EPR_PRIOR_RATE_SPOIL)
+  epr_hitout <- .bayesian_shrink(hitout_sum, wt_gms_hitout, loading,
+                                 prior_gms[["hitout"]], EPR_PRIOR_RATE_HITOUT)
 
   cli::cli_h2("Shrinkage Calculation (pre-centering, TOG-weighted)")
 
@@ -1248,7 +1258,9 @@ explain_epr <- function(player,
               wt_gms_recv, prior_gms["recv"]))
 
   cat(sprintf("\n  Note: sums use game totals (per80 * tog), denominator is weighted minutes\n"))
-  cat(sprintf("  (wt * tog). Final EPR also has TOG-weighted centering (see calculate_epr()).\n"))
+  cat(sprintf("  (wt * tog). These are epr_RAW: the PUBLISHED EPR is this, then\n"))
+  cat(sprintf("  position-centred by centre_epr_by_position() (via calculate_epr()),\n"))
+  cat(sprintf("  so it will not match the leaderboard exactly.\n"))
 
   invisible(list(
     game_trace = dt,

@@ -1,0 +1,70 @@
+# `explain_epr()` used to retype `.bayesian_shrink()`'s body four times rather
+# than call it (psr.R:1217-1220 before 2026-08-11). An explainer that
+# reimplements the thing it explains keeps printing a confident, plausible
+# trace of the OLD formula the day the real one changes, and nothing fails.
+#
+# These tests do not run explain_epr() -- it needs the AFL API and a resolved
+# player. They pin the two things the change actually turned on: that the
+# production shrinkage is what gets called, and that the call is spelled the
+# way the four sites spell it.
+
+test_that(".bayesian_shrink() is the formula explain_epr() prints", {
+  # The literal expression that used to be inline, four times over. If
+  # .bayesian_shrink() is ever rewritten, this fails and the explainer's
+  # printed derivation has to be revisited with it -- which is the whole point
+  # of making the explainer call it.
+  set.seed(3)
+  n <- 200
+  sum_val <- stats::rnorm(n, 40, 15)
+  wt_gms <- stats::runif(n, 0, 60)
+  loading <- 1.4
+  prior_games <- 3
+  prior_rate <- 0.35
+
+  expect_identical(
+    .bayesian_shrink(sum_val, wt_gms, loading, prior_games, prior_rate),
+    (loading * sum_val + prior_games * prior_rate) / (wt_gms + prior_games)
+  )
+})
+
+test_that("explain_epr() no longer spells the shrinkage out by hand", {
+  # Drift guard. Local-dev only, like the other source scans -- R CMD check
+  # runs against an installed package with no R/ tree beside it.
+  code <- .r_source_code()
+  skip_if(is.null(code), "R/ source tree not present (installed build)")
+  psr <- code[["psr.R"]]
+  expect_false(is.null(psr))
+
+  # The shape of the inline form: a division whose numerator multiplies a
+  # prior_games term by a prior rate.
+  inline <- grepl("loading \\* [a-z_]+_sum\\s*\\+\\s*prior_gms", paste(psr, collapse = " "))
+  expect_false(inline,
+               info = "call .bayesian_shrink() instead of retyping its body")
+  expect_true(any(grepl("\\.bayesian_shrink\\(", psr)))
+})
+
+test_that("named subsetting does not leak a name into the result", {
+  # The latent bug the rewrite exposed. `prior_gms["recv"]` keeps its name, so
+  # the computed value carried name "recv", and `c(recv = value)` then produced
+  # "recv.recv" -- meaning res$shrinkage$epr_raw[["recv"]] did not resolve.
+  # `[[` drops the name and the wrapper's own names stand.
+  prior_gms <- c(recv = 3, disp = 3)
+
+  leaky <- (1 * 10 + prior_gms["recv"] * 2) / (5 + prior_gms["recv"])
+  clean <- (1 * 10 + prior_gms[["recv"]] * 2) / (5 + prior_gms[["recv"]])
+
+  expect_identical(unname(leaky), clean)          # same number
+  expect_identical(names(c(recv = leaky)), "recv.recv")  # the old bug
+  expect_identical(names(c(recv = clean)), "recv")       # what we want now
+})
+
+test_that("the explainer says its numbers are pre-centring", {
+  # explain_epr() reports epr_RAW. The published EPR is that, then
+  # position-centred, so the two do not match and the output has to say so or
+  # someone will file a bug against the leaderboard.
+  code <- .r_source_code()
+  skip_if(is.null(code), "R/ source tree not present (installed build)")
+  psr <- paste(code[["psr.R"]], collapse = " ")
+  expect_match(psr, "centre_epr_by_position", fixed = TRUE)
+  expect_match(psr, "PUBLISHED EPR", fixed = TRUE)
+})
