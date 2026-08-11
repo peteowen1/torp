@@ -255,91 +255,9 @@ if (isTRUE(EPV_LEVEL_CENTRE)) {
   cli::cli_progress_step("Centring EPV on listed-position levels")
   all_pgd <- centre_epv_by_position(all_pgd)
 
-  # Verify the invariant that makes this worth doing: the TOG-weighted sum per
-  # (season, round, bucket) is what EPR's numerator accumulates, so it is the
-  # thing that must vanish -- not the unweighted mean, which would look centred
-  # while EPR stayed skewed.
-  .lc <- if (all(paste0(EPV_LEVEL_CENTRE_CHANNELS, "_oadj") %in% names(all_pgd)))
-    "_oadj" else "_adj"
-  .chk <- data.table::as.data.table(all_pgd)
-  .chk[, `:=`(pos_bucket = torp:::.collapse_listed_position(position_group),
-              w = pmax(dplyr::coalesce(time_on_ground_percentage / 100, 0.1), 0.1))]
-  .chk <- .chk[!is.na(pos_bucket)]
-  # Fail CLOSED. chk_worst starts at 0 and is only ever RAISED, so if every cell
-  # is empty -- position_group missing or renamed, or every value unmapped --
-  # the loop never runs, chk_worst stays 0, the abort below is skipped, and the
-  # script reports "verified (max |cell mean| = 0)" having verified nothing.
-  # That is the same shape as the bugs this guard exists to catch, one level up:
-  # the GUARD degrading to a no-op rather than the normalisation.
-  #
-  # NOTE the names here are deliberately NOT dot-prefixed. cli >= 3.4.0 treats
-  # `{.name}` as style markup, so a bare `{.checked}` in any cli_* string is a
-  # hard error ("Invalid cli literal: starts with a dot") -- it took this
-  # pipeline down on 2026-07-29 AFTER the centring had already succeeded, i.e.
-  # the guard crashed on reporting a pass. Same bug previously hit
-  # check_manifest_sync(). Bare `{signif(chk_worst, 3)}` is safe either way
-  # because it starts with a function call, which is exactly why the abort paths
-  # survived and only the success path blew up -- the failure mode is invisible
-  # until the happy path runs.
-  if (nrow(.chk) == 0) {
-    cli::cli_abort(c(
-      "Cannot verify EPV level centring: no row has a mapped position bucket.",
-      "x" = "Refusing to build ratings on EPV whose centring cannot be checked."
-    ))
-  }
-  # With EPV_POSITION_SHRINK on, a cell is NOT left at zero -- it is left at
-  # (1 - lambda) * (its round mean - its bucket's earlier mean). That is still
-  # an exact quantity, so this guard checks the residual against what the
-  # centring RECORDED it should be, rather than loosening its tolerance to
-  # accommodate the feature. Loosening the equivalent guard 50x for a 0.004
-  # effect is what got the EPR version of this reverted.
-  .cells <- attr(all_pgd, "epv_level_centring")
-  epv_shrink_on <- isTRUE(torp:::EPV_POSITION_SHRINK)
-  if (epv_shrink_on && (is.null(.cells) || nrow(.cells) == 0)) {
-    cli::cli_abort(c(
-      "EPV_POSITION_SHRINK is ON but centre_epv_by_position() recorded no per-cell corrections.",
-      "x" = "Without them a shrunk residual is indistinguishable from centring having failed."
-    ))
-  }
-  chk_worst <- 0
-  chk_cells <- 0L
-  for (cc in paste0(EPV_LEVEL_CENTRE_CHANNELS, .lc)) {
-    m <- .chk[is.finite(get(cc)),
-              .(wm = stats::weighted.mean(get(cc), w)),
-              by = .(season, round, pos_bucket)]
-    if (nrow(m) == 0) next
-    m[, expected := 0]
-    if (!is.null(.cells) && nrow(.cells) > 0) {
-      .ce <- data.table::as.data.table(.cells)[channel == cc,
-                                               .(season, round, pos_bucket, resid_expected)]
-      if (nrow(.ce) > 0) {
-        m[.ce, expected := i.resid_expected, on = .(season, round, pos_bucket)]
-        # A cell the centring never recorded is a cell it never corrected.
-        if (anyNA(m$expected)) {
-          cli::cli_abort(c(
-            "{sum(is.na(m$expected))} cell{?s} of {.field {cc}} have no recorded correction.",
-            "x" = "Refusing to treat an uncorrected cell as if it had been centred."
-          ))
-        }
-      }
-    }
-    chk_worst <- max(chk_worst, max(abs(m$wm - m$expected), na.rm = TRUE))
-    chk_cells <- chk_cells + nrow(m)
-  }
-  if (chk_cells == 0L) {
-    cli::cli_abort(c(
-      "Cannot verify EPV level centring: zero cells had a finite channel value.",
-      "x" = "An empty check is not a pass."
-    ))
-  }
-  if (!is.finite(chk_worst) || chk_worst > 1e-8) {
-    cli::cli_abort(c(
-      "EPV level centring did not take: max |cell mean - expected residual| = {signif(chk_worst, 3)}",
-      "x" = "Refusing to build ratings on EPV that is not centred as claimed."
-    ))
-  }
-  cli::cli_alert_success("EPV level centring verified across {chk_cells} cell{?s} (max deviation from expected = {signif(chk_worst, 3)}; shrinkage {epv_shrink_on})")
-  rm(.chk, chk_worst, chk_cells, .lc, .cells, epv_shrink_on)
+  # Verify it took. The check itself lives in R/centring_verification.R so
+  # CI exercises it -- it ran only in production until 2026-08-11.
+  verify_epv_level_centring(all_pgd)
 }
 
 data.table::setkey(all_pgd, match_id)
@@ -504,77 +422,8 @@ if (nrow(torp_new) > 0) {
   if (isTRUE(EPR_POSITION_CENTRE)) {
     torp_df_total <- centre_epr_by_position(torp_df_total)
 
-    # Check EVERY (season, round, position) cell, not just the latest. Centring
-    # runs across all history, so sampling one round would let an earlier round
-    # fail silently -- and it is the historical rounds that feed model training.
-    #
-    # This checks the weighted mean of `epr` (the total) while centring is
-    # applied per CHANNEL. Those agree exactly only because the four channels
-    # are finite together or NA together (verified 2026-07-28: 107,448 rows all
-    # finite, 23,480 all NA, ZERO partial), so every channel's mean is taken
-    # over the same players and their sum is the total's mean. That invariant
-    # holds by data, not by contract. If partial-NA rows ever appear the check
-    # fails loud rather than passing something wrong -- the skew would exceed
-    # the tolerance below -- but the message would be misleading, so start here.
-    # Group by the SAME collapsed bucket centre_epr_by_position() used. Keying
-    # this on raw position_group while centring uses the 6-way map would fail
-    # every run for the two merged forward groups -- each is only mean-zero
-    # jointly. A guard that groups differently from the code it guards is not a
-    # guard.
-    chk <- data.table::as.data.table(torp_df_total)
-    chk[, pos_bucket := torp:::.collapse_listed_position(position_group)]
-    chk <- chk[
-      !is.na(pos_bucket),
-      .(wmean = stats::weighted.mean(epr, pmax(pred_tog, 0.01), na.rm = TRUE),
-        n = .N, n_rated = sum(is.finite(epr))),
-      by = .(season, round, pos_bucket)]
-
-    # A cell where NOBODY is rated yet has nothing to centre and no mean to
-    # check -- that is the start of the dataset, not a failure. 23,480 rows
-    # (~18%) carry an NA channel and therefore an NA epr, which is pre-existing
-    # published behaviour; in early 2021 a few whole position-rounds are NA.
-    # Skip those, but COUNT them, so "nothing was checkable" can never be
-    # mistaken for "everything checked out".
-    unrated <- chk[n_rated == 0]
-    if (nrow(unrated) > 0) {
-      cli::cli_inform(
-        "Position centring: {nrow(unrated)} cell{?s} have no rated players (earliest: season {unrated$season[1]} round {unrated$round[1]} {unrated$pos_bucket[1]}) -- nothing to verify there")
-    }
-    # Known, accepted limitation: a cell with n_rated == 1 passes vacuously --
-    # the weighted mean of one point IS that point, so subtracting it leaves
-    # exactly 0 whatever the grouping logic did. Early rounds are where such
-    # cells live, so the guard's power is weakest precisely where this filter
-    # newly admits cells. Left as-is because the failure this guard exists to
-    # catch (a whole taxonomy or channel not centring) shows up across many
-    # cells at once, not in a single-player one.
-    chk <- chk[n_rated > 0]
-    # Fail CLOSED. An empty check is not a pass: zero rows here means nothing
-    # had a position group, which is exactly the state in which centring cannot
-    # have happened.
-    if (nrow(chk) == 0) {
-      cli::cli_abort(c(
-        "Cannot verify EPR position centring: no position bucket has a single rated player.",
-        "x" = "Refusing to publish ratings whose centring cannot be checked."
-      ))
-    }
-    if (!all(is.finite(chk$wmean))) {
-      bad <- chk[!is.finite(wmean)]
-      cli::cli_abort(c(
-        "EPR position centring produced {nrow(bad)} non-finite cell mean{?s}.",
-        "i" = "First: season {bad$season[1]} round {bad$round[1]} {bad$pos_bucket[1]}"
-      ))
-    }
-    worst <- max(abs(chk$wmean))
-    if (worst > 1e-6) {
-      b <- chk[which.max(abs(wmean))]
-      cli::cli_abort(c(
-        "EPR position centring did not take: max |weighted mean| = {signif(worst, 3)}",
-        "i" = "Worst cell: season {b$season} round {b$round} {b$pos_bucket} (n = {b$n})",
-        "x" = "Refusing to publish ratings whose positions are not centred as claimed."
-      ))
-    }
-    cli::cli_alert_success(
-      "Position centring verified across {nrow(chk)} (season, round, position) cell{?s}")
+    # Verify it took. Lives in R/centring_verification.R so CI exercises it.
+    verify_epr_position_centring(torp_df_total)
   }
 
   if (!is.null(psr_df) && nrow(psr_df) > 0 && "psr" %in% names(psr_df)) {
