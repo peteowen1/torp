@@ -1176,7 +1176,15 @@ explain_epr <- function(player,
     wt_disp   = exp(-days_diff / EPR_DECAY_DISP),
     wt_spoil  = exp(-days_diff / EPR_DECAY_SPOIL),
     wt_hitout = exp(-days_diff / EPR_DECAY_HITOUT),
-    tog = pmax(time_on_ground_percentage / 100, 0.1)
+    # Mirror production's tog_safe (player_ratings.R:303) exactly, including
+    # the NA -> 100 imputation. Without it a single game with a missing
+    # time_on_ground_percentage gives tog = NA, which propagates through
+    # wt_gms_* and the aggregate sums and makes the player's whole epr_* NA --
+    # while production, having imputed, reports a number. Dormant today (zero
+    # NAs in the current player_game_data) and that is exactly why it would
+    # have gone unnoticed until the one game that has one.
+    tog = pmax(data.table::fifelse(
+      is.na(time_on_ground_percentage), 100, time_on_ground_percentage) / 100, 0.1)
   )]
 
   # Pick the SAME columns calculate_epr_stats() picks (player_ratings.R:265).
@@ -1198,16 +1206,30 @@ explain_epr <- function(player,
   cli::cli_h1("{pname} | EPR Calculation Trace")
   cli::cli_h2("Per-game inputs (position-adjusted per-80-min rates)")
 
-  show_dt <- dt[order(-season, -round), .(
-    season, round, team, opponent, tog,
-    recv_adj = round(get(c_recv), 2),
-    disp_adj = round(get(c_disp), 2),
-    spoil_adj = round(get(c_spoil), 2),
-    hitout_adj = round(get(c_hitout), 2),
-    recv_total = round(get(c_recv) * tog, 2),
-    days_ago = days_diff,
-    wt_recv = round(wt_recv, 3)
-  )]
+  # Extract via [[ ]] into plain vectors and order those, rather than calling
+  # get() inside the j-expression. get() inside dt[i, j] breaks data.table's
+  # fast column-reference path -- documented in this tree's own R/data.table
+  # gotchas after one such line left ~5.4GB unreclaimed on a table whose output
+  # was ~60MB. Irrelevant at this scale (one player's career, a few hundred
+  # rows) but there is no reason to plant the pattern where someone copies it.
+  ord <- order(-dt$season, -dt$round)
+  v_recv   <- dt[[c_recv]][ord]
+  v_disp   <- dt[[c_disp]][ord]
+  v_spoil  <- dt[[c_spoil]][ord]
+  v_hitout <- dt[[c_hitout]][ord]
+  v_tog    <- dt$tog[ord]
+
+  show_dt <- data.table::data.table(
+    season = dt$season[ord], round = dt$round[ord],
+    team = dt$team[ord], opponent = dt$opponent[ord], tog = v_tog,
+    recv_adj   = round(v_recv, 2),
+    disp_adj   = round(v_disp, 2),
+    spoil_adj  = round(v_spoil, 2),
+    hitout_adj = round(v_hitout, 2),
+    recv_total = round(v_recv * v_tog, 2),
+    days_ago = dt$days_diff[ord],
+    wt_recv = round(dt$wt_recv[ord], 3)
+  )
 
   cat(sprintf("  Showing %d of %d career games:\n", min(top_n, nrow(show_dt)), nrow(dt)))
   cat(sprintf("  Channels: %s%s\n", sfx,

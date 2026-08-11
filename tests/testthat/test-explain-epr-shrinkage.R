@@ -91,6 +91,40 @@ test_that("explain_epr() selects channels the way calculate_epr_stats() does", {
   }
 })
 
+test_that("explain_epr() imputes a missing TOG the way production does", {
+  # Third divergence of the same kind. production's tog_safe
+  # (player_ratings.R:303) imputes NA -> 100 before flooring at 0.1; the
+  # explainer did not, so one game with a missing time_on_ground_percentage
+  # would give tog = NA, propagate through the weighted minutes and the sums,
+  # and report the player's entire EPR as NA while production reported a
+  # number. Zero NAs in the data today, which is precisely why it would have
+  # surfaced on the first game that had one.
+  impute <- function(x) {
+    pmax(data.table::fifelse(is.na(x), 100, x) / 100, 0.1)
+  }
+  expect_identical(impute(c(90, NA, 5)), c(0.9, 1.0, 0.1))
+
+  code <- .r_source_code()
+  skip_if(is.null(code), "R/ source tree not present (installed build)")
+  psr <- paste(code[["psr.R"]], collapse = " ")
+  pr  <- paste(code[["player_ratings.R"]], collapse = " ")
+  # Both must impute; neither may floor a raw NA.
+  expect_match(psr, "fifelse\\(\\s*is.na\\(time_on_ground_percentage\\), 100")
+  expect_match(pr,  "fifelse\\(is.na\\(time_on_ground_percentage\\), 100")
+})
+
+test_that("explain_epr() does not call get() inside a data.table j-expression", {
+  # This tree's own R/data.table gotchas forbid it: get() inside dt[i, j]
+  # breaks the fast column-reference path, and one such line once left ~5.4GB
+  # unreclaimed. Harmless at explain_epr()'s scale, but the pattern gets
+  # copied, so it should not exist here to copy.
+  code <- .r_source_code()
+  skip_if(is.null(code), "R/ source tree not present (installed build)")
+  psr <- code[["psr.R"]]
+  expect_false(any(grepl("get\\(c_(recv|disp|spoil|hitout)\\)", psr)),
+               info = "extract with dt[[col]] instead of get() inside [")
+})
+
 test_that("explain_epr() no longer hardcodes the _adj channels in its aggregates", {
   # The specific line shape that was wrong: sum(dt$epv_<ch>_adj * ...).
   code <- .r_source_code()
