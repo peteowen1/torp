@@ -156,12 +156,17 @@ if (length(diffs) == 0 && length(only_a) == 0 && length(only_b) == 0) {
   cat("drifted from production, so migrating it onto build_prediction_state()\n")
   cat("is a pure de-duplication.\n")
   if (isTRUE(calibration_explains_all)) {
-    cat("\nBUT -- ONE MIGRATION HAZARD, and it would change served numbers:\n")
+    cat("\nOne LATENT trap to know about -- not currently reachable:\n")
     cat("build_prediction_state() returns a team_mdl_df whose pred_score_diff\n")
-    cat("is ALREADY calibrated (match_model.R:892). .predict_match_model()\n")
-    cat("calibrates again (matchup_table.R:596). Swapping the builder in\n")
-    cat("without removing that second call DOUBLE-APPLIES the sidecar, and\n")
-    cat("nothing would fail -- the blog's finals pricing would just be wrong.\n")
+    cat("is ALREADY calibrated (match_model.R:892). Today that is harmless:\n")
+    cat(".predict_match_model() never reads that column -- it predicts fresh\n")
+    cat("from the models onto synthetic rows (matchup_table.R:589/592) and\n")
+    cat("calibrates once (:596). The only uses of state$team_mdl_df are\n")
+    cat("xrating features (:357), weather imputation (:425) and factor\n")
+    cat("levels (:565). So a straight swap does NOT double-apply.\n")
+    cat("The trap is for later: any code that starts reading\n")
+    cat("team_mdl_df$pred_score_diff and then calibrates it would apply the\n")
+    cat("~10% shrink twice, and nothing would fail.\n")
   }
 } else {
   cat("VERDICT: DIFFERENT, beyond the known calibration-stage difference.\n")
