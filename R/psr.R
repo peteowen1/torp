@@ -1176,33 +1176,73 @@ explain_epr <- function(player,
     wt_disp   = exp(-days_diff / EPR_DECAY_DISP),
     wt_spoil  = exp(-days_diff / EPR_DECAY_SPOIL),
     wt_hitout = exp(-days_diff / EPR_DECAY_HITOUT),
-    tog = pmax(time_on_ground_percentage / 100, 0.1)
+    # Mirror production's tog_safe (player_ratings.R:303) exactly, including
+    # the NA -> 100 imputation. Without it a single game with a missing
+    # time_on_ground_percentage gives tog = NA, which propagates through
+    # wt_gms_* and the aggregate sums and makes the player's whole epr_* NA --
+    # while production, having imputed, reports a number. Dormant today (zero
+    # NAs in the current player_game_data) and that is exactly why it would
+    # have gone unnoticed until the one game that has one.
+    tog = pmax(data.table::fifelse(
+      is.na(time_on_ground_percentage), 100, time_on_ground_percentage) / 100, 0.1)
   )]
+
+  # Pick the SAME columns calculate_epr_stats() picks (player_ratings.R:265).
+  # It prefers the opponent-adjusted `_oadj` channels when the frame carries
+  # them and falls back to `_adj`; the production pipeline runs
+  # adjust_epv_for_opponents() before EPR, so the published numbers ARE
+  # opponent-adjusted. This function hardcoded `_adj`, which meant its trace
+  # silently omitted that adjustment while a comment two lines down claimed it
+  # was "same as calculate_epr_stats". Same claim, now true.
+  has_oadj <- all(c("epv_recv_oadj", "epv_disp_oadj",
+                    "epv_spoil_oadj", "epv_hitout_oadj") %in% names(dt))
+  sfx <- if (has_oadj) "_oadj" else "_adj"
+  c_recv   <- paste0("epv_recv", sfx)
+  c_disp   <- paste0("epv_disp", sfx)
+  c_spoil  <- paste0("epv_spoil", sfx)
+  c_hitout <- paste0("epv_hitout", sfx)
 
   # Show per-game trace
   cli::cli_h1("{pname} | EPR Calculation Trace")
   cli::cli_h2("Per-game inputs (position-adjusted per-80-min rates)")
 
-  show_dt <- dt[order(-season, -round), .(
-    season, round, team, opponent, tog,
-    recv_adj = round(epv_recv_adj, 2),
-    disp_adj = round(epv_disp_adj, 2),
-    spoil_adj = round(epv_spoil_adj, 2),
-    hitout_adj = round(epv_hitout_adj, 2),
-    recv_total = round(epv_recv_adj * tog, 2),
-    days_ago = days_diff,
-    wt_recv = round(wt_recv, 3)
-  )]
+  # Extract via [[ ]] into plain vectors and order those, rather than calling
+  # get() inside the j-expression. get() inside dt[i, j] breaks data.table's
+  # fast column-reference path -- documented in this tree's own R/data.table
+  # gotchas after one such line left ~5.4GB unreclaimed on a table whose output
+  # was ~60MB. Irrelevant at this scale (one player's career, a few hundred
+  # rows) but there is no reason to plant the pattern where someone copies it.
+  ord <- order(-dt$season, -dt$round)
+  v_recv   <- dt[[c_recv]][ord]
+  v_disp   <- dt[[c_disp]][ord]
+  v_spoil  <- dt[[c_spoil]][ord]
+  v_hitout <- dt[[c_hitout]][ord]
+  v_tog    <- dt$tog[ord]
+
+  show_dt <- data.table::data.table(
+    season = dt$season[ord], round = dt$round[ord],
+    team = dt$team[ord], opponent = dt$opponent[ord], tog = v_tog,
+    recv_adj   = round(v_recv, 2),
+    disp_adj   = round(v_disp, 2),
+    spoil_adj  = round(v_spoil, 2),
+    hitout_adj = round(v_hitout, 2),
+    recv_total = round(v_recv * v_tog, 2),
+    days_ago = dt$days_diff[ord],
+    wt_recv = round(dt$wt_recv[ord], 3)
+  )
 
   cat(sprintf("  Showing %d of %d career games:\n", min(top_n, nrow(show_dt)), nrow(dt)))
+  cat(sprintf("  Channels: %s%s\n", sfx,
+              if (has_oadj) " (opponent-adjusted, as production uses)" else
+                " (NOT opponent-adjusted -- frame carries no _oadj columns)"))
   print(head(show_dt, top_n), row.names = FALSE)
 
-  # Compute the aggregates (same as calculate_epr_stats — TOG-weighted)
-  # _adj is per-80 rate; multiply by tog to get game total, weight by decay
-  recv_sum   <- sum(dt$epv_recv_adj * dt$tog * dt$wt_recv, na.rm = TRUE)
-  disp_sum   <- sum(dt$epv_disp_adj * dt$tog * dt$wt_disp, na.rm = TRUE)
-  spoil_sum  <- sum(dt$epv_spoil_adj * dt$tog * dt$wt_spoil, na.rm = TRUE)
-  hitout_sum <- sum(dt$epv_hitout_adj * dt$tog * dt$wt_hitout, na.rm = TRUE)
+  # Compute the aggregates (same as calculate_epr_stats -- TOG-weighted)
+  # the channel is a per-80 rate; multiply by tog for the game total, weight by decay
+  recv_sum   <- sum(dt[[c_recv]]   * dt$tog * dt$wt_recv,   na.rm = TRUE)
+  disp_sum   <- sum(dt[[c_disp]]   * dt$tog * dt$wt_disp,   na.rm = TRUE)
+  spoil_sum  <- sum(dt[[c_spoil]]  * dt$tog * dt$wt_spoil,  na.rm = TRUE)
+  hitout_sum <- sum(dt[[c_hitout]] * dt$tog * dt$wt_hitout, na.rm = TRUE)
 
   # Denominator is weighted minutes (wt * tog), not weighted games
   wt_gms_recv   <- sum(dt$wt_recv * dt$tog, na.rm = TRUE)
@@ -1214,10 +1254,20 @@ explain_epr <- function(player,
   loading <- EPR_LOADING_DEFAULT
   prior_gms <- c(recv = EPR_PRIOR_GAMES_RECV, disp = EPR_PRIOR_GAMES_DISP,
                   spoil = EPR_PRIOR_GAMES_SPOIL, hitout = EPR_PRIOR_GAMES_HITOUT)
-  epr_recv   <- (loading * recv_sum   + prior_gms["recv"]   * EPR_PRIOR_RATE_RECV)   / (wt_gms_recv   + prior_gms["recv"])
-  epr_disp   <- (loading * disp_sum   + prior_gms["disp"]   * EPR_PRIOR_RATE_DISP)   / (wt_gms_disp   + prior_gms["disp"])
-  epr_spoil  <- (loading * spoil_sum  + prior_gms["spoil"]  * EPR_PRIOR_RATE_SPOIL)  / (wt_gms_spoil  + prior_gms["spoil"])
-  epr_hitout <- (loading * hitout_sum + prior_gms["hitout"] * EPR_PRIOR_RATE_HITOUT) / (wt_gms_hitout + prior_gms["hitout"])
+  # Call the production shrinkage, do not retype it. These four lines used to
+  # spell out `(loading * sum + prior * rate) / (wt + prior)` by hand -- the
+  # exact body of `.bayesian_shrink()` (player_ratings.R). An explainer that
+  # reimplements the thing it explains will keep printing a confident,
+  # plausible trace of the OLD formula the day the real one changes, and
+  # nothing would fail.
+  epr_recv   <- .bayesian_shrink(recv_sum,   wt_gms_recv,   loading,
+                                 prior_gms[["recv"]],   EPR_PRIOR_RATE_RECV)
+  epr_disp   <- .bayesian_shrink(disp_sum,   wt_gms_disp,   loading,
+                                 prior_gms[["disp"]],   EPR_PRIOR_RATE_DISP)
+  epr_spoil  <- .bayesian_shrink(spoil_sum,  wt_gms_spoil,  loading,
+                                 prior_gms[["spoil"]],  EPR_PRIOR_RATE_SPOIL)
+  epr_hitout <- .bayesian_shrink(hitout_sum, wt_gms_hitout, loading,
+                                 prior_gms[["hitout"]], EPR_PRIOR_RATE_HITOUT)
 
   cli::cli_h2("Shrinkage Calculation (pre-centering, TOG-weighted)")
 
@@ -1248,7 +1298,10 @@ explain_epr <- function(player,
               wt_gms_recv, prior_gms["recv"]))
 
   cat(sprintf("\n  Note: sums use game totals (per80 * tog), denominator is weighted minutes\n"))
-  cat(sprintf("  (wt * tog). Final EPR also has TOG-weighted centering (see calculate_epr()).\n"))
+  cat(sprintf("  (wt * tog). These are epr_RAW: the PUBLISHED EPR is this, then\n"))
+  cat(sprintf("  position-centred by centre_epr_by_position() -- called from\n"))
+  cat(sprintf("  build_ratings_history() and run_ratings_pipeline.R, NOT from\n"))
+  cat(sprintf("  calculate_epr() -- so it will not match the leaderboard exactly.\n"))
 
   invisible(list(
     game_trace = dt,
