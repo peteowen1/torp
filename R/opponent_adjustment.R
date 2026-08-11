@@ -67,7 +67,7 @@ adjust_stat_ratings_for_opponents <- function(stat_ratings,
   # Step 2: Compute per-player opponent adjustment factors
   # For each player, weighted average of opponent adj_factors across matches
   dt_played[, days_since := as.numeric(ref_date - match_date_rating)]
-  dt_played[, opp_wt := exp(-lambda_decay * days_since)]
+  dt_played[, opp_wt := .decay_weight(days_since, lambda_decay)]
 
   # Deduplicate to one row per player-match (take first row)
   player_matches <- unique(dt_played[, .(player_id, match_id, opponent, opp_wt)])
@@ -305,7 +305,7 @@ adjust_stats_for_opponents <- function(player_stats,
     prior_teams <- allowed$team_conceding[prior_idx]
     prior_dates <- allowed$match_date_rating[prior_idx]
     prior_mat <- stat_mat[prior_idx, , drop = FALSE]
-    decay_wts <- exp(-lambda_decay * as.numeric(mdate - prior_dates))
+    decay_wts <- .decay_weight(as.numeric(mdate - prior_dates), lambda_decay)
 
     # League average (weighted) across all prior games
     wt_total <- sum(decay_wts)
@@ -330,8 +330,7 @@ adjust_stats_for_opponents <- function(player_stats,
         wt_sum <- sum(tm_wts)
         if (wt_sum == 0) return(1.0)
         wt_mean <- sum(prior_mat[tm_idx, j] * tm_wts) / wt_sum
-        shrunk <- (wt_sum * wt_mean + prior_games * league_avg[j]) /
-          (wt_sum + prior_games)
+        shrunk <- .shrink_to_league(wt_sum, wt_mean, league_avg[j], prior_games)
         if (shrunk == 0 || is.na(shrunk) || league_avg[j] == 0) return(1.0)
         raw_factor <- league_avg[j] / shrunk
         min(max(raw_factor, cap[1]), cap[2])
@@ -395,7 +394,7 @@ adjust_stats_for_opponents <- function(player_stats,
 
   # Compute decay weights
   allowed[, days_since := as.numeric(ref_date - match_date_rating)]
-  allowed[, decay_wt := exp(-lambda_decay * days_since)]
+  allowed[, decay_wt := .decay_weight(days_since, lambda_decay)]
 
   # League average (weighted): guard against all-NA or zero weights
   total_wt <- sum(allowed$decay_wt, na.rm = TRUE)
@@ -414,8 +413,7 @@ adjust_stats_for_opponents <- function(player_stats,
     result <- lapply(stat_cols, function(col) {
       raw_wt_mean <- sum(w * get(col)) / sum(w)
       # Shrink toward league average
-      shrunk <- (sum(w) * raw_wt_mean + prior_games * league_avg[[col]]) /
-        (sum(w) + prior_games)
+      shrunk <- .shrink_to_league(sum(w), raw_wt_mean, league_avg[[col]], prior_games)
       shrunk
     })
     stats::setNames(result, stat_cols)

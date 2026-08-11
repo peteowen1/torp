@@ -74,7 +74,7 @@
     }
 
     # Compute decay-weighted average EPV allowed per defending team
-    prior[, decay_wt := exp(-lambda_decay * as.numeric(mdate - game_date))]
+    prior[, decay_wt := .decay_weight(as.numeric(mdate - game_date), lambda_decay)]
 
     # League average (guarded against zero weights)
     total_prior_wt <- sum(prior$decay_wt, na.rm = TRUE)
@@ -91,7 +91,7 @@
         .(epv_allowed_avg = league_avg_val, n_def_games = n_games)
       } else {
         wt_mean <- sum(epv_allowed * decay_wt, na.rm = TRUE) / wt_sum
-        shrunk <- (wt_sum * wt_mean + prior_games * league_avg_val) / (wt_sum + prior_games)
+        shrunk <- .shrink_to_league(wt_sum, wt_mean, league_avg_val, prior_games)
         .(epv_allowed_avg = shrunk, n_def_games = n_games)
       }
     }, by = defending_team]

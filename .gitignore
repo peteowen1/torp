@@ -67,3 +67,6 @@ docs/
 
 # Pipeline run logs (local artifacts, not source)
 data-raw/**/log_*.txt
+
+# testthat writes this on a failing run (incl. deliberate mutation tests)
+tests/testthat/testthat-problems.rds
