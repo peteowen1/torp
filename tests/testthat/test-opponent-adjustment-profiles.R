@@ -1,11 +1,18 @@
 # Characterisation tests for the stat-rating opponent adjustment.
 #
 # `.compute_rolling_stat_profiles()` and `.compute_team_defensive_profiles()`
-# had ZERO test coverage as of 2026-08-11, while their EPV twin
-# (`.compute_rolling_epv_profiles()`) had five. All three implement the same
-# decay-weighted, shrunk-to-league-average team profile over strictly-prior
-# games -- the shrinkage line is duplicated verbatim between
-# `opponent_adjustment.R:333` and `epv_opponent_adjustment.R:94`.
+# had ZERO test coverage as of 2026-08-11. Their EPV twin
+# (`.compute_rolling_epv_profiles()`) nominally had five tests, but on reading
+# them they are all about the 2026-07-27 stale-vintage / all-NA guard, not
+# about shrinkage arithmetic, decay direction or causality. So these are the
+# FIRST arithmetic tests for the whole family, not a catch-up to a
+# well-covered sibling -- an earlier version of this header said otherwise and
+# was wrong.
+#
+# All three implement the same decay-weighted, shrunk-to-league-average team
+# profile over strictly-prior games -- the shrinkage line is duplicated
+# verbatim between `opponent_adjustment.R:333` and
+# `epv_opponent_adjustment.R:94`.
 #
 # These tests exist BEFORE any attempt to share that core. Refactoring an
 # untested function that feeds published stat ratings is the dangerous order;
@@ -138,9 +145,18 @@ test_that("decay makes an older match count for less", {
 
   nf <- stats::setNames(near$disposals_adj_factor, near$team)
   ff <- stats::setNames(far$disposals_adj_factor, far$team)
-  # The old match pulls A's profile one way; ageing it out must move the
-  # factor, and toward the recent match's implication.
-  expect_false(isTRUE(all.equal(nf[["A"]], ff[["A"]])))
+
+  # DIRECTION, not merely difference. An earlier version of this test asserted
+  # only that near != far, which an inverted decay sign (exp(+lambda*days),
+  # older games counting for MORE) would have passed while validating exactly
+  # the wrong behaviour.
+  #
+  # A allowed 50 in the old match and 10 in the recent one. Ageing the old
+  # match out must therefore pull A's allowance DOWN toward 10 -- a stingier
+  # defence -- which RAISES its factor, since factor = league / allowed.
+  expect_gt(ff[["A"]], nf[["A"]])
+  # B is the mirror image and must move the other way.
+  expect_lt(ff[["B"]], nf[["B"]])
 })
 
 # --- .compute_rolling_stat_profiles ------------------------------------------
@@ -202,6 +218,28 @@ test_that("prior_games controls how hard the profile is pulled to the league mea
   )
   h <- heavy[match_id == "M3"]$disposals_adj_factor
   expect_true(all(abs(h - 1) < 0.01))
+})
+
+test_that("the rolling path clamps to the cap too, not just the as-of path", {
+  # The clamp is written out separately in each function. Testing it only on
+  # .compute_team_defensive_profiles() would let a refactor fumble it in the
+  # rolling path and still pass everything.
+  d0 <- as.Date("2026-01-01")
+  dt <- data.table::data.table(
+    match_id = c("M1", "M1", "M2", "M2"),
+    team = c("A", "B", "A", "B"), opponent = c("B", "A", "B", "A"),
+    match_date_rating = c(d0, d0, d0 + 10, d0 + 10),
+    disposals = c(1, 10000, 5, 5)
+  )
+  res <- .compute_rolling_stat_profiles(
+    dt, lambda_decay = 0, rate_sources = .rate_sources,
+    cap = c(0.7, 1.4), prior_games = 0
+  )
+  m2 <- res[match_id == "M2"]
+  expect_gt(nrow(m2), 0)
+  expect_true(all(m2$disposals_adj_factor >= 0.7))
+  expect_true(all(m2$disposals_adj_factor <= 1.4))
+  expect_setequal(m2$disposals_adj_factor, c(0.7, 1.4))
 })
 
 test_that("the rolling and as-of implementations agree on the same prior window", {
