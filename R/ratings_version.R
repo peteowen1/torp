@@ -467,10 +467,12 @@ read_ratings_manifest <- function() {
 #'    `RATING_VINTAGE`, so the label still matches while the maths changed.
 #'
 #' @param strict If TRUE, an unreadable manifest or an undefined canonical
-#'   vintage aborts rather than warning. Defaults to whether
-#'   `VERSEBUS_STRICT` is set, matching every other pipeline entry point's
-#'   convention (versebus §1.5). Production call sites pass `TRUE` explicitly
-#'   regardless of the environment.
+#'   vintage aborts rather than warning. Defaults to `VERSEBUS_STRICT=1` via
+#'   `.strict_mode()`, matching every other pipeline entry point's convention
+#'   (versebus §1.5). Until 2026-08-11 this tested `nzchar()` instead, so it
+#'   was the one site where `VERSEBUS_STRICT="0"` still went strict.
+#'   Production call sites pass `TRUE` explicitly regardless of the
+#'   environment.
 #' @param manifest The ratings manifest to check against. Defaults to
 #'   `read_ratings_manifest()`; injectable so this function's tests run
 #'   offline.
@@ -478,7 +480,7 @@ read_ratings_manifest <- function() {
 #'   `list(aligned = NA)` / `list(aligned = NA, canonical = canon)` when a
 #'   non-strict run grandfathers a gap it could not verify.
 #' @keywords internal
-check_vintage_alignment <- function(strict = nzchar(Sys.getenv("VERSEBUS_STRICT")),
+check_vintage_alignment <- function(strict = .strict_mode(),
                                     manifest = read_ratings_manifest()) {
   branch <- Sys.getenv("GITHUB_REF_NAME", "local")
 

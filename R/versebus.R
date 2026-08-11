@@ -398,7 +398,10 @@ vb_read_prev_manifest <- function(repo, tag) {
 #' propagates and the caller must opt in to "serve stale + warn" explicitly.
 #' @param manifest pass a manifest to verify sha256; NULL fetches it
 #'   (legacy mode when the tag has none)
-#' @param require_manifest TRUE in CI/strict mode (VERSEBUS_STRICT=1)
+#' @param require_manifest TRUE in CI/strict mode (VERSEBUS_STRICT=1). torp has
+#'   a `.strict_mode()` helper owning this parse rule, but this file is vendored
+#'   into torpmodels and guarded function-by-function by `test-versebus-sync.R`,
+#'   so the check stays inline here until the sibling copy gains the helper too.
 #' @param max_age optional difftime; manifest older than this raises
 #'   `vb_error_stale`
 #' @keywords internal

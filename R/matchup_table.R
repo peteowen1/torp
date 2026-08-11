@@ -20,7 +20,7 @@
 #      visitor-perspective) rows against that frozen snapshot, recomputing
 #      only venue-dependent features (log_dist, familiarity) per row.
 #   4. .predict_match_model() replicates run_predictions_pipeline()'s exact
-#      predict-time sequence (GAM chain -> XGBoost chain -> 50/50 blend ->
+#      predict-time sequence (GAM chain -> XGBoost chain -> Input Blend ->
 #      GAM win head fed the blended margin -> margin recalibration) on that
 #      newdata, using the models fitted in step 1.
 #   5. build_matchup_table() averages the host/visitor perspectives exactly
@@ -35,6 +35,12 @@
 # pre-upload core was judged riskier than this bounded duplication. If
 # run_predictions_pipeline() gains a shared core helper later, this file
 # should be the first caller migrated onto it.
+#
+# 2026-08-11: two pieces of that duplication have already been retired -- the
+# per-week roster aggregation is now the shared .build_week_ratings()
+# (match_data_prep.R) and the blend is the shared .blend_gam_xgb()
+# (match_model.R). What remains duplicated in .freeze_match_state() is the
+# load/feature/injury-overlay sequence itself.
 
 # .gf_anchor_date ----
 
@@ -174,35 +180,11 @@
     tr$return_round <- NA_real_
   }
 
-  .build_week_ratings <- function(tr_data, w) {
-    weeks_ahead <- max(w - min(target_weeks), 0)
-    discount <- max(INJURY_KNOWN_DISCOUNT - 0.01 * weeks_ahead, INJURY_DISCOUNT_FLOOR)
-
-    tr_data |>
-      dplyr::filter(
-        !is.na(epr),
-        is.na(injury) | (!is.na(return_round) & return_round <= w)
-      ) |>
-      dplyr::mutate(team_name = team) |>
-      dplyr::group_by(team_name, season, round) |>
-      dplyr::mutate(
-        n_players = dplyr::n(),
-        team_tog_sum = sum(pred_tog, na.rm = TRUE),
-        tog_wt = dplyr::if_else(team_tog_sum > 0, pred_tog * 18 / team_tog_sum, 18 / n_players)
-      ) |>
-      dplyr::summarise(
-        epr_week = sum(epr * tog_wt, na.rm = TRUE) * discount,
-        epr_recv_week = sum(epr_recv * tog_wt, na.rm = TRUE) * discount,
-        epr_disp_week = sum(epr_disp * tog_wt, na.rm = TRUE) * discount,
-        epr_spoil_week = sum(epr_spoil * tog_wt, na.rm = TRUE) * discount,
-        epr_hitout_week = sum(epr_hitout * tog_wt, na.rm = TRUE) * discount,
-        psr_week = sum(psr * tog_wt, na.rm = TRUE) * discount,
-        .groups = "drop"
-      ) |>
-      dplyr::mutate(round = w)
-  }
-
-  tr_week <- purrr::map_dfr(target_weeks, function(w) .build_week_ratings(tr, w))
+  # Shared with run_predictions_pipeline() -- see .build_week_ratings() in
+  # match_data_prep.R.
+  tr_week <- purrr::map_dfr(
+    target_weeks, function(w) .build_week_ratings(tr, w, target_weeks)
+  )
 
   team_rt_fix_df <- team_rt_fix_df |>
     dplyr::left_join(tr_week, by = c("team_name" = "team_name", "season" = "season", "round_number" = "round")) |>
@@ -603,8 +585,8 @@
     s4_cols <- c(base_cols, "xgb_pred_xscore_diff", "xgb_pred_conv_diff", "xgb_pred_tot_xscore")
     df$xgb_pred_score_diff <- .xgb_predict(xgb_models$score_diff, s4_cols)
 
-    df$pred_tot_xscore <- 0.5 * df$gam_pred_tot_xscore + 0.5 * df$xgb_pred_tot_xscore
-    df$pred_score_diff <- 0.5 * df$gam_pred_score_diff + 0.5 * df$xgb_pred_score_diff
+    df$pred_tot_xscore <- .blend_gam_xgb(df$gam_pred_tot_xscore, df$xgb_pred_tot_xscore)
+    df$pred_score_diff <- .blend_gam_xgb(df$gam_pred_score_diff, df$xgb_pred_score_diff)
   } else {
     df$pred_tot_xscore <- df$gam_pred_tot_xscore
     df$pred_score_diff <- df$gam_pred_score_diff

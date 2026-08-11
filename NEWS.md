@@ -105,6 +105,19 @@
 
 ## Bug Fixes
 
+* **`VERSEBUS_STRICT="0"` no longer goes strict at exactly one call site.**
+  `check_vintage_alignment()` tested `nzchar(Sys.getenv("VERSEBUS_STRICT"))`
+  while the other four sites tested `== "1"`, so any non-empty value — `"0"`,
+  `"false"` — aborted there and stayed lenient everywhere else, despite that
+  function's own roxygen claiming it matched "every other pipeline entry
+  point's convention". Nothing in this repo or torpdata ever set the variable
+  to anything but `"1"`, so no production run was affected; the divergence was
+  live but unexercised. The parse rule now lives once in `.strict_mode()`
+  (`R/load_utils.R`) and the four torp-local sites call it. `R/versebus.R`
+  deliberately keeps its inline copy: that file is vendored into torpmodels and
+  guarded function-by-function by `test-versebus-sync.R`, so it cannot call a
+  torp-local helper until the sibling copy has one.
+
 * **`vb_publish()` retries its post-upload verify instead of failing on a listing
   race.** Ported from panna (`39e413c`/`387ea96`/`6ddff96`), where a 6-byte mismatch on
   `predictions.parquet` resolved within 2s — a pure listing race, not corruption — and a
@@ -208,6 +221,31 @@
   help. The guards check *completeness*, not mere presence -- `players` is a count, so
   a partially published sheet yields a small non-`NA` number that a presence-only
   check would miss (`MIN_PLAUSIBLE_LINEUP`).
+
+## Chores
+
+* **The GAM/XGBoost Input Blend is defined once.** The `0.5 * gam + 0.5 * xgb`
+  arithmetic was written out at three call sites — `run_predictions_pipeline()`,
+  `fit_match_margin_calibration()` and `build_matchup_table()` — so the
+  calibration sidecar that gates what gets served, and the matchup table that
+  prices finals for the blog, were each scoring a *copy* of production rather
+  than production. Now `.blend_gam_xgb()` (`R/match_model.R`) with the weight in
+  `MATCH_BLEND_WEIGHT` (`R/constants_match.R`). Output-neutral: `1 - 0.5` is
+  exact, and a test asserts bit-identity against the literal it replaced.
+
+* **`.build_week_ratings()` is defined once.** It was pasted verbatim into
+  `match_model.R` and `matchup_table.R` — the two copies differed only in a line
+  wrap — so a new EPR channel or a changed injury discount had to be edited
+  twice or the blog's matchup table would silently disagree with the published
+  predictions. Now one internal function in `R/match_data_prep.R`, alongside its
+  lineup-based sibling `.build_team_ratings_df()`, taking `target_weeks`
+  explicitly instead of capturing it from the enclosing frame.
+
+* **Three drift guards added** (`test-shared-match-helpers.R`) so the copies
+  stay gone: no `R/` file may re-parse `VERSEBUS_STRICT`, write the blend
+  arithmetic inline, or define `.build_week_ratings()` a second time. Local-dev
+  only, same as `test-versebus-sync.R` — `R CMD check` runs against an installed
+  package with no `R/` tree beside it, so they skip there.
 
 ## New Features
 

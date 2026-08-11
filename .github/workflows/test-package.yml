@@ -148,10 +148,18 @@ jobs:
           }, envir = ns)
           lockBinding("merge_coverage.character", ns)
 
+          # clean = FALSE is load-bearing, not laziness. With clean = TRUE,
+          # package_coverage() deletes install_path on the way out -- including
+          # testthat.Rout.fail -- so the "Show testthat output" step below found
+          # nothing and printed `find: ... No such file or directory`. Four
+          # coverage failures between 2026-08-09 and 2026-08-11 reported only
+          # "Failure in .../testthat.Rout.fail" with the file already gone, which
+          # is why none of them was ever diagnosed. The runner is discarded after
+          # the job, so nothing needs cleaning up.
           cov <- covr::package_coverage(
             type = "tests",
             quiet = FALSE,
-            clean = TRUE,
+            clean = FALSE,
             install_path = file.path(Sys.getenv("RUNNER_TEMP"), "package")
           )
           covr::codecov(coverage = cov, quiet = FALSE)

@@ -11,7 +11,11 @@ powershell.exe -Command 'Rscript "path/to/script.R"'
 
 ## Code Organization
 
-141 exports across ~65 R files. Grouped by domain:
+The package is large; `R/` and `NAMESPACE` give the current file and export
+counts, so they are deliberately not stated here — the figures that used to be
+("141 exports across ~65 R files") had drifted to 158 and 77.
+
+What `ls R/` does not give you is which files belong together. Grouped by domain:
 
 | Domain | Key files | Purpose |
 |--------|-----------|---------|

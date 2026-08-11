@@ -574,7 +574,7 @@ file_reader <- function(file_name, release_tag) {
                              fetch_all_fn = NULL,
                              use_disk_cache = FALSE,
                              refresh = FALSE,
-                             strict = isTRUE(Sys.getenv("VERSEBUS_STRICT") == "1")) {
+                             strict = .strict_mode()) {
   cache_key <- paste0(cache_prefix, "_", paste(sort(seasons), collapse = "_"))
 
   # Force refresh: clear in-memory and disk caches

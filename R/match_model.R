@@ -3,6 +3,27 @@
 # Convenience wrappers and the full predictions pipeline.
 # Data prep helpers are in match_data_prep.R; training in match_train.R.
 
+# .blend_gam_xgb ----
+
+#' The GAM/XGBoost Input Blend
+#'
+#' One definition of the blend that produces every published match prediction.
+#' Called by `run_predictions_pipeline()` (this file),
+#' `fit_match_margin_calibration()` (match_calibration.R) and
+#' `build_matchup_table()` (matchup_table.R) -- before 2026-08-11 each wrote the
+#' arithmetic out itself, so the sidecar that gates releases and the table that
+#' prices finals for the blog scored a copy of production rather than
+#' production.
+#'
+#' @param gam_pred,xgb_pred Numeric vectors of equal length.
+#' @param weight GAM weight; the XGBoost weight is `1 - weight`.
+#' @return Numeric vector, the blended prediction.
+#' @keywords internal
+.blend_gam_xgb <- function(gam_pred, xgb_pred, weight = MATCH_BLEND_WEIGHT) {
+  weight * gam_pred + (1 - weight) * xgb_pred
+}
+
+
 # build_team_mdl_df (convenience wrapper) ----
 
 #' Build complete match model dataset end-to-end
@@ -569,7 +590,7 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
   # cli_progress_done() is REQUIRED here: cli progress steps auto-close only
   # when a sibling progress_step starts in the same frame OR the frame exits.
   # The match_train.R progress_steps live in nested function frames, so they
-  # don't supersede this one — without an explicit done(), this spinner stays
+  # don't supersede this one -- without an explicit done(), this spinner stays
   # alive for the entire pipeline and its line state interleaves with later
   # cli_inform() prints (you see "from AFL API" smeared into other messages).
   tryCatch({
@@ -701,7 +722,7 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
     cli::cli_inform("Pipeline aborted after {round(elapsed, 1)}s")
     return(invisible(NULL))
   }
-  # torp_ratings() already joins injuries — drop those columns before re-joining
+  # torp_ratings() already joins injuries -- drop those columns before re-joining
   # with the pipeline's own injury data (which includes return_round parsing)
   tr[c("injury", "estimated_return")] <- NULL
   tr <- match_injuries(tr, inj_df)
@@ -734,40 +755,12 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
     tr$return_round <- NA_real_
   }
 
-  # Build per-week roster ratings: only exclude players still injured for
-  # that week (return_round > week). Players returning by the target week
-  # are included. Discount scales with prediction horizon (0.99 for next
-  # week, dropping 0.01 per week, floor 0.90).
-  .build_week_ratings <- function(tr_data, w) {
-    weeks_ahead <- max(w - min(target_weeks), 0)
-    discount <- max(INJURY_KNOWN_DISCOUNT - 0.01 * weeks_ahead,
-                    INJURY_DISCOUNT_FLOOR)
-
-    tr_data |>
-      dplyr::filter(
-        !is.na(epr),
-        is.na(injury) | (!is.na(return_round) & return_round <= w)
-      ) |>
-      dplyr::mutate(team_name = team) |>
-      dplyr::group_by(team_name, season, round) |>
-      dplyr::mutate(
-        n_players = dplyr::n(),
-        team_tog_sum = sum(pred_tog, na.rm = TRUE),
-        tog_wt = dplyr::if_else(team_tog_sum > 0, pred_tog * 18 / team_tog_sum, 18 / n_players)
-      ) |>
-      dplyr::summarise(
-        epr_week = sum(epr * tog_wt, na.rm = TRUE) * discount,
-        epr_recv_week = sum(epr_recv * tog_wt, na.rm = TRUE) * discount,
-        epr_disp_week = sum(epr_disp * tog_wt, na.rm = TRUE) * discount,
-        epr_spoil_week = sum(epr_spoil * tog_wt, na.rm = TRUE) * discount,
-        epr_hitout_week = sum(epr_hitout * tog_wt, na.rm = TRUE) * discount,
-        psr_week = sum(psr * tog_wt, na.rm = TRUE) * discount,
-        .groups = "drop"
-      ) |>
-      dplyr::mutate(round = w)
-  }
-
-  tr_week <- purrr::map_dfr(target_weeks, function(w) .build_week_ratings(tr, w)) |>
+  # Per-week roster ratings -- see .build_week_ratings() in match_data_prep.R
+  # for the injury/discount/TOG rules. build_matchup_table() calls the same
+  # function, so the two cannot drift.
+  tr_week <- purrr::map_dfr(
+    target_weeks, function(w) .build_week_ratings(tr, w, target_weeks)
+  ) |>
     dplyr::arrange(-epr_week)
 
   # Overlay injury-adjusted ratings
@@ -826,12 +819,15 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
   # used). Kept outside tryCatch so GAM predict failures are not misattributed
   # to XGBoost and data is never left in a half-blended state.
   if (!is.null(xgb_result)) {
-    team_mdl_df$pred_tot_xscore  <- 0.5 * team_mdl_df$gam_pred_tot_xscore  +
-      0.5 * team_mdl_df$xgb_pred_tot_xscore
-    team_mdl_df$pred_xscore_diff <- 0.5 * team_mdl_df$gam_pred_xscore_diff +
-      0.5 * team_mdl_df$xgb_pred_xscore_diff
-    team_mdl_df$pred_score_diff  <- 0.5 * team_mdl_df$gam_pred_score_diff  +
-      0.5 * team_mdl_df$xgb_pred_score_diff
+    team_mdl_df$pred_tot_xscore  <- .blend_gam_xgb(
+      team_mdl_df$gam_pred_tot_xscore,  team_mdl_df$xgb_pred_tot_xscore
+    )
+    team_mdl_df$pred_xscore_diff <- .blend_gam_xgb(
+      team_mdl_df$gam_pred_xscore_diff, team_mdl_df$xgb_pred_xscore_diff
+    )
+    team_mdl_df$pred_score_diff  <- .blend_gam_xgb(
+      team_mdl_df$gam_pred_score_diff,  team_mdl_df$xgb_pred_score_diff
+    )
     team_mdl_df$pred_win <- predict(
       gam_result$models$win, newdata = team_mdl_df, type = "response"
     )

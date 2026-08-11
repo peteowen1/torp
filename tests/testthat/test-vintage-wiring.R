@@ -293,14 +293,19 @@ test_that("manifest is injectable, defaulting to read_ratings_manifest()", {
   expect_equal(deparse(formals(check_vintage_alignment)$manifest), "read_ratings_manifest()")
 })
 
-test_that("strict defaults to whether VERSEBUS_STRICT is set", {
+test_that("strict defaults to VERSEBUS_STRICT=1, like every other call site", {
   # eval() here is safe: the expression being evaluated is the function's own
-  # formal default (`nzchar(Sys.getenv("VERSEBUS_STRICT"))`), read from the
-  # loaded package's static source via formals() -- not external/user input.
+  # formal default (`.strict_mode()`), read from the loaded package's static
+  # source via formals() -- not external/user input.
   withr::with_envvar(c(VERSEBUS_STRICT = "1"), {
     expect_true(eval(formals(check_vintage_alignment)$strict))
   })
   withr::with_envvar(c(VERSEBUS_STRICT = ""), {
+    expect_false(eval(formals(check_vintage_alignment)$strict))
+  })
+  # Regression, 2026-08-11: this default tested nzchar(), so "0" -- which the
+  # four other call sites read as lenient -- went STRICT here alone.
+  withr::with_envvar(c(VERSEBUS_STRICT = "0"), {
     expect_false(eval(formals(check_vintage_alignment)$strict))
   })
 })

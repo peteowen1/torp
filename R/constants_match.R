@@ -43,6 +43,18 @@ FIELD_ZONE_SCORING_80 <- 80
 # Match Model Constants
 # ---------------------
 
+#' GAM weight in the GAM/XGBoost Input Blend
+#'
+#' The published match prediction is `w * gam_pred + (1 - w) * xgb_pred` for
+#' each of `tot_xscore`, `xscore_diff` and `score_diff`. Until 2026-08-11 the
+#' `0.5` was a literal at three separate call sites -- `run_predictions_pipeline()`,
+#' `fit_match_margin_calibration()` and `build_matchup_table()` -- so the
+#' calibration sidecar that gates releases and the matchup table that prices
+#' finals for the blog were each scoring a copy of production rather than
+#' production itself.
+#' @keywords internal
+MATCH_BLEND_WEIGHT <- 0.5
+
 #' Phase groupings for match model position columns
 #' Maps lineup_position to broad phase categories
 #' @keywords internal

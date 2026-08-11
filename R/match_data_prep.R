@@ -75,6 +75,60 @@
 }
 
 
+# .build_week_ratings ----
+
+#' Build per-week roster ratings for one target week
+#'
+#' Roster-based counterpart to [.build_team_ratings_df()], which is
+#' lineup-based. Only excludes players still injured for that week
+#' (`return_round > w`); players returning by the target week are included.
+#' The discount scales with prediction horizon (0.99 for the nearest week,
+#' dropping 0.01 per week, floored at `INJURY_DISCOUNT_FLOOR`).
+#'
+#' Single copy of an aggregation that until 2026-08-11 was pasted verbatim into
+#' both `run_predictions_pipeline()` (match_model.R) and
+#' `build_matchup_table()` (matchup_table.R) -- the two differed only in a line
+#' wrap, so a new EPR channel or a changed TOG scaling had to be edited twice or
+#' the blog's matchup table would silently disagree with the published
+#' predictions.
+#'
+#' @param tr_data Roster ratings with `epr*`, `psr`, `pred_tog`, `injury` and
+#'   `return_round` columns.
+#' @param w Target week (round number) to build ratings for.
+#' @param target_weeks All weeks being predicted; the horizon discount is
+#'   measured from `min(target_weeks)`.
+#' @return One row per (team_name, season), with `round` set to `w`.
+#' @keywords internal
+.build_week_ratings <- function(tr_data, w, target_weeks) {
+  weeks_ahead <- max(w - min(target_weeks), 0)
+  discount <- max(INJURY_KNOWN_DISCOUNT - 0.01 * weeks_ahead,
+                  INJURY_DISCOUNT_FLOOR)
+
+  tr_data |>
+    dplyr::filter(
+      !is.na(epr),
+      is.na(injury) | (!is.na(return_round) & return_round <= w)
+    ) |>
+    dplyr::mutate(team_name = team) |>
+    dplyr::group_by(team_name, season, round) |>
+    dplyr::mutate(
+      n_players = dplyr::n(),
+      team_tog_sum = sum(pred_tog, na.rm = TRUE),
+      tog_wt = dplyr::if_else(team_tog_sum > 0, pred_tog * 18 / team_tog_sum, 18 / n_players)
+    ) |>
+    dplyr::summarise(
+      epr_week = sum(epr * tog_wt, na.rm = TRUE) * discount,
+      epr_recv_week = sum(epr_recv * tog_wt, na.rm = TRUE) * discount,
+      epr_disp_week = sum(epr_disp * tog_wt, na.rm = TRUE) * discount,
+      epr_spoil_week = sum(epr_spoil * tog_wt, na.rm = TRUE) * discount,
+      epr_hitout_week = sum(epr_hitout * tog_wt, na.rm = TRUE) * discount,
+      psr_week = sum(psr * tog_wt, na.rm = TRUE) * discount,
+      .groups = "drop"
+    ) |>
+    dplyr::mutate(round = w)
+}
+
+
 # .build_team_ratings_df ----
 
 #' Build team-level ratings from lineups
