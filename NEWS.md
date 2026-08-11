@@ -21,7 +21,23 @@
 
   `refresh_results` exists because publishing the season's results to the
   `results-data` release is the one side effect that lives inside the state
-  half. Production keeps it; a read-only caller passes `FALSE`.
+  half. Production keeps it; a read-only caller passes `FALSE`. Note what
+  `FALSE` costs: `results` feeds GAM training, so a read-only build trains on
+  whatever the release already held, silently.
+
+  **One bug the move introduced, found in pre-PR review and fixed before
+  merge, because it is the exact blind spot of a diff-based proof.** The state
+  half has a *third* exit: when there are no TORP ratings for the target week
+  yet — pre-season, or fixtures not published — it returns `NULL`. That used
+  to end the whole pipeline. After the split it only ended the builder, and
+  the wrapper unpacked `state$…` from `NULL` without checking. `NULL$anything`
+  is `NULL` and `length(NULL) == 0`, so the validation gate was bypassed and
+  execution reached the upload and died on `NULL |> dplyr::ungroup()` — an
+  unhandled crash replacing a clean, expected no-op, on the scheduled
+  workflow's direct call. The guard is one line; the lesson is that a
+  line-diff of relocated code cannot see a *missing* guard at the new seam,
+  so the regression test mocks the builder and asserts the wrapper exits
+  cleanly and publishes nothing.
 
 * **Four tests on the new seam**, including a contract guard for the failure
   mode this refactor actually risks: the uploader reading a `state$` field the

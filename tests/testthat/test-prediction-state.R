@@ -7,9 +7,36 @@
 # uploader reaching for a piece of state the builder forgot to hand back,
 # which today would surface as "object not found" in production.
 
-# NOTE: nothing in this file calls build_prediction_state(). It hits the AFL
-# API, the torpdata releases, and publishes the season's results -- running it
-# from a test would upload.
+# NOTE: nothing in this file calls build_prediction_state() for real. It hits
+# the AFL API, the torpdata releases, and publishes the season's results --
+# running it from a test would upload. Where the seam itself needs exercising,
+# build_prediction_state() is MOCKED, which is far cheaper than stubbing the
+# ten loaders underneath it and targets the contract rather than the plumbing.
+
+test_that("a NULL state returns cleanly instead of falling into the upload", {
+  # Regression, caught in pre-PR review of the split. build_prediction_state()
+  # returns invisible(NULL) when there are no TORP ratings for the target week
+  # (pre-season, or fixtures not published) -- an expected, recurring no-op
+  # that the scheduled workflow hits with no upstream guard.
+  #
+  # Before the fix the wrapper unpacked `state$x` from NULL without checking.
+  # NULL$anything is NULL and length(NULL) == 0, so the validation gate was
+  # bypassed and execution reached `week_gms |> dplyr::ungroup()` and died --
+  # an unhandled crash replacing a clean exit, with the real cause already
+  # printed and scrolled past.
+  published <- FALSE
+  testthat::local_mocked_bindings(
+    build_prediction_state = function(...) invisible(NULL),
+    save_to_release = function(...) {
+      published <<- TRUE
+      invisible(NULL)
+    }
+  )
+
+  expect_no_error(res <- run_predictions_pipeline(week = 1, season = 2026))
+  expect_null(res)
+  expect_false(published)
+})
 
 test_that("production behaviour is unchanged: refresh_results defaults to TRUE", {
   # The one side effect inside the state half is the results refresh, which
@@ -32,6 +59,12 @@ test_that("every piece of state the uploader reads is one the builder returns", 
   src <- .r_source_lines("match_model.R")
   skip_if(is.null(src), "R/ source tree not present (installed build)")
 
+  # Scan CODE, not prose. Comments legitimately mention `state$x` when
+  # explaining the seam, and counting those as real reads made this test fail
+  # on a comment -- which is a false positive, i.e. exactly the kind of noise
+  # that gets a guard deleted.
+  code_only <- src[!grepl("^\\s*#", src)]
+
   # What the builder promises: the names in the .prediction_state() list.
   ctor_start <- grep("^\\s*\\.prediction_state <- function", src)
   expect_length(ctor_start, 1)
@@ -41,9 +74,9 @@ test_that("every piece of state the uploader reads is one the builder returns", 
   provided <- provided[nzchar(provided)]
   expect_true(length(provided) >= 8)
 
-  # What the uploader consumes: every `state$x` in the file.
+  # What the uploader consumes: every `state$<field>` in the code.
   consumed <- unique(gsub(".*state\\$([A-Za-z_.]+).*", "\\1",
-                          grep("state\\$[A-Za-z_.]+", src, value = TRUE)))
+                          grep("state\\$[A-Za-z_.]+", code_only, value = TRUE)))
   consumed <- consumed[nzchar(consumed)]
   expect_true(length(consumed) >= 3)
 

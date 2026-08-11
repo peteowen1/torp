@@ -21,14 +21,24 @@ build_prediction_state(
 \item{refresh_results}{If TRUE (production default), refresh the season's
 results from the AFL API and publish them to the \code{results-data} release
 before building. This is the ONE side effect inside the state half; pass
-FALSE for a read-only build.}
+FALSE for a read-only build. \strong{Note what FALSE costs:} \code{results} feeds
+\code{.build_team_mdl_df()} and therefore GAM training, so a read-only build
+trains on whatever the release already held, with nothing at runtime
+saying it was stale. Fine for a same-day dry run, wrong for anything
+whose numbers get compared against production.}
 }
 \value{
 A list with \code{season}, \code{target_weeks}, \code{is_backfill}, \code{all_preds},
 \code{week_gms}, \code{team_mdl_df}, \code{gam_result}, \code{xgb_result},
-\code{validation_errors} and \code{pipeline_start}. \code{validation_errors} is
-non-empty only on an interactive run; a non-interactive run aborts
-instead, exactly as the pipeline did before the split.
+\code{validation_errors} and \code{pipeline_start} — \strong{or \code{NULL}} when there is
+nothing to predict (no TORP ratings for the target week yet: pre-season,
+or fixtures not published). Callers MUST handle the \code{NULL};
+\code{NULL$anything} is \code{NULL} in R, so an unchecked caller reads every field
+as empty and fails much later somewhere unrelated.
+
+\code{validation_errors} is non-empty only on an interactive run; a
+non-interactive run aborts instead, exactly as the pipeline did before
+the split.
 }
 \description{
 The whole of \code{run_predictions_pipeline()} except the uploads: loads data,

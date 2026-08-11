@@ -573,12 +573,22 @@ get_lineup_ratings <- function(season = NULL, round = NULL, match_id = NULL) {
 #' @param refresh_results If TRUE (production default), refresh the season's
 #'   results from the AFL API and publish them to the `results-data` release
 #'   before building. This is the ONE side effect inside the state half; pass
-#'   FALSE for a read-only build.
+#'   FALSE for a read-only build. **Note what FALSE costs:** `results` feeds
+#'   `.build_team_mdl_df()` and therefore GAM training, so a read-only build
+#'   trains on whatever the release already held, with nothing at runtime
+#'   saying it was stale. Fine for a same-day dry run, wrong for anything
+#'   whose numbers get compared against production.
 #' @return A list with `season`, `target_weeks`, `is_backfill`, `all_preds`,
 #'   `week_gms`, `team_mdl_df`, `gam_result`, `xgb_result`,
-#'   `validation_errors` and `pipeline_start`. `validation_errors` is
-#'   non-empty only on an interactive run; a non-interactive run aborts
-#'   instead, exactly as the pipeline did before the split.
+#'   `validation_errors` and `pipeline_start` — **or `NULL`** when there is
+#'   nothing to predict (no TORP ratings for the target week yet: pre-season,
+#'   or fixtures not published). Callers MUST handle the `NULL`;
+#'   `NULL$anything` is `NULL` in R, so an unchecked caller reads every field
+#'   as empty and fails much later somewhere unrelated.
+#'
+#'   `validation_errors` is non-empty only on an interactive run; a
+#'   non-interactive run aborts instead, exactly as the pipeline did before
+#'   the split.
 #' @keywords internal
 build_prediction_state <- function(week = NULL, weeks = NULL, season = NULL,
                                    refresh_results = TRUE) {
@@ -960,6 +970,16 @@ build_prediction_state <- function(week = NULL, weeks = NULL, season = NULL,
 run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
 
   state <- build_prediction_state(week = week, weeks = weeks, season = season)
+
+  # NULL means there was nothing to predict -- no TORP ratings for the target
+  # week yet (pre-season, or fixtures not published). Before the state/upload
+  # split this was a bare `return(invisible(NULL))` from the middle of one
+  # function; now it has to cross a seam, and without this check `state$x`
+  # silently yields NULL for every field (NULL$anything is NULL, and
+  # length(NULL) == 0 slips past the validation gate below) until the upload
+  # half dies on `NULL |> dplyr::ungroup()` -- an unhandled crash in place of a
+  # clean, expected no-op, with the real cause already scrolled past.
+  if (is.null(state)) return(invisible(NULL))
 
   season         <- state$season
   target_weeks   <- state$target_weeks
