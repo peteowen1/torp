@@ -123,7 +123,7 @@ get_player_game_ratings <- function(match = NULL,
   # kept an `!all(scale == 1)` fall-through that had already been removed as a
   # bug from the copy in player_credit.R.
   .ch <- c("epv_recv_adj", "epv_disp_adj", "epv_spoil_adj", "epv_hitout_adj")
-  if (.use_per_channel_scale(attr(player_epv, "epv_engine"))) {
+  if (.use_per_channel_scale(.frame_epv_engine(player_epv, "player EPV frame"))) {
     for (cc in .ch) {
       k <- EPV3_POINTS_SCALE[[EPV_CHANNEL_SCALE_KEYS[[sub("_adj$", "", cc)]]]]
       if (is.finite(k)) player_epv[, (cc) := get(cc) * k]
