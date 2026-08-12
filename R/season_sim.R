@@ -97,9 +97,17 @@ prepare_sim_data <- function(season, team_ratings = NULL, fixtures = NULL,
 
   # --- Team Ratings ---
   # When injuries are provided, build from player-level ratings so we can
-
   # exclude specific injured players. Otherwise use pre-computed team ratings.
-  use_injury_aware <- !is.null(injuries) && nrow(injuries) > 0
+  #
+  # isTRUE(), and isFALSE() handled explicitly: nrow() returns NULL for
+  # anything that is not a data.frame or matrix, so `injuries = FALSE` -- the
+  # documented way to say "no injury adjustment", which simulate_afl_season()
+  # accepts -- made this expression NA and killed the function on `if (NA)`
+  # with a message naming neither injuries nor the argument. Only
+  # simulate_afl_season() normalising FALSE to NULL before calling kept it off
+  # the front door.
+  if (isFALSE(injuries)) injuries <- NULL
+  use_injury_aware <- isTRUE(is.data.frame(injuries) && nrow(injuries) > 0)
 
   if (is.null(team_ratings)) {
     sim_teams <- NULL
@@ -107,25 +115,32 @@ prepare_sim_data <- function(season, team_ratings = NULL, fixtures = NULL,
     # When injuries provided, skip pre-computed team ratings and go straight
     # to player-level ratings so injured players can be excluded
     if (!use_injury_aware) {
-      # Try pre-computed team ratings first.
+      # Pre-computed team ratings are the PREFERRED estimator, and as of
+      # 2026-08-12 they are reachable again. Between the metric-first rename
+      # (28a42a82) and that date this branch was dead: the release carries
+      # `team_epr`, the lookup asked only for team_torp/torp, and
+      # as.numeric(NULL) yields a 0-row table rather than an error -- so a
+      # successful load was indistinguishable from no data and every
+      # simulation silently used the player-TORP fallback instead.
       #
-      # !! This branch is currently DEAD IN PRODUCTION and the fallback below
-      # is the only path that ever runs. run_ratings_pipeline.R publishes
-      # team_ratings.parquet with `team_epr` (since the metric-first rename,
-      # 28a42a82); the torp_col lookup below still asks for team_torp/torp,
-      # load_team_ratings() does not rename columns, and `as.numeric(NULL)`
-      # builds a 0-row table rather than erroring -- so sim_teams comes back
-      # empty on a perfectly successful load. Confirmed by running it.
+      # Preferred on measurement, not preference. simulate.R adds
+      # (home_torp - away_torp) to the margin with NO coefficient, so the
+      # regression slope of actual margin on the rating diff IS the
+      # calibration, and 1.0 is correct. Over 1,204 matches, 2021-2026:
       #
-      # NOT silently repaired here, because the two paths are not the same
-      # measurement: this one reads a team-level rating directly, the fallback
-      # sums ~18 players' TORP and applies a discount. Making the lookup work
-      # would change every published simulation's rating scale, which is a
-      # decision about the numbers, not a bug fix. Until it is made, the guard
-      # below at least stops the switch being invisible.
+      #   team_epr     slope 1.070  95% CI [0.970, 1.170]   MAE 27.06  67.9% tips
+      #   player TORP  slope 1.173  95% CI [1.066, 1.281]   MAE 26.91  67.8% tips
       #
-      # Say so when the load itself fails, too. The cli_alert_info further down
-      # announces the fallback as if it were a normal branch choice.
+      # The fallback's CI excludes 1.0: it understates margins by ~17%, which
+      # in a season sim compresses every projected ladder and understates
+      # top-4/finals separation. team_epr cannot be distinguished from
+      # correctly scaled. What the fallback wins -- 0.15 MAE, 0.008 R2, tips
+      # level -- is about ordering, which the sim barely uses.
+      #
+      # Neither is properly calibrated (per-season slopes run 0.78-1.27), so a
+      # scaling coefficient is the real fix; this is the improvement available
+      # without one. Switching widened simulated margins ~19% and moved 4 of 18
+      # teams more than 2 ladder places.
       tr <- tryCatch(load_team_ratings(), error = function(e) {
         cli::cli_alert_warning(
           "Could not load pre-computed team ratings ({conditionMessage(e)}) -- falling back to player TORP, which is a DIFFERENT estimator.")
@@ -139,14 +154,19 @@ prepare_sim_data <- function(season, team_ratings = NULL, fixtures = NULL,
           if (nrow(tr_dt) > 0) {
             max_round <- max(tr_dt$round, na.rm = TRUE)
             tr_dt <- tr_dt[round == max_round]
-            torp_col <- if ("team_torp" %in% names(tr_dt)) "team_torp" else "torp"
-            team_col <- if ("team" %in% names(tr_dt)) "team" else "team_name"
-            # Name the mismatch instead of letting as.numeric(NULL) turn a
-            # successful load into an empty frame that reads as "no data".
-            if (!torp_col %in% names(tr_dt)) {
-              cli::cli_alert_warning(c(
-                "Team ratings loaded fine but carry no {.field {torp_col}} column (found: {.field {setdiff(names(tr_dt), c('season', 'round', 'team'))}}) -- this branch cannot use them."
-              ))
+            # team_epr FIRST: it is what run_ratings_pipeline.R actually
+            # publishes since the metric-first rename (28a42a82). The two older
+            # names are kept for hand-passed or pre-rename frames. Asking only
+            # for team_torp/torp is what made this whole branch dead code --
+            # as.numeric(NULL) builds a 0-row table instead of erroring, so a
+            # successful load looked exactly like no data and every simulation
+            # silently took the player-TORP fallback below.
+            torp_col <- .resolve_col(tr_dt, c("team_epr", "team_torp", "torp"))
+            team_col <- .resolve_col(tr_dt, c("team", "team_name"))
+            # Name the mismatch rather than letting it look like "no data".
+            if (is.null(torp_col) || is.null(team_col)) {
+              cli::cli_alert_warning(
+                "Team ratings loaded fine but carry no usable rating/team column (found: {.field {names(tr_dt)}}) -- falling back to player TORP.")
               sim_teams <- NULL
             } else {
               sim_teams <- data.table::data.table(

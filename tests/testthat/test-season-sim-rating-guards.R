@@ -38,6 +38,49 @@
   )
 }
 
+test_that("the team-ratings branch reads team_epr, the column actually published", {
+  # This branch was dead from the metric-first rename (28a42a82) until
+  # 2026-08-12. run_ratings_pipeline.R publishes `team_epr`; the lookup asked
+  # only for team_torp/torp; load_team_ratings() does not rename columns; and
+  # as.numeric(NULL) yields a 0-row table rather than erroring -- so a
+  # successful load was indistinguishable from no data and every simulation
+  # silently used the player-TORP fallback. Assert the real schema.
+  local_mocked_bindings(
+    load_team_ratings = function(...) data.frame(
+      season = 2024L, round = 1L,
+      team = c("Geelong Cats", "Carlton"),
+      team_epr = c(12, -4),
+      stringsAsFactors = FALSE
+    ),
+    load_torp_ratings = function(...) .mock_full_history_ratings(),
+    load_predictions  = function(...) NULL,
+    get_all_injuries  = function(...) NULL
+  )
+
+  prep <- prepare_sim_data(season = 2024, fixtures = .mock_fixtures(2024))
+
+  # team_epr passes through verbatim -- no TOG re-weighting, no discount.
+  # The fallback would have produced ~18x these values.
+  expect_equal(sort(prep$sim_teams$torp), c(-4, 12))
+})
+
+test_that("a team-ratings frame with no usable rating column says so and falls back", {
+  local_mocked_bindings(
+    load_team_ratings = function(...) data.frame(
+      season = 2024L, round = 1L, team = c("Geelong Cats", "Carlton"),
+      some_other_metric = c(1, 2), stringsAsFactors = FALSE
+    ),
+    load_torp_ratings = function(...) .mock_full_history_ratings(),
+    load_predictions  = function(...) NULL,
+    get_all_injuries  = function(...) NULL
+  )
+
+  expect_message(
+    prepare_sim_data(season = 2024, fixtures = .mock_fixtures(2024)),
+    "no usable rating"
+  )
+})
+
 test_that("prepare_sim_data() uses the season asked for, not the newest in the file", {
   local_mocked_bindings(
     load_team_ratings   = function(...) stop("no team ratings release"),
