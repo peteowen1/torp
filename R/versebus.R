@@ -350,14 +350,22 @@ vb_read_prev_manifest <- function(repo, tag) {
 }
 
 .vb_check_parquet_magic <- function(path) {
+  # Compare raw bytes; never rawToChar(). rawToChar() raises "embedded nul in
+  # string" the moment a byte is 0x00, so a truncated or garbage download made
+  # this check ABORT rather than return FALSE -- it crashed on exactly the
+  # corruption it exists to detect, and the abort surfaced as an unclassified
+  # error rather than a clean integrity failure.
+  #
+  # Size is also checked before any read now: the previous order read four
+  # bytes first and only then tested sz < 8L.
+  sz <- file.size(path)
+  if (is.na(sz) || sz < 8L) return(FALSE)
   con <- file(path, "rb")
   on.exit(close(con), add = TRUE)
-  head <- readBin(con, "raw", 4L)
-  sz <- file.size(path)
-  if (sz < 8L) return(FALSE)
+  magic <- charToRaw("PAR1")
+  if (!identical(readBin(con, "raw", 4L), magic)) return(FALSE)
   seek(con, sz - 4L)
-  tail <- readBin(con, "raw", 4L)
-  identical(rawToChar(head), "PAR1") && identical(rawToChar(tail), "PAR1")
+  identical(readBin(con, "raw", 4L), magic)
 }
 
 #' Retry a fallible operation with short exponential backoff
