@@ -107,15 +107,27 @@ prepare_sim_data <- function(season, team_ratings = NULL, fixtures = NULL,
     # When injuries provided, skip pre-computed team ratings and go straight
     # to player-level ratings so injured players can be excluded
     if (!use_injury_aware) {
-      # Try pre-computed team ratings first
-      tr <- tryCatch(load_team_ratings(), error = function(e) NULL)
+      # Try pre-computed team ratings first.
+      #
+      # Say so when this fails. The fallback below is not the same estimator --
+      # it sums ~18 players' TORP and applies a discount, where this path reads
+      # a team-level rating directly. Collapsing a transient network failure
+      # into a silent switch between the two publishes a differently-scaled
+      # simulation with nothing in the log marking the day it happened. The
+      # cli_alert_info further down announces the fallback as if it were a
+      # normal branch choice, which is exactly how it would read.
+      tr <- tryCatch(load_team_ratings(), error = function(e) {
+        cli::cli_alert_warning(
+          "Could not load pre-computed team ratings ({conditionMessage(e)}) -- falling back to player TORP, which is a DIFFERENT estimator.")
+        NULL
+      })
       if (!is.null(tr)) {
         tr_dt <- data.table::as.data.table(tr)
         if ("season" %in% names(tr_dt) && "round" %in% names(tr_dt)) {
           target_season <- season
           tr_dt <- tr_dt[season == target_season]
           if (nrow(tr_dt) > 0) {
-            max_round <- max(tr_dt$round)
+            max_round <- max(tr_dt$round, na.rm = TRUE)
             tr_dt <- tr_dt[round == max_round]
             torp_col <- if ("team_torp" %in% names(tr_dt)) "team_torp" else "torp"
             team_col <- if ("team" %in% names(tr_dt)) "team" else "team_name"
@@ -142,15 +154,35 @@ prepare_sim_data <- function(season, team_ratings = NULL, fixtures = NULL,
       } else {
         pr <- tryCatch(load_torp_ratings(), error = function(e) NULL)
       }
-      if (is.null(pr)) {
+      # nrow(), not just is.null(). load_torp_ratings() does not error on a
+      # failed download -- it returns a ZERO-ROW frame and a warning (see
+      # load_data.R). So the tryCatch above never fires, is.null(pr) is FALSE,
+      # and without this check max() on an empty column returns -Inf, the
+      # filters below match nothing, and the simulation runs on zero teams.
+      if (is.null(pr) || nrow(pr) == 0) {
         cli::cli_abort("Could not load team or player ratings. Provide them via the {.arg team_ratings} argument.")
       }
       pr_dt <- data.table::as.data.table(pr)
-      # Take latest available ratings
-      if ("season" %in% names(pr_dt) && "round" %in% names(pr_dt)) {
-        max_season <- max(pr_dt$season)
-        pr_dt <- pr_dt[season == max_season]
-        max_round <- max(pr_dt$round)
+
+      # Filter to the REQUESTED season, not the newest one in the file.
+      # torp_ratings.parquet is full-history and upserted every run, and
+      # load_torp_ratings() takes no season argument, so `max(pr_dt$season)`
+      # silently handed every historical backtest the CURRENT season's
+      # ratings. The team-ratings branch above has always filtered on the
+      # requested season; this one did not, so one function answered the same
+      # question two different ways depending on which path it took.
+      if ("season" %in% names(pr_dt)) {
+        target_season <- season
+        pr_dt <- pr_dt[season == target_season]
+        if (nrow(pr_dt) == 0) {
+          cli::cli_abort(c(
+            "No player ratings for {season} in the ratings release.",
+            "i" = "Pass ratings directly via the {.arg team_ratings} argument to simulate a season the release does not cover."
+          ))
+        }
+      }
+      if ("round" %in% names(pr_dt)) {
+        max_round <- max(pr_dt$round, na.rm = TRUE)
         pr_dt <- pr_dt[round == max_round]
       }
 
@@ -198,12 +230,27 @@ prepare_sim_data <- function(season, team_ratings = NULL, fixtures = NULL,
     sim_teams <- data.table::as.data.table(team_ratings)[, .(team, torp)]
   }
 
+  # Nothing downstream checks this, and an empty frame propagates all the way
+  # into simulate_season() -- gf_familiarity is even built from sim_teams$team
+  # below, so it comes out empty too and the simulation runs on no teams at all
+  # rather than failing.
+  if (nrow(sim_teams) == 0) {
+    cli::cli_abort(c(
+      "No team ratings available for {season} -- refusing to simulate on an empty rating set.",
+      "i" = "Pass ratings directly via the {.arg team_ratings} argument."
+    ))
+  }
+
   # --- Injury Return Schedule ---
   # Build a schedule of TORP boosts for when injured players return
   injury_schedule <- NULL
-  if (use_injury_aware && exists("pr_dt_full") && !is.null(pr_dt_full)) {
+  # inherits = FALSE: pr_dt_full is only bound inside the player-ratings branch
+  # above. Without it, exists() walks up to the global environment, so an
+  # unrelated user variable of the same name would be fed to
+  # build_injury_schedule() as if it were this season's ratings.
+  if (use_injury_aware && exists("pr_dt_full", inherits = FALSE) && !is.null(pr_dt_full)) {
     # Determine current round from played games
-    current_round <- if (nrow(played_games) > 0) max(played_games$roundnum) else 1L
+    current_round <- if (nrow(played_games) > 0) max(played_games$roundnum, na.rm = TRUE) else 1L
     inj_with_round <- injuries
     inj_with_round$return_round <- parse_return_round(
       injuries$estimated_return, season, current_round

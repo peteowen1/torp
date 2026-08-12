@@ -253,20 +253,29 @@ get_lineup_ratings <- function(season = NULL, round = NULL, match_id = NULL) {
 #'   team perspective
 #' @keywords internal
 .format_match_preds <- function(df) {
+  # `bits` and `pred_xmargin` (pred_xscore_diff) used to be selected here and
+  # then silently dropped by the summarise() below, exactly as utc_start_time
+  # was. Neither has a consumer -- `bits` is a per-row scoring metric computed
+  # against the actual result in .train_match_gams(), not a prediction, and
+  # pred_xmargin appears nowhere downstream. Dropping them from the select
+  # rather than leaving code that reads as if they were published.
+  #
+  # NOTE: pred_xmargin is the expected-score margin, and its sibling
+  # pred_xtotal IS published. If it should be published too, add it to the
+  # group_by/summarise -- selecting it alone never did anything.
   home <- df |>
     dplyr::filter(team_type_fac.x == "home") |>
     dplyr::select(
       season = season.x, round = round_number.x, players = count.x, match_id,
       home_team = team_name.x, home_epr = epr.x, home_psr = psr.x,
       away_team = team_name.y, away_epr = epr.y, away_psr = psr.y,
-      pred_xtotal = pred_tot_xscore, pred_xmargin = pred_xscore_diff,
-      pred_margin = pred_score_diff, pred_win, bits,
+      pred_xtotal = pred_tot_xscore,
+      pred_margin = pred_score_diff, pred_win,
       margin = score_diff, start_time = local_start_time_str,
       utc_start_time, venue = venue.x
     )
   away <- df |>
     dplyr::mutate(
-      pred_xscore_diff = -pred_xscore_diff,
       pred_score_diff = -pred_score_diff,
       pred_win = 1 - pred_win,
       score_diff = -score_diff
@@ -276,8 +285,8 @@ get_lineup_ratings <- function(season = NULL, round = NULL, match_id = NULL) {
       season = season.x, round = round_number.x, players = count.x, match_id,
       home_team = team_name.y, home_epr = epr.y, home_psr = psr.y,
       away_team = team_name.x, away_epr = epr.x, away_psr = psr.x,
-      pred_xtotal = pred_tot_xscore, pred_xmargin = pred_xscore_diff,
-      pred_margin = pred_score_diff, pred_win, bits,
+      pred_xtotal = pred_tot_xscore,
+      pred_margin = pred_score_diff, pred_win,
       margin = score_diff, start_time = local_start_time_str,
       utc_start_time, venue = venue.x
     )
@@ -1083,17 +1092,39 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
       cli::cli_alert_success("Uploaded locked predictions ({nrow(combined)} rows, week{?s} {paste(target_weeks, collapse = ', ')} updated)")
     },
     error = function(e) {
-      local_path <- file.path("data-raw", paste0(pred_file_name, ".parquet"))
-      arrow::write_parquet(combined, local_path)
-      # cli_alert_danger FIRST, because it prints immediately. R defers warnings
-      # to the end of the script, and on 2026-07-29 the job was killed by its
-      # timeout one second after the pipeline finished -- so this warning never
-      # printed and a predictions/CSV divergence that fed Squiggle stale tips
-      # left no trace anywhere in the log.
+      # cli_alert_danger FIRST, and genuinely first -- these two lines used to
+      # sit BELOW the arrow::write_parquet() call despite this comment claiming
+      # otherwise. The write targets a RELATIVE data-raw/ path, so any run
+      # whose working directory is not the package root threw inside the error
+      # handler and killed it before a single one of these messages printed,
+      # then escaped run_predictions_pipeline() entirely. That is the whole of
+      # the 2026-07-29 failure reproduced inside the handler written to report
+      # it: upload fails, Squiggle serves last round's tips, log says nothing.
+      #
+      # cli_alert_* print immediately (they go through message()); cli_warn is
+      # deferred to end-of-script and was lost when that job hit its timeout
+      # one second after the pipeline finished.
       cli::cli_alert_danger(
         "FAILED to upload locked predictions for {pred_file_name}: {conditionMessage(e)}")
       cli::cli_alert_danger(
         "squiggle.com.au may now be serving the PREVIOUS round's tips. Verify predictions_<season>.csv and .parquet timestamps agree before first bounce.")
+
+      # Best-effort local rescue copy, and it must not be able to take the
+      # diagnostics down with it.
+      local_path <- file.path("data-raw", paste0(pred_file_name, ".parquet"))
+      local_path <- tryCatch({
+        arrow::write_parquet(combined, local_path)
+        local_path
+      }, error = function(e2) {
+        fallback <- file.path(tempdir(), paste0(pred_file_name, ".parquet"))
+        saved <- tryCatch({
+          arrow::write_parquet(combined, fallback)
+          fallback
+        }, error = function(e3) NULL)
+        cli::cli_alert_danger(
+          "Could not save the rescue copy to {local_path} ({conditionMessage(e2)}){if (is.null(saved)) ' and the tempdir fallback failed too' else paste0(' -- wrote it to ', saved, ' instead')}.")
+        saved %||% local_path
+      })
       cli::cli_warn(c(
         "Failed to upload locked predictions: {conditionMessage(e)}",
         "i" = "Saved locally to {local_path}",

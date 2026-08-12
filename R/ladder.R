@@ -310,9 +310,9 @@ calculate_final_ladder <- function(season = get_afl_season(),
     if (!is.null(pr)) {
       pr_dt <- data.table::as.data.table(pr)
       if ("season" %in% names(pr_dt) && "round" %in% names(pr_dt)) {
-        max_s <- max(pr_dt$season)
+        max_s <- max(pr_dt$season, na.rm = TRUE)
         pr_dt <- pr_dt[season == max_s]
-        max_r <- max(pr_dt$round)
+        max_r <- max(pr_dt$round, na.rm = TRUE)
         pr_dt <- pr_dt[round == max_r]
       }
 
