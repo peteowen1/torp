@@ -282,8 +282,21 @@ get_lineup_ratings <- function(season = NULL, round = NULL, match_id = NULL) {
       utc_start_time, venue = venue.x
     )
   dplyr::bind_rows(home, away) |>
+    # utc_start_time is a GROUPING variable, not a dropped passenger. It is
+    # selected above but summarise() keeps only group vars and summarised ones,
+    # so before 2026-08-12 it was silently discarded here -- taking
+    # .warn_post_hoc_predictions() offline with it, since that guard's first act
+    # is to check for this column and return 0 when it is absent. The guard had
+    # therefore never fired since the day it was written.
+    #
+    # Grouping on it is safe and cannot split a match into two rows: the
+    # home/away self-join in .build_team_mdl_df() only duplicates `opp_cols`,
+    # and utc_start_time is not among them, so both rows of a match_id carry
+    # one shared fixture start time. Exactly the argument that already holds
+    # for start_time, which has been grouped on here since the beginning.
     dplyr::group_by(season, round, match_id, home_team, home_epr, home_psr,
-                    away_team, away_epr, away_psr, start_time, venue) |>
+                    away_team, away_epr, away_psr, start_time, utc_start_time,
+                    venue) |>
     dplyr::summarise(
       players = mean(players), pred_xtotal = mean(pred_xtotal),
       pred_margin = mean(pred_margin), pred_win = mean(pred_win),
@@ -300,8 +313,8 @@ get_lineup_ratings <- function(season = NULL, round = NULL, match_id = NULL) {
       home_team = as.character(home_team),
       away_team = as.character(away_team)
     ) |>
-    dplyr::select(season, round, match_id:away_psr, start_time, venue,
-                  epr_diff, psr_diff, players:margin)
+    dplyr::select(season, round, match_id:away_psr, start_time, utc_start_time,
+                  venue, epr_diff, psr_diff, players:margin)
 }
 
 
@@ -350,7 +363,17 @@ get_lineup_ratings <- function(season = NULL, round = NULL, match_id = NULL) {
   # ISO-with-T string silently parses to MIDNIGHT rather than failing, so a
   # naive version of this check flagged almost every legitimate prediction as
   # post-hoc. Both were caught only by testing against the real column values.
-  if (!all(c("generated_utc", "utc_start_time") %in% names(combined))) return(invisible(0L))
+  # Say so rather than returning silently. This gate is why the check was dead
+  # from the day it was written until 2026-08-12: .format_match_preds() dropped
+  # utc_start_time in its summarise(), this line returned 0, and "no post-hoc
+  # rows" and "never ran" were indistinguishable in the log. A guard that can
+  # stop checking without saying so is not a guard.
+  missing_cols <- setdiff(c("generated_utc", "utc_start_time"), names(combined))
+  if (length(missing_cols) > 0) {
+    cli::cli_inform(
+      "Post-hoc prediction check skipped: no {.field {missing_cols}} column{?s} on the prediction frame.")
+    return(invisible(0L))
+  }
   gen <- suppressWarnings(as.POSIXct(combined$generated_utc,
                                      format = "%Y-%m-%dT%H:%M:%SZ", tz = "UTC"))
   start <- suppressWarnings(.parse_utc_start(combined$utc_start_time))

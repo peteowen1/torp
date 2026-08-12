@@ -45,11 +45,31 @@ test_that("rows with no stamp are skipped, not treated as post-hoc", {
   expect_equal(n, 0L)
 })
 
-test_that("a frame with no generated_utc column at all is a no-op", {
+test_that("a frame with no generated_utc column at all is a no-op, but says so", {
   df <- data.frame(week = 1, match_id = "M1",
                    utc_start_time = "2026-06-04T09:30:00.000+0000",
                    stringsAsFactors = FALSE)
-  expect_silent(n <- torp:::.warn_post_hoc_predictions(df))
+  # Was expect_silent until 2026-08-12. Silence here is what let the check sit
+  # dead for its whole life: see the utc_start_time test below.
+  expect_message(n <- torp:::.warn_post_hoc_predictions(df), "skipped")
+  expect_equal(n, 0L)
+})
+
+test_that("a frame with no utc_start_time column announces the skip", {
+  # THE case this file never covered, and the reason the guard never fired.
+  # Every .pred_frame() above hands the function a utc_start_time; its only
+  # real caller did not. .format_match_preds() selected the column and then
+  # dropped it in the summarise() (group vars and summarised vars are all that
+  # survive), so in production this branch was taken on every single run and
+  # returned 0 without a word. Six passing tests, a dead check.
+  #
+  # The column is now carried through -- see test-post-hoc-guard.R, which
+  # asserts it on the frame .format_match_preds() actually builds. This test
+  # guards the other half: if it ever goes missing again, the log says so.
+  df <- data.frame(week = 1, match_id = "M1",
+                   generated_utc = "2026-06-05T04:00:00Z",
+                   stringsAsFactors = FALSE)
+  expect_message(n <- torp:::.warn_post_hoc_predictions(df), "utc_start_time")
   expect_equal(n, 0L)
 })
 
