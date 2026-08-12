@@ -60,6 +60,55 @@ test_that("the team-ratings branch prefers team_torp over team_epr", {
   expect_equal(sort(prep$sim_teams$torp), c(-4, 12))
 })
 
+test_that("an all-zero team_torp is rejected as unusable, not simulated as a flat league", {
+  # The failure this guards: calculate_torp() runs only if PSR computed, and
+  # `sum(all-NA, na.rm = TRUE)` is 0 rather than NA -- so a PSR failure
+  # publishes team_torp = 0.00 for all 18 teams. The column is present and
+  # well-shaped, so a presence-only check prefers it over team_epr and the sim
+  # runs a league where every team is identical. nrow(sim_teams) == 0 cannot
+  # catch it: the frame is full, just uniform.
+  local_mocked_bindings(
+    load_team_ratings = function(...) data.frame(
+      season = 2024L, round = 1L,
+      team = c("Geelong Cats", "Carlton"),
+      team_torp = c(0, 0),      # what a PSR failure publishes
+      team_epr  = c(12, -4),    # still good
+      stringsAsFactors = FALSE
+    ),
+    load_torp_ratings = function(...) .mock_full_history_ratings(),
+    load_predictions  = function(...) NULL,
+    get_all_injuries  = function(...) NULL
+  )
+
+  expect_message(
+    prep <- prepare_sim_data(season = 2024, fixtures = .mock_fixtures(2024)),
+    "present but unusable"
+  )
+  # Fell through to team_epr rather than simulating a flat league.
+  expect_equal(sort(prep$sim_teams$torp), c(-4, 12))
+})
+
+test_that("an all-NA team_torp is rejected too", {
+  local_mocked_bindings(
+    load_team_ratings = function(...) data.frame(
+      season = 2024L, round = 1L,
+      team = c("Geelong Cats", "Carlton"),
+      team_torp = c(NA_real_, NA_real_),
+      team_epr  = c(12, -4),
+      stringsAsFactors = FALSE
+    ),
+    load_torp_ratings = function(...) .mock_full_history_ratings(),
+    load_predictions  = function(...) NULL,
+    get_all_injuries  = function(...) NULL
+  )
+
+  expect_message(
+    prep <- prepare_sim_data(season = 2024, fixtures = .mock_fixtures(2024)),
+    "present but unusable"
+  )
+  expect_equal(sort(prep$sim_teams$torp), c(-4, 12))
+})
+
 test_that("a pre-team_torp release falls back to team_epr and says to re-run the pipeline", {
   # This branch was dead from the metric-first rename (28a42a82) until
   # 2026-08-12: the lookup asked only for team_torp/torp, load_team_ratings()

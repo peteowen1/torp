@@ -129,7 +129,7 @@ prepare_sim_data <- function(season, team_ratings = NULL, fixtures = NULL,
       # scale is a single free multiplier, ordering is not.
       #
       # Full numbers, method and caveats:
-      #   docs/reviews/2026-08-12-TEAM-RATING-CALIBRATION.md
+      #   ../docs/reviews/2026-08-12-TEAM-RATING-CALIBRATION.md
       # Kept there rather than here because they are a point-in-time
       # measurement that drifts every round, and this file reloads constantly.
       #
@@ -174,7 +174,35 @@ prepare_sim_data <- function(season, team_ratings = NULL, fixtures = NULL,
             # c847a917, and the pre-2026-03 published values equal today's
             # team_epr. Don't read old team_torp as today's team_torp.
             torp_col <- .resolve_col(tr_dt, c("team_torp", "team_epr", "torp"))
-            if (identical(torp_col, "team_epr")) {
+
+            # Presence is not usability, and this is the one place that
+            # distinction can silently destroy a simulation. .resolve_col()
+            # checks only that a column EXISTS. If team_torp is present but
+            # degenerate for this round -- every value NA, or every value
+            # identical, which is what a PSR failure upstream produces -- it
+            # still wins the lookup, every team gets the same rating, and the
+            # sim runs a league with NO team differentiation. The
+            # nrow(sim_teams) == 0 guard below cannot catch it: the frame is
+            # full, just uniform. Demote to the next candidate instead.
+            demoted <- FALSE
+            if (!is.null(torp_col)) {
+              vals <- suppressWarnings(as.numeric(tr_dt[[torp_col]]))
+              usable <- any(is.finite(vals)) && length(unique(vals[is.finite(vals)])) > 1L
+              if (!usable) {
+                demoted <- TRUE
+                cli::cli_alert_warning(c(
+                  "{.field {torp_col}} is present but unusable for {season} round {max_round} -- every team identical or NA.",
+                  "i" = "Most likely a PSR computation failure upstream in run_ratings_pipeline.R. Trying the next rating column."
+                ))
+                torp_col <- .resolve_col(
+                  tr_dt, setdiff(c("team_torp", "team_epr", "torp"), torp_col))
+              }
+            }
+
+            # Name the actual cause. These two reach team_epr for different
+            # reasons and want different operator responses: re-run the ratings
+            # pipeline, versus go and find out why PSR failed.
+            if (identical(torp_col, "team_epr") && !demoted) {
               cli::cli_alert_info(
                 "Team ratings carry no {.field team_torp} -- using {.field team_epr}. Re-run data-raw/03-ratings/run_ratings_pipeline.R to publish the better-measured team TORP.")
             }

@@ -481,6 +481,13 @@ tryCatch({
 
   cli::cli_inform("Building team ratings from {nrow(ratings_for_teams)} player rating rows")
 
+  # Weighted sum that answers NA when it has nothing to sum, instead of 0.
+  # See the team_torp comment below for why that distinction is load-bearing.
+  .wsum <- function(x, w) {
+    if (is.null(x) || all(is.na(x))) return(NA_real_)
+    round(sum(x * w, na.rm = TRUE), 2)
+  }
+
   team_ratings <- ratings_for_teams |>
     dplyr::filter(!is.na(.data$epr)) |>
     dplyr::group_by(.data$season, .data$round, .data$team) |>
@@ -493,13 +500,24 @@ tryCatch({
     dplyr::summarise(
       # team_torp is the headline team rating: TORP is the composed player
       # metric (0.5*EPR + 0.5*PSR), and on the same pred_tog weighting it beats
-      # both components at predicting the next round's margin. Over 1,204
-      # matches, 2021-2026, correlating each team-rating diff against actual
-      # margin: TORP r 0.5257, PSR r 0.5199, EPR r 0.5177; MAE 26.88 / 26.96 /
-      # 27.06. Added 2026-08-12 -- season_sim.R prefers it and falls back to
-      # team_epr on releases published before this ran.
-      team_torp    = round(sum(.data$torp * .data$tog_wt, na.rm = TRUE), 2),
-      team_psr     = round(sum(.data$psr * .data$tog_wt, na.rm = TRUE), 2),
+      # both components at predicting the next round's margin. Added
+      # 2026-08-12; measurement in
+      # ../../../docs/reviews/2026-08-12-TEAM-RATING-CALIBRATION.md.
+      # season_sim.R prefers it and falls back to team_epr on releases
+      # published before this ran.
+      #
+      # .wsum(), not sum(..., na.rm = TRUE). calculate_torp() -- the only step
+      # that adds `torp`/`psr` -- runs conditionally on PSR computing
+      # successfully, and that already has a logged failure path. When it is
+      # skipped, this round's rows carry NA torp (the column survives the
+      # rows_upsert from previous rows). `sum(all-NA, na.rm = TRUE)` is 0, NOT
+      # NA, so every team's team_torp would publish as exactly 0.00 -- a
+      # perfectly-shaped column asserting that all 18 teams are identical.
+      # season_sim.R would prefer it over team_epr and simulate a league with
+      # no team differentiation at all, silently. NA is the honest answer and
+      # lets the consumer fall back.
+      team_torp    = .wsum(.data$torp, .data$tog_wt),
+      team_psr     = .wsum(.data$psr, .data$tog_wt),
       team_epr     = round(sum(.data$epr * .data$tog_wt, na.rm = TRUE), 2),
       team_epr_recv    = round(sum(.data$epr_recv * .data$tog_wt, na.rm = TRUE), 2),
       team_epr_disp    = round(sum(.data$epr_disp * .data$tog_wt, na.rm = TRUE), 2),

@@ -13,7 +13,7 @@
   **This changes published output**: simulated margins widen ~19% and 4 of 18
   teams move more than 2 ladder places. `team_torp` was chosen on measurement —
   it wins every scale-free comparison against `team_epr` and `team_psr` — see
-  `docs/reviews/2026-08-12-TEAM-RATING-CALIBRATION.md`, which also records what
+  `../docs/reviews/2026-08-12-TEAM-RATING-CALIBRATION.md`, which also records what
   the first pass of that analysis got wrong. Releases published before
   2026-08-12 carry no `team_torp`; until the ratings pipeline re-runs,
   `prepare_sim_data()` falls back to `team_epr` and says so.
