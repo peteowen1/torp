@@ -282,18 +282,15 @@ get_lineup_ratings <- function(season = NULL, round = NULL, match_id = NULL) {
       utc_start_time, venue = venue.x
     )
   dplyr::bind_rows(home, away) |>
-    # utc_start_time is a GROUPING variable, not a dropped passenger. It is
-    # selected above but summarise() keeps only group vars and summarised ones,
-    # so before 2026-08-12 it was silently discarded here -- taking
-    # .warn_post_hoc_predictions() offline with it, since that guard's first act
-    # is to check for this column and return 0 when it is absent. The guard had
-    # therefore never fired since the day it was written.
+    # utc_start_time is a GROUPING variable, not a passenger: summarise() keeps
+    # only group vars and summarised ones, so anything merely selected above is
+    # dropped here. See .warn_post_hoc_predictions() below for what that cost.
     #
-    # Grouping on it is safe and cannot split a match into two rows: the
-    # home/away self-join in .build_team_mdl_df() only duplicates `opp_cols`,
-    # and utc_start_time is not among them, so both rows of a match_id carry
-    # one shared fixture start time. Exactly the argument that already holds
-    # for start_time, which has been grouped on here since the beginning.
+    # Grouping on it cannot split a match into two rows. It is fixture-level:
+    # .build_fixtures_df() selects it before the pivot_longer that turns one
+    # fixture into a home row and an away row, so both rows carry the identical
+    # value by construction. Same argument that already holds for start_time,
+    # grouped on here since the beginning.
     dplyr::group_by(season, round, match_id, home_team, home_epr, home_psr,
                     away_team, away_epr, away_psr, start_time, utc_start_time,
                     venue) |>
@@ -551,7 +548,6 @@ get_lineup_ratings <- function(season = NULL, round = NULL, match_id = NULL) {
       dplyr::arrange(week)
 
     vb_guard_accumulate(existing, combined, floor = 0.9)
-    .warn_post_hoc_predictions(combined)
   } else {
     # existing is NULL only when file_reader() confirmed absence (404) above,
     # or the file genuinely has 0 rows (loaded fine). Independently confirm
@@ -571,6 +567,16 @@ get_lineup_ratings <- function(season = NULL, round = NULL, match_id = NULL) {
     }
     combined <- week_gms
   }
+
+  # On the final frame, outside the branch, so BOTH upload paths are checked.
+  # It lived inside the accumulating branch until 2026-08-12, which left the
+  # fresh-upload path -- first run of a season, or recovery after the release
+  # asset is deleted -- publishing with no post-hoc check and no message saying
+  # one had been skipped. That recovery case is exactly when retrodictions are
+  # likely, since it is a mid-season rebuild of games already played.
+  # .warn_missing_lineups() above has always run before the split for the same
+  # reason; this one now matches it.
+  .warn_post_hoc_predictions(combined)
 
   combined
 }

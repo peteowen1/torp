@@ -1,19 +1,17 @@
-# .warn_post_hoc_predictions() was dead from the day it was written until
-# 2026-08-12: .format_match_preds() selected utc_start_time and then dropped it
-# in the summarise() (only group vars and summarised vars survive), so the
-# guard's first line found no such column and returned 0 on every single run.
-# "No post-hoc rows" and "the check never ran" looked identical in the log.
-#
-# These tests pin the column through the aggregation and prove the guard fires
-# on a frame of the shape production actually builds. A shape test is the point:
-# the arithmetic was always right, the input never reached it.
+# Regression coverage for the utc_start_time drop -- the incident itself is
+# recorded at .warn_post_hoc_predictions(). These tests pin the column through
+# the aggregation and prove the guard fires on a frame of the shape production
+# actually builds. A shape test is the point: the arithmetic was always right,
+# the input never reached it.
 
 .mock_team_mdl_df_preds <- function(utc = "2026-06-04T09:00:00.000+0000") {
-  # team_mdl_df is long: one row per team per match, built by a self-join on
-  # type_anti. So the away row is the SAME match from the away team's
-  # perspective -- .x and .y swapped, and every signed prediction negated.
-  # .format_match_preds() flips the away row back and averages the pair.
-  # A mock that repeats the home row's .x/.y on both rows produces two
+  # team_mdl_df is long -- one row per team per match -- from the pivot_longer
+  # in .build_fixtures_df(). The later self-join on type_anti in
+  # .build_team_mdl_df() does not create that shape; it attaches the opponent's
+  # columns as .y onto the already-long frame. So the away row is the SAME
+  # match from the away team's perspective: .x and .y swapped, and every signed
+  # prediction negated. .format_match_preds() flips it back and averages the
+  # pair. A mock that repeats the home row's .x/.y on both rows produces two
   # distinct group keys and silently tests nothing.
   row <- function(type, tx, ty, eprx, psrx, epry, psry, xdiff, sdiff, win, margin) {
     data.frame(
