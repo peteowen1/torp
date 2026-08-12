@@ -38,13 +38,33 @@
   )
 }
 
-test_that("the team-ratings branch reads team_epr, the column actually published", {
+test_that("the team-ratings branch prefers team_torp over team_epr", {
+  # TORP is the composed metric (0.5*EPR + 0.5*PSR) and beats both components
+  # at predicting the next round's margin on every scale-free measure. When a
+  # release carries both, team_torp must win.
+  local_mocked_bindings(
+    load_team_ratings = function(...) data.frame(
+      season = 2024L, round = 1L,
+      team = c("Geelong Cats", "Carlton"),
+      team_torp = c(12, -4),
+      team_epr  = c(99, 99),   # sentinel: picking this is a visible failure
+      stringsAsFactors = FALSE
+    ),
+    load_torp_ratings = function(...) .mock_full_history_ratings(),
+    load_predictions  = function(...) NULL,
+    get_all_injuries  = function(...) NULL
+  )
+
+  prep <- prepare_sim_data(season = 2024, fixtures = .mock_fixtures(2024))
+  # Verbatim -- no TOG re-weighting, no discount applied on this path.
+  expect_equal(sort(prep$sim_teams$torp), c(-4, 12))
+})
+
+test_that("a pre-team_torp release falls back to team_epr and says to re-run the pipeline", {
   # This branch was dead from the metric-first rename (28a42a82) until
-  # 2026-08-12. run_ratings_pipeline.R publishes `team_epr`; the lookup asked
-  # only for team_torp/torp; load_team_ratings() does not rename columns; and
-  # as.numeric(NULL) yields a 0-row table rather than erroring -- so a
-  # successful load was indistinguishable from no data and every simulation
-  # silently used the player-TORP fallback. Assert the real schema.
+  # 2026-08-12: the lookup asked only for team_torp/torp, load_team_ratings()
+  # does not rename columns, and as.numeric(NULL) yields a 0-row table rather
+  # than erroring -- so a successful load was indistinguishable from no data.
   local_mocked_bindings(
     load_team_ratings = function(...) data.frame(
       season = 2024L, round = 1L,
@@ -57,10 +77,10 @@ test_that("the team-ratings branch reads team_epr, the column actually published
     get_all_injuries  = function(...) NULL
   )
 
-  prep <- prepare_sim_data(season = 2024, fixtures = .mock_fixtures(2024))
-
-  # team_epr passes through verbatim -- no TOG re-weighting, no discount.
-  # The fallback would have produced ~18x these values.
+  expect_message(
+    prep <- prepare_sim_data(season = 2024, fixtures = .mock_fixtures(2024)),
+    "no.*team_torp"
+  )
   expect_equal(sort(prep$sim_teams$torp), c(-4, 12))
 })
 
@@ -112,6 +132,29 @@ test_that("prepare_sim_data() aborts when the requested season is absent, rather
     prepare_sim_data(season = 2019, fixtures = .mock_fixtures(2019)),
     "No player ratings for 2019"
   )
+})
+
+test_that("injuries = FALSE is accepted rather than crashing on if (NA)", {
+  # nrow() returns NULL for anything that is not a data.frame or matrix, so
+  # `TRUE && logical(0)` made use_injury_aware NA and killed the function on
+  # `if (NA)` -- with a message naming neither the argument nor injuries. FALSE
+  # is the documented way to say "no injury adjustment"; only
+  # simulate_afl_season() normalising it to NULL kept this off the front door.
+  local_mocked_bindings(
+    load_team_ratings = function(...) data.frame(
+      season = 2024L, round = 1L, team = c("Geelong Cats", "Carlton"),
+      team_torp = c(12, -4), stringsAsFactors = FALSE
+    ),
+    load_torp_ratings = function(...) .mock_full_history_ratings(),
+    load_predictions  = function(...) NULL,
+    get_all_injuries  = function(...) NULL
+  )
+
+  expect_no_error(
+    prep <- prepare_sim_data(season = 2024, fixtures = .mock_fixtures(2024),
+                             injuries = FALSE)
+  )
+  expect_equal(sort(prep$sim_teams$torp), c(-4, 12))
 })
 
 test_that("a season with no ratings yet falls back to the prior season loudly, not fatally", {

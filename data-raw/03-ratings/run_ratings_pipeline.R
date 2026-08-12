@@ -491,6 +491,15 @@ tryCatch({
                                .data$pred_tog * 18 / .data$team_tog_sum, 0)
     ) |>
     dplyr::summarise(
+      # team_torp is the headline team rating: TORP is the composed player
+      # metric (0.5*EPR + 0.5*PSR), and on the same pred_tog weighting it beats
+      # both components at predicting the next round's margin. Over 1,204
+      # matches, 2021-2026, correlating each team-rating diff against actual
+      # margin: TORP r 0.5257, PSR r 0.5199, EPR r 0.5177; MAE 26.88 / 26.96 /
+      # 27.06. Added 2026-08-12 -- season_sim.R prefers it and falls back to
+      # team_epr on releases published before this ran.
+      team_torp    = round(sum(.data$torp * .data$tog_wt, na.rm = TRUE), 2),
+      team_psr     = round(sum(.data$psr * .data$tog_wt, na.rm = TRUE), 2),
       team_epr     = round(sum(.data$epr * .data$tog_wt, na.rm = TRUE), 2),
       team_epr_recv    = round(sum(.data$epr_recv * .data$tog_wt, na.rm = TRUE), 2),
       team_epr_disp    = round(sum(.data$epr_disp * .data$tog_wt, na.rm = TRUE), 2),

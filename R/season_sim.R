@@ -123,24 +123,26 @@ prepare_sim_data <- function(season, team_ratings = NULL, fixtures = NULL,
       # successful load was indistinguishable from no data and every
       # simulation silently used the player-TORP fallback instead.
       #
-      # Preferred on measurement, not preference. simulate.R adds
-      # (home_torp - away_torp) to the margin with NO coefficient, so the
-      # regression slope of actual margin on the rating diff IS the
-      # calibration, and 1.0 is correct. Over 1,204 matches, 2021-2026:
+      # team_torp is preferred on measurement: it wins every SCALE-FREE
+      # comparison against team_epr and team_psr (correlation, R2, MAE) at
+      # predicting the next round's margin. Scale-free is the right basis --
+      # scale is a single free multiplier, ordering is not.
       #
-      #   team_epr     slope 1.070  95% CI [0.970, 1.170]   MAE 27.06  67.9% tips
-      #   player TORP  slope 1.173  95% CI [1.066, 1.281]   MAE 26.91  67.8% tips
+      # Full numbers, method and caveats:
+      #   docs/reviews/2026-08-12-TEAM-RATING-CALIBRATION.md
+      # Kept there rather than here because they are a point-in-time
+      # measurement that drifts every round, and this file reloads constantly.
       #
-      # The fallback's CI excludes 1.0: it understates margins by ~17%, which
-      # in a season sim compresses every projected ladder and understates
-      # top-4/finals separation. team_epr cannot be distinguished from
-      # correctly scaled. What the fallback wins -- 0.15 MAE, 0.008 R2, tips
-      # level -- is about ordering, which the sim barely uses.
+      # Do NOT re-derive the choice from OLS slope alone. An earlier version of
+      # this comment did, and it was wrong twice over: the arms carried an
+      # asymmetric 0.95 discount that inflates one slope mechanically, and with
+      # season-clustered errors every arm's CI covers 1.0, so slope does not
+      # separate them at all.
       #
-      # Neither is properly calibrated (per-season slopes run 0.78-1.27), so a
-      # scaling coefficient is the real fix; this is the improvement available
-      # without one. Switching widened simulated margins ~19% and moved 4 of 18
-      # teams more than 2 ladder places.
+      # NOT calibrated. Every arm understates margins, and a bigger problem
+      # sits underneath: the sim's noise term is ~15% short of the residual
+      # spread the data actually shows, for ANY choice of rating. Fix that
+      # before spending more on the estimator choice.
       tr <- tryCatch(load_team_ratings(), error = function(e) {
         cli::cli_alert_warning(
           "Could not load pre-computed team ratings ({conditionMessage(e)}) -- falling back to player TORP, which is a DIFFERENT estimator.")
@@ -154,14 +156,28 @@ prepare_sim_data <- function(season, team_ratings = NULL, fixtures = NULL,
           if (nrow(tr_dt) > 0) {
             max_round <- max(tr_dt$round, na.rm = TRUE)
             tr_dt <- tr_dt[round == max_round]
-            # team_epr FIRST: it is what run_ratings_pipeline.R actually
-            # publishes since the metric-first rename (28a42a82). The two older
-            # names are kept for hand-passed or pre-rename frames. Asking only
-            # for team_torp/torp is what made this whole branch dead code --
-            # as.numeric(NULL) builds a 0-row table instead of erroring, so a
-            # successful load looked exactly like no data and every simulation
-            # silently took the player-TORP fallback below.
-            torp_col <- .resolve_col(tr_dt, c("team_epr", "team_torp", "torp"))
+            # team_torp first (measured best; added to run_ratings_pipeline.R
+            # 2026-08-12), then team_epr for releases published before that
+            # ran, then the bare legacy name for hand-passed frames.
+            #
+            # This branch was dead from c847a917 (2026-03-16) to 2026-08-12.
+            # That commit renamed the published column team_torp -> team_epr
+            # while this lookup kept asking for team_torp, and as.numeric(NULL)
+            # builds a 0-row table instead of erroring -- so a successful load
+            # was indistinguishable from no data and every simulation silently
+            # used the player-TORP fallback for five months.
+            #
+            # Note the trap in that history: the OLD team_torp was built from a
+            # column then called `torp` which the same commit renamed to `epr`.
+            # It was EPR-based, not the modern 0.5*EPR + 0.5*PSR blend. So the
+            # name `team_torp` means different things either side of
+            # c847a917, and the pre-2026-03 published values equal today's
+            # team_epr. Don't read old team_torp as today's team_torp.
+            torp_col <- .resolve_col(tr_dt, c("team_torp", "team_epr", "torp"))
+            if (identical(torp_col, "team_epr")) {
+              cli::cli_alert_info(
+                "Team ratings carry no {.field team_torp} -- using {.field team_epr}. Re-run data-raw/03-ratings/run_ratings_pipeline.R to publish the better-measured team TORP.")
+            }
             team_col <- .resolve_col(tr_dt, c("team", "team_name"))
             # Name the mismatch rather than letting it look like "no data".
             if (is.null(torp_col) || is.null(team_col)) {
