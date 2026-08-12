@@ -182,7 +182,13 @@ simulate_match_mc <- function(home_team, away_team,
     }
   }
 
-  if (is.null(estimate)) {
+  # is.na as well as is.null. na.rm above fixed the common case (one NA row
+  # among real ones), but a caller-supplied plain data.frame or tibble whose
+  # season/round column is entirely NA still yields all-NA rows from `df[NA, ]`
+  # rather than none -- so length(home_r) > 0 passes, the arithmetic above
+  # produces NA, and an is.null-only check lets an NA estimate through silently.
+  # team_ratings is a user-facing argument, so that shape is reachable.
+  if (is.null(estimate) || is.na(estimate)) {
     cli::cli_warn("Could not resolve ratings for {home_team} vs {away_team}, using home_advantage only")
     estimate <- home_advantage
   }

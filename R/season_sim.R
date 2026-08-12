@@ -109,13 +109,23 @@ prepare_sim_data <- function(season, team_ratings = NULL, fixtures = NULL,
     if (!use_injury_aware) {
       # Try pre-computed team ratings first.
       #
-      # Say so when this fails. The fallback below is not the same estimator --
-      # it sums ~18 players' TORP and applies a discount, where this path reads
-      # a team-level rating directly. Collapsing a transient network failure
-      # into a silent switch between the two publishes a differently-scaled
-      # simulation with nothing in the log marking the day it happened. The
-      # cli_alert_info further down announces the fallback as if it were a
-      # normal branch choice, which is exactly how it would read.
+      # !! This branch is currently DEAD IN PRODUCTION and the fallback below
+      # is the only path that ever runs. run_ratings_pipeline.R publishes
+      # team_ratings.parquet with `team_epr` (since the metric-first rename,
+      # 28a42a82); the torp_col lookup below still asks for team_torp/torp,
+      # load_team_ratings() does not rename columns, and `as.numeric(NULL)`
+      # builds a 0-row table rather than erroring -- so sim_teams comes back
+      # empty on a perfectly successful load. Confirmed by running it.
+      #
+      # NOT silently repaired here, because the two paths are not the same
+      # measurement: this one reads a team-level rating directly, the fallback
+      # sums ~18 players' TORP and applies a discount. Making the lookup work
+      # would change every published simulation's rating scale, which is a
+      # decision about the numbers, not a bug fix. Until it is made, the guard
+      # below at least stops the switch being invisible.
+      #
+      # Say so when the load itself fails, too. The cli_alert_info further down
+      # announces the fallback as if it were a normal branch choice.
       tr <- tryCatch(load_team_ratings(), error = function(e) {
         cli::cli_alert_warning(
           "Could not load pre-computed team ratings ({conditionMessage(e)}) -- falling back to player TORP, which is a DIFFERENT estimator.")
@@ -131,11 +141,20 @@ prepare_sim_data <- function(season, team_ratings = NULL, fixtures = NULL,
             tr_dt <- tr_dt[round == max_round]
             torp_col <- if ("team_torp" %in% names(tr_dt)) "team_torp" else "torp"
             team_col <- if ("team" %in% names(tr_dt)) "team" else "team_name"
-            sim_teams <- data.table::data.table(
-              team = as.character(tr_dt[[team_col]]),
-              torp = as.numeric(tr_dt[[torp_col]])
-            )
-            sim_teams <- sim_teams[, .(torp = mean(torp)), by = team]
+            # Name the mismatch instead of letting as.numeric(NULL) turn a
+            # successful load into an empty frame that reads as "no data".
+            if (!torp_col %in% names(tr_dt)) {
+              cli::cli_alert_warning(c(
+                "Team ratings loaded fine but carry no {.field {torp_col}} column (found: {.field {setdiff(names(tr_dt), c('season', 'round', 'team'))}}) -- this branch cannot use them."
+              ))
+              sim_teams <- NULL
+            } else {
+              sim_teams <- data.table::data.table(
+                team = as.character(tr_dt[[team_col]]),
+                torp = as.numeric(tr_dt[[torp_col]])
+              )
+              sim_teams <- sim_teams[, .(torp = mean(torp)), by = team]
+            }
           }
         }
       }
@@ -173,13 +192,36 @@ prepare_sim_data <- function(season, team_ratings = NULL, fixtures = NULL,
       # question two different ways depending on which path it took.
       if ("season" %in% names(pr_dt)) {
         target_season <- season
-        pr_dt <- pr_dt[season == target_season]
-        if (nrow(pr_dt) == 0) {
-          cli::cli_abort(c(
-            "No player ratings for {season} in the ratings release.",
-            "i" = "Pass ratings directly via the {.arg team_ratings} argument to simulate a season the release does not cover."
-          ))
+        if (!any(pr_dt$season == target_season, na.rm = TRUE)) {
+          # No rows for the requested season. Two very different situations
+          # share this symptom, and they want opposite handling:
+          #
+            #   Pre-season. get_afl_season() is year(Sys.Date()), and
+          #   run_ratings_pipeline.R skips seasons with no PBP, so from
+          #   January until round 1 the current season has NO ratings rows
+          #   at all. The daily run is designed to work in that window.
+          #   Carrying the previous season forward is the right answer --
+          #   just not silently, which is what max(season) used to do.
+          #
+          #   A season the release genuinely does not cover (a backtest of a
+          #   year before the data starts). There is nothing sensible to
+          #   substitute, so abort.
+          #
+          # Aborting on both would kill the daily pipeline for the ~2.5
+          # months every year that fall in the first case -- trading
+          # slightly-stale ratings for no predictions at all.
+          prior <- pr_dt$season[pr_dt$season < target_season]
+          if (length(prior) == 0) {
+            cli::cli_abort(c(
+              "No player ratings for {season} in the ratings release, and no earlier season to fall back on.",
+              "i" = "Pass ratings directly via the {.arg team_ratings} argument to simulate a season the release does not cover."
+            ))
+          }
+          target_season <- max(prior, na.rm = TRUE)
+          cli::cli_alert_warning(
+            "No player ratings for {season} yet -- falling back to {target_season}'s final ratings as a proxy. Expected before round 1; investigate if the season is under way.")
         }
+        pr_dt <- pr_dt[season == target_season]
       }
       if ("round" %in% names(pr_dt)) {
         max_round <- max(pr_dt$round, na.rm = TRUE)

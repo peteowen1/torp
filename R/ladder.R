@@ -309,11 +309,25 @@ calculate_final_ladder <- function(season = get_afl_season(),
     })
     if (!is.null(pr)) {
       pr_dt <- data.table::as.data.table(pr)
+      # torp_ratings(season) is already season-scoped, so max_s is a
+      # consistency check rather than a filter that does real work.
       if ("season" %in% names(pr_dt) && "round" %in% names(pr_dt)) {
         max_s <- max(pr_dt$season, na.rm = TRUE)
         pr_dt <- pr_dt[season == max_s]
         max_r <- max(pr_dt$round, na.rm = TRUE)
         pr_dt <- pr_dt[round == max_r]
+      }
+
+      # An all-NA season/round column makes max() return -Inf, the filters
+      # above then match nothing, and build_injury_schedule() runs on an empty
+      # table -- after which the nrow(injury_schedule) > 0 check below just
+      # skips the whole injury adjustment without a word. The ladder still
+      # comes back, quietly unadjusted.
+      if (nrow(pr_dt) == 0) {
+        cli::cli_warn(c(
+          "Player ratings for {season} collapsed to zero rows when filtering to the latest round.",
+          "!" = "Returning the ladder WITHOUT injury adjustments."
+        ))
       }
 
       inj_with_round <- data.table::as.data.table(injuries)

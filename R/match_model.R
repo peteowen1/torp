@@ -1093,17 +1093,23 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
     },
     error = function(e) {
       # cli_alert_danger FIRST, and genuinely first -- these two lines used to
-      # sit BELOW the arrow::write_parquet() call despite this comment claiming
-      # otherwise. The write targets a RELATIVE data-raw/ path, so any run
-      # whose working directory is not the package root threw inside the error
-      # handler and killed it before a single one of these messages printed,
-      # then escaped run_predictions_pipeline() entirely. That is the whole of
-      # the 2026-07-29 failure reproduced inside the handler written to report
-      # it: upload fails, Squiggle serves last round's tips, log says nothing.
+      # sit BELOW the arrow::write_parquet() call despite the comment there
+      # claiming otherwise. The write targets a RELATIVE data-raw/ path, so a
+      # run whose working directory is not the package root throws inside the
+      # error handler and kills it before any diagnostic prints, then escapes
+      # run_predictions_pipeline() entirely.
+      #
+      # Scope that honestly: the scheduled workflow sets no working-directory,
+      # so its CWD is the checkout root and the relative path resolves -- this
+      # is a live bug for local and interactive runs, NOT an established cause
+      # of the 2026-07-29 incident. That one has its own documented account at
+      # load_data.R (the verify re-raise, and a deferred cli_warn lost when the
+      # job timed out), which requires this handler to have run to completion.
+      # The two explanations are not compatible; don't merge them.
       #
       # cli_alert_* print immediately (they go through message()); cli_warn is
-      # deferred to end-of-script and was lost when that job hit its timeout
-      # one second after the pipeline finished.
+      # deferred to end-of-script and can be dropped past nwarnings or lost to
+      # a timeout, which is why the ordering matters at all.
       cli::cli_alert_danger(
         "FAILED to upload locked predictions for {pred_file_name}: {conditionMessage(e)}")
       cli::cli_alert_danger(
@@ -1111,23 +1117,35 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
 
       # Best-effort local rescue copy, and it must not be able to take the
       # diagnostics down with it.
-      local_path <- file.path("data-raw", paste0(pred_file_name, ".parquet"))
-      local_path <- tryCatch({
-        arrow::write_parquet(combined, local_path)
-        local_path
+      #
+      # `saved` is NULL when nothing was written, and stays NULL -- it is not
+      # defaulted back to the attempted path. Reporting "Saved locally to
+      # data-raw/..." when both writes failed sends whoever is investigating a
+      # stale-predictions incident hunting for a file that does not exist,
+      # which is worse than saying nothing.
+      attempted <- file.path("data-raw", paste0(pred_file_name, ".parquet"))
+      saved <- tryCatch({
+        arrow::write_parquet(combined, attempted)
+        attempted
       }, error = function(e2) {
         fallback <- file.path(tempdir(), paste0(pred_file_name, ".parquet"))
-        saved <- tryCatch({
+        alt <- tryCatch({
           arrow::write_parquet(combined, fallback)
           fallback
         }, error = function(e3) NULL)
-        cli::cli_alert_danger(
-          "Could not save the rescue copy to {local_path} ({conditionMessage(e2)}){if (is.null(saved)) ' and the tempdir fallback failed too' else paste0(' -- wrote it to ', saved, ' instead')}.")
-        saved %||% local_path
+        if (is.null(alt)) {
+          cli::cli_alert_danger(
+            "Could not save the rescue copy to {attempted} ({conditionMessage(e2)}), and the tempdir fallback failed too -- NO local copy of these predictions exists.")
+        } else {
+          cli::cli_alert_danger(
+            "Could not save the rescue copy to {attempted} ({conditionMessage(e2)}) -- wrote it to {alt} instead.")
+        }
+        alt
       })
       cli::cli_warn(c(
         "Failed to upload locked predictions: {conditionMessage(e)}",
-        "i" = "Saved locally to {local_path}",
+        "i" = if (is.null(saved)) "No local copy was saved -- both the data-raw/ and tempdir writes failed."
+              else "Saved locally to {saved}",
         "i" = "Check WORKFLOW_PAT if this is a permissions issue"
       ))
     }

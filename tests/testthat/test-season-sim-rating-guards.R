@@ -71,6 +71,29 @@ test_that("prepare_sim_data() aborts when the requested season is absent, rather
   )
 })
 
+test_that("a season with no ratings yet falls back to the prior season loudly, not fatally", {
+  # The pre-season window, and the reason the abort above must NOT be
+  # unconditional. get_afl_season() is year(Sys.Date()), and
+  # run_ratings_pipeline.R skips seasons with no PBP, so from January until
+  # round 1 the CURRENT season has zero ratings rows -- for ~2.5 months every
+  # year. Aborting there would kill the daily run and publish nothing, which
+  # is worse than carrying last season's ratings forward with a warning.
+  local_mocked_bindings(
+    load_team_ratings = function(...) stop("no team ratings release"),
+    load_torp_ratings = function(...) .mock_full_history_ratings(),
+    load_predictions  = function(...) NULL,
+    get_all_injuries  = function(...) NULL
+  )
+
+  # 2027 is not in the release; 2026 is the most recent prior season.
+  expect_message(
+    prep <- prepare_sim_data(season = 2027, fixtures = .mock_fixtures(2027)),
+    "falling back to 2026"
+  )
+  # And it really used 2026 (negative torp in the mock), not 2024.
+  expect_true(all(prep$sim_teams$torp < 0))
+})
+
 test_that("a zero-row ratings return is caught, not treated as a successful load", {
   # load_torp_ratings() warns and returns 0 rows on a failed download. The old
   # is.null() check passed it straight through to max() on an empty column.
