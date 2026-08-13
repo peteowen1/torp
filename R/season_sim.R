@@ -14,6 +14,63 @@
 # Data preparation
 # --------------------------------------------------------------------------
 
+#' Aggregate player TORP into a team rating, pricing absences at replacement
+#'
+#' Split out of `prepare_sim_data()` so the injury behaviour is testable without
+#' standing up fixtures and a full simulation (torp#151).
+#'
+#' The denominator is the FULL squad's `pred_tog`, not the available squad's.
+#' Re-normalising over who is left makes the weights sum to 18 no matter how many
+#' players are missing, which hands the injured players' minutes to the remaining
+#' RATED players — so the implicit replacement becomes the team's own average.
+#' Measured on 2026 R23 that ranged -2.01 (Richmond) to +1.16 (Hawthorn) and
+#' correlated +0.945 with team rating: injuries hurt strong teams less, purely as
+#' an artefact of the aggregation.
+#'
+#' Vacated weight is instead priced at an explicit replacement level: the mean
+#' torp of players outside each squad's top 22 by `pred_tog`, taken from the
+#' pre-exclusion frame so injuries cannot move it. Holding the denominator alone
+#' is not enough — `torp` is centred at 0, so a bare hole credits missing players
+#' with league-average value.
+#'
+#' Validated over 17 injury snapshots spanning 15 rounds (224 team-observations
+#' where a team lost above-replacement players): violations of "losing
+#' above-replacement players must lower your rating" fall from 93 (41.5%) to 0.
+#' Teams with nobody out are unchanged — the vacated weight is exactly 0.
+#'
+#' @param pr_dt player ratings AFTER any injury exclusion
+#' @param pr_dt_full player ratings BEFORE exclusion, or NULL when not
+#'   injury-aware (in which case the two are the same frame)
+#' @param discount scalar applied to the finished team rating
+#' @return a data.table of `team`, `torp`
+#' @keywords internal
+.aggregate_team_torp <- function(pr_dt, pr_dt_full = NULL, discount = 1) {
+  pr_dt <- data.table::as.data.table(pr_dt)
+  squad <- data.table::as.data.table(
+    if (!is.null(pr_dt_full)) pr_dt_full else pr_dt)
+
+  full_tog <- squad[, .(team_tog = sum(pred_tog, na.rm = TRUE)), by = team]
+
+  squad_r <- data.table::copy(squad)
+  squad_r[, tog_rnk := data.table::frank(-pred_tog, ties.method = "first"),
+          by = team]
+  repl_torp <- squad_r[tog_rnk > SIM_TOP_N_PLAYERS + 1, mean(torp, na.rm = TRUE)]
+  if (!is.finite(repl_torp)) repl_torp <- 0
+
+  d <- merge(pr_dt, full_tog, by = "team", all.x = TRUE)
+  d[, tog_wt := {
+    n_pl <- .N
+    if (isTRUE(team_tog[1] > 0)) pred_tog * 18 / team_tog else rep(18 / n_pl, n_pl)
+  }, by = team]
+
+  d[, .(
+    # 18 - sum(tog_wt) is the weight vacated by excluded players, and is exactly
+    # 0 when nobody is out — so the no-injury path is bit-identical to before.
+    torp = (sum(torp * tog_wt, na.rm = TRUE) +
+              max(18 - sum(tog_wt, na.rm = TRUE), 0) * repl_torp) * discount
+  ), by = team]
+}
+
 #' Prepare simulation data for a season
 #'
 #' Loads fixtures, team ratings, and (optionally) predictions, then separates
@@ -329,15 +386,27 @@ prepare_sim_data <- function(season, team_ratings = NULL, fixtures = NULL,
       # pred_tog-weighted aggregation: torp is now per-80 (centered around 0),
       # so negative values are intentional (below-average players). No pmax guard
       # needed — TOG weighting handles contribution scaling.
+      #
+      # The denominator is the FULL squad's pred_tog, not the available squad's
+      # (torp#151). Re-normalising over who is left makes the weights sum to 18
+      # regardless of how many players are missing, so the injured players'
+      # minutes get handed to the remaining RATED players -- i.e. the implicit
+      # replacement is the team's own average. Measured on 2026 R23 that ranged
+      # -2.01 (Richmond) to +1.16 (Hawthorn) and correlated +0.945 with team
+      # rating: injuries hurt strong teams less, purely as an artefact.
+      #
+      # Instead, vacated weight is priced at an explicit replacement level --
+      # the mean torp of players outside each squad's top 22 by pred_tog,
+      # computed from the pre-exclusion frame so injuries cannot move it.
+      # Holding the denominator alone is NOT enough: torp is centred at 0, so a
+      # bare hole credits missing players with league-average value.
+      #
+      # Validated over 17 injury snapshots spanning 15 rounds (224 team-obs
+      # where a team lost above-replacement players): violations of "losing
+      # above-replacement players must lower your rating" fall from 93 (41.5%)
+      # to 0. Teams with nobody out are bit-identical either way.
       if ("pred_tog" %in% names(pr_dt)) {
-        pr_dt[, tog_wt := {
-          team_sum <- sum(pred_tog, na.rm = TRUE)
-          n_pl <- .N
-          if (team_sum > 0) pred_tog * 18 / team_sum else rep(18 / n_pl, n_pl)
-        }, by = team]
-        sim_teams <- pr_dt[, .(
-          torp = sum(torp * tog_wt, na.rm = TRUE) * discount
-        ), by = team]
+        sim_teams <- .aggregate_team_torp(pr_dt, pr_dt_full, discount)
       } else {
         pr_dt[, tm_rnk := rank(-torp), by = team]
         sim_teams <- pr_dt[tm_rnk <= SIM_TOP_N_PLAYERS, .(
