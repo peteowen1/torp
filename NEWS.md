@@ -10,8 +10,16 @@
   exactly like "no data" and every simulation silently fell through to a
   player-TORP fallback. The lookup now resolves `team_torp` first, then
   `team_epr`, and `run_ratings_pipeline.R` publishes `team_torp`.
-  **This changes published output**: simulated margins widen ~19% and 4 of 18
-  teams move more than 2 ladder places. `team_torp` was chosen on measurement —
+  **This changes the non-injury-aware path only**: on it, simulated margins
+  widen ~19% and 4 of 18 teams move more than 2 ladder places. **It does not
+  change the simulations published to inthegame.blog.** Those pass injuries, so
+  `use_injury_aware` is `TRUE`, the whole team-ratings lookup is skipped
+  (`R/season_sim.R`, `if (!use_injury_aware)`), and team ratings are built live
+  from player TORP with injured players excluded. Verified on the first blog
+  build after this merged: torpdata run 31661873642, `torp_sha 0d2676a`, logging
+  `Building injury-aware team ratings from player TORP (top 21 per team)`.
+  Whether the published path *should* use `team_torp` is open and unmeasured —
+  see torp#149. `team_torp` was chosen on measurement —
   it wins every scale-free comparison against `team_epr` and `team_psr` — see
   `../docs/reviews/2026-08-12-TEAM-RATING-CALIBRATION.md`, which also records what
   the first pass of that analysis got wrong. Releases published before
