@@ -58,6 +58,41 @@ test_that(".build_locked_predictions proceeds fresh when file_reader confirms ab
   expect_equal(nrow(out), 3)
 })
 
+test_that("the post-hoc check runs on the FRESH upload path too, not just the merge", {
+  # It lived inside the accumulating branch, so a first-run-of-season or a
+  # recovery after the release asset is deleted published with no post-hoc
+  # check at all -- and, once the skip message was added, without even that.
+  # The recovery case is when retrodictions are most likely: it rebuilds games
+  # that have already been played.
+  local_mocked_bindings(
+    file_reader = function(file_name, release_tag) {
+      stop(structure(
+        class = c("vb_error_absent", "vb_error", "error", "condition"),
+        list(message = "404 not found", call = NULL))
+      )
+    },
+    vb_confirm_absent = function(repo, tag, name) TRUE
+  )
+
+  # One row stamped a day AFTER its own game started: a retrodiction.
+  week_gms <- data.frame(
+    week = 5, match_id = "M1", margin = 3,
+    utc_start_time = "2026-06-04T09:30:00.000+0000",
+    generated_utc  = "2026-06-05T04:00:00Z",
+    stringsAsFactors = FALSE
+  )
+
+  expect_warning(
+    out <- .build_locked_predictions(
+      "predictions_2026", 2026, week_gms, .mock_team_mdl_df(),
+      target_weeks = 5,
+      completed_margins = data.frame(match_id = character(0), .actual_margin = numeric(0))
+    ),
+    "computed AFTER"
+  )
+  expect_equal(nrow(out), 1)
+})
+
 test_that(".build_locked_predictions refuses a fresh upload when the asset is not confirmed absent", {
   local_mocked_bindings(
     file_reader = function(file_name, release_tag) {

@@ -253,20 +253,29 @@ get_lineup_ratings <- function(season = NULL, round = NULL, match_id = NULL) {
 #'   team perspective
 #' @keywords internal
 .format_match_preds <- function(df) {
+  # `bits` and `pred_xmargin` (pred_xscore_diff) used to be selected here and
+  # then silently dropped by the summarise() below, exactly as utc_start_time
+  # was. Neither has a consumer -- `bits` is a per-row scoring metric computed
+  # against the actual result in .train_match_gams(), not a prediction, and
+  # pred_xmargin appears nowhere downstream. Dropping them from the select
+  # rather than leaving code that reads as if they were published.
+  #
+  # NOTE: pred_xmargin is the expected-score margin, and its sibling
+  # pred_xtotal IS published. If it should be published too, add it to the
+  # group_by/summarise -- selecting it alone never did anything.
   home <- df |>
     dplyr::filter(team_type_fac.x == "home") |>
     dplyr::select(
       season = season.x, round = round_number.x, players = count.x, match_id,
       home_team = team_name.x, home_epr = epr.x, home_psr = psr.x,
       away_team = team_name.y, away_epr = epr.y, away_psr = psr.y,
-      pred_xtotal = pred_tot_xscore, pred_xmargin = pred_xscore_diff,
-      pred_margin = pred_score_diff, pred_win, bits,
+      pred_xtotal = pred_tot_xscore,
+      pred_margin = pred_score_diff, pred_win,
       margin = score_diff, start_time = local_start_time_str,
       utc_start_time, venue = venue.x
     )
   away <- df |>
     dplyr::mutate(
-      pred_xscore_diff = -pred_xscore_diff,
       pred_score_diff = -pred_score_diff,
       pred_win = 1 - pred_win,
       score_diff = -score_diff
@@ -276,14 +285,24 @@ get_lineup_ratings <- function(season = NULL, round = NULL, match_id = NULL) {
       season = season.x, round = round_number.x, players = count.x, match_id,
       home_team = team_name.y, home_epr = epr.y, home_psr = psr.y,
       away_team = team_name.x, away_epr = epr.x, away_psr = psr.x,
-      pred_xtotal = pred_tot_xscore, pred_xmargin = pred_xscore_diff,
-      pred_margin = pred_score_diff, pred_win, bits,
+      pred_xtotal = pred_tot_xscore,
+      pred_margin = pred_score_diff, pred_win,
       margin = score_diff, start_time = local_start_time_str,
       utc_start_time, venue = venue.x
     )
   dplyr::bind_rows(home, away) |>
+    # utc_start_time is a GROUPING variable, not a passenger: summarise() keeps
+    # only group vars and summarised ones, so anything merely selected above is
+    # dropped here. See .warn_post_hoc_predictions() below for what that cost.
+    #
+    # Grouping on it cannot split a match into two rows. It is fixture-level:
+    # .build_fixtures_df() selects it before the pivot_longer that turns one
+    # fixture into a home row and an away row, so both rows carry the identical
+    # value by construction. Same argument that already holds for start_time,
+    # grouped on here since the beginning.
     dplyr::group_by(season, round, match_id, home_team, home_epr, home_psr,
-                    away_team, away_epr, away_psr, start_time, venue) |>
+                    away_team, away_epr, away_psr, start_time, utc_start_time,
+                    venue) |>
     dplyr::summarise(
       players = mean(players), pred_xtotal = mean(pred_xtotal),
       pred_margin = mean(pred_margin), pred_win = mean(pred_win),
@@ -300,8 +319,8 @@ get_lineup_ratings <- function(season = NULL, round = NULL, match_id = NULL) {
       home_team = as.character(home_team),
       away_team = as.character(away_team)
     ) |>
-    dplyr::select(season, round, match_id:away_psr, start_time, venue,
-                  epr_diff, psr_diff, players:margin)
+    dplyr::select(season, round, match_id:away_psr, start_time, utc_start_time,
+                  venue, epr_diff, psr_diff, players:margin)
 }
 
 
@@ -350,7 +369,17 @@ get_lineup_ratings <- function(season = NULL, round = NULL, match_id = NULL) {
   # ISO-with-T string silently parses to MIDNIGHT rather than failing, so a
   # naive version of this check flagged almost every legitimate prediction as
   # post-hoc. Both were caught only by testing against the real column values.
-  if (!all(c("generated_utc", "utc_start_time") %in% names(combined))) return(invisible(0L))
+  # Say so rather than returning silently. This gate is why the check was dead
+  # from the day it was written until 2026-08-12: .format_match_preds() dropped
+  # utc_start_time in its summarise(), this line returned 0, and "no post-hoc
+  # rows" and "never ran" were indistinguishable in the log. A guard that can
+  # stop checking without saying so is not a guard.
+  missing_cols <- setdiff(c("generated_utc", "utc_start_time"), names(combined))
+  if (length(missing_cols) > 0) {
+    cli::cli_inform(
+      "Post-hoc prediction check skipped: no {.field {missing_cols}} column{?s} on the prediction frame.")
+    return(invisible(0L))
+  }
   gen <- suppressWarnings(as.POSIXct(combined$generated_utc,
                                      format = "%Y-%m-%dT%H:%M:%SZ", tz = "UTC"))
   start <- suppressWarnings(.parse_utc_start(combined$utc_start_time))
@@ -528,7 +557,6 @@ get_lineup_ratings <- function(season = NULL, round = NULL, match_id = NULL) {
       dplyr::arrange(week)
 
     vb_guard_accumulate(existing, combined, floor = 0.9)
-    .warn_post_hoc_predictions(combined)
   } else {
     # existing is NULL only when file_reader() confirmed absence (404) above,
     # or the file genuinely has 0 rows (loaded fine). Independently confirm
@@ -548,6 +576,16 @@ get_lineup_ratings <- function(season = NULL, round = NULL, match_id = NULL) {
     }
     combined <- week_gms
   }
+
+  # On the final frame, outside the branch, so BOTH upload paths are checked.
+  # It lived inside the accumulating branch until 2026-08-12, which left the
+  # fresh-upload path -- first run of a season, or recovery after the release
+  # asset is deleted -- publishing with no post-hoc check and no message saying
+  # one had been skipped. That recovery case is exactly when retrodictions are
+  # likely, since it is a mid-season rebuild of games already played.
+  # .warn_missing_lineups() above has always run before the split for the same
+  # reason; this one now matches it.
+  .warn_post_hoc_predictions(combined)
 
   combined
 }
@@ -1054,20 +1092,60 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
       cli::cli_alert_success("Uploaded locked predictions ({nrow(combined)} rows, week{?s} {paste(target_weeks, collapse = ', ')} updated)")
     },
     error = function(e) {
-      local_path <- file.path("data-raw", paste0(pred_file_name, ".parquet"))
-      arrow::write_parquet(combined, local_path)
-      # cli_alert_danger FIRST, because it prints immediately. R defers warnings
-      # to the end of the script, and on 2026-07-29 the job was killed by its
-      # timeout one second after the pipeline finished -- so this warning never
-      # printed and a predictions/CSV divergence that fed Squiggle stale tips
-      # left no trace anywhere in the log.
+      # cli_alert_danger FIRST, and genuinely first -- these two lines used to
+      # sit BELOW the arrow::write_parquet() call despite the comment there
+      # claiming otherwise. The write targets a RELATIVE data-raw/ path, so a
+      # run whose working directory is not the package root throws inside the
+      # error handler and kills it before any diagnostic prints, then escapes
+      # run_predictions_pipeline() entirely.
+      #
+      # Scope that honestly: the scheduled workflow sets no working-directory,
+      # so its CWD is the checkout root and the relative path resolves -- this
+      # is a live bug for local and interactive runs, NOT an established cause
+      # of the 2026-07-29 incident. That one has its own documented account at
+      # load_data.R (the verify re-raise, and a deferred cli_warn lost when the
+      # job timed out), which requires this handler to have run to completion.
+      # The two explanations are not compatible; don't merge them.
+      #
+      # cli_alert_* print immediately (they go through message()); cli_warn is
+      # deferred to end-of-script and can be dropped past nwarnings or lost to
+      # a timeout, which is why the ordering matters at all.
       cli::cli_alert_danger(
         "FAILED to upload locked predictions for {pred_file_name}: {conditionMessage(e)}")
       cli::cli_alert_danger(
         "squiggle.com.au may now be serving the PREVIOUS round's tips. Verify predictions_<season>.csv and .parquet timestamps agree before first bounce.")
+
+      # Best-effort local rescue copy, and it must not be able to take the
+      # diagnostics down with it.
+      #
+      # `saved` is NULL when nothing was written, and stays NULL -- it is not
+      # defaulted back to the attempted path. Reporting "Saved locally to
+      # data-raw/..." when both writes failed sends whoever is investigating a
+      # stale-predictions incident hunting for a file that does not exist,
+      # which is worse than saying nothing.
+      attempted <- file.path("data-raw", paste0(pred_file_name, ".parquet"))
+      saved <- tryCatch({
+        arrow::write_parquet(combined, attempted)
+        attempted
+      }, error = function(e2) {
+        fallback <- file.path(tempdir(), paste0(pred_file_name, ".parquet"))
+        alt <- tryCatch({
+          arrow::write_parquet(combined, fallback)
+          fallback
+        }, error = function(e3) NULL)
+        if (is.null(alt)) {
+          cli::cli_alert_danger(
+            "Could not save the rescue copy to {attempted} ({conditionMessage(e2)}), and the tempdir fallback failed too -- NO local copy of these predictions exists.")
+        } else {
+          cli::cli_alert_danger(
+            "Could not save the rescue copy to {attempted} ({conditionMessage(e2)}) -- wrote it to {alt} instead.")
+        }
+        alt
+      })
       cli::cli_warn(c(
         "Failed to upload locked predictions: {conditionMessage(e)}",
-        "i" = "Saved locally to {local_path}",
+        "i" = if (is.null(saved)) "No local copy was saved -- both the data-raw/ and tempdir writes failed."
+              else "Saved locally to {saved}",
         "i" = "Check WORKFLOW_PAT if this is a permissions issue"
       ))
     }

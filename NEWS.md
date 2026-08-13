@@ -1,5 +1,29 @@
 # torp (development version)
 
+## Bug fixes
+
+* **Season simulations were built by the wrong estimator for five months, and
+  the numbers move now that they aren't.** `c847a917` (2026-03-16) renamed the
+  published team-rating column `team_torp` → `team_epr`, but
+  `prepare_sim_data()` kept asking for `team_torp`. `as.numeric(NULL)` builds a
+  0-row table rather than erroring, so a perfectly successful load looked
+  exactly like "no data" and every simulation silently fell through to a
+  player-TORP fallback. The lookup now resolves `team_torp` first, then
+  `team_epr`, and `run_ratings_pipeline.R` publishes `team_torp`.
+  **This changes published output**: simulated margins widen ~19% and 4 of 18
+  teams move more than 2 ladder places. `team_torp` was chosen on measurement —
+  it wins every scale-free comparison against `team_epr` and `team_psr` — see
+  `../docs/reviews/2026-08-12-TEAM-RATING-CALIBRATION.md`, which also records what
+  the first pass of that analysis got wrong. Releases published before
+  2026-08-12 carry no `team_torp`; until the ratings pipeline re-runs,
+  `prepare_sim_data()` falls back to `team_epr` and says so.
+
+* `prepare_sim_data(injuries = FALSE)` no longer errors. `nrow()` returns `NULL`
+  for a non-data.frame, so the documented "no injury adjustment" value made the
+  internal `use_injury_aware` flag `NA` and died on `if (NA)` with a message
+  naming neither the argument nor injuries. Only `simulate_afl_season()`
+  normalising `FALSE` to `NULL` kept it off the front door.
+
 ## Chores
 
 * **Building a match prediction no longer implies publishing one.**

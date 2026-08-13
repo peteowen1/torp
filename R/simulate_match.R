@@ -166,9 +166,13 @@ simulate_match_mc <- function(home_team, away_team,
     if (!is.null(team_ratings) && nrow(team_ratings) > 0) {
       # Use latest rating per team
       tr <- team_ratings
-      if ("season" %in% names(tr)) tr <- tr[tr$season == max(tr$season), ]
+      # na.rm on both, because the failure is silent and ugly: max() of a
+      # column holding any NA is NA, and `df[NA, ]` returns a row of all-NA
+      # rather than no rows -- so nrow() stays non-zero, home_r/away_r come
+      # back NA, and `estimate` is NA with nothing saying why.
+      if ("season" %in% names(tr)) tr <- tr[tr$season == max(tr$season, na.rm = TRUE), ]
       if ("round" %in% names(tr)) {
-        tr <- tr[tr$round == max(tr$round), ]
+        tr <- tr[tr$round == max(tr$round, na.rm = TRUE), ]
       }
       home_r <- tr$torp[tr$team == home_team]
       away_r <- tr$torp[tr$team == away_team]
@@ -178,7 +182,13 @@ simulate_match_mc <- function(home_team, away_team,
     }
   }
 
-  if (is.null(estimate)) {
+  # is.na as well as is.null. na.rm above fixed the common case (one NA row
+  # among real ones), but a caller-supplied plain data.frame or tibble whose
+  # season/round column is entirely NA still yields all-NA rows from `df[NA, ]`
+  # rather than none -- so length(home_r) > 0 passes, the arithmetic above
+  # produces NA, and an is.null-only check lets an NA estimate through silently.
+  # team_ratings is a user-facing argument, so that shape is reachable.
+  if (is.null(estimate) || is.na(estimate)) {
     cli::cli_warn("Could not resolve ratings for {home_team} vs {away_team}, using home_advantage only")
     estimate <- home_advantage
   }

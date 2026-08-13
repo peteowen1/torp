@@ -359,7 +359,7 @@ utils::globalVariables(c(
   "type_anti", "Ground",
 
   # Predictions pipeline output
-  "week", "source", "pred_xtotal", "pred_xmargin",
+  "week", "source", "pred_xtotal",
 
   # Backfill helper
   ".actual_margin",
