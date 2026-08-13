@@ -113,7 +113,20 @@ prepare_sim_data <- function(season, team_ratings = NULL, fixtures = NULL,
     sim_teams <- NULL
 
     # When injuries provided, skip pre-computed team ratings and go straight
-    # to player-level ratings so injured players can be excluded
+    # to player-level ratings so injured players can be excluded.
+    #
+    # KNOW WHAT THIS GATE COSTS BEFORE TUNING ANYTHING BELOW IT. The blog's
+    # published simulations (torpdata build-blog-data -> afl/simulations.parquet)
+    # pass injuries, so they take the OTHER branch and never read team_torp at
+    # all. Everything inside this `if` -- the team_torp/team_epr resolution, the
+    # degenerate-column demotion, the measured estimator choice -- applies to
+    # backtests and to callers that pass no injuries. Confirmed on the first
+    # blog build after the team_torp switch merged (torpdata run 31661873642,
+    # torp_sha 0d2676a): "Building injury-aware team ratings from player TORP".
+    #
+    # Whether the published path SHOULD use team_torp is open: it trades the
+    # better-measured estimator for knowing who is actually available, and
+    # nobody has measured which wins. torp#149.
     if (!use_injury_aware) {
       # Pre-computed team ratings are the PREFERRED estimator, and as of
       # 2026-08-12 they are reachable again. Between the metric-first rename
