@@ -7,17 +7,32 @@
 
 #' Box-score terms that make up each EPV channel
 #'
-#' The exact composition read off `create_player_game_data()`'s final mutate
-#' (`player_credit.R:1002-1015`). Each entry is `stat column -> weight name in
-#' [default_epv_params()]`, and every term enters its channel linearly as
-#' `count * weight` — which is what makes this decomposition arithmetic rather
-#' than an approximation.
+#' The exact composition of `create_player_game_data()`. Each entry is `stat
+#' column -> weight name in [default_epv_params()]`, and every term enters its
+#' channel linearly as `count * weight` — which is what makes this decomposition
+#' arithmetic rather than an approximation.
 #'
-#' **Keep this in lockstep with that mutate.** If a term is added there and not
-#' here, [player_epv_breakdown()]'s residual silently absorbs it and the category
-#' is simply missing from the profile. The `verify` gate catches a *total*
-#' mismatch, not a term quietly landing in the residual, so the two are not
-#' interchangeable checks.
+#' @section Two source locations, not one:
+#' The four channels are **not** all built in the same place, and assuming they
+#' are is how this list drifts:
+#'
+#' * `disp` and `recv` — the final mutate, `player_credit.R:1001-1012`.
+#' * `spoil` and `hitout` — **Step 4**, `player_credit.R:857-859`, inside
+#'   `spoil_hitout_df`. The final mutate only zero-fills these two
+#'   (`replace_na(epv_spoil, 0)`), so a maintainer who checks only the mutate
+#'   will not see their formulas at all.
+#'
+#' Under v2 `epv_spoil` and `epv_hitout` are **pure box score with no chain
+#' component**, so a near-zero `chain` residual on those channels is correct
+#' behaviour rather than a missing term.
+#'
+#' **Keep this in lockstep with both locations.** If a term is added to either
+#' and not here, [player_epv_breakdown()]'s residual silently absorbs it and the
+#' category is simply missing from the profile. The `verify` gate catches a
+#' *total* mismatch, not a term quietly landing in the residual — and a term
+#' placed in the **wrong channel** reconciles perfectly while showing a player's
+#' value under the wrong heading. None of these three checks substitutes for
+#' another.
 #'
 #' @keywords internal
 EPV_BOX_TERMS <- list(

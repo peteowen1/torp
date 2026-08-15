@@ -11,16 +11,33 @@ An object of class \code{list} of length 4.
 EPV_BOX_TERMS
 }
 \description{
-The exact composition read off \code{create_player_game_data()}'s final mutate
-(\code{player_credit.R:1002-1015}). Each entry is \verb{stat column -> weight name in [default_epv_params()]}, and every term enters its channel linearly as
-\code{count * weight} — which is what makes this decomposition arithmetic rather
-than an approximation.
+The exact composition of \code{create_player_game_data()}. Each entry is \verb{stat column -> weight name in [default_epv_params()]}, and every term enters its
+channel linearly as \code{count * weight} — which is what makes this decomposition
+arithmetic rather than an approximation.
 }
-\details{
-\strong{Keep this in lockstep with that mutate.} If a term is added there and not
-here, \code{\link[=player_epv_breakdown]{player_epv_breakdown()}}'s residual silently absorbs it and the category
-is simply missing from the profile. The \code{verify} gate catches a \emph{total}
-mismatch, not a term quietly landing in the residual, so the two are not
-interchangeable checks.
+\section{Two source locations, not one}{
+
+The four channels are \strong{not} all built in the same place, and assuming they
+are is how this list drifts:
+\itemize{
+\item \code{disp} and \code{recv} — the final mutate, \code{player_credit.R:1001-1012}.
+\item \code{spoil} and \code{hitout} — \strong{Step 4}, \code{player_credit.R:857-859}, inside
+\code{spoil_hitout_df}. The final mutate only zero-fills these two
+(\code{replace_na(epv_spoil, 0)}), so a maintainer who checks only the mutate
+will not see their formulas at all.
 }
+
+Under v2 \code{epv_spoil} and \code{epv_hitout} are \strong{pure box score with no chain
+component}, so a near-zero \code{chain} residual on those channels is correct
+behaviour rather than a missing term.
+
+\strong{Keep this in lockstep with both locations.} If a term is added to either
+and not here, \code{\link[=player_epv_breakdown]{player_epv_breakdown()}}'s residual silently absorbs it and the
+category is simply missing from the profile. The \code{verify} gate catches a
+\emph{total} mismatch, not a term quietly landing in the residual — and a term
+placed in the \strong{wrong channel} reconciles perfectly while showing a player's
+value under the wrong heading. None of these three checks substitutes for
+another.
+}
+
 \keyword{internal}

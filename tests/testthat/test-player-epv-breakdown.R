@@ -103,6 +103,21 @@ test_that("share is computed over ABSOLUTE epv, so a near-zero total cannot expl
   expect_equal(s$tot, rep(1, nrow(s)))
 })
 
+test_that("an all-zero player-game gives NA share rather than NaN", {
+  # 0/0 is NaN in R, and a NaN reaching a page renders as literal "NaN". This is
+  # reachable: a player who came on late with no recorded stat and no chain value.
+  ps <- .fake_ps()
+  for (s in unlist(lapply(EPV_BOX_TERMS, names), use.names = FALSE)) {
+    data.table::set(ps, j = s, value = c(0, 0))
+  }
+  pg <- .fake_pg()   # channels and epv already all zero
+  b <- player_epv_breakdown(player_game = pg, player_stats = ps)
+  expect_true(all(is.na(b$share)))
+  expect_false(any(is.nan(b$share)))
+  # The gate must still pass -- zero really does reconstruct zero.
+  expect_equal(sum(b$epv), 0)
+})
+
 test_that("EPV_BOX_TERMS covers the 29 documented box-score categories", {
   # A guard on the lockstep requirement: if someone adds a term to
   # create_player_game_data()'s mutate and here, this count moves and the change
