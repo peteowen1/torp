@@ -523,22 +523,33 @@ tryCatch({
       # overstated the risk.
       #
       # They are already protected, but by an invariant living in a DIFFERENT
-      # FILE: `epr` is defined as the sum of its four channels
-      # (player_ratings.R:331 and :453,
-      # `epr := round(epr_recv + epr_disp + epr_spoil + epr_hitout, 2)`), so
-      # `epr` is NA exactly when the channels are, and the `!is.na(epr)` filter
-      # above therefore removes every row that could make a channel all-NA.
+      # FILE, and it is worth naming the RIGHT one -- an earlier version of this
+      # comment cited the wrong enforcement point.
+      #
+      # `epr` is built as the sum of its four channels in player_ratings.R:331
+      # and :453, but that is not what guards this stage: line 422 above runs
+      # centre_epr_by_position() (EPR_POSITION_CENTRE is TRUE,
+      # constants_ratings.R:787), which REBUILDS epr from the centred channels at
+      # player_ratings.R:731-735 and sets `epr := NA_real_` on any row where ANY
+      # channel is non-finite. That is a stronger invariant than the sum -- not
+      # "all four NA" but "any one non-finite" -- and it is the one the
+      # `!is.na(epr)` filter above then acts on.
+      #
+      # So the operative chain is: any channel non-finite -> epr NA -> row
+      # filtered out. Change the NA propagation in centre_epr_by_position() and
+      # these five columns lose their protection; changing the formula at :331
+      # or :453 alone would not, because centring re-enforces it afterwards.
+      #
       # Measured 2026-08-15 over all 132,552 player-rounds: the NA masks of
       # epr / epr_recv / epr_disp / epr_spoil / epr_hitout / torp are
       # *identical*, 0 differing rows, and no channel is all-NA in any of the
       # 2,934 team-rounds.
       #
       # So this change is a no-op today -- verified identical() on all five
-      # columns across every team-round -- and it is here so that the safety of
-      # a published column does not depend on an undocumented coupling two files
-      # away. If `epr` ever stops being the sum of exactly these channels, the
-      # bare sum() would silently publish 0.00 and season_sim.R's degenerate-
-      # column demotion only inspects team_torp/team_epr, so a flat channel
+      # columns across every team-round -- and it is here so the safety of a
+      # published column does not rest on that chain holding. If it breaks, the
+      # bare sum() would silently publish 0.00, and season_sim.R's degenerate-
+      # column demotion inspects only team_torp/team_epr, so a flat channel
       # column would sail straight through.
       team_torp    = .wsum(.data$torp, .data$tog_wt),
       team_psr     = .wsum(.data$psr, .data$tog_wt),
