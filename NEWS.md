@@ -2,6 +2,30 @@
 
 ## Bug fixes
 
+* **Match predictions could be attached to the wrong match, silently, as soon as
+  the finals fixture is published.** `.train_match_xgb()`'s `predict_all()` built
+  its design matrix with `stats::model.matrix()`, whose default `na.action` is
+  `na.omit` — so every row carrying an NA in a feature column was **dropped**, and
+  the function returned fewer predictions than the frame had rows. The caller
+  assigns that straight back (`team_mdl_df$xgb_pred_... <- predict_all(...)`),
+  which fails two ways: when the lengths do not divide it errors far from the
+  cause (`"replacement has N rows, data has M"`, naming neither the NAs nor the
+  matches), and **when they do divide R recycles in silence** and every prediction
+  after the first gap lands on the wrong match. Placeholder finals fixtures (teams
+  TBD) carry NA rating features every year from the moment the AFL publishes the
+  finals schedule — precisely when predictions matter most. Bit twice on
+  2026-07-29.
+
+  Fixed by routing `na.action` through `stats::model.frame()`, which is the only
+  form that works: **passing `na.action = na.pass` to `model.matrix()` directly
+  does not preserve the rows** (measured — 5-row frame in, 3 rows out), and that
+  is the obvious one-line fix. XGBoost then routes NA down the default branch it
+  learned at training time, so the vector comes back full length and finite. The
+  helper is now `.predict_all_rows()` at file scope, and it **aborts** rather than
+  return a vector that could recycle. Training is unaffected — it is fed completed
+  matches only. Identity behaviour on frames with no NAs is covered by test.
+  New tests: `tests/testthat/test-match-predict-alignment.R`.
+
 * **Season simulations were built by the wrong estimator for five months, and
   the numbers move now that they aren't.** `c847a917` (2026-03-16) renamed the
   published team-rating column `team_torp` → `team_epr`, but
