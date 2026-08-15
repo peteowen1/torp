@@ -181,9 +181,38 @@ prepare_sim_data <- function(season, team_ratings = NULL, fixtures = NULL,
     # blog build after the team_torp switch merged (torpdata run 31661873642,
     # torp_sha 0d2676a): "Building injury-aware team ratings from player TORP".
     #
-    # Whether the published path SHOULD use team_torp is open: it trades the
-    # better-measured estimator for knowing who is actually available, and
-    # nobody has measured which wins. torp#149.
+    # This gate costs NOTHING in estimator quality, which is the opposite of
+    # what this comment used to say. Measured 2026-08-15 (torp#149): the
+    # published `team_torp` and the `.aggregate_team_torp()` output built below
+    # are the SAME NUMBER -- run_ratings_pipeline.R:519 writes
+    # `.wsum(torp, tog_wt)` and this file recomputes the identical
+    # pred_tog-weighted sum from the same release. Regressed per round over all
+    # 24 rounds of 2026: correlation 1.000000, slope 0.9999-1.0001, max
+    # residual 0.0063 rating pts (parquet rounding).
+    #
+    # So the gate selects ONE thing: whether injured players are excluded. It
+    # does not trade away a better-measured estimator to get that, and any
+    # claim that it does is retired.
+    #
+    # Still open, and NOT answerable with the data that exists: whether the
+    # exclusion helps. It is a big intervention -- 17.1% of predicted minutes
+    # per round, sd 6.95 rating pts of movement, ~5.6 margin pts against a
+    # margin sd of 38.9 -- with a signal ceiling of ~1% of error (~0.3 MAE).
+    # Scored over 13 rounds / 102 games it reads -0.460 MAE (injury-aware
+    # worse), 95% CI [-1.462, +0.628]; controlling for the rating, the injury
+    # shift's coefficient is +0.549 (SE 0.662, p 0.41) -- right sign, not
+    # separable from zero. The design resolves ~1.0 MAE against a ~0.3 MAE
+    # effect, i.e. underpowered ~3x, and the binding constraint is that
+    # injury_list_2026.parquet is the only season of snapshots. More seasons,
+    # not a better script.
+    #
+    # Do NOT read a raw cor(injury shift, margin) as evidence here: it is -0.256
+    # and it is a confound, not a finding. The shift correlates -0.668 with the
+    # rating difference itself (stronger teams are downgraded more, correct
+    # behaviour post-torp#151), which alone predicts -0.311.
+    #
+    # Full method, anchors and the two withdrawn readings:
+    #   ../docs/reviews/SIM-ESTIMATOR-TEAM-TORP-VS-INJURY-AWARE-2026-08-15.md
     if (!use_injury_aware) {
       # Pre-computed team ratings are the PREFERRED estimator, and as of
       # 2026-08-12 they are reachable again. Between the metric-first rename
