@@ -1,5 +1,34 @@
 # torp (development version)
 
+## New features
+
+* **`player_epv_breakdown()` — where a player's value actually comes from.**
+  Decomposes each player-game's EPV into the **29 box-score categories the credit
+  model is built from** (contested marks, ground ball gets, marks inside 50,
+  goals, shots at goal, clangers, turnovers, metres gained, intercepts,
+  one-percenters, tackles, hitouts, …) plus a per-channel `chain` residual.
+  Returns points, counts and share, long-format, ready for a profile page.
+
+  **The parts add to the whole, and that is enforced.** `verify = TRUE` aborts
+  unless the categories reproduce the published `epv` for every player-game — a
+  breakdown that merely came close would put numbers on a page that visibly
+  disagree with the rating beside them.
+
+  **The residual is a finding, not a leftover.** It averages **39.7% of total
+  absolute EPV**, so roughly two-fifths of a rating comes from play-by-play
+  context with no counting stat behind it — precisely what a counting-stat
+  profile cannot show.
+
+  **Not built from `delta_epv`.** That was the obvious approach and it is wrong:
+  summing pbp's per-row `delta_epv` by player correlates only **0.626** with
+  published EPV and is out by a mean of **4.82 points per player-game**, because
+  `delta_epv` is the swing *caused by* an event while the credit model splits it
+  between disposer and receiver. A prototype built that way failed its gate at
+  `max|epv_disp − rebuilt| = 16.78`, which is how the real structure was found.
+
+  Plan, measurements and the remaining chain-side phase:
+  `docs/plans/PLAYER-EPV-BREAKDOWN-PLAN.md`.
+
 ## Display
 
 * **Spoil and hitout are now shown together as one "Contest" channel.** Neither
