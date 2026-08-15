@@ -6,7 +6,7 @@
 \usage{
 plot_team_ratings(
   team_ratings = NULL,
-  metric = c("epr", "recv", "disp", "spoil", "hitout"),
+  metric = c("epr", "recv", "disp", "contest", "spoil", "hitout"),
   season = get_afl_season()
 )
 }
@@ -14,8 +14,18 @@ plot_team_ratings(
 \item{team_ratings}{Optional data frame of team ratings. If NULL (default),
 loads via \code{load_team_ratings()} and filters to the latest round.}
 
-\item{metric}{One of \code{"epr"} (default), \code{"recv"}, \code{"disp"}, \code{"spoil"},
-or \code{"hitout"}. Mapped to \code{team_epr}, \code{team_epr_recv}, etc.}
+\item{metric}{One of \code{"epr"} (default), \code{"recv"}, \code{"disp"}, \code{"contest"},
+\code{"spoil"} or \code{"hitout"}. Mapped to \code{team_epr}, \code{team_epr_recv}, etc.
+
+\code{"contest"} is a display channel with no published column behind it: it is
+\code{team_epr_spoil + team_epr_hitout}, computed here. Neither part is what its
+name suggests — the "spoil" channel is spoils plus tackles plus pressure,
+the "hitout" channel is hitouts plus ruck contests — so both are contest
+value and the sum is the honest unit. \code{"spoil"} and \code{"hitout"} still work
+and are labelled as the aerial and stoppage halves of it.
+
+Contest is a \strong{small} channel: sd 0.266 against disposal's 1.693, roughly
+2\% of EPR's spread. It will look flat beside the others, correctly.}
 
 \item{season}{Season year for title. Default: current season.}
 }

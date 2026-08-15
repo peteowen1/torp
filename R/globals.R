@@ -63,6 +63,9 @@ utils::globalVariables(c(
 
   # TORP rating variables
   "torp", "torp_shift", "epr", "epr_recv", "epr_disp", "epr_spoil", "epr_hitout",
+  # Display-only channel: epr_spoil + epr_hitout, built in team_profile.R's
+  # print method. No published column of this name exists.
+  "contest",
   "torp_home_round", "torp_away_round", "home_torp", "away_torp",
   "epv_adj", "epv_recv_adj", "recv_sum",
   "epv_disp_adj", "disp_sum", "epv_spoil_adj", "spoil_sum",
