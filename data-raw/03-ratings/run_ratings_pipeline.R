@@ -516,13 +516,48 @@ tryCatch({
       # season_sim.R would prefer it over team_epr and simulate a league with
       # no team differentiation at all, silently. NA is the honest answer and
       # lets the consumer fall back.
+      #
+      # The EPR family below uses .wsum() too, for consistency rather than
+      # because it is currently reachable -- and the distinction is worth writing
+      # down, because a #148 review finding recorded these as unguarded and that
+      # overstated the risk.
+      #
+      # They are already protected, but by an invariant living in a DIFFERENT
+      # FILE, and it is worth naming the RIGHT one -- an earlier version of this
+      # comment cited the wrong enforcement point.
+      #
+      # `epr` is built as the sum of its four channels in player_ratings.R:331
+      # and :453, but that is not what guards this stage: line 422 above runs
+      # centre_epr_by_position() (EPR_POSITION_CENTRE is TRUE,
+      # constants_ratings.R:787), which REBUILDS epr from the centred channels at
+      # player_ratings.R:731-735 and sets `epr := NA_real_` on any row where ANY
+      # channel is non-finite. That is a stronger invariant than the sum -- not
+      # "all four NA" but "any one non-finite" -- and it is the one the
+      # `!is.na(epr)` filter above then acts on.
+      #
+      # So the operative chain is: any channel non-finite -> epr NA -> row
+      # filtered out. Change the NA propagation in centre_epr_by_position() and
+      # these five columns lose their protection; changing the formula at :331
+      # or :453 alone would not, because centring re-enforces it afterwards.
+      #
+      # Measured 2026-08-15 over all 132,552 player-rounds: the NA masks of
+      # epr / epr_recv / epr_disp / epr_spoil / epr_hitout / torp are
+      # *identical*, 0 differing rows, and no channel is all-NA in any of the
+      # 2,934 team-rounds.
+      #
+      # So this change is a no-op today -- verified identical() on all five
+      # columns across every team-round -- and it is here so the safety of a
+      # published column does not rest on that chain holding. If it breaks, the
+      # bare sum() would silently publish 0.00, and season_sim.R's degenerate-
+      # column demotion inspects only team_torp/team_epr, so a flat channel
+      # column would sail straight through.
       team_torp    = .wsum(.data$torp, .data$tog_wt),
       team_psr     = .wsum(.data$psr, .data$tog_wt),
-      team_epr     = round(sum(.data$epr * .data$tog_wt, na.rm = TRUE), 2),
-      team_epr_recv    = round(sum(.data$epr_recv * .data$tog_wt, na.rm = TRUE), 2),
-      team_epr_disp    = round(sum(.data$epr_disp * .data$tog_wt, na.rm = TRUE), 2),
-      team_epr_spoil   = round(sum(.data$epr_spoil * .data$tog_wt, na.rm = TRUE), 2),
-      team_epr_hitout  = round(sum(.data$epr_hitout * .data$tog_wt, na.rm = TRUE), 2),
+      team_epr     = .wsum(.data$epr, .data$tog_wt),
+      team_epr_recv    = .wsum(.data$epr_recv, .data$tog_wt),
+      team_epr_disp    = .wsum(.data$epr_disp, .data$tog_wt),
+      team_epr_spoil   = .wsum(.data$epr_spoil, .data$tog_wt),
+      team_epr_hitout  = .wsum(.data$epr_hitout, .data$tog_wt),
       top_player   = .data$player_name[which.max(.data$epr)],
       top_epr      = round(max(.data$epr, na.rm = TRUE), 2),
       n_players    = sum(.data$pred_tog > 0),
