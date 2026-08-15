@@ -276,15 +276,29 @@ print.torp_team_profile <- function(x, ...) {
 
   if (nrow(x$top_players) > 0) {
     cat("--- Top Players (TORP) ---\n")
-    # Show a compact view
+    # Show a compact view. `epr_spoil` and `epr_hitout` are collapsed into one
+    # `contest` column: neither is what its name says (spoils + tackles +
+    # pressure, and hitouts + ruck contests respectively), both are contest
+    # value, and the sum is exact -- epr = recv + disp + contest holds to
+    # 0.000000, same as the four-way split. Display only; the underlying
+    # columns are untouched.
+    tp <- data.table::as.data.table(x$top_players)
+    if (all(c("epr_spoil", "epr_hitout") %in% names(tp))) {
+      tp <- data.table::copy(tp)
+      # Plain `+`, so an NA in either part propagates rather than being read as
+      # a zero contribution. They are in practice always NA together -- `epr` is
+      # set NA when any channel is non-finite (centre_epr_by_position) -- but a
+      # display should not be the thing that decides that.
+      tp[, contest := epr_spoil + epr_hitout]
+    }
     display_cols <- intersect(
-      c("player_name", "epr", "epr_recv", "epr_disp", "epr_spoil", "epr_hitout"),
-      names(x$top_players)
+      c("player_name", "epr", "epr_recv", "epr_disp", "contest"),
+      names(tp)
     )
     if (length(display_cols) > 0) {
-      print(x$top_players[, ..display_cols], row.names = FALSE)
+      print(tp[, ..display_cols], row.names = FALSE)
     } else {
-      print(x$top_players, row.names = FALSE)
+      print(tp, row.names = FALSE)
     }
     cat("\n")
   }

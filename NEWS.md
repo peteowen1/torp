@@ -1,5 +1,34 @@
 # torp (development version)
 
+## Display
+
+* **Spoil and hitout are now shown together as one "Contest" channel.** Neither
+  was ever what its name said: `epv_spoil` is spoils **plus tackles plus
+  pressure**, and `epv_hitout` is hitouts **plus ruck contests**
+  (`player_credit.R:857-859`). Both are contest value, so the sum is the honest
+  unit to display.
+
+  `plot_team_ratings()` gains `metric = "contest"`; `"spoil"` and `"hitout"`
+  still work and are relabelled as its aerial and stoppage halves. The
+  `team_profile` print method now shows one `contest` column in place of the two.
+
+  **Display only — no published column changes.** `team_epr_contest` is computed
+  on demand rather than added to the release, because the release schema is a
+  consumer contract and none of the ratings move.
+
+  Two things to expect. **It looks flat**: contest sd is 0.266 against disposal's
+  1.693 and receiving's 1.134, about 2% of EPR's spread — that is its honest
+  size. And **midfielders top the aerial half** (Dunkley, Cripps and Curtis above
+  Harris Andrews at 2026 R23), which is the tackles-and-pressure content showing
+  through, not an error.
+
+  Accuracy, precisely: the merge itself moves the last bit only (~1e-16, from
+  reassociating the sum — floating-point addition is not associative). Player
+  ratings reconcile exactly (`epr = recv + disp + contest` to 0.000000 across all
+  721 rated players at 2026 R23). Team ratings reconcile to ~0.02, a
+  **pre-existing** gap from each `team_epr_*` being rounded to 2dp independently;
+  the four-way split carries it too and merging does not widen it.
+
 ## Bug fixes
 
 * **Match predictions could be attached to the wrong match, silently, as soon as
