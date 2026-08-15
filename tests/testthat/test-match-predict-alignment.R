@@ -73,6 +73,45 @@ test_that("an all-NA feature column still yields one prediction per row", {
   expect_length(preds, nrow(df))
 })
 
+test_that("factor features keep the same design-matrix columns, in order", {
+  # This is the real risk in the fix, not the NA handling: `base_cols` carries
+  # two factors (`team_type_fac`, `days_rest_diff_fac`), and xgboost matches
+  # features POSITIONALLY. If the model.frame() detour changed the dummy column
+  # set or its order, predictions would be silently scored against the wrong
+  # features -- a far worse bug than the one being fixed.
+  d <- data.frame(
+    num  = c(1, 2, 3, 4),
+    fac  = factor(c("home", "away", "home", "away"), levels = c("away", "home")),
+    fac2 = factor(c("a", "b", "a", "b"), levels = c("a", "b", "c"))  # unused level
+  )
+
+  old <- stats::model.matrix(~ . - 1, data = d)
+  mf <- stats::model.frame(~ . - 1, data = d, na.action = stats::na.pass)
+  new <- stats::model.matrix(~ . - 1, data = mf)
+
+  # On a frame with no NAs the two paths must agree exactly, attributes included.
+  expect_identical(old, new)
+})
+
+test_that("an NA in a FACTOR feature preserves the row and the column set", {
+  d <- data.frame(
+    num = c(1, 2, 3, 4),
+    fac = factor(c("home", NA, "home", "away"), levels = c("away", "home"))
+  )
+  clean <- data.frame(
+    num = c(1, 2, 3, 4),
+    fac = factor(c("home", "away", "home", "away"), levels = c("away", "home"))
+  )
+
+  mf <- stats::model.frame(~ . - 1, data = d, na.action = stats::na.pass)
+  new <- stats::model.matrix(~ . - 1, data = mf)
+
+  expect_equal(nrow(new), nrow(d))
+  expect_identical(colnames(new), colnames(stats::model.matrix(~ . - 1, data = clean)))
+  # The NA row's dummies go NA rather than silently encoding a level.
+  expect_true(all(is.na(new[2, c("facaway", "fachome")])))
+})
+
 test_that("the recycling case the guard exists for cannot slip through", {
   bst <- .fit_toy_booster()
   # 4-row frame with 2 NA rows: model.matrix() would return 2 rows, and 2
