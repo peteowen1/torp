@@ -469,6 +469,65 @@
 }
 
 
+# .predict_all_rows ----
+
+#' Score every row of a frame, refusing to return a misaligned vector
+#'
+#' `model.matrix()`'s default `na.action` is `na.omit`, so ANY row carrying an
+#' NA in a feature column is silently DROPPED and the caller gets back fewer
+#' predictions than the frame has rows. `.train_match_xgb()` assigns the result
+#' straight onto the frame (`team_mdl_df$xgb_pred_... <- ...`), and that fails
+#' two different ways depending on arithmetic:
+#'
+#' * lengths do not divide — `"replacement has N rows, data has M"`, raised far
+#'   from the cause and naming neither the NAs nor the matches involved;
+#' * lengths DO divide — R **recycles silently**, attaching every prediction
+#'   after the first gap to the wrong match, with nothing logged.
+#'
+#' The second is why this is a guard and not a tidy-up.
+#'
+#' Not hypothetical: placeholder finals fixtures (teams TBD) carry NA rating
+#' features every year from the moment the AFL publishes the finals schedule,
+#' which is exactly when predictions matter most. Bit twice on 2026-07-29 in two
+#' different places.
+#'
+#' **The obvious one-line fix does not work.** Passing `na.action = na.pass` to
+#' `model.matrix()` still drops the rows — measured, 5-row frame in, 3 rows out.
+#' The `na.action` has to reach `model.frame()`, hence the detour below.
+#' XGBoost then routes NA down the default branch it learned at training time,
+#' so the vector comes back full length and finite.
+#'
+#' Training is unaffected — `train_step()` is fed completed matches only.
+#'
+#' @param model A trained `xgb.Booster`.
+#' @param df Frame to score. Every row gets a prediction.
+#' @param feature_cols Character vector of feature columns.
+#' @return Numeric vector, guaranteed `length() == nrow(df)`.
+#' @keywords internal
+.predict_all_rows <- function(model, df, feature_cols) {
+  fdf <- df[, feature_cols, drop = FALSE]
+  mf <- stats::model.frame(~ . - 1, data = fdf, na.action = stats::na.pass)
+  mat <- stats::model.matrix(~ . - 1, data = mf)
+  if (nrow(mat) != nrow(df)) {
+    cli::cli_abort(c(
+      "Feature matrix has {nrow(mat)} row{?s} for a {nrow(df)}-row frame.",
+      "x" = "Rows were dropped building the design matrix, so predictions cannot be aligned to matches.",
+      "i" = "Expected na.pass to preserve every row -- check for a non-numeric feature column."
+    ))
+  }
+  preds <- predict(model, xgboost::xgb.DMatrix(data = mat))
+  # Belt and braces: the entire failure mode is a short vector reaching an
+  # assignment, so refuse to return one. An abort here names the cause; the
+  # recycling it prevents names nothing.
+  if (length(preds) != nrow(df)) {
+    cli::cli_abort(
+      "Predicted {length(preds)} value{?s} for {nrow(df)} row{?s} -- refusing to return a vector that would recycle."
+    )
+  }
+  preds
+}
+
+
 # .train_match_xgb ----
 
 #' Train the 5-model sequential XGBoost pipeline
@@ -588,11 +647,10 @@
          best_n = best_n, cv_score = cv_score)
   }
 
-  # Helper: predict on full dataset
-  predict_all <- function(model, df, feature_cols) {
-    mat <- stats::model.matrix(~ . - 1, data = df[, feature_cols, drop = FALSE])
-    predict(model, xgboost::xgb.DMatrix(data = mat))
-  }
+  # Helper: predict on the full frame. Defined at file scope as
+  # .predict_all_rows() so its row-alignment guard is testable without training
+  # a model; see the comment on that function for why the guard exists.
+  predict_all <- .predict_all_rows
 
   # Step 1: total xPoints (includes weather features)
   s1 <- train_step(xgb_df, xgb_df$total_xpoints_adj, xgb_df$weightz, s1_cols, reg_params, "total_xpoints")
