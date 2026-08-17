@@ -4,7 +4,7 @@
 # Pattern spec: C:\dev\ECOSYSTEM-FIX-PLAN.md S1. Repo-specific glue (repo/tag
 # resolution, cache invalidation) stays OUT of this file -- callers pass
 # repo/tag explicitly and register hooks via options() (see vb_publish).
-VERSEBUS_VERSION <- "1.0.0"
+VERSEBUS_VERSION <- "1.1.0"
 
 # Session state: one-time legacy warnings, manifest-seen memory (for the
 # retry-once-on-momentary-absence rule), manifest fetch rate limiting.
@@ -14,8 +14,13 @@ VERSEBUS_VERSION <- "1.0.0"
 
 .vb_generation_stamp <- function() {
   run_id <- Sys.getenv("GITHUB_RUN_ID", "")
+  # basename(tempfile("")) for local entropy, NOT sample(). sample() advances
+  # the CALLER's RNG stream, so publishing silently changed the draws of any
+  # simulation seeded before it -- an invisible reproducibility break in a
+  # package that also fits models and runs tournament sims. tempfile() is
+  # process-unique without touching .Random.seed.
   suffix <- if (nzchar(run_id)) paste0("-r", run_id) else
-    paste0("-l", paste(sample(c(0:9, letters[1:6]), 6, replace = TRUE), collapse = ""))
+    paste0("-l", substr(basename(tempfile("")), 5, 10))
   paste0(format(Sys.time(), "%Y%m%dT%H%M%SZ", tz = "UTC"), suffix)
 }
 
@@ -602,7 +607,19 @@ vb_publish <- function(paths, repo, tag,
     return(invisible(vb_write_manifest(.vb_merge_entries(prev, entries), tag, tmp)))
   }
 
-  Sys.setenv(piggyback_cache_duration = 1)  # P6: never serve pre-upload listings
+  # P6: never serve pre-upload listings. Restore on exit -- this used to be a
+  # bare Sys.setenv() that leaked for the rest of the session, silently
+  # disabling piggyback's listing cache for every unrelated caller after the
+  # first publish.
+  .vb_prev_cache_duration <- Sys.getenv("piggyback_cache_duration", unset = NA)
+  Sys.setenv(piggyback_cache_duration = 1)
+  on.exit({
+    if (is.na(.vb_prev_cache_duration)) {
+      Sys.unsetenv("piggyback_cache_duration")
+    } else {
+      Sys.setenv(piggyback_cache_duration = .vb_prev_cache_duration)
+    }
+  }, add = TRUE)
 
   # 3. Upload data assets with bounded exponential backoff; collect failures.
   failures <- character(0)
@@ -645,7 +662,10 @@ vb_publish <- function(paths, repo, tag,
   missing <- character(0)
   mismatched <- character(0)
   verify_detail <- character(0)
-  for (verify_attempt in seq_along(c(verify_delays, NA))) {
+  # One attempt per delay, plus a final attempt after the last sleep. Was
+  # `seq_along(c(verify_delays, NA))`, which computes the same count via a
+  # throwaway NA -- a puzzle where a sum will do.
+  for (verify_attempt in seq_len(length(verify_delays) + 1L)) {
     listed <- vb_list_assets(repo, tag)
     missing <- character(0)
     mismatched <- character(0)
