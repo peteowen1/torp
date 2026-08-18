@@ -1235,6 +1235,15 @@ create_player_game_data <- function(pbp_data = NULL,
   # epv_engine = "v3" while the constant still reads "v2" would silently get v2
   # scaling, which is exactly how every arm in this session was run.
   attr(plyr_gm_df, "epv_engine") <- epv_engine
+
+  # And again as a COLUMN, because the attribute does not survive the parquet
+  # round-trip this frame makes through the release. Without it Stage 3 reloads
+  # the frame unstamped and prices v3 data as v2 -- which the pipeline reports
+  # in a warning and then carries on regardless. .restore_epv_engine_attr()
+  # turns this back into the attribute on load.
+  if (!is.null(epv_engine) && nrow(plyr_gm_df) > 0) {
+    plyr_gm_df[["epv_engine"]] <- as.character(epv_engine)
+  }
   return(plyr_gm_df)
 }
 

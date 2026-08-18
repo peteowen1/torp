@@ -895,6 +895,9 @@ load_player_stats <- function(seasons = get_afl_season(), use_disk_cache = TRUE,
 #' @param seasons A numeric vector of 4-digit years associated with given AFL seasons - defaults to latest season. If set to `TRUE`, returns all available data since 2021.
 #' @param use_disk_cache Logical. If TRUE, uses persistent disk cache for faster repeated loads. Default is FALSE.
 #' @param columns Optional character vector of column names to read. If NULL (default), reads all columns.
+#' @param version Rating vintage label. `NULL` (default) reads the canonical
+#'   `player_game_<season>.parquet`; a label reads `player_game_<season>_<label>.parquet`,
+#'   matching the names the pipeline's Stage 2 writes for a candidate vintage.
 #'
 #' @return A data frame containing player game performance data.
 #' @seealso [create_player_game_data()], [player_game_ratings()], [calculate_epr()]
@@ -905,10 +908,29 @@ load_player_stats <- function(seasons = get_afl_season(), use_disk_cache = TRUE,
 #' })
 #' }
 #' @export
-load_player_game_data <- function(seasons = get_afl_season(), use_disk_cache = FALSE, columns = NULL) {
+load_player_game_data <- function(seasons = get_afl_season(), use_disk_cache = FALSE, columns = NULL,
+                                  version = NULL) {
   seasons <- validate_seasons(seasons)
 
-  urls <- generate_urls("player_game-data", "player_game", seasons)
+  if (is.null(version)) {
+    urls <- generate_urls("player_game-data", "player_game", seasons)
+  } else {
+    # A candidate vintage has its own per-season assets, written by Stage 2 as
+    # .vintage_asset_stem(paste0("player_game_", s), version). Building those
+    # names here rather than in generate_urls() keeps the aggregated-file
+    # shortcut (which only ever covers canonical) out of the candidate path.
+    #
+    # This argument exists because Stage 3 called load_player_game_data(TRUE)
+    # with no vintage while Stage 2 wrote _v3 files, so a run labelled v3 built
+    # its ratings from the canonical v2 player-game data -- a v2 vintage wearing
+    # a v3 name, with nothing failing (2026-08-18).
+    base_url <- paste0("https://github.com/", get_torp_data_repo(), "/releases/download")
+    urls <- paste0(base_url, "/player_game-data/",
+                   vapply(seasons,
+                          function(s) .vintage_asset_stem(paste0("player_game_", s), version),
+                          character(1)),
+                   ".parquet")
+  }
 
   out <- load_from_url(urls, seasons = seasons, use_disk_cache = use_disk_cache, columns = columns)
 
@@ -916,7 +938,42 @@ load_player_game_data <- function(seasons = get_afl_season(), use_disk_cache = F
   if (nrow(out) > 0) .normalise_columns(out, PLAYER_GAME_COL_MAP)
 
   if (nrow(out) > 0) out <- .normalise_team_values(out)
+  out <- .restore_epv_engine_attr(out)
   return(out)
+}
+
+#' Re-attach the EPV engine stamp after a parquet round-trip
+#'
+#' @description `create_player_game_data()` tags its frame with an
+#'   `epv_engine` attribute, and every downstream pricing decision reads it.
+#'   R attributes do not survive parquet, so a frame that goes through the
+#'   release comes back unstamped and [.frame_epv_engine()] then prices it as
+#'   v2 -- silently, whatever engine actually produced it.
+#'
+#'   The engine therefore travels as a COLUMN, which does survive, and this
+#'   restores it to an attribute on load. Files written before the column
+#'   existed are all v2, so an absent column means v2 rather than "unknown".
+#'
+#'   A frame carrying two different engines is refused outright: it can only
+#'   come from mixing vintages across seasons, and averaging two pricing
+#'   conventions into one rating is not something to warn about and continue.
+#'
+#' @param out A loaded player-game frame.
+#' @return The frame, stamped.
+#' @keywords internal
+.restore_epv_engine_attr <- function(out) {
+  if (nrow(out) == 0 || !"epv_engine" %in% names(out)) return(out)
+  engines <- unique(stats::na.omit(out[["epv_engine"]]))
+  if (length(engines) > 1) {
+    cli::cli_abort(
+      c("Player-game data carries {length(engines)} EPV engines: {.val {engines}}.",
+        "x" = "These price differently, so one rating built across both is meaningless.",
+        "i" = "Load a single vintage: {.code load_player_game_data(version = ...)}."),
+      class = "torp_error_mixed_epv_engine"
+    )
+  }
+  if (length(engines) == 1) data.table::setattr(out, "epv_engine", as.character(engines))
+  out
 }
 
 #' Load AFL Fixture Data
