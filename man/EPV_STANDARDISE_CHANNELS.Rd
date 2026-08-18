@@ -5,7 +5,7 @@
 \alias{EPV_STANDARDISE_CHANNELS}
 \title{EPV channels the position adjustment rescales (see EPV_POSITION_STANDARDISE)}
 \format{
-An object of class \code{character} of length 3.
+An object of class \code{character} of length 2.
 }
 \usage{
 EPV_STANDARDISE_CHANNELS

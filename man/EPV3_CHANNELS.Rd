@@ -43,6 +43,34 @@ understood: merging buries \code{cont_stop}, the most predictive channel per
 sd in the whole rating (+5.73 points of margin per sd, coefficient 9.60),
 inside \code{cont_aerial}, which is fully redundant (-0.06 per sd, p = 0.954).
 
+\strong{Set to 4 on 2026-08-18.} The optimiser run that was to settle this
+NEVER COMPLETED -- \code{epv3_optimiser.txt} checkpointed "1 of 4 arms" on
+2026-08-03 and stopped partway into the second, so no 3-channel arm was ever
+optimised and the value sat at 3 on no completed evidence while this very
+docstring said "Currently 4". Reconciled to 4, which every finished piece of
+evidence supports: the untuned gate (RMSE, bits, Brier, tips; MAE tied), the
+orthogonality (cor 0.004, so merging destroys information rather than removing
+duplication), and a direct re-measurement on 2026-08-18 -- ruck reads t = 4.39
+standalone and t = 0.13 once merged.
+
+\strong{Read those two numbers with their source attached.} They come from
+\code{epv3_calibrate_final.R}, whose build is 3-channel-oriented and whose
+priors differ from the shipping structure. The later same-day run under the
+actual shipping constants (\code{epv3_calibrate_4ch.R}, output
+\code{data-raw/outputs/epv3_calibrate_4ch.txt}) re-measures ruck standalone at
+\strong{t = 1.78, 1.3 percent of variance} -- below that script's own
+absolute-t-of-2 identifiability bar, which files ruck under "NOT JUDGED, no
+identifiable signal" and returns "VERDICT: MET (on 2 identifiable
+channels)". So the case
+for 4 does NOT rest on ruck being individually identifiable; it rests on
+orthogonality (cor 0.004) and on the merge burying rather than combining the
+signal. Anyone revisiting this should start from the 4ch output, not from the
+4.39 above, which is the more favourable of two measurements.
+
+The decisive practical point: a merged channel at t = 0.13 has no measurable
+points-per-unit, so step 6's calibration CANNOT pass while 3 is set. Finishing
+the optimiser is still worth doing -- it tunes decay and shrinkage per arm --
+but it cannot change the burial mechanism, only how much each arm is helped.
 \strong{But that comparison is not yet fair.} Both arms inherited decay and
 shrinkage priors tuned for v2's box-score channels, and the 3-channel arm
 inherits parameters shaped around a 4-channel structure. The optimiser

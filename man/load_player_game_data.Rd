@@ -7,7 +7,8 @@
 load_player_game_data(
   seasons = get_afl_season(),
   use_disk_cache = FALSE,
-  columns = NULL
+  columns = NULL,
+  version = NULL
 )
 }
 \arguments{
@@ -16,6 +17,10 @@ load_player_game_data(
 \item{use_disk_cache}{Logical. If TRUE, uses persistent disk cache for faster repeated loads. Default is FALSE.}
 
 \item{columns}{Optional character vector of column names to read. If NULL (default), reads all columns.}
+
+\item{version}{Rating vintage label. \code{NULL} (default) reads the canonical
+\verb{player_game_<season>.parquet}; a label reads \verb{player_game_<season>_<label>.parquet},
+matching the names the pipeline's Stage 2 writes for a candidate vintage.}
 }
 \value{
 A data frame containing player game performance data.

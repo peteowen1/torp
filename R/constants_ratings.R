@@ -214,9 +214,10 @@ EPV_CONT_LOSS_ALLOC <- "team"
 #' priors differ from the shipping structure. The later same-day run under the
 #' actual shipping constants (\code{epv3_calibrate_4ch.R}, output
 #' \code{data-raw/outputs/epv3_calibrate_4ch.txt}) re-measures ruck standalone at
-#' \strong{t = 1.78, 1.3\% of variance} -- below that script's own |t| >= 2
-#' identifiability bar, which files ruck under "NOT JUDGED, no identifiable
-#' signal" and returns "VERDICT: MET (on 2 identifiable channels)". So the case
+#' \strong{t = 1.78, 1.3 percent of variance} -- below that script's own
+#' absolute-t-of-2 identifiability bar, which files ruck under "NOT JUDGED, no
+#' identifiable signal" and returns "VERDICT: MET (on 2 identifiable
+#' channels)". So the case
 #' for 4 does NOT rest on ruck being individually identifiable; it rests on
 #' orthogonality (cor 0.004) and on the merge burying rather than combining the
 #' signal. Anyone revisiting this should start from the 4ch output, not from the
@@ -289,7 +290,7 @@ EPV3_CHANNELS <- 4L
 #'     of the game rather than a defect -- see \code{EPV3_CHANNELS} and
 #'     \code{docs/reference/EPV-VALUE-ANATOMY.md} §5.
 #' }
-#' @keywords internal
+#'
 #' \strong{Provenance, 2026-08-18 -- these are the FOUR-channel constants, and
 #' they come from the gate that measured them.} The gate is
 #' \code{torpmodels/data-raw/04-match-model/ws30_epv3_4ch_gate.R} -- in the
@@ -304,6 +305,7 @@ EPV3_CHANNELS <- 4L
 #' calibration on disk -- provenance nobody could reconstruct, which is why it
 #' is written down now. cont_stop was 1 because the 3-channel merge left the
 #' ruck slot inert; under 4 channels it is a live channel and carries 1.8557.
+#' @keywords internal
 EPV3_POINTS_SCALE <- if (identical(EPV_ENGINE, "v3")) {
   c(recv = 3.7557, disp = 2.5196, cont_aerial = 0.3870, cont_stop = 1.8557)
 } else {
