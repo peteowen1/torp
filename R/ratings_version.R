@@ -72,6 +72,16 @@
 #' @keywords internal
 .rating_defining_constants <- function() {
   list(
+    # The engine leads, because it is the largest rating-defining choice there
+    # is and it was absent from this list until 2026-08-18. The drift guard
+    # exists to catch "a rating-defining constant changed without bumping
+    # RATING_VINTAGE", and while these three were missing it could not see the
+    # engine flip from v2 to v3 -- the one change most capable of altering every
+    # row in the file. Found staging v3 for promotion.
+    EPV_ENGINE = EPV_ENGINE,
+    EPV3_CHANNELS = EPV3_CHANNELS,
+    EPV3_POINTS_SCALE = as.list(EPV3_POINTS_SCALE),
+    EPV_CONT_LOSS_ALLOC = EPV_CONT_LOSS_ALLOC,
     TORP_EPR_WEIGHT = TORP_EPR_WEIGHT,
     EPV_POSITION_STANDARDISE = EPV_POSITION_STANDARDISE,
     EPV_STANDARDISE_CHANNELS = EPV_STANDARDISE_CHANNELS,
