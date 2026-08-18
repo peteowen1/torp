@@ -930,7 +930,12 @@ PSR_POSITION_STANDARDISE <- TRUE
 #' groups on the raw 20-way \code{lineup_position}, not through the 6-way map,
 #' so the correction reaches only \code{pos_group} derivations.
 #' @keywords internal
-RATING_VINTAGE <- "v2"
+#'
+#' v3 (2026-08-18): the EPV engine moved from v2 to the four-channel chain-native
+#' v3, which reprices every row -- the change this vintage exists to mark. The
+#' outgoing v2 canonical is preserved as torp_ratings_v2.parquet, byte-identical
+#' to the 08-17 file it replaces, so a rollback is a copy rather than a rebuild.
+RATING_VINTAGE <- "v3"
 
 #' Map from the 20-way team-sheet lineup position to a 6-way position group
 #'
