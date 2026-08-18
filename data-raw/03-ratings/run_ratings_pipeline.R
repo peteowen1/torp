@@ -464,14 +464,24 @@ if (nrow(torp_new) > 0) {
   # Provenance: record which constants produced this vintage. Never sets
   # `canonical` -- promotion is deliberate and separate.
   tryCatch(
-    # The vintage label comes from the CONSTANTS (RATING_VINTAGE), not from the
-    # filename. Regenerating canonical under new constants writes
+    # For a CANONICAL run the label comes from the CONSTANTS (RATING_VINTAGE),
+    # not the filename. Regenerating canonical under new constants writes
     # torp_ratings.parquet while the vintage is "v2" -- deriving the label from
     # the filename would record that file as v1, i.e. label the new data as the
-    # data it replaced. canonical is set only when this run wrote canonical.
+    # data it replaced.
+    #
+    # A CANDIDATE run records under its OWN label. Using RATING_VINTAGE there
+    # overwrites the canonical vintage's entry with the candidate's file and row
+    # count, leaving the manifest describing data that canonical is not. Not
+    # hypothetical: the v3 candidate build on 2026-08-18 left the published
+    # manifest reading v2 -> torp_ratings_v3.parquet, rows 133364, while
+    # canonical was still the 08-17 v2 file. The manifest is what licenses a
+    # ratings write, so a wrong entry is worse than a missing one.
+    #
+    # canonical is still set only when this run wrote canonical.
     torp:::publish_ratings_manifest(
       nrow(torp_df_total),
-      version = torp:::RATING_VINTAGE,
+      version = if (is.null(RATINGS_VINTAGE)) torp:::RATING_VINTAGE else RATINGS_VINTAGE,
       file = vintage_file,
       set_canonical = is.null(RATINGS_VINTAGE)
     ),
