@@ -199,13 +199,27 @@ EPV_CONT_LOSS_ALLOC <- "team"
 #' sd in the whole rating (+5.73 points of margin per sd, coefficient 9.60),
 #' inside \code{cont_aerial}, which is fully redundant (-0.06 per sd, p = 0.954).
 #'
+#' \strong{Set to 4 on 2026-08-18.} The optimiser run that was to settle this
+#' NEVER COMPLETED -- `epv3_optimiser.txt` checkpointed "1 of 4 arms" on
+#' 2026-08-03 and stopped partway into the second, so no 3-channel arm was ever
+#' optimised and the value sat at 3 on no completed evidence while this very
+#' docstring said "Currently 4". Reconciled to 4, which every finished piece of
+#' evidence supports: the untuned gate (RMSE, bits, Brier, tips; MAE tied), the
+#' orthogonality (cor 0.004, so merging destroys information rather than removing
+#' duplication), and a direct re-measurement on 2026-08-18 -- ruck reads t = 4.39
+#' standalone and t = 0.13 once merged.
+#'
+#' The decisive practical point: a merged channel at t = 0.13 has no measurable
+#' points-per-unit, so step 6's calibration CANNOT pass while 3 is set. Finishing
+#' the optimiser is still worth doing -- it tunes decay and shrinkage per arm --
+#' but it cannot change the burial mechanism, only how much each arm is helped.
 #' \strong{But that comparison is not yet fair.} Both arms inherited decay and
 #' shrinkage priors tuned for v2's box-score channels, and the 3-channel arm
 #' inherits parameters shaped around a 4-channel structure. The optimiser
 #' (\code{epv3_optimise_epr.R}) re-runs 3-vs-4 with each structure tuned on its
 #' own terms, which is the only version of this comparison worth deciding on.
 #' @keywords internal
-EPV3_CHANNELS <- 3L
+EPV3_CHANNELS <- 4L
 
 #' Per-channel points constants for v3 (1 unit = 1 point of margin)
 #'
