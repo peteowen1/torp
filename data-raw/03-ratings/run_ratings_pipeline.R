@@ -36,7 +36,10 @@ clear_skip_markers()
 # FABLE-VINTAGE-GUARD-PLAN: refuse to write ratings when the deployed code's
 # vintage/constants disagree with what the manifest already published as
 # canonical (torp 2026-07-27/28 incident 1).
-torp:::check_vintage_alignment(strict = TRUE)
+# RATINGS_VINTAGE is read BELOW, so resolve it here just for the guard: a
+# candidate write must be judged as a candidate, not as a canonical write.
+.vintage_for_guard <- if (exists("RATINGS_VINTAGE", envir = .GlobalEnv)) get("RATINGS_VINTAGE", envir = .GlobalEnv) else NULL
+torp:::check_vintage_alignment(strict = TRUE, candidate = .vintage_for_guard)
 
 # Source daily_release.R into a local env to get update_player_stats() and
 # update_teams() without leaking .release_cache and other globals.
