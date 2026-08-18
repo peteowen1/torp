@@ -409,12 +409,29 @@ if (nrow(torp_new) > 0) {
       torp_df_total <- torp_new
     }
   } else {
-    # REBUILD_ALL_RATINGS: torp_new is expected to already cover full history
-    # (SEASONS == TRUE). Floor-guard against the existing release regardless
-    # -- a shrink here means the just-computed "full" set is actually partial.
+    # REBUILD_ALL_RATINGS: torp_new REPLACES the whole file, so it must actually
+    # cover full history. A run that lost a season to a transient error still
+    # reaches here -- only an ALL-seasons failure aborts above -- and would
+    # publish a "full history" that silently drops that season's rows.
+    #
+    # The floor guard below is not sufficient cover for this. It runs only when
+    # `existing` loaded, and `existing` is legitimately NULL on the first build
+    # of any new vintage: precisely the v3 candidate build this pipeline was
+    # just used for. So the one run with no prior file to compare against was
+    # also the one with no protection at all. Refuse instead.
+    if (length(failed_seasons) > 0) {
+      cli::cli_abort(c(
+        "Refusing to publish a full rebuild that lost {length(failed_seasons)} season{?s}: {paste(failed_seasons, collapse = ', ')}.",
+        "x" = "REBUILD_ALL_RATINGS replaces the entire file, so a partial result publishes as though that history never existed.",
+        "i" = "Re-run those seasons, or use the incremental path to upsert what did compute."
+      ), class = "torp_error_partial_full_rebuild")
+    }
     torp_df_total <- torp_new
   }
 
+  # Floor-guard against the existing release when there is one. On a brand-new
+  # vintage there is nothing to compare against, which is why the partial-rebuild
+  # refusal above cannot be delegated to this check.
   if (!is.null(existing)) {
     vb_guard_accumulate(existing, torp_df_total, floor = 0.9)
   }

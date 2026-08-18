@@ -256,6 +256,13 @@ vb_list_assets <- function(repo, tag) {
         if (is.finite(n)) return(n)
       }
     }
+    # A 404/410 on the DOWNLOAD path is evidence, not ignorance: the object is
+    # not there. Returning NA_real_ here would say "could not tell", and the
+    # caller reads that as "unreachable -- warn and proceed", so a genuinely
+    # lost upload would report success. That path became reachable when an
+    # asset missing from the listing started being confirmed here rather than
+    # aborting outright, so the distinction has to be made (2026-08-18 review).
+    if (as.integer(resp$status_code) %in% c(404L, 410L)) return(VB_ASSET_CONFIRMED_ABSENT)
     NA_real_
   }, error = function(e) NA_real_)
 }

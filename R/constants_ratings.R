@@ -209,6 +209,19 @@ EPV_CONT_LOSS_ALLOC <- "team"
 #' duplication), and a direct re-measurement on 2026-08-18 -- ruck reads t = 4.39
 #' standalone and t = 0.13 once merged.
 #'
+#' \strong{Read those two numbers with their source attached.} They come from
+#' \code{epv3_calibrate_final.R}, whose build is 3-channel-oriented and whose
+#' priors differ from the shipping structure. The later same-day run under the
+#' actual shipping constants (\code{epv3_calibrate_4ch.R}, output
+#' \code{data-raw/outputs/epv3_calibrate_4ch.txt}) re-measures ruck standalone at
+#' \strong{t = 1.78, 1.3\% of variance} -- below that script's own |t| >= 2
+#' identifiability bar, which files ruck under "NOT JUDGED, no identifiable
+#' signal" and returns "VERDICT: MET (on 2 identifiable channels)". So the case
+#' for 4 does NOT rest on ruck being individually identifiable; it rests on
+#' orthogonality (cor 0.004) and on the merge burying rather than combining the
+#' signal. Anyone revisiting this should start from the 4ch output, not from the
+#' 4.39 above, which is the more favourable of two measurements.
+#'
 #' The decisive practical point: a merged channel at t = 0.13 has no measurable
 #' points-per-unit, so step 6's calibration CANNOT pass while 3 is set. Finishing
 #' the optimiser is still worth doing -- it tunes decay and shrinkage per arm --
@@ -278,11 +291,14 @@ EPV3_CHANNELS <- 4L
 #' }
 #' @keywords internal
 #' \strong{Provenance, 2026-08-18 -- these are the FOUR-channel constants, and
-#' they come from the gate that measured them.} ws30_epv3_4ch_gate.R fits its
-#' own scale inside the v3 arm and then evaluates THAT arm, so its numbers are
-#' the ones the +0.1913 dMAE result was produced with. epv3_calibrate_4ch.R
-#' produces a different set (1.650 / 1.421 / 0.337 / 1.659) from its own build;
-#' wiring those would ship constants no gate ever scored.
+#' they come from the gate that measured them.} The gate is
+#' \code{torpmodels/data-raw/04-match-model/ws30_epv3_4ch_gate.R} -- in the
+#' SIBLING repo, not this one, which is why it cannot be found from a torp-only
+#' search. It fits its own scale inside the v3 arm and then evaluates THAT arm,
+#' so its numbers are the ones the +0.1913 dMAE result was produced with.
+#' \code{epv3_calibrate_4ch.R} produces a different set
+#' (1.650 / 1.421 / 0.337 / 1.659) from its own build; wiring those would ship
+#' constants no gate ever scored.
 #'
 #' The previous values (3.3413 / 2.6078 / 0.5226 / 1) matched NEITHER
 #' calibration on disk -- provenance nobody could reconstruct, which is why it
@@ -932,9 +948,15 @@ PSR_POSITION_STANDARDISE <- TRUE
 #' @keywords internal
 #'
 #' v3 (2026-08-18): the EPV engine moved from v2 to the four-channel chain-native
-#' v3, which reprices every row -- the change this vintage exists to mark. The
-#' outgoing v2 canonical is preserved as torp_ratings_v2.parquet, byte-identical
-#' to the 08-17 file it replaces, so a rollback is a copy rather than a rebuild.
+#' v3, which reprices every row -- the change this vintage exists to mark.
+#'
+#' The outgoing v2 canonical is preserved as torp_ratings_v2.parquet. That copy
+#' was made by downloading the live asset and re-uploading the SAME FILE, then
+#' checking both md5s matched (819c6bed...), so it is byte-identical rather than
+#' merely row-identical, and a rollback is a copy rather than a rebuild. Worth
+#' stating precisely: \code{preserve_rating_vintage()} would NOT give that
+#' guarantee -- it reads the frame and re-serialises through
+#' \code{arrow::write_parquet()}, which preserves values, not bytes.
 RATING_VINTAGE <- "v3"
 
 #' Map from the 20-way team-sheet lineup position to a 6-way position group

@@ -216,8 +216,14 @@ save_to_release <- function(df, file_name, release_tag, also_csv = FALSE, prev_r
       # appear. torp_ratings_v3.parquet uploaded fine and then halted the run on
       # this branch, taking Stages 4 and 5 with it, while the asset was in fact
       # live (2026-08-18, first build of the v3 vintage).
+      # The extra class marks the ORIGIN. Absent-from-listing and stale-in-
+      # listing share the same recovery (ask the download path), but not the
+      # same verdict when that path answers 404: with no listing row at all
+      # there is no evidence the object was ever written, whereas a stale row
+      # is itself evidence of a previous good asset.
       .vb_abort("Post-upload verify: {.val {f_name}} missing from {repo}@{release_tag} listing after upload",
-                c("vb_error_transient", "vb_verify_stale_listing"))
+                c("vb_error_transient", "vb_verify_stale_listing",
+                  "vb_verify_absent_from_listing"))
     }
     local_bytes <- as.numeric(file.size(tf))
     listed_bytes <- as.numeric(row$size[1L])
@@ -294,8 +300,30 @@ save_to_release <- function(df, file_name, release_tag, also_csv = FALSE, prev_r
         if (is.finite(true_bytes) && isTRUE(all.equal(true_bytes, local_bytes))) {
           cli::cli_alert_success(
             "Post-upload verify: {.val {f_name}} confirmed at {true_bytes} bytes on the download path -- the listing was simply lagging.")
-        } else if (is.finite(true_bytes) && true_bytes < local_bytes) {
+        } else if (inherits(e, "vb_verify_absent_from_listing") &&
+                   identical(as.numeric(true_bytes), as.numeric(VB_ASSET_CONFIRMED_ABSENT))) {
+          # Decisive ONLY for the absent-from-listing origin: neither route can
+          # see the object, and there is no prior listing row suggesting one was
+          # ever there, so this is a lost write rather than a lagging index.
+          # Without this it fell through to the "unreachable" arm below and
+          # warned-and-proceeded, reporting a lost upload as success
+          # (2026-08-18 review, on the path this file had just started using).
+          #
+          # Deliberately NOT applied to a merely-stale listing row: there the
+          # row itself is evidence a good asset exists, so a 404 on the download
+          # path is one more unreliable read rather than proof of absence.
+          verify_err <<- tryCatch(
+            cli::cli_abort(
+              "Post-upload verify: {.val {f_name}} answers 404/410 on the download path too, after {local_bytes} bytes were written -- a lost write, not a lagging listing",
+              class = c("vb_error_integrity", "vb_error")),
+            error = function(x) x)
+        } else if (is.finite(true_bytes) &&
+                   !identical(as.numeric(true_bytes), as.numeric(VB_ASSET_CONFIRMED_ABSENT)) &&
+                   true_bytes < local_bytes) {
           # Now this IS evidence, not an ambiguity: the stored object is short.
+          # The sentinel is excluded explicitly -- it is negative, so it compares
+          # as "short" and would otherwise be reported as a truncated upload when
+          # what actually happened is a 404 on a merely-stale listing row.
           verify_err <<- tryCatch(
             cli::cli_abort(
               "Post-upload verify: {.val {f_name}} is {true_bytes} bytes on the download path against {local_bytes} written -- a genuinely short asset, not a lagging listing",
@@ -940,13 +968,32 @@ load_player_game_data <- function(seasons = get_afl_season(), use_disk_cache = F
                    ".parquet")
   }
 
-  out <- load_from_url(urls, seasons = seasons, use_disk_cache = use_disk_cache, columns = columns)
+  # Always read the engine stamp, even when the caller asked for a narrow
+  # projection, then drop it again if they did not want it. Without this a
+  # `columns=` that omits epv_engine returns an unstamped frame, and an
+  # unstamped frame is priced as v2 whatever produced it -- silently, since
+  # .frame_epv_engine() only warns when the GLOBAL engine constant reads v3,
+  # which is exactly not the case while a v3 candidate is being inspected
+  # before promotion. Same read-then-drop shape load_from_url() already uses
+  # for the season/round filter columns.
+  read_cols <- columns
+  if (!is.null(read_cols)) read_cols <- union(read_cols, "epv_engine")
+
+  out <- load_from_url(urls, seasons = seasons, use_disk_cache = use_disk_cache, columns = read_cols)
 
   # Normalise old abbreviated column names (plyr_nm → player_name, etc.)
   if (nrow(out) > 0) .normalise_columns(out, PLAYER_GAME_COL_MAP)
 
   if (nrow(out) > 0) out <- .normalise_team_values(out)
   out <- .restore_epv_engine_attr(out)
+
+  # Stamp is on the attribute now, so the column can go if unasked for. setattr
+  # rather than a copy: dropping a column must not discard what we just read.
+  if (!is.null(columns) && !("epv_engine" %in% columns) && "epv_engine" %in% names(out)) {
+    eng <- attr(out, "epv_engine")
+    out <- out[, setdiff(names(out), "epv_engine"), drop = FALSE]
+    if (!is.null(eng)) data.table::setattr(out, "epv_engine", eng)
+  }
   return(out)
 }
 
@@ -971,7 +1018,26 @@ load_player_game_data <- function(seasons = get_afl_season(), use_disk_cache = F
 #' @keywords internal
 .restore_epv_engine_attr <- function(out) {
   if (nrow(out) == 0 || !"epv_engine" %in% names(out)) return(out)
-  engines <- unique(stats::na.omit(out[["epv_engine"]]))
+  vals <- out[["epv_engine"]]
+
+  # A PARTIALLY stamped frame is the dangerous shape, and na.omit() hid it.
+  # Seasons arrive as separate files and are rbindlist(fill = TRUE)'d together,
+  # so a season rebuilt under v3 supplies the column while seasons not yet
+  # rebuilt supply NA. Dropping those NAs leaves one distinct engine, the frame
+  # is stamped with it, and centre_epv_by_position() then applies the v3
+  # per-channel scale to every row -- repricing years of v2-computed history,
+  # silently, on a clean run. The all-absent case stays fine: no column at all
+  # means no season was rebuilt, which is a genuine v2 frame.
+  n_missing <- sum(is.na(vals))
+  engines <- unique(stats::na.omit(vals))
+  if (n_missing > 0 && length(engines) > 0) {
+    cli::cli_abort(
+      c("Player-game data is only partly stamped: {n_missing} of {length(vals)} row{?s} carry no EPV engine, alongside {.val {engines}}.",
+        "x" = "That is seasons from different vintages in one frame. Stamping it from the labelled rows would reprice the unlabelled ones.",
+        "i" = "Rebuild the missing seasons, or load a single vintage: {.code load_player_game_data(version = ...)}."),
+      class = "torp_error_mixed_epv_engine"
+    )
+  }
   if (length(engines) > 1) {
     cli::cli_abort(
       c("Player-game data carries {length(engines)} EPV engines: {.val {engines}}.",

@@ -97,9 +97,13 @@ default_epv_params <- function() {
 #' missing stamp and a v2 stamp mean the same thing, so warning would be noise.
 #'
 #' The fuller fix -- carrying the engine as a column, which survives every
-#' transform -- is deliberately NOT done here: `player_game_data` is a published
-#' artifact and adding a column changes its released schema. That is a decision,
-#' not a refactor.
+#' transform -- WAS done on 2026-08-18, reversing the earlier decision recorded
+#' here. The reason it was deferred (adding a column changes `player_game_data`'s
+#' released schema) was real but was outweighed: the attribute does not survive
+#' the parquet round-trip the frame makes through the release, so Stage 3 reloaded
+#' it unstamped and priced v3 data as v2 while this function only warned. See
+#' `create_player_game_data()` for the column write and
+#' `.restore_epv_engine_attr()` for the read-back.
 #'
 #' @param x A frame produced by `create_player_game_data()`, possibly after
 #'   transforms that dropped attributes.

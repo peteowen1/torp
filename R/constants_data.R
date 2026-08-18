@@ -49,6 +49,22 @@ VB_VERIFY_CLOCK_SKEW_SECS <- 120
 #' @keywords internal
 VB_TRUE_SIZE_TIMEOUT_SECS <- 20
 
+#' Sentinel: the download path positively reported the asset absent
+#'
+#' `.vb_asset_true_size()` answers a byte count, `NA_real_` for "could not
+#' tell", and this for "the server said 404/410". Those last two must not
+#' collapse together: callers read "could not tell" as a reason to warn and
+#' proceed, so a genuinely lost upload answering 404 would be reported as a
+#' successful write. Negative so it cannot be mistaken for a real byte count.
+#'
+#' It is NOT collision-proof against every comparison, and an earlier version of
+#' this note wrongly claimed it was: being negative, it satisfies
+#' `true_bytes < local_bytes` and so reads as "a truncated upload" unless callers
+#' exclude it first. Every size comparison against this value must test for the
+#' sentinel explicitly.
+#' @keywords internal
+VB_ASSET_CONFIRMED_ABSENT <- -1
+
 
 # EPV Model Constants
 # -------------------
