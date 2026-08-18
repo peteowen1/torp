@@ -118,7 +118,7 @@ EPV_PER_CHANNEL_POINTS_SCALE <- FALSE
 #' \strong{Flipping this changes every published rating.} It is a flag, not a
 #' tunable: v3 has to clear the gates in that plan's section 6 first.
 #' @keywords internal
-EPV_ENGINE <- "v2"
+EPV_ENGINE <- "v3"
 
 #' How v3 distributes contest debits whose loser chains never names
 #'
@@ -277,8 +277,19 @@ EPV3_CHANNELS <- 4L
 #'     \code{docs/reference/EPV-VALUE-ANATOMY.md} §5.
 #' }
 #' @keywords internal
+#' \strong{Provenance, 2026-08-18 -- these are the FOUR-channel constants, and
+#' they come from the gate that measured them.} ws30_epv3_4ch_gate.R fits its
+#' own scale inside the v3 arm and then evaluates THAT arm, so its numbers are
+#' the ones the +0.1913 dMAE result was produced with. epv3_calibrate_4ch.R
+#' produces a different set (1.650 / 1.421 / 0.337 / 1.659) from its own build;
+#' wiring those would ship constants no gate ever scored.
+#'
+#' The previous values (3.3413 / 2.6078 / 0.5226 / 1) matched NEITHER
+#' calibration on disk -- provenance nobody could reconstruct, which is why it
+#' is written down now. cont_stop was 1 because the 3-channel merge left the
+#' ruck slot inert; under 4 channels it is a live channel and carries 1.8557.
 EPV3_POINTS_SCALE <- if (identical(EPV_ENGINE, "v3")) {
-  c(recv = 3.3413, disp = 2.6078, cont_aerial = 0.5226, cont_stop = 1)
+  c(recv = 3.7557, disp = 2.5196, cont_aerial = 0.3870, cont_stop = 1.8557)
 } else {
   c(recv = 1, disp = 1, cont_aerial = 1, cont_stop = 1)
 }

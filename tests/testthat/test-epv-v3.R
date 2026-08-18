@@ -1,5 +1,13 @@
-test_that("EPV_ENGINE defaults to v2 so published ratings are unchanged", {
-  expect_identical(EPV_ENGINE, "v2")
+# The engine is a DELIBERATE, published choice, so this test pins it rather
+# than defaulting it. Flipped to "v3" on 2026-08-18 by Pete after the
+# four-channel gate: dMAE +0.1913, 95% CI [-0.2311, +0.6136] on 630 matches
+# (2024-2026), v3 leading on bits -- inside the stated "slightly worse is
+# fine" tolerance, where the three-channel +1.109 was not.
+#
+# CHANGING THIS LINE CHANGES EVERY PUBLISHED RATING. If this test fails, do
+# not "fix" it -- find out who moved the engine and why.
+test_that("EPV_ENGINE is pinned to the engine we intend to publish", {
+  expect_identical(EPV_ENGINE, "v3")
 })
 
 test_that("create_player_game_data rejects an unknown engine", {
