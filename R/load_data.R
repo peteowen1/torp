@@ -208,8 +208,16 @@ save_to_release <- function(df, file_name, release_tag, also_csv = FALSE, prev_r
     )
     row <- listed[listed$name == f_name, , drop = FALSE]
     if (nrow(row) == 0L) {
+      # Absent from the listing is the same failure as stale in the listing --
+      # the listing is wrong -- so it earns the same treatment: resolve the
+      # asset by name on the download path, which cannot answer out of a lagging
+      # index. A NEW asset name is what lands here, since there is no prior row
+      # for the listing to be stale against, and it is also the slowest to
+      # appear. torp_ratings_v3.parquet uploaded fine and then halted the run on
+      # this branch, taking Stages 4 and 5 with it, while the asset was in fact
+      # live (2026-08-18, first build of the v3 vintage).
       .vb_abort("Post-upload verify: {.val {f_name}} missing from {repo}@{release_tag} listing after upload",
-                "vb_error_transient")
+                c("vb_error_transient", "vb_verify_stale_listing"))
     }
     local_bytes <- as.numeric(file.size(tf))
     listed_bytes <- as.numeric(row$size[1L])
