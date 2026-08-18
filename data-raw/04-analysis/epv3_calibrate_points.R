@@ -75,13 +75,14 @@ fit_report <- function(m, label) {
   f <- stats::lm(frm, data = m)
   co <- summary(f)$coefficients
   dt <- data.table(arm = label, channel = sub("^d_", "", rownames(co)),
+                   coef_raw = co[, 1],
                    coef = round(co[, 1], 4), se = round(co[, 2], 4),
                    t = round(co[, 3], 2))
   # The constant is the COEFFICIENT, not its reciprocal. Scaling a predictor by
   # k divides its coefficient by k, so x' = coef * x contributes coef * x = x'
   # points -- one unit of the scaled channel is one point of margin. Using
   # 1/coef squares it instead, which is how the refit check caught it.
-  dt[, points_constant := round(coef, 4)]
+  dt[, points_constant := coef_raw]
   list(fit = f, tbl = dt)
 }
 r2 <- fit_report(mv2, "v2"); r3 <- fit_report(mv3, "v3")
@@ -110,7 +111,7 @@ names(k) <- r3$tbl$channel
 say("")
 say("--- fitted EPV3_POINTS_SCALE ---")
 say(paste0("EPV3_POINTS_SCALE <- c(",
-           paste(sprintf('%s = %.4f', names(k), k), collapse = ", "), ")"))
+           paste(sprintf('%s = %.6f', names(k), k), collapse = ", "), ")"))
 
 # ---- Refit check: must return 1.0 everywhere -------------------------------
 mv3c <- copy(mv3)
@@ -119,9 +120,31 @@ rc <- fit_report(mv3c, "v3-calibrated")
 say("")
 say("--- refit after scaling: every coefficient must read 1.0 ---")
 say_dt(rc$tbl[, .(channel, coef, se, t)], 8)
-if (max(abs(rc$tbl$coef - 1)) > 1e-6) {
-  say("!! refit did NOT return 1.0 -- the constants are not what they claim")
-}
+# TWO checks, because they fail for different reasons.
+#
+# (1) the ALGEBRA, on full-precision constants. Scaling a predictor by its own
+#     coefficient must return exactly 1, so anything above floating-point noise
+#     means the constant is not the coefficient and the derivation is wrong.
+# (2) the SHIPPED constants, which are written to 6dp. Rounding moves each
+#     coefficient by roughly its own relative rounding error, so this is bounded
+#     at 1e-4 rather than 1e-9 — a real limit, stated rather than hidden.
+#
+# The 2026-08-03 run had ONE check at 1e-6 applied to 4dp-ROUNDED output, which
+# no rounding can satisfy unless it lands exactly on 1.0000. It reported failure
+# while its own table read 1.0000/1.0001/1.0000/1.0000, and that false alarm is
+# why this step sat unfinished.
+dev_raw <- max(abs(rc$tbl$coef_raw - 1))
+say(sprintf("algebra check   : max |coef - 1| = %.3e (tolerance 1e-9)", dev_raw))
+if (dev_raw > 1e-9) stop("refit did not return 1.0: the constants are not the coefficients")
+
+k_ship <- round(k, 6)
+mv3s <- copy(mv3)
+for (ch in names(k_ship)) mv3s[, (paste0("d_", ch)) := get(paste0("d_", ch)) * k_ship[[ch]]]
+rs <- fit_report(mv3s, "v3-shipped")
+dev_ship <- max(abs(rs$tbl$coef_raw - 1))
+say(sprintf("shipped-precision: max |coef - 1| = %.3e (tolerance 1e-4, 6dp constants)", dev_ship))
+if (dev_ship > 1e-4) stop("6dp constants do not reproduce unit coefficients")
+say("both refit checks PASS")
 
 # ---- Diagnostic: variance shares after calibration -------------------------
 say("")
