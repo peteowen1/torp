@@ -291,15 +291,30 @@ EPV3_CHANNELS <- 4L
 #'     \code{docs/reference/EPV-VALUE-ANATOMY.md} §5.
 #' }
 #'
-#' \strong{Provenance, 2026-08-18 -- these are the FOUR-channel constants, and
-#' they come from the gate that measured them.} The gate is
-#' \code{torpmodels/data-raw/04-match-model/ws30_epv3_4ch_gate.R} -- in the
-#' SIBLING repo, not this one, which is why it cannot be found from a torp-only
-#' search. It fits its own scale inside the v3 arm and then evaluates THAT arm,
-#' so its numbers are the ones the +0.1913 dMAE result was produced with.
-#' \code{epv3_calibrate_4ch.R} produces a different set
-#' (1.650 / 1.421 / 0.337 / 1.659) from its own build; wiring those would ship
-#' constants no gate ever scored.
+#' \strong{Provenance, corrected 2026-08-19 -- these are the CALIBRATED
+#' four-channel constants, and calibration is the whole point of them.} They are
+#' the measured points of margin per unit of each channel, section A of
+#' \code{data-raw/outputs/epv3_calibrate_4ch.txt}. Applied, every identifiable
+#' channel reads 1.000 (0.99987 recv, 1.00047 disp, 1.00180 ruck) -- which is
+#' what "1 unit = 1 point of margin" means and what makes an EPV total
+#' interpretable as points.
+#'
+#' \strong{What was shipped first, and why it was wrong.} The values
+#' 3.7557 / 2.5196 / 0.3870 / 1.8557 went live on 2026-08-18. They came from
+#' \code{ws30_epv3_4ch_gate.R} (in the SIBLING torpmodels repo, which is why a
+#' torp-only search cannot find it), which fits its own scale inside the v3 arm
+#' and evaluates that arm -- so the numbers were defensible as the ones the
+#' +0.1913 dMAE result was produced with. But they are 2.3x and 1.8x the
+#' calibrated values on the two channels carrying ~99\% of the variance, so
+#' every published EPV total came out roughly double: the season leader read
+#' 668.5 points of margin where the calibrated scale gives about 332. Pete
+#' caught it by eye off the live leaderboard -- "highest should be like 300
+#' maybe" -- after internal checks passed, because the site and the blog posts
+#' were built from the same wrong numbers and agreed with each other.
+#'
+#' The lesson worth keeping: a scale chosen for predictive performance is not
+#' automatically a scale in the stated units. If this constant is ever retuned,
+#' the test is section B reading 1.000, not the gate's dMAE.
 #'
 #' The previous values (3.3413 / 2.6078 / 0.5226 / 1) matched NEITHER
 #' calibration on disk -- provenance nobody could reconstruct, which is why it
@@ -307,7 +322,7 @@ EPV3_CHANNELS <- 4L
 #' ruck slot inert; under 4 channels it is a live channel and carries 1.8557.
 #' @keywords internal
 EPV3_POINTS_SCALE <- if (identical(EPV_ENGINE, "v3")) {
-  c(recv = 3.7557, disp = 2.5196, cont_aerial = 0.3870, cont_stop = 1.8557)
+  c(recv = 1.650438, disp = 1.421199, cont_aerial = 0.337485, cont_stop = 1.659480)
 } else {
   c(recv = 1, disp = 1, cont_aerial = 1, cont_stop = 1)
 }
