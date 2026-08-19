@@ -36,7 +36,10 @@ clear_skip_markers()
 # FABLE-VINTAGE-GUARD-PLAN: refuse to write ratings when the deployed code's
 # vintage/constants disagree with what the manifest already published as
 # canonical (torp 2026-07-27/28 incident 1).
-torp:::check_vintage_alignment(strict = TRUE)
+# RATINGS_VINTAGE is read BELOW, so resolve it here just for the guard: a
+# candidate write must be judged as a candidate, not as a canonical write.
+.vintage_for_guard <- if (exists("RATINGS_VINTAGE", envir = .GlobalEnv)) get("RATINGS_VINTAGE", envir = .GlobalEnv) else NULL
+torp:::check_vintage_alignment(strict = TRUE, candidate = .vintage_for_guard)
 
 # Source daily_release.R into a local env to get update_player_stats() and
 # update_teams() without leaking .release_cache and other globals.
@@ -128,24 +131,30 @@ if (REBUILD_PLAYER_GAME) {
   cli::cli_h2("Stage 2: Build Player Game Data")
   tictoc::tic("stage_2_player_game")
 
-  # Batch load all seasons at once (parallel download via curl::multi_download)
-  cli::cli_progress_step("Batch loading PBP, player_stats, teams for {length(seasons)} seasons")
-  all_pbp <- load_pbp(seasons, rounds = TRUE)
-  all_chains <- load_chains(seasons, rounds = TRUE)
-  all_pstats <- load_player_stats(seasons)
-  all_teams <- load_teams(seasons)
-  cli::cli_inform("  Loaded: PBP {nrow(all_pbp)} | chains {nrow(all_chains)} | player_stats {nrow(all_pstats)} | teams {nrow(all_teams)}")
-
+  # Load ONE season at a time, inside the loop.
+  #
+  # This used to batch-load every season up front to get a parallel curl
+  # download, then subset per season. PBP alone is ~0.4 GB per season (348,608
+  # rows for 2024) and chains are bigger, so six seasons stayed resident while
+  # the loop only ever needed one -- and create_player_game_data() allocates on
+  # top of that. On 2026-08-18 it killed Rscript.exe outright partway through
+  # 2024: a Windows Application Error with no R-level message, which reads like
+  # a crash in the building code rather than memory exhaustion. Each death then
+  # orphaned an Rscript still holding 2-3 GB, so every retry began with less
+  # headroom than the one before.
+  #
+  # The batched download is the only thing given up, and it is the cheap half of
+  # this stage; peak memory is the half that decides whether the run finishes.
   for (s in seasons) {
     tryCatch({
       cli::cli_progress_step("Building player game data for {s}")
 
-      pbp <- all_pbp[all_pbp$season == s, ]
-      chains <- all_chains[all_chains$season == s, ]
-      pstats <- all_pstats[all_pstats$season == s, ]
-      teams_data <- all_teams[all_teams$season == s, ]
+      pbp <- load_pbp(s, rounds = TRUE)
+      chains <- load_chains(s, rounds = TRUE)
+      pstats <- load_player_stats(s)
+      teams_data <- load_teams(s)
 
-      cli::cli_inform("  PBP: {nrow(pbp)} rows | player_stats: {nrow(pstats)} rows | teams: {nrow(teams_data)} rows")
+      cli::cli_inform("  PBP: {nrow(pbp)} rows | chains: {nrow(chains)} rows | player_stats: {nrow(pstats)} rows | teams: {nrow(teams_data)} rows")
       if (nrow(pbp) == 0) {
         cli::cli_alert_danger("No PBP data for {s} - skipping")
         stage2_failed_seasons <- c(stage2_failed_seasons, as.character(s))
@@ -158,6 +167,12 @@ if (REBUILD_PLAYER_GAME) {
       file_name <- paste0("player_game_", s)
       save_to_release(pgd, torp:::.vintage_asset_stem(file_name, RATINGS_VINTAGE), "player_game-data")
       cli::cli_alert_success("Released {file_name} ({nrow(pgd)} rows)")
+
+      # Hand this season's memory back before the next one loads. Without the
+      # explicit gc() R can hold several seasons' worth of freed-but-unreturned
+      # pages, which puts back the peak the per-season load just removed.
+      rm(pbp, chains, pstats, teams_data, pgd)
+      invisible(gc(verbose = FALSE))
     }, error = function(e) {
       cli::cli_alert_danger("Failed to build player game data for {s}: {conditionMessage(e)}")
       stage2_failed_seasons <<- c(stage2_failed_seasons, as.character(s))
@@ -210,7 +225,7 @@ clear_all_cache()
   }
   withr::local_options(list(torp.local_data_dir = NA))
   stopifnot(is.null(get_local_data_dir()))   # assert the bypass actually took
-  load_player_game_data(TRUE)
+  load_player_game_data(TRUE, version = RATINGS_VINTAGE)
 }
 all_pgd <- .load_pgd_from_release()
 cli::cli_inform("Player game data loaded: {nrow(all_pgd)} rows, {ncol(all_pgd)} cols")
@@ -394,12 +409,29 @@ if (nrow(torp_new) > 0) {
       torp_df_total <- torp_new
     }
   } else {
-    # REBUILD_ALL_RATINGS: torp_new is expected to already cover full history
-    # (SEASONS == TRUE). Floor-guard against the existing release regardless
-    # -- a shrink here means the just-computed "full" set is actually partial.
+    # REBUILD_ALL_RATINGS: torp_new REPLACES the whole file, so it must actually
+    # cover full history. A run that lost a season to a transient error still
+    # reaches here -- only an ALL-seasons failure aborts above -- and would
+    # publish a "full history" that silently drops that season's rows.
+    #
+    # The floor guard below is not sufficient cover for this. It runs only when
+    # `existing` loaded, and `existing` is legitimately NULL on the first build
+    # of any new vintage: precisely the v3 candidate build this pipeline was
+    # just used for. So the one run with no prior file to compare against was
+    # also the one with no protection at all. Refuse instead.
+    if (length(failed_seasons) > 0) {
+      cli::cli_abort(c(
+        "Refusing to publish a full rebuild that lost {length(failed_seasons)} season{?s}: {paste(failed_seasons, collapse = ', ')}.",
+        "x" = "REBUILD_ALL_RATINGS replaces the entire file, so a partial result publishes as though that history never existed.",
+        "i" = "Re-run those seasons, or use the incremental path to upsert what did compute."
+      ), class = "torp_error_partial_full_rebuild")
+    }
     torp_df_total <- torp_new
   }
 
+  # Floor-guard against the existing release when there is one. On a brand-new
+  # vintage there is nothing to compare against, which is why the partial-rebuild
+  # refusal above cannot be delegated to this check.
   if (!is.null(existing)) {
     vb_guard_accumulate(existing, torp_df_total, floor = 0.9)
   }
@@ -449,14 +481,24 @@ if (nrow(torp_new) > 0) {
   # Provenance: record which constants produced this vintage. Never sets
   # `canonical` -- promotion is deliberate and separate.
   tryCatch(
-    # The vintage label comes from the CONSTANTS (RATING_VINTAGE), not from the
-    # filename. Regenerating canonical under new constants writes
+    # For a CANONICAL run the label comes from the CONSTANTS (RATING_VINTAGE),
+    # not the filename. Regenerating canonical under new constants writes
     # torp_ratings.parquet while the vintage is "v2" -- deriving the label from
     # the filename would record that file as v1, i.e. label the new data as the
-    # data it replaced. canonical is set only when this run wrote canonical.
+    # data it replaced.
+    #
+    # A CANDIDATE run records under its OWN label. Using RATING_VINTAGE there
+    # overwrites the canonical vintage's entry with the candidate's file and row
+    # count, leaving the manifest describing data that canonical is not. Not
+    # hypothetical: the v3 candidate build on 2026-08-18 left the published
+    # manifest reading v2 -> torp_ratings_v3.parquet, rows 133364, while
+    # canonical was still the 08-17 v2 file. The manifest is what licenses a
+    # ratings write, so a wrong entry is worse than a missing one.
+    #
+    # canonical is still set only when this run wrote canonical.
     torp:::publish_ratings_manifest(
       nrow(torp_df_total),
-      version = torp:::RATING_VINTAGE,
+      version = if (is.null(RATINGS_VINTAGE)) torp:::RATING_VINTAGE else RATINGS_VINTAGE,
       file = vintage_file,
       set_canonical = is.null(RATINGS_VINTAGE)
     ),
@@ -476,7 +518,7 @@ tryCatch({
   ratings_for_teams <- if (exists("torp_df_total") && nrow(torp_df_total) > 0) {
     torp_df_total
   } else {
-    load_torp_ratings()
+    load_torp_ratings(version = RATINGS_VINTAGE)
   }
 
   cli::cli_inform("Building team ratings from {nrow(ratings_for_teams)} player rating rows")
@@ -578,8 +620,10 @@ tictoc::toc(log = TRUE)
 cli::cli_h2("Stage 5: Player Game & Season Ratings")
 tictoc::tic("stage_5_derived_ratings")
 
-# all_pstats is only batch-loaded in Stage 2 (REBUILD_PLAYER_GAME); load it
-# here too so Stage 5 doesn't fail when that stage was skipped.
+# Stage 5 needs every season at once, so it loads them here. Stage 2 used to
+# leave an all-seasons player_stats behind that this reused; it now loads one
+# season at a time (see its comment), so the exists() check is a no-op today and
+# kept only so a caller who does define all_pstats is not overridden.
 if (!exists("all_pstats")) {
   all_pstats <- load_player_stats(seasons)
 }

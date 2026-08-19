@@ -386,7 +386,7 @@ parquet_from_url <- function(url) {
     # #68) with a short backoff; a confirmed 404 is never worth retrying.
     load <- .vb_retry(
       function() arrow::read_parquet(url),
-      should_retry = function(e) !grepl("404|Not Found", conditionMessage(e), ignore.case = TRUE)
+      should_retry = function(e) !.error_is_absent(e, url)
     )
 
     # Validate that we got actual data
@@ -401,9 +401,10 @@ parquet_from_url <- function(url) {
   }, error = function(e) {
     error_msg <- conditionMessage(e)
 
-    if (grepl("404|Not Found", error_msg, ignore.case = TRUE)) {
-      # Confirmed absent -- legitimate (e.g. a round not yet published).
-      # Empty frame here really does mean "nothing to load", not "unknown".
+    if (.error_is_absent(e, url)) {
+      # Confirmed absent -- legitimate (e.g. a round not yet published, or a
+      # candidate rating vintage on its first build). Empty frame here really
+      # does mean "nothing to load", not "unknown".
       cli::cli_warn("Data file not found at {.url {url}} - file may not exist for this season/round combination")
       result <- data.table::data.table()
       attr(result, "skip_reason") <- "not_found"

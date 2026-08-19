@@ -118,7 +118,7 @@ EPV_PER_CHANNEL_POINTS_SCALE <- FALSE
 #' \strong{Flipping this changes every published rating.} It is a flag, not a
 #' tunable: v3 has to clear the gates in that plan's section 6 first.
 #' @keywords internal
-EPV_ENGINE <- "v2"
+EPV_ENGINE <- "v3"
 
 #' How v3 distributes contest debits whose loser chains never names
 #'
@@ -199,13 +199,41 @@ EPV_CONT_LOSS_ALLOC <- "team"
 #' sd in the whole rating (+5.73 points of margin per sd, coefficient 9.60),
 #' inside \code{cont_aerial}, which is fully redundant (-0.06 per sd, p = 0.954).
 #'
+#' \strong{Set to 4 on 2026-08-18.} The optimiser run that was to settle this
+#' NEVER COMPLETED -- `epv3_optimiser.txt` checkpointed "1 of 4 arms" on
+#' 2026-08-03 and stopped partway into the second, so no 3-channel arm was ever
+#' optimised and the value sat at 3 on no completed evidence while this very
+#' docstring said "Currently 4". Reconciled to 4, which every finished piece of
+#' evidence supports: the untuned gate (RMSE, bits, Brier, tips; MAE tied), the
+#' orthogonality (cor 0.004, so merging destroys information rather than removing
+#' duplication), and a direct re-measurement on 2026-08-18 -- ruck reads t = 4.39
+#' standalone and t = 0.13 once merged.
+#'
+#' \strong{Read those two numbers with their source attached.} They come from
+#' \code{epv3_calibrate_final.R}, whose build is 3-channel-oriented and whose
+#' priors differ from the shipping structure. The later same-day run under the
+#' actual shipping constants (\code{epv3_calibrate_4ch.R}, output
+#' \code{data-raw/outputs/epv3_calibrate_4ch.txt}) re-measures ruck standalone at
+#' \strong{t = 1.78, 1.3 percent of variance} -- below that script's own
+#' absolute-t-of-2 identifiability bar, which files ruck under "NOT JUDGED, no
+#' identifiable signal" and returns "VERDICT: MET (on 2 identifiable
+#' channels)". So the case
+#' for 4 does NOT rest on ruck being individually identifiable; it rests on
+#' orthogonality (cor 0.004) and on the merge burying rather than combining the
+#' signal. Anyone revisiting this should start from the 4ch output, not from the
+#' 4.39 above, which is the more favourable of two measurements.
+#'
+#' The decisive practical point: a merged channel at t = 0.13 has no measurable
+#' points-per-unit, so step 6's calibration CANNOT pass while 3 is set. Finishing
+#' the optimiser is still worth doing -- it tunes decay and shrinkage per arm --
+#' but it cannot change the burial mechanism, only how much each arm is helped.
 #' \strong{But that comparison is not yet fair.} Both arms inherited decay and
 #' shrinkage priors tuned for v2's box-score channels, and the 3-channel arm
 #' inherits parameters shaped around a 4-channel structure. The optimiser
 #' (\code{epv3_optimise_epr.R}) re-runs 3-vs-4 with each structure tuned on its
 #' own terms, which is the only version of this comparison worth deciding on.
 #' @keywords internal
-EPV3_CHANNELS <- 3L
+EPV3_CHANNELS <- 4L
 
 #' Per-channel points constants for v3 (1 unit = 1 point of margin)
 #'
@@ -262,9 +290,39 @@ EPV3_CHANNELS <- 3L
 #'     of the game rather than a defect -- see \code{EPV3_CHANNELS} and
 #'     \code{docs/reference/EPV-VALUE-ANATOMY.md} §5.
 #' }
+#'
+#' \strong{Provenance, corrected 2026-08-19 -- these are the CALIBRATED
+#' four-channel constants, and calibration is the whole point of them.} They are
+#' the measured points of margin per unit of each channel, section A of
+#' \code{data-raw/outputs/epv3_calibrate_4ch.txt}. Applied, every identifiable
+#' channel reads 1.000 (0.99987 recv, 1.00047 disp, 1.00180 ruck) -- which is
+#' what "1 unit = 1 point of margin" means and what makes an EPV total
+#' interpretable as points.
+#'
+#' \strong{What was shipped first, and why it was wrong.} The values
+#' 3.7557 / 2.5196 / 0.3870 / 1.8557 went live on 2026-08-18. They came from
+#' \code{ws30_epv3_4ch_gate.R} (in the SIBLING torpmodels repo, which is why a
+#' torp-only search cannot find it), which fits its own scale inside the v3 arm
+#' and evaluates that arm -- so the numbers were defensible as the ones the
+#' +0.1913 dMAE result was produced with. But they are 2.3x and 1.8x the
+#' calibrated values on the two channels carrying ~99\% of the variance, so
+#' every published EPV total came out roughly double: the season leader read
+#' 668.5 points of margin where the calibrated scale gives about 332. Pete
+#' caught it by eye off the live leaderboard -- "highest should be like 300
+#' maybe" -- after internal checks passed, because the site and the blog posts
+#' were built from the same wrong numbers and agreed with each other.
+#'
+#' The lesson worth keeping: a scale chosen for predictive performance is not
+#' automatically a scale in the stated units. If this constant is ever retuned,
+#' the test is section B reading 1.000, not the gate's dMAE.
+#'
+#' The previous values (3.3413 / 2.6078 / 0.5226 / 1) matched NEITHER
+#' calibration on disk -- provenance nobody could reconstruct, which is why it
+#' is written down now. cont_stop was 1 because the 3-channel merge left the
+#' ruck slot inert; under 4 channels it is a live channel and carries 1.8557.
 #' @keywords internal
 EPV3_POINTS_SCALE <- if (identical(EPV_ENGINE, "v3")) {
-  c(recv = 3.3413, disp = 2.6078, cont_aerial = 0.5226, cont_stop = 1)
+  c(recv = 1.650438, disp = 1.421199, cont_aerial = 0.337485, cont_stop = 1.659480)
 } else {
   c(recv = 1, disp = 1, cont_aerial = 1, cont_stop = 1)
 }
@@ -905,7 +963,18 @@ PSR_POSITION_STANDARDISE <- TRUE
 #' groups on the raw 20-way \code{lineup_position}, not through the 6-way map,
 #' so the correction reaches only \code{pos_group} derivations.
 #' @keywords internal
-RATING_VINTAGE <- "v2"
+#'
+#' v3 (2026-08-18): the EPV engine moved from v2 to the four-channel chain-native
+#' v3, which reprices every row -- the change this vintage exists to mark.
+#'
+#' The outgoing v2 canonical is preserved as torp_ratings_v2.parquet. That copy
+#' was made by downloading the live asset and re-uploading the SAME FILE, then
+#' checking both md5s matched (819c6bed...), so it is byte-identical rather than
+#' merely row-identical, and a rollback is a copy rather than a rebuild. Worth
+#' stating precisely: \code{preserve_rating_vintage()} would NOT give that
+#' guarantee -- it reads the frame and re-serialises through
+#' \code{arrow::write_parquet()}, which preserves values, not bytes.
+RATING_VINTAGE <- "v3"
 
 #' Map from the 20-way team-sheet lineup position to a 6-way position group
 #'

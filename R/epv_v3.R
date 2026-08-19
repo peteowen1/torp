@@ -101,11 +101,19 @@ build_aerial_contests <- function(chains, pbp_data) {
   half <- as.numeric(stats::quantile(abs(ch$x), 0.995, na.rm = TRUE))
 
   data.table::setorder(ch, match_id, display_order)
+  # Six grouped calls, not thirty, and no get(). `get(stem)` inside a grouped
+  # `:=` defeats data.table's column analysis: it cannot tell at parse time which
+  # columns j touches, so it builds the FULL .SD for every match group. On a
+  # season of chains that is the documented multi-GB pattern. `.SDcols` names the
+  # five columns explicitly, so each group materialises five vectors instead of
+  # the whole table, and `shift(.SD, k)` returns them in .SDcols order — a 1:1
+  # match for the names being assigned. Output is byte-identical; verified in
+  # data-raw/04-analysis/epv3_verify_shift_refactor.R.
+  .shift_stems <- c("description", "player_id", "team_id", "x", "y")
   for (k in 1:6) {
-    for (stem in c("description", "player_id", "team_id", "x", "y")) {
-      ch[, (paste0(".f", k, "_", stem)) :=
-           data.table::shift(get(stem), k, type = "lead"), by = match_id]
-    }
+    ch[, (paste0(".f", k, "_", .shift_stems)) :=
+         data.table::shift(.SD, k, type = "lead"),
+       by = match_id, .SDcols = .shift_stems]
   }
 
   kk <- ch[description %chin% c("Kick", "Ground Kick") &

@@ -7,7 +7,8 @@ published as canonical}
 \usage{
 check_vintage_alignment(
   strict = .strict_mode(),
-  manifest = read_ratings_manifest()
+  manifest = read_ratings_manifest(),
+  candidate = NULL
 )
 }
 \arguments{
@@ -22,6 +23,15 @@ environment.}
 \item{manifest}{The ratings manifest to check against. Defaults to
 \code{read_ratings_manifest()}; injectable so this function's tests run
 offline.}
+
+\item{candidate}{Vintage label when the run is writing a CANDIDATE vintage
+(\verb{torp_ratings_<label>.parquet}) rather than canonical, or \code{NULL} for a
+canonical write. A candidate never touches canonical, so drift from
+canonical's published constants is not a reason to refuse it -- checking it
+anyway made this guard block the exact remedy its own error message
+recommends. Still refused for a candidate: an unreadable manifest, and a
+label equal to the canonical one, which is a canonical write wearing a
+candidate flag.}
 }
 \value{
 Invisibly, \code{list(aligned = TRUE, canonical = canon)} on success, or

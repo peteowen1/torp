@@ -83,14 +83,19 @@ KNOWN_NON_DEFINING <- c(
   "EPV_POINTS_SCALE", "EPV_PER_CHANNEL_POINTS_SCALE", "EPV_CHANNEL_SCALE_KEYS",
   "EPV_RUCK_SWING_SCALE", "EPV_WEIGHT_DECAY_DAYS",
 
-  # -- v3 chain-native engine selector and its exclusively-v3 machinery.
-  # EPV_ENGINE == "v2" is the production default; flipping it changes every
-  # published rating and would need both its own vintage bump AND its own
-  # wiring into .rating_defining_constants() (which today hardcodes v2's
-  # recv/disp/spoil/hitout shape) -- a known limitation for when v3 ships (see
-  # docs/plans/EPV-V3-CHAIN-NATIVE.md), not fixed here. EPV_CONT_LOSS_ALLOC
-  # only affects v3's contest-loss allocation rule. (2026-08-09)
-  "EPV_ENGINE", "EPV_CONT_LOSS_ALLOC",
+  # -- EPV_ENGINE and EPV_CONT_LOSS_ALLOC sat here until 2026-08-18, deferred on
+  # the entry's own stated grounds: flipping the engine "changes every published
+  # rating and would need both its own vintage bump AND its own wiring into
+  # .rating_defining_constants() -- a known limitation for when v3 ships".
+  # v3 has now shipped, so both are wired and this entry is pruned rather than
+  # carried forward. While they sat here the drift guard was blind to the
+  # largest rating-defining change available: an engine flip produced
+  # byte-identical defining_constants and passed the check unremarked.
+  #
+  # STILL UNRESOLVED, recorded rather than left implicit: the EPR_DECAY and
+  # EPR_PRIOR_* leaves are captured under v2's recv/disp/spoil/hitout channel
+  # names, so a v3 vintage records its priors under v2's labels. The VALUES are
+  # captured and drift is still detected -- only the naming is stale.
 
   # -- The "contest" EPR slot (decay/prior-games/prior-rate) is defined but
   # referenced nowhere outside constants_ratings.R itself (verified by a

@@ -44,7 +44,12 @@ test_that("hitout is excluded from standardisation", {
   # The exclusion is the guard against the ruck blow-up, so assert it directly
   # rather than trusting the constant to stay put.
   expect_false("hitout" %in% EPV_STANDARDISE_CHANNELS)
-  expect_setequal(EPV_STANDARDISE_CHANNELS, c("recv", "disp", "spoil"))
+  # The exact set is engine-dependent; the INVARIANT is that hitout is never in
+  # it. Under v3 the contest channel is excluded too -- measured to lift it from
+  # t 1.83 to 2.24 -- so assert per engine rather than pinning one list.
+  expect_setequal(EPV_STANDARDISE_CHANNELS,
+                  if (identical(EPV_ENGINE, "v3")) c("recv", "disp")
+                  else c("recv", "disp", "spoil"))
 })
 
 test_that("the corrected lineup map fixes the three audited assignments", {

@@ -72,6 +72,16 @@
 #' @keywords internal
 .rating_defining_constants <- function() {
   list(
+    # The engine leads, because it is the largest rating-defining choice there
+    # is and it was absent from this list until 2026-08-18. The drift guard
+    # exists to catch "a rating-defining constant changed without bumping
+    # RATING_VINTAGE", and while these three were missing it could not see the
+    # engine flip from v2 to v3 -- the one change most capable of altering every
+    # row in the file. Found staging v3 for promotion.
+    EPV_ENGINE = EPV_ENGINE,
+    EPV3_CHANNELS = EPV3_CHANNELS,
+    EPV3_POINTS_SCALE = as.list(EPV3_POINTS_SCALE),
+    EPV_CONT_LOSS_ALLOC = EPV_CONT_LOSS_ALLOC,
     TORP_EPR_WEIGHT = TORP_EPR_WEIGHT,
     EPV_POSITION_STANDARDISE = EPV_POSITION_STANDARDISE,
     EPV_STANDARDISE_CHANNELS = EPV_STANDARDISE_CHANNELS,
@@ -476,12 +486,21 @@ read_ratings_manifest <- function() {
 #' @param manifest The ratings manifest to check against. Defaults to
 #'   `read_ratings_manifest()`; injectable so this function's tests run
 #'   offline.
+#' @param candidate Vintage label when the run is writing a CANDIDATE vintage
+#'   (`torp_ratings_<label>.parquet`) rather than canonical, or `NULL` for a
+#'   canonical write. A candidate never touches canonical, so drift from
+#'   canonical's published constants is not a reason to refuse it -- checking it
+#'   anyway made this guard block the exact remedy its own error message
+#'   recommends. Still refused for a candidate: an unreadable manifest, and a
+#'   label equal to the canonical one, which is a canonical write wearing a
+#'   candidate flag.
 #' @return Invisibly, `list(aligned = TRUE, canonical = canon)` on success, or
 #'   `list(aligned = NA)` / `list(aligned = NA, canonical = canon)` when a
 #'   non-strict run grandfathers a gap it could not verify.
 #' @keywords internal
 check_vintage_alignment <- function(strict = .strict_mode(),
-                                    manifest = read_ratings_manifest()) {
+                                    manifest = read_ratings_manifest(),
+                                    candidate = NULL) {
   branch <- Sys.getenv("GITHUB_REF_NAME", "local")
 
   if (is.null(manifest)) {
@@ -496,6 +515,29 @@ check_vintage_alignment <- function(strict = .strict_mode(),
       "i" = "Grandfathering a pre-manifest release -- proceeding without an alignment check (branch {.val {branch}})."
     ))
     return(invisible(list(aligned = NA)))
+  }
+
+  # CANDIDATE WRITES ARE A DIFFERENT QUESTION. This check exists to stop a run
+  # writing CANONICAL ratings with constants that disagree with what canonical
+  # was published as -- the 2026-07-27/28 incident. A candidate vintage writes
+  # torp_ratings_<label>.parquet and never touches canonical, so drift from
+  # canonical is not a reason to refuse it. Refusing it made this guard block the
+  # exact remedy its own mismatch error recommends ('publish it as a candidate
+  # vintage first'), so a constants change could never be staged at all
+  # (found 2026-08-18 staging EPV v3).
+  #
+  # Still enforced for a candidate: the manifest must be readable (above), and
+  # the label must NOT be the canonical one -- a canonical write wearing a
+  # candidate label is precisely what must never be waved through.
+  if (!is.null(candidate)) {
+    if (identical(candidate, manifest$canonical)) {
+      cli::cli_abort(c(
+        "Refusing to write vintage {.val {candidate}} as a CANDIDATE: it is the canonical vintage.",
+        "x" = "That is a canonical write wearing a candidate label (branch {.val {branch}})."
+      ), class = "torp_error_vintage_candidate_is_canonical")
+    }
+    return(invisible(list(aligned = NA, canonical = manifest$canonical,
+                          candidate = candidate)))
   }
 
   canon <- manifest$canonical

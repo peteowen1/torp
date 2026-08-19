@@ -67,7 +67,9 @@ test_that("flipping the engine to v3 changes exactly the intended constants", {
   expect_equal(get("EPV_STANDARDISE_CHANNELS", e), c("recv", "disp"))
 
   pts <- get("EPV3_POINTS_SCALE", e)
-  expect_equal(unname(pts), c(3.3413, 2.6078, 0.5226, 1))
+  # FOUR-channel constants, from ws30_epv3_4ch_gate.R -- the gate that scored
+  # them. cont_stop is no longer 1: under 4 channels the ruck slot is live.
+  expect_equal(unname(pts), c(3.7557, 2.5196, 0.3870, 1.8557))
 
   # Each prior rate must carry its OWN channel's factor. This is the check that
   # would have caught the 0.919 fallback bug from the other direction.
@@ -76,5 +78,10 @@ test_that("flipping the engine to v3 changes exactly the intended constants", {
   expect_equal(unname(get("EPR_PRIOR_RATE_SPOIL", e)), -0.3 * pts[["cont_aerial"]])
   # The hitout slot holds nothing under 3 channels, so it must shrink toward
   # exactly zero rather than toward a prior for a channel that does not exist.
-  expect_equal(unname(get("EPR_PRIOR_RATE_HITOUT", e)), 0)
+  # Under FOUR channels the ruck slot holds a real channel, so its prior must
+  # carry its own factor. Zero was correct only while the 3-channel merge
+  # emptied the slot; leaving it at zero now is the "blend of scaled and
+  # unscaled parts" bug this file exists to catch.
+  expect_equal(unname(get("EPR_PRIOR_RATE_HITOUT", e)),
+               -0.3 * pts[["cont_stop"]] * get("EPV_RUCK_SWING_SCALE", e))
 })

@@ -256,6 +256,13 @@ vb_list_assets <- function(repo, tag) {
         if (is.finite(n)) return(n)
       }
     }
+    # A 404/410 on the DOWNLOAD path is evidence, not ignorance: the object is
+    # not there. Returning NA_real_ here would say "could not tell", and the
+    # caller reads that as "unreachable -- warn and proceed", so a genuinely
+    # lost upload would report success. That path became reachable when an
+    # asset missing from the listing started being confirmed here rather than
+    # aborting outright, so the distinction has to be made (2026-08-18 review).
+    if (as.integer(resp$status_code) %in% c(404L, 410L)) return(VB_ASSET_CONFIRMED_ABSENT)
     NA_real_
   }, error = function(e) NA_real_)
 }
@@ -737,4 +744,72 @@ vb_publish <- function(paths, repo, tag,
     }
   }
   unname(out)
+}
+
+# ---------------------------------------------------------------------------
+# Is a URL confirmed absent, or did it merely fail?
+# ---------------------------------------------------------------------------
+
+#' Confirm a URL is genuinely absent
+#'
+#' @description POSITIVE confirmation only. A HEAD request that definitively
+#'   reports the resource gone (404/410) is the ONLY thing that returns `TRUE`;
+#'   every other outcome -- 200, a 5xx, a timeout, a DNS failure -- returns
+#'   `FALSE` so the caller goes on treating the failure as transient.
+#'
+#'   Getting this backwards is the expensive direction: a caller that reads
+#'   "network blip" as "the file does not exist" overwrites full-history
+#'   ratings-data with just the seasons one run computed (torp P1/P8). So the
+#'   fail-safe answer is FALSE.
+#'
+#' @param url A single URL.
+#' @return `TRUE` only when the server positively reports the resource absent.
+#' @keywords internal
+.url_confirmed_absent <- function(url) {
+  tryCatch({
+    h <- curl::new_handle(nobody = TRUE, followlocation = TRUE, timeout = 15L)
+    status <- curl::curl_fetch_memory(url, handle = h)$status_code
+    isTRUE(status %in% c(404L, 410L))
+  }, error = function(e) FALSE)
+}
+
+#' Did this download error mean "absent"?
+#'
+#' @description Classifies a failed parquet read as absent-vs-transient.
+#'
+#'   WHY THIS IS NOT JUST A REGEX. The message check is a fast path, not the
+#'   authority. R's `download.file()` route reports the HTTP status in a
+#'   *warning* ("HTTP status was '404 Not Found'") and leaves the error itself
+#'   as a bare "cannot open URL '...'", so a message regex sees no 404 and
+#'   silently classifies a genuinely missing file as transient. That misrouted
+#'   every caller relying on `vb_error_absent`: building a brand-new rating
+#'   vintage aborted six times over, because the not-yet-written
+#'   torp_ratings_<label>.parquet read as a network failure rather than as the
+#'   legitimately-absent file it was (2026-08-18, staging EPV v3).
+#'
+#'   Widening the regex would just move the brittleness, so absence is
+#'   confirmed against the resource itself.
+#'
+#' @param e The condition raised by the failed read.
+#' @param url The URL that was being read.
+#' @return `TRUE` if the resource is confirmed absent.
+#' @keywords internal
+.error_is_absent <- function(e, url) {
+  msg <- conditionMessage(e)
+  if (grepl("404|Not Found", msg, ignore.case = TRUE)) return(TRUE)
+
+  # Confirm against the resource ONLY when the message says nothing about
+  # status. An error naming a 5xx, a timeout or a refused connection already
+  # tells us the file's existence is not the problem, and asking the network on
+  # every such failure would make error classification depend on the network
+  # being reachable -- including under test, which is how a gate quietly stops
+  # meaning anything.
+  #
+  # An uninformative shape missing from this list degrades to transient: the
+  # caller retries, then aborts loudly, rather than concluding "absent" and
+  # overwriting full-history data. That is the safe direction to be wrong in.
+  uninformative <- grepl("cannot open URL|could not open|Failed to open|unable to open",
+                         msg, ignore.case = TRUE)
+  if (!uninformative) return(FALSE)
+  .url_confirmed_absent(url)
 }

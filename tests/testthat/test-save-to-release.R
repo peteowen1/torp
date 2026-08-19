@@ -453,3 +453,61 @@ test_that("prev_rows_floor no-ops rather than blocking when the manifest cannot 
     })
   }
 })
+
+test_that("an asset MISSING from the listing is confirmed on the download path, not fatal", {
+  # A brand-new asset name is the slowest thing to appear in a release listing,
+  # and there is no prior row for it to be "stale" against -- so it arrives here
+  # as absent rather than stale, and until 2026-08-18 that was fatal. The first
+  # ever build of the v3 rating vintage uploaded torp_ratings_v3.parquet
+  # successfully and then halted the run on this branch, losing Stages 4 and 5,
+  # while the asset was live the whole time.
+  #
+  # A wrong listing is a wrong listing whichever way it is wrong, so this takes
+  # the same route as the stale case: ask the download path, which resolves by
+  # name and cannot answer out of a lagging index.
+  uploaded_bytes <- NULL
+  testthat::local_mocked_bindings(
+    pb_upload = function(file, repo, tag, overwrite = TRUE, ...) {
+      uploaded_bytes <<- file.size(file)
+      invisible(NULL)
+    },
+    .package = "piggyback"
+  )
+  testthat::local_mocked_bindings(
+    gh = function(endpoint, ...) list(assets = list()),   # never lists our asset
+    .package = "gh"
+  )
+  testthat::local_mocked_bindings(
+    .publish_bus_manifest = function(...) invisible(NULL),
+    save_locally = function(...) invisible(NULL),
+    # The transport says the object is there, at exactly what we wrote.
+    .vb_asset_true_size = function(repo, tag, name) uploaded_bytes
+  )
+
+  df <- data.frame(x = 1:3, y = c("a", "b", "c"))
+  expect_no_error(save_to_release(df, "widget", "test-tag"))
+})
+
+test_that("an asset missing from the listing AND short on the download path still aborts", {
+  # The permissive branch must not become a way through for a real short write.
+  uploaded_bytes <- NULL
+  testthat::local_mocked_bindings(
+    pb_upload = function(file, repo, tag, overwrite = TRUE, ...) {
+      uploaded_bytes <<- file.size(file)
+      invisible(NULL)
+    },
+    .package = "piggyback"
+  )
+  testthat::local_mocked_bindings(
+    gh = function(endpoint, ...) list(assets = list()),
+    .package = "gh"
+  )
+  testthat::local_mocked_bindings(
+    .publish_bus_manifest = function(...) invisible(NULL),
+    save_locally = function(...) invisible(NULL),
+    .vb_asset_true_size = function(repo, tag, name) uploaded_bytes - 4
+  )
+
+  df <- data.frame(x = 1:3, y = c("a", "b", "c"))
+  expect_error(save_to_release(df, "widget", "test-tag"), "short asset|genuinely short")
+})
