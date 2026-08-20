@@ -29,6 +29,9 @@
     ),
     epr = 10, epr_recv = 2.5, epr_disp = 2.5, epr_spoil = 2.5, epr_hitout = 2.5,
     psr = 5, count = 22L,
+    # MATCH_LISTED_POS_MAP bucket sums -- XGBoost features via
+    # MATCH_LISTED_POS_DIFF_COLS, so the snapshot must carry them.
+    key_def = 1.5, med_def = 1.5, midfield = 3, med_fwd = 1.5, key_fwd = 1.5, rucks = 1,
     stringsAsFactors = FALSE
   )
   target <- data.frame(
@@ -39,6 +42,8 @@
     epr = c(12, 8, 6), epr_recv = c(3, 2, 1.5), epr_disp = c(3, 2, 1.5),
     epr_spoil = c(3, 2, 1.5), epr_hitout = c(3, 2, 1.5),
     psr = c(6, 4, 2), count = 22L,
+    key_def = c(2, 1.5, 1), med_def = c(2, 1.5, 1), midfield = c(4, 2.5, 2),
+    med_fwd = c(2, 1.5, 1), key_fwd = c(1, 0.5, 0.5), rucks = c(1, 1, 0.5),
     stringsAsFactors = FALSE
   )
   rbind(history, target)
@@ -217,4 +222,39 @@ test_that("build_matchup_table is exported with the expected signature", {
 test_that("MATCHUP_TABLE_DAYS_REST constant exists and is a sensible positive number", {
   expect_true(is.numeric(torp:::MATCHUP_TABLE_DAYS_REST))
   expect_gt(torp:::MATCHUP_TABLE_DAYS_REST, 0)
+})
+
+# -----------------------------------------------------------------------------
+# Feature lockstep with .train_match_xgb() (regression: 2026-08-20)
+# -----------------------------------------------------------------------------
+# The matchup table re-builds an XGBoost design matrix by hand. When the
+# listed-position splits were added to training (#132) and not here, the matrix
+# was six columns short -- and xgboost neither errored nor warned, it just
+# predicted on misaligned features. Every finals tie priced from this table was
+# wrong for weeks while the build stayed green. These tests fail if the two
+# column lists drift apart again.
+
+test_that(".build_matchup_newdata() emits every MATCH_LISTED_POS_DIFF_COLS feature", {
+  state <- list(
+    team_rt_fix_df = .mt_make_team_rt_fix_df(),
+    team_mdl_df = .mt_make_team_mdl_df(),
+    all_grounds = .mt_make_all_grounds(),
+    season = 2026L, week = 4L
+  )
+  frozen <- .extract_frozen_teams(state)
+  nd <- .build_matchup_newdata(state, frozen)
+  expect_true(all(MATCH_LISTED_POS_DIFF_COLS %in% names(nd)))
+  # and they must be real differences, not constants
+  expect_gt(stats::sd(nd$midfield_diff), 0)
+})
+
+test_that(".extract_frozen_teams() aborts when a listed-position column is absent", {
+  bad <- .mt_make_team_rt_fix_df()
+  bad$rucks <- NULL
+  state <- list(
+    team_rt_fix_df = bad, team_mdl_df = .mt_make_team_mdl_df(),
+    all_grounds = .mt_make_all_grounds(), season = 2026L, week = 4L
+  )
+  frozen <- .extract_frozen_teams(state)
+  expect_error(.build_matchup_newdata(state, frozen), "listed-position column")
 })
