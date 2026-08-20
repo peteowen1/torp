@@ -204,6 +204,78 @@ jobs:
             run_predictions_pipeline(week = week)
           "
 
+      # Runs AFTER predictions have published, and cannot block them.
+      # inthegame-blog prices every finals tie from this file, so it must be
+      # rebuilt each run -- it used to be a hand-made one-off that went five
+      # weeks stale in finals week. The script gates itself before uploading;
+      # see its header for what the gate checks and why it is that check.
+      - name: Build + publish matchup table
+        id: matchup_table
+        continue-on-error: true
+        env:
+          GITHUB_PAT: ${{ secrets.WORKFLOW_PAT }}
+          GH_TOKEN: ${{ secrets.WORKFLOW_PAT }}
+        run: |
+          if ! Rscript data-raw/02-models/build_matchup_table.R; then
+            echo "::warning::Matchup table build/publish FAILED -- the blog keeps serving the previously published table, which goes staler every day it is not rebuilt. Check this step's log."
+            exit 1
+          fi
+
+      # continue-on-error keeps the job GREEN, so the step's own failure icon and
+      # its ::warning:: live only in the Actions UI and reach nobody. This
+      # pipeline's whole history is a thing that broke while every dashboard
+      # stayed green, so the failure gets a channel a human actually reads.
+      # Same create-or-comment shape as the workflow-level notifier below.
+      - name: Notify if the matchup table did not publish
+        if: steps.matchup_table.outcome == 'failure'
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const title = 'Matchup table did not publish';
+            const body = `The matchup table build/publish step failed on ${new Date().toISOString()}.
+
+            The blog prices EVERY finals tie from this file, so it is now serving
+            the previously published table and will keep doing so, going staler
+            each day, until this succeeds. The site compensates in the meantime:
+            afl/simulator.qmd detects the stale round stamp and prices the current
+            injury list into finals itself.
+
+            [View run](${context.payload.repository.html_url}/actions/runs/${context.runId})
+
+            **Troubleshooting:**
+            1. The pre-publish gate refuses to upload when build_matchup_table()
+               disagrees with production on rows they both price. A gate failure
+               is a real defect, not a flaky run -- do not rerun to get past it.
+            2. Most likely cause is the XGBoost feature list in
+               .predict_match_model() drifting from .train_match_xgb().
+            3. TORP_MATCHUP_DRY_RUN=1/true/yes skips the upload by design.
+            4. Reproduce locally with
+               TORP_MATCHUP_DRY_RUN=1 Rscript data-raw/02-models/build_matchup_table.R`;
+
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'automation,bug'
+            });
+            const existing = issues.data.find(i => i.title === title);
+            if (existing) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing.number,
+                body: `Failed again on ${new Date().toISOString()}. [View run](${context.payload.repository.html_url}/actions/runs/${context.runId})`
+              });
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: title,
+                body: body,
+                labels: ['bug', 'automation']
+              });
+            }
+
       - name: Get prediction info
         id: pred_info
         run: |

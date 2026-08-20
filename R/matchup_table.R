@@ -180,6 +180,7 @@
     all_grounds = state$all_grounds,
     gam_models = state$gam_result$models,
     xgb_models = if (!is.null(state$xgb_result)) state$xgb_result$models else NULL,
+    xgb_feature_names = if (!is.null(state$xgb_result)) state$xgb_result$feature_names else NULL,
     margin_calib = margin_calib,
     xgb_osr_dsr_cols = xgb_osr_dsr_cols,
     xgb_weather_cols = xgb_weather_cols,
@@ -212,13 +213,47 @@
     dplyr::distinct(team_id, .keep_all = TRUE) |>
     dplyr::select(
       team_id, team_name, epr, epr_recv, epr_disp, epr_spoil, epr_hitout,
-      psr, dplyr::any_of(c("osr", "dsr"))
+      psr, dplyr::any_of(c("osr", "dsr")),
+      # Listed-position bucket sums. These are XGBoost FEATURES
+      # (MATCH_LISTED_POS_DIFF_COLS, see .train_match_xgb()), so a fabricated
+      # row cannot be scored without them -- omitting them here silently
+      # shortened the predict-time design matrix by six columns and made every
+      # XGBoost prediction in this file garbage from 2026-08 until 2026-08-20.
+      dplyr::any_of(names(MATCH_LISTED_POS_MAP))
     ) |>
     dplyr::filter(!is.na(team_name))
 
   n_missing_ratings <- sum(is.na(snapshot$epr))
   if (n_missing_ratings > 0) {
     cli::cli_abort("build_matchup_table: {n_missing_ratings} team(s) have NA epr in the frozen snapshot ({season} R{week}) -- roster/injury overlay did not resolve them")
+  }
+
+  # The listed-position buckets need the SAME check, and they cannot rely on
+  # the epr one passing. epr has a roster-overlay fallback
+  # (match_model.R's use_roster branch) and a forward-fill
+  # (match_data_prep.R's tidyr::fill); the bucket columns have NEITHER. So on
+  # any week whose lineups are not yet published -- which is most of the week
+  # for a daily job -- epr resolves while these can stay NA.
+  #
+  # Checking they merely EXIST is not enough: an all-NA column passes a
+  # setdiff() on names and then reaches model.matrix(), which drops NA rows
+  # SILENTLY. The prediction vector then comes back shorter than the frame and
+  # either errors on assignment or, if the lengths happen to divide, recycles
+  # into the wrong rows and prices the wrong clubs against each other.
+  #
+  # Aborting is deliberately preferred to a 0 fallback. The consumer keeps its
+  # previous table and prices the current injury list itself
+  # (afl/simulator.qmd), which is a known-good degradation; six features
+  # quietly zeroed is not.
+  pos_cols <- intersect(names(MATCH_LISTED_POS_MAP), names(snapshot))
+  na_pos <- vapply(pos_cols, function(c) sum(is.na(snapshot[[c]])), integer(1))
+  if (any(na_pos > 0)) {
+    bad <- paste0(names(na_pos)[na_pos > 0], " (", na_pos[na_pos > 0], ")", collapse = ", ")
+    cli::cli_abort(c(
+      "build_matchup_table: NA listed-position value(s) in the frozen snapshot ({season} R{week}): {bad}",
+      "i" = "These are XGBoost features. Unlike epr they have no roster-overlay or forward-fill fallback, so this is expected on a week whose lineups are not published yet.",
+      "x" = "model.matrix() would drop those rows silently and misalign every prediction. Not building."
+    ))
   }
 
   # History used for home-ground + venue familiarity: matches strictly
@@ -276,7 +311,18 @@
   n_teams <- length(team_names)
   if (n_teams < 2) cli::cli_abort("build_matchup_table: fewer than 2 teams in frozen snapshot")
 
-  rating_cols <- intersect(c("epr", "epr_recv", "epr_disp", "epr_spoil", "epr_hitout", "psr", "osr", "dsr"),
+  # MATCH_LISTED_POS_MAP buckets ride along with the rating columns: they are
+  # per-team EPR sums, fabricated the same way, and their _diff forms are
+  # XGBoost features.
+  missing_pos <- setdiff(names(MATCH_LISTED_POS_MAP), names(snapshot))
+  if (length(missing_pos) > 0) {
+    cli::cli_abort(c(
+      "build_matchup_table: frozen snapshot is missing listed-position column(s): {paste(missing_pos, collapse = ', ')}",
+      "i" = "These are XGBoost features via MATCH_LISTED_POS_DIFF_COLS; scoring without them misaligns the design matrix."
+    ))
+  }
+  rating_cols <- intersect(c("epr", "epr_recv", "epr_disp", "epr_spoil", "epr_hitout", "psr", "osr", "dsr",
+                             names(MATCH_LISTED_POS_MAP)),
                             names(snapshot))
   rating_vec <- stats::setNames(
     lapply(rating_cols, function(col) stats::setNames(snapshot[[col]], team_names)),
@@ -455,6 +501,9 @@
   df$torp.x <- TORP_EPR_WEIGHT * df$epr.x + (1 - TORP_EPR_WEIGHT) * df$psr.x
   df$torp.y <- TORP_EPR_WEIGHT * df$epr.y + (1 - TORP_EPR_WEIGHT) * df$psr.y
   df$torp_diff <- df$torp.x - df$torp.y
+  for (col in names(MATCH_LISTED_POS_MAP)) {
+    df[[paste0(col, "_diff")]] <- df[[paste0(col, ".x")]] - df[[paste0(col, ".y")]]
+  }
   df$log_dist_diff <- df$log_dist.x - df$log_dist.y
   df$familiarity_diff <- df$familiarity.x - df$familiarity.y
 
@@ -496,7 +545,16 @@
       "game_prop_through_month.x", "game_prop_through_day.x",
       "epr_diff", "epr_recv_diff", "epr_disp_diff", "epr_spoil_diff", "epr_hitout_diff",
       "torp_diff", "psr_diff", state$xgb_osr_dsr_cols,
-      "xelo_diff", "log_dist_diff", "familiarity_diff", "days_rest_diff_fac"
+      "xelo_diff",
+      # MUST stay in lockstep with .train_match_xgb()'s own base_cols
+      # (match_train.R) -- same columns, same ORDER. model.matrix() output is
+      # positional, so a column missing here does not error, it silently
+      # shifts every downstream column and the model predicts on nonsense.
+      # That is exactly what happened when the listed-position splits were
+      # added to training (#132) and not here. The feature-name assertion in
+      # .xgb_predict() below is what makes a future drift fail loudly.
+      MATCH_LISTED_POS_DIFF_COLS,
+      "log_dist_diff", "familiarity_diff", "days_rest_diff_fac"
     )
 
     xgb_levels <- list(
@@ -509,19 +567,68 @@
       }
       d
     }
-    .xgb_predict <- function(model, cols) {
+    # Fail loud on any train/predict feature drift.
+    #
+    # This cannot be checked off the model object: in xgboost 3.x an
+    # xgb.Booster is a bare external pointer with no feature_names, and
+    # predict() on a matrix with the WRONG NUMBER of columns returns numbers
+    # rather than erroring (verified 2026-08-20: 2 of 4 columns -> no error).
+    # That is precisely how a six-column shortfall here scored every finals
+    # tie on nonsense for weeks while the build stayed green. So
+    # .train_match_xgb() records colnames() of each training matrix and we
+    # assert against that.
+    expected_names <- state$xgb_feature_names
+    if (is.null(expected_names)) {
+      cli::cli_abort(c(
+        "build_matchup_table: state carries no xgb_feature_names, so the design matrix cannot be verified.",
+        "i" = "Build the state with .freeze_match_state(), which records them from .train_match_xgb()."
+      ))
+    }
+    .xgb_predict <- function(model, cols, step) {
+      missing_cols <- setdiff(cols, names(df))
+      if (length(missing_cols) > 0) {
+        cli::cli_abort("build_matchup_table: fabricated frame is missing XGBoost feature(s): {paste(missing_cols, collapse = ', ')}")
+      }
       mat <- stats::model.matrix(~ . - 1, data = .relevel(df[, cols, drop = FALSE]))
+      # model.matrix() drops rows containing NA without warning, so a shorter
+      # matrix is the general signature of an NA reaching the feature frame
+      # from ANY source -- not just the listed-position columns
+      # .extract_frozen_teams() now guards. predict() would then return fewer
+      # values than the frame has rows, and the assignment would either error or
+      # recycle into the wrong rows. Column names alone cannot see this.
+      if (nrow(mat) != nrow(df)) {
+        cli::cli_abort(c(
+          "build_matchup_table: design matrix for step {.val {step}} has {nrow(mat)} row(s) for a {nrow(df)}-row frame.",
+          "i" = "model.matrix() dropped rows containing NA. Find the NA feature rather than letting predictions misalign."
+        ))
+      }
+      expected <- expected_names[[step]]
+      if (is.null(expected)) {
+        cli::cli_abort("build_matchup_table: no recorded training feature names for step {.val {step}}.")
+      }
+      if (!identical(colnames(mat), expected)) {
+        only_model <- setdiff(expected, colnames(mat))
+        only_mat <- setdiff(colnames(mat), expected)
+        cli::cli_abort(c(
+          "build_matchup_table: XGBoost design matrix does not match the trained model.",
+          "x" = "{length(expected)} trained feature(s), {ncol(mat)} built here.",
+          if (length(only_model)) c("x" = "Missing: {paste(only_model, collapse = ', ')}") else NULL,
+          if (length(only_mat)) c("x" = "Unexpected: {paste(only_mat, collapse = ', ')}") else NULL,
+          if (!length(only_model) && !length(only_mat)) c("x" = "Same columns, different ORDER -- model.matrix() is positional.") else NULL,
+          "i" = "Keep base_cols in lockstep with .train_match_xgb() in match_train.R."
+        ))
+      }
       predict(model, xgboost::xgb.DMatrix(data = mat))
     }
 
     s1_cols <- c(base_cols, state$xgb_weather_cols)
-    df$xgb_pred_tot_xscore <- .xgb_predict(xgb_models$total_xpoints, s1_cols)
+    df$xgb_pred_tot_xscore <- .xgb_predict(xgb_models$total_xpoints, s1_cols, "total_xpoints")
     s2_cols <- c(base_cols, "xgb_pred_tot_xscore")
-    df$xgb_pred_xscore_diff <- .xgb_predict(xgb_models$xscore_diff, s2_cols)
+    df$xgb_pred_xscore_diff <- .xgb_predict(xgb_models$xscore_diff, s2_cols, "xscore_diff")
     s3_cols <- c(base_cols, "xgb_pred_tot_xscore", "xgb_pred_xscore_diff")
-    df$xgb_pred_conv_diff <- .xgb_predict(xgb_models$conv_diff, s3_cols)
+    df$xgb_pred_conv_diff <- .xgb_predict(xgb_models$conv_diff, s3_cols, "conv_diff")
     s4_cols <- c(base_cols, "xgb_pred_xscore_diff", "xgb_pred_conv_diff", "xgb_pred_tot_xscore")
-    df$xgb_pred_score_diff <- .xgb_predict(xgb_models$score_diff, s4_cols)
+    df$xgb_pred_score_diff <- .xgb_predict(xgb_models$score_diff, s4_cols, "score_diff")
 
     df$pred_tot_xscore <- .blend_gam_xgb(df$gam_pred_tot_xscore, df$xgb_pred_tot_xscore)
     df$pred_score_diff <- .blend_gam_xgb(df$gam_pred_score_diff, df$xgb_pred_score_diff)

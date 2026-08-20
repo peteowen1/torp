@@ -643,8 +643,14 @@
       params = params, data = dtrain, nrounds = best_n,
       print_every_n = 0, verbose = 0
     )
+    # colnames(fmat) is the ONLY reliable record of what this model expects:
+    # an xgb.Booster in xgboost 3.x is a bare external pointer, carries no
+    # feature_names, and predict() on a matrix with the wrong columns returns
+    # numbers instead of erroring. Callers that rebuild a design matrix later
+    # (build_matchup_table()) assert against this.
     list(model = model, preds = predict(model, dtrain),
-         best_n = best_n, cv_score = cv_score)
+         best_n = best_n, cv_score = cv_score,
+         feature_names = colnames(fmat))
   }
 
   # Helper: predict on the full frame. Defined at file scope as
@@ -703,5 +709,11 @@
     score_diff     = list(best_n = s4$best_n, cv_score = s4$cv_score),
     win            = list(best_n = s5$best_n, cv_score = s5$cv_score)
   )
-  list(models = models, steps = steps, data = team_mdl_df)
+  feature_names <- list(
+    total_xpoints = s1$feature_names, xscore_diff = s2$feature_names,
+    conv_diff = s3$feature_names, score_diff = s4$feature_names,
+    win = s5$feature_names
+  )
+  list(models = models, steps = steps, data = team_mdl_df,
+       feature_names = feature_names)
 }
