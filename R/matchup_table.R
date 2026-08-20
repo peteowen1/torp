@@ -228,6 +228,34 @@
     cli::cli_abort("build_matchup_table: {n_missing_ratings} team(s) have NA epr in the frozen snapshot ({season} R{week}) -- roster/injury overlay did not resolve them")
   }
 
+  # The listed-position buckets need the SAME check, and they cannot rely on
+  # the epr one passing. epr has a roster-overlay fallback
+  # (match_model.R's use_roster branch) and a forward-fill
+  # (match_data_prep.R's tidyr::fill); the bucket columns have NEITHER. So on
+  # any week whose lineups are not yet published -- which is most of the week
+  # for a daily job -- epr resolves while these can stay NA.
+  #
+  # Checking they merely EXIST is not enough: an all-NA column passes a
+  # setdiff() on names and then reaches model.matrix(), which drops NA rows
+  # SILENTLY. The prediction vector then comes back shorter than the frame and
+  # either errors on assignment or, if the lengths happen to divide, recycles
+  # into the wrong rows and prices the wrong clubs against each other.
+  #
+  # Aborting is deliberately preferred to a 0 fallback. The consumer keeps its
+  # previous table and prices the current injury list itself
+  # (afl/simulator.qmd), which is a known-good degradation; six features
+  # quietly zeroed is not.
+  pos_cols <- intersect(names(MATCH_LISTED_POS_MAP), names(snapshot))
+  na_pos <- vapply(pos_cols, function(c) sum(is.na(snapshot[[c]])), integer(1))
+  if (any(na_pos > 0)) {
+    bad <- paste0(names(na_pos)[na_pos > 0], " (", na_pos[na_pos > 0], ")", collapse = ", ")
+    cli::cli_abort(c(
+      "build_matchup_table: NA listed-position value(s) in the frozen snapshot ({season} R{week}): {bad}",
+      "i" = "These are XGBoost features. Unlike epr they have no roster-overlay or forward-fill fallback, so this is expected on a week whose lineups are not published yet.",
+      "x" = "model.matrix() would drop those rows silently and misalign every prediction. Not building."
+    ))
+  }
+
   # History used for home-ground + venue familiarity: matches strictly
   # before the frozen target week, across all seasons available (mirrors
   # .build_match_features()'s get_mode()/cumulative-proportion scope, which
@@ -562,6 +590,18 @@
         cli::cli_abort("build_matchup_table: fabricated frame is missing XGBoost feature(s): {paste(missing_cols, collapse = ', ')}")
       }
       mat <- stats::model.matrix(~ . - 1, data = .relevel(df[, cols, drop = FALSE]))
+      # model.matrix() drops rows containing NA without warning, so a shorter
+      # matrix is the general signature of an NA reaching the feature frame
+      # from ANY source -- not just the listed-position columns
+      # .extract_frozen_teams() now guards. predict() would then return fewer
+      # values than the frame has rows, and the assignment would either error or
+      # recycle into the wrong rows. Column names alone cannot see this.
+      if (nrow(mat) != nrow(df)) {
+        cli::cli_abort(c(
+          "build_matchup_table: design matrix for step {.val {step}} has {nrow(mat)} row(s) for a {nrow(df)}-row frame.",
+          "i" = "model.matrix() dropped rows containing NA. Find the NA feature rather than letting predictions misalign."
+        ))
+      }
       expected <- expected_names[[step]]
       if (is.null(expected)) {
         cli::cli_abort("build_matchup_table: no recorded training feature names for step {.val {step}}.")

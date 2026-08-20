@@ -51,6 +51,18 @@ season <- get_afl_season()
 week   <- get_afl_week(type = "next")
 cli::cli_h1("Matchup table: {season} R{week}")
 
+# get_afl_week() downgrades a fixture-load failure to an empty frame and returns
+# round 0 rather than erroring (R/utils.R). Building a table stamped for the
+# wrong round is worse than not building one, because the blog reads that stamp
+# to decide whether the table is current -- so refuse the implausible input
+# rather than inherit it.
+if (!is.finite(week) || week < 1) {
+  cli::cli_abort(c(
+    "Refusing to build for round {week}.",
+    "i" = "get_afl_week() returns 0 when fixtures fail to load; a table stamped with the wrong round would be read as current by the site."
+  ))
+}
+
 state <- torp:::.freeze_match_state(season = season, week = week)
 
 # ---- Gate 1: the fabricated predict path still agrees with production -------
@@ -62,6 +74,18 @@ if (nrow(real) == 0) {
 }
 scored <- torp:::.predict_match_model(as.data.frame(real), state)
 d <- abs(real$pred_score_diff - scored$pred_score_diff)
+# Count the missing BEFORE taking a max that would drop them. na.rm = TRUE on a
+# partially-NA vector reports the largest disagreement among the rows that
+# happened to score, which reads as agreement while some rows never produced a
+# comparable value at all -- a subset-failure variant of the very drift this
+# gate is here to catch.
+n_na_d <- sum(is.na(d))
+if (n_na_d > 0) {
+  cli::cli_abort(c(
+    "Predict-path check FAILED: {n_na_d} of {length(d)} row(s) produced no comparable prediction.",
+    "i" = "A partial NA means the replicate predict path broke for a subset of rows. Not publishing."
+  ))
+}
 max_d <- max(d, na.rm = TRUE)
 cli::cli_alert_info("Predict-path agreement on {nrow(real)} real row(s): max|d| = {round(max_d, 4)} margin points")
 if (!is.finite(max_d) || max_d > MAX_ABS_DIFF) {
@@ -97,8 +121,17 @@ if (stats::sd(tbl$pred_margin) < 5) {
 # the upload. This is how the gates get exercised against real data without
 # promoting a vintage -- R2 is read at runtime by the site, so a release upload
 # reaches production on the next blog-data run with no preview stage in between.
-if (nzchar(Sys.getenv("TORP_MATCHUP_DRY_RUN"))) {
-  cli::cli_alert_success("DRY RUN: all gates passed, {nrow(tbl)} rows built, nothing uploaded")
+# Explicitly truthy, NOT nzchar(): nzchar("0") is TRUE, so a stray
+# TORP_MATCHUP_DRY_RUN=0 -- the value someone would set meaning "off" -- would
+# silently switch publishing off forever while the step stayed green. That is
+# the exact failure mode this pipeline exists to prevent, and the escape hatch
+# meant to test it safely would have reintroduced it.
+if (tolower(Sys.getenv("TORP_MATCHUP_DRY_RUN")) %in% c("1", "true", "yes")) {
+  # WARNING, not success: a dry run must not read like a normal publish to
+  # anyone skimming the log or grepping it.
+  cli::cli_alert_warning("DRY RUN: all gates passed, {nrow(tbl)} rows built, NOTHING UPLOADED")
+  cat("::warning::Matchup table ran in DRY RUN mode -- nothing was published.
+")
   quit(save = "no", status = 0)
 }
 
