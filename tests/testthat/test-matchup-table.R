@@ -258,3 +258,28 @@ test_that(".extract_frozen_teams() aborts when a listed-position column is absen
   frozen <- .extract_frozen_teams(state)
   expect_error(.build_matchup_newdata(state, frozen), "listed-position column")
 })
+
+test_that(".extract_frozen_teams() aborts on an all-NA listed-position column", {
+  # Presence is not enough. Unlike epr, these columns have no roster-overlay or
+  # forward-fill fallback, so they are genuinely NA on any week whose lineups
+  # are not published yet -- and an all-NA column passes a names-only check,
+  # then model.matrix() drops those rows silently.
+  bad <- .mt_make_team_rt_fix_df()
+  bad$midfield[bad$round_number == 4L] <- NA_real_
+  state <- list(
+    team_rt_fix_df = bad, team_mdl_df = .mt_make_team_mdl_df(),
+    all_grounds = .mt_make_all_grounds(), season = 2026L, week = 4L
+  )
+  expect_error(.extract_frozen_teams(state), "NA listed-position value")
+})
+
+test_that("the frozen snapshot's listed-position columns are all non-NA in the healthy case", {
+  state <- list(
+    team_rt_fix_df = .mt_make_team_rt_fix_df(), team_mdl_df = .mt_make_team_mdl_df(),
+    all_grounds = .mt_make_all_grounds(), season = 2026L, week = 4L
+  )
+  frozen <- .extract_frozen_teams(state)
+  for (col in names(MATCH_LISTED_POS_MAP)) {
+    expect_false(any(is.na(frozen$snapshot[[col]])), info = col)
+  }
+})
