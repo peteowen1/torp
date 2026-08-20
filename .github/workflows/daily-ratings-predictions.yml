@@ -204,6 +204,22 @@ jobs:
             run_predictions_pipeline(week = week)
           "
 
+      # Runs AFTER predictions have published, and cannot block them.
+      # inthegame-blog prices every finals tie from this file, so it must be
+      # rebuilt each run -- it used to be a hand-made one-off that went five
+      # weeks stale in finals week. The script gates itself before uploading;
+      # see its header for what the gate checks and why it is that check.
+      - name: Build + publish matchup table
+        continue-on-error: true
+        env:
+          GITHUB_PAT: ${{ secrets.WORKFLOW_PAT }}
+          GH_TOKEN: ${{ secrets.WORKFLOW_PAT }}
+        run: |
+          if ! Rscript data-raw/02-models/build_matchup_table.R; then
+            echo "::warning::Matchup table build/publish FAILED -- the blog keeps serving the previously published table, which goes staler every day it is not rebuilt. Check this step's log."
+            exit 1
+          fi
+
       - name: Get prediction info
         id: pred_info
         run: |
