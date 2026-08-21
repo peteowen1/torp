@@ -62,11 +62,15 @@ test_that("vb_download sha mismatch vs manifest warns and trusts the download wh
   # A manifest sha256 mismatch is far more often a stale manifest (upload
   # succeeded, the LAST manifest publish didn't) than real corruption --
   # vb_download() downgrades this to a warning and falls back to
-  # verify-by-size against a live listing. "No listing contradicts it" means
-  # the listing call SUCCEEDS but the asset isn't in it (panna#187 fix 2:
-  # a failed listing CALL is no longer treated the same way -- it now raises
-  # vb_error_transient instead of silently skipping the check, see the
-  # dedicated regression test below).
+  # verify-by-size against a live listing. With no listing available here
+  # (no gh::gh mock -- vb_list_assets fails, caught, treated as
+  # "can't corroborate either way"), the download is trusted and completes.
+  #
+  # This is the CONTRACT, not an accident. panna#187's second fix originally
+  # made a failed listing abort; that bricks the asset on an API blip, which
+  # is what this fallback exists to prevent. bouncer shipped it, CI caught
+  # it, and it was reverted (bouncerverse/bouncer 5edd3ac). Only the silence
+  # was fixed -- see the warning regression test below.
   dir <- withr::local_tempdir()
   dest <- file.path(dir, "model.parquet")
   writeLines("PRIOR-GOOD-CONTENT", dest)
@@ -84,12 +88,6 @@ test_that("vb_download sha mismatch vs manifest warns and trusts the download wh
       invisible(NULL)
     },
     .package = "piggyback"
-  )
-  testthat::local_mocked_bindings(
-    gh = function(...) list(assets = list(
-      list(name = "unrelated.parquet", size = 1, updated_at = "2026-01-01T00:00:00Z", id = 1)
-    )),
-    .package = "gh"
   )
 
   expect_warning(
@@ -298,7 +296,11 @@ test_that("vb_read_manifest retry classifies a transient listing error as transi
   expect_identical(call_n, 2L)  # confirms the retry branch actually ran
 })
 
-test_that("vb_download's verify_by_size raises when the listing call fails, instead of skipping the check (regression: unmanifested asset moved into place + .sha256 sidecar written with zero verification)", {
+test_that("vb_download's verify_by_size WARNS when the listing call fails, and says the file was accepted unverified", {
+  # The defect was silence, not the fallback. Trusting an unverifiable
+  # download is deliberate (see the sha-mismatch test above); doing it
+  # without saying so is not. Aborting instead would brick the asset on any
+  # transient API failure -- bouncer tried that and reverted it in 5edd3ac.
   dir <- withr::local_tempdir()
   dest <- file.path(dir, "unmanifested.rds")
 
@@ -315,18 +317,18 @@ test_that("vb_download's verify_by_size raises when the listing call fails, inst
     .package = "gh"
   )
 
-  # No manifest entry for this asset (the common, unmanifested-tag case) --
-  # verify_by_size() is the ONLY integrity check on this path.
-  expect_error(
-    suppressWarnings(
-      vb_download(repo = "test/fixture", tag = "verify-size-tag",
-                 name = "unmanifested.rds", dest = dest,
-                 manifest = list(assets = NULL))
-    ),
-    class = "vb_error_transient"
+  # No manifest entry (the common, unmanifested-tag case) -- verify_by_size()
+  # is the ONLY integrity check on this path, so its inability to run must be
+  # audible.
+  expect_warning(
+    vb_download(repo = "test/fixture", tag = "verify-size-tag",
+                name = "unmanifested.rds", dest = dest,
+                manifest = list(assets = NULL)),
+    "WITHOUT verification"
   )
-  # And the file must NOT have been moved into place unverified.
-  expect_false(file.exists(dest))
+  # Behaviour preserved: the download still completes.
+  expect_true(file.exists(dest))
+  expect_true(file.exists(paste0(dest, ".sha256")))
 })
 
 test_that("vb_publish's cache-invalidation hook failure is surfaced as a warning, never swallowed (regression: consumers served pre-publish data indefinitely with nothing recording why)", {

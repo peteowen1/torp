@@ -489,14 +489,22 @@ vb_download <- function(repo, tag, name, dest,
               "vb_error_integrity")
   }
   verify_by_size <- function() {
-    # Distinguish "listing worked, asset is not in it" (legitimately nothing
-    # to check) from "the listing call failed" (no check happened at all).
-    # Swallowing the latter meant an unmanifested asset -- the common case --
-    # was moved into place and given a .sha256 sidecar with zero integrity
-    # checking, invisibly, on any transient API failure.
+    # The defect here was SILENCE, not the fallback. Trusting the download
+    # when the listing is unavailable is deliberate: this function is also
+    # the sha-mismatch path's graceful degradation (see the caller below),
+    # and a stale manifest entry is far more common than real corruption, so
+    # aborting on a transient API blip would brick the asset until someone
+    # manually republished the manifest -- the exact outcome that caller
+    # exists to avoid. bouncer shipped the abort version, CI caught it, and
+    # it was reverted in bouncerverse/bouncer 5edd3ac (2026-08-16) for this
+    # reason. Keep the behaviour; remove the silence.
     listed <- tryCatch(vb_list_assets(repo, tag), error = function(e) {
-      .vb_abort("{.val {name}}: could not list assets to size-check the download",
-                "vb_error_transient")
+      cli::cli_warn(c(
+        "{.val {name}}: could not list assets to size-check the download
+         ({conditionMessage(e)})",
+        "!" = "Accepted WITHOUT verification -- no manifest entry and no live
+               listing to corroborate it."))
+      NULL
     })
     if (!is.null(listed) && name %in% listed$name) {
       want <- listed$size[listed$name == name][1L]
