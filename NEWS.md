@@ -2,6 +2,40 @@
 
 ## Bug fixes
 
+* **`versebus.R`: four silent-failure defects ported from bouncer's review
+  (canonical copy; already fixed in `peteowen1/bouncer@86e2ebc` and ported to
+  `pannaverse/panna` as panna#187; this repo was the last vendored copy still
+  carrying all four).** All four turn a transient failure into a
+  silently-accepted "everything is fine":
+  * `vb_read_manifest()`'s retry-once branch classified every error as
+    "confirmed absent" instead of reusing `vb_classify_error()` like the
+    first attempt does. A network blip on the retry looked identical to the
+    manifest genuinely having been deleted, fell through to legacy mode, and
+    **disabled sha256 verification for every download on that tag for the
+    rest of the session** behind a one-time warning nobody would connect to
+    the cause.
+  * `vb_download()`'s `verify_by_size()` swallowed a failed asset listing and
+    skipped the check entirely rather than distinguishing "listing worked,
+    asset not in it" (fine, nothing to check) from "the listing call itself
+    errored" (no check happened at all). This is the *only* integrity check
+    on an unmanifested tag -- the common case -- so a transient API failure
+    meant the file was moved into place and given a `.sha256` sidecar as
+    though verification had passed.
+  * `vb_publish()`'s cache-invalidation hook failed via bare
+    `try(..., silent = TRUE)` -- the only failure path in this file with no
+    logging at all. A dead hook meant downstream consumers kept serving
+    pre-publish data indefinitely with nothing recording why.
+  * `vb_generation()` ran `max()` on `updated_at` with no `na.rm`. One
+    unrelated asset missing a timestamp (which `vb_list_assets()`
+    deliberately tolerates as `NA` rather than failing the whole listing)
+    silently turned the entire generation into `NA`, indistinguishable from
+    "no assets at all". Latent today (no caller in this package yet).
+
+  Each has a dedicated regression test in `tests/testthat/test-versebus.R`,
+  mutation-tested by reverting the fix and confirming the test fails.
+  `torpverse/torpmodels/R/versebus.R` still carries all four unfixed and now
+  fails `test-versebus-sync.R`'s drift guard against this copy -- follow-up
+  needed there.
 * **`versebus.R` → `VERSEBUS_VERSION` 1.1.0** (canonical copy; mirrored to
   `pannaverse/panna` in the same change, which `test-versebus-sync.R` verifies).
   * `vb_publish()` now restores `piggyback_cache_duration` on exit. It was set
