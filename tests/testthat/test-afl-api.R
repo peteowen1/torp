@@ -180,7 +180,7 @@ test_that("get_afl_results filters to CONCLUDED status", {
   )
 
   local_mocked_bindings(
-    get_afl_fixtures = function(season = NULL) mock_fixtures
+    get_afl_fixtures = function(season = NULL, comp = "AFLM") mock_fixtures
   )
 
   results <- get_afl_results(2025)
@@ -199,7 +199,7 @@ test_that("get_afl_results returns empty tibble when no concluded games", {
   )
 
   local_mocked_bindings(
-    get_afl_fixtures = function(season = NULL) mock_fixtures
+    get_afl_fixtures = function(season = NULL, comp = "AFLM") mock_fixtures
   )
 
   results <- get_afl_results(2025)
@@ -208,7 +208,7 @@ test_that("get_afl_results returns empty tibble when no concluded games", {
 
 test_that("get_afl_results returns empty tibble when fixtures are empty", {
   local_mocked_bindings(
-    get_afl_fixtures = function(season = NULL) tibble::tibble()
+    get_afl_fixtures = function(season = NULL, comp = "AFLM") tibble::tibble()
   )
 
   results <- get_afl_results(2025)
@@ -226,7 +226,7 @@ test_that("get_afl_results falls back to score-based filter without status colum
   )
 
   local_mocked_bindings(
-    get_afl_fixtures = function(season = NULL) mock_fixtures
+    get_afl_fixtures = function(season = NULL, comp = "AFLM") mock_fixtures
   )
 
   results <- suppressMessages(get_afl_results(2025))

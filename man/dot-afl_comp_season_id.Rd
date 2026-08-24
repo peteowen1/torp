@@ -4,10 +4,12 @@
 \alias{.afl_comp_season_id}
 \title{Resolve AFL API compSeasonId for a season}
 \usage{
-.afl_comp_season_id(season)
+.afl_comp_season_id(season, comp = "AFLM")
 }
 \arguments{
 \item{season}{Numeric year}
+
+\item{comp}{Competition: "AFLM" (default) or "AFLW"}
 }
 \value{
 Numeric compSeasonId, or NULL if not found
@@ -15,6 +17,7 @@ Numeric compSeasonId, or NULL if not found
 \description{
 The public AFL API (\code{aflapi.afl.com.au}) uses numeric comp season IDs,
 not the \verb{CD_S\{year\}014} format used by the CFS endpoint. This function
-resolves the numeric ID via a cached HTTP lookup (at most once per session).
+resolves the numeric ID via a cached HTTP lookup (at most once per session
+per comp).
 }
 \keyword{internal}

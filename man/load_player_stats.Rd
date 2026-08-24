@@ -8,7 +8,8 @@ load_player_stats(
   seasons = get_afl_season(),
   use_disk_cache = TRUE,
   refresh = FALSE,
-  columns = NULL
+  columns = NULL,
+  comp = "AFLM"
 )
 }
 \arguments{
@@ -22,6 +23,9 @@ fetched fresh from the API.}
 from the API for all seasons. Default is FALSE.}
 
 \item{columns}{Optional character vector of column names to read. If NULL (default), reads all columns.}
+
+\item{comp}{Competition: "AFLM" (default) or "AFLW". AFLW's box score is a
+narrower stat set (59 vs 84 columns as of 2026-08-24).}
 }
 \value{
 A data frame containing player stats data.

@@ -4,10 +4,15 @@
 \alias{get_afl_fixtures}
 \title{Fetch AFL Fixtures}
 \usage{
-get_afl_fixtures(season = NULL)
+get_afl_fixtures(season = NULL, comp = "AFLM")
 }
 \arguments{
 \item{season}{Numeric year, or \code{TRUE} for all available seasons (default: current season via \code{\link[=get_afl_season]{get_afl_season()}})}
+
+\item{comp}{Competition: "AFLM" (default, men's) or "AFLW". AFLW covers
+fixtures, results, box-score stats and rosters; chain-level data does
+not exist for AFLW at the AFL API (verified live 2026-08-24, every
+season 2018-2026) so \code{\link[=get_match_chains]{get_match_chains()}} does not accept it.}
 }
 \value{
 A tibble of fixture data
@@ -20,6 +25,7 @@ Includes scores for completed games (same data the results endpoint returns).
 \dontrun{
 fixtures <- get_afl_fixtures()
 fixtures <- get_afl_fixtures(2025)
+fixtures <- get_afl_fixtures(2026, comp = "AFLW")
 }
 
 }

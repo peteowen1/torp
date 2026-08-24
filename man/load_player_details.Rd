@@ -8,7 +8,8 @@ load_player_details(
   seasons = get_afl_season(),
   use_disk_cache = TRUE,
   refresh = FALSE,
-  columns = NULL
+  columns = NULL,
+  comp = "AFLM"
 )
 }
 \arguments{
@@ -22,6 +23,11 @@ fetched fresh from the API.}
 from the API for all seasons. Default is FALSE.}
 
 \item{columns}{Optional character vector of column names to read. If NULL (default), reads all columns.}
+
+\item{comp}{Competition: "AFLM" (default) or "AFLW". AFLW always uses the
+per-season fetch path (no batch \code{fetch_all_fn}) -- \code{.fetch_all_player_details()}
+is AFLM-only internal plumbing not worth complicating for the multi-season
+AFLW case, which is rare and fine at per-season speed.}
 }
 \value{
 A data frame containing AFL player biographical details including names, ages, and team affiliations.

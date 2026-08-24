@@ -4,13 +4,16 @@
 \alias{.afl_all_comp_seasons}
 \title{Fetch all AFL comp seasons (cached)}
 \usage{
-.afl_all_comp_seasons()
+.afl_all_comp_seasons(comp = "AFLM")
+}
+\arguments{
+\item{comp}{Competition: "AFLM" (default) or "AFLW". Filtered via
+\link{AFL_COMP_PUBLIC_API_CODES}.}
 }
 \value{
 A data.frame with id and year columns, or NULL on failure
 }
 \description{
 Uses the public AFL API to look up competition season IDs.
-The AFL Premiership competition code is "AFL" (or "CD_AFLPrem").
 }
 \keyword{internal}

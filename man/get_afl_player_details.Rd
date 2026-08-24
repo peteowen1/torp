@@ -4,10 +4,12 @@
 \alias{get_afl_player_details}
 \title{Fetch AFL Player Details}
 \usage{
-get_afl_player_details(season = NULL)
+get_afl_player_details(season = NULL, comp = "AFLM")
 }
 \arguments{
 \item{season}{Numeric year (default: current season via \code{\link[=get_afl_season]{get_afl_season()}})}
+
+\item{comp}{Competition: "AFLM" (default) or "AFLW"}
 }
 \value{
 A tibble of player details with player_name, age, row_id columns

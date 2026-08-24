@@ -8,7 +8,8 @@ load_teams(
   seasons = get_afl_season(),
   use_disk_cache = TRUE,
   refresh = FALSE,
-  columns = NULL
+  columns = NULL,
+  comp = "AFLM"
 )
 }
 \arguments{
@@ -22,6 +23,8 @@ fetched fresh from the API.}
 from the API for all seasons. Default is FALSE.}
 
 \item{columns}{Optional character vector of column names to read. If NULL (default), reads all columns.}
+
+\item{comp}{Competition: "AFLM" (default) or "AFLW".}
 }
 \value{
 A data frame containing AFL team and player lineup data.
