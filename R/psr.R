@@ -89,13 +89,34 @@
   out
 }
 
+#' Build a comp-qualified coefficient filename
+#'
+#' AFLM (default) is unchanged; any other comp gets its coefficient set
+#' suffixed (e.g. "psr_coefficients.csv" -> "psr_coefficients_aflw.csv"),
+#' matching the naming the AFLW training pipeline
+#' (data-raw/06-stat-ratings/aflw_run_pipeline.R) writes.
+#' @param base Base filename, e.g. "psr_coefficients.csv"
+#' @param comp Competition: "AFLM" (default) or "AFLW"
+#' @return The comp-qualified filename
+#' @keywords internal
+.comp_coef_filename <- function(base, comp = "AFLM") {
+  if (comp == "AFLM") return(base)
+  sub("\\.csv$", paste0("_", tolower(comp), ".csv"), base)
+}
+
 #' Resolve path to PSR coefficient CSV
 #'
 #' Checks inst/extdata first, then falls back to data-raw/cache-stat-ratings/.
 #' @param coef_file Filename (default "psr_coefficients.csv")
+#' @param comp Competition: "AFLM" (default) or "AFLW". AFLW's PSR/PSV is a
+#'   box-score-only pipeline sourced from load_player_stats(comp="AFLW") --
+#'   see docs/plans/AFLW-MIGRATION-PLAN.md Sec 6 -- with its own coefficient
+#'   files, never comparable to men's PSR/PSV numbers.
 #' @return Absolute path to the CSV, or "" if not found
 #' @keywords internal
-.find_psr_coef_path <- function(coef_file = "psr_coefficients.csv") {
+.find_psr_coef_path <- function(coef_file = "psr_coefficients.csv", comp = "AFLM") {
+  .validate_afl_comp(comp)
+  coef_file <- .comp_coef_filename(coef_file, comp)
   path <- system.file("extdata", coef_file, package = "torp")
   if (path == "") {
     path <- file.path(
@@ -694,14 +715,17 @@ calculate_psv_components <- function(player_stats, coef_df, osr_coef_df,
 #' @inheritParams calculate_psv
 #' @param psr_coef_path Path to the margin PSR coefficient CSV. If NULL,
 #'   searches \code{inst/extdata/psr_coefficients.csv}.
+#' @param comp Competition: "AFLM" (default) or "AFLW". Only used to resolve
+#'   \code{psr_coef_path} when it is NULL; ignored if an explicit path is
+#'   given.
 #'
 #' @return A data.table with \code{psv}, \code{osv}, \code{dsv} columns.
 #'
 #' @keywords internal
 .compute_psv <- function(player_stats, psr_coef_path = NULL, tog_adjust = TRUE,
-                          center = TRUE) {
+                          center = TRUE, comp = "AFLM") {
   if (is.null(psr_coef_path)) {
-    psr_coef_path <- .find_psr_coef_path()
+    psr_coef_path <- .find_psr_coef_path(comp = comp)
   }
 
   if (!nzchar(psr_coef_path) || !file.exists(psr_coef_path)) {
@@ -712,8 +736,8 @@ calculate_psv_components <- function(player_stats, coef_df, osr_coef_df,
   coef_df <- utils::read.csv(psr_coef_path)
 
   coef_dir <- dirname(psr_coef_path)
-  osr_path <- file.path(coef_dir, "osr_coefficients.csv")
-  dsr_path <- file.path(coef_dir, "dsr_coefficients.csv")
+  osr_path <- file.path(coef_dir, .comp_coef_filename("osr_coefficients.csv", comp))
+  dsr_path <- file.path(coef_dir, .comp_coef_filename("dsr_coefficients.csv", comp))
 
   if (file.exists(osr_path) && file.exists(dsr_path)) {
     osr_coef_df <- utils::read.csv(osr_path)
@@ -1553,12 +1577,16 @@ explain_player_rating <- function(player,
 #' @param listed_pos Optional data frame of player_id plus a listed position
 #'   column. Passed through to calculate_psr(); loaded from
 #'   load_player_details() when NULL and centring on listed is requested.
+#' @param comp Competition: "AFLM" (default) or "AFLW". Only used to resolve
+#'   \code{psr_coef_path} when it is NULL; ignored if an explicit path is
+#'   given.
 #' @return A data.table with \code{psr}, \code{osr}, \code{dsr} columns.
 #' @keywords internal
 .compute_psr_from_stat_ratings <- function(skills, psr_coef_path = NULL, center = TRUE,
                                           centre_by_round = PSR_CENTRE_BY_ROUND,
                                           listed_pos = NULL,
-                                          centre_on_listed = PSR_CENTRE_ON_LISTED) {
+                                          centre_on_listed = PSR_CENTRE_ON_LISTED,
+                                          comp = "AFLM") {
   # This is already the I/O boundary for the PSR path (it reads the coefficient
   # CSVs), so it is also the right place to source listed positions when the
   # caller has not. Doing it here rather than in calculate_psr() keeps that
@@ -1571,7 +1599,7 @@ explain_player_rating <- function(player,
   # Resolve margin coefficient path
 
   if (is.null(psr_coef_path)) {
-    psr_coef_path <- .find_psr_coef_path()
+    psr_coef_path <- .find_psr_coef_path(comp = comp)
   }
 
   if (!nzchar(psr_coef_path) || !file.exists(psr_coef_path)) {
@@ -1583,8 +1611,8 @@ explain_player_rating <- function(player,
 
   # Try to find osr/dsr coefficient files in the same directory
   coef_dir <- dirname(psr_coef_path)
-  osr_path <- file.path(coef_dir, "osr_coefficients.csv")
-  dsr_path <- file.path(coef_dir, "dsr_coefficients.csv")
+  osr_path <- file.path(coef_dir, .comp_coef_filename("osr_coefficients.csv", comp))
+  dsr_path <- file.path(coef_dir, .comp_coef_filename("dsr_coefficients.csv", comp))
 
   if (file.exists(osr_path) && file.exists(dsr_path)) {
     osr_coef_df <- utils::read.csv(osr_path)
