@@ -350,16 +350,23 @@ build_team_rapm_net <- function(seasons = TRUE, comp = "AFLM",
 #' @return list(X (sparse Matrix, n team-sides x 2p columns), y (points
 #'   scored), team_match_ids, match_ids, columns (length p), n, p, n_over_p).
 #' @keywords internal
+#' @param player_rows Optional pre-built row table (same shape
+#'   \code{.prepare_team_rapm_player_rows()} returns) to build the design from
+#'   instead of fetching fresh -- lets a caller row-filter first (e.g.
+#'   \code{build_team_rapm_asof()}'s point-in-time \code{match_date <= ref_date}
+#'   filter) while reusing this function's column-pruning and matrix-building
+#'   logic unchanged. \code{NULL} (default) preserves existing behaviour
+#'   exactly: fetch fresh via \code{seasons}/\code{comp}.
 build_team_rapm_split <- function(seasons = TRUE, comp = "AFLM",
                                   exposure = NULL, threshold = NULL, unit = NULL,
-                                  game_minutes = NULL) {
+                                  game_minutes = NULL, player_rows = NULL) {
   .validate_afl_comp(comp)
   if (is.null(exposure)) exposure <- if (comp == "AFLM") "binary" else "tog"
   exposure <- match.arg(exposure, c("binary", "tog"))
   if (!requireNamespace("Matrix", quietly = TRUE)) {
     cli::cli_abort("Matrix package required for team RAPM.")
   }
-  rows <- .prepare_team_rapm_player_rows(seasons, comp = comp)
+  rows <- if (is.null(player_rows)) .prepare_team_rapm_player_rows(seasons, comp = comp) else player_rows
   if (nrow(rows) == 0) {
     cli::cli_abort("No player rows available to build a RAPM matrix for comp {.val {comp}}.")
   }
@@ -419,14 +426,22 @@ build_team_rapm_split <- function(seasons = TRUE, comp = "AFLM",
 #' Applying it to AFLM too is a strict improvement (a wider search can only
 #' find an equal-or-better minimum), not a change carried over without
 #' checking.
+#' @param weights Optional numeric vector, glmnet observation (case) weights
+#'   -- e.g. decay weights for an as-of/career-style fit
+#'   (\code{build_team_rapm_asof()}). \code{NULL} (default) fits unweighted,
+#'   identical to every existing caller's behaviour.
 #' @keywords internal
-.team_rapm_fit <- function(X, y, foldid = NULL, nfolds = 10, seed = 20260825) {
+.team_rapm_fit <- function(X, y, foldid = NULL, nfolds = 10, seed = 20260825, weights = NULL) {
   if (!requireNamespace("glmnet", quietly = TRUE)) {
     cli::cli_abort("glmnet package required for team RAPM.")
   }
   set.seed(seed)
   args <- list(x = X, y = y, alpha = 0, standardize = FALSE, keep = TRUE,
                nlambda = 400, lambda.min.ratio = 1e-6)
+  if (!is.null(weights)) {
+    stopifnot(length(weights) == nrow(X))
+    args$weights <- weights
+  }
   if (is.null(foldid)) {
     args$nfolds <- min(nfolds, nrow(X))
   } else {
@@ -437,10 +452,14 @@ build_team_rapm_split <- function(seasons = TRUE, comp = "AFLM",
   lambda_idx <- cv_model$index["min", "Lambda"]
   stopifnot(length(lambda_idx) == 1L)
   oof_pred <- cv_model$fit.preval[, lambda_idx]
-  cv_r2 <- 1 - sum((y - oof_pred)^2) / sum((y - mean(y))^2)
-
   in_sample_pred <- as.vector(stats::predict(cv_model, newx = X, s = "lambda.min"))
-  in_sample_r2 <- 1 - sum((y - in_sample_pred)^2) / sum((y - mean(y))^2)
+  # Weighted R^2 when observation weights are supplied (e.g. decay weights) --
+  # an unweighted R^2 on a decay-weighted fit would score heavily-downweighted
+  # old rows exactly as much as recent ones, which is not what the fit optimised.
+  wv <- if (is.null(weights)) rep(1, length(y)) else weights
+  wmean_y <- stats::weighted.mean(y, wv)
+  cv_r2 <- 1 - sum(wv * (y - oof_pred)^2) / sum(wv * (y - wmean_y)^2)
+  in_sample_r2 <- 1 - sum(wv * (y - in_sample_pred)^2) / sum(wv * (y - wmean_y)^2)
 
   list(model = cv_model, lambda_min = cv_model$lambda.min, cv_r2 = cv_r2, in_sample_r2 = in_sample_r2)
 }

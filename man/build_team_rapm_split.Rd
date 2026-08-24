@@ -12,7 +12,8 @@ build_team_rapm_split(
   exposure = NULL,
   threshold = NULL,
   unit = NULL,
-  game_minutes = NULL
+  game_minutes = NULL,
+  player_rows = NULL
 )
 }
 \arguments{
@@ -43,6 +44,14 @@ without re-checking which one actually works for each comp's data.}
 \item{game_minutes}{Nominal full-game minutes, used only when
 \code{unit="tog_minutes"} to convert \code{tog} (a 0-1 fraction) into
 minutes. Default depends on \code{comp}.}
+
+\item{player_rows}{Optional pre-built row table (same shape
+\code{.prepare_team_rapm_player_rows()} returns) to build the design from
+instead of fetching fresh -- lets a caller row-filter first (e.g.
+\code{build_team_rapm_asof()}'s point-in-time \code{match_date <= ref_date}
+filter) while reusing this function's column-pruning and matrix-building
+logic unchanged. \code{NULL} (default) preserves existing behaviour
+exactly: fetch fresh via \code{seasons}/\code{comp}.}
 }
 \value{
 list(X (sparse Matrix, n team-sides x 2p columns), y (points
