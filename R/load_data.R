@@ -619,7 +619,11 @@ file_reader <- function(file_name, release_tag) {
       rm(list = cache_key, envir = .torp_cache)
     }
     if (use_disk_cache) {
-      clear_disk_cache(pattern = sprintf("cfs_%s_", cache_prefix))
+      # Anchored + requires a digit right after the prefix (the season year),
+      # so a shorter comp's prefix (e.g. "player_stats") can't match a longer
+      # comp-suffixed one ("player_stats_AFLW") as a substring -- an unanchored
+      # pattern here would let refreshing AFLM silently wipe AFLW's disk cache.
+      clear_disk_cache(pattern = sprintf("^cfs_%s_\\d", cache_prefix))
     }
   }
 
@@ -893,6 +897,8 @@ load_xg <- function(seasons = get_afl_season(), rounds = NULL, use_disk_cache = 
 #' @param refresh Logical. If TRUE, clears all caches and fetches fresh data
 #'   from the API for all seasons. Default is FALSE.
 #' @param columns Optional character vector of column names to read. If NULL (default), reads all columns.
+#' @param comp Competition: "AFLM" (default) or "AFLW". AFLW's box score is a
+#'   narrower stat set (59 vs 84 columns as of 2026-08-24).
 #'
 #' @return A data frame containing player stats data.
 #' @seealso [load_player_details()], [player_game_ratings()], [player_season_ratings()]
@@ -903,13 +909,19 @@ load_xg <- function(seasons = get_afl_season(), rounds = NULL, use_disk_cache = 
 #' })
 #' }
 #' @export
-load_player_stats <- function(seasons = get_afl_season(), use_disk_cache = TRUE, refresh = FALSE, columns = NULL) {
+load_player_stats <- function(seasons = get_afl_season(), use_disk_cache = TRUE, refresh = FALSE,
+                              columns = NULL, comp = "AFLM") {
+  .validate_afl_comp(comp)
   seasons <- validate_seasons(seasons)
 
+  # comp-suffix the cache prefix so an AFLM and AFLW load for the same season
+  # never collide in the in-memory cache or the disk cache filename.
+  cache_prefix <- if (comp == "AFLM") "player_stats" else paste0("player_stats_", comp)
+
   out <- .load_with_cache(
-    cache_prefix = "player_stats",
+    cache_prefix = cache_prefix,
     seasons = seasons,
-    fetch_fn = get_afl_player_stats,
+    fetch_fn = function(s) get_afl_player_stats(s, comp = comp),
     columns = columns,
     use_disk_cache = use_disk_cache,
     refresh = refresh
@@ -1062,6 +1074,7 @@ load_player_game_data <- function(seasons = get_afl_season(), use_disk_cache = F
 #' @param cache_ttl Numeric. Time-to-live for cached data in seconds. Default is 3600 (1 hour).
 #' @param verbose Logical. If TRUE, prints cache hit/miss information.
 #' @param columns Optional character vector of column names to read. If NULL (default), reads all columns.
+#' @param comp Competition: "AFLM" (default) or "AFLW".
 #'
 #' @return A data frame containing AFL fixture and schedule data.
 #' @seealso [load_results()], [load_teams()], [load_predictions()]
@@ -1077,7 +1090,9 @@ load_player_game_data <- function(seasons = get_afl_season(), use_disk_cache = F
 #' @export
 load_fixtures <- function(seasons = NULL, all = FALSE, use_disk_cache = FALSE,
                           use_mem_cache = TRUE, cache_ttl = 3600, verbose = FALSE,
-                          columns = NULL, use_cache = NULL) {
+                          columns = NULL, use_cache = NULL, comp = "AFLM") {
+  .validate_afl_comp(comp)
+
   # Deprecation shim: use_cache → use_mem_cache
   if (!is.null(use_cache)) {
     cli::cli_warn("{.arg use_cache} is deprecated in {.fn load_fixtures}. Use {.arg use_mem_cache} instead.")
@@ -1092,10 +1107,12 @@ load_fixtures <- function(seasons = NULL, all = FALSE, use_disk_cache = FALSE,
     seasons <- validate_seasons(seasons)
   }
 
+  cache_prefix <- if (comp == "AFLM") "fixtures" else paste0("fixtures_", comp)
+
   out <- .load_with_cache(
-    cache_prefix = "fixtures",
+    cache_prefix = cache_prefix,
     seasons = seasons,
-    fetch_fn = get_afl_fixtures,
+    fetch_fn = function(s) get_afl_fixtures(s, comp = comp),
     use_cache = use_mem_cache,
     cache_ttl = cache_ttl,
     verbose = verbose,
@@ -1119,6 +1136,7 @@ load_fixtures <- function(seasons = NULL, all = FALSE, use_disk_cache = FALSE,
 #' @param refresh Logical. If TRUE, clears all caches and fetches fresh data
 #'   from the API for all seasons. Default is FALSE.
 #' @param columns Optional character vector of column names to read. If NULL (default), reads all columns.
+#' @param comp Competition: "AFLM" (default) or "AFLW".
 #'
 #' @return A data frame containing AFL team and player lineup data.
 #' @seealso [load_fixtures()], [load_results()], [load_player_details()]
@@ -1129,13 +1147,17 @@ load_fixtures <- function(seasons = NULL, all = FALSE, use_disk_cache = FALSE,
 #' })
 #' }
 #' @export
-load_teams <- function(seasons = get_afl_season(), use_disk_cache = TRUE, refresh = FALSE, columns = NULL) {
+load_teams <- function(seasons = get_afl_season(), use_disk_cache = TRUE, refresh = FALSE,
+                       columns = NULL, comp = "AFLM") {
+  .validate_afl_comp(comp)
   seasons <- validate_seasons(seasons)
 
+  cache_prefix <- if (comp == "AFLM") "teams" else paste0("teams_", comp)
+
   out <- .load_with_cache(
-    cache_prefix = "teams",
+    cache_prefix = cache_prefix,
     seasons = seasons,
-    fetch_fn = get_afl_lineups,
+    fetch_fn = function(s) get_afl_lineups(s, comp = comp),
     columns = columns,
     use_disk_cache = use_disk_cache,
     refresh = refresh
@@ -1160,6 +1182,7 @@ load_teams <- function(seasons = get_afl_season(), use_disk_cache = TRUE, refres
 #' @param seasons A numeric vector of 4-digit years associated with given AFL seasons - defaults to latest season. If set to `TRUE`, returns all available data since 2021.
 #' @param use_disk_cache Logical. If TRUE, uses persistent disk cache for faster repeated loads. Default is FALSE.
 #' @param columns Optional character vector of column names to read. If NULL (default), reads all columns.
+#' @param comp Competition: "AFLM" (default) or "AFLW".
 #'
 #' @return A data frame containing AFL match results and final scores.
 #' @seealso [load_fixtures()], [load_predictions()], [load_teams()]
@@ -1170,13 +1193,16 @@ load_teams <- function(seasons = get_afl_season(), use_disk_cache = TRUE, refres
 #' })
 #' }
 #' @export
-load_results <- function(seasons = get_afl_season(), use_disk_cache = FALSE, columns = NULL) {
+load_results <- function(seasons = get_afl_season(), use_disk_cache = FALSE, columns = NULL, comp = "AFLM") {
+  .validate_afl_comp(comp)
   seasons <- validate_seasons(seasons)
 
+  cache_prefix <- if (comp == "AFLM") "results" else paste0("results_", comp)
+
   out <- .load_with_cache(
-    cache_prefix = "results",
+    cache_prefix = cache_prefix,
     seasons = seasons,
-    fetch_fn = get_afl_results,
+    fetch_fn = function(s) get_afl_results(s, comp = comp),
     columns = columns,
     use_disk_cache = use_disk_cache
   )
@@ -1195,6 +1221,10 @@ load_results <- function(seasons = get_afl_season(), use_disk_cache = FALSE, col
 #' @param refresh Logical. If TRUE, clears all caches and fetches fresh data
 #'   from the API for all seasons. Default is FALSE.
 #' @param columns Optional character vector of column names to read. If NULL (default), reads all columns.
+#' @param comp Competition: "AFLM" (default) or "AFLW". AFLW always uses the
+#'   per-season fetch path (no batch `fetch_all_fn`) -- `.fetch_all_player_details()`
+#'   is AFLM-only internal plumbing not worth complicating for the multi-season
+#'   AFLW case, which is rare and fine at per-season speed.
 #'
 #' @return A data frame containing AFL player biographical details including names, ages, and team affiliations.
 #' @seealso [load_player_stats()], [calculate_epr()], [player_game_ratings()]
@@ -1205,14 +1235,18 @@ load_results <- function(seasons = get_afl_season(), use_disk_cache = FALSE, col
 #' })
 #' }
 #' @export
-load_player_details <- function(seasons = get_afl_season(), use_disk_cache = TRUE, refresh = FALSE, columns = NULL) {
+load_player_details <- function(seasons = get_afl_season(), use_disk_cache = TRUE, refresh = FALSE,
+                                columns = NULL, comp = "AFLM") {
+  .validate_afl_comp(comp)
   seasons <- validate_seasons(seasons)
 
+  cache_prefix <- if (comp == "AFLM") "player_details" else paste0("player_details_", comp)
+
   out <- .load_with_cache(
-    cache_prefix = "player_details",
+    cache_prefix = cache_prefix,
     seasons = seasons,
-    fetch_fn = get_afl_player_details,
-    fetch_all_fn = .fetch_all_player_details,
+    fetch_fn = function(s) get_afl_player_details(s, comp = comp),
+    fetch_all_fn = if (comp == "AFLM") .fetch_all_player_details else NULL,
     columns = columns,
     use_disk_cache = use_disk_cache,
     refresh = refresh

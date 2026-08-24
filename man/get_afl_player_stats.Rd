@@ -4,10 +4,14 @@
 \alias{get_afl_player_stats}
 \title{Fetch AFL Player Stats}
 \usage{
-get_afl_player_stats(season = NULL)
+get_afl_player_stats(season = NULL, comp = "AFLM")
 }
 \arguments{
 \item{season}{Numeric year (default: current season via \code{\link[=get_afl_season]{get_afl_season()}})}
+
+\item{comp}{Competition: "AFLM" (default) or "AFLW". AFLW's box score is a
+narrower stat set than men's (59 vs 84 columns as of 2026-08-24) — fewer
+fields tracked, not a bug.}
 }
 \value{
 A tibble of player match stats

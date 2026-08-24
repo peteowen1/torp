@@ -253,25 +253,40 @@ NULL
 }
 
 
+#' Validate a comp code against the known set
+#' @param comp Character, e.g. "AFLM" or "AFLW"
+#' @keywords internal
+.validate_afl_comp <- function(comp) {
+  if (!comp %in% names(AFL_COMP_PUBLIC_API_CODES)) {
+    cli::cli_abort(
+      "Unknown comp {.val {comp}} -- must be one of {.val {names(AFL_COMP_PUBLIC_API_CODES)}}"
+    )
+  }
+  invisible(comp)
+}
+
 #' Resolve AFL API compSeasonId for a season
 #'
 #' The public AFL API (`aflapi.afl.com.au`) uses numeric comp season IDs,
 #' not the `CD_S{year}014` format used by the CFS endpoint. This function
-#' resolves the numeric ID via a cached HTTP lookup (at most once per session).
+#' resolves the numeric ID via a cached HTTP lookup (at most once per session
+#' per comp).
 #'
 #' @param season Numeric year
+#' @param comp Competition: "AFLM" (default) or "AFLW"
 #' @return Numeric compSeasonId, or NULL if not found
 #' @keywords internal
 #'
 #' @importFrom httr GET http_error content
 #' @importFrom jsonlite fromJSON
-.afl_comp_season_id <- function(season) {
-  cache_key <- paste0("afl_comp_season_id_", season)
+.afl_comp_season_id <- function(season, comp = "AFLM") {
+  .validate_afl_comp(comp)
+  cache_key <- paste0("afl_comp_season_id_", comp, "_", season)
   cached <- get_from_cache(cache_key)
   if (!is.null(cached)) return(cached)
 
-  # Fetch all comp seasons (cached once per session)
-  seasons_list <- .afl_all_comp_seasons()
+  # Fetch all comp seasons (cached once per session per comp)
+  seasons_list <- .afl_all_comp_seasons(comp)
   if (is.null(seasons_list) || nrow(seasons_list) == 0) return(NULL)
 
   # Extract year from providerId (e.g. "CD_S2025014" → 2025)
@@ -295,15 +310,18 @@ NULL
 #' Fetch all AFL comp seasons (cached)
 #'
 #' Uses the public AFL API to look up competition season IDs.
-#' The AFL Premiership competition code is "AFL" (or "CD_AFLPrem").
 #'
+#' @param comp Competition: "AFLM" (default) or "AFLW". Filtered via
+#'   [AFL_COMP_PUBLIC_API_CODES].
 #' @return A data.frame with id and year columns, or NULL on failure
 #' @keywords internal
-.afl_all_comp_seasons <- function() {
-  cached <- get_from_cache("afl_all_comp_seasons")
+.afl_all_comp_seasons <- function(comp = "AFLM") {
+  .validate_afl_comp(comp)
+  cache_key <- paste0("afl_all_comp_seasons_", comp)
+  cached <- get_from_cache(cache_key)
   if (!is.null(cached)) return(cached)
 
-  # Step 1: Get AFLM competition ID
+  # Step 1: Get the target competition's ID
   comp_resp <- tryCatch(
     httr::GET(paste0(AFL_API_BASE_URL, "competitions")),
     error = function(e) NULL
@@ -327,14 +345,21 @@ NULL
   comps <- comp_json$competitions %||% comp_json
   if (!is.data.frame(comps) || nrow(comps) == 0) return(NULL)
 
-  # Find AFL Premiership competition — try multiple code patterns
-  aflm <- if ("code" %in% names(comps)) {
-    comps[comps$code %in% c("AFL", "AFLM", "CD_AFLPrem"), ]
+  # Find the target competition — try multiple code patterns
+  target_comp <- if ("code" %in% names(comps)) {
+    comps[comps$code %in% AFL_COMP_PUBLIC_API_CODES[[comp]], ]
+  } else if (comp == "AFLM") {
+    comps[1, ]  # pre-existing fallback: first competition (AFLM was always comp 1)
   } else {
-    comps[1, ]  # fallback: first competition
+    # Never guess for a non-AFLM comp -- "first competition" was only ever a
+    # safe fallback because AFLM was the only comp ever requested. Silently
+    # resolving to it for "AFLW" would serve men's data under a women's
+    # request, cache the wrong compSeasonId under the AFLW cache key, and
+    # never surface anywhere.
+    cli::cli_abort("AFL API competitions response is missing the {.val code} column -- cannot safely resolve comp {.val {comp}} without it.")
   }
-  if (nrow(aflm) == 0) return(NULL)
-  comp_id <- aflm$id[1]
+  if (nrow(target_comp) == 0) return(NULL)
+  comp_id <- target_comp$id[1]
 
   # Step 2: Get all comp seasons for this competition
   cs_resp <- tryCatch(
@@ -360,7 +385,7 @@ NULL
   seasons <- cs_json$compSeasons %||% cs_json
   if (!is.data.frame(seasons) || nrow(seasons) == 0) return(NULL)
 
-  store_in_cache("afl_all_comp_seasons", seasons)
+  store_in_cache(cache_key, seasons)
   seasons
 }
 
@@ -531,6 +556,10 @@ NULL
 #' Includes scores for completed games (same data the results endpoint returns).
 #'
 #' @param season Numeric year, or `TRUE` for all available seasons (default: current season via [get_afl_season()])
+#' @param comp Competition: "AFLM" (default, men's) or "AFLW". AFLW covers
+#'   fixtures, results, box-score stats and rosters; chain-level data does
+#'   not exist for AFLW at the AFL API (verified live 2026-08-24, every
+#'   season 2018-2026) so [get_match_chains()] does not accept it.
 #' @return A tibble of fixture data
 #' @export
 #'
@@ -538,14 +567,17 @@ NULL
 #' \dontrun{
 #' fixtures <- get_afl_fixtures()
 #' fixtures <- get_afl_fixtures(2025)
+#' fixtures <- get_afl_fixtures(2026, comp = "AFLW")
 #' }
 #'
 #' @importFrom httr GET stop_for_status content
 #' @importFrom jsonlite fromJSON
-get_afl_fixtures <- function(season = NULL) {
+get_afl_fixtures <- function(season = NULL, comp = "AFLM") {
+  .validate_afl_comp(comp)
+
   # TRUE = all available seasons
   if (isTRUE(season)) {
-    seasons_df <- .afl_all_comp_seasons()
+    seasons_df <- .afl_all_comp_seasons(comp)
     if (is.null(seasons_df) || nrow(seasons_df) == 0) {
       cli::cli_abort("Could not fetch available seasons from AFL API.")
     }
@@ -573,12 +605,12 @@ get_afl_fixtures <- function(season = NULL) {
     auto_season <- FALSE
   }
 
-  result <- .fetch_fixtures_for_season(season)
+  result <- .fetch_fixtures_for_season(season, comp)
 
   # If the default season doesn't exist yet (pre-season), fall back to previous year
   if (is.null(result) && auto_season) {
     cli::cli_inform("Season {season} not yet available in AFL API, falling back to {season - 1}.")
-    result <- .fetch_fixtures_for_season(season - 1L)
+    result <- .fetch_fixtures_for_season(season - 1L, comp)
   }
 
   if (is.null(result)) {
@@ -590,10 +622,11 @@ get_afl_fixtures <- function(season = NULL) {
 
 #' Fetch fixtures for a single season by year (internal)
 #' @param season Numeric year
+#' @param comp Competition: "AFLM" (default) or "AFLW"
 #' @return A tibble, or NULL if the API returns an error
 #' @keywords internal
-.fetch_fixtures_for_season <- function(season) {
-  season_id <- .afl_comp_season_id(season)
+.fetch_fixtures_for_season <- function(season, comp = "AFLM") {
+  season_id <- .afl_comp_season_id(season, comp)
   if (is.null(season_id)) return(NULL)
   .fetch_fixtures_for_season_id(season_id)
 }
@@ -671,6 +704,7 @@ get_afl_fixtures <- function(season = NULL) {
 #' derives results from fixture data (which includes scores).
 #'
 #' @param season Numeric year (default: current season via [get_afl_season()])
+#' @param comp Competition: "AFLM" (default) or "AFLW"
 #' @return A tibble of completed match data (fixture schema, filtered to concluded games)
 #' @export
 #'
@@ -678,8 +712,8 @@ get_afl_fixtures <- function(season = NULL) {
 #' \dontrun{
 #' results <- get_afl_results(2025)
 #' }
-get_afl_results <- function(season = NULL) {
-  fixtures <- get_afl_fixtures(season)
+get_afl_results <- function(season = NULL, comp = "AFLM") {
+  fixtures <- get_afl_fixtures(season, comp)
   if (nrow(fixtures) == 0) return(tibble::tibble())
 
   # Filter to completed games
@@ -703,6 +737,7 @@ get_afl_results <- function(season = NULL) {
 #' external dependencies.
 #'
 #' @param season Numeric year (default: current season via [get_afl_season()])
+#' @param comp Competition: "AFLM" (default) or "AFLW"
 #' @return A data.table with columns: team, played, wins, draws, losses,
 #'   points_for, points_against, percentage, ladder_points, rank.
 #' @export
@@ -711,8 +746,8 @@ get_afl_results <- function(season = NULL) {
 #' \dontrun{
 #' ladder <- get_afl_ladder(2026)
 #' }
-get_afl_ladder <- function(season = NULL) {
-  results <- get_afl_results(season)
+get_afl_ladder <- function(season = NULL, comp = "AFLM") {
+  results <- get_afl_results(season, comp)
   if (nrow(results) == 0) {
     cli::cli_inform("No completed games for ladder calculation.")
     return(data.table::data.table())
@@ -738,6 +773,7 @@ get_afl_ladder <- function(season = NULL) {
 #'
 #' @param season Numeric year (default: current season via [get_afl_season()])
 #' @param round Optional round number to filter to. If NULL, fetches all rounds.
+#' @param comp Competition: "AFLM" (default) or "AFLW"
 #' @return A tibble of player lineup data
 #' @export
 #'
@@ -748,8 +784,8 @@ get_afl_ladder <- function(season = NULL) {
 #'
 #' @importFrom httr GET add_headers content
 #' @importFrom purrr map list_rbind
-get_afl_lineups <- function(season = NULL, round = NULL) {
-  fixtures <- get_afl_fixtures(season)
+get_afl_lineups <- function(season = NULL, round = NULL, comp = "AFLM") {
+  fixtures <- get_afl_fixtures(season, comp)
   if (nrow(fixtures) == 0) return(tibble::tibble())
 
   if (!is.null(round)) {
@@ -798,6 +834,9 @@ get_afl_lineups <- function(season = NULL, round = NULL) {
 #' Uses cached fixtures for match IDs and a single shared auth token.
 #'
 #' @param season Numeric year (default: current season via [get_afl_season()])
+#' @param comp Competition: "AFLM" (default) or "AFLW". AFLW's box score is a
+#'   narrower stat set than men's (59 vs 84 columns as of 2026-08-24) — fewer
+#'   fields tracked, not a bug.
 #' @return A tibble of player match stats
 #' @export
 #'
@@ -808,8 +847,8 @@ get_afl_lineups <- function(season = NULL, round = NULL) {
 #'
 #' @importFrom httr GET add_headers content
 #' @importFrom purrr map list_rbind
-get_afl_player_stats <- function(season = NULL) {
-  fixtures <- get_afl_fixtures(season)
+get_afl_player_stats <- function(season = NULL, comp = "AFLM") {
+  fixtures <- get_afl_fixtures(season, comp)
   if (nrow(fixtures) == 0) return(tibble::tibble())
 
   # Only fetch stats for concluded matches
@@ -852,6 +891,7 @@ get_afl_player_stats <- function(season = NULL) {
 #' Uses team IDs from fixture data and the public squads endpoint.
 #'
 #' @param season Numeric year (default: current season via [get_afl_season()])
+#' @param comp Competition: "AFLM" (default) or "AFLW"
 #' @return A tibble of player details with player_name, age, row_id columns
 #' @export
 #'
@@ -863,8 +903,8 @@ get_afl_player_stats <- function(season = NULL) {
 #' @importFrom httr GET stop_for_status content
 #' @importFrom jsonlite fromJSON
 #' @importFrom purrr map list_rbind
-get_afl_player_details <- function(season = NULL) {
-  fixtures <- get_afl_fixtures(season)
+get_afl_player_details <- function(season = NULL, comp = "AFLM") {
+  fixtures <- get_afl_fixtures(season, comp)
   if (nrow(fixtures) == 0) return(tibble::tibble())
 
   # Derive actual season from fixture data (handles auto-fallback)
@@ -875,7 +915,7 @@ get_afl_player_details <- function(season = NULL) {
   } else {
     season %||% get_afl_season()
   }
-  season_id <- .afl_comp_season_id(actual_season)
+  season_id <- .afl_comp_season_id(actual_season, comp)
   if (is.null(season_id)) {
     cli::cli_abort("Could not resolve comp season ID for {actual_season}")
   }

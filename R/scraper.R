@@ -22,6 +22,12 @@
 #'   (e.g. `"CD_M20260140001"`). When a match ID is supplied, `round` is
 #'   ignored and chains are fetched for that single match.
 #' @param round The round number (numeric). If NA, retrieves data for all rounds in the season.
+#' @param comp Competition: only "AFLM" (men's, default) is supported. AFLW
+#'   has no chain/possession data at the AFL API -- verified live 2026-08-24
+#'   against every season 2018-2026, including that week's concluded round --
+#'   so this errors rather than returning an empty result. Fixtures,
+#'   box-score stats and rosters ARE available for AFLW; see
+#'   [get_afl_fixtures()].
 #'
 #' @return A dataframe containing match chain data.
 #' @export
@@ -33,7 +39,16 @@
 #' }
 #' @importFrom dplyr inner_join left_join filter
 #' @importFrom cli cli_abort cli_inform
-get_match_chains <- function(season = get_afl_season(), round = NA) {
+get_match_chains <- function(season = get_afl_season(), round = NA, comp = "AFLM") {
+  .validate_afl_comp(comp)
+  if (comp != "AFLM") {
+    cli::cli_abort(c(
+      "Chain data is not available for comp {.val {comp}}.",
+      "i" = "Verified live 2026-08-24 against every AFLW season 2018-2026: the AFL API's matchPlays endpoint returns an empty match shell for every AFLW match ID tested. Only \"AFLM\" is supported here.",
+      "i" = "AFLW fixtures/results/stats/rosters ARE available -- see {.fn get_afl_fixtures}."
+    ))
+  }
+
   # Detect match ID input (e.g. "CD_M20260140001")
   if (is.character(season) && grepl("^CD_M", season)) {
     return(.get_chains_by_match_id(season))

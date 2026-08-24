@@ -12,7 +12,8 @@ load_fixtures(
   cache_ttl = 3600,
   verbose = FALSE,
   columns = NULL,
-  use_cache = NULL
+  use_cache = NULL,
+  comp = "AFLM"
 )
 }
 \arguments{
@@ -31,6 +32,8 @@ load_fixtures(
 \item{columns}{Optional character vector of column names to read. If NULL (default), reads all columns.}
 
 \item{use_cache}{Deprecated. Use \code{use_mem_cache} instead.}
+
+\item{comp}{Competition: "AFLM" (default) or "AFLW".}
 }
 \value{
 A data frame containing AFL fixture and schedule data.

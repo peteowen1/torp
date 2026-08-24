@@ -4,10 +4,12 @@
 \alias{.fetch_fixtures_for_season}
 \title{Fetch fixtures for a single season by year (internal)}
 \usage{
-.fetch_fixtures_for_season(season)
+.fetch_fixtures_for_season(season, comp = "AFLM")
 }
 \arguments{
 \item{season}{Numeric year}
+
+\item{comp}{Competition: "AFLM" (default) or "AFLW"}
 }
 \value{
 A tibble, or NULL if the API returns an error
