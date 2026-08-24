@@ -10,7 +10,8 @@
   center = TRUE,
   centre_by_round = PSR_CENTRE_BY_ROUND,
   listed_pos = NULL,
-  centre_on_listed = PSR_CENTRE_ON_LISTED
+  centre_on_listed = PSR_CENTRE_ON_LISTED,
+  comp = "AFLM"
 )
 }
 \arguments{
@@ -38,6 +39,10 @@ load_player_details() when NULL and centring on listed is requested.}
 rather than the stat-ratings frame's own pos_group. Defaults to
 PSR_CENTRE_ON_LISTED (FALSE -- the listed arm was measured and
 regressed, dMAE +0.382).}
+
+\item{comp}{Competition: "AFLM" (default) or "AFLW". Only used to resolve
+\code{psr_coef_path} when it is NULL; ignored if an explicit path is
+given.}
 }
 \value{
 A data.table with \code{psr}, \code{osr}, \code{dsr} columns.

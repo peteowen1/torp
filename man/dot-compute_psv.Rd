@@ -8,7 +8,8 @@
   player_stats,
   psr_coef_path = NULL,
   tog_adjust = TRUE,
-  center = TRUE
+  center = TRUE,
+  comp = "AFLM"
 )
 }
 \arguments{
@@ -25,6 +26,10 @@ on). If FALSE, use raw counts directly.}
 
 \item{center}{Logical. If TRUE (default), subtract the per-round league mean
 so PSV represents contribution above the average player that round.}
+
+\item{comp}{Competition: "AFLM" (default) or "AFLW". Only used to resolve
+\code{psr_coef_path} when it is NULL; ignored if an explicit path is
+given.}
 }
 \value{
 A data.table with \code{psv}, \code{osv}, \code{dsv} columns.

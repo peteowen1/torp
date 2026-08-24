@@ -4,10 +4,15 @@
 \alias{.find_psr_coef_path}
 \title{Resolve path to PSR coefficient CSV}
 \usage{
-.find_psr_coef_path(coef_file = "psr_coefficients.csv")
+.find_psr_coef_path(coef_file = "psr_coefficients.csv", comp = "AFLM")
 }
 \arguments{
 \item{coef_file}{Filename (default "psr_coefficients.csv")}
+
+\item{comp}{Competition: "AFLM" (default) or "AFLW". AFLW's PSR/PSV is a
+box-score-only pipeline sourced from load_player_stats(comp="AFLW") --
+see docs/plans/AFLW-MIGRATION-PLAN.md Sec 6 -- with its own coefficient
+files, never comparable to men's PSR/PSV numbers.}
 }
 \value{
 Absolute path to the CSV, or "" if not found
