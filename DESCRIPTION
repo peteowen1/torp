@@ -35,6 +35,7 @@ Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.3
 Suggests:
     geosphere,
+    glmnet,
     Matrix,
     piggyback (>= 0.1.4),
     pkgload,
