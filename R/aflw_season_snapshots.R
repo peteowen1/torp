@@ -225,7 +225,11 @@ list_aflw_season_stat_snapshots <- function(season = NULL) {
     snapshot_date = as.Date(sub(rx, "\\2", hits))
   )
   if (!is.null(season)) {
-    out <- out[out$season %in% as.integer(season)]
+    # Captured into a differently-named local first: inside `[`, data.table
+    # resolves `season` to the COLUMN, not this argument, so filtering on the
+    # bare name silently matches every row instead of the requested season.
+    want_seasons <- as.integer(season)
+    out <- out[out$season %in% want_seasons]
   }
   data.table::setorder(out, season, snapshot_date)
   out[]
