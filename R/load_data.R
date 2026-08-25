@@ -1670,3 +1670,46 @@ load_psr <- function(seasons = get_afl_season(), use_disk_cache = FALSE, columns
 load_weather <- function() {
   file_reader("weather_data", "weather-data")
 }
+
+#' Load AFLW statspro Season Stats
+#'
+#' @description Loads AFLW season-total player stats scraped from AFL.com.au's
+#' `statspro` API (`get_afl_player_season_stats()`), published to the
+#' `aflw_season_stats-data` torpdata release, one parquet per season
+#' (2018-current). Carries 28 "extended" fields (`spoils`, `pressure_acts`,
+#' `effective_kicks` and 25 others) that [load_player_stats()]'s AFLW rows
+#' return empty/zero for -- confirmed CFS gap, see `AFL-API-REFERENCE.md`'s
+#' "Endpoint family: statspro" section. Season-total granularity only; no
+#' round-level equivalent exists for these specific fields.
+#'
+#' @param seasons A numeric vector of 4-digit years, or `TRUE` for all
+#'   available seasons (2018-current). Defaults to the current season.
+#' @param use_disk_cache Logical. If TRUE, uses persistent disk cache. Default FALSE.
+#' @param columns Optional character vector of column names to read.
+#' @return A tibble, one row per player-season, `player_id`/`season`/`comp`/
+#'   `team_abbr`/`games_played` plus the 63 `totals`/`averages` fields.
+#' @seealso [get_afl_player_season_stats()], [load_player_stats()]
+#' @export
+load_aflw_season_stats <- function(seasons = get_afl_season(), use_disk_cache = FALSE, columns = NULL) {
+  # Deliberately NOT validate_seasons(): it enforces AFL_MIN_SEASON:current
+  # (2021:current) unconditionally, for any explicit numeric input too, not
+  # just for resolving TRUE -- and AFLW's own history starts 2018 (confirmed
+  # live 2026-08-25). A lighter, AFLW-specific check instead.
+  aflw_first_year <- 2018L
+  current_year <- as.integer(format(Sys.Date(), "%Y"))
+  if (isTRUE(seasons)) {
+    seasons <- aflw_first_year:current_year
+  }
+  if (!is.numeric(seasons)) {
+    cli::cli_abort("load_aflw_season_stats: seasons must be numeric or TRUE.")
+  }
+  seasons <- as.integer(seasons)
+  invalid <- seasons[seasons < aflw_first_year | seasons > current_year]
+  if (length(invalid) > 0) {
+    cli::cli_abort("load_aflw_season_stats: invalid season year{?s} {invalid} -- must be between {aflw_first_year} and {current_year}.")
+  }
+
+  urls <- generate_urls("aflw_season_stats-data", "aflw_season_stats", seasons, rounds = NULL)
+  out <- load_from_url(urls, seasons = seasons, use_disk_cache = use_disk_cache, columns = columns)
+  out
+}

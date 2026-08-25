@@ -931,7 +931,16 @@ get_afl_player_season_stats <- function(season = NULL, comp = "AFLW") {
     return(tibble::tibble())
   }
   yr <- as.numeric(season)
-  seasons_list$.year <- as.numeric(gsub("CD_S(\\d{4})\\d+", "\\1", seasons_list$providerId))
+  # NOT providerId regex: 2022 AFLW splits into two comp seasons and one of
+  # them (CD_S2101264, "Season 7") does not have the calendar year as its
+  # first 4 digits -- confirmed live, would silently resolve to "year 2101"
+  # and drop that season entirely. `name` reliably starts with the real year
+  # for every comp-season including this one ("2022 NAB AFLW Season 7").
+  seasons_list$.year <- if ("name" %in% names(seasons_list)) {
+    as.numeric(gsub("^(\\d{4}).*", "\\1", seasons_list$name))
+  } else {
+    as.numeric(gsub("CD_S(\\d{4})\\d+", "\\1", seasons_list$providerId))
+  }
   matches <- seasons_list[seasons_list$.year == yr, , drop = FALSE]
   if (nrow(matches) == 0) {
     cli::cli_warn("get_afl_player_season_stats: no comp-season provider id found for {comp} {season}.")
