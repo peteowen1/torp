@@ -775,6 +775,85 @@ end — check the source map before trusting a guessed signature.
 
 ---
 
+## Endpoint: `cfs/commentaryFeed/{match_id}`  (CFS-family, token)  — LIVE COMMENTARY (not chains)
+
+**Found** via the `react.bundle.min.js.map` source map (`cfsCommentary-api.jsx` module) —
+**not** from grepping minified text; the map de-minifies the whole bundle into 1728 original
+source files and made this trivial to find where earlier passes were guessing. **Base URL**
+found in the live page HTML (not the bundle — it's injected as a `PULSE.app.environment` runtime
+value): `//api.afl.com.au/cfs/commentaryFeed`. Auth: the same anonymous `x-media-mis-token`
+flow as the rest of the CFS family.
+
+**URL:** `https://api.afl.com.au/cfs/commentaryFeed/{match_id}` (CFS `CD_M...` provider id)
+
+**Verified live, AFLW, 2025 R1** (`CD_M20252640101`) — genuinely populated, not empty:
+
+```json
+{"matchId":"CD_M20252640101","lastUpdated":"2025-08-14T11:39:32.766+0000",
+ "commentaryEvent":[{"comment":"BEHIND - Blues (Madeleine Guerin)","periodNumber":4,
+   "periodSeconds":962,"playerId":"CD_I1009888","teamId":"CD_T8096","scoreEvent":true}, ...]}
+```
+
+Compared 2020 (`CD_M20202640101`, empty — `commentaryEvent: []`) against 2025 (populated) —
+**this feed is not retained/generated for older AFLW matches**, only recent ones. Worth
+checking the actual cutoff before relying on it for historical work.
+
+**This is NOT chain/possession data — characterise it honestly.** 70 total `commentaryEvent`
+rows for the entire 2025 R1 match (a real match has 300+ individual disposals alone). Breakdown:
+21 `scoreEvent: true` rows (every goal/behind, correctly tagged with real `playerId`/`teamId`
+and `periodSeconds` timestamp — genuinely useful for a scoring-progression timeline), the rest
+are auto-generated narrative blurbs (leading disposal-getters, quarter-time/full-time markers,
+interchange notes, "X% of play in Y's forward half" summaries) with `playerId`/`teamId` almost
+always `null`. **No individual disposals, no non-scoring possessions, no coordinates, no event
+sequencing beyond goals/behinds.** Does not answer Pete's "is there chains somewhere for AFLW"
+question in the way that would matter for chain-derived EPV/credit work — it's a live-blog feed,
+not the event-tracking data that produces `intercepts`/`contestedMarks` in `playerSeasonRoundStats`.
+That underlying event-tracking almost certainly exists (Champion Data has to log something to
+compute those per-round counts) but is not exposed anywhere on afl.com.au's public-facing site —
+this reconnaissance found no endpoint that exposes it directly, only its aggregated output.
+
+**AFLM comparison, same endpoint, same match round** (`CD_M20250140101`): same shape, similarly
+sparse (goals/behinds tagged, narrative blurbs otherwise) — **this is not an AFLW-specific
+limitation, the commentary feed is this coarse for men's matches too.**
+
+## AFLM vs AFLW field-population check on `playersStats/seasons` — no comp-specific gap found
+
+Direct test, same endpoint, same season (2025), sampled the first player from each response:
+`CD_S2025264` (AFLW, 580 players) vs `CD_S2025014` (AFLM, 808 players). **Identical 63-field
+schema on both sides** — `set(AFLW keys) == set(AFLM keys)`, zero fields present on one comp and
+absent on the other.
+
+Zero-rate comparison across the 10 fields most relevant to torp's SPM defense fit
+(`zeros/non-null/total` across all players in each comp):
+
+| Field | AFLW | AFLM |
+|---|---|---|
+| `intercepts` | 76/580/580 | 150/808/808 |
+| `spoils` | 120/580/580 | 189/808/808 |
+| `pressureActs` | 68/580/580 | 140/808/808 |
+| `metresGained` | 68/580/580 | 141/808/808 |
+| `scoreInvolvements` | 78/580/580 | 151/808/808 |
+| `effectiveDisposals` | 68/580/580 | 143/808/808 |
+| `contestedMarks` | 256/580/580 | 309/808/808 |
+| `hitouts` | 468/580/580 | 676/808/808 |
+| `ruckContests` | 418/580/580 | 628/808/808 |
+| `kickins` | 452/580/580 | 610/808/808 |
+
+Zero-rates are proportionally similar between comps for every field (roughly 12-18% for the
+general-purpose stats; 70-80% for `hitouts`/`ruckContests`/`kickins`, which is expected — most
+players never ruck or take a kick-in, on either comp, so a high zero-rate there is normal
+selection, not a data gap). **Conclusion: no AFLW-specific field-population gap in this specific
+endpoint** — earlier concern (CFS `extendedStats` being empty for AFLW) was about a *different*
+endpoint family; `playersStats/seasons` and its round-level sibling `playerSeasonRoundStats`
+(documented above) do not reproduce that gap.
+
+**Not reached this pass** (time-boxed, logged rather than silently dropped): Job 3 items from
+the directive — Compare Players (`playerHeadToHead/featured`), the live ladder page UI check,
+sibling paths off `compseasons/{id}`, and whether a second/session-based auth tier unlocks the
+10 already-404'd endpoints from the first reconnaissance pass.
+
+---
+
 ## Endpoint → torp release → loader summary
 
 | Endpoint | Fetch fn | torpdata release | Loader |
