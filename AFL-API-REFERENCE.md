@@ -22,6 +22,9 @@ Three base URLs, defined in `R/constants_afl.R`:
 | `AFL_API_BASE_URL` | `https://aflapi.afl.com.au/afl/v2/` | **Public** — no token. Plain `httr::GET()`. |
 | `AFL_CFS_API_BASE_URL` | `https://api.afl.com.au/cfs/afl/` | **Token** — `x-media-mis-token` header. |
 | `AFL_SAPI_BASE_URL` | `https://sapi.afl.com.au/afl/` | **Token** — `x-media-mis-token` header. |
+| *(new, not yet a torp constant)* `https://api.afl.com.au/statspro/` | **Token** — same `x-media-mis-token` flow as CFS, same host (`api.afl.com.au`), sibling path to `/cfs/afl/`. Confirmed live 2026-08-25. See "Endpoint family: `statspro`" below. |
+
+**Live-request gotcha found confirming the `statspro` family, worth recording:** `POST .../WMCTok` with **no request body** gets Akamai's edge WAF to reject it with `411 Length Required` before it ever reaches the AFL backend — `httr::POST()` (what `get_token()` uses) always sends a `Content-Length` header even for an empty body, so torp's own R code is unaffected, but a bare `curl -X POST` (or any client that omits `Content-Length` on a bodyless POST) gets a **content-free 411**, not a 401, which reads as "wrong endpoint" rather than "malformed request." Fix for anyone reproducing this outside R: `curl -X POST ... -d ""`.
 
 **Auth flow** (`R/scraper.R`):
 - `get_token()` — POSTs `AFL_CFS_API_BASE_URL + "WMCTok"`, returns a bearer
@@ -514,6 +517,160 @@ sets the attacking coordinate frame; the action `teamId` does not — see
 
 ---
 
+## Endpoint family: `statspro` and public-host additions (undocumented until 2026-08-25)
+
+**Origin:** a GitHub commit comment from an outside contributor (`jhol3990`,
+[torp commit `abe27f56`](https://github.com/peteowen1/torp/commit/abe27f56a55cd746ac11af310942e7cdd8409a60#commitcomment-197552272))
+found that CFS's `playerStats/match/{matchId}` `extendedStats` field is present
+in the schema but genuinely empty for every AFLW match sampled — matching
+independently what the AFLW rating build hit the same night — and located a
+working season-total alternative via AFL.com.au's own React bundle. That one
+endpoint was then extended into a fuller reconnaissance pass, described here:
+the site's production JS bundles (`https://www.afl.com.au/resources/{version}/scripts/{main,react,vendors}.bundle.js`,
+version read off any live page's `<script src>` tags) were downloaded and
+grepped for RTK-Query path templates
+(`grep -oE '[a-zA-Z][a-zA-Z]{2,25}/\$\{[a-zA-Z0-9_.]+\}[a-zA-Z0-9/_{}\.\$-]*'`),
+surfacing far more endpoint candidates than the one already found. Each was
+then tested LIVE against the real AFLW 2025 season before being written up
+here — **nothing below is from the bundle text alone; every "Confirmed" entry
+was hit with a real request this session, and every "Found in bundle, NOT
+confirmed" entry was genuinely tried and failed**, not omitted for being
+inconvenient.
+
+### Confirmed: `playersStats/seasons/{seasonProviderId}`  (statspro, token)  — AFLW EXTENDED STATS
+
+**URL:** `https://api.afl.com.au/statspro/playersStats/seasons/{seasonProviderId}?includeBenchmarks=false`
+**seasonProviderId:** the comp-season **provider id**, not the numeric id — e.g.
+`CD_S2025264` (2025 AFLW). 2022 is split into two comp seasons:
+`CD_S2022264` (Season 6) and `CD_S2101264` (Season 7).
+
+Verified live 2026-08-25 against `CD_S2025264`: `totalResults: 580` (580 AFLW
+players with a 2025 record), 63-field `totals`/`averages` block per player,
+**genuinely populated, not zero-filled** — sampled directly (Jodie Hicks,
+Richmond, `CD_I1001681`, 6 games): `spoils=5, intercepts=18, pressureActs=66,
+effectiveKicks=35, metresGained=1017, scoreInvolvements=5`. This is the exact
+set that reads empty from `playerStats/match/{matchId}`'s `extendedStats` for
+AFLW (see that endpoint's entry above).
+
+**Nesting:** `{ search: {...}, totalResults: int, players: [{ playerId,
+playerDetails: {...}, team: {...}, gamesPlayed, totals: {63 fields}, averages:
+{same 63 fields} }] }`
+
+| Field | Type | Description | Sample |
+|-------|------|-------------|--------|
+| `players[].playerId` | chr | Provider id | `CD_I1001681` |
+| `players[].playerDetails.{givenName,surname,age,heightCm,weightKg,jumperNumber,kickingFoot,stateOfOrigin,draftYear,debutYear,recruitedFrom}` | mixed | Player bio | `age=29, debutYear="2018"` |
+| `players[].team.{teamId,teamAbbr,teamName,teamNickname}` | chr | Current team | `RICH` |
+| `players[].gamesPlayed` | num | Games played this comp-season | `6` |
+| `players[].totals.*` (63 fields) | num | Season totals — see full list below | `spoils=5` |
+| `players[].averages.*` (same 63 fields) | num | Per-game averages of the same fields | — |
+
+Full `totals`/`averages` field list (63): `matchesPlayed, timeOnGroundPercentage,
+behinds, bounces, centreBounceAttendances, centreClearances, clangers,
+contestDefLosses, contestDefLossPercentage, contestDefOneOnOnes,
+contestedMarks, contestedPossessionRate, contestedPossessions,
+contestOffOneOnOnes, contestOffWins, contestOffWinsPercentage,
+defHalfPressureActs, disposalEfficiency, disposals, dreamTeamPoints,
+effectiveDisposals, effectiveKicks, f50GroundBallGets, freesAgainst, freesFor,
+goalAccuracy, goalAssists, goals, groundBallGets, handballs, hitouts,
+hitoutsToAdvantage, hitoutToAdvantageRate, hitoutWinPercentage, inside50s,
+interceptMarks, intercepts, kickEfficiency, kickins, kickinsPlayon, kicks,
+kickToHandballRatio, marks, marksInside50, marksOnLead, metresGained,
+onePercenters, pressureActs, ranking, ratingPoints, rebound50s, ruckContests,
+scoreInvolvements, scoreLaunches, shotsAtGoal, spoils, stoppageClearances,
+tackles, tacklesInside50, totalClearances, totalPossessions, turnovers,
+uncontestedPossessions`.
+
+**Caveat (Holden's finding, not independently re-verified this pass but not
+contradicted either):** season-total/season-average granularity only. The
+sibling `playersStats/rounds/{roundProviderId}` endpoint returns only the
+basic ~35-field set — none of the 63 extended fields above are present at
+round granularity, and CFS match-level `extendedStats` is genuinely empty
+everywhere. **No known match-by-match or round-by-round source for these
+fields in AFLW exists as of this pass.**
+
+**Feeds →** nothing in torp yet — not wired into any loader. Directly relevant
+to `build_team_spm_features()` (`R/team_spm.R`), which already references
+`intercepts_prate` in its defense sign-constraints and is season-level by
+design (`build_team_spm_features()` aggregates box-score per season already)
+— a clean granularity match for enriching AFLW's SPM inputs, not yet built.
+
+### Confirmed: `compseasons/{numericId}/ladders`  (public, no token)  — LADDER
+
+**URL:** `AFL_API_BASE_URL + "compseasons/" + numeric_id + "/ladders"` —
+**numeric** comp-season id (e.g. `84` for AFLW 2025), NOT the `CD_S...`
+provider id (provider id on this host → `HTTP 400`). Resolve via the existing
+`.afl_comp_season_id()` (`R/afl_api.R`).
+
+Not previously documented despite living on the already-public, already-used
+host — genuinely missed in the original pass, found only by mining the bundle.
+
+Verified live 2026-08-25 against AFLW 2025 (`numericId=84`): `HTTP 200`, rich,
+fully-populated ladder with per-team win/loss records, home/interstate/last-5
+splits and quarter-by-quarter breakdown — not a thin summary.
+
+**Nesting:** `{ meta{code}, compSeason{id,providerId,name,shortName,currentRoundNumber}, round{...}, lastUpdated, ladders: [{ conference, entries: [{...}] }] }`
+
+| Field (`ladders[].entries[]`) | Type | Description | Sample |
+|-------|------|-------------|--------|
+| `position` | int | Ladder position | `1` |
+| `team.{id,providerId,name,abbreviation,nickname,teamType}` | mixed | Team identity, `teamType="WOMEN"` for AFLW | `North Melbourne` |
+| `played` | int | Games played | `12` |
+| `pointsFor` / `pointsAgainst` | int | Season points scored/conceded | `868` / `270` |
+| `minScore` / `maxScore` | int | Season score range | `50` / `114` |
+| `avgWinMargin` / `avgLossMargin` | num | Average margins | `49.8` / `0.0` |
+| `playersUsed` | int | Distinct players fielded this season | `27` |
+| `quartersWon.{winQ1..winQ4,total}` | int | Quarters won by number | `winQ1=10` |
+| `thisSeasonRecord.{ladderPosition,aggregatePoints,percentage,winLossRecord,winRatio}` | mixed | Current standing detail | `percentage=321.5` |
+| `thisRoundLastSeason.*` | mixed | Same shape, prior-season comparison at this round | — |
+| `homeRecord` / `interstateRecord` / `lastFiveGamesRecord` / `localRecord` | `{wins,losses,draws,played}` | Situational win/loss splits | `homeRecord.wins=6` |
+
+**Feeds →** nothing in torp yet. `get_afl_ladder()` currently computes
+standings itself from the `matches` fixture data rather than calling this
+endpoint — this is a genuine alternative source (richer situational splits:
+home/interstate/last-5/percentage-vs-last-season), not yet compared for
+agreement or wired in.
+
+### Confirmed: `compseasons/{numericId}/rounds`  (public, no token)
+
+**URL:** `AFL_API_BASE_URL + "compseasons/" + numeric_id + "/rounds"`
+
+Verified live: `HTTP 200` against AFLW 2025, paginated round list (`numEntries=16`
+for the 2025 AFLW season). Same shape as the `round.*` block already embedded
+in the `matches` endpoint (`id, providerId, abbreviation, name, roundNumber,
+byes, utcStartTime, utcEndTime`) — **largely redundant** with data torp
+already captures via `matches`; useful only if round metadata is needed
+without pulling full fixture/score data.
+
+### Found in bundle, NOT confirmed (genuinely tried, genuinely failed)
+
+Every one of these path templates was extracted from the same bundle mining
+pass and actually tried this session — against `api.afl.com.au/statspro/`,
+`api.afl.com.au/cfs/afl/`, `sapi.afl.com.au/afl/`, and `aflapi.afl.com.au/afl/v2/`,
+with both the numeric and provider-id forms where applicable, with the working
+anonymous token. All returned `404` (or `400`/`403` where noted) everywhere
+tried — most likely either a different, unauthenticated-by-this-flow host (an
+internal "coach portal" behind real login, not the anonymous WMCTok flow) or a
+URL shape this pass didn't reconstruct correctly from the minified RTK-Query
+config. Recorded so a future pass doesn't have to re-mine the bundle from
+scratch, and doesn't waste time assuming any of these are dead ends confirmed
+by evidence rather than by absence:
+
+| Path template (from bundle) | Tried against | Result |
+|---|---|---|
+| `compseasons/{id}/award/brownlow`, `.../award/brownlow/player-search` | statspro, sapi (numeric + provider id) | 404 everywhere |
+| `bfawards/season/{seasonPid}` | statspro, sapi (numeric + provider id) | 404 everywhere |
+| `coach/match/{matchId}/teamStats` | statspro (numeric + provider match id) | 404 everywhere |
+| `match/{matchId}/teamStats` (no `coach` prefix) | statspro | 404 |
+| `matchInterchange/{matchId}` | statspro | 404 |
+| `matchItem/{matchId}` | not tried — no real id format found in the bundle context for this one | — |
+| `playerCareerSeasonStats/{id}`, `.../benchmarked` | statspro (numeric player id, provider player id) | 404 / 400 |
+| `playerProfile/{t}{n}` | not tried — parameter shape (`${t}${n}`, two concatenated template vars) unclear from the minified source | — |
+| `year/{year}/prospectProfile/{playerId}` | not tried — likely AFLM draft-specific, not chased given AFLW is the priority | — |
+| `playersStats/matches/{matchId}` (guessed sibling of `seasons`/`rounds`) | statspro | 404 — confirms Holden's own finding that no match-level extended-stats source exists |
+
+---
+
 ## Endpoint → torp release → loader summary
 
 | Endpoint | Fetch fn | torpdata release | Loader |
@@ -527,6 +684,12 @@ sets the attacking coordinate frame; the action `teamId` does not — see
 | `fixturesAndResults/...round...` | `get_round_games()` / `get_season_games()` | (chain enumerator) | — |
 | `players` | `get_players(use_api=TRUE)` | (chain join, fallback) | — |
 | `matchPlays` | `get_match_chains()` | `chains-data`, `pbp-data`, `xg-data` | `load_chains()`, `load_pbp()`, `load_xg()` |
+| `statspro/playersStats/seasons` | none yet | none yet | none yet — AFLW extended-stats source, not wired in |
+| `compseasons/{id}/ladders` | none yet | none yet | none yet — alternative to torp's own `get_afl_ladder()` computation |
+| `compseasons/{id}/rounds` | none yet | none yet | none yet — largely redundant with `matches`' embedded `round.*` |
 
-*Live-verification:* every endpoint above was reached live on 2026-06-18.
-None were documented purely from code/cache.
+*Live-verification:* every endpoint above the `statspro` family was reached
+live on 2026-06-18. The `statspro`/public-host additions were reached live on
+2026-08-25 (see "Endpoint family: `statspro`" above for the full verification
+detail, including the endpoints found but NOT confirmed). None were
+documented purely from code/cache.
