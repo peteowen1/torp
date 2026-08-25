@@ -26,7 +26,10 @@
 # version after a real logic change is exactly the kind of silent-staleness
 # bug this session spent all night hunting elsewhere, so do not skip it.
 
-.TEAM_RAPM_ASOF_CACHE_VERSION <- 1L
+.TEAM_RAPM_ASOF_CACHE_VERSION <- 2L  # bumped 2026-08-25: fit_team_spm_asof()'s
+# logic changed (season-grain flat-weight SPM -> match-grain decay-weighted
+# SPM via build_team_spm_features_asof()) -- an un-bumped version here would
+# silently serve pre-change cached results under the same key shape.
 
 # .team_rapm_asof_cache_dir ----
 
@@ -148,13 +151,14 @@ fit_team_rapm_asof_cached <- function(ref_date, comp = "AFLM", halflife_days = 3
 #' @return Identical, cache hit or miss, to calling \code{fit_team_spm_asof()}
 #'   directly.
 #' @keywords internal
-fit_team_spm_asof_cached <- function(ref_date, rapm_asof_ratings, comp = "AFLM", seasons = TRUE,
-                                     alpha = 0.5, nfolds = 10, seed = 20260825, prior_games = 10) {
+fit_team_spm_asof_cached <- function(ref_date, rapm_asof_ratings, comp = "AFLM", halflife_days = 730,
+                                     seasons = TRUE, alpha = 0.5, nfolds = 10, seed = 20260825,
+                                     prior_games = 10) {
   ref_date <- as.Date(ref_date)
   ratings_hash <- digest::digest(rapm_asof_ratings, algo = "md5")
   key <- .team_rapm_asof_cache_key(
     "spm_asof", comp,
-    ref_date = as.character(ref_date),
+    ref_date = as.character(ref_date), halflife_days = halflife_days,
     seasons = if (isTRUE(seasons)) "ALL" else paste(sort(seasons), collapse = ","),
     alpha = alpha, nfolds = nfolds, seed = seed, prior_games = prior_games,
     ratings_hash = ratings_hash
@@ -165,8 +169,9 @@ fit_team_spm_asof_cached <- function(ref_date, rapm_asof_ratings, comp = "AFLM",
     return(readRDS(path))
   }
 
-  out <- fit_team_spm_asof(ref_date, rapm_asof_ratings, comp = comp, seasons = seasons,
-                           alpha = alpha, nfolds = nfolds, seed = seed, prior_games = prior_games)
+  out <- fit_team_spm_asof(ref_date, rapm_asof_ratings, comp = comp, halflife_days = halflife_days,
+                           seasons = seasons, alpha = alpha, nfolds = nfolds, seed = seed,
+                           prior_games = prior_games)
 
   if (.team_rapm_asof_cache_enabled() && !is.null(out)) {
     saveRDS(out, path)

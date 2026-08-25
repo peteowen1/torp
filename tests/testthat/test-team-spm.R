@@ -219,8 +219,13 @@ test_that("fit_team_spm_asof degrades to a loud NULL (not a crash) when the trai
   )
   rapm_thin <- .mock_rapm_ratings(c("P1", "P2"))  # same thin-pool shape as the AFLW crash
 
+  # seasons must be explicit here: the mock's load_player_stats() naively
+  # does lapply(seasons, ...), and passing the TRUE default (build_team_spm_features_asof()'s
+  # "all available seasons" convention, matching build_team_rapm_asof()) would
+  # produce garbage match_ids ("mTRUE_1") that never join against load_results()'s
+  # real dated match_ids -- a test-mock limitation, not a production behaviour.
   expect_warning(
-    out <- fit_team_spm_asof(as.Date("2024-06-01"), rapm_thin, comp = "AFLM"),
+    out <- fit_team_spm_asof(as.Date("2024-06-01"), rapm_thin, comp = "AFLM", seasons = c(2023L, 2024L)),
     "only 2 training row"
   )
   expect_null(out)

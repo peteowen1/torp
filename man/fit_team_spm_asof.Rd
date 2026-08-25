@@ -5,19 +5,23 @@
 \title{Second-order leak fix (AFL-DECAY-XRAPM-PLAN.md sec1/sec6 point 5): the SPM
 shrinkage-prior itself must be point-in-time, or future box-score
 information leaks through the shrinkage step even when RAPM's own rows
-are correctly filtered. Mirrors panna's \code{fit_expanding_skill_spm()},
-generalized from season-cutoff to \code{ref_date} -- trains SPM only on
-seasons that ended strictly before whichever season \code{ref_date} falls
-in (never the in-progress season, even matches before \code{ref_date}
-within it -- same conservative granularity panna's own
-\code{season_end_year < cutoff_year} filter uses; box-score features are
-season-aggregated by \code{build_team_spm_features()}, so this is the
-finest point-in-time grain available without changing that function).}
+are correctly filtered. \strong{Decay-weighted as of 2026-08-25} (sec19-21) --
+previously trained on \code{all_seasons[all_seasons < cutoff_season]} with
+every prior season weighted equally, mismatched against RAPM's own decay
+weighting; now uses \code{build_team_spm_features_asof()}, which filters
+\code{match_date <= ref_date} at MATCH grain and decay-weights at the same
+\code{halflife_days} as the RAPM half, by default. This is STILL a leak
+fix for the same reason as before (a flat all-history SPM fit would leak
+future box-score information through the shrinkage step even when RAPM's
+own rows are correctly filtered) -- the change is that the point-in-time
+filter is now applied at match grain, not season grain, matching
+\code{fit_team_rapm_asof()}'s own precision.}
 \usage{
 fit_team_spm_asof(
   ref_date,
   rapm_asof_ratings,
   comp = "AFLM",
+  halflife_days = 730,
   seasons = TRUE,
   alpha = 0.5,
   nfolds = 10,
@@ -26,7 +30,8 @@ fit_team_spm_asof(
 )
 }
 \arguments{
-\item{ref_date}{Date. Determines the training-season cutoff.}
+\item{ref_date}{Date. Only matches with \code{match_date <= ref_date}
+contribute to the SPM fit.}
 
 \item{rapm_asof_ratings}{Output of
 \code{extract_team_rapm_ratings()} run on this SAME \code{ref_date}'s
@@ -36,8 +41,14 @@ this function's own leak-safety is moot.}
 
 \item{comp}{"AFLM" (default) or "AFLW".}
 
-\item{seasons}{Passed to \code{load_results()} to enumerate all available
-seasons (the pool to restrict to \code{< cutoff_season}).}
+\item{halflife_days}{Decay half-life in days for the SPM box-score
+aggregation. Default 730, matching \code{fit_team_rapm_asof()}'s
+shipped default -- the two halves of a shrinkage blend should decay at
+the same rate unless there's a specific, separately-investigated reason
+to diverge them.}
+
+\item{seasons}{Passed to \code{build_team_spm_features_asof()} as the pool
+to filter from.}
 
 \item{alpha}{Elastic-net mixing parameter. Default 0.5.}
 
@@ -49,30 +60,31 @@ after merging \code{rapm_ratings} with \code{spm_features}.}
 \item{prior_games}{Passed to \code{shrink_team_rapm()}.}
 }
 \value{
-\code{shrink_team_rapm()}'s output (data.table) with \code{season}
-set to the training cutoff. \code{NULL} (with a LOUD warning) if EITHER
-\code{ref_date} falls in or before the earliest available season -- there
-is no strictly-prior season to train SPM on -- OR the strictly-prior
-training pool has too few individually-rated players for
-\code{fit_team_spm()}'s cross-validation (seen on AFLW's early
-checkpoints, where the RAPM pruning threshold pools almost everyone into
-replacement-level: n=2 rows is not enough for even 3-fold CV). Callers
-must not silently substitute the all-history SPM in either case (that is
-exactly the leak this function exists to prevent) -- fall back only with
-an explicit, visible warning at the call site, matching panna's own
-convention (AFL-DECAY-XRAPM-PLAN.md sec1).
+\code{shrink_team_rapm()}'s output (data.table) with \code{ref_date}
+attached. \code{NULL} (with a LOUD warning) if EITHER no matches survive
+the point-in-time filter OR the resulting training pool has too few
+individually-rated players for \code{fit_team_spm()}'s cross-validation
+(seen on AFLW's early checkpoints, where the RAPM pruning threshold pools
+almost everyone into replacement-level: n=2 rows is not enough for even
+3-fold CV). Callers must not silently substitute the all-history SPM in
+either case (that is exactly the leak this function exists to prevent)
+-- fall back only with an explicit, visible warning at the call site,
+matching panna's own convention (AFL-DECAY-XRAPM-PLAN.md sec1).
 }
 \description{
 Second-order leak fix (AFL-DECAY-XRAPM-PLAN.md sec1/sec6 point 5): the SPM
 shrinkage-prior itself must be point-in-time, or future box-score
 information leaks through the shrinkage step even when RAPM's own rows
-are correctly filtered. Mirrors panna's \code{fit_expanding_skill_spm()},
-generalized from season-cutoff to \code{ref_date} -- trains SPM only on
-seasons that ended strictly before whichever season \code{ref_date} falls
-in (never the in-progress season, even matches before \code{ref_date}
-within it -- same conservative granularity panna's own
-\code{season_end_year < cutoff_year} filter uses; box-score features are
-season-aggregated by \code{build_team_spm_features()}, so this is the
-finest point-in-time grain available without changing that function).
+are correctly filtered. \strong{Decay-weighted as of 2026-08-25} (sec19-21) --
+previously trained on \code{all_seasons[all_seasons < cutoff_season]} with
+every prior season weighted equally, mismatched against RAPM's own decay
+weighting; now uses \code{build_team_spm_features_asof()}, which filters
+\code{match_date <= ref_date} at MATCH grain and decay-weights at the same
+\code{halflife_days} as the RAPM half, by default. This is STILL a leak
+fix for the same reason as before (a flat all-history SPM fit would leak
+future box-score information through the shrinkage step even when RAPM's
+own rows are correctly filtered) -- the change is that the point-in-time
+filter is now applied at match grain, not season grain, matching
+\code{fit_team_rapm_asof()}'s own precision.
 }
 \keyword{internal}

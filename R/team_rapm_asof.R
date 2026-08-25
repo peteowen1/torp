@@ -172,6 +172,125 @@ build_team_rapm_asof <- function(ref_date, comp = "AFLM", halflife_days = 365,
   ))
 }
 
+# build_team_spm_features_asof ----
+
+#' Point-in-time, decay-weighted SPM box-score features -- the SPM-side
+#' analogue of \code{build_team_rapm_asof()}. Fixes a real inconsistency
+#' found 2026-08-25 (AFL-DECAY-XRAPM-PLAN.md sec19-21): the season-block
+#' \code{fit_team_spm_asof()} trained its SPM prior on
+#' \code{all_seasons[all_seasons < cutoff_season]} -- every prior SEASON
+#' weighted equally, no decay -- while \code{fit_team_rapm_asof()} decay-
+#' weights its RAPM half. That mismatch (a recency-weighted RAPM shrunk
+#' toward a flat-history SPM prior) measurably cost accuracy: raw RAPM beat
+#' the shrunk blend by more than the entire halflife sweep's span. This
+#' function decay-weights the box-score aggregation itself, at MATCH grain
+#' (\code{load_player_stats()}'s native granularity), matching RAPM's own
+#' \code{0.5^(age_days/halflife_days)} formula and its filter-first-decay-
+#' second leak-safety discipline exactly.
+#'
+#' @param ref_date Date (or coercible). Only matches with
+#'   \code{match_date <= ref_date} contribute -- LEAK SAFETY: filtered first,
+#'   decayed second, identical discipline to \code{build_team_rapm_asof()}.
+#' @param comp "AFLM" (default) or "AFLW".
+#' @param halflife_days Decay half-life in days. Default 730, matching the
+#'   shipped RAPM default (\code{HALFLIFE_DAYS} in
+#'   \code{data-raw/03-ratings/build_team_rapm_asof_snapshots.R}) -- the two
+#'   halves of a shrinkage blend should decay at the same rate unless there is
+#'   a specific reason to diverge them, which has not been investigated.
+#' @param seasons Numeric vector of seasons, or \code{TRUE} (default) -- the
+#'   pool to filter from; \code{ref_date} does the actual point-in-time
+#'   restriction, same convention as \code{build_team_rapm_asof()}.
+#' @return Same shape as \code{build_team_spm_features()}
+#'   (list(model_df, feature_cols, degenerate_cols)) -- a drop-in replacement
+#'   for \code{fit_team_spm()}'s \code{spm_features} argument. \code{NULL}
+#'   (with a warning) if no matches survive the point-in-time filter.
+#'   \code{model_df$total_tog_minutes} and \code{model_df}'s stat sums are
+#'   now DECAY-WEIGHTED ("effective" minutes/counts, not raw totals) --
+#'   \code{model_df$n_games} stays a raw, unweighted count for diagnostics.
+#' @keywords internal
+build_team_spm_features_asof <- function(ref_date, comp = "AFLM", halflife_days = 730,
+                                         seasons = TRUE) {
+  .validate_afl_comp(comp)
+  stopifnot(halflife_days > 0)
+  ref_date <- as.Date(ref_date)
+  game_minutes <- if (comp == "AFLM") 120 else 80
+
+  ps <- data.table::as.data.table(load_player_stats(seasons, comp = comp))
+  if (nrow(ps) == 0) {
+    cli::cli_abort("build_team_spm_features_asof: no player_stats returned for comp {.val {comp}}.")
+  }
+  ps <- ps[!is.na(time_on_ground_percentage) & !is.na(player_id)]
+
+  match_dates <- .team_rapm_match_dates(seasons, comp = comp)
+  ps <- merge(ps, match_dates, by = "match_id")
+
+  # LEAK SAFETY: filter FIRST, decay SECOND -- identical discipline to
+  # build_team_rapm_asof(); see that function's header for why this order
+  # is the entire leak-safety property, not a stylistic choice.
+  ps <- ps[match_date <= ref_date]
+  if (nrow(ps) == 0) {
+    cli::cli_warn(paste0(
+      "build_team_spm_features_asof: no matches on or before {as.character(ref_date)} ",
+      "for comp {.val {comp}} -- returning NULL."))
+    return(NULL)
+  }
+  age_days <- as.numeric(ref_date - ps$match_date)
+  if (any(age_days < 0)) {
+    cli::cli_abort("build_team_spm_features_asof: {sum(age_days < 0)} row{?s} have a match_date AFTER ref_date despite the point-in-time filter -- this is a bug, not data noise.")
+  }
+  ps[, decay_weight := 0.5 ^ (age_days / halflife_days)]
+  ps[, tog_minutes := pmin(pmax(time_on_ground_percentage / 100, 0), 1) * game_minutes]
+
+  exclude_cols <- c("player_id", "player_name", "team_id", "match_id", "round_number",
+                     "season", "jumper_number", "time_on_ground_percentage", "tog_minutes",
+                     "venue_name", "home_team_name", "away_team_name", "utc_start_time",
+                     "position", "position_group", "team_status", "match_date", "decay_weight")
+  numeric_cols <- names(ps)[vapply(ps, is.numeric, logical(1))]
+  stat_cols <- setdiff(numeric_cols, exclude_cols)
+
+  agg <- ps[, c(list(total_tog_minutes = sum(tog_minutes * decay_weight), n_games = .N),
+                lapply(.SD, function(x) sum(x * decay_weight, na.rm = TRUE))),
+            by = player_id, .SDcols = stat_cols]
+
+  rate_cols <- paste0(stat_cols, "_prate")
+  agg[, (rate_cols) := lapply(.SD, function(x) x / pmax(total_tog_minutes, 1) * game_minutes),
+      .SDcols = stat_cols]
+
+  # Position bucket: SAME point-in-time-filtered rows as everything above --
+  # build_team_spm_features() restricts this to its `seasons` arg too (not a
+  # global lookup), so this stays symmetric with that leak-safety discipline.
+  rows <- .prepare_team_rapm_player_rows(seasons, comp = comp)
+  if (nrow(rows) > 0) {
+    rows <- merge(rows, match_dates, by = "match_id")
+    rows_ptid <- rows[match_date <= ref_date]
+    col_map <- .team_rapm_prune_columns(rows_ptid, comp = comp)
+    pos_lookup <- unique(col_map[, .(player_id, position_bucket)])
+    agg <- merge(agg, pos_lookup, by = "player_id", all.x = TRUE)
+  } else {
+    agg[, position_bucket := NA_character_]
+  }
+  n_no_pos <- sum(is.na(agg$position_bucket))
+  if (n_no_pos > 0) {
+    cli::cli_warn("build_team_spm_features_asof: {n_no_pos} player{?s} have no resolvable position_bucket -- position dummies default to all-0 for {?them/these}")
+  }
+  agg[, `:=`(
+    is_def  = as.integer(!is.na(position_bucket) & position_bucket == "DEF"),
+    is_mid  = as.integer(!is.na(position_bucket) & position_bucket == "MID"),
+    is_fwd  = as.integer(!is.na(position_bucket) & position_bucket == "FWD"),
+    is_ruck = as.integer(!is.na(position_bucket) & position_bucket == "RUCK")
+  )]
+
+  sds <- vapply(rate_cols, function(cn) stats::sd(agg[[cn]], na.rm = TRUE), numeric(1))
+  degenerate_cols <- names(sds)[is.na(sds) | sds < 1e-8]
+  usable_rate_cols <- setdiff(rate_cols, degenerate_cols)
+
+  list(
+    model_df = agg,
+    feature_cols = c(usable_rate_cols, "is_def", "is_mid", "is_fwd", "is_ruck"),
+    degenerate_cols = degenerate_cols
+  )
+}
+
 # fit_team_rapm_asof ----
 
 #' Ridge-fit an as-of RAPM design, weighting observations by
@@ -201,70 +320,57 @@ fit_team_rapm_asof <- function(rapm_data, nfolds = 10, seed = 20260825) {
 #' Second-order leak fix (AFL-DECAY-XRAPM-PLAN.md sec1/sec6 point 5): the SPM
 #' shrinkage-prior itself must be point-in-time, or future box-score
 #' information leaks through the shrinkage step even when RAPM's own rows
-#' are correctly filtered. Mirrors panna's \code{fit_expanding_skill_spm()},
-#' generalized from season-cutoff to \code{ref_date} -- trains SPM only on
-#' seasons that ended strictly before whichever season \code{ref_date} falls
-#' in (never the in-progress season, even matches before \code{ref_date}
-#' within it -- same conservative granularity panna's own
-#' \code{season_end_year < cutoff_year} filter uses; box-score features are
-#' season-aggregated by \code{build_team_spm_features()}, so this is the
-#' finest point-in-time grain available without changing that function).
+#' are correctly filtered. **Decay-weighted as of 2026-08-25** (sec19-21) --
+#' previously trained on \code{all_seasons[all_seasons < cutoff_season]} with
+#' every prior season weighted equally, mismatched against RAPM's own decay
+#' weighting; now uses \code{build_team_spm_features_asof()}, which filters
+#' \code{match_date <= ref_date} at MATCH grain and decay-weights at the same
+#' \code{halflife_days} as the RAPM half, by default. This is STILL a leak
+#' fix for the same reason as before (a flat all-history SPM fit would leak
+#' future box-score information through the shrinkage step even when RAPM's
+#' own rows are correctly filtered) -- the change is that the point-in-time
+#' filter is now applied at match grain, not season grain, matching
+#' \code{fit_team_rapm_asof()}'s own precision.
 #'
-#' @param ref_date Date. Determines the training-season cutoff.
+#' @param ref_date Date. Only matches with \code{match_date <= ref_date}
+#'   contribute to the SPM fit.
 #' @param rapm_asof_ratings Output of
 #'   \code{extract_team_rapm_ratings()} run on this SAME \code{ref_date}'s
 #'   \code{build_team_rapm_asof()}/\code{fit_team_rapm_asof()} output -- the
 #'   RAPM target this SPM predicts must itself already be point-in-time, or
 #'   this function's own leak-safety is moot.
 #' @param comp "AFLM" (default) or "AFLW".
-#' @param seasons Passed to \code{load_results()} to enumerate all available
-#'   seasons (the pool to restrict to \code{< cutoff_season}).
+#' @param halflife_days Decay half-life in days for the SPM box-score
+#'   aggregation. Default 730, matching \code{fit_team_rapm_asof()}'s
+#'   shipped default -- the two halves of a shrinkage blend should decay at
+#'   the same rate unless there's a specific, separately-investigated reason
+#'   to diverge them.
+#' @param seasons Passed to \code{build_team_spm_features_asof()} as the pool
+#'   to filter from.
 #' @inheritParams fit_team_spm
 #' @param prior_games Passed to \code{shrink_team_rapm()}.
-#' @return \code{shrink_team_rapm()}'s output (data.table) with \code{season}
-#'   set to the training cutoff. \code{NULL} (with a LOUD warning) if EITHER
-#'   \code{ref_date} falls in or before the earliest available season -- there
-#'   is no strictly-prior season to train SPM on -- OR the strictly-prior
-#'   training pool has too few individually-rated players for
-#'   \code{fit_team_spm()}'s cross-validation (seen on AFLW's early
-#'   checkpoints, where the RAPM pruning threshold pools almost everyone into
-#'   replacement-level: n=2 rows is not enough for even 3-fold CV). Callers
-#'   must not silently substitute the all-history SPM in either case (that is
-#'   exactly the leak this function exists to prevent) -- fall back only with
-#'   an explicit, visible warning at the call site, matching panna's own
-#'   convention (AFL-DECAY-XRAPM-PLAN.md sec1).
+#' @return \code{shrink_team_rapm()}'s output (data.table) with \code{ref_date}
+#'   attached. \code{NULL} (with a LOUD warning) if EITHER no matches survive
+#'   the point-in-time filter OR the resulting training pool has too few
+#'   individually-rated players for \code{fit_team_spm()}'s cross-validation
+#'   (seen on AFLW's early checkpoints, where the RAPM pruning threshold pools
+#'   almost everyone into replacement-level: n=2 rows is not enough for even
+#'   3-fold CV). Callers must not silently substitute the all-history SPM in
+#'   either case (that is exactly the leak this function exists to prevent)
+#'   -- fall back only with an explicit, visible warning at the call site,
+#'   matching panna's own convention (AFL-DECAY-XRAPM-PLAN.md sec1).
 #' @keywords internal
-fit_team_spm_asof <- function(ref_date, rapm_asof_ratings, comp = "AFLM", seasons = TRUE,
-                              alpha = 0.5, nfolds = 10, seed = 20260825, prior_games = 10) {
+fit_team_spm_asof <- function(ref_date, rapm_asof_ratings, comp = "AFLM", halflife_days = 730,
+                              seasons = TRUE, alpha = 0.5, nfolds = 10, seed = 20260825,
+                              prior_games = 10) {
   .validate_afl_comp(comp)
   ref_date <- as.Date(ref_date)
 
-  match_dates <- .team_rapm_match_dates(seasons, comp = comp)
-  res <- load_results(seasons, comp = comp)
-  res_dt <- data.table::as.data.table(res)
-  res_dt <- merge(res_dt[, .(match_id, season)], match_dates, by = "match_id")
-
-  prior_matches <- res_dt[match_date <= ref_date]
-  if (nrow(prior_matches) == 0) {
-    cli::cli_warn(paste0(
-      "fit_team_spm_asof: NO matches on or before {as.character(ref_date)} for comp {.val {comp}} -- ",
-      "cannot determine a cutoff season. Returning NULL; callers must NOT silently fall back to an ",
-      "all-history SPM (that reintroduces the exact leak this function exists to prevent)."))
+  spm_features <- build_team_spm_features_asof(ref_date, comp = comp,
+                                                halflife_days = halflife_days, seasons = seasons)
+  if (is.null(spm_features)) {
     return(NULL)
   }
-  cutoff_season <- max(prior_matches$season)
-  all_seasons <- sort(unique(res_dt$season))
-  train_seasons <- all_seasons[all_seasons < cutoff_season]
-
-  if (length(train_seasons) == 0) {
-    cli::cli_warn(paste0(
-      "fit_team_spm_asof: ref_date {as.character(ref_date)} falls in the EARLIEST available season ",
-      "({cutoff_season}) for comp {.val {comp}} -- no strictly-prior season exists to train SPM on. ",
-      "Returning NULL; callers must NOT silently fall back to an all-history SPM."))
-    return(NULL)
-  }
-
-  spm_features <- build_team_spm_features(train_seasons, comp = comp)
   spm_fit <- tryCatch(
     fit_team_spm(spm_features, rapm_asof_ratings, alpha = alpha, nfolds = nfolds, seed = seed),
     torp_spm_too_few_rows = function(e) {
@@ -280,7 +386,7 @@ fit_team_spm_asof <- function(ref_date, rapm_asof_ratings, comp = "AFLM", season
   }
   spm_pred <- predict_team_spm(spm_fit, spm_features)
   shrunk <- shrink_team_rapm(rapm_asof_ratings, spm_pred, prior_games = prior_games)
-  shrunk[, `:=`(ref_date = ref_date, spm_train_seasons_max = cutoff_season - 1L)]
+  shrunk[, `:=`(ref_date = ref_date, spm_halflife_days = halflife_days)]
   shrunk[]
 }
 

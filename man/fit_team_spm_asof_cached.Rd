@@ -12,6 +12,7 @@ fit_team_spm_asof_cached(
   ref_date,
   rapm_asof_ratings,
   comp = "AFLM",
+  halflife_days = 730,
   seasons = TRUE,
   alpha = 0.5,
   nfolds = 10,
@@ -20,7 +21,8 @@ fit_team_spm_asof_cached(
 )
 }
 \arguments{
-\item{ref_date}{Date. Determines the training-season cutoff.}
+\item{ref_date}{Date. Only matches with \code{match_date <= ref_date}
+contribute to the SPM fit.}
 
 \item{rapm_asof_ratings}{Output of
 \code{extract_team_rapm_ratings()} run on this SAME \code{ref_date}'s
@@ -30,8 +32,14 @@ this function's own leak-safety is moot.}
 
 \item{comp}{"AFLM" (default) or "AFLW".}
 
-\item{seasons}{Passed to \code{load_results()} to enumerate all available
-seasons (the pool to restrict to \code{< cutoff_season}).}
+\item{halflife_days}{Decay half-life in days for the SPM box-score
+aggregation. Default 730, matching \code{fit_team_rapm_asof()}'s
+shipped default -- the two halves of a shrinkage blend should decay at
+the same rate unless there's a specific, separately-investigated reason
+to diverge them.}
+
+\item{seasons}{Passed to \code{build_team_spm_features_asof()} as the pool
+to filter from.}
 
 \item{alpha}{Elastic-net mixing parameter. Default 0.5.}
 
