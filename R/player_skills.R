@@ -406,6 +406,66 @@ estimate_player_stat_ratings <- function(stat_rating_data, ref_date = NULL,
 
 
 # ============================================================================
+# Stat rating checkpoint dates
+# ============================================================================
+
+#' Per-round reference dates for stat-rating checkpoints (PLAYED rounds only)
+#'
+#' Builds the season/round -> ref_date map the stat-rating pipelines estimate
+#' at, where \code{ref_date} is the first match of that round.
+#'
+#' \strong{Only rounds that have actually been played are valid checkpoints.}
+#' \code{load_fixtures()} returns the whole scheduled fixture list, so building
+#' this map from it unfiltered yields checkpoints at dates in the future. Those
+#' rows are not harmless duplicates of the last real round: the underlying
+#' match data is identical but the extra weeks of time decay make the estimates
+#' drift monotonically, so anything reading the artifact and taking
+#' \code{max(round)} as "current" gets a materially reordered leaderboard.
+#' Measured 2026-08-25: AFLW 2026 had 108 fixtures scheduled but 18 played (10
+#' phantom rounds, the furthest 9 weeks out); AFLM 2026 had 5 (scheduled finals).
+#'
+#' Filters on a recorded score rather than \code{ref_date <= Sys.Date()} so a
+#' match that was scheduled in the past but postponed is excluded too, matching
+#' the idiom already used in \code{05_compare_psr_models.R} and
+#' \code{06_train_psr_model.R}. Verified over all history in both comps: this
+#' shifts \strong{zero} existing round ref_dates, it only drops unplayed rounds.
+#'
+#' @param fixtures Fixture table from \code{load_fixtures()} (data.frame or
+#'   data.table) with \code{season}, \code{round_number}, \code{utc_start_time},
+#'   \code{home_score} and \code{away_score}.
+#' @param seasons Optional vector of seasons to restrict to. \code{NULL} keeps
+#'   all.
+#'
+#' @return data.table with \code{season}, \code{round}, \code{ref_date}, ordered
+#'   by \code{ref_date}. Zero rows if no round has been played.
+#' @keywords internal
+.played_round_ref_dates <- function(fixtures, seasons = NULL) {
+  fx <- data.table::as.data.table(fixtures)
+  required <- c("season", "round_number", "utc_start_time", "home_score", "away_score")
+  missing_cols <- setdiff(required, names(fx))
+  if (length(missing_cols) > 0) {
+    cli::cli_abort("fixtures is missing required column{?s}: {.val {missing_cols}}")
+  }
+
+  fx <- fx[!is.na(home_score) & !is.na(away_score)]
+  if (!is.null(seasons)) fx <- fx[season %in% seasons]
+  if (nrow(fx) == 0) {
+    return(data.table::data.table(
+      season = numeric(0), round = integer(0), ref_date = as.Date(character(0))
+    ))
+  }
+
+  ref_date_map <- fx[
+    ,
+    .(ref_date = min(as.Date(utc_start_time), na.rm = TRUE)),
+    by = .(season, round = round_number)
+  ]
+  ref_date_map <- ref_date_map[!is.na(ref_date) & is.finite(ref_date)]
+  data.table::setorder(ref_date_map, ref_date)
+  ref_date_map[]
+}
+
+# ============================================================================
 # Batch stat rating estimation
 # ============================================================================
 

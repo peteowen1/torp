@@ -30,13 +30,10 @@ cli::cli_h1("Step 2: per-round stat ratings")
 
 fixtures <- as.data.table(load_fixtures(TRUE, comp = "AFLW"))
 seasons <- sort(unique(stat_rating_data$season))
-ref_date_map <- fixtures[
-  season %in% seasons,
-  .(ref_date = min(as.Date(utc_start_time), na.rm = TRUE)),
-  by = .(season, round = round_number)
-]
-ref_date_map <- ref_date_map[!is.na(ref_date) & is.finite(ref_date)]
-setorder(ref_date_map, ref_date)
+# PLAYED rounds only -- load_fixtures() returns the full scheduled list, and
+# estimating at a future ref_date produces drifting phantom rounds that reorder
+# any leaderboard read off max(round). See torp:::.played_round_ref_dates().
+ref_date_map <- torp:::.played_round_ref_dates(fixtures, seasons = seasons)
 cli::cli_inform("Processing {nrow(ref_date_map)} season-round combinations")
 
 params <- default_stat_rating_params()

@@ -36,14 +36,12 @@ cli::cli_h1("Estimating stat ratings by round")
 
 seasons <- sort(unique(stat_rating_data$season))
 
-# Collect all ref_dates: one per season-round (= first match of that round)
-ref_date_map <- fixtures_dt[
-  season %in% seasons,
-  .(ref_date = min(as.Date(utc_start_time), na.rm = TRUE)),
-  by = .(season, round = round_number)
-]
-ref_date_map <- ref_date_map[!is.na(ref_date) & is.finite(ref_date)]
-data.table::setorder(ref_date_map, ref_date)
+# Collect all ref_dates: one per PLAYED season-round (= first match of that round).
+# fixtures_dt itself is deliberately left unfiltered -- the future-fixture-SEASONS
+# block below needs the full scheduled list. Only the within-season checkpoint map
+# is restricted to played rounds; see torp:::.played_round_ref_dates() for why
+# (unplayed rounds drift with time decay and corrupt max(round) readers).
+ref_date_map <- torp:::.played_round_ref_dates(fixtures_dt, seasons = seasons)
 cli::cli_inform("Processing {nrow(ref_date_map)} season-round combinations")
 
 # Batch estimation (no CI needed for per-round snapshots) ----
