@@ -581,19 +581,99 @@ scoreInvolvements, scoreLaunches, shotsAtGoal, spoils, stoppageClearances,
 tackles, tacklesInside50, totalClearances, totalPossessions, turnovers,
 uncontestedPossessions`.
 
-**Caveat (Holden's finding, not independently re-verified this pass but not
-contradicted either):** season-total/season-average granularity only. The
-sibling `playersStats/rounds/{roundProviderId}` endpoint returns only the
-basic ~35-field set — none of the 63 extended fields above are present at
-round granularity, and CFS match-level `extendedStats` is genuinely empty
-everywhere. **No known match-by-match or round-by-round source for these
-fields in AFLW exists as of this pass.**
+**Caveat corrected 2026-08-25 (was: "no round-level source exists" — that
+overstated it):** season-total/season-average granularity gives the full
+63-field set. The sibling `playersStats/rounds/{roundProviderId}` endpoint,
+and the per-player equivalent `playerSeasonRoundStats/{playerId}?seasonId={id}`
+(see below — both verified to return the **identical** 35-field set), are
+genuinely narrower than the season endpoint — `spoils`, `pressureActs`,
+`effectiveKicks`, `effectiveDisposals`, `hitoutsToAdvantage`, `groundBallGets`
+and `kickins` are confirmed absent, not just null, at round granularity. **But
+the round-level set is not "basic"** — it includes `intercepts`,
+`metresGained`, `contestedMarks`, `contestedPossessions` and
+`scoreInvolvements`, five fields from the "extended" 63 that a truly basic
+box-score would not have. `intercepts` specifically is what
+`build_team_spm_features()`'s defense sign-constraint (`intercepts_prate`)
+already expects — round-level, match-tied intercepts genuinely exist for
+AFLW, verified live (Jodie Hicks R6 2025 vs St Kilda: `intercepts=3`,
+`metresGained=128`, tied to `matchId=CD_M20252640608`). CFS match-level
+`extendedStats` is still confirmed empty — this is a different, working path
+to *some* of the same information, not a contradiction of that finding.
 
 **Feeds →** nothing in torp yet — not wired into any loader. Directly relevant
 to `build_team_spm_features()` (`R/team_spm.R`), which already references
 `intercepts_prate` in its defense sign-constraints and is season-level by
 design (`build_team_spm_features()` aggregates box-score per season already)
-— a clean granularity match for enriching AFLW's SPM inputs, not yet built.
+— a clean granularity match for enriching AFLW's SPM inputs at either
+granularity, not yet built.
+
+### Confirmed: `playerSeasonRoundStats/{playerId}?seasonId={seasonProviderId}`  (statspro, token)  — PER-PLAYER ROUND BREAKDOWN
+
+**URL:** `https://api.afl.com.au/statspro/playerSeasonRoundStats/{providerPlayerId}?seasonId={seasonProviderId}`
+— **`seasonId` must be the `CD_S...` provider id, not the numeric id** (numeric
+form returns `400 CFSAPI001 "Invalid season id"`, confirmed). Found via the
+react bundle's source map (`statsPro-api.jsx`, `getPlayerSeasonRoundStats`),
+not the minified text — the source map (`react.bundle.min.js.map`, `HTTP 200`,
+1728 embedded original source files) de-minifies the whole bundle; `main.js`/
+`vendors.js` have no accessible source map (`403`).
+
+Verified live against `CD_I1001681` (Jodie Hicks), `seasonId=CD_S2025264`: one
+row per round played (6 rounds), each with `roundId, matchId, roundName,
+roundNumber, result, opponent{...}, stats{35 fields}` — see the field-set note
+above. Response is gzip-encoded; plain `curl` without `--compressed` returns
+binary garbage, easy to misread as a broken endpoint.
+
+**Feeds →** nothing in torp yet. This is the natural per-round input for any
+future point-in-time/decay-weighted AFLW rating work (separate from tonight's
+AFLM decay-xRAPM investigation, `feat/aflw-decay-xrapm`) — round-tied, not
+just season-tied, extended stats.
+
+### Confirmed: `playerCareerSeasonStats/{playerId}/benchmarked?competitionType=AFLW`  (statspro, token)  — CAREER + YEARLY BREAKDOWN
+
+**URL:** `https://api.afl.com.au/statspro/playerCareerSeasonStats/{providerPlayerId}/benchmarked?competitionType=AFLW`
+— the `competitionType=AFLW` **query param** (not path segment) is required;
+the earlier pass tried this without it and recorded a false dead end (see the
+corrected bundle-only table below). Also found via the source map — the app's
+own `getPlayerCareerSeasonStats` queryFn tries `/benchmarked` first and falls
+back to the non-benchmarked path on error, same param.
+
+Verified live against `CD_I1001681`: `{ playerId, careerTotals: {62 fields,
+includes spoils/pressureActs/effectiveKicks — the full extended set at career
+grain}, benchmarkedCareerAverages, yearlySeasonStats: [8 entries, one per
+season played — { seasonId, year, team, seasonTotals, benchmarkedSeasonAverages }] }`.
+**One call returns a player's entire AFLW career, season-by-season, at the
+same 63-field richness as the season endpoint** — more efficient than calling
+`playersStats/seasons/{id}` once per season per player if building a
+multi-season training set.
+
+**Feeds →** nothing in torp yet. Worth comparing against `playersStats/seasons`
+for agreement before treating either as authoritative — not done this pass.
+
+### Confirmed: `playerProfile/{playerId}?seasonId={seasonProviderId}`  (statspro, token)  — PLAYER BIO
+
+**URL:** `https://api.afl.com.au/statspro/playerProfile/{providerPlayerId}?seasonId={seasonProviderId}`
+(alternatively `?competitionCode={code}` per the source, not tried). Also a
+corrected dead end — the earlier pass didn't have the param shape.
+
+Verified live: bio fields (`givenName, surname, age, heightCm, weightKg,
+jumperNumber, kickingFoot, stateOfOrigin, draftYear, debutYear, recruitedFrom`)
+— overlaps with `playerDetails` already embedded in `playersStats/seasons`,
+not obviously additive. Low priority.
+
+### Confirmed: `teams?compSeasonId={numericId}&pageSize=100`  (public, no token)  — TEAM LIST
+
+**URL:** `AFL_API_BASE_URL + "teams?compSeasonId=" + numeric_id + "&pageSize=100"`
+Found via live interactive browser reconnaissance (network capture while
+switching the season filter on `afl.com.au/aflw/stats/leaders`), not bundle
+mining. Verified live against AFLW 2025 (`compSeasonId=84`): `HTTP 200`, 18
+teams, `{ id, providerId, name, abbreviation, nickname, club{id,providerId,
+name,abbreviation,nickname}, metadata{social links, homeVenue, captainIds,
+...} }` per team. `club` vs `team` distinction may matter for AFLW where one
+club can field both an AFLM and AFLW team under different `team.id`s — not
+investigated further.
+
+**Feeds →** nothing in torp yet; `AFL_TEAM_ALIASES`-style team resolution
+already exists elsewhere in torp, not compared against this source.
 
 ### Confirmed: `compseasons/{numericId}/ladders`  (public, no token)  — LADDER
 
@@ -644,17 +724,21 @@ without pulling full fixture/score data.
 
 ### Found in bundle, NOT confirmed (genuinely tried, genuinely failed)
 
-Every one of these path templates was extracted from the same bundle mining
-pass and actually tried this session — against `api.afl.com.au/statspro/`,
+Every one of these path templates was extracted from bundle mining and
+actually tried this session — against `api.afl.com.au/statspro/`,
 `api.afl.com.au/cfs/afl/`, `sapi.afl.com.au/afl/`, and `aflapi.afl.com.au/afl/v2/`,
 with both the numeric and provider-id forms where applicable, with the working
 anonymous token. All returned `404` (or `400`/`403` where noted) everywhere
 tried — most likely either a different, unauthenticated-by-this-flow host (an
 internal "coach portal" behind real login, not the anonymous WMCTok flow) or a
-URL shape this pass didn't reconstruct correctly from the minified RTK-Query
-config. Recorded so a future pass doesn't have to re-mine the bundle from
-scratch, and doesn't waste time assuming any of these are dead ends confirmed
-by evidence rather than by absence:
+genuinely nonexistent path. **Two entries below the original pass recorded as
+dead ends — `playerCareerSeasonStats` and `playerProfile` — turned out to be
+false negatives: the source map (found 2026-08-25, see above) revealed both
+need a query param the original guesses didn't include
+(`competitionType=AFLW`, `seasonId=...` respectively). Both now confirmed
+working, moved to their own entries above.** Left here as a reminder that a
+404 without the source-derived exact param shape is not always a real dead
+end — check the source map before trusting a guessed signature.
 
 | Path template (from bundle) | Tried against | Result |
 |---|---|---|
@@ -664,10 +748,30 @@ by evidence rather than by absence:
 | `match/{matchId}/teamStats` (no `coach` prefix) | statspro | 404 |
 | `matchInterchange/{matchId}` | statspro | 404 |
 | `matchItem/{matchId}` | not tried — no real id format found in the bundle context for this one | — |
-| `playerCareerSeasonStats/{id}`, `.../benchmarked` | statspro (numeric player id, provider player id) | 404 / 400 |
-| `playerProfile/{t}{n}` | not tried — parameter shape (`${t}${n}`, two concatenated template vars) unclear from the minified source | — |
 | `year/{year}/prospectProfile/{playerId}` | not tried — likely AFLM draft-specific, not chased given AFLW is the priority | — |
 | `playersStats/matches/{matchId}` (guessed sibling of `seasons`/`rounds`) | statspro | 404 — confirms Holden's own finding that no match-level extended-stats source exists |
+
+### Not reached this pass (honest gaps, not omissions)
+
+- **Compare Players page** (`afl.com.au/aflw/stats/compare`) — interactive
+  browser clicks on featured comparison cards didn't register during live
+  reconnaissance; the underlying endpoint (likely `getPlayerHeadToHead`,
+  `/playerHeadToHead/featured?seasonId={id}` — found in the source map,
+  **not yet tried live**) was not confirmed.
+- **`getLeadingPlayerMatchRoundTotals`/`getLeadingPlayerMatchSeasonTotals`**
+  (`/leadingPlayerMatchTotals/round/{id}`, `/leadingPlayerMatchTotals/season/{id}`)
+  and **`getLeadingPlayerStats`** (`/leadingPlayerStats/season/{id}?limit=5`)
+  and **`getSearchResults`** (`/playersStats/seasons/{id}?playerNameLike=...`)
+  — all found in the same source-mapped `statsPro-api.jsx`, none tried live
+  this pass.
+- Ladder page live UI check (does the real site call `compseasons/{id}/ladders`
+  the way the bundle mining inferred) — not done, though the endpoint itself
+  is independently confirmed working.
+- Sibling paths off the confirmed public host (`compseasons/{id}/teams`,
+  `.../venues`, `.../byes`) — not tried.
+- `main.js`/`vendors.js` have no accessible source map (`403`) — only
+  `react.bundle.min.js.map` was available; other route-specific chunk bundles
+  beyond the three top-level ones were not enumerated or mined.
 
 ---
 
