@@ -21,14 +21,13 @@ args <- commandArgs(trailingOnly = TRUE)
 comp <- if (length(args) >= 1) args[1] else "AFLM"
 season_filter <- if (length(args) >= 2) as.integer(args[-1]) else NULL
 
-HALFLIFE_DAYS <- 1095  # AFL-DECAY-XRAPM-PLAN.md Stage E: sweep was monotone
-                       # to the grid boundary on both comps (longer always
-                       # beat shorter, up to a 100000d/no-decay control) --
-                       # not a clean interior optimum. 1095d (3yr) is a
-                       # judgement call: within the "not worse than the
-                       # boundary" region without degrading to no-decay,
-                       # which would defeat the point of building this at
-                       # all. Flagged for Pete's review, not a validated pick.
+HALFLIFE_DAYS <- 730  # AFL-DECAY-XRAPM-PLAN.md §18-19: swept properly on the
+                      # validated margin~rating_diff method (round-level
+                      # walk-forward, pooled 2023-2026) -- flat curve, R^2
+                      # 0.2726-0.2769 across 180-100000d, no real interior
+                      # optimum (the 0.0006 gap between 730 and any nearby
+                      # point is noise). 730d (2yr) is Pete's pick among the
+                      # statistically-tied values, made 2026-08-25.
 
 cli::cli_h1("Building {comp} as-of RAPM/SPM snapshots (halflife={HALFLIFE_DAYS}d)")
 
