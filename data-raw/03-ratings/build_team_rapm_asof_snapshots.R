@@ -45,6 +45,8 @@ n_skipped <- 0L
 
 for (i in seq_len(nrow(checkpoints))) {
   ref_date <- checkpoints$checkpoint_date[i]
+  ckpt_season <- checkpoints$season[i]
+  ckpt_round <- checkpoints$round_number[i]
   t0 <- Sys.time()
 
   rapm_ratings <- tryCatch(
@@ -59,11 +61,24 @@ for (i in seq_len(nrow(checkpoints))) {
   spm_asof <- fit_team_spm_asof_cached(ref_date, rapm_ratings, comp = comp)
   if (is.null(spm_asof)) { n_skipped <- n_skipped + 1L; next }
 
+  # season/round_number carried so the match model can join this snapshot on
+  # the SAME (player_id, season, round) key PSR already uses
+  # (.build_team_ratings_df's rolling as-of join) rather than re-deriving a
+  # date->round mapping at consumption time.
+  #
+  # team_rapm_shrunk is the SHIPPING value (AFL-DECAY-XRAPM-PLAN.md sec24,
+  # Pete 2026-08-25) -- RAPM shrunk toward the decay-weighted SPM prior. It was
+  # previously dropped here: the `rapm` column below is the RAW offense-defense
+  # difference, a different rating. Both are now carried; consumers must pick
+  # deliberately.
   out <- spm_asof[, .(
     player_id, ref_date = ref_date,
+    season = ckpt_season, round_number = ckpt_round,
+    team_rapm_shrunk,
     rapm = rapm_offense - rapm_defense,
     rapm_offense, rapm_defense,
     spm_offense, spm_defense,
+    shrinkage_weight,
     total_minutes = n_games  # placeholder unit note below
   )]
   results[[i]] <- out

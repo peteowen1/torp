@@ -4,12 +4,17 @@
 \alias{.build_team_ratings_df}
 \title{Build team-level ratings from lineups}
 \usage{
-.build_team_ratings_df(teams, torp_df, psr_df = NULL)
+.build_team_ratings_df(teams, torp_df, psr_df = NULL, xrapm_df = NULL)
 }
 \arguments{
 \item{teams}{Raw teams/lineups from load_teams()}
 
 \item{torp_df}{EPR ratings from load_torp_ratings()}
+
+\item{psr_df}{PSR ratings, joined as-of each lineup row's (season, round)}
+
+\item{xrapm_df}{As-of xRAPM snapshot from \code{\link[=load_team_rapm_asof]{load_team_rapm_asof()}}, or NULL to
+leave the \code{xrapm} column at a flat 0}
 }
 \value{
 Team-level aggregated ratings with position columns

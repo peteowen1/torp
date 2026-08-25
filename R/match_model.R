@@ -73,7 +73,18 @@ build_team_mdl_df <- function(season = NULL, target_weeks = NULL,
   fix_df <- .build_fixtures_df(fixtures)
 
   cli::cli_h2("Processing lineups")
-  team_rt_df <- .build_team_ratings_df(teams, torp_df, psr_df)
+  # xRAPM snapshot is a local build artifact, not a published release -- absent
+  # in CI and on clean checkouts, where load_team_rapm_asof() warns and returns
+  # NULL and xrapm_diff stays a flat 0. Deliberately non-fatal: a missing
+  # snapshot must degrade the feature, not break the prediction pipeline.
+  xrapm_df <- tryCatch(
+    load_team_rapm_asof(comp = "AFLM"),
+    error = function(e) {
+      cli::cli_warn("Failed to load as-of xRAPM snapshot ({conditionMessage(e)}) -- xrapm_diff falls back to neutral 0")
+      NULL
+    }
+  )
+  team_rt_df <- .build_team_ratings_df(teams, torp_df, psr_df, xrapm_df)
 
   cli::cli_h2("Computing features")
   team_rt_fix_df <- .build_match_features(fix_df, team_rt_df, all_grounds)
