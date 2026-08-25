@@ -48,20 +48,16 @@ for (i in seq_len(nrow(checkpoints))) {
   ref_date <- checkpoints$checkpoint_date[i]
   t0 <- Sys.time()
 
-  design <- tryCatch(
-    build_team_rapm_asof(ref_date, comp = comp, halflife_days = HALFLIFE_DAYS),
+  rapm_ratings <- tryCatch(
+    fit_team_rapm_asof_cached(ref_date, comp = comp, halflife_days = HALFLIFE_DAYS, nfolds = 10),
     error = function(e) {
       cli::cli_warn("[{i}/{nrow(checkpoints)}] ref={as.character(ref_date)}: build failed -- {conditionMessage(e)}")
       NULL
     }
   )
-  if (is.null(design)) { n_skipped <- n_skipped + 1L; next }
+  if (is.null(rapm_ratings)) { n_skipped <- n_skipped + 1L; next }
 
-  fit <- fit_team_rapm_asof(design, nfolds = 10)
-  rapm_ratings <- extract_team_rapm_ratings(design, fit)
-  rapm_ratings <- rapm_ratings[rating_type == "individual"]
-
-  spm_asof <- fit_team_spm_asof(ref_date, rapm_ratings, comp = comp)
+  spm_asof <- fit_team_spm_asof_cached(ref_date, rapm_ratings, comp = comp)
   if (is.null(spm_asof)) { n_skipped <- n_skipped + 1L; next }
 
   out <- spm_asof[, .(
@@ -74,7 +70,7 @@ for (i in seq_len(nrow(checkpoints))) {
   results[[i]] <- out
   n_ok <- n_ok + 1L
   elapsed <- round(as.numeric(Sys.time() - t0), 1)
-  cli::cli_inform("[{i}/{nrow(checkpoints)}] ref={as.character(ref_date)} n_matches={design$n_train_matches} p={design$p} rows={nrow(out)} ({elapsed}s)")
+  cli::cli_inform("[{i}/{nrow(checkpoints)}] ref={as.character(ref_date)} n_matches={attr(rapm_ratings, 'n_train_matches')} p={attr(rapm_ratings, 'p')} rows={nrow(out)} ({elapsed}s)")
 }
 
 total_elapsed <- round(as.numeric(Sys.time() - t_start) / 60, 1)

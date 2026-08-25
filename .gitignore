@@ -43,6 +43,7 @@ data-raw/archive/
 # Stat rating pipeline cache (large RDS files)
 data-raw/cache-stat-ratings/
 data-raw/cache-skills/
+data-raw/cache-team-rapm-asof/
 nul
 _ul
 data-raw/debug/
