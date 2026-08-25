@@ -179,6 +179,53 @@ test_that("fit_team_spm warns and drops rows when rapm_ratings has players absen
   expect_equal(fit$n, 6L)
 })
 
+test_that("fit_team_spm aborts (torp_spm_too_few_rows) rather than passing a sub-3 fold count to glmnet", {
+  # AFLW-crash regression (AFL-DECAY-XRAPM-PLAN.md sec9): the RAPM pruning
+  # threshold can pool almost every player on a thin early-history training
+  # pool, leaving a merged design of 2 rows -- min(nfolds, nrow(X)) = 2, which
+  # glmnet::cv.glmnet rejects with its own cryptic "nfolds must be bigger than
+  # 3" error. This must surface as a controlled, catchable condition instead.
+  local_mocked_bindings(
+    load_player_stats = function(seasons, ...) .mock_spm_ps(seasons, comp = "AFLM"),
+    load_player_game_data = .mock_spm_pgd,
+    load_results = function(seasons, comp = "AFLM") .mock_spm_results(seasons, comp = "AFLM")
+  )
+  feats <- build_team_spm_features(2024L, comp = "AFLM")
+  rapm_thin <- .mock_rapm_ratings(c("P1", "P2"))  # only 2 of the 6 box-score players individually rated
+
+  err <- tryCatch({
+    fit_team_spm(feats, rapm_thin, nfolds = 10)
+    NULL
+  }, error = function(e) e)
+
+  expect_false(is.null(err))
+  expect_true(inherits(err, "torp_spm_too_few_rows"))
+  expect_match(conditionMessage(err), "only 2 training row")
+})
+
+test_that("fit_team_spm_asof degrades to a loud NULL (not a crash) when the training pool is too thin for fit_team_spm", {
+  mock_results_with_dates <- function(seasons, comp = "AFLM") {
+    res <- .mock_spm_results(seasons, comp = comp)
+    res$utc_start_time <- as.POSIXct(paste0(res$season, "-04-01"), tz = "UTC") +
+      (seq_len(nrow(res)) * 3600)
+    res
+  }
+  local_mocked_bindings(
+    load_player_stats = function(seasons, ...) .mock_spm_ps(seasons, comp = "AFLM"),
+    load_player_game_data = .mock_spm_pgd,
+    load_results = function(seasons, comp = "AFLM") {
+      rbind(mock_results_with_dates(2023L, comp = "AFLM"), mock_results_with_dates(2024L, comp = "AFLM"))
+    }
+  )
+  rapm_thin <- .mock_rapm_ratings(c("P1", "P2"))  # same thin-pool shape as the AFLW crash
+
+  expect_warning(
+    out <- fit_team_spm_asof(as.Date("2024-06-01"), rapm_thin, comp = "AFLM"),
+    "only 2 training row"
+  )
+  expect_null(out)
+})
+
 test_that("shrink_team_rapm: hand-computed shrinkage weight and blend", {
   # rapm_ratings mirrors extract_team_rapm_ratings()'s real columns -- no
   # n_games there; n_games/total_tog_minutes come only from spm_predictions

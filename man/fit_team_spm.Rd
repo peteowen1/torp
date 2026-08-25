@@ -22,13 +22,19 @@ fit_team_spm(
 
 \item{alpha}{Elastic-net mixing parameter. Default 0.5.}
 
-\item{nfolds}{CV folds. Default 10.}
+\item{nfolds}{CV folds. Default 10; effectively capped at \code{nrow(X)}
+after merging \code{rapm_ratings} with \code{spm_features}.}
 
 \item{seed}{RNG seed.}
 }
 \value{
 list(model_offense, model_defense, feature_cols, cv_r2_offense,
 cv_r2_defense, cv_r2_net, in_sample_r2_offense, in_sample_r2_defense, n, p).
+Aborts (condition class \code{torp_spm_too_few_rows}) if the merged
+training design has fewer than 3 rows -- glmnet::cv.glmnet's own floor
+for cross-validation. Callers with a thin/expanding-window training pool
+(e.g. \code{fit_team_spm_asof()}) should catch this condition class and
+degrade to a loud NULL rather than letting a raw glmnet error propagate.
 }
 \description{
 Fit SPM: two elastic-net models (offense, defense) predicting raw RAPM

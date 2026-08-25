@@ -31,7 +31,8 @@ point-in-time rather than mixing in future-season players/stats).}
 
 \item{alpha}{Elastic-net mixing parameter. Default 0.5.}
 
-\item{nfolds}{CV folds. Default 10.}
+\item{nfolds}{CV folds. Default 10; effectively capped at \code{nrow(X)}
+after merging \code{rapm_ratings} with \code{spm_features}.}
 
 \item{seed}{RNG seed.}
 

@@ -161,10 +161,16 @@ build_team_spm_features <- function(seasons = TRUE, comp = "AFLM") {
 #' @param rapm_ratings Output of \code{extract_team_rapm_ratings()}.
 #'   \code{replacement_*} rows are filtered out here explicitly.
 #' @param alpha Elastic-net mixing parameter. Default 0.5.
-#' @param nfolds CV folds. Default 10.
+#' @param nfolds CV folds. Default 10; effectively capped at \code{nrow(X)}
+#'   after merging \code{rapm_ratings} with \code{spm_features}.
 #' @param seed RNG seed.
 #' @return list(model_offense, model_defense, feature_cols, cv_r2_offense,
 #'   cv_r2_defense, cv_r2_net, in_sample_r2_offense, in_sample_r2_defense, n, p).
+#'   Aborts (condition class \code{torp_spm_too_few_rows}) if the merged
+#'   training design has fewer than 3 rows -- glmnet::cv.glmnet's own floor
+#'   for cross-validation. Callers with a thin/expanding-window training pool
+#'   (e.g. \code{fit_team_spm_asof()}) should catch this condition class and
+#'   degrade to a loud NULL rather than letting a raw glmnet error propagate.
 #' @keywords internal
 fit_team_spm <- function(spm_features, rapm_ratings, alpha = 0.5, nfolds = 10,
                          seed = 20260825) {
@@ -196,8 +202,22 @@ fit_team_spm <- function(spm_features, rapm_ratings, alpha = 0.5, nfolds = 10,
 
   constraints <- .team_spm_defense_sign_constraints(feature_cols)
 
+  nfolds_eff <- min(nfolds, nrow(X))
+  if (nfolds_eff < 3) {
+    cli::cli_abort(
+      paste0(
+        "fit_team_spm: only {nrow(X)} training row{?s} available after merging ",
+        "rapm_ratings with spm_features (nfolds capped by rows to {nfolds_eff}) -- ",
+        "glmnet::cv.glmnet requires at least 3 folds. The design is too thin to fit ",
+        "a meaningful SPM (seen with as-of/expanding-window callers on a training pool ",
+        "with very few individually-rated players); do not force a fit on this few rows."
+      ),
+      class = "torp_spm_too_few_rows"
+    )
+  }
+
   set.seed(seed)
-  foldid <- sample(rep_len(seq_len(min(nfolds, nrow(X))), nrow(X)))
+  foldid <- sample(rep_len(seq_len(nfolds_eff), nrow(X)))
 
   r2_fn <- function(a, p) 1 - sum((a - p)^2) / sum((a - mean(a))^2)
 

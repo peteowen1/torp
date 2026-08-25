@@ -41,7 +41,8 @@ seasons (the pool to restrict to \code{< cutoff_season}).}
 
 \item{alpha}{Elastic-net mixing parameter. Default 0.5.}
 
-\item{nfolds}{CV folds. Default 10.}
+\item{nfolds}{CV folds. Default 10; effectively capped at \code{nrow(X)}
+after merging \code{rapm_ratings} with \code{spm_features}.}
 
 \item{seed}{RNG seed.}
 
@@ -49,12 +50,16 @@ seasons (the pool to restrict to \code{< cutoff_season}).}
 }
 \value{
 \code{shrink_team_rapm()}'s output (data.table) with \code{season}
-set to the training cutoff. \code{NULL} (with a LOUD warning) if
-\code{ref_date} falls in or before the earliest available season --
-there is no strictly-prior season to train SPM on. Callers must not
-silently substitute the all-history SPM in this case (that is exactly
-the leak this function exists to prevent) -- fall back only with an
-explicit, visible warning at the call site, matching panna's own
+set to the training cutoff. \code{NULL} (with a LOUD warning) if EITHER
+\code{ref_date} falls in or before the earliest available season -- there
+is no strictly-prior season to train SPM on -- OR the strictly-prior
+training pool has too few individually-rated players for
+\code{fit_team_spm()}'s cross-validation (seen on AFLW's early
+checkpoints, where the RAPM pruning threshold pools almost everyone into
+replacement-level: n=2 rows is not enough for even 3-fold CV). Callers
+must not silently substitute the all-history SPM in either case (that is
+exactly the leak this function exists to prevent) -- fall back only with
+an explicit, visible warning at the call site, matching panna's own
 convention (AFL-DECAY-XRAPM-PLAN.md sec1).
 }
 \description{

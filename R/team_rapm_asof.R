@@ -222,12 +222,16 @@ fit_team_rapm_asof <- function(rapm_data, nfolds = 10, seed = 20260825) {
 #' @inheritParams fit_team_spm
 #' @param prior_games Passed to \code{shrink_team_rapm()}.
 #' @return \code{shrink_team_rapm()}'s output (data.table) with \code{season}
-#'   set to the training cutoff. \code{NULL} (with a LOUD warning) if
-#'   \code{ref_date} falls in or before the earliest available season --
-#'   there is no strictly-prior season to train SPM on. Callers must not
-#'   silently substitute the all-history SPM in this case (that is exactly
-#'   the leak this function exists to prevent) -- fall back only with an
-#'   explicit, visible warning at the call site, matching panna's own
+#'   set to the training cutoff. \code{NULL} (with a LOUD warning) if EITHER
+#'   \code{ref_date} falls in or before the earliest available season -- there
+#'   is no strictly-prior season to train SPM on -- OR the strictly-prior
+#'   training pool has too few individually-rated players for
+#'   \code{fit_team_spm()}'s cross-validation (seen on AFLW's early
+#'   checkpoints, where the RAPM pruning threshold pools almost everyone into
+#'   replacement-level: n=2 rows is not enough for even 3-fold CV). Callers
+#'   must not silently substitute the all-history SPM in either case (that is
+#'   exactly the leak this function exists to prevent) -- fall back only with
+#'   an explicit, visible warning at the call site, matching panna's own
 #'   convention (AFL-DECAY-XRAPM-PLAN.md sec1).
 #' @keywords internal
 fit_team_spm_asof <- function(ref_date, rapm_asof_ratings, comp = "AFLM", seasons = TRUE,
@@ -261,7 +265,19 @@ fit_team_spm_asof <- function(ref_date, rapm_asof_ratings, comp = "AFLM", season
   }
 
   spm_features <- build_team_spm_features(train_seasons, comp = comp)
-  spm_fit <- fit_team_spm(spm_features, rapm_asof_ratings, alpha = alpha, nfolds = nfolds, seed = seed)
+  spm_fit <- tryCatch(
+    fit_team_spm(spm_features, rapm_asof_ratings, alpha = alpha, nfolds = nfolds, seed = seed),
+    torp_spm_too_few_rows = function(e) {
+      cli::cli_warn(paste0(
+        "fit_team_spm_asof: ref_date {as.character(ref_date)} for comp {.val {comp}} -- ",
+        "{conditionMessage(e)} Returning NULL; callers must NOT silently fall back to an ",
+        "all-history SPM (that reintroduces the exact leak this function exists to prevent)."))
+      NULL
+    }
+  )
+  if (is.null(spm_fit)) {
+    return(NULL)
+  }
   spm_pred <- predict_team_spm(spm_fit, spm_features)
   shrunk <- shrink_team_rapm(rapm_asof_ratings, spm_pred, prior_games = prior_games)
   shrunk[, `:=`(ref_date = ref_date, spm_train_seasons_max = cutoff_season - 1L)]
