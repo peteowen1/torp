@@ -9,12 +9,27 @@
   reachable; this retrain is the first to use it. Training grows from 350 to 463
   matches (+32%) and CV folds from 4 to 7.
 
-  Measured on the identical 135-match 2025-2026 test set, both arms fit in one
-  execution: margin RMSE 30.31 -> 29.38, MAE 24.23 -> 23.53, R2 0.269 -> 0.313.
-  The paired per-match improvement is **not statistically significant** (mean
-  -0.70, 95% CI [-2.02, +0.61], p = 0.29, better on 71 of 135); it is adopted on
-  the grounds that every margin metric moves the same way and that excluding
-  data needs the stronger justification, not including it.
+  **The size of the gain is easy to overstate, so state it carefully.** A first
+  pass reported margin RMSE 30.31 -> 29.38 on the identical 135-match 2025-2026
+  test set. That comparison is confounded: each arm was CV-selecting its own
+  elastic-net alpha and they landed on different ones (2021-24 chose alpha=1,
+  2018-24 chose alpha=0), so it moved the training window and the penalty family
+  together. Holding alpha fixed and comparing like with like, the window alone is
+  worth roughly -0.4 RMSE averaged over the grid, and at alpha=0 -- the penalty
+  this release actually ships -- it is:
+
+  | | 2021-24 | 2018-24 |
+  |---|---|---|
+  | Margin RMSE | 29.50 | 29.38 |
+  | Margin MAE | 23.41 | 23.53 |
+
+  So RMSE improves by 0.12 and **MAE gets slightly worse**. The window is better
+  on RMSE at every alpha tested (0, 0.25, 0.5, 0.75, 1), which is real evidence of
+  direction, but the effect is small and **not statistically significant anywhere**
+  (best paired p = 0.29; at alpha=0, p = 0.64, better on 72 of 135 matches).
+
+  It is adopted on the principle that excluding available data needs the stronger
+  justification, not on a demonstrated accuracy win.
 
   Ratings move very little: Spearman rank correlation 0.992 across 91,083
   player-rounds, mean |delta| 0.12 PSR, and 9 of the top 10 at 2026 R2 are
@@ -23,8 +38,16 @@
   **Known regression:** the OSR/DSR decomposition path gets slightly worse
   (off-minus-def RMSE 29.39 -> 29.92) while the direct margin fit improves.
   PSR itself is scored from the margin fit, so the headline rating is the one
-  that improved, but the component split is marginally worse and is not yet
-  explained.
+  that improved, but the component split is marginally worse.
+
+  This one is explained. Pinning alpha=1 removes the regression (off-minus-def
+  29.38) and gives the best margin metrics of any arm, but it **fails the anchor
+  checks** and was rejected: lasso at that lambda collapses PSR nonzero betas from
+  33 to 9 of 48, puts 93% of |beta*sd| on three stats, changes the top drivers
+  entirely, drops Spearman against published ratings to 0.829, and drives the OSR
+  `goals` coefficient to exactly 0 -- an offensive rating with no weight on goals.
+  Alpha therefore stays CV-selected; see the note in
+  `data-raw/06-stat-ratings/aflw_run_pipeline.R`.
 
   The retrained files carry six extra `stat_name` rows (`effective_kicks`,
   `effective_disposals`, `intercept_marks`, `f50_ground_ball_gets`,
