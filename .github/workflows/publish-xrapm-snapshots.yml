@@ -31,7 +31,14 @@ on:
         default: false
 
 env:
-  GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+  # WORKFLOW_PAT, not GITHUB_TOKEN: save_to_release() publishes to
+  # peteowen1/torpdata, a DIFFERENT repo. The automatic GITHUB_TOKEN is
+  # hard-scoped to the repo the workflow runs in, so it cannot authenticate
+  # against torpdata no matter what `permissions:` says -- the job would fail
+  # every scheduled run. Matches daily-ratings-predictions.yml,
+  # aflw-season-stats-weekly.yml and train-stat-models.yml, which all publish
+  # cross-repo the same way.
+  GITHUB_PAT: ${{ secrets.WORKFLOW_PAT }}
   R_KEEP_PKG_SOURCE: yes
   piggyback_cache_duration: 1
 

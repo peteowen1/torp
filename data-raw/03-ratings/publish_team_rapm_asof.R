@@ -43,7 +43,7 @@ build_snapshot <- function(comp) {
 
   checkpoints <- .team_rapm_played_checkpoints(comp = comp)
   if (nrow(checkpoints) == 0) {
-    cli::cli_warn("No played checkpoints for comp {.val {comp}} -- skipping.")
+    cli::cli_alert_danger("No played checkpoints for comp {.val {comp}} -- skipping.")
     return(NULL)
   }
   data.table::setorder(checkpoints, season, round_number)
@@ -63,7 +63,7 @@ build_snapshot <- function(comp) {
       fit_team_rapm_asof_cached(ref_date, comp = comp,
                                 halflife_days = HALFLIFE_DAYS, nfolds = 10),
       error = function(e) {
-        cli::cli_warn("[{i}/{nrow(checkpoints)}] ref={as.character(ref_date)}: RAPM failed -- {conditionMessage(e)}")
+        cli::cli_alert_danger("[{i}/{nrow(checkpoints)}] ref={as.character(ref_date)}: RAPM failed -- {conditionMessage(e)}")
         NULL
       }
     )
@@ -72,7 +72,7 @@ build_snapshot <- function(comp) {
     spm_asof <- tryCatch(
       fit_team_spm_asof_cached(ref_date, rapm_ratings, comp = comp),
       error = function(e) {
-        cli::cli_warn("[{i}/{nrow(checkpoints)}] ref={as.character(ref_date)}: SPM failed -- {conditionMessage(e)}")
+        cli::cli_alert_danger("[{i}/{nrow(checkpoints)}] ref={as.character(ref_date)}: SPM failed -- {conditionMessage(e)}")
         NULL
       }
     )
@@ -141,7 +141,7 @@ validate_snapshot <- function(dt, comp) {
 for (comp in comps) {
   dt <- build_snapshot(comp)
   if (is.null(dt)) {
-    cli::cli_warn("{comp}: nothing built, skipping publish.")
+    cli::cli_alert_danger("{comp}: nothing built, skipping publish.")
     next
   }
   validate_snapshot(dt, comp)
