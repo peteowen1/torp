@@ -217,6 +217,36 @@ test_that("AFLM season validation is bit-identical through the comp dispatcher",
   expect_equal(torp:::.validate_seasons_comp(2023:2025, "AFLM"), torp:::validate_seasons(2023:2025))
 })
 
+test_that("every comp-taking loader routes season validation through the comp dispatcher", {
+  # Class-level guard, not an instance one. When the comp-aware floor first
+  # landed it reached load_player_stats/load_fixtures/load_teams but MISSED
+  # load_results() and load_player_details() -- both take `comp`, both kept the
+  # non-comp-aware validate_seasons(), so load_results(2019, comp = "AFLW")
+  # aborted with "Seasons must be between 2021 and 2026" even though the data
+  # exists (verified live: load_fixtures(2019, comp="AFLW") returns 38 scored
+  # matches). That gap blocked the first AFLW PSR publish, because the
+  # published-artifact guard verifies against load_results() and could not see
+  # 2018-2020 at all.
+  #
+  # This asserts the RULE rather than those two functions: if a loader accepts
+  # `comp`, its season floor must depend on `comp`. A future comp-taking loader
+  # that forgets fails here.
+  loader_names <- c("load_player_stats", "load_fixtures", "load_teams",
+                    "load_results", "load_player_details")
+  for (nm in loader_names) {
+    fn <- get(nm, envir = asNamespace("torp"))
+    expect_true("comp" %in% names(formals(fn)),
+                info = paste0(nm, " is expected to take a comp argument"))
+    body_src <- paste(deparse(body(fn)), collapse = "\n")
+    expect_true(
+      grepl(".validate_seasons_comp", body_src, fixed = TRUE),
+      info = paste0(nm, "() takes `comp` but does not route season validation ",
+                    "through .validate_seasons_comp() -- pre-2021 AFLW seasons ",
+                    "will abort or be silently dropped.")
+    )
+  }
+})
+
 test_that(".build_aflw_stat_ratings() asserts cross-feed coverage", {
   # The guard that must be present: rating data has a played round the
   # fixture-derived checkpoint map lacks (results feed lagging the stats feed).
