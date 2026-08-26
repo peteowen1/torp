@@ -138,9 +138,12 @@
 #'
 #' @param teams Raw teams/lineups from load_teams()
 #' @param torp_df EPR ratings from load_torp_ratings()
+#' @param psr_df PSR ratings, joined as-of each lineup row's (season, round)
+#' @param xrapm_df As-of xRAPM snapshot from [load_team_rapm_asof()], or NULL to
+#'   leave the `xrapm` column at a flat 0
 #' @return Team-level aggregated ratings with position columns
 #' @keywords internal
-.build_team_ratings_df <- function(teams, torp_df, psr_df = NULL) {
+.build_team_ratings_df <- function(teams, torp_df, psr_df = NULL, xrapm_df = NULL) {
   torp_prior_total <- EPR_PRIOR_RATE_RECV + EPR_PRIOR_RATE_DISP +
     EPR_PRIOR_RATE_SPOIL + EPR_PRIOR_RATE_HITOUT
 
@@ -282,6 +285,15 @@
     team_lineup_df$psr <- PSR_PRIOR_RATE
   }
 
+  # xRAPM (2026-08-25, AFL-DECAY-XRAPM-PLAN.md sec24): decay-weighted,
+  # SPM-shrunk RAPM, joined as-of each lineup row's (season, round) on exactly
+  # the same leak-safety argument as the PSR join above. Wired at Pete's
+  # explicit direction despite FAILING the g7 gate (p = 0.075) -- see
+  # team_rapm_match_feature.R's header for the full evidence level and for the
+  # two structural caveats (expected- vs actual-TOG weighting, and the snapshot
+  # not being a published artifact).
+  team_lineup_df <- .join_xrapm_to_lineups(team_lineup_df, xrapm_df)
+
   # Generate position columns from lookup tables
   for (col in names(MATCH_PHASE_MAP))
     team_lineup_df[[col]] <- ifelse(team_lineup_df$lineup_position %in% MATCH_PHASE_MAP[[col]], team_lineup_df$epr, NA)
@@ -302,7 +314,7 @@
   }
 
   # Aggregate to team level
-  torp_sum_cols <- c("epr", "epr_recv", "epr_disp", "epr_spoil", "epr_hitout", "psr")
+  torp_sum_cols <- c("epr", "epr_recv", "epr_disp", "epr_spoil", "epr_hitout", "psr", "xrapm")
   if ("osr" %in% names(team_lineup_df)) torp_sum_cols <- c(torp_sum_cols, "osr", "dsr")
 
   team_rt_df <- team_lineup_df |>
@@ -693,6 +705,7 @@
   opp_cols <- c(
     "match_id", "team_type",
     "epr", "epr_recv", "epr_disp", "epr_spoil", "epr_hitout", "psr",
+    intersect("xrapm", names(team_rt_fix_df)),
     intersect(c("osr", "dsr"), names(team_rt_fix_df)),
     "def", "mid", "fwd", "int", MATCH_INDIVIDUAL_POS,
     # Listed position groups must be carried for the OPPONENT too, or their
@@ -760,6 +773,9 @@
       epr_spoil_diff = epr_spoil.x - epr_spoil.y,
       epr_hitout_diff = epr_hitout.x - epr_hitout.y,
       psr_diff = psr.x - psr.y,
+      # Same orientation as every other *_diff here: this team minus its
+      # opponent. team_type_fac already carries home advantage, so no HGA term.
+      xrapm_diff = if ("xrapm.x" %in% names(team_mdl_df_tot)) xrapm.x - xrapm.y else 0,
       osr_diff = if ("osr.x" %in% names(team_mdl_df_tot)) osr.x - osr.y else NA_real_,
       dsr_diff = if ("dsr.x" %in% names(team_mdl_df_tot)) dsr.x - dsr.y else NA_real_,
       torp.x = TORP_EPR_WEIGHT * epr.x + (1 - TORP_EPR_WEIGHT) * psr.x,

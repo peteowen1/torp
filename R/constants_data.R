@@ -169,3 +169,13 @@ CONTEST_GROUND_BALL_DESCS <- c(
   "Hard Ball Get Crumb", "Loose Ball Get Crumb",
   "Ruck Hard Ball Get"
 )
+
+#' torpdata release tag for the as-of xRAPM snapshots
+#'
+#' One parquet per competition (`career_team_rapm_asof_AFLM.parquet`,
+#' `career_team_rapm_asof_AFLW.parquet`), one row per player per played round
+#' checkpoint. Consumed by [load_team_rapm_asof()] and, through it, the match
+#' model's `xrapm_diff` feature.
+#'
+#' @keywords internal
+TEAM_RAPM_ASOF_RELEASE_TAG <- "team_rapm_asof-data"

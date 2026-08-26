@@ -1,6 +1,70 @@
-# torp (development version)
+# torp 1.4.0
+
+## New features
+
+* **AFLW extended stats, via a previously-undocumented AFL API endpoint.** CFS's
+  `playerStats/match` returns an empty `extendedStats` block for AFLW, so 25
+  fields (`spoils`, `pressure_acts`, `effective_disposals`, ...) had never
+  existed for the women's competition. An outside contributor (`jhol3990`, on
+  commit `abe27f56`) located a working alternative at
+  `api.afl.com.au/statspro/playersStats/seasons/{id}`. New
+  `get_afl_player_season_stats()` and `load_aflw_season_stats()`;
+  `aflw_season_stats-data` published for 2018-2026.
+
+* **Per-round AFLW extended stats, by differencing weekly snapshots.** That
+  endpoint returns only a *season-to-date cumulative total* — no as-at-date
+  parameter exists, confirmed from AFL.com.au's own client source. So
+  `aflw-season-stats-weekly.yml` captures a dated snapshot each Tuesday and
+  `diff_aflw_season_snapshots()` differences consecutive captures. **Works only
+  going forward from when the cron starts**; already-played rounds remain
+  season-total only. Only *cumulative* columns are differenced — subtracting
+  season-to-date rates or `_avg` columns yields a plausible-looking meaningless
+  number, so those are excluded and listed in a `rate_cols_dropped` attribute.
+
+* **AFLW PSR is stored, not just computed.** Previously every AFLW PSR figure
+  was calculated on demand and discarded. New `load_aflw_psr()` and a Stage 7
+  in `run_ratings_pipeline.R` that scores from frozen coefficients and
+  publishes `aflw_psr-data` (2018-2026, 91,083 player-rounds). Scoring only —
+  `aflw_run_pipeline.R` remains the *training* script and deliberately stays
+  off the daily cadence, since running it there would retrain the rating
+  definition every day.
+
+* **`xrapm_diff` added to the match model**, with a production home for the
+  rating: `team_rapm_asof-data`, `load_team_rapm_asof()`, and a weekly
+  `publish-xrapm-snapshots.yml`. **This feature does not pass the project's own
+  `g7_verdict()` gate** (β=1.079, p=0.078, dMAE −0.143) — deterministically
+  reproducible, not noise, but below threshold. Shipped as a deliberate
+  judgement call, recorded here so the evidence level travels with the code.
 
 ## Bug fixes
+
+* **Stat-rating pipelines were estimating at unplayed future rounds.** Both
+  pipelines built their checkpoint dates from `load_fixtures()`, which includes
+  scheduled-but-unplayed fixtures — AFLW 2026 produced 10 phantom rounds (map to
+  round 12, only 2 played), AFLM 5. Not inert: the phantom rows flow into
+  `calculate_psr()`'s position-standardisation step, which pools by position
+  with no season/round grouping, shifting the within-position SD and rescaling
+  **real** players' ratings (AFLW up to 0.2095, 80%+ of rows; AFLM ~0.0159).
+  They also made `max(round)` a trap for anything reading the intermediate
+  artifact. New `.played_round_ref_dates()` filters on a *recorded score* rather
+  than a date, so postponed-but-past-dated matches are excluded too, and
+  `.assert_ref_date_coverage()` catches the reverse case where the results feed
+  lags the player-stats feed and a genuinely-played round would be dropped.
+
+* **AFLW's 2018-2020 history was unreachable through five loaders.**
+  `validate_seasons()` floors at `AFL_MIN_SEASON` (2021, where men's *chain*
+  data starts), so `load_results(2019, comp = "AFLW")` aborted outright while
+  `load_fixtures(2019, comp = "AFLW")` returned 38 scored matches. New
+  `.validate_seasons_comp()` dispatcher routes to an AFLW floor of 2018;
+  the men's path is provably unchanged. Found by consequence — it blocked the
+  first `aflw_psr-data` publish, because the artifact guard verifies against
+  `load_results()` and could not see those seasons.
+
+* **The as-of xRAPM join leaked each round's own result into its own feature.**
+  Checkpoints labelled `round_number = r` are dated the day *before* round r+1,
+  so they contain round r's results, and the join used inclusive `>=`. Now a
+  strict `>`, so a round only ever sees a prior checkpoint. Three existing tests
+  had asserted the leaked behaviour as correct and were corrected.
 
 * **`versebus.R`: four silent-failure defects ported from bouncer's review
   (canonical copy; already fixed in `peteowen1/bouncer@86e2ebc` and ported to
@@ -36,6 +100,21 @@
   `torpverse/torpmodels/R/versebus.R` still carries all four unfixed and now
   fails `test-versebus-sync.R`'s drift guard against this copy -- follow-up
   needed there.
+* **`versebus.R` → `VERSEBUS_VERSION` 1.1.0** (canonical copy; mirrored to
+  `pannaverse/panna` in the same change, which `test-versebus-sync.R` verifies).
+  * `vb_publish()` now restores `piggyback_cache_duration` on exit. It was set
+    unconditionally and never reset, so the first publish in a session silently
+    disabled piggyback's listing cache for every unrelated caller afterwards.
+  * `.vb_generation_stamp()` no longer builds its local suffix with `sample()`.
+    Doing so advanced the **caller's** RNG stream, so publishing changed the
+    draws of any simulation seeded before it — an invisible reproducibility
+    break in a package that also fits models and runs sims. Now uses
+    `tempfile()`, which is process-unique and does not touch `.Random.seed`.
+  * `vb_publish()`'s post-upload verify loop iterates `seq_len(n + 1L)` rather
+    than `seq_along(c(verify_delays, NA))` — same count, no throwaway `NA`.
+
+## Bug fixes
+
 * **`versebus.R` → `VERSEBUS_VERSION` 1.1.0** (canonical copy; mirrored to
   `pannaverse/panna` in the same change, which `test-versebus-sync.R` verifies).
   * `vb_publish()` now restores `piggyback_cache_duration` on exit. It was set

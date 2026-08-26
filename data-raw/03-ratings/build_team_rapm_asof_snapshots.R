@@ -31,7 +31,16 @@ HALFLIFE_DAYS <- 730  # AFL-DECAY-XRAPM-PLAN.md §18-19: swept properly on the
 
 cli::cli_h1("Building {comp} as-of RAPM/SPM snapshots (halflife={HALFLIFE_DAYS}d)")
 
-checkpoints <- .team_rapm_checkpoint_dates(comp = comp)
+# PLAYED rounds only. .team_rapm_checkpoint_dates() is pure fixture-calendar
+# geometry and happily returns scheduled-but-unplayed rounds; building those is
+# wrong twice over (a max(round) reader sees a phantom "current" round, and the
+# phantom rows are unstable -- their `match_date <= ref_date` window grows daily
+# until the date passes, so the same checkpoint yields a different rating each
+# run). Same trap fixed in the stat-ratings pipeline.
+checkpoints <- .team_rapm_played_checkpoints(comp = comp)
+if (nrow(checkpoints) == 0) {
+  cli::cli_abort("No PLAYED checkpoints for comp {.val {comp}} -- nothing to build.")
+}
 if (!is.null(season_filter)) {
   checkpoints <- checkpoints[season %in% season_filter]
 }
@@ -45,6 +54,8 @@ n_skipped <- 0L
 
 for (i in seq_len(nrow(checkpoints))) {
   ref_date <- checkpoints$checkpoint_date[i]
+  ckpt_season <- checkpoints$season[i]
+  ckpt_round <- checkpoints$round_number[i]
   t0 <- Sys.time()
 
   rapm_ratings <- tryCatch(
@@ -59,11 +70,24 @@ for (i in seq_len(nrow(checkpoints))) {
   spm_asof <- fit_team_spm_asof_cached(ref_date, rapm_ratings, comp = comp)
   if (is.null(spm_asof)) { n_skipped <- n_skipped + 1L; next }
 
+  # season/round_number carried so the match model can join this snapshot on
+  # the SAME (player_id, season, round) key PSR already uses
+  # (.build_team_ratings_df's rolling as-of join) rather than re-deriving a
+  # date->round mapping at consumption time.
+  #
+  # team_rapm_shrunk is the SHIPPING value (AFL-DECAY-XRAPM-PLAN.md sec24,
+  # Pete 2026-08-25) -- RAPM shrunk toward the decay-weighted SPM prior. It was
+  # previously dropped here: the `rapm` column below is the RAW offense-defense
+  # difference, a different rating. Both are now carried; consumers must pick
+  # deliberately.
   out <- spm_asof[, .(
     player_id, ref_date = ref_date,
+    season = ckpt_season, round_number = ckpt_round,
+    team_rapm_shrunk,
     rapm = rapm_offense - rapm_defense,
     rapm_offense, rapm_defense,
     spm_offense, spm_defense,
+    shrinkage_weight,
     total_minutes = n_games  # placeholder unit note below
   )]
   results[[i]] <- out

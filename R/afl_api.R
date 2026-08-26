@@ -885,6 +885,111 @@ get_afl_player_stats <- function(season = NULL, comp = "AFLM") {
 }
 
 
+#' Fetch AFL statspro season-total player stats (extended fields)
+#'
+#' Fetches the `statspro/playersStats/seasons/{providerId}` endpoint — one
+#' HTTP call returns every player's season totals/averages for a comp-season,
+#' including 28 "extended" fields that the CFS `playerStats/match/{matchId}`
+#' `extendedStats` block returns genuinely empty for AFLW (confirmed
+#' 2026-08-25; see `AFL-API-REFERENCE.md`'s "Endpoint family: statspro"
+#' section for the full field-by-field audit against [get_afl_player_stats()]).
+#' Season-total granularity only -- the round-level sibling endpoint
+#' (`playerSeasonRoundStats`) does NOT carry these 28 fields at all (confirmed
+#' absent, not just null), and the season endpoint has no as-at-round/cutoff
+#' parameter -- the client never sends one, and `&roundId=...` was tested live
+#' and had no effect. So this is genuinely the finest grain available for
+#' these specific fields.
+#'
+#' Same anonymous `x-media-mis-token` auth as [get_afl_player_stats()] --
+#' reuses [get_token()]'s 5-minute cache.
+#'
+#' @param season Numeric year (default: current season via [get_afl_season()])
+#' @param comp Competition: "AFLM" or "AFLW" (default). Built AFLW-first
+#'   because that's where the gap is (see field-audit note above), but the
+#'   endpoint and field set work identically for AFLM -- no comp-specific
+#'   branching needed.
+#' @return A tibble, one row per player who played this comp-season, with
+#'   `player_id`, `season`, `comp`, `team_abbr`, `games_played`, and the 63
+#'   snake_cased `totals.*`/`averages.*` fields (averages suffixed `_avg`).
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' season_stats <- get_afl_player_season_stats(2025, comp = "AFLW")
+#' }
+#'
+#' @importFrom httr GET add_headers content stop_for_status
+#' @importFrom jsonlite fromJSON
+get_afl_player_season_stats <- function(season = NULL, comp = "AFLW") {
+  .validate_afl_comp(comp)
+  if (is.null(season)) season <- get_afl_season()
+
+  seasons_list <- .afl_all_comp_seasons(comp)
+  if (is.null(seasons_list) || nrow(seasons_list) == 0 ||
+      !"providerId" %in% names(seasons_list)) {
+    cli::cli_warn("get_afl_player_season_stats: could not resolve a provider id for {comp} {season}.")
+    return(tibble::tibble())
+  }
+  yr <- as.numeric(season)
+  # NOT providerId regex: 2022 AFLW splits into two comp seasons and one of
+  # them (CD_S2101264, "Season 7") does not have the calendar year as its
+  # first 4 digits -- confirmed live, would silently resolve to "year 2101"
+  # and drop that season entirely. `name` reliably starts with the real year
+  # for every comp-season including this one ("2022 NAB AFLW Season 7").
+  seasons_list$.year <- if ("name" %in% names(seasons_list)) {
+    as.numeric(gsub("^(\\d{4}).*", "\\1", seasons_list$name))
+  } else {
+    as.numeric(gsub("CD_S(\\d{4})\\d+", "\\1", seasons_list$providerId))
+  }
+  matches <- seasons_list[seasons_list$.year == yr, , drop = FALSE]
+  if (nrow(matches) == 0) {
+    cli::cli_warn("get_afl_player_season_stats: no comp-season provider id found for {comp} {season}.")
+    return(tibble::tibble())
+  }
+  # 2022 AFLW splits into two comp seasons (CD_S2022264 "Season 6" and
+  # CD_S2101264 "Season 7") -- pull both rather than picking one arbitrarily.
+  provider_ids <- matches$providerId
+
+  # Per-id error isolation, mirroring get_afl_fixtures()'s multi-season loop:
+  # 2022 AFLW issues TWO sequential calls, so an unguarded failure on the second
+  # would discard the first's already-fetched data along with it.
+  out <- purrr::map(provider_ids, function(pid) {
+    url <- paste0(AFL_STATSPRO_BASE_URL, "playersStats/seasons/", pid, "?includeBenchmarks=false")
+    json <- tryCatch(access_api(url), error = function(e) {
+      cli::cli_warn(paste0(
+        "get_afl_player_season_stats: comp-season {pid} failed to fetch -- ",
+        "{conditionMessage(e)}. Continuing with the remaining id{?s}."))
+      NULL
+    })
+    if (is.null(json)) return(NULL)
+    if (is.null(json$players) || nrow(json$players) == 0) return(NULL)
+    players <- json$players
+    # jsonlite::fromJSON(..., flatten=TRUE) turns players[].totals.* /
+    # .averages.* into dot-prefixed top-level columns, not nested data.frames.
+    totals_cols <- grep("^totals\\.", names(players), value = TRUE)
+    avg_cols <- grep("^averages\\.", names(players), value = TRUE)
+    totals <- players[, totals_cols, drop = FALSE]
+    names(totals) <- sub("^totals\\.", "", names(totals))
+    averages <- players[, avg_cols, drop = FALSE]
+    names(averages) <- paste0(sub("^averages\\.", "", names(averages)), "_avg")
+    id_cols <- tibble::tibble(
+      player_id = players$playerId,
+      season = yr,
+      comp = comp,
+      team_abbr = if ("team.teamAbbr" %in% names(players)) players[["team.teamAbbr"]] else NA_character_,
+      games_played = if ("gamesPlayed" %in% names(players)) players[["gamesPlayed"]] else NA_real_
+    )
+    dplyr::bind_cols(id_cols, tibble::as_tibble(totals), tibble::as_tibble(averages))
+  })
+  out <- purrr::list_rbind(purrr::compact(out))
+  if (nrow(out) == 0) return(tibble::tibble())
+
+  data.table::setDT(out)
+  .bulk_snake_case(out, verbose = FALSE, label = "AFLW season stats")
+  tibble::as_tibble(out)
+}
+
+
 #' Fetch AFL Player Details
 #'
 #' Fetches player biographical/squad details for a season.

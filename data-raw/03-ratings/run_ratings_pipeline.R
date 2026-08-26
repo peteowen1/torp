@@ -739,6 +739,100 @@ tryCatch({
 
 tictoc::toc(log = TRUE)
 
+# Stage 7: Compute & Release AFLW PSR ----
+#
+# SCORING only. data-raw/06-stat-ratings/aflw_run_pipeline.R is the TRAINING
+# script -- it refits glmnet and rewrites inst/extdata/*_coefficients_aflw.csv,
+# i.e. the rating definition. That must NOT run on this cadence; it is the
+# AFLW analogue of 06-stat-ratings/ for men's, which likewise runs occasionally
+# and separately. Here the coefficients are a frozen input.
+#
+# Wrapped exactly like Stage 6: an AFLW failure is reported loudly and the
+# pipeline continues, so it can never cost the men's ratings and predictions
+# that have already published above.
+
+cli::cli_h2("Stage 7: Compute & Release AFLW PSR")
+tictoc::tic("stage_7_aflw_psr")
+
+tryCatch({
+  aflw_psr_all <- torp:::.compute_aflw_psr(TRUE)
+
+  if (is.null(aflw_psr_all) || nrow(aflw_psr_all) == 0) {
+    cli::cli_warn("AFLW PSR returned no rows - skipping AFLW PSR release")
+  } else {
+    cli::cli_inform("AFLW PSR computed for {nrow(aflw_psr_all)} player-rounds across {length(unique(aflw_psr_all$season))} seasons")
+
+    # Guard the published artifact, not just the build. .build_aflw_stat_ratings()
+    # already restricts to played rounds, but a release is the expensive thing to
+    # get wrong: phantom future rounds published once are read by consumers long
+    # after the cause is forgotten.
+    aflw_played <- data.table::as.data.table(load_results(TRUE, comp = "AFLW"))
+    played_max <- aflw_played[, .(max_played = max(as.integer(round_number), na.rm = TRUE)),
+                              by = .(season = as.integer(season))]
+    chk <- merge(
+      data.table::as.data.table(aflw_psr_all)[, .(max_psr = max(as.integer(round), na.rm = TRUE)),
+                                              by = .(season = as.integer(season))],
+      played_max, by = "season", all.x = TRUE
+    )
+    bad <- chk[is.na(max_played) | max_psr > max_played]
+    if (nrow(bad) > 0) {
+      # Pre-formatted: a {?s} plural marker alongside another interpolated
+      # value makes cli abort with "Multiple quantities for pluralization",
+      # which would mask this check's own message.
+      detail <- paste(sprintf("%d (psr max %d vs played max %s)",
+                              bad$season, bad$max_psr, bad$max_played), collapse = "; ")
+      cli::cli_abort(paste0(
+        "AFLW PSR contains rounds beyond the last PLAYED round -- refusing to publish. ",
+        "Offending seasons: ", detail))
+    }
+    cli::cli_alert_success("Played-rounds check passed for {nrow(chk)} AFLW season{?s}")
+
+    for (s in sort(unique(aflw_psr_all$season))) {
+      psr_season <- aflw_psr_all[aflw_psr_all$season == s, ]
+      file_name <- paste0("aflw_psr_", s)
+      # No vintage stem: AFLW is not in the men's RATINGS_VINTAGE system, and
+      # .vintage_asset_stem(x, NULL) returns x unchanged anyway.
+      save_to_release(psr_season, file_name, "aflw_psr-data")
+      cli::cli_alert_success("Released {file_name} ({nrow(psr_season)} rows)")
+    }
+  }
+}, error = function(e) {
+  cli::cli_alert_danger("Failed to compute/release AFLW PSR: {conditionMessage(e)}")
+})
+
+tictoc::toc(log = TRUE)
+
+# As-of xRAPM snapshots: deliberately NOT a stage here ----
+#
+# An earlier revision refreshed them as "Stage 8" of this script. Removed
+# 2026-08-26, for a structural reason rather than a stylistic one.
+#
+# The refresh is only cheap when data-raw/cache-team-rapm-asof/ is warm. No
+# workflow caches that directory, and every scheduled run gets a fresh
+# ephemeral runner -- so in production it was ALWAYS cold: ~13s x 156 AFLM
+# checkpoints ~= 34 min, plus AFLW, inside this job's 45-minute budget shared
+# with Stages 1-7. And build-predictions has `needs: compute-ratings`, so
+# overrunning here does not merely skip the snapshot: it publishes NO
+# PREDICTIONS AT ALL. That is the 2026-07-29 failure mode written into
+# daily-ratings-predictions.yml's own comments.
+#
+# Caching the directory would have made the common case fast but left the cold
+# case (first run, cache eviction, a key miss) still able to take predictions
+# down. An optional feature's refresh must not sit on the critical path at all,
+# so it moved to its own workflow: .github/workflows/publish-xrapm-snapshots.yml,
+# running data-raw/03-ratings/publish_team_rapm_asof.R with a cold-run-sized
+# timeout and its own cache.
+#
+# That also retired a duplicated, thinner implementation. The inline Stage 8
+# re-implemented publish_team_rapm_asof.R's build/validate loop but swallowed
+# every per-checkpoint error with no message (100 of 156 could fail and the log
+# still read like success) and gated the publish on only
+# `anyNA(player_id) || all(is.na(team_rapm_shrunk))` -- no row floor, no
+# duplicate-key check, no unplayed-round check. The sibling script has all of
+# those. Deleting the copy is the fix; this repo has already been bitten twice
+# by two copies of one list drifting apart (match_train.R / matchup_table.R
+# base_cols).
+
 # Summary ----
 
 cli::cli_h2("Pipeline Complete")

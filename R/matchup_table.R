@@ -213,7 +213,7 @@
     dplyr::distinct(team_id, .keep_all = TRUE) |>
     dplyr::select(
       team_id, team_name, epr, epr_recv, epr_disp, epr_spoil, epr_hitout,
-      psr, dplyr::any_of(c("osr", "dsr")),
+      psr, dplyr::any_of(c("osr", "dsr", "xrapm")),
       # Listed-position bucket sums. These are XGBoost FEATURES
       # (MATCH_LISTED_POS_DIFF_COLS, see .train_match_xgb()), so a fabricated
       # row cannot be scored without them -- omitting them here silently
@@ -322,6 +322,7 @@
     ))
   }
   rating_cols <- intersect(c("epr", "epr_recv", "epr_disp", "epr_spoil", "epr_hitout", "psr", "osr", "dsr",
+                             "xrapm",
                              names(MATCH_LISTED_POS_MAP)),
                             names(snapshot))
   rating_vec <- stats::setNames(
@@ -498,6 +499,13 @@
   df$psr_diff <- df$psr.x - df$psr.y
   if (all(c("osr.x", "osr.y") %in% names(df))) df$osr_diff <- df$osr.x - df$osr.y
   if (all(c("dsr.x", "dsr.y") %in% names(df))) df$dsr_diff <- df$dsr.x - df$dsr.y
+  # xrapm_diff is an unconditional base_col, so the fabricated frame must always
+  # carry it -- a 0 here means "no snapshot", matching the training-side fallback.
+  df$xrapm_diff <- if (all(c("xrapm.x", "xrapm.y") %in% names(df))) {
+    df$xrapm.x - df$xrapm.y
+  } else {
+    0
+  }
   df$torp.x <- TORP_EPR_WEIGHT * df$epr.x + (1 - TORP_EPR_WEIGHT) * df$psr.x
   df$torp.y <- TORP_EPR_WEIGHT * df$epr.y + (1 - TORP_EPR_WEIGHT) * df$psr.y
   df$torp_diff <- df$torp.x - df$torp.y
@@ -546,6 +554,7 @@
       "epr_diff", "epr_recv_diff", "epr_disp_diff", "epr_spoil_diff", "epr_hitout_diff",
       "torp_diff", "psr_diff", state$xgb_osr_dsr_cols,
       "xelo_diff",
+      "xrapm_diff",
       # MUST stay in lockstep with .train_match_xgb()'s own base_cols
       # (match_train.R) -- same columns, same ORDER. model.matrix() output is
       # positional, so a column missing here does not error, it silently

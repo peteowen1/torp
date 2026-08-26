@@ -94,6 +94,81 @@
   by_round[]
 }
 
+# .team_rapm_played_checkpoints ----
+
+#' Checkpoint dates restricted to rounds that have actually been PLAYED
+#'
+#' \code{.team_rapm_checkpoint_dates()} derives pure calendar geometry from
+#' \code{load_fixtures(all = TRUE)}, which includes rounds that are merely
+#' SCHEDULED. Building snapshots for those is wrong for two distinct reasons,
+#' the second of which is specific to this decay engine:
+#'
+#' \enumerate{
+#'   \item The same trap already found and fixed in the stat-ratings pipeline:
+#'     a consumer taking \code{max(round_number)} as "current" silently reads a
+#'     phantom future round. (AFLM 2026 schedules 5 finals rounds past the last
+#'     played round; AFLW 2026 schedules 10.)
+#'   \item \strong{The phantom rows are not even stable.} A checkpoint's fit
+#'     uses \code{match_date <= ref_date}. For a ref_date in the future that
+#'     window keeps growing as real matches are played, so the same
+#'     (season, round) checkpoint yields a DIFFERENT rating every day until its
+#'     date passes. Publishing that to a release means an artifact whose
+#'     historical rows churn without any code change -- the opposite of what a
+#'     released artifact is for.
+#' }
+#'
+#' Filters on a recorded score rather than \code{checkpoint_date <= Sys.Date()}:
+#' a match scheduled in the past but postponed has no score and is equally
+#' invalid as a checkpoint, and a date comparison would wave it through. Same
+#' idiom the PSR training scripts already use
+#' (\code{!is.na(home_score) & !is.na(away_score)}).
+#'
+#' @inheritParams .team_rapm_checkpoint_dates
+#' @return Same shape as \code{.team_rapm_checkpoint_dates()}, restricted to
+#'   (season, round_number) pairs in which at least one match has a recorded
+#'   score. Zero rows if nothing has been played.
+#' @keywords internal
+.team_rapm_played_checkpoints <- function(seasons = TRUE, comp = "AFLM") {
+  cp <- .team_rapm_checkpoint_dates(seasons = seasons, comp = comp)
+
+  res <- load_results(TRUE, comp = comp)
+  if (nrow(res) == 0) {
+    cli::cli_warn(c(
+      "No results available for comp {.val {comp}} -- no round can be confirmed played.",
+      "x" = "Returning zero checkpoints rather than building snapshots for scheduled rounds."
+    ))
+    return(cp[0])
+  }
+  res_dt <- data.table::as.data.table(res)
+
+  needed <- c("season", "round_number", "home_score", "away_score")
+  missing <- setdiff(needed, names(res_dt))
+  if (length(missing) > 0) {
+    cli::cli_abort(c(
+      "Cannot confirm which rounds were played for comp {.val {comp}}: results are missing {missing}.",
+      "i" = "Refusing to fall back to the unfiltered fixture calendar -- that reintroduces phantom future checkpoints."
+    ))
+  }
+
+  played <- unique(res_dt[!is.na(home_score) & !is.na(away_score),
+                          .(season, round_number)])
+  if (nrow(played) == 0) {
+    cli::cli_warn("No played matches found for comp {.val {comp}} -- returning zero checkpoints.")
+    return(cp[0])
+  }
+
+  n_before <- nrow(cp)
+  out <- cp[played, on = .(season, round_number), nomatch = NULL]
+  data.table::setorder(out, season, round_number)
+  n_dropped <- n_before - nrow(out)
+  if (n_dropped > 0) {
+    cli::cli_inform(
+      "Dropped {n_dropped} scheduled-but-unplayed checkpoint{?s} for comp {.val {comp}} ({nrow(out)} played remain)."
+    )
+  }
+  out[]
+}
+
 # build_team_rapm_asof ----
 
 #' Point-in-time, decay-weighted RAPM design as of a reference date --

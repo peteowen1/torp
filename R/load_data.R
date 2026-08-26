@@ -912,7 +912,8 @@ load_xg <- function(seasons = get_afl_season(), rounds = NULL, use_disk_cache = 
 load_player_stats <- function(seasons = get_afl_season(), use_disk_cache = TRUE, refresh = FALSE,
                               columns = NULL, comp = "AFLM") {
   .validate_afl_comp(comp)
-  seasons <- validate_seasons(seasons)
+  # comp-aware floor: AFLW history starts 2018, men's chain data at 2021.
+  seasons <- .validate_seasons_comp(seasons, comp)
 
   # comp-suffix the cache prefix so an AFLM and AFLW load for the same season
   # never collide in the in-memory cache or the disk cache filename.
@@ -1104,7 +1105,8 @@ load_fixtures <- function(seasons = NULL, all = FALSE, use_disk_cache = FALSE,
   if (is.null(seasons)) {
     seasons <- get_afl_season()
   } else {
-    seasons <- validate_seasons(seasons)
+    # comp-aware floor: AFLW history starts 2018, men's chain data at 2021.
+    seasons <- .validate_seasons_comp(seasons, comp)
   }
 
   cache_prefix <- if (comp == "AFLM") "fixtures" else paste0("fixtures_", comp)
@@ -1150,7 +1152,8 @@ load_fixtures <- function(seasons = NULL, all = FALSE, use_disk_cache = FALSE,
 load_teams <- function(seasons = get_afl_season(), use_disk_cache = TRUE, refresh = FALSE,
                        columns = NULL, comp = "AFLM") {
   .validate_afl_comp(comp)
-  seasons <- validate_seasons(seasons)
+  # comp-aware floor: AFLW history starts 2018, men's chain data at 2021.
+  seasons <- .validate_seasons_comp(seasons, comp)
 
   cache_prefix <- if (comp == "AFLM") "teams" else paste0("teams_", comp)
 
@@ -1195,7 +1198,7 @@ load_teams <- function(seasons = get_afl_season(), use_disk_cache = TRUE, refres
 #' @export
 load_results <- function(seasons = get_afl_season(), use_disk_cache = FALSE, columns = NULL, comp = "AFLM") {
   .validate_afl_comp(comp)
-  seasons <- validate_seasons(seasons)
+  seasons <- .validate_seasons_comp(seasons, comp)
 
   cache_prefix <- if (comp == "AFLM") "results" else paste0("results_", comp)
 
@@ -1238,7 +1241,7 @@ load_results <- function(seasons = get_afl_season(), use_disk_cache = FALSE, col
 load_player_details <- function(seasons = get_afl_season(), use_disk_cache = TRUE, refresh = FALSE,
                                 columns = NULL, comp = "AFLM") {
   .validate_afl_comp(comp)
-  seasons <- validate_seasons(seasons)
+  seasons <- .validate_seasons_comp(seasons, comp)
 
   cache_prefix <- if (comp == "AFLM") "player_details" else paste0("player_details_", comp)
 
@@ -1651,6 +1654,84 @@ load_psr <- function(seasons = get_afl_season(), use_disk_cache = FALSE, columns
 }
 
 
+#' Load AFLW Player Skill Ratings (PSR)
+#'
+#' @description Loads pre-computed AFLW PSR from the
+#'   [torpdata repository](https://github.com/peteowen1/torpdata), release tag
+#'   `aflw_psr-data`. The AFLW equivalent of [load_psr()], kept as its own
+#'   release rather than a comp column on `psr-data` so the men's published
+#'   artifact -- which live consumers read -- is never rewritten by an AFLW run.
+#'
+#' @details Deliberately does NOT call `validate_seasons()`. That helper floors
+#'   at `AFL_MIN_SEASON` (2021) because that is where torp's men's chain data
+#'   starts, but AFLW's box-score history runs from 2018 -- passing it through
+#'   would abort on exactly the three earliest seasons this release exists to
+#'   carry.
+#'
+#' @param seasons A numeric vector of 4-digit years, or `TRUE` for every
+#'   available AFLW season (2018 onwards).
+#' @param use_disk_cache Logical. If `TRUE`, uses persistent disk cache for
+#'   faster repeated loads. Default is `FALSE`.
+#' @param columns Optional character vector of column names to read. If NULL
+#'   (default), reads all columns.
+#'
+#' @return A data frame of AFLW PSR with columns including \code{player_id},
+#'   \code{player_name}, \code{season}, \code{round}, \code{pos_group},
+#'   \code{psr_raw}, and \code{psr}.
+#' @seealso [load_psr()], [calculate_psr()]
+#' @examples
+#' \dontrun{
+#' try({ # prevents cran errors
+#'   load_aflw_psr(2025)
+#'   load_aflw_psr(TRUE)  # all AFLW seasons
+#' })
+#' }
+#' @export
+load_aflw_psr <- function(seasons = get_afl_season(), use_disk_cache = FALSE, columns = NULL) {
+  seasons <- .validate_aflw_seasons(seasons)
+
+  urls <- generate_urls("aflw_psr-data", "aflw_psr", seasons)
+
+  out <- load_from_url(urls, seasons = seasons, use_disk_cache = use_disk_cache, columns = columns)
+
+  if (nrow(out) > 0) out <- .normalise_team_values(out)
+  return(out)
+}
+
+
+#' Validate a season vector against AFLW's own history
+#'
+#' AFLW's first season is 2018, three years before `AFL_MIN_SEASON`. This
+#' mirrors [validate_seasons()] but against the right floor.
+#'
+#' @param seasons Numeric vector of seasons, or TRUE for all AFLW seasons.
+#' @return An integer vector of seasons.
+#' @keywords internal
+.validate_aflw_seasons <- function(seasons) {
+  current_year <- as.integer(format(Sys.Date(), "%Y"))
+
+  if (isTRUE(seasons)) return(AFLW_MIN_SEASON:current_year)
+
+  if (!is.numeric(seasons)) {
+    cli::cli_abort("Seasons must be numeric values or TRUE")
+  }
+
+  invalid <- seasons[seasons < AFLW_MIN_SEASON | seasons > current_year]
+  if (length(invalid) > 0) {
+    # Pre-formatted, not interpolated with a {?s} plural marker: cli cannot
+    # resolve which quantity to pluralise on when several values are
+    # interpolated in one string, and aborts with "Multiple quantities for
+    # pluralization" -- turning a clear validation error into a cli internal one.
+    bad <- paste(invalid, collapse = ", ")
+    cli::cli_abort(paste0(
+      "Invalid AFLW season year(s): ", bad,
+      ". Must be between ", AFLW_MIN_SEASON, " and ", current_year))
+  }
+
+  seasons
+}
+
+
 #' Load Weather Data
 #'
 #' Downloads historical match weather data from the torpdata GitHub release.
@@ -1669,4 +1750,153 @@ load_psr <- function(seasons = get_afl_season(), use_disk_cache = FALSE, columns
 #' @export
 load_weather <- function() {
   file_reader("weather_data", "weather-data")
+}
+
+#' Load AFLW statspro Season Stats
+#'
+#' @description Loads AFLW season-total player stats scraped from AFL.com.au's
+#' `statspro` API (`get_afl_player_season_stats()`), published to the
+#' `aflw_season_stats-data` torpdata release, one parquet per season
+#' (2018-current). Carries 28 "extended" fields (`spoils`, `pressure_acts`,
+#' `effective_kicks` and 25 others) that [load_player_stats()]'s AFLW rows
+#' return empty/zero for -- confirmed CFS gap, see `AFL-API-REFERENCE.md`'s
+#' "Endpoint family: statspro" section. Season-total granularity only; no
+#' round-level equivalent exists for these specific fields.
+#'
+#' @param seasons A numeric vector of 4-digit years, or `TRUE` for all
+#'   available seasons (2018-current). Defaults to the current season.
+#' @param use_disk_cache Logical. If TRUE, uses persistent disk cache. Default FALSE.
+#' @param columns Optional character vector of column names to read.
+#' @return A tibble, one row per player-season, `player_id`/`season`/`comp`/
+#'   `team_abbr`/`games_played` plus the 63 `totals`/`averages` fields.
+#' @seealso [get_afl_player_season_stats()], [load_player_stats()]
+#' @export
+load_aflw_season_stats <- function(seasons = get_afl_season(), use_disk_cache = FALSE, columns = NULL) {
+  # Deliberately NOT validate_seasons(): it enforces AFL_MIN_SEASON:current
+  # (2021:current) unconditionally, for any explicit numeric input too, not
+  # just for resolving TRUE -- and AFLW's own history starts 2018 (confirmed
+  # live 2026-08-25). A lighter, AFLW-specific check instead.
+  aflw_first_year <- 2018L
+  current_year <- as.integer(format(Sys.Date(), "%Y"))
+  if (isTRUE(seasons)) {
+    seasons <- aflw_first_year:current_year
+  }
+  if (!is.numeric(seasons)) {
+    cli::cli_abort("load_aflw_season_stats: seasons must be numeric or TRUE.")
+  }
+  seasons <- as.integer(seasons)
+  invalid <- seasons[seasons < aflw_first_year | seasons > current_year]
+  if (length(invalid) > 0) {
+    cli::cli_abort("load_aflw_season_stats: invalid season year{?s} {invalid} -- must be between {aflw_first_year} and {current_year}.")
+  }
+
+  urls <- generate_urls("aflw_season_stats-data", "aflw_season_stats", seasons, rounds = NULL)
+  out <- load_from_url(urls, seasons = seasons, use_disk_cache = use_disk_cache, columns = columns)
+  out
+}
+
+# ============================================================================
+# As-of xRAPM snapshots
+# ============================================================================
+
+#' Load the As-Of xRAPM Snapshot Table for a Competition
+#'
+#' @description
+#' Loads the decay-weighted, SPM-shrunk RAPM ("xRAPM") snapshot -- one row per
+#' player per round checkpoint -- from the torpdata `team_rapm_asof-data`
+#' release. This is the rating behind the match model's `xrapm_diff` feature.
+#'
+#' Resolution order, first hit wins:
+#' \enumerate{
+#'   \item \code{path}, when given (tests, or a deliberate one-off).
+#'   \item The local build artifact written by
+#'     \code{data-raw/03-ratings/build_team_rapm_asof_snapshots.R}. Gitignored,
+#'     so this only fires for someone who has built it -- zero-network dev.
+#'   \item The torpdata release, via the usual \code{load_from_url()} path
+#'     (which itself prefers a local \code{torpdata/data/} sibling when one is
+#'     configured).
+#' }
+#'
+#' @section Why this returns NULL rather than erroring:
+#' \code{xrapm_diff} is a non-essential match-model feature that degrades to a
+#' flat neutral 0 when the snapshot is unavailable, mirroring \code{xelo_diff}.
+#' A missing snapshot must therefore be loud but non-fatal -- erroring here
+#' would take down the whole served prediction pipeline over one optional
+#' feature. The caller owns the flat-0 fallback and must say so visibly.
+#'
+#' @param comp "AFLM" (default) or "AFLW".
+#' @param path Optional explicit parquet path, bypassing both local and release
+#'   resolution. Primarily for tests.
+#' @return A data.frame with at least \code{player_id}, \code{season},
+#'   \code{round_number}, \code{team_rapm_shrunk}; or \code{NULL} when no
+#'   snapshot can be resolved.
+#' @seealso [save_to_release()]
+#' @examples
+#' \dontrun{
+#' try({ # prevents cran errors
+#'   load_team_rapm_asof("AFLM")
+#' })
+#' }
+#' @export
+load_team_rapm_asof <- function(comp = "AFLM", path = NULL) {
+  .validate_afl_comp(comp)
+  f_stem <- sprintf("career_team_rapm_asof_%s", comp)
+  out <- NULL
+  source_desc <- NULL
+
+  # NOTE on severity throughout this function: cli_alert_danger, not cli_warn.
+  # Every branch here ends in "xrapm_diff silently becomes 0 for every match",
+  # which is precisely the class of failure a deferred warning hides. cli_warn
+  # is held to end-of-Rscript and can be dropped past getOption("nwarnings") or
+  # lost when a job is killed on timeout -- the documented 2026-07-29 incident.
+  # Same rule as match_model.R:1133-1139.
+  if (!is.null(path)) {
+    if (!file.exists(path)) {
+      cli::cli_alert_danger("No as-of xRAPM snapshot at the explicit path {path}.")
+      cli::cli_alert_danger("xrapm_diff will fall back to neutral 0 for every match.")
+      return(NULL)
+    }
+    out <- as.data.frame(arrow::read_parquet(path))
+    source_desc <- path
+  } else {
+    local_path <- file.path("data-raw", "03-ratings", paste0(f_stem, ".parquet"))
+    if (file.exists(local_path)) {
+      out <- as.data.frame(arrow::read_parquet(local_path))
+      source_desc <- local_path
+    } else {
+      url <- paste0(
+        "https://github.com/", get_torp_data_repo(),
+        "/releases/download/", TEAM_RAPM_ASOF_RELEASE_TAG, "/", f_stem, ".parquet"
+      )
+      source_desc <- url
+      out <- tryCatch(
+        as.data.frame(load_from_url(url)),
+        error = function(e) {
+          cli::cli_alert_danger(
+            "Could not load the as-of xRAPM snapshot for comp {comp} from release {TEAM_RAPM_ASOF_RELEASE_TAG}: {conditionMessage(e)}"
+          )
+          cli::cli_alert_info("Build and publish it with data-raw/03-ratings/publish_team_rapm_asof.R.")
+          cli::cli_alert_danger("xrapm_diff will fall back to neutral 0 for every match.")
+          NULL
+        }
+      )
+    }
+  }
+
+  if (is.null(out)) return(NULL)
+  if (nrow(out) == 0) {
+    cli::cli_alert_danger("As-of xRAPM snapshot for comp {comp} resolved but is EMPTY ({source_desc}).")
+    cli::cli_alert_danger("xrapm_diff will fall back to neutral 0 for every match.")
+    return(NULL)
+  }
+
+  required <- c("player_id", "season", "round_number", "team_rapm_shrunk")
+  missing <- setdiff(required, names(out))
+  if (length(missing) > 0) {
+    cli::cli_abort(c(
+      "As-of xRAPM snapshot from {.path {source_desc}} is missing required column{?s}: {missing}.",
+      "i" = "Snapshots built before 2026-08-26 dropped `team_rapm_shrunk` and the season/round keys -- rebuild the snapshot."
+    ))
+  }
+  out
 }
