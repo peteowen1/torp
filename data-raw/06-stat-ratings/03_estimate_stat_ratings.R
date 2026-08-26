@@ -42,6 +42,13 @@ seasons <- sort(unique(stat_rating_data$season))
 # is restricted to played rounds; see torp:::.played_round_ref_dates() for why
 # (unplayed rounds drift with time decay and corrupt max(round) readers).
 ref_date_map <- torp:::.played_round_ref_dates(fixtures_dt, seasons = seasons)
+
+# Cross-feed check: the map above is built from FIXTURE scores, but the rows
+# being checkpointed come from the player-stats feed. If results lag stats, a
+# played round exists here but not there and would be silently dropped -- every
+# count below is derived from the already-filtered map, so nothing else notices.
+torp:::.assert_ref_date_coverage(ref_date_map, stat_rating_data)
+
 cli::cli_inform("Processing {nrow(ref_date_map)} season-round combinations")
 
 # Batch estimation (no CI needed for per-round snapshots) ----
@@ -72,12 +79,29 @@ for (i in seq_len(nrow(ref_date_map))) {
 }
 
 n_failures <- nrow(ref_date_map) - counter
+empty_seasons <- character(0)
 for (szn in seasons) {
   n_rnds <- ref_date_map[season == szn, .N]
   n_ok <- sum(vapply(all_results[seq_len(counter)], function(r) {
     any(r$season == szn)
   }, logical(1)))
+  # A season with rating data but ZERO checkpoints is silent data loss: the
+  # by-round loop skips it (nothing in the map), the future-fixture rescue
+  # below skips it (setdiff excludes seasons already in `seasons`), and the
+  # counter == 0 abort never fires while other seasons succeed. Do not let it
+  # print as a completion line.
+  if (n_rnds == 0) {
+    empty_seasons <- c(empty_seasons, as.character(szn))
+    next
+  }
   cli::cli_inform("Completed {szn} ({n_ok}/{n_rnds} rounds)")
+}
+if (length(empty_seasons) > 0) {
+  cli::cli_abort(c(
+    "{length(empty_seasons)} season{?s} with rating data produced ZERO checkpoints: {.val {empty_seasons}}.",
+    "i" = "These seasons are in stat_rating_data but absent from ref_date_map, so they are neither estimated by round nor rescued as future fixtures.",
+    "x" = "Aborting rather than publishing an artifact that silently omits them."
+  ))
 }
 
 # Estimate for future fixture seasons (first round only) ----

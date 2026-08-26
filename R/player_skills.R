@@ -427,19 +427,30 @@ estimate_player_stat_ratings <- function(stat_rating_data, ref_date = NULL,
 #' Filters on a recorded score rather than \code{ref_date <= Sys.Date()} so a
 #' match that was scheduled in the past but postponed is excluded too, matching
 #' the idiom already used in \code{05_compare_psr_models.R} and
-#' \code{06_train_psr_model.R}. Verified over all history in both comps: this
-#' shifts \strong{zero} existing round ref_dates, it only drops unplayed rounds.
+#' \code{06_train_psr_model.R}.
+#'
+#' \strong{Scope of the historical check, stated precisely:} a one-off
+#' comparison over all seasons in both comps (2026-08-25) found this filter
+#' shifts zero \emph{existing} round ref_dates and only drops unplayed rounds.
+#' That check covers settled history only, where the fixture and player-stat
+#' feeds have long since agreed. It says nothing about the live case where the
+#' two feeds disagree transiently -- see
+#' \code{\link{.assert_ref_date_coverage}}, which is the guard for that.
 #'
 #' @param fixtures Fixture table from \code{load_fixtures()} (data.frame or
 #'   data.table) with \code{season}, \code{round_number}, \code{utc_start_time},
 #'   \code{home_score} and \code{away_score}.
 #' @param seasons Optional vector of seasons to restrict to. \code{NULL} keeps
 #'   all.
+#' @param verbose Logical. Report how many fixture rows and rounds were dropped
+#'   as unplayed. Default \code{TRUE} -- the bug this function exists to fix was
+#'   invisible precisely because nothing logged what was being included, so
+#'   over-filtering must not be silent either.
 #'
 #' @return data.table with \code{season}, \code{round}, \code{ref_date}, ordered
 #'   by \code{ref_date}. Zero rows if no round has been played.
 #' @keywords internal
-.played_round_ref_dates <- function(fixtures, seasons = NULL) {
+.played_round_ref_dates <- function(fixtures, seasons = NULL, verbose = TRUE) {
   fx <- data.table::as.data.table(fixtures)
   required <- c("season", "round_number", "utc_start_time", "home_score", "away_score")
   missing_cols <- setdiff(required, names(fx))
@@ -447,8 +458,22 @@ estimate_player_stat_ratings <- function(stat_rating_data, ref_date = NULL,
     cli::cli_abort("fixtures is missing required column{?s}: {.val {missing_cols}}")
   }
 
-  fx <- fx[!is.na(home_score) & !is.na(away_score)]
   if (!is.null(seasons)) fx <- fx[season %in% seasons]
+  n_before <- nrow(fx)
+  rounds_before <- nrow(unique(fx[, .(season, round_number)]))
+
+  fx <- fx[!is.na(home_score) & !is.na(away_score)]
+
+  if (isTRUE(verbose)) {
+    n_dropped <- n_before - nrow(fx)
+    rounds_after <- nrow(unique(fx[, .(season, round_number)]))
+    cli::cli_inform(paste0(
+      "Played-round filter: kept {nrow(fx)}/{n_before} fixture rows ",
+      "({rounds_after}/{rounds_before} season-rounds); dropped {n_dropped} ",
+      "unplayed/scoreless row{?s}."
+    ))
+  }
+
   if (nrow(fx) == 0) {
     return(data.table::data.table(
       season = numeric(0), round = integer(0), ref_date = as.Date(character(0))
@@ -463,6 +488,80 @@ estimate_player_stat_ratings <- function(stat_rating_data, ref_date = NULL,
   ref_date_map <- ref_date_map[!is.na(ref_date) & is.finite(ref_date)]
   data.table::setorder(ref_date_map, ref_date)
   ref_date_map[]
+}
+
+
+#' Assert the checkpoint map covers every played round present in the data
+#'
+#' \code{.played_round_ref_dates()} decides "played" from the \emph{fixtures}
+#' feed, but the rows actually being checkpointed (\code{stat_rating_data})
+#' come from an independent feed -- \code{load_player_game_data()} plus
+#' \code{load_player_stats()}. The two can disagree transiently: if the
+#' fixtures/results API posts final scores later than the player-stats feed
+#' (a realistic race for a pipeline run shortly after full-time), the newest
+#' round exists in \code{stat_rating_data} while its fixture score is still
+#' \code{NA}, and the checkpoint map silently omits it.
+#'
+#' That failure is invisible from inside the pipeline: every subsequent count
+#' is derived from the already-filtered map, so the logs read as complete
+#' success while the published artifact is missing its newest round. This
+#' function is the cross-feed check that catches it -- the one comparison the
+#' pipeline could not otherwise make.
+#'
+#' \strong{Aborts rather than warns.} A gap means real, rated-eligible match
+#' data is being silently excluded from a published artifact, which is the same
+#' class of quietly-wrong output the phantom-round bug produced in the opposite
+#' direction. Set \code{strict = FALSE} for a loud warning instead when a caller
+#' genuinely wants to proceed on partial coverage.
+#'
+#' @param ref_date_map Output of \code{.played_round_ref_dates()}.
+#' @param stat_rating_data The per-match data being checkpointed. Needs
+#'   \code{season} and a round column (\code{round} or \code{round_number}).
+#' @param strict Logical. \code{TRUE} (default) aborts on a coverage gap;
+#'   \code{FALSE} warns.
+#' @param label Character. Context prefix for the message (e.g. "AFLW").
+#'
+#' @return \code{ref_date_map}, invisibly, when coverage is complete.
+#' @keywords internal
+.assert_ref_date_coverage <- function(ref_date_map, stat_rating_data,
+                                      strict = TRUE, label = NULL) {
+  srd <- data.table::as.data.table(stat_rating_data)
+  round_col <- intersect(c("round", "round_number"), names(srd))[1]
+  if (is.na(round_col) || !"season" %in% names(srd)) {
+    cli::cli_warn(paste0(
+      "Cannot verify checkpoint coverage: stat_rating_data lacks a season ",
+      "and/or round column. Skipping the cross-feed check."
+    ))
+    return(invisible(ref_date_map))
+  }
+
+  have <- unique(data.table::as.data.table(ref_date_map)[, .(
+    season = as.numeric(season), round = as.integer(round)
+  )])
+  want <- unique(srd[!is.na(season) & !is.na(get(round_col)), .(
+    season = as.numeric(season), round = as.integer(get(round_col))
+  )])
+
+  missing <- want[!have, on = .(season, round)]
+  if (nrow(missing) == 0) return(invisible(ref_date_map))
+
+  data.table::setorder(missing, season, round)
+  gaps <- paste0(missing$season, " R", missing$round)
+  prefix <- if (is.null(label)) "" else paste0(label, ": ")
+  msg <- c(
+    paste0(
+      prefix, "{nrow(missing)} played season-round{?s} present in the rating ",
+      "data {?is/are} missing from the checkpoint map: {.val {gaps}}."
+    ),
+    "i" = paste0(
+      "The checkpoint map is built from fixture scores; these rounds have ",
+      "match data but no recorded fixture score yet. Most likely the results ",
+      "feed lags the player-stats feed -- re-run once scores post."
+    ),
+    "x" = "Proceeding would publish an artifact silently missing those rounds."
+  )
+  if (isTRUE(strict)) cli::cli_abort(msg) else cli::cli_warn(msg)
+  invisible(ref_date_map)
 }
 
 # ============================================================================
