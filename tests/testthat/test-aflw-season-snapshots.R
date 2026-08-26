@@ -152,6 +152,99 @@ test_that("an empty later snapshot is an error, not an empty delta", {
   expect_error(diff_aflw_season_snapshots(earlier, later), "0 rows")
 })
 
+test_that("a duplicate player_id in either snapshot is refused, not silently cross-joined", {
+  # merge() on a duplicated key expands cartesian-style: every stat for that
+  # player multiplied, no error, a table that still looks entirely plausible.
+  clean <- .mock_snapshot(c("A", "B"), games = c(3, 4), disposals = c(30, 40), spoils = c(3, 8))
+  dup <- .mock_snapshot(c("A", "A"), games = c(3, 3), disposals = c(30, 30), spoils = c(3, 3))
+
+  expect_error(diff_aflw_season_snapshots(dup, clean), "duplicate")
+  expect_error(diff_aflw_season_snapshots(clean, dup), "duplicate")
+})
+
+test_that("snapshots dated out of order, or identically, are refused", {
+  # Reversed args only produce negative deltas, which merely warn -- so a
+  # reversed pair could still be published. An identical pair gives a clean
+  # all-zero table with no signal at all.
+  a <- .mock_snapshot("A", games = 3, disposals = 30, spoils = 3, snapshot_date = "2026-08-18")
+  b <- .mock_snapshot("A", games = 4, disposals = 42, spoils = 5, snapshot_date = "2026-08-25")
+
+  expect_error(diff_aflw_season_snapshots(b, a), "must precede")
+  expect_error(diff_aflw_season_snapshots(b, b), "must precede")
+})
+
+test_that("an implausible number of new players warns rather than silently inflating", {
+  # A player absent from `earlier` is credited her whole season-to-date total.
+  # For a genuine debutant that is right; for a player dropped by a partial
+  # upstream fetch it is a hugely overstated round figure that looks normal.
+  ids <- sprintf("P%02d", seq_len(40))
+  earlier <- .mock_snapshot("P01", games = 3, disposals = 30, spoils = 3,
+                            snapshot_date = "2026-08-18")
+  later <- .mock_snapshot(ids, games = rep(4, 40), disposals = rep(44, 40),
+                          spoils = rep(5, 40), snapshot_date = "2026-08-25")
+
+  expect_warning(
+    d <- diff_aflw_season_snapshots(earlier, later, recompute_averages = FALSE),
+    "plausible-debutant threshold"
+  )
+  # The inflation itself is still visible in the output, not silently corrected.
+  expect_equal(attr(d, "n_players_new_since_earlier"), 39L)
+  expect_equal(d[player_id == "P40"]$disposals, 44)
+})
+
+test_that("an oversized gap between snapshots warns that the window spans extra rounds", {
+  # A skipped weekly capture produces a two-round delta that is shaped exactly
+  # like a one-round one.
+  earlier <- .mock_snapshot("A", games = 3, disposals = 30, spoils = 3, snapshot_date = "2026-08-04")
+  later <- .mock_snapshot("A", games = 5, disposals = 54, spoils = 7, snapshot_date = "2026-08-25")
+
+  expect_warning(
+    d <- diff_aflw_season_snapshots(earlier, later, recompute_averages = FALSE),
+    "MORE THAN ONE ROUND"
+  )
+  expect_equal(attr(d, "gap_days"), 21L)
+})
+
+test_that("a normal weekly gap records gap_days without warning", {
+  earlier <- .mock_snapshot("A", games = 3, disposals = 30, spoils = 3, snapshot_date = "2026-08-18")
+  later <- .mock_snapshot("A", games = 4, disposals = 42, spoils = 5, snapshot_date = "2026-08-25")
+
+  d <- diff_aflw_season_snapshots(earlier, later, recompute_averages = FALSE)
+
+  expect_equal(attr(d, "gap_days"), 7L)
+})
+
+test_that("a cumulative column absent from the earlier snapshot is recorded, not silently dropped", {
+  # Schema drift (the endpoint gains a field mid-season) removes a column from
+  # the delta for a completely different reason than a rate exclusion does.
+  earlier <- .mock_snapshot("A", games = 3, disposals = 30, spoils = 3, snapshot_date = "2026-08-18")
+  later <- .mock_snapshot("A", games = 4, disposals = 42, spoils = 5, snapshot_date = "2026-08-25")
+  later[, intercepts := 12]
+
+  expect_warning(
+    d <- diff_aflw_season_snapshots(earlier, later, recompute_averages = FALSE),
+    "no prior value"
+  )
+  expect_true("intercepts" %in% attr(d, "schema_cols_dropped"))
+  expect_false("intercepts" %in% names(d))
+})
+
+test_that("a mid-window team change is flagged rather than silently reattributed", {
+  # Identity columns come from `later`, so a traded player's whole window --
+  # including games for her former club -- lands on her new one.
+  earlier <- .mock_snapshot(c("A", "B"), games = c(3, 3), disposals = c(30, 30),
+                            spoils = c(3, 3), snapshot_date = "2026-08-18")
+  later <- .mock_snapshot(c("A", "B"), games = c(4, 4), disposals = c(42, 42),
+                          spoils = c(5, 5), snapshot_date = "2026-08-25")
+  later[player_id == "B", team_abbr := "CARL"]
+
+  expect_warning(
+    d <- diff_aflw_season_snapshots(earlier, later, recompute_averages = FALSE),
+    "changed team_abbr"
+  )
+  expect_equal(attr(d, "players_changed_team"), "B")
+})
+
 test_that("column classification splits identity, cumulative and rate", {
   cls <- .aflw_snapshot_classify_cols(c(
     "player_id", "season", "comp", "team_abbr",
@@ -196,6 +289,26 @@ test_that("listing returns zero rows when the release does not exist yet", {
   out <- list_aflw_season_stat_snapshots(2026)
   expect_s3_class(out, "data.table")
   expect_equal(nrow(out), 0)
+})
+
+test_that("a failed asset listing is distinguishable from a release with no assets", {
+  # Both return NULL from get_release_assets(), but they mean opposite things:
+  # "nothing published yet" is fine to proceed on, "could not check" is not.
+  # The publish script gates its regression check on telling them apart.
+  tag <- "test-fetch-error-tag"
+
+  local_mocked_bindings(
+    get_torp_data_repo = function() "peteowen1/torpdata",
+    .package = "torp"
+  )
+  testthat::local_mocked_bindings(
+    gh = function(...) stop("simulated network failure"),
+    .package = "gh"
+  )
+
+  expect_warning(assets <- torp:::get_release_assets(tag), "Could not fetch")
+  expect_null(assets)
+  expect_match(torp:::.last_release_fetch_error(tag), "simulated network failure")
 })
 
 test_that("loading without any published snapshot fails with an actionable message", {

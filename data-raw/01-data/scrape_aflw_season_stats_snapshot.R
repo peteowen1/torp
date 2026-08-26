@@ -63,6 +63,23 @@ if (nrow(d) < 100) {
 # cumulative totals only ever grow within a season, so a fall means the scrape
 # caught a partial/erroring response and publishing it would poison the delta.
 prior <- tryCatch(list_aflw_season_stat_snapshots(season), error = function(e) NULL)
+
+# An empty listing has two very different causes: the release genuinely has no
+# snapshot yet (fine -- this is the season's first, nothing to compare against),
+# or the listing call failed. Both previously arrived here as zero rows and
+# silently skipped the monotonicity check below -- on exactly the run where a
+# flaky network makes a partial capture MORE likely. Refuse to publish blind.
+fetch_err <- torp:::.last_release_fetch_error(AFLW_SNAPSHOT_RELEASE_TAG)
+if (is.null(prior) || nrow(prior) == 0) {
+  if (!is.null(fetch_err)) {
+    cli::cli_abort(paste0(
+      "Season {season}: could not list existing snapshots ({fetch_err}). That is not the ",
+      "same as there being none, and publishing now would skip the monotonicity check ",
+      "against the previous snapshot. Not publishing -- re-run once the listing succeeds."))
+  }
+  cli::cli_inform("No prior snapshot for season {season}; this is the first, so there is nothing to compare against.")
+}
+
 if (!is.null(prior) && nrow(prior) > 0) {
   last_date <- max(prior$snapshot_date)
   if (last_date == as_of) {
@@ -70,19 +87,32 @@ if (!is.null(prior) && nrow(prior) > 0) {
   }
   prev <- tryCatch(load_aflw_season_stats_snapshot(season, as_of = last_date), error = function(e) NULL)
   if (!is.null(prev) && nrow(prev) > 0 && last_date != as_of) {
+    # all.y: an INNER join here would only compare players present in BOTH
+    # captures, so a player who vanished from this week's fetch -- the exact
+    # signature of a partial upstream response -- simply would not appear in
+    # the comparison and nothing would fire. Keeping every prior player makes
+    # her disappearance visible as a missing `now`.
     chk <- merge(
       data.table::as.data.table(d)[, .(player_id, now = games_played)],
       data.table::as.data.table(prev)[, .(player_id, before = games_played)],
-      by = "player_id"
+      by = "player_id", all.y = TRUE
     )
-    went_back <- chk[now < before]
+    went_back <- chk[!is.na(now) & now < before]
     if (nrow(went_back) > 0) {
       cli::cli_abort(paste0(
         "Season {season}: {nrow(went_back)} player{?s} have FEWER games_played than in the ",
         "{last_date} snapshot. Cumulative totals cannot fall -- this capture looks partial. ",
         "Not publishing."))
     }
-    cli::cli_inform("Monotonicity check passed against the {last_date} snapshot.")
+    vanished <- chk[is.na(now)]
+    if (nrow(vanished) > 0) {
+      cli::cli_abort(paste0(
+        "Season {season}: {nrow(vanished)} player{?s} present in the {last_date} snapshot are ",
+        "MISSING from this capture. Players do not leave a season's cumulative table, so this ",
+        "looks like a partial fetch. Publishing it would credit each of them her whole ",
+        "season-to-date total as a single round's delta on the next diff. Not publishing."))
+    }
+    cli::cli_inform("Monotonicity check passed against the {last_date} snapshot ({nrow(chk)} players compared).")
   }
 }
 

@@ -30,8 +30,14 @@ different facts and the caller should be able to tell them apart.}
 A data.table: identity columns, \code{games_played} (games in the window),
 one delta column per cumulative stat, optional recomputed \verb{_avg} columns,
 and \code{snapshot_from}/\code{snapshot_to} marking the window. Non-cumulative source
-columns are dropped; the dropped set is recorded in the \code{"rate_cols_dropped"}
-attribute.
+columns are dropped. Attributes carry what the numbers alone cannot show:
+\code{"rate_cols_dropped"} (excluded as non-cumulative),
+\code{"schema_cols_dropped"} (cumulative but absent from \code{earlier}, so not
+differenceable), \code{"gap_days"} (elapsed days between snapshots -- a pair
+spanning much more than a week has probably swallowed a skipped capture
+and covers two rounds), \code{"players_changed_team"} (traded mid-window, so
+their deltas are attributed wholly to the later club),
+\code{"n_players_new_since_earlier"} and \code{"n_players_unplayed_in_window"}.
 }
 \description{
 Given the same season's cumulative season-to-date totals captured at two

@@ -66,6 +66,26 @@ AFLW_SNAPSHOT_RATE_PATTERNS <- "(_avg|_percentage|_rate|_efficiency|_accuracy)$"
 #' @keywords internal
 AFLW_SNAPSHOT_ID_COLS <- c("player_id", "season", "comp", "team_abbr")
 
+#' Longest snapshot gap still consistent with a single round
+#'
+#' The weekly capture runs Tuesdays, so a normal pair is 7 days apart. AFLW
+#' rounds run Thursday-Monday with 3-8 day gaps between them, so a pair a
+#' little over a week apart can still be one round (a public-holiday fixture,
+#' a rescheduled match). Past this, the pair has almost certainly swallowed a
+#' skipped capture and covers two rounds -- which looks identical in the output
+#' unless something says so.
+#' @keywords internal
+AFLW_SNAPSHOT_MAX_GAP_DAYS <- 10L
+
+#' Most players that can plausibly debut between two weekly snapshots
+#'
+#' Round-one captures aside, AFLW debutants arrive a handful at a time. A
+#' double-digit count between consecutive weekly snapshots is far more likely
+#' to mean the earlier capture was partial -- and every "new" player is then
+#' credited her whole season-to-date total as one window's delta.
+#' @keywords internal
+AFLW_SNAPSHOT_MAX_NEW_PLAYERS <- 25L
+
 #' Classify a snapshot's columns into identity / cumulative / non-cumulative
 #'
 #' @param nms Character vector of column names.
@@ -104,8 +124,14 @@ AFLW_SNAPSHOT_ID_COLS <- c("player_id", "season", "comp", "team_abbr")
 #' @return A data.table: identity columns, `games_played` (games in the window),
 #'   one delta column per cumulative stat, optional recomputed `_avg` columns,
 #'   and `snapshot_from`/`snapshot_to` marking the window. Non-cumulative source
-#'   columns are dropped; the dropped set is recorded in the `"rate_cols_dropped"`
-#'   attribute.
+#'   columns are dropped. Attributes carry what the numbers alone cannot show:
+#'   `"rate_cols_dropped"` (excluded as non-cumulative),
+#'   `"schema_cols_dropped"` (cumulative but absent from `earlier`, so not
+#'   differenceable), `"gap_days"` (elapsed days between snapshots -- a pair
+#'   spanning much more than a week has probably swallowed a skipped capture
+#'   and covers two rounds), `"players_changed_team"` (traded mid-window, so
+#'   their deltas are attributed wholly to the later club),
+#'   `"n_players_new_since_earlier"` and `"n_players_unplayed_in_window"`.
 #' @export
 diff_aflw_season_snapshots <- function(earlier, later,
                                        recompute_averages = TRUE,
@@ -125,6 +151,39 @@ diff_aflw_season_snapshots <- function(earlier, later,
     }
   }
 
+  # Differencing keys on player_id via a merge. A duplicated key on EITHER side
+  # produces a cartesian expansion -- every stat for that player silently
+  # multiplied, no error, a plausible-looking table. The scrape script guards
+  # its own fresh capture, but `earlier` arrives from a previously-published
+  # file (or, since this function is exported, from any caller at all), so the
+  # check has to live here too.
+  for (side in c("earlier", "later")) {
+    frame <- if (side == "earlier") earlier else later
+    dup <- anyDuplicated(frame$player_id)
+    if (dup > 0) {
+      cli::cli_abort(paste0(
+        "diff_aflw_season_snapshots: {.arg {side}} has duplicate {.val player_id} values ",
+        "(first at row {dup}, {.val {frame$player_id[dup]}}). Differencing merges on ",
+        "player_id, so duplicates would silently produce a cartesian delta."))
+    }
+  }
+
+  # Reversed arguments only half-announce themselves: the deltas come out
+  # negative, which merely WARNS below, so a reversed pair can still be
+  # published. Identical arguments do not announce themselves at all -- every
+  # delta is a clean zero and the table looks entirely valid.
+  from_date <- attr(earlier, "snapshot_date", exact = TRUE)
+  to_date <- attr(later, "snapshot_date", exact = TRUE)
+  if (!is.null(from_date) && !is.null(to_date)) {
+    if (as.Date(from_date) >= as.Date(to_date)) {
+      cli::cli_abort(paste0(
+        "diff_aflw_season_snapshots: {.arg earlier} is dated {as.Date(from_date)} and ",
+        "{.arg later} {as.Date(to_date)} -- {.arg earlier} must precede {.arg later}. ",
+        "Equal dates give an all-zero delta that looks valid; reversed dates give ",
+        "negatives that only warn."))
+    }
+  }
+
   # A snapshot pair from different seasons is a caller error, not something to
   # difference: cumulative totals restart each season, so the delta would be
   # this season's running total minus an unrelated one.
@@ -139,13 +198,52 @@ diff_aflw_season_snapshots <- function(earlier, later,
 
   cls <- .aflw_snapshot_classify_cols(names(later))
   stat_cols <- intersect(cls$cumulative, names(earlier))
+  # A cumulative column present in `later` but not `earlier` -- the endpoint
+  # gained a field mid-season -- cannot be differenced (there is no prior value
+  # to subtract). It drops out here exactly like a rate column does, but for a
+  # completely different reason, so it gets its own attribute: a consumer
+  # seeing a column vanish should be able to tell "not differenceable this
+  # window" from "deliberately excluded as a rate".
+  schema_dropped <- setdiff(cls$cumulative, names(earlier))
   stat_cols <- stat_cols[vapply(stat_cols, function(c) is.numeric(later[[c]]), logical(1))]
   if (length(stat_cols) == 0) {
     cli::cli_abort("diff_aflw_season_snapshots: no cumulative numeric columns common to both snapshots.")
   }
+  if (length(schema_dropped) > 0) {
+    cli::cli_warn(paste0(
+      "diff_aflw_season_snapshots: {length(schema_dropped)} cumulative column{?s} present in ",
+      "{.arg later} but absent from {.arg earlier} ({.val {schema_dropped}}) -- no prior value ",
+      "to difference against, so {?it is/they are} omitted from this delta. Recorded in the ",
+      "{.val schema_cols_dropped} attribute."))
+  }
 
   id_cols <- cls$id
   keep_later <- unique(c("player_id", id_cols, stat_cols))
+
+  # Identity columns are taken from `later` only, so a player traded inside the
+  # window has the WHOLE window -- including games for her former club --
+  # attributed to her new one. Her own totals stay correct; any team-level
+  # aggregation of these deltas would not. Detect it here, while `earlier`'s
+  # team_abbr is still in scope, and record the affected players.
+  traded <- character(0)
+  if ("team_abbr" %in% names(earlier) && "team_abbr" %in% names(later)) {
+    tm <- merge(
+      later[, c("player_id", "team_abbr"), with = FALSE],
+      earlier[, c("player_id", "team_abbr"), with = FALSE],
+      by = "player_id", suffixes = c(".later", ".earlier")
+    )
+    moved <- !is.na(tm$team_abbr.earlier) & !is.na(tm$team_abbr.later) &
+      tm$team_abbr.earlier != tm$team_abbr.later
+    traded <- as.character(tm$player_id[moved])
+    if (length(traded) > 0) {
+      cli::cli_warn(paste0(
+        "diff_aflw_season_snapshots: {length(traded)} player{?s} changed team_abbr inside this ",
+        "window. Their deltas are attributed entirely to the LATER club, so team-level ",
+        "aggregation of this delta will misattribute games played for the former one. ",
+        "Player ids in the {.val players_changed_team} attribute."))
+    }
+  }
+
   prev <- earlier[, unique(c("player_id", stat_cols)), with = FALSE]
   data.table::setnames(prev, stat_cols, paste0(".prev_", stat_cols))
 
@@ -190,14 +288,50 @@ diff_aflw_season_snapshots <- function(earlier, later,
     }
   }
 
-  from_date <- attr(earlier, "snapshot_date", exact = TRUE)
-  to_date <- attr(later, "snapshot_date", exact = TRUE)
   out[, `:=`(
     snapshot_from = if (is.null(from_date)) NA_character_ else as.character(from_date),
     snapshot_to = if (is.null(to_date)) NA_character_ else as.character(to_date)
   )]
 
+  # The whole design assumes one snapshot pair spans one round. Nothing
+  # enforces that: the cron can be skipped (a script error, or GitHub simply
+  # not firing a `schedule` trigger, which is a known and unannounced Actions
+  # behaviour), and the next pair then silently covers TWO rounds while looking
+  # identical in shape to every other week's file. Surface the gap so a
+  # consumer can check it, and say so loudly when it is out of range.
+  gap_days <- NA_integer_
+  if (!is.null(from_date) && !is.null(to_date)) {
+    gap_days <- as.integer(as.Date(to_date) - as.Date(from_date))
+    if (gap_days > AFLW_SNAPSHOT_MAX_GAP_DAYS) {
+      cli::cli_warn(paste0(
+        "diff_aflw_season_snapshots: {gap_days} days between snapshots ",
+        "({as.Date(from_date)} to {as.Date(to_date)}), beyond the ",
+        "{AFLW_SNAPSHOT_MAX_GAP_DAYS}-day single-round window. This delta probably covers ",
+        "MORE THAN ONE ROUND -- a skipped weekly capture looks exactly like this. Treating ",
+        "it as one round's contribution would overstate every figure in it."))
+    }
+  }
+
+  # A player in `later` but not `earlier` is credited her entire season-to-date
+  # total as this window's delta -- correct for a genuine debutant, badly wrong
+  # if she was simply missing from the earlier capture. A partial upstream
+  # fetch is realistic (get_afl_player_season_stats() isolates errors per
+  # provider id precisely so one failure does not zero the rest), and the
+  # per-player inflation is invisible in the output. Debutant counts are small
+  # and lumpy; a large one mid-season means the earlier snapshot was short.
+  if (n_new > AFLW_SNAPSHOT_MAX_NEW_PLAYERS) {
+    cli::cli_warn(paste0(
+      "diff_aflw_season_snapshots: {n_new} players appear in {.arg later} but not ",
+      "{.arg earlier}, above the plausible-debutant threshold of ",
+      "{AFLW_SNAPSHOT_MAX_NEW_PLAYERS}. Each is credited her FULL season-to-date total as ",
+      "this window's delta. If the earlier snapshot was a partial capture rather than these ",
+      "being real debutants, every one of those figures is inflated. Verify before trusting."))
+  }
+
   data.table::setattr(out, "rate_cols_dropped", cls$rate)
+  data.table::setattr(out, "schema_cols_dropped", schema_dropped)
+  data.table::setattr(out, "players_changed_team", traded)
+  data.table::setattr(out, "gap_days", gap_days)
   data.table::setattr(out, "n_players_new_since_earlier", n_new)
   data.table::setattr(out, "n_players_unplayed_in_window", sum(unplayed))
   out[]
