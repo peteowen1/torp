@@ -113,6 +113,21 @@
   * `vb_publish()`'s post-upload verify loop iterates `seq_len(n + 1L)` rather
     than `seq_along(c(verify_delays, NA))` — same count, no throwaway `NA`.
 
+## Bug fixes
+
+* **`versebus.R` → `VERSEBUS_VERSION` 1.1.0** (canonical copy; mirrored to
+  `pannaverse/panna` in the same change, which `test-versebus-sync.R` verifies).
+  * `vb_publish()` now restores `piggyback_cache_duration` on exit. It was set
+    unconditionally and never reset, so the first publish in a session silently
+    disabled piggyback's listing cache for every unrelated caller afterwards.
+  * `.vb_generation_stamp()` no longer builds its local suffix with `sample()`.
+    Doing so advanced the **caller's** RNG stream, so publishing changed the
+    draws of any simulation seeded before it — an invisible reproducibility
+    break in a package that also fits models and runs sims. Now uses
+    `tempfile()`, which is process-unique and does not touch `.Random.seed`.
+  * `vb_publish()`'s post-upload verify loop iterates `seq_len(n + 1L)` rather
+    than `seq_along(c(verify_delays, NA))` — same count, no throwaway `NA`.
+
 ## New features
 
 * **`player_epv_breakdown()` — where a player's value actually comes from.**
