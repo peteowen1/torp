@@ -244,7 +244,41 @@ test_that("every comp-taking loader routes season validation through the comp di
                     "through .validate_seasons_comp() -- pre-2021 AFLW seasons ",
                     "will abort or be silently dropped.")
     )
+    # The string alone is not enough. `.validate_seasons_comp(seasons, "AFLM")`
+    # -- hardcoded, ignoring the loader's own `comp` -- would satisfy the grep
+    # above while reintroducing exactly this bug. Require the argument to be
+    # forwarded, since a hardcoded literal is the same copy-paste slip that
+    # produced the original gap.
+    expect_true(
+      grepl(".validate_seasons_comp(seasons, comp)", body_src, fixed = TRUE),
+      info = paste0(nm, "() calls .validate_seasons_comp() but does not forward ",
+                    "its own `comp` argument -- a hardcoded comp silently ",
+                    "reintroduces the wrong season floor.")
+    )
   }
+})
+
+test_that("the comp-dispatcher guard itself is not vacuous", {
+  # Guards this file's own class-level test: it must FAIL for a function that
+  # takes `comp` and validates seasons without the dispatcher. Written because
+  # this repo has documented source-scanning tests that passed vacuously.
+  bad_hardcoded <- function(seasons = 2024, comp = "AFLM") {
+    seasons <- torp:::.validate_seasons_comp(seasons, "AFLM")
+    seasons
+  }
+  bad_plain <- function(seasons = 2024, comp = "AFLM") {
+    seasons <- torp:::validate_seasons(seasons)
+    seasons
+  }
+  src_hardcoded <- paste(deparse(body(bad_hardcoded)), collapse = "\n")
+  src_plain <- paste(deparse(body(bad_plain)), collapse = "\n")
+
+  # The plain-validate_seasons case fails the first assertion.
+  expect_false(grepl(".validate_seasons_comp", src_plain, fixed = TRUE))
+  # The hardcoded-comp case passes the string check but must fail the
+  # forwarding check -- the gap the string check alone would let through.
+  expect_true(grepl(".validate_seasons_comp", src_hardcoded, fixed = TRUE))
+  expect_false(grepl(".validate_seasons_comp(seasons, comp)", src_hardcoded, fixed = TRUE))
 })
 
 test_that(".build_aflw_stat_ratings() asserts cross-feed coverage", {
