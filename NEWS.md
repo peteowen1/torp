@@ -1,3 +1,39 @@
+# torp 1.4.1
+
+## Rating changes
+
+* **AFLW PSR/OSR/DSR coefficients retrained on the full 2018-2026 history.** The
+  published set was trained on 2021-2024 only -- not by choice, but because
+  `validate_seasons()` floored every AFLW load at `AFL_MIN_SEASON` (2021, the
+  men's chain-data start). The comp-aware floor shipped in 1.4.0 made 2018-2020
+  reachable; this retrain is the first to use it. Training grows from 350 to 463
+  matches (+32%) and CV folds from 4 to 7.
+
+  Measured on the identical 135-match 2025-2026 test set, both arms fit in one
+  execution: margin RMSE 30.31 -> 29.38, MAE 24.23 -> 23.53, R2 0.269 -> 0.313.
+  The paired per-match improvement is **not statistically significant** (mean
+  -0.70, 95% CI [-2.02, +0.61], p = 0.29, better on 71 of 135); it is adopted on
+  the grounds that every margin metric moves the same way and that excluding
+  data needs the stronger justification, not including it.
+
+  Ratings move very little: Spearman rank correlation 0.992 across 91,083
+  player-rounds, mean |delta| 0.12 PSR, and 9 of the top 10 at 2026 R2 are
+  unchanged (the one swap is a 0.01 tie at tenth). The top three are identical.
+
+  **Known regression:** the OSR/DSR decomposition path gets slightly worse
+  (off-minus-def RMSE 29.39 -> 29.92) while the direct margin fit improves.
+  PSR itself is scored from the margin fit, so the headline rating is the one
+  that improved, but the component split is marginally worse and is not yet
+  explained.
+
+  The retrained files carry six extra `stat_name` rows (`effective_kicks`,
+  `effective_disposals`, `intercept_marks`, `f50_ground_ball_gets`,
+  `score_launches`, `marks_on_lead`). These stats exist **only in 2018-2019** and
+  are absent from 2020 onward, including all live data, so the per-round
+  estimator collapses them to a constant (sd exactly 0) and they contribute
+  nothing: dropping them yields bit-identical predictions. They are inert
+  placeholders, not live features.
+
 # torp 1.4.0
 
 ## New features
