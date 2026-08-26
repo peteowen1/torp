@@ -30,13 +30,16 @@ cli::cli_h1("Step 2: per-round stat ratings")
 
 fixtures <- as.data.table(load_fixtures(TRUE, comp = "AFLW"))
 seasons <- sort(unique(stat_rating_data$season))
-ref_date_map <- fixtures[
-  season %in% seasons,
-  .(ref_date = min(as.Date(utc_start_time), na.rm = TRUE)),
-  by = .(season, round = round_number)
-]
-ref_date_map <- ref_date_map[!is.na(ref_date) & is.finite(ref_date)]
-setorder(ref_date_map, ref_date)
+# PLAYED rounds only -- load_fixtures() returns the full scheduled list, and
+# estimating at a future ref_date produces drifting phantom rounds that reorder
+# any leaderboard read off max(round). See torp:::.played_round_ref_dates().
+ref_date_map <- torp:::.played_round_ref_dates(fixtures, seasons = seasons)
+
+# Cross-feed check -- see the men's 03_estimate_stat_ratings.R for the full
+# reasoning. The map comes from fixture scores; the rated rows come from the
+# player-stats feed, and a lag between them silently drops the newest round.
+torp:::.assert_ref_date_coverage(ref_date_map, stat_rating_data, label = "AFLW")
+
 cli::cli_inform("Processing {nrow(ref_date_map)} season-round combinations")
 
 params <- default_stat_rating_params()
@@ -63,6 +66,28 @@ for (i in seq_len(nrow(ref_date_map))) {
 n_failures <- nrow(ref_date_map) - counter
 cli::cli_inform("{counter}/{nrow(ref_date_map)} season-rounds estimated ({n_failures} skipped)")
 if (counter == 0) cli::cli_abort("All round estimations failed.")
+
+# Per-season breakdown, mirroring the men's script. Without this, a season
+# dropped entirely by the checkpoint filter is invisible here: every count
+# above is post-filter, and the abort only fires on TOTAL emptiness.
+aflw_empty_seasons <- character(0)
+for (szn in seasons) {
+  n_rnds <- ref_date_map[season == szn, .N]
+  n_ok <- sum(vapply(all_results[seq_len(counter)], function(r) {
+    any(r$season == szn)
+  }, logical(1)))
+  if (n_rnds == 0) {
+    aflw_empty_seasons <- c(aflw_empty_seasons, as.character(szn))
+    next
+  }
+  cli::cli_inform("Completed {szn} ({n_ok}/{n_rnds} rounds)")
+}
+if (length(aflw_empty_seasons) > 0) {
+  cli::cli_abort(c(
+    "{length(aflw_empty_seasons)} AFLW season{?s} with rating data produced ZERO checkpoints: {.val {aflw_empty_seasons}}.",
+    "x" = "Aborting rather than publishing an artifact that silently omits them."
+  ))
+}
 
 all_stat_ratings <- rbindlist(all_results[seq_len(counter)], fill = TRUE)
 cli::cli_inform("Total: {nrow(all_stat_ratings)} player-round rows")
