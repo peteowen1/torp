@@ -42,6 +42,16 @@
   # to "load it" fixes them all at once; defaulting to "abort" would have made
   # the correct behaviour the one you must remember to ask for, which is how
   # the playstyle key survived unnoticed in the first place.
+  # RESIDUAL COMP GAP, deliberately left rather than plumbed:
+  # this self-load has no comp to forward, so it defaults to AFLM. An AFLW
+  # caller reaches it only if BOTH (a) PSR_CENTRE_ON_LISTED is TRUE (FALSE
+  # today) and (b) .compute_psr_from_stat_ratings()'s own comp-aware load
+  # returned NULL -- i.e. load_player_details() failed for EVERY requested
+  # season. Doubly latent. Closing it properly means adding `comp` to
+  # calculate_psr()/calculate_psr_components(), both EXPORTED, with 49 call
+  # sites across 19 files; that churn is not justified by a dead branch.
+  # If PSR_CENTRE_ON_LISTED is ever flipped on for AFLW, thread comp through
+  # from calculate_psr() BEFORE trusting AFLW centring.
   if (is.null(listed_pos)) {
     listed_pos <- .load_listed_positions(unique(dt$season))
   }
@@ -1593,7 +1603,14 @@ explain_player_rating <- function(player,
   # function pure and testable, while making it hard for a caller to
   # accidentally centre on the wrong taxonomy by forgetting an argument.
   if (is.null(listed_pos) && isTRUE(center) && isTRUE(centre_on_listed)) {
-    listed_pos <- .load_listed_positions(unique(data.table::as.data.table(skills)$season))
+    # comp MUST be forwarded: .load_listed_positions() calls
+    # load_player_details(), which defaults to the men's competition. Without
+    # this an AFLW scoring run would centre on men's listed positions --
+    # silently, since the join simply wouldn't match. Latent rather than live
+    # (PSR_CENTRE_ON_LISTED defaults FALSE, so this branch is dead today), but
+    # it fires the moment that flag is flipped for AFLW.
+    listed_pos <- .load_listed_positions(
+      unique(data.table::as.data.table(skills)$season), comp = comp)
   }
 
   # Resolve margin coefficient path
@@ -1634,10 +1651,13 @@ explain_player_rating <- function(player,
 #' 100.0%.
 #'
 #' @param seasons Integer vector of seasons.
+#' @param comp Competition: "AFLM" (default) or "AFLW". Forwarded to
+#'   \code{load_player_details()} so an AFLW caller centres on AFLW listings
+#'   rather than silently picking up the men's.
 #' @return A data.table of \code{player_id}, \code{position}, or NULL when no
 #'   season yielded rows.
 #' @keywords internal
-.load_listed_positions <- function(seasons) {
+.load_listed_positions <- function(seasons, comp = "AFLM") {
   seasons <- sort(unique(seasons[!is.na(seasons)]))
   if (length(seasons) == 0) return(NULL)
 
@@ -1645,10 +1665,10 @@ explain_player_rating <- function(player,
     # Name the season AND the reason. Swallowing this silently means a single
     # season vanishing from the join shows up only as a lower match rate
     # downstream -- a symptom with no cause attached, which is not debuggable.
-    d <- tryCatch(data.table::as.data.table(load_player_details(s)),
+    d <- tryCatch(data.table::as.data.table(load_player_details(s, comp = comp)),
                   error = function(e) {
                     cli::cli_alert_danger(
-                      "Listed positions for season {s} failed to load: {conditionMessage(e)}")
+                      "Listed positions for season {s} ({comp}) failed to load: {conditionMessage(e)}")
                     NULL
                   })
     if (is.null(d) || nrow(d) == 0) return(NULL)

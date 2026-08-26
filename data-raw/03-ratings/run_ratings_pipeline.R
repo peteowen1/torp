@@ -739,7 +739,68 @@ tryCatch({
 
 tictoc::toc(log = TRUE)
 
-# Stage 7: Refresh & Release As-Of xRAPM Snapshots ----
+# Stage 7: Compute & Release AFLW PSR ----
+#
+# SCORING only. data-raw/06-stat-ratings/aflw_run_pipeline.R is the TRAINING
+# script -- it refits glmnet and rewrites inst/extdata/*_coefficients_aflw.csv,
+# i.e. the rating definition. That must NOT run on this cadence; it is the
+# AFLW analogue of 06-stat-ratings/ for men's, which likewise runs occasionally
+# and separately. Here the coefficients are a frozen input.
+#
+# Wrapped exactly like Stage 6: an AFLW failure is reported loudly and the
+# pipeline continues, so it can never cost the men's ratings and predictions
+# that have already published above.
+
+cli::cli_h2("Stage 7: Compute & Release AFLW PSR")
+tictoc::tic("stage_7_aflw_psr")
+
+tryCatch({
+  aflw_psr_all <- torp:::.compute_aflw_psr(TRUE)
+
+  if (is.null(aflw_psr_all) || nrow(aflw_psr_all) == 0) {
+    cli::cli_warn("AFLW PSR returned no rows - skipping AFLW PSR release")
+  } else {
+    cli::cli_inform("AFLW PSR computed for {nrow(aflw_psr_all)} player-rounds across {length(unique(aflw_psr_all$season))} seasons")
+
+    # Guard the published artifact, not just the build. .build_aflw_stat_ratings()
+    # already restricts to played rounds, but a release is the expensive thing to
+    # get wrong: phantom future rounds published once are read by consumers long
+    # after the cause is forgotten.
+    aflw_played <- data.table::as.data.table(load_results(TRUE, comp = "AFLW"))
+    played_max <- aflw_played[, .(max_played = max(as.integer(round_number), na.rm = TRUE)),
+                              by = .(season = as.integer(season))]
+    chk <- merge(
+      data.table::as.data.table(aflw_psr_all)[, .(max_psr = max(as.integer(round), na.rm = TRUE)),
+                                              by = .(season = as.integer(season))],
+      played_max, by = "season", all.x = TRUE
+    )
+    bad <- chk[is.na(max_played) | max_psr > max_played]
+    if (nrow(bad) > 0) {
+      # Pre-formatted: a {?s} plural marker alongside another interpolated
+      # value makes cli abort with "Multiple quantities for pluralization",
+      # which would mask this check's own message.
+      detail <- paste(sprintf("%d (psr max %d vs played max %s)",
+                              bad$season, bad$max_psr, bad$max_played), collapse = "; ")
+      cli::cli_abort(paste0(
+        "AFLW PSR contains rounds beyond the last PLAYED round -- refusing to publish. ",
+        "Offending seasons: ", detail))
+    }
+    cli::cli_alert_success("Played-rounds check passed for {nrow(chk)} AFLW season{?s}")
+
+    for (s in sort(unique(aflw_psr_all$season))) {
+      psr_season <- aflw_psr_all[aflw_psr_all$season == s, ]
+      file_name <- paste0("aflw_psr_", s)
+      # No vintage stem: AFLW is not in the men's RATINGS_VINTAGE system, and
+      # .vintage_asset_stem(x, NULL) returns x unchanged anyway.
+      save_to_release(psr_season, file_name, "aflw_psr-data")
+      cli::cli_alert_success("Released {file_name} ({nrow(psr_season)} rows)")
+    }
+  }
+}, error = function(e) {
+  cli::cli_alert_danger("Failed to compute/release AFLW PSR: {conditionMessage(e)}")
+})
+
+# Stage 8: Refresh & Release As-Of xRAPM Snapshots ----
 
 # The match model's `xrapm_diff` feature reads these (via
 # load_team_rapm_asof()). They are PER-ROUND, so they must be refreshed as
@@ -753,7 +814,7 @@ tictoc::toc(log = TRUE)
 # non-fatal: xrapm_diff is one optional feature, and failing to refresh it
 # must not take down a pipeline that also publishes the ratings themselves.
 
-cli::cli_h2("Stage 7: As-Of xRAPM Snapshots")
+cli::cli_h2("Stage 8: As-Of xRAPM Snapshots")
 tictoc::tic("stage_7_xrapm_asof")
 
 for (xrapm_comp in c("AFLM", "AFLW")) {

@@ -4,10 +4,14 @@
 \alias{.load_listed_positions}
 \title{Load listed positions for a set of seasons}
 \usage{
-.load_listed_positions(seasons)
+.load_listed_positions(seasons, comp = "AFLM")
 }
 \arguments{
 \item{seasons}{Integer vector of seasons.}
+
+\item{comp}{Competition: "AFLM" (default) or "AFLW". Forwarded to
+\code{load_player_details()} so an AFLW caller centres on AFLW listings
+rather than silently picking up the men's.}
 }
 \value{
 A data.table of \code{player_id}, \code{position}, or NULL when no

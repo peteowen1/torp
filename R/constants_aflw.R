@@ -52,3 +52,14 @@ AFLW_ELO_CARRYOVER <- 0.75
 #' the grid choice mattered far more than this threshold does.
 #' @keywords internal
 AFLW_RAPM_MIN_TOG_MINUTES <- 900
+
+#' First AFLW season
+#'
+#' AFLW's inaugural season. Three years before the men's
+#' \code{AFL_MIN_SEASON} (2021), which is floored where torp's men's CHAIN
+#' data starts -- a constraint AFLW does not share, since its ratings are
+#' box-score derived (no chains exist for AFLW at all). Loaders over AFLW
+#' releases must validate against this, not \code{AFL_MIN_SEASON}, or they
+#' abort on the three earliest seasons.
+#' @keywords internal
+AFLW_MIN_SEASON <- 2018L

@@ -1,0 +1,95 @@
+name: AFLW Season Stats Weekly Snapshot
+
+on:
+  # Tuesday, deliberately.
+  #
+  # statspro's season endpoint returns cumulative season-to-date totals and has
+  # no as-at-round parameter, so the only way to recover round-level figures for
+  # the 28 extended fields (spoils, pressure_acts, ...) that CFS leaves empty for
+  # AFLW is to snapshot weekly and difference consecutive captures. For that to
+  # bracket exactly ONE round, the capture has to land in the gap between rounds.
+  #
+  # AFL/AFLW rounds run Thu-Mon. Checked live against 2023-2025 fixtures: rounds
+  # close on a Monday or Sunday overwhelmingly (21-22 of ~24 rounds a season),
+  # with the between-round gap always 3-8 days; a round closing on the Tuesday
+  # itself happens 2-3 times a season (ANZAC Day being the recurring cause, since
+  # it is date-fixed rather than weekday-fixed). Tuesday is therefore inside the
+  # gap in every season checked, while Monday would sometimes land mid-round.
+  #
+  # 06:00 UTC is ~16:00-17:00 AEST/AEDT Tuesday -- clear of any Monday-night
+  # fixture, which at the latest finishes around 12:00 UTC Monday.
+  #
+  # The equivalent per-round logic, computed from the fixture calendar rather
+  # than assumed from a weekday, is .team_rapm_checkpoint_dates() in
+  # R/team_rapm_asof.R; a cron needs a fixed weekday, hence the constant here.
+  #
+  # NOTE: GitHub fires `schedule` only from the DEFAULT branch, so this cron is
+  # inert until this workflow reaches main.
+  schedule:
+    - cron: '0 6 * * 2'
+
+  workflow_dispatch:
+    inputs:
+      season:
+        description: 'Season to snapshot (blank = current)'
+        type: number
+        required: false
+
+env:
+  GITHUB_PAT: ${{ secrets.WORKFLOW_PAT }}
+  R_KEEP_PKG_SOURCE: yes
+  piggyback_cache_duration: 1
+
+concurrency:
+  group: aflw-season-stats-snapshot
+  cancel-in-progress: false
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup R
+        uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: '4.4.0'
+          use-public-rspm: true
+
+      - name: Setup R dependencies
+        uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          cache-version: 3
+          extra-packages: |
+            any::devtools
+            any::piggyback
+            any::cli
+            any::data.table
+            any::arrow
+            any::httr
+            any::jsonlite
+          needs: |
+            devtools
+
+      - name: Capture AFLW season-stat snapshot
+        env:
+          INPUT_SEASON: ${{ github.event.inputs.season }}
+        run: |
+          Rscript -e "
+            devtools::load_all(quiet = TRUE)
+            season_input <- Sys.getenv('INPUT_SEASON', '')
+            if (nzchar(season_input) && season_input != 'NA') {
+              # A manual re-run for a specific season still writes a snapshot
+              # dated TODAY -- the file name records when it was captured, not
+              # which round it covers, and back-dating it would fabricate a
+              # capture that never happened.
+              assign('SNAPSHOT_SEASON', as.integer(season_input), envir = globalenv())
+            }
+            source('data-raw/01-data/scrape_aflw_season_stats_snapshot.R')
+          "
