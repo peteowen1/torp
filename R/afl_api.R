@@ -950,9 +950,18 @@ get_afl_player_season_stats <- function(season = NULL, comp = "AFLW") {
   # CD_S2101264 "Season 7") -- pull both rather than picking one arbitrarily.
   provider_ids <- matches$providerId
 
+  # Per-id error isolation, mirroring get_afl_fixtures()'s multi-season loop:
+  # 2022 AFLW issues TWO sequential calls, so an unguarded failure on the second
+  # would discard the first's already-fetched data along with it.
   out <- purrr::map(provider_ids, function(pid) {
     url <- paste0(AFL_STATSPRO_BASE_URL, "playersStats/seasons/", pid, "?includeBenchmarks=false")
-    json <- access_api(url)
+    json <- tryCatch(access_api(url), error = function(e) {
+      cli::cli_warn(paste0(
+        "get_afl_player_season_stats: comp-season {pid} failed to fetch -- ",
+        "{conditionMessage(e)}. Continuing with the remaining id{?s}."))
+      NULL
+    })
+    if (is.null(json)) return(NULL)
     if (is.null(json$players) || nrow(json$players) == 0) return(NULL)
     players <- json$players
     # jsonlite::fromJSON(..., flatten=TRUE) turns players[].totals.* /

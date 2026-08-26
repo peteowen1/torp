@@ -11,7 +11,7 @@
 # One HTTP call per season (~580 players each), not one-per-player -- cheap.
 # Run: powershell.exe -Command 'Rscript "data-raw/01-data/scrape_aflw_season_stats.R"'
 
-devtools::load_all("C:/dev/torpverse/torp", quiet = TRUE)
+devtools::load_all(quiet = TRUE)
 
 AFLW_SEASON_STATS_FIRST_YEAR <- 2018L # AFLW's inaugural season; 2017 has no comp-season provider id (confirmed)
 

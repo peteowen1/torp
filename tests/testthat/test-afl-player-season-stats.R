@@ -96,6 +96,37 @@ test_that("get_afl_player_season_stats pulls both 2022 AFLW comp seasons (Season
   expect_true(any(grepl("CD_S2101264", calls)))
 })
 
+test_that("get_afl_player_season_stats keeps a succeeding id's data when a sibling id fails", {
+  # 2022 AFLW issues TWO sequential calls. Without per-id error isolation, a
+  # transient failure on the second discards the FIRST call's already-fetched
+  # data too -- the whole function aborts. Mirrors get_afl_fixtures()'s own
+  # per-season tryCatch.
+  local_mocked_bindings(
+    .afl_all_comp_seasons = function(comp = "AFLM") {
+      tibble::tibble(
+        providerId = c("CD_S2022264", "CD_S2101264"),
+        name = c("2022 NAB AFLW Season 6", "2022 NAB AFLW Season 7")
+      )
+    },
+    access_api = function(url) {
+      if (grepl("CD_S2101264", url)) stop("simulated transient 503")
+      list(totalResults = 1, players = data.frame(
+        playerId = "CD_I0000001", gamesPlayed = 1,
+        "team.teamAbbr" = "RICH", "totals.spoils" = 1, "averages.spoils" = 1,
+        check.names = FALSE, stringsAsFactors = FALSE
+      ))
+    },
+    .package = "torp"
+  )
+  expect_warning(
+    result <- get_afl_player_season_stats(2022, comp = "AFLW"),
+    "failed to fetch"
+  )
+  # The surviving id's row is kept rather than lost with the failure.
+  expect_equal(nrow(result), 1)
+  expect_equal(result$player_id, "CD_I0000001")
+})
+
 test_that("load_aflw_season_stats has expected signature", {
   args <- formals(load_aflw_season_stats)
   expect_true("seasons" %in% names(args))
