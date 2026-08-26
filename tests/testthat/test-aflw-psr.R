@@ -104,3 +104,96 @@ test_that(".prepare_aflw_stat_rating_data aborts on empty AFLW player_stats rath
   )
   expect_error(torp:::.prepare_aflw_stat_rating_data(2025), "No AFLW player_stats")
 })
+
+# --- aflw_psr-data release path (scoring + loader) ---------------------------
+# These cover the SCORING half only. aflw_run_pipeline.R (training) is
+# deliberately not on the pipeline cadence -- see .build_aflw_stat_ratings().
+
+test_that(".validate_aflw_seasons accepts AFLW's pre-2021 history", {
+  # The whole reason this helper exists: validate_seasons() floors at
+  # AFL_MIN_SEASON (2021) and would abort on AFLW's first three seasons.
+  expect_error(validate_seasons(2018), "Invalid season")
+  expect_equal(torp:::.validate_aflw_seasons(2018), 2018)
+  expect_equal(torp:::.validate_aflw_seasons(c(2018, 2019)), c(2018, 2019))
+})
+
+test_that(".validate_aflw_seasons(TRUE) spans from AFLW_MIN_SEASON", {
+  got <- torp:::.validate_aflw_seasons(TRUE)
+  expect_equal(min(got), AFLW_MIN_SEASON)
+  expect_true(AFLW_MIN_SEASON < AFL_MIN_SEASON)
+})
+
+test_that(".validate_aflw_seasons rejects seasons before AFLW existed", {
+  expect_error(torp:::.validate_aflw_seasons(2017), "Invalid AFLW season")
+  expect_error(torp:::.validate_aflw_seasons("2018"), "must be numeric")
+})
+
+test_that("load_aflw_psr requests the aflw_psr-data release", {
+  captured <- NULL
+  testthat::local_mocked_bindings(
+    generate_urls = function(data_type, file_prefix, seasons, ...) {
+      captured <<- list(data_type = data_type, file_prefix = file_prefix, seasons = seasons)
+      "http://example.invalid/x.parquet"
+    },
+    load_from_url = function(...) data.frame()
+  )
+  load_aflw_psr(2025)
+  expect_equal(captured$data_type, "aflw_psr-data")
+  expect_equal(captured$file_prefix, "aflw_psr")
+  expect_equal(captured$seasons, 2025)
+})
+
+test_that("load_aflw_psr does not abort on AFLW's earliest seasons", {
+  # Regression guard: routing this loader through validate_seasons() would
+  # make 2018-2020 unreachable, which is precisely the history the release
+  # exists to carry.
+  testthat::local_mocked_bindings(
+    generate_urls = function(...) "http://example.invalid/x.parquet",
+    load_from_url = function(...) data.frame()
+  )
+  expect_no_error(load_aflw_psr(2018))
+})
+
+test_that(".compute_aflw_psr returns NULL when no stat ratings are available", {
+  # Must degrade to NULL, not error: the pipeline stage treats NULL as
+  # "skip the release", and an abort there would be caught by the tryCatch
+  # but reported as a failure rather than an empty season.
+  expect_null(torp:::.compute_aflw_psr(stat_ratings = data.frame()))
+})
+
+test_that(".build_aflw_stat_ratings returns NULL when no round was played", {
+  # The played-rounds guard is what keeps phantom future rounds out of the
+  # published release; with nothing played there is nothing to estimate.
+  testthat::local_mocked_bindings(
+    .prepare_aflw_stat_rating_data = function(seasons = TRUE) {
+      data.table::data.table(player_id = "1", season = 2026L, round = 1L)
+    },
+    load_fixtures = function(...) {
+      data.frame(
+        season = 2026L, round_number = 1L,
+        utc_start_time = "2099-01-01T00:00:00.000+0000",
+        home_score = NA_real_, away_score = NA_real_
+      )
+    }
+  )
+  expect_warning(res <- torp:::.build_aflw_stat_ratings(TRUE), "no PLAYED rounds")
+  expect_null(res)
+})
+
+test_that(".compute_psr_from_stat_ratings forwards comp to listed-position loading", {
+  # Latent-but-real: .load_listed_positions() calls load_player_details(),
+  # which defaults to the men's competition. Without the passthrough an AFLW
+  # run would centre on men's listings and simply fail to join -- silently.
+  seen_comp <- NULL
+  testthat::local_mocked_bindings(
+    .load_listed_positions = function(seasons, comp = "AFLM") {
+      seen_comp <<- comp
+      NULL
+    },
+    .find_psr_coef_path = function(...) ""
+  )
+  suppressWarnings(torp:::.compute_psr_from_stat_ratings(
+    data.frame(season = 2025L), center = TRUE, centre_on_listed = TRUE, comp = "AFLW"
+  ))
+  expect_equal(seen_comp, "AFLW")
+})

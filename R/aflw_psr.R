@@ -65,3 +65,91 @@
     teams = teams
   )
 }
+
+#' Build AFLW per-round stat ratings
+#'
+#' The SCORING half of what \code{data-raw/06-stat-ratings/aflw_run_pipeline.R}
+#' does end-to-end. That script is a TRAINING script -- it also fits glmnet
+#' models and rewrites \code{inst/extdata/*_coefficients_aflw.csv}, i.e. the
+#' rating DEFINITION. This function deliberately stops short of that: the
+#' per-round Bayesian estimate is a pure function of box-score data plus
+#' \code{default_stat_rating_params()}, so it can run on every pipeline pass
+#' without re-deriving what a rating means. Retraining on a daily cadence is
+#' exactly what the vintage system exists to prevent.
+#'
+#' @param seasons Numeric vector of seasons, or TRUE for all available AFLW
+#'   seasons.
+#' @return A data.table of player-round stat ratings (one row per player per
+#'   played round), or NULL when no round could be estimated.
+#' @keywords internal
+.build_aflw_stat_ratings <- function(seasons = TRUE) {
+  stat_rating_data <- .prepare_aflw_stat_rating_data(seasons)
+  if (nrow(stat_rating_data) == 0) {
+    cli::cli_warn(".build_aflw_stat_ratings: no AFLW stat-rating rows -- returning NULL.")
+    return(NULL)
+  }
+
+  fixtures <- data.table::as.data.table(load_fixtures(TRUE, comp = "AFLW"))
+  season_vec <- sort(unique(stat_rating_data$season))
+
+  # PLAYED rounds only. load_fixtures() returns the full scheduled list, and
+  # estimating at a future ref_date yields drifting phantom rounds that reorder
+  # any leaderboard read off max(round) -- and would publish them to a release.
+  ref_date_map <- .played_round_ref_dates(fixtures, seasons = season_vec)
+  if (nrow(ref_date_map) == 0) {
+    cli::cli_warn(".build_aflw_stat_ratings: no PLAYED rounds for seasons {paste(season_vec, collapse = ', ')} -- returning NULL.")
+    return(NULL)
+  }
+
+  batch_results <- .estimate_stat_ratings_batch(
+    stat_rating_data,
+    ref_dates = ref_date_map$ref_date,
+    params = default_stat_rating_params(),
+    compute_ci = FALSE
+  )
+
+  out <- vector("list", nrow(ref_date_map))
+  counter <- 0L
+  for (i in seq_len(nrow(ref_date_map))) {
+    rd_key <- as.character(ref_date_map$ref_date[i])
+    if (!rd_key %in% names(batch_results)) next
+    res <- batch_results[[rd_key]]
+    if (is.null(res) || nrow(res) == 0) next
+    res[, `:=`(season = ref_date_map$season[i], round = ref_date_map$round[i])]
+    counter <- counter + 1L
+    out[[counter]] <- res
+  }
+
+  if (counter == 0L) {
+    cli::cli_warn(".build_aflw_stat_ratings: all {nrow(ref_date_map)} round estimations failed -- returning NULL.")
+    return(NULL)
+  }
+  if (counter < nrow(ref_date_map)) {
+    # Named, not swallowed: a silent shortfall reads as a thin season rather
+    # than as rounds that failed to estimate.
+    cli::cli_warn(".build_aflw_stat_ratings: {nrow(ref_date_map) - counter} of {nrow(ref_date_map)} season-rounds could not be estimated.")
+  }
+
+  data.table::rbindlist(out[seq_len(counter)], fill = TRUE)
+}
+
+#' Compute AFLW PSR from frozen coefficients
+#'
+#' Scores AFLW player-rounds against the committed
+#' \code{inst/extdata/psr_coefficients_aflw.csv} (plus the osr/dsr pair when
+#' present). The coefficients are an input here, never an output -- see
+#' \code{.build_aflw_stat_ratings()} for why that separation matters.
+#'
+#' @param seasons Numeric vector of seasons, or TRUE for all available AFLW
+#'   seasons.
+#' @param stat_ratings Optional pre-built stat ratings (skips the rebuild).
+#' @return A data.table with \code{psr} (and \code{osr}/\code{dsr} when the
+#'   component coefficients are available), or NULL when scoring is not
+#'   possible.
+#' @keywords internal
+.compute_aflw_psr <- function(seasons = TRUE, stat_ratings = NULL) {
+  if (is.null(stat_ratings)) stat_ratings <- .build_aflw_stat_ratings(seasons)
+  if (is.null(stat_ratings) || nrow(stat_ratings) == 0) return(NULL)
+
+  .compute_psr_from_stat_ratings(stat_ratings, comp = "AFLW")
+}
