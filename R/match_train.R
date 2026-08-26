@@ -588,6 +588,20 @@
     "epr_spoil_diff", "epr_hitout_diff",
     "torp_diff", "psr_diff", osr_dsr_cols,
     "xelo_diff",
+    # xrapm_diff (2026-08-25): decay-weighted, SPM-shrunk RAPM. Wired at Pete's
+    # explicit direction despite FAILING the g7 gate (p = 0.075, CI spans zero)
+    # -- see team_rapm_match_feature.R's header. Included unconditionally on the
+    # same reasoning as xelo_diff: .build_team_mdl_df() always produces the
+    # column, falling back to a flat 0 when no snapshot is available.
+    #
+    # DELIBERATELY XGBOOST-ONLY -- do not add s(xrapm_diff) to the GAM formulas
+    # without gating it first. The sec22/sec23 gate fed this feature through
+    # rolling_lib.R's `extra_feature_cols`, which appends to the XGBoost
+    # base_cols and never touches a GAM formula. So the p = 0.075 result
+    # describes the XGBoost half alone; putting it in the GAMs would ship a
+    # configuration with no measurement behind it at all, which is strictly
+    # worse-evidenced than the already-sub-threshold number we do have.
+    "xrapm_diff",
     # Listed-position splits. Only usable as features because the published EPR
     # is position-centred (EPR_POSITION_CENTRE); uncentred bucket sums encode
     # roster shape, and teams differ in bucket counts in 40-76% of matches.

@@ -802,6 +802,37 @@ tryCatch({
 
 tictoc::toc(log = TRUE)
 
+# As-of xRAPM snapshots: deliberately NOT a stage here ----
+#
+# An earlier revision refreshed them as "Stage 8" of this script. Removed
+# 2026-08-26, for a structural reason rather than a stylistic one.
+#
+# The refresh is only cheap when data-raw/cache-team-rapm-asof/ is warm. No
+# workflow caches that directory, and every scheduled run gets a fresh
+# ephemeral runner -- so in production it was ALWAYS cold: ~13s x 156 AFLM
+# checkpoints ~= 34 min, plus AFLW, inside this job's 45-minute budget shared
+# with Stages 1-7. And build-predictions has `needs: compute-ratings`, so
+# overrunning here does not merely skip the snapshot: it publishes NO
+# PREDICTIONS AT ALL. That is the 2026-07-29 failure mode written into
+# daily-ratings-predictions.yml's own comments.
+#
+# Caching the directory would have made the common case fast but left the cold
+# case (first run, cache eviction, a key miss) still able to take predictions
+# down. An optional feature's refresh must not sit on the critical path at all,
+# so it moved to its own workflow: .github/workflows/publish-xrapm-snapshots.yml,
+# running data-raw/03-ratings/publish_team_rapm_asof.R with a cold-run-sized
+# timeout and its own cache.
+#
+# That also retired a duplicated, thinner implementation. The inline Stage 8
+# re-implemented publish_team_rapm_asof.R's build/validate loop but swallowed
+# every per-checkpoint error with no message (100 of 156 could fail and the log
+# still read like success) and gated the publish on only
+# `anyNA(player_id) || all(is.na(team_rapm_shrunk))` -- no row floor, no
+# duplicate-key check, no unplayed-round check. The sibling script has all of
+# those. Deleting the copy is the fix; this repo has already been bitten twice
+# by two copies of one list drifting apart (match_train.R / matchup_table.R
+# base_cols).
+
 # Summary ----
 
 cli::cli_h2("Pipeline Complete")

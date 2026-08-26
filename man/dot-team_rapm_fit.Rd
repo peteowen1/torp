@@ -6,7 +6,20 @@
 fold, the gate number) and in-sample R^2, glmnet's own documented
 index-based lambda.min lookup (not a fragile floating-point == match).}
 \usage{
-.team_rapm_fit(X, y, foldid = NULL, nfolds = 10, seed = 20260825)
+.team_rapm_fit(
+  X,
+  y,
+  foldid = NULL,
+  nfolds = 10,
+  seed = 20260825,
+  weights = NULL
+)
+}
+\arguments{
+\item{weights}{Optional numeric vector, glmnet observation (case) weights
+-- e.g. decay weights for an as-of/career-style fit
+(\code{build_team_rapm_asof()}). \code{NULL} (default) fits unweighted,
+identical to every existing caller's behaviour.}
 }
 \description{
 Wide lambda grid (\code{nlambda=400, lambda.min.ratio=1e-6}) applied

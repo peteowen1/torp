@@ -1794,3 +1794,109 @@ load_aflw_season_stats <- function(seasons = get_afl_season(), use_disk_cache = 
   out <- load_from_url(urls, seasons = seasons, use_disk_cache = use_disk_cache, columns = columns)
   out
 }
+
+# ============================================================================
+# As-of xRAPM snapshots
+# ============================================================================
+
+#' Load the As-Of xRAPM Snapshot Table for a Competition
+#'
+#' @description
+#' Loads the decay-weighted, SPM-shrunk RAPM ("xRAPM") snapshot -- one row per
+#' player per round checkpoint -- from the torpdata `team_rapm_asof-data`
+#' release. This is the rating behind the match model's `xrapm_diff` feature.
+#'
+#' Resolution order, first hit wins:
+#' \enumerate{
+#'   \item \code{path}, when given (tests, or a deliberate one-off).
+#'   \item The local build artifact written by
+#'     \code{data-raw/03-ratings/build_team_rapm_asof_snapshots.R}. Gitignored,
+#'     so this only fires for someone who has built it -- zero-network dev.
+#'   \item The torpdata release, via the usual \code{load_from_url()} path
+#'     (which itself prefers a local \code{torpdata/data/} sibling when one is
+#'     configured).
+#' }
+#'
+#' @section Why this returns NULL rather than erroring:
+#' \code{xrapm_diff} is a non-essential match-model feature that degrades to a
+#' flat neutral 0 when the snapshot is unavailable, mirroring \code{xelo_diff}.
+#' A missing snapshot must therefore be loud but non-fatal -- erroring here
+#' would take down the whole served prediction pipeline over one optional
+#' feature. The caller owns the flat-0 fallback and must say so visibly.
+#'
+#' @param comp "AFLM" (default) or "AFLW".
+#' @param path Optional explicit parquet path, bypassing both local and release
+#'   resolution. Primarily for tests.
+#' @return A data.frame with at least \code{player_id}, \code{season},
+#'   \code{round_number}, \code{team_rapm_shrunk}; or \code{NULL} when no
+#'   snapshot can be resolved.
+#' @seealso [save_to_release()]
+#' @examples
+#' \dontrun{
+#' try({ # prevents cran errors
+#'   load_team_rapm_asof("AFLM")
+#' })
+#' }
+#' @export
+load_team_rapm_asof <- function(comp = "AFLM", path = NULL) {
+  .validate_afl_comp(comp)
+  f_stem <- sprintf("career_team_rapm_asof_%s", comp)
+  out <- NULL
+  source_desc <- NULL
+
+  # NOTE on severity throughout this function: cli_alert_danger, not cli_warn.
+  # Every branch here ends in "xrapm_diff silently becomes 0 for every match",
+  # which is precisely the class of failure a deferred warning hides. cli_warn
+  # is held to end-of-Rscript and can be dropped past getOption("nwarnings") or
+  # lost when a job is killed on timeout -- the documented 2026-07-29 incident.
+  # Same rule as match_model.R:1133-1139.
+  if (!is.null(path)) {
+    if (!file.exists(path)) {
+      cli::cli_alert_danger("No as-of xRAPM snapshot at the explicit path {path}.")
+      cli::cli_alert_danger("xrapm_diff will fall back to neutral 0 for every match.")
+      return(NULL)
+    }
+    out <- as.data.frame(arrow::read_parquet(path))
+    source_desc <- path
+  } else {
+    local_path <- file.path("data-raw", "03-ratings", paste0(f_stem, ".parquet"))
+    if (file.exists(local_path)) {
+      out <- as.data.frame(arrow::read_parquet(local_path))
+      source_desc <- local_path
+    } else {
+      url <- paste0(
+        "https://github.com/", get_torp_data_repo(),
+        "/releases/download/", TEAM_RAPM_ASOF_RELEASE_TAG, "/", f_stem, ".parquet"
+      )
+      source_desc <- url
+      out <- tryCatch(
+        as.data.frame(load_from_url(url)),
+        error = function(e) {
+          cli::cli_alert_danger(
+            "Could not load the as-of xRAPM snapshot for comp {comp} from release {TEAM_RAPM_ASOF_RELEASE_TAG}: {conditionMessage(e)}"
+          )
+          cli::cli_alert_info("Build and publish it with data-raw/03-ratings/publish_team_rapm_asof.R.")
+          cli::cli_alert_danger("xrapm_diff will fall back to neutral 0 for every match.")
+          NULL
+        }
+      )
+    }
+  }
+
+  if (is.null(out)) return(NULL)
+  if (nrow(out) == 0) {
+    cli::cli_alert_danger("As-of xRAPM snapshot for comp {comp} resolved but is EMPTY ({source_desc}).")
+    cli::cli_alert_danger("xrapm_diff will fall back to neutral 0 for every match.")
+    return(NULL)
+  }
+
+  required <- c("player_id", "season", "round_number", "team_rapm_shrunk")
+  missing <- setdiff(required, names(out))
+  if (length(missing) > 0) {
+    cli::cli_abort(c(
+      "As-of xRAPM snapshot from {.path {source_desc}} is missing required column{?s}: {missing}.",
+      "i" = "Snapshots built before 2026-08-26 dropped `team_rapm_shrunk` and the season/round keys -- rebuild the snapshot."
+    ))
+  }
+  out
+}
