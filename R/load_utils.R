@@ -74,6 +74,33 @@ set_torp_data_repo <- function(repo) {
 # Release asset cache (session-scoped, short TTL)
 .torp_release_cache <- new.env(parent = emptyenv())
 
+# Records why the last get_release_assets() call for a tag returned NULL.
+# NULL entry = the fetch succeeded (the release genuinely has no matching
+# assets); a character entry = the fetch itself failed. See
+# .last_release_fetch_error().
+.torp_release_fetch_error <- new.env(parent = emptyenv())
+
+#' Why the last release-asset fetch for a tag returned nothing
+#'
+#' `get_release_assets()` returns `NULL` both when a release genuinely has no
+#' assets and when the API call fails, and its callers cannot tell those apart.
+#' That matters wherever "no prior data" and "could not check for prior data"
+#' should lead to different behaviour -- notably a publish step that skips its
+#' regression check when it believes nothing was published before, which would
+#' otherwise skip that check on precisely the flaky-network run where a bad
+#' capture is most likely.
+#'
+#' @param release_tag Character. The release tag name.
+#' @return The error message from the last failed fetch for this tag, or `NULL`
+#'   if the last fetch succeeded (or none has been attempted this session).
+#' @keywords internal
+.last_release_fetch_error <- function(release_tag) {
+  if (!exists(release_tag, envir = .torp_release_fetch_error)) {
+    return(NULL)
+  }
+  get(release_tag, envir = .torp_release_fetch_error)
+}
+
 #' Get filenames available in a GitHub release
 #'
 #' Queries the GitHub API via piggyback for the list of assets attached to a
@@ -103,9 +130,17 @@ get_release_assets <- function(release_tag) {
       repo = repo_parts[2],
       tag = release_tag
     )
+    assign(release_tag, NULL, envir = .torp_release_fetch_error)
     vapply(resp$assets, function(a) a$name, character(1))
   }, error = function(e) {
-    cli::cli_inform("Could not fetch release assets for {.val {release_tag}}: {e$message}")
+    # NULL is deliberately kept as the return: generate_urls() treats it as
+    # "listing unavailable, use the heuristic filter", and changing that
+    # contract would alter every loader's fallback. But NULL alone cannot tell
+    # a caller "this release has no assets" from "the network just failed",
+    # and a caller gating a regression check on the difference needs to know.
+    # The message is recorded here for .last_release_fetch_error() to report.
+    assign(release_tag, conditionMessage(e), envir = .torp_release_fetch_error)
+    cli::cli_warn("Could not fetch release assets for {.val {release_tag}}: {e$message}")
     NULL
   })
 

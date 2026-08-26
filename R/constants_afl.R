@@ -132,6 +132,15 @@ AFL_CFS_API_BASE_URL <- "https://api.afl.com.au/cfs/afl/"
 #' @keywords internal
 AFL_SAPI_BASE_URL <- "https://sapi.afl.com.au/afl/"
 
+#' AFL statspro API base URL (season/round player stats, ladders)
+#'
+#' Same anonymous `x-media-mis-token` auth flow as [AFL_CFS_API_BASE_URL] --
+#' both hosts share the token from [get_token()]. Undocumented until
+#' 2026-08-25 (found via AFL.com.au's own React bundle source map); see
+#' `AFL-API-REFERENCE.md`'s "Endpoint family: statspro" section.
+#' @keywords internal
+AFL_STATSPRO_BASE_URL <- "https://api.afl.com.au/statspro/"
+
 #' AFL CFS numeric competition codes (the 3-digit segment in `CD_S{year}{code}`
 #' / `CD_R{year}{code}{round}` URLs and match IDs)
 #'
