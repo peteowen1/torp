@@ -46,6 +46,17 @@ reference:
       - starts_with("load_")
       - fixtures
 
+  - title: AFLW Season-Stat Snapshots
+    desc: >
+      Weekly captures of AFLW cumulative season-to-date totals, and the
+      differencing that recovers round-level figures from them. The statspro
+      season endpoint has no as-at-round parameter, so snapshotting and
+      differencing is the only route to round-grain extended stats -- and only
+      forward from the first snapshot.
+    contents:
+      - diff_aflw_season_snapshots
+      - list_aflw_season_stat_snapshots
+
   - title: Prediction Models
     desc: Add expected points, win probability, and shot predictions to play-by-play data
     contents:
