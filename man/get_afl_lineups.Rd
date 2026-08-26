@@ -4,12 +4,14 @@
 \alias{get_afl_lineups}
 \title{Fetch AFL Lineups}
 \usage{
-get_afl_lineups(season = NULL, round = NULL)
+get_afl_lineups(season = NULL, round = NULL, comp = "AFLM")
 }
 \arguments{
 \item{season}{Numeric year (default: current season via \code{\link[=get_afl_season]{get_afl_season()}})}
 
 \item{round}{Optional round number to filter to. If NULL, fetches all rounds.}
+
+\item{comp}{Competition: "AFLM" (default) or "AFLW"}
 }
 \value{
 A tibble of player lineup data

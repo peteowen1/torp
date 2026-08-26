@@ -4,7 +4,7 @@
 \alias{get_match_chains}
 \title{Get Match Chains}
 \usage{
-get_match_chains(season = get_afl_season(), round = NA)
+get_match_chains(season = get_afl_season(), round = NA, comp = "AFLM")
 }
 \arguments{
 \item{season}{The AFL season year (numeric), or a match ID string
@@ -12,6 +12,13 @@ get_match_chains(season = get_afl_season(), round = NA)
 ignored and chains are fetched for that single match.}
 
 \item{round}{The round number (numeric). If NA, retrieves data for all rounds in the season.}
+
+\item{comp}{Competition: only "AFLM" (men's, default) is supported. AFLW
+has no chain/possession data at the AFL API -- verified live 2026-08-24
+against every season 2018-2026, including that week's concluded round --
+so this errors rather than returning an empty result. Fixtures,
+box-score stats and rosters ARE available for AFLW; see
+\code{\link[=get_afl_fixtures]{get_afl_fixtures()}}.}
 }
 \value{
 A dataframe containing match chain data.

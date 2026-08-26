@@ -43,6 +43,7 @@ data-raw/archive/
 # Stat rating pipeline cache (large RDS files)
 data-raw/cache-stat-ratings/
 data-raw/cache-skills/
+data-raw/cache-team-rapm-asof/
 nul
 _ul
 data-raw/debug/
@@ -67,6 +68,7 @@ docs/
 
 # Pipeline run logs (local artifacts, not source)
 data-raw/**/log_*.txt
+data-raw/03-ratings/career_team_rapm_asof_*.parquet
 
 # testthat writes this on a failing run (incl. deliberate mutation tests)
 tests/testthat/testthat-problems.rds

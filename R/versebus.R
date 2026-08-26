@@ -318,7 +318,16 @@ vb_read_manifest <- function(repo, tag, required = FALSE) {
   })
   if (is.null(m) && isTRUE(.vb_state[[paste0("seen_", key)]])) {
     Sys.sleep(10)
-    m <- tryCatch(fetch(), error = function(e) NULL)
+    # Classify the retry exactly as the first attempt does. Swallowing every
+    # error here turned a network blip into "the manifest is gone", which
+    # falls through to legacy mode and runs the rest of the session with
+    # sha256 verification silently disabled -- the precise inversion of this
+    # file's own rule that an uncertain classification is transient, never
+    # absent.
+    m <- tryCatch(fetch(), error = function(e) {
+      if (vb_classify_error(e) == "absent") return(NULL)
+      stop(e)
+    })
   }
   if (is.null(m)) {
     # A tag with no manifest at all is a bootstrap/legacy state, not an
@@ -480,7 +489,23 @@ vb_download <- function(repo, tag, name, dest,
               "vb_error_integrity")
   }
   verify_by_size <- function() {
-    listed <- tryCatch(vb_list_assets(repo, tag), error = function(e) NULL)
+    # The defect here was SILENCE, not the fallback. Trusting the download
+    # when the listing is unavailable is deliberate: this function is also
+    # the sha-mismatch path's graceful degradation (see the caller below),
+    # and a stale manifest entry is far more common than real corruption, so
+    # aborting on a transient API blip would brick the asset until someone
+    # manually republished the manifest -- the exact outcome that caller
+    # exists to avoid. bouncer shipped the abort version, CI caught it, and
+    # it was reverted in bouncerverse/bouncer 5edd3ac (2026-08-16) for this
+    # reason. Keep the behaviour; remove the silence.
+    listed <- tryCatch(vb_list_assets(repo, tag), error = function(e) {
+      cli::cli_warn(c(
+        "{.val {name}}: could not list assets to size-check the download
+         ({conditionMessage(e)})",
+        "!" = "Accepted WITHOUT verification -- no manifest entry and no live
+               listing to corroborate it."))
+      NULL
+    })
     if (!is.null(listed) && name %in% listed$name) {
       want <- listed$size[listed$name == name][1L]
       if (!isTRUE(all.equal(as.numeric(file.size(tmp)), want))) {
@@ -551,8 +576,13 @@ vb_generation <- function(repo, tag) {
   if (!is.null(m) && !is.null(m$generation)) return(m$generation)
   assets <- vb_list_assets(repo, tag)
   if (nrow(assets) == 0L) return(NA_character_)
-  # per C:\dev\CLAUDE.md: asset updatedAt, never release createdAt
-  max(assets$updated_at)
+  # per C:\dev\CLAUDE.md: asset updatedAt, never release createdAt.
+  # na.rm because vb_list_assets deliberately fills NA for an asset missing
+  # updated_at -- without it, one malformed UNRELATED asset silently makes
+  # the whole generation NA, indistinguishable from the no-assets case.
+  stamps <- assets$updated_at[!is.na(assets$updated_at)]
+  if (!length(stamps)) return(NA_character_)
+  max(stamps)
 }
 
 #' Manifest-last atomic publish (the versebus producer pattern)
@@ -722,7 +752,16 @@ vb_publish <- function(paths, repo, tag,
 
   # 7. Own-write cache invalidation hook.
   hook <- getOption("versebus.on_publish")
-  if (is.function(hook)) try(hook(repo, tag), silent = TRUE)
+  if (is.function(hook)) {
+    # The publish itself has already succeeded, so a hook failure must not
+    # abort -- but it must not be invisible either. The hook exists so
+    # consumers refresh after a publish; if it dies silently they serve
+    # pre-publish data indefinitely with nothing recording why.
+    tryCatch(hook(repo, tag), error = function(e) {
+      cli::cli_warn(c("vb_publish: cache-invalidation hook failed: {conditionMessage(e)}",
+                      "i" = "The publish succeeded; downstream readers may serve stale data until refreshed."))
+    })
+  }
 
   cli::cli_alert_success("vb_publish: {length(entries)} asset(s) committed to {repo}@{tag} (generation {manifest$generation})")
   invisible(manifest)

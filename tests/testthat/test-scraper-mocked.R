@@ -22,6 +22,30 @@ test_that("access_api function exists", {
 })
 
 # -----------------------------------------------------------------------------
+# AFLW comp parameter — no chain data exists for AFLW (verified live 2026-08-24)
+# -----------------------------------------------------------------------------
+
+test_that("get_match_chains errors on comp = AFLW rather than returning empty", {
+  expect_error(
+    get_match_chains(2026, 1, comp = "AFLW"),
+    "not available for comp"
+  )
+})
+
+test_that("get_match_chains defaults to AFLM and accepts it explicitly", {
+  # Both should reach the same "season < 2021" guard, not the comp guard —
+  # proves comp = "AFLM" isn't itself rejected.
+  expect_error(get_match_chains(2020), "prior to 2021")
+  expect_error(get_match_chains(2020, comp = "AFLM"), "prior to 2021")
+})
+
+test_that(".validate_afl_comp accepts known comps and rejects unknown ones", {
+  expect_no_error(torp:::.validate_afl_comp("AFLM"))
+  expect_no_error(torp:::.validate_afl_comp("AFLW"))
+  expect_error(torp:::.validate_afl_comp("BOGUS"), "Unknown comp")
+})
+
+# -----------------------------------------------------------------------------
 # get_many_game_chains Tests
 # -----------------------------------------------------------------------------
 

@@ -7,7 +7,8 @@
 load_results(
   seasons = get_afl_season(),
   use_disk_cache = FALSE,
-  columns = NULL
+  columns = NULL,
+  comp = "AFLM"
 )
 }
 \arguments{
@@ -16,6 +17,8 @@ load_results(
 \item{use_disk_cache}{Logical. If TRUE, uses persistent disk cache for faster repeated loads. Default is FALSE.}
 
 \item{columns}{Optional character vector of column names to read. If NULL (default), reads all columns.}
+
+\item{comp}{Competition: "AFLM" (default) or "AFLW".}
 }
 \value{
 A data frame containing AFL match results and final scores.

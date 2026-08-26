@@ -4,10 +4,12 @@
 \alias{get_afl_ladder}
 \title{Fetch AFL Ladder (Current Standings)}
 \usage{
-get_afl_ladder(season = NULL)
+get_afl_ladder(season = NULL, comp = "AFLM")
 }
 \arguments{
 \item{season}{Numeric year (default: current season via \code{\link[=get_afl_season]{get_afl_season()}})}
+
+\item{comp}{Competition: "AFLM" (default) or "AFLW"}
 }
 \value{
 A data.table with columns: team, played, wins, draws, losses,

@@ -42,6 +42,16 @@
   # to "load it" fixes them all at once; defaulting to "abort" would have made
   # the correct behaviour the one you must remember to ask for, which is how
   # the playstyle key survived unnoticed in the first place.
+  # RESIDUAL COMP GAP, deliberately left rather than plumbed:
+  # this self-load has no comp to forward, so it defaults to AFLM. An AFLW
+  # caller reaches it only if BOTH (a) PSR_CENTRE_ON_LISTED is TRUE (FALSE
+  # today) and (b) .compute_psr_from_stat_ratings()'s own comp-aware load
+  # returned NULL -- i.e. load_player_details() failed for EVERY requested
+  # season. Doubly latent. Closing it properly means adding `comp` to
+  # calculate_psr()/calculate_psr_components(), both EXPORTED, with 49 call
+  # sites across 19 files; that churn is not justified by a dead branch.
+  # If PSR_CENTRE_ON_LISTED is ever flipped on for AFLW, thread comp through
+  # from calculate_psr() BEFORE trusting AFLW centring.
   if (is.null(listed_pos)) {
     listed_pos <- .load_listed_positions(unique(dt$season))
   }
@@ -89,13 +99,34 @@
   out
 }
 
+#' Build a comp-qualified coefficient filename
+#'
+#' AFLM (default) is unchanged; any other comp gets its coefficient set
+#' suffixed (e.g. "psr_coefficients.csv" -> "psr_coefficients_aflw.csv"),
+#' matching the naming the AFLW training pipeline
+#' (data-raw/06-stat-ratings/aflw_run_pipeline.R) writes.
+#' @param base Base filename, e.g. "psr_coefficients.csv"
+#' @param comp Competition: "AFLM" (default) or "AFLW"
+#' @return The comp-qualified filename
+#' @keywords internal
+.comp_coef_filename <- function(base, comp = "AFLM") {
+  if (comp == "AFLM") return(base)
+  sub("\\.csv$", paste0("_", tolower(comp), ".csv"), base)
+}
+
 #' Resolve path to PSR coefficient CSV
 #'
 #' Checks inst/extdata first, then falls back to data-raw/cache-stat-ratings/.
 #' @param coef_file Filename (default "psr_coefficients.csv")
+#' @param comp Competition: "AFLM" (default) or "AFLW". AFLW's PSR/PSV is a
+#'   box-score-only pipeline sourced from load_player_stats(comp="AFLW") --
+#'   see docs/plans/AFLW-MIGRATION-PLAN.md Sec 6 -- with its own coefficient
+#'   files, never comparable to men's PSR/PSV numbers.
 #' @return Absolute path to the CSV, or "" if not found
 #' @keywords internal
-.find_psr_coef_path <- function(coef_file = "psr_coefficients.csv") {
+.find_psr_coef_path <- function(coef_file = "psr_coefficients.csv", comp = "AFLM") {
+  .validate_afl_comp(comp)
+  coef_file <- .comp_coef_filename(coef_file, comp)
   path <- system.file("extdata", coef_file, package = "torp")
   if (path == "") {
     path <- file.path(
@@ -694,14 +725,17 @@ calculate_psv_components <- function(player_stats, coef_df, osr_coef_df,
 #' @inheritParams calculate_psv
 #' @param psr_coef_path Path to the margin PSR coefficient CSV. If NULL,
 #'   searches \code{inst/extdata/psr_coefficients.csv}.
+#' @param comp Competition: "AFLM" (default) or "AFLW". Only used to resolve
+#'   \code{psr_coef_path} when it is NULL; ignored if an explicit path is
+#'   given.
 #'
 #' @return A data.table with \code{psv}, \code{osv}, \code{dsv} columns.
 #'
 #' @keywords internal
 .compute_psv <- function(player_stats, psr_coef_path = NULL, tog_adjust = TRUE,
-                          center = TRUE) {
+                          center = TRUE, comp = "AFLM") {
   if (is.null(psr_coef_path)) {
-    psr_coef_path <- .find_psr_coef_path()
+    psr_coef_path <- .find_psr_coef_path(comp = comp)
   }
 
   if (!nzchar(psr_coef_path) || !file.exists(psr_coef_path)) {
@@ -712,8 +746,8 @@ calculate_psv_components <- function(player_stats, coef_df, osr_coef_df,
   coef_df <- utils::read.csv(psr_coef_path)
 
   coef_dir <- dirname(psr_coef_path)
-  osr_path <- file.path(coef_dir, "osr_coefficients.csv")
-  dsr_path <- file.path(coef_dir, "dsr_coefficients.csv")
+  osr_path <- file.path(coef_dir, .comp_coef_filename("osr_coefficients.csv", comp))
+  dsr_path <- file.path(coef_dir, .comp_coef_filename("dsr_coefficients.csv", comp))
 
   if (file.exists(osr_path) && file.exists(dsr_path)) {
     osr_coef_df <- utils::read.csv(osr_path)
@@ -1553,25 +1587,36 @@ explain_player_rating <- function(player,
 #' @param listed_pos Optional data frame of player_id plus a listed position
 #'   column. Passed through to calculate_psr(); loaded from
 #'   load_player_details() when NULL and centring on listed is requested.
+#' @param comp Competition: "AFLM" (default) or "AFLW". Only used to resolve
+#'   \code{psr_coef_path} when it is NULL; ignored if an explicit path is
+#'   given.
 #' @return A data.table with \code{psr}, \code{osr}, \code{dsr} columns.
 #' @keywords internal
 .compute_psr_from_stat_ratings <- function(skills, psr_coef_path = NULL, center = TRUE,
                                           centre_by_round = PSR_CENTRE_BY_ROUND,
                                           listed_pos = NULL,
-                                          centre_on_listed = PSR_CENTRE_ON_LISTED) {
+                                          centre_on_listed = PSR_CENTRE_ON_LISTED,
+                                          comp = "AFLM") {
   # This is already the I/O boundary for the PSR path (it reads the coefficient
   # CSVs), so it is also the right place to source listed positions when the
   # caller has not. Doing it here rather than in calculate_psr() keeps that
   # function pure and testable, while making it hard for a caller to
   # accidentally centre on the wrong taxonomy by forgetting an argument.
   if (is.null(listed_pos) && isTRUE(center) && isTRUE(centre_on_listed)) {
-    listed_pos <- .load_listed_positions(unique(data.table::as.data.table(skills)$season))
+    # comp MUST be forwarded: .load_listed_positions() calls
+    # load_player_details(), which defaults to the men's competition. Without
+    # this an AFLW scoring run would centre on men's listed positions --
+    # silently, since the join simply wouldn't match. Latent rather than live
+    # (PSR_CENTRE_ON_LISTED defaults FALSE, so this branch is dead today), but
+    # it fires the moment that flag is flipped for AFLW.
+    listed_pos <- .load_listed_positions(
+      unique(data.table::as.data.table(skills)$season), comp = comp)
   }
 
   # Resolve margin coefficient path
 
   if (is.null(psr_coef_path)) {
-    psr_coef_path <- .find_psr_coef_path()
+    psr_coef_path <- .find_psr_coef_path(comp = comp)
   }
 
   if (!nzchar(psr_coef_path) || !file.exists(psr_coef_path)) {
@@ -1583,8 +1628,8 @@ explain_player_rating <- function(player,
 
   # Try to find osr/dsr coefficient files in the same directory
   coef_dir <- dirname(psr_coef_path)
-  osr_path <- file.path(coef_dir, "osr_coefficients.csv")
-  dsr_path <- file.path(coef_dir, "dsr_coefficients.csv")
+  osr_path <- file.path(coef_dir, .comp_coef_filename("osr_coefficients.csv", comp))
+  dsr_path <- file.path(coef_dir, .comp_coef_filename("dsr_coefficients.csv", comp))
 
   if (file.exists(osr_path) && file.exists(dsr_path)) {
     osr_coef_df <- utils::read.csv(osr_path)
@@ -1606,10 +1651,13 @@ explain_player_rating <- function(player,
 #' 100.0%.
 #'
 #' @param seasons Integer vector of seasons.
+#' @param comp Competition: "AFLM" (default) or "AFLW". Forwarded to
+#'   \code{load_player_details()} so an AFLW caller centres on AFLW listings
+#'   rather than silently picking up the men's.
 #' @return A data.table of \code{player_id}, \code{position}, or NULL when no
 #'   season yielded rows.
 #' @keywords internal
-.load_listed_positions <- function(seasons) {
+.load_listed_positions <- function(seasons, comp = "AFLM") {
   seasons <- sort(unique(seasons[!is.na(seasons)]))
   if (length(seasons) == 0) return(NULL)
 
@@ -1617,10 +1665,10 @@ explain_player_rating <- function(player,
     # Name the season AND the reason. Swallowing this silently means a single
     # season vanishing from the join shows up only as a lower match rate
     # downstream -- a symptom with no cause attached, which is not debuggable.
-    d <- tryCatch(data.table::as.data.table(load_player_details(s)),
+    d <- tryCatch(data.table::as.data.table(load_player_details(s, comp = comp)),
                   error = function(e) {
                     cli::cli_alert_danger(
-                      "Listed positions for season {s} failed to load: {conditionMessage(e)}")
+                      "Listed positions for season {s} ({comp}) failed to load: {conditionMessage(e)}")
                     NULL
                   })
     if (is.null(d) || nrow(d) == 0) return(NULL)

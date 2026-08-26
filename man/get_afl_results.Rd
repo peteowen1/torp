@@ -4,10 +4,12 @@
 \alias{get_afl_results}
 \title{Fetch AFL Results}
 \usage{
-get_afl_results(season = NULL)
+get_afl_results(season = NULL, comp = "AFLM")
 }
 \arguments{
 \item{season}{Numeric year (default: current season via \code{\link[=get_afl_season]{get_afl_season()}})}
+
+\item{comp}{Competition: "AFLM" (default) or "AFLW"}
 }
 \value{
 A tibble of completed match data (fixture schema, filtered to concluded games)

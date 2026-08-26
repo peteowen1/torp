@@ -30,6 +30,26 @@ test_that("is_disk_cached returns FALSE for non-existent URL", {
   expect_false(is_disk_cached("https://example.com/data/nonexistent_test.parquet"))
 })
 
+test_that("clear_disk_cache's anchored comp pattern doesn't collide a shorter comp prefix with a longer one", {
+  # Regression test for the .load_with_cache() refresh path: an AFLM refresh
+  # (cache_prefix = "player_stats") must not also match/delete AFLW's
+  # comp-suffixed cache file (cache_prefix = "player_stats_AFLW"), since
+  # "cfs_player_stats_" is a literal substring of "cfs_player_stats_AFLW_...".
+  cache_dir <- get_disk_cache_dir()
+  aflm_file <- file.path(cache_dir, "cfs_player_stats_2025_test.parquet")
+  aflw_file <- file.path(cache_dir, "cfs_player_stats_AFLW_2025_test.parquet")
+  on.exit(unlink(c(aflm_file, aflw_file)), add = TRUE)
+
+  file.create(aflm_file)
+  file.create(aflw_file)
+
+  # This is the exact pattern .load_with_cache() now builds for an AFLM refresh.
+  clear_disk_cache(pattern = "^cfs_player_stats_\\d")
+
+  expect_false(file.exists(aflm_file))
+  expect_true(file.exists(aflw_file))
+})
+
 test_that("set_disk_cache_options stores and returns settings", {
   result <- set_disk_cache_options(enabled = FALSE, max_age_days = 30)
   expect_equal(result$enabled, FALSE)
