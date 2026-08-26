@@ -560,3 +560,60 @@ test_that(".played_round_ref_dates() aborts on a missing required column", {
   fx$home_score <- NULL
   expect_error(.played_round_ref_dates(fx), "missing required column")
 })
+
+test_that(".played_round_ref_dates() reports what it dropped as unplayed", {
+  # The bug this guard fixes was invisible because nothing logged what was
+  # being included. Over-filtering must not be silent either.
+  expect_message(
+    .played_round_ref_dates(make_fixture_set()),
+    "dropped 1 unplayed/scoreless row"
+  )
+  # ...and stays quiet when a caller explicitly opts out.
+  expect_silent(.played_round_ref_dates(make_fixture_set(), verbose = FALSE))
+})
+
+# --- .assert_ref_date_coverage() -------------------------------------------
+# The cross-feed check: ref_date_map comes from FIXTURE scores, the rated rows
+# come from the player-stats feed, and a lag between the two silently drops the
+# newest round from a published artifact.
+
+make_srd <- function(seasons, rounds) {
+  data.frame(season = seasons, round = rounds, stringsAsFactors = FALSE)
+}
+
+test_that(".assert_ref_date_coverage() passes when the map covers the data", {
+  map <- .played_round_ref_dates(make_fixture_set())
+  srd <- make_srd(c(2025, 2026, 2026), c(1L, 1L, 2L))
+  expect_silent(.assert_ref_date_coverage(map, srd))
+})
+
+test_that(".assert_ref_date_coverage() aborts when a played round is missing from the map", {
+  # The real failure: results feed lags the player-stats feed, so round 3 has
+  # match data but no fixture score yet and never enters the checkpoint map.
+  map <- .played_round_ref_dates(make_fixture_set(), verbose = FALSE)
+  srd <- make_srd(c(2025, 2026, 2026, 2026), c(1L, 1L, 2L, 3L))
+  expect_error(.assert_ref_date_coverage(map, srd), "2026 R3")
+  expect_error(.assert_ref_date_coverage(map, srd), "missing from the checkpoint map")
+})
+
+test_that(".assert_ref_date_coverage(strict = FALSE) warns instead of aborting", {
+  map <- .played_round_ref_dates(make_fixture_set(), verbose = FALSE)
+  srd <- make_srd(c(2026, 2026, 2026), c(1L, 2L, 3L))
+  expect_warning(.assert_ref_date_coverage(map, srd, strict = FALSE), "2026 R3")
+})
+
+test_that(".assert_ref_date_coverage() accepts round_number as the round column", {
+  map <- .played_round_ref_dates(make_fixture_set(), verbose = FALSE)
+  srd <- data.frame(season = c(2025, 2026), round_number = c(1L, 1L))
+  expect_silent(.assert_ref_date_coverage(map, srd))
+})
+
+test_that(".assert_ref_date_coverage() warns, not aborts, when it cannot check", {
+  # No season/round columns means the check is impossible -- that should be
+  # visible, but it must not take down a pipeline on its own.
+  map <- .played_round_ref_dates(make_fixture_set(), verbose = FALSE)
+  expect_warning(
+    .assert_ref_date_coverage(map, data.frame(x = 1)),
+    "Cannot verify checkpoint coverage"
+  )
+})

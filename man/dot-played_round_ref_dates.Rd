@@ -4,7 +4,7 @@
 \alias{.played_round_ref_dates}
 \title{Per-round reference dates for stat-rating checkpoints (PLAYED rounds only)}
 \usage{
-.played_round_ref_dates(fixtures, seasons = NULL)
+.played_round_ref_dates(fixtures, seasons = NULL, verbose = TRUE)
 }
 \arguments{
 \item{fixtures}{Fixture table from \code{load_fixtures()} (data.frame or
@@ -13,6 +13,11 @@ data.table) with \code{season}, \code{round_number}, \code{utc_start_time},
 
 \item{seasons}{Optional vector of seasons to restrict to. \code{NULL} keeps
 all.}
+
+\item{verbose}{Logical. Report how many fixture rows and rounds were dropped
+as unplayed. Default \code{TRUE} -- the bug this function exists to fix was
+invisible precisely because nothing logged what was being included, so
+over-filtering must not be silent either.}
 }
 \value{
 data.table with \code{season}, \code{round}, \code{ref_date}, ordered
@@ -36,7 +41,14 @@ phantom rounds, the furthest 9 weeks out); AFLM 2026 had 5 (scheduled finals).
 Filters on a recorded score rather than \code{ref_date <= Sys.Date()} so a
 match that was scheduled in the past but postponed is excluded too, matching
 the idiom already used in \code{05_compare_psr_models.R} and
-\code{06_train_psr_model.R}. Verified over all history in both comps: this
-shifts \strong{zero} existing round ref_dates, it only drops unplayed rounds.
+\code{06_train_psr_model.R}.
+
+\strong{Scope of the historical check, stated precisely:} a one-off
+comparison over all seasons in both comps (2026-08-25) found this filter
+shifts zero \emph{existing} round ref_dates and only drops unplayed rounds.
+That check covers settled history only, where the fixture and player-stat
+feeds have long since agreed. It says nothing about the live case where the
+two feeds disagree transiently -- see
+\code{\link{.assert_ref_date_coverage}}, which is the guard for that.
 }
 \keyword{internal}
