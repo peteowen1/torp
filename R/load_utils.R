@@ -177,6 +177,29 @@ validate_seasons <- function(seasons) {
   return(seasons)
 }
 
+#' Validate seasons for a specific competition
+#'
+#' \code{validate_seasons()} floors at \code{AFL_MIN_SEASON} (2021 -- where the
+#' men's CHAIN data starts) regardless of competition. AFLW's own history runs
+#' from 2018, and it is box-score based, so that floor is wrong for it in both
+#' directions: \code{seasons = TRUE} silently resolves to 2021+ (dropping
+#' AFLW's first three seasons with no warning), and an explicit
+#' \code{load_player_stats(2019, comp = "AFLW")} aborts outright even though
+#' the data exists.
+#'
+#' Routing on \code{comp} rather than widening \code{AFL_MIN_SEASON} keeps
+#' men's behaviour bit-identical -- the men's floor is load-bearing elsewhere
+#' (chain-derived pipelines genuinely have no pre-2021 data to read).
+#'
+#' @param seasons Numeric vector of seasons, or TRUE for all available.
+#' @param comp Competition: "AFLM" (default) or "AFLW".
+#' @return A validated numeric vector of seasons.
+#' @keywords internal
+.validate_seasons_comp <- function(seasons, comp = "AFLM") {
+  if (identical(comp, "AFLW")) return(.validate_aflw_seasons(seasons))
+  validate_seasons(seasons)
+}
+
 #' Generate URLs for data download
 #'
 #' @param data_type Type of data (e.g., "chain-data", "pbp-data")

@@ -101,6 +101,15 @@
     return(NULL)
   }
 
+  # Cross-feed check -- see 03_estimate_stat_ratings.R for the full reasoning.
+  # The map is built from FIXTURE scores; the rows being rated come from the
+  # player-stats feed. If results lag stats (a live race on the pre-game
+  # schedule this runs on), a played round exists in stat_rating_data but not
+  # in the map and is silently dropped -- every count below derives from the
+  # already-filtered map, so nothing else would notice. The played-rounds guard
+  # above catches phantom FUTURE rounds; only this catches a MISSING one.
+  .assert_ref_date_coverage(ref_date_map, stat_rating_data, label = "AFLW")
+
   batch_results <- .estimate_stat_ratings_batch(
     stat_rating_data,
     ref_dates = ref_date_map$ref_date,
@@ -121,16 +130,36 @@
   }
 
   if (counter == 0L) {
-    cli::cli_warn(".build_aflw_stat_ratings: all {nrow(ref_date_map)} round estimations failed -- returning NULL.")
+    cli::cli_alert_danger(".build_aflw_stat_ratings: all {nrow(ref_date_map)} round estimations failed -- returning NULL.")
     return(NULL)
   }
   if (counter < nrow(ref_date_map)) {
-    # Named, not swallowed: a silent shortfall reads as a thin season rather
-    # than as rounds that failed to estimate.
-    cli::cli_warn(".build_aflw_stat_ratings: {nrow(ref_date_map) - counter} of {nrow(ref_date_map)} season-rounds could not be estimated.")
+    # cli_alert_danger FIRST, not a bare cli_warn: warnings are deferred to the
+    # end of an Rscript run and silently dropped past getOption("nwarnings").
+    # See save_to_release() (R/load_data.R) -- that is exactly how the
+    # 2026-07-29 CSV divergence left no trace in the log.
+    n_missing <- nrow(ref_date_map) - counter
+    cli::cli_alert_danger(
+      ".build_aflw_stat_ratings: {n_missing} of {nrow(ref_date_map)} season-rounds could not be estimated.")
+    cli::cli_warn(".build_aflw_stat_ratings: {n_missing} of {nrow(ref_date_map)} season-rounds could not be estimated.")
   }
 
-  data.table::rbindlist(out[seq_len(counter)], fill = TRUE)
+  built <- data.table::rbindlist(out[seq_len(counter)], fill = TRUE)
+
+  # A season present in the rating data but absent from the built output is
+  # invisible downstream: Stage 7's own check groups the RESULT, so a wholly
+  # missing season has no row to be counted against. Mirrors the same abort in
+  # aflw_run_pipeline.R and 03_estimate_stat_ratings.R.
+  built_seasons <- unique(built$season)
+  empty_seasons <- setdiff(season_vec, built_seasons)
+  if (length(empty_seasons) > 0) {
+    cli::cli_abort(c(
+      "{length(empty_seasons)} AFLW season{?s} with rating data produced ZERO checkpoints: {.val {as.character(empty_seasons)}}.",
+      "x" = "Aborting rather than returning an artifact that silently omits them."
+    ))
+  }
+
+  built
 }
 
 #' Compute AFLW PSR from frozen coefficients

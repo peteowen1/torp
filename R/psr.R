@@ -42,6 +42,16 @@
   # to "load it" fixes them all at once; defaulting to "abort" would have made
   # the correct behaviour the one you must remember to ask for, which is how
   # the playstyle key survived unnoticed in the first place.
+  # RESIDUAL COMP GAP, deliberately left rather than plumbed:
+  # this self-load has no comp to forward, so it defaults to AFLM. An AFLW
+  # caller reaches it only if BOTH (a) PSR_CENTRE_ON_LISTED is TRUE (FALSE
+  # today) and (b) .compute_psr_from_stat_ratings()'s own comp-aware load
+  # returned NULL -- i.e. load_player_details() failed for EVERY requested
+  # season. Doubly latent. Closing it properly means adding `comp` to
+  # calculate_psr()/calculate_psr_components(), both EXPORTED, with 49 call
+  # sites across 19 files; that churn is not justified by a dead branch.
+  # If PSR_CENTRE_ON_LISTED is ever flipped on for AFLW, thread comp through
+  # from calculate_psr() BEFORE trusting AFLW centring.
   if (is.null(listed_pos)) {
     listed_pos <- .load_listed_positions(unique(dt$season))
   }

@@ -912,7 +912,8 @@ load_xg <- function(seasons = get_afl_season(), rounds = NULL, use_disk_cache = 
 load_player_stats <- function(seasons = get_afl_season(), use_disk_cache = TRUE, refresh = FALSE,
                               columns = NULL, comp = "AFLM") {
   .validate_afl_comp(comp)
-  seasons <- validate_seasons(seasons)
+  # comp-aware floor: AFLW history starts 2018, men's chain data at 2021.
+  seasons <- .validate_seasons_comp(seasons, comp)
 
   # comp-suffix the cache prefix so an AFLM and AFLW load for the same season
   # never collide in the in-memory cache or the disk cache filename.
@@ -1104,7 +1105,8 @@ load_fixtures <- function(seasons = NULL, all = FALSE, use_disk_cache = FALSE,
   if (is.null(seasons)) {
     seasons <- get_afl_season()
   } else {
-    seasons <- validate_seasons(seasons)
+    # comp-aware floor: AFLW history starts 2018, men's chain data at 2021.
+    seasons <- .validate_seasons_comp(seasons, comp)
   }
 
   cache_prefix <- if (comp == "AFLM") "fixtures" else paste0("fixtures_", comp)
@@ -1150,7 +1152,8 @@ load_fixtures <- function(seasons = NULL, all = FALSE, use_disk_cache = FALSE,
 load_teams <- function(seasons = get_afl_season(), use_disk_cache = TRUE, refresh = FALSE,
                        columns = NULL, comp = "AFLM") {
   .validate_afl_comp(comp)
-  seasons <- validate_seasons(seasons)
+  # comp-aware floor: AFLW history starts 2018, men's chain data at 2021.
+  seasons <- .validate_seasons_comp(seasons, comp)
 
   cache_prefix <- if (comp == "AFLM") "teams" else paste0("teams_", comp)
 

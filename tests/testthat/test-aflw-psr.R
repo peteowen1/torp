@@ -197,3 +197,30 @@ test_that(".compute_psr_from_stat_ratings forwards comp to listed-position loadi
   ))
   expect_equal(seen_comp, "AFLW")
 })
+
+# --- comp-aware season floor (build/scoring side) ---------------------------
+
+test_that(".validate_seasons_comp() floors AFLW at 2018 but leaves AFLM at 2021", {
+  # validate_seasons() is NOT comp-aware: TRUE resolves to AFL_MIN_SEASON:current
+  # (2021+), which silently drops AFLW's first three seasons, and an explicit
+  # 2019 aborts outright. The build/scoring path must not inherit that floor.
+  expect_equal(min(torp:::.validate_seasons_comp(TRUE, "AFLW")), torp:::AFLW_MIN_SEASON)
+  expect_equal(min(torp:::.validate_seasons_comp(TRUE, "AFLM")), torp:::AFL_MIN_SEASON)
+  # The specific case that aborted before: an explicit pre-2021 AFLW season.
+  expect_equal(torp:::.validate_seasons_comp(2019, "AFLW"), 2019)
+  expect_error(torp:::.validate_seasons_comp(2019, "AFLM"), "Invalid season years")
+})
+
+test_that("AFLM season validation is bit-identical through the comp dispatcher", {
+  # Routing on comp must not perturb the men's path at all.
+  expect_equal(torp:::.validate_seasons_comp(TRUE, "AFLM"), torp:::validate_seasons(TRUE))
+  expect_equal(torp:::.validate_seasons_comp(2023:2025, "AFLM"), torp:::validate_seasons(2023:2025))
+})
+
+test_that(".build_aflw_stat_ratings() asserts cross-feed coverage", {
+  # The guard that must be present: rating data has a played round the
+  # fixture-derived checkpoint map lacks (results feed lagging the stats feed).
+  map <- data.table::data.table(season = 2026L, round = 1L, ref_date = as.Date("2026-08-01"))
+  srd <- data.table::data.table(season = c(2026L, 2026L), round = c(1L, 3L))
+  expect_error(torp:::.assert_ref_date_coverage(map, srd, label = "AFLW"), "2026 R3")
+})
