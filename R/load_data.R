@@ -1844,12 +1844,16 @@ load_team_rapm_asof <- function(comp = "AFLM", path = NULL) {
   out <- NULL
   source_desc <- NULL
 
+  # NOTE on severity throughout this function: cli_alert_danger, not cli_warn.
+  # Every branch here ends in "xrapm_diff silently becomes 0 for every match",
+  # which is precisely the class of failure a deferred warning hides. cli_warn
+  # is held to end-of-Rscript and can be dropped past getOption("nwarnings") or
+  # lost when a job is killed on timeout -- the documented 2026-07-29 incident.
+  # Same rule as match_model.R:1133-1139.
   if (!is.null(path)) {
     if (!file.exists(path)) {
-      cli::cli_warn(c(
-        "No as-of xRAPM snapshot at the explicit path {.path {path}}.",
-        "x" = "xrapm_diff will fall back to neutral 0 for every match."
-      ))
+      cli::cli_alert_danger("No as-of xRAPM snapshot at the explicit path {path}.")
+      cli::cli_alert_danger("xrapm_diff will fall back to neutral 0 for every match.")
       return(NULL)
     }
     out <- as.data.frame(arrow::read_parquet(path))
@@ -1868,11 +1872,11 @@ load_team_rapm_asof <- function(comp = "AFLM", path = NULL) {
       out <- tryCatch(
         as.data.frame(load_from_url(url)),
         error = function(e) {
-          cli::cli_warn(c(
-            "Could not load the as-of xRAPM snapshot for comp {.val {comp}} from release {.val {TEAM_RAPM_ASOF_RELEASE_TAG}}: {conditionMessage(e)}",
-            "i" = "Build and publish it with data-raw/03-ratings/publish_team_rapm_asof.R.",
-            "x" = "xrapm_diff will fall back to neutral 0 for every match."
-          ))
+          cli::cli_alert_danger(
+            "Could not load the as-of xRAPM snapshot for comp {comp} from release {TEAM_RAPM_ASOF_RELEASE_TAG}: {conditionMessage(e)}"
+          )
+          cli::cli_alert_info("Build and publish it with data-raw/03-ratings/publish_team_rapm_asof.R.")
+          cli::cli_alert_danger("xrapm_diff will fall back to neutral 0 for every match.")
           NULL
         }
       )
@@ -1881,10 +1885,8 @@ load_team_rapm_asof <- function(comp = "AFLM", path = NULL) {
 
   if (is.null(out)) return(NULL)
   if (nrow(out) == 0) {
-    cli::cli_warn(c(
-      "As-of xRAPM snapshot for comp {.val {comp}} resolved but is EMPTY ({.path {source_desc}}).",
-      "x" = "xrapm_diff will fall back to neutral 0 for every match."
-    ))
+    cli::cli_alert_danger("As-of xRAPM snapshot for comp {comp} resolved but is EMPTY ({source_desc}).")
+    cli::cli_alert_danger("xrapm_diff will fall back to neutral 0 for every match.")
     return(NULL)
   }
 

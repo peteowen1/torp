@@ -40,7 +40,11 @@ test_that("load_team_rapm_asof warns and returns NULL for a missing explicit pat
   missing_path <- file.path(tempdir(), "definitely-not-here-xrapm.parquet")
   expect_false(file.exists(missing_path))
 
-  expect_warning(
+  # expect_message, not expect_warning: these paths use cli_alert_danger so
+  # they print immediately. A cli_warn here would be deferred to end-of-Rscript
+  # and could be dropped past nwarnings or lost to a timeout -- the exact way
+  # this failure would otherwise go unlogged.
+  expect_message(
     out <- load_team_rapm_asof(comp = "AFLM", path = missing_path),
     "No as-of xRAPM snapshot"
   )
@@ -62,9 +66,9 @@ test_that("load_team_rapm_asof ABORTS when the shipping column is absent", {
   )
 })
 
-test_that("load_team_rapm_asof warns and returns NULL on an empty snapshot", {
+test_that("load_team_rapm_asof reports loudly and returns NULL on an empty snapshot", {
   p <- .write_snapshot(.mk_snapshot()[0, ])
-  expect_warning(
+  expect_message(
     out <- load_team_rapm_asof(comp = "AFLM", path = p),
     "EMPTY"
   )
@@ -164,9 +168,9 @@ test_that(".team_rapm_played_checkpoints aborts rather than silently falling bac
 # .warn_stale_xrapm_snapshot -- the silent-rot guard
 # -----------------------------------------------------------------------------
 
-test_that(".warn_stale_xrapm_snapshot warns when the snapshot is behind the predicted round", {
+test_that(".warn_stale_xrapm_snapshot reports loudly when the snapshot is behind the predicted round", {
   snap <- .mk_snapshot(rounds = 1:3)  # latest = 2026 R3
-  expect_warning(
+  expect_message(
     torp:::.warn_stale_xrapm_snapshot(snap, season = 2026L, round_number = 9L, comp = "AFLM"),
     "STALE xRAPM snapshot"
   )
@@ -194,10 +198,10 @@ test_that(".warn_stale_xrapm_snapshot is a no-op for NULL/empty input", {
   expect_silent(torp:::.warn_stale_xrapm_snapshot(.mk_snapshot()[0, ], 2026L, 5L))
 })
 
-test_that(".warn_stale_xrapm_snapshot warns across a season boundary", {
+test_that(".warn_stale_xrapm_snapshot reports loudly across a season boundary", {
   # Last season's final round is not "one round behind" this season's round 1.
   snap <- .mk_snapshot(seasons = 2025L, rounds = 1:3)
-  expect_warning(
+  expect_message(
     torp:::.warn_stale_xrapm_snapshot(snap, season = 2026L, round_number = 1L, comp = "AFLM"),
     "STALE xRAPM snapshot"
   )

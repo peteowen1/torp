@@ -81,7 +81,7 @@ build_team_mdl_df <- function(season = NULL, target_weeks = NULL,
   xrapm_df <- tryCatch(
     load_team_rapm_asof(comp = "AFLM"),
     error = function(e) {
-      cli::cli_warn("Failed to load as-of xRAPM snapshot ({conditionMessage(e)}) -- xrapm_diff falls back to neutral 0")
+      cli::cli_alert_danger("Failed to load as-of xRAPM snapshot ({conditionMessage(e)}) -- xrapm_diff falls back to neutral 0")
       NULL
     }
   )
@@ -803,7 +803,31 @@ build_prediction_state <- function(week = NULL, weeks = NULL, season = NULL,
   }
 
   cli::cli_h2("Processing lineups")
-  team_rt_df <- .build_team_ratings_df(teams, torp_df_total, psr_df)
+  # xRAPM: same block as build_team_mdl_df()'s. It lives in BOTH because this is
+  # the function production actually runs -- run_predictions_pipeline() calls
+  # build_prediction_state(), never the build_team_mdl_df() wrapper (that one is
+  # used only by data-raw/debug/ scripts). Wiring it into the wrapper alone left
+  # xrapm_diff a flat 0 for every match ever served, silently: the NULL path in
+  # .join_xrapm_to_lineups() sets 0 and returns without a word, so nothing in the
+  # log distinguished "feature off" from "feature on and neutral".
+  xrapm_df <- tryCatch(
+    load_team_rapm_asof(comp = "AFLM"),
+    error = function(e) {
+      cli::cli_alert_danger("Failed to load as-of xRAPM snapshot ({conditionMessage(e)}) -- xrapm_diff falls back to neutral 0")
+      NULL
+    }
+  )
+  if (is.null(xrapm_df)) {
+    cli::cli_alert_danger("xRAPM snapshot unavailable -- xrapm_diff is a flat 0 for every match in this run.")
+  } else {
+    .warn_stale_xrapm_snapshot(
+      xrapm_df,
+      season = season,
+      round_number = max(target_weeks, na.rm = TRUE),
+      comp = "AFLM"
+    )
+  }
+  team_rt_df <- .build_team_ratings_df(teams, torp_df_total, psr_df, xrapm_df)
 
   cli::cli_h2("Computing features")
   team_rt_fix_df <- .build_match_features(fix_df, team_rt_df, all_grounds)

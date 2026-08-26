@@ -15,8 +15,9 @@
 \code{team_lineup_df} with an added numeric \code{xrapm} column.
 }
 \description{
-Mirrors the PSR rolling as-of join in \code{.build_team_ratings_df()}: for each
-lineup row, take the latest snapshot row for that player whose
-(season, round) is at or before the lineup row's own (season, round).
+For each lineup row, take the latest snapshot row for that player whose
+(season, round) is STRICTLY BEFORE the lineup row's own (season, round) --
+see this file's leak-safety header for why strict, and why \code{>=} was a real
+leak. Predicting round q uses checkpoint q-1.
 }
 \keyword{internal}

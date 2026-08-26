@@ -32,13 +32,30 @@
 #     `load_data.R`, refreshed on the ratings-pipeline cadence, and guarded
 #     against silent staleness by `.warn_stale_xrapm_snapshot()` below.
 #
-# Leak-safety: the as-of engine builds each snapshot from matches strictly
-# before its `ref_date`, and `.team_rapm_checkpoint_dates()` sets that date to
-# (round's first match - 1 day). So the snapshot for (season s, round r)
-# incorporates nothing from round r onward, and using it to predict round r is
-# not leakage -- the same argument `.build_team_ratings_df()` already documents
-# for PSR(s, r). The rolling join below preserves that by only ever matching a
-# lineup row to a checkpoint at or before its own round.
+# LEAK-SAFETY -- read this before changing the join below.
+#
+# A snapshot row labelled (season s, round r) is the checkpoint that CONTAINS
+# round r. `.team_rapm_checkpoint_dates()` dates it `next_round_first - 1`, i.e.
+# the day before round r+1 starts, and the fit takes every match with
+# `match_date <= ref_date`. So checkpoint r has already seen round r's results.
+#
+# The label is therefore "data through round r", NOT "safe to predict round r".
+# Predicting round q needs a checkpoint built strictly before round q starts,
+# which is checkpoint q-1 -- dated the day before round q's first bounce, and
+# the freshest rating that is legitimately available pre-bounce.
+#
+# Hence the join below is a STRICT `>`, not `>=`. With `>=` a round-r lineup row
+# matched checkpoint r -- a rating fitted on that very match's outcome. That was
+# a real leak (fixed 2026-08-26); it was dormant only because `xrapm_diff` was
+# not yet wired into the served pipeline, and it was certified as correct by a
+# test that asserted round 1 should see a snapshot row also labelled round 1.
+#
+# The failure mode it would have caused is worth naming, because it is worse
+# than a merely-useless feature: training rows would carry a leaked (artificially
+# strong) `xrapm_diff` while served rows carried a correctly-lagged one, so the
+# model would learn to lean on the feature far harder than its true, already
+# marginal (p = 0.078) signal justifies -- actively degrading served predictions
+# rather than just failing to improve them.
 
 # NOTE: `load_team_rapm_asof()` lives in `load_data.R` with the rest of the
 # `load_*()` family. It used to be defined here, back when the snapshot was a
@@ -97,11 +114,21 @@
   }
 
   if (is.na(lag_rounds) || lag_rounds > max_lag_rounds) {
-    cli::cli_warn(c(
-      "STALE xRAPM snapshot for comp {.val {comp}}: latest checkpoint is {latest_season} R{latest_round}, but {season} R{round_number} is being predicted.",
-      "!" = "The rolling join will reuse {latest_season} R{latest_round}'s ratings for this match -- xrapm_diff is frozen, not current.",
-      "i" = "Refresh it: data-raw/03-ratings/publish_team_rapm_asof.R (runs on the ratings-pipeline cadence)."
-    ))
+    # cli_alert_danger, not cli_warn: this is the house rule documented in
+    # match_model.R:1133-1139 (and aflw_psr.R, load_data.R, player_ratings.R).
+    # cli_warn is deferred to end-of-Rscript and can be dropped past
+    # getOption("nwarnings") or lost entirely when a job is killed on timeout --
+    # which is exactly how the 2026-07-29 silent predictions-CSV failure went
+    # unlogged. cli_alert_danger goes through message() and prints immediately.
+    cli::cli_alert_danger(
+      "STALE xRAPM snapshot for comp {comp}: latest checkpoint is {latest_season} R{latest_round}, but {season} R{round_number} is being predicted."
+    )
+    cli::cli_alert_danger(
+      "The rolling join will reuse {latest_season} R{latest_round}'s ratings -- xrapm_diff is frozen, not current."
+    )
+    cli::cli_alert_info(
+      "Refresh it: data-raw/03-ratings/publish_team_rapm_asof.R (runs on its own cadence via publish-xrapm-snapshots.yml)."
+    )
   }
   invisible(lag_rounds)
 }
@@ -110,9 +137,10 @@
 
 #' Attach a TOG-weighted, leak-safe `xrapm` column to a lineup table
 #'
-#' Mirrors the PSR rolling as-of join in `.build_team_ratings_df()`: for each
-#' lineup row, take the latest snapshot row for that player whose
-#' (season, round) is at or before the lineup row's own (season, round).
+#' For each lineup row, take the latest snapshot row for that player whose
+#' (season, round) is STRICTLY BEFORE the lineup row's own (season, round) --
+#' see this file's leak-safety header for why strict, and why `>=` was a real
+#' leak. Predicting round q uses checkpoint q-1.
 #'
 #' @param team_lineup_df Lineup rows, already carrying `lineup_tog`.
 #' @param xrapm_df Output of `load_team_rapm_asof()`.
@@ -148,7 +176,9 @@
     dplyr::mutate(.xrapm_lineup_key = .data$season * 100L + as.integer(.data$round_number)) |>
     dplyr::left_join(
       xrapm_for_join,
-      by = dplyr::join_by("player_id", closest(".xrapm_lineup_key" >= "xrapm_key"))
+      # STRICT `>`: checkpoint r contains round r's own results, so a round-q
+      # row may only see checkpoint q-1 or earlier. See the header.
+      by = dplyr::join_by("player_id", closest(".xrapm_lineup_key" > "xrapm_key"))
     ) |>
     dplyr::select(-".xrapm_lineup_key", -"xrapm_key")
 

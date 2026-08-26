@@ -1,0 +1,92 @@
+name: Publish xRAPM Snapshots
+
+# Refreshes the as-of xRAPM snapshots (`team_rapm_asof-data`) that the match
+# model's `xrapm_diff` feature reads via load_team_rapm_asof().
+#
+# WHY THIS IS ITS OWN WORKFLOW, not a stage of daily-ratings-predictions.yml:
+# it used to be "Stage 8" of run_ratings_pipeline.R. That put a slow, optional
+# refresh inside the `compute-ratings` job, which `build-predictions` declares
+# as `needs:` -- so overrunning the 45-minute budget did not just skip the
+# snapshot, it published no predictions at all. A cold build is ~34 min for
+# AFLM alone (~13s x 156 checkpoints) and the runner cache starts empty on
+# every scheduled run, so that was the normal case, not the edge case.
+#
+# Here it cannot block anything. If this workflow fails or is skipped, the
+# snapshot simply goes stale, and .warn_stale_xrapm_snapshot() says so loudly
+# at prediction time (naming the round gap) rather than silently serving a
+# frozen rating.
+
+on:
+  schedule:
+    # Mondays 08:00 UTC -- after the weekend's rounds have completed and been
+    # scored, before Thursday's first ratings run needs the refreshed file.
+    - cron: '0 8 * * 1'
+
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Build and validate without uploading'
+        required: false
+        type: boolean
+        default: false
+
+env:
+  GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+  R_KEEP_PKG_SOURCE: yes
+  piggyback_cache_duration: 1
+
+jobs:
+  publish-xrapm:
+    runs-on: ubuntu-latest
+    # Sized for a genuinely COLD checkpoint cache (~34 min AFLM + AFLW, plus
+    # R dependency install). The cache step below usually makes it far faster,
+    # but the timeout must survive a cache miss without being the thing that
+    # fails -- nothing downstream depends on this job, so a long run is cheap.
+    timeout-minutes: 120
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup R
+        uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: '4.4.0'
+          use-public-rspm: true
+
+      - name: Setup R dependencies
+        uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          extra-packages: |
+            any::arrow
+            any::glmnet
+            any::piggyback
+            local::.
+
+      # The checkpoint cache is what makes an incremental refresh cheap: an
+      # already-computed (comp, ref_date, halflife) checkpoint becomes a disk
+      # read instead of a glmnet fit. Keyed so a new run restores the previous
+      # run's cache and then extends it with only the genuinely-new rounds.
+      - name: Restore xRAPM checkpoint cache
+        uses: actions/cache@v4
+        with:
+          path: data-raw/cache-team-rapm-asof
+          key: xrapm-asof-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            xrapm-asof-${{ runner.os }}-
+
+      - name: Publish xRAPM snapshots
+        env:
+          TORP_XRAPM_DRY_RUN: ${{ inputs.dry_run && '1' || '' }}
+        run: Rscript data-raw/03-ratings/publish_team_rapm_asof.R
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## xRAPM Snapshot Refresh" >> $GITHUB_STEP_SUMMARY
+          echo "**Date:** $(date +'%Y-%m-%d %H:%M UTC')" >> $GITHUB_STEP_SUMMARY
+          echo "**Trigger:** ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Result:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY

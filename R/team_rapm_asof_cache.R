@@ -80,6 +80,61 @@
   file.path(.team_rapm_asof_cache_dir(), paste0(key, ".rds"))
 }
 
+# .team_rapm_asof_cache_read / .team_rapm_asof_cache_write ----
+
+#' Read a cache entry, treating a corrupt file as a miss rather than an error
+#'
+#' A truncated \code{.rds} is a realistic artifact here, not a hypothetical: a
+#' long refresh killed mid-write (a timeout, a cancelled workflow) leaves one
+#' behind. Left unhandled, the next run's \code{readRDS()} throws, and the
+#' callers of these cached fits treat any error as an ordinary
+#' "this checkpoint failed" -- so a corrupt cache file looks identical to a
+#' genuine modelling failure, and the fix (clear the cache) is invisible from
+#' the log. Delete it and recompute instead, saying so.
+#'
+#' @param path Cache file path.
+#' @return The cached object, or \code{NULL} on a miss or a corrupt file.
+#' @keywords internal
+.team_rapm_asof_cache_read <- function(path) {
+  if (!file.exists(path)) return(NULL)
+  tryCatch(
+    readRDS(path),
+    error = function(e) {
+      cli::cli_alert_danger(
+        "Corrupt xRAPM cache entry {basename(path)} ({conditionMessage(e)}) -- deleting and recomputing."
+      )
+      unlink(path)
+      NULL
+    }
+  )
+}
+
+#' Write a cache entry atomically
+#'
+#' \code{saveRDS()} straight to the final path is what creates the truncated
+#' files \code{.team_rapm_asof_cache_read()} has to recover from. Write to a
+#' unique temp file in the same directory and rename -- rename is atomic within
+#' a filesystem, so a killed run leaves either the old entry or nothing, never
+#' a half-written one.
+#'
+#' @param object Object to cache.
+#' @param path Final cache file path.
+#' @return Invisibly, \code{TRUE} on success, \code{FALSE} if the write failed.
+#' @keywords internal
+.team_rapm_asof_cache_write <- function(object, path) {
+  tmp <- paste0(path, ".tmp-", Sys.getpid(), "-", as.integer(stats::runif(1, 1, 1e9)))
+  ok <- tryCatch({
+    saveRDS(object, tmp)
+    if (!file.rename(tmp, path)) stop("rename failed")
+    TRUE
+  }, error = function(e) {
+    cli::cli_alert_danger("Could not write xRAPM cache entry {basename(path)}: {conditionMessage(e)}")
+    FALSE
+  })
+  if (!ok && file.exists(tmp)) unlink(tmp)
+  invisible(ok)
+}
+
 # fit_team_rapm_asof_cached ----
 
 #' Cached as-of RAPM snapshot: memoizes \code{build_team_rapm_asof()} +
@@ -115,8 +170,9 @@ fit_team_rapm_asof_cached <- function(ref_date, comp = "AFLM", halflife_days = 3
   )
   path <- .team_rapm_asof_cache_path(key)
 
-  if (.team_rapm_asof_cache_enabled() && file.exists(path)) {
-    return(readRDS(path))
+  if (.team_rapm_asof_cache_enabled()) {
+    hit <- .team_rapm_asof_cache_read(path)
+    if (!is.null(hit)) return(hit)
   }
 
   design <- build_team_rapm_asof(ref_date, comp = comp, halflife_days = halflife_days,
@@ -134,7 +190,7 @@ fit_team_rapm_asof_cached <- function(ref_date, comp = "AFLM", halflife_days = 3
   data.table::setattr(ratings, "cv_r2", fit$cv_r2)
 
   if (.team_rapm_asof_cache_enabled()) {
-    saveRDS(ratings, path)
+    .team_rapm_asof_cache_write(ratings, path)
   }
   ratings
 }
@@ -165,8 +221,9 @@ fit_team_spm_asof_cached <- function(ref_date, rapm_asof_ratings, comp = "AFLM",
   )
   path <- .team_rapm_asof_cache_path(key)
 
-  if (.team_rapm_asof_cache_enabled() && file.exists(path)) {
-    return(readRDS(path))
+  if (.team_rapm_asof_cache_enabled()) {
+    hit <- .team_rapm_asof_cache_read(path)
+    if (!is.null(hit)) return(hit)
   }
 
   out <- fit_team_spm_asof(ref_date, rapm_asof_ratings, comp = comp, halflife_days = halflife_days,
@@ -174,7 +231,7 @@ fit_team_spm_asof_cached <- function(ref_date, rapm_asof_ratings, comp = "AFLM",
                            prior_games = prior_games)
 
   if (.team_rapm_asof_cache_enabled() && !is.null(out)) {
-    saveRDS(out, path)
+    .team_rapm_asof_cache_write(out, path)
   }
   out
 }
