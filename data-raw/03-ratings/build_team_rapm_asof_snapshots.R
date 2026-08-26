@@ -31,7 +31,16 @@ HALFLIFE_DAYS <- 730  # AFL-DECAY-XRAPM-PLAN.md §18-19: swept properly on the
 
 cli::cli_h1("Building {comp} as-of RAPM/SPM snapshots (halflife={HALFLIFE_DAYS}d)")
 
-checkpoints <- .team_rapm_checkpoint_dates(comp = comp)
+# PLAYED rounds only. .team_rapm_checkpoint_dates() is pure fixture-calendar
+# geometry and happily returns scheduled-but-unplayed rounds; building those is
+# wrong twice over (a max(round) reader sees a phantom "current" round, and the
+# phantom rows are unstable -- their `match_date <= ref_date` window grows daily
+# until the date passes, so the same checkpoint yields a different rating each
+# run). Same trap fixed in the stat-ratings pipeline.
+checkpoints <- .team_rapm_played_checkpoints(comp = comp)
+if (nrow(checkpoints) == 0) {
+  cli::cli_abort("No PLAYED checkpoints for comp {.val {comp}} -- nothing to build.")
+}
 if (!is.null(season_filter)) {
   checkpoints <- checkpoints[season %in% season_filter]
 }

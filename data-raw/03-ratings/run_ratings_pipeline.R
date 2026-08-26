@@ -739,6 +739,73 @@ tryCatch({
 
 tictoc::toc(log = TRUE)
 
+# Stage 7: Refresh & Release As-Of xRAPM Snapshots ----
+
+# The match model's `xrapm_diff` feature reads these (via
+# load_team_rapm_asof()). They are PER-ROUND, so they must be refreshed as
+# rounds complete: the rolling as-of join degrades silently rather than
+# erroring, quietly serving the last checkpoint it has for every later match.
+# That is why this runs on the same cadence as the ratings themselves.
+#
+# Cheap in the steady state -- fit_team_*_asof_cached() makes an
+# already-computed checkpoint a near-instant disk read, so a daily run pays
+# only for genuinely-new rounds. Wrapped in tryCatch and deliberately
+# non-fatal: xrapm_diff is one optional feature, and failing to refresh it
+# must not take down a pipeline that also publishes the ratings themselves.
+
+cli::cli_h2("Stage 7: As-Of xRAPM Snapshots")
+tictoc::tic("stage_7_xrapm_asof")
+
+for (xrapm_comp in c("AFLM", "AFLW")) {
+  tryCatch({
+    checkpoints <- torp:::.team_rapm_played_checkpoints(comp = xrapm_comp)
+    if (nrow(checkpoints) == 0) {
+      cli::cli_warn("{xrapm_comp}: no played checkpoints -- skipping xRAPM snapshot.")
+    } else {
+      data.table::setorder(checkpoints, season, round_number)
+      rows <- vector("list", nrow(checkpoints))
+      n_ok <- 0L
+      for (i in seq_len(nrow(checkpoints))) {
+        rd <- checkpoints$checkpoint_date[i]
+        rr <- tryCatch(
+          fit_team_rapm_asof_cached(rd, comp = xrapm_comp, halflife_days = 730, nfolds = 10),
+          error = function(e) NULL
+        )
+        if (is.null(rr)) next
+        sp <- tryCatch(fit_team_spm_asof_cached(rd, rr, comp = xrapm_comp), error = function(e) NULL)
+        if (is.null(sp)) next
+        rows[[i]] <- sp[, .(
+          player_id, ref_date = rd,
+          season = checkpoints$season[i], round_number = checkpoints$round_number[i],
+          team_rapm_shrunk,
+          rapm = rapm_offense - rapm_defense,
+          rapm_offense, rapm_defense, spm_offense, spm_defense,
+          shrinkage_weight, n_games
+        )]
+        n_ok <- n_ok + 1L
+      }
+      snap <- data.table::rbindlist(rows, fill = TRUE)
+      if (nrow(snap) == 0) {
+        cli::cli_warn("{xrapm_comp}: xRAPM snapshot built 0 rows -- not publishing.")
+      } else if (anyNA(snap$player_id) || all(is.na(snap$team_rapm_shrunk))) {
+        cli::cli_alert_danger("{xrapm_comp}: xRAPM snapshot failed validation -- not publishing.")
+      } else {
+        f_stem <- sprintf("career_team_rapm_asof_%s", xrapm_comp)
+        arrow::write_parquet(snap, file.path("data-raw", "03-ratings", paste0(f_stem, ".parquet")))
+        save_to_release(as.data.frame(snap), f_stem, TEAM_RAPM_ASOF_RELEASE_TAG)
+        latest <- snap[which.max(season * 100L + round_number)]
+        cli::cli_alert_success(
+          "Released {f_stem} ({nrow(snap)} rows, {n_ok} checkpoints, latest {latest$season} R{latest$round_number})"
+        )
+      }
+    }
+  }, error = function(e) {
+    cli::cli_alert_danger("Failed to refresh/release {xrapm_comp} xRAPM snapshot: {conditionMessage(e)}")
+  })
+}
+
+tictoc::toc(log = TRUE)
+
 # Summary ----
 
 cli::cli_h2("Pipeline Complete")

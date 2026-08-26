@@ -27,7 +27,10 @@
 #     feature scored in sec23 and the feature computed here are not identical,
 #     and the gate number should not be assumed to transfer unchanged.
 #
-#  2. THE SNAPSHOT IS NOT A PUBLISHED ARTIFACT. See `load_team_rapm_asof()`.
+#  2. (RESOLVED 2026-08-26) The snapshot is now a published torpdata artifact
+#     (`team_rapm_asof-data`), loaded by `load_team_rapm_asof()` in
+#     `load_data.R`, refreshed on the ratings-pipeline cadence, and guarded
+#     against silent staleness by `.warn_stale_xrapm_snapshot()` below.
 #
 # Leak-safety: the as-of engine builds each snapshot from matches strictly
 # before its `ref_date`, and `.team_rapm_checkpoint_dates()` sets that date to
@@ -37,58 +40,70 @@
 # for PSR(s, r). The rolling join below preserves that by only ever matching a
 # lineup row to a checkpoint at or before its own round.
 
-# load_team_rapm_asof ----
+# NOTE: `load_team_rapm_asof()` lives in `load_data.R` with the rest of the
+# `load_*()` family. It used to be defined here, back when the snapshot was a
+# gitignored local-only artifact with no release behind it; it was moved (not
+# duplicated) on 2026-08-26 when the artifact was published.
 
-#' Load the as-of xRAPM snapshot table for a competition
+# .warn_stale_xrapm_snapshot ----
+
+#' Warn loudly when the xRAPM snapshot is behind the round being predicted
 #'
-#' @section Infrastructure gap:
-#' Unlike every other rating input to the match model, this snapshot is **not**
-#' published to a torpdata release and has no entry in the `load_*()` family
-#' proper. It is a local build artifact written by
-#' `data-raw/03-ratings/build_team_rapm_asof_snapshots.R`, and that path is
-#' gitignored. Consequences, stated plainly rather than discovered later:
+#' The failure this exists to catch is silent by construction. The rolling
+#' as-of join in \code{.join_xrapm_to_lineups()} matches each lineup row to the
+#' latest checkpoint at or before its own round. If the snapshot stops being
+#' refreshed, that join keeps succeeding -- it just keeps returning the last
+#' checkpoint it has, for every future round, forever. Nothing errors, no row
+#' count changes, and the feature quietly degrades into a frozen rating.
 #'
-#' * A clean checkout (and therefore CI, and therefore the scheduled prediction
-#'   workflow) has no snapshot file, so `xrapm_diff` falls back to neutral 0 --
-#'   see `.build_team_ratings_df()`'s caller-side handling.
-#' * The snapshot must be REBUILT as the season advances. It is a per-round
-#'   artifact; a stale file silently stops gaining checkpoints, and the rolling
-#'   join then reuses the last available round's ratings for every later match.
-#'   That degrades quietly rather than erroring.
+#' Warn rather than abort, deliberately, and for the same reason
+#' \code{load_team_rapm_asof()} returns NULL rather than erroring: this is one
+#' optional feature inside a served prediction pipeline, and a stale rating is
+#' strictly better than no predictions at all. The warning names the gap in
+#' rounds so it is actionable rather than decorative.
 #'
-#' Making this feature genuinely live requires publishing the snapshot to a
-#' torpdata release and refreshing it on the same cadence as the ratings
-#' pipeline. That work does not exist yet.
-#'
-#' @param comp "AFLM" (default) or "AFLW".
-#' @param path Optional explicit path, primarily for tests.
-#' @return A data.frame with at least `player_id`, `season`, `round_number`,
-#'   `team_rapm_shrunk`; or `NULL` if no snapshot is available.
+#' @param xrapm_df Snapshot table, or NULL.
+#' @param season Integer season being predicted.
+#' @param round_number Integer round being predicted.
+#' @param comp "AFLM" or "AFLW", for the message only.
+#' @param max_lag_rounds Rounds of lag tolerated before warning. Default 1 --
+#'   the checkpoint for round r is built just before round r, so a
+#'   correctly-refreshed snapshot is never more than one round behind.
+#' @return Invisibly, the lag in rounds (\code{NA} when it cannot be computed).
 #' @keywords internal
-load_team_rapm_asof <- function(comp = "AFLM", path = NULL) {
-  .validate_afl_comp(comp)
-  if (is.null(path)) {
-    path <- file.path("data-raw", "03-ratings",
-                      sprintf("career_team_rapm_asof_%s.parquet", comp))
+.warn_stale_xrapm_snapshot <- function(xrapm_df, season, round_number,
+                                       comp = "AFLM", max_lag_rounds = 1L) {
+  if (is.null(xrapm_df) || nrow(xrapm_df) == 0) return(invisible(NA_integer_))
+  if (length(season) != 1L || length(round_number) != 1L ||
+      is.na(season) || is.na(round_number)) {
+    return(invisible(NA_integer_))
   }
-  if (!file.exists(path)) {
+
+  target_key <- as.integer(season) * 100L + as.integer(round_number)
+  snap_keys <- as.integer(xrapm_df$season) * 100L + as.integer(xrapm_df$round_number)
+  snap_keys <- snap_keys[!is.na(snap_keys)]
+  if (length(snap_keys) == 0) return(invisible(NA_integer_))
+
+  latest_key <- max(snap_keys)
+  if (latest_key >= target_key) return(invisible(0L))
+
+  latest_season <- latest_key %/% 100L
+  latest_round <- latest_key %% 100L
+
+  lag_rounds <- if (latest_season == as.integer(season)) {
+    as.integer(round_number) - latest_round
+  } else {
+    NA_integer_
+  }
+
+  if (is.na(lag_rounds) || lag_rounds > max_lag_rounds) {
     cli::cli_warn(c(
-      "No as-of xRAPM snapshot found for comp {.val {comp}} at {.path {path}}.",
-      "i" = "Build it with data-raw/03-ratings/build_team_rapm_asof_snapshots.R.",
-      "x" = "xrapm_diff will fall back to neutral 0 for every match."
-    ))
-    return(NULL)
-  }
-  out <- as.data.frame(arrow::read_parquet(path))
-  required <- c("player_id", "season", "round_number", "team_rapm_shrunk")
-  missing <- setdiff(required, names(out))
-  if (length(missing) > 0) {
-    cli::cli_abort(c(
-      "As-of xRAPM snapshot at {.path {path}} is missing required column{?s}: {missing}.",
-      "i" = "Snapshots built before 2026-08-26 dropped `team_rapm_shrunk` and the season/round keys -- rebuild the snapshot."
+      "STALE xRAPM snapshot for comp {.val {comp}}: latest checkpoint is {latest_season} R{latest_round}, but {season} R{round_number} is being predicted.",
+      "!" = "The rolling join will reuse {latest_season} R{latest_round}'s ratings for this match -- xrapm_diff is frozen, not current.",
+      "i" = "Refresh it: data-raw/03-ratings/publish_team_rapm_asof.R (runs on the ratings-pipeline cadence)."
     ))
   }
-  out
+  invisible(lag_rounds)
 }
 
 # .join_xrapm_to_lineups ----

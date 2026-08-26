@@ -73,10 +73,11 @@ build_team_mdl_df <- function(season = NULL, target_weeks = NULL,
   fix_df <- .build_fixtures_df(fixtures)
 
   cli::cli_h2("Processing lineups")
-  # xRAPM snapshot is a local build artifact, not a published release -- absent
-  # in CI and on clean checkouts, where load_team_rapm_asof() warns and returns
-  # NULL and xrapm_diff stays a flat 0. Deliberately non-fatal: a missing
-  # snapshot must degrade the feature, not break the prediction pipeline.
+  # The xRAPM snapshot is published to torpdata (`team_rapm_asof-data`) and
+  # refreshed on this pipeline's own cadence, but it is still an OPTIONAL
+  # feature: if it cannot be resolved, load_team_rapm_asof() warns and returns
+  # NULL and xrapm_diff stays a flat 0. Deliberately non-fatal -- a missing
+  # snapshot must degrade one feature, not break the prediction pipeline.
   xrapm_df <- tryCatch(
     load_team_rapm_asof(comp = "AFLM"),
     error = function(e) {
@@ -84,6 +85,17 @@ build_team_mdl_df <- function(season = NULL, target_weeks = NULL,
       NULL
     }
   )
+  # A stale snapshot is the dangerous case: the rolling join keeps succeeding
+  # and silently serves a frozen rating. Check it against the round actually
+  # being predicted, and say so loudly if it is behind.
+  if (!is.null(target_weeks) && !is.null(season)) {
+    .warn_stale_xrapm_snapshot(
+      xrapm_df,
+      season = season,
+      round_number = max(target_weeks, na.rm = TRUE),
+      comp = "AFLM"
+    )
+  }
   team_rt_df <- .build_team_ratings_df(teams, torp_df, psr_df, xrapm_df)
 
   cli::cli_h2("Computing features")
