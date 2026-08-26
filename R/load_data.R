@@ -912,7 +912,8 @@ load_xg <- function(seasons = get_afl_season(), rounds = NULL, use_disk_cache = 
 load_player_stats <- function(seasons = get_afl_season(), use_disk_cache = TRUE, refresh = FALSE,
                               columns = NULL, comp = "AFLM") {
   .validate_afl_comp(comp)
-  seasons <- validate_seasons(seasons)
+  # comp-aware floor: AFLW history starts 2018, men's chain data at 2021.
+  seasons <- .validate_seasons_comp(seasons, comp)
 
   # comp-suffix the cache prefix so an AFLM and AFLW load for the same season
   # never collide in the in-memory cache or the disk cache filename.
@@ -1104,7 +1105,8 @@ load_fixtures <- function(seasons = NULL, all = FALSE, use_disk_cache = FALSE,
   if (is.null(seasons)) {
     seasons <- get_afl_season()
   } else {
-    seasons <- validate_seasons(seasons)
+    # comp-aware floor: AFLW history starts 2018, men's chain data at 2021.
+    seasons <- .validate_seasons_comp(seasons, comp)
   }
 
   cache_prefix <- if (comp == "AFLM") "fixtures" else paste0("fixtures_", comp)
@@ -1150,7 +1152,8 @@ load_fixtures <- function(seasons = NULL, all = FALSE, use_disk_cache = FALSE,
 load_teams <- function(seasons = get_afl_season(), use_disk_cache = TRUE, refresh = FALSE,
                        columns = NULL, comp = "AFLM") {
   .validate_afl_comp(comp)
-  seasons <- validate_seasons(seasons)
+  # comp-aware floor: AFLW history starts 2018, men's chain data at 2021.
+  seasons <- .validate_seasons_comp(seasons, comp)
 
   cache_prefix <- if (comp == "AFLM") "teams" else paste0("teams_", comp)
 
@@ -1648,6 +1651,84 @@ load_psr <- function(seasons = get_afl_season(), use_disk_cache = FALSE, columns
 
   if (nrow(out) > 0) out <- .normalise_team_values(out)
   return(out)
+}
+
+
+#' Load AFLW Player Skill Ratings (PSR)
+#'
+#' @description Loads pre-computed AFLW PSR from the
+#'   [torpdata repository](https://github.com/peteowen1/torpdata), release tag
+#'   `aflw_psr-data`. The AFLW equivalent of [load_psr()], kept as its own
+#'   release rather than a comp column on `psr-data` so the men's published
+#'   artifact -- which live consumers read -- is never rewritten by an AFLW run.
+#'
+#' @details Deliberately does NOT call `validate_seasons()`. That helper floors
+#'   at `AFL_MIN_SEASON` (2021) because that is where torp's men's chain data
+#'   starts, but AFLW's box-score history runs from 2018 -- passing it through
+#'   would abort on exactly the three earliest seasons this release exists to
+#'   carry.
+#'
+#' @param seasons A numeric vector of 4-digit years, or `TRUE` for every
+#'   available AFLW season (2018 onwards).
+#' @param use_disk_cache Logical. If `TRUE`, uses persistent disk cache for
+#'   faster repeated loads. Default is `FALSE`.
+#' @param columns Optional character vector of column names to read. If NULL
+#'   (default), reads all columns.
+#'
+#' @return A data frame of AFLW PSR with columns including \code{player_id},
+#'   \code{player_name}, \code{season}, \code{round}, \code{pos_group},
+#'   \code{psr_raw}, and \code{psr}.
+#' @seealso [load_psr()], [calculate_psr()]
+#' @examples
+#' \dontrun{
+#' try({ # prevents cran errors
+#'   load_aflw_psr(2025)
+#'   load_aflw_psr(TRUE)  # all AFLW seasons
+#' })
+#' }
+#' @export
+load_aflw_psr <- function(seasons = get_afl_season(), use_disk_cache = FALSE, columns = NULL) {
+  seasons <- .validate_aflw_seasons(seasons)
+
+  urls <- generate_urls("aflw_psr-data", "aflw_psr", seasons)
+
+  out <- load_from_url(urls, seasons = seasons, use_disk_cache = use_disk_cache, columns = columns)
+
+  if (nrow(out) > 0) out <- .normalise_team_values(out)
+  return(out)
+}
+
+
+#' Validate a season vector against AFLW's own history
+#'
+#' AFLW's first season is 2018, three years before `AFL_MIN_SEASON`. This
+#' mirrors [validate_seasons()] but against the right floor.
+#'
+#' @param seasons Numeric vector of seasons, or TRUE for all AFLW seasons.
+#' @return An integer vector of seasons.
+#' @keywords internal
+.validate_aflw_seasons <- function(seasons) {
+  current_year <- as.integer(format(Sys.Date(), "%Y"))
+
+  if (isTRUE(seasons)) return(AFLW_MIN_SEASON:current_year)
+
+  if (!is.numeric(seasons)) {
+    cli::cli_abort("Seasons must be numeric values or TRUE")
+  }
+
+  invalid <- seasons[seasons < AFLW_MIN_SEASON | seasons > current_year]
+  if (length(invalid) > 0) {
+    # Pre-formatted, not interpolated with a {?s} plural marker: cli cannot
+    # resolve which quantity to pluralise on when several values are
+    # interpolated in one string, and aborts with "Multiple quantities for
+    # pluralization" -- turning a clear validation error into a cli internal one.
+    bad <- paste(invalid, collapse = ", ")
+    cli::cli_abort(paste0(
+      "Invalid AFLW season year(s): ", bad,
+      ". Must be between ", AFLW_MIN_SEASON, " and ", current_year))
+  }
+
+  seasons
 }
 
 
