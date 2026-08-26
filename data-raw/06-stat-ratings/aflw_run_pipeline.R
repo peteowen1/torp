@@ -221,7 +221,47 @@ X_test_osr <- X_test[, -osr_exclude_cols, drop = FALSE]
 X_train_dsr <- X_train[, -dsr_exclude_cols, drop = FALSE]
 X_test_dsr <- X_test[, -dsr_exclude_cols, drop = FALSE]
 
-alpha_grid <- c(0, 0.25, 0.5, 0.75, 1)
+# Alpha stays CV-SELECTED over the full grid. Recorded here because it was
+# investigated properly on 2026-08-26 and the obvious "improvement" is a trap.
+#
+# Context: widening the training window from 2021-24 to 2018-24 appeared to buy
+# -0.93 test RMSE. It did not. Each arm was CV-selecting its own alpha and they
+# landed on different ones (old 1, new 0), so most of that gap was the penalty
+# family, not the extra seasons. Holding alpha fixed and sweeping it -- which
+# isolates the window as the only varying axis -- gives the real window effect:
+#
+#   alpha  RMSE old->new   MAE old->new    paired p
+#   0.00   29.50 -> 29.38  23.41 -> 23.53  0.639   <- MAE goes the WRONG way
+#   0.25   30.24 -> 29.96  24.07 -> 24.08  0.979
+#   0.50   30.27 -> 29.98  24.15 -> 24.10  0.910
+#   0.75   30.31 -> 29.96  24.22 -> 24.07  0.788
+#   1.00   30.31 -> 29.31  24.23 -> 23.36  0.286
+#
+# So the window is worth about -0.4 RMSE on average, consistent in direction at
+# every alpha but never close to significant, and it costs MAE at low alpha.
+#
+# TWO reasons this grid was left alone rather than pinned to the best-looking row:
+#
+# 1. Picking alpha off that table would be selecting on the TEST set. The sweep is
+#    a valid attribution tool -- it says how much of the -0.93 was the window --
+#    but it is not a valid selection rule. CV picks on training error, which is
+#    the honest thing to do even when it picks the arm that scores worse on 2025.
+#
+# 2. alpha=1 was tried and FAILS the anchor checks despite the best test metrics.
+#    Lasso at this lambda hollows the model out: PSR nonzero betas 33 -> 9 of 48,
+#    93% of |beta*sd| on three stats, and OSR `goals` driven to EXACTLY 0 -- an
+#    offensive rating that assigns no weight to goals. The top drivers change
+#    identity (metres_gained/disposals/kicks -> score_involvements/inside50s/
+#    clearances) and Spearman against published ratings drops 0.992 -> 0.829.
+#    A -1.00 RMSE bought by deleting three quarters of the model is not a gain.
+#
+# Set TORP_AFLW_ALPHA_GRID (comma-separated) to re-sweep when re-examining; the
+# default is the full grid, matching what produced the published coefficients.
+alpha_grid <- as.numeric(strsplit(Sys.getenv("TORP_AFLW_ALPHA_GRID", "0,0.25,0.5,0.75,1"), ",")[[1]])
+stopifnot(length(alpha_grid) >= 1, !anyNA(alpha_grid),
+          all(alpha_grid >= 0), all(alpha_grid <= 1))
+cli::cli_inform("Penalty alpha grid: {paste(alpha_grid, collapse = ', ')}{if (length(alpha_grid) == 1) ' (pinned)' else ' (CV-selected)'}")
+
 fit_model <- function(X_tr, X_te, y_tr, y_te, label) {
   best_cvm <- Inf; best_fit <- NULL; best_a <- NULL
   nf <- length(unique(foldid))
