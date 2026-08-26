@@ -1198,7 +1198,7 @@ load_teams <- function(seasons = get_afl_season(), use_disk_cache = TRUE, refres
 #' @export
 load_results <- function(seasons = get_afl_season(), use_disk_cache = FALSE, columns = NULL, comp = "AFLM") {
   .validate_afl_comp(comp)
-  seasons <- validate_seasons(seasons)
+  seasons <- .validate_seasons_comp(seasons, comp)
 
   cache_prefix <- if (comp == "AFLM") "results" else paste0("results_", comp)
 
@@ -1241,7 +1241,7 @@ load_results <- function(seasons = get_afl_season(), use_disk_cache = FALSE, col
 load_player_details <- function(seasons = get_afl_season(), use_disk_cache = TRUE, refresh = FALSE,
                                 columns = NULL, comp = "AFLM") {
   .validate_afl_comp(comp)
-  seasons <- validate_seasons(seasons)
+  seasons <- .validate_seasons_comp(seasons, comp)
 
   cache_prefix <- if (comp == "AFLM") "player_details" else paste0("player_details_", comp)
 
