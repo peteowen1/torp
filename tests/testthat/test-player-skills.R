@@ -485,3 +485,135 @@ test_that(".map_position_group maps 20-way lineup_position correctly", {
   expect_true(is.na(.map_position_group("SUB")))
   expect_true(is.na(.map_position_group("EMERG")))
 })
+
+# .played_round_ref_dates() — the future-rounds guard -------------------------
+# Regression (2026-08-25): load_fixtures() returns the full SCHEDULED fixture
+# list, so building the stat-rating checkpoint map from it unfiltered estimated
+# ratings at ref_dates weeks in the future. Those rows are not harmless
+# duplicates of the last real round -- same match data, more time decay applied,
+# so they drift monotonically and materially reorder any leaderboard read off
+# max(round). Measured live: 10 phantom rounds for AFLW 2026 (furthest 9 weeks
+# out), 5 for AFLM 2026 (the scheduled finals).
+
+make_fixture_set <- function() {
+  data.frame(
+    season = c(2025L, 2025L, 2026L, 2026L, 2026L, 2026L),
+    round_number = c(1L, 1L, 1L, 1L, 2L, 3L),
+    utc_start_time = c(
+      "2025-03-06T08:30:00.000+00:00", "2025-03-07T08:30:00.000+00:00",
+      "2026-03-05T08:30:00.000+00:00", "2026-03-06T08:30:00.000+00:00",
+      "2026-03-12T08:30:00.000+00:00", "2026-03-19T08:30:00.000+00:00"
+    ),
+    # 2026 rounds 1-2 played; round 3 scheduled but NOT played (no score)
+    home_score = c(90L, 85L, 100L, 75L, 88L, NA_integer_),
+    away_score = c(80L, 70L, 60L, 95L, 77L, NA_integer_),
+    stringsAsFactors = FALSE
+  )
+}
+
+test_that(".played_round_ref_dates() keeps only rounds that were actually played", {
+  res <- .played_round_ref_dates(make_fixture_set())
+
+  # the scheduled-but-unplayed round must be absent
+  expect_false(any(res$season == 2026 & res$round == 3))
+  # every played round survives
+  expect_equal(nrow(res), 3L)
+  expect_setequal(paste(res$season, res$round), c("2025 1", "2026 1", "2026 2"))
+})
+
+test_that(".played_round_ref_dates() uses the round's first match as ref_date", {
+  res <- .played_round_ref_dates(make_fixture_set())
+  r1_2026 <- res[res$season == 2026 & res$round == 1, ]
+  expect_equal(r1_2026$ref_date, as.Date("2026-03-05"))
+  # returned in chronological order
+  expect_false(is.unsorted(res$ref_date))
+})
+
+test_that(".played_round_ref_dates() honours the seasons filter", {
+  res <- .played_round_ref_dates(make_fixture_set(), seasons = 2026)
+  expect_true(all(res$season == 2026))
+  expect_equal(nrow(res), 2L)
+})
+
+test_that(".played_round_ref_dates() excludes a postponed past-dated round", {
+  # A round scheduled in the PAST but never played (postponed/abandoned) is not
+  # a valid checkpoint either -- which is why the guard filters on a recorded
+  # score rather than on `ref_date <= Sys.Date()`.
+  fx <- make_fixture_set()
+  fx$utc_start_time[6] <- "2020-03-19T08:30:00.000+00:00" # long past, still no score
+  res <- .played_round_ref_dates(fx)
+  expect_false(any(res$season == 2026 & res$round == 3))
+  expect_equal(nrow(res), 3L)
+})
+
+test_that(".played_round_ref_dates() returns a typed empty map when nothing is played", {
+  fx <- make_fixture_set()
+  fx$home_score <- NA_integer_
+  fx$away_score <- NA_integer_
+  res <- .played_round_ref_dates(fx)
+  expect_equal(nrow(res), 0L)
+  expect_true(all(c("season", "round", "ref_date") %in% names(res)))
+})
+
+test_that(".played_round_ref_dates() aborts on a missing required column", {
+  fx <- make_fixture_set()
+  fx$home_score <- NULL
+  expect_error(.played_round_ref_dates(fx), "missing required column")
+})
+
+test_that(".played_round_ref_dates() reports what it dropped as unplayed", {
+  # The bug this guard fixes was invisible because nothing logged what was
+  # being included. Over-filtering must not be silent either.
+  expect_message(
+    .played_round_ref_dates(make_fixture_set()),
+    "dropped 1 unplayed/scoreless row"
+  )
+  # ...and stays quiet when a caller explicitly opts out.
+  expect_silent(.played_round_ref_dates(make_fixture_set(), verbose = FALSE))
+})
+
+# --- .assert_ref_date_coverage() -------------------------------------------
+# The cross-feed check: ref_date_map comes from FIXTURE scores, the rated rows
+# come from the player-stats feed, and a lag between the two silently drops the
+# newest round from a published artifact.
+
+make_srd <- function(seasons, rounds) {
+  data.frame(season = seasons, round = rounds, stringsAsFactors = FALSE)
+}
+
+test_that(".assert_ref_date_coverage() passes when the map covers the data", {
+  map <- .played_round_ref_dates(make_fixture_set())
+  srd <- make_srd(c(2025, 2026, 2026), c(1L, 1L, 2L))
+  expect_silent(.assert_ref_date_coverage(map, srd))
+})
+
+test_that(".assert_ref_date_coverage() aborts when a played round is missing from the map", {
+  # The real failure: results feed lags the player-stats feed, so round 3 has
+  # match data but no fixture score yet and never enters the checkpoint map.
+  map <- .played_round_ref_dates(make_fixture_set(), verbose = FALSE)
+  srd <- make_srd(c(2025, 2026, 2026, 2026), c(1L, 1L, 2L, 3L))
+  expect_error(.assert_ref_date_coverage(map, srd), "2026 R3")
+  expect_error(.assert_ref_date_coverage(map, srd), "missing from the checkpoint map")
+})
+
+test_that(".assert_ref_date_coverage(strict = FALSE) warns instead of aborting", {
+  map <- .played_round_ref_dates(make_fixture_set(), verbose = FALSE)
+  srd <- make_srd(c(2026, 2026, 2026), c(1L, 2L, 3L))
+  expect_warning(.assert_ref_date_coverage(map, srd, strict = FALSE), "2026 R3")
+})
+
+test_that(".assert_ref_date_coverage() accepts round_number as the round column", {
+  map <- .played_round_ref_dates(make_fixture_set(), verbose = FALSE)
+  srd <- data.frame(season = c(2025, 2026), round_number = c(1L, 1L))
+  expect_silent(.assert_ref_date_coverage(map, srd))
+})
+
+test_that(".assert_ref_date_coverage() warns, not aborts, when it cannot check", {
+  # No season/round columns means the check is impossible -- that should be
+  # visible, but it must not take down a pipeline on its own.
+  map <- .played_round_ref_dates(make_fixture_set(), verbose = FALSE)
+  expect_warning(
+    .assert_ref_date_coverage(map, data.frame(x = 1)),
+    "Cannot verify checkpoint coverage"
+  )
+})
