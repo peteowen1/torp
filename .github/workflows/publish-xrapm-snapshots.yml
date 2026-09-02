@@ -81,7 +81,7 @@ jobs:
       # read instead of a glmnet fit. Keyed so a new run restores the previous
       # run's cache and then extends it with only the genuinely-new rounds.
       - name: Restore xRAPM checkpoint cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: data-raw/cache-team-rapm-asof
           key: xrapm-asof-${{ runner.os }}-${{ github.run_id }}
