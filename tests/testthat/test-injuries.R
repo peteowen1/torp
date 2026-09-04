@@ -750,59 +750,137 @@ test_that("accuracy helpers return empty tibble when inj_hist lacks scraped_at",
   expect_equal(nrow(tbc_return_survival(2026)), 0)
 })
 
-# --- scrape_injuries() table-count guard ---
+# --- injury_table_clubs(): reading each table's club off the page ---
 #
-# scrape_injuries() derives a row's CLUB from the POSITION of its table on
-# afl.com.au, assuming 18 tables in alphabetical order. Every other injury test
-# in this file mocks scrape_injuries() wholesale, so that assumption had no
-# coverage at all -- which is how it broke silently in the 2026 finals. The AFL
-# page lists only clubs still alive once finals start (8 tables on 2026-09-04),
-# and the old "fall back to as many as we can match" branch stapled the first 8
-# alphabetical club names onto the 8 surviving clubs in page order. 30 of 49
-# rows came out labelled with the wrong club -- Sydney's whole list, Heeney,
-# Warner and Blakey included, was filed under Geelong -- and every downstream
-# consumer then dropped them for not matching a player rating. Team ratings,
-# match predictions, the blog simulator and torp's own season sims all ran
+# scrape_injuries() used to derive a row's CLUB from the POSITION of its table
+# on afl.com.au, assuming 18 tables in alphabetical order. Every other injury
+# test in this file mocks scrape_injuries() wholesale, so that assumption had no
+# coverage -- which is how it broke silently in the 2026 finals. The page lists
+# only clubs still alive once finals start (8 tables on 2026-09-04), and the old
+# fallback stapled the first 8 alphabetical club names onto the 8 survivors in
+# page order. 30 of 49 rows came out with the wrong club -- Sydney's whole list,
+# Heeney, Warner and Blakey included, filed under Geelong -- and every consumer
+# then dropped them for not matching a player rating, so team ratings, match
+# predictions, the blog simulator and torp's own season sims all ran
 # injury-blind for five clubs with nothing failing anywhere.
+#
+# The club is now READ from the badge URL preceding each table and resolved
+# through AFL_TEAM_ALIASES, with every failure path returning NULL.
 
-fake_injury_table <- function(player) {
-  data.frame(
-    Player = c(player, "Updated: September 1, 2026"),
-    Injury = c("Hamstring", ""),
-    `Estimated Return` = c("1 week", ""),
-    check.names = FALSE, stringsAsFactors = FALSE
+fake_injury_html <- function(codes) {
+  paste0(
+    "<html><body>",
+    paste0(vapply(codes, function(cd) {
+      badge <- if (is.na(cd)) "" else paste0(
+        "<!-- <img src=\"https://x/26_0134_Editorial-GFX_Straps-Badge-Refresh_",
+        cd, "_FA-1x.jpg\"> -->")
+      paste0(badge, "<table><tr><td>x</td></tr></table>")
+    }, character(1)), collapse = ""),
+    "</body></html>"
   )
 }
 
-test_that("scrape_injuries returns nothing when the page has fewer than 18 tables", {
-  # Finals: afl.com.au drops eliminated clubs.
-  eight <- lapply(paste0("Player ", 1:8), fake_injury_table)
-  local_mocked_bindings(
-    session = function(...) structure(list(), class = "rvest_session"),
-    html_table = function(...) eight,
-    .package = "rvest"
+test_that("injury_table_clubs reads the club from the badge, not the position", {
+  # Deliberately NOT alphabetical, and only clubs still alive -- the exact
+  # finals shape that used to mislabel. Position-based labelling would have
+  # called these Adelaide / Brisbane / Carlton / Collingwood.
+  codes <- c("SYD", "HAW", "WB", "GEEL")
+  expect_equal(
+    injury_table_clubs(fake_injury_html(codes), length(codes)),
+    c("Sydney Swans", "Hawthorn Hawks", "Western Bulldogs", "Geelong Cats")
   )
-  expect_warning(result <- scrape_injuries(), "returning NO weekly injuries")
-  expect_s3_class(result, "data.frame")
-  # Stale-but-correct beats confidently-wrong: no weekly data at all, rather
-  # than 8 rows carrying guessed clubs.
-  expect_equal(nrow(result), 0)
-  expect_true(all(c("player", "team", "injury", "estimated_return", "updated", "player_norm")
-                  %in% names(result)))
 })
 
-test_that("scrape_injuries labels clubs alphabetically when all 18 tables are present", {
-  eighteen <- lapply(paste0("Player ", 1:18), fake_injury_table)
-  local_mocked_bindings(
-    session = function(...) structure(list(), class = "rvest_session"),
-    html_table = function(...) eighteen,
-    .package = "rvest"
+test_that("injury_table_clubs handles the real 2026 finals page shape", {
+  # The eight codes observed live on 2026-09-04.
+  codes <- c("ADEL", "BRIS", "CARL", "FREM", "GEEL", "HAW", "SYD", "WB")
+  expect_equal(injury_table_clubs(fake_injury_html(codes), 8L),
+               unname(AFL_TEAM_ALIASES[codes]))
+})
+
+test_that("injury_table_clubs covers the badge codes that differ from the API abbreviations", {
+  # BRIS and FREM are the injury page's own codes; the API uses BL and FRE. A
+  # gap here is exactly what fails closed in March when the other ten appear.
+  expect_equal(injury_table_clubs(fake_injury_html(c("BRIS", "FREM")), 2L),
+               c("Brisbane Lions", "Fremantle Dockers"))
+})
+
+test_that("injury_table_clubs fails closed on a code it cannot resolve", {
+  expect_warning(res <- injury_table_clubs(fake_injury_html(c("SYD", "ZZZ")), 2L),
+                 "Could not resolve")
+  expect_null(res)
+})
+
+test_that("injury_table_clubs names the unresolved code so the fix is one line", {
+  expect_warning(injury_table_clubs(fake_injury_html(c("SYD", "ZZZ")), 2L), "ZZZ")
+})
+
+test_that("injury_table_clubs fails closed when a table has no badge", {
+  expect_warning(res <- injury_table_clubs(fake_injury_html(c("SYD", NA)), 2L),
+                 "no badge found")
+  expect_null(res)
+})
+
+test_that("injury_table_clubs fails closed when two tables resolve to one club", {
+  # Drift between the badges and the tables is indistinguishable from correct
+  # output unless it is checked for.
+  expect_warning(res <- injury_table_clubs(fake_injury_html(c("SYD", "SYD")), 2L),
+                 "same club")
+  expect_null(res)
+})
+
+test_that("injury_table_clubs fails closed when tables and source tags disagree", {
+  expect_warning(res <- injury_table_clubs(fake_injury_html(c("SYD", "HAW", "GEEL")), 2L),
+                 "correspond one-to-one|<table> tag")
+  expect_null(res)
+})
+
+test_that("injury_table_clubs fails closed on unusable HTML", {
+  expect_warning(expect_null(injury_table_clubs(NA_character_, 1L)), "raw HTML")
+  expect_warning(expect_null(injury_table_clubs("", 1L)), "raw HTML")
+})
+
+# The two ways this scheme can fail OPEN — i.e. resolve every code cleanly, trip
+# none of the other guards, and still label every table wrong. Both were found by
+# code review with runnable repros, not by reasoning, and both are the exact
+# "confidently wrong" shape this function exists to prevent.
+
+test_that("injury_table_clubs fails closed when a second club's badge sits before the table", {
+  # A promo strip or related-content widget carrying another club's crest
+  # between the real badge and its table. "Last match wins" would silently
+  # relabel the table as the promo's club, with no warning at all.
+  html <- paste0(
+    "<html>",
+    "<!-- <img src=\"x/Straps-Badge-Refresh_SYD_FA-1x.jpg\"> -->",      # the real badge
+    "<!-- <img src=\"x/Straps-Badge-Refresh_HAW_FA-1x.jpg\"> -->",      # a promo crest
+    "<table><tr><td>x</td></tr></table>",
+    "<!-- <img src=\"x/Straps-Badge-Refresh_GEEL_FA-1x.jpg\"> -->",
+    "<table><tr><td>x</td></tr></table></html>"
   )
-  result <- scrape_injuries()
-  expect_equal(nrow(result), 18)
-  # One row per club, in the alphabetical order the position-based labelling
-  # assumes. This is the assumption the guard above protects, stated once so a
-  # change to either half has to face the other.
-  expect_equal(result$team, sort(AFL_TEAMS$name))
-  expect_equal(result$player[1], "Player 1")
+  expect_warning(res <- injury_table_clubs(html, 2L), "More than one club")
+  expect_null(res)
+})
+
+test_that("injury_table_clubs tolerates the real page's repeated srcset badges", {
+  # The live page carries 16 matches per segment — the responsive srcset
+  # variants of ONE badge. Identical codes must NOT trip the mixed-badge guard,
+  # or the fix would fail closed on the very page it is meant to read.
+  seg <- paste(rep("<img src=\"x/Straps-Badge-Refresh_SYD_FA-1x.jpg\">", 16), collapse = " ")
+  html <- paste0("<html>", seg, "<table><tr><td>x</td></tr></table></html>")
+  expect_equal(injury_table_clubs(html, 1L), "Sydney Swans")
+})
+
+test_that("injury_table_clubs fails closed when badges FOLLOW their tables", {
+  # If the AFL ever moves the badge after its table, every label shifts by one
+  # and still resolves — distinct clubs, right count, no duplicates. Only the
+  # distance from badge to table gives it away.
+  filler <- paste(rep("y", 5000), collapse = "")
+  html <- paste0(
+    "<html><!-- <img src=\"x/Straps-Badge-Refresh_CARL_FA-1x.jpg\"> -->", filler,
+    "<table><tr><td>1</td></tr></table>",
+    "<!-- <img src=\"x/Straps-Badge-Refresh_SYD_FA-1x.jpg\"> -->", filler,
+    "<table><tr><td>2</td></tr></table></html>"
+  )
+  expect_warning(res <- injury_table_clubs(html, 2L), "no badge within")
+  expect_null(res)
 })

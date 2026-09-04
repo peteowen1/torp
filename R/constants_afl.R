@@ -220,10 +220,14 @@ AFL_TEAM_ALIASES <- c(
   # --- Abbreviations (AFL API + common) ---
   "ADEL"  = "Adelaide Crows",
   "BL"    = "Brisbane Lions",
+  # Codes used in the afl.com.au injury-list badge URLs, which differ from the
+  # API's own abbreviations (BL / FRE). Observed on the live page 2026-09-04.
+  "BRIS"  = "Brisbane Lions",
   "CARL"  = "Carlton Blues",
   "COLL"  = "Collingwood Magpies",
   "ESS"   = "Essendon Bombers",
   "FRE"   = "Fremantle Dockers",
+  "FREM"  = "Fremantle Dockers",
   "GEEL"  = "Geelong Cats",
   "GCFC"  = "Gold Coast Suns",
   "GWS"   = "GWS Giants",
