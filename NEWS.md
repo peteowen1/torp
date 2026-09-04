@@ -1,3 +1,29 @@
+# torp 1.4.2
+
+## Match model
+
+* **`MATCH_BLEND_WEIGHT` set to 1.0 (pure GAM; XGBoost still trained but no
+  longer blended into `pred_score_diff`/`pred_win`).** Three independent
+  measurements agree GAM-only beats every blend weight on MAE, Brier and
+  log-loss: the original WS5 sweep, a fresh out-of-fold validation on current
+  data, and a from-scratch retest of a better-calibrated XGBoost variant.
+  XGBoost's own training path is unchanged, so this is a served-blend change
+  only, not an architecture change.
+* **Fixed in-sample leakage in the GAM and XGBoost stacked cascades**
+  (`.train_match_gams()`, `.train_match_xgb()`). Each stage's prediction fed
+  forward into later stages was previously the stage's own in-sample fit;
+  training rows now get season-grouped out-of-fold predictions instead.
+  Measured on a full 54-round rolling comparison (423 out-of-sample matches):
+  every delta on the served blends is inside noise. This is a correctness fix
+  for a real leak class, not a performance change.
+
+  **Known limitation:** the GAM cascade's `team_name_season` random effect
+  is season-scoped by construction, so season-grouped folds give it zero
+  training/held-out overlap on every fold -- mgcv predicts it at the
+  population mean rather than erroring. Already reflected in the rolling
+  comparison above (measured harmless on the served blend); see the comment
+  above `gam_folds` in `R/match_train.R` for detail.
+
 # torp 1.4.1
 
 ## Rating changes

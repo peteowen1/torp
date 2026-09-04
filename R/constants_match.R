@@ -52,8 +52,21 @@ FIELD_ZONE_SCORING_80 <- 80
 #' calibration sidecar that gates releases and the matchup table that prices
 #' finals for the blog were each scoring a copy of production rather than
 #' production itself.
+#'
+#' Set to 1.0 (pure GAM, XGBoost trained but unused in the blend) on
+#' 2026-08-27 evidence: GAM-only beat every blend weight on three independent
+#' measurements -- the original WS5 research (26.043 vs the 50/50 blend's
+#' 26.198, monotonic improvement as GAM weight rose from 0.35 to 0.65), this
+#' session's fresh OOF-fix validation on current data (GAM 25.757 vs blend
+#' 26.201/26.192, best on every metric not just MAE), and a from-scratch
+#' ensemble retest of a better-behaved XGB variant (still monotonically worse
+#' the more XGB weight it carried). See FABLE-MATCH-MAE-PLAN.md and
+#' torpverse/docs/NEXT-STEPS.md (2026-08-27) for the full evidence trail.
+#' XGBoost is still trained (`.train_match_xgb()`/`train_step()` are unchanged)
+#' since nothing downstream assumes its absence yet -- this only changes the
+#' blend weight, not the architecture.
 #' @keywords internal
-MATCH_BLEND_WEIGHT <- 0.5
+MATCH_BLEND_WEIGHT <- 1.0
 
 #' Phase groupings for match model position columns
 #' Maps lineup_position to broad phase categories
