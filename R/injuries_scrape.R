@@ -43,10 +43,32 @@ scrape_injuries <- function(timeout = 30) {
     team_names <- sort(AFL_TEAMS$name)
     n_tables <- length(raw_tables)
 
+    # FAIL CLOSED. The club is inferred from a table's POSITION, so the
+    # alphabetical-18 assumption is not a nicety -- it is the only thing tying
+    # a row to a club. When it does not hold, every label is a guess.
+    #
+    # It stopped holding in finals 2026: afl.com.au lists only clubs still
+    # alive, so the page served 8 tables, and the old "fall back to as many as
+    # we can match" branch stapled the first 8 alphabetical club names onto the
+    # 8 surviving clubs in page order. 30 of 49 rows were mislabelled --
+    # Sydney's whole list, Heeney/Warner/Blakey included, came out as Geelong.
+    # Downstream every one of those rows was silently dropped for not matching
+    # a player rating, so team ratings, match predictions, the blog simulator
+    # AND torp's own 3000-run season sims all ran injury-blind for five clubs
+    # with nothing failing anywhere.
+    #
+    # Returning empty means get_all_injuries() falls back to the preseason CSV
+    # and warns that the weekly scrape produced nothing (see injuries_match.R).
+    # Stale-but-correct beats confidently-wrong: a dropped absence understates
+    # an injury the model cannot see, while a misattributed one actively docks
+    # a club that is fully fit.
     if (n_tables != length(team_names)) {
-      cli::cli_warn("Expected {length(team_names)} injury tables but found {n_tables}")
-      # Fall back to as many as we can match
-      team_names <- team_names[seq_len(min(n_tables, length(team_names)))]
+      cli::cli_warn(c(
+        "!" = "Expected {length(team_names)} injury tables but found {n_tables} -- returning NO weekly injuries.",
+        "i" = "Club identity is derived from table position, so a table count other than {length(team_names)} makes every club label a guess. This is expected during finals, when afl.com.au lists only the clubs still playing.",
+        "i" = "Fix is to read each table's club from the page rather than infer it from position."
+      ))
+      return(empty_df)
     }
 
     all_rows <- vector("list", n_tables)
