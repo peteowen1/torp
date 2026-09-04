@@ -111,6 +111,26 @@ test_that(".extract_frozen_teams reads the target-week snapshot + home ground + 
   expect_equal(fam$familiarity[fam$team_id == 3 & fam$venue == "M.C.G."], 1)
 })
 
+test_that(".extract_frozen_teams carries forward a team's last-played round when it has no row at the target week (finals: eliminated/bye teams)", {
+  # torp#163 (first failed 2026-08-23): team_rt_fix_df is fixture-derived, so a
+  # team not rostered at `week` simply has no row there. Every home-and-away
+  # round happens to field all 18 clubs, but a finals round doesn't -- Team C
+  # here has no round-4 row (as if eliminated after round 3) and must still
+  # appear in the snapshot, carrying its round-3 state forward.
+  fix_df <- .mt_make_team_rt_fix_df()
+  fix_df <- fix_df[!(fix_df$round_number == 4L & fix_df$team_name == "Team C"), ]
+  state <- list(team_rt_fix_df = fix_df, season = 2026L, week = 4L)
+  frozen <- torp:::.extract_frozen_teams(state)
+
+  expect_equal(nrow(frozen$snapshot), 3)
+  expect_setequal(frozen$snapshot$team_name, c("Team A", "Team B", "Team C"))
+  # Team A/B still get their round-4 (target-week) row unchanged.
+  expect_equal(frozen$snapshot$epr[frozen$snapshot$team_name == "Team A"], 12)
+  expect_equal(frozen$snapshot$epr[frozen$snapshot$team_name == "Team B"], 8)
+  # Team C falls back to its round-3 (last-played) row, not round 4's value.
+  expect_equal(frozen$snapshot$epr[frozen$snapshot$team_name == "Team C"], 10)
+})
+
 test_that(".extract_frozen_teams aborts loudly on unresolved NA ratings", {
   bad <- .mt_make_team_rt_fix_df()
   bad$epr[bad$round_number == 4 & bad$team_name == "Team B"] <- NA_real_
