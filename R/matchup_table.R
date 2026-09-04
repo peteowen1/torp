@@ -208,8 +208,23 @@
   season <- state$season
   week <- state$week
 
+  # `round_number == week` (pre-2026-09) silently returned fewer than 18 teams
+  # every finals round: team_rt_fix_df is built from the FIXTURE, so a team not
+  # rostered this round (bye, or eliminated) simply has no row at `week` --
+  # every home-and-away round happens to field all 18 clubs, which is why this
+  # went unnoticed until finals week 1 (8 teams, 4 games) tripped Gate 2's
+  # MIN_TEAMS check (torp#163, first failed 2026-08-23).
+  #
+  # The table's whole point is a full round-robin so resolveFinal() can always
+  # find a row (see the file header) -- so every team needs a row here even
+  # when it isn't playing `week`, using its most recent available
+  # roster/injury-adjusted state (its last-played round) rather than nothing.
+  # A live finalist still gets `week`'s own row; an eliminated/bye team's row
+  # is as-of its last game, not `week` specifically -- deliberate per Pete,
+  # 2026-09-04.
   snapshot <- team_rt_fix_df |>
-    dplyr::filter(season == .env$season, round_number == .env$week) |>
+    dplyr::filter(season == .env$season, round_number <= .env$week) |>
+    dplyr::arrange(team_id, dplyr::desc(round_number)) |>
     dplyr::distinct(team_id, .keep_all = TRUE) |>
     dplyr::select(
       team_id, team_name, epr, epr_recv, epr_disp, epr_spoil, epr_hitout,

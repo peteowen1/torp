@@ -66,11 +66,28 @@ if (!is.finite(week) || week < 1) {
 state <- torp:::.freeze_match_state(season = season, week = week)
 
 # ---- Gate 1: the fabricated predict path still agrees with production -------
+# Restricted to rows NOT YET PLAYED (win is NA), not just this round's rows.
+# Every home-and-away round used to satisfy that for free -- the daily
+# pipeline always ran before any game in the upcoming round had a result --
+# but a finals round spans several days, and this script can run after some
+# of the round's games are already decided. A played row is now a TRAINING
+# row: torp:::.oof_predict_gam()'s season-grouped out-of-fold correction
+# (2026-09) deliberately gives it a DIFFERENT gam_pred_score_diff than a
+# plain predict() replay would produce, by design (it de-leaks the cascade).
+# Comparing on played rows fails Gate 1 for a reason that has nothing to do
+# with the drift this gate exists to catch -- confirmed 2026-09-04: two of
+# four R26 rows were already-decided finals results and diverged by up to
+# 16.3 margin points from a fresh replay, while the two genuinely-upcoming
+# rows in the same round agreed to within 0.04.
 real <- state$team_mdl_df[
-  state$team_mdl_df$season.x == season & state$team_mdl_df$round_number.x == week,
+  state$team_mdl_df$season.x == season & state$team_mdl_df$round_number.x == week &
+    is.na(state$team_mdl_df$win),
 ]
 if (nrow(real) == 0) {
-  cli::cli_abort("No {season} R{week} rows in team_mdl_df -- cannot verify the predict path, refusing to publish.")
+  cli::cli_abort(c(
+    "No {season} R{week} row(s) still awaiting a result -- cannot verify the predict path, refusing to publish.",
+    "i" = "Either the round has no rows at all (pre-season / fixtures not published), or every game in it is already decided."
+  ))
 }
 scored <- torp:::.predict_match_model(as.data.frame(real), state)
 d <- abs(real$pred_score_diff - scored$pred_score_diff)

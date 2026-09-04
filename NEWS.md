@@ -1,4 +1,30 @@
-# torp 1.4.2
+# torp 1.4.3
+
+## Matchup table (finals odds)
+
+* **Fixed: the matchup table stopped publishing every finals round, from round 1
+  of finals onward (torp#163, first failed 2026-08-23).** `.extract_frozen_teams()`
+  read team ratings from the fixture for the target round only; every
+  home-and-away round happens to field all 18 clubs, but a finals round fields
+  fewer, so the table's `MIN_TEAMS = 18` gate correctly refused to publish an
+  incomplete table. Eliminated/bye teams now carry forward their most recent
+  available roster/injury-adjusted rating instead of being dropped, so the
+  table stays a genuine full 18-team round-robin through every finals week
+  (Pete's call, 2026-09-04 -- the alternative was shrinking the gate to match
+  the actual finals field, which would leave `resolveFinal()` unable to find a
+  row for some hypothetical ties).
+
+* **Fixed a second, independent failure surfaced while validating the above:**
+  the predict-path verification gate (Gate 1) compared `.predict_match_model()`'s
+  replay against `pred_score_diff` for every row in the target round, including
+  rows whose result had already landed (finals games are staggered across
+  several days, so this script can now run mid-round). A played row is a
+  TRAINING row, and the 2026-09 out-of-fold stacking fix deliberately gives it a
+  different `gam_pred_score_diff` than a fresh `predict()` replay -- correctly,
+  by design, but Gate 1 read that as drift (up to 16.3 margin points on 2026
+  R26) and refused to publish. Gate 1 now compares only rows still awaiting a
+  result, which is also the only class of row the matchup table actually needs
+  the predict path to get right.
 
 ## Match model
 
