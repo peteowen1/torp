@@ -209,17 +209,57 @@ injury_table_clubs <- function(raw_html, n_tables) {
     ))
     return(NULL)
   }
+  # The scheme rests on an invariant the page is not obliged to keep: EXACTLY
+  # ONE club's badge per segment, sitting immediately BEFORE its table. Both
+  # halves are checked, because a violation of either resolves cleanly to a
+  # wrong club and none of the other guards can see it — the failure would be
+  # silent and confident, which is the thing this whole function exists to stop.
+  #
+  # Measured on the live page 2026-09-04: each segment carries 16 matches — the
+  # responsive srcset variants of one badge — ALL WITH THE SAME CODE, and the
+  # last sits 83-86 characters before its table.
+  MAX_BADGE_GAP <- 4000L   # ~45x the observed 83-86, far below a segment (~36KB)
+  mixed <- character(0)
+  far <- integer(0)
   codes <- vapply(seq_len(n_tables), function(i) {
     # Lookaround rather than a capture group plus sub(): the backreference form
     # needs "\1" in R source, which is one escaping layer away from silently
     # becoming a control character and matching nothing (it did, first time).
-    hits <- regmatches(
-      segments[i],
-      gregexpr("(?<=Straps-Badge-Refresh_)[A-Z]+(?=_)", segments[i], perl = TRUE)
-    )[[1]]
+    m <- gregexpr("(?<=Straps-Badge-Refresh_)[A-Z]+(?=_)", segments[i], perl = TRUE)[[1]]
+    hits <- regmatches(segments[i], list(m))[[1]]
     if (!length(hits)) return(NA_character_)
-    hits[length(hits)]
+    # ONE club per segment. A promo strip or related-content widget carrying
+    # another club's crest between the real badge and the table would otherwise
+    # win on "last match" and silently relabel the table.
+    if (length(unique(hits)) > 1L) {
+      mixed <<- c(mixed, paste0("table ", i, ": ", paste(unique(hits), collapse = "/")))
+      return(NA_character_)
+    }
+    # ...and it must sit just before the table. If the AFL ever moves badges to
+    # FOLLOW their tables, every label shifts by one and still resolves — the
+    # one arrangement that defeats every other check here.
+    gap <- nchar(segments[i]) - (m[length(m)] + attr(m, "match.length")[length(m)] - 1L)
+    if (gap > MAX_BADGE_GAP) {
+      far <<- c(far, i)
+      return(NA_character_)
+    }
+    hits[1]
   }, character(1))
+  if (length(mixed)) {
+    cli::cli_warn(c(
+      "!" = "More than one club's badge sits before the same injury table -- returning NO weekly injuries.",
+      "i" = "{paste(mixed, collapse = '; ')}.",
+      "i" = "Taking the nearest would be a guess; the page layout has changed and the lookup needs rechecking."
+    ))
+    return(NULL)
+  }
+  if (length(far)) {
+    cli::cli_warn(c(
+      "!" = "{length(far)} injury table{?s} had no badge within {MAX_BADGE_GAP} characters (table{?s}: {paste(far, collapse = ', ')}) -- returning NO weekly injuries.",
+      "i" = "A distant badge usually means badges now FOLLOW their tables, which shifts every club label by one while still resolving cleanly."
+    ))
+    return(NULL)
+  }
 
   team_names <- unname(AFL_TEAM_ALIASES[codes])
   unresolved <- is.na(team_names)

@@ -839,3 +839,48 @@ test_that("injury_table_clubs fails closed on unusable HTML", {
   expect_warning(expect_null(injury_table_clubs(NA_character_, 1L)), "raw HTML")
   expect_warning(expect_null(injury_table_clubs("", 1L)), "raw HTML")
 })
+
+# The two ways this scheme can fail OPEN — i.e. resolve every code cleanly, trip
+# none of the other guards, and still label every table wrong. Both were found by
+# code review with runnable repros, not by reasoning, and both are the exact
+# "confidently wrong" shape this function exists to prevent.
+
+test_that("injury_table_clubs fails closed when a second club's badge sits before the table", {
+  # A promo strip or related-content widget carrying another club's crest
+  # between the real badge and its table. "Last match wins" would silently
+  # relabel the table as the promo's club, with no warning at all.
+  html <- paste0(
+    "<html>",
+    "<!-- <img src=\"x/Straps-Badge-Refresh_SYD_FA-1x.jpg\"> -->",      # the real badge
+    "<!-- <img src=\"x/Straps-Badge-Refresh_HAW_FA-1x.jpg\"> -->",      # a promo crest
+    "<table><tr><td>x</td></tr></table>",
+    "<!-- <img src=\"x/Straps-Badge-Refresh_GEEL_FA-1x.jpg\"> -->",
+    "<table><tr><td>x</td></tr></table></html>"
+  )
+  expect_warning(res <- injury_table_clubs(html, 2L), "More than one club")
+  expect_null(res)
+})
+
+test_that("injury_table_clubs tolerates the real page's repeated srcset badges", {
+  # The live page carries 16 matches per segment — the responsive srcset
+  # variants of ONE badge. Identical codes must NOT trip the mixed-badge guard,
+  # or the fix would fail closed on the very page it is meant to read.
+  seg <- paste(rep("<img src=\"x/Straps-Badge-Refresh_SYD_FA-1x.jpg\">", 16), collapse = " ")
+  html <- paste0("<html>", seg, "<table><tr><td>x</td></tr></table></html>")
+  expect_equal(injury_table_clubs(html, 1L), "Sydney Swans")
+})
+
+test_that("injury_table_clubs fails closed when badges FOLLOW their tables", {
+  # If the AFL ever moves the badge after its table, every label shifts by one
+  # and still resolves — distinct clubs, right count, no duplicates. Only the
+  # distance from badge to table gives it away.
+  filler <- paste(rep("y", 5000), collapse = "")
+  html <- paste0(
+    "<html><!-- <img src=\"x/Straps-Badge-Refresh_CARL_FA-1x.jpg\"> -->", filler,
+    "<table><tr><td>1</td></tr></table>",
+    "<!-- <img src=\"x/Straps-Badge-Refresh_SYD_FA-1x.jpg\"> -->", filler,
+    "<table><tr><td>2</td></tr></table></html>"
+  )
+  expect_warning(res <- injury_table_clubs(html, 2L), "no badge within")
+  expect_null(res)
+})
