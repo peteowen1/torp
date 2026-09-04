@@ -839,6 +839,25 @@ build_prediction_state <- function(week = NULL, weeks = NULL, season = NULL,
   if (nrow(inj_df) == 0 && min(target_weeks) > 1) {
     cli::cli_warn("0 injuries loaded during active season - all players will be treated as available")
   }
+  # WEEKLY specifically, not just the total. An absent injury row is treated
+  # identically to a confirmed-fit player everywhere downstream (match_injuries
+  # merges all.x = TRUE, season_sim only excludes names it can see, and
+  # match_data_prep keeps is.na(injury) at full weight), so "no weekly data" is
+  # the state where a player hurt in round 22-24 gets priced as fully fit.
+  #
+  # The total-rows check above cannot see it: preseason long-term injuries
+  # linger, so nrow(inj_df) stays non-zero while the weekly list is empty.
+  # scrape_injuries() failing closed during finals (it cannot label clubs when
+  # afl.com.au drops eliminated teams) makes that the ROUTINE finals state
+  # rather than a rare failure, which is why this now needs its own warning.
+  weekly_n <- sum(inj_df$source == "weekly", na.rm = TRUE)
+  if (weekly_n == 0 && nrow(inj_df) > 0 && min(target_weeks) > 1) {
+    cli::cli_warn(c(
+      "!" = "No WEEKLY injuries loaded during an active season - only {nrow(inj_df)} preseason row{?s}.",
+      "i" = "Anyone injured since the preseason list was curated is being priced as fully fit.",
+      "i" = "Expected during finals (scrape_injuries fails closed when afl.com.au lists only surviving clubs); investigate if it happens mid-season."
+    ))
+  }
 
   # Parse return rounds and save injury snapshot to torpdata release
   if (nrow(inj_df) > 0) {
