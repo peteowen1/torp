@@ -190,6 +190,18 @@
   # cascade features below (models 1, 2 and 4's predictions feed later
   # stages as inputs) -- NOT a substitute for the caller's own train_filter,
   # which still controls what counts as "training" at all.
+  #
+  # Known limitation: the m1/m2/m4 formulas include a team_name_season
+  # random effect (s(team_name_season.x/.y, bs = "re")), which is scoped to
+  # a single season by construction (match_data_prep.R:
+  # paste(team_name, season)). Season-grouped folds therefore give that
+  # term ZERO training/held-out overlap on every fold, every retrain -- mgcv
+  # predicts it at the population mean rather than erroring or NA'ing.
+  # Measured harmless on the served blend (423-match rolling comparison,
+  # 2026-08-27, "a wash, not a win" -- see NEWS.md), but this is a real,
+  # deterministic gap in the OOF-corrected training features for models
+  # 2/4/5, not a hypothetical edge case.
+  stopifnot(!anyNA(gam_df$season.x))
   gam_seasons <- sort(unique(gam_df$season.x))
   gam_folds <- lapply(gam_seasons, function(s) which(gam_df$season.x == s))
 
@@ -705,7 +717,11 @@
     nthread = xgb_nthread
   )
 
-  # Season-grouped CV folds
+  # Season-grouped CV folds. Also reused below by oof_predict_xgb() to
+  # de-leak the stacked cascade -- a training row with an unmapped season.x
+  # would silently sit in no fold and never get corrected, so guard it here
+  # rather than downstream.
+  stopifnot(!anyNA(xgb_df$season.x))
   train_seasons <- sort(unique(xgb_df$season.x))
   folds <- lapply(train_seasons, function(s) which(xgb_df$season.x == s))
 
