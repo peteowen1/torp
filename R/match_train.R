@@ -105,6 +105,44 @@
 
 # .train_match_gams ----
 
+#' Out-of-fold prediction for one stacked-cascade GAM stage
+#'
+#' Refits `formula` once per season fold, holding that season's rows out of
+#' training and predicting only onto them, then assembles the held-out
+#' predictions into one vector aligned to `data`'s row order. Used so a
+#' cascade stage's own in-sample fit is never fed forward as the next
+#' stage's input feature (see the header comment on `.train_match_gams()`
+#' and `.train_match_xgb()` for why this matters).
+#'
+#' @param formula Model formula, identical to the one used for the full fit.
+#' @param data Training data (one cascade stage's `gam_df`).
+#' @param weights Numeric weights vector, same length as `data`.
+#' @param family GAM family (e.g. `gaussian()`).
+#' @param gamma_arg Smoothness penalty multiplier, matching the full fit.
+#' @param nthreads Threads for `mgcv::bam()`.
+#' @param folds List of integer row-index vectors, one per held-out fold.
+#' @return Numeric vector, `length(data)` rows, out-of-fold predictions.
+#' @keywords internal
+.oof_predict_gam <- function(formula, data, weights, family, gamma_arg, nthreads, folds) {
+  # bam()/gam() resolve `weights =`/`subset =` NSE using environment(formula)
+  # -- the LEXICAL scope where the formula was built (.train_match_gams()'s
+  # frame) -- not this function's call frame. Rebinding it here makes `data`,
+  # `weights` and the fold index `f` all resolve from THIS frame instead,
+  # where they actually live; otherwise bam() aborts with "object 'f' not
+  # found" the moment it tries to evaluate `weights[-f]`.
+  environment(formula) <- environment()
+  oof <- rep(NA_real_, nrow(data))
+  for (f in folds) {
+    fit <- mgcv::bam(
+      formula, data = data[-f, ], weights = weights[-f], family = family,
+      select = TRUE, discrete = TRUE, drop.unused.levels = FALSE,
+      gamma = gamma_arg, nthreads = nthreads
+    )
+    oof[f] <- predict(fit, newdata = data[f, ], type = "response")
+  }
+  oof
+}
+
 #' Train the 5-model sequential GAM pipeline
 #'
 #' Trains total xPoints, xScore diff, conversion, score diff, and win probability
@@ -147,6 +185,13 @@
   if (nrow(gam_df) == 0) {
     cli::cli_abort("Cannot train GAM models: 0 completed matches after filtering")
   }
+
+  # Season-grouped out-of-fold assignment. Used only to de-leak the stacked
+  # cascade features below (models 1, 2 and 4's predictions feed later
+  # stages as inputs) -- NOT a substitute for the caller's own train_filter,
+  # which still controls what counts as "training" at all.
+  gam_seasons <- sort(unique(gam_df$season.x))
+  gam_folds <- lapply(gam_seasons, function(s) which(gam_df$season.x == s))
 
   # Check which optional smooth terms have sufficient unique values (need >= k)
   # Terms with constant/near-constant data are dropped to prevent mgcv errors
@@ -255,6 +300,14 @@
     gamma = gamma_arg
   )
   team_mdl_df$gam_pred_tot_xscore <- predict(afl_total_xpoints_mdl, newdata = team_mdl_df, type = "response")
+  # Out-of-fold correction for training rows only: models 2, 3 and 5 consume
+  # gam_pred_tot_xscore as an input feature, so the value they train on must
+  # not come from a fit that already saw that row's own outcome. Non-training
+  # rows (upcoming fixtures) keep the full-model prediction above -- there is
+  # no "held-out fold" for them, and it is already legitimately out-of-sample.
+  team_mdl_df$gam_pred_tot_xscore[train_mask] <- .oof_predict_gam(
+    m1_formula, gam_df, gam_df$weightz, gaussian(), gamma_arg, nthreads, gam_folds
+  )
 
   # Model 2: xScore differential
   cli::cli_progress_step("Training xScore diff model")
@@ -297,6 +350,11 @@
     gamma = gamma_arg
   )
   team_mdl_df$gam_pred_xscore_diff <- predict(afl_xscore_diff_mdl, newdata = team_mdl_df, type = "response")
+  # Out-of-fold correction, same reasoning as model 1: models 3 and 4 both
+  # consume gam_pred_xscore_diff as an input feature.
+  team_mdl_df$gam_pred_xscore_diff[train_mask] <- .oof_predict_gam(
+    m2_formula, gam_df, gam_df$weightz, gaussian(), gamma_arg, nthreads, gam_folds
+  )
 
   # Model 3: Conversion differential
   cli::cli_progress_step("Training conversion model")
@@ -375,6 +433,14 @@
     gamma = gamma_arg
   )
   team_mdl_df$gam_pred_score_diff <- predict(afl_score_mdl, newdata = team_mdl_df, type = "response")
+  # Out-of-fold correction: model 5 consumes gam_pred_score_diff as an input
+  # feature, AND it is served directly (run_predictions_pipeline() blends
+  # gam_pred_score_diff/xgb_pred_score_diff for every row, including
+  # completed matches) -- so training-row honesty here also matters for
+  # historical reporting, not only for model 5's own fit.
+  team_mdl_df$gam_pred_score_diff[train_mask] <- .oof_predict_gam(
+    m4_formula, gam_df, gam_df$weightz, "gaussian", gamma_arg, nthreads, gam_folds
+  )
 
   # Model 5: Win probability — trained on bare pred_* names so the blend step
   # can re-feed the same model with blended values via newdata.
@@ -601,6 +667,11 @@
     # describes the XGBoost half alone; putting it in the GAMs would ship a
     # configuration with no measurement behind it at all, which is strictly
     # worse-evidenced than the already-sub-threshold number we do have.
+    #
+    # Attempted 2026-08-27: adding it was trivial (mirrors xelo_diff exactly),
+    # but every locally-cached team_mdl_df snapshot available for gating has
+    # xrapm_diff constant at 0 (no real xRAPM backfill present -- see
+    # torpverse/docs/NEXT-STEPS.md). Reverted rather than ship ungated.
     "xrapm_diff",
     # Listed-position splits. Only usable as features because the published EPR
     # is position-centred (EPR_POSITION_CENTRE); uncentred bucket sums encode
@@ -672,28 +743,76 @@
   # a model; see the comment on that function for why the guard exists.
   predict_all <- .predict_all_rows
 
+  # Helper: out-of-fold prediction for one cascade stage, using the SAME
+  # season folds as train_step()'s xgb.cv() and the ALREADY-CHOSEN best_n
+  # (not re-run per fold -- nrounds was already selected honestly via
+  # cross-validated early stopping on the full training set, so refitting
+  # xgb.cv per fold too would only add compute, not honesty). Used so a
+  # stage's own in-sample fit is never fed forward as the next stage's
+  # input feature (see header comment on this function and
+  # .train_match_gams()/.oof_predict_gam() for the GAM-side equivalent).
+  oof_predict_xgb <- function(df, label, weights, feature_cols, params, best_n) {
+    oof <- rep(NA_real_, nrow(df))
+    for (f in folds) {
+      fmat_tr <- stats::model.matrix(~ . - 1, data = df[-f, feature_cols, drop = FALSE])
+      dtr <- xgboost::xgb.DMatrix(data = fmat_tr, label = label[-f], weight = weights[-f])
+      withr::local_seed(1234)
+      fit <- xgboost::xgb.train(
+        params = params, data = dtr, nrounds = best_n, print_every_n = 0, verbose = 0
+      )
+      fmat_te <- stats::model.matrix(~ . - 1, data = df[f, feature_cols, drop = FALSE])
+      oof[f] <- predict(fit, xgboost::xgb.DMatrix(data = fmat_te))
+    }
+    oof
+  }
+
   # Step 1: total xPoints (includes weather features)
   s1 <- train_step(xgb_df, xgb_df$total_xpoints_adj, xgb_df$weightz, s1_cols, reg_params, "total_xpoints")
-  xgb_df$xgb_pred_tot_xscore <- s1$preds
+  # Out-of-fold correction for training rows: steps 2-4 all consume
+  # xgb_pred_tot_xscore as an input feature, so what they train on must not
+  # come from a fit that already saw that row's own outcome. team_mdl_df's
+  # non-training rows (upcoming fixtures) keep the full-model prediction
+  # below -- there is no held-out fold for them, and it is already
+  # legitimately out-of-sample.
+  xgb_df$xgb_pred_tot_xscore <- oof_predict_xgb(
+    xgb_df, xgb_df$total_xpoints_adj, xgb_df$weightz, s1_cols, reg_params, s1$best_n
+  )
   team_mdl_df$xgb_pred_tot_xscore <- predict_all(s1$model, team_mdl_df, s1_cols)
+  team_mdl_df$xgb_pred_tot_xscore[train_mask] <- xgb_df$xgb_pred_tot_xscore
 
   # Step 2: xScore diff
   s2_cols <- c(base_cols, "xgb_pred_tot_xscore")
   s2 <- train_step(xgb_df, xgb_df$xscore_diff, xgb_df$weightz, s2_cols, reg_params, "xscore_diff")
-  xgb_df$xgb_pred_xscore_diff <- s2$preds
+  # Out-of-fold correction: steps 3 and 4 both consume xgb_pred_xscore_diff.
+  xgb_df$xgb_pred_xscore_diff <- oof_predict_xgb(
+    xgb_df, xgb_df$xscore_diff, xgb_df$weightz, s2_cols, reg_params, s2$best_n
+  )
   team_mdl_df$xgb_pred_xscore_diff <- predict_all(s2$model, team_mdl_df, s2_cols)
+  team_mdl_df$xgb_pred_xscore_diff[train_mask] <- xgb_df$xgb_pred_xscore_diff
 
   # Step 3: conv diff
   s3_cols <- c(base_cols, "xgb_pred_tot_xscore", "xgb_pred_xscore_diff")
   s3 <- train_step(xgb_df, xgb_df$shot_conv_diff, xgb_df$shot_weightz, s3_cols, reg_params, "conv_diff")
-  xgb_df$xgb_pred_conv_diff <- s3$preds
+  # Out-of-fold correction: step 4 consumes xgb_pred_conv_diff.
+  xgb_df$xgb_pred_conv_diff <- oof_predict_xgb(
+    xgb_df, xgb_df$shot_conv_diff, xgb_df$shot_weightz, s3_cols, reg_params, s3$best_n
+  )
   team_mdl_df$xgb_pred_conv_diff <- predict_all(s3$model, team_mdl_df, s3_cols)
+  team_mdl_df$xgb_pred_conv_diff[train_mask] <- xgb_df$xgb_pred_conv_diff
 
   # Step 4: score diff
   s4_cols <- c(base_cols, "xgb_pred_xscore_diff", "xgb_pred_conv_diff", "xgb_pred_tot_xscore")
   s4 <- train_step(xgb_df, xgb_df$score_diff, xgb_df$weightz, s4_cols, reg_params, "score_diff")
-  xgb_df$xgb_pred_score_diff <- s4$preds
+  # Out-of-fold correction: step 5 consumes xgb_pred_score_diff, AND it is
+  # served directly (run_predictions_pipeline() blends gam_pred_score_diff/
+  # xgb_pred_score_diff for every row, including completed matches) -- so
+  # training-row honesty here also matters for historical reporting, not
+  # only for step 5's own fit.
+  xgb_df$xgb_pred_score_diff <- oof_predict_xgb(
+    xgb_df, xgb_df$score_diff, xgb_df$weightz, s4_cols, reg_params, s4$best_n
+  )
   team_mdl_df$xgb_pred_score_diff <- predict_all(s4$model, team_mdl_df, s4_cols)
+  team_mdl_df$xgb_pred_score_diff[train_mask] <- xgb_df$xgb_pred_score_diff
 
   # Step 5: win probability — computed for diagnostics only. Not used in
   # final pred_win: tree models can't represent the smooth saturating logit

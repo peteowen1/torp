@@ -100,14 +100,21 @@ test_that("VERSEBUS_STRICT is parsed in one place (versebus.R excepted)", {
 test_that(".blend_gam_xgb() reproduces the literal it replaced", {
   gam <- c(10, -3.5, 0, 121.25)
   xgb <- c(20, 4.5, 7, -8.75)
-  # Bit-for-bit against the arithmetic that was inline at three call sites.
-  expect_identical(.blend_gam_xgb(gam, xgb), 0.5 * gam + 0.5 * xgb)
+  # Bit-for-bit against the arithmetic that was inline at three call sites,
+  # pre-2026-08-11 refactor. Explicit weight=0.5 -- this documents that
+  # historical transition, independent of MATCH_BLEND_WEIGHT's current value
+  # (changed to 1.0 on 2026-08-27; see the constant's own roxygen for why).
+  expect_identical(.blend_gam_xgb(gam, xgb, weight = 0.5), 0.5 * gam + 0.5 * xgb)
 })
 
-test_that(".blend_gam_xgb() weights are convex and honour the constant", {
-  expect_identical(MATCH_BLEND_WEIGHT, 0.5)
+test_that(".blend_gam_xgb() weights are convex and default to MATCH_BLEND_WEIGHT", {
   gam <- c(10, 20)
   xgb <- c(30, 40)
+  # The no-weight-arg call must use the constant, whatever its current value --
+  # not a specific historical number (MATCH_BLEND_WEIGHT was 0.5 pre-2026-08-27,
+  # 1.0 from that point; a test pinned to either number would break on the
+  # next legitimate weight change).
+  expect_identical(.blend_gam_xgb(gam, xgb), .blend_gam_xgb(gam, xgb, weight = MATCH_BLEND_WEIGHT))
   expect_identical(.blend_gam_xgb(gam, xgb, weight = 1), gam)
   expect_identical(.blend_gam_xgb(gam, xgb, weight = 0), xgb)
   # A weight change must move the result, or a call site is ignoring it.
