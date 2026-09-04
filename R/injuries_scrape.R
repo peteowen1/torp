@@ -38,38 +38,39 @@ scrape_injuries <- function(timeout = 30) {
     url <- "https://www.afl.com.au/matches/injury-list"
     session <- rvest::session(url, httr::timeout(timeout))
     raw_tables <- rvest::html_table(session)
-
-    # AFL page has 18 tables in alphabetical team order
-    team_names <- sort(AFL_TEAMS$name)
     n_tables <- length(raw_tables)
 
-    # FAIL CLOSED. The club is inferred from a table's POSITION, so the
-    # alphabetical-18 assumption is not a nicety -- it is the only thing tying
-    # a row to a club. When it does not hold, every label is a guess.
+    # READ each table's club off the page; never infer it from position.
     #
-    # It stopped holding in finals 2026: afl.com.au lists only clubs still
-    # alive, so the page served 8 tables, and the old "fall back to as many as
-    # we can match" branch stapled the first 8 alphabetical club names onto the
-    # 8 surviving clubs in page order. 30 of 49 rows were mislabelled --
-    # Sydney's whole list, Heeney/Warner/Blakey included, came out as Geelong.
-    # Downstream every one of those rows was silently dropped for not matching
-    # a player rating, so team ratings, match predictions, the blog simulator
-    # AND torp's own 3000-run season sims all ran injury-blind for five clubs
-    # with nothing failing anywhere.
+    # Position-based labelling is what broke in the 2026 finals: the page lists
+    # only clubs still alive (8 tables, not 18), and pairing the first 8
+    # alphabetical names with them mislabelled 30 of 49 rows -- Sydney's whole
+    # list, Heeney/Warner/Blakey included, came out as Geelong, and every row
+    # was then silently dropped downstream for not matching a player rating.
     #
-    # Returning empty means get_all_injuries() falls back to the preseason CSV
-    # and warns that the weekly scrape produced nothing (see injuries_match.R).
-    # Stale-but-correct beats confidently-wrong: a dropped absence understates
-    # an injury the model cannot see, while a misattributed one actively docks
-    # a club that is fully fit.
-    if (n_tables != length(team_names)) {
-      cli::cli_warn(c(
-        "!" = "Expected {length(team_names)} injury tables but found {n_tables} -- returning NO weekly injuries.",
-        "i" = "Club identity is derived from table position, so a table count other than {length(team_names)} makes every club label a guess. This is expected during finals, when afl.com.au lists only the clubs still playing.",
-        "i" = "Fix is to read each table's club from the page rather than infer it from position."
-      ))
+    # Each table is preceded by that club's badge image, whose URL carries a
+    # club code: "..._Straps-Badge-Refresh_ADEL_FA-1x.jpg". Verified against
+    # the live page on 2026-09-04: the eight tables resolve to ADEL, BRIS,
+    # CARL, FREM, GEEL, HAW, SYD, WB -- exactly the eight clubs still alive,
+    # and confirming independently which tables the old code had mislabelled.
+    #
+    # That markup sits inside an HTML COMMENT, so the parsed DOM cannot see it
+    # and we scan the raw response text instead. That is the fragile part, and
+    # it is why every failure below is FAIL CLOSED rather than a fallback: if
+    # the AFL restructures the page, this returns nothing and says so, instead
+    # of quietly attributing injuries to the wrong clubs again.
+    raw_html <- tryCatch(
+      httr::content(session$response, as = "text", encoding = "UTF-8"),
+      error = function(e) NA_character_
+    )
+    if (is.na(raw_html) || !nzchar(raw_html)) {
+      cli::cli_warn(c("!" = "Could not read the injury page's raw HTML -- returning NO weekly injuries.",
+                      "i" = "Club identity is read from a badge URL in the page source; without it every label would be a guess."))
       return(empty_df)
     }
+
+    team_names <- injury_table_clubs(raw_html, n_tables)
+    if (is.null(team_names)) return(empty_df)   # every failure already warned
 
     all_rows <- vector("list", n_tables)
 
@@ -167,4 +168,79 @@ load_preseason_injuries <- function(season) {
 
   inj$player_norm <- norm_name(inj$player)
   inj
+}
+
+
+#' Resolve each injury table's club from the page source
+#'
+#' `scrape_injuries()` must never infer a club from a table's POSITION -- see
+#' its comments for what that cost in the 2026 finals. Each table on
+#' afl.com.au's injury list is preceded by that club's badge image, whose URL
+#' carries a club code (`..._Straps-Badge-Refresh_ADEL_FA-1x.jpg`). This reads
+#' those codes in document order and resolves them through [AFL_TEAM_ALIASES].
+#'
+#' Pulled out as its own function so the correctness claim can be tested
+#' directly, on strings, rather than through a mocked HTTP session.
+#'
+#' Every failure mode returns `NULL` after warning -- FAIL CLOSED. The badge
+#' markup sits inside an HTML comment, so it is not visible to a DOM parser and
+#' this scans raw text; if the AFL restructures the page, publishing nothing and
+#' saying so beats attributing injuries to the wrong clubs again.
+#'
+#' @param raw_html Character scalar, the page's raw HTML.
+#' @param n_tables Integer, how many tables the parser found.
+#' @return A character vector of canonical club names, one per table, or `NULL`.
+#' @keywords internal
+injury_table_clubs <- function(raw_html, n_tables) {
+  if (length(raw_html) != 1L || is.na(raw_html) || !nzchar(raw_html)) {
+    cli::cli_warn(c(
+      "!" = "Could not read the injury page's raw HTML -- returning NO weekly injuries.",
+      "i" = "Club identity is read from a badge URL in the page source; without it every label would be a guess."
+    ))
+    return(NULL)
+  }
+  # One segment per table, each holding everything before it. A table's badge is
+  # the LAST one appearing in its segment.
+  segments <- strsplit(raw_html, "<table", fixed = TRUE)[[1]]
+  if (length(segments) - 1L != n_tables) {
+    cli::cli_warn(c(
+      "!" = "Found {n_tables} parsed table{?s} but {length(segments) - 1L} <table> tag{?s} in the source -- returning NO weekly injuries.",
+      "i" = "The two must correspond one-to-one for the badge lookup to name the right club."
+    ))
+    return(NULL)
+  }
+  codes <- vapply(seq_len(n_tables), function(i) {
+    # Lookaround rather than a capture group plus sub(): the backreference form
+    # needs "\1" in R source, which is one escaping layer away from silently
+    # becoming a control character and matching nothing (it did, first time).
+    hits <- regmatches(
+      segments[i],
+      gregexpr("(?<=Straps-Badge-Refresh_)[A-Z]+(?=_)", segments[i], perl = TRUE)
+    )[[1]]
+    if (!length(hits)) return(NA_character_)
+    hits[length(hits)]
+  }, character(1))
+
+  team_names <- unname(AFL_TEAM_ALIASES[codes])
+  unresolved <- is.na(team_names)
+  if (any(unresolved)) {
+    # A code we do not know is a club we would otherwise mislabel. Name it: the
+    # fix is one line in AFL_TEAM_ALIASES, and only 8 of the 18 codes are
+    # observable during finals, so the rest will surface this way in March.
+    bad <- ifelse(is.na(codes[unresolved]), "(no badge found)", codes[unresolved])
+    cli::cli_warn(c(
+      "!" = "Could not resolve {sum(unresolved)} of {n_tables} injury table{?s} to a club -- returning NO weekly injuries.",
+      "i" = "Unresolved badge code{?s}: {paste(unique(bad), collapse = ', ')}.",
+      "i" = "If these are real club codes, add them to AFL_TEAM_ALIASES; if the page no longer carries badge URLs, the club must be read some other way."
+    ))
+    return(NULL)
+  }
+  if (anyDuplicated(team_names)) {
+    cli::cli_warn(c(
+      "!" = "Two injury tables resolved to the same club ({paste(unique(team_names[duplicated(team_names)]), collapse = ', ')}) -- returning NO weekly injuries.",
+      "i" = "The badge lookup has drifted out of step with the tables."
+    ))
+    return(NULL)
+  }
+  team_names
 }
