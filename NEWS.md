@@ -5,7 +5,7 @@
 Two defects in `allocate_by_mirror()` (`R/epv_v3_mirror.R`). Both are **latent,
 not live**: `EPV_CONT_LOSS_ALLOC` is `"team"`, so the mirror branch does not run
 in production. The code is kept deliberately (the constant's own docs say the
-reasoning was sound and only the data settled it), so it is worth it working.
+reasoning was sound and only the data settled it), so it is worth having it work.
 
 * **A documented fallback that silently did the opposite.** The `weights` @param
   said "NULL falls back to the flat share"; the code returned an EMPTY table, so
