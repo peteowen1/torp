@@ -1637,8 +1637,8 @@ POSITION_AVG_TOG <- c(
 #'
 #' The ledger has 24 act types and not one is defensive -- no spoils, tackles,
 #' smothers or pressure acts, because chains does not record them. Measured on
-#' 2026: across 40,785 turnovers the disposer is debited 43,457 points while the
-#' player who wins the ball back is credited -0.030 on average, i.e. nothing.
+#' 2026: across 32,938 turnovers the disposer is debited 43,728 points while the
+#' player who wins the ball back is credited -0.029 on average, i.e. nothing.
 #' Every turnover is a pure debit. This constant is the fraction handed to the
 #' winning side instead, and it is the single largest correction in the system.
 #'
@@ -1713,8 +1713,8 @@ NP_EXCLUDED_DESCS <- c("Centre Bounce")
 #' Share of a defensive pool paid to the player who actually won the ball
 #'
 #' The ball-winner is OBSERVED, not inferred: he is the actor on the very next
-#' PBP row. Measured 2026 across 40,785 turnovers, defenders win 39.7% of them
-#' (the most of any band) while losing only 22.2% -- so routing the pool by
+#' PBP row. Measured 2026 across 32,938 turnovers, defenders win 47.3% of them
+#' (the most of any band) while losing only 22.8% -- so routing the pool by
 #' positional mirror instead sent defenders' earned credit to midfielders, and
 #' raising `NP_DEFENSIVE_SHARE` under that rule made the forward/defender gap
 #' WIDER (2.19 -> 2.58 points per game at phi 0 -> 0.9) rather than closing it.

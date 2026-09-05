@@ -254,7 +254,7 @@
   # the turnover, which is usually not the same man.
   #
   # This split exists because routing the whole pool by positional mirror was
-  # measurably wrong. Defenders win 39.7% of turnovers and lose 22.2%, so they
+  # measurably wrong. Defenders win 47.3% of turnovers and lose 22.8%, so they
   # are net ball-winners; but the mirror of a midfielder who coughs it up is
   # another midfielder, so the credit defenders earned was paid to midfielders.
   # Under mirror-only routing, raising phi from 0 to 0.9 moved defenders from

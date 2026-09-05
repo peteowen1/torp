@@ -18,14 +18,14 @@ Design, measurements and the dead end not to re-open:
   abandoned per-channel calibration was compensating for.
 * **Defensive credit, which the ledger had none of.** PBP carries 24 act types
   and not one is defensive -- no spoils, tackles, smothers or pressure acts. So
-  across 40,785 turnovers the disposer was debited 43,457 points while the
-  player who won the ball got -0.030 on average. `NP_DEFENSIVE_SHARE` now moves
+  across 32,938 turnovers the disposer was debited 43,728 points while the
+  player who won the ball got -0.029 on average. `NP_DEFENSIVE_SHARE` now moves
   a share to the winning side.
 * **Paid to the player observed to win the ball, not to a positional mirror.**
   Routing the whole pool by mirror made the forward/defender gap WIDER as more
   defensive credit was paid (2.19 -> 2.58 points per game), because a
-  midfielder's mirror is another midfielder. Defenders win 39.7% of turnovers
-  and lose 22.2%, and the winner is directly observable as the actor on the next
+  midfielder's mirror is another midfielder. Defenders win 47.3% of turnovers
+  and lose 22.8%, and the winner is directly observable as the actor on the next
   row. `NP_BALL_WINNER_SHARE` pays him; the rest still spreads by matchup for
   the pressure that forced it.
 * **Adjacency is taken on the unfiltered sequence.** Filtering rows out and
