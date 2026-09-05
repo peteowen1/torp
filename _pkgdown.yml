@@ -153,6 +153,14 @@ reference:
       - matches("chain")
       - extract_contests
 
+  - title: Net Points
+    desc: >
+      Allocate the actual match margin across players, rather than fitting a
+      scale to it. Team totals differ by exactly the final margin.
+    contents:
+      - build_net_points
+      - check_net_points_conservation
+
   - title: Match Analysis
     desc: Match-level expected goals, predictions, and head-to-head comparisons
     contents:
