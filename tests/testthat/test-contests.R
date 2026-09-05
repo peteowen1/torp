@@ -299,3 +299,80 @@ test_that("build_h2h_summary handles empty contests", {
   result <- build_h2h_summary(contests, p1, p2)
   expect_equal(nrow(result), 0)
 })
+
+# ---------------------------------------------------------------------------
+# population = "duel" vs "all" (torp#153)
+# ---------------------------------------------------------------------------
+# EPV3_DUEL_OUT (epv_v3_duels.R) excludes Uncontested Mark and Mark On Lead as
+# "receptions rather than duels". extract_contests() used to reach them anyway
+# via CHAINS_MARK_WIN_DESCS, so an unrestricted W-L counted uncontested
+# receptions as won contests -- measured at 74% of the same-team mark branch on
+# 2026 chains. These pin both populations and, critically, that the DEFAULT is
+# unchanged.
+
+test_that("extract_contests() default is unchanged (still the 'all' population)", {
+  chains <- create_mock_contest_chains()
+  expect_identical(
+    extract_contests(chains = chains, type = "aerial"),
+    extract_contests(chains = chains, type = "aerial", population = "all")
+  )
+})
+
+test_that("population = 'duel' drops Uncontested Mark and Mark On Lead outcomes", {
+  chains <- create_mock_contest_chains()
+  all_c  <- extract_contests(chains = chains, type = "aerial", population = "all")
+  duel_c <- extract_contests(chains = chains, type = "aerial", population = "duel")
+
+  # The mock carries one intercept per mark type; only the Contested Mark
+  # ones are duels, so 'duel' must be a strict subset.
+  expect_lt(nrow(duel_c), nrow(all_c))
+  expect_false(any(duel_c$player2_desc %in% c("Uncontested Mark", "Mark On Lead")))
+  expect_true(any(all_c$player2_desc %in% c("Uncontested Mark", "Mark On Lead")))
+
+  # Spoils are duels by construction and must survive untouched.
+  expect_equal(sum(duel_c$outcome == "spoil"), sum(all_c$outcome == "spoil"))
+})
+
+test_that("extract_contests() refuses an unknown population rather than guessing", {
+  chains <- create_mock_contest_chains()
+  expect_error(
+    extract_contests(chains = chains, type = "aerial", population = "genuine"),
+    "population"
+  )
+})
+
+test_that("population = 'duel' drops receptions from the SAME-TEAM mark branch", {
+  # Review gap (2026-09-05): the fixture above has only one same-team mark pair
+  # (a Contested Mark), so the previous test proved exclusion on the
+  # intercept_mark branch only -- it would still pass if the `marks` filter were
+  # reverted to CHAINS_MARK_WIN_DESCS. The same-team branch is where the impact
+  # is concentrated (2,921 of 3,914 rows on 2026 data), so pin it directly.
+  base <- create_mock_contest_chains()
+  extra <- data.table::data.table(
+    matchId = rep("CD_M20240101", 4),
+    season = rep(2024L, 4), round_number = rep(1L, 4),
+    displayOrder = 23:26,
+    period = rep(1L, 4), periodSeconds = c(2300L, 2310L, 2400L, 2410L),
+    x = c(70L, 70L, 80L, 80L),
+    y = c(5L, 5L, -5L, -5L),
+    # both pairs are SAME-team (T001 -> T001), i.e. the `mark` branch
+    teamId = c("T001", "T001", "T001", "T001"),
+    description = c("Contest Target", "Uncontested Mark",
+                    "Contest Target", "Mark On Lead"),
+    playerId = c("P30", "P31", "P32", "P33")
+  )
+  chains <- data.table::rbindlist(list(base, extra), use.names = TRUE, fill = TRUE)
+
+  all_c  <- extract_contests(chains = chains, type = "aerial", population = "all")
+  duel_c <- extract_contests(chains = chains, type = "aerial", population = "duel")
+
+  all_marks  <- all_c[outcome == "mark"]
+  duel_marks <- duel_c[outcome == "mark"]
+
+  # "all" sees the reception pairs as won contests; "duel" must not.
+  expect_true(any(all_marks$player2_desc %in% c("Uncontested Mark", "Mark On Lead")))
+  expect_false(any(duel_marks$player2_desc %in% c("Uncontested Mark", "Mark On Lead")))
+  expect_equal(nrow(all_marks) - nrow(duel_marks), 2L)
+  # the genuine Contested Mark win survives
+  expect_true(all(duel_marks$player2_desc == "Contested Mark"))
+})

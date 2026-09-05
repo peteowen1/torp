@@ -1,3 +1,25 @@
+# torp 1.4.4
+
+## Contests
+
+* **`extract_contests()` gains a `population` argument, so a contest W-L can be
+  built on the project's own duel definition.** `EPV3_DUEL_OUT`
+  (`epv_v3_duels.R`) excludes `Uncontested Mark` and `Mark On Lead` as
+  "receptions rather than duels" -- `Mark On Lead` records a defence win 0.0%
+  of the time across 19,247 events -- but `extract_contests()` reached them
+  anyway through a second, looser constant (`CHAINS_MARK_WIN_DESCS`). Measured
+  on 2026 chains, that is **2,921 of 3,914 rows (74%) of the same-team `mark`
+  branch counted as won contests that were never contested**.
+
+  `population` defaults to `EPV3_CONTEST_POPULATION` -- the same global switch
+  the v3 contest channel uses, currently `"all"` -- so **the default output is
+  unchanged and no existing caller moves**. Pass `population = "duel"` for
+  anything presented as a contest won or lost.
+
+  Anchor check: on 2026 the duel population gives a league forward win rate of
+  **0.186**, reproducing the 0.182 recorded independently from raw chains in the
+  2026-08-15 decision. The unrestricted population gives 0.427, more than double.
+
 # torp 1.4.3
 
 ## Matchup table (finals odds)
