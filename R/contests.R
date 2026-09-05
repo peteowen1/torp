@@ -80,8 +80,9 @@ extract_contests <- function(chains = NULL, type = "all", seasons = TRUE,
   # the argument too.
   #
   # This matters most for the same-team "mark" branch below. Measured on 2026
-  # chains: that branch holds 3,914 rows, of which 1,661 are Uncontested Mark
-  # and 1,249 are Mark On Lead -- 74% of its "attacker wins" were never
+  # chains: that branch holds 3,914 rows, of which 1,672 are Uncontested Mark
+  # and 1,249 are Mark On Lead -- 2,921, or 74.6%, of its "attacker wins"
+  # were never
   # contested. EPV3_DUEL_OUT excludes exactly those two as "receptions rather
   # than duels" (Mark On Lead records a defence win 0.0% of the time across
   # 19,247 events), so under population = "duel" only Contested Mark survives.
