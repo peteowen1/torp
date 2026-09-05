@@ -122,23 +122,56 @@ allocate_by_mirror <- function(scored, chains, weights) {
   roster <- merge(roster, pos, by = c("match_id", "player_id"), all.x = TRUE)
 
   un <- s[is.na(loser_pid) & !is.na(winner_pid)]
-  if (nrow(un) == 0 || is.null(weights)) {
+  if (nrow(un) == 0) {
     return(data.table::data.table(player_id = character(), match_id = character(),
                                   cont_alloc = numeric()))
+  }
+  # NULL weights used to return an EMPTY table here, silently dropping the whole
+  # allocation -- while this function's own @param said "NULL falls back to the
+  # flat share". build_mirror_weights() returns NULL on three separate paths
+  # (no positions, fewer than 500 named duels, no rows after the join), so this
+  # was reachable, and when it fired the contest debit went nowhere with nothing
+  # logged. Now it does what the docs say: everyone shares equally, which is the
+  # same behaviour the wsum <= 0 fallback below already gives per group.
+  flat <- is.null(weights)
+  if (flat) {
+    cli::cli_warn(c(
+      "Mirror weights unavailable -- allocating the contest debit as a FLAT share.",
+      "i" = "build_mirror_weights() returned NULL; positional matchup is not being used."
+    ))
   }
   un <- merge(un, pos, by.x = c("match_id", "winner_pid"),
               by.y = c("match_id", "player_id"), all.x = TRUE)
   data.table::setnames(un, "pos", "winner_pos")
+  # Measure what the winner_pos filter drops BEFORE it drops it. The
+  # conservation check at the bottom compares `owed` (computed from `agg`,
+  # i.e. post-filter) against `got`, so it is structurally blind to any debit
+  # belonging to a row whose winner has no known position -- filtered-to-
+  # filtered always balances. That is the one loss it cannot see, so account
+  # for it separately rather than leaving it invisible.
+  debit_total <- sum(un$loser_credit)
   agg <- un[!is.na(winner_pos), .(debit = sum(loser_credit)),
             by = .(match_id, team_id = loser_tid, winner_pos)]
+  debit_kept <- sum(agg$debit)
+  dropped <- debit_total - debit_kept
+  if (abs(debit_total) > 0 && abs(dropped) > 0.001 * abs(debit_total)) {
+    cli::cli_warn(c(
+      "Mirror allocation: {round(100 * dropped / debit_total, 1)}% of the contest debit has no positioned winner and is NOT allocated.",
+      "i" = "{round(dropped, 1)} of {round(debit_total, 1)} points, dropped by the winner_pos filter before the conservation check can see it."
+    ))
+  }
   if (nrow(agg) == 0) {
     return(data.table::data.table(player_id = character(), match_id = character(),
                                   cont_alloc = numeric()))
   }
 
   a <- merge(agg, roster, by = c("match_id", "team_id"), allow.cartesian = TRUE)
-  a <- merge(a, weights, by.x = c("winner_pos", "pos"),
-             by.y = c("winner_pos", "loser_pos"), all.x = TRUE)
+  if (flat) {
+    a[, w := 1]
+  } else {
+    a <- merge(a, weights, by.x = c("winner_pos", "pos"),
+               by.y = c("winner_pos", "loser_pos"), all.x = TRUE)
+  }
   # Unmapped positions are all-or-nothing, NOT "shared at the smallest weight".
   # An earlier version of this comment claimed the latter ("nobody is exempt
   # from a team failure"); the code does the opposite in the common case. Read

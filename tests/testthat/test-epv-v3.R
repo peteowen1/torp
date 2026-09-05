@@ -26,22 +26,60 @@ test_that("aerial outcomes exclude fumbles, which have no winner to credit", {
   expect_true("Contested Mark" %in% EPV3_AERIAL_OUT)
 })
 
-test_that("the contest credit split is zero-sum and rewards the upset", {
-  # The identity the whole engine rests on: winner banks |cont_att|, loser sheds
-  # it, and the payout scales with the SURPRISE, not with the event.
-  p <- c(0.1, 0.5, 0.9)
-  delta <- 2
-  # Defence wins: it banks (1 - p) * Delta, so beating a contest it was expected
-  # to lose (p small) pays most.
-  def_win_credit <- (1 - p) * delta
-  expect_true(all(diff(def_win_credit) < 0))
-  # Attack retains: it banks p * Delta, largest when the defence was favoured.
-  att_win_credit <- p * delta
-  expect_true(all(diff(att_win_credit) > 0))
-  # Zero-sum in both branches.
-  expect_equal(def_win_credit + (-def_win_credit), rep(0, length(p)))
-})
-
+# Stub model for exercising score_contests() without fitting a GAM. Defined at
+# file level so S3 dispatch finds it; predict() is all score_contests() asks of
+# these objects.
+epv3_stub_model <- function(v) structure(list(v = v), class = "epv3_stub")
+predict.epv3_stub <- function(object, newdata, ...) rep_len(object$v, nrow(newdata))
+# score_contests() calls stats::predict() from inside the package namespace, so
+# a method defined only in this file's environment is not found by UseMethod().
+# Register it explicitly.
+registerS3method("predict", "epv3_stub", predict.epv3_stub)
+
+test_that("the contest credit split is zero-sum and rewards the upset", {
+  # The identity the whole engine rests on: winner banks |cont_att|, loser sheds
+  # it, and the payout scales with the SURPRISE, not with the event.
+  #
+  # This test used to restate that formula in its own body and assert on the
+  # restatement -- its final check was `x + (-x) == 0`, true for any x, so it
+  # exercised no production code at all. It now calls score_contests() for real.
+  #
+  # What it actually catches, mutation-tested 2026-09-05: swapping p and (1 - p)
+  # in score_contests()'s cont_att line fails 4 assertions here. What it does
+  # NOT catch, checked rather than assumed: inverting the sign for defence wins
+  # passes, because winner_credit/loser_credit go through abs() -- the current
+  # design is immune to that by construction, which is precisely why the
+  # production comment prefers it to the old branching version.
+  #
+  # Delta = V_att - V_def = 2; p is the defence-win probability.
+  cst <- data.table::data.table(
+    def_win    = c(TRUE, FALSE),
+    exp_pts    = c(0, 0),
+    out_pid    = c("W1", "W2"), out_tid    = c("T1", "T2"),
+    target_pid = c("L1", "L2"), target_tid = c("T2", "T1"),
+    kick_tid   = c("T2", "T1")
+  )
+  mk <- function(p) list(p = epv3_stub_model(p), att = epv3_stub_model(3),
+                         def = epv3_stub_model(1))
+  s <- score_contests(cst, mk(0.1))
+
+  # Zero-sum, on the REAL output: what the winner banks the loser sheds.
+  expect_equal(s$winner_credit + s$loser_credit, c(0, 0))
+  expect_true(all(s$winner_credit >= 0))
+  expect_true(all(s$loser_credit <= 0))
+
+  # Rewards the upset: at p = 0.1 the defence is a heavy underdog, so a defence
+  # win pays (1 - p) * Delta = 1.8 while the attack merely retaining pays 0.2.
+  expect_equal(s$winner_credit[s$def_win], 1.8)
+  expect_equal(s$winner_credit[!s$def_win], 0.2)
+
+  # Scales with surprise, not with the event: raise p and the defence-win credit
+  # must FALL while the attack-retain credit RISES.
+  s2 <- score_contests(cst, mk(0.9))
+  expect_lt(s2$winner_credit[s2$def_win], s$winner_credit[s$def_win])
+  expect_gt(s2$winner_credit[!s2$def_win], s$winner_credit[!s$def_win])
+})
+
 test_that("the allocation rule is one of the measured set", {
   # "contested" is deliberately absent as a default: it INVERTS the channel
   # (cor with contested marks -0.165; Harris Andrews -284). See
