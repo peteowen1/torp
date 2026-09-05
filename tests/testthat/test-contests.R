@@ -299,3 +299,44 @@ test_that("build_h2h_summary handles empty contests", {
   result <- build_h2h_summary(contests, p1, p2)
   expect_equal(nrow(result), 0)
 })
+
+# ---------------------------------------------------------------------------
+# population = "duel" vs "all" (torp#153)
+# ---------------------------------------------------------------------------
+# EPV3_DUEL_OUT (epv_v3_duels.R) excludes Uncontested Mark and Mark On Lead as
+# "receptions rather than duels". extract_contests() used to reach them anyway
+# via CHAINS_MARK_WIN_DESCS, so an unrestricted W-L counted uncontested
+# receptions as won contests -- measured at 74% of the same-team mark branch on
+# 2026 chains. These pin both populations and, critically, that the DEFAULT is
+# unchanged.
+
+test_that("extract_contests() default is unchanged (still the 'all' population)", {
+  chains <- create_mock_contest_chains()
+  expect_identical(
+    extract_contests(chains = chains, type = "aerial"),
+    extract_contests(chains = chains, type = "aerial", population = "all")
+  )
+})
+
+test_that("population = 'duel' drops Uncontested Mark and Mark On Lead outcomes", {
+  chains <- create_mock_contest_chains()
+  all_c  <- extract_contests(chains = chains, type = "aerial", population = "all")
+  duel_c <- extract_contests(chains = chains, type = "aerial", population = "duel")
+
+  # The mock carries one intercept per mark type; only the Contested Mark
+  # ones are duels, so 'duel' must be a strict subset.
+  expect_lt(nrow(duel_c), nrow(all_c))
+  expect_false(any(duel_c$player2_desc %in% c("Uncontested Mark", "Mark On Lead")))
+  expect_true(any(all_c$player2_desc %in% c("Uncontested Mark", "Mark On Lead")))
+
+  # Spoils are duels by construction and must survive untouched.
+  expect_equal(sum(duel_c$outcome == "spoil"), sum(all_c$outcome == "spoil"))
+})
+
+test_that("extract_contests() refuses an unknown population rather than guessing", {
+  chains <- create_mock_contest_chains()
+  expect_error(
+    extract_contests(chains = chains, type = "aerial", population = "genuine"),
+    "population"
+  )
+})
