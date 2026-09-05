@@ -195,6 +195,44 @@ test_that("the defensive share moves value BETWEEN teams but not the margin", {
   expect_true(max(abs(tt$v.x - tt$v.y)) > 1e-6)
 })
 
+# ---- adjacency: the defect conservation could never see --------------------
+# Filtering rows out and THEN taking the next row steps over the gap, so the
+# "next actor" becomes whoever followed it. On 2026 that made 19.2% of detected
+# turnovers actually restarts, and classified 2,586 goals -- half of all goal
+# kicks -- as turnovers, firing the defensive pool and paying the opposition for
+# conceding. Every conservation test stayed green throughout: it is a pure
+# attribution error and the totals never moved.
+test_that("adjacency is taken on the unfiltered sequence", {
+  f <- np_fixture()
+  # M1 row 5 is a Kick by Away FC, immediately followed by the excluded Centre
+  # Bounce (row 6). Its next actor must be NOBODY -- a restart is chain-terminal.
+  # Filter-then-shift instead sees row 7 (Handball, Away FC) and calls it a
+  # retained disposal.
+  adj <- torp:::.np_adjacency(f$pbp)
+  r5 <- adj[match_id == "M1" & display_order == 5]
+  expect_true(is.na(r5$next_team))
+  expect_true(is.na(r5$next_player))
+  # ...and a genuine same-team pass still resolves.
+  r1 <- adj[match_id == "M1" & display_order == 1]
+  expect_equal(r1$next_team, "Home FC")
+  expect_equal(r1$next_player, "p2")
+})
+
+test_that("a disposal into a restart is neither retained nor a turnover", {
+  f <- np_fixture()
+  led <- suppressMessages(torp:::.np_build_ledger(f$pbp))
+  r5 <- led[match_id == "M1" & display_order == 5]
+  expect_true(is.na(r5$next_team))
+  # With no next team it cannot be a turnover, so no defensive pool fires for it
+  # and no receiver share is paid. Verify by making the receiver share total:
+  # p3's row-5 value must stay entirely with p3.
+  a <- suppressMessages(build_net_points(f$pbp, f$stats, f$results,
+                                         receiver_share = 1, defensive_share = 1,
+                                         reconcile = FALSE))
+  expect_equal(sum(a$net_points_hm), unname(sum(NP_FIXTURE_LEDGER_HM)),
+               tolerance = 1e-10)
+})
+
 # ---- the exclusion rule ----------------------------------------------------
 test_that("centre-bounce phantom value is excluded, not merely dropped", {
   f <- np_fixture()

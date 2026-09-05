@@ -28,6 +28,14 @@ Design, measurements and the dead end not to re-open:
   and lose 22.2%, and the winner is directly observable as the actor on the next
   row. `NP_BALL_WINNER_SHARE` pays him; the rest still spreads by matchup for
   the pressure that forced it.
+* **Adjacency is taken on the unfiltered sequence.** Filtering rows out and
+  then taking the next row steps over the gap, so the "next actor" became
+  whoever followed it. Found in review: 15,556 disposals (10.2%) had the wrong
+  next team, 19.2% of detected turnovers were actually restarts, and **2,586
+  goals -- half of all goal kicks -- were classified as turnovers**, firing the
+  defensive pool and paying the opposition for conceding. A restart is now
+  chain-terminal: neither a retained disposal nor a turnover. Every conservation
+  test stayed green throughout, because it is a pure attribution error.
 * **The centre-bounce artifact is excluded by rule, not by luck.** `exp_pts` is
   exactly 0 on every Centre Bounce row, making its delta phantom value (+4,461
   points in 2026). It was previously dropped only as a side effect of an

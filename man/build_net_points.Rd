@@ -53,7 +53,12 @@ its margin. \code{FALSE} leaves the raw allocation, which is what you want when
 measuring how close the ledger gets on its own.}
 }
 \value{
-A data.table with one row per player-match:
+A data.table with one row per player-match \strong{that had at least one
+allocatable act}. A rostered player whose every touch fell into
+\code{NP_EXCLUDED_DESCS} or a missing-field filter is absent rather than present
+at zero; the count is logged. This does not affect conservation (a zero row
+contributes nothing either way) but a consumer expecting the full team sheet
+must join back to the lineup itself. Columns:
 \describe{
 \item{\code{np_direct}}{value from the player's own acts}
 \item{\code{np_defensive_won}}{paid for turnovers he was observed to win}
