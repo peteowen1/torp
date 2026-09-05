@@ -4,7 +4,13 @@
 \alias{extract_contests}
 \title{Extract Head-to-Head Contests from Chains Data}
 \usage{
-extract_contests(chains = NULL, type = "all", seasons = TRUE, rounds = TRUE)
+extract_contests(
+  chains = NULL,
+  type = "all",
+  seasons = TRUE,
+  rounds = TRUE,
+  population = EPV3_CONTEST_POPULATION
+)
 }
 \arguments{
 \item{chains}{A data.frame or data.table of chains data (from
@@ -19,6 +25,19 @@ and \code{rounds}.}
 
 \item{rounds}{Rounds to load if \code{chains} is NULL. Passed to
 \code{load_chains()}.}
+
+\item{population}{Which aerial outcomes count as a contest:
+\code{"duel"} restricts marks to \code{EPV3_DUEL_OUT} (Contested Mark
+only, of the three this function reaches), \code{"all"} keeps
+\code{Uncontested Mark} and \code{Mark On Lead} too. Defaults to
+\code{EPV3_CONTEST_POPULATION}, the same global switch the v3 contest
+channel uses -- currently \code{"all"}, so the default is unchanged.
+
+Use \code{"duel"} for anything presented as a contest won or lost.
+\code{EPV3_DUEL_OUT}'s own documentation calls the two excluded outcomes
+"receptions rather than duels", and measured on 2026 chains they are 74\\%
+of the same-team \code{mark} branch -- so an unrestricted W-L counts
+uncontested receptions as won contests.}
 }
 \value{
 A data.table with one row per contest, containing columns:
@@ -46,7 +65,7 @@ Aerial contest outcomes (Contest Target / Kick Inside 50 Result at same x,y):
 \item{mark}{A player from the same team as the Contest Target marks it.
 The kicking team won the aerial contest (winner = player1).}
 \item{intercept_mark}{A player from the opposing team marks it
-(Contested Mark, Uncontested Mark, Mark On Lead). The defending team
+(which mark types count depends on \code{population}). The defending team
 won (winner = player2).}
 \item{spoil}{A player from the opposing team spoils it. The defending
 team won (winner = player2).}

@@ -17,6 +17,18 @@
 #'   \code{load_chains()}.
 #' @param rounds Rounds to load if \code{chains} is NULL. Passed to
 #'   \code{load_chains()}.
+#' @param population Which aerial outcomes count as a contest:
+#'   \code{"duel"} restricts marks to \code{EPV3_DUEL_OUT} (Contested Mark
+#'   only, of the three this function reaches), \code{"all"} keeps
+#'   \code{Uncontested Mark} and \code{Mark On Lead} too. Defaults to
+#'   \code{EPV3_CONTEST_POPULATION}, the same global switch the v3 contest
+#'   channel uses -- currently \code{"all"}, so the default is unchanged.
+#'
+#'   Use \code{"duel"} for anything presented as a contest won or lost.
+#'   \code{EPV3_DUEL_OUT}'s own documentation calls the two excluded outcomes
+#'   "receptions rather than duels", and measured on 2026 chains they are 74\%
+#'   of the same-team \code{mark} branch -- so an unrestricted W-L counts
+#'   uncontested receptions as won contests.
 #'
 #' @return A data.table with one row per contest, containing columns:
 #'   \code{match_id}, \code{season}, \code{round_number},
@@ -34,7 +46,7 @@
 #'   \item{mark}{A player from the same team as the Contest Target marks it.
 #'     The kicking team won the aerial contest (winner = player1).}
 #'   \item{intercept_mark}{A player from the opposing team marks it
-#'     (Contested Mark, Uncontested Mark, Mark On Lead). The defending team
+#'     (which mark types count depends on \code{population}). The defending team
 #'     won (winner = player2).}
 #'   \item{spoil}{A player from the opposing team spoils it. The defending
 #'     team won (winner = player2).}
@@ -55,11 +67,31 @@
 #' })
 #' }
 extract_contests <- function(chains = NULL, type = "all", seasons = TRUE,
-                             rounds = TRUE) {
+                             rounds = TRUE,
+                             population = EPV3_CONTEST_POPULATION) {
   valid_types <- c("all", "aerial", "ground_ball")
   if (!type %in% valid_types) {
     cli::cli_abort("{.arg type} must be one of {.val {valid_types}}, not {.val {type}}")
   }
+
+  # Which mark outcomes count as a contest, per the project's own duel
+  # definition (EPV3_DUEL_OUT, epv_v3_duels.R) rather than a second, looser
+  # list. epv3_aerial_out() aborts on an unknown population, so this validates
+  # the argument too.
+  #
+  # This matters most for the same-team "mark" branch below. Measured on 2026
+  # chains: that branch holds 3,914 rows, of which 1,672 are Uncontested Mark
+  # and 1,249 are Mark On Lead -- 2,921, or 74.6%, of its "attacker wins"
+  # were never
+  # contested. EPV3_DUEL_OUT excludes exactly those two as "receptions rather
+  # than duels" (Mark On Lead records a defence win 0.0% of the time across
+  # 19,247 events), so under population = "duel" only Contested Mark survives.
+  #
+  # Default is EPV3_CONTEST_POPULATION so this follows the same global switch
+  # as the v3 contest channel instead of inventing a third convention. That
+  # constant is currently "all", so the default behaviour here is UNCHANGED --
+  # flipping it is a separate, gated decision (see NEXT-STEPS).
+  mark_wins <- intersect(epv3_aerial_out(population), CHAINS_MARK_WIN_DESCS)
 
   if (is.null(chains)) {
     chains <- load_chains(seasons = seasons, rounds = rounds)
@@ -125,7 +157,7 @@ extract_contests <- function(chains = NULL, type = "all", seasons = TRUE,
 
     # Intercept mark: opposing team marks (defender wins)
     intercepts <- aerial_rows[
-      .next_desc %in% CHAINS_MARK_WIN_DESCS & team_id != .next_team_id
+      .next_desc %in% mark_wins & team_id != .next_team_id
     ]
     if (nrow(intercepts) > 0) {
       results[["intercept_mark"]] <- format_contest_rows(
@@ -136,7 +168,7 @@ extract_contests <- function(chains = NULL, type = "all", seasons = TRUE,
 
     # Mark: same team marks (attacker's team wins)
     marks <- aerial_rows[
-      .next_desc %in% CHAINS_MARK_WIN_DESCS & team_id == .next_team_id
+      .next_desc %in% mark_wins & team_id == .next_team_id
     ]
     if (nrow(marks) > 0) {
       results[["mark"]] <- format_contest_rows(
