@@ -1,3 +1,34 @@
+# torp 1.4.5
+
+## EPV v3 -- mirror allocator
+
+Two defects in `allocate_by_mirror()` (`R/epv_v3_mirror.R`). Both are **latent,
+not live**: `EPV_CONT_LOSS_ALLOC` is `"team"`, so the mirror branch does not run
+in production. The code is kept deliberately (the constant's own docs say the
+reasoning was sound and only the data settled it), so it is worth it working.
+
+* **A documented fallback that silently did the opposite.** The `weights` @param
+  said "NULL falls back to the flat share"; the code returned an EMPTY table, so
+  the entire contest-debit allocation vanished with nothing logged.
+  `build_mirror_weights()` returns NULL on three separate paths (no positions,
+  fewer than 500 named duels, no rows after the join), so this was reachable. It
+  now allocates a genuine flat share and warns that positional matchup is off.
+
+* **A conservation check that could not see the loss it was checking for.** The
+  check compared `owed` against `got`, but `owed` was computed AFTER the
+  `!is.na(winner_pos)` filter -- filtered-to-filtered always balances, so a
+  debit belonging to a winner with no known position was dropped silently and
+  the check still passed. The dropped share is now measured before the filter
+  and warned on.
+
+## Tests
+
+* Replaced a test that restated the credit formula in its own body -- its final
+  assertion was `x + (-x) == 0`, true for any x, exercising no production code.
+  It now calls `score_contests()` with stub models. Mutation-tested: swapping
+  `p` and `(1 - p)` fails 4 assertions. Also recorded what it does NOT catch
+  (a defence-win sign inversion passes, because the credits go through `abs()`).
+
 # torp 1.4.4
 
 ## Contests
