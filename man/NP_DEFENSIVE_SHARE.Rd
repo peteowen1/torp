@@ -13,8 +13,8 @@ NP_DEFENSIVE_SHARE
 \description{
 The ledger has 24 act types and not one is defensive -- no spoils, tackles,
 smothers or pressure acts, because chains does not record them. Measured on
-2026: across 40,785 turnovers the disposer is debited 43,457 points while the
-player who wins the ball back is credited -0.030 on average, i.e. nothing.
+2026: across 32,938 turnovers the disposer is debited 43,728 points while the
+player who wins the ball back is credited -0.029 on average, i.e. nothing.
 Every turnover is a pure debit. This constant is the fraction handed to the
 winning side instead, and it is the single largest correction in the system.
 }

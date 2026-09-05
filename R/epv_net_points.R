@@ -28,6 +28,13 @@
 # job is prediction and which has no conservation requirement. This split is the
 # whole point: EPV calibrates to what happened, EPR to what will happen.
 
+# NOTE ON @param RANGES. Write "between 0 and 1 inclusive", never the interval
+# notation with square brackets: roxygen reads square brackets as a markdown
+# link, emits an unresolvable cross-reference into the .Rd, and R CMD check
+# fails it as a WARNING -- which this repo's CI treats as an error
+# (error_on: "warning"). Cost one red CI run on PR #189. The same text inside a
+# cli:: string is fine; only roxygen is parsed as markdown.
+
 #' Is this row's value phantom rather than football?
 #'
 #' @param desc Character vector of PBP descriptions.
@@ -177,7 +184,7 @@
 #' the same team-match, so no team total changes.
 #'
 #' @param led Ledger from `.np_build_ledger()`.
-#' @param alpha Receiver's share in [0, 1].
+#' @param alpha Receiver's share, between 0 and 1 inclusive.
 #' @return A data.table of `match_id`, `team`, `player_id`, `np_direct`.
 #' @keywords internal
 .np_direct_credit <- function(led, alpha) {
@@ -210,7 +217,7 @@
 #' @param led Ledger from `.np_build_ledger()`.
 #' @param lineup Per-match roster: `match_id`, `team`, `player_id`, `position`,
 #'   `tog`, `def_acts`.
-#' @param phi Defensive share in [0, 1].
+#' @param phi Defensive share, between 0 and 1 inclusive.
 #' @param psi Share of the pool paid straight to the OBSERVED ball-winner (the
 #'   actor on the next row). The remainder is spread by `.np_spread_pool()`.
 #' @return A list of `debits` (per disposer, negative of what they keep),

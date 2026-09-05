@@ -12,7 +12,7 @@
 \item{lineup}{Per-match roster: \code{match_id}, \code{team}, \code{player_id}, \code{position},
 \code{tog}, \code{def_acts}.}
 
-\item{phi}{Defensive share in \link{0, 1}.}
+\item{phi}{Defensive share, between 0 and 1 inclusive.}
 
 \item{psi}{Share of the pool paid straight to the OBSERVED ball-winner (the
 actor on the next row). The remainder is spread by \code{.np_spread_pool()}.}

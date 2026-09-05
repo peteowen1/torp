@@ -9,7 +9,7 @@
 \arguments{
 \item{led}{Ledger from \code{.np_build_ledger()}.}
 
-\item{alpha}{Receiver's share in \link{0, 1}.}
+\item{alpha}{Receiver's share, between 0 and 1 inclusive.}
 }
 \value{
 A data.table of \code{match_id}, \code{team}, \code{player_id}, \code{np_direct}.

@@ -12,8 +12,8 @@ NP_BALL_WINNER_SHARE
 }
 \description{
 The ball-winner is OBSERVED, not inferred: he is the actor on the very next
-PBP row. Measured 2026 across 40,785 turnovers, defenders win 39.7\% of them
-(the most of any band) while losing only 22.2\% -- so routing the pool by
+PBP row. Measured 2026 across 32,938 turnovers, defenders win 47.3\% of them
+(the most of any band) while losing only 22.8\% -- so routing the pool by
 positional mirror instead sent defenders' earned credit to midfielders, and
 raising \code{NP_DEFENSIVE_SHARE} under that rule made the forward/defender gap
 WIDER (2.19 -> 2.58 points per game at phi 0 -> 0.9) rather than closing it.
