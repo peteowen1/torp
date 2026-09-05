@@ -1617,3 +1617,110 @@ POSITION_AVG_TOG <- c(
   HFFR = 0.79, RK = 0.79,
   INT = 0.73, SUB = 0.33, EMERG = 0.05
 )
+
+# =============================================================================
+# NET POINTS (EPV as a conservation ledger) -- see docs/plans/EPV-NET-POINTS.md
+# =============================================================================
+# These govern build_net_points(), which allocates the actual match margin
+# across players rather than fitting a scale to it.
+#
+# READ THIS BEFORE TUNING ANY OF THEM. The conservation identity holds for ANY
+# value of NP_DEFENSIVE_SHARE, NP_RECEIVER_SHARE and NP_MIRROR_SHARE, and for
+# any non-negative spread weighting. That is the design working as intended --
+# a reallocation cannot change a total -- but it means the margin identity is
+# USELESS as a way to choose them. They are not identifiable from conservation
+# and must never be "fitted" against it. Pick them on football judgement, or
+# score them against something conservation cannot see: year-over-year
+# repeatability, or predictive value once EPR consumes the output.
+
+#' Share of a turnover's value paid to the team that won the ball
+#'
+#' The ledger has 24 act types and not one is defensive -- no spoils, tackles,
+#' smothers or pressure acts, because chains does not record them. Measured on
+#' 2026: across 40,785 turnovers the disposer is debited 43,457 points while the
+#' player who wins the ball back is credited -0.030 on average, i.e. nothing.
+#' Every turnover is a pure debit. This constant is the fraction handed to the
+#' winning side instead, and it is the single largest correction in the system.
+#'
+#' Why a transfer between teams does not break conservation: in the home-margin
+#' frame the loser's failure and the winner's success point the SAME direction
+#' and share one quantity, rather than each being paid it in full.
+#'
+#' 0.30 is a judgement, not a measurement -- see the header above for why it
+#' cannot be fitted from the identity.
+#' @keywords internal
+NP_DEFENSIVE_SHARE <- 0.30
+
+#' Share of a retained disposal's value paid to the receiver
+#'
+#' 73.1% of disposals are retained by the same team with a named receiver,
+#' carrying 38.0% of all ledger value, and today 100% of it goes to the disposer
+#' even though the receiver's lead created much of it. Effect on per-player-game
+#' spread (2026): sd 4.676 at 0.00, 4.465 at 0.15, 4.344 at 0.30, 4.335 at 0.50
+#' -- real but modest, and saturating by 0.30.
+#' @keywords internal
+NP_RECEIVER_SHARE <- 0.30
+
+#' Share of a defensive pool paid to the direct positional opponent
+#'
+#' Pete's framing, and the same one `epv_v3_mirror.R` records: the mirror should
+#' take a high share but not all. The remainder spreads across the rest of the
+#' on-field team by time on ground, so nobody takes all of it and nobody is
+#' wholly exempt.
+#' @keywords internal
+NP_MIRROR_SHARE <- 0.50
+
+#' Positional mirror: who marks whom
+#'
+#' The geometric matchup. Left/right flip because the two teams attack in
+#' opposite directions, so a left-side forward is opposed by a right-side
+#' defender. Symmetric by construction -- `NP_POSITION_MIRROR[[x]]` and its
+#' reverse must agree, which `test-epv-net-points.R` asserts.
+#'
+#' This is an ASSUMED map, deliberately, where `epv_v3_mirror.R` estimates its
+#' equivalent from named duels. The assumed version is complete (every slot has
+#' a mirror) where the empirical one is only identified for defence-wins, and it
+#' needs no chains load. Swapping in empirical weights later changes only WHO is
+#' paid, never whether the ledger balances.
+#' @keywords internal
+NP_POSITION_MIRROR <- c(
+  FF = "FB",   FB = "FF",
+  CHF = "CHB", CHB = "CHF",
+  FPL = "BPR", BPR = "FPL",
+  FPR = "BPL", BPL = "FPR",
+  HFFL = "HBFR", HBFR = "HFFL",
+  HFFR = "HBFL", HBFL = "HFFR",
+  WL = "WR",   WR = "WL",
+  C = "C",     R = "R",   RR = "RR",  RK = "RK",
+  INT = "INT", SUB = "SUB", EMERG = "EMERG"
+)
+
+#' PBP descriptions that are disposals for net-points purposes
+#' @keywords internal
+NP_DISPOSAL_DESCS <- c("Kick", "Handball")
+
+#' PBP descriptions carrying phantom value that must never be allocated
+#'
+#' `exp_pts` is exactly 0.0000 on every Centre Bounce row, so the delta out of a
+#' centre bounce is a reset artifact, not football: +4,461 points across 5,662
+#' rows in 2026. Today it is excluded only as a side effect of the `is.na(team)`
+#' filter -- dropped by luck rather than by rule, and it would return the moment
+#' that filter moved. Same root cause as the refuted `EPV_RUCK_SWING_SCALE`
+#' justification; see docs/reference/EPV-VALUE-ANATOMY.md.
+#' @keywords internal
+NP_EXCLUDED_DESCS <- c("Centre Bounce")
+
+#' Share of a defensive pool paid to the player who actually won the ball
+#'
+#' The ball-winner is OBSERVED, not inferred: he is the actor on the very next
+#' PBP row. Measured 2026 across 40,785 turnovers, defenders win 39.7% of them
+#' (the most of any band) while losing only 22.2% -- so routing the pool by
+#' positional mirror instead sent defenders' earned credit to midfielders, and
+#' raising `NP_DEFENSIVE_SHARE` under that rule made the forward/defender gap
+#' WIDER (2.19 -> 2.58 points per game at phi 0 -> 0.9) rather than closing it.
+#'
+#' The remaining `1 - NP_BALL_WINNER_SHARE` still spreads by matchup, because
+#' the player who gathers the loose ball is not the only one who caused the
+#' turnover -- the pressure that forced it usually came from someone else.
+#' @keywords internal
+NP_BALL_WINNER_SHARE <- 0.60

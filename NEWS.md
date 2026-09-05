@@ -1,3 +1,46 @@
+# torp 1.4.6
+
+## Net Points -- EPV as a conservation ledger
+
+New, and deliberately parallel to the published pipeline: nothing in
+`get_player_game_ratings()` or EPR changes. `build_net_points()` allocates the
+ACTUAL match margin across players instead of fitting a scale to it, which is
+Dean Oliver's Net Points model stated for AFL. Team totals differ by exactly the
+final margin -- 211 matches of 2026, max error 5.2e-14 points.
+
+Design, measurements and the dead end not to re-open:
+`../docs/plans/EPV-NET-POINTS.md`.
+
+* **The margin is the total; the work is dividing it up.** `delta_epv`
+  telescopes along a chain, so summed per team it already lands within a goal
+  of the margin (cor 0.9857, median error 4.9 points) with nothing fitted. The
+  published player `epv` turns that into a 40-point error, which is what the
+  abandoned per-channel calibration was compensating for.
+* **Defensive credit, which the ledger had none of.** PBP carries 24 act types
+  and not one is defensive -- no spoils, tackles, smothers or pressure acts. So
+  across 40,785 turnovers the disposer was debited 43,457 points while the
+  player who won the ball got -0.030 on average. `NP_DEFENSIVE_SHARE` now moves
+  a share to the winning side.
+* **Paid to the player observed to win the ball, not to a positional mirror.**
+  Routing the whole pool by mirror made the forward/defender gap WIDER as more
+  defensive credit was paid (2.19 -> 2.58 points per game), because a
+  midfielder's mirror is another midfielder. Defenders win 39.7% of turnovers
+  and lose 22.2%, and the winner is directly observable as the actor on the next
+  row. `NP_BALL_WINNER_SHARE` pays him; the rest still spreads by matchup for
+  the pressure that forced it.
+* **The centre-bounce artifact is excluded by rule, not by luck.** `exp_pts` is
+  exactly 0 on every Centre Bounce row, making its delta phantom value (+4,461
+  points in 2026). It was previously dropped only as a side effect of an
+  `is.na(team)` filter.
+* **No centring, standardisation, TOG scaling or opponent adjustment.** Each
+  subtracts an expectation, and that is what breaks the identity. They stay at
+  the EPR layer, whose job is prediction.
+
+`check_net_points_conservation()` asserts the identity. Note what it cannot see:
+conservation holds no matter WHICH players are paid, so the shares are not
+identifiable from it and must never be fitted against it.
+
+
 # torp 1.4.5
 
 ## EPV v3 -- mirror allocator
