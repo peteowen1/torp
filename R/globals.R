@@ -476,3 +476,27 @@ utils::globalVariables(c(
 utils::globalVariables(c(
   ".psr_sd", ".psr_w", "lineup_pos_group", "wpa_disp", "wpa_recv"
 ))
+
+# Net Points ledger (R/epv_net_points.R) and the v4 engine branch: data.table
+# column names used in j / := expressions.
+utils::globalVariables(c(
+  "in_pbp", "pbp_desc", "pbp_tid", "pbp_pid", "n_home", "n_exp", "x_home", "v_next",
+  "band", "baseline", "adj", "prev_same", "adj_here", "adj_from_next", "reprice_hm",
+  "is_stoppage", "resolve_desc", "resolve_team", "resolve_player", "resolve_lag",
+  "next_desc", "hm", "kind", "is_disp", "scored", "contested", "cont_desc", "csur", "gsur",
+  "def_win", "winner_pid", "sgn", "dec", "sur", "dec_hm", "sur_hm", "c_hm", "g_hm",
+  "own_hm", "recv_hm", "win_hm", "team_hm", "cede_hm", "cede_c_hm", "stop_hm", "p_hat",
+  "psi_row", "rho", "opp_team", "on_roster", "t1", "t2", "teams", "has_winner",
+  "spread_hm", "pool_hm", "winner_slot", "loser_pid", "n_pair", "s_pair", "s_acts",
+  "s_mirror", "s_tog", "c_pair", "c_acts", "c_mirror", "c_tog", "is_mirror", "w", "wsum",
+  "alloc", "def_team", "W", "L", "s_ruck", "s_player", "s_pool", "how", "win_team",
+  "lose_team", "sw_win", "sw_lose", "w_win", "w_lose", "v_ruck", "v_pool", "v",
+  "np_stoppage", "np_team", "np_contest_won", "np_defensive_won", "np_defensive",
+  "np_ceded", "np_direct", "np_residual", "np_raw", "net_points_hm", "net_points", ".sgn",
+  "off_home", "off_away", "np_own", "np_won", "np_pool", "v_lost", "share", "tog",
+  "def_acts", "ntot", "tot", "terminal", "nt", "npl", "nd", "c_p", "c_decision", "c_cont",
+  "c_ground", "c_desc", "c_def_win", "c_winner", "V_branch", "kick_do", "out_desc",
+  "out_pid", "decision", "surprise", "V_pre", "V_after", "V_def_hat", "V_att_hat",
+  ".season", "n_pid", "n_tid", "att", "def", "role", "resid_expected", "expected", "err",
+  "round_first_match", "n_mirror", "tog_mirror", "tog_other", "n_wrong", "denom"
+))
