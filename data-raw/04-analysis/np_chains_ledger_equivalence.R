@@ -60,4 +60,12 @@ say("\nspoils: ", nrow(sp), "; attack regathers (next PBP state is the kicking t
     round(100 * mean(sp$kind == "terminal"), 1), "%")
 say("spoiler is the next PBP actor: ",
     round(100 * mean(sp$resolve_player == sp$next_player, na.rm = TRUE), 1), "%")
+# The scoring rule: a row after which the score moved is terminal. With chains
+# we can see what those rows resolved into; they must be scores and restarts,
+# never something that reads as a possession change.
+term <- disp[kind == "terminal", .N, by = resolve_desc][order(-N)]
+say("\nterminal disposals by resolution (scores and restarts expected):")
+print(head(term, 8))
+stopifnot(disp[resolve_desc == "Behind" & kind == "turnover", .N] == 0)
+say("behinds classed as turnovers: 0 (asserted)")
 say("\ndone")

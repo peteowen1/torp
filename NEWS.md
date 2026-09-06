@@ -13,8 +13,22 @@ Nothing uses the resolution yet. It is step 1 of the v4 credit rules
 (`docs/plans/EPV-V4-CREDIT-RULES.md`).
 
 Two facts the resolution column showed on day one: the spoiler is the next
-possessor only 7.8% of the time, and 3,860 kicks that resolve to a behind are
+possessor only 7.8% of the time, and 3,860 kicks that resolve to a behind were
 classed as turnovers because the next state is the opposition's kick-in.
+
+## A score is followed by a restart, never a turnover
+
+Fixed the second of those. The defence was being paid 30% of every behind
+conceded -- 1,981 points across 2026, 9.3 a match -- and the kick-in taker took
+60% of that, almost all of it to half-backs. Adjacency now treats a row after
+which the running score moved as chain-terminal, the same status a centre
+bounce already had; that covers goals, behinds, rushed behinds and dribbled
+scores in one rule, with or without chains. PBP books the points on the row
+AFTER the scoring act, so `home_points` / `away_points` are now required
+ledger columns. Per-position means all fall (the shooter wears the whole
+behind, the defence stops collecting it): defenders 2.23 -> 1.67, forwards
+4.07 -> 3.49 points a game. Defenders now win 43.3% of turnovers, not 47.3%;
+the difference was kick-ins.
 
 # torp 1.4.7
 

@@ -27,7 +27,11 @@ np_fixture <- function() {
     player_id = c("p1", "p2", "p1", "p3", "p3", "p2", "p4", "p3",
                   "p1", "p3", "p2", "p1"),
     delta_epv = c(1.0, -2.0, 3.0, 0.5, -1.5, 99.0, 2.0, -0.5,
-                  4.0, -1.0, 2.5, -3.0)
+                  4.0, -1.0, 2.5, -3.0),
+    # running score, booked on the row AFTER the scoring act as PBP does;
+    # constant here so no row is terminal by score. The scoring test below
+    # moves it.
+    home_points = 0L, away_points = 0L
   )
   stats <- data.table::data.table(
     match_id = c(rep("M1", 4), rep("M2", 4)),
@@ -442,4 +446,34 @@ test_that("a sequence with holes or duplicates is refused", {
   wrong[match_id == "M1" & display_order == 20, description := "Kick"]
   expect_error(suppressMessages(torp:::.np_sequence(f$pbp, wrong)),
                "different description")
+})
+
+# ---- scoring acts are terminal ----------------------------------------------
+test_that("a behind is followed by a restart, not a turnover", {
+  f <- np_fixture()
+  # M1 row 3 is a Kick by Home p1 followed by an Away Uncontested Mark (row 4):
+  # a turnover as the fixture stands. Book one home point from row 4 onward and
+  # it becomes a behind followed by the kick-in.
+  base <- suppressMessages(build_net_points(f$pbp, f$stats, f$results,
+                                            defensive_share = 1, reconcile = FALSE))
+  pbp <- data.table::copy(f$pbp)
+  pbp[match_id == "M1" & display_order >= 4, home_points := 1L]
+  adj <- torp:::.np_adjacency(pbp)
+  r3 <- adj[match_id == "M1" & display_order == 3]
+  expect_true(is.na(r3$next_team))
+  expect_true(is.na(r3$next_player))
+  # the row before it is untouched
+  expect_equal(adj[match_id == "M1" & display_order == 2]$next_player, "p1")
+  led <- suppressMessages(torp:::.np_build_ledger(pbp))
+  expect_true(is.na(led[match_id == "M1" & display_order == 3]$next_team))
+  # no defensive pool fires for it, so with defensive_share = 1 the kicker keeps
+  # the whole row where before the whole row went to the opposition
+  np <- suppressMessages(build_net_points(pbp, f$stats, f$results,
+                                          defensive_share = 1, reconcile = FALSE))
+  p1_before <- base[match_id == "M1" & player_id == "p1"]$net_points_hm
+  p1_after  <- np[match_id == "M1" & player_id == "p1"]$net_points_hm
+  expect_equal(p1_after - p1_before, 3.0, tolerance = 1e-10)
+  # and the ledger total has not moved
+  expect_equal(sum(np$net_points_hm), unname(sum(NP_FIXTURE_LEDGER_HM)),
+               tolerance = 1e-10)
 })

@@ -90,7 +90,8 @@
   p <- data.table::as.data.table(pbp_data)
   if (is.null(chains)) {
     s <- p[, .(match_id, display_order, description, team,
-               home_away = as.character(home_away), player_id, delta_epv)]
+               home_away = as.character(home_away), player_id, delta_epv,
+               home_points, away_points)]
     s[, in_pbp := TRUE]
     data.table::setorder(s, match_id, display_order)
     return(s)
@@ -115,7 +116,7 @@
   # Every PBP row must be a chains row, or the two sequences are from
   # different vintages and "the next row" would mean different things in each.
   pk <- p[, .(match_id = as.character(match_id), display_order, description,
-              team_id, delta_epv)]
+              team_id, delta_epv, home_points, away_points)]
   miss <- pk[!cs, on = key]
   if (nrow(miss) > 0) {
     cli::cli_abort(c(
@@ -125,7 +126,7 @@
     ))
   }
   s <- merge(cs, pk[, .(match_id, display_order, pbp_desc = description,
-                       delta_epv, in_pbp = TRUE)],
+                       delta_epv, home_points, away_points, in_pbp = TRUE)],
              by = key, all.x = TRUE)
   s[is.na(in_pbp), in_pbp := FALSE]
   bad <- s[in_pbp == TRUE & !is.na(pbp_desc) & pbp_desc != description]
@@ -155,7 +156,7 @@
   cli::cli_alert_info(
     "Net points sequence: {format(nrow(s), big.mark = ',')} chains rows, {format(sum(s$in_pbp), big.mark = ',')} carry PBP value; {format(nrow(extra), big.mark = ',')} chains-only rows visible for resolution ({top_txt})")
   s[, .(match_id, display_order, description, team, home_away, player_id,
-        delta_epv, in_pbp)]
+        delta_epv, home_points, away_points, in_pbp)]
 }
 
 #' What each disposal turned into: the first row after it that is not in flight
@@ -221,7 +222,7 @@
 .np_build_ledger <- function(pbp_data, chains = NULL) {
   d0 <- data.table::as.data.table(pbp_data)
   need <- c("match_id", "display_order", "delta_epv", "home_away", "team",
-            "player_id", "description")
+            "player_id", "description", "home_points", "away_points")
   missing <- setdiff(need, names(d0))
   if (length(missing)) {
     cli::cli_abort(c(
@@ -320,20 +321,35 @@
 #' the test for "there is no next actor" -- such rows get `NA` and are therefore
 #' neither retained disposals nor turnovers.
 #'
+#' \strong{So is a score.} A behind is followed by the opposition's kick-in,
+#' which HAS a team, so by the rule above it read as a turnover: the defence
+#' was paid 30% of every behind conceded (1,981 points in 2026, 9.3 a match)
+#' and the kick-in taker took 60% of that -- almost all of it to half-backs.
+#' Found on 2026-09-06 by the chains resolution column. The general form: the
+#' running score changes between this row and the next only when this row
+#' scored (goal, behind, rushed behind, a dribbled ground kick), and a score is
+#' always followed by a restart. PBP books the points on the FOLLOWING row,
+#' which is why the comparison is this row against the next.
+#'
 #' @param pbp_data The full play-by-play, before any filtering.
 #' @return A data.table of `match_id`, `display_order`, `next_team`,
 #'   `next_player`.
 #' @keywords internal
 .np_adjacency <- function(pbp_data) {
   a <- data.table::as.data.table(pbp_data)[, .(match_id, display_order, team,
-                                               player_id, description)]
+                                               player_id, description,
+                                               home_points, away_points)]
   data.table::setorder(a, match_id, display_order)
+  a[, tot := home_points + away_points]
   a[, `:=`(nt = data.table::shift(team, -1L),
            npl = data.table::shift(player_id, -1L),
-           nd = data.table::shift(description, -1L)), by = match_id]
-  # Chain-terminal: the next event has no acting team (a restart), or is one we
-  # exclude as phantom. Either way there is no next actor to credit.
-  a[, terminal := is.na(nt) | .np_is_excluded(nd)]
+           nd = data.table::shift(description, -1L),
+           ntot = data.table::shift(tot, -1L)), by = match_id]
+  # Chain-terminal: the next event has no acting team (a restart), is one we
+  # exclude as phantom, or the score moved (this row scored, and a restart
+  # follows). Either way there is no next actor to credit.
+  a[, scored := !is.na(ntot) & !is.na(tot) & ntot != tot]
+  a[, terminal := is.na(nt) | .np_is_excluded(nd) | scored]
   a[, .(match_id, display_order,
         next_team = data.table::fifelse(terminal, NA_character_, nt),
         next_player = data.table::fifelse(terminal, NA_character_, npl))]
