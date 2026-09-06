@@ -4,7 +4,12 @@
 \alias{.np_build_ledger}
 \title{Build the per-act ledger in the home-margin frame}
 \usage{
-.np_build_ledger(pbp_data, chains = NULL)
+.np_build_ledger(
+  pbp_data,
+  chains = NULL,
+  stoppages = c("exclude", "allocate"),
+  stoppage_baseline = NULL
+)
 }
 \arguments{
 \item{pbp_data}{Play-by-play carrying \code{delta_epv}, \code{home_away}, \code{team},
@@ -14,6 +19,13 @@
 ledger's VALUE is unchanged -- every point still comes from a PBP row --
 but each disposal also carries \verb{resolve_*}: the chains row that ended it
 (a spoil, a contested mark, a goal), which PBP never shows.}
+
+\item{stoppages}{\code{"exclude"} (the default) drops stoppage rows as before;
+\code{"allocate"} keeps them as ledger rows with \code{is_stoppage = TRUE}, valued at
+the neutral baseline (D15), and reprices the row before each one.}
+
+\item{stoppage_baseline}{Precomputed \code{.np_stoppage_baseline()} table, or
+\code{NULL} to estimate it from the data.}
 }
 \value{
 A data.table of ledger rows with \code{hm} (home-margin-frame value) plus

@@ -1796,3 +1796,51 @@ NP_BALL_WINNER_SHARE_BY_ACT_DEFAULT <- 0.30
 #' test, not results.
 #' @keywords internal
 NP_CONTEXT_WEIGHTS <- c(pair = 0.40, acts = 0.30, mirror = 0.20, tog = 0.10)
+
+#' Stoppage rows the ledger can allocate (D15)
+#'
+#' Centre bounces, ball-ups and boundary throw-ins carry no team, so their value
+#' -- about 30 points of gross swing a match in 2026 -- fell into the
+#' reconciliation residual and was spread by time on ground. Under
+#' `stoppages = "allocate"` each is valued at a neutral baseline for its type and
+#' location and the swing to the first possession is paid to the side that won
+#' it (rucks, the first-possession player, the pool) and worn by the side that
+#' lost it.
+#' @keywords internal
+NP_STOPPAGE_DESCS <- c("Centre Bounce", "Ball Up Call", "Out of Bounds")
+
+#' First-possession descriptions that name a hitout, and the ruck's own gather
+#' @keywords internal
+NP_STOPPAGE_HITOUT_DESCS <- "Gather From Hitout"
+
+#' @rdname NP_STOPPAGE_HITOUT_DESCS
+#' @keywords internal
+NP_STOPPAGE_RUCK_OWN_DESCS <- "Ruck Hard Ball Get"
+
+#' Share of a stoppage swing worn by the side that lost it
+#'
+#' The swing is one quantity in the home-margin frame: what the winning side is
+#' credited and what the losing side is debited must add to it, exactly as a
+#' turnover's blame and credit do. 0.5 by symmetry -- a lost hitout is as much
+#' the loser's doing as the winner's. Not identifiable from conservation.
+#' @keywords internal
+NP_STOPPAGE_LOSER_SHARE <- 0.50
+
+#' How a side's half of a stoppage swing splits, by how the ball came out (D15)
+#'
+#' Pete's splits, 2026-09-06: a gather from a hitout is mostly the tap; a ground
+#' ball or free is mostly the player who won it; a ruck's own hard-ball get is
+#' his. `ruck` is shared between a team's rucks by `hitouts_to_advantage` that
+#' match (winning side) or `ruck_contests - hitouts` (losing side). With no ruck
+#' credited on a side, that share joins its pool. All (Y) defaults for the
+#' year-over-year test.
+#' @keywords internal
+NP_STOPPAGE_SPLIT <- list(
+  hitout   = c(ruck = 0.50, player = 0.30, pool = 0.20),
+  ruck_own = c(ruck = 0.00, player = 0.80, pool = 0.20),
+  ground   = c(ruck = 0.20, player = 0.50, pool = 0.30)
+)
+
+#' Width, in metres, of the location bands the stoppage baseline is averaged in
+#' @keywords internal
+NP_STOPPAGE_BAND_M <- 20

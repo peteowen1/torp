@@ -1,5 +1,28 @@
 # torp 1.4.8
 
+## Net Points: stoppages and ruck credit (D15)
+
+`build_net_points(stoppages = "allocate")` (difficulty credit only) stops dropping
+centre bounces, ball-ups and throw-ins. Each is valued at a neutral baseline for
+its type and 20m band of the ground (`.np_stoppage_baseline()`: the average
+first-possession value over both winners; ball-ups run from -2.05 at the home
+side's defensive end to +1.41 at its goal, centre bounces sit at 0.1), the row
+before it is paid up to that baseline and the stoppage row from the baseline to
+the first possession, so the pair still sums to what it did. The swing splits
+`NP_STOPPAGE_LOSER_SHARE` (0.5) to the side that lost the ball; each side's half
+follows `NP_STOPPAGE_SPLIT` by how the ball came out (a gather from a hitout:
+ruck 50 / player 30 / pool 20; a ground ball or free: player 50 / pool 30 /
+rucks 20; a ruck's own hard-ball get: his 80 / pool 20), with a team's ruck
+share divided by `hitouts_to_advantage` (winner) or `ruck_contests - hitouts`
+(loser) that match. New `np_stoppage` column and `stoppage_*` payment roles.
+
+2026: 18,325 stoppage rows carrying 57 points of gross swing a match, all of
+which used to fall into the reconciliation residual (median |residual| per
+player-game 0.104 -> 0.021). Gawn and Grundy lead the column; rucks' stoppage
+credit correlates 0.65 with hitouts to advantage; rucks rise from 5.3 to 6.2
+net points a game. Split-half reliability 0.680 -> 0.665, so the shares go to
+the year-over-year test with the rest. This replaces the old EPV's flat
+per-hitout constant, whose sign was wrong.
 ## Net Points explainer rebuilt on the v4 rules, plus a defender's page
 
 `data-raw/04-analysis/build_net_points_explainer.R` now reads the ledger's own

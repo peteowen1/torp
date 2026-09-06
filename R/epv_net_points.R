@@ -91,7 +91,7 @@
   if (is.null(chains)) {
     s <- p[, .(match_id, display_order, description, team,
                home_away = as.character(home_away), player_id, delta_epv,
-               home_points, away_points)]
+               home_points, away_points, home, x, exp_pts)]
     s[, in_pbp := TRUE]
     data.table::setorder(s, match_id, display_order)
     return(s)
@@ -116,7 +116,8 @@
   # Every PBP row must be a chains row, or the two sequences are from
   # different vintages and "the next row" would mean different things in each.
   pk <- p[, .(match_id = as.character(match_id), display_order, description,
-              team_id, player_id, delta_epv, home_points, away_points)]
+              team_id, player_id, delta_epv, home_points, away_points, home, x,
+              exp_pts)]
   miss <- pk[!cs, on = key]
   if (nrow(miss) > 0) {
     cli::cli_abort(c(
@@ -127,7 +128,8 @@
   }
   s <- merge(cs, pk[, .(match_id, display_order, pbp_desc = description,
                        pbp_tid = team_id, pbp_pid = player_id,
-                       delta_epv, home_points, away_points, in_pbp = TRUE)],
+                       delta_epv, home_points, away_points, home, x, exp_pts,
+                       in_pbp = TRUE)],
              by = key, all.x = TRUE)
   s[is.na(in_pbp), in_pbp := FALSE]
   # Same key must mean the same act by the same player for the same team. The
@@ -167,7 +169,7 @@
   cli::cli_alert_info(
     "Net points sequence: {format(nrow(s), big.mark = ',')} chains rows, {format(sum(s$in_pbp), big.mark = ',')} carry PBP value; {format(nrow(extra), big.mark = ',')} chains-only rows visible for resolution ({top_txt})")
   s[, .(match_id, display_order, description, team, home_away, player_id,
-        delta_epv, home_points, away_points, in_pbp)]
+        delta_epv, home_points, away_points, home, x, exp_pts, in_pbp)]
 }
 
 #' What each disposal turned into: the first row after it that is not in flight
@@ -218,6 +220,49 @@
         resolve_lag)]
 }
 
+#' Neutral baseline for a stoppage, by type and location (D15)
+#'
+#' A stoppage row's own state value is filled from the side that ends up
+#' winning the first possession, so ball-ups and throw-ins read near zero and
+#' the swing leaks into the row before them. The baseline is the average
+#' first-possession value, in the home-margin frame, over both winners, for
+#' each stoppage type and 20m band of the ground (oriented to the home side's
+#' attacking end). Valuing the stoppage there makes the row before it worth
+#' "forcing the stoppage" and the stoppage row worth "winning it", and the two
+#' still sum to what they summed to, so conservation is untouched.
+#'
+#' The centre-bounce baseline must sit near zero; anything else means the
+#' frame is wrong, and the function aborts rather than reprice every clearance.
+#'
+#' @param seq Output of `.np_sequence()`.
+#' @return `description`, `band`, `baseline`, `n`.
+#' @keywords internal
+.np_stoppage_baseline <- function(seq) {
+  s <- seq[in_pbp == TRUE, .(match_id, display_order, description, home, x, exp_pts)]
+  data.table::setorder(s, match_id, display_order)
+  s[, `:=`(n_home = data.table::shift(home, -1L), n_exp = data.table::shift(exp_pts, -1L)),
+    by = match_id]
+  st <- s[description %chin% NP_STOPPAGE_DESCS & !is.na(home) & is.finite(x) &
+            !is.na(n_home) & is.finite(n_exp)]
+  if (nrow(st) == 0) {
+    cli::cli_abort("No stoppage rows with a following possession -- cannot estimate a baseline.")
+  }
+  st[, `:=`(x_home = x * data.table::fifelse(home == 1L, 1, -1),
+            v_next = n_exp * data.table::fifelse(n_home == 1L, 1, -1))]
+  st[, band := floor(x_home / NP_STOPPAGE_BAND_M) * NP_STOPPAGE_BAND_M]
+  out <- st[, .(baseline = mean(v_next), n = .N), by = .(description, band)]
+  cb <- out[description == "Centre Bounce", sum(baseline * n) / sum(n)]
+  if (is.finite(cb) && abs(cb) > 0.5) {
+    cli::cli_abort(c(
+      "Centre-bounce baseline is {round(cb, 3)}; it should sit near zero.",
+      "x" = "The stoppage frame is wrong; refusing to reprice every clearance on it."
+    ))
+  }
+  cli::cli_alert_info(
+    "Stoppage baseline: {nrow(out)} type x band cells from {format(nrow(st), big.mark = ',')} stoppages; centre bounce {round(cb, 3)}, ball-up range {round(min(out[description == 'Ball Up Call']$baseline), 2)} to {round(max(out[description == 'Ball Up Call']$baseline), 2)}")
+  out
+}
+
 #' Build the per-act ledger in the home-margin frame
 #'
 #' @param pbp_data Play-by-play carrying `delta_epv`, `home_away`, `team`,
@@ -226,14 +271,23 @@
 #'   ledger's VALUE is unchanged -- every point still comes from a PBP row --
 #'   but each disposal also carries `resolve_*`: the chains row that ended it
 #'   (a spoil, a contested mark, a goal), which PBP never shows.
+#' @param stoppages `"exclude"` (the default) drops stoppage rows as before;
+#'   `"allocate"` keeps them as ledger rows with `is_stoppage = TRUE`, valued at
+#'   the neutral baseline (D15), and reprices the row before each one.
+#' @param stoppage_baseline Precomputed `.np_stoppage_baseline()` table, or
+#'   `NULL` to estimate it from the data.
 #' @return A data.table of ledger rows with `hm` (home-margin-frame value) plus
 #'   the next row's team and player, used to detect turnovers, and the
 #'   resolution columns (`NA` without chains).
 #' @keywords internal
-.np_build_ledger <- function(pbp_data, chains = NULL) {
+.np_build_ledger <- function(pbp_data, chains = NULL,
+                             stoppages = c("exclude", "allocate"),
+                             stoppage_baseline = NULL) {
+  stoppages <- match.arg(stoppages)
   d0 <- data.table::as.data.table(pbp_data)
   need <- c("match_id", "display_order", "delta_epv", "home_away", "team",
-            "player_id", "description", "home_points", "away_points")
+            "player_id", "description", "home_points", "away_points", "home",
+            "x", "exp_pts")
   missing <- setdiff(need, names(d0))
   if (length(missing)) {
     cli::cli_abort(c(
@@ -268,15 +322,20 @@
 
   # The centre-bounce artifact is +4,461 points in 2026 and was previously
   # dropped only as a side effect of requiring a non-NA team.
-  excl <- d[.np_is_excluded(description)]
+  # Under "allocate" a stoppage row is a ledger row: it needs a frame (`home`)
+  # and a value, nothing else. Under "exclude" centre bounces are dropped by
+  # rule and the rest fall out for having no team, as before.
+  d[, is_stoppage := identical(stoppages, "allocate") &
+        description %chin% NP_STOPPAGE_DESCS & !is.na(home)]
+  excl <- d[.np_is_excluded(description) & !is_stoppage]
   if (nrow(excl)) {
     cli::cli_alert_info(
       "Net points: excluding {format(nrow(excl), big.mark = ',')} phantom row{?s} worth {round(sum(excl$delta_epv), 1)} points ({paste(NP_EXCLUDED_DESCS, collapse = ', ')})")
   }
-  d <- d[!.np_is_excluded(description)]
+  d <- d[!(.np_is_excluded(description) & !is_stoppage)]
   n_post_excl <- nrow(d)
 
-  d <- d[!is.na(team) & !is.na(player_id) & !is.na(home_away)]
+  d <- d[is_stoppage | (!is.na(team) & !is.na(player_id) & !is.na(home_away))]
   n_keep <- nrow(d)
   cli::cli_alert_info(
     "Net points ledger: {format(n_keep, big.mark = ',')} of {format(n_all, big.mark = ',')} PBP rows ({round(100 * n_keep / n_all, 1)}%); {format(n_post_excl - n_keep, big.mark = ',')} dropped for a missing team, player or orientation")
@@ -288,7 +347,45 @@
   data.table::setorder(d, match_id, display_order)
   # Home-margin frame: an away act's value flips sign, because a good away act
   # pushes the margin down.
-  d[, hm := delta_epv * data.table::fifelse(home_away == "Home", 1, -1)]
+  d[, hm := delta_epv * data.table::fifelse(
+    is_stoppage, data.table::fifelse(home == 1L, 1, -1),
+    data.table::fifelse(home_away == "Home", 1, -1))]
+
+  if (identical(stoppages, "allocate")) {
+    # Reprice each stoppage to its neutral baseline (D15). The row before it is
+    # paid up to the baseline; the stoppage row is paid from the baseline to
+    # the first possession. adj = baseline - state value the row carried, so
+    # (hm_prev + adj) + (hm_stop - adj) is what the pair summed to before.
+    bl <- if (is.null(stoppage_baseline)) .np_stoppage_baseline(seq) else
+      data.table::as.data.table(stoppage_baseline)
+    d[, x_home := x * data.table::fifelse(home == 1L, 1, -1)]
+    d[, band := floor(x_home / NP_STOPPAGE_BAND_M) * NP_STOPPAGE_BAND_M]
+    d[bl, on = .(description, band), baseline := i.baseline]
+    d[, adj := 0]
+    d[is_stoppage == TRUE & is.finite(baseline) & is.finite(exp_pts),
+      adj := baseline - exp_pts * data.table::fifelse(home == 1L, 1, -1)]
+    n_nobase <- d[is_stoppage == TRUE & !is.finite(baseline), .N]
+    if (n_nobase > 0) {
+      cli::cli_alert_warning(
+        "{n_nobase} stoppage{?s} had no baseline cell (location out of range) and keep{?s/} the row's own value.")
+    }
+    # the previous ledger row in the same match receives +adj; the first row
+    # of a match has none, so that stoppage keeps its full swing
+    d[, prev_same := data.table::shift(match_id, 1L) == match_id]
+    d[is.na(prev_same), prev_same := FALSE]
+    d[, adj_here := data.table::fifelse(is_stoppage & prev_same, adj, 0)]
+    d[, adj_from_next := data.table::shift(adj_here, -1L, fill = 0), by = match_id]
+    d[, hm := hm - adj_here + adj_from_next]
+    # the row before a stoppage keeps what was added to it, so its difficulty
+    # terms can be moved by the same amount (the surprise absorbs it: the
+    # kick's "after" is now the baseline, not the leaked winner's state)
+    d[, reprice_hm := adj_from_next]
+    d[, `:=`(prev_same = NULL, adj_here = NULL, adj_from_next = NULL,
+             x_home = NULL, band = NULL, baseline = NULL, adj = NULL)]
+    st <- d[is_stoppage == TRUE]
+    cli::cli_alert_info(
+      "Stoppages allocated: {format(nrow(st), big.mark = ',')} rows carrying {round(sum(abs(st$hm)), 1)} points gross ({round(sum(abs(st$hm)) / data.table::uniqueN(st$match_id), 1)} a match) after repricing to the baseline")
+  }
   d[adj, on = .(match_id, display_order),
     `:=`(next_team = i.next_team, next_player = i.next_player,
          next_desc = i.next_desc)]
@@ -302,8 +399,9 @@
     cli::cli_alert_info(
       "Net points resolution: {round(100 * mean(!is.na(disp$resolve_desc)), 1)}% of {format(nrow(disp), big.mark = ',')} disposals resolve within 6 rows; {round(100 * mean(disp$resolve_desc %chin% c('Spoil', 'Contest Target', 'Contested Mark'), na.rm = TRUE), 1)}% at a named contest")
   }
+  if (!"reprice_hm" %in% names(d)) d[, reprice_hm := 0]
   out <- d[, .(match_id, display_order, description, team, home_away, player_id,
-               hm, next_team, next_player, next_desc,
+               hm, is_stoppage, reprice_hm, next_team, next_player, next_desc,
                resolve_desc, resolve_team, resolve_player, resolve_lag)]
   # Every named actor in the sequence, including chains-only ones (a spoiler
   # who never touched the ball in PBP), so a contest winner always has a roster
@@ -539,8 +637,10 @@
     }
   }
   l <- data.table::copy(led)
-  l[, is_disp := description %in% NP_DISPOSAL_DESCS]
+  if (!"is_stoppage" %in% names(l)) l[, is_stoppage := FALSE]
+  l[, is_disp := description %in% NP_DISPOSAL_DESCS & !is_stoppage]
   l[, kind := data.table::fcase(
+    is_stoppage,                                       "stoppage",
     !is_disp,                                          "act",
     is.na(next_team),                                  "terminal",
     next_team == team & !is.na(next_player),           "retained",
@@ -556,8 +656,10 @@
            win_hm = 0,
            team_hm = 0,
            cede_hm = data.table::fifelse(kind == "turnover", hm * phi, 0),
-           cede_c_hm = 0,
+           cede_c_hm = 0, stop_hm = 0,
            winner_pid = NA_character_, cont_desc = NA_character_)]
+  # a stoppage row is paid by .np_stoppage_credit(), not by any rule below
+  l[kind == "stoppage", `:=`(own_hm = 0, recv_hm = 0, cede_hm = 0, stop_hm = hm)]
 
   if (identical(credit, "difficulty")) {
     if (is.null(terms) || nrow(terms) == 0) {
@@ -585,12 +687,16 @@
     l[, sgn := data.table::fifelse(home_away == "Home", 1, -1)]
     l[, `:=`(dec_hm = dec * sgn, sur_hm = sur * sgn,
              c_hm = csur * sgn, g_hm = gsur * sgn)]
+    # a row repriced to a stoppage baseline: the surprise (and, on a contested
+    # kick, its ground-ball part) moves with it, the decision does not
+    if (!"reprice_hm" %in% names(l)) l[, reprice_hm := 0]
+    l[reprice_hm != 0, `:=`(sur_hm = sur_hm + reprice_hm, g_hm = g_hm + reprice_hm)]
     l[, scored := is_disp & !is.na(p_hat) & is.finite(dec_hm) & is.finite(sur_hm)]
 
     # The row identity, asserted rather than assumed: decision + surprise must
     # rebuild the row's value. If it does not, the terms came from a different
     # PBP vintage than the ledger and every split below would be fiction.
-    gap <- l[scored == TRUE, max(abs(dec_hm + sur_hm - hm))]
+    gap <- if (any(l$scored)) l[scored == TRUE, max(abs(dec_hm + sur_hm - hm))] else 0
     if (!is.finite(gap) || gap > 1e-9) {
       cli::cli_abort(c(
         "Difficulty terms do not rebuild the ledger row: max |decision + surprise - delta| = {signif(gap, 3)}.",
@@ -661,7 +767,7 @@
   }
 
   # the four parts must rebuild every row, whichever rule produced them
-  gap4 <- l[, max(abs(own_hm + recv_hm + win_hm + team_hm + cede_hm + cede_c_hm - hm))]
+  gap4 <- l[, max(abs(own_hm + recv_hm + win_hm + team_hm + cede_hm + cede_c_hm + stop_hm - hm))]
   if (!is.finite(gap4) || gap4 > 1e-9) {
     cli::cli_abort("Credit terms do not sum to the row value (max gap {signif(gap4, 3)}).")
   }
@@ -682,7 +788,7 @@
 #' @return `match_id`, `team`, `player_id`, `np_direct`.
 #' @keywords internal
 .np_direct_credit <- function(l) {
-  actor <- l[, .(match_id, team, player_id, v = own_hm + cede_hm + cede_c_hm)]
+  actor <- l[kind != "stoppage", .(match_id, team, player_id, v = own_hm + cede_hm + cede_c_hm)]
   recv <- l[kind == "retained", .(match_id, team, player_id = next_player, v = recv_hm)]
   win <- l[win_hm != 0 & !is.na(winner_pid),
            .(match_id, team, player_id = winner_pid, v = win_hm)]
@@ -878,6 +984,114 @@
   out <- unname(NP_CONTEST_WINNER_SHARE[desc])
   out[is.na(out)] <- NP_CONTEST_WINNER_SHARE_DEFAULT
   out
+}
+
+#' Pay a stoppage swing: rucks, the first-possession player, both pools (D15)
+#'
+#' The swing on a stoppage row is baseline -> first possession, in the
+#' home-margin frame. `NP_STOPPAGE_LOSER_SHARE` of it is worn by the side that
+#' lost the ball; the rest is credited to the side that won it. Each side's
+#' half splits by how the ball came out (`NP_STOPPAGE_SPLIT`): the ruck share
+#' goes to that side's rucks in proportion to `hitouts_to_advantage` (winner)
+#' or `ruck_contests - hitouts` (loser) that match, the player share to the
+#' first-possession player, the rest to the side's pool. A side with no ruck
+#' credited passes the ruck share to its pool. A stoppage with no first
+#' possession (a stoppage straight into another stoppage) splits its swing
+#' between the two pools.
+#'
+#' @param l Output of `.np_credit_terms()`.
+#' @param lineup Roster with `hitouts_to_advantage`, `ruck_contests`, `hitouts`.
+#' @param loser_share `NP_STOPPAGE_LOSER_SHARE`.
+#' @param split `NP_STOPPAGE_SPLIT`.
+#' @return `individual` (`match_id`, `team`, `player_id`, `np_stoppage`),
+#'   `pool` rows shaped for `.np_spread_pool()`, and `rows` for the payment
+#'   table.
+#' @keywords internal
+.np_stoppage_credit <- function(l, lineup, loser_share = NP_STOPPAGE_LOSER_SHARE,
+                                split = NP_STOPPAGE_SPLIT) {
+  st <- l[kind == "stoppage" & hm != 0]
+  if (nrow(st) == 0) return(list(individual = NULL, pool = NULL, rows = NULL))
+  if (!is.numeric(loser_share) || length(loser_share) != 1 || is.na(loser_share) ||
+      loser_share < 0 || loser_share > 1) {
+    cli::cli_abort("{.arg stoppage_loser_share} must be one number between 0 and 1 inclusive.")
+  }
+  for (nm in names(split)) {
+    if (abs(sum(split[[nm]]) - 1) > 1e-9) {
+      cli::cli_abort("NP_STOPPAGE_SPLIT${nm} must sum to 1, not {sum(split[[nm]])}.")
+    }
+  }
+  tt <- lineup[, .(teams = list(sort(unique(team)))), by = match_id]
+  if (any(lengths(tt$teams) != 2)) {
+    cli::cli_abort("{sum(lengths(tt$teams) != 2)} match{?es} do not have exactly two teams on the roster.")
+  }
+  tt[, `:=`(t1 = vapply(teams, `[`, "", 1L), t2 = vapply(teams, `[`, "", 2L))]
+  st[tt, on = "match_id", `:=`(t1 = i.t1, t2 = i.t2)]
+  st[, has_winner := !is.na(next_team) & !is.na(next_player)]
+  st[, `:=`(win_team = next_team,
+            lose_team = data.table::fifelse(next_team == t1, t2, t1))]
+  st[, how := data.table::fcase(
+    next_desc %chin% NP_STOPPAGE_HITOUT_DESCS,   "hitout",
+    next_desc %chin% NP_STOPPAGE_RUCK_OWN_DESCS, "ruck_own",
+    default = "ground")]
+  sp <- data.table::rbindlist(lapply(names(split), function(k)
+    data.table::data.table(how = k, s_ruck = split[[k]][["ruck"]],
+                           s_player = split[[k]][["player"]], s_pool = split[[k]][["pool"]])))
+  st[sp, on = "how", `:=`(s_ruck = i.s_ruck, s_player = i.s_player, s_pool = i.s_pool)]
+  st[, `:=`(W = (1 - loser_share) * hm, L = loser_share * hm)]
+
+  # ruck weights per team-match
+  rk <- lineup[, .(match_id, team, player_id,
+                   w_win = pmax(hitouts_to_advantage, 0),
+                   w_lose = pmax(ruck_contests - hitouts, 0))]
+  rk[, `:=`(sw_win = sum(w_win), sw_lose = sum(w_lose)), by = .(match_id, team)]
+  st[unique(rk[, .(match_id, team, sw_win)]), on = .(match_id, win_team = team), sw_win := i.sw_win]
+  st[unique(rk[, .(match_id, team, sw_lose)]), on = .(match_id, lose_team = team), sw_lose := i.sw_lose]
+  st[is.na(sw_win), sw_win := 0]; st[is.na(sw_lose), sw_lose := 0]
+
+  # winner side: player, rucks (or pool), pool; loser side: rucks (or pool), pool
+  w_player <- st[has_winner == TRUE, .(match_id, display_order, team = win_team,
+                                       player_id = next_player, v = W * s_player,
+                                       role = "stoppage_player")]
+  w_ruck_pool <- st[has_winner == TRUE, .(match_id, display_order, team = win_team,
+                                          v_ruck = W * s_ruck * (sw_win > 0),
+                                          v_pool = W * s_pool + W * s_ruck * (sw_win == 0))]
+  l_ruck_pool <- st[has_winner == TRUE, .(match_id, display_order, team = lose_team,
+                                          v_ruck = L * s_ruck * (sw_lose > 0),
+                                          v_pool = L * (1 - s_ruck) + L * s_ruck * (sw_lose == 0))]
+  # ruck payments: spread each row's v_ruck across that team's rucks by weight
+  ruck_pay <- function(rp, wcol, swcol) {
+    x <- merge(rp[v_ruck != 0], rk[get(wcol) > 0, .(match_id, team, player_id, w = get(wcol), sw = get(swcol))],
+               by = c("match_id", "team"), allow.cartesian = TRUE)
+    x[, .(match_id, display_order, team, player_id, v = v_ruck * w / sw, role = "stoppage_ruck")]
+  }
+  w_ruck <- ruck_pay(w_ruck_pool, "w_win", "sw_win")
+  l_ruck <- ruck_pay(l_ruck_pool, "w_lose", "sw_lose")
+  # no winner: both pools, half each
+  nw <- st[has_winner == FALSE]
+  nw_pool <- data.table::rbindlist(list(
+    nw[, .(match_id, display_order, team = t1, v_pool = hm / 2)],
+    nw[, .(match_id, display_order, team = t2, v_pool = hm / 2)]))
+  pool_rows <- data.table::rbindlist(list(
+    w_ruck_pool[, .(match_id, display_order, team, v_pool)],
+    l_ruck_pool[, .(match_id, display_order, team, v_pool)],
+    nw_pool), use.names = TRUE)[v_pool != 0]
+
+  ind <- data.table::rbindlist(list(w_player, w_ruck, l_ruck), use.names = TRUE)
+  individual <- ind[, .(np_stoppage = sum(v)), by = .(match_id, team, player_id)]
+  pool <- pool_rows[, .(pool_hm = sum(v_pool)), by = .(match_id, def_team = team)]
+  pool[, `:=`(winner_slot = NA_character_, loser_pid = NA_character_)]
+
+  paid <- sum(ind$v) + sum(pool_rows$v_pool); owed <- sum(st$hm)
+  if (abs(paid - owed) > 1e-6) {
+    cli::cli_abort("Stoppage credit does not conserve: owed {round(owed, 4)}, paid {round(paid, 4)}.")
+  }
+  cli::cli_alert_info(
+    "Stoppage credit: {format(nrow(st), big.mark = ',')} stoppages ({format(sum(st$has_winner), big.mark = ',')} with a first possession; {format(st[how == 'hitout', .N], big.mark = ',')} from a hitout); {round(sum(abs(ind[role == 'stoppage_ruck']$v)), 1)} points to rucks, {round(sum(abs(w_player$v)), 1)} to first-possession players, {round(sum(abs(pool_rows$v_pool)), 1)} to pools")
+  rows <- data.table::rbindlist(list(
+    ind[, .(match_id, display_order, role, team, player_id, hm = v)],
+    pool_rows[, .(match_id, display_order, role = "stoppage_pool", team, player_id = NA_character_, hm = v_pool)]),
+    use.names = TRUE)
+  list(individual = individual, pool = pool, rows = rows)
 }
 
 #' Spread each pool across the winning team's on-field players
@@ -1128,6 +1342,16 @@
 #'   seasons. With a single season the fit is in-sample and says so.
 #' @param contest_pairs Precomputed output of `.np_contest_pairs()` for
 #'   `spread = "context"`; computed from `chains` when absent.
+#' @param stoppages `"exclude"` (the default) drops centre bounces, ball-ups and
+#'   throw-ins as before, so their swing falls into the residual; `"allocate"`
+#'   (difficulty credit only) values each at a neutral baseline for its type and
+#'   location and pays the swing to the side that won the first possession
+#'   (rucks by hitouts to advantage, the first-possession player, the pool) and
+#'   against the side that lost it. See `NP_STOPPAGE_SPLIT`.
+#' @param stoppage_baseline Precomputed `.np_stoppage_baseline()` table, or
+#'   `NULL` to estimate it from the data.
+#' @param stoppage_loser_share Share of each stoppage swing worn by the losing
+#'   side. See `NP_STOPPAGE_LOSER_SHARE`.
 #' @param return_payments Attach the per-act payment table as attribute
 #'   `np_payments`: one row per (act, recipient) with `role` (actor, receiver,
 #'   contest_winner, ball_winner, attack_pool, defence_pool), the recipient's
@@ -1177,6 +1401,9 @@
 #'       of it. It is not a penalty column.}
 #'     \item{`np_contest_won`}{paid for contests he won against a kick (a
 #'       spoil, an intercept mark), difficulty credit only}
+#'     \item{`np_stoppage`}{stoppage swings paid to him as a ruck or as the
+#'       first-possession player, both signs (zero unless
+#'       `stoppages = "allocate"`)}
 #'     \item{`np_team`}{his share of his own team's offence pools (zero under
 #'       `credit = "flat"`)}
 #'     \item{`np_residual`}{his share of the unexplained margin}
@@ -1209,7 +1436,11 @@ build_net_points <- function(pbp_data = NULL,
                              difficulty_terms = NULL,
                              leak_safe = TRUE,
                              contest_pairs = NULL,
-                             return_payments = FALSE) {
+                             return_payments = FALSE,
+                             stoppages = c("exclude", "allocate"),
+                             stoppage_baseline = NULL,
+                             stoppage_loser_share = NP_STOPPAGE_LOSER_SHARE) {
+  stoppages <- match.arg(stoppages)
   spread <- match.arg(spread)
   level <- match.arg(level)
   credit <- match.arg(credit)
@@ -1217,7 +1448,10 @@ build_net_points <- function(pbp_data = NULL,
   if (is.null(player_stats)) player_stats <- load_player_stats(TRUE)
   if (is.null(results)) results <- load_results(TRUE)
 
-  led <- .np_build_ledger(pbp_data, chains)
+  if (identical(stoppages, "allocate") && !identical(credit, "difficulty")) {
+    cli::cli_abort("{.arg stoppages = \"allocate\"} is part of the difficulty rule set; use {.arg credit = \"difficulty\"}.")
+  }
+  led <- .np_build_ledger(pbp_data, chains, stoppages, stoppage_baseline)
 
   # --- lineup: roster, positions, TOG and defensive box-score work ----------
   ps <- data.table::as.data.table(player_stats)
@@ -1240,11 +1474,15 @@ build_net_points <- function(pbp_data = NULL,
   # through the ledger's own roster so the two vocabularies never have to agree.
   roster <- attr(led, "np_roster")
   if (is.null(roster)) roster <- unique(led[, .(match_id, team, player_id)])
+  for (v in c("hitouts_to_advantage", "ruck_contests", "hitouts")) {
+    if (!v %in% names(ps)) data.table::set(ps, j = v, value = NA_real_)
+  }
   lineup <- merge(
     roster,
     ps[, .(match_id, player_id, position,
            tog = pmax(time_on_ground_percentage / 100, 0.01),
-           def_acts = .def_acts)],
+           def_acts = .def_acts,
+           hitouts_to_advantage, ruck_contests, hitouts)],
     by = c("match_id", "player_id"), all.x = TRUE)
 
   # COVERAGE, not presence: a position column that is present and 100% NA would
@@ -1280,6 +1518,15 @@ build_net_points <- function(pbp_data = NULL,
   }
   lineup[is.na(tog), tog := 0.75]
   lineup[is.na(def_acts), def_acts := 0]
+  for (v in c("hitouts_to_advantage", "ruck_contests", "hitouts")) {
+    data.table::set(lineup, i = which(is.na(lineup[[v]])), j = v, value = 0)
+  }
+  if (identical(stoppages, "allocate") && sum(lineup$hitouts_to_advantage) == 0) {
+    cli::cli_abort(c(
+      "No player has any hitouts to advantage in {.arg player_stats}.",
+      "x" = "Every stoppage's ruck share would fall through to the pool without saying so."
+    ))
+  }
 
   # --- allocate -------------------------------------------------------------
   terms <- NULL
@@ -1310,7 +1557,10 @@ build_net_points <- function(pbp_data = NULL,
   direct <- .np_direct_credit(l)
   dp <- .np_defensive_pool(l, lineup, ball_winner_share,
                            by_act = identical(credit, "difficulty"))
-  alloc <- .np_spread_pool(dp$pool, lineup, spread, mirror_share, pairs)
+  sc <- .np_stoppage_credit(l, lineup, stoppage_loser_share)
+  pool_all <- data.table::rbindlist(list(dp$pool, sc$pool), use.names = TRUE, fill = TRUE)
+  if (!is.null(pool_all) && nrow(pool_all) == 0) pool_all <- NULL
+  alloc <- .np_spread_pool(pool_all, lineup, spread, mirror_share, pairs)
   team_alloc <- .np_spread_pool(.np_offence_pool(l), lineup, spread, mirror_share, pairs)
   if (!is.null(team_alloc)) data.table::setnames(team_alloc, "np_defensive", "np_team")
 
@@ -1343,12 +1593,17 @@ build_net_points <- function(pbp_data = NULL,
   } else {
     np[, np_contest_won := 0]
   }
+  if (!is.null(sc$individual)) {
+    np <- merge(np, sc$individual, by = c("match_id", "team", "player_id"), all = TRUE)
+  } else {
+    np[, np_stoppage := 0]
+  }
   for (v in c("np_direct", "np_ceded", "np_defensive", "np_defensive_won", "np_team",
-              "np_contest_won")) {
+              "np_contest_won", "np_stoppage")) {
     data.table::set(np, i = which(is.na(np[[v]])), j = v, value = 0)
   }
   np[, np_raw := np_direct + np_ceded + np_defensive + np_defensive_won + np_team +
-        np_contest_won]
+        np_contest_won + np_stoppage]
 
   np <- merge(np, lineup[, .(match_id, player_id, tog)],
               by = c("match_id", "player_id"), all.x = TRUE)
@@ -1405,7 +1660,7 @@ build_net_points <- function(pbp_data = NULL,
   # defenders are being reported in opposite frames.
   np[, .sgn := data.table::fifelse(home_away == "Home", 1, -1)]
   parts <- c("np_direct", "np_defensive", "np_defensive_won", "np_ceded",
-             "np_team", "np_contest_won", "np_residual")
+             "np_team", "np_contest_won", "np_stoppage", "np_residual")
   for (v in parts) {
     data.table::set(np, j = v, value = np[[v]] * np$.sgn)
   }
@@ -1413,8 +1668,8 @@ build_net_points <- function(pbp_data = NULL,
 
   out <- np[, .(match_id, team, player_id, home_away,
                 np_direct, np_defensive_won, np_contest_won, np_defensive,
-                np_ceded, np_team, np_residual, net_points_hm, net_points,
-                margin)]
+                np_ceded, np_team, np_stoppage, np_residual, net_points_hm,
+                net_points, margin)]
   # The parts must sum to the whole, in whichever frame they are read.
   gap <- max(abs(rowSums(as.matrix(out[, ..parts])) - out$net_points))
   if (gap > 1e-8) {
@@ -1436,6 +1691,7 @@ build_net_points <- function(pbp_data = NULL,
               hm = cede_hm * data.table::fifelse(has_winner, 1 - psi_row, 1) + cede_c_hm * (1 - rho))][hm != 0]
       ))
     }
+    if (!is.null(sc$rows)) pay <- c(pay, list(sc$rows))
     pay <- data.table::rbindlist(pay, use.names = TRUE)
     paid <- sum(pay$hm); owed <- sum(l$hm)
     if (abs(paid - owed) > 1e-6) {
@@ -1453,7 +1709,8 @@ build_net_points <- function(pbp_data = NULL,
                            chains = !is.null(chains), credit = credit,
                            blame_share = blame_share,
                            offence_pool_share = offence_pool_share,
-                           leak_safe = leak_safe))
+                           leak_safe = leak_safe, stoppages = stoppages,
+                           stoppage_loser_share = stoppage_loser_share))
   out[]
 }
 
