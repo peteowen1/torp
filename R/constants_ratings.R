@@ -1001,7 +1001,15 @@ PSR_POSITION_STANDARDISE <- TRUE
 #' stating precisely: \code{preserve_rating_vintage()} would NOT give that
 #' guarantee -- it reads the frame and re-serialises through
 #' \code{arrow::write_parquet()}, which preserves values, not bytes.
-RATING_VINTAGE <- "v3"
+#'
+#' v4 (2026-09-06): the EPV engine moved from v3 to v4, the Net Points ledger
+#' (`build_net_points()`), which reprices every row again, and the finished EPR
+#' channels carry `EPR_UNITS_SCALE_V4`. The outgoing v3 canonical is preserved
+#' as torp_ratings_v3.parquet by the same download-and-re-upload path as v2
+#' (byte-identical, md5-checked), in
+#' `data-raw/03-ratings/promote_v4_vintage.R`. The manifest moved to
+#' canonical = "v4" before this constant did, for the reason the v3 note gives.
+RATING_VINTAGE <- "v4"
 
 #' Map from the 20-way team-sheet lineup position to a 6-way position group
 #'
