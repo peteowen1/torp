@@ -155,11 +155,18 @@ test_that("create_player_game_data *_adj columns are game-value scale (regressio
     hm <- cell_means(pgd$epv_hitout_adj, hitout_key)
     hitout_sd <- stats::sd(pgd$epv_hitout_adj, na.rm = TRUE)
     blended <- isTRUE(EPV_HITOUT_CENTRE_ON_RUCK) && EPV_RUCK_BLEND_WIDTH > 0
-    tol <- if (blended) 0.25 * hitout_sd else 1e-6
-    expect_true(all(abs(hm) < tol),
-                info = sprintf(
-                  "Largest per-cell mean of epv_hitout_adj: %.3e (tol %.3e, blended = %s)",
-                  max(abs(hm), na.rm = TRUE), tol, blended))
+    if (isTRUE(hitout_sd == 0)) {
+      # v4 carries stoppage credit inside epv_recv and leaves the hitout
+      # channel at exactly zero; a tolerance of a quarter of a zero sd would
+      # fail `0 < 0` for a channel that cannot be mis-keyed
+      expect_true(all(pgd$epv_hitout_adj == 0))
+    } else {
+      tol <- if (blended) 0.25 * hitout_sd else 1e-6
+      expect_true(all(abs(hm) < tol),
+                  info = sprintf(
+                    "Largest per-cell mean of epv_hitout_adj: %.3e (tol %.3e, blended = %s)",
+                    max(abs(hm), na.rm = TRUE), tol, blended))
+    }
   }
 
   # Semantic guards: position_group is the 6-way class, lineup_position is the

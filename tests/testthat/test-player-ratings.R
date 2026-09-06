@@ -230,7 +230,7 @@ test_that("calculate_epr_stats uses prior_games_spoil and prior_games_hitout con
   # Engine-conditioned. v3 measured much larger evidence requirements than v2:
   # its chain-delta channels are far noisier than v2 box-score counts, so a
   # player needs more games before his own record outweighs the prior.
-  if (identical(torp:::EPV_ENGINE, "v3")) {
+  if (torp:::EPV_ENGINE %in% c("v3", "v4")) {
     expect_identical(torp:::EPR_PRIOR_GAMES_SPOIL, 11.09)
   } else {
     expect_identical(torp:::EPR_PRIOR_GAMES_SPOIL, 3.0000)

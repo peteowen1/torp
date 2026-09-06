@@ -1,5 +1,35 @@
-# torp 1.4.9
+# torp 1.5.0
 
+## EPV_ENGINE flipped to "v4": Net Points is the published EPV
+
+Pete's decision, 2026-09-06, after the six-season fast gate
+(`data-raw/04-analysis/run_epr_gate_v3v4.R`, 1,227 matches, both engines built
+leak-safe by the same code): v4 won every out-of-sample row -- MAE 26.77 vs
+27.18, RMSE 34.05 vs 34.58, tips 0.694 vs 0.684, Brier 0.196 vs 0.204, log
+loss 0.580 vs 0.597, bits 0.163 vs 0.139 -- and the defence question stated
+directly (points conceded against the opposition's defensive rating, club and
+season fixed effects) reads -1.45 (t -4.0) against v3's -0.57 (t -3.5).
+
+With it, `EPR_UNITS_SCALE_V4` (2.40): the finished v4 EPR channels are
+multiplied by the measured within-team coefficient so the rating is in margin
+points. It is a units factor, not a prediction change -- a linear rescale is
+invisible to every regression in the gate -- and it is NOT `EPR_LOADING_DEFAULT`,
+which multiplies only the data term against the prior and lost the gate on all
+five rows when tried at 2.4. Chad Warner reads about +5.5 above a medium
+forward instead of +2.3. Measured while deciding this: with 25+ weighted games
+81% of a player's above-position mean carries into his next game, but the
+lineup gate still preferred the heavier shrink (24 games) to the player-level
+best-guess prior (10 games) on every row, so the shrink stays. The units
+factor is part of the ratings vintage fingerprint, and v4 keeps the
+standardise list it was gated with.
+
+Also fixed: the v4 engine was still running the v2 contest split
+(`compute_contest_credit()`) and discarding it; the gate is now `chain_native`.
+
+Downstream: the match models in torpmodels were trained on v3's EPR scale and
+distribution and need retraining on the v4 ratings history before predictions
+are trusted; the production match gate runs once after that as the guardrail.
+inthegame-blog issue #649 carries the units-gate re-anchor and channel labels.
 ## `EPV_ENGINE = "v4"`: the Net Points ledger as an engine (not yet the default)
 
 `create_player_game_data(epv_engine = "v4")` builds the player-game frame from
@@ -27,6 +57,8 @@ Data fact found on the way: the play-by-play's booked final score differs from
 the official result in 52 of 213 matches of 2026, always by exactly 1 or 6
 points, because points are booked on the row after the scoring act and a match
 whose last act is a score has no such row.
+# torp 1.4.9
+
 ## Net Points: stoppages and ruck credit (D15)
 
 `build_net_points(stoppages = "allocate")` (difficulty credit only) stops dropping
@@ -46,8 +78,8 @@ share divided by `hitouts_to_advantage` (winner) or `ruck_contests - hitouts`
 2026: 18,325 stoppage rows carrying 57 points of gross swing a match, all of
 which used to fall into the reconciliation residual (median |residual| per
 player-game 0.104 -> 0.021). Gawn and Grundy lead the column; rucks' stoppage
-credit correlates 0.65 with hitouts to advantage; rucks rise from 5.3 to 6.2
-net points a game. Split-half reliability 0.680 -> 0.665, so the shares go to
+credit correlates 0.63 with hitouts to advantage; rucks (lineup code RK; R is
+a rover) rise from 4.1 to 5.4 net points a game. Split-half reliability 0.680 -> 0.665, so the shares go to
 the year-over-year test with the rest. This replaces the old EPV's flat
 per-hitout constant, whose sign was wrong.
 # torp 1.4.8

@@ -125,7 +125,24 @@ EPV_PER_CHANNEL_POINTS_SCALE <- FALSE
 #' \strong{Flipping this changes every published rating.} It is a flag, not a
 #' tunable: an engine has to clear the gates first (\code{docs/HOW-WE-WORK.md}).
 #' @keywords internal
-EPV_ENGINE <- "v3"
+EPV_ENGINE <- "v4"
+
+#' Units factor on the finished v4 EPR: shrunk points to margin points
+#'
+#' The EPR shrink pulls every player toward a prior, which is right for
+#' prediction (the six-season gate preferred v3's shrink to the player-level
+#' "best guess" prior on every out-of-sample row) and wrong for units: the
+#' lineup difference explained the margin at a within-team coefficient of
+#' **2.40** (1,227 matches, club and season fixed effects, 2026-09-06) where a
+#' rating in margin points reads 1.0. This multiplies the finished channels by
+#' that coefficient. It changes no ranking and no prediction row -- a linear
+#' rescale is invisible to every regression in the gate -- it only makes the
+#' number mean what it says: Chad Warner reads about +5.5 above a medium
+#' forward, not +2.3. Do NOT use `EPR_LOADING_DEFAULT` for this: loading
+#' multiplies only the data term against the prior, so it is a shrink knob,
+#' and setting it to 2.4 lost the gate on all five rows.
+#' @keywords internal
+EPR_UNITS_SCALE_V4 <- 2.40
 
 #' How v3 distributes contest debits whose loser chains never names
 #'
@@ -1216,7 +1233,9 @@ LINEUP_GROUP_MAP <- c(
 #' \code{spoil} channel is a genuine all-position quantity (spoils, tackles,
 #' pressure acts) that should keep being standardised.
 #' @keywords internal
-EPV_STANDARDISE_CHANNELS <- if (identical(EPV_ENGINE, "v3")) {
+EPV_STANDARDISE_CHANNELS <- if (EPV_ENGINE %in% c("v3", "v4")) {
+  # v4 was gated with exactly this list (the frames were built under a v3
+  # load), so it keeps it: what ships is what was measured
   c("recv", "disp")
 } else {
   c("recv", "disp", "spoil")

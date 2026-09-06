@@ -48,7 +48,7 @@ test_that("hitout is excluded from standardisation", {
   # it. Under v3 the contest channel is excluded too -- measured to lift it from
   # t 1.83 to 2.24 -- so assert per engine rather than pinning one list.
   expect_setequal(EPV_STANDARDISE_CHANNELS,
-                  if (identical(EPV_ENGINE, "v3")) c("recv", "disp")
+                  if (EPV_ENGINE %in% c("v3", "v4")) c("recv", "disp")
                   else c("recv", "disp", "spoil"))
 })
 
