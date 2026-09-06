@@ -4,14 +4,14 @@
 \alias{.np_reconcile}
 \title{Force each match to sum exactly to its margin}
 \usage{
-.np_reconcile(np, level = c("half_margin", "sum"))
+.np_reconcile(np, level = c("sum", "half_margin"))
 }
 \arguments{
 \item{np}{Per-player frame already carrying \code{np_raw} (home-margin frame),
 \code{margin}, \code{team}, \code{home_away} and \code{tog}.}
 
-\item{level}{\code{"half_margin"} pins both team totals; \code{"sum"} pins only the
-match total and lets the level float.}
+\item{level}{\code{"sum"} (default) pins only the match total, which is the whole
+identity. \code{"half_margin"} additionally pins each team total to \code{margin/2}.}
 }
 \value{
 \code{np} with an \code{np_residual} column added, by reference.
@@ -28,23 +28,38 @@ the right direction and is why the split is signed rather than absolute.
 This term is where home-ground advantage and model error land. It is
 deliberately flat so it cannot reorder players within a team.
 }
-\section{Two constraints, not one}{
+\section{Why "sum" is the default, measured rather than assumed}{
 
-Pinning only the per-match SUM leaves the LEVEL free, and the raw ledger's
-level is badly behaved: it measures each team's absolute scoring performance
-against expectation, so in a high-scoring game both teams can be strongly
-positive at once. Measured 2026, one match had home +95.5 and away +32.5 in
-their own frames -- a correct 63-point difference sitting on a meaningless
-level. \code{level = "half_margin"} adds the second constraint, turning an
-absolute-performance ledger into a margin ledger:
+The identity that matters -- Oliver's, and the one actually asked for -- is
+that the whole match sums to the margin, which in own-team frames reads as
+\code{sum(home) - sum(away) == margin}. \strong{Pinning the SUM alone achieves that
+exactly.} \code{level = "half_margin"} adds a second, cosmetic constraint (each
+team's total lands on \code{margin/2}) and it is very expensive. Measured over 211
+matches of 2026:
 
-\if{html}{\out{<div class="sourceCode">}}\preformatted{home total = +margin/2       away total = -margin/2
-}\if{html}{\out{</div>}}
+\tabular{lrr}{
+\tab \code{sum} \tab \code{half_margin} \cr
+team difference == margin \tab 4.3e-14 \tab 5.7e-14 \cr
+median |np_residual| \tab 0.10 \tab 2.64 \cr
+residual as \\% of |net_points| \tab 3\\% \tab 102\\% \cr
+Spearman(raw, final) \tab 0.9993 \tab 0.7425
+}
 
-Two constraints, two team totals, fully determined. The correction is flat
-within a team (TOG-weighted), so it shifts the level without reordering
-anyone; what it cannot do is hide that the underlying level was off, which
-is why \code{np_residual} is reported as its own column rather than folded in.
+Under \code{half_margin} the correction is LARGER than the thing it corrects and
+it reorders players, because it is spread by time on ground and TOG varies
+(\code{cor(np_residual, tog) = -0.481}, median 1.50 points of spread between the
+longest and shortest stint in a team-match). An earlier version of this note
+claimed the residual "shifts the level without reordering anyone" -- that was
+asserted, never measured, and it is false.
+
+The underlying reason the level needs such a big push is worth knowing: the
+raw ledger tracks a team's OWN SCORE (cor 0.906) better than the margin
+(0.786), because \code{delta_epv} measures scoring production against expectation.
+In a high-scoring game both teams read strongly positive at once, and the
+median distance from \code{margin/2} is 61.4 points. \code{half_margin} does not fix
+that; it flattens it with a term big enough to distort the ranking. Keep the
+level free and report the difference, which is the quantity that is actually
+anchored.
 }
 
 \keyword{internal}

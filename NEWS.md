@@ -1,3 +1,66 @@
+# torp 1.4.8
+
+## Net Points reads chains alongside PBP
+
+`build_net_points(chains=)` takes the raw chains for the same matches. The
+allocation is **identical** -- proven on all 213 matches of 2026 with `identical()`
+in `data-raw/04-analysis/np_chains_ledger_equivalence.R` -- but every disposal in
+the ledger now carries `resolve_desc` / `resolve_team` / `resolve_player`: the
+chains row that ended it (a spoil, a contested mark, a goal), which PBP drops.
+PBP is an exact subset of chains on `(match_id, display_order)`; the 82,718
+chains-only rows in 2026 are spoils, contest targets, goals, behinds and fumbles.
+Nothing uses the resolution yet. It is step 1 of the v4 credit rules
+(`docs/plans/EPV-V4-CREDIT-RULES.md`).
+
+Two facts the resolution column showed on day one: the spoiler is the next
+possessor only 7.8% of the time, and 3,860 kicks that resolve to a behind were
+classed as turnovers because the next state is the opposition's kick-in.
+
+## A score is followed by a restart, never a turnover
+
+Fixed the second of those. The defence was being paid 30% of every behind
+conceded -- 1,981 points across 2026, 9.3 a match -- and the kick-in taker took
+60% of that, almost all of it to half-backs. Adjacency now treats a row after
+which the running score moved as chain-terminal, the same status a centre
+bounce already had; that covers goals, behinds, rushed behinds and dribbled
+scores in one rule, with or without chains. PBP books the points on the row
+AFTER the scoring act, so `home_points` / `away_points` are now required
+ledger columns. Per-position means all fall (the shooter wears the whole
+behind, the defence stops collecting it): defenders 2.23 -> 1.67, forwards
+4.07 -> 3.49 points a game. Defenders now win 43.3% of turnovers, not 47.3%;
+the difference was kick-ins.
+
+# torp 1.4.7
+
+## Net Points -- the level constraint was wrong
+
+`build_net_points(level=)` now defaults to `"sum"`, not `"half_margin"`.
+
+The identity that matters -- `sum(home) - sum(away) == margin` -- holds under
+BOTH modes; pinning the match total is the whole of Oliver's identity.
+`"half_margin"` added a second, cosmetic constraint (each team lands on
+`margin/2`) at a cost that measurement did not support. Over 211 matches of 2026:
+
+| | `sum` | `half_margin` |
+|---|---|---|
+| median \|np_residual\| | 0.10 | 2.64 |
+| residual as % of \|net_points\| | 3% | 102% |
+| Spearman(raw, final) | 0.9993 | 0.7425 |
+
+* Under `"half_margin"` the correction was **larger than the thing it
+  corrected**, and it **reordered players** -- it spreads by time on ground and
+  TOG varies (`cor(np_residual, tog) = -0.481`). The docs claimed it "shifts the
+  level without reordering anyone"; that was asserted, never measured, and
+  false. Corrected.
+* Papley in the 2026 R26 Sydney-Brisbane game moves +20.52 to +23.96, his
+  residual falling from -3.56 to -0.11.
+* Worth knowing: the raw ledger tracks a team's OWN SCORE (cor 0.906) better
+  than the margin (0.786), because `delta_epv` measures scoring production
+  against expectation. Both teams read positive in a high-scoring game and the
+  median distance from `margin/2` is 61.4 points, systematically. That is the
+  deep form of the missing-defence gap, and flattening it was never a fix.
+
+
 # torp 1.4.6
 
 ## Net Points -- EPV as a conservation ledger

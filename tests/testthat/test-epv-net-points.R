@@ -27,7 +27,11 @@ np_fixture <- function() {
     player_id = c("p1", "p2", "p1", "p3", "p3", "p2", "p4", "p3",
                   "p1", "p3", "p2", "p1"),
     delta_epv = c(1.0, -2.0, 3.0, 0.5, -1.5, 99.0, 2.0, -0.5,
-                  4.0, -1.0, 2.5, -3.0)
+                  4.0, -1.0, 2.5, -3.0),
+    # running score, booked on the row AFTER the scoring act as PBP does;
+    # constant here so no row is terminal by score. The scoring test below
+    # moves it.
+    home_points = 0L, away_points = 0L
   )
   stats <- data.table::data.table(
     match_id = c(rep("M1", 4), rep("M2", 4)),
@@ -302,6 +306,45 @@ test_that("matchup spread refuses to degrade silently when positions are absent"
     "flat spread")
 })
 
+test_that("the default level is sum, and it barely disturbs the raw allocation", {
+  # half_margin was the default until it was measured: its residual runs a median
+  # 2.64 points against a median |net_points| of about the same size (102%), and
+  # it reorders players at Spearman 0.7425 because it spreads by TOG and TOG
+  # varies. "sum" gets the SAME margin identity for a median residual of 0.10.
+  f <- np_fixture()
+  d <- suppressMessages(build_net_points(f$pbp, f$stats, f$results))
+  expect_equal(attr(d, "np_params")$level, "sum")
+
+  hm <- suppressMessages(build_net_points(f$pbp, f$stats, f$results,
+                                          level = "half_margin"))
+  # The STRUCTURAL difference, which is exact and fixture-independent: under
+  # "sum" both teams absorb the same total correction, (margin - total)/2 each,
+  # so it is a pure shift. Under "half_margin" each team absorbs its own
+  # distance from margin/2, which differs between them whenever the levels are
+  # asymmetric -- and on real data they are, by a median of 61.4 points.
+  #
+  # The magnitude claim (median residual 0.10 vs 2.64, Spearman 0.9993 vs
+  # 0.7425) is a real-data result and is recorded in docs/plans/EPV-NET-POINTS.md
+  # rather than asserted here: this fixture's two teams happen to be symmetric,
+  # so the two modes coincide on it exactly. Asserting it here would have been a
+  # test that passes for the wrong reason.
+  sides <- d[, .(r = sum(np_residual)), by = .(match_id, home_away)]
+  h <- sides[home_away == "Home"][order(match_id)]
+  a <- sides[home_away == "Away"][order(match_id)]
+  expect_equal(h$match_id, a$match_id)
+  # Equal and OPPOSITE in own-team frames: in the home-margin frame both sides
+  # take the same +(margin - total)/2, and the away side's sign then flips on
+  # output. Measured here as 9.2 / -9.2 -- if these ever came out equal with the
+  # same sign, the final frame flip would have stopped being applied.
+  expect_equal(h$r, -a$r, tolerance = 1e-10)
+
+  for (x in list(d, hm)) {
+    chk <- x[, .(a = sum(net_points_hm), m = data.table::first(margin)),
+             by = match_id]
+    expect_equal(chk$a, chk$m, tolerance = 1e-10)
+  }
+})
+
 test_that("level = half_margin pins each team to half the margin", {
   f <- np_fixture()
   np <- suppressMessages(build_net_points(f$pbp, f$stats, f$results,
@@ -309,4 +352,128 @@ test_that("level = half_margin pins each team to half the margin", {
   d <- np[, .(v = sum(net_points_hm)), by = .(match_id, team)]
   d <- merge(d, unique(np[, .(match_id, margin)]), by = "match_id")
   expect_equal(d$v, d$margin / 2, tolerance = 1e-10)
+})
+
+# ---- chains-aware sequence ---------------------------------------------------
+# PBP is a subset of chains on (match_id, display_order). With chains supplied
+# the VALUE must not move at all -- every point still comes from a PBP row --
+# while each disposal learns what it resolved into (a spoil, a goal), which PBP
+# never shows. The fixture spaces display_order by 10 so chains-only rows can
+# sit between PBP rows.
+np_chains_fixture <- function() {
+  f <- np_fixture()
+  pbp <- data.table::copy(f$pbp)
+  pbp[, display_order := display_order * 10L]
+  pbp[, team_id := data.table::fifelse(home_away == "Home", "H", "A")]
+  extra <- data.table::data.table(
+    match_id      = c("M1", "M1", "M1", "M2"),
+    display_order = c(15L, 33L, 36L, 35L),
+    description   = c("Kick Into F50", "Contest Target", "Spoil", "Goal"),
+    team_id       = c("H", "H", "A", "H"),
+    player_id     = c("p1", "p2", "p3", "p2")
+  )
+  chains <- data.table::rbindlist(list(
+    pbp[, .(match_id, display_order, description, team_id, player_id)], extra),
+    use.names = TRUE)
+  data.table::setorder(chains, match_id, display_order)
+  list(pbp = pbp, chains = chains, stats = f$stats, results = f$results)
+}
+
+test_that("chains change nothing about the allocation", {
+  f <- np_chains_fixture()
+  for (rs in c(0, 0.3)) {
+    a <- suppressMessages(build_net_points(f$pbp, f$stats, f$results,
+                                           receiver_share = rs))
+    b <- suppressMessages(build_net_points(f$pbp, f$stats, f$results,
+                                           chains = f$chains, receiver_share = rs))
+    data.table::setorder(a, match_id, player_id)
+    data.table::setorder(b, match_id, player_id)
+    # the params attribute records that chains were supplied; the DATA must
+    # be bit-identical
+    expect_identical(as.data.frame(a), as.data.frame(b), ignore_attr = TRUE)
+    expect_identical(a$net_points, b$net_points)
+  }
+  expect_true(attr(b, "np_params")$chains)
+})
+
+test_that("the sequence keeps adjacency on PBP rows and names the resolution", {
+  f <- np_chains_fixture()
+  l0 <- suppressMessages(torp:::.np_build_ledger(f$pbp))
+  l1 <- suppressMessages(torp:::.np_build_ledger(f$pbp, f$chains))
+  # same ledger rows, same value, same next actor: chains-only rows are not
+  # states and must not become "who acted next"
+  expect_equal(nrow(l1), nrow(l0))
+  expect_identical(l1[, .(match_id, display_order, hm, next_team, next_player)],
+                   l0[, .(match_id, display_order, hm, next_team, next_player)])
+  expect_true(all(is.na(l0$resolve_desc)))
+  # M1 row 30: Kick by p1, then Contest Target (in flight) then Spoil by p3.
+  # Adjacency still says p3 (the next PBP row); resolution names the spoil.
+  r30 <- l1[match_id == "M1" & display_order == 30]
+  expect_equal(r30$next_player, "p3")
+  expect_equal(r30$resolve_desc, "Spoil")
+  expect_equal(r30$resolve_player, "p3")
+  expect_equal(r30$resolve_team, "Away FC")
+  expect_equal(r30$resolve_lag, 2L)
+  # M1 row 10: Kick, then an in-flight annotation, then the Handball. The
+  # annotation is skipped.
+  r10 <- l1[match_id == "M1" & display_order == 10]
+  expect_equal(r10$resolve_desc, "Handball")
+  expect_equal(r10$resolve_player, "p2")
+  expect_equal(r10$resolve_lag, 2L)
+  # M2 row 30: a Kick resolving to a chains-only Goal row by the kicker.
+  r30b <- l1[match_id == "M2" & display_order == 30]
+  expect_equal(r30b$resolve_desc, "Goal")
+  expect_equal(r30b$resolve_player, "p2")
+  # a chains-only row is oriented by PBP's own team map
+  s <- suppressMessages(torp:::.np_sequence(f$pbp, f$chains))
+  sp <- s[match_id == "M1" & display_order == 36]
+  expect_false(sp$in_pbp)
+  expect_equal(sp$team, "Away FC")
+  expect_equal(sp$home_away, "Away")
+  expect_true(is.na(sp$delta_epv))
+})
+
+test_that("a sequence with holes or duplicates is refused", {
+  f <- np_chains_fixture()
+  holed <- f$chains[!(match_id == "M1" & display_order == 20)]
+  expect_error(suppressMessages(torp:::.np_sequence(f$pbp, holed)),
+               "not in")
+  duped <- data.table::rbindlist(list(f$chains, f$chains[1]))
+  expect_error(suppressMessages(torp:::.np_sequence(f$pbp, duped)),
+               "duplicated")
+  # same key, different act: not the same data
+  wrong <- data.table::copy(f$chains)
+  wrong[match_id == "M1" & display_order == 20, description := "Kick"]
+  expect_error(suppressMessages(torp:::.np_sequence(f$pbp, wrong)),
+               "different description")
+})
+
+# ---- scoring acts are terminal ----------------------------------------------
+test_that("a behind is followed by a restart, not a turnover", {
+  f <- np_fixture()
+  # M1 row 3 is a Kick by Home p1 followed by an Away Uncontested Mark (row 4):
+  # a turnover as the fixture stands. Book one home point from row 4 onward and
+  # it becomes a behind followed by the kick-in.
+  base <- suppressMessages(build_net_points(f$pbp, f$stats, f$results,
+                                            defensive_share = 1, reconcile = FALSE))
+  pbp <- data.table::copy(f$pbp)
+  pbp[match_id == "M1" & display_order >= 4, home_points := 1L]
+  adj <- torp:::.np_adjacency(pbp)
+  r3 <- adj[match_id == "M1" & display_order == 3]
+  expect_true(is.na(r3$next_team))
+  expect_true(is.na(r3$next_player))
+  # the row before it is untouched
+  expect_equal(adj[match_id == "M1" & display_order == 2]$next_player, "p1")
+  led <- suppressMessages(torp:::.np_build_ledger(pbp))
+  expect_true(is.na(led[match_id == "M1" & display_order == 3]$next_team))
+  # no defensive pool fires for it, so with defensive_share = 1 the kicker keeps
+  # the whole row where before the whole row went to the opposition
+  np <- suppressMessages(build_net_points(pbp, f$stats, f$results,
+                                          defensive_share = 1, reconcile = FALSE))
+  p1_before <- base[match_id == "M1" & player_id == "p1"]$net_points_hm
+  p1_after  <- np[match_id == "M1" & player_id == "p1"]$net_points_hm
+  expect_equal(p1_after - p1_before, 3.0, tolerance = 1e-10)
+  # and the ledger total has not moved
+  expect_equal(sum(np$net_points_hm), unname(sum(NP_FIXTURE_LEDGER_HM)),
+               tolerance = 1e-10)
 })

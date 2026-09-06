@@ -4,15 +4,21 @@
 \alias{.np_build_ledger}
 \title{Build the per-act ledger in the home-margin frame}
 \usage{
-.np_build_ledger(pbp_data)
+.np_build_ledger(pbp_data, chains = NULL)
 }
 \arguments{
 \item{pbp_data}{Play-by-play carrying \code{delta_epv}, \code{home_away}, \code{team},
 \code{player_id}, \code{description}, \code{match_id}, \code{display_order}.}
+
+\item{chains}{Raw chains for the same matches, or \code{NULL}. With chains the
+ledger's VALUE is unchanged -- every point still comes from a PBP row --
+but each disposal also carries \verb{resolve_*}: the chains row that ended it
+(a spoil, a contested mark, a goal), which PBP never shows.}
 }
 \value{
 A data.table of ledger rows with \code{hm} (home-margin-frame value) plus
-the next row's team and player, used to detect turnovers.
+the next row's team and player, used to detect turnovers, and the
+resolution columns (\code{NA} without chains).
 }
 \description{
 Build the per-act ledger in the home-margin frame

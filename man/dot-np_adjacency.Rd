@@ -38,5 +38,15 @@ ended; nobody took the ball off anyone. Centre bounces, ball-ups and
 out-of-bounds all carry no \code{team}, so a missing team on the following row is
 the test for "there is no next actor" -- such rows get \code{NA} and are therefore
 neither retained disposals nor turnovers.
+
+\strong{So is a score.} A behind is followed by the opposition's kick-in,
+which HAS a team, so by the rule above it read as a turnover: the defence
+was paid 30\% of every behind conceded (1,981 points in 2026, 9.3 a match)
+and the kick-in taker took 60\% of that -- almost all of it to half-backs.
+Found on 2026-09-06 by the chains resolution column. The general form: the
+running score changes between this row and the next only when this row
+scored (goal, behind, rushed behind, a dribbled ground kick), and a score is
+always followed by a restart. PBP books the points on the FOLLOWING row,
+which is why the comparison is this row against the next.
 }
 \keyword{internal}

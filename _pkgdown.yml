@@ -14,12 +14,15 @@ home:
 
 navbar:
   structure:
-    left: [intro, reference, articles, explainer]
+    left: [intro, reference, articles, explainer, netpoints]
     right: [search, github]
   components:
     explainer:
       text: TORP Explainer
       href: torp_explainer.html
+    netpoints:
+      text: Net Points
+      href: net-points.html
     github:
       icon: fa-github
       href: https://github.com/peteowen1/torp

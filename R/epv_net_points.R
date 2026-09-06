@@ -66,18 +66,164 @@
   out
 }
 
+#' The full act sequence: PBP rows, plus the chains rows PBP drops
+#'
+#' PBP is an exact subset of chains on `(match_id, display_order)` -- measured
+#' on 2026: 355,399 PBP rows, every one present in chains with the same
+#' description, team and player, and 82,718 chains-only rows. Those extra rows
+#' are precisely the ones the credit rules need to see and PBP cannot show:
+#' `Spoil` (13,096, names the spoiler), `Contest Target` (4,423, names the
+#' intended target), `Goal` / `Behind`, `Mark Fumbled`, `Tackle`. They carry no
+#' `delta_epv` -- the value stays on the PBP row that precedes them -- so they
+#' are visible for **resolution** (what the disposal turned into) without ever
+#' entering the ledger's value.
+#'
+#' Without `chains` the sequence is PBP alone and every row is `in_pbp`.
+#'
+#' @param pbp_data Play-by-play.
+#' @param chains Raw chains for the same matches, or `NULL`.
+#' @return A data.table ordered by `match_id, display_order` with
+#'   `description`, `team`, `home_away`, `player_id`, `delta_epv` and
+#'   `in_pbp` (does this row carry a PBP state).
+#' @keywords internal
+.np_sequence <- function(pbp_data, chains = NULL) {
+  p <- data.table::as.data.table(pbp_data)
+  if (is.null(chains)) {
+    s <- p[, .(match_id, display_order, description, team,
+               home_away = as.character(home_away), player_id, delta_epv,
+               home_points, away_points)]
+    s[, in_pbp := TRUE]
+    data.table::setorder(s, match_id, display_order)
+    return(s)
+  }
+  if (!"team_id" %in% names(p)) {
+    cli::cli_abort("Play-by-play needs {.field team_id} to be aligned with chains.")
+  }
+  ch <- data.table::as.data.table(chains)
+  detect_chains_columns(ch)
+  cs <- ch[, .(match_id = as.character(match_id), display_order,
+               description, team_id, player_id)]
+  rm(ch)
+  key <- c("match_id", "display_order")
+  ndup <- sum(duplicated(cs, by = key))
+  if (ndup > 0) {
+    cli::cli_abort(c(
+      "{format(ndup, big.mark = ',')} duplicated (match_id, display_order) key{?s} in {.arg chains}.",
+      "x" = "Every join below would multiply value on those rows."
+    ))
+  }
+
+  # Every PBP row must be a chains row, or the two sequences are from
+  # different vintages and "the next row" would mean different things in each.
+  pk <- p[, .(match_id = as.character(match_id), display_order, description,
+              team_id, delta_epv, home_points, away_points)]
+  miss <- pk[!cs, on = key]
+  if (nrow(miss) > 0) {
+    cli::cli_abort(c(
+      "{format(nrow(miss), big.mark = ',')} PBP row{?s} ({round(100 * nrow(miss) / nrow(pk), 2)}%) are not in {.arg chains}.",
+      "x" = "PBP and chains must be the same matches and vintage; refusing to build a sequence with holes in it.",
+      "i" = "First missing: match {.val {miss$match_id[1]}}, display_order {.val {miss$display_order[1]}}."
+    ))
+  }
+  s <- merge(cs, pk[, .(match_id, display_order, pbp_desc = description,
+                       delta_epv, home_points, away_points, in_pbp = TRUE)],
+             by = key, all.x = TRUE)
+  s[is.na(in_pbp), in_pbp := FALSE]
+  bad <- s[in_pbp == TRUE & !is.na(pbp_desc) & pbp_desc != description]
+  if (nrow(bad) > 0) {
+    cli::cli_abort(c(
+      "{format(nrow(bad), big.mark = ',')} row{?s} have a different description in PBP and chains.",
+      "x" = "Same key, different act: the two inputs are not the same data."
+    ))
+  }
+  s[, pbp_desc := NULL]
+
+  # Team name and home/away frame come from PBP's own per-match map, so a
+  # chains-only row is oriented exactly as the PBP rows around it.
+  tm <- unique(p[!is.na(team_id) & !is.na(team) & !is.na(home_away),
+                 .(match_id = as.character(match_id), team_id, team,
+                   home_away = as.character(home_away))])
+  dup <- tm[, .N, by = .(match_id, team_id)][N > 1]
+  if (nrow(dup) > 0) {
+    cli::cli_abort("{nrow(dup)} (match, team_id) pair{?s} map to more than one team name or frame in PBP.")
+  }
+  s <- merge(s, tm, by = c("match_id", "team_id"), all.x = TRUE)
+  data.table::setorder(s, match_id, display_order)
+
+  extra <- s[in_pbp == FALSE]
+  top <- head(extra[, .N, by = description][order(-N)], 4)
+  top_txt <- if (nrow(top)) paste0(top$description, " ", format(top$N, big.mark = ","), collapse = ", ") else "none"
+  cli::cli_alert_info(
+    "Net points sequence: {format(nrow(s), big.mark = ',')} chains rows, {format(sum(s$in_pbp), big.mark = ',')} carry PBP value; {format(nrow(extra), big.mark = ',')} chains-only rows visible for resolution ({top_txt})")
+  s[, .(match_id, display_order, description, team, home_away, player_id,
+        delta_epv, home_points, away_points, in_pbp)]
+}
+
+#' What each disposal turned into: the first row after it that is not in flight
+#'
+#' The same rule `build_disposal_events()` uses: skip the annotation rows that
+#' describe the ball mid-air (`CHAINS_INFLIGHT_DESCS`) and take the first row
+#' that says what happened -- `Spoil`, `Contested Mark`, `Loose Ball Get`,
+#' `Goal`. This is a different question from adjacency: adjacency asks who
+#' next held a PBP state (the ground-ball winner after a spoil), resolution
+#' asks who ended the contest (the spoiler). Both are needed and they are
+#' allowed to name different people.
+#'
+#' Looks at most six rows ahead. A disposal with nothing but in-flight rows in
+#' that window resolves to `NA`.
+#'
+#' @param seq Output of `.np_sequence()`.
+#' @return `match_id`, `display_order`, `resolve_desc`, `resolve_team`,
+#'   `resolve_player`, `resolve_lag`, for disposal rows only.
+#' @keywords internal
+.np_resolution <- function(seq) {
+  s <- seq[, .(match_id, display_order, description, team, player_id)]
+  data.table::setorder(s, match_id, display_order)
+  K <- 6L
+  for (k in seq_len(K)) {
+    for (v in c("description", "team", "player_id")) {
+      s[, (paste0("f", k, "_", v)) := data.table::shift(get(v), k, type = "lead"),
+        by = match_id]
+    }
+  }
+  d <- s[description %chin% NP_DISPOSAL_DESCS]
+  inflight <- CHAINS_INFLIGHT_DESCS
+  d[, resolve_lag := NA_integer_]
+  for (k in rev(seq_len(K))) {
+    fd <- d[[paste0("f", k, "_description")]]
+    d[!is.na(fd) & !(fd %chin% inflight), resolve_lag := k]
+  }
+  pick <- function(v) {
+    out <- rep(NA_character_, nrow(d))
+    for (k in seq_len(K)) {
+      idx <- which(d$resolve_lag == k)
+      out[idx] <- d[[paste0("f", k, "_", v)]][idx]
+    }
+    out
+  }
+  d[, `:=`(resolve_desc = pick("description"), resolve_team = pick("team"),
+           resolve_player = pick("player_id"))]
+  d[, .(match_id, display_order, resolve_desc, resolve_team, resolve_player,
+        resolve_lag)]
+}
+
 #' Build the per-act ledger in the home-margin frame
 #'
 #' @param pbp_data Play-by-play carrying `delta_epv`, `home_away`, `team`,
 #'   `player_id`, `description`, `match_id`, `display_order`.
+#' @param chains Raw chains for the same matches, or `NULL`. With chains the
+#'   ledger's VALUE is unchanged -- every point still comes from a PBP row --
+#'   but each disposal also carries `resolve_*`: the chains row that ended it
+#'   (a spoil, a contested mark, a goal), which PBP never shows.
 #' @return A data.table of ledger rows with `hm` (home-margin-frame value) plus
-#'   the next row's team and player, used to detect turnovers.
+#'   the next row's team and player, used to detect turnovers, and the
+#'   resolution columns (`NA` without chains).
 #' @keywords internal
-.np_build_ledger <- function(pbp_data) {
-  d <- data.table::as.data.table(pbp_data)
+.np_build_ledger <- function(pbp_data, chains = NULL) {
+  d0 <- data.table::as.data.table(pbp_data)
   need <- c("match_id", "display_order", "delta_epv", "home_away", "team",
-            "player_id", "description")
-  missing <- setdiff(need, names(d))
+            "player_id", "description", "home_points", "away_points")
+  missing <- setdiff(need, names(d0))
   if (length(missing)) {
     cli::cli_abort(c(
       "Play-by-play is missing {length(missing)} column{?s} the ledger needs: {.val {missing}}",
@@ -85,10 +231,15 @@
     ))
   }
 
+  seq <- .np_sequence(d0, chains)
   # Adjacency FIRST, on the unfiltered sequence -- see .np_adjacency(). Doing
   # this after the filters below is what made half of all goals read as
-  # turnovers.
+  # turnovers. Adjacency is taken over the PBP rows only: a chains-only row
+  # holds no state, so "who acted next" must skip it or a spoil would read as
+  # the spoiler winning possession. Resolution is where the spoiler is named.
+  d <- seq[in_pbp == TRUE]
   adj <- .np_adjacency(d)
+  res <- if (is.null(chains)) NULL else .np_resolution(seq)
 
   # EVERY filter below reports what it removed, and the four counts must add up
   # to n_all. They did not before 2026-09-05: the NA-delta_epv drop was silent,
@@ -129,8 +280,19 @@
   d[, hm := delta_epv * data.table::fifelse(home_away == "Home", 1, -1)]
   d[adj, on = .(match_id, display_order),
     `:=`(next_team = i.next_team, next_player = i.next_player)]
+  d[, `:=`(resolve_desc = NA_character_, resolve_team = NA_character_,
+           resolve_player = NA_character_, resolve_lag = NA_integer_)]
+  if (!is.null(res)) {
+    d[res, on = .(match_id, display_order),
+      `:=`(resolve_desc = i.resolve_desc, resolve_team = i.resolve_team,
+           resolve_player = i.resolve_player, resolve_lag = i.resolve_lag)]
+    disp <- d[description %chin% NP_DISPOSAL_DESCS]
+    cli::cli_alert_info(
+      "Net points resolution: {round(100 * mean(!is.na(disp$resolve_desc)), 1)}% of {format(nrow(disp), big.mark = ',')} disposals resolve within 6 rows; {round(100 * mean(disp$resolve_desc %chin% c('Spoil', 'Contest Target', 'Contested Mark'), na.rm = TRUE), 1)}% at a named contest")
+  }
   d[, .(match_id, display_order, description, team, home_away, player_id,
-        hm, next_team, next_player)]
+        hm, next_team, next_player,
+        resolve_desc, resolve_team, resolve_player, resolve_lag)]
 }
 
 #' Who genuinely acted next, computed on the UNFILTERED sequence
@@ -159,20 +321,35 @@
 #' the test for "there is no next actor" -- such rows get `NA` and are therefore
 #' neither retained disposals nor turnovers.
 #'
+#' \strong{So is a score.} A behind is followed by the opposition's kick-in,
+#' which HAS a team, so by the rule above it read as a turnover: the defence
+#' was paid 30% of every behind conceded (1,981 points in 2026, 9.3 a match)
+#' and the kick-in taker took 60% of that -- almost all of it to half-backs.
+#' Found on 2026-09-06 by the chains resolution column. The general form: the
+#' running score changes between this row and the next only when this row
+#' scored (goal, behind, rushed behind, a dribbled ground kick), and a score is
+#' always followed by a restart. PBP books the points on the FOLLOWING row,
+#' which is why the comparison is this row against the next.
+#'
 #' @param pbp_data The full play-by-play, before any filtering.
 #' @return A data.table of `match_id`, `display_order`, `next_team`,
 #'   `next_player`.
 #' @keywords internal
 .np_adjacency <- function(pbp_data) {
   a <- data.table::as.data.table(pbp_data)[, .(match_id, display_order, team,
-                                               player_id, description)]
+                                               player_id, description,
+                                               home_points, away_points)]
   data.table::setorder(a, match_id, display_order)
+  a[, tot := home_points + away_points]
   a[, `:=`(nt = data.table::shift(team, -1L),
            npl = data.table::shift(player_id, -1L),
-           nd = data.table::shift(description, -1L)), by = match_id]
-  # Chain-terminal: the next event has no acting team (a restart), or is one we
-  # exclude as phantom. Either way there is no next actor to credit.
-  a[, terminal := is.na(nt) | .np_is_excluded(nd)]
+           nd = data.table::shift(description, -1L),
+           ntot = data.table::shift(tot, -1L)), by = match_id]
+  # Chain-terminal: the next event has no acting team (a restart), is one we
+  # exclude as phantom, or the score moved (this row scored, and a restart
+  # follows). Either way there is no next actor to credit.
+  a[, scored := !is.na(ntot) & !is.na(tot) & ntot != tot]
+  a[, terminal := is.na(nt) | .np_is_excluded(nd) | scored]
   a[, .(match_id, display_order,
         next_team = data.table::fifelse(terminal, NA_character_, nt),
         next_player = data.table::fifelse(terminal, NA_character_, npl))]
@@ -378,29 +555,45 @@
 #' This term is where home-ground advantage and model error land. It is
 #' deliberately flat so it cannot reorder players within a team.
 #'
-#' @section Two constraints, not one:
-#' Pinning only the per-match SUM leaves the LEVEL free, and the raw ledger's
-#' level is badly behaved: it measures each team's absolute scoring performance
-#' against expectation, so in a high-scoring game both teams can be strongly
-#' positive at once. Measured 2026, one match had home +95.5 and away +32.5 in
-#' their own frames -- a correct 63-point difference sitting on a meaningless
-#' level. `level = "half_margin"` adds the second constraint, turning an
-#' absolute-performance ledger into a margin ledger:
+#' @section Why "sum" is the default, measured rather than assumed:
+#' The identity that matters -- Oliver's, and the one actually asked for -- is
+#' that the whole match sums to the margin, which in own-team frames reads as
+#' `sum(home) - sum(away) == margin`. **Pinning the SUM alone achieves that
+#' exactly.** `level = "half_margin"` adds a second, cosmetic constraint (each
+#' team's total lands on `margin/2`) and it is very expensive. Measured over 211
+#' matches of 2026:
 #'
-#'     home total = +margin/2       away total = -margin/2
+#' \tabular{lrr}{
+#'   \tab `sum` \tab `half_margin` \cr
+#'   team difference == margin \tab 4.3e-14 \tab 5.7e-14 \cr
+#'   median |np_residual| \tab 0.10 \tab 2.64 \cr
+#'   residual as \% of |net_points| \tab 3\% \tab 102\% \cr
+#'   Spearman(raw, final) \tab 0.9993 \tab 0.7425
+#' }
 #'
-#' Two constraints, two team totals, fully determined. The correction is flat
-#' within a team (TOG-weighted), so it shifts the level without reordering
-#' anyone; what it cannot do is hide that the underlying level was off, which
-#' is why `np_residual` is reported as its own column rather than folded in.
+#' Under `half_margin` the correction is LARGER than the thing it corrects and
+#' it reorders players, because it is spread by time on ground and TOG varies
+#' (`cor(np_residual, tog) = -0.481`, median 1.50 points of spread between the
+#' longest and shortest stint in a team-match). An earlier version of this note
+#' claimed the residual "shifts the level without reordering anyone" -- that was
+#' asserted, never measured, and it is false.
+#'
+#' The underlying reason the level needs such a big push is worth knowing: the
+#' raw ledger tracks a team's OWN SCORE (cor 0.906) better than the margin
+#' (0.786), because `delta_epv` measures scoring production against expectation.
+#' In a high-scoring game both teams read strongly positive at once, and the
+#' median distance from `margin/2` is 61.4 points. `half_margin` does not fix
+#' that; it flattens it with a term big enough to distort the ranking. Keep the
+#' level free and report the difference, which is the quantity that is actually
+#' anchored.
 #'
 #' @param np Per-player frame already carrying `np_raw` (home-margin frame),
 #'   `margin`, `team`, `home_away` and `tog`.
-#' @param level `"half_margin"` pins both team totals; `"sum"` pins only the
-#'   match total and lets the level float.
+#' @param level `"sum"` (default) pins only the match total, which is the whole
+#'   identity. `"half_margin"` additionally pins each team total to `margin/2`.
 #' @return `np` with an `np_residual` column added, by reference.
 #' @keywords internal
-.np_reconcile <- function(np, level = c("half_margin", "sum")) {
+.np_reconcile <- function(np, level = c("sum", "half_margin")) {
   level <- match.arg(level)
   need <- c("np_raw", "margin", "team", "home_away", "tog", "match_id")
   missing <- setdiff(need, names(np))
@@ -458,6 +651,12 @@
 #'   ground and defensive acts. Defaults to `load_player_stats(TRUE)`.
 #' @param results Match results supplying the margin. Defaults to
 #'   `load_results(TRUE)`.
+#' @param chains Raw chains for the same matches, or `NULL` (the default). With
+#'   chains the allocation is **identical** -- every point still comes from a
+#'   PBP row, and this is asserted by `data-raw/04-analysis/np_chains_ledger_equivalence.R`
+#'   -- but each disposal in the ledger also carries what it resolved into
+#'   (a spoil, a contested mark, a goal), which PBP drops. Later credit rules
+#'   need that; nothing in this function uses it yet.
 #' @param defensive_share Fraction of each turnover paid to the team that won
 #'   the ball. Not identifiable from conservation -- see `NP_DEFENSIVE_SHARE`.
 #' @param receiver_share Fraction of a retained disposal paid to the receiver.
@@ -470,10 +669,10 @@
 #'   mirror takes `mirror_share`, rest by TOG), `"defensive_acts"` (by box-score
 #'   defensive work) or `"tog"` (flat by time on ground).
 #' @param mirror_share Share the mirror slot takes when `spread = "matchup"`.
-#' @param level `"half_margin"` pins each team's total to half the margin, which
-#'   is the Oliver shape; `"sum"` pins only the match total and leaves the level
-#'   as the raw ledger produced it. See `.np_reconcile()` for why the level
-#'   needs its own constraint.
+#' @param level `"sum"` (default) pins the match total to the margin, which is
+#'   the Oliver identity and all that is required. `"half_margin"` additionally
+#'   forces each team's total to `margin/2` -- cosmetic, and it costs a residual
+#'   larger than the signal that reorders players. See `.np_reconcile()`.
 #' @param reconcile Whether to book the residual so each match sums exactly to
 #'   its margin. `FALSE` leaves the raw allocation, which is what you want when
 #'   measuring how close the ledger gets on its own.
@@ -509,12 +708,13 @@
 build_net_points <- function(pbp_data = NULL,
                              player_stats = NULL,
                              results = NULL,
+                             chains = NULL,
                              defensive_share = NP_DEFENSIVE_SHARE,
                              receiver_share = NP_RECEIVER_SHARE,
                              ball_winner_share = NP_BALL_WINNER_SHARE,
                              spread = c("matchup", "defensive_acts", "tog"),
                              mirror_share = NP_MIRROR_SHARE,
-                             level = c("half_margin", "sum"),
+                             level = c("sum", "half_margin"),
                              reconcile = TRUE) {
   spread <- match.arg(spread)
   level <- match.arg(level)
@@ -522,7 +722,7 @@ build_net_points <- function(pbp_data = NULL,
   if (is.null(player_stats)) player_stats <- load_player_stats(TRUE)
   if (is.null(results)) results <- load_results(TRUE)
 
-  led <- .np_build_ledger(pbp_data)
+  led <- .np_build_ledger(pbp_data, chains)
 
   # --- lineup: roster, positions, TOG and defensive box-score work ----------
   ps <- data.table::as.data.table(player_stats)
@@ -688,7 +888,8 @@ build_net_points <- function(pbp_data = NULL,
                            receiver_share = receiver_share,
                            ball_winner_share = ball_winner_share,
                            spread = spread, mirror_share = mirror_share,
-                           level = level, reconciled = isTRUE(reconcile)))
+                           level = level, reconciled = isTRUE(reconcile),
+                           chains = !is.null(chains)))
   out[]
 }
 
