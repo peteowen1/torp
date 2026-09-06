@@ -51,7 +51,9 @@ test_that("flipping the engine to v3 changes exactly the intended constants", {
   }
   skip_if_not(file.exists(f), "constants_ratings.R not locatable from the test tree")
 
-  txt <- sub('^EPV_ENGINE <- "v2"$', 'EPV_ENGINE <- "v3"', readLines(f))
+  # whatever engine is pinned, rewrite the assignment to v3 and check v3's
+  # constants come out
+  txt <- sub('^EPV_ENGINE <- "v[0-9]"$', 'EPV_ENGINE <- "v3"', readLines(f))
   expect_true(any(grepl('^EPV_ENGINE <- "v3"$', txt)),
               info = "the EPV_ENGINE assignment no longer matches the pattern this test rewrites")
 
@@ -69,7 +71,9 @@ test_that("flipping the engine to v3 changes exactly the intended constants", {
   pts <- get("EPV3_POINTS_SCALE", e)
   # FOUR-channel constants, from ws30_epv3_4ch_gate.R -- the gate that scored
   # them. cont_stop is no longer 1: under 4 channels the ruck slot is live.
-  expect_equal(unname(pts), c(3.7557, 2.5196, 0.3870, 1.8557))
+  # the four-channel constants the gate actually scored (torp abd70131,
+  # 2026-08-18); the 3.7557 / 2.5196 / 0.3870 / 1.8557 pin was the earlier fit
+  expect_equal(unname(pts), c(1.650438, 1.421199, 0.337485, 1.659480))
 
   # Each prior rate must carry its OWN channel's factor. This is the check that
   # would have caught the 0.919 fallback bug from the other direction.

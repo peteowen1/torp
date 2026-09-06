@@ -79,6 +79,7 @@
     # engine flip from v2 to v3 -- the one change most capable of altering every
     # row in the file. Found staging v3 for promotion.
     EPV_ENGINE = EPV_ENGINE,
+    EPR_UNITS_SCALE_V4 = EPR_UNITS_SCALE_V4,
     EPV3_CHANNELS = EPV3_CHANNELS,
     EPV3_POINTS_SCALE = as.list(EPV3_POINTS_SCALE),
     EPV_CONT_LOSS_ALLOC = EPV_CONT_LOSS_ALLOC,

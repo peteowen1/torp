@@ -804,7 +804,9 @@ create_player_game_data <- function(pbp_data = NULL,
     aerial_target_wins = integer(), aerial_target_losses = integer(),
     aerial_def_wins = integer(), aerial_def_losses = integer()
   )
-  contest_dt <- if (v3) empty_contest else tryCatch({
+  # chain-native engines (v3 and v4) never read this; v4 was paying for the
+  # full v2 contest split and discarding it (review, 2026-09-06)
+  contest_dt <- if (chain_native) empty_contest else tryCatch({
     if (is.null(chains)) chains <- load_chains(TRUE)
     compute_contest_credit(chains, pbp_data,
                            contest_share = p$contest_share %||% (1 / 3))
