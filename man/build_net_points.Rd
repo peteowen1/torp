@@ -101,6 +101,8 @@ opposition instead of to him. Read the SIGN carefully: this is a
 positive number that REDUCES his debit, because the debit itself is
 already in \code{np_direct} at full size and this cancels \code{defensive_share}
 of it. It is not a penalty column.}
+\item{\code{np_contest_won}}{paid for contests he won against a kick (a
+spoil, an intercept mark), difficulty credit only}
 \item{\code{np_team}}{his share of his own team's offence pools (zero under
 \code{credit = "flat"})}
 \item{\code{np_residual}}{his share of the unexplained margin}

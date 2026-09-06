@@ -1,5 +1,28 @@
 # torp 1.4.8
 
+## Net Points: contested kicks split at the contest (D8)
+
+Step 3 of the v4 credit rules. A kick that resolves at a fought contest (a
+spoil, a contested or pack mark, or any mark the defence took; 19,574 in
+2026, 88.6% won by the defence) now splits its surprise once more, using the
+v3 aerial branch models: the contest surprise (branch value minus EV) goes to
+whoever won the contest, the ground-ball surprise (what happened after the
+fall of the ball) to whoever possessed next. A same-team winner is paid
+directly; a defensive winner is paid through the new `np_contest_won` column
+at `NP_CONTEST_WINNER_SHARE` for how the contest was won (a mark 80%, a spoil
+50%), the rest joining the defensive pool. This is the term the 2026-08 build
+paid to nobody, and it is what stops a spoil the attack regathers from
+debiting the spoiler. Harris Andrews in the Sydney game: 3.77 (flat) -> 6.57
+(step 2) -> 9.01; split-half reliability 0.645 -> 0.671.
+
+## Net Points: PBP rows keep PBP's player and team
+
+Review finding on the chains-aware ledger: `.np_sequence()` took `player_id`
+and `team_id` for PBP rows from chains and only checked that the description
+agreed, so a chains/PBP disagreement on the actor would have moved credit
+silently. PBP rows now keep PBP's own player and team, and any disagreement on
+description, player or team at the same key aborts.
+
 ## Net Points: difficulty credit (`credit = "difficulty"`)
 
 Step 2 of the v4 credit rules (`docs/plans/EPV-V4-CREDIT-RULES.md`, D5-D7, D9).

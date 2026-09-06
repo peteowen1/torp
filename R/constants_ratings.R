@@ -1748,3 +1748,23 @@ NP_BLAME_SHARE <- 0.30
 #' small. Not identifiable from conservation; see `NP_BLAME_SHARE`.
 #' @keywords internal
 NP_OFFENCE_POOL_SHARE <- 0.10
+
+#' Difficulty credit: the contest winner's share of a ceded contest surprise (D11)
+#'
+#' When a kick resolves at a contest the defence won, the defence's share of
+#' the contest surprise is routed by HOW it was won. An intercept mark is
+#' nearly all the marker's; a spoil is half the spoiler's, because the spoil
+#' only ends the contest and the pressure around it is other people's work.
+#' Keyed by the chains description of the resolving row; anything else gets
+#' `NP_CONTEST_WINNER_SHARE_DEFAULT`. Chosen with Pete 2026-09-06 as the defaults
+#' for the year-over-year test, not as results.
+#' @keywords internal
+NP_CONTEST_WINNER_SHARE <- c(
+  "Contested Mark" = 0.80, "Uncontested Mark" = 0.80, "Mark On Lead" = 0.80,
+  "Pack Mark (P)" = 0.80, "Pack Mark (O)" = 0.80,
+  "Spoil" = 0.50, "Spoil gaining possession" = 0.50, "Spoil ineffective" = 0.50
+)
+
+#' Fallback for `NP_CONTEST_WINNER_SHARE`
+#' @keywords internal
+NP_CONTEST_WINNER_SHARE_DEFAULT <- 0.50

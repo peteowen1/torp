@@ -19,7 +19,8 @@ of the surprise).}
 }
 \value{
 A list of \code{debits} (per disposer, negative of what they ceded),
-\code{won} (paid directly to identified ball-winners) and \code{pool} (the remainder,
+\code{won} (paid directly to identified ball-winners), \code{contest_won} (paid to
+the named winner of a contest the defence won) and \code{pool} (the remainder,
 per \code{match_id}, \code{def_team}, \code{winner_slot}).
 }
 \description{

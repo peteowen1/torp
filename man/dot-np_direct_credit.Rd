@@ -14,9 +14,10 @@
 }
 \description{
 Reads the per-row split from \code{.np_credit_terms()}. \code{np_direct} is the actor's
-own rows at FACE value (own + cede, i.e. before anything is transferred to
-the opposition) plus what he received as a receiver, so that \code{np_ceded} can
-report the transfer separately. Conservation within a team-match is
+own rows at FACE value (own + everything ceded, i.e. before anything is
+transferred to the opposition) plus what he received as a receiver or as a
+same-team contest winner, so that \code{np_ceded} can report the transfer
+separately. Conservation within a team-match is
 untouched: the receiver share and the offence pool move value between
 teammates only.
 }

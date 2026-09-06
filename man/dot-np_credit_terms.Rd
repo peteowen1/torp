@@ -22,8 +22,11 @@
 \item{terms}{Output of \code{.np_difficulty_terms()}, or \code{NULL} under flat.}
 }
 \value{
-\code{led} with \code{kind}, \code{scored}, \code{own_hm}, \code{recv_hm}, \code{team_hm},
-\code{cede_hm} added.
+\code{led} with \code{kind}, \code{scored}, \code{contested} and the six parts \code{own_hm},
+\code{recv_hm}, \code{win_hm} (a same-team contest winner), \code{team_hm}, \code{cede_hm}
+(ground-ball value ceded to the opposition) and \code{cede_c_hm} (contest
+value ceded to the opposition, routed to the contest winner by
+\code{NP_CONTEST_WINNER_SHARE}).
 }
 \description{
 Every row's \code{hm} is split into four non-overlapping parts that sum back to

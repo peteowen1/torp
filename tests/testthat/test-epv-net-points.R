@@ -445,7 +445,17 @@ test_that("a sequence with holes or duplicates is refused", {
   wrong <- data.table::copy(f$chains)
   wrong[match_id == "M1" & display_order == 20, description := "Kick"]
   expect_error(suppressMessages(torp:::.np_sequence(f$pbp, wrong)),
-               "different description")
+               "disagree on 1 description")
+  # same key and act, different player: would silently move credit (review
+  # finding, 2026-09-06), so it must abort too
+  wrong_p <- data.table::copy(f$chains)
+  wrong_p[match_id == "M1" & display_order == 30, player_id := "pX"]
+  expect_error(suppressMessages(torp:::.np_sequence(f$pbp, wrong_p)),
+               "1 player")
+  wrong_t <- data.table::copy(f$chains)
+  wrong_t[match_id == "M1" & display_order == 30, team_id := "A"]
+  expect_error(suppressMessages(torp:::.np_sequence(f$pbp, wrong_t)),
+               "1 team")
 })
 
 # ---- scoring acts are terminal ----------------------------------------------
@@ -546,4 +556,61 @@ test_that("difficulty credit without chains or terms is refused", {
   expect_error(
     suppressMessages(build_net_points(f$pbp, f$stats, f$results, credit = "difficulty")),
     "needs")
+})
+
+# ---- contested kicks: three terms, three recipients (D8) ----------------------
+test_that("a contest the defence won pays the winner, the pool and the ground ball", {
+  f <- np_fixture()
+  # M1 row 3 (Kick, Home p1, 3.0, turned over to Away p3) becomes a spoil by p3:
+  # decision -0.5, contest surprise -1.5, ground surprise 5.0 (sums to 3.0).
+  terms <- np_terms_fixture()
+  terms[display_order == 3, `:=`(contested = TRUE, cont_desc = "Spoil",
+                                 cont_surprise = -1.5, ground_surprise = 5.0,
+                                 def_win = TRUE, winner_pid = "p3")]
+  np <- suppressMessages(build_net_points(
+    f$pbp, f$stats, f$results, credit = "difficulty", difficulty_terms = terms,
+    reconcile = FALSE, spread = "tog", receiver_share = 0.3, defensive_share = 0.3,
+    ball_winner_share = 1, blame_share = 0.3, offence_pool_share = 0.1))
+  m1 <- np[match_id == "M1"]
+  p1 <- m1[player_id == "p1"]; p3 <- m1[player_id == "p3"]; p4 <- m1[player_id == "p4"]
+  # p1 keeps decision + 0.3 of both losses: -0.5 - 0.45 + 1.5 = 0.55; cedes
+  # 0.7 * -1.5 = -1.05 at the contest and 0.7 * 5.0 = 3.5 on the ground ball.
+  # Face value is unchanged (0.55 - 1.05 + 3.5 = 3.0), so np_direct is as before.
+  expect_equal(p1$np_direct, 0.522 + 3.0 - 0.6, tolerance = 1e-9)
+  expect_equal(p1$np_ceded, -(3.5 - 1.05), tolerance = 1e-9)
+  # p3 (away): the ground-ball cession in full (psi = 1), and half the contest
+  # cession as the spoiler (NP_CONTEST_WINNER_SHARE["Spoil"] = 0.5), both in
+  # his own frame
+  expect_equal(p3$np_defensive_won, -3.5, tolerance = 1e-9)
+  expect_equal(p3$np_contest_won, 0.525, tolerance = 1e-9)
+  # the other half of the contest cession spreads by TOG over Away FC (p3 100,
+  # p4 70)
+  expect_equal(p3$np_defensive, 0.525 * 100 / 170, tolerance = 1e-9)
+  expect_equal(p4$np_defensive, 0.525 * 70 / 170, tolerance = 1e-9)
+  expect_equal(sum(np$net_points_hm), unname(sum(NP_FIXTURE_LEDGER_HM)), tolerance = 1e-10)
+})
+
+test_that("a contest the attack won pays the same-team winner directly", {
+  f <- np_fixture()
+  # M2 row 3 (Kick, Home p2, 2.5, retained by p1): a contested mark by p1.
+  terms <- data.table::data.table(
+    match_id = "M2", display_order = 3L, p_hat = 0.5, decision = 0.5, surprise = 2.0,
+    contested = TRUE, cont_desc = "Contested Mark", cont_surprise = 1.5,
+    ground_surprise = 0.5, def_win = FALSE, winner_pid = "p1")
+  np <- suppressMessages(build_net_points(
+    f$pbp, f$stats, f$results, credit = "difficulty", difficulty_terms = terms,
+    reconcile = FALSE, spread = "tog", receiver_share = 0.3, defensive_share = 0.3,
+    ball_winner_share = 1, blame_share = 0.3, offence_pool_share = 0.1))
+  m2 <- np[match_id == "M2"]
+  p1 <- m2[player_id == "p1"]; p2 <- m2[player_id == "p2"]
+  # p2 keeps 0.9 * decision; p1 gets 0.9 * (1.5 + 0.5) as winner and receiver;
+  # the Home pool takes 0.1 * 2.5.
+  expect_equal(p2$np_direct, 0.9 * 0.5, tolerance = 1e-9)
+  # p1's other rows: row 1 Kick (4.0, unscored turnover, face value) and row 4
+  # Handball (-3.0, terminal)
+  expect_equal(p1$np_direct, 4.0 - 3.0 + 0.9 * 2.0, tolerance = 1e-9)
+  expect_equal(p1$np_team, 0.25 * 90 / 170, tolerance = 1e-9)
+  expect_equal(p2$np_team, 0.25 * 80 / 170, tolerance = 1e-9)
+  expect_true(all(m2$np_contest_won == 0))
+  expect_equal(sum(np$net_points_hm), unname(sum(NP_FIXTURE_LEDGER_HM)), tolerance = 1e-10)
 })
