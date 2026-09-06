@@ -1874,6 +1874,12 @@ np_difficulty_terms_for_season <- function(season, pbp_data = NULL, chains = NUL
     n_diff <- res[!is.na(off_home) & (off_home - off_away) != (home_score - away_score), .N]
     cli::cli_alert_info(
       "v4 margins: {n_off} of {nrow(res)} matches from official results ({n_diff} differ from the running score), {nrow(res) - n_off} from the running score")
+    if (n_off == 0 && nrow(off) > 0 && nrow(res) >= 5) {
+      cli::cli_abort(c(
+        "Official results were supplied for {nrow(off)} match{?es} but none of the {nrow(res)} play-by-play matches matched.",
+        "x" = "That is a match_id format or competition mismatch, not a live match; refusing to fall back to the running score for a whole season."
+      ))
+    }
     res[!is.na(off_home), `:=`(home_score = off_home, away_score = off_away)]
     res[, c("off_home", "off_away") := NULL]
   }
@@ -1881,4 +1887,27 @@ np_difficulty_terms_for_season <- function(season, pbp_data = NULL, chains = NUL
                    credit = "difficulty", stoppages = "allocate",
                    difficulty_terms = difficulty_terms,
                    leak_safe = is.null(difficulty_terms))
+}
+
+
+#' Map a Net Points frame onto the v4 engine's three channels
+#'
+#' Own acts (decisions, surprises, what he received, net of what his losses
+#' ceded), what he won back (turnovers, contests, stoppages), and his share of
+#' the pools plus the reconciliation residual. The three sum to `net_points`.
+#'
+#' @param np Output of `build_net_points()`.
+#' @return `player_id`, `match_id`, `np_own`, `np_won`, `np_pool`, `net_points`.
+#' @keywords internal
+.np_v4_channels <- function(np) {
+  out <- np[, .(player_id, match_id,
+                np_own = np_direct + np_ceded,
+                np_won = np_defensive_won + np_contest_won + np_stoppage,
+                np_pool = np_defensive + np_team + np_residual,
+                net_points)]
+  gap <- max(abs(out$np_own + out$np_won + out$np_pool - out$net_points))
+  if (!is.finite(gap) || gap > 1e-8) {
+    cli::cli_abort("v4 channels do not sum to net points (max gap {signif(gap, 3)}).")
+  }
+  out
 }

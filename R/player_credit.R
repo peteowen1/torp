@@ -1010,11 +1010,7 @@ create_player_game_data <- function(pbp_data = NULL,
     # them unchanged: recv = won, disp = own, spoil = pools, hitout = 0.
     if (is.null(chains) && is.null(difficulty_terms)) chains <- load_chains(TRUE)
     np <- .np_engine_frame(pbp_data, player_stats, chains, difficulty_terms)
-    np_dt <- np[, .(player_id, match_id,
-                    np_own = np_direct + np_ceded,
-                    np_won = np_defensive_won + np_contest_won + np_stoppage,
-                    np_pool = np_defensive + np_team + np_residual,
-                    net_points)]
+    np_dt <- .np_v4_channels(np)
     # A player with net points but no play-by-play act (a pool share for a sub
     # who never touched it) has no row in this frame, in any engine. His value
     # re-spreads across his team-mates in that match by time on ground, so the
@@ -1035,6 +1031,17 @@ create_player_game_data <- function(pbp_data = NULL,
       np_dt[lost_team, on = .(match_id, team), v_lost := i.v]
       np_dt[is.na(v_lost), v_lost := 0]
       np_dt[, share := v_lost * tog / sum(tog), by = .(match_id, team)]
+      # every lost point must land on a surviving team-mate; a team with no
+      # surviving row at all is a data failure, not a rounding case
+      respread <- np_dt[, .(got = sum(share)), by = .(match_id, team)]
+      owed <- merge(lost_team, respread, by = c("match_id", "team"), all.x = TRUE)
+      owed[is.na(got), got := 0]
+      if (nrow(owed) && max(abs(owed$v - owed$got)) > 1e-8) {
+        cli::cli_abort(c(
+          "v4: {round(sum(abs(owed$v - owed$got)), 2)} points of net points belong to a team with no player row in the frame.",
+          "x" = "Nothing to re-spread them across; the frame would no longer sum to the margin."
+        ))
+      }
       np_dt[, `:=`(np_pool = np_pool + share, net_points = net_points + share)]
       np_dt[, c("team", "tog", "v_lost", "share") := NULL]
     }

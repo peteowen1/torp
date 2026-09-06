@@ -866,3 +866,23 @@ test_that("consecutive stoppages telescope, and a stoppage that opens a match ke
   # and the match totals are exactly the excluded totals plus the raw stoppage values
   expect_equal(led[, sum(hm)], raw[, sum(hm)] + 0.6 + 0.2 + 0.8, tolerance = 1e-10)
 })
+
+# ---- the v4 engine's channel mapping ----------------------------------------
+test_that("the v4 channels are own / won / pools and nothing else", {
+  np <- data.table::data.table(
+    player_id = c("a", "b"), match_id = "M",
+    np_direct = c(5, -1), np_ceded = c(-2, 0.5), np_defensive_won = c(1, 0),
+    np_contest_won = c(0.5, 0), np_stoppage = c(0, 2), np_defensive = c(0.3, 0.2),
+    np_team = c(0.1, 0.1), np_residual = c(0.05, -0.05))
+  np[, net_points := np_direct + np_ceded + np_defensive_won + np_contest_won + np_stoppage +
+                     np_defensive + np_team + np_residual]
+  ch <- torp:::.np_v4_channels(np)
+  expect_equal(ch[player_id == "a"]$np_own, 3)          # 5 - 2: own acts net of what he ceded
+  expect_equal(ch[player_id == "a"]$np_won, 1.5)        # turnover + contest won
+  expect_equal(ch[player_id == "a"]$np_pool, 0.45)      # pools + residual
+  expect_equal(ch[player_id == "b"]$np_won, 2)          # a ruck's stoppage credit is "won"
+  expect_equal(ch$np_own + ch$np_won + ch$np_pool, ch$net_points, tolerance = 1e-12)
+  # a frame whose parts do not add up is refused
+  np[1, np_residual := 9]
+  expect_error(torp:::.np_v4_channels(np), "do not sum")
+})
