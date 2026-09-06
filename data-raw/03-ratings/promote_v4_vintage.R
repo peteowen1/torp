@@ -36,8 +36,22 @@ say("snapshot rows ", nrow(snap), " | manifest v3 rows ", m$vintages$v3$rows)
 stopifnot(nrow(snap) == m$vintages$v3$rows)
 md5 <- tools::md5sum(SNAP)[[1]]
 
-existing <- tryCatch(withr::with_envvar(c(VERSEBUS_STRICT = "1"), load_torp_ratings(version = "v3")), error = function(e) NULL)
-if (!is.null(existing) && nrow(existing) > 0) stop("torp_ratings_v3.parquet already exists on the release; refusing to overwrite")
+# Existence check against the release's own asset list, not a loader that
+# maps a transient failure to "absent". A v3 file that is already there is
+# fine ONLY if it is byte-identical to the snapshot (a previous run of this
+# script got as far as uploading and then failed on the manifest); anything
+# else aborts.
+assets <- system2("gh", c("release", "view", "ratings-data", "--repo", repo, "--json", "assets",
+                          "--jq", shQuote('.assets[].name')), stdout = TRUE)
+stopifnot(length(assets) > 0, "torp_ratings.parquet" %in% assets)
+already <- "torp_ratings_v3.parquet" %in% assets
+if (already) {
+  chk0 <- file.path(tempdir(), "existing_v3.parquet")
+  system2("gh", c("release", "download", "ratings-data", "--repo", repo, "--pattern", "torp_ratings_v3.parquet", "--output", chk0, "--clobber"))
+  stopifnot(file.exists(chk0))
+  if (!identical(tools::md5sum(chk0)[[1]], md5)) stop("torp_ratings_v3.parquet already exists on the release and is NOT this snapshot; refusing to touch it")
+  say("torp_ratings_v3.parquet already preserved and byte-identical; only the manifest step remains")
+}
 
 m$vintages$v3$file <- "torp_ratings_v3.parquet"
 m$vintages$v4 <- torp:::.build_rating_vintage_entry(nrow(snap), version = "v4", file = "torp_ratings.parquet")
@@ -50,14 +64,24 @@ say("manifest after promotion: canonical ", m$canonical, "; vintages ", paste(na
 
 if (!APPLY) { say("DRY RUN: nothing uploaded. Set PROMOTE_APPLY=1 to apply."); quit(status = 0) }
 
-up <- file.path(tempdir(), "torp_ratings_v3.parquet"); file.copy(SNAP, up, overwrite = TRUE)
-piggyback::pb_upload(up, repo = repo, tag = "ratings-data", overwrite = FALSE)
-chk <- file.path(tempdir(), "verify_v3.parquet")
-system2("gh", c("release", "download", "ratings-data", "--repo", repo, "--pattern", "torp_ratings_v3.parquet", "--output", chk, "--clobber"))
-md5_back <- tools::md5sum(chk)[[1]]
-say("md5 local ", md5, " | md5 on release ", md5_back)
-if (!identical(md5, md5_back)) stop("preserved file is not byte-identical; do NOT proceed")
-piggyback::pb_upload(tf, repo = repo, tag = "ratings-data", overwrite = TRUE)
+if (!already) {
+  up <- file.path(tempdir(), "torp_ratings_v3.parquet"); file.copy(SNAP, up, overwrite = TRUE)
+  piggyback::pb_upload(up, repo = repo, tag = "ratings-data", overwrite = FALSE)
+  chk <- file.path(tempdir(), "verify_v3.parquet")
+  system2("gh", c("release", "download", "ratings-data", "--repo", repo, "--pattern", "torp_ratings_v3.parquet", "--output", chk, "--clobber"))
+  stopifnot(file.exists(chk))
+  md5_back <- tools::md5sum(chk)[[1]]
+  say("md5 local ", md5, " | md5 on release ", md5_back)
+  if (!identical(md5, md5_back)) stop("preserved file is not byte-identical; do NOT proceed")
+}
+# From here the v3 file is preserved. If the manifest upload fails, re-running
+# this script with the same snapshot resumes at the manifest step.
+ok <- tryCatch({ piggyback::pb_upload(tf, repo = repo, tag = "ratings-data", overwrite = TRUE); TRUE }, error = function(e) {
+  say("MANIFEST UPLOAD FAILED: ", conditionMessage(e), "
+  State: torp_ratings_v3.parquet is preserved and verified; ratings_manifest.json still says canonical v3.
+  Remedy: re-run this script with the same PROMOTE_V3_FILE and PROMOTE_APPLY=1; it resumes at the manifest step.")
+  FALSE })
+if (!ok) quit(status = 1)
 m2 <- read_ratings_manifest()
 stopifnot(identical(m2$canonical, "v4"), identical(m2$vintages$v3$file, "torp_ratings_v3.parquet"))
 say("PROMOTED: canonical v4; v3 preserved byte-identical (md5 ", substr(md5, 1, 8), "). Now merge RATING_VINTAGE <- \"v4\".")

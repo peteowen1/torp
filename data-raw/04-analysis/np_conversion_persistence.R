@@ -56,6 +56,11 @@ fwrite(d, file.path(OUT, "np_conversion_by_game.csv"))
 pgd <- as.data.table(arrow::read_parquet(file.path(OUT, "v3v4_pgd_v4.parquet"), col_select = c("match_id", "player_id", "position_group", "player_name")))
 pos <- pgd[, .(pos = names(which.max(table(position_group))), name = player_name[1]), by = player_id]
 ps <- merge(d[, .(g = .N, total = mean(net_points), conv = mean(conv), rest = mean(rest)), by = .(player_id, season)], pos, by = "player_id")
+# the position lookup is a side artifact; an inner join that silently drops
+# players would move every correlation below, so coverage is asserted
+n_ledger <- uniqueN(d$player_id); n_kept <- uniqueN(ps$player_id)
+say("position lookup covers ", n_kept, " of ", n_ledger, " ledger players")
+stopifnot(n_kept >= 0.98 * n_ledger)
 w <- dcast(ps[g >= MIN_G], player_id + pos + name ~ season, value.var = c("total", "conv", "rest", "g"))
 w <- w[!is.na(total_2025) & !is.na(total_2026)]
 say("\nPlayers with ", MIN_G, "+ games in both seasons: ", nrow(w))
