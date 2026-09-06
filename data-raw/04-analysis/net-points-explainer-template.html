@@ -179,7 +179,11 @@ document.getElementById("scorebar").innerHTML =
    <span class="pill">${p.name} &middot; ${p.position} &middot; ${p.tog}% game time</span>`;
 
 /* ---------- pitch ---------- */
-const RX = 77.5, RY = 68;
+/* Ground size comes from the match, not a constant: AFL venues run 155m to 175m
+   long across a single season, and drawing every one at 155m would misplace
+   every dot on the larger grounds. */
+const RX = m.half_length, RY = m.half_width;
+const VB = [-(RX + 11), -(RY + 6), 2 * (RX + 11), 2 * (RY + 6)].map(v => v.toFixed(1)).join(" ");
 const ev = D.events.map((e, i) => ({...e, i}));
 const maxAbs = Math.max(...ev.map(e => Math.abs(e.contrib)), 0.4);
 const r = v => 1.5 + 4.6 * Math.sqrt(Math.abs(v) / maxAbs);
@@ -201,7 +205,7 @@ function pitch() {
   // 50m x 50m, goal square 9m deep and 6.4m wide, 50m arc struck from the centre
   // of the goal line. An earlier version drew the centre square 50x25 and added
   // a full-length centre line, which is not a marking on a football ground.
-  return `<svg viewBox="-88 -74 176 148" role="img" aria-label="Match events on an AFL ground">
+  return `<svg viewBox="${VB}" role="img" aria-label="Match events on an AFL ground">
     <ellipse class="oval" cx="0" cy="0" rx="${RX}" ry="${RY}"/>
     <rect x="-25" y="-25" width="50" height="50" fill="none" stroke="var(--grassline)" stroke-width=".6"/>
     <circle cx="0" cy="0" r="5" fill="none" stroke="var(--grassline)" stroke-width=".6"/>
