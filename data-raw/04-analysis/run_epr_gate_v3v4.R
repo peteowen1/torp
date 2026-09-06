@@ -82,7 +82,16 @@ rt4 <- build_ratings(pgd4, "v4"); cat("v4 ratings:", nrow(rt4), "rows\n")
 set_const(EPV_ENGINE = "v3")
 
 cat("\n==== FACE VALIDITY (top 40, stability, appears-from-nowhere) ====\n")
-print(face_validity(rt3, rt4))
+# face_validity() wants ONE row per player: the latest rated round of each
+# engine, not the round-by-round table (that merge is cartesian)
+snap <- function(rt) {
+  rt <- as.data.table(rt)[!is.na(epr)]
+  last <- rt[season == max(season), max(round)]
+  rt[season == max(season) & round == last]
+}
+fv <- tryCatch(face_validity(snap(rt3), snap(rt4)),
+               error = function(e) { cat("face_validity failed:", conditionMessage(e), "\n"); NULL })
+if (!is.null(fv)) print(fv)
 
 cat("\n==== FAST EPR GATE (lineup rating -> team points, club and season fixed effects) ====\n")
 g3 <- bm_epr_gate(pgd3, rt3, res, "v3 production")
