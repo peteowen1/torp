@@ -2,23 +2,23 @@
 % Please edit documentation in R/epv_net_points.R
 \name{.np_defensive_pool}
 \alias{.np_defensive_pool}
-\title{Take the defensive share off each turnover and pool it by opposing position}
+\title{Route what a turnover cedes to the opposition}
 \usage{
-.np_defensive_pool(led, lineup, phi, psi = 0)
+.np_defensive_pool(l, lineup, psi = 0)
 }
 \arguments{
-\item{led}{Ledger from \code{.np_build_ledger()}.}
+\item{l}{Output of \code{.np_credit_terms()}; \code{cede_hm} is what each turnover
+hands to the opposition (flat: \code{phi * hm}; difficulty: the defence's share
+of the surprise).}
 
 \item{lineup}{Per-match roster: \code{match_id}, \code{team}, \code{player_id}, \code{position},
 \code{tog}, \code{def_acts}.}
 
-\item{phi}{Defensive share, between 0 and 1 inclusive.}
-
-\item{psi}{Share of the pool paid straight to the OBSERVED ball-winner (the
-actor on the next row). The remainder is spread by \code{.np_spread_pool()}.}
+\item{psi}{Share of the ceded value paid straight to the OBSERVED ball-winner
+(the actor on the next row). The remainder is spread by \code{.np_spread_pool()}.}
 }
 \value{
-A list of \code{debits} (per disposer, negative of what they keep),
+A list of \code{debits} (per disposer, negative of what they ceded),
 \code{won} (paid directly to identified ball-winners) and \code{pool} (the remainder,
 per \code{match_id}, \code{def_team}, \code{winner_slot}).
 }

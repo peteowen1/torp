@@ -1,5 +1,30 @@
 # torp 1.4.8
 
+## Net Points: difficulty credit (`credit = "difficulty"`)
+
+Step 2 of the v4 credit rules (`docs/plans/EPV-V4-CREDIT-RULES.md`, D5-D7, D9).
+Every disposal the difficulty model can score splits into a decision term
+(`EV - before`, always the disposer's) and a surprise (`after - EV`). Retained:
+the disposer keeps `p` of the surprise and the receiver `1 - p`, with `p` the
+modelled chance of losing the ball. Turnover: the disposer keeps
+`NP_BLAME_SHARE` (0.30) of the surprise, the defence is credited the rest.
+`NP_OFFENCE_POOL_SHARE` (0.10) of every non-turnover disposal goes to the
+attacking team's pool, reported in the new `np_team` column. The 4.2% of
+disposals the model cannot score fall back to the flat rule, and the count is
+logged. The row identity is asserted, not assumed: the terms must rebuild
+every row's `delta_epv` to 1e-9 or the build aborts.
+
+The flat rule is untouched: `credit = "flat"` (the default) reproduces the
+previous build to 5e-14 on all 9,792 player-matches of 2026. Both modes go
+through one per-row split (`.np_credit_terms()`: own / receiver / team pool /
+ceded), which is the role tagging D3 asks for.
+
+Measured on 2026, in-sample fit, default shares: 95.8% of disposals scored,
+conservation 4e-14, Spearman against flat 0.89 over player-games, split-half
+reliability 0.645 -> 0.656. Harris Andrews in the Sydney game goes 3.77 -> 6.57
+while Papley is unchanged (23.19 -> 23.17); the season top 12 gains Richards,
+Bontempelli, Dempsey and Daicos instead of being twelve forwards. The
+`difficulty_terms` argument lets a share sweep fit the models once.
 ## Net Points reads chains alongside PBP
 
 `build_net_points(chains=)` takes the raw chains for the same matches. The

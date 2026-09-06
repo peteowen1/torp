@@ -1724,3 +1724,27 @@ NP_EXCLUDED_DESCS <- c("Centre Bounce")
 #' turnover -- the pressure that forced it usually came from someone else.
 #' @keywords internal
 NP_BALL_WINNER_SHARE <- 0.60
+
+#' Difficulty credit: the disposer's share of a turnover's SURPRISE
+#'
+#' Under `credit = "difficulty"` a turnover splits into the decision term
+#' (`EV - before`, always the disposer's) and the surprise (`after - EV`). The
+#' disposer keeps this share of the surprise as execution blame; the rest is
+#' credit to the defence. Chosen by Pete 2026-09-06 over "decision only" so a
+#' kick that was fine in expectation but badly executed still costs its kicker
+#' something. Not identifiable from conservation -- the identity holds for any
+#' value -- so this is the default the year-over-year repeatability test starts
+#' from, not a result. The first row to watch when it runs: a fumbled 2m
+#' handball wore -0.58 under the flat rule and -0.16 under this one.
+#' @keywords internal
+NP_BLAME_SHARE <- 0.30
+
+#' Difficulty credit: the slice of a non-turnover disposal paid to the team
+#'
+#' Pete's rule that every play type has both an individual and a team
+#' component: the leads and structure that created the option are nobody's
+#' row. Spread by the same rule as the defensive pool. A slice spread flat by
+#' time on ground is a pure shrink toward the team average, which is why it is
+#' small. Not identifiable from conservation; see `NP_BLAME_SHARE`.
+#' @keywords internal
+NP_OFFENCE_POOL_SHARE <- 0.10

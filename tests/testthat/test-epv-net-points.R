@@ -477,3 +477,73 @@ test_that("a behind is followed by a restart, not a turnover", {
   expect_equal(sum(np$net_points_hm), unname(sum(NP_FIXTURE_LEDGER_HM)),
                tolerance = 1e-10)
 })
+
+# ---- difficulty credit ------------------------------------------------------
+# The terms are injected by hand so the arithmetic is checked, not the GAMs.
+np_terms_fixture <- function() {
+  data.table::data.table(
+    match_id      = c("M1", "M1"),
+    display_order = c(1L, 3L),
+    # row 1: Kick by Home p1, retained by p2, delta 1.0 = 0.3 + 0.7
+    # row 3: Kick by Home p1, turned over to Away p3, delta 3.0 = -0.5 + 3.5
+    p_hat    = c(0.4, 0.5),
+    decision = c(0.3, -0.5),
+    surprise = c(0.7, 3.5)
+  )
+}
+
+test_that("flat credit leaves np_team at zero and the totals where they were", {
+  f <- np_fixture()
+  np <- suppressMessages(build_net_points(f$pbp, f$stats, f$results, reconcile = FALSE))
+  expect_true(all(np$np_team == 0))
+  expect_equal(sum(np$net_points_hm), unname(sum(NP_FIXTURE_LEDGER_HM)), tolerance = 1e-10)
+})
+
+test_that("difficulty credit pays decision, split surprise, blame and the pools", {
+  f <- np_fixture()
+  np <- suppressMessages(build_net_points(
+    f$pbp, f$stats, f$results, credit = "difficulty",
+    difficulty_terms = np_terms_fixture(), reconcile = FALSE, spread = "tog",
+    receiver_share = 0.3, defensive_share = 0.3, ball_winner_share = 1,
+    blame_share = 0.3, offence_pool_share = 0.1))
+  m1 <- np[match_id == "M1"]
+  p1 <- m1[player_id == "p1"]; p2 <- m1[player_id == "p2"]; p3 <- m1[player_id == "p3"]
+  # p1, row 1 retained: keeps 0.9 * (0.3 + 0.4 * 0.7) = 0.522; p2 receives
+  # 0.9 * 0.6 * 0.7 = 0.378; the Home pool takes 0.1.
+  # p1, row 3 turnover: keeps -0.5 + 0.3 * 3.5 = 0.55, cedes 0.7 * 3.5 = 2.45;
+  # np_direct reports the row at face value (3.0) and np_ceded the transfer.
+  # p1 also receives the flat share of p2's unscored handball (row 2, -2.0):
+  # 0.3 * -2.0 = -0.6.
+  expect_equal(p1$np_direct, 0.522 + 3.0 - 0.6, tolerance = 1e-9)
+  expect_equal(p1$np_ceded, -2.45, tolerance = 1e-9)
+  # p3 is away: the whole ceded 2.45 lands on him as ball-winner, reported in
+  # his own frame
+  expect_equal(p3$np_defensive_won, -2.45, tolerance = 1e-9)
+  # the offence pool (0.1 from row 1) spreads by TOG over Home FC's p1 (90)
+  # and p2 (80)
+  expect_equal(p1$np_team, 0.1 * 90 / 170, tolerance = 1e-9)
+  expect_equal(p2$np_team, 0.1 * 80 / 170, tolerance = 1e-9)
+  # p2's direct: his own unscored handball under the flat rule (keeps 70% of
+  # -2.0) plus the surprise he received on row 1
+  expect_equal(p2$np_direct, -1.4 + 0.378, tolerance = 1e-9)
+  # and nothing was created or destroyed
+  expect_equal(sum(np$net_points_hm), unname(sum(NP_FIXTURE_LEDGER_HM)), tolerance = 1e-10)
+  expect_equal(attr(np, "np_params")$credit, "difficulty")
+})
+
+test_that("difficulty terms that do not rebuild the row are refused", {
+  f <- np_fixture()
+  bad <- np_terms_fixture()
+  bad[1, surprise := 0.9]  # 0.3 + 0.9 != 1.0
+  expect_error(
+    suppressMessages(build_net_points(f$pbp, f$stats, f$results, credit = "difficulty",
+                                      difficulty_terms = bad)),
+    "do not rebuild")
+})
+
+test_that("difficulty credit without chains or terms is refused", {
+  f <- np_fixture()
+  expect_error(
+    suppressMessages(build_net_points(f$pbp, f$stats, f$results, credit = "difficulty")),
+    "needs")
+})
