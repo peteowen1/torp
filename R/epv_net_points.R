@@ -828,7 +828,9 @@
   # and cancel across the season.
   cli::cli_alert_info(
     "Defensive pool: {format(sum(to$kind == 'turnover'), big.mark = ',')} turnovers cede {round(sum(abs(to$cede_hm)), 1)} points gross ({if (isTRUE(by_act)) 'ball-winner share by act' else paste0(round(100 * psi), '% to the observed ball-winner')}) plus {round(sum(abs(to$cede_c_hm)), 1)} at contests; rest spread")
-  list(debits = debits, won = won, contest_won = cwon, pool = pool)
+  list(debits = debits, won = won, contest_won = cwon, pool = pool,
+       rows = to[, .(match_id, display_order, opp_team, psi_row, rho, winner_pid,
+                     next_player, has_winner, cede_hm, cede_c_hm)])
 }
 
 #' Ball-winner's share of a ceded ground ball, by what he did to win it (D11)
@@ -1119,6 +1121,12 @@
 #'   seasons. With a single season the fit is in-sample and says so.
 #' @param contest_pairs Precomputed output of `.np_contest_pairs()` for
 #'   `spread = "context"`; computed from `chains` when absent.
+#' @param return_payments Attach the per-act payment table as attribute
+#'   `np_payments`: one row per (act, recipient) with `role` (actor, receiver,
+#'   contest_winner, ball_winner, attack_pool, defence_pool), the recipient's
+#'   `team` and `player_id` (`NA` for a pool, which is spread later) and the
+#'   home-margin amount `hm`. This is the role tagging of the design (D3); the
+#'   explainer reads it. Pool rows carry what was pooled, not who got it.
 #' @param chains Raw chains for the same matches, or `NULL` (the default). With
 #'   chains the allocation is **identical** -- every point still comes from a
 #'   PBP row, and this is asserted by `data-raw/04-analysis/np_chains_ledger_equivalence.R`
@@ -1193,7 +1201,8 @@ build_net_points <- function(pbp_data = NULL,
                              offence_pool_share = NP_OFFENCE_POOL_SHARE,
                              difficulty_terms = NULL,
                              leak_safe = TRUE,
-                             contest_pairs = NULL) {
+                             contest_pairs = NULL,
+                             return_payments = FALSE) {
   spread <- match.arg(spread)
   level <- match.arg(level)
   credit <- match.arg(credit)
@@ -1403,6 +1412,30 @@ build_net_points <- function(pbp_data = NULL,
   gap <- max(abs(rowSums(as.matrix(out[, ..parts])) - out$net_points))
   if (gap > 1e-8) {
     cli::cli_abort("Net points components do not sum to the total (max gap {signif(gap, 3)}).")
+  }
+  if (isTRUE(return_payments)) {
+    pay <- list(
+      l[own_hm != 0, .(match_id, display_order, role = "actor", team, player_id, hm = own_hm)],
+      l[recv_hm != 0, .(match_id, display_order, role = "receiver", team, player_id = next_player, hm = recv_hm)],
+      l[win_hm != 0 & !is.na(winner_pid), .(match_id, display_order, role = "contest_winner", team, player_id = winner_pid, hm = win_hm)],
+      l[team_hm != 0, .(match_id, display_order, role = "attack_pool", team, player_id = NA_character_, hm = team_hm)]
+    )
+    if (!is.null(dp$rows)) {
+      r <- dp$rows
+      pay <- c(pay, list(
+        r[has_winner == TRUE & cede_hm != 0, .(match_id, display_order, role = "ball_winner", team = opp_team, player_id = next_player, hm = cede_hm * psi_row)],
+        r[cede_c_hm != 0 & !is.na(winner_pid) & rho > 0, .(match_id, display_order, role = "contest_winner", team = opp_team, player_id = winner_pid, hm = cede_c_hm * rho)],
+        r[, .(match_id, display_order, role = "defence_pool", team = opp_team, player_id = NA_character_,
+              hm = cede_hm * data.table::fifelse(has_winner, 1 - psi_row, 1) + cede_c_hm * (1 - rho))][hm != 0]
+      ))
+    }
+    pay <- data.table::rbindlist(pay, use.names = TRUE)
+    paid <- sum(pay$hm); owed <- sum(l$hm)
+    if (abs(paid - owed) > 1e-6) {
+      cli::cli_abort("Payment table does not rebuild the ledger: paid {round(paid, 4)}, ledger {round(owed, 4)}.")
+    }
+    data.table::setorder(pay, match_id, display_order, role)
+    data.table::setattr(out, "np_payments", pay)
   }
   data.table::setattr(out, "np_params",
                       list(defensive_share = defensive_share,

@@ -729,3 +729,31 @@ test_that("a contest the defence won but the attack regathered pays the oppositi
                tolerance = 1e-10)
   expect_equal(sum(np2$net_points_hm), unname(sum(NP_FIXTURE_LEDGER_HM)), tolerance = 1e-10)
 })
+
+# ---- the payment table rebuilds the ledger ------------------------------------
+test_that("return_payments gives one row per act and recipient that sums to the ledger", {
+  f <- np_fixture()
+  terms <- np_terms_fixture()
+  terms[display_order == 3, `:=`(contested = TRUE, cont_desc = "Spoil",
+                                 cont_surprise = -1.5, ground_surprise = 5.0,
+                                 def_win = TRUE, winner_pid = "p3")]
+  np <- suppressMessages(build_net_points(
+    f$pbp, f$stats, f$results, credit = "difficulty", difficulty_terms = terms,
+    reconcile = FALSE, spread = "tog", return_payments = TRUE))
+  pay <- attr(np, "np_payments")
+  expect_true(data.table::is.data.table(pay))
+  expect_setequal(unique(pay$role), c("actor", "receiver", "contest_winner", "ball_winner",
+                                      "attack_pool", "defence_pool"))
+  # the table is the ledger, re-expressed
+  expect_equal(sum(pay$hm), unname(sum(NP_FIXTURE_LEDGER_HM)), tolerance = 1e-10)
+  # and it names the spoiler on row 3 at his share
+  r3 <- pay[match_id == "M1" & display_order == 3]
+  expect_equal(r3[role == "contest_winner"]$player_id, "p3")
+  expect_equal(r3[role == "contest_winner"]$team, "Away FC")
+  expect_equal(r3[role == "contest_winner"]$hm, 0.7 * -1.5 * 0.5, tolerance = 1e-9)
+  # per row, named payments + pools = the row's value
+  led <- suppressMessages(torp:::.np_build_ledger(f$pbp))
+  chk <- merge(pay[, .(paid = sum(hm)), by = .(match_id, display_order)],
+               led[, .(match_id, display_order, hm)], by = c("match_id", "display_order"))
+  expect_equal(chk$paid, chk$hm, tolerance = 1e-9)
+})

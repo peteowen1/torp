@@ -21,7 +21,8 @@ build_net_points(
   offence_pool_share = NP_OFFENCE_POOL_SHARE,
   difficulty_terms = NULL,
   leak_safe = TRUE,
-  contest_pairs = NULL
+  contest_pairs = NULL,
+  return_payments = FALSE
 )
 }
 \arguments{
@@ -88,6 +89,13 @@ seasons. With a single season the fit is in-sample and says so.}
 
 \item{contest_pairs}{Precomputed output of \code{.np_contest_pairs()} for
 \code{spread = "context"}; computed from \code{chains} when absent.}
+
+\item{return_payments}{Attach the per-act payment table as attribute
+\code{np_payments}: one row per (act, recipient) with \code{role} (actor, receiver,
+contest_winner, ball_winner, attack_pool, defence_pool), the recipient's
+\code{team} and \code{player_id} (\code{NA} for a pool, which is spread later) and the
+home-margin amount \code{hm}. This is the role tagging of the design (D3); the
+explainer reads it. Pool rows carry what was pooled, not who got it.}
 }
 \value{
 A data.table with one row per player-match \strong{that had at least one
