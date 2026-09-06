@@ -542,6 +542,59 @@ add_quarter_vars_dt <- function(dt) {
   }
   dt[, lag_points_row := NULL]
 
+  # A match that ends on a scoring shot never receives its terminating Goal or
+  # Behind row from the feed, so `end_of_chain` stays 0 across that final chain
+  # and its points are never booked. Measured across 2021-2026: 254 of 1,274
+  # matches finished 1 or 6 points short of the official result, every one this
+  # shape, and the running score on the last row is what `build_net_points()`
+  # falls back to for a live match. Book the score on the match's last row when
+  # its chain scored and that chain has booked nothing.
+  #
+  # The guard is CHAIN-scoped, not match-scoped: the boundary is the later of
+  # the last `end_of_chain` and the last booked score, because the orphan
+  # kick-in fix above can book a point inside the trailing material without
+  # closing a chain. Scoping it to the last chain-end alone would let one orphan
+  # kick-in suppress this fix for the rest of the match (a review found the
+  # case; it does not occur in 2021-2026, which is why both versions measure
+  # identically at 1,263 of 1,274 exact and zero regressions).
+  #
+  # Deliberately narrow on what it STAMPS: `end_of_chain` and `scoring_team_id`
+  # are not touched, because both feed EPV features and the defect is an
+  # unbooked score, not a mis-drawn chain. Leaving `scoring_team_id` alone also
+  # keeps `pos_points_team_id` NA, and with it the EP training label
+  # (`model_points`), so no model input moves.
+  #
+  # It is NOT free of side effects downstream: `pos_points` below is a
+  # next-observation-carried-backward fill of `points_row` within the quarter, so
+  # booking the last row also fills every previously unbooked row of that final
+  # quarter, and `pos_is_goal` with it. That is the correct value -- those rows
+  # really were followed by that score -- but it is a change to released columns,
+  # not a one-row edit.
+  tail_fix <- dt[, {
+    n <- .N
+    last_end <- suppressWarnings(max(which(end_of_chain == 1L)))
+    last_book <- suppressWarnings(max(which(!is.na(points_row))))
+    bound <- max(if (is.finite(last_end)) last_end else 0L,
+                 if (is.finite(last_book)) last_book else 0L)
+    .(idx = .I[n],
+      fire = final_state[n] %chin% c("goal", "behind", "rushed", "rushedOpp") &&
+        end_of_chain[n] == 0L && bound < n,
+      state = final_state[n], desc = description[n],
+      tid = team_id[n], oid = opp_id[n])
+  }, by = match_id]
+  tail_fix <- tail_fix[fire == TRUE]
+  if (nrow(tail_fix) > 0L) {
+    data.table::set(dt, tail_fix$idx, "points_row",
+                    data.table::fifelse(tail_fix$state == "goal", 6L, 1L))
+    data.table::set(dt, tail_fix$idx, "points_team_id",
+                    data.table::fcase(
+                      tail_fix$state == "rushedOpp", tail_fix$oid,
+                      tail_fix$state == "rushed" & tail_fix$desc == "Spoil", tail_fix$oid,
+                      default = tail_fix$tid))
+    cli::cli_alert_info(
+      "Booked a final-row score in {nrow(tail_fix)} match{?es} whose closing chain had no Goal/Behind row.")
+  }
+
   dt[, `:=`(
     home_points_row = data.table::fifelse(
       !is.na(points_team_id) & points_team_id == home_team_id & !is.na(points_row), points_row, 0L

@@ -755,7 +755,7 @@ EPR_POSITION_SHRINK_PRIOR <- 5
 #'
 #' \strong{Shrinks toward the bucket's own earlier mean, NOT toward zero.} That
 #' distinction is the whole design and it was measured, not assumed
-#' (\code{data-raw/04-analysis/measure_epv_shrink_priors.R}, 2026-07-30).
+#' (\code{data-raw/04-analysis/archive-2026-09-07/measure_epv_shrink_priors.R}, 2026-07-30).
 #' Shrinking toward zero -- what the reverted \code{EPR_POSITION_SHRINK} did --
 #' withholds correction, and every point withheld is a point of positional level
 #' handed back to the published rating. At prior 5 that restored a spread of
@@ -1016,7 +1016,7 @@ RATING_VINTAGE <- "v4"
 #' Corrected 2026-07-27 after an audit of all 18 on-field codes against player
 #' height, the clubs' listed positions, PBP-derived position groups and each
 #' code's on-field statistical profile
-#' (\code{data-raw/04-analysis/lineup_position_taxonomy_audit.R},
+#' (\code{data-raw/04-analysis/archive-2026-09-07/lineup_position_taxonomy_audit.R},
 #' \code{position_source_provenance.R}). Three of the previous assignments were
 #' contradicted by every source:
 #'
@@ -1367,7 +1367,7 @@ EPV_DEF_PRESSURE_WT <- -0.1882
 #' positive.
 #'
 #' \strong{This weight is positive against the measurement, deliberately.} The
-#' fit (\code{data-raw/04-analysis/epv3_ruck_three_way.R}, 1,242 matches) puts an
+#' fit (\code{data-raw/04-analysis/archive-2026-09-07/epv3_ruck_three_way.R}, 1,242 matches) puts an
 #' undirected tap at \strong{-0.0209} per ruck (t -3.5), stable across halves at
 #' -0.0586 / -0.0299: winning a tap you do not direct is worth slightly less than
 #' nothing, because you have committed your ruck and the ball drops into a

@@ -82,6 +82,13 @@ ok <- tryCatch({ piggyback::pb_upload(tf, repo = repo, tag = "ratings-data", ove
   Remedy: re-run this script with the same PROMOTE_V3_FILE and PROMOTE_APPLY=1; it resumes at the manifest step.")
   FALSE })
 if (!ok) quit(status = 1)
-m2 <- read_ratings_manifest()
+# Read the manifest back through a cache-busted URL. read_ratings_manifest()
+# hits the plain release download URL, which GitHub's CDN serves stale for a
+# few minutes after an overwrite -- on the real promotion (2026-09-07) that
+# turned a successful publish into a false "not TRUE" abort AFTER everything
+# had been uploaded correctly.
+m2 <- jsonlite::fromJSON(paste0("https://github.com/", repo,
+        "/releases/download/ratings-data/ratings_manifest.json?cb=",
+        as.integer(Sys.time())), simplifyVector = FALSE)
 stopifnot(identical(m2$canonical, "v4"), identical(m2$vintages$v3$file, "torp_ratings_v3.parquet"))
 say("PROMOTED: canonical v4; v3 preserved byte-identical (md5 ", substr(md5, 1, 8), "). Now merge RATING_VINTAGE <- \"v4\".")

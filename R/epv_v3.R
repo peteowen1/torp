@@ -108,7 +108,7 @@ build_aerial_contests <- function(chains, pbp_data) {
   # five columns explicitly, so each group materialises five vectors instead of
   # the whole table, and `shift(.SD, k)` returns them in .SDcols order — a 1:1
   # match for the names being assigned. Output is byte-identical; verified in
-  # data-raw/04-analysis/epv3_verify_shift_refactor.R.
+  # data-raw/04-analysis/archive-2026-09-07/epv3_verify_shift_refactor.R.
   .shift_stems <- c("description", "player_id", "team_id", "x", "y")
   for (k in 1:6) {
     ch[, (paste0(".f", k, "_", .shift_stems)) :=
