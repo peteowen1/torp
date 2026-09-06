@@ -166,6 +166,7 @@ reference:
       scale to it. Team totals differ by exactly the final margin.
     contents:
       - build_net_points
+      - np_difficulty_terms_for_season
       - check_net_points_conservation
 
   - title: Match Analysis

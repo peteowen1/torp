@@ -22,7 +22,10 @@ build_net_points(
   difficulty_terms = NULL,
   leak_safe = TRUE,
   contest_pairs = NULL,
-  return_payments = FALSE
+  return_payments = FALSE,
+  stoppages = c("exclude", "allocate"),
+  stoppage_baseline = NULL,
+  stoppage_loser_share = NP_STOPPAGE_LOSER_SHARE
 )
 }
 \arguments{
@@ -96,6 +99,19 @@ contest_winner, ball_winner, attack_pool, defence_pool), the recipient's
 \code{team} and \code{player_id} (\code{NA} for a pool, which is spread later) and the
 home-margin amount \code{hm}. This is the role tagging of the design (D3); the
 explainer reads it. Pool rows carry what was pooled, not who got it.}
+
+\item{stoppages}{\code{"exclude"} (the default) drops centre bounces, ball-ups and
+throw-ins as before, so their swing falls into the residual; \code{"allocate"}
+(difficulty credit only) values each at a neutral baseline for its type and
+location and pays the swing to the side that won the first possession
+(rucks by hitouts to advantage, the first-possession player, the pool) and
+against the side that lost it. See \code{NP_STOPPAGE_SPLIT}.}
+
+\item{stoppage_baseline}{Precomputed \code{.np_stoppage_baseline()} table, or
+\code{NULL} to estimate it from the data.}
+
+\item{stoppage_loser_share}{Share of each stoppage swing worn by the losing
+side. See \code{NP_STOPPAGE_LOSER_SHARE}.}
 }
 \value{
 A data.table with one row per player-match \strong{that had at least one
@@ -107,7 +123,9 @@ must join back to the lineup itself. Columns:
 \describe{
 \item{\code{np_direct}}{value from the player's own acts}
 \item{\code{np_defensive_won}}{paid for turnovers he was observed to win}
-\item{\code{np_defensive}}{his share of the pressure pools his team won}
+\item{\code{np_defensive}}{his share of the pressure pools his team won and,
+under \code{stoppages = "allocate"}, of the stoppage pools (each side's
+pool slice of every stoppage swing)}
 \item{\code{np_ceded}}{the part of his own turnover debit that was paid to the
 opposition instead of to him. Read the SIGN carefully: this is a
 positive number that REDUCES his debit, because the debit itself is
@@ -115,6 +133,9 @@ already in \code{np_direct} at full size and this cancels \code{defensive_share}
 of it. It is not a penalty column.}
 \item{\code{np_contest_won}}{paid for contests he won against a kick (a
 spoil, an intercept mark), difficulty credit only}
+\item{\code{np_stoppage}}{stoppage swings paid to him as a ruck or as the
+first-possession player, both signs (zero unless
+\code{stoppages = "allocate"})}
 \item{\code{np_team}}{his share of his own team's offence pools (zero under
 \code{credit = "flat"})}
 \item{\code{np_residual}}{his share of the unexplained margin}

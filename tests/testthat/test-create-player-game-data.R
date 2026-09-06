@@ -190,3 +190,34 @@ test_that("load_player_game_data has correct function signature", {
   fn_args <- names(formals(load_player_game_data))
   expect_true("seasons" %in% fn_args)
 })
+
+test_that("the v4 engine sums to the margin in every match and fills the three channels", {
+  skip_if(is.null(.shared$pbp) || is.null(.shared$player_stats) || is.null(.shared$teams) ||
+            is.null(.shared$chains),
+          "Could not load required data")
+  pgd <- tryCatch(
+    suppressWarnings(create_player_game_data(.shared$pbp, .shared$player_stats, .shared$teams,
+                                             chains = .shared$chains, epv_engine = "v4")),
+    error = function(e) NULL
+  )
+  skip_if(is.null(pgd), "Could not create v4 player game data")
+  pgd <- data.table::as.data.table(pgd)
+  expect_identical(attr(pgd, "epv_engine"), "v4")
+  expect_true(all(pgd$epv_hitout == 0))
+  expect_equal(pgd$epv, pgd$epv_recv + pgd$epv_disp + pgd$epv_spoil, tolerance = 1e-9)
+  expect_equal(pgd$epv, pgd$net_points, tolerance = 1e-9)
+  # the identity that defines v4: home minus away, per match, is the OFFICIAL
+  # margin, exactly (value paid to players with no play-by-play act is
+  # re-spread within their team, so nothing leaves the frame)
+  res <- tryCatch(data.table::as.data.table(load_results(2024)), error = function(e) NULL)
+  skip_if(is.null(res), "Could not load results")
+  pbp <- data.table::as.data.table(.shared$pbp)
+  mg <- res[as.character(match_id) %in% unique(pbp$match_id) & !is.na(home_score),
+            .(match_id = as.character(match_id), margin = home_score - away_score,
+              home = torp_replace_teams(home_team_name))]
+  got <- merge(pgd[, .(match_id, team, epv)], mg, by = "match_id")[
+    , .(diff = sum(epv * ifelse(team == home, 1, -1))), by = match_id]
+  chk <- merge(got, mg, by = "match_id")
+  expect_gt(nrow(chk), 0)
+  expect_equal(chk$diff, chk$margin, tolerance = 1e-6)
+})

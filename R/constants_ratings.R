@@ -115,8 +115,15 @@ EPV_PER_CHANNEL_POINTS_SCALE <- FALSE
 #' 0.0\% of the time. Four channels \code{recv / disp / cont_aerial / cont_stop}.
 #' See \code{../docs/plans/EPV-V3-CHAIN-NATIVE.md}.
 #'
+#' \code{"v4"} is the Net Points ledger (\code{build_net_points()} under
+#' \code{credit = "difficulty"} with stoppages allocated): every player-match
+#' sums, across a match, to the margin. Three channels to start -- own acts,
+#' won back, pools -- carried in the \code{disp / recv / spoil} columns so EPR's
+#' plumbing is unchanged; \code{hitout} is zero. See
+#' \code{../docs/plans/EPV-V4-CREDIT-RULES.md}.
+#'
 #' \strong{Flipping this changes every published rating.} It is a flag, not a
-#' tunable: v3 has to clear the gates in that plan's section 6 first.
+#' tunable: an engine has to clear the gates first (\code{docs/HOW-WE-WORK.md}).
 #' @keywords internal
 EPV_ENGINE <- "v3"
 
@@ -367,15 +374,15 @@ EPV_CHANNEL_SCALE_KEYS <- c(epv_recv = "recv", epv_disp = "disp",
 #' measurement on the 4-channel v3 build gave 14.38 / 24.35 / 11.37, so these
 #' are stable to the structure change.
 #' @keywords internal
-EPR_PRIOR_GAMES_RECV <- if (identical(EPV_ENGINE, "v3")) 14.38 else 3.0000
+EPR_PRIOR_GAMES_RECV <- if (EPV_ENGINE %in% c("v3", "v4")) 14.38 else 3.0000
 
 #' Prior games constant for disposal ratings. See \code{EPR_PRIOR_GAMES_RECV}.
 #' @keywords internal
-EPR_PRIOR_GAMES_DISP <- if (identical(EPV_ENGINE, "v3")) 24.33 else 3.0000
+EPR_PRIOR_GAMES_DISP <- if (EPV_ENGINE %in% c("v3", "v4")) 24.33 else 3.0000
 
 #' Prior games constant for the spoil/contest slot. See \code{EPR_PRIOR_GAMES_RECV}.
 #' @keywords internal
-EPR_PRIOR_GAMES_SPOIL <- if (identical(EPV_ENGINE, "v3")) 11.09 else 3.0000
+EPR_PRIOR_GAMES_SPOIL <- if (EPV_ENGINE %in% c("v3", "v4")) 11.09 else 3.0000
 
 #' Sub-component scales applied BEFORE the two contest channels merge
 #'
@@ -486,6 +493,9 @@ PSV_POINTS_SCALE <- 1.579
 #' constant no longer a constant.
 #' @keywords internal
 .epr_prior_points_scale <- function(slot) {
+  # v4 is already in margin points -- the ledger sums to the margin -- so no
+  # per-channel scale applies
+  if (identical(EPV_ENGINE, "v4")) return(1)
   if (identical(EPV_ENGINE, "v3") && exists("EPV3_POINTS_SCALE")) {
     EPV3_POINTS_SCALE[[slot]]
   } else {
@@ -1796,3 +1806,51 @@ NP_BALL_WINNER_SHARE_BY_ACT_DEFAULT <- 0.30
 #' test, not results.
 #' @keywords internal
 NP_CONTEXT_WEIGHTS <- c(pair = 0.40, acts = 0.30, mirror = 0.20, tog = 0.10)
+
+#' Stoppage rows the ledger can allocate (D15)
+#'
+#' Centre bounces, ball-ups and boundary throw-ins carry no team, so their value
+#' -- about 30 points of gross swing a match in 2026 -- fell into the
+#' reconciliation residual and was spread by time on ground. Under
+#' `stoppages = "allocate"` each is valued at a neutral baseline for its type and
+#' location and the swing to the first possession is paid to the side that won
+#' it (rucks, the first-possession player, the pool) and worn by the side that
+#' lost it.
+#' @keywords internal
+NP_STOPPAGE_DESCS <- c("Centre Bounce", "Ball Up Call", "Out of Bounds")
+
+#' First-possession descriptions that name a hitout, and the ruck's own gather
+#' @keywords internal
+NP_STOPPAGE_HITOUT_DESCS <- "Gather From Hitout"
+
+#' @rdname NP_STOPPAGE_HITOUT_DESCS
+#' @keywords internal
+NP_STOPPAGE_RUCK_OWN_DESCS <- "Ruck Hard Ball Get"
+
+#' Share of a stoppage swing worn by the side that lost it
+#'
+#' The swing is one quantity in the home-margin frame: what the winning side is
+#' credited and what the losing side is debited must add to it, exactly as a
+#' turnover's blame and credit do. 0.5 by symmetry -- a lost hitout is as much
+#' the loser's doing as the winner's. Not identifiable from conservation.
+#' @keywords internal
+NP_STOPPAGE_LOSER_SHARE <- 0.50
+
+#' How a side's half of a stoppage swing splits, by how the ball came out (D15)
+#'
+#' Pete's splits, 2026-09-06: a gather from a hitout is mostly the tap; a ground
+#' ball or free is mostly the player who won it; a ruck's own hard-ball get is
+#' his. `ruck` is shared between a team's rucks by `hitouts_to_advantage` that
+#' match (winning side) or `ruck_contests - hitouts` (losing side). With no ruck
+#' credited on a side, that share joins its pool. All (Y) defaults for the
+#' year-over-year test.
+#' @keywords internal
+NP_STOPPAGE_SPLIT <- list(
+  hitout   = c(ruck = 0.50, player = 0.30, pool = 0.20),
+  ruck_own = c(ruck = 0.00, player = 0.80, pool = 0.20),
+  ground   = c(ruck = 0.20, player = 0.50, pool = 0.30)
+)
+
+#' Width, in metres, of the location bands the stoppage baseline is averaged in
+#' @keywords internal
+NP_STOPPAGE_BAND_M <- 20

@@ -31,13 +31,19 @@ np_fixture <- function() {
     # running score, booked on the row AFTER the scoring act as PBP does;
     # constant here so no row is terminal by score. The scoring test below
     # moves it.
-    home_points = 0L, away_points = 0L
+    home_points = 0L, away_points = 0L,
+    # frame, location and state for the stoppage rule; inert under "exclude"
+    home = c(1L, 1L, 1L, 0L, 0L, 1L, 0L, 0L, 1L, 0L, 1L, 1L),
+    x = 0, exp_pts = 0
   )
   stats <- data.table::data.table(
     match_id = c(rep("M1", 4), rep("M2", 4)),
     player_id = rep(c("p1", "p2", "p3", "p4"), 2),
     position = c("FF", "C", "FB", "WL", "FF", "C", "FB", "WL"),
     time_on_ground_percentage = c(90, 80, 100, 70, 90, 80, 100, 70),
+    hitouts_to_advantage = c(2, 0, 3, 0, 2, 0, 3, 0),
+    ruck_contests = c(5, 0, 6, 0, 5, 0, 6, 0),
+    hitouts = c(2, 0, 3, 0, 2, 0, 3, 0),
     tackles = c(1, 2, 3, 4, 1, 2, 3, 4),
     pressure_acts = c(5, 6, 7, 8, 5, 6, 7, 8),
     spoils = c(0, 1, 2, 3, 0, 1, 2, 3),
@@ -742,4 +748,141 @@ test_that("return_payments gives one row per act and recipient that sums to the 
   chk <- merge(pay[, .(paid = sum(hm)), by = .(match_id, display_order)],
                led[, .(match_id, display_order, hm)], by = c("match_id", "display_order"))
   expect_equal(chk$paid, chk$hm, tolerance = 1e-9)
+})
+
+# ---- stoppages: baseline, repricing, rucks (D15) -------------------------------
+np_stoppage_fixture <- function() {
+  f <- np_fixture()
+  pbp <- data.table::copy(f$pbp)
+  pbp[, display_order := display_order * 10L]
+  # M2 between row 20 (Handball, Away p3, -1.0) and row 30 (Kick, Home p2, 2.5):
+  # a ball-up whose state is filled from the eventual winner (home), then a
+  # Gather From Hitout by Home p2 -- the ruck (p1 has the hitouts) tapped it.
+  stop <- data.table::data.table(
+    match_id = "M2", display_order = 25L, description = "Ball Up Call",
+    team = NA_character_, home_away = NA_character_, player_id = NA_character_,
+    delta_epv = 0.6, home_points = 0L, away_points = 0L, home = 1L, x = 10, exp_pts = 0.4)
+  # the first possession becomes a Gather From Hitout (was a Kick) with the
+  # same value, so the ledger total moves only by the stoppage row itself
+  pbp[match_id == "M2" & display_order == 30L, description := "Gather From Hitout"]
+  # M1's deliberately absurd +99 centre bounce is a stoppage too; it belongs to
+  # the exclusion test, not to this one
+  pbp <- pbp[!(match_id == "M1" & display_order == 60L)]
+  pbp <- data.table::rbindlist(list(pbp, stop), use.names = TRUE)
+  data.table::setorder(pbp, match_id, display_order)
+  list(pbp = pbp, stats = f$stats, results = f$results)
+}
+
+test_that("stoppage rows are excluded by default and allocated on request", {
+  f <- np_stoppage_fixture()
+  # baseline injected: this ball-up is worth 0.1 to the home side at neutral
+  bl <- data.table::data.table(description = "Ball Up Call", band = 0, baseline = 0.1, n = 1L)
+  ex <- suppressMessages(build_net_points(f$pbp, f$stats, f$results, reconcile = FALSE))
+  expect_true(all(ex$np_stoppage == 0))
+  # the same difficulty build with and without the stoppage, so pool sums can
+  # be compared net of the turnover pools that exist either way
+  ex_d <- suppressMessages(build_net_points(
+    f$pbp, f$stats, f$results, credit = "difficulty", difficulty_terms = np_terms_fixture(),
+    reconcile = FALSE, spread = "tog", offence_pool_share = 0))
+  al <- suppressMessages(build_net_points(
+    f$pbp, f$stats, f$results, credit = "difficulty", difficulty_terms = np_terms_fixture(),
+    reconcile = FALSE, spread = "tog", offence_pool_share = 0, stoppages = "allocate",
+    stoppage_baseline = bl, stoppage_loser_share = 0.5))
+  # the ledger now carries the stoppage row's raw value, and only that: the
+  # repricing below is a transfer between two rows of the same match and can
+  # never move a total, so this line says nothing about shares or direction
+  # (those are asserted row by row further down)
+  expect_equal(sum(al$net_points_hm) - sum(ex$net_points_hm), 0.6, tolerance = 1e-10)
+  # repricing: adj = baseline - exp_pts * sgn = 0.1 - 0.4 = -0.3. The row before
+  # (Away p3's handball, delta -1.0, so +1.0 in the home frame) is paid +adj =
+  # 0.7; the stoppage swing is 0.6 - adj = 0.9: the home side won the ball at
+  # 0.9 above neutral.
+  led <- suppressMessages(torp:::.np_build_ledger(f$pbp, stoppages = "allocate",
+                                                  stoppage_baseline = bl))
+  expect_equal(led[match_id == "M2" & display_order == 20L]$hm, 0.7, tolerance = 1e-10)
+  expect_equal(led[match_id == "M2" & display_order == 25L]$hm, 0.9, tolerance = 1e-10)
+  expect_true(led[match_id == "M2" & display_order == 25L]$is_stoppage)
+  # split: winner half 0.45 (hitout: ruck 0.5 / player 0.3 / pool 0.2), loser
+  # half 0.45 (rucks 0.5 by contests lost, pool 0.5). Home rucks: p1 has the
+  # hitouts_to_advantage (2), p2 none. Away rucks by ruck_contests - hitouts:
+  # p3 (6 - 3 = 3), p4 (0).
+  m2 <- al[match_id == "M2"]
+  expect_equal(m2[player_id == "p1"]$np_stoppage, 0.45 * 0.5, tolerance = 1e-9)   # ruck credit
+  expect_equal(m2[player_id == "p2"]$np_stoppage, 0.45 * 0.3, tolerance = 1e-9)   # gatherer
+  # p3 is away: the losing ruck wears 0.45 * 0.5 in the home frame = -0.225 own
+  expect_equal(m2[player_id == "p3"]$np_stoppage, -0.45 * 0.5, tolerance = 1e-9)
+  # p4 has no act in M2 and no stoppage payment, so no row at all
+  expect_equal(nrow(m2[player_id == "p4"]), 0)
+  # pools, net of the turnover pools both builds share: home 0.45 * 0.2 = 0.09,
+  # away 0.45 * 0.5 = 0.225 (home frame, so negative in Away's own frame)
+  e2 <- ex_d[match_id == "M2"]
+  expect_equal(m2[team == "Home FC", sum(np_defensive)] - e2[team == "Home FC", sum(np_defensive)],
+               0.09, tolerance = 1e-9)
+  expect_equal(m2[team == "Away FC", sum(np_defensive)] - e2[team == "Away FC", sum(np_defensive)],
+               -0.225, tolerance = 1e-9)
+  # and the payment table rebuilds the ledger, stoppage rows included
+  al2 <- suppressMessages(build_net_points(
+    f$pbp, f$stats, f$results, credit = "difficulty", difficulty_terms = np_terms_fixture(),
+    reconcile = FALSE, spread = "tog", offence_pool_share = 0, stoppages = "allocate",
+    stoppage_baseline = bl, return_payments = TRUE))
+  pay <- attr(al2, "np_payments")
+  expect_equal(sum(pay$hm), sum(al2$net_points_hm), tolerance = 1e-9)
+  expect_setequal(pay[display_order == 25L]$role, c("stoppage_ruck", "stoppage_player", "stoppage_pool"))
+})
+
+test_that("allocating stoppages under the flat rule is refused", {
+  f <- np_stoppage_fixture()
+  expect_error(suppressMessages(build_net_points(f$pbp, f$stats, f$results, stoppages = "allocate")),
+               "difficulty")
+})
+
+test_that("consecutive stoppages telescope, and a stoppage that opens a match keeps its swing", {
+  f <- np_stoppage_fixture()
+  pbp <- data.table::copy(f$pbp)
+  # a second ball-up straight after the first (no possession between)
+  second <- pbp[match_id == "M2" & display_order == 25L]
+  second[, `:=`(display_order = 27L, delta_epv = 0.2, exp_pts = 0.3)]
+  # and a centre bounce as the very first row of M1 (home wins it: +0.8)
+  opener <- data.table::copy(second)[, `:=`(match_id = "M1", display_order = 5L,
+                                            description = "Centre Bounce", delta_epv = 0.8,
+                                            exp_pts = 0, x = 0)]
+  pbp <- data.table::rbindlist(list(pbp, second, opener), use.names = TRUE)
+  data.table::setorder(pbp, match_id, display_order)
+  bl <- data.table::data.table(description = c("Ball Up Call", "Centre Bounce"),
+                               band = 0, baseline = c(0.1, 0.05), n = 1L)
+  led <- suppressMessages(torp:::.np_build_ledger(pbp, stoppages = "allocate", stoppage_baseline = bl))
+  raw <- suppressMessages(torp:::.np_build_ledger(pbp, stoppages = "exclude"))
+  m2 <- led[match_id == "M2"]
+  # adj25 = 0.1 - 0.4 = -0.3; adj27 = 0.1 - 0.3 = -0.2. Row 20 takes +adj25,
+  # row 25 takes -adj25 + adj27, row 27 takes -adj27: one payer and one
+  # receiver per adj, and the three rows still sum to the raw 1.0 + 0.6 + 0.2.
+  expect_equal(m2[display_order == 20L]$hm, 1.0 - 0.3, tolerance = 1e-10)
+  expect_equal(m2[display_order == 25L]$hm, 0.6 + 0.3 - 0.2, tolerance = 1e-10)
+  expect_equal(m2[display_order == 27L]$hm, 0.2 + 0.2, tolerance = 1e-10)
+  expect_equal(m2[display_order %in% c(20L, 25L, 27L), sum(hm)], 1.8, tolerance = 1e-10)
+  # the opener has no row before it, so it keeps its raw home-frame value and
+  # nothing is paid to a row that does not exist
+  expect_equal(led[match_id == "M1" & display_order == 5L]$hm, 0.8, tolerance = 1e-10)
+  # and the match totals are exactly the excluded totals plus the raw stoppage values
+  expect_equal(led[, sum(hm)], raw[, sum(hm)] + 0.6 + 0.2 + 0.8, tolerance = 1e-10)
+})
+
+# ---- the v4 engine's channel mapping ----------------------------------------
+test_that("the v4 channels are own / won / pools and nothing else", {
+  np <- data.table::data.table(
+    player_id = c("a", "b"), match_id = "M",
+    np_direct = c(5, -1), np_ceded = c(-2, 0.5), np_defensive_won = c(1, 0),
+    np_contest_won = c(0.5, 0), np_stoppage = c(0, 2), np_defensive = c(0.3, 0.2),
+    np_team = c(0.1, 0.1), np_residual = c(0.05, -0.05))
+  np[, net_points := np_direct + np_ceded + np_defensive_won + np_contest_won + np_stoppage +
+                     np_defensive + np_team + np_residual]
+  ch <- torp:::.np_v4_channels(np)
+  expect_equal(ch[player_id == "a"]$np_own, 3)          # 5 - 2: own acts net of what he ceded
+  expect_equal(ch[player_id == "a"]$np_won, 1.5)        # turnover + contest won
+  expect_equal(ch[player_id == "a"]$np_pool, 0.45)      # pools + residual
+  expect_equal(ch[player_id == "b"]$np_won, 2)          # a ruck's stoppage credit is "won"
+  expect_equal(ch$np_own + ch$np_won + ch$np_pool, ch$net_points, tolerance = 1e-12)
+  # a frame whose parts do not add up is refused
+  np[1, np_residual := 9]
+  expect_error(torp:::.np_v4_channels(np), "do not sum")
 })
