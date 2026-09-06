@@ -496,7 +496,8 @@
 #' @param leak_safe Fit each season on strictly earlier seasons.
 #' @return `match_id`, `display_order`, `p_hat`, `decision`, `surprise`.
 #' @keywords internal
-.np_difficulty_terms <- function(pbp_data, chains, leak_safe = TRUE) {
+.np_difficulty_terms <- function(pbp_data, chains, leak_safe = TRUE,
+                                 train_pbp = NULL, train_chains = NULL) {
   de <- build_disposal_events(chains, pbp_data)
   if (nrow(de) == 0) {
     cli::cli_abort("No disposal could be scored for difficulty -- check that {.arg chains} and {.arg pbp_data} overlap.")
@@ -510,7 +511,18 @@
     ))
   }
   seasons <- sort(unique(de$.season))
-  scored <- if (isTRUE(leak_safe) && length(seasons) > 1) {
+  # An explicit training set (the previous season, loaded by the caller) wins
+  # over the within-data season loop: the pipeline scores one season at a time.
+  have_train <- !is.null(train_pbp) && !is.null(train_chains)
+  scored <- if (have_train) {
+    de_tr <- build_disposal_events(train_chains, train_pbp)
+    if (nrow(de_tr) < 20000) {
+      cli::cli_abort("Training data has only {nrow(de_tr)} disposals; refusing to fit the difficulty models on it.")
+    }
+    cli::cli_alert_info(
+      "Difficulty models fitted on {format(nrow(de_tr), big.mark = ',')} training disposals from {paste(sort(unique(substr(de_tr$match_id, 5, 8))), collapse = ', ')}, scoring {paste(seasons, collapse = ', ')}")
+    score_disposals(de, fit_disposal_models(de_tr))
+  } else if (isTRUE(leak_safe) && length(seasons) > 1) {
     data.table::rbindlist(lapply(seasons, function(s) {
       idx <- de$.season < s
       if (sum(idx) < 20000) {
@@ -548,7 +560,13 @@
   if (nrow(cst) > 0) {
     cst[, .season := as.integer(substr(match_id, 5, 8))]
     cseasons <- sort(unique(cst$.season))
-    csc <- if (isTRUE(leak_safe) && length(cseasons) > 1) {
+    csc <- if (have_train) {
+      cst_tr <- build_aerial_contests(train_chains, train_pbp)
+      if (nrow(cst_tr) < 5000) {
+        cli::cli_abort("Training data has only {nrow(cst_tr)} aerial contests; refusing to fit the contest models on it.")
+      }
+      score_contests(cst, fit_contest_models(cst_tr))
+    } else if (isTRUE(leak_safe) && length(cseasons) > 1) {
       data.table::rbindlist(lapply(cseasons, function(s) {
         idx <- cst$.season < s
         if (sum(idx) < 5000) {
@@ -1393,7 +1411,9 @@
 #'   \describe{
 #'     \item{`np_direct`}{value from the player's own acts}
 #'     \item{`np_defensive_won`}{paid for turnovers he was observed to win}
-#'     \item{`np_defensive`}{his share of the pressure pools his team won}
+#'     \item{`np_defensive`}{his share of the pressure pools his team won and,
+#'       under `stoppages = "allocate"`, of the stoppage pools (each side's
+#'       pool slice of every stoppage swing)}
 #'     \item{`np_ceded`}{the part of his own turnover debit that was paid to the
 #'       opposition instead of to him. Read the SIGN carefully: this is a
 #'       positive number that REDUCES his debit, because the debit itself is
@@ -1770,4 +1790,95 @@ check_net_points_conservation <- function(np, tol = 1e-6) {
   cli::cli_alert_success(
     "Net points conserves in all {nrow(chk)} matches (max error {format(max(abs(chk$err)), digits = 3)} points)")
   invisible(chk)
+}
+
+
+#' Difficulty terms for one season, fitted on another (the pipeline's entry point)
+#'
+#' Loads only the columns the models read for the training season, fits, scores
+#' the target season and frees the training data. The default training season
+#' is the one before; the first season we hold chains for (2021) is fitted on
+#' the one after, a reverse fit that touches only that season (D14).
+#'
+#' @param season Season to score.
+#' @param pbp_data,chains The target season's data (loaded when `NULL`).
+#' @param train_season Season to fit on. Defaults to `season - 1`, or
+#'   `season + 1` when `season` is the earliest in `available`.
+#' @param available Seasons chains exist for.
+#' @return `.np_difficulty_terms()` output for `season`.
+#' @export
+np_difficulty_terms_for_season <- function(season, pbp_data = NULL, chains = NULL,
+                                           train_season = NULL,
+                                           available = 2021:get_afl_season()) {
+  season <- as.integer(season)
+  if (is.null(train_season)) {
+    train_season <- if (season <= min(available)) season + 1L else season - 1L
+  }
+  if (is.null(pbp_data)) pbp_data <- load_pbp(season, rounds = TRUE)
+  if (is.null(chains)) chains <- load_chains(season, rounds = TRUE)
+  cli::cli_alert_info("Difficulty terms for {season}: fitting on {train_season}")
+  tr_pbp <- load_pbp(train_season, rounds = TRUE,
+                     columns = c("match_id", "display_order", "exp_pts", "delta_epv"))
+  tr_ch <- load_chains(train_season, rounds = TRUE)
+  on.exit(rm(tr_pbp, tr_ch), add = TRUE)
+  .np_difficulty_terms(pbp_data, chains, leak_safe = FALSE,
+                       train_pbp = tr_pbp, train_chains = tr_ch)
+}
+
+#' Net points as the v4 EPV engine's player-game frame
+#'
+#' The margin each match comes from the official results where they exist and
+#' from the play-by-play's own running score otherwise, so a match in progress
+#' balances to the score so far. The two disagree more than you would think:
+#' on 2026 the booked running score differed from the official result in 24%
+#' of matches, by up to 6 points, so the official margin is the one the ledger
+#' is pinned to and the difference sits in the reconciliation residual.
+#'
+#' @param pbp_data Play-by-play for the matches to rate.
+#' @param player_stats Box-score stats for the same matches.
+#' @param chains Raw chains for the same matches.
+#' @param difficulty_terms Precomputed terms (leak-safe from
+#'   `np_difficulty_terms_for_season()`); fitted in-sample, with a warning,
+#'   when `NULL`.
+#' @param results Official results, or `NULL` to load them for the seasons in
+#'   `pbp_data` (falling back to the running score when that fails).
+#' @return `build_net_points()` output under the v4 rule set.
+#' @keywords internal
+.np_engine_frame <- function(pbp_data, player_stats, chains, difficulty_terms = NULL,
+                             results = NULL) {
+  p <- data.table::as.data.table(pbp_data)
+  need <- c("match_id", "home_team_name", "away_team_name", "home_points", "away_points")
+  miss <- setdiff(need, names(p))
+  if (length(miss)) cli::cli_abort("Play-by-play is missing {.val {miss}} for the v4 engine.")
+  data.table::setorder(p, match_id, display_order)
+  res <- p[, .(home_team_name = torp_replace_teams(home_team_name[1]),
+               away_team_name = torp_replace_teams(away_team_name[1]),
+               home_score = home_points[.N], away_score = away_points[.N]),
+           by = match_id]
+  bad <- res[is.na(home_score) | is.na(away_score)]
+  if (nrow(bad)) cli::cli_abort("{nrow(bad)} match{?es} have no running score on the last play-by-play row.")
+
+  if (is.null(results)) {
+    seasons <- sort(unique(as.integer(substr(res$match_id, 5, 8))))
+    results <- tryCatch(load_results(seasons), error = function(e) {
+      cli::cli_alert_warning("Official results unavailable ({conditionMessage(e)}); using the running score.")
+      NULL
+    })
+  }
+  if (!is.null(results)) {
+    off <- data.table::as.data.table(results)[
+      !is.na(home_score) & !is.na(away_score),
+      .(match_id = as.character(match_id), off_home = home_score, off_away = away_score)]
+    res[off, on = "match_id", `:=`(off_home = i.off_home, off_away = i.off_away)]
+    n_off <- sum(!is.na(res$off_home))
+    n_diff <- res[!is.na(off_home) & (off_home - off_away) != (home_score - away_score), .N]
+    cli::cli_alert_info(
+      "v4 margins: {n_off} of {nrow(res)} matches from official results ({n_diff} differ from the running score), {nrow(res) - n_off} from the running score")
+    res[!is.na(off_home), `:=`(home_score = off_home, away_score = off_away)]
+    res[, c("off_home", "off_away") := NULL]
+  }
+  build_net_points(pbp_data, player_stats, res, chains = chains,
+                   credit = "difficulty", stoppages = "allocate",
+                   difficulty_terms = difficulty_terms,
+                   leak_safe = is.null(difficulty_terms))
 }

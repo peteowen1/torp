@@ -11,7 +11,8 @@ create_player_game_data(
   chains = NULL,
   decay = EPR_DECAY_DEFAULT_DAYS,
   epv_params = NULL,
-  epv_engine = EPV_ENGINE
+  epv_engine = EPV_ENGINE,
+  difficulty_terms = NULL
 )
 }
 \arguments{
@@ -34,6 +35,10 @@ uses \code{default_epv_params()}.}
 constant. Passed explicitly rather than read from the constant inside, so
 a caller can select an engine the global default does not name; the choice
 is recorded on the returned frame as its \code{epv_engine} attribute.}
+
+\item{difficulty_terms}{v4 only: precomputed difficulty terms from
+\code{np_difficulty_terms_for_season()} (leak-safe). Fitted in-sample, with a
+warning, when \code{NULL}.}
 }
 \value{
 A data.table with one row per player per match, containing:

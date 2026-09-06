@@ -115,9 +115,9 @@ default_epv_params <- function() {
 #' @keywords internal
 .frame_epv_engine <- function(x, what = "frame", configured = EPV_ENGINE) {
   eng <- attr(x, "epv_engine")
-  if (is.null(eng) && identical(configured, "v3")) {
+  if (is.null(eng) && configured %in% c("v3", "v4")) {
     cli::cli_warn(c(
-      "The {what} carries no {.field epv_engine} attribute while {.code EPV_ENGINE} is {.val v3}.",
+      "The {what} carries no {.field epv_engine} attribute while {.code EPV_ENGINE} is {.val {configured}}.",
       "x" = "It will be priced as v2. R drops attributes on {.code merge()}/{.code rbind()}/most dplyr verbs, so this is far more likely a lost stamp than a genuine v2 frame.",
       "i" = "Re-attach after the transform that dropped it: {.code data.table::setattr(x, \"epv_engine\", \"v3\")}."
     ))
@@ -588,6 +588,9 @@ centre_epv_by_position <- function(pgd, channels = EPV_LEVEL_CENTRE_CHANNELS) {
 #'   a caller can select an engine the global default does not name; the choice
 #'   is recorded on the returned frame as its \code{epv_engine} attribute.
 #'
+#' @param difficulty_terms v4 only: precomputed difficulty terms from
+#'   `np_difficulty_terms_for_season()` (leak-safe). Fitted in-sample, with a
+#'   warning, when `NULL`.
 #' @return A data.table with one row per player per match, containing:
 #'   identifiers (\code{player_id}, \code{match_id}, \code{season}, \code{round},
 #'   \code{player_name}, \code{team}, \code{opponent}, \code{position_group}, \code{lineup_position}, \code{team_id},
@@ -611,15 +614,19 @@ create_player_game_data <- function(pbp_data = NULL,
                                     chains = NULL,
                                     decay = EPR_DECAY_DEFAULT_DAYS,
                                     epv_params = NULL,
-                                    epv_engine = EPV_ENGINE) {
+                                    epv_engine = EPV_ENGINE,
+                                    difficulty_terms = NULL) {
 
-  if (!epv_engine %in% c("v2", "v3")) {
+  if (!epv_engine %in% c("v2", "v3", "v4")) {
     cli::cli_abort(c(
       "Unknown {.arg epv_engine}: {.val {epv_engine}}",
-      "x" = "Refusing to guess an engine -- expected {.val v2} or {.val v3}."
+      "x" = "Refusing to guess an engine -- expected {.val v2}, {.val v3} or {.val v4}."
     ))
   }
   v3 <- identical(epv_engine, "v3")
+  v4 <- identical(epv_engine, "v4")
+  # v3 and v4 are both chain-native: neither takes the v2 box-score spoil terms
+  chain_native <- v3 || v4
 
   p <- if (is.null(epv_params)) default_epv_params() else epv_params
 
@@ -833,7 +840,7 @@ create_player_game_data <- function(pbp_data = NULL,
     player_id = character(), match_id = character(),
     spoil_epv_ctx = numeric(), spoils_priced = integer()
   )
-  spoil_ctx_dt <- if (v3) empty_spoil_ctx else tryCatch({
+  spoil_ctx_dt <- if (chain_native) empty_spoil_ctx else tryCatch({
     if (is.null(chains)) chains <- load_chains(TRUE)
     compute_spoil_credit(chains, pbp_data,
                          contest_share = p$contest_share %||% (1 / 3))
@@ -992,6 +999,68 @@ create_player_game_data <- function(pbp_data = NULL,
         # old expression whenever EPV3_SUB_SCALE is all 1s.
         epv = epv_recv + epv_disp + epv_spoil + epv_hitout
       )
+  } else if (v4) {
+    # v4: the Net Points ledger (docs/plans/EPV-V4-CREDIT-RULES.md). One value
+    # per player-match that sums, across a match, to the margin. Three
+    # channels, Pete's starting point for EPR: own acts (decisions, surprises
+    # and what he received, net of what his losses ceded), what he won back
+    # (turnovers, contests, stoppages), and his share of the team pools. The
+    # reconciliation residual rides with the pools so the channels sum to the
+    # total exactly. The four column names are kept so EPR's plumbing reads
+    # them unchanged: recv = won, disp = own, spoil = pools, hitout = 0.
+    if (is.null(chains) && is.null(difficulty_terms)) chains <- load_chains(TRUE)
+    np <- .np_engine_frame(pbp_data, player_stats, chains, difficulty_terms)
+    np_dt <- np[, .(player_id, match_id,
+                    np_own = np_direct + np_ceded,
+                    np_won = np_defensive_won + np_contest_won + np_stoppage,
+                    np_pool = np_defensive + np_team + np_residual,
+                    net_points)]
+    # A player with net points but no play-by-play act (a pool share for a sub
+    # who never touched it) has no row in this frame, in any engine. His value
+    # re-spreads across his team-mates in that match by time on ground, so the
+    # frame still sums to the margin; the amount is logged (1.56 points across
+    # 2026, two player-matches).
+    lost <- np_dt[!plyr_gm_df, on = .(player_id, match_id)]
+    if (nrow(lost) > 0) {
+      cli::cli_alert_warning(
+        "v4: {nrow(lost)} player-match{?es} with net points but no play-by-play act ({round(sum(abs(lost$net_points)), 2)} points) re-spread within their team by time on ground.")
+      lost_team <- np[lost, on = .(player_id, match_id), .(match_id, team, v = i.net_points)][
+        , .(v = sum(v)), by = .(match_id, team)]
+      np_dt <- merge(np_dt, np[, .(player_id, match_id, team)], by = c("player_id", "match_id"))
+      np_dt <- np_dt[!lost, on = .(player_id, match_id)]
+      tg <- data.table::as.data.table(player_stats)[, .(player_id, match_id,
+                                                        tog = pmax(time_on_ground_percentage, 1))]
+      np_dt[tg, on = .(player_id, match_id), tog := i.tog]
+      np_dt[is.na(tog), tog := 75]
+      np_dt[lost_team, on = .(match_id, team), v_lost := i.v]
+      np_dt[is.na(v_lost), v_lost := 0]
+      np_dt[, share := v_lost * tog / sum(tog), by = .(match_id, team)]
+      np_dt[, `:=`(np_pool = np_pool + share, net_points = net_points + share)]
+      np_dt[, c("team", "tog", "v_lost", "share") := NULL]
+    }
+    plyr_gm_df <- plyr_gm_df |>
+      dplyr::left_join(as.data.frame(np_dt), by = c("player_id", "match_id")) |>
+      dplyr::mutate(
+        contest_epv = tidyr::replace_na(contest_epv, 0),
+        aerial_target_wins = as.integer(tidyr::replace_na(aerial_target_wins, 0)),
+        aerial_target_losses = as.integer(tidyr::replace_na(aerial_target_losses, 0)),
+        aerial_def_wins = as.integer(tidyr::replace_na(aerial_def_wins, 0)),
+        aerial_def_losses = as.integer(tidyr::replace_na(aerial_def_losses, 0)),
+        spoil_epv_ctx = tidyr::replace_na(spoil_epv_ctx, 0),
+        spoils_priced = as.integer(tidyr::replace_na(spoils_priced, 0)),
+        epv_recv = tidyr::replace_na(np_won, 0),
+        epv_disp = tidyr::replace_na(np_own, 0),
+        epv_spoil = tidyr::replace_na(np_pool, 0),
+        epv_hitout = 0,
+        epv = epv_recv + epv_disp + epv_spoil + epv_hitout,
+        net_points = tidyr::replace_na(net_points, 0),
+        wp_credit = tidyr::replace_na(wp_credit, 0),
+        wp_disp_credit = tidyr::replace_na(wp_disp_credit, 0),
+        wp_recv_credit = tidyr::replace_na(wp_recv_credit, 0)
+      ) |>
+      dplyr::select(-dplyr::any_of(c("np_own", "np_won", "np_pool")))
+    gap <- max(abs(plyr_gm_df$epv - plyr_gm_df$net_points))
+    if (gap > 1e-8) cli::cli_abort("v4 channels do not sum to net points (max gap {signif(gap, 3)}).")
   } else {
   plyr_gm_df <- plyr_gm_df |>
     dplyr::mutate(
@@ -1210,7 +1279,7 @@ create_player_game_data <- function(pbp_data = NULL,
       # v3 only. Kept under any_of() so v2 output keeps its declared schema
       # exactly — column_schema.R would reject the extras on a released frame.
       dplyr::any_of(c("epv_cont_aerial", "epv_cont_stop",
-                      "contests_won", "contests_lost")),
+                      "contests_won", "contests_lost", "net_points")),
       # PBP-derived action counts
       disposals_pbp, receptions,
       # EPV model input stats

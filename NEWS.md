@@ -1,5 +1,32 @@
 # torp 1.4.8
 
+## `EPV_ENGINE = "v4"`: the Net Points ledger as an engine (not yet the default)
+
+`create_player_game_data(epv_engine = "v4")` builds the player-game frame from
+`build_net_points()` under the full v4 rule set (difficulty credit, contest
+split, routing by act, stoppages allocated). Three channels to start, Pete's
+choice for EPR: own acts in `epv_disp`, what he won back (turnovers, contests,
+stoppages) in `epv_recv`, his share of the pools plus the reconciliation
+residual in `epv_spoil`; `epv_hitout` is zero and `epv` equals `net_points`
+exactly. The four column names are kept so EPR's plumbing reads them unchanged;
+EPR's own structure is open (Pete, 2026-09-06). The margin comes from the
+official results, with the play-by-play's running score as the live fallback,
+and every match sums to it (max error 1.6e-14 on 2026). A player with net
+points but no play-by-play act (two player-matches, 1.56 points in 2026) has
+his value re-spread within his team by time on ground, so nothing leaves the
+frame. `np_difficulty_terms_for_season()` fits a season's difficulty and
+contest models on the season before (2021 on 2022) with narrowed loads, for the
+per-season pipeline loop. `data-raw/04-analysis/run_epr_gate_v3v4.R` is the
+fast-gate and face-validity comparison against v3; the default stays `"v3"`
+until that gate is read.
+
+Measured on 2026: the v4 frame builds in 0.4 minutes; correlation with v3's
+`epv` 0.84 (Spearman 0.79); per-player-game sd 3.97 against v3's 4.25.
+
+Data fact found on the way: the play-by-play's booked final score differs from
+the official result in 52 of 213 matches of 2026, always by exactly 1 or 6
+points, because points are booked on the row after the scoring act and a match
+whose last act is a score has no such row.
 ## Net Points: stoppages and ruck credit (D15)
 
 `build_net_points(stoppages = "allocate")` (difficulty credit only) stops dropping

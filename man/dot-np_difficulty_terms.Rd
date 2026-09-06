@@ -4,7 +4,13 @@
 \alias{.np_difficulty_terms}
 \title{Difficulty terms for every scorable disposal: p, decision, surprise}
 \usage{
-.np_difficulty_terms(pbp_data, chains, leak_safe = TRUE)
+.np_difficulty_terms(
+  pbp_data,
+  chains,
+  leak_safe = TRUE,
+  train_pbp = NULL,
+  train_chains = NULL
+)
 }
 \arguments{
 \item{pbp_data}{Play-by-play carrying \code{exp_pts} and \code{delta_epv}.}

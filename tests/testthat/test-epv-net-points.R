@@ -788,7 +788,10 @@ test_that("stoppage rows are excluded by default and allocated on request", {
     f$pbp, f$stats, f$results, credit = "difficulty", difficulty_terms = np_terms_fixture(),
     reconcile = FALSE, spread = "tog", offence_pool_share = 0, stoppages = "allocate",
     stoppage_baseline = bl, stoppage_loser_share = 0.5))
-  # the ledger now carries the stoppage row's value: totals differ by exactly it
+  # the ledger now carries the stoppage row's raw value, and only that: the
+  # repricing below is a transfer between two rows of the same match and can
+  # never move a total, so this line says nothing about shares or direction
+  # (those are asserted row by row further down)
   expect_equal(sum(al$net_points_hm) - sum(ex$net_points_hm), 0.6, tolerance = 1e-10)
   # repricing: adj = baseline - exp_pts * sgn = 0.1 - 0.4 = -0.3. The row before
   # (Away p3's handball, delta -1.0, so +1.0 in the home frame) is paid +adj =
@@ -831,4 +834,35 @@ test_that("allocating stoppages under the flat rule is refused", {
   f <- np_stoppage_fixture()
   expect_error(suppressMessages(build_net_points(f$pbp, f$stats, f$results, stoppages = "allocate")),
                "difficulty")
+})
+
+test_that("consecutive stoppages telescope, and a stoppage that opens a match keeps its swing", {
+  f <- np_stoppage_fixture()
+  pbp <- data.table::copy(f$pbp)
+  # a second ball-up straight after the first (no possession between)
+  second <- pbp[match_id == "M2" & display_order == 25L]
+  second[, `:=`(display_order = 27L, delta_epv = 0.2, exp_pts = 0.3)]
+  # and a centre bounce as the very first row of M1 (home wins it: +0.8)
+  opener <- data.table::copy(second)[, `:=`(match_id = "M1", display_order = 5L,
+                                            description = "Centre Bounce", delta_epv = 0.8,
+                                            exp_pts = 0, x = 0)]
+  pbp <- data.table::rbindlist(list(pbp, second, opener), use.names = TRUE)
+  data.table::setorder(pbp, match_id, display_order)
+  bl <- data.table::data.table(description = c("Ball Up Call", "Centre Bounce"),
+                               band = 0, baseline = c(0.1, 0.05), n = 1L)
+  led <- suppressMessages(torp:::.np_build_ledger(pbp, stoppages = "allocate", stoppage_baseline = bl))
+  raw <- suppressMessages(torp:::.np_build_ledger(pbp, stoppages = "exclude"))
+  m2 <- led[match_id == "M2"]
+  # adj25 = 0.1 - 0.4 = -0.3; adj27 = 0.1 - 0.3 = -0.2. Row 20 takes +adj25,
+  # row 25 takes -adj25 + adj27, row 27 takes -adj27: one payer and one
+  # receiver per adj, and the three rows still sum to the raw 1.0 + 0.6 + 0.2.
+  expect_equal(m2[display_order == 20L]$hm, 1.0 - 0.3, tolerance = 1e-10)
+  expect_equal(m2[display_order == 25L]$hm, 0.6 + 0.3 - 0.2, tolerance = 1e-10)
+  expect_equal(m2[display_order == 27L]$hm, 0.2 + 0.2, tolerance = 1e-10)
+  expect_equal(m2[display_order %in% c(20L, 25L, 27L), sum(hm)], 1.8, tolerance = 1e-10)
+  # the opener has no row before it, so it keeps its raw home-frame value and
+  # nothing is paid to a row that does not exist
+  expect_equal(led[match_id == "M1" & display_order == 5L]$hm, 0.8, tolerance = 1e-10)
+  # and the match totals are exactly the excluded totals plus the raw stoppage values
+  expect_equal(led[, sum(hm)], raw[, sum(hm)] + 0.6 + 0.2 + 0.8, tolerance = 1e-10)
 })

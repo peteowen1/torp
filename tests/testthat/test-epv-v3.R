@@ -12,7 +12,7 @@ test_that("EPV_ENGINE is pinned to the engine we intend to publish", {
 
 test_that("create_player_game_data rejects an unknown engine", {
   expect_error(
-    create_player_game_data(epv_engine = "v4"),
+    create_player_game_data(epv_engine = "v9"),
     "Unknown"
   )
 })

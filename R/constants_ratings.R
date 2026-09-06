@@ -115,8 +115,15 @@ EPV_PER_CHANNEL_POINTS_SCALE <- FALSE
 #' 0.0\% of the time. Four channels \code{recv / disp / cont_aerial / cont_stop}.
 #' See \code{../docs/plans/EPV-V3-CHAIN-NATIVE.md}.
 #'
+#' \code{"v4"} is the Net Points ledger (\code{build_net_points()} under
+#' \code{credit = "difficulty"} with stoppages allocated): every player-match
+#' sums, across a match, to the margin. Three channels to start -- own acts,
+#' won back, pools -- carried in the \code{disp / recv / spoil} columns so EPR's
+#' plumbing is unchanged; \code{hitout} is zero. See
+#' \code{../docs/plans/EPV-V4-CREDIT-RULES.md}.
+#'
 #' \strong{Flipping this changes every published rating.} It is a flag, not a
-#' tunable: v3 has to clear the gates in that plan's section 6 first.
+#' tunable: an engine has to clear the gates first (\code{docs/HOW-WE-WORK.md}).
 #' @keywords internal
 EPV_ENGINE <- "v3"
 
@@ -367,15 +374,15 @@ EPV_CHANNEL_SCALE_KEYS <- c(epv_recv = "recv", epv_disp = "disp",
 #' measurement on the 4-channel v3 build gave 14.38 / 24.35 / 11.37, so these
 #' are stable to the structure change.
 #' @keywords internal
-EPR_PRIOR_GAMES_RECV <- if (identical(EPV_ENGINE, "v3")) 14.38 else 3.0000
+EPR_PRIOR_GAMES_RECV <- if (EPV_ENGINE %in% c("v3", "v4")) 14.38 else 3.0000
 
 #' Prior games constant for disposal ratings. See \code{EPR_PRIOR_GAMES_RECV}.
 #' @keywords internal
-EPR_PRIOR_GAMES_DISP <- if (identical(EPV_ENGINE, "v3")) 24.33 else 3.0000
+EPR_PRIOR_GAMES_DISP <- if (EPV_ENGINE %in% c("v3", "v4")) 24.33 else 3.0000
 
 #' Prior games constant for the spoil/contest slot. See \code{EPR_PRIOR_GAMES_RECV}.
 #' @keywords internal
-EPR_PRIOR_GAMES_SPOIL <- if (identical(EPV_ENGINE, "v3")) 11.09 else 3.0000
+EPR_PRIOR_GAMES_SPOIL <- if (EPV_ENGINE %in% c("v3", "v4")) 11.09 else 3.0000
 
 #' Sub-component scales applied BEFORE the two contest channels merge
 #'
@@ -486,6 +493,9 @@ PSV_POINTS_SCALE <- 1.579
 #' constant no longer a constant.
 #' @keywords internal
 .epr_prior_points_scale <- function(slot) {
+  # v4 is already in margin points -- the ledger sums to the margin -- so no
+  # per-channel scale applies
+  if (identical(EPV_ENGINE, "v4")) return(1)
   if (identical(EPV_ENGINE, "v3") && exists("EPV3_POINTS_SCALE")) {
     EPV3_POINTS_SCALE[[slot]]
   } else {

@@ -123,7 +123,9 @@ must join back to the lineup itself. Columns:
 \describe{
 \item{\code{np_direct}}{value from the player's own acts}
 \item{\code{np_defensive_won}}{paid for turnovers he was observed to win}
-\item{\code{np_defensive}}{his share of the pressure pools his team won}
+\item{\code{np_defensive}}{his share of the pressure pools his team won and,
+under \code{stoppages = "allocate"}, of the stoppage pools (each side's
+pool slice of every stoppage swing)}
 \item{\code{np_ceded}}{the part of his own turnover debit that was paid to the
 opposition instead of to him. Read the SIGN carefully: this is a
 positive number that REDUCES his debit, because the debit itself is
