@@ -1,3 +1,23 @@
+# torp 1.5.1
+
+## Rating vintage promoted to v4
+
+`RATING_VINTAGE` is now `"v4"`. The 1.5.0 engine flip changed every rating-defining
+constant the manifest records without bumping the vintage, so
+`check_vintage_alignment()` refused the first scheduled ratings run on `main`
+(2026-09-06 13:25 UTC: `EPV_ENGINE: manifest "v3" vs live "v4"` and nine more
+drifted constants). That is the guard doing its job; this release is the bump it
+asked for. Promotion follows the v3 recipe in
+`data-raw/03-ratings/promote_v4_vintage.R`: the published v3 file is re-uploaded
+as `torp_ratings_v3.parquet` byte for byte (md5-checked), the manifest's v3 entry
+points at it, a v4 entry carries the live constants, and canonical moves to v4
+before this constant lands on `main`.
+
+Also: `data-raw/04-analysis/np_conversion_persistence.R` measures whether the
+goal-kicker's conversion credit repeats year to year before anyone moves it to the
+team pool. It does (r 0.60 over 358 players, 0.50 within key forwards; 2025
+conversion predicts 2026 total one for one), so it stays with the kicker (D18).
+
 # torp 1.5.0
 
 ## EPV_ENGINE flipped to "v4": Net Points is the published EPV
