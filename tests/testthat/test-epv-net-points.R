@@ -617,81 +617,67 @@ test_that("a contest the attack won pays the same-team winner directly", {
   expect_equal(sum(np$net_points_hm), unname(sum(NP_FIXTURE_LEDGER_HM)), tolerance = 1e-10)
 })
 
-
 # ---- routing by act and the context spread (D11, D12) -------------------------
-
 test_that("under difficulty the ball-winner's share follows what he did", {
-
   f <- np_fixture()
-
   # M1 row 3: p1 turns it over to p3, whose next act is an Uncontested Mark
-
   # (0.80 by act) -- the flat rule would pay ball_winner_share.
-
   np <- suppressMessages(build_net_points(
-
     f$pbp, f$stats, f$results, credit = "difficulty",
-
     difficulty_terms = np_terms_fixture(), reconcile = FALSE, spread = "tog",
-
     ball_winner_share = 0.6, blame_share = 0.3, offence_pool_share = 0))
-
   p3 <- np[match_id == "M1" & player_id == "p3"]
-
   # ceded on row 3 = 0.7 * 3.5 = 2.45; an intercept mark takes 80% of it
-
   expect_equal(p3$np_defensive_won, -0.8 * 2.45, tolerance = 1e-9)
-
   expect_equal(sum(np$net_points_hm), unname(sum(NP_FIXTURE_LEDGER_HM)), tolerance = 1e-10)
-
 })
-
-
 
 test_that("the context spread conserves and honours an observed pairing", {
-
   f <- np_fixture()
-
   # Away FC in M1 is p3 (FB, 100% TOG, 3 tackles ...) and p4 (WL, 70%).
-
   # A pairing says p4 was the one contesting p1's kicks.
-
   pairs <- data.table::data.table(match_id = "M1", att = "p1", def = "p4", n = 3L)
-
   base <- suppressMessages(build_net_points(
-
     f$pbp, f$stats, f$results, reconcile = FALSE, spread = "context",
-
     ball_winner_share = 0, defensive_share = 1))
-
   paired <- suppressMessages(build_net_points(
-
     f$pbp, f$stats, f$results, reconcile = FALSE, spread = "context",
-
     ball_winner_share = 0, defensive_share = 1, contest_pairs = pairs))
-
   for (np in list(base, paired)) {
-
     expect_equal(sum(np$net_points_hm), unname(sum(NP_FIXTURE_LEDGER_HM)), tolerance = 1e-10)
-
   }
-
   # p1's turnovers in M1 pool to Away FC; with the pairing, p4's share of
-
-  # those pools rises and p3's falls, and the pair sums are unchanged
-
+  # those pools rises and p3's falls (compared in size: away players read the
+  # pool in their own frame), and the team sum is unchanged
   b <- base[match_id == "M1"]; q <- paired[match_id == "M1"]
-
   expect_gt(abs(q[player_id == "p4"]$np_defensive), abs(b[player_id == "p4"]$np_defensive))
-
   expect_lt(abs(q[player_id == "p3"]$np_defensive), abs(b[player_id == "p3"]$np_defensive))
-
   expect_equal(q[team == "Away FC", sum(np_defensive)], b[team == "Away FC", sum(np_defensive)],
-
                tolerance = 1e-10)
-
+  # And the exact weights, from the constants, so a mislabelled component would
+  # fail (review, 2026-09-06). The only Away pool in M1 is p1's row-3 turnover
+  # (3.0, all of it pooled). p3 is FB (p1 is FF, so p3 is the mirror), TOG 100,
+  # defensive acts 3+7+2+1+1 = 14; p4 is WL, TOG 70, acts 4+8+3+1+1 = 17.
+  cw <- NP_CONTEXT_WEIGHTS
+  w3 <- cw[["acts"]] * 14 / 31 + cw[["mirror"]] * 1 + cw[["tog"]] * 100 / 170
+  w4 <- cw[["acts"]] * 17 / 31 + cw[["mirror"]] * 0 + cw[["tog"]] * 70 / 170
+  expect_equal(b[player_id == "p4"]$np_defensive, -3.0 * w4 / (w3 + w4), tolerance = 1e-9)
+  expect_equal(b[player_id == "p3"]$np_defensive, -3.0 * w3 / (w3 + w4), tolerance = 1e-9)
+  w4p <- w4 + cw[["pair"]] * 1
+  expect_equal(q[player_id == "p4"]$np_defensive, -3.0 * w4p / (w3 + w4p), tolerance = 1e-9)
+  # a pairing table with a repeated key is summed, not truncated to its last
+  # row: p4 seen 2 + 1 times and p3 once must equal p4 3, p3 1 (pair shares
+  # 0.75 / 0.25), where truncation would give 1 / 1 (0.5 / 0.5)
+  dup <- data.table::data.table(match_id = "M1", att = "p1", def = c("p4", "p4", "p3"), n = c(2L, 1L, 1L))
+  agg <- data.table::data.table(match_id = "M1", att = "p1", def = c("p4", "p3"), n = c(3L, 1L))
+  run <- function(pr) suppressMessages(build_net_points(
+    f$pbp, f$stats, f$results, reconcile = FALSE, spread = "context",
+    ball_winner_share = 0, defensive_share = 1, contest_pairs = pr))[match_id == "M1"]
+  expect_equal(run(dup)[player_id == "p4"]$np_defensive, run(agg)[player_id == "p4"]$np_defensive,
+               tolerance = 1e-10)
+  w4d <- w4 + cw[["pair"]] * 0.75; w3d <- w3 + cw[["pair"]] * 0.25
+  expect_equal(run(dup)[player_id == "p4"]$np_defensive, -3.0 * w4d / (w3d + w4d), tolerance = 1e-9)
 })
-
 
 # ---- the opposition is the other roster, never the resolution row -------------
 test_that("a contest the defence won but the attack regathered pays the opposition", {

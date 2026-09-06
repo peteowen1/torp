@@ -936,13 +936,18 @@
     # Pete's rule (D12): use as much context as the data gives. Four
     # components, each normalised to sum to 1 across the team, weighted by
     # NP_CONTEXT_WEIGHTS; a component with no support in a pool (no pairing
-    # observed, no mirror on the ground) drops out and the rest renormalise.
+    # observed, no mirror on the ground) contributes nothing and the rest
+    # share the pool pro rata.
     # Pairing evidence outranks the mirror prior, because mirror alone
     # widened the forward/defender gap (EPV-NET-POINTS.md s5).
     cw <- NP_CONTEXT_WEIGHTS
     if (!is.null(pairs) && nrow(pairs) > 0) {
-      pr <- data.table::as.data.table(pairs)[, .(match_id = as.character(match_id),
-                                                 loser_pid = att, player_id = def, n_pair = n)]
+      # Aggregate first: an update-join keeps only the LAST matching row, so a
+      # caller-supplied table with a repeated (match, att, def) key would
+      # silently lose evidence (review finding, 2026-09-06).
+      pr <- data.table::as.data.table(pairs)[, .(n_pair = sum(n)),
+                                             by = .(match_id = as.character(match_id),
+                                                    loser_pid = att, player_id = def)]
       a[pr, on = .(match_id, loser_pid, player_id), n_pair := i.n_pair]
     }
     if (!"n_pair" %in% names(a)) a[, n_pair := NA_real_]
@@ -955,10 +960,12 @@
       c_acts   = data.table::fifelse(s_acts > 0, def_acts / s_acts, 0),
       c_mirror = data.table::fifelse(s_mirror > 0, as.numeric(is_mirror) / s_mirror, 0),
       c_tog    = data.table::fifelse(s_tog > 0, tog / s_tog, 0))]
-    a[, denom := cw[["pair"]] * (s_pair > 0) + cw[["acts"]] * (s_acts > 0) +
-                 cw[["mirror"]] * (s_mirror > 0) + cw[["tog"]] * (s_tog > 0)]
-    a[, w := (cw[["pair"]] * c_pair + cw[["acts"]] * c_acts +
-              cw[["mirror"]] * c_mirror + cw[["tog"]] * c_tog) / pmax(denom, 1e-9)]
+    # No explicit renormalisation for components without support: `wsum`
+    # below divides by the group's total weight, so a dropped component's
+    # share is redistributed pro rata by construction (a per-group constant
+    # divisor here would cancel out -- review, 2026-09-06).
+    a[, w := cw[["pair"]] * c_pair + cw[["acts"]] * c_acts +
+             cw[["mirror"]] * c_mirror + cw[["tog"]] * c_tog]
     n_paired <- data.table::uniqueN(a[s_pair > 0, .SD, .SDcols = grp])
     cli::cli_alert_info(
       "Context spread: {format(n_paired, big.mark = ',')} of {format(data.table::uniqueN(a[, .SD, .SDcols = grp]), big.mark = ',')} pools carry pairing evidence")

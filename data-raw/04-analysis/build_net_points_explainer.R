@@ -35,15 +35,21 @@ stopifnot(is.null(get_local_data_dir()))
 
 MID    <- Sys.getenv("NP_MATCH", unset = "CD_M20260142602")
 PLAYER <- Sys.getenv("NP_PLAYER", unset = "Papley")
+CREDIT <- Sys.getenv("NP_CREDIT", unset = "difficulty")
 HERE   <- "data-raw/04-analysis"
-OUT    <- "pkgdown/assets/net-points.html"
+OUT    <- Sys.getenv("NP_OUT", unset = "pkgdown/assets/net-points.html")
+stopifnot(CREDIT %in% c("flat", "difficulty"))
 say <- function(...) cat(..., "\n", sep = "")
 
 say("=== NET POINTS EXPLAINER ===")
 say("match ", MID, " | player ~", PLAYER)
 
-pbp <- as.data.table(load_pbp(2026, rounds = TRUE))
-ps  <- as.data.table(load_player_stats(2026, refresh = TRUE))
+# Two seasons, so the difficulty models that score 2026 are fitted on 2025
+# (leak-safe) rather than on the season being explained.
+SEASONS <- if (identical(CREDIT, "difficulty")) 2025:2026 else 2026
+pbp <- as.data.table(load_pbp(SEASONS, rounds = TRUE))
+ch  <- if (identical(CREDIT, "difficulty")) as.data.table(load_chains(SEASONS)) else NULL
+ps  <- as.data.table(load_player_stats(SEASONS, refresh = TRUE))
 res <- load_results(TRUE)
 pgr <- as.data.table(load_player_game_ratings(seasons = 2026))
 
@@ -76,32 +82,58 @@ PID <- cand$player_id
 pname <- cand$player_name
 
 m   <- pbp[match_id == MID]
-led <- .np_build_ledger(pbp)[match_id == MID]
+led <- .np_build_ledger(pbp, ch)[match_id == MID]
 setorder(led, display_order)
-led[, kind := fcase(
-  !(description %in% NP_DISPOSAL_DESCS), "possession",
-  is.na(next_team),                      "terminal",
-  next_team == team,                     "retained",
-  default =                              "turnover")]
 
-np  <- build_net_points(pbp, ps, res)
+# The page shows what the LEDGER paid, read back from its own payment table,
+# not re-derived here from the shares. An earlier version re-implemented the
+# split in this script and could drift from the metric while still looking
+# authoritative; now the only arithmetic here is a reconciliation.
+np  <- build_net_points(pbp, ps, res, chains = ch, credit = CREDIT, return_payments = TRUE)
+pay <- attr(np, "np_payments")
 row <- np[match_id == MID & player_id == PID]
 stopifnot(nrow(row) == 1)
+flat_row <- if (identical(CREDIT, "difficulty")) {
+  suppressMessages(build_net_points(pbp[match_id == MID], ps, res))[match_id == MID & player_id == PID]
+} else NULL
+
+# difficulty terms (kicker's frame) for the page's explanations
+terms <- if (identical(CREDIT, "difficulty")) attr(np, "np_terms") else NULL
+if (identical(CREDIT, "difficulty") && is.null(terms)) {
+  terms <- .np_difficulty_terms(pbp, ch, leak_safe = TRUE)
+}
 
 ev <- merge(led, m[, .(display_order, x, y, goal_x, venue_length, venue_width,
-                       period, period_seconds)],
+                       period, period_seconds, exp_pts)],
             by = "display_order")
+ev[, kind := fcase(
+  !(description %in% NP_DISPOSAL_DESCS), "act",
+  is.na(next_team),                      "terminal",
+  next_team == team & !is.na(next_player), "retained",
+  next_team == team,                     "terminal",
+  default =                              "turnover")]
+if (!is.null(terms)) {
+  tt <- as.data.table(terms)[match_id == MID]
+  ev[tt, on = "display_order", `:=`(p = i.p_hat, dec = i.decision, sur = i.surprise,
+                                    contested = i.contested, cont_desc = i.cont_desc,
+                                    csur = i.cont_surprise, gsur = i.ground_surprise,
+                                    def_win = i.def_win, winner_pid = i.winner_pid)]
+  ev[is.na(contested), contested := FALSE]
+} else {
+  ev[, `:=`(p = NA_real_, dec = NA_real_, sur = NA_real_, contested = FALSE,
+            cont_desc = NA_character_, csur = NA_real_, gsur = NA_real_,
+            def_win = NA, winner_pid = NA_character_)]
+}
+ev[, scored := is.finite(p) & description %in% NP_DISPOSAL_DESCS]
 
-# A single PBP row can carry TWO roles for the same player -- he disposes and is
-# himself the next actor (a self-pass off the ground). A single fcase picks one
-# and silently drops the other's credit, which broke the reconciliation below by
-# exactly that event's value. Build the three role sets independently.
-own_ev  <- ev[player_id == PID][, role := "own"]
-recv_ev <- ev[kind == "retained" & next_player == PID][, role := "received"]
-won_ev  <- ev[kind == "turnover" & next_player == PID][, role := "won"]
-mine <- rbindlist(list(own_ev, recv_ev, won_ev), use.names = TRUE)
+# His payments, one row per (act, role), from the ledger's own table
+mypay <- pay[match_id == MID & player_id == PID]
+mypay[, role := fcase(role == "actor", "own", role == "receiver", "received",
+                      role == "ball_winner", "won", role == "contest_winner", "contest",
+                      default = role)]
+stopifnot(all(mypay$role %in% c("own", "received", "won", "contest")))
+mine <- merge(mypay[, .(display_order, role, pay_hm = hm)], ev, by = "display_order")
 setorder(mine, display_order, role)
-
 stopifnot(nrow(mine) > 0)
 if (nrow(mine) < 5) {
   cli::cli_warn(c(
@@ -114,11 +146,8 @@ if (nrow(mine) < 5) {
 # goal_x as venue_length/2 - x (clean_pbp.R). goal_x is a DISTANCE to goal (never
 # negative), NOT a side indicator, and treating it as one flips half the pitch.
 #
-# HALF-LENGTH IS PER VENUE, not a constant. An earlier version hardcoded 77.5,
-# which is right only for this 155m ground; venue_length runs 155 to 175 across
-# 2026, so pointing NP_MATCH at almost any other game aborted here. It also has
-# to reach the page, or the ground would be drawn the wrong size and every dot
-# misplaced.
+# HALF-LENGTH IS PER VENUE, not a constant; venue_length runs 155 to 175 across
+# 2026, and it has to reach the page or the ground is drawn the wrong size.
 stopifnot(length(unique(mine$venue_length)) == 1)
 HALF_LEN <- mine$venue_length[1] / 2
 HALF_WID <- mine$venue_width[1] / 2
@@ -126,28 +155,23 @@ stopifnot(all(abs((HALF_LEN - mine$x) - mine$goal_x) < 1e-6))
 say("venue ", mine$venue_length[1], "m x ", mine$venue_width[1],
     "m -- goal at x = ", HALF_LEN)
 
-# FRAME. `hm` is the home-margin frame; build_net_points() reports its components
-# in each player's OWN frame, flipping the sign for away players. Both must be in
-# the same frame or the page shows every event backwards -- which is exactly what
-# happened, and the reconciliation below caught it: for an away player the two
-# sides came out as -1.0875 against +1.0875, an exact sign flip. It went unnoticed
-# on the default match only because Papley is on the home team, where the flip is
-# the identity. This is the single most valuable line in the script.
+# FRAME. Payments and the ledger are in the home-margin frame; the page shows
+# the player's OWN frame, so an away player's numbers flip sign. The terms
+# (before / expectation / after / surprise) are shown in the KICKING side's
+# frame, which is what the explanations describe, so they do not flip.
 SGN <- if (identical(row$home_away, "Home")) 1 else -1
-mine[, hm := hm * SGN]
-
-mine[, contrib := fcase(
-  role == "own" & kind == "retained", hm * (1 - NP_RECEIVER_SHARE),
-  role == "own" & kind == "turnover", hm * (1 - NP_DEFENSIVE_SHARE),
-  role == "own",                      hm,
-  role == "received",                 hm * NP_RECEIVER_SHARE,
-  role == "won",                      hm * NP_DEFENSIVE_SHARE * NP_BALL_WINNER_SHARE,
-  default = 0)]
+mine[, `:=`(hm = hm * SGN, contrib = pay_hm * SGN)]
+mine[, `:=`(before = exp_pts, ev_pts = exp_pts + dec, after = exp_pts + dec + sur)]
+mine[, same_team := !is.na(winner_pid) & winner_pid == PID & (resolve_team == team)]
+mine[, share := fcase(role == "won", .np_ball_winner_share(next_desc),
+                      role == "contest" & !same_team, .np_contest_winner_share(cont_desc),
+                      default = NA_real_)]
 
 # The per-event numbers on the page must add up to the ledger components the
-# function actually produced. Without this the page can drift from the metric
-# while still looking authoritative.
-expect <- row$np_direct + row$np_ceded + row$np_defensive_won
+# function actually produced. np_direct carries his own rows at face value and
+# what he received; np_ceded is the transfer out; the two won columns are what
+# came in. Their sum is exactly what the payment table says he was paid.
+expect <- row$np_direct + row$np_ceded + row$np_defensive_won + row$np_contest_won
 if (abs(sum(mine$contrib) - expect) > 1e-9) {
   cli::cli_abort(c(
     "Per-event contributions do not reconcile to the ledger.",
@@ -174,16 +198,26 @@ payload <- list(
   player = list(id = PID, name = pname, team = row$team,
                 position = pstat$position, tog = pstat$time_on_ground_percentage,
                 published_epv = prat$epv),
-  params = list(receiver_share = NP_RECEIVER_SHARE,
+  params = list(credit = CREDIT,
+                receiver_share = NP_RECEIVER_SHARE,
                 defensive_share = NP_DEFENSIVE_SHARE,
                 ball_winner_share = NP_BALL_WINNER_SHARE,
-                mirror_share = NP_MIRROR_SHARE),
-  totals = list(np_direct = row$np_direct, np_defensive_won = row$np_defensive_won,
-                np_defensive = row$np_defensive, np_ceded = row$np_ceded,
-                np_residual = row$np_residual, net_points = row$net_points),
+                mirror_share = NP_MIRROR_SHARE,
+                blame_share = NP_BLAME_SHARE,
+                offence_pool_share = NP_OFFENCE_POOL_SHARE),
+  totals = c(list(np_direct = row$np_direct, np_defensive_won = row$np_defensive_won,
+                  np_contest_won = row$np_contest_won, np_defensive = row$np_defensive,
+                  np_team = row$np_team, np_ceded = row$np_ceded,
+                  np_residual = row$np_residual, net_points = row$net_points),
+              if (!is.null(flat_row)) list(flat_net_points = flat_row$net_points)),
   events = mine[, .(order = display_order, period, secs = period_seconds,
                     desc = description, kind, role, x = round(x, 1), y = round(y, 1),
-                    hm = round(hm, 3), contrib = round(contrib, 3))]
+                    hm = round(hm, 3), contrib = round(contrib, 3),
+                    scored, p = round(p, 3), before = round(before, 3),
+                    ev = round(ev_pts, 3), after = round(after, 3),
+                    dec = round(dec, 3), sur = round(sur, 3),
+                    contested, cont_desc, csur = round(csur, 3), gsur = round(gsur, 3),
+                    def_win, next_desc, same_team, share)]
 )
 
 tmpl <- paste(readLines(file.path(HERE, "net-points-explainer-template.html"),
@@ -191,7 +225,7 @@ tmpl <- paste(readLines(file.path(HERE, "net-points-explainer-template.html"),
 if (!grepl("__DATA__", tmpl, fixed = TRUE)) {
   cli::cli_abort("Template has no {.code __DATA__} placeholder -- nothing would be injected.")
 }
-html <- sub("__DATA__", toJSON(payload, auto_unbox = TRUE, digits = 4), tmpl, fixed = TRUE)
+html <- sub("__DATA__", toJSON(payload, auto_unbox = TRUE, digits = 4, na = "null"), tmpl, fixed = TRUE)
 stopifnot(!grepl("__DATA__", html, fixed = TRUE))
 
 # Write via a temp file and rename, so a failure part-way through leaves the

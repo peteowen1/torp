@@ -1,5 +1,22 @@
 # torp 1.4.8
 
+## Net Points explainer rebuilt on the v4 rules, plus a defender's page
+
+`data-raw/04-analysis/build_net_points_explainer.R` now reads the ledger's own
+payment table (`build_net_points(return_payments = TRUE)`) instead of
+re-deriving the split, scores under `credit = "difficulty"` by default with the
+models fitted leak-safe on 2025, and explains each act as decision + surprise
+with the kick's chance of being lost. A fourth role, a contest he won, joins
+the page. `NP_PLAYER` / `NP_OUT` / `NP_CREDIT` select the player, the output
+file and the rule set; the site now carries Papley (a forward) and Harris
+Andrews (a defender, 9.35 net points in the same game against a published EPV
+of 3.2) under a Net Points menu.
+
+Review findings on the context spread, fixed: a caller-supplied `contest_pairs`
+table with a repeated key was truncated to its last row by the update-join (now
+summed first), the per-pool renormalising divisor was inert and is gone, and
+the context test now asserts the exact weights from `NP_CONTEXT_WEIGHTS`.
+
 ## Net Points: routing by act, and a context spread (D11, D12)
 
 Step 4 of the v4 credit rules. Under difficulty credit the ball-winner's share
