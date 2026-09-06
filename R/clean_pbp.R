@@ -542,6 +542,43 @@ add_quarter_vars_dt <- function(dt) {
   }
   dt[, lag_points_row := NULL]
 
+  # A match that ends on a scoring shot never receives its terminating Goal or
+  # Behind row from the feed, so `end_of_chain` stays 0 across that final chain
+  # and its points are never booked. Measured across 2021-2026: 254 of 1,274
+  # matches finished 1 or 6 points short of the official result, every one this
+  # shape, and the running score on the last row is what `build_net_points()`
+  # falls back to for a live match. Book the score on the match's last row when
+  # its chain scored and nothing in that chain is booked already.
+  #
+  # Deliberately narrow. `end_of_chain` and `scoring_team_id` are NOT touched:
+  # both feed EPV features, and the defect is an unbooked score, not a mis-drawn
+  # chain. `points_row_na` is left as it was for the same reason the orphan
+  # kick-in fix above leaves it -- it is computed earlier and read by nothing.
+  tail_fix <- dt[, {
+    n <- .N
+    last_end <- suppressWarnings(max(which(end_of_chain == 1L)))
+    last_book <- suppressWarnings(max(which(!is.na(points_row))))
+    end_ref <- if (is.finite(last_end)) last_end else 0L
+    .(idx = .I[n],
+      fire = final_state[n] %chin% c("goal", "behind", "rushed", "rushedOpp") &&
+        end_of_chain[n] == 0L && end_ref < n &&
+        (!is.finite(last_book) || last_book <= end_ref),
+      state = final_state[n], desc = description[n],
+      tid = team_id[n], oid = opp_id[n])
+  }, by = match_id]
+  tail_fix <- tail_fix[fire == TRUE]
+  if (nrow(tail_fix) > 0L) {
+    data.table::set(dt, tail_fix$idx, "points_row",
+                    data.table::fifelse(tail_fix$state == "goal", 6L, 1L))
+    data.table::set(dt, tail_fix$idx, "points_team_id",
+                    data.table::fcase(
+                      tail_fix$state == "rushedOpp", tail_fix$oid,
+                      tail_fix$state == "rushed" & tail_fix$desc == "Spoil", tail_fix$oid,
+                      default = tail_fix$tid))
+    cli::cli_alert_info(
+      "Booked a final-row score in {nrow(tail_fix)} match{?es} whose closing chain had no Goal/Behind row.")
+  }
+
   dt[, `:=`(
     home_points_row = data.table::fifelse(
       !is.na(points_team_id) & points_team_id == home_team_id & !is.na(points_row), points_row, 0L

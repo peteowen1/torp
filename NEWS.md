@@ -1,3 +1,33 @@
+# torp 1.5.2
+
+## The last score of a match is booked
+
+A match that ends on a scoring shot never receives its terminating Goal or Behind
+row from the feed, so `end_of_chain` stayed 0 across that closing chain and its
+points were never booked. The running score on the final play-by-play row was
+therefore 1 or 6 points short of the official result in **254 of 1,274 matches**
+across 2021-2026. `add_quarter_vars_dt()` now books the score on the match's last
+row when its chain scored and nothing in that chain is booked already.
+
+Measured over the same six seasons: matches whose running score matches the
+official result go from 1,009 to 1,263 of 1,274, with **zero** matches changed
+that were already correct. The 11 that remain wrong are separate data gaps, two
+of them play-by-play files missing large blocks of a match.
+
+The change is deliberately narrow. `end_of_chain` and `scoring_team_id` are not
+touched, because both feed EPV features and the defect is an unbooked score, not
+a mis-drawn chain. Published EPV is unaffected either way: `build_net_points()`
+pins to `load_results()` and uses the running score only as a live-match fallback,
+which is exactly the path this repairs.
+
+**This only affects newly cleaned play-by-play.** The `pbp-data` release holds
+already-cleaned frames, so the published history keeps the short scores until
+torpdata regenerates it.
+
+Also: 173 superseded one-off analysis scripts (24,880 lines) moved to
+`data-raw/04-analysis/archive-2026-09-07/`. Nothing in `R/` sources them; the
+roxygen citations that named a moved file by path are repointed.
+
 # torp 1.5.1
 
 ## Rating vintage promoted to v4
