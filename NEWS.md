@@ -1,4 +1,4 @@
-# torp 1.4.8
+# torp 1.4.9
 
 ## `EPV_ENGINE = "v4"`: the Net Points ledger as an engine (not yet the default)
 
@@ -50,6 +50,8 @@ credit correlates 0.65 with hitouts to advantage; rucks rise from 5.3 to 6.2
 net points a game. Split-half reliability 0.680 -> 0.665, so the shares go to
 the year-over-year test with the rest. This replaces the old EPV's flat
 per-hitout constant, whose sign was wrong.
+# torp 1.4.8
+
 ## Net Points explainer rebuilt on the v4 rules, plus a defender's page
 
 `data-raw/04-analysis/build_net_points_explainer.R` now reads the ledger's own
