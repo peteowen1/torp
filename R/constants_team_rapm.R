@@ -15,7 +15,7 @@
 #' position.
 #'
 #' Same unit (games, not TOG-minutes) as the validated
-#' data-raw/04-analysis/rapm_general.R prototype used (docs/plans/
+#' data-raw/04-analysis/archive-2026-09-07/rapm_general.R prototype used (docs/plans/
 #' FABLE-DEFENDER-VALUE-PLAN.md sec7.22), which found MIN_GAMES=10 gave
 #' 888 individually-rated players from 1,182 matches. Swept fresh against
 #' current data volume (docs/plans/AFLM-RAPM-SPM-PLAN.md) rather than

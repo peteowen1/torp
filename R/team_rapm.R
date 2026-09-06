@@ -3,7 +3,7 @@
 # One comp-parameterized engine, not two near-duplicate files. Built
 # 2026-08-24/25: AFLW's box-score RAPM was new territory (no chain data to
 # build a splint-based RAPM from); AFLM's was a productionisation of an
-# already-validated ad-hoc script (data-raw/04-analysis/rapm_general.R,
+# already-validated ad-hoc script (data-raw/04-analysis/archive-2026-09-07/rapm_general.R,
 # 2026-07-27, docs/plans/FABLE-DEFENDER-VALUE-PLAN.md sec7.20-7.22: margin
 # RAPM OOS R^2=0.2561, coefficient split-half reliability 0.784-0.803 --
 # "the most stable rating the program has produced"). Consolidated into one
