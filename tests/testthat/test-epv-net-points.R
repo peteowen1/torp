@@ -302,6 +302,45 @@ test_that("matchup spread refuses to degrade silently when positions are absent"
     "flat spread")
 })
 
+test_that("the default level is sum, and it barely disturbs the raw allocation", {
+  # half_margin was the default until it was measured: its residual runs a median
+  # 2.64 points against a median |net_points| of about the same size (102%), and
+  # it reorders players at Spearman 0.7425 because it spreads by TOG and TOG
+  # varies. "sum" gets the SAME margin identity for a median residual of 0.10.
+  f <- np_fixture()
+  d <- suppressMessages(build_net_points(f$pbp, f$stats, f$results))
+  expect_equal(attr(d, "np_params")$level, "sum")
+
+  hm <- suppressMessages(build_net_points(f$pbp, f$stats, f$results,
+                                          level = "half_margin"))
+  # The STRUCTURAL difference, which is exact and fixture-independent: under
+  # "sum" both teams absorb the same total correction, (margin - total)/2 each,
+  # so it is a pure shift. Under "half_margin" each team absorbs its own
+  # distance from margin/2, which differs between them whenever the levels are
+  # asymmetric -- and on real data they are, by a median of 61.4 points.
+  #
+  # The magnitude claim (median residual 0.10 vs 2.64, Spearman 0.9993 vs
+  # 0.7425) is a real-data result and is recorded in docs/plans/EPV-NET-POINTS.md
+  # rather than asserted here: this fixture's two teams happen to be symmetric,
+  # so the two modes coincide on it exactly. Asserting it here would have been a
+  # test that passes for the wrong reason.
+  sides <- d[, .(r = sum(np_residual)), by = .(match_id, home_away)]
+  h <- sides[home_away == "Home"][order(match_id)]
+  a <- sides[home_away == "Away"][order(match_id)]
+  expect_equal(h$match_id, a$match_id)
+  # Equal and OPPOSITE in own-team frames: in the home-margin frame both sides
+  # take the same +(margin - total)/2, and the away side's sign then flips on
+  # output. Measured here as 9.2 / -9.2 -- if these ever came out equal with the
+  # same sign, the final frame flip would have stopped being applied.
+  expect_equal(h$r, -a$r, tolerance = 1e-10)
+
+  for (x in list(d, hm)) {
+    chk <- x[, .(a = sum(net_points_hm), m = data.table::first(margin)),
+             by = match_id]
+    expect_equal(chk$a, chk$m, tolerance = 1e-10)
+  }
+})
+
 test_that("level = half_margin pins each team to half the margin", {
   f <- np_fixture()
   np <- suppressMessages(build_net_points(f$pbp, f$stats, f$results,

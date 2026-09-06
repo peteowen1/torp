@@ -378,29 +378,45 @@
 #' This term is where home-ground advantage and model error land. It is
 #' deliberately flat so it cannot reorder players within a team.
 #'
-#' @section Two constraints, not one:
-#' Pinning only the per-match SUM leaves the LEVEL free, and the raw ledger's
-#' level is badly behaved: it measures each team's absolute scoring performance
-#' against expectation, so in a high-scoring game both teams can be strongly
-#' positive at once. Measured 2026, one match had home +95.5 and away +32.5 in
-#' their own frames -- a correct 63-point difference sitting on a meaningless
-#' level. `level = "half_margin"` adds the second constraint, turning an
-#' absolute-performance ledger into a margin ledger:
+#' @section Why "sum" is the default, measured rather than assumed:
+#' The identity that matters -- Oliver's, and the one actually asked for -- is
+#' that the whole match sums to the margin, which in own-team frames reads as
+#' `sum(home) - sum(away) == margin`. **Pinning the SUM alone achieves that
+#' exactly.** `level = "half_margin"` adds a second, cosmetic constraint (each
+#' team's total lands on `margin/2`) and it is very expensive. Measured over 211
+#' matches of 2026:
 #'
-#'     home total = +margin/2       away total = -margin/2
+#' \tabular{lrr}{
+#'   \tab `sum` \tab `half_margin` \cr
+#'   team difference == margin \tab 4.3e-14 \tab 5.7e-14 \cr
+#'   median |np_residual| \tab 0.10 \tab 2.64 \cr
+#'   residual as \% of |net_points| \tab 3\% \tab 102\% \cr
+#'   Spearman(raw, final) \tab 0.9993 \tab 0.7425
+#' }
 #'
-#' Two constraints, two team totals, fully determined. The correction is flat
-#' within a team (TOG-weighted), so it shifts the level without reordering
-#' anyone; what it cannot do is hide that the underlying level was off, which
-#' is why `np_residual` is reported as its own column rather than folded in.
+#' Under `half_margin` the correction is LARGER than the thing it corrects and
+#' it reorders players, because it is spread by time on ground and TOG varies
+#' (`cor(np_residual, tog) = -0.481`, median 1.50 points of spread between the
+#' longest and shortest stint in a team-match). An earlier version of this note
+#' claimed the residual "shifts the level without reordering anyone" -- that was
+#' asserted, never measured, and it is false.
+#'
+#' The underlying reason the level needs such a big push is worth knowing: the
+#' raw ledger tracks a team's OWN SCORE (cor 0.906) better than the margin
+#' (0.786), because `delta_epv` measures scoring production against expectation.
+#' In a high-scoring game both teams read strongly positive at once, and the
+#' median distance from `margin/2` is 61.4 points. `half_margin` does not fix
+#' that; it flattens it with a term big enough to distort the ranking. Keep the
+#' level free and report the difference, which is the quantity that is actually
+#' anchored.
 #'
 #' @param np Per-player frame already carrying `np_raw` (home-margin frame),
 #'   `margin`, `team`, `home_away` and `tog`.
-#' @param level `"half_margin"` pins both team totals; `"sum"` pins only the
-#'   match total and lets the level float.
+#' @param level `"sum"` (default) pins only the match total, which is the whole
+#'   identity. `"half_margin"` additionally pins each team total to `margin/2`.
 #' @return `np` with an `np_residual` column added, by reference.
 #' @keywords internal
-.np_reconcile <- function(np, level = c("half_margin", "sum")) {
+.np_reconcile <- function(np, level = c("sum", "half_margin")) {
   level <- match.arg(level)
   need <- c("np_raw", "margin", "team", "home_away", "tog", "match_id")
   missing <- setdiff(need, names(np))
@@ -470,10 +486,10 @@
 #'   mirror takes `mirror_share`, rest by TOG), `"defensive_acts"` (by box-score
 #'   defensive work) or `"tog"` (flat by time on ground).
 #' @param mirror_share Share the mirror slot takes when `spread = "matchup"`.
-#' @param level `"half_margin"` pins each team's total to half the margin, which
-#'   is the Oliver shape; `"sum"` pins only the match total and leaves the level
-#'   as the raw ledger produced it. See `.np_reconcile()` for why the level
-#'   needs its own constraint.
+#' @param level `"sum"` (default) pins the match total to the margin, which is
+#'   the Oliver identity and all that is required. `"half_margin"` additionally
+#'   forces each team's total to `margin/2` -- cosmetic, and it costs a residual
+#'   larger than the signal that reorders players. See `.np_reconcile()`.
 #' @param reconcile Whether to book the residual so each match sums exactly to
 #'   its margin. `FALSE` leaves the raw allocation, which is what you want when
 #'   measuring how close the ledger gets on its own.
@@ -514,7 +530,7 @@ build_net_points <- function(pbp_data = NULL,
                              ball_winner_share = NP_BALL_WINNER_SHARE,
                              spread = c("matchup", "defensive_acts", "tog"),
                              mirror_share = NP_MIRROR_SHARE,
-                             level = c("half_margin", "sum"),
+                             level = c("sum", "half_margin"),
                              reconcile = TRUE) {
   spread <- match.arg(spread)
   level <- match.arg(level)

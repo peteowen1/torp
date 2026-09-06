@@ -13,7 +13,7 @@ build_net_points(
   ball_winner_share = NP_BALL_WINNER_SHARE,
   spread = c("matchup", "defensive_acts", "tog"),
   mirror_share = NP_MIRROR_SHARE,
-  level = c("half_margin", "sum"),
+  level = c("sum", "half_margin"),
   reconcile = TRUE
 )
 }
@@ -43,10 +43,10 @@ defensive work) or \code{"tog"} (flat by time on ground).}
 
 \item{mirror_share}{Share the mirror slot takes when \code{spread = "matchup"}.}
 
-\item{level}{\code{"half_margin"} pins each team's total to half the margin, which
-is the Oliver shape; \code{"sum"} pins only the match total and leaves the level
-as the raw ledger produced it. See \code{.np_reconcile()} for why the level
-needs its own constraint.}
+\item{level}{\code{"sum"} (default) pins the match total to the margin, which is
+the Oliver identity and all that is required. \code{"half_margin"} additionally
+forces each team's total to \code{margin/2} -- cosmetic, and it costs a residual
+larger than the signal that reorders players. See \code{.np_reconcile()}.}
 
 \item{reconcile}{Whether to book the residual so each match sums exactly to
 its margin. \code{FALSE} leaves the raw allocation, which is what you want when
