@@ -2,20 +2,23 @@
 % Please edit documentation in R/epv_net_points.R
 \name{.np_direct_credit}
 \alias{.np_direct_credit}
-\title{Move a share of each retained disposal from the disposer to the receiver}
+\title{Pay the named recipients: the actor and the receiver}
 \usage{
-.np_direct_credit(led, alpha)
+.np_direct_credit(l)
 }
 \arguments{
-\item{led}{Ledger from \code{.np_build_ledger()}.}
-
-\item{alpha}{Receiver's share, between 0 and 1 inclusive.}
+\item{l}{Output of \code{.np_credit_terms()}.}
 }
 \value{
-A data.table of \code{match_id}, \code{team}, \code{player_id}, \code{np_direct}.
+\code{match_id}, \code{team}, \code{player_id}, \code{np_direct}.
 }
 \description{
-Conservation is untouched by construction: value moves between two players in
-the same team-match, so no team total changes.
+Reads the per-row split from \code{.np_credit_terms()}. \code{np_direct} is the actor's
+own rows at FACE value (own + everything ceded, i.e. before anything is
+transferred to the opposition) plus what he received as a receiver or as a
+same-team contest winner, so that \code{np_ceded} can report the transfer
+separately. Conservation within a team-match is
+untouched: the receiver share and the offence pool move value between
+teammates only.
 }
 \keyword{internal}

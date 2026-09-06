@@ -1724,3 +1724,75 @@ NP_EXCLUDED_DESCS <- c("Centre Bounce")
 #' turnover -- the pressure that forced it usually came from someone else.
 #' @keywords internal
 NP_BALL_WINNER_SHARE <- 0.60
+
+#' Difficulty credit: the disposer's share of a turnover's SURPRISE
+#'
+#' Under `credit = "difficulty"` a turnover splits into the decision term
+#' (`EV - before`, always the disposer's) and the surprise (`after - EV`). The
+#' disposer keeps this share of the surprise as execution blame; the rest is
+#' credit to the defence. Chosen by Pete 2026-09-06 over "decision only" so a
+#' kick that was fine in expectation but badly executed still costs its kicker
+#' something. Not identifiable from conservation -- the identity holds for any
+#' value -- so this is the default the year-over-year repeatability test starts
+#' from, not a result. The first row to watch when it runs: a fumbled 2m
+#' handball wore -0.58 under the flat rule and -0.16 under this one.
+#' @keywords internal
+NP_BLAME_SHARE <- 0.30
+
+#' Difficulty credit: the slice of a non-turnover disposal paid to the team
+#'
+#' Pete's rule that every play type has both an individual and a team
+#' component: the leads and structure that created the option are nobody's
+#' row. Spread by the same rule as the defensive pool. A slice spread flat by
+#' time on ground is a pure shrink toward the team average, which is why it is
+#' small. Not identifiable from conservation; see `NP_BLAME_SHARE`.
+#' @keywords internal
+NP_OFFENCE_POOL_SHARE <- 0.10
+
+#' Difficulty credit: the contest winner's share of a ceded contest surprise (D11)
+#'
+#' When a kick resolves at a contest the defence won, the defence's share of
+#' the contest surprise is routed by HOW it was won. An intercept mark is
+#' nearly all the marker's; a spoil is half the spoiler's, because the spoil
+#' only ends the contest and the pressure around it is other people's work.
+#' Keyed by the chains description of the resolving row; anything else gets
+#' `NP_CONTEST_WINNER_SHARE_DEFAULT`. Chosen with Pete 2026-09-06 as the defaults
+#' for the year-over-year test, not as results.
+#' @keywords internal
+NP_CONTEST_WINNER_SHARE <- c(
+  "Contested Mark" = 0.80, "Uncontested Mark" = 0.80, "Mark On Lead" = 0.80,
+  "Pack Mark (P)" = 0.80, "Pack Mark (O)" = 0.80,
+  "Spoil" = 0.50, "Spoil gaining possession" = 0.50, "Spoil ineffective" = 0.50
+)
+
+#' Fallback for `NP_CONTEST_WINNER_SHARE`
+#' @keywords internal
+NP_CONTEST_WINNER_SHARE_DEFAULT <- 0.50
+
+#' Difficulty credit: the ball-winner's share of a ceded ground ball, by act (D11)
+#'
+#' Under difficulty credit the flat `NP_BALL_WINNER_SHARE` gives way to a share
+#' for WHAT the winner did on the next row: a mark or a free is nearly all his,
+#' a loose ball is mostly the pressure that made it loose. Chosen with Pete
+#' 2026-09-06 as defaults for the year-over-year test.
+#' @keywords internal
+NP_BALL_WINNER_SHARE_BY_ACT <- c(
+  "Uncontested Mark" = 0.80, "Contested Mark" = 0.80, "Mark On Lead" = 0.80,
+  "Free For" = 0.80,
+  "Loose Ball Get" = 0.30, "Hard Ball Get" = 0.30, "Loose Ball Get Crumb" = 0.30,
+  "Gather" = 0.30, "Gather From Hitout" = 0.30, "Gather from Opposition" = 0.30,
+  "Handball Received" = 0.30, "Ground Kick" = 0.30
+)
+
+#' Fallback for `NP_BALL_WINNER_SHARE_BY_ACT`
+#' @keywords internal
+NP_BALL_WINNER_SHARE_BY_ACT_DEFAULT <- 0.30
+
+#' Weights of the four context components in `spread = "context"` (D12)
+#'
+#' Observed pairing outranks the mirror prior, because mirror alone widened the
+#' forward/defender gap (EPV-NET-POINTS.md s5). A component with no support in
+#' a pool drops out and the rest renormalise. Defaults for the year-over-year
+#' test, not results.
+#' @keywords internal
+NP_CONTEXT_WEIGHTS <- c(pair = 0.40, acts = 0.30, mirror = 0.20, tog = 0.10)

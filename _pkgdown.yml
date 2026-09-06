@@ -22,7 +22,11 @@ navbar:
       href: torp_explainer.html
     netpoints:
       text: Net Points
-      href: net-points.html
+      menu:
+        - text: A forward (Papley)
+          href: net-points.html
+        - text: A defender (Andrews)
+          href: net-points-defender.html
     github:
       icon: fa-github
       href: https://github.com/peteowen1/torp

@@ -1,5 +1,93 @@
 # torp 1.4.8
 
+## Net Points explainer rebuilt on the v4 rules, plus a defender's page
+
+`data-raw/04-analysis/build_net_points_explainer.R` now reads the ledger's own
+payment table (`build_net_points(return_payments = TRUE)`) instead of
+re-deriving the split, scores under `credit = "difficulty"` by default with the
+models fitted leak-safe on 2025, and explains each act as decision + surprise
+with the kick's chance of being lost. A fourth role, a contest he won, joins
+the page. `NP_PLAYER` / `NP_OUT` / `NP_CREDIT` select the player, the output
+file and the rule set; the site now carries Papley (a forward) and Harris
+Andrews (a defender, 9.35 net points in the same game against a published EPV
+of 3.2) under a Net Points menu.
+
+Review findings on the context spread, fixed: a caller-supplied `contest_pairs`
+table with a repeated key was truncated to its last row by the update-join (now
+summed first), the per-pool renormalising divisor was inert and is gone, and
+the context test now asserts the exact weights from `NP_CONTEXT_WEIGHTS`.
+
+## Net Points: routing by act, and a context spread (D11, D12)
+
+Step 4 of the v4 credit rules. Under difficulty credit the ball-winner's share
+of a ceded ground ball follows WHAT he did to win it (`NP_BALL_WINNER_SHARE_BY_ACT`:
+a mark or a free 80%, a loose ball 30%) instead of the flat
+`NP_BALL_WINNER_SHARE`. And `spread = "context"` shares a team pool by Pete's
+mix of evidence: observed attacker-versus-defender pairings from chains contest
+targets (`.np_contest_pairs()`, 12.7 a match in 2026), box-score defensive acts,
+the positional mirror and time on ground, weighted by `NP_CONTEXT_WEIGHTS`
+(0.4 / 0.3 / 0.2 / 0.1); a component with no support in a pool drops out. Pools
+are now keyed by the disposer as well, so the pairing can be looked up.
+
+Measured on 2026: 1,574 of 9,169 defensive pools carry pairing evidence; the
+context spread moves the forward/defender gap from 2.03 (matchup) to 1.61 points
+a game, but split-half reliability falls from 0.680 to 0.649, so `"matchup"`
+stays the default and the weights are left to the year-over-year test.
+
+Review finding fixed here: the opposition that receives a contest cession is
+now the OTHER team on the match roster, never the team of the resolution row,
+and the roster includes chains-only actors (a spoiler who never touched the
+ball in PBP). A winner not on that roster sends his share to the pool with a
+logged count rather than creating a phantom row.
+
+## Net Points: contested kicks split at the contest (D8)
+
+Step 3 of the v4 credit rules. A kick that resolves at a fought contest (a
+spoil, a contested or pack mark, or any mark the defence took; 19,574 in
+2026, 88.6% won by the defence) now splits its surprise once more, using the
+v3 aerial branch models: the contest surprise (branch value minus EV) goes to
+whoever won the contest, the ground-ball surprise (what happened after the
+fall of the ball) to whoever possessed next. A same-team winner is paid
+directly; a defensive winner is paid through the new `np_contest_won` column
+at `NP_CONTEST_WINNER_SHARE` for how the contest was won (a mark 80%, a spoil
+50%), the rest joining the defensive pool. This is the term the 2026-08 build
+paid to nobody, and it is what stops a spoil the attack regathers from
+debiting the spoiler. Harris Andrews in the Sydney game: 3.77 (flat) -> 6.57
+(step 2) -> 9.01; split-half reliability 0.645 -> 0.671.
+
+## Net Points: PBP rows keep PBP's player and team
+
+Review finding on the chains-aware ledger: `.np_sequence()` took `player_id`
+and `team_id` for PBP rows from chains and only checked that the description
+agreed, so a chains/PBP disagreement on the actor would have moved credit
+silently. PBP rows now keep PBP's own player and team, and any disagreement on
+description, player or team at the same key aborts.
+
+## Net Points: difficulty credit (`credit = "difficulty"`)
+
+Step 2 of the v4 credit rules (`docs/plans/EPV-V4-CREDIT-RULES.md`, D5-D7, D9).
+Every disposal the difficulty model can score splits into a decision term
+(`EV - before`, always the disposer's) and a surprise (`after - EV`). Retained:
+the disposer keeps `p` of the surprise and the receiver `1 - p`, with `p` the
+modelled chance of losing the ball. Turnover: the disposer keeps
+`NP_BLAME_SHARE` (0.30) of the surprise, the defence is credited the rest.
+`NP_OFFENCE_POOL_SHARE` (0.10) of every non-turnover disposal goes to the
+attacking team's pool, reported in the new `np_team` column. The 4.2% of
+disposals the model cannot score fall back to the flat rule, and the count is
+logged. The row identity is asserted, not assumed: the terms must rebuild
+every row's `delta_epv` to 1e-9 or the build aborts.
+
+The flat rule is untouched: `credit = "flat"` (the default) reproduces the
+previous build to 5e-14 on all 9,792 player-matches of 2026. Both modes go
+through one per-row split (`.np_credit_terms()`: own / receiver / team pool /
+ceded), which is the role tagging D3 asks for.
+
+Measured on 2026, in-sample fit, default shares: 95.8% of disposals scored,
+conservation 4e-14, Spearman against flat 0.89 over player-games, split-half
+reliability 0.645 -> 0.656. Harris Andrews in the Sydney game goes 3.77 -> 6.57
+while Papley is unchanged (23.19 -> 23.17); the season top 12 gains Richards,
+Bontempelli, Dempsey and Daicos instead of being twelve forwards. The
+`difficulty_terms` argument lets a share sweep fit the models once.
 ## Net Points reads chains alongside PBP
 
 `build_net_points(chains=)` takes the raw chains for the same matches. The

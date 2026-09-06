@@ -9,13 +9,20 @@ build_net_points(
   player_stats = NULL,
   results = NULL,
   chains = NULL,
+  credit = c("flat", "difficulty"),
   defensive_share = NP_DEFENSIVE_SHARE,
   receiver_share = NP_RECEIVER_SHARE,
   ball_winner_share = NP_BALL_WINNER_SHARE,
-  spread = c("matchup", "defensive_acts", "tog"),
+  spread = c("matchup", "defensive_acts", "tog", "context"),
   mirror_share = NP_MIRROR_SHARE,
   level = c("sum", "half_margin"),
-  reconcile = TRUE
+  reconcile = TRUE,
+  blame_share = NP_BLAME_SHARE,
+  offence_pool_share = NP_OFFENCE_POOL_SHARE,
+  difficulty_terms = NULL,
+  leak_safe = TRUE,
+  contest_pairs = NULL,
+  return_payments = FALSE
 )
 }
 \arguments{
@@ -33,6 +40,14 @@ PBP row, and this is asserted by \code{data-raw/04-analysis/np_chains_ledger_equ
 -- but each disposal in the ledger also carries what it resolved into
 (a spoil, a contested mark, a goal), which PBP drops. Later credit rules
 need that; nothing in this function uses it yet.}
+
+\item{credit}{\code{"flat"} (the default) pays fixed shares: \code{receiver_share} of a
+retained disposal to the receiver, \code{defensive_share} of a turnover to the
+opposition. \code{"difficulty"} follows the v4 identity per disposal (see
+\code{.np_credit_terms()}): the decision term to the disposer, the surprise split
+by the modelled chance of losing the ball, \code{blame_share} of a lost surprise
+kept by the disposer, \code{offence_pool_share} of every non-turnover disposal to
+the attacking team's pool. Needs \code{chains} or \code{difficulty_terms}.}
 
 \item{defensive_share}{Fraction of each turnover paid to the team that won
 the ball. Not identifiable from conservation -- see \code{NP_DEFENSIVE_SHARE}.}
@@ -59,6 +74,28 @@ larger than the signal that reorders players. See \code{.np_reconcile()}.}
 \item{reconcile}{Whether to book the residual so each match sums exactly to
 its margin. \code{FALSE} leaves the raw allocation, which is what you want when
 measuring how close the ledger gets on its own.}
+
+\item{blame_share}{Difficulty only: the disposer's share of a turnover's
+surprise. See \code{NP_BLAME_SHARE}.}
+
+\item{offence_pool_share}{Difficulty only: the slice of each non-turnover
+disposal paid to the attacking team's pool. See \code{NP_OFFENCE_POOL_SHARE}.}
+
+\item{difficulty_terms}{Precomputed output of \code{.np_difficulty_terms()}, so a
+share sweep fits the models once. Ignored under \code{credit = "flat"}.}
+
+\item{leak_safe}{Difficulty only: fit each season's models on earlier
+seasons. With a single season the fit is in-sample and says so.}
+
+\item{contest_pairs}{Precomputed output of \code{.np_contest_pairs()} for
+\code{spread = "context"}; computed from \code{chains} when absent.}
+
+\item{return_payments}{Attach the per-act payment table as attribute
+\code{np_payments}: one row per (act, recipient) with \code{role} (actor, receiver,
+contest_winner, ball_winner, attack_pool, defence_pool), the recipient's
+\code{team} and \code{player_id} (\code{NA} for a pool, which is spread later) and the
+home-margin amount \code{hm}. This is the role tagging of the design (D3); the
+explainer reads it. Pool rows carry what was pooled, not who got it.}
 }
 \value{
 A data.table with one row per player-match \strong{that had at least one
@@ -76,6 +113,10 @@ opposition instead of to him. Read the SIGN carefully: this is a
 positive number that REDUCES his debit, because the debit itself is
 already in \code{np_direct} at full size and this cancels \code{defensive_share}
 of it. It is not a penalty column.}
+\item{\code{np_contest_won}}{paid for contests he won against a kick (a
+spoil, an intercept mark), difficulty credit only}
+\item{\code{np_team}}{his share of his own team's offence pools (zero under
+\code{credit = "flat"})}
 \item{\code{np_residual}}{his share of the unexplained margin}
 \item{\code{net_points}}{the total, in the player's OWN team frame, so
 positive is always good}

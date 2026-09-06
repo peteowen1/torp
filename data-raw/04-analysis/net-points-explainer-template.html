@@ -8,7 +8,7 @@
   :root{
     --bg:#fbfaf8; --panel:#fff; --ink:#1c1c1e; --muted:#6b6b70;
     --line:#e3e1dd; --pos:#1a7f5a; --neg:#b3341f; --accent:#2b5c8a;
-    --own:#2b5c8a; --recv:#7a5ea8; --won:#c2820a;
+    --own:#2b5c8a; --recv:#7a5ea8; --won:#c2820a; --cont: #b07cd8;
     --grass:#eef3ec; --grassline:#c9d6c6;
   }
   @media (prefers-color-scheme: dark){
@@ -103,6 +103,7 @@ This page follows one player through one game, act by act.</p>
         <span><i style="background:var(--own)"></i>his own act</span>
         <span><i style="background:var(--recv)"></i>a pass he received</span>
         <span><i style="background:var(--won)"></i>a turnover he won</span>
+        <span><i style="background:var(--cont)"></i>a contest he won</span>
         <span class="muted">· circle size = size of the contribution · green gained, red cost</span>
       </div>
       <p class="note">He attacks towards the right-hand goal. Positions are where the act happened.
@@ -140,11 +141,12 @@ expectation is exactly what stops the team totals adding up to the margin. They 
 that predicts future games, not in the measure of what happened.</p>
 
 <div class="caveat">
-<strong>Two numbers here are judgement, not measurement.</strong> The share of a turnover paid to the
-defending side, and the share of that paid to the player who actually won the ball, are set by hand.
-They cannot be fitted from the margin: the totals add up correctly for <em>any</em> value of either,
-which is the design working properly and also why the margin cannot choose them. They are being
-settled against how repeatable a player's score is from one season to the next.
+<strong>The shares here are judgement, not measurement.</strong> How much of a lost kick's surprise the
+kicker wears, how much of a won contest is the winner's rather than his team's, and the size of the
+team slice are set by hand. They cannot be fitted from the margin: the totals add up correctly for
+<em>any</em> value of each, which is the design working properly and also why the margin cannot
+choose them. They are settled against how repeatable a player's score is from one season to the
+next, and the first run of that test (2025 to 2026) left every default where it was.
 </div>
 
 <div class="caveat">
@@ -166,9 +168,12 @@ Every figure on this page is computed from play-by-play, not entered by hand.
 const D = __DATA__;
 
 const fmt = (v, d = 2) => (v >= 0 ? "+" : "−") + Math.abs(v).toFixed(d);
+const pct = v => Math.round(v * 100) + "%";
 const cls = v => v >= 0 ? "pos" : "neg";
-const ROLE = {own:"his own act", received:"a pass he received", won:"a turnover he won"};
-const ROLECOL = {own:"var(--own)", received:"var(--recv)", won:"var(--won)"};
+const V4 = D.params.credit === "difficulty";
+const ROLE = {own: "his own act", received: "a pass he received", won: "a turnover he won",
+              contest: "a contest he won"};
+const ROLECOL = {own: "var(--own)", received: "var(--recv)", won: "var(--won)", contest: "var(--cont)"};
 
 /* ---------- header ---------- */
 const m = D.match, p = D.player;
@@ -176,7 +181,8 @@ document.getElementById("scorebar").innerHTML =
   `<strong style="font-size:1.05rem">${m.home} ${m.home_score} &ndash; ${m.away_score} ${m.away}</strong>
    <span class="pill">Round ${m.round}, ${m.date}</span>
    <span class="pill">margin +${m.margin}</span>
-   <span class="pill">${p.name} &middot; ${p.position} &middot; ${p.tog}% game time</span>`;
+   <span class="pill">${p.name} &middot; ${p.position} &middot; ${p.tog}% game time</span>
+   <span class="pill">${V4 ? "v4 credit rules" : "flat shares"}</span>`;
 
 /* ---------- pitch ---------- */
 /* Ground size comes from the match, not a constant: AFL venues run 155m to 175m
@@ -201,10 +207,8 @@ function pitch() {
       r="${r(e.contrib).toFixed(2)}"
       fill="${e.contrib >= 0 ? 'var(--pos)' : 'var(--neg)'}"
       stroke="${ROLECOL[e.role]}" stroke-width="1"><title>${e.desc} — ${fmt(e.contrib)}</title></circle>`).join("");
-  // Real AFL markings, to scale for this ground (155m x 136m): centre square is
-  // 50m x 50m, goal square 9m deep and 6.4m wide, 50m arc struck from the centre
-  // of the goal line. An earlier version drew the centre square 50x25 and added
-  // a full-length centre line, which is not a marking on a football ground.
+  // Real AFL markings, to scale for this ground: centre square 50m x 50m, goal
+  // square 9m deep and 6.4m wide, 50m arc struck from the centre of the goal line.
   return `<svg viewBox="${VB}" role="img" aria-label="Match events on an AFL ground">
     <ellipse class="oval" cx="0" cy="0" rx="${RX}" ry="${RY}"/>
     <rect x="-25" y="-25" width="50" height="50" fill="none" stroke="var(--grassline)" stroke-width=".6"/>
@@ -222,7 +226,8 @@ document.getElementById("pitchwrap").innerHTML = pitch();
 
 /* ---------- filters ---------- */
 let filter = "all";
-const roles = ["all", "own", "received", "won"];
+const roles = ["all", "own", "received", "won", "contest"].filter(rr =>
+  rr === "all" || ev.some(e => e.role === rr));
 document.getElementById("filters").innerHTML = roles.map(rr =>
   `<button class="f" data-r="${rr}" aria-pressed="${rr === 'all'}">${
     rr === "all" ? "All acts" : ROLE[rr]}${rr === "all" ? "" : ` (${ev.filter(e => e.role === rr).length})`}</button>`
@@ -259,33 +264,35 @@ document.getElementById("events").innerHTML =
     </tr>`).join("") + "</tbody>";
 
 function kindText(e) {
-  if (e.role === "won") return "he won it back";
+  if (e.role === "won") return `he won it back (${e.next_desc || "next touch"})`;
+  if (e.role === "contest") return `he won the contest (${e.cont_desc || "contest"})`;
   if (e.role === "received") return "the pass came to him";
+  if (e.contested) return `to a contest (${e.cont_desc}), ${e.def_win ? "lost" : "won"}`;
   return {retained: "kept by his team", turnover: "lost to the opposition",
-          terminal: "chain ended (score or restart)", possession: "possession, not a disposal"}[e.kind];
+          terminal: "chain ended (score or restart)", act: "possession, not a disposal"}[e.kind];
 }
 
-/* ---------- detail ---------- */
-function rule(e) {
+/* ---------- detail: the rule that produced each number ---------- */
+function ruleFlat(e) {
   const P = D.params;
   if (e.role === "received")
-    return `He received this pass, so he takes <strong>${Math.round(P.receiver_share * 100)}%</strong>
+    return `He received this pass, so he takes <strong>${pct(P.receiver_share)}</strong>
       of its value: ${fmt(e.hm)} &times; ${P.receiver_share} = <strong>${fmt(e.contrib)}</strong>.
-      The player who kicked it keeps the other ${Math.round((1 - P.receiver_share) * 100)}%.`;
+      The player who kicked it keeps the other ${pct(1 - P.receiver_share)}.`;
   if (e.role === "won")
     return `He won the ball back here. The opposition's mistake was worth ${fmt(e.hm)};
-      <strong>${Math.round(P.defensive_share * 100)}%</strong> of that moves to his team, and
-      <strong>${Math.round(P.ball_winner_share * 100)}%</strong> of that goes to whoever actually
+      <strong>${pct(P.defensive_share)}</strong> of that moves to his team, and
+      <strong>${pct(P.ball_winner_share)}</strong> of that goes to whoever actually
       won it &mdash; him. ${fmt(e.hm)} &times; ${P.defensive_share} &times; ${P.ball_winner_share}
       = <strong>${fmt(e.contrib)}</strong>.`;
   if (e.kind === "retained")
-    return `He kept the ball alive. He keeps <strong>${Math.round((1 - P.receiver_share) * 100)}%</strong>
-      and the player who received it takes ${Math.round(P.receiver_share * 100)}%:
+    return `He kept the ball alive. He keeps <strong>${pct(1 - P.receiver_share)}</strong>
+      and the player who received it takes ${pct(P.receiver_share)}:
       ${fmt(e.hm)} &times; ${(1 - P.receiver_share).toFixed(2)} = <strong>${fmt(e.contrib)}</strong>.`;
   if (e.kind === "turnover")
     return `He lost the ball. He carries
-      <strong>${Math.round((1 - P.defensive_share) * 100)}%</strong> of the cost; the other
-      ${Math.round(P.defensive_share * 100)}% is credited to the opposition for winning it:
+      <strong>${pct(1 - P.defensive_share)}</strong> of the cost; the other
+      ${pct(P.defensive_share)} is credited to the opposition for winning it:
       ${fmt(e.hm)} &times; ${(1 - P.defensive_share).toFixed(2)} = <strong>${fmt(e.contrib)}</strong>.`;
   if (e.kind === "terminal")
     return `The chain ended here &mdash; a score, or the ball going out. Nobody took it off him,
@@ -293,6 +300,70 @@ function rule(e) {
   return `A possession rather than a disposal. The full value stays with him:
       <strong>${fmt(e.contrib)}</strong>.`;
 }
+
+function ruleV4(e) {
+  const P = D.params, beta = P.blame_share, om = P.offence_pool_share;
+  const kicker = e.role === "own" ? "his" : "the kicker's";
+  const setup = e.scored
+    ? `Before the kick ${kicker} side could expect <strong>${fmt(e.before)}</strong>. Given how hard it was
+       &mdash; a <strong>${pct(e.p)}</strong> chance of losing it &mdash; it was worth
+       <strong>${fmt(e.ev)}</strong> in expectation. It ended up worth <strong>${fmt(e.after)}</strong>,
+       so the <em>surprise</em> was <strong>${fmt(e.sur)}</strong> (all in the kicking side's frame).`
+    : "";
+  if (e.role === "received")
+    return `${setup} The kicker keeps ${pct(e.p)} of that surprise for the execution and he, as the
+      receiver, takes the rest, less the ${pct(om)} team slice:
+      ${fmt(e.sur)} &times; ${(1 - e.p).toFixed(2)} &times; ${(1 - om).toFixed(2)} =
+      <strong>${fmt(e.contrib)}</strong>.`;
+  if (e.role === "won")
+    return `${setup} He won the ball back with a ${(e.next_desc || "possession").toLowerCase()}.
+      The kicker wears ${pct(beta)} of the ${e.contested ? "ground-ball " : ""}surprise
+      ${e.contested ? `(${fmt(e.gsur)}, what happened after the fall of the ball)` : ""};
+      the defence is credited the rest, and winning it that way gives the winner
+      <strong>${pct(e.share)}</strong> of the defence's share: <strong>${fmt(e.contrib)}</strong>.
+      The remainder spreads across his team for the pressure around it.`;
+  if (e.role === "contest")
+    return e.same_team
+      ? `${setup} It went to a contest &mdash; a ${(e.cont_desc || "contest").toLowerCase()} &mdash;
+         and he won it. Winning was worth <strong>${fmt(e.csur)}</strong> against the expectation
+         of the contest, and that is his, less the ${pct(om)} team slice: <strong>${fmt(e.contrib)}</strong>.`
+      : `${setup} It went to a contest &mdash; a ${(e.cont_desc || "contest").toLowerCase()} &mdash;
+         and he won it for the defence. Losing the contest cost the kicking side
+         <strong>${fmt(e.csur)}</strong> against its expectation; the kicker wears ${pct(beta)} of that,
+         the defence is credited the rest, and a ${(e.cont_desc || "contest").toLowerCase()} gives its
+         winner <strong>${pct(e.share)}</strong> of it: <strong>${fmt(e.contrib)}</strong>.
+         What happened after the fall of the ball (${fmt(e.gsur)}) follows the next possession.`;
+  /* his own act */
+  if (!e.scored) {
+    if (e.kind === "act")
+      return `A possession rather than a disposal. The full value stays with him:
+        <strong>${fmt(e.contrib)}</strong>.`;
+    return `This disposal could not be scored for difficulty (no resolvable outcome row in the
+      chains data), so it falls back to the flat rule. ${ruleFlat(e)}`;
+  }
+  const decision = `${setup} The <em>decision</em>, ${fmt(e.ev)} &minus; ${fmt(e.before)} =
+    <strong>${fmt(e.dec)}</strong>, is his alone.`;
+  if (e.contested)
+    return `${decision} It went to a contest &mdash; a ${(e.cont_desc || "contest").toLowerCase()} &mdash;
+      which his side ${e.def_win ? "lost" : "won"}: the contest surprise, <strong>${fmt(e.csur)}</strong>,
+      goes to the contest winner${e.def_win ? `, and he wears ${pct(beta)} of it` : ""}. What
+      happened after the fall of the ball, <strong>${fmt(e.gsur)}</strong>, follows the next
+      possession${e.kind === "turnover" ? ` (lost, so he wears ${pct(beta)} of that too)` :
+      e.kind === "retained" ? " (regathered by his side)" : " (the chain ended)"}.
+      His: <strong>${fmt(e.contrib)}</strong>.`;
+  if (e.kind === "retained")
+    return `${decision} Of the surprise he keeps <strong>${pct(e.p)}</strong> for the execution
+      (the harder the kick, the more of it is his) and the receiver takes ${pct(1 - e.p)}.
+      Less the ${pct(om)} team slice: (${fmt(e.dec)} + ${e.p.toFixed(2)} &times; ${fmt(e.sur)})
+      &times; ${(1 - om).toFixed(2)} = <strong>${fmt(e.contrib)}</strong>.`;
+  if (e.kind === "turnover")
+    return `${decision} It was lost. He wears <strong>${pct(beta)}</strong> of the surprise as
+      execution blame; the rest is credited to the side that won it:
+      ${fmt(e.dec)} + ${beta} &times; ${fmt(e.sur)} = <strong>${fmt(e.contrib)}</strong>.`;
+  return `${decision} The chain ended here &mdash; a score, or a restart &mdash; so the surprise
+    stays with him too, less the ${pct(om)} team slice: <strong>${fmt(e.contrib)}</strong>.`;
+}
+const rule = V4 ? ruleV4 : ruleFlat;
 
 function show(i) {
   const e = ev[i];
@@ -319,9 +390,12 @@ document.getElementById("events").addEventListener("click", e => {
 /* ---------- ledger ---------- */
 const T = D.totals;
 const rows = [
-  ["His own acts", T.np_direct, "everything he did, after sharing passes with receivers"],
+  ["His own acts", T.np_direct, V4 ? "every decision he made, plus his share of each surprise, plus what he received"
+                                   : "everything he did, after sharing passes with receivers"],
   ["Turnovers he won", T.np_defensive_won, "paid for taking the ball off the opposition"],
+  ...(V4 ? [["Contests he won", T.np_contest_won, "spoils and intercept marks against the opposition's kicks"]] : []),
   ["Team pressure share", T.np_defensive, "his slice of turnovers his team forced"],
+  ...(V4 ? [["Team attack share", T.np_team, "his slice of the team's cut of every disposal it kept"]] : []),
   ["Turnover cost returned", T.np_ceded, "the part of his own losses credited to the opposition"],
   ["Reconciliation", T.np_residual, "the small correction that makes the match add up exactly"]
 ];
@@ -331,30 +405,59 @@ document.getElementById("ledger").innerHTML =
   `<tr class="total"><td>Net points</td><td class="n ${cls(T.net_points)}">${fmt(T.net_points)}</td></tr>`;
 document.getElementById("ledgernote").innerHTML =
   `For comparison, the EPV published today reads <strong>${p.published_epv.toFixed(1)}</strong> for
-   this game. The two measure different things: that one is not tied to the scoreboard, this one is.`;
+   this game${D.totals.flat_net_points !== undefined ? `, and the flat-share version of this ledger
+   <strong>${fmt(D.totals.flat_net_points)}</strong>` : ""}. The published number is not tied to the
+   scoreboard; this one is.`;
 
 /* ---------- steps ---------- */
 const P = D.params;
-document.getElementById("steps").innerHTML = [
+const stepsFlat = [
   [`Start from what each play was worth`,
    `Every act changes how many points a team can expect to score next. That change is the raw
     material &mdash; and because those changes chain together, adding them up across a whole match
     already lands within about a goal of the real margin, with nothing fitted.`],
   [`Share a pass between the two players in it`,
    `A kick that finds a teammate was made by two people. The kicker keeps
-    ${Math.round((1 - P.receiver_share) * 100)}%, the receiver takes ${Math.round(P.receiver_share * 100)}%.`],
+    ${pct(1 - P.receiver_share)}, the receiver takes ${pct(P.receiver_share)}.`],
   [`Take something off a turnover and give it to the other side`,
    `The play-by-play records no tackles, spoils or pressure, so defending would otherwise be worth
-    nothing at all. ${Math.round(P.defensive_share * 100)}% of every turnover moves to the team that
-    won the ball.`],
+    nothing at all. ${pct(P.defensive_share)} of every turnover moves to the team that won the ball.`],
   [`Pay the player who actually won it`,
    `He is not guessed at &mdash; he is the next player to touch the ball.
-    ${Math.round(P.ball_winner_share * 100)}% of that credit goes to him; the rest spreads across his
+    ${pct(P.ball_winner_share)} of that credit goes to him; the rest spreads across his
     team for the pressure that forced the mistake.`],
   [`Make the match add up`,
    `A small correction, shared by time on ground, so the two teams' totals differ by exactly the final
     margin. It either balances or there is a bug &mdash; there is nothing to tune.`]
-].map(([h, b]) => `<li><strong>${h}</strong><br><span class="muted">${b}</span></li>`).join("");
+];
+const stepsV4 = [
+  [`Start from what each play was worth`,
+   `Every act changes how many points a team can expect to score next. Those changes chain together,
+    so adding them up across a match already lands within about a goal of the real margin, with
+    nothing fitted.`],
+  [`Split every disposal into a decision and a surprise`,
+   `A model of how hard each kick was gives its chance of being lost, and from that what it was worth
+    in expectation. The gap between that and the state before the kick is the <em>decision</em>, and it
+    is always the kicker's. The gap between what actually happened and the expectation is the
+    <em>surprise</em>.`],
+  [`Share the surprise by how hard the kick was`,
+   `On a kick his side kept, the kicker keeps a share of the surprise equal to the chance the kick had
+    of being lost &mdash; the harder the kick, the more of it is his &mdash; and the receiver takes the
+    rest. A 15m chip has almost no surprise to share; a 55m pass hit on the chest has a lot.`],
+  [`Credit the defence for what it caused`,
+   `On a kick that was lost, the kicker wears ${pct(P.blame_share)} of the surprise as execution blame
+    and the side that won it is credited the rest. A kick that reaches a contest splits once more: the
+    contest itself to whoever won it, and what happened after the fall of the ball to whoever possessed
+    next. A mark or a free is nearly all the winner's; a loose ball is mostly the pressure around it.`],
+  [`Keep a team slice`,
+   `${pct(P.offence_pool_share)} of every disposal a side keeps goes to its team pool, for the leads and
+    structure that created the option. Pools are shared across the players on the ground.`],
+  [`Make the match add up`,
+   `A small correction, shared by time on ground, so the two teams' totals differ by exactly the final
+    margin. It either balances or there is a bug &mdash; there is nothing to tune.`]
+];
+document.getElementById("steps").innerHTML = (V4 ? stepsV4 : stepsFlat)
+  .map(([h, b]) => `<li><strong>${h}</strong><br><span class="muted">${b}</span></li>`).join("");
 
 show(ev.reduce((best, e, i) => Math.abs(e.contrib) > Math.abs(ev[best].contrib) ? i : best, 0));
 applyFilter();

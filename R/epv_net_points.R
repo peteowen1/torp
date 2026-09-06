@@ -116,7 +116,7 @@
   # Every PBP row must be a chains row, or the two sequences are from
   # different vintages and "the next row" would mean different things in each.
   pk <- p[, .(match_id = as.character(match_id), display_order, description,
-              team_id, delta_epv, home_points, away_points)]
+              team_id, player_id, delta_epv, home_points, away_points)]
   miss <- pk[!cs, on = key]
   if (nrow(miss) > 0) {
     cli::cli_abort(c(
@@ -126,17 +126,28 @@
     ))
   }
   s <- merge(cs, pk[, .(match_id, display_order, pbp_desc = description,
+                       pbp_tid = team_id, pbp_pid = player_id,
                        delta_epv, home_points, away_points, in_pbp = TRUE)],
              by = key, all.x = TRUE)
   s[is.na(in_pbp), in_pbp := FALSE]
-  bad <- s[in_pbp == TRUE & !is.na(pbp_desc) & pbp_desc != description]
-  if (nrow(bad) > 0) {
+  # Same key must mean the same act by the same player for the same team. The
+  # VALUE comes from PBP, so a PBP row keeps PBP's own player and team; chains
+  # only supplies the rows PBP does not have. Any disagreement is a vintage
+  # mismatch and aborts -- a silent difference here would move credit between
+  # players while every conservation check stayed green.
+  same <- function(a, b) (is.na(a) & is.na(b)) | (!is.na(a) & !is.na(b) & a == b)
+  chk <- s[in_pbp == TRUE]
+  n_desc <- sum(!same(chk$pbp_desc, chk$description))
+  n_pid <- sum(!same(chk$pbp_pid, chk$player_id))
+  n_tid <- sum(!same(chk$pbp_tid, chk$team_id))
+  if (n_desc + n_pid + n_tid > 0) {
     cli::cli_abort(c(
-      "{format(nrow(bad), big.mark = ',')} row{?s} have a different description in PBP and chains.",
-      "x" = "Same key, different act: the two inputs are not the same data."
+      "PBP and chains disagree on {n_desc} description{?s}, {n_pid} player{?s} and {n_tid} team{?s} at the same (match_id, display_order).",
+      "x" = "Same key, different act or actor: the two inputs are not the same data."
     ))
   }
-  s[, pbp_desc := NULL]
+  s[in_pbp == TRUE, `:=`(player_id = pbp_pid, team_id = pbp_tid)]
+  s[, c("pbp_desc", "pbp_pid", "pbp_tid") := NULL]
 
   # Team name and home/away frame come from PBP's own per-match map, so a
   # chains-only row is oriented exactly as the PBP rows around it.
@@ -279,7 +290,8 @@
   # pushes the margin down.
   d[, hm := delta_epv * data.table::fifelse(home_away == "Home", 1, -1)]
   d[adj, on = .(match_id, display_order),
-    `:=`(next_team = i.next_team, next_player = i.next_player)]
+    `:=`(next_team = i.next_team, next_player = i.next_player,
+         next_desc = i.next_desc)]
   d[, `:=`(resolve_desc = NA_character_, resolve_team = NA_character_,
            resolve_player = NA_character_, resolve_lag = NA_integer_)]
   if (!is.null(res)) {
@@ -290,9 +302,16 @@
     cli::cli_alert_info(
       "Net points resolution: {round(100 * mean(!is.na(disp$resolve_desc)), 1)}% of {format(nrow(disp), big.mark = ',')} disposals resolve within 6 rows; {round(100 * mean(disp$resolve_desc %chin% c('Spoil', 'Contest Target', 'Contested Mark'), na.rm = TRUE), 1)}% at a named contest")
   }
-  d[, .(match_id, display_order, description, team, home_away, player_id,
-        hm, next_team, next_player,
-        resolve_desc, resolve_team, resolve_player, resolve_lag)]
+  out <- d[, .(match_id, display_order, description, team, home_away, player_id,
+               hm, next_team, next_player, next_desc,
+               resolve_desc, resolve_team, resolve_player, resolve_lag)]
+  # Every named actor in the sequence, including chains-only ones (a spoiler
+  # who never touched the ball in PBP), so a contest winner always has a roster
+  # row to be paid on.
+  data.table::setattr(out, "np_roster",
+                      unique(seq[!is.na(team) & !is.na(player_id),
+                                 .(match_id, team, player_id)]))
+  out
 }
 
 #' Who genuinely acted next, computed on the UNFILTERED sequence
@@ -352,73 +371,377 @@
   a[, terminal := is.na(nt) | .np_is_excluded(nd) | scored]
   a[, .(match_id, display_order,
         next_team = data.table::fifelse(terminal, NA_character_, nt),
-        next_player = data.table::fifelse(terminal, NA_character_, npl))]
+        next_player = data.table::fifelse(terminal, NA_character_, npl),
+        next_desc = data.table::fifelse(terminal, NA_character_, nd))]
 }
 
-#' Move a share of each retained disposal from the disposer to the receiver
+#' Difficulty terms for every scorable disposal: p, decision, surprise
 #'
-#' Conservation is untouched by construction: value moves between two players in
-#' the same team-match, so no team total changes.
+#' The identity each disposal follows (docs/plans/EPV-V4-CREDIT-RULES.md, D5-D7):
 #'
-#' @param led Ledger from `.np_build_ledger()`.
-#' @param alpha Receiver's share, between 0 and 1 inclusive.
-#' @return A data.table of `match_id`, `team`, `player_id`, `np_direct`.
+#' ```
+#' delta_epv = (EV - before)    the DECISION  -> the disposer
+#'           + (after - EV)     the SURPRISE  -> whoever resolved it
+#' ```
+#'
+#' with `EV = (1 - p) * V_keep + p * V_lose` and `p` the modelled chance of
+#' losing the ball. Everything here comes from `torp/R/epv_difficulty.R`, built
+#' in 2026-08 and never switched on; this is the first consumer. The models are
+#' fitted **leak-safe by season** -- each season scored on earlier seasons --
+#' and fall back to an in-sample fit, loudly, when no earlier season is present.
+#'
+#' Terms are in the ACTING team's frame, like `delta_epv`; the ledger flips
+#' them to the home-margin frame when it joins them.
+#'
+#' @param pbp_data Play-by-play carrying `exp_pts` and `delta_epv`.
+#' @param chains Raw chains for the same matches.
+#' @param leak_safe Fit each season on strictly earlier seasons.
+#' @return `match_id`, `display_order`, `p_hat`, `decision`, `surprise`.
 #' @keywords internal
-.np_direct_credit <- function(led, alpha) {
-  if (!is.numeric(alpha) || length(alpha) != 1 || is.na(alpha) || alpha < 0 || alpha > 1) {
-    cli::cli_abort("{.arg receiver_share} must be one number in [0, 1], not {.val {alpha}}.")
+.np_difficulty_terms <- function(pbp_data, chains, leak_safe = TRUE) {
+  de <- build_disposal_events(chains, pbp_data)
+  if (nrow(de) == 0) {
+    cli::cli_abort("No disposal could be scored for difficulty -- check that {.arg chains} and {.arg pbp_data} overlap.")
   }
-  l <- data.table::copy(led)
-  l[, retained := description %in% NP_DISPOSAL_DESCS &
-      !is.na(next_team) & next_team == team & !is.na(next_player)]
-
-  actor <- l[, .(match_id, team, player_id,
-                 v = data.table::fifelse(retained, hm * (1 - alpha), hm))]
-  recv <- l[retained == TRUE,
-            .(match_id, team, player_id = next_player, v = hm * alpha)]
-  out <- data.table::rbindlist(list(actor, recv))[
-    , .(np_direct = sum(v)), by = .(match_id, team, player_id)]
-
-  moved <- l[retained == TRUE, sum(abs(hm)) * alpha]
+  de[, .season := as.integer(substr(match_id, 5, 8))]
+  n_bad <- sum(is.na(de$.season) | de$.season < 2000 | de$.season > 2100)
+  if (isTRUE(leak_safe) && n_bad > 0) {
+    cli::cli_abort(c(
+      "Could not parse a plausible season from {n_bad} of {nrow(de)} match_id{?s}.",
+      "x" = "Refusing to run leak-safe fitting on an unparsed season."
+    ))
+  }
+  seasons <- sort(unique(de$.season))
+  scored <- if (isTRUE(leak_safe) && length(seasons) > 1) {
+    data.table::rbindlist(lapply(seasons, function(s) {
+      idx <- de$.season < s
+      if (sum(idx) < 20000) {
+        idx <- de$.season == s
+        cli::cli_alert_warning(
+          "Season {s}: difficulty models fitted IN-SAMPLE (no earlier season available).")
+      }
+      score_disposals(de[.season == s], fit_disposal_models(de, idx))
+    }))
+  } else {
+    if (isTRUE(leak_safe)) {
+      cli::cli_alert_warning(
+        "Difficulty models fitted IN-SAMPLE on {seasons}: only one season supplied. Fine for measurement, not for a published rating.")
+    }
+    score_disposals(de, fit_disposal_models(de))
+  }
+  scored[, decision := V_pre - exp_pts]
   cli::cli_alert_info(
-    "Receiver split: {round(100 * alpha)}% of {format(l[retained == TRUE, .N], big.mark = ',')} retained disposals reallocated ({round(moved, 1)} points of |value|)")
+    "Difficulty terms: {format(nrow(scored), big.mark = ',')} disposals scored; mean p(lose) {round(mean(scored$p_hat), 3)}, mean |decision| {round(mean(abs(scored$decision)), 3)}, mean |surprise| {round(mean(abs(scored$surprise)), 3)}")
+  out <- scored[, .(match_id = as.character(match_id), display_order, p_hat,
+                    decision, surprise)]
+  out[, `:=`(contested = FALSE, cont_desc = NA_character_,
+             cont_surprise = NA_real_, ground_surprise = NA_real_,
+             def_win = NA, winner_pid = NA_character_)]
+
+  # --- the contest branch (D8) ------------------------------------------------
+  # A kick that resolves at a contest is split once more: the contest surprise
+  # (branch value minus EV) belongs to whoever won the contest, and the
+  # ground-ball surprise (what happened after the fall of the ball, minus the
+  # branch value) to whoever possessed next. The branch models are v3's aerial
+  # models, fitted on every kick that resolves at a mark or spoil; the split is
+  # applied only where a contest was actually fought -- a duel outcome, or any
+  # mark the defence took -- so a teammate's uncontested mark stays under D6.
+  cst <- build_aerial_contests(chains, pbp_data)
+  if (nrow(cst) > 0) {
+    cst[, .season := as.integer(substr(match_id, 5, 8))]
+    cseasons <- sort(unique(cst$.season))
+    csc <- if (isTRUE(leak_safe) && length(cseasons) > 1) {
+      data.table::rbindlist(lapply(cseasons, function(s) {
+        idx <- cst$.season < s
+        if (sum(idx) < 5000) {
+          idx <- cst$.season == s
+          cli::cli_alert_warning(
+            "Season {s}: contest models fitted IN-SAMPLE (no earlier season available).")
+        }
+        score_contests(cst[.season == s], fit_contest_models(cst, idx))
+      }))
+    } else {
+      score_contests(cst, fit_contest_models(cst))
+    }
+    csc <- csc[def_win == TRUE | out_desc %chin% EPV3_DUEL_OUT]
+    csc[, V_branch := data.table::fifelse(def_win, V_def_hat, V_att_hat)]
+    ct <- csc[, .(match_id = as.character(match_id), display_order = kick_do,
+                  c_p = p_hat, c_decision = V_pre - exp_pts,
+                  c_cont = V_branch - V_pre, c_ground = V_after - V_branch,
+                  c_desc = out_desc, c_def_win = def_win, c_winner = out_pid)]
+    n_new <- nrow(ct[!out, on = .(match_id, display_order)])
+    out <- merge(out, ct, by = c("match_id", "display_order"), all = TRUE)
+    hit <- !is.na(out$c_p)
+    out[hit, `:=`(p_hat = c_p, decision = c_decision,
+                  surprise = c_cont + c_ground, contested = TRUE,
+                  cont_desc = c_desc, cont_surprise = c_cont,
+                  ground_surprise = c_ground, def_win = c_def_win,
+                  winner_pid = c_winner)]
+    out[, c("c_p", "c_decision", "c_cont", "c_ground", "c_desc", "c_def_win",
+            "c_winner") := NULL]
+    cli::cli_alert_info(
+      "Contest terms: {format(sum(hit), big.mark = ',')} kicks resolve at a fought contest ({format(n_new, big.mark = ',')} not scorable as plain disposals); defence won {round(100 * mean(out$def_win[hit]), 1)}%; mean |contest surprise| {round(mean(abs(out$cont_surprise[hit])), 3)}, mean |ground surprise| {round(mean(abs(out$ground_surprise[hit])), 3)}")
+  }
+  out[is.na(contested), contested := FALSE]
   out
 }
 
-#' Take the defensive share off each turnover and pool it by opposing position
+#' Decide, per ledger row, who is paid what
+#'
+#' Every row's `hm` is split into four non-overlapping parts that sum back to
+#' it exactly:
+#'
+#' \describe{
+#'   \item{`own_hm`}{what the actor keeps}
+#'   \item{`recv_hm`}{paid to the receiver of a retained disposal}
+#'   \item{`team_hm`}{paid to the actor's team pool (offence, D9)}
+#'   \item{`cede_hm`}{paid to the OPPOSITION for a turnover, routed by
+#'     `.np_defensive_pool()` (ball-winner share, then the spread)}
+#' }
+#'
+#' Under `credit = "flat"` the split is the pre-v4 rule: a retained disposal
+#' gives `alpha` to the receiver, a turnover cedes `phi`, nothing goes to an
+#' offence pool. Under `credit = "difficulty"` a scored disposal follows the
+#' identity in `.np_difficulty_terms()`:
+#'
+#' \itemize{
+#'   \item retained: actor `(1 - omega) * (decision + p * surprise)`, receiver
+#'     `(1 - omega) * (1 - p) * surprise`, team pool `omega * hm` (D6, D9);
+#'   \item turnover: actor `decision + beta * surprise`, opposition
+#'     `(1 - beta) * surprise` (D7);
+#'   \item terminal (a score, a restart): actor `(1 - omega) * hm`, team pool
+#'     `omega * hm`.
+#' }
+#'
+#' A disposal the difficulty model could not score (no resolvable outcome row,
+#' 4.8% in 2026) falls back to the flat rule; the count is logged, because a
+#' silent fallback here would be indistinguishable from the rule working.
+#'
+#' @param led Ledger from `.np_build_ledger()`.
+#' @param credit `"flat"` or `"difficulty"`.
+#' @param alpha Flat receiver share.
+#' @param phi Flat defensive share.
+#' @param beta Disposer's share of a lost surprise (difficulty).
+#' @param omega Offence team-pool share (difficulty).
+#' @param terms Output of `.np_difficulty_terms()`, or `NULL` under flat.
+#' @return `led` with `kind`, `scored`, `contested` and the six parts `own_hm`,
+#'   `recv_hm`, `win_hm` (a same-team contest winner), `team_hm`, `cede_hm`
+#'   (ground-ball value ceded to the opposition) and `cede_c_hm` (contest
+#'   value ceded to the opposition, routed to the contest winner by
+#'   `NP_CONTEST_WINNER_SHARE`).
+#' @keywords internal
+.np_credit_terms <- function(led, credit, alpha, phi, beta = 0, omega = 0,
+                             terms = NULL) {
+  for (nm in c("alpha", "phi", "beta", "omega")) {
+    v <- get(nm)
+    if (!is.numeric(v) || length(v) != 1 || is.na(v) || v < 0 || v > 1) {
+      cli::cli_abort("{.arg {nm}} must be one number between 0 and 1 inclusive, not {.val {v}}.")
+    }
+  }
+  l <- data.table::copy(led)
+  l[, is_disp := description %in% NP_DISPOSAL_DESCS]
+  l[, kind := data.table::fcase(
+    !is_disp,                                          "act",
+    is.na(next_team),                                  "terminal",
+    next_team == team & !is.na(next_player),           "retained",
+    next_team == team,                                 "terminal",
+    default =                                          "turnover")]
+
+  # flat rule everywhere first; difficulty overwrites the rows it can score
+  l[, `:=`(scored = FALSE, contested = FALSE,
+           own_hm  = data.table::fcase(kind == "retained", hm * (1 - alpha),
+                                       kind == "turnover", hm * (1 - phi),
+                                       default = hm),
+           recv_hm = data.table::fifelse(kind == "retained", hm * alpha, 0),
+           win_hm = 0,
+           team_hm = 0,
+           cede_hm = data.table::fifelse(kind == "turnover", hm * phi, 0),
+           cede_c_hm = 0,
+           winner_pid = NA_character_, cont_desc = NA_character_)]
+
+  if (identical(credit, "difficulty")) {
+    if (is.null(terms) || nrow(terms) == 0) {
+      cli::cli_abort("{.arg credit = \"difficulty\"} needs difficulty terms and none were supplied.")
+    }
+    t <- data.table::as.data.table(terms)
+    for (v in c("contested", "cont_desc", "cont_surprise", "ground_surprise",
+                "def_win", "winner_pid")) {
+      if (!v %in% names(t)) {
+        data.table::set(t, j = v, value = switch(v, contested = FALSE,
+                                                 def_win = NA,
+                                                 cont_desc = NA_character_,
+                                                 winner_pid = NA_character_,
+                                                 NA_real_))
+      }
+    }
+    t <- t[, .(match_id = as.character(match_id), display_order, p_hat, decision,
+               surprise, contested, cont_desc, cont_surprise, ground_surprise,
+               def_win, winner_pid)]
+    l[t, on = .(match_id, display_order),
+      `:=`(p_hat = i.p_hat, dec = i.decision, sur = i.surprise,
+           contested = i.contested, cont_desc = i.cont_desc, csur = i.cont_surprise,
+           gsur = i.ground_surprise, def_win = i.def_win, winner_pid = i.winner_pid)]
+    l[is.na(contested), contested := FALSE]
+    l[, sgn := data.table::fifelse(home_away == "Home", 1, -1)]
+    l[, `:=`(dec_hm = dec * sgn, sur_hm = sur * sgn,
+             c_hm = csur * sgn, g_hm = gsur * sgn)]
+    l[, scored := is_disp & !is.na(p_hat) & is.finite(dec_hm) & is.finite(sur_hm)]
+
+    # The row identity, asserted rather than assumed: decision + surprise must
+    # rebuild the row's value. If it does not, the terms came from a different
+    # PBP vintage than the ledger and every split below would be fiction.
+    gap <- l[scored == TRUE, max(abs(dec_hm + sur_hm - hm))]
+    if (!is.finite(gap) || gap > 1e-9) {
+      cli::cli_abort(c(
+        "Difficulty terms do not rebuild the ledger row: max |decision + surprise - delta| = {signif(gap, 3)}.",
+        "x" = "The terms and the play-by-play are not the same data."
+      ))
+    }
+    n_disp <- sum(l$is_disp)
+    n_unscored <- sum(l$is_disp & !l$scored)
+    cli::cli_alert_info(
+      "Difficulty credit: {format(n_disp - n_unscored, big.mark = ',')} of {format(n_disp, big.mark = ',')} disposals scored ({round(100 * (n_disp - n_unscored) / n_disp, 1)}%); {format(n_unscored, big.mark = ',')} fall back to the flat rule. Row identity max gap {signif(gap, 2)}.")
+
+    l[scored == TRUE & kind == "retained", `:=`(
+      own_hm  = (1 - omega) * (dec_hm + p_hat * sur_hm),
+      recv_hm = (1 - omega) * (1 - p_hat) * sur_hm,
+      team_hm = omega * hm,
+      cede_hm = 0)]
+    l[scored == TRUE & kind == "turnover", `:=`(
+      own_hm  = dec_hm + beta * sur_hm,
+      recv_hm = 0,
+      team_hm = 0,
+      cede_hm = (1 - beta) * sur_hm)]
+    l[scored == TRUE & kind == "terminal", `:=`(
+      own_hm  = (1 - omega) * hm,
+      recv_hm = 0,
+      team_hm = omega * hm,
+      cede_hm = 0)]
+
+    # --- contested kicks (D8): three terms, three recipients -----------------
+    # The contest surprise goes to whoever won the contest: a same-team winner
+    # is paid directly (win_hm); a defensive winner is paid through cede_c_hm,
+    # which .np_defensive_pool() routes by NP_CONTEST_WINNER_SHARE. The
+    # ground-ball surprise follows the next possession exactly as an ordinary
+    # disposal does. The disposer keeps the decision and, on anything lost,
+    # `beta` of the loss.
+    cs <- l$scored & l$contested & is.finite(l$c_hm) & is.finite(l$g_hm) &
+      !is.na(l$def_win)
+    if (any(cs)) {
+      bad_win <- l[cs & !is.na(resolve_player) & !is.na(winner_pid) &
+                     resolve_player != winner_pid, .N]
+      if (bad_win > 0) {
+        cli::cli_warn(
+          "{bad_win} contested kick{?s} name a different winner in the terms than in the ledger's resolution; the terms' winner is used.")
+      }
+      aw <- cs & !l$def_win
+      dw <- cs & l$def_win
+      l[aw & kind == "retained", `:=`(
+        own_hm = (1 - omega) * dec_hm, win_hm = (1 - omega) * c_hm,
+        recv_hm = (1 - omega) * g_hm, team_hm = omega * hm, cede_hm = 0, cede_c_hm = 0)]
+      l[aw & kind == "terminal", `:=`(
+        own_hm = (1 - omega) * (dec_hm + g_hm), win_hm = (1 - omega) * c_hm,
+        recv_hm = 0, team_hm = omega * hm, cede_hm = 0, cede_c_hm = 0)]
+      l[aw & kind == "turnover", `:=`(
+        own_hm = dec_hm + beta * g_hm, win_hm = c_hm, recv_hm = 0, team_hm = 0,
+        cede_hm = (1 - beta) * g_hm, cede_c_hm = 0)]
+      l[dw & kind == "retained", `:=`(
+        own_hm = dec_hm + beta * c_hm, win_hm = 0, recv_hm = (1 - omega) * g_hm,
+        team_hm = omega * g_hm, cede_hm = 0, cede_c_hm = (1 - beta) * c_hm)]
+      l[dw & kind == "turnover", `:=`(
+        own_hm = dec_hm + beta * c_hm + beta * g_hm, win_hm = 0, recv_hm = 0,
+        team_hm = 0, cede_hm = (1 - beta) * g_hm, cede_c_hm = (1 - beta) * c_hm)]
+      l[dw & kind == "terminal", `:=`(
+        own_hm = dec_hm + beta * c_hm + (1 - omega) * g_hm, win_hm = 0, recv_hm = 0,
+        team_hm = omega * g_hm, cede_hm = 0, cede_c_hm = (1 - beta) * c_hm)]
+      cli::cli_alert_info(
+        "Contest credit: {format(sum(cs), big.mark = ',')} kicks split at the contest; {format(sum(dw), big.mark = ',')} won by the defence ({round(sum(abs(l$cede_c_hm)), 1)} points ceded at the contest), {format(sum(aw), big.mark = ',')} by the attack ({round(sum(abs(l$win_hm)), 1)} points to same-team winners)")
+    }
+    l[, c("dec", "sur", "sgn", "csur", "gsur") := NULL]
+  }
+
+  # the four parts must rebuild every row, whichever rule produced them
+  gap4 <- l[, max(abs(own_hm + recv_hm + win_hm + team_hm + cede_hm + cede_c_hm - hm))]
+  if (!is.finite(gap4) || gap4 > 1e-9) {
+    cli::cli_abort("Credit terms do not sum to the row value (max gap {signif(gap4, 3)}).")
+  }
+  l
+}
+
+#' Pay the named recipients: the actor and the receiver
+#'
+#' Reads the per-row split from `.np_credit_terms()`. `np_direct` is the actor's
+#' own rows at FACE value (own + everything ceded, i.e. before anything is
+#' transferred to the opposition) plus what he received as a receiver or as a
+#' same-team contest winner, so that `np_ceded` can report the transfer
+#' separately. Conservation within a team-match is
+#' untouched: the receiver share and the offence pool move value between
+#' teammates only.
+#'
+#' @param l Output of `.np_credit_terms()`.
+#' @return `match_id`, `team`, `player_id`, `np_direct`.
+#' @keywords internal
+.np_direct_credit <- function(l) {
+  actor <- l[, .(match_id, team, player_id, v = own_hm + cede_hm + cede_c_hm)]
+  recv <- l[kind == "retained", .(match_id, team, player_id = next_player, v = recv_hm)]
+  win <- l[win_hm != 0 & !is.na(winner_pid),
+           .(match_id, team, player_id = winner_pid, v = win_hm)]
+  out <- data.table::rbindlist(list(actor, recv, win))[
+    , .(np_direct = sum(v)), by = .(match_id, team, player_id)]
+  moved <- l[kind == "retained", sum(abs(recv_hm))]
+  cli::cli_alert_info(
+    "Receiver split: {format(l[kind == 'retained', .N], big.mark = ',')} retained disposals, {round(moved, 1)} points of |value| to receivers")
+  out
+}
+
+#' The offence pool: each team's own slice of its retained disposals (D9)
+#'
+#' @param l Output of `.np_credit_terms()`.
+#' @return Pool rows shaped for `.np_spread_pool()` (`winner_slot` is `NA`, so
+#'   the spread is by the rule's non-mirror weighting), or `NULL`.
+#' @keywords internal
+.np_offence_pool <- function(l) {
+  p <- l[team_hm != 0, .(pool_hm = sum(team_hm)), by = .(match_id, def_team = team)]
+  if (nrow(p) == 0) return(NULL)
+  p[, `:=`(winner_slot = NA_character_, loser_pid = NA_character_)]
+  cli::cli_alert_info(
+    "Offence pool: {round(sum(abs(l$team_hm)), 1)} points gross across {nrow(p)} team-matches")
+  p
+}
+
+#' Route what a turnover cedes to the opposition
 #'
 #' The pool is keyed on the DISPOSER's position, because that is what the mirror
 #' map is indexed by: the player who lost the ball tells us which opposing slot
 #' was most likely responsible for winning it.
 #'
-#' @param led Ledger from `.np_build_ledger()`.
+#' @param l Output of `.np_credit_terms()`; `cede_hm` is what each turnover
+#'   hands to the opposition (flat: `phi * hm`; difficulty: the defence's share
+#'   of the surprise).
 #' @param lineup Per-match roster: `match_id`, `team`, `player_id`, `position`,
 #'   `tog`, `def_acts`.
-#' @param phi Defensive share, between 0 and 1 inclusive.
-#' @param psi Share of the pool paid straight to the OBSERVED ball-winner (the
-#'   actor on the next row). The remainder is spread by `.np_spread_pool()`.
-#' @return A list of `debits` (per disposer, negative of what they keep),
-#'   `won` (paid directly to identified ball-winners) and `pool` (the remainder,
+#' @param psi Share of the ceded value paid straight to the OBSERVED ball-winner
+#'   (the actor on the next row). The remainder is spread by `.np_spread_pool()`.
+#' @param by_act Route the ball-winner's share by HOW he won it
+#'   (`NP_BALL_WINNER_SHARE_BY_ACT`, keyed on the next row's description)
+#'   instead of the flat `psi`. On under difficulty credit (D11).
+#' @return A list of `debits` (per disposer, negative of what they ceded),
+#'   `won` (paid directly to identified ball-winners), `contest_won` (paid to
+#'   the named winner of a contest the defence won) and `pool` (the remainder,
 #'   per `match_id`, `def_team`, `winner_slot`).
 #' @keywords internal
-.np_defensive_pool <- function(led, lineup, phi, psi = 0) {
-  if (!is.numeric(phi) || length(phi) != 1 || is.na(phi) || phi < 0 || phi > 1) {
-    cli::cli_abort("{.arg defensive_share} must be one number in [0, 1], not {.val {phi}}.")
-  }
-  to <- led[description %in% NP_DISPOSAL_DESCS &
-              !is.na(next_team) & next_team != team]
+.np_defensive_pool <- function(l, lineup, psi = 0, by_act = FALSE) {
   if (!is.numeric(psi) || length(psi) != 1 || is.na(psi) || psi < 0 || psi > 1) {
     cli::cli_abort("{.arg ball_winner_share} must be one number in [0, 1], not {.val {psi}}.")
   }
+  to <- l[kind == "turnover" | cede_c_hm != 0]
   if (nrow(to) == 0) {
     cli::cli_warn("No turnovers found -- the defensive pool is empty.")
-    return(list(debits = NULL, won = NULL, pool = NULL))
+    return(list(debits = NULL, won = NULL, contest_won = NULL, pool = NULL))
   }
 
   pos <- lineup[, .(match_id, team, player_id, position)]
   to <- merge(to, pos, by = c("match_id", "team", "player_id"), all.x = TRUE)
-  # A disposer with no lineup row cannot be mirrored. Spread his pool flatly by
-  # sending it to the catch-all slot rather than dropping it, and SAY how much.
   unmapped <- to[is.na(position)]
   if (nrow(unmapped)) {
     cli::cli_warn(c(
@@ -430,37 +753,131 @@
 
   to[, winner_slot := data.table::fifelse(is.na(position), NA_character_,
                                           .np_mirror_of(position))]
-  debits <- to[, .(np_ceded = -sum(hm) * phi),
-               by = .(match_id, team, player_id)]
+  debits <- to[, .(np_ceded = -sum(cede_hm + cede_c_hm)), by = .(match_id, team, player_id)]
 
-  # SPLIT THE POOL. `psi` goes to the player we can SEE won the ball -- the
-  # actor on the next row -- and the rest is spread for the pressure that forced
-  # the turnover, which is usually not the same man.
-  #
   # This split exists because routing the whole pool by positional mirror was
-  # measurably wrong. Defenders win 47.3% of turnovers and lose 22.8%, so they
-  # are net ball-winners; but the mirror of a midfielder who coughs it up is
-  # another midfielder, so the credit defenders earned was paid to midfielders.
-  # Under mirror-only routing, raising phi from 0 to 0.9 moved defenders from
-  # -0.84 to -2.19 points per game and midfielders from -0.20 to +2.55 -- the
-  # opposite of what a defensive-credit mechanism is for.
-  to[, has_winner := !is.na(next_player)]
+  # measurably wrong: the mirror of a midfielder who coughs it up is another
+  # midfielder, so the credit defenders earned was paid to midfielders. The
+  # ball-winner needs no inference -- he is the actor on the very next row.
+  to[, has_winner := kind == "turnover" & !is.na(next_player)]
+  # The ball-winner's share: flat `psi`, or under difficulty credit a share
+  # for how he won it -- an intercept mark or a free is nearly all his, a loose
+  # ball 30m from the fall of a smothered kick is mostly other people's pressure
+  # (D11). Keyed on what the winner DID (the next row), not on what the kick
+  # resolved into, because the contest itself is paid separately.
+  to[, psi_row := psi]
+  if (isTRUE(by_act)) to[has_winner == TRUE, psi_row := .np_ball_winner_share(next_desc)]
   won <- to[has_winner == TRUE,
-            .(np_defensive_won = sum(hm) * phi * psi),
+            .(np_defensive_won = sum(cede_hm * psi_row)),
             by = .(match_id, team = next_team, player_id = next_player)]
   # Any pool with no identifiable winner keeps its full value for the spread,
   # rather than quietly losing `psi` of it.
-  to[, spread_hm := hm * phi * data.table::fifelse(has_winner, 1 - psi, 1)]
+  to[, spread_hm := cede_hm * data.table::fifelse(has_winner, 1 - psi_row, 1)]
+
+  # Contest cessions: the named contest winner takes NP_CONTEST_WINNER_SHARE
+  # for how the contest was won (a mark is nearly all his, a spoil half), the
+  # rest joins the pool for the pressure around the contest. The winner's
+  # team is the opposition of the kicker by construction (def_win).
+  to[, rho := 0]
+  to[cede_c_hm != 0, rho := .np_contest_winner_share(cont_desc)]
+  to[cede_c_hm != 0 & is.na(winner_pid), rho := 0]
+  # The opposition is the OTHER team in the match, taken from the roster --
+  # never from the resolution row, whose team belongs to whoever that lookahead
+  # landed on and can disagree with the winner the contest models named
+  # (review finding, 2026-09-06). A match has exactly two teams; a turnover's
+  # next_team must be that other team, and both are asserted.
+  tt <- lineup[, .(teams = list(sort(unique(team)))), by = match_id]
+  n_teams <- lengths(tt$teams)
+  if (any(n_teams != 2)) {
+    cli::cli_abort("{sum(n_teams != 2)} match{?es} do not have exactly two teams on the roster.")
+  }
+  tt[, `:=`(t1 = vapply(teams, `[`, "", 1L), t2 = vapply(teams, `[`, "", 2L))]
+  to[tt, on = "match_id", `:=`(t1 = i.t1, t2 = i.t2)]
+  to[, opp_team := data.table::fifelse(team == t1, t2, t1)]
+  n_wrong <- to[kind == "turnover" & !is.na(next_team) & next_team != opp_team, .N]
+  if (n_wrong > 0) {
+    cli::cli_abort("{n_wrong} turnover{?s} have a next_team that is neither team in the match.")
+  }
+  to[, on_roster := FALSE]
+  to[lineup[, .(match_id, team, player_id)], on = .(match_id, opp_team = team, winner_pid = player_id),
+     on_roster := TRUE]
+  off <- to[cede_c_hm != 0 & !is.na(winner_pid) & !on_roster]
+  if (nrow(off) > 0) {
+    cli::cli_warn(c(
+      "{nrow(off)} contest winner{?s} {?is/are} not on the opposition's roster; {?its/their} share ({round(sum(abs(off$cede_c_hm)), 2)} points) goes to the pool instead.",
+      "i" = "The contest models and the roster disagree on who this player is."
+    ))
+    to[cede_c_hm != 0 & !is.na(winner_pid) & !on_roster, `:=`(winner_pid = NA_character_, rho = 0)]
+  }
+  cwon <- to[cede_c_hm != 0 & !is.na(winner_pid),
+             .(np_contest_won = sum(cede_c_hm * rho)),
+             by = .(match_id, team = opp_team, player_id = winner_pid)]
+  if (nrow(cwon) == 0) cwon <- NULL
+  to[, spread_hm := spread_hm + cede_c_hm * (1 - rho)]
+  # keyed by the disposer too, so a context spread can use who was observed
+  # contesting HIM
   pool <- to[, .(pool_hm = sum(spread_hm)),
-             by = .(match_id, def_team = next_team, winner_slot)]
+             by = .(match_id, def_team = opp_team, winner_slot, loser_pid = player_id)]
+  if (anyNA(pool$def_team)) {
+    lost <- pool[is.na(def_team), sum(abs(pool_hm))]
+    cli::cli_abort("{round(lost, 2)} points of ceded value have no opposing team to receive them.")
+  }
 
   # Report the GROSS moved, not the net. The net is near zero by construction --
   # home and away turnover debits carry opposite signs in the home-margin frame
-  # and cancel across the season -- so logging `sum(pool_hm)` reads as "almost
-  # nothing happened" when in fact tens of thousands of points changed hands.
+  # and cancel across the season.
   cli::cli_alert_info(
-    "Defensive pool: {round(100 * phi)}% of {format(nrow(to), big.mark = ',')} turnovers = {round(sum(abs(to$hm)) * phi, 1)} points gross; {round(100 * psi)}% to the observed ball-winner ({round(100 * mean(to$has_winner), 1)}% identified), rest spread")
-  list(debits = debits, won = won, pool = pool)
+    "Defensive pool: {format(sum(to$kind == 'turnover'), big.mark = ',')} turnovers cede {round(sum(abs(to$cede_hm)), 1)} points gross ({if (isTRUE(by_act)) 'ball-winner share by act' else paste0(round(100 * psi), '% to the observed ball-winner')}) plus {round(sum(abs(to$cede_c_hm)), 1)} at contests; rest spread")
+  list(debits = debits, won = won, contest_won = cwon, pool = pool,
+       rows = to[, .(match_id, display_order, opp_team, psi_row, rho, winner_pid,
+                     next_player, has_winner, cede_hm, cede_c_hm)])
+}
+
+#' Ball-winner's share of a ceded ground ball, by what he did to win it (D11)
+#' @param desc PBP description of the winning row.
+#' @return Numeric vector of shares.
+#' @keywords internal
+.np_ball_winner_share <- function(desc) {
+  out <- unname(NP_BALL_WINNER_SHARE_BY_ACT[desc])
+  out[is.na(out)] <- NP_BALL_WINNER_SHARE_BY_ACT_DEFAULT
+  out
+}
+
+#' Named attacker-versus-defender pairings observed in chains (D12)
+#'
+#' A `Contest Target` row names the player a kick was aimed at; when the very
+#' next row is an opponent's act (a spoil, a contested mark, a crumb) it names
+#' who beat him. 2026: 12.7 such pairs a match, 13.6% of distinct pairs meeting
+#' twice or more in a match. Thin, but it is the only direct evidence of who
+#' was matched on whom, and a repeated pairing is a tag.
+#'
+#' @param chains Raw chains.
+#' @return `match_id`, `att`, `def`, `n`.
+#' @keywords internal
+.np_contest_pairs <- function(chains) {
+  ch <- data.table::as.data.table(chains)
+  detect_chains_columns(ch)
+  c2 <- ch[, .(match_id = as.character(match_id), display_order, description,
+               player_id, team_id)]
+  data.table::setorder(c2, match_id, display_order)
+  c2[, `:=`(n_pid = data.table::shift(player_id, -1L),
+            n_tid = data.table::shift(team_id, -1L)), by = match_id]
+  pr <- c2[description == "Contest Target" & !is.na(player_id) & !is.na(n_pid) &
+             !is.na(team_id) & !is.na(n_tid) & n_tid != team_id,
+           .(n = .N), by = .(match_id, att = player_id, def = n_pid)]
+  cli::cli_alert_info(
+    "Contest pairs: {format(sum(pr$n), big.mark = ',')} attacker-vs-defender pairings over {format(data.table::uniqueN(pr$match_id), big.mark = ',')} matches")
+  pr
+}
+
+#' Individual share of a contest cession, by how the contest was won (D11)
+#' @param desc Chains description of the resolving row.
+#' @return Numeric vector of shares.
+#' @keywords internal
+.np_contest_winner_share <- function(desc) {
+  out <- unname(NP_CONTEST_WINNER_SHARE[desc])
+  out[is.na(out)] <- NP_CONTEST_WINNER_SHARE_DEFAULT
+  out
 }
 
 #' Spread each pool across the winning team's on-field players
@@ -472,12 +889,19 @@
 #'
 #' @param pool From `.np_defensive_pool()`.
 #' @param lineup Per-match roster with `position`, `tog`, `def_acts`.
-#' @param spread One of "matchup", "defensive_acts", "tog".
+#' @param spread How a team pool is shared across the players on the ground:
+#'   `"matchup"` (the disposer's positional mirror takes `mirror_share`, rest by
+#'   TOG), `"defensive_acts"` (by box-score defensive acts), `"tog"` (flat by
+#'   time on ground) or `"context"` (Pete's D12 mix: observed pairings from
+#'   chains contest targets, defensive acts, mirror and TOG, weighted by
+#'   `NP_CONTEXT_WEIGHTS`; needs `chains` or `contest_pairs` for the pairings).
 #' @param mirror_share Share the mirror slot takes under "matchup".
 #' @return A data.table of `match_id`, `team`, `player_id`, `np_defensive`.
 #' @keywords internal
-.np_spread_pool <- function(pool, lineup, spread, mirror_share) {
+.np_spread_pool <- function(pool, lineup, spread, mirror_share, pairs = NULL) {
   if (is.null(pool) || nrow(pool) == 0) return(NULL)
+  if (!"loser_pid" %in% names(pool)) pool[, loser_pid := NA_character_]
+  grp <- c("match_id", "def_team", "winner_slot", "loser_pid")
 
   a <- merge(pool, lineup, by.x = c("match_id", "def_team"),
              by.y = c("match_id", "team"), allow.cartesian = TRUE)
@@ -492,18 +916,15 @@
     tog = tog,
     defensive_acts = def_acts,
     matchup = 0,  # filled below
+    context = 0,  # filled below
     cli::cli_abort("Unknown {.arg spread}: {.val {spread}}")
   )]
 
   if (identical(spread, "matchup")) {
-    # The mirror slot takes `mirror_share` of the pool; the rest of the team
-    # shares the remainder by time on ground. A pool whose winner_slot is
-    # unknown (disposer had no lineup row) falls through to a flat TOG spread,
-    # which is what the warning in .np_defensive_pool() promised.
     a[, is_mirror := !is.na(winner_slot) & position == winner_slot]
-    a[, n_mirror := sum(is_mirror), by = .(match_id, def_team, winner_slot)]
-    a[, tog_mirror := sum(tog * is_mirror), by = .(match_id, def_team, winner_slot)]
-    a[, tog_other := sum(tog * !is_mirror), by = .(match_id, def_team, winner_slot)]
+    a[, n_mirror := sum(is_mirror), by = grp]
+    a[, tog_mirror := sum(tog * is_mirror), by = grp]
+    a[, tog_other := sum(tog * !is_mirror), by = grp]
     a[, w := data.table::fcase(
       n_mirror == 0,  tog,                                    # no mirror on park
       is_mirror,      mirror_share * tog / pmax(tog_mirror, 1e-9),
@@ -511,23 +932,62 @@
     )]
   }
 
+  if (identical(spread, "context")) {
+    # Pete's rule (D12): use as much context as the data gives. Four
+    # components, each normalised to sum to 1 across the team, weighted by
+    # NP_CONTEXT_WEIGHTS; a component with no support in a pool (no pairing
+    # observed, no mirror on the ground) contributes nothing and the rest
+    # share the pool pro rata.
+    # Pairing evidence outranks the mirror prior, because mirror alone
+    # widened the forward/defender gap (EPV-NET-POINTS.md s5).
+    cw <- NP_CONTEXT_WEIGHTS
+    if (!is.null(pairs) && nrow(pairs) > 0) {
+      # Aggregate first: an update-join keeps only the LAST matching row, so a
+      # caller-supplied table with a repeated (match, att, def) key would
+      # silently lose evidence (review finding, 2026-09-06).
+      pr <- data.table::as.data.table(pairs)[, .(n_pair = sum(n)),
+                                             by = .(match_id = as.character(match_id),
+                                                    loser_pid = att, player_id = def)]
+      a[pr, on = .(match_id, loser_pid, player_id), n_pair := i.n_pair]
+    }
+    if (!"n_pair" %in% names(a)) a[, n_pair := NA_real_]
+    a[is.na(n_pair), n_pair := 0]
+    a[, is_mirror := !is.na(winner_slot) & !is.na(position) & position == winner_slot]
+    a[, `:=`(s_pair = sum(n_pair), s_acts = sum(def_acts), s_mirror = sum(is_mirror),
+             s_tog = sum(tog)), by = grp]
+    a[, `:=`(
+      c_pair   = data.table::fifelse(s_pair > 0, n_pair / s_pair, 0),
+      c_acts   = data.table::fifelse(s_acts > 0, def_acts / s_acts, 0),
+      c_mirror = data.table::fifelse(s_mirror > 0, as.numeric(is_mirror) / s_mirror, 0),
+      c_tog    = data.table::fifelse(s_tog > 0, tog / s_tog, 0))]
+    # No explicit renormalisation for components without support: `wsum`
+    # below divides by the group's total weight, so a dropped component's
+    # share is redistributed pro rata by construction (a per-group constant
+    # divisor here would cancel out -- review, 2026-09-06).
+    a[, w := cw[["pair"]] * c_pair + cw[["acts"]] * c_acts +
+             cw[["mirror"]] * c_mirror + cw[["tog"]] * c_tog]
+    n_paired <- data.table::uniqueN(a[s_pair > 0, .SD, .SDcols = grp])
+    cli::cli_alert_info(
+      "Context spread: {format(n_paired, big.mark = ',')} of {format(data.table::uniqueN(a[, .SD, .SDcols = grp]), big.mark = ',')} pools carry pairing evidence")
+  }
+
   a[!is.finite(w) | w < 0, w := 0]
-  a[, wsum := sum(w), by = .(match_id, def_team, winner_slot)]
+  a[, wsum := sum(w), by = grp]
   # A group with no weight anywhere still has to be paid: fall back to flat --
   # and SAY SO. Silently degrading a targeted spread rule to flat is exactly the
   # failure this module logs everywhere else. Under `defensive_acts` this fires
   # when a whole team-match recorded no tackles/pressure/spoils/intercepts, which
   # in practice means their player_stats rows failed to join.
-  flat_groups <- unique(a[wsum <= 0, .(match_id, def_team, winner_slot)])
+  flat_groups <- unique(a[wsum <= 0, .SD, .SDcols = grp])
   if (nrow(flat_groups)) {
-    flat_pts <- sum(abs(unique(a[wsum <= 0, .(match_id, def_team, winner_slot, pool_hm)])$pool_hm))
+    flat_pts <- sum(abs(unique(a[wsum <= 0, .SD, .SDcols = c(grp, "pool_hm")])$pool_hm))
     cli::cli_warn(c(
       "{nrow(flat_groups)} pool group{?s} had zero weight under {.val {spread}} and fell back to a FLAT spread ({round(flat_pts, 1)} points).",
       "i" = "Check that {.arg player_stats} joined for those teams."
     ))
   }
   a[wsum <= 0, w := 1]
-  a[, wsum := sum(w), by = .(match_id, def_team, winner_slot)]
+  a[, wsum := sum(w), by = grp]
   a[, alloc := pool_hm * w / wsum]
 
   out <- a[, .(np_defensive = sum(alloc)), by = .(match_id, team = def_team, player_id)]
@@ -651,6 +1111,29 @@
 #'   ground and defensive acts. Defaults to `load_player_stats(TRUE)`.
 #' @param results Match results supplying the margin. Defaults to
 #'   `load_results(TRUE)`.
+#' @param credit `"flat"` (the default) pays fixed shares: `receiver_share` of a
+#'   retained disposal to the receiver, `defensive_share` of a turnover to the
+#'   opposition. `"difficulty"` follows the v4 identity per disposal (see
+#'   `.np_credit_terms()`): the decision term to the disposer, the surprise split
+#'   by the modelled chance of losing the ball, `blame_share` of a lost surprise
+#'   kept by the disposer, `offence_pool_share` of every non-turnover disposal to
+#'   the attacking team's pool. Needs `chains` or `difficulty_terms`.
+#' @param blame_share Difficulty only: the disposer's share of a turnover's
+#'   surprise. See `NP_BLAME_SHARE`.
+#' @param offence_pool_share Difficulty only: the slice of each non-turnover
+#'   disposal paid to the attacking team's pool. See `NP_OFFENCE_POOL_SHARE`.
+#' @param difficulty_terms Precomputed output of `.np_difficulty_terms()`, so a
+#'   share sweep fits the models once. Ignored under `credit = "flat"`.
+#' @param leak_safe Difficulty only: fit each season's models on earlier
+#'   seasons. With a single season the fit is in-sample and says so.
+#' @param contest_pairs Precomputed output of `.np_contest_pairs()` for
+#'   `spread = "context"`; computed from `chains` when absent.
+#' @param return_payments Attach the per-act payment table as attribute
+#'   `np_payments`: one row per (act, recipient) with `role` (actor, receiver,
+#'   contest_winner, ball_winner, attack_pool, defence_pool), the recipient's
+#'   `team` and `player_id` (`NA` for a pool, which is spread later) and the
+#'   home-margin amount `hm`. This is the role tagging of the design (D3); the
+#'   explainer reads it. Pool rows carry what was pooled, not who got it.
 #' @param chains Raw chains for the same matches, or `NULL` (the default). With
 #'   chains the allocation is **identical** -- every point still comes from a
 #'   PBP row, and this is asserted by `data-raw/04-analysis/np_chains_ledger_equivalence.R`
@@ -692,6 +1175,10 @@
 #'       positive number that REDUCES his debit, because the debit itself is
 #'       already in `np_direct` at full size and this cancels `defensive_share`
 #'       of it. It is not a penalty column.}
+#'     \item{`np_contest_won`}{paid for contests he won against a kick (a
+#'       spoil, an intercept mark), difficulty credit only}
+#'     \item{`np_team`}{his share of his own team's offence pools (zero under
+#'       `credit = "flat"`)}
 #'     \item{`np_residual`}{his share of the unexplained margin}
 #'     \item{`net_points`}{the total, in the player's OWN team frame, so
 #'       positive is always good}
@@ -709,15 +1196,23 @@ build_net_points <- function(pbp_data = NULL,
                              player_stats = NULL,
                              results = NULL,
                              chains = NULL,
+                             credit = c("flat", "difficulty"),
                              defensive_share = NP_DEFENSIVE_SHARE,
                              receiver_share = NP_RECEIVER_SHARE,
                              ball_winner_share = NP_BALL_WINNER_SHARE,
-                             spread = c("matchup", "defensive_acts", "tog"),
+                             spread = c("matchup", "defensive_acts", "tog", "context"),
                              mirror_share = NP_MIRROR_SHARE,
                              level = c("sum", "half_margin"),
-                             reconcile = TRUE) {
+                             reconcile = TRUE,
+                             blame_share = NP_BLAME_SHARE,
+                             offence_pool_share = NP_OFFENCE_POOL_SHARE,
+                             difficulty_terms = NULL,
+                             leak_safe = TRUE,
+                             contest_pairs = NULL,
+                             return_payments = FALSE) {
   spread <- match.arg(spread)
   level <- match.arg(level)
+  credit <- match.arg(credit)
   if (is.null(pbp_data)) pbp_data <- load_pbp(TRUE)
   if (is.null(player_stats)) player_stats <- load_player_stats(TRUE)
   if (is.null(results)) results <- load_results(TRUE)
@@ -743,7 +1238,8 @@ build_net_points <- function(pbp_data = NULL,
 
   # `team` on the ledger is a team NAME; player_stats carries a team_id. Join
   # through the ledger's own roster so the two vocabularies never have to agree.
-  roster <- unique(led[, .(match_id, team, player_id)])
+  roster <- attr(led, "np_roster")
+  if (is.null(roster)) roster <- unique(led[, .(match_id, team, player_id)])
   lineup <- merge(
     roster,
     ps[, .(match_id, player_id, position,
@@ -786,9 +1282,37 @@ build_net_points <- function(pbp_data = NULL,
   lineup[is.na(def_acts), def_acts := 0]
 
   # --- allocate -------------------------------------------------------------
-  direct <- .np_direct_credit(led, receiver_share)
-  dp <- .np_defensive_pool(led, lineup, defensive_share, ball_winner_share)
-  alloc <- .np_spread_pool(dp$pool, lineup, spread, mirror_share)
+  terms <- NULL
+  if (identical(credit, "difficulty")) {
+    if (!is.null(difficulty_terms)) {
+      terms <- difficulty_terms
+    } else if (is.null(chains)) {
+      cli::cli_abort(c(
+        "{.arg credit = \"difficulty\"} needs {.arg chains} (kick length and landing come from the chains rows) or precomputed {.arg difficulty_terms}.",
+        "i" = "Pass {.code chains = load_chains(...)} for the same matches."
+      ))
+    } else {
+      terms <- .np_difficulty_terms(pbp_data, chains, leak_safe)
+    }
+  }
+  l <- .np_credit_terms(led, credit, receiver_share, defensive_share,
+                        blame_share, offence_pool_share, terms)
+  pairs <- NULL
+  if (identical(spread, "context")) {
+    if (!is.null(contest_pairs)) {
+      pairs <- contest_pairs
+    } else if (!is.null(chains)) {
+      pairs <- .np_contest_pairs(chains)
+    } else {
+      cli::cli_warn("{.arg spread = \"context\"} without {.arg chains}: no pairing evidence, spreading by defensive acts, mirror and time on ground only.")
+    }
+  }
+  direct <- .np_direct_credit(l)
+  dp <- .np_defensive_pool(l, lineup, ball_winner_share,
+                           by_act = identical(credit, "difficulty"))
+  alloc <- .np_spread_pool(dp$pool, lineup, spread, mirror_share, pairs)
+  team_alloc <- .np_spread_pool(.np_offence_pool(l), lineup, spread, mirror_share, pairs)
+  if (!is.null(team_alloc)) data.table::setnames(team_alloc, "np_defensive", "np_team")
 
   # dp$debits needs the same NULL check as alloc and dp$won -- all three come
   # from the same "no turnovers" return, but merge(x, NULL, by = ...) errors
@@ -809,10 +1333,22 @@ build_net_points <- function(pbp_data = NULL,
   } else {
     np[, np_defensive_won := 0]
   }
-  for (v in c("np_direct", "np_ceded", "np_defensive", "np_defensive_won")) {
+  if (!is.null(team_alloc)) {
+    np <- merge(np, team_alloc, by = c("match_id", "team", "player_id"), all = TRUE)
+  } else {
+    np[, np_team := 0]
+  }
+  if (!is.null(dp$contest_won)) {
+    np <- merge(np, dp$contest_won, by = c("match_id", "team", "player_id"), all = TRUE)
+  } else {
+    np[, np_contest_won := 0]
+  }
+  for (v in c("np_direct", "np_ceded", "np_defensive", "np_defensive_won", "np_team",
+              "np_contest_won")) {
     data.table::set(np, i = which(is.na(np[[v]])), j = v, value = 0)
   }
-  np[, np_raw := np_direct + np_ceded + np_defensive + np_defensive_won]
+  np[, np_raw := np_direct + np_ceded + np_defensive + np_defensive_won + np_team +
+        np_contest_won]
 
   np <- merge(np, lineup[, .(match_id, player_id, tog)],
               by = c("match_id", "player_id"), all.x = TRUE)
@@ -869,19 +1405,44 @@ build_net_points <- function(pbp_data = NULL,
   # defenders are being reported in opposite frames.
   np[, .sgn := data.table::fifelse(home_away == "Home", 1, -1)]
   parts <- c("np_direct", "np_defensive", "np_defensive_won", "np_ceded",
-             "np_residual")
+             "np_team", "np_contest_won", "np_residual")
   for (v in parts) {
     data.table::set(np, j = v, value = np[[v]] * np$.sgn)
   }
   np[, net_points := net_points_hm * .sgn]
 
   out <- np[, .(match_id, team, player_id, home_away,
-                np_direct, np_defensive_won, np_defensive, np_ceded,
-                np_residual, net_points_hm, net_points, margin)]
+                np_direct, np_defensive_won, np_contest_won, np_defensive,
+                np_ceded, np_team, np_residual, net_points_hm, net_points,
+                margin)]
   # The parts must sum to the whole, in whichever frame they are read.
   gap <- max(abs(rowSums(as.matrix(out[, ..parts])) - out$net_points))
   if (gap > 1e-8) {
     cli::cli_abort("Net points components do not sum to the total (max gap {signif(gap, 3)}).")
+  }
+  if (isTRUE(return_payments)) {
+    pay <- list(
+      l[own_hm != 0, .(match_id, display_order, role = "actor", team, player_id, hm = own_hm)],
+      l[recv_hm != 0, .(match_id, display_order, role = "receiver", team, player_id = next_player, hm = recv_hm)],
+      l[win_hm != 0 & !is.na(winner_pid), .(match_id, display_order, role = "contest_winner", team, player_id = winner_pid, hm = win_hm)],
+      l[team_hm != 0, .(match_id, display_order, role = "attack_pool", team, player_id = NA_character_, hm = team_hm)]
+    )
+    if (!is.null(dp$rows)) {
+      r <- dp$rows
+      pay <- c(pay, list(
+        r[has_winner == TRUE & cede_hm != 0, .(match_id, display_order, role = "ball_winner", team = opp_team, player_id = next_player, hm = cede_hm * psi_row)],
+        r[cede_c_hm != 0 & !is.na(winner_pid) & rho > 0, .(match_id, display_order, role = "contest_winner", team = opp_team, player_id = winner_pid, hm = cede_c_hm * rho)],
+        r[, .(match_id, display_order, role = "defence_pool", team = opp_team, player_id = NA_character_,
+              hm = cede_hm * data.table::fifelse(has_winner, 1 - psi_row, 1) + cede_c_hm * (1 - rho))][hm != 0]
+      ))
+    }
+    pay <- data.table::rbindlist(pay, use.names = TRUE)
+    paid <- sum(pay$hm); owed <- sum(l$hm)
+    if (abs(paid - owed) > 1e-6) {
+      cli::cli_abort("Payment table does not rebuild the ledger: paid {round(paid, 4)}, ledger {round(owed, 4)}.")
+    }
+    data.table::setorder(pay, match_id, display_order, role)
+    data.table::setattr(out, "np_payments", pay)
   }
   data.table::setattr(out, "np_params",
                       list(defensive_share = defensive_share,
@@ -889,7 +1450,10 @@ build_net_points <- function(pbp_data = NULL,
                            ball_winner_share = ball_winner_share,
                            spread = spread, mirror_share = mirror_share,
                            level = level, reconciled = isTRUE(reconcile),
-                           chains = !is.null(chains)))
+                           chains = !is.null(chains), credit = credit,
+                           blame_share = blame_share,
+                           offence_pool_share = offence_pool_share,
+                           leak_safe = leak_safe))
   out[]
 }
 
