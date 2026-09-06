@@ -1,0 +1,359 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Net Points — how a player's EPV is built</title>
+<style>
+  :root{
+    --bg:#fbfaf8; --panel:#fff; --ink:#1c1c1e; --muted:#6b6b70;
+    --line:#e3e1dd; --pos:#1a7f5a; --neg:#b3341f; --accent:#2b5c8a;
+    --own:#2b5c8a; --recv:#7a5ea8; --won:#c2820a;
+    --grass:#eef3ec; --grassline:#c9d6c6;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#16171a; --panel:#1e2024; --ink:#e9e8e6; --muted:#9a9aa2;
+      --line:#33363c; --pos:#4cc38a; --neg:#f0705a; --accent:#7fb0dd;
+      --own:#7fb0dd; --recv:#b39ddb; --won:#e3b341;
+      --grass:#1d2420; --grassline:#33463a;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#16171a; --panel:#1e2024; --ink:#e9e8e6; --muted:#9a9aa2;
+    --line:#33363c; --pos:#4cc38a; --neg:#f0705a; --accent:#7fb0dd;
+    --own:#7fb0dd; --recv:#b39ddb; --won:#e3b341;
+    --grass:#1d2420; --grassline:#33463a;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  .wrap{max-width:1180px;margin:0 auto;padding:28px 20px 80px}
+  h1{font-size:1.9rem;line-height:1.2;margin:0 0 6px;letter-spacing:-.02em}
+  h2{font-size:1.15rem;margin:34px 0 10px;letter-spacing:-.01em}
+  h3{font-size:.95rem;margin:20px 0 6px}
+  .sub{color:var(--muted);margin:0 0 22px;font-size:1.02rem}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 18px}
+  .grid{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(280px,1fr);gap:18px;align-items:start}
+  @media (max-width:880px){.grid{grid-template-columns:1fr}}
+  .muted{color:var(--muted)}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-variant-numeric:tabular-nums}
+  .pos{color:var(--pos)} .neg{color:var(--neg)}
+  .scorebar{display:flex;flex-wrap:wrap;gap:10px;align-items:baseline;margin-bottom:18px}
+  .pill{display:inline-block;padding:2px 9px;border-radius:999px;border:1px solid var(--line);
+        font-size:.78rem;color:var(--muted);background:var(--panel)}
+  svg{display:block;width:100%;height:auto;touch-action:manipulation}
+  .oval{fill:var(--grass);stroke:var(--grassline);stroke-width:.8}
+  .mark{stroke:var(--panel);stroke-width:.9;cursor:pointer}
+  .mark:hover{stroke:var(--ink);stroke-width:1.6}
+  .mark.sel{stroke:var(--ink);stroke-width:2.2}
+  .mark.dim{opacity:.13}
+  .lbl{font-size:3.4px;fill:var(--muted)}
+  .controls{display:flex;flex-wrap:wrap;gap:7px;margin:12px 0 4px}
+  button.f{font:inherit;font-size:.83rem;padding:5px 11px;border-radius:999px;cursor:pointer;
+           border:1px solid var(--line);background:var(--panel);color:var(--ink)}
+  button.f[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+  table{border-collapse:collapse;width:100%;font-size:.87rem}
+  th,td{text-align:left;padding:5px 8px;border-bottom:1px solid var(--line)}
+  th{font-weight:600;color:var(--muted);font-size:.76rem;text-transform:uppercase;letter-spacing:.05em}
+  td.n,th.n{text-align:right;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+            font-variant-numeric:tabular-nums}
+  tbody tr{cursor:pointer}
+  tbody tr:hover{background:color-mix(in srgb,var(--accent) 8%,transparent)}
+  tbody tr.sel{background:color-mix(in srgb,var(--accent) 15%,transparent)}
+  .scroll{max-height:340px;overflow:auto;overflow-x:auto}
+  .ledger td.n{font-size:.95rem}
+  .ledger tr.total td{border-top:2px solid var(--ink);border-bottom:none;font-weight:700;padding-top:9px}
+  .detail{min-height:132px}
+  .kv{display:grid;grid-template-columns:auto 1fr;gap:3px 12px;font-size:.87rem;margin-top:8px}
+  .kv dt{color:var(--muted)} .kv dd{margin:0;font-family:ui-monospace,Menlo,Consolas,monospace}
+  .rule{margin-top:10px;padding:9px 11px;border-left:3px solid var(--accent);
+        background:color-mix(in srgb,var(--accent) 7%,transparent);border-radius:0 6px 6px 0;font-size:.87rem}
+  .legend{display:flex;flex-wrap:wrap;gap:14px;font-size:.8rem;color:var(--muted);margin-top:10px}
+  .legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px;vertical-align:-1px}
+  .note{font-size:.88rem;color:var(--muted);margin-top:8px}
+  .caveat{border-left:3px solid var(--neg);padding:10px 13px;
+          background:color-mix(in srgb,var(--neg) 6%,transparent);border-radius:0 6px 6px 0;margin:14px 0}
+  code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.9em;
+       background:color-mix(in srgb,var(--ink) 7%,transparent);padding:1px 5px;border-radius:4px}
+  .steps{counter-reset:s;list-style:none;padding:0;margin:0}
+  .steps li{counter-increment:s;position:relative;padding-left:38px;margin-bottom:16px}
+  .steps li::before{content:counter(s);position:absolute;left:0;top:1px;width:25px;height:25px;
+    border-radius:50%;background:var(--accent);color:#fff;display:grid;place-items:center;
+    font-size:.8rem;font-weight:700}
+  .foot{margin-top:44px;padding-top:16px;border-top:1px solid var(--line);font-size:.84rem;color:var(--muted)}
+  a{color:var(--accent)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Net Points</h1>
+<p class="sub">The final margin is the total. Every point of it is credited or debited to a player.
+This page follows one player through one game, act by act.</p>
+
+<div class="scorebar" id="scorebar"></div>
+
+<div class="grid">
+  <div>
+    <div class="card">
+      <div id="pitchwrap"></div>
+      <div class="controls" id="filters"></div>
+      <div class="legend">
+        <span><i style="background:var(--own)"></i>his own act</span>
+        <span><i style="background:var(--recv)"></i>a pass he received</span>
+        <span><i style="background:var(--won)"></i>a turnover he won</span>
+        <span class="muted">· circle size = size of the contribution · green gained, red cost</span>
+      </div>
+      <p class="note">He attacks towards the right-hand goal. Positions are where the act happened.
+      Click any circle — or any row in the table — to see how that single act reaches his score.</p>
+    </div>
+  </div>
+
+  <div>
+    <div class="card detail" id="detail"></div>
+    <div class="card" style="margin-top:18px">
+      <h3 style="margin-top:0">The ledger</h3>
+      <table class="ledger" id="ledger"></table>
+      <p class="note" id="ledgernote"></p>
+    </div>
+  </div>
+</div>
+
+<h2>Every act, in order</h2>
+<div class="card">
+  <div class="scroll">
+    <table id="events"></table>
+  </div>
+</div>
+
+<h2>How the score is built</h2>
+<div class="card">
+<ol class="steps" id="steps"></ol>
+</div>
+
+<h2>What this does not do</h2>
+<div class="card">
+<p style="margin-top:0">No positional centring, no standardising, no scaling by time on ground, no
+opponent adjustment. Every one of those compares a player against an expectation, and subtracting an
+expectation is exactly what stops the team totals adding up to the margin. They belong in the rating
+that predicts future games, not in the measure of what happened.</p>
+
+<div class="caveat">
+<strong>Two numbers here are judgement, not measurement.</strong> The share of a turnover paid to the
+defending side, and the share of that paid to the player who actually won the ball, are set by hand.
+They cannot be fitted from the margin: the totals add up correctly for <em>any</em> value of either,
+which is the design working properly and also why the margin cannot choose them. They are being
+settled against how repeatable a player's score is from one season to the next.
+</div>
+
+<div class="caveat">
+<strong>The level is not anchored, only the difference.</strong> The raw ledger tracks a team's own
+score (correlation 0.906) more closely than the margin (0.786), because it measures scoring against
+expectation. In a high-scoring game both sides read positive at once. What is pinned exactly is the
+<em>difference</em> between the two teams, which is the match margin.
+</div>
+</div>
+
+<div class="foot">
+Generated from <code>torp::build_net_points()</code>. Method and measurements:
+<a href="https://github.com/peteowen1/torp">peteowen1/torp</a>.
+Every figure on this page is computed from play-by-play, not entered by hand.
+</div>
+</div>
+
+<script>
+const D = __DATA__;
+
+const fmt = (v, d = 2) => (v >= 0 ? "+" : "−") + Math.abs(v).toFixed(d);
+const cls = v => v >= 0 ? "pos" : "neg";
+const ROLE = {own:"his own act", received:"a pass he received", won:"a turnover he won"};
+const ROLECOL = {own:"var(--own)", received:"var(--recv)", won:"var(--won)"};
+
+/* ---------- header ---------- */
+const m = D.match, p = D.player;
+document.getElementById("scorebar").innerHTML =
+  `<strong style="font-size:1.05rem">${m.home} ${m.home_score} &ndash; ${m.away_score} ${m.away}</strong>
+   <span class="pill">Round ${m.round}, ${m.date}</span>
+   <span class="pill">margin +${m.margin}</span>
+   <span class="pill">${p.name} &middot; ${p.position} &middot; ${p.tog}% game time</span>`;
+
+/* ---------- pitch ---------- */
+const RX = 77.5, RY = 68;
+const ev = D.events.map((e, i) => ({...e, i}));
+const maxAbs = Math.max(...ev.map(e => Math.abs(e.contrib)), 0.4);
+const r = v => 1.5 + 4.6 * Math.sqrt(Math.abs(v) / maxAbs);
+
+function pitch() {
+  const arc = (cx, sign) => {
+    const R = 50, pts = [];
+    for (let a = -90; a <= 90; a += 4) {
+      const t = a * Math.PI / 180;
+      pts.push(`${(cx + sign * R * Math.cos(t)).toFixed(1)},${(R * Math.sin(t)).toFixed(1)}`);
+    }
+    return pts.join(" ");
+  };
+  const dots = ev.map(e => `<circle class="mark" data-i="${e.i}" cx="${e.x}" cy="${-e.y}"
+      r="${r(e.contrib).toFixed(2)}"
+      fill="${e.contrib >= 0 ? 'var(--pos)' : 'var(--neg)'}"
+      stroke="${ROLECOL[e.role]}" stroke-width="1"><title>${e.desc} — ${fmt(e.contrib)}</title></circle>`).join("");
+  // Real AFL markings, to scale for this ground (155m x 136m): centre square is
+  // 50m x 50m, goal square 9m deep and 6.4m wide, 50m arc struck from the centre
+  // of the goal line. An earlier version drew the centre square 50x25 and added
+  // a full-length centre line, which is not a marking on a football ground.
+  return `<svg viewBox="-88 -74 176 148" role="img" aria-label="Match events on an AFL ground">
+    <ellipse class="oval" cx="0" cy="0" rx="${RX}" ry="${RY}"/>
+    <rect x="-25" y="-25" width="50" height="50" fill="none" stroke="var(--grassline)" stroke-width=".6"/>
+    <circle cx="0" cy="0" r="5" fill="none" stroke="var(--grassline)" stroke-width=".6"/>
+    <circle cx="0" cy="0" r="1.5" fill="none" stroke="var(--grassline)" stroke-width=".6"/>
+    <polyline points="${arc(RX, -1)}" fill="none" stroke="var(--grassline)" stroke-width=".6"/>
+    <polyline points="${arc(-RX, 1)}" fill="none" stroke="var(--grassline)" stroke-width=".6"/>
+    <rect x="${RX - 9}" y="-3.2" width="9" height="6.4" fill="none" stroke="var(--grassline)" stroke-width=".6"/>
+    <rect x="${-RX}" y="-3.2" width="9" height="6.4" fill="none" stroke="var(--grassline)" stroke-width=".6"/>
+    <text class="lbl" x="${RX - 24}" y="-${RY - 5}">attacking &#8594;</text>
+    ${dots}
+  </svg>`;
+}
+document.getElementById("pitchwrap").innerHTML = pitch();
+
+/* ---------- filters ---------- */
+let filter = "all";
+const roles = ["all", "own", "received", "won"];
+document.getElementById("filters").innerHTML = roles.map(rr =>
+  `<button class="f" data-r="${rr}" aria-pressed="${rr === 'all'}">${
+    rr === "all" ? "All acts" : ROLE[rr]}${rr === "all" ? "" : ` (${ev.filter(e => e.role === rr).length})`}</button>`
+).join("");
+document.getElementById("filters").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  filter = b.dataset.r;
+  document.querySelectorAll("#filters button").forEach(x =>
+    x.setAttribute("aria-pressed", x.dataset.r === filter));
+  applyFilter();
+});
+function applyFilter() {
+  document.querySelectorAll(".mark").forEach(c => {
+    const e = ev[+c.dataset.i];
+    c.classList.toggle("dim", filter !== "all" && e.role !== filter);
+  });
+  document.querySelectorAll("#events tbody tr").forEach(tr => {
+    const e = ev[+tr.dataset.i];
+    tr.style.display = (filter === "all" || e.role === filter) ? "" : "none";
+  });
+}
+
+/* ---------- event table ---------- */
+document.getElementById("events").innerHTML =
+  `<thead><tr><th class="n">#</th><th>Act</th><th>Role</th><th>What happened next</th>
+   <th class="n">Play value</th><th class="n">To him</th></tr></thead><tbody>` +
+  ev.map(e => `<tr data-i="${e.i}">
+      <td class="n muted">${e.order}</td>
+      <td>${e.desc}</td>
+      <td style="color:${ROLECOL[e.role]}">${ROLE[e.role]}</td>
+      <td class="muted">${kindText(e)}</td>
+      <td class="n">${fmt(e.hm, 2)}</td>
+      <td class="n ${cls(e.contrib)}"><strong>${fmt(e.contrib, 2)}</strong></td>
+    </tr>`).join("") + "</tbody>";
+
+function kindText(e) {
+  if (e.role === "won") return "he won it back";
+  if (e.role === "received") return "the pass came to him";
+  return {retained: "kept by his team", turnover: "lost to the opposition",
+          terminal: "chain ended (score or restart)", possession: "possession, not a disposal"}[e.kind];
+}
+
+/* ---------- detail ---------- */
+function rule(e) {
+  const P = D.params;
+  if (e.role === "received")
+    return `He received this pass, so he takes <strong>${Math.round(P.receiver_share * 100)}%</strong>
+      of its value: ${fmt(e.hm)} &times; ${P.receiver_share} = <strong>${fmt(e.contrib)}</strong>.
+      The player who kicked it keeps the other ${Math.round((1 - P.receiver_share) * 100)}%.`;
+  if (e.role === "won")
+    return `He won the ball back here. The opposition's mistake was worth ${fmt(e.hm)};
+      <strong>${Math.round(P.defensive_share * 100)}%</strong> of that moves to his team, and
+      <strong>${Math.round(P.ball_winner_share * 100)}%</strong> of that goes to whoever actually
+      won it &mdash; him. ${fmt(e.hm)} &times; ${P.defensive_share} &times; ${P.ball_winner_share}
+      = <strong>${fmt(e.contrib)}</strong>.`;
+  if (e.kind === "retained")
+    return `He kept the ball alive. He keeps <strong>${Math.round((1 - P.receiver_share) * 100)}%</strong>
+      and the player who received it takes ${Math.round(P.receiver_share * 100)}%:
+      ${fmt(e.hm)} &times; ${(1 - P.receiver_share).toFixed(2)} = <strong>${fmt(e.contrib)}</strong>.`;
+  if (e.kind === "turnover")
+    return `He lost the ball. He carries
+      <strong>${Math.round((1 - P.defensive_share) * 100)}%</strong> of the cost; the other
+      ${Math.round(P.defensive_share * 100)}% is credited to the opposition for winning it:
+      ${fmt(e.hm)} &times; ${(1 - P.defensive_share).toFixed(2)} = <strong>${fmt(e.contrib)}</strong>.`;
+  if (e.kind === "terminal")
+    return `The chain ended here &mdash; a score, or the ball going out. Nobody took it off him,
+      so the full value stays with him: <strong>${fmt(e.contrib)}</strong>.`;
+  return `A possession rather than a disposal. The full value stays with him:
+      <strong>${fmt(e.contrib)}</strong>.`;
+}
+
+function show(i) {
+  const e = ev[i];
+  document.querySelectorAll(".mark").forEach(c => c.classList.toggle("sel", +c.dataset.i === i));
+  document.querySelectorAll("#events tbody tr").forEach(tr => tr.classList.toggle("sel", +tr.dataset.i === i));
+  document.getElementById("detail").innerHTML =
+    `<h3 style="margin-top:0">${e.desc}
+       <span class="pill" style="color:${ROLECOL[e.role]}">${ROLE[e.role]}</span></h3>
+     <dl class="kv">
+       <dt>When</dt><dd>Q${e.period}, ${Math.floor(e.secs / 60)}:${String(e.secs % 60).padStart(2, "0")}</dd>
+       <dt>Where</dt><dd>${e.x}m, ${e.y}m</dd>
+       <dt>Value of the play</dt><dd class="${cls(e.hm)}">${fmt(e.hm)}</dd>
+       <dt>Goes to him</dt><dd class="${cls(e.contrib)}"><strong>${fmt(e.contrib)}</strong></dd>
+     </dl>
+     <div class="rule">${rule(e)}</div>`;
+}
+document.getElementById("pitchwrap").addEventListener("click", e => {
+  const c = e.target.closest(".mark"); if (c) show(+c.dataset.i);
+});
+document.getElementById("events").addEventListener("click", e => {
+  const tr = e.target.closest("tr[data-i]"); if (tr) show(+tr.dataset.i);
+});
+
+/* ---------- ledger ---------- */
+const T = D.totals;
+const rows = [
+  ["His own acts", T.np_direct, "everything he did, after sharing passes with receivers"],
+  ["Turnovers he won", T.np_defensive_won, "paid for taking the ball off the opposition"],
+  ["Team pressure share", T.np_defensive, "his slice of turnovers his team forced"],
+  ["Turnover cost returned", T.np_ceded, "the part of his own losses credited to the opposition"],
+  ["Reconciliation", T.np_residual, "the small correction that makes the match add up exactly"]
+];
+document.getElementById("ledger").innerHTML =
+  rows.map(([k, v, why]) => `<tr><td>${k}<br><span class="muted" style="font-size:.79rem">${why}</span></td>
+    <td class="n ${cls(v)}">${fmt(v)}</td></tr>`).join("") +
+  `<tr class="total"><td>Net points</td><td class="n ${cls(T.net_points)}">${fmt(T.net_points)}</td></tr>`;
+document.getElementById("ledgernote").innerHTML =
+  `For comparison, the EPV published today reads <strong>${p.published_epv.toFixed(1)}</strong> for
+   this game. The two measure different things: that one is not tied to the scoreboard, this one is.`;
+
+/* ---------- steps ---------- */
+const P = D.params;
+document.getElementById("steps").innerHTML = [
+  [`Start from what each play was worth`,
+   `Every act changes how many points a team can expect to score next. That change is the raw
+    material &mdash; and because those changes chain together, adding them up across a whole match
+    already lands within about a goal of the real margin, with nothing fitted.`],
+  [`Share a pass between the two players in it`,
+   `A kick that finds a teammate was made by two people. The kicker keeps
+    ${Math.round((1 - P.receiver_share) * 100)}%, the receiver takes ${Math.round(P.receiver_share * 100)}%.`],
+  [`Take something off a turnover and give it to the other side`,
+   `The play-by-play records no tackles, spoils or pressure, so defending would otherwise be worth
+    nothing at all. ${Math.round(P.defensive_share * 100)}% of every turnover moves to the team that
+    won the ball.`],
+  [`Pay the player who actually won it`,
+   `He is not guessed at &mdash; he is the next player to touch the ball.
+    ${Math.round(P.ball_winner_share * 100)}% of that credit goes to him; the rest spreads across his
+    team for the pressure that forced the mistake.`],
+  [`Make the match add up`,
+   `A small correction, shared by time on ground, so the two teams' totals differ by exactly the final
+    margin. It either balances or there is a bug &mdash; there is nothing to tune.`]
+].map(([h, b]) => `<li><strong>${h}</strong><br><span class="muted">${b}</span></li>`).join("");
+
+show(ev.reduce((best, e, i) => Math.abs(e.contrib) > Math.abs(ev[best].contrib) ? i : best, 0));
+applyFilter();
+</script>
+</body>
+</html>
