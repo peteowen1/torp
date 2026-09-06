@@ -1768,3 +1768,31 @@ NP_CONTEST_WINNER_SHARE <- c(
 #' Fallback for `NP_CONTEST_WINNER_SHARE`
 #' @keywords internal
 NP_CONTEST_WINNER_SHARE_DEFAULT <- 0.50
+
+#' Difficulty credit: the ball-winner's share of a ceded ground ball, by act (D11)
+#'
+#' Under difficulty credit the flat `NP_BALL_WINNER_SHARE` gives way to a share
+#' for WHAT the winner did on the next row: a mark or a free is nearly all his,
+#' a loose ball is mostly the pressure that made it loose. Chosen with Pete
+#' 2026-09-06 as defaults for the year-over-year test.
+#' @keywords internal
+NP_BALL_WINNER_SHARE_BY_ACT <- c(
+  "Uncontested Mark" = 0.80, "Contested Mark" = 0.80, "Mark On Lead" = 0.80,
+  "Free For" = 0.80,
+  "Loose Ball Get" = 0.30, "Hard Ball Get" = 0.30, "Loose Ball Get Crumb" = 0.30,
+  "Gather" = 0.30, "Gather From Hitout" = 0.30, "Gather from Opposition" = 0.30,
+  "Handball Received" = 0.30, "Ground Kick" = 0.30
+)
+
+#' Fallback for `NP_BALL_WINNER_SHARE_BY_ACT`
+#' @keywords internal
+NP_BALL_WINNER_SHARE_BY_ACT_DEFAULT <- 0.30
+
+#' Weights of the four context components in `spread = "context"` (D12)
+#'
+#' Observed pairing outranks the mirror prior, because mirror alone widened the
+#' forward/defender gap (EPV-NET-POINTS.md s5). A component with no support in
+#' a pool drops out and the rest renormalise. Defaults for the year-over-year
+#' test, not results.
+#' @keywords internal
+NP_CONTEXT_WEIGHTS <- c(pair = 0.40, acts = 0.30, mirror = 0.20, tog = 0.10)

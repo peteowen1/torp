@@ -4,14 +4,19 @@
 \alias{.np_spread_pool}
 \title{Spread each pool across the winning team's on-field players}
 \usage{
-.np_spread_pool(pool, lineup, spread, mirror_share)
+.np_spread_pool(pool, lineup, spread, mirror_share, pairs = NULL)
 }
 \arguments{
 \item{pool}{From \code{.np_defensive_pool()}.}
 
 \item{lineup}{Per-match roster with \code{position}, \code{tog}, \code{def_acts}.}
 
-\item{spread}{One of "matchup", "defensive_acts", "tog".}
+\item{spread}{How a team pool is shared across the players on the ground:
+\code{"matchup"} (the disposer's positional mirror takes \code{mirror_share}, rest by
+TOG), \code{"defensive_acts"} (by box-score defensive acts), \code{"tog"} (flat by
+time on ground) or \code{"context"} (Pete's D12 mix: observed pairings from
+chains contest targets, defensive acts, mirror and TOG, weighted by
+\code{NP_CONTEXT_WEIGHTS}; needs \code{chains} or \code{contest_pairs} for the pairings).}
 
 \item{mirror_share}{Share the mirror slot takes under "matchup".}
 }

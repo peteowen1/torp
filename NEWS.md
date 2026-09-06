@@ -1,5 +1,28 @@
 # torp 1.4.8
 
+## Net Points: routing by act, and a context spread (D11, D12)
+
+Step 4 of the v4 credit rules. Under difficulty credit the ball-winner's share
+of a ceded ground ball follows WHAT he did to win it (`NP_BALL_WINNER_SHARE_BY_ACT`:
+a mark or a free 80%, a loose ball 30%) instead of the flat
+`NP_BALL_WINNER_SHARE`. And `spread = "context"` shares a team pool by Pete's
+mix of evidence: observed attacker-versus-defender pairings from chains contest
+targets (`.np_contest_pairs()`, 12.7 a match in 2026), box-score defensive acts,
+the positional mirror and time on ground, weighted by `NP_CONTEXT_WEIGHTS`
+(0.4 / 0.3 / 0.2 / 0.1); a component with no support in a pool drops out. Pools
+are now keyed by the disposer as well, so the pairing can be looked up.
+
+Measured on 2026: 1,574 of 9,169 defensive pools carry pairing evidence; the
+context spread moves the forward/defender gap from 2.03 (matchup) to 1.61 points
+a game, but split-half reliability falls from 0.680 to 0.649, so `"matchup"`
+stays the default and the weights are left to the year-over-year test.
+
+Review finding fixed here: the opposition that receives a contest cession is
+now the OTHER team on the match roster, never the team of the resolution row,
+and the roster includes chains-only actors (a spoiler who never touched the
+ball in PBP). A winner not on that roster sends his share to the pool with a
+logged count rather than creating a phantom row.
+
 ## Net Points: contested kicks split at the contest (D8)
 
 Step 3 of the v4 credit rules. A kick that resolves at a fought contest (a

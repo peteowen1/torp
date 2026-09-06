@@ -526,9 +526,10 @@ test_that("difficulty credit pays decision, split surprise, blame and the pools"
   # 0.3 * -2.0 = -0.6.
   expect_equal(p1$np_direct, 0.522 + 3.0 - 0.6, tolerance = 1e-9)
   expect_equal(p1$np_ceded, -2.45, tolerance = 1e-9)
-  # p3 is away: the whole ceded 2.45 lands on him as ball-winner, reported in
-  # his own frame
-  expect_equal(p3$np_defensive_won, -2.45, tolerance = 1e-9)
+  # p3 is away: he won the ball with an Uncontested Mark, so under difficulty
+  # credit the by-act table (0.80, NP_BALL_WINNER_SHARE_BY_ACT) applies, not
+  # the flat ball_winner_share; reported in his own frame
+  expect_equal(p3$np_defensive_won, -0.8 * 2.45, tolerance = 1e-9)
   # the offence pool (0.1 from row 1) spreads by TOG over Home FC's p1 (90)
   # and p2 (80)
   expect_equal(p1$np_team, 0.1 * 90 / 170, tolerance = 1e-9)
@@ -578,15 +579,16 @@ test_that("a contest the defence won pays the winner, the pool and the ground ba
   # Face value is unchanged (0.55 - 1.05 + 3.5 = 3.0), so np_direct is as before.
   expect_equal(p1$np_direct, 0.522 + 3.0 - 0.6, tolerance = 1e-9)
   expect_equal(p1$np_ceded, -(3.5 - 1.05), tolerance = 1e-9)
-  # p3 (away): the ground-ball cession in full (psi = 1), and half the contest
-  # cession as the spoiler (NP_CONTEST_WINNER_SHARE["Spoil"] = 0.5), both in
-  # his own frame
-  expect_equal(p3$np_defensive_won, -3.5, tolerance = 1e-9)
+  # p3 (away): 80% of the ground-ball cession (he won it with an Uncontested
+  # Mark, by-act table) and half the contest cession as the spoiler
+  # (NP_CONTEST_WINNER_SHARE["Spoil"] = 0.5), both in his own frame
+  expect_equal(p3$np_defensive_won, -0.8 * 3.5, tolerance = 1e-9)
   expect_equal(p3$np_contest_won, 0.525, tolerance = 1e-9)
-  # the other half of the contest cession spreads by TOG over Away FC (p3 100,
-  # p4 70)
-  expect_equal(p3$np_defensive, 0.525 * 100 / 170, tolerance = 1e-9)
-  expect_equal(p4$np_defensive, 0.525 * 70 / 170, tolerance = 1e-9)
+  # the pool is the other half of the contest cession (-0.525 in the home
+  # frame) plus the unpaid 20% of the ground-ball cession (+0.7): +0.175, spread
+  # by TOG over Away FC (p3 100, p4 70) and read in their own frame
+  expect_equal(p3$np_defensive, -0.175 * 100 / 170, tolerance = 1e-9)
+  expect_equal(p4$np_defensive, -0.175 * 70 / 170, tolerance = 1e-9)
   expect_equal(sum(np$net_points_hm), unname(sum(NP_FIXTURE_LEDGER_HM)), tolerance = 1e-10)
 })
 
@@ -613,4 +615,79 @@ test_that("a contest the attack won pays the same-team winner directly", {
   expect_equal(p2$np_team, 0.25 * 80 / 170, tolerance = 1e-9)
   expect_true(all(m2$np_contest_won == 0))
   expect_equal(sum(np$net_points_hm), unname(sum(NP_FIXTURE_LEDGER_HM)), tolerance = 1e-10)
+})
+
+# ---- routing by act and the context spread (D11, D12) -------------------------
+test_that("under difficulty the ball-winner's share follows what he did", {
+  f <- np_fixture()
+  # M1 row 3: p1 turns it over to p3, whose next act is an Uncontested Mark
+  # (0.80 by act) -- the flat rule would pay ball_winner_share.
+  np <- suppressMessages(build_net_points(
+    f$pbp, f$stats, f$results, credit = "difficulty",
+    difficulty_terms = np_terms_fixture(), reconcile = FALSE, spread = "tog",
+    ball_winner_share = 0.6, blame_share = 0.3, offence_pool_share = 0))
+  p3 <- np[match_id == "M1" & player_id == "p3"]
+  # ceded on row 3 = 0.7 * 3.5 = 2.45; an intercept mark takes 80% of it
+  expect_equal(p3$np_defensive_won, -0.8 * 2.45, tolerance = 1e-9)
+  expect_equal(sum(np$net_points_hm), unname(sum(NP_FIXTURE_LEDGER_HM)), tolerance = 1e-10)
+})
+
+test_that("the context spread conserves and honours an observed pairing", {
+  f <- np_fixture()
+  # Away FC in M1 is p3 (FB, 100% TOG, 3 tackles ...) and p4 (WL, 70%).
+  # A pairing says p4 was the one contesting p1's kicks.
+  pairs <- data.table::data.table(match_id = "M1", att = "p1", def = "p4", n = 3L)
+  base <- suppressMessages(build_net_points(
+    f$pbp, f$stats, f$results, reconcile = FALSE, spread = "context",
+    ball_winner_share = 0, defensive_share = 1))
+  paired <- suppressMessages(build_net_points(
+    f$pbp, f$stats, f$results, reconcile = FALSE, spread = "context",
+    ball_winner_share = 0, defensive_share = 1, contest_pairs = pairs))
+  for (np in list(base, paired)) {
+    expect_equal(sum(np$net_points_hm), unname(sum(NP_FIXTURE_LEDGER_HM)), tolerance = 1e-10)
+  }
+  # p1's turnovers in M1 pool to Away FC; with the pairing, p4's share of
+  # those pools rises and p3's falls, and the pair sums are unchanged
+  b <- base[match_id == "M1"]; q <- paired[match_id == "M1"]
+  expect_gt(abs(q[player_id == "p4"]$np_defensive), abs(b[player_id == "p4"]$np_defensive))
+  expect_lt(abs(q[player_id == "p3"]$np_defensive), abs(b[player_id == "p3"]$np_defensive))
+  expect_equal(q[team == "Away FC", sum(np_defensive)], b[team == "Away FC", sum(np_defensive)],
+               tolerance = 1e-10)
+})
+
+# ---- the opposition is the other roster, never the resolution row -------------
+test_that("a contest the defence won but the attack regathered pays the opposition", {
+  f <- np_fixture()
+  # M1 row 1: Kick by Home p1, retained by p2 (delta 1.0). Terms say the
+  # defence (p3) spoiled it and Home regathered: decision 0.3, contest -0.5,
+  # ground 1.2. No chains are supplied, so the ledger's resolve_team is NA and
+  # the opposition must be derived from the roster.
+  terms <- data.table::data.table(
+    match_id = "M1", display_order = 1L, p_hat = 0.4, decision = 0.3, surprise = 0.7,
+    contested = TRUE, cont_desc = "Spoil", cont_surprise = -0.5, ground_surprise = 1.2,
+    def_win = TRUE, winner_pid = "p3")
+  np <- suppressMessages(build_net_points(
+    f$pbp, f$stats, f$results, credit = "difficulty", difficulty_terms = terms,
+    reconcile = FALSE, spread = "tog", blame_share = 0.3, offence_pool_share = 0.1))
+  expect_false(anyNA(np$team))
+  expect_equal(nrow(np[, .N, by = .(match_id, player_id)][N > 1]), 0)
+  p3 <- np[match_id == "M1" & player_id == "p3"]
+  expect_equal(p3$team, "Away FC")
+  # spoiler takes half of the ceded 0.7 * -0.5 = -0.35 (home frame), own frame +
+  expect_equal(p3$np_contest_won, 0.5 * 0.35, tolerance = 1e-9)
+  # p2 receives 0.9 * 1.2 as the regatherer
+  expect_equal(np[match_id == "M1" & player_id == "p2"]$np_direct, -1.4 + 0.9 * 1.2, tolerance = 1e-9)
+  expect_equal(sum(np$net_points_hm), unname(sum(NP_FIXTURE_LEDGER_HM)), tolerance = 1e-10)
+  # a winner who is not on the opposition's roster: share to the pool, no
+  # phantom row, total unchanged
+  terms[, winner_pid := "pZ"]
+  np2 <- suppressWarnings(suppressMessages(build_net_points(
+    f$pbp, f$stats, f$results, credit = "difficulty", difficulty_terms = terms,
+    reconcile = FALSE, spread = "tog", blame_share = 0.3, offence_pool_share = 0.1)))
+  expect_false("pZ" %in% np2$player_id)
+  expect_true(all(np2$np_contest_won == 0))
+  expect_equal(np2[match_id == "M1" & team == "Away FC", sum(np_defensive)],
+               np[match_id == "M1" & team == "Away FC", sum(np_defensive + np_contest_won)],
+               tolerance = 1e-10)
+  expect_equal(sum(np2$net_points_hm), unname(sum(NP_FIXTURE_LEDGER_HM)), tolerance = 1e-10)
 })

@@ -13,14 +13,15 @@ build_net_points(
   defensive_share = NP_DEFENSIVE_SHARE,
   receiver_share = NP_RECEIVER_SHARE,
   ball_winner_share = NP_BALL_WINNER_SHARE,
-  spread = c("matchup", "defensive_acts", "tog"),
+  spread = c("matchup", "defensive_acts", "tog", "context"),
   mirror_share = NP_MIRROR_SHARE,
   level = c("sum", "half_margin"),
   reconcile = TRUE,
   blame_share = NP_BLAME_SHARE,
   offence_pool_share = NP_OFFENCE_POOL_SHARE,
   difficulty_terms = NULL,
-  leak_safe = TRUE
+  leak_safe = TRUE,
+  contest_pairs = NULL
 )
 }
 \arguments{
@@ -84,6 +85,9 @@ share sweep fits the models once. Ignored under \code{credit = "flat"}.}
 
 \item{leak_safe}{Difficulty only: fit each season's models on earlier
 seasons. With a single season the fit is in-sample and says so.}
+
+\item{contest_pairs}{Precomputed output of \code{.np_contest_pairs()} for
+\code{spread = "context"}; computed from \code{chains} when absent.}
 }
 \value{
 A data.table with one row per player-match \strong{that had at least one
