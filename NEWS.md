@@ -1,3 +1,21 @@
+# torp 1.4.8
+
+## Net Points reads chains alongside PBP
+
+`build_net_points(chains=)` takes the raw chains for the same matches. The
+allocation is **identical** -- proven on all 213 matches of 2026 with `identical()`
+in `data-raw/04-analysis/np_chains_ledger_equivalence.R` -- but every disposal in
+the ledger now carries `resolve_desc` / `resolve_team` / `resolve_player`: the
+chains row that ended it (a spoil, a contested mark, a goal), which PBP drops.
+PBP is an exact subset of chains on `(match_id, display_order)`; the 82,718
+chains-only rows in 2026 are spoils, contest targets, goals, behinds and fumbles.
+Nothing uses the resolution yet. It is step 1 of the v4 credit rules
+(`docs/plans/EPV-V4-CREDIT-RULES.md`).
+
+Two facts the resolution column showed on day one: the spoiler is the next
+possessor only 7.8% of the time, and 3,860 kicks that resolve to a behind are
+classed as turnovers because the next state is the opposition's kick-in.
+
 # torp 1.4.7
 
 ## Net Points -- the level constraint was wrong

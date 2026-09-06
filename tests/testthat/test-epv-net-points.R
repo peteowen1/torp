@@ -349,3 +349,97 @@ test_that("level = half_margin pins each team to half the margin", {
   d <- merge(d, unique(np[, .(match_id, margin)]), by = "match_id")
   expect_equal(d$v, d$margin / 2, tolerance = 1e-10)
 })
+
+# ---- chains-aware sequence ---------------------------------------------------
+# PBP is a subset of chains on (match_id, display_order). With chains supplied
+# the VALUE must not move at all -- every point still comes from a PBP row --
+# while each disposal learns what it resolved into (a spoil, a goal), which PBP
+# never shows. The fixture spaces display_order by 10 so chains-only rows can
+# sit between PBP rows.
+np_chains_fixture <- function() {
+  f <- np_fixture()
+  pbp <- data.table::copy(f$pbp)
+  pbp[, display_order := display_order * 10L]
+  pbp[, team_id := data.table::fifelse(home_away == "Home", "H", "A")]
+  extra <- data.table::data.table(
+    match_id      = c("M1", "M1", "M1", "M2"),
+    display_order = c(15L, 33L, 36L, 35L),
+    description   = c("Kick Into F50", "Contest Target", "Spoil", "Goal"),
+    team_id       = c("H", "H", "A", "H"),
+    player_id     = c("p1", "p2", "p3", "p2")
+  )
+  chains <- data.table::rbindlist(list(
+    pbp[, .(match_id, display_order, description, team_id, player_id)], extra),
+    use.names = TRUE)
+  data.table::setorder(chains, match_id, display_order)
+  list(pbp = pbp, chains = chains, stats = f$stats, results = f$results)
+}
+
+test_that("chains change nothing about the allocation", {
+  f <- np_chains_fixture()
+  for (rs in c(0, 0.3)) {
+    a <- suppressMessages(build_net_points(f$pbp, f$stats, f$results,
+                                           receiver_share = rs))
+    b <- suppressMessages(build_net_points(f$pbp, f$stats, f$results,
+                                           chains = f$chains, receiver_share = rs))
+    data.table::setorder(a, match_id, player_id)
+    data.table::setorder(b, match_id, player_id)
+    # the params attribute records that chains were supplied; the DATA must
+    # be bit-identical
+    expect_identical(as.data.frame(a), as.data.frame(b), ignore_attr = TRUE)
+    expect_identical(a$net_points, b$net_points)
+  }
+  expect_true(attr(b, "np_params")$chains)
+})
+
+test_that("the sequence keeps adjacency on PBP rows and names the resolution", {
+  f <- np_chains_fixture()
+  l0 <- suppressMessages(torp:::.np_build_ledger(f$pbp))
+  l1 <- suppressMessages(torp:::.np_build_ledger(f$pbp, f$chains))
+  # same ledger rows, same value, same next actor: chains-only rows are not
+  # states and must not become "who acted next"
+  expect_equal(nrow(l1), nrow(l0))
+  expect_identical(l1[, .(match_id, display_order, hm, next_team, next_player)],
+                   l0[, .(match_id, display_order, hm, next_team, next_player)])
+  expect_true(all(is.na(l0$resolve_desc)))
+  # M1 row 30: Kick by p1, then Contest Target (in flight) then Spoil by p3.
+  # Adjacency still says p3 (the next PBP row); resolution names the spoil.
+  r30 <- l1[match_id == "M1" & display_order == 30]
+  expect_equal(r30$next_player, "p3")
+  expect_equal(r30$resolve_desc, "Spoil")
+  expect_equal(r30$resolve_player, "p3")
+  expect_equal(r30$resolve_team, "Away FC")
+  expect_equal(r30$resolve_lag, 2L)
+  # M1 row 10: Kick, then an in-flight annotation, then the Handball. The
+  # annotation is skipped.
+  r10 <- l1[match_id == "M1" & display_order == 10]
+  expect_equal(r10$resolve_desc, "Handball")
+  expect_equal(r10$resolve_player, "p2")
+  expect_equal(r10$resolve_lag, 2L)
+  # M2 row 30: a Kick resolving to a chains-only Goal row by the kicker.
+  r30b <- l1[match_id == "M2" & display_order == 30]
+  expect_equal(r30b$resolve_desc, "Goal")
+  expect_equal(r30b$resolve_player, "p2")
+  # a chains-only row is oriented by PBP's own team map
+  s <- suppressMessages(torp:::.np_sequence(f$pbp, f$chains))
+  sp <- s[match_id == "M1" & display_order == 36]
+  expect_false(sp$in_pbp)
+  expect_equal(sp$team, "Away FC")
+  expect_equal(sp$home_away, "Away")
+  expect_true(is.na(sp$delta_epv))
+})
+
+test_that("a sequence with holes or duplicates is refused", {
+  f <- np_chains_fixture()
+  holed <- f$chains[!(match_id == "M1" & display_order == 20)]
+  expect_error(suppressMessages(torp:::.np_sequence(f$pbp, holed)),
+               "not in")
+  duped <- data.table::rbindlist(list(f$chains, f$chains[1]))
+  expect_error(suppressMessages(torp:::.np_sequence(f$pbp, duped)),
+               "duplicated")
+  # same key, different act: not the same data
+  wrong <- data.table::copy(f$chains)
+  wrong[match_id == "M1" & display_order == 20, description := "Kick"]
+  expect_error(suppressMessages(torp:::.np_sequence(f$pbp, wrong)),
+               "different description")
+})
