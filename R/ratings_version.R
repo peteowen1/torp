@@ -97,6 +97,28 @@
     # correlation with plain kick volume from +0.20 to +0.47 -- consequential
     # in both directions, and until now invisible to this guard.
     NP_BLAME_SHARE = NP_BLAME_SHARE,
+    # Registered as dead in a review response earlier tonight, on a season-total
+    # SIGNED sum that cancelled across matches -- the same class of error a
+    # broken sweep script made a few hours earlier in this session. Checked
+    # properly (per-player-game, with and without reconcile=TRUE, identical
+    # either way so it is not a reconciliation artifact): moving 0->1 touches
+    # every one of 512 players by 8+ games, max single-game move 10.0 points.
+    # Genuinely live; wired rather than registered. Why a fallback documented
+    # as reaching only the ~4% of disposals difficulty scoring can't score
+    # produces an effect this large is not yet understood -- flagged, not
+    # explained, and worth a real investigation before this constant is next
+    # discussed as small.
+    NP_DEFENSIVE_SHARE = NP_DEFENSIVE_SHARE,
+    # The per-act ball-winner credit table (and its catch-all default): the
+    # LIVE mechanism under credit = "difficulty", confirmed by tracing
+    # .np_defensive_pool() -- psi_row is overwritten from this table on every
+    # turnover with an identified winner. A review caught this registered as
+    # dead in the same pass that wrongly registered NP_DEFENSIVE_SHARE; I had
+    # confused it with the genuinely-dead NP_BALL_WINNER_SHARE (the flat
+    # scalar the by-act table always overrides). Confirmed live directly:
+    # sweeping the default 0->1 moves 512 players, max single-game move 6.2.
+    NP_BALL_WINNER_SHARE_BY_ACT = as.list(NP_BALL_WINNER_SHARE_BY_ACT),
+    NP_BALL_WINNER_SHARE_BY_ACT_DEFAULT = NP_BALL_WINNER_SHARE_BY_ACT_DEFAULT,
     EPV3_CHANNELS = EPV3_CHANNELS,
     EPV3_POINTS_SCALE = as.list(EPV3_POINTS_SCALE),
     EPV_CONT_LOSS_ALLOC = EPV_CONT_LOSS_ALLOC,

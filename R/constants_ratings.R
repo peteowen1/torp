@@ -1684,6 +1684,18 @@ POSITION_AVG_TOG <- c(
 #'
 #' 0.30 is a judgement, not a measurement -- see the header above for why it
 #' cannot be fitted from the identity.
+#'
+#' \strong{Under `credit = "difficulty"`, this flat rule is the FALLBACK for
+#' the disposals the model can't score -- documented at ~4% of rows -- and it
+#' was called "inert" here for a few hours on 2026-09-08 on that basis. It is
+#' not.} Checked per-player-game (2026-09-08): moving 0 to 1 touches all 512
+#' players with 8+ games, max single-game move 10.0 points, identical with
+#' and without `reconcile = TRUE` so it is not a reconciliation artifact. The
+#' earlier "inert" reading summed a signed value across the whole season,
+#' which cancels turnovers won at home against turnovers won away -- the same
+#' mistake a sweep script made hours earlier the same night. Wired into
+#' `.rating_defining_constants()`. Why a ~4%-of-rows fallback produces an
+#' effect this large is not yet understood.
 #' @keywords internal
 NP_DEFENSIVE_SHARE <- 0.30
 
