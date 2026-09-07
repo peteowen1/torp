@@ -25,7 +25,6 @@ utils::globalVariables(c(
   "home_points", "away_points", "home_points_row", "away_points_row",
   "pos_team_points", "opp_team_points", "pos_points", "pos_points_team_id",
   "points_diff", "points_row", "points_row_na", "points_shot", "points_team_id",
-  "fire",
   "model_points",
 
   # Position/location variables
