@@ -1061,27 +1061,35 @@ test_that("a missing payment table is an error, not a silent pass-through", {
                "payment table")
 })
 
-test_that("one NA time on ground does not take a whole team down", {
-  # sum(tog) is a GROUP SCALAR, so before the guard a single NA made every value
-  # on that player's team NA rather than just his own.
+# Two different real-world causes put an NA into `out$tog`, and ONE guard
+# there catches both (`.np_team_margin()`'s comment above that guard explains
+# why an earlier, second guard upstream was removed: disabling each in
+# isolation, on this fixture, showed the upstream one changed nothing --
+# not the warning, not net_points, not even which internal column the value
+# landed in -- for every pool-spread setting tried). Both scenarios below
+# converge on that one guard's message, "no time on ground on record", which
+# names both causes rather than picking one.
+
+test_that("a player with a lineup row but no time-on-ground value doesn't take his team down", {
+  # sum(tog) is a GROUP SCALAR in the reconciliation below, so an unguarded NA
+  # here would make every value on his team NA, not just his own.
   f <- np_fixture()
   f$stats[match_id == "M1" & player_id == "p2",
           time_on_ground_percentage := NA_real_]
-  # assert the guard FIRES, not merely that nothing crashed: a suppressed
-  # warning would let this pass with the branch never executing
-  expect_warning(cv <- np_conv(f), "no time on ground")
+  expect_warning(cv <- np_conv(f), "no time on ground on record")
   expect_false(anyNA(cv$net_points))
   expect_equal(cv[match_id == "M1" & home_away == "Home", sum(net_points)], 20,
                tolerance = 1e-9)
 })
 
-test_that("a paid player absent from player_stats does not take a team down", {
-  # the second NA path: `out` is built with all = TRUE, so a named player with
-  # no lineup row arrives with tog NA. He is invisible to the guard on `lu`,
-  # because that merge is inner and he is simply not in it.
+test_that("a paid player absent from player_stats entirely does not take a team down", {
+  # `out` is built with all = TRUE, so a named player with no player_stats row
+  # at all still arrives here, with tog NA. This is the genuinely load-bearing
+  # case: disabling the guard on it aborts with "a team total is 20 off its
+  # own margin", confirmed by direct test, not by reading the code.
   f <- np_fixture()
   f$stats <- f$stats[!(match_id == "M1" & player_id == "p2")]
-  expect_warning(cv <- np_conv(f), "no lineup row")
+  expect_warning(cv <- np_conv(f), "no time on ground on record")
   expect_false(anyNA(cv$net_points))
   expect_equal(cv[match_id == "M1" & home_away == "Home", sum(net_points)], 20,
                tolerance = 1e-9)

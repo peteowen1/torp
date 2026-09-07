@@ -2073,18 +2073,6 @@ np_difficulty_terms_for_season <- function(season, pbp_data = NULL, chains = NUL
   lu <- merge(lu, unique(np[, .(match_id = as.character(match_id),
                                 player_id = as.character(player_id), team)]),
               by = c("match_id", "player_id"))
-  # `time_on_ground_percentage` is NA for some rows in player_stats, and both
-  # weightings below divide by a GROUP SUM of it. A group sum is a scalar, so a
-  # single NA does not spoil one player, it makes every value on his team NA and
-  # the abort downstream then blames the components rather than the lineup.
-  # (`dacts` cannot be NA: dz() coalesces it.)
-  .miss <- lu[is.na(tog)]
-  if (nrow(.miss) > 0) {
-    cli::cli_warn(c(
-      "{nrow(.miss)} player{?s} have no time on ground; defaulting to 0.75 so the pool split stays finite.",
-      "i" = "First few: {.val {utils::head(unique(.miss$player_id), 5)}}."))
-    lu[is.na(tog), tog := 0.75]
-  }
   lu[, w := if (identical(NP_TEAM_MARGIN_POOL_BY, "tog")) tog else pmax(dacts, 0.5)]
 
   ros <- merge(lu, pool, by = c("match_id", "team"), all.x = TRUE)[is.na(pool), pool := 0]
@@ -2092,15 +2080,26 @@ np_difficulty_terms_for_season <- function(season, pbp_data = NULL, chains = NUL
   out <- merge(ros[, .(match_id, team, player_id, tog, share)], namd,
                by = c("match_id", "team", "player_id"), all = TRUE)
   out[is.na(named), named := 0][is.na(share), share := 0][, val := named + share]
-  # This merge is all = TRUE, so a player who took a named payment but has no
-  # row in player_stats lands here with tog NA -- which the guard above cannot
-  # see, because `lu` is built with an inner merge and he is simply absent from
-  # it. The reconciliation below divides by sum(tog), so leaving it would take
-  # his whole team with him.
+  # `out$tog` can be NA for two different reasons -- a player with no row at
+  # all in player_stats (this merge is all = TRUE, so he still appears via his
+  # named payment) or a player whose row has a missing
+  # time_on_ground_percentage -- and the reconciliation below divides by a
+  # GROUP SUM of `tog`, so either one turns his whole team's final numbers NA,
+  # not just his. ONE check here is enough for both: an earlier version also
+  # guarded `lu$tog` before this point, on the theory that leaving it NA would
+  # corrupt the pool-share split above. It does not -- verified by disabling
+  # each guard in isolation. Under the shipped pool-by-defensive-acts setting
+  # the weight `w` never reads `tog` at all, so an unguarded NA there is
+  # already inert; under the alternative pool-by-tog setting, an unguarded
+  # `share` for the whole team collapses to `0` via the line two above (a
+  # pre-existing behaviour, not new here) and this check's default absorbs the
+  # shortfall through `recon` instead, landing on the exact same per-player
+  # total. Keeping a second guard upstream bought nothing but a chance for its
+  # comment to overstate what it did, which is what happened.
   if (anyNA(out$tog)) {
     .nolu <- unique(out[is.na(tog)]$player_id)
     cli::cli_warn(c(
-      "{length(.nolu)} paid player{?s} have no lineup row; defaulting time on ground to 0.75.",
+      "{length(.nolu)} paid player{?s} have no time on ground on record (no lineup row, or the row's time-on-ground value is missing); defaulting to 0.75.",
       "i" = "First few: {.val {utils::head(.nolu, 5)}}."))
     out[is.na(tog), tog := 0.75]
   }

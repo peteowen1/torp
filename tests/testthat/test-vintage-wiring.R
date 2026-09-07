@@ -104,7 +104,37 @@ KNOWN_NON_DEFINING <- c(
   # EPR_LOADING_DEFAULT is a real, used `loading` default (player_ratings.R,
   # psr.R) currently at the identity value 1.0 -- registered rather than
   # assumed inert for the same reason as EPV_RUCK_SWING_SCALE above. (2026-08-09)
-  "EPR_DECAY_DEFAULT_DAYS", "EPR_LOADING_DEFAULT"
+  "EPR_DECAY_DEFAULT_DAYS", "EPR_LOADING_DEFAULT",
+
+  # -- The NP_ family, widened into this scan on 2026-09-08. Four of its
+  # constants were already wired (NP_TURNOVER_ON_ALL_ACTS and the three
+  # NP_TEAM_MARGIN_* dials); this batch is the rest, and it is NOT one
+  # uniform case -- some are measured dead, most are simply unaudited.
+  #
+  # PROVEN INERT under the credit = "difficulty" path production runs on
+  # 2026-09-08: each is a flat-share fallback for the ~4% of disposals
+  # difficulty scoring cannot resolve, and moving it from 0 to 1 across the
+  # whole 2026 season moved total value by 1 point (NP_RECEIVER_SHARE), 74
+  # points (NP_DEFENSIVE_SHARE) or 0 points (NP_BALL_WINNER_SHARE, fully
+  # superseded by the by-act table). Registered rather than wired because
+  # wiring a provably dead constant into the drift guard buys nothing; if
+  # `credit = "difficulty"` is ever dropped these stop being dead and this
+  # entry needs revisiting.
+  "NP_RECEIVER_SHARE", "NP_DEFENSIVE_SHARE", "NP_BALL_WINNER_SHARE",
+  "NP_BALL_WINNER_SHARE_BY_ACT", "NP_BALL_WINNER_SHARE_BY_ACT_DEFAULT",
+
+  # -- UNAUDITED. Found by the scan, not yet measured either way. Each is a
+  # credit/blame dial in build_net_points()'s stoppage, contest or mirror
+  # logic and genuinely COULD move published ratings; none has been swept the
+  # way NP_BLAME_SHARE was before it got wired below. Auditing this list is
+  # its own session, not this one -- registering it here at least makes the
+  # gap visible instead of silent. (2026-09-08)
+  "NP_MIRROR_SHARE", "NP_POSITION_MIRROR", "NP_DISPOSAL_DESCS",
+  "NP_EXCLUDED_DESCS", "NP_OFFENCE_POOL_SHARE", "NP_CONTEST_WINNER_SHARE",
+  "NP_CONTEST_WINNER_SHARE_DEFAULT", "NP_CONTEXT_WEIGHTS",
+  "NP_STOPPAGE_DESCS", "NP_STOPPAGE_HITOUT_DESCS",
+  "NP_STOPPAGE_RUCK_OWN_DESCS", "NP_STOPPAGE_LOSER_SHARE",
+  "NP_STOPPAGE_SPLIT", "NP_STOPPAGE_BAND_M"
 )
 
 # ---------------------------------------------------------------------------
@@ -154,7 +184,7 @@ vintage_scan_family_constants <- function(path = vintage_constants_source_path()
   pat <- "^([A-Z][A-Z0-9_]*) *<-"
   hit <- grepl(pat, code_lines)
   nm <- sub(paste0(pat, ".*$"), "\\1", code_lines[hit])
-  families <- "^(TORP_|EPR_|EPV_|PSR_|LINEUP_POSITION_)"
+  families <- "^(TORP_|EPR_|EPV_|PSR_|LINEUP_POSITION_|NP_)"
   sort(unique(nm[grepl(families, nm)]))
 }
 

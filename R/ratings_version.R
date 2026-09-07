@@ -90,6 +90,13 @@
     NP_TEAM_MARGIN_CONVENTION = NP_TEAM_MARGIN_CONVENTION,
     NP_TEAM_MARGIN_NAMED_SHARE = NP_TEAM_MARGIN_NAMED_SHARE,
     NP_TEAM_MARGIN_POOL_BY = NP_TEAM_MARGIN_POOL_BY,
+    # The disposer's share of a lost kick's surprise. Swept for the first time
+    # 2026-09-08 (its own docstring called the shipped 0.30 "the default the
+    # repeatability test starts from, not a result"): moving it from 0.30 to
+    # 1.00 moves within-position repeatability from 0.6535 to 0.7561 and the
+    # correlation with plain kick volume from +0.20 to +0.47 -- consequential
+    # in both directions, and until now invisible to this guard.
+    NP_BLAME_SHARE = NP_BLAME_SHARE,
     EPV3_CHANNELS = EPV3_CHANNELS,
     EPV3_POINTS_SCALE = as.list(EPV3_POINTS_SCALE),
     EPV_CONT_LOSS_ALLOC = EPV_CONT_LOSS_ALLOC,

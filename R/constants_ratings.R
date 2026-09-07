@@ -1832,9 +1832,19 @@ NP_TEAM_MARGIN_POOL_BY <- "dacts"
 #' credit to the defence. Chosen by Pete 2026-09-06 over "decision only" so a
 #' kick that was fine in expectation but badly executed still costs its kicker
 #' something. Not identifiable from conservation -- the identity holds for any
-#' value -- so this is the default the year-over-year repeatability test starts
-#' from, not a result. The first row to watch when it runs: a fumbled 2m
-#' handball wore -0.58 under the flat rule and -0.16 under this one.
+#' value.
+#'
+#' Swept 2026-09-08, once Pete asked why the league's best kick (Nick Daicos)
+#' had a poor Kick channel: repeatability rises monotonically with this share
+#' (0.6535 at 0.30, 0.7561 at 1.00) but so does the correlation with plain kick
+#' VOLUME (+0.20 to +0.47) and, moved the other way, the correlation with
+#' defensive acts falls to -0.40 at 1.00 -- exactly the positions the team-sum
+#' convention was shipped to help. The shipped 0.30 sits close to the
+#' volume-neutral point; raising it buys repeatability by making the metric
+#' more of a kick counter, which is not a trade to make blind. A move to 0.15
+#' is the one live candidate (repeatability 0.6338, kick correlation flat at
+#' +0.09) and is queued for the same session that revisits the contest-kick
+#' rule, not made here.
 #' @keywords internal
 NP_BLAME_SHARE <- 0.30
 
