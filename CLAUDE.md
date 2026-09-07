@@ -37,13 +37,30 @@ What `ls R/` does not give you is which files belong together. Grouped by domain
 
 ## Key Constants
 
-All rating-blend weights and decay parameters (`TORP_EPR_WEIGHT`, `EPR_DECAY_RECV`, `EPR_DECAY_DISP`, `EPR_DECAY_SPOIL`, `EPR_DECAY_HITOUT`, `EPR_PRIOR_GAMES_RECV`, `EPV_WEIGHT_DECAY_DAYS`, `TOTAL_PRED_TOG`) live in `R/constants_ratings.R` — see the source for current values.
+All rating-blend weights and decay parameters (`TORP_EPR_WEIGHT`, `EPR_DECAY_RECV`, `EPR_DECAY_DISP`, `EPR_DECAY_SPOIL`, `EPR_DECAY_HITOUT`, `EPR_PRIOR_GAMES_RECV`, `EPV_WEIGHT_DECAY_DAYS`) live in `R/constants_ratings.R` — see the source for current values.
 
-### EPV v3 (built 2026-08-03, NOT shipped)
+### EPV v4 (Net Points) is the published engine since 2026-09-07
 
-`EPV_ENGINE` selects the engine and defaults to `"v2"`, so published ratings are
-unchanged — proven, not asserted: `data-raw/04-analysis/epv3_verify_v2_unchanged.R`
-compares all 73 columns across 56,576 player-games.
+`EPV_ENGINE` selects the engine and is `"v4"`. `RATING_VINTAGE` is `"v4"` to match;
+the two must move together or `check_vintage_alignment()` refuses every ratings run.
+v4 allocates the actual match margin rather than fitting a scale to it — see
+[`../docs/plans/EPV-V4-CREDIT-RULES.md`](../docs/plans/EPV-V4-CREDIT-RULES.md) for the
+rules D1-D18 and worked examples, and `R/epv_net_points.R` for the ledger.
+
+Two things that trip people up on the published frame:
+
+- **`epv_hitout` is identically zero.** Stoppage value lives in `epv_recv` now, and
+  `epv` is exactly `epv_recv + epv_disp + epv_spoil`. A design carrying the total
+  beside its parts is rank-deficient, and a constant-zero column is a second,
+  different defect that is easy to confuse with collinearity.
+- **The published `epv*` columns are position- and opponent-adjusted, mean zero.**
+  They do NOT sum to the match margin (2026: correlation 0.953, mean gap 10.3
+  points). The conservation identity holds on the raw ledger only. For a final
+  score use `load_results()`.
+
+`"v2"` and `"v3"` remain selectable and their code paths are still present.
+The v3 material below is kept because those paths are reachable by flipping the
+constant, not because v3 is live.
 
 **Before touching anything EPV- or contest-related, read
 [`../docs/reference/EPV-V3-CHANNELS.md`](../docs/reference/EPV-V3-CHANNELS.md)**

@@ -97,11 +97,6 @@ KNOWN_NON_DEFINING <- c(
   # names, so a v3 vintage records its priors under v2's labels. The VALUES are
   # captured and drift is still detected -- only the naming is stale.
 
-  # -- The "contest" EPR slot (decay/prior-games/prior-rate) is defined but
-  # referenced nowhere outside constants_ratings.R itself (verified by a
-  # repo-wide grep 2026-08-09) -- dead until a consumer reads it, most likely
-  # a future v3 3-channel merge. Not rating-defining while nothing reads it.
-  "EPR_DECAY_CONTEST", "EPR_PRIOR_GAMES_CONTEST", "EPR_PRIOR_RATE_CONTEST",
 
   # -- Legacy/derived, not independent degrees of freedom.
   # EPR_DECAY_DEFAULT_DAYS is a straight alias (`<- EPR_DECAY_RECV`), so its

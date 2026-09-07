@@ -108,10 +108,6 @@ POSITION_AVG_TOG_DEFAULT <- 0.75
 #' @keywords internal
 AFL_ROOF_VENUES <- c("Docklands")
 
-#' Default timezone for AFL matches
-#' @keywords internal
-AFL_DEFAULT_TIMEZONE <- "Australia/Melbourne"
-
 #' Maximum round number fallback when AFL_REGULAR_SEASON_ROUNDS lookup fails
 #' @keywords internal
 AFL_MAX_REGULAR_ROUNDS <- 24L
@@ -140,19 +136,6 @@ AFL_SAPI_BASE_URL <- "https://sapi.afl.com.au/afl/"
 #' `AFL-API-REFERENCE.md`'s "Endpoint family: statspro" section.
 #' @keywords internal
 AFL_STATSPRO_BASE_URL <- "https://api.afl.com.au/statspro/"
-
-#' AFL CFS numeric competition codes (the 3-digit segment in `CD_S{year}{code}`
-#' / `CD_R{year}{code}{round}` URLs and match IDs)
-#'
-#' Verified live against `aflapi.afl.com.au/afl/v2/competitions` 2026-08-24.
-#' Not currently threaded through the CFS-keyed scraper functions
-#' ([get_round_games()], [get_season_games()]) because those exist only to
-#' enumerate matches for chain scraping, and AFLW has no chain data at any
-#' comp code (see [get_match_chains()] docs) -- there is nothing for the AFLW
-#' entry to unlock there yet. Kept here as the verified reference for when
-#' that changes.
-#' @keywords internal
-AFL_COMP_CODES <- c(AFLM = "014", AFLW = "264")
 
 #' AFL public API (`aflapi.afl.com.au`) competition `code` values per comp
 #'

@@ -8,11 +8,6 @@
 # EPR (Expected Possession Rating) System Constants
 # -------------------------------------------------
 
-#' Default total predicted TOG for league-wide centering (18 players per team x 18 teams).
-#' Used as fallback; actual centering adapts to the number of teams present.
-#' @keywords internal
-TOTAL_PRED_TOG <- 324L
-
 #' Decay factor (in days) for PBP-level game recency weighting in add_epv_vars()
 #' @keywords internal
 EPV_WEIGHT_DECAY_DAYS <- 365
@@ -561,19 +556,6 @@ EPR_PRIOR_RATE_HITOUT <- if (identical(EPV_ENGINE, "v3") && identical(EPV3_CHANN
 } else {
   -0.3000 * .epr_prior_points_scale("cont_stop") * EPV_RUCK_SWING_SCALE
 }
-
-#' Decay factor (in days) for contest component weighting
-#' @keywords internal
-EPR_DECAY_CONTEST <- EPR_DECAY_RECV
-
-#' Prior games constant for contest ratings
-#' @keywords internal
-EPR_PRIOR_GAMES_CONTEST <- 3.0000
-
-#' Prior rate for contest component (shrinkage target per weighted game).
-#' Zero because contest credit is zero-sum — average player should be 0.
-#' @keywords internal
-EPR_PRIOR_RATE_CONTEST <- 0.0000
 
 #' Weight of EPR in TORP blend (0.5 = equal blend of EPR + PSR)
 #' @keywords internal
