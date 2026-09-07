@@ -42,6 +42,7 @@ so the correction reaches only \code{pos_group} derivations.
 \keyword{(2026-09-06):}
 \keyword{(2026-09-07):}
 \keyword{(819c6bed...),}
+\keyword{(PROMOTE_FROM=v4,}
 \keyword{(`build_net_points()`),}
 \keyword{(byte-identical,}
 \keyword{--}
@@ -55,6 +56,7 @@ so the correction reaches only \code{pos_group} derivations.
 \keyword{NOT}
 \keyword{NP_TURNOVER_ON_ALL_ACTS.}
 \keyword{Net}
+\keyword{PROMOTE_TO=v5),}
 \keyword{Points}
 \keyword{SAME}
 \keyword{That}
@@ -63,8 +65,8 @@ so the correction reaches only \code{pos_group} derivations.
 \keyword{\code{arrow::write_parquet()},}
 \keyword{\code{preserve_rating_vintage()}}
 \keyword{`EPR_UNITS_SCALE_V4`.}
+\keyword{`data-raw/03-ratings/promote_rating_vintage.R`}
 \keyword{`data-raw/03-ratings/promote_v4_vintage.R`.}
-\keyword{`data-raw/03-ratings/promote_v5_vintage.R`,}
 \keyword{a}
 \keyword{act}
 \keyword{again,}

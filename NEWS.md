@@ -30,9 +30,16 @@ defenders +0.31, rucks +0.31, key forwards +0.24, key defenders +0.23. Both
 teams rise, because the margin identity constrains the gap between them and not
 either total. The ten largest gainers are contested midfielders.
 
-Gates added: `run_epr_gate_tackle_fix.R`, `np_espn_mirror_sweep.R` and
-`np_defensive_share_gate.R`, all carrying an arms guard that aborts when two
-arms come back identical. It earned its place four times in one session.
+Gates added: `run_epr_gate_tackle_fix.R`, `np_espn_mirror_sweep.R`,
+`np_defensive_share_gate.R` and `run_epr_gate_team_margin.R`, all carrying an
+arms guard that aborts when two arms come back identical. It earned its place
+four times in one session. The last of those gates an idea that has NOT shipped:
+the convention where each team's players sum to that team's own margin, scoped in
+`../docs/plans/NET-POINTS-TEAM-SUM-CONVENTION.md`.
+
+Three tests now pin the new branch directly, including one asserting that exactly
+one row reclassifies when the flag moves. It shipped first with only downstream
+aggregate gates behind it, which cannot say which rows changed.
 
 # torp 1.5.3
 

@@ -997,7 +997,8 @@ PSR_POSITION_STANDARDISE <- TRUE
 #' swing as blame and credited the winner nothing -- 27.1 points a match. Every
 #' rating moves, most of all for tacklers, so it takes its own vintage. The
 #' outgoing v4 canonical is preserved as torp_ratings_v4.parquet by
-#' `data-raw/03-ratings/promote_v5_vintage.R`, and the manifest moves to
+#' `data-raw/03-ratings/promote_rating_vintage.R` (PROMOTE_FROM=v4,
+#' PROMOTE_TO=v5), and the manifest moves to
 #' canonical = "v5" BEFORE this constant reaches main, for the reason the v3
 #' note gives.
 RATING_VINTAGE <- "v5"
