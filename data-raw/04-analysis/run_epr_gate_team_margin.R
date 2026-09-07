@@ -34,6 +34,11 @@ source("C:/dev/torpverse/torp/data-raw/04-analysis/benchmark_suite.R")
 OUT_DIR <- "C:/dev/torpverse/torp/data-raw/outputs"
 SEASONS <- 2021:get_afl_season()
 MIRROR_SHARE <- as.numeric(Sys.getenv("TM_MIRROR_SHARE", "0"))
+# The configuration that beat the shipped ledger on repeatability (0.606 against
+# 0.591): a flat split per row between the named player and his side, with the
+# side pool spread by defensive acts rather than minutes. Pete's design.
+NAMED_SHARE <- as.numeric(Sys.getenv("TM_NAMED_SHARE", "0.5"))
+POOL_BY     <- Sys.getenv("TM_POOL_BY", "dacts")
 sink(file.path(OUT_DIR, "epr_gate_team_margin.txt"), split = TRUE)
 cat("=== fast EPR gate: v4 shipped vs team-sums-to-its-own-margin ===\n")
 cat("run at", format(Sys.time()), "| mirror share", MIRROR_SHARE, "\n")
@@ -43,7 +48,8 @@ set_const <- function(...) {
 }
 
 # ---- the convention, as a transform of one season's payments ----------------
-team_margin_values <- function(pay, ha, tog, margins, slots, mirror_share) {
+team_margin_values <- function(pay, ha, tog, margins, slots, mirror_share,
+                               named_share = NA_real_, pool_by = "tog") {
   pay <- merge(pay, ha, by = c("match_id", "team"), all.x = TRUE)
   pay[, own := hm * fifelse(home_away == "Home", 1, -1)]
   pay[, v := sum(hm), by = .(match_id, display_order)]
@@ -91,20 +97,42 @@ team_margin_values <- function(pay, ha, tog, margins, slots, mirror_share) {
     sides[is.na(mir_got), mir_got := 0]
   }
   sides[side == "concede" & is.na(got), got := 0]
+  # carry display_order: the per-row split below groups on it, and building this
+  # without it is what killed the first run of this gate
   pr <- sides[is.na(got) | side == "concede",
-              .(match_id, team, scaled = target - fifelse(side == "concede", got + mir_got, 0))]
+              .(match_id, display_order, team,
+                scaled = target - fifelse(side == "concede", got + mir_got, 0))]
   pr <- pr[abs(scaled) > 1e-12]
 
   alloc <- rbind(
-    pay[!is.na(scaled), .(match_id, team, player_id = as.character(player_id), scaled)],
-    if (is.null(mir)) NULL else mir[, .(match_id, team = opp_team,
+    pay[!is.na(scaled), .(match_id, display_order, team,
+                          player_id = as.character(player_id), scaled)],
+    if (is.null(mir)) NULL else mir[, .(match_id, display_order, team = opp_team,
                                         player_id = as.character(player_id), scaled = charge)],
-    pr[, .(match_id, team, player_id = NA_character_, scaled)])
+    pr[, .(match_id, display_order, team, player_id = NA_character_, scaled)])
+
+  # Flat split PER ROW: the named player takes named_share of that row's charge,
+  # his side's pool the rest. Applying this per MATCH instead made every player's
+  # number a rescaling of the final score and dropped repeatability to 0.04.
+  if (!is.na(named_share)) {
+    alloc[, row_tot := sum(scaled), by = .(match_id, display_order, team)]
+    alloc[, named_tot := sum(scaled[!is.na(player_id)]), by = .(match_id, display_order, team)]
+    named <- alloc[!is.na(player_id) & abs(named_tot) > 1e-12]
+    named[, scaled := scaled * named_share * row_tot / named_tot]
+    pools <- unique(alloc[, .(match_id, display_order, team, row_tot, named_tot)])
+    pools[, scaled := fifelse(abs(named_tot) > 1e-12,
+                              (1 - named_share) * row_tot, row_tot)]
+    alloc <- rbind(named[, .(match_id, team, player_id, scaled)],
+                   pools[, .(match_id, team, player_id = NA_character_, scaled)])
+  } else {
+    alloc <- alloc[, .(match_id, team, player_id, scaled)]
+  }
+  tog[, w := if (identical(pool_by, "tog")) tog else pmax(dacts, 0.5)]
 
   pool  <- alloc[is.na(player_id), .(pool = sum(scaled)), by = .(match_id, team)]
   named <- alloc[!is.na(player_id), .(named = sum(scaled)), by = .(match_id, team, player_id)]
   ros <- merge(tog, pool, by = c("match_id", "team"), all.x = TRUE)[is.na(pool), pool := 0]
-  ros[, share := pool * tog / sum(tog), by = .(match_id, team)]
+  ros[, share := pool * w / sum(w), by = .(match_id, team)]
   out <- merge(ros[, .(match_id, team, player_id, tog, share)], named,
                by = c("match_id", "team", "player_id"), all = TRUE)
   out[is.na(named), named := 0][is.na(share), share := 0][, val := named + share]
@@ -148,15 +176,17 @@ build_pgd <- function(tag) {
     pay <- as.data.table(attr(np, "np_payments")); pay[, match_id := as.character(match_id)]
     ha <- unique(pbp[, .(match_id = as.character(match_id), team, home_away)])
     tid <- unique(pbp[, .(team_id = as.character(team_id), team)])
+    dz <- function(x) pmax(dplyr::coalesce(as.numeric(x), 0), 0)
     tog <- ps[, .(match_id = as.character(match_id), player_id = as.character(player_id),
                   team_id = as.character(team_id),
-                  tog = pmax(time_on_ground_percentage, 1) / 100)]
+                  tog = pmax(time_on_ground_percentage, 1) / 100,
+                  dacts = dz(tackles) + dz(intercepts) + dz(one_percenters))]
     tog <- merge(tog, tid, by = "team_id")[, team_id := NULL]
     margins <- res[!is.na(home_score), .(match_id = as.character(match_id),
                                          margin = home_score - away_score)]
     tv <- team_margin_values(pay, ha, tog, margins,
                              slots_all[substr(match_id, 5, 8) == as.character(s)],
-                             MIRROR_SHARE)
+                             MIRROR_SHARE, NAMED_SHARE, POOL_BY)
     d <- base[season == s]
     d <- merge(d, tv[, .(match_id, player_id, new_val = val)],
                by = c("match_id", "player_id"), all.x = TRUE)

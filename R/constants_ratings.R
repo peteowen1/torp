@@ -1785,6 +1785,32 @@ NP_BALL_WINNER_SHARE <- 0.60
 #' @keywords internal
 NP_TURNOVER_ON_ALL_ACTS <- TRUE
 
+#' Each team's players sum to that team's OWN margin
+#'
+#' The convention ESPN's Net Points uses. Off by default: it changes every
+#' published number and has not cleared the rating gate.
+#'
+#' Measured so far, 2025 to 2026, against the shipped ledger: within-position
+#' repeatability 0.606 against 0.591 with a named share of 0.5 and the pool
+#' spread by defensive acts, at the cost of team dependence 25 per cent against
+#' 11. One criterion each way, which is why it is not on.
+#' @keywords internal
+NP_TEAM_MARGIN_CONVENTION <- FALSE
+
+#' Share of a row paid to the named player under the team-margin convention
+#'
+#' The rest goes to that side's pool. NA keeps whatever shares the ledger
+#' already computed, which scores worse (0.564) than a flat half (0.598).
+#' @keywords internal
+NP_TEAM_MARGIN_NAMED_SHARE <- 0.5
+
+#' How the team-margin convention spreads a side's pool
+#'
+#' \code{"dacts"} (tackles, intercepts, one-percenters) or \code{"tog"}.
+#' Defensive acts scored better on repeatability, 0.606 against 0.598.
+#' @keywords internal
+NP_TEAM_MARGIN_POOL_BY <- "dacts"
+
 #' Difficulty credit: the disposer's share of a turnover's SURPRISE
 #'
 #' Under `credit = "difficulty"` a turnover splits into the decision term
