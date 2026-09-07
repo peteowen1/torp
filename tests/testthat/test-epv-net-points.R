@@ -972,3 +972,117 @@ test_that("the flag never reclassifies a disposal or a chain-terminal row", {
   expect_equal(moved$kind_off, "act")
   expect_equal(moved$kind_on, "turnover")
 })
+
+# ---- the team-sum convention ----------------------------------------------
+# .np_team_margin() reallocates every row twice, as credit to the side that
+# gained it and as blame to the side that conceded it, so each team totals its
+# OWN margin instead of only the difference between the sides being pinned.
+#
+# NOTE the entry point. build_net_points() does NOT apply the convention;
+# .np_engine_frame() does, after building payments. Writing these tests against
+# build_net_points() first produced Home 10.35 and Away -9.65 -- which differ by
+# exactly the 20-point margin, so every eyeball check passes. Only the per-team
+# assertion can tell the two ledgers apart, which is the reason to have it.
+#
+# What these tests CANNOT see: whether the right players are credited. Same
+# limitation as the rest of this file, and not fixable here.
+np_conv <- function(f) {
+  np <- suppressMessages(build_net_points(f$pbp, f$stats, f$results,
+                                          return_payments = TRUE))
+  suppressMessages(torp:::.np_team_margin(np, f$pbp, f$stats, f$results))
+}
+# M1 is 100-80, so +20 to the home side; M2 is 60-75, so -15.
+np_conv_want <- data.table::data.table(
+  match_id = c("M1", "M1", "M2", "M2"),
+  home_away = c("Home", "Away", "Home", "Away"),
+  want = c(20, -20, -15, 15))
+
+test_that("each team sums to its own margin, not just the difference", {
+  got <- merge(np_conv(np_fixture())[, .(v = sum(net_points)),
+                                     by = .(match_id, home_away)],
+               np_conv_want, by = c("match_id", "home_away"))
+  expect_equal(nrow(got), 4L)
+  expect_equal(got$v, got$want, tolerance = 1e-9)
+})
+
+test_that("the convention is what produces that, not the base ledger", {
+  # if this ever stops holding, the test above has gone vacuous
+  f <- np_fixture()
+  base <- suppressMessages(build_net_points(f$pbp, f$stats, f$results))
+  d <- base[match_id == "M1", .(v = sum(net_points)), by = home_away]
+  h <- d[home_away == "Home"]$v; a <- d[home_away == "Away"]$v
+  expect_equal(h - a, 20, tolerance = 1e-9)          # difference: already right
+  expect_false(isTRUE(all.equal(h, 20, tolerance = 1e-6)))  # own margin: not yet
+})
+
+test_that("the identity holds under both named-share branches", {
+  for (share in list(NA_real_, 0.5)) {
+    testthat::local_mocked_bindings(NP_TEAM_MARGIN_NAMED_SHARE = share,
+                                    .package = "torp")
+    got <- merge(np_conv(np_fixture())[, .(v = sum(net_points)),
+                                       by = .(match_id, home_away)],
+                 np_conv_want, by = c("match_id", "home_away"))
+    expect_equal(got$v, got$want, tolerance = 1e-9,
+                 label = paste("named share", share))
+  }
+})
+
+test_that("the identity holds under both pool weightings", {
+  for (by in c("tog", "dacts")) {
+    testthat::local_mocked_bindings(NP_TEAM_MARGIN_POOL_BY = by, .package = "torp")
+    got <- merge(np_conv(np_fixture())[, .(v = sum(net_points)),
+                                       by = .(match_id, home_away)],
+                 np_conv_want, by = c("match_id", "home_away"))
+    expect_equal(got$v, got$want, tolerance = 1e-9, label = paste("pool by", by))
+  }
+})
+
+test_that("components still sum to the total after the convention", {
+  cv <- np_conv(np_fixture())
+  parts <- intersect(c("np_direct", "np_defensive_won", "np_contest_won",
+                       "np_defensive", "np_ceded", "np_team", "np_stoppage",
+                       "np_residual"), names(cv))
+  expect_equal(rowSums(as.matrix(cv[, ..parts])), cv$net_points, tolerance = 1e-9)
+})
+
+test_that("the per-player split is exposed and adds up", {
+  sp <- data.table::as.data.table(attr(np_conv(np_fixture()),
+                                       "np_team_margin_parts"))
+  expect_true(all(c("named", "share", "recon", "val") %in% names(sp)))
+  # all three parts, not two and a total: the reconciliation is a real payment
+  # and hiding it inside `val` makes a hand-traced number impossible to check
+  expect_equal(sp$named + sp$share + sp$recon, sp$val, tolerance = 1e-9)
+})
+
+test_that("a missing payment table is an error, not a silent pass-through", {
+  f <- np_fixture()
+  np <- suppressMessages(build_net_points(f$pbp, f$stats, f$results))
+  expect_error(torp:::.np_team_margin(np, f$pbp, f$stats, f$results),
+               "payment table")
+})
+
+test_that("one NA time on ground does not take a whole team down", {
+  # sum(tog) is a GROUP SCALAR, so before the guard a single NA made every value
+  # on that player's team NA rather than just his own.
+  f <- np_fixture()
+  f$stats[match_id == "M1" & player_id == "p2",
+          time_on_ground_percentage := NA_real_]
+  # assert the guard FIRES, not merely that nothing crashed: a suppressed
+  # warning would let this pass with the branch never executing
+  expect_warning(cv <- np_conv(f), "no time on ground")
+  expect_false(anyNA(cv$net_points))
+  expect_equal(cv[match_id == "M1" & home_away == "Home", sum(net_points)], 20,
+               tolerance = 1e-9)
+})
+
+test_that("a paid player absent from player_stats does not take a team down", {
+  # the second NA path: `out` is built with all = TRUE, so a named player with
+  # no lineup row arrives with tog NA. He is invisible to the guard on `lu`,
+  # because that merge is inner and he is simply not in it.
+  f <- np_fixture()
+  f$stats <- f$stats[!(match_id == "M1" & player_id == "p2")]
+  expect_warning(cv <- np_conv(f), "no lineup row")
+  expect_false(anyNA(cv$net_points))
+  expect_equal(cv[match_id == "M1" & home_away == "Home", sum(net_points)], 20,
+               tolerance = 1e-9)
+})

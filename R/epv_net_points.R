@@ -1951,8 +1951,10 @@ np_difficulty_terms_for_season <- function(season, pbp_data = NULL, chains = NUL
 #'
 #' @param np `build_net_points()` output carrying the `np_payments` attribute.
 #' @param pbp_data,player_stats,res As given to the engine.
-#' @return `np` with every component rescaled so each team sums to its own
-#'   margin. The components still sum to `net_points` for each player.
+#' @return `np` with each team's players summing to that team's own margin. The
+#'   difference is booked into `np_team` rather than rescaling every component,
+#'   because rescaling explodes for players whose parts nearly cancel. The
+#'   components still sum to `net_points` for each player.
 #' @keywords internal
 .np_team_margin <- function(np, pbp_data, player_stats, res) {
   pay <- attr(np, "np_payments")
@@ -1980,27 +1982,11 @@ np_difficulty_terms_for_season <- function(season, pbp_data = NULL, chains = NUL
   pay[, scaled := data.table::fifelse(abs(side_sum) > 0.05 * abs(v),
                                       own * target / side_sum, NA_real_)]
 
-  rows <- unique(pay[, .(match_id, display_order, v, gain_home)])
-  sides <- rbind(data.table::copy(rows)[, side := "gain"],
-                 data.table::copy(rows)[, side := "concede"])
-  sides <- merge(sides, ha, by = "match_id", allow.cartesian = TRUE)
-  sides <- sides[((home_away == "Home") == gain_home) == (side == "gain")]
-  sides[, target := data.table::fifelse(side == "gain", abs(v), -abs(v))]
-  cov <- pay[!is.na(scaled), .(got = sum(scaled)), by = .(match_id, display_order, side)]
-  sides <- merge(sides, cov, by = c("match_id", "display_order", "side"), all.x = TRUE)
-  sides[side == "concede" & is.na(got), got := 0]
-  # carry display_order: the split below groups on it, and building this table
-  # without it killed two earlier runs
-  pr <- sides[is.na(got) | side == "concede",
-              .(match_id, display_order, team,
-                scaled = target - data.table::fifelse(side == "concede", got, 0))]
-  pr <- pr[abs(scaled) > 1e-12]
-
-  # The named/pool split, computed on `pay` directly rather than through a
-  # rebuilt allocation table. The previous version disagreed with an independent
-  # row-by-row audit by 5.3 points on a single player (Grundy, 2026 R14: audit
-  # +2.99, engine -2.36), and three attempts to explain the difference by reading
-  # the code all failed. This is the form `data-raw/04-analysis/np_row_audit.R`
+  # The named/pool split is computed on `pay` directly rather than through a
+  # rebuilt allocation table. An earlier version disagreed with an independent
+  # row-by-row audit by 5.3 points on one player (Grundy, 2026 R14: audit +2.99,
+  # engine -2.36), and three attempts to explain the difference by reading the
+  # code all failed. This is the form data-raw/04-analysis/np_row_audit.R
   # verifies, so the two agree by construction. If they diverge again, run it.
   ns <- NP_TEAM_MARGIN_NAMED_SHARE
   # NAMED payments only. Summing every payment on the row, pool included, makes
@@ -2039,15 +2025,12 @@ np_difficulty_terms_for_season <- function(season, pbp_data = NULL, chains = NUL
   }
   pool <- prow[, .(pool = sum(pool_row)), by = .(match_id, team)]
 
-  # THE INVARIANT. On every row, what the named players take plus what the pool
-  # takes must equal what that side was charged. It is one line and it is the
-  # only thing that distinguishes the intended rule (the named players split
-  # half of the ROW between them) from the natural misreading (each named player
-  # keeps half of his OWN amount). On 2026 R14 the misreading leaked 34 of
-  # Sydney's 150 points and 28 of Carlton's 78 into the reconciliation, and it
-  # took four reversals to settle because both wrong versions were internally
-  # consistent. Two calculations agreeing proves nothing if both share a
-  # misreading; this check does not care what anyone believes.
+  # THE INVARIANT, with an honest note on its reach. Named + pool == the
+  # side's charge has real teeth only when `ns` is finite. In the shipped NA
+  # branch the pool is DEFINED as charge minus named, so the identity holds by
+  # algebra whatever the named part is; a review caught me claiming otherwise.
+  # The NA branch is policed by the rescale check below instead, which is a
+  # real statement about the doubling step and can fail.
   .nm <- namd[, .(named = sum(named)), by = .(match_id, team)]
   .tg <- prow[, .(charged = sum(target)), by = .(match_id, team)]
   .id <- merge(merge(.nm, pool, by = c("match_id", "team"), all = TRUE),
@@ -2058,10 +2041,18 @@ np_difficulty_terms_for_season <- function(season, pbp_data = NULL, chains = NUL
   .gap <- max(abs(.id$named + .id$pool - .id$charged))
   if (!is.finite(.gap) || .gap > 1e-6) {
     cli::cli_abort(c(
-      "Team-margin convention: named + pool does not equal what the side was charged (max gap {signif(.gap, 3)}).",
-      "x" = "Value is leaking into the reconciliation instead of reaching players.",
-      "i" = "Audit it row by row with {.file data-raw/04-analysis/np_row_audit.R}."
-    ))
+      "Team-margin convention: named + pool does not equal the side's charge (gap {signif(.gap, 3)}).",
+      "i" = "Audit it with {.file data-raw/04-analysis/np_row_audit.R}."))
+  }
+  # The rescale check: on every row-side the convention touched, the payments
+  # must add up to that side's full charge. This one can fail in either branch.
+  .rs <- pay[!is.na(scaled), .(got = sum(scaled), want = target[1]),
+             by = .(match_id, display_order, team)]
+  .rgap <- max(abs(.rs$got - .rs$want))
+  if (!is.finite(.rgap) || .rgap > 1e-6) {
+    cli::cli_abort(c(
+      "Team-margin convention: a rescaled row-side does not sum to its charge (gap {signif(.rgap, 3)}).",
+      "x" = "The doubling step is not conserving value."))
   }
 
   ps <- data.table::as.data.table(player_stats)
@@ -2072,6 +2063,18 @@ np_difficulty_terms_for_season <- function(season, pbp_data = NULL, chains = NUL
   lu <- merge(lu, unique(np[, .(match_id = as.character(match_id),
                                 player_id = as.character(player_id), team)]),
               by = c("match_id", "player_id"))
+  # `time_on_ground_percentage` is NA for some rows in player_stats, and both
+  # weightings below divide by a GROUP SUM of it. A group sum is a scalar, so a
+  # single NA does not spoil one player, it makes every value on his team NA and
+  # the abort downstream then blames the components rather than the lineup.
+  # (`dacts` cannot be NA: dz() coalesces it.)
+  .miss <- lu[is.na(tog)]
+  if (nrow(.miss) > 0) {
+    cli::cli_warn(c(
+      "{nrow(.miss)} player{?s} have no time on ground; defaulting to 0.75 so the pool split stays finite.",
+      "i" = "First few: {.val {utils::head(unique(.miss$player_id), 5)}}."))
+    lu[is.na(tog), tog := 0.75]
+  }
   lu[, w := if (identical(NP_TEAM_MARGIN_POOL_BY, "tog")) tog else pmax(dacts, 0.5)]
 
   ros <- merge(lu, pool, by = c("match_id", "team"), all.x = TRUE)[is.na(pool), pool := 0]
@@ -2079,6 +2082,18 @@ np_difficulty_terms_for_season <- function(season, pbp_data = NULL, chains = NUL
   out <- merge(ros[, .(match_id, team, player_id, tog, share)], namd,
                by = c("match_id", "team", "player_id"), all = TRUE)
   out[is.na(named), named := 0][is.na(share), share := 0][, val := named + share]
+  # This merge is all = TRUE, so a player who took a named payment but has no
+  # row in player_stats lands here with tog NA -- which the guard above cannot
+  # see, because `lu` is built with an inner merge and he is simply absent from
+  # it. The reconciliation below divides by sum(tog), so leaving it would take
+  # his whole team with him.
+  if (anyNA(out$tog)) {
+    .nolu <- unique(out[is.na(tog)]$player_id)
+    cli::cli_warn(c(
+      "{length(.nolu)} paid player{?s} have no lineup row; defaulting time on ground to 0.75.",
+      "i" = "First few: {.val {utils::head(.nolu, 5)}}."))
+    out[is.na(tog), tog := 0.75]
+  }
 
   mg <- data.table::as.data.table(res)[, .(match_id = as.character(match_id),
                                            margin = home_score - away_score)]
@@ -2087,7 +2102,11 @@ np_difficulty_terms_for_season <- function(season, pbp_data = NULL, chains = NUL
   chk[, want := margin * data.table::fifelse(home_away == "Home", 1, -1)]
   out <- merge(out, chk[, .(match_id, team, short = want - tot)],
                by = c("match_id", "team"))
-  out[, val := val + short * tog / sum(tog), by = .(match_id, team)]
+  # Keep the reconciliation as its own column rather than folding it into
+  # `val`. The attribute below advertises three parts, and a reader tracing one
+  # player's number by hand needs to see all three separately.
+  out[, recon := short * tog / sum(tog), by = .(match_id, team)]
+  out[, val := val + recon]
 
   # Book the CHANGE against the pool channel rather than rescaling every
   # component by new/old. Rescaling explodes when a player has large
@@ -2128,7 +2147,7 @@ np_difficulty_terms_for_season <- function(season, pbp_data = NULL, chains = NUL
   # pool slice and reconciliation, which is what a reader needs to see when a
   # number looks wrong
   data.table::setattr(np, "np_team_margin_parts",
-                      out[, .(match_id, player_id, team, named, share, val)])
+                      out[, .(match_id, player_id, team, named, share, recon, val)])
   cli::cli_alert_info(
     "Team-margin convention: every team sums to its own margin (max gap {signif(gap, 2)}); named share {ns}, pool by {NP_TEAM_MARGIN_POOL_BY}.")
   np[]

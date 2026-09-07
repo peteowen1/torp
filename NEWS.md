@@ -27,12 +27,38 @@ mirror at a stoppage -- the winning side has two names to share the half and the
 losing side has one, so the losing ruck wears 1.00 where his opponent earns
 0.625 on the same contest. Stable is not the same as correct.
 
-**The invariant.** `.np_team_margin()` aborts unless named plus pool equals what
-each side was charged, on every row. It took four reversals to settle what that
-split should be, because every wrong version was internally consistent; two
-calculations agreeing proves nothing when both share a misreading. The check
-then caught a second leak on the first run of a branch it had never seen.
-`data-raw/04-analysis/np_row_audit.R` prints the shares per row for any player.
+**The invariant, stated honestly.** `.np_team_margin()` aborts unless named plus
+pool equals what each side was charged. That check has real teeth only when
+`NP_TEAM_MARGIN_NAMED_SHARE` is a number: in the branch actually shipped, where
+it is `NA` and each side simply doubles, the pool is DEFINED as the charge minus
+the named part, so the identity holds by algebra no matter what the named part
+is. A review caught me describing it as protection for the shipped path when it
+is not. The shipped branch is now policed by a second check that can genuinely
+fail: every rescaled row-side must sum to that side's full charge, which is a
+real statement about the doubling step.
+
+Settling the split took four reversals, because every wrong version was
+internally consistent; two calculations agreeing proves nothing when both share
+a misreading. `data-raw/04-analysis/np_row_audit.R` prints the shares per row for
+any player, and the per-player split is now exposed as its own attribute with the
+reconciliation as a separate column rather than folded into the total.
+
+**Two NA paths that would each have taken a whole team down.** The pool spread
+and the reconciliation both divide by a GROUP SUM of time on ground. A group sum
+is a scalar, so one missing value made every player on that team NA rather than
+just the one. Both paths are now defaulted and warned about, and both are tested
+by asserting the warning fires, not merely that nothing crashed.
+
+**The rating gate: predictive rows worse, face validity FAIL.** Within-position
+repeatability 0.5663 to 0.5250 and skill score 0.1608 to 0.0582, both worse, as
+the sweep predicted. Face validity fails on four of four change-detectors:
+Spearman rank stability 0.49 against a 0.90 limit, key defenders going from 0 to
+6 of the top 30, five of the ten biggest risers key defenders, and Tim English
+climbing 175 to 13. That gate measures how much the leaderboard MOVED, and a
+convention chosen for its position spread is expected to move it, so this is not
+read as a defect. It is recorded because the direction matters: the change lifts
+key defenders and rucks, which is the direction the defender-undervaluation work
+predicted, and nobody should be surprised by the new leaderboard.
 
 `RATING_VINTAGE` bumps to v6 and the three convention constants are wired into
 `.rating_defining_constants()`. Promote before merging, or the nightly aborts:

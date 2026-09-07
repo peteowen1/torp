@@ -1794,13 +1794,19 @@ NP_TURNOVER_ON_ALL_ACTS <- TRUE
 
 #' Each team's players sum to that team's OWN margin
 #'
-#' The convention ESPN's Net Points uses. Off by default: it changes every
-#' published number and has not cleared the rating gate.
+#' ON since 2026-09-07. Every row is allocated twice, as credit to the side
+#' that gained it and as blame to the side that conceded it, so a team's
+#' players total its own margin (+63 and -63) rather than only the difference
+#' between the sides being pinned. The convention ESPN's Net Points uses.
 #'
-#' Measured so far, 2025 to 2026, against the shipped ledger: within-position
-#' repeatability 0.606 against 0.591 with a named share of 0.5 and the pool
-#' spread by defensive acts, at the cost of team dependence 25 per cent against
-#' 11. One criterion each way, which is why it is not on.
+#' \strong{Shipped against the measurements, not because of them.} Over five
+#' season pairs and 1,794 player-pairs: within-position repeatability 0.5716
+#' against the previous 0.591, team dependence 23 per cent against 11. Both
+#' worse. It buys a number answering who won the game rather than who played
+#' well, and the tightest position spread tested, 2.12 against 2.78, with
+#' rucks at +1.28 instead of the -3.49 the half-share alternative produces
+#' through a naming artefact. Pete's decision, with those figures in front of
+#' him.
 #' @keywords internal
 NP_TEAM_MARGIN_CONVENTION <- TRUE
 
