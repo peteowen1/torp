@@ -33,9 +33,13 @@ pool equals what each side was charged. That check has real teeth only when
 it is `NA` and each side simply doubles, the pool is DEFINED as the charge minus
 the named part, so the identity holds by algebra no matter what the named part
 is. A review caught me describing it as protection for the shipped path when it
-is not. The shipped branch is now policed by a second check that can genuinely
-fail: every rescaled row-side must sum to that side's full charge, which is a
-real statement about the doubling step.
+is not. Chasing that down further: the replacement check I first wrote, that
+every rescaled row-side sums to that side's full charge, is tautological for the
+same reason, and I nearly shipped the same overclaim twice. It is kept because
+it catches a structural break, a team landing on both sides of one row, but it
+is now described as what it is. The check with real teeth is the last one in the
+function: each team's total against the official result, an external input the
+ledger cannot manufacture. An identity is not a test.
 
 Settling the split took four reversals, because every wrong version was
 internally consistent; two calculations agreeing proves nothing when both share

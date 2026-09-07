@@ -2044,15 +2044,25 @@ np_difficulty_terms_for_season <- function(season, pbp_data = NULL, chains = NUL
       "Team-margin convention: named + pool does not equal the side's charge (gap {signif(.gap, 3)}).",
       "i" = "Audit it with {.file data-raw/04-analysis/np_row_audit.R}."))
   }
-  # The rescale check: on every row-side the convention touched, the payments
-  # must add up to that side's full charge. This one can fail in either branch.
+  # A STRUCTURAL check, and worth being precise about what it can and cannot do,
+  # because I have now overstated two of these. Summing `scaled` over a group
+  # that lies within one side gives target/side_sum * sum(own), which is `target`
+  # exactly; and a team can never be on both sides of a row, since it is either
+  # home or away and `gain_home` is fixed per row. So this cannot fail on the
+  # arithmetic. What it CAN catch is that structure breaking: a row where a team
+  # lands on both sides, or the NA filter splitting a group. Cheap, and it fires
+  # on a corruption no other check here would see.
+  #
+  # The check with real teeth is the LAST one in this function, against `res`:
+  # that one compares the totals to an external input the ledger cannot
+  # manufacture. An identity is not a test.
   .rs <- pay[!is.na(scaled), .(got = sum(scaled), want = target[1]),
              by = .(match_id, display_order, team)]
   .rgap <- max(abs(.rs$got - .rs$want))
   if (!is.finite(.rgap) || .rgap > 1e-6) {
     cli::cli_abort(c(
       "Team-margin convention: a rescaled row-side does not sum to its charge (gap {signif(.rgap, 3)}).",
-      "x" = "The doubling step is not conserving value."))
+      "x" = "A team is on both sides of one row, or the NA filter split a group."))
   }
 
   ps <- data.table::as.data.table(player_stats)
