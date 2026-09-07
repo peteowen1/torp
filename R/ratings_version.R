@@ -85,6 +85,11 @@
     # leaving it out would make the drift guard blind to it, exactly as it was
     # blind to the engine flip before 2026-08-18.
     NP_TURNOVER_ON_ALL_ACTS = NP_TURNOVER_ON_ALL_ACTS,
+    # The team-sum convention and its two dials: they decide every published
+    # number, so the drift guard has to see them.
+    NP_TEAM_MARGIN_CONVENTION = NP_TEAM_MARGIN_CONVENTION,
+    NP_TEAM_MARGIN_NAMED_SHARE = NP_TEAM_MARGIN_NAMED_SHARE,
+    NP_TEAM_MARGIN_POOL_BY = NP_TEAM_MARGIN_POOL_BY,
     EPV3_CHANNELS = EPV3_CHANNELS,
     EPV3_POINTS_SCALE = as.list(EPV3_POINTS_SCALE),
     EPV_CONT_LOSS_ALLOC = EPV_CONT_LOSS_ALLOC,

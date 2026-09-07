@@ -1001,7 +1001,14 @@ PSR_POSITION_STANDARDISE <- TRUE
 #' PROMOTE_TO=v5), and the manifest moves to
 #' canonical = "v5" BEFORE this constant reaches main, for the reason the v3
 #' note gives.
-RATING_VINTAGE <- "v5"
+#'
+#' v6 (2026-09-07): the team-sum convention. Each team's players now sum to that
+#' team's OWN margin, +63 and -63, rather than only the difference between the
+#' sides being pinned. Every published number moves, so it takes its own vintage.
+#' Preserve the outgoing v5 with
+#' `data-raw/03-ratings/promote_rating_vintage.R` (PROMOTE_FROM=v5, PROMOTE_TO=v6)
+#' and move the manifest to canonical v6 BEFORE this constant reaches main.
+RATING_VINTAGE <- "v6"
 
 #' Map from the 20-way team-sheet lineup position to a 6-way position group
 #'
@@ -1795,14 +1802,14 @@ NP_TURNOVER_ON_ALL_ACTS <- TRUE
 #' spread by defensive acts, at the cost of team dependence 25 per cent against
 #' 11. One criterion each way, which is why it is not on.
 #' @keywords internal
-NP_TEAM_MARGIN_CONVENTION <- FALSE
+NP_TEAM_MARGIN_CONVENTION <- TRUE
 
 #' Share of a row paid to the named player under the team-margin convention
 #'
 #' The rest goes to that side's pool. NA keeps whatever shares the ledger
 #' already computed, which scores worse (0.564) than a flat half (0.598).
 #' @keywords internal
-NP_TEAM_MARGIN_NAMED_SHARE <- 0.5
+NP_TEAM_MARGIN_NAMED_SHARE <- NA_real_
 
 #' How the team-margin convention spreads a side's pool
 #'

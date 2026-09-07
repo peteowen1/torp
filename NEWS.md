@@ -1,3 +1,43 @@
+# torp 1.7.0
+
+## Each team's players now sum to that team's own margin
+
+The team-sum convention, `NP_TEAM_MARGIN_CONVENTION`, is on. Sydney beat Carlton
+by 63; their 23 players now total +63 and Carlton's total -63. Previously only
+the difference between the sides was pinned, so the same match read Sydney 208
+and Carlton 145. This is the convention ESPN's Net Points uses, which is the
+metric this ledger is named after, and Pete identified it correctly twice before
+I accepted it.
+
+Every row is now allocated twice, as credit to the side that gained it and as
+blame to the side that conceded it, with each side keeping whatever shares the
+ledger already computed. The pool is spread by defensive acts.
+
+**Shipped against the measurements, not because of them.** Over five season
+pairs and 1,794 player-pairs: within-position repeatability 0.5716 against the
+shipped 0.591, and team dependence 23% against 11%. Both worse. What it buys is
+a number that answers who won the game rather than who played well, and the
+tightest position spread of anything tested, 2.12 against 2.78, with rucks at
++1.28 rather than the -3.49 the alternative split produces through a naming
+artefact. Pete's call, made with those figures in front of him.
+
+Rejected on the way: charging the named player half of each row instead of
+keeping the ledger's shares. It repeats better, 0.6107, but breaks the ruck
+mirror at a stoppage -- the winning side has two names to share the half and the
+losing side has one, so the losing ruck wears 1.00 where his opponent earns
+0.625 on the same contest. Stable is not the same as correct.
+
+**The invariant.** `.np_team_margin()` aborts unless named plus pool equals what
+each side was charged, on every row. It took four reversals to settle what that
+split should be, because every wrong version was internally consistent; two
+calculations agreeing proves nothing when both share a misreading. The check
+then caught a second leak on the first run of a branch it had never seen.
+`data-raw/04-analysis/np_row_audit.R` prints the shares per row for any player.
+
+`RATING_VINTAGE` bumps to v6 and the three convention constants are wired into
+`.rating_defining_constants()`. Promote before merging, or the nightly aborts:
+`promote_rating_vintage.R` with PROMOTE_FROM=v5 PROMOTE_TO=v6.
+
 # torp 1.6.0
 
 ## The player who wins the ball back is paid for it
