@@ -1,4 +1,42 @@
+# torp 1.5.3
+
+## Retracted: the 1.5.2 "last score of a match" fix was inert and its numbers were wrong
+
+The code added in 1.5.2 **never fired on real data** and has been removed, along
+with its tests. Measured across 2021-2026 by running `clean_pbp()` on the stored
+chains for every season: it fired zero times, and the cleaned frame was already
+1,262 of 1,274 matches exact against the official result.
+
+What went wrong is worth recording. The 1-or-6 point shortfall is real, but it
+lives in the **published** `pbp-data` frame, not in `clean_pbp()`'s output. The
+release is filtered by `EPV_RELEVANT_DESCRIPTIONS` in `clean_model_data_epv()`,
+which drops `Goal`, `Behind` and `Kick Inside 50 Result` rows. A match ending on a
+score therefore has its final scoring row removed, and the last surviving row
+carries the running score from just before that score. The terminating row is
+present in the feed, its chain is marked, and its points are booked correctly --
+none of which the 1.5.2 note said.
+
+The measurement that justified 1.5.2 was taken on the released, filtered frame,
+and the code was then written into `add_quarter_vars_dt()`, which runs before that
+filter and sees a frame where the defect does not exist. Scoring a rule on one
+frame and implementing it against another is the whole of the error.
+
+**Nothing published is affected.** `build_net_points()` pins to `load_results()`,
+and the v4 ratings, game logs and predictions released on 2026-09-07 never read
+the running score. Consumers wanting a final score should use `load_results()`;
+the last row of `pbp-data` is not it, by design of the filter.
+
+The archive of 173 one-off analysis scripts shipped in 1.5.2 stands and is
+unaffected.
+
 # torp 1.5.2
+
+> **RETRACTED in 1.5.3.** The "last score of a match" change below never fired on
+> real data and its before/after figures were measured on the released, filtered
+> frame rather than on the frame the code runs against. It has been removed. The
+> archive of 173 analysis scripts, described at the end, stands. Left in place
+> rather than deleted so the retraction has something to point at.
+
 
 ## The last score of a match is booked
 
