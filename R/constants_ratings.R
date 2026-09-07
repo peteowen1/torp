@@ -1744,6 +1744,26 @@ NP_EXCLUDED_DESCS <- c("Centre Bounce")
 #' @keywords internal
 NP_BALL_WINNER_SHARE <- 0.60
 
+#' Treat every lost possession as a turnover, not only kicks and handballs
+#'
+#' Until 2026-09-07 the turnover split fired only on rows in
+#' NP_DISPOSAL_DESCS. Any other act that lost the ball -- a loose ball get, a
+#' gather, a handball receive, a ground kick -- paid the whole swing as blame on
+#' the actor and credited the opponent who took it nothing.
+#'
+#' Measured on 2026: 15.9 such rows a match carrying 27.1 points of swing, with
+#' the opponent credited on none of them, against 156 disposal turnovers a match
+#' where the opponent is credited on 88 per cent. Per event the uncredited ones
+#' are worth 1.72 against 0.54, because they are the tackled-in-possession
+#' cases. On frees won straight off the opposition, 1,439 of 3,214 paid the
+#' winner nothing and averaged a 2.21 point swing.
+#'
+#' Off by default until it clears the rating gate: it moves published ratings,
+#' and it should lift tackling midfielders relative to intercepting defenders,
+#' who already get paid because they win the ball off kicks.
+#' @keywords internal
+NP_TURNOVER_ON_ALL_ACTS <- FALSE
+
 #' Difficulty credit: the disposer's share of a turnover's SURPRISE
 #'
 #' Under `credit = "difficulty"` a turnover splits into the decision term

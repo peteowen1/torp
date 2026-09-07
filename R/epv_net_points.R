@@ -657,8 +657,22 @@
   l <- data.table::copy(led)
   if (!"is_stoppage" %in% names(l)) l[, is_stoppage := FALSE]
   l[, is_disp := description %in% NP_DISPOSAL_DESCS & !is_stoppage]
+  # A row where the NEXT act belongs to the opposition is a turnover, and until
+  # 2026-09-07 that was only true of kicks and handballs: every other act fell
+  # to "act", which pays 100% to the actor and credits nobody. So a player who
+  # was tackled after a loose ball get, or who lost a handball receive, was
+  # debited the whole swing and the opponent who took the ball was paid nothing.
+  # Measured on 2026: 15.9 such rows a match carrying 27.1 points of swing, none
+  # of it credited, against 156 disposal turnovers a match where the opponent is
+  # paid 88% of the time. The uncredited events are worth 1.72 each against 0.54,
+  # because they are the tackled-in-possession ones. Every one of the 20
+  # descriptions involved is an act by the side in possession -- spoils and
+  # tackles are not in the play-by-play, so no defensive act is blamed here.
+  # `NP_TURNOVER_ON_ALL_ACTS` gates it because it moves published ratings.
   l[, kind := data.table::fcase(
     is_stoppage,                                       "stoppage",
+    !is_disp & isTRUE(NP_TURNOVER_ON_ALL_ACTS) &
+      !is.na(next_team) & next_team != team,           "turnover",
     !is_disp,                                          "act",
     is.na(next_team),                                  "terminal",
     next_team == team & !is.na(next_player),           "retained",
