@@ -657,8 +657,22 @@
   l <- data.table::copy(led)
   if (!"is_stoppage" %in% names(l)) l[, is_stoppage := FALSE]
   l[, is_disp := description %in% NP_DISPOSAL_DESCS & !is_stoppage]
+  # A row where the NEXT act belongs to the opposition is a turnover, and until
+  # 2026-09-07 that was only true of kicks and handballs: every other act fell
+  # to "act", which pays 100% to the actor and credits nobody. So a player who
+  # was tackled after a loose ball get, or who lost a handball receive, was
+  # debited the whole swing and the opponent who took the ball was paid nothing.
+  # Measured on 2026: 15.9 such rows a match carrying 27.1 points of swing, none
+  # of it credited, against 156 disposal turnovers a match where the opponent is
+  # paid 88% of the time. The uncredited events are worth 1.72 each against 0.54,
+  # because they are the tackled-in-possession ones. Every one of the 20
+  # descriptions involved is an act by the side in possession -- spoils and
+  # tackles are not in the play-by-play, so no defensive act is blamed here.
+  # `NP_TURNOVER_ON_ALL_ACTS` gates it because it moves published ratings.
   l[, kind := data.table::fcase(
     is_stoppage,                                       "stoppage",
+    !is_disp & isTRUE(NP_TURNOVER_ON_ALL_ACTS) &
+      !is.na(next_team) & next_team != team,           "turnover",
     !is_disp,                                          "act",
     is.na(next_team),                                  "terminal",
     next_team == team & !is.na(next_player),           "retained",
@@ -1390,6 +1404,17 @@
 #'   goes through `spread`, for the pressure that forced the turnover. Routing
 #'   the whole pool through `spread` was measurably wrong -- see
 #'   `NP_BALL_WINNER_SHARE`.
+#'
+#'   **Only reaches `credit = "flat"`.** Under `credit = "difficulty"` the share
+#'   is keyed on HOW the winner won it (`NP_BALL_WINNER_SHARE_BY_ACT`: an
+#'   intercept mark or free is nearly all his, a loose ball mostly other
+#'   people's pressure), and that table overwrites this argument on every row
+#'   with a named winner. Passing a non-default value there therefore did
+#'   nothing at all -- silently, until 2026-09-07, when a gate arm raising it to
+#'   0.85 returned numbers identical to the default. That is deliberate, and
+#'   `test-epv-net-points.R` asserts it by passing 1 and expecting the by-act
+#'   0.8, so it is documented rather than policed. To move the winner's cut
+#'   under difficulty credit, edit `NP_BALL_WINNER_SHARE_BY_ACT`.
 #' @param spread How the defensive pool is divided: `"matchup"` (the positional
 #'   mirror takes `mirror_share`, rest by TOG), `"defensive_acts"` (by box-score
 #'   defensive work) or `"tog"` (flat by time on ground).
@@ -1575,8 +1600,15 @@ build_net_points <- function(pbp_data = NULL,
     }
   }
   direct <- .np_direct_credit(l)
-  dp <- .np_defensive_pool(l, lineup, ball_winner_share,
-                           by_act = identical(credit, "difficulty"))
+  # `ball_winner_share` is deliberately overridden under difficulty credit: the
+  # by-act table decides how much of the pool the winner keeps, and three tests
+  # in test-epv-net-points.R assert exactly that by passing 1 and expecting the
+  # by-act 0.8. An abort added here on 2026-09-07 broke that contract and took
+  # 21 assertions out of the suite; the argument is documented rather than
+  # policed. What the episode was really about is that a GATE ARM varying it
+  # under difficulty credit tests nothing -- vary NP_BALL_WINNER_SHARE_BY_ACT.
+  .by_act <- identical(credit, "difficulty")
+  dp <- .np_defensive_pool(l, lineup, ball_winner_share, by_act = .by_act)
   sc <- .np_stoppage_credit(l, lineup, stoppage_loser_share)
   pool_all <- data.table::rbindlist(list(dp$pool, sc$pool), use.names = TRUE, fill = TRUE)
   if (!is.null(pool_all) && nrow(pool_all) == 0) pool_all <- NULL

@@ -886,3 +886,89 @@ test_that("the v4 channels are own / won / pools and nothing else", {
   np[1, np_residual := 9]
   expect_error(torp:::.np_v4_channels(np), "do not sum")
 })
+
+# ---- NP_TURNOVER_ON_ALL_ACTS ------------------------------------------------
+# The branch this pins moves 27.1 points a match and every published rating, and
+# it shipped with nothing asserting it directly -- only downstream aggregate
+# gates, which cannot say WHICH rows changed. A review called that out and it was
+# right. The fixture is the exact shape the defect lived in: a non-disposal act
+# that loses the ball, which used to pay 100% to the actor and credit the
+# opponent who took it nothing.
+
+np_ballwin_fixture <- function() {
+  # Home wins it, loses it at a Loose Ball Get, Away kicks it away.
+  pbp <- data.table::data.table(
+    match_id = "M1",
+    display_order = 1:4,
+    description = c("Kick", "Loose Ball Get", "Kick", "Handball"),
+    team = c("Home FC", "Home FC", "Away FC", "Away FC"),
+    home_away = c("Home", "Home", "Away", "Away"),
+    player_id = c("p1", "p2", "p3", "p4"),
+    delta_epv = c(1.0, -4.0, 2.0, 1.0),
+    home_points = 0L, away_points = 0L,
+    home = c(1L, 1L, 0L, 0L),
+    x = 0, exp_pts = 0
+  )
+  stats <- data.table::data.table(
+    match_id = "M1", player_id = c("p1", "p2", "p3", "p4"),
+    position = c("FF", "C", "FB", "WL"),
+    time_on_ground_percentage = c(90, 80, 100, 70),
+    hitouts_to_advantage = 0, ruck_contests = 0, hitouts = 0,
+    tackles = 1, pressure_acts = 5, spoils = 0, intercepts = 1, one_percenters = 0
+  )
+  results <- data.table::data.table(
+    match_id = "M1", home_team_name = "Home FC", away_team_name = "Away FC",
+    home_score = 100, away_score = 80)
+  list(pbp = pbp, stats = stats, results = results)
+}
+
+test_that("a non-disposal act that loses the ball is a turnover, not a free hit", {
+  f <- np_ballwin_fixture()
+  led <- torp:::.np_build_ledger(f$pbp, chains = NULL)
+  # row 2 is the Loose Ball Get whose next act belongs to Away
+  on <- withr::with_options(list(), {
+    testthat::local_mocked_bindings(NP_TURNOVER_ON_ALL_ACTS = TRUE, .package = "torp")
+    torp:::.np_credit_terms(led, credit = "flat", alpha = 0.3, phi = 0.3)
+  })
+  r <- on[display_order == 2 & match_id == "M1"]
+  expect_equal(r$kind, "turnover")
+  # the actor keeps 1 - phi, the opposition is ceded phi -- neither is zero
+  expect_equal(r$own_hm, r$hm * 0.7, tolerance = 1e-9)
+  expect_equal(r$cede_hm, r$hm * 0.3, tolerance = 1e-9)
+  expect_true(abs(r$cede_hm) > 1e-9)
+})
+
+test_that("with the flag off the same row is an act and credits nobody", {
+  # the regression guard: this is the behaviour that lost 27.1 points a match,
+  # kept explicit so flipping the flag back is a visible change and not a quiet one
+  f <- np_ballwin_fixture()
+  led <- torp:::.np_build_ledger(f$pbp, chains = NULL)
+  off <- {
+    testthat::local_mocked_bindings(NP_TURNOVER_ON_ALL_ACTS = FALSE, .package = "torp")
+    torp:::.np_credit_terms(led, credit = "flat", alpha = 0.3, phi = 0.3)
+  }
+  r <- off[display_order == 2 & match_id == "M1"]
+  expect_equal(r$kind, "act")
+  expect_equal(r$own_hm, r$hm, tolerance = 1e-9)
+  expect_equal(r$cede_hm, 0, tolerance = 1e-9)
+})
+
+test_that("the flag never reclassifies a disposal or a chain-terminal row", {
+  # fcase evaluates in order, so the new branch sits before the old catch-all.
+  # It must intercept ONLY non-disposal rows whose next act is the opposition.
+  f <- np_ballwin_fixture()
+  led <- torp:::.np_build_ledger(f$pbp, chains = NULL)
+  both <- lapply(c(TRUE, FALSE), function(flag) {
+    testthat::local_mocked_bindings(NP_TURNOVER_ON_ALL_ACTS = flag, .package = "torp")
+    torp:::.np_credit_terms(led, credit = "flat", alpha = 0.3, phi = 0.3)[
+      , .(match_id, display_order, kind)]
+  })
+  d <- merge(both[[1]], both[[2]], by = c("match_id", "display_order"),
+             suffixes = c("_on", "_off"))
+  moved <- d[kind_on != kind_off]
+  # exactly one row moves, and it is the non-disposal one
+  expect_equal(nrow(moved), 1L)
+  expect_equal(moved$display_order, 2L)
+  expect_equal(moved$kind_off, "act")
+  expect_equal(moved$kind_on, "turnover")
+})

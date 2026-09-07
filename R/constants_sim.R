@@ -144,10 +144,6 @@ MATCH_SIM_QUARTER_ALPHA <- c(22, 27, 25, 26)
 #' @keywords internal
 MATCH_SIM_DEFAULT_N <- 10000L
 
-#' Average shots per team per quarter (empirical from 2021-2025 PBP)
-#' @keywords internal
-MATCH_SIM_AVG_SHOTS_PER_QTR <- 7.5
-
 #' Average goal conversion rate (goals / shots, empirical 2021-2025)
 #' @keywords internal
 MATCH_SIM_AVG_CONV_RATE <- 0.52

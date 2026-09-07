@@ -1625,28 +1625,6 @@ compute_spoil_credit <- function(chains, pbp_data, contest_share = 1 / 3) {
 }
 
 
-#' Backward-compatible wrapper (deprecated)
-#' @keywords internal
-compute_failed_recv_credit <- function(chains,
-                                       weight_per_loss = EPV_RECV_FAILED_CONTEST_WT) {
-  cli::cli_warn("Use {.fn compute_contest_credit} instead of {.fn compute_failed_recv_credit}")
-  contests <- extract_contests(chains = chains, type = "aerial")
-  if (nrow(contests) == 0) {
-    return(data.table::data.table(
-      player_id = character(), match_id = character(),
-      failed_epv_recv = numeric(), failed_receptions = integer()
-    ))
-  }
-  failed <- contests[outcome %in% c("spoil", "intercept_mark") & winner == "player2"]
-  if (nrow(failed) == 0) {
-    return(data.table::data.table(
-      player_id = character(), match_id = character(),
-      failed_epv_recv = numeric(), failed_receptions = integer()
-    ))
-  }
-  failed[, .(failed_epv_recv = .N * weight_per_loss, failed_receptions = .N),
-         by = .(player_id = player1_id, match_id)]
-}
 
 
 #' @rdname default_epv_params

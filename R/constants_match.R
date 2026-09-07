@@ -27,18 +27,6 @@ WP_TIME_SCALING <- 15
 # Field Position Constants
 # ------------------------
 
-#' Scoring zone boundary at 30m from goal
-#' @keywords internal
-FIELD_ZONE_SCORING_30 <- 30
-
-#' Scoring zone boundary at 50m from goal
-#' @keywords internal
-FIELD_ZONE_SCORING_50 <- 50
-
-#' Scoring zone boundary at 80m from goal
-#' @keywords internal
-FIELD_ZONE_SCORING_80 <- 80
-
 
 # Match Model Constants
 # ---------------------

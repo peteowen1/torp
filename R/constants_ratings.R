@@ -8,11 +8,6 @@
 # EPR (Expected Possession Rating) System Constants
 # -------------------------------------------------
 
-#' Default total predicted TOG for league-wide centering (18 players per team x 18 teams).
-#' Used as fallback; actual centering adapts to the number of teams present.
-#' @keywords internal
-TOTAL_PRED_TOG <- 324L
-
 #' Decay factor (in days) for PBP-level game recency weighting in add_epv_vars()
 #' @keywords internal
 EPV_WEIGHT_DECAY_DAYS <- 365
@@ -562,19 +557,6 @@ EPR_PRIOR_RATE_HITOUT <- if (identical(EPV_ENGINE, "v3") && identical(EPV3_CHANN
   -0.3000 * .epr_prior_points_scale("cont_stop") * EPV_RUCK_SWING_SCALE
 }
 
-#' Decay factor (in days) for contest component weighting
-#' @keywords internal
-EPR_DECAY_CONTEST <- EPR_DECAY_RECV
-
-#' Prior games constant for contest ratings
-#' @keywords internal
-EPR_PRIOR_GAMES_CONTEST <- 3.0000
-
-#' Prior rate for contest component (shrinkage target per weighted game).
-#' Zero because contest credit is zero-sum — average player should be 0.
-#' @keywords internal
-EPR_PRIOR_RATE_CONTEST <- 0.0000
-
 #' Weight of EPR in TORP blend (0.5 = equal blend of EPR + PSR)
 #' @keywords internal
 TORP_EPR_WEIGHT <- 0.5
@@ -1009,7 +991,17 @@ PSR_POSITION_STANDARDISE <- TRUE
 #' (byte-identical, md5-checked), in
 #' `data-raw/03-ratings/promote_v4_vintage.R`. The manifest moved to
 #' canonical = "v4" before this constant did, for the reason the v3 note gives.
-RATING_VINTAGE <- "v4"
+#'
+#' v5 (2026-09-07): NP_TURNOVER_ON_ALL_ACTS. The turnover split had fired only
+#' on kicks and handballs, so any other act that lost the ball paid the whole
+#' swing as blame and credited the winner nothing -- 27.1 points a match. Every
+#' rating moves, most of all for tacklers, so it takes its own vintage. The
+#' outgoing v4 canonical is preserved as torp_ratings_v4.parquet by
+#' `data-raw/03-ratings/promote_rating_vintage.R` (PROMOTE_FROM=v4,
+#' PROMOTE_TO=v5), and the manifest moves to
+#' canonical = "v5" BEFORE this constant reaches main, for the reason the v3
+#' note gives.
+RATING_VINTAGE <- "v5"
 
 #' Map from the 20-way team-sheet lineup position to a 6-way position group
 #'
@@ -1761,6 +1753,37 @@ NP_EXCLUDED_DESCS <- c("Centre Bounce")
 #' turnover -- the pressure that forced it usually came from someone else.
 #' @keywords internal
 NP_BALL_WINNER_SHARE <- 0.60
+
+#' Treat every lost possession as a turnover, not only kicks and handballs
+#'
+#' Until 2026-09-07 the turnover split fired only on rows in
+#' NP_DISPOSAL_DESCS. Any other act that lost the ball -- a loose ball get, a
+#' gather, a handball receive, a ground kick -- paid the whole swing as blame on
+#' the actor and credited the opponent who took it nothing.
+#'
+#' Measured on 2026: 15.9 such rows a match carrying 27.1 points of swing, with
+#' the opponent credited on none of them, against 156 disposal turnovers a match
+#' where the opponent is credited on 88 per cent. Per event the uncredited ones
+#' are worth 1.72 against 0.54, because they are the tackled-in-possession
+#' cases. On frees won straight off the opposition, 1,439 of 3,214 paid the
+#' winner nothing and averaged a 2.21 point swing.
+#'
+#' Cleared the fast rating gate on 2026-09-07 and is ON. Both arms built by the
+#' same code over 2021-2026, 1,227 matches: mean absolute error 26.793 -> 26.738,
+#' root mean square error 34.082 -> 33.984, Brier 0.19642 -> 0.19542, log loss
+#' 0.58040 -> 0.57800, bits 0.16266 -> 0.16613. Five of five predictive rows
+#' better, none worse; the within-team coefficient moves 1.018 -> 1.013 with its
+#' t from 10.46 to 10.62. Face validity passes with rank stability 0.997.
+#'
+#' The one loss: tipping 0.6957 -> 0.6929, about three tips across 1,038 matches.
+#' Taken because the change repairs a measured defect rather than tuning a
+#' parameter, and because every other predictive row agrees.
+#'
+#' Per position it lifts midfielders most (+0.44 a game) and key defenders least
+#' (+0.23), which is the intended direction: defenders already got paid because
+#' they win the ball off kicks, while tacklers did not.
+#' @keywords internal
+NP_TURNOVER_ON_ALL_ACTS <- TRUE
 
 #' Difficulty credit: the disposer's share of a turnover's SURPRISE
 #'

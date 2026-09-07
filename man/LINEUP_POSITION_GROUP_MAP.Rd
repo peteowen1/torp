@@ -14,7 +14,7 @@ LINEUP_POSITION_GROUP_MAP
 Corrected 2026-07-27 after an audit of all 18 on-field codes against player
 height, the clubs' listed positions, PBP-derived position groups and each
 code's on-field statistical profile
-(\code{data-raw/04-analysis/lineup_position_taxonomy_audit.R},
+(\code{data-raw/04-analysis/archive-2026-09-07/lineup_position_taxonomy_audit.R},
 \code{position_source_provenance.R}). Three of the previous assignments were
 contradicted by every source:
 }

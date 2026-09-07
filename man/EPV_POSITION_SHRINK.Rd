@@ -29,7 +29,7 @@ Only 22 of 966 cells carry weight below 5, but they are September.
 
 \strong{Shrinks toward the bucket's own earlier mean, NOT toward zero.} That
 distinction is the whole design and it was measured, not assumed
-(\code{data-raw/04-analysis/measure_epv_shrink_priors.R}, 2026-07-30).
+(\code{data-raw/04-analysis/archive-2026-09-07/measure_epv_shrink_priors.R}, 2026-07-30).
 Shrinking toward zero -- what the reverted \code{EPR_POSITION_SHRINK} did --
 withholds correction, and every point withheld is a point of positional level
 handed back to the published rating. At prior 5 that restored a spread of
