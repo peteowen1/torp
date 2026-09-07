@@ -1,3 +1,39 @@
+# torp 1.6.0
+
+## The player who wins the ball back is paid for it
+
+The turnover split fired only on kicks and handballs. Any other act that lost
+the ball -- a loose ball get, a gather, a handball receive, a ground kick --
+paid the whole swing as blame on the actor and credited the opponent who took
+it **nothing**. Measured on 2026: 15.9 such rows a match carrying 27.1 points of
+swing, none of it credited, against 156 disposal turnovers a match where the
+opponent is paid 88% of the time. Per event the uncredited ones are worth 1.72
+against 0.54, because they are the tackled-in-possession cases.
+
+Found by tracing one free kick end to end. Carlton lost the ball at a loose ball
+get, Sydney won a free worth 3.0 points of field position, and the ledger
+debited the Carlton player 2.098 while paying Sydney nothing. On frees won
+straight off the opposition, 1,439 of 3,214 paid the winner nothing at an
+average swing of 2.21 points.
+
+`NP_TURNOVER_ON_ALL_ACTS` is now TRUE. Cleared the fast rating gate over
+2021-2026, both arms built by the same code: MAE 26.793 -> 26.738, RMSE 34.082
+-> 33.984, Brier 0.19642 -> 0.19542, log loss 0.58040 -> 0.57800, bits 0.16266
+-> 0.16613. Five of five predictive rows better, none worse. Within-team
+coefficient 1.018 -> 1.013 with t from 10.46 to 10.62, and face validity passes
+at rank stability 0.997. Tipping is fractionally down, 0.6957 -> 0.6929, about
+three tips across 1,038 matches; taken because the change repairs a defect
+rather than tunes a parameter.
+
+Per position, per game: midfielders +0.44, medium forwards +0.39, medium
+defenders +0.31, rucks +0.31, key forwards +0.24, key defenders +0.23. Both
+teams rise, because the margin identity constrains the gap between them and not
+either total. The ten largest gainers are contested midfielders.
+
+Gates added: `run_epr_gate_tackle_fix.R`, `np_espn_mirror_sweep.R` and
+`np_defensive_share_gate.R`, all carrying an arms guard that aborts when two
+arms come back identical. It earned its place four times in one session.
+
 # torp 1.5.3
 
 ## Retracted: the 1.5.2 "last score of a match" fix was inert and its numbers were wrong

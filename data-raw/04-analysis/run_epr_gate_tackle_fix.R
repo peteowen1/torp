@@ -70,8 +70,14 @@ psr_df <- tryCatch(.compute_psr_from_stat_ratings(load_player_stat_ratings(TRUE)
 res <- as.data.table(load_results(TRUE))
 
 build_ratings <- function(pgd, tag) {
-  cached <- if (tag == "v4") file.path(OUT_DIR, "v3v4_rt_v4.parquet") else
-                             file.path(OUT_DIR, paste0("tf_rt_", tag, ".parquet"))
+  # Do NOT reuse v3v4_rt_v4.parquet for the shipped arm. That cache was built by
+  # run_epr_gate_v3v4.R while EPV_ENGINE was still v3, so .build_epr_season() did
+  # not apply EPR_UNITS_SCALE_V4 to it. Scoring it against an arm built now, with
+  # the factor live, made the shipped arm read coef 2.397 against the new arm at
+  # 1.013 -- a ratio of 2.37, which is the units factor and not the change. The
+  # out-of-sample rows are scale-invariant and were unaffected, but the
+  # coefficient rows were comparing constants. Both arms are built here.
+  cached <- file.path(OUT_DIR, paste0("tf_rt_", tag, ".parquet"))
   if (file.exists(cached)) {
     cli::cli_alert_info("Reusing cached {tag} ratings")
     return(as.data.table(read_parquet(cached)))

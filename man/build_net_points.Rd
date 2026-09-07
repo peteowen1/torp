@@ -61,7 +61,18 @@ the ball. Not identifiable from conservation -- see \code{NP_DEFENSIVE_SHARE}.}
 player observed to win the ball (the actor on the next row). The remainder
 goes through \code{spread}, for the pressure that forced the turnover. Routing
 the whole pool through \code{spread} was measurably wrong -- see
-\code{NP_BALL_WINNER_SHARE}.}
+\code{NP_BALL_WINNER_SHARE}.
+
+\strong{Only reaches \code{credit = "flat"}.} Under \code{credit = "difficulty"} the share
+is keyed on HOW the winner won it (\code{NP_BALL_WINNER_SHARE_BY_ACT}: an
+intercept mark or free is nearly all his, a loose ball mostly other
+people's pressure), and that table overwrites this argument on every row
+with a named winner. Passing a non-default value there therefore did
+nothing at all -- silently, until 2026-09-07, when a gate arm raising it to
+0.85 returned numbers identical to the default. That is deliberate, and
+\code{test-epv-net-points.R} asserts it by passing 1 and expecting the by-act
+0.8, so it is documented rather than policed. To move the winner's cut
+under difficulty credit, edit \code{NP_BALL_WINNER_SHARE_BY_ACT}.}
 
 \item{spread}{How the defensive pool is divided: \code{"matchup"} (the positional
 mirror takes \code{mirror_share}, rest by TOG), \code{"defensive_acts"} (by box-score
