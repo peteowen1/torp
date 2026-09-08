@@ -2,13 +2,13 @@
 #' ledger -- every number on the page comes from build_net_points() and its
 #' np_payments / np_team_margin_parts attributes, never a hand-typed literal.
 #'
-#' Nineteen passages in nine numbered categories (group number + a letter
-#' within it, e.g. "1a"/"1b" -- Pete's ask, 2026-09-10, so a category keeps
-#' its number regardless of how many examples live in it), each anchored
-#' (id="example-N"). Examples 1-9 show a play-by-play trace (before / EV of
+#' Twenty passages in ten numbered categories (group number + a letter within
+#' it, e.g. "1a"/"1b" -- Pete's ask, 2026-09-10, so a category keeps its
+#' number regardless of how many examples live in it), each anchored
+#' (id="example-N"). Examples 1-11 show a play-by-play trace (before / EV of
 #' the choice / after / delta, all from the row's OWN delta_epv, never the
 #' next row's exp_pts) and a "who was charged" table built with the same
-#' team-sum scaling as local-tools/np_explorer/app.R's finish(). Example 10
+#' team-sum scaling as local-tools/np_explorer/app.R's finish(). Example 12
 #' uses torp:::.np_team_margin()'s per-player parts to show Carlton's full
 #' roster summing to their own match margin.
 #'
@@ -183,7 +183,10 @@ passages <- list(
        mech = "A non-disposal turnover (a tackle forcing a free kick) still fires the winner's credit against the loser's blame, the same shape as a lost kick or handball -- and the same asymmetry: the losing side has no pool, so the tackled player wears the full charge alone."),
   list(n = "9", tag = "Compound cases", title = "A kick into a contest, then the siren",
        match_id = "CD_M20260141903", lo = 604, hi = 612, hl = 609,
-       mech = "Two things at once. Winning a contested mark (as in Example 3a) fires two separate terms on the same row: a contest-win credit for beating an opponent to it, and a receiver term still priced against how much of a coin-flip the contest was -- only their net is the real credit. And separately: the last row of a quarter has no next row, so its whole remaining position is charged to whoever last touched it -- the siren, not a mistake.")
+       mech = "Two things at once. Winning a contested mark (as in Example 3a) fires two separate terms on the same row: a contest-win credit for beating an opponent to it, and a receiver term still priced against how much of a coin-flip the contest was -- only their net is the real credit. And separately: the last row of a quarter has no next row, so its whole remaining position is charged to whoever last touched it -- the siren, not a mistake."),
+  list(n = "11", tag = "Ground kick", title = "A kick along the ground bypasses the disposal split entirely",
+       match_id = "CD_M20260140001", lo = 1162, hi = 1169, hl = 1165,
+       mech = "A full audit of every description the ledger ever sees (27 of them) found exactly one genuinely different treatment, not just a different label on an already-shown rule: \"Ground Kick\" is not in NP_DISPOSAL_DESCS (only \"Kick\" and \"Handball\" are), so it never gets the decision/surprise split D6-D8 give a real kick -- it is priced as a plain act, paid in full to the kicker, or (as here) a turnover in full to whoever the ball bounces to. The other 26 descriptions all resolve to a rule already shown elsewhere on this page under a different name.")
 )
 
 # ---------------------------------------------------------------------------
@@ -415,7 +418,7 @@ for (i in seq_along(passages)) {
 }
 
 # ---------------------------------------------------------------------------
-# 7. Example 10 -- the team pool table (Carlton, CD_M20260140001)
+# 7. Example 12 -- the team pool table (Carlton, CD_M20260140001)
 # ---------------------------------------------------------------------------
 np9 <- copy(np)
 cv <- suppressMessages(torp:::.np_team_margin(np9, PBP, PS, RES))
@@ -439,12 +442,12 @@ stopifnot(nrow(pool9) > 0)
 # assert Named + Pool share + Reconciliation == Total, per row
 gap9a <- max(abs((pool9$named + pool9$share + pool9$recon) - pool9$val))
 if (!is.finite(gap9a) || gap9a > 1e-6) {
-  stop("Example 10: named + share + recon != val (gap ", signif(gap9a, 4), ")")
+  stop("Example 12: named + share + recon != val (gap ", signif(gap9a, 4), ")")
 }
 # assert the roster sums to Carlton's own margin
 gap9b <- abs(sum(pool9$val) - carl_margin)
 if (!is.finite(gap9b) || gap9b > 1e-6) {
-  stop("Example 10: roster total ", round(sum(pool9$val), 3),
+  stop("Example 12: roster total ", round(sum(pool9$val), 3),
        " != Carlton's margin ", carl_margin, " (gap ", signif(gap9b, 4), ")")
 }
 setorder(pool9, val)
@@ -470,10 +473,10 @@ ex9_mech <- sprintf(
 example9_html <- paste0(
   '<div class="scenario">',
   '<span class="tag">Team pool</span>',
-  '<h2>Example 10 &mdash; Team pool spread</h2>',
+  '<h2>Example 12 &mdash; Team pool spread</h2>',
   '<p class="mech">', ex9_mech, '</p>',
   '<div class="example" id="example-9">',
-  '<h3>Example 10</h3>',
+  '<h3>Example 12</h3>',
   '<table><thead><tr><th>Player</th><th class="num-col">Named</th>',
   '<th class="num-col">Pool share</th><th class="num-col">Reconciliation</th>',
   '<th class="num-col">Total</th></tr></thead><tbody>',
@@ -483,7 +486,7 @@ example9_html <- paste0(
 )
 
 summary_lines[length(passages) + 1L] <- sprintf(
-  "Example 10 (Team pool, %s): %d players, sum %.2f vs margin %.2f, max reconciliation gap %.2e",
+  "Example 12 (Team pool, %s): %d players, sum %.2f vs margin %.2f, max reconciliation gap %.2e",
   carl_team, nrow(pool9), sum(pool9$val), carl_margin, gap9b)
 cat(summary_lines[length(passages) + 1L], "\n")
 
