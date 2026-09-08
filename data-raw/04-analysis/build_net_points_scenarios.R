@@ -121,31 +121,58 @@ period_word <- function(p) {
 # ---------------------------------------------------------------------------
 # 3. The nine passages, exactly as specified
 # ---------------------------------------------------------------------------
+# Numbered by CATEGORY (Pete's ask, 2026-09-10): the group number is the tag, a
+# letter distinguishes passages within it, so "ruck stoppages = 1" and "shots =
+# 2" stay fixed reference points regardless of how many examples live in each.
 passages <- list(
-  list(n = 1, tag = "Ruck stoppages", title = "Centre bounce, clean advantage, then lost",
+  list(n = "1a", tag = "Ruck stoppages", title = "Centre bounce, clean advantage, then lost",
        match_id = "CD_M20260140001", lo = 1018, hi = 1026, hl = 1023,
        mech = "A stoppage is repriced against a neutral baseline for its type and location first -- a centre bounce reads EP = 0 on the raw play-by-play, which would otherwise hide the whole swing. The ruck contest, the first player to gather, and a team-level pool each take a share."),
-  list(n = 2, tag = "Ruck stoppages", title = "Centre bounce, hitout to a scramble",
+  list(n = "1b", tag = "Ruck stoppages", title = "Centre bounce, a clean tap to a teammate",
+       match_id = "CD_M20260140001", lo = 133, hi = 141, hl = 134,
+       mech = "A different split applies when the ball comes out of the ruck contest as a genuine tap (\"Gather From Hitout\") rather than a scramble: the ruck who wins it keeps the larger share (50%) against the gatherer's 30%, because a clean hitout is mostly his doing. This is the one split Pete asked to leave untouched -- his own earlier, deliberate call to favour the tap."),
+  list(n = "1c", tag = "Ruck stoppages", title = "Centre bounce, a contested scramble",
        match_id = "CD_M20260140001", lo = 929, hi = 937, hl = 934,
-       mech = "Same rule as Example 1, a different outcome: the tap turns into a scramble rather than a clean run, and the losing side of a contested stoppage still pays the disposal that loses it, not the tap itself."),
-  list(n = 3, tag = "Shots", title = "A goal",
+       mech = "Where the ball does NOT come out as a clean hitout -- this one resolves as a Hard Ball Get, a scramble -- the ruck and the first player to the ball now split roughly evenly (35/35), corrected 2026-09-10 from an earlier 20/50 split that read, on a real row, as far too small a share for the ruck relative to the player who gathered it. Compare Example 1b, the clean tap, which keeps the old 50/30 split unchanged."),
+  list(n = "1d", tag = "Ruck stoppages", title = "Centre bounce, the ruck wins his own hard ball get",
+       match_id = "CD_M20260140003", lo = 1854, hi = 1862, hl = 1856,
+       mech = "A third way the ball can come out: the ruck himself is the one who wins the hard ball get, not a teammate. There is no separate \"receiver\" here -- he already is the disposer and the winner both -- so this pays him 80% directly, with no ruck-share/player-share split to make."),
+  list(n = "2a", tag = "Shots", title = "A goal",
        match_id = "CD_M20260141001", lo = 147, hi = 157, hl = 154,
        mech = "A shot at goal is priced with the exact same decision/surprise split as any other kick -- there is no separate \"shot\" rule. The scoring kick's own delta is the gap between the position just before it and the fixed value of a goal (6.000); most of a goal's value is usually already banked by the time the shot is taken."),
-  list(n = 4, tag = "Shots", title = "A behind, then the kick-in",
+  list(n = "2b", tag = "Shots", title = "A behind, then the kick-in",
        match_id = "CD_M20260141505", lo = 1971, hi = 1981, hl = 1976,
        mech = "A behind is scored as a turnover: the shot's after-state is 1 minus the opposition's expected kick-in return, not the scoreboard's +1. A shot can score and still be a net loss for the shooting side once the resulting kick-in is priced in."),
-  list(n = 5, tag = "Uncontested receive", title = "An uncontested mark deep in space",
+  list(n = "2c", tag = "Shots", title = "A shot that goes out on the full",
+       match_id = "CD_M20260140201", lo = 362, hi = 372, hl = 366,
+       mech = "A third, different shot outcome: the kick sails out of bounds on the full without registering a score at all. There is no goal or behind to price against, so the row is valued like any other kick that gives the ball away outright -- the after-state is the negative of wherever the free kick handed the opposition the ball, same as a normal turnover, not a scoring rule of any kind."),
+  list(n = "3a", tag = "Contested marks", title = "The attacking side wins the contest",
+       match_id = "CD_M20260140001", lo = 7, hi = 15, hl = 13,
+       mech = "A kick resolves at a contest three ways (D8). Here a teammate wins it: the marking player is paid directly (win_hm) as a same-team contest winner, and the kicker keeps his decision plus a share of the contest surprise -- no value crosses to the opposition at all."),
+  list(n = "3b", tag = "Contested marks", title = "The opposition marks it (an intercept mark)",
+       match_id = "CD_M20260140001", lo = 40, hi = 48, hl = 44,
+       mech = "The same contest, won the other way: the defender's mark is paid through cede_c_hm, routed to him as the named contest winner by NP_CONTEST_WINNER_SHARE (0.80 for a mark) -- almost all of the cession, because catching it cleanly is nearly all his doing."),
+  list(n = "3c", tag = "Contested marks", title = "Spoiled -- nobody marks it",
+       match_id = "CD_M20260140001", lo = 15, hi = 22, hl = 17,
+       mech = "The third contest outcome: the ball is spoiled clear rather than marked by anyone. A spoil is a CHAINS event, not a play-by-play row in its own right, so it never appears as its own line in this trace -- only the kick that was contested and whatever the ball becomes afterward. NP_CONTEST_WINNER_SHARE for a spoil is 0.50, half what a mark pays, because a spoil is a shared outcome (the ball still has to be won again) rather than a clean take."),
+  list(n = "4", tag = "Uncontested receive", title = "An uncontested mark deep in space",
        match_id = "CD_M20260140102", lo = 1217, hi = 1226, hl = 1222,
-       mech = "The receiver's share of the surprise term when the disposal lands cleanly and uncontested -- value the receiving player earns just by being in space and taking the simple mark."),
-  list(n = 6, tag = "Contested receive", title = "A kick into a contest, then the siren",
-       match_id = "CD_M20260141903", lo = 604, hi = 612, hl = 609,
-       mech = "Winning a contested mark fires two separate terms on the same row: a contest-win credit for beating an opponent to it, and a receiver term still priced against how much of a coin-flip the contest was. And separately: the last row of a quarter has no next row, so its whole remaining position is charged to whoever last touched it -- the siren, not a mistake."),
-  list(n = 7, tag = "Intercepts", title = "Reading a long kick (intercept)",
+       mech = "The receiver's share of the surprise term when the disposal lands cleanly and uncontested -- value the receiving player earns just by being in space and taking the simple mark. (There is no \"dropped uncontested mark\" outcome in the data to split against -- checked: no description in play-by-play or chains records an uncontested chance being spilled.)"),
+  list(n = "5a", tag = "Loose ball pickups", title = "A loose ball, recovered by the same team",
+       match_id = "CD_M20260140001", lo = 74, hi = 80, hl = 76,
+       mech = "A loose-ball or hard-ball get is not itself a disposal (only Kick and Handball get the difficulty-model split) -- it is priced as a plain act, paid in full to whoever wins it, unless the next act belongs to the other side."),
+  list(n = "5b", tag = "Loose ball pickups", title = "A loose ball, lost to the opposition",
+       match_id = "CD_M20260140002", lo = 1094, hi = 1099, hl = 1095,
+       mech = "The same act, the other outcome: the very next touch belongs to the opposing team, so this becomes a turnover row under NP_TURNOVER_ON_ALL_ACTS -- the same blame-pool and ball-winner mechanics as a lost kick or handball, even though nobody disposed of anything."),
+  list(n = "6", tag = "Intercepts", title = "Reading a long kick (intercept)",
        match_id = "CD_M20260141904", lo = 1589, hi = 1599, hl = 1595,
        mech = "The biggest single-row swings in the ledger happen here -- but like a contested mark, an intercept can fire more than one role on the same player (ball_winner and contest_winner both), and only the net across them is his real credit for the row. The conceding side has no pool to spread onto, so the disposer alone wears the whole loss."),
-  list(n = 8, tag = "Other turnovers", title = "A tackle, a free, a goal",
+  list(n = "7", tag = "Other turnovers", title = "A tackle, a free, a goal",
        match_id = "CD_M20260140303", lo = 1138, hi = 1146, hl = 1141,
-       mech = "A non-disposal turnover (a tackle forcing a free kick) still fires the winner's credit against the loser's blame, the same shape as a lost kick or handball -- and the same asymmetry: the losing side has no pool, so the tackled player wears the full charge alone.")
+       mech = "A non-disposal turnover (a tackle forcing a free kick) still fires the winner's credit against the loser's blame, the same shape as a lost kick or handball -- and the same asymmetry: the losing side has no pool, so the tackled player wears the full charge alone."),
+  list(n = "8", tag = "Compound cases", title = "A kick into a contest, then the siren",
+       match_id = "CD_M20260141903", lo = 604, hi = 612, hl = 609,
+       mech = "Two things at once. Winning a contested mark (as in Example 3a) fires two separate terms on the same row: a contest-win credit for beating an opponent to it, and a receiver term still priced against how much of a coin-flip the contest was -- only their net is the real credit. And separately: the last row of a quarter has no next row, so its whole remaining position is charged to whoever last touched it -- the siren, not a mistake.")
 )
 
 # ---------------------------------------------------------------------------
@@ -371,7 +398,7 @@ for (i in seq_along(passages)) {
 
   n_charged <- nrow(charged$player_rows) + nrow(charged$pool_rows)
   summary_lines[i] <- sprintf(
-    "Example %d (%s): %d trace rows, %d charged lines, max side-sum gap %.2e",
+    "Example %s (%s): %d trace rows, %d charged lines, max side-sum gap %.2e",
     pg$n, pg$title, nrow(rows), n_charged, charged$max_gap)
   cat(summary_lines[i], "\n")
 }
