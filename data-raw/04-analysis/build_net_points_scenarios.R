@@ -2,13 +2,15 @@
 #' ledger -- every number on the page comes from build_net_points() and its
 #' np_payments / np_team_margin_parts attributes, never a hand-typed literal.
 #'
-#' Nine passages, numbered, each anchored (id="example-N"). Examples 1-8 show
-#' a play-by-play trace (before / EV of the choice / after / delta, all from
-#' the row's OWN delta_epv, never the next row's exp_pts) and a "who was
-#' charged" table built with the same team-sum scaling as
-#' local-tools/np_explorer/app.R's finish(). Example 9 uses
-#' torp:::.np_team_margin()'s per-player parts to show Carlton's full roster
-#' summing to their own match margin.
+#' Nineteen passages in nine numbered categories (group number + a letter
+#' within it, e.g. "1a"/"1b" -- Pete's ask, 2026-09-10, so a category keeps
+#' its number regardless of how many examples live in it), each anchored
+#' (id="example-N"). Examples 1-9 show a play-by-play trace (before / EV of
+#' the choice / after / delta, all from the row's OWN delta_epv, never the
+#' next row's exp_pts) and a "who was charged" table built with the same
+#' team-sum scaling as local-tools/np_explorer/app.R's finish(). Example 10
+#' uses torp:::.np_team_margin()'s per-player parts to show Carlton's full
+#' roster summing to their own match margin.
 #'
 #' Run via PowerShell (arrow segfaults under Git Bash R):
 #'   powershell.exe -Command 'Rscript "data-raw/04-analysis/build_net_points_scenarios.R"'
@@ -119,7 +121,7 @@ period_word <- function(p) {
 }
 
 # ---------------------------------------------------------------------------
-# 3. The nine passages, exactly as specified
+# 3. The passages, in nine numbered categories
 # ---------------------------------------------------------------------------
 # Numbered by CATEGORY (Pete's ask, 2026-09-10): the group number is the tag, a
 # letter distinguishes passages within it, so "ruck stoppages = 1" and "shots =
@@ -155,22 +157,31 @@ passages <- list(
   list(n = "3c", tag = "Contested marks", title = "Spoiled -- nobody marks it",
        match_id = "CD_M20260140001", lo = 15, hi = 22, hl = 17,
        mech = "The third contest outcome: the ball is spoiled clear rather than marked by anyone. A spoil is a CHAINS event, not a play-by-play row in its own right, so it never appears as its own line in this trace -- only the kick that was contested and whatever the ball becomes afterward. NP_CONTEST_WINNER_SHARE for a spoil is 0.50, half what a mark pays, because a spoil is a shared outcome (the ball still has to be won again) rather than a clean take."),
-  list(n = "4", tag = "Uncontested receive", title = "An uncontested mark deep in space",
+  list(n = "4a", tag = "Uncontested receive", title = "An uncontested mark, caught cleanly",
        match_id = "CD_M20260140102", lo = 1217, hi = 1226, hl = 1222,
-       mech = "The receiver's share of the surprise term when the disposal lands cleanly and uncontested -- value the receiving player earns just by being in space and taking the simple mark. (There is no \"dropped uncontested mark\" outcome in the data to split against -- checked: no description in play-by-play or chains records an uncontested chance being spilled.)"),
+       mech = "The receiver's share of the surprise term when the disposal lands cleanly and uncontested -- value the receiving player earns just by being in space and taking the simple mark."),
+  list(n = "4b", tag = "Uncontested receive", title = "A mark attempt, fumbled and then dropped",
+       match_id = "CD_M20260140003", lo = 877, hi = 889, hl = 881,
+       mech = "Correction, 2026-09-10: a dropped mark DOES exist -- it was checked against play-by-play only the first time, and chains records it as two chained events, \"Mark Fumbled\" then \"Mark Dropped\" (1,846 and 1,477 times in 2026). Like a spoil, neither is its own play-by-play row, so it never appears as its own line here -- only the kick whose reception failed, and how play resumes (a ball-up, in this case). The description doesn't record whether the attempt was contested or uncontested, so this stands for the general case rather than a clean uncontested-only instance."),
   list(n = "5a", tag = "Loose ball pickups", title = "A loose ball, recovered by the same team",
        match_id = "CD_M20260140001", lo = 74, hi = 80, hl = 76,
        mech = "A loose-ball or hard-ball get is not itself a disposal (only Kick and Handball get the difficulty-model split) -- it is priced as a plain act, paid in full to whoever wins it, unless the next act belongs to the other side."),
   list(n = "5b", tag = "Loose ball pickups", title = "A loose ball, lost to the opposition",
        match_id = "CD_M20260140002", lo = 1094, hi = 1099, hl = 1095,
        mech = "The same act, the other outcome: the very next touch belongs to the opposing team, so this becomes a turnover row under NP_TURNOVER_ON_ALL_ACTS -- the same blame-pool and ball-winner mechanics as a lost kick or handball, even though nobody disposed of anything."),
-  list(n = "6", tag = "Intercepts", title = "Reading a long kick (intercept)",
+  list(n = "5c", tag = "Loose ball pickups", title = "A kick lands with no mark attempted at all",
+       match_id = "CD_M20260140002", lo = 364, hi = 371, hl = 367,
+       mech = "No stoppage, no mark -- the kick simply comes down in a contest and bounces to whoever gets to it first, here the opposition. This is the same turnover rule as Example 5b; the only thing distinct about it is what did NOT happen: nobody marked it, and it wasn't preceded by a whistle."),
+  list(n = "6", tag = "Open-play free kicks", title = "A kick goes out on the full, in general play",
+       match_id = "CD_M20260140306", lo = 423, hi = 431, hl = 427,
+       mech = "The same rule as the shot in Example 2c, away from goal: kicking the ball out on the full anywhere on the ground is a free kick to the opposition, and the row is priced as an ordinary turnover to wherever that free kick handed them the ball -- nothing goal-related about the rule itself."),
+  list(n = "7", tag = "Intercepts", title = "Reading a long kick (intercept)",
        match_id = "CD_M20260141904", lo = 1589, hi = 1599, hl = 1595,
        mech = "The biggest single-row swings in the ledger happen here -- but like a contested mark, an intercept can fire more than one role on the same player (ball_winner and contest_winner both), and only the net across them is his real credit for the row. The conceding side has no pool to spread onto, so the disposer alone wears the whole loss."),
-  list(n = "7", tag = "Other turnovers", title = "A tackle, a free, a goal",
+  list(n = "8", tag = "Other turnovers", title = "A tackle, a free, a goal",
        match_id = "CD_M20260140303", lo = 1138, hi = 1146, hl = 1141,
        mech = "A non-disposal turnover (a tackle forcing a free kick) still fires the winner's credit against the loser's blame, the same shape as a lost kick or handball -- and the same asymmetry: the losing side has no pool, so the tackled player wears the full charge alone."),
-  list(n = "8", tag = "Compound cases", title = "A kick into a contest, then the siren",
+  list(n = "9", tag = "Compound cases", title = "A kick into a contest, then the siren",
        match_id = "CD_M20260141903", lo = 604, hi = 612, hl = 609,
        mech = "Two things at once. Winning a contested mark (as in Example 3a) fires two separate terms on the same row: a contest-win credit for beating an opponent to it, and a receiver term still priced against how much of a coin-flip the contest was -- only their net is the real credit. And separately: the last row of a quarter has no next row, so its whole remaining position is charged to whoever last touched it -- the siren, not a mistake.")
 )
@@ -404,7 +415,7 @@ for (i in seq_along(passages)) {
 }
 
 # ---------------------------------------------------------------------------
-# 7. Example 9 -- the team pool table (Carlton, CD_M20260140001)
+# 7. Example 10 -- the team pool table (Carlton, CD_M20260140001)
 # ---------------------------------------------------------------------------
 np9 <- copy(np)
 cv <- suppressMessages(torp:::.np_team_margin(np9, PBP, PS, RES))
@@ -428,12 +439,12 @@ stopifnot(nrow(pool9) > 0)
 # assert Named + Pool share + Reconciliation == Total, per row
 gap9a <- max(abs((pool9$named + pool9$share + pool9$recon) - pool9$val))
 if (!is.finite(gap9a) || gap9a > 1e-6) {
-  stop("Example 9: named + share + recon != val (gap ", signif(gap9a, 4), ")")
+  stop("Example 10: named + share + recon != val (gap ", signif(gap9a, 4), ")")
 }
 # assert the roster sums to Carlton's own margin
 gap9b <- abs(sum(pool9$val) - carl_margin)
 if (!is.finite(gap9b) || gap9b > 1e-6) {
-  stop("Example 9: roster total ", round(sum(pool9$val), 3),
+  stop("Example 10: roster total ", round(sum(pool9$val), 3),
        " != Carlton's margin ", carl_margin, " (gap ", signif(gap9b, 4), ")")
 }
 setorder(pool9, val)
@@ -459,10 +470,10 @@ ex9_mech <- sprintf(
 example9_html <- paste0(
   '<div class="scenario">',
   '<span class="tag">Team pool</span>',
-  '<h2>Example 9 &mdash; Team pool spread</h2>',
+  '<h2>Example 10 &mdash; Team pool spread</h2>',
   '<p class="mech">', ex9_mech, '</p>',
   '<div class="example" id="example-9">',
-  '<h3>Example 9</h3>',
+  '<h3>Example 10</h3>',
   '<table><thead><tr><th>Player</th><th class="num-col">Named</th>',
   '<th class="num-col">Pool share</th><th class="num-col">Reconciliation</th>',
   '<th class="num-col">Total</th></tr></thead><tbody>',
@@ -472,7 +483,7 @@ example9_html <- paste0(
 )
 
 summary_lines[length(passages) + 1L] <- sprintf(
-  "Example 9 (Team pool, %s): %d players, sum %.2f vs margin %.2f, max reconciliation gap %.2e",
+  "Example 10 (Team pool, %s): %d players, sum %.2f vs margin %.2f, max reconciliation gap %.2e",
   carl_team, nrow(pool9), sum(pool9$val), carl_margin, gap9b)
 cat(summary_lines[length(passages) + 1L], "\n")
 
