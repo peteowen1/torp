@@ -2,15 +2,19 @@
 #' ledger -- every number on the page comes from build_net_points() and its
 #' np_payments / np_team_margin_parts attributes, never a hand-typed literal.
 #'
-#' Twenty-four passages in eleven numbered categories (group number + a letter within
-#' it, e.g. "1a"/"1b" -- Pete's ask, 2026-09-10, so a category keeps its
-#' number regardless of how many examples live in it), each anchored
-#' (id="example-N"). Examples 1-11 show a play-by-play trace (before / EV of
-#' the choice / after / delta, all from the row's OWN delta_epv, never the
-#' next row's exp_pts) and a "who was charged" table built with the same
-#' team-sum scaling as local-tools/np_explorer/app.R's finish(). Example 12
-#' uses torp:::.np_team_margin()'s per-player parts to show Carlton's full
-#' roster summing to their own match margin.
+#' Forty-four passages in thirteen numbered categories (group number + a
+#' letter within it, e.g. "1a"/"1b" -- Pete's ask, 2026-09-10, so a category
+#' keeps its number regardless of how many examples live in it), each
+#' anchored (id="example-N"). Examples 1-12 show a play-by-play trace
+#' (before / EV of the choice / after / delta, all from the row's OWN
+#' delta_epv, never the next row's exp_pts) and a "who was charged" table
+#' built with the same team-sum scaling as local-tools/np_explorer/app.R's
+#' finish(). Category 13 (Chains-only play types) covers every chains
+#' description occurring 10+ times in 2026 that never reaches the ledger,
+#' shown with a dashed "phantom" row where the event happened -- no EP of
+#' its own, since it isn't scored separately, but placed correctly in the
+#' sequence. Example 14 uses torp:::.np_team_margin()'s per-player parts to
+#' show Carlton's full roster summing to their own match margin.
 #'
 #' Run via PowerShell (arrow segfaults under Git Bash R):
 #'   powershell.exe -Command 'Rscript "data-raw/04-analysis/build_net_points_scenarios.R"'
@@ -50,6 +54,37 @@ PBP <- merge(PBP, FULL[, c("match_id", "display_order", fcols), with = FALSE],
 setorder(PBP, match_id, display_order)
 PBP[, last_in_period := display_order == max(display_order), by = .(match_id, period)]
 rm(FULL)
+
+# Chains-only events (category 13, "phantom" rows): cached locally after the
+# first run, since load_chains(2026) takes about a minute. team_id -> team and
+# player_id -> player_name both come from the same released PBP frame chains
+# is matched against (RAW_PBP_FOR_NAMES), so a phantom row's team/player reads
+# exactly like a real trace row's.
+CH_CACHE <- file.path(D, "chains_2026_for_scenarios.parquet")
+RAW_PBP_FOR_NAMES <- as.data.table(load_pbp(seasons = 2026))
+RAW_PBP_FOR_NAMES[, `:=`(match_id = as.character(match_id), team_id = as.character(team_id),
+                        player_id = as.character(player_id))]
+tm_map <- unique(RAW_PBP_FOR_NAMES[!is.na(team_id), .(match_id, team_id, team)])
+nm_ch  <- unique(RAW_PBP_FOR_NAMES[!is.na(player_id), .(player_id, player_name)])
+
+if (file.exists(CH_CACHE)) {
+  CH <- as.data.table(read_parquet(CH_CACHE))
+} else {
+  CH <- as.data.table(load_chains(seasons = 2026))[, .(match_id = as.character(match_id),
+        display_order, description, player_id = as.character(player_id),
+        team_id = as.character(team_id))]
+  write_parquet(CH, CH_CACHE)
+}
+CH <- merge(CH, tm_map, by = c("match_id", "team_id"), all.x = TRUE)
+CH <- merge(CH, nm_ch, by = "player_id", all.x = TRUE)
+# a chains "phantom" row is one whose display_order never appears in PBP at all
+pbp_slots <- unique(PBP[, .(match_id, display_order)])
+pbp_slots[, in_pbp := TRUE]
+CH <- merge(CH, pbp_slots, by = c("match_id", "display_order"), all.x = TRUE)
+CH[is.na(in_pbp), in_pbp := FALSE]
+PHANTOM <- CH[in_pbp == FALSE]
+cat("Chains-only (phantom) rows across 2026:", nrow(PHANTOM), "of", nrow(CH), "chains rows\n")
+rm(RAW_PBP_FOR_NAMES)
 
 led <- suppressMessages(torp:::.np_build_ledger(PBP, chains = NULL, stoppages = "allocate"))
 l <- suppressMessages(torp:::.np_credit_terms(led, "difficulty",
@@ -154,13 +189,13 @@ passages <- list(
   list(n = "3b", tag = "Contested marks", title = "The opposition marks it (an intercept mark)",
        match_id = "CD_M20260140001", lo = 40, hi = 48, hl = 44,
        mech = "The same contest, won the other way: the defender's mark is paid through cede_c_hm, routed to him as the named contest winner by NP_CONTEST_WINNER_SHARE (0.80 for a mark) -- almost all of the cession, because catching it cleanly is nearly all his doing."),
-  list(n = "3c", tag = "Contested marks", title = "Spoiled -- nobody marks it",
+  list(n = "3c", tag = "Contested marks", title = "Spoiled -- nobody marks it", phantom = TRUE,
        match_id = "CD_M20260140001", lo = 15, hi = 22, hl = 17,
-       mech = "The third contest outcome: the ball is spoiled clear rather than marked by anyone. A spoil is a CHAINS event, not a play-by-play row in its own right, so it never appears as its own line in this trace -- only the kick that was contested and whatever the ball becomes afterward. NP_CONTEST_WINNER_SHARE for a spoil is 0.50, half what a mark pays, because a spoil is a shared outcome (the ball still has to be won again) rather than a clean take."),
+       mech = "The third contest outcome: the ball is spoiled clear rather than marked by anyone. A spoil is a chains event, not a play-by-play row in its own right (13,096 of them in 2026, shown below as the dashed phantom row) -- only the kick that was contested and whatever the ball becomes afterward carry their own EP. NP_CONTEST_WINNER_SHARE for a spoil is 0.50, half what a mark pays, because a spoil is a shared outcome (the ball still has to be won again) rather than a clean take."),
   list(n = "4a", tag = "Uncontested receive", title = "An uncontested mark, caught cleanly",
        match_id = "CD_M20260140102", lo = 1217, hi = 1226, hl = 1222,
        mech = "The receiver's share of the surprise term when the disposal lands cleanly and uncontested -- value the receiving player earns just by being in space and taking the simple mark."),
-  list(n = "4b", tag = "Uncontested receive", title = "A mark attempt, fumbled and then dropped",
+  list(n = "4b", tag = "Uncontested receive", title = "A mark attempt, fumbled and then dropped", phantom = TRUE,
        match_id = "CD_M20260140003", lo = 877, hi = 889, hl = 881,
        mech = "Correction, 2026-09-10: a dropped mark DOES exist -- it was checked against play-by-play only the first time, and chains records it as two chained events, \"Mark Fumbled\" then \"Mark Dropped\" (1,846 and 1,477 times in 2026). Like a spoil, neither is its own play-by-play row, so it never appears as its own line here -- only the kick whose reception failed, and how play resumes (a ball-up, in this case). The description doesn't record whether the attempt was contested or uncontested, so this stands for the general case rather than a clean uncontested-only instance."),
   list(n = "5a", tag = "Loose ball pickups", title = "A loose ball, recovered by the same team",
@@ -198,7 +233,87 @@ passages <- list(
        mech = "\"Free Advantage\" is the umpire letting play continue because the team that earned the free is already ahead of the contest -- it is still just an act row for whoever gets the advantage call, same rule as 10a-10c. This one plays on and is turned over three rows later, which is its own row's business, not the advantage call's."),
   list(n = "11", tag = "Ground kick", title = "A kick along the ground bypasses the disposal split entirely",
        match_id = "CD_M20260140001", lo = 1162, hi = 1169, hl = 1165,
-       mech = "A full audit of every description the ledger ever sees (27 of them) found exactly one genuinely different treatment, not just a different label on an already-shown rule: \"Ground Kick\" is not in NP_DISPOSAL_DESCS (only \"Kick\" and \"Handball\" are), so it never gets the decision/surprise split D6-D8 give a real kick -- it is priced as a plain act, paid in full to the kicker, or (as here) a turnover in full to whoever the ball bounces to. The other 26 descriptions all resolve to a rule already shown elsewhere on this page under a different name.")
+       mech = "A full audit of every description the ledger ever sees (27 of them) found exactly one genuinely different treatment, not just a different label on an already-shown rule: \"Ground Kick\" is not in NP_DISPOSAL_DESCS (only \"Kick\" and \"Handball\" are), so it never gets the decision/surprise split D6-D8 give a real kick -- it is priced as a plain act, paid in full to the kicker, or (as here) a turnover in full to whoever the ball bounces to. The other 26 descriptions all resolve to a rule already shown elsewhere on this page under a different name."),
+  list(n = "13a", tag = "Chains-only play types", phantom = TRUE,
+       title = "Kick Into F50 (19,560 in 2026)",
+       match_id = "CD_M20260140001", lo = 175, hi = 180, hl = 178,
+       mech = "78 distinct descriptions exist in the underlying chains data; only 27 ever reach the ledger (see the audit in Example 11). The other 51 are chains-only tags -- checked in full this time, not a keyword search -- and this section shows every one that occurs 10 or more times in 2026 (23 of the 51, covering 80,608 of their 80,654 rows), so the whole picture is here, not a sample. \"Kick Into F50\" tags a kick that entered the forward 50; it carries no value of its own, the kick itself already does."),
+  list(n = "13b", tag = "Chains-only play types", phantom = TRUE,
+       title = "Kick Inside 50 Result (19,558)",
+       match_id = "CD_M20260140001", lo = 176, hi = 183, hl = 179,
+       mech = "The companion tag to 13a: what happened once the kick above landed inside 50. Same situation -- no value of its own, it just labels the outcome the surrounding real rows already price."),
+  list(n = "13c", tag = "Chains-only play types", phantom = TRUE,
+       title = "Goal (5,489)",
+       match_id = "CD_M20260140001", lo = 1177, hi = 1182, hl = 1179,
+       mech = "The chains-level scoring tag. The play-by-play frame this ledger reads has already dropped the Goal/Behind rows entirely (see Example 4a/2a for how a scoring kick is actually priced -- the kick's own after-state is the fixed 6.000), so this tag never reaches the ledger; it is shown here purely so its place in the sequence is visible."),
+  list(n = "13d", tag = "Chains-only play types", phantom = TRUE,
+       title = "Kickin play on (4,461)",
+       match_id = "CD_M20260140001", lo = 832, hi = 839, hl = 835,
+       mech = "Tags a kick-in taken quickly, played on rather than a set shot. Same as every phantom row here: a label on the surrounding sequence, no value of its own."),
+  list(n = "13e", tag = "Chains-only play types", phantom = TRUE,
+       title = "Contest Target (4,423)",
+       match_id = "CD_M20260140001", lo = 548, hi = 555, hl = 551,
+       mech = "Names which player a kick was aimed at -- the evidence D12's context spread uses to weight the pool by who was actually contesting whom, but not a row that is itself paid."),
+  list(n = "13f", tag = "Chains-only play types", phantom = TRUE,
+       title = "Behind (4,038)",
+       match_id = "CD_M20260140001", lo = 831, hi = 837, hl = 834,
+       mech = "The chains-level tag for a scored behind -- see Example 2b for how the actual shot is priced (the after-state is 1 minus the opposition's kick-in return, not the scoreboard's +1). This tag itself carries nothing."),
+  list(n = "13g", tag = "Chains-only play types", phantom = TRUE,
+       title = "OOF Kick In (2,045)",
+       match_id = "CD_M20260140001", lo = 1327, hi = 1332, hl = 1330,
+       mech = "The kick-in that follows a kick going out on the full (Example 6 shows the out-on-full row itself). This tag marks the restart; the restart kick right after it is a real, separately-priced row."),
+  list(n = "13h", tag = "Chains-only play types", phantom = TRUE,
+       title = "Shot At Goal (1,925)",
+       match_id = "CD_M20260140001", lo = 1229, hi = 1235, hl = 1232,
+       mech = "Chains' own flag for \"this kick was a shot\" -- redundant with points_shot on the real row, and not itself priced."),
+  list(n = "13i", tag = "Chains-only play types", phantom = TRUE,
+       title = "No Pressure Error (1,110)",
+       match_id = "CD_M20260140001", lo = 1135, hi = 1141, hl = 1138,
+       mech = "An unforced error -- lost the ball with no tackle or chase forcing it. Still just a tag: the row it sits on (here a Ground Kick, which per Example 11 gets no decision/surprise split anyway) carries whatever value there is."),
+  list(n = "13j", tag = "Chains-only play types", phantom = TRUE,
+       title = "Out On Full (914)",
+       match_id = "CD_M20260140002", lo = 739, hi = 746, hl = 742,
+       mech = "Distinct from \"Out On Full After Kick\" (Example 6, which IS a real play-by-play row): this is chains' own separate tag for the same event, and does not reach the ledger itself."),
+  list(n = "13k", tag = "Chains-only play types", phantom = TRUE,
+       title = "Kickin short (382)",
+       match_id = "CD_M20260140004", lo = 272, hi = 279, hl = 275,
+       mech = "A kick-in that doesn't clear the defensive 50 -- a length tag on the kick-in, not its own value."),
+  list(n = "13l", tag = "Chains-only play types", phantom = TRUE,
+       title = "Tackle (77)",
+       match_id = "CD_M20260140205", lo = 1104, hi = 1109, hl = 1107,
+       mech = "The tackle itself is never a play-by-play row -- see Example 8, where a tackle forces a free kick and the FREE is what carries value, not a \"Tackle\" row. Here it precedes a clean retained loose ball, so no free resulted."),
+  list(n = "13m", tag = "Chains-only play types", phantom = TRUE,
+       title = "Pack Mark (P) (62)",
+       match_id = "CD_M20260140207", lo = 1802, hi = 1807, hl = 1803,
+       mech = "A pack mark taken by the attacking side -- chains' finer label for a contested mark in a genuine pack. Resolves through the same Contested Mark / Uncontested Mark rows the ledger actually reads."),
+  list(n = "13n", tag = "Chains-only play types", phantom = TRUE,
+       title = "Pack Mark (O) (40)",
+       match_id = "CD_M20260140407", lo = 1428, hi = 1433, hl = 1431,
+       mech = "The defensive-side twin of 13m -- a pack mark taken by the team without the ball."),
+  list(n = "13o", tag = "Chains-only play types", phantom = TRUE,
+       title = "Debit (33)",
+       match_id = "CD_M20260140408", lo = 1825, hi = 1832, hl = 1828,
+       mech = "A chains bookkeeping tag (paired with \"Credit\", Example 14s) from the provider's own internal accounting -- not a football event, and not read by anything in this ledger."),
+  list(n = "13p", tag = "Chains-only play types", phantom = TRUE,
+       title = "Free Against (20)",
+       match_id = "CD_M20260140705", lo = 1759, hi = 1764, hl = 1762,
+       mech = "The mirror of a \"Free For\" row from the penalised player's side -- the free itself is priced on the Free For row (real, in play-by-play); this is chains' bookkeeping of who it was against."),
+  list(n = "13q", tag = "Chains-only play types", phantom = TRUE,
+       title = "Smothered (18)",
+       match_id = "CD_M20260140603", lo = 663, hi = 668, hl = 665,
+       mech = "A kick charged down at the point of release. Whatever value that swing carries sits on the surrounding real rows (here, the Loose Ball Get either side); the smother itself is never scored."),
+  list(n = "13r", tag = "Chains-only play types", phantom = TRUE,
+       title = "Credit (14)",
+       match_id = "CD_M20260141401", lo = 386, hi = 393, hl = 389,
+       mech = "The other half of 13o's bookkeeping pair -- again, provider accounting, not a football act, and not read by the ledger."),
+  list(n = "13s", tag = "Chains-only play types", phantom = TRUE,
+       title = "Rebound 50 (10)",
+       match_id = "CD_M20260142101", lo = 1252, hi = 1259, hl = 1255,
+       mech = "Tags a passage of play as originating from a defensive rebound out of the back 50 -- a phase label across several real rows, not a row of its own value."),
+  list(n = "13t", tag = "Chains-only play types", phantom = TRUE,
+       title = "Kickin long (10)",
+       match_id = "CD_M20260141705", lo = 1253, hi = 1260, hl = 1256,
+       mech = "The length twin of 13k: a kick-in that travels a long way. Just a length tag, same as short.")
 )
 
 # ---------------------------------------------------------------------------
@@ -227,7 +342,7 @@ act_label <- function(desc, kind, points_shot, last_in_period, m, d) {
   else esc(desc)
 }
 
-build_trace <- function(pg) {
+build_trace <- function(pg, show_phantoms = FALSE) {
   rows <- PBP[match_id == pg$match_id & display_order %between% c(pg$lo, pg$hi)]
   setorder(rows, display_order)
   rows <- merge(rows, l[, .(match_id, display_order, kind, scored, dec_hm, contested)],
@@ -238,12 +353,33 @@ build_trace <- function(pg) {
                               exp_pts + dec_hm * fifelse(home_away == "Home", 1, -1),
                               NA_real_)]
   rows[, ep_after := exp_pts + delta_epv]
+  rows[, is_phantom := FALSE]
+  if (isTRUE(show_phantoms)) {
+    ph <- PHANTOM[match_id == pg$match_id & display_order %between% c(pg$lo, pg$hi)]
+    if (nrow(ph) > 0) {
+      ph <- ph[, .(match_id, display_order, description, player_name, team)]
+      ph[, is_phantom := TRUE]
+      rows <- rbindlist(list(rows, ph), use.names = TRUE, fill = TRUE)
+      setorder(rows, display_order)
+    }
+  }
   rows
 }
 
 render_trace_html <- function(pg, rows) {
+  any_phantom <- isTRUE(any(rows$is_phantom))
   trs <- vapply(seq_len(nrow(rows)), function(i) {
     r <- rows[i]
+    if (isTRUE(r$is_phantom)) {
+      no_player <- is.na(r$player_name) || identical(r$player_name, "NA NA")
+      player <- if (no_player) "&mdash;" else esc(r$player_name)
+      team   <- if (is.na(r$team)) "&mdash;" else esc(r$team)
+      cls <- if (r$display_order == pg$hl) "phantom turn" else "phantom"
+      return(sprintf(
+        '<tr class="%s"><td>%d</td><td class="desc">%s</td><td>%s</td><td>%s</td><td class="num-col" colspan="4">not its own play-by-play row &mdash; value already inside the surrounding rows</td></tr>',
+        cls, r$display_order, esc(r$description), player, team
+      ))
+    }
     is_hl <- r$display_order == pg$hl
     # the source data encodes "no player" (a contest row) as the literal
     # string "NA NA", not an actual NA -- both are treated as missing.
@@ -260,10 +396,13 @@ render_trace_html <- function(pg, rows) {
       delta_cls, fmt_signed(r$delta_epv)
     )
   }, character(1))
+  phantom_note <- if (any_phantom)
+    ' Rows shaded and dashed are chains-only events with no play-by-play row of their own -- shown so the sequence reads right, but they carry no separate EP or &Delta;EP; whatever they represent is already inside the real rows around them.'
+  else ""
   paste0(
     '<p class="ctx framenote">Expected points are shown from the acting player&rsquo;s own side on each row: ',
     'positive is good for the team listed on that row. At a turnover the &ldquo;after&rdquo; value is negative ',
-    'because the other side now has the ball.</p>',
+    'because the other side now has the ball.', phantom_note, '</p>',
     '<table class="trace"><thead><tr><th>Row</th><th>Act</th><th>Player</th><th>Team</th>',
     '<th class="num-col">EP before</th><th class="num-col">EV of the choice</th>',
     '<th class="num-col">EP after</th><th class="num-col">&Delta;EP</th></tr></thead><tbody>',
@@ -398,7 +537,7 @@ summary_lines <- character(length(passages) + 1L)
 
 for (i in seq_along(passages)) {
   pg <- passages[[i]]
-  rows <- build_trace(pg)
+  rows <- build_trace(pg, show_phantoms = isTRUE(pg$phantom))
   first <- rows[1]
   ctx <- sprintf("%s %d, %s %d, %s quarter.",
                  esc(first$home_team_name), first$home_points,
@@ -430,7 +569,7 @@ for (i in seq_along(passages)) {
 }
 
 # ---------------------------------------------------------------------------
-# 7. Example 12 -- the team pool table (Carlton, CD_M20260140001)
+# 7. Example 14 -- the team pool table (Carlton, CD_M20260140001)
 # ---------------------------------------------------------------------------
 np9 <- copy(np)
 cv <- suppressMessages(torp:::.np_team_margin(np9, PBP, PS, RES))
@@ -454,12 +593,12 @@ stopifnot(nrow(pool9) > 0)
 # assert Named + Pool share + Reconciliation == Total, per row
 gap9a <- max(abs((pool9$named + pool9$share + pool9$recon) - pool9$val))
 if (!is.finite(gap9a) || gap9a > 1e-6) {
-  stop("Example 12: named + share + recon != val (gap ", signif(gap9a, 4), ")")
+  stop("Example 14: named + share + recon != val (gap ", signif(gap9a, 4), ")")
 }
 # assert the roster sums to Carlton's own margin
 gap9b <- abs(sum(pool9$val) - carl_margin)
 if (!is.finite(gap9b) || gap9b > 1e-6) {
-  stop("Example 12: roster total ", round(sum(pool9$val), 3),
+  stop("Example 14: roster total ", round(sum(pool9$val), 3),
        " != Carlton's margin ", carl_margin, " (gap ", signif(gap9b, 4), ")")
 }
 setorder(pool9, val)
@@ -485,10 +624,10 @@ ex9_mech <- sprintf(
 example9_html <- paste0(
   '<div class="scenario">',
   '<span class="tag">Team pool</span>',
-  '<h2>Example 12 &mdash; Team pool spread</h2>',
+  '<h2>Example 14 &mdash; Team pool spread</h2>',
   '<p class="mech">', ex9_mech, '</p>',
   '<div class="example" id="example-9">',
-  '<h3>Example 12</h3>',
+  '<h3>Example 14</h3>',
   '<table><thead><tr><th>Player</th><th class="num-col">Named</th>',
   '<th class="num-col">Pool share</th><th class="num-col">Reconciliation</th>',
   '<th class="num-col">Total</th></tr></thead><tbody>',
@@ -498,7 +637,7 @@ example9_html <- paste0(
 )
 
 summary_lines[length(passages) + 1L] <- sprintf(
-  "Example 12 (Team pool, %s): %d players, sum %.2f vs margin %.2f, max reconciliation gap %.2e",
+  "Example 14 (Team pool, %s): %d players, sum %.2f vs margin %.2f, max reconciliation gap %.2e",
   carl_team, nrow(pool9), sum(pool9$val), carl_margin, gap9b)
 cat(summary_lines[length(passages) + 1L], "\n")
 
@@ -565,6 +704,8 @@ head_html <- '<!doctype html>
   .framenote{font-size:.85rem;color:var(--muted);margin:6px 0 10px}
   .trace td.desc{white-space:nowrap} .trace td.delta{font-weight:600}
   .trace tr.turn td{background:color-mix(in srgb, var(--neg) 8%, transparent)}
+  .trace tr.phantom td{font-style:italic;color:var(--muted);border-top:1px dashed var(--muted);border-bottom:1px dashed var(--muted)}
+  .trace tr.phantom td.desc{white-space:normal}
   .poolnote{font-size:.85rem;color:var(--muted);margin:10px 0 0}
   footer{margin-top:40px;padding-top:20px;border-top:1px solid var(--line);color:var(--muted);font-size:.88rem}
   footer a{color:var(--accent)}
