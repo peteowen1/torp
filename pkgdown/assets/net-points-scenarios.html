@@ -46,6 +46,18 @@
   .take{margin-top:12px;padding:10px 14px;border-left:3px solid var(--accent);
         background:var(--panel);border-radius:0 6px 6px 0;font-size:.92rem}
   .take b{color:var(--accent)}
+  .terms{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;margin:14px 0 0;font-size:.88rem}
+  .terms dt{font-weight:700;white-space:nowrap}
+  .terms dd{margin:0;color:var(--muted)}
+  .example{margin:22px 0 26px;padding:16px 18px;background:var(--panel);border:1px solid var(--line);
+           border-radius:10px}
+  .example h3{margin:0 0 4px;font-size:1rem}
+  .example .ctx{color:var(--muted);font-size:.85rem;margin:0 0 12px}
+  .example h4{margin:16px 0 4px;font-size:.76rem;text-transform:uppercase;letter-spacing:.03em;
+              color:var(--muted)}
+  .trace td.desc{white-space:nowrap} .trace td.delta{font-weight:600}
+  .trace tr.turn td{background:color-mix(in srgb, var(--neg) 8%, transparent)}
+  .poolnote{font-size:.85rem;color:var(--muted);margin:10px 0 0}
   footer{margin-top:40px;padding-top:20px;border-top:1px solid var(--line);color:var(--muted);font-size:.88rem}
   footer a{color:var(--accent)}
   a{color:var(--accent)}
@@ -71,52 +83,213 @@
       to the side that conceded it (torp&nbsp;1.7.0, rating vintage v6). That's why each
       team's own players sum to that team's own margin, not just the gap between the two
       sides. Values below are in <b>points</b>, the same units as the final score.</p>
+    <dl class="terms">
+      <dt>Expected Points (EP)</dt>
+      <dd>The per-play state model — "if the match stopped right now, how many points is this
+        position worth?" This is the <code>exp_pts</code> column, the "before" and "after" in
+        every row-by-row trace below. It has nothing to do with EPV.</dd>
+      <dt>Net Points</dt>
+      <dd>What this whole page is about — the play-by-play EP swings, allocated to named
+        players and re-summed so each team totals its own margin. This is the ledger.</dd>
+      <dt>EPV</dt>
+      <dd>An older, separate player rating (still published, not built from this ledger).
+        Not used anywhere on this page — mentioned only so the two don't get confused.</dd>
+    </dl>
   </div>
 
   <div class="scenario">
     <span class="tag">Ruck stoppages</span>
     <h2>Centre bounces, ball-ups and boundary throw-ins</h2>
     <p class="mech">A stoppage is repriced against a neutral baseline for its type and
-      location first — a centre bounce reads <code>exp_pts = 0</code> on the raw play-by-play,
-      which would otherwise hide the whole swing. The winning ruck, the first player to gather,
-      and a pool for the contest around them each take a share.</p>
-    <table>
-      <thead><tr><th>Player</th><th>Stoppage type</th><th class="num-col">Points</th></tr></thead>
-      <tbody>
-        <tr><td>Lloyd Meek</td><td>Ball Up Call</td><td class="num-col pos">+0.92</td></tr>
-        <tr><td>Ned Moyle</td><td>Centre Bounce</td><td class="num-col pos">+0.68</td></tr>
-        <tr><td>Jarrod Witts</td><td>Out of Bounds</td><td class="num-col pos">+0.68</td></tr>
-        <tr><td>Brodie Grundy</td><td>Ball Up Call</td><td class="num-col neg">&minus;0.66</td></tr>
-        <tr><td>Marc Pittonet</td><td>Ball Up Call</td><td class="num-col pos">+0.66</td></tr>
-      </tbody>
-    </table>
-    <p class="take">Single-stoppage swings are small — the biggest ruck row in 75,646
-      stoppages this season is under one point. Stoppage value mostly accrues to whoever
-      gets first possession after the tap, not the tap itself.</p>
+      location first — a centre bounce reads <code>EP = 0</code> on the raw play-by-play,
+      which would otherwise hide the whole swing. The ruck contest, the first player to
+      gather, and a team-level pool each take a share. Two real sequences from the same
+      match (Round&nbsp;1, Sydney home to Carlton) below — one where the tap turns into a
+      clean run, one where it turns into a scramble — and both end the same way, which is
+      itself the point.</p>
+
+    <div class="example">
+      <h3>Example A — clean advantage off the bounce, then lost anyway</h3>
+      <p class="ctx">Sydney 18, Carlton 21, second quarter. Centre bounce, display order 1019.</p>
+      <h4>Play by play</h4>
+      <table class="trace">
+        <thead><tr><th>Row</th><th>Act</th><th>Player</th><th>Team</th>
+          <th class="num-col">EP before</th><th class="num-col">EP after</th>
+          <th class="num-col">&Delta;EP</th></tr></thead>
+        <tbody>
+          <tr><td>1019</td><td class="desc">Centre Bounce</td><td>&mdash; (contest)</td><td>&mdash;</td>
+            <td class="num-col">&mdash;</td><td class="num-col">0.000</td><td class="num-col">&mdash;</td></tr>
+          <tr><td>1020</td><td class="desc">Loose Ball Get</td><td>James Jordon</td><td>Sydney</td>
+            <td class="num-col">0.000</td><td class="num-col">0.923</td><td class="num-col delta pos">+0.923</td></tr>
+          <tr><td>1021</td><td class="desc">Handball</td><td>James Jordon</td><td>Sydney</td>
+            <td class="num-col">0.923</td><td class="num-col">0.877</td><td class="num-col delta neg">&minus;0.046</td></tr>
+          <tr><td>1022</td><td class="desc">Handball Received</td><td>Angus Sheldrick</td><td>Sydney</td>
+            <td class="num-col">0.877</td><td class="num-col">1.119</td><td class="num-col delta pos">+0.242</td></tr>
+          <tr class="turn"><td>1023</td><td class="desc">Kick &mdash; intercepted</td><td>Angus Sheldrick</td><td>Sydney</td>
+            <td class="num-col">1.119</td><td class="num-col">1.198</td><td class="num-col delta pos">+0.079</td></tr>
+        </tbody>
+      </table>
+      <h4>Who was charged</h4>
+      <table>
+        <thead><tr><th>Role</th><th>Player</th><th>Team</th><th class="num-col">Points</th></tr></thead>
+        <tbody>
+          <tr><td>First possession</td><td>James Jordon</td><td>Sydney</td><td class="num-col pos">+0.39</td></tr>
+          <tr><td>Ruck contest (5-way split)</td><td>Grundy / Amartey (Syd), Pittonet / Reidy / Cripps (Carl)</td>
+            <td>both</td><td class="num-col">+0.14 to &minus;0.11 each</td></tr>
+          <tr><td>Kick decision</td><td>Angus Sheldrick</td><td>Sydney</td><td class="num-col neg">&minus;1.43</td></tr>
+          <tr><td>Won the turnover</td><td>Oliver Hollands</td><td>Carlton</td><td class="num-col pos">+0.43</td></tr>
+          <tr><td>Team pool (bucket, not yet split to a player)</td><td>&mdash;</td><td>Carlton</td><td class="num-col pos">+1.00</td></tr>
+        </tbody>
+      </table>
+      <p class="poolnote">"Team pool" here isn't one player's — it's banked to Carlton as a
+        whole for this row, and only gets spread across Carlton's actual roster once, at the
+        end of the match (see the Team Pool section below).</p>
+      <p class="take">Sydney built value on three straight plays (+0.92, +0.24 net across the
+        chain) and then a single failed kick from good field position wiped almost all of it
+        out in one row (&minus;1.43) — <b>the exact Kick/Handball skew Pete flagged.</b> The
+        decision term is priced against how good the position already was, not against
+        whether the kick worked.</p>
+    </div>
+
+    <div class="example">
+      <h3>Example B — hitout to a scramble, same outcome</h3>
+      <p class="ctx">Same match, first quarter, Sydney 18, Carlton 15. Centre bounce, display
+        order 930.</p>
+      <h4>Play by play</h4>
+      <table class="trace">
+        <thead><tr><th>Row</th><th>Act</th><th>Player</th><th>Team</th>
+          <th class="num-col">EP before</th><th class="num-col">EP after</th>
+          <th class="num-col">&Delta;EP</th></tr></thead>
+        <tbody>
+          <tr><td>930</td><td class="desc">Centre Bounce</td><td>&mdash; (contest)</td><td>&mdash;</td>
+            <td class="num-col">&mdash;</td><td class="num-col">0.000</td><td class="num-col">&mdash;</td></tr>
+          <tr><td>931</td><td class="desc">Hard Ball Get</td><td>James Rowbottom</td><td>Sydney</td>
+            <td class="num-col">0.000</td><td class="num-col">0.861</td><td class="num-col delta pos">+0.861</td></tr>
+          <tr><td>932</td><td class="desc">Handball</td><td>James Rowbottom</td><td>Sydney</td>
+            <td class="num-col">0.861</td><td class="num-col">0.816</td><td class="num-col delta neg">&minus;0.045</td></tr>
+          <tr><td>933</td><td class="desc">Hard Ball Get</td><td>James Jordon</td><td>Sydney</td>
+            <td class="num-col">0.816</td><td class="num-col">1.059</td><td class="num-col delta pos">+0.243</td></tr>
+          <tr class="turn"><td>934</td><td class="desc">Handball &mdash; intercepted</td><td>James Jordon</td><td>Sydney</td>
+            <td class="num-col">1.059</td><td class="num-col">1.010</td><td class="num-col delta neg">&minus;0.049</td></tr>
+          <tr><td>935</td><td class="desc">Loose Ball Get</td><td>Oliver Hollands</td><td>Carlton</td>
+            <td class="num-col">1.010</td><td class="num-col">0.579</td><td class="num-col delta neg">&minus;0.432</td></tr>
+          <tr><td>936</td><td class="desc">Handball</td><td>Oliver Hollands</td><td>Carlton</td>
+            <td class="num-col">0.579</td><td class="num-col">0.552</td><td class="num-col delta neg">&minus;0.026</td></tr>
+        </tbody>
+      </table>
+      <h4>Who was charged</h4>
+      <table>
+        <thead><tr><th>Role</th><th>Player</th><th>Team</th><th class="num-col">Points</th></tr></thead>
+        <tbody>
+          <tr><td>First possession</td><td>James Rowbottom</td><td>Sydney</td><td class="num-col pos">+0.40</td></tr>
+          <tr><td>Ruck contest (5-way split)</td><td>Grundy / Amartey (Syd), Pittonet / Reidy / Cripps (Carl)</td>
+            <td>both</td><td class="num-col">+0.15 to &minus;0.12 each</td></tr>
+          <tr><td>Handball decision</td><td>James Jordon</td><td>Sydney</td><td class="num-col neg">&minus;1.59</td></tr>
+          <tr><td>Won the turnover</td><td>Oliver Hollands</td><td>Carlton</td><td class="num-col pos">+0.48</td></tr>
+          <tr><td>Team pool (bucket)</td><td>&mdash;</td><td>Carlton</td><td class="num-col pos">+1.11</td></tr>
+          <tr><td>Received Hollands' handball</td><td>Jagga Smith</td><td>Carlton</td><td class="num-col pos">+0.26</td></tr>
+        </tbody>
+      </table>
+      <p class="take">Same shape, bigger charge: Jordon's handball out of a stoppage scramble
+        costs him &minus;1.59, more than double what his own hard-ball-get and Rowbottom's
+        work were worth combined. A play that starts scrappy (low EP, 0.86) has more room to
+        fall than one that starts clean, so the losing side of a contested stoppage pays more
+        per turnover than the winning side of a clean one — a second version of the same
+        skew.</p>
+    </div>
+
+    <p class="take">Single-stoppage swings to the ruck/first-possession roles are small — the
+      biggest ruck-contest row in 75,646 stoppages this season is under one point. What moves
+      the ledger is what happens on the next two or three plays, not the tap itself.</p>
   </div>
 
   <div class="scenario">
     <span class="tag">Shots</span>
-    <h2>A kick that scores</h2>
+    <h2>A kick that scores — and one that doesn't</h2>
     <p class="mech">A shot at goal is priced with the exact same decision/surprise split as any
-      other kick — there is no separate "shot" rule. That means a shot can be charged
-      <i>negative</i> on its decision term even when it goes through for a goal, if the
-      pre-shot position already carried a high expected value: scoring "as expected" from a
-      close, easy set shot realises little of the marginal credit a harder shot would.</p>
-    <table>
-      <thead><tr><th>Player</th><th>Act</th><th class="num-col">Decision term</th></tr></thead>
-      <tbody>
-        <tr><td>Ned Long</td><td>Kick, led to a score</td><td class="num-col neg">&minus;3.77</td></tr>
-        <tr><td>Luke Jackson</td><td>Kick, led to a score</td><td class="num-col neg">&minus;2.68</td></tr>
-        <tr><td>Hayden McLean</td><td>Kick, led to a score</td><td class="num-col neg">&minus;2.60</td></tr>
-        <tr><td>Rhylee West</td><td>Kick, led to a score</td><td class="num-col neg">&minus;2.42</td></tr>
-        <tr><td>Braeden Campbell</td><td>Kick, led to a score</td><td class="num-col neg">&minus;2.33</td></tr>
-      </tbody>
-    </table>
-    <p class="take"><b>This is the shape of the skew Pete flagged</b>: the decision term on a
-      kick reads negative far more often than it reads positive, whether or not the kick
-      worked, because it's scored against a baseline that already expected a lot from the
-      position the player was in.</p>
+      other kick — there is no separate "shot" rule. Two real passages below: one that
+      finishes as a goal, one as a wasted behind, from the same round of 2026.</p>
+
+    <div class="example">
+      <h3>Example A — a goal, but the kick itself barely moves the number</h3>
+      <p class="ctx">Brisbane 0, Geelong 8, first quarter. Brisbane works it inside 50 and
+        scores.</p>
+      <h4>Play by play</h4>
+      <table class="trace">
+        <thead><tr><th>Row</th><th>Act</th><th>Player</th><th>Team</th>
+          <th class="num-col">EP before</th><th class="num-col">EP after</th>
+          <th class="num-col">&Delta;EP</th></tr></thead>
+        <tbody>
+          <tr><td>148</td><td class="desc">Handball</td><td>Logan Morris</td><td>Brisbane</td>
+            <td class="num-col">&mdash;</td><td class="num-col">1.140</td><td class="num-col">&mdash;</td></tr>
+          <tr><td>149</td><td class="desc">Handball Received</td><td>Cam Rayner</td><td>Brisbane</td>
+            <td class="num-col">1.140</td><td class="num-col">1.366</td><td class="num-col delta pos">+0.226</td></tr>
+          <tr><td>150</td><td class="desc">Kick</td><td>Cam Rayner</td><td>Brisbane</td>
+            <td class="num-col">1.366</td><td class="num-col">1.779</td><td class="num-col delta pos">+0.413</td></tr>
+          <tr><td>153</td><td class="desc">Mark On Lead</td><td>Cody Curtin</td><td>Brisbane</td>
+            <td class="num-col">1.779</td><td class="num-col">5.270</td><td class="num-col delta pos">+3.491</td></tr>
+          <tr><td>154</td><td class="desc">Kick &mdash; goal</td><td>Cody Curtin</td><td>Brisbane</td>
+            <td class="num-col">5.270</td><td class="num-col">5.863</td><td class="num-col delta pos">+0.593</td></tr>
+        </tbody>
+      </table>
+      <h4>Who was charged</h4>
+      <table>
+        <thead><tr><th>Role</th><th>Player</th><th class="num-col">Points</th></tr></thead>
+        <tbody>
+          <tr><td>Kicked to Curtin</td><td>Cam Rayner</td><td class="num-col pos">+1.91</td></tr>
+          <tr><td>Marking it on the lead (received)</td><td>Cody Curtin</td><td class="num-col pos">+1.24</td></tr>
+          <tr><td>Marking it on the lead (own decision)</td><td>Cody Curtin</td><td class="num-col pos">+0.59</td></tr>
+          <tr><td>The actual goalkicking kick</td><td>Cody Curtin</td><td class="num-col pos">+0.26</td></tr>
+        </tbody>
+      </table>
+      <p class="take"><b>This is the mechanism behind the whole skew, in one passage.</b> Curtin's
+        total for the goal was worth about +2.09 — but +1.83 of it was already banked the
+        moment he marked cleanly on the lead. By the time he actually kicked for goal, the
+        position was already worth 5.27, so close to a certain score that the kick itself only
+        had 0.59 of value left to add. <b>The scoreboard says +6. The ledger, correctly, says
+        most of that was earned two acts earlier.</b></p>
+    </div>
+
+    <div class="example">
+      <h3>Example B — a scored behind that still costs the kicker</h3>
+      <p class="ctx">Collingwood 77, Port Adelaide 49, deep in Collingwood's forward half.</p>
+      <h4>Play by play</h4>
+      <table class="trace">
+        <thead><tr><th>Row</th><th>Act</th><th>Player</th><th>Team</th>
+          <th class="num-col">EP before</th><th class="num-col">EP after</th>
+          <th class="num-col">&Delta;EP</th></tr></thead>
+        <tbody>
+          <tr><td>1972</td><td class="desc">Handball</td><td>Jack Crisp</td><td>Collingwood</td>
+            <td class="num-col">&mdash;</td><td class="num-col">2.318</td><td class="num-col">&mdash;</td></tr>
+          <tr><td>1973</td><td class="desc">Handball Received</td><td>Jack Buller</td><td>Collingwood</td>
+            <td class="num-col">2.318</td><td class="num-col">2.452</td><td class="num-col delta pos">+0.134</td></tr>
+          <tr><td>1974</td><td class="desc">Handball</td><td>Jack Buller</td><td>Collingwood</td>
+            <td class="num-col">2.452</td><td class="num-col">2.407</td><td class="num-col delta neg">&minus;0.045</td></tr>
+          <tr><td>1975</td><td class="desc">Handball Received</td><td>Ned Long</td><td>Collingwood</td>
+            <td class="num-col">2.407</td><td class="num-col">2.616</td><td class="num-col delta pos">+0.209</td></tr>
+          <tr class="turn"><td>1976</td><td class="desc">Kick &mdash; a behind, then rebounded</td><td>Ned Long</td><td>Collingwood</td>
+            <td class="num-col">2.616</td><td class="num-col">2.930</td><td class="num-col delta pos">+0.314</td></tr>
+          <tr><td>1978</td><td class="desc">Uncontested Mark</td><td>Darcy Byrne-Jones</td><td>Port Adelaide</td>
+            <td class="num-col">2.930</td><td class="num-col">0.843</td><td class="num-col delta neg">&minus;2.087</td></tr>
+        </tbody>
+      </table>
+      <h4>Who was charged</h4>
+      <table>
+        <thead><tr><th>Role</th><th>Player</th><th>Team</th><th class="num-col">Points</th></tr></thead>
+        <tbody>
+          <tr><td>The shot itself</td><td>Ned Long</td><td>Collingwood</td><td class="num-col neg">&minus;3.77</td></tr>
+          <tr><td>Won the ball back off the kick-in
+            <br><span class="poolnote" style="margin:0">(ball_winner +3.02 and contest_winner +0.0001, netted)</span></td>
+            <td>Darcy Byrne-Jones</td><td>Port Adelaide</td><td class="num-col pos">+3.02</td></tr>
+          <tr><td>Team pool (bucket)</td><td>&mdash;</td><td>Port Adelaide</td><td class="num-col pos">+0.75</td></tr>
+        </tbody>
+      </table>
+      <p class="take">The scoreboard shows Collingwood +1 (a behind). The ledger shows Collingwood
+        &minus;3.77: the shot missed the far more valuable goal, and the resulting kick-in was
+        marked cleanly by Port Adelaide, essentially handing general-play position straight
+        back. <b>A play can score and still be a net loss</b> — that's not a bug, it's the whole
+        point of pricing against expected points rather than the scoreboard.</p>
+    </div>
   </div>
 
   <div class="scenario">
@@ -125,63 +298,144 @@
     <p class="mech">The receiver's share of the surprise term when the disposal lands cleanly
       and uncontested — value the receiving player earns just by being in space and taking
       the simple mark.</p>
-    <table>
-      <thead><tr><th>Player</th><th>Received via</th><th class="num-col">Points</th></tr></thead>
-      <tbody>
-        <tr><td>Josh Weddle</td><td>Kick → Uncontested Mark</td><td class="num-col pos">+2.22</td></tr>
-        <tr><td>Lincoln McCarthy</td><td>Kick → Uncontested Mark</td><td class="num-col pos">+2.16</td></tr>
-        <tr><td>Talor Byrne</td><td>Kick → Uncontested Mark</td><td class="num-col pos">+2.14</td></tr>
-        <tr><td>Harvey Johnston</td><td>Kick → Uncontested Mark</td><td class="num-col pos">+2.13</td></tr>
-        <tr><td>Sam Switkowski</td><td>Kick → Uncontested Mark</td><td class="num-col pos">+2.12</td></tr>
-      </tbody>
-    </table>
-    <p class="take">Every one of the top uncontested marks this season prices positive — this
-      is the other half of the skew: Receiving reads almost all positive for the same reason
-      Kicking reads almost all negative.</p>
+    <div class="example">
+      <h3>Josh Weddle marks deep in space</h3>
+      <p class="ctx">Hawthorn 52, Essendon 102, Hawthorn working the ball forward.</p>
+      <h4>Play by play</h4>
+      <table class="trace">
+        <thead><tr><th>Row</th><th>Act</th><th>Player</th>
+          <th class="num-col">EP before</th><th class="num-col">EP after</th>
+          <th class="num-col">&Delta;EP</th></tr></thead>
+        <tbody>
+          <tr><td>1218</td><td class="desc">Kick</td><td>Connor Macdonald</td>
+            <td class="num-col">&mdash;</td><td class="num-col">2.097</td><td class="num-col">&mdash;</td></tr>
+          <tr><td>1221</td><td class="desc">Gather</td><td>Mitch Lewis</td>
+            <td class="num-col">2.097</td><td class="num-col">1.906</td><td class="num-col delta neg">&minus;0.191</td></tr>
+          <tr><td>1222</td><td class="desc">Kick</td><td>Mitch Lewis</td>
+            <td class="num-col">1.906</td><td class="num-col">2.328</td><td class="num-col delta pos">+0.422</td></tr>
+          <tr class="turn"><td>1223</td><td class="desc">Uncontested Mark</td><td>Josh Weddle</td>
+            <td class="num-col">2.328</td><td class="num-col">5.316</td><td class="num-col delta pos">+2.988</td></tr>
+          <tr><td>1224</td><td class="desc">Kick</td><td>Josh Weddle</td>
+            <td class="num-col">5.316</td><td class="num-col">5.277</td><td class="num-col delta neg">&minus;0.039</td></tr>
+        </tbody>
+      </table>
+      <h4>Who was charged</h4>
+      <table>
+        <thead><tr><th>Role</th><th>Player</th><th class="num-col">Points</th></tr></thead>
+        <tbody>
+          <tr><td>Kicked it to Weddle</td><td>Mitch Lewis</td><td class="num-col pos">+0.47</td></tr>
+          <tr><td>Marked it, uncontested</td><td>Josh Weddle</td><td class="num-col pos">+2.22</td></tr>
+          <tr><td>His own mark decision</td><td>Josh Weddle</td><td class="num-col neg">&minus;0.04</td></tr>
+        </tbody>
+      </table>
+      <p class="take">A near-3-point jump in field position, almost all of it credited to the man
+        who marked it — clean space, nothing contested, nothing to net against. This is what a
+        Receiving credit looks like with no offsetting charge, which is why the Receiving side
+        of the ledger reads as consistently positive as the Kicking side reads negative.</p>
+    </div>
   </div>
 
   <div class="scenario">
     <span class="tag">Contested receive</span>
     <h2>A contested mark</h2>
-    <p class="mech">The same receiver role, but the disposal had to be fought for. Winning a
-      contested mark is a real skill and a repeatable one — but because the ball was already
-      heading into a contest (a lower pre-mark expectation), and the marking player still had
-      to beat an opponent to get there, the biggest contested-mark rows in the ledger price
-      close to zero or negative rather than clearly positive.</p>
-    <table>
-      <thead><tr><th>Player</th><th>Received via</th><th class="num-col">Points</th></tr></thead>
-      <tbody>
-        <tr><td>Jack Higgins</td><td>Kick → Contested Mark</td><td class="num-col neg">&minus;0.82</td></tr>
-        <tr><td>Bailey J. Williams</td><td>Kick → Contested Mark</td><td class="num-col neg">&minus;0.81</td></tr>
-        <tr><td>Lachlan McAndrew</td><td>Kick → Contested Mark</td><td class="num-col neg">&minus;0.77</td></tr>
-        <tr><td>Charlie Curnow</td><td>Kick → Contested Mark</td><td class="num-col pos">+0.74</td></tr>
-        <tr><td>Sam Berry</td><td>Kick → Contested Mark</td><td class="num-col neg">&minus;0.63</td></tr>
-      </tbody>
-    </table>
-    <p class="take">Four of the five biggest contested marks of 2026 price negative for the
-      man who won them. This is a second, sharper version of the same skew — worth checking
-      directly alongside the Kick/Handball fix next session.</p>
+    <p class="mech">Winning a contested mark fires <b>two</b> separate terms on the same row: a
+      contest-win credit for beating an opponent to it, and a receiver term that's still priced
+      against how much of a coin-flip the contest was. Reading only one of the two — which the
+      first version of this page did — understates or overstates what actually happened.</p>
+    <div class="example">
+      <h3>Jack Higgins wins it in the air, then loses more on his next kick</h3>
+      <p class="ctx">St Kilda 26, Geelong 12, working it forward through a chain of marks.</p>
+      <h4>Play by play</h4>
+      <table class="trace">
+        <thead><tr><th>Row</th><th>Act</th><th>Player</th>
+          <th class="num-col">EP before</th><th class="num-col">EP after</th>
+          <th class="num-col">&Delta;EP</th></tr></thead>
+        <tbody>
+          <tr><td>602</td><td class="desc">Kick</td><td>Liam Stocker</td>
+            <td class="num-col">&mdash;</td><td class="num-col">&minus;0.260</td><td class="num-col">&mdash;</td></tr>
+          <tr><td>603</td><td class="desc">Uncontested Mark</td><td>Tobie Travaglia</td>
+            <td class="num-col">&minus;0.260</td><td class="num-col">&minus;0.093</td><td class="num-col delta pos">+0.167</td></tr>
+          <tr><td>604</td><td class="desc">Kick</td><td>Tobie Travaglia</td>
+            <td class="num-col">&minus;0.093</td><td class="num-col">&minus;0.079</td><td class="num-col delta pos">+0.014</td></tr>
+          <tr><td>605</td><td class="desc">Uncontested Mark</td><td>Cooper Sharman</td>
+            <td class="num-col">&minus;0.079</td><td class="num-col">0.222</td><td class="num-col delta pos">+0.301</td></tr>
+          <tr class="turn"><td>606</td><td class="desc">Kick &mdash; contested mark</td><td>Cooper Sharman</td>
+            <td class="num-col">0.222</td><td class="num-col">0.199</td><td class="num-col delta neg">&minus;0.023</td></tr>
+          <tr><td>608</td><td class="desc">Contested Mark</td><td>Jack Higgins</td>
+            <td class="num-col">0.199</td><td class="num-col">0.528</td><td class="num-col delta pos">+0.329</td></tr>
+          <tr><td>609</td><td class="desc">Kick</td><td>Jack Higgins</td>
+            <td class="num-col">0.528</td><td class="num-col">0.582</td><td class="num-col delta pos">+0.054</td></tr>
+        </tbody>
+      </table>
+      <h4>Who was charged</h4>
+      <table>
+        <thead><tr><th>Role</th><th>Player</th><th class="num-col">Points</th></tr></thead>
+        <tbody>
+          <tr><td>Won the contest (row 606)</td><td>Jack Higgins</td><td class="num-col pos">+1.14</td></tr>
+          <tr><td>Received it, contested (row 606, same row)</td><td>Jack Higgins</td><td class="num-col neg">&minus;0.82</td></tr>
+          <tr><td><i>Net for row 606</i></td><td><i>Jack Higgins</i></td><td class="num-col pos"><i>+0.31</i></td></tr>
+          <tr><td>His own mark decision (row 608)</td><td>Jack Higgins</td><td class="num-col pos">+0.05</td></tr>
+          <tr><td>His next kick (row 609)</td><td>Jack Higgins</td><td class="num-col neg">&minus;0.65</td></tr>
+        </tbody>
+      </table>
+      <p class="take"><b>Higgins nets &minus;0.28 for the whole passage</b> despite genuinely
+        winning the contested mark — the win itself is worth +0.31, but his own next kick two
+        rows later costs more than that on its own. This is the Kick/Handball skew showing up
+        inside a single passage of play, not just in season totals.</p>
+    </div>
   </div>
 
   <div class="scenario">
     <span class="tag">Intercepts</span>
     <h2>Winning the ball back in a contest</h2>
-    <p class="mech">When a disposal is intercepted, most of the value moves straight to the
-      opponent who took it — the biggest single-row credits in the whole ledger are here,
-      because a turnover deep in your forward line can swing a match by double figures in
-      one act.</p>
-    <table>
-      <thead><tr><th>Player</th><th>Team</th><th class="num-col">Points</th></tr></thead>
-      <tbody>
-        <tr><td>Sam Collins</td><td>Gold Coast Suns</td><td class="num-col pos">+15.55</td></tr>
-        <tr><td>Liam Baker</td><td>West Coast Eagles</td><td class="num-col pos">+14.33</td></tr>
-        <tr><td>Ewan Mackinlay</td><td>Port Adelaide Power</td><td class="num-col pos">+11.69</td></tr>
-        <tr><td>Connor Budarick</td><td>Western Bulldogs</td><td class="num-col pos">+8.54</td></tr>
-        <tr><td>Buku Khamis</td><td>Western Bulldogs</td><td class="num-col pos">+8.16</td></tr>
-      </tbody>
-    </table>
-    <p class="take">Intercepts are the highest-leverage single act in the game — an order of
-      magnitude bigger than the biggest disposal-receive row.</p>
+    <p class="mech">The biggest single-row swings in the ledger happen here — but like a
+      contested mark, an intercept can fire more than one role on the same player, and only the
+      <b>net</b> across them is his real credit for the row.</p>
+    <div class="example">
+      <h3>Sam Collins reads a long kick, Gold Coast v Western Bulldogs</h3>
+      <p class="ctx">Gold Coast 47, Western Bulldogs 69. Gold Coast lose the ruck contest badly,
+        then win the ball straight back deep in defence.</p>
+      <h4>Play by play</h4>
+      <table class="trace">
+        <thead><tr><th>Row</th><th>Act</th><th>Player</th><th>Team</th>
+          <th class="num-col">EP before</th><th class="num-col">EP after</th>
+          <th class="num-col">&Delta;EP</th></tr></thead>
+        <tbody>
+          <tr><td>1591</td><td class="desc">Ruck Hard Ball Get &mdash; lost</td><td>Ned Moyle</td><td>Gold Coast</td>
+            <td class="num-col">&mdash;</td><td class="num-col">&minus;0.729</td><td class="num-col">&mdash;</td></tr>
+          <tr><td>1592</td><td class="desc">Hard Ball Get</td><td>Matthew Kennedy</td><td>W. Bulldogs</td>
+            <td class="num-col">&minus;0.729</td><td class="num-col">2.275</td><td class="num-col delta pos">+3.004</td></tr>
+          <tr><td>1593</td><td class="desc">Handball</td><td>Matthew Kennedy</td><td>W. Bulldogs</td>
+            <td class="num-col">2.275</td><td class="num-col">2.359</td><td class="num-col delta pos">+0.084</td></tr>
+          <tr><td>1594</td><td class="desc">Handball Received</td><td>Rory Lobb</td><td>W. Bulldogs</td>
+            <td class="num-col">2.359</td><td class="num-col">3.251</td><td class="num-col delta pos">+0.892</td></tr>
+          <tr class="turn"><td>1595</td><td class="desc">Kick &mdash; intercepted</td><td>Rory Lobb</td><td>W. Bulldogs</td>
+            <td class="num-col">3.251</td><td class="num-col">4.256</td><td class="num-col delta pos">+1.005</td></tr>
+          <tr><td>1597</td><td class="desc">Uncontested Mark</td><td>Sam Collins</td><td>Gold Coast</td>
+            <td class="num-col">4.256</td><td class="num-col">&minus;0.156</td><td class="num-col delta neg">&minus;4.412</td></tr>
+        </tbody>
+      </table>
+      <h4>Who was charged</h4>
+      <table>
+        <thead><tr><th>Role</th><th>Player</th><th>Team</th><th class="num-col">Points</th></tr></thead>
+        <tbody>
+          <tr><td>Lost the ruck contest</td><td>Ned Moyle</td><td>Gold Coast</td><td class="num-col neg">&minus;1.55</td></tr>
+          <tr><td>Won it out of the ruck</td><td>Matthew Kennedy</td><td>W. Bulldogs</td><td class="num-col pos">+0.46</td></tr>
+          <tr><td>Team pool (bucket)</td><td>&mdash;</td><td>W. Bulldogs</td><td class="num-col pos">+1.08</td></tr>
+          <tr><td>The kick that got picked off</td><td>Rory Lobb</td><td>W. Bulldogs</td><td class="num-col neg">&minus;4.10</td></tr>
+          <tr><td>Read the intercept (contest_winner)</td><td>Sam Collins</td><td>Gold Coast</td><td class="num-col pos">+15.55</td></tr>
+          <tr><td>Same row, ball_winner term</td><td>Sam Collins</td><td>Gold Coast</td><td class="num-col neg">&minus;12.27</td></tr>
+          <tr><td><i>Net for Collins, row 1595</i></td><td><i>Sam Collins</i></td><td><i>Gold Coast</i></td><td class="num-col pos"><i>+3.28</i></td></tr>
+          <tr><td>Team pool (bucket)</td><td>&mdash;</td><td>Gold Coast</td><td class="num-col pos">+0.82</td></tr>
+        </tbody>
+      </table>
+      <p class="take"><b>Correction from the first version of this page:</b> it reported Sam
+        Collins' credit for this intercept as +15.55 — that was only one of two role lines that
+        land on him on the same row; the other, a &minus;12.27 ball-winner term, very nearly
+        cancels it. His real net credit for the row is +3.28, still the single biggest positive
+        entry in this whole document, but a quarter of what was first reported. Always sum every
+        role a named player appears under on a row before calling it his credit.</p>
+    </div>
   </div>
 
   <div class="scenario">
@@ -191,27 +445,53 @@
       a kick or a handball, so a loose-ball or hard-ball get that won the ball back paid the
       whole swing as blame to the side that lost it and credited the winner nothing (torp
       1.6.0). Fixed: any act that loses the ball now pays its winner too.</p>
-    <table>
-      <thead><tr><th>Player</th><th>Team</th><th>Won it via</th><th class="num-col">Points</th></tr></thead>
-      <tbody>
-        <tr><td>Zac Bailey</td><td>Brisbane Lions</td><td>Handball Received</td><td class="num-col pos">+3.95</td></tr>
-        <tr><td>Joel Freijah</td><td>Western Bulldogs</td><td>Handball Received</td><td class="num-col pos">+3.90</td></tr>
-        <tr><td>Mattaes Phillipou</td><td>St Kilda Saints</td><td>Handball Received</td><td class="num-col pos">+3.87</td></tr>
-        <tr><td>Nick Watson</td><td>Hawthorn Hawks</td><td>Handball Received</td><td class="num-col pos">+3.81</td></tr>
-        <tr><td>Liam Fawcett</td><td>Richmond Tigers</td><td>Handball Received</td><td class="num-col pos">+3.78</td></tr>
-      </tbody>
-    </table>
-    <p class="take">15.9 of these rows happen a match, worth 27.1 points a match total, none
-      of it credited before the fix.</p>
+    <div class="example">
+      <h3>Zac Bailey wins a free kick out of a scramble</h3>
+      <p class="ctx">Brisbane 45, St Kilda 50. St Kilda try to work it out of defence by hand.</p>
+      <h4>Play by play</h4>
+      <table class="trace">
+        <thead><tr><th>Row</th><th>Act</th><th>Player</th><th>Team</th>
+          <th class="num-col">EP before</th><th class="num-col">EP after</th>
+          <th class="num-col">&Delta;EP</th></tr></thead>
+        <tbody>
+          <tr><td>1137</td><td class="desc">Loose Ball Get</td><td>Bradley Hill</td><td>St Kilda</td>
+            <td class="num-col">&mdash;</td><td class="num-col">&minus;0.196</td><td class="num-col">&mdash;</td></tr>
+          <tr><td>1138</td><td class="desc">Handball</td><td>Bradley Hill</td><td>St Kilda</td>
+            <td class="num-col">&minus;0.196</td><td class="num-col">&minus;0.307</td><td class="num-col delta neg">&minus;0.111</td></tr>
+          <tr><td>1139</td><td class="desc">Handball Received</td><td>Dougal Howard</td><td>St Kilda</td>
+            <td class="num-col">&minus;0.307</td><td class="num-col">&minus;0.127</td><td class="num-col delta pos">+0.180</td></tr>
+          <tr><td>1140</td><td class="desc">Handball</td><td>Dougal Howard</td><td>St Kilda</td>
+            <td class="num-col">&minus;0.127</td><td class="num-col">&minus;0.244</td><td class="num-col delta neg">&minus;0.117</td></tr>
+          <tr class="turn"><td>1141</td><td class="desc">Handball Received &mdash; won by Brisbane</td><td>Jack Sinclair</td><td>St Kilda</td>
+            <td class="num-col">&minus;0.244</td><td class="num-col">&minus;0.378</td><td class="num-col delta neg">&minus;0.134</td></tr>
+          <tr><td>1142</td><td class="desc">Free For</td><td>Zac Bailey</td><td>Brisbane</td>
+            <td class="num-col">&minus;0.378</td><td class="num-col">5.313</td><td class="num-col delta pos">+5.691</td></tr>
+        </tbody>
+      </table>
+      <h4>Who was charged</h4>
+      <table>
+        <thead><tr><th>Role</th><th>Player</th><th>Team</th><th class="num-col">Points</th></tr></thead>
+        <tbody>
+          <tr><td>Was about to receive it</td><td>Jack Sinclair</td><td>St Kilda</td><td class="num-col neg">&minus;4.93</td></tr>
+          <tr><td>Won it (this is the 2026-09-07 fix)</td><td>Zac Bailey</td><td>Brisbane</td><td class="num-col pos">+3.95</td></tr>
+          <tr><td>Team pool (bucket)</td><td>&mdash;</td><td>Brisbane</td><td class="num-col pos">+0.99</td></tr>
+        </tbody>
+      </table>
+      <p class="take">Before the fix, Sinclair still paid the &minus;4.93, but none of it landed
+        on Bailey — it was booked as if the ball had simply evaporated. 15.9 of these rows
+        happen a match, worth 27.1 points a match total, none of it credited before 1.6.0.</p>
+    </div>
   </div>
 
   <div class="scenario">
     <span class="tag">Team pool</span>
     <h2>Value that belongs to a side, not a person</h2>
-    <p class="mech">Not every point on a row can be pinned to a named player — some of it goes
-      to a pool, spread by which players were near the contest. <b>Round&nbsp;1, Sydney 132
-      d. Carlton 69 (a 63-point margin):</b> Carlton's 23 listed players below all sum to
-      exactly &minus;63, their own team's margin.</p>
+    <p class="mech">Every "team pool (bucket)" line in the examples above is banked to a team,
+      not a player — it can't be pinned to one name at the moment it happens. Those buckets
+      accumulate across the whole match and get spread across the roster once, at full time, by
+      who was actually near the contests. <b>Round&nbsp;1, Sydney 132 d. Carlton 69 (a 63-point
+      margin):</b> Carlton's 23 listed players below all sum to exactly &minus;63, their own
+      team's margin.</p>
     <table>
       <thead><tr><th>Player</th><th class="num-col">Named</th><th class="num-col">Pool share</th><th class="num-col">Total</th></tr></thead>
       <tbody>
@@ -224,14 +504,19 @@
     </table>
     <p class="take">"Pool share" here is always a cost to Carlton (their opponent's positive
       value against them) — it's what the pool spreads onto each Carlton player for value
-      Sydney's players earned that couldn't be pinned to one Carlton defender.</p>
+      Sydney's players earned that couldn't be pinned to one Carlton defender. "Named" is
+      everything each player earned directly, row by row, exactly like the examples above —
+      note it doesn't rank the same as the final total: Sam Walsh's own play (&minus;11.65) is
+      worse than Ben Ainsworth's (+8.84), but Walsh's pool charge is smaller, so the gap between
+      them narrows once the team's shared cost is spread on.</p>
   </div>
 
   <div class="scenario">
     <span class="tag">Downstream adjustments</span>
     <h2>What happens after the ledger balances</h2>
-    <p class="mech">Two adjustments apply after the raw ledger is built, and neither is a
-      credit or blame rule in itself:</p>
+    <p class="mech">Two adjustments apply after the raw ledger above is built, and neither is a
+      credit or blame rule in itself — they don't touch any of the row-by-row numbers shown on
+      this page, only the separately published rating columns:</p>
     <table>
       <thead><tr><th>Adjustment</th><th>What it does</th></tr></thead>
       <tbody>
