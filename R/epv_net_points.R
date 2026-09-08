@@ -303,6 +303,10 @@
   # holds no state, so "who acted next" must skip it or a spoil would read as
   # the spoiler winning possession. Resolution is where the spoiler is named.
   d <- seq[in_pbp == TRUE]
+  # One key type for every join below (adjacency, resolution, the period flag,
+  # the difficulty terms): a review of 48d48edf found the coercion applied to
+  # `d` after `adj` had been built from it, so the two could disagree on type.
+  d[, match_id := as.character(match_id)]
   adj <- .np_adjacency(d)
   res <- if (is.null(chains)) NULL else .np_resolution(seq)
   # The last row of each quarter, taken on the FULL frame: delta_epv is built
@@ -312,13 +316,12 @@
   if ("period" %in% names(d0)) {
     lp <- d0[, .(match_id = as.character(match_id), display_order, period)]
     lp[, last_in_period := display_order == max(display_order), by = .(match_id, period)]
-    d[, match_id := as.character(match_id)]
     d[lp, on = .(match_id, display_order), `:=`(period = i.period, last_in_period = i.last_in_period)]
     d[is.na(last_in_period), last_in_period := FALSE]
   } else {
     d[, `:=`(period = NA_integer_, last_in_period = FALSE)]
     cli::cli_alert_warning(
-      "Play-by-play carries no {.field period}: the siren rule cannot fire, so each quarter's last act is charged to its actor.")
+      "Play-by-play carries no {.field period}: the siren rule cannot fire (each quarter's last act is charged to its actor) and the stoppage repricing can cross a quarter boundary.")
   }
 
   # EVERY filter below reports what it removed, and the four counts must add up
@@ -819,6 +822,9 @@
     # than by the modelled chance of losing the ball; contested kicks keep the
     # D6/D8 split above.
     u <- NP_UNCONTESTED_RECEIVER_SHARE
+    if (!is.numeric(u) || length(u) != 1 || (is.finite(u) && (u < 0 || u > 1))) {
+      cli::cli_abort("{.code NP_UNCONTESTED_RECEIVER_SHARE} must be NA or one number in [0, 1], not {.val {u}}.")
+    }
     if (is.finite(u)) {
       unc <- l$scored & l$kind == "retained" & !l$contested
       if (any(unc)) {
