@@ -87,7 +87,7 @@
 #'   `in_pbp` (does this row carry a PBP state).
 #' @keywords internal
 .np_sequence <- function(pbp_data, chains = NULL) {
-  p <- data.table::as.data.table(pbp_data)
+  p <- if (data.table::is.data.table(pbp_data)) pbp_data else data.table::as.data.table(pbp_data)
   if (is.null(chains)) {
     s <- p[, .(match_id, display_order, description, team,
                home_away = as.character(home_away), player_id, delta_epv,
@@ -284,7 +284,7 @@
                              stoppages = c("exclude", "allocate"),
                              stoppage_baseline = NULL) {
   stoppages <- match.arg(stoppages)
-  d0 <- data.table::as.data.table(pbp_data)
+  d0 <- if (data.table::is.data.table(pbp_data)) pbp_data else data.table::as.data.table(pbp_data)
   need <- c("match_id", "display_order", "delta_epv", "home_away", "team",
             "player_id", "description", "home_points", "away_points", "home",
             "x", "exp_pts")
@@ -993,7 +993,7 @@
 #' @return `match_id`, `att`, `def`, `n`.
 #' @keywords internal
 .np_contest_pairs <- function(chains) {
-  ch <- data.table::as.data.table(chains)
+  ch <- if (data.table::is.data.table(chains)) chains else data.table::as.data.table(chains)
   detect_chains_columns(ch)
   c2 <- ch[, .(match_id = as.character(match_id), display_order, description,
                player_id, team_id)]
@@ -1191,7 +1191,7 @@
       # Aggregate first: an update-join keeps only the LAST matching row, so a
       # caller-supplied table with a repeated (match, att, def) key would
       # silently lose evidence (review finding, 2026-09-06).
-      pr <- data.table::as.data.table(pairs)[, .(n_pair = sum(n)),
+      pr <- (if (data.table::is.data.table(pairs)) pairs else data.table::as.data.table(pairs))[, .(n_pair = sum(n)),
                                              by = .(match_id = as.character(match_id),
                                                     loser_pid = att, player_id = def)]
       a[pr, on = .(match_id, loser_pid, player_id), n_pair := i.n_pair]
@@ -1671,7 +1671,7 @@ build_net_points <- function(pbp_data = NULL,
   }
 
   # --- reconcile to the exact margin ---------------------------------------
-  res <- data.table::as.data.table(results)
+  res <- if (data.table::is.data.table(results)) results else data.table::as.data.table(results)
   res <- res[!is.na(home_score) & !is.na(away_score)]
   margins <- res[, .(match_id = as.character(match_id),
                      margin = home_score - away_score,
@@ -1778,7 +1778,7 @@ build_net_points <- function(pbp_data = NULL,
 #' @return Invisibly, a data.table of per-match sums. Aborts on a violation.
 #' @export
 check_net_points_conservation <- function(np, tol = 1e-6) {
-  x <- data.table::as.data.table(np)
+  x <- if (data.table::is.data.table(np)) np else data.table::as.data.table(np)
   # THREE WAYS THIS CHECK USED TO PASS ON EXACTLY WHAT IT EXISTS TO CATCH, all
   # found by review on 2026-09-05 and all reproduced before being fixed:
   #
@@ -1898,7 +1898,7 @@ np_difficulty_terms_for_season <- function(season, pbp_data = NULL, chains = NUL
     })
   }
   if (!is.null(results)) {
-    off <- data.table::as.data.table(results)[
+    off <- (if (data.table::is.data.table(results)) results else data.table::as.data.table(results))[
       !is.na(home_score) & !is.na(away_score),
       .(match_id = as.character(match_id), off_home = home_score, off_away = away_score)]
     res[off, on = "match_id", `:=`(off_home = i.off_home, off_away = i.off_away)]
@@ -1966,7 +1966,7 @@ np_difficulty_terms_for_season <- function(season, pbp_data = NULL, chains = NUL
   }
   pay <- data.table::as.data.table(pay)
   np <- data.table::as.data.table(np)
-  p <- data.table::as.data.table(pbp_data)
+  p <- if (data.table::is.data.table(pbp_data)) pbp_data else data.table::as.data.table(pbp_data)
   pay[, match_id := as.character(match_id)]
   ha <- unique(p[, .(match_id = as.character(match_id), team, home_away)])
   pay <- merge(pay, ha, by = c("match_id", "team"), all.x = TRUE)
@@ -2065,7 +2065,7 @@ np_difficulty_terms_for_season <- function(season, pbp_data = NULL, chains = NUL
       "x" = "A team is on both sides of one row, or the NA filter split a group."))
   }
 
-  ps <- data.table::as.data.table(player_stats)
+  ps <- if (data.table::is.data.table(player_stats)) player_stats else data.table::as.data.table(player_stats)
   dz <- function(x) pmax(dplyr::coalesce(as.numeric(x), 0), 0)
   lu <- ps[, .(match_id = as.character(match_id), player_id = as.character(player_id),
                tog = pmax(time_on_ground_percentage, 1) / 100,
@@ -2104,7 +2104,7 @@ np_difficulty_terms_for_season <- function(season, pbp_data = NULL, chains = NUL
     out[is.na(tog), tog := 0.75]
   }
 
-  mg <- data.table::as.data.table(res)[, .(match_id = as.character(match_id),
+  mg <- (if (data.table::is.data.table(res)) res else data.table::as.data.table(res))[, .(match_id = as.character(match_id),
                                            margin = home_score - away_score)]
   chk <- merge(merge(out[, .(tot = sum(val)), by = .(match_id, team)], ha,
                      by = c("match_id", "team")), mg, by = "match_id")
