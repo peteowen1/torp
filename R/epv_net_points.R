@@ -993,7 +993,17 @@
 #' @return `match_id`, `att`, `def`, `n`.
 #' @keywords internal
 .np_contest_pairs <- function(chains) {
-  ch <- if (data.table::is.data.table(chains)) chains else data.table::as.data.table(chains)
+  # A genuine copy, not the read-only guard used elsewhere in this file: this
+  # is the one site of the ten where the "never mutated" premise is false.
+  # detect_chains_columns() calls .normalise_chains_columns() on camelCase
+  # input, which renames columns BY REFERENCE (setnames()/set(), which never
+  # auto-copy -- that is the whole point of using them). Skipping the copy
+  # here would let this function rename the CALLER's own chains object out
+  # from under them whenever it happens to arrive un-normalised. A review
+  # caught this; copy(if (is.data.table(x)) x else as.data.table(x)) copies
+  # exactly once either way, per this file's own r-datatable-gotchas.md note.
+  ch <- data.table::copy(
+    if (data.table::is.data.table(chains)) chains else data.table::as.data.table(chains))
   detect_chains_columns(ch)
   c2 <- ch[, .(match_id = as.character(match_id), display_order, description,
                player_id, team_id)]
