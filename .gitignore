@@ -72,3 +72,4 @@ data-raw/03-ratings/career_team_rapm_asof_*.parquet
 
 # testthat writes this on a failing run (incl. deliberate mutation tests)
 tests/testthat/testthat-problems.rds
+local-tools/

@@ -27,6 +27,8 @@ navbar:
           href: net-points.html
         - text: A defender (Andrews)
           href: net-points-defender.html
+        - text: Every credit/blame scenario
+          href: net-points-scenarios.html
     github:
       icon: fa-github
       href: https://github.com/peteowen1/torp

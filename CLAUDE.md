@@ -41,8 +41,15 @@ All rating-blend weights and decay parameters (`TORP_EPR_WEIGHT`, `EPR_DECAY_REC
 
 ### EPV v4 (Net Points) is the published engine since 2026-09-07
 
-`EPV_ENGINE` selects the engine and is `"v4"`. `RATING_VINTAGE` is `"v4"` to match;
-the two must move together or `check_vintage_alignment()` refuses every ratings run.
+**`EPV_ENGINE` and `RATING_VINTAGE` are two different things and they do NOT move
+together.** `EPV_ENGINE` names the METHOD and is `"v4"`. `RATING_VINTAGE` names the
+PUBLISHED BATCH and is `"v6"` — it advances every time the numbers change, whether or
+not the method did. Reading the pair as one version cost a wrong explanation once, so
+quote which one you mean. What must stay aligned is `RATING_VINTAGE` against the
+manifest's canonical vintage: `check_vintage_alignment(strict = TRUE)` aborts every
+nightly run when they differ, which is why a promotion is applied to the manifest
+BEFORE the new `RATING_VINTAGE` reaches `main`.
+
 v4 allocates the actual match margin rather than fitting a scale to it — see
 [`../docs/plans/EPV-V4-CREDIT-RULES.md`](../docs/plans/EPV-V4-CREDIT-RULES.md) for the
 rules D1-D18 and worked examples, and `R/epv_net_points.R` for the ledger.

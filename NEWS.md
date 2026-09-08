@@ -1,3 +1,73 @@
+# torp 1.7.0
+
+## Each team's players now sum to that team's own margin
+
+The team-sum convention, `NP_TEAM_MARGIN_CONVENTION`, is on. Sydney beat Carlton
+by 63; their 23 players now total +63 and Carlton's total -63. Previously only
+the difference between the sides was pinned, so the same match read Sydney 208
+and Carlton 145. This is the convention ESPN's Net Points uses, which is the
+metric this ledger is named after, and Pete identified it correctly twice before
+I accepted it.
+
+Every row is now allocated twice, as credit to the side that gained it and as
+blame to the side that conceded it, with each side keeping whatever shares the
+ledger already computed. The pool is spread by defensive acts.
+
+**Shipped against the measurements, not because of them.** Over five season
+pairs and 1,794 player-pairs: within-position repeatability 0.5716 against the
+shipped 0.591, and team dependence 23% against 11%. Both worse. What it buys is
+a number that answers who won the game rather than who played well, and the
+tightest position spread of anything tested, 2.12 against 2.78, with rucks at
++1.28 rather than the -3.49 the alternative split produces through a naming
+artefact. Pete's call, made with those figures in front of him.
+
+Rejected on the way: charging the named player half of each row instead of
+keeping the ledger's shares. It repeats better, 0.6107, but breaks the ruck
+mirror at a stoppage -- the winning side has two names to share the half and the
+losing side has one, so the losing ruck wears 1.00 where his opponent earns
+0.625 on the same contest. Stable is not the same as correct.
+
+**The invariant, stated honestly.** `.np_team_margin()` aborts unless named plus
+pool equals what each side was charged. That check has real teeth only when
+`NP_TEAM_MARGIN_NAMED_SHARE` is a number: in the branch actually shipped, where
+it is `NA` and each side simply doubles, the pool is DEFINED as the charge minus
+the named part, so the identity holds by algebra no matter what the named part
+is. A review caught me describing it as protection for the shipped path when it
+is not. Chasing that down further: the replacement check I first wrote, that
+every rescaled row-side sums to that side's full charge, is tautological for the
+same reason, and I nearly shipped the same overclaim twice. It is kept because
+it catches a structural break, a team landing on both sides of one row, but it
+is now described as what it is. The check with real teeth is the last one in the
+function: each team's total against the official result, an external input the
+ledger cannot manufacture. An identity is not a test.
+
+Settling the split took four reversals, because every wrong version was
+internally consistent; two calculations agreeing proves nothing when both share
+a misreading. `data-raw/04-analysis/np_row_audit.R` prints the shares per row for
+any player, and the per-player split is now exposed as its own attribute with the
+reconciliation as a separate column rather than folded into the total.
+
+**Two NA paths that would each have taken a whole team down.** The pool spread
+and the reconciliation both divide by a GROUP SUM of time on ground. A group sum
+is a scalar, so one missing value made every player on that team NA rather than
+just the one. Both paths are now defaulted and warned about, and both are tested
+by asserting the warning fires, not merely that nothing crashed.
+
+**The rating gate: predictive rows worse, face validity FAIL.** Within-position
+repeatability 0.5663 to 0.5250 and skill score 0.1608 to 0.0582, both worse, as
+the sweep predicted. Face validity fails on four of four change-detectors:
+Spearman rank stability 0.49 against a 0.90 limit, key defenders going from 0 to
+6 of the top 30, five of the ten biggest risers key defenders, and Tim English
+climbing 175 to 13. That gate measures how much the leaderboard MOVED, and a
+convention chosen for its position spread is expected to move it, so this is not
+read as a defect. It is recorded because the direction matters: the change lifts
+key defenders and rucks, which is the direction the defender-undervaluation work
+predicted, and nobody should be surprised by the new leaderboard.
+
+`RATING_VINTAGE` bumps to v6 and the three convention constants are wired into
+`.rating_defining_constants()`. Promote before merging, or the nightly aborts:
+`promote_rating_vintage.R` with PROMOTE_FROM=v5 PROMOTE_TO=v6.
+
 # torp 1.6.0
 
 ## The player who wins the ball back is paid for it

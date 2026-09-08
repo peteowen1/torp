@@ -1001,7 +1001,14 @@ PSR_POSITION_STANDARDISE <- TRUE
 #' PROMOTE_TO=v5), and the manifest moves to
 #' canonical = "v5" BEFORE this constant reaches main, for the reason the v3
 #' note gives.
-RATING_VINTAGE <- "v5"
+#'
+#' v6 (2026-09-07): the team-sum convention. Each team's players now sum to that
+#' team's OWN margin, +63 and -63, rather than only the difference between the
+#' sides being pinned. Every published number moves, so it takes its own vintage.
+#' Preserve the outgoing v5 with
+#' `data-raw/03-ratings/promote_rating_vintage.R` (PROMOTE_FROM=v5, PROMOTE_TO=v6)
+#' and move the manifest to canonical v6 BEFORE this constant reaches main.
+RATING_VINTAGE <- "v6"
 
 #' Map from the 20-way team-sheet lineup position to a 6-way position group
 #'
@@ -1677,6 +1684,18 @@ POSITION_AVG_TOG <- c(
 #'
 #' 0.30 is a judgement, not a measurement -- see the header above for why it
 #' cannot be fitted from the identity.
+#'
+#' \strong{Under `credit = "difficulty"`, this flat rule is the FALLBACK for
+#' the disposals the model can't score -- documented at ~4% of rows -- and it
+#' was called "inert" here for a few hours on 2026-09-08 on that basis. It is
+#' not.} Checked per-player-game (2026-09-08): moving 0 to 1 touches all 512
+#' players with 8+ games, max single-game move 10.0 points, identical with
+#' and without `reconcile = TRUE` so it is not a reconciliation artifact. The
+#' earlier "inert" reading summed a signed value across the whole season,
+#' which cancels turnovers won at home against turnovers won away -- the same
+#' mistake a sweep script made hours earlier the same night. Wired into
+#' `.rating_defining_constants()`. Why a ~4%-of-rows fallback produces an
+#' effect this large is not yet understood.
 #' @keywords internal
 NP_DEFENSIVE_SHARE <- 0.30
 
@@ -1785,6 +1804,38 @@ NP_BALL_WINNER_SHARE <- 0.60
 #' @keywords internal
 NP_TURNOVER_ON_ALL_ACTS <- TRUE
 
+#' Each team's players sum to that team's OWN margin
+#'
+#' ON since 2026-09-07. Every row is allocated twice, as credit to the side
+#' that gained it and as blame to the side that conceded it, so a team's
+#' players total its own margin (+63 and -63) rather than only the difference
+#' between the sides being pinned. The convention ESPN's Net Points uses.
+#'
+#' \strong{Shipped against the measurements, not because of them.} Over five
+#' season pairs and 1,794 player-pairs: within-position repeatability 0.5716
+#' against the previous 0.591, team dependence 23 per cent against 11. Both
+#' worse. It buys a number answering who won the game rather than who played
+#' well, and the tightest position spread tested, 2.12 against 2.78, with
+#' rucks at +1.28 instead of the -3.49 the half-share alternative produces
+#' through a naming artefact. Pete's decision, with those figures in front of
+#' him.
+#' @keywords internal
+NP_TEAM_MARGIN_CONVENTION <- TRUE
+
+#' Share of a row paid to the named player under the team-margin convention
+#'
+#' The rest goes to that side's pool. NA keeps whatever shares the ledger
+#' already computed, which scores worse (0.564) than a flat half (0.598).
+#' @keywords internal
+NP_TEAM_MARGIN_NAMED_SHARE <- NA_real_
+
+#' How the team-margin convention spreads a side's pool
+#'
+#' \code{"dacts"} (tackles, intercepts, one-percenters) or \code{"tog"}.
+#' Defensive acts scored better on repeatability, 0.606 against 0.598.
+#' @keywords internal
+NP_TEAM_MARGIN_POOL_BY <- "dacts"
+
 #' Difficulty credit: the disposer's share of a turnover's SURPRISE
 #'
 #' Under `credit = "difficulty"` a turnover splits into the decision term
@@ -1793,9 +1844,19 @@ NP_TURNOVER_ON_ALL_ACTS <- TRUE
 #' credit to the defence. Chosen by Pete 2026-09-06 over "decision only" so a
 #' kick that was fine in expectation but badly executed still costs its kicker
 #' something. Not identifiable from conservation -- the identity holds for any
-#' value -- so this is the default the year-over-year repeatability test starts
-#' from, not a result. The first row to watch when it runs: a fumbled 2m
-#' handball wore -0.58 under the flat rule and -0.16 under this one.
+#' value.
+#'
+#' Swept 2026-09-08, once Pete asked why the league's best kick (Nick Daicos)
+#' had a poor Kick channel: repeatability rises monotonically with this share
+#' (0.6535 at 0.30, 0.7561 at 1.00) but so does the correlation with plain kick
+#' VOLUME (+0.20 to +0.47) and, moved the other way, the correlation with
+#' defensive acts falls to -0.40 at 1.00 -- exactly the positions the team-sum
+#' convention was shipped to help. The shipped 0.30 sits close to the
+#' volume-neutral point; raising it buys repeatability by making the metric
+#' more of a kick counter, which is not a trade to make blind. A move to 0.15
+#' is the one live candidate (repeatability 0.6338, kick correlation flat at
+#' +0.09) and is queued for the same session that revisits the contest-kick
+#' rule, not made here.
 #' @keywords internal
 NP_BLAME_SHARE <- 0.30
 

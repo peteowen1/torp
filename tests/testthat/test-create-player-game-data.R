@@ -213,9 +213,13 @@ test_that("the v4 engine sums to the margin in every match and fills the three c
   expect_true(all(pgd$epv_hitout == 0))
   expect_equal(pgd$epv, pgd$epv_recv + pgd$epv_disp + pgd$epv_spoil, tolerance = 1e-9)
   expect_equal(pgd$epv, pgd$net_points, tolerance = 1e-9)
-  # the identity that defines v4: home minus away, per match, is the OFFICIAL
-  # margin, exactly (value paid to players with no play-by-play act is
-  # re-spread within their team, so nothing leaves the frame)
+  # The identity that defines v4 under the team-sum convention (torp 1.7.0,
+  # NP_TEAM_MARGIN_CONVENTION): EACH side's players sum to that side's OWN
+  # margin, home to +margin and away to -margin -- not just their difference.
+  # This test asserted the pre-1.7.0 identity (home minus away == margin,
+  # i.e. only the difference pinned) and every one of its numbers was
+  # exactly double the true one once the convention shipped -- the team-sum
+  # doubling itself, not a bug (`docs/DECISIONS.md#made-2026-09-08`).
   res <- tryCatch(data.table::as.data.table(load_results(2024)), error = function(e) NULL)
   skip_if(is.null(res), "Could not load results")
   pbp <- data.table::as.data.table(.shared$pbp)
@@ -223,8 +227,9 @@ test_that("the v4 engine sums to the margin in every match and fills the three c
             .(match_id = as.character(match_id), margin = home_score - away_score,
               home = torp_replace_teams(home_team_name))]
   got <- merge(pgd[, .(match_id, team, epv)], mg, by = "match_id")[
-    , .(diff = sum(epv * ifelse(team == home, 1, -1))), by = match_id]
+    , .(own = sum(epv)), by = .(match_id, team)]
   chk <- merge(got, mg, by = "match_id")
+  chk[, want := ifelse(team == home, margin, -margin)]
   expect_gt(nrow(chk), 0)
-  expect_equal(chk$diff, chk$margin, tolerance = 1e-6)
+  expect_equal(chk$own, chk$want, tolerance = 1e-6)
 })

@@ -972,3 +972,125 @@ test_that("the flag never reclassifies a disposal or a chain-terminal row", {
   expect_equal(moved$kind_off, "act")
   expect_equal(moved$kind_on, "turnover")
 })
+
+# ---- the team-sum convention ----------------------------------------------
+# .np_team_margin() reallocates every row twice, as credit to the side that
+# gained it and as blame to the side that conceded it, so each team totals its
+# OWN margin instead of only the difference between the sides being pinned.
+#
+# NOTE the entry point. build_net_points() does NOT apply the convention;
+# .np_engine_frame() does, after building payments. Writing these tests against
+# build_net_points() first produced Home 10.35 and Away -9.65 -- which differ by
+# exactly the 20-point margin, so every eyeball check passes. Only the per-team
+# assertion can tell the two ledgers apart, which is the reason to have it.
+#
+# What these tests CANNOT see: whether the right players are credited. Same
+# limitation as the rest of this file, and not fixable here.
+np_conv <- function(f) {
+  np <- suppressMessages(build_net_points(f$pbp, f$stats, f$results,
+                                          return_payments = TRUE))
+  suppressMessages(torp:::.np_team_margin(np, f$pbp, f$stats, f$results))
+}
+# M1 is 100-80, so +20 to the home side; M2 is 60-75, so -15.
+np_conv_want <- data.table::data.table(
+  match_id = c("M1", "M1", "M2", "M2"),
+  home_away = c("Home", "Away", "Home", "Away"),
+  want = c(20, -20, -15, 15))
+
+test_that("each team sums to its own margin, not just the difference", {
+  got <- merge(np_conv(np_fixture())[, .(v = sum(net_points)),
+                                     by = .(match_id, home_away)],
+               np_conv_want, by = c("match_id", "home_away"))
+  expect_equal(nrow(got), 4L)
+  expect_equal(got$v, got$want, tolerance = 1e-9)
+})
+
+test_that("the convention is what produces that, not the base ledger", {
+  # if this ever stops holding, the test above has gone vacuous
+  f <- np_fixture()
+  base <- suppressMessages(build_net_points(f$pbp, f$stats, f$results))
+  d <- base[match_id == "M1", .(v = sum(net_points)), by = home_away]
+  h <- d[home_away == "Home"]$v; a <- d[home_away == "Away"]$v
+  expect_equal(h - a, 20, tolerance = 1e-9)          # difference: already right
+  expect_false(isTRUE(all.equal(h, 20, tolerance = 1e-6)))  # own margin: not yet
+})
+
+test_that("the identity holds under both named-share branches", {
+  for (share in list(NA_real_, 0.5)) {
+    testthat::local_mocked_bindings(NP_TEAM_MARGIN_NAMED_SHARE = share,
+                                    .package = "torp")
+    got <- merge(np_conv(np_fixture())[, .(v = sum(net_points)),
+                                       by = .(match_id, home_away)],
+                 np_conv_want, by = c("match_id", "home_away"))
+    expect_equal(got$v, got$want, tolerance = 1e-9,
+                 label = paste("named share", share))
+  }
+})
+
+test_that("the identity holds under both pool weightings", {
+  for (by in c("tog", "dacts")) {
+    testthat::local_mocked_bindings(NP_TEAM_MARGIN_POOL_BY = by, .package = "torp")
+    got <- merge(np_conv(np_fixture())[, .(v = sum(net_points)),
+                                       by = .(match_id, home_away)],
+                 np_conv_want, by = c("match_id", "home_away"))
+    expect_equal(got$v, got$want, tolerance = 1e-9, label = paste("pool by", by))
+  }
+})
+
+test_that("components still sum to the total after the convention", {
+  cv <- np_conv(np_fixture())
+  parts <- intersect(c("np_direct", "np_defensive_won", "np_contest_won",
+                       "np_defensive", "np_ceded", "np_team", "np_stoppage",
+                       "np_residual"), names(cv))
+  expect_equal(rowSums(as.matrix(cv[, ..parts])), cv$net_points, tolerance = 1e-9)
+})
+
+test_that("the per-player split is exposed and adds up", {
+  sp <- data.table::as.data.table(attr(np_conv(np_fixture()),
+                                       "np_team_margin_parts"))
+  expect_true(all(c("named", "share", "recon", "val") %in% names(sp)))
+  # all three parts, not two and a total: the reconciliation is a real payment
+  # and hiding it inside `val` makes a hand-traced number impossible to check
+  expect_equal(sp$named + sp$share + sp$recon, sp$val, tolerance = 1e-9)
+})
+
+test_that("a missing payment table is an error, not a silent pass-through", {
+  f <- np_fixture()
+  np <- suppressMessages(build_net_points(f$pbp, f$stats, f$results))
+  expect_error(torp:::.np_team_margin(np, f$pbp, f$stats, f$results),
+               "payment table")
+})
+
+# Two different real-world causes put an NA into `out$tog`, and ONE guard
+# there catches both (`.np_team_margin()`'s comment above that guard explains
+# why an earlier, second guard upstream was removed: disabling each in
+# isolation, on this fixture, showed the upstream one changed nothing --
+# not the warning, not net_points, not even which internal column the value
+# landed in -- for every pool-spread setting tried). Both scenarios below
+# converge on that one guard's message, "no time on ground on record", which
+# names both causes rather than picking one.
+
+test_that("a player with a lineup row but no time-on-ground value doesn't take his team down", {
+  # sum(tog) is a GROUP SCALAR in the reconciliation below, so an unguarded NA
+  # here would make every value on his team NA, not just his own.
+  f <- np_fixture()
+  f$stats[match_id == "M1" & player_id == "p2",
+          time_on_ground_percentage := NA_real_]
+  expect_warning(cv <- np_conv(f), "no time on ground on record")
+  expect_false(anyNA(cv$net_points))
+  expect_equal(cv[match_id == "M1" & home_away == "Home", sum(net_points)], 20,
+               tolerance = 1e-9)
+})
+
+test_that("a paid player absent from player_stats entirely does not take a team down", {
+  # `out` is built with all = TRUE, so a named player with no player_stats row
+  # at all still arrives here, with tog NA. This is the genuinely load-bearing
+  # case: disabling the guard on it aborts with "a team total is 20 off its
+  # own margin", confirmed by direct test, not by reading the code.
+  f <- np_fixture()
+  f$stats <- f$stats[!(match_id == "M1" & player_id == "p2")]
+  expect_warning(cv <- np_conv(f), "no time on ground on record")
+  expect_false(anyNA(cv$net_points))
+  expect_equal(cv[match_id == "M1" & home_away == "Home", sum(net_points)], 20,
+               tolerance = 1e-9)
+})
