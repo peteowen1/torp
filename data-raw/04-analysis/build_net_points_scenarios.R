@@ -2,7 +2,7 @@
 #' ledger -- every number on the page comes from build_net_points() and its
 #' np_payments / np_team_margin_parts attributes, never a hand-typed literal.
 #'
-#' Twenty passages in ten numbered categories (group number + a letter within
+#' Twenty-four passages in eleven numbered categories (group number + a letter within
 #' it, e.g. "1a"/"1b" -- Pete's ask, 2026-09-10, so a category keeps its
 #' number regardless of how many examples live in it), each anchored
 #' (id="example-N"). Examples 1-11 show a play-by-play trace (before / EV of
@@ -184,6 +184,18 @@ passages <- list(
   list(n = "9", tag = "Compound cases", title = "A kick into a contest, then the siren",
        match_id = "CD_M20260141903", lo = 604, hi = 612, hl = 609,
        mech = "Two things at once. Winning a contested mark (as in Example 3a) fires two separate terms on the same row: a contest-win credit for beating an opponent to it, and a receiver term still priced against how much of a coin-flip the contest was -- only their net is the real credit. And separately: the last row of a quarter has no next row, so its whole remaining position is charged to whoever last touched it -- the siren, not a mistake."),
+  list(n = "10a", tag = "Everyday acts", title = "A bounce, running with the ball",
+       match_id = "CD_M20260140001", lo = 408, hi = 414, hl = 411,
+       mech = "Bounce, Gather and Knock On (10a-10c) all get the identical, plain treatment: not a disposal (only Kick and Handball are), so no decision/surprise split -- the row's value goes in full to whoever did it, or in full to the opposition if the very next touch is theirs. Same rule as the loose-ball examples in category 5, shown here under their own labels so the label alone can be checked against the rule."),
+  list(n = "10b", tag = "Everyday acts", title = "A gather, then lost to the opposition",
+       match_id = "CD_M20260140001", lo = 241, hi = 247, hl = 243,
+       mech = "The turnover side of the same plain-act rule: Gulden gathers it, the very next touch is Carlton's, so the whole row is ceded -- no different, mechanically, from a lost kick or handball, just a different label on the act itself."),
+  list(n = "10c", tag = "Everyday acts", title = "A knock-on, kept alive by his own side",
+       match_id = "CD_M20260140003", lo = 57, hi = 64, hl = 60,
+       mech = "The same rule again, retained this time: Barrass's knock-on is followed straight back to a teammate, so it is priced as a plain act with nothing ceded -- exactly like Example 10a."),
+  list(n = "10d", tag = "Everyday acts", title = "A free kick, advantage played rather than stopping",
+       match_id = "CD_M20260140002", lo = 1286, hi = 1293, hl = 1289,
+       mech = "\"Free Advantage\" is the umpire letting play continue because the team that earned the free is already ahead of the contest -- it is still just an act row for whoever gets the advantage call, same rule as 10a-10c. This one plays on and is turned over three rows later, which is its own row's business, not the advantage call's."),
   list(n = "11", tag = "Ground kick", title = "A kick along the ground bypasses the disposal split entirely",
        match_id = "CD_M20260140001", lo = 1162, hi = 1169, hl = 1165,
        mech = "A full audit of every description the ledger ever sees (27 of them) found exactly one genuinely different treatment, not just a different label on an already-shown rule: \"Ground Kick\" is not in NP_DISPOSAL_DESCS (only \"Kick\" and \"Handball\" are), so it never gets the decision/surprise split D6-D8 give a real kick -- it is priced as a plain act, paid in full to the kicker, or (as here) a turnover in full to whoever the ball bounces to. The other 26 descriptions all resolve to a rule already shown elsewhere on this page under a different name.")
