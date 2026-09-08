@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Net Points — every credit and blame scenario</title>
+<style>
+  :root{
+    --bg:#fbfaf8; --panel:#fff; --ink:#1c1c1e; --muted:#6b6b70;
+    --line:#e3e1dd; --pos:#1a7f5a; --neg:#b3341f; --accent:#2b5c8a;
+    --tag-bg:#f1efe9; --tag-ink:#5a5750;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#16171a; --panel:#1e2024; --ink:#e9e8e6; --muted:#9a9aa2;
+      --line:#33363c; --pos:#4cc38a; --neg:#f0705a; --accent:#7fb0dd;
+      --tag-bg:#26282c; --tag-ink:#b7b4ac;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#16171a; --panel:#1e2024; --ink:#e9e8e6; --muted:#9a9aa2;
+    --line:#33363c; --pos:#4cc38a; --neg:#f0705a; --accent:#7fb0dd;
+    --tag-bg:#26282c; --tag-ink:#b7b4ac;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  .wrap{max-width:920px;margin:0 auto;padding:32px 20px 90px}
+  h1{font-size:1.85rem;line-height:1.2;margin:0 0 6px;letter-spacing:-.02em}
+  h2{font-size:1.2rem;margin:0 0 4px;letter-spacing:-.01em}
+  .sub{color:var(--muted);margin:0 0 26px;font-size:1.02rem;max-width:62ch}
+  .rule{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px 20px;margin-bottom:34px}
+  .rule p{margin:0 0 10px} .rule p:last-child{margin-bottom:0}
+  .scenario{border-top:1px solid var(--line);padding:30px 0}
+  .scenario:first-of-type{border-top:none}
+  .num{display:inline-block;color:var(--muted);font-variant-numeric:tabular-nums;margin-right:8px}
+  .mech{color:var(--muted);max-width:66ch;margin:6px 0 16px}
+  .tag{display:inline-block;background:var(--tag-bg);color:var(--tag-ink);border-radius:5px;
+       font-size:.72rem;font-weight:600;letter-spacing:.02em;text-transform:uppercase;
+       padding:2px 7px;margin:0 6px 6px 0}
+  table{border-collapse:collapse;width:100%;font-size:.9rem;margin-top:4px}
+  th,td{text-align:left;padding:6px 10px;border-bottom:1px solid var(--line)}
+  th{color:var(--muted);font-weight:600;font-size:.76rem;text-transform:uppercase;letter-spacing:.02em}
+  td.num-col,th.num-col{text-align:right;font-variant-numeric:tabular-nums;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  .pos{color:var(--pos)} .neg{color:var(--neg)}
+  .take{margin-top:12px;padding:10px 14px;border-left:3px solid var(--accent);
+        background:var(--panel);border-radius:0 6px 6px 0;font-size:.92rem}
+  .take b{color:var(--accent)}
+  footer{margin-top:40px;padding-top:20px;border-top:1px solid var(--line);color:var(--muted);font-size:.88rem}
+  footer a{color:var(--accent)}
+  a{color:var(--accent)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Net Points — every credit and blame scenario</h1>
+  <p class="sub">Every point of a match margin is allocated to the players on the field. This
+    page walks through the eight kinds of play that get priced differently, each with real
+    rows from the 2026 season. Companion to the player-level walkthroughs for
+    <a href="net-points.html">a forward (Papley)</a> and <a href="net-points-defender.html">a
+    defender (Andrews)</a>.</p>
+
+  <div class="rule">
+    <p><b>The one rule everything below serves:</b> a play's value is the gap between the
+      expected points before it and after it — <code>delta_epv = (EV − before) + (after − EV)</code>.
+      The first half is the <b>decision</b>: did this option beat what was expected, and it
+      always goes to the player who chose it. The second half is the <b>surprise</b>: how far
+      the actual outcome (kept, dropped, intercepted) landed from what the decision alone
+      predicted, and it splits between the players involved.</p>
+    <p>Every row is charged twice: once as credit to the side that gained value, once as blame
+      to the side that conceded it (torp&nbsp;1.7.0, rating vintage v6). That's why each
+      team's own players sum to that team's own margin, not just the gap between the two
+      sides. Values below are in <b>points</b>, the same units as the final score.</p>
+  </div>
+
+  <div class="scenario">
+    <span class="tag">Ruck stoppages</span>
+    <h2>Centre bounces, ball-ups and boundary throw-ins</h2>
+    <p class="mech">A stoppage is repriced against a neutral baseline for its type and
+      location first — a centre bounce reads <code>exp_pts = 0</code> on the raw play-by-play,
+      which would otherwise hide the whole swing. The winning ruck, the first player to gather,
+      and a pool for the contest around them each take a share.</p>
+    <table>
+      <thead><tr><th>Player</th><th>Stoppage type</th><th class="num-col">Points</th></tr></thead>
+      <tbody>
+        <tr><td>Lloyd Meek</td><td>Ball Up Call</td><td class="num-col pos">+0.92</td></tr>
+        <tr><td>Ned Moyle</td><td>Centre Bounce</td><td class="num-col pos">+0.68</td></tr>
+        <tr><td>Jarrod Witts</td><td>Out of Bounds</td><td class="num-col pos">+0.68</td></tr>
+        <tr><td>Brodie Grundy</td><td>Ball Up Call</td><td class="num-col neg">&minus;0.66</td></tr>
+        <tr><td>Marc Pittonet</td><td>Ball Up Call</td><td class="num-col pos">+0.66</td></tr>
+      </tbody>
+    </table>
+    <p class="take">Single-stoppage swings are small — the biggest ruck row in 75,646
+      stoppages this season is under one point. Stoppage value mostly accrues to whoever
+      gets first possession after the tap, not the tap itself.</p>
+  </div>
+
+  <div class="scenario">
+    <span class="tag">Shots</span>
+    <h2>A kick that scores</h2>
+    <p class="mech">A shot at goal is priced with the exact same decision/surprise split as any
+      other kick — there is no separate "shot" rule. That means a shot can be charged
+      <i>negative</i> on its decision term even when it goes through for a goal, if the
+      pre-shot position already carried a high expected value: scoring "as expected" from a
+      close, easy set shot realises little of the marginal credit a harder shot would.</p>
+    <table>
+      <thead><tr><th>Player</th><th>Act</th><th class="num-col">Decision term</th></tr></thead>
+      <tbody>
+        <tr><td>Ned Long</td><td>Kick, led to a score</td><td class="num-col neg">&minus;3.77</td></tr>
+        <tr><td>Luke Jackson</td><td>Kick, led to a score</td><td class="num-col neg">&minus;2.68</td></tr>
+        <tr><td>Hayden McLean</td><td>Kick, led to a score</td><td class="num-col neg">&minus;2.60</td></tr>
+        <tr><td>Rhylee West</td><td>Kick, led to a score</td><td class="num-col neg">&minus;2.42</td></tr>
+        <tr><td>Braeden Campbell</td><td>Kick, led to a score</td><td class="num-col neg">&minus;2.33</td></tr>
+      </tbody>
+    </table>
+    <p class="take"><b>This is the shape of the skew Pete flagged</b>: the decision term on a
+      kick reads negative far more often than it reads positive, whether or not the kick
+      worked, because it's scored against a baseline that already expected a lot from the
+      position the player was in.</p>
+  </div>
+
+  <div class="scenario">
+    <span class="tag">Uncontested receive</span>
+    <h2>An uncontested mark</h2>
+    <p class="mech">The receiver's share of the surprise term when the disposal lands cleanly
+      and uncontested — value the receiving player earns just by being in space and taking
+      the simple mark.</p>
+    <table>
+      <thead><tr><th>Player</th><th>Received via</th><th class="num-col">Points</th></tr></thead>
+      <tbody>
+        <tr><td>Josh Weddle</td><td>Kick → Uncontested Mark</td><td class="num-col pos">+2.22</td></tr>
+        <tr><td>Lincoln McCarthy</td><td>Kick → Uncontested Mark</td><td class="num-col pos">+2.16</td></tr>
+        <tr><td>Talor Byrne</td><td>Kick → Uncontested Mark</td><td class="num-col pos">+2.14</td></tr>
+        <tr><td>Harvey Johnston</td><td>Kick → Uncontested Mark</td><td class="num-col pos">+2.13</td></tr>
+        <tr><td>Sam Switkowski</td><td>Kick → Uncontested Mark</td><td class="num-col pos">+2.12</td></tr>
+      </tbody>
+    </table>
+    <p class="take">Every one of the top uncontested marks this season prices positive — this
+      is the other half of the skew: Receiving reads almost all positive for the same reason
+      Kicking reads almost all negative.</p>
+  </div>
+
+  <div class="scenario">
+    <span class="tag">Contested receive</span>
+    <h2>A contested mark</h2>
+    <p class="mech">The same receiver role, but the disposal had to be fought for. Winning a
+      contested mark is a real skill and a repeatable one — but because the ball was already
+      heading into a contest (a lower pre-mark expectation), and the marking player still had
+      to beat an opponent to get there, the biggest contested-mark rows in the ledger price
+      close to zero or negative rather than clearly positive.</p>
+    <table>
+      <thead><tr><th>Player</th><th>Received via</th><th class="num-col">Points</th></tr></thead>
+      <tbody>
+        <tr><td>Jack Higgins</td><td>Kick → Contested Mark</td><td class="num-col neg">&minus;0.82</td></tr>
+        <tr><td>Bailey J. Williams</td><td>Kick → Contested Mark</td><td class="num-col neg">&minus;0.81</td></tr>
+        <tr><td>Lachlan McAndrew</td><td>Kick → Contested Mark</td><td class="num-col neg">&minus;0.77</td></tr>
+        <tr><td>Charlie Curnow</td><td>Kick → Contested Mark</td><td class="num-col pos">+0.74</td></tr>
+        <tr><td>Sam Berry</td><td>Kick → Contested Mark</td><td class="num-col neg">&minus;0.63</td></tr>
+      </tbody>
+    </table>
+    <p class="take">Four of the five biggest contested marks of 2026 price negative for the
+      man who won them. This is a second, sharper version of the same skew — worth checking
+      directly alongside the Kick/Handball fix next session.</p>
+  </div>
+
+  <div class="scenario">
+    <span class="tag">Intercepts</span>
+    <h2>Winning the ball back in a contest</h2>
+    <p class="mech">When a disposal is intercepted, most of the value moves straight to the
+      opponent who took it — the biggest single-row credits in the whole ledger are here,
+      because a turnover deep in your forward line can swing a match by double figures in
+      one act.</p>
+    <table>
+      <thead><tr><th>Player</th><th>Team</th><th class="num-col">Points</th></tr></thead>
+      <tbody>
+        <tr><td>Sam Collins</td><td>Gold Coast Suns</td><td class="num-col pos">+15.55</td></tr>
+        <tr><td>Liam Baker</td><td>West Coast Eagles</td><td class="num-col pos">+14.33</td></tr>
+        <tr><td>Ewan Mackinlay</td><td>Port Adelaide Power</td><td class="num-col pos">+11.69</td></tr>
+        <tr><td>Connor Budarick</td><td>Western Bulldogs</td><td class="num-col pos">+8.54</td></tr>
+        <tr><td>Buku Khamis</td><td>Western Bulldogs</td><td class="num-col pos">+8.16</td></tr>
+      </tbody>
+    </table>
+    <p class="take">Intercepts are the highest-leverage single act in the game — an order of
+      magnitude bigger than the biggest disposal-receive row.</p>
+  </div>
+
+  <div class="scenario">
+    <span class="tag">Other turnovers</span>
+    <h2>Winning the ball back off a non-disposal act</h2>
+    <p class="mech">Until 2026-09-07 the turnover split only fired when the lost ball came off
+      a kick or a handball, so a loose-ball or hard-ball get that won the ball back paid the
+      whole swing as blame to the side that lost it and credited the winner nothing (torp
+      1.6.0). Fixed: any act that loses the ball now pays its winner too.</p>
+    <table>
+      <thead><tr><th>Player</th><th>Team</th><th>Won it via</th><th class="num-col">Points</th></tr></thead>
+      <tbody>
+        <tr><td>Zac Bailey</td><td>Brisbane Lions</td><td>Handball Received</td><td class="num-col pos">+3.95</td></tr>
+        <tr><td>Joel Freijah</td><td>Western Bulldogs</td><td>Handball Received</td><td class="num-col pos">+3.90</td></tr>
+        <tr><td>Mattaes Phillipou</td><td>St Kilda Saints</td><td>Handball Received</td><td class="num-col pos">+3.87</td></tr>
+        <tr><td>Nick Watson</td><td>Hawthorn Hawks</td><td>Handball Received</td><td class="num-col pos">+3.81</td></tr>
+        <tr><td>Liam Fawcett</td><td>Richmond Tigers</td><td>Handball Received</td><td class="num-col pos">+3.78</td></tr>
+      </tbody>
+    </table>
+    <p class="take">15.9 of these rows happen a match, worth 27.1 points a match total, none
+      of it credited before the fix.</p>
+  </div>
+
+  <div class="scenario">
+    <span class="tag">Team pool</span>
+    <h2>Value that belongs to a side, not a person</h2>
+    <p class="mech">Not every point on a row can be pinned to a named player — some of it goes
+      to a pool, spread by which players were near the contest. <b>Round&nbsp;1, Sydney 132
+      d. Carlton 69 (a 63-point margin):</b> Carlton's 23 listed players below all sum to
+      exactly &minus;63, their own team's margin.</p>
+    <table>
+      <thead><tr><th>Player</th><th class="num-col">Named</th><th class="num-col">Pool share</th><th class="num-col">Total</th></tr></thead>
+      <tbody>
+        <tr><td>Sam Walsh</td><td class="num-col neg">&minus;11.65</td><td class="num-col">+2.51</td><td class="num-col neg">&minus;15.19</td></tr>
+        <tr><td>George Hewett</td><td class="num-col neg">&minus;8.78</td><td class="num-col">+3.14</td><td class="num-col neg">&minus;10.74</td></tr>
+        <tr><td>Marc Pittonet</td><td class="num-col pos">+10.36</td><td class="num-col">+1.57</td><td class="num-col pos">+6.67</td></tr>
+        <tr><td>Mitch McGovern</td><td class="num-col pos">+6.35</td><td class="num-col">+3.76</td><td class="num-col pos">+3.91</td></tr>
+        <tr><td>Ben Ainsworth</td><td class="num-col pos">+8.84</td><td class="num-col">+0.94</td><td class="num-col pos">+3.98</td></tr>
+      </tbody>
+    </table>
+    <p class="take">"Pool share" here is always a cost to Carlton (their opponent's positive
+      value against them) — it's what the pool spreads onto each Carlton player for value
+      Sydney's players earned that couldn't be pinned to one Carlton defender.</p>
+  </div>
+
+  <div class="scenario">
+    <span class="tag">Downstream adjustments</span>
+    <h2>What happens after the ledger balances</h2>
+    <p class="mech">Two adjustments apply after the raw ledger is built, and neither is a
+      credit or blame rule in itself:</p>
+    <table>
+      <thead><tr><th>Adjustment</th><th>What it does</th></tr></thead>
+      <tbody>
+        <tr><td>Position &amp; opponent adjustment</td>
+          <td>The published <code>epv*</code> columns are centred to zero and adjusted for
+          position and opponent strength — they no longer sum to the match margin (2026:
+          correlation 0.953 with the raw ledger, mean gap 10.3 points). For a final score,
+          use the raw ledger or <code>load_results()</code>, not the published columns.</td></tr>
+        <tr><td>Conversion persistence</td>
+          <td>Goal-kicking accuracy stays with the kicker rather than being pooled to the
+          team — it repeats year to year (r&nbsp;0.60 over 358 players) and predicts next
+          year's conversion one-for-one, so it is treated as a real, keepable skill rather
+          than noise to be spread around (D18).</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <footer>
+    Every number above is a real 2026 payment row, pulled straight from
+    <code>build_net_points()</code>. Full technical reference with every constant and its
+    live/dead status: <code>docs/reference/EPV-CREDIT-BLAME-CHOICES.md</code> in the
+    torpverse repo. Next up: using the parameter explorer to fix the Kick/Handball vs
+    Receiving skew shown above.
+  </footer>
+</div>
+</body>
+</html>
