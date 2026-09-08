@@ -305,6 +305,21 @@
   d <- seq[in_pbp == TRUE]
   adj <- .np_adjacency(d)
   res <- if (is.null(chains)) NULL else .np_resolution(seq)
+  # The last row of each quarter, taken on the FULL frame: delta_epv is built
+  # within (match, period), so that row's delta is the whole state evaporating
+  # at the siren (NP_SIREN_TO_POOL). Flagged here so .np_credit_terms() can
+  # route it; if the frame has no period the rule cannot fire and says so.
+  if ("period" %in% names(d0)) {
+    lp <- d0[, .(match_id = as.character(match_id), display_order, period)]
+    lp[, last_in_period := display_order == max(display_order), by = .(match_id, period)]
+    d[, match_id := as.character(match_id)]
+    d[lp, on = .(match_id, display_order), `:=`(period = i.period, last_in_period = i.last_in_period)]
+    d[is.na(last_in_period), last_in_period := FALSE]
+  } else {
+    d[, `:=`(period = NA_integer_, last_in_period = FALSE)]
+    cli::cli_alert_warning(
+      "Play-by-play carries no {.field period}: the siren rule cannot fire, so each quarter's last act is charged to its actor.")
+  }
 
   # EVERY filter below reports what it removed, and the four counts must add up
   # to n_all. They did not before 2026-09-05: the NA-delta_epv drop was silent,
@@ -371,7 +386,10 @@
     }
     # the previous ledger row in the same match receives +adj; the first row
     # of a match has none, so that stoppage keeps its full swing
-    d[, prev_same := data.table::shift(match_id, 1L) == match_id]
+    # ... and never across a quarter boundary: the row before a Q2 centre
+    # bounce is the last kick of Q1, whose value the siren already settled.
+    d[, prev_same := data.table::shift(match_id, 1L) == match_id &
+          (is.na(period) | data.table::shift(period, 1L) == period)]
     d[is.na(prev_same), prev_same := FALSE]
     d[, adj_here := data.table::fifelse(is_stoppage & prev_same, adj, 0)]
     d[, adj_from_next := data.table::shift(adj_here, -1L, fill = 0), by = match_id]
@@ -402,7 +420,8 @@
   if (!"reprice_hm" %in% names(d)) d[, reprice_hm := 0]
   out <- d[, .(match_id, display_order, description, team, home_away, player_id,
                hm, is_stoppage, reprice_hm, next_team, next_player, next_desc,
-               resolve_desc, resolve_team, resolve_player, resolve_lag)]
+               resolve_desc, resolve_team, resolve_player, resolve_lag,
+               period, last_in_period)]
   # Every named actor in the sequence, including chains-only ones (a spoiler
   # who never touched the ball in PBP), so a contest winner always has a roster
   # row to be paid on.
@@ -795,7 +814,36 @@
       cli::cli_alert_info(
         "Contest credit: {format(sum(cs), big.mark = ',')} kicks split at the contest; {format(sum(dw), big.mark = ',')} won by the defence ({round(sum(abs(l$cede_c_hm)), 1)} points ceded at the contest), {format(sum(aw), big.mark = ',')} by the attack ({round(sum(abs(l$win_hm)), 1)} points to same-team winners)")
     }
+    # Pete's rule (2026-09-09): a reception row has two players and they split
+    # it. Where NO contest was fought, the surprise goes by a flat share rather
+    # than by the modelled chance of losing the ball; contested kicks keep the
+    # D6/D8 split above.
+    u <- NP_UNCONTESTED_RECEIVER_SHARE
+    if (is.finite(u)) {
+      unc <- l$scored & l$kind == "retained" & !l$contested
+      if (any(unc)) {
+        l[unc, `:=`(own_hm  = (1 - omega) * (dec_hm + (1 - u) * sur_hm),
+                    recv_hm = (1 - omega) * u * sur_hm)]
+        cli::cli_alert_info(
+          "Uncontested receptions: {format(sum(unc), big.mark = ',')} retained disposals split their surprise {round(100 * (1 - u))}/{round(100 * u)} disposer/receiver (NP_UNCONTESTED_RECEIVER_SHARE)")
+      }
+    }
     l[, c("dec", "sur", "sgn", "csur", "gsur") := NULL]
+  }
+
+  # The siren (NP_SIREN_TO_POOL): a quarter's last act evaporates the whole
+  # remaining state and nobody lost it. The actor's own share goes to the
+  # possessing side's pool; what the row already pays to a receiver, a contest
+  # winner, the opposition or a stoppage is left exactly as it was.
+  if (!"last_in_period" %in% names(l)) l[, last_in_period := FALSE]
+  if (isTRUE(NP_SIREN_TO_POOL)) {
+    sr <- l$last_in_period & l$kind %in% c("terminal", "act")
+    if (any(sr)) {
+      l[sr, `:=`(team_hm = hm - recv_hm - win_hm - cede_hm - cede_c_hm - stop_hm,
+                 own_hm = 0)]
+      cli::cli_alert_info(
+        "Siren: {sum(sr)} quarter-ending act{?s} worth {round(sum(abs(l$hm[sr])), 1)} points go to the possessing side's pool, not the last actor (NP_SIREN_TO_POOL)")
+    }
   }
 
   # the four parts must rebuild every row, whichever rule produced them
@@ -1755,9 +1803,44 @@ build_net_points <- function(pbp_data = NULL,
     }
     if (!is.null(sc$rows)) pay <- c(pay, list(sc$rows))
     pay <- data.table::rbindlist(pay, use.names = TRUE)
+    pay[, doubled := FALSE]
     paid <- sum(pay$hm); owed <- sum(l$hm)
     if (abs(paid - owed) > 1e-6) {
       cli::cli_abort("Payment table does not rebuild the ledger: paid {round(paid, 4)}, ledger {round(owed, 4)}.")
+    }
+    # The blame side (NP_BLAME_POOL, Pete 2026-09-09). These rows are marked
+    # `doubled`: they are NOT part of the ledger's value -- the check above has
+    # already passed without them -- they exist for the team-margin doubling,
+    # where every row is allocated once to each side. What a row ceded to the
+    # opposition is booked again as a pool for the side that conceded it, so
+    # the disposer no longer wears 100% of a lost possession on the rescale.
+    # NP_PRESSURE_BACK_SHARE of that pool goes to the teammate whose disposal
+    # delivered the ball to a player who then lost it on a non-disposal act.
+    if (isTRUE(NP_BLAME_POOL)) {
+      data.table::setorder(l, match_id, display_order)
+      bl <- l[, .(match_id, display_order, team, player_id, is_disp, kind,
+                  ceded = cede_hm + cede_c_hm,
+                  p_team = data.table::shift(team, 1L),
+                  p_pid = data.table::shift(player_id, 1L),
+                  p_next = data.table::shift(next_player, 1L),
+                  p_disp = data.table::shift(is_disp, 1L)),
+              by = .(.m = match_id)][, .m := NULL]
+      bl <- bl[ceded != 0]
+      bl[, back := kind == "turnover" & !is_disp & !is.na(p_pid) & !is.na(p_next) &
+             p_team == team & p_disp == TRUE & p_next == player_id]
+      bl[is.na(back), back := FALSE]
+      pb <- NP_PRESSURE_BACK_SHARE
+      if (!is.numeric(pb) || length(pb) != 1 || is.na(pb) || pb < 0 || pb > 1) {
+        cli::cli_abort("{.code NP_PRESSURE_BACK_SHARE} must be one number in [0, 1].")
+      }
+      pool_rows <- bl[, .(match_id, display_order, role = "blame_pool", team,
+                          player_id = NA_character_,
+                          hm = ceded * data.table::fifelse(back, 1 - pb, 1), doubled = TRUE)]
+      back_rows <- bl[back == TRUE, .(match_id, display_order, role = "pressure_back", team,
+                                      player_id = p_pid, hm = ceded * pb, doubled = TRUE)]
+      pay <- data.table::rbindlist(list(pay, pool_rows, back_rows), use.names = TRUE)
+      cli::cli_alert_info(
+        "Blame side: {format(nrow(bl), big.mark = ',')} lost possessions book {round(sum(abs(bl$ceded)), 1)} points as the conceding side's pool; {format(sum(bl$back), big.mark = ',')} tackled-after-a-pass rows send {round(100 * pb)}% of theirs back to the passer (NP_BLAME_POOL, NP_PRESSURE_BACK_SHARE)")
     }
     data.table::setorder(pay, match_id, display_order, role)
     data.table::setattr(out, "np_payments", pay)
@@ -1981,7 +2064,12 @@ np_difficulty_terms_for_season <- function(season, pbp_data = NULL, chains = NUL
   ha <- unique(p[, .(match_id = as.character(match_id), team, home_away)])
   pay <- merge(pay, ha, by = c("match_id", "team"), all.x = TRUE)
   pay[, own := hm * data.table::fifelse(home_away == "Home", 1, -1)]
-  pay[, v := sum(hm), by = .(match_id, display_order)]
+  # The row's VALUE is the ledger's payments only. `doubled` rows (the blame
+  # side's pool and pressure-back, NP_BLAME_POOL) are the second allocation
+  # this convention makes, so they take part in the side sums below but must
+  # not count toward what the row is worth.
+  if (!"doubled" %in% names(pay)) pay[, doubled := FALSE]
+  pay[, v := sum(hm[doubled == FALSE]), by = .(match_id, display_order)]
   pay <- pay[abs(v) > 1e-12]
   pay[, gain_home := v > 0]
   pay[, side := data.table::fifelse((home_away == "Home") == gain_home, "gain", "concede")]

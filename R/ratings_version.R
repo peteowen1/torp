@@ -90,6 +90,14 @@
     NP_TEAM_MARGIN_CONVENTION = NP_TEAM_MARGIN_CONVENTION,
     NP_TEAM_MARGIN_NAMED_SHARE = NP_TEAM_MARGIN_NAMED_SHARE,
     NP_TEAM_MARGIN_POOL_BY = NP_TEAM_MARGIN_POOL_BY,
+    # Pete's four rules from the 2026-09-09 scenarios review. Each moves
+    # published numbers: the blame pool re-splits every lost possession, the
+    # siren rule moves ~5 points a match off named players, the uncontested
+    # share re-splits every uncontested reception.
+    NP_BLAME_POOL = NP_BLAME_POOL,
+    NP_PRESSURE_BACK_SHARE = NP_PRESSURE_BACK_SHARE,
+    NP_SIREN_TO_POOL = NP_SIREN_TO_POOL,
+    NP_UNCONTESTED_RECEIVER_SHARE = NP_UNCONTESTED_RECEIVER_SHARE,
     # The disposer's share of a lost kick's surprise. Swept for the first time
     # 2026-09-08 (its own docstring called the shipped 0.30 "the default the
     # repeatability test starts from, not a result"): moving it from 0.30 to

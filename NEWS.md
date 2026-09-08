@@ -1,3 +1,42 @@
+# torp 1.8.0
+
+## Four Net Points rules from Pete's row-by-row review of the scenarios page
+
+Pete read `net-points-scenarios.html` row by row on 2026-09-09 (comments in
+`docs/plans/NET-POINTS-SCENARIOS-REVIEW.md`, the data checks and plan in
+`docs/plans/NET-POINTS-SCENARIOS-FIX-PLAN.md`). Four rules came out of it, each
+behind a constant registered in `.rating_defining_constants()`:
+
+- **`NP_BLAME_POOL` (on).** Under the team-margin convention every row is
+  allocated once to each side, but the side that lost a possession had only
+  the disposer to allocate to, so the rescale put 100% of every turnover on
+  him: Sheldrick -1.43 of -1.43, Lobb -4.10 of -4.10, Sinclair -4.93 of -4.93.
+  The conceding side now gets a pool worth what the row ceded, so the
+  disposer keeps the decision and his `NP_BLAME_SHARE` of the surprise and the
+  rest is the team's (Sheldrick -0.54 and Sydney -0.90 on the same row). The
+  pool rows are marked `doubled` in `np_payments` and live only in the
+  doubling layer; the raw ledger and its conservation checks are unchanged.
+- **`NP_PRESSURE_BACK_SHARE` (0.5).** When a player loses the ball on a
+  non-disposal act after a teammate's disposal to him, that share of his blame
+  pool goes to the passer. Sinclair tackled after Howard's handball: Sinclair
+  -3.45, Howard -0.74, St Kilda's pool -0.74 (was Sinclair -4.93).
+- **`NP_SIREN_TO_POOL` (on).** `delta_epv` is built within a quarter, so the
+  last row of each quarter carried the whole evaporating state to whoever last
+  touched the ball: 852 rows and 1,082 points in 2026, 5.08 a match, 809 of it
+  on named players. It goes to the possessing side's pool now, and the D15
+  stoppage repricing no longer crosses a quarter boundary. Needs `period` on
+  the play-by-play; the ledger says so when it is missing.
+- **`NP_UNCONTESTED_RECEIVER_SHARE` (0.5).** A reception row has two players
+  and they split its surprise evenly where no contest was fought; contested
+  kicks keep D6/D8. Lewis to Weddle, uncontested deep in space: +1.23 / +1.46
+  instead of +0.47 / +2.22.
+
+Every team still sums to its own margin (max gap 6e-14 over 213 matches), and
+the four rules are part of the still-unpublished v6 vintage, so no new vintage.
+Not changed, measured and recorded in the plan: the difficulty model's
+decision terms (median 0.14-0.31 of the row) are not the source of the numbers
+that looked wrong on the page; the page was displaying each row's neighbour.
+
 # torp 1.7.0
 
 ## Each team's players now sum to that team's own margin

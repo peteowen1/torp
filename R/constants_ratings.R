@@ -1836,6 +1836,58 @@ NP_TEAM_MARGIN_NAMED_SHARE <- NA_real_
 #' @keywords internal
 NP_TEAM_MARGIN_POOL_BY <- "dacts"
 
+#' The side that conceded a turnover gets a team pool, like the side that won it
+#'
+#' Under the team-margin convention every row is allocated twice. The side that
+#' won a turnover always had two parts -- the named ball-winner and a pool --
+#' but the side that lost it had only the disposer, so the rescale to the row
+#' put 100 per cent of every lost possession on him: Sheldrick -1.43 of -1.43,
+#' Lobb -4.10 of -4.10, Sinclair -4.93 of -4.93 (2026 R1, R19, R3). Pete's
+#' rule, 2026-09-09: the conceding side splits the same way -- the disposer
+#' keeps the decision and his `NP_BLAME_SHARE` of the surprise, and what the
+#' row ceded to the opposition is booked as a negative pool for his own team,
+#' spread by `NP_TEAM_MARGIN_POOL_BY`. The blame pool lives only in the
+#' doubling layer (`.np_team_margin()`), so the raw ledger and its
+#' conservation checks are untouched.
+#' @keywords internal
+NP_BLAME_POOL <- TRUE
+
+#' Share of a tackled player's blame pool that reaches back to the passer
+#'
+#' When a player loses the ball on a non-disposal act -- tackled after a
+#' handball receive, a gather, a loose-ball get -- and the row before was a
+#' teammate's disposal to him, this share of the conceding side's pool goes
+#' to that disposer rather than the whole roster: the pass under pressure
+#' created the loss. Pete's Howard/Sinclair example, 2026-09-09. Only under
+#' `NP_BLAME_POOL`.
+#' @keywords internal
+NP_PRESSURE_BACK_SHARE <- 0.5
+
+#' A quarter's last act is nobody's loss: its evaporated state goes to the pool
+#'
+#' `delta_epv` is built within (match, period), so the last row of a quarter
+#' has no next row and its delta is `-exp_pts`: the whole remaining position
+#' evaporates at the siren and was booked to whoever last touched the ball.
+#' 2026: 852 rows, 1,082 points, 5.08 a match, 809 of it on named players (474
+#' kicks averaging 1.73). With this on, the row's own share goes to the
+#' possessing side's team pool instead; the receiver, contest and ceded parts
+#' are unchanged. Also stops the D15 stoppage repricing crossing a quarter
+#' boundary. Needs `period` on the play-by-play; the ledger says so when it
+#' is missing.
+#' @keywords internal
+NP_SIREN_TO_POOL <- TRUE
+
+#' Receiver's share of the surprise on an UNCONTESTED retained disposal
+#'
+#' D6 splits a retained disposal's surprise by the modelled chance of losing
+#' it: the receiver gets `1 - p`. On an uncontested mark deep in space p is
+#' small, so the receiver took 76 per cent (Lewis +0.47, Weddle +2.22, 2026
+#' R1 row 1222). Pete's rule, 2026-09-09: a reception row has two players and
+#' they split it -- a flat share, applied only where no contest was fought
+#' (`contested == FALSE`); contested kicks keep D6/D8. `NA` restores D6.
+#' @keywords internal
+NP_UNCONTESTED_RECEIVER_SHARE <- 0.5
+
 #' Difficulty credit: the disposer's share of a turnover's SURPRISE
 #'
 #' Under `credit = "difficulty"` a turnover splits into the decision term
