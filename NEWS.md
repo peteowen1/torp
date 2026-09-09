@@ -37,6 +37,58 @@ Not changed, measured and recorded in the plan: the difficulty model's
 decision terms (median 0.14-0.31 of the row) are not the source of the numbers
 that looked wrong on the page; the page was displaying each row's neighbour.
 
+## The stoppage baseline is keyed on where the stoppage was, not on its outcome
+
+`.np_stoppage_baseline()` bands a stoppage by location so it can be priced
+neutrally. The location came from play-by-play -- and a PBP stoppage row's `x`
+is where the ball was **next gathered**, identical to the following row's on
+97.7% of stoppages and to the preceding row's on 7.1%. The neutral baseline was
+therefore conditioned on the outcome it exists to be neutral about. The tell:
+centre-bounce P(home wins) read 0.599 in one band and 0.435 in the next, which
+is impossible for an event that always happens on the centre circle (pooled it
+was always 50.8%; the split was artifact). `team` is NA on every stoppage row
+too, so the `home` flag orienting them is inherited, and 2.4% of stoppages more
+than 5m from centre sat on the wrong half of the ground.
+
+Chains carries the real coordinate: 100.0% of 6,162 centre bounces sit at
+exactly (0,0) there, against 12.1% in PBP.
+
+- `.np_sequence()` now carries `chain_x_home` (chains `x` flipped to the home
+  frame via `chain_team_id`) and `chain_aby`. The frame was verified on each
+  side separately -- +0.967 on home-owned chains, +0.969 on away -- because a
+  sign error is invisible on the home team, where the transform is the identity.
+- **`abs(y)` joins the cell key.** Holding type and 20m band fixed, the baseline
+  spreads 0.345 points across corridor / 15-30m / boundary, and 0.536 in the
+  defensive 50, against a 0.66-point mean swing. That is roughly 10x what a
+  stoppage-specific win probability could be worth (measured ceiling 6.2%).
+- **The baseline is written as the contest it is**, `P(win) * V(win) + (1 - P) *
+  V(lose)`, with `P` fitted rather than taken from each cell's own noisy win
+  rate. Not a change of definition -- a cell mean already equals that expression
+  by the law of total expectation -- a change of estimator.
+- `NP_STOPPAGE_SHRINK_N` shrinks each side's conditional value toward its type's,
+  because the true location reaches pockets where a season leaves `n = 1` cells
+  that would otherwise set a baseline from one stoppage and pay its winner
+  nothing.
+- `.np_stoppage_cells()` is one shared cell key called by both the estimator and
+  the ledger, so a stoppage cannot be priced from one cell and charged against
+  another.
+- Two guards: a chi-square homogeneity test on the win rate across a type's
+  cells, and `NP_STOPPAGE_WIN_WARN` / `NP_STOPPAGE_WIN_ABORT` bounding the fitted
+  rate. The first has to be a chi-square rather than a range -- the broken key's
+  centre bounce spans 0.164 across 2 cells and the fixed key's out-of-bounds
+  spans 0.160 across 12, indistinguishable by range and 32 orders of magnitude
+  apart by chi-square.
+
+The effect is a redistribution, not a level change, which is the right shape for
+fixing a conditioning variable: the channel total moves -0.4% and the mean
+baseline change is exactly 0.000, but 40.7% of stoppages change band and 21.5%
+reprice by more than 0.10 points. Against actual scoreboard outcomes across 11
+type x zone cells, r = 0.992.
+
+Also fixed: `build_net_points_scenarios.R` passed `chains = NULL`, so every
+stoppage on the published explainer page had been priced on the old,
+outcome-keyed bands.
+
 # torp 1.7.0
 
 ## Each team's players now sum to that team's own margin
