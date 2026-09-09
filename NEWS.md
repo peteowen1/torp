@@ -1,5 +1,13 @@
 # torp 1.8.0
 
+**Rating vintage v7.** Every published number moves, so this ships as a new
+vintage rather than an in-place overwrite: the four credit rules re-split every
+lost possession and every uncontested reception, and the stoppage rebuild
+reprices 21.5% of stoppages by more than 0.10 points. The outgoing v6 is
+preserved byte-identical as `torp_ratings_v6.parquet`; `canonical` moved to v7
+before this reached `main`, which is the order `check_vintage_alignment()`
+enforces.
+
 ## Four Net Points rules from Pete's row-by-row review of the scenarios page
 
 Pete read `net-points-scenarios.html` row by row on 2026-09-09 (comments in
