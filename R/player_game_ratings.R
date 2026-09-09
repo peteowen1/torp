@@ -113,6 +113,15 @@ player_game_ratings <- function(season_val = get_afl_season(),
 
   has_wpa <- "wp_credit" %in% names(df)
 
+  # `net_points` is optional only so a partial frame (a test fixture, a caller
+  # assembling channels by hand) still works -- but its absence is said out
+  # loud, because a display column that silently disappears is worse than one
+  # that fails. Every pipeline caller supplies `epv`.
+  if (!"epv" %in% names(df)) {
+    cli::cli_alert_warning(
+      "No {.field epv} column on the input: the result will carry no {.field net_points}, the value that sums to a team's own margin.")
+  }
+
   # Use _oadj (opponent-adjusted) columns when available, fall back to raw
   has_oadj <- all(c("epv_recv_oadj", "epv_disp_oadj",
                      "epv_spoil_oadj", "epv_hitout_oadj") %in% names(df))
@@ -174,6 +183,15 @@ player_game_ratings <- function(season_val = get_afl_season(),
       lineup_position = "lineup_position",
       team = "team", opp = "opponent",
       tog = "tog_frac",
+      # The ledger value, carried through uncentred and unadjusted. `epv` below
+      # is centred within (season, lineup_position) and, where the columns
+      # exist, opponent-adjusted -- both right for a RATING and both fatal to a
+      # number displayed beside Score, because they stop a team's players
+      # summing to that team's margin. Measured 2026-09-09: this column sums to
+      # the own margin exactly (mean gap 0.00), `epv` misses by 9.56 on average.
+      # See docs/plans/EPV-DISPLAY-COLUMN.md. Additive on purpose: nothing that
+      # already reads `epv` changes.
+      dplyr::any_of(c(net_points = "epv")),
       epv = "epv_c", epv_recv = "epv_recv_c", epv_disp = "epv_disp_c",
       epv_spoil = "epv_spoil_c", epv_hitout = "epv_hitout_c",
       epv_p80 = "epv_p80", epv_recv_p80 = "epv_recv_p80", epv_disp_p80 = "epv_disp_p80",
