@@ -1008,7 +1008,18 @@ PSR_POSITION_STANDARDISE <- TRUE
 #' Preserve the outgoing v5 with
 #' `data-raw/03-ratings/promote_rating_vintage.R` (PROMOTE_FROM=v5, PROMOTE_TO=v6)
 #' and move the manifest to canonical v6 BEFORE this constant reaches main.
-RATING_VINTAGE <- "v6"
+#'
+#' v7 (2026-09-09): the 1.8.0 rules. Four credit/blame rules from Pete's
+#' row-by-row review (`NP_BLAME_POOL`, `NP_PRESSURE_BACK_SHARE`,
+#' `NP_SIREN_TO_POOL`, `NP_UNCONTESTED_RECEIVER_SHARE`), plus the stoppage
+#' baseline rebuilt on the stoppage's OWN location from chains rather than on
+#' its outcome's, with `abs(y)` in the cell key. Every published number moves --
+#' the four rules re-split every lost possession and every uncontested
+#' reception, and the stoppage rebuild reprices 21.5% of stoppages by more than
+#' 0.10 points -- so it takes its own vintage. Preserve the outgoing v6 with
+#' `data-raw/03-ratings/promote_rating_vintage.R` (PROMOTE_FROM=v6, PROMOTE_TO=v7)
+#' and move the manifest to canonical v7 BEFORE this constant reaches main.
+RATING_VINTAGE <- "v7"
 
 #' Map from the 20-way team-sheet lineup position to a 6-way position group
 #'

@@ -1,4 +1,33 @@
+# torp 1.8.1
+
+## RATING_VINTAGE moves to v7
+
+Operational follow-up to 1.8.0, shipped separately because the order matters.
+1.8.0 wired four rating-defining constants that the published v6 manifest did
+not record, which makes `check_vintage_alignment(strict = TRUE)` abort every
+scheduled run -- the same guard, and the same failure, as 2026-09-07.
+
+Rolled forward rather than refreshing v6's manifest entry: the numbers genuinely
+changed, so refreshing would claim v6 was produced by constants that now produce
+different values, and the next run would upsert two different rule sets into one
+published file.
+
+v6 is preserved byte-identical as `torp_ratings_v6.parquet` (md5 `f1d0472d`,
+checked against a re-download) and the manifest's `canonical` moved to v7 BEFORE
+this constant reached `main`, which is the order the guard enforces. Note
+GitHub's CDN served the stale manifest for about two minutes after the
+overwrite, so a read-back has to be verified against the uncached URL that
+`read_ratings_manifest()` actually fetches.
+
 # torp 1.8.0
+
+**Rating vintage v7.** Every published number moves, so this ships as a new
+vintage rather than an in-place overwrite: the four credit rules re-split every
+lost possession and every uncontested reception, and the stoppage rebuild
+reprices 21.5% of stoppages by more than 0.10 points. The outgoing v6 is
+preserved byte-identical as `torp_ratings_v6.parquet`; `canonical` moved to v7
+before this reached `main`, which is the order `check_vintage_alignment()`
+enforces.
 
 ## Four Net Points rules from Pete's row-by-row review of the scenarios page
 
