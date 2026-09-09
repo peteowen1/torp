@@ -111,11 +111,12 @@
     # properly (per-player-game, with and without reconcile=TRUE, identical
     # either way so it is not a reconciliation artifact): moving 0->1 touches
     # every one of 512 players by 8+ games, max single-game move 10.0 points.
-    # Genuinely live; wired rather than registered. Why a fallback documented
-    # as reaching only the ~4% of disposals difficulty scoring can't score
-    # produces an effect this large is not yet understood -- flagged, not
-    # explained, and worth a real investigation before this constant is next
-    # discussed as small.
+    # Genuinely live; wired rather than registered. The "why is a ~4% fallback
+    # this big" puzzle was answered on review (2026-09-09): the reach is not 4%.
+    # Difficulty scoring requires is_disp, but with NP_TURNOVER_ON_ALL_ACTS on a
+    # NON-disposal act also becomes a turnover and can never be scored, so it
+    # takes this flat rule permanently in every credit mode -- 15.9 rows a match
+    # carrying 27.1 points, on top of the ~4% of disposal turnovers.
     NP_DEFENSIVE_SHARE = NP_DEFENSIVE_SHARE,
     # The per-act ball-winner credit table (and its catch-all default): the
     # LIVE mechanism under credit = "difficulty", confirmed by tracing

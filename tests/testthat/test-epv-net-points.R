@@ -1236,3 +1236,100 @@ test_that("a paid player absent from player_stats entirely does not take a team 
   expect_equal(cv[match_id == "M1" & home_away == "Home", sum(net_points)], 20,
                tolerance = 1e-9)
 })
+
+# ---- the stoppage location comes from chains, in the home frame -------------
+# Added 2026-09-09 after review: every symbol in the chains-location path
+# shipped untested, because np_chains_fixture() carries no x/y/chain_team_id
+# and so takes the `has_loc = FALSE` branch on every run. These fixtures carry
+# the coordinates, which is the only way the sign flip below ever executes.
+#
+# The frame case is the one that matters. Chains x is in the CHAIN-OWNING
+# team's attacking frame, so an away-owned chain has to have its sign flipped
+# to read as home margin. On a home-owned chain the transform is the identity,
+# which is exactly why a sign error there is invisible -- so both sides are
+# asserted, with the same magnitude and opposite signs.
+np_loc_fixture <- function(chain_team = c("H", "A"), x = 40, y = 5) {
+  pbp <- data.table::data.table(
+    match_id = "M1", display_order = 1:3,
+    description = c("Kick", "Ball Up Call", "Handball"),
+    team = c("Home FC", NA, "Away FC"),
+    home_away = c("Home", NA, "Away"),
+    team_id = c("H", NA, "A"),
+    player_id = c("p1", NA, "p3"),
+    delta_epv = c(1, 0.5, -1),
+    home_points = 0L, away_points = 0L,
+    home = c(1L, 1L, 0L),
+    x = c(0, -70, 0),          # deliberately NOT the chains x, so we can tell
+    exp_pts = c(0, 0.25, 0.75)
+  )
+  chains <- data.table::data.table(
+    match_id = "M1", display_order = 1:3,
+    description = c("Kick", "Ball Up Call", "Handball"),
+    team_id = c("H", NA, "A"), player_id = c("p1", NA, "p3"),
+    x = c(0, x, 0), y = c(0, y, 0),
+    chain_team_id = chain_team[1], home_team_id = "H"
+  )
+  list(pbp = pbp, chains = chains)
+}
+
+test_that("chains gives the stoppage its own location, flipped to the home frame", {
+  home_chain <- np_loc_fixture("H", x = 40, y = 5)
+  away_chain <- np_loc_fixture("A", x = 40, y = 5)
+  sh <- suppressMessages(torp:::.np_sequence(home_chain$pbp, home_chain$chains))
+  sa <- suppressMessages(torp:::.np_sequence(away_chain$pbp, away_chain$chains))
+
+  # same raw chains x, opposite home-frame sign purely because of who owns the chain
+  expect_equal(sh[display_order == 2L]$chain_x_home, 40)
+  expect_equal(sa[display_order == 2L]$chain_x_home, -40)
+  # |y| needs no flip: it is the same number from either end
+  expect_equal(sh[display_order == 2L]$chain_aby, 5)
+  expect_equal(sa[display_order == 2L]$chain_aby, 5)
+})
+
+test_that("the chains location beats PBP's, which is the whole point of the change", {
+  f <- np_loc_fixture("H", x = 40, y = 5)
+  s <- suppressMessages(torp:::.np_sequence(f$pbp, f$chains))
+  d <- data.table::as.data.table(s)[display_order == 2L]
+  torp:::.np_stoppage_cells(d)
+  # PBP says x = -70 (band -80); chains says +40 (band +40). Chains must win.
+  expect_equal(d$x_home, 40)
+  expect_equal(d$band, 40)
+})
+
+test_that("without chains the cell key falls back to PBP's x, and says the same thing twice", {
+  f <- np_loc_fixture("H")
+  d <- data.table::as.data.table(
+    suppressMessages(torp:::.np_sequence(f$pbp, NULL)))[display_order == 2L]
+  n_true <- torp:::.np_stoppage_cells(d)
+  expect_equal(n_true, 0L)          # nothing was located from chains
+  expect_equal(d$x_home, -70)       # PBP's own x, in the home frame
+  expect_equal(d$band, -80)
+})
+
+test_that("the corridor bins bucket on |y|, and a missing y gets its own bin", {
+  mk <- function(y) {
+    f <- np_loc_fixture("H", x = 40, y = y)
+    d <- data.table::as.data.table(
+      suppressMessages(torp:::.np_sequence(f$pbp, f$chains)))[display_order == 2L]
+    torp:::.np_stoppage_cells(d)
+    d$yband
+  }
+  expect_equal(mk(5), 0)     # corridor
+  expect_equal(mk(20), 15)   # middle
+  expect_equal(mk(55), 30)   # boundary
+  expect_equal(mk(-55), 30)  # sign of y must not matter
+  expect_equal(mk(NA_real_), -1)  # sentinel, never folded in with the corridor
+})
+
+test_that("the win-rate range check warns at Pete's band and aborts outside it", {
+  cell <- function(p) data.table::data.table(
+    description = "Ball Up Call", band = 0, yband = 0, n = 500L, p_home = p)
+  expect_silent(torp:::.np_check_stoppage_win_rate(cell(0.50)))
+  expect_silent(torp:::.np_check_stoppage_win_rate(cell(c(0.46, 0.54))))
+  expect_message(torp:::.np_check_stoppage_win_rate(cell(c(0.44, 0.56))),
+                 "outside the expected")
+  expect_error(torp:::.np_check_stoppage_win_rate(cell(c(0.30, 0.50))),
+               "two-sided contest")
+  expect_error(torp:::.np_check_stoppage_win_rate(cell(c(0.50, 0.70))),
+               "two-sided contest")
+})

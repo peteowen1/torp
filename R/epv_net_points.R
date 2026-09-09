@@ -257,23 +257,6 @@
         resolve_lag)]
 }
 
-#' Neutral baseline for a stoppage, by type and location (D15)
-#'
-#' A stoppage row's own state value is filled from the side that ends up
-#' winning the first possession, so ball-ups and throw-ins read near zero and
-#' the swing leaks into the row before them. The baseline is the average
-#' first-possession value, in the home-margin frame, over both winners, for
-#' each stoppage type and 20m band of the ground (oriented to the home side's
-#' attacking end). Valuing the stoppage there makes the row before it worth
-#' "forcing the stoppage" and the stoppage row worth "winning it", and the two
-#' still sum to what they summed to, so conservation is untouched.
-#'
-#' The centre-bounce baseline must sit near zero; anything else means the
-#' frame is wrong, and the function aborts rather than reprice every clearance.
-#'
-#' @param seq Output of `.np_sequence()`.
-#' @return `description`, `band`, `baseline`, `n`.
-#' @keywords internal
 #' Which cell a stoppage falls in: type x 20m band x distance from the corridor
 #'
 #' `.np_stoppage_baseline()` estimates the cell means and `.np_build_ledger()`
@@ -338,6 +321,30 @@
   invisible(out)
 }
 
+#' Neutral baseline for a stoppage, by type and location (D15)
+#'
+#' A stoppage row's own state value is filled from the side that ends up
+#' winning the first possession, so ball-ups and throw-ins read near zero and
+#' the swing leaks into the row before them. The baseline prices the stoppage
+#' as the contest it is -- `P(home wins) * V(home wins) + (1 - P) * V(away
+#' wins)`, in the home-margin frame -- for each stoppage type, 20m band of the
+#' ground and corridor-to-boundary band (oriented to the home side's attacking
+#' end). Valuing the stoppage there makes the row before it worth "forcing the
+#' stoppage" and the stoppage row worth "winning it", and the two still sum to
+#' what they summed to, so conservation is untouched.
+#'
+#' Location comes from chains, not from play-by-play: a PBP stoppage row's `x`
+#' is where the ball was next gathered, so banding on it conditions the neutral
+#' baseline on the outcome it exists to be neutral about.
+#'
+#' The centre-bounce baseline must sit near zero, and the win rate must not vary
+#' across the cells of a type by more than chance allows; either failing means
+#' the frame is wrong, and the function aborts rather than reprice every
+#' clearance on it.
+#'
+#' @param seq Output of `.np_sequence()`.
+#' @return `description`, `band`, `yband`, `baseline`, `n`, `p_home`, `Vh`, `Va`.
+#' @keywords internal
 .np_stoppage_baseline <- function(seq) {
   keep <- c("match_id", "display_order", "description", "home", "x", "exp_pts",
             intersect(c("chain_x_home", "chain_aby"), names(seq)))
@@ -381,6 +388,14 @@
   # p = 0.17) and no 20m band's interval excludes 50%. So a smooth fitted P
   # drops sampling noise out of the baseline without discarding any signal,
   # and it makes the contest inspectable rather than implicit.
+  # The fallback is recorded, not just warned about. A stoppage is a near-fair
+  # contest, so the pooled rate it falls back to is ~0.50 -- which is exactly
+  # what a healthy fit also produces, and would sail through the range check
+  # below indistinguishable from success. Any error here (including one in this
+  # function's own newdata) would then flatten every cell's win rate to a single
+  # number and leave one warning line as the only trace. The flag makes the
+  # summary say which of the two happened.
+  win_fallback <- FALSE
   p_fit <- tryCatch({
     fit <- stats::glm(home_won ~ x_home + description, data = st,
                       family = stats::binomial())
@@ -388,9 +403,17 @@
                                              description = out$description),
                    type = "response")
   }, error = function(e) {
-    cli::cli_alert_warning("Stoppage win-rate model did not fit ({conditionMessage(e)}); using the pooled rate.")
+    win_fallback <<- TRUE
+    cli::cli_alert_warning("Stoppage win-rate model did not fit ({conditionMessage(e)}); every cell falls back to the pooled rate, so the win rate below is flat by failure, not by fit.")
     rep(mean(st$home_won), nrow(out))
   })
+  if (!win_fallback && (!is.numeric(p_fit) || length(p_fit) != nrow(out) ||
+                        anyNA(p_fit))) {
+    cli::cli_abort(c(
+      "The stoppage win-rate fit returned {length(p_fit)} usable value{?s} for {nrow(out)} cell{?s}.",
+      "x" = "A prediction that is the wrong length or carries NA would price cells off the wrong rows."
+    ))
+  }
   out[, p_home := p_fit]
   .np_check_stoppage_win_rate(out)
 
@@ -437,6 +460,15 @@
   # above has already said so -- and the same finding is reported as a warning,
   # so that a deliberate no-chains run still completes as it always did.
   chk <- out[n >= 100]
+  # A check with no subject is not a passing check. On a single match, a partial
+  # season or a small fixture there may be no type with two cells of 100+, and
+  # the guard then tests nothing -- so say that, rather than let a silent skip
+  # read like a clean bill of health.
+  n_testable <- chk[, .N, by = description][N > 1, .N]
+  if (n_testable == 0) {
+    cli::cli_alert_warning(
+      "Win-rate homogeneity not tested: no stoppage type has two cells of 100+ stoppages. The location-vs-outcome check did not run.")
+  }
   if (nrow(chk) > 1) {
     for (desc in unique(chk$description)) {
       c2 <- chk[description == desc]
@@ -582,7 +614,20 @@
     # A caller-supplied table may predate the corridor split; join it on the key
     # it actually has rather than erroring, and say which key was used, because
     # silently dropping the |y| dimension would change pricing without a trace.
+    # Coverage is reported HERE, on the rows actually being priced, not only
+    # inside .np_stoppage_baseline(). When a caller supplies a precomputed
+    # baseline that function never runs, so without this line a run whose chains
+    # coverage had collapsed would price every stoppage off PBP's outcome
+    # location with nothing anywhere saying so -- and a baseline fitted once and
+    # reused weekly is exactly the shape that invites it.
     .np_stoppage_cells(d)
+    n_stop_rows <- d[is_stoppage == TRUE, .N]
+    n_stop_true <- if ("chain_x_home" %in% names(d))
+      d[is_stoppage == TRUE & is.finite(chain_x_home), .N] else 0L
+    if (n_stop_rows > 0 && n_stop_true < n_stop_rows) {
+      cli::cli_alert_warning(
+        "{format(n_stop_rows - n_stop_true, big.mark = ',')} of {format(n_stop_rows, big.mark = ',')} stoppages being priced ({round(100 * (n_stop_rows - n_stop_true) / n_stop_rows, 1)}%) have no chains location and use PBP's x, which is where the ball was next gathered.")
+    }
     bl_key <- if ("yband" %in% names(bl)) c("description", "band", "yband") else
       c("description", "band")
     if (length(bl_key) == 2L) {
@@ -595,8 +640,17 @@
       adj := baseline - exp_pts * data.table::fifelse(home == 1L, 1, -1)]
     n_nobase <- d[is_stoppage == TRUE & !is.finite(baseline), .N]
     if (n_nobase > 0) {
-      cli::cli_alert_warning(
-        "{n_nobase} stoppage{?s} had no baseline cell (location out of range) and keep{?s/} the row's own value.")
+      # A percentage, not a bare count: a supplied baseline whose keys mostly
+      # miss (last season's band edges, a different vintage) looks identical to
+      # a handful of out-of-range pockets when only the count is printed.
+      pct <- 100 * n_nobase / max(n_stop_rows, 1L)
+      msg <- "{n_nobase} stoppage{?s} ({round(pct, 1)}% of those priced) had no baseline cell and keep{?s/} the row's own value."
+      if (pct > 50) {
+        cli::cli_abort(c(msg,
+          "x" = "More than half the stoppages matched no cell: the supplied baseline is not for this data.",
+          "i" = "Check its band edges and stoppage descriptions against {.fn .np_stoppage_baseline}'s output."))
+      }
+      cli::cli_alert_warning(msg)
     }
     # the previous ledger row in the same match receives +adj; the first row
     # of a match has none, so that stoppage keeps its full swing

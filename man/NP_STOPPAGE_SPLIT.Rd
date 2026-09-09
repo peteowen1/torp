@@ -18,4 +18,17 @@ match (winning side) or \code{ruck_contests - hitouts} (losing side). With no ru
 credited on a side, that share joins its pool. All (Y) defaults for the
 year-over-year test.
 }
+\details{
+\strong{\code{ground} corrected 2026-09-10.} A real row (930, Sydney v Carlton R1:
+Rowbottom's Hard Ball Get off a scrambled centre bounce) showed the ruck's
+nominal 20\% diluted across every contesting ruck by weight -- Grundy 0.074,
+Amartey 0.005 against Rowbottom's 0.198 -- and read, to Pete, as far too
+small: "there should be like any other reception row for now where disposer
+(ruck tapping it out) and receiver get roughly equal share." Ground moves to
+0.35/0.35 (was 0.20/0.50), pool unchanged at 0.30 -- an explicit baseline for
+now, to be tuned once it is checked against real predictive value, not
+repeatability alone (D19). \code{hitout} is untouched: that split already favours
+the tap deliberately (0.50 over 0.30), Pete's own earlier call, and this
+correction was about the ground case specifically.
+}
 \keyword{internal}

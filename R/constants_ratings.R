@@ -1694,8 +1694,16 @@ POSITION_AVG_TOG <- c(
 #' earlier "inert" reading summed a signed value across the whole season,
 #' which cancels turnovers won at home against turnovers won away -- the same
 #' mistake a sweep script made hours earlier the same night. Wired into
-#' `.rating_defining_constants()`. Why a ~4%-of-rows fallback produces an
-#' effect this large is not yet understood.
+#' `.rating_defining_constants()`.
+#'
+#' The "why is a ~4% fallback this big" puzzle was answered on review
+#' (2026-09-09): the reach is not 4%. Difficulty scoring requires `is_disp`
+#' (`.np_credit_terms()`, `scored := is_disp & ...`), but with
+#' `NP_TURNOVER_ON_ALL_ACTS` on, a NON-disposal act also becomes a turnover --
+#' and such a row can never be scored, so it takes this flat rule permanently,
+#' in every credit mode. That is another 15.9 rows a match carrying 27.1 points
+#' of swing (see `NP_TURNOVER_ON_ALL_ACTS` below), on top of the ~4% of
+#' disposal turnovers the model cannot reach.
 #' @keywords internal
 NP_DEFENSIVE_SHARE <- 0.30
 
