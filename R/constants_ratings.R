@@ -1036,7 +1036,16 @@ PSR_POSITION_STANDARDISE <- TRUE
 #' 0.10 points -- so it takes its own vintage. Preserve the outgoing v6 with
 #' `data-raw/03-ratings/promote_rating_vintage.R` (PROMOTE_FROM=v6, PROMOTE_TO=v7)
 #' and move the manifest to canonical v7 BEFORE this constant reaches main.
-RATING_VINTAGE <- "v7"
+#'
+#' v8 (2026-09-09, torp#206): `EPR_PRIOR_RATE_HITOUT` now also zeros under v4,
+#' where `epv_hitout` is identically zero -- the constant's own guard had never
+#' been extended past the v3 comparison it was written for, so every player's
+#' `epr_hitout` had been shrinking toward a leftover v2/v3-era rate with no
+#' basis in real v4 data (7.3% of the whole rating, systematically boosting
+#' rucks and penalising low-games defenders). Preserve the outgoing v7 with
+#' `data-raw/03-ratings/promote_rating_vintage.R` (PROMOTE_FROM=v7, PROMOTE_TO=v8)
+#' and move the manifest to canonical v8 BEFORE this constant reaches main.
+RATING_VINTAGE <- "v8"
 
 #' Map from the 20-way team-sheet lineup position to a 6-way position group
 #'
