@@ -113,6 +113,34 @@ player_game_ratings <- function(season_val = get_afl_season(),
 
   has_wpa <- "wp_credit" %in% names(df)
 
+  # Prefer the REAL ledger net_points when the frame carries one -- v4's
+  # create_player_game_data() already attaches it and asserts epv == net_points
+  # to 1e-8 (R/player_credit.R). Re-deriving from epv instead would have worked
+  # only by leaning on that invariant holding from 80 lines away in a different
+  # file; passing the real column through means a future engine that loosens
+  # the invariant, or a v2/v3 frame that never had it, cannot silently mislabel
+  # something as net_points that is not actually the ledger's own value.
+  #
+  # It is optional only so a partial frame (a test fixture, a caller
+  # assembling channels by hand) still works -- but its absence is said out
+  # loud, because a display column that silently disappears is worse than one
+  # that fails. Every pipeline caller supplies at least `epv`.
+  has_np <- "net_points" %in% names(df)
+  np_col <- if (has_np) "net_points" else "epv"
+  if (has_np && "epv" %in% names(df)) {
+    np_gap <- max(abs(df$epv - df$net_points), na.rm = TRUE)
+    if (is.finite(np_gap) && np_gap > 1e-6) {
+      cli::cli_abort(c(
+        "{.field epv} and {.field net_points} disagree by up to {signif(np_gap, 3)}.",
+        "x" = "They are supposed to be the same value (v4's own 1e-8 assertion); publishing net_points from a source that disagrees with epv would be worse than not publishing it."
+      ))
+    }
+  }
+  if (!np_col %in% names(df)) {
+    cli::cli_alert_warning(
+      "No {.field epv} or {.field net_points} column on the input: the result will carry no {.field net_points}, the value that sums to a team's own margin.")
+  }
+
   # Use _oadj (opponent-adjusted) columns when available, fall back to raw
   has_oadj <- all(c("epv_recv_oadj", "epv_disp_oadj",
                      "epv_spoil_oadj", "epv_hitout_oadj") %in% names(df))
@@ -174,6 +202,17 @@ player_game_ratings <- function(season_val = get_afl_season(),
       lineup_position = "lineup_position",
       team = "team", opp = "opponent",
       tog = "tog_frac",
+      # The ledger value, carried through uncentred and unadjusted. `epv` below
+      # is centred within (season, lineup_position) and, where the columns
+      # exist, opponent-adjusted -- both right for a RATING and both fatal to a
+      # number displayed beside Score, because they stop a team's players
+      # summing to that team's margin. Measured 2026-09-09: this column sums to
+      # the own margin exactly (mean gap 0.00), `epv` misses by 9.56 on average.
+      # See docs/plans/EPV-DISPLAY-COLUMN.md. Additive on purpose: nothing that
+      # already reads `epv` changes. Sourced from the real net_points column
+      # when the frame has one (see np_col above), never re-derived from epv
+      # when a genuine ledger value is available.
+      net_points = dplyr::any_of(np_col),
       epv = "epv_c", epv_recv = "epv_recv_c", epv_disp = "epv_disp_c",
       epv_spoil = "epv_spoil_c", epv_hitout = "epv_hitout_c",
       epv_p80 = "epv_p80", epv_recv_p80 = "epv_recv_p80", epv_disp_p80 = "epv_disp_p80",
