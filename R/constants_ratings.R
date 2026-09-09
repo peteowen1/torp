@@ -2030,6 +2030,24 @@ NP_STOPPAGE_SPLIT <- list(
 #' @keywords internal
 NP_STOPPAGE_BAND_M <- 20
 
+#' Expected range for the fitted stoppage win rate, and the range that aborts
+#'
+#' A stoppage is a contest between two sides, so P(home wins) must sit near a
+#' coin flip wherever on the ground it happens. Pete's sense check, 2026-09-09:
+#' roughly 55% defending your own end, 45% attacking, 50% in the middle. The
+#' measured gradient runs the same way but is far flatter than that -- the fit
+#' spans 48.4% to 51.8% across the whole ground, and the trend does not clear
+#' noise (1 df test on 18,309 stoppages, p = 0.17). The warn band is set at his
+#' expectation so an unusual season gets looked at; the abort band is set well
+#' outside it, because a fit that far from even is a broken win model or a
+#' broken coordinate frame rather than a real football effect.
+#' @keywords internal
+NP_STOPPAGE_WIN_WARN <- c(0.45, 0.55)
+
+#' @rdname NP_STOPPAGE_WIN_WARN
+#' @keywords internal
+NP_STOPPAGE_WIN_ABORT <- c(0.35, 0.65)
+
 #' Lower edges, in metres, of the corridor-to-boundary bins a stoppage is cut into
 #'
 #' Distance from the centre corridor, `abs(y)`. A throw-in tight against the

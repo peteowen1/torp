@@ -306,6 +306,38 @@
   n_true
 }
 
+#' Sanity-check the fitted stoppage win rate (Pete's range check, 2026-09-09)
+#'
+#' A stoppage is a contest between two sides, so a fitted P(home wins) has to
+#' sit near a coin flip everywhere on the ground. Pete's expectation: about 55%
+#' defending your own end, 45% at the other, 50% in the middle. Measured on
+#' 2026 the real gradient is far flatter than that -- the fit spans 48.4% to
+#' 51.8% and the trend does not clear noise (1 df test, p = 0.17) -- so the
+#' warn band is set at his numbers and the abort band well outside them. A fit
+#' outside the abort band is not a surprising season, it is a broken model or a
+#' broken frame.
+#'
+#' @param out Cell table carrying `p_home`, `n` and `description`.
+#' @return `out`, invisibly.
+#' @keywords internal
+.np_check_stoppage_win_rate <- function(out) {
+  p <- out$p_home[is.finite(out$p_home)]
+  if (!length(p)) return(invisible(out))
+  rng <- range(p)
+  if (rng[1] < NP_STOPPAGE_WIN_ABORT[1] || rng[2] > NP_STOPPAGE_WIN_ABORT[2]) {
+    cli::cli_abort(c(
+      "Fitted stoppage win rate spans {round(100 * rng[1], 1)}% to {round(100 * rng[2], 1)}%.",
+      "x" = "A stoppage is a two-sided contest; outside {round(100 * NP_STOPPAGE_WIN_ABORT[1])}-{round(100 * NP_STOPPAGE_WIN_ABORT[2])}% the win model or the frame is wrong, not the season.",
+      "i" = "Check that the location reaching {.fn .np_stoppage_baseline} is the stoppage's own and is oriented to the home side."
+    ))
+  }
+  if (rng[1] < NP_STOPPAGE_WIN_WARN[1] || rng[2] > NP_STOPPAGE_WIN_WARN[2]) {
+    cli::cli_alert_warning(
+      "Fitted stoppage win rate spans {round(100 * rng[1], 1)}% to {round(100 * rng[2], 1)}%, outside the expected {round(100 * NP_STOPPAGE_WIN_WARN[1])}-{round(100 * NP_STOPPAGE_WIN_WARN[2])}%. Worth a look, not necessarily wrong.")
+  }
+  invisible(out)
+}
+
 .np_stoppage_baseline <- function(seq) {
   keep <- c("match_id", "display_order", "description", "home", "x", "exp_pts",
             intersect(c("chain_x_home", "chain_aby"), names(seq)))
@@ -330,20 +362,54 @@
   if (nrow(st) == 0) {
     cli::cli_abort("No stoppage row has a usable location -- cannot band a baseline.")
   }
-  st[, v_next := n_exp * data.table::fifelse(n_home == 1L, 1, -1)]
+  st[, `:=`(v_next = n_exp * data.table::fifelse(n_home == 1L, 1, -1),
+            home_won = as.integer(n_home == 1L))]
   out <- st[, .(cell_mean = mean(v_next), n = .N,
-                p_home = mean(n_home == 1L)), by = .(description, band, yband)]
-  # Shrink each cell toward its type's overall mean. A sparse band (the true
-  # location reaches the pockets, where a handful of ball-ups land) would
-  # otherwise take its baseline from one or two observations -- and a cell of
-  # n = 1 sets the baseline exactly equal to that stoppage's own outcome, which
-  # hands its winner nothing and pays the whole swing to the row before. At the
-  # populated cells the pull is immaterial (n = 1,277 moves 1.5%). Conservation
-  # is untouched either way: the baseline only decides how a fixed pair-total
-  # splits between the stoppage and the act that forced it.
-  out[, type_mean := sum(cell_mean * n) / sum(n), by = description]
-  out[, baseline := (n * cell_mean + NP_STOPPAGE_SHRINK_N * type_mean) /
-        (n + NP_STOPPAGE_SHRINK_N)]
+                p_obs = mean(home_won),
+                x_mid = mean(x_home),
+                n_h = sum(home_won), n_a = sum(1L - home_won),
+                Vh_cell = mean(v_next[home_won == 1L]),
+                Va_cell = mean(v_next[home_won == 0L])),
+            by = .(description, band, yband)]
+
+  # The baseline is written as a contest: P(home wins) x what the home side is
+  # worth once it has it, plus the same for the away side. That is not a change
+  # of definition -- a cell's plain mean is already exactly this with P set to
+  # the cell's own win rate (law of total expectation) -- it is a change of
+  # ESTIMATOR. The cell's own win rate is noisy, and measured on 2026 that noise
+  # is all it is: the win rate does not slope with location (1 df trend test,
+  # p = 0.17) and no 20m band's interval excludes 50%. So a smooth fitted P
+  # drops sampling noise out of the baseline without discarding any signal,
+  # and it makes the contest inspectable rather than implicit.
+  p_fit <- tryCatch({
+    fit <- stats::glm(home_won ~ x_home + description, data = st,
+                      family = stats::binomial())
+    stats::predict(fit, newdata = data.frame(x_home = out$x_mid,
+                                             description = out$description),
+                   type = "response")
+  }, error = function(e) {
+    cli::cli_alert_warning("Stoppage win-rate model did not fit ({conditionMessage(e)}); using the pooled rate.")
+    rep(mean(st$home_won), nrow(out))
+  })
+  out[, p_home := p_fit]
+  .np_check_stoppage_win_rate(out)
+
+  # Shrink each side's conditional value toward its type's, on that side's own
+  # count. The true location reaches the pockets, where a season leaves one or
+  # two stoppages in a cell -- and a cell holding a single home win would
+  # otherwise set V(home wins) to that one stoppage's outcome. At a populated
+  # cell the pull is immaterial. Conservation is untouched whatever the baseline
+  # is: it only decides how a fixed pair-total splits between the stoppage and
+  # the act that forced it.
+  out[, `:=`(Vh_type = sum(Vh_cell * n_h, na.rm = TRUE) / sum(n_h[is.finite(Vh_cell)]),
+             Va_type = sum(Va_cell * n_a, na.rm = TRUE) / sum(n_a[is.finite(Va_cell)])),
+      by = description]
+  k <- NP_STOPPAGE_SHRINK_N
+  out[, `:=`(Vh = (data.table::fifelse(is.finite(Vh_cell), n_h * Vh_cell, 0) + k * Vh_type) /
+               (data.table::fifelse(is.finite(Vh_cell), n_h, 0L) + k),
+             Va = (data.table::fifelse(is.finite(Va_cell), n_a * Va_cell, 0) + k * Va_type) /
+               (data.table::fifelse(is.finite(Va_cell), n_a, 0L) + k))]
+  out[, baseline := p_home * Vh + (1 - p_home) * Va]
   cb <- out[description == "Centre Bounce", sum(baseline * n) / sum(n)]
   if (is.finite(cb) && abs(cb) > 0.5) {
     cli::cli_abort(c(
@@ -394,8 +460,8 @@
     }
   }
   cli::cli_alert_info(
-    "Stoppage baseline: {nrow(out)} type x band x corridor cells from {format(nrow(st), big.mark = ',')} stoppages ({round(100 * n_true / n_st)}% located from chains, {out[n < NP_STOPPAGE_SHRINK_N, .N]} thin cell{?s} shrunk toward their type mean); centre bounce {round(cb, 3)}, ball-up range {round(min(out[description == 'Ball Up Call']$baseline), 2)} to {round(max(out[description == 'Ball Up Call']$baseline), 2)}")
-  out[, .(description, band, yband, baseline, n)]
+    "Stoppage baseline: {nrow(out)} type x band x corridor cells from {format(nrow(st), big.mark = ',')} stoppages ({round(100 * n_true / n_st)}% located from chains, {out[n < NP_STOPPAGE_SHRINK_N, .N]} thin cell{?s} shrunk toward their type mean); win rate {round(100 * min(out$p_home), 1)}-{round(100 * max(out$p_home), 1)}%, centre bounce {round(cb, 3)}, ball-up range {round(min(out[description == 'Ball Up Call']$baseline), 2)} to {round(max(out[description == 'Ball Up Call']$baseline), 2)}")
+  out[, .(description, band, yband, baseline, n, p_home, Vh, Va)]
 }
 
 #' Build the per-act ledger in the home-margin frame
