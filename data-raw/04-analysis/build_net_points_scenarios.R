@@ -46,11 +46,14 @@ RES[, match_id := as.character(match_id)]
 
 FULL <- as.data.table(load_pbp(seasons = 2026))
 FULL[, match_id := as.character(match_id)]
-fcols <- setdiff(intersect(c("player_name", "points_shot", "period",
+# team_id is needed to align PBP with chains, which the ledger now requires:
+# the stoppage baseline reads a stoppage's location from chains.
+fcols <- setdiff(intersect(c("player_name", "points_shot", "period", "team_id",
                               "home_team_name", "away_team_name"), names(FULL)),
                   names(PBP))
 PBP <- merge(PBP, FULL[, c("match_id", "display_order", fcols), with = FALSE],
              by = c("match_id", "display_order"), all.x = TRUE)
+PBP[, team_id := as.character(team_id)]
 setorder(PBP, match_id, display_order)
 PBP[, last_in_period := display_order == max(display_order), by = .(match_id, period)]
 rm(FULL)
@@ -73,14 +76,24 @@ RAW_PBP_FOR_NAMES[, `:=`(match_id = as.character(match_id), team_id = as.charact
 tm_map <- unique(RAW_PBP_FOR_NAMES[!is.na(team_id), .(match_id, team_id, team)])
 nm_ch  <- unique(RAW_PBP_FOR_NAMES[!is.na(player_id), .(player_id, player_name)])
 
-if (file.exists(CH_CACHE)) {
-  CH <- as.data.table(read_parquet(CH_CACHE))
+# x/y/chain_team_id/home_team_id are here for the ledger, not for the phantom
+# rows: since 2026-09-09 the stoppage baseline takes a stoppage's location from
+# chains, because PBP's x on a stoppage row is where the ball was next gathered
+# rather than where the stoppage was. Passing chains = NULL below would price
+# every stoppage on the old, outcome-contaminated bands.
+CH_COLS <- c("match_id", "display_order", "description", "player_id", "team_id",
+             "x", "y", "chain_team_id", "home_team_id")
+if (file.exists(CH_CACHE) && all(CH_COLS %in% names(read_parquet(CH_CACHE, as_data_frame = FALSE)))) {
+  CH_RAW <- as.data.table(read_parquet(CH_CACHE))
 } else {
-  CH <- as.data.table(load_chains(seasons = 2026))[, .(match_id = as.character(match_id),
-        display_order, description, player_id = as.character(player_id),
-        team_id = as.character(team_id))]
-  write_parquet(CH, CH_CACHE)
+  CH_RAW <- as.data.table(load_chains(seasons = 2026))[, ..CH_COLS]
+  for (v in c("match_id", "player_id", "team_id", "chain_team_id", "home_team_id")) {
+    CH_RAW[, (v) := as.character(get(v))]
+  }
+  write_parquet(CH_RAW, CH_CACHE)
 }
+# the ledger gets the untouched frame; the joins below are only for display
+CH <- copy(CH_RAW)
 CH <- merge(CH, tm_map, by = c("match_id", "team_id"), all.x = TRUE)
 CH <- merge(CH, nm_ch, by = "player_id", all.x = TRUE)
 # a chains "phantom" row is one whose display_order never appears in PBP at all
@@ -92,13 +105,13 @@ PHANTOM <- CH[in_pbp == FALSE]
 cat("Chains-only (phantom) rows across 2026:", nrow(PHANTOM), "of", nrow(CH), "chains rows\n")
 rm(RAW_PBP_FOR_NAMES)
 
-led <- suppressMessages(torp:::.np_build_ledger(PBP, chains = NULL, stoppages = "allocate"))
+led <- suppressMessages(torp:::.np_build_ledger(PBP, chains = CH_RAW, stoppages = "allocate"))
 l <- suppressMessages(torp:::.np_credit_terms(led, "difficulty",
        alpha = torp:::NP_RECEIVER_SHARE, phi = torp:::NP_DEFENSIVE_SHARE,
        beta = torp:::NP_BLAME_SHARE, omega = torp:::NP_OFFENCE_POOL_SHARE, terms = TM))
 l[, match_id := as.character(match_id)]
 
-np <- suppressMessages(build_net_points(PBP, PS, RES, chains = NULL, credit = "difficulty",
+np <- suppressMessages(build_net_points(PBP, PS, RES, chains = CH_RAW, credit = "difficulty",
        stoppages = "allocate", difficulty_terms = TM, leak_safe = FALSE,
        return_payments = TRUE))
 

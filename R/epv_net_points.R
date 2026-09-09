@@ -364,6 +364,12 @@
   # of bounds spans 0.160 over 12 -- indistinguishable by range, and 32 orders
   # of magnitude apart by chi-square (p = 1.3e-34 against p = 0.066). The
   # threshold sits far below anything noise produces and far above the defect.
+  #
+  # It ABORTS only when a chains location was actually available, because then
+  # a failure means the wiring is wrong and the run should stop. With no chains
+  # at all the contamination is expected rather than surprising -- the fallback
+  # above has already said so -- and the same finding is reported as a warning,
+  # so that a deliberate no-chains run still completes as it always did.
   chk <- out[n >= 100]
   if (nrow(chk) > 1) {
     for (desc in unique(chk$description)) {
@@ -374,13 +380,17 @@
       if (pbar <= 0 || pbar >= 1) next
       chi <- sum((k - c2$n * pbar)^2 / (c2$n * pbar * (1 - pbar)))
       pv <- stats::pchisq(chi, df = nrow(c2) - 1, lower.tail = FALSE)
-      if (pv < 1e-10) {
-        cli::cli_abort(c(
-          "P(home wins) differs across the {nrow(c2)} cells of {.val {desc}} far beyond chance (chi-square p = {format(pv, digits = 2)}).",
-          "x" = "Location is predicting the winner, which means the cell is keyed on the outcome rather than on where the stoppage was.",
-          "i" = "Check that {.field chain_x_home} reached {.fn .np_stoppage_baseline} -- PBP's own x has this defect."
-        ))
+      if (pv >= 1e-10) next
+      msg <- c(
+        "P(home wins) differs across the {nrow(c2)} cells of {.val {desc}} far beyond chance (chi-square p = {format(pv, digits = 2)}).",
+        "x" = "Location is predicting the winner, which means the cell is keyed on the outcome rather than on where the stoppage was."
+      )
+      if (n_true > 0) {
+        cli::cli_abort(c(msg,
+          "i" = "A chains location was available, so this is a wiring fault: check that {.field chain_x_home} survived into {.fn .np_stoppage_baseline}."))
       }
+      cli::cli_warn(c(msg,
+        "i" = "No chains location was available, so this is the known PBP defect rather than a new one. Supply {.arg chains} to price stoppages on where they actually happened."))
     }
   }
   cli::cli_alert_info(
