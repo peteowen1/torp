@@ -10,20 +10,26 @@
 \item{seq}{Output of \code{.np_sequence()}.}
 }
 \value{
-\code{description}, \code{band}, \code{baseline}, \code{n}.
+\code{description}, \code{band}, \code{yband}, \code{baseline}, \code{n}, \code{p_home}, \code{Vh}, \code{Va}.
 }
 \description{
 A stoppage row's own state value is filled from the side that ends up
 winning the first possession, so ball-ups and throw-ins read near zero and
-the swing leaks into the row before them. The baseline is the average
-first-possession value, in the home-margin frame, over both winners, for
-each stoppage type and 20m band of the ground (oriented to the home side's
-attacking end). Valuing the stoppage there makes the row before it worth
-"forcing the stoppage" and the stoppage row worth "winning it", and the two
-still sum to what they summed to, so conservation is untouched.
+the swing leaks into the row before them. The baseline prices the stoppage
+as the contest it is -- \verb{P(home wins) * V(home wins) + (1 - P) * V(away wins)}, in the home-margin frame -- for each stoppage type, 20m band of the
+ground and corridor-to-boundary band (oriented to the home side's attacking
+end). Valuing the stoppage there makes the row before it worth "forcing the
+stoppage" and the stoppage row worth "winning it", and the two still sum to
+what they summed to, so conservation is untouched.
 }
 \details{
-The centre-bounce baseline must sit near zero; anything else means the
-frame is wrong, and the function aborts rather than reprice every clearance.
+Location comes from chains, not from play-by-play: a PBP stoppage row's \code{x}
+is where the ball was next gathered, so banding on it conditions the neutral
+baseline on the outcome it exists to be neutral about.
+
+The centre-bounce baseline must sit near zero, and the win rate must not vary
+across the cells of a type by more than chance allows; either failing means
+the frame is wrong, and the function aborts rather than reprice every
+clearance on it.
 }
 \keyword{internal}

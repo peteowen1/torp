@@ -101,8 +101,30 @@
   }
   ch <- data.table::as.data.table(chains)
   detect_chains_columns(ch)
-  cs <- ch[, .(match_id = as.character(match_id), display_order,
-               description, team_id, player_id)]
+  # chains also carries the stoppage's OWN location, which PBP does not: a PBP
+  # stoppage row's `x` is where the ball was next GATHERED (97.7% identical to
+  # the next row's x, 7.1% to the previous row's). Every centre bounce happens
+  # at the centre circle, and in chains 100.0% of them sit at exactly x = 0
+  # against 12.1% in PBP. The D15 baseline bands a stoppage by location, so
+  # taking that location from PBP conditions the "neutral" baseline on the very
+  # outcome it is meant to be neutral about. `chain_team_id` comes too because
+  # chains x is in the chain team's attacking frame.
+  # No warning here: whether a missing location matters depends on the stoppage
+  # mode, which this function does not know. `.np_stoppage_baseline()` is the
+  # place that actually falls back, and it says so there.
+  # `y` comes too: how far the stoppage is from the corridor is worth about
+  # 0.35 points of baseline within a type and 20m band (0.54 in the defensive
+  # 50), against a mean stoppage swing of 0.66. It needs no frame flip -- the
+  # ledger uses |y|, which is the same number from either end.
+  has_loc <- all(c("x", "y", "chain_team_id") %in% names(ch))
+  cs <- ch[, .(match_id = as.character(match_id), display_order = display_order,
+               description = description, team_id = team_id, player_id = player_id)]
+  if (has_loc) {
+    cs[, `:=`(chain_x = as.numeric(ch$x), chain_aby = abs(as.numeric(ch$y)),
+              chain_team_id = as.character(ch$chain_team_id))]
+  } else {
+    cs[, `:=`(chain_x = NA_real_, chain_aby = NA_real_, chain_team_id = NA_character_)]
+  }
   rm(ch)
   key <- c("match_id", "display_order")
   ndup <- sum(duplicated(cs, by = key))
@@ -163,13 +185,28 @@
   s <- merge(s, tm, by = c("match_id", "team_id"), all.x = TRUE)
   data.table::setorder(s, match_id, display_order)
 
+  # Put the chains location in the home-margin frame, so a band means the same
+  # thing whichever side the chain belongs to. The sign map is built from PBP's
+  # own `home` (0/1) rather than from `home_away` text, so it cannot disagree
+  # with the frame `.np_stoppage_baseline()` uses for everything else.
+  hs <- unique(p[!is.na(team_id) & !is.na(home),
+                 .(match_id = as.character(match_id), team_id = as.character(team_id),
+                   chain_home = home)])
+  dup_h <- hs[, .N, by = .(match_id, team_id)][N > 1]
+  if (nrow(dup_h) > 0) {
+    cli::cli_abort("{nrow(dup_h)} (match, team_id) pair{?s} are both home and away in PBP.")
+  }
+  s[hs, on = .(match_id, chain_team_id = team_id), chain_home := i.chain_home]
+  s[, chain_x_home := chain_x * data.table::fifelse(chain_home == 1L, 1, -1)]
+
   extra <- s[in_pbp == FALSE]
   top <- head(extra[, .N, by = description][order(-N)], 4)
   top_txt <- if (nrow(top)) paste0(top$description, " ", format(top$N, big.mark = ","), collapse = ", ") else "none"
   cli::cli_alert_info(
     "Net points sequence: {format(nrow(s), big.mark = ',')} chains rows, {format(sum(s$in_pbp), big.mark = ',')} carry PBP value; {format(nrow(extra), big.mark = ',')} chains-only rows visible for resolution ({top_txt})")
   s[, .(match_id, display_order, description, team, home_away, player_id,
-        delta_epv, home_points, away_points, home, x, exp_pts, in_pbp)]
+        delta_epv, home_points, away_points, home, x, exp_pts, in_pbp,
+        chain_x_home, chain_aby)]
 }
 
 #' What each disposal turned into: the first row after it that is not in flight
@@ -220,37 +257,182 @@
         resolve_lag)]
 }
 
+#' Which cell a stoppage falls in: type x 20m band x distance from the corridor
+#'
+#' `.np_stoppage_baseline()` estimates the cell means and `.np_build_ledger()`
+#' charges each stoppage against them. They must key on exactly the same thing
+#' or a stoppage is priced from one cell and charged to another, so both call
+#' this one function rather than each writing the expression out.
+#'
+#' Location comes from chains where it exists (`chain_x_home`, `chain_aby`) and
+#' falls back to PBP's own x, which is the location of the stoppage's OUTCOME
+#' rather than of the stoppage.
+#'
+#' @param d Table with `description`, `home`, `x`, and optionally `chain_x_home`
+#'   and `chain_aby`. Modified by reference.
+#' @return Count of rows that had a true chains location.
+#' @keywords internal
+.np_stoppage_cells <- function(d) {
+  d[, x_home := if ("chain_x_home" %in% names(d)) chain_x_home else NA_real_]
+  n_true <- sum(is.finite(d$x_home))
+  d[!is.finite(x_home) & is.finite(x),
+    x_home := x * data.table::fifelse(home == 1L, 1, -1)]
+  d[, aby := if ("chain_aby" %in% names(d)) chain_aby else NA_real_]
+  d[, band := floor(x_home / NP_STOPPAGE_BAND_M) * NP_STOPPAGE_BAND_M]
+  # yband is named by the lower edge of its bin. A row with no |y| gets its own
+  # bin (-1) rather than being folded in with the corridor: a missing coordinate
+  # must never be able to masquerade as a centre-ground stoppage, and as its own
+  # cell it simply shrinks toward the type mean.
+  d[, yband := -1]
+  d[is.finite(aby),
+    yband := NP_STOPPAGE_Y_BREAKS[findInterval(aby, NP_STOPPAGE_Y_BREAKS)]]
+  n_true
+}
+
+#' Sanity-check the fitted stoppage win rate (Pete's range check, 2026-09-09)
+#'
+#' A stoppage is a contest between two sides, so a fitted P(home wins) has to
+#' sit near a coin flip everywhere on the ground. Pete's expectation: about 55%
+#' defending your own end, 45% at the other, 50% in the middle. Measured on
+#' 2026 the real gradient is far flatter than that -- the fit spans 48.4% to
+#' 51.8% and the trend does not clear noise (1 df test, p = 0.17) -- so the
+#' warn band is set at his numbers and the abort band well outside them. A fit
+#' outside the abort band is not a surprising season, it is a broken model or a
+#' broken frame.
+#'
+#' @param out Cell table carrying `p_home`, `n` and `description`.
+#' @return `out`, invisibly.
+#' @keywords internal
+.np_check_stoppage_win_rate <- function(out) {
+  p <- out$p_home[is.finite(out$p_home)]
+  if (!length(p)) return(invisible(out))
+  rng <- range(p)
+  if (rng[1] < NP_STOPPAGE_WIN_ABORT[1] || rng[2] > NP_STOPPAGE_WIN_ABORT[2]) {
+    cli::cli_abort(c(
+      "Fitted stoppage win rate spans {round(100 * rng[1], 1)}% to {round(100 * rng[2], 1)}%.",
+      "x" = "A stoppage is a two-sided contest; outside {round(100 * NP_STOPPAGE_WIN_ABORT[1])}-{round(100 * NP_STOPPAGE_WIN_ABORT[2])}% the win model or the frame is wrong, not the season.",
+      "i" = "Check that the location reaching {.fn .np_stoppage_baseline} is the stoppage's own and is oriented to the home side."
+    ))
+  }
+  if (rng[1] < NP_STOPPAGE_WIN_WARN[1] || rng[2] > NP_STOPPAGE_WIN_WARN[2]) {
+    cli::cli_alert_warning(
+      "Fitted stoppage win rate spans {round(100 * rng[1], 1)}% to {round(100 * rng[2], 1)}%, outside the expected {round(100 * NP_STOPPAGE_WIN_WARN[1])}-{round(100 * NP_STOPPAGE_WIN_WARN[2])}%. Worth a look, not necessarily wrong.")
+  }
+  invisible(out)
+}
+
 #' Neutral baseline for a stoppage, by type and location (D15)
 #'
 #' A stoppage row's own state value is filled from the side that ends up
 #' winning the first possession, so ball-ups and throw-ins read near zero and
-#' the swing leaks into the row before them. The baseline is the average
-#' first-possession value, in the home-margin frame, over both winners, for
-#' each stoppage type and 20m band of the ground (oriented to the home side's
-#' attacking end). Valuing the stoppage there makes the row before it worth
-#' "forcing the stoppage" and the stoppage row worth "winning it", and the two
-#' still sum to what they summed to, so conservation is untouched.
+#' the swing leaks into the row before them. The baseline prices the stoppage
+#' as the contest it is -- `P(home wins) * V(home wins) + (1 - P) * V(away
+#' wins)`, in the home-margin frame -- for each stoppage type, 20m band of the
+#' ground and corridor-to-boundary band (oriented to the home side's attacking
+#' end). Valuing the stoppage there makes the row before it worth "forcing the
+#' stoppage" and the stoppage row worth "winning it", and the two still sum to
+#' what they summed to, so conservation is untouched.
 #'
-#' The centre-bounce baseline must sit near zero; anything else means the
-#' frame is wrong, and the function aborts rather than reprice every clearance.
+#' Location comes from chains, not from play-by-play: a PBP stoppage row's `x`
+#' is where the ball was next gathered, so banding on it conditions the neutral
+#' baseline on the outcome it exists to be neutral about.
+#'
+#' The centre-bounce baseline must sit near zero, and the win rate must not vary
+#' across the cells of a type by more than chance allows; either failing means
+#' the frame is wrong, and the function aborts rather than reprice every
+#' clearance on it.
 #'
 #' @param seq Output of `.np_sequence()`.
-#' @return `description`, `band`, `baseline`, `n`.
+#' @return `description`, `band`, `yband`, `baseline`, `n`, `p_home`, `Vh`, `Va`.
 #' @keywords internal
 .np_stoppage_baseline <- function(seq) {
-  s <- seq[in_pbp == TRUE, .(match_id, display_order, description, home, x, exp_pts)]
+  keep <- c("match_id", "display_order", "description", "home", "x", "exp_pts",
+            intersect(c("chain_x_home", "chain_aby"), names(seq)))
+  s <- seq[in_pbp == TRUE, ..keep]
   data.table::setorder(s, match_id, display_order)
   s[, `:=`(n_home = data.table::shift(home, -1L), n_exp = data.table::shift(exp_pts, -1L)),
     by = match_id]
-  st <- s[description %chin% NP_STOPPAGE_DESCS & !is.na(home) & is.finite(x) &
+  st <- s[description %chin% NP_STOPPAGE_DESCS & !is.na(home) &
             !is.na(n_home) & is.finite(n_exp)]
   if (nrow(st) == 0) {
     cli::cli_abort("No stoppage rows with a following possession -- cannot estimate a baseline.")
   }
-  st[, `:=`(x_home = x * data.table::fifelse(home == 1L, 1, -1),
-            v_next = n_exp * data.table::fifelse(n_home == 1L, 1, -1))]
-  st[, band := floor(x_home / NP_STOPPAGE_BAND_M) * NP_STOPPAGE_BAND_M]
-  out <- st[, .(baseline = mean(v_next), n = .N), by = .(description, band)]
+  n_true <- .np_stoppage_cells(st)
+  if (n_true < nrow(st)) {
+    cli::cli_warn(c(
+      "{format(nrow(st) - n_true, big.mark = ',')} of {format(nrow(st), big.mark = ',')} stoppages have no chains location and fall back to PBP's x.",
+      "!" = "PBP's x on a stoppage row is where the ball was next gathered, so those bands are set by the outcome they price."
+    ))
+  }
+  n_st <- nrow(st)
+  st <- st[is.finite(x_home)]
+  if (nrow(st) == 0) {
+    cli::cli_abort("No stoppage row has a usable location -- cannot band a baseline.")
+  }
+  st[, `:=`(v_next = n_exp * data.table::fifelse(n_home == 1L, 1, -1),
+            home_won = as.integer(n_home == 1L))]
+  out <- st[, .(cell_mean = mean(v_next), n = .N,
+                p_obs = mean(home_won),
+                x_mid = mean(x_home),
+                n_h = sum(home_won), n_a = sum(1L - home_won),
+                Vh_cell = mean(v_next[home_won == 1L]),
+                Va_cell = mean(v_next[home_won == 0L])),
+            by = .(description, band, yband)]
+
+  # The baseline is written as a contest: P(home wins) x what the home side is
+  # worth once it has it, plus the same for the away side. That is not a change
+  # of definition -- a cell's plain mean is already exactly this with P set to
+  # the cell's own win rate (law of total expectation) -- it is a change of
+  # ESTIMATOR. The cell's own win rate is noisy, and measured on 2026 that noise
+  # is all it is: the win rate does not slope with location (1 df trend test,
+  # p = 0.17) and no 20m band's interval excludes 50%. So a smooth fitted P
+  # drops sampling noise out of the baseline without discarding any signal,
+  # and it makes the contest inspectable rather than implicit.
+  # The fallback is recorded, not just warned about. A stoppage is a near-fair
+  # contest, so the pooled rate it falls back to is ~0.50 -- which is exactly
+  # what a healthy fit also produces, and would sail through the range check
+  # below indistinguishable from success. Any error here (including one in this
+  # function's own newdata) would then flatten every cell's win rate to a single
+  # number and leave one warning line as the only trace. The flag makes the
+  # summary say which of the two happened.
+  win_fallback <- FALSE
+  p_fit <- tryCatch({
+    fit <- stats::glm(home_won ~ x_home + description, data = st,
+                      family = stats::binomial())
+    stats::predict(fit, newdata = data.frame(x_home = out$x_mid,
+                                             description = out$description),
+                   type = "response")
+  }, error = function(e) {
+    win_fallback <<- TRUE
+    cli::cli_alert_warning("Stoppage win-rate model did not fit ({conditionMessage(e)}); every cell falls back to the pooled rate, so the win rate below is flat by failure, not by fit.")
+    rep(mean(st$home_won), nrow(out))
+  })
+  if (!win_fallback && (!is.numeric(p_fit) || length(p_fit) != nrow(out) ||
+                        anyNA(p_fit))) {
+    cli::cli_abort(c(
+      "The stoppage win-rate fit returned {length(p_fit)} usable value{?s} for {nrow(out)} cell{?s}.",
+      "x" = "A prediction that is the wrong length or carries NA would price cells off the wrong rows."
+    ))
+  }
+  out[, p_home := p_fit]
+  .np_check_stoppage_win_rate(out)
+
+  # Shrink each side's conditional value toward its type's, on that side's own
+  # count. The true location reaches the pockets, where a season leaves one or
+  # two stoppages in a cell -- and a cell holding a single home win would
+  # otherwise set V(home wins) to that one stoppage's outcome. At a populated
+  # cell the pull is immaterial. Conservation is untouched whatever the baseline
+  # is: it only decides how a fixed pair-total splits between the stoppage and
+  # the act that forced it.
+  out[, `:=`(Vh_type = sum(Vh_cell * n_h, na.rm = TRUE) / sum(n_h[is.finite(Vh_cell)]),
+             Va_type = sum(Va_cell * n_a, na.rm = TRUE) / sum(n_a[is.finite(Va_cell)])),
+      by = description]
+  k <- NP_STOPPAGE_SHRINK_N
+  out[, `:=`(Vh = (data.table::fifelse(is.finite(Vh_cell), n_h * Vh_cell, 0) + k * Vh_type) /
+               (data.table::fifelse(is.finite(Vh_cell), n_h, 0L) + k),
+             Va = (data.table::fifelse(is.finite(Va_cell), n_a * Va_cell, 0) + k * Va_type) /
+               (data.table::fifelse(is.finite(Va_cell), n_a, 0L) + k))]
+  out[, baseline := p_home * Vh + (1 - p_home) * Va]
   cb <- out[description == "Centre Bounce", sum(baseline * n) / sum(n)]
   if (is.finite(cb) && abs(cb) > 0.5) {
     cli::cli_abort(c(
@@ -258,9 +440,60 @@
       "x" = "The stoppage frame is wrong; refusing to reprice every clearance on it."
     ))
   }
+  # A cell must say WHERE the stoppage was, never WHO won it. When the location
+  # is taken from the outcome, P(home wins) varies across cells of the same type
+  # by more than chance allows -- centre bounce read 0.599 against 0.435 on
+  # PBP's x, which is impossible for an event that always happens on the centre
+  # circle.
+  #
+  # The test has to be a chi-square against binomial noise, not a range. The
+  # range of P across cells grows with the NUMBER of cells under a perfect null,
+  # so it cannot tell a defect from a fine partition: measured on 2026, the
+  # broken key's centre bounce spans 0.164 over 2 cells and the fixed key's out
+  # of bounds spans 0.160 over 12 -- indistinguishable by range, and 32 orders
+  # of magnitude apart by chi-square (p = 1.3e-34 against p = 0.066). The
+  # threshold sits far below anything noise produces and far above the defect.
+  #
+  # It ABORTS only when a chains location was actually available, because then
+  # a failure means the wiring is wrong and the run should stop. With no chains
+  # at all the contamination is expected rather than surprising -- the fallback
+  # above has already said so -- and the same finding is reported as a warning,
+  # so that a deliberate no-chains run still completes as it always did.
+  chk <- out[n >= 100]
+  # A check with no subject is not a passing check. On a single match, a partial
+  # season or a small fixture there may be no type with two cells of 100+, and
+  # the guard then tests nothing -- so say that, rather than let a silent skip
+  # read like a clean bill of health.
+  n_testable <- chk[, .N, by = description][N > 1, .N]
+  if (n_testable == 0) {
+    cli::cli_alert_warning(
+      "Win-rate homogeneity not tested: no stoppage type has two cells of 100+ stoppages. The location-vs-outcome check did not run.")
+  }
+  if (nrow(chk) > 1) {
+    for (desc in unique(chk$description)) {
+      c2 <- chk[description == desc]
+      if (nrow(c2) < 2) next
+      k <- c2$p_home * c2$n
+      pbar <- sum(k) / sum(c2$n)
+      if (pbar <= 0 || pbar >= 1) next
+      chi <- sum((k - c2$n * pbar)^2 / (c2$n * pbar * (1 - pbar)))
+      pv <- stats::pchisq(chi, df = nrow(c2) - 1, lower.tail = FALSE)
+      if (pv >= 1e-10) next
+      msg <- c(
+        "P(home wins) differs across the {nrow(c2)} cells of {.val {desc}} far beyond chance (chi-square p = {format(pv, digits = 2)}).",
+        "x" = "Location is predicting the winner, which means the cell is keyed on the outcome rather than on where the stoppage was."
+      )
+      if (n_true > 0) {
+        cli::cli_abort(c(msg,
+          "i" = "A chains location was available, so this is a wiring fault: check that {.field chain_x_home} survived into {.fn .np_stoppage_baseline}."))
+      }
+      cli::cli_warn(c(msg,
+        "i" = "No chains location was available, so this is the known PBP defect rather than a new one. Supply {.arg chains} to price stoppages on where they actually happened."))
+    }
+  }
   cli::cli_alert_info(
-    "Stoppage baseline: {nrow(out)} type x band cells from {format(nrow(st), big.mark = ',')} stoppages; centre bounce {round(cb, 3)}, ball-up range {round(min(out[description == 'Ball Up Call']$baseline), 2)} to {round(max(out[description == 'Ball Up Call']$baseline), 2)}")
-  out
+    "Stoppage baseline: {nrow(out)} type x band x corridor cells from {format(nrow(st), big.mark = ',')} stoppages ({round(100 * n_true / n_st)}% located from chains, {out[n < NP_STOPPAGE_SHRINK_N, .N]} thin cell{?s} shrunk toward their type mean); win rate {round(100 * min(out$p_home), 1)}-{round(100 * max(out$p_home), 1)}%, centre bounce {round(cb, 3)}, ball-up range {round(min(out[description == 'Ball Up Call']$baseline), 2)} to {round(max(out[description == 'Ball Up Call']$baseline), 2)}")
+  out[, .(description, band, yband, baseline, n, p_home, Vh, Va)]
 }
 
 #' Build the per-act ledger in the home-margin frame
@@ -303,8 +536,26 @@
   # holds no state, so "who acted next" must skip it or a spoil would read as
   # the spoiler winning possession. Resolution is where the spoiler is named.
   d <- seq[in_pbp == TRUE]
+  # One key type for every join below (adjacency, resolution, the period flag,
+  # the difficulty terms): a review of 48d48edf found the coercion applied to
+  # `d` after `adj` had been built from it, so the two could disagree on type.
+  d[, match_id := as.character(match_id)]
   adj <- .np_adjacency(d)
   res <- if (is.null(chains)) NULL else .np_resolution(seq)
+  # The last row of each quarter, taken on the FULL frame: delta_epv is built
+  # within (match, period), so that row's delta is the whole state evaporating
+  # at the siren (NP_SIREN_TO_POOL). Flagged here so .np_credit_terms() can
+  # route it; if the frame has no period the rule cannot fire and says so.
+  if ("period" %in% names(d0)) {
+    lp <- d0[, .(match_id = as.character(match_id), display_order, period)]
+    lp[, last_in_period := display_order == max(display_order), by = .(match_id, period)]
+    d[lp, on = .(match_id, display_order), `:=`(period = i.period, last_in_period = i.last_in_period)]
+    d[is.na(last_in_period), last_in_period := FALSE]
+  } else {
+    d[, `:=`(period = NA_integer_, last_in_period = FALSE)]
+    cli::cli_alert_warning(
+      "Play-by-play carries no {.field period}: the siren rule cannot fire (each quarter's last act is charged to its actor) and the stoppage repricing can cross a quarter boundary.")
+  }
 
   # EVERY filter below reports what it removed, and the four counts must add up
   # to n_all. They did not before 2026-09-05: the NA-delta_epv drop was silent,
@@ -358,20 +609,55 @@
     # (hm_prev + adj) + (hm_stop - adj) is what the pair summed to before.
     bl <- if (is.null(stoppage_baseline)) .np_stoppage_baseline(seq) else
       data.table::as.data.table(stoppage_baseline)
-    d[, x_home := x * data.table::fifelse(home == 1L, 1, -1)]
-    d[, band := floor(x_home / NP_STOPPAGE_BAND_M) * NP_STOPPAGE_BAND_M]
-    d[bl, on = .(description, band), baseline := i.baseline]
+    # The SAME cell key the baseline was estimated on -- one shared function,
+    # so a stoppage cannot be priced from one cell and charged against another.
+    # A caller-supplied table may predate the corridor split; join it on the key
+    # it actually has rather than erroring, and say which key was used, because
+    # silently dropping the |y| dimension would change pricing without a trace.
+    # Coverage is reported HERE, on the rows actually being priced, not only
+    # inside .np_stoppage_baseline(). When a caller supplies a precomputed
+    # baseline that function never runs, so without this line a run whose chains
+    # coverage had collapsed would price every stoppage off PBP's outcome
+    # location with nothing anywhere saying so -- and a baseline fitted once and
+    # reused weekly is exactly the shape that invites it.
+    .np_stoppage_cells(d)
+    n_stop_rows <- d[is_stoppage == TRUE, .N]
+    n_stop_true <- if ("chain_x_home" %in% names(d))
+      d[is_stoppage == TRUE & is.finite(chain_x_home), .N] else 0L
+    if (n_stop_rows > 0 && n_stop_true < n_stop_rows) {
+      cli::cli_alert_warning(
+        "{format(n_stop_rows - n_stop_true, big.mark = ',')} of {format(n_stop_rows, big.mark = ',')} stoppages being priced ({round(100 * (n_stop_rows - n_stop_true) / n_stop_rows, 1)}%) have no chains location and use PBP's x, which is where the ball was next gathered.")
+    }
+    bl_key <- if ("yband" %in% names(bl)) c("description", "band", "yband") else
+      c("description", "band")
+    if (length(bl_key) == 2L) {
+      cli::cli_alert_warning(
+        "Supplied stoppage baseline has no {.field yband}: pricing on type and 20m band only, with no corridor-to-boundary split.")
+    }
+    d[bl, on = bl_key, baseline := i.baseline]
     d[, adj := 0]
     d[is_stoppage == TRUE & is.finite(baseline) & is.finite(exp_pts),
       adj := baseline - exp_pts * data.table::fifelse(home == 1L, 1, -1)]
     n_nobase <- d[is_stoppage == TRUE & !is.finite(baseline), .N]
     if (n_nobase > 0) {
-      cli::cli_alert_warning(
-        "{n_nobase} stoppage{?s} had no baseline cell (location out of range) and keep{?s/} the row's own value.")
+      # A percentage, not a bare count: a supplied baseline whose keys mostly
+      # miss (last season's band edges, a different vintage) looks identical to
+      # a handful of out-of-range pockets when only the count is printed.
+      pct <- 100 * n_nobase / max(n_stop_rows, 1L)
+      msg <- "{n_nobase} stoppage{?s} ({round(pct, 1)}% of those priced) had no baseline cell and keep{?s/} the row's own value."
+      if (pct > 50) {
+        cli::cli_abort(c(msg,
+          "x" = "More than half the stoppages matched no cell: the supplied baseline is not for this data.",
+          "i" = "Check its band edges and stoppage descriptions against {.fn .np_stoppage_baseline}'s output."))
+      }
+      cli::cli_alert_warning(msg)
     }
     # the previous ledger row in the same match receives +adj; the first row
     # of a match has none, so that stoppage keeps its full swing
-    d[, prev_same := data.table::shift(match_id, 1L) == match_id]
+    # ... and never across a quarter boundary: the row before a Q2 centre
+    # bounce is the last kick of Q1, whose value the siren already settled.
+    d[, prev_same := data.table::shift(match_id, 1L) == match_id &
+          (is.na(period) | data.table::shift(period, 1L) == period)]
     d[is.na(prev_same), prev_same := FALSE]
     d[, adj_here := data.table::fifelse(is_stoppage & prev_same, adj, 0)]
     d[, adj_from_next := data.table::shift(adj_here, -1L, fill = 0), by = match_id]
@@ -381,7 +667,8 @@
     # kick's "after" is now the baseline, not the leaked winner's state)
     d[, reprice_hm := adj_from_next]
     d[, `:=`(prev_same = NULL, adj_here = NULL, adj_from_next = NULL,
-             x_home = NULL, band = NULL, baseline = NULL, adj = NULL)]
+             x_home = NULL, band = NULL, aby = NULL, yband = NULL,
+             baseline = NULL, adj = NULL)]
     st <- d[is_stoppage == TRUE]
     cli::cli_alert_info(
       "Stoppages allocated: {format(nrow(st), big.mark = ',')} rows carrying {round(sum(abs(st$hm)), 1)} points gross ({round(sum(abs(st$hm)) / data.table::uniqueN(st$match_id), 1)} a match) after repricing to the baseline")
@@ -402,7 +689,8 @@
   if (!"reprice_hm" %in% names(d)) d[, reprice_hm := 0]
   out <- d[, .(match_id, display_order, description, team, home_away, player_id,
                hm, is_stoppage, reprice_hm, next_team, next_player, next_desc,
-               resolve_desc, resolve_team, resolve_player, resolve_lag)]
+               resolve_desc, resolve_team, resolve_player, resolve_lag,
+               period, last_in_period)]
   # Every named actor in the sequence, including chains-only ones (a spoiler
   # who never touched the ball in PBP), so a contest winner always has a roster
   # row to be paid on.
@@ -795,7 +1083,39 @@
       cli::cli_alert_info(
         "Contest credit: {format(sum(cs), big.mark = ',')} kicks split at the contest; {format(sum(dw), big.mark = ',')} won by the defence ({round(sum(abs(l$cede_c_hm)), 1)} points ceded at the contest), {format(sum(aw), big.mark = ',')} by the attack ({round(sum(abs(l$win_hm)), 1)} points to same-team winners)")
     }
+    # Pete's rule (2026-09-09): a reception row has two players and they split
+    # it. Where NO contest was fought, the surprise goes by a flat share rather
+    # than by the modelled chance of losing the ball; contested kicks keep the
+    # D6/D8 split above.
+    u <- NP_UNCONTESTED_RECEIVER_SHARE
+    if (!is.numeric(u) || length(u) != 1 || (is.finite(u) && (u < 0 || u > 1))) {
+      cli::cli_abort("{.code NP_UNCONTESTED_RECEIVER_SHARE} must be NA or one number in [0, 1], not {.val {u}}.")
+    }
+    if (is.finite(u)) {
+      unc <- l$scored & l$kind == "retained" & !l$contested
+      if (any(unc)) {
+        l[unc, `:=`(own_hm  = (1 - omega) * (dec_hm + (1 - u) * sur_hm),
+                    recv_hm = (1 - omega) * u * sur_hm)]
+        cli::cli_alert_info(
+          "Uncontested receptions: {format(sum(unc), big.mark = ',')} retained disposals split their surprise {round(100 * (1 - u))}/{round(100 * u)} disposer/receiver (NP_UNCONTESTED_RECEIVER_SHARE)")
+      }
+    }
     l[, c("dec", "sur", "sgn", "csur", "gsur") := NULL]
+  }
+
+  # The siren (NP_SIREN_TO_POOL): a quarter's last act evaporates the whole
+  # remaining state and nobody lost it. The actor's own share goes to the
+  # possessing side's pool; what the row already pays to a receiver, a contest
+  # winner, the opposition or a stoppage is left exactly as it was.
+  if (!"last_in_period" %in% names(l)) l[, last_in_period := FALSE]
+  if (isTRUE(NP_SIREN_TO_POOL)) {
+    sr <- l$last_in_period & l$kind %in% c("terminal", "act")
+    if (any(sr)) {
+      l[sr, `:=`(team_hm = hm - recv_hm - win_hm - cede_hm - cede_c_hm - stop_hm,
+                 own_hm = 0)]
+      cli::cli_alert_info(
+        "Siren: {sum(sr)} quarter-ending act{?s} worth {round(sum(abs(l$hm[sr])), 1)} points go to the possessing side's pool, not the last actor (NP_SIREN_TO_POOL)")
+    }
   }
 
   # the four parts must rebuild every row, whichever rule produced them
@@ -1755,9 +2075,44 @@ build_net_points <- function(pbp_data = NULL,
     }
     if (!is.null(sc$rows)) pay <- c(pay, list(sc$rows))
     pay <- data.table::rbindlist(pay, use.names = TRUE)
+    pay[, doubled := FALSE]
     paid <- sum(pay$hm); owed <- sum(l$hm)
     if (abs(paid - owed) > 1e-6) {
       cli::cli_abort("Payment table does not rebuild the ledger: paid {round(paid, 4)}, ledger {round(owed, 4)}.")
+    }
+    # The blame side (NP_BLAME_POOL, Pete 2026-09-09). These rows are marked
+    # `doubled`: they are NOT part of the ledger's value -- the check above has
+    # already passed without them -- they exist for the team-margin doubling,
+    # where every row is allocated once to each side. What a row ceded to the
+    # opposition is booked again as a pool for the side that conceded it, so
+    # the disposer no longer wears 100% of a lost possession on the rescale.
+    # NP_PRESSURE_BACK_SHARE of that pool goes to the teammate whose disposal
+    # delivered the ball to a player who then lost it on a non-disposal act.
+    if (isTRUE(NP_BLAME_POOL)) {
+      data.table::setorder(l, match_id, display_order)
+      bl <- l[, .(match_id, display_order, team, player_id, is_disp, kind,
+                  ceded = cede_hm + cede_c_hm,
+                  p_team = data.table::shift(team, 1L),
+                  p_pid = data.table::shift(player_id, 1L),
+                  p_next = data.table::shift(next_player, 1L),
+                  p_disp = data.table::shift(is_disp, 1L)),
+              by = .(.m = match_id)][, .m := NULL]
+      bl <- bl[ceded != 0]
+      bl[, back := kind == "turnover" & !is_disp & !is.na(p_pid) & !is.na(p_next) &
+             p_team == team & p_disp == TRUE & p_next == player_id]
+      bl[is.na(back), back := FALSE]
+      pb <- NP_PRESSURE_BACK_SHARE
+      if (!is.numeric(pb) || length(pb) != 1 || is.na(pb) || pb < 0 || pb > 1) {
+        cli::cli_abort("{.code NP_PRESSURE_BACK_SHARE} must be one number in [0, 1].")
+      }
+      pool_rows <- bl[, .(match_id, display_order, role = "blame_pool", team,
+                          player_id = NA_character_,
+                          hm = ceded * data.table::fifelse(back, 1 - pb, 1), doubled = TRUE)]
+      back_rows <- bl[back == TRUE, .(match_id, display_order, role = "pressure_back", team,
+                                      player_id = p_pid, hm = ceded * pb, doubled = TRUE)]
+      pay <- data.table::rbindlist(list(pay, pool_rows, back_rows), use.names = TRUE)
+      cli::cli_alert_info(
+        "Blame side: {format(nrow(bl), big.mark = ',')} lost possessions book {round(sum(abs(bl$ceded)), 1)} points as the conceding side's pool; {format(sum(bl$back), big.mark = ',')} tackled-after-a-pass rows send {round(100 * pb)}% of theirs back to the passer (NP_BLAME_POOL, NP_PRESSURE_BACK_SHARE)")
     }
     data.table::setorder(pay, match_id, display_order, role)
     data.table::setattr(out, "np_payments", pay)
@@ -1981,7 +2336,12 @@ np_difficulty_terms_for_season <- function(season, pbp_data = NULL, chains = NUL
   ha <- unique(p[, .(match_id = as.character(match_id), team, home_away)])
   pay <- merge(pay, ha, by = c("match_id", "team"), all.x = TRUE)
   pay[, own := hm * data.table::fifelse(home_away == "Home", 1, -1)]
-  pay[, v := sum(hm), by = .(match_id, display_order)]
+  # The row's VALUE is the ledger's payments only. `doubled` rows (the blame
+  # side's pool and pressure-back, NP_BLAME_POOL) are the second allocation
+  # this convention makes, so they take part in the side sums below but must
+  # not count toward what the row is worth.
+  if (!"doubled" %in% names(pay)) pay[, doubled := FALSE]
+  pay[, v := sum(hm[doubled == FALSE]), by = .(match_id, display_order)]
   pay <- pay[abs(v) > 1e-12]
   pay[, gain_home := v > 0]
   pay[, side := data.table::fifelse((home_away == "Home") == gain_home, "gain", "concede")]

@@ -1694,8 +1694,16 @@ POSITION_AVG_TOG <- c(
 #' earlier "inert" reading summed a signed value across the whole season,
 #' which cancels turnovers won at home against turnovers won away -- the same
 #' mistake a sweep script made hours earlier the same night. Wired into
-#' `.rating_defining_constants()`. Why a ~4%-of-rows fallback produces an
-#' effect this large is not yet understood.
+#' `.rating_defining_constants()`.
+#'
+#' The "why is a ~4% fallback this big" puzzle was answered on review
+#' (2026-09-09): the reach is not 4%. Difficulty scoring requires `is_disp`
+#' (`.np_credit_terms()`, `scored := is_disp & ...`), but with
+#' `NP_TURNOVER_ON_ALL_ACTS` on, a NON-disposal act also becomes a turnover --
+#' and such a row can never be scored, so it takes this flat rule permanently,
+#' in every credit mode. That is another 15.9 rows a match carrying 27.1 points
+#' of swing (see `NP_TURNOVER_ON_ALL_ACTS` below), on top of the ~4% of
+#' disposal turnovers the model cannot reach.
 #' @keywords internal
 NP_DEFENSIVE_SHARE <- 0.30
 
@@ -1836,6 +1844,58 @@ NP_TEAM_MARGIN_NAMED_SHARE <- NA_real_
 #' @keywords internal
 NP_TEAM_MARGIN_POOL_BY <- "dacts"
 
+#' The side that conceded a turnover gets a team pool, like the side that won it
+#'
+#' Under the team-margin convention every row is allocated twice. The side that
+#' won a turnover always had two parts -- the named ball-winner and a pool --
+#' but the side that lost it had only the disposer, so the rescale to the row
+#' put 100 per cent of every lost possession on him: Sheldrick -1.43 of -1.43,
+#' Lobb -4.10 of -4.10, Sinclair -4.93 of -4.93 (2026 R1, R19, R3). Pete's
+#' rule, 2026-09-09: the conceding side splits the same way -- the disposer
+#' keeps the decision and his `NP_BLAME_SHARE` of the surprise, and what the
+#' row ceded to the opposition is booked as a negative pool for his own team,
+#' spread by `NP_TEAM_MARGIN_POOL_BY`. The blame pool lives only in the
+#' doubling layer (`.np_team_margin()`), so the raw ledger and its
+#' conservation checks are untouched.
+#' @keywords internal
+NP_BLAME_POOL <- TRUE
+
+#' Share of a tackled player's blame pool that reaches back to the passer
+#'
+#' When a player loses the ball on a non-disposal act -- tackled after a
+#' handball receive, a gather, a loose-ball get -- and the row before was a
+#' teammate's disposal to him, this share of the conceding side's pool goes
+#' to that disposer rather than the whole roster: the pass under pressure
+#' created the loss. Pete's Howard/Sinclair example, 2026-09-09. Only under
+#' `NP_BLAME_POOL`.
+#' @keywords internal
+NP_PRESSURE_BACK_SHARE <- 0.5
+
+#' A quarter's last act is nobody's loss: its evaporated state goes to the pool
+#'
+#' `delta_epv` is built within (match, period), so the last row of a quarter
+#' has no next row and its delta is `-exp_pts`: the whole remaining position
+#' evaporates at the siren and was booked to whoever last touched the ball.
+#' 2026: 852 rows, 1,082 points, 5.08 a match, 809 of it on named players (474
+#' kicks averaging 1.73). With this on, the row's own share goes to the
+#' possessing side's team pool instead; the receiver, contest and ceded parts
+#' are unchanged. Also stops the D15 stoppage repricing crossing a quarter
+#' boundary. Needs `period` on the play-by-play; the ledger says so when it
+#' is missing.
+#' @keywords internal
+NP_SIREN_TO_POOL <- TRUE
+
+#' Receiver's share of the surprise on an UNCONTESTED retained disposal
+#'
+#' D6 splits a retained disposal's surprise by the modelled chance of losing
+#' it: the receiver gets `1 - p`. On an uncontested mark deep in space p is
+#' small, so the receiver took 76 per cent (Lewis +0.47, Weddle +2.22, 2026
+#' R1 row 1222). Pete's rule, 2026-09-09: a reception row has two players and
+#' they split it -- a flat share, applied only where no contest was fought
+#' (`contested == FALSE`); contested kicks keep D6/D8. `NA` restores D6.
+#' @keywords internal
+NP_UNCONTESTED_RECEIVER_SHARE <- 0.5
+
 #' Difficulty credit: the disposer's share of a turnover's SURPRISE
 #'
 #' Under `credit = "difficulty"` a turnover splits into the decision term
@@ -1955,13 +2015,68 @@ NP_STOPPAGE_LOSER_SHARE <- 0.50
 #' match (winning side) or `ruck_contests - hitouts` (losing side). With no ruck
 #' credited on a side, that share joins its pool. All (Y) defaults for the
 #' year-over-year test.
+#'
+#' \strong{`ground` corrected 2026-09-10.} A real row (930, Sydney v Carlton R1:
+#' Rowbottom's Hard Ball Get off a scrambled centre bounce) showed the ruck's
+#' nominal 20% diluted across every contesting ruck by weight -- Grundy 0.074,
+#' Amartey 0.005 against Rowbottom's 0.198 -- and read, to Pete, as far too
+#' small: "there should be like any other reception row for now where disposer
+#' (ruck tapping it out) and receiver get roughly equal share." Ground moves to
+#' 0.35/0.35 (was 0.20/0.50), pool unchanged at 0.30 -- an explicit baseline for
+#' now, to be tuned once it is checked against real predictive value, not
+#' repeatability alone (D19). `hitout` is untouched: that split already favours
+#' the tap deliberately (0.50 over 0.30), Pete's own earlier call, and this
+#' correction was about the ground case specifically.
 #' @keywords internal
 NP_STOPPAGE_SPLIT <- list(
   hitout   = c(ruck = 0.50, player = 0.30, pool = 0.20),
   ruck_own = c(ruck = 0.00, player = 0.80, pool = 0.20),
-  ground   = c(ruck = 0.20, player = 0.50, pool = 0.30)
+  ground   = c(ruck = 0.35, player = 0.35, pool = 0.30)
 )
 
 #' Width, in metres, of the location bands the stoppage baseline is averaged in
 #' @keywords internal
 NP_STOPPAGE_BAND_M <- 20
+
+#' Expected range for the fitted stoppage win rate, and the range that aborts
+#'
+#' A stoppage is a contest between two sides, so P(home wins) must sit near a
+#' coin flip wherever on the ground it happens. Pete's sense check, 2026-09-09:
+#' roughly 55% defending your own end, 45% attacking, 50% in the middle. The
+#' measured gradient runs the same way but is far flatter than that -- the fit
+#' spans 48.4% to 51.8% across the whole ground, and the trend does not clear
+#' noise (1 df test on 18,309 stoppages, p = 0.17). The warn band is set at his
+#' expectation so an unusual season gets looked at; the abort band is set well
+#' outside it, because a fit that far from even is a broken win model or a
+#' broken coordinate frame rather than a real football effect.
+#' @keywords internal
+NP_STOPPAGE_WIN_WARN <- c(0.45, 0.55)
+
+#' @rdname NP_STOPPAGE_WIN_WARN
+#' @keywords internal
+NP_STOPPAGE_WIN_ABORT <- c(0.35, 0.65)
+
+#' Lower edges, in metres, of the corridor-to-boundary bins a stoppage is cut into
+#'
+#' Distance from the centre corridor, `abs(y)`. A throw-in tight against the
+#' boundary and a ball-up in the corridor are not the same proposition even at
+#' the same distance from goal: measured over 2026, holding stoppage type and
+#' 20m band fixed, the neutral baseline spreads 0.35 points across these bins on
+#' average and 0.54 in the defensive 50, against a mean stoppage swing of 0.66.
+#' It moves the VALUE only -- who wins stays 48-52% in every bin.
+#' @keywords internal
+NP_STOPPAGE_Y_BREAKS <- c(0, 15, 30)
+
+#' Strength of the shrink from a stoppage band's own mean toward its type's mean
+#'
+#' Read as a number of prior observations: a band with `n` real stoppages keeps
+#' `n / (n + NP_STOPPAGE_SHRINK_N)` of its own mean and takes the rest from the
+#' overall mean for that stoppage type. It exists because the true stoppage
+#' location (from chains, since 2026-09-09) reaches ground that the previous,
+#' outcome-derived location never did -- the deep pockets, where a season leaves
+#' one or two ball-ups in a band. Such a cell would otherwise set its baseline
+#' from a single observation, which is exactly that stoppage's own outcome, and
+#' pay its winner nothing. At 20 the pull is negligible wherever there is real
+#' support (1.5% at n = 1,277) and near-total at n = 1.
+#' @keywords internal
+NP_STOPPAGE_SHRINK_N <- 20

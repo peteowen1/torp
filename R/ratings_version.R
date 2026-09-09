@@ -90,6 +90,14 @@
     NP_TEAM_MARGIN_CONVENTION = NP_TEAM_MARGIN_CONVENTION,
     NP_TEAM_MARGIN_NAMED_SHARE = NP_TEAM_MARGIN_NAMED_SHARE,
     NP_TEAM_MARGIN_POOL_BY = NP_TEAM_MARGIN_POOL_BY,
+    # Pete's four rules from the 2026-09-09 scenarios review. Each moves
+    # published numbers: the blame pool re-splits every lost possession, the
+    # siren rule moves ~5 points a match off named players, the uncontested
+    # share re-splits every uncontested reception.
+    NP_BLAME_POOL = NP_BLAME_POOL,
+    NP_PRESSURE_BACK_SHARE = NP_PRESSURE_BACK_SHARE,
+    NP_SIREN_TO_POOL = NP_SIREN_TO_POOL,
+    NP_UNCONTESTED_RECEIVER_SHARE = NP_UNCONTESTED_RECEIVER_SHARE,
     # The disposer's share of a lost kick's surprise. Swept for the first time
     # 2026-09-08 (its own docstring called the shipped 0.30 "the default the
     # repeatability test starts from, not a result"): moving it from 0.30 to
@@ -103,11 +111,12 @@
     # properly (per-player-game, with and without reconcile=TRUE, identical
     # either way so it is not a reconciliation artifact): moving 0->1 touches
     # every one of 512 players by 8+ games, max single-game move 10.0 points.
-    # Genuinely live; wired rather than registered. Why a fallback documented
-    # as reaching only the ~4% of disposals difficulty scoring can't score
-    # produces an effect this large is not yet understood -- flagged, not
-    # explained, and worth a real investigation before this constant is next
-    # discussed as small.
+    # Genuinely live; wired rather than registered. The "why is a ~4% fallback
+    # this big" puzzle was answered on review (2026-09-09): the reach is not 4%.
+    # Difficulty scoring requires is_disp, but with NP_TURNOVER_ON_ALL_ACTS on a
+    # NON-disposal act also becomes a turnover and can never be scored, so it
+    # takes this flat rule permanently in every credit mode -- 15.9 rows a match
+    # carrying 27.1 points, on top of the ~4% of disposal turnovers.
     NP_DEFENSIVE_SHARE = NP_DEFENSIVE_SHARE,
     # The per-act ball-winner credit table (and its catch-all default): the
     # LIVE mechanism under credit = "difficulty", confirmed by tracing

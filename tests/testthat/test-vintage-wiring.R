@@ -133,7 +133,21 @@ KNOWN_NON_DEFINING <- c(
   "NP_CONTEST_WINNER_SHARE_DEFAULT", "NP_CONTEXT_WEIGHTS",
   "NP_STOPPAGE_DESCS", "NP_STOPPAGE_HITOUT_DESCS",
   "NP_STOPPAGE_RUCK_OWN_DESCS", "NP_STOPPAGE_LOSER_SHARE",
-  "NP_STOPPAGE_SPLIT", "NP_STOPPAGE_BAND_M"
+  "NP_STOPPAGE_SPLIT", "NP_STOPPAGE_BAND_M",
+  # Same family, same gap, added 2026-09-09 with the stoppage-location rebuild.
+  # These two are not "might move ratings" -- they were MEASURED moving them:
+  # adding the corridor split repriced 21.5% of stoppages by more than 0.10
+  # points. They are registered rather than wired only because wiring them
+  # while NP_STOPPAGE_BAND_M above stays unwired would put half of one cell key
+  # in the manifest and leave the other half invisible, which is worse than a
+  # gap that is honestly recorded. The whole NP_STOPPAGE_* family should be
+  # wired together in the audit session the block above already calls for.
+  "NP_STOPPAGE_Y_BREAKS", "NP_STOPPAGE_SHRINK_N",
+  # A different category, and the only genuinely safe entries in this list:
+  # these two are the bounds of a sanity check on the fitted stoppage win rate.
+  # They can abort a run or print a warning; they are never read into any
+  # arithmetic, so no value of either can change a published number. (2026-09-09)
+  "NP_STOPPAGE_WIN_WARN", "NP_STOPPAGE_WIN_ABORT"
 )
 
 # ---------------------------------------------------------------------------

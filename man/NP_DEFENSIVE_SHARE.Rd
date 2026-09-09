@@ -25,5 +25,25 @@ and share one quantity, rather than each being paid it in full.
 
 0.30 is a judgement, not a measurement -- see the header above for why it
 cannot be fitted from the identity.
+
+\strong{Under \code{credit = "difficulty"}, this flat rule is the FALLBACK for
+the disposals the model can't score -- documented at ~4\% of rows -- and it
+was called "inert" here for a few hours on 2026-09-08 on that basis. It is
+not.} Checked per-player-game (2026-09-08): moving 0 to 1 touches all 512
+players with 8+ games, max single-game move 10.0 points, identical with
+and without \code{reconcile = TRUE} so it is not a reconciliation artifact. The
+earlier "inert" reading summed a signed value across the whole season,
+which cancels turnovers won at home against turnovers won away -- the same
+mistake a sweep script made hours earlier the same night. Wired into
+\code{.rating_defining_constants()}.
+
+The "why is a ~4\% fallback this big" puzzle was answered on review
+(2026-09-09): the reach is not 4\%. Difficulty scoring requires \code{is_disp}
+(\code{.np_credit_terms()}, \code{scored := is_disp & ...}), but with
+\code{NP_TURNOVER_ON_ALL_ACTS} on, a NON-disposal act also becomes a turnover --
+and such a row can never be scored, so it takes this flat rule permanently,
+in every credit mode. That is another 15.9 rows a match carrying 27.1 points
+of swing (see \code{NP_TURNOVER_ON_ALL_ACTS} below), on top of the ~4\% of
+disposal turnovers the model cannot reach.
 }
 \keyword{internal}

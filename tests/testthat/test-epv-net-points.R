@@ -516,6 +516,9 @@ test_that("flat credit leaves np_team at zero and the totals where they were", {
 })
 
 test_that("difficulty credit pays decision, split surprise, blame and the pools", {
+  # this test is about D6's p-weighted split; the flat uncontested share (R4)
+  # has its own test below
+  testthat::local_mocked_bindings(NP_UNCONTESTED_RECEIVER_SHARE = NA_real_, .package = "torp")
   f <- np_fixture()
   np <- suppressMessages(build_net_points(
     f$pbp, f$stats, f$results, credit = "difficulty",
@@ -567,6 +570,7 @@ test_that("difficulty credit without chains or terms is refused", {
 
 # ---- contested kicks: three terms, three recipients (D8) ----------------------
 test_that("a contest the defence won pays the winner, the pool and the ground ball", {
+  testthat::local_mocked_bindings(NP_UNCONTESTED_RECEIVER_SHARE = NA_real_, .package = "torp")
   f <- np_fixture()
   # M1 row 3 (Kick, Home p1, 3.0, turned over to Away p3) becomes a spoil by p3:
   # decision -0.5, contest surprise -1.5, ground surprise 5.0 (sums to 3.0).
@@ -732,8 +736,11 @@ test_that("return_payments gives one row per act and recipient that sums to the 
   np <- suppressMessages(build_net_points(
     f$pbp, f$stats, f$results, credit = "difficulty", difficulty_terms = terms,
     reconcile = FALSE, spread = "tog", return_payments = TRUE))
-  pay <- attr(np, "np_payments")
-  expect_true(data.table::is.data.table(pay))
+  pay_all <- attr(np, "np_payments")
+  expect_true(data.table::is.data.table(pay_all))
+  # the ledger's own payments; the `doubled` rows are the blame side's second
+  # allocation (NP_BLAME_POOL) and are tested separately below
+  pay <- pay_all[doubled == FALSE]
   expect_setequal(unique(pay$role), c("actor", "receiver", "contest_winner", "ball_winner",
                                       "attack_pool", "defence_pool"))
   # the table is the ledger, re-expressed
@@ -825,9 +832,144 @@ test_that("stoppage rows are excluded by default and allocated on request", {
     f$pbp, f$stats, f$results, credit = "difficulty", difficulty_terms = np_terms_fixture(),
     reconcile = FALSE, spread = "tog", offence_pool_share = 0, stoppages = "allocate",
     stoppage_baseline = bl, return_payments = TRUE))
-  pay <- attr(al2, "np_payments")
+  pay <- attr(al2, "np_payments")[doubled == FALSE]
   expect_equal(sum(pay$hm), sum(al2$net_points_hm), tolerance = 1e-9)
   expect_setequal(pay[display_order == 25L]$role, c("stoppage_ruck", "stoppage_player", "stoppage_pool"))
+})
+
+# ---- Pete's four rules, 2026-09-09 ---------------------------------------------
+test_that("R1: the conceding side gets a blame pool equal to what the row ceded, marked doubled", {
+  f <- np_fixture()
+  np <- suppressMessages(build_net_points(
+    f$pbp, f$stats, f$results, credit = "difficulty", difficulty_terms = np_terms_fixture(),
+    reconcile = FALSE, spread = "tog", blame_share = 0.3, offence_pool_share = 0.1,
+    return_payments = TRUE))
+  pay <- attr(np, "np_payments")
+  bl <- pay[role == "blame_pool"]
+  expect_true(all(bl$doubled))
+  expect_true(all(is.na(bl$player_id)))
+  # M1 row 3: p1's kick turned over, cedes 0.7 * 3.5 = 2.45 to Away; the blame
+  # pool books the same 2.45 against Home (home frame, so the same sign)
+  r3 <- bl[match_id == "M1" & display_order == 3]
+  expect_equal(r3$team, "Home FC")
+  expect_equal(r3$hm, 0.7 * 3.5, tolerance = 1e-9)
+  # every ceded amount is mirrored once, and the doubled rows never touch the ledger sum
+  led <- suppressMessages(torp:::.np_build_ledger(f$pbp))
+  expect_equal(sum(pay[doubled == FALSE]$hm), sum(led$hm), tolerance = 1e-9)
+  ceded <- pay[doubled == FALSE & role %in% c("ball_winner", "defence_pool", "contest_winner") &
+                 !(role == "contest_winner" & team == "Home FC" & display_order == 1),
+               .(v = sum(hm)), by = .(match_id, display_order)]
+  mirrored <- pay[doubled == TRUE, .(m = sum(hm)), by = .(match_id, display_order)]
+  chk <- merge(ceded, mirrored, by = c("match_id", "display_order"))
+  expect_equal(chk$m, chk$v, tolerance = 1e-9)
+  # under the team-margin convention the blame pool takes the side's shortfall:
+  # the conceding actor is no longer rescaled to the whole row
+  tm <- suppressMessages(torp:::.np_team_margin(np, f$pbp, f$stats, f$results))
+  parts <- attr(tm, "np_team_margin_parts")
+  expect_equal(sum(tm[match_id == "M1" & team == "Home FC"]$net_points), 20, tolerance = 1e-9)
+  expect_equal(sum(tm[match_id == "M1" & team == "Away FC"]$net_points), -20, tolerance = 1e-9)
+  # off: no doubled rows at all
+  testthat::local_mocked_bindings(NP_BLAME_POOL = FALSE, .package = "torp")
+  np0 <- suppressMessages(build_net_points(
+    f$pbp, f$stats, f$results, credit = "difficulty", difficulty_terms = np_terms_fixture(),
+    reconcile = FALSE, spread = "tog", return_payments = TRUE))
+  expect_equal(sum(attr(np0, "np_payments")$doubled), 0)
+})
+
+test_that("R2: a player tackled after a teammate's pass sends half his blame pool back to the passer", {
+  # Home p1 handballs to p2, p2 loses it on the receive to Away p3
+  pbp <- data.table::data.table(
+    match_id = "M9", display_order = 1:4,
+    description = c("Handball", "Handball Received", "Kick", "Kick"),
+    team = c("Home FC", "Home FC", "Away FC", "Away FC"),
+    home_away = c("Home", "Home", "Away", "Away"),
+    player_id = c("p1", "p2", "p3", "p3"),
+    delta_epv = c(0.5, -2.0, 1.0, 0.5),
+    home_points = 0L, away_points = 0L, home = c(1L, 1L, 0L, 0L), x = 0, exp_pts = 0)
+  f <- np_fixture()
+  stats <- f$stats[match_id == "M1"][, match_id := "M9"]
+  res <- data.table::data.table(match_id = "M9", home_team_name = "Home FC", away_team_name = "Away FC",
+                                home_score = 10, away_score = 12)
+  terms <- data.table::data.table(match_id = "M9", display_order = 1L, p_hat = 0.1,
+                                  decision = 0.1, surprise = 0.4)
+  np <- suppressMessages(build_net_points(
+    pbp, stats, res, credit = "difficulty", difficulty_terms = terms,
+    reconcile = FALSE, spread = "tog", defensive_share = 0.3, return_payments = TRUE))
+  pay <- attr(np, "np_payments")
+  # row 2 is a non-disposal turnover under the flat rule: cedes 0.3 * -2.0 = -0.6
+  r2 <- pay[match_id == "M9" & display_order == 2]
+  pb <- r2[role == "pressure_back"]
+  expect_equal(nrow(pb), 1)
+  expect_equal(pb$player_id, "p1")
+  expect_equal(pb$team, "Home FC")
+  expect_equal(pb$hm, 0.5 * -0.6, tolerance = 1e-9)
+  expect_equal(r2[role == "blame_pool"]$hm, 0.5 * -0.6, tolerance = 1e-9)
+  # the passer's pressure-back is NAMED under the team-margin convention, so it
+  # lands on him, not on the pool
+  tm <- suppressMessages(torp:::.np_team_margin(np, pbp, stats, res))
+  parts <- data.table::as.data.table(attr(tm, "np_team_margin_parts"))
+  expect_lt(parts[player_id == "p1"]$named, 0.1 + 0.9 * 0.4 * 0.5 + 1e-9)
+  # a disposal turnover gets no pressure-back: row 3 is a kick
+  expect_equal(nrow(pay[display_order == 3 & role == "pressure_back"]), 0)
+})
+
+test_that("R3: a quarter's last act goes to the possessing side's pool, and the rule says so when it cannot fire", {
+  f <- np_fixture()
+  pbp <- data.table::copy(f$pbp)
+  # M1: rows 1-5 are Q1, the centre bounce at row 6 opens Q2. Row 5 (Kick, Away
+  # p3, -1.5) is Q1's last act: with period known it is terminal at the siren.
+  pbp[, period := data.table::fifelse(match_id == "M1" & display_order >= 6, 2L, 1L)]
+  np <- suppressMessages(build_net_points(
+    pbp, f$stats, f$results, credit = "difficulty", difficulty_terms = np_terms_fixture(),
+    reconcile = FALSE, spread = "tog", offence_pool_share = 0.1, return_payments = TRUE))
+  pay <- attr(np, "np_payments")
+  r5 <- pay[match_id == "M1" & display_order == 5]
+  expect_equal(nrow(r5[role == "actor"]), 0)
+  expect_equal(r5[role == "attack_pool"]$team, "Away FC")
+  # the row's full value (home frame: -(-1.5) = +1.5) goes to the pool
+  expect_equal(r5[role == "attack_pool"]$hm, 1.5, tolerance = 1e-9)
+  # the last row of the MATCH (M1 row 8, M2 row 4) is a siren too
+  expect_equal(nrow(pay[match_id == "M2" & display_order == 4 & role == "actor"]), 0)
+  # totals are untouched: it is a transfer within the side
+  expect_equal(sum(np$net_points_hm), unname(sum(NP_FIXTURE_LEDGER_HM)), tolerance = 1e-10)
+  # without period the rule cannot fire and the ledger says so
+  expect_message(torp:::.np_build_ledger(f$pbp), "period")
+  led <- suppressMessages(torp:::.np_build_ledger(f$pbp))
+  expect_false(any(led$last_in_period))
+  # off: the actor keeps it
+  testthat::local_mocked_bindings(NP_SIREN_TO_POOL = FALSE, .package = "torp")
+  np0 <- suppressMessages(build_net_points(
+    pbp, f$stats, f$results, credit = "difficulty", difficulty_terms = np_terms_fixture(),
+    reconcile = FALSE, spread = "tog", offence_pool_share = 0.1, return_payments = TRUE))
+  expect_equal(attr(np0, "np_payments")[match_id == "M1" & display_order == 5 & role == "actor"]$hm,
+               1.5, tolerance = 1e-9)
+})
+
+test_that("R4: an uncontested reception splits its surprise by the flat share, a contested one by p", {
+  f <- np_fixture()
+  # row 1: Kick by Home p1 retained by p2, decision 0.3, surprise 0.7, p 0.4,
+  # offence pool 0.1. Flat share 0.5: p1 keeps 0.9 * (0.3 + 0.35) = 0.585,
+  # p2 receives 0.9 * 0.35 = 0.315 (D6 would give 0.522 / 0.378).
+  np <- suppressMessages(build_net_points(
+    f$pbp, f$stats, f$results, credit = "difficulty", difficulty_terms = np_terms_fixture(),
+    reconcile = FALSE, spread = "tog", blame_share = 0.3, offence_pool_share = 0.1,
+    return_payments = TRUE))
+  r1 <- attr(np, "np_payments")[match_id == "M1" & display_order == 1]
+  expect_equal(r1[role == "actor"]$hm, 0.9 * (0.3 + 0.5 * 0.7), tolerance = 1e-9)
+  expect_equal(r1[role == "receiver"]$hm, 0.9 * 0.5 * 0.7, tolerance = 1e-9)
+  # a contested row is untouched by the flat share
+  terms <- np_terms_fixture()
+  terms[display_order == 1, `:=`(contested = TRUE, cont_desc = "Contested Mark",
+                                 cont_surprise = 0.2, ground_surprise = 0.5,
+                                 def_win = FALSE, winner_pid = "p2")]
+  npc <- suppressMessages(build_net_points(
+    f$pbp, f$stats, f$results, credit = "difficulty", difficulty_terms = terms,
+    reconcile = FALSE, spread = "tog", blame_share = 0.3, offence_pool_share = 0.1,
+    return_payments = TRUE))
+  r1c <- attr(npc, "np_payments")[match_id == "M1" & display_order == 1]
+  expect_equal(r1c[role == "actor"]$hm, 0.9 * 0.3, tolerance = 1e-9)
+  expect_equal(r1c[role == "receiver"]$hm, 0.9 * 0.5, tolerance = 1e-9)
+  expect_equal(sum(np$net_points_hm), unname(sum(NP_FIXTURE_LEDGER_HM)), tolerance = 1e-10)
 })
 
 test_that("allocating stoppages under the flat rule is refused", {
@@ -1093,4 +1235,101 @@ test_that("a paid player absent from player_stats entirely does not take a team 
   expect_false(anyNA(cv$net_points))
   expect_equal(cv[match_id == "M1" & home_away == "Home", sum(net_points)], 20,
                tolerance = 1e-9)
+})
+
+# ---- the stoppage location comes from chains, in the home frame -------------
+# Added 2026-09-09 after review: every symbol in the chains-location path
+# shipped untested, because np_chains_fixture() carries no x/y/chain_team_id
+# and so takes the `has_loc = FALSE` branch on every run. These fixtures carry
+# the coordinates, which is the only way the sign flip below ever executes.
+#
+# The frame case is the one that matters. Chains x is in the CHAIN-OWNING
+# team's attacking frame, so an away-owned chain has to have its sign flipped
+# to read as home margin. On a home-owned chain the transform is the identity,
+# which is exactly why a sign error there is invisible -- so both sides are
+# asserted, with the same magnitude and opposite signs.
+np_loc_fixture <- function(chain_team = c("H", "A"), x = 40, y = 5) {
+  pbp <- data.table::data.table(
+    match_id = "M1", display_order = 1:3,
+    description = c("Kick", "Ball Up Call", "Handball"),
+    team = c("Home FC", NA, "Away FC"),
+    home_away = c("Home", NA, "Away"),
+    team_id = c("H", NA, "A"),
+    player_id = c("p1", NA, "p3"),
+    delta_epv = c(1, 0.5, -1),
+    home_points = 0L, away_points = 0L,
+    home = c(1L, 1L, 0L),
+    x = c(0, -70, 0),          # deliberately NOT the chains x, so we can tell
+    exp_pts = c(0, 0.25, 0.75)
+  )
+  chains <- data.table::data.table(
+    match_id = "M1", display_order = 1:3,
+    description = c("Kick", "Ball Up Call", "Handball"),
+    team_id = c("H", NA, "A"), player_id = c("p1", NA, "p3"),
+    x = c(0, x, 0), y = c(0, y, 0),
+    chain_team_id = chain_team[1], home_team_id = "H"
+  )
+  list(pbp = pbp, chains = chains)
+}
+
+test_that("chains gives the stoppage its own location, flipped to the home frame", {
+  home_chain <- np_loc_fixture("H", x = 40, y = 5)
+  away_chain <- np_loc_fixture("A", x = 40, y = 5)
+  sh <- suppressMessages(torp:::.np_sequence(home_chain$pbp, home_chain$chains))
+  sa <- suppressMessages(torp:::.np_sequence(away_chain$pbp, away_chain$chains))
+
+  # same raw chains x, opposite home-frame sign purely because of who owns the chain
+  expect_equal(sh[display_order == 2L]$chain_x_home, 40)
+  expect_equal(sa[display_order == 2L]$chain_x_home, -40)
+  # |y| needs no flip: it is the same number from either end
+  expect_equal(sh[display_order == 2L]$chain_aby, 5)
+  expect_equal(sa[display_order == 2L]$chain_aby, 5)
+})
+
+test_that("the chains location beats PBP's, which is the whole point of the change", {
+  f <- np_loc_fixture("H", x = 40, y = 5)
+  s <- suppressMessages(torp:::.np_sequence(f$pbp, f$chains))
+  d <- data.table::as.data.table(s)[display_order == 2L]
+  torp:::.np_stoppage_cells(d)
+  # PBP says x = -70 (band -80); chains says +40 (band +40). Chains must win.
+  expect_equal(d$x_home, 40)
+  expect_equal(d$band, 40)
+})
+
+test_that("without chains the cell key falls back to PBP's x, and says the same thing twice", {
+  f <- np_loc_fixture("H")
+  d <- data.table::as.data.table(
+    suppressMessages(torp:::.np_sequence(f$pbp, NULL)))[display_order == 2L]
+  n_true <- torp:::.np_stoppage_cells(d)
+  expect_equal(n_true, 0L)          # nothing was located from chains
+  expect_equal(d$x_home, -70)       # PBP's own x, in the home frame
+  expect_equal(d$band, -80)
+})
+
+test_that("the corridor bins bucket on |y|, and a missing y gets its own bin", {
+  mk <- function(y) {
+    f <- np_loc_fixture("H", x = 40, y = y)
+    d <- data.table::as.data.table(
+      suppressMessages(torp:::.np_sequence(f$pbp, f$chains)))[display_order == 2L]
+    torp:::.np_stoppage_cells(d)
+    d$yband
+  }
+  expect_equal(mk(5), 0)     # corridor
+  expect_equal(mk(20), 15)   # middle
+  expect_equal(mk(55), 30)   # boundary
+  expect_equal(mk(-55), 30)  # sign of y must not matter
+  expect_equal(mk(NA_real_), -1)  # sentinel, never folded in with the corridor
+})
+
+test_that("the win-rate range check warns at Pete's band and aborts outside it", {
+  cell <- function(p) data.table::data.table(
+    description = "Ball Up Call", band = 0, yband = 0, n = 500L, p_home = p)
+  expect_silent(torp:::.np_check_stoppage_win_rate(cell(0.50)))
+  expect_silent(torp:::.np_check_stoppage_win_rate(cell(c(0.46, 0.54))))
+  expect_message(torp:::.np_check_stoppage_win_rate(cell(c(0.44, 0.56))),
+                 "outside the expected")
+  expect_error(torp:::.np_check_stoppage_win_rate(cell(c(0.30, 0.50))),
+               "two-sided contest")
+  expect_error(torp:::.np_check_stoppage_win_rate(cell(c(0.50, 0.70))),
+               "two-sided contest")
 })
