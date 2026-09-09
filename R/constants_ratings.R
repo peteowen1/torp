@@ -546,12 +546,29 @@ EPR_PRIOR_RATE_SPOIL <- -0.3000 * .epr_prior_points_scale("cont_aerial")
 #' level for a channel that does not exist. Conditioned on BOTH constants so v2
 #' is untouched whatever \code{EPV3_CHANNELS} says.
 #'
+#' \strong{Also zeroed under v4 (2026-09-09, torp#206) — the same all-zero
+#' condition this paragraph already describes, just not covered by the
+#' condition.} \code{epv_hitout} is identically zero under v4 for every row,
+#' checked across all six published seasons after the vintage rebuild. The
+#' guard below only ever tested \code{EPV_ENGINE == "v3"}, so v4 fell through
+#' to the leftover v2/v3-era rate and every player's \code{epr_hitout} shrank
+#' toward a non-zero, purely-legacy prior instead of the zero the channel
+#' actually holds. Measured before the fix: mean \code{|epr_hitout|} = 0.0998
+#' against mean \code{|epr|} = 1.373 (7.3% of the whole rating), correlation
+#' with \code{epr} 0.559. Not flat noise -- the scaled prior differs by
+#' \code{cont_stop}'s own scale, which is a RUCK channel (sd 1.480 for rucks
+#' against 0.112-0.504 everywhere else), so the shrink pulled every low-weight
+#' ruck up and every low-weight non-ruck down: rucks (Gawn, Lobb, Grundy) sat
+#' at +0.10, fringe defenders (near-zero games) sat at -0.53 to -0.60 on a
+#' rating whose typical player is around 1.37 in magnitude.
+#'
 #' (This paragraph sat AFTER `@keywords internal` with no blank line, so roxygen
 #' folded all of it into the keywords tag: the rendered help lost the
 #' explanation entirely and gained ~40 junk entries like `\keyword{Zeroed}`.
 #' Prose must precede the tag block.)
 #' @keywords internal
-EPR_PRIOR_RATE_HITOUT <- if (identical(EPV_ENGINE, "v3") && identical(EPV3_CHANNELS, 3L)) {
+EPR_PRIOR_RATE_HITOUT <- if (identical(EPV_ENGINE, "v4") ||
+                             (identical(EPV_ENGINE, "v3") && identical(EPV3_CHANNELS, 3L))) {
   0
 } else {
   -0.3000 * .epr_prior_points_scale("cont_stop") * EPV_RUCK_SWING_SCALE
@@ -1019,7 +1036,16 @@ PSR_POSITION_STANDARDISE <- TRUE
 #' 0.10 points -- so it takes its own vintage. Preserve the outgoing v6 with
 #' `data-raw/03-ratings/promote_rating_vintage.R` (PROMOTE_FROM=v6, PROMOTE_TO=v7)
 #' and move the manifest to canonical v7 BEFORE this constant reaches main.
-RATING_VINTAGE <- "v7"
+#'
+#' v8 (2026-09-09, torp#206): `EPR_PRIOR_RATE_HITOUT` now also zeros under v4,
+#' where `epv_hitout` is identically zero -- the constant's own guard had never
+#' been extended past the v3 comparison it was written for, so every player's
+#' `epr_hitout` had been shrinking toward a leftover v2/v3-era rate with no
+#' basis in real v4 data (7.3% of the whole rating, systematically boosting
+#' rucks and penalising low-games defenders). Preserve the outgoing v7 with
+#' `data-raw/03-ratings/promote_rating_vintage.R` (PROMOTE_FROM=v7, PROMOTE_TO=v8)
+#' and move the manifest to canonical v8 BEFORE this constant reaches main.
+RATING_VINTAGE <- "v8"
 
 #' Map from the 20-way team-sheet lineup position to a 6-way position group
 #'
