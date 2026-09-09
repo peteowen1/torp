@@ -786,13 +786,25 @@ test_that("stoppage rows are excluded by default and allocated on request", {
   bl <- data.table::data.table(description = "Ball Up Call", band = 0, baseline = 0.1, n = 1L)
   ex <- suppressMessages(build_net_points(f$pbp, f$stats, f$results, reconcile = FALSE))
   expect_true(all(ex$np_stoppage == 0))
+  # np_stoppage_fixture() multiplies every display_order by 10 (row 1 -> 10,
+  # row 3 -> 30), so np_terms_fixture()'s own display_order = c(1, 3) never
+  # matched here -- found by the empty-subject guard (torp#202) added
+  # 2026-09-09, which is exactly what it exists to catch. This test's own
+  # assertions never depended on M1's disposals actually being difficulty-
+  # split (817-829 are all M2 stoppage credit, or a difference between two
+  # consistently-built frames that cancels either way), so the fixture bug was
+  # harmless to what was being checked -- but it means credit = "difficulty"
+  # had silently been running the flat rule here the whole time. Scaling the
+  # terms to match is the real fix, not loosening the guard.
+  terms <- data.table::copy(np_terms_fixture())
+  terms[, display_order := display_order * 10L]
   # the same difficulty build with and without the stoppage, so pool sums can
   # be compared net of the turnover pools that exist either way
   ex_d <- suppressMessages(build_net_points(
-    f$pbp, f$stats, f$results, credit = "difficulty", difficulty_terms = np_terms_fixture(),
+    f$pbp, f$stats, f$results, credit = "difficulty", difficulty_terms = terms,
     reconcile = FALSE, spread = "tog", offence_pool_share = 0))
   al <- suppressMessages(build_net_points(
-    f$pbp, f$stats, f$results, credit = "difficulty", difficulty_terms = np_terms_fixture(),
+    f$pbp, f$stats, f$results, credit = "difficulty", difficulty_terms = terms,
     reconcile = FALSE, spread = "tog", offence_pool_share = 0, stoppages = "allocate",
     stoppage_baseline = bl, stoppage_loser_share = 0.5))
   # the ledger now carries the stoppage row's raw value, and only that: the
@@ -829,7 +841,7 @@ test_that("stoppage rows are excluded by default and allocated on request", {
                -0.225, tolerance = 1e-9)
   # and the payment table rebuilds the ledger, stoppage rows included
   al2 <- suppressMessages(build_net_points(
-    f$pbp, f$stats, f$results, credit = "difficulty", difficulty_terms = np_terms_fixture(),
+    f$pbp, f$stats, f$results, credit = "difficulty", difficulty_terms = terms,
     reconcile = FALSE, spread = "tog", offence_pool_share = 0, stoppages = "allocate",
     stoppage_baseline = bl, return_payments = TRUE))
   pay <- attr(al2, "np_payments")[doubled == FALSE]
@@ -1332,4 +1344,56 @@ test_that("the win-rate range check warns at Pete's band and aborts outside it",
                "two-sided contest")
   expect_error(torp:::.np_check_stoppage_win_rate(cell(c(0.50, 0.70))),
                "two-sided contest")
+})
+
+# ---- an empty terms join must abort, not silently run as the flat rule -----
+# torp#202, fixed 2026-09-09. If difficulty_terms matches NOTHING in the
+# play-by-play (vintage mismatch, wrong season, a match_id format difference),
+# `scored` was FALSE on every row, the row-identity check's `any(l$scored)`
+# guard made it vacuously pass (gap set to 0), and the ledger silently ran
+# entirely on the flat rule -- a caller who asked for credit = "difficulty"
+# got credit = "flat" with only a routine-severity log line saying so.
+#
+# The guard is deliberately narrow: n_scored == 0 despite disposals existing,
+# not a coverage percentage. This suite's own fixtures routinely supply terms
+# for only a handful of a scenario's rows by design (see np_terms_fixture()
+# above, and R2/R3 below) -- a coverage floor aborted those too, which would
+# have been the wrong fix for the wrong shape of problem.
+
+test_that("difficulty terms matching nothing abort instead of silently flattening", {
+  f <- np_fixture()
+  # a real terms table shape, but for a match_id that does not exist in f$pbp
+  # at all -- the join finds zero rows, exactly the empty-subject case
+  none <- data.table::data.table(
+    match_id = c("ZZZZ_NOT_A_MATCH", "ZZZZ_NOT_A_MATCH"),
+    display_order = c(1L, 3L),
+    p_hat = c(0.4, 0.5), decision = c(0.3, -0.5), surprise = c(0.7, 3.5))
+  expect_error(
+    suppressMessages(build_net_points(f$pbp, f$stats, f$results, credit = "difficulty",
+                                      difficulty_terms = none)),
+    "None of")
+})
+
+test_that("difficulty terms matching even one row do not trip the empty-subject guard", {
+  # deliberately thin, mirroring how this suite's other difficulty-credit
+  # tests already work (np_terms_fixture() itself only covers 2 of several
+  # rows) -- must NOT abort, because the one row that does score gets real
+  # verification from the row-identity check, so partial coverage is not the
+  # defect this guard exists to catch
+  f <- np_fixture()
+  one_row <- data.table::data.table(
+    match_id = "M1", display_order = 1L,
+    p_hat = 0.4, decision = 0.3, surprise = 0.7)
+  expect_no_error(
+    suppressMessages(build_net_points(f$pbp, f$stats, f$results, credit = "difficulty",
+                                      difficulty_terms = one_row,
+                                      reconcile = FALSE, spread = "tog")))
+})
+
+test_that("difficulty terms covering the real fixture do not trip the guard either", {
+  f <- np_fixture()
+  expect_no_error(
+    suppressMessages(build_net_points(f$pbp, f$stats, f$results, credit = "difficulty",
+                                      difficulty_terms = np_terms_fixture(),
+                                      reconcile = FALSE, spread = "tog")))
 })

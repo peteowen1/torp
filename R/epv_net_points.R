@@ -1016,6 +1016,26 @@
     # The row identity, asserted rather than assumed: decision + surprise must
     # rebuild the row's value. If it does not, the terms came from a different
     # PBP vintage than the ledger and every split below would be fiction.
+    #
+    # This check is an empty-subject trap (found on review, 2026-09-09,
+    # torp#202): if the terms join matches NOTHING -- a vintage mismatch, a
+    # match_id format difference, terms fit on the wrong season -- `scored` is
+    # FALSE everywhere, `any(l$scored)` is FALSE, `gap` is set to 0, and the
+    # abort that exists specifically to catch "the terms and the data disagree"
+    # cannot fire on the strongest possible version of that disagreement. The
+    # ledger then silently runs entirely on the flat rule: conservation still
+    # holds (it's a complete allocation), so nothing downstream catches a
+    # caller who asked for credit = "difficulty" quietly getting credit = "flat".
+    #
+    # The fix is narrow rather than a coverage floor: this test suite's own
+    # fixtures routinely supply terms for only a handful of a scenario's rows
+    # by design (each test exercises one behaviour, not full coverage), and a
+    # percentage threshold aborted every one of them -- a real production
+    # vintage mismatch and a deliberately scoped test fixture are not the same
+    # shape and must not share a guard. What actually makes the identity check
+    # vacuous is n_scored == 0 exactly: any row that DOES score already gets
+    # real verification from the gap check above, so partial coverage is not
+    # the defect -- zero coverage despite disposals existing is.
     gap <- if (any(l$scored)) l[scored == TRUE, max(abs(dec_hm + sur_hm - hm))] else 0
     if (!is.finite(gap) || gap > 1e-9) {
       cli::cli_abort(c(
@@ -1024,9 +1044,17 @@
       ))
     }
     n_disp <- sum(l$is_disp)
-    n_unscored <- sum(l$is_disp & !l$scored)
+    n_scored <- sum(l$scored)
+    n_unscored <- n_disp - n_scored
+    if (n_disp > 0 && n_scored == 0) {
+      cli::cli_abort(c(
+        "None of {format(n_disp, big.mark = ',')} disposals scored under {.val difficulty} credit.",
+        "x" = "The row-identity check above verifies nothing when nothing scores, so it cannot have caught this: {.arg difficulty_terms} is not matching this play-by-play at all, and the whole ledger would silently run on the flat rule instead of the difficulty split that was asked for.",
+        "i" = "Check {.arg difficulty_terms}'s (match_id, display_order) keys and season/vintage against {.arg pbp_data}'s."
+      ))
+    }
     cli::cli_alert_info(
-      "Difficulty credit: {format(n_disp - n_unscored, big.mark = ',')} of {format(n_disp, big.mark = ',')} disposals scored ({round(100 * (n_disp - n_unscored) / n_disp, 1)}%); {format(n_unscored, big.mark = ',')} fall back to the flat rule. Row identity max gap {signif(gap, 2)}.")
+      "Difficulty credit: {format(n_scored, big.mark = ',')} of {format(n_disp, big.mark = ',')} disposals scored ({round(100 * n_scored / max(n_disp, 1), 1)}%); {format(n_unscored, big.mark = ',')} fall back to the flat rule. Row identity max gap {signif(gap, 2)}.")
 
     l[scored == TRUE & kind == "retained", `:=`(
       own_hm  = (1 - omega) * (dec_hm + p_hat * sur_hm),
