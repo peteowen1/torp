@@ -326,11 +326,37 @@ test_that("net_points carries the ledger value through uncentred", {
   expect_false(isTRUE(all.equal(r$net_points, r$epv)))
 })
 
+test_that("a real net_points column is passed through, never re-derived from epv", {
+  # v4's create_player_game_data() attaches a genuine net_points column
+  # (R/player_credit.R) asserted equal to epv to 1e-8. This must be preferred
+  # over re-deriving from epv, so that a future engine loosening that
+  # invariant -- or a frame where the two legitimately differ -- cannot
+  # silently mislabel a value as net_points that is not the real ledger one.
+  #
+  # net_points is set within the agreement gate (real pipeline shape, where
+  # v4's own upstream assertion already holds) but not byte-identical to epv,
+  # so a pass-through and a re-derivation are distinguishable.
+  m <- np_mock()
+  m$net_points <- m$epv + 1e-7
+  r <- torp:::.compute_player_game_ratings(m, 2025L, 1L)
+  got <- r$net_points[match(m$player_id, r$player_id)]
+  expect_equal(got, m$net_points)     # passed through as-is
+  expect_false(isTRUE(all.equal(got, m$epv)))  # NOT silently re-derived from epv
+})
+
+test_that("epv and net_points disagreeing beyond the gate aborts rather than mislabels", {
+  m <- np_mock()
+  m$net_points <- m$epv + 1  # far outside the 1e-6 agreement gate
+  expect_error(
+    torp:::.compute_player_game_ratings(m, 2025L, 1L),
+    "disagree")
+})
+
 test_that("net_points is absent but announced when the frame has no epv", {
   m <- np_mock(with_epv = FALSE)
   expect_message(
     r <- torp:::.compute_player_game_ratings(m, 2025L, 1L),
-    "no .*net_points|net_points")
+    "No epv or net_points column")
   expect_false("net_points" %in% names(r))
   # the rest of the frame is unaffected -- this is a degraded input, not a failure
   expect_true(all(c("epv", "epv_p80") %in% names(r)))
@@ -342,10 +368,15 @@ test_that("centring zeroes epv within a position group, and net_points is untouc
   # The centring is time-on-ground weighted: each channel has
   # sum(channel)/sum(tog) * tog subtracted, so the CENTRED channel sums to zero
   # within each (season, lineup_position) group. epv is the sum of those, so it
-  # does too -- up to the 1dp rounding applied per channel.
+  # does too. This fixture has exactly 2 rows per group, so the two centred
+  # values are exact negatives of each other before rounding, and round() is
+  # symmetric about zero -- the rounded pair sums to EXACTLY 0, not merely
+  # "close to it". A loose tolerance here (0.25 in an earlier draft) could not
+  # have caught a real regression: two rows summing to zero by construction
+  # pass it regardless of what the actual centred values are.
   by_pos <- stats::aggregate(epv ~ lineup_position, data = r, FUN = sum)
-  expect_true(all(abs(by_pos$epv) < 0.25))
+  expect_equal(by_pos$epv, rep(0, nrow(by_pos)), tolerance = 1e-9)
   # net_points gets none of that treatment, so it does not sum to zero
   np_by_pos <- stats::aggregate(net_points ~ lineup_position, data = r, FUN = sum)
-  expect_false(all(abs(np_by_pos$net_points) < 0.25))
+  expect_false(all(abs(np_by_pos$net_points) < 1e-9))
 })
