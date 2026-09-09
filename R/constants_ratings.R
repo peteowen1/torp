@@ -2029,3 +2029,28 @@ NP_STOPPAGE_SPLIT <- list(
 #' Width, in metres, of the location bands the stoppage baseline is averaged in
 #' @keywords internal
 NP_STOPPAGE_BAND_M <- 20
+
+#' Lower edges, in metres, of the corridor-to-boundary bins a stoppage is cut into
+#'
+#' Distance from the centre corridor, `abs(y)`. A throw-in tight against the
+#' boundary and a ball-up in the corridor are not the same proposition even at
+#' the same distance from goal: measured over 2026, holding stoppage type and
+#' 20m band fixed, the neutral baseline spreads 0.35 points across these bins on
+#' average and 0.54 in the defensive 50, against a mean stoppage swing of 0.66.
+#' It moves the VALUE only -- who wins stays 48-52% in every bin.
+#' @keywords internal
+NP_STOPPAGE_Y_BREAKS <- c(0, 15, 30)
+
+#' Strength of the shrink from a stoppage band's own mean toward its type's mean
+#'
+#' Read as a number of prior observations: a band with `n` real stoppages keeps
+#' `n / (n + NP_STOPPAGE_SHRINK_N)` of its own mean and takes the rest from the
+#' overall mean for that stoppage type. It exists because the true stoppage
+#' location (from chains, since 2026-09-09) reaches ground that the previous,
+#' outcome-derived location never did -- the deep pockets, where a season leaves
+#' one or two ball-ups in a band. Such a cell would otherwise set its baseline
+#' from a single observation, which is exactly that stoppage's own outcome, and
+#' pay its winner nothing. At 20 the pull is negligible wherever there is real
+#' support (1.5% at n = 1,277) and near-total at n = 1.
+#' @keywords internal
+NP_STOPPAGE_SHRINK_N <- 20
