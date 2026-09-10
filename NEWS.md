@@ -1,3 +1,66 @@
+# torp 1.8.3
+
+## The disposal-difficulty model no longer reads its own outcome (#210)
+
+`fit_disposal_models()` drops `s(kick_len)` and `s(fwd_gain)`. Both were
+computed in `build_disposal_events()` from `out_x`/`out_y` -- the resolving row
+-- which is the same row whose `out_tid` **is** the target
+(`turnover = out_tid != team_id`). The old docstring excluded the outcome
+*description* and then admitted the outcome *coordinates*.
+
+`p_hat` splits the credit on ~96% of disposals, so this sat underneath most of
+every player's Net Points. Measured over 150,071 disposals in 2026:
+
+| | turnover rate |
+|---|---|
+| `kick_len` <= 0.5m (9,440 rows -- Goals and Behinds) | **0.0%** |
+| `kick_len` 50m+ | 59.6% |
+
+and the rows the model was surest about had a median `kick_len` of **115m** --
+not a kick, but the distance to wherever the ball was next touched. `kick_len`
+alone scored 0.45151 log loss against 0.54031 for intercept-only, i.e. 77% of
+the full model's gain from one contaminated variable.
+
+**Three cheaper repairs were measured and all three fail.** The in-flight chains
+rows are not a landing coordinate (38.7% coverage, median implied length 0.0m --
+they are logged at the kick's own position). Capping at a plausible kick
+distance keeps 98.6% of the fit while over-60m rows are only 2.7% of the data,
+so the leak is spread through the ordinary range rather than concentrated in the
+absurd tail. Shortening the 1-6 row lookahead cannot help because 85.0% of scans
+already stop at one row, and it would corrupt the *label*: an in-flight
+annotation carries the KICKING team's id, so a 1-row window relabels 35.6% of
+turnovers as retained.
+
+Between them those three name the mechanism: **after a turnover the next
+recorded event is intrinsically distant** -- a kick-in, the opponent downfield --
+so any feature read off the resolving row carries the outcome, at every distance
+and in every window. That is why there is no cheap repair and the features go.
+
+**Cost:** 0.050 log loss, 44% of the old model's gain over the base rate. It
+also all but removes the `p_hat` saturation behind #209 (the defence is paid
+`(1 - p_hat) * surprise`, so `p_hat = 1` pays whoever won the ball nothing).
+
+**This moves published ratings** -- mean |change| 0.396 a game, max 4.364, 718 of
+9,794 player-games moving more than a point -- so it needs a `RATING_VINTAGE`
+bump and a full-history rebuild, not a quiet merge.
+
+**It is NOT the defender fix, and that was tested rather than assumed.** The
+hypothesis was that an inflated upper tail of `p_hat` suppresses defensive
+credit. Measured through the real machinery on production's fit-on-2025 regime,
+removing the leak moves key defenders -2.107 -> -2.432 a game and *widens* the
+forward/defender gap 3.963 -> 4.474.
+
+The aerial-contest model in `epv_v3.R` was checked for the same defect and is
+**clean**: its `out_desc` is restricted to marks and spoils, so the resolving row
+is where the ball arrived, and `kick_len` there is physically plausible (median
+33.8m, 1.5% over 60m, **none** over 100m) with a smooth monotone defence-win
+gradient from 9.1% to 67.4%. Conditioning on where the ball landed is a
+legitimate question about a kick the kicker aimed.
+
+`kick_len` and `fwd_gain` are still built in `build_disposal_events()`: the
+`is.finite()` filter that ends that function uses them to define which disposals
+are scored, so removing them would silently change the row population.
+
 # torp 1.8.2
 
 ## Ten rating-defining constants wired into the drift guard

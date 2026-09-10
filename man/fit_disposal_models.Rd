@@ -20,4 +20,37 @@ Every term must be knowable BEFORE the disposal resolves -- \code{exp_pts}
 describes the situation beforehand and is legitimate; the outcome
 description is not and must never appear.
 }
+\details{
+\strong{\code{kick_len} and \code{fwd_gain} were removed on 2026-09-11
+(torp#210) because that rule had a hole in it.} Both are computed from
+\code{out_x}/\code{out_y} -- the resolving row -- which is the same row whose
+\code{out_tid} \emph{is} the target. The old docstring excluded the outcome
+\emph{description} and then admitted the outcome \emph{coordinates}. Measured
+over 150,071 disposals: \code{kick_len} at or under 0.5m is 0.0\\% turnover
+(those 9,440 rows are Goals and Behinds), 50m+ is 59.6\\%, and the rows the
+model was surest about had a median \code{kick_len} of 115m -- not a kick, but
+the distance to wherever the ball was next touched. \code{kick_len} alone
+scored 0.45151 log loss against 0.54031 for intercept-only.
+
+Three cheaper repairs were measured and all three fail. The in-flight chains
+rows are not a landing coordinate (38.7\\% coverage, median implied length
+0.0m -- they are logged at the kick's own position). Capping at a plausible
+kick distance keeps 98.6\\% of the fit while over-60m rows are only 2.7\\% of
+the data, so the leak is spread through the ordinary range rather than
+concentrated in the absurd tail. And shortening the 1-6 row lookahead cannot
+help because 85.0\\% of scans already stop at one row; a 1-row window would
+instead corrupt the label, relabelling 35.6\\% of turnovers as retained,
+because an in-flight annotation carries the KICKING team's id.
+
+The mechanism those three closures name between them: \strong{after a turnover
+the next recorded event is intrinsically distant} -- a kick-in, the opponent
+downfield -- so any feature read off the resolving row carries the outcome, at
+every distance and in every window.
+
+Cost of removal: 0.050 log loss, which is 44\\% of the old model's gain over
+the base rate. It also all but removes the \code{p_hat} saturation behind
+torp#209. The columns are still built in \code{build_disposal_events()} --
+they define the row population through its final \code{is.finite()} filter,
+and they remain useful diagnostics -- they are simply not fitted on.
+}
 \keyword{internal}
