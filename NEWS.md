@@ -43,6 +43,29 @@ The same algebra predicted `NP_BLAME_SHARE` inert and was **wrong** (it moves
 own pool, making it a within-side split as well as a cross-team one. Measure,
 do not infer.
 
+## Sequencing: a widening change merges FIRST, then re-records
+
+Recorded because getting it backwards took the pipeline down on 2026-09-10.
+`check_vintage_alignment()` compares via `.diff_defining_constants()`, which
+**unions** the manifest's and the live code's name sets and reports `<absent>`
+in **either** direction. So the manifest must never describe more constants than
+the code on `main` knows about.
+
+That inverts the familiar order. A **value** change (a constant's value moves,
+so published numbers change) promotes the manifest BEFORE the code reaches
+`main` — the v6/v7/v8 pattern above. A **widening** change like this one, where
+values are unchanged and only the recorded set grows, has to go the other way:
+merge to `main` first, then re-record. Re-recording v8's 97 leaves from this
+branch while `main` still knew 65 made `main` see 29 phantom differences and
+abort every run; reverted the same hour from a worktree at `origin/main`, with
+the pipeline never firing in between and no published number touched.
+
+The re-record itself is scripted at
+`data-raw/05-validation/rerecord_vintage_manifest.R` rather than left as a
+hand-typed call, because `publish_ratings_manifest()` needs `n_rows` (required,
+no default) and an explicit `file` — its default names `torp_ratings_v8.parquet`
+while the canonical vintage lives at `torp_ratings.parquet`.
+
 ## Note on the v8 vintage
 
 `RATING_VINTAGE` reached `"v8"` in 1.8.1 (the `EPR_PRIOR_RATE_HITOUT` zero-guard
