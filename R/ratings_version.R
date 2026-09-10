@@ -128,7 +128,7 @@
     # sweeping the default 0->1 moves 512 players, max single-game move 6.2.
     NP_BALL_WINNER_SHARE_BY_ACT = as.list(NP_BALL_WINNER_SHARE_BY_ACT),
     NP_BALL_WINNER_SHARE_BY_ACT_DEFAULT = NP_BALL_WINNER_SHARE_BY_ACT_DEFAULT,
-    # The stoppage pricing unit, wired together on 2026-09-11 -- the audit the
+    # The stoppage pricing unit, wired together on 2026-09-10 -- the audit the
     # KNOWN_NON_DEFINING register kept asking for. Measured on 2026 (9,794
     # player-matches, PUBLISHED numbers after .np_team_margin()):
     # NP_STOPPAGE_SPLIT moves 100% of players, max 2.83 a game, by flipping

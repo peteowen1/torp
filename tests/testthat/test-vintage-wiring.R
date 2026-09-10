@@ -107,7 +107,7 @@ KNOWN_NON_DEFINING <- c(
   "EPR_DECAY_DEFAULT_DAYS", "EPR_LOADING_DEFAULT",
 
   # -- The NP_ family, widened into this scan on 2026-09-08 and audited on
-  # 2026-09-11 (the stoppage pricing unit, the offence pool and the contest
+  # 2026-09-10 (the stoppage pricing unit, the offence pool and the contest
   # winner table all moved to .rating_defining_constants(), each with a measured
   # magnitude recorded there). Two of the rest are genuinely inert under
   # production's credit = "difficulty" path. The first is NP_RECEIVER_SHARE, checked
@@ -124,16 +124,16 @@ KNOWN_NON_DEFINING <- c(
   "NP_RECEIVER_SHARE", "NP_BALL_WINNER_SHARE",
 
   # -- STILL UNAUDITED. These five are the pool-SPREAD dials, a different
-  # sub-family from the stoppage pricing unit that was wired on 2026-09-11.
+  # sub-family from the stoppage pricing unit that was wired on 2026-09-10.
   # Worth knowing before they are swept: production runs spread = "matchup"
   # (build_net_points()'s match.arg default -- .np_engine_frame() never passes
-  # `spread`, traced 2026-09-11), so NP_MIRROR_SHARE and NP_POSITION_MIRROR are
+  # `spread`, traced 2026-09-10), so NP_MIRROR_SHARE and NP_POSITION_MIRROR are
   # LIVE on every team pool, while NP_CONTEXT_WEIGHTS is read only under
   # spread = "context" and therefore cannot move a published number today.
   # None has been measured; that is the next audit session.
   "NP_MIRROR_SHARE", "NP_POSITION_MIRROR", "NP_CONTEXT_WEIGHTS",
   "NP_DISPOSAL_DESCS", "NP_EXCLUDED_DESCS",
-  # -- MEASURED INERT, 2026-09-11, and the reason it can be trusted as inert
+  # -- MEASURED INERT, 2026-09-10, and the reason it can be trusted as inert
   # rather than merely small. .np_team_margin() rescales each SIDE of every row
   # up to that row's FULL value (own * target / side_sum), so any constant whose
   # only job is splitting a row's value BETWEEN the two teams is divided
