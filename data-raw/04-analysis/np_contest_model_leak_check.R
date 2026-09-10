@@ -61,8 +61,29 @@ print(cst[, .(n = .N,
               median = round(median(kick_len), 1),
               p95 = round(quantile(kick_len, .95), 1),
               max = round(max(kick_len), 1),
-              pct_over_60m = round(100 * mean(kick_len > 60), 1),
-              pct_over_100m = round(100 * mean(kick_len > 100), 1))])
+              pct_over_60m = round(100 * mean(kick_len > 60), 1))])
+
+# COUNTS, not percentages. This block exists because the first version of this
+# script printed `pct_over_100m` rounded to one decimal: 16 rows in 50,050 is
+# 0.032%, which prints as "0.0", and that was then written into NEWS.md and the
+# commit message as "NONE over 100m" -- a false absolute, contradicted by the
+# `max` column in the very same table, which read 143.3m.
+#
+# A percentage cannot express "none". Only a count can. The house rule is to
+# never quote a derived statistic without the raw count behind it, and this is
+# what breaking it looks like.
+say("\ncounts above each threshold (a rounded percentage CANNOT say 'none'):")
+for (thr in c(60, 80, 100, 120, 140)) {
+  n <- sum(cst$kick_len > thr)
+  say("  kick_len > ", formatC(thr, width = 3), "m : ", formatC(n, width = 6),
+      "   (", format(round(100 * n / nrow(cst), 4), nsmall = 4), "%)")
+}
+n100 <- sum(cst$kick_len > 100)
+if (n100 > 0) {
+  say("\n  ", n100, " contests exceed 100m -- physically impossible as one kick.")
+  say("  Their shape decides whether they are the same leak in miniature:")
+  print(cst[kick_len > 100, .(n = .N), by = .(out_desc, def_win)][order(-n)])
+}
 
 say("\ndefence-win rate by kick_len band (a real kick-length effect should be")
 say("smooth and monotone-ish; a leak shows a step at the impossible end):")

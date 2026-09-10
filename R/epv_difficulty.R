@@ -220,8 +220,11 @@ build_disposal_events <- function(chains, pbp_data) {
 #' over 150,071 disposals: \code{kick_len} at or under 0.5m is 0.0\% turnover
 #' (those 9,440 rows are Goals and Behinds), 50m+ is 59.6\%, and the rows the
 #' model was surest about had a median \code{kick_len} of 115m -- not a kick, but
-#' the distance to wherever the ball was next touched. \code{kick_len} alone
-#' scored 0.45151 log loss against 0.54031 for intercept-only.
+#' the distance to wherever the ball was next touched (115.8m unrounded, quoted
+#' as 115m elsewhere). \code{kick_len} alone scored 0.45151 log loss against
+#' 0.54031 for intercept-only -- \strong{77\% of the full model's gain over the
+#' base rate from that one contaminated variable}, which is the number to
+#' remember if anyone proposes reinstating it.
 #'
 #' Three cheaper repairs were measured and all three fail. The in-flight chains
 #' rows are not a landing coordinate (38.7\% coverage, median implied length

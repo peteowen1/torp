@@ -59,9 +59,22 @@ say("  rows at p >= 0.99   : ", tm[p_hat >= 0.99, .N],
 say("  rows at p >= 0.999  : ", tm[p_hat >= 0.999, .N])
 
 say("\n=== VERDICT ===")
+# The band is deliberately wider than the measured 18, and saying why matters
+# more than the number: SEASON is the CURRENT season, so re-running this later
+# adds rounds to load_pbp() and both nrow(de) and n99 move. The 18/768 in the
+# header are a snapshot taken 2026-09-11, not an invariant. What has to hold is
+# the ORDER OF MAGNITUDE -- tens, not hundreds -- because the leaky arm sat at
+# 768 and no refit drift crosses that gap. A pass inside the band is therefore
+# "same arm", not "same number"; the exact count is printed so the difference is
+# visible rather than hidden behind the word MATCHES.
+MEASURED_N99 <- 18L
+BAND <- 40L
 n99 <- tm[p_hat >= 0.99, .N]
-if (n99 <= 40) {
-  say("  MATCHES the measured clean arm (", n99, " rows at p >= 0.99).")
+if (n99 <= BAND) {
+  say("  MATCHES the measured clean arm: ", n99, " rows at p >= 0.99",
+      if (n99 == MEASURED_N99) " (exactly the measured 18)."
+      else paste0(" against ", MEASURED_N99, " measured -- within the band of ",
+                  BAND, ", see the note above."))
   say("  The saturation behind #209 is ~", round(100 * (1 - n99 / 768)), "% reduced, NOT eliminated --")
   say("  the defensive clamp stays.")
 } else {
