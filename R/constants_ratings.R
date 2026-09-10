@@ -988,7 +988,6 @@ PSR_POSITION_STANDARDISE <- TRUE
 #' radius than "v2 adds the corrected taxonomy" implies: EPV standardisation
 #' groups on the raw 20-way \code{lineup_position}, not through the 6-way map,
 #' so the correction reaches only \code{pos_group} derivations.
-#' @keywords internal
 #'
 #' v3 (2026-08-18): the EPV engine moved from v2 to the four-channel chain-native
 #' v3, which reprices every row -- the change this vintage exists to mark.
@@ -1045,7 +1044,29 @@ PSR_POSITION_STANDARDISE <- TRUE
 #' rucks and penalising low-games defenders). Preserve the outgoing v7 with
 #' `data-raw/03-ratings/promote_rating_vintage.R` (PROMOTE_FROM=v7, PROMOTE_TO=v8)
 #' and move the manifest to canonical v8 BEFORE this constant reaches main.
-RATING_VINTAGE <- "v8"
+#'
+#' v9 (2026-09-11, torp#210): the disposal-difficulty model stopped reading its
+#' own outcome. `kick_len` and `fwd_gain` were computed from the resolving row's
+#' coordinates -- the same row whose `out_tid` IS the target -- and `p_hat`
+#' splits the credit on ~96% of disposals, so the leak sat underneath most of
+#' every player's Net Points. Removing them costs 0.050 log loss (44% of the
+#' model's gain over the base rate) and moves published ratings by mean 0.396 a
+#' game, max 4.364, with 718 of 9,794 player-games shifting more than a point.
+#' Preserve the outgoing v8 with
+#' `data-raw/03-ratings/promote_rating_vintage.R` (PROMOTE_FROM=v8, PROMOTE_TO=v9)
+#' and move the manifest to canonical v9 BEFORE this constant reaches main.
+#'
+#' \strong{This vintage is the reason torp#212 exists.} Every earlier bump was
+#' triggered by a named constant changing, which
+#' `.rating_defining_constants()` captures and the drift guard can therefore
+#' see. This one is a model FORMULA, which is not a constant -- so the manifest
+#' diff for v8 -> v9 is EMPTY and nothing would have demanded this bump. It was
+#' done by hand. Until #212 wires the formulas in, ask "does this move ratings?"
+#' rather than "did a constant change?" -- the guard answers the second question
+#' and this vintage is proof they are not the same question.
+#'
+#' @keywords internal
+RATING_VINTAGE <- "v9"
 
 #' Map from the 20-way team-sheet lineup position to a 6-way position group
 #'

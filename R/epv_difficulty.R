@@ -11,6 +11,13 @@
 #                 35-45m 56.0%  45-55m 45.2%   >55m 35.4%
 #   type          handball 89.5%   kick 66.3%   ground kick 53.9%
 #
+# *** THE KICK-LENGTH ROW ABOVE IS CONTAMINATED AND IS KEPT ONLY AS HISTORY. ***
+# `kick_len` is measured to the RESOLVING row, which after a turnover is
+# wherever the opponent next touched the ball -- so the gradient across those
+# buckets is partly the outcome restating itself, not difficulty. It was removed
+# from the fit on 2026-09-11 (torp#210); see fit_disposal_models(). The `type`
+# row is unaffected: whether it was a handball is knowable beforehand.
+#
 # A 15m chip to an unmarked teammate and a 50m pass under pressure currently pay
 # their receiver the same share. Oliver's whole argument is that they should not:
 # credit belongs to the participant whose part was harder, and the counterfactual
@@ -98,9 +105,12 @@ EPV_DIFFICULTY_SURPRISE_SHARE <- 0.5
 #' the receiver does in the air. One constant is the wrong \emph{shape}, not
 #' merely the wrong value.
 #'
-#' \strong{Known limitation.} The residual is situation-free only with respect to
-#' what the branch models see (position, kick length, forward gain, goal
-#' distance, \code{exp_pts}, handball flag, inside-50 flag). A player who
+#' \strong{Known limitation, and it WIDENED on 2026-09-11.} The residual is
+#' situation-free only with respect to what the branch models see -- which is
+#' now position, goal distance, \code{exp_pts}, handball flag and inside-50 flag.
+#' Kick length and forward gain were dropped as target leakage (torp#210), so the
+#' models no longer control for how long the kick was, and the shares below were
+#' measured when they still did. They have not been re-measured. A player who
 #' habitually receives in contexts those terms under-predict -- leading into
 #' space, one-out -- earns a repeatable positive residual that is context rather
 #' than skill. That inflates the resolver side of every cell by an unknown
@@ -178,6 +188,12 @@ build_disposal_events <- function(chains, pbp_data) {
   d[, `:=`(
     turnover = out_tid != team_id,
     V_after  = exp_pts + delta_epv,
+    # NOT FEATURES. `kick_len` and `fwd_gain` come off the same resolving row as
+    # `turnover` above, so fitting on them leaks the target (torp#210, removed
+    # from the formula 2026-09-11). They are still built for two reasons: the
+    # is.finite() filter at the end of this function uses them to define the row
+    # population, so dropping them would silently change which disposals are
+    # scored; and they remain the right diagnostic for auditing the leak.
     kick_len = sqrt((out_x - x)^2 + (out_y - y)^2),
     fwd_gain = out_x - x,
     abs_y    = abs(y),
@@ -196,13 +212,51 @@ build_disposal_events <- function(chains, pbp_data) {
 #' describes the situation beforehand and is legitimate; the outcome
 #' description is not and must never appear.
 #'
+#' \strong{\code{kick_len} and \code{fwd_gain} were removed on 2026-09-11
+#' (torp#210) because that rule had a hole in it.} Both are computed from
+#' \code{out_x}/\code{out_y} -- the resolving row -- which is the same row whose
+#' \code{out_tid} \emph{is} the target. The old docstring excluded the outcome
+#' \emph{description} and then admitted the outcome \emph{coordinates}. Measured
+#' over 150,071 disposals: \code{kick_len} at or under 0.5m is 0.0\% turnover
+#' (those 9,440 rows are Goals and Behinds), 50m+ is 59.6\%, and the rows the
+#' model was surest about had a median \code{kick_len} of 115m -- not a kick, but
+#' the distance to wherever the ball was next touched (115.8m unrounded, quoted
+#' as 115m elsewhere). \code{kick_len} alone scored 0.45151 log loss against
+#' 0.54031 for intercept-only -- \strong{77\% of the full model's gain over the
+#' base rate from that one contaminated variable}, which is the number to
+#' remember if anyone proposes reinstating it.
+#'
+#' Three cheaper repairs were measured and all three fail. The in-flight chains
+#' rows are not a landing coordinate (38.7\% coverage, median implied length
+#' 0.0m -- they are logged at the kick's own position). Capping at a plausible
+#' kick distance keeps 98.6\% of the fit while over-60m rows are only 2.7\% of
+#' the data, so the leak is spread through the ordinary range rather than
+#' concentrated in the absurd tail. And shortening the 1-6 row lookahead cannot
+#' help because 85.0\% of scans already stop at one row; a 1-row window would
+#' instead corrupt the label, relabelling 35.6\% of turnovers as retained,
+#' because an in-flight annotation carries the KICKING team's id.
+#'
+#' The mechanism those three closures name between them: \strong{after a turnover
+#' the next recorded event is intrinsically distant} -- a kick-in, the opponent
+#' downfield -- so any feature read off the resolving row carries the outcome, at
+#' every distance and in every window.
+#'
+#' Cost of removal: 0.050 log loss, which is 44\% of the old model's gain over
+#' the base rate. It also all but removes the \code{p_hat} saturation behind
+#' torp#209. The columns are still built in \code{build_disposal_events()} --
+#' they define the row population through its final \code{is.finite()} filter,
+#' and they remain useful diagnostics -- they are simply not fitted on.
+#'
 #' @param de Disposal table from \code{build_disposal_events()}.
 #' @param train_idx Logical vector selecting rows to fit on.
 #' @return A list of three \code{bam} fits.
 #' @keywords internal
 fit_disposal_models <- function(de, train_idx = rep(TRUE, nrow(de))) {
   tr <- de[train_idx]
-  rhs <- ~ s(x, abs_y) + s(kick_len) + s(fwd_gain) + s(goal_dist) +
+  # Everything here is knowable before the ball leaves his boot: where he is,
+  # how far from goal, what the situation is worth, whether it is a handball.
+  # Do NOT re-add a term derived from out_x/out_y -- see the note above.
+  rhs <- ~ s(x, abs_y) + s(goal_dist) +
     s(exp_pts) + is_handball + i50f
   fit <- function(f, dd, ...) {
     for (fv in c("is_handball", "i50f")) {

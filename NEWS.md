@@ -1,3 +1,119 @@
+# torp 1.8.3
+
+## The disposal-difficulty model no longer reads its own outcome (#210)
+
+`fit_disposal_models()` drops `s(kick_len)` and `s(fwd_gain)`. Both were
+computed in `build_disposal_events()` from `out_x`/`out_y` -- the resolving row
+-- which is the same row whose `out_tid` **is** the target
+(`turnover = out_tid != team_id`). The old docstring excluded the outcome
+*description* and then admitted the outcome *coordinates*.
+
+`p_hat` splits the credit on ~96% of disposals, so this sat underneath most of
+every player's Net Points. Measured over 150,071 disposals in 2026:
+
+| | turnover rate |
+|---|---|
+| `kick_len` <= 0.5m (9,440 rows -- Goals and Behinds) | **0.0%** |
+| `kick_len` 50m+ | 59.6% |
+
+and the rows the model was surest about had a median `kick_len` of **115m** --
+not a kick, but the distance to wherever the ball was next touched. `kick_len`
+alone scored 0.45151 log loss against 0.54031 for intercept-only, i.e. 77% of
+the full model's gain from one contaminated variable.
+
+**Three cheaper repairs were measured and all three fail.** The in-flight chains
+rows are not a landing coordinate (38.7% coverage, median implied length 0.0m --
+they are logged at the kick's own position). Capping at a plausible kick
+distance keeps 98.6% of the fit while over-60m rows are only 2.7% of the data,
+so the leak is spread through the ordinary range rather than concentrated in the
+absurd tail. Shortening the 1-6 row lookahead cannot help because 85.0% of scans
+already stop at one row, and it would corrupt the *label*: an in-flight
+annotation carries the KICKING team's id, so a 1-row window relabels 35.6% of
+turnovers as retained.
+
+Between them those three name the mechanism: **after a turnover the next
+recorded event is intrinsically distant** -- a kick-in, the opponent downfield --
+so any feature read off the resolving row carries the outcome, at every distance
+and in every window. That is why there is no cheap repair and the features go.
+
+**Cost:** 0.050 log loss, 44% of the old model's gain over the base rate. It
+also all but removes the `p_hat` saturation behind #209 -- from 768 rows at
+`p_hat >= 0.99` down to 18, with the disposal path now reaching **zero** (its
+99.9th percentile is 0.7402; all 18 survivors are contests).
+
+An earlier draft of this entry said that saturation matters because "the defence
+is paid `(1 - p_hat) * surprise`". **That was wrong and is corrected here**, since
+it is the kind of claim someone would later build on. `(1 - p_hat) * sur_hm` is
+`recv_hm` on the *retained* branch (`epv_net_points.R:1061`) -- the receiving
+teammate, not the defence -- and the defence is paid `cede_hm = (1 - beta) *
+sur_hm` on the turnover branch, where `p_hat` does not appear at all. That
+retained line is moreover **dead**: every retained row is overwritten downstream,
+contested ones at `:1093`/`:1102` and uncontested ones at `:1125` (live, because
+`NP_UNCONTESTED_RECEIVER_SHARE` is 0.5), and measurement confirms no row escapes
+-- 0 of 19,660 contested rows have non-finite contest terms.
+
+So `p_hat` is not a payment share on any live branch; it acts only through
+`V_pre`, which shapes `decision` and `surprise` themselves. Clamping `p_hat` to
+0.99 on all 18 rows and re-running the ledger moves **zero** of 9,794
+player-games.
+
+The real mechanism, measured: for a contest, `V_pre = (1 - p) * V_att + p * V_def`
+and the ledger pays the winner out of `c_cont = V_branch - V_pre`. When the model
+is certain **and the certain side wins**, `V_branch` already equals `V_pre`, so
+the contest surprise collapses to zero and the winner's share of nothing is
+nothing. Mean `|cont_surprise|` is **0.0005** on the saturated rows against
+**0.937** elsewhere. Certainty does not divert the payment; it destroys the
+quantity being divided.
+
+It is symmetric, which confirms the mechanism rather than a defender-specific
+story: where the *attack* is certain (`p <= 0.01`) and the attack wins,
+`|cont_surprise|` is 0.0129; where the attack is certain and the **defence** wins
+anyway, it is **1.9554**. And it is a gradient, not 18 rows -- mean
+`|cont_surprise|` runs 1.29 / 0.83 / 0.71 / 0.67 / 0.28 / 0.002 / 0.000 across
+rising `p_hat` bands. The 18 are simply where it reaches exactly zero.
+
+That reframes #209 from a bug into a design question, which is why it is recorded
+here rather than fixed: surprise-based credit pays nothing for an unsurprising
+outcome **by construction**. Whether a defender who wins a contest he was
+near-certain to win should be paid nothing is Pete's call, not a code fix.
+
+**This moves published ratings** -- mean |change| 0.396 a game, max 4.364, 718 of
+9,794 player-games moving more than a point -- so it needs a `RATING_VINTAGE`
+bump and a full-history rebuild, not a quiet merge.
+
+**It is NOT the defender fix, and that was tested rather than assumed.** The
+hypothesis was that an inflated upper tail of `p_hat` suppresses defensive
+credit. Measured through the real machinery on production's fit-on-2025 regime,
+removing the leak moves key defenders -2.107 -> -2.432 a game and *widens* the
+forward/defender gap 3.963 -> 4.474.
+
+The aerial-contest model in `epv_v3.R` was checked for the same defect and is
+left alone. Its `out_desc` is restricted to marks and spoils, so the resolving
+row is where the ball arrived, and `kick_len` there is physically plausible
+(median 33.8m, p95 55.6m, 726 of 50,050 rows over 60m) with a smooth monotone
+defence-win gradient from 9.1% to 67.4%. Conditioning on where the ball landed is
+a legitimate question about a kick the kicker aimed.
+
+**But it is not spotless, and an earlier draft of this entry overclaimed it as
+having "none over 100m".** There are **16 of 50,050 (0.032%)** between 102.0m and
+143.3m -- impossible as a single kick. All 16 are `def_win`, and all 16 resolve at
+a reception (15 Uncontested Mark, 1 Mark On Lead): the same mechanism as the
+disposal leak, at 1/3000th the scale. `CHAINS_INFLIGHT_DESCS` includes phases that
+are not one kick's flight (`Rebound 50`, `Kick In Ineffective`, the kick-in
+entries), so the `.olag` scan can occasionally walk through a whole unrelated
+possession. Left as-is on materiality, now stated as a count rather than a false
+absolute.
+
+The error is worth recording because of how it happened: the check script printed
+`pct_over_100m` rounded to one decimal, 0.032% rendered as "0.0", and that was
+read as zero -- while the `max` column in the same table read 143.3m and said
+otherwise. A percentage cannot express "none"; only a count can. The script now
+prints counts at 60/80/100/120/140m.
+
+`kick_len` and `fwd_gain` are still built in `build_disposal_events()`: the
+`is.finite()` filter that ends that function uses them to define which disposals
+are scored, so removing them would silently change the row population.
+
 # torp 1.8.2
 
 ## Ten rating-defining constants wired into the drift guard

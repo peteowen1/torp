@@ -23,6 +23,22 @@ non-zero prior on an all-zero channel would shrink toward it and reintroduce a
 level for a channel that does not exist. Conditioned on BOTH constants so v2
 is untouched whatever \code{EPV3_CHANNELS} says.
 
+\strong{Also zeroed under v4 (2026-09-09, torp#206) — the same all-zero
+condition this paragraph already describes, just not covered by the
+condition.} \code{epv_hitout} is identically zero under v4 for every row,
+checked across all six published seasons after the vintage rebuild. The
+guard below only ever tested \code{EPV_ENGINE == "v3"}, so v4 fell through
+to the leftover v2/v3-era rate and every player's \code{epr_hitout} shrank
+toward a non-zero, purely-legacy prior instead of the zero the channel
+actually holds. Measured before the fix: mean \code{|epr_hitout|} = 0.0998
+against mean \code{|epr|} = 1.373 (7.3\% of the whole rating), correlation
+with \code{epr} 0.559. Not flat noise -- the scaled prior differs by
+\code{cont_stop}'s own scale, which is a RUCK channel (sd 1.480 for rucks
+against 0.112-0.504 everywhere else), so the shrink pulled every low-weight
+ruck up and every low-weight non-ruck down: rucks (Gawn, Lobb, Grundy) sat
+at +0.10, fringe defenders (near-zero games) sat at -0.53 to -0.60 on a
+rating whose typical player is around 1.37 in magnitude.
+
 (This paragraph sat AFTER \verb{@keywords internal} with no blank line, so roxygen
 folded all of it into the keywords tag: the rendered help lost the
 explanation entirely and gained ~40 junk entries like \verb{\\keyword\{Zeroed\}}.

@@ -47,9 +47,12 @@ essentially settled by the handball, whereas a kick's depends heavily on what
 the receiver does in the air. One constant is the wrong \emph{shape}, not
 merely the wrong value.
 
-\strong{Known limitation.} The residual is situation-free only with respect to
-what the branch models see (position, kick length, forward gain, goal
-distance, \code{exp_pts}, handball flag, inside-50 flag). A player who
+\strong{Known limitation, and it WIDENED on 2026-09-11.} The residual is
+situation-free only with respect to what the branch models see -- which is
+now position, goal distance, \code{exp_pts}, handball flag and inside-50 flag.
+Kick length and forward gain were dropped as target leakage (torp#210), so the
+models no longer control for how long the kick was, and the shares below were
+measured when they still did. They have not been re-measured. A player who
 habitually receives in contexts those terms under-predict -- leading into
 space, one-out -- earns a repeatable positive residual that is context rather
 than skill. That inflates the resolver side of every cell by an unknown
