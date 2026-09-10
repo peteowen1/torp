@@ -106,10 +106,11 @@ KNOWN_NON_DEFINING <- c(
   # assumed inert for the same reason as EPV_RUCK_SWING_SCALE above. (2026-08-09)
   "EPR_DECAY_DEFAULT_DAYS", "EPR_LOADING_DEFAULT",
 
-  # -- The NP_ family, widened into this scan on 2026-09-08. Four of its
-  # constants were already wired (NP_TURNOVER_ON_ALL_ACTS and the three
-  # NP_TEAM_MARGIN_* dials). Of the rest, only ONE is genuinely inert under
-  # production's credit = "difficulty" path -- NP_RECEIVER_SHARE, checked
+  # -- The NP_ family, widened into this scan on 2026-09-08 and audited on
+  # 2026-09-10 (the stoppage pricing unit, the offence pool and the contest
+  # winner table all moved to .rating_defining_constants(), each with a measured
+  # magnitude recorded there). Two of the rest are genuinely inert under
+  # production's credit = "difficulty" path. The first is NP_RECEIVER_SHARE, checked
   # per-player-game (not a season-total signed sum, which cancels): 1.7 points
   # of absolute movement across the WHOLE 2026 season, 2 of 512 players
   # touched at all. NP_DEFENSIVE_SHARE and the NP_BALL_WINNER_SHARE_BY_ACT
@@ -122,31 +123,36 @@ KNOWN_NON_DEFINING <- c(
   # tracing the code rather than by summing a season total.
   "NP_RECEIVER_SHARE", "NP_BALL_WINNER_SHARE",
 
-  # -- UNAUDITED. Found by the scan, not yet measured either way. Each is a
-  # credit/blame dial in build_net_points()'s stoppage, contest or mirror
-  # logic and genuinely COULD move published ratings; none has been swept the
-  # way NP_BLAME_SHARE was before it got wired below. Auditing this list is
-  # its own session, not this one -- registering it here at least makes the
-  # gap visible instead of silent. (2026-09-08)
-  "NP_MIRROR_SHARE", "NP_POSITION_MIRROR", "NP_DISPOSAL_DESCS",
-  "NP_EXCLUDED_DESCS", "NP_OFFENCE_POOL_SHARE", "NP_CONTEST_WINNER_SHARE",
-  "NP_CONTEST_WINNER_SHARE_DEFAULT", "NP_CONTEXT_WEIGHTS",
-  "NP_STOPPAGE_DESCS", "NP_STOPPAGE_HITOUT_DESCS",
-  "NP_STOPPAGE_RUCK_OWN_DESCS", "NP_STOPPAGE_LOSER_SHARE",
-  "NP_STOPPAGE_SPLIT", "NP_STOPPAGE_BAND_M",
-  # Same family, same gap, added 2026-09-09 with the stoppage-location rebuild.
-  # These two are not "might move ratings" -- they were MEASURED moving them:
-  # adding the corridor split repriced 21.5% of stoppages by more than 0.10
-  # points. They are registered rather than wired only because wiring them
-  # while NP_STOPPAGE_BAND_M above stays unwired would put half of one cell key
-  # in the manifest and leave the other half invisible, which is worse than a
-  # gap that is honestly recorded. The whole NP_STOPPAGE_* family should be
-  # wired together in the audit session the block above already calls for.
-  "NP_STOPPAGE_Y_BREAKS", "NP_STOPPAGE_SHRINK_N",
-  # A different category, and the only genuinely safe entries in this list:
-  # these two are the bounds of a sanity check on the fitted stoppage win rate.
-  # They can abort a run or print a warning; they are never read into any
-  # arithmetic, so no value of either can change a published number. (2026-09-09)
+  # -- STILL UNAUDITED. These five are the pool-SPREAD dials, a different
+  # sub-family from the stoppage pricing unit that was wired on 2026-09-10.
+  # Worth knowing before they are swept: production runs spread = "matchup"
+  # (build_net_points()'s match.arg default -- .np_engine_frame() never passes
+  # `spread`, traced 2026-09-10), so NP_MIRROR_SHARE and NP_POSITION_MIRROR are
+  # LIVE on every team pool, while NP_CONTEXT_WEIGHTS is read only under
+  # spread = "context" and therefore cannot move a published number today.
+  # None has been measured; that is the next audit session.
+  "NP_MIRROR_SHARE", "NP_POSITION_MIRROR", "NP_CONTEXT_WEIGHTS",
+  "NP_DISPOSAL_DESCS", "NP_EXCLUDED_DESCS",
+  # -- MEASURED INERT, 2026-09-10, and the reason it can be trusted as inert
+  # rather than merely small. .np_team_margin() rescales each SIDE of every row
+  # up to that row's FULL value (own * target / side_sum), so any constant whose
+  # only job is splitting a row's value BETWEEN the two teams is divided
+  # straight back out. NP_STOPPAGE_LOSER_SHARE is exactly that and nothing else
+  # -- the within-side ruck/player/pool split is NP_STOPPAGE_SPLIT's job, and
+  # that one is wired. Swept 0.50 -> 0.20 over 2026: the RAW ledger moves up to
+  # 9.68 points a player-game (mean 0.72), and the PUBLISHED numbers move
+  # 8.0e-15 -- 0 of 9,794 player-matches change at 1e-6. Not "small": zero.
+  # This also closes NEXT-STEPS.md's "two dials never swept, unaudited either
+  # way" for this dial; there is nothing to sweep.
+  # Caution for whoever revisits: the same algebra predicted NP_BLAME_SHARE
+  # inert and was WRONG (it moves 100% of players, max 6.25), because
+  # NP_BLAME_POOL gives the conceding side its own pool, making blame_share a
+  # within-side split as well as a cross-team one. Measure, do not infer.
+  "NP_STOPPAGE_LOSER_SHARE",
+  # A different category again: these two are the bounds of a sanity check on
+  # the fitted stoppage win rate. They can abort a run or print a warning; they
+  # are never read into any arithmetic, so no value of either can change a
+  # published number. (2026-09-09)
   "NP_STOPPAGE_WIN_WARN", "NP_STOPPAGE_WIN_ABORT"
 )
 

@@ -128,6 +128,39 @@
     # sweeping the default 0->1 moves 512 players, max single-game move 6.2.
     NP_BALL_WINNER_SHARE_BY_ACT = as.list(NP_BALL_WINNER_SHARE_BY_ACT),
     NP_BALL_WINNER_SHARE_BY_ACT_DEFAULT = NP_BALL_WINNER_SHARE_BY_ACT_DEFAULT,
+    # The stoppage pricing unit, wired together on 2026-09-10 -- the audit the
+    # KNOWN_NON_DEFINING register kept asking for. Measured on 2026 (9,794
+    # player-matches, PUBLISHED numbers after .np_team_margin()):
+    # NP_STOPPAGE_SPLIT moves 100% of players, max 2.83 a game, by flipping
+    # `ground` back to its pre-2026-09-10 0.20/0.50. That settles the register's
+    # "might move ratings" for this family with a number.
+    #
+    # The rest are wired as STRUCTURAL members of the same mechanism rather
+    # than each swept alone: DESCS selects which rows are stoppages at all,
+    # the HITOUT/RUCK_OWN descs route which split each one takes, and
+    # BAND_M + Y_BREAKS are the two halves of one cell key. Wiring half a cell
+    # key is what the register refused to do, and it was right -- so they go
+    # in together or not at all.
+    #
+    # NP_STOPPAGE_LOSER_SHARE is deliberately NOT here: it is the one member
+    # measured INERT (see the register). NP_STOPPAGE_WIN_WARN / _ABORT stay out
+    # for the reason already recorded -- they are sanity-check bounds, never
+    # read into arithmetic.
+    NP_STOPPAGE_DESCS = as.list(NP_STOPPAGE_DESCS),
+    NP_STOPPAGE_HITOUT_DESCS = as.list(NP_STOPPAGE_HITOUT_DESCS),
+    NP_STOPPAGE_RUCK_OWN_DESCS = as.list(NP_STOPPAGE_RUCK_OWN_DESCS),
+    NP_STOPPAGE_SPLIT = lapply(NP_STOPPAGE_SPLIT, as.list),
+    NP_STOPPAGE_BAND_M = NP_STOPPAGE_BAND_M,
+    NP_STOPPAGE_Y_BREAKS = as.list(NP_STOPPAGE_Y_BREAKS),
+    NP_STOPPAGE_SHRINK_N = NP_STOPPAGE_SHRINK_N,
+    # Both measured live the same day, same method, same 9,794 player-matches:
+    # NP_OFFENCE_POOL_SHARE 0.10 -> 0.40 moves 100% of players, max 9.15 a game
+    # (the largest unguarded mover found); NP_CONTEST_WINNER_SHARE with the mark
+    # entries 0.80 -> 0.40 moves 100%, max 8.50. Both had sat in the register on
+    # "unaudited, could move ratings" since 2026-09-08.
+    NP_OFFENCE_POOL_SHARE = NP_OFFENCE_POOL_SHARE,
+    NP_CONTEST_WINNER_SHARE = as.list(NP_CONTEST_WINNER_SHARE),
+    NP_CONTEST_WINNER_SHARE_DEFAULT = NP_CONTEST_WINNER_SHARE_DEFAULT,
     EPV3_CHANNELS = EPV3_CHANNELS,
     EPV3_POINTS_SCALE = as.list(EPV3_POINTS_SCALE),
     EPV_CONT_LOSS_ALLOC = EPV_CONT_LOSS_ALLOC,
