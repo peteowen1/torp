@@ -8,7 +8,15 @@
 # defining_constants.
 #
 # Written 2026-09-10 for the v8 re-record after torp 1.8.2 wired ten NP_
-# constants (32 leaves added, 0 removed, 0 value changes).
+# constants: 29 leaves newly recorded, 0 removed, 0 value changes.
+#
+# 29, not 32, and the gap is worth knowing because it is the same quirk that
+# broke this script's first polling loop. A loose unlist()-based comparison
+# counts 32; .diff_defining_constants() -- the comparison the guard actually
+# makes, and therefore the number that matters -- reports 29. The three
+# missing ones are NA-valued leaves (NP_TEAM_MARGIN_NAMED_SHARE and
+# LINEUP_POSITION_GROUP_MAP's INT/SUB/EMERG), which serialise to JSON null and
+# vanish from unlist() on the way back. Quote the guard's number, not a count.
 #
 # -----------------------------------------------------------------------------
 # WHEN TO RUN IT. This is the opposite of the order a VALUE change uses, and
