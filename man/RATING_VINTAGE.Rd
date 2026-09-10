@@ -35,182 +35,81 @@ Likewise the corrected \code{LINEUP_POSITION_GROUP_MAP} has a narrower blast
 radius than "v2 adds the corrected taxonomy" implies: EPV standardisation
 groups on the raw 20-way \code{lineup_position}, not through the 6-way map,
 so the correction reaches only \code{pos_group} derivations.
+
+v3 (2026-08-18): the EPV engine moved from v2 to the four-channel chain-native
+v3, which reprices every row -- the change this vintage exists to mark.
+
+The outgoing v2 canonical is preserved as torp_ratings_v2.parquet. That copy
+was made by downloading the live asset and re-uploading the SAME FILE, then
+checking both md5s matched (819c6bed...), so it is byte-identical rather than
+merely row-identical, and a rollback is a copy rather than a rebuild. Worth
+stating precisely: \code{preserve_rating_vintage()} would NOT give that
+guarantee -- it reads the frame and re-serialises through
+\code{arrow::write_parquet()}, which preserves values, not bytes.
+
+v4 (2026-09-06): the EPV engine moved from v3 to v4, the Net Points ledger
+(\code{build_net_points()}), which reprices every row again, and the finished EPR
+channels carry \code{EPR_UNITS_SCALE_V4}. The outgoing v3 canonical is preserved
+as torp_ratings_v3.parquet by the same download-and-re-upload path as v2
+(byte-identical, md5-checked), in
+\code{data-raw/03-ratings/promote_v4_vintage.R}. The manifest moved to
+canonical = "v4" before this constant did, for the reason the v3 note gives.
+
+v5 (2026-09-07): NP_TURNOVER_ON_ALL_ACTS. The turnover split had fired only
+on kicks and handballs, so any other act that lost the ball paid the whole
+swing as blame and credited the winner nothing -- 27.1 points a match. Every
+rating moves, most of all for tacklers, so it takes its own vintage. The
+outgoing v4 canonical is preserved as torp_ratings_v4.parquet by
+\code{data-raw/03-ratings/promote_rating_vintage.R} (PROMOTE_FROM=v4,
+PROMOTE_TO=v5), and the manifest moves to
+canonical = "v5" BEFORE this constant reaches main, for the reason the v3
+note gives.
+
+v6 (2026-09-07): the team-sum convention. Each team's players now sum to that
+team's OWN margin, +63 and -63, rather than only the difference between the
+sides being pinned. Every published number moves, so it takes its own vintage.
+Preserve the outgoing v5 with
+\code{data-raw/03-ratings/promote_rating_vintage.R} (PROMOTE_FROM=v5, PROMOTE_TO=v6)
+and move the manifest to canonical v6 BEFORE this constant reaches main.
+
+v7 (2026-09-09): the 1.8.0 rules. Four credit/blame rules from Pete's
+row-by-row review (\code{NP_BLAME_POOL}, \code{NP_PRESSURE_BACK_SHARE},
+\code{NP_SIREN_TO_POOL}, \code{NP_UNCONTESTED_RECEIVER_SHARE}), plus the stoppage
+baseline rebuilt on the stoppage's OWN location from chains rather than on
+its outcome's, with \code{abs(y)} in the cell key. Every published number moves --
+the four rules re-split every lost possession and every uncontested
+reception, and the stoppage rebuild reprices 21.5\% of stoppages by more than
+0.10 points -- so it takes its own vintage. Preserve the outgoing v6 with
+\code{data-raw/03-ratings/promote_rating_vintage.R} (PROMOTE_FROM=v6, PROMOTE_TO=v7)
+and move the manifest to canonical v7 BEFORE this constant reaches main.
+
+v8 (2026-09-09, torp#206): \code{EPR_PRIOR_RATE_HITOUT} now also zeros under v4,
+where \code{epv_hitout} is identically zero -- the constant's own guard had never
+been extended past the v3 comparison it was written for, so every player's
+\code{epr_hitout} had been shrinking toward a leftover v2/v3-era rate with no
+basis in real v4 data (7.3\% of the whole rating, systematically boosting
+rucks and penalising low-games defenders). Preserve the outgoing v7 with
+\code{data-raw/03-ratings/promote_rating_vintage.R} (PROMOTE_FROM=v7, PROMOTE_TO=v8)
+and move the manifest to canonical v8 BEFORE this constant reaches main.
+
+v9 (2026-09-11, torp#210): the disposal-difficulty model stopped reading its
+own outcome. \code{kick_len} and \code{fwd_gain} were computed from the resolving row's
+coordinates -- the same row whose \code{out_tid} IS the target -- and \code{p_hat}
+splits the credit on ~96\% of disposals, so the leak sat underneath most of
+every player's Net Points. Removing them costs 0.050 log loss (44\% of the
+model's gain over the base rate) and moves published ratings by mean 0.396 a
+game, max 4.364, with 718 of 9,794 player-games shifting more than a point.
+Preserve the outgoing v8 with
+\code{data-raw/03-ratings/promote_rating_vintage.R} (PROMOTE_FROM=v8, PROMOTE_TO=v9)
+and move the manifest to canonical v9 BEFORE this constant reaches main.
+
+\strong{This vintage is the reason torp#212 exists.} Every earlier bump was
+triggered by a named constant changing, which
+\code{.rating_defining_constants()} captures and the drift guard can therefore
+see. This one is a model FORMULA, which is not a constant -- so the manifest
+diff for v8 -> v9 is EMPTY and nothing would have demanded this bump. It was
+done by hand. Until #212 wires the formulas in, ask "does this move ratings?"
+rather than "did a constant change?" -- the guard answers the second question
+and this vintage is proof they are not the same question.
 }
-\keyword{"v4"}
-\keyword{"v5"}
-\keyword{(2026-08-18):}
-\keyword{(2026-09-06):}
-\keyword{(2026-09-07):}
-\keyword{(819c6bed...),}
-\keyword{(PROMOTE_FROM=v4,}
-\keyword{(PROMOTE_FROM=v5,}
-\keyword{(`build_net_points()`),}
-\keyword{(byte-identical,}
-\keyword{+63}
-\keyword{--}
-\keyword{-63,}
-\keyword{27.1}
-\keyword{=}
-\keyword{BEFORE}
-\keyword{EPR}
-\keyword{EPV}
-\keyword{Each}
-\keyword{Every}
-\keyword{FILE,}
-\keyword{NOT}
-\keyword{NP_TURNOVER_ON_ALL_ACTS.}
-\keyword{Net}
-\keyword{OWN}
-\keyword{PROMOTE_TO=v5),}
-\keyword{PROMOTE_TO=v6)}
-\keyword{Points}
-\keyword{Preserve}
-\keyword{SAME}
-\keyword{That}
-\keyword{The}
-\keyword{Worth}
-\keyword{\code{arrow::write_parquet()},}
-\keyword{\code{preserve_rating_vintage()}}
-\keyword{`EPR_UNITS_SCALE_V4`.}
-\keyword{`data-raw/03-ratings/promote_rating_vintage.R`}
-\keyword{`data-raw/03-ratings/promote_v4_vintage.R`.}
-\keyword{a}
-\keyword{act}
-\keyword{again,}
-\keyword{all}
-\keyword{and}
-\keyword{any}
-\keyword{as}
-\keyword{asset}
-\keyword{ball}
-\keyword{before}
-\keyword{being}
-\keyword{between}
-\keyword{blame}
-\keyword{both}
-\keyword{by}
-\keyword{byte-identical}
-\keyword{bytes.}
-\keyword{canonical}
-\keyword{carry}
-\keyword{chain-native}
-\keyword{change}
-\keyword{channels}
-\keyword{checking}
-\keyword{constant}
-\keyword{convention.}
-\keyword{copy}
-\keyword{credited}
-\keyword{did,}
-\keyword{difference}
-\keyword{download-and-re-upload}
-\keyword{downloading}
-\keyword{engine}
-\keyword{every}
-\keyword{exists}
-\keyword{finished}
-\keyword{fired}
-\keyword{for}
-\keyword{four-channel}
-\keyword{frame}
-\keyword{from}
-\keyword{give}
-\keyword{gives.}
-\keyword{guarantee}
-\keyword{had}
-\keyword{handballs,}
-\keyword{in}
 \keyword{internal}
-\keyword{is}
-\keyword{it}
-\keyword{its}
-\keyword{kicks}
-\keyword{ledger}
-\keyword{live}
-\keyword{lost}
-\keyword{made}
-\keyword{main,}
-\keyword{main.}
-\keyword{manifest}
-\keyword{margin,}
-\keyword{mark.}
-\keyword{match.}
-\keyword{matched}
-\keyword{md5-checked),}
-\keyword{md5s}
-\keyword{merely}
-\keyword{most}
-\keyword{move}
-\keyword{moved}
-\keyword{moves}
-\keyword{moves,}
-\keyword{not}
-\keyword{note}
-\keyword{nothing}
-\keyword{now}
-\keyword{number}
-\keyword{of}
-\keyword{on}
-\keyword{only}
-\keyword{other}
-\keyword{outgoing}
-\keyword{own}
-\keyword{paid}
-\keyword{path}
-\keyword{pinned.}
-\keyword{players}
-\keyword{points}
-\keyword{precisely:}
-\keyword{preserved}
-\keyword{preserves}
-\keyword{published}
-\keyword{rather}
-\keyword{rating}
-\keyword{re-serialises}
-\keyword{re-uploading}
-\keyword{reaches}
-\keyword{reads}
-\keyword{reason}
-\keyword{rebuild.}
-\keyword{reprices}
-\keyword{rollback}
-\keyword{row}
-\keyword{row-identical,}
-\keyword{same}
-\keyword{sides}
-\keyword{so}
-\keyword{split}
-\keyword{stating}
-\keyword{sum}
-\keyword{swing}
-\keyword{tacklers,}
-\keyword{takes}
-\keyword{team's}
-\keyword{team-sum}
-\keyword{than}
-\keyword{that}
-\keyword{the}
-\keyword{then}
-\keyword{this}
-\keyword{through}
-\keyword{to}
-\keyword{torp_ratings_v2.parquet.}
-\keyword{torp_ratings_v3.parquet}
-\keyword{torp_ratings_v4.parquet}
-\keyword{turnover}
-\keyword{v2}
-\keyword{v3}
-\keyword{v3,}
-\keyword{v4}
-\keyword{v4,}
-\keyword{v5}
-\keyword{v6}
-\keyword{values,}
-\keyword{vintage}
-\keyword{vintage.}
-\keyword{was}
-\keyword{which}
-\keyword{whole}
-\keyword{winner}
-\keyword{with}
-\keyword{would}
