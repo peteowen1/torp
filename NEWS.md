@@ -1,3 +1,54 @@
+# torp 1.8.2
+
+## Ten rating-defining constants wired into the drift guard
+
+`.rating_defining_constants()` now captures the stoppage pricing unit
+(`NP_STOPPAGE_DESCS`, `NP_STOPPAGE_HITOUT_DESCS`, `NP_STOPPAGE_RUCK_OWN_DESCS`,
+`NP_STOPPAGE_SPLIT`, `NP_STOPPAGE_BAND_M`, `NP_STOPPAGE_Y_BREAKS`,
+`NP_STOPPAGE_SHRINK_N`) plus `NP_OFFENCE_POOL_SHARE`,
+`NP_CONTEST_WINNER_SHARE` and `NP_CONTEST_WINNER_SHARE_DEFAULT`. Until now
+changing any of them altered every published rating with no manifest trace and
+no vintage bump required -- they were honestly registered as a known gap in
+`test-vintage-wiring.R`'s `KNOWN_NON_DEFINING`, on "unaudited, could move
+ratings" rather than on measurement.
+
+They are measured now, on 2026 (9,794 player-matches, published numbers after
+`.np_team_margin()`): `NP_OFFENCE_POOL_SHARE` 0.10 -> 0.40 moves **100% of
+players, max 9.15 a game** -- the largest unguarded mover found;
+`NP_CONTEST_WINNER_SHARE` with the mark entries 0.80 -> 0.40 moves 100%, max
+8.50; `NP_STOPPAGE_SPLIT` flipped back to its pre-2026-09-10 `ground` split
+moves 100%, max 2.83. The remaining stoppage constants go in as structural
+members of the same mechanism rather than swept individually: `DESCS` selects
+which rows are stoppages at all, the hitout/ruck-own descriptions route which
+split each takes, and `BAND_M` + `Y_BREAKS` are the two halves of one cell key.
+Wiring half a cell key is what the register refused to do and was right to
+refuse, so they go in together.
+
+## NP_STOPPAGE_LOSER_SHARE is inert, and why that is safe to rely on
+
+Swept 0.50 -> 0.20 over 2026: the raw `build_net_points()` ledger moves up to
+**9.68 points a player-game** (mean 0.72) and the published numbers move
+**8.0e-15** -- 0 of 9,794 player-matches change at 1e-6. Not small: zero.
+
+The mechanism, which is what makes it trustworthy rather than a lucky sweep:
+`.np_team_margin()` rescales each SIDE of every row up to that row's full value
+(`own * target / side_sum`), so a constant whose only job is splitting a row
+BETWEEN the two teams is divided straight back out. `NP_STOPPAGE_LOSER_SHARE`
+is exactly that and nothing else -- the within-side ruck/player/pool split is
+`NP_STOPPAGE_SPLIT`'s job. It stays in `KNOWN_NON_DEFINING`, moved to the
+proven-inert section with the measurement recorded.
+
+The same algebra predicted `NP_BLAME_SHARE` inert and was **wrong** (it moves
+100% of players, max 6.25), because `NP_BLAME_POOL` gives the conceding side its
+own pool, making it a within-side split as well as a cross-team one. Measure,
+do not infer.
+
+## Note on the v8 vintage
+
+`RATING_VINTAGE` reached `"v8"` in 1.8.1 (the `EPR_PRIOR_RATE_HITOUT` zero-guard
+fix, torp#206) without its own NEWS section or a version bump. Recorded here so
+the changelog's latest vintage note is not still v7 while production serves v8.
+
 # torp 1.8.1
 
 ## RATING_VINTAGE moves to v7
