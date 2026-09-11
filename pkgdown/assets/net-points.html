@@ -133,6 +133,68 @@ This page follows one player through one game, act by act.</p>
 <ol class="steps" id="steps"></ol>
 </div>
 
+<h2>What the ledger can and cannot see</h2>
+<div class="card">
+<p style="margin-top:0">The ledger is built from the play-by-play feed. The richer <em>chains</em> feed is
+read alongside it to work out who ended up with the ball, but only play-by-play rows carry value. That
+boundary decides who can be credited or blamed at all, and it is much sharper than it looks.</p>
+
+<table>
+<tr><th>&nbsp;</th><th style="text-align:right">play types</th></tr>
+<tr><td>recorded in chains</td><td style="text-align:right">78</td></tr>
+<tr><td>reaching play-by-play</td><td style="text-align:right">27</td></tr>
+<tr><td><strong>in chains only &mdash; invisible to the ledger</strong></td><td style="text-align:right"><strong>51</strong> (80,694 rows)</td></tr>
+</table>
+
+<p>Spoils, contest annotations, tackles and dropped marks are all in that invisible set. Some of them
+still reach a player through the contest path, which reads chains directly. Others do not reach anyone.</p>
+
+<div class="caveat">
+<strong>A dropped mark is charged to the kicker.</strong> When a player fumbles a mark, that row is not in
+play-by-play, so the feed shows only the kick followed by an opponent winning the ball &mdash; and the
+<em>kicker</em> is booked with the turnover. Measured across a season, fumbled and dropped marks are
+charged to a different player than the one who erred <strong>100% of the time</strong>: roughly 1,300
+events and 7 points a match sitting with the wrong name.
+</div>
+
+<div class="caveat">
+<strong>Not every error is misplaced, and the difference matters.</strong> A kick out on the full names the
+<em>kicker</em>, and the kick is the error, so the ledger already has that right &mdash; on 1,819 of 1,902
+rows. Lumping those in with the fumbles would move blame away from the player who earned it, and would
+overstate the problem by more than half.
+</div>
+</div>
+
+<h2>What counts as a contest</h2>
+<div class="card">
+<p style="margin-top:0">A kick that ends in the air is split again, between whoever won the ball and whoever
+was beaten to it. That only makes sense if a contest actually happened &mdash; and for a long time the
+ledger decided that from how the kick <em>ended</em> rather than from whether anyone contested it.</p>
+
+<p>Two thirds of what it called contests were nothing of the kind: a kick finding a teammate, or an
+opponent marking it with nobody near him. Those sit alongside genuine duels with wildly different
+outcomes, and the model has no way to tell them apart:</p>
+
+<table>
+<tr><th>what the row actually is</th><th style="text-align:right">share</th><th style="text-align:right">defence wins</th></tr>
+<tr><td>a reception &mdash; nobody contested it</td><td style="text-align:right">69.8%</td><td style="text-align:right">13.1%</td></tr>
+<tr><td>a spoil</td><td style="text-align:right">22.5%</td><td style="text-align:right">100.0%</td></tr>
+<tr><td>a contested or pack mark</td><td style="text-align:right">7.7%</td><td style="text-align:right">41.6%</td></tr>
+</table>
+
+<p>Knowing which of the three a row is very nearly tells you the answer, so a model that cannot see the
+category ends up confident for the wrong reason. Restricting to kicks where the chains feed actually
+recorded a contest &mdash; a named target, or an outcome that is a duel by definition &mdash; cuts the
+population by two thirds and takes the model's worst overconfidence from 13.6 points to 2.8.</p>
+
+<div class="caveat">
+<strong>Kick length used to be read off the wrong row.</strong> The difficulty model measured how far a kick
+travelled using the position of whatever happened next &mdash; which, after a turnover, is often a kick-in
+from the far end. The rows it was surest about had a median &ldquo;kick length&rdquo; of 115 metres. Removing it
+cost about 44% of the model's apparent accuracy, nearly all of which was never real.
+</div>
+</div>
+
 <h2>What this does not do</h2>
 <div class="card">
 <p style="margin-top:0">No positional centring, no standardising, no scaling by time on ground, no

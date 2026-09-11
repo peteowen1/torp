@@ -500,3 +500,12 @@ utils::globalVariables(c(
   ".season", "n_pid", "n_tid", "att", "def", "role", "resid_expected", "expected", "err",
   "round_first_match", "n_mirror", "tog_mirror", "tog_other", "n_wrong", "denom"
 ))
+
+# Net Points error-blame re-attribution (.np_error_actor, the payment split).
+# data.table NSE columns, declared here or R CMD check raises "no visible
+# binding for global variable" as a NOTE -- and this package runs rcmdcheck with
+# error_on = "warning", so an undeclared column fails CI rather than nagging.
+utils::globalVariables(c(
+  ".grp", "err_do", "err_pid", "err_desc", "err_team",
+  "act_pid", "act_team", ".err_share"
+))

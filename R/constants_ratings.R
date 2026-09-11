@@ -1940,13 +1940,12 @@ NP_PRESSURE_BACK_SHARE <- 0.5
 #' Measured on 2026, splitting on whether the erring player is the one already
 #' being blamed:
 #'
-#' \tabular{lrl}{
-#'   \strong{act} \tab \strong{n} \tab \strong{who is blamed today} \cr
-#'   Mark Fumbled        \tab 787 \tab a DIFFERENT player, 100\% \cr
-#'   Mark Dropped        \tab 662 \tab a DIFFERENT player, 100\% \cr
-#'   No Pressure Error   \tab 472 \tab a different player on 408 \cr
-#'   Out On Full After Kick \tab 1,110 \tab the kicker himself on 1,109 \cr
-#'   Out On Full         \tab 792 \tab the kicker himself on 710 \cr
+#' \itemize{
+#'   \item \code{Mark Fumbled}, 787 events -- a DIFFERENT player, every one
+#'   \item \code{Mark Dropped}, 662 events -- a DIFFERENT player, every one
+#'   \item \code{No Pressure Error}, 472 events -- a different player on 408
+#'   \item \code{Out On Full After Kick}, 1,110 events -- the kicker himself on 1,109
+#'   \item \code{Out On Full}, 792 events -- the kicker himself on 710
 #' }
 #'
 #' \strong{Out On Full and Out On Full After Kick are deliberately NOT in this
