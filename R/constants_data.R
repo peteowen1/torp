@@ -163,8 +163,29 @@ CHAINS_CONTEST_TARGET_DESCS <- c("Contest Target", "Kick Inside 50 Result")
 #' exactly the class of bug that hides behind a green check.
 #'
 #' Adding it names the beaten opponent on \strong{3,647} more contests: 2,825 to
-#' 6,472. Gated by \code{EPV3_TARGET_FROM_I50} because it moves published
-#' ratings.
+#' 6,472, and defensive wins with a named loser go from 1,970 to 5,349.
+#'
+#' \strong{IT DOES NOT MOVE PUBLISHED RATINGS, and an earlier version of this
+#' note wrongly said it did} (review finding, 2026-09-11). \code{target_pid} is
+#' consumed only through \code{loser_pid} in \code{compute_aerial_credit()},
+#' which \code{player_credit.R:658} calls inside \code{if (v3)}. Production runs
+#' \code{EPV_ENGINE = "v4"}, and v4's path reaches
+#' \code{build_aerial_contests()} through \code{.np_difficulty_terms()} but
+#' selects only \code{winner_pid}; \code{target_pid} is dropped before the
+#' ledger ever sees it. Measured: with the flag off versus on,
+#' \code{identical(terms_off, terms_on)} is \code{TRUE} -- byte-identical -- even
+#' though the contest table's own \code{target_pid} column visibly jumps from
+#' 2,497 to 9,391 in the same run.
+#'
+#' So this is live under v3 and inert under v4. \strong{Under v4 the beaten
+#' defender is never named at all}: the contest debit goes to the conceding
+#' side's pool via \code{.np_defensive_pool()}, spread by exposure. Whether v4
+#' should debit the named player instead is a real design question and is NOT
+#' answered by this constant.
+#'
+#' It stays in \code{.rating_defining_constants()} because \code{EPV_ENGINE} is
+#' selectable: under v3 it does move ratings, and a constant that is
+#' rating-defining on any live-selectable path belongs in the manifest.
 #' @keywords internal
 EPV3_CONTEST_TARGET_DESCS <- c("Contest Target")
 

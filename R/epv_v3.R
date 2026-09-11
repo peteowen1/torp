@@ -167,10 +167,16 @@ build_aerial_contests <- function(chains, pbp_data) {
   #
   # Dropped rather than aborted, on purpose. A handful of mislabelled rows is a
   # feed quirk, and taking the nightly pipeline down for it would be worse than
-  # the defect -- an unnamed loser already has a defined fallback, the exposure-
-  # weighted pool in .np_contest_loss_pool(). But it is never silent: a debit
-  # landing on the winner is exactly the class of bug that hides behind a green
-  # check, so it warns with a count.
+  # the defect -- an unnamed loser already has a defined fallback in
+  # allocate_contest_losses(), which spreads the debit over the conceding side
+  # by aerial exposure. But it is never silent: a debit landing on the winner is
+  # exactly the class of bug that hides behind a green check, so it warns with a
+  # count.
+  #
+  # (An earlier version of this comment named `.np_contest_loss_pool()` as the
+  # fallback. No such function exists -- it was invented while writing the
+  # comment. Recorded because a plausible-looking function name in a comment is
+  # exactly the kind of thing a later reader trusts without grepping.)
   bad_t <- kk[!is.na(target_pid) & !is.na(out_pid) & !is.na(out_tid) &
                 !is.na(team_id) & out_tid != team_id & target_pid == out_pid, .N]
   if (bad_t > 0) {

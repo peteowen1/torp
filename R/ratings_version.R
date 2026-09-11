@@ -101,9 +101,16 @@
     # still open about. Both are inert at their defaults, so the manifest's
     # recorded VALUES will not change any rating -- but the guard must see them
     # before anyone flips one. Measured at the aggressive settings:
-    # NP_ERROR_BLAME_SHARE 0 -> 1 moves 1,436 player-games (max 1.609 a game),
-    # EPV3_TARGET_FROM_I50 FALSE -> TRUE names a loser on 3,379 more defensive
-    # contest wins, routing those debits to a player instead of the roster.
+    # NP_ERROR_BLAME_SHARE 0 -> 1 moves 1,436 player-games (max 1.609 a game).
+    #
+    # EPV3_TARGET_FROM_I50 is the awkward one and the comment here was wrong
+    # first time. It names a loser on 3,379 more defensive contest wins, but
+    # ONLY UNDER v3: loser_pid is consumed in compute_aerial_credit(), which
+    # player_credit.R:658 calls inside `if (v3)`, and v4 drops target_pid before
+    # the ledger sees it (measured: the difficulty terms are byte-identical with
+    # the flag on and off). It is wired anyway because EPV_ENGINE is selectable
+    # and it does move ratings on that path -- rating-defining on any
+    # live-selectable path is still rating-defining.
     NP_ERROR_BLAME_SHARE = NP_ERROR_BLAME_SHARE,
     NP_ERROR_DESCS = as.list(NP_ERROR_DESCS),
     EPV3_TARGET_FROM_I50 = EPV3_TARGET_FROM_I50,
