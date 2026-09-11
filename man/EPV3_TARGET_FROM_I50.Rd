@@ -16,6 +16,11 @@ the shipped behaviour of naming a beaten contestant only where a
 \code{Contest Target} row happened to be logged.
 }
 \details{
-
+\strong{This marker is NOT duel evidence on its own, and must not be used as
+such.} On \strong{54.8 percent} of rows the named target is the same player who
+resolves the kick -- he marked a kick from his own side, unopposed, which is a
+reception rather than a contest. Only the other 45.2 percent, where a different
+player wins it (88 percent of them opposition), is a duel. A population rule keyed
+on whether a target was named would re-admit 3,925 receptions.
 }
 \keyword{internal}

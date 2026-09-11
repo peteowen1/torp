@@ -15,6 +15,34 @@ EPV3_CONTEST_TARGET_DESCS
 i50 annotation is excluded here and retained there.
 }
 \details{
+\strong{Measured 2026-09-11 and the exclusion no longer holds.} Pete noticed
+the beaten contestant named on the \code{Kick Inside 50 Result} row, at the
+same coordinates as the outcome. Over 2026:
 
+A player is named on \strong{64.2 percent} of those rows (12,556 of 19,558),
+and that player is on the \strong{kicking} side on \strong{100.0 percent} of
+them -- 12,555 of 12,556, one exception all season.
+
+The 100 percent figure is the property that matters. \code{target_pid} is consumed only as
+\code{loser_pid = fifelse(def_win, target_pid, NA)} (\code{epv_v3.R}), so a
+row naming the WINNER would debit the player who won the contest -- the
+2026-07 interceptor bug in a new place. It never does, and on a defensive win
+the target cannot be the winner anyway, because the target is always on the
+kicking side.
+
+\strong{That is now enforced, not just measured} (review finding, 2026-09-11).
+A 100 percent rate on one season is a property of that data, not of the code:
+a re-scrape or another season could put the single exception on a
+\code{def_win} row, and
+nothing would have stopped it. \code{build_aerial_contests()} drops any target
+that equals the winner and warns with a count. Dropped rather than aborted on
+purpose -- an unnamed loser already falls back to the exposure-weighted pool,
+so a feed quirk costs accuracy on a few rows instead of taking the nightly
+pipeline down -- but never silently, because a debit landing on the winner is
+exactly the class of bug that hides behind a green check.
+
+Adding it names the beaten opponent on \strong{3,647} more contests: 2,825 to
+6,472. Gated by \code{EPV3_TARGET_FROM_I50} because it moves published
+ratings.
 }
 \keyword{internal}
