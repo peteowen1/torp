@@ -111,6 +111,23 @@
     # the flag on and off). It is wired anyway because EPV_ENGINE is selectable
     # and it does move ratings on that path -- rating-defining on any
     # live-selectable path is still rating-defining.
+    #
+    # THAT MEASUREMENT IS CONDITIONAL ON EPV3_CONTEST_POPULATION = "all", and
+    # stops holding the moment "evidence" is promoted (review finding,
+    # 2026-09-11). Under "all", target_pid only decides which contests get a
+    # loser_pid, which v4 never reads. Under "evidence" it also GATES ROW
+    # MEMBERSHIP in the contest table, and v4 builds its `contested` flag and
+    # its branch models from exactly that table -- so more named targets means a
+    # different population, a different fit, and different published numbers.
+    # Re-verify the byte-identical claim before any "evidence" promotion; do not
+    # carry it forward on the strength of this comment.
+    # EPV3_CONTEST_POPULATION was never wired, and that was a live gap rather
+    # than an oversight about a dead constant: under v4 it selects which rows
+    # .np_difficulty_terms() treats as contested, so it overwrites p_hat and the
+    # surprise split on every one of them. Changing it moves published ratings.
+    # Found 2026-09-11 adding the "evidence" value.
+    EPV3_CONTEST_POPULATION = EPV3_CONTEST_POPULATION,
+    EPV3_DUEL_EVIDENCE_OUTS = as.list(EPV3_DUEL_EVIDENCE_OUTS),
     NP_ERROR_BLAME_SHARE = NP_ERROR_BLAME_SHARE,
     NP_ERROR_DESCS = as.list(NP_ERROR_DESCS),
     EPV3_TARGET_FROM_I50 = EPV3_TARGET_FROM_I50,
