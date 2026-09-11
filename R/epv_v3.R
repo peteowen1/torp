@@ -140,14 +140,54 @@ build_aerial_contests <- function(chains, pbp_data) {
 
   # The intended receiver is named only when a Contest Target row was logged in
   # the in-flight span. That is the only way a beaten target can be debited.
+  #
+  # Under EPV3_TARGET_FROM_I50, `Kick Inside 50 Result` counts as a second
+  # marker. Measured 2026: it names a player on 64.2% of its rows and that
+  # player is on the KICKING side 100.0% of the time (12,555 of 12,556), so it
+  # can never be the winner -- which is the only property that makes it safe
+  # here, since target_pid is consumed solely as the loser on a defensive win.
+  # Worth 3,647 additional named opponents, 2,825 -> 6,472.
+  markers <- if (isTRUE(EPV3_TARGET_FROM_I50)) CHAINS_CONTEST_TARGET_DESCS
+             else EPV3_CONTEST_TARGET_DESCS
   tpid <- rep(NA_character_, nrow(kk))
   for (k in 1:5) {
     d <- kk[[paste0(".f", k, "_description")]]
-    hit <- !is.na(kk$.olag) & k < kk$.olag & is.na(tpid) &
-      d %chin% EPV3_CONTEST_TARGET_DESCS
+    hit <- !is.na(kk$.olag) & k < kk$.olag & is.na(tpid) & d %chin% markers
     tpid[hit] <- kk[[paste0(".f", k, "_player_id")]][hit]
   }
   kk[, target_pid := tpid]
+  # STRUCTURAL GUARD, not a measurement. `target_pid` is consumed downstream as
+  # `loser_pid = fifelse(def_win, target_pid, NA)`, so a row naming the player
+  # who WON would debit the winner -- the 2026-07 interceptor bug in a new
+  # place. Measured on 2026 that never happens (the i50 marker names the kicking
+  # side on 12,555 of 12,556 rows, and on a defensive win the target cannot be
+  # the winner because the target is on the kicking side). But 100% on one
+  # season is a property of that data, not of this code: a re-scrape or another
+  # season could put the single exception on a def_win row.
+  #
+  # Dropped rather than aborted, on purpose. A handful of mislabelled rows is a
+  # feed quirk, and taking the nightly pipeline down for it would be worse than
+  # the defect -- an unnamed loser already has a defined fallback in
+  # allocate_contest_losses(), which spreads the debit over the conceding side
+  # by aerial exposure. But it is never silent: a debit landing on the winner is
+  # exactly the class of bug that hides behind a green check, so it warns with a
+  # count.
+  #
+  # (An earlier version of this comment named `.np_contest_loss_pool()` as the
+  # fallback. No such function exists -- it was invented while writing the
+  # comment. Recorded because a plausible-looking function name in a comment is
+  # exactly the kind of thing a later reader trusts without grepping.)
+  bad_t <- kk[!is.na(target_pid) & !is.na(out_pid) & !is.na(out_tid) &
+                !is.na(team_id) & out_tid != team_id & target_pid == out_pid, .N]
+  if (bad_t > 0) {
+    cli::cli_warn(c(
+      "{bad_t} contest{?s} name the WINNER as the beaten target; dropping the target on {?it/them}.",
+      "x" = "Kept, {?it/they} would debit the player who won the contest.",
+      "i" = "Expected 0 -- the target marker should only ever name the kicking side."
+    ))
+    kk[!is.na(target_pid) & !is.na(out_pid) & !is.na(out_tid) & !is.na(team_id) &
+         out_tid != team_id & target_pid == out_pid, target_pid := NA_character_]
+  }
 
   # Which outcomes count as a contest. Under EPV3_CONTEST_POPULATION = "duel"
   # this drops Uncontested Mark and Mark On Lead -- 68.5% of the rows and 53.9%

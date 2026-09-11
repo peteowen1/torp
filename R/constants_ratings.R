@@ -1929,6 +1929,54 @@ NP_BLAME_POOL <- TRUE
 #' @keywords internal
 NP_PRESSURE_BACK_SHARE <- 0.5
 
+#' Chains-only acts that name the player who made the error
+#'
+#' The ledger runs on PBP, and 51 of the 78 play types in chains never reach
+#' PBP (80,694 rows in 2026). When one of these sits between a disposal and the
+#' opposition's next possession, PBP sees only the disposal followed by an
+#' opponent, so the DISPOSER is booked as the turnover -- for an error someone
+#' else made.
+#'
+#' Measured on 2026, splitting on whether the erring player is the one already
+#' being blamed:
+#'
+#' \itemize{
+#'   \item \code{Mark Fumbled}, 787 events -- a DIFFERENT player, every one
+#'   \item \code{Mark Dropped}, 662 events -- a DIFFERENT player, every one
+#'   \item \code{No Pressure Error}, 472 events -- a different player on 408
+#'   \item \code{Out On Full After Kick}, 1,110 events -- the kicker himself on 1,109
+#'   \item \code{Out On Full}, 792 events -- the kicker himself on 710
+#' }
+#'
+#' \strong{Out On Full and Out On Full After Kick are deliberately NOT in this
+#' list.} They name the kicker, and a kick out on the full IS the kicker's
+#' error, so the existing attribution is already right; adding them would move
+#' blame away from the player who earned it. That split is the whole reason this
+#' constant is a list rather than "every chains-only act".
+#' @keywords internal
+NP_ERROR_DESCS <- c("Mark Fumbled", "Mark Dropped", "Dropped Mark",
+                    "No Pressure Error")
+
+#' Share of a turnover debit moved to the teammate who actually erred
+#'
+#' Same shape as \code{NP_PRESSURE_BACK_SHARE}: the value is already correct in
+#' total -- the ledger conserves -- so this moves the RECIPIENT, never the
+#' amount. At 0 the rule is inert and every debit stays with the disposer, which
+#' is today's behaviour.
+#'
+#' Applies only where a \code{NP_ERROR_DESCS} row sits between a disposal and the
+#' opposition's next possession AND the erring player is a teammate of the
+#' disposer AND is not the disposer himself. Roughly 1,300 events and 1,530
+#' points a season, about 7 a match.
+#'
+#' \strong{Not 1.0, and the reason is a real disagreement to settle on rows.} The
+#' disposer is not blameless: he chose to kick it there, and \code{own_hm} on a
+#' turnover carries his DECISION term as well as his share of the surprise. A
+#' share of 1 would say a kick into a contest that a teammate drops is entirely
+#' the teammate's fault, which is the mirror of the bug being fixed.
+#' @keywords internal
+NP_ERROR_BLAME_SHARE <- 0
+
 #' A quarter's last act is nobody's loss: its evaporated state goes to the pool
 #'
 #' `delta_epv` is built within (match, period), so the last row of a quarter

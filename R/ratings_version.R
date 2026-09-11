@@ -96,6 +96,24 @@
     # share re-splits every uncontested reception.
     NP_BLAME_POOL = NP_BLAME_POOL,
     NP_PRESSURE_BACK_SHARE = NP_PRESSURE_BACK_SHARE,
+    # Added 2026-09-11 with the constants themselves, because shipping a
+    # rating-mover unwired is the gap torp#208 existed to close and torp#212 is
+    # still open about. Both are inert at their defaults, so the manifest's
+    # recorded VALUES will not change any rating -- but the guard must see them
+    # before anyone flips one. Measured at the aggressive settings:
+    # NP_ERROR_BLAME_SHARE 0 -> 1 moves 1,436 player-games (max 1.609 a game).
+    #
+    # EPV3_TARGET_FROM_I50 is the awkward one and the comment here was wrong
+    # first time. It names a loser on 3,379 more defensive contest wins, but
+    # ONLY UNDER v3: loser_pid is consumed in compute_aerial_credit(), which
+    # player_credit.R:658 calls inside `if (v3)`, and v4 drops target_pid before
+    # the ledger sees it (measured: the difficulty terms are byte-identical with
+    # the flag on and off). It is wired anyway because EPV_ENGINE is selectable
+    # and it does move ratings on that path -- rating-defining on any
+    # live-selectable path is still rating-defining.
+    NP_ERROR_BLAME_SHARE = NP_ERROR_BLAME_SHARE,
+    NP_ERROR_DESCS = as.list(NP_ERROR_DESCS),
+    EPV3_TARGET_FROM_I50 = EPV3_TARGET_FROM_I50,
     NP_SIREN_TO_POOL = NP_SIREN_TO_POOL,
     NP_UNCONTESTED_RECEIVER_SHARE = NP_UNCONTESTED_RECEIVER_SHARE,
     # The disposer's share of a lost kick's surprise. Swept for the first time
