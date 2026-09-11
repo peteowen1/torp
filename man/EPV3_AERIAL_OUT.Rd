@@ -7,6 +7,12 @@
 epv3_aerial_out(population = EPV3_CONTEST_POPULATION)
 }
 \description{
-The outcome set the contest path should use, given the population setting
+\code{"evidence"} returns the WIDE set deliberately. It cannot express Pete's
+rule on its own, because that rule is row-level -- a contest is a kick where
+chains logged a target OR the outcome is self-evidently a duel -- and an
+outcome whitelist has no way to say "or a target was logged". The row-level
+filter lives in \code{build_aerial_contests()}; this function's job under
+\code{"evidence"} is only to let every candidate row through so that filter
+can see it.
 }
 \keyword{internal}

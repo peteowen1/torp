@@ -52,15 +52,47 @@ EPV3_DUEL_OUT <- c("Contested Mark", "Pack Mark (P)", "Pack Mark (O)",
 #' @keywords internal
 EPV3_CONTEST_POPULATION <- "all"
 
+#' Outcomes that are self-evidently a duel, whatever chains annotated
+#'
+#' Used by \code{EPV3_CONTEST_POPULATION = "evidence"}. A contested or pack mark
+#' is a duel by name; a spoil is a defender beating someone to the ball; a
+#' fumbled or dropped mark is a contest someone lost by not holding it.
+#'
+#' \code{Mark Fumbled} and \code{Mark Dropped} are Pete's additions (2026-09-11)
+#' and were excluded entirely before. Measured, \code{Mark Fumbled} runs at
+#' 37.9 percent defence-win over 1,840 rows -- genuinely two-sided, not a
+#' rounding error. \code{Mark Dropped} deduplicates against it: the pair is one
+#' event on two rows at the same coordinates.
+#' @keywords internal
+EPV3_DUEL_EVIDENCE_OUTS <- c("Contested Mark", "Pack Mark (P)", "Pack Mark (O)",
+                             "Spoil", "Spoil gaining possession",
+                             "Spoil ineffective", "Mark Fumbled",
+                             "Mark Dropped", "Dropped Mark")
+
 #' The outcome set the contest path should use, given the population setting
+#'
+#' \code{"evidence"} returns the WIDE set deliberately. It cannot express Pete's
+#' rule on its own, because that rule is row-level -- a contest is a kick where
+#' chains logged a target OR the outcome is self-evidently a duel -- and an
+#' outcome whitelist has no way to say "or a target was logged". The row-level
+#' filter lives in \code{build_aerial_contests()}; this function's job under
+#' \code{"evidence"} is only to let every candidate row through so that filter
+#' can see it.
 #' @keywords internal
 epv3_aerial_out <- function(population = EPV3_CONTEST_POPULATION) {
   switch(population,
-    duel = EPV3_DUEL_OUT,
-    all  = EPV3_AERIAL_OUT,
+    duel     = EPV3_DUEL_OUT,
+    all      = EPV3_AERIAL_OUT,
+    # "Free For" joins the CANDIDATE set but is NOT in EPV3_DUEL_EVIDENCE_OUTS:
+    # a free kick is not self-evidently a duel, so it survives only through the
+    # target clause of the row-level filter. That is Pete's call (2026-09-11) --
+    # a contest that drew a free kick is still a contest, and chains named both
+    # players. It admits ~556 of the 2,842 Free For outcomes; the rest have no
+    # logged contest and drop out.
+    evidence = unique(c(EPV3_AERIAL_OUT, EPV3_DUEL_EVIDENCE_OUTS, "Free For")),
     cli::cli_abort(c(
       "Unknown {.code EPV3_CONTEST_POPULATION}: {.val {population}}",
-      "x" = "Refusing to guess a contest population -- expected {.val duel} or {.val all}."
+      "x" = "Refusing to guess a contest population -- expected {.val duel}, {.val all} or {.val evidence}."
     ))
   )
 }

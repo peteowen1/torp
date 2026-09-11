@@ -111,6 +111,13 @@
     # the flag on and off). It is wired anyway because EPV_ENGINE is selectable
     # and it does move ratings on that path -- rating-defining on any
     # live-selectable path is still rating-defining.
+    # EPV3_CONTEST_POPULATION was never wired, and that was a live gap rather
+    # than an oversight about a dead constant: under v4 it selects which rows
+    # .np_difficulty_terms() treats as contested, so it overwrites p_hat and the
+    # surprise split on every one of them. Changing it moves published ratings.
+    # Found 2026-09-11 adding the "evidence" value.
+    EPV3_CONTEST_POPULATION = EPV3_CONTEST_POPULATION,
+    EPV3_DUEL_EVIDENCE_OUTS = as.list(EPV3_DUEL_EVIDENCE_OUTS),
     NP_ERROR_BLAME_SHARE = NP_ERROR_BLAME_SHARE,
     NP_ERROR_DESCS = as.list(NP_ERROR_DESCS),
     EPV3_TARGET_FROM_I50 = EPV3_TARGET_FROM_I50,
