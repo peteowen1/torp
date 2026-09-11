@@ -50,7 +50,7 @@ EPV3_DUEL_OUT <- c("Contested Mark", "Pack Mark (P)", "Pack Mark (O)",
 #' disposer/receiver split, so value moves into \code{recv} and \code{disp}
 #' rather than disappearing.
 #' @keywords internal
-EPV3_CONTEST_POPULATION <- "all"
+EPV3_CONTEST_POPULATION <- "evidence"
 
 #' Outcomes that are self-evidently a duel, whatever chains annotated
 #'
