@@ -140,11 +140,19 @@ build_aerial_contests <- function(chains, pbp_data) {
 
   # The intended receiver is named only when a Contest Target row was logged in
   # the in-flight span. That is the only way a beaten target can be debited.
+  #
+  # Under EPV3_TARGET_FROM_I50, `Kick Inside 50 Result` counts as a second
+  # marker. Measured 2026: it names a player on 64.2% of its rows and that
+  # player is on the KICKING side 100.0% of the time (12,555 of 12,556), so it
+  # can never be the winner -- which is the only property that makes it safe
+  # here, since target_pid is consumed solely as the loser on a defensive win.
+  # Worth 3,647 additional named opponents, 2,825 -> 6,472.
+  markers <- if (isTRUE(EPV3_TARGET_FROM_I50)) CHAINS_CONTEST_TARGET_DESCS
+             else EPV3_CONTEST_TARGET_DESCS
   tpid <- rep(NA_character_, nrow(kk))
   for (k in 1:5) {
     d <- kk[[paste0(".f", k, "_description")]]
-    hit <- !is.na(kk$.olag) & k < kk$.olag & is.na(tpid) &
-      d %chin% EPV3_CONTEST_TARGET_DESCS
+    hit <- !is.na(kk$.olag) & k < kk$.olag & is.na(tpid) & d %chin% markers
     tpid[hit] <- kk[[paste0(".f", k, "_player_id")]][hit]
   }
   kk[, target_pid := tpid]

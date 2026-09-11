@@ -135,8 +135,44 @@ CHAINS_CONTEST_TARGET_DESCS <- c("Contest Target", "Kick Inside 50 Result")
 #'
 #' `Contest Target` only. See \code{CHAINS_CONTEST_TARGET_DESCS} for why the
 #' i50 annotation is excluded here and retained there.
+#'
+#' \strong{Measured 2026-09-11 and the exclusion no longer holds.} Pete noticed
+#' the beaten contestant named on the \code{Kick Inside 50 Result} row, at the
+#' same coordinates as the outcome. Over 2026:
+#'
+#' \itemize{
+#'   \item a player is named on \strong{64.2\%} of those rows (12,556 of 19,558)
+#'   \item and that player is on the \strong{kicking} side on \strong{100.0\%}
+#'     of them -- 12,555 of 12,556, one exception all season
+#' }
+#'
+#' The 100\% is the property that matters. \code{target_pid} is consumed only as
+#' \code{loser_pid = fifelse(def_win, target_pid, NA)} (\code{epv_v3.R}), so a
+#' row naming the WINNER would debit the player who won the contest -- the
+#' 2026-07 interceptor bug in a new place. It never does, and on a defensive win
+#' the target cannot be the winner anyway, because the target is always on the
+#' kicking side.
+#'
+#' Adding it names the beaten opponent on \strong{3,647} more contests: 2,825 to
+#' 6,472. Gated by \code{EPV3_TARGET_FROM_I50} because it moves published
+#' ratings.
 #' @keywords internal
 EPV3_CONTEST_TARGET_DESCS <- c("Contest Target")
+
+#' Also read the target off `Kick Inside 50 Result`
+#'
+#' See \code{EPV3_CONTEST_TARGET_DESCS} for the measurement. \code{FALSE} keeps
+#' the shipped behaviour of naming a beaten contestant only where a
+#' \code{Contest Target} row happened to be logged.
+#'
+#' \strong{This marker is NOT duel evidence on its own, and must not be used as
+#' such.} On \strong{54.8\%} of rows the named target is the same player who
+#' resolves the kick -- he marked his own team's kick unopposed, which is a
+#' reception rather than a contest. Only the other 45.2\%, where a different
+#' player wins it (88\% of them opposition), is a duel. A population rule keyed
+#' on "a target was named" would re-admit 3,925 receptions.
+#' @keywords internal
+EPV3_TARGET_FROM_I50 <- FALSE
 
 #' Chains descriptions that may sit between a kick and its contest outcome
 #'

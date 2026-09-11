@@ -496,6 +496,61 @@
   out[, .(description, band, yband, baseline, n, p_home, Vh, Va)]
 }
 
+#' Name the player who made an error the ledger cannot see
+#'
+#' The ledger runs on PBP, and 51 of chains' 78 play types never reach it
+#' (80,694 rows in 2026). When one of those names a player at fault and sits
+#' between a disposal and the opposition's next possession, PBP sees only
+#' `Kick (SYD Bice) -> Loose Ball Get (NMFC)`: the team changes, the KICK is
+#' booked as the turnover, and Bice wears the whole swing for a mark Nick
+#' Blakey dropped.
+#'
+#' Measured on 2026, `Mark Fumbled` and `Mark Dropped` are blamed on a
+#' different player **100%** of the time -- 1,449 rows, though `Fumbled ->
+#' Dropped` is one event on two rows so the distinct count is nearer 787.
+#'
+#' Returns at most one row per PBP act: the FIRST qualifying error in the gap,
+#' and only where the erring player is a teammate of the actor and is not the
+#' actor himself. Both conditions matter. A different team means an opponent
+#' fumbled an intercept, which is a different event and not this row's fault;
+#' the same player means the attribution is already right, which is exactly the
+#' case for `Out On Full After Kick` and why it is not in `NP_ERROR_DESCS`.
+#'
+#' @param seq Output of `.np_sequence()` -- the FULL sequence, because the rows
+#'   this needs are the ones `in_pbp == TRUE` removes.
+#' @return `match_id`, `display_order`, `err_pid`, `err_desc`; empty if chains
+#'   carries none.
+#' @keywords internal
+.np_error_actor <- function(seq) {
+  empty <- data.table::data.table(
+    match_id = character(), display_order = integer(),
+    err_pid = character(), err_desc = character())
+  if (is.null(seq) || !nrow(seq) || !"in_pbp" %in% names(seq)) return(empty)
+  s <- data.table::as.data.table(seq)[, .(match_id = as.character(match_id),
+                                          display_order, description, player_id,
+                                          team, in_pbp)]
+  data.table::setorder(s, match_id, display_order)
+  # Each chains-only row belongs to the last PBP act before it. cumsum over
+  # in_pbp gives that grouping directly, and it is the same device
+  # `.np_resolution()` uses to walk forward past in-flight rows.
+  s[, .grp := cumsum(in_pbp), by = match_id]
+  s <- s[.grp > 0]
+  owner <- s[in_pbp == TRUE, .(match_id, .grp, display_order,
+                               act_pid = player_id, act_team = team)]
+  errs <- s[in_pbp == FALSE & description %chin% NP_ERROR_DESCS &
+              !is.na(player_id),
+            .(match_id, .grp, err_pid = player_id, err_team = team,
+              err_desc = description, err_do = display_order)]
+  if (!nrow(errs)) return(empty)
+  data.table::setorder(errs, match_id, .grp, err_do)
+  errs <- errs[, .SD[1L], by = .(match_id, .grp)]
+  o <- merge(owner, errs, by = c("match_id", ".grp"))
+  o <- o[!is.na(act_pid) & !is.na(err_pid) & err_pid != act_pid &
+           !is.na(act_team) & !is.na(err_team) & err_team == act_team]
+  if (!nrow(o)) return(empty)
+  o[, .(match_id, display_order, err_pid, err_desc)]
+}
+
 #' Build the per-act ledger in the home-margin frame
 #'
 #' @param pbp_data Play-by-play carrying `delta_epv`, `home_away`, `team`,
@@ -541,6 +596,10 @@
   # `d` after `adj` had been built from it, so the two could disagree on type.
   d[, match_id := as.character(match_id)]
   adj <- .np_adjacency(d)
+  # Who actually made the error, when the ledger cannot see the act. Taken from
+  # the FULL sequence for the same reason adjacency is taken from the filtered
+  # one: the rows this needs are precisely the ones `in_pbp == TRUE` drops.
+  errs <- if (is.null(chains)) NULL else .np_error_actor(seq)
   res <- if (is.null(chains)) NULL else .np_resolution(seq)
   # The last row of each quarter, taken on the FULL frame: delta_epv is built
   # within (match, period), so that row's delta is the whole state evaporating
@@ -686,11 +745,20 @@
     cli::cli_alert_info(
       "Net points resolution: {round(100 * mean(!is.na(disp$resolve_desc)), 1)}% of {format(nrow(disp), big.mark = ',')} disposals resolve within 6 rows; {round(100 * mean(disp$resolve_desc %chin% c('Spoil', 'Contest Target', 'Contested Mark'), na.rm = TRUE), 1)}% at a named contest")
   }
+  d[, `:=`(err_pid = NA_character_, err_desc = NA_character_)]
+  if (!is.null(errs) && nrow(errs)) {
+    d[errs, on = .(match_id, display_order),
+      `:=`(err_pid = i.err_pid, err_desc = i.err_desc)]
+    n_err <- d[!is.na(err_pid), .N]
+    n_tov <- d[!is.na(err_pid) & !is.na(next_team) & next_team != team, .N]
+    cli::cli_alert_info(
+      "Error actors: {format(n_err, big.mark = ',')} act{?s} are followed by a chains-only error naming a teammate ({format(n_tov, big.mark = ',')} of them lose the ball, so the actor is currently blamed for it)")
+  }
   if (!"reprice_hm" %in% names(d)) d[, reprice_hm := 0]
   out <- d[, .(match_id, display_order, description, team, home_away, player_id,
                hm, is_stoppage, reprice_hm, next_team, next_player, next_desc,
                resolve_desc, resolve_team, resolve_player, resolve_lag,
-               period, last_in_period)]
+               err_pid, err_desc, period, last_in_period)]
   # Every named actor in the sequence, including chains-only ones (a spoiler
   # who never touched the ball in PBP), so a contest winner always has a roster
   # row to be paid on.
@@ -2086,8 +2154,24 @@ build_net_points <- function(pbp_data = NULL,
     cli::cli_abort("Net points components do not sum to the total (max gap {signif(gap, 3)}).")
   }
   if (isTRUE(return_payments)) {
+    # The debit for an error the ledger cannot see belongs to the player who
+    # made it, not to the teammate who kicked to him. This moves the RECIPIENT
+    # and never the amount -- `eb` of each qualifying actor payment goes to
+    # `err_pid`, the rest stays -- so conservation is untouched by construction
+    # and the payment-rebuilds-the-ledger check below still has to pass.
+    eb <- NP_ERROR_BLAME_SHARE
+    if (!is.numeric(eb) || length(eb) != 1 || is.na(eb) || eb < 0 || eb > 1) {
+      cli::cli_abort("{.code NP_ERROR_BLAME_SHARE} must be one number in [0, 1], not {.val {eb}}.")
+    }
+    has_err <- if ("err_pid" %in% names(l)) {
+      !is.na(l$err_pid) & l$kind == "turnover" & l$own_hm != 0
+    } else rep(FALSE, nrow(l))
+    l[, .err_share := data.table::fifelse(has_err, eb, 0)]
     pay <- list(
-      l[own_hm != 0, .(match_id, display_order, role = "actor", team, player_id, hm = own_hm)],
+      l[own_hm != 0, .(match_id, display_order, role = "actor", team, player_id,
+                       hm = own_hm * (1 - .err_share))],
+      l[has_err & .err_share > 0, .(match_id, display_order, role = "error_blame",
+                                    team, player_id = err_pid, hm = own_hm * .err_share)],
       l[recv_hm != 0, .(match_id, display_order, role = "receiver", team, player_id = next_player, hm = recv_hm)],
       l[win_hm != 0 & !is.na(winner_pid), .(match_id, display_order, role = "contest_winner", team, player_id = winner_pid, hm = win_hm)],
       l[team_hm != 0, .(match_id, display_order, role = "attack_pool", team, player_id = NA_character_, hm = team_hm)]
@@ -2104,6 +2188,12 @@ build_net_points <- function(pbp_data = NULL,
     if (!is.null(sc$rows)) pay <- c(pay, list(sc$rows))
     pay <- data.table::rbindlist(pay, use.names = TRUE)
     pay[, doubled := FALSE]
+    if (any(has_err)) {
+      moved <- sum(abs(l$own_hm[has_err])) * eb
+      cli::cli_alert_info(
+        "Error blame: {format(sum(has_err), big.mark = ',')} turnover{?s} follow a chains-only error by a teammate ({paste(sort(unique(stats::na.omit(l$err_desc[has_err]))), collapse = ', ')}); {round(100 * eb)}% of their debit ({round(moved, 1)} points) moves to the player who erred (NP_ERROR_BLAME_SHARE)")
+    }
+    l[, .err_share := NULL]
     paid <- sum(pay$hm); owed <- sum(l$hm)
     if (abs(paid - owed) > 1e-6) {
       cli::cli_abort("Payment table does not rebuild the ledger: paid {round(paid, 4)}, ledger {round(owed, 4)}.")

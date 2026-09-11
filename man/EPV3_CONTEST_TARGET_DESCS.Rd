@@ -14,4 +14,7 @@ EPV3_CONTEST_TARGET_DESCS
 \verb{Contest Target} only. See \code{CHAINS_CONTEST_TARGET_DESCS} for why the
 i50 annotation is excluded here and retained there.
 }
+\details{
+
+}
 \keyword{internal}
