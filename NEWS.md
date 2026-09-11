@@ -1,3 +1,62 @@
+# torp 1.8.4
+
+## Blame the player who actually made the error (`NP_ERROR_BLAME_SHARE`)
+
+The ledger runs on PBP, and **51 of chains' 78 play types never reach it**
+(80,694 rows in 2026). When one of those names a player at fault and sits
+between a disposal and the opposition's next possession, PBP sees only
+
+```
+Kick (SYD Bice)  ->  Loose Ball Get (NMFC Duursma)
+```
+
+the team changes, the kick is booked as the turnover, and Bice wears the whole
+swing for a mark **Nick Blakey** dropped. Measured on 2026, `Mark Fumbled` and
+`Mark Dropped` are blamed on a different player **100%** of the time.
+
+`.np_error_actor()` names the culprit from the sequence `.np_sequence()` already
+assembles, and `NP_ERROR_BLAME_SHARE` moves that share of the debit to him under
+a new `error_blame` payment role. It moves the **recipient, never the amount**,
+so conservation is untouched by construction -- verified at the aggressive
+setting: team-margin max gap 7.1e-14, ledger-rebuild assertion clean.
+
+**`Out On Full` and `Out On Full After Kick` are deliberately excluded.** They
+name the *kicker*, and a kick out on the full **is** the kicker's error, so
+today's attribution is already right on 1,819 of 1,902 rows. Including them
+would have moved blame away from the player who earned it. That split is why
+`NP_ERROR_DESCS` is a list rather than "every chains-only act".
+
+Default is `0` -- inert, no published number moves. At `1.0`: 784 turnovers,
+309.1 points, 1,436 player-games, max 1.609 a game.
+
+## A second contest-target marker, and an honest note on what it does
+
+`constants_data.R:132` has always defined
+`CHAINS_CONTEST_TARGET_DESCS <- c("Contest Target", "Kick Inside 50 Result")`
+while the contest engine scanned only the first. Pete spotted the beaten
+contestant named on the i50 row at the outcome's own coordinates. A player is
+named on 64.2% of those rows and is on the **kicking side 100.0%** of the time
+(12,555 of 12,556) -- the property that makes it safe, since `target_pid` is
+consumed only as the loser on a defensive win, and a row naming the *winner*
+would debit the player who won.
+
+That safety property is now **enforced, not documented**: `build_aerial_contests()`
+drops any target equal to the winner and warns with a count. A 100% rate on one
+season is a fact about that season, not about the code.
+
+**It does not move published ratings, and an earlier draft of this entry said it
+did.** `target_pid` reaches the ledger only through `compute_aerial_credit()`,
+which `player_credit.R:658` calls inside `if (v3)`. Production runs v4, whose
+path drops `target_pid` before the ledger sees it -- measured, the difficulty
+terms are byte-identical with the flag on and off. Live under v3, inert under
+v4, and wired into the drift guard because `EPV_ENGINE` is selectable.
+
+**Under v4 the beaten target is never charged at all** -- the kicker wears it.
+Simulated, moving that debit to the player actually beaten narrows the
+forward/defender gap **4.474 → 4.096**, recovering 74% of what the #210 leak fix
+cost, by *deflating key forwards* (−0.365) rather than crediting defenders
+(+0.014). Not implemented; recorded as a decision for Pete.
+
 # torp 1.8.3
 
 ## The disposal-difficulty model no longer reads its own outcome (#210)
