@@ -153,5 +153,30 @@ move, so preserve v10 with
 \code{data-raw/03-ratings/promote_rating_vintage.R} (PROMOTE_FROM=v10,
 PROMOTE_TO=v11) and move the manifest to canonical v11 BEFORE this constant
 reaches main.
+
+v12 (2026-09-12): \code{NP_CONTEST_FILTER_SYMMETRIC} \code{FALSE} -> \code{TRUE},
+fixing torp#220. The contest path filtered its scored rows a second time in a
+way that kept every defensive win unconditionally but an attacking win only
+when the outcome was in the narrower \code{EPV3_DUEL_OUT} list --- so a
+\code{Mark Fumbled} won by the defence was priced and the identical outcome
+won by the attack was discarded. Its own stated intent one line above is
+symmetric, so this was a defect against its own spec, not a design choice.
+
+Measured: 1,483 of 17,078 contests dropped, 8.7 percent, and
+\strong{every one of them an attacking win} --- 1,149 \code{Mark Fumbled},
+339 \code{Free For}. The defensive win rate read 86 percent against a true
+78.7, and the defence took 60.1 percent of contest credit against a
+corrected 48.3.
+
+\strong{This WIDENS the forward-defender gap, 3.413 -> 3.795}, and that is
+the correct direction: the defence's share was inflated by the discarded
+rows, not the corrected one deflated. Worth +0.399 a game to key forwards
+(+0.370 of it in \code{np_direct}) --- a forward who won a contested mark
+after a fumble or a free was being paid nothing for it, 1,490 times a season.
+73 percent of player-games move (mean 0.223, max 5.838), so this needs a
+full-history rebuild. Preserve v11 with
+\code{data-raw/03-ratings/promote_rating_vintage.R} (PROMOTE_FROM=v11,
+PROMOTE_TO=v12) and move the manifest to canonical v12 BEFORE this constant
+reaches main.
 }
 \keyword{internal}
