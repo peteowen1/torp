@@ -19,7 +19,7 @@ is one point of margin and they convert at very different rates.
 
 \strong{Keyed on the constant, not on a per-call argument}, so a script that
 passes \code{epv_engine = "v3"} while \code{EPV_ENGINE} still reads
-\code{"v2"} gets v2 priors. That is the right default for production and the
+\code{v2} gets v2 priors. That is the right default for production and the
 wrong one for a two-engine gate, so gate scripts must
 \code{assignInNamespace()} the prior rates for their v3 arm. The alternative
 -- resolving the prior inside \code{.build_epr_season()} -- would make the

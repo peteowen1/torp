@@ -1,3 +1,50 @@
+# torp 1.8.6
+
+## Rating vintage v11: stop charging defenders most for defending
+
+`NP_TEAM_MARGIN_POOL_BY` goes `"dacts"` -> `"tog"`.
+
+**This came out of decomposing the forward-defender gap for the first time
+rather than guessing at it**, and the result reframes the defender program.
+`build_net_points()` returns eight columns that sum to `net_points` exactly, so
+the 4.273-a-game gap is arithmetic:
+
+| column | KEY_FWD | KEY_DEF | gap |
+|---|---:|---:|---:|
+| **own acts** (`np_direct`) | **+4.079** | **-1.972** | **+6.051** |
+| turnovers won | 0.446 | **2.259** | -1.813 |
+| **offence pool** (`np_team`) | -5.619 | **-6.433** | **+0.814** |
+| contests won | 0.033 | **0.702** | -0.669 |
+
+**Defenders are not under-credited for defending.** They already out-earn
+forwards on turnovers won and contests. The entire gap is that marking near goal
+gains expected points while rebounding out of defensive 50 loses them -- which is
+football. **3.543 of the 4.274 is earned and beyond any re-split.**
+
+The one allocated lever was this constant, and it was hard to defend on its own
+terms: it spread a side's **offence** pool in proportion to **defensive acts**, so
+a defender doing his job more diligently took a bigger share of a pool that
+exists to account for attacking value. Key defenders carried **-6.433** against
+forwards' **-5.619** -- or -643 against -562 per 100 TOG.
+
+| position | `dacts` | **`tog`** | change |
+|---|---:|---:|---:|
+| KEY_FORWARD | 2.031 | 1.650 | -0.381 |
+| MEDIUM_FORWARD | 0.763 | 0.560 | -0.203 |
+| MIDFIELDER | 0.329 | 0.345 | +0.016 |
+| RUCK | 0.630 | 0.696 | +0.066 |
+| MEDIUM_DEFENDER | -1.294 | -1.159 | +0.135 |
+| **KEY_DEFENDER** | **-2.242** | **-1.765** | **+0.477** |
+
+Gap **4.273 -> 3.415, narrower by 0.858** -- more than the entire allocated part
+(0.731), because it flips the imbalance rather than shrinking it: under `"tog"`
+defenders are charged slightly *less* of the pool than forwards.
+
+**Cost: repeatability 0.606 -> 0.598**, the 0.008 edge that chose `"dacts"`.
+Accepted knowingly -- position balance was never the criterion in that
+comparison. All 9,838 player-games move (mean 0.339, max 3.08), so this ships
+with a full-history rebuild.
+
 # torp 1.8.5
 
 ## Rating vintage v10: the contest population and error blame go live

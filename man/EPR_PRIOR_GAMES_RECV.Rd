@@ -23,7 +23,7 @@ need much more shrinkage.
 were measured on v3's channels and are meaningless for v2's; applying them to
 v2 would change every published rating today for no reason. v2 keeps 3.0 so
 production is byte-for-byte untouched while the engine flag stays at
-\code{"v2"}.
+\code{v2}.
 
 v2's own measured values are 7.75 / 9.12 / 12.19 / 4.18 -- also well above
 3.0, so production is under-shrinking too. That is a separate shippable

@@ -17,7 +17,7 @@ overwriting it, so a published number can always be traced to the definition
 that produced it. See \code{docs/plans/RATING-VERSIONING-PLAN.md}.
 }
 \details{
-\code{"v1"} is every rating published before 2026-07-27. \code{"v2"} adds the
+\code{v1} is every rating published before 2026-07-27. \code{v2} adds the
 EPV position-variance standardisation and PSR standardisation.
 
 \strong{Weekly PSR centring is NOT part of what v2 actually shipped}, despite
@@ -138,6 +138,20 @@ All 9,794 player-games move (mean 0.493, max 5.205, 1,140 over a point), so
 this needs a full-history rebuild. Preserve v9 with
 \code{data-raw/03-ratings/promote_rating_vintage.R} (PROMOTE_FROM=v9,
 PROMOTE_TO=v10) and move the manifest to canonical v10 BEFORE this constant
+reaches main.
+
+v11 (2026-09-12): \code{NP_TEAM_MARGIN_POOL_BY} \code{dacts} -> \code{tog}.
+The first decomposition of the forward-defender gap found 83\\% of it is
+EARNED -- a key forward's own acts are worth +4.079 and a key defender's
+-1.972 -- and that defenders already out-earn forwards on turnovers won and
+contests. The one allocated lever was this constant, which spread a side's
+OFFENCE pool by DEFENSIVE acts, charging defenders most for defending.
+Flipping it narrows the gap 4.273 -> 3.415 (key defenders -2.242 -> -1.765),
+more than the whole allocated part because it flips the imbalance rather
+than shrinking it. Costs 0.008 of repeatability. All 9,838 player-games
+move, so preserve v10 with
+\code{data-raw/03-ratings/promote_rating_vintage.R} (PROMOTE_FROM=v10,
+PROMOTE_TO=v11) and move the manifest to canonical v11 BEFORE this constant
 reaches main.
 }
 \keyword{internal}
