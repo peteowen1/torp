@@ -76,7 +76,12 @@ lab <- function(role, d) {
     role == "ball_winner" & d %like% "Loose Ball|Hard Ball|Crumb", "Winning a loose/ground ball",
     role == "ball_winner",                            "Winning the ball off a disposal",
     role == "error_blame",                            "Charged for an error",
-    role == "pressure_back",                          "Pressure forced",
+    # No "pressure_back" branch on purpose. Those rows are booked with
+    # doubled = TRUE (epv_net_points.R:2230) because they sit on the blame side
+    # of a turnover that is already counted once from the other side, and the
+    # filter above keeps only doubled == FALSE. Pressure credit is real but it
+    # is not separable at this read point -- it reaches the player inside
+    # np_team, after .np_team_margin()'s correction.
     role == "stoppage_ruck" & d == "Centre Bounce",   "Ruck: centre bounce",
     role == "stoppage_ruck" & d == "Ball Up Call",    "Ruck: ball-up",
     role == "stoppage_ruck",                          "Ruck: boundary throw-in",
@@ -114,8 +119,29 @@ per[, v := round(v / gms, 3)]
 
 w <- dcast(per, player_id + gms + tog ~ cat, value.var = "v", fill = 0)
 nm <- unique(pbp[!is.na(player_id), .(player_id = as.character(player_id), name = player_name)])
-tmf <- unique(pg[, .(player_id, team, pos = position_group)])
+
+# One row per player, and it has to be FORCED rather than assumed.
+# `position_group` in player_game_ratings is the PER-MATCH lineup listing, not
+# the season-stable club listing (docs/reference/POSITIONS.md), so
+# `unique(player_id, team, position_group)` is not one row per player: 53 of 669
+# players in 2026 line up in more than one position across a season, and merging
+# that straight onto `w` duplicated all 53 -- identical Net Points, two position
+# labels, both published. Take the MODAL (team, position) by games played, and
+# break ties on the labels themselves so the choice is deterministic rather than
+# whatever order the table arrived in.
+tmf <- pg[, .N, by = .(player_id, team, pos = position_group)]
+data.table::setorder(tmf, player_id, -N, team, pos)
+tmf <- tmf[, .SD[1], by = player_id][, .(player_id, team, pos)]
+stopifnot(!anyDuplicated(tmf$player_id))
+
+n_before <- nrow(w)
 w <- merge(w, nm, by = "player_id"); w <- merge(w, tmf, by = "player_id", all.x = TRUE)
+if (nrow(w) != n_before) {
+  cli::cli_abort(c(
+    "The name/position merges changed the row count: {n_before} -> {nrow(w)}.",
+    "x" = "A lookup table has more than one row for some player, so those players are duplicated in the artifact.",
+    "i" = "Both lookups must be one row per {.field player_id} before this merge."))
+}
 netv <- fin[, .(net = round(sum(net_points) / uniqueN(match_id), 3)), by = player_id]
 w <- merge(w, netv, by = "player_id")
 setorder(w, -net)
@@ -129,6 +155,23 @@ say("  mean |gap| ", round(mean(w$.gap), 4), "   worst ", round(max(w$.gap), 4),
 say("  The gap exists because the payment ledger is read one step before")
 say("  .np_team_margin()'s correction, which books its adjustment into np_team")
 say("  only. Reported, not forced to zero.")
+
+# ...but it is GATED, not merely reported. This is the one check in the script
+# that can catch "the numbers are wrong", and until 2026-09-12 it only printed --
+# which is the same shape as the defect this whole file exists to prevent: a
+# published artifact nobody could tell had gone bad. The bound is the measured
+# baseline with about 3x headroom (2026, v11: mean 0.0329, worst 0.147), loose
+# enough that ordinary vintage-to-vintage movement passes and tight enough that
+# a duplicated player or a mis-labelled role cannot. Raise it only with a new
+# measured baseline in this comment.
+GAP_MEAN_MAX <- 0.10
+GAP_WORST_MAX <- 0.50
+if (mean(w$.gap) > GAP_MEAN_MAX || max(w$.gap) > GAP_WORST_MAX) {
+  cli::cli_abort(c(
+    "Categories do not reconcile with Net Points: mean |gap| {round(mean(w$.gap), 4)} (limit {GAP_MEAN_MAX}), worst {round(max(w$.gap), 4)} (limit {GAP_WORST_MAX}).",
+    "x" = "Something is being double-counted, dropped, or labelled into the wrong bucket. The artifact is NOT written.",
+    "i" = "Worst offenders: {paste(utils::head(w[order(-.gap)]$player_id, 5), collapse = ', ')}."))
+}
 w[, c(".chk", ".gap") := NULL]
 
 out <- list(
@@ -149,7 +192,7 @@ out <- list(
       "Receiving (own act)" = c("Receiving a kick","Receiving a handball"),
       "Contests, turnovers & errors" = c("Winning a contest (mark/spoil)",
         "Winning a loose/ground ball","Winning the ball off a disposal",
-        "Charged for an error","Pressure forced"),
+        "Charged for an error"),
       "Stoppages" = c("Ruck: centre bounce","Ruck: ball-up","Ruck: boundary throw-in",
         "First possession: centre bounce","First possession: ball-up",
         "First possession: boundary throw-in"),
