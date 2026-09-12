@@ -52,6 +52,32 @@ EPV3_DUEL_OUT <- c("Contested Mark", "Pack Mark (P)", "Pack Mark (O)",
 #' @keywords internal
 EPV3_CONTEST_POPULATION <- "evidence"
 
+#' Judge a contest by what happened, not by who won it (torp#220)
+#'
+#' The two-way contest path filters its scored rows a second time, after the
+#' population has already been decided. The shipped expression is
+#' \code{def_win == TRUE | out_desc \%chin\% EPV3_DUEL_OUT}, which keeps every
+#' defensive win unconditionally but an attacking win only when the outcome is
+#' in the narrower duel list --- so a \code{Mark Fumbled} won by the defence is
+#' priced and the identical outcome won by the attack is discarded.
+#'
+#' The intent stated one line above it is symmetric: "applied only where a
+#' contest was actually fought". The implementation is not, and that is the
+#' defect.
+#'
+#' Measured on 2026: the asymmetric version drops 1,483 of 17,078 contests (8.7
+#' percent) and \strong{100 percent of them are attacking wins} --- 1,149
+#' \code{Mark Fumbled} and 339 \code{Free For}. It lifts the defensive win rate
+#' from 78.7 to 86 percent and the defence's share of contest credit from 48.3
+#' to 60.1 percent.
+#'
+#' \code{TRUE} asks the same question the population filter already asked: was a
+#' target logged, or is the outcome self-evidently a duel. Expect it to
+#' \emph{widen} the forward-defender gap --- the inflated number is the current
+#' one, not the corrected one.
+#' @keywords internal
+NP_CONTEST_FILTER_SYMMETRIC <- FALSE
+
 #' How many outcomes the contest model prices
 #'
 #' \code{"two"} is the shipped v11 behaviour: the outcome is either a defensive

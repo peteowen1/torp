@@ -944,8 +944,17 @@
     # from 78.7% to 86% and is most of why the contest channel looked so
     # one-sided. The three-way population is already decided by the
     # duel-evidence rule in build_aerial_contests(), so it needs no second bite.
+    # NP_CONTEST_FILTER_SYMMETRIC makes the two-way filter judge a row by what
+    # KIND of event it was, never by who won it, which is what the intent above
+    # says and what the old expression did not do. `EPV3_DUEL_EVIDENCE_OUTS` is
+    # the same list that built the population one step earlier, so this asks the
+    # question once instead of asking a narrower version of it twice.
     if (!identical(EPV3_CONTEST_OUTCOMES, "three")) {
-      csc <- csc[def_win == TRUE | out_desc %chin% EPV3_DUEL_OUT]
+      csc <- if (isTRUE(NP_CONTEST_FILTER_SYMMETRIC)) {
+        csc[!is.na(target_pid) | out_desc %chin% EPV3_DUEL_EVIDENCE_OUTS]
+      } else {
+        csc[def_win == TRUE | out_desc %chin% EPV3_DUEL_OUT]
+      }
       csc[, V_branch := data.table::fifelse(def_win, V_def_hat, V_att_hat)]
     } else {
       csc[, V_branch := data.table::fcase(out3 == "mark_att", V_att_hat,
