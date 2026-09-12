@@ -128,6 +128,20 @@
     # Found 2026-09-11 adding the "evidence" value.
     EPV3_CONTEST_POPULATION = EPV3_CONTEST_POPULATION,
     EPV3_DUEL_EVIDENCE_OUTS = as.list(EPV3_DUEL_EVIDENCE_OUTS),
+    # All three added 2026-09-12 and all three move published ratings, so they
+    # belong here even though every one of them ships OFF. A constant that is
+    # rating-defining only when enabled still has to be in the manifest, or the
+    # run that enables it looks like a no-change run to the guard -- which is
+    # exactly the hole torp#212 describes from the other direction.
+    #
+    # Widening, not a value change: this makes the manifest describe MORE
+    # constants than it did, so it merges to main FIRST and the manifest is
+    # re-recorded SECOND. The reverse order records a manifest that main cannot
+    # yet reproduce.
+    NP_CONTEST_FILTER_SYMMETRIC = NP_CONTEST_FILTER_SYMMETRIC,
+    EPV3_CONTEST_OUTCOMES = EPV3_CONTEST_OUTCOMES,
+    EPV3_CONTEST_EXCLUDE_SHOTS = EPV3_CONTEST_EXCLUDE_SHOTS,
+    EPV3_CONTEST_MARK_OUTS = as.list(EPV3_CONTEST_MARK_OUTS),
     NP_ERROR_BLAME_SHARE = NP_ERROR_BLAME_SHARE,
     NP_ERROR_DESCS = as.list(NP_ERROR_DESCS),
     EPV3_TARGET_FROM_I50 = EPV3_TARGET_FROM_I50,

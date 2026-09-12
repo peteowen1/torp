@@ -935,8 +935,32 @@
     } else {
       score_contests(cst, fit_contest_models(cst))
     }
-    csc <- csc[def_win == TRUE | out_desc %chin% EPV3_DUEL_OUT]
-    csc[, V_branch := data.table::fifelse(def_win, V_def_hat, V_att_hat)]
+    # This second filter is ASYMMETRIC and only survives under the two-way
+    # model. It keeps every defensive win unconditionally but an attacking win
+    # only when the outcome is in EPV3_DUEL_OUT, so Mark Fumbled and Free For
+    # rows won by the attack are discarded while the same outcomes won by the
+    # defence are kept. Measured on 2026: 1,483 of 17,078 contests dropped
+    # (8.7%), 100% of them attacking wins, which lifts the defensive win rate
+    # from 78.7% to 86% and is most of why the contest channel looked so
+    # one-sided. The three-way population is already decided by the
+    # duel-evidence rule in build_aerial_contests(), so it needs no second bite.
+    # NP_CONTEST_FILTER_SYMMETRIC makes the two-way filter judge a row by what
+    # KIND of event it was, never by who won it, which is what the intent above
+    # says and what the old expression did not do. `EPV3_DUEL_EVIDENCE_OUTS` is
+    # the same list that built the population one step earlier, so this asks the
+    # question once instead of asking a narrower version of it twice.
+    if (!identical(EPV3_CONTEST_OUTCOMES, "three")) {
+      csc <- if (isTRUE(NP_CONTEST_FILTER_SYMMETRIC)) {
+        csc[!is.na(target_pid) | out_desc %chin% EPV3_DUEL_EVIDENCE_OUTS]
+      } else {
+        csc[def_win == TRUE | out_desc %chin% EPV3_DUEL_OUT]
+      }
+      csc[, V_branch := data.table::fifelse(def_win, V_def_hat, V_att_hat)]
+    } else {
+      csc[, V_branch := data.table::fcase(out3 == "mark_att", V_att_hat,
+                                          out3 == "mark_def", V_def_hat,
+                                          default = V_oth_hat)]
+    }
     ct <- csc[, .(match_id = as.character(match_id), display_order = kick_do,
                   c_p = p_hat, c_decision = V_pre - exp_pts,
                   c_cont = V_branch - V_pre, c_ground = V_after - V_branch,

@@ -1,3 +1,53 @@
+# torp 1.8.8
+
+## A contest has three outcomes, and the population filter was asymmetric
+
+Nothing here changes a published rating. Every new constant defaults to the
+shipped v11 behaviour, and the inertness check reproduces it exactly: 17,571
+contests built, 16,081 scored, 78.7% defensive.
+
+### `NP_CONTEST_FILTER_SYMMETRIC` — torp#220, a live defect
+
+The two-way contest path filtered its scored rows a second time with
+`def_win == TRUE | out_desc %chin% EPV3_DUEL_OUT`, which keeps every defensive
+win unconditionally but an attacking win only when the outcome is in the
+narrower duel list. A `Mark Fumbled` won by the defence was priced; the
+identical outcome won by the attack was thrown away. The intent stated one line
+above it is symmetric, so this is a defect against its own spec.
+
+Measured on 2026: 1,483 of 17,078 contests dropped (8.7%), **100% of them
+attacking wins**. The defensive win rate reads 86% instead of 78.7%. Setting
+the new constant `TRUE` is worth **+0.399 a game to key forwards** — one who
+wins a contested mark after a fumble or a free was being paid nothing for it,
+1,490 times a season.
+
+### `EPV3_CONTEST_OUTCOMES` — three branches instead of two
+
+A kick into a contest ends with a mark to the attack, a mark to the defence, or
+nobody marking it. With two bins all 11,302 spoils are booked as "defence won",
+so `V_def` is fitted 88.4% on spoils and an intercept mark genuinely worth
+−0.722 expected points is priced at +0.270. The fitted probability is blind
+too: 0.787 on spoils, 0.786 on attacking marks, 0.791 on defensive marks.
+
+Under `"three"` an intercept mark prices at −0.720. Built as two nested
+binomials rather than a multinomial, which keeps the three weights
+non-negative and summing to 1 by construction and preserves
+`bam(discrete = TRUE)`.
+
+`EPV3_CONTEST_EXCLUDE_SHOTS` drops shots at goal and ruck-tap kicks from the
+population: a defender touching a shot on the goal line is not a marking duel.
+
+### Both flips widen the forward-defender gap
+
+Symmetric filter 3.413 → 3.795; three-way model 3.413 → 3.648. That is the
+correct direction — the defence's current 60.1% share of contest credit is
+inflated by the discarded rows — but it reverses part of what v9–v11 achieved,
+so enabling either is a decision rather than a default.
+
+All four constants are registered in `.rating_defining_constants()` despite
+being inert, because a flag that becomes rating-defining only once enabled
+makes the run that enables it look like a no-change run to the drift guard.
+
 # torp 1.8.7
 
 ## The "Where Net Points Come From" artifact can be rebuilt

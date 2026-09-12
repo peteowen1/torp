@@ -115,6 +115,12 @@ build_aerial_contests <- function(chains, pbp_data) {
          data.table::shift(.SD, k, type = "lead"),
        by = match_id, .SDcols = .shift_stems]
   }
+  # One lag, for the two row-level exclusions the three-way population applies
+  # (a shot at goal, and a kick straight out of a ruck contest). Declared here
+  # rather than inside the switch so the column always exists and the two
+  # populations differ only by a filter, never by a schema.
+  if (!"shot_at_goal" %chin% names(ch)) ch[, shot_at_goal := NA]
+  ch[, .b1_description := data.table::shift(description, 1L), by = match_id]
 
   kk <- ch[description %chin% c("Kick", "Ground Kick") &
              !is.na(player_id) & !is.na(team_id)]
@@ -198,7 +204,8 @@ build_aerial_contests <- function(chains, pbp_data) {
   .out_set <- epv3_aerial_out()
   cst <- kk[out_desc %chin% .out_set & !is.na(out_tid) & !is.na(out_pid), .(
     match_id, kick_do = display_order, kick_pid = player_id, kick_tid = team_id,
-    kick_x = x, kick_y = y, out_desc, out_pid, out_tid, out_x, out_y, target_pid
+    kick_x = x, kick_y = y, out_desc, out_pid, out_tid, out_x, out_y, target_pid,
+    kick_shot = shot_at_goal, kick_prev = .b1_description
   )]
   if (nrow(cst) == 0) return(cst)
 
@@ -239,6 +246,33 @@ build_aerial_contests <- function(chains, pbp_data) {
   # A Spoil logged to the KICKING team is a chain-logging artifact, not an
   # attacking win. v2 drops the same rows for the same reason (~16% of spoils).
   cst <- cst[!(grepl("^Spoil", out_desc) & def_win == FALSE)]
+
+  # PETE'S THREE OUTCOMES (2026-09-12). `def_win` stays exactly as it is and
+  # keeps doing one job -- ROUTING, i.e. which side the payment goes to. `out3`
+  # does the other -- PRICING, i.e. which branch value the contest is judged
+  # against. Splitting those two apart is what makes the change small: the
+  # ledger's payment paths are untouched, only the branch value changes.
+  #
+  # A free kick joins the mark branches because Pete's rule is that a free is a
+  # possession win for whoever won it. That also removes the rows that produced
+  # torp#209's symptom: under the two-way filter only defence-won frees
+  # survived, so the model saw a slice where the defence won 100% of the time
+  # and fitted p = 1.000 there, which pays the winner exactly nothing.
+  cst[, out3 := data.table::fcase(
+    out_desc %chin% EPV3_CONTEST_MARK_OUTS | startsWith(out_desc, "Free For"),
+      data.table::fifelse(def_win, "mark_def", "mark_att"),
+    default = "other")]
+
+  if (isTRUE(EPV3_CONTEST_EXCLUDE_SHOTS)) {
+    # A defender touching a shot on the goal line is not a marking contest, and
+    # a ruckman's kick straight out of a centre bounce is not one either.
+    n_before <- nrow(cst)
+    cst <- cst[!(kick_shot %in% TRUE) &
+                 !(!is.na(kick_prev) & grepl("Ruck|Centre Bounce", kick_prev))]
+    cli::cli_alert_info(
+      "Contest population: dropped {format(n_before - nrow(cst), big.mark = ',')} of {format(n_before, big.mark = ',')} contests as shots at goal or kicks out of a ruck contest")
+    if (nrow(cst) == 0) return(cst)
+  }
 
   cst <- merge(cst, pbp[, .(match_id, display_order, exp_pts, delta_epv)],
                by.x = c("match_id", "kick_do"),
@@ -295,10 +329,43 @@ fit_contest_models <- function(cst, train_idx = rep(TRUE, nrow(cst))) {
     }
     mgcv::bam(f, data = droplevels(d), discrete = TRUE, ...)
   }
+  if (!identical(EPV3_CONTEST_OUTCOMES, "three")) {
+    return(list(
+      p   = fit(stats::update(rhs, def_win ~ .), tr, family = stats::binomial()),
+      att = fit(stats::update(rhs, V_after ~ .), tr[def_win == FALSE]),
+      def = fit(stats::update(rhs, V_after ~ .), tr[def_win == TRUE])
+    ))
+  }
+
+  # THREE BRANCHES, fitted as two NESTED binomials rather than one multinomial.
+  #
+  # Two independent binomials for P(mark_att) and P(mark_def) would not be
+  # coherent: nothing stops their sum exceeding 1, and p_other would come out
+  # negative, which then makes V_pre a weighted average with a negative weight
+  # and the whole conservation argument meaningless. mgcv's multinom family is
+  # coherent but is not supported by bam(discrete = TRUE), which is what makes
+  # this fit in seconds rather than minutes on a full history.
+  #
+  # The nested decomposition gives coherence for free:
+  #   p_other = P(nobody marked it)
+  #   p_att   = (1 - p_other) *      P(the attack marked it | somebody did)
+  #   p_def   = (1 - p_other) * (1 - P(the attack marked it | somebody did))
+  # Both factors are in [0, 1], so all three are non-negative and sum to 1 by
+  # construction, and both are plain binomials that bam() handles.
+  tr <- data.table::copy(tr)
+  tr[, `:=`(.is_other = out3 == "other", .is_att = out3 == "mark_att")]
+  marked <- tr[.is_other == FALSE]
+  if (nrow(marked) < 200) {
+    cli::cli_abort(c(
+      "Only {nrow(marked)} contest{?s} in this training set were marked by somebody.",
+      "x" = "The three-way contest model cannot fit a branch on that."))
+  }
   list(
-    p   = fit(stats::update(rhs, def_win ~ .), tr, family = stats::binomial()),
-    att = fit(stats::update(rhs, V_after ~ .), tr[def_win == FALSE]),
-    def = fit(stats::update(rhs, V_after ~ .), tr[def_win == TRUE])
+    p_other = fit(stats::update(rhs, .is_other ~ .), tr, family = stats::binomial()),
+    p_att   = fit(stats::update(rhs, .is_att ~ .), marked, family = stats::binomial()),
+    att = fit(stats::update(rhs, V_after ~ .), tr[out3 == "mark_att"]),
+    def = fit(stats::update(rhs, V_after ~ .), tr[out3 == "mark_def"]),
+    oth = fit(stats::update(rhs, V_after ~ .), tr[out3 == "other"])
   )
 }
 
@@ -312,6 +379,53 @@ fit_contest_models <- function(cst, train_idx = rep(TRUE, nrow(cst))) {
 #' @keywords internal
 score_contests <- function(cst, models) {
   d <- data.table::copy(cst)
+  three <- !is.null(models$p_other)
+  if (three) {
+    pr <- function(m) as.numeric(stats::predict(m, newdata = d, type = "response"))
+    d[, `:=`(
+      p_other_hat = pr(models$p_other),
+      V_att_hat   = as.numeric(stats::predict(models$att, newdata = d)),
+      V_def_hat   = as.numeric(stats::predict(models$def, newdata = d)),
+      V_oth_hat   = as.numeric(stats::predict(models$oth, newdata = d))
+    )]
+    d[, .p_att_given := pr(models$p_att)]
+    d[, `:=`(p_att_hat = (1 - p_other_hat) * .p_att_given,
+             p_def_hat = (1 - p_other_hat) * (1 - .p_att_given))]
+    d[, .p_att_given := NULL]
+    # p_hat keeps its old meaning -- the chance the attack does NOT take the
+    # mark -- so anything reading it still reads the same quantity.
+    d[, p_hat := 1 - p_att_hat]
+    d[, `:=`(V_pre = p_att_hat * V_att_hat + p_def_hat * V_def_hat +
+                     p_other_hat * V_oth_hat,
+             Delta = V_att_hat - V_def_hat)]
+    # The three weights are non-negative and sum to 1 by construction; assert it
+    # rather than trust it, because a negative weight would make V_pre an
+    # average that lies outside its own branches and every downstream credit
+    # would be quietly wrong rather than visibly broken.
+    bad <- d[, sum(abs(p_att_hat + p_def_hat + p_other_hat - 1) > 1e-8 |
+                     p_att_hat < 0 | p_def_hat < 0 | p_other_hat < 0)]
+    if (bad > 0) {
+      cli::cli_abort("{bad} contest{?s} have branch probabilities that are negative or do not sum to 1.")
+    }
+    # The v3 credit columns, so the v3 engine keeps working under this switch.
+    # cont_att is the general definition, V_branch - V_pre, signed in the
+    # attacking frame -- which is what the two-way expression below computes
+    # too, written out there in the form that was verified against a sign bug.
+    d[, V_branch_hat := data.table::fcase(out3 == "mark_att", V_att_hat,
+                                          out3 == "mark_def", V_def_hat,
+                                          default = V_oth_hat)]
+    d[, cont_att := V_branch_hat - V_pre]
+    d[, `:=`(
+      disp_credit   = V_pre - exp_pts,
+      winner_credit = abs(cont_att),
+      loser_credit  = -abs(cont_att),
+      winner_pid    = out_pid,
+      winner_tid    = out_tid,
+      loser_pid     = data.table::fifelse(def_win, target_pid, NA_character_),
+      loser_tid     = data.table::fifelse(def_win, kick_tid, out_tid)
+    )]
+    return(d)
+  }
   d[, `:=`(
     p_hat     = as.numeric(stats::predict(models$p,   newdata = d, type = "response")),
     V_att_hat = as.numeric(stats::predict(models$att, newdata = d)),

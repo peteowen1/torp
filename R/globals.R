@@ -509,3 +509,13 @@ utils::globalVariables(c(
   ".grp", "err_do", "err_pid", "err_desc", "err_team",
   "act_pid", "act_team", ".err_share"
 ))
+
+# Three-outcome contest model (EPV3_CONTEST_OUTCOMES = "three"): the branch
+# probabilities, the third branch value, and the row-level exclusion columns.
+# Same reason as the block above -- rcmdcheck runs with error_on = "warning"
+# here, so an undeclared data.table column fails CI rather than nagging.
+utils::globalVariables(c(
+  "out3", ".b1_description", "kick_shot", "kick_prev",
+  "p_other_hat", "p_att_hat", "p_def_hat", "V_oth_hat", "V_branch_hat",
+  ".is_other", ".is_att", ".p_att_given", "shot_at_goal"
+))
