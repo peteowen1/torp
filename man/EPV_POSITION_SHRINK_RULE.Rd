@@ -11,7 +11,7 @@ An object of class \code{character} of length 1.
 EPV_POSITION_SHRINK_RULE
 }
 \description{
-\code{"prior"} is the smooth Bayesian blend, \code{lambda = wt / (wt + prior)}.
+\code{prior} is the smooth Bayesian blend, \code{lambda = wt / (wt + prior)}.
 \strong{It FAILED its match-MAE gate on 2026-07-30} (\code{ws12_epv_shrink_prior.R}:
 ΔMAE +0.232 / −0.051 / +0.090 at priors 1/2/5, non-monotonic, every arm inside
 the ~0.157 noise floor, and every arm costing bits). The diagnosis is the
@@ -21,7 +21,7 @@ the median cell weight) in order to reach the 22 cells that need it, so the
 gate was measuring the dilution rather than the fix.
 }
 \details{
-\code{"floor"} is the answer to that: \code{lambda = min(1, wt / floor)}. Cells at
+\code{floor} is the answer to that: \code{lambda = min(1, wt / floor)}. Cells at
 or above the floor are \strong{bit-identical to production}, and only cells
 below it ramp toward their bucket's earlier mean. The change is then confined
 to cells carrying ~0.5\% of total weight -- i.e. the finals series and round 0 --

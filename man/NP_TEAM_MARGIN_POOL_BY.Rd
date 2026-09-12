@@ -11,7 +11,36 @@ An object of class \code{character} of length 1.
 NP_TEAM_MARGIN_POOL_BY
 }
 \description{
-\code{"dacts"} (tackles, intercepts, one-percenters) or \code{"tog"}.
+\code{dacts} (tackles, intercepts, one-percenters) or \code{tog}.
 Defensive acts scored better on repeatability, 0.606 against 0.598.
+}
+\details{
+\strong{Changed to \code{tog} for v11 (2026-09-12), on a criterion the
+original choice never considered.} The forward-defender gap was decomposed
+for the first time rather than guessed at, and it reframes the defender
+program. Defenders are \strong{not} under-credited for defending -- they
+already out-earn forwards on turnovers won (2.259 against 0.446) and contests
+(0.702 against 0.033). The entire gap is that a key forward's OWN ACTS are
+worth \strong{+4.079} and a key defender's \strong{-1.972}: marking near
+goal gains expected points, rebounding out of defensive 50 loses them. That is
+football, and 3.543 of the 4.274 is earned and beyond any re-split.
+
+This constant is the one allocated lever of any size, and it was hard to
+defend on its own terms: it spread a side's \emph{offence} pool in proportion
+to \emph{defensive} acts, so a defender doing his job more diligently took a
+bigger share of a pool that exists to account for attacking value. Key
+defenders carried -6.433 against forwards' -5.619, or -643 against -562 per
+100 TOG.
+
+Swept, everything else identical: the gap goes \strong{4.273 -> 3.415},
+narrower by \strong{0.858}. That exceeds the entire allocated part (0.731)
+because it does not merely shrink the imbalance, it flips it -- under
+\code{tog} defenders are charged slightly \emph{less} than forwards. Key
+defenders move -2.242 -> -1.765, key forwards 2.031 -> 1.650. All 9,838
+player-games move, mean 0.339, max 3.08.
+
+\strong{The cost is the 0.008 repeatability edge that chose \code{dacts}},
+0.606 -> 0.598. Accepted knowingly: position balance was never the criterion
+in that comparison.
 }
 \keyword{internal}

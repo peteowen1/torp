@@ -101,16 +101,16 @@ EPV_PER_CHANNEL_POINTS_SCALE <- FALSE
 
 #' Which EPV engine computes the channels
 #'
-#' \code{"v2"} is production and is the default: box-score weights plus a
+#' \code{v2} is production and is the default: box-score weights plus a
 #' chain-derived part, four channels \code{recv / disp / spoil / hitout}.
 #'
-#' \code{"v3"} is the chain-native rebuild -- \code{delta_epv} arithmetic only,
+#' \code{v3} is the chain-native rebuild -- \code{delta_epv} arithmetic only,
 #' with the ruck/hitout box terms as the single permitted carve-out because
 #' \code{Centre Bounce} and \code{Ball Up Call} rows carry a \code{player_id}
 #' 0.0\% of the time. Four channels \code{recv / disp / cont_aerial / cont_stop}.
 #' See \code{../docs/plans/EPV-V3-CHAIN-NATIVE.md}.
 #'
-#' \code{"v4"} is the Net Points ledger (\code{build_net_points()} under
+#' \code{v4} is the Net Points ledger (\code{build_net_points()} under
 #' \code{credit = "difficulty"} with stoppages allocated): every player-match
 #' sums, across a match, to the margin. Three channels to start -- own acts,
 #' won back, pools -- carried in the \code{disp / recv / spoil} columns so EPR's
@@ -148,7 +148,7 @@ EPR_UNITS_SCALE_V4 <- 2.40
 #' upside-only.
 #'
 #' Five rules were measured against each other (\code{epv3_compare_alloc.R},
-#' 2026-08-03, 57,145 player-games). \code{"team"} wins and is the default.
+#' 2026-08-03, 57,145 player-games). \code{team} wins and is the default.
 #'
 #' \tabular{lrrrrr}{
 #'   \tab \strong{none} \tab \strong{contested} \tab \strong{wide} \tab \strong{team} \tab \strong{ledger} \cr
@@ -160,25 +160,25 @@ EPR_UNITS_SCALE_V4 <- 2.40
 #' }
 #'
 #' \describe{
-#'   \item{\code{"team"}}{Equal share across every player who appeared for the
+#'   \item{\code{team}}{Equal share across every player who appeared for the
 #'     losing team. Makes no claim about WHICH opponent was beaten, only that the
 #'     team was -- so it cannot reorder players within a team, which is the
 #'     distortion every exposure-weighted rule introduced in one direction or the
 #'     other. Conserves exactly and is the most repeatable.}
-#'   \item{\code{"prorata"}}{Weight by aerial exposure in the zone. Rejected: the
+#'   \item{\code{prorata}}{Weight by aerial exposure in the zone. Rejected: the
 #'     contested-only base is nearly a win count and INVERTS the channel (Harris
 #'     Andrews, the best intercept defender in the competition, reads -284), and
 #'     the wide base charges mark-and-kick rebounders for duels they never
 #'     entered (Caleb Daniel -202).}
-#'   \item{\code{"none"}}{Leave it unallocated. Scores as well as \code{"team"}
+#'   \item{\code{none}}{Leave it unallocated. Scores as well as \code{team}
 #'     but the channel becomes upside-only and it does not conserve -- 153,428
 #'     points of debit simply vanish.}
-#'   \item{\code{"ledger"}}{Weight by the player's OWN recorded one-on-one losses
+#'   \item{\code{ledger}}{Weight by the player's OWN recorded one-on-one losses
 #'     from the AFL API. Theoretically the best key and it is why the API dig
 #'     happened -- \strong{but measurement rejected it.} Its near-zero
 #'     correlations looked at first like "measures ability, not volume"; the
 #'     persistence test says otherwise, at r = 0.485 year-over-year against
-#'     \code{"team"}'s 0.819. Netting a player's wins against his own losses
+#'     \code{team}'s 0.819. Netting a player's wins against his own losses
 #'     cancels most of the signal and leaves noise. Kept implemented because the
 #'     reasoning was sound and only the data settled it.}
 #' }
@@ -375,7 +375,7 @@ EPV_CHANNEL_SCALE_KEYS <- c(epv_recv = "recv", epv_disp = "disp",
 #' were measured on v3's channels and are meaningless for v2's; applying them to
 #' v2 would change every published rating today for no reason. v2 keeps 3.0 so
 #' production is byte-for-byte untouched while the engine flag stays at
-#' \code{"v2"}.
+#' \code{v2}.
 #'
 #' v2's own measured values are 7.75 / 9.12 / 12.19 / 4.18 -- also well above
 #' 3.0, so production is under-shrinking too. That is a separate shippable
@@ -498,7 +498,7 @@ PSV_POINTS_SCALE <- 1.579
 #'
 #' \strong{Keyed on the constant, not on a per-call argument}, so a script that
 #' passes \code{epv_engine = "v3"} while \code{EPV_ENGINE} still reads
-#' \code{"v2"} gets v2 priors. That is the right default for production and the
+#' \code{v2} gets v2 priors. That is the right default for production and the
 #' wrong one for a two-engine gate, so gate scripts must
 #' \code{assignInNamespace()} the prior rates for their v3 arm. The alternative
 #' -- resolving the prior inside \code{.build_epr_season()} -- would make the
@@ -773,7 +773,7 @@ EPV_POSITION_SHRINK <- FALSE
 
 #' Which shrinkage rule `EPV_POSITION_SHRINK` uses: `"floor"` or `"prior"`
 #'
-#' \code{"prior"} is the smooth Bayesian blend, `lambda = wt / (wt + prior)`.
+#' \code{prior} is the smooth Bayesian blend, `lambda = wt / (wt + prior)`.
 #' \strong{It FAILED its match-MAE gate on 2026-07-30} (`ws12_epv_shrink_prior.R`:
 #' ΔMAE +0.232 / −0.051 / +0.090 at priors 1/2/5, non-monotonic, every arm inside
 #' the ~0.157 noise floor, and every arm costing bits). The diagnosis is the
@@ -782,7 +782,7 @@ EPV_POSITION_SHRINK <- FALSE
 #' the median cell weight) in order to reach the 22 cells that need it, so the
 #' gate was measuring the dilution rather than the fix.
 #'
-#' \code{"floor"} is the answer to that: `lambda = min(1, wt / floor)`. Cells at
+#' \code{floor} is the answer to that: `lambda = min(1, wt / floor)`. Cells at
 #' or above the floor are \strong{bit-identical to production}, and only cells
 #' below it ramp toward their bucket's earlier mean. The change is then confined
 #' to cells carrying ~0.5% of total weight -- i.e. the finals series and round 0 --
@@ -970,7 +970,7 @@ PSR_POSITION_STANDARDISE <- TRUE
 #' overwriting it, so a published number can always be traced to the definition
 #' that produced it. See \code{docs/plans/RATING-VERSIONING-PLAN.md}.
 #'
-#' \code{"v1"} is every rating published before 2026-07-27. \code{"v2"} adds the
+#' \code{v1} is every rating published before 2026-07-27. \code{v2} adds the
 #' EPV position-variance standardisation and PSR standardisation.
 #'
 #' **Weekly PSR centring is NOT part of what v2 actually shipped**, despite
@@ -1093,8 +1093,22 @@ PSR_POSITION_STANDARDISE <- TRUE
 #' \code{data-raw/03-ratings/promote_rating_vintage.R} (PROMOTE_FROM=v9,
 #' PROMOTE_TO=v10) and move the manifest to canonical v10 BEFORE this constant
 #' reaches main.
+#'
+#' v11 (2026-09-12): \code{NP_TEAM_MARGIN_POOL_BY} \code{dacts} -> \code{tog}.
+#' The first decomposition of the forward-defender gap found 83\% of it is
+#' EARNED -- a key forward's own acts are worth +4.079 and a key defender's
+#' -1.972 -- and that defenders already out-earn forwards on turnovers won and
+#' contests. The one allocated lever was this constant, which spread a side's
+#' OFFENCE pool by DEFENSIVE acts, charging defenders most for defending.
+#' Flipping it narrows the gap 4.273 -> 3.415 (key defenders -2.242 -> -1.765),
+#' more than the whole allocated part because it flips the imbalance rather
+#' than shrinking it. Costs 0.008 of repeatability. All 9,838 player-games
+#' move, so preserve v10 with
+#' \code{data-raw/03-ratings/promote_rating_vintage.R} (PROMOTE_FROM=v10,
+#' PROMOTE_TO=v11) and move the manifest to canonical v11 BEFORE this constant
+#' reaches main.
 #' @keywords internal
-RATING_VINTAGE <- "v10"
+RATING_VINTAGE <- "v11"
 
 #' Map from the 20-way team-sheet lineup position to a 6-way position group
 #'
@@ -1925,10 +1939,38 @@ NP_TEAM_MARGIN_NAMED_SHARE <- NA_real_
 
 #' How the team-margin convention spreads a side's pool
 #'
-#' \code{"dacts"} (tackles, intercepts, one-percenters) or \code{"tog"}.
+#' \code{dacts} (tackles, intercepts, one-percenters) or \code{tog}.
 #' Defensive acts scored better on repeatability, 0.606 against 0.598.
+#'
+#' \strong{Changed to \code{tog} for v11 (2026-09-12), on a criterion the
+#' original choice never considered.} The forward-defender gap was decomposed
+#' for the first time rather than guessed at, and it reframes the defender
+#' program. Defenders are \strong{not} under-credited for defending -- they
+#' already out-earn forwards on turnovers won (2.259 against 0.446) and contests
+#' (0.702 against 0.033). The entire gap is that a key forward's OWN ACTS are
+#' worth \strong{+4.079} and a key defender's \strong{-1.972}: marking near
+#' goal gains expected points, rebounding out of defensive 50 loses them. That is
+#' football, and 3.543 of the 4.274 is earned and beyond any re-split.
+#'
+#' This constant is the one allocated lever of any size, and it was hard to
+#' defend on its own terms: it spread a side's \emph{offence} pool in proportion
+#' to \emph{defensive} acts, so a defender doing his job more diligently took a
+#' bigger share of a pool that exists to account for attacking value. Key
+#' defenders carried -6.433 against forwards' -5.619, or -643 against -562 per
+#' 100 TOG.
+#'
+#' Swept, everything else identical: the gap goes \strong{4.273 -> 3.415},
+#' narrower by \strong{0.858}. That exceeds the entire allocated part (0.731)
+#' because it does not merely shrink the imbalance, it flips it -- under
+#' \code{tog} defenders are charged slightly \emph{less} than forwards. Key
+#' defenders move -2.242 -> -1.765, key forwards 2.031 -> 1.650. All 9,838
+#' player-games move, mean 0.339, max 3.08.
+#'
+#' \strong{The cost is the 0.008 repeatability edge that chose \code{dacts}},
+#' 0.606 -> 0.598. Accepted knowingly: position balance was never the criterion
+#' in that comparison.
 #' @keywords internal
-NP_TEAM_MARGIN_POOL_BY <- "dacts"
+NP_TEAM_MARGIN_POOL_BY <- "tog"
 
 #' The side that conceded a turnover gets a team pool, like the side that won it
 #'

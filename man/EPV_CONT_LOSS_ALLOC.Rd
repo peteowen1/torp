@@ -19,7 +19,7 @@ upside-only.
 }
 \details{
 Five rules were measured against each other (\code{epv3_compare_alloc.R},
-2026-08-03, 57,145 player-games). \code{"team"} wins and is the default.
+2026-08-03, 57,145 player-games). \code{team} wins and is the default.
 
 \tabular{lrrrrr}{
 \tab \strong{none} \tab \strong{contested} \tab \strong{wide} \tab \strong{team} \tab \strong{ledger} \cr
@@ -31,25 +31,25 @@ conserves           \tab  no    \tab  yes   \tab  yes   \tab  yes   \tab  yes   
 }
 
 \describe{
-\item{\code{"team"}}{Equal share across every player who appeared for the
+\item{\code{team}}{Equal share across every player who appeared for the
 losing team. Makes no claim about WHICH opponent was beaten, only that the
 team was -- so it cannot reorder players within a team, which is the
 distortion every exposure-weighted rule introduced in one direction or the
 other. Conserves exactly and is the most repeatable.}
-\item{\code{"prorata"}}{Weight by aerial exposure in the zone. Rejected: the
+\item{\code{prorata}}{Weight by aerial exposure in the zone. Rejected: the
 contested-only base is nearly a win count and INVERTS the channel (Harris
 Andrews, the best intercept defender in the competition, reads -284), and
 the wide base charges mark-and-kick rebounders for duels they never
 entered (Caleb Daniel -202).}
-\item{\code{"none"}}{Leave it unallocated. Scores as well as \code{"team"}
+\item{\code{none}}{Leave it unallocated. Scores as well as \code{team}
 but the channel becomes upside-only and it does not conserve -- 153,428
 points of debit simply vanish.}
-\item{\code{"ledger"}}{Weight by the player's OWN recorded one-on-one losses
+\item{\code{ledger}}{Weight by the player's OWN recorded one-on-one losses
 from the AFL API. Theoretically the best key and it is why the API dig
 happened -- \strong{but measurement rejected it.} Its near-zero
 correlations looked at first like "measures ability, not volume"; the
 persistence test says otherwise, at r = 0.485 year-over-year against
-\code{"team"}'s 0.819. Netting a player's wins against his own losses
+\code{team}'s 0.819. Netting a player's wins against his own losses
 cancels most of the signal and leaves noise. Kept implemented because the
 reasoning was sound and only the data settled it.}
 }

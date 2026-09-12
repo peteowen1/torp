@@ -40,13 +40,14 @@ res <- as.data.table(load_results(SEASON))
 tm  <- as.data.table(np_difficulty_terms_for_season(SEASON, pbp_data = pbp, chains = ch))
 
 np <- build_net_points(pbp, ps, res, chains = ch, credit = "difficulty",
-                       stoppages = "allocate", difficulty_terms = tm)
+                       stoppages = "allocate", difficulty_terms = tm,
+                       return_payments = TRUE)
 np <- as.data.table(torp:::.np_team_margin(np, pbp, ps, res))
 np[, `:=`(match_id = as.character(match_id), player_id = as.character(player_id))]
 
 pg <- as.data.table(load_player_game_ratings(SEASON))
 pg[, `:=`(match_id = as.character(match_id), player_id = as.character(player_id))]
-meta <- unique(pg[, .(match_id, player_id, position_group, tog = time_on_ground_pct)])
+meta <- unique(pg[, .(match_id, player_id, position_group, tog)])
 d <- merge(np, meta, by = c("match_id", "player_id"), all.x = TRUE)
 d <- d[!is.na(position_group)]
 
