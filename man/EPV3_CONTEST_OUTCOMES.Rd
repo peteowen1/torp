@@ -36,5 +36,14 @@ second filter in \code{np_difficulty_terms()} is dropped: it kept every
 defensive win unconditionally but attacking wins only when the outcome was
 in \code{EPV3_DUEL_OUT}, discarding 1,483 rows of which 100 percent were
 attacking wins and inflating the defensive win rate from 78.7 to 86 percent.
+
+\strong{ON since rating vintage v13} (2026-09-12). Measured against the
+SHIPPED v12 baseline it NARROWS the forward-defender gap, 3.795 to 3.648.
+Measured against v11 the same model read +0.235, because v11 still carried
+the asymmetric filter --- that put the filter fix inside the three-way arm
+and left it out of the baseline. The three-way arm lands on 3.648 either way,
+since this path skips the second filter entirely; only the baseline moved.
+Key forwards give up 0.513 a game (0.355 of it from \code{np_direct}, where a
+same-team contest winner is booked), key defenders 0.366.
 }
 \keyword{internal}

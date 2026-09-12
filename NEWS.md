@@ -1,3 +1,53 @@
+# torp 1.9.0
+
+## Rating vintage v13: a contest has three outcomes, not two
+
+`EPV3_CONTEST_OUTCOMES` goes `"two"` -> `"three"` and
+`EPV3_CONTEST_EXCLUDE_SHOTS` `FALSE` -> `TRUE`, shipped together because they
+are one design.
+
+A kick into a contest ends with a mark to the attack, a mark to the defence, or
+nobody marking it. With two bins all 11,302 spoils are booked "defence won", and
+two things follow:
+
+- `V_def` is fitted **88.4% on spoils**, so an intercept mark genuinely worth
+  **−0.722** expected points prices at **+0.270** — about a full point
+  understated, on each of 1,602 of them. Under `"three"` it prices at −0.720.
+- The fitted probability is blind to the distinction: mean `p_hat` 0.787 on
+  spoils, 0.786 on attacking marks, 0.791 on defensive marks.
+
+On inside-50 kicks the real split is nobody marks it 44.1%, attack marks it
+37.5%, defence marks it 18.4% — so when the ball sticks the attack takes
+**58.8%** of the marks. Shots at goal and ruck-tap kicks leave the population:
+a defender touching a shot on the goal line is not a marking duel.
+
+### Unlike v12, this NARROWS the gap
+
+| position | v12 | v13 |
+|---|---|---|
+| KEY_FORWARD | 8.404 | 7.891 |
+| MEDIUM_FORWARD | 6.385 | 6.164 |
+| MIDFIELDER | 5.868 | 5.730 |
+| RUCK | 4.971 | 4.809 |
+| MEDIUM_DEFENDER | 4.565 | 4.424 |
+| KEY_DEFENDER | 4.609 | 4.243 |
+| **forward-defender gap** | **3.795** | **3.648** |
+
+Measured against v11 the same model read **+0.235**, the opposite sign. That
+was a comparison error, not a model change: v11 still carried the asymmetric
+filter, so the filter fix sat inside the three-way arm and was absent from the
+baseline. The three-way arm lands on 3.648 in both measurements — this path
+skips the second filter entirely — and only the baseline moved, 3.413 to 3.795.
+
+Key forwards give up 0.513 a game, 0.355 of it from `np_direct`, which is where
+a same-team contest winner is booked. Every player-game moves (mean 0.352, max
+5.882). Branch models are weak either way: AUC 0.603 for "nobody marks it" and
+0.591 for "which side marks it", where 0.5 is a coin flip.
+
+v12 is preserved as `torp_ratings_v12.parquet`. Verify with
+`data-raw/05-validation/check_v13_published.R`, whose prediction was recorded
+before the rebuild ran.
+
 # torp 1.8.9
 
 ## Rating vintage v12: judge a contest by what happened, not by who won it

@@ -360,6 +360,24 @@ fit_contest_models <- function(cst, train_idx = rep(TRUE, nrow(cst))) {
       "Only {nrow(marked)} contest{?s} in this training set were marked by somebody.",
       "x" = "The three-way contest model cannot fit a branch on that."))
   }
+  # PER BRANCH, not just the total. The combined count above can clear 200 while
+  # one branch is empty -- the leak-safe path refits on each season's earlier
+  # seasons, and a thin early window could in principle contain no defensive
+  # marks at all. bam() on a 0-row frame errors, which takes the nightly
+  # pipeline down rather than producing a wrong number, so the abort here buys
+  # a message that says which branch and how many rather than an opaque mgcv
+  # failure. Raised on review of the v13 flip, when this path was enabled in a
+  # committed state for the first time.
+  n_branch <- tr[, .N, by = out3]
+  for (bn in c("mark_att", "mark_def", "other")) {
+    n <- if (bn %chin% n_branch$out3) n_branch[out3 == bn]$N else 0L
+    if (n < 50) {
+      cli::cli_abort(c(
+        "Contest branch {.val {bn}} has {n} row{?s} in this training set (need >= 50).",
+        "x" = "Its value model cannot be fitted, so the three-way split has no price for that outcome.",
+        "i" = "Branch counts: {paste0(n_branch$out3, '=', n_branch$N, collapse = ', ')}."))
+    }
+  }
   list(
     p_other = fit(stats::update(rhs, .is_other ~ .), tr, family = stats::binomial()),
     p_att   = fit(stats::update(rhs, .is_att ~ .), marked, family = stats::binomial()),

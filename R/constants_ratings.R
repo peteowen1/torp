@@ -1132,8 +1132,32 @@ PSR_POSITION_STANDARDISE <- TRUE
 #' \code{data-raw/03-ratings/promote_rating_vintage.R} (PROMOTE_FROM=v11,
 #' PROMOTE_TO=v12) and move the manifest to canonical v12 BEFORE this constant
 #' reaches main.
+#'
+#' v13 (2026-09-12): \code{EPV3_CONTEST_OUTCOMES} \code{two} -> \code{three} and
+#' \code{EPV3_CONTEST_EXCLUDE_SHOTS} \code{FALSE} -> \code{TRUE}, shipped
+#' together because they are one design. A contest ends with a mark to the
+#' attack, a mark to the defence, or nobody marking it. With two bins every one
+#' of 11,302 spoils is booked as a defensive win, so \code{V_def} is fitted 88.4
+#' percent on spoils and an intercept mark genuinely worth -0.722 expected
+#' points prices at +0.270 --- about a full point understated on each of 1,602.
+#' The probability is blind to the distinction as well: mean \code{p_hat} 0.787
+#' on spoils, 0.786 on attacking marks, 0.791 on defensive marks.
+#'
+#' \strong{Unlike v12 this NARROWS the forward-defender gap, 3.795 to 3.648.}
+#' Measured against v11 the same model read +0.235, because v11 still carried
+#' the asymmetric filter and that put the filter fix inside the three-way arm
+#' while leaving it out of the baseline. The three-way arm lands on 3.648 in
+#' both measurements --- this path skips the second filter entirely, so the
+#' filter constant cannot reach it --- and only the baseline moved.
+#'
+#' Key forwards give up 0.513 a game, 0.355 of it from \code{np_direct} where a
+#' same-team contest winner is booked; key defenders 0.366. Every player-game
+#' moves (mean 0.352, max 5.882), so this needs a full-history rebuild.
+#' Preserve v12 with \code{data-raw/03-ratings/promote_rating_vintage.R}
+#' (PROMOTE_FROM=v12, PROMOTE_TO=v13) and move the manifest to canonical v13
+#' BEFORE these constants reach main.
 #' @keywords internal
-RATING_VINTAGE <- "v12"
+RATING_VINTAGE <- "v13"
 
 #' Map from the 20-way team-sheet lineup position to a 6-way position group
 #'
