@@ -19,5 +19,9 @@ percent), 493 of 17,571 contests overall.
 \details{
 Kept separate from \code{EPV3_CONTEST_OUTCOMES} so the two can be measured
 one at a time; both are part of the same design decision.
+
+\strong{ON since rating vintage v13} (2026-09-12), shipped together with the
+three-outcome model because they are one design. Contested rows go 17,571 to
+16,922.
 }
 \keyword{internal}
