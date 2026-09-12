@@ -75,8 +75,11 @@ EPV3_CONTEST_POPULATION <- "evidence"
 #' target logged, or is the outcome self-evidently a duel. Expect it to
 #' \emph{widen} the forward-defender gap --- the inflated number is the current
 #' one, not the corrected one.
+#'
+#' \strong{ON since rating vintage v12} (2026-09-12). Contested rows go 16,081
+#' to 17,571; key forwards gain 0.399 a game and the gap moves 3.413 to 3.795.
 #' @keywords internal
-NP_CONTEST_FILTER_SYMMETRIC <- FALSE
+NP_CONTEST_FILTER_SYMMETRIC <- TRUE
 
 #' How many outcomes the contest model prices
 #'

@@ -1,3 +1,46 @@
+# torp 1.8.9
+
+## Rating vintage v12: judge a contest by what happened, not by who won it
+
+`NP_CONTEST_FILTER_SYMMETRIC` goes `FALSE` -> `TRUE`, fixing torp#220.
+
+The contest path filtered its scored rows a second time with
+`def_win == TRUE | out_desc %chin% EPV3_DUEL_OUT`, keeping every defensive win
+unconditionally but an attacking win only when the outcome was in the narrower
+duel list. A `Mark Fumbled` won by the defence was priced; the identical
+outcome won by the attack was discarded. The intent stated one line above it is
+symmetric, so this was a defect against its own spec.
+
+**Measured:** 1,483 of 17,078 contests dropped (8.7%), **100% of them attacking
+wins** — 1,149 `Mark Fumbled` and 339 `Free For`. The defensive win rate read
+86% against a true 78.7%, and the defence took 60.1% of all contest credit
+against a corrected 48.3%.
+
+In plain terms: a key forward who won a contested mark after a fumble or a free
+was being paid nothing for it, 1,490 times a season.
+
+| position | v11 | v12 |
+|---|---|---|
+| KEY_FORWARD | 8.005 | 8.404 |
+| MEDIUM_FORWARD | 6.337 | 6.385 |
+| MIDFIELDER | 5.903 | 5.868 |
+| RUCK | 4.882 | 4.971 |
+| MEDIUM_DEFENDER | 4.632 | 4.565 |
+| KEY_DEFENDER | 4.592 | 4.609 |
+| **forward-defender gap** | **3.413** | **3.795** |
+
+**This WIDENS the gap, and that is the correct direction.** The defence's share
+of contest credit was inflated by the discarded rows. It does partly reverse
+what v9-v11 achieved for defenders, which is worth stating plainly: two of
+those three vintages were also fixing specification errors, and this one
+happens to run the other way. Combined with the finding that 83% of the gap is
+earned, the honest read is that the forward-defender gap is largely real.
+
+73% of player-games move (mean 0.223, max 5.838). v11 is preserved as
+`torp_ratings_v11.parquet`. Verify with
+`data-raw/05-validation/check_v12_published.R`, whose prediction was recorded
+before the rebuild ran.
+
 # torp 1.8.8
 
 ## A contest has three outcomes, and the population filter was asymmetric
