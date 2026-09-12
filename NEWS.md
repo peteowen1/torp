@@ -1,3 +1,19 @@
+# torp 1.8.7
+
+## The "Where Net Points Come From" artifact can be rebuilt
+
+`data-raw/04-analysis/build_np_categories_artifact.R` is new. The published page
+had no committed generator, so nobody could regenerate it and it sat on rating
+vintage v8 while production ran v11. The script computes every figure live from
+`build_net_points(return_payments = TRUE)` — no cached CSV, no hand-entered
+numbers — which is the same defect that put a pre-`#210` model on the ledger
+walkthrough until Pete's own arithmetic caught it.
+
+It also reports how far the per-play-type categories sum from `net_points`
+rather than forcing the gap to zero: the payment ledger is read one step before
+`.np_team_margin()`'s correction, which books its adjustment into `np_team`
+alone.
+
 # torp 1.8.6
 
 ## Rating vintage v11: stop charging defenders most for defending
