@@ -111,5 +111,33 @@ diff for v8 -> v9 is EMPTY and nothing would have demanded this bump. It was
 done by hand. Until #212 wires the formulas in, ask "does this move ratings?"
 rather than "did a constant change?" -- the guard answers the second question
 and this vintage is proof they are not the same question.
+
+v10 (2026-09-11): TWO constants flipped together, both Pete's decisions and
+both measured as independent of each other before being bundled.
+
+\code{EPV3_CONTEST_POPULATION} "all" -> "evidence". The contest population was
+inferred from the OUTCOME description, so 69.8\\% of it was plain receptions --
+a kick finding a teammate, or an opponent marking it unopposed. Pete decided
+the rule from real chain sequences: a contest is a kick where chains logged a
+target, or the outcome is self-evidently a duel. Population 50,050 -> 17,493,
+and the worst calibration error in the 0.8-0.99 band falls from 13.6 points
+to 2.8 with no recalibration layer.
+
+\code{NP_ERROR_BLAME_SHARE} 0 -> 1. A fumbled or dropped mark is not in PBP,
+so the ledger saw only the kick followed by an opponent and charged the
+KICKER -- a different player than the one who erred, 100\\% of the time. The
+whole debit now moves to the player who dropped it.
+
+\strong{The bundling was verified, not assumed.} Largest interaction term
+across all six positions: \strong{0.001 points a game}, so the two effects add
+and their separate figures can be quoted honestly. Had they interacted, every
+attribution in the release notes would have been wrong.
+
+Combined: key defenders -2.432 -> -2.235, forward-defender gap 4.474 -> 4.267.
+All 9,794 player-games move (mean 0.493, max 5.205, 1,140 over a point), so
+this needs a full-history rebuild. Preserve v9 with
+\code{data-raw/03-ratings/promote_rating_vintage.R} (PROMOTE_FROM=v9,
+PROMOTE_TO=v10) and move the manifest to canonical v10 BEFORE this constant
+reaches main.
 }
 \keyword{internal}

@@ -91,6 +91,27 @@ extract_contests <- function(chains = NULL, type = "all", seasons = TRUE,
   # as the v3 contest channel instead of inventing a third convention. That
   # constant is currently "all", so the default behaviour here is UNCHANGED --
   # flipping it is a separate, gated decision (see NEXT-STEPS).
+  # "evidence" CANNOT be honoured here, and saying so is the point of this
+  # branch. That population is a ROW-LEVEL rule -- a contest is a kick where
+  # chains logged a target, or the outcome is a duel by definition -- and the
+  # `target_pid` half of it exists only inside build_aerial_contests(). This
+  # function has no such filter.
+  #
+  # Worse, it would fail SILENTLY rather than loudly: mark_wins is an intersect
+  # against CHAINS_MARK_WIN_DESCS, whose three entries are all already in
+  # EPV3_AERIAL_OUT, and "evidence" returns a SUPERSET of that. So the intersect
+  # is byte-identical to "all" and this function would quietly do the old thing
+  # while its caller believed the new rule was in force (found on review,
+  # 2026-09-11). Warn rather than abort: the default flipping to "evidence" must
+  # not take down the v2 paths that read this, but it must not pass unremarked.
+  if (identical(population, "evidence")) {
+    cli::cli_warn(c(
+      "{.code extract_contests()} cannot apply the {.val evidence} contest population.",
+      "!" = "That rule is row-level and lives in {.fn build_aerial_contests}; this function has no equivalent filter, so it is falling back to {.val all}.",
+      "i" = "Anything comparing these contests against the v3/v4 contest channel is comparing two different populations."
+    ))
+    population <- "all"
+  }
   mark_wins <- intersect(epv3_aerial_out(population), CHAINS_MARK_WIN_DESCS)
 
   if (is.null(chains)) {

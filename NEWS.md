@@ -1,3 +1,65 @@
+# torp 1.8.5
+
+## Rating vintage v10: the contest population and error blame go live
+
+Two constants flip together. Both are Pete's decisions, and the mechanisms were
+reviewed and merged separately (#214, #215) before either default moved.
+
+| constant | from | to |
+|---|---|---|
+| `EPV3_CONTEST_POPULATION` | `"all"` | **`"evidence"`** |
+| `NP_ERROR_BLAME_SHARE` | `0` | **`1`** |
+| `RATING_VINTAGE` | `v9` | **`v10`** |
+
+**The contest population was never a contest population.** It was inferred from
+the *outcome* description, so **69.8%** of it was plain receptions -- a kick
+finding a teammate, or an opponent marking it unopposed. Pete spotted this from
+the data, not from a metric, and decided the rule by reading real chain
+sequences: a contest is a kick where chains logged a target, or the outcome is
+self-evidently a duel. Population 50,050 -> 17,493, and the worst calibration
+error in the 0.8-0.99 band falls from **13.6 points to 2.8** with no
+recalibration layer.
+
+**A dropped mark is no longer charged to the kicker.** `Mark Fumbled` and
+`Mark Dropped` are not in PBP, so the ledger saw only the kick followed by an
+opponent winning the ball -- and booked the *kicker* with the turnover, a
+different player than the one who erred **100%** of the time. The whole debit now
+moves to the player who dropped it.
+
+### The bundling was verified, not assumed
+
+The two ship as one vintage on the claim that they are independent. Measured
+across four arms (neither / each / both), the largest interaction term across all
+six positions is **0.001 points a game**, so their separate figures genuinely add
+and one rebuild covers both. Had they interacted, every attribution below would
+have been wrong.
+
+| position | v9 | **v10** | change |
+|---|---:|---:|---:|
+| KEY_FORWARD | 2.042 | 2.032 | −0.010 |
+| MEDIUM_FORWARD | 0.900 | 0.762 | −0.138 |
+| MIDFIELDER | 0.352 | 0.331 | −0.021 |
+| RUCK | 0.439 | 0.618 | **+0.179** |
+| MEDIUM_DEFENDER | −1.319 | −1.294 | +0.025 |
+| **KEY_DEFENDER** | **−2.432** | **−2.235** | **+0.197** |
+
+Forward−defender gap **4.474 → 4.267**. This is the first change in the
+defender program to narrow it by *crediting defenders* rather than deflating
+forwards: dropping 30k uncontested receptions stops a defender's contest wins
+being diluted by rows where nobody contested anything.
+
+All 9,794 player-games move (mean 0.493, max 5.205, 1,140 over a point), so this
+ships with a full-history rebuild.
+
+Reference: [PLAY-TYPES.md](https://github.com/peteowen1/torpverse/blob/dev/docs/reference/PLAY-TYPES.md).
+
+### Also in this release
+
+`DESCRIPTION` reaches `main` at 1.8.5. It had drifted: the 1.8.4 bump was staged
+by the PR hook *after* #214's head commit was pushed, so it travelled to `dev`
+with #215 instead and `main` briefly carried a NEWS heading for a version the
+package did not claim.
+
 # torp 1.8.4
 
 ## Blame the player who actually made the error (`NP_ERROR_BLAME_SHARE`)

@@ -202,6 +202,39 @@ build_aerial_contests <- function(chains, pbp_data) {
   )]
   if (nrow(cst) == 0) return(cst)
 
+  # PETE'S DUEL-EVIDENCE RULE (2026-09-11), decided from real chain sequences.
+  #
+  # The population was inferred from the OUTCOME description, which made 69.8% of
+  # it plain receptions -- a kick finding a teammate, or an opponent marking it
+  # unopposed. Neither is a duel. The trace that settled it:
+  #
+  #   572  Kick Inside 50 Result   -     -                54  15
+  #   573  Uncontested Mark        GWS   Jayden Laverde   54  15
+  #
+  # Richmond kicked inside 50 and a GWS defender marked it UNCONTESTED. A
+  # turnover, but nobody contested anything.
+  #
+  # Why it matters beyond tidiness: def_win rates were 13.1% (reception), 41.6%
+  # (contested mark) and 100% (spoil), so WHICH EVENT A ROW IS nearly determined
+  # the answer -- and the model cannot see the category, since out_desc is
+  # excluded as a feature and geometry recovers it at AUC 0.555. It was chasing
+  # an unseeable categorical. Measured, this filter alone takes the worst
+  # calibration error in the 0.8-0.99 band from 13.6 points to 2.8, with no
+  # recalibration layer.
+  #
+  # Keyed on target_pid, so it is computed AFTER the marker scan above and moves
+  # with EPV3_TARGET_FROM_I50: with that flag on, more rows carry a logged
+  # target and the population widens accordingly. That coupling is deliberate --
+  # both answer the same question, "did chains see a contest here" -- but it
+  # means the two constants must be swept together, never one at a time.
+  if (identical(EPV3_CONTEST_POPULATION, "evidence")) {
+    n_before <- nrow(cst)
+    cst <- cst[!is.na(target_pid) | out_desc %chin% EPV3_DUEL_EVIDENCE_OUTS]
+    cli::cli_alert_info(
+      "Contest population {.val evidence}: {format(nrow(cst), big.mark = ',')} of {format(n_before, big.mark = ',')} kicks kept ({round(100 * nrow(cst) / max(n_before, 1), 1)}%); {format(n_before - nrow(cst), big.mark = ',')} receptions with no logged contest dropped")
+    if (nrow(cst) == 0) return(cst)
+  }
+
   cst[, def_win := out_tid != kick_tid]
   # A Spoil logged to the KICKING team is a chain-logging artifact, not an
   # attacking win. v2 drops the same rows for the same reason (~16% of spoils).

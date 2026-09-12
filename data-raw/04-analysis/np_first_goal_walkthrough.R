@@ -16,7 +16,16 @@ pbp <- as.data.table(load_pbp(SEASON)); pbp[, match_id := as.character(match_id)
 ch  <- as.data.table(load_chains(SEASON)); ch[, match_id := as.character(match_id)]
 ps  <- as.data.table(load_player_stats(SEASON, refresh = TRUE))
 res <- as.data.table(load_results(SEASON)); res[, match_id := as.character(match_id)]
-tm  <- fread("data-raw/outputs/np_difficulty_terms_2025_2026.csv")
+# COMPUTE THE TERMS LIVE, do not read the cached CSV. That file was written
+# before torp#210 removed the difficulty model's leaked features, so every
+# number downstream of it -- the payments, the net points, the whole page -- was
+# being built on a superseded model. The two disagree materially on the same
+# row: on Steele's kick the cached split is decision -0.0671 / contest -0.5332 /
+# ground +0.2224, the live one +0.2018 / -0.3525 / -0.2272. Both sum to the same
+# delta, but WHO gets paid changes completely.
+# Found 2026-09-11 when the page's own arithmetic would not reconcile.
+tm  <- as.data.table(np_difficulty_terms_for_season(SEASON, pbp_data = pbp, chains = ch))
+tm[, match_id := as.character(match_id)]
 tm[, match_id := as.character(match_id)]
 tm  <- tm[substr(match_id, 5, 8) == as.character(SEASON)]
 
@@ -42,9 +51,37 @@ seg_pbp <- pbp[match_id == MATCH & display_order >= first_dispord & display_orde
 seg_pbp <- merge(seg_pbp, nm, by = "player_id", all.x = TRUE)
 setorder(seg_pbp, display_order)
 
+# THE LEDGER'S OWN VALUE, WHICH IS NOT THE RAW delta_epv ON EVERY ROW.
+# Pete found this reading the page: row 3's payments summed to +0.2415 while the
+# row showed delta_epv -0.3779, a 0.62 gap the page never explained. The cause is
+# stoppage REPRICING -- a kick that ends in a ball-up is judged against what a
+# kick to that spot is worth, and the rest of the swing is moved onto the
+# stoppage row for the ruck/first-possession/pool split to share. So "kicking to
+# a contest is net positive" is correct and deliberate, not a bug.
+# 17,482 rows are repriced across 2026, moving 8,247.6 points.
+led <- as.data.table(torp:::.np_build_ledger(pbp, ch, stoppages = "allocate"))
+led[, match_id := as.character(match_id)]
+seg_pbp <- merge(seg_pbp,
+                 led[match_id == MATCH, .(display_order, ledger_hm = hm,
+                                          reprice_hm = reprice_hm)],
+                 by = "display_order", all.x = TRUE)
+setorder(seg_pbp, display_order)
+
 # --- chains rows for the same window (adds the Goal row PBP doesn't have) ---
+# x/y IN THE HOME TEAM'S FRAME. chains coordinates are in the CHAIN team's
+# attacking frame, so the same physical spot flips sign when possession turns
+# over -- the ball-up at display_order 7 reads x = +40 on Melbourne's chain and
+# the very next row reads x = -51 on Brisbane's. Negating the away chains gives
+# one consistent map: positive x is always toward the home team's goal.
 seg_ch <- ch[match_id == MATCH & display_order >= first_dispord & display_order <= first_goal,
-            .(display_order, description, team_id, player_id)]
+            .(display_order, description, team_id, player_id,
+              chain_number, chain_team_id, x, y)]
+.home_tid <- as.character(unique(ch[match_id == MATCH]$home_team_id)[1])
+seg_ch[, x_home := as.numeric(x) * data.table::fifelse(
+  as.character(chain_team_id) == .home_tid, 1, -1)]
+seg_ch[, y_home := as.numeric(y) * data.table::fifelse(
+  as.character(chain_team_id) == .home_tid, 1, -1)]
+seg_ch[, c("x", "y") := NULL]
 seg_ch[, player_id := as.character(player_id)]
 seg_ch <- merge(seg_ch, nm, by = "player_id", all.x = TRUE)
 setorder(seg_ch, display_order)
@@ -122,7 +159,29 @@ out <- list(
   payment_rows = seg_pay[, .(player_id, match_id, display_order, role, team, player_name,
                              hm = round(hm, 6), own = round(own, 6),
                              scaled = round(scaled, 6), doubled)],
-  whole_match_net_points = whole_match, team_sums = team_sums
+  # THE SPLIT THAT EXPLAINS THE ROW. Pete, reading the page: "the numbers still
+  # don't add up... add like a contest row". There IS no contest row -- the
+  # annotation rows (Kick Into F50, Kick Inside 50 Result, Spoil) are not in PBP
+  # and carry no value. The contest is a THREE-WAY SPLIT of the kick's own swing:
+  #   decision        what the kick was worth as a choice of destination
+  #   cont_surprise   the contest itself, relative to the modelled chance
+  #   ground_surprise what happened once the ball hit the ground
+  # and decision + cont + ground = the row's raw delta_epv. Shipping these lets
+  # the page show why a kick into a contest can pay its kicker while the row
+  # loses value.
+  difficulty_terms = tm[match_id == MATCH & display_order >= first_dispord &
+                        display_order <= first_goal,
+                        .(display_order, p_hat = round(p_hat, 4),
+                          decision = round(decision, 4),
+                          surprise = round(surprise, 4), contested,
+                          cont_surprise = round(cont_surprise, 4),
+                          ground_surprise = round(ground_surprise, 4),
+                          def_win, cont_desc)],
+  whole_match_net_points = whole_match, team_sums = team_sums,
+  # chain_team_id is an ID; the page needs a name. Built from PBP's own
+  # per-match map so it cannot disagree with the team names used everywhere else.
+  team_names = unique(pbp[match_id == MATCH & !is.na(team_id) & !is.na(team),
+                          .(team_id = as.character(team_id), team = as.character(team))])
 )
 write_json(out, "data-raw/outputs/np_first_goal_walkthrough.json", auto_unbox = TRUE,
           na = "null", digits = 6)
