@@ -1,5 +1,29 @@
 # torp 1.9.0
 
+## Roxygen `\%` under markdown mode was silently corrupting docs (torp#211)
+
+The original ask -- `man/RATING_VINTAGE.Rd` rendering as ~200 junk
+`\keyword{}` entries -- had already resolved itself as `@keywords internal`
+moved to the end of its block over prior edits. But the root cause was wider
+than that one symptom: this package runs `Roxygen: list(markdown = TRUE)`,
+and every hand-written `\%` in a roxygen comment gets double-escaped by the
+markdown layer into `\\%`, which is invalid Rd. Sometimes that just renders
+wrong; when a `\strong{}`/`\emph{}` tag's closing brace landed after the
+corrupted `\\%` on the same line, the stray unescaped `%` started a live Rd
+comment and roxygen2 blanked the ENTIRE `@details` value rather than
+truncating it -- three constants (including `RATING_VINTAGE` itself, several
+paragraphs of its v10/v11 history) were rendering with silently-empty
+sections.
+
+Fixed by replacing every hand-written `\%` with plain `%` across 8 files (the
+correct form under markdown mode -- roxygen2 escapes it correctly on its
+own). Also removed 4 dead `@rdname`-only backward-compatibility aliases for
+internal stat-rating functions (`.estimate_skills_batch`,
+`.prepare_skill_data`, `.compute_skill_denominator`, `.skill_stat_params`) --
+the alias pattern itself was what made roxygen2 skip building those 5 topics
+("no name and/or title"); one live caller was repointed at the real function
+name instead of the alias.
+
 ## Difficulty-terms coverage now checked per season, not just per batch (torp#204)
 
 `.np_credit_terms()`'s empty-subject guard (torp#202) sums `n_scored` across

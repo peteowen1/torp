@@ -30,11 +30,11 @@
 #' Two players could plausibly have contested the ball. Excludes
 #' \code{Uncontested Mark} and \code{Mark On Lead}, which
 #' \code{EPV3_AERIAL_OUT} contains and which are receptions rather than duels --
-#' \code{Mark On Lead} records a defence win 0.0\% of the time across 19,247
+#' \code{Mark On Lead} records a defence win 0.0% of the time across 19,247
 #' events, which is what "nobody contested it" looks like in the data.
 #'
-#' \code{Spoil} variants are 100\% defence-wins by construction and
-#' \code{Contested Mark} 43.9\%; those are the two that carry the population.
+#' \code{Spoil} variants are 100% defence-wins by construction and
+#' \code{Contested Mark} 43.9%; those are the two that carry the population.
 #' @keywords internal
 EPV3_DUEL_OUT <- c("Contested Mark", "Pack Mark (P)", "Pack Mark (O)",
                    "Spoil", "Spoil gaining possession", "Spoil ineffective")
@@ -56,7 +56,7 @@ EPV3_CONTEST_POPULATION <- "evidence"
 #'
 #' The two-way contest path filters its scored rows a second time, after the
 #' population has already been decided. The shipped expression is
-#' \code{def_win == TRUE | out_desc \%chin\% EPV3_DUEL_OUT}, which keeps every
+#' \code{def_win == TRUE | out_desc %chin% EPV3_DUEL_OUT}, which keeps every
 #' defensive win unconditionally but an attacking win only when the outcome is
 #' in the narrower duel list --- so a \code{Mark Fumbled} won by the defence is
 #' priced and the identical outcome won by the attack is discarded.

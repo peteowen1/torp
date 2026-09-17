@@ -107,7 +107,7 @@ EPV_PER_CHANNEL_POINTS_SCALE <- FALSE
 #' \code{v3} is the chain-native rebuild -- \code{delta_epv} arithmetic only,
 #' with the ruck/hitout box terms as the single permitted carve-out because
 #' \code{Centre Bounce} and \code{Ball Up Call} rows carry a \code{player_id}
-#' 0.0\% of the time. Four channels \code{recv / disp / cont_aerial / cont_stop}.
+#' 0.0% of the time. Four channels \code{recv / disp / cont_aerial / cont_stop}.
 #' See \code{../docs/plans/EPV-V3-CHAIN-NATIVE.md}.
 #'
 #' \code{v4} is the Net Points ledger (\code{build_net_points()} under
@@ -141,9 +141,9 @@ EPR_UNITS_SCALE_V4 <- 2.40
 
 #' How v3 distributes contest debits whose loser chains never names
 #'
-#' Chains names the beaten aerial opponent in only ~12\% of contests -- never
+#' Chains names the beaten aerial opponent in only ~12% of contests -- never
 #' when the attack retains, and only when a \code{Contest Target} row happened to
-#' be logged when the defence wins. So ~86\% of the contest credit mass carries a
+#' be logged when the defence wins. So ~86% of the contest credit mass carries a
 #' debit with no name on it, and it has to go somewhere or the channel becomes
 #' upside-only.
 #'
@@ -270,15 +270,15 @@ EPV3_CHANNELS <- 4L
 #' unscaled prior leaves EPR a blend of the two.
 #'
 #' \strong{The headline finding, which is not what was hoped for.} In raw EPV
-#' units the contest channel carries 15.7\% of variance; converted to margin
-#' points it carries \strong{3.3\%}, because a unit of contest is worth 0.27
+#' units the contest channel carries 15.7% of variance; converted to margin
+#' points it carries \strong{3.3%}, because a unit of contest is worth 0.27
 #' points against a unit of disposal's 0.61. Contest value is real and much
 #' larger than v2 allowed, but it converts to scoreboard margin at less than half
 #' the rate possession value does. Equal thirds and "1 unit = 1 point" are not
 #' simultaneously achievable, and per Pete's call the points constraint wins.
 #'
 #' \code{cont_stop} converts at 1.77 -- the highest of the four -- so calibration
-#' would AMPLIFY the ruck channel 1.77x and take it from 0.5\% to 4.6\% of
+#' would AMPLIFY the ruck channel 1.77x and take it from 0.5% to 4.6% of
 #' variance.
 #'
 #' \strong{Prior warning.} Per-channel constants were tried on the v2 structure
@@ -293,10 +293,10 @@ EPV3_CHANNELS <- 4L
 #'
 #' Verified by REBUILD, not analytically, and iterated to a fixed point
 #' (\code{epv3_verify_shipping_constants.R}): \strong{recv 1.00002, disp
-#' 1.00016, contest 0.99599} -- worst residual 0.4\%.
+#' 1.00016, contest 0.99599} -- worst residual 0.4%.
 #'
-#' \strong{Do not chase that last 0.4\%.} The contest coefficient carries a
-#' standard error of roughly 87\% of itself (t 1.12), so 0.4\% is orders of
+#' \strong{Do not chase that last 0.4%.} The contest coefficient carries a
+#' standard error of roughly 87% of itself (t 1.12), so 0.4% is orders of
 #' magnitude below its own noise floor; earlier iterations oscillated between
 #' 0.989 and 1.016 for exactly that reason. Two real causes:
 #' \itemize{
@@ -324,7 +324,7 @@ EPV3_CHANNELS <- 4L
 #' torp-only search cannot find it), which fits its own scale inside the v3 arm
 #' and evaluates that arm -- so the numbers were defensible as the ones the
 #' +0.1913 dMAE result was produced with. But they are 2.3x and 1.8x the
-#' calibrated values on the two channels carrying ~99\% of the variance, so
+#' calibrated values on the two channels carrying ~99% of the variance, so
 #' every published EPV total came out roughly double: the season leader read
 #' 668.5 points of margin where the calibrated scale gives about 332. Pete
 #' caught it by eye off the live leaderboard -- "highest should be like 300
@@ -443,7 +443,7 @@ EPV3_SUB_SCALE <- c(cont_aerial = 1, cont_stop = 1)
 #' behind 3.14x is sound; the "artifact" verdict was not.
 #'
 #' The one nuance that survives: \code{exp_pts} on \code{Centre Bounce} is
-#' hard-coded (sd exactly 0, 100\% exactly zero) where every other description
+#' hard-coded (sd exactly 0, 100% exactly zero) where every other description
 #' has a distribution -- \code{Ball Up Call} reads sd 0.84. So the 0 is a
 #' pipeline convention rather than an EP-model estimate. Defensible, but the
 #' +0.79 depends on it.
@@ -462,17 +462,17 @@ EPV3_SUB_SCALE <- c(cont_aerial = 1, cont_stop = 1)
 #' \strong{The reconciliation, and it points somewhere else entirely.} There is
 #' ~10 points per match of genuinely unallocated stoppage value. It is real, and
 #' it mostly does NOT belong to the ruck -- it belongs to the MIDFIELDER who
-#' actually wins the ball, who today receives only the receiver's 50\% because a
+#' actually wins the ball, who today receives only the receiver's 50% because a
 #' stoppage has no disposer to pay the other half. Raising this constant would
 #' hand the midfielder's share to the ruck. The open question is not "how much
-#' more should rucks get" but "should a stoppage clearance pay 100\% to the
-#' winner rather than 50\%".
+#' more should rucks get" but "should a stoppage clearance pay 100% to the
+#' winner rather than 50%".
 #'
 #' The regression route to a larger constant (7.22x historically, 7.50x refitted
 #' 2026-08-04) remains rejected on its own evidence: it falls to 4.39 under PSR
 #' control, reads 4.94 then 10.09 split-half, and \code{epv_cont_stop} is a
 #' linear function of hitout COUNTS (\code{cor 0.9900}), so applying it made raw
-#' hitout volume 12\% of the rating.
+#' hitout volume 12% of the rating.
 #' @keywords internal
 EPV_RUCK_SWING_SCALE <- 1
 
@@ -1070,7 +1070,7 @@ PSR_POSITION_STANDARDISE <- TRUE
 #' both measured as independent of each other before being bundled.
 #'
 #' \code{EPV3_CONTEST_POPULATION} "all" -> "evidence". The contest population was
-#' inferred from the OUTCOME description, so 69.8\% of it was plain receptions --
+#' inferred from the OUTCOME description, so 69.8% of it was plain receptions --
 #' a kick finding a teammate, or an opponent marking it unopposed. Pete decided
 #' the rule from real chain sequences: a contest is a kick where chains logged a
 #' target, or the outcome is self-evidently a duel. Population 50,050 -> 17,493,
@@ -1079,7 +1079,7 @@ PSR_POSITION_STANDARDISE <- TRUE
 #'
 #' \code{NP_ERROR_BLAME_SHARE} 0 -> 1. A fumbled or dropped mark is not in PBP,
 #' so the ledger saw only the kick followed by an opponent and charged the
-#' KICKER -- a different player than the one who erred, 100\% of the time. The
+#' KICKER -- a different player than the one who erred, 100% of the time. The
 #' whole debit now moves to the player who dropped it.
 #'
 #' \strong{The bundling was verified, not assumed.} Largest interaction term
@@ -1095,7 +1095,7 @@ PSR_POSITION_STANDARDISE <- TRUE
 #' reaches main.
 #'
 #' v11 (2026-09-12): \code{NP_TEAM_MARGIN_POOL_BY} \code{dacts} -> \code{tog}.
-#' The first decomposition of the forward-defender gap found 83\% of it is
+#' The first decomposition of the forward-defender gap found 83% of it is
 #' EARNED -- a key forward's own acts are worth +4.079 and a key defender's
 #' -1.972 -- and that defenders already out-earn forwards on turnovers won and
 #' contests. The one allocated lever was this constant, which spread a side's
@@ -1381,9 +1381,9 @@ LINEUP_GROUP_MAP <- c(
 #' it is partly ruck-exclusive -- exactly the shape that made \code{hitout}
 #' unstandardisable. Standardising it normalises away the only thing it
 #' measures: with the two contest parts merged in points, the channel came out
-#' at 0.023 points per unit, t 0.27, carrying \strong{0.0\%} of the rating's
+#' at 0.023 points per unit, t 0.27, carrying \strong{0.0%} of the rating's
 #' variance. It had been standardised out of existence. Excluding it takes the
-#' contest channel from t 1.83 to 2.24 and from 1.7\% of value to 2.6\%.
+#' contest channel from t 1.83 to 2.24 and from 1.7% of value to 2.6%.
 #'
 #' Keyed on \code{EPV_ENGINE} rather than on \code{EPV3_CHANNELS} because v2's
 #' \code{spoil} channel is a genuine all-position quantity (spoils, tackles,
@@ -1432,13 +1432,13 @@ EPV_DISP_SCALE <- 0.5000
 #'
 #' The multiplier sits on the \code{pos_team == -1} branch, so it is the
 #' INTERCEPT branch. The case for zeroing it was that the term is noise:
-#' game-to-game reception reliability rises 0.2507 -> 0.3086 (+23\%) while
+#' game-to-game reception reliability rises 0.2507 -> 0.3086 (+23%) while
 #' count-dependence FALLS 0.53 -> 0.297.
 #'
 #' \strong{What that missed is what the term contains.} Interception is the
 #' highest-value receiving act in the game by a factor of eight -- 168 per match
 #' at mean +0.625 against ordinary receptions' 1,453 per match at +0.079. It is
-#' 10\% of receiving events, 31\% of gross reception value and roughly half the
+#' 10% of receiving events, 31% of gross reception value and roughly half the
 #' channel's net (\code{docs/reference/EPV-VALUE-ANATOMY.md} §4). So "drop a
 #' noisy term" was actually "stop crediting interceptions".
 #'
@@ -1510,7 +1510,7 @@ EPV_DEF_PRESSURE_WT <- -0.1882
 #' \strong{Repriced 2026-08-07, 0.0510 -> 0.0615.} With
 #' \code{EPV_RUCK_CONTEST_WT} now a debit, a contest WON nets
 #' \code{0.0615 - 0.0232 = +0.0383} and one LOST costs \code{-0.0232}, which puts
-#' break-even at a \strong{37.7\%} win rate -- the actual league average. An
+#' break-even at a \strong{37.7%} win rate -- the actual league average. An
 #' average ruck's contest work is therefore worth about nothing, a better one
 #' positive.
 #'
@@ -1529,8 +1529,8 @@ EPV_HITOUT_WT <- 0.0615 * EPV_RUCK_SWING_SCALE
 #' The one term the measurement and the design agree on, and the one that should
 #' dominate: the ruck's skill is DIRECTION, not elevation. Left at 0.1748 in the
 #' 2026-08-07 repricing although the fit says +0.1013 per ruck (t 6.4) -- at
-#' 0.1748 direction carries 70.5\% of the channel's variance, at 0.1015 only
-#' 55.6\%, and dropping it costs a third of the channel's remaining spread on top
+#' 0.1748 direction carries 70.5% of the channel's variance, at 0.1015 only
+#' 55.6%, and dropping it costs a third of the channel's remaining spread on top
 #' of what the attendance debit already costs. If the channel is too loud that is
 #' a points-SCALE decision, not a reason to underweight the skill.
 #' @keywords internal
@@ -1609,8 +1609,8 @@ EPV_RUCK_CONTEST_WT <- -0.0232 * EPV_RUCK_SWING_SCALE
 #' \strong{The reason for turning it on is not the reason previously written
 #' here.} That said it would let the channel be amplified; measurement killed the
 #' amplification instead (see \code{EPV_RUCK_SWING_SCALE} -- its justifying swing
-#' figure is ~93\% centre-bounce reset artifact, and the regression route is
-#' ~40\% team quality). The ledger stands on its own: paying a ruckman for
+#' figure is ~93% centre-bounce reset artifact, and the regression route is
+#' ~40% team quality). The ledger stands on its own: paying a ruckman for
 #' contests he LOST is indefensible whatever the channel is worth.
 #' @keywords internal
 EPV3_STOP_ZERO_SUM <- TRUE

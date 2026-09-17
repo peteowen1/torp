@@ -47,7 +47,7 @@ cli::cli_inform("Using {length(sampled_players)} players (of {length(eligible_pl
 
 # Resolve position groups (should already exist from prepare_stat_rating_data)
 if (!"pos_group" %in% names(dt)) {
-  .resolve_skill_positions(dt)
+  .resolve_stat_rating_positions(dt)
 }
 
 # Build vectorized optimization structures ----

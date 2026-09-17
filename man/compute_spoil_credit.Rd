@@ -26,7 +26,7 @@ rather than by a flat per-spoil weight.
 }
 \details{
 \code{compute_contest_credit()} already prices contests contextually, but its
-filter keys on \code{CHAINS_CONTEST_TARGET_DESCS}, which matches only ~28\\% of
+filter keys on \code{CHAINS_CONTEST_TARGET_DESCS}, which matches only ~28\% of
 spoils — the largest group of spoils simply follows a plain \code{"Kick"} row.
 This function reaches the rest: it locates every \code{"Spoil"} in chains, scans
 back up to 5 rows for the kick that produced it (the same scan
@@ -38,7 +38,7 @@ Spoils already captured as contest triples are excluded, so this never
 double-counts against \code{contest_epv}.
 
 The credit is \strong{signed}: a spoil on a kick that was still good for the
-attacking team earns negative credit. About 40\\% of spoils fall in that group,
+attacking team earns negative credit. About 40\% of spoils fall in that group,
 which is the discrimination a flat weight cannot express.
 }
 \keyword{internal}

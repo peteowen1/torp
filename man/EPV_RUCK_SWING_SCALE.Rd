@@ -31,7 +31,7 @@ the ball came from the umpire. Measured unallocated remainder:
 behind 3.14x is sound; the "artifact" verdict was not.
 
 The one nuance that survives: \code{exp_pts} on \code{Centre Bounce} is
-hard-coded (sd exactly 0, 100\\% exactly zero) where every other description
+hard-coded (sd exactly 0, 100\% exactly zero) where every other description
 has a distribution -- \code{Ball Up Call} reads sd 0.84. So the 0 is a
 pipeline convention rather than an EP-model estimate. Defensible, but the
 +0.79 depends on it.
@@ -50,16 +50,16 @@ ruck barely relates to winning the clearance.
 \strong{The reconciliation, and it points somewhere else entirely.} There is
 ~10 points per match of genuinely unallocated stoppage value. It is real, and
 it mostly does NOT belong to the ruck -- it belongs to the MIDFIELDER who
-actually wins the ball, who today receives only the receiver's 50\\% because a
+actually wins the ball, who today receives only the receiver's 50\% because a
 stoppage has no disposer to pay the other half. Raising this constant would
 hand the midfielder's share to the ruck. The open question is not "how much
-more should rucks get" but "should a stoppage clearance pay 100\\% to the
-winner rather than 50\\%".
+more should rucks get" but "should a stoppage clearance pay 100\% to the
+winner rather than 50\%".
 
 The regression route to a larger constant (7.22x historically, 7.50x refitted
 2026-08-04) remains rejected on its own evidence: it falls to 4.39 under PSR
 control, reads 4.94 then 10.09 split-half, and \code{epv_cont_stop} is a
 linear function of hitout COUNTS (\code{cor 0.9900}), so applying it made raw
-hitout volume 12\\% of the rating.
+hitout volume 12\% of the rating.
 }
 \keyword{internal}

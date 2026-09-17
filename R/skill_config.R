@@ -315,7 +315,3 @@ skill_position_map <- stat_rating_position_map
 #' @rdname default_stat_rating_params
 #' @export
 default_skill_params <- default_stat_rating_params
-
-#' @rdname .stat_rating_params
-#' @keywords internal
-.skill_stat_params <- .stat_rating_params

@@ -15,6 +15,85 @@ v3's channels are separately calibrated, replacing the single global
 \code{EPV_POINTS_SCALE}.
 }
 \details{
+\strong{Fitted 2026-08-03 but deliberately NOT applied yet:}
+\code{c(recv = 0.5969, disp = 0.6095, cont_aerial = 0.2656, cont_stop = 1.7680)}
+(\code{epv3_calibrate_points.R}; the refit returns 1.0000 on every channel, so
+the constants are what they claim). Left at 1 so the match-model gate compares
+\emph{engines} with one variable moving, not engine-plus-rescale. Applying
+them also requires threading each constant into its \code{EPR_PRIOR_RATE_*}
+twin, exactly as \code{EPV_POINTS_SCALE} is -- \code{.bayesian_shrink()} adds
+\code{prior_games * prior_rate} after the value, so a scaled channel with an
+unscaled prior leaves EPR a blend of the two.
 
+\strong{The headline finding, which is not what was hoped for.} In raw EPV
+units the contest channel carries 15.7\% of variance; converted to margin
+points it carries \strong{3.3\%}, because a unit of contest is worth 0.27
+points against a unit of disposal's 0.61. Contest value is real and much
+larger than v2 allowed, but it converts to scoreboard margin at less than half
+the rate possession value does. Equal thirds and "1 unit = 1 point" are not
+simultaneously achievable, and per Pete's call the points constraint wins.
+
+\code{cont_stop} converts at 1.77 -- the highest of the four -- so calibration
+would AMPLIFY the ruck channel 1.77x and take it from 0.5\% to 4.6\% of
+variance.
+
+\strong{Prior warning.} Per-channel constants were tried on the v2 structure
+on 2026-07-30 and failed: they reshuffled 5 of the served top 20, NARROWED
+defender spread and dragged every position's thin-evidence quartile down
+~0.25. Under v3 this is the natural move, but it is a re-test, not a given,
+and those are the three symptoms to look for.
+\strong{FITTED AND APPLIED 2026-08-04}, on the structure that ships: 3
+channels, raw contest merge, contest not standardised, ledger stoppage term,
+measured shrinkage. Refitting was not optional -- a points constant is only
+valid for the structure it was fitted on, and every one of those changed.
+
+Verified by REBUILD, not analytically, and iterated to a fixed point
+(\code{epv3_verify_shipping_constants.R}): \strong{recv 1.00002, disp
+1.00016, contest 0.99599} -- worst residual 0.4\%.
+
+\strong{Do not chase that last 0.4\%.} The contest coefficient carries a
+standard error of roughly 87\% of itself (t 1.12), so 0.4\% is orders of
+magnitude below its own noise floor; earlier iterations oscillated between
+0.989 and 1.016 for exactly that reason. Two real causes:
+\itemize{
+\item \code{adjust_epv_for_opponents()} is NOT linear in one channel -- it
+forms \code{.abs_total} as a sum of \code{abs()} ACROSS channels, so
+scaling channels by factors as different as 3.34 / 2.61 / 0.53 shifts the
+denominator. "Scaling a channel scales its rating by exactly k" is an
+approximation here, not an identity.
+\item contest value barely predicts team margin at all, which is a property
+of the game rather than a defect -- see \code{EPV3_CHANNELS} and
+\code{docs/reference/EPV-VALUE-ANATOMY.md} §5.
+}
+
+\strong{Provenance, corrected 2026-08-19 -- these are the CALIBRATED
+four-channel constants, and calibration is the whole point of them.} They are
+the measured points of margin per unit of each channel, section A of
+\code{data-raw/outputs/epv3_calibrate_4ch.txt}. Applied, every identifiable
+channel reads 1.000 (0.99987 recv, 1.00047 disp, 1.00180 ruck) -- which is
+what "1 unit = 1 point of margin" means and what makes an EPV total
+interpretable as points.
+
+\strong{What was shipped first, and why it was wrong.} The values
+3.7557 / 2.5196 / 0.3870 / 1.8557 went live on 2026-08-18. They came from
+\code{ws30_epv3_4ch_gate.R} (in the SIBLING torpmodels repo, which is why a
+torp-only search cannot find it), which fits its own scale inside the v3 arm
+and evaluates that arm -- so the numbers were defensible as the ones the
++0.1913 dMAE result was produced with. But they are 2.3x and 1.8x the
+calibrated values on the two channels carrying ~99\% of the variance, so
+every published EPV total came out roughly double: the season leader read
+668.5 points of margin where the calibrated scale gives about 332. Pete
+caught it by eye off the live leaderboard -- "highest should be like 300
+maybe" -- after internal checks passed, because the site and the blog posts
+were built from the same wrong numbers and agreed with each other.
+
+The lesson worth keeping: a scale chosen for predictive performance is not
+automatically a scale in the stated units. If this constant is ever retuned,
+the test is section B reading 1.000, not the gate's dMAE.
+
+The previous values (3.3413 / 2.6078 / 0.5226 / 1) matched NEITHER
+calibration on disk -- provenance nobody could reconstruct, which is why it
+is written down now. cont_stop was 1 because the 3-channel merge left the
+ruck slot inert; under 4 channels it is a live channel and carries 1.8557.
 }
 \keyword{internal}
