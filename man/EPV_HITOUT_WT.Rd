@@ -11,7 +11,12 @@ An object of class \code{numeric} of length 1.
 EPV_HITOUT_WT
 }
 \description{
-
+\strong{Repriced 2026-08-07, 0.0510 -> 0.0615.} With
+\code{EPV_RUCK_CONTEST_WT} now a debit, a contest WON nets
+\code{0.0615 - 0.0232 = +0.0383} and one LOST costs \code{-0.0232}, which puts
+break-even at a \strong{37.7\%} win rate -- the actual league average. An
+average ruck's contest work is therefore worth about nothing, a better one
+positive.
 }
 \details{
 \strong{This weight is positive against the measurement, deliberately.} The

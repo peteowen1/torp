@@ -65,7 +65,7 @@ EPV3_AERIAL_EXPOSURE_WIDE <- c(EPV3_AERIAL_EXPOSURE_DESCS,
 #' Anchors on the KICK, not on the \code{Contest Target} / \code{Spoil}
 #' annotations. Anchoring on the annotations was tried first and is wrong twice
 #' over: a spoil-anchored population is defence-wins-only by construction (it
-#' read p = 75.1\% against the target-anchored 57.2\%, pure selection), and it
+#' read p = 75.1% against the target-anchored 57.2%, pure selection), and it
 #' leaves a mark to be paid by both \code{epv_recv} and the contest channel.
 #' Kick-anchoring makes the outcome always observed, so \code{p} is unbiased, and
 #' makes a marker's reception credit and his contest credit the same quantity.
@@ -471,7 +471,7 @@ score_contests <- function(cst, models) {
 
 #' Distribute contest debits whose loser chains never names
 #'
-#' Chains names the beaten aerial opponent in only ~12\% of contests: never when
+#' Chains names the beaten aerial opponent in only ~12% of contests: never when
 #' the attack retains (recon found 0 of 7,736 attacking mark wins carry an
 #' opposing row at the same coordinates, including 0 of the 2,017 logged as
 #' \emph{contested} marks), and only when a \code{Contest Target} row happened to

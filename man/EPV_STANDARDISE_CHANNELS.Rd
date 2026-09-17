@@ -22,6 +22,18 @@ at 4.06 against his true 1.12. Excluding the channel scores strictly better
 than capping the amplifier (§7.18c).
 }
 \details{
+\strong{Under v3 the contest channel is excluded for the same reason}, and it
+took a measurement to see it. Under \code{EPV3_CHANNELS = 3L} the
+\code{spoil} slot holds aerial contest value MERGED with stoppage value, so
+it is partly ruck-exclusive -- exactly the shape that made \code{hitout}
+unstandardisable. Standardising it normalises away the only thing it
+measures: with the two contest parts merged in points, the channel came out
+at 0.023 points per unit, t 0.27, carrying \strong{0.0\%} of the rating's
+variance. It had been standardised out of existence. Excluding it takes the
+contest channel from t 1.83 to 2.24 and from 1.7\% of value to 2.6\%.
 
+Keyed on \code{EPV_ENGINE} rather than on \code{EPV3_CHANNELS} because v2's
+\code{spoil} channel is a genuine all-position quantity (spoils, tackles,
+pressure acts) that should keep being standardised.
 }
 \keyword{internal}

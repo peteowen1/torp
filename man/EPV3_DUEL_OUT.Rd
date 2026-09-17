@@ -14,11 +14,11 @@ EPV3_DUEL_OUT
 Two players could plausibly have contested the ball. Excludes
 \code{Uncontested Mark} and \code{Mark On Lead}, which
 \code{EPV3_AERIAL_OUT} contains and which are receptions rather than duels --
-\code{Mark On Lead} records a defence win 0.0\\% of the time across 19,247
+\code{Mark On Lead} records a defence win 0.0\% of the time across 19,247
 events, which is what "nobody contested it" looks like in the data.
 }
 \details{
-\code{Spoil} variants are 100\\% defence-wins by construction and
-\code{Contested Mark} 43.9\\%; those are the two that carry the population.
+\code{Spoil} variants are 100\% defence-wins by construction and
+\code{Contested Mark} 43.9\%; those are the two that carry the population.
 }
 \keyword{internal}

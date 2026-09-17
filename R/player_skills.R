@@ -1016,7 +1016,3 @@ estimate_player_stat_ratings <- function(stat_rating_data, ref_date = NULL,
 #' @rdname estimate_player_stat_ratings
 #' @export
 estimate_player_skills <- estimate_player_stat_ratings
-
-#' @rdname .estimate_stat_ratings_batch
-#' @keywords internal
-.estimate_skills_batch <- .estimate_stat_ratings_batch

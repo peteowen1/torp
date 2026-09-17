@@ -113,8 +113,8 @@ COORD_FLIP_TOLERANCE <- 70
 #'
 #' \strong{`Kick Inside 50 Result` does not belong here and is left anyway.}
 #' It is an ANNOTATION of where an inside-50 entry ended up, not a player who
-#' contested anything: 90.4 rows per match of which \strong{34.7\% carry no
-#' `player_id` at all}, against `Contest Target`'s 26.0 per match at 100\%. The
+#' contested anything: 90.4 rows per match of which \strong{34.7% carry no
+#' `player_id` at all}, against `Contest Target`'s 26.0 per match at 100%. The
 #' volume comparison is the tell -- `Contest Target` at 26.0 lines up almost
 #' exactly with the AFL API's 26 defensive one-on-ones per match, two
 #' independent sources counting the same thing, and an annotation firing 3.5x as

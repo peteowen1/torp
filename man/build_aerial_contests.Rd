@@ -18,7 +18,7 @@ A data.table, one row per aerial contest.
 Anchors on the KICK, not on the \code{Contest Target} / \code{Spoil}
 annotations. Anchoring on the annotations was tried first and is wrong twice
 over: a spoil-anchored population is defence-wins-only by construction (it
-read p = 75.1\\% against the target-anchored 57.2\\%, pure selection), and it
+read p = 75.1\% against the target-anchored 57.2\%, pure selection), and it
 leaves a mark to be paid by both \code{epv_recv} and the contest channel.
 Kick-anchoring makes the outcome always observed, so \code{p} is unbiased, and
 makes a marker's reception credit and his contest credit the same quantity.
