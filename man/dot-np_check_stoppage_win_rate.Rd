@@ -20,6 +20,7 @@ defending your own end, 45\% at the other, 50\% in the middle. Measured on
 51.8\% and the trend does not clear noise (1 df test, p = 0.17) -- so the
 warn band is set at his numbers and the abort band well outside them. A fit
 outside the abort band is not a surprising season, it is a broken model or a
-broken frame.
+broken frame -- but only once the cell reporting it has enough observations
+to say so; see \code{NP_STOPPAGE_WIN_MIN_N} (torp#225).
 }
 \keyword{internal}
