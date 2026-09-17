@@ -2281,6 +2281,33 @@ NP_STOPPAGE_WIN_WARN <- c(0.45, 0.55)
 #' @keywords internal
 NP_STOPPAGE_WIN_ABORT <- c(0.35, 0.65)
 
+#' Minimum cell observations before a fitted stoppage win rate counts toward the sense check (torp#225)
+#'
+#' The range check above is calibrated against a full season -- thousands of
+#' stoppages, 28 type x band x corridor cells all well populated. Run against
+#' a single live round instead (\code{inthegame-blog}'s
+#' \code{enrich-live-chains.R} calls the same pipeline on whatever the
+#' current round has played so far), the same 28 cells split maybe 180
+#' stoppages between them: median cell \code{n} around 4-5, several cells
+#' with \code{n = 1}. A cell that thin can carry a fitted \code{p_home} well
+#' away from 50% purely from the GLM being evaluated at an unusual
+#' \code{x_home} with almost nothing anchoring it there -- not a broken
+#' model, a small sample. Measured on a real 2-match slice (2026 R1): the
+#' unfiltered range was 40.6-53%, uncomfortably close to the 65% ceiling
+#' that actually tripped in production; restricting to cells with
+#' \code{n >= NP_STOPPAGE_WIN_MIN_N} narrowed it to 43.3-53%, and every one
+#' of the worst-fitted cells by \code{|p_home - 0.5|} had \code{n} of 1-3.
+#'
+#' Does not touch the season-scale check's power: on a real 2025 season
+#' (216 matches), only 2 of 43 cells fall below this floor, and excluding
+#' them left the season's overall range unchanged (46.2-54% either way,
+#' both thin cells' p_home already sat mid-band). So this doesn't weaken
+#' \code{NP_STOPPAGE_WIN_ABORT}'s ability to catch a genuinely broken model
+#' or frame -- it only stops a handful of coin-flip-sized live cells from
+#' being read as evidence of one.
+#' @keywords internal
+NP_STOPPAGE_WIN_MIN_N <- 5
+
 #' Lower edges, in metres, of the corridor-to-boundary bins a stoppage is cut into
 #'
 #' Distance from the centre corridor, `abs(y)`. A throw-in tight against the

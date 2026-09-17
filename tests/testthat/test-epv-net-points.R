@@ -1346,6 +1346,32 @@ test_that("the win-rate range check warns at Pete's band and aborts outside it",
                "two-sided contest")
 })
 
+test_that("a thin extreme cell cannot drag a healthy result into warn/abort (torp#225)", {
+  # the actual fix's purpose: a live single-round sample throws in a few
+  # coin-flip-sized cells (n = 1-3, seen in the issue) alongside real ones.
+  # The thin cell here (p_home 0.90) would abort outright under the old,
+  # unfiltered check; once it's below NP_STOPPAGE_WIN_MIN_N it's excluded from
+  # the sense check, and the one well-populated, in-band cell leaves nothing
+  # to warn or abort on.
+  ok_and_thin <- data.table::data.table(
+    description = "Ball Up Call", band = c(0, 20), yband = 0,
+    n = c(1L, 500L), p_home = c(0.90, 0.50))
+  expect_silent(torp:::.np_check_stoppage_win_rate(ok_and_thin))
+})
+
+test_that("a well-populated cell still trips the abort/warn band even alongside thin ones", {
+  mixed <- data.table::data.table(
+    description = "Ball Up Call", band = c(0, 20), yband = 0,
+    n = c(1L, 500L), p_home = c(0.90, 0.70))
+  expect_error(torp:::.np_check_stoppage_win_rate(mixed), "two-sided contest")
+})
+
+test_that("the check skips cleanly (not silently or with an error) when every cell is thin", {
+  all_thin <- data.table::data.table(
+    description = "Ball Up Call", band = 0, yband = 0, n = 1L, p_home = 0.90)
+  expect_message(torp:::.np_check_stoppage_win_rate(all_thin), "check skipped")
+})
+
 # ---- an empty terms join must abort, not silently run as the flat rule -----
 # torp#202, fixed 2026-09-09. If difficulty_terms matches NOTHING in the
 # play-by-play (vintage mismatch, wrong season, a match_id format difference),
