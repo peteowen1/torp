@@ -27,8 +27,10 @@ that actually tripped in production; restricting to cells with
 of the worst-fitted cells by \code{|p_home - 0.5|} had \code{n} of 1-3.
 }
 \details{
-Does not touch the season-scale check's power: a full season's cells are
-all comfortably above this floor already, so nothing here weakens
+Does not touch the season-scale check's power: on a real 2025 season
+(216 matches), only 2 of 43 cells fall below this floor, and excluding
+them left the season's overall range unchanged (46.2-54\% either way,
+both thin cells' p_home already sat mid-band). So this doesn't weaken
 \code{NP_STOPPAGE_WIN_ABORT}'s ability to catch a genuinely broken model
 or frame -- it only stops a handful of coin-flip-sized live cells from
 being read as evidence of one.
