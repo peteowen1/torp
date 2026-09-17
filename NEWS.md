@@ -1,5 +1,27 @@
 # torp 1.9.0
 
+## exp_pts/delta_epv frame documented, not normalised (torp#217)
+
+`team_id_mdl` already answers "which team's frame is this row expressed
+in" -- including on stoppage rows, where it correctly names whoever ends up
+winning the contest rather than whoever's chain just ended. Verified across
+the full 2026 season, scoping "next row" within (match_id, period) so a
+stoppage isn't compared against the unrelated bounce that opens the next
+quarter: 100% agreement, 12,238 of 12,238 usable rows (match_id alone,
+without the period scope, gives 12,250 of 12,267 -- 99.86% -- and every one
+of those 17 apparent disagreements turns out to be that cross-quarter
+artifact, not a real one). The confusion this issue was filed over was
+`chain_team_id` (a different column, marking the chain that just ENDED)
+looking like it should answer this and not doing so.
+
+Documented in `add_epv_vars()` rather than adding a new column or
+normalising every row to one declared frame. Normalising was costed and
+rejected: 20+ raw consumers of `delta_epv`/`exp_pts` across torp,
+torpmodels, torpdata and inthegame-blog, plus the (still-draft) "How EPV
+works" post, which explicitly teaches readers `delta_epv` is "in the
+kicking team's frame" -- real blast radius against zero benefit once
+`team_id_mdl` already does the job.
+
 ## Model formulas are now visible to the drift guard (torp#212)
 
 `.rating_defining_constants()` / `check_vintage_alignment()` only ever
