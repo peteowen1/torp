@@ -1747,7 +1747,7 @@
 #'   \tab `sum` \tab `half_margin` \cr
 #'   team difference == margin \tab 4.3e-14 \tab 5.7e-14 \cr
 #'   median |np_residual| \tab 0.10 \tab 2.64 \cr
-#'   residual as \% of |net_points| \tab 3\% \tab 102\% \cr
+#'   residual as % of |net_points| \tab 3% \tab 102% \cr
 #'   Spearman(raw, final) \tab 0.9993 \tab 0.7425
 #' }
 #'

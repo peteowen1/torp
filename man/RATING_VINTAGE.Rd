@@ -116,7 +116,7 @@ v10 (2026-09-11): TWO constants flipped together, both Pete's decisions and
 both measured as independent of each other before being bundled.
 
 \code{EPV3_CONTEST_POPULATION} "all" -> "evidence". The contest population was
-inferred from the OUTCOME description, so 69.8\\% of it was plain receptions --
+inferred from the OUTCOME description, so 69.8\% of it was plain receptions --
 a kick finding a teammate, or an opponent marking it unopposed. Pete decided
 the rule from real chain sequences: a contest is a kick where chains logged a
 target, or the outcome is self-evidently a duel. Population 50,050 -> 17,493,
@@ -125,7 +125,7 @@ to 2.8 with no recalibration layer.
 
 \code{NP_ERROR_BLAME_SHARE} 0 -> 1. A fumbled or dropped mark is not in PBP,
 so the ledger saw only the kick followed by an opponent and charged the
-KICKER -- a different player than the one who erred, 100\\% of the time. The
+KICKER -- a different player than the one who erred, 100\% of the time. The
 whole debit now moves to the player who dropped it.
 
 \strong{The bundling was verified, not assumed.} Largest interaction term
@@ -141,7 +141,7 @@ PROMOTE_TO=v10) and move the manifest to canonical v10 BEFORE this constant
 reaches main.
 
 v11 (2026-09-12): \code{NP_TEAM_MARGIN_POOL_BY} \code{dacts} -> \code{tog}.
-The first decomposition of the forward-defender gap found 83\\% of it is
+The first decomposition of the forward-defender gap found 83\% of it is
 EARNED -- a key forward's own acts are worth +4.079 and a key defender's
 -1.972 -- and that defenders already out-earn forwards on turnovers won and
 contests. The one allocated lever was this constant, which spread a side's

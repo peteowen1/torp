@@ -29,7 +29,7 @@ denominator is taken from \code{chains} alone.}
 A data.table of \code{player_id}, \code{match_id}, \code{cont_alloc}.
 }
 \description{
-Chains names the beaten aerial opponent in only ~12\\% of contests: never when
+Chains names the beaten aerial opponent in only ~12\% of contests: never when
 the attack retains (recon found 0 of 7,736 attacking mark wins carry an
 opposing row at the same coordinates, including 0 of the 2,017 logged as
 \emph{contested} marks), and only when a \code{Contest Target} row happened to

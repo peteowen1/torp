@@ -53,8 +53,8 @@ DIFFERENTIAL cannot, and that is what makes the channel safe to scale.
 \strong{The reason for turning it on is not the reason previously written
 here.} That said it would let the channel be amplified; measurement killed the
 amplification instead (see \code{EPV_RUCK_SWING_SCALE} -- its justifying swing
-figure is ~93\\% centre-bounce reset artifact, and the regression route is
-~40\\% team quality). The ledger stands on its own: paying a ruckman for
+figure is ~93\% centre-bounce reset artifact, and the regression route is
+~40\% team quality). The ledger stands on its own: paying a ruckman for
 contests he LOST is indefensible whatever the channel is worth.
 }
 \keyword{internal}

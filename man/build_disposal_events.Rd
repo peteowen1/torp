@@ -16,7 +16,7 @@ A data.table, one row per resolvable disposal.
 }
 \description{
 One row per disposal, carrying what was knowable BEFORE it resolved plus the
-outcome. 95.2\\% of disposals resolve to an outcome row naming a team and a
+outcome. 95.2\% of disposals resolve to an outcome row naming a team and a
 player.
 }
 \keyword{internal}

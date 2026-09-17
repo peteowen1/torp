@@ -11,9 +11,9 @@ An object of class \code{character} of length 1.
 EPV_CONT_LOSS_ALLOC
 }
 \description{
-Chains names the beaten aerial opponent in only ~12\\% of contests -- never
+Chains names the beaten aerial opponent in only ~12\% of contests -- never
 when the attack retains, and only when a \code{Contest Target} row happened to
-be logged when the defence wins. So ~86\\% of the contest credit mass carries a
+be logged when the defence wins. So ~86\% of the contest credit mass carries a
 debit with no name on it, and it has to go somewhere or the channel becomes
 upside-only.
 }

@@ -35,7 +35,7 @@ channel uses -- currently \code{"all"}, so the default is unchanged.
 
 Use \code{"duel"} for anything presented as a contest won or lost.
 \code{EPV3_DUEL_OUT}'s own documentation calls the two excluded outcomes
-"receptions rather than duels", and measured on 2026 chains they are 74\\%
+"receptions rather than duels", and measured on 2026 chains they are 74\%
 of the same-team \code{mark} branch -- so an unrestricted W-L counts
 uncontested receptions as won contests.}
 }

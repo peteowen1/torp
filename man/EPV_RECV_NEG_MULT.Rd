@@ -18,13 +18,13 @@ missed is worth recording.
 \details{
 The multiplier sits on the \code{pos_team == -1} branch, so it is the
 INTERCEPT branch. The case for zeroing it was that the term is noise:
-game-to-game reception reliability rises 0.2507 -> 0.3086 (+23\\%) while
+game-to-game reception reliability rises 0.2507 -> 0.3086 (+23\%) while
 count-dependence FALLS 0.53 -> 0.297.
 
 \strong{What that missed is what the term contains.} Interception is the
 highest-value receiving act in the game by a factor of eight -- 168 per match
 at mean +0.625 against ordinary receptions' 1,453 per match at +0.079. It is
-10\\% of receiving events, 31\\% of gross reception value and roughly half the
+10\% of receiving events, 31\% of gross reception value and roughly half the
 channel's net (\code{docs/reference/EPV-VALUE-ANATOMY.md} §4). So "drop a
 noisy term" was actually "stop crediting interceptions".
 

@@ -384,17 +384,3 @@
   }
   rep(0, nrow(dt))
 }
-
-
-# Backward compatibility aliases
-#' @rdname .prepare_stat_rating_data
-#' @keywords internal
-.prepare_skill_data <- .prepare_stat_rating_data
-
-#' @rdname .resolve_stat_rating_positions
-#' @keywords internal
-.resolve_skill_positions <- .resolve_stat_rating_positions
-
-#' @rdname .compute_stat_rating_denominator
-#' @keywords internal
-.compute_skill_denominator <- .compute_stat_rating_denominator
