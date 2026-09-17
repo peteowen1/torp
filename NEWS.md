@@ -1,5 +1,28 @@
 # torp 1.9.0
 
+## Model formulas are now visible to the drift guard (torp#212)
+
+`.rating_defining_constants()` / `check_vintage_alignment()` only ever
+tracked NAMED constants -- a model specification living as a local
+`rhs <- ~ ...` inside `fit_disposal_models()` or `fit_contest_models()` had
+no name to register, so editing it moved every published rating with no
+manifest diff and no vintage bump required. This is the same class of gap
+torp#208 closed for ten constants, one level up: a category the guard
+couldn't see at all, not an omission within a category it could.
+
+Lifted both formulas to named constants (`EPV_DIFFICULTY_RHS` in
+`R/epv_difficulty.R`, `EPV_CONTEST_RHS` in `R/epv_v3.R`) and wired them into
+`.rating_defining_constants()` as their deparsed text, so
+`.diff_defining_constants()` gets a readable before/after on a formula
+change exactly as it already does for character values.
+
+Not addressed here (noted for later, lower urgency): the `sum(idx) < 20000`
+/ `< 5000` season-blocking thresholds in `.np_difficulty_terms()` that decide
+in-sample vs leak-safe fitting are also magic numbers rather than
+manifest-tracked constants, though in practice every AFL season has far more
+disposals/contests than either floor, so this branch is unlikely to be live
+on real data.
+
 ## Roxygen `\%` under markdown mode was silently corrupting docs (torp#211)
 
 The original ask -- `man/RATING_VINTAGE.Rd` rendering as ~200 junk

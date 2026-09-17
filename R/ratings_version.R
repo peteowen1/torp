@@ -80,6 +80,16 @@
     # row in the file. Found staging v3 for promotion.
     EPV_ENGINE = EPV_ENGINE,
     EPR_UNITS_SCALE_V4 = EPR_UNITS_SCALE_V4,
+    # torp#212: a model FORMULA is a rating-defining choice with no name to
+    # register, so it was invisible to this guard entirely -- not merely
+    # unwired, but unwireable in its previous shape (a local `rhs <- ~ ...`
+    # inside fit_disposal_models()/fit_contest_models()). Lifted to named
+    # constants (R/epv_difficulty.R, R/epv_v3.R) specifically so they have
+    # something to register here. Captured as deparsed text so
+    # .diff_defining_constants() gets a readable before/after on a formula
+    # change, the same way it already does for character values.
+    EPV_DIFFICULTY_RHS = paste(deparse(EPV_DIFFICULTY_RHS), collapse = " "),
+    EPV_CONTEST_RHS = paste(deparse(EPV_CONTEST_RHS), collapse = " "),
     # Wired the day it was turned on. It changes every published rating -- 27.1
     # points a match of possession value moves from pure blame to credit -- so
     # leaving it out would make the drift guard blind to it, exactly as it was

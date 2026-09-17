@@ -205,6 +205,19 @@ build_disposal_events <- function(chains, pbp_data) {
   d[is.finite(kick_len) & is.finite(fwd_gain) & is.finite(goal_dist)]
 }
 
+#' The difficulty-credit disposal model's specification (torp#212)
+#'
+#' A named, manifest-tracked constant rather than a local variable inside
+#' \code{fit_disposal_models()}, because the drift guard
+#' (\code{.rating_defining_constants()} / \code{check_vintage_alignment()})
+#' only sees NAMED constants -- a bare \code{rhs <- ~ ...} local was a rating
+#' mover the guard could not see at all: editing it changes every published
+#' rating with no manifest diff and no vintage bump required. \code{kick_len}
+#' and \code{fwd_gain} were removed 2026-09-11 (torp#210, leakage) --
+#' see \code{fit_disposal_models()}'s own docs for why they must not return.
+#' @keywords internal
+EPV_DIFFICULTY_RHS <- ~ s(x, abs_y) + s(goal_dist) + s(exp_pts) + is_handball + i50f
+
 #' Fit the three disposal branch models
 #'
 #' \code{p} = P(turnover), and the two branch values = \code{E[post-state | branch]}.
@@ -256,8 +269,7 @@ fit_disposal_models <- function(de, train_idx = rep(TRUE, nrow(de))) {
   # Everything here is knowable before the ball leaves his boot: where he is,
   # how far from goal, what the situation is worth, whether it is a handball.
   # Do NOT re-add a term derived from out_x/out_y -- see the note above.
-  rhs <- ~ s(x, abs_y) + s(goal_dist) +
-    s(exp_pts) + is_handball + i50f
+  rhs <- EPV_DIFFICULTY_RHS
   fit <- function(f, dd, ...) {
     for (fv in c("is_handball", "i50f")) {
       if (fv %in% all.vars(f) && length(unique(dd[[fv]][!is.na(dd[[fv]])])) < 2) {
