@@ -1148,6 +1148,30 @@
     cli::cli_alert_info(
       "Difficulty credit: {format(n_scored, big.mark = ',')} of {format(n_disp, big.mark = ',')} disposals scored ({round(100 * n_scored / max(n_disp, 1), 1)}%); {format(n_unscored, big.mark = ',')} fall back to the flat rule. Row identity max gap {signif(gap, 2)}.")
 
+    # torp#204: the check above sums n_scored across the WHOLE call, so a
+    # single season's terms mismatching entirely (a match_id format change
+    # partway through history, terms fit on the wrong season range) is
+    # invisible whenever OTHER seasons in the same batch keep the aggregate
+    # above zero -- exactly the shape a full-history vintage rebuild's one
+    # `.np_engine_frame()` call takes (`docs/plans` calls this the
+    # "vintage flip needs a full-history rebuild" pattern). This does NOT
+    # tighten the row-level guard above (a per-MATCH version of that was
+    # tried during torp#202 and rejected: this test suite's own difficulty
+    # fixtures routinely give terms for only one match of a two-match
+    # scenario by design). A per-SEASON floor is a different, coarser check
+    # that only fires when a whole season -- not a deliberately-scoped test
+    # fixture -- comes back with zero coverage.
+    season_cov <- l[is_disp == TRUE, .(n_disp = .N, n_scored = sum(scored)),
+                    by = .(season = substr(match_id, 5, 8))]
+    bad_seasons <- season_cov[n_disp > 0 & n_scored == 0]
+    if (nrow(bad_seasons) > 0) {
+      cli::cli_abort(c(
+        "Difficulty terms scored ZERO disposals in season(s) {.val {bad_seasons$season}}, despite {format(n_scored, big.mark = ',')} scoring elsewhere in this call.",
+        "x" = "The whole-batch check above cannot see this: the other season(s) keep the aggregate above zero, hiding a season whose {.arg difficulty_terms} do not match {.arg pbp_data} at all.",
+        "i" = "Check {.arg difficulty_terms} coverage specifically for season(s) {.val {bad_seasons$season}}."
+      ))
+    }
+
     l[scored == TRUE & kind == "retained", `:=`(
       own_hm  = (1 - omega) * (dec_hm + p_hat * sur_hm),
       recv_hm = (1 - omega) * (1 - p_hat) * sur_hm,
