@@ -318,3 +318,35 @@ test_that("the frozen snapshot's listed-position columns are all non-NA in the h
     expect_false(any(is.na(frozen$snapshot[[col]])), info = col)
   }
 })
+
+# .matchup_hours_to_next_bounce ----
+
+.mt_make_fixtures <- function(round_number, status, hours_from_now) {
+  data.frame(
+    round_number = round_number,
+    status = status,
+    utc_start_time = format(Sys.time() + hours_from_now * 3600, "%Y-%m-%dT%H:%M:%OS3+0000", tz = "UTC"),
+    stringsAsFactors = FALSE
+  )
+}
+
+test_that(".matchup_hours_to_next_bounce() finds the earliest unstarted match in the target round (torp#190)", {
+  fx <- .mt_make_fixtures(
+    round_number = c(4L, 4L, 4L, 5L),
+    status = c("CONCLUDED", "SCHEDULED", "SCHEDULED", "SCHEDULED"),
+    hours_from_now = c(-10, 30, 5, 1)   # round 4's earliest unstarted match is 5h out
+  )
+  expect_equal(.matchup_hours_to_next_bounce(fx, week = 4L), 5, tolerance = 0.01)
+})
+
+test_that(".matchup_hours_to_next_bounce() ignores CONCLUDED matches", {
+  fx <- .mt_make_fixtures(
+    round_number = 4L, status = c("CONCLUDED", "SCHEDULED"), hours_from_now = c(-1, 20)
+  )
+  expect_equal(.matchup_hours_to_next_bounce(fx, week = 4L), 20, tolerance = 0.01)
+})
+
+test_that(".matchup_hours_to_next_bounce() returns NA when the round has no matching row -- an unknown deadline, not a safe one", {
+  fx <- .mt_make_fixtures(round_number = 5L, status = "SCHEDULED", hours_from_now = 10)
+  expect_true(is.na(.matchup_hours_to_next_bounce(fx, week = 4L)))
+})

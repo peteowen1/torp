@@ -13,6 +13,14 @@ script catches only that class to skip cleanly (exit 0, a `::notice::` line)
 rather than fail. Every other abort in the file is unchanged and still reaches
 the workflow's failure comment.
 
+The skip is NOT unconditional (review finding): quiet only when a later
+scheduled run still has a chance to catch it before kickoff
+(`MATCHUP_TABLE_LINEUP_SKIP_MAX_HOURS`, 24h -- the widest gap between
+consecutive crons). Inside that window a missing lineup is the real failure
+this pre-game schedule exists to catch -- rounds 19-21 of 2026 already cost
+~3.2 MAE from exactly this "nothing failed, but the lineup was still missing
+at game time" pattern -- so it stays loud there.
+
 ## Rating vintage v13: a contest has three outcomes, not two
 
 `EPV3_CONTEST_OUTCOMES` goes `"two"` -> `"three"` and

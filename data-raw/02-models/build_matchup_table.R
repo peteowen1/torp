@@ -121,11 +121,31 @@ if (!is.finite(max_d) || max_d > MAX_ABS_DIFF) {
 # `torp_error_lineups_not_published` is the ONLY condition treated this way;
 # every other abort still exits non-zero and reaches the workflow's failure
 # comment, unchanged.
+#
+# But NOT unconditionally quiet (review finding, 2026-09-17): the whole reason
+# this pipeline runs on a pre-game schedule at all is that "missing lineups,
+# nothing failed" already cost ~3.2 MAE on 2026 rounds 19-21 (see the cron
+# comment in daily-ratings-predictions.yml). Quietly exiting 0 on every run
+# would reproduce exactly that failure mode if the AFL is still late right up
+# to the last scheduled run before kickoff. So this checks hours-to-bounce
+# and only skips quietly when a later scheduled run still has a chance to
+# catch it; inside that window it is treated as the real failure it now is.
 tbl <- tryCatch(
   build_matchup_table(state = state),
   torp_error_lineups_not_published = function(e) {
+    fx <- tryCatch(load_fixtures(season), error = function(e2) NULL)
+    hrs_to_bounce <- if (is.null(fx)) NA_real_ else torp:::.matchup_hours_to_next_bounce(fx, week)
+
+    if (is.na(hrs_to_bounce) || hrs_to_bounce <= MATCHUP_TABLE_LINEUP_SKIP_MAX_HOURS) {
+      cli::cli_abort(c(
+        "build_matchup_table: team lists still missing within {MATCHUP_TABLE_LINEUP_SKIP_MAX_HOURS}h of {season} R{week}'s first bounce.",
+        "x" = conditionMessage(e),
+        "i" = "This is the last realistic chance before kickoff -- treating as a real failure, not routine noise."
+      ))
+    }
+
     cli::cli_alert_info("Skipping: {conditionMessage(e)}")
-    cat("::notice::Matchup table skipped -- team lists not published yet for this round. The blog keeps serving the previously published table; this is expected and will resolve once lineups drop.\n")
+    cat(sprintf("::notice::Matchup table skipped -- team lists not published yet (%.1fh until first bounce, a later scheduled run will retry). The blog keeps serving the previously published table.\n", hrs_to_bounce))
     quit(save = "no", status = 0)
   }
 )
