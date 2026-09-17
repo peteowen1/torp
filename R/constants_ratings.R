@@ -2165,23 +2165,29 @@ NP_OFFENCE_POOL_SHARE <- 0.10
 #' `NP_CONTEST_WINNER_SHARE_DEFAULT`. Chosen with Pete 2026-09-06 as the defaults
 #' for the year-over-year test, not as results.
 #'
-#' \strong{The spoil share is the biggest allocation lever in the ledger and it
-#' has never been moved.} Sized by derivative 2026-09-12 (rho enters linearly,
-#' so one build bounds what a sweep would find): \strong{+0.10 on the spoil
-#' share moves the forward-defender gap by -0.144 a game}, three times what v13
-#' bought. It is very nearly a PURE defender lever, because rho routes only
-#' DEFENSIVE contest wins --- a forward's contest credit is \code{win_hm}, a
-#' same-team mark, which rho does not touch (+0.008 a game against a key
-#' defender's +0.119).
+#' \strong{Raising the spoil share (v14, 0.50 to 0.65) was measured and
+#' SHELVED 2026-09-17 --- do not re-queue it on the strength of the derivative
+#' below.} The 2026-09-12 derivative sizing (\code{np_contest_winner_share_lever.R})
+#' predicted +0.10 on the spoil share moves the forward-defender gap -0.144 a
+#' game, from raw, pre-reconciliation payment columns. A real A/B on identical
+#' rows (\code{np_v14_spoil_share_effect.R}) found the RAW gap narrows only
+#' 0.082, and the PUBLISHED gap (after \code{.np_team_margin()} reconciliation)
+#' actually WIDENS 0.012, sign-reversed for key defenders specifically
+#' (raw +0.068, published -0.013). Cause: \code{.np_team_margin()}'s
+#' TOG-weighted pool spread shares the shrunk pool's loss across the whole
+#' team, while the gain concentrates on the one named winner --- a
+#' redistribution step the derivative never modelled. Any lever sized off raw
+#' ledger columns needs re-sizing against the published number before it is
+#' trusted. See NEXT-STEPS.md / DECISIONS.md 2026-09-17 for the full finding.
 #'
 #' Unlike the v12 and v13 fixes this is a JUDGEMENT, not a bug: 0.50 encodes
 #' the view that a spoil only ends the contest and the pressure around it is
-#' other people's work. Pete's call 2026-09-12, on the football rather than the
-#' number: \strong{0.65} --- a spoil is a real individual act, the defender got
-#' there and beat his man, but still less wholly his than a clean intercept
-#' mark, because a spoil leaves the ball live and what happens next is often
-#' somebody else's. Queued as v14; script
-#' \code{data-raw/04-analysis/np_contest_winner_share_lever.R}.
+#' other people's work. Pete's reasoning for wanting 0.65 (2026-09-12): a
+#' spoil is a real individual act, the defender got there and beat his man,
+#' but still less wholly his than a clean intercept mark, because a spoil
+#' leaves the ball live and what happens next is often somebody else's --- the
+#' football case for the move still stands even though the measured ledger
+#' effect does not deliver what was predicted.
 #' @keywords internal
 NP_CONTEST_WINNER_SHARE <- c(
   "Contested Mark" = 0.80, "Uncontested Mark" = 0.80, "Mark On Lead" = 0.80,
