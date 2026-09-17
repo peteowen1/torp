@@ -3,21 +3,24 @@
 ## Stoppage win-rate sense check no longer fires on a live single-round sample (torp#225)
 
 `.np_check_stoppage_win_rate()`'s abort band (35-65%) is calibrated against a
-full season's worth of stoppages, where all 28 type x band x corridor cells
-are well populated. Run against a single live round instead (as
-inthegame-blog's `enrich-live-chains.R` does), the same cells split maybe
-180 stoppages between them -- median cell `n` around 4-5, several at `n = 1`
--- and a fitted `p_home` at that thinness can land well away from 50% purely
-from noise, not a broken model or frame.
+full season's worth of stoppages, where the type x band x corridor cells
+(43 of them, 2025) are almost all well populated. Run against a single live
+round instead (as inthegame-blog's `enrich-live-chains.R` does), those same
+28 cells that a 2-match round actually reaches split maybe 180 stoppages
+between them -- median cell `n` around 4-5, several at `n = 1` -- and a
+fitted `p_home` at that thinness can land well away from 50% purely from
+noise, not a broken model or frame.
 
 Added `NP_STOPPAGE_WIN_MIN_N` (5): only cells with at least that many
 observations count toward the sense check. Measured on a real 2-match slice
 (2026 R1): the unfiltered range was 40.6-53%, uncomfortably close to the
 65% ceiling that actually tripped in production; filtered to `n >= 5` it
 narrowed to 43.3-53%, and every one of the worst-fitted cells had `n` of
-1-3. A full season's cells all clear the floor already, so this doesn't
-weaken the check against a genuinely broken model -- it only stops a
-handful of coin-flip-sized live cells from being read as evidence of one.
+1-3. Checked against a real full season too (2025, 216 matches): only 2 of
+43 cells fall below the floor, and excluding them left the season's overall
+range unchanged (46.2-54% either way) -- so this doesn't weaken the check
+against a genuinely broken model, it only stops a handful of coin-flip-sized
+live cells from being read as evidence of one.
 
 `team_id_mdl` already answers "which team's frame is this row expressed
 in" -- including on stoppage rows, where it correctly names whoever ends up
