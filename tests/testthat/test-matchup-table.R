@@ -293,6 +293,21 @@ test_that(".extract_frozen_teams() aborts on an all-NA listed-position column", 
   expect_error(.extract_frozen_teams(state), "NA listed-position value")
 })
 
+test_that(".extract_frozen_teams() tags the missing-lineup abort with its own class (torp#190)", {
+  # A daily job hits this on most days of the week -- the AFL only publishes
+  # team lists 1-2 days out. build_matchup_table.R catches exactly this class
+  # to skip quietly instead of filing a fresh automation failure every run;
+  # any other abort in this file must NOT carry this class, or a real defect
+  # would get skipped silently too.
+  bad <- .mt_make_team_rt_fix_df()
+  bad$midfield[bad$round_number == 4L] <- NA_real_
+  state <- list(
+    team_rt_fix_df = bad, team_mdl_df = .mt_make_team_mdl_df(),
+    all_grounds = .mt_make_all_grounds(), season = 2026L, week = 4L
+  )
+  expect_error(.extract_frozen_teams(state), class = "torp_error_lineups_not_published")
+})
+
 test_that("the frozen snapshot's listed-position columns are all non-NA in the healthy case", {
   state <- list(
     team_rt_fix_df = .mt_make_team_rt_fix_df(), team_mdl_df = .mt_make_team_mdl_df(),
