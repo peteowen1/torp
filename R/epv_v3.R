@@ -297,6 +297,22 @@ build_aerial_contests <- function(chains, pbp_data) {
 }
 
 
+#' The contest model's specification (torp#212)
+#'
+#' A named, manifest-tracked constant rather than a local variable inside
+#' \code{fit_contest_models()}, for the same reason as
+#' \code{EPV_DIFFICULTY_RHS}: the drift guard
+#' (\code{.rating_defining_constants()} / \code{check_vintage_alignment()})
+#' only sees NAMED constants, so a bare \code{rhs <- ~ ...} local was a rating
+#' mover invisible to it -- editing it moves every published contest-derived
+#' number with no manifest diff and no vintage bump required. Unlike the
+#' disposal model, \code{kick_len}/\code{fwd_gain} are legitimate here: they
+#' describe the aerial ball flight before the contest resolves, not the
+#' post-resolution outcome coordinates that made them leakage for
+#' \code{fit_disposal_models()}.
+#' @keywords internal
+EPV_CONTEST_RHS <- ~ s(att_x, abs_y) + s(kick_len) + s(fwd_gain) + s(goal_dist) + s(exp_pts) + i50f
+
 #' Fit the three contest branch models
 #'
 #' \code{p} = P(defence wins), and the two branch values \code{V_att} /
@@ -316,8 +332,7 @@ fit_contest_models <- function(cst, train_idx = rep(TRUE, nrow(cst))) {
   # on a lead" is only observable because the attack won it. It also all but
   # separated the binomial (19,031 attacking wins against 1 defensive), which is
   # how it surfaced -- a degenerate-contrast error in the defensive branch.
-  rhs <- ~ s(att_x, abs_y) + s(kick_len) + s(fwd_gain) + s(goal_dist) +
-    s(exp_pts) + i50f
+  rhs <- EPV_CONTEST_RHS
   fit <- function(f, d, ...) {
     # A factor with one observed level in a subset kills bam() with an opaque
     # "contrasts not defined for 0 degrees of freedom". Drop such terms rather
