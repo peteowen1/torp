@@ -1,5 +1,19 @@
 # torp 1.9.0
 
+## Difficulty-terms coverage now checked per season, not just per batch (torp#204)
+
+`.np_credit_terms()`'s empty-subject guard (torp#202) sums `n_scored` across
+the whole call, so a single season's `difficulty_terms` mismatching entirely
+inside a multi-season, full-history vintage rebuild (`.np_engine_frame()`)
+was invisible whenever other seasons in the same batch kept the aggregate
+above zero. A per-match version of the same check was tried during #202 and
+rejected -- this test suite's own difficulty-credit fixtures deliberately
+supply terms for only one match of a two-match scenario. Added a per-SEASON
+floor instead (`substr(match_id, 5, 8)`, matching `.np_engine_frame()`'s own
+convention): fires only when a whole season comes back with zero scored
+disposals despite nonzero elsewhere, which every single-season test fixture
+is structurally incapable of triggering.
+
 ## Matchup table stops crying wolf when team lists aren't published yet (torp#190)
 
 `build_matchup_table.R`'s scheduled run was filing a fresh "Failed again"

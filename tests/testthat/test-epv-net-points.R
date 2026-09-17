@@ -1397,3 +1397,55 @@ test_that("difficulty terms covering the real fixture do not trip the guard eith
                                       difficulty_terms = np_terms_fixture(),
                                       reconcile = FALSE, spread = "tog")))
 })
+
+# ---- a per-season blind spot in the whole-batch guard above (torp#204) -----
+# The empty-subject guard sums n_scored across the WHOLE call. A full-history
+# vintage rebuild calls build_net_points() once across several seasons
+# (`.np_engine_frame()`), so if difficulty_terms matches nothing in ONE season
+# out of several, the other seasons' scored rows keep the aggregate above
+# zero and the guard above never fires -- the exact gap this issue describes.
+# Real match_ids encode season at chars 5-8 (`CD_M<season>...`, matching
+# `.np_engine_frame()`'s own `substr(match_id, 5, 8)`); np_fixture()'s plain
+# "M1"/"M2" don't, which is why the tests above never exercise this path.
+
+np_seasoned_fixture <- function() {
+  f <- np_fixture()
+  relabel <- c(M1 = "CD_M20240001", M2 = "CD_M20250001")
+  f$pbp$match_id <- unname(relabel[f$pbp$match_id])
+  f$stats$match_id <- unname(relabel[f$stats$match_id])
+  f$results$match_id <- unname(relabel[f$results$match_id])
+  f
+}
+
+test_that("a season with zero scored disposals aborts even though the batch total is nonzero", {
+  f <- np_seasoned_fixture()
+  # terms for 2024 (M1) only -- np_terms_fixture() relabelled the same way.
+  # 2025 (M2) has real disposal rows (from np_fixture()) but NO terms at all.
+  terms <- np_terms_fixture()
+  terms$match_id <- "CD_M20240001"
+  expect_error(
+    suppressMessages(build_net_points(f$pbp, f$stats, f$results, credit = "difficulty",
+                                      difficulty_terms = terms,
+                                      reconcile = FALSE, spread = "tog")),
+    "ZERO disposals in season"
+  )
+})
+
+test_that("terms covering every season in a multi-season call do not trip the per-season guard", {
+  # same season-shaped match_ids as above, but terms for BOTH seasons -- must
+  # not error just because match_id happens to encode more than one season.
+  f <- np_seasoned_fixture()
+  terms_2024 <- np_terms_fixture(); terms_2024$match_id <- "CD_M20240001"
+  # M2's rows 1 and 3 (both Home, so hm = delta_epv): delta_epv 4.0 and 2.5 --
+  # decision/surprise must rebuild those exactly, or the row-identity check
+  # (a different guard) rejects them; the split itself is arbitrary.
+  terms_2025 <- data.table::data.table(
+    match_id = "CD_M20250001", display_order = c(1L, 3L),
+    p_hat = c(0.4, 0.5), decision = c(4.0, 2.5), surprise = c(0, 0)
+  )
+  terms <- rbind(terms_2024, terms_2025)
+  expect_no_error(
+    suppressMessages(build_net_points(f$pbp, f$stats, f$results, credit = "difficulty",
+                                      difficulty_terms = terms,
+                                      reconcile = FALSE, spread = "tog")))
+})
