@@ -319,3 +319,20 @@ MATCH_MARGIN_SLOPE_GATE <- c(0.85, 1.10)
 #' \code{days_rest_diff_fac = "0"} -- the actual number is cosmetic.
 #' @keywords internal
 MATCHUP_TABLE_DAYS_REST <- 13
+
+#' How close to kickoff a still-missing team list stops being routine (torp#190)
+#'
+#' `build_matchup_table.R`'s scheduled run treats "team lists not published
+#' yet" as an expected, quiet skip -- true most of the week, since the AFL
+#' typically names teams only 1-2 days out and the job runs on a schedule
+#' regardless. But `daily-ratings-predictions.yml`'s own cron comment records
+#' why that CANNOT be unconditional: rounds 19-21 of 2026 shipped with
+#' `players = NA` and nothing failed, costing ~3.2 MAE, because a missing
+#' lineup was never distinguished from "still time for one to appear."
+#'
+#' 24 hours brackets the widest gap between consecutive scheduled runs
+#' (Sat 00:00 -> Sun 00:00 UTC); inside that window there may be no later
+#' run before kickoff, so a lineup still missing is treated as the real,
+#' loud failure this schedule exists to catch rather than routine noise.
+#' @keywords internal
+MATCHUP_TABLE_LINEUP_SKIP_MAX_HOURS <- 24

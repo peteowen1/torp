@@ -300,6 +300,30 @@
   list(snapshot = snapshot, home_venue = home_venue, familiarity_now = familiarity_now)
 }
 
+#' Hours until the earliest not-yet-decided match of a round bounces
+#'
+#' @description Backs the `torp_error_lineups_not_published` decision in
+#'   `build_matchup_table.R` (torp#190): whether a still-missing team list is
+#'   routine (a later scheduled run will retry before kickoff) or the real,
+#'   loud failure the pre-game cron schedule exists to catch (no later run
+#'   will). Split out from the entry-point script so the threshold logic is
+#'   unit-testable without a live `load_fixtures()` call.
+#'
+#' @param fixtures A fixtures frame with `round_number`, `status`,
+#'   `utc_start_time` (the shape `load_fixtures()` returns).
+#' @param week Target round number.
+#' @return Numeric hours until the earliest `status != "CONCLUDED"` match in
+#'   `week` starts, or `NA_real_` if `week` has no such row -- an unknown
+#'   deadline, which the caller must treat as urgent, not as safe to skip.
+#' @keywords internal
+.matchup_hours_to_next_bounce <- function(fixtures, week) {
+  upcoming <- fixtures[fixtures$round_number == week & fixtures$status != "CONCLUDED", ]
+  if (nrow(upcoming) == 0) return(NA_real_)
+  starts <- .parse_utc_start(upcoming$utc_start_time)
+  if (all(is.na(starts))) return(NA_real_)
+  as.numeric(difftime(min(starts, na.rm = TRUE), Sys.time(), units = "hours"))
+}
+
 # .build_matchup_newdata ----
 
 #' Fabricate the 18x17x2 directed matchup rows against the frozen state
