@@ -298,13 +298,28 @@
 #' 51.8% and the trend does not clear noise (1 df test, p = 0.17) -- so the
 #' warn band is set at his numbers and the abort band well outside them. A fit
 #' outside the abort band is not a surprising season, it is a broken model or a
-#' broken frame.
+#' broken frame -- but only once the cell reporting it has enough observations
+#' to say so; see `NP_STOPPAGE_WIN_MIN_N` (torp#225).
 #'
 #' @param out Cell table carrying `p_home`, `n` and `description`.
 #' @return `out`, invisibly.
 #' @keywords internal
 .np_check_stoppage_win_rate <- function(out) {
-  p <- out$p_home[is.finite(out$p_home)]
+  # torp#225: a thin cell (live single-round sample, most cells n < 10) can
+  # carry a fitted p_home far from 50% purely from the GLM being evaluated at
+  # an unusual x_home with almost nothing anchoring it there. Restricting the
+  # check to well-populated cells doesn't weaken it against a genuinely broken
+  # model -- a full season's cells all clear this floor already -- it only
+  # stops a handful of coin-flip-sized cells from being read as evidence of
+  # one. All rows still go into the ledger; only the SENSE CHECK ignores thin
+  # cells.
+  checked <- out[out$n >= NP_STOPPAGE_WIN_MIN_N, ]
+  if (!nrow(checked)) {
+    cli::cli_alert_info(
+      "Stoppage win-rate check skipped: no cell reached {NP_STOPPAGE_WIN_MIN_N} observations ({nrow(out)} cell{?s} total).")
+    return(invisible(out))
+  }
+  p <- checked$p_home[is.finite(checked$p_home)]
   if (!length(p)) return(invisible(out))
   rng <- range(p)
   if (rng[1] < NP_STOPPAGE_WIN_ABORT[1] || rng[2] > NP_STOPPAGE_WIN_ABORT[2]) {
