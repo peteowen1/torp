@@ -293,6 +293,21 @@ test_that(".extract_frozen_teams() aborts on an all-NA listed-position column", 
   expect_error(.extract_frozen_teams(state), "NA listed-position value")
 })
 
+test_that(".extract_frozen_teams() tags the missing-lineup abort with its own class (torp#190)", {
+  # A daily job hits this on most days of the week -- the AFL only publishes
+  # team lists 1-2 days out. build_matchup_table.R catches exactly this class
+  # to skip quietly instead of filing a fresh automation failure every run;
+  # any other abort in this file must NOT carry this class, or a real defect
+  # would get skipped silently too.
+  bad <- .mt_make_team_rt_fix_df()
+  bad$midfield[bad$round_number == 4L] <- NA_real_
+  state <- list(
+    team_rt_fix_df = bad, team_mdl_df = .mt_make_team_mdl_df(),
+    all_grounds = .mt_make_all_grounds(), season = 2026L, week = 4L
+  )
+  expect_error(.extract_frozen_teams(state), class = "torp_error_lineups_not_published")
+})
+
 test_that("the frozen snapshot's listed-position columns are all non-NA in the healthy case", {
   state <- list(
     team_rt_fix_df = .mt_make_team_rt_fix_df(), team_mdl_df = .mt_make_team_mdl_df(),
@@ -302,4 +317,110 @@ test_that("the frozen snapshot's listed-position columns are all non-NA in the h
   for (col in names(MATCH_LISTED_POS_MAP)) {
     expect_false(any(is.na(frozen$snapshot[[col]])), info = col)
   }
+})
+
+# .matchup_hours_to_next_bounce ----
+
+.mt_make_fixtures <- function(round_number, status, hours_from_now) {
+  data.frame(
+    round_number = round_number,
+    status = status,
+    utc_start_time = format(Sys.time() + hours_from_now * 3600, "%Y-%m-%dT%H:%M:%OS3+0000", tz = "UTC"),
+    stringsAsFactors = FALSE
+  )
+}
+
+test_that(".matchup_hours_to_next_bounce() finds the earliest unstarted match in the target round (torp#190)", {
+  fx <- .mt_make_fixtures(
+    round_number = c(4L, 4L, 4L, 5L),
+    status = c("CONCLUDED", "SCHEDULED", "SCHEDULED", "SCHEDULED"),
+    hours_from_now = c(-10, 30, 5, 1)   # round 4's earliest unstarted match is 5h out
+  )
+  expect_equal(.matchup_hours_to_next_bounce(fx, week = 4L), 5, tolerance = 0.01)
+})
+
+test_that(".matchup_hours_to_next_bounce() ignores CONCLUDED matches", {
+  fx <- .mt_make_fixtures(
+    round_number = 4L, status = c("CONCLUDED", "SCHEDULED"), hours_from_now = c(-1, 20)
+  )
+  expect_equal(.matchup_hours_to_next_bounce(fx, week = 4L), 20, tolerance = 0.01)
+})
+
+test_that(".matchup_hours_to_next_bounce() returns NA when the round has no matching row -- an unknown deadline, not a safe one", {
+  fx <- .mt_make_fixtures(round_number = 5L, status = "SCHEDULED", hours_from_now = 10)
+  expect_true(is.na(.matchup_hours_to_next_bounce(fx, week = 4L)))
+})
+
+test_that(".matchup_earliest_bounce() returns NA when NO start time in the round parses -- unparseable is unknown, not safe", {
+  fx <- data.frame(
+    round_number = 4L, status = "SCHEDULED", utc_start_time = "not-a-date",
+    stringsAsFactors = FALSE
+  )
+  expect_true(is.na(.matchup_earliest_bounce(fx, week = 4L)))
+  expect_true(is.na(.matchup_hours_to_next_bounce(fx, week = 4L)))
+})
+
+# .matchup_next_scheduled_run / .matchup_lineup_wait_is_safe ----
+#
+# 2026-01-04 00:00 UTC is a Sunday (verified: weekdays(as.Date("2026-01-04")) ==
+# "Sunday") -- used as a known-weekday anchor so these tests don't depend on
+# guessing today's day of week.
+
+.mt_sun <- as.POSIXct("2026-01-04 00:00:00", tz = "UTC")
+
+.mt_make_fixtures_at <- function(round_number, status, start_utc) {
+  data.frame(
+    round_number = round_number, status = status,
+    utc_start_time = format(start_utc, "%Y-%m-%dT%H:%M:%OS3+0000", tz = "UTC"),
+    stringsAsFactors = FALSE
+  )
+}
+
+test_that(".matchup_next_scheduled_run() reproduces the workflow's actual (non-uniform) cron gaps", {
+  # Thu 06:00 -> Fri 06:00 = 24h
+  expect_equal(
+    as.numeric(difftime(.matchup_next_scheduled_run(.mt_sun + 4 * 86400 + 6 * 3600),
+                        .mt_sun + 5 * 86400 + 6 * 3600, units = "hours")),
+    0, tolerance = 0.001
+  )
+  # Fri 06:00 -> Sat 00:00 = 18h
+  expect_equal(
+    as.numeric(difftime(.matchup_next_scheduled_run(.mt_sun + 5 * 86400 + 6 * 3600),
+                        .mt_sun + 6 * 86400, units = "hours")),
+    0, tolerance = 0.001
+  )
+  # Sat 00:00 -> Sun 00:00 = 24h
+  expect_equal(
+    as.numeric(difftime(.matchup_next_scheduled_run(.mt_sun + 6 * 86400),
+                        .mt_sun + 7 * 86400, units = "hours")),
+    0, tolerance = 0.001
+  )
+  # Sun 00:00 -> the FOLLOWING Thu 06:00 = 102h -- the gap the flat-threshold
+  # version of this fix got wrong by ~4x (review finding, 2026-09-17).
+  next_run <- .matchup_next_scheduled_run(.mt_sun + 7 * 86400)
+  expect_equal(as.numeric(difftime(next_run, .mt_sun + 7 * 86400, units = "hours")),
+              102, tolerance = 0.001)
+})
+
+test_that(".matchup_lineup_wait_is_safe() is TRUE for the routine case: a later run precedes kickoff", {
+  # Saturday 00:00 UTC run; round's earliest bounce is Sunday afternoon
+  # (Sun 00:00 + 12h) -- the Sunday 00:00 UTC cron will retry first.
+  from <- .mt_sun + 6 * 86400
+  fx <- .mt_make_fixtures_at(4L, "SCHEDULED", .mt_sun + 7 * 86400 + 12 * 3600)
+  expect_true(.matchup_lineup_wait_is_safe(fx, week = 4L, from = from))
+})
+
+test_that(".matchup_lineup_wait_is_safe() is FALSE for the Easter-Monday/ANZAC-Day case (review finding, 2026-09-17)", {
+  # Sunday 00:00 UTC run; a Monday fixture bounces ~27h later, but the next
+  # scheduled run is the FOLLOWING Thursday, 102h away -- well after kickoff.
+  # A flat 24h threshold called this "safe"; it is exactly the failure this
+  # whole fix exists to prevent (missing lineup, nothing failed).
+  from <- .mt_sun + 7 * 86400
+  fx <- .mt_make_fixtures_at(4L, "SCHEDULED", .mt_sun + 8 * 86400 + 3 * 3600)
+  expect_false(.matchup_lineup_wait_is_safe(fx, week = 4L, from = from))
+})
+
+test_that(".matchup_lineup_wait_is_safe() is FALSE when the deadline is unknown", {
+  fx <- .mt_make_fixtures_at(5L, "SCHEDULED", .mt_sun + 86400)
+  expect_false(.matchup_lineup_wait_is_safe(fx, week = 4L, from = .mt_sun))
 })

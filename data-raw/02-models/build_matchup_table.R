@@ -114,7 +114,49 @@ if (!is.finite(max_d) || max_d > MAX_ABS_DIFF) {
 }
 
 # ---- Build ------------------------------------------------------------------
-tbl <- build_matchup_table(state = state)
+# Team lists are absent for most of the week for a daily job (torp#190): the
+# AFL typically publishes them only 1-2 days before a match, and this script
+# runs on a schedule regardless. That is not a code defect -- it is the
+# expected state for the round most of the time -- so it must not read as one.
+# `torp_error_lineups_not_published` is the ONLY condition treated this way;
+# every other abort still exits non-zero and reaches the workflow's failure
+# comment, unchanged.
+#
+# But NOT unconditionally quiet (review finding, 2026-09-17): the whole reason
+# this pipeline runs on a pre-game schedule at all is that "missing lineups,
+# nothing failed" already cost ~3.2 MAE on 2026 rounds 19-21 (see the cron
+# comment in daily-ratings-predictions.yml). Quietly exiting 0 on every run
+# would reproduce exactly that failure mode if the AFL is still late right up
+# to the last scheduled run before kickoff.
+#
+# A flat "N hours is safe" threshold was tried here first and was WRONG (second
+# review finding, same day): the gaps between the four weekly cron runs are
+# not uniform -- Sun 00:00 -> the following Thu 06:00 UTC is 102 hours, with
+# nothing scheduled on Mon/Tue/Wed -- so a threshold sized to the Sat->Sun gap
+# (24h) would call a Sunday run "safe" for a Monday fixture (Easter Monday,
+# ANZAC Day) that nothing checks again until Thursday, well after it is
+# played. `.matchup_lineup_wait_is_safe()` instead checks the ACTUAL next
+# scheduled occurrence against the round's earliest bounce.
+tbl <- tryCatch(
+  build_matchup_table(state = state),
+  torp_error_lineups_not_published = function(e) {
+    fx <- tryCatch(load_fixtures(season), error = function(e2) NULL)
+    safe <- !is.null(fx) && torp:::.matchup_lineup_wait_is_safe(fx, week)
+    hrs_to_bounce <- if (is.null(fx)) NA_real_ else torp:::.matchup_hours_to_next_bounce(fx, week)
+
+    if (!safe) {
+      cli::cli_abort(c(
+        "build_matchup_table: team lists still missing, and no later scheduled run precedes {season} R{week}'s earliest bounce.",
+        "x" = conditionMessage(e),
+        "i" = "This is the last realistic chance before kickoff -- treating as a real failure, not routine noise."
+      ))
+    }
+
+    cli::cli_alert_info("Skipping: {conditionMessage(e)}")
+    cat(sprintf("::notice::Matchup table skipped -- team lists not published yet (%.1fh until first bounce, a later scheduled run will retry before then). The blog keeps serving the previously published table.\n", hrs_to_bounce))
+    quit(save = "no", status = 0)
+  }
+)
 
 # ---- Gate 2: shape and sanity ----------------------------------------------
 n_teams  <- length(unique(c(tbl$home, tbl$away)))

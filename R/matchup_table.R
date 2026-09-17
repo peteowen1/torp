@@ -268,7 +268,7 @@
       "build_matchup_table: NA listed-position value(s) in the frozen snapshot ({season} R{week}): {bad}",
       "i" = "These are XGBoost features. Unlike epr they have no roster-overlay or forward-fill fallback, so this is expected on a week whose lineups are not published yet.",
       "x" = "model.matrix() would drop those rows silently and misalign every prediction. Not building."
-    ))
+    ), class = "torp_error_lineups_not_published")
   }
 
   # History used for home-ground + venue familiarity: matches strictly
@@ -298,6 +298,91 @@
     dplyr::select(team_id, venue, familiarity)
 
   list(snapshot = snapshot, home_venue = home_venue, familiarity_now = familiarity_now)
+}
+
+#' Earliest kickoff among a round's not-yet-decided matches
+#'
+#' @param fixtures A fixtures frame with `round_number`, `status`,
+#'   `utc_start_time` (the shape `load_fixtures()` returns).
+#' @param week Target round number.
+#' @return The earliest `status != "CONCLUDED"` match's start time in `week`,
+#'   as a UTC POSIXct, or `NA` (POSIXct) if `week` has no such row or none of
+#'   its start times parse -- an unknown deadline, which callers must treat
+#'   as urgent, not as safe to wait on.
+#' @keywords internal
+.matchup_earliest_bounce <- function(fixtures, week) {
+  upcoming <- fixtures[fixtures$round_number == week & fixtures$status != "CONCLUDED", ]
+  if (nrow(upcoming) == 0) return(as.POSIXct(NA))
+  starts <- .parse_utc_start(upcoming$utc_start_time)
+  if (all(is.na(starts))) return(as.POSIXct(NA))
+  min(starts, na.rm = TRUE)
+}
+
+#' Hours until the earliest not-yet-decided match of a round bounces
+#'
+#' @description Human-readable companion to `.matchup_earliest_bounce()`, for
+#'   the log line in `build_matchup_table.R`. The actual quiet-skip decision
+#'   is `.matchup_lineup_wait_is_safe()`, not a threshold on this value --
+#'   see that function's docs for why a flat hours cutoff was tried and
+#'   rejected (torp#190).
+#' @inheritParams .matchup_earliest_bounce
+#' @return Numeric hours from now, or `NA_real_` if the deadline is unknown.
+#' @keywords internal
+.matchup_hours_to_next_bounce <- function(fixtures, week) {
+  bounce <- .matchup_earliest_bounce(fixtures, week)
+  if (is.na(bounce)) return(NA_real_)
+  as.numeric(difftime(bounce, Sys.time(), units = "hours"))
+}
+
+#' Is a later scheduled run guaranteed before this round's earliest bounce?
+#'
+#' @description The `torp_error_lineups_not_published` quiet-skip decision in
+#'   `build_matchup_table.R` (torp#190): a still-missing team list is routine
+#'   ONLY if a later `daily-ratings-predictions.yml` cron run
+#'   (`MATCHUP_TABLE_CRON_SCHEDULE`) will fire before kickoff and get another
+#'   chance to see it published. Comparing against the actual next scheduled
+#'   occurrence -- rather than a flat "N hours is always safe" threshold --
+#'   is deliberate: the gaps between those four weekly runs are not uniform
+#'   (see `MATCHUP_TABLE_CRON_SCHEDULE`'s docs), so any single number either
+#'   misses the routine case or wrongly treats a genuinely last-chance run as
+#'   safe.
+#' @inheritParams .matchup_earliest_bounce
+#' @param from Reference "now" (default `Sys.time()`; parameterised for
+#'   tests).
+#' @return `TRUE` only when the deadline is known AND a later scheduled run
+#'   precedes it. `NA` bounce or `NA` next-run both resolve to `FALSE` --
+#'   an undeterminable state is never treated as safe to skip.
+#' @keywords internal
+.matchup_lineup_wait_is_safe <- function(fixtures, week, from = Sys.time()) {
+  bounce <- .matchup_earliest_bounce(fixtures, week)
+  if (is.na(bounce)) return(FALSE)
+  next_run <- .matchup_next_scheduled_run(from)
+  !is.na(next_run) && next_run < bounce
+}
+
+#' Next `daily-ratings-predictions.yml` cron occurrence after a reference time
+#'
+#' @param from Reference time (any tz; converted to UTC internally, since the
+#'   schedule is defined in UTC).
+#' @return The next occurrence strictly after `from`, as a UTC POSIXct.
+#'   Searches up to 8 days ahead, comfortably more than the schedule's own
+#'   102-hour Sun->Thu gap.
+#' @keywords internal
+.matchup_next_scheduled_run <- function(from = Sys.time()) {
+  from_utc <- from
+  attr(from_utc, "tzone") <- "UTC"
+  day0 <- as.POSIXct(trunc(from_utc, "days"))
+  attr(day0, "tzone") <- "UTC"
+
+  occurrences <- unlist(lapply(0:8, function(d) {
+    day <- day0 + d * 86400
+    wday <- as.POSIXlt(day)$wday
+    hits <- Filter(function(s) unname(s["wday"]) == wday, MATCHUP_TABLE_CRON_SCHEDULE)
+    vapply(hits, function(s) as.numeric(day) + unname(s["hour"]) * 3600, numeric(1))
+  }))
+  occurrences <- occurrences[occurrences > as.numeric(from_utc)]
+  if (length(occurrences) == 0) return(as.POSIXct(NA))
+  as.POSIXct(min(occurrences), origin = "1970-01-01", tz = "UTC")
 }
 
 # .build_matchup_newdata ----

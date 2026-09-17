@@ -1,5 +1,30 @@
 # torp 1.9.0
 
+## Matchup table stops crying wolf when team lists aren't published yet (torp#190)
+
+`build_matchup_table.R`'s scheduled run was filing a fresh "Failed again"
+comment on torp#190 every time it ran during finals week -- 30 times over 12
+days -- because it could not tell "team lists genuinely absent, most of the
+week for a daily job" apart from a real defect. Both aborted the same way.
+
+The listed-position abort in `.extract_frozen_teams()` now carries its own
+condition class, `torp_error_lineups_not_published`, and the entry-point
+script catches only that class to skip cleanly (exit 0, a `::notice::` line)
+rather than fail. Every other abort in the file is unchanged and still reaches
+the workflow's failure comment.
+
+The skip is NOT unconditional (review finding): quiet only when a later
+scheduled cron run actually precedes kickoff
+(`.matchup_lineup_wait_is_safe()` / `.matchup_next_scheduled_run()`,
+checked against the real `daily-ratings-predictions.yml` cron list, not a
+flat hours threshold -- a first pass tried 24h and was wrong by ~4x, since
+Sun 00:00 -> the following Thu 06:00 UTC is 102h with nothing scheduled on
+Mon/Tue/Wed, which would have called a Sunday run "safe" for a real, annual
+Easter-Monday/ANZAC-Day fixture). Inside that gap a missing lineup is the
+real failure this pre-game schedule exists to catch -- rounds 19-21 of 2026
+already cost ~3.2 MAE from exactly this "nothing failed, but the lineup was
+still missing at game time" pattern -- so it stays loud there.
+
 ## Rating vintage v13: a contest has three outcomes, not two
 
 `EPV3_CONTEST_OUTCOMES` goes `"two"` -> `"three"` and

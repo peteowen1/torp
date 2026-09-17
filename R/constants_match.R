@@ -319,3 +319,31 @@ MATCH_MARGIN_SLOPE_GATE <- c(0.85, 1.10)
 #' \code{days_rest_diff_fac = "0"} -- the actual number is cosmetic.
 #' @keywords internal
 MATCHUP_TABLE_DAYS_REST <- 13
+
+#' `daily-ratings-predictions.yml`'s `schedule:` cron entries (torp#190)
+#'
+#' One row per cron line in that workflow's `on.schedule` block, as
+#' `(wday, hour)` in UTC (`wday`: 0 = Sunday .. 6 = Saturday, matching
+#' \code{POSIXlt$wday}). Backs `.matchup_next_scheduled_run()`'s decision
+#' about whether a still-missing team list is routine (a later run will
+#' retry before kickoff) or the real failure `build_matchup_table.R`'s
+#' pre-game schedule exists to catch.
+#'
+#' A flat "N hours is always safe" threshold was tried first and was wrong:
+#' the gaps between these four runs are NOT uniform (Fri->Sat is 18h, but
+#' Sun->the following Thu is 102h -- there is no run at all on Mon/Tue/Wed),
+#' so a single number either misses the routine case or, worse, treats the
+#' Sunday run as "safe" for a Monday fixture that nothing will check again
+#' until Thursday. AFL schedules real games on that gap every year (Easter
+#' Monday, ANZAC Day) -- exactly the recurring midweek exception
+#' `team_rapm_asof.R`'s day-of-week logic already has to account for
+#' elsewhere. Hardcoded rather than parsed from the YAML: if the schedule
+#' changes, this must be updated by hand, and the tests pin these values so
+#' a drift shows up as a test failure instead of a silent gap.
+#' @keywords internal
+MATCHUP_TABLE_CRON_SCHEDULE <- list(
+  c(wday = 4, hour = 6),   # Thu 06:00 UTC
+  c(wday = 5, hour = 6),   # Fri 06:00 UTC
+  c(wday = 6, hour = 0),   # Sat 00:00 UTC
+  c(wday = 0, hour = 0)    # Sun 00:00 UTC
+)
