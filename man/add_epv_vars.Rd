@@ -18,3 +18,30 @@ A dataframe with additional EPV-related variables.
 \description{
 This function adds EPV-related variables to the input dataframe.
 }
+\section{What frame \code{exp_pts}/\code{delta_epv} are expressed in (torp#217)}{
+
+Every row's \code{exp_pts} is in \strong{\code{team_id_mdl}'s frame} -- the
+team in possession, which for a stoppage row (Centre Bounce, Ball Up Call)
+is already whichever side ends up winning it, not whichever side's chain
+just ended. This was found confusing twice in one session because
+\code{chain_team_id} (a different column, marking the chain that just
+ENDED) looks like it should answer this and does not.
+
+\code{team_id_mdl} already IS the frame indicator and needs no new column:
+verified across the full 2026 season, \code{team_id_mdl} matches the next
+row's \code{team_id_mdl} (the side that resolves the contest) on 12,250 of
+12,267 stoppage rows (99.86\%). Reproduces the worked example that
+surfaced this (\code{CD_M20260140608}, \code{Ball Up Call} then
+\code{Gather From Hitout}): \code{team_id_mdl} is Brisbane's on both,
+\code{exp_pts} -0.532 then -0.532, i.e. one consistent frame throughout,
+not a sign flip mid-stoppage.
+
+Considered and rejected: normalising every row to one declared frame
+(e.g. always home-team). Costed at prohibitive blast radius -- 20+ raw
+consumers of \code{delta_epv}/\code{exp_pts} across torp, torpmodels,
+torpdata and inthegame-blog, PLUS the published "How EPV works" post,
+which explicitly teaches readers \code{delta_epv} is "in the kicking
+team's frame" -- against zero benefit, since \code{team_id_mdl} already
+answers the question this issue was about.
+}
+
