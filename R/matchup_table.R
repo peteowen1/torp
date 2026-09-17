@@ -268,7 +268,7 @@
       "build_matchup_table: NA listed-position value(s) in the frozen snapshot ({season} R{week}): {bad}",
       "i" = "These are XGBoost features. Unlike epr they have no roster-overlay or forward-fill fallback, so this is expected on a week whose lineups are not published yet.",
       "x" = "model.matrix() would drop those rows silently and misalign every prediction. Not building."
-    ))
+    ), class = "torp_error_lineups_not_published")
   }
 
   # History used for home-ground + venue familiarity: matches strictly

@@ -114,7 +114,21 @@ if (!is.finite(max_d) || max_d > MAX_ABS_DIFF) {
 }
 
 # ---- Build ------------------------------------------------------------------
-tbl <- build_matchup_table(state = state)
+# Team lists are absent for most of the week for a daily job (torp#190): the
+# AFL typically publishes them only 1-2 days before a match, and this script
+# runs on a schedule regardless. That is not a code defect -- it is the
+# expected state for the round most of the time -- so it must not read as one.
+# `torp_error_lineups_not_published` is the ONLY condition treated this way;
+# every other abort still exits non-zero and reaches the workflow's failure
+# comment, unchanged.
+tbl <- tryCatch(
+  build_matchup_table(state = state),
+  torp_error_lineups_not_published = function(e) {
+    cli::cli_alert_info("Skipping: {conditionMessage(e)}")
+    cat("::notice::Matchup table skipped -- team lists not published yet for this round. The blog keeps serving the previously published table; this is expected and will resolve once lineups drop.\n")
+    quit(save = "no", status = 0)
+  }
+)
 
 # ---- Gate 2: shape and sanity ----------------------------------------------
 n_teams  <- length(unique(c(tbl$home, tbl$away)))

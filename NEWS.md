@@ -1,5 +1,18 @@
 # torp 1.9.0
 
+## Matchup table stops crying wolf when team lists aren't published yet (torp#190)
+
+`build_matchup_table.R`'s scheduled run was filing a fresh "Failed again"
+comment on torp#190 every time it ran during finals week -- 30 times over 12
+days -- because it could not tell "team lists genuinely absent, most of the
+week for a daily job" apart from a real defect. Both aborted the same way.
+
+The listed-position abort in `.extract_frozen_teams()` now carries its own
+condition class, `torp_error_lineups_not_published`, and the entry-point
+script catches only that class to skip cleanly (exit 0, a `::notice::` line)
+rather than fail. Every other abort in the file is unchanged and still reaches
+the workflow's failure comment.
+
 ## Rating vintage v13: a contest has three outcomes, not two
 
 `EPV3_CONTEST_OUTCOMES` goes `"two"` -> `"three"` and
