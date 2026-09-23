@@ -1,0 +1,285 @@
+<title>Net Ledger Walkthrough</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+/* One renderer for both sports' walkthroughs: torp and panna each write a JSON
+   file in the shared shape and render_ledger_page.R fills it in below.
+   See vault/plans/NET-LEDGER-PARITY.md. */
+:root{
+  --paper:#f2f5f2; --card:#fbfcfb; --ink:#14201c; --mut:#5d6b64; --rule:#d3dbd5;
+  --acc:#1d4f43; --credit:#1a7f5a; --debit:#b0452e; --pool:#5f748c; --shade:#e8ede9;
+  --home:#2f5d8a; --away:#b86b1f; --turf:#e3ebe2; --mark:#b9c7bb;
+  --d:'Archivo',system-ui,sans-serif; --b:'Source Serif 4',Georgia,serif;
+  --m:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  color-scheme:dark;
+  --paper:#101613; --card:#161d1a; --ink:#e4ebe6; --mut:#93a29a; --rule:#27322d;
+  --acc:#6fbfa6; --credit:#53c99c; --debit:#e38471; --pool:#8fa6bd; --shade:#1b2320;
+  --home:#7fa9d6; --away:#e0a15c; --turf:#18221d; --mark:#34443a;
+}}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --paper:#101613; --card:#161d1a; --ink:#e4ebe6; --mut:#93a29a; --rule:#27322d;
+  --acc:#6fbfa6; --credit:#53c99c; --debit:#e38471; --pool:#8fa6bd; --shade:#1b2320;
+  --home:#7fa9d6; --away:#e0a15c; --turf:#18221d; --mark:#34443a;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--b);font-size:16px;line-height:1.6;-webkit-font-smoothing:antialiased}
+.wrap{max-width:84rem;margin:0 auto;padding-block:2.6rem 5rem;padding-inline:16px}
+.col{max-width:36rem}
+h1{font-family:var(--d);font-weight:700;font-size:clamp(1.9rem,5.5vw,2.7rem);line-height:1.05;letter-spacing:-.02em;margin:0 0 .6rem;text-wrap:balance}
+h2{font-family:var(--d);font-weight:600;font-size:1.3rem;letter-spacing:-.01em;margin:2.6rem 0 .3rem;text-wrap:balance}
+.eyebrow{font-family:var(--d);font-size:.68rem;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--acc);margin:0 0 .5rem}
+p{margin:0 0 .8rem}
+.mut{color:var(--mut)} .small{font-size:.9rem}
+code,.n{font-family:var(--m);font-variant-numeric:tabular-nums}
+code{font-size:.85em;background:var(--shade);padding:.05em .32em;border-radius:3px}
+.pos{color:var(--credit)} .neg{color:var(--debit)}
+
+.score{display:flex;flex-wrap:wrap;align-items:baseline;gap:.4rem 1rem;font-family:var(--d);margin:.4rem 0 1rem}
+.score .t{font-weight:600;font-size:1.05rem}
+.score .s{font-family:var(--m);font-weight:600;font-size:1.4rem}
+.rules{display:grid;grid-template-columns:repeat(auto-fit,minmax(14rem,1fr));gap:1px;background:var(--rule);border:1px solid var(--rule);border-radius:4px;overflow:hidden;margin:1.2rem 0}
+.rules div{background:var(--card);padding:.7rem .85rem;font-size:.88rem;color:var(--mut)}
+.rules b{display:block;font-family:var(--d);font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;color:var(--ink);margin-bottom:.15rem}
+
+.bar{display:flex;gap:.6rem;flex-wrap:wrap;align-items:center;margin:.8rem 0}
+input[type=search]{font:inherit;font-size:.9rem;padding:.4rem .7rem;border:1px solid var(--rule);border-radius:3px;background:var(--card);color:var(--ink);min-width:0;flex:1 1 14rem;max-width:22rem}
+input:focus-visible{outline:2px solid var(--acc);outline-offset:1px}
+.count{font-family:var(--m);font-size:.78rem;color:var(--mut)}
+
+.led{border:1px solid var(--rule);border-radius:4px;overflow:hidden;background:var(--card)}
+.act{border-bottom:1px solid var(--rule)}
+.act:last-child{border-bottom:0}
+.act.goal{background:var(--shade)}
+.line{display:grid;grid-template-columns:2.2rem 4.6rem 1fr auto;gap:.2rem .7rem;align-items:baseline;padding:.55rem .85rem}
+.ord{font-family:var(--m);font-size:.72rem;color:var(--mut)}
+.clk{font-family:var(--m);font-size:.76rem;color:var(--mut);white-space:nowrap}
+.who{font-family:var(--d);font-size:.93rem;font-weight:600;line-height:1.3}
+.who span{font-family:var(--b);font-weight:400;color:var(--mut);font-size:.88rem}
+.chg{font-family:var(--m);font-size:.92rem;font-weight:600;white-space:nowrap;text-align:right}
+.chg small{display:block;font-weight:400;font-size:.68rem;color:var(--mut)}
+.tags{grid-column:3/-1;display:flex;gap:.35rem;flex-wrap:wrap}
+.tag{font-family:var(--m);font-size:.66rem;color:var(--mut);border:1px solid var(--rule);border-radius:2px;padding:0 .3rem}
+.tacc{display:grid;grid-template-columns:1fr 1fr;border-top:1px dashed var(--rule)}
+.tacc>div{padding:.45rem .85rem .55rem}
+.tacc>div:first-child{border-right:1px solid var(--rule)}
+.side{font-family:var(--d);font-size:.6rem;letter-spacing:.13em;text-transform:uppercase;color:var(--mut);margin-bottom:.25rem}
+.pay{display:flex;justify-content:space-between;gap:.7rem;font-size:.85rem;line-height:1.5}
+.pay .r{font-family:var(--d);font-size:.64rem;letter-spacing:.05em;text-transform:uppercase;color:var(--mut);margin-left:.35rem}
+.pay .v{font-family:var(--m);font-size:.82rem;white-space:nowrap}
+.pool{color:var(--pool);font-style:italic}
+.sum{display:flex;justify-content:space-between;border-top:1px solid var(--rule);margin-top:.35rem;padding-top:.25rem;font-family:var(--m);font-size:.78rem;color:var(--mut)}
+.none{font-size:.82rem;color:var(--mut);font-style:italic}
+
+.scroll{overflow-x:auto;border:1px solid var(--rule);border-radius:4px;background:var(--card);margin:1rem 0}
+table{border-collapse:collapse;width:100%;font-size:.88rem}
+th,td{text-align:left;padding:.4rem .7rem;border-bottom:1px solid var(--rule);white-space:nowrap}
+thead th{font-family:var(--d);font-size:.63rem;letter-spacing:.11em;text-transform:uppercase;color:var(--mut);font-weight:600}
+td.n,th.n{text-align:right}
+tr.tot td{font-weight:600;background:var(--shade)}
+.check{font-family:var(--m);font-size:.85rem;margin:.6rem 0}
+
+/* the passage and its pitch, side by side; the pitch follows you down */
+.lgrid{display:grid;grid-template-columns:minmax(0,1fr) minmax(300px,30rem);gap:1.6rem;align-items:start}
+.pitchcard{position:sticky;top:calc(env(safe-area-inset-top,0px) + 12px);background:var(--card);border:1px solid var(--rule);border-radius:4px;padding:.8rem .9rem}
+.pitchcard h3{font-family:var(--d);font-size:.95rem;margin:0 0 .15rem}
+.pcap{font-size:.8rem;color:var(--mut);margin:0 0 .5rem;min-height:2.4em}
+#pitch{width:100%;height:auto;display:block}
+.pkey{display:flex;flex-wrap:wrap;gap:.3rem 1rem;font-family:var(--d);font-size:.7rem;color:var(--mut);margin-top:.45rem}
+.pkey i{display:inline-block;width:.6rem;height:.6rem;border-radius:50%;margin-right:.3rem;vertical-align:-1px}
+.act{cursor:pointer}
+.act.cur{box-shadow:inset 3px 0 0 var(--acc)}
+.act:focus-visible{outline:2px solid var(--acc);outline-offset:-2px}
+@media (max-width:1000px){.lgrid{grid-template-columns:1fr}
+  .pitchcard{order:-1;z-index:2}
+  #pitch{max-height:34vh}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+@media (max-width:640px){.tacc{grid-template-columns:1fr}.tacc>div:first-child{border-right:0;border-bottom:1px solid var(--rule)}
+  .line{grid-template-columns:4.2rem 1fr auto}.ord{display:none}}
+</style>
+
+<div class="wrap">
+  <p class="eyebrow" id="eyebrow"></p>
+  <h1 id="h1"></h1>
+  <div class="score" id="score"></div>
+  <div class="col"><p id="lede"></p></div>
+  <div class="rules">
+    <div><b>Read each entry</b>The number on the right is how much the action changed the expected score, for the side that made it.</div>
+    <div><b>Booked twice</b>Left: what the side that acted was paid. Right: the same amount, opposite sign, charged to the other side.</div>
+    <div><b>Named or pooled</b>A named player is paid where the data names one. The rest goes to that side's team pool, shared out later.</div>
+  </div>
+
+  <h2>The passage</h2>
+  <div class="bar"><input type="search" id="q" placeholder="Filter by player or team" aria-label="Filter by player or team"><span class="count" id="count"></span></div>
+  <div class="lgrid">
+    <div class="led" id="led"></div>
+    <aside class="pitchcard" aria-label="Where the action happened">
+      <h3>Where it happened</h3>
+      <p class="pcap" id="pcap"></p>
+      <svg id="pitch" role="img" aria-label="Pitch showing where the selected action started and finished"></svg>
+      <div class="pkey"><span><i style="background:var(--home)"></i><span id="k-home"></span></span>
+        <span><i style="background:var(--away)"></i><span id="k-away"></span></span>
+        <span id="k-dir"></span></div>
+    </aside>
+  </div>
+
+  <h2>Closing the books</h2>
+  <p class="col small mut" id="close-sub"></p>
+  <div id="teams"></div>
+  <p class="small mut" id="foot"></p>
+</div>
+
+<script>
+const DATA = /*__DATA__*/null;
+const S = {
+  afl:      {name: "Net Points", unit: "points", dp: 3, scoreline: "margin", acted: "acted", other: "other side"},
+  football: {name: "Net Goals",  unit: "goals",  dp: 3, scoreline: "goal difference", acted: "acted", other: "other side"}
+}[DATA.sport || "afl"];
+const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const f = v => (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(v).toFixed(S.dp);
+const c = v => v > 0 ? "pos" : v < 0 ? "neg" : "";
+const M = DATA.match;
+// R writes an empty value as {} -- only a real string or number is shown
+const val = x => (typeof x === "string" && x !== "") || typeof x === "number" ? x : null;
+
+document.title = S.name + " Walkthrough";
+document.getElementById("eyebrow").textContent = S.name + " · one passage, every payment";
+document.getElementById("h1").textContent = DATA.rows.length + " actions, up to " + (DATA.headline || "a goal");
+document.getElementById("score").innerHTML =
+  '<span class="t">' + esc(M.home) + '</span><span class="s">' + M.home_score + '–' + M.away_score +
+  '</span><span class="t">' + esc(M.away) + '</span>';
+document.getElementById("lede").textContent =
+  "Every action changes the expected score. " + S.name + " divides that change among the players who caused it, " +
+  "booking it once as credit to the side that gained and once as blame to the side that lost, so that each team's " +
+  "players add up to that team's own " + S.scoreline + ". Here is every action in one passage, with exactly what each paid.";
+
+function payHtml(list){
+  if (!list.length) return '<div class="none">nothing booked</div>';
+  let t = 0;
+  const rows = list.map(p => { t += p.value;
+    const nm = p.player ? '<b>' + esc(p.player) + '</b><span class="r">' + esc(p.role) + '</span>'
+                        : '<span class="pool">team pool</span>';
+    return '<div class="pay"><span>' + nm + '</span><span class="v ' + c(p.value) + '">' + f(p.value) + '</span></div>';
+  }).join("");
+  return rows + '<div class="sum"><span>booked</span><span>' + f(t) + '</span></div>';
+}
+
+function render(){
+  const q = document.getElementById("q").value.trim().toLowerCase();
+  const rows = DATA.rows.filter(r => !q || [r.player, r.team].concat(r.payments.map(p => p.player))
+    .some(s => (s || "").toLowerCase().includes(q)));
+  document.getElementById("count").textContent = rows.length + " of " + DATA.rows.length + " actions";
+  document.getElementById("led").innerHTML = rows.map(function(r){
+    const own = r.payments.filter(p => p.entry === "offence");
+    const oth = r.payments.filter(p => p.entry !== "offence");
+    const otherTeam = r.team === M.home ? M.away : M.home;
+    const tags = Object.entries(r.tags || {}).filter(kv => val(kv[1]) != null)
+      .map(kv => '<span class="tag">' + esc(kv[0]) + ' ' + esc(kv[1]) + '</span>').join("");
+    return '<div class="act' + (r.is_goal ? ' goal' : '') + (r.ord === CUR ? ' cur' : '') +
+      '" tabindex="0" data-ord="' + r.ord + '">' +
+      '<div class="line"><span class="ord">' + r.ord + '</span><span class="clk">' + esc(r.clock) + '</span>' +
+      '<span class="who">' + esc(r.player || "—") + ' <span>' + esc(r.action) + (val(r.result) ? ' (' + esc(r.result) + ')' : '') +
+      ', ' + esc(r.team) + '</span></span>' +
+      '<span class="chg ' + c(r.change) + '">' + f(r.change) + '<small>from ' + (typeof r.value_before !== "number" ? "–" : r.value_before.toFixed(S.dp)) + '</small></span>' +
+      (tags ? '<span class="tags">' + tags + '</span>' : '') + '</div>' +
+      '<div class="tacc"><div><div class="side">' + esc(r.team) + ' — ' + S.acted + '</div>' + payHtml(own) + '</div>' +
+      '<div><div class="side">' + esc(otherTeam) + ' — ' + S.other + '</div>' + payHtml(oth) + '</div></div></div>';
+  }).join("");
+}
+document.getElementById("q").oninput = render;
+
+// ---- the pitch ------------------------------------------------------------
+// Every row may carry `from` and `to` in the pitch frame DATA.pitch describes
+// (the home team always attacks to the right). The selected action is a dot
+// where it started and an arrow to where it finished; the ones before it fade
+// behind, so you can read the passage building up.
+const P = DATA.pitch || {kind: DATA.sport === "football" ? "football" : "afl", x: [0, 100], y: [0, 100]};
+const NS = "http://www.w3.org/2000/svg";
+let CUR = (DATA.rows.find(r => r.is_goal) || DATA.rows[DATA.rows.length - 1]).ord;
+const G = P.kind === "football" ? {w: 105, h: 68, pad: 3} : {w: 2 * P.x[1], h: 2 * P.y[1], pad: 4};
+const X = x => P.kind === "football" ? G.pad + x * 1.05 : G.pad + (x - P.x[0]);
+const Y = y => P.kind === "football" ? G.pad + (100 - y) * 0.68 : G.pad + (P.y[1] - y);
+const svg = document.getElementById("pitch");
+svg.setAttribute("viewBox", "0 0 " + (G.w + 2 * G.pad) + " " + (G.h + 2 * G.pad));
+function el(tag, at, parent){ const e = document.createElementNS(NS, tag);
+  for (const k in at) e.setAttribute(k, at[k]); (parent || svg).appendChild(e); return e; }
+const line = {fill: "none", stroke: "var(--mark)", "stroke-width": 0.5};
+if (P.kind === "football") {
+  const p = G.pad;
+  el("rect", {x: p, y: p, width: 105, height: 68, fill: "var(--turf)", stroke: "var(--mark)", "stroke-width": 0.6});
+  el("line", Object.assign({x1: p + 52.5, y1: p, x2: p + 52.5, y2: p + 68}, line));
+  el("circle", Object.assign({cx: p + 52.5, cy: p + 34, r: 9.15}, line));
+  [[0, 1], [105, -1]].forEach(function(e){
+    el("rect", Object.assign({x: e[1] > 0 ? p : p + 105 - 16.5, y: p + 13.85, width: 16.5, height: 40.3}, line));
+    el("rect", Object.assign({x: e[1] > 0 ? p : p + 105 - 5.5, y: p + 24.85, width: 5.5, height: 18.3}, line));
+  });
+} else {
+  const cx = G.pad + G.w / 2, cy = G.pad + G.h / 2;
+  el("ellipse", {cx: cx, cy: cy, rx: G.w / 2, ry: G.h / 2, fill: "var(--turf)", stroke: "var(--mark)", "stroke-width": 0.8});
+  // a 50m arc reaches the boundary where the oval has already narrowed, so
+  // clip it to the ground rather than let its ends run off the edge
+  el("ellipse", {cx: cx, cy: cy, rx: G.w / 2, ry: G.h / 2}, el("clipPath", {id: "oval"}));
+  el("rect", Object.assign({x: cx - 25, y: cy - 25, width: 50, height: 50}, line));
+  el("circle", Object.assign({cx: cx, cy: cy, r: 5}, line));
+  // 50m arcs, centred on each goal
+  [-1, 1].forEach(function(sd){ const gx = cx + sd * G.w / 2;
+    el("path", Object.assign({"clip-path": "url(#oval)", d: "M " + gx + " " + (cy - 50) + " A 50 50 0 0 " + (sd > 0 ? 0 : 1) + " " + gx + " " + (cy + 50)}, line)); });
+}
+el("defs", {}).innerHTML = ["home", "away"].map(t =>
+  '<marker id="ah-' + t + '" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">' +
+  '<path d="M0,0 L10,5 L0,10 z" fill="var(--' + t + ')"/></marker>').join("");
+const layer = el("g", {});
+const teamCol = t => t === M.home ? "var(--home)" : "var(--away)";
+
+function drawPitch(){
+  layer.innerHTML = "";
+  const i = DATA.rows.findIndex(r => r.ord === CUR);
+  DATA.rows.slice(0, i + 1).forEach(function(r, j){
+    if (!r.from) return;
+    const now = j === i, age = i - j;
+    const op = now ? 1 : Math.max(0.12, 0.55 - age * 0.06);
+    const col = teamCol(r.team);
+    if (r.to) el("line", {x1: X(r.from.x), y1: Y(r.from.y), x2: X(r.to.x), y2: Y(r.to.y), stroke: col,
+      "stroke-width": now ? 0.9 : 0.45, opacity: op, "marker-end": now ? "url(#ah-" + (r.team === M.home ? "home" : "away") + ")" : "", "stroke-linecap": "round"}, layer);
+    el("circle", {cx: X(r.from.x), cy: Y(r.from.y), r: now ? 1.9 : 1, fill: col, opacity: op,
+      stroke: now ? "var(--card)" : "none", "stroke-width": 0.5}, layer);
+  });
+  const r = DATA.rows[i];
+  document.getElementById("pcap").textContent = r ? (r.clock + " · " + (r.player || "—") + ", " + r.action +
+    (val(r.result) ? " (" + r.result + ")" : "") + (r.from ? "" : " · no position recorded")) : "";
+}
+document.getElementById("k-home").textContent = M.home;
+document.getElementById("k-away").textContent = M.away;
+document.getElementById("k-dir").textContent = "→ " + M.home + " attack";
+
+function select(ord){
+  CUR = ord;
+  document.querySelectorAll(".act.cur").forEach(e => e.classList.remove("cur"));
+  const e = document.querySelector('.act[data-ord="' + ord + '"]'); if (e) e.classList.add("cur");
+  drawPitch();
+}
+const led = document.getElementById("led");
+led.addEventListener("mouseover", function(ev){ const a = ev.target.closest(".act"); if (a) select(+a.dataset.ord); });
+led.addEventListener("focusin", function(ev){ const a = ev.target.closest(".act"); if (a) select(+a.dataset.ord); });
+led.addEventListener("click", function(ev){ const a = ev.target.closest(".act"); if (a) select(+a.dataset.ord); });
+render();
+drawPitch();
+
+document.getElementById("close-sub").textContent =
+  "The whole match, not just this passage: every player's final " + S.name.toLowerCase() + ". The anchor column is his " +
+  "share of the last step, which moves each team onto its real " + S.scoreline + ". Each team's column adds up to that.";
+const want = {}; want[M.home] = M.home_score - M.away_score; want[M.away] = M.away_score - M.home_score;
+document.getElementById("teams").innerHTML = [M.home, M.away].map(function(tm){
+  const ps = DATA.totals.filter(t => t.team === tm).sort((a, b) => b.net - a.net);
+  const tot = ps.reduce((s, p) => s + p.net, 0), anc = ps.reduce((s, p) => s + p.anchor, 0);
+  const ok = Math.abs(tot - want[tm]) < 0.0005 * (ps.length + 1);
+  return '<div class="scroll"><table><thead><tr><th>' + esc(tm) + '</th><th class="n">' + S.name + '</th><th class="n">of which anchor</th></tr></thead><tbody>' +
+    ps.map(p => '<tr><td>' + esc(p.player) + '</td><td class="n ' + c(p.net) + '">' + f(p.net) + '</td><td class="n">' + f(p.anchor) + '</td></tr>').join("") +
+    '<tr class="tot"><td>Team total</td><td class="n">' + f(tot) + '</td><td class="n">' + f(anc) + '</td></tr></tbody></table></div>' +
+    '<p class="check">' + (ok ? '✓ ' : '✗ ') + esc(tm) + ' add up to ' + f(tot) + ', its real ' + S.scoreline + ' is ' + f(want[tm]) + '</p>';
+}).join("");
+document.getElementById("foot").innerHTML = DATA.source || "";
+</script>

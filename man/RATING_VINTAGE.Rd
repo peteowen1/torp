@@ -202,5 +202,22 @@ moves (mean 0.352, max 5.882), so this needs a full-history rebuild.
 Preserve v12 with \code{data-raw/03-ratings/promote_rating_vintage.R}
 (PROMOTE_FROM=v12, PROMOTE_TO=v13) and move the manifest to canonical v13
 BEFORE these constants reach main.
+
+v14 (2026-09-23): every team-margin row now books both sides
+(\code{NP_BOOK_CONCEDING_SIDE}) and the defence's unnamed pool credit is
+shared half by defensive acts (\code{NP_POOL_DACTS_SHARE} 0 -> 0.5), panna's
+net goals rule. Booking alone moved nothing (9,978 player-games identical,
+anchor 41.9 -> 1.1 percent of value); the acts split is what moves ratings.
+
+\strong{The key forward / key defender gap: 3.465 -> 0.797 (2026), 3.141 ->
+0.547 (2025).} Key defenders gain about 1.5 a game, key forwards give up about
+1.2; season rank correlation 0.84. Year-to-year repeatability falls 0.732 ->
+0.636 overall but only 0.623 -> 0.607 within position: most of the old
+figure was position itself repeating. Pete's call: position should not decide
+who is above average (\code{data-raw/04-analysis/np_v14_check.R}). Every
+player-game moves, so this needs a full-history rebuild. Preserve v13 with
+\code{data-raw/03-ratings/promote_rating_vintage.R} (PROMOTE_FROM=v13,
+PROMOTE_TO=v14) and move the manifest to canonical v14 BEFORE these constants
+reach main.
 }
 \keyword{internal}

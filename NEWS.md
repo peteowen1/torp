@@ -1,3 +1,48 @@
+# torp 1.9.1
+
+## Rating vintage v14: the defence is paid on every row, and its pool credit follows defensive acts
+
+Two changes to `.np_team_margin()`, the step that makes each team's players add
+up to that team's own margin.
+
+**Every row now books both sides** (`NP_BOOK_CONCEDING_SIDE`). On 83.8% of 2026
+rows (302,960 of 361,414, mostly ordinary kicks, handballs and gathers) the
+ledger paid only the side with the ball, so what the defence conceded reached
+it only through the final reconciliation, as one lump by time on ground: 41.9%
+of all value. Those rows now charge the other side's team pool on the row
+itself, the same amount with the opposite sign, which is what panna's net
+goals ledger does on every action. On its own this moved no number (9,978
+player-games identical; the reconciliation fell to 1.1% of value), because the
+pool and the reconciliation were both shared by time on ground.
+
+**The defence's unnamed pool credit is shared half by defensive acts**
+(`NP_POOL_DACTS_SHARE` 0 -> 0.5): pool credit on the side without the ball is
+split half by time on ground and half by each player's share of tackles,
+intercepts and one-percenters. Blame, and credit on a side's own possession,
+stay on time on ground. Also panna's rule.
+
+Effect, per game: the key forward / key defender gap goes 3.465 -> 0.797 on
+2026 and 3.141 -> 0.547 on 2025; key defenders gain about 1.5, key forwards
+give up about 1.2; season rank correlation 0.84. Year-to-year repeatability
+(2025 -> 2026, 390 players) falls 0.732 -> 0.636 overall but only 0.623 ->
+0.607 within position -- most of the old figure was position itself repeating.
+`data-raw/04-analysis/np_v14_check.R`, `np_pool_dacts_ab.R`,
+`np_book_conceding_ab.R`, `np_anchor_anatomy.R`.
+
+Both constants are wired into `.rating_defining_constants()`. Also registers
+`NP_STOPPAGE_WIN_MIN_N` (torp#225) as non-defining: it only gates a sense check.
+
+## Net points pages: exact play-type split, shared templates
+
+`.np_team_margin()` now also returns the payment rows at their final value
+(`attr(, "np_team_margin_payments")`) and each row-side's pool
+(`attr(, "np_team_margin_pool_rows")`). Built on those, the play-type page's
+columns add up to net points exactly (worst gap 4e-15; it used to miss by up to
+0.23 because it read the payments before the rescale). The page and the
+first-goal walkthrough now render from `data-raw/04-analysis/templates/`, the
+same templates panna's net goals pages use, and both generators share one
+cached season build (`np_season_build.R`).
+
 # torp 1.9.0
 
 ## Stoppage win-rate sense check no longer fires on a live single-round sample (torp#225)

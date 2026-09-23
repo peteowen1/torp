@@ -7,19 +7,20 @@
 # a difficulty-terms cache written before torp#210, so every number on the page
 # came from a superseded model and only Pete's arithmetic caught it.
 #
-# So this computes EVERYTHING live. No cached CSV, no hand-entered figures.
+# So this computes everything from live code. The one cache, np_season_build.R,
+# is keyed on the code and constants that decide the ledger. No hand-entered figures.
 #
-# WHAT THE CATEGORIES ARE. build_net_points() returns eight named columns per
-# player-match that sum to net_points exactly. Three of them (the team pools and
-# the residual) are used verbatim. The other five are split further by play type
-# by reading the row-level payment ledger (return_payments = TRUE) and grouping
-# on its real `role` plus the play-by-play `description`.
+# WHAT THE CATEGORIES ARE. .np_team_margin() -- the step production runs --
+# gives every player-match three parts that sum to net_points exactly: `named`
+# (payments to him by name), `share` (his slice of the team pool) and `recon`
+# (his slice of the gap to the team's real margin). `named` is split by play
+# type from attr(, "np_team_margin_payments"), the same payment rows at their
+# FINAL value, grouped on `role` plus the play-by-play `description`.
 #
-# HONEST ABOUT THE GAP, as the page already was: the payment ledger is read one
-# step earlier than .np_team_margin()'s correction, which books its adjustment
-# into np_team only. So the categories sum to Net within a small tolerance
-# rather than exactly. That is measured and reported here rather than forced to
-# zero.
+# So the categories add up to Net EXACTLY (gated at 1e-9 below). Until
+# 2026-09-23 this read np_payments, the values from BEFORE the rescale, and
+# missed Net by up to 0.23 a game; that gap was also what inflated the old
+# "Team offence pool (np_team)" column to about -5 a game on every top player.
 #
 #   powershell.exe -Command 'Rscript "data-raw/04-analysis/build_np_categories_artifact.R"'
 suppressMessages({library(data.table); library(jsonlite); devtools::load_all(quiet = TRUE)})
@@ -29,24 +30,23 @@ say <- function(...) cat(..., "\n", sep = "")
 SEASON  <- 2026
 MIN_GMS <- 8
 
-pbp <- as.data.table(load_pbp(SEASON)); pbp[, match_id := as.character(match_id)]
-ch  <- as.data.table(load_chains(SEASON))
-ps  <- as.data.table(load_player_stats(SEASON, refresh = TRUE))
-res <- as.data.table(load_results(SEASON))
-tm  <- as.data.table(np_difficulty_terms_for_season(SEASON, pbp_data = pbp, chains = ch))
+# shared with np_first_goal_walkthrough.R and cached; see np_season_build.R
+source("data-raw/04-analysis/np_season_build.R")
+b <- np_season_build(SEASON)
+pbp <- b$pbp; ch <- b$ch; ps <- b$ps; res <- b$res; tm <- b$tm
 
 say("live constants: EPV_ENGINE ", EPV_ENGINE, " | RATING_VINTAGE ", RATING_VINTAGE,
     " | population ", EPV3_CONTEST_POPULATION,
     " | pool by ", NP_TEAM_MARGIN_POOL_BY,
     " | error blame ", NP_ERROR_BLAME_SHARE)
 
-np  <- build_net_points(pbp, ps, res, chains = ch, credit = "difficulty",
-                        stoppages = "allocate", difficulty_terms = tm,
-                        return_payments = TRUE)
-pay <- as.data.table(attr(np, "np_payments"))
-pay[, match_id := as.character(match_id)]
-fin <- as.data.table(torp:::.np_team_margin(np, pbp, ps, res))
-fin[, `:=`(match_id = as.character(match_id), player_id = as.character(player_id))]
+np  <- b$np
+fin <- torp:::.np_team_margin(np, pbp, ps, res)
+pay   <- as.data.table(attr(fin, "np_team_margin_payments"))
+parts <- as.data.table(attr(fin, "np_team_margin_parts"))
+fin <- as.data.table(fin)
+for (d in list(pay, parts, fin)) d[, `:=`(match_id = as.character(match_id),
+                                           player_id = as.character(player_id))]
 
 pg <- as.data.table(load_player_game_ratings(SEASON))
 pg[, `:=`(match_id = as.character(match_id), player_id = as.character(player_id))]
@@ -54,7 +54,7 @@ meta <- unique(pg[, .(match_id, player_id, position_group, tog)])
 
 # --- categories: role x play type --------------------------------------------
 desc <- unique(pbp[, .(match_id, display_order, description)])
-p <- merge(pay[!is.na(player_id) & doubled == FALSE], desc,
+p <- merge(pay, desc,
            by = c("match_id", "display_order"), all.x = TRUE)
 p[, player_id := as.character(player_id)]
 
@@ -76,12 +76,10 @@ lab <- function(role, d) {
     role == "ball_winner" & d %like% "Loose Ball|Hard Ball|Crumb", "Winning a loose/ground ball",
     role == "ball_winner",                            "Winning the ball off a disposal",
     role == "error_blame",                            "Charged for an error",
-    # No "pressure_back" branch on purpose. Those rows are booked with
-    # doubled = TRUE (epv_net_points.R:2230) because they sit on the blame side
-    # of a turnover that is already counted once from the other side, and the
-    # filter above keeps only doubled == FALSE. Pressure credit is real but it
-    # is not separable at this read point -- it reaches the player inside
-    # np_team, after .np_team_margin()'s correction.
+    # The blame side of a turnover sent back to the teammate who set it up
+    # (doubled = TRUE rows). Separable now that payments are read at their
+    # final value.
+    role == "pressure_back",                          "Blame passed back (turnover)",
     role == "stoppage_ruck" & d == "Centre Bounce",   "Ruck: centre bounce",
     role == "stoppage_ruck" & d == "Ball Up Call",    "Ruck: ball-up",
     role == "stoppage_ruck",                          "Ruck: boundary throw-in",
@@ -91,17 +89,15 @@ lab <- function(role, d) {
     default = "Other own act")
 }
 p[, cat := lab(role, description)]
-# to each player's OWN frame, so positive is good for everyone
-ha <- unique(pbp[!is.na(team) & !is.na(home_away), .(match_id, team, home_away)])
-p <- merge(p, ha, by = c("match_id", "team"), all.x = TRUE)
-p[, own := hm * fifelse(home_away == "Home", 1, -1)]
+# `paid` is already in the player's own frame (positive = good for him).
+unk <- p[is.na(description), .N]
+if (unk > 0) say("  ", unk, " payment rows have no play-by-play description (labelled 'Other own act')")
 
-cats <- p[, .(v = sum(own)), by = .(match_id, player_id, cat)]
+cats <- p[, .(v = sum(paid)), by = .(match_id, player_id, cat)]
 
-POOLS <- c(np_defensive = "Team pressure pool (np_defensive)",
-           np_team      = "Team offence pool (np_team)",
-           np_residual  = "Unexplained margin (np_residual)")
-pl <- melt(fin[, c("match_id", "player_id", names(POOLS)), with = FALSE],
+POOLS <- c(share = "Team pool share",
+           recon = "Anchor to the real margin")
+pl <- melt(parts[, c("match_id", "player_id", names(POOLS)), with = FALSE],
            id.vars = c("match_id", "player_id"), variable.name = "k", value.name = "v")
 pl[, cat := POOLS[as.character(k)]][, k := NULL]
 
@@ -112,10 +108,25 @@ g <- all_cats[, .(gms = uniqueN(match_id)), by = player_id][gms >= MIN_GMS]
 all_cats <- all_cats[player_id %in% g$player_id]
 
 per <- all_cats[, .(v = sum(v)), by = .(player_id, cat)]
-gms <- all_cats[, .(gms = uniqueN(match_id), tog = round(mean(tog, na.rm = TRUE), 1)),
+gms <- all_cats[, .(gms = uniqueN(match_id), tog = round(mean(tog, na.rm = TRUE), 3)),
                 by = player_id]
 per <- merge(per, gms, by = "player_id")
-per[, v := round(v / gms, 3)]
+per[, v := v / gms]
+
+# THE GATE, on unrounded values: categories must rebuild Net exactly.
+netv <- fin[player_id %in% g$player_id,
+            .(net = sum(net_points) / uniqueN(match_id)), by = player_id]
+.chk <- merge(per[, .(tot = sum(v)), by = player_id], netv, by = "player_id")
+.gap <- max(abs(.chk$tot - .chk$net))
+say("\n=== do the categories sum to Net? ===  worst |gap| ", signif(.gap, 3),
+    " over ", nrow(.chk), " players (unrounded)")
+if (!is.finite(.gap) || .gap > 1e-9) {
+  cli::cli_abort(c(
+    "Categories do not add up to Net Points (worst gap {signif(.gap, 3)}).",
+    "x" = "Something is double-counted, dropped, or labelled into the wrong bucket. The artifact is NOT written.",
+    "i" = "Worst offenders: {paste(utils::head(.chk[order(-abs(tot - net))]$player_id, 5), collapse = ', ')}."))
+}
+per[, v := round(v, 3)]
 
 w <- dcast(per, player_id + gms + tog ~ cat, value.var = "v", fill = 0)
 nm <- unique(pbp[!is.na(player_id), .(player_id = as.character(player_id), name = player_name)])
@@ -142,39 +153,13 @@ if (nrow(w) != n_before) {
     "x" = "A lookup table has more than one row for some player, so those players are duplicated in the artifact.",
     "i" = "Both lookups must be one row per {.field player_id} before this merge."))
 }
-netv <- fin[, .(net = round(sum(net_points) / uniqueN(match_id), 3)), by = player_id]
-w <- merge(w, netv, by = "player_id")
+w <- merge(w, netv[, .(player_id, net = round(net, 3))], by = "player_id")
 setorder(w, -net)
-
 CATS <- setdiff(names(w), c("player_id", "gms", "tog", "name", "team", "pos", "net"))
-w[, .chk := rowSums(.SD), .SDcols = CATS]
-w[, .gap := abs(.chk - net)]
-say("\n=== how close do the categories sum to Net? ===")
-say("  mean |gap| ", round(mean(w$.gap), 4), "   worst ", round(max(w$.gap), 4),
-    "   (Net itself runs about +/-8 a game)")
-say("  The gap exists because the payment ledger is read one step before")
-say("  .np_team_margin()'s correction, which books its adjustment into np_team")
-say("  only. Reported, not forced to zero.")
 
-# ...but it is GATED, not merely reported. This is the one check in the script
-# that can catch "the numbers are wrong", and until 2026-09-12 it only printed --
-# which is the same shape as the defect this whole file exists to prevent: a
-# published artifact nobody could tell had gone bad. The bound is the measured
-# baseline with about 3x headroom (2026, v11: mean 0.0329, worst 0.147), loose
-# enough that ordinary vintage-to-vintage movement passes and tight enough that
-# a duplicated player or a mis-labelled role cannot. Raise it only with a new
-# measured baseline in this comment.
-GAP_MEAN_MAX <- 0.10
-GAP_WORST_MAX <- 0.50
-if (mean(w$.gap) > GAP_MEAN_MAX || max(w$.gap) > GAP_WORST_MAX) {
-  cli::cli_abort(c(
-    "Categories do not reconcile with Net Points: mean |gap| {round(mean(w$.gap), 4)} (limit {GAP_MEAN_MAX}), worst {round(max(w$.gap), 4)} (limit {GAP_WORST_MAX}).",
-    "x" = "Something is being double-counted, dropped, or labelled into the wrong bucket. The artifact is NOT written.",
-    "i" = "Worst offenders: {paste(utils::head(w[order(-.gap)]$player_id, 5), collapse = ', ')}."))
-}
-w[, c(".chk", ".gap") := NULL]
 
 out <- list(
+  sport = "afl",
   season = SEASON, n = nrow(w), min_games = MIN_GMS,
   vintage = RATING_VINTAGE, engine = EPV_ENGINE,
   population = EPV3_CONTEST_POPULATION, pool_by = NP_TEAM_MARGIN_POOL_BY,
@@ -192,11 +177,11 @@ out <- list(
       "Receiving (own act)" = c("Receiving a kick","Receiving a handball"),
       "Contests, turnovers & errors" = c("Winning a contest (mark/spoil)",
         "Winning a loose/ground ball","Winning the ball off a disposal",
-        "Charged for an error"),
+        "Charged for an error", "Blame passed back (turnover)"),
       "Stoppages" = c("Ruck: centre bounce","Ruck: ball-up","Ruck: boundary throw-in",
         "First possession: centre bounce","First possession: ball-up",
         "First possession: boundary throw-in"),
-      "Team pools & residual" = unname(POOLS))
+      "Team pool & anchor" = unname(POOLS))
     fam <- lapply(fam, function(m) intersect(m, CATS))
     missing <- setdiff(CATS, unlist(fam))
     if (length(missing)) {

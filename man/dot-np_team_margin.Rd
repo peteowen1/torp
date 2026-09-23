@@ -4,7 +4,14 @@
 \alias{.np_team_margin}
 \title{Re-allocate so each team's players sum to that team's OWN margin}
 \usage{
-.np_team_margin(np, pbp_data, player_stats, res)
+.np_team_margin(
+  np,
+  pbp_data,
+  player_stats,
+  res,
+  book_conceding = NP_BOOK_CONCEDING_SIDE,
+  dacts_share = NP_POOL_DACTS_SHARE
+)
 }
 \arguments{
 \item{np}{\code{build_net_points()} output carrying the \code{np_payments} attribute.}

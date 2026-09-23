@@ -100,6 +100,12 @@
     NP_TEAM_MARGIN_CONVENTION = NP_TEAM_MARGIN_CONVENTION,
     NP_TEAM_MARGIN_NAMED_SHARE = NP_TEAM_MARGIN_NAMED_SHARE,
     NP_TEAM_MARGIN_POOL_BY = NP_TEAM_MARGIN_POOL_BY,
+    # v14: every row books both sides, and the defence's unnamed pool credit is
+    # shared half by defensive acts. Booking alone moves nothing while the pool
+    # is split by time on ground, but it creates the defensive-credit rows the
+    # acts split pays out, so together they move every player-game.
+    NP_BOOK_CONCEDING_SIDE = NP_BOOK_CONCEDING_SIDE,
+    NP_POOL_DACTS_SHARE = NP_POOL_DACTS_SHARE,
     # Pete's four rules from the 2026-09-09 scenarios review. Each moves
     # published numbers: the blame pool re-splits every lost possession, the
     # siren rule moves ~5 points a match off named players, the uncontested
