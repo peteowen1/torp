@@ -1881,7 +1881,7 @@
 #'   explainer reads it. Pool rows carry what was pooled, not who got it.
 #' @param chains Raw chains for the same matches, or `NULL` (the default). With
 #'   chains the allocation is **identical** -- every point still comes from a
-#'   PBP row, and this is asserted by `data-raw/04-analysis/np_chains_ledger_equivalence.R`
+#'   PBP row, and this is asserted by `data-raw/04-analysis/archive/net-points/np_chains_ledger_equivalence.R`
 #'   -- but each disposal in the ledger also carries what it resolved into
 #'   (a spoil, a contested mark, a goal), which PBP drops. Later credit rules
 #'   need that; nothing in this function uses it yet.
