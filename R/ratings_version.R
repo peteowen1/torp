@@ -318,20 +318,54 @@
 #'   outgoing vintage), so the entry carries an explicit gap rather than a
 #'   definition the data was never built under. See
 #'   \code{.build_rating_vintage_entry()}.
+#' @param manifest The manifest to merge into. Defaults to the published one.
+#'   Pass a list only to rebuild a lost manifest, together with
+#'   \code{allow_create = TRUE}.
+#' @param allow_create If FALSE (default), abort when no manifest can be read
+#'   rather than starting a new one. A new one knows only this vintage and
+#'   says canonical is \code{"v1"}, so starting one because a read failed
+#'   would overwrite the whole vintage history.
 #' @return Invisibly, the manifest that was uploaded.
 #' @keywords internal
 publish_ratings_manifest <- function(n_rows, version = RATING_VINTAGE,
                                      file = NULL, set_canonical = FALSE,
-                                     defining_constants = .rating_defining_constants()) {
+                                     defining_constants = .rating_defining_constants(),
+                                     manifest = read_ratings_manifest(),
+                                     allow_create = FALSE) {
+  if (is.null(manifest) && !isTRUE(allow_create)) {
+    cli::cli_abort(c(
+      "Could not read ratings_manifest.json, so it was not rewritten.",
+      "x" = "Starting a new one would replace every vintage's record with this one's.",
+      "i" = "If the manifest is really gone, rebuild it deliberately with {.code allow_create = TRUE}."))
+  }
   entry <- .build_rating_vintage_entry(n_rows, version = version, file = file,
                                        defining_constants = defining_constants)
-  manifest <- .merge_rating_manifest(read_ratings_manifest(), version, entry)
+  manifest <- .merge_rating_manifest(manifest, version, entry)
   if (isTRUE(set_canonical)) manifest$canonical <- version
 
   tf <- file.path(tempdir(), "ratings_manifest.json")
   writeLines(jsonlite::toJSON(manifest, auto_unbox = TRUE, pretty = TRUE, null = "null"), tf)
-  piggyback::pb_upload(tf, repo = get_torp_data_repo(), tag = "ratings-data",
-                       overwrite = TRUE)
+  repo <- get_torp_data_repo()
+  # pb_upload(overwrite = TRUE) DELETES the old asset before uploading the new
+  # one, and reports a failed upload as a warning. On 2026-09-17 that left the
+  # release with no manifest at all while the run reported success, and every
+  # ratings run for the next six days aborted at check_vintage_alignment().
+  # So confirm the asset is there afterwards, and fail loudly if it is not.
+  piggyback::pb_upload(tf, repo = repo, tag = "ratings-data", overwrite = TRUE)
+  present <- FALSE
+  for (i in 1:5) {
+    assets <- tryCatch(piggyback::pb_list(repo = repo, tag = "ratings-data"),
+                       error = function(e) NULL)
+    present <- !is.null(assets) && "ratings_manifest.json" %in% assets$file_name
+    if (present) break
+    Sys.sleep(6)
+  }
+  if (!present) {
+    cli::cli_abort(c(
+      "ratings_manifest.json is not on the ratings-data release after uploading it.",
+      "x" = "Every later ratings run will refuse to write until it is restored.",
+      "i" = "The manifest that should be there was written to {.file {tf}}."))
+  }
   cli::cli_alert_success(
     "Published ratings_manifest.json (vintage {.val {version}}, canonical {.val {manifest$canonical}})"
   )

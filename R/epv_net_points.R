@@ -2589,6 +2589,14 @@ np_difficulty_terms_for_season <- function(season, pbp_data = NULL, chains = NUL
   if (isTRUE(book_conceding)) {
     rv <- unique(pay[, .(match_id, display_order, v)])
     sides <- unique(ha[!is.na(team) & !is.na(home_away)])
+    # Two sides per match, or a match's missing side is never booked -- and the
+    # reconciliation would hide it, since it tops each team up to its margin.
+    one_sided <- sides[, .N, by = match_id][N != 2]
+    if (nrow(one_sided)) {
+      cli::cli_warn(c(
+        "{nrow(one_sided)} match{?es} {?has/have} {.emph not} exactly two sides in the play-by-play, so rows there are booked to one side only.",
+        "i" = "First few: {.val {utils::head(one_sided$match_id, 5)}}."))
+    }
     both <- merge(rv, sides, by = "match_id", allow.cartesian = TRUE)
     both[, target := data.table::fifelse((home_away == "Home") == (v > 0), abs(v), -abs(v))]
     miss <- both[!prow, on = c("match_id", "display_order", "team")]
@@ -2606,7 +2614,14 @@ np_difficulty_terms_for_season <- function(season, pbp_data = NULL, chains = NUL
   # all blame, and credit on a side's own possession -- by `w` as before. The
   # pool TOTAL is unchanged, so the invariant below still reads `pool`.
   act <- unique(p[!is.na(team), .(match_id = as.character(match_id), display_order,
-                                  acting = team)], by = c("match_id", "display_order"))
+                                  acting = team)])
+  dup <- act[, .N, by = .(match_id, display_order)][N > 1]
+  if (nrow(dup)) {
+    cli::cli_warn(c(
+      "{nrow(dup)} play-by-play row{?s} carry two teams; the first is taken as the side with the ball.",
+      "i" = "First: match {.val {dup$match_id[1]}}, row {.val {dup$display_order[1]}}."))
+    act <- unique(act, by = c("match_id", "display_order"))
+  }
   prow <- merge(prow, act, by = c("match_id", "display_order"), all.x = TRUE)
   prow[, dcred := !is.na(acting) & team != acting & pool_row > 0]
   pool <- prow[, .(pool = sum(pool_row), pool_d = sum(pool_row[dcred])), by = .(match_id, team)]
@@ -2667,6 +2682,14 @@ np_difficulty_terms_for_season <- function(season, pbp_data = NULL, chains = NUL
   # defensive acts (tackles + intercepts + one-percenters), panna's rule. A side
   # with no defensive acts recorded falls back to `w`. Everything else by `w`.
   k <- dacts_share
+  # A side with credit to share but no defensive acts recorded falls back to
+  # time on ground. Legitimate for a quiet side; a stats gap looks identical,
+  # so say how often it happens rather than doing it silently.
+  nd <- ros[, .(credit = pool_d[1], acts = sum(dacts)), by = .(match_id, team)][credit > 0 & acts == 0]
+  if (k > 0 && nrow(nd)) {
+    cli::cli_alert_warning(
+      "{nrow(nd)} team-match{?es} with defensive pool credit have no defensive acts recorded; that credit is shared by time on ground.")
+  }
   ros[, share := {
     ww <- w / sum(w)
     wd <- if (sum(dacts) > 0) dacts / sum(dacts) else ww

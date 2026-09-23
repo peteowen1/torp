@@ -12,9 +12,13 @@ tpl  <- paste(readLines(a[1], encoding = "UTF-8", warn = FALSE), collapse = "\n"
 json <- paste(readLines(a[2], encoding = "UTF-8", warn = FALSE), collapse = "\n")
 invisible(jsonlite::parse_json(json))            # fail here, not in a browser
 json <- gsub("</", "<\\/", json, fixed = TRUE) # cannot close the <script>
-stopifnot(grepl("/*__DATA__*/null", tpl, fixed = TRUE))
+# exactly one data slot and one <title>, or sub() would leave a second slot
+# unfilled / keep the template's title, and ship a wrong page without error
+count <- function(pat, x, fixed = FALSE) lengths(regmatches(x, gregexpr(pat, x, fixed = fixed)))
+stopifnot(count("/*__DATA__*/null", tpl, fixed = TRUE) == 1, count("<title>[^<]*</title>", tpl) == 1)
 out <- sub("/*__DATA__*/null", json, tpl, fixed = TRUE)
 # the gallery names the page from <title>, so each sport's page gets its own
 out <- sub("<title>[^<]*</title>", paste0("<title>", a[4], "</title>"), out)
+stopifnot(grepl(paste0("<title>", a[4], "</title>"), out, fixed = TRUE))
 writeLines(out, a[3], useBytes = TRUE)
 cat("wrote", a[3], "(", round(file.size(a[3]) / 1024), "KB )\n")
