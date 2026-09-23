@@ -1,3 +1,24 @@
+# torp 1.9.2
+
+## Predictions no longer blocked when the win model contradicts the margin model
+
+Every prediction for 2026 R29 was refused because Fremantle v Brisbane had a
+predicted margin of -10.4 (Brisbane by 10) and a Fremantle win probability of
+0.540. The win model is a separate GAM with a total-score x margin interaction:
+at this match's expected total (189, above the 99th percentile of training) the
+interaction flattens the margin's effect and a small team-season effect tips a
+10-point underdog past 50%. Capping the total at the training range was not
+enough (0.515).
+
+`.reconcile_win_with_margin()` now replaces the win probability with
+`pnorm(margin / sigma)` on contradicting rows only (sigma = the margin model's
+residual SD this run, 33.1 points), and says so. R29 becomes Brisbane 0.623 /
+Fremantle 0.377; one completed match also changes (2 of 2,334 completed rows
+contradict). A win model that follows the margin by construction is the proper
+fix and is queued as its own model change.
+`data-raw/05-validation/diagnose_margin_win_disagreement.R` splits the win
+model into its terms for any match.
+
 # torp 1.9.1
 
 ## Rating vintage v14: the defence is paid on every row, and its pool credit follows defensive acts

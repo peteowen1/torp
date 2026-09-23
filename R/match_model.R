@@ -1002,6 +1002,7 @@ build_prediction_state <- function(week = NULL, weeks = NULL, season = NULL,
   # is absent -- see match_calibration.R.
   margin_calib <- load_match_margin_calibration()
   team_mdl_df$pred_score_diff <- apply_match_margin_calibration(team_mdl_df$pred_score_diff, margin_calib)
+  team_mdl_df <- .reconcile_win_with_margin(team_mdl_df)
 
   # Format Predictions ----
   cli::cli_h2("Generating predictions for {length(target_weeks)} week{?s}")
@@ -1678,4 +1679,50 @@ add_weather_to_preds <- function(preds, raw_cols = FALSE) {
     cli::cli_warn("Could not parse any start_time values. Example: {x[!is.na(x)][1]}")
   }
   parsed
+}
+
+
+#' Derive win probability from the margin where the two models contradict
+#'
+#' The win model is a separate GAM with a total-score x margin interaction and
+#' team-season effects, so it is not bound to agree with the margin model. At an
+#' unusually high expected total the interaction flattens the margin's effect
+#' and a small team effect can tip a clear underdog past 50%: 2026 R29,
+#' Fremantle v Brisbane, margin -10.4 with Fremantle win 0.540 at an expected
+#' total of 189 (above the 99th percentile of training). The validation in
+#' build_prediction_state() rightly refuses to publish a contradiction, which
+#' blocked every prediction that week.
+#'
+#' For those rows only -- margin more than 1 point from zero, win more than 2
+#' points from 50%, opposite directions: the validation's own test -- the win
+#' probability is replaced with `pnorm(margin / sigma)`, sigma being the margin
+#' model's residual SD on completed matches this run. Everything else is left
+#' exactly as the win model gave it. Fitted on 2026: 2 of 2,334 completed rows
+#' contradict. A win model that follows the margin by construction is the real
+#' fix and a model change in its own right (queued, torpverse NEXT-STEPS).
+#'
+#' @param df Team-level model frame with `pred_score_diff`, `pred_win`,
+#'   `score_diff`.
+#' @return `df` with `pred_win` replaced on contradicting rows, and
+#'   `pred_win_from_margin` flagging them.
+#' @keywords internal
+.reconcile_win_with_margin <- function(df) {
+  df$pred_win_from_margin <- FALSE
+  bad <- abs(df$pred_score_diff) > 1 & abs(df$pred_win - 0.5) > 0.02 &
+    sign(df$pred_score_diff) != sign(df$pred_win - 0.5)
+  bad <- bad %in% TRUE
+  if (!any(bad)) return(df)
+  done <- is.finite(df$score_diff) & is.finite(df$pred_score_diff)
+  sigma <- stats::sd(df$score_diff[done] - df$pred_score_diff[done])
+  if (!is.finite(sigma) || sigma <= 0 || sum(done) < 100) {
+    cli::cli_warn("Cannot size the margin model's spread ({sum(done)} completed rows); leaving {sum(bad)} contradicting win probabilit{?y/ies} for the validation to catch.")
+    return(df)
+  }
+  df$pred_win[bad] <- stats::pnorm(df$pred_score_diff[bad] / sigma)
+  df$pred_win_from_margin[bad] <- TRUE
+  who <- if ("team_name.x" %in% names(df)) as.character(df$team_name.x[bad]) else character()
+  cli::cli_warn(c(
+    "Win probability derived from the margin for {sum(bad)} team-row{?s}: the win model contradicted the margin model.",
+    "i" = "sigma {round(sigma, 1)} points; rows: {paste(utils::head(who, 6), collapse = ', ')}."))
+  df
 }
