@@ -1,0 +1,475 @@
+<title>Net Ledger Breakdown</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+:root{
+  --ground:#F2F4F1; --surface:#FFFFFF; --surface-2:#EAEEE9; --line:#D6DCD5; --line-soft:#E6EAE4;
+  --ink:#141A17; --ink-2:#4A544E; --ink-3:#78827B;
+  --gain:#1F6F5C; --loss:#A8452F; --accent:#3D4A7A; --accent-soft:#E7EAF3;
+  --shadow:0 1px 2px rgba(20,26,23,.06),0 8px 24px rgba(20,26,23,.06);
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --ground:#111412; --surface:#1A1E1B; --surface-2:#232823; --line:#333A34; --line-soft:#272D28;
+  --ink:#E9EDE7; --ink-2:#A8B2A9; --ink-3:#7E887F;
+  --gain:#4FBF9E; --loss:#E08A6F; --accent:#8FA0D8; --accent-soft:#232941;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.35);
+}}
+:root[data-theme="dark"]{
+  --ground:#111412; --surface:#1A1E1B; --surface-2:#232823; --line:#333A34; --line-soft:#272D28;
+  --ink:#E9EDE7; --ink-2:#A8B2A9; --ink-3:#7E887F;
+  --gain:#4FBF9E; --loss:#E08A6F; --accent:#8FA0D8; --accent-soft:#232941;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.35);
+}
+*{box-sizing:border-box}
+body{background:var(--ground);color:var(--ink);
+  font:400 15px/1.55 "IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  padding:0 0 64px}
+.wrap{max-width:1400px;margin:0 auto;padding:0 24px}
+header{padding:36px 0 18px;border-bottom:1px solid var(--line)}
+h1{font-family:"Fraunces",Georgia,serif;font-weight:600;font-size:clamp(30px,4.2vw,44px);
+  line-height:1.05;margin:0 0 12px;letter-spacing:-.015em;text-wrap:balance;max-width:20ch}
+.lede{color:var(--ink-2);max-width:70ch;margin:0 0 18px;font-size:16px}
+.facts{display:flex;flex-wrap:wrap;gap:0;border:1px solid var(--line);border-radius:3px;
+  background:var(--surface);overflow:hidden}
+.fact{padding:11px 18px;border-right:1px solid var(--line-soft);flex:1 1 auto;min-width:126px}
+.fact:last-child{border-right:0}
+.fact dt{font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-3);margin:0 0 3px}
+.fact dd{margin:0;font-family:"IBM Plex Mono",monospace;font-size:19px;font-variant-numeric:tabular-nums}
+h2{font-family:"Fraunces",Georgia,serif;font-weight:600;font-size:21px;margin:34px 0 4px;letter-spacing:-.01em}
+.sub{color:var(--ink-2);font-size:13.5px;margin:0 0 14px;max-width:78ch}
+.legend{display:grid;grid-template-columns:repeat(auto-fill,minmax(232px,1fr));gap:1px;
+  background:var(--line-soft);border:1px solid var(--line);border-radius:3px;overflow:hidden}
+.lg{background:var(--surface);padding:9px 12px;display:flex;align-items:baseline;gap:9px}
+.sw{width:9px;height:9px;border-radius:2px;flex:none;transform:translateY(-1px)}
+.lg .nm{font-size:12.5px;flex:1;line-height:1.3}
+.lg .mn{font-family:"IBM Plex Mono",monospace;font-size:12px;font-variant-numeric:tabular-nums;color:var(--ink-2)}
+.fam{grid-column:1/-1;background:var(--surface-2);padding:6px 12px;font-size:10.5px;
+  letter-spacing:.09em;text-transform:uppercase;color:var(--ink-3)}
+.bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:16px 0 12px}
+input[type=search],select{font:inherit;font-size:13.5px;padding:7px 11px;border:1px solid var(--line);
+  border-radius:3px;background:var(--surface);color:var(--ink)}
+input[type=search]{min-width:210px}
+.seg{display:flex;border:1px solid var(--line);border-radius:3px;overflow:hidden;background:var(--surface)}
+.seg button{font:inherit;font-size:13px;padding:7px 14px;border:0;background:transparent;color:var(--ink-2);
+  cursor:pointer;border-right:1px solid var(--line-soft)}
+.seg button:last-child{border-right:0}
+.seg button[aria-pressed=true]{background:var(--accent);color:#fff}
+#detail-toggle{font:inherit;font-size:13px;padding:7px 14px;border:1px solid var(--line);
+  border-radius:3px;background:var(--surface);color:var(--ink-2);cursor:pointer}
+#detail-toggle:hover{color:var(--ink)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.count{color:var(--ink-3);font-size:12.5px;margin-left:auto;font-variant-numeric:tabular-nums}
+.scroll{overflow-x:auto;border:1px solid var(--line);border-radius:3px;background:var(--surface)}
+.topscroll{overflow-x:auto;overflow-y:hidden;height:14px;margin-bottom:2px}
+.topscroll div{height:1px}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{padding:7px 8px;text-align:right;white-space:nowrap;border-bottom:1px solid var(--line-soft)}
+thead tr:not(.famrow) th{position:sticky;top:27px;z-index:3;background:var(--surface-2);font-weight:600;font-size:10px;
+  letter-spacing:.05em;text-transform:uppercase;color:var(--ink-2);cursor:pointer;
+  vertical-align:bottom;border-bottom:1px solid var(--line)}
+thead th .h{display:block;max-width:70px;white-space:normal;line-height:1.15;margin-left:auto}
+th.l,td.l{text-align:left}
+td.nm{position:sticky;left:0;z-index:2;background:var(--surface);font-weight:500}
+thead th.nm{z-index:4;background:var(--surface-2)}
+tr.famrow th{position:sticky;top:0;z-index:4;height:22px;padding:4px 8px;font-size:9.5px;
+  letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);font-weight:600;
+  border-bottom:1px solid var(--line-soft);cursor:default;background:var(--surface-2)}
+tr.famrow th.famhead{text-align:left;color:var(--ink-2);border-left:2px solid var(--line)}
+th.fam-start,td.fam-start{border-left:2px solid var(--line)}
+tbody tr:hover td{background:var(--surface-2)}
+tbody tr:hover td.nm{background:var(--surface-2)}
+tbody tr.sel td{background:var(--accent-soft)}
+tbody tr.sel td.nm{background:var(--accent-soft)}
+tbody tr{cursor:pointer}
+tr.avg td{background:var(--surface-2);border-bottom:2px solid var(--line);
+  font-weight:500;cursor:default;color:var(--ink-2)}
+tr.avg td.nm{background:var(--surface-2)}
+tr.avg:hover td{background:var(--surface-2)}
+tr.avg .tag{font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);
+  display:block;font-weight:600}
+.num{font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums}
+.pos{color:var(--gain)}.neg{color:var(--loss)}.zero{color:var(--ink-3)}
+.net{font-weight:500;border-left:1px solid var(--line);border-right:1px solid var(--line)}
+.meta{color:var(--ink-3);font-size:11.5px}
+.comp{width:150px;min-width:150px;padding:0 9px}
+.cb{display:flex;height:15px;align-items:stretch;position:relative}
+.cb .side{display:flex;height:100%;overflow:hidden}
+.cb .l{justify-content:flex-end;flex-direction:row-reverse}
+.cb i{display:block;height:100%}
+.axis{width:1px;background:var(--ink-3);flex:none}
+.detail{border:1px solid var(--line);border-radius:3px;background:var(--surface);
+  padding:18px 20px;box-shadow:var(--shadow);margin-bottom:14px}
+.dh{display:flex;flex-wrap:wrap;gap:16px;align-items:baseline;border-bottom:1px solid var(--line-soft);
+  padding-bottom:11px;margin-bottom:12px}
+.dh h3{font-family:"Fraunces",Georgia,serif;font-weight:600;font-size:23px;margin:0;letter-spacing:-.01em}
+.dh .t{color:var(--ink-2);font-size:14px}
+.dh .n{margin-left:auto;font-family:"IBM Plex Mono",monospace;font-size:23px;font-variant-numeric:tabular-nums}
+.rows{display:grid;gap:4px}
+.rowhead{display:grid;grid-template-columns:212px 1fr 66px 74px 84px;gap:12px;font-size:10.5px;
+  letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);padding-bottom:2px}
+.rowhead span:nth-child(3),.rowhead span:nth-child(4),.rowhead span:nth-child(5){text-align:right}
+.row{display:grid;grid-template-columns:212px 1fr 66px 74px 84px;gap:12px;align-items:center;font-size:13px}
+.row .lab{display:flex;align-items:center;gap:8px;color:var(--ink-2);line-height:1.25}
+.track{position:relative;height:17px;background:var(--surface-2);border-radius:2px}
+.track .mid{position:absolute;left:50%;top:0;bottom:0;width:1px;background:var(--line)}
+.track i{position:absolute;top:2px;bottom:2px;border-radius:1px}
+.track u{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--ink);opacity:.55;
+  border-radius:1px}
+.row .v{text-align:right;font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums}
+.row .d{text-align:right;font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums;font-size:12px}
+.row .r{text-align:right;font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums;
+  font-size:12px;color:var(--ink-3)}
+.row.total{border-top:1px solid var(--line);margin-top:4px;padding-top:6px}
+.row.total .r{color:var(--ink);font-weight:600}
+.row.total .v{font-weight:600}
+.key{font-size:12px;color:var(--ink-3);margin-top:10px;display:flex;align-items:center;gap:7px}
+.key u{display:inline-block;width:2px;height:12px;background:var(--ink);opacity:.55}
+.note{margin-top:28px;border-left:2px solid var(--accent);padding:2px 0 2px 16px;color:var(--ink-2);
+  font-size:13.5px;max-width:78ch}
+.note b{color:var(--ink);font-weight:600}
+.note p{margin:0 0 10px}.note p:last-child{margin:0}
+footer{margin-top:40px;padding-top:16px;border-top:1px solid var(--line);color:var(--ink-3);font-size:12px}
+.refreshed{font-size:11.5px;color:var(--ink-3);font-family:"IBM Plex Mono",monospace;margin:0 0 14px}
+@media (max-width:820px){.row,.rowhead{grid-template-columns:128px 1fr 56px 62px 70px}.comp{display:none}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+
+<div class="wrap">
+<header>
+  <h1 id="h1"></h1>
+  <p class="lede" id="lede"></p>
+  <p class="refreshed" id="refreshed"></p>
+  <dl class="facts">
+    <div class="fact"><dt>Season</dt><dd id="f-season"></dd></div>
+    <div class="fact"><dt>Players</dt><dd id="f-n"></dd></div>
+    <div class="fact"><dt>Categories</dt><dd id="f-cats"></dd></div>
+    <div class="fact"><dt>Unit</dt><dd id="f-unit"></dd></div>
+    <div class="fact"><dt>Minimum</dt><dd id="f-min"></dd></div>
+  </dl>
+</header>
+
+<h2>The categories</h2>
+<p class="sub" id="sub-legend"></p>
+<div class="legend" id="legend"></div>
+
+<h2>Every player, every category</h2>
+<p class="sub" id="sub-table"></p>
+<div class="bar">
+  <input type="search" id="q" placeholder="Search player or team" aria-label="Search player or team">
+  <select id="pos" aria-label="Filter by position"><option value="">All positions</option></select>
+  <div class="seg" role="group" aria-label="Which players">
+    <button data-view="top" aria-pressed="true">Top 30</button>
+    <button data-view="bottom" aria-pressed="false">Bottom 30</button>
+    <button data-view="all" aria-pressed="false">All</button>
+  </div>
+  <button id="detail-toggle" aria-pressed="true" style="margin-left:auto">Hide player chart</button>
+  <span class="count" id="count"></span>
+</div>
+
+<div class="detail" id="detail"></div>
+<div class="topscroll" id="topscroll" aria-hidden="true"><div></div></div>
+<div class="scroll" id="tblscroll"><table id="tbl"><thead></thead><tbody></tbody></table></div>
+
+<div class="note" id="note"></div>
+
+<footer id="foot"></footer>
+</div>
+
+<script>
+const DATA = /*__DATA__*/null;
+const FAM = DATA.families.map(f => [f.name, f.members]);
+
+// Everything that differs between the sports lives in this one block. The
+// arithmetic, layout and checks below are shared, so a fix to either page is
+// a fix to both (vault/plans/NET-LEDGER-PARITY.md).
+const SPORT = {
+  afl: {
+    title: "Where Net Points Come From", total: "Net points", unit: "pts / game", unitShort: "pts/game",
+    weight: "time on ground", weightShort: "TOG", weightKey: "tog",
+    weightFmt: p => Math.round((p.tog || 0) * 100) + "%",
+    w: p => p.tog, scoreline: "margin", dp: 2,
+    source: "torp <code>build_net_points()</code> then <code>.np_team_margin()</code>, EPV engine " +
+      (DATA.engine || "") + ", rating vintage " + (DATA.vintage || "") +
+      ". Generated by <code>torp/data-raw/04-analysis/build_np_categories_artifact.R</code>."
+  },
+  football: {
+    title: "Where Net Goals Come From", total: "Net goals", unit: "goals / game", unitShort: "goals/game",
+    weight: "minutes played", weightShort: "Mins", weightKey: "mins",
+    weightFmt: p => String(Math.round(p.mins || 0)),
+    w: p => p.mins, scoreline: "goal difference", dp: 3,
+    source: "panna <code>ng_spread_pools()</code> then <code>ng_reconcile_margin()</code>, " +
+      (DATA.league || "") + " " + (DATA.season || "") +
+      ". Generated by <code>panna/data-raw/epv/net-goals/build_net_goals_artifacts.R</code>."
+  }
+}[DATA.sport || "afl"];
+
+document.title = SPORT.title;
+document.getElementById("h1").textContent = SPORT.title;
+document.getElementById("lede").innerHTML =
+  "Every player's " + SPORT.total.toLowerCase() + " for " + DATA.season + ", split into the things the ledger " +
+  "actually paid him for. Each team's players add up to that team's own " + SPORT.scoreline + ", and each " +
+  "player's columns add up to his total &mdash; exactly, not approximately. Click a player to watch them add up.";
+document.getElementById("f-season").textContent = DATA.season;
+document.getElementById("f-unit").textContent = SPORT.unit;
+document.getElementById("sub-legend").textContent =
+  "Colour follows the family. The figure is the league average per game, weighted by " + SPORT.weight +
+  ", so you can see which play types pay everyone about the same and which separate players.";
+document.getElementById("sub-table").textContent =
+  "Click a player to load his breakdown into the panel below. Click a column head to sort. The first row is the " +
+  SPORT.weight + "-weighted average for whoever is currently filtered.";
+document.getElementById("note").innerHTML =
+  "<p><b>How the columns add up.</b> Every action changes the expected score. That change is booked twice: once as " +
+  "credit to the side that gained it and once as blame to the side that lost it. Within a side it goes to the players " +
+  "the data names (the play-type columns), and whatever nobody is named for goes to a <b>team pool</b>, shared by " +
+  SPORT.weight + ".</p>" +
+  "<p><b>The anchor.</b> Adding up those payments gets each team close to, but not exactly onto, its real " +
+  SPORT.scoreline + ". The last step spreads each team's remaining gap across its players by " + SPORT.weight +
+  ". It is its own column so you can see how big it is.</p>" +
+  "<p><b>Checked, not assumed.</b> This data is only written if every player-match's columns add up to its " +
+  SPORT.total.toLowerCase() + " (worst gap under one billionth). Figures shown are rounded to three decimals.</p>";
+document.getElementById("foot").innerHTML = SPORT.source + (DATA.generated_utc ? " Data built " + DATA.generated_utc + "." : "");
+// Columns in FAMILY order: the family header row spans consecutive columns,
+// so the columns must be grouped the same way. DATA.methods is alphabetical.
+const ORDER = FAM.flatMap(f => f[1]).concat(DATA.methods.filter(k => !FAM.some(f => f[1].includes(k))));
+const P = DATA.players;
+
+// A fixed palette per family, varied in lightness within it -- avoids threading
+// 25 new CSS custom properties through both theme blocks for a page whose
+// category set is expected to change as the taxonomy gets figured out.
+const HUES = [[61,90,146],[45,80,145],[200,20,55],[150,55,45],[38,75,50],[270,10,50],[330,40,50]];
+const FAM_HUE = Object.fromEntries(FAM.map((f, i) => [f[0], HUES[i % HUES.length]]));
+function famColors(name, n){
+  const [h,s,lBase] = FAM_HUE[name] || [0,0,50];
+  const out = [];
+  for (let i=0;i<n;i++){
+    const l = n<=1 ? lBase : lBase - 16 + (32*i/(n-1));
+    out.push("hsl(" + h + "," + s + "%," + Math.round(l) + "%)");
+  }
+  return out;
+}
+const COLOR = {};
+FAM.forEach(function(f){
+  const cols = famColors(f[0], f[1].length);
+  f[1].forEach(function(k,i){ COLOR[k] = cols[i]; });
+});
+
+const SHORT = {
+  "Kick":"Kick","Handball":"Handball","Ground kick":"Ground kick","Bounce":"Bounce",
+  "Free kick (own)":"Free kick","Taking a handball":"HB taken","Gathering the ball":"Gather",
+  "Marking (uncontested)":"Mark (unc)","Marking (contested)":"Mark (con)","Other own act":"Other act",
+  "Receiving a kick":"Recv kick","Receiving a handball":"Recv HB","Receiving (other)":"Recv other",
+  "Winning a contest (mark/spoil)":"Win contest","Winning a loose/ground ball":"Win loose ball",
+  "Winning the ball off a disposal":"Win off disp.","Pressure forced":"Pressure",
+  "Ruck: centre bounce":"Ruck: CB","Ruck: ball-up":"Ruck: BU","Ruck: boundary throw-in":"Ruck: OOB",
+  "First possession: centre bounce":"1st poss: CB","First possession: ball-up":"1st poss: BU",
+  "First possession: boundary throw-in":"1st poss: OOB",
+  "Team pressure pool (np_defensive)":"Team pressure","Team offence pool (np_team)":"Team offence",
+  "Unexplained margin (np_residual)":"Residual",
+  "Blame passed back (turnover)":"Blame back","Team pool share":"Pool share",
+  "Anchor to the real margin":"Anchor","Anchor to the real goal difference":"Anchor",
+  "Tackles & interceptions":"Tackles/ints","Receiving a pass":"Receiving"
+};
+ORDER.forEach(function(k){ if (!SHORT[k]) SHORT[k] = k; });
+
+const POSN = {MIDFIELDER:"Mid",KEY_FORWARD:"Key fwd",MEDIUM_FORWARD:"Med fwd",
+  KEY_DEFENDER:"Key def",MEDIUM_DEFENDER:"Med def",RUCK:"Ruck"};
+const fmt = v => (v>0?"+":v<0?"−":"") + Math.abs(v).toFixed(SPORT.dp);
+const cls = v => Math.abs(v)<0.5*Math.pow(10,-SPORT.dp) ? "zero" : v>0 ? "pos" : "neg";
+const cvar = k => COLOR[k];
+
+document.getElementById("f-n").textContent = DATA.n;
+document.getElementById("f-cats").textContent = ORDER.length;
+document.getElementById("f-min").textContent = DATA.min_games + " games";
+
+function wavg(set, k){
+  let n=0, d=0;
+  set.forEach(function(p){ const w = SPORT.w(p) || 0; n += p[k]*w; d += w; });
+  return d ? n/d : 0;
+}
+const LEAGUE = Object.fromEntries(ORDER.concat(["net"]).map(k=>[k, wavg(P,k)]));
+const BYPOS = {};
+Array.from(new Set(P.map(p=>p.pos))).forEach(function(v){
+  const s = P.filter(p=>p.pos===v);
+  BYPOS[v] = Object.fromEntries(ORDER.concat(["net"]).map(k=>[k, wavg(s,k)]));
+});
+
+document.getElementById("legend").innerHTML = FAM.map(function(f){
+  return '<div class="fam">' + f[0] + '</div>' + f[1].map(function(k){
+    return '<div class="lg"><span class="sw" style="background:' + cvar(k) + '"></span>' +
+      '<span class="nm">' + k + '</span><span class="mn">' + fmt(LEAGUE[k]) + '</span></div>';
+  }).join("");
+}).join("");
+
+let GROSS = 0;
+P.forEach(function(p){
+  let up=0, dn=0;
+  ORDER.forEach(function(k){ p[k]>0 ? up+=p[k] : dn-=p[k]; });
+  GROSS = Math.max(GROSS, up, dn);
+});
+
+const posSel = document.getElementById("pos");
+Array.from(new Set(P.map(p=>p.pos))).sort().forEach(function(v){
+  const o=document.createElement("option"); o.value=v; o.textContent=POSN[v]||v; posSel.append(o);});
+
+let sortKey="net", sortDir=-1, view="top", sel=null;
+
+const FAM_OF = {};
+FAM.forEach(function(f){ f[1].forEach(function(k){ FAM_OF[k]=f[0]; }); });
+const FAM_START = new Set(FAM.map(f=>f[1][0]));
+const famTint = k => { const c = cvar(k); return c ? c.replace("hsl(","hsla(").replace(")",",0.14)") : ""; };
+
+const thead = document.querySelector("#tbl thead");
+const famRow = '<tr class="famrow"><th colspan="7"></th>' +
+  FAM.map(function(f){
+    return '<th colspan="'+f[1].length+'" class="famhead" style="background:'+famTint(f[1][0])+'">'+f[0]+'</th>';
+  }).join("") + '</tr>';
+thead.innerHTML = famRow + "<tr>" +
+  '<th class="l nm" data-k="name">Player</th><th class="l" data-k="team">Team</th>' +
+  '<th class="l" data-k="pos">Pos</th><th data-k="gms">Gms</th><th data-k="' + SPORT.weightKey + '">' + SPORT.weightShort + '</th>' +
+  '<th class="l">Where it comes from</th>' +
+  '<th class="net" data-k="net">Net</th>' +
+  ORDER.map(k=>'<th data-k="'+k+'" title="'+k+' ('+FAM_OF[k]+')"'+
+    (FAM_START.has(k)?' class="fam-start"':'')+' style="background:'+famTint(k)+'">'+
+    '<span class="h">'+SHORT[k]+'</span></th>').join("") +
+  "</tr>";
+thead.querySelectorAll("th[data-k]").forEach(function(th){ th.onclick = function(){
+  const k = th.dataset.k;
+  if (sortKey===k) sortDir*=-1; else { sortKey=k; sortDir = (k==="name"||k==="team"||k==="pos")?1:-1; }
+  render();
+};});
+
+function bar(p){
+  function seg(k,v){
+    return '<i style="width:' + (Math.abs(v)/GROSS*70).toFixed(2) + 'px;background:' + cvar(k) +
+      '" title="' + k + " " + fmt(p[k]) + '"></i>';
+  }
+  const up = ORDER.filter(k=>p[k]>0).map(k=>seg(k,p[k])).join("");
+  const dn = ORDER.filter(k=>p[k]<0).map(k=>seg(k,p[k])).join("");
+  return '<div class="cb"><div class="side l">'+dn+'</div><div class="axis"></div><div class="side">'+up+'</div></div>';
+}
+
+function cmp(a,b){
+  const x=a[sortKey], y=b[sortKey];
+  return (typeof x==="string" ? x.localeCompare(y) : x-y) * sortDir;
+}
+
+function render(){
+  const q = document.getElementById("q").value.trim().toLowerCase();
+  const pf = posSel.value;
+  let pool = P.filter(p => (!pf || p.pos===pf) &&
+    (!q || (p.name||"").toLowerCase().includes(q) || (p.team||"").toLowerCase().includes(q)));
+  const total = pool.length;
+  let rows = pool;
+  if (view==="top") rows = pool.slice().sort((a,b)=>b.net-a.net).slice(0,30);
+  if (view==="bottom") rows = pool.slice().sort((a,b)=>a.net-b.net).slice(0,30);
+  rows = rows.slice().sort(cmp);
+  document.getElementById("count").textContent =
+    view==="all" ? total + " players" : rows.length + " of " + total + " players";
+
+  const label = pf ? (POSN[pf]||pf) : "All positions";
+  const avgW = {tog: pool.length ? pool.reduce((s,p)=>s+(p.tog||0),0)/pool.length : 0,
+                mins: pool.length ? pool.reduce((s,p)=>s+(p.mins||0),0)/pool.length : 0};
+  const avgRow = pool.length ? ('<tr class="avg">' +
+    '<td class="l nm"><span class="tag">' + SPORT.weightShort + '-weighted avg</span>' + label + '</td>' +
+    '<td class="l meta">' + total + ' players</td><td class="l meta"></td><td class="num meta"></td>' +
+    '<td class="num meta">' + SPORT.weightFmt(avgW) + '</td><td class="comp"></td>' +
+    '<td class="num net ' + cls(wavg(pool,"net")) + '">' + fmt(wavg(pool,"net")) + '</td>' +
+    ORDER.map(function(k){ const v = wavg(pool,k);
+      return '<td class="num ' + cls(v) + (FAM_START.has(k)?' fam-start':'') + '">' + fmt(v) + '</td>'; }).join("") + '</tr>') : "";
+
+  document.querySelector("#tbl tbody").innerHTML = avgRow + rows.map(function(p){
+    return '<tr data-id="'+p.player_id+'"'+(sel===p.player_id?' class="sel"':'')+'>' +
+      '<td class="l nm">'+p.name+'</td><td class="l meta">'+p.team+'</td>' +
+      '<td class="l meta">'+(POSN[p.pos]||p.pos)+'</td><td class="num meta">'+p.gms+'</td>' +
+      '<td class="num meta">'+SPORT.weightFmt(p)+'</td>' +
+      '<td class="comp">'+bar(p)+'</td>' +
+      '<td class="num net '+cls(p.net)+'">'+fmt(p.net)+'</td>' +
+      ORDER.map(k=>'<td class="num '+cls(p[k])+(FAM_START.has(k)?' fam-start':'')+'">'+fmt(p[k])+'</td>').join("") + '</tr>';
+  }).join("");
+  document.querySelectorAll("#tbl tbody tr[data-id]").forEach(function(tr){
+    tr.onclick = function(){ sel = tr.dataset.id; render(); detail(); };});
+  if (!sel && rows.length) {
+    sel = rows[0].player_id; detail();
+    const first = document.querySelector("#tbl tbody tr[data-id]");
+    if (first) first.classList.add("sel");
+  }
+}
+
+function detail(){
+  const p = P.find(x=>x.player_id===sel); if(!p) return;
+  const pm = BYPOS[p.pos];
+  const mx = Math.max.apply(null,
+    ORDER.map(k=>Math.max(Math.abs(p[k]), Math.abs(pm[k]))).concat([0.5]));
+  let running = 0;
+  const rows = ORDER.slice().sort((a,b)=>Math.abs(p[b])-Math.abs(p[a])).map(function(k){
+    const v=p[k], m=pm[k], d=v-m;
+    const w = Math.abs(v)/mx*50;
+    const style = v>=0 ? "left:50%;width:"+w+"%" : "right:50%;width:"+w+"%";
+    const mpos = 50 + (m/mx*50);
+    running += v;
+    return '<div class="row"><span class="lab"><span class="sw" style="background:'+cvar(k)+'"></span>'+k+'</span>' +
+      '<span class="track"><span class="mid"></span>' +
+      '<i style="'+style+';background:'+cvar(k)+'"></i>' +
+      '<u style="left:calc('+mpos+'% - 1px)" title="'+(POSN[p.pos]||p.pos)+' average '+fmt(m)+'"></u></span>' +
+      '<span class="v '+cls(v)+'">'+fmt(v)+'</span>' +
+      '<span class="d '+cls(d)+'">'+fmt(d)+'</span>' +
+      '<span class="r">'+fmt(running)+'</span></div>';
+  }).join("");
+  const dn = p.net - pm.net;
+  const totalGap = p.net - running;
+  const totalRow = '<div class="row total"><span class="lab"><b>Sum of all categories</b></span><span></span>' +
+    '<span class="v '+cls(running)+'">'+fmt(running)+'</span><span class="d"></span>' +
+    '<span class="r">'+(Math.abs(totalGap)<0.0005*(ORDER.length+1)?"= total":(fmt(totalGap)+" vs total"))+'</span></div>';
+  document.getElementById("detail").innerHTML =
+    '<div class="dh"><h3>'+p.name+'</h3><span class="t">'+p.team+' &middot; '+(POSN[p.pos]||p.pos)+
+    ' &middot; '+p.gms+' games &middot; '+SPORT.weightFmt(p)+' '+SPORT.weight+'</span>' +
+    '<span class="n '+cls(p.net)+'">'+fmt(p.net)+' <span class="t">'+SPORT.unitShort+', '+
+    fmt(dn)+' vs '+(POSN[p.pos]||p.pos).toLowerCase()+'</span></span></div>' +
+    '<div class="rowhead"><span>Category</span><span></span><span>Him</span><span>vs pos</span><span>Running total</span></div>' +
+    '<div class="rows">'+rows+'</div>' + totalRow +
+    '<div class="key"><u></u> marks the ' + (POSN[p.pos]||p.pos).toLowerCase() +
+    ' average for that category, weighted by ' + SPORT.weight + '. The last column is a running total' +
+    ' down the list, ending at the sum of all ' + ORDER.length + ' columns, which is his total.</div>';
+}
+
+document.getElementById("q").oninput = function(){ sel=null; render(); };
+posSel.onchange = function(){ sel=null; render(); };
+
+(function(){
+  const detailEl = document.getElementById("detail");
+  const btn = document.getElementById("detail-toggle");
+  let hidden = false;
+  try { hidden = localStorage.getItem("ledger-detail-hidden") === "1"; } catch(e) {}
+  function apply(){
+    detailEl.hidden = hidden;
+    btn.textContent = hidden ? "Show player chart" : "Hide player chart";
+    btn.setAttribute("aria-pressed", String(!hidden));
+  }
+  apply();
+  btn.onclick = function(){
+    hidden = !hidden;
+    try { localStorage.setItem("ledger-detail-hidden", hidden ? "1" : "0"); } catch(e) {}
+    apply();
+  };
+})();
+document.querySelectorAll(".seg button[data-view]").forEach(function(b){ b.onclick = function(){
+  view = b.dataset.view; sel=null;
+  document.querySelectorAll(".seg button[data-view]").forEach(x=>x.setAttribute("aria-pressed", x===b));
+  render();
+};});
+render();
+
+// Mirror the table's horizontal scrollbar above it, so columns can be scrolled
+// while looking at the top rows. The spacer is sized to the table's width.
+(function(){
+  const top = document.getElementById("topscroll"), bot = document.getElementById("tblscroll");
+  const spacer = top.firstElementChild;
+  function size(){ spacer.style.width = bot.scrollWidth + "px"; top.hidden = bot.scrollWidth <= bot.clientWidth + 1; }
+  top.addEventListener("scroll", function(){ if (bot.scrollLeft !== top.scrollLeft) bot.scrollLeft = top.scrollLeft; });
+  bot.addEventListener("scroll", function(){ if (top.scrollLeft !== bot.scrollLeft) top.scrollLeft = bot.scrollLeft; });
+  window.addEventListener("resize", size);
+  // the table's width changes on re-render and again when the web fonts arrive
+  if (window.ResizeObserver) new ResizeObserver(size).observe(document.getElementById("tbl"));
+  else new MutationObserver(size).observe(document.getElementById("tbl"), {childList: true, subtree: true});
+  size();
+})();
+</script>

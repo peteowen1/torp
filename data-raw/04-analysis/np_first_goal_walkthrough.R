@@ -12,27 +12,18 @@ say <- function(...) cat(..., "\n", sep = "")
 SEASON <- 2026
 MATCH <- "CD_M20260140608"
 
-pbp <- as.data.table(load_pbp(SEASON)); pbp[, match_id := as.character(match_id)]
-ch  <- as.data.table(load_chains(SEASON)); ch[, match_id := as.character(match_id)]
-ps  <- as.data.table(load_player_stats(SEASON, refresh = TRUE))
-res <- as.data.table(load_results(SEASON)); res[, match_id := as.character(match_id)]
-# COMPUTE THE TERMS LIVE, do not read the cached CSV. That file was written
-# before torp#210 removed the difficulty model's leaked features, so every
-# number downstream of it -- the payments, the net points, the whole page -- was
-# being built on a superseded model. The two disagree materially on the same
-# row: on Steele's kick the cached split is decision -0.0671 / contest -0.5332 /
-# ground +0.2224, the live one +0.2018 / -0.3525 / -0.2272. Both sum to the same
-# delta, but WHO gets paid changes completely.
-# Found 2026-09-11 when the page's own arithmetic would not reconcile.
-tm  <- as.data.table(np_difficulty_terms_for_season(SEASON, pbp_data = pbp, chains = ch))
-tm[, match_id := as.character(match_id)]
-tm[, match_id := as.character(match_id)]
-tm  <- tm[substr(match_id, 5, 8) == as.character(SEASON)]
-
-say("Running build_net_points() on the real 2026 season (real algorithm, unmodified)...")
-np <- build_net_points(pbp, ps, res, chains = ch, credit = "difficulty",
-                       stoppages = "allocate", difficulty_terms = tm,
-                       return_payments = TRUE)
+# The season build (play-by-play, chains, stats, results, difficulty terms,
+# build_net_points()) is shared with build_np_categories_artifact.R and cached;
+# see np_season_build.R for what invalidates it. The terms are computed live,
+# never from the old cached CSV: that file predated torp#210's removal of the
+# difficulty model's leaked features, and every number built on it was from a
+# superseded model (on Steele's kick, decision -0.0671 / contest -0.5332 /
+# ground +0.2224 against the live +0.2018 / -0.3525 / -0.2272). Found 2026-09-11
+# when the page's own arithmetic would not reconcile.
+source("data-raw/04-analysis/np_season_build.R")
+b <- np_season_build(SEASON)
+pbp <- b$pbp; ch <- b$ch; ps <- b$ps; res <- b$res; tm <- b$tm; np <- b$np
+np_final <- torp:::.np_team_margin(np, pbp, ps, res)
 pay <- as.data.table(attr(np, "np_payments"))
 pay[, match_id := as.character(match_id)]
 np_dt <- as.data.table(np)
@@ -127,8 +118,7 @@ say("Sum of hm (home-frame, signed) in this window: ", round(sum(seg_pay$hm), 3)
 # just a difference of 2 -- is a SEPARATE step, .np_team_margin(), applied by
 # .np_engine_frame() on top of build_net_points()'s output. Apply it here too,
 # or "checks out to the margin" will silently mean the wrong thing.
-say("\nApplying .np_team_margin() -- the step that's actually live in production...")
-np_final <- torp:::.np_team_margin(np, pbp, ps, res)
+say("\n.np_team_margin() -- the step that's actually live in production -- was applied above")
 np_final <- as.data.table(np_final)
 np_final[, `:=`(match_id = as.character(match_id), player_id = as.character(player_id))]
 
@@ -186,3 +176,81 @@ out <- list(
 write_json(out, "data-raw/outputs/np_first_goal_walkthrough.json", auto_unbox = TRUE,
           na = "null", digits = 6)
 say("\nWrote data-raw/outputs/np_first_goal_walkthrough.json")
+
+# --- the shared walkthrough shape (vault/plans/NET-LEDGER-PARITY.md) ---------
+# The same JSON panna's build_net_goals_artifacts.R writes, rendered by
+# templates/ledger-walkthrough.html. Payments are at their FINAL value (after
+# .np_team_margin()'s rescale), named plus each row-side's pool, so every
+# row-side sums to exactly what that side was charged. A side with nothing on
+# a row shows "nothing booked" -- which on most AFL rows is the conceding side
+# (np_anchor_anatomy.R): that is the thing this page lets you see.
+fpaid <- as.data.table(attr(np_final, "np_team_margin_payments"))
+fpool <- as.data.table(attr(np_final, "np_team_margin_pool_rows"))
+fparts <- as.data.table(attr(np_final, "np_team_margin_parts"))
+for (d in list(fpaid, fpool, fparts)) d[, match_id := as.character(match_id)]
+fpaid <- fpaid[match_id == MATCH & display_order %between% c(first_dispord, first_goal)]
+fpool <- fpool[match_id == MATCH & display_order %between% c(first_dispord, first_goal) & abs(pool) > 1e-12]
+fpaid <- merge(fpaid, nm, by = "player_id", all.x = TRUE)
+home_t <- as.character(ha[home_away == "Home"]$team)
+away_t <- as.character(ha[home_away == "Away"]$team)
+clk <- unique(pbp[match_id == MATCH, .(display_order, period, period_seconds)])
+
+# Positions for the pitch plot, in the home team's frame (seg_ch, above): the
+# home team attacks toward +x. A play's "to" is the next chains row with a
+# position, which is where the ball went next.
+pos <- seg_ch[is.finite(x_home) & is.finite(y_home), .(display_order, description, x_home, y_home)]
+setorder(pos, display_order)
+# The next chains row is often an annotation at the SAME spot (Kick Into F50,
+# the Goal marker, which is recorded where the kick was taken), so skip rows
+# that have not moved. A kick whose next row is a Goal or Behind goes to the
+# goal mouth at the end the kicking side attacks.
+ground <- ch[match_id == MATCH, .(x = max(abs(as.numeric(x)), na.rm = TRUE),
+                                  y = max(abs(as.numeric(y)), na.rm = TRUE))]
+pt <- function(k) if (nrow(k)) list(x = k$x_home[1], y = k$y_home[1]) else NULL
+dest <- function(o, acting) {
+  here <- pos[display_order == o]
+  nxt <- pos[display_order > o]
+  if (!nrow(here) || !nrow(nxt)) return(NULL)
+  if (nxt$description[1] %in% c("Goal", "Behind"))
+    return(list(x = ground$x * fifelse(acting == home_t, 1, -1), y = 0))
+  moved <- nxt[x_home != here$x_home[1] | y_home != here$y_home[1]]
+  pt(moved)
+}
+
+rows <- lapply(seq_len(nrow(seg_pbp)), function(i) {
+  r <- seg_pbp[i]; o <- r$display_order
+  own_sign <- function(t) fifelse(t == home_t, 1, -1)
+  # the acting side: the row's team, or for a stoppage the side it favoured
+  acting <- if (!is.na(r$team)) as.character(r$team) else if (isTRUE(r$ledger_hm >= 0)) home_t else away_t
+  pp <- rbind(
+    fpaid[display_order == o, .(player = player_name, team = as.character(team), role, value = paid)],
+    fpool[display_order == o, .(player = NA_character_, team = as.character(team), role = "team pool", value = pool)])
+  pp[, entry := fifelse(team == acting, "offence", "defence")]
+  setorder(pp, entry, -value)
+  k <- clk[display_order == o]
+  list(ord = i, is_goal = o == first_goal,
+       from = pt(pos[display_order == o]), to = dest(o, acting),
+       clock = if (nrow(k)) sprintf("Q%d %02d:%02d", k$period[1], k$period_seconds[1] %/% 60,
+                                    round(k$period_seconds[1] %% 60)) else as.character(o),
+       team = acting, player = r$player_name, action = r$description, result = NULL,
+       value_before = round(r$exp_pts * own_sign(acting), 4),
+       change = round(r$ledger_hm * own_sign(acting), 4),
+       tags = list(repriced = if (isTRUE(abs(r$reprice_hm) > 1e-9)) "stoppage" else NULL),
+       payments = lapply(seq_len(nrow(pp)), function(j) as.list(pp[j])))
+})
+tot <- merge(np_final[match_id == MATCH, .(player_id, team, net = round(net_points, 3))],
+             fparts[match_id == MATCH, .(player_id = as.character(player_id), anchor = round(recon, 3))],
+             by = "player_id", all.x = TRUE)
+tot <- merge(tot, nm, by = "player_id", all.x = TRUE)
+write_json(list(sport = "afl", unit = "points",
+                pitch = list(kind = "afl", x = c(-ground$x, ground$x), y = c(-ground$y, ground$y),
+                             attack = "home team attacks to the right"),
+                match = list(id = MATCH, home = home_t, away = away_t,
+                             home_score = margin_row$home_score, away_score = margin_row$away_score),
+                rows = rows, headline = "the first goal",
+                source = paste0("Built by <code>torp/data-raw/04-analysis/np_first_goal_walkthrough.R</code> from ",
+                                "<code>build_net_points()</code> then <code>.np_team_margin()</code>, EPV engine ",
+                                EPV_ENGINE, ", rating vintage ", RATING_VINTAGE, ", ", SEASON, "."),
+                totals = tot[, .(player = player_name, team, net, anchor)]),
+           "data-raw/outputs/np_walkthrough_shared.json", auto_unbox = TRUE, na = "null", digits = 6)
+say("Wrote data-raw/outputs/np_walkthrough_shared.json (", length(rows), " rows)")

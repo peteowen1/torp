@@ -880,6 +880,83 @@ test_that("R1: the conceding side gets a blame pool equal to what the row ceded,
   parts <- attr(tm, "np_team_margin_parts")
   expect_equal(sum(tm[match_id == "M1" & team == "Home FC"]$net_points), 20, tolerance = 1e-9)
   expect_equal(sum(tm[match_id == "M1" & team == "Away FC"]$net_points), -20, tolerance = 1e-9)
+  # the final-value payments + pool share + reconciliation rebuild each
+  # player's net_points exactly -- the identity the play-type page relies on
+  paid <- data.table::as.data.table(attr(tm, "np_team_margin_payments"))
+  expect_gt(nrow(paid), 0)
+  rebuilt <- merge(paid[, .(named = sum(paid)), by = .(match_id, player_id)],
+                   data.table::as.data.table(parts)[, .(match_id, player_id, share, recon)],
+                   by = c("match_id", "player_id"), all = TRUE)
+  rebuilt[is.na(named), named := 0]
+  rebuilt <- merge(rebuilt, tm[, .(match_id, player_id, net_points)],
+                   by = c("match_id", "player_id"))
+  expect_gt(nrow(rebuilt), 0)
+  expect_equal(rebuilt$named + rebuilt$share + rebuilt$recon, rebuilt$net_points,
+               tolerance = 1e-9)
+  # and the per-row pools are the same money as the shared-out pool: per team,
+  # named payments + row pools = named + pool shares
+  prows <- data.table::as.data.table(attr(tm, "np_team_margin_pool_rows"))
+  expect_gt(nrow(prows), 0)
+  lhs <- merge(paid[, .(a = sum(paid)), by = .(match_id, team)],
+               prows[, .(b = sum(pool)), by = .(match_id, team)],
+               by = c("match_id", "team"), all = TRUE)
+  lhs[is.na(a), a := 0][is.na(b), b := 0]
+  rhs <- data.table::as.data.table(parts)[, .(r = sum(named) + sum(share)), by = .(match_id, team)]
+  chk2 <- merge(lhs, rhs, by = c("match_id", "team"))
+  expect_equal(nrow(chk2), nrow(rhs))
+  expect_equal(chk2$a + chk2$b, chk2$r, tolerance = 1e-9)
+
+  # book_conceding: every row is booked to BOTH teams, the margins still hold,
+  # and while the pool is split by time on ground alone (NP_POOL_DACTS_SHARE =
+  # 0) leaving it off changes no number
+  testthat::local_mocked_bindings(NP_POOL_DACTS_SHARE = 0, .package = "torp")
+  base <- suppressMessages(torp:::.np_team_margin(np, f$pbp, f$stats, f$results, book_conceding = TRUE))
+  off <- suppressMessages(torp:::.np_team_margin(np, f$pbp, f$stats, f$results, book_conceding = FALSE))
+  expect_equal(off$net_points, base$net_points, tolerance = 1e-9)
+  on <- suppressMessages(torp:::.np_team_margin(np, f$pbp, f$stats, f$results, book_conceding = TRUE))
+  expect_equal(sum(on[match_id == "M1" & team == "Home FC"]$net_points), 20, tolerance = 1e-9)
+  expect_equal(sum(on[match_id == "M1" & team == "Away FC"]$net_points), -20, tolerance = 1e-9)
+  booked <- rbind(
+    data.table::as.data.table(attr(on, "np_team_margin_payments"))[, .(match_id, display_order, team)],
+    data.table::as.data.table(attr(on, "np_team_margin_pool_rows"))[, .(match_id, display_order, team)])
+  sides <- unique(booked)[, .N, by = .(match_id, display_order)]
+  expect_gt(nrow(sides), 0)
+  expect_true(all(sides$N == 2))
+  # pool credit by defensive acts. Team totals hold for any k by construction,
+  # so they cannot catch a split that goes the WRONG way; the per-player check
+  # below can. Moving k from 0 to 1 must move each player's pool share by
+  # exactly pool_d * (his share of his side's defensive acts - his share of its
+  # time on ground), pool_d being his side's credit on rows where the OTHER
+  # side had the ball.
+  k0 <- suppressMessages(torp:::.np_team_margin(np, f$pbp, f$stats, f$results, dacts_share = 0))
+  k1 <- suppressMessages(torp:::.np_team_margin(np, f$pbp, f$stats, f$results, dacts_share = 1))
+  for (x in list(k0, k1)) {
+    expect_equal(sum(x[match_id == "M1" & team == "Home FC"]$net_points), 20, tolerance = 1e-9)
+    expect_equal(sum(x[match_id == "M1" & team == "Away FC"]$net_points), -20, tolerance = 1e-9)
+  }
+  pr1 <- data.table::as.data.table(attr(k1, "np_team_margin_pool_rows"))
+  act <- unique(data.table::as.data.table(f$pbp)[!is.na(team),
+                  .(match_id = as.character(match_id), display_order, acting = team)])
+  pr1 <- merge(pr1, act, by = c("match_id", "display_order"), all.x = TRUE)
+  pd <- pr1[, .(pool_d = sum(pool[!is.na(acting) & team != acting & pool > 0])), by = .(match_id, team)]
+  expect_true(any(pd$pool_d > 0))           # the fixture must exercise the split
+  st <- data.table::as.data.table(f$stats)[, .(
+    match_id = as.character(match_id), player_id = as.character(player_id),
+    tog = pmax(time_on_ground_percentage, 1) / 100,
+    dacts = tackles + intercepts + one_percenters)]
+  st <- merge(st, unique(data.table::as.data.table(k1)[, .(match_id = as.character(match_id),
+                                                         player_id = as.character(player_id), team)]),
+              by = c("match_id", "player_id"))
+  st <- merge(st, pd, by = c("match_id", "team"), all.x = TRUE)[is.na(pool_d), pool_d := 0]
+  st[, want := pool_d * (dacts / sum(dacts) - tog / sum(tog)), by = .(match_id, team)]
+  s0 <- data.table::as.data.table(attr(k0, "np_team_margin_parts"))[, .(match_id, player_id, s0 = share)]
+  s1 <- data.table::as.data.table(attr(k1, "np_team_margin_parts"))[, .(match_id, player_id, s1 = share)]
+  got <- merge(merge(s0, s1, by = c("match_id", "player_id")), st, by = c("match_id", "player_id"))
+  expect_gt(nrow(got), 0)
+  expect_equal(got$s1 - got$s0, got$want, tolerance = 1e-9)
+  # (Whether the reconciliation SHRINKS is an empirical question about real
+  # matches, where conceded rows add up to roughly the opponent's score -- it is
+  # measured in data-raw/04-analysis/np_book_conceding_ab.R, not asserted here.)
   # off: no doubled rows at all
   testthat::local_mocked_bindings(NP_BLAME_POOL = FALSE, .package = "torp")
   np0 <- suppressMessages(build_net_points(

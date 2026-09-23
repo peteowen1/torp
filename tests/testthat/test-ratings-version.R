@@ -218,3 +218,32 @@ test_that("a preserved vintage records NO defining_constants", {
   live <- .build_rating_vintage_entry(100, version = "v2")
   expect_false(is.null(live$defining_constants))
 })
+
+test_that("publish_ratings_manifest() never starts over on a failed read, and checks the upload landed", {
+  # 2026-09-17: the manifest vanished (delete-then-upload, upload failed, run
+  # reported success) and every ratings run aborted for six days after.
+  up <- 0L
+  testthat::local_mocked_bindings(pb_upload = function(...) { up <<- up + 1L; invisible(NULL) },
+                                  .package = "piggyback")
+  # a failed read must not become a fresh one-vintage manifest
+  expect_error(torp:::publish_ratings_manifest(10, version = "v9", manifest = NULL),
+               "Could not read ratings_manifest.json")
+  expect_equal(up, 0L)
+
+  old <- list(canonical = "v8", vintages = list(v8 = list(file = "torp_ratings.parquet", rows = 5L)))
+  # the upload "succeeds" but the asset is not there: abort, not success
+  testthat::local_mocked_bindings(pb_list = function(...) data.frame(file_name = "other.parquet"),
+                                  .package = "piggyback")
+  testthat::local_mocked_bindings(Sys.sleep = function(...) NULL, .package = "base")
+  expect_error(torp:::publish_ratings_manifest(10, version = "v9", manifest = old,
+                                                defining_constants = NULL),
+               "not on the ratings-data release")
+  expect_equal(up, 1L)
+
+  # and when it is there, the other vintages survive the merge
+  testthat::local_mocked_bindings(pb_list = function(...) data.frame(file_name = "ratings_manifest.json"),
+                                  .package = "piggyback")
+  m <- torp:::publish_ratings_manifest(10, version = "v9", manifest = old, defining_constants = NULL)
+  expect_setequal(names(m$vintages), c("v8", "v9"))
+  expect_identical(m$canonical, "v8")
+})

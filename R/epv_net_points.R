@@ -2502,7 +2502,9 @@ np_difficulty_terms_for_season <- function(season, pbp_data = NULL, chains = NUL
 #'   because rescaling explodes for players whose parts nearly cancel. The
 #'   components still sum to `net_points` for each player.
 #' @keywords internal
-.np_team_margin <- function(np, pbp_data, player_stats, res) {
+.np_team_margin <- function(np, pbp_data, player_stats, res,
+                            book_conceding = NP_BOOK_CONCEDING_SIDE,
+                            dacts_share = NP_POOL_DACTS_SHARE) {
   pay <- attr(np, "np_payments")
   if (is.null(pay) || nrow(pay) == 0) {
     cli::cli_abort(c(
@@ -2574,7 +2576,55 @@ np_difficulty_terms_for_season <- function(season, pbp_data = NULL, chains = NUL
                 by = .(match_id, display_order, team)]
     prow[, pool_row := target - got_named]
   }
-  pool <- prow[, .(pool = sum(pool_row)), by = .(match_id, team)]
+  # BOOK BOTH SIDES OF EVERY ROW. A row-side exists above only where the
+  # ledger paid someone on that side, and on ordinary possession rows (a kick,
+  # a handball, a gather) it pays only the side that had the ball: 83.8% of 2026
+  # rows, 61.6% of their value. The side that conceded was then never charged
+  # on the row, and its share reached it only through the reconciliation below,
+  # as one lump by time on ground (36% of all value; np_anchor_anatomy.R).
+  # Charging the missing side's pool on the row itself -- the same amount,
+  # opposite sign -- is what panna's ledger does on every action. Player totals
+  # barely move while the pool is also shared by time on ground; what changes
+  # is that the blame sits on the row, where a smarter split can reach it.
+  if (isTRUE(book_conceding)) {
+    rv <- unique(pay[, .(match_id, display_order, v)])
+    sides <- unique(ha[!is.na(team) & !is.na(home_away)])
+    # Two sides per match, or a match's missing side is never booked -- and the
+    # reconciliation would hide it, since it tops each team up to its margin.
+    one_sided <- sides[, .N, by = match_id][N != 2]
+    if (nrow(one_sided)) {
+      cli::cli_warn(c(
+        "{nrow(one_sided)} match{?es} {?has/have} {.emph not} exactly two sides in the play-by-play, so rows there are booked to one side only.",
+        "i" = "First few: {.val {utils::head(one_sided$match_id, 5)}}."))
+    }
+    both <- merge(rv, sides, by = "match_id", allow.cartesian = TRUE)
+    both[, target := data.table::fifelse((home_away == "Home") == (v > 0), abs(v), -abs(v))]
+    miss <- both[!prow, on = c("match_id", "display_order", "team")]
+    if (nrow(miss)) {
+      prow <- rbind(prow, miss[, .(match_id, display_order, team, target, pool_row = target)],
+                    fill = TRUE)
+    }
+    cli::cli_alert_info(
+      "Booked the missing side of {format(nrow(miss), big.mark = ',')} row{?s} to its team pool ({round(sum(abs(miss$target)), 1)} points).")
+  }
+  # DEFENSIVE CREDIT, kept apart. A pool row on the side that did NOT have the
+  # ball with a positive value is credit for the defence: the other side lost
+  # value and nobody was named for causing it. That part is shared partly by
+  # defensive acts (NP_POOL_DACTS_SHARE, below); everything else in the pool --
+  # all blame, and credit on a side's own possession -- by `w` as before. The
+  # pool TOTAL is unchanged, so the invariant below still reads `pool`.
+  act <- unique(p[!is.na(team), .(match_id = as.character(match_id), display_order,
+                                  acting = team)])
+  dup <- act[, .N, by = .(match_id, display_order)][N > 1]
+  if (nrow(dup)) {
+    cli::cli_warn(c(
+      "{nrow(dup)} play-by-play row{?s} carry two teams; the first is taken as the side with the ball.",
+      "i" = "First: match {.val {dup$match_id[1]}}, row {.val {dup$display_order[1]}}."))
+    act <- unique(act, by = c("match_id", "display_order"))
+  }
+  prow <- merge(prow, act, by = c("match_id", "display_order"), all.x = TRUE)
+  prow[, dcred := !is.na(acting) & team != acting & pool_row > 0]
+  pool <- prow[, .(pool = sum(pool_row), pool_d = sum(pool_row[dcred])), by = .(match_id, team)]
 
   # THE INVARIANT, with an honest note on its reach. Named + pool == the
   # side's charge has real teeth only when `ns` is finite. In the shipped NA
@@ -2626,8 +2676,25 @@ np_difficulty_terms_for_season <- function(season, pbp_data = NULL, chains = NUL
               by = c("match_id", "player_id"))
   lu[, w := if (identical(NP_TEAM_MARGIN_POOL_BY, "tog")) tog else pmax(dacts, 0.5)]
 
-  ros <- merge(lu, pool, by = c("match_id", "team"), all.x = TRUE)[is.na(pool), pool := 0]
-  ros[, share := pool * w / sum(w), by = .(match_id, team)]
+  ros <- merge(lu, pool, by = c("match_id", "team"), all.x = TRUE)
+  ros[is.na(pool), pool := 0][is.na(pool_d), pool_d := 0]
+  # Defensive credit: (1 - k) by `w`, k by each player's share of the side's
+  # defensive acts (tackles + intercepts + one-percenters), panna's rule. A side
+  # with no defensive acts recorded falls back to `w`. Everything else by `w`.
+  k <- dacts_share
+  # A side with credit to share but no defensive acts recorded falls back to
+  # time on ground. Legitimate for a quiet side; a stats gap looks identical,
+  # so say how often it happens rather than doing it silently.
+  nd <- ros[, .(credit = pool_d[1], acts = sum(dacts)), by = .(match_id, team)][credit > 0 & acts == 0]
+  if (k > 0 && nrow(nd)) {
+    cli::cli_alert_warning(
+      "{nrow(nd)} team-match{?es} with defensive pool credit have no defensive acts recorded; that credit is shared by time on ground.")
+  }
+  ros[, share := {
+    ww <- w / sum(w)
+    wd <- if (sum(dacts) > 0) dacts / sum(dacts) else ww
+    (pool - pool_d) * ww + pool_d * ((1 - k) * ww + k * wd)
+  }, by = .(match_id, team)]
   out <- merge(ros[, .(match_id, team, player_id, tog, share)], namd,
                by = c("match_id", "team", "player_id"), all = TRUE)
   out[is.na(named), named := 0][is.na(share), share := 0][, val := named + share]
@@ -2708,6 +2775,24 @@ np_difficulty_terms_for_season <- function(season, pbp_data = NULL, chains = NUL
   # number looks wrong
   data.table::setattr(np, "np_team_margin_parts",
                       out[, .(match_id, player_id, team, named, share, recon, val)])
+  # ...and the payment rows behind `named`, at their FINAL value. Summed by
+  # player they equal `named` exactly, so a breakdown built from these (by role
+  # and play type) plus `share` plus `recon` adds up to net_points with nothing
+  # left over. Reading np_payments instead gives the pre-rescale values, which
+  # is why the play-type page used to miss Net by up to 0.23 a game.
+  paid <- if (is.finite(ns)) {
+    pay[keep == TRUE, .(match_id, display_order, team, player_id = as.character(player_id),
+                        role, doubled, paid = conv)]
+  } else {
+    pay[!is.na(scaled) & !is.na(player_id),
+        .(match_id, display_order, team, player_id = as.character(player_id),
+          role, doubled, paid = scaled)]
+  }
+  data.table::setattr(np, "np_team_margin_payments", paid)
+  # The pool part of each row-side, before it is shared out by `w`, so a
+  # row-by-row walkthrough can show named + pool = the side's charge.
+  data.table::setattr(np, "np_team_margin_pool_rows",
+                      prow[, .(match_id, display_order, team, pool = pool_row)])
   cli::cli_alert_info(
     "Team-margin convention: every team sums to its own margin (max gap {signif(gap, 2)}); named share {ns}, pool by {NP_TEAM_MARGIN_POOL_BY}.")
   np[]

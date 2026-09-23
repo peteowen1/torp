@@ -9,7 +9,9 @@ publish_ratings_manifest(
   version = RATING_VINTAGE,
   file = NULL,
   set_canonical = FALSE,
-  defining_constants = .rating_defining_constants()
+  defining_constants = .rating_defining_constants(),
+  manifest = read_ratings_manifest(),
+  allow_create = FALSE
 )
 }
 \arguments{
@@ -31,6 +33,15 @@ recording a vintage the running code did NOT generate (preserving an
 outgoing vintage), so the entry carries an explicit gap rather than a
 definition the data was never built under. See
 \code{.build_rating_vintage_entry()}.}
+
+\item{manifest}{The manifest to merge into. Defaults to the published one.
+Pass a list only to rebuild a lost manifest, together with
+\code{allow_create = TRUE}.}
+
+\item{allow_create}{If FALSE (default), abort when no manifest can be read
+rather than starting a new one. A new one knows only this vintage and
+says canonical is \code{"v1"}, so starting one because a read failed
+would overwrite the whole vintage history.}
 }
 \value{
 Invisibly, the manifest that was uploaded.

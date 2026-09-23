@@ -1156,8 +1156,25 @@ PSR_POSITION_STANDARDISE <- TRUE
 #' Preserve v12 with \code{data-raw/03-ratings/promote_rating_vintage.R}
 #' (PROMOTE_FROM=v12, PROMOTE_TO=v13) and move the manifest to canonical v13
 #' BEFORE these constants reach main.
+#'
+#' v14 (2026-09-23): every team-margin row now books both sides
+#' (\code{NP_BOOK_CONCEDING_SIDE}) and the defence's unnamed pool credit is
+#' shared half by defensive acts (\code{NP_POOL_DACTS_SHARE} 0 -> 0.5), panna's
+#' net goals rule. Booking alone moved nothing (9,978 player-games identical,
+#' anchor 41.9 -> 1.1 percent of value); the acts split is what moves ratings.
+#'
+#' \strong{The key forward / key defender gap: 3.465 -> 0.797 (2026), 3.141 ->
+#' 0.547 (2025).} Key defenders gain about 1.5 a game, key forwards give up about
+#' 1.2; season rank correlation 0.84. Year-to-year repeatability falls 0.732 ->
+#' 0.636 overall but only 0.623 -> 0.607 within position: most of the old
+#' figure was position itself repeating. Pete's call: position should not decide
+#' who is above average (\code{data-raw/04-analysis/np_v14_check.R}). Every
+#' player-game moves, so this needs a full-history rebuild. Preserve v13 with
+#' \code{data-raw/03-ratings/promote_rating_vintage.R} (PROMOTE_FROM=v13,
+#' PROMOTE_TO=v14) and move the manifest to canonical v14 BEFORE these constants
+#' reach main.
 #' @keywords internal
-RATING_VINTAGE <- "v13"
+RATING_VINTAGE <- "v14"
 
 #' Map from the 20-way team-sheet lineup position to a 6-way position group
 #'
@@ -1985,6 +2002,49 @@ NP_TEAM_MARGIN_CONVENTION <- TRUE
 #' already computed, which scores worse (0.564) than a flat half (0.598).
 #' @keywords internal
 NP_TEAM_MARGIN_NAMED_SHARE <- NA_real_
+
+#' Book the conceding side of every row in the team-margin step
+#'
+#' When TRUE, `.np_team_margin()` charges the side with no payment on a row --
+#' mostly the defending side of an ordinary kick, handball or gather -- to its
+#' team pool on that row, the same amount with the opposite sign, as panna's
+#' net goals ledger does on every action. When FALSE (the published vintage),
+#' that charge reaches the team only through the final reconciliation to its
+#' margin, which on 2026 carries 36% of all value
+#' (`data-raw/04-analysis/np_anchor_anatomy.R`). Agreed with Pete 2026-09-23 on
+#' real walkthrough rows.
+#'
+#' ON ITS OWN it changes no published number while the pool and the
+#' reconciliation are both shared by time on ground: moving a team's amount
+#' from one to the other gives every player the same slice. With
+#' `NP_POOL_DACTS_SHARE > 0` it does move numbers, because the rows it books
+#' include the defence's credit (the attacking side lost value), which that
+#' split pays by defensive acts. Hence it is a defining constant (v14).
+#' Measured on 2026 (`np_book_conceding_ab.R`): 9,978 player-matches unchanged,
+#' anchor 41.9% -> 1.1% of absolute value, team pool 7.3% -> 48.6%. What it buys
+#' is that the blame sits on the row, where a split other than time on ground
+#' (who was on the ground, defensive acts) can reach it: `NP_POOL_DACTS_SHARE`.
+#' @keywords internal
+NP_BOOK_CONCEDING_SIDE <- TRUE
+
+#' Share of the defence's unnamed pool credit paid by defensive acts
+#'
+#' In `.np_team_margin()`, pool credit on the side WITHOUT the ball -- the other
+#' side lost value and no defender was named -- is split `1 - k` by time on
+#' ground and `k` by each player's share of his side's defensive acts
+#' (tackles + intercepts + one-percenters). Blame, and pool credit on a side's
+#' own possession, stay on time on ground. panna's net goals uses the same rule
+#' at `dacts_share = 0.5`.
+#'
+#' v14 (2026-09-23), from 0 (everything by time on ground): on 2026 the key
+#' forward / key defender gap goes 3.465 -> 0.797 points a game (key defenders
+#' +1.47, key forwards -1.20), season rank correlation 0.84
+#' (`data-raw/04-analysis/np_pool_dacts_ab.R`). Shipped at Pete's call: top
+#' defenders now read positive, and position no longer decides who is above
+#' average. Known and accepted: spoils are paid by name as contest wins and are
+#' most of `one_percenters`, so they also weight this split.
+#' @keywords internal
+NP_POOL_DACTS_SHARE <- 0.5
 
 #' How the team-margin convention spreads a side's pool
 #'

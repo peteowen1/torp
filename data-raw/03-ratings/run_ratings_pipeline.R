@@ -502,7 +502,12 @@ if (nrow(torp_new) > 0) {
       file = vintage_file,
       set_canonical = is.null(RATINGS_VINTAGE)
     ),
-    error = function(e) cli::cli_warn("Could not publish ratings manifest: {conditionMessage(e)}")
+    # A failed manifest publish FAILS the run. It used to cli_warn(), which R
+    # defers to the end of the script and folds into "There were 35 warnings":
+    # on 2026-09-17 the manifest was lost that way and the run reported success.
+    # The ratings above are already uploaded; failing here is only the signal.
+    error = function(e) cli::cli_abort(c("Could not publish the ratings manifest.",
+                                         "x" = conditionMessage(e)), parent = e)
   )
 }
 

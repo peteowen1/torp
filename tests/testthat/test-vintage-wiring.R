@@ -152,8 +152,10 @@ KNOWN_NON_DEFINING <- c(
   # A different category again: these two are the bounds of a sanity check on
   # the fitted stoppage win rate. They can abort a run or print a warning; they
   # are never read into any arithmetic, so no value of either can change a
-  # published number. (2026-09-09)
-  "NP_STOPPAGE_WIN_WARN", "NP_STOPPAGE_WIN_ABORT"
+  # published number. (2026-09-09) The third, the minimum cell size the check
+  # reads (torp#225), is the same kind: it decides which cells the check looks
+  # at and nothing else; every row still goes into the ledger. (2026-09-23)
+  "NP_STOPPAGE_WIN_WARN", "NP_STOPPAGE_WIN_ABORT", "NP_STOPPAGE_WIN_MIN_N"
 )
 
 # ---------------------------------------------------------------------------
