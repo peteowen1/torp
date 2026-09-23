@@ -1711,6 +1711,11 @@ add_weather_to_preds <- function(preds, raw_cols = FALSE) {
   bad <- abs(df$pred_score_diff) > 1 & abs(df$pred_win - 0.5) > 0.02 &
     sign(df$pred_score_diff) != sign(df$pred_win - 0.5)
   bad <- bad %in% TRUE
+  # The validation tests the MATCH, after the two team rows are averaged, so a
+  # match with only one contradicting row could still fail it. Treat the match
+  # as a unit: if either row contradicts, both are derived from their margins,
+  # which keeps them complementary.
+  if ("match_id" %in% names(df)) bad <- df$match_id %in% df$match_id[bad]
   if (!any(bad)) return(df)
   done <- is.finite(df$score_diff) & is.finite(df$pred_score_diff)
   sigma <- stats::sd(df$score_diff[done] - df$pred_score_diff[done])
