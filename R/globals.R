@@ -477,6 +477,11 @@ utils::globalVariables(c(
   ".psr_sd", ".psr_w", "lineup_pos_group", "wpa_disp", "wpa_recv"
 ))
 
+# Net Points play-type breakdown (R/np_breakdown.R).
+utils::globalVariables(c(
+  "paid", "description", "category", "value", "recon", "bd_gap"
+))
+
 # Net Points ledger (R/epv_net_points.R) and the v4 engine branch: data.table
 # column names used in j / := expressions.
 utils::globalVariables(c(

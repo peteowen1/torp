@@ -540,10 +540,22 @@ update_player_game_data <- function(season) {
     return(invisible(NULL))
   }
 
+  # Net Points by play type, gated inside create_player_game_data() to add up
+  # to this frame's net_points. Read before save_to_release() touches pgd.
+  np_bd <- attr(pgd, "np_breakdown")
+
   file_name <- glue::glue("player_game_{season}")
   save_to_release(df = pgd, file_name = file_name, release_tag = "player_game-data")
 
   cli::cli_inform("Saved player game data: {file_name} ({nrow(pgd)} rows)")
+
+  if (!is.null(np_bd) && nrow(np_bd) > 0) {
+    bd_name <- glue::glue("np_breakdown_{season}")
+    save_to_release(df = as.data.frame(np_bd), file_name = bd_name, release_tag = "player_game-data")
+    cli::cli_inform("Saved Net Points breakdown: {bd_name} ({nrow(np_bd)} rows)")
+  } else {
+    cli::cli_alert_warning("No Net Points breakdown on the player game data (engine {EPV_ENGINE}); nothing saved.")
+  }
   invisible(NULL)
 }
 

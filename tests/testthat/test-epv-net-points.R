@@ -893,6 +893,20 @@ test_that("R1: the conceding side gets a blame pool equal to what the row ceded,
   expect_gt(nrow(rebuilt), 0)
   expect_equal(rebuilt$named + rebuilt$share + rebuilt$recon, rebuilt$net_points,
                tolerance = 1e-9)
+  # the published play-type breakdown is that identity, labelled: every
+  # player-match's categories add up to its net_points
+  bd <- torp:::.np_breakdown(tm, f$pbp)
+  expect_setequal(names(bd), c("match_id", "player_id", "category", "value"))
+  expect_true("Team pool share" %in% bd$category)
+  bsum <- merge(bd[, .(b = sum(value)), by = .(match_id, player_id)],
+                tm[, .(match_id = as.character(match_id), player_id = as.character(player_id), net_points)],
+                by = c("match_id", "player_id"))
+  expect_equal(bsum$b, bsum$net_points, tolerance = 1e-9)
+  # and a payment that goes missing is caught, not published
+  broken <- data.table::copy(tm)
+  data.table::setattr(broken, "np_team_margin_payments", paid[-which.max(abs(paid))])
+  data.table::setattr(broken, "np_team_margin_parts", parts)
+  expect_error(torp:::.np_breakdown(broken, f$pbp), "do not add up")
   # and the per-row pools are the same money as the shared-out pool: per team,
   # named payments + row pools = named + pool shares
   prows <- data.table::as.data.table(attr(tm, "np_team_margin_pool_rows"))
