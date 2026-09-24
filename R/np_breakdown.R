@@ -74,6 +74,13 @@
     cli::cli_abort("Play-by-play has more than one description for a (match_id, display_order).")
   }
   pay <- merge(pay, desc, by = c("match_id", "display_order"), all.x = TRUE)
+  # A payment with no play-by-play description falls into "Other own act". The
+  # sum gate below cannot see that (relabelling keeps totals), so say how many.
+  unk <- pay[is.na(description), .N]
+  if (unk > 0) {
+    cli::cli_alert_warning(
+      "Net Points breakdown: {unk} of {nrow(pay)} payment rows have no play-by-play description; labelled 'Other own act'.")
+  }
   pay[, category := .np_play_type(role, description)]
   named <- pay[, .(value = sum(paid)), by = .(match_id, player_id, category)]
   pools <- rbind(parts[, .(match_id, player_id, category = "Team pool share", value = share)],
