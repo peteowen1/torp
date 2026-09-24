@@ -1013,6 +1013,10 @@ create_player_game_data <- function(pbp_data = NULL,
     if (is.null(chains) && is.null(difficulty_terms)) chains <- load_chains(TRUE)
     np <- .np_engine_frame(pbp_data, player_stats, chains, difficulty_terms)
     np_dt <- .np_v4_channels(np)
+    # Where each player-match's net points came from, by play type (published
+    # beside the game data; see .np_breakdown()). Only the team-margin
+    # convention exposes final-value payments, so it is NULL without it.
+    np_bd <- if (isTRUE(NP_TEAM_MARGIN_CONVENTION)) .np_breakdown(np, pbp_data) else NULL
     # A player with net points but no play-by-play act (a pool share for a sub
     # who never touched it) has no row in this frame, in any engine. His value
     # re-spreads across his team-mates in that match by time on ground, so the
@@ -1045,6 +1049,14 @@ create_player_game_data <- function(pbp_data = NULL,
         ))
       }
       np_dt[, `:=`(np_pool = np_pool + share, net_points = net_points + share)]
+      if (!is.null(np_bd)) {
+        np_bd <- np_bd[!lost[, .(player_id = as.character(player_id), match_id = as.character(match_id))],
+                       on = .(player_id, match_id)]
+        np_bd <- rbind(np_bd, np_dt[share != 0, .(match_id = as.character(match_id),
+                                                  player_id = as.character(player_id),
+                                                  category = "Re-spread from a team-mate with no act",
+                                                  value = share)])
+      }
       np_dt[, c("team", "tog", "v_lost", "share") := NULL]
     }
     plyr_gm_df <- plyr_gm_df |>
@@ -1317,6 +1329,23 @@ create_player_game_data <- function(pbp_data = NULL,
   # epv_engine = "v3" while the constant still reads "v2" would silently get v2
   # scaling, which is exactly how every arm in this session was run.
   attr(plyr_gm_df, "epv_engine") <- epv_engine
+
+  # The play-type breakdown rides as an attribute (the release saves it as its
+  # own file). Checked against the FINISHED frame: every player-match's
+  # categories must add up to the net_points published beside them.
+  if (exists("np_bd", inherits = FALSE) && !is.null(np_bd)) {
+    chk <- merge(np_bd[, .(tot = sum(value)), by = .(match_id, player_id)],
+                 data.table::data.table(match_id = as.character(plyr_gm_df$match_id),
+                                        player_id = as.character(plyr_gm_df$player_id),
+                                        net_points = plyr_gm_df$net_points),
+                 by = c("match_id", "player_id"), all = TRUE)
+    chk[is.na(tot), tot := 0][is.na(net_points), net_points := 0]
+    bd_gap <- max(abs(chk$tot - chk$net_points))
+    if (!is.finite(bd_gap) || bd_gap > 1e-8) {
+      cli::cli_abort("v4: the play-type breakdown misses published net_points by {signif(bd_gap, 3)} points.")
+    }
+    attr(plyr_gm_df, "np_breakdown") <- np_bd
+  }
 
   # And again as a COLUMN, because the attribute does not survive the parquet
   # round-trip this frame makes through the release. Without it Stage 3 reloads

@@ -69,7 +69,7 @@ thead tr:not(.famrow) th{position:sticky;top:27px;z-index:3;background:var(--sur
 thead th .h{display:block;max-width:70px;white-space:normal;line-height:1.15;margin-left:auto}
 th.l,td.l{text-align:left}
 td.nm{position:sticky;left:0;z-index:2;background:var(--surface);font-weight:500}
-thead th.nm{z-index:4;background:var(--surface-2)}
+thead th.nm{z-index:4;background:var(--surface-2);left:0}
 tr.famrow th{position:sticky;top:0;z-index:4;height:22px;padding:4px 8px;font-size:9.5px;
   letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);font-weight:600;
   border-bottom:1px solid var(--line-soft);cursor:default;background:var(--surface-2)}
@@ -176,7 +176,8 @@ footer{margin-top:40px;padding-top:16px;border-top:1px solid var(--line);color:v
 
 <script>
 const DATA = /*__DATA__*/null;
-const FAM = DATA.families.map(f => [f.name, f.members]);
+// A family with no members would draw an empty section and an empty header span.
+const FAM = DATA.families.filter(f => (f.members || []).length).map(f => [f.name, f.members]);
 
 // Everything that differs between the sports lives in this one block. The
 // arithmetic, layout and checks below are shared, so a fix to either page is
@@ -235,8 +236,13 @@ const P = DATA.players;
 // A fixed palette per family, varied in lightness within it -- avoids threading
 // 25 new CSS custom properties through both theme blocks for a page whose
 // category set is expected to change as the taxonomy gets figured out.
-const HUES = [[61,90,146],[45,80,145],[200,20,55],[150,55,45],[38,75,50],[270,10,50],[330,40,50]];
-const FAM_HUE = Object.fromEntries(FAM.map((f, i) => [f[0], HUES[i % HUES.length]]));
+// [hue, saturation %, lightness %]. Lightness must stay under 100 -- the first
+// two entries were once 146 and 145, which rendered both families white.
+// The team-pool family is always gold, whichever position it takes.
+const HUES = [[212,55,45],[150,45,38],[200,18,50],[20,65,50],[270,30,55],[330,40,50]];
+const POOL_HUE = [38,75,46];
+let hi = 0;
+const FAM_HUE = Object.fromEntries(FAM.map(f => [f[0], /pool/i.test(f[0]) ? POOL_HUE : HUES[hi++ % HUES.length]]));
 function famColors(name, n){
   const [h,s,lBase] = FAM_HUE[name] || [0,0,50];
   const out = [];
@@ -318,14 +324,14 @@ const FAM_START = new Set(FAM.map(f=>f[1][0]));
 const famTint = k => { const c = cvar(k); return c ? c.replace("hsl(","hsla(").replace(")",",0.14)") : ""; };
 
 const thead = document.querySelector("#tbl thead");
-const famRow = '<tr class="famrow"><th colspan="7"></th>' +
+const famRow = '<tr class="famrow"><th colspan="5"></th><th class="comp l">Where it comes from</th><th></th>' +
   FAM.map(function(f){
     return '<th colspan="'+f[1].length+'" class="famhead" style="background:'+famTint(f[1][0])+'">'+f[0]+'</th>';
   }).join("") + '</tr>';
 thead.innerHTML = famRow + "<tr>" +
   '<th class="l nm" data-k="name">Player</th><th class="l" data-k="team">Team</th>' +
   '<th class="l" data-k="pos">Pos</th><th data-k="gms">Gms</th><th data-k="' + SPORT.weightKey + '">' + SPORT.weightShort + '</th>' +
-  '<th class="l">Where it comes from</th>' +
+  '<th class="l comp" data-k="net" title="Sort by net">&nbsp;</th>' +
   '<th class="net" data-k="net">Net</th>' +
   ORDER.map(k=>'<th data-k="'+k+'" title="'+k+' ('+FAM_OF[k]+')"'+
     (FAM_START.has(k)?' class="fam-start"':'')+' style="background:'+famTint(k)+'">'+
