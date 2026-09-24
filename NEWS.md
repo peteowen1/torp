@@ -1,3 +1,13 @@
+# torp 1.9.3
+
+## Net Points by play type, published beside the player game data
+
+`create_player_game_data()` attaches each player-match's `net_points` split by play type and role,
+plus the team pool share and the anchor to the real margin (`.np_breakdown()`), checked to add up
+to the published `net_points`. The daily release saves it as `np_breakdown_<season>`, and torpdata
+ships it to the website. 2026: 9,976 player-matches, 136,351 rows, worst gap 1.4e-14. Payments
+with no play-by-play description are counted and reported rather than silently labelled.
+
 # torp 1.9.2
 
 ## Predictions no longer blocked when the win model contradicts the margin model
