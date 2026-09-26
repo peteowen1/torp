@@ -481,7 +481,7 @@ utils::globalVariables(c(
 utils::globalVariables(c(
   "wpa_net", "wpa_neutral", "wpa_own", "wpa_won", "wpa_team", "p0", "p0_source",
   "i.p0", "i.p0_source", "source", "home_target", "home_win_prob", "got", "want",
-  "pred_win", "i.tog", "i.v"
+  "pred_win", "i.tog", "i.v", "n_sides", "n"
 ))
 
 # Net Points play-type breakdown (R/np_breakdown.R).

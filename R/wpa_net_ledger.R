@@ -76,6 +76,11 @@ build_wpa_ledger <- function(pbp_data, player_stats, pre_match,
   pm_miss <- setdiff(c("match_id", "home_win_prob"), names(pm))
   if (length(pm_miss)) cli::cli_abort("{.arg pre_match} is missing {.val {pm_miss}}.")
   if (!"source" %in% names(pm)) pm[, source := "forecast"]
+  dup <- pm[!is.na(home_win_prob), .(n = data.table::uniqueN(home_win_prob)), by = match_id][n > 1]
+  if (nrow(dup)) {
+    cli::cli_alert_warning(
+      "WPA ledger: {nrow(dup)} match{?es} have more than one pre-match chance; keeping the first row for each: {.val {head(as.character(dup$match_id), 5)}}.")
+  }
   pm <- unique(pm[!is.na(home_win_prob), .(match_id = as.character(match_id),
                                            p0 = as.numeric(home_win_prob), p0_source = as.character(source))],
                by = "match_id")
@@ -103,9 +108,26 @@ build_wpa_ledger <- function(pbp_data, player_stats, pre_match,
   np <- .np_team_margin(np, p, player_stats, eng_res)
   np <- data.table::as.data.table(np)
 
+  # A match can have a forecast and still come back from the engine with no
+  # rows, or with only one side (build_net_points() drops rows missing a team,
+  # player or orientation before its own dropped-match count is taken). Such a
+  # match is not rated: it joins `skipped`, so callers leave its players NA. If
+  # it were missing from `skipped` they would read "no act" and write 0, which
+  # looks like a real, average game.
+  sides <- np[, .(n_sides = data.table::uniqueN(home_away)), by = .(match_id = as.character(match_id))]
+  lost_m <- setdiff(res$match_id, sides[n_sides == 2, match_id])
+  if (length(lost_m)) {
+    cli::cli_alert_warning(
+      "WPA ledger: {length(lost_m)} match{?es} with a forecast came back from the engine with no rows or only one side and {?is/are} left out: {.val {head(lost_m, 5)}}.")
+    np <- np[!as.character(match_id) %in% lost_m]
+    res <- res[!match_id %in% lost_m]
+    skipped <- c(skipped, lost_m)
+  }
+  if (nrow(res) == 0) cli::cli_abort("WPA ledger: no match survived the engine.")
+
   # The identity this whole file exists for: every team sums to its own
-  # result minus its pre-match chance. Checked on the engine's own output,
-  # before anything is dropped or joined.
+  # result minus its pre-match chance. Every remaining match has both sides
+  # (above), so this inner join covers all of them.
   chk <- np[, .(got = sum(net_points)), by = .(match_id = as.character(match_id), home_away)]
   chk <- merge(chk, res[, .(match_id, home_target)], by = "match_id")
   chk[, want := data.table::fifelse(home_away == "Home", home_target, -home_target)]
@@ -147,7 +169,12 @@ build_wpa_ledger <- function(pbp_data, player_stats, pre_match,
         cli::cli_alert_warning("WPA ledger: {src} forecasts for {yr} unavailable ({conditionMessage(e)}).")
         NULL
       })
-      if (is.null(d) || !nrow(d) || !all(c("match_id", "pred_win") %in% names(d))) return(NULL)
+      if (is.null(d) || !nrow(d)) return(NULL)
+      miss <- setdiff(c("match_id", "pred_win"), names(d))
+      if (length(miss)) {
+        cli::cli_alert_warning("WPA ledger: {src} forecasts for {yr} loaded but have no {.field {miss}}; not used.")
+        return(NULL)
+      }
       d[, .(match_id = as.character(match_id), home_win_prob = as.numeric(pred_win), source = src)]
     }))
   }
@@ -189,9 +216,14 @@ build_wpa_ledger <- function(pbp_data, player_stats, pre_match,
                                                      match_id = as.character(match_id))])
   lost <- wpn[!keep, on = .(player_id, match_id)]
   if (nrow(lost) == 0) return(wpn)
-  tm <- unique(data.table::as.data.table(pbp_data)[!is.na(player_id),
-          .(player_id = as.character(player_id), match_id = as.character(match_id), team)],
-          by = c("player_id", "match_id"))
+  tm <- unique(data.table::as.data.table(pbp_data)[!is.na(player_id) & !is.na(team),
+          .(player_id = as.character(player_id), match_id = as.character(match_id), team)])
+  # One team per player-match, or his value could land on the wrong side and
+  # the conservation check below (built from the same lookup) could not see it.
+  two <- tm[, .N, by = .(player_id, match_id)][N > 1]
+  if (nrow(two)) {
+    cli::cli_abort("WPA ledger: {nrow(two)} player-match{?es} carry more than one team in the play-by-play, e.g. {.val {two$player_id[1]}} in {.val {two$match_id[1]}}.")
+  }
   lost <- merge(lost, tm, by = c("player_id", "match_id"), all.x = TRUE)
   if (anyNA(lost$team)) cli::cli_abort("WPA ledger: {sum(is.na(lost$team))} dropped player-match{?es} have no team in the play-by-play.")
   owed <- lost[, .(v = sum(wpa_net)), by = .(match_id, team)]

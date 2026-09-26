@@ -104,6 +104,23 @@ test_that("a match with no forecast is left out, said so, and does not disturb t
   expect_equal(tt[match_id == "M1" & home_away == "Home", total], 0.40, tolerance = 1e-12)
 })
 
+test_that("a match the engine drops is skipped, not left for a caller to zero", {
+  f <- wpa_fixture()
+  f$pbp[match_id == "M2", team := NA_character_]
+  expect_message(out <- build_wpa_ledger(f$pbp, f$stats, f$pre, results = f$results),
+                 "came back from the engine")
+  expect_true("M2" %in% attr(out, "skipped"))
+  expect_false("M2" %in% out$match_id)
+  expect_equal(team_totals(out)[match_id == "M1" & home_away == "Home", total], 0.40, tolerance = 1e-12)
+})
+
+test_that("two different forecasts for one match are said out loud", {
+  f <- wpa_fixture()
+  pre <- rbind(f$pre, data.table::data.table(match_id = "M1", home_win_prob = 0.70))
+  expect_message(build_wpa_ledger(f$pbp, f$stats, pre, results = f$results),
+                 "more than one pre-match chance")
+})
+
 test_that("no forecast for any match is refused", {
   f <- wpa_fixture()
   expect_error(suppressMessages(build_wpa_ledger(f$pbp, f$stats, f$pre[0], results = f$results)),
@@ -129,6 +146,14 @@ test_that("dropped players' value re-spreads to team-mates and the team total ho
   m <- merge(kept, out, by = c("match_id", "player_id"), suffixes = c("", ".before"))
   expect_equal(m$wpa_own, m$wpa_own.before)
   expect_equal(m$wpa_net - m$wpa_net.before, m$wpa_team - m$wpa_team.before, tolerance = 1e-12)
+})
+
+test_that("a player tagged with two teams in one match stops the re-spread", {
+  f <- wpa_fixture()
+  out <- run_wpa(f)
+  keep <- out[!(match_id == "M1" & player_id == "p2"), .(player_id, match_id)]
+  bad <- data.table::copy(f$pbp)[match_id == "M1" & display_order == 2, team := "Away FC"]
+  expect_error(suppressMessages(.wpa_respread_lost(out, keep, bad, f$stats)), "more than one team")
 })
 
 test_that("bad inputs are refused with the problem named", {

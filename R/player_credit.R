@@ -823,7 +823,10 @@ create_player_game_data <- function(pbp_data = NULL,
   pm <- pre_match
   if (is.null(pm)) {
     pm <- tryCatch(.wpa_pre_match(sort(unique(as.integer(substr(as.character(pbp_data$match_id), 5, 8))))),
-                   error = function(e) data.table::data.table(match_id = character(), home_win_prob = numeric()))
+                   error = function(e) {
+                     cli::cli_warn("WPA ledger: loading pre-match forecasts failed, so wpa_net will be NA: {conditionMessage(e)}")
+                     data.table::data.table(match_id = character(), home_win_prob = numeric())
+                   })
   }
   plyr_gm_df <- .wpa_attach(plyr_gm_df, .wpa_run("forecast start", pm, wpn_cols), wpn_cols)
   plyr_gm_df <- .wpa_attach(
