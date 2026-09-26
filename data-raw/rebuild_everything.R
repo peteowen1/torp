@@ -201,7 +201,7 @@ get_start_round <- function(season) {
 }
 
 get_max_round <- function(season) {
-  if (season == get_afl_season()) get_afl_week() else 28L
+  if (season == get_afl_season()) get_afl_week() else .afl_last_round(season)   # 29 in 2026
 }
 
 failures <- data.frame(label = character(), error = character(),

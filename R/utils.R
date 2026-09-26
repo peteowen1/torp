@@ -97,16 +97,25 @@ get_afl_week <- function(type = "current") {
     return(0)
   }
 
-  # A round is current once a match in it has KICKED OFF, compared as instants in
-  # UTC. It used to compare dates (the UTC date of kick-off against today's AEST
-  # date), so a round only became current the day after it started: the 2026
-  # Grand Final, a single Saturday match, was still "round 28" at that evening's
-  # release and its net points never built (2026-09-26). Instants have no
-  # timezone boundary to get wrong.
   kickoff <- .afl_kickoff_utc(all_fixtures$utc_start_time)
-  now_utc <- lubridate::with_tz(Sys.time(), tzone = "UTC")
-  past_fixtures <- all_fixtures[!is.na(kickoff) & kickoff <= now_utc, , drop = FALSE]
-  future_fixtures <- all_fixtures[is.na(kickoff) | kickoff > now_utc, , drop = FALSE]
+  if (type == "current") {
+    # "current": a round is current once a match in it has KICKED OFF, compared as
+    # UTC instants. Comparing dates made a round current only the day after it
+    # started: the 2026 Grand Final, a single Saturday match, was still "round 28"
+    # at that evening's release and its net points never built (2026-09-26).
+    now_utc <- lubridate::with_tz(Sys.time(), tzone = "UTC")
+    started <- !is.na(kickoff) & kickoff <= now_utc
+  } else {
+    # "next" keeps the date rule on purpose: a round stays "next" for the whole
+    # day its last match is played, so predictions don't jump to round N+1 the
+    # moment round N's last match kicks off, hours before it finishes (and, in
+    # finals, before N+1's teams are known). Review finding, 2026-09-26.
+    today_aest <- lubridate::as_date(lubridate::with_tz(Sys.time(), tzone = "Australia/Brisbane"))
+    kickoff_day <- lubridate::as_date(lubridate::with_tz(kickoff, tzone = "Australia/Brisbane"))
+    started <- !is.na(kickoff_day) & kickoff_day < today_aest
+  }
+  past_fixtures <- all_fixtures[started, , drop = FALSE]
+  future_fixtures <- all_fixtures[!started, , drop = FALSE]
 
   # Pre-season: no past fixtures yet
   if (nrow(past_fixtures) == 0) {

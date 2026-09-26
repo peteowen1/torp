@@ -89,7 +89,7 @@ build_ratings <- function(pgd, tag) {
   if (isTRUE(EPV_LEVEL_CENTRE)) d <- centre_epv_by_position(d)
   out <- rbindlist(lapply(sort(unique(d$season)), function(s) {
     sr <- if (s >= 2024) 0 else 1
-    mr <- if (s == get_afl_season()) get_afl_week(type = "next") else 28
+    mr <- if (s == get_afl_season()) get_afl_week(type = "next") else .afl_last_round(s)
     torp:::.build_epr_season(s, sr:mr, d, shared_stat_ratings, shared_fixtures)
   }), use.names = TRUE, fill = TRUE)
   if (isTRUE(EPR_POSITION_CENTRE)) out <- centre_epr_by_position(out)

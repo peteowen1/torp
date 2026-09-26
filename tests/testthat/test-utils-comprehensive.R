@@ -381,6 +381,7 @@ test_that("get_afl_week makes a round current once a match in it has kicked off"
     get_afl_season = function(...) as.integer(format(now, "%Y"))
   )
   expect_equal(get_afl_week("current"), 29)   # kicked off an hour ago, same day
+  expect_equal(get_afl_week("next"), 29)      # "next" keeps the date rule: still 29 today
 
   fx$utc_start_time[3] <- iso(now + 3600)      # kicks off in an hour
   expect_equal(get_afl_week("current"), 28)
