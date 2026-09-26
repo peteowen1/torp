@@ -591,6 +591,10 @@ centre_epv_by_position <- function(pgd, channels = EPV_LEVEL_CENTRE_CHANNELS) {
 #' @param difficulty_terms v4 only: precomputed difficulty terms from
 #'   `np_difficulty_terms_for_season()` (leak-safe). Fitted in-sample, with a
 #'   warning, when `NULL`.
+#' @param pre_match Pre-match forecasts (`match_id`, `home_win_prob`,
+#'   optional `source`) for the WPA ledger (`build_wpa_ledger()`); when
+#'   `NULL`, locked forecasts filled by retrodictions for the seasons in
+#'   `pbp_data`.
 #' @return A data.table with one row per player per match, containing:
 #'   identifiers (\code{player_id}, \code{match_id}, \code{season}, \code{round},
 #'   \code{player_name}, \code{team}, \code{opponent}, \code{position_group}, \code{lineup_position}, \code{team_id},
@@ -615,7 +619,8 @@ create_player_game_data <- function(pbp_data = NULL,
                                     decay = EPR_DECAY_DEFAULT_DAYS,
                                     epv_params = NULL,
                                     epv_engine = EPV_ENGINE,
-                                    difficulty_terms = NULL) {
+                                    difficulty_terms = NULL,
+                                    pre_match = NULL) {
 
   if (!epv_engine %in% c("v2", "v3", "v4")) {
     cli::cli_abort(c(
@@ -779,6 +784,53 @@ create_player_game_data <- function(pbp_data = NULL,
   })
   plyr_gm_df <- merge(plyr_gm_df, wp_dt,
     by = c("player_id", "match_id"), all.x = TRUE, sort = FALSE)
+
+  # --- Step 3c: WPA Net Points ledger (docs/plans/WPA-NET-LEDGER.md) ---
+  # Two runs, same per-play credit, different starting point. wpa_net starts
+  # each team at its pre-match forecast (locked, else retrodiction; matches
+  # with neither are skipped); wpa_neutral starts every home team at
+  # WPA_NEUTRAL_HOME_PROB, so it covers every match. wpa_own/won/team are
+  # wpa_net's parts. Published beside wp_credit, which stays until the blog
+  # has switched. On failure a run's columns are NA, never 0: a zero would read
+  # as a real, average game, and torpdata's coverage check fails on NA.
+  .wpa_run <- function(label, pm, cols, rename = NULL) {
+    tryCatch({
+      wpn <- build_wpa_ledger(pbp_data, player_stats, pm)
+      skipped <- attr(wpn, "skipped")
+      keep <- plyr_gm_df[!as.character(match_id) %in% skipped, .(player_id, match_id)]
+      dt <- .wpa_respread_lost(wpn, keep, pbp_data, player_stats)
+      if (!is.null(rename)) data.table::setnames(dt, names(rename), unname(rename))
+      list(dt = dt[, c("player_id", "match_id", cols), with = FALSE], skipped = skipped)
+    }, error = function(e) {
+      cli::cli_warn("WPA ledger ({label}) skipped, {.field {cols}} will be NA: {conditionMessage(e)}")
+      NULL
+    })
+  }
+  .wpa_attach <- function(frame, run, cols) {
+    if (is.null(run)) {
+      for (cc in cols) data.table::set(frame, j = cc, value = NA_real_)
+      return(frame)
+    }
+    frame <- merge(frame, run$dt, by = c("player_id", "match_id"), all.x = TRUE, sort = FALSE)
+    # A player in a rated match with no ledger row made no allocatable act;
+    # his share is genuinely zero. A skipped match stays NA: nobody in it has
+    # a number, and 0 would say they did.
+    rated <- !as.character(frame$match_id) %in% run$skipped
+    for (cc in cols) data.table::set(frame, i = which(rated & is.na(frame[[cc]])), j = cc, value = 0)
+    frame
+  }
+  wpn_cols <- c("wpa_net", "wpa_own", "wpa_won", "wpa_team")
+  pm <- pre_match
+  if (is.null(pm)) {
+    pm <- tryCatch(.wpa_pre_match(sort(unique(as.integer(substr(as.character(pbp_data$match_id), 5, 8))))),
+                   error = function(e) data.table::data.table(match_id = character(), home_win_prob = numeric()))
+  }
+  plyr_gm_df <- .wpa_attach(plyr_gm_df, .wpa_run("forecast start", pm, wpn_cols), wpn_cols)
+  plyr_gm_df <- .wpa_attach(
+    plyr_gm_df,
+    .wpa_run("neutral start", .wpa_neutral_pre_match(pbp_data$match_id), "wpa_neutral",
+             rename = c(wpa_net = "wpa_neutral")),
+    "wpa_neutral")
 
   # --- Step 3b2: difficulty-weighted disposal credit ---
   # Left-joined like every other channel, so a player who ONLY appears as a
@@ -1301,6 +1353,8 @@ create_player_game_data <- function(pbp_data = NULL,
       # exactly — column_schema.R would reject the extras on a released frame.
       dplyr::any_of(c("epv_cont_aerial", "epv_cont_stop",
                       "contests_won", "contests_lost", "net_points")),
+      # WPA ledger (Step 3c). any_of() for the same schema reason as above.
+      dplyr::any_of(c("wpa_net", "wpa_neutral", "wpa_own", "wpa_won", "wpa_team")),
       # PBP-derived action counts
       disposals_pbp, receptions,
       # EPV model input stats

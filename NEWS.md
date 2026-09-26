@@ -1,3 +1,27 @@
+# torp 1.9.5
+
+## WPA as a ledger that adds up: `wpa_net` and `wpa_neutral`
+
+Published WPA (`wp_credit`) credits each play's win probability change to the disposer and receiver
+and never debits the side that conceded, then centres it by position. A team's players can total
+several wins and both teams in a match can come out positive (2026 Grand Final: Brisbane +2.91,
+Fremantle +2.36).
+
+`build_wpa_ledger()` runs the same per-play change through the Net Points engine instead, so each
+team's players sum to its result (1, 0.5, 0) minus a pre-match chance and the two teams cancel.
+`create_player_game_data()` runs it twice and publishes both, uncentred, beside `wp_credit`:
+
+- `wpa_net` starts each team at its forecast: the locked forecast, else the retrodiction
+  (2026 rounds 0-12). 2021 rounds 1-13 have neither and are left NA. Parts `wpa_own`, `wpa_won`,
+  `wpa_team` add up to it.
+- `wpa_neutral` starts every home team at `WPA_NEUTRAL_HOME_PROB` (0.57, the 2021-2026 home win
+  rate), so a win is worth about the same to any team. Covers every match.
+
+The win probability model's opening value is NOT used as a fallback forecast: it has no
+team-strength input and correlated -0.03 with the locked forecast. `.np_match_results()` is
+extracted from `.np_engine_frame()` so both ledgers read the same results; net points is unchanged.
+Design and worked examples: `docs/plans/WPA-NET-LEDGER.md` (torpverse).
+
 # torp 1.9.4
 
 ## The 2026 Grand Final (round 29) is no longer left out

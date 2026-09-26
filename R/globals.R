@@ -477,6 +477,13 @@ utils::globalVariables(c(
   ".psr_sd", ".psr_w", "lineup_pos_group", "wpa_disp", "wpa_recv"
 ))
 
+# WPA Net Points ledger (R/wpa_net_ledger.R).
+utils::globalVariables(c(
+  "wpa_net", "wpa_neutral", "wpa_own", "wpa_won", "wpa_team", "p0", "p0_source",
+  "i.p0", "i.p0_source", "source", "home_target", "home_win_prob", "got", "want",
+  "pred_win", "i.tog", "i.v"
+))
+
 # Net Points play-type breakdown (R/np_breakdown.R).
 utils::globalVariables(c(
   "paid", "description", "category", "value", "recon", "bd_gap"
