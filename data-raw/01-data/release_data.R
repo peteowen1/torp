@@ -30,7 +30,7 @@ tictoc::tic('chains')
 release_chains_season <- function(season, rounds = NULL) {
   if (is.null(rounds)) {
     start <- if (season >= 2024) 0 else 1
-    end <- if (season == get_afl_season()) get_afl_week() else 28
+    end <- if (season == get_afl_season()) get_afl_week() else .afl_last_round(season)
     rounds <- start:end
   }
 
@@ -65,7 +65,7 @@ tictoc::tic('pbp')
 #' @param season Season year
 release_pbp_season <- function(season) {
   start <- if (season >= 2024) 0 else 1
-  end <- if (season == get_afl_season()) get_afl_week() else 28
+  end <- if (season == get_afl_season()) get_afl_week() else .afl_last_round(season)
   rounds <- start:end
 
   all_chains <- purrr::map(rounds, function(round) {

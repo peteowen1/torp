@@ -81,7 +81,8 @@ get_start_round <- function(season) {
 }
 
 get_max_round <- function(season) {
-  if (season == get_afl_season()) get_afl_week() else 28L
+  if (season == get_afl_season()) return(get_afl_week())
+  .afl_last_round(season)   # from fixtures: 28 until 2025, 29 in 2026
 }
 
 # Track failures across the run

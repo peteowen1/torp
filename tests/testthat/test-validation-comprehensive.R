@@ -73,8 +73,8 @@ test_that("validate_rounds accepts TRUE for all rounds", {
   result <- torp:::validate_rounds(TRUE)
   expect_true(is.numeric(result))
   expect_true(0 %in% result)
-  expect_true(28 %in% result)
-  expect_equal(result, 0:28)
+  expect_true(29 %in% result)   # the 2026 Grand Final
+  expect_equal(result, torp:::AFL_ALL_ROUNDS)
 })
 
 test_that("validate_rounds rejects negative rounds", {
@@ -83,10 +83,12 @@ test_that("validate_rounds rejects negative rounds", {
   expect_error(torp:::validate_rounds(c(-1, 1, 2)), "Invalid round")
 })
 
-test_that("validate_rounds rejects rounds > 28", {
-  expect_error(torp:::validate_rounds(29), "Invalid round")
+test_that("validate_rounds accepts the 2026 Grand Final and TRUE, rejects beyond AFL_ALL_ROUNDS", {
+  expect_equal(torp:::validate_rounds(29), 29)          # 2026 Grand Final
+  expect_equal(torp:::validate_rounds(TRUE), torp:::AFL_ALL_ROUNDS)
+  expect_error(torp:::validate_rounds(31), "Invalid round")
   expect_error(torp:::validate_rounds(50), "Invalid round")
-  expect_error(torp:::validate_rounds(c(1, 2, 30)), "Invalid round")
+  expect_error(torp:::validate_rounds(c(1, 2, 31)), "Invalid round")
 })
 
 test_that("validate_rounds rejects non-numeric input", {

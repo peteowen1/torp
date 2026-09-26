@@ -19,7 +19,7 @@ test_that("player_game_ratings validates input", {
   expect_error(player_game_ratings(season_val = "invalid"), "season_val must be numeric")
   expect_error(player_game_ratings(round_val = "invalid"), "round_val must be numeric")
   expect_error(player_game_ratings(season_val = 1900), "1990 and")
-  expect_error(player_game_ratings(round_val = 50), "0 and 28")
+  expect_error(player_game_ratings(round_val = 50), "0 and 30")
 })
 
 test_that(".compute_player_game_ratings includes WPA columns when present", {

@@ -4,12 +4,13 @@
 \alias{get_season_games}
 \title{Get Season Games}
 \usage{
-get_season_games(season, rounds = 28)
+get_season_games(season, rounds = NULL)
 }
 \arguments{
 \item{season}{The AFL season year (numeric).}
 
-\item{rounds}{The maximum number of rounds to check (default: 28, covers all AFL season formats).}
+\item{rounds}{The number of rounds to check. \code{NULL} (the default) takes the season's last
+round from its fixtures (\code{.afl_last_round()}): 28 until 2025, 29 in 2026.}
 }
 \value{
 A dataframe containing game data for the entire season.

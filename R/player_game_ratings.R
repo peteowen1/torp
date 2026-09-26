@@ -34,7 +34,7 @@ player_game_ratings <- function(season_val = get_afl_season(),
     cli::cli_abort("season_val must be numeric (e.g., 2024)")
   }
 
-  if (isTRUE(round_val)) round_val <- 0:28
+  if (isTRUE(round_val)) round_val <- AFL_ALL_ROUNDS
   if (!is.numeric(round_val) && !is.na(round_val)) {
     cli::cli_abort("round_val must be numeric (e.g., 1, 2, 3...) or TRUE for all rounds")
   }
@@ -45,8 +45,8 @@ player_game_ratings <- function(season_val = get_afl_season(),
   }
 
   # Validate reasonable round range
-  if (is.numeric(round_val) && (any(round_val < 0) || any(round_val > 28))) {
-    cli::cli_abort("round_val must be between 0 and 28")
+  if (is.numeric(round_val) && (any(round_val < 0) || any(round_val > max(AFL_ALL_ROUNDS)))) {
+    cli::cli_abort("round_val must be between 0 and {max(AFL_ALL_ROUNDS)}")
   }
 
   df <- load_player_game_ratings(season_val)

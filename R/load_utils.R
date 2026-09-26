@@ -175,15 +175,16 @@ invalidate_release_cache <- function(release_tag) {
 #' @return Validated rounds vector
 #' @keywords internal
 validate_rounds <- function(rounds) {
-  if (isTRUE(rounds)) rounds <- 0:28
+  if (isTRUE(rounds)) rounds <- AFL_ALL_ROUNDS
 
   if (!is.numeric(rounds)) {
     cli::cli_abort("Rounds must be numeric values or TRUE")
   }
 
-  invalid_rounds <- rounds[rounds < 0 | rounds > 28]
+  hi <- max(AFL_ALL_ROUNDS)   # 29 was the 2026 Grand Final; 28 used to be the cap
+  invalid_rounds <- rounds[rounds < 0 | rounds > hi]
   if (length(invalid_rounds) > 0) {
-    cli::cli_abort("Invalid round numbers: {paste(invalid_rounds, collapse = ', ')}. Rounds must be between 0 and 28")
+    cli::cli_abort("Invalid round numbers: {paste(invalid_rounds, collapse = ', ')}. Rounds must be between 0 and {hi}")
   }
 
   return(rounds)
@@ -281,8 +282,8 @@ generate_urls <- function(data_type, file_prefix, seasons, rounds = NULL, prefer
     current_season <- get_afl_season()
     current_round <- get_afl_week()
 
-    # Check if we're loading all rounds for any season (rounds 0-28 or TRUE was passed)
-    all_rounds <- 0:28
+    # Check if we're loading all rounds for any season (AFL_ALL_ROUNDS or TRUE was passed)
+    all_rounds <- AFL_ALL_ROUNDS
     loading_all_rounds <- length(rounds) >= length(all_rounds) &&
       all(all_rounds %in% rounds)
 
