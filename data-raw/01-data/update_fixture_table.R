@@ -45,7 +45,15 @@ tictoc::tic()
 
 # Only fetch lineups if season has started (round > 0)
 if (current_round > 0) {
-  rounds_to_fetch <- max(0, current_round - 1):min(current_round + 1, 28)
+  # Cap at the season's last round from its fixtures, not a hard-coded 28: the
+  # 2026 Grand Final is round 29, and min(current + 1, 28) never fetched its
+  # lineups, so its net points could not be built (2026-09-26).
+  last_round <- if (has_data(fixtures_upd) && "round_number" %in% names(fixtures_upd)) {
+    max(fixtures_upd$round_number, na.rm = TRUE)
+  } else {
+    current_round + 1
+  }
+  rounds_to_fetch <- max(0, current_round - 1):min(current_round + 1, last_round)
 
   teams_upd <- safe_fetch(get_afl_lineups, season, round = rounds_to_fetch)
 

@@ -39,6 +39,27 @@ get_afl_season <- function(type = "current") {
   return(season_year)
 }
 
+# Fixture kick-off times as UTC instants. The API sends ISO strings with an
+# offset ("2026-09-26T04:30:00.000+0000"); a cached table may already hold
+# POSIXct. Unparseable values come back NA and count as not yet started.
+.afl_kickoff_utc <- function(x) {
+  if (inherits(x, "POSIXct")) return(lubridate::with_tz(x, tzone = "UTC"))
+  lubridate::ymd_hms(as.character(x), tz = "UTC", quiet = TRUE)
+}
+
+# The last round a season has, from its fixtures. Hard-coded 28s undercount
+# 2026, whose Grand Final is round 29. Falls back to the old per-season
+# numbers (27 for 2021-22, else 28) only when no fixtures can be loaded.
+.afl_last_round <- function(season) {
+  fx <- tryCatch(load_fixtures(season, use_mem_cache = TRUE), error = function(e) NULL)
+  col <- intersect(c("round_number", "round.roundNumber"), names(fx))
+  if (length(col)) {
+    r <- suppressWarnings(max(as.numeric(fx[[col[1]]]), na.rm = TRUE))
+    if (is.finite(r)) return(as.integer(r))
+  }
+  if (season %in% c(2021, 2022)) 27L else 28L
+}
+
 #' Get AFL Week
 #'
 #' Determine the current or next AFL week (round) based on fixtures.
@@ -51,13 +72,11 @@ get_afl_season <- function(type = "current") {
 #' @importFrom dplyr filter
 #' @importFrom cli cli_abort
 get_afl_week <- function(type = "current") {
-  if (isTRUE(type)) return(0:28)
+  if (isTRUE(type)) return(AFL_ALL_ROUNDS)
   if (!type %in% c("current", "next")) {
     cli::cli_abort('type must be one of: "current", "next", or TRUE for all rounds')
   }
   season <- get_afl_season("current")
-  time_aest <- lubridate::with_tz(Sys.time(), tzone = "Australia/Brisbane")
-  current_day <- lubridate::as_date(time_aest)
 
   # Try to load fixtures for current season with caching enabled
   # (get_afl_week is called frequently as a default parameter value)
@@ -78,12 +97,25 @@ get_afl_week <- function(type = "current") {
     return(0)
   }
 
-  # Compare as Date objects to avoid POSIXct/Date coercion (which uses midnight UTC,
-  # not midnight AEST, creating a ~10 hour boundary mismatch)
-  past_fixtures <- all_fixtures |>
-    dplyr::filter(lubridate::as_date(.data$utc_start_time) < current_day)
-  future_fixtures <- all_fixtures |>
-    dplyr::filter(lubridate::as_date(.data$utc_start_time) >= current_day)
+  kickoff <- .afl_kickoff_utc(all_fixtures$utc_start_time)
+  if (type == "current") {
+    # "current": a round is current once a match in it has KICKED OFF, compared as
+    # UTC instants. Comparing dates made a round current only the day after it
+    # started: the 2026 Grand Final, a single Saturday match, was still "round 28"
+    # at that evening's release and its net points never built (2026-09-26).
+    now_utc <- lubridate::with_tz(Sys.time(), tzone = "UTC")
+    started <- !is.na(kickoff) & kickoff <= now_utc
+  } else {
+    # "next" keeps the date rule on purpose: a round stays "next" for the whole
+    # day its last match is played, so predictions don't jump to round N+1 the
+    # moment round N's last match kicks off, hours before it finishes (and, in
+    # finals, before N+1's teams are known). Review finding, 2026-09-26.
+    today_aest <- lubridate::as_date(lubridate::with_tz(Sys.time(), tzone = "Australia/Brisbane"))
+    kickoff_day <- lubridate::as_date(lubridate::with_tz(kickoff, tzone = "Australia/Brisbane"))
+    started <- !is.na(kickoff_day) & kickoff_day < today_aest
+  }
+  past_fixtures <- all_fixtures[started, , drop = FALSE]
+  future_fixtures <- all_fixtures[!started, , drop = FALSE]
 
   # Pre-season: no past fixtures yet
   if (nrow(past_fixtures) == 0) {

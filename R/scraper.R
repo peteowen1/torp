@@ -311,13 +311,15 @@ get_round_games <- function(season, round, concluded_only = TRUE) {
 #' Retrieves game data for an entire season using parallel HTTP requests.
 #'
 #' @param season The AFL season year (numeric).
-#' @param rounds The maximum number of rounds to check (default: 28, covers all AFL season formats).
+#' @param rounds The number of rounds to check. `NULL` (the default) takes the season's last
+#'   round from its fixtures (`.afl_last_round()`): 28 until 2025, 29 in 2026.
 #'
 #' @return A dataframe containing game data for the entire season.
 #' @keywords internal
 #'
 #' @importFrom curl new_pool new_handle curl_fetch_multi multi_run
-get_season_games <- function(season, rounds = 28) {
+get_season_games <- function(season, rounds = NULL) {
+  if (is.null(rounds)) rounds <- .afl_last_round(season)
   token <- get_token()
   urls <- vapply(seq_len(rounds), function(r) {
     paste0(AFL_CFS_API_BASE_URL, "fixturesAndResults/season/CD_S",

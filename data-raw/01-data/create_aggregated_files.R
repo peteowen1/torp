@@ -46,9 +46,7 @@ get_max_round <- function(season) {
   if (season == current_season) {
     return(get_afl_week())
   }
-  # Historical seasons
-  if (season == 2021 || season == 2022) return(27)
-  return(28)
+  .afl_last_round(season)   # from fixtures: 29 in 2026
 }
 
 # Core Functions ----

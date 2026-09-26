@@ -145,7 +145,7 @@ expect_reasonable_season <- function(season) {
 expect_reasonable_round <- function(round) {
   testthat::expect_type(round, "double")
   testthat::expect_gte(round, 0)
-  testthat::expect_lte(round, 28)
+  testthat::expect_lte(round, max(AFL_ALL_ROUNDS))   # 29 in 2026 (Grand Final)
 }
 
 # -----------------------------------------------------------------------------

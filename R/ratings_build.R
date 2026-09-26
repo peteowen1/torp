@@ -194,7 +194,7 @@ build_ratings_history <- function(seasons,
   out <- list()
   for (s in seasons) {
     start_round <- if (s >= 2024) 0 else 1
-    max_round <- if (s == get_afl_season()) get_afl_week(type = "next") else 28
+    max_round <- if (s == get_afl_season()) get_afl_week(type = "next") else .afl_last_round(s)
     out[[as.character(s)]] <- tryCatch(
       .build_epr_season(s, start_round:max_round, pgd, stat_ratings, fixtures),
       error = function(e) {

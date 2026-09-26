@@ -363,37 +363,42 @@ test_that("get_afl_week returns reasonable values", {
   expect_reasonable_round(result)
 })
 
-test_that("get_afl_week compares dates correctly near midnight AEST boundary", {
-  # Regression test: POSIXct-to-Date coercion uses midnight UTC, not AEST,
-
-  # creating a ~10 hour window where games are misclassified.
-  # The fix wraps utcStartTime in lubridate::as_date() before comparison.
-  mock_fixtures <- data.frame(
-    compSeason.year = rep(2025, 3),
-    round.roundNumber = c(1, 2, 3),
-    # Game at 14:10 UTC on Apr 5 = 00:10 AEST on Apr 6 (next day in AEST)
-    utcStartTime = as.POSIXct(
-      c("2025-03-20 06:00:00", "2025-04-05 14:10:00", "2025-04-12 06:00:00"),
-      tz = "UTC"
-    ),
+test_that("get_afl_week makes a round current once a match in it has kicked off", {
+  # Regression, 2026-09-26: the Grand Final (round 29) kicked off at 04:30 UTC,
+  # but get_afl_week() compared DATES, so at that evening's release it still
+  # returned 28 and the Grand Final's net points were never built. Fixture
+  # times are relative to now, so no clock needs mocking.
+  iso <- function(t) format(t, "%Y-%m-%dT%H:%M:%S.000+0000", tz = "UTC")
+  now <- Sys.time()
+  fx <- data.frame(
+    season = as.integer(format(now, "%Y")),
+    round_number = c(27L, 28L, 29L),
+    utc_start_time = iso(c(now - 8 * 86400, now - 7 * 86400, now - 3600)),
     stringsAsFactors = FALSE
   )
+  testthat::local_mocked_bindings(
+    load_fixtures = function(...) fx,
+    get_afl_season = function(...) as.integer(format(now, "%Y"))
+  )
+  expect_equal(get_afl_week("current"), 29)   # kicked off an hour ago, same day
+  expect_equal(get_afl_week("next"), 29)      # "next" keeps the date rule: still 29 today
 
-  # as_date() should classify the Apr 5 UTC game as Apr 5 (date only, no TZ shift)
-  game_dates <- lubridate::as_date(mock_fixtures$utcStartTime)
-  expect_equal(game_dates[2], as.Date("2025-04-05"))
+  fx$utc_start_time[3] <- iso(now + 3600)      # kicks off in an hour
+  expect_equal(get_afl_week("current"), 28)
+  expect_equal(get_afl_week("next"), 29)
+})
 
-  # Verify the comparison logic: if "today" is Apr 5, the game IS today (past)
-  current_day <- as.Date("2025-04-05")
-  past <- game_dates < current_day
-  future <- game_dates >= current_day
-  expect_false(past[2])  # Apr 5 game is NOT past on Apr 5
-  expect_true(future[2]) # Apr 5 game is future/current on Apr 5
+test_that(".afl_kickoff_utc parses the API's ISO strings and POSIXct alike", {
+  x <- .afl_kickoff_utc(c("2026-09-26T04:30:00.000+0000", NA, "not a time"))
+  expect_equal(format(x[1], "%Y-%m-%d %H:%M", tz = "UTC"), "2026-09-26 04:30")
+  expect_true(all(is.na(x[2:3])))
+  p <- as.POSIXct("2026-09-26 14:30:00", tz = "Australia/Brisbane")
+  expect_equal(format(.afl_kickoff_utc(p), "%H:%M", tz = "UTC"), "04:30")
+})
 
-  # If "today" is Apr 6, the game IS past
-  current_day2 <- as.Date("2025-04-06")
-  past2 <- game_dates < current_day2
-  expect_true(past2[2]) # Apr 5 game is past on Apr 6
+test_that("'all rounds' reaches the 2026 Grand Final (round 29)", {
+  expect_true(29L %in% get_afl_week(TRUE))
+  expect_true(29L %in% AFL_ALL_ROUNDS)
 })
 
 # -----------------------------------------------------------------------------
@@ -476,4 +481,12 @@ test_that("torp_dummy_cols ignores missing columns gracefully", {
   result <- torp:::torp_dummy_cols(df, "nonexistent_col")
   expect_equal(names(result), "x")
   expect_equal(nrow(result), 3)
+})
+
+test_that(".afl_last_round reads the season's last round from its fixtures", {
+  testthat::local_mocked_bindings(load_fixtures = function(...) data.frame(round_number = c(0L, 14L, 29L)))
+  expect_identical(.afl_last_round(2026), 29L)
+  testthat::local_mocked_bindings(load_fixtures = function(...) stop("offline"))
+  expect_identical(.afl_last_round(2022), 27L)   # fallbacks: the old hand-set values
+  expect_identical(.afl_last_round(2025), 28L)
 })

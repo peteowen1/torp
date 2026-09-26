@@ -1,3 +1,20 @@
+# torp 1.9.4
+
+## The 2026 Grand Final (round 29) is no longer left out
+
+torp assumed a season ends at round 28. In 2026 the Grand Final is round 29, so it was missing from
+every "all rounds" load (`0:28`), its lineups were never fetched (`min(current + 1, 28)`), and the
+release scripts capped historical seasons at 28. And `get_afl_week()` compared dates, so a round
+only became current the day AFTER it started: the Grand Final's own evening release still processed
+round 28. Its net points were never built, and the site showed the live estimate instead.
+
+- `AFL_ALL_ROUNDS` (0:30) replaces every hard-coded `0:28`.
+- `.afl_last_round(season)` reads a season's last round from its fixtures (27, 27, 28, 28, 28, 29
+  for 2021-2026, matching the old hand-set values up to 2025). The release scripts use it.
+- `get_afl_week()` makes a round current once a match in it has kicked off, comparing UTC instants
+  (`.afl_kickoff_utc()`), not dates.
+- Lineup fetches cap at the season's last fixture round.
+
 # torp 1.9.3
 
 ## Net Points by play type, published beside the player game data

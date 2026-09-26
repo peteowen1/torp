@@ -11,6 +11,17 @@
 #' @keywords internal
 AFL_MIN_SEASON <- 2021L
 
+#' Every round number an AFL season can have, for "all rounds" (`TRUE`)
+#'
+#' Rounds run from 0 (Opening Round, since 2024) to the Grand Final. That was
+#' round 28 until 2025; in 2026 the Grand Final is round 29, and the old
+#' hard-coded `0:28` silently left it out of every all-rounds load and every
+#' lineup fetch (2026-09-26). Round numbers that a season doesn't have simply
+#' match nothing, so this errs high; the season's real last round comes from its
+#' fixtures (`.afl_last_round()`).
+#' @keywords internal
+AFL_ALL_ROUNDS <- 0:30
+
 #' Nominal playing time per AFL quarter in seconds (excludes stoppages)
 #' @keywords internal
 AFL_PLAY_QUARTER_SECONDS <- 1200L

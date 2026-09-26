@@ -161,8 +161,7 @@ get_max_round <- function(season) {
   if (season == current_season) {
     return(get_afl_week())
   }
-  # Historical seasons have up to round 28 (including finals)
-  return(28)
+  .afl_last_round(season)   # from fixtures: 28 until 2025, 29 in 2026
 }
 
 #' Get Starting Round for a Season

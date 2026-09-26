@@ -51,9 +51,9 @@ load_from_url <- function(url, ..., seasons = TRUE, rounds = TRUE, use_disk_cach
       out <- out[out$round_number %in% rounds, ]
     } else if ("week" %in% names(out) && !all(is.na(out$week))) {
       out <- out[out$week %in% rounds, ]
-    } else if (nrow(out) > 0 && !setequal(rounds, 0:28)) {
+    } else if (nrow(out) > 0 && !setequal(rounds, AFL_ALL_ROUNDS)) {
       # Only warn when specific rounds were requested but no round column exists.
-      # When rounds = 0:28 (from validate_rounds(TRUE)), filtering is a no-op anyway.
+      # When rounds = AFL_ALL_ROUNDS (from validate_rounds(TRUE)), filtering is a no-op anyway.
       cli::cli_warn("Round filtering requested but no round column found in data. Returning unfiltered. Available columns: {.val {head(names(out), 10)}}")
     }
   }
