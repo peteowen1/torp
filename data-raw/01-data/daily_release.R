@@ -613,11 +613,18 @@ update_player_game_ratings <- function(season) {
   if (is.null(ratings) || nrow(ratings) == 0) {
     return(invisible(NULL))
   }
-  # Keep the last good file rather than publish one with blank PSV: it would
-  # fail the blog's gate and block all AFL blog data until the next ratings run.
-  if (!"psv" %in% names(ratings) || all(is.na(ratings$psv))) {
-    cli::cli_alert_danger("Player game ratings for {season} have no PSV -- NOT overwriting the released file (it keeps the previous round's ratings).")
-    return(invisible(NULL))
+  # Keep the last good file rather than publish one with missing PSV: torpdata's
+  # game-logs gate refuses ANY NA psv in the latest season, so it would block all
+  # AFL blog data until the next ratings run. A full season has PSV on every row
+  # (2026: 10,022 of 10,022), so any gap is a failure. Raised, not returned, so
+  # the caller's handler records it in the run's failures and the GitHub issue
+  # notification fires -- a quiet skip would keep a stale file with no alert.
+  n_na <- if ("psv" %in% names(ratings)) sum(is.na(ratings$psv)) else nrow(ratings)
+  if (n_na > 0) {
+    cli::cli_abort(c(
+      "Player game ratings for {season}: PSV missing on {n_na} of {nrow(ratings)} rows.",
+      "x" = "NOT overwriting the released file; it keeps the previous ratings until PSV computes (check load_player_stats({season}))."
+    ))
   }
 
   file_name <- glue::glue("player_game_ratings_{season}")
