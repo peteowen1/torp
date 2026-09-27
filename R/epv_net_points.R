@@ -2424,6 +2424,31 @@ np_difficulty_terms_for_season <- function(season, pbp_data = NULL, chains = NUL
 #' @keywords internal
 .np_engine_frame <- function(pbp_data, player_stats, chains, difficulty_terms = NULL,
                              results = NULL) {
+  res <- .np_match_results(pbp_data, results)
+  np <- build_net_points(pbp_data, player_stats, res, chains = chains,
+                         credit = "difficulty", stoppages = "allocate",
+                         difficulty_terms = difficulty_terms,
+                         leak_safe = is.null(difficulty_terms),
+                         return_payments = isTRUE(NP_TEAM_MARGIN_CONVENTION))
+  if (isTRUE(NP_TEAM_MARGIN_CONVENTION)) {
+    np <- .np_team_margin(np, pbp_data, player_stats, res)
+  }
+  np
+}
+
+#' Final score of every match in the play-by-play
+#'
+#' Official results where they exist, the play-by-play's own running score
+#' otherwise. Shared by the net points engine and the WPA ledger
+#' (`build_wpa_ledger()`), so the two can never disagree about who won.
+#'
+#' @param pbp_data Play-by-play for the matches.
+#' @param results Official results, or `NULL` to load them for the seasons in
+#'   `pbp_data` (falling back to the running score when that fails).
+#' @return A data.table of `match_id`, `home_team_name`, `away_team_name`,
+#'   `home_score`, `away_score`.
+#' @keywords internal
+.np_match_results <- function(pbp_data, results = NULL) {
   p <- data.table::as.data.table(pbp_data)
   need <- c("match_id", "home_team_name", "away_team_name", "home_points", "away_points")
   miss <- setdiff(need, names(p))
@@ -2461,15 +2486,7 @@ np_difficulty_terms_for_season <- function(season, pbp_data = NULL, chains = NUL
     res[!is.na(off_home), `:=`(home_score = off_home, away_score = off_away)]
     res[, c("off_home", "off_away") := NULL]
   }
-  np <- build_net_points(pbp_data, player_stats, res, chains = chains,
-                         credit = "difficulty", stoppages = "allocate",
-                         difficulty_terms = difficulty_terms,
-                         leak_safe = is.null(difficulty_terms),
-                         return_payments = isTRUE(NP_TEAM_MARGIN_CONVENTION))
-  if (isTRUE(NP_TEAM_MARGIN_CONVENTION)) {
-    np <- .np_team_margin(np, pbp_data, player_stats, res)
-  }
-  np
+  res
 }
 
 

@@ -170,6 +170,7 @@ reference:
       - build_net_points
       - np_difficulty_terms_for_season
       - check_net_points_conservation
+      - build_wpa_ledger
 
   - title: Match Analysis
     desc: Match-level expected goals, predictions, and head-to-head comparisons

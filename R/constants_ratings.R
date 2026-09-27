@@ -2003,6 +2003,27 @@ NP_TEAM_MARGIN_CONVENTION <- TRUE
 #' @keywords internal
 NP_TEAM_MARGIN_NAMED_SHARE <- NA_real_
 
+#' Units the WPA ledger runs the net points engine in
+#'
+#' `build_wpa_ledger()` feeds win probability change through the net points
+#' engine, which was written for points and has absolute guards sized for
+#' them. Win probability is a fraction, so a whole match moves the ledger by
+#' at most 1; scaling by 100 puts it in percentage points, the same order as a
+#' typical margin, before the engine sees it. Output is divided back, so the
+#' published columns are fractions like `wp_credit`.
+#' @keywords internal
+WPA_LEDGER_SCALE <- 100
+
+#' Pre-match home win chance for the team-neutral WPA ledger
+#'
+#' `wpa_neutral` starts every match here instead of at the forecast, so a
+#' heavy favourite that wins earns as much as an underdog that wins, apart
+#' from the home edge. 0.57 is the home win rate over the 1,168 matches of
+#' 2021-2026 in the blog's predictions file (draws as half); by season it ran
+#' 0.46 (2021, partial) to 0.60.
+#' @keywords internal
+WPA_NEUTRAL_HOME_PROB <- 0.57
+
 #' Book the conceding side of every row in the team-margin step
 #'
 #' When TRUE, `.np_team_margin()` charges the side with no payment on a row --
