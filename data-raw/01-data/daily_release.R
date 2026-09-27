@@ -600,13 +600,23 @@ update_player_game_ratings <- function(season) {
     pgd <- load_player_game_data(season)
     start_round <- get_start_round(season)
     max_round <- get_max_round(season)
-    .compute_player_game_ratings(pgd, season, start_round:max_round)
+    pgr <- .compute_player_game_ratings(pgd, season, start_round:max_round)
+    # PSV and torp_value, as the ratings pipeline adds them. Without this the
+    # release published the file with no PSV until daily-ratings-predictions.yml
+    # ran again, and the blog's coverage gate stopped every AFL build meanwhile.
+    .add_psv_to_game_ratings(pgr, load_player_stats(season), season)
   }, error = function(e) {
     cli::cli_alert_danger("Failed to compute player game ratings: {conditionMessage(e)}")
     return(NULL)
   })
 
   if (is.null(ratings) || nrow(ratings) == 0) {
+    return(invisible(NULL))
+  }
+  # Keep the last good file rather than publish one with blank PSV: it would
+  # fail the blog's gate and block all AFL blog data until the next ratings run.
+  if (!"psv" %in% names(ratings) || all(is.na(ratings$psv))) {
+    cli::cli_alert_danger("Player game ratings for {season} have no PSV -- NOT overwriting the released file (it keeps the previous round's ratings).")
     return(invisible(NULL))
   }
 

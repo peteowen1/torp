@@ -1,3 +1,15 @@
+# torp 1.9.7
+
+## The daily release keeps PSV in player game ratings
+
+`update_player_game_ratings()` (daily release) rebuilt `player_game_ratings_<season>` from
+`.compute_player_game_ratings()` alone, which has no PSV; only the ratings pipeline added PSV and
+`torp_value`. So every release that recomputed ratings published the file with blank PSV until
+`daily-ratings-predictions.yml` ran again (Thu-Sun). The blog's game-logs coverage gate (torpdata
+#94) then stopped every AFL blog build in between (2026-09-27); before the gate, blank PSV shipped
+silently (16 minutes on 2026-09-26). Both writers now call `.add_psv_to_game_ratings()`, and the
+release keeps the previous file rather than publish one with no PSV.
+
 # torp 1.9.6
 
 ## Net points split into parts that add up to it: `np_own`, `np_won`, `np_team`
