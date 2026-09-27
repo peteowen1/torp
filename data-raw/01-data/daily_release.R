@@ -282,6 +282,56 @@ update_season_chains <- function(season, round) {
   invisible(NULL)
 }
 
+#' Update Scoring Events for Current Season
+#'
+#' Fetches every scoring event for the round's matches from the AFL API
+#' (get_match_score_events()), replaces those matches in
+#' score_events_{season}, and re-uploads it with match_items_{season} (the
+#' full match item JSON, one row per match).
+#'
+#' @param season Season year
+#' @param round Round number
+#' @return Invisible NULL
+update_season_score_events <- function(season, round) {
+  cli::cli_h2("Updating score_events_{season} with round {round}")
+  new_events <- get_match_score_events(season, round)
+  new_items <- attr(new_events, "match_items")
+  if (is.null(new_items) || nrow(new_items) == 0) {
+    cli::cli_inform("No concluded matches for {season} round {round}")
+    return(invisible(NULL))
+  }
+
+  # Same 404-vs-transient discipline as update_season_chains(): only a
+  # confirmed-absent file is grounds for starting fresh.
+  read_existing <- function(name) {
+    tryCatch(file_reader(name, "score_events-data"),
+      vb_error_absent = function(e) {
+        if (!isTRUE(vb_confirm_absent(get_torpdata_repo(), "score_events-data", paste0(name, ".parquet")))) {
+          cli::cli_abort("Refusing fresh upload of {.val {name}}: not confirmed absent from score_events-data.")
+        }
+        NULL
+      },
+      error = function(e) cli::cli_abort("Could not load existing {name} ({conditionMessage(e)}) - aborting to avoid overwriting the season with one round", parent = e))
+  }
+  merge_in <- function(existing, new) {
+    if (is.null(existing) || nrow(existing) == 0) return(data.table::as.data.table(new))
+    existing <- data.table::as.data.table(existing)
+    data.table::rbindlist(list(existing[!match_id %in% new_items$match_id], new), use.names = TRUE, fill = TRUE)
+  }
+
+  events_name <- glue::glue("score_events_{season}")
+  items_name <- glue::glue("match_items_{season}")
+  events <- merge_in(read_existing(events_name), data.table::as.data.table(new_events))
+  items <- merge_in(read_existing(items_name), new_items)
+  data.table::setorder(events, match_id, event_number)
+  data.table::setorder(items, match_id)
+
+  save_to_release(df = events, file_name = events_name, release_tag = "score_events-data", prev_rows_floor = 0.9)
+  save_to_release(df = items, file_name = items_name, release_tag = "score_events-data", prev_rows_floor = 0.9)
+  cli::cli_alert_success("Saved {events_name} ({nrow(events)} events, {nrow(items)} matches)")
+  invisible(NULL)
+}
+
 #' Update PBP Data for Current Season
 #'
 #' Fetches new round chains, processes into PBP, merges into existing _all file.
@@ -989,7 +1039,10 @@ run_daily_release <- function(force = FALSE) {
       player_stats = update_player_stats,
       teams = update_teams,
       player_details = update_player_details,
-      player_game_data = update_player_game_data
+      player_game_data = update_player_game_data,
+      # every scoring event, from the AFL API match item (feeds the blog's
+      # chain-events running score); a failure lands in seasonal_failures
+      score_events = function(s) update_season_score_events(s, current_round)
     )
   } else {
     # team_only: skip heavy data types that haven't changed

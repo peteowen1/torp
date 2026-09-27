@@ -814,6 +814,35 @@ load_chains <- function(seasons = get_afl_season(), rounds = TRUE, use_disk_cach
   return(out)
 }
 
+#' Load Scoring Events
+#'
+#' @description Loads every scoring event (goal, behind, rushed behind) per
+#'   match from the [torpdata repository](https://github.com/peteowen1/torpdata),
+#'   as fetched by [get_match_score_events()]: team, quarter, second, scorer
+#'   and the running score after each. Unlike a score rebuilt from
+#'   [load_chains()], it includes the rushed behinds and after-the-siren scores
+#'   the chains feed does not record.
+#'
+#' @param seasons A numeric vector of 4-digit years - defaults to latest season.
+#'   If set to `TRUE`, returns all available data since 2021.
+#' @param use_disk_cache Logical. If TRUE, uses persistent disk cache.
+#' @param columns Optional character vector of column names to read.
+#'
+#' @return A data frame with one row per scoring event.
+#' @seealso [get_match_score_events()], [load_chains()]
+#' @examples
+#' \dontrun{
+#' try({ # prevents cran errors
+#'   load_score_events(2026)
+#' })
+#' }
+#' @export
+load_score_events <- function(seasons = get_afl_season(), use_disk_cache = FALSE, columns = NULL) {
+  seasons <- validate_seasons(seasons)
+  urls <- generate_urls("score_events-data", "score_events", seasons)
+  load_from_url(urls, seasons = seasons, use_disk_cache = use_disk_cache, columns = columns)
+}
+
 #' Load Play By Play Data
 #'
 #' @description Loads play by play seasons from the [torpdata repository](https://github.com/peteowen1/torpdata)
