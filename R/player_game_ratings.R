@@ -222,7 +222,8 @@ player_game_ratings <- function(season_val = get_afl_season(),
       # pre-match forecast, and centring would break that. wpa_neutral starts
       # every match at an even chance (with a home edge) instead of the
       # forecast. Optional so frames built before the ledger still work.
-      dplyr::any_of(c("wpa_net", "wpa_neutral", "wpa_own", "wpa_won", "wpa_team")),
+      dplyr::any_of(c("wpa_net", "wpa_neutral", "wpa_own", "wpa_won", "wpa_team",
+                      "wpa_neutral_own", "wpa_neutral_won", "wpa_neutral_team")),
       # net_points split into the same three parts, uncentred (.np_raw_parts()):
       # these add up to net_points, where the centred epv_* channels below add up
       # to the rating `epv` instead.

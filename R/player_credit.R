@@ -790,7 +790,9 @@ create_player_game_data <- function(pbp_data = NULL,
   # each team at its pre-match forecast (locked, else retrodiction; matches
   # with neither are skipped); wpa_neutral starts every home team at
   # WPA_NEUTRAL_HOME_PROB, so it covers every match. wpa_own/won/team are
-  # wpa_net's parts. Published beside wp_credit, which stays until the blog
+  # wpa_net's parts and wpa_neutral_own/won/team are wpa_neutral's. The
+  # neutral run is the blog's default WPA (Pete, 2026-09-28): like net points,
+  # it does not start from team ratings, so it needs the same breakdown. Published beside wp_credit, which stays until the blog
   # has switched. On failure a run's columns are NA, never 0: a zero would read
   # as a real, average game, and torpdata's coverage check fails on NA.
   .wpa_run <- function(label, pm, cols, rename = NULL) {
@@ -820,6 +822,7 @@ create_player_game_data <- function(pbp_data = NULL,
     frame
   }
   wpn_cols <- c("wpa_net", "wpa_own", "wpa_won", "wpa_team")
+  wpn_neutral_cols <- c("wpa_neutral", "wpa_neutral_own", "wpa_neutral_won", "wpa_neutral_team")
   pm <- pre_match
   if (is.null(pm)) {
     pm <- tryCatch(.wpa_pre_match(sort(unique(as.integer(substr(as.character(pbp_data$match_id), 5, 8))))),
@@ -831,9 +834,10 @@ create_player_game_data <- function(pbp_data = NULL,
   plyr_gm_df <- .wpa_attach(plyr_gm_df, .wpa_run("forecast start", pm, wpn_cols), wpn_cols)
   plyr_gm_df <- .wpa_attach(
     plyr_gm_df,
-    .wpa_run("neutral start", .wpa_neutral_pre_match(pbp_data$match_id), "wpa_neutral",
-             rename = c(wpa_net = "wpa_neutral")),
-    "wpa_neutral")
+    .wpa_run("neutral start", .wpa_neutral_pre_match(pbp_data$match_id), wpn_neutral_cols,
+             rename = c(wpa_net = "wpa_neutral", wpa_own = "wpa_neutral_own",
+                        wpa_won = "wpa_neutral_won", wpa_team = "wpa_neutral_team")),
+    wpn_neutral_cols)
 
   # --- Step 3b2: difficulty-weighted disposal credit ---
   # Left-joined like every other channel, so a player who ONLY appears as a
@@ -1357,7 +1361,8 @@ create_player_game_data <- function(pbp_data = NULL,
       dplyr::any_of(c("epv_cont_aerial", "epv_cont_stop",
                       "contests_won", "contests_lost", "net_points")),
       # WPA ledger (Step 3c). any_of() for the same schema reason as above.
-      dplyr::any_of(c("wpa_net", "wpa_neutral", "wpa_own", "wpa_won", "wpa_team")),
+      dplyr::any_of(c("wpa_net", "wpa_neutral", "wpa_own", "wpa_won", "wpa_team",
+                      "wpa_neutral_own", "wpa_neutral_won", "wpa_neutral_team")),
       # PBP-derived action counts
       disposals_pbp, receptions,
       # EPV model input stats
