@@ -141,6 +141,10 @@ player_game_ratings <- function(season_val = get_afl_season(),
       "No {.field epv} or {.field net_points} column on the input: the result will carry no {.field net_points}, the value that sums to a team's own margin.")
   }
 
+  # After the epv/net_points gate above (its message is the more useful one when
+  # they disagree), before anything below centres the channels.
+  df <- .np_raw_parts(df)
+
   # Use _oadj (opponent-adjusted) columns when available, fall back to raw
   has_oadj <- all(c("epv_recv_oadj", "epv_disp_oadj",
                      "epv_spoil_oadj", "epv_hitout_oadj") %in% names(df))
@@ -219,6 +223,10 @@ player_game_ratings <- function(season_val = get_afl_season(),
       # every match at an even chance (with a home edge) instead of the
       # forecast. Optional so frames built before the ledger still work.
       dplyr::any_of(c("wpa_net", "wpa_neutral", "wpa_own", "wpa_won", "wpa_team")),
+      # net_points split into the same three parts, uncentred (.np_raw_parts()):
+      # these add up to net_points, where the centred epv_* channels below add up
+      # to the rating `epv` instead.
+      dplyr::any_of(c("np_own", "np_won", "np_team")),
       epv = "epv_c", epv_recv = "epv_recv_c", epv_disp = "epv_disp_c",
       epv_spoil = "epv_spoil_c", epv_hitout = "epv_hitout_c",
       epv_p80 = "epv_p80", epv_recv_p80 = "epv_recv_p80", epv_disp_p80 = "epv_disp_p80",
@@ -230,6 +238,46 @@ player_game_ratings <- function(season_val = get_afl_season(),
       )),
       player_id = "player_id", team_id = "team_id", match_id = "match_id"
     )
+}
+
+#' The net points parts, captured before any centring
+#'
+#' `create_player_game_data()` publishes the ledger's three parts as `epv_disp`
+#' (own acts), `epv_recv` (won back) and `epv_spoil` (team share; `epv_hitout`
+#' is always 0 under v4, so `np_team` is just the team pool), and asserts they
+#' sum to `net_points`. `player_game_ratings()` then centres those channels by
+#' (season, lineup_position) for the rating, so the published ones add up to
+#' `epv` and miss `net_points` by up to 10.7 points (2026). The site shows
+#' net_points as EPV beside the channels, so it needs parts that add up to it:
+#' `np_own`, `np_won`, `np_team`, named like the WPA ledger's `wpa_own/won/team`.
+#' Taken from the `_raw` columns when an older frame has them. Call it on the
+#' player game DATA (`.compute_player_game_ratings()`), never on the published
+#' ratings, whose channels are already centred.
+#' @keywords internal
+.np_raw_parts <- function(df) {
+  # Already split (a frame that came through here before): keep it. Rebuilding
+  # from centred channels would be exactly the mismatch this exists to avoid.
+  if (all(c("np_own", "np_won", "np_team") %in% names(df))) return(df)
+  raw <- function(n) {
+    r <- paste0(n, "_raw")
+    if (r %in% names(df)) df[[r]] else if (n %in% names(df)) df[[n]] else NULL
+  }
+  own <- raw("epv_disp"); won <- raw("epv_recv"); spoil <- raw("epv_spoil")
+  if (is.null(own) || is.null(won) || is.null(spoil)) return(df)
+  hit <- raw("epv_hitout"); if (is.null(hit)) hit <- 0
+  df$np_own <- own
+  df$np_won <- won
+  df$np_team <- spoil + dplyr::coalesce(hit, 0)
+  if ("net_points" %in% names(df)) {
+    gap <- max(abs(df$np_own + df$np_won + df$np_team - df$net_points), na.rm = TRUE)
+    if (is.finite(gap) && gap > 1e-6) {
+      cli::cli_abort(c(
+        "The net points parts do not add up to {.field net_points} (max gap {signif(gap, 3)}).",
+        "x" = "np_own + np_won + np_team would sit beside net_points on the site and not sum to it."
+      ))
+    }
+  }
+  df
 }
 
 #' Center EPV raw columns to per-position-season mean of zero

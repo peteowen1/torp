@@ -1,3 +1,15 @@
+# torp 1.9.6
+
+## Net points split into parts that add up to it: `np_own`, `np_won`, `np_team`
+
+`player_game_ratings` now carries net points' three parts uncentred, named like the WPA ledger's
+`wpa_own`/`wpa_won`/`wpa_team`: own acts, won back, and team share (`epv_hitout` is always 0 under
+v4, so `np_team` is the team pool). The site shows `net_points` as EPV beside three channels, but
+the published `epv_recv`/`epv_disp`/`epv_spoil` are centred by position-season for the rating and
+add up to `epv`, missing `net_points` by up to 10.7 points (2026). `.np_raw_parts()` captures them
+from the player game data before any centring and refuses parts that don't add up (2026: max gap
+7e-15 over 10,022 rows).
+
 # torp 1.9.5
 
 ## WPA as a ledger that adds up: `wpa_net` and `wpa_neutral`
