@@ -11,9 +11,11 @@ powershell.exe -Command 'Rscript "path/to/script.R"'
 
 ## Code Organization
 
-The package is large; `R/` and `NAMESPACE` give the current file and export
-counts, so they are deliberately not stated here — the figures that used to be
-("141 exports across ~65 R files") had drifted to 158 and 77.
+The package is large; run `ls R/*.R | wc -l` and `grep -c '^export' NAMESPACE`
+for the current file and export counts. Deliberately not stated here — every
+figure previously written into this file (141 exports/~65 files, then 158/77)
+was stale within weeks; as of 2026-09-27 it's 170 exports across 94 R files,
+and that too will drift.
 
 What `ls R/` does not give you is which files belong together. Grouped by domain:
 
@@ -45,8 +47,9 @@ All rating-blend weights and decay parameters (`TORP_EPR_WEIGHT`, `EPR_DECAY_REC
 
 **`EPV_ENGINE` and `RATING_VINTAGE` are two different things and they do NOT move
 together.** `EPV_ENGINE` names the METHOD and is `"v4"`. `RATING_VINTAGE` names the
-PUBLISHED BATCH and is `"v13"` (check `R/constants_ratings.R` for the current value —
-it advances often, so treat this as illustrative, not authoritative) — it advances every time the numbers change, whether or
+PUBLISHED BATCH — check `R/constants_ratings.R` for the current value (`"v14"` as
+of 2026-09-27; it advances often, so treat any value written here as illustrative,
+not authoritative) — it advances every time the numbers change, whether or
 not the method did. Reading the pair as one version cost a wrong explanation once, so
 quote which one you mean. What must stay aligned is `RATING_VINTAGE` against the
 manifest's canonical vintage: `check_vintage_alignment(strict = TRUE)` aborts every
@@ -79,19 +82,13 @@ constant, not because v3 is live.
 (where the value actually comes from, measured over 2.05M PBP rows).
 
 **Read the anatomy doc before proposing any credit weight change.** Two live
-constants were refuted by it in one session, and both had converging evidence
-behind them beforehand:
-
-- `EPV_RUCK_SWING_SCALE`'s 3.14× justification is **~93% centre-bounce reset
-  artifact** — `exp_pts` is exactly 0.0000 on every `Centre Bounce` row.
-- `EPV_RECV_NEG_MULT = 0` deletes the **intercept** branch, which is the
-  highest-value receiving act in the game (+0.625/event against +0.079).
-
+constants were refuted by it in one session despite converging evidence behind
+them beforehand — both looked like noise reduction and were signal deletion.
 The general shape: **when a change improves a summary statistic, ask what events
-it removed before banking it.** Both of those looked like noise reduction and
-were signal deletion. And note game-to-game reliability and year-over-year
-repeatability can move in *opposite* directions — quote which one you mean; the
-second is the one that separates ability from noise.
+it removed before banking it.** Also note game-to-game reliability and
+year-over-year repeatability can move in *opposite* directions — quote which one
+you mean; the second is the one that separates ability from noise. Full
+incident (which two constants, the numbers): `../docs/reference/claude-md-detail.md`.
 
 - **The v3 channel names are ALIASES and they lie.** `epv_spoil` /
   `epr_spoil` hold *aerial contest* value and contain no spoil weight;
@@ -113,7 +110,18 @@ second is the one that separates ability from noise.
 Design, gates and the dead ends not to re-open:
 [`../docs/plans/EPV-V3-CHAIN-NATIVE.md`](../docs/plans/EPV-V3-CHAIN-NATIVE.md).
 
-WPA is intentionally **not** folded into `torp_value` — surfaced as a parallel metric. (The original "WP gradient too steep in close/late" rationale was measured **false** in 2026-07: the WP family is actually *flat* there — see [`../docs/reviews/FABLE-WP-EXPERIMENTS.md`](../docs/reviews/FABLE-WP-EXPERIMENTS.md) §7. Decision 2026-07-11: exclusion stood until (a) a light recalibration layer fitted on recent-season OOS predictions ships, and (b) a temporal Q4/close slope release gate exists — the canonical model still ran slope ~1.14/1.26 on temporal holdout. Update 2026-07-12: recalibration layer shipped ([`../docs/plans/FABLE-RECAL-PLAN.md`](../docs/plans/FABLE-RECAL-PLAN.md) — `get_wp_preds()` applies the `wp_calibration` sidecar, `torpmodels::train_core_models()` gates every WP release on the calibrated temporal slope); WPA reinstatement is now pending the `../docs/plans/FABLE-RECAL-PLAN.md` §2 Step 6 bias re-measurement (the plan's own D6 cross-reference to "§5" for this protocol is stale -- Step 6 is where it actually lives, §5 is Non-goals), not a separate design decision.)
+WPA is intentionally **not** folded into `torp_value` — surfaced as a parallel
+metric. The original "WP gradient too steep in close/late" rationale was
+measured **false** in 2026-07 (WP is actually *flat* there —
+[`../docs/reviews/FABLE-WP-EXPERIMENTS.md`](../docs/reviews/FABLE-WP-EXPERIMENTS.md)
+§7). The recalibration layer + temporal slope release gate that were gating
+reinstatement shipped 2026-07-12
+([`../docs/plans/FABLE-RECAL-PLAN.md`](../docs/plans/FABLE-RECAL-PLAN.md) —
+`get_wp_preds()` applies `wp_calibration`, `torpmodels::train_core_models()`
+gates every WP release on the calibrated temporal slope). WPA reinstatement is
+now pending that plan's §2 Step 6 bias re-measurement (its own cross-reference
+to "§5" for this protocol is stale — Step 6 is where it lives), not a separate
+design decision. Full history: `../docs/reference/claude-md-detail.md`.
 
 ## Data Loaders
 
@@ -148,8 +156,9 @@ Common loaders (see `?load_data` for the full list):
 03-ratings/     # TORP/EPR/PSR computation
 04-analysis/    # Ad-hoc analysis
 05-validation/  # Cross-release sanity checks
-06-stat-ratings/ # Per-stat Bayesian rating training
-stat-models/    # Cached artifacts (2 .rds) + README only — the 58 per-stat GAMs are released via torpmodels' stat-models tag, not committed here
+06-stat-ratings/ # Per-stat Bayesian rating training (PSR)
+07-stat-models/ # wt_av_modelling.R — canonical trainer for the per-stat GAMs (stat-models release tag)
+stat-models/    # Local cache of the trained per-stat .rds files (one per stat) + README — the per-stat GAMs (84 as of 2026-09-27) are released via torpmodels' stat-models tag, not committed here
 ```
 
 `rebuild_everything.R` re-runs the full data-raw pipeline end-to-end.
@@ -195,7 +204,7 @@ The short version, because getting this wrong has cost real MAE more than once:
 
 ## Gotchas
 
-- **Every new exported function MUST be added to `_pkgdown.yml`'s `reference:` index** — `pkgdown::check_pkgdown()` runs in both CI workflows and fails the build otherwise (bit twice on 2026-07-21: #111, PR #114).
+- **Every new exported function MUST be added to `_pkgdown.yml`'s `reference:` index** — `pkgdown::check_pkgdown()` runs in `test-package.yml` (not `pkgdown.yml`, which just deploys) and fails the build otherwise (bit on 2026-07-21: #111, fixed by PR #112).
 - **EP must be trained before WP** — WP uses EP predictions as features. Same for live variants.
 - **Arrow + Git Bash R = segfault** — wrap in PowerShell (see top of file).
 - **Weather imputation** — `add_weather_to_preds()` uses median imputation for missing weather; the `total_xpoints` GAM expects this neutral fallback rather than NA.
@@ -206,12 +215,14 @@ The short version, because getting this wrong has cost real MAE more than once:
 
 ## Tests
 
-~50 test files in `tests/testthat/`. Key ones:
+113 test files in `tests/testthat/` (2026-09-27; run `ls tests/testthat/*.R | wc -l` for the current count). Key ones:
 - `test-load_torp_data.R` — loader contracts
 - `test-add-model-variables.R` — EP/WP/xG feature engineering
 - `test-player-ratings.R` — TORP composition math
 - `test-sim-helpers.R` — Monte Carlo simulation
-- `match_model.R` (published predictions) has no dedicated test file — zero test coverage today
+- `match_model.R`'s `run_predictions_pipeline()` has no single dedicated test
+  file, but is exercised by `test-prediction-state.R`, `test-post-hoc-guard.R`,
+  `test-predictions-overwrite.R`, and `test-team-rapm-match-feature.R`
 
 Run a single file with `testthat::test_file("tests/testthat/test-NAME.R")`.
 
@@ -229,14 +240,13 @@ Run a single file with `testthat::test_file("tests/testthat/test-NAME.R")`.
 (run `ls .github/workflows/` for the current list — this table has drifted before)
 
 **The pre-game schedule on `daily-ratings-predictions.yml` is load-bearing — do not remove it.**
-Until 2026-07-28 the only automatic trigger was the torpdata `repository_dispatch`, which fires
-after a **data release**, which happens only when there are **new games**. The AFL publishes team
-lists *between* rounds, so the pipeline could never run in the window between team-naming and
-first bounce, and every round was locked using the previous round's lineup state — none. Rounds
-19, 20 and 21 of 2026 all published with `players = NA` (every player on the position prior),
-costing ~0.50 MAE season-wide and 4.75 on the affected rounds. Nothing failed; the predictions
-were just worse. Note GitHub only fires `schedule` from the **default branch**, so the crons are
-inert on any other ref.
+Without it, the only trigger is torpdata's `repository_dispatch`, which fires only after a data
+release, which happens only when there are new games — so the pipeline could never run in the
+window between team-naming and first bounce, and every round would be predicted on the previous
+round's lineup state, silently (nothing fails; the predictions are just worse). This happened for
+real in 2026 (rounds 19-21) before the schedule was added 2026-07-28 — see
+`../docs/reference/claude-md-detail.md` for the incident and the MAE cost. Note GitHub only fires
+`schedule` from the **default branch**, so the crons are inert on any other ref.
 
 Two guards back it up: `.warn_missing_lineups()` reports at write time, and
 `data-raw/05-validation/check_prediction_lineups.R` answers on demand whether the upcoming round
