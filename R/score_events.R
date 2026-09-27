@@ -21,8 +21,8 @@
 #' @param match_ids Optional character vector of match IDs
 #'   (e.g. `"CD_M20260142901"`) to fetch instead of a season / round.
 #' @return A data.table of scoring events, snake_case, with `match_id`,
-#'   `season`, `round_number` and `event_number` (order within the match)
-#'   added, and a `match_items` attribute: a data.table of `match_id`,
+#'   `season`, `round_number`, `event_number` (order within the match) and
+#'   `match_status` added, and a `match_items` attribute: a data.table of `match_id`,
 #'   `fetched_at` and `match_item_json`.
 #' @export
 get_match_score_events <- function(season = get_afl_season(), round = NA, match_ids = NULL) {
@@ -104,7 +104,10 @@ get_match_score_events <- function(season = get_afl_season(), round = NA, match_
       idx <- i
       h <- curl::new_handle(httpheader = paste0("x-media-mis-token: ", token))
       curl::curl_fetch_multi(urls[idx], done = function(resp) {
-        if (resp$status_code == 200L) out[[idx]] <<- rawToChar(resp$content)
+        # A 200 can carry an HTML error page (torpdata#71); leave the slot
+        # empty so the sequential retry below picks it up.
+        body <- if (resp$status_code == 200L) rawToChar(resp$content) else NULL
+        if (!is.null(body) && !.is_html_error_page(body)) out[[idx]] <<- body
       }, fail = function(msg) NULL, handle = h, pool = pool)
     })
   }

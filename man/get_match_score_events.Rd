@@ -16,8 +16,8 @@ get_match_score_events(season = get_afl_season(), round = NA, match_ids = NULL)
 }
 \value{
 A data.table of scoring events, snake_case, with \code{match_id},
-\code{season}, \code{round_number} and \code{event_number} (order within the match)
-added, and a \code{match_items} attribute: a data.table of \code{match_id},
+\code{season}, \code{round_number}, \code{event_number} (order within the match) and
+\code{match_status} added, and a \code{match_items} attribute: a data.table of \code{match_id},
 \code{fetched_at} and \code{match_item_json}.
 }
 \description{
