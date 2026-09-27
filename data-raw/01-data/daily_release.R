@@ -600,7 +600,11 @@ update_player_game_ratings <- function(season) {
     pgd <- load_player_game_data(season)
     start_round <- get_start_round(season)
     max_round <- get_max_round(season)
-    .compute_player_game_ratings(pgd, season, start_round:max_round)
+    pgr <- .compute_player_game_ratings(pgd, season, start_round:max_round)
+    # PSV and torp_value, as the ratings pipeline adds them. Without this the
+    # release published the file with no PSV until daily-ratings-predictions.yml
+    # ran again, and the blog's coverage gate stopped every AFL build meanwhile.
+    .add_psv_to_game_ratings(pgr, load_player_stats(season), season)
   }, error = function(e) {
     cli::cli_alert_danger("Failed to compute player game ratings: {conditionMessage(e)}")
     return(NULL)
@@ -608,6 +612,19 @@ update_player_game_ratings <- function(season) {
 
   if (is.null(ratings) || nrow(ratings) == 0) {
     return(invisible(NULL))
+  }
+  # Keep the last good file rather than publish one with missing PSV: torpdata's
+  # game-logs gate refuses ANY NA psv in the latest season, so it would block all
+  # AFL blog data until the next ratings run. A full season has PSV on every row
+  # (2026: 10,022 of 10,022), so any gap is a failure. Raised, not returned, so
+  # the caller's handler records it in the run's failures and the GitHub issue
+  # notification fires -- a quiet skip would keep a stale file with no alert.
+  n_na <- if ("psv" %in% names(ratings)) sum(is.na(ratings$psv)) else nrow(ratings)
+  if (n_na > 0) {
+    cli::cli_abort(c(
+      "Player game ratings for {season}: PSV missing on {n_na} of {nrow(ratings)} rows.",
+      "x" = "NOT overwriting the released file; it keeps the previous ratings until PSV computes (check load_player_stats({season}))."
+    ))
   }
 
   file_name <- glue::glue("player_game_ratings_{season}")

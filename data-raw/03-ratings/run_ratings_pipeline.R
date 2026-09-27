@@ -644,58 +644,10 @@ for (s in seasons) {
     # Player game ratings (EPV-based)
     pgr <- .compute_player_game_ratings(pgd, s, start_round:max_round)
 
-    # Add PSV columns from box-score stats
+    # PSV (box-score value) and per-game TORP value, shared with the daily
+    # release so the two writers of player_game_ratings_<season> can't drift.
     pstats_season <- data.table::as.data.table(all_pstats[all_pstats$season == s, ])
-    if (nrow(pstats_season) > 0) {
-      # Ensure tog column exists (PSV expects fraction 0-1)
-      if (!"tog" %in% names(pstats_season) && "time_on_ground_percentage" %in% names(pstats_season)) {
-        pstats_season[, tog := pmax(time_on_ground_percentage / 100, 0.1)]
-      }
-      # Carry position_group from EPV so PSV can center by position
-      if (!"position_group" %in% names(pstats_season) && "position_group" %in% names(pgr)) {
-        pg_map <- unique(data.table::as.data.table(pgr)[, .(player_id, match_id, position_group)])
-        pstats_season <- merge(pstats_season, pg_map,
-                               by = intersect(c("player_id", "match_id"), names(pstats_season)),
-                               all.x = TRUE)
-      }
-      # Apply per-game stat opponent adjustment before PSV
-      pstats_season <- tryCatch({
-        adjust_stats_for_opponents(pstats_season)
-      }, error = function(e) {
-        cli::cli_warn("Stat opponent adjustment failed for {s}: {conditionMessage(e)}")
-        pstats_season
-      })
-      psv_result <- tryCatch({
-        .compute_psv(pstats_season)
-      }, error = function(e) {
-        cli::cli_warn("PSV computation failed for {s}: {conditionMessage(e)}")
-        NULL
-      })
-      if (!is.null(psv_result)) {
-        # Per-game (psv/osv/dsv) + centered per-80 (psv_p80/osv_p80/dsv_p80),
-        # both supplied directly by calculate_psv() (issue #80).
-        psv_cols <- intersect(
-          c("psv", "osv", "dsv", "psv_p80", "osv_p80", "dsv_p80"),
-          names(psv_result)
-        )
-        if (length(psv_cols) > 0 && "player_id" %in% names(psv_result) &&
-            "match_id" %in% names(psv_result)) {
-          psv_slim <- psv_result[, c("player_id", "match_id", psv_cols), with = FALSE]
-          pgr <- merge(pgr, psv_slim, by = c("player_id", "match_id"), all.x = TRUE)
-          # psv is per-game (psv_p80 * tog), on the same scale as epv
-          cli::cli_inform("  Added PSV columns to game ratings ({sum(!is.na(pgr$psv))} matched)")
-        }
-      }
-    }
-
-    # Compute per-game TORP value: 50% EPV + 50% PSV (parallels career TORP = 50% EPR + 50% PSR)
-    if (all(c("epv", "psv") %in% names(pgr))) {
-      pgr$torp_value <- round(
-        TORP_EPR_WEIGHT * pgr$epv + (1 - TORP_EPR_WEIGHT) * pgr$psv,
-        1
-      )
-      pgr$torp_value_p80 <- round(pgr$torp_value / pgr$tog, 1)
-    }
+    pgr <- .add_psv_to_game_ratings(pgr, pstats_season, s)
 
     file_name <- paste0("player_game_ratings_", s)
     save_to_release(pgr, torp:::.vintage_asset_stem(file_name, RATINGS_VINTAGE), "player_game_ratings-data")

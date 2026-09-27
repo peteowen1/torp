@@ -563,3 +563,59 @@ player_season_stats <- function(season_val = get_afl_season(),
                  stat_cols, "player_id")
   result[, intersect(col_order, names(result)), with = FALSE]
 }
+
+#' Add PSV and per-game TORP value to player game ratings
+#'
+#' `.compute_player_game_ratings()` builds the EPV side only. PSV (box-score
+#' value) and `torp_value` (50/50 EPV and PSV) were added by the ratings
+#' pipeline alone (`run_ratings_pipeline.R`), so the daily release, which also
+#' writes `player_game_ratings_<season>`, published the file with no PSV until
+#' the ratings workflow ran again. The blog's game-logs coverage gate then stopped
+#' every AFL blog build (2026-09-27; it had shipped blank PSV silently before the
+#' gate existed). Both writers call this now.
+#'
+#' @param pgr Output of `.compute_player_game_ratings()` for one season.
+#' @param pstats_season Player stats for the same season (`load_player_stats()`).
+#' @param season Season, for messages.
+#' @return `pgr` with psv/osv/dsv, their per-80 columns and torp_value(_p80)
+#'   when PSV could be computed; unchanged (with a warning) otherwise.
+#' @keywords internal
+.add_psv_to_game_ratings <- function(pgr, pstats_season, season) {
+  pstats_season <- data.table::as.data.table(pstats_season)
+  if (nrow(pstats_season) > 0) {
+    # PSV expects tog as a fraction 0-1
+    if (!"tog" %in% names(pstats_season) && "time_on_ground_percentage" %in% names(pstats_season)) {
+      pstats_season[, tog := pmax(time_on_ground_percentage / 100, 0.1)]
+    }
+    # Carry position_group from EPV so PSV can centre by position
+    if (!"position_group" %in% names(pstats_season) && "position_group" %in% names(pgr)) {
+      pg_map <- unique(data.table::as.data.table(pgr)[, .(player_id, match_id, position_group)])
+      pstats_season <- merge(pstats_season, pg_map,
+                             by = intersect(c("player_id", "match_id"), names(pstats_season)),
+                             all.x = TRUE)
+    }
+    pstats_season <- tryCatch(adjust_stats_for_opponents(pstats_season), error = function(e) {
+      cli::cli_warn("Stat opponent adjustment failed for {season}: {conditionMessage(e)}")
+      pstats_season
+    })
+    psv_result <- tryCatch(.compute_psv(pstats_season), error = function(e) {
+      cli::cli_warn("PSV computation failed for {season}: {conditionMessage(e)}")
+      NULL
+    })
+    if (!is.null(psv_result)) {
+      # Per-game (psv/osv/dsv) + centred per-80, both from calculate_psv() (#80)
+      psv_cols <- intersect(c("psv", "osv", "dsv", "psv_p80", "osv_p80", "dsv_p80"), names(psv_result))
+      if (length(psv_cols) > 0 && all(c("player_id", "match_id") %in% names(psv_result))) {
+        psv_slim <- psv_result[, c("player_id", "match_id", psv_cols), with = FALSE]
+        pgr <- merge(pgr, psv_slim, by = c("player_id", "match_id"), all.x = TRUE)
+        cli::cli_inform("  Added PSV columns to game ratings ({sum(!is.na(pgr$psv))} matched)")
+      }
+    }
+  }
+  # Per-game TORP value: 50% EPV + 50% PSV (parallels career TORP = 50% EPR + 50% PSR)
+  if (all(c("epv", "psv") %in% names(pgr))) {
+    pgr$torp_value <- round(TORP_EPR_WEIGHT * pgr$epv + (1 - TORP_EPR_WEIGHT) * pgr$psv, 1)
+    pgr$torp_value_p80 <- round(pgr$torp_value / pgr$tog, 1)
+  }
+  pgr
+}
