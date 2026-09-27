@@ -380,3 +380,20 @@ test_that("centring zeroes epv within a position group, and net_points is untouc
   np_by_pos <- stats::aggregate(net_points ~ lineup_position, data = r, FUN = sum)
   expect_false(all(abs(np_by_pos$net_points) < 1e-9))
 })
+
+test_that(".np_raw_parts splits net_points into parts that add up to it", {
+  d <- data.frame(epv_disp = c(3, -1), epv_recv = c(1, 0.5), epv_spoil = c(-2, 0.5),
+                  epv_hitout = c(0, 0), net_points = c(2, 0))
+  out <- torp:::.np_raw_parts(d)
+  expect_equal(out$np_own + out$np_won + out$np_team, out$net_points)
+  expect_equal(out$np_team, c(-2, 0.5))            # spoil + hitout (hitout is 0 under v4)
+  # Taken from _raw columns when an older frame carries them
+  d2 <- transform(d, epv_disp_raw = epv_disp + 1, epv_recv_raw = epv_recv, epv_spoil_raw = epv_spoil - 1)
+  d2$net_points <- d2$epv_disp_raw + d2$epv_recv_raw + d2$epv_spoil_raw
+  expect_equal(torp:::.np_raw_parts(d2)$np_own, d2$epv_disp_raw)
+  # Parts that don't add up are refused rather than published
+  expect_error(torp:::.np_raw_parts(transform(d, net_points = c(9, 0))), "do not add up")
+  # Existing parts are kept, never rebuilt from (possibly centred) channels
+  d3 <- transform(d, np_own = 1, np_won = 1, np_team = 0)
+  expect_identical(torp:::.np_raw_parts(d3)$np_own, c(1, 1))
+})
