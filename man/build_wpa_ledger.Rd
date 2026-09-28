@@ -35,7 +35,10 @@ A data.table, one row per player-match, of \code{player_id},
 \code{wpa_own} + \code{wpa_won} + \code{wpa_team} = \code{wpa_net}. All in win probability
 (fractions), each in the player's own team frame. Attribute \code{targets}
 holds each match's \code{p0}, its source, the result and the home target;
-attribute \code{skipped} the match_ids left out for want of a forecast.
+attribute \code{skipped} the match_ids left out for want of a forecast;
+attribute \code{row_payments} every row's payments (\code{match_id},
+\code{display_order}, \code{team}, \code{player_id} -- \code{NA} for a side's pool share --
+and \code{amount} in win probability), for splitting WPA by quarter.
 }
 \description{
 Runs per-play win probability change through \code{build_net_points()} so each
