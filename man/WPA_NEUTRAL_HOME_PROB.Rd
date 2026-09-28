@@ -12,9 +12,11 @@ WPA_NEUTRAL_HOME_PROB
 }
 \description{
 \code{wpa_neutral} starts every match here instead of at the forecast, so a
-heavy favourite that wins earns as much as an underdog that wins, apart
-from the home edge. 0.57 is the home win rate over the 1,168 matches of
-2021-2026 in the blog's predictions file (draws as half); by season it ran
-0.46 (2021, partial) to 0.60.
+heavy favourite that wins earns as much as an underdog that wins. 0.5: a
+straight coin flip, no home edge (Pete, 2026-09-28). It is the WPA
+counterpart of net points, which shares out the raw margin with nothing
+taken off for home ground, travel or rest, and it needs no special case
+for a Grand Final or other neutral-venue match. It was 0.57 (the home win
+rate 2021-2026) until then.
 }
 \keyword{internal}
