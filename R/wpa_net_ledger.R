@@ -49,7 +49,10 @@
 #'   `wpa_own` + `wpa_won` + `wpa_team` = `wpa_net`. All in win probability
 #'   (fractions), each in the player's own team frame. Attribute `targets`
 #'   holds each match's `p0`, its source, the result and the home target;
-#'   attribute `skipped` the match_ids left out for want of a forecast.
+#'   attribute `skipped` the match_ids left out for want of a forecast;
+#'   attribute `row_payments` every row's payments (`match_id`,
+#'   `display_order`, `team`, `player_id` -- `NA` for a side's pool share --
+#'   and `amount` in win probability), for splitting WPA by quarter.
 #' @export
 build_wpa_ledger <- function(pbp_data, player_stats, pre_match,
                              results = NULL, scale = WPA_LEDGER_SCALE) {
@@ -106,6 +109,18 @@ build_wpa_ledger <- function(pbp_data, player_stats, pre_match,
   np <- build_net_points(p, player_stats, eng_res, credit = "flat",
                          stoppages = "exclude", return_payments = TRUE)
   np <- .np_team_margin(np, p, player_stats, eng_res)
+  # Per-row payments, kept before np is filtered (which drops attributes): the
+  # named payments and each side's pool share on every row. They let a caller
+  # split a player's WPA by quarter (torpdata player-quarters), in the output
+  # units below.
+  row_pay <- data.table::rbindlist(list(
+    data.table::as.data.table(attr(np, "np_team_margin_payments"))[
+      , .(match_id = as.character(match_id), display_order = as.integer(display_order), team,
+          player_id = as.character(player_id), amount = paid / scale)],
+    data.table::as.data.table(attr(np, "np_team_margin_pool_rows"))[
+      , .(match_id = as.character(match_id), display_order = as.integer(display_order), team,
+          player_id = NA_character_, amount = pool / scale)]
+  ))
   np <- data.table::as.data.table(np)
 
   # A match can have a forecast and still come back from the engine with no
@@ -145,6 +160,7 @@ build_wpa_ledger <- function(pbp_data, player_stats, pre_match,
   data.table::setattr(out, "targets",
                       res[, .(match_id, p0, p0_source, result, home_target = home_target / scale)])
   data.table::setattr(out, "skipped", skipped)
+  data.table::setattr(out, "row_payments", row_pay[match_id %in% res$match_id])
   out
 }
 
