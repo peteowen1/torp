@@ -77,13 +77,14 @@ test_that("the parts add up to wpa_net", {
   expect_equal(out$wpa_own + out$wpa_won + out$wpa_team, out$wpa_net, tolerance = 1e-12)
 })
 
-test_that("the neutral start pins every match to the home edge, whatever the forecast", {
+test_that("the neutral start pins every match to 50/50, whatever the forecast", {
   f <- wpa_fixture()
-  out <- run_wpa(f, pre = .wpa_neutral_pre_match(f$pbp$match_id, home_prob = 0.57))
+  out <- run_wpa(f, pre = .wpa_neutral_pre_match(f$pbp$match_id))
   tt <- team_totals(out)
-  # M1 home won -> +0.43; M2 home lost -> -0.57
-  expect_equal(tt[match_id == "M1" & home_away == "Home", total], 1 - 0.57, tolerance = 1e-12)
-  expect_equal(tt[match_id == "M2" & home_away == "Home", total], 0 - 0.57, tolerance = 1e-12)
+  expect_equal(WPA_NEUTRAL_HOME_PROB, 0.5)
+  # M1 home won -> +0.5; M2 home lost -> -0.5
+  expect_equal(tt[match_id == "M1" & home_away == "Home", total], 1 - 0.5, tolerance = 1e-12)
+  expect_equal(tt[match_id == "M2" & home_away == "Home", total], 0 - 0.5, tolerance = 1e-12)
   expect_equal(unique(attr(out, "targets")$p0_source), "neutral")
 })
 

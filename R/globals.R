@@ -479,7 +479,7 @@ utils::globalVariables(c(
 
 # WPA Net Points ledger (R/wpa_net_ledger.R).
 utils::globalVariables(c(
-  "wpa_net", "wpa_neutral", "wpa_own", "wpa_won", "wpa_team", "p0", "p0_source",
+  "wpa_net", "wpa_neutral", "wpa_own", "wpa_won", "wpa_team", "wpa_neutral_own", "wpa_neutral_won", "wpa_neutral_team", "p0", "p0_source",
   "i.p0", "i.p0_source", "source", "home_target", "home_win_prob", "got", "want",
   "pred_win", "i.tog", "i.v", "n_sides", "n", "N"
 ))
