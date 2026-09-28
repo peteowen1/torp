@@ -15,8 +15,8 @@
 # Two versions, same per-play credit, different starting point:
 #   wpa_net      -- every team starts at its pre-match forecast, so beating a
 #                   side you were expected to beat is worth little
-#   wpa_neutral  -- every team starts at WPA_NEUTRAL_HOME_PROB (home) or its
-#                   complement, so a win is worth about the same to anyone
+#   wpa_neutral  -- every team starts at WPA_NEUTRAL_HOME_PROB (0.5, a coin
+#                   flip), so a win is worth the same to anyone
 # The per-play values come from a win probability model with no team-strength
 # input, so only the target differs between the two.
 

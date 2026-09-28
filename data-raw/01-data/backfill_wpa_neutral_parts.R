@@ -17,6 +17,12 @@
 #   Rscript data-raw/01-data/backfill_wpa_neutral_parts.R            # 2021 to current
 #   Rscript data-raw/01-data/backfill_wpa_neutral_parts.R 2026       # one season
 #   Rscript data-raw/01-data/backfill_wpa_neutral_parts.R --dry-run  # check only
+#   Rscript data-raw/01-data/backfill_wpa_neutral_parts.R --replace  # new start
+#
+# --replace: WPA_NEUTRAL_HOME_PROB changed (0.57 -> 0.5, 2026-09-28), so the
+# published wpa_neutral is replaced along with its parts. The equality check
+# cannot apply; instead every team's players must add up to exactly +0.5
+# (won), -0.5 (lost) or 0 (drew), and the parts to the total.
 
 suppressMessages(devtools::load_all(quiet = TRUE))
 suppressMessages(library(data.table))
@@ -27,6 +33,7 @@ options(torp.local_data_dir = NA)
 
 args <- commandArgs(trailingOnly = TRUE)
 dry_run <- "--dry-run" %in% args
+replace <- "--replace" %in% args
 yrs <- suppressWarnings(as.integer(args[!grepl("^--", args)]))
 seasons <- if (length(yrs)) yrs else 2021:get_afl_season()
 parts <- c("wpa_neutral_own", "wpa_neutral_won", "wpa_neutral_team")
@@ -48,6 +55,7 @@ for (season in seasons) {
   dt <- dt[, c("player_id", "match_id", ".chk", parts), with = FALSE]
 
   for (cc in intersect(parts, names(pgd))) pgd[, (cc) := NULL]
+  old_total <- if (replace) pgd$wpa_neutral else NULL
   out <- merge(pgd, dt, by = c("player_id", "match_id"), all.x = TRUE, sort = FALSE)
   if (nrow(out) != nrow(pgd)) stop(season, ": the merge changed the row count")
   # Same zero / NA rule as .wpa_attach(): a rated match with no ledger row is a
@@ -60,11 +68,20 @@ for (season in seasons) {
   miss <- sum(is.na(out$.chk) != is.na(out$wpa_neutral))
   sum_gap <- max(abs(out$wpa_neutral_own + out$wpa_neutral_won + out$wpa_neutral_team - out$wpa_neutral), na.rm = TRUE)
   cli::cli_inform("{nrow(out)} rows | recomputed vs published wpa_neutral: max gap {signif(gap, 3)}, NA disagreements {miss} | parts vs total: max gap {signif(sum_gap, 3)}")
-  if (!isTRUE(gap < 1e-6) || miss > 0) {
+  if (replace) {
+    # The total is replaced; check it lands on the result from a 50/50 start.
+    out[, wpa_neutral := .chk]
+    tt <- out[!is.na(wpa_neutral), .(total = sum(wpa_neutral)), by = .(match_id, team)]
+    off <- tt[pmin(abs(total - 0.5), abs(total + 0.5), abs(total)) > 1e-6]
+    cli::cli_inform("replace: {nrow(tt)} team totals, {nrow(off)} not on +0.5 / -0.5 / 0 | total moved by up to {signif(max(abs(out$wpa_neutral - old_total), na.rm = TRUE), 3)}")
+    if (nrow(off) > 0) stop(season, ": ", nrow(off), " team totals are not +0.5, -0.5 or 0, e.g. ", off$match_id[1])
+  } else if (!isTRUE(gap < 1e-6) || miss > 0) {
     stop(season, ": recomputed wpa_neutral does not match the published file, so the parts would not ",
          "belong to it. Rebuild the season in full instead.")
   }
-  if (!isTRUE(sum_gap < 1e-6)) stop(season, ": the three parts do not add up to wpa_neutral")
+  # Checked on the total being written (the recomputed one under --replace).
+  sum_gap <- max(abs(out$wpa_neutral_own + out$wpa_neutral_won + out$wpa_neutral_team - out$wpa_neutral), na.rm = TRUE)
+  if (!isTRUE(sum_gap < 1e-6)) stop(season, ": the three parts do not add up to wpa_neutral (max gap ", signif(sum_gap, 3), ")")
   out[, .chk := NULL]
   data.table::setcolorder(out, c(names(pgd), parts))
 

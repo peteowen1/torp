@@ -220,7 +220,7 @@ player_game_ratings <- function(season_val = get_afl_season(),
       # The WPA ledger (docs/plans/WPA-NET-LEDGER.md), uncentred for the same
       # reason as net_points: wpa_net sums per team to the result minus the
       # pre-match forecast, and centring would break that. wpa_neutral starts
-      # every match at an even chance (with a home edge) instead of the
+      # every match at an even 50/50 chance instead of the
       # forecast. Optional so frames built before the ledger still work.
       dplyr::any_of(c("wpa_net", "wpa_neutral", "wpa_own", "wpa_won", "wpa_team",
                       "wpa_neutral_own", "wpa_neutral_won", "wpa_neutral_team")),
