@@ -1173,8 +1173,16 @@ PSR_POSITION_STANDARDISE <- TRUE
 #' \code{data-raw/03-ratings/promote_rating_vintage.R} (PROMOTE_FROM=v13,
 #' PROMOTE_TO=v14) and move the manifest to canonical v14 BEFORE these constants
 #' reach main.
+#'
+#' v15 (2026-09-29): no constant changes. The 2026 play-by-play is re-scored on
+#' the current EP/WP models: the published file had rounds 0-17 on older EP and
+#' 0-19 on older WP (mean |exp_pts gap| 0.094-0.105 in rounds 0-14, |wp gap|
+#' 0.016-0.032 in rounds 0-19). The 2026 numbers move, so the vintage moves (Pete);
+#' 2021-2025 are unchanged. Plan: \code{docs/plans/AFL-2026-RERELEASE.md}. Preserve
+#' v14 with \code{data-raw/03-ratings/promote_rating_vintage.R} (PROMOTE_FROM=v14,
+#' PROMOTE_TO=v15) and move the manifest to canonical v15 BEFORE this reaches main.
 #' @keywords internal
-RATING_VINTAGE <- "v14"
+RATING_VINTAGE <- "v15"
 
 #' Map from the 20-way team-sheet lineup position to a 6-way position group
 #'

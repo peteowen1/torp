@@ -1,3 +1,13 @@
+# torp 1.9.8
+
+## Rating vintage v15: AFL 2026 re-scored on the current EP/WP models
+
+The published 2026 play-by-play had been scored with older models, EP in rounds 0-17 and WP in
+0-19, so 2026 EPV, net points and WPA rested on them (live WPA agreed with the published value at
+only 0.24-0.49 correlation in the worst rounds). 2026 is re-scored on the current models with no
+constant changes, so the vintage moves to v15 and v14 stays on the release as its own file.
+2021-2025 are unchanged in every column; 2026 torp correlates 0.9999 with v14.
+
 # torp 1.9.7
 
 ## The daily release keeps PSV in player game ratings
