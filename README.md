@@ -12,6 +12,8 @@ coverage](https://codecov.io/gh/peteowen1/torp/branch/main/graph/badge.svg)](htt
 stable](https://img.shields.io/badge/lifecycle-stable-brightgreen.svg)](https://lifecycle.r-lib.org/articles/stages.html#stable)
 <!-- badges: end -->
 
+TORP ratings, match predictions and season simulations built with this package are published, updated after every round, at [inthegame.blog/afl](https://inthegame.blog/afl/).
+
 **torp** is an R package for AFL analytics. It provides player ratings
 (TORP), expected points and win probability models, season simulations,
 and easy access to processed AFL data.
