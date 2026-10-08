@@ -166,7 +166,7 @@ save_injury_data <- function(injuries_df, season) {
     combined <- dplyr::bind_rows(existing, injuries_df)
   } else {
     is_absent <- tryCatch(
-      vb_confirm_absent(get_torp_data_repo(), "injury-data", paste0("injury_list_", season, ".parquet")),
+      confirm_fresh_start(get_torp_data_repo(), "injury-data", paste0("injury_list_", season, ".parquet")),
       error = function(e) {
         cli::cli_abort("Could not verify injury_list_{season}.parquet is absent before a fresh upload: {conditionMessage(e)}")
       }

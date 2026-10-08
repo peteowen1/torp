@@ -5,14 +5,19 @@
 # 2026-07-25 (3 attempts/~7s -> 5 attempts/~20s, c(2,3,5,10) delays) after
 # the original budget still wasn't enough during live-game upload bursts.
 
+# The retry/verify backoffs are real Sys.sleep() calls: unmocked, this file
+# took 315s (2026-10-08), every devtools::test() run. None of the assertions
+# depend on wall-clock waiting.
+testthat::local_mocked_bindings(Sys.sleep = function(...) NULL, .package = "base")
+
 test_that("save_to_release retries the post-upload size verify through a stale GitHub listing, then succeeds", {
   uploaded_bytes <- NULL
   testthat::local_mocked_bindings(
-    pb_upload = function(file, repo, tag, overwrite = TRUE, ...) {
+    safe_release_upload = function(file, repo, tag, name = basename(file), ...) {
       uploaded_bytes <<- file.size(file)
       invisible(NULL)
     },
-    .package = "piggyback"
+    .package = "torp"
   )
 
   call_count <- 0
@@ -44,11 +49,11 @@ test_that("save_to_release ABORTS when a SMALLER listing is stamped AFTER our up
   # short. That is the truncation signature and must stay fatal.
   uploaded_bytes <- NULL
   testthat::local_mocked_bindings(
-    pb_upload = function(file, repo, tag, overwrite = TRUE, ...) {
+    safe_release_upload = function(file, repo, tag, name = basename(file), ...) {
       uploaded_bytes <<- file.size(file)
       invisible(NULL)
     },
-    .package = "piggyback"
+    .package = "torp"
   )
 
   call_count <- 0
@@ -84,11 +89,11 @@ test_that("save_to_release warns when a SMALLER listing is stamped BEFORE our up
   # Size direction carries no information here; only the timestamp does.
   uploaded_bytes <- NULL
   testthat::local_mocked_bindings(
-    pb_upload = function(file, repo, tag, overwrite = TRUE, ...) {
+    safe_release_upload = function(file, repo, tag, name = basename(file), ...) {
       uploaded_bytes <<- file.size(file)
       invisible(NULL)
     },
-    .package = "piggyback"
+    .package = "torp"
   )
 
   call_count <- 0
@@ -123,11 +128,11 @@ test_that("save_to_release warns when a LARGER listing is stamped BEFORE our upl
   # predictions for two weeks.
   uploaded_bytes <- NULL
   testthat::local_mocked_bindings(
-    pb_upload = function(file, repo, tag, overwrite = TRUE, ...) {
+    safe_release_upload = function(file, repo, tag, name = basename(file), ...) {
       uploaded_bytes <<- file.size(file)
       invisible(NULL)
     },
-    .package = "piggyback"
+    .package = "torp"
   )
 
   call_count <- 0
@@ -160,11 +165,11 @@ test_that("save_to_release ABORTS when a LARGER listing is stamped AFTER our upl
   # concurrent writer -- i.e. our data is NOT what is live. Must stay fatal.
   uploaded_bytes <- NULL
   testthat::local_mocked_bindings(
-    pb_upload = function(file, repo, tag, overwrite = TRUE, ...) {
+    safe_release_upload = function(file, repo, tag, name = basename(file), ...) {
       uploaded_bytes <<- file.size(file)
       invisible(NULL)
     },
-    .package = "piggyback"
+    .package = "torp"
   )
 
   testthat::local_mocked_bindings(
@@ -199,11 +204,11 @@ test_that("save_to_release aborts, citing the parse failure, when updated_at is 
   # never evaluated.
   uploaded_bytes <- NULL
   testthat::local_mocked_bindings(
-    pb_upload = function(file, repo, tag, overwrite = TRUE, ...) {
+    safe_release_upload = function(file, repo, tag, name = basename(file), ...) {
       uploaded_bytes <<- file.size(file)
       invisible(NULL)
     },
-    .package = "piggyback"
+    .package = "torp"
   )
   testthat::local_mocked_bindings(
     gh = function(endpoint, ...) {
@@ -227,8 +232,8 @@ test_that("save_to_release aborts, citing the parse failure, when updated_at is 
 
 test_that("save_to_release warns (not aborts) when the post-upload listing call itself keeps failing", {
   testthat::local_mocked_bindings(
-    pb_upload = function(file, repo, tag, overwrite = TRUE, ...) invisible(NULL),
-    .package = "piggyback"
+    safe_release_upload = function(file, repo, tag, name = basename(file), ...) invisible(NULL),
+    .package = "torp"
   )
   testthat::local_mocked_bindings(
     gh = function(endpoint, ...) stop("simulated network failure"),
@@ -267,11 +272,11 @@ test_that("save_to_release warns (not aborts) when the post-upload listing call 
 test_that("a lagging listing is CONFIRMED CLEAN when the download path matches what we wrote", {
   uploaded_bytes <- NULL
   testthat::local_mocked_bindings(
-    pb_upload = function(file, repo, tag, overwrite = TRUE, ...) {
+    safe_release_upload = function(file, repo, tag, name = basename(file), ...) {
       uploaded_bytes <<- file.size(file)
       invisible(NULL)
     },
-    .package = "piggyback"
+    .package = "torp"
   )
   .mock_stale_listing()
   testthat::local_mocked_bindings(
@@ -306,11 +311,11 @@ test_that("a lagging listing is CONFIRMED CLEAN when the download path matches w
 test_that("a lagging listing ABORTS when the download path shows a genuinely short asset", {
   uploaded_bytes <- NULL
   testthat::local_mocked_bindings(
-    pb_upload = function(file, repo, tag, overwrite = TRUE, ...) {
+    safe_release_upload = function(file, repo, tag, name = basename(file), ...) {
       uploaded_bytes <<- file.size(file)
       invisible(NULL)
     },
-    .package = "piggyback"
+    .package = "torp"
   )
   .mock_stale_listing()
   testthat::local_mocked_bindings(
@@ -331,8 +336,8 @@ test_that("an UNAVAILABLE authoritative size falls back to the old warn-and-proc
   # The contract that matters most: .vb_asset_true_size() returns NA on every
   # failure path, and NA must never be read as either a pass or a truncation.
   testthat::local_mocked_bindings(
-    pb_upload = function(file, repo, tag, overwrite = TRUE, ...) invisible(NULL),
-    .package = "piggyback"
+    safe_release_upload = function(file, repo, tag, name = basename(file), ...) invisible(NULL),
+    .package = "torp"
   )
   .mock_stale_listing()
   testthat::local_mocked_bindings(
@@ -382,8 +387,8 @@ test_that(".vb_asset_true_size reads the total off Content-Range, not the range 
 test_that("prev_rows_floor ABORTS before uploading when the frame is far under the published row count", {
   uploaded <- FALSE
   testthat::local_mocked_bindings(
-    pb_upload = function(...) { uploaded <<- TRUE; invisible(NULL) },
-    .package = "piggyback"
+    safe_release_upload = function(...) { uploaded <<- TRUE; invisible(NULL) },
+    .package = "torp"
   )
   testthat::local_mocked_bindings(
     .publish_bus_manifest = function(...) invisible(NULL),
@@ -405,8 +410,8 @@ test_that("prev_rows_floor ABORTS before uploading when the frame is far under t
 
 test_that("prev_rows_floor allows a frame at or above the floor", {
   testthat::local_mocked_bindings(
-    pb_upload = function(...) invisible(NULL),
-    .package = "piggyback"
+    safe_release_upload = function(...) invisible(NULL),
+    .package = "torp"
   )
   testthat::local_mocked_bindings(
     gh = function(endpoint, ...) list(assets = list(list(
@@ -437,7 +442,7 @@ test_that("prev_rows_floor no-ops rather than blocking when the manifest cannot 
     local({
       manifest <- mf
       testthat::local_mocked_bindings(
-        pb_upload = function(...) invisible(NULL), .package = "piggyback")
+        safe_release_upload = function(...) invisible(NULL), .package = "torp")
       testthat::local_mocked_bindings(
         gh = function(endpoint, ...) list(assets = list(list(
           name = "widget.parquet", size = 1e9,
@@ -467,11 +472,11 @@ test_that("an asset MISSING from the listing is confirmed on the download path, 
   # name and cannot answer out of a lagging index.
   uploaded_bytes <- NULL
   testthat::local_mocked_bindings(
-    pb_upload = function(file, repo, tag, overwrite = TRUE, ...) {
+    safe_release_upload = function(file, repo, tag, name = basename(file), ...) {
       uploaded_bytes <<- file.size(file)
       invisible(NULL)
     },
-    .package = "piggyback"
+    .package = "torp"
   )
   testthat::local_mocked_bindings(
     gh = function(endpoint, ...) list(assets = list()),   # never lists our asset
@@ -492,11 +497,11 @@ test_that("an asset missing from the listing AND short on the download path stil
   # The permissive branch must not become a way through for a real short write.
   uploaded_bytes <- NULL
   testthat::local_mocked_bindings(
-    pb_upload = function(file, repo, tag, overwrite = TRUE, ...) {
+    safe_release_upload = function(file, repo, tag, name = basename(file), ...) {
       uploaded_bytes <<- file.size(file)
       invisible(NULL)
     },
-    .package = "piggyback"
+    .package = "torp"
   )
   testthat::local_mocked_bindings(
     gh = function(endpoint, ...) list(assets = list()),

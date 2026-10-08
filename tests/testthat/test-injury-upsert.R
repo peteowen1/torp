@@ -1,7 +1,7 @@
 # torp H1 / ECOSYSTEM-FIX-PLAN.md T6: save_injury_data() must never treat a
 # 0-row (or errored) read of existing history as "safe to overwrite". Only a
 # positively-confirmed-absent release asset justifies a fresh upload. No
-# network -- load_injury_data/vb_confirm_absent/save_to_release are mocked.
+# network -- load_injury_data/confirm_fresh_start/save_to_release are mocked.
 
 .new_injury_row <- function(player = "New Player", team = "Richmond") {
   data.frame(
@@ -15,7 +15,7 @@
 test_that("save_injury_data refuses to overwrite when 0-row existing is not confirmed absent", {
   local_mocked_bindings(
     load_injury_data = function(seasons = get_afl_season(), columns = NULL) data.frame(),
-    vb_confirm_absent = function(repo, tag, name) FALSE,  # asset IS present -- 0-row read was ambiguous
+    confirm_fresh_start = function(repo, tag, name) FALSE,  # asset IS present -- 0-row read was ambiguous
     save_to_release = function(...) stop("save_to_release must not be called")
   )
 
@@ -29,7 +29,7 @@ test_that("save_injury_data proceeds fresh only when the release asset is confir
   uploaded <- NULL
   local_mocked_bindings(
     load_injury_data = function(seasons = get_afl_season(), columns = NULL) data.frame(),
-    vb_confirm_absent = function(repo, tag, name) TRUE,  # genuinely absent (first-ever publish)
+    confirm_fresh_start = function(repo, tag, name) TRUE,  # genuinely absent (first-ever publish)
     save_to_release = function(df, file_name, release_tag, also_csv = FALSE, prev_rows_floor = NULL) {
       uploaded <<- df
       invisible(NULL)

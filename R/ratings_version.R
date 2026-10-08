@@ -350,8 +350,9 @@ publish_ratings_manifest <- function(n_rows, version = RATING_VINTAGE,
   # one, and reports a failed upload as a warning. On 2026-09-17 that left the
   # release with no manifest at all while the run reported success, and every
   # ratings run for the next six days aborted at check_vintage_alignment().
-  # So confirm the asset is there afterwards, and fail loudly if it is not.
-  piggyback::pb_upload(tf, repo = repo, tag = "ratings-data", overwrite = TRUE)
+  # safe_release_upload() keeps the old manifest until the new one is verified
+  # on the release; the presence check below stays as a second opinion.
+  safe_release_upload(tf, repo = repo, tag = "ratings-data", name = "ratings_manifest.json")
   present <- FALSE
   for (i in 1:5) {
     assets <- tryCatch(piggyback::pb_list(repo = repo, tag = "ratings-data"),

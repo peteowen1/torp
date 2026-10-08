@@ -126,7 +126,7 @@ test_that("the results refresh is the only publish inside the state half", {
   builder <- src[start:(end - 1)]
   code <- builder[!grepl("^\\s*#", builder)]
 
-  writes <- grep("save_to_release\\(|pb_upload\\(", code, value = TRUE)
+  writes <- grep("save_to_release\\(|pb_upload\\(|safe_release_upload\\(", code, value = TRUE)
   expect_length(writes, 1)
   expect_match(writes[1], "results_", fixed = FALSE)
 

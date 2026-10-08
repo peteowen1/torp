@@ -1,3 +1,24 @@
+# torp 1.9.9
+
+## Release uploads never delete the old asset before the new one is on the release
+
+`piggyback::pb_upload(overwrite = TRUE)` (and the default `"use_timestamps"` whenever the local
+file is newer) deletes the existing asset, then uploads, and piggyback 0.1.5 only warns when that
+upload fails. A failed upload left the asset gone, and the accumulating writers then read it as a
+first run and published a cut-down file over the history: locked predictions, injury history,
+chains/pbp, score events. `vb_confirm_absent()`, the guard against exactly that, passed, because
+the delete itself made the asset absent. `save_to_release()` retried only on 404/422, so an HTTP
+500 after the delete gave up at once (how wheather lost its cache on 2026-09-17).
+
+- New internal `safe_release_upload()` uploads under a temporary name, waits until the listing
+  shows it uploaded at the local size, then deletes the old asset and renames. Used by
+  `save_to_release()` (parquet, CSV copy, `bus_manifest.json`), `ratings_manifest.json`, the
+  match-model uploads and `promote_rating_vintage.R`.
+- New internal `confirm_fresh_start()` replaces `vb_confirm_absent()` at every start-fresh branch.
+  An asset the tag's `bus_manifest.json` lists but the release lacks was lost, not never made, so
+  it aborts; set `TORP_ALLOW_FRESH_START=<asset>` to rebuild one on purpose.
+- `test-save-to-release.R` mocks `Sys.sleep`: 315s to 6.5s.
+
 # torp 1.9.8
 
 ## Rating vintage v15: AFL 2026 re-scored on the current EP/WP models
