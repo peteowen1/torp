@@ -52,6 +52,12 @@ RELEASE_TMP_PREFIX <- "vbnew-"
   )
 }
 
+# Real data assets on a tag: not the manifest, not temp copies, not `exclude`.
+.release_data_assets <- function(assets, exclude = character()) {
+  n <- assets$name
+  n[!startsWith(n, RELEASE_TMP_PREFIX) & n != "bus_manifest.json" & !(n %in% exclude)]
+}
+
 # Rows that are a temp copy of `name` left by an upload whose final rename
 # never happened.
 .release_tmp_copies <- function(assets, name) {
@@ -80,10 +86,13 @@ safe_release_upload <- function(path, repo, tag, name = basename(path),
   size <- as.numeric(file.size(path))
   if (is.na(size)) cli::cli_abort("safe_release_upload: {.file {path}} does not exist")
   r <- .vb_split_repo(repo)
-  tmp_name <- sprintf("%s%s-%s-%d%06d--%s", RELEASE_TMP_PREFIX,
+  # Unique per call from the pid and a microsecond clock -- not sample.int(),
+  # which would advance .Random.seed and change the draws of a seeded
+  # simulation that uploads mid-run.
+  tmp_name <- sprintf("%s%s-%s-%d%s--%s", RELEASE_TMP_PREFIX,
                       Sys.getenv("GITHUB_RUN_ID", "local"),
                       Sys.getenv("GITHUB_RUN_ATTEMPT", "0"),
-                      Sys.getpid(), sample.int(999999L, 1L), name)
+                      Sys.getpid(), sprintf("%.0f", as.numeric(Sys.time()) * 1e6), name)
 
   # Never serve piggyback a pre-upload listing (same as vb_publish()).
   prev_cache <- Sys.getenv("piggyback_cache_duration", unset = NA)
@@ -107,9 +116,13 @@ safe_release_upload <- function(path, repo, tag, name = basename(path),
   #    can lag an upload by tens of seconds (torpdata#74), hence the polling.
   new_id <- NA_real_
   assets <- NULL
+  last_err <- "none"
   for (d in c(0, poll_delays)) {
     if (d > 0) Sys.sleep(d)
-    assets <- tryCatch(.release_assets_with_state(repo, tag), error = function(e) NULL)
+    assets <- tryCatch(.release_assets_with_state(repo, tag), error = function(e) {
+      last_err <<- conditionMessage(e)
+      NULL
+    })
     if (is.null(assets)) next
     hit <- assets[assets$name == tmp_name & assets$state %in% "uploaded" &
                     assets$size == size, , drop = FALSE]
@@ -119,7 +132,7 @@ safe_release_upload <- function(path, repo, tag, name = basename(path),
     }
   }
   if (is.na(new_id)) {
-    .vb_abort("{.val {tmp_name}} never listed as uploaded at {size} bytes; the existing {.val {name}} is untouched",
+    .vb_abort("{.val {tmp_name}} never listed as uploaded at {size} bytes (last listing error: {last_err}); the existing {.val {name}} is untouched",
               "vb_error_transient")
   }
 
@@ -131,7 +144,7 @@ safe_release_upload <- function(path, repo, tag, name = basename(path),
   for (i in seq_len(nrow(old))) {
     err <- tryCatch({
       gh::gh("DELETE /repos/{owner}/{repo}/releases/assets/{id}",
-             owner = r$owner, repo = r$name, id = old$id[i])
+             owner = r$owner, repo = r$name, id = format(old$id[i], scientific = FALSE))
       NULL
     }, error = function(e) e)
     if (!is.null(err)) {
@@ -147,7 +160,7 @@ safe_release_upload <- function(path, repo, tag, name = basename(path),
   tryCatch(
     .vb_retry(function() {
       gh::gh("PATCH /repos/{owner}/{repo}/releases/assets/{id}",
-             owner = r$owner, repo = r$name, id = new_id, name = name)
+             owner = r$owner, repo = r$name, id = format(new_id, scientific = FALSE), name = name)
     }, times = 3L, delays = c(5, 10)),
     error = function(e) {
       .vb_abort("Rename of {.val {tmp_name}} to {.val {name}} failed after the old asset was deleted; the data is on the release as {.val {tmp_name}}: {conditionMessage(e)}",
@@ -201,6 +214,18 @@ confirm_fresh_start <- function(repo, tag, name) {
   # (A half-uploaded asset under its real name never gets this far:
   # vb_confirm_absent() lists it as present.)
   manifest <- vb_read_prev_manifest(repo, tag)
+  if (is.null(manifest)) {
+    # No commit record at all. On a tag that already holds data that is not
+    # "new", it is a lost manifest (or one stranded under a temp name), and
+    # the manifest was the only evidence of what else used to be here.
+    others <- .release_data_assets(assets, exclude = name)
+    if (length(others) > 0L) {
+      .vb_abort(c("{repo}@{tag} holds {length(others)} data asset{?s} but no bus_manifest.json, so a missing {.val {name}} cannot be told apart from a new one.",
+                  "i" = "Restore bus_manifest.json, or set TORP_ALLOW_FRESH_START={name} if {.val {name}} is genuinely new."),
+                "vb_error_integrity")
+    }
+    return(TRUE)
+  }
   if (!is.null(.vb_manifest_entry_for(manifest, name))) {
     .vb_abort(c("{.val {name}} is listed in {repo}@{tag}'s bus_manifest.json but missing from the release: it was LOST, not never made.",
                 "x" = "Starting fresh would publish a cut-down file over its history.",

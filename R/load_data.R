@@ -416,7 +416,19 @@ save_to_release <- function(df, file_name, release_tag, also_csv = FALSE, prev_r
   entry <- vb_asset_entry(local_path, rows = rows)
   entry$name <- name  # local_path is a tempfile; use the canonical asset name
 
-  prev <- tryCatch(vb_read_prev_manifest(repo, tag), error = function(e) NULL)
+  # A read failure must not become "no previous manifest": the merge would
+  # publish a one-entry manifest and drop every other asset's record, and
+  # confirm_fresh_start() relies on those records to tell a LOST asset from a
+  # new one. So errors propagate (the caller warns and skips this write), and
+  # a genuinely absent manifest is only started fresh on a tag holding no
+  # other data.
+  prev <- vb_read_prev_manifest(repo, tag)
+  if (is.null(prev)) {
+    others <- .release_data_assets(.release_assets_with_state(repo, tag), exclude = name)
+    if (length(others) > 0L) {
+      cli::cli_abort("No bus_manifest.json on {repo}@{tag}, which holds {length(others)} other data asset{?s}; refusing to start a one-entry manifest that would drop them")
+    }
+  }
   merged <- .vb_merge_entries(prev, stats::setNames(list(entry), name))
 
   tmp <- file.path(tempdir(), paste0(".bus_manifest_", tag, ".json"))

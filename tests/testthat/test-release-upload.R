@@ -78,9 +78,13 @@ test_that("safe_release_upload replaces the asset in place and leaves no temp co
   st <- .fake_release(a.parquet = 5)
   .mock_release(st)
   f <- .new_file(20)
+  set.seed(42)
+  seed_before <- .Random.seed
   safe_release_upload(f, "o/r", "t", name = "a.parquet")
   expect_equal(st$names(), "a.parquet")
   expect_equal(st$size_of("a.parquet"), 20)
+  # A seeded simulation that uploads mid-run must draw the same numbers after.
+  expect_identical(.Random.seed, seed_before)
 })
 
 test_that("a failed upload POST (piggyback only warns) keeps the old asset", {
@@ -154,6 +158,51 @@ test_that("confirm_fresh_start aborts when bus_manifest.json lists an asset the 
 
   withr::local_envvar(TORP_ALLOW_FRESH_START = "predictions_2026.parquet")
   expect_true(confirm_fresh_start("o/r", "predictions", "predictions_2026.parquet"))
+})
+
+test_that("confirm_fresh_start: no manifest on a tag that holds data cannot prove 'new'", {
+  st <- .fake_release(chains_data_2025_all.parquet = 5)
+  .mock_release(st)
+  testthat::local_mocked_bindings(vb_read_prev_manifest = function(...) NULL)
+  expect_error(confirm_fresh_start("o/r", "chains-data", "chains_data_2026_all.parquet"),
+               "no bus_manifest.json", class = "vb_error_integrity")
+
+  # An empty tag (or one holding only temp copies of other names) is a real first run.
+  st2 <- .fake_release()
+  .mock_release(st2)
+  expect_true(confirm_fresh_start("o/r", "chains-data", "chains_data_2026_all.parquet"))
+})
+
+test_that(".publish_bus_manifest never replaces a manifest it could not read", {
+  f <- .new_file(20)
+  uploads <- 0L
+  testthat::local_mocked_bindings(
+    safe_release_upload = function(...) { uploads <<- uploads + 1L; invisible(1) },
+    vb_read_prev_manifest = function(...) {
+      stop(structure(class = c("http_error_500", "error", "condition"),
+                     list(message = "Server Error (HTTP 500)", call = NULL)))
+    }
+  )
+  expect_error(.publish_bus_manifest("predictions", "predictions_2026.parquet", f, rows = 3))
+  expect_equal(uploads, 0L)
+})
+
+test_that(".publish_bus_manifest starts a manifest only on a tag with no other data", {
+  f <- .new_file(20)
+  uploads <- 0L
+  listing <- data.frame(id = 1, name = "predictions_2025.parquet", size = 5, state = "uploaded")
+  testthat::local_mocked_bindings(
+    safe_release_upload = function(...) { uploads <<- uploads + 1L; invisible(1) },
+    vb_read_prev_manifest = function(...) NULL,
+    .release_assets_with_state = function(...) listing
+  )
+  expect_error(.publish_bus_manifest("predictions", "predictions_2026.parquet", f, rows = 3),
+               "one-entry manifest")
+  expect_equal(uploads, 0L)
+
+  listing <- data.frame(id = 1, name = "predictions_2026.parquet", size = 20, state = "uploaded")
+  .publish_bus_manifest("predictions", "predictions_2026.parquet", f, rows = 3)
+  expect_equal(uploads, 1L)
 })
 
 test_that("confirm_fresh_start: a tag that does not exist yet is a genuine first run", {
