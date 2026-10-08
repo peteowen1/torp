@@ -76,36 +76,22 @@ save_to_release <- function(df, file_name, release_tag, also_csv = FALSE, prev_r
   # this runner and GitHub.
   upload_started_at <- as.POSIXct(Sys.time(), tz = "UTC")
 
+  # Never delete-then-upload: safe_release_upload() keeps the old asset until
+  # a verified replacement is on the release (R/release_upload.R). It used to
+  # be pb_upload() with a retry only on 404/422, so an HTTP 500 after
+  # piggyback's delete left the asset gone -- and the accumulating callers'
+  # next run then started fresh over the history. Retried on transient
+  # failures, which before the swap never touch the old asset.
   tryCatch(
-    piggyback::pb_upload(tf,
-                         repo = repo,
-                         tag = release_tag,
-                         name = f_name),
+    .vb_retry(function() {
+      # Re-stamp per attempt: the verify below checks THIS attempt's write.
+      upload_started_at <<- as.POSIXct(Sys.time(), tz = "UTC")
+      safe_release_upload(tf, repo = repo, tag = release_tag, name = f_name)
+    }, times = 3L, delays = c(5, 15),
+    should_retry = function(e) inherits(e, "vb_error_transient")),
     error = function(e) {
-      # Retry once on 404/422 — piggyback's delete-then-upload can fail if the
-      # asset ID changed between listing and deletion (concurrent upload or
-      # stale cache), or if a concurrent create raced us (422). A short
-      # backoff then a fresh attempt re-fetches the asset list.
-      if (grepl("404|422", conditionMessage(e))) {
-        cli::cli_warn("Upload error for {.val {f_name}}, retrying once...")
-        Sys.sleep(2)
-        # Re-stamp: it is THIS attempt whose result the verify below checks, so
-        # the staleness cutoff must reference it and not the abandoned first
-        # attempt. Matters most precisely here -- the 404/422 path is the
-        # concurrent-upload case the staleness check exists to disambiguate.
-        upload_started_at <<- as.POSIXct(Sys.time(), tz = "UTC")
-        tryCatch(
-          piggyback::pb_upload(tf,
-                               repo = repo,
-                               tag = release_tag,
-                               name = f_name),
-          error = function(e2) {
-            cli::cli_abort("Failed to upload {.val {f_name}} to release {.val {release_tag}} (after retry): {conditionMessage(e2)}")
-          }
-        )
-      } else {
-        cli::cli_abort("Failed to upload {.val {f_name}} to release {.val {release_tag}}: {conditionMessage(e)}")
-      }
+      cli::cli_abort("Failed to upload {.val {f_name}} to release {.val {release_tag}}: {conditionMessage(e)}",
+                     parent = e)
     }
   )
 
@@ -364,10 +350,7 @@ save_to_release <- function(df, file_name, release_tag, also_csv = FALSE, prev_r
     # miss, and it must name the consequence.
     tryCatch({
       utils::write.csv(df, tf_csv, row.names = FALSE)
-      piggyback::pb_upload(tf_csv,
-                           repo = repo,
-                           tag = release_tag,
-                           name = csv_name)
+      safe_release_upload(tf_csv, repo = repo, tag = release_tag, name = csv_name)
     }, error = function(e) {
       # cli_alert_danger FIRST: it prints immediately. A bare cli_warn is
       # deferred to the end of an Rscript run and dropped past
@@ -433,14 +416,26 @@ save_to_release <- function(df, file_name, release_tag, also_csv = FALSE, prev_r
   entry <- vb_asset_entry(local_path, rows = rows)
   entry$name <- name  # local_path is a tempfile; use the canonical asset name
 
-  prev <- tryCatch(vb_read_prev_manifest(repo, tag), error = function(e) NULL)
+  # A read failure must not become "no previous manifest": the merge would
+  # publish a one-entry manifest and drop every other asset's record, and
+  # confirm_fresh_start() relies on those records to tell a LOST asset from a
+  # new one. So errors propagate (the caller warns and skips this write), and
+  # a genuinely absent manifest is only started fresh on a tag holding no
+  # other data.
+  prev <- vb_read_prev_manifest(repo, tag)
+  if (is.null(prev)) {
+    others <- .release_data_assets(.release_assets_with_state(repo, tag), exclude = name)
+    if (length(others) > 0L) {
+      cli::cli_abort("No bus_manifest.json on {repo}@{tag}, which holds {length(others)} other data asset{?s}; refusing to start a one-entry manifest that would drop them")
+    }
+  }
   merged <- .vb_merge_entries(prev, stats::setNames(list(entry), name))
 
   tmp <- file.path(tempdir(), paste0(".bus_manifest_", tag, ".json"))
   on.exit(unlink(tmp), add = TRUE)
   manifest <- vb_write_manifest(merged, tag, tmp)
 
-  up <- function() piggyback::pb_upload(tmp, repo = repo, tag = tag, name = "bus_manifest.json", overwrite = TRUE)
+  up <- function() safe_release_upload(tmp, repo = repo, tag = tag, name = "bus_manifest.json")
   tryCatch(up(), error = function(e) { Sys.sleep(5); up() })
 
   invisible(manifest)

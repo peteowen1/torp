@@ -223,8 +223,8 @@ test_that("publish_ratings_manifest() never starts over on a failed read, and ch
   # 2026-09-17: the manifest vanished (delete-then-upload, upload failed, run
   # reported success) and every ratings run aborted for six days after.
   up <- 0L
-  testthat::local_mocked_bindings(pb_upload = function(...) { up <<- up + 1L; invisible(NULL) },
-                                  .package = "piggyback")
+  testthat::local_mocked_bindings(safe_release_upload = function(...) { up <<- up + 1L; invisible(NULL) },
+                                  .package = "torp")
   # a failed read must not become a fresh one-vintage manifest
   expect_error(torp:::publish_ratings_manifest(10, version = "v9", manifest = NULL),
                "Could not read ratings_manifest.json")

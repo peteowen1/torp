@@ -94,7 +94,7 @@ if (!already) {
 # From here the outgoing file is preserved. If the manifest upload fails,
 # re-running with the same snapshot resumes at the manifest step.
 ok <- tryCatch({
-  piggyback::pb_upload(tf, repo = repo, tag = "ratings-data", overwrite = TRUE); TRUE
+  safe_release_upload(tf, repo = repo, tag = "ratings-data", name = "ratings_manifest.json"); TRUE
 }, error = function(e) {
   say("MANIFEST UPLOAD FAILED: ", conditionMessage(e),
       "\n  State: ", preserved, " is preserved and verified; the manifest still says canonical ", FROM,

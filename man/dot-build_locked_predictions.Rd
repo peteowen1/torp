@@ -36,7 +36,7 @@ than a confirmed-absent 404) aborts rather than being treated as "no
 existing file" -- that collapse is exactly what let one week's data
 silently replace a full season of locked history. A fresh, non-accumulating
 upload is only permitted after independently confirming via
-\code{\link[=vb_confirm_absent]{vb_confirm_absent()}} that the release asset really is absent. An
+\code{\link[=confirm_fresh_start]{confirm_fresh_start()}} that the release asset really is absent. An
 accumulating merge is floor-guarded against a >10\% shrink via
 \code{\link[=vb_guard_accumulate]{vb_guard_accumulate()}}.
 }

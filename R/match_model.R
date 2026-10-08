@@ -490,7 +490,7 @@ get_lineup_ratings <- function(season = NULL, round = NULL, match_id = NULL) {
 #' existing file" -- that collapse is exactly what let one week's data
 #' silently replace a full season of locked history. A fresh, non-accumulating
 #' upload is only permitted after independently confirming via
-#' [vb_confirm_absent()] that the release asset really is absent. An
+#' [confirm_fresh_start()] that the release asset really is absent. An
 #' accumulating merge is floor-guarded against a >10% shrink via
 #' [vb_guard_accumulate()].
 #'
@@ -586,7 +586,7 @@ get_lineup_ratings <- function(season = NULL, round = NULL, match_id = NULL) {
     # the release asset really is absent before doing a fresh, non-accumulating
     # upload -- this is the mandatory guard before any "start fresh" branch.
     is_absent <- tryCatch(
-      vb_confirm_absent(pred_repo, "predictions", paste0(pred_file_name, ".parquet")),
+      confirm_fresh_start(pred_repo, "predictions", paste0(pred_file_name, ".parquet")),
       error = function(e) {
         cli::cli_abort("Could not verify {.val {pred_file_name}.parquet} is absent from the predictions release before a fresh upload: {conditionMessage(e)}")
       }
@@ -1294,7 +1294,7 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
       t1 <- proc.time()[["elapsed"]]
       gam_size <- file.size(gam_path) / 1e6
       cli::cli_alert_info("match_gams saveRDS: {round(t1 - t0, 1)}s ({round(gam_size, 1)} MB)")
-      piggyback::pb_upload(gam_path, repo = "peteowen1/torpmodels", tag = "core-models")
+      safe_release_upload(gam_path, repo = "peteowen1/torpmodels", tag = "core-models")
       t2 <- proc.time()[["elapsed"]]
       cli::cli_alert_info("match_gams pb_upload: {round(t2 - t1, 1)}s")
       local_cache <- file.path(cache_dir, "core", "match_gams.rds")
@@ -1320,7 +1320,7 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
         t4 <- proc.time()[["elapsed"]]
         xgb_size <- file.size(xgb_path) / 1e6
         cli::cli_alert_info("match_xgb saveRDS: {round(t4 - t3, 1)}s ({round(xgb_size, 1)} MB)")
-        piggyback::pb_upload(xgb_path, repo = "peteowen1/torpmodels", tag = "core-models")
+        safe_release_upload(xgb_path, repo = "peteowen1/torpmodels", tag = "core-models")
         t5 <- proc.time()[["elapsed"]]
         cli::cli_alert_info("match_xgb pb_upload: {round(t5 - t4, 1)}s")
         local_cache_xgb <- file.path(cache_dir, "core", "match_xgb_pipeline.rds")
@@ -1376,7 +1376,7 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
             calib_out <- torpmodels:::stamp_model_meta(calib_out, calib_meta)
           }
           saveRDS(calib_out, calib_path)
-          piggyback::pb_upload(calib_path, repo = "peteowen1/torpmodels", tag = "core-models")
+          safe_release_upload(calib_path, repo = "peteowen1/torpmodels", tag = "core-models")
           local_cache_calib <- file.path(cache_dir, "core", "match_margin_calibration.rds")
           if (dir.exists(dirname(local_cache_calib))) {
             file.copy(calib_path, local_cache_calib, overwrite = TRUE)

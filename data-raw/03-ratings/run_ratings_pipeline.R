@@ -398,7 +398,7 @@ if (nrow(torp_new) > 0) {
       is_absent <- tryCatch(
         # Per-VINTAGE, not per-tag: publishing a candidate must neither trip
         # the guard protecting canonical nor bypass its own.
-        vb_confirm_absent(get_torp_data_repo(), "ratings-data", vintage_file),
+        confirm_fresh_start(get_torp_data_repo(), "ratings-data", vintage_file),
         error = function(e) {
           cli::cli_abort("Could not verify {vintage_file} is absent before a fresh upload: {conditionMessage(e)}")
         }

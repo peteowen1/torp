@@ -221,7 +221,7 @@ update_season_chains <- function(season, round) {
 
   if (is.null(existing)) {
     is_absent <- tryCatch(
-      vb_confirm_absent(get_torpdata_repo(), "chains-data", paste0(chains_all_name, ".parquet")),
+      confirm_fresh_start(get_torpdata_repo(), "chains-data", paste0(chains_all_name, ".parquet")),
       error = function(e) {
         cli::cli_abort("Could not verify {.val {chains_all_name}.parquet} is absent from chains-data before a fresh upload: {conditionMessage(e)}")
       }
@@ -306,7 +306,7 @@ update_season_score_events <- function(season, round) {
   read_existing <- function(name) {
     tryCatch(file_reader(name, "score_events-data"),
       vb_error_absent = function(e) {
-        if (!isTRUE(vb_confirm_absent(get_torpdata_repo(), "score_events-data", paste0(name, ".parquet")))) {
+        if (!isTRUE(confirm_fresh_start(get_torpdata_repo(), "score_events-data", paste0(name, ".parquet")))) {
           cli::cli_abort("Refusing fresh upload of {.val {name}}: not confirmed absent from score_events-data.")
         }
         NULL
@@ -379,7 +379,7 @@ update_season_pbp <- function(season, round) {
 
   if (is.null(existing)) {
     is_absent <- tryCatch(
-      vb_confirm_absent(get_torpdata_repo(), "pbp-data", paste0(pbp_all_name, ".parquet")),
+      confirm_fresh_start(get_torpdata_repo(), "pbp-data", paste0(pbp_all_name, ".parquet")),
       error = function(e) {
         cli::cli_abort("Could not verify {.val {pbp_all_name}.parquet} is absent from pbp-data before a fresh upload: {conditionMessage(e)}")
       }

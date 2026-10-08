@@ -2,7 +2,7 @@
 # extracted overwrite guard from run_predictions_pipeline()) must never
 # collapse a transient read failure into "no existing predictions", and must
 # floor-guard any accumulating merge. No network -- file_reader/
-# vb_confirm_absent are mocked.
+# confirm_fresh_start are mocked.
 
 .mock_team_mdl_df <- function() {
   data.frame(
@@ -48,7 +48,7 @@ test_that(".build_locked_predictions proceeds fresh when file_reader confirms ab
         list(message = "404 not found", call = NULL))
       )
     },
-    vb_confirm_absent = function(repo, tag, name) TRUE
+    confirm_fresh_start = function(repo, tag, name) TRUE
   )
 
   out <- .build_locked_predictions(
@@ -71,7 +71,7 @@ test_that("the post-hoc check runs on the FRESH upload path too, not just the me
         list(message = "404 not found", call = NULL))
       )
     },
-    vb_confirm_absent = function(repo, tag, name) TRUE
+    confirm_fresh_start = function(repo, tag, name) TRUE
   )
 
   # One row stamped a day AFTER its own game started: a retrodiction.
@@ -101,7 +101,7 @@ test_that(".build_locked_predictions refuses a fresh upload when the asset is no
         list(message = "404 not found", call = NULL))
       )
     },
-    vb_confirm_absent = function(repo, tag, name) FALSE
+    confirm_fresh_start = function(repo, tag, name) FALSE
   )
 
   expect_error(
