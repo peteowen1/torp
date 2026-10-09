@@ -1009,6 +1009,7 @@ build_prediction_state <- function(week = NULL, weeks = NULL, season = NULL,
 
   # All matches (for analysis)
   all_preds <- .format_match_preds(team_mdl_df)
+  all_preds <- .finals_win_from_margin(all_preds, .margin_residual_sd(team_mdl_df))
 
   # Target week predictions (for upload)
   week_gms <- all_preds |>
@@ -1717,10 +1718,10 @@ add_weather_to_preds <- function(preds, raw_cols = FALSE) {
   # which keeps them complementary.
   if ("match_id" %in% names(df)) bad <- df$match_id %in% df$match_id[bad]
   if (!any(bad)) return(df)
-  done <- is.finite(df$score_diff) & is.finite(df$pred_score_diff)
-  sigma <- stats::sd(df$score_diff[done] - df$pred_score_diff[done])
-  if (!is.finite(sigma) || sigma <= 0 || sum(done) < 100) {
-    cli::cli_warn("Cannot size the margin model's spread ({sum(done)} completed rows); leaving {sum(bad)} contradicting win probabilit{?y/ies} for the validation to catch.")
+  sigma <- .margin_residual_sd(df)
+  if (is.na(sigma)) {
+    n_done <- sum(is.finite(df$score_diff) & is.finite(df$pred_score_diff))
+    cli::cli_warn("Cannot size the margin model's spread ({n_done} completed rows); leaving {sum(bad)} contradicting win probabilit{?y/ies} for the validation to catch.")
     return(df)
   }
   df$pred_win[bad] <- stats::pnorm(df$pred_score_diff[bad] / sigma)
@@ -1730,4 +1731,61 @@ add_weather_to_preds <- function(preds, raw_cols = FALSE) {
     "Win probability derived from the margin for {sum(bad)} team-row{?s}: the win model contradicted the margin model.",
     "i" = "sigma {round(sigma, 1)} points; rows: {paste(utils::head(who, 6), collapse = ', ')}."))
   df
+}
+
+
+#' Residual SD of the margin model on completed matches
+#'
+#' The spread `.reconcile_win_with_margin()` and `.finals_win_from_margin()`
+#' use to turn a margin into a win probability: `sd(score_diff -
+#' pred_score_diff)` over rows with both values.
+#'
+#' @param df Team-level model frame with `pred_score_diff` and `score_diff`.
+#' @return The SD, or `NA_real_` when it cannot be sized (fewer than 100
+#'   completed rows, or a non-positive / non-finite result).
+#' @keywords internal
+.margin_residual_sd <- function(df) {
+  done <- is.finite(df$score_diff) & is.finite(df$pred_score_diff)
+  sigma <- stats::sd(df$score_diff[done] - df$pred_score_diff[done])
+  if (!is.finite(sigma) || sigma <= 0 || sum(done) < 100) return(NA_real_)
+  sigma
+}
+
+
+#' Derive finals win probabilities from the predicted margin (torp#247)
+#'
+#' On finals rows the win GAM's non-margin terms (team and team-season
+#' effects, the total x margin interaction, travel, familiarity, rest) can
+#' outweigh the margin itself, so `pred_win` stopped following
+#' `pred_margin`: a home side predicted to lose by 6.6 got 0.496, and +12.1
+#' and +18.4 both got about 0.658. The -6.6 row sits inside
+#' `.reconcile_win_with_margin()`'s 2-point tolerance, so nothing caught it.
+#'
+#' For finals rows (round above the season's last home-and-away round,
+#' `AFL_REGULAR_SEASON_ROUNDS`, falling back to `AFL_MAX_REGULAR_ROUNDS`)
+#' the match-level win probability is replaced with
+#' `pnorm(pred_margin / sigma)`, sigma being the margin model's residual SD
+#' this run, the same rule `.reconcile_win_with_margin()` applies to
+#' contradicting rows. Applied after the home/away rows are averaged, so the
+#' result is a strictly increasing function of the published margin and is
+#' below 0.5 exactly when the margin is negative. Home-and-away rows are
+#' left as the win model gave them.
+#'
+#' @param preds Match-level predictions from `.format_match_preds()`, with
+#'   `season`, `round`, `pred_margin`, `pred_win`.
+#' @param sigma Margin residual SD, from `.margin_residual_sd()`.
+#' @return `preds` with `pred_win` replaced on finals rows.
+#' @keywords internal
+.finals_win_from_margin <- function(preds, sigma) {
+  last_ha <- unname(AFL_REGULAR_SEASON_ROUNDS[as.character(preds$season)])
+  last_ha[is.na(last_ha)] <- AFL_MAX_REGULAR_ROUNDS
+  finals <- (as.numeric(preds$round) > last_ha & is.finite(preds$pred_margin)) %in% TRUE
+  if (!any(finals)) return(preds)
+  if (!is.finite(sigma) || sigma <= 0) {
+    cli::cli_warn("Cannot size the margin model's spread; leaving {sum(finals)} finals win probabilit{?y/ies} as the win model gave them.")
+    return(preds)
+  }
+  preds$pred_win[finals] <- stats::pnorm(preds$pred_margin[finals] / sigma)
+  cli::cli_alert_info("Finals win probability derived from the margin for {sum(finals)} match{?es} (sigma {round(sigma, 1)} points).")
+  preds
 }
