@@ -101,9 +101,10 @@ with what can and cannot be shown without the data releases:
    win 0.540, at an expected total of 189, above the 99th percentile of
    training, where "the interaction flattens the margin's effect". The issue's
    +12.1 and +18.4 both pricing at ~0.658 is what a flattened slope looks
-   like. *Not re-measured for the issue's rows: needs the fitted models.*
-   `data-raw/05-validation/diagnose_margin_win_disagreement.R` splits the win
-   GAM into its terms for any `MATCH_ID` and is the tool to confirm it.
+   like. Supported by the released rows (next section). The term-by-term split
+   still needs the fitted models:
+   `data-raw/05-validation/diagnose_margin_win_disagreement.R` does it for any
+   `MATCH_ID`.
 2. **Team-season random effects counted twice.** `s(team_name_season.*)`
    appears in both the margin model and the win model. A sizeable team-season
    effect in the win model can pull a −6.6 underdog to ~0.5 even when the
@@ -116,6 +117,73 @@ with what can and cannot be shown without the data releases:
    earlier). Neutral-venue finals (MCG for non-Victorian teams) change
    `log_dist_diff`/`familiarity_diff`. Both enter the win GAM independently
    of the margin. *Not verified for the specific rows.*
+
+### Measured from the published releases (2026-10-09)
+
+Source: `predictions_<season>.parquet` and `retrodictions_<season>.parquet`,
+2021-2026, downloaded from the torpdata `predictions` / `retrodictions`
+releases and read with pyarrow. "Implied sigma" = `pred_margin /
+qnorm(pred_win)`: the normal spread that would turn the published margin into
+the published probability. Around 30 is normal; larger means the win curve is
+flatter than the margin warrants.
+
+2026 finals, locked predictions:
+
+| Rd | Match | pred_margin | pred_win | pred_xtotal | implied sigma | pnorm(m/30.9) |
+|---|---|---|---|---|---|---|
+| 25 | Western Bulldogs v Collingwood | +1.6 | 0.515 | 171.4 | 41.5 | 0.520 |
+| 25 | Melbourne v Carlton | +12.6 | 0.615 | 176.8 | 43.4 | 0.659 |
+| 26 | Fremantle v Hawthorn | +2.7 | 0.522 | 176.2 | 47.9 | 0.534 |
+| 26 | Geelong v Carlton | +12.1 | 0.658 | 164.9 | 29.6 | 0.652 |
+| 26 | Sydney v Brisbane | −6.6 | 0.496 | **198.8** | 658 | 0.415 |
+| 26 | Adelaide v Western Bulldogs | +16.9 | 0.708 | 165.8 | 30.9 | 0.708 |
+| 27 | Fremantle v Geelong | −3.7 | 0.463 | 178.7 | 39.0 | 0.453 |
+| 27 | Brisbane v Adelaide | +18.4 | 0.659 | 179.5 | 44.9 | 0.724 |
+| 28 | Hawthorn v Brisbane | +1.6 | 0.498 | 187.9 | wrong sign | 0.521 |
+| 28 | Sydney v Fremantle | −2.5 | 0.488 | 180.6 | 80.8 | 0.468 |
+| 29 | Fremantle v Brisbane (GF) | −15.7 | 0.472 | 183.4 | 227 | 0.306 |
+
+What this shows:
+
+- **Mechanism 1 is the one at work.** The two finals with expected totals
+  near 165 (Geelong v Carlton, Adelaide v Western Bulldogs) are priced
+  normally. Every final at 176 or above is flat or contradicts the margin.
+  Sydney v Brisbane's 198.8 is above the H&A 99th percentile (187.8). The
+  Grand Final went out at 0.472 for a 15.7-point underdog. The same gradient
+  holds across all 1,865 rows with |margin| > 3: median implied sigma 26.2 at
+  totals 150-160, 28.7 at 160-170, 31.1 at 170-180, 31.8 at 180-190.
+- **The issue's "+12.1 and +18.4 price the same" is mostly the +18.4 row.**
+  Geelong v Carlton (+12.1, 0.658) is priced normally; Brisbane v Adelaide
+  (+18.4, 0.659) is the flat one.
+- **This isn't specific to finals.** Over 2021-2026, 19 rows have margin and
+  probability pointing opposite ways (|margin| > 1); 17 are H&A, all inside the
+  0.02 tolerance. Across all seasons the median implied sigma is the same for
+  finals and H&A (29.6 vs 29.4). 2026's finals stand out because their
+  expected totals were high (median ~179 vs H&A median 167).
+- **Round 25 is a final.** 2026 locked rounds 13-24 have 7-9 matches; round 25
+  has 2 (the wildcard round), then 4, 2, 2, 1. The
+  `AFL_REGULAR_SEASON_ROUNDS` threshold of 24 is correct for 2026.
+
+Calibration on completed matches (draws dropped; locked rows, with
+retrodictions filling seasons/rounds that have no locked row; residual SD of
+`margin - pred_margin` over all completed rows = 30.9):
+
+| Rows | n | win model | pnorm(m/33.1) | pnorm(m/30) | pnorm(m/26) | best sigma |
+|---|---|---|---|---|---|---|
+| H&A | 1996 | **0.5362** | 0.5409 | 0.5423 | 0.5494 | 33.5 |
+| Finals, all | 101 | 0.6017 | 0.6075 | 0.6039 | **0.5997** | 21.5 |
+| Finals, locked only | 56 | **0.6210** | 0.6250 | 0.6239 | 0.6241 | 28.0 |
+
+(log-loss; Brier ranks the same way.) On finals the four rules are within
+0.006 of each other on 56-101 matches, which is noise. The fix on this branch
+does not make finals forecasts measurably better or worse; what it buys is
+consistency between the two published columns. On H&A the win model is
+slightly ahead of any pnorm rule, which is one reason not to extend the
+finals rule to every row. The "best sigma" of 21.5 on all finals leans on
+retrodictions, which are leaky (fitted with later ratings) and so
+overconfident; the locked-only 28.0 is the cleaner number, between the blog's
+26 and this run's ~31-33. Nothing here justifies switching the branch from the
+run's residual SD to 26.
 
 Whichever term dominates for a given row, the structural cause is the same:
 the published probability is produced by a model that is not a function of
@@ -169,11 +237,13 @@ negative, that H&A rows are untouched, the fallback for a season missing from
 
 ## What this does not prove
 
-- That pnorm with the run's residual SD is better calibrated on finals than
-  the win GAM. Needs the release data: compare log-loss/Brier of both on
-  historical finals (2021-2026), e.g. from `retrodictions_*`.
-- Which of the three mechanisms produced the issue's rows. Run
-  `diagnose_margin_win_disagreement.R` with each `MATCH_ID`.
+- That pnorm is better calibrated on finals than the win GAM. Measured above:
+  neither is distinguishable on the finals sample.
+- The term-by-term split for the issue's rows. The released rows point to the
+  total x margin interaction; `diagnose_margin_win_disagreement.R` with each
+  `MATCH_ID` would confirm it from the fitted models.
+- H&A rows at high expected totals have the same flat curve and are not
+  covered by this branch.
 - The site: once a run with this change publishes, `afl/team-maps.js`
   `aflTeamMaps.homeWinProb` can go back to the stored value (blog #658).
 
