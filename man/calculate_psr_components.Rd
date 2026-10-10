@@ -12,7 +12,8 @@ calculate_psr_components(
   center = TRUE,
   centre_by_round = PSR_CENTRE_BY_ROUND,
   listed_pos = NULL,
-  centre_on_listed = PSR_CENTRE_ON_LISTED
+  centre_on_listed = PSR_CENTRE_ON_LISTED,
+  psr_centre = c("career", "listed", "weekly")
 )
 }
 \arguments{
@@ -48,6 +49,23 @@ load_player_details() when NULL and centring on listed is requested.}
 rather than the stat-ratings frame's own pos_group. Defaults to
 PSR_CENTRE_ON_LISTED (FALSE -- the listed arm was measured and
 regressed, dMAE +0.382).}
+
+\item{psr_centre}{Which position each player is compared with. Every
+non-career key aborts when its column is missing rather than falling back.
+\itemize{
+\item \code{"career"} (default): \code{pos_group}, his most common
+registered position across his career. The match model uses this;
+both alternatives cost match MAE as model inputs (listed +0.382,
+ws9; weekly +0.199, ws31).
+\item \code{"listed"}: \code{listed_pos_group}, his listed position for
+that season -- the same key EPR centres on and \code{torp_ratings}
+presents under. Published ratings use this (Pete, 2026-10-11, Thread
+G; \code{PSR_PUBLISHED_CENTRE}).
+\item \code{"weekly"}: \code{lineup_pos_group}, the slot he was most
+recently named in on a team sheet. Kept reachable for scoring only: read
+under the listing it roughly doubled the positional spread Thread G
+set out to remove (2026: 0.679 -> 1.328).
+}}
 }
 \value{
 A data.table with columns: \code{player_id}, \code{player_name},

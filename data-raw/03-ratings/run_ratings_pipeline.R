@@ -443,7 +443,9 @@ if (nrow(torp_new) > 0) {
   # to the current snapshot, leaving psr/osr/dsr flat across history (#88).
   psr_df <- tryCatch({
     stat_ratings <- load_player_stat_ratings(TRUE)
-    .compute_psr_from_stat_ratings(stat_ratings)
+    # Published ratings compare each player with his latest named slot (Thread
+    # G, 2026-10-11). The match model computes its own career-centred PSR.
+    .compute_psr_from_stat_ratings(stat_ratings, psr_centre = PSR_PUBLISHED_CENTRE)
   }, error = function(e) {
     cli::cli_warn("Could not compute PSR for release: {e$message}")
     NULL
@@ -678,7 +680,10 @@ tryCatch({
   }
   if (file.exists(psr_coef_path) && nchar(psr_coef_path) > 0) {
     coef_df <- utils::read.csv(psr_coef_path)
-    psr_all <- calculate_psr(stat_ratings, coef_df)
+    # Same centring key as the torp_ratings blend above, so psr-data and
+    # torp_ratings$psr agree.
+    stat_ratings <- .attach_psr_key(stat_ratings, PSR_PUBLISHED_CENTRE)
+    psr_all <- calculate_psr(stat_ratings, coef_df, psr_centre = PSR_PUBLISHED_CENTRE)
     cli::cli_inform("PSR computed for {nrow(psr_all)} player-rounds across {length(unique(psr_all$season))} seasons")
 
     for (s in sort(unique(psr_all$season))) {

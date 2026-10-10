@@ -1,3 +1,33 @@
+# torp 1.9.10
+
+## Published PSR is centred on the same position TORP shows it under (rating vintage v16)
+
+PSR compared each player with his most common registered position over his whole career
+(`pos_group`), but `torp_ratings` presents it under his listed position for that season, and EPR
+centres on that listing. The two labels disagree for about 20% of 2026 player-rounds, so a
+converted player was judged against his old position: Jack Silvagni, a career key forward now
+listed as a key defender, sat about 2.4 TORP low, and Mitch McGovern, swung forward, about 2.4
+high. Read under the listing, the average PSR gap between position groups was 0.679 in 2026
+(Thread G; Pete's decision, torpverse `docs/DECISIONS.md` 2026-10-11).
+
+- `calculate_psr()`, `calculate_psr_components()` and `.compute_psr_from_stat_ratings()` take a
+  new `psr_centre` argument: `"career"` (default, `pos_group`), `"listed"` (that season's listing)
+  or `"weekly"` (latest named team-sheet slot). The key is now chosen explicitly, never by which
+  columns the frame happens to carry; the 20-way `lineup_position` fallback is gone.
+- Every producer of published PSR (`psr-data`, `torp_ratings`, `psr_ratings()`,
+  `calculate_torp_ratings()`, `get_lineup_ratings()`) passes the new constant
+  `PSR_PUBLISHED_CENTRE = "listed"`, registered with the vintage drift guard. The gap above falls
+  to 0.114 (2026) and 0.03-0.09 in 2022-2025.
+- The match model is unchanged. `build_team_mdl_df()` and `build_prediction_state()` compute a
+  `"career"` PSR themselves; serving no longer reads the `psr-data` release. Verified identical to
+  the published v15 `psr-data` on all 176,055 rows (max difference 2e-14). Both alternatives cost
+  match MAE as model inputs: listed +0.382 (ws9), weekly +0.199 `[-0.077, +0.479]` (ws31).
+- Weekly was built first and rejected: it roughly doubled the gap (2026: 1.328), because each side
+  names only five midfield slots and most listed midfielders are named on a flank. It stays
+  reachable for scoring.
+- `RATING_VINTAGE` v15 -> v16. Promote with `promote_rating_vintage.R` (PROMOTE_FROM=v15,
+  PROMOTE_TO=v16) and move the manifest to canonical v16 before this reaches `main`.
+
 # torp 1.9.9
 
 ## Release uploads never delete the old asset before the new one is on the release

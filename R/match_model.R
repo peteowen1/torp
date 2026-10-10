@@ -51,7 +51,9 @@ build_team_mdl_df <- function(season = NULL, target_weeks = NULL,
   psr_df <- NULL
   tryCatch({
     skills <- load_player_stat_ratings(TRUE)
-    psr_df <- .compute_psr_from_stat_ratings(skills, psr_coef_path)
+    # Career-centred on purpose: weekly centring as a match-model input
+    # scored dMAE +0.199 (ws31, 2026-10-11). Published ratings use weekly.
+    psr_df <- .compute_psr_from_stat_ratings(skills, psr_coef_path, psr_centre = "career")
     if (!is.null(psr_df)) {
       cli::cli_inform("PSR computed for {nrow(psr_df)} player-rounds")
     }
@@ -162,7 +164,8 @@ get_lineup_ratings <- function(season = NULL, round = NULL, match_id = NULL) {
   # Load PSR
   psr_df <- tryCatch({
     skills <- load_player_stat_ratings(TRUE)
-    .compute_psr_from_stat_ratings(skills)
+    # Display table: same weekly key as the published ratings.
+    .compute_psr_from_stat_ratings(skills, psr_centre = PSR_PUBLISHED_CENTRE)
   }, error = function(e) {
     cli::cli_warn("Failed to compute PSR: {conditionMessage(e)}")
     NULL
@@ -771,32 +774,20 @@ build_prediction_state <- function(week = NULL, weeks = NULL, season = NULL,
   cli::cli_h2("Loading PSR")
   psr_df <- NULL
 
-  # Strategy 1: Load pre-computed PSR from torpdata releases
-
+  # Always computed here, career-centred, never read from the psr-data release:
+  # the release is the PUBLISHED PSR, which compares each player with his
+  # latest named slot (Thread G, 2026-10-11), while the match model keeps the
+  # career-modal key (weekly scored dMAE +0.199 as a model input, ws31). This
+  # matches what build_team_mdl_df() trains on.
   tryCatch({
-    psr_df <- load_psr(TRUE)
-    if (nrow(psr_df) > 0) {
-      cli::cli_inform("PSR loaded from release: {nrow(psr_df)} player-rounds")
-    } else {
-      psr_df <- NULL
+    skills <- load_player_stat_ratings(TRUE)
+    psr_df <- .compute_psr_from_stat_ratings(skills, psr_centre = "career")
+    if (!is.null(psr_df)) {
+      cli::cli_inform("PSR computed from skills+coefficients (career key): {nrow(psr_df)} player-rounds")
     }
   }, error = function(e) {
-    cli::cli_warn("Could not load PSR from release: {e$message}")
+    cli::cli_warn("Failed to compute PSR: {e$message}")
   })
-
-  # Strategy 2: Compute from skills + coefficients (with osr/dsr decomposition)
-  # Also triggered when release PSR lacks osr/dsr columns
-  if (is.null(psr_df) || !all(c("osr", "dsr") %in% names(psr_df))) {
-    tryCatch({
-      skills <- load_player_stat_ratings(TRUE)
-      psr_df <- .compute_psr_from_stat_ratings(skills)
-      if (!is.null(psr_df)) {
-        cli::cli_inform("PSR computed from skills+coefficients: {nrow(psr_df)} player-rounds")
-      }
-    }, error = function(e) {
-      cli::cli_warn("Failed to compute PSR: {e$message}")
-    })
-  }
 
   if (is.null(psr_df)) {
     cli::cli_warn("PSR unavailable - predictions will proceed without PSR features")
