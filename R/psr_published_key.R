@@ -14,9 +14,14 @@
 #' for all of history, this keeps one row per player-season, so a 2022 rating is
 #' compared with how he was listed in 2022.
 #'
-#' A season that fails to load is reported and skipped; its rows then roll back
-#' to the player's previous season in \code{.attach_season_listing()}, and the
-#' match-rate check there catches a wholesale failure.
+#' Also loads the season before the earliest one requested, so a one-season
+#' build (the daily job) rolls a player with no listing that season back to the
+#' same earlier listing a full rebuild would.
+#'
+#' A requested season that fails to load, comes back empty, or has no position
+#' column ABORTS. Skipping it would roll that season's rows back to older
+#' listings and publish them under the listed key's name; the current season,
+#' fetched fresh from the API every run, is the likeliest to fail.
 #'
 #' @param seasons Integer vector of seasons.
 #' @param comp Competition, forwarded to \code{load_player_details()}.
@@ -24,16 +29,22 @@
 #' @keywords internal
 .load_season_listing <- function(seasons, comp = "AFLM") {
   seasons <- sort(unique(stats::na.omit(as.integer(seasons))))
+  prior <- min(seasons) - 1L
+  min_season <- if (identical(comp, "AFLM")) AFL_MIN_SEASON else -Inf
+  if (prior >= min_season) seasons <- c(prior, seasons)
   got <- lapply(seasons, function(s) {
     d <- tryCatch(data.table::as.data.table(load_player_details(s, comp = comp)),
                   error = function(e) {
-                    cli::cli_alert_danger(
-                      "Listed positions for season {s} ({comp}) failed to load: {conditionMessage(e)}")
-                    NULL
+                    # The prior season is a convenience; tolerate its absence
+                    # (e.g. a competition's first year), never a requested one.
+                    if (s == prior) return(NULL)
+                    cli::cli_abort("Listed positions for season {s} ({comp}) failed to load: {conditionMessage(e)}")
                   })
-    if (is.null(d) || nrow(d) == 0) return(NULL)
-    pcol <- intersect(c("position_group", "position"), names(d))[1]
-    if (is.na(pcol) || !"player_id" %in% names(d)) return(NULL)
+    pcol <- if (is.null(d)) NA_character_ else intersect(c("position_group", "position"), names(d))[1]
+    if (is.null(d) || nrow(d) == 0 || is.na(pcol) || !"player_id" %in% names(d)) {
+      if (s == prior) return(NULL)
+      cli::cli_abort("Listed positions for season {s} ({comp}) came back without rows, player_id or a position column.")
+    }
     d[!is.na(get(pcol)), list(player_id = as.character(player_id), season = s,
                               position = as.character(get(pcol)))]
   })
@@ -48,9 +59,12 @@
 #' latest EARLIER season's listing, then his career \code{pos_group} (mapped to
 #' the same buckets) -- never \code{calculate_psr()}'s global-mean branch.
 #'
-#' Aborts when under half the rows match a listing for their own season: that
-#' is a broken load, and centring on fallbacks would publish a different key
-#' under the same name.
+#' Aborts when, in ANY season, the rows that matched a listing for their own
+#' season carry under 90\% of that season's \code{wt_80s} (under 50\% of rows
+#' when there are no weights). Unmatched rows are mostly players who never
+#' play: measured 2026-10-11, 63-71\% of rows but 95-100\% of weight matched in
+#' every season 2021-2026. Per season, because one missing season out of six
+#' still leaves the overall share above any sensible overall floor.
 #'
 #' @param skills Stat-ratings frame with \code{player_id}, \code{season}, and
 #'   (for the fallback) \code{pos_group}.
@@ -88,10 +102,18 @@
   cli::cli_inform(
     "Listed PSR key: {n_exact} listed that season, {n_rolled} from an earlier season, {n - n_exact - n_rolled - n_none} career fallback, {n_none} none (of {n})."
   )
-  if (n > 0 && n_exact < 0.5 * n) {
+  has_w <- "wt_80s" %in% names(dt)
+  cov <- data.table::data.table(
+    season = dt$season, hit = !is.na(exact),
+    w = if (has_w) pmax(data.table::fcoalesce(as.numeric(dt$wt_80s), 0), 0) else 1
+  )[, list(share = if (sum(w) > 0) sum(w[hit]) / sum(w) else mean(hit)), by = season]
+  floor_share <- if (has_w) 0.9 else 0.5
+  bad <- cov[share < floor_share]
+  if (nrow(bad) > 0) {
+    unit <- if (has_w) "wt_80s" else "rows"
     cli::cli_abort(c(
-      "Only {n_exact} of {n} rows matched a listing for their own season.",
-      "x" = "Refusing to publish PSR centred mostly on fallbacks under the listed key's name."
+      "Listed PSR key: these seasons matched their own season's listing on too little of their {unit} (floor {100 * floor_share}%): {paste0(bad$season, ' ', round(100 * bad$share), '%', collapse = ', ')}.",
+      "x" = "Refusing to publish PSR centred on fallbacks under the listed key's name."
     ))
   }
   dt[]

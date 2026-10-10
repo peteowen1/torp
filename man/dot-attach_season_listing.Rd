@@ -22,8 +22,11 @@ latest EARLIER season's listing, then his career \code{pos_group} (mapped to
 the same buckets) -- never \code{calculate_psr()}'s global-mean branch.
 }
 \details{
-Aborts when under half the rows match a listing for their own season: that
-is a broken load, and centring on fallbacks would publish a different key
-under the same name.
+Aborts when, in ANY season, the rows that matched a listing for their own
+season carry under 90\\% of that season's \code{wt_80s} (under 50\\% of rows
+when there are no weights). Unmatched rows are mostly players who never
+play: measured 2026-10-11, 63-71\\% of rows but 95-100\\% of weight matched in
+every season 2021-2026. Per season, because one missing season out of six
+still leaves the overall share above any sensible overall floor.
 }
 \keyword{internal}

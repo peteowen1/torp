@@ -110,7 +110,9 @@ test_that(".attach_season_listing uses that season, else an earlier one, else ca
     player_id = c("P1", "P1", "P2", "P3"),
     season    = c(2022L, 2023L, 2023L, 2023L),
     round     = 1L,
-    pos_group = c("KEY_FORWARD", "KEY_FORWARD", "MIDFIELDER", "RUCK")
+    pos_group = c("KEY_FORWARD", "KEY_FORWARD", "MIDFIELDER", "RUCK"),
+    # the fallback rows carry no weight, so the per-season floor stays quiet
+    wt_80s    = c(1, 0, 1, 0)
   )
   listing <- data.table::data.table(
     player_id = c("P1", "P1", "P2"),
@@ -128,5 +130,47 @@ test_that(".attach_season_listing refuses a mostly-unmatched join", {
   skills <- data.table::data.table(player_id = c("P1", "P2", "P3"), season = 2023L,
                                    pos_group = "MIDFIELDER")
   listing <- data.table::data.table(player_id = "P1", season = 2023L, position = "RUCK")
-  expect_error(suppressMessages(.attach_season_listing(skills, listing)), "matched a listing")
+  expect_error(suppressMessages(.attach_season_listing(skills, listing)), "own season's listing")
+})
+
+test_that(".attach_season_listing refuses ONE missing season even when the overall share is high", {
+  # Five seasons fully listed, 2026 not at all: 5/6 of rows match overall,
+  # which an overall floor would pass. The per-season floor must not.
+  skills <- data.table::data.table(
+    player_id = rep(c("P1", "P2"), 6),
+    season    = rep(2021:2026, each = 2),
+    pos_group = "MIDFIELDER",
+    wt_80s    = 1
+  )
+  listing <- data.table::data.table(
+    player_id = rep(c("P1", "P2"), 5),
+    season    = rep(2021:2025, each = 2),
+    position  = "MIDFIELDER"
+  )
+  expect_error(suppressMessages(.attach_season_listing(skills, listing)), "2026")
+})
+
+test_that(".attach_season_listing judges coverage by wt_80s, not row count", {
+  # 1 of 3 rows matches, but it carries all the weight: a fringe player with no
+  # games and no listing must not block publication.
+  skills <- data.table::data.table(player_id = c("P1", "P2", "P3"), season = 2023L,
+                                   pos_group = "MIDFIELDER", wt_80s = c(10, 0, 0))
+  listing <- data.table::data.table(player_id = "P1", season = 2023L, position = "RUCK")
+  out <- suppressMessages(.attach_season_listing(skills, listing))
+  expect_equal(out$listed_pos_group, c("rucks", "midfield", "midfield"))
+})
+
+test_that(".load_season_listing aborts when a requested season fails to load", {
+  local_mocked_bindings(load_player_details = function(seasons, comp = "AFLM", ...) {
+    if (seasons == 2026) stop("API down")
+    data.frame(player_id = "P1", position = "RUCK")
+  })
+  expect_error(.load_season_listing(2025:2026), "2026")
+  # ...but tolerates the convenience prior season failing
+  local_mocked_bindings(load_player_details = function(seasons, comp = "AFLM", ...) {
+    if (seasons == 2024) stop("not cached")
+    data.frame(player_id = "P1", position = "RUCK")
+  })
+  out <- .load_season_listing(2025:2026)
+  expect_equal(sort(unique(out$season)), c(2025L, 2026L))
 })

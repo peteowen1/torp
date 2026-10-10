@@ -25,6 +25,15 @@ high. Read under the listing, the average PSR gap between position groups was 0.
 - Weekly was built first and rejected: it roughly doubled the gap (2026: 1.328), because each side
   names only five midfield slots and most listed midfielders are named on a flank. It stays
   reachable for scoring.
+- Fails loud instead of publishing a quietly different key: a season whose listing fails to load
+  aborts (the current season is fetched fresh every run, so it is the likeliest to fail), and
+  `.attach_season_listing()` aborts when any one season matched its own listing on under 90% of
+  `wt_80s` (measured 95-100% in every season 2021-2026). The ratings pipeline now stops when PSR
+  cannot be computed, instead of warning and publishing `torp_ratings` without `psr`/`torp`, and
+  loads the listing once for both `torp_ratings` and `psr-data`. `calculate_psr()` reports how many
+  rows had no key and were centred on the all-history mean.
+- `rebuild_all_release_data.R` publishes with the same key. `check_position_centring.R` checks
+  `psr-data` on the key it was centred on, with the centring's own weights (worst cell 4.6e-15).
 - `RATING_VINTAGE` v15 -> v16. Promote with `promote_rating_vintage.R` (PROMOTE_FROM=v15,
   PROMOTE_TO=v16) and move the manifest to canonical v16 before this reaches `main`.
 

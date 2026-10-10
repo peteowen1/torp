@@ -22,8 +22,13 @@ for all of history, this keeps one row per player-season, so a 2022 rating is
 compared with how he was listed in 2022.
 }
 \details{
-A season that fails to load is reported and skipped; its rows then roll back
-to the player's previous season in \code{.attach_season_listing()}, and the
-match-rate check there catches a wholesale failure.
+Also loads the season before the earliest one requested, so a one-season
+build (the daily job) rolls a player with no listing that season back to the
+same earlier listing a full rebuild would.
+
+A requested season that fails to load, comes back empty, or has no position
+column ABORTS. Skipping it would roll that season's rows back to older
+listings and publish them under the listed key's name; the current season,
+fetched fresh from the API every run, is the likeliest to fail.
 }
 \keyword{internal}

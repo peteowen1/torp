@@ -316,7 +316,10 @@ if (run_ratings) {
       }
       if (file.exists(psr_coef_path)) {
         coef_df <- utils::read.csv(psr_coef_path)
-        psr_data <- calculate_psr(stat_ratings, coef_df)
+        # Published PSR's centring key (Thread G, v16) -- same as stage 6 and
+        # update_psr(), or this path would publish a different key into psr-data.
+        stat_ratings <- .attach_psr_key(stat_ratings, PSR_PUBLISHED_CENTRE)
+        psr_data <- calculate_psr(stat_ratings, coef_df, psr_centre = PSR_PUBLISHED_CENTRE)
         save_to_release(psr_data, paste0("psr_", season), "psr-data")
         cli::cli_inform("  psr_{season}: {nrow(psr_data)} rows")
       } else {

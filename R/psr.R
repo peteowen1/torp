@@ -313,6 +313,12 @@ calculate_psr <- function(skills, coef_df, center = TRUE,
   if (center && is.null(psr_pos_col)) {
     cli::cli_warn("No position column found for PSR centering; using global mean subtraction")
   }
+  if (center && !is.null(psr_pos_col)) {
+    n_na_key <- sum(is.na(dt[[psr_pos_col]]))
+    if (n_na_key > 0) {
+      cli::cli_inform("PSR: {n_na_key} of {nrow(dt)} rows have no {.field {psr_pos_col}} and are centred on the all-history mean instead.")
+    }
+  }
   # Group per (season, round) when those columns exist, not pooled over all
   # history. Pooling makes every position average zero ACROSS the dataset while
   # leaving any individual round skewed -- measured on the served round, rucks
