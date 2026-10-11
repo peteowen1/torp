@@ -4,13 +4,14 @@
 \alias{.finals_win_from_margin}
 \title{Derive finals win probabilities from the predicted margin (torp#247)}
 \usage{
-.finals_win_from_margin(preds, sigma)
+.finals_win_from_margin(preds, sigma = NULL)
 }
 \arguments{
 \item{preds}{Match-level predictions from \code{.format_match_preds()}, with
 \code{season}, \code{round}, \code{pred_margin}, \code{pred_win}.}
 
-\item{sigma}{Margin residual SD, from \code{.margin_residual_sd()}.}
+\item{sigma}{Margin spread to use. NULL (default) sizes it with
+\code{.heldout_margin_sigma()}, only when there are finals rows to price.}
 }
 \value{
 \code{preds} with \code{pred_win} replaced on finals rows.
@@ -25,13 +26,22 @@ and +18.4 both got about 0.658. The -6.6 row sits inside
 }
 \details{
 For finals rows (round above the season's last home-and-away round,
-\code{AFL_REGULAR_SEASON_ROUNDS}, falling back to \code{AFL_MAX_REGULAR_ROUNDS})
-the match-level win probability is replaced with
-\code{pnorm(pred_margin / sigma)}, sigma being the margin model's residual SD
-this run, the same rule \code{.reconcile_win_with_margin()} applies to
-contradicting rows. Applied after the home/away rows are averaged, so the
-result is a strictly increasing function of the published margin and is
-below 0.5 exactly when the margin is negative. Home-and-away rows are
-left as the win model gave them.
+\code{AFL_REGULAR_SEASON_ROUNDS}) the match-level win probability is replaced
+with \code{pnorm(pred_margin / sigma)}. Applied after the home/away rows are
+averaged, so the result is a strictly increasing function of the published
+margin and is below 0.5 exactly when the margin is negative. Home-and-away
+rows are left as the win model gave them.
+
+sigma is HELD OUT (torp#252): by default the spread of the locked pre-game
+predictions' errors, \code{.heldout_margin_sigma()}, not this run's training
+residuals, which run small (30.9 against 32.4 held out) and made every
+finals probability overconfident. When it cannot be sized the documented
+\code{FINALS_MARGIN_SIGMA_FALLBACK} is used: never the win model's own value,
+which is the number this function exists to replace.
+
+Seasons after the last mapped one use \code{AFL_MAX_REGULAR_ROUNDS} (a future
+season is most likely 24 rounds). Seasons BEFORE the first mapped one are
+skipped with a warning: 2020 had 17 home-and-away rounds, so a guessed
+cut-off there would price finals as home-and-away or the reverse.
 }
 \keyword{internal}

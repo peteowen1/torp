@@ -1000,7 +1000,8 @@ build_prediction_state <- function(week = NULL, weeks = NULL, season = NULL,
 
   # All matches (for analysis)
   all_preds <- .format_match_preds(team_mdl_df)
-  all_preds <- .finals_win_from_margin(all_preds, .margin_residual_sd(team_mdl_df))
+  # Held-out sigma, sized inside only when finals rows exist (torp#252).
+  all_preds <- .finals_win_from_margin(all_preds)
 
   # Target week predictions (for upload)
   week_gms <- all_preds |>
@@ -1753,30 +1754,82 @@ add_weather_to_preds <- function(preds, raw_cols = FALSE) {
 #' `.reconcile_win_with_margin()`'s 2-point tolerance, so nothing caught it.
 #'
 #' For finals rows (round above the season's last home-and-away round,
-#' `AFL_REGULAR_SEASON_ROUNDS`, falling back to `AFL_MAX_REGULAR_ROUNDS`)
-#' the match-level win probability is replaced with
-#' `pnorm(pred_margin / sigma)`, sigma being the margin model's residual SD
-#' this run, the same rule `.reconcile_win_with_margin()` applies to
-#' contradicting rows. Applied after the home/away rows are averaged, so the
-#' result is a strictly increasing function of the published margin and is
-#' below 0.5 exactly when the margin is negative. Home-and-away rows are
-#' left as the win model gave them.
+#' `AFL_REGULAR_SEASON_ROUNDS`) the match-level win probability is replaced
+#' with `pnorm(pred_margin / sigma)`. Applied after the home/away rows are
+#' averaged, so the result is a strictly increasing function of the published
+#' margin and is below 0.5 exactly when the margin is negative. Home-and-away
+#' rows are left as the win model gave them.
+#'
+#' sigma is HELD OUT (torp#252): by default the spread of the locked pre-game
+#' predictions' errors, `.heldout_margin_sigma()`, not this run's training
+#' residuals, which run small (30.9 against 32.4 held out) and made every
+#' finals probability overconfident. When it cannot be sized the documented
+#' `FINALS_MARGIN_SIGMA_FALLBACK` is used: never the win model's own value,
+#' which is the number this function exists to replace.
+#'
+#' Seasons after the last mapped one use `AFL_MAX_REGULAR_ROUNDS` (a future
+#' season is most likely 24 rounds). Seasons BEFORE the first mapped one are
+#' skipped with a warning: 2020 had 17 home-and-away rounds, so a guessed
+#' cut-off there would price finals as home-and-away or the reverse.
 #'
 #' @param preds Match-level predictions from `.format_match_preds()`, with
 #'   `season`, `round`, `pred_margin`, `pred_win`.
-#' @param sigma Margin residual SD, from `.margin_residual_sd()`.
+#' @param sigma Margin spread to use. NULL (default) sizes it with
+#'   `.heldout_margin_sigma()`, only when there are finals rows to price.
 #' @return `preds` with `pred_win` replaced on finals rows.
 #' @keywords internal
-.finals_win_from_margin <- function(preds, sigma) {
-  last_ha <- unname(AFL_REGULAR_SEASON_ROUNDS[as.character(preds$season)])
-  last_ha[is.na(last_ha)] <- AFL_MAX_REGULAR_ROUNDS
-  finals <- (as.numeric(preds$round) > last_ha & is.finite(preds$pred_margin)) %in% TRUE
+.finals_win_from_margin <- function(preds, sigma = NULL) {
+  seasons <- as.integer(preds$season)
+  first_mapped <- min(as.integer(names(AFL_REGULAR_SEASON_ROUNDS)))
+  last_ha <- unname(AFL_REGULAR_SEASON_ROUNDS[as.character(seasons)])
+  unmapped_old <- (is.na(last_ha) & seasons < first_mapped) %in% TRUE
+  last_ha[is.na(last_ha) & !unmapped_old] <- AFL_MAX_REGULAR_ROUNDS
+  if (any(unmapped_old)) {
+    cli::cli_warn("No regular-season round count for season{?s} {unique(seasons[unmapped_old])}; leaving their win probabilities as the win model gave them. Add them to {.code AFL_REGULAR_SEASON_ROUNDS}.")
+  }
+  finals <- (!unmapped_old & as.numeric(preds$round) > last_ha &
+               is.finite(preds$pred_margin)) %in% TRUE
   if (!any(finals)) return(preds)
+  if (is.null(sigma)) sigma <- .heldout_margin_sigma()
   if (!is.finite(sigma) || sigma <= 0) {
-    cli::cli_warn("Cannot size the margin model's spread; leaving {sum(finals)} finals win probabilit{?y/ies} as the win model gave them.")
-    return(preds)
+    cli::cli_alert_warning("Could not size the held-out margin spread; using the documented fallback sigma {FINALS_MARGIN_SIGMA_FALLBACK} for {sum(finals)} finals match{?es}.")
+    sigma <- FINALS_MARGIN_SIGMA_FALLBACK
   }
   preds$pred_win[finals] <- stats::pnorm(preds$pred_margin[finals] / sigma)
   cli::cli_alert_info("Finals win probability derived from the margin for {sum(finals)} match{?es} (sigma {round(sigma, 1)} points).")
   preds
+}
+
+
+#' Held-out spread of the margin model, from the locked pre-game predictions
+#'
+#' `sd(margin - pred_margin)` over every completed match in the `predictions`
+#' release, finals included. Those rows are locked before the match is played,
+#' so their errors are out of sample -- unlike `.margin_residual_sd()`, which
+#' measures the residuals of a model trained on the same matches. (Not
+#' perfectly: a few rows were computed after kickoff, which
+#' `.warn_post_hoc_predictions()` exists to flag; they would pull the spread
+#' down slightly.) Measured 2026-10-11: 32.4 over 1,062 completed matches
+#' 2021-2026 (32.3 over the 1,006 home-and-away ones), against 30.9 in sample.
+#'
+#' @param preds Optional locked-predictions frame with `margin` and
+#'   `pred_margin`; loaded with `load_predictions(TRUE)` when NULL.
+#' @param min_n Fewest completed matches to size it from.
+#' @return The SD, or `NA_real_` when the load fails or fewer than `min_n`
+#'   completed matches are available.
+#' @keywords internal
+.heldout_margin_sigma <- function(preds = NULL, min_n = 100L) {
+  if (is.null(preds)) {
+    preds <- tryCatch(load_predictions(TRUE, columns = c("margin", "pred_margin")),
+                      error = function(e) {
+                        cli::cli_alert_warning("Locked predictions failed to load: {conditionMessage(e)}")
+                        NULL
+                      })
+  }
+  if (is.null(preds) || !all(c("margin", "pred_margin") %in% names(preds))) return(NA_real_)
+  done <- is.finite(preds$margin) & is.finite(preds$pred_margin)
+  if (sum(done) < min_n) return(NA_real_)
+  sigma <- stats::sd(preds$margin[done] - preds$pred_margin[done])
+  if (!is.finite(sigma) || sigma <= 0) return(NA_real_)
+  sigma
 }
