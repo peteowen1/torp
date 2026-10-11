@@ -1,5 +1,22 @@
 # torp 1.9.10
 
+## Finals win probability uses a held-out spread (torp#252)
+
+#249 turned finals margins into win probabilities with `pnorm(pred_margin / sigma)`, but sized sigma
+from the residuals of the model just trained on those same matches (30.9), which made every finals
+probability overconfident (+12.1: 0.652 instead of about 0.64). When sigma could not be sized it
+republished the win model's own value, the number #249 exists to replace.
+
+- `.finals_win_from_margin()` now sizes sigma with `.heldout_margin_sigma()`: the spread of the
+  locked pre-game predictions' errors, out of sample by construction (32.4 over 1,062 matches,
+  2021-2026). It is loaded only when there are finals rows to price.
+- When that cannot be sized, it uses `FINALS_MARGIN_SIGMA_FALLBACK = 33` (Pete), never the win
+  model's value.
+- Seasons before `AFL_REGULAR_SEASON_ROUNDS` starts are skipped with a warning instead of assuming
+  24 rounds (2020 had 17).
+- Unchanged: `.reconcile_win_with_margin()` (home-and-away rows where the two models contradict)
+  still uses the in-sample `.margin_residual_sd()`.
+
 ## Published PSR is centred on the same position TORP shows it under (rating vintage v16)
 
 PSR compared each player with his most common registered position over his whole career
