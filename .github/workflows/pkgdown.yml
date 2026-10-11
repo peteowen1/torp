@@ -2,7 +2,10 @@ on:
   push:
     branches: [main, master]
   pull_request:
-    branches: [main, master]
+    # dev too, so a PR that breaks the site build (e.g. a file under docs/,
+    # torp#249) fails on its own PR. The deploy job skips pull_request events,
+    # so this never publishes. Not added to push: that WOULD deploy from dev.
+    branches: [main, master, dev]
   release:
     types: [published]
   workflow_dispatch:
