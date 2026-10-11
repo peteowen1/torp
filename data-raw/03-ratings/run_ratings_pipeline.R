@@ -441,13 +441,23 @@ if (nrow(torp_new) > 0) {
   # existing release above), so PSR must cover ALL seasons too -- otherwise
   # historical rows find no per-round match in calculate_torp() and fall back
   # to the current snapshot, leaving psr/osr/dsr flat across history (#88).
-  psr_df <- tryCatch({
-    stat_ratings <- load_player_stat_ratings(TRUE)
-    .compute_psr_from_stat_ratings(stat_ratings)
-  }, error = function(e) {
-    cli::cli_warn("Could not compute PSR for release: {e$message}")
-    NULL
-  })
+  # Published ratings compare each player with his listed position for that
+  # season (Thread G, v16). The match model computes its own career-centred
+  # PSR. The listing is loaded ONCE and reused by stage 6, so psr-data and
+  # torp_ratings$psr cannot be centred on different loads.
+  #
+  # A failure here is fatal. It used to warn and publish torp_ratings without
+  # psr/torp: save_to_release() checks only row counts, so that release looked
+  # fine.
+  stat_ratings <- load_player_stat_ratings(TRUE)
+  published_listing <- if (identical(PSR_PUBLISHED_CENTRE, "listed")) {
+    .load_season_listing(unique(stat_ratings$season))
+  }
+  psr_df <- .compute_psr_from_stat_ratings(stat_ratings, psr_centre = PSR_PUBLISHED_CENTRE,
+                                           season_listing = published_listing)
+  if (is.null(psr_df) || nrow(psr_df) == 0 || !"psr" %in% names(psr_df)) {
+    cli::cli_abort("PSR for the ratings release came back empty -- refusing to publish torp_ratings without psr/torp.")
+  }
   # Position-centre EPR BEFORE blending, so `torp` is built from the same
   # centred channels it will be published alongside. Centring afterwards would
   # leave torp derived from uncentred EPR and silently inconsistent with it.
@@ -678,7 +688,12 @@ tryCatch({
   }
   if (file.exists(psr_coef_path) && nchar(psr_coef_path) > 0) {
     coef_df <- utils::read.csv(psr_coef_path)
-    psr_all <- calculate_psr(stat_ratings, coef_df)
+    # Same centring key AND the same listing load as the torp_ratings blend
+    # above, so psr-data and torp_ratings$psr agree.
+    stat_ratings <- .attach_psr_key(
+      stat_ratings, PSR_PUBLISHED_CENTRE,
+      season_listing = if (exists("published_listing")) published_listing)
+    psr_all <- calculate_psr(stat_ratings, coef_df, psr_centre = PSR_PUBLISHED_CENTRE)
     cli::cli_inform("PSR computed for {nrow(psr_all)} player-rounds across {length(unique(psr_all$season))} seasons")
 
     for (s in sort(unique(psr_all$season))) {

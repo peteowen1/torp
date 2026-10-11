@@ -581,7 +581,7 @@ calculate_epr_stats_batch <- function(player_game_data = NULL,
 
   cli::cli_inform("Inline stat ratings: {nrow(skills)} players")
 
-  .compute_psr_from_stat_ratings(skills)
+  .compute_psr_from_stat_ratings(skills, psr_centre = PSR_PUBLISHED_CENTRE)
 }
 
 
@@ -920,7 +920,7 @@ psr_ratings <- function(season_val = get_afl_season(type = "current"),
                         round_val = get_afl_week(type = "next"),
                         psr_coef_path = NULL) {
   skills <- load_player_stat_ratings(TRUE)
-  result <- .compute_psr_from_stat_ratings(skills, psr_coef_path)
+  result <- .compute_psr_from_stat_ratings(skills, psr_coef_path, psr_centre = PSR_PUBLISHED_CENTRE)
   if (is.null(result)) {
     return(data.table::data.table(
       player_id = character(), player_name = character(),
@@ -976,7 +976,7 @@ torp_ratings <- function(season_val = get_afl_season(type = "current"),
   # Try pre-computed stat ratings first (fast); fall back to inline estimation
   psr_df <- tryCatch({
     skills <- load_player_stat_ratings(TRUE)
-    .compute_psr_from_stat_ratings(skills)
+    .compute_psr_from_stat_ratings(skills, psr_centre = PSR_PUBLISHED_CENTRE)
   }, error = function(e) {
     cli::cli_warn("Pre-computed stat ratings not available ({conditionMessage(e)}), trying inline computation...")
     tryCatch({

@@ -737,7 +737,8 @@ update_psr <- function(season) {
       return(NULL)
     }
 
-    .compute_psr_from_stat_ratings(stat_ratings, psr_coef_path)
+    # Published PSR: weekly key (Thread G, 2026-10-11).
+    .compute_psr_from_stat_ratings(stat_ratings, psr_coef_path, psr_centre = PSR_PUBLISHED_CENTRE)
   }, error = function(e) {
     cli::cli_alert_danger("Failed to compute PSR: {conditionMessage(e)}")
     return(NULL)
