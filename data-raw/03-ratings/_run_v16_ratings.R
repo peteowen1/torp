@@ -8,12 +8,16 @@
 # data is not refreshed. The manifest was promoted v15 -> v16 first
 # (promote_rating_vintage.R; v15 kept byte-identical as torp_ratings_v15.parquet).
 #
+# PROVENANCE ONLY -- it already ran (2026-10-11, 64 min). Re-running rewrites the
+# published v16 in place; the guards below stop it once v16 is no longer current.
+#
 # Run from torp/:  Rscript data-raw/03-ratings/_run_v16_ratings.R
 options(torp.local_data_dir = NA)   # never let a stale local torpdata/data shadow the releases
 suppressMessages(devtools::load_all(".", quiet = TRUE))
 stopifnot(is.null(get_local_data_dir()),
           identical(RATING_VINTAGE, "v16"),
-          identical(PSR_PUBLISHED_CENTRE, "listed"))
+          identical(PSR_PUBLISHED_CENTRE, "listed"),
+          identical(read_ratings_manifest()$canonical, "v16"))
 SEASONS <- TRUE
 REFRESH_UPSTREAM <- FALSE
 REBUILD_PLAYER_GAME <- FALSE
