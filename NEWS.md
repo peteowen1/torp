@@ -1,3 +1,59 @@
+# torp 1.9.10
+
+## Finals win probability uses a held-out spread (torp#252)
+
+#249 turned finals margins into win probabilities with `pnorm(pred_margin / sigma)`, but sized sigma
+from the residuals of the model just trained on those same matches (30.9), which made every finals
+probability overconfident (+12.1: 0.652 instead of about 0.64). When sigma could not be sized it
+republished the win model's own value, the number #249 exists to replace.
+
+- `.finals_win_from_margin()` now sizes sigma with `.heldout_margin_sigma()`: the spread of the
+  locked pre-game predictions' errors, out of sample apart from any rows computed after kickoff
+  (32.4 over 1,062 completed matches 2021-2026; 32.3 over the 1,006 home-and-away ones). It is loaded only when there are finals rows to price.
+- When that cannot be sized, it uses `FINALS_MARGIN_SIGMA_FALLBACK = 33` (Pete), never the win
+  model's value.
+- Seasons before `AFL_REGULAR_SEASON_ROUNDS` starts are skipped with a warning instead of assuming
+  24 rounds (2020 had 17).
+- Unchanged: `.reconcile_win_with_margin()` (home-and-away rows where the two models contradict)
+  still uses the in-sample `.margin_residual_sd()`.
+
+## Published PSR is centred on the same position TORP shows it under (rating vintage v16)
+
+PSR compared each player with his most common registered position over his whole career
+(`pos_group`), but `torp_ratings` presents it under his listed position for that season, and EPR
+centres on that listing. The two labels disagree for about 20% of 2026 player-rounds, so a
+converted player was judged against his old position: Jack Silvagni, a career key forward now
+listed as a key defender, sat about 2.4 TORP low, and Mitch McGovern, swung forward, about 2.4
+high. Read under the listing, the average PSR gap between position groups was 0.679 in 2026
+(Thread G; Pete's decision, torpverse `docs/DECISIONS.md` 2026-10-11).
+
+- `calculate_psr()`, `calculate_psr_components()` and `.compute_psr_from_stat_ratings()` take a
+  new `psr_centre` argument: `"career"` (default, `pos_group`), `"listed"` (that season's listing)
+  or `"weekly"` (latest named team-sheet slot). The key is now chosen explicitly, never by which
+  columns the frame happens to carry; the 20-way `lineup_position` fallback is gone.
+- Every producer of published PSR (`psr-data`, `torp_ratings`, `psr_ratings()`,
+  `calculate_torp_ratings()`, `get_lineup_ratings()`) passes the new constant
+  `PSR_PUBLISHED_CENTRE = "listed"`, registered with the vintage drift guard. The gap above falls
+  to 0.114 (2026) and 0.03-0.09 in 2022-2025.
+- The match model is unchanged. `build_team_mdl_df()` and `build_prediction_state()` compute a
+  `"career"` PSR themselves; serving no longer reads the `psr-data` release. Verified identical to
+  the published v15 `psr-data` on all 176,055 rows (max difference 2e-14). Both alternatives cost
+  match MAE as model inputs: listed +0.382 (ws9), weekly +0.199 `[-0.077, +0.479]` (ws31).
+- Weekly was built first and rejected: it roughly doubled the gap (2026: 1.328), because each side
+  names only five midfield slots and most listed midfielders are named on a flank. It stays
+  reachable for scoring.
+- Fails loud instead of publishing a quietly different key: a season whose listing fails to load
+  aborts (the current season is fetched fresh every run, so it is the likeliest to fail), and
+  `.attach_season_listing()` aborts when any one season matched its own listing on under 90% of
+  `wt_80s` (measured 95-100% in every season 2021-2026). The ratings pipeline now stops when PSR
+  cannot be computed, instead of warning and publishing `torp_ratings` without `psr`/`torp`, and
+  loads the listing once for both `torp_ratings` and `psr-data`. `calculate_psr()` reports how many
+  rows had no key and were centred on the all-history mean.
+- `rebuild_all_release_data.R` publishes with the same key. `check_position_centring.R` checks
+  `psr-data` on the key it was centred on, with the centring's own weights (worst cell 4.6e-15).
+- `RATING_VINTAGE` v15 -> v16. Promote with `promote_rating_vintage.R` (PROMOTE_FROM=v15,
+  PROMOTE_TO=v16) and move the manifest to canonical v16 before this reaches `main`.
+
 # torp 1.9.9
 
 ## Release uploads never delete the old asset before the new one is on the release

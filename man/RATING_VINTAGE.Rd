@@ -219,5 +219,23 @@ player-game moves, so this needs a full-history rebuild. Preserve v13 with
 \code{data-raw/03-ratings/promote_rating_vintage.R} (PROMOTE_FROM=v13,
 PROMOTE_TO=v14) and move the manifest to canonical v14 BEFORE these constants
 reach main.
+
+v15 (2026-09-29): no constant changes. The 2026 play-by-play is re-scored on
+the current EP/WP models: the published file had rounds 0-17 on older EP and
+0-19 on older WP (mean |exp_pts gap| 0.094-0.105 in rounds 0-14, |wp gap|
+0.016-0.032 in rounds 0-19). The 2026 numbers move, so the vintage moves (Pete);
+2021-2025 are unchanged. Plan: \code{docs/plans/AFL-2026-RERELEASE.md}. Preserve
+v14 with \code{data-raw/03-ratings/promote_rating_vintage.R} (PROMOTE_FROM=v14,
+PROMOTE_TO=v15) and move the manifest to canonical v15 BEFORE this reaches main.
+
+v16 (2026-10-11): published PSR compares each player with his listed
+position for that season (\code{PSR_PUBLISHED_CENTRE = "listed"}) instead of
+his career-modal \code{pos_group} (Pete, Thread G), so PSR is centred on the
+same label TORP presents it under. Most player-rounds move a little;
+converted players move up to about 2.4 TORP. The match model is unchanged:
+it computes its own career-centred PSR. Preserve v15 with
+\code{data-raw/03-ratings/promote_rating_vintage.R} (PROMOTE_FROM=v15,
+PROMOTE_TO=v16) and move the manifest to canonical v16 BEFORE this reaches
+main.
 }
 \keyword{internal}

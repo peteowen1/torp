@@ -347,3 +347,22 @@ MATCHUP_TABLE_CRON_SCHEDULE <- list(
   c(wday = 6, hour = 0),   # Sat 00:00 UTC
   c(wday = 0, hour = 0)    # Sun 00:00 UTC
 )
+
+#' Fallback margin spread for finals win probabilities (torp#252)
+#'
+#' Used by `.finals_win_from_margin()` only when `.heldout_margin_sigma()`
+#' cannot size the spread from the locked pre-game predictions (load failure,
+#' or under 100 completed matches). Measured spreads, all in points:
+#' \itemize{
+#'   \item 32.4: held-out SD of locked predictions' errors, 1,062 completed
+#'     matches 2021-2026; 32.3 over the 1,006 home-and-away ones
+#'     (2026-10-11).
+#'   \item 33.5: the sigma that minimised log-loss on home-and-away matches,
+#'     and 33.1 in the torp 1.9.2 run (torp#247 write-up).
+#'   \item 30.9: in-sample training residuals, the overconfident value #252
+#'     replaced.
+#' }
+#' 33 sits at the out-of-sample end on purpose: a fallback should err toward
+#' less confident probabilities. Pete chose it 2026-10-11.
+#' @keywords internal
+FINALS_MARGIN_SIGMA_FALLBACK <- 33

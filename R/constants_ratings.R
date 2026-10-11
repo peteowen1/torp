@@ -945,6 +945,34 @@ PSR_CENTRE_BY_ROUND <- TRUE
 #' @keywords internal
 PSR_CENTRE_ON_LISTED <- FALSE
 
+#' Which position published PSR compares each player with
+#'
+#' \code{"listed"}: his listed position for that season
+#' (\code{.attach_season_listing()}) -- the key EPR centres on and
+#' \code{torp_ratings} presents under, so PSR is read under the same label it
+#' was centred on. Every producer of PUBLISHED PSR
+#' -- \code{psr-data}, \code{torp_ratings}, \code{psr_ratings()},
+#' \code{calculate_torp_ratings()}, \code{get_lineup_ratings()} -- passes this
+#' as \code{psr_centre}. The match model does not: it passes \code{"career"}
+#' (\code{pos_group}, his most common registered position over his career).
+#'
+#' Decided by Pete 2026-10-11 (Thread G) after walking real 2026 rows: 136 of
+#' 669 players' career position differed from their 2026 listing, worth up to
+#' about 2.4 TORP for converted players (Jack Silvagni, a career key forward now
+#' a key defender, about 2 low). As match-model inputs both alternatives cost
+#' MAE (listed +0.382, ws9; weekly +0.199, ws31), so the model keeps career.
+#'
+#' Why listed and not weekly: built first, the weekly team-sheet key roughly
+#' DOUBLED the positional spread read under the listing (mean within-round gap
+#' between listed groups' average PSR, 2026: career 0.679, weekly 1.328),
+#' because each side names only five midfield slots and most listed
+#' midfielders are named on a flank. The listed key removes it by construction.
+#'
+#' A named constant rather than a bare argument value so the vintage drift
+#' guard (\code{.rating_defining_constants()}) can see it -- torp#212.
+#' @keywords internal
+PSR_PUBLISHED_CENTRE <- "listed"
+
 #' Whether PSR position centring rescales as well as recentres
 #'
 #' The mirror of \code{EPV_POSITION_STANDARDISE} on the PSR side.
@@ -1181,8 +1209,18 @@ PSR_POSITION_STANDARDISE <- TRUE
 #' 2021-2025 are unchanged. Plan: \code{docs/plans/AFL-2026-RERELEASE.md}. Preserve
 #' v14 with \code{data-raw/03-ratings/promote_rating_vintage.R} (PROMOTE_FROM=v14,
 #' PROMOTE_TO=v15) and move the manifest to canonical v15 BEFORE this reaches main.
+#'
+#' v16 (2026-10-11): published PSR compares each player with his listed
+#' position for that season (\code{PSR_PUBLISHED_CENTRE = "listed"}) instead of
+#' his career-modal \code{pos_group} (Pete, Thread G), so PSR is centred on the
+#' same label TORP presents it under. Most player-rounds move a little;
+#' converted players move up to about 2.4 TORP. The match model is unchanged:
+#' it computes its own career-centred PSR. Preserve v15 with
+#' \code{data-raw/03-ratings/promote_rating_vintage.R} (PROMOTE_FROM=v15,
+#' PROMOTE_TO=v16) and move the manifest to canonical v16 BEFORE this reaches
+#' main.
 #' @keywords internal
-RATING_VINTAGE <- "v15"
+RATING_VINTAGE <- "v16"
 
 #' Map from the 20-way team-sheet lineup position to a 6-way position group
 #'

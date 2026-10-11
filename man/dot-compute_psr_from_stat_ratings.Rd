@@ -11,7 +11,10 @@
   centre_by_round = PSR_CENTRE_BY_ROUND,
   listed_pos = NULL,
   centre_on_listed = PSR_CENTRE_ON_LISTED,
-  comp = "AFLM"
+  comp = "AFLM",
+  psr_centre = c("career", "listed", "weekly"),
+  lineup = NULL,
+  season_listing = NULL
 )
 }
 \arguments{
@@ -43,6 +46,19 @@ regressed, dMAE +0.382).}
 \item{comp}{Competition: "AFLM" (default) or "AFLW". Only used to resolve
 \code{psr_coef_path} when it is NULL; ignored if an explicit path is
 given.}
+
+\item{psr_centre}{\code{"career"} (default; the match model),
+\code{"listed"} (published ratings) or \code{"weekly"} (scoring only).
+See \code{\link{calculate_psr}}. The key column is attached here when
+\code{skills} lacks it.}
+
+\item{lineup}{Optional team-sheet frame for \code{"weekly"}: \code{player_id},
+\code{season}, \code{round}, \code{lineup_position}. Loaded from
+\code{load_player_game_data()} when NULL.}
+
+\item{season_listing}{Optional listing frame for \code{"listed"}:
+\code{player_id}, \code{season}, \code{position}. Loaded from
+\code{load_player_details()} when NULL.}
 }
 \value{
 A data.table with \code{psr}, \code{osr}, \code{dsr} columns.

@@ -179,6 +179,22 @@
 #'   scored on 2026-07-29 and REGRESSED (dMAE +0.382, CI entirely above zero).
 #'   Exists so that arm stays reachable from production code rather than a
 #'   replica.
+#' @param psr_centre Which position each player is compared with. Every
+#'   non-career key aborts when its column is missing rather than falling back.
+#'   \itemize{
+#'     \item \code{"career"} (default): \code{pos_group}, his most common
+#'       registered position across his career. The match model uses this;
+#'       both alternatives cost match MAE as model inputs (listed +0.382,
+#'       ws9; weekly +0.199, ws31).
+#'     \item \code{"listed"}: \code{listed_pos_group}, his listed position for
+#'       that season -- the same key EPR centres on and \code{torp_ratings}
+#'       presents under. Published ratings use this (Pete, 2026-10-11, Thread
+#'       G; \code{PSR_PUBLISHED_CENTRE}).
+#'     \item \code{"weekly"}: \code{lineup_pos_group}, the slot he was most
+#'       recently named in on a team sheet. Kept reachable for scoring only: read
+#'       under the listing it roughly doubled the positional spread Thread G
+#'       set out to remove (2026: 0.679 -> 1.328).
+#'   }
 #' @return A data.table with columns: \code{player_id}, \code{player_name},
 #'   \code{season}, \code{round}, \code{pos_group}, \code{psr_raw}, \code{psr}.
 #'
@@ -186,8 +202,18 @@
 calculate_psr <- function(skills, coef_df, center = TRUE,
                           centre_by_round = PSR_CENTRE_BY_ROUND,
                           listed_pos = NULL,
-                          centre_on_listed = PSR_CENTRE_ON_LISTED) {
+                          centre_on_listed = PSR_CENTRE_ON_LISTED,
+                          psr_centre = c("career", "listed", "weekly")) {
+  psr_centre <- match.arg(psr_centre)
   dt <- data.table::as.data.table(skills)
+  key_needed <- switch(psr_centre, listed = "listed_pos_group",
+                       weekly = "lineup_pos_group", NULL)
+  if (!is.null(key_needed) && isTRUE(center) && !key_needed %in% names(dt)) {
+    cli::cli_abort(c(
+      "{.code psr_centre = '{psr_centre}'} needs a {.field {key_needed}} column.",
+      "i" = "Use {.fn .compute_psr_from_stat_ratings}, which attaches it."
+    ))
+  }
 
   # Validate coef_df
   if (!all(c("stat_name", "beta") %in% names(coef_df))) {
@@ -275,13 +301,23 @@ calculate_psr <- function(skills, coef_df, center = TRUE,
   # (20.3% in 2026), and centring on one while TORP reads the other put ~0.30 of
   # positional level straight back into TORP. 2021, where the labels agree 100%,
   # showed exactly 0.000 spread -- the control that identified the mechanism.
+  # 2026-10-11: the weekly key is chosen EXPLICITLY by `psr_centre`, never by
+  # which columns happen to be present. Before, the frame's columns decided, so
+  # adding lineup_position upstream would have silently moved the match model
+  # along with the published ratings. The 20-way lineup_position branch is gone:
+  # §7.15 measured finer-than-6-way at +0.013, i.e. nothing.
   psr_pos_col <- if (".listed_bucket" %in% names(dt)) ".listed_bucket"
-                 else if ("lineup_pos_group" %in% names(dt)) "lineup_pos_group"
-                 else if ("lineup_position" %in% names(dt)) "lineup_position"
+                 else if (!is.null(key_needed)) key_needed
                  else if ("pos_group" %in% names(dt)) "pos_group"
                  else NULL
   if (center && is.null(psr_pos_col)) {
     cli::cli_warn("No position column found for PSR centering; using global mean subtraction")
+  }
+  if (center && !is.null(psr_pos_col)) {
+    n_na_key <- sum(is.na(dt[[psr_pos_col]]))
+    if (n_na_key > 0) {
+      cli::cli_inform("PSR: {n_na_key} of {nrow(dt)} rows have no {.field {psr_pos_col}} and are centred on the all-history mean instead.")
+    }
   }
   # Group per (season, round) when those columns exist, not pooled over all
   # history. Pooling makes every position average zero ACROSS the dataset while
@@ -374,16 +410,19 @@ calculate_psr_components <- function(skills, coef_df, osr_coef_df, dsr_coef_df,
                                      center = TRUE,
                                      centre_by_round = PSR_CENTRE_BY_ROUND,
                                      listed_pos = NULL,
-                                     centre_on_listed = PSR_CENTRE_ON_LISTED) {
-  # All three arms MUST get the same listed_pos. osr + dsr are shifted to sum to
-  # psr below, so centring them on different keys would push the discrepancy
-  # into that shift and silently distort the decomposition rather than erroring.
+                                     centre_on_listed = PSR_CENTRE_ON_LISTED,
+                                     psr_centre = c("career", "listed", "weekly")) {
+  psr_centre <- match.arg(psr_centre)
+  # All three arms MUST get the same listed_pos (and psr_centre). osr + dsr are
+  # shifted to sum to psr below, so centring them on different keys would push
+  # the discrepancy into that shift and silently distort the decomposition
+  # rather than erroring.
   # Margin PSR (the authoritative total)
-  psr_result <- calculate_psr(skills, coef_df, center = center, centre_by_round = centre_by_round, listed_pos = listed_pos, centre_on_listed = centre_on_listed)
+  psr_result <- calculate_psr(skills, coef_df, center = center, centre_by_round = centre_by_round, listed_pos = listed_pos, centre_on_listed = centre_on_listed, psr_centre = psr_centre)
 
   # Raw offensive and defensive scores
-  osr_result <- calculate_psr(skills, osr_coef_df, center = center, centre_by_round = centre_by_round, listed_pos = listed_pos, centre_on_listed = centre_on_listed)
-  dsr_result <- calculate_psr(skills, dsr_coef_df, center = center, centre_by_round = centre_by_round, listed_pos = listed_pos, centre_on_listed = centre_on_listed)
+  osr_result <- calculate_psr(skills, osr_coef_df, center = center, centre_by_round = centre_by_round, listed_pos = listed_pos, centre_on_listed = centre_on_listed, psr_centre = psr_centre)
+  dsr_result <- calculate_psr(skills, dsr_coef_df, center = center, centre_by_round = centre_by_round, listed_pos = listed_pos, centre_on_listed = centre_on_listed, psr_centre = psr_centre)
 
   # Additive shift: distribute residual evenly so osr + dsr = psr
   raw_osr <- osr_result$psr
@@ -1590,18 +1629,39 @@ explain_player_rating <- function(player,
 #' @param comp Competition: "AFLM" (default) or "AFLW". Only used to resolve
 #'   \code{psr_coef_path} when it is NULL; ignored if an explicit path is
 #'   given.
+#' @param psr_centre \code{"career"} (default; the match model),
+#'   \code{"listed"} (published ratings) or \code{"weekly"} (scoring only).
+#'   See \code{\link{calculate_psr}}. The key column is attached here when
+#'   \code{skills} lacks it.
+#' @param lineup Optional team-sheet frame for \code{"weekly"}: \code{player_id},
+#'   \code{season}, \code{round}, \code{lineup_position}. Loaded from
+#'   \code{load_player_game_data()} when NULL.
+#' @param season_listing Optional listing frame for \code{"listed"}:
+#'   \code{player_id}, \code{season}, \code{position}. Loaded from
+#'   \code{load_player_details()} when NULL.
 #' @return A data.table with \code{psr}, \code{osr}, \code{dsr} columns.
 #' @keywords internal
 .compute_psr_from_stat_ratings <- function(skills, psr_coef_path = NULL, center = TRUE,
                                           centre_by_round = PSR_CENTRE_BY_ROUND,
                                           listed_pos = NULL,
                                           centre_on_listed = PSR_CENTRE_ON_LISTED,
-                                          comp = "AFLM") {
+                                          comp = "AFLM",
+                                          psr_centre = c("career", "listed", "weekly"),
+                                          lineup = NULL,
+                                          season_listing = NULL) {
   # This is already the I/O boundary for the PSR path (it reads the coefficient
   # CSVs), so it is also the right place to source listed positions when the
   # caller has not. Doing it here rather than in calculate_psr() keeps that
   # function pure and testable, while making it hard for a caller to
   # accidentally centre on the wrong taxonomy by forgetting an argument.
+  psr_centre <- match.arg(psr_centre)
+  # The non-career keys are attached here, at the I/O boundary, for the same
+  # reason as listed positions below.
+  if (isTRUE(center)) {
+    skills <- .attach_psr_key(skills, psr_centre, comp = comp,
+                              season_listing = season_listing, lineup = lineup)
+  }
+
   if (is.null(listed_pos) && isTRUE(center) && isTRUE(centre_on_listed)) {
     # comp MUST be forwarded: .load_listed_positions() calls
     # load_player_details(), which defaults to the men's competition. Without
@@ -1635,11 +1695,13 @@ explain_player_rating <- function(player,
     osr_coef_df <- utils::read.csv(osr_path)
     dsr_coef_df <- utils::read.csv(dsr_path)
     calculate_psr_components(skills, coef_df, osr_coef_df, dsr_coef_df, center = center,
-                             centre_by_round = centre_by_round, listed_pos = listed_pos, centre_on_listed = centre_on_listed)
+                             centre_by_round = centre_by_round, listed_pos = listed_pos, centre_on_listed = centre_on_listed,
+                             psr_centre = psr_centre)
   } else {
     cli::cli_inform("OSR/DSR coefficient files not found -- computing PSR only (no osr/dsr decomposition)")
     calculate_psr(skills, coef_df, center = center, centre_by_round = centre_by_round,
-                  listed_pos = listed_pos, centre_on_listed = centre_on_listed)
+                  listed_pos = listed_pos, centre_on_listed = centre_on_listed,
+                  psr_centre = psr_centre)
   }
 }
 

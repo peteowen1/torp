@@ -474,7 +474,9 @@ utils::globalVariables(c(
 # disposer and receiver); cleared here so the NOTE goes to zero rather than
 # leaving a known-benign remainder that future runs learn to ignore.
 utils::globalVariables(c(
-  ".psr_sd", ".psr_w", "lineup_pos_group", "wpa_disp", "wpa_recv"
+  ".psr_sd", ".psr_w", "lineup_pos_group", "wpa_disp", "wpa_recv",
+  # .attach_weekly_pos() (R/psr_weekly.R)
+  ".pid", ".key", ".lpg", "listed_pos_group"
 ))
 
 # WPA Net Points ledger (R/wpa_net_ledger.R).

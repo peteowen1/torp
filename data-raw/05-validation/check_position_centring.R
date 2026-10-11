@@ -166,16 +166,26 @@ if (!is.null(psr_rel) && nrow(psr_rel) > 0 && "psr" %in% names(psr_rel)) {
   #
   # So it tested neither the population nor the statistic that the invariant is
   # about. Checking the release on its own key and weights gives 2.09e-04.
-  psr_key <- if ("lineup_pos_group" %in% names(psr_rel)) "lineup_pos_group"
-             else if ("lineup_position" %in% names(psr_rel)) "lineup_position"
-             else if ("pos_group" %in% names(psr_rel)) "pos_group" else NULL
+  # Since v16 psr-data is centred on PSR_PUBLISHED_CENTRE's key, which the
+  # release does not carry: re-attach it with the same function the producers
+  # use, then check on it. Checking on pos_group would report v16 as uncentred.
+  psr_rel <- torp:::.attach_psr_key(psr_rel, torp:::PSR_PUBLISHED_CENTRE)
+  psr_key <- switch(torp:::PSR_PUBLISHED_CENTRE,
+                    listed = "listed_pos_group", weekly = "lineup_pos_group",
+                    career = "pos_group")
+  if (!psr_key %in% names(psr_rel)) psr_key <- NULL
   if (is.null(psr_key)) {
     cli::cli_alert_danger("psr-data carries no position column -- PSR centring cannot be checked.")
     psr_bad <- TRUE
   } else {
+    # The exact weights the centring used: rows with no or zero wt_80s carry no
+    # weight there, so they carry none here. The old 0.01 pseudo-weight was a
+    # close enough stand-in on pos_group (worst 2.1e-04) but not on the listed
+    # key (0.048, over PSR_CENTRE_TOL), where fringe zero-weight players land in
+    # thin cells. Exact weights give 4.6e-15 on both (2026-10-11).
     psr_rel[, .psrw := if ("wt_80s" %in% names(psr_rel))
-                         pmax(dplyr::coalesce(wt_80s, 1), 0.01) else 1]
-    pc <- psr_rel[!is.na(get(psr_key)) & is.finite(psr),
+                         dplyr::coalesce(as.numeric(wt_80s), 0) else 1]
+    pc <- psr_rel[!is.na(get(psr_key)) & is.finite(psr) & .psrw > 0,
                   .(wmean = stats::weighted.mean(psr, .psrw, na.rm = TRUE), n = .N),
                   by = c("season", "round", psr_key)]
     # Empty is not a pass -- same trap section 1 fell into.

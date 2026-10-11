@@ -79,6 +79,8 @@
     # engine flip from v2 to v3 -- the one change most capable of altering every
     # row in the file. Found staging v3 for promotion.
     EPV_ENGINE = EPV_ENGINE,
+    # Thread G (2026-10-11): published PSR's centring key.
+    PSR_PUBLISHED_CENTRE = PSR_PUBLISHED_CENTRE,
     EPR_UNITS_SCALE_V4 = EPR_UNITS_SCALE_V4,
     # torp#212: a model FORMULA is a rating-defining choice with no name to
     # register, so it was invisible to this guard entirely -- not merely
