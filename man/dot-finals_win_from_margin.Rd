@@ -34,7 +34,7 @@ rows are left as the win model gave them.
 
 sigma is HELD OUT (torp#252): by default the spread of the locked pre-game
 predictions' errors, \code{.heldout_margin_sigma()}, not this run's training
-residuals, which run small (30.9 against 32.3 held out) and made every
+residuals, which run small (30.9 against 32.4 held out) and made every
 finals probability overconfident. When it cannot be sized the documented
 \code{FINALS_MARGIN_SIGMA_FALLBACK} is used: never the win model's own value,
 which is the number this function exists to replace.

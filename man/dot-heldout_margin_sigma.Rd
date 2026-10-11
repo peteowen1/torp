@@ -18,10 +18,12 @@ completed matches are available.
 }
 \description{
 \code{sd(margin - pred_margin)} over every completed match in the \code{predictions}
-release. Those rows were locked before the match was played, so their
-errors are out of sample by construction -- unlike \code{.margin_residual_sd()},
-which measures the residuals of a model trained on the same matches.
-Measured 2026-10-11: 32.3 over 1,006 home-and-away matches 2021-2026,
-against 30.9 in sample.
+release, finals included. Those rows are locked before the match is played,
+so their errors are out of sample -- unlike \code{.margin_residual_sd()}, which
+measures the residuals of a model trained on the same matches. (Not
+perfectly: a few rows were computed after kickoff, which
+\code{.warn_post_hoc_predictions()} exists to flag; they would pull the spread
+down slightly.) Measured 2026-10-11: 32.4 over 1,062 completed matches
+2021-2026 (32.3 over the 1,006 home-and-away ones), against 30.9 in sample.
 }
 \keyword{internal}

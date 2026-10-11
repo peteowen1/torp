@@ -8,8 +8,8 @@ probability overconfident (+12.1: 0.652 instead of about 0.64). When sigma could
 republished the win model's own value, the number #249 exists to replace.
 
 - `.finals_win_from_margin()` now sizes sigma with `.heldout_margin_sigma()`: the spread of the
-  locked pre-game predictions' errors, out of sample by construction (32.4 over 1,062 matches,
-  2021-2026). It is loaded only when there are finals rows to price.
+  locked pre-game predictions' errors, out of sample apart from any rows computed after kickoff
+  (32.4 over 1,062 completed matches 2021-2026; 32.3 over the 1,006 home-and-away ones). It is loaded only when there are finals rows to price.
 - When that cannot be sized, it uses `FINALS_MARGIN_SIGMA_FALLBACK = 33` (Pete), never the win
   model's value.
 - Seasons before `AFL_REGULAR_SEASON_ROUNDS` starts are skipped with a warning instead of assuming

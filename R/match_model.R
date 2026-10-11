@@ -1762,7 +1762,7 @@ add_weather_to_preds <- function(preds, raw_cols = FALSE) {
 #'
 #' sigma is HELD OUT (torp#252): by default the spread of the locked pre-game
 #' predictions' errors, `.heldout_margin_sigma()`, not this run's training
-#' residuals, which run small (30.9 against 32.3 held out) and made every
+#' residuals, which run small (30.9 against 32.4 held out) and made every
 #' finals probability overconfident. When it cannot be sized the documented
 #' `FINALS_MARGIN_SIGMA_FALLBACK` is used: never the win model's own value,
 #' which is the number this function exists to replace.
@@ -1782,7 +1782,7 @@ add_weather_to_preds <- function(preds, raw_cols = FALSE) {
   seasons <- as.integer(preds$season)
   first_mapped <- min(as.integer(names(AFL_REGULAR_SEASON_ROUNDS)))
   last_ha <- unname(AFL_REGULAR_SEASON_ROUNDS[as.character(seasons)])
-  unmapped_old <- is.na(last_ha) & seasons < first_mapped
+  unmapped_old <- (is.na(last_ha) & seasons < first_mapped) %in% TRUE
   last_ha[is.na(last_ha) & !unmapped_old] <- AFL_MAX_REGULAR_ROUNDS
   if (any(unmapped_old)) {
     cli::cli_warn("No regular-season round count for season{?s} {unique(seasons[unmapped_old])}; leaving their win probabilities as the win model gave them. Add them to {.code AFL_REGULAR_SEASON_ROUNDS}.")
@@ -1804,11 +1804,13 @@ add_weather_to_preds <- function(preds, raw_cols = FALSE) {
 #' Held-out spread of the margin model, from the locked pre-game predictions
 #'
 #' `sd(margin - pred_margin)` over every completed match in the `predictions`
-#' release. Those rows were locked before the match was played, so their
-#' errors are out of sample by construction -- unlike `.margin_residual_sd()`,
-#' which measures the residuals of a model trained on the same matches.
-#' Measured 2026-10-11: 32.3 over 1,006 home-and-away matches 2021-2026,
-#' against 30.9 in sample.
+#' release, finals included. Those rows are locked before the match is played,
+#' so their errors are out of sample -- unlike `.margin_residual_sd()`, which
+#' measures the residuals of a model trained on the same matches. (Not
+#' perfectly: a few rows were computed after kickoff, which
+#' `.warn_post_hoc_predictions()` exists to flag; they would pull the spread
+#' down slightly.) Measured 2026-10-11: 32.4 over 1,062 completed matches
+#' 2021-2026 (32.3 over the 1,006 home-and-away ones), against 30.9 in sample.
 #'
 #' @param preds Optional locked-predictions frame with `margin` and
 #'   `pred_margin`; loaded with `load_predictions(TRUE)` when NULL.

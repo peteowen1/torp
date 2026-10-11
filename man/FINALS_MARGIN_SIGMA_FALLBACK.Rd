@@ -15,8 +15,9 @@ Used by \code{.finals_win_from_margin()} only when \code{.heldout_margin_sigma()
 cannot size the spread from the locked pre-game predictions (load failure,
 or under 100 completed matches). Measured spreads, all in points:
 \itemize{
-\item 32.3: held-out SD of locked predictions' errors, 1,006
-home-and-away matches 2021-2026 (2026-10-11).
+\item 32.4: held-out SD of locked predictions' errors, 1,062 completed
+matches 2021-2026; 32.3 over the 1,006 home-and-away ones
+(2026-10-11).
 \item 33.5: the sigma that minimised log-loss on home-and-away matches,
 and 33.1 in the torp 1.9.2 run (torp#247 write-up).
 \item 30.9: in-sample training residuals, the overconfident value #252
