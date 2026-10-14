@@ -4,17 +4,22 @@
 \alias{.matchup_season_is_over}
 \title{Is the season over, so there is no round to build a matchup table for?}
 \usage{
-.matchup_season_is_over(fixtures, week)
+.matchup_season_is_over(fixtures, week, min_days_idle = 14, from = Sys.time())
 }
 \arguments{
 \item{fixtures}{A fixtures frame with \code{round_number}, \code{status},
 \code{utc_start_time} (the shape \code{load_fixtures()} returns).}
 
 \item{week}{Target round number.}
+
+\item{min_days_idle}{Days since the latest kickoff before the season counts
+as over.}
+
+\item{from}{Reference "now" (default \code{Sys.time()}; parameterised for tests).}
 }
 \value{
 \code{TRUE} only when the season is demonstrably finished; \code{FALSE} for an
-empty or \code{NULL} fixtures frame.
+empty or \code{NULL} fixtures frame, or when no start time parses.
 }
 \description{
 The off-season quiet-skip decision in \code{build_matchup_table.R}
@@ -23,10 +28,17 @@ the Grand Final round (2026: R29), every row of which is decided, so Gate 1
 used to abort on every daily run until March -- reopening torp#237 each
 time.
 
-Keyed on fixture STATUS, not on dates or on \code{team_mdl_df}: a season is
-over only when its fixtures loaded, every one of them is \code{CONCLUDED}, and
-the target round is the season's last (or later). A postponed match, a
-finals week still to come, or a failed fixture load all leave something
-not concluded (or nothing at all), so they still fail loudly.
+A season is over only when its fixtures loaded, every one of them is
+\code{CONCLUDED}, the target round is the last one loaded (or later), AND the
+latest kickoff is more than \code{min_days_idle} days ago. A postponed match or
+a failed fixture load leaves something not concluded (or nothing at all),
+so it still fails loudly.
+
+The date guard is what separates the off-season from mid-finals (review
+finding, 2026-10-14): if the AFL has not yet published the next finals
+round, the loaded fixtures look exactly like a finished season -- all
+concluded, target round = last loaded round. Gaps inside a season (the
+pre-finals bye included) were at most 11.1 days in 2023-2026 (measured from
+load_fixtures()); the off-season is months.
 }
 \keyword{internal}
