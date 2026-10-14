@@ -84,6 +84,16 @@ real <- state$team_mdl_df[
     is.na(state$team_mdl_df$win),
 ]
 if (nrow(real) == 0) {
+  # Off-season (torp#237): after the Grand Final this ran daily until March,
+  # aborting here and reopening the issue every time. Skip only when the
+  # season's fixtures show every match concluded and R{week} is the last round;
+  # anything less certain still falls through to the abort below.
+  fx <- tryCatch(load_fixtures(season), error = function(e) NULL)
+  if (torp:::.matchup_season_is_over(fx, week)) {
+    cli::cli_alert_info("Skipping: every {season} fixture is concluded and R{week} is the last round -- off-season.")
+    cat(sprintf("::notice::Matchup table skipped -- the %d season is over (all %d fixtures concluded). The blog keeps serving the last published table.\n", season, nrow(fx)))
+    quit(save = "no", status = 0)
+  }
   cli::cli_abort(c(
     "No {season} R{week} row(s) still awaiting a result -- cannot verify the predict path, refusing to publish.",
     "i" = "Either the round has no rows at all (pre-season / fixtures not published), or every game in it is already decided."
