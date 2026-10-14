@@ -424,3 +424,28 @@ test_that(".matchup_lineup_wait_is_safe() is FALSE when the deadline is unknown"
   fx <- .mt_make_fixtures_at(5L, "SCHEDULED", .mt_sun + 86400)
   expect_false(.matchup_lineup_wait_is_safe(fx, week = 4L, from = .mt_sun))
 })
+
+# .matchup_season_is_over (torp#237) ----
+
+test_that(".matchup_season_is_over() is TRUE once every fixture is concluded and the target is the last round (2026: get_afl_week stays on the GF round)", {
+  fx <- .mt_make_fixtures(round_number = c(28L, 29L), status = "CONCLUDED", hours_from_now = c(-400, -200))
+  expect_true(.matchup_season_is_over(fx, week = 29L))
+  expect_true(.matchup_season_is_over(fx, week = 30L))
+})
+
+test_that(".matchup_season_is_over() is FALSE while any fixture is not concluded (postponed match, finals to come)", {
+  fx <- .mt_make_fixtures(round_number = c(27L, 28L), status = c("CONCLUDED", "SCHEDULED"), hours_from_now = c(-200, 100))
+  expect_false(.matchup_season_is_over(fx, week = 29L))
+})
+
+test_that(".matchup_season_is_over() is FALSE for an earlier round, even if every loaded fixture is concluded", {
+  fx <- .mt_make_fixtures(round_number = c(27L, 28L), status = "CONCLUDED", hours_from_now = c(-200, -10))
+  expect_false(.matchup_season_is_over(fx, week = 27L))
+})
+
+test_that(".matchup_season_is_over() treats a failed or empty fixture load as NOT over", {
+  expect_false(.matchup_season_is_over(NULL, week = 29L))
+  expect_false(.matchup_season_is_over(.mt_make_fixtures(integer(0), character(0), numeric(0)), week = 29L))
+  fx <- .mt_make_fixtures(round_number = 28L, status = NA_character_, hours_from_now = -10)
+  expect_false(.matchup_season_is_over(fx, week = 29L))
+})
