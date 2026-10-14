@@ -342,20 +342,34 @@
 #'   used to abort on every daily run until March -- reopening torp#237 each
 #'   time.
 #'
-#'   Keyed on fixture STATUS, not on dates or on `team_mdl_df`: a season is
-#'   over only when its fixtures loaded, every one of them is `CONCLUDED`, and
-#'   the target round is the season's last (or later). A postponed match, a
-#'   finals week still to come, or a failed fixture load all leave something
-#'   not concluded (or nothing at all), so they still fail loudly.
+#'   A season is over only when its fixtures loaded, every one of them is
+#'   `CONCLUDED`, the target round is the last one loaded (or later), AND the
+#'   latest kickoff is more than `min_days_idle` days ago. A postponed match or
+#'   a failed fixture load leaves something not concluded (or nothing at all),
+#'   so it still fails loudly.
+#'
+#'   The date guard is what separates the off-season from mid-finals (review
+#'   finding, 2026-10-14): if the AFL has not yet published the next finals
+#'   round, the loaded fixtures look exactly like a finished season -- all
+#'   concluded, target round = last loaded round. Gaps inside a season (the
+#'   pre-finals bye included) were at most 11.1 days in 2023-2026 (measured from
+#'   load_fixtures()); the off-season is months.
 #' @inheritParams .matchup_earliest_bounce
+#' @param min_days_idle Days since the latest kickoff before the season counts
+#'   as over.
+#' @param from Reference "now" (default `Sys.time()`; parameterised for tests).
 #' @return `TRUE` only when the season is demonstrably finished; `FALSE` for an
-#'   empty or `NULL` fixtures frame.
+#'   empty or `NULL` fixtures frame, or when no start time parses.
 #' @keywords internal
-.matchup_season_is_over <- function(fixtures, week) {
+.matchup_season_is_over <- function(fixtures, week, min_days_idle = 14, from = Sys.time()) {
   if (is.null(fixtures) || nrow(fixtures) == 0) return(FALSE)
   if (anyNA(fixtures$status)) return(FALSE)
+  if (!all(fixtures$status == "CONCLUDED")) return(FALSE)
   last_round <- suppressWarnings(max(fixtures$round_number, na.rm = TRUE))
-  all(fixtures$status == "CONCLUDED") && is.finite(last_round) && week >= last_round
+  if (!is.finite(last_round) || week < last_round) return(FALSE)
+  starts <- .parse_utc_start(fixtures$utc_start_time)
+  if (all(is.na(starts))) return(FALSE)
+  as.numeric(difftime(from, max(starts, na.rm = TRUE), units = "days")) > min_days_idle
 }
 
 #' Is a later scheduled run guaranteed before this round's earliest bounce?
