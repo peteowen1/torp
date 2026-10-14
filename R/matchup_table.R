@@ -334,6 +334,30 @@
   as.numeric(difftime(bounce, Sys.time(), units = "hours"))
 }
 
+#' Is the season over, so there is no round to build a matchup table for?
+#'
+#' @description The off-season quiet-skip decision in `build_matchup_table.R`
+#'   (torp#237). After the Grand Final, `get_afl_week(type = "next")` stays on
+#'   the Grand Final round (2026: R29), every row of which is decided, so Gate 1
+#'   used to abort on every daily run until March -- reopening torp#237 each
+#'   time.
+#'
+#'   Keyed on fixture STATUS, not on dates or on `team_mdl_df`: a season is
+#'   over only when its fixtures loaded, every one of them is `CONCLUDED`, and
+#'   the target round is the season's last (or later). A postponed match, a
+#'   finals week still to come, or a failed fixture load all leave something
+#'   not concluded (or nothing at all), so they still fail loudly.
+#' @inheritParams .matchup_earliest_bounce
+#' @return `TRUE` only when the season is demonstrably finished; `FALSE` for an
+#'   empty or `NULL` fixtures frame.
+#' @keywords internal
+.matchup_season_is_over <- function(fixtures, week) {
+  if (is.null(fixtures) || nrow(fixtures) == 0) return(FALSE)
+  if (anyNA(fixtures$status)) return(FALSE)
+  last_round <- suppressWarnings(max(fixtures$round_number, na.rm = TRUE))
+  all(fixtures$status == "CONCLUDED") && is.finite(last_round) && week >= last_round
+}
+
 #' Is a later scheduled run guaranteed before this round's earliest bounce?
 #'
 #' @description The `torp_error_lineups_not_published` quiet-skip decision in
