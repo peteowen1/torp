@@ -488,7 +488,9 @@ XG_COL_MAP <- c(
 #' }
 #'
 #' @param dt A data.table or data.frame of player stats.
-#' @return The input (coerced to data.table) with normalised column names, modified by reference.
+#' @return The input coerced to a data.table (a data.frame input is copied, so
+#'   only a data.table input is modified by reference), returned invisibly.
+#'   Assign the result.
 #' @keywords internal
 .normalise_player_stats_columns <- function(dt) {
   if (!data.table::is.data.table(dt)) {
@@ -537,7 +539,12 @@ XG_COL_MAP <- c(
   # --- 5. Add `player_name` from given_name + surname if missing ---
   nms <- names(dt)
   if (!"player_name" %in% nms && all(c("given_name", "surname") %in% nms)) {
-    dt[, player_name := paste(given_name, surname)]
+    # NA-aware: paste() would turn a missing part into the string "NA"
+    dt[, player_name := trimws(paste(
+      data.table::fifelse(is.na(given_name), "", as.character(given_name)),
+      data.table::fifelse(is.na(surname), "", as.character(surname))
+    ))]
+    dt[player_name == "", player_name := NA_character_]
   }
 
   # --- 6. Add `season` column if missing ---
@@ -575,11 +582,33 @@ XG_COL_MAP <- c(
   nms <- names(dt)
   missing_ext <- expected_ext[!expected_ext %in% nms]
   if (length(missing_ext) > 0) {
-    safe_log_info(paste0("Zero-filling missing API columns: ", paste(missing_ext, collapse = ", ")))
+    # Consumers (player_credit.R) rely on the zero-fill, so keep it, but say so
+    # immediately: a missing feed is otherwise indistinguishable from real zeros.
+    message("Zero-filling missing API columns (absent from feed, not real zeros): ",
+            paste(missing_ext, collapse = ", "))
     dt[, (missing_ext) := 0L]
   }
 
   invisible(dt)
+}
+
+
+# ============================================================================
+# Shared two-step normaliser
+# ============================================================================
+
+#' Apply a column map then snake_case the remainder
+#'
+#' @param df A data.frame, tibble, or data.table.
+#' @param col_map Named character vector of old -> new column names.
+#' @param label Label used in snake_case log output.
+#' @return The input with normalised column names, modified by reference
+#'   where possible. Returns invisibly.
+#' @keywords internal
+.normalise_schema <- function(df, col_map, label) {
+  .normalise_columns(df, col_map)
+  .bulk_snake_case(df, verbose = FALSE, label = label)
+  invisible(df)
 }
 
 
@@ -597,9 +626,7 @@ XG_COL_MAP <- c(
 #' @return The input with normalised column names, modified by reference.
 #' @keywords internal
 .normalise_fixture_columns <- function(df) {
-  .normalise_columns(df, FIXTURE_COL_MAP)
-  .bulk_snake_case(df, verbose = FALSE, label = "Fixture")
-  invisible(df)
+  .normalise_schema(df, FIXTURE_COL_MAP, "Fixture")
 }
 
 
@@ -646,7 +673,7 @@ XG_COL_MAP <- c(
     )
   }
 
-  df
+  invisible(df)
 }
 
 
@@ -662,9 +689,7 @@ XG_COL_MAP <- c(
 #' @return The input with normalised column names, modified by reference.
 #' @keywords internal
 .normalise_chains_columns <- function(df) {
-  .normalise_columns(df, CHAINS_COL_MAP)
-  .bulk_snake_case(df, verbose = FALSE, label = "Chains")
-  invisible(df)
+  .normalise_schema(df, CHAINS_COL_MAP, "Chains")
 }
 
 
@@ -680,9 +705,7 @@ XG_COL_MAP <- c(
 #' @return The input with normalised column names, modified by reference.
 #' @keywords internal
 .normalise_player_details_columns <- function(df) {
-  .normalise_columns(df, PLAYER_DETAILS_COL_MAP)
-  .bulk_snake_case(df, verbose = FALSE, label = "Player details")
-  invisible(df)
+  .normalise_schema(df, PLAYER_DETAILS_COL_MAP, "Player details")
 }
 
 
@@ -698,9 +721,7 @@ XG_COL_MAP <- c(
 #' @return The input with normalised column names, modified by reference.
 #' @keywords internal
 .normalise_predictions_columns <- function(df) {
-  .normalise_columns(df, PREDICTIONS_COL_MAP)
-  .bulk_snake_case(df, verbose = FALSE, label = "Predictions")
-  invisible(df)
+  .normalise_schema(df, PREDICTIONS_COL_MAP, "Predictions")
 }
 
 
@@ -771,7 +792,7 @@ XG_COL_MAP <- c(
 #' @return The input, modified in place. Returns invisibly.
 #' @keywords internal
 .normalise_team_values <- function(df) {
-  if (is.null(df) || nrow(df) == 0L) return(df)
+  if (is.null(df) || nrow(df) == 0L) return(invisible(df))
 
   nms <- names(df)
   is_dt <- data.table::is.data.table(df)
@@ -804,5 +825,5 @@ XG_COL_MAP <- c(
     }
   }
 
-  df
+  invisible(df)
 }
