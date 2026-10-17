@@ -204,6 +204,17 @@ adjust_epv_for_opponents <- function(player_game_data,
     }
   }
 
+  # A NA utc_start_time gives a NA game_date, and `game_date < mdate` treats NA
+  # as no-match: that team-game silently drops out of every later defensive
+  # profile and its own profile row is zero-filled below. Say so up front.
+  n_na_date <- sum(is.na(dt$utc_start_time))
+  if (n_na_date > 0) {
+    cli::cli_inform(c(
+      "!" = "{n_na_date} player-game row{?s} ha{?s/ve} NA utc_start_time.",
+      "i" = "Those team-games are excluded from every opponent profile and get no adjustment."
+    ))
+  }
+
   cli::cli_inform("Computing rolling team EPV defensive profiles...")
 
   # Compute opponent profiles
@@ -249,7 +260,22 @@ adjust_epv_for_opponents <- function(player_game_data,
   # Distribute adjustment by TOG share
   n_no_profile <- sum(is.na(dt$epv_opp_adj))
   if (n_no_profile > 0) {
-    cli::cli_inform("{n_no_profile} player-games had no opponent profile (no adjustment applied)")
+    # Immediate message (not a deferred warning) naming where the zero fill lands.
+    # Early history legitimately has none; a large share means missing profiles.
+    by_season <- if ("season" %in% names(dt)) {
+      tab <- table(dt$season[is.na(dt$epv_opp_adj)])
+      paste0(names(tab), ": ", as.integer(tab), collapse = ", ")
+    } else {
+      "season column not present"
+    }
+    cli::cli_inform("{n_no_profile} player-games had no opponent profile (no adjustment applied); by season: {by_season}")
+    if (n_no_profile > 1000L && n_no_profile / nrow(dt) > 0.25) {
+      cli::cli_abort(c(
+        "{n_no_profile} of {nrow(dt)} player-games ({round(100 * n_no_profile / nrow(dt))}%) had no opponent profile.",
+        "x" = "Zero-filling that share would silently skip the opponent adjustment.",
+        "i" = "By season: {by_season}"
+      ), class = c("torp_error_stale_input", "vb_error_integrity"))
+    }
   }
   dt[is.na(epv_opp_adj), epv_opp_adj := 0]
   dt[, .player_adj := epv_opp_adj * .tog_share]
