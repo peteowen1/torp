@@ -63,6 +63,15 @@ if (!is.finite(week) || week < 1) {
   ))
 }
 
+# Off-season (torp#237): decide from the fixtures alone, before training any
+# model state, that there is nothing to publish.
+fx <- tryCatch(load_fixtures(season), error = function(e) NULL)
+if (torp:::.matchup_season_is_over(fx, week)) {
+  cli::cli_alert_info("Skipping: every {season} fixture is concluded and R{week} is the last round -- off-season.")
+  cat(sprintf("::notice::Matchup table skipped -- the %d season is over (all %d fixtures concluded). The blog keeps serving the last published table.\n", season, nrow(fx)))
+  quit(save = "no", status = 0)
+}
+
 state <- torp:::.freeze_match_state(season = season, week = week)
 
 # ---- Gate 1: the fabricated predict path still agrees with production -------
@@ -199,8 +208,7 @@ if (tolower(Sys.getenv("TORP_MATCHUP_DRY_RUN")) %in% c("1", "true", "yes")) {
   # WARNING, not success: a dry run must not read like a normal publish to
   # anyone skimming the log or grepping it.
   cli::cli_alert_warning("DRY RUN: all gates passed, {nrow(tbl)} rows built, NOTHING UPLOADED")
-  cat("::warning::Matchup table ran in DRY RUN mode -- nothing was published.
-")
+  cat("::warning::Matchup table ran in DRY RUN mode -- nothing was published.\n")
   quit(save = "no", status = 0)
 }
 
