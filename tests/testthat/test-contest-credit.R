@@ -161,6 +161,39 @@ test_that("compute_contest_credit skips contest when kick is beyond 5-row lookba
   expect_true(nrow(q9) == 0)
 })
 
+test_that("compute_contest_credit does not credit a kick behind a possession event", {
+  # Kick (row 1) -> Handball (row 2) -> Contest Target (row 3) -> Spoil (row 4).
+  # The handball is a possession event, so the kick belongs to a different play
+  # and its swing must not pay this contest (same gating as compute_spoil_credit).
+  mk <- function(mid, between) {
+    n <- 3L + length(between)
+    data.table::data.table(
+      match_id = rep(mid, n),
+      display_order = seq_len(n),
+      period = rep(1L, n),
+      period_seconds = seq(100L, by = 100L, length.out = n),
+      team_id = c(rep("T1", n - 1L), "T2"),
+      player_id = paste0(mid, sprintf("%02d", seq_len(n))),
+      description = c("Kick", between, "Contest Target", "Spoil"),
+      x = rep(10L, n), y = rep(5L, n)
+    )
+  }
+  pbp_for <- function(mid, n) data.table::data.table(
+    match_id = rep(mid, n), display_order = seq_len(n),
+    delta_epv = c(0.6, rep(NA_real_, n - 1L))
+  )
+
+  blocked <- mk("MB", "Handball")
+  expect_equal(nrow(compute_contest_credit(blocked, pbp_for("MB", nrow(blocked)))), 0)
+
+  # An in-flight annotation between the kick and the target does not block it.
+  open <- mk("MO", "Kick Into F50")
+  res <- compute_contest_credit(open, pbp_for("MO", nrow(open)))
+  expect_equal(nrow(res), 2)
+  expect_equal(res[player_id == "MO03"]$contest_epv, 0.6 / 3)
+  expect_equal(res[player_id == "MO04"]$contest_epv, -0.6 / 3)
+})
+
 test_that("compute_contest_credit does not modify input chains", {
   chains <- create_credit_chains()
   pbp <- create_credit_pbp()
