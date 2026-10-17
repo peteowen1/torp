@@ -174,3 +174,48 @@ test_that(".load_season_listing aborts when a requested season fails to load", {
   out <- .load_season_listing(2025:2026)
   expect_equal(sort(unique(out$season)), c(2025L, 2026L))
 })
+
+test_that(".attach_weekly_pos flags a season with no usable team sheet even when other seasons match", {
+  # Sheets exist for 2023-2026 only: 2021 and 2022 rows have nothing at or
+  # before them. 8 of 12 rows match overall, so the all-rows check passes; the
+  # per-season check must name the empty seasons.
+  skills <- data.table::data.table(
+    player_id = rep(c("P1", "P2"), 6), season = rep(2021:2026, each = 2),
+    round = 1L, pos_group = "MIDFIELDER", wt_80s = 1
+  )
+  lineup <- data.table::data.table(
+    player_id = rep(c("P1", "P2"), 4), season = rep(2023:2026, each = 2),
+    round = 1L, lineup_position = "C"
+  )
+  msgs <- gsub("\\s+", " ", paste(testthat::capture_messages(.attach_weekly_pos(skills, lineup)), collapse = " "))
+  expect_match(msgs, "too little.*2021 0%, 2022 0%")
+  full <- data.table::data.table(
+    player_id = rep(c("P1", "P2"), 6), season = rep(2021:2026, each = 2),
+    round = 1L, lineup_position = "C"
+  )
+  msgs <- testthat::capture_messages(.attach_weekly_pos(skills, full))
+  expect_false(any(grepl("too little", msgs)))
+})
+
+test_that(".dt_copy_once returns an independent copy of a data.table or data.frame", {
+  d <- data.table::data.table(a = 1:3)
+  cp <- .dt_copy_once(d)
+  cp[, a := 0L]
+  expect_equal(d$a, 1:3)
+  f <- data.frame(a = 1:3)
+  cp2 <- .dt_copy_once(f)
+  expect_true(data.table::is.data.table(cp2))
+  cp2[, a := 0L]
+  expect_equal(f$a, 1:3)
+})
+
+test_that(".load_season_listing keeps one row per player-season and drops NA positions", {
+  local_mocked_bindings(load_player_details = function(seasons, comp = "AFLM", ...) {
+    data.table::data.table(player_id = c("P1", "P2", "P3"),
+                           position_group = c("RUCK", NA, "MIDFIELDER"))
+  })
+  out <- suppressMessages(.load_season_listing(2026L))
+  expect_setequal(out$player_id, c("P1", "P3"))
+  expect_true(all(out$season %in% c(2025L, 2026L)))
+  expect_equal(anyDuplicated(out[, c("player_id", "season")]), 0L)
+})

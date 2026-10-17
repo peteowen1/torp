@@ -9,7 +9,8 @@ explain_player_game(
   match_id,
   player_stats = NULL,
   season = NULL,
-  per80 = TRUE
+  per80 = TRUE,
+  comp = "AFLM"
 )
 }
 \arguments{
@@ -24,6 +25,10 @@ loads from API via \code{load_player_stats()}.}
 
 \item{per80}{Logical. If TRUE, show per-80-minute contributions.
 Default TRUE.}
+
+\item{comp}{Competition: "AFLM" (default) or "AFLW". Selects the coefficient
+set the breakdown decomposes with, the same way production scoring does
+(\code{.compute_psv()}).}
 }
 \value{
 Invisibly returns a list with \code{epv} (EPV summary data.table)
