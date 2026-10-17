@@ -134,3 +134,10 @@ test_that("create_validation_report generates proper output", {
   expect_true(grepl("MODEL VALIDATION REPORT", report))
   expect_true(grepl("Test Model", report))
 })
+test_that("evaluate_model_comprehensive survives heavily tied predictions", {
+  set.seed(1)
+  p <- rep(c(0.3, 0.7), each = 100)
+  y <- rbinom(200, 1, p)
+  expect_no_error(res <- evaluate_model_comprehensive(y, p))
+  expect_true(is.finite(res$brier_ci_lower))
+})
