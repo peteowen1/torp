@@ -19,7 +19,12 @@
 #'   home_margin), completed matches only, sorted by date then match_id
 #' @keywords internal
 .matches_from_team_mdl_df <- function(team_mdl_df) {
-  out <- team_mdl_df[team_mdl_df$team_type == "home" & !is.na(team_mdl_df$win), ]
+  # Filter on the margin as well as win: a completed row with a win but no
+  # score_diff would otherwise reach build_team_elo() and be scored as a draw.
+  # (.build_team_mdl_df() derives win from score_diff, so today the two are NA
+  # together; this keeps that from being load-bearing.)
+  out <- team_mdl_df[team_mdl_df$team_type == "home" &
+                       !is.na(team_mdl_df$win) & !is.na(team_mdl_df$score_diff), ]
   data.frame(
     match_id    = out$match_id,
     date        = as.Date(out$utc_start_time),
@@ -31,6 +36,20 @@
     stringsAsFactors = FALSE
   ) |>
     dplyr::arrange(date, match_id)
+}
+
+# .elo_mov_mult ----
+
+#' 538-style margin-of-victory multiplier for one Elo update
+#'
+#' @param margin Final margin (any sign; only its size is used here).
+#' @param elo_diff_winner Winner's pre-match rating minus the loser's. Positive
+#'   for a favourite win, negative for an upset.
+#' @return Positive multiplier. The denominator is floored at
+#'   \code{ELO_MOV_DENOM_MIN} so it cannot reach zero or turn negative.
+#' @keywords internal
+.elo_mov_mult <- function(margin, elo_diff_winner) {
+  log(abs(margin) + 1) * (2.2 / pmax(0.001 * elo_diff_winner + 2.2, ELO_MOV_DENOM_MIN))
 }
 
 # build_team_elo ----
@@ -51,7 +70,7 @@
 #' @param hga Home-ground advantage, in Elo points, added to the home team's
 #'   rating before computing expected result. Default \code{ELO_HGA}.
 #' @param carryover Fraction of a team's rating retained across a season
-#'   boundary (1 = no regression, 0 = full reset to 1500). Default
+#'   boundary (1 = no regression, 0 = full reset to \code{ELO_INIT}). Default
 #'   \code{ELO_CARRYOVER}.
 #' @param mov_mult Logical; apply the log-margin x anti-runaway multiplier
 #'   (538-style) to the update magnitude. FALSE = plain win/loss/draw Elo.
@@ -70,7 +89,7 @@ build_team_elo <- function(matches, k = ELO_K, hga = ELO_HGA, carryover = ELO_CA
   matches <- matches[order(matches$date, matches$match_id), ]
 
   teams <- sort(unique(c(matches$home_team, matches$away_team)))
-  elo <- stats::setNames(rep(1500, length(teams)), teams)
+  elo <- stats::setNames(rep(ELO_INIT, length(teams)), teams)
   last_season <- stats::setNames(rep(NA_integer_, length(teams)), teams)
 
   n <- nrow(matches)
@@ -86,10 +105,10 @@ build_team_elo <- function(matches, k = ELO_K, hga = ELO_HGA, carryover = ELO_CA
     # each team in a new season (equivalent to applying it once per team at
     # season start, since ratings are otherwise untouched between matches).
     if (!is.na(last_season[[h]]) && last_season[[h]] < s) {
-      elo[[h]] <- carryover * elo[[h]] + (1 - carryover) * 1500
+      elo[[h]] <- carryover * elo[[h]] + (1 - carryover) * ELO_INIT
     }
     if (!is.na(last_season[[a]]) && last_season[[a]] < s) {
-      elo[[a]] <- carryover * elo[[a]] + (1 - carryover) * 1500
+      elo[[a]] <- carryover * elo[[a]] + (1 - carryover) * ELO_INIT
     }
 
     elo_h <- elo[[h]]
@@ -108,7 +127,7 @@ build_team_elo <- function(matches, k = ELO_K, hga = ELO_HGA, carryover = ELO_CA
       # era adjustment. abs() collapses that asymmetry and dampens upsets
       # the same as favourite blowouts.
       elo_diff_winner <- if (m > 0) elo_h - elo_a else elo_a - elo_h
-      log(abs(m) + 1) * (2.2 / (0.001 * elo_diff_winner + 2.2))
+      .elo_mov_mult(m, elo_diff_winner)
     } else {
       1
     }
@@ -151,7 +170,7 @@ build_team_elo <- function(matches, k = ELO_K, hga = ELO_HGA, carryover = ELO_CA
 #'   each team's \emph{current} rating (\code{elo_result$current}, its rating
 #'   after its most recent completed match). A team with no rating history
 #'   at all (has never appeared in a completed match, e.g. brand new franchise
-#'   fixture data glitch) falls back to the neutral starting rating (1500),
+#'   fixture data glitch) falls back to the neutral starting rating (\code{ELO_INIT}, 1500),
 #'   giving \code{elo_diff = 0} for that row only.
 #' @keywords internal
 join_elo_diff_to_team_mdl_df <- function(team_mdl_df, elo_result) {
@@ -177,8 +196,8 @@ join_elo_diff_to_team_mdl_df <- function(team_mdl_df, elo_result) {
     dplyr::left_join(as.data.frame(cur_x), by = "team_name_x_chr") |>
     dplyr::left_join(as.data.frame(cur_y), by = "team_name_y_chr") |>
     dplyr::mutate(
-      elo_pre_x = dplyr::coalesce(elo_pre_x, elo_current_x, 1500),
-      elo_pre_y = dplyr::coalesce(elo_pre_y, elo_current_y, 1500),
+      elo_pre_x = dplyr::coalesce(elo_pre_x, elo_current_x, ELO_INIT),
+      elo_pre_y = dplyr::coalesce(elo_pre_y, elo_current_y, ELO_INIT),
       elo_diff = elo_pre_x - elo_pre_y
     ) |>
     dplyr::select(-team_name_x_chr, -team_name_y_chr, -elo_pre_x, -elo_pre_y,

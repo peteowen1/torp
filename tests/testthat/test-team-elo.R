@@ -90,3 +90,26 @@ test_that("join_elo_diff_to_team_mdl_df: a team with zero history anywhere gets 
   out <- join_elo_diff_to_team_mdl_df(team_mdl_df, res)
   expect_equal(out$elo_diff, 0)
 })
+
+test_that(".matches_from_team_mdl_df: a row with a win but NA score_diff is dropped, not scored as a draw", {
+  df <- data.frame(
+    match_id = c("a", "b"), team_type = "home", win = c(1, 1),
+    utc_start_time = c("2024-01-01T00:00:00Z", "2024-01-08T00:00:00Z"),
+    season.x = 2024L, round_number.x = 1:2,
+    team_name.x = c("A", "A"), team_name.y = c("B", "B"),
+    score_diff = c(10, NA), stringsAsFactors = FALSE
+  )
+  expect_equal(.matches_from_team_mdl_df(df)$match_id, "a")
+})
+
+test_that(".elo_mov_mult: stays positive and finite at and beyond the singular rating gap", {
+  # The unclamped denominator 0.001 * gap + 2.2 is zero at gap = -2200 and
+  # negative below it, which would flip the sign of the update.
+  gaps <- c(-5000, -2300, -2200, -2199, -1000, 0, 500)
+  mult <- .elo_mov_mult(30, gaps)
+  expect_true(all(is.finite(mult)))
+  expect_true(all(mult > 0))
+  # Unchanged inside the reachable range
+  expect_equal(.elo_mov_mult(30, 0), log(31))
+  expect_equal(.elo_mov_mult(30, 100), log(31) * 2.2 / 2.3)
+})
