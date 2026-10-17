@@ -91,6 +91,40 @@ test_that("join_elo_diff_to_team_mdl_df: a team with zero history anywhere gets 
   expect_equal(out$elo_diff, 0)
 })
 
+test_that("join_elo_diff_to_team_mdl_df: a new-season fixture's elo_diff equals the training-time value (A274)", {
+  m <- .synthetic_matches()
+  hist <- m[m$match_id != "m4", ]          # m4 is A v B, first match of 2025
+  fx <- data.frame(match_id = "m4", season.x = 2025L,
+                   team_name.x = factor("A"), team_name.y = factor("B"))
+  for (cv in c(1, 0.75, 0.5)) {
+    full <- build_team_elo(m, k = 20, hga = 0, carryover = cv, mov_mult = FALSE)
+    pre <- function(team) full$by_match$elo_pre[full$by_match$match_id == "m4" & full$by_match$team_name == team]
+    train_diff <- pre("A") - pre("B")
+
+    res <- build_team_elo(hist, k = 20, hga = 0, carryover = cv, mov_mult = FALSE)
+    expect_equal(join_elo_diff_to_team_mdl_df(fx, res)$elo_diff, train_diff)
+
+    # Non-vacuous: with carryover < 1 the unregressed end-of-2024 gap (the
+    # pre-fix value) is a different number.
+    raw_gap <- res$current$elo_current[res$current$team_name == "A"] -
+      res$current$elo_current[res$current$team_name == "B"]
+    if (cv < 1) expect_gt(abs(raw_gap - train_diff), 1)
+  }
+})
+
+test_that("join_elo_diff_to_team_mdl_df: a same-season fixture keeps the unregressed current rating", {
+  m <- .synthetic_matches()
+  hist <- m[m$season == 2024, ]
+  res <- build_team_elo(hist, k = 20, hga = 0, carryover = 0.5, mov_mult = FALSE)
+  fx <- data.frame(match_id = "f", season.x = 2024L,
+                   team_name.x = factor("A"), team_name.y = factor("B"))
+  expect_equal(
+    join_elo_diff_to_team_mdl_df(fx, res)$elo_diff,
+    res$current$elo_current[res$current$team_name == "A"] -
+      res$current$elo_current[res$current$team_name == "B"]
+  )
+})
+
 test_that(".matches_from_team_mdl_df: a row with a win but NA score_diff is dropped, not scored as a draw", {
   df <- data.frame(
     match_id = c("a", "b"), team_type = "home", win = c(1, 1),

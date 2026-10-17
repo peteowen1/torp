@@ -21,9 +21,12 @@ reflects only strictly-prior matches). Rows with no historical elo_pre
 -- upcoming/unplayed fixtures, which is exactly what
 \code{run_predictions_pipeline()} needs elo_diff for -- fall back to
 each team's \emph{current} rating (\code{elo_result$current}, its rating
-after its most recent completed match). A team with no rating history
+after its most recent completed match), regressed toward the mean by
+\code{carryover} for each season boundary between that match and the
+row's \code{season.x} (as the training rows were), when \code{season.x}
+is present. A team with no rating history
 at all (has never appeared in a completed match, e.g. brand new franchise
-fixture data glitch) falls back to the neutral starting rating (1500),
+fixture data glitch) falls back to the neutral starting rating (\code{ELO_INIT}, 1500),
 giving \code{elo_diff = 0} for that row only.
 }
 \description{

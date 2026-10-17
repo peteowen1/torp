@@ -99,7 +99,12 @@
 #'   \item{current}{data.table(team_name, elo_current) -- each team's rating
 #'     immediately AFTER its most recent match in \code{matches}. Used for
 #'     upcoming/unplayed fixtures, where there is no historical elo_pre to
-#'     look up (see \code{join_elo_diff_to_team_mdl_df()}).}
+#'     look up (see \code{join_elo_diff_to_team_mdl_df()}). Not yet regressed
+#'     for a new season; the join does that per fixture.}
+#'   \item{last_season}{data.table(team_name, last_season) -- season of each
+#'     team's most recent match in \code{matches}.}
+#'   \item{carryover}{The \code{carryover} used, so the join can regress
+#'     \code{current} the same way.}
 #' @keywords internal
 build_team_elo <- function(matches, k = ELO_K, hga = ELO_HGA, carryover = ELO_CARRYOVER,
                             mov_mult = TRUE) {
@@ -168,8 +173,45 @@ build_team_elo <- function(matches, k = ELO_K, hga = ELO_HGA, carryover = ELO_CA
     current = data.table::data.table(
       team_name   = names(elo),
       elo_current = unname(elo)
-    )
+    ),
+    # Kept beside (not inside) `current` so that table keeps its two-column
+    # shape for callers that rename it positionally (build_aflw_team_elo()).
+    last_season = data.table::data.table(
+      team_name   = names(last_season),
+      last_season = unname(last_season)
+    ),
+    carryover = carryover
   )
+}
+
+# .elo_carry_to_season ----
+
+#' Regress current ratings across any season boundary before a fixture
+#'
+#' \code{elo_result$current} is a team's rating immediately after its last
+#' match, but \code{build_team_elo()} regresses a rating toward the mean when
+#' the team's first match of a NEW season is reached. A fixture in a later
+#' season than the team's last match therefore needs the same regression
+#' applied, or its Elo difference is on a different scale from the training
+#' rows (1 / carryover = 1.33x too wide at the default 0.75).
+#'
+#' @param elo_current Each row's team rating after its last completed match.
+#' @param team Team name for each row (character).
+#' @param season Season of the fixture each row belongs to.
+#' @param elo_result Output of \code{build_team_elo()}.
+#' @return \code{elo_current}, regressed where the team's last completed match
+#'   was in an earlier season than \code{season}. Returned unchanged when
+#'   \code{elo_result} carries no season information (hand-built results) or
+#'   \code{season} is unavailable.
+#' @keywords internal
+.elo_carry_to_season <- function(elo_current, team, season, elo_result) {
+  ls <- elo_result$last_season
+  if (is.null(ls) || is.null(season) || is.null(elo_result$carryover)) return(elo_current)
+  last <- unname(stats::setNames(ls$last_season, ls$team_name)[team])
+  gap <- season - last
+  regress <- !is.na(gap) & gap >= 1
+  elo_current[regress] <- .elo_regress(elo_current[regress], gap[regress], elo_result$carryover)
+  elo_current
 }
 
 # join_elo_diff_to_team_mdl_df ----
@@ -187,7 +229,10 @@ build_team_elo <- function(matches, k = ELO_K, hga = ELO_HGA, carryover = ELO_CA
 #'   -- upcoming/unplayed fixtures, which is exactly what
 #'   \code{run_predictions_pipeline()} needs elo_diff for -- fall back to
 #'   each team's \emph{current} rating (\code{elo_result$current}, its rating
-#'   after its most recent completed match). A team with no rating history
+#'   after its most recent completed match), regressed toward the mean by
+#'   \code{carryover} for each season boundary between that match and the
+#'   row's \code{season.x} (as the training rows were), when \code{season.x}
+#'   is present. A team with no rating history
 #'   at all (has never appeared in a completed match, e.g. brand new franchise
 #'   fixture data glitch) falls back to the neutral starting rating (\code{ELO_INIT}, 1500),
 #'   giving \code{elo_diff = 0} for that row only.
@@ -215,6 +260,12 @@ join_elo_diff_to_team_mdl_df <- function(team_mdl_df, elo_result) {
     dplyr::left_join(as.data.frame(cur_x), by = "team_name_x_chr") |>
     dplyr::left_join(as.data.frame(cur_y), by = "team_name_y_chr") |>
     dplyr::mutate(
+      # Fixtures in a later season than a team's last match get the same
+      # season-boundary regression the training rows received.
+      elo_current_x = .elo_carry_to_season(elo_current_x, team_name_x_chr,
+                                           team_mdl_df[["season.x"]], elo_result),
+      elo_current_y = .elo_carry_to_season(elo_current_y, team_name_y_chr,
+                                           team_mdl_df[["season.x"]], elo_result),
       elo_pre_x = dplyr::coalesce(elo_pre_x, elo_current_x, ELO_INIT),
       elo_pre_y = dplyr::coalesce(elo_pre_y, elo_current_y, ELO_INIT),
       elo_diff = elo_pre_x - elo_pre_y
