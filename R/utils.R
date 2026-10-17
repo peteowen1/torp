@@ -51,7 +51,13 @@ get_afl_season <- function(type = "current") {
 # 2026, whose Grand Final is round 29. Falls back to the old per-season
 # numbers (27 for 2021-22, else 28) only when no fixtures can be loaded.
 .afl_last_round <- function(season) {
-  fx <- tryCatch(load_fixtures(season, use_mem_cache = TRUE), error = function(e) NULL)
+  fx <- tryCatch(
+    load_fixtures(season, use_mem_cache = TRUE),
+    error = function(e) {
+      cli::cli_warn("Could not load fixtures for season {season} ({e$message}); using the default last round.")
+      NULL
+    }
+  )
   col <- intersect(c("round_number", "round.roundNumber"), names(fx))
   if (length(col)) {
     r <- suppressWarnings(max(as.numeric(fx[[col[1]]]), na.rm = TRUE))
@@ -65,6 +71,8 @@ get_afl_season <- function(type = "current") {
 #' Determine the current or next AFL week (round) based on fixtures.
 #'
 #' @param type A character string: "current" returns the current week, "next" returns the upcoming week.
+#'   After the Grand Final both return the last played round (the season is still the
+#'   calendar year), not round 1 of the next season.
 #'
 #' @return An integer representing the AFL week (round) number.
 #' @export
