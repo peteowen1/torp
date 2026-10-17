@@ -54,5 +54,8 @@ wp_median, wp_p75, wp_p90}
 \description{
 Simulates a single AFL match N times, producing score distributions,
 quarter-by-quarter breakdowns, individual scoring events, and a win
-probability fan chart showing how WP could evolve during the match.
+probability fan chart showing how WP could evolve during the match. The WP trajectory blends each
+simulation's current margin with a fraction of its own realised final margin,
+so it bridges to that simulation's outcome (at full time the effective margin
+is twice the final margin); it is not anchored on the pre-game expectation.
 }

@@ -7,7 +7,10 @@
 #'
 #' Simulates a single AFL match N times, producing score distributions,
 #' quarter-by-quarter breakdowns, individual scoring events, and a win
-#' probability fan chart showing how WP could evolve during the match.
+#' probability fan chart showing how WP could evolve during the match. The WP trajectory blends each
+#' simulation's current margin with a fraction of its own realised final margin,
+#' so it bridges to that simulation's outcome (at full time the effective margin
+#' is twice the final margin); it is not anchored on the pre-game expectation.
 #'
 #' @param home_team Character. Home team name (matched via AFL_TEAM_ALIASES).
 #' @param away_team Character. Away team name.
@@ -170,7 +173,15 @@ simulate_match_mc <- function(home_team, away_team,
       # column holding any NA is NA, and `df[NA, ]` returns a row of all-NA
       # rather than no rows -- so nrow() stays non-zero, home_r/away_r come
       # back NA, and `estimate` is NA with nothing saying why.
-      if ("season" %in% names(tr)) tr <- tr[tr$season == max(tr$season, na.rm = TRUE), ]
+      if ("season" %in% names(tr)) {
+        ratings_season <- max(tr$season, na.rm = TRUE)
+        if (!identical(as.numeric(ratings_season), as.numeric(season))) {
+          cli::cli_warn(
+            "Team ratings are from season {ratings_season} (latest available), not the requested season {season}."
+          )
+        }
+        tr <- tr[tr$season == ratings_season, ]
+      }
       if ("round" %in% names(tr)) {
         tr <- tr[tr$round == max(tr$round, na.rm = TRUE), ]
       }
@@ -262,8 +273,9 @@ simulate_match_mc <- function(home_team, away_team,
   if (nrow(events_dt) > 0) {
     data.table::setorder(events_dt, sim_id, time_pct, -score_value)
     # Recompute cumulative scores after sorting (interleaved home/away)
-    events_dt[, c("cum_home", "cum_away") := .recompute_cumulative(
-      .SD$team, .SD$score_value
+    events_dt[, c("cum_home", "cum_away") := list(
+      cumsum(as.integer(data.table::fifelse(team == "home", score_value, 0L))),
+      cumsum(as.integer(data.table::fifelse(team == "home", 0L, score_value)))
     ), by = sim_id]
   }
 
@@ -330,6 +342,11 @@ simulate_match_mc <- function(home_team, away_team,
     sign_adj <- sign(adj[i])
     for (j in seq_len(abs(adj[i]))) {
       q <- sample.int(k, 1L)
+      # A removal from an empty quarter would go negative and be clamped to 0
+      # below, breaking the total; redirect it to a quarter that has points.
+      if (sign_adj < 0 && qtr_scores[i, q] <= 0) {
+        q <- which(qtr_scores[i, ] > 0)[1L]
+      }
       qtr_scores[i, q] <- qtr_scores[i, q] + sign_adj
     }
   }
@@ -438,7 +455,9 @@ simulate_match_mc <- function(home_team, away_team,
   # Vectorized approach: for each time point, find margin at that time
   # across all sims simultaneously using data.table rolling joins
 
-  # Pre-compute final margin per sim (for blending with pre-game expectation)
+  # Pre-compute final margin per sim. The trajectory below deliberately bridges
+  # each sim toward its OWN realised outcome (not the pre-game expectation), so
+  # WP at t = 1 reaches 2 * final margin and every sim ends decisively.
   final_margins <- events_dt[, .(final_margin = cum_home[.N] - cum_away[.N]),
                               by = sim_id]
   # Fill in sims with no events
