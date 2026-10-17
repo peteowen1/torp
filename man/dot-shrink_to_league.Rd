@@ -26,7 +26,13 @@ Appeared identically at three call sites.
 The shrinkage is on the cell's own WEIGHT, not its game count: a team whose
 prior games are all heavily decayed carries little evidence, and weight says
 that where a count does not. \code{prior_games = 0} reproduces the unshrunk
-weighted mean exactly.
+weighted mean exactly, PROVIDED \code{wt_sum > 0}.
+
+A cell with no weight and no prior (\code{wt_sum + prior_games == 0}), or one
+whose mean is itself \code{NaN} because it was built as \code{0 / 0}, has nothing to
+report. The raw formula would give \code{NaN} there; this returns \code{league_avg},
+the only defensible value for "no evidence". Every finite result is left
+bit-identical (the guard only touches elements that would be \code{NaN}).
 
 Note the ordering with the cap that callers apply afterwards: shrinkage runs
 FIRST and does most of the work. On a two-team fixture with a 1-vs-10000
