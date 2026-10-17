@@ -371,3 +371,29 @@ test_that("vb_generation drops NA updated_at before max() instead of letting one
   gen <- vb_generation("test/fixture", "generation-na-tag")
   expect_identical(gen, "2026-03-01T00:00:00Z")
 })
+
+test_that("vb_publish disables piggyback's listing cache DURING the upload and restores it after", {
+  withr::local_envvar(piggyback_cache_duration = "600")
+  dir <- withr::local_tempdir()
+  p <- write_fixture_file(dir, "cachefile.rds", content = "cache-test")
+  sz <- file.size(p)
+  seen <- character(0)
+  testthat::local_mocked_bindings(
+    pb_upload = function(file, repo, tag, overwrite = TRUE, ...) {
+      seen <<- c(seen, Sys.getenv("piggyback_cache_duration", unset = "UNSET"))
+      invisible(NULL)
+    },
+    .package = "piggyback"
+  )
+  testthat::local_mocked_bindings(
+    gh = function(...) list(assets = list(
+      list(name = "cachefile.rds", size = sz, updated_at = "2026-01-01T00:00:00Z", id = 1)
+    )),
+    .package = "gh"
+  )
+  suppressWarnings(vb_publish(p, repo = "test/fixture", tag = "cache-tag",
+                              carry_forward = FALSE, max_retries = 0))
+  expect_true(length(seen) >= 1)
+  expect_true(all(seen == "1"))
+  expect_identical(Sys.getenv("piggyback_cache_duration", unset = "UNSET"), "600")
+})

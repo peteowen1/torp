@@ -190,7 +190,9 @@ vb_list_assets <- function(repo, tag) {
   assets <- if (is.null(rel$assets)) list() else rel$assets
   data.frame(
     name = vapply(assets, function(a) a$name, character(1)),
-    size = vapply(assets, function(a) as.numeric(a$size), numeric(1)),
+    size = vapply(assets,
+                  function(a) if (is.null(a$size)) NA_real_ else as.numeric(a$size),
+                  numeric(1)),
     # NULL-guarded: save_to_release()'s post-upload verify now decides
     # fatal-vs-warn on this field, so one malformed OTHER asset on the release
     # must not throw here and take down verification of the file we care about
@@ -198,9 +200,25 @@ vb_list_assets <- function(repo, tag) {
     updated_at = vapply(assets,
                         function(a) if (is.null(a$updated_at)) NA_character_ else a$updated_at,
                         character(1)),
-    id = vapply(assets, function(a) as.numeric(a$id), numeric(1)),
+    id = vapply(assets,
+                function(a) if (is.null(a$id)) NA_real_ else as.numeric(a$id),
+                numeric(1)),
     stringsAsFactors = FALSE
   )
+}
+
+# Make piggyback re-list on every call (cache duration 1s) and return a
+# function that restores the caller's setting; use as
+# `restore <- .vb_with_fresh_listing(); on.exit(restore(), add = TRUE)` (call the
+# helper NOW; only the restore belongs in on.exit) so a publish never leaks
+# the setting to unrelated callers.
+.vb_with_fresh_listing <- function() {
+  prev <- Sys.getenv("piggyback_cache_duration", unset = NA)
+  Sys.setenv(piggyback_cache_duration = 1)
+  function() {
+    if (is.na(prev)) Sys.unsetenv("piggyback_cache_duration")
+    else Sys.setenv(piggyback_cache_duration = prev)
+  }
 }
 
 #' Read an asset's true stored size, bypassing the release listing
@@ -629,6 +647,12 @@ vb_publish <- function(paths, repo, tag,
   if (!is.null(min_row_frac) && !is.null(prev)) {
     for (e in entries) {
       pe <- .vb_manifest_entry_for(prev, e$name)
+      if (!is.null(pe) && !is.null(pe$rows) && !is.na(pe$rows) &&
+          as.numeric(pe$rows) > 0 && (is.null(e$rows) || is.na(e$rows))) {
+        # Models and the like legitimately carry no row count, so warn rather
+        # than abort -- but never skip the floor without saying so.
+        cli::cli_warn("{.val {e$name}}: no row count supplied, so the {min_row_frac * 100}% row floor vs previous {pe$rows} rows was NOT checked")
+      }
       if (!is.null(pe) && !is.na(e$rows) && !is.null(pe$rows) && !is.na(pe$rows) &&
           e$rows < min_row_frac * as.numeric(pe$rows)) {
         .vb_abort("{.val {e$name}}: {e$rows} rows < {min_row_frac * 100}% of
@@ -641,22 +665,16 @@ vb_publish <- function(paths, repo, tag,
     cli::cli_alert_info("vb_publish dry run: {length(entries)} asset(s) for {repo}@{tag}")
     tmp <- tempfile(fileext = ".json")
     on.exit(unlink(tmp), add = TRUE)
-    return(invisible(vb_write_manifest(.vb_merge_entries(prev, entries), tag, tmp)))
+    merged <- .vb_merge_entries(if (carry_forward) prev else NULL, entries)
+    return(invisible(vb_write_manifest(merged, tag, tmp)))
   }
 
   # P6: never serve pre-upload listings. Restore on exit -- this used to be a
   # bare Sys.setenv() that leaked for the rest of the session, silently
   # disabling piggyback's listing cache for every unrelated caller after the
   # first publish.
-  .vb_prev_cache_duration <- Sys.getenv("piggyback_cache_duration", unset = NA)
-  Sys.setenv(piggyback_cache_duration = 1)
-  on.exit({
-    if (is.na(.vb_prev_cache_duration)) {
-      Sys.unsetenv("piggyback_cache_duration")
-    } else {
-      Sys.setenv(piggyback_cache_duration = .vb_prev_cache_duration)
-    }
-  }, add = TRUE)
+  restore_cache <- .vb_with_fresh_listing()
+  on.exit(restore_cache(), add = TRUE)
 
   # 3. Upload data assets with bounded exponential backoff; collect failures.
   failures <- character(0)
@@ -745,7 +763,12 @@ vb_publish <- function(paths, repo, tag,
 
   # 6. Manifest last (merge for partial publishes), with one retry.
   merged <- .vb_merge_entries(if (carry_forward) prev else NULL, entries)
-  tmp <- file.path(tempdir(), "bus_manifest.json")
+  # Must be named bus_manifest.json (pb_upload uses the basename), so give it
+  # its own directory rather than a fixed path shared by every publish.
+  tmp_dir <- tempfile("vbman")
+  dir.create(tmp_dir)
+  on.exit(unlink(tmp_dir, recursive = TRUE), add = TRUE)
+  tmp <- file.path(tmp_dir, "bus_manifest.json")
   manifest <- vb_write_manifest(merged, tag, tmp)
   up <- function() piggyback::pb_upload(tmp, repo = repo, tag = tag, overwrite = TRUE)
   tryCatch(up(), error = function(e) { Sys.sleep(5); up() })

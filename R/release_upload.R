@@ -95,12 +95,8 @@ safe_release_upload <- function(path, repo, tag, name = basename(path),
                       Sys.getpid(), sprintf("%.0f", as.numeric(Sys.time()) * 1e6), name)
 
   # Never serve piggyback a pre-upload listing (same as vb_publish()).
-  prev_cache <- Sys.getenv("piggyback_cache_duration", unset = NA)
-  Sys.setenv(piggyback_cache_duration = 1)
-  on.exit({
-    if (is.na(prev_cache)) Sys.unsetenv("piggyback_cache_duration")
-    else Sys.setenv(piggyback_cache_duration = prev_cache)
-  }, add = TRUE)
+  restore_cache <- .vb_with_fresh_listing()
+  on.exit(restore_cache(), add = TRUE)
 
   # 1. A fresh name: there is nothing to delete, so nothing can be lost here.
   tryCatch(
@@ -136,6 +132,9 @@ safe_release_upload <- function(path, repo, tag, name = basename(path),
               "vb_error_transient")
   }
 
+  # NB: concurrent publishes of the SAME asset are unsupported -- this step
+  # deletes every stranded temp copy of `name`, including one another run is
+  # still about to rename.
   # 3. Only now remove the old asset and any stranded temp copies of it. A
   #    failed delete of the real name stops here: the rename would collide.
   stale <- .release_tmp_copies(assets, name)
@@ -197,6 +196,11 @@ confirm_fresh_start <- function(repo, tag, name) {
   allowed <- trimws(strsplit(Sys.getenv("TORP_ALLOW_FRESH_START", ""), ",")[[1]])
   if ("1" %in% allowed || name %in% allowed) {
     cli::cli_alert_warning("TORP_ALLOW_FRESH_START set: starting {.val {name}} fresh without the lost-asset checks")
+    stranded <- tryCatch(.release_tmp_copies(.release_assets_with_state(repo, tag), name)$name,
+                         error = function(e) character())
+    if (length(stranded) > 0L) {
+      cli::cli_warn("Stranded temp cop{?y/ies} of {.val {name}} on {repo}@{tag} will be DELETED by the next publish: {.val {stranded}}")
+    }
     return(TRUE)
   }
 
