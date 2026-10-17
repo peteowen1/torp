@@ -266,3 +266,10 @@ CONTEST_GROUND_BALL_DESCS <- c(
 #'
 #' @keywords internal
 TEAM_RAPM_ASOF_RELEASE_TAG <- "team_rapm_asof-data"
+
+#' Default in-memory cache time-to-live in seconds (1 hour)
+#'
+#' Default TTL for entries held in the package-level memory cache.
+#'
+#' @keywords internal
+MEM_CACHE_TTL_SECS <- 3600
