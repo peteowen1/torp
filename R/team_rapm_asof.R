@@ -169,6 +169,11 @@
   out[]
 }
 
+# Exponential half-life decay shared by the as-of RAPM, SPM and decay-tuning paths.
+.team_rapm_decay_weight <- function(age_days, halflife_days) {
+  0.5 ^ (age_days / halflife_days)
+}
+
 # build_team_rapm_asof ----
 
 #' Point-in-time, decay-weighted RAPM design as of a reference date --
@@ -239,7 +244,7 @@ build_team_rapm_asof <- function(ref_date, comp = "AFLM", halflife_days = 365,
   if (any(age_days < 0)) {
     cli::cli_abort("build_team_rapm_asof: {sum(age_days < 0)} row{?s} have a match_date AFTER ref_date despite the point-in-time filter -- this is a bug, not data noise.")
   }
-  decay_weight <- 0.5 ^ (age_days / halflife_days)
+  decay_weight <- .team_rapm_decay_weight(age_days, halflife_days)
 
   c(rapm_data, list(
     decay_weight = decay_weight, ref_date = ref_date,
@@ -313,7 +318,7 @@ build_team_spm_features_asof <- function(ref_date, comp = "AFLM", halflife_days 
   if (any(age_days < 0)) {
     cli::cli_abort("build_team_spm_features_asof: {sum(age_days < 0)} row{?s} have a match_date AFTER ref_date despite the point-in-time filter -- this is a bug, not data noise.")
   }
-  ps[, decay_weight := 0.5 ^ (age_days / halflife_days)]
+  ps[, decay_weight := .team_rapm_decay_weight(age_days, halflife_days)]
   ps[, tog_minutes := pmin(pmax(time_on_ground_percentage / 100, 0), 1) * game_minutes]
 
   exclude_cols <- c("player_id", "player_name", "team_id", "match_id", "round_number",
@@ -537,7 +542,7 @@ optimize_team_rapm_decay <- function(comp = "AFLM", seasons = TRUE,
   foldid_train <- unname(fold_of_match[match_ids_train])
 
   res <- data.table::rbindlist(lapply(halflife_grid, function(hl) {
-    w <- 0.5 ^ (age_train / hl)
+    w <- .team_rapm_decay_weight(age_train, hl)
     fit <- .team_rapm_fit(full_design$X[train_idx, , drop = FALSE], full_design$y[train_idx],
                           foldid = foldid_train, seed = seed, weights = w)
     yhat <- as.vector(stats::predict(fit$model, newx = Xh, s = "lambda.min"))
