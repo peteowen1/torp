@@ -81,3 +81,22 @@ test_that("generate_urls keeps _all aggregated files for current season", {
   expect_length(urls, 1)
   expect_true(grepl("_all\\.parquet$", urls))
 })
+
+test_that("a failed release listing is negative-cached so repeat calls do not re-fetch", {
+  tag <- "test-negative-cache-tag"
+  n_calls <- 0
+  local_mocked_bindings(
+    get_torp_data_repo = function() "peteowen1/torpdata",
+    .package = "torp"
+  )
+  testthat::local_mocked_bindings(
+    gh = function(...) { n_calls <<- n_calls + 1; stop("simulated outage") },
+    .package = "gh"
+  )
+  withr::defer(torp:::invalidate_release_cache(tag))
+
+  expect_warning(torp:::get_release_assets(tag), "Could not fetch")
+  expect_null(torp:::get_release_assets(tag))
+  expect_equal(n_calls, 1)
+  expect_match(torp:::.last_release_fetch_error(tag), "simulated outage")
+})
