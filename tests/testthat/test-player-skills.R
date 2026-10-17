@@ -721,3 +721,34 @@ test_that("non-TOG-adjusted rate stats exclude availability-only rows from expos
   # TOG-adjusted stats are untouched: exposure there is TOG, which is 0 on avail rows
   expect_equal(single$goals_n80s, dat[avail_only == FALSE, .(s = sum(tog)), by = player_id][order(player_id)]$s)
 })
+
+# A198: an NA source value is unrecorded, not zero events -------------------------
+# It used to count as 0 in the numerator while the game's TOG still counted as
+# exposure, so a missing value pulled the player's rate down.
+
+test_that("rate stats leave NA source rows out of numerator AND exposure", {
+  dat <- create_mock_stat_rating_data()
+  na_rows <- which(dat$player_id == "1" & !dat$avail_only)[1:2]
+  dat[na_rows, goals := NA_real_]
+  p1 <- dat[player_id == "1" & avail_only == FALSE & !is.na(goals)]
+  expected_raw <- sum(p1$goals) / sum(p1$tog)
+  expected_n80s <- sum(p1$tog)
+
+  expect_warning(
+    single <- estimate_player_stat_ratings(dat, compute_ci = FALSE),
+    "NA source values on played rows"
+  )
+  expect_equal(single[player_id == "1"]$goals_raw, expected_raw)
+  expect_equal(single[player_id == "1"]$goals_n80s, expected_n80s)
+
+  expect_warning(
+    suppressMessages(batch <- .estimate_stat_ratings_batch(
+      dat, max(dat$match_date_rating) + 1L, compute_ci = FALSE)[[1]]),
+    "NA source values on played rows"
+  )
+  expect_equal(batch[player_id == "1"]$goals_raw, expected_raw)
+  expect_equal(batch[player_id == "1"]$goals_n80s, expected_n80s)
+
+  # Players with no NA are unaffected, and no warning fires on clean data
+  expect_no_warning(estimate_player_stat_ratings(create_mock_stat_rating_data(), compute_ci = FALSE))
+})

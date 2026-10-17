@@ -80,6 +80,21 @@
   lookup
 }
 
+#' Warn about rate-stat source values that were NA on played rows
+#'
+#' Such rows are excluded from both the numerator and the exposure (they are
+#' unrecorded, not zero), so say how many there were.
+#' @param na_src_rows Named integer vector: stat name -> played rows with an NA source.
+#' @keywords internal
+#' @noRd
+.warn_na_rate_source <- function(na_src_rows) {
+  if (length(na_src_rows) == 0) return(invisible(NULL))
+  cli::cli_warn(c(
+    "{length(na_src_rows)} rate stat(s) had NA source values on played rows ({sum(na_src_rows)} stat-rows in total); those rows were excluded from the numerator and the exposure.",
+    "i" = "Per stat: {paste(names(na_src_rows), na_src_rows, sep = ' = ', collapse = ', ')}"
+  ))
+}
+
 # ============================================================================
 # Core stat rating estimation
 # ============================================================================
@@ -209,6 +224,7 @@ estimate_player_stat_ratings <- function(stat_rating_data, ref_date = NULL,
 
   skill_results <- list()
   skipped_stats <- character(0)
+  na_src_rows <- integer(0)  # rate stat -> played rows whose source value is NA
 
   # Per-stat lambda/prior: stat_params > category_params > global fallback
   # (.stat_rate_params / .stat_eff_params, shared with the batch estimator)
@@ -234,7 +250,14 @@ estimate_player_stat_ratings <- function(stat_rating_data, ref_date = NULL,
     prior_str <- rp$prior
 
     vals <- as.numeric(dt[[use_col]])
-    vals[is.na(vals)] <- 0
+    # An NA source value is "not recorded", not "zero events": the row leaves
+    # both the numerator and the exposure (A198). Availability-only rows are NA
+    # by construction and carry no TOG exposure anyway, so only played rows are
+    # counted and reported.
+    na_src <- is.na(vals)
+    vals[na_src] <- 0
+    n_na_played <- sum(na_src & !dt$avail_only)
+    if (n_na_played > 0) na_src_rows[stat_nm] <- n_na_played
 
     # Use TOG as exposure denominator unless stat is not TOG-adjusted
     is_tog_adj <- is.na(rate_defs$tog_adjusted[i]) || isTRUE(rate_defs$tog_adjusted[i])
@@ -254,6 +277,7 @@ estimate_player_stat_ratings <- function(stat_rating_data, ref_date = NULL,
       # the per-game rate of anyone who misses rounds (B69).
       tog_vals <- as.numeric(!dt$avail_only)
     }
+    tog_vals[na_src] <- 0
 
     w_vec <- exp(-stat_lambda * dt$days_since)
 
@@ -436,6 +460,7 @@ estimate_player_stat_ratings <- function(stat_rating_data, ref_date = NULL,
   if (length(skipped_stats) > 0) {
     cli::cli_warn("Skipped {length(skipped_stats)} stat(s) due to missing columns: {paste(skipped_stats, collapse = ', ')}")
   }
+  .warn_na_rate_source(na_src_rows)
 
   # Clean up temp columns
   tmp_cols <- intersect(c(".wnum", ".wden", ".w_rate", ".tog_safe", ".raw_vals", ".raw_tog",
@@ -781,6 +806,7 @@ estimate_player_stat_ratings <- function(stat_rating_data, ref_date = NULL,
   rate_defs <- stat_defs[stat_defs$type == "rate", ]
   eff_defs  <- stat_defs[stat_defs$type == "efficiency", ]
   skipped_stats <- character(0)
+  na_src_rows <- integer(0)  # rate stat -> played rows whose source value is NA
   t_stats <- proc.time()
 
   n_total_stats <- nrow(rate_defs) + nrow(eff_defs)
@@ -803,11 +829,16 @@ estimate_player_stat_ratings <- function(stat_rating_data, ref_date = NULL,
     lam <- rp$lambda
     prior_str <- rp$prior
 
-    vals <- as.numeric(dt[[src_col]]); vals[is.na(vals)] <- 0
+    vals <- as.numeric(dt[[src_col]])
+    na_src <- is.na(vals)  # not recorded: out of numerator AND exposure (A198)
+    vals[na_src] <- 0
+    n_na_played <- sum(na_src & !dt$avail_only)
+    if (n_na_played > 0) na_src_rows[stat_nm] <- n_na_played
     is_tog_adj <- is.na(rate_defs$tog_adjusted[i]) || isTRUE(rate_defs$tog_adjusted[i])
     # NA tog -> 1 here but 0 in .tog_safe (80s counts): see the note in
     # estimate_player_stat_ratings().
     tog_vals <- if (is_tog_adj) { tv <- as.numeric(dt$tog); tv[is.na(tv)] <- 1; tv } else as.numeric(!dt$avail_only)  # played rows only (B69)
+    tog_vals[na_src] <- 0
 
     base_w <- exp(lam * dt$.d)
 
@@ -1042,6 +1073,7 @@ estimate_player_stat_ratings <- function(stat_rating_data, ref_date = NULL,
 
   if (length(skipped_stats) > 0)
     cli::cli_warn("Skipped {length(skipped_stats)} stat(s) due to missing columns: {paste(skipped_stats, collapse = ', ')}")
+  .warn_na_rate_source(na_src_rows)
 
   # === Filter and split into per-ref_date results ===
   res <- res[wt_games >= params$min_games]
