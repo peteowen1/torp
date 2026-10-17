@@ -25,7 +25,9 @@ theme_torp <- function(base_size = 12) {
 #' @export
 #' @importFrom ggplot2 scale_colour_manual
 team_color_scale <- function(...) {
-  args <- utils::modifyList(list(values = AFL_TEAM_COLORS), list(...))
+  # Not modifyList(): it drops NULL entries, losing a caller's name = NULL.
+  args <- list(...)
+  if (!"values" %in% names(args)) args$values <- AFL_TEAM_COLORS
   do.call(ggplot2::scale_colour_manual, args)
 }
 
@@ -38,7 +40,9 @@ team_color_scale <- function(...) {
 #' @export
 #' @importFrom ggplot2 scale_fill_manual
 team_fill_scale <- function(...) {
-  args <- utils::modifyList(list(values = AFL_TEAM_COLORS), list(...))
+  # Not modifyList(): it drops NULL entries, losing a caller's name = NULL.
+  args <- list(...)
+  if (!"values" %in% names(args)) args$values <- AFL_TEAM_COLORS
   do.call(ggplot2::scale_fill_manual, args)
 }
 

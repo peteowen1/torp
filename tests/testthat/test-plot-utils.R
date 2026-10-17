@@ -75,3 +75,11 @@ test_that("team colour scales accept a caller-supplied values=", {
   expect_s3_class(team_color_scale(values = c(A = "red")), "Scale")
   expect_s3_class(team_fill_scale(values = c(A = "red")), "Scale")
 })
+
+test_that("team colour scales keep an explicit name = NULL (no legend title)", {
+  expect_null(team_color_scale(name = NULL)$name)
+  expect_null(team_fill_scale(name = NULL)$name)
+  # default stays the ggplot2 waiver (auto title)
+  expect_true(inherits(team_color_scale()$name, "waiver"))
+  expect_equal(team_color_scale(name = "Club")$name, "Club")
+})
