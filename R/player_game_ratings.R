@@ -142,11 +142,11 @@ player_game_ratings <- function(season_val = get_afl_season(),
   # something as net_points that is not actually the ledger's own value.
   #
   # It is optional only so a partial frame (a test fixture, a caller
-  # assembling channels by hand) still works -- but its absence is said out
-  # loud, because a display column that silently disappears is worse than one
-  # that fails. Every pipeline caller supplies at least `epv`.
+  # assembling channels by hand, a v2/v3 frame) still works -- but its absence
+  # is said out loud and the column is NA, never filled from `epv`: a raw epv
+  # is not the ledger value, and labelling it net_points is exactly the
+  # mislabel the paragraph above rules out.
   has_np <- "net_points" %in% names(df)
-  np_col <- if (has_np) "net_points" else "epv"
   if (has_np && "epv" %in% names(df)) {
     np_gap <- max(abs(df$epv - df$net_points), na.rm = TRUE)
     if (is.finite(np_gap) && np_gap > 1e-6) {
@@ -156,14 +156,15 @@ player_game_ratings <- function(season_val = get_afl_season(),
       ))
     }
   }
-  if (!np_col %in% names(df)) {
+  if (!has_np) {
     cli::cli_alert_warning(
-      "No {.field epv} or {.field net_points} column on the input: the result will carry no {.field net_points}, the value that sums to a team's own margin.")
+      "No {.field net_points} column on the input: {.field net_points} (the value that sums to a team's own margin) will be NA in the result. {.field epv} is not substituted for it.")
   }
 
   # After the epv/net_points gate above (its message is the more useful one when
   # they disagree), before anything below centres the channels.
   df <- .np_raw_parts(df)
+  if (!has_np) df$net_points <- NA_real_
 
   # Use _oadj (opponent-adjusted) columns when available, fall back to raw
   has_oadj <- all(c("epv_recv_oadj", "epv_disp_oadj",
@@ -234,9 +235,8 @@ player_game_ratings <- function(season_val = get_afl_season(),
       # the own margin exactly (mean gap 0.00), `epv` misses by 9.56 on average.
       # See docs/plans/EPV-DISPLAY-COLUMN.md. Additive on purpose: nothing that
       # already reads `epv` changes. Sourced from the real net_points column
-      # when the frame has one (see np_col above), never re-derived from epv
-      # when a genuine ledger value is available.
-      net_points = dplyr::any_of(np_col),
+      # when the frame has one, NA when it does not -- never re-derived from epv.
+      net_points = "net_points",
       # The WPA ledger (docs/plans/WPA-NET-LEDGER.md), uncentred for the same
       # reason as net_points: wpa_net sums per team to the result minus the
       # pre-match forecast, and centring would break that. wpa_neutral starts

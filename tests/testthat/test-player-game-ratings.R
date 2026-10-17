@@ -293,7 +293,7 @@ test_that("print.torp_player_profile produces output", {
 # own margin by 0.000 on average, `epv` by 9.56.
 # Analysis: docs/plans/EPV-DISPLAY-COLUMN.md.
 
-np_mock <- function(with_epv = TRUE) {
+np_mock <- function(with_epv = TRUE, with_np = TRUE) {
   d <- data.frame(
     player_id = paste0("P", 1:6),
     match_id = rep(c("M1", "M2"), each = 3),
@@ -312,6 +312,8 @@ np_mock <- function(with_epv = TRUE) {
     stringsAsFactors = FALSE
   )
   if (with_epv) d$epv <- c(5, 3, -1, 4, 2, -2)
+  # v4 frames always carry the ledger column (equal to epv, asserted upstream)
+  if (with_epv && with_np) d$net_points <- d$epv
   d
 }
 
@@ -352,12 +354,24 @@ test_that("epv and net_points disagreeing beyond the gate aborts rather than mis
     "disagree")
 })
 
-test_that("net_points is absent but announced when the frame has no epv", {
+test_that("net_points is NA, not raw epv, when the frame has no ledger column", {
+  # A v2/v3 frame has epv but no net_points. Publishing epv under the name
+  # net_points would be the mislabel the ledger column exists to prevent.
+  m <- np_mock(with_np = FALSE)
+  expect_message(
+    r <- torp:::.compute_player_game_ratings(m, 2025L, 1L),
+    "No net_points column")
+  expect_true("net_points" %in% names(r))
+  expect_true(all(is.na(r$net_points)))
+  expect_true(all(c("np_own", "np_won", "np_team") %in% names(r)))
+})
+
+test_that("net_points is NA but announced when the frame has no epv either", {
   m <- np_mock(with_epv = FALSE)
   expect_message(
     r <- torp:::.compute_player_game_ratings(m, 2025L, 1L),
-    "No epv or net_points column")
-  expect_false("net_points" %in% names(r))
+    "No net_points column")
+  expect_true(all(is.na(r$net_points)))
   # the rest of the frame is unaffected -- this is a degraded input, not a failure
   expect_true(all(c("epv", "epv_p80") %in% names(r)))
 })
