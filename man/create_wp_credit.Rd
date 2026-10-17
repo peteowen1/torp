@@ -10,8 +10,9 @@ create_wp_credit(pbp_data = NULL, disp_share = WP_CREDIT_DISP_SHARE)
 \item{pbp_data}{Play-by-play data with WPA already computed (via
 \code{add_wp_vars()}). Must contain columns: \code{wpa}, \code{player_id},
 \code{player_name}, \code{lead_player_id}, \code{pos_team},
-\code{display_order}, \code{match_id}, \code{team}, \code{season},
-\code{round_number}, \code{utc_start_time}. If NULL, loads and prepares
+\code{display_order}, \code{match_id}, \code{team}, \code{round_number},
+\code{utc_start_time} (the output \code{season} is derived from the year
+of \code{utc_start_time}), \code{description}. If NULL, loads and prepares
 data via \code{load_pbp()}.}
 
 \item{disp_share}{Fraction of WPA credited to the disposer (0-1). Default is

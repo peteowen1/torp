@@ -11,8 +11,16 @@
 #'   inference; without a fixed seed each retraining produces a different model.
 #'   Scoped via [withr::local_seed()] so the caller's RNG stream is not affected.
 #'
+#' @details
+#' \strong{Deprecated.} The quarter-break states are simulated from the
+#' final score (scaled final margin plus noise), so the margin feature is a
+#' copy of the outcome and the fitted model leaks the result. Use the live
+#' XGBoost win probability model trained in torpmodels instead. Do not ship
+#' these coefficients.
+#'
 #' @return A list with: coefficients (named list), model (glm object), data (training data)
 #' @export
+#' @keywords internal
 #'
 #' @examples
 #' \dontrun{
@@ -23,6 +31,10 @@
 fit_win_probability <- function(seasons = 2010:2025,
                                 output_path = NULL,
                                 seed = 20250101L) {
+  cli::cli_warn(c(
+    "{.fn fit_win_probability} is deprecated: it simulates quarter-break scores from final scores, leaking the outcome.",
+    "i" = "Use the live win probability model trained in torpmodels instead."
+  ))
   withr::local_seed(seed)
   cli::cli_h1("Fitting AFL Win Probability Model")
 
@@ -88,6 +100,10 @@ fit_win_probability <- function(seasons = 2010:2025,
   }
 
   training_data <- do.call(rbind, training_rows[seq_len(idx - 1)])
+
+  if (is.null(training_data) || nrow(training_data) == 0) {
+    cli::cli_abort("No usable concluded matches for win probability training")
+  }
 
   cli::cli_alert_info("Training data: {nrow(training_data)} rows ({nrow(training_data)/4} matches x 4 quarters)")
 
