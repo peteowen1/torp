@@ -11,7 +11,7 @@
 # week-by-week reconstruction (expensive -- retrains 5 GAMs + 5 XGBoost
 # models per round). Production instead uses a single temporal holdout (the
 # same pattern already proven for wp_calibration/fit_wp_temporal_variant()):
-# train on all seasons except the most recently completed one, score that
+# train on all seasons except the latest season with results, score that
 # season out-of-sample, fit the scale on those predictions. Cheaper (one
 # extra full training pass per retrain, not dozens), and the WP precedent
 # shows this pattern ships reliably.
@@ -20,12 +20,20 @@
 
 #' Fit a leak-safe margin recalibration scale via one temporal holdout
 #'
-#' Trains the GAM+XGBoost chain on all seasons strictly before the most
-#' recently completed season in `team_mdl_df`, scores that held-out season
-#' with the resulting models (same 50/50 Input Blend used in production,
+#' Trains the GAM+XGBoost chain on all seasons strictly before the latest
+#' season with results in `team_mdl_df`, scores that held-out season
+#' with the resulting models (same Input Blend used in production,
+#' \code{MATCH_BLEND_WEIGHT}, currently 1.0 = pure GAM;
 #' \code{run_predictions_pipeline()}'s blend block), and fits
 #' \code{b = coef(lm(margin ~ pred_margin + 0))} on those honest OOS
 #' predictions (V1a's "slope_only" mode).
+#'
+#' The holdout is the latest season with ANY result, so in an in-progress
+#' season it is the partial current season: early in the year \code{n_oos}
+#' is often below \code{MATCH_RECAL_MIN_N} and the fit cold-starts to
+#' \code{b = 1}. \code{slope_raw} (what the gate tests) comes from
+#' \code{lm(margin ~ pred_margin)} WITH an intercept, whereas the shipped
+#' \code{b} is through the origin, so the two can differ slightly.
 #'
 #' @param team_mdl_df Complete model dataset from \code{.build_team_mdl_df()}
 #' @param nthreads Threads for the holdout GAM fit (default 4)
@@ -72,12 +80,20 @@ fit_match_margin_calibration <- function(team_mdl_df, nthreads = 4L) {
     pred_margin = xgb_data$pred_score_diff_blend[test_mask],
     margin      = xgb_data$score_diff[test_mask]
   )
+  has_match_id <- "match_id" %in% names(xgb_data)
+  if (has_match_id) oos$match_id <- xgb_data$match_id[test_mask]
   oos <- oos[stats::complete.cases(oos), ]
   # team_mdl_df (and therefore xgb_data) is long -- one row per team per
   # match -- so nrow(oos) is a ROW count. n_oos must mean MATCH count
   # everywhere below (MATCH_RECAL_MIN_N and the release gate are both
-  # documented in match counts), so halve it here, once, at the source.
-  n_oos <- nrow(oos) / 2
+  # documented in match counts), so convert here, once, at the source: count
+  # matches with both rows complete (an unpaired row would make nrow/2 a
+  # half-integer). Without a match_id column, fall back to halving.
+  n_oos <- if (has_match_id) {
+    sum(table(oos$match_id) == 2L)
+  } else {
+    nrow(oos) / 2
+  }
 
   slope_raw <- if (n_oos >= 2) {
     tryCatch(unname(stats::coef(stats::lm(margin ~ pred_margin, data = oos))[["pred_margin"]]),
