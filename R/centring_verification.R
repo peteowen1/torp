@@ -52,10 +52,15 @@ verify_epv_level_centring <- function(pgd,
                                       tol = 1e-8,
                                       shrink_on = isTRUE(EPV_POSITION_SHRINK)) {
   lc <- if (all(paste0(channels, "_oadj") %in% names(pgd))) "_oadj" else "_adj"
-  chk <- data.table::as.data.table(pgd)
-  chk[, `:=`(pos_bucket = .collapse_listed_position(position_group),
-             w = pmax(dplyr::coalesce(time_on_ground_percentage / 100, 0.1), 0.1))]
-  chk <- chk[!is.na(pos_bucket)]
+  # Slim frame of only the key and weight columns; channel values are read per
+  # iteration by [[ ]], so the full player-game frame is never copied.
+  pos_bucket <- .collapse_listed_position(pgd[["position_group"]])
+  keep <- !is.na(pos_bucket)
+  chk <- data.table::data.table(
+    season = pgd[["season"]][keep],
+    round = pgd[["round"]][keep],
+    pos_bucket = pos_bucket[keep],
+    w = pmax(dplyr::coalesce(pgd[["time_on_ground_percentage"]][keep] / 100, 0.1), 0.1))
 
   # Fail CLOSED. `worst` starts at 0 and is only ever RAISED, so if every cell
   # is empty -- position_group missing or renamed, or every value unmapped --
@@ -78,28 +83,34 @@ verify_epv_level_centring <- function(pgd,
   worst <- 0
   n_cells <- 0L
   for (cc in paste0(channels, lc)) {
-    m <- chk[is.finite(get(cc)),
-             .(wm = stats::weighted.mean(get(cc), w)),
-             by = .(season, round, pos_bucket)]
+    vals <- as.numeric(pgd[[cc]][keep])
+    fin <- is.finite(vals)
+    m <- data.table::data.table(season = chk$season[fin], round = chk$round[fin],
+                                pos_bucket = chk$pos_bucket[fin],
+                                w = chk$w[fin], v = vals[fin])[
+      , .(wm = stats::weighted.mean(v, w)), by = .(season, round, pos_bucket)]
     if (nrow(m) == 0) next
     m[, expected := 0]
     if (!is.null(cells) && nrow(cells) > 0) {
       ce <- data.table::as.data.table(cells)[channel == cc,
                                              .(season, round, pos_bucket, resid_expected)]
+      # With shrinkage ON a missing record cannot be read as "expected 0": the
+      # join-update below writes only to cells that MATCH `ce`, so an unrecorded
+      # cell would silently keep 0 and fail later as "did not take". Name it here.
+      if (shrink_on) {
+        n_unrecorded <- nrow(m[!ce, on = .(season, round, pos_bucket)])
+        if (n_unrecorded > 0) {
+          cli::cli_abort(c(
+            "{n_unrecorded} cell{?s} of {.field {cc}} have no recorded correction.",
+            "x" = "Refusing to treat an unrecorded cell as if it had been centred."
+          ))
+        }
+      }
       if (nrow(ce) > 0) {
         m[ce, expected := i.resid_expected, on = .(season, round, pos_bucket)]
-        # KNOWN GAP, documented rather than fixed here (see
-        # test-centring-verification.R). This is a join-UPDATE: it writes only
-        # to rows of `m` that MATCH `ce`. A cell absent from `ce` keeps its
-        # `expected = 0` default and never becomes NA, so the check below sees
-        # only explicitly-NA recorded residuals -- not missing ones. The
-        # original comment here claimed otherwise.
-        #
-        # Harmless today: EPV_POSITION_SHRINK is FALSE, so every true residual
-        # is 0 and 0 is the right expectation. With shrinkage ON an unrecorded
-        # cell trips the tolerance check instead, so it still fails -- just
-        # with a message blaming centring rather than the missing record.
-        # Tightening it is a ratings-pipeline decision, not a refactor.
+        # Without shrinkage an unrecorded cell keeps expected = 0, which is the
+        # right expectation (every true residual is 0). Only an explicit NA in
+        # the record is caught here.
         if (anyNA(m$expected)) {
           cli::cli_abort(c(
             "{sum(is.na(m$expected))} cell{?s} of {.field {cc}} have no recorded correction.",
@@ -165,11 +176,17 @@ verify_epv_level_centring <- function(pgd,
 #'   Aborts on any failure.
 #' @keywords internal
 verify_epr_position_centring <- function(epr_df, tol = 1e-6) {
-  chk <- data.table::as.data.table(epr_df)
-  chk[, pos_bucket := .collapse_listed_position(position_group)]
+  # Slim frame; same weight as centre_epr_by_position(): NA/non-finite pred_tog
+  # gets weight 0 (excluded), otherwise floored at 0.01.
+  w <- as.numeric(epr_df[["pred_tog"]])
+  chk <- data.table::data.table(
+    season = epr_df[["season"]], round = epr_df[["round"]],
+    pos_bucket = .collapse_listed_position(epr_df[["position_group"]]),
+    epr = epr_df[["epr"]],
+    w = ifelse(is.finite(w), pmax(w, 0.01), 0))
   chk <- chk[
     !is.na(pos_bucket),
-    .(wmean = stats::weighted.mean(epr, pmax(pred_tog, 0.01), na.rm = TRUE),
+    .(wmean = stats::weighted.mean(epr, w, na.rm = TRUE),
       n = .N, n_rated = sum(is.finite(epr))),
     by = .(season, round, pos_bucket)]
 
