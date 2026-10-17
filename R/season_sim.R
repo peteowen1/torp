@@ -108,7 +108,8 @@ prepare_sim_data <- function(season, team_ratings = NULL, fixtures = NULL,
 
   # Filter to target season (normalised fixtures use canonical `season` column)
   if ("season" %in% names(fix_dt)) {
-    fix_dt <- fix_dt[get("season") == season]
+    target_season <- season  # bare `season` inside i would be the column
+    fix_dt <- fix_dt[season == target_season]
   }
 
   # Build sim_games from canonical fixture columns
@@ -369,7 +370,7 @@ prepare_sim_data <- function(season, team_ratings = NULL, fixtures = NULL,
       if (is.null(pr) || nrow(pr) == 0) {
         cli::cli_abort("Could not load team or player ratings. Provide them via the {.arg team_ratings} argument.")
       }
-      pr_dt <- data.table::as.data.table(pr)
+      pr_dt <- if (data.table::is.data.table(pr)) pr else data.table::as.data.table(pr)
 
       # Filter to the REQUESTED season, not the newest one in the file.
       # torp_ratings.parquet is full-history and upserted every run, and
@@ -415,6 +416,10 @@ prepare_sim_data <- function(season, team_ratings = NULL, fixtures = NULL,
         max_round <- max(pr_dt$round, na.rm = TRUE)
         pr_dt <- pr_dt[round == max_round]
       }
+
+      # Copy the (now filtered) table so the in-place edits below never touch
+      # the caller's ratings
+      pr_dt <- data.table::copy(pr_dt)
 
       # Normalise rating column name: epr -> torp for consistency
       if ("epr" %in% names(pr_dt) && !"torp" %in% names(pr_dt)) {
@@ -523,6 +528,9 @@ prepare_sim_data <- function(season, team_ratings = NULL, fixtures = NULL,
     pred_ht  <- .resolve_col(pred_dt, c("home_team", "home_team_name"))
 
     if (!is.null(pred_rnd) && !is.null(pred_ht) && "pred_xtotal" %in% names(pred_dt)) {
+      if (anyDuplicated(pred_dt[, c(pred_rnd, pred_ht), with = FALSE])) {
+        cli::cli_warn("{.arg predictions} has duplicate ({pred_rnd}, {pred_ht}) rows; pred_xtotal for those games is taken from an arbitrary one.")
+      }
       sim_games[pred_dt,
         pred_xtotal := i.pred_xtotal,
         on = stats::setNames(c(pred_rnd, pred_ht), c("roundnum", "home_team"))
