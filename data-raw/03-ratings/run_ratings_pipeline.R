@@ -235,7 +235,9 @@ cli::cli_inform("Player game data loaded: {nrow(all_pgd)} rows, {ncol(all_pgd)} 
 # it is invisible in row counts.
 .adj_cols <- grep("_adj$", names(all_pgd), value = TRUE)
 if (length(.adj_cols) > 0 && "season" %in% names(all_pgd)) {
-  .cov <- data.table::as.data.table(all_pgd)[
+  # Subset to the columns used BEFORE as.data.table() so the copy is of season +
+  # the _adj columns, not the whole player-game table.
+  .cov <- data.table::as.data.table(as.list(all_pgd)[c("season", .adj_cols)])[
     , lapply(.SD, function(x) mean(!is.na(x))), by = "season", .SDcols = .adj_cols]
   .mixed <- .adj_cols[vapply(.adj_cols, function(cc) {
     v <- .cov[[cc]]; any(v < 0.01) && any(v > 0.99)
@@ -279,12 +281,19 @@ data.table::setkey(all_pgd, match_id)
 
 # Pre-load shared data once — avoids ~145 redundant loads per full rebuild
 cli::cli_progress_step("Pre-loading shared reference data")
+# A failed/empty load is fatal: continuing would feed a constant (or absent)
+# squad_selection_rating into pred_tog and publish the changed numbers.
 shared_stat_ratings <- tryCatch(get_player_stat_ratings(current = FALSE), error = function(e) {
-  cli::cli_alert_danger("Could not load stat ratings: {conditionMessage(e)}")
-  NULL
+  cli::cli_abort(c("Could not load stat ratings; refusing to build ratings without them.",
+                   "x" = conditionMessage(e)),
+                 class = c("torp_error_stat_ratings", "vb_error_integrity"), parent = e)
 })
+if (is.null(shared_stat_ratings) || nrow(shared_stat_ratings) == 0) {
+  cli::cli_abort("Stat ratings came back empty; refusing to build ratings without them.",
+                 class = c("torp_error_stat_ratings", "vb_error_integrity"))
+}
 # Backwards compat: rename time_on_ground_rating → cond_tog_rating if needed
-if (!is.null(shared_stat_ratings)) {
+{
   if (!"cond_tog_rating" %in% names(shared_stat_ratings) && "time_on_ground_rating" %in% names(shared_stat_ratings)) {
     shared_stat_ratings$cond_tog_rating <- shared_stat_ratings$time_on_ground_rating
   }
@@ -296,8 +305,9 @@ if (!is.null(shared_stat_ratings)) {
     if ("squad_selection_skill" %in% names(shared_stat_ratings)) {
       shared_stat_ratings$squad_selection_rating <- shared_stat_ratings$squad_selection_skill
     } else {
-      cli::cli_alert_danger("Stat ratings missing squad_selection_rating; using cond_tog_rating alone as pred_tog")
-      shared_stat_ratings$squad_selection_rating <- 1
+      # No constant-1 fallback: it silently changes pred_tog and so the published ratings.
+      cli::cli_abort("Stat ratings are missing squad_selection_rating (and squad_selection_skill); refusing to build ratings.",
+                     class = c("torp_error_stat_ratings", "vb_error_integrity"))
     }
   }
 }
@@ -315,7 +325,7 @@ empty_seasons <- character()
 
 for (s in seasons) {
   tryCatch({
-    start_round <- if (s >= 2024) 0 else 1
+    start_round <- get_start_round(s)
     max_round <- if (s == get_afl_season()) {
       get_afl_week(type = "next")
     } else {
@@ -468,10 +478,9 @@ if (nrow(torp_new) > 0) {
     verify_epr_position_centring(torp_df_total)
   }
 
-  if (!is.null(psr_df) && nrow(psr_df) > 0 && "psr" %in% names(psr_df)) {
-    torp_df_total <- calculate_torp(torp_df_total, psr_df)
-    cli::cli_alert_success("Blended PSR into ratings ({sum(!is.na(torp_df_total$torp))} rows with torp)")
-  }
+  # PSR presence is guaranteed by the abort above.
+  torp_df_total <- calculate_torp(torp_df_total, psr_df)
+  cli::cli_alert_success("Blended PSR into ratings ({sum(!is.na(torp_df_total$torp))} rows with torp)")
 
   # Manifest-backed second opinion on top of the vb_guard_accumulate() above.
   # That one compares against `existing` as loaded in this process; if the load
@@ -485,6 +494,9 @@ if (nrow(torp_new) > 0) {
   uploaded <- tryCatch(load_torp_ratings(version = RATINGS_VINTAGE), error = function(e) NULL)
   if (is.null(uploaded) || nrow(uploaded) != nrow(torp_df_total)) {
     cli::cli_alert_danger("Upload verification failed - piggyback cache delay may be the cause")
+    cli::cli_abort(c("Could not read {vintage_stem} back after upload (or the row count differs); not publishing the manifest.",
+                     "i" = "Re-run once the release cache has caught up."),
+                   class = c("torp_error_upload_verification", "vb_error_integrity"))
   }
   cli::cli_alert_success("Released {vintage_stem} ({nrow(torp_df_total)} rows)")
 
@@ -564,9 +576,9 @@ tryCatch({
       # published before this ran.
       #
       # .wsum(), not sum(..., na.rm = TRUE). calculate_torp() -- the only step
-      # that adds `torp`/`psr` -- runs conditionally on PSR computing
-      # successfully, and that already has a logged failure path. When it is
-      # skipped, this round's rows carry NA torp (the column survives the
+      # that adds `torp`/`psr` -- always runs when ratings are published
+      # (the PSR gate above aborts otherwise), but a round's rows can still lack
+      # it, e.g. when Stage 4 falls back to a previously released table. Those rows carry NA torp (the column survives the
       # rows_upsert from previous rows). `sum(all-NA, na.rm = TRUE)` is 0, NOT
       # NA, so every team's team_torp would publish as exactly 0.00 -- a
       # perfectly-shaped column asserting that all 18 teams are identical.
