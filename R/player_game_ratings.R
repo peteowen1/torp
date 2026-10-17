@@ -679,9 +679,16 @@ player_season_stats <- function(season_val = get_afl_season(),
   # row). Strict callers publish, and the blog's game-logs gate refuses any NA
   # psv, so a partial gap aborts too. Every published season 2021-2026 had PSV
   # on all rows (58,324 of 58,324, checked 2026-10-18).
-  n_na <- if ("psv" %in% names(pgr)) sum(is.na(pgr$psv)) else 0L
-  if (isTRUE(strict) && n_na > 0) {
-    cli::cli_abort("PSV missing on {n_na} of {nrow(pgr)} rows of the {season} game ratings")
+  if (isTRUE(strict)) {
+    # psv_fail() covers the whole-failure paths; this catches a result that
+    # merged other columns (osv/dsv) but no psv, and rows left unmatched.
+    if (!"psv" %in% names(pgr)) {
+      cli::cli_abort("PSV missing from the {season} game ratings: the PSV result had no psv column")
+    }
+    n_na <- sum(is.na(pgr$psv))
+    if (n_na > 0) {
+      cli::cli_abort("PSV missing on {n_na} of {nrow(pgr)} rows of the {season} game ratings")
+    }
   }
   pgr
 }
