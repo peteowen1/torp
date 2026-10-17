@@ -59,6 +59,9 @@ calculate_player_attribution <- function(match_features,
 
   # Ablate each rating column and measure impact
   available_cols <- intersect(player_rating_cols, names(match_features))
+  if (length(available_cols) == 0) {
+    cli::cli_abort("None of {.arg player_rating_cols} are columns of {.arg match_features}.")
+  }
 
   results <- do.call(rbind, lapply(available_cols, function(col) {
     ablated <- match_features
@@ -97,24 +100,35 @@ calculate_player_attribution <- function(match_features,
 #' @param player_rating_cols Character vector. Rating columns to ablate.
 #' @param baseline_value Numeric. Ablation baseline. Default 0.
 #'
-#' @return Data frame with per-feature average contributions across matches
+#' @return Data frame with per-feature average contributions across matches:
+#'   `mean_contribution`, `sd_contribution` (`NA` for a feature seen in only one
+#'   match), `n_matches` and `n_failed` (matches that errored and were dropped,
+#'   repeated on every row).
 #' @export
 batch_player_attribution <- function(match_features_list,
                                       predict_fn,
                                       player_rating_cols,
                                       baseline_value = 0) {
 
+  fail_msgs <- character(0)
   all_results <- lapply(match_features_list, function(features) {
     tryCatch(
       calculate_player_attribution(features, predict_fn, player_rating_cols, baseline_value),
-      error = function(e) NULL
+      error = function(e) {
+        fail_msgs <<- c(fail_msgs, conditionMessage(e))
+        NULL
+      }
     )
   })
 
   all_results <- Filter(Negate(is.null), all_results)
+  n_failed <- length(fail_msgs)
+  if (n_failed > 0 && length(all_results) > 0) {
+    cli::cli_warn("{n_failed} of {length(match_features_list)} match{?es} failed and {?was/were} dropped. First error: {fail_msgs[1]}")
+  }
 
   if (length(all_results) == 0) {
-    cli::cli_warn("No successful attributions computed")
+    cli::cli_warn("No successful attributions computed. First error: {fail_msgs[1]}")
     return(data.frame())
   }
 
@@ -132,6 +146,7 @@ batch_player_attribution <- function(match_features_list,
     mean_contribution = agg$contribution[, "mean"],
     sd_contribution = agg$contribution[, "sd"],
     n_matches = agg$contribution[, "n"],
+    n_failed = n_failed,
     stringsAsFactors = FALSE
   )
 
