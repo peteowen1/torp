@@ -464,3 +464,28 @@ test_that(".attach_listed_pos takes the LATEST listing by season, whatever the r
   expect_equal(a$.listed_bucket, b$.listed_bucket)
   expect_equal(a$.listed_bucket[a$player_id == "P1"], .collapse_listed_position("MIDFIELDER"))
 })
+
+test_that("explain_player_plays: match_id actually filters the play-by-play (review B79)", {
+  # `dt[dt$match_id %in% match_id]` compared the column with itself and kept
+  # every row, so the match_id argument never filtered anything.
+  pbp <- data.table::data.table(
+    match_id = rep(c("M1", "M2"), each = 4),
+    display_order = rep(1:4, 2),
+    period = 1L,
+    round_week = rep(c("01", "02"), each = 4),
+    player_id = "OTHER", lead_player_id = "CD_I1",
+    pos_team = 1L, delta_epv = c(0.5, -0.2, 0.3, 0.1, 1, 1, 1, 1),
+    lead_desc_tot = "Kick"
+  )
+  out <- NULL
+  suppressMessages(utils::capture.output(
+    out <- explain_player_plays("CD_I1", season = 2026L, match_id = "M1",
+                                top_n = 1, pbp_data = pbp)
+  ))
+  expect_equal(unique(out$as_receiver$match_id), "M1")
+  expect_equal(nrow(out$as_receiver), 4L)
+  expect_error(
+    suppressMessages(utils::capture.output(
+      explain_player_plays("CD_I1", season = 2026L, match_id = "NOPE", pbp_data = pbp))),
+    "No play-by-play rows")
+})

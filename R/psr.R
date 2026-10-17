@@ -1121,7 +1121,15 @@ explain_player_plays <- function(player,
   # Filter to the requested match(es) BEFORE sorting, so a one-match request
   # does not sort the whole season.
   if (!is.null(match_id)) {
-    dt <- dt[dt$match_id %in% match_id]
+    # NOT `dt[dt$match_id %in% match_id]`: inside [, the bare `match_id` on the
+    # right resolves to the COLUMN, so that filter compared the column with
+    # itself and kept every row -- the match_id argument never filtered
+    # anything. Capture the argument under a name that is not a column.
+    wanted_matches <- match_id
+    dt <- dt[dt$match_id %in% wanted_matches]
+    if (nrow(dt) == 0) {
+      cli::cli_abort("No play-by-play rows for match_id {.val {wanted_matches}} in season {paste(season, collapse = ', ')}.")
+    }
   }
   data.table::setorder(dt, match_id, display_order)
 
