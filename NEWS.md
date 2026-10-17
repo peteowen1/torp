@@ -1,3 +1,16 @@
+# torp 1.10.0
+
+## Codebase review fixes (2026-10-17, torp#259)
+
+A full-codebase review found 453 issues. This release ships the 62 fix clusters that leave published numbers unchanged. Record: `torpverse/docs/reviews/CODEBASE-REVIEW-2026-10-17.md`.
+
+* Team profiles now get lineup info. `.get_latest_lineup_ids()` used to drop every row, because it looked up full team names as abbreviations.
+* Silent failures now warn, record a skip or abort: daily-release fetch wrappers, `update_player_game_ratings`, partial season loads, partial player-details fetches, AFLW snapshot checks and partial AFLW stat-rating builds.
+* `season_sim.R` and `ladder.R` actually filter fixtures by season. The old filter compared the column with itself.
+* Edge-case value fixes: AFLW 2022 lineup season (2101 → 2022), duplicate injury-ratings rows, canonical blog team names, and player names with a missing part.
+* New internal switch `STAT_RATE_NONTOG_EXCLUDE_UNPLAYED` (default `FALSE`, the published behaviour), held for review of finding B69.
+* Dead internal code removed: the baseline-model comparison chain, `validate_wp_input()`, `check_wp_model_health()`, `select_afl_xgb_vars()`, `determine_team_id_mdl()`, and the PSR helpers in `analyze_match.R`.
+
 # torp 1.9.10
 
 ## Finals win probability uses a held-out spread (torp#252)
