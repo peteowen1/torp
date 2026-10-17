@@ -15,6 +15,9 @@
 Numeric vector of denominators.
 }
 \description{
-Supports "col1+col2" for summing multiple columns.
+Supports "col1+col2" for summing multiple columns. A row's NA counts as 0.
+A column named in the spec that is absent from \code{dt} contributes 0 and
+raises a warning: a valid-looking all-zero vector would otherwise silently
+turn the stat into its prior.
 }
 \keyword{internal}
