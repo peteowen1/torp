@@ -185,11 +185,12 @@ add_team_id_mdl_dt <- function(dt) {
 #' @return Invisible NULL (modifies dt by reference)
 #' @keywords internal
 fix_chain_coordinates_dt <- function(dt) {
-  # Warn if any rows have NA team_id_mdl (coordinates can't be fixed for these)
+  # Warn if any rows have NA team_id_mdl. Their orientation can't be decided, so
+  # x/y are left exactly as delivered (not re-oriented, not blanked).
   na_team_count <- sum(is.na(dt$team_id_mdl))
   if (na_team_count > 0L) {
     warning("fix_chain_coordinates_dt: ", na_team_count,
-            " rows have NA team_id_mdl; coordinates for these rows will not be fixed.")
+            " rows have NA team_id_mdl; their x/y are left unchanged (not re-oriented).")
   }
 
   # --- A) Convert to pitch-relative (home-team) coordinates ---
@@ -199,10 +200,12 @@ fix_chain_coordinates_dt <- function(dt) {
   # consistent frame, so opponent-actor rows (spoils, contests, the trailing
   # event of the previous chain) no longer look like 90m coordinate jumps that
   # the steps C-F cascade would mis-flip. See issue #92.
-  # Use as.double() to avoid integer truncation when interpolating later
+  # Use as.double() to avoid integer truncation when interpolating later.
+  # When the team comparison is NA (missing team id) the orientation is unknown:
+  # keep the delivered x/y (na =) rather than letting fifelse blank them to NA.
   dt[, `:=`(
-    x_pitch = as.double(data.table::fifelse(coord_team_id == coord_home_team_id, x, -x)),
-    y_pitch = as.double(data.table::fifelse(coord_team_id == coord_home_team_id, y, -y))
+    x_pitch = as.double(data.table::fifelse(coord_team_id == coord_home_team_id, x, -x, na = x)),
+    y_pitch = as.double(data.table::fifelse(coord_team_id == coord_home_team_id, y, -y, na = y))
   )]
 
   # --- B) Fix throw-in/stoppage rows ---
@@ -294,9 +297,10 @@ fix_chain_coordinates_dt <- function(dt) {
   # IS the possessing team (coord_team_id == team_id_mdl) the round trip is
   # identity; only genuine opponent-actor rows are intentionally negated here.
   # See issue #92.
+  # Rows whose team comparison is NA keep their delivered x/y untouched (na =).
   dt[, `:=`(
-    x = as.integer(round(data.table::fifelse(team_id_mdl == coord_home_team_id, x_pitch, -x_pitch))),
-    y = as.integer(round(data.table::fifelse(team_id_mdl == coord_home_team_id, y_pitch, -y_pitch)))
+    x = as.integer(round(data.table::fifelse(team_id_mdl == coord_home_team_id, x_pitch, -x_pitch, na = as.double(x)))),
+    y = as.integer(round(data.table::fifelse(team_id_mdl == coord_home_team_id, y_pitch, -y_pitch, na = as.double(y))))
   )]
 
   dt[, c("x_pitch", "y_pitch") := NULL]
