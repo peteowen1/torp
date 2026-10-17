@@ -61,7 +61,7 @@ test_that("format_predictions_blog joins xscore lookup correctly", {
     xscore_home = 91.5,
     xscore_away = 88.0
   )
-  out <- format_predictions_blog(.mock_preds(), xg = xg)
+  expect_warning(out <- format_predictions_blog(.mock_preds(), xg = xg), "no matching xg row")
   joined <- out[out$home_team == "Carlton Blues" &
                   out$away_team == "Essendon Bombers", ]
   expect_equal(joined$xscore_home, 91.5)
@@ -163,7 +163,7 @@ test_that("xg_to_blog_lookup output joins cleanly against canonical preds", {
     away_xscore = 88.0
   )
   lookup <- xg_to_blog_lookup(xg, 2026)
-  out <- format_predictions_blog(.mock_preds(), xg = lookup)
+  expect_warning(out <- format_predictions_blog(.mock_preds(), xg = lookup), "no matching xg row")
   joined <- out[out$home_team == "Carlton Blues", ]
   expect_equal(joined$xscore_home, 91.5)
 })
