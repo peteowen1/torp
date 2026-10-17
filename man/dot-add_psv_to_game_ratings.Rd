@@ -13,8 +13,8 @@
 
 \item{season}{Season, for messages.}
 
-\item{strict}{If \code{TRUE}, abort when PSV could not be computed instead of
-returning \code{pgr} without it. Default \code{FALSE}, which keeps the old behaviour
+\item{strict}{If \code{TRUE}, abort when PSV could not be computed, or left any
+row with an NA \code{psv}, instead of returning \code{pgr} without it. Default \code{FALSE}, which keeps the old behaviour
 of returning the EPV-only frame, but now says so immediately and tags the
 result (see Value).}
 }
