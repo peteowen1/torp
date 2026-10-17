@@ -379,14 +379,14 @@ calculate_brier_score <- function(actual, predicted) {
 #'
 #' A simplified wrapper around assess_model_calibration for creating calibration
 #' plot data. For more comprehensive calibration analysis, use assess_model_calibration
-#' directly followed by prepare_calibration_plot.
+#' directly.
 #'
 #' @param actual Vector of actual binary outcomes
 #' @param predicted Vector of predicted probabilities
 #' @param n_bins Number of bins for calibration plot
 #' @return List with plot data and statistics
 #' @keywords internal
-#' @seealso \code{\link{assess_model_calibration}}, \code{\link{prepare_calibration_plot}}
+#' @seealso \code{\link{assess_model_calibration}}
 create_calibration_plot <- function(actual, predicted, n_bins = 10) {
   # Use the comprehensive assess_model_calibration internally
   calibration_results <- assess_model_calibration(actual, predicted, n_bins)
