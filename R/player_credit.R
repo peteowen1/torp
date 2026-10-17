@@ -832,11 +832,16 @@ create_player_game_data <- function(pbp_data = NULL,
     all.x = TRUE, sort = FALSE)
 
   # --- Step 3b: WPA credit ---
+  # wp_failed is read at the zero-fill after the engine arms: a player-match
+  # missing from a run that SUCCEEDED is a real zero, but a failed run must
+  # leave the columns NA, never a plausible-looking all-zero channel.
+  wp_failed <- FALSE
   wp_dt <- tryCatch({
     wpc <- create_wp_credit(pbp_data)
     wpc[, .(player_id, match_id, wp_credit, wp_disp_credit, wp_recv_credit)]
   }, error = function(e) {
-    cli::cli_warn("WPA credit skipped: {conditionMessage(e)}")
+    wp_failed <<- TRUE
+    cli::cli_warn("WPA credit skipped, wp_credit columns will be NA: {conditionMessage(e)}")
     data.table::data.table(
       player_id = character(), match_id = character(),
       wp_credit = numeric(), wp_disp_credit = numeric(), wp_recv_credit = numeric()
@@ -1229,12 +1234,15 @@ create_player_game_data <- function(pbp_data = NULL,
   }
 
   # WPA is engine-independent -- it reads the WP model, not the EPV channels.
-  plyr_gm_df <- plyr_gm_df |>
-    dplyr::mutate(
-      wp_credit = tidyr::replace_na(wp_credit, 0),
-      wp_disp_credit = tidyr::replace_na(wp_disp_credit, 0),
-      wp_recv_credit = tidyr::replace_na(wp_recv_credit, 0)
-    )
+  # Skipped when create_wp_credit() failed: see wp_failed above.
+  if (!wp_failed) {
+    plyr_gm_df <- plyr_gm_df |>
+      dplyr::mutate(
+        wp_credit = tidyr::replace_na(wp_credit, 0),
+        wp_disp_credit = tidyr::replace_na(wp_disp_credit, 0),
+        wp_recv_credit = tidyr::replace_na(wp_recv_credit, 0)
+      )
+  }
 
   # --- Step 6: Join teams data for lineup_position (20-way AFL lineup role) ---
   teams_pos <- teams |>
