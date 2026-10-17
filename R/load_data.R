@@ -169,11 +169,10 @@ save_to_release <- function(df, file_name, release_tag, also_csv = FALSE, prev_r
   #
   # Note the previous iteration of this comment claimed truncation was
   # "independently guarded by the row-count floor against bus_manifest.json".
-  # That was FALSE twice over. `prev_rows_floor` defaults to NULL and none of the
-  # ~80 save_to_release() call sites pass it, so it is inert -- and even wired up
-  # it would not help, because it compares `nrow(df)` IN MEMORY and aborts before
-  # write_parquet(). It guards bad INPUT, not a bad TRANSFER. Do not cite it as a
-  # truncation backstop again. The transport-side backstop is
+  # That was FALSE. `prev_rows_floor` is live at about 7 call sites (daily
+  # release, ratings pipeline, matchup table, WPA backfill), but it compares
+  # `nrow(df)` IN MEMORY and aborts before write_parquet(). It guards bad INPUT,
+  # not a bad TRANSFER. Do not cite it as a truncation backstop again. The transport-side backstop is
   # `.vb_asset_true_size()`, on the stale-listing path below.
   #
   # The availability motivation still stands -- a whole daily release aborting
@@ -213,7 +212,7 @@ save_to_release <- function(df, file_name, release_tag, also_csv = FALSE, prev_r
     }
     local_bytes <- as.numeric(file.size(tf))
     listed_bytes <- as.numeric(row$size[1L])
-    if (!isTRUE(all.equal(listed_bytes, local_bytes))) {
+    if (listed_bytes != local_bytes) {
       # Same phrase in every branch below, so the direction is always visible in
       # the log even when the decision did not turn on it.
       direction <- if (listed_bytes < local_bytes) "<" else ">"
@@ -479,7 +478,13 @@ update_player_stats <- function(season) {
   # player_stats file that's missing more than 5% of matches -- an unattended
   # daily run would otherwise happily re-upload (and re-poison) a partial file.
   if ("match_id" %in% names(player_stats)) {
-    fixtures <- tryCatch(get_afl_fixtures(season), error = function(e) NULL)
+    fixtures <- tryCatch(get_afl_fixtures(season), error = function(e) {
+      cli::cli_warn(c(
+        "Completeness check skipped for {season}: could not fetch fixtures.",
+        "i" = conditionMessage(e)
+      ))
+      NULL
+    })
     if (!is.null(fixtures) && nrow(fixtures) > 0 && "status" %in% names(fixtures)) {
       expected_matches <- sum(fixtures$status == "CONCLUDED", na.rm = TRUE)
       fetched_matches <- dplyr::n_distinct(player_stats$match_id)
@@ -805,7 +810,7 @@ load_chains <- function(seasons = get_afl_season(), rounds = TRUE, use_disk_cach
     .normalise_chains_columns(out)
   }
 
-  if (nrow(out) > 0) out <- .normalise_team_values(out)
+  out <- .normalise_team_values(out)
   return(out)
 }
 
@@ -864,7 +869,7 @@ load_pbp <- function(seasons = get_afl_season(), rounds = TRUE, use_disk_cache =
 
   out <- load_from_url(urls, seasons = seasons, rounds = rounds, use_disk_cache = use_disk_cache, columns = columns)
 
-  if (nrow(out) > 0) out <- .normalise_team_values(out)
+  out <- .normalise_team_values(out)
   return(out)
 }
 
@@ -906,7 +911,7 @@ load_xg <- function(seasons = get_afl_season(), rounds = NULL, use_disk_cache = 
     out <- out[round_number %in% as.integer(rounds)]
   }
 
-  if (nrow(out) > 0) out <- .normalise_team_values(out)
+  out <- .normalise_team_values(out)
   return(out)
 }
 
@@ -955,7 +960,7 @@ load_player_stats <- function(seasons = get_afl_season(), use_disk_cache = TRUE,
   # Normalise once after retrieval (handles both fresh API data and stale disk cache)
   if (nrow(out) > 0) out <- tibble::as_tibble(.normalise_player_stats_columns(out))
 
-  if (nrow(out) > 0) out <- .normalise_team_values(out)
+  out <- .normalise_team_values(out)
   out
 }
 
@@ -997,7 +1002,7 @@ load_player_game_data <- function(seasons = get_afl_season(), use_disk_cache = F
     # with no vintage while Stage 2 wrote _v3 files, so a run labelled v3 built
     # its ratings from the canonical v2 player-game data -- a v2 vintage wearing
     # a v3 name, with nothing failing (2026-08-18).
-    base_url <- paste0("https://github.com/", get_torp_data_repo(), "/releases/download")
+    base_url <- .release_download_base()
     urls <- paste0(base_url, "/player_game-data/",
                    vapply(seasons,
                           function(s) .vintage_asset_stem(paste0("player_game_", s), version),
@@ -1021,7 +1026,7 @@ load_player_game_data <- function(seasons = get_afl_season(), use_disk_cache = F
   # Normalise old abbreviated column names (plyr_nm → player_name, etc.)
   if (nrow(out) > 0) .normalise_columns(out, PLAYER_GAME_COL_MAP)
 
-  if (nrow(out) > 0) out <- .normalise_team_values(out)
+  out <- .normalise_team_values(out)
   out <- .restore_epv_engine_attr(out)
 
   # Stamp is on the attribute now, so the column can go if unasked for. setattr
@@ -1126,12 +1131,9 @@ load_fixtures <- function(seasons = NULL, all = FALSE, use_disk_cache = FALSE,
 
   # Process parameters — `all = TRUE` is equivalent to `seasons = TRUE`
   if (all) seasons <- TRUE
-  if (is.null(seasons)) {
-    seasons <- get_afl_season()
-  } else {
-    # comp-aware floor: AFLW history starts 2018, men's chain data at 2021.
-    seasons <- .validate_seasons_comp(seasons, comp)
-  }
+  if (is.null(seasons)) seasons <- get_afl_season()
+  # comp-aware floor: AFLW history starts 2018, men's chain data at 2021.
+  seasons <- .validate_seasons_comp(seasons, comp)
 
   cache_prefix <- if (comp == "AFLM") "fixtures" else paste0("fixtures_", comp)
 
@@ -1145,7 +1147,7 @@ load_fixtures <- function(seasons = NULL, all = FALSE, use_disk_cache = FALSE,
     columns = columns,
     use_disk_cache = use_disk_cache
   )
-  if (nrow(out) > 0) out <- .normalise_team_values(out)
+  out <- .normalise_team_values(out)
   out
 }
 
@@ -1198,7 +1200,7 @@ load_teams <- function(seasons = get_afl_season(), use_disk_cache = TRUE, refres
     }
   }
 
-  if (nrow(out) > 0) out <- .normalise_team_values(out)
+  out <- .normalise_team_values(out)
   out
 }
 
@@ -1233,7 +1235,7 @@ load_results <- function(seasons = get_afl_season(), use_disk_cache = FALSE, col
     columns = columns,
     use_disk_cache = use_disk_cache
   )
-  if (nrow(out) > 0) out <- .normalise_team_values(out)
+  out <- .normalise_team_values(out)
   out
 }
 
@@ -1278,7 +1280,7 @@ load_player_details <- function(seasons = get_afl_season(), use_disk_cache = TRU
     use_disk_cache = use_disk_cache,
     refresh = refresh
   )
-  if (nrow(out) > 0) out <- .normalise_team_values(out)
+  out <- .normalise_team_values(out)
   out
 }
 
@@ -1310,14 +1312,34 @@ load_predictions <- function(seasons = get_afl_season(), rounds = get_afl_week(t
   out <- load_from_url(urls, seasons = seasons, rounds = rounds, use_disk_cache = use_disk_cache, columns = columns)
 
   # Normalise old column names (providerId → match_id, etc.)
+  .finalise_predictions_frame(out)
+}
+
+#' Base URL for GitHub release asset downloads on the torpdata repo
+#' @return Character scalar, no trailing slash.
+#' @keywords internal
+#' @noRd
+.release_download_base <- function() {
+  paste0("https://github.com/", get_torp_data_repo(), "/releases/download")
+}
+
+#' Normalise columns and team names on a predictions-shaped frame
+#'
+#' Shared tail of [load_predictions()] and [load_retrodictions()]. Converts to
+#' data.table so `.normalise_predictions_columns()` can rename by reference,
+#' then returns a tibble with canonical team names.
+#'
+#' @param out A data.frame of predictions (may be empty).
+#' @return A tibble (or the empty input, team-normalised).
+#' @keywords internal
+#' @noRd
+.finalise_predictions_frame <- function(out) {
   if (nrow(out) > 0) {
     if (!data.table::is.data.table(out)) out <- data.table::as.data.table(out)
     .normalise_predictions_columns(out)
     out <- tibble::as_tibble(out)
   }
-
-  if (nrow(out) > 0) out <- .normalise_team_values(out)
-  return(out)
+  .normalise_team_values(out)
 }
 
 #' Load Retrodictions Data
@@ -1350,14 +1372,7 @@ load_retrodictions <- function(seasons = get_afl_season(), rounds = get_afl_week
 
   out <- load_from_url(urls, seasons = seasons, rounds = rounds, use_disk_cache = use_disk_cache, columns = columns)
 
-  if (nrow(out) > 0) {
-    if (!data.table::is.data.table(out)) out <- data.table::as.data.table(out)
-    .normalise_predictions_columns(out)
-    out <- tibble::as_tibble(out)
-  }
-
-  if (nrow(out) > 0) out <- .normalise_team_values(out)
-  return(out)
+  .finalise_predictions_frame(out)
 }
 
 #' Load TORP Ratings Data
@@ -1386,7 +1401,7 @@ load_retrodictions <- function(seasons = get_afl_season(), rounds = get_afl_week
 #' }
 #' @export
 load_torp_ratings <- function(columns = NULL, version = NULL) {
-  base_url <- paste0("https://github.com/", get_torp_data_repo(), "/releases/download")
+  base_url <- .release_download_base()
   url <- paste0(base_url, "/ratings-data/", .rating_vintage_file(version))
   out <- load_from_url(url, columns = columns)
 
@@ -1396,7 +1411,7 @@ load_torp_ratings <- function(columns = NULL, version = NULL) {
   if (nrow(out) == 0) {
     cli::cli_warn("No TORP ratings data loaded. The file may not exist yet or the download failed.")
   }
-  if (nrow(out) > 0) out <- .normalise_team_values(out)
+  out <- .normalise_team_values(out)
   out
 }
 
@@ -1445,7 +1460,7 @@ load_player_game_ratings <- function(seasons = get_afl_season(), rounds = TRUE, 
   # Normalise old display column names (total_points → epv_raw, etc.)
   if (nrow(out) > 0) .normalise_columns(out, PLAYER_GAME_RATINGS_COL_MAP)
 
-  if (nrow(out) > 0) out <- .normalise_team_values(out)
+  out <- .normalise_team_values(out)
   return(out)
 }
 
@@ -1485,7 +1500,7 @@ load_player_season_ratings <- function(seasons = get_afl_season(), use_disk_cach
   # Normalise old season rating column names
   if (nrow(out) > 0) .normalise_columns(out, PLAYER_GAME_RATINGS_COL_MAP)
 
-  if (nrow(out) > 0) out <- .normalise_team_values(out)
+  out <- .normalise_team_values(out)
   return(out)
 }
 
@@ -1512,14 +1527,14 @@ load_player_season_ratings <- function(seasons = get_afl_season(), use_disk_cach
 #' }
 #' @export
 load_team_ratings <- function(columns = NULL) {
-  base_url <- paste0("https://github.com/", get_torp_data_repo(), "/releases/download")
+  base_url <- .release_download_base()
   url <- paste0(base_url, "/team_ratings-data/team_ratings.parquet")
   out <- load_from_url(url, columns = columns)
 
   if (nrow(out) == 0) {
     cli::cli_warn("No team ratings data loaded. The file may not exist yet or the download failed.")
   }
-  if (nrow(out) > 0) out <- .normalise_team_values(out)
+  out <- .normalise_team_values(out)
   out
 }
 
@@ -1545,10 +1560,10 @@ load_team_ratings <- function(columns = NULL) {
 #' @export
 load_injury_data <- function(seasons = get_afl_season(), columns = NULL) {
   seasons <- validate_seasons(seasons)
-  base_url <- paste0("https://github.com/", get_torp_data_repo(), "/releases/download")
+  base_url <- .release_download_base()
   urls <- paste0(base_url, "/injury-data/injury_list_", seasons, ".parquet")
   out <- load_from_url(urls, seasons = seasons, columns = columns)
-  if (nrow(out) > 0) out <- .normalise_team_values(out)
+  out <- .normalise_team_values(out)
   out
 }
 
@@ -1591,7 +1606,7 @@ load_ep_wp_charts <- function(seasons = get_afl_season(), rounds = TRUE, use_dis
 
   out <- load_from_url(urls, seasons = seasons, rounds = rounds, use_disk_cache = use_disk_cache, columns = columns)
 
-  if (nrow(out) > 0) out <- .normalise_team_values(out)
+  out <- .normalise_team_values(out)
   return(out)
 }
 
@@ -1631,7 +1646,7 @@ load_player_stat_ratings <- function(seasons = get_afl_season(), use_disk_cache 
   # Map old *_skill columns to *_rating for backward compat with old parquets
   .normalise_stat_rating_columns(out)
 
-  if (nrow(out) > 0) out <- .normalise_team_values(out)
+  out <- .normalise_team_values(out)
   return(out)
 }
 
@@ -1673,7 +1688,7 @@ load_psr <- function(seasons = get_afl_season(), use_disk_cache = FALSE, columns
 
   out <- load_from_url(urls, seasons = seasons, use_disk_cache = use_disk_cache, columns = columns)
 
-  if (nrow(out) > 0) out <- .normalise_team_values(out)
+  out <- .normalise_team_values(out)
   return(out)
 }
 
@@ -1718,7 +1733,7 @@ load_aflw_psr <- function(seasons = get_afl_season(), use_disk_cache = FALSE, co
 
   out <- load_from_url(urls, seasons = seasons, use_disk_cache = use_disk_cache, columns = columns)
 
-  if (nrow(out) > 0) out <- .normalise_team_values(out)
+  out <- .normalise_team_values(out)
   return(out)
 }
 
@@ -1800,19 +1815,7 @@ load_aflw_season_stats <- function(seasons = get_afl_season(), use_disk_cache = 
   # (2021:current) unconditionally, for any explicit numeric input too, not
   # just for resolving TRUE -- and AFLW's own history starts 2018 (confirmed
   # live 2026-08-25). A lighter, AFLW-specific check instead.
-  aflw_first_year <- 2018L
-  current_year <- as.integer(format(Sys.Date(), "%Y"))
-  if (isTRUE(seasons)) {
-    seasons <- aflw_first_year:current_year
-  }
-  if (!is.numeric(seasons)) {
-    cli::cli_abort("load_aflw_season_stats: seasons must be numeric or TRUE.")
-  }
-  seasons <- as.integer(seasons)
-  invalid <- seasons[seasons < aflw_first_year | seasons > current_year]
-  if (length(invalid) > 0) {
-    cli::cli_abort("load_aflw_season_stats: invalid season year{?s} {invalid} -- must be between {aflw_first_year} and {current_year}.")
-  }
+  seasons <- as.integer(.validate_aflw_seasons(if (isTRUE(seasons)) TRUE else seasons))
 
   urls <- generate_urls("aflw_season_stats-data", "aflw_season_stats", seasons, rounds = NULL)
   out <- load_from_url(urls, seasons = seasons, use_disk_cache = use_disk_cache, columns = columns)
@@ -1885,13 +1888,11 @@ load_team_rapm_asof <- function(comp = "AFLM", path = NULL) {
   } else {
     local_path <- file.path("data-raw", "03-ratings", paste0(f_stem, ".parquet"))
     if (file.exists(local_path)) {
+      cli::cli_alert_info("Using cwd-relative local as-of xRAPM snapshot {normalizePath(local_path)}")
       out <- as.data.frame(arrow::read_parquet(local_path))
       source_desc <- local_path
     } else {
-      url <- paste0(
-        "https://github.com/", get_torp_data_repo(),
-        "/releases/download/", TEAM_RAPM_ASOF_RELEASE_TAG, "/", f_stem, ".parquet"
-      )
+      url <- paste0(.release_download_base(), "/", TEAM_RAPM_ASOF_RELEASE_TAG, "/", f_stem, ".parquet")
       source_desc <- url
       out <- tryCatch(
         as.data.frame(load_from_url(url)),
