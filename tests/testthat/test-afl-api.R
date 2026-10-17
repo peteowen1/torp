@@ -330,3 +330,13 @@ test_that("get_afl_results returns concluded games", {
     expect_true(all(results$status == "CONCLUDED"))
   }
 })
+
+# .season_from_provider_id -------------------------------------------------
+
+test_that(".season_from_provider_id handles normal and AFLW Season 7 ids", {
+  expect_equal(.season_from_provider_id(c("CD_S2025014", "CD_S2022264", "CD_S2101264")),
+               c(2025, 2022, 2022))
+  expect_equal(.season_from_provider_id("CD_M2024014001"), 2024)
+  expect_true(is.na(.season_from_provider_id("garbage")))
+  expect_true(is.na(.season_from_provider_id(NA_character_)))
+})
