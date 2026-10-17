@@ -37,7 +37,7 @@ What `ls R/` does not give you is which files belong together. Grouped by domain
 | **Format** | `format_blog.R` | Blog parquet shapes consumed by torpdata `build_blog_data.R` |
 | **Logging** | `logging.R` | Internal cli wrappers |
 | **Team RAPM/SPM** | `team_rapm.R`, `team_rapm_asof.R`, `team_rapm_asof_cache.R`, `team_rapm_match_feature.R`, `team_spm.R`, `matchup_table.R`, `constants_team_rapm.R` | Team-level ridge-regularised APM (`build_team_rapm_net()`) shrunk toward an SPM prior (`fit_team_spm()` / `shrink_team_rapm()`); `matchup_table.R` builds the per-match feature table consumed by the match model |
-| **AFLW** | `aflw_elo.R`, `aflw_match_model.R`, `aflw_psr.R`, `aflw_season_snapshots.R`, `constants_aflw.R` | Separate AFLW Elo + PSR + match-win-prob pipeline (`fit_aflw_match_model()` / `predict_aflw_win_prob()`), independent constants; refreshed by `aflw-season-stats-weekly.yml` |
+| **AFLW** | `aflw_elo.R`, `aflw_match_model.R`, `aflw_psr.R`, `aflw_season_snapshots.R`, `constants_aflw.R` | Separate AFLW Elo + PSR + match-win-prob pipeline (`fit_aflw_match_model()` / `predict_aflw_win_prob()`), independent constants. Elo/PSR season stats are refreshed by `aflw-season-stats-weekly.yml`; the match model (`aflw_match_model.R`) is experimental and NOT wired into any workflow (no production caller as of 2026-10) |
 
 ## Key Constants
 
