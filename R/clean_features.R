@@ -343,61 +343,6 @@ select_afl_model_vars <- function(df) {
     )
 }
 
-#' Select AFL XGBoost Model Variables (Lean Feature Set)
-#'
-#' Selects a reduced set of variables optimised for XGBoost match prediction.
-#' Removes high-cardinality factor columns (team_name, team_name_season, venue)
-#' that create hundreds of sparse dummies via model.matrix(), and drops sample
-#' weights that aren't predictive features.
-#'
-#' @param df A dataframe containing AFL team model data with GAM predictions
-#' @return A dataframe with ~25 numeric/low-cardinality features + response
-#' @keywords internal
-select_afl_xgb_vars <- function(df) {
-  df |>
-    dplyr::select(
-      # Response
-      .data$win,
-
-      # Home/away (1 dummy)
-      .data$team_type_fac,
-
-      # Time features (numeric)
-      .data$game_year_decimal.x,
-      .data$game_prop_through_year.x,
-      .data$game_prop_through_month.x,
-      .data$game_prop_through_day.x,
-
-      # EPR ratings (numeric)
-      .data$epr_diff,
-      .data$epr_recv_diff,
-      .data$epr_disp_diff,
-      .data$epr_spoil_diff,
-      .data$epr_hitout_diff,
-      .data$epr.x,
-      .data$epr.y,
-
-      # Venue/travel (numeric)
-      .data$log_dist.x,
-      .data$log_dist.y,
-      .data$log_dist_diff,
-      .data$familiarity.x,
-      .data$familiarity.y,
-      .data$familiarity_diff,
-
-      # Days rest (4 dummies - low cardinality)
-      .data$days_rest_diff_fac,
-
-      # GAM predictions (the main signal)
-      .data$pred_tot_xscore,
-      .data$pred_xscore_diff,
-      .data$pred_conv_diff,
-      .data$pred_score_diff,
-      .data$pred_win
-    )
-}
-
-
 #' Clean Shots Data
 #'
 #' @param df A dataframe containing raw shot data.
@@ -494,23 +439,6 @@ filter_relevant_descriptions <- function(df) {
 # NOTE: add_epv_variables() (legacy dplyr path) was removed alongside
 # calculate_mirror(). The data.table implementation in
 # clean_model_data_epv_dt() → add_epv_team_vars_dt() is the canonical path.
-
-#' Determine Team ID Model
-#'
-#' @param throw_in A vector indicating if the play is a throw-in.
-#' @param team_id A vector of team IDs.
-#' @return A vector of determined team IDs.
-#' @keywords internal
-#' @importFrom dplyr case_when lead
-determine_team_id_mdl <- function(throw_in, team_id) {
-  rlang::check_installed("zoo", version = "1.8.0", reason = "for NA fill in EPV model data preparation")
-  result <- dplyr::case_when(
-    throw_in == 1 ~ dplyr::lead(team_id),
-    TRUE ~ team_id
-  )
-  result <- zoo::na.locf0(result, fromLast = TRUE)
-  zoo::na.locf0(result)
-}
 
 # NOTE: Legacy dplyr-based mirror helpers (is_current_throw_in_team_change,
 # is_consecutive_throw_in_same_side, etc.) and calculate_mirror() were removed
