@@ -693,3 +693,31 @@ test_that("batch estimator agrees with the single-date estimator", {
   expect_true(all(batch_ci$goals_rating_lower <= batch_ci$goals_rating))
   expect_true(all(batch_ci$goals_rating <= batch_ci$goals_rating_upper))
 })
+
+# B69: non-TOG-adjusted rate stats must not count unplayed rounds as exposure ---
+# dream_team_points / rating_points use 1 unit of exposure per row. The mock data
+# carries 2 availability-only rows per player (tog = 0, avail_only = TRUE), which
+# used to add 2 units of exposure with nothing in the numerator, so a player's
+# per-game rate was deflated by 8/10.
+
+test_that("non-TOG-adjusted rate stats exclude availability-only rows from exposure", {
+  dat <- create_mock_stat_rating_data()
+  expect_equal(sum(dat$avail_only), 20)  # 10 players x 2 missed rounds
+  played <- dat[avail_only == FALSE, .(mean_dtp = mean(dream_team_points), n = .N), by = player_id]
+
+  single <- estimate_player_stat_ratings(dat, compute_ci = FALSE)
+  data.table::setkey(single, player_id)
+  data.table::setkey(played, player_id)
+  expect_equal(single$dream_team_points_raw, played$mean_dtp)
+  # n80s is the raw exposure total: games played, not rostered rounds
+  expect_equal(single$dream_team_points_n80s, as.numeric(played$n))
+
+  suppressMessages(batch <- .estimate_stat_ratings_batch(
+    dat, max(dat$match_date_rating) + 1L, compute_ci = FALSE)[[1]])
+  data.table::setkey(batch, player_id)
+  expect_equal(batch$dream_team_points_raw, played$mean_dtp)
+  expect_equal(batch$dream_team_points_n80s, as.numeric(played$n))
+
+  # TOG-adjusted stats are untouched: exposure there is TOG, which is 0 on avail rows
+  expect_equal(single$goals_n80s, dat[avail_only == FALSE, .(s = sum(tog)), by = player_id][order(player_id)]$s)
+})

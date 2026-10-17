@@ -248,7 +248,11 @@ estimate_player_stat_ratings <- function(stat_rating_data, ref_date = NULL,
       # 2021-2026, n = 58,324), so unifying them would change no number today.
       tog_vals[is.na(tog_vals)] <- 1
     } else {
-      tog_vals <- rep(1, nrow(dt))
+      # Not TOG-adjusted: one unit of exposure per game he PLAYED. An
+      # availability-only row (a round he was rostered but not selected for)
+      # has no numerator, so counting it as a unit of exposure would deflate
+      # the per-game rate of anyone who misses rounds (B69).
+      tog_vals <- as.numeric(!dt$avail_only)
     }
 
     w_vec <- exp(-stat_lambda * dt$days_since)
@@ -803,7 +807,7 @@ estimate_player_stat_ratings <- function(stat_rating_data, ref_date = NULL,
     is_tog_adj <- is.na(rate_defs$tog_adjusted[i]) || isTRUE(rate_defs$tog_adjusted[i])
     # NA tog -> 1 here but 0 in .tog_safe (80s counts): see the note in
     # estimate_player_stat_ratings().
-    tog_vals <- if (is_tog_adj) { tv <- as.numeric(dt$tog); tv[is.na(tv)] <- 1; tv } else rep(1, nrow(dt))
+    tog_vals <- if (is_tog_adj) { tv <- as.numeric(dt$tog); tv[is.na(tv)] <- 1; tv } else as.numeric(!dt$avail_only)  # played rows only (B69)
 
     base_w <- exp(lam * dt$.d)
 

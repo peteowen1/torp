@@ -267,8 +267,11 @@
   # This lets the Beta-Binomial TOG model account for selection probability:
   # missed rounds contribute (tog=0, tog_denominator=1) to the denominator,
   # pulling estimates down for players who miss games.
-  # Other stats are unaffected: rate stats use tog as exposure (0 * w = 0),
-  # efficiency stats have 0 successes and 0 attempts (0 * w = 0).
+  # Other stats are unaffected: TOG-adjusted rate stats use tog as exposure
+  # (0 * w = 0), NON-TOG-adjusted rate stats (dream_team_points, rating_points)
+  # use 1 per row, so the estimators explicitly give avail_only rows zero
+  # exposure there, and efficiency stats have 0 successes and 0 attempts
+  # (0 * w = 0).
   out[, avail_only := FALSE]
 
   round_cal <- out[, .(match_date_rating = min(match_date_rating)),
