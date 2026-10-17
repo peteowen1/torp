@@ -23,8 +23,7 @@
     return(NULL)
   }
 
-  fixtures <- load_fixtures(all = TRUE) |>
-    dplyr::filter(season == .env$season)
+  fixtures <- load_fixtures(season)
   teams <- load_teams(season)
   if (nrow(teams) == 0) {
     cli::cli_alert_info("No lineup data for {season}")
@@ -51,13 +50,18 @@
     dplyr::filter(!lineup_position %in% c("EMERG", "SUB") | is.na(lineup_position)) |>
     dplyr::mutate(player_norm = norm_name(paste(given_name, surname))) |>
     dplyr::transmute(round = as.integer(.data$round_number),
-                     player_norm = .data$player_norm) |>
+                     player_norm = .data$player_norm,
+                     team = torp_replace_teams(.data$team_name)) |>
     dplyr::distinct()
 
-  played_keys <- paste(played_df$round, played_df$player_norm)
+  # Keyed by (round, player_norm, team): two clubs can field the same
+  # normalised name. Lineups (team_name) and injuries (team) both carry
+  # canonical full club names (AFL_TEAM_ALIASES / .normalise_team_values), and
+  # torp_replace_teams() is idempotent, so both sides are passed through it.
+  played_keys <- paste(played_df$round, played_df$player_norm, played_df$team)
 
   list(
-    inj_hist = inj_hist,
+    inj_hist = dplyr::mutate(inj_hist, team = torp_replace_teams(.data$team)),
     round_starts = round_starts,
     played_df = played_df,
     played_keys = played_keys
@@ -65,9 +69,22 @@
 }
 
 
-# Internal: for each round with a fixture start, collect the latest
-# pre-kickoff weekly listing per (player_norm, team) whose estimated_return
-# matches `return_filter` (a predicate on the lowercased string). Returns a
+# Internal: first round in `round_starts` (columns round_number, round_start,
+# sorted by round_start) whose start is after each timestamp in `ts`; NA when
+# `ts` is after the last start.
+.scrape_round_for <- function(ts, round_starts) {
+  vapply(ts, function(t) {
+    idx <- which(round_starts$round_start > t)
+    if (length(idx) == 0) NA_integer_ else as.integer(round_starts$round_number[idx[1]])
+  }, integer(1))
+}
+
+
+# Internal: for each round with a fixture start, take the latest pre-kickoff
+# weekly listing per (player_norm, team) -- picked on ALL weekly rows, so a
+# later listing supersedes an earlier one -- and keep it only if its
+# estimated_return matches `return_filter` (a predicate on the lowercased
+# string). Returns a
 # tibble with `round_number` (evaluation round), `scrape_round` (round the
 # listing was published for -- first upcoming round after scraped_at),
 # `player`, `team`, `injury`, `estimated_return`, `player_norm`,
@@ -79,13 +96,12 @@
     r  <- ctx$round_starts$round_number[i]
     rs <- ctx$round_starts$round_start[i]
     ctx$inj_hist |>
-      dplyr::filter(.data$source == "weekly",
-                    .data$scraped_at < rs,
-                    return_filter(tolower(trimws(.data$estimated_return)))) |>
-      dplyr::arrange(.data$player_norm, .data$scraped_at) |>
-      dplyr::group_by(.data$player_norm) |>
+      dplyr::filter(.data$source == "weekly", .data$scraped_at < rs) |>
+      dplyr::arrange(.data$player_norm, .data$team, .data$scraped_at) |>
+      dplyr::group_by(.data$player_norm, .data$team) |>
       dplyr::slice_tail(n = 1) |>
       dplyr::ungroup() |>
+      dplyr::filter(return_filter(tolower(trimws(.data$estimated_return)))) |>
       dplyr::mutate(round_number = r)
   })
 
@@ -94,13 +110,10 @@
   # scrape_round = first upcoming round whose start is after scraped_at.
   # parse_return_round() needs this (not the evaluation round), otherwise
   # a "1-2 weeks" listing keeps sliding forward each round we evaluate.
-  listings$scrape_round <- vapply(listings$scraped_at, function(ts) {
-    idx <- which(rs_sorted$round_start > ts)
-    if (length(idx) == 0) NA_integer_ else as.integer(rs_sorted$round_number[idx[1]])
-  }, integer(1))
+  listings$scrape_round <- .scrape_round_for(listings$scraped_at, rs_sorted)
 
   listings |>
-    dplyr::mutate(played = paste(.data$round_number, .data$player_norm) %in% ctx$played_keys)
+    dplyr::mutate(played = paste(.data$round_number, .data$player_norm, .data$team) %in% ctx$played_keys)
 }
 
 
@@ -327,39 +340,60 @@ tbc_return_survival <- function(season = NULL) {
     return(tibble::tibble())
   }
 
-  # For each (player_norm, team) keep the first TBC scrape -- that's the
-  # start of the TBC episode. Later scrapes with the same state were already
-  # collapsed by save_injury_data(), but we guard anyway.
-  tbc_first <- tbc_hist |>
-    dplyr::group_by(.data$player_norm, .data$team) |>
-    dplyr::slice_head(n = 1) |>
-    dplyr::ungroup()
-
-  # Tag each episode with its scrape round (first round whose kickoff is
-  # after scraped_at; if scrape precedes round 1, use round 1).
+  # Tag each TBC scrape with its scrape round (first round whose kickoff is
+  # after scraped_at; if scrape precedes round 1, use round 1). round_starts
+  # only holds rounds already started, so a scrape after the last started
+  # round belongs to the next upcoming round -- kept as a censored episode
+  # rather than dropped.
   rs <- ctx$round_starts |> dplyr::arrange(.data$round_start)
-  tbc_first$first_tbc_round <- vapply(tbc_first$scraped_at, function(ts) {
-    idx <- which(rs$round_start > ts)
-    if (length(idx) == 0) NA_integer_ else as.integer(rs$round_number[idx[1]])
-  }, integer(1))
-
   completed_rounds <- rs$round_number
   last_completed <- if (length(completed_rounds) > 0) max(completed_rounds) else NA_integer_
 
+  tbc_hist$first_tbc_round <- .scrape_round_for(tbc_hist$scraped_at, rs)
+  tbc_hist$first_tbc_round[is.na(tbc_hist$first_tbc_round)] <- as.integer(last_completed) + 1L
+
   played_df <- ctx$played_df
+
+  # An episode starts at a (player_norm, team)'s first TBC scrape. A later TBC
+  # scrape starts a NEW episode only if the player played a round in between
+  # (>= the current episode's start, < this scrape's round); otherwise it is a
+  # repeat of the same episode (save_injury_data() already collapses most).
+  new_episode <- logical(nrow(tbc_hist))
+  grp <- paste(tbc_hist$player_norm, tbc_hist$team, sep = "|")
+  for (idx in split(seq_len(nrow(tbc_hist)), grp)) {
+    cur <- NA_integer_
+    for (k in idx) {
+      r <- tbc_hist$first_tbc_round[k]
+      if (is.na(cur)) {
+        new_episode[k] <- TRUE
+        cur <- r
+      } else {
+        pl <- played_df$round[played_df$player_norm == tbc_hist$player_norm[k] &
+                                played_df$team == tbc_hist$team[k]]
+        if (any(pl >= cur & pl < r)) {
+          new_episode[k] <- TRUE
+          cur <- r
+        }
+      }
+    }
+  }
+  tbc_first <- tbc_hist[new_episode, , drop = FALSE]
 
   # For each episode, find first played round >= first_tbc_round
   out <- tbc_first |>
     dplyr::mutate(
-      return_round = purrr::map2_int(.data$player_norm, .data$first_tbc_round, function(pn, r0) {
-        if (is.na(r0)) return(NA_integer_)
-        hits <- played_df$round[played_df$player_norm == pn & played_df$round >= r0]
-        if (length(hits) == 0) NA_integer_ else min(hits)
-      }),
+      return_round = purrr::pmap_int(
+        list(.data$player_norm, .data$team, .data$first_tbc_round),
+        function(pn, tm, r0) {
+          if (is.na(r0)) return(NA_integer_)
+          hits <- played_df$round[played_df$player_norm == pn &
+                                    played_df$team == tm & played_df$round >= r0]
+          if (length(hits) == 0) NA_integer_ else min(hits)
+        }),
       censored = is.na(.data$return_round),
       rounds_out = dplyr::if_else(
         .data$censored,
-        as.integer(last_completed) - .data$first_tbc_round,
+        pmax(0L, as.integer(last_completed) - .data$first_tbc_round),
         .data$return_round - .data$first_tbc_round
       )
     ) |>
