@@ -218,3 +218,21 @@ test_that("confirm_fresh_start never reads a listing failure as absence", {
   .mock_release(st)
   expect_error(confirm_fresh_start("o/r", "t", "x.parquet"))
 })
+
+test_that("safe_release_upload disables piggyback's listing cache DURING the upload and restores it after", {
+  withr::local_envvar(piggyback_cache_duration = "600")
+  st <- .fake_release()
+  .mock_release(st)
+  seen <- NULL
+  testthat::local_mocked_bindings(
+    pb_upload = function(file, repo, tag, name = basename(file), overwrite = FALSE, ...) {
+      seen <<- Sys.getenv("piggyback_cache_duration", unset = "UNSET")
+      st$add(name, as.numeric(file.size(file)))
+      invisible(NULL)
+    },
+    .package = "piggyback"
+  )
+  safe_release_upload(.new_file(), "o/r", "t", name = "a.parquet")
+  expect_identical(seen, "1")
+  expect_identical(Sys.getenv("piggyback_cache_duration", unset = "UNSET"), "600")
+})

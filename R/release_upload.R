@@ -95,7 +95,8 @@ safe_release_upload <- function(path, repo, tag, name = basename(path),
                       Sys.getpid(), sprintf("%.0f", as.numeric(Sys.time()) * 1e6), name)
 
   # Never serve piggyback a pre-upload listing (same as vb_publish()).
-  on.exit(.vb_with_fresh_listing()(), add = TRUE)
+  restore_cache <- .vb_with_fresh_listing()
+  on.exit(restore_cache(), add = TRUE)
 
   # 1. A fresh name: there is nothing to delete, so nothing can be lost here.
   tryCatch(

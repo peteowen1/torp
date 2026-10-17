@@ -209,7 +209,8 @@ vb_list_assets <- function(repo, tag) {
 
 # Make piggyback re-list on every call (cache duration 1s) and return a
 # function that restores the caller's setting; use as
-# `on.exit(.vb_with_fresh_listing()(), add = TRUE)` so a publish never leaks
+# `restore <- .vb_with_fresh_listing(); on.exit(restore(), add = TRUE)` (call the
+# helper NOW; only the restore belongs in on.exit) so a publish never leaks
 # the setting to unrelated callers.
 .vb_with_fresh_listing <- function() {
   prev <- Sys.getenv("piggyback_cache_duration", unset = NA)
@@ -672,7 +673,8 @@ vb_publish <- function(paths, repo, tag,
   # bare Sys.setenv() that leaked for the rest of the session, silently
   # disabling piggyback's listing cache for every unrelated caller after the
   # first publish.
-  on.exit(.vb_with_fresh_listing()(), add = TRUE)
+  restore_cache <- .vb_with_fresh_listing()
+  on.exit(restore_cache(), add = TRUE)
 
   # 3. Upload data assets with bounded exponential backoff; collect failures.
   failures <- character(0)
