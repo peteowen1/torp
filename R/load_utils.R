@@ -116,7 +116,10 @@ get_release_assets <- function(release_tag) {
   if (exists(release_tag, envir = .torp_release_cache)) {
     cached <- get(release_tag, envir = .torp_release_cache)
     age_secs <- as.numeric(difftime(Sys.time(), cached$time, units = "secs"))
-    if (age_secs < RELEASE_ASSET_CACHE_TTL_SECS) {
+    # A failed listing (assets NULL) is remembered only briefly, so a GitHub
+    # outage costs one failed round trip per window rather than one per call.
+    ttl_secs <- if (is.null(cached$assets)) RELEASE_ASSET_FAILURE_CACHE_TTL_SECS else RELEASE_ASSET_CACHE_TTL_SECS
+    if (age_secs < ttl_secs) {
       return(cached$assets)
     }
   }
@@ -144,9 +147,10 @@ get_release_assets <- function(release_tag) {
     NULL
   })
 
-  if (!is.null(assets)) {
-    assign(release_tag, list(assets = assets, time = Sys.time()), envir = .torp_release_cache)
-  }
+  # Failures are cached too (assets = NULL, short TTL above). The error text
+  # stays in .torp_release_fetch_error, so .last_release_fetch_error() still
+  # reports it on a cache hit.
+  assign(release_tag, list(assets = assets, time = Sys.time()), envir = .torp_release_cache)
 
   assets
 }
@@ -262,11 +266,19 @@ generate_urls <- function(data_type, file_prefix, seasons, rounds = NULL, prefer
   current_season <- get_afl_season()
   current_round <- NULL
 
-  if (is.null(rounds)) {
-    combinations <- expand.grid(seasons = seasons)
+  # Season-only (rounds_02d NULL) or season x round file names, sorted
+  build_urls <- function(rounds_02d = NULL) {
+    if (is.null(rounds_02d)) {
+      u <- paste0(base_url, "/", data_type, "/", file_prefix, "_", seasons, ".parquet")
+    } else {
+      combinations <- expand.grid(seasons = seasons, rounds = rounds_02d)
+      u <- paste0(base_url, "/", data_type, "/", file_prefix, "_", combinations$seasons, "_", combinations$rounds, ".parquet")
+    }
+    sort(u)
+  }
 
-    urls <- paste0(base_url, "/", data_type, "/", file_prefix, "_", combinations$seasons, ".parquet")
-    urls <- sort(urls)
+  if (is.null(rounds)) {
+    urls <- build_urls()
   }
 
   if (!is.null(rounds)) {
@@ -275,11 +287,13 @@ generate_urls <- function(data_type, file_prefix, seasons, rounds = NULL, prefer
     aggregated_only_types <- c("chains-data", "pbp-data", "ep_wp_chart-data")
 
     if (data_type %in% aggregated_only_types) {
+      # Aggregated _all URLs are deliberately NOT checked against the release
+      # listing: a missing file should surface as a failed download in the
+      # loader, not be silently dropped here.
       urls <- paste0(base_url, "/", data_type, "/", file_prefix, "_", seasons, "_all.parquet")
       return(as.character(urls))
     }
 
-    current_season <- get_afl_season()
     current_round <- get_afl_week()
 
     # Check if we're loading all rounds for any season (AFL_ALL_ROUNDS or TRUE was passed)
@@ -294,11 +308,7 @@ generate_urls <- function(data_type, file_prefix, seasons, rounds = NULL, prefer
     }
 
     # Use per-round files (default behavior for other data types)
-    rounds_02d <- sprintf("%02d", rounds)
-    combinations <- expand.grid(seasons = seasons, rounds = rounds_02d)
-
-    urls <- paste0(base_url, "/", data_type, "/", file_prefix, "_", combinations$seasons, "_", combinations$rounds, ".parquet")
-    urls <- sort(urls)
+    urls <- build_urls(sprintf("%02d", rounds))
   }
 
   # Filter URLs against actual release assets (ground truth).
@@ -322,7 +332,7 @@ generate_urls <- function(data_type, file_prefix, seasons, rounds = NULL, prefer
     parts <- regmatches(fname, gregexpr("[0-9]+", fname))[[1]]
     if (length(parts) == 0) return(TRUE)
     file_season <- as.numeric(parts[length(parts) - (length(parts) > 1)])
-    if (is.na(file_season) || file_season < 2020) {
+    if (is.na(file_season) || file_season < min(AFL_MIN_SEASON, AFLW_MIN_SEASON)) {
       cli::cli_warn("Could not parse season from URL: {.url {u}}")
       return(TRUE)
     }
@@ -332,7 +342,6 @@ generate_urls <- function(data_type, file_prefix, seasons, rounds = NULL, prefer
     if (length(parts) >= 2) {
       file_round <- as.numeric(parts[length(parts)])
       if (grepl("_all\\.parquet$", u)) return(TRUE)
-      if (is.null(current_round)) current_round <<- get_afl_week()
       return(file_round <= current_round)
     }
     TRUE
