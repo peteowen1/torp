@@ -669,10 +669,11 @@ for (s in seasons) {
 
     # PSV (box-score value) and per-game TORP value, shared with the daily
     # release so the two writers of player_game_ratings_<season> can't drift.
-    # strict: a season whose PSV failed keeps its previous release instead of
-    # being overwritten EPV-only (the blog's game-logs gate refuses NA psv, so an
-    # EPV-only file blocks every AFL build; daily_release.R guards the same way).
-    # Every season 2021-2026 has player stats, so this never skips a season by design.
+    # strict: a season whose PSV failed, or left any row NA, is not written, so
+    # its existing release (if this vintage has one) stays in place rather than
+    # being overwritten EPV-only. The blog's game-logs gate refuses NA psv, so such
+    # a file blocks every AFL build; daily_release.R guards the same way. As
+    # published on 2026-10-18 every season 2021-2026 had PSV on all rows.
     pstats_season <- data.table::as.data.table(all_pstats[all_pstats$season == s, ])
     pgr <- .add_psv_to_game_ratings(pgr, pstats_season, s, strict = TRUE)
 
@@ -691,7 +692,7 @@ for (s in seasons) {
   })
 }
 if (length(stage5_failed_seasons) > 0) {
-  cli::cli_alert_danger("Stage 5 failed for seasons: {paste(stage5_failed_seasons, collapse = ', ')} - their player game/season ratings keep the previous release")
+  cli::cli_alert_danger("Stage 5 failed for seasons: {paste(stage5_failed_seasons, collapse = ', ')} - their player game/season ratings were not written this run")
 }
 
 tictoc::toc(log = TRUE)

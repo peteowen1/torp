@@ -605,8 +605,8 @@ player_season_stats <- function(season_val = get_afl_season(),
 #' @param pgr Output of `.compute_player_game_ratings()` for one season.
 #' @param pstats_season Player stats for the same season (`load_player_stats()`).
 #' @param season Season, for messages.
-#' @param strict If `TRUE`, abort when PSV could not be computed instead of
-#'   returning `pgr` without it. Default `FALSE`, which keeps the old behaviour
+#' @param strict If `TRUE`, abort when PSV could not be computed, or left any
+#'   row with an NA `psv`, instead of returning `pgr` without it. Default `FALSE`, which keeps the old behaviour
 #'   of returning the EPV-only frame, but now says so immediately and tags the
 #'   result (see Value).
 #' @return `pgr` with psv/osv/dsv, their per-80 columns and torp_value(_p80)
@@ -675,5 +675,13 @@ player_season_stats <- function(season_val = get_afl_season(),
     pgr$torp_value_p80 <- round(pgr$torp_value / .tog_floor(pgr$tog), 1)
   }
   if (psv_failed || !"psv" %in% names(pgr)) attr(pgr, "psv_missing") <- TRUE
+  # PSV can compute yet leave rows unmatched (the merge above keeps every pgr
+  # row). Strict callers publish, and the blog's game-logs gate refuses any NA
+  # psv, so a partial gap aborts too. Every published season 2021-2026 had PSV
+  # on all rows (58,324 of 58,324, checked 2026-10-18).
+  n_na <- if ("psv" %in% names(pgr)) sum(is.na(pgr$psv)) else 0L
+  if (isTRUE(strict) && n_na > 0) {
+    cli::cli_abort("PSV missing on {n_na} of {nrow(pgr)} rows of the {season} game ratings")
+  }
   pgr
 }
