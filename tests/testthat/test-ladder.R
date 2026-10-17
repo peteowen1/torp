@@ -495,25 +495,33 @@ test_that("score generation produces non-negative plausible scores", {
 })
 
 test_that("calculate_final_ladder ranks on unrounded expected points and filters season", {
+  # 2024: A v B (unplayed, A 0.52 to win but a -10 predicted margin) and
+  # C v D (C 0.80). 2023: A v B already PLAYED 100-50, which must be ignored.
   fixtures <- data.frame(
-    match_id = as.character(1:3), season = c(2024, 2024, 2023),
-    round_number = c(1, 2, 1),
+    match_id = c("1", "2", "3"), season = c(2024, 2024, 2023),
+    round_number = c(1, 1, 1),
     home_team_name = c("A", "C", "A"), away_team_name = c("B", "D", "B"),
-    home_score = NA_real_, away_score = NA_real_
+    home_score = c(NA, NA, 100), away_score = c(NA, NA, 50)
   )
-  # A: 0.64 wins -> 2.56 pts (rounds to 3); C: 0.62 -> 2.48 pts (rounds to 2)
+  # A: 0.52 wins -> 2.08 pts, B: 0.48 -> 1.92 pts. Both round to 2, so the old
+  # code fell back to percentage, where B (positive margin) beat A.
   preds <- data.frame(
     match_id = c("1", "2"), home_team = c("A", "C"), away_team = c("B", "D"),
-    pred_win = c(0.64, 0.62), pred_margin = c(10, 9), pred_xtotal = c(160, 160)
+    pred_win = c(0.52, 0.80), pred_margin = c(-10, 20), pred_xtotal = c(160, 160)
   )
   ladder <- suppressWarnings(calculate_final_ladder(
     season = 2024, fixtures = fixtures, predictions = preds
   ))
   expect_equal(nrow(ladder), 4)
+  # Season filter: the played 2023 game must not count toward 2024
   expect_equal(sum(ladder$played), 0)
-  expect_equal(ladder$team[1:2], c("A", "C"))
-  expect_equal(ladder[team == "A"]$ladder_points, 3)
-  expect_equal(ladder[team == "C"]$ladder_points, 2)
+  expect_equal(sum(ladder$wins), 0)
+  # Display points tie at 2 ...
+  expect_equal(ladder[team == "A"]$ladder_points, 2)
+  expect_equal(ladder[team == "B"]$ladder_points, 2)
+  expect_lt(ladder[team == "A"]$percentage, ladder[team == "B"]$percentage)
+  # ... but ranking uses unrounded expected points: A above B
+  expect_lt(ladder[team == "A"]$rank, ladder[team == "B"]$rank)
 
   dup <- rbind(preds, data.frame(match_id = "1", home_team = "A", away_team = "B",
                                  pred_win = 0.9, pred_margin = 30, pred_xtotal = 160))
@@ -522,4 +530,6 @@ test_that("calculate_final_ladder ranks on unrounded expected points and filters
     "duplicate"
   )
   expect_equal(nrow(l2), 4)
+  # last duplicate row wins: A now 0.9 expected win
+  expect_equal(l2[team == "A"]$expected_wins, 0.9)
 })
