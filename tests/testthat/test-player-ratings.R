@@ -963,3 +963,35 @@ test_that("wt_tog ignores games with NA TOG in both numerator and denominator", 
   resb <- torp:::calculate_epr_stats_batch(pgd, ri)
   expect_equal(resb$wt_tog[resb$player_id == "B"], 80)
 })
+
+test_that("calculate_torp does not back-fill historical rows with a later PSR", {
+  # Player A is only rated from round 3. Their round-1 row is HISTORICAL (rounds
+  # 3 and 4 exist in the PSR history), so it must take the prior, not round 4's
+  # PSR. Round 5 is past the newest PSR round, so it falls back to the latest.
+  epr_df <- data.frame(
+    player_id = c("A", "A", "A", "B", "B"),
+    player_name = c("A", "A", "A", "B", "B"),
+    epr = c(2, 3, 4, 1, 1),
+    season = 2024L,
+    round = c(1L, 3L, 5L, 1L, 4L),
+    stringsAsFactors = FALSE
+  )
+  psr_df <- data.frame(
+    player_id = c("A", "A", "B", "B"),
+    season = 2024L,
+    round = c(3L, 4L, 1L, 4L),
+    psr = c(30, 40, 5, 15),
+    osr = c(18, 24, 3, 9),
+    dsr = c(12, 16, 2, 6),
+    stringsAsFactors = FALSE
+  )
+
+  res <- calculate_torp(epr_df, psr_df)
+  a1 <- res[res$player_id == "A" & res$round == 1L, ]
+  a3 <- res[res$player_id == "A" & res$round == 3L, ]
+  a5 <- res[res$player_id == "A" & res$round == 5L, ]
+  expect_equal(a1$psr, torp:::PSR_PRIOR_RATE)
+  expect_equal(a1$osr, torp:::PSR_PRIOR_RATE / 2)
+  expect_equal(a3$psr, 30)
+  expect_equal(a5$psr, 40)
+})

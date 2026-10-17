@@ -783,9 +783,12 @@ centre_epr_by_position <- function(epr_df,
 #' @details When both \code{epr_df} and \code{psr_df} carry \code{season} and
 #'   \code{round} columns, PSR/OSR/DSR are joined per
 #'   \code{(player_id, season, round)} so each historical rating row receives the
-#'   PSR as it stood at that point in time. Rows with no matching historical PSR
-#'   (e.g. the current round in live computation, or seasons outside the PSR
-#'   history) fall back to the player's latest available PSR snapshot. When
+#'   PSR as it stood at that point in time. Rows with no matching PSR that are
+#'   dated AFTER the newest round in the PSR history (e.g. the current round in
+#'   live computation) fall back to the player's latest available PSR snapshot.
+#'   Earlier unmatched rows (a player not yet rated that round, or seasons
+#'   before the PSR history) are NOT back-filled, since the latest snapshot
+#'   would leak later information into them; they take the prior rate. When
 #'   either frame lacks season/round, the latest-per-player snapshot is used for
 #'   all rows.
 #'
@@ -844,8 +847,16 @@ calculate_torp <- function(epr_df, psr_df, epr_weight = TORP_EPR_WEIGHT) {
     result$season <- epr_df$season
     result$round <- epr_df$round
 
-    # Backfill rows with no historical PSR match using the latest snapshot
-    unmatched <- is.na(result$psr)
+    # Backfill unmatched rows with the latest snapshot -- but ONLY rows dated
+    # after the newest PSR in the history (the live current round, or a round
+    # not yet scored). The latest snapshot is "as of" that newest round, so
+    # handing it to an earlier row would leak later information into it: a
+    # player first rated in round 10 would carry his round-10+ PSR back into
+    # rounds 0-9. Earlier unmatched rows stay NA and take the prior below.
+    psr_key <- hist_psr$season * 1000L + hist_psr$round
+    psr_newest <- suppressWarnings(max(psr_key, na.rm = TRUE))
+    row_key <- result$season * 1000L + result$round
+    unmatched <- is.na(result$psr) & !is.na(row_key) & row_key > psr_newest
     if (any(unmatched)) {
       fb_keys <- data.frame(player_id = result$player_id[unmatched],
                             stringsAsFactors = FALSE)
