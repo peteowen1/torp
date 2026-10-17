@@ -174,3 +174,12 @@ test_that(".xscore_matches_from_team_mdl_df: an isolated xScore gap informs rath
   expect_no_warning(out <- .xscore_matches_from_team_mdl_df(df))
   expect_equal(out$home_xmargin[out$match_id == "m0"], 25)
 })
+
+test_that("build_xscore_rating skips a match with no margin instead of poisoning ratings", {
+  m <- data.frame(match_id = 1:3, season = 2024L,
+                  home_team = c("A", "A", "A"), away_team = c("B", "B", "B"),
+                  home_xmargin = c(10, NA, 10), stringsAsFactors = FALSE)
+  expect_warning(res <- build_xscore_rating(m), "no margin")
+  expect_false(anyNA(res$by_match$rating_pre))
+  expect_false(anyNA(res$current$rating_current))
+})
