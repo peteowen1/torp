@@ -22,6 +22,14 @@ AFL_MIN_SEASON <- 2021L
 #' @keywords internal
 AFL_ALL_ROUNDS <- 0:30
 
+#' Players on the ground per team (used to scale TOG to a per-round total)
+#' @keywords internal
+AFL_PLAYERS_ON_FIELD <- 18L
+
+#' First season with an Opening Round 0 (round numbering starts at 0, not 1)
+#' @keywords internal
+AFL_FIRST_ROUND_ZERO_SEASON <- 2024L
+
 #' Nominal playing time per AFL quarter in seconds (excludes stoppages)
 #' @keywords internal
 AFL_PLAY_QUARTER_SECONDS <- 1200L
