@@ -82,7 +82,6 @@ add_torp_ids_dt <- function(dt) {
     opp_id = data.table::fifelse(team_id == home_team_id, away_team_id, home_team_id),
     y = -y,
     home_away = factor(data.table::fifelse(team_id == home_team_id, "Home", "Away")),
-    goal_x = venue_length / 2 - x,
     throw_in = data.table::fcase(
       description %in% c("Centre Bounce", "Out of Bounds", "Ball Up Call"), 1L,
       default = 0L
@@ -233,6 +232,7 @@ fix_chain_coordinates_dt <- function(dt) {
   n_flipped <- 1L
   iter <- 0L
   max_flip_iters <- 50L
+  converged <- FALSE
   while (n_flipped > 0L && iter < max_flip_iters) {
     iter <- iter + 1L
     dt[, `:=`(
@@ -258,6 +258,7 @@ fix_chain_coordinates_dt <- function(dt) {
       shot_row != 1L
     )]
     n_flipped <- length(flip_rows)
+    if (n_flipped == 0L) converged <- TRUE
 
     if (n_flipped > 0L) {
       dt[flip_rows, `:=`(x_pitch = -x_pitch, y_pitch = -y_pitch)]
@@ -265,7 +266,9 @@ fix_chain_coordinates_dt <- function(dt) {
 
     dt[, c("prev_x", "prev_y", "dist_as_is", "dist_flipped") := NULL]
   }
-  if (iter >= max_flip_iters) {
+  # Warn only if the loop never reached a no-flip pass; converging on exactly the
+  # last permitted iteration is not a failure.
+  if (!converged) {
     warning("fix_chain_coordinates_dt: reached max iterations (", max_flip_iters,
             ") with ", n_flipped, " rows still flagged. Possible oscillating coordinates.")
   }
