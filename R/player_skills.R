@@ -196,7 +196,10 @@ estimate_player_stat_ratings <- function(stat_rating_data, ref_date = NULL,
   has_lineup <- "lineup_position" %in% names(dt_played)
   player_meta <- dt_played[, {
     out <- list(
-      player_name = data.table::last(player_name),
+      # Name on his most recent row, by date rather than by row order: last()
+      # depended on the input being date-sorted (the batch estimator sorts
+      # first, this one did not), B71.
+      player_name = player_name[which.max(match_date_rating)],
       # Career/window-MODAL position. Stable by construction, which is why it
       # varies in only 0.6% of player-seasons and cannot track a mid-season
       # role change (FABLE-DEFENDER-VALUE-PLAN §7.14a).

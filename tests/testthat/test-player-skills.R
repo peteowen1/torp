@@ -848,3 +848,18 @@ test_that("availability rows keep the game-derived position when the roster posi
   out2 <- .prepare_stat_rating_data(pgd, ps, rosters = rosters2)
   expect_true(all(out2[player_id == "P3"]$pos_group == "KEY_FORWARD"))
 })
+
+# B71: player_name is the most recent name regardless of row order ---------------
+
+test_that("player_name comes from the latest match, not the last row of the input", {
+  dat <- create_mock_stat_rating_data()
+  latest <- dat[player_id == "1" & avail_only == FALSE, max(match_date_rating)]
+  dat[player_id == "1" & match_date_rating == latest, player_name := "Renamed Player"]
+  # Put the newest row first: row order no longer matches date order
+  dat <- dat[order(-match_date_rating)]
+  single <- estimate_player_stat_ratings(dat, compute_ci = FALSE)
+  expect_equal(single[player_id == "1"]$player_name, "Renamed Player")
+  suppressMessages(batch <- .estimate_stat_ratings_batch(
+    dat, max(dat$match_date_rating) + 1L, compute_ci = FALSE)[[1]])
+  expect_equal(batch[player_id == "1"]$player_name, "Renamed Player")
+})
