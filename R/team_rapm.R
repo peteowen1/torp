@@ -539,7 +539,7 @@ fit_team_rapm_split <- function(rapm_data, nfolds = 10, seed = 20260825) {
 #' @return list(mean_jaccard, pct_over_090, n_pairs).
 #' @keywords internal
 .team_rapm_coappearance <- function(player_rows) {
-  by_player <- split(player_rows$match_id, player_rows$player_id)
+  by_player <- split(player_rows$match_id, as.character(player_rows$player_id))
   team_players <- unique(player_rows[, .(player_id, team_id)])
   pairs <- team_players[, {
     ids <- sort(player_id)
@@ -551,7 +551,7 @@ fit_team_rapm_split <- function(rapm_data, nfolds = 10, seed = 20260825) {
   if (nrow(pairs) == 0) return(list(mean_jaccard = NA_real_, pct_over_090 = NA_real_, n_pairs = 0L))
 
   jac <- vapply(seq_len(nrow(pairs)), function(i) {
-    s1 <- by_player[[pairs$p1[i]]]; s2 <- by_player[[pairs$p2[i]]]
+    s1 <- by_player[[as.character(pairs$p1[i])]]; s2 <- by_player[[as.character(pairs$p2[i])]]
     if (is.null(s1) || is.null(s2)) return(NA_real_)
     inter <- length(intersect(s1, s2)); uni <- length(union(s1, s2))
     if (uni == 0) return(NA_real_)
@@ -643,7 +643,9 @@ extract_team_rapm_ratings <- function(rapm_data, rapm_fit) {
 #'   \code{extract_team_rapm_ratings()}'s columns plus \code{season} (the
 #'   cutoff each row's rating is valid FOR -- computed using strictly-prior
 #'   seasons only) and \code{n_train_seasons}. For \code{design="net"}: a
-#'   list of per-cutoff \code{list(season, rapm_data, rapm_fit)}.
+#'   list of per-cutoff \code{list(season, rapm_data, rapm_fit)}. Cutoffs whose
+#'   design matrix failed to build are skipped with a warning and listed in the
+#'   \code{failed_cutoffs} attribute (\code{NULL} when none failed).
 #' @keywords internal
 build_team_rapm_expanding <- function(seasons = TRUE, comp = "AFLM", min_train_seasons = 2L,
                                       design = c("split", "net"), exposure = NULL,
@@ -658,6 +660,7 @@ build_team_rapm_expanding <- function(seasons = TRUE, comp = "AFLM", min_train_s
   cli::cli_inform("build_team_rapm_expanding: {length(cutoffs)} season cutoff{?s} to fit for comp {.val {comp}}: {.val {cutoffs}}")
 
   results <- vector("list", length(cutoffs))
+  failed_cutoffs <- NULL
   for (i in seq_along(cutoffs)) {
     cutoff <- cutoffs[i]
     train_seasons <- sort(unique(load_results(seasons, comp = comp)$season))
@@ -675,7 +678,10 @@ build_team_rapm_expanding <- function(seasons = TRUE, comp = "AFLM", min_train_s
         NULL
       }
     )
-    if (is.null(rapm_data)) next
+    if (is.null(rapm_data)) {
+      failed_cutoffs <- c(failed_cutoffs, cutoff)
+      next
+    }
 
     rapm_fit <- fitter(rapm_data, nfolds = nfolds, seed = seed)
 
@@ -693,8 +699,11 @@ build_team_rapm_expanding <- function(seasons = TRUE, comp = "AFLM", min_train_s
     if (nrow(out) == 0) {
       cli::cli_abort("build_team_rapm_expanding: every season cutoff failed to fit.")
     }
+    data.table::setattr(out, "failed_cutoffs", failed_cutoffs)
     out[]
   } else {
-    Filter(Negate(is.null), results)
+    out <- Filter(Negate(is.null), results)
+    attr(out, "failed_cutoffs") <- failed_cutoffs
+    out
   }
 }
