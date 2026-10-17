@@ -261,3 +261,35 @@ test_that("the rolling and as-of implementations agree on the same prior window"
     a, tolerance = 1e-10
   )
 })
+
+# --- adjust_stats_for_opponents(): default is causal -------------------------
+
+test_that("adjust_stats_for_opponents() defaults to causal rolling profiles", {
+  # The snapshot (rolling = FALSE) builds each opponent's profile from every
+  # game including the one being adjusted. The default must not.
+  defs <- data.frame(stat_name = "disposals", type = "rate",
+                     source_col = "disposals", stringsAsFactors = FALSE)
+  d0 <- as.Date("2026-01-01")
+  mk <- function(m3) data.table::data.table(
+    player_id = paste0("P", 1:6),
+    match_id = c("M1", "M1", "M2", "M2", "M3", "M3"),
+    team     = c("A", "B", "C", "D", "A", "C"),
+    opponent = c("B", "A", "D", "C", "C", "A"),
+    match_date_rating = c(d0, d0, d0 + 7, d0 + 7, d0 + 14, d0 + 14),
+    disposals = c(10, 30, 20, 40, m3, m3)
+  )
+  factor_m3 <- function(dt, ...) {
+    out <- suppressMessages(adjust_stats_for_opponents(
+      dt, lambda_decay = 0, stat_defs = defs, ...))
+    out <- out[match_id == "M3" & team == "A"]
+    out$disposals_oadj / out$disposals
+  }
+
+  # Default == explicit rolling = TRUE.
+  expect_identical(factor_m3(mk(50)), factor_m3(mk(50), rolling = TRUE))
+  # Causal: the match being adjusted cannot move its own factor.
+  expect_equal(factor_m3(mk(50)), factor_m3(mk(5000)))
+  # The in-sample snapshot does move, which is the leak.
+  expect_false(isTRUE(all.equal(factor_m3(mk(50), rolling = FALSE),
+                                factor_m3(mk(5000), rolling = FALSE))))
+})

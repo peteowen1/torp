@@ -10,7 +10,7 @@ adjust_stats_for_opponents(
   prior_games = 5,
   cap = OPP_ADJ_FACTOR_CAP,
   stat_defs = NULL,
-  rolling = FALSE
+  rolling = TRUE
 )
 }
 \arguments{
@@ -27,9 +27,18 @@ them from \code{home_team_name}, \code{away_team_name}, \code{team_status}.}
 
 \item{stat_defs}{Output of \code{\link[=stat_rating_definitions]{stat_rating_definitions()}}. If NULL, uses default.}
 
-\item{rolling}{Logical. If TRUE, computes causal rolling profiles (each game
-uses only prior games for its opponent profile). If FALSE (default),
-computes a single snapshot profile at the latest date.}
+\item{rolling}{Logical. If TRUE (default), computes causal rolling profiles
+(each game uses only prior games for its opponent profile). If FALSE,
+computes a single snapshot profile at the latest date.
+
+The snapshot is IN-SAMPLE: each team's conceded profile is built from
+every game in \code{player_stats}, including the match being adjusted and
+every later one, so a game's factor partly reflects its own outcome and
+the future. That is acceptable for descriptive per-game stats but it must
+not feed anything fitted or evaluated out of sample. Use \code{rolling = TRUE}
+for that. Note that \code{rolling = TRUE} only sees the games passed in, so a
+single-season input has no history for its first matches (neutral factor
+1.0 for the opening match, thin profiles for the opening rounds).}
 }
 \value{
 The input data with additional \verb{\{stat\}_oadj} columns for each rate stat.
