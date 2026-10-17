@@ -1552,12 +1552,26 @@ compute_contest_credit <- function(chains, pbp_data, contest_share = 1 / 3) {
   }
 
   # Find the kicker's display_order (first Kick/Ground Kick within 5 rows back)
+  # The scan may only pass through in-flight annotation rows, exactly as
+  # compute_spoil_credit() does: a possession event (Handball, Mark, an earlier
+  # Spoil, ...) between the kick and the contest means the kick further back
+  # belongs to a different play, and crediting it would pay the contest with
+  # the swing of a kick it never touched.
+  inflight <- CHAINS_INFLIGHT_DESCS
+  contests[, `:=`(
+    .clear2 = .lag1_desc %chin% inflight,
+    .clear3 = .lag1_desc %chin% inflight & .lag2_desc %chin% inflight,
+    .clear4 = .lag1_desc %chin% inflight & .lag2_desc %chin% inflight &
+              .lag3_desc %chin% inflight,
+    .clear5 = .lag1_desc %chin% inflight & .lag2_desc %chin% inflight &
+              .lag3_desc %chin% inflight & .lag4_desc %chin% inflight
+  )]
   contests[, kick_display_order := data.table::fcase(
     .lag1_desc %chin% kick_descs, .lag1_do,
-    .lag2_desc %chin% kick_descs, .lag2_do,
-    .lag3_desc %chin% kick_descs, .lag3_do,
-    .lag4_desc %chin% kick_descs, .lag4_do,
-    .lag5_desc %chin% kick_descs, .lag5_do,
+    .clear2 & .lag2_desc %chin% kick_descs, .lag2_do,
+    .clear3 & .lag3_desc %chin% kick_descs, .lag3_do,
+    .clear4 & .lag4_desc %chin% kick_descs, .lag4_do,
+    .clear5 & .lag5_desc %chin% kick_descs, .lag5_do,
     default = NA_integer_
   )]
 
