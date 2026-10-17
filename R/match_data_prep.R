@@ -80,8 +80,10 @@
 #' Build per-week roster ratings for one target week
 #'
 #' Roster-based counterpart to [.build_team_ratings_df()], which is
-#' lineup-based. Only excludes players still injured for that week
-#' (`return_round > w`); players returning by the target week are included.
+#' lineup-based. Excludes players still injured for that week (`return_round >
+#' w`) and injured players with no known return round (`injury` set but
+#' `return_round` NA, treated as out); players returning by the target week
+#' (`return_round <= w`) and uninjured players are included.
 #' The discount scales with prediction horizon (0.99 for the nearest week,
 #' dropping 0.01 per week, floored at `INJURY_DISCOUNT_FLOOR`).
 #'
@@ -126,6 +128,31 @@
       .groups = "drop"
     ) |>
     dplyr::mutate(round = w)
+}
+
+
+# .torp_sum_cols ----
+
+#' Rating columns summed to team level, defined once
+#'
+#' The team-aggregation in [.build_team_ratings_df()] and the column select in
+#' [.build_match_features()] each used to spell this list out, so a rating added
+#' to one and not the other vanished silently. `include_xrapm` is the one
+#' difference that is kept on purpose, for now: `.build_team_ratings_df()` sums
+#' `xrapm`, but `.build_match_features()` has never carried it through, which
+#' leaves `xrapm_diff` a constant 0 in the model frame (see the note at the
+#' call in `.build_match_features()`).
+#'
+#' @param available Column names of the frame being summed or selected.
+#' @param include_xrapm Whether to include `xrapm`.
+#' @return Character vector of rating column names present in `available`
+#'   (`osr`/`dsr` only when `osr` is).
+#' @keywords internal
+.torp_sum_cols <- function(available, include_xrapm = FALSE) {
+  cols <- c("epr", "epr_recv", "epr_disp", "epr_spoil", "epr_hitout", "psr",
+            if (include_xrapm) "xrapm")
+  if ("osr" %in% available) cols <- c(cols, "osr", "dsr")
+  cols
 }
 
 
@@ -314,8 +341,7 @@
   }
 
   # Aggregate to team level
-  torp_sum_cols <- c("epr", "epr_recv", "epr_disp", "epr_spoil", "epr_hitout", "psr", "xrapm")
-  if ("osr" %in% names(team_lineup_df)) torp_sum_cols <- c(torp_sum_cols, "osr", "dsr")
+  torp_sum_cols <- .torp_sum_cols(names(team_lineup_df), include_xrapm = TRUE)
 
   team_rt_df <- team_lineup_df |>
     dplyr::filter(!is.na(player_id)) |>
@@ -343,8 +369,12 @@
 #' @keywords internal
 #' @importFrom purrr pmap_dbl
 .build_match_features <- function(fix_df, team_rt_df, all_grounds) {
-  torp_sum_cols <- c("epr", "epr_recv", "epr_disp", "epr_spoil", "epr_hitout", "psr")
-  if ("osr" %in% names(team_rt_df)) torp_sum_cols <- c(torp_sum_cols, "osr", "dsr")
+  # xrapm is NOT carried through here (include_xrapm = FALSE), so it never
+  # reaches team_rt_fix_df and `xrapm_diff` is a constant 0 in the model frame.
+  # Measured 2026-10-17 on 2024-2026: max |xrapm_diff| = 0 although the as-of
+  # snapshot loads and .build_team_ratings_df() sums it. Left as it was --
+  # switching it on changes the XGBoost feature set and needs the owner's call.
+  torp_sum_cols <- .torp_sum_cols(names(team_rt_df), include_xrapm = FALSE)
 
   # Add venue from fixtures (teams data doesn't carry venue)
   team_rt_df <- team_rt_df |>
@@ -388,9 +418,10 @@
       by = "team_id"
     ) |>
     dplyr::mutate(
-      distance = purrr::pmap_dbl(
-        list(venue_lon, venue_lat, team_lon, team_lat),
-        ~ geosphere::distHaversine(c(..1, ..2), c(..3, ..4))
+      # One vectorised call over coordinate matrices; NA coordinates give NA
+      # distance (-> MATCH_LOG_DIST_DEFAULT below), as the per-row version did.
+      distance = if (dplyr::n() == 0) numeric(0) else geosphere::distHaversine(
+        cbind(venue_lon, venue_lat), cbind(team_lon, team_lat)
       ),
       log_dist = log(distance + MATCH_LOG_DIST_OFFSET),
       log_dist = tidyr::replace_na(log_dist, MATCH_LOG_DIST_DEFAULT)
@@ -422,7 +453,16 @@
         dplyr::all_of(c(torp_sum_cols, MATCH_POS_COLS, "count"))
       ),
       by = c("match_id", "team_id", "season", "round_number")
-    ) |>
+    )
+
+  # fill() and lag() below walk each team's rows in frame order, and neither
+  # .build_fixtures_df() nor load_fixtures() sorts. Order by kickoff first so a
+  # missing rating is only ever filled from an EARLIER match (never a later
+  # one, which would be as-of leakage), then restore the incoming row order
+  # (order(ord) is the inverse permutation) so nothing downstream sees a
+  # reshuffled frame.
+  ord <- order(team_rt_fix_df$team_id, team_rt_fix_df$utc_dt)
+  team_rt_fix_df <- team_rt_fix_df[ord, ] |>
     dplyr::group_by(team_id) |>
     tidyr::fill(epr, epr_recv, epr_disp, epr_spoil, epr_hitout, psr,
                 dplyr::any_of(c("osr", "dsr"))) |>
@@ -435,6 +475,7 @@
     ) |>
     tidyr::fill(def, mid, fwd, int) |>
     dplyr::ungroup()
+  team_rt_fix_df <- team_rt_fix_df[order(ord), ]
 
   team_rt_fix_df
 }
@@ -685,6 +726,25 @@
 }
 
 
+# .completed_weight_mean ----
+
+#' Mean time-decay weight over completed matches
+#'
+#' Divisor for [.build_team_mdl_df()]'s weight normalisation. Falls back to the
+#' mean over every row when no match has a score yet, so a frame of fixtures
+#' alone still gets finite weights rather than `NaN`.
+#'
+#' @param w Raw time-decay weights.
+#' @param score_diff Final margin; `NA` for matches not yet played.
+#' @return A single finite mean.
+#' @keywords internal
+.completed_weight_mean <- function(w, score_diff) {
+  done <- is.finite(score_diff)
+  m <- if (any(done)) mean(w[done], na.rm = TRUE) else mean(w, na.rm = TRUE)
+  m
+}
+
+
 # .build_team_mdl_df ----
 
 #' Build the full match model dataset
@@ -748,8 +808,16 @@
     bad_ids <- unique(team_mdl_df_tot$match_id[na_mask])
     # A future fixture with unnamed teams is expected. A COMPLETED match with no
     # opponent is a real join failure and must not be waved through as one.
-    completed <- if ("score_diff" %in% names(team_mdl_df_tot)) {
-      sum(na_mask & !is.na(team_mdl_df_tot$score_diff))
+    #
+    # Two tests, and both are needed. `result` (home minus away score, from
+    # .build_fixtures_df()) is the completed-match marker that exists at this
+    # point -- `score_diff` is not created until after the results join below,
+    # so a guard keyed on it was dead and the abort unreachable. And the abort
+    # keys on the opponent ROW being absent (`season.y` is NA), not on an NA
+    # rating: a completed match whose opponent merely has no rating history is
+    # the rating-less-team case, which stays a warning, not an abort.
+    completed <- if (all(c("result", "season.y") %in% names(team_mdl_df_tot))) {
+      sum(na_mask & is.na(team_mdl_df_tot$season.y) & !is.na(team_mdl_df_tot$result))
     } else 0L
     cli::cli_warn(c(
       "{na_opp} row{?s} have no opponent after the self-join; their rating features are NA.",
@@ -762,6 +830,22 @@
         "x" = "That is a join failure, not an unnamed future fixture. Refusing to build a model frame on it."
       ))
     }
+  }
+
+  # Two deliberately different missing-feature conventions, kept apart because
+  # their consumers read them differently (so do NOT unify them to one fill):
+  #   * osr_diff / dsr_diff -> NA. The formula builders (match_train.R) and
+  #     build_matchup_table() test `all(is.na(osr_diff))` to decide the feature
+  #     is ABSENT and leave it out of the model. A 0 fill would read as a real,
+  #     constant feature and put it in.
+  #   * xrapm_diff -> 0. It is an unconditional XGBoost feature column, so it
+  #     must exist and be finite; 0 is the neutral "no known difference".
+  # The fallback itself is silent in the data, so say so here.
+  if (!all(c("osr.x", "osr.y", "dsr.x", "dsr.y") %in% names(team_mdl_df_tot))) {
+    cli::cli_inform("No osr/dsr in the team ratings -- osr_diff and dsr_diff are NA (features left out of the models).")
+  }
+  if (!all(c("xrapm.x", "xrapm.y") %in% names(team_mdl_df_tot))) {
+    cli::cli_inform("No xrapm in the team ratings -- xrapm_diff is a neutral 0 for every row.")
   }
 
   team_mdl_df_tot <- team_mdl_df_tot |>
@@ -782,11 +866,15 @@
       torp.y = TORP_EPR_WEIGHT * epr.y + (1 - TORP_EPR_WEIGHT) * psr.y,
       torp_diff = torp.x - torp.y
     ) |>
+    # many-to-one: two team rows per match against ONE results / xG row. A
+    # duplicate match_id on the right would multiply team-match rows and break
+    # the 1:1 self-join assumption and the weights, so make it an error.
     dplyr::left_join(
       .normalise_results_schema(results),
-      by = "match_id"
+      by = "match_id", relationship = "many-to-one"
     ) |>
-    dplyr::left_join(xg_df, by = c("match_id" = "match_id")) |>
+    dplyr::left_join(xg_df, by = c("match_id" = "match_id"),
+                     relationship = "many-to-one") |>
     dplyr::mutate(
       home_shots = home_goals + home_behinds,
       away_shots = away_goals + away_behinds,
@@ -891,7 +979,12 @@
       ))),
       weightz = exp(as.numeric(-(weight_anchor_date - as.Date(utc_start_time))) /
         MATCH_WEIGHT_DECAY_DAYS),
-      weightz = weightz / mean(weightz, na.rm = TRUE),
+      # Normalise to mean 1 over COMPLETED matches only. Unplayed fixtures start
+      # after the anchor date, so exp(-(anchor - date) / decay) is above 1 for
+      # them; including them in the mean pulled it up and scaled every training
+      # row's weight down. Weights are never trained on for unplayed rows, and
+      # the same divisor applies to all rows, so relative weights are unchanged.
+      weightz = weightz / .completed_weight_mean(weightz, score_diff),
       shot_weightz = (harmean_shots / mean(harmean_shots, na.rm = TRUE)) * weightz
     )
 
@@ -920,8 +1013,15 @@
     )
 
   # Join weather and apply log transforms
+  # Weather is keyed one row per match. .load_match_weather() binds the
+  # historical file to forecast rows and does not dedupe, so collapse any
+  # repeated match_id here (first row wins) rather than fanning out the frame.
+  if (anyDuplicated(weather_df$match_id) > 0) {
+    cli::cli_warn("weather_df has {sum(duplicated(weather_df$match_id))} duplicate match_id row{?s} -- keeping the first of each")
+    weather_df <- dplyr::distinct(weather_df, match_id, .keep_all = TRUE)
+  }
   team_mdl_df <- team_mdl_df |>
-    dplyr::left_join(weather_df, by = "match_id") |>
+    dplyr::left_join(weather_df, by = "match_id", relationship = "many-to-one") |>
     dplyr::mutate(
       temp_avg = tidyr::replace_na(temp_avg, stats::median(temp_avg, na.rm = TRUE)),
       wind_avg = tidyr::replace_na(wind_avg, stats::median(wind_avg, na.rm = TRUE)),

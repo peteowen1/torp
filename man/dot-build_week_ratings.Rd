@@ -20,8 +20,9 @@ One row per (team_name, season), with \code{round} set to \code{w}.
 }
 \description{
 Roster-based counterpart to \code{\link[=.build_team_ratings_df]{.build_team_ratings_df()}}, which is
-lineup-based. Only excludes players still injured for that week
-(\code{return_round > w}); players returning by the target week are included.
+lineup-based. Excludes players still injured for that week (\code{return_round > w}) and injured players with no known return round (\code{injury} set but
+\code{return_round} NA, treated as out); players returning by the target week
+(\code{return_round <= w}) and uninjured players are included.
 The discount scales with prediction horizon (0.99 for the nearest week,
 dropping 0.01 per week, floored at \code{INJURY_DISCOUNT_FLOOR}).
 }

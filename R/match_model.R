@@ -3,6 +3,25 @@
 # Convenience wrappers and the full predictions pipeline.
 # Data prep helpers are in match_data_prep.R; training in match_train.R.
 
+# .margin_slope_ok ----
+
+#' Does a raw out-of-sample margin slope pass the release gate?
+#'
+#' `is.finite()`, not `is.na()`: the cold-start branch in
+#' `run_predictions_pipeline()` is checked first and already handles the
+#' legitimate NA slope (too few OOS matches), so a non-finite slope reaching
+#' this test is a failed `lm()` fit. That must fail the gate; treating NA as a
+#' pass uploaded a sidecar whose slope was never checked.
+#'
+#' @param slope_raw Raw OOS slope from `fit_match_margin_calibration()`.
+#' @param gate Length-2 acceptable range, default `MATCH_MARGIN_SLOPE_GATE`.
+#' @return `TRUE` only for a finite slope inside `gate`.
+#' @keywords internal
+.margin_slope_ok <- function(slope_raw, gate = MATCH_MARGIN_SLOPE_GATE) {
+  is.finite(slope_raw) && slope_raw >= gate[1] && slope_raw <= gate[2]
+}
+
+
 # .blend_gam_xgb ----
 
 #' The GAM/XGBoost Input Blend
@@ -227,6 +246,10 @@ get_lineup_ratings <- function(season = NULL, round = NULL, match_id = NULL) {
         )
     }
   } else {
+    # Reached when the PSR load/compute above failed or returned nothing. Every
+    # player then gets the flat prior scaled by his position's TOG, so psr and
+    # torp in this table are NOT on the same footing as the published ratings.
+    cli::cli_warn("No PSR available -- every player's psr is the flat prior {PSR_PRIOR_RATE} x lineup TOG, so psr and torp below are a placeholder, not real ratings.")
     lineup_df$psr <- PSR_PRIOR_RATE * lineup_df$lineup_tog
   }
 
@@ -730,6 +753,12 @@ build_prediction_state <- function(week = NULL, weeks = NULL, season = NULL,
   })
   if (is.null(torp_df_total) || nrow(torp_df_total) < 100) {
     cli::cli_warn("TORP ratings unavailable or too small from release - computing from scratch (this may be slow)")
+    # round_val is the as-at round of the ratings (ratings use data before that
+    # round), and this fallback returns that ONE round only. get_afl_week("next")
+    # follows today's date, not the target week resolved below, so on a backfill
+    # or a re-run for an earlier week these are not the as-at ratings for the
+    # week being predicted. Not changed here: target_weeks is resolved after
+    # this block, and a "weeks = 'all'" backfill has no single round to pass.
     torp_df_total <- tryCatch(
       calculate_epr(season_val = season, round_val = get_afl_week(type = "next")),
       error = function(e) {
@@ -1024,9 +1053,11 @@ build_prediction_state <- function(week = NULL, weeks = NULL, season = NULL,
   meaningful <- abs(week_gms$pred_margin) > 1 & abs(week_gms$pred_win - 0.5) > 0.02
   disagreements <- meaningful & margin_sign != win_sign
   if (any(disagreements, na.rm = TRUE)) {
-    bad <- week_gms[disagreements, ]
+    # which(): a logical index containing NA returns an all-NA row, which would
+    # be counted as a (blank) disagreement.
+    bad <- week_gms[which(disagreements), ]
     validation_errors <- c(validation_errors, paste0(
-      "Margin/win probability direction disagreement for ", sum(disagreements), " match(es). ",
+      "Margin/win probability direction disagreement for ", nrow(bad), " match(es). ",
       "e.g. ", bad$home_team[1], " vs ", bad$away_team[1],
       " (", season, " R", bad$round[1], ", ", bad$match_id[1], ")",
       ": margin=", round(bad$pred_margin[1], 1), ", win=", round(bad$pred_win[1], 3)
@@ -1035,7 +1066,7 @@ build_prediction_state <- function(week = NULL, weeks = NULL, season = NULL,
 
   # Total expected score should be in a plausible range (100-250 points)
   if (any(week_gms$pred_xtotal < 100 | week_gms$pred_xtotal > 250, na.rm = TRUE)) {
-    bad_xt <- week_gms[week_gms$pred_xtotal < 100 | week_gms$pred_xtotal > 250, ]
+    bad_xt <- week_gms[which(week_gms$pred_xtotal < 100 | week_gms$pred_xtotal > 250), ]
     validation_errors <- c(validation_errors, paste0(
       "Implausible pred_xtotal for ", nrow(bad_xt), " match(es) outside 100-250 range. ",
       "e.g. ", bad_xt$home_team[1], " vs ", bad_xt$away_team[1],
@@ -1241,10 +1272,20 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
       error = function(e) {
         retro_failures <<- retro_failures + 1L
         local_path <- file.path("data-raw", paste0(retro_file_name, ".parquet"))
-        arrow::write_parquet(retro_preds, local_path)
+        # Guarded like the locked-predictions handler above: a failed local
+        # write (disk full, locked file, missing data-raw/) must not escape the
+        # season loop and skip the remaining seasons and the model upload.
+        saved_local <- tryCatch({
+          arrow::write_parquet(retro_preds, local_path)
+          TRUE
+        }, error = function(e2) {
+          cli::cli_alert_danger(
+            "Could not save retrodictions_{retro_s} locally to {local_path}: {conditionMessage(e2)}")
+          FALSE
+        })
         cli::cli_warn(c(
           "Failed to upload retrodictions_{retro_s}: {conditionMessage(e)}",
-          "i" = "Saved locally to {local_path}"
+          "i" = if (saved_local) "Saved locally to {local_path}" else "No local copy was saved."
         ))
       }
     )
@@ -1346,7 +1387,7 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
       )
       if (!is.null(calib_fit)) {
         gate <- MATCH_MARGIN_SLOPE_GATE
-        slope_ok <- is.na(calib_fit$slope_raw) || (calib_fit$slope_raw >= gate[1] && calib_fit$slope_raw <= gate[2])
+        slope_ok <- .margin_slope_ok(calib_fit$slope_raw, gate)
         if (isTRUE(calib_fit$cold_start)) {
           cli::cli_warn(c(
             "Margin calibration cold start: only {calib_fit$n_oos} OOS holdout matches (< {MATCH_RECAL_MIN_N}) -- b was forced to identity.",
@@ -1600,6 +1641,16 @@ add_weather_to_preds <- function(preds, raw_cols = FALSE) {
     return(preds)
   }
 
+  # One weather row per match. load_weather() takes no season argument, so the
+  # per-season .load_match_weather() calls above each return the WHOLE
+  # historical file and bind_rows() stacks the copies: every match_id repeats
+  # once per season in `preds`. Left alone, the join below would multiply the
+  # predictions rows by that count. Keep the first row per match_id.
+  n_dup_weather <- sum(duplicated(weather_df$match_id))
+  if (n_dup_weather > 0) {
+    weather_df <- dplyr::distinct(weather_df, match_id, .keep_all = TRUE)
+  }
+
   weather_df$weather <- .format_weather_summary(
     weather_df$temp_avg, weather_df$wind_avg,
     weather_df$precipitation_total, weather_df$is_roof
@@ -1612,7 +1663,11 @@ add_weather_to_preds <- function(preds, raw_cols = FALSE) {
   }
 
   out <- preds |>
-    dplyr::left_join(weather_df[, intersect(keep, names(weather_df))], by = "match_id")
+    dplyr::left_join(weather_df[, intersect(keep, names(weather_df))], by = "match_id",
+                     relationship = "many-to-one")
+  if (nrow(out) != nrow(preds)) {
+    cli::cli_abort("Joining weather changed the row count ({nrow(preds)} -> {nrow(out)}); refusing to return duplicated predictions.")
+  }
 
   added <- setdiff(keep, "match_id")
   if (length(added) > 0 && "venue" %in% names(out)) {
@@ -1736,10 +1791,34 @@ add_weather_to_preds <- function(preds, raw_cols = FALSE) {
 #' @return The SD, or `NA_real_` when it cannot be sized (fewer than 100
 #'   completed rows, or a non-positive / non-finite result).
 #' @keywords internal
-.margin_residual_sd <- function(df) {
-  done <- is.finite(df$score_diff) & is.finite(df$pred_score_diff)
-  sigma <- stats::sd(df$score_diff[done] - df$pred_score_diff[done])
-  if (!is.finite(sigma) || sigma <= 0 || sum(done) < 100) return(NA_real_)
+.margin_residual_sd <- function(df, min_n = MARGIN_SIGMA_MIN_N) {
+  .residual_sd(df$score_diff, df$pred_score_diff, min_n)
+}
+
+
+#' Fewest completed matches a margin-spread estimate is sized from
+#'
+#' Shared by `.margin_residual_sd()` and `.heldout_margin_sigma()`, which used
+#' to carry the same 100-row floor as separate literals.
+#' @keywords internal
+#' @noRd
+MARGIN_SIGMA_MIN_N <- 100L
+
+
+#' SD of `actual - pred` over rows where both are finite
+#'
+#' The single routine behind the margin-spread helpers.
+#'
+#' @param actual,pred Numeric vectors of equal length.
+#' @param min_n Fewest finite pairs to size it from.
+#' @return The SD, or `NA_real_` with fewer than `min_n` finite pairs or a
+#'   non-finite / non-positive result.
+#' @keywords internal
+.residual_sd <- function(actual, pred, min_n = MARGIN_SIGMA_MIN_N) {
+  done <- is.finite(actual) & is.finite(pred)
+  if (sum(done) < min_n) return(NA_real_)
+  sigma <- stats::sd(actual[done] - pred[done])
+  if (!is.finite(sigma) || sigma <= 0) return(NA_real_)
   sigma
 }
 
@@ -1818,7 +1897,7 @@ add_weather_to_preds <- function(preds, raw_cols = FALSE) {
 #' @return The SD, or `NA_real_` when the load fails or fewer than `min_n`
 #'   completed matches are available.
 #' @keywords internal
-.heldout_margin_sigma <- function(preds = NULL, min_n = 100L) {
+.heldout_margin_sigma <- function(preds = NULL, min_n = MARGIN_SIGMA_MIN_N) {
   if (is.null(preds)) {
     preds <- tryCatch(load_predictions(TRUE, columns = c("margin", "pred_margin")),
                       error = function(e) {
@@ -1827,9 +1906,5 @@ add_weather_to_preds <- function(preds, raw_cols = FALSE) {
                       })
   }
   if (is.null(preds) || !all(c("margin", "pred_margin") %in% names(preds))) return(NA_real_)
-  done <- is.finite(preds$margin) & is.finite(preds$pred_margin)
-  if (sum(done) < min_n) return(NA_real_)
-  sigma <- stats::sd(preds$margin[done] - preds$pred_margin[done])
-  if (!is.finite(sigma) || sigma <= 0) return(NA_real_)
-  sigma
+  .residual_sd(preds$margin, preds$pred_margin, min_n)
 }
