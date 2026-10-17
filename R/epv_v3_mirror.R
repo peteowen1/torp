@@ -57,6 +57,9 @@ EPV3_MIRROR_PRIOR <- 200
 #' @keywords internal
 build_mirror_weights <- function(scored, pos) {
   s <- data.table::as.data.table(scored)
+  if (anyDuplicated(pos, by = c("match_id", "player_id")) > 0) {
+    cli::cli_abort("{.arg pos} must have one row per match_id and player_id.")
+  }
   named <- s[!is.na(loser_pid) & !is.na(winner_pid)]
   if (nrow(named) < 500) {
     cli::cli_warn(c(
@@ -72,7 +75,13 @@ build_mirror_weights <- function(scored, pos) {
                  by.y = c("match_id", "player_id"), all.x = TRUE)
   data.table::setnames(named, "pos", "loser_pos")
   named <- named[!is.na(winner_pos) & !is.na(loser_pos)]
-  if (nrow(named) < 500) return(NULL)
+  if (nrow(named) < 500) {
+    cli::cli_warn(c(
+      "Only {nrow(named)} duels with both positions known: too few to estimate matchup weights.",
+      "i" = "Falling back to the flat share."
+    ))
+    return(NULL)
+  }
 
   # Only defence-wins are usable: the attack-retained direction is essentially
   # never logged, so including it would add noise from a handful of rows rather
@@ -110,13 +119,22 @@ build_mirror_weights <- function(scored, pos) {
 #' @param chains Raw chains, used for the roster and positions.
 #' @param weights From \code{build_mirror_weights()}; \code{NULL} falls back to
 #'   the flat share.
+#' @param pos Optional \code{match_id}, \code{player_id}, \code{pos} table, one
+#'   row per player-match. Pass the same table given to
+#'   \code{build_mirror_weights()} so position has one definition per call;
+#'   derived from \code{chains} (first logged position) when \code{NULL}.
 #' @return A data.table of \code{player_id}, \code{match_id}, \code{cont_alloc}.
 #' @keywords internal
-allocate_by_mirror <- function(scored, chains, weights) {
-  ch <- data.table::as.data.table(chains)
+allocate_by_mirror <- function(scored, chains, weights, pos = NULL) {
+  ch <- data.table::as.data.table(
+    if (data.table::is.data.table(chains)) chains[, .(match_id, team_id, player_id, player_position)]
+    else chains[, c("match_id", "team_id", "player_id", "player_position")])
   s <- data.table::as.data.table(scored)
-  pos <- unique(ch[!is.na(player_id) & !is.na(player_position),
-                   .(match_id, player_id, pos = player_position)])
+  if (is.null(pos)) {
+    pos <- unique(ch[!is.na(player_id) & !is.na(player_position),
+                     .(match_id, player_id, pos = player_position)])
+    pos <- pos[!duplicated(pos, by = c("match_id", "player_id"))]
+  }
   roster <- unique(ch[!is.na(player_id) & !is.na(team_id),
                       .(match_id, team_id, player_id)])
   roster <- merge(roster, pos, by = c("match_id", "player_id"), all.x = TRUE)
@@ -165,6 +183,9 @@ allocate_by_mirror <- function(scored, chains, weights) {
                                   cont_alloc = numeric()))
   }
 
+  # The expansion (each winner_pos group x each roster player) is intended; it
+  # is bounded only while the roster is unique, so assert that.
+  stopifnot(!anyDuplicated(roster, by = c("match_id", "team_id", "player_id")))
   a <- merge(agg, roster, by = c("match_id", "team_id"), allow.cartesian = TRUE)
   if (flat) {
     a[, w := 1]
