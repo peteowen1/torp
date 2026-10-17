@@ -93,6 +93,7 @@ add_epv_vars <- function(df, reference_date = Sys.Date()) {
       ),
       lead_team = dplyr::if_else(is.na(.data$points_shot), dplyr::lead(.data$team), .data$team),
       xpoints_diff = .data$points_diff + .data$exp_pts,
+      # last row of each (match, period) falls back to the realised points_diff
       delta_epv = dplyr::lead(.data$xpoints_diff, default = dplyr::last(.data$points_diff)) * .data$team_change - .data$xpoints_diff,
       weight_gm = exp(as.numeric(-(lubridate::as_date(reference_date) - lubridate::as_date(.data$utc_start_time))) / EPV_WEIGHT_DECAY_DAYS),
       round_week = sprintf("%02d", .data$round_number)
@@ -105,6 +106,10 @@ add_epv_vars <- function(df, reference_date = Sys.Date()) {
   }
   if (any(!pbp_final$team_change %in% c(-1L, 1L), na.rm = TRUE)) {
     cli::cli_warn("Unexpected team_change values detected (expected -1 or 1)")
+  }
+  n_na_weight <- sum(is.na(pbp_final$weight_gm))
+  if (n_na_weight > 0) {
+    cli::cli_warn("{n_na_weight} row{?s} with NA weight_gm (missing utc_start_time)")
   }
 
   return(pbp_final)
@@ -145,6 +150,7 @@ add_wp_vars <- function(df) {
     dplyr::mutate(
       wp = round(pmax(0.001, pmin(0.999, .data$wp)), 5),
 
+      # last row of each match gets wp_next == wp, so its wpa is 0 by construction
       wp_next = dplyr::lead(.data$wp, default = dplyr::last(.data$wp)),
       team_id_next = dplyr::lead(.data$team_id_mdl, default = dplyr::last(.data$team_id_mdl)),
 
@@ -246,6 +252,9 @@ get_epv_preds <- function(df) {
     if (is.matrix(preds_raw)) {
       preds <- as.data.frame(preds_raw)
     } else {
+      if (length(preds_raw) != 5L * nrow(df)) {
+        cli::cli_abort("EP model returned {length(preds_raw)} values for {nrow(df)} rows (expected 5 per row)")
+      }
       preds <- as.data.frame(matrix(preds_raw, ncol = 5, byrow = TRUE))
     }
     colnames(preds) <- c("opp_goal", "opp_behind", "behind", "goal", "no_score")
