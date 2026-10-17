@@ -376,3 +376,38 @@ test_that("population = 'duel' drops receptions from the SAME-TEAM mark branch",
   # the genuine Contested Mark win survives
   expect_true(all(duel_marks$player2_desc == "Contested Mark"))
 })
+
+
+test_that("overlapping ground ball pairs do not reuse a row", {
+  chains <- data.table::data.table(
+    match_id = "M1", season = 2024L, round_number = 1L,
+    display_order = 1:3, period = 1L, period_seconds = c(10L, 11L, 12L),
+    x = 5L, y = 5L,
+    team_id = c("T1", "T2", "T1"),
+    description = rep("Hard Ball Get", 3),
+    player_id = c("A", "B", "C")
+  )
+  res <- extract_contests(chains = chains, type = "ground_ball")
+  expect_equal(nrow(res), 1)
+  expect_equal(res$player1_id, "A")
+  expect_equal(res$player2_id, "B")
+})
+
+test_that("extract_contests warns when season/round_number are absent", {
+  chains <- create_mock_contest_chains()
+  chains[, c("season", "round_number") := NULL]
+  expect_warning(
+    res <- extract_contests(chains = chains, type = "ground_ball"),
+    "season"
+  )
+  expect_true(all(is.na(res$season)))
+})
+
+test_that("filter_chains_to_pair keeps only matches with both players", {
+  chains <- data.table::data.table(
+    match_id = c("M1", "M1", "M2", "M2", "M3"),
+    player_id = c("A", "B", "A", "C", "B")
+  )
+  out <- filter_chains_to_pair(chains, "A", "B")
+  expect_equal(unique(out$match_id), "M1")
+})
