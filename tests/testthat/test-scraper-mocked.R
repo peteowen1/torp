@@ -11,6 +11,13 @@ test_that("get_round_games function exists", {
   expect_true(is.function(get_round_games))
 })
 
+test_that(".assert_unique_player_keys aborts on duplicate (playerId, season)", {
+  ok <- data.frame(playerId = c("a", "b"), season = 2024)
+  expect_no_error(.assert_unique_player_keys(ok))
+  dup <- data.frame(playerId = c("a", "a"), season = 2024)
+  expect_error(.assert_unique_player_keys(dup), "not unique")
+})
+
 test_that("get_season_games function exists", {
   expect_true(exists("get_season_games"))
   expect_true(is.function(get_season_games))
