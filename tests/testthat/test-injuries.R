@@ -601,6 +601,7 @@ test_that("build_injury_schedule aggregates same-round returns", {
     round_number = c(1L, 2L, 3L, 3L),
     given_name = c("Dan", "Bob", "Alice", "Eve"),
     surname = c("Four", "Two", "One", "Five"),
+    team_name = c("Geelong Cats", "Sydney Swans", "Sydney Swans", "Hawthorn Hawks"),
     lineup_position = c("FF", "MID", "DEF", "MID")
   )
 
