@@ -10,7 +10,9 @@
 \item{dt}{A data.table or data.frame of player stats.}
 }
 \value{
-The input (coerced to data.table) with normalised column names, modified by reference.
+The input coerced to a data.table (a data.frame input is copied, so
+only a data.table input is modified by reference), returned invisibly.
+Assign the result.
 }
 \description{
 Maps both old (2021-2025) and new (2026+ v2 API) player stats schemas to

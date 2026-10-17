@@ -4,7 +4,7 @@
 \alias{allocate_by_mirror}
 \title{Spread an unnamed contest debit across the losing team by positional matchup}
 \usage{
-allocate_by_mirror(scored, chains, weights)
+allocate_by_mirror(scored, chains, weights, pos = NULL)
 }
 \arguments{
 \item{scored}{Output of \code{score_contests()}.}
@@ -13,6 +13,11 @@ allocate_by_mirror(scored, chains, weights)
 
 \item{weights}{From \code{build_mirror_weights()}; \code{NULL} falls back to
 the flat share.}
+
+\item{pos}{Optional \code{match_id}, \code{player_id}, \code{pos} table, one
+row per player-match. Pass the same table given to
+\code{build_mirror_weights()} so position has one definition per call;
+derived from \code{chains} (first logged position) when \code{NULL}.}
 }
 \value{
 A data.table of \code{player_id}, \code{match_id}, \code{cont_alloc}.

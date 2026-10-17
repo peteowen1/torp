@@ -15,7 +15,8 @@ A length-1 character string.
 \description{
 Two leaves that already went through the SAME round-trip (see
 \code{.round_trip_constants()}) are equal iff their JSON text is equal --
-\code{digits = NA} keeps full numeric precision, and \code{NULL} is handled
+the round-trip itself must run at \code{digits = NA} (full precision) or a
+difference past the 4th decimal is lost before this step. \code{NULL} is handled
 explicitly because \code{toJSON(NULL)} renders \code{"{}"}, not \code{"null"}.
 }
 \keyword{internal}

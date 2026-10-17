@@ -12,12 +12,14 @@
 \item{d}{Play-by-play \code{description} of the row.}
 }
 \value{
-Character vector of category labels.
+Character vector of category labels. Aborts on a role this function
+does not know, rather than filing it under an own-act label.
 }
 \description{
 Labels one payment row by the role it was paid in and the play-by-play
 description of the row. These are the columns of "Where Net Points Come
-From" (\code{data-raw/04-analysis/build_np_categories_artifact.R}) and of the
-published breakdown; both read this one function.
+From" (\code{data-raw/04-analysis/build_np_categories_artifact.R}, which reads
+it through \code{.np_breakdown()}) and of the published breakdown
+(\code{R/player_credit.R}, \code{data-raw/01-data/daily_release.R}).
 }
 \keyword{internal}
