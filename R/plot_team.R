@@ -31,7 +31,10 @@ plot_team_ratings <- function(team_ratings = NULL,
   metric <- match.arg(metric)
 
   if (is.null(team_ratings)) {
-    team_ratings <- load_team_ratings()
+    team_ratings <- load_team_ratings(
+      columns = c("season", "round", "team", "team_epr", "team_epr_recv",
+                  "team_epr_disp", "team_epr_spoil", "team_epr_hitout")
+    )
   }
 
   if (nrow(team_ratings) == 0) {
@@ -40,10 +43,17 @@ plot_team_ratings <- function(team_ratings = NULL,
 
   # Filter to latest round per season if multiple rounds exist
   if ("round" %in% names(team_ratings) && "season" %in% names(team_ratings)) {
-    latest <- team_ratings$season == max(team_ratings$season, na.rm = TRUE)
-    team_ratings <- team_ratings[latest, ]
+    # Use the requested season when it has rows, else fall back to the latest.
+    # which() keeps NA season/round values from becoming all-NA phantom rows.
+    use_season <- if (any(team_ratings$season == season, na.rm = TRUE)) {
+      season
+    } else {
+      max(team_ratings$season, na.rm = TRUE)
+    }
+    team_ratings <- team_ratings[which(team_ratings$season == use_season), ]
     latest_round <- max(team_ratings$round, na.rm = TRUE)
-    team_ratings <- team_ratings[team_ratings$round == latest_round, ]
+    team_ratings <- team_ratings[which(team_ratings$round == latest_round), ]
+    season <- use_season
   }
 
   # "contest" is a DISPLAY channel, not a published column. `epv_spoil` is
@@ -94,6 +104,12 @@ plot_team_ratings <- function(team_ratings = NULL,
         "i" = "Available: {.val {available}}"
       ))
     }
+  }
+
+  # Drop teams with no value for the metric; an all-NA metric cannot be plotted
+  team_ratings <- team_ratings[which(!is.na(team_ratings[[col_name]])), ]
+  if (nrow(team_ratings) == 0) {
+    cli::cli_abort("Column {.val {col_name}} has no non-missing values to plot.")
   }
 
   # Sort by metric

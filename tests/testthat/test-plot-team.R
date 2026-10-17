@@ -29,3 +29,21 @@ test_that("plot_team_ratings errors on missing metric column", {
   mock_ratings <- data.frame(team = "Adelaide Crows", x = 1, stringsAsFactors = FALSE)
   expect_error(plot_team_ratings(mock_ratings, metric = "epr"))
 })
+
+test_that("plot_team_ratings honours season arg and drops NA metric rows", {
+  mk <- function(season, round, epr) data.frame(
+    season = season, round = round,
+    team = c("Collingwood", "Geelong", "Sydney"), team_epr = epr,
+    stringsAsFactors = FALSE
+  )
+  d <- rbind(mk(2025, 5, c(1, 2, 3)), mk(2026, 1, c(4, NA, 6)))
+  p <- plot_team_ratings(d, metric = "epr", season = 2025)
+  expect_equal(nrow(p$data), 3)
+  expect_match(p$labels$title, "2025")
+  # Season with no rows falls back to latest; the NA metric row is dropped
+  p2 <- plot_team_ratings(d, metric = "epr", season = 2030)
+  expect_equal(nrow(p2$data), 2)
+  expect_match(p2$labels$title, "2026")
+  d$team_epr <- NA_real_
+  expect_error(plot_team_ratings(d, metric = "epr", season = 2025))
+})
