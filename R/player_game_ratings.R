@@ -1,8 +1,13 @@
 #' Get game ratings
 #'
 #' Convenience wrapper around [load_player_game_ratings()] with filtering
-#' by season, round, match, or team. Returns the same data as the load
-#' function — both pull from the same pre-computed release.
+#' by season, round, match, or team. Both pull from the same pre-computed
+#' release, but this wrapper returns a fixed display subset of its columns:
+#' season, round, player, position group, team, opponent, time on ground, the
+#' EPV / WPA-credit / PSV / TORP value columns (totals, or per-80 when
+#' `per80 = TRUE`) and the player, team and match ids. The released columns
+#' `lineup_position`, `net_points`, the `wpa_*` ledger and the `np_*` parts are
+#' NOT returned here; use [load_player_game_ratings()] for those.
 #'
 #' @param season_val The season to get ratings for. Default is the current season.
 #' @param round_val The round number to get ratings for. Default is the current round.
@@ -12,7 +17,8 @@
 #'   totals. Default `FALSE` (totals).
 #' @param round_num Deprecated. Use \code{round_val} instead.
 #'
-#' @return A data frame containing player game ratings.
+#' @return A data frame containing the display subset of player game ratings
+#'   described above, sorted by TORP value (or EPV when PSV is absent).
 #' @export
 #'
 #' @importFrom dplyr filter arrange
@@ -60,7 +66,7 @@ player_game_ratings <- function(season_val = get_afl_season(),
   for (col in c("psv", "osv", "dsv")) {
     p80_col <- paste0(col, "_p80")
     if (col %in% names(dt) && !p80_col %in% names(dt)) {
-      dt[, (p80_col) := round(get(col) / pmax(tog, 0.01), 1)]
+      dt[, (p80_col) := round(get(col) / .tog_floor(tog), 1)]
     }
   }
 
@@ -86,6 +92,20 @@ player_game_ratings <- function(season_val = get_afl_season(),
   if (sort_col %in% names(result)) data.table::setorderv(result, sort_col, order = -1L)
   result
 }
+
+# One floor for every per-80 division. A player on for 0% of a game (or a stray
+# 0 in an old release) would otherwise give Inf/NaN, and the three places that
+# floored had used 0.01, 0.1 and nothing. 0.1 matches the credit pipeline
+# (R/player_credit.R) and the tog_frac in .compute_player_game_ratings().
+.PGR_TOG_FLOOR <- 0.1
+
+#' Floor a time-on-ground fraction before dividing by it
+#'
+#' NA stays NA (an unknown time on ground is not the same as a short one).
+#' @param tog Time on ground as a fraction (0-1).
+#' @return `tog` with values below 0.1 raised to 0.1.
+#' @keywords internal
+.tog_floor <- function(tog) pmax(tog, .PGR_TOG_FLOOR)
 
 #' Compute player game ratings from raw player game data
 #'
@@ -158,7 +178,7 @@ player_game_ratings <- function(season_val = get_afl_season(),
     dplyr::mutate(
       position_group = dplyr::if_else(.data$position_group == "MIDFIELDER_FORWARD",
                                       "MEDIUM_FORWARD", .data$position_group),
-      tog_frac = pmax(dplyr::coalesce(.data$time_on_ground_percentage / 100, 0.1), 0.1),
+      tog_frac = .tog_floor(dplyr::coalesce(.data$time_on_ground_percentage / 100, .PGR_TOG_FLOOR)),
       epv_recv_c = round(.data[[recv_col]] -
         sum(.data[[recv_col]]) / sum(.data$tog_frac) * .data$tog_frac, 1),
       epv_disp_c = round(.data[[disp_col]] -
@@ -307,7 +327,7 @@ player_game_ratings <- function(season_val = get_afl_season(),
     ) |>
     dplyr::select(-".total_tog") |>
     dplyr::mutate(
-      .safe_tog = pmax(.data$tog, 0.1),
+      .safe_tog = .tog_floor(.data$tog),
       epv_p80 = round(.data$epv / .data$.safe_tog, 1),
       epv_recv_p80 = round(.data$epv_recv / .data$.safe_tog, 1),
       epv_disp_p80 = round(.data$epv_disp / .data$.safe_tog, 1),
@@ -422,6 +442,9 @@ player_season_ratings <- function(season_val = get_afl_season(),
       team = get_mode(team),
       position_group = get_mode(position_group),
       games = .N,
+      # games with a known time on ground: the p80 denominator below. A game
+      # with NA tog must not be counted at the player's average tog.
+      n_tog = sum(!is.na(tog)),
       avg_tog = round(mean(tog, na.rm = TRUE), 2)
     )
     # EPV columns (always present)
@@ -447,8 +470,9 @@ player_season_ratings <- function(season_val = get_afl_season(),
 
   for (col in all_val_cols) {
     p80_col <- paste0(col, "_p80")
-    result[, (p80_col) := round(get(col) / (games * avg_tog), 1)]
+    result[, (p80_col) := round(get(col) / (n_tog * avg_tog), 1)]
   }
+  result[, n_tog := NULL]
 
   # Select and order columns
   if (per80) {
@@ -500,7 +524,7 @@ player_season_stats <- function(season_val = get_afl_season(),
 
   # TOG fraction
   if (!"tog" %in% names(ps) && "time_on_ground_percentage" %in% names(ps)) {
-    ps[, tog := pmax(as.numeric(time_on_ground_percentage) / 100, 0.1)]
+    ps[, tog := .tog_floor(as.numeric(time_on_ground_percentage) / 100)]
   }
 
   # Round number
@@ -539,6 +563,7 @@ player_season_stats <- function(season_val = get_afl_season(),
       team = get_mode(team),
       position = get_mode(position),
       games = .N,
+      n_tog = sum(!is.na(tog)),
       avg_tog = round(mean(tog, na.rm = TRUE), 2)
     )
     for (col in stat_cols) out[[col]] <- sum(get(col), na.rm = TRUE)
@@ -548,9 +573,11 @@ player_season_stats <- function(season_val = get_afl_season(),
   # Per-80 mode: divide by (games * avg_tog) to get per-full-game rates
   if (per80) {
     for (col in stat_cols) {
-      result[, (col) := round(get(col) / (games * avg_tog), 1)]
+      result[, (col) := round(get(col) / (n_tog * avg_tog), 1)]
     }
   }
+
+  result[, n_tog := NULL]
 
   # Sort
   if (!sort_by %in% names(result)) {
@@ -578,15 +605,32 @@ player_season_stats <- function(season_val = get_afl_season(),
 #' @param pgr Output of `.compute_player_game_ratings()` for one season.
 #' @param pstats_season Player stats for the same season (`load_player_stats()`).
 #' @param season Season, for messages.
+#' @param strict If `TRUE`, abort when PSV could not be computed instead of
+#'   returning `pgr` without it. Default `FALSE`, which keeps the old behaviour
+#'   of returning the EPV-only frame, but now says so immediately and tags the
+#'   result (see Value).
 #' @return `pgr` with psv/osv/dsv, their per-80 columns and torp_value(_p80)
-#'   when PSV could be computed; unchanged (with a warning) otherwise.
+#'   when PSV could be computed. When it could not (stats opponent adjustment
+#'   or PSV failed, no player stats, or no usable PSV columns), `pgr` comes back
+#'   without them and carries `attr(, "psv_missing") == TRUE`; a release
+#'   pipeline should check that attribute (or pass `strict = TRUE`) before
+#'   publishing.
 #' @keywords internal
-.add_psv_to_game_ratings <- function(pgr, pstats_season, season) {
+.add_psv_to_game_ratings <- function(pgr, pstats_season, season, strict = FALSE) {
+  psv_fail <- function(why) {
+    # cli_warn() is deferred to the end of a long run, by which time the partial
+    # frame has usually been published; an alert prints now.
+    if (isTRUE(strict)) {
+      cli::cli_abort("PSV missing from the {season} game ratings: {why}")
+    }
+    cli::cli_alert_danger("PSV missing from the {season} game ratings ({why}); returning EPV-only ratings.")
+  }
+  psv_failed <- FALSE
   pstats_season <- data.table::as.data.table(pstats_season)
   if (nrow(pstats_season) > 0) {
     # PSV expects tog as a fraction 0-1
     if (!"tog" %in% names(pstats_season) && "time_on_ground_percentage" %in% names(pstats_season)) {
-      pstats_season[, tog := pmax(time_on_ground_percentage / 100, 0.1)]
+      pstats_season[, tog := .tog_floor(time_on_ground_percentage / 100)]
     }
     # Carry position_group from EPV so PSV can centre by position
     if (!"position_group" %in% names(pstats_season) && "position_group" %in% names(pgr)) {
@@ -596,27 +640,40 @@ player_season_stats <- function(season_val = get_afl_season(),
                              all.x = TRUE)
     }
     pstats_season <- tryCatch(adjust_stats_for_opponents(pstats_season), error = function(e) {
-      cli::cli_warn("Stat opponent adjustment failed for {season}: {conditionMessage(e)}")
+      # Not fatal on its own (PSV can run on unadjusted stats), but it changes
+      # the numbers, so say so now.
+      cli::cli_alert_warning("Stat opponent adjustment failed for {season}: {conditionMessage(e)}; PSV uses unadjusted stats.")
       pstats_season
     })
+    psv_err <- NULL
     psv_result <- tryCatch(.compute_psv(pstats_season), error = function(e) {
-      cli::cli_warn("PSV computation failed for {season}: {conditionMessage(e)}")
+      psv_err <<- conditionMessage(e)
       NULL
     })
-    if (!is.null(psv_result)) {
+    if (is.null(psv_result)) {
+      psv_failed <- TRUE
+      psv_fail(paste0("PSV computation failed: ", if (is.null(psv_err)) "no result" else psv_err))
+    } else {
       # Per-game (psv/osv/dsv) + centred per-80, both from calculate_psv() (#80)
       psv_cols <- intersect(c("psv", "osv", "dsv", "psv_p80", "osv_p80", "dsv_p80"), names(psv_result))
       if (length(psv_cols) > 0 && all(c("player_id", "match_id") %in% names(psv_result))) {
         psv_slim <- psv_result[, c("player_id", "match_id", psv_cols), with = FALSE]
         pgr <- merge(pgr, psv_slim, by = c("player_id", "match_id"), all.x = TRUE)
         cli::cli_inform("  Added PSV columns to game ratings ({sum(!is.na(pgr$psv))} matched)")
+      } else {
+        psv_failed <- TRUE
+        psv_fail("PSV result lacks psv columns or the player_id/match_id keys")
       }
     }
+  } else {
+    psv_failed <- TRUE
+    psv_fail("no player stats for the season")
   }
   # Per-game TORP value: 50% EPV + 50% PSV (parallels career TORP = 50% EPR + 50% PSR)
   if (all(c("epv", "psv") %in% names(pgr))) {
     pgr$torp_value <- round(TORP_EPR_WEIGHT * pgr$epv + (1 - TORP_EPR_WEIGHT) * pgr$psv, 1)
-    pgr$torp_value_p80 <- round(pgr$torp_value / pgr$tog, 1)
+    pgr$torp_value_p80 <- round(pgr$torp_value / .tog_floor(pgr$tog), 1)
   }
+  if (psv_failed || !"psv" %in% names(pgr)) attr(pgr, "psv_missing") <- TRUE
   pgr
 }

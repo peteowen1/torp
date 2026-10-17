@@ -397,3 +397,36 @@ test_that(".np_raw_parts splits net_points into parts that add up to it", {
   d3 <- transform(d, np_own = 1, np_won = 1, np_team = 0)
   expect_identical(torp:::.np_raw_parts(d3)$np_own, c(1, 1))
 })
+
+# ---- N11: tog floor, season denominators, PSV-missing signal ----------------
+
+test_that(".tog_floor floors at 0.1 and leaves NA alone", {
+  expect_equal(torp:::.tog_floor(c(0, 0.05, 0.1, 0.8, NA)), c(0.1, 0.1, 0.1, 0.8, NA))
+})
+
+test_that("season p80 divides by games with a known tog only", {
+  # Three games, one with NA tog. Old denominator: 3 * mean(0.8, 0.6) = 2.1;
+  # new: 2 * 0.7 = 1.4.
+  pgr <- data.frame(
+    season = 2025L, player_name = "A", player_id = "P1", team_id = "T1",
+    team = "Adelaide Crows", position_group = "MIDFIELDER",
+    tog = c(0.8, 0.6, NA), epv = c(7, 7, 0), stringsAsFactors = FALSE
+  )
+  r <- torp:::.compute_player_season_ratings(pgr, per80 = TRUE)
+  expect_equal(r$games, 3L)
+  expect_equal(r$epv_p80, 10)
+  expect_false("n_tog" %in% names(r))
+})
+
+test_that(".add_psv_to_game_ratings flags and announces a missing PSV", {
+  pgr <- data.frame(player_id = "P1", match_id = "M1", epv = 1, tog = 0.8)
+  # no player stats at all
+  expect_message(
+    r <- torp:::.add_psv_to_game_ratings(pgr, data.frame(), 2025L),
+    "PSV missing")
+  expect_true(isTRUE(attr(r, "psv_missing")))
+  expect_false("psv" %in% names(r))
+  expect_error(
+    torp:::.add_psv_to_game_ratings(pgr, data.frame(), 2025L, strict = TRUE),
+    "PSV missing")
+})
