@@ -24,6 +24,13 @@ Fits a logistic regression model for live win probability prediction.
 The model estimates P(home_win | margin, game_progress) using historical
 AFL data with quarter-by-quarter scores.
 }
+\details{
+\strong{Deprecated.} The quarter-break states are simulated from the
+final score (scaled final margin plus noise), so the margin feature is a
+copy of the outcome and the fitted model leaks the result. Use the live
+XGBoost win probability model trained in torpmodels instead. Do not ship
+these coefficients.
+}
 \examples{
 \dontrun{
 result <- fit_win_probability()
@@ -31,3 +38,4 @@ result <- fit_win_probability()
 result$coefficients
 }
 }
+\keyword{internal}

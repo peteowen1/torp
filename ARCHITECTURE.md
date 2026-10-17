@@ -504,7 +504,6 @@ Reference models for WP evaluation: Naive (always 0.5), Score-Only (logistic on 
 | Match Prediction | `R/match_model.R` | `run_predictions_pipeline()`, `build_team_mdl_df()` |
 | Match Data Prep | `R/match_data_prep.R` | `.build_fixtures_df()`, `.build_team_ratings_df()`, `.build_match_features()`, `.load_match_weather()` |
 | Match Training | `R/match_train.R` | GAM fitting functions |
-| WP Utilities | `R/wp_utils.R` | WP input validation, model health checks |
 | Baseline Models | `R/baseline_models.R` | Score-only, time-score, EP-based baselines |
 | Simulation | `R/simulate.R` | `simulate_season()`, `process_games()`, `process_games_dt()` |
 | Match Simulation | `R/simulate_match.R` | `simulate_match_mc()` |
