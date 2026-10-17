@@ -143,3 +143,19 @@ test_that("load_match_margin_calibration: torpmodels error degrades to NULL, not
   expect_warning(res <- load_match_margin_calibration(), "unavailable")
   expect_null(res)
 })
+
+test_that("fit_match_margin_calibration: n_oos counts complete match pairs by match_id (an unpaired row is not a half match)", {
+  mocks <- .match_calib_mock_train(slope = 1)
+  testthat::local_mocked_bindings(
+    .train_match_gams = mocks$gams,
+    .train_match_xgb = mocks$xgb,
+    .package = "torp"
+  )
+  df <- .match_calib_mock_df(n_train_matches = 5, n_holdout_matches = 4)
+  df$match_id <- rep(seq_len(nrow(df) / 2), each = 2)
+  # Break one holdout row: its match loses its pair
+  df$score_diff[nrow(df)] <- NA_real_
+
+  res <- suppressWarnings(fit_match_margin_calibration(df))
+  expect_equal(res$n_oos, 3)
+})
