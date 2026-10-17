@@ -31,7 +31,9 @@ and \code{rounds}.}
 only, of the three this function reaches), \code{"all"} keeps
 \code{Uncontested Mark} and \code{Mark On Lead} too. Defaults to
 \code{EPV3_CONTEST_POPULATION}, the same global switch the v3 contest
-channel uses -- currently \code{"all"}, so the default is unchanged.
+channel uses. That constant is currently \code{"evidence"}, which this
+function cannot apply (it is a row-level rule); it warns and falls back to
+\code{"all"}. Pass \code{"all"} or \code{"duel"} to choose explicitly.
 
 Use \code{"duel"} for anything presented as a contest won or lost.
 \code{EPV3_DUEL_OUT}'s own documentation calls the two excluded outcomes

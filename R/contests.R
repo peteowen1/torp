@@ -22,7 +22,9 @@
 #'   only, of the three this function reaches), \code{"all"} keeps
 #'   \code{Uncontested Mark} and \code{Mark On Lead} too. Defaults to
 #'   \code{EPV3_CONTEST_POPULATION}, the same global switch the v3 contest
-#'   channel uses -- currently \code{"all"}, so the default is unchanged.
+#'   channel uses. That constant is currently \code{"evidence"}, which this
+#'   function cannot apply (it is a row-level rule); it warns and falls back to
+#'   \code{"all"}. Pass \code{"all"} or \code{"duel"} to choose explicitly.
 #'
 #'   Use \code{"duel"} for anything presented as a contest won or lost.
 #'   \code{EPV3_DUEL_OUT}'s own documentation calls the two excluded outcomes
@@ -89,8 +91,9 @@ extract_contests <- function(chains = NULL, type = "all", seasons = TRUE,
   #
   # Default is EPV3_CONTEST_POPULATION so this follows the same global switch
   # as the v3 contest channel instead of inventing a third convention. That
-  # constant is currently "all", so the default behaviour here is UNCHANGED --
-  # flipping it is a separate, gated decision (see NEXT-STEPS).
+  # constant is currently "evidence", which this function cannot honour: it
+  # warns and falls back to "all" (below), so the effective population is
+  # "all". Pass population = "all" or "duel" explicitly to avoid the warning.
   # "evidence" CANNOT be honoured here, and saying so is the point of this
   # branch. That population is a ROW-LEVEL rule -- a contest is a kick where
   # chains logged a target, or the outcome is a duel by definition -- and the
@@ -144,6 +147,17 @@ extract_contests <- function(chains = NULL, type = "all", seasons = TRUE,
 
   data.table::setorderv(dt, c("match_id", "display_order"))
 
+  missing_meta <- setdiff(c("season", "round_number"), names(dt))
+  if (length(missing_meta) > 0) {
+    cli::cli_warn(c(
+      "Chains data is missing: {.field {missing_meta}}.",
+      "i" = "The returned contests will have {.val NA} in the missing column(s)."
+    ))
+  }
+
+  # Row index, used to stop one row being counted in two overlapping pairs
+  dt[, .row_idx := .I]
+
   # Add adjacent-row info within each match
   dt[, `:=`(
     .next_desc      = data.table::shift(description, 1L, type = "lead"),
@@ -165,6 +179,9 @@ extract_contests <- function(chains = NULL, type = "all", seasons = TRUE,
   # --- Aerial contests ---
   if (type %in% c("all", "aerial")) {
     aerial_rows <- same_xy[description %in% CHAINS_CONTEST_TARGET_DESCS]
+    aerial_rows <- drop_overlapping_pairs(aerial_rows[
+      .next_desc == "Spoil" | .next_desc %in% mark_wins
+    ])
 
     # Spoil: opposing team spoils (defender wins)
     spoils <- aerial_rows[
@@ -200,11 +217,11 @@ extract_contests <- function(chains = NULL, type = "all", seasons = TRUE,
 
   # --- Ground ball contests ---
   if (type %in% c("all", "ground_ball")) {
-    gb <- same_xy[
+    gb <- drop_overlapping_pairs(same_xy[
       description %in% CONTEST_GROUND_BALL_DESCS &
       .next_desc %in% CONTEST_GROUND_BALL_DESCS &
       team_id != .next_team_id
-    ]
+    ])
     if (nrow(gb) > 0) {
       results[["ground_ball"]] <- format_contest_rows(
         gb, contest_type = "ground_ball", outcome = NA_character_,
@@ -215,7 +232,8 @@ extract_contests <- function(chains = NULL, type = "all", seasons = TRUE,
 
   # Clean up temp columns (on the original dt, not same_xy)
   temp_cols <- intersect(
-    c(".next_desc", ".next_player_id", ".next_team_id", ".next_x", ".next_y"),
+    c(".next_desc", ".next_player_id", ".next_team_id", ".next_x", ".next_y",
+      ".row_idx"),
     names(dt)
   )
   if (length(temp_cols) > 0) dt[, (temp_cols) := NULL]
@@ -240,6 +258,10 @@ extract_contests <- function(chains = NULL, type = "all", seasons = TRUE,
 #' @param seasons Seasons to search. Numeric vector or \code{TRUE} for all.
 #' @param rounds Rounds to include. Numeric vector or \code{TRUE} for all.
 #' @param chains Optional pre-loaded chains data to avoid re-downloading.
+#' @param population Which aerial outcomes count as a contest; passed to
+#'   \code{\link{extract_contests}}, which documents the options and why
+#'   \code{"evidence"} falls back to \code{"all"}. Defaults to
+#'   \code{EPV3_CONTEST_POPULATION}.
 #'
 #' @return An S3 object of class \code{torp_head_to_head} with elements:
 #'   \describe{
@@ -260,7 +282,8 @@ extract_contests <- function(chains = NULL, type = "all", seasons = TRUE,
 #' })
 #' }
 head_to_head <- function(player1, player2, type = "all", seasons = TRUE,
-                         rounds = TRUE, chains = NULL) {
+                         rounds = TRUE, chains = NULL,
+                         population = EPV3_CONTEST_POPULATION) {
   p1 <- resolve_player(player1, seasons = seasons)
   p2 <- resolve_player(player2, seasons = seasons)
 
@@ -268,8 +291,16 @@ head_to_head <- function(player1, player2, type = "all", seasons = TRUE,
     cli::cli_abort("Both names resolve to the same player: {.val {p1$player_name}}")
   }
 
+  # Only matches where both players appear can hold a contest between them,
+  # so cut the chains down before the full-history pair scan.
+  if (is.null(chains)) {
+    chains <- load_chains(seasons = seasons, rounds = rounds)
+  }
+  chains <- filter_chains_to_pair(chains, p1$player_id, p2$player_id)
+
   contests <- extract_contests(
-    chains = chains, type = type, seasons = seasons, rounds = rounds
+    chains = chains, type = type, seasons = seasons, rounds = rounds,
+    population = population
   )
 
   if (nrow(contests) == 0) {
@@ -336,6 +367,44 @@ print.torp_head_to_head <- function(x, ...) {
 
 
 # Internal helpers ---------------------------------------------------------
+
+#' Keep only chains rows from matches containing both players
+#'
+#' @param chains data.frame / data.table of chains (camelCase or snake_case)
+#' @param pid1,pid2 Player IDs
+#' @return Subset of \code{chains}; unchanged if the columns are not found.
+#' @keywords internal
+filter_chains_to_pair <- function(chains, pid1, pid2) {
+  nms <- names(chains)
+  mcol <- intersect(c("match_id", "matchId"), nms)[1]
+  pcol <- intersect(c("player_id", "playerId"), nms)[1]
+  if (is.na(mcol) || is.na(pcol)) return(chains)
+  m <- chains[[mcol]]
+  p <- chains[[pcol]]
+  keep <- intersect(unique(m[!is.na(p) & p == pid1]),
+                    unique(m[!is.na(p) & p == pid2]))
+  chains[m %in% keep, ]
+}
+
+
+#' Drop pairs that reuse a row already used by an earlier pair
+#'
+#' Candidate pairs are (row i, row i+1). Three consecutive rows A, B, C give
+#' pairs (A,B) and (B,C); B would be counted in two contests. Within each run
+#' of consecutive left rows, keep every second pair so no row appears twice.
+#'
+#' @param pairs data.table of candidate pairs with a \code{.row_idx} column
+#'   (the left row's position in the match-ordered chains).
+#' @return \code{pairs} without the overlapping rows.
+#' @keywords internal
+drop_overlapping_pairs <- function(pairs) {
+  if (nrow(pairs) < 2L) return(pairs)
+  data.table::setorderv(pairs, ".row_idx")
+  idx <- pairs$.row_idx
+  run_id <- cumsum(c(TRUE, diff(idx) != 1L))
+  pos_in_run <- stats::ave(idx, run_id, FUN = seq_along)
+  pairs[pos_in_run %% 2L == 1L]
+}
 
 #' Detect chains column naming convention
 #'
