@@ -2,14 +2,26 @@
 #'
 #' Labels one payment row by the role it was paid in and the play-by-play
 #' description of the row. These are the columns of "Where Net Points Come
-#' From" (`data-raw/04-analysis/build_np_categories_artifact.R`) and of the
-#' published breakdown; both read this one function.
+#' From" (`data-raw/04-analysis/build_np_categories_artifact.R`, which reads
+#' it through `.np_breakdown()`) and of the published breakdown
+#' (`R/player_credit.R`, `data-raw/01-data/daily_release.R`).
 #'
 #' @param role Payment role from `attr(np, "np_team_margin_payments")`.
 #' @param d Play-by-play `description` of the row.
-#' @return Character vector of category labels.
+#' @return Character vector of category labels. Aborts on a role this function
+#'   does not know, rather than filing it under an own-act label.
 #' @keywords internal
 .np_play_type <- function(role, d) {
+  known_roles <- c("actor", "receiver", "contest_winner", "ball_winner",
+                   "error_blame", "pressure_back", "stoppage_ruck",
+                   "stoppage_player")
+  bad <- setdiff(unique(role), known_roles)
+  if (length(bad) > 0L) {
+    cli::cli_abort(c(
+      "Unknown Net Points payment role{?s}: {.val {bad}}.",
+      "x" = "Add {?it/them} to {.fn .np_play_type} so the play type is not silently mislabelled."
+    ))
+  }
   data.table::fcase(
     role == "actor" & d == "Kick",                    "Kick",
     role == "actor" & d == "Handball",                "Handball",
@@ -64,12 +76,19 @@
       "x" = "The breakdown needs {.fn .np_team_margin}'s output (NP_TEAM_MARGIN_CONVENTION = TRUE)."
     ))
   }
-  pay <- data.table::as.data.table(pay)[, `:=`(match_id = as.character(match_id),
-                                                player_id = as.character(player_id))]
-  parts <- data.table::as.data.table(parts)[, `:=`(match_id = as.character(match_id),
-                                                    player_id = as.character(player_id))]
-  desc <- unique(data.table::as.data.table(pbp_data)[
-    , .(match_id = as.character(match_id), display_order, description)])
+  # as.data.table() deep-copies even a data.table, so copy exactly once and
+  # only the narrow tables; pbp is projected to three columns before any copy.
+  pay   <- data.table::copy(if (data.table::is.data.table(pay)) pay else data.table::as.data.table(pay))
+  parts <- data.table::copy(if (data.table::is.data.table(parts)) parts else data.table::as.data.table(parts))
+  pay[, `:=`(match_id = as.character(match_id), player_id = as.character(player_id))]
+  parts[, `:=`(match_id = as.character(match_id), player_id = as.character(player_id))]
+  desc <- unique(
+    if (data.table::is.data.table(pbp_data)) {
+      pbp_data[, .(match_id = as.character(match_id), display_order, description)]
+    } else {
+      data.table::as.data.table(pbp_data[, c("match_id", "display_order", "description")])[
+        , .(match_id = as.character(match_id), display_order, description)]
+    })
   if (anyDuplicated(desc, by = c("match_id", "display_order"))) {
     cli::cli_abort("Play-by-play has more than one description for a (match_id, display_order).")
   }
@@ -93,6 +112,7 @@
                                                  player_id = as.character(player_id), net_points)],
                by = c("match_id", "player_id"), all = TRUE)
   chk[is.na(tot), tot := 0][is.na(net_points), net_points := 0]
+  if (nrow(chk) == 0L) cli::cli_abort("No player-matches to break down.")
   gap <- max(abs(chk$tot - chk$net_points))
   if (!is.finite(gap) || gap > tol) {
     cli::cli_abort(c(

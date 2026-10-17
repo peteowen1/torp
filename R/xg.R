@@ -202,10 +202,12 @@ extract_player_xg_skill <- function(shot_model = NULL) {
 
   # Count shots per player from training data if available
   if (!is.null(shot_model$model) && "player_id_shot" %in% names(shot_model$model)) {
-    shot_counts <- as.data.table(shot_model$model)[, .(n_shots = .N), by = .(player_id = player_id_shot)]
-    shot_counts[, player_id := as.character(player_id)]
+    tab <- table(shot_model$model[["player_id_shot"]])
+    shot_counts <- data.table::data.table(player_id = names(tab), n_shots = as.integer(tab))
     result <- merge(result, shot_counts, by = "player_id", all.x = TRUE)
     result[is.na(n_shots), n_shots := 0L]
+  } else {
+    result[, n_shots := NA_integer_]
   }
 
   # Join player names from player_details
