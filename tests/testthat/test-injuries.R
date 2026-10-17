@@ -897,3 +897,18 @@ test_that("build_injury_schedule warns on non-numeric return_round and duplicate
   expect_equal(nrow(res), 1L)
   expect_true(is.finite(res$torp_boost))
 })
+
+test_that(".injury_raw_html_ok warns and returns FALSE on unusable HTML", {
+  expect_true(.injury_raw_html_ok("<html></html>"))
+  expect_warning(ok <- .injury_raw_html_ok(NA_character_), "raw HTML")
+  expect_false(ok)
+})
+
+test_that("scrape_injuries tags a failed scrape with scrape_status = 'failed'", {
+  skip_if_not_installed("rvest")
+  local_mocked_bindings(session = function(...) stop("boom"), .package = "rvest")
+  expect_warning(res <- scrape_injuries(), "Failed to scrape")
+  expect_equal(nrow(res), 0)
+  expect_equal(attr(res, "scrape_status"), "failed")
+  expect_s3_class(res$updated, "Date")
+})
