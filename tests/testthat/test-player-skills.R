@@ -814,3 +814,37 @@ test_that("efficiency stats drop NA-success rows from successes and attempts", {
                clean[player_id == "2"]$disposal_efficiency_raw)
   expect_equal(single[player_id == "1"]$goal_accuracy_raw, clean[player_id == "1"]$goal_accuracy_raw)
 })
+
+# A204: game-derived positions survive the roster merge ---------------------------
+
+test_that("availability rows keep the game-derived position when the roster position does not map", {
+  pgd <- data.table::data.table(
+    player_id = c("P1", "P2", "P2"),
+    match_id = c("M1", "M1", "M2"),
+    player_name = c("A One", "B Two", "B Two"),
+    season = 2024, round = c(1L, 1L, 2L),
+    utc_start_time = c("2024-03-14T09:00:00.000+0000", "2024-03-14T09:00:00.000+0000",
+                       "2024-03-21T09:00:00.000+0000"),
+    time_on_ground_percentage = 80,
+    position = c("MIDFIELDER", "RUCK", "RUCK"),
+    disposals = 10
+  )
+  ps <- data.table::data.table(player_id = c("P1", "P2", "P2"), match_id = c("M1", "M1", "M2"),
+                               disposal_efficiency = 70)
+  # P1's roster position maps to no group; P2 is a normal ruck
+  rosters <- data.table::data.table(
+    player_id = c("P1", "P2"), season = 2024, team = "T", position = c("UNKNOWN", "RUCK")
+  )
+  out <- .prepare_stat_rating_data(pgd, ps, rosters = rosters)
+  # The outer merge must not invent rows: every row is a real (player, match)
+  expect_false(anyNA(out$avail_only))
+  expect_false(anyNA(out$match_id))
+  p1_missed <- out[player_id == "P1" & avail_only == TRUE]
+  expect_equal(nrow(p1_missed), 1)  # missed round 2
+  expect_equal(p1_missed$pos_group, "MIDFIELDER")
+  # A never-played rostered player still falls back to the roster position
+  rosters2 <- rbind(rosters, data.table::data.table(player_id = "P3", season = 2024, team = "T",
+                                                   position = "KEY_FORWARD"))
+  out2 <- .prepare_stat_rating_data(pgd, ps, rosters = rosters2)
+  expect_true(all(out2[player_id == "P3"]$pos_group == "KEY_FORWARD"))
+})

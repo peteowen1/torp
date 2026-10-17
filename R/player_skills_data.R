@@ -351,8 +351,11 @@
       roster_pos[, roster_pos_group := .map_position_group(position)]
       roster_pos <- roster_pos[!is.na(roster_pos_group), .(player_id, roster_pos_group)]
       roster_pos <- unique(roster_pos, by = "player_id")
-      # Merge: prefer game-based pos, fallback to roster pos
-      player_pos <- merge(roster_pos, player_pos, by = "player_id", all.x = TRUE)
+      # Merge: prefer game-based pos, fallback to roster pos. Outer join, so a
+      # player with a game-derived position but no roster entry (or a roster
+      # position that maps to NA) keeps his game-derived one (A204); a left join
+      # from roster_pos silently dropped him and his unplayed rows got NA.
+      player_pos <- merge(roster_pos, player_pos, by = "player_id", all = TRUE)
       player_pos[is.na(pos_group), pos_group := roster_pos_group]
       player_pos[, roster_pos_group := NULL]
     }
