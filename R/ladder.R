@@ -214,9 +214,12 @@ calculate_final_ladder <- function(season = get_afl_season(),
   if (is.null(fixtures)) {
     fixtures <- load_fixtures(seasons = season)
   }
-  fix_dt <- data.table::as.data.table(fixtures)
+  fix_dt <- if (data.table::is.data.table(fixtures)) fixtures else data.table::as.data.table(fixtures)
   if ("season" %in% names(fix_dt)) {
-    fix_dt <- fix_dt[get("season") == season]
+    # Bare `season` inside [ ] resolves to the column (always TRUE), so copy
+    # the argument to a differently named variable first.
+    target_season <- season
+    fix_dt <- fix_dt[season == target_season]
   }
 
   rnd_col <- .resolve_col(fix_dt, c("round_number", "roundnum"))
@@ -269,6 +272,13 @@ calculate_final_ladder <- function(season = get_afl_season(),
     pred_mid <- .resolve_col(pred_dt, c("match_id", "providerId"))
 
     if (!is.null(pred_mid) && !is.null(mid_col)) {
+      # More than one prediction row per match would multiply or arbitrarily
+      # pick a row in the join below; keep the last (latest appended) one.
+      if (anyDuplicated(pred_dt[[pred_mid]]) > 0) {
+        n_dup <- sum(duplicated(pred_dt[[pred_mid]]))
+        cli::cli_warn("Predictions have {n_dup} duplicate {.field {pred_mid}} row{?s}; keeping the last row per match.")
+        pred_dt <- unique(pred_dt, by = pred_mid, fromLast = TRUE)
+      }
       # Build a lookup with the prediction's home_team for flip detection
       pred_lookup <- pred_dt[, c(pred_mid, "pred_win", "pred_margin",
                                   "pred_xtotal", pred_ht), with = FALSE]
@@ -372,6 +382,11 @@ calculate_final_ladder <- function(season = get_afl_season(),
 
           games[, c("home_boost", "away_boost") := NULL]
         }
+      } else if (nrow(pr_dt) > 0) {
+        cli::cli_warn(c(
+          "Injury adjustment was requested but no injuries matched player ratings ({nrow(injuries)} injury row{?s} passed in).",
+          "!" = "Returning the ladder WITHOUT injury adjustments."
+        ))
       }
     }
   }
@@ -440,7 +455,7 @@ calculate_final_ladder <- function(season = get_afl_season(),
     percentage    = data.table::fifelse(points_against > 0,
                                         points_for / points_against * 100,
                                         data.table::fifelse(points_for > 0, Inf, 0)),
-    ladder_points = round(expected_wins * 4)
+    ladder_points = round(expected_wins * 4)  # display only; ranking uses expected_wins
   )]
 
   # Tiebreak: ladder points -> percentage. Points-for was dropped (it is not
@@ -450,7 +465,8 @@ calculate_final_ladder <- function(season = get_afl_season(),
   # for unplayed games, and a meaningful H2H-points tiebreak needs
   # deterministic W/L, not a win probability. A residual tie here (points
   # AND percentage both equal) falls back to insertion order.
-  data.table::setorder(ladder, -ladder_points, -percentage)
+  # Ranked on unrounded expected points so rounding cannot create artificial ties.
+  data.table::setorder(ladder, -expected_wins, -percentage)
   ladder[, rank := seq_len(.N)]
 
   ladder[]
