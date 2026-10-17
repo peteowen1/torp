@@ -1,3 +1,6 @@
+# Logistic win probability from a predicted margin (shared scaling constant)
+.wp_from_margin <- function(x) 1 / (10^(-x / SIM_WP_SCALING_FACTOR) + 1)
+
 #' Simulate a season of games
 #'
 #' This function simulates a season of games based on team ratings and fixture data.
@@ -27,9 +30,14 @@ simulate_season <- function(sim_teams, sim_games, return_teams = FALSE,
   has_residuals <- "residual_mean" %in% names(sim_teams_dt) &&
     any(sim_teams_dt$residual_se > 0, na.rm = TRUE)
   if (has_residuals) {
-    sim_teams_dt[, residual := stats::rnorm(.N, residual_mean, residual_se)]
+    sim_teams_dt[, residual := stats::rnorm(.N, residual_mean, replace(residual_se, is.na(residual_se), 0))]
   } else if (!"residual" %in% names(sim_teams_dt)) {
-    sim_teams_dt[, residual := 0]
+    # No uncertainty to draw from: use the stated mean as a fixed residual
+    if ("residual_mean" %in% names(sim_teams_dt)) {
+      sim_teams_dt[, residual := data.table::fifelse(is.na(residual_mean), 0, residual_mean)]
+    } else {
+      sim_teams_dt[, residual := 0]
+    }
   }
 
   # Ensure columns have correct types (handle case where they start as logical NA)
@@ -100,7 +108,7 @@ simulate_season <- function(sim_teams, sim_games, return_teams = FALSE,
 
     data.table::set(sim_games_r, j = "estimate", value = estimate)
     data.table::set(sim_games_r, j = "wp",
-                    value = 1 / (10^(-estimate / SIM_WP_SCALING_FACTOR) + 1))
+                    value = .wp_from_margin(estimate))
 
     # Simulate result for unplayed games
     na_mask <- is.na(sim_games_r$result)
@@ -173,8 +181,9 @@ simulate_season <- function(sim_teams, sim_games, return_teams = FALSE,
 #' @keywords internal
 process_games_dt <- function(sim_teams, sim_games, round_num,
                              injury_sd = SIM_INJURY_SD) {
-  # Copy teams (modified via rating shifts); sim_games is a pre-split slice
+  # Copy both inputs: teams are modified via rating shifts, games via :=
   sim_teams <- data.table::copy(sim_teams)
+  sim_games <- data.table::copy(sim_games)
 
   sim_teams[, roundnum := round_num]
   sim_games[, roundnum := round_num]
@@ -198,7 +207,7 @@ process_games_dt <- function(sim_teams, sim_games, round_num,
     (home_torp - away_torp) +
     (home_residual - away_residual) +
     stats::rnorm(n_games, 0, injury_sd) - stats::rnorm(n_games, 0, injury_sd)]
-  sim_games[, wp := 1 / (10^(-estimate / SIM_WP_SCALING_FACTOR) + 1)]
+  sim_games[, wp := .wp_from_margin(estimate)]
 
   sim_games[is.na(result), result := as.integer(
     round(stats::rnorm(.N, estimate, SIM_NOISE_SD + (abs(estimate) / 3)))
@@ -212,7 +221,7 @@ process_games_dt <- function(sim_teams, sim_games, round_num,
     } else {
       SIM_AVG_TOTAL
     }
-    total <- pmax(stats::rnorm(.N, base_total, SIM_TOTAL_SD), 40)
+    total <- pmax(stats::rnorm(.N, base_total, SIM_TOTAL_SD), SIM_MIN_TOTAL)
     hs <- as.integer(pmax(round((total + result) / 2), 0))
     as_val <- as.integer(pmax(round((total - result) / 2), 0))
     list(hs, as_val)
