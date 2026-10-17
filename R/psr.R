@@ -866,7 +866,12 @@ explain_player_game <- function(player_id, match_id, player_stats = NULL,
 
   suffix <- if (per80) " (per 80 min)" else " (total)"
   epv_summary <- NULL
-  pgr <- tryCatch(load_player_game_ratings(season), error = function(e) NULL)
+  pgr <- tryCatch(load_player_game_ratings(season), error = function(e) {
+    cli::cli_warn(c(
+      "Player game ratings for season {season} failed to load; the EPV section is skipped.",
+      "x" = conditionMessage(e)))
+    NULL
+  })
   if (!is.null(pgr)) {
     pgr_dt <- data.table::as.data.table(pgr)
     pgr_dt[, player_id := as.character(player_id)]
@@ -1048,14 +1053,25 @@ explain_player_plays <- function(player,
 
   # Load PBP
   if (is.null(pbp_data)) {
-    pbp_data <- load_pbp(season)
+    # Every column this function reads, and nothing else: the full PBP frame is
+    # ~190 columns. Older seasons may lack some of them, in which case fall
+    # back to the full load rather than fail.
+    pbp_cols <- c("match_id", "display_order", "period", "player_id",
+                  "player_name", "team", "description", "play_type",
+                  "phase_of_play", "x", "y", "pos_team", "delta_epv",
+                  "exp_pts", "lead_player", "lead_player_id", "lead_desc_tot",
+                  "round_week", "home_away", "away_team_name", "home_team_name")
+    pbp_data <- tryCatch(load_pbp(season, columns = pbp_cols),
+                         error = function(e) load_pbp(season))
   }
   dt <- data.table::as.data.table(pbp_data)
-  data.table::setorder(dt, match_id, display_order)
 
+  # Filter to the requested match(es) BEFORE sorting, so a one-match request
+  # does not sort the whole season.
   if (!is.null(match_id)) {
     dt <- dt[dt$match_id %in% match_id]
   }
+  data.table::setorder(dt, match_id, display_order)
 
   # Columns to show in context view
   ctx_cols <- c("display_order", "period", "player_name", "team",
@@ -1080,6 +1096,14 @@ explain_player_plays <- function(player,
     out[, is_play := .row_idx %in% idx]
     out
   }
+
+  # NOTE (review B80, deliberately NOT refactored here): the receiving and
+  # disposal credit formulas below are a hand-copied replica of the per-event
+  # credit in create_player_game_data() (R/player_credit.R). A change to the
+  # production formula will not reach this trace. The right fix is a shared
+  # helper (e.g. .recv_credit(delta_epv, pos_team, p)) called from both places;
+  # it touches the production credit path, so it needs its own change and a
+  # before/after on published EPV.
 
   # --- Receiving plays (player is lead_player_id = next to touch the ball) ---
   recv_plays <- dt[dt$lead_player_id == pid]
@@ -1431,7 +1455,7 @@ explain_player_rating <- function(player,
   pr <- player_row[1, ]
 
   cli::cli_h1("{pname} | {pr$team} | TORP Rating Breakdown")
-  cli::cli_h2("Overall: TORP {pr$torp} = 0.5 * EPR ({pr$epr}) + 0.5 * PSR ({round(pr$psr, 2)})")
+  cli::cli_h2("Overall: TORP {pr$torp} = {TORP_EPR_WEIGHT} * EPR ({pr$epr}) + {1 - TORP_EPR_WEIGHT} * PSR ({round(pr$psr, 2)})")
 
   # --- 2. EPR decomposition ---
   cli::cli_h2("EPR Breakdown (recv + disp + spoil + hitout)")
@@ -1460,8 +1484,12 @@ explain_player_rating <- function(player,
               shrink_vals$gms %||% "?",
               shrink_vals$wt_gms %||% shrink_vals$wt_gms_recv %||% "?",
               shrink_vals$wt_tog %||% "?"))
-  cat(sprintf("  Prior games (shrinkage strength): 3.0 per component\n"))
-  cat(sprintf("  Bayesian formula: EPR_i = (loading * sum_i + 3 * prior_rate) / (wt_gms_i + 3)\n"))
+  # Per-channel prior games come from the constants, not a literal: under v3/v4
+  # they are 14.38 / 24.33 / 11.09, not the 3.0 this used to print.
+  cat(sprintf("  Prior games (shrinkage strength): recv %s | disp %s | spoil %s | hitout %s\n",
+              format(EPR_PRIOR_GAMES_RECV), format(EPR_PRIOR_GAMES_DISP),
+              format(EPR_PRIOR_GAMES_SPOIL), format(EPR_PRIOR_GAMES_HITOUT)))
+  cat("  Bayesian formula: EPR_i = (loading * sum_i + prior_games_i * prior_rate_i) / (wt_gms_i + prior_games_i)\n")
 
   # --- 3. PSR decomposition ---
   cli::cli_h2("PSR Breakdown (stat rating contributions to predicted margin)")
@@ -1474,10 +1502,15 @@ explain_player_rating <- function(player,
     coef_df <- coef_df[coef_df$beta != 0, , drop = FALSE]
 
     # Load player's stat ratings
-    skills <- tryCatch(load_player_stat_ratings(season_val), error = function(e) NULL)
+    skills <- tryCatch(load_player_stat_ratings(season_val), error = function(e) {
+      cli::cli_alert_warning(
+        "Stat ratings for season {season_val} failed to load ({conditionMessage(e)}); the PSR breakdown is skipped.")
+      NULL
+    })
     if (!is.null(skills)) {
-      skills_dt <- data.table::as.data.table(skills)
-      player_skills <- skills_dt[skills_dt$player_id == pid]
+      # Subset the player's rows by index: converting the whole season's frame
+      # to a data.table first copied every row to read a handful.
+      player_skills <- data.table::as.data.table(skills[which(skills$player_id == pid), ])
       if (nrow(player_skills) > 0) {
         # Take latest round
         player_skills <- player_skills[order(-round)][1]
@@ -1489,13 +1522,25 @@ explain_player_rating <- function(player,
           available <- skill_cols %in% names(player_skills)
         }
 
+        # Report coverage: a dropped coefficient or a zero-imputed NA rating
+        # makes the breakdown incomplete, and it must not look complete.
+        if (any(!available)) {
+          cli::cli_alert_warning(
+            "{sum(!available)} of {length(available)} PSR coefficient stat{?s} have no rating column and are left out of this breakdown: {paste(coef_df$stat_name[!available], collapse = ', ')}")
+        }
+
         coef_sub <- coef_df[available, , drop = FALSE]
         skill_cols_avail <- skill_cols[available]
 
         raw_ratings <- vapply(skill_cols_avail, function(col) {
-          v <- as.numeric(player_skills[[col]])
-          if (is.na(v)) 0 else v
+          as.numeric(player_skills[[col]])
         }, numeric(1))
+        n_na_ratings <- sum(is.na(raw_ratings))
+        if (n_na_ratings > 0) {
+          cli::cli_alert_warning(
+            "{n_na_ratings} of {length(raw_ratings)} stat rating{?s} {?is/are} NA for this player and counted as 0 in the breakdown.")
+        }
+        raw_ratings[is.na(raw_ratings)] <- 0
 
         # Apply SD normalisation if present
         if ("sd" %in% names(coef_sub)) {
@@ -1537,7 +1582,11 @@ explain_player_rating <- function(player,
   cli::cli_h2("Recent Game Log (EPV + PSV per game)")
   pgr <- tryCatch(
     load_player_game_ratings(season_val),
-    error = function(e) NULL
+    error = function(e) {
+      cli::cli_alert_warning(
+        "Player game ratings for season {season_val} failed to load ({conditionMessage(e)}); the game log is skipped.")
+      NULL
+    }
   )
   game_log <- NULL
   if (!is.null(pgr)) {
@@ -1670,7 +1719,7 @@ explain_player_rating <- function(player,
     # (PSR_CENTRE_ON_LISTED defaults FALSE, so this branch is dead today), but
     # it fires the moment that flag is flipped for AFLW.
     listed_pos <- .load_listed_positions(
-      unique(data.table::as.data.table(skills)$season), comp = comp)
+      unique(skills[["season"]]), comp = comp)
   }
 
   # Resolve margin coefficient path
@@ -1736,7 +1785,13 @@ explain_player_rating <- function(player,
     if (is.null(d) || nrow(d) == 0) return(NULL)
     pcol <- intersect(c("position_group", "position"), names(d))[1]
     if (is.na(pcol) || !"player_id" %in% names(d)) return(NULL)
-    d[!is.na(get(pcol)), .(player_id, position = as.character(get(pcol)), season = s)]
+    # Extract the column once instead of get() inside [, which defeats
+    # data.table's fast column access.
+    pos_vals <- d[[pcol]]
+    has_pos <- !is.na(pos_vals)
+    data.table::data.table(player_id = d$player_id[has_pos],
+                           position = as.character(pos_vals[has_pos]),
+                           season = s)
   })
   got <- got[!vapply(got, is.null, logical(1))]
   if (length(got) == 0) {

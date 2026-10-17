@@ -45,11 +45,24 @@
       if (s == prior) return(NULL)
       cli::cli_abort("Listed positions for season {s} ({comp}) came back without rows, player_id or a position column.")
     }
-    d[!is.na(get(pcol)), list(player_id = as.character(player_id), season = s,
-                              position = as.character(get(pcol)))]
+    # Extract the column once: get() inside [ defeats data.table's fast path.
+    pos_vals <- d[[pcol]]
+    has_pos <- !is.na(pos_vals)
+    data.table::data.table(player_id = as.character(d$player_id[has_pos]),
+                           season = s,
+                           position = as.character(pos_vals[has_pos]))
   })
   out <- data.table::rbindlist(got, use.names = TRUE)
+  # fromLast: if a player has two listing rows in one season, the later row
+  # (a mid-season relisting) wins.
   unique(out, by = c("player_id", "season"), fromLast = TRUE)
+}
+
+# One independent data.table copy of `x`, made exactly once. as.data.table() of
+# a data.frame already copies, and of a data.table it deep-copies too, so
+# wrapping it in copy() as well duplicated the whole frame.
+.dt_copy_once <- function(x) {
+  if (data.table::is.data.table(x)) data.table::copy(x) else data.table::as.data.table(x)
 }
 
 #' Attach each player's listed position for that season
@@ -72,7 +85,7 @@
 #' @return \code{skills} as a data.table with \code{listed_pos_group} added.
 #' @keywords internal
 .attach_season_listing <- function(skills, listing) {
-  dt <- data.table::copy(data.table::as.data.table(skills))
+  dt <- .dt_copy_once(skills)
   if (!all(c("player_id", "season") %in% names(dt))) {
     cli::cli_abort("{.arg skills} needs player_id and season; got {.val {names(dt)}}")
   }
@@ -82,6 +95,7 @@
   }
   ls <- ls[, list(.pid = as.character(player_id), .key = as.integer(season),
                   .lpg = .collapse_listed_position(position))]
+  # fromLast, as in .load_season_listing(): the later listing row wins.
   ls <- unique(ls[!is.na(.lpg) & !is.na(.key)], by = c(".pid", ".key"), fromLast = TRUE)
   if (nrow(ls) == 0) {
     cli::cli_abort("No usable listed positions in {.arg listing}.")
@@ -164,7 +178,7 @@
 #' @return \code{skills} as a data.table with \code{lineup_pos_group} added.
 #' @keywords internal
 .attach_weekly_pos <- function(skills, lineup) {
-  dt <- data.table::copy(data.table::as.data.table(skills))
+  dt <- .dt_copy_once(skills)
   need <- c("player_id", "season", "round")
   if (!all(need %in% names(dt))) {
     cli::cli_abort("{.arg skills} needs {.field {need}}; got {.val {names(dt)}}")
@@ -178,6 +192,8 @@
     .key = as.integer(season) * 1000L + as.integer(round),
     .lpg = unname(LINEUP_POSITION_GROUP_MAP[as.character(lineup_position)])
   )]
+  # No fromLast here, so the FIRST named slot per (player, round) is kept. The
+  # key is player x round, so two rows only arise from a duplicated team sheet.
   lp <- unique(lp[!is.na(.lpg) & !is.na(.key)], by = c(".pid", ".key"))
   if (nrow(lp) == 0) {
     cli::cli_abort(c(
@@ -205,6 +221,31 @@
   if (n > 0 && n_exact + n_rolled == 0) {
     cli::cli_abort("Weekly PSR key matched no team sheet at all -- the join is broken (check player_id/season/round types).")
   }
+  # Per-season floor, mirroring .attach_season_listing(): the all-rows check
+  # above passes while one season has sparse team-sheet coverage, because the
+  # other seasons carry the overall share. A row counts as covered when a named
+  # on-field slot exists at or before its round (exact or rolled, from ANY
+  # season: rolling back across a season boundary is the key's design, and a
+  # same-season-only test measured 83% on healthy 2026 data, below the floor).
+  # Share is by wt_80s when present, since unmatched rows are mostly players who
+  # never play. This catches a season with no usable history at all; it cannot
+  # catch one whose sheets are missing but whose players roll in from last year.
+  if (n > 0) {
+    has_w <- "wt_80s" %in% names(dt)
+    cov <- data.table::data.table(
+      season = dt$season, hit = !is.na(rolled),
+      w = if (has_w) pmax(data.table::fcoalesce(as.numeric(dt$wt_80s), 0), 0) else 1
+    )[, list(share = if (sum(w) > 0) sum(w[hit]) / sum(w) else mean(hit)), by = season]
+    floor_share <- if (has_w) 0.9 else 0.5
+    bad <- cov[share < floor_share]
+    if (nrow(bad) > 0) {
+      unit <- if (has_w) "wt_80s" else "rows"
+      # alert_danger, not abort: this key is scoring-only and not published, so
+      # a sparse season should be loud without killing an experiment run.
+      cli::cli_alert_danger(
+        "Weekly PSR key: these seasons matched a team sheet on too little of their {unit} (floor {100 * floor_share}%): {paste0(bad$season, ' ', round(100 * bad$share), '%', collapse = ', ')}.")
+    }
+  }
   dt[]
 }
 
@@ -225,7 +266,7 @@
 .attach_psr_key <- function(skills, psr_centre = c("career", "listed", "weekly"),
                             comp = "AFLM", season_listing = NULL, lineup = NULL) {
   psr_centre <- match.arg(psr_centre)
-  seasons <- unique(data.table::as.data.table(skills)$season)
+  seasons <- unique(skills[["season"]])
   if (identical(psr_centre, "listed") && !"listed_pos_group" %in% names(skills)) {
     if (is.null(season_listing)) season_listing <- .load_season_listing(seasons, comp = comp)
     return(.attach_season_listing(skills, season_listing))
