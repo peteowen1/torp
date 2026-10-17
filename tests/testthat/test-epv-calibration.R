@@ -88,3 +88,20 @@ test_that("EPV_RAW_CHANNEL_SCALE defaults to fitting, not to a stored number", {
   # staleness trap that invalidated a gate on 2026-08-05.
   expect_null(EPV_RAW_CHANNEL_SCALE)
 })
+
+test_that("calibrate_epv_channels refuses a missing or all-NA channel", {
+  pgd <- data.table::data.table(match_id = "M1", team = "A", epv_recv = 1,
+                                epv_disp = 2, epv_spoil = 3)
+  sc <- c(epv_recv = 1, epv_disp = 1, epv_spoil = 1)
+  expect_error(calibrate_epv_channels(pgd[, !"epv_spoil"], scale = sc), "missing")
+  pgd[, epv_spoil := NA_real_]
+  expect_error(calibrate_epv_channels(pgd, scale = sc), "Entirely NA")
+})
+
+test_that("fit_epv_channel_scale aborts on duplicated match_id in results", {
+  pgd <- data.table::data.table(match_id = "M1", team = "A", epv_recv = 1,
+                                epv_disp = 2, epv_spoil = 3)
+  res <- data.frame(match_id = c("M1", "M1"), home_team_name = "A",
+                    away_team_name = "B", home_score = 10, away_score = 5)
+  expect_error(fit_epv_channel_scale(pgd, res), "duplicated")
+})

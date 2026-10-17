@@ -52,7 +52,7 @@ EPV_RAW_CHANNEL_SCALE <- NULL
 #' @keywords internal
 fit_epv_channel_scale <- function(pgd, results) {
   ch <- c("epv_recv", "epv_disp", "epv_spoil")
-  d <- data.table::as.data.table(pgd)
+  d <- if (data.table::is.data.table(pgd)) pgd else data.table::as.data.table(pgd)
   miss <- setdiff(c(ch, "match_id", "team"), names(d))
   if (length(miss)) {
     cli::cli_abort("Player-game frame is missing {.field {miss}}.")
@@ -61,19 +61,37 @@ fit_epv_channel_scale <- function(pgd, results) {
   tg <- r[, .(match_id = as.character(match_id), home = home_team_name,
               away = away_team_name, margin = home_score - away_score)]
   tg <- tg[is.finite(margin)]
+  if (anyDuplicated(tg$match_id)) {
+    cli::cli_abort(c(
+      "{.arg results} has {sum(duplicated(tg$match_id))} duplicated {.field match_id} value{?s}.",
+      "x" = "A duplicated match would join twice and be counted twice in the fit."))
+  }
 
   ts <- d[, lapply(.SD, function(v) sum(v, na.rm = TRUE)), .SDcols = ch,
           by = .(match_id = as.character(match_id), team)]
+  # Names are matched exactly. A spelling mismatch between results and the
+  # player-game frame (e.g. Footscray vs Western Bulldogs) would otherwise drop
+  # those matches from the fit with only the nrow < 100 check to notice.
+  bad <- setdiff(unique(c(tg$home, tg$away)), unique(ts$team))
+  if (length(bad)) {
+    cli::cli_warn("{length(bad)} team name{?s} in {.arg results} not found in {.arg pgd}: {.val {bad}}; their matches are excluded from the fit.")
+  }
   h <- merge(tg, ts, by.x = c("match_id", "home"), by.y = c("match_id", "team"))
   a <- merge(tg, ts, by.x = c("match_id", "away"), by.y = c("match_id", "team"))
   m <- merge(h[, c("match_id", "margin", ch), with = FALSE],
              a[, c("match_id", ch), with = FALSE],
              by = "match_id", suffixes = c("_h", "_a"))
+  if (nrow(m) >= 100 && nrow(m) / nrow(tg) < 0.5) {
+    cli::cli_warn("Only {nrow(m)} of {nrow(tg)} results matches ({round(100 * nrow(m) / nrow(tg), 1)}%) joined to the player-game frame; check team names.")
+  }
   if (nrow(m) < 100) {
     cli::cli_abort(c("Only {nrow(m)} match{?es} usable for the channel-scale fit.",
                      "x" = "Refusing to fit a calibration constant on that."))
   }
-  for (v in ch) m[, (paste0("d_", v)) := get(paste0(v, "_h")) - get(paste0(v, "_a"))]
+  for (v in ch) {
+    data.table::set(m, j = paste0("d_", v),
+                    value = m[[paste0(v, "_h")]] - m[[paste0(v, "_a")]])
+  }
   fml <- stats::as.formula(paste("margin ~ 0 +", paste0("d_", ch, collapse = " + ")))
   co <- stats::coef(stats::lm(fml, data = m))
   # lm() returns NA for an aliased coefficient instead of erroring -- a channel
@@ -97,7 +115,8 @@ fit_epv_channel_scale <- function(pgd, results) {
 #' Adds \code{epv_recv_cal}, \code{epv_disp_cal}, \code{epv_spoil_cal} and their
 #' sum \code{epv_cal}. Existing columns are untouched.
 #'
-#' @param pgd Player-game frame.
+#' @param pgd Player-game frame. Partial NAs in a channel are treated as 0;
+#'   a channel that is entirely NA is an error.
 #' @param results Match results, needed only when \code{scale} is \code{NULL}.
 #' @param scale Optional named numeric to use instead of fitting.
 #' @return \code{pgd} with four columns added; the scale used is attached as the
@@ -118,7 +137,18 @@ calibrate_epv_channels <- function(pgd, results = NULL,
   if (!all(ch %in% names(scale))) {
     cli::cli_abort("{.arg scale} must be named for {.field {ch}}.")
   }
-  d <- data.table::copy(data.table::as.data.table(pgd))
+  miss <- setdiff(ch, names(pgd))
+  if (length(miss)) {
+    cli::cli_abort("Player-game frame is missing {.field {miss}}.")
+  }
+  d <- if (data.table::is.data.table(pgd)) data.table::copy(pgd) else data.table::as.data.table(pgd)
+  # Partial NAs are filled with 0 below; a channel that is ALL NA with a
+  # supplied scale would silently drop out of epv_cal, so refuse it.
+  all_na <- ch[vapply(ch, function(v) nrow(d) > 0 && all(is.na(d[[v]])), logical(1))]
+  if (length(all_na)) {
+    cli::cli_abort(c("Entirely NA channel(s): {.field {all_na}}.",
+                     "x" = "Zero-filling would silently drop them from {.field epv_cal}."))
+  }
   for (v in ch) {
     data.table::set(d, j = paste0(v, "_cal"),
                     value = scale[[v]] * data.table::fifelse(is.na(d[[v]]), 0, d[[v]]))
