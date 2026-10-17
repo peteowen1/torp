@@ -4,7 +4,7 @@
 \alias{.add_psv_to_game_ratings}
 \title{Add PSV and per-game TORP value to player game ratings}
 \usage{
-.add_psv_to_game_ratings(pgr, pstats_season, season)
+.add_psv_to_game_ratings(pgr, pstats_season, season, strict = FALSE)
 }
 \arguments{
 \item{pgr}{Output of \code{.compute_player_game_ratings()} for one season.}
@@ -12,10 +12,19 @@
 \item{pstats_season}{Player stats for the same season (\code{load_player_stats()}).}
 
 \item{season}{Season, for messages.}
+
+\item{strict}{If \code{TRUE}, abort when PSV could not be computed instead of
+returning \code{pgr} without it. Default \code{FALSE}, which keeps the old behaviour
+of returning the EPV-only frame, but now says so immediately and tags the
+result (see Value).}
 }
 \value{
 \code{pgr} with psv/osv/dsv, their per-80 columns and torp_value(_p80)
-when PSV could be computed; unchanged (with a warning) otherwise.
+when PSV could be computed. When it could not (stats opponent adjustment
+or PSV failed, no player stats, or no usable PSV columns), \code{pgr} comes back
+without them and carries \code{attr(, "psv_missing") == TRUE}; a release
+pipeline should check that attribute (or pass \code{strict = TRUE}) before
+publishing.
 }
 \description{
 \code{.compute_player_game_ratings()} builds the EPV side only. PSV (box-score

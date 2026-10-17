@@ -28,10 +28,16 @@ totals. Default \code{FALSE} (totals).}
 \item{round_num}{Deprecated. Use \code{round_val} instead.}
 }
 \value{
-A data frame containing player game ratings.
+A data frame containing the display subset of player game ratings
+described above, sorted by TORP value (or EPV when PSV is absent).
 }
 \description{
 Convenience wrapper around \code{\link[=load_player_game_ratings]{load_player_game_ratings()}} with filtering
-by season, round, match, or team. Returns the same data as the load
-function — both pull from the same pre-computed release.
+by season, round, match, or team. Both pull from the same pre-computed
+release, but this wrapper returns a fixed display subset of its columns:
+season, round, player, position group, team, opponent, time on ground, the
+EPV / WPA-credit / PSV / TORP value columns (totals, or per-80 when
+\code{per80 = TRUE}) and the player, team and match ids. The released columns
+\code{lineup_position}, \code{net_points}, the \verb{wpa_*} ledger and the \verb{np_*} parts are
+NOT returned here; use \code{\link[=load_player_game_ratings]{load_player_game_ratings()}} for those.
 }

@@ -293,7 +293,7 @@ test_that("print.torp_player_profile produces output", {
 # own margin by 0.000 on average, `epv` by 9.56.
 # Analysis: docs/plans/EPV-DISPLAY-COLUMN.md.
 
-np_mock <- function(with_epv = TRUE) {
+np_mock <- function(with_epv = TRUE, with_np = TRUE) {
   d <- data.frame(
     player_id = paste0("P", 1:6),
     match_id = rep(c("M1", "M2"), each = 3),
@@ -312,6 +312,8 @@ np_mock <- function(with_epv = TRUE) {
     stringsAsFactors = FALSE
   )
   if (with_epv) d$epv <- c(5, 3, -1, 4, 2, -2)
+  # v4 frames always carry the ledger column (equal to epv, asserted upstream)
+  if (with_epv && with_np) d$net_points <- d$epv
   d
 }
 
@@ -352,12 +354,24 @@ test_that("epv and net_points disagreeing beyond the gate aborts rather than mis
     "disagree")
 })
 
-test_that("net_points is absent but announced when the frame has no epv", {
+test_that("net_points is NA, not raw epv, when the frame has no ledger column", {
+  # A v2/v3 frame has epv but no net_points. Publishing epv under the name
+  # net_points would be the mislabel the ledger column exists to prevent.
+  m <- np_mock(with_np = FALSE)
+  expect_message(
+    r <- torp:::.compute_player_game_ratings(m, 2025L, 1L),
+    "No net_points column")
+  expect_true("net_points" %in% names(r))
+  expect_true(all(is.na(r$net_points)))
+  expect_true(all(c("np_own", "np_won", "np_team") %in% names(r)))
+})
+
+test_that("net_points is NA but announced when the frame has no epv either", {
   m <- np_mock(with_epv = FALSE)
   expect_message(
     r <- torp:::.compute_player_game_ratings(m, 2025L, 1L),
-    "No epv or net_points column")
-  expect_false("net_points" %in% names(r))
+    "No net_points column")
+  expect_true(all(is.na(r$net_points)))
   # the rest of the frame is unaffected -- this is a degraded input, not a failure
   expect_true(all(c("epv", "epv_p80") %in% names(r)))
 })
@@ -396,4 +410,37 @@ test_that(".np_raw_parts splits net_points into parts that add up to it", {
   # Existing parts are kept, never rebuilt from (possibly centred) channels
   d3 <- transform(d, np_own = 1, np_won = 1, np_team = 0)
   expect_identical(torp:::.np_raw_parts(d3)$np_own, c(1, 1))
+})
+
+# ---- N11: tog floor, season denominators, PSV-missing signal ----------------
+
+test_that(".tog_floor floors at 0.1 and leaves NA alone", {
+  expect_equal(torp:::.tog_floor(c(0, 0.05, 0.1, 0.8, NA)), c(0.1, 0.1, 0.1, 0.8, NA))
+})
+
+test_that("season p80 divides by games with a known tog only", {
+  # Three games, one with NA tog. Old denominator: 3 * mean(0.8, 0.6) = 2.1;
+  # new: 2 * 0.7 = 1.4.
+  pgr <- data.frame(
+    season = 2025L, player_name = "A", player_id = "P1", team_id = "T1",
+    team = "Adelaide Crows", position_group = "MIDFIELDER",
+    tog = c(0.8, 0.6, NA), epv = c(7, 7, 0), stringsAsFactors = FALSE
+  )
+  r <- torp:::.compute_player_season_ratings(pgr, per80 = TRUE)
+  expect_equal(r$games, 3L)
+  expect_equal(r$epv_p80, 10)
+  expect_false("n_tog" %in% names(r))
+})
+
+test_that(".add_psv_to_game_ratings flags and announces a missing PSV", {
+  pgr <- data.frame(player_id = "P1", match_id = "M1", epv = 1, tog = 0.8)
+  # no player stats at all
+  expect_message(
+    r <- torp:::.add_psv_to_game_ratings(pgr, data.frame(), 2025L),
+    "PSV missing")
+  expect_true(isTRUE(attr(r, "psv_missing")))
+  expect_false("psv" %in% names(r))
+  expect_error(
+    torp:::.add_psv_to_game_ratings(pgr, data.frame(), 2025L, strict = TRUE),
+    "PSV missing")
 })
