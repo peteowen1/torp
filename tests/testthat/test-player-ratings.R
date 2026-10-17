@@ -889,3 +889,63 @@ test_that("EPR_POSITION_SHRINK holds back thin cells and leaves fat ones alone",
   o_fat  <- suppressMessages(centre_epr_by_position(mk(20)))
   expect_equal(sd(o_thin$epr_recv[1:3]), sd(o_fat$epr_recv[1:3]), tolerance = 1e-8)
 })
+
+
+# -----------------------------------------------------------------------------
+# Review fixes (C02): batch path hygiene, posn by date, torp_movers overlap
+# -----------------------------------------------------------------------------
+
+.batch_fixture <- function() {
+  data.table::data.table(
+    player_id = rep(c("A", "B"), each = 3),
+    player_name = rep(c("A", "B"), each = 3),
+    # match ids deliberately NOT in date order for player A
+    match_id = rep(c("CD_M2024014103", "CD_M2024014101", "CD_M2024014102"), 2),
+    utc_start_time = rep(as.Date("2024-04-01") + c(14, 0, 7), 2),
+    epv_recv_adj = 1, epv_disp_adj = 1, epv_spoil_adj = 1, epv_hitout_adj = 1,
+    time_on_ground_percentage = c(80, 90, 70, 85, 85, 85),
+    position_group = c("DEF", "MID", "FWD", "RUC", "RUC", "RUC")
+  )
+}
+
+test_that("calculate_epr_stats_batch leaves the caller's data.table untouched", {
+  pgd <- .batch_fixture()
+  cols_before <- names(pgd)
+  key_before <- data.table::key(pgd)
+  ri <- data.table::data.table(round_val = 1L, match_ref = "CD_M2024014103",
+                               date_val = as.Date("2024-05-01"))
+  res <- torp:::calculate_epr_stats_batch(pgd, ri)
+  expect_equal(nrow(res), 2)
+  expect_identical(names(pgd), cols_before)
+  expect_identical(data.table::key(pgd), key_before)
+})
+
+test_that("posn is the position from the player's most recent game, not last row", {
+  pgd <- .batch_fixture()
+  res <- torp:::calculate_epr_stats(pgd, "CD_M2024014103", as.Date("2024-05-01"))
+  # Player A's latest game by date is match ...103 (day +14) = DEF
+  expect_equal(res$posn[res$player_id == "A"], "DEF")
+  ri <- data.table::data.table(round_val = 1L, match_ref = "CD_M2024014103",
+                               date_val = as.Date("2024-05-01"))
+  resb <- torp:::calculate_epr_stats_batch(pgd, ri)
+  expect_equal(resb$posn[resb$player_id == "A"], "DEF")
+})
+
+test_that("torp_movers never lists a player as both riser and faller", {
+  fake <- data.frame(
+    player_id = rep(as.character(1:5), 2),
+    player_name = rep(paste0("P", 1:5), 2),
+    team = "T",
+    season = 2024L,
+    round = rep(c(1L, 2L), each = 5),
+    torp = c(1, 2, 3, 4, 5, 2, 1, 5, 3, 9)
+  )
+  testthat::local_mocked_bindings(load_torp_ratings = function(...) fake)
+  utils::capture.output(suppressMessages(
+    res <- torp_movers(2024L, 2L, 1L, top_n = 4)
+  ))
+  # 5 players, top_n 4: 4 risers + only the 1 left over as faller
+  expect_equal(sum(res$direction == "up"), 4)
+  expect_equal(sum(res$direction == "down"), 1)
+  expect_false(any(duplicated(res$player_id)))
+})

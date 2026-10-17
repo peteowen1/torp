@@ -115,14 +115,19 @@ calculate_epr <- function(season_val = get_afl_season(type = "current"),
 
 
   # Resolve skills: TRUE → auto-load, FALSE/NULL → skip, data.frame → validate
+  skills_fallback <- FALSE
   if (isTRUE(skills)) {
     skills <- tryCatch(
       get_player_stat_ratings(current = FALSE),
       error = function(e) {
-        cli::cli_warn("Could not load skills data, skipping TOG adjustment: {conditionMessage(e)}")
+        cli::cli_warn(c(
+          "Could not load skills data, skipping TOG adjustment: {conditionMessage(e)}",
+          "!" = "Ratings from this run are NOT comparable with published ones (no pred_tog centring)."
+        ))
         NULL
       }
     )
+    skills_fallback <- is.null(skills)
     skills <- .normalise_skills_columns(skills, strict = FALSE)
   } else if (isFALSE(skills)) {
     skills <- NULL
@@ -201,6 +206,9 @@ calculate_epr <- function(season_val = get_afl_season(type = "current"),
         cli::cli_warn("Total predicted TOG is zero -- TOG-weighted centering skipped. Check skills data alignment.")
       }
     }
+
+    # Record the fallback on the output so a published vintage can be checked
+    if (skills_fallback) attr(final_df, "skills_fallback") <- TRUE
 
     cli::cli_inform("EPR ratings as at {season_val} round {round_val}")
     return(final_df)
@@ -314,7 +322,7 @@ calculate_epr_stats <- function(player_game_data = NULL, match_ref, date_val, de
     disp_sum   = sum(get(epv_disp_col) * tog_safe * wt_disp, na.rm = TRUE),
     spoil_sum  = sum(get(epv_spoil_col) * tog_safe * wt_spoil, na.rm = TRUE),
     hitout_sum = sum(get(epv_hitout_col) * tog_safe * wt_hitout, na.rm = TRUE),
-    posn = data.table::last(position_group)
+    posn = data.table::last(position_group[order(utc_start_time)])
   ), by = player_id]
 
   # Derive per-component EPR with TOG-weighted games
@@ -377,8 +385,11 @@ calculate_epr_stats_batch <- function(player_game_data = NULL,
     player_game_data <- load_player_game_data(TRUE)
   }
 
+  # Copy on the data.table branch: setkey() and the match_idx assignment below
+  # modify by reference, which would otherwise change the caller's key and add a
+  # column to their object. as.data.table() on a data.frame already copies.
   dt <- if (data.table::is.data.table(player_game_data)) {
-    player_game_data
+    data.table::copy(player_game_data)
   } else {
     data.table::as.data.table(player_game_data)
   }
@@ -445,7 +456,7 @@ calculate_epr_stats_batch <- function(player_game_data = NULL,
     disp_sum    = sum(get(epv_disp_col) * tog_safe * wt_disp, na.rm = TRUE),
     spoil_sum   = sum(get(epv_spoil_col) * tog_safe * wt_spoil, na.rm = TRUE),
     hitout_sum  = sum(get(epv_hitout_col) * tog_safe * wt_hitout, na.rm = TRUE),
-    posn = data.table::last(position_group)
+    posn = data.table::last(position_group[order(utc_start_time)])
   ), by = .(round_val, player_id)]
 
   result[, `:=`(
@@ -1062,7 +1073,9 @@ torp_movers <- function(season_val = get_afl_season(),
 
   risers <- head(merged, top_n)
   risers[, direction := "up"]
-  fallers <- tail(merged, top_n)
+  # Exclude anyone already listed as a riser: with fewer than 2 * top_n players
+  # the head and tail overlap and one row would be both up and down.
+  fallers <- tail(merged[!player_id %in% risers$player_id], top_n)
   fallers[, direction := "down"]
   data.table::setorderv(fallers, "change", order = 1L)
 
