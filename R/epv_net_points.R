@@ -99,7 +99,7 @@
   if (!"team_id" %in% names(p)) {
     cli::cli_abort("Play-by-play needs {.field team_id} to be aligned with chains.")
   }
-  ch <- data.table::as.data.table(chains)
+  ch <- if (data.table::is.data.table(chains)) chains else data.table::as.data.table(chains)
   detect_chains_columns(ch)
   # chains also carries the stoppage's OWN location, which PBP does not: a PBP
   # stoppage row's `x` is where the ball was next GATHERED (97.7% identical to
@@ -285,7 +285,7 @@
   # cell it simply shrinks toward the type mean.
   d[, yband := -1]
   d[is.finite(aby),
-    yband := NP_STOPPAGE_Y_BREAKS[findInterval(aby, NP_STOPPAGE_Y_BREAKS)]]
+    yband := NP_STOPPAGE_Y_BREAKS[pmax(findInterval(aby, NP_STOPPAGE_Y_BREAKS), 1L)]]
   n_true
 }
 
@@ -824,9 +824,14 @@
 #'   `next_player`.
 #' @keywords internal
 .np_adjacency <- function(pbp_data) {
-  a <- data.table::as.data.table(pbp_data)[, .(match_id, display_order, team,
-                                               player_id, description,
-                                               home_points, away_points)]
+  adj_cols <- c("match_id", "display_order", "team", "player_id", "description",
+                "home_points", "away_points")
+  # slim BEFORE converting, so a full-history frame is not deep-copied wide
+  a <- if (data.table::is.data.table(pbp_data)) {
+    pbp_data[, adj_cols, with = FALSE]
+  } else {
+    data.table::as.data.table(pbp_data[, adj_cols, drop = FALSE])
+  }
   data.table::setorder(a, match_id, display_order)
   a[, tot := home_points + away_points]
   a[, `:=`(nt = data.table::shift(team, -1L),
@@ -981,6 +986,9 @@
                   c_cont = V_branch - V_pre, c_ground = V_after - V_branch,
                   c_desc = out_desc, c_def_win = def_win, c_winner = out_pid)]
     n_new <- nrow(ct[!out, on = .(match_id, display_order)])
+    if (anyDuplicated(ct, by = c("match_id", "display_order")) > 0L) {
+      cli::cli_abort("Aerial contests are not unique per (match_id, display_order); merging them would duplicate ledger rows.")
+    }
     out <- merge(out, ct, by = c("match_id", "display_order"), all = TRUE)
     hit <- !is.na(out$c_p)
     out[hit, `:=`(p_hat = c_p, decision = c_decision,
@@ -1217,7 +1225,7 @@
                      resolve_player != winner_pid, .N]
       if (bad_win > 0) {
         cli::cli_warn(
-          "{bad_win} contested kick{?s} name a different winner in the terms than in the ledger's resolution; the terms' winner is used.")
+          "{bad_win} contested kick{?s} name a different winner in the terms than in the ledger's resolution; the ledger's resolution is kept (rows counted only, not reassigned).")
       }
       aw <- cs & !l$def_win
       dw <- cs & l$def_win
@@ -1303,6 +1311,11 @@
   recv <- l[kind == "retained", .(match_id, team, player_id = next_player, v = recv_hm)]
   win <- l[win_hm != 0 & !is.na(winner_pid),
            .(match_id, team, player_id = winner_pid, v = win_hm)]
+  nowin <- l[win_hm != 0 & is.na(winner_pid)]
+  if (nrow(nowin) > 0) {
+    cli::cli_warn(
+      "{format(nrow(nowin), big.mark = ',')} ledger row{?s} carry win_hm but no winner_pid ({round(sum(abs(nowin$win_hm)), 2)} points of |value|); that credit is not paid directly.")
+  }
   out <- data.table::rbindlist(list(actor, recv, win))[
     , .(np_direct = sum(v)), by = .(match_id, team, player_id)]
   moved <- l[kind == "retained", sum(abs(recv_hm))]
@@ -1358,6 +1371,9 @@
   }
 
   pos <- lineup[, .(match_id, team, player_id, position)]
+  if (anyDuplicated(pos, by = c("match_id", "team", "player_id")) > 0L) {
+    cli::cli_abort("The lineup has more than one row per (match_id, team, player_id); joining it would double-count pool shares.")
+  }
   to <- merge(to, pos, by = c("match_id", "team", "player_id"), all.x = TRUE)
   unmapped <- to[is.na(position)]
   if (nrow(unmapped)) {
@@ -1581,7 +1597,7 @@
                                           v_pool = L * (1 - s_ruck) + L * s_ruck * (sw_lose == 0))]
   # ruck payments: spread each row's v_ruck across that team's rucks by weight
   ruck_pay <- function(rp, wcol, swcol) {
-    x <- merge(rp[v_ruck != 0], rk[get(wcol) > 0, .(match_id, team, player_id, w = get(wcol), sw = get(swcol))],
+    x <- merge(rp[v_ruck != 0], rk[rk[[wcol]] > 0, .(match_id, team, player_id, w = get(wcol), sw = get(swcol))],
                by = c("match_id", "team"), allow.cartesian = TRUE)
     x[, .(match_id, display_order, team, player_id, v = v_ruck * w / sw, role = "stoppage_ruck")]
   }
@@ -1656,7 +1672,7 @@
   )]
 
   if (identical(spread, "matchup")) {
-    a[, is_mirror := !is.na(winner_slot) & position == winner_slot]
+    a[, is_mirror := !is.na(winner_slot) & !is.na(position) & position == winner_slot]
     a[, n_mirror := sum(is_mirror), by = grp]
     a[, tog_mirror := sum(tog * is_mirror), by = grp]
     a[, tog_other := sum(tog * !is_mirror), by = grp]
@@ -1988,19 +2004,27 @@ build_net_points <- function(pbp_data = NULL,
   led <- .np_build_ledger(pbp_data, chains, stoppages, stoppage_baseline)
 
   # --- lineup: roster, positions, TOG and defensive box-score work ----------
-  ps <- data.table::as.data.table(player_stats)
   need <- c("match_id", "player_id", "position", "time_on_ground_percentage")
-  missing <- setdiff(need, names(ps))
+  missing <- setdiff(need, names(player_stats))
   if (length(missing)) {
     cli::cli_abort("{.arg player_stats} is missing {.val {missing}}.")
   }
   def_cols <- intersect(c("tackles", "pressure_acts", "spoils", "intercepts",
-                          "one_percenters"), names(ps))
+                          "one_percenters"), names(player_stats))
   if (length(def_cols) == 0) {
     cli::cli_abort(c(
       "{.arg player_stats} has none of the defensive columns the spread needs.",
       "i" = "Expected some of: tackles, pressure_acts, spoils, intercepts, one_percenters."
     ))
+  }
+  # narrow to the columns used BEFORE copying (the := below must not touch the
+  # caller's table); a full box-score frame is wide
+  keep_ps <- intersect(c(need, def_cols, "hitouts_to_advantage", "ruck_contests",
+                         "hitouts"), names(player_stats))
+  ps <- if (data.table::is.data.table(player_stats)) {
+    player_stats[, keep_ps, with = FALSE]
+  } else {
+    data.table::as.data.table(player_stats[, keep_ps, drop = FALSE])
   }
   ps[, .def_acts := rowSums(as.matrix(.SD), na.rm = TRUE), .SDcols = def_cols]
 
@@ -2049,6 +2073,10 @@ build_net_points <- function(pbp_data = NULL,
       "Only {round(100 * cov_def, 1)}% of players have any defensive box-score acts.",
       "x" = "{.arg spread = \"defensive_acts\"} would fall through to its flat fallback for most groups."
     ))
+  }
+  if (cov_tog < 1) {
+    cli::cli_alert_warning(
+      "{format(sum(is.na(lineup$tog)), big.mark = ',')} of {format(nrow(lineup), big.mark = ',')} players ({round(100 * (1 - cov_tog), 1)}%) have no time on ground; imputing 0.75 for them.")
   }
   lineup[is.na(tog), tog := 0.75]
   lineup[is.na(def_acts), def_acts := 0]
@@ -2416,8 +2444,10 @@ np_difficulty_terms_for_season <- function(season, pbp_data = NULL, chains = NUL
 #' @param player_stats Box-score stats for the same matches.
 #' @param chains Raw chains for the same matches.
 #' @param difficulty_terms Precomputed terms (leak-safe from
-#'   `np_difficulty_terms_for_season()`); fitted in-sample, with a warning,
-#'   when `NULL`.
+#'   `np_difficulty_terms_for_season()`). When `NULL` they are fitted here with
+#'   `leak_safe = TRUE`: multi-season `pbp_data` uses the rolling prior-season
+#'   fit; a single season has no prior season, so it is fitted in-sample, with
+#'   a warning.
 #' @param results Official results, or `NULL` to load them for the seasons in
 #'   `pbp_data` (falling back to the running score when that fails).
 #' @return `build_net_points()` output under the v4 rule set.
@@ -2464,7 +2494,7 @@ np_difficulty_terms_for_season <- function(season, pbp_data = NULL, chains = NUL
   if (is.null(results)) {
     seasons <- sort(unique(as.integer(substr(res$match_id, 5, 8))))
     results <- tryCatch(load_results(seasons), error = function(e) {
-      cli::cli_alert_warning("Official results unavailable ({conditionMessage(e)}); using the running score.")
+      cli::cli_warn("Official results unavailable ({conditionMessage(e)}); using the running score.")
       NULL
     })
   }
@@ -2763,6 +2793,11 @@ np_difficulty_terms_for_season <- function(season, pbp_data = NULL, chains = NUL
   np[, player_id := as.character(player_id)]
   np <- merge(np, out[, .(match_id, player_id, .new = val)],
               by = c("match_id", "player_id"), all.x = TRUE)
+  n_unalloc <- np[is.na(.new), .N]
+  if (n_unalloc > 0) {
+    cli::cli_warn(
+      "{format(n_unalloc, big.mark = ',')} net-points row{?s} have no margin allocation and are set to 0; their value moves to the team term.")
+  }
   np[is.na(.new), .new := 0]
   np[, np_team := np_team + (.new - net_points)]
   np[, net_points := .new]
