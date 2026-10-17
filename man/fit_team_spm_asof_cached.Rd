@@ -16,7 +16,7 @@ fit_team_spm_asof_cached(
   seasons = TRUE,
   alpha = 0.5,
   nfolds = 10,
-  seed = 20260825,
+  seed = .TEAM_RAPM_ASOF_SEED,
   prior_games = 10
 )
 }
