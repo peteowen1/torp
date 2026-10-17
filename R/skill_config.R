@@ -141,6 +141,7 @@ stat_rating_definitions <- function() {
       FALSE, FALSE          # dream_team_points, rating_points
     ),
     pos_adjusted = TRUE,
+    played_only = NA,
     stringsAsFactors = FALSE
   )
 
@@ -169,9 +170,6 @@ stat_rating_definitions <- function() {
     played_only = c(NA, NA, NA, NA, NA, TRUE, FALSE),
     stringsAsFactors = FALSE
   )
-
-  # Add played_only column to rate_stats so rbind works
-  rate_stats$played_only <- NA
 
   rbind(rate_stats, efficiency_stats)
 }
@@ -203,8 +201,8 @@ stat_rating_position_map <- function() {
 #' Returns optimized defaults for the Bayesian stat rating estimation pipeline.
 #' Per-category lambda and prior values come from
 #' \code{data-raw/06-stat-ratings/02_optimize_skill_params.R}. The global \code{lambda_rate}
-#' and \code{prior_games} are used as fallbacks for any category not in
-#' \code{category_params}.
+#' and \code{prior_games} are used for any stat without an entry in
+#' \code{stat_params}.
 #'
 #' @return A named list with elements:
 #'   \describe{
@@ -214,7 +212,8 @@ stat_rating_position_map <- function() {
 #'     \item{prior_attempts}{Prior pseudo-attempts for Beta-Binomial efficiency stats.}
 #'     \item{min_games}{Minimum weighted games to appear in output.}
 #'     \item{credible_level}{Width of credible interval (e.g. 0.80 for 80 pct).}
-#'     \item{category_params}{Per-category lambda and prior_strength overrides.}
+#'     \item{stat_params}{Per-stat list of \code{lambda} and \code{prior_strength}
+#'       overrides (see \code{.stat_rating_params()}). There is no per-category tier.}
 #'   }
 #' @keywords internal
 default_stat_rating_params <- function() {
