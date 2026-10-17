@@ -115,14 +115,19 @@ calculate_epr <- function(season_val = get_afl_season(type = "current"),
 
 
   # Resolve skills: TRUE → auto-load, FALSE/NULL → skip, data.frame → validate
+  skills_fallback <- FALSE
   if (isTRUE(skills)) {
     skills <- tryCatch(
       get_player_stat_ratings(current = FALSE),
       error = function(e) {
-        cli::cli_warn("Could not load skills data, skipping TOG adjustment: {conditionMessage(e)}")
+        cli::cli_warn(c(
+          "Could not load skills data, skipping TOG adjustment: {conditionMessage(e)}",
+          "!" = "Ratings from this run are NOT comparable with published ones (no pred_tog centring)."
+        ))
         NULL
       }
     )
+    skills_fallback <- is.null(skills)
     skills <- .normalise_skills_columns(skills, strict = FALSE)
   } else if (isFALSE(skills)) {
     skills <- NULL
@@ -201,6 +206,9 @@ calculate_epr <- function(season_val = get_afl_season(type = "current"),
         cli::cli_warn("Total predicted TOG is zero -- TOG-weighted centering skipped. Check skills data alignment.")
       }
     }
+
+    # Record the fallback on the output so a published vintage can be checked
+    if (skills_fallback) attr(final_df, "skills_fallback") <- TRUE
 
     cli::cli_inform("EPR ratings as at {season_val} round {round_val}")
     return(final_df)
@@ -308,13 +316,15 @@ calculate_epr_stats <- function(player_game_data = NULL, match_ref, date_val, de
     wt_gms_disp   = sum(wt_disp * tog_safe, na.rm = TRUE),
     wt_gms_spoil  = sum(wt_spoil * tog_safe, na.rm = TRUE),
     wt_gms_hitout = sum(wt_hitout * tog_safe, na.rm = TRUE),
+    # Numerator and denominator must cover the SAME rows: a game with NA TOG
+    # used to add its weight to wt_gms_raw but 0 to tog_sum, dragging wt_tog low.
     tog_sum    = sum(time_on_ground_percentage * wt_recv, na.rm = TRUE),
-    wt_gms_raw = sum(wt_recv, na.rm = TRUE),
+    wt_gms_raw = sum(wt_recv[!is.na(time_on_ground_percentage)]),
     recv_sum   = sum(get(epv_recv_col) * tog_safe * wt_recv, na.rm = TRUE),
     disp_sum   = sum(get(epv_disp_col) * tog_safe * wt_disp, na.rm = TRUE),
     spoil_sum  = sum(get(epv_spoil_col) * tog_safe * wt_spoil, na.rm = TRUE),
     hitout_sum = sum(get(epv_hitout_col) * tog_safe * wt_hitout, na.rm = TRUE),
-    posn = data.table::last(position_group)
+    posn = data.table::last(position_group[order(utc_start_time)])
   ), by = player_id]
 
   # Derive per-component EPR with TOG-weighted games
@@ -377,8 +387,11 @@ calculate_epr_stats_batch <- function(player_game_data = NULL,
     player_game_data <- load_player_game_data(TRUE)
   }
 
+  # Copy on the data.table branch: setkey() and the match_idx assignment below
+  # modify by reference, which would otherwise change the caller's key and add a
+  # column to their object. as.data.table() on a data.frame already copies.
   dt <- if (data.table::is.data.table(player_game_data)) {
-    player_game_data
+    data.table::copy(player_game_data)
   } else {
     data.table::as.data.table(player_game_data)
   }
@@ -439,13 +452,14 @@ calculate_epr_stats_batch <- function(player_game_data = NULL,
     wt_gms_disp    = sum(wt_disp * tog_safe, na.rm = TRUE),
     wt_gms_spoil   = sum(wt_spoil * tog_safe, na.rm = TRUE),
     wt_gms_hitout  = sum(wt_hitout * tog_safe, na.rm = TRUE),
+    # Same rows in numerator and denominator (see calculate_epr_stats)
     tog_sum    = sum(time_on_ground_percentage * wt_recv, na.rm = TRUE),
-    wt_gms_raw = sum(wt_recv, na.rm = TRUE),
-    recv_sum    = sum(get(epv_recv_col) * tog_safe * wt_recv, na.rm = TRUE),
+    wt_gms_raw = sum(wt_recv[!is.na(time_on_ground_percentage)]),
+    recv_sum    =sum(get(epv_recv_col) * tog_safe * wt_recv, na.rm = TRUE),
     disp_sum    = sum(get(epv_disp_col) * tog_safe * wt_disp, na.rm = TRUE),
     spoil_sum   = sum(get(epv_spoil_col) * tog_safe * wt_spoil, na.rm = TRUE),
     hitout_sum  = sum(get(epv_hitout_col) * tog_safe * wt_hitout, na.rm = TRUE),
-    posn = data.table::last(position_group)
+    posn = data.table::last(position_group[order(utc_start_time)])
   ), by = .(round_val, player_id)]
 
   result[, `:=`(
@@ -769,9 +783,12 @@ centre_epr_by_position <- function(epr_df,
 #' @details When both \code{epr_df} and \code{psr_df} carry \code{season} and
 #'   \code{round} columns, PSR/OSR/DSR are joined per
 #'   \code{(player_id, season, round)} so each historical rating row receives the
-#'   PSR as it stood at that point in time. Rows with no matching historical PSR
-#'   (e.g. the current round in live computation, or seasons outside the PSR
-#'   history) fall back to the player's latest available PSR snapshot. When
+#'   PSR as it stood at that point in time. Rows with no matching PSR that are
+#'   dated AFTER the newest round in the PSR history (e.g. the current round in
+#'   live computation) fall back to the player's latest available PSR snapshot.
+#'   Earlier unmatched rows (a player not yet rated that round, or seasons
+#'   before the PSR history) are NOT back-filled, since the latest snapshot
+#'   would leak later information into them; they take the prior rate. When
 #'   either frame lacks season/round, the latest-per-player snapshot is used for
 #'   all rows.
 #'
@@ -830,8 +847,16 @@ calculate_torp <- function(epr_df, psr_df, epr_weight = TORP_EPR_WEIGHT) {
     result$season <- epr_df$season
     result$round <- epr_df$round
 
-    # Backfill rows with no historical PSR match using the latest snapshot
-    unmatched <- is.na(result$psr)
+    # Backfill unmatched rows with the latest snapshot -- but ONLY rows dated
+    # after the newest PSR in the history (the live current round, or a round
+    # not yet scored). The latest snapshot is "as of" that newest round, so
+    # handing it to an earlier row would leak later information into it: a
+    # player first rated in round 10 would carry his round-10+ PSR back into
+    # rounds 0-9. Earlier unmatched rows stay NA and take the prior below.
+    psr_key <- hist_psr$season * 1000L + hist_psr$round
+    psr_newest <- suppressWarnings(max(psr_key, na.rm = TRUE))
+    row_key <- result$season * 1000L + result$round
+    unmatched <- is.na(result$psr) & !is.na(row_key) & row_key > psr_newest
     if (any(unmatched)) {
       fb_keys <- data.frame(player_id = result$player_id[unmatched],
                             stringsAsFactors = FALSE)
@@ -1062,7 +1087,9 @@ torp_movers <- function(season_val = get_afl_season(),
 
   risers <- head(merged, top_n)
   risers[, direction := "up"]
-  fallers <- tail(merged, top_n)
+  # Exclude anyone already listed as a riser: with fewer than 2 * top_n players
+  # the head and tail overlap and one row would be both up and down.
+  fallers <- tail(merged[!player_id %in% risers$player_id], top_n)
   fallers[, direction := "down"]
   data.table::setorderv(fallers, "change", order = 1L)
 

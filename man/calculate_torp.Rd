@@ -24,9 +24,12 @@ to produce the final TORP rating. TORP = w * epr + (1 - w) * psr.
 When both \code{epr_df} and \code{psr_df} carry \code{season} and
 \code{round} columns, PSR/OSR/DSR are joined per
 \code{(player_id, season, round)} so each historical rating row receives the
-PSR as it stood at that point in time. Rows with no matching historical PSR
-(e.g. the current round in live computation, or seasons outside the PSR
-history) fall back to the player's latest available PSR snapshot. When
+PSR as it stood at that point in time. Rows with no matching PSR that are
+dated AFTER the newest round in the PSR history (e.g. the current round in
+live computation) fall back to the player's latest available PSR snapshot.
+Earlier unmatched rows (a player not yet rated that round, or seasons
+before the PSR history) are NOT back-filled, since the latest snapshot
+would leak later information into them; they take the prior rate. When
 either frame lacks season/round, the latest-per-player snapshot is used for
 all rows.
 }
