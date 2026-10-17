@@ -479,9 +479,12 @@ update_player_stats <- function(season) {
   # daily run would otherwise happily re-upload (and re-poison) a partial file.
   if ("match_id" %in% names(player_stats)) {
     fixtures <- tryCatch(get_afl_fixtures(season), error = function(e) {
+      # Interpolate the message as a value: an API error body can contain
+      # braces (JSON), which cli would otherwise parse as glue and throw.
+      err_msg <- conditionMessage(e)
       cli::cli_warn(c(
         "Completeness check skipped for {season}: could not fetch fixtures.",
-        "i" = conditionMessage(e)
+        "i" = "{err_msg}"
       ))
       NULL
     })
