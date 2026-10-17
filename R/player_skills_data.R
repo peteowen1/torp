@@ -223,8 +223,19 @@
 
     # Compute derived disposal_efficiency column for Beta-Binomial model
     if ("disposal_efficiency" %in% names(pgd)) {
+      # A missing efficiency stays NA (not recorded). It used to become 0, which
+      # booked 0 effective disposals against a full disposal count and pulled the
+      # player's rate down; the estimators now drop NA-success rows from both
+      # successes and attempts (A202).
       pgd[, disposal_efficiency_pct_x_disposals :=
-        data.table::fifelse(is.na(disposal_efficiency), 0, as.numeric(disposal_efficiency)) / 100 * disposals]
+        as.numeric(disposal_efficiency) / 100 * disposals]
+      n_na_eff <- sum(is.na(pgd$disposal_efficiency))
+      if (n_na_eff > 0) {
+        cli::cli_warn(c(
+          "{n_na_eff} of {nrow(pgd)} player-match rows have no disposal_efficiency ({round(100 * n_na_eff / nrow(pgd), 2)}%).",
+          "i" = "They are left out of the disposal-efficiency stat rather than counted as 0% effective."
+        ))
+      }
     } else {
       cli::cli_warn("disposal_efficiency column not found; skill will rely on prior")
       pgd[, disposal_efficiency_pct_x_disposals := NA_real_]
@@ -267,8 +278,11 @@
   # This lets the Beta-Binomial TOG model account for selection probability:
   # missed rounds contribute (tog=0, tog_denominator=1) to the denominator,
   # pulling estimates down for players who miss games.
-  # Other stats are unaffected: rate stats use tog as exposure (0 * w = 0),
-  # efficiency stats have 0 successes and 0 attempts (0 * w = 0).
+  # Other stats are unaffected: TOG-adjusted rate stats use tog as exposure
+  # (0 * w = 0), NON-TOG-adjusted rate stats (dream_team_points, rating_points)
+  # use 1 per row, so the estimators explicitly give avail_only rows zero
+  # exposure there, and efficiency stats have 0 successes and 0 attempts
+  # (0 * w = 0).
   out[, avail_only := FALSE]
 
   round_cal <- out[, .(match_date_rating = min(match_date_rating)),
@@ -337,8 +351,11 @@
       roster_pos[, roster_pos_group := .map_position_group(position)]
       roster_pos <- roster_pos[!is.na(roster_pos_group), .(player_id, roster_pos_group)]
       roster_pos <- unique(roster_pos, by = "player_id")
-      # Merge: prefer game-based pos, fallback to roster pos
-      player_pos <- merge(roster_pos, player_pos, by = "player_id", all.x = TRUE)
+      # Merge: prefer game-based pos, fallback to roster pos. Outer join, so a
+      # player with a game-derived position but no roster entry (or a roster
+      # position that maps to NA) keeps his game-derived one (A204); a left join
+      # from roster_pos silently dropped him and his unplayed rows got NA.
+      player_pos <- merge(roster_pos, player_pos, by = "player_id", all = TRUE)
       player_pos[is.na(pos_group), pos_group := roster_pos_group]
       player_pos[, roster_pos_group := NULL]
     }
@@ -358,29 +375,29 @@
 
 #' Compute denominator vector from a column spec string
 #'
-#' Supports "col1+col2" for summing multiple columns.
+#' Supports "col1+col2" for summing multiple columns. A row's NA counts as 0.
+#' A column named in the spec that is absent from \code{dt} contributes 0 and
+#' raises a warning: a valid-looking all-zero vector would otherwise silently
+#' turn the stat into its prior.
 #'
 #' @param dt A data.table.
 #' @param denom_spec A string like "col" or "col1+col2".
 #' @return Numeric vector of denominators.
 #' @keywords internal
 .compute_stat_rating_denominator <- function(dt, denom_spec) {
-  if (grepl("\\+", denom_spec)) {
-    parts <- strsplit(denom_spec, "\\+")[[1]]
-    result <- rep(0, nrow(dt))
-    for (p in parts) {
-      if (p %in% names(dt)) {
-        v <- as.numeric(dt[[p]])
-        v[is.na(v)] <- 0
-        result <- result + v
-      }
-    }
-    return(result)
+  parts <- strsplit(denom_spec, "\\+")[[1]]
+  absent <- setdiff(parts, names(dt))
+  if (length(absent) > 0) {
+    cli::cli_warn(c(
+      "Efficiency column spec {.val {denom_spec}}: column(s) {.val {absent}} not found in the stat-rating data.",
+      "i" = "Absent column(s) count as 0, so the stat will rest on its prior for every affected row."
+    ))
   }
-  if (denom_spec %in% names(dt)) {
-    v <- as.numeric(dt[[denom_spec]])
+  result <- rep(0, nrow(dt))
+  for (p in intersect(parts, names(dt))) {
+    v <- as.numeric(dt[[p]])
     v[is.na(v)] <- 0
-    return(v)
+    result <- result + v
   }
-  rep(0, nrow(dt))
+  result
 }

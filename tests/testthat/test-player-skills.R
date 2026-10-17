@@ -192,7 +192,9 @@ test_that("player with many games has stat rating close to empirical mean", {
   params <- default_stat_rating_params()
   params$min_games <- 1
 
-  result <- estimate_player_stat_ratings(dt, params = params)
+  # Hand-built frame with only some columns: the missing-column warnings
+  # (stats skipped, efficiency specs absent) are expected here.
+  result <- suppressWarnings(estimate_player_stat_ratings(dt, params = params))
 
   # With 50 games at exactly 2 goals, estimate should be close to 2
   expect_equal(result$goals_rating[1], 2, tolerance = 0.3)
@@ -241,7 +243,9 @@ test_that("raw averages are per-player, not league-wide", {
   )
   params <- default_stat_rating_params()
   params$min_games <- 1
-  result <- estimate_player_stat_ratings(dt, params = params)
+  # Hand-built frame with only some columns: the missing-column warnings
+  # (stats skipped, efficiency specs absent) are expected here.
+  result <- suppressWarnings(estimate_player_stat_ratings(dt, params = params))
 
   alice <- result[player_id == "A"]
   bob   <- result[player_id == "B"]
@@ -616,4 +620,276 @@ test_that(".assert_ref_date_coverage() warns, not aborts, when it cannot check",
     .assert_ref_date_coverage(map, data.frame(x = 1)),
     "Cannot verify checkpoint coverage"
   )
+})
+
+# .compute_stat_rating_denominator() -- absent columns must be visible ---------
+# A named column that is missing used to return rep(0, n) silently, which turned
+# the whole efficiency stat into its prior with nothing logged.
+
+test_that(".compute_stat_rating_denominator() sums specs and treats NA as 0", {
+  dt <- data.table::data.table(a = c(1, NA, 3), b = c(10, 20, NA))
+  expect_equal(.compute_stat_rating_denominator(dt, "a"), c(1, 0, 3))
+  expect_equal(.compute_stat_rating_denominator(dt, "a+b"), c(11, 20, 3))
+})
+
+test_that(".compute_stat_rating_denominator() warns when a named column is absent", {
+  dt <- data.table::data.table(a = c(1, 2, 3))
+  expect_warning(res <- .compute_stat_rating_denominator(dt, "nope"), "nope")
+  expect_equal(res, c(0, 0, 0))
+  # One present, one absent part of a "+" spec: sum what exists, still warn
+  expect_warning(res2 <- .compute_stat_rating_denominator(dt, "a+nope"), "nope")
+  expect_equal(res2, c(1, 2, 3))
+  expect_no_warning(.compute_stat_rating_denominator(dt, "a"))
+})
+
+# Skipped efficiency stats are recorded and the batch run reports what it did ---
+
+test_that("single-date and batch estimators both report an efficiency stat with no spec as skipped", {
+  dat <- create_mock_stat_rating_data()
+  defs <- stat_rating_definitions()
+  broken <- which(defs$stat_name == "goal_accuracy")
+  defs$success_col[broken] <- NA_character_
+
+  expect_warning(
+    res <- estimate_player_stat_ratings(dat, stat_defs = defs, compute_ci = FALSE),
+    "Skipped 1 stat"
+  )
+  expect_false("goal_accuracy_rating" %in% names(res))
+
+  refs <- as.Date("2024-04-01")
+  expect_warning(
+    suppressMessages(bres <- .estimate_stat_ratings_batch(dat, refs, stat_defs = defs)),
+    "Skipped 1 stat"
+  )
+  expect_false("goal_accuracy_rating" %in% names(bres[[1]]))
+  expect_true("disposal_efficiency_rating" %in% names(bres[[1]]))
+})
+
+test_that("batch estimator agrees with the single-date estimator", {
+  dat <- create_mock_stat_rating_data()
+  # The mock uses short group names (DEF/MID/...); the batch estimator only
+  # knows the real ones from stat_rating_position_map(), so use those here.
+  dat[, pos_group := c(DEF = "KEY_DEFENDER", MID = "MIDFIELDER",
+                       FWD = "KEY_FORWARD", RUCK = "RUCK")[pos_group]]
+  ref <- as.Date("2024-04-15")
+  single <- estimate_player_stat_ratings(dat, ref_date = ref, compute_ci = FALSE)
+  suppressMessages(batch <- .estimate_stat_ratings_batch(dat, ref, compute_ci = FALSE))
+  batch <- batch[[1]]
+  data.table::setkey(single, player_id)
+  data.table::setkey(batch, player_id)
+  expect_equal(batch$player_id, single$player_id)
+  rating_cols <- grep("_rating$", names(single), value = TRUE)
+  for (cn in rating_cols) {
+    expect_equal(batch[[cn]], single[[cn]], tolerance = 1e-8, info = cn)
+  }
+
+  # The single keyed join per stat must also carry the interval columns
+  suppressWarnings(suppressMessages(
+    batch_ci <- .estimate_stat_ratings_batch(dat, ref, compute_ci = TRUE)[[1]]
+  ))
+  expect_true(all(c("goals_rating_lower", "goals_rating_upper",
+                    "goal_accuracy_rating_lower", "goal_accuracy_rating_upper") %in% names(batch_ci)))
+  expect_false(anyNA(batch_ci$goals_rating_lower))
+  expect_true(all(batch_ci$goals_rating_lower <= batch_ci$goals_rating))
+  expect_true(all(batch_ci$goals_rating <= batch_ci$goals_rating_upper))
+})
+
+# B69: non-TOG-adjusted rate stats and unplayed rounds ---------------------------
+# dream_team_points / rating_points use 1 unit of exposure per row. The mock data
+# carries 2 availability-only rows per player (tog = 0, avail_only = TRUE).
+# STAT_RATE_NONTOG_EXCLUDE_UNPLAYED decides whether those rows count as exposure:
+# FALSE (published behaviour, held until the owner has walked real rows) counts
+# them, so a player's per-game rate is scaled by played / rostered = 8/10; TRUE
+# counts games played only.
+
+test_that("non-TOG-adjusted exposure counts unplayed rows by default (B69 switch off)", {
+  expect_false(STAT_RATE_NONTOG_EXCLUDE_UNPLAYED)
+  dat <- create_mock_stat_rating_data()
+  expect_equal(sum(dat$avail_only), 20)  # 10 players x 2 missed rounds
+  played <- dat[avail_only == FALSE, .(mean_dtp = mean(dream_team_points), n = .N), by = player_id]
+  rostered <- dat[, .(n_all = .N), by = player_id]
+
+  single <- estimate_player_stat_ratings(dat, compute_ci = FALSE)
+  data.table::setkey(single, player_id)
+  data.table::setkey(played, player_id)
+  data.table::setkey(rostered, player_id)
+  # raw exposure is every rostered round, so the raw rate is deflated by n / n_all
+  expect_equal(single$dream_team_points_raw, played$mean_dtp * played$n / rostered$n_all)
+  expect_equal(single$dream_team_points_n80s, as.numeric(rostered$n_all))
+
+  suppressMessages(batch <- .estimate_stat_ratings_batch(
+    dat, max(dat$match_date_rating) + 1L, compute_ci = FALSE)[[1]])
+  data.table::setkey(batch, player_id)
+  expect_equal(batch$dream_team_points_raw, played$mean_dtp * played$n / rostered$n_all)
+  expect_equal(batch$dream_team_points_n80s, as.numeric(rostered$n_all))
+})
+
+test_that("non-TOG-adjusted rate stats exclude availability-only rows from exposure when the B69 switch is on", {
+  testthat::local_mocked_bindings(STAT_RATE_NONTOG_EXCLUDE_UNPLAYED = TRUE)
+  dat <- create_mock_stat_rating_data()
+  played <- dat[avail_only == FALSE, .(mean_dtp = mean(dream_team_points), n = .N), by = player_id]
+
+  single <- estimate_player_stat_ratings(dat, compute_ci = FALSE)
+  data.table::setkey(single, player_id)
+  data.table::setkey(played, player_id)
+  expect_equal(single$dream_team_points_raw, played$mean_dtp)
+  # n80s is the raw exposure total: games played, not rostered rounds
+  expect_equal(single$dream_team_points_n80s, as.numeric(played$n))
+
+  suppressMessages(batch <- .estimate_stat_ratings_batch(
+    dat, max(dat$match_date_rating) + 1L, compute_ci = FALSE)[[1]])
+  data.table::setkey(batch, player_id)
+  expect_equal(batch$dream_team_points_raw, played$mean_dtp)
+  expect_equal(batch$dream_team_points_n80s, as.numeric(played$n))
+
+  # TOG-adjusted stats are untouched: exposure there is TOG, which is 0 on avail rows
+  expect_equal(single$goals_n80s, dat[avail_only == FALSE, .(s = sum(tog)), by = player_id][order(player_id)]$s)
+})
+
+test_that(".nontog_exposure follows the switch", {
+  av <- c(FALSE, TRUE, FALSE)
+  expect_equal(.nontog_exposure(av, exclude_unplayed = FALSE), c(1, 1, 1))
+  expect_equal(.nontog_exposure(av, exclude_unplayed = TRUE), c(1, 0, 1))
+})
+
+# A198: an NA source value is unrecorded, not zero events -------------------------
+# It used to count as 0 in the numerator while the game's TOG still counted as
+# exposure, so a missing value pulled the player's rate down.
+
+test_that("rate stats leave NA source rows out of numerator AND exposure", {
+  dat <- create_mock_stat_rating_data()
+  na_rows <- which(dat$player_id == "1" & !dat$avail_only)[1:2]
+  dat[na_rows, tackles := NA_real_]
+  p1 <- dat[player_id == "1" & avail_only == FALSE & !is.na(tackles)]
+  expected_raw <- sum(p1$tackles) / sum(p1$tog)
+  expected_n80s <- sum(p1$tog)
+
+  expect_warning(
+    single <- estimate_player_stat_ratings(dat, compute_ci = FALSE),
+    "NA source values on played rows"
+  )
+  expect_equal(single[player_id == "1"]$tackles_raw, expected_raw)
+  expect_equal(single[player_id == "1"]$tackles_n80s, expected_n80s)
+
+  expect_warning(
+    suppressMessages(batch <- .estimate_stat_ratings_batch(
+      dat, max(dat$match_date_rating) + 1L, compute_ci = FALSE)[[1]]),
+    "NA source values on played rows"
+  )
+  expect_equal(batch[player_id == "1"]$tackles_raw, expected_raw)
+  expect_equal(batch[player_id == "1"]$tackles_n80s, expected_n80s)
+
+  # Players with no NA are unaffected, and no warning fires on clean data
+  expect_no_warning(estimate_player_stat_ratings(create_mock_stat_rating_data(), compute_ci = FALSE))
+})
+
+# A202: a missing disposal_efficiency is not 0% effective -------------------------
+# NA efficiency used to become 0 successes against a full disposal count, which
+# pulled the player's efficiency rate down.
+
+test_that(".prepare_stat_rating_data keeps a missing disposal_efficiency as NA and says so", {
+  pgd <- data.table::data.table(
+    player_id = c("P1", "P1", "P2", "P2"),
+    match_id = c("M1", "M2", "M1", "M2"),
+    player_name = c("A One", "A One", "B Two", "B Two"),
+    season = 2024, round = c(1L, 2L, 1L, 2L),
+    utc_start_time = rep(c("2024-03-14T09:00:00.000+0000", "2024-03-21T09:00:00.000+0000"), 2),
+    time_on_ground_percentage = 80,
+    position = "MIDFIELDER",
+    disposals = c(20, 20, 10, 10)
+  )
+  ps <- data.table::data.table(
+    player_id = c("P1", "P1", "P2", "P2"),
+    match_id = c("M1", "M2", "M1", "M2"),
+    disposal_efficiency = c(75, NA, 50, 60)
+  )
+  expect_warning(
+    out <- .prepare_stat_rating_data(pgd, ps),
+    "1 of 4 player-match rows have no disposal_efficiency"
+  )
+  played <- out[avail_only == FALSE][order(player_id, match_id)]
+  expect_equal(played$disposal_efficiency_pct_x_disposals, c(15, NA, 5, 6))
+})
+
+test_that("efficiency stats drop NA-success rows from successes and attempts", {
+  dat <- create_mock_stat_rating_data()
+  na_rows <- which(dat$player_id == "1" & !dat$avail_only)[1:3]
+  dat[na_rows, disposal_efficiency_pct_x_disposals := NA_real_]
+  ok <- dat[player_id == "1" & avail_only == FALSE & !is.na(disposal_efficiency_pct_x_disposals)]
+  expected_raw <- sum(ok$disposal_efficiency_pct_x_disposals) / sum(ok$disposals)
+  expected_att <- sum(ok$disposals)
+  # The old behaviour (NA -> 0 successes, full attempts) would give this instead
+  old_raw <- sum(ok$disposal_efficiency_pct_x_disposals) /
+    sum(dat[player_id == "1" & avail_only == FALSE]$disposals)
+  expect_lt(old_raw, expected_raw)
+
+  expect_warning(
+    single <- estimate_player_stat_ratings(dat, compute_ci = FALSE),
+    "NA successes on played rows"
+  )
+  expect_equal(single[player_id == "1"]$disposal_efficiency_raw, expected_raw)
+  expect_equal(single[player_id == "1"]$disposal_efficiency_attempts, expected_att)
+
+  expect_warning(
+    suppressMessages(batch <- .estimate_stat_ratings_batch(
+      dat, max(dat$match_date_rating) + 1L, compute_ci = FALSE)[[1]]),
+    "NA successes on played rows"
+  )
+  expect_equal(batch[player_id == "1"]$disposal_efficiency_raw, expected_raw)
+  expect_equal(batch[player_id == "1"]$disposal_efficiency_attempts, expected_att)
+
+  # Other players and other efficiency stats are untouched, and clean data is quiet
+  clean <- estimate_player_stat_ratings(create_mock_stat_rating_data(), compute_ci = FALSE)
+  expect_equal(single[player_id == "2"]$disposal_efficiency_raw,
+               clean[player_id == "2"]$disposal_efficiency_raw)
+  expect_equal(single[player_id == "1"]$goal_accuracy_raw, clean[player_id == "1"]$goal_accuracy_raw)
+})
+
+# A204: game-derived positions survive the roster merge ---------------------------
+
+test_that("availability rows keep the game-derived position when the roster position does not map", {
+  pgd <- data.table::data.table(
+    player_id = c("P1", "P2", "P2"),
+    match_id = c("M1", "M1", "M2"),
+    player_name = c("A One", "B Two", "B Two"),
+    season = 2024, round = c(1L, 1L, 2L),
+    utc_start_time = c("2024-03-14T09:00:00.000+0000", "2024-03-14T09:00:00.000+0000",
+                       "2024-03-21T09:00:00.000+0000"),
+    time_on_ground_percentage = 80,
+    position = c("MIDFIELDER", "RUCK", "RUCK"),
+    disposals = 10
+  )
+  ps <- data.table::data.table(player_id = c("P1", "P2", "P2"), match_id = c("M1", "M1", "M2"),
+                               disposal_efficiency = 70)
+  # P1's roster position maps to no group; P2 is a normal ruck
+  rosters <- data.table::data.table(
+    player_id = c("P1", "P2"), season = 2024, team = "T", position = c("UNKNOWN", "RUCK")
+  )
+  out <- .prepare_stat_rating_data(pgd, ps, rosters = rosters)
+  # The outer merge must not invent rows: every row is a real (player, match)
+  expect_false(anyNA(out$avail_only))
+  expect_false(anyNA(out$match_id))
+  p1_missed <- out[player_id == "P1" & avail_only == TRUE]
+  expect_equal(nrow(p1_missed), 1)  # missed round 2
+  expect_equal(p1_missed$pos_group, "MIDFIELDER")
+  # A never-played rostered player still falls back to the roster position
+  rosters2 <- rbind(rosters, data.table::data.table(player_id = "P3", season = 2024, team = "T",
+                                                   position = "KEY_FORWARD"))
+  out2 <- .prepare_stat_rating_data(pgd, ps, rosters = rosters2)
+  expect_true(all(out2[player_id == "P3"]$pos_group == "KEY_FORWARD"))
+})
+
+# B71: player_name is the most recent name regardless of row order ---------------
+
+test_that("player_name comes from the latest match, not the last row of the input", {
+  dat <- create_mock_stat_rating_data()
+  latest <- dat[player_id == "1" & avail_only == FALSE, max(match_date_rating)]
+  dat[player_id == "1" & match_date_rating == latest, player_name := "Renamed Player"]
+  # Put the newest row first: row order no longer matches date order
+  dat <- dat[order(-match_date_rating)]
+  single <- estimate_player_stat_ratings(dat, compute_ci = FALSE)
+  expect_equal(single[player_id == "1"]$player_name, "Renamed Player")
+  suppressMessages(batch <- .estimate_stat_ratings_batch(
+    dat, max(dat$match_date_rating) + 1L, compute_ci = FALSE)[[1]])
+  expect_equal(batch[player_id == "1"]$player_name, "Renamed Player")
 })
