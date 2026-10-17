@@ -95,6 +95,21 @@
   ))
 }
 
+#' Warn about efficiency-stat successes that were NA on played rows
+#'
+#' Such rows are excluded from both successes and attempts (the outcome was not
+#' recorded; it is not a failure), so say how many there were.
+#' @param na_succ_rows Named integer vector: stat name -> played rows with NA successes.
+#' @keywords internal
+#' @noRd
+.warn_na_efficiency_success <- function(na_succ_rows) {
+  if (length(na_succ_rows) == 0) return(invisible(NULL))
+  cli::cli_warn(c(
+    "{length(na_succ_rows)} efficiency stat(s) had NA successes on played rows ({sum(na_succ_rows)} stat-rows in total); those rows were excluded from successes and attempts.",
+    "i" = "Per stat: {paste(names(na_succ_rows), na_succ_rows, sep = ' = ', collapse = ', ')}"
+  ))
+}
+
 # ============================================================================
 # Core stat rating estimation
 # ============================================================================
@@ -225,6 +240,7 @@ estimate_player_stat_ratings <- function(stat_rating_data, ref_date = NULL,
   skill_results <- list()
   skipped_stats <- character(0)
   na_src_rows <- integer(0)  # rate stat -> played rows whose source value is NA
+  na_succ_rows <- integer(0) # efficiency stat -> played rows whose successes are NA
 
   # Per-stat lambda/prior: stat_params > category_params > global fallback
   # (.stat_rate_params / .stat_eff_params, shared with the batch estimator)
@@ -371,10 +387,17 @@ estimate_player_stat_ratings <- function(stat_rating_data, ref_date = NULL,
     } else {
       successes <- .compute_stat_rating_denominator(dt_eff, success_spec)
     }
-    successes[is.na(successes)] <- 0
+    # NA successes mean the outcome was not recorded, which is not the same as
+    # "none succeeded": the row leaves successes AND attempts (A202). Counting it
+    # as 0 successes against a full attempt count pulled the rate down.
+    na_succ <- is.na(successes)
+    successes[na_succ] <- 0
 
     attempts <- .compute_stat_rating_denominator(dt_eff, attempts_spec)
     attempts[is.na(attempts)] <- 0
+    attempts[na_succ] <- 0
+    n_na_played <- sum(na_succ & !dt_eff$avail_only)
+    if (n_na_played > 0) na_succ_rows[stat_nm] <- n_na_played
 
     # Ensure successes <= attempts
     successes <- pmin(successes, attempts)
@@ -461,6 +484,7 @@ estimate_player_stat_ratings <- function(stat_rating_data, ref_date = NULL,
     cli::cli_warn("Skipped {length(skipped_stats)} stat(s) due to missing columns: {paste(skipped_stats, collapse = ', ')}")
   }
   .warn_na_rate_source(na_src_rows)
+  .warn_na_efficiency_success(na_succ_rows)
 
   # Clean up temp columns
   tmp_cols <- intersect(c(".wnum", ".wden", ".w_rate", ".tog_safe", ".raw_vals", ".raw_tog",
@@ -807,6 +831,7 @@ estimate_player_stat_ratings <- function(stat_rating_data, ref_date = NULL,
   eff_defs  <- stat_defs[stat_defs$type == "efficiency", ]
   skipped_stats <- character(0)
   na_src_rows <- integer(0)  # rate stat -> played rows whose source value is NA
+  na_succ_rows <- integer(0) # efficiency stat -> played rows whose successes are NA
   t_stats <- proc.time()
 
   n_total_stats <- nrow(rate_defs) + nrow(eff_defs)
@@ -956,10 +981,14 @@ estimate_player_stat_ratings <- function(stat_rating_data, ref_date = NULL,
     } else {
       .compute_stat_rating_denominator(dt_eff, success_spec)
     }
-    successes[is.na(successes)] <- 0
+    na_succ <- is.na(successes)  # unrecorded: out of successes AND attempts (A202)
+    successes[na_succ] <- 0
 
     attempts <- .compute_stat_rating_denominator(dt_eff, attempts_spec)
     attempts[is.na(attempts)] <- 0
+    attempts[na_succ] <- 0
+    n_na_played <- sum(na_succ & !dt_eff$avail_only)
+    if (n_na_played > 0) na_succ_rows[stat_nm] <- n_na_played
     successes <- pmin(successes, attempts)
 
     base_w <- exp(lam * dt_eff$.d)
@@ -1074,6 +1103,7 @@ estimate_player_stat_ratings <- function(stat_rating_data, ref_date = NULL,
   if (length(skipped_stats) > 0)
     cli::cli_warn("Skipped {length(skipped_stats)} stat(s) due to missing columns: {paste(skipped_stats, collapse = ', ')}")
   .warn_na_rate_source(na_src_rows)
+  .warn_na_efficiency_success(na_succ_rows)
 
   # === Filter and split into per-ref_date results ===
   res <- res[wt_games >= params$min_games]

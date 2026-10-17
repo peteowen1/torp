@@ -729,26 +729,88 @@ test_that("non-TOG-adjusted rate stats exclude availability-only rows from expos
 test_that("rate stats leave NA source rows out of numerator AND exposure", {
   dat <- create_mock_stat_rating_data()
   na_rows <- which(dat$player_id == "1" & !dat$avail_only)[1:2]
-  dat[na_rows, goals := NA_real_]
-  p1 <- dat[player_id == "1" & avail_only == FALSE & !is.na(goals)]
-  expected_raw <- sum(p1$goals) / sum(p1$tog)
+  dat[na_rows, tackles := NA_real_]
+  p1 <- dat[player_id == "1" & avail_only == FALSE & !is.na(tackles)]
+  expected_raw <- sum(p1$tackles) / sum(p1$tog)
   expected_n80s <- sum(p1$tog)
 
   expect_warning(
     single <- estimate_player_stat_ratings(dat, compute_ci = FALSE),
     "NA source values on played rows"
   )
-  expect_equal(single[player_id == "1"]$goals_raw, expected_raw)
-  expect_equal(single[player_id == "1"]$goals_n80s, expected_n80s)
+  expect_equal(single[player_id == "1"]$tackles_raw, expected_raw)
+  expect_equal(single[player_id == "1"]$tackles_n80s, expected_n80s)
 
   expect_warning(
     suppressMessages(batch <- .estimate_stat_ratings_batch(
       dat, max(dat$match_date_rating) + 1L, compute_ci = FALSE)[[1]]),
     "NA source values on played rows"
   )
-  expect_equal(batch[player_id == "1"]$goals_raw, expected_raw)
-  expect_equal(batch[player_id == "1"]$goals_n80s, expected_n80s)
+  expect_equal(batch[player_id == "1"]$tackles_raw, expected_raw)
+  expect_equal(batch[player_id == "1"]$tackles_n80s, expected_n80s)
 
   # Players with no NA are unaffected, and no warning fires on clean data
   expect_no_warning(estimate_player_stat_ratings(create_mock_stat_rating_data(), compute_ci = FALSE))
+})
+
+# A202: a missing disposal_efficiency is not 0% effective -------------------------
+# NA efficiency used to become 0 successes against a full disposal count, which
+# pulled the player's efficiency rate down.
+
+test_that(".prepare_stat_rating_data keeps a missing disposal_efficiency as NA and says so", {
+  pgd <- data.table::data.table(
+    player_id = c("P1", "P1", "P2", "P2"),
+    match_id = c("M1", "M2", "M1", "M2"),
+    player_name = c("A One", "A One", "B Two", "B Two"),
+    season = 2024, round = c(1L, 2L, 1L, 2L),
+    utc_start_time = rep(c("2024-03-14T09:00:00.000+0000", "2024-03-21T09:00:00.000+0000"), 2),
+    time_on_ground_percentage = 80,
+    position = "MIDFIELDER",
+    disposals = c(20, 20, 10, 10)
+  )
+  ps <- data.table::data.table(
+    player_id = c("P1", "P1", "P2", "P2"),
+    match_id = c("M1", "M2", "M1", "M2"),
+    disposal_efficiency = c(75, NA, 50, 60)
+  )
+  expect_warning(
+    out <- .prepare_stat_rating_data(pgd, ps),
+    "1 of 4 player-match rows have no disposal_efficiency"
+  )
+  played <- out[avail_only == FALSE][order(player_id, match_id)]
+  expect_equal(played$disposal_efficiency_pct_x_disposals, c(15, NA, 5, 6))
+})
+
+test_that("efficiency stats drop NA-success rows from successes and attempts", {
+  dat <- create_mock_stat_rating_data()
+  na_rows <- which(dat$player_id == "1" & !dat$avail_only)[1:3]
+  dat[na_rows, disposal_efficiency_pct_x_disposals := NA_real_]
+  ok <- dat[player_id == "1" & avail_only == FALSE & !is.na(disposal_efficiency_pct_x_disposals)]
+  expected_raw <- sum(ok$disposal_efficiency_pct_x_disposals) / sum(ok$disposals)
+  expected_att <- sum(ok$disposals)
+  # The old behaviour (NA -> 0 successes, full attempts) would give this instead
+  old_raw <- sum(ok$disposal_efficiency_pct_x_disposals) /
+    sum(dat[player_id == "1" & avail_only == FALSE]$disposals)
+  expect_lt(old_raw, expected_raw)
+
+  expect_warning(
+    single <- estimate_player_stat_ratings(dat, compute_ci = FALSE),
+    "NA successes on played rows"
+  )
+  expect_equal(single[player_id == "1"]$disposal_efficiency_raw, expected_raw)
+  expect_equal(single[player_id == "1"]$disposal_efficiency_attempts, expected_att)
+
+  expect_warning(
+    suppressMessages(batch <- .estimate_stat_ratings_batch(
+      dat, max(dat$match_date_rating) + 1L, compute_ci = FALSE)[[1]]),
+    "NA successes on played rows"
+  )
+  expect_equal(batch[player_id == "1"]$disposal_efficiency_raw, expected_raw)
+  expect_equal(batch[player_id == "1"]$disposal_efficiency_attempts, expected_att)
+
+  # Other players and other efficiency stats are untouched, and clean data is quiet
+  clean <- estimate_player_stat_ratings(create_mock_stat_rating_data(), compute_ci = FALSE)
+  expect_equal(single[player_id == "2"]$disposal_efficiency_raw,
+               clean[player_id == "2"]$disposal_efficiency_raw)
+  expect_equal(single[player_id == "1"]$goal_accuracy_raw, clean[player_id == "1"]$goal_accuracy_raw)
 })

@@ -223,8 +223,19 @@
 
     # Compute derived disposal_efficiency column for Beta-Binomial model
     if ("disposal_efficiency" %in% names(pgd)) {
+      # A missing efficiency stays NA (not recorded). It used to become 0, which
+      # booked 0 effective disposals against a full disposal count and pulled the
+      # player's rate down; the estimators now drop NA-success rows from both
+      # successes and attempts (A202).
       pgd[, disposal_efficiency_pct_x_disposals :=
-        data.table::fifelse(is.na(disposal_efficiency), 0, as.numeric(disposal_efficiency)) / 100 * disposals]
+        as.numeric(disposal_efficiency) / 100 * disposals]
+      n_na_eff <- sum(is.na(pgd$disposal_efficiency))
+      if (n_na_eff > 0) {
+        cli::cli_warn(c(
+          "{n_na_eff} of {nrow(pgd)} player-match rows have no disposal_efficiency ({round(100 * n_na_eff / nrow(pgd), 2)}%).",
+          "i" = "They are left out of the disposal-efficiency stat rather than counted as 0% effective."
+        ))
+      }
     } else {
       cli::cli_warn("disposal_efficiency column not found; skill will rely on prior")
       pgd[, disposal_efficiency_pct_x_disposals := NA_real_]
