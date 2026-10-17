@@ -20,6 +20,11 @@
 # The per-play values come from a win probability model with no team-strength
 # input, so only the target differs between the two.
 
+# Time on ground (percent) assumed for a player with no box-score row, and the
+# floor under it, when re-spreading a dropped player's value by time on ground.
+WPA_TOG_DEFAULT <- 75
+WPA_TOG_FLOOR <- 1
+
 #' Build the WPA Net Points ledger
 #'
 #' Runs per-play win probability change through `build_net_points()` so each
@@ -56,7 +61,9 @@
 #' @export
 build_wpa_ledger <- function(pbp_data, player_stats, pre_match,
                              results = NULL, scale = WPA_LEDGER_SCALE) {
-  p <- data.table::as.data.table(data.table::copy(pbp_data))
+  # One copy only (delta_epv is added by reference below); as.data.table() of
+  # a data.table would deep-copy a second time.
+  p <- if (data.table::is.data.table(pbp_data)) data.table::copy(pbp_data) else data.table::as.data.table(pbp_data)
   need <- c("match_id", "wpa", "home_away")
   miss <- setdiff(need, names(p))
   if (length(miss)) cli::cli_abort("Play-by-play is missing {.val {miss}} for the WPA ledger.")
@@ -96,7 +103,8 @@ build_wpa_ledger <- function(pbp_data, player_stats, pre_match,
       "WPA ledger: {length(skipped)} of {nrow(res)} match{?es} have no pre-match forecast and are left out (their players get no WPA ledger row). First: {.val {skipped[1]}}.")
     res <- res[!is.na(p0)]
     p <- p[match_id %in% res$match_id]
-    player_stats <- data.table::as.data.table(player_stats)[as.character(match_id) %in% res$match_id]
+    ps_dt <- if (data.table::is.data.table(player_stats)) player_stats else data.table::as.data.table(player_stats)
+    player_stats <- ps_dt[as.character(match_id) %in% res$match_id]
   }
   if (nrow(res) == 0) cli::cli_abort("WPA ledger: no match has a pre-match forecast.")
   res[, home_target := scale * (result - p0)]
@@ -180,7 +188,7 @@ build_wpa_ledger <- function(pbp_data, player_stats, pre_match,
 #' @keywords internal
 .wpa_pre_match <- function(seasons) {
   grab <- function(loader, src) {
-    data.table::rbindlist(lapply(seasons, function(yr) {
+    out <- data.table::rbindlist(lapply(seasons, function(yr) {
       d <- tryCatch(data.table::as.data.table(loader(yr, rounds = TRUE)), error = function(e) {
         cli::cli_alert_warning("WPA ledger: {src} forecasts for {yr} unavailable ({conditionMessage(e)}).")
         NULL
@@ -191,13 +199,31 @@ build_wpa_ledger <- function(pbp_data, player_stats, pre_match,
         cli::cli_alert_warning("WPA ledger: {src} forecasts for {yr} loaded but have no {.field {miss}}; not used.")
         return(NULL)
       }
-      d[, .(match_id = as.character(match_id), home_win_prob = as.numeric(pred_win), source = src)]
+      d[, .(match_id = as.character(match_id), home_win_prob = as.numeric(pred_win), source = src,
+        season = yr)]
     }))
+    # Every season failing gives a 0-column table; keep it typed so the
+    # anti-join below finds its columns.
+    if (!ncol(out)) {
+      out <- data.table::data.table(match_id = character(), home_win_prob = numeric(),
+                                    source = character(), season = seasons[0])
+    }
+    out
   }
   locked <- grab(load_predictions, "locked")
   retro <- grab(load_retrodictions, "retrodiction")
-  out <- rbind(locked, retro[!match_id %in% locked$match_id])
-  unique(out[!is.na(home_win_prob)], by = "match_id")
+  retro <- retro[!match_id %in% locked$match_id]
+  out <- unique(rbind(locked, retro)[!is.na(home_win_prob)], by = "match_id")
+  # Say which seasons leaned on end-of-season retrodictions, so a locked-loader
+  # failure cannot shift a season's targets unnoticed.
+  retro_seasons <- sort(unique(out[source == "retrodiction", season]))
+  if (length(retro_seasons)) {
+    cli::cli_alert_warning(
+      "WPA ledger: {sum(out$source == 'retrodiction')} match{?es} use retrodictions, not locked forecasts (season{?s} {retro_seasons}).")
+  }
+  out[, season := NULL]
+  data.table::setattr(out, "retrodiction_seasons", retro_seasons)
+  out
 }
 
 #' Even pre-match chances for the team-neutral WPA ledger
@@ -232,7 +258,8 @@ build_wpa_ledger <- function(pbp_data, player_stats, pre_match,
                                                      match_id = as.character(match_id))])
   lost <- wpn[!keep, on = .(player_id, match_id)]
   if (nrow(lost) == 0) return(wpn)
-  tm <- unique(data.table::as.data.table(pbp_data)[!is.na(player_id) & !is.na(team),
+  pbp_dt <- if (data.table::is.data.table(pbp_data)) pbp_data else data.table::as.data.table(pbp_data)
+  tm <- unique(pbp_dt[!is.na(player_id) & !is.na(team),
           .(player_id = as.character(player_id), match_id = as.character(match_id), team)])
   # One team per player-match, or his value could land on the wrong side and
   # the conservation check below (built from the same lookup) could not see it.
@@ -245,10 +272,11 @@ build_wpa_ledger <- function(pbp_data, player_stats, pre_match,
   owed <- lost[, .(v = sum(wpa_net)), by = .(match_id, team)]
   wpn <- merge(wpn[keep, on = .(player_id, match_id), nomatch = NULL], tm,
                by = c("player_id", "match_id"), all.x = TRUE)
-  tg <- data.table::as.data.table(player_stats)[, .(player_id = as.character(player_id),
-          match_id = as.character(match_id), tog = pmax(time_on_ground_percentage, 1))]
+  ps_dt <- if (data.table::is.data.table(player_stats)) player_stats else data.table::as.data.table(player_stats)
+  tg <- ps_dt[, .(player_id = as.character(player_id),
+          match_id = as.character(match_id), tog = pmax(time_on_ground_percentage, WPA_TOG_FLOOR))]
   wpn[tg, on = .(player_id, match_id), tog := i.tog]
-  wpn[is.na(tog), tog := 75]
+  wpn[is.na(tog), tog := WPA_TOG_DEFAULT]
   wpn[owed, on = .(match_id, team), v_lost := i.v]
   wpn[is.na(v_lost), v_lost := 0]
   wpn[, share := v_lost * tog / sum(tog), by = .(match_id, team)]

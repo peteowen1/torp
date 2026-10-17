@@ -174,3 +174,18 @@ test_that("the scale is only units: output is the same whatever the engine ran i
   data.table::setkey(a, match_id, player_id); data.table::setkey(b, match_id, player_id)
   expect_equal(a$wpa_net, b$wpa_net, tolerance = 1e-9)
 })
+
+test_that(".wpa_pre_match survives a missing retrodiction source and records retro seasons", {
+  locked <- function(yr, rounds = TRUE) data.frame(match_id = c("a", "b"), pred_win = c(0.6, 0.4))
+  boom <- function(yr, rounds = TRUE) stop("no source")
+  retro <- function(yr, rounds = TRUE) data.frame(match_id = c("b", "c"), pred_win = c(0.5, 0.7))
+  testthat::local_mocked_bindings(load_predictions = locked, load_retrodictions = boom)
+  out <- suppressMessages(.wpa_pre_match(2024))
+  expect_setequal(out$match_id, c("a", "b"))
+  expect_equal(length(attr(out, "retrodiction_seasons")), 0)
+  testthat::local_mocked_bindings(load_retrodictions = retro)
+  out <- suppressMessages(.wpa_pre_match(2024))
+  expect_setequal(out$match_id, c("a", "b", "c"))
+  expect_equal(attr(out, "retrodiction_seasons"), 2024)
+  expect_false("season" %in% names(out))
+})
