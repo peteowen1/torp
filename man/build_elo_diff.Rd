@@ -22,7 +22,7 @@ build_elo_diff(
 rating before computing expected result. Default \code{ELO_HGA}.}
 
 \item{carryover}{Fraction of a team's rating retained across a season
-boundary (1 = no regression, 0 = full reset to 1500). Default
+boundary (1 = no regression, 0 = full reset to \code{ELO_INIT}). Default
 \code{ELO_CARRYOVER}.}
 }
 \value{

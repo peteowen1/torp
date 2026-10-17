@@ -244,6 +244,19 @@ ELO_HGA <- 45
 #' @keywords internal
 ELO_CARRYOVER <- 0.75
 
+#' Elo starting rating, and the mean that season-boundary regression pulls
+#' toward. A team with no rating history is given this value.
+#' @keywords internal
+ELO_INIT <- 1500
+
+#' Floor on the margin-of-victory multiplier's denominator
+#' (\code{0.001 * winner_elo_gap + 2.2}). The denominator reaches zero at a
+#' winner rated 2200 points below the loser and the multiplier would then flip
+#' the update's sign; that gap is unreachable at \code{ELO_K = 20}, so the
+#' floor only makes the guard explicit.
+#' @keywords internal
+ELO_MOV_DENOM_MIN <- 0.1
+
 
 # xScore Team Power Rating Constants
 # ----------------------------------
