@@ -352,6 +352,18 @@ test_that(".build_match_features fills a missing rating only from EARLIER matche
   expect_equal(shuf$epr[shuf$match_id == "M3"], 5)
 })
 
+test_that(".completed_weight_mean excludes unplayed fixtures from the normalising mean", {
+  w <- c(0.5, 1, 1.5, 2, 2, NA)               # last three: unplayed, weights above 1
+  score_diff <- c(10, -4, 22, NA, NA, NA)
+  expect_equal(torp:::.completed_weight_mean(w, score_diff), 1)          # mean(0.5, 1, 1.5), not mean of all
+  expect_equal(mean(w, na.rm = TRUE), 1.4)                               # what the old code divided by
+  # no completed match yet: fall back to the all-row mean rather than NaN
+  expect_equal(torp:::.completed_weight_mean(w, rep(NA_real_, 6)), 1.4)
+  # after dividing, completed rows average exactly 1
+  done <- is.finite(score_diff)
+  expect_equal(mean((w / torp:::.completed_weight_mean(w, score_diff))[done]), 1)
+})
+
 test_that(".torp_sum_cols is one definition: osr/dsr only with osr, xrapm only on request", {
   base <- c("epr", "epr_recv", "epr_disp", "epr_spoil", "epr_hitout", "psr")
   expect_identical(torp:::.torp_sum_cols(c("epr", "psr")), base)

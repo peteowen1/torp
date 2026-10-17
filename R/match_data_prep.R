@@ -726,6 +726,25 @@
 }
 
 
+# .completed_weight_mean ----
+
+#' Mean time-decay weight over completed matches
+#'
+#' Divisor for [.build_team_mdl_df()]'s weight normalisation. Falls back to the
+#' mean over every row when no match has a score yet, so a frame of fixtures
+#' alone still gets finite weights rather than `NaN`.
+#'
+#' @param w Raw time-decay weights.
+#' @param score_diff Final margin; `NA` for matches not yet played.
+#' @return A single finite mean.
+#' @keywords internal
+.completed_weight_mean <- function(w, score_diff) {
+  done <- is.finite(score_diff)
+  m <- if (any(done)) mean(w[done], na.rm = TRUE) else mean(w, na.rm = TRUE)
+  m
+}
+
+
 # .build_team_mdl_df ----
 
 #' Build the full match model dataset
@@ -960,7 +979,12 @@
       ))),
       weightz = exp(as.numeric(-(weight_anchor_date - as.Date(utc_start_time))) /
         MATCH_WEIGHT_DECAY_DAYS),
-      weightz = weightz / mean(weightz, na.rm = TRUE),
+      # Normalise to mean 1 over COMPLETED matches only. Unplayed fixtures start
+      # after the anchor date, so exp(-(anchor - date) / decay) is above 1 for
+      # them; including them in the mean pulled it up and scaled every training
+      # row's weight down. Weights are never trained on for unplayed rows, and
+      # the same divisor applies to all rows, so relative weights are unchanged.
+      weightz = weightz / .completed_weight_mean(weightz, score_diff),
       shot_weightz = (harmean_shots / mean(harmean_shots, na.rm = TRUE)) * weightz
     )
 
