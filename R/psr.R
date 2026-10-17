@@ -75,8 +75,21 @@
   }
 
   # One listed position per player. Take the LAST non-missing value, matching
-  # how player_details resolves a mid-season relisting.
-  lp <- lp[!is.na(get(pcol)), .(.lp_raw = get(pcol)[.N]), by = player_id]
+  # how player_details resolves a mid-season relisting. "Last" is by season and
+  # round when the frame carries them -- not by row position, which would make
+  # the chosen position depend on how the caller happened to order the rows.
+  # (.load_listed_positions() already sorts and returns one row per player, so
+  # the production path is unchanged.) Without any ordering column the row
+  # order is the only information there is, and is kept.
+  ord_cols <- intersect(c("season", "round", "round_number"), names(lp))
+  ord_idx <- if (length(ord_cols) > 0) {
+    do.call(order, unname(as.list(lp[, ord_cols, with = FALSE])))
+  } else {
+    seq_len(nrow(lp))
+  }
+  lp <- data.table::data.table(player_id = lp$player_id[ord_idx],
+                               .lp_val = lp[[pcol]][ord_idx])
+  lp <- lp[!is.na(.lp_val), .(.lp_raw = .lp_val[.N]), by = player_id]
   lp[, .listed_bucket := .collapse_listed_position(.lp_raw)]
 
   out <- merge(dt, lp[, .(player_id, .listed_bucket)], by = "player_id",

@@ -451,3 +451,16 @@ test_that(".psv_tog_rate / .psv_tog_mult keep the existing handling of valid and
   # 0 and below keep the 0.1 floor in the multiplier; only NA maps to 1.
   expect_equal(.psv_tog_mult(tog), c(1, 0.1, 0.1, 0.1, 0.5, 1))
 })
+
+test_that(".attach_listed_pos takes the LATEST listing by season, whatever the row order (review B75)", {
+  dt <- data.table::data.table(player_id = c("P1", "P2"), season = 2026L)
+  # P1 was a ruck in 2024 and a midfielder in 2025; the 2025 row comes FIRST.
+  lp_shuffled <- data.frame(player_id = c("P1", "P1", "P2"), season = c(2025L, 2024L, 2025L),
+                            position_group = c("MIDFIELDER", "RUCK", "KEY_FORWARD"),
+                            stringsAsFactors = FALSE)
+  lp_sorted <- lp_shuffled[order(lp_shuffled$player_id, lp_shuffled$season), ]
+  a <- .attach_listed_pos(data.table::copy(dt), lp_shuffled, center = TRUE, centre_on_listed = TRUE)
+  b <- .attach_listed_pos(data.table::copy(dt), lp_sorted,   center = TRUE, centre_on_listed = TRUE)
+  expect_equal(a$.listed_bucket, b$.listed_bucket)
+  expect_equal(a$.listed_bucket[a$player_id == "P1"], .collapse_listed_position("MIDFIELDER"))
+})
