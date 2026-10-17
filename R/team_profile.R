@@ -134,9 +134,12 @@ team_profile <- function(team_name, seasons = get_afl_season(), top_n = 10) {
   top_players <- tryCatch({
     ratings <- data.table::as.data.table(load_torp_ratings())
     # Filter to latest snapshot
-    ratings <- ratings[season == max(season, na.rm = TRUE)]
-    ratings <- ratings[round == max(round, na.rm = TRUE)]
-    team_players <- ratings[team == tm$name & !is.na(epr)]
+    # Latest snapshot for THIS team (a club on a bye has no rows in the
+    # league's latest round)
+    team_players <- ratings[team == tm$name]
+    team_players <- team_players[season == max(season, na.rm = TRUE)]
+    team_players <- team_players[round == max(round, na.rm = TRUE)]
+    team_players <- team_players[!is.na(epr)]
     if (nrow(team_players) > 0) {
       data.table::setorder(team_players, -epr)
       head(team_players, top_n)
@@ -457,12 +460,13 @@ get_team_stat_ratings <- function(team_name = NULL, top_n = 22) {
 #' Get latest lineup player IDs per team
 #'
 #' Loads lineup data for the current season and extracts each team's most
-#' recent match lineup. Maps abbreviation-style team names to canonical names.
+#' recent match lineup. Maps team names (full, short or abbreviation) to
+#' canonical names.
 #'
 #' @return A list with elements:
 #' \describe{
 #'   \item{players}{data.table with \code{player_id} and \code{team} (canonical name)}
-#'   \item{match_info}{data.table with \code{team} and \code{match_id} for each team's latest match}
+#'   \item{match_info}{data.table with \code{team} and \code{last_match} (the match id) for each team's latest match}
 #' }
 #' Returns NULL if lineup data is unavailable.
 #' @keywords internal
@@ -474,9 +478,14 @@ get_team_stat_ratings <- function(team_name = NULL, top_n = 22) {
 
   if (is.null(lineups) || nrow(lineups) == 0) return(NULL)
 
-  # Map abbreviation team_name to canonical name
-  abbr_to_name <- stats::setNames(AFL_TEAMS$name, AFL_TEAMS$abbr)
-  lineups[, team := abbr_to_name[team_name]]
+  # Map team_name (full, short or abbreviation) to canonical name
+  lineups[, team := torp_replace_teams(as.character(team_name))]
+  lineups[!team %in% AFL_TEAMS$name, team := NA_character_]
+  n_unmatched <- sum(is.na(lineups$team))
+  if (n_unmatched > 0) {
+    bad <- unique(as.character(lineups$team_name[is.na(lineups$team)]))
+    cli::cli_warn("Dropping {n_unmatched} lineup row{?s} with unrecognised team name{?s}: {.val {bad}}")
+  }
   lineups <- lineups[!is.na(team)]
 
   if (nrow(lineups) == 0) return(NULL)
@@ -546,7 +555,14 @@ team_stat_rating_profile <- function(team_name, top_n = 22) {
   mean_cols <- paste0(stat_defs$stat_name, "_mean")
   sum_cols <- intersect(sum_cols, names(all_teams))
   mean_cols <- intersect(mean_cols, names(all_teams))
-  stat_names <- sub("_sum$", "", sum_cols)
+  # Pair sum and mean columns by stat name, so a missing column cannot shift
+  # later stats onto the wrong one
+  stat_names <- stat_defs$stat_name[
+    paste0(stat_defs$stat_name, "_sum") %in% sum_cols &
+      paste0(stat_defs$stat_name, "_mean") %in% mean_cols
+  ]
+  sum_cols <- paste0(stat_names, "_sum")
+  mean_cols <- paste0(stat_names, "_mean")
 
   # Build profile using mean (per-player average) for comparability
   profile <- data.frame(stat = stat_names, stringsAsFactors = FALSE)
@@ -670,7 +686,10 @@ match_local_time <- function(utc_start_time, venue_timezone = NULL) {
   fixture <- tryCatch({
     fix <- data.table::as.data.table(load_fixtures(all = TRUE))
     fix[match_id == mid | as.character(match_id) == mid]
-  }, error = function(e) NULL)
+  }, error = function(e) {
+    cli::cli_warn("Could not load fixtures for lineup details: {conditionMessage(e)}")
+    NULL
+  })
 
   if (is.null(fixture) || nrow(fixture) == 0) {
     return(list(match_id = mid, opponent = NA, round = NA, datetime = NA))
@@ -769,6 +788,3 @@ get_team_skills <- get_team_stat_ratings
 #' @export
 team_skill_profile <- team_stat_rating_profile
 
-#' @rdname print.torp_team_stat_rating_profile
-#' @export
-print.torp_team_skill_profile <- function(x, ...) print.torp_team_stat_rating_profile(x, ...)
