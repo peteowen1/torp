@@ -311,7 +311,12 @@
 #'   as urgent, not as safe to wait on.
 #' @keywords internal
 .matchup_earliest_bounce <- function(fixtures, week) {
-  upcoming <- fixtures[fixtures$round_number == week & fixtures$status != "CONCLUDED", ]
+  # %in% is NA-safe: a bare `!= "CONCLUDED"` on an NA status yields an NA
+  # logical index, i.e. an all-NA row whose start time is silently ignored. An
+  # unknown status counts as not-yet-decided, matching the NA-is-urgent rule in
+  # the docstring (and .matchup_season_is_over()).
+  upcoming <- fixtures[fixtures$round_number %in% week &
+                         !(fixtures$status %in% "CONCLUDED"), ]
   if (nrow(upcoming) == 0) return(as.POSIXct(NA))
   starts <- .parse_utc_start(upcoming$utc_start_time)
   if (all(is.na(starts))) return(as.POSIXct(NA))
@@ -541,10 +546,13 @@
   game_prop_through_day <- 14.5 / 24
   game_year_decimal <- game_year + game_prop_through_year
 
-  # Weather: median imputation (matches .build_team_mdl_df()'s own fallback;
-  # inserting copies of the median at the median position does not move it,
-  # so recomputing off the already-imputed team_mdl_df column reproduces the
-  # exact constant used at training time).
+  # Weather fallbacks match .build_team_mdl_df()'s own: temp_avg, wind_avg and
+  # humidity_avg use the MEDIAN (inserting copies of the median at the median
+  # position does not move it, so recomputing off the already-imputed
+  # team_mdl_df column reproduces the exact constant used at training time),
+  # but precipitation_total falls back to a fixed 0, not a median
+  # (match_data_prep.R: tidyr::replace_na(precipitation_total, 0)). Keep it 0
+  # here or serving drifts from training.
   tmdf <- state$team_mdl_df
   weather_const <- list(
     temp_avg = stats::median(tmdf$temp_avg, na.rm = TRUE),

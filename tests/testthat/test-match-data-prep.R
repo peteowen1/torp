@@ -249,3 +249,118 @@ test_that("PSR fallback works when psr_df is NULL", {
 
   expect_true(all(result$psr == PSR_PRIOR_RATE))
 })
+
+# -----------------------------------------------------------------------------
+# .build_team_mdl_df guards (C06)
+# -----------------------------------------------------------------------------
+
+# Minimal team_rt_fix_df: two matches, a home and an away row each. M1 is
+# completed (result present), M2 is an unplayed fixture. Every column the
+# opponent self-join reads is present and constant.
+.tdp_mdl_frame <- function() {
+  num_cols <- c("epr", "epr_recv", "epr_disp", "epr_spoil", "epr_hitout", "psr",
+                "def", "mid", "fwd", "int", MATCH_INDIVIDUAL_POS,
+                names(MATCH_LISTED_POS_MAP),
+                "log_dist", "familiarity", "days_rest", "count",
+                "game_year_decimal", "game_prop_through_year",
+                "game_prop_through_month", "game_prop_through_day")
+  df <- data.frame(
+    match_id = rep(c("M1", "M2"), each = 2),
+    team_type = rep(c("home", "away"), 2),
+    season = 2026L, round_number = 1L, venue = "V",
+    team_name = rep(c("A", "B"), 2),
+    team_name_season = factor(rep(c("A 2026", "B 2026"), 2)),
+    team_type_fac = factor(rep(c("home", "away"), 2)),
+    game_wday_fac = factor(1),
+    utc_start_time = "2026-03-01T00:00:00.000+0000",
+    result = c(10, -10, NA, NA),
+    stringsAsFactors = FALSE
+  )
+  for (col in num_cols) df[[col]] <- 1
+  df
+}
+
+test_that(".build_team_mdl_df aborts when a COMPLETED match has no opponent row (the guard used to be dead)", {
+  df <- .tdp_mdl_frame()
+  df <- df[!(df$match_id == "M1" & df$team_type == "away"), ]
+  expect_error(
+    suppressWarnings(torp:::.build_team_mdl_df(df, data.frame(), data.frame(), data.frame(), Sys.Date())),
+    "COMPLETED match-row"
+  )
+})
+
+test_that(".build_team_mdl_df only warns for an UNPLAYED fixture with no opponent row, and for a rating-less opponent", {
+  df <- .tdp_mdl_frame()
+  df <- df[!(df$match_id == "M2" & df$team_type == "away"), ]
+  msg <- tryCatch(
+    suppressWarnings(torp:::.build_team_mdl_df(df, data.frame(), data.frame(), data.frame(), Sys.Date())),
+    error = function(e) conditionMessage(e)
+  )
+  expect_false(is.character(msg) && any(grepl("COMPLETED match-row", msg)))
+
+  # Completed match, both rows present, opponent simply has no rating: epr.y is
+  # NA but the opponent ROW exists, so this stays a warning.
+  df2 <- .tdp_mdl_frame()
+  df2$epr[df2$match_id == "M1" & df2$team_type == "away"] <- NA_real_
+  expect_warning(
+    msg2 <- tryCatch(torp:::.build_team_mdl_df(df2, data.frame(), data.frame(), data.frame(), Sys.Date()),
+                     error = function(e) conditionMessage(e)),
+    "no opponent after the self-join"
+  )
+  expect_false(is.character(msg2) && any(grepl("COMPLETED match-row", msg2)))
+})
+
+test_that(".build_team_mdl_df refuses a results table with a duplicated match_id rather than fanning rows out", {
+  df <- .tdp_mdl_frame()
+  res <- data.frame(
+    match_id = c("M1", "M1"), home_score = 90, home_goals = 13, home_behinds = 12,
+    away_score = 80, away_goals = 12, away_behinds = 8
+  )
+  expect_error(
+    suppressWarnings(torp:::.build_team_mdl_df(df, res, data.frame(match_id = character()),
+                                               data.frame(), Sys.Date())),
+    class = "dplyr_error_join_relationship_many_to_one"
+  )
+})
+
+test_that(".torp_sum_cols is one definition: osr/dsr only with osr, xrapm only on request", {
+  base <- c("epr", "epr_recv", "epr_disp", "epr_spoil", "epr_hitout", "psr")
+  expect_identical(torp:::.torp_sum_cols(c("epr", "psr")), base)
+  expect_identical(torp:::.torp_sum_cols(c("epr", "osr"), include_xrapm = TRUE),
+                   c(base, "xrapm", "osr", "dsr"))
+  expect_identical(torp:::.torp_sum_cols("osr"), c(base, "osr", "dsr"))
+})
+
+test_that(".residual_sd is the one routine behind both margin-spread helpers, with one min_n floor", {
+  set.seed(1)
+  a <- rnorm(150, sd = 30); p <- rnorm(150, sd = 5)
+  expect_equal(torp:::.residual_sd(a, p), stats::sd(a - p))
+  expect_true(is.na(torp:::.residual_sd(a[1:99], p[1:99])))          # below MARGIN_SIGMA_MIN_N
+  expect_equal(torp:::.residual_sd(a[1:99], p[1:99], min_n = 50), stats::sd(a[1:99] - p[1:99]))
+  a[1] <- NA
+  expect_equal(torp:::.residual_sd(a, p), stats::sd((a - p)[-1]))    # non-finite pairs dropped
+  expect_equal(torp:::.margin_residual_sd(data.frame(score_diff = a, pred_score_diff = p)),
+               torp:::.residual_sd(a, p))
+  expect_equal(torp:::.heldout_margin_sigma(data.frame(margin = a, pred_margin = p)),
+               torp:::.residual_sd(a, p))
+  expect_true(is.na(torp:::.residual_sd(rep(1, 150), rep(0, 150)))) # zero spread
+})
+
+test_that("add_weather_to_preds does not duplicate predictions when several seasons each return the whole weather file", {
+  # load_weather() has no season argument, so the per-season loader returns the
+  # same historical rows once per season and bind_rows() stacks the copies.
+  wx <- tibble::tibble(match_id = c("A", "B"), temp_avg = c(15, 20), wind_avg = c(10, 12),
+                       humidity_avg = c(60, 70), precipitation_total = c(0, 1.2),
+                       is_roof = c(FALSE, FALSE))
+  testthat::local_mocked_bindings(
+    load_fixtures = function(...) data.frame(),
+    file_reader = function(...) data.frame(),
+    .load_match_weather = function(...) wx,
+    .package = "torp"
+  )
+  preds <- data.frame(match_id = c("A", "B"), season = c(2025L, 2026L), round = 1L)
+  out <- add_weather_to_preds(preds)
+  expect_equal(nrow(out), 2L)
+  expect_equal(out$match_id, c("A", "B"))
+  expect_false(anyNA(out$weather))
+})

@@ -351,6 +351,16 @@ test_that(".matchup_hours_to_next_bounce() returns NA when the round has no matc
   expect_true(is.na(.matchup_hours_to_next_bounce(fx, week = 4L)))
 })
 
+test_that(".matchup_earliest_bounce() counts an NA-status match as undecided instead of dropping it", {
+  # With `status != "CONCLUDED"` the NA row became an all-NA index row and its
+  # 2-hour kickoff was ignored, so the deadline read 30 hours out.
+  fx <- .mt_make_fixtures(
+    round_number = c(4L, 4L), status = c("SCHEDULED", NA_character_),
+    hours_from_now = c(30, 2)
+  )
+  expect_equal(.matchup_hours_to_next_bounce(fx, week = 4L), 2, tolerance = 0.01)
+})
+
 test_that(".matchup_earliest_bounce() returns NA when NO start time in the round parses -- unparseable is unknown, not safe", {
   fx <- data.frame(
     round_number = 4L, status = "SCHEDULED", utc_start_time = "not-a-date",
