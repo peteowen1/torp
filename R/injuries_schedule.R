@@ -29,6 +29,14 @@ build_injury_schedule <- function(injuries_df, player_ratings_dt) {
   pr_dt <- data.table::as.data.table(player_ratings_dt)
 
   # Only players who will actually return this season (finite return_round)
+  if (!is.numeric(inj_dt$return_round)) {
+    rr <- suppressWarnings(as.numeric(inj_dt$return_round))
+    n_bad <- sum(is.na(rr) & !is.na(inj_dt$return_round))
+    if (n_bad > 0) {
+      cli::cli_warn("{n_bad} non-numeric {.field return_round} value{?s} dropped from the injury schedule")
+    }
+    inj_dt[, return_round := rr]
+  }
   inj_dt <- inj_dt[is.finite(return_round) & !is.na(return_round)]
   if (nrow(inj_dt) == 0) {
     return(data.table::data.table(
@@ -68,8 +76,13 @@ build_injury_schedule <- function(injuries_df, player_ratings_dt) {
   } else {
     join_by <- "player_norm"
   }
+  pr_join <- pr_dt[, ..pr_cols]
+  if (anyDuplicated(pr_join, by = join_by) > 0) {
+    cli::cli_warn("Duplicate ratings rows per {paste(join_by, collapse = '/')}; keeping the first so boosts are not double-counted")
+    pr_join <- unique(pr_join, by = join_by)
+  }
   matched <- merge(inj_dt[, ..inj_merge_cols],
-                   pr_dt[, ..pr_cols],
+                   pr_join,
                    by = join_by, all.x = TRUE)
 
   # Drop unmatched (players not in ratings)

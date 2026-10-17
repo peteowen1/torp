@@ -884,3 +884,16 @@ test_that("injury_table_clubs fails closed when badges FOLLOW their tables", {
   expect_warning(res <- injury_table_clubs(html, 2L), "no badge within")
   expect_null(res)
 })
+
+test_that("build_injury_schedule warns on non-numeric return_round and duplicate ratings", {
+  inj <- data.frame(player = c("A Smith", "B Jones"), team = "Carlton",
+                    return_round = c("5", "soon"), stringsAsFactors = FALSE)
+  pr <- data.table::data.table(player_name = c("A Smith", "A Smith"),
+                               team = "Carlton", torp = c(2, 2), pred_tog = c(0.8, 0.8))
+  expect_warning(
+    expect_warning(res <- build_injury_schedule(inj, pr), "non-numeric"),
+    "Duplicate ratings"
+  )
+  expect_equal(nrow(res), 1L)
+  expect_true(is.finite(res$torp_boost))
+})
