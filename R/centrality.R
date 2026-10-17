@@ -21,7 +21,6 @@
 #'   - `player_id` or `playerId`: Player identifier
 #'   - `team`: Player's team
 #'   - `match_id` or `matchId`: Match identifier
-#'   - `time_on_ground` (optional): Playing time as weight
 #' @param min_matches Integer. Minimum matches for inclusion. Default 5.
 #' @param damping Numeric. centrality damping factor (0-1). Default 0.85.
 #'
@@ -120,10 +119,10 @@ empty_centrality_result <- function(players, min_matches) {
   data.frame(
     player_id = players,
     centrality = rep(1, n),
-    unique_teams = rep(0L, n),
-    matches_played = rep(min_matches, n),
-    component_id = rep(1L, n),
-    component_size = rep(n, n),
+    unique_teams = rep(NA_integer_, n),
+    matches_played = rep(NA_integer_, n),
+    component_id = rep(NA_integer_, n),
+    component_size = rep(NA_integer_, n),
     stringsAsFactors = FALSE
   )
 }
@@ -135,8 +134,6 @@ build_adjacency <- function(pm) {
   player_ids <- sort(unique(pm$player_id))
   n <- length(player_ids)
   idx <- stats::setNames(seq_along(player_ids), player_ids)
-
-  has_tog <- "time_on_ground" %in% names(pm)
 
   matches <- split(pm, pm$match_id)
   row_chunks <- vector("list", length(matches))
@@ -152,6 +149,14 @@ build_adjacency <- function(pm) {
     row_chunks[[m_idx]] <- c(pairs[1, ], pairs[2, ])
     col_chunks[[m_idx]] <- c(pairs[2, ], pairs[1, ])
     val_chunks[[m_idx]] <- rep(1, np * 2)
+  }
+
+  if (all(vapply(row_chunks, is.null, logical(1)))) {
+    # No two players ever shared a match: explicit empty graph
+    return(Matrix::sparseMatrix(
+      i = integer(0), j = integer(0), x = numeric(0),
+      dims = c(n, n), dimnames = list(player_ids, player_ids)
+    ))
   }
 
   Matrix::sparseMatrix(

@@ -12,7 +12,6 @@ calculate_player_centrality(player_matches, min_matches = 5L, damping = 0.85)
 \item \code{player_id} or \code{playerId}: Player identifier
 \item \code{team}: Player's team
 \item \code{match_id} or \code{matchId}: Match identifier
-\item \code{time_on_ground} (optional): Playing time as weight
 }}
 
 \item{min_matches}{Integer. Minimum matches for inclusion. Default 5.}
