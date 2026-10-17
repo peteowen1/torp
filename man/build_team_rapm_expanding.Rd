@@ -67,7 +67,9 @@ For \code{design="split"}: data.table with all of
 \code{extract_team_rapm_ratings()}'s columns plus \code{season} (the
 cutoff each row's rating is valid FOR -- computed using strictly-prior
 seasons only) and \code{n_train_seasons}. For \code{design="net"}: a
-list of per-cutoff \code{list(season, rapm_data, rapm_fit)}.
+list of per-cutoff \code{list(season, rapm_data, rapm_fit)}. Cutoffs whose
+design matrix failed to build are skipped with a warning and listed in the
+\code{failed_cutoffs} attribute (\code{NULL} when none failed).
 }
 \description{
 RAPM is a batch ridge regression, not sequential like Elo, so it cannot be
