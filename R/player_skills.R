@@ -80,6 +80,27 @@
   lookup
 }
 
+#' Exposure per row for a rate stat that is not TOG-adjusted
+#'
+#' dream_team_points and rating_points use one unit of exposure per row instead
+#' of TOG. Availability-only rows (rostered but not selected, \code{tog = 0})
+#' reach that path with no numerator. Finding B69
+#' (docs/reviews/CODEBASE-REVIEW-2026-10-17.md in the torpverse repo) is that
+#' counting each of those unplayed rounds as a full unit of exposure deflates
+#' the per-game rate. Whether to count them is set by
+#' \code{STAT_RATE_NONTOG_EXCLUDE_UNPLAYED}: \code{FALSE} (the published
+#' behaviour) counts every row, \code{TRUE} counts played rows only.
+#'
+#' @param avail_only Logical vector, \code{TRUE} on availability-only rows.
+#' @param exclude_unplayed Whether unplayed rows get zero exposure.
+#' @return Numeric vector of per-row exposure, same length as \code{avail_only}.
+#' @keywords internal
+#' @noRd
+.nontog_exposure <- function(avail_only,
+                             exclude_unplayed = STAT_RATE_NONTOG_EXCLUDE_UNPLAYED) {
+  if (isTRUE(exclude_unplayed)) as.numeric(!avail_only) else rep(1, length(avail_only))
+}
+
 #' Warn about rate-stat source values that were NA on played rows
 #'
 #' Such rows are excluded from both the numerator and the exposure (they are
@@ -290,13 +311,14 @@ estimate_player_stat_ratings <- function(stat_rating_data, ref_date = NULL,
       # 2021-2026, n = 58,324), so unifying them would change no number today.
       tog_vals[is.na(tog_vals)] <- 1
     } else {
-      # Not TOG-adjusted: one unit of exposure per game he PLAYED. An
-      # availability-only row (a round he was rostered but not selected for)
-      # has no numerator, so counting it as a unit of exposure would deflate
-      # the per-game rate of anyone who misses rounds (B69).
-      tog_vals <- as.numeric(!dt$avail_only)
+      # Not TOG-adjusted: one unit of exposure per row (see
+      # .nontog_exposure() and the B69 switch).
+      tog_vals <- .nontog_exposure(dt$avail_only)
     }
-    tog_vals[na_src] <- 0
+    # NA source on a PLAYED row: out of numerator and exposure (A198).
+    # Availability-only rows are NA by construction, so they are left to the
+    # exposure rules above (TOG is 0 on them; non-TOG is the B69 switch).
+    tog_vals[na_src & !dt$avail_only] <- 0
 
     w_vec <- exp(-stat_lambda * dt$days_since)
 
@@ -865,8 +887,8 @@ estimate_player_stat_ratings <- function(stat_rating_data, ref_date = NULL,
     is_tog_adj <- is.na(rate_defs$tog_adjusted[i]) || isTRUE(rate_defs$tog_adjusted[i])
     # NA tog -> 1 here but 0 in .tog_safe (80s counts): see the note in
     # estimate_player_stat_ratings().
-    tog_vals <- if (is_tog_adj) { tv <- as.numeric(dt$tog); tv[is.na(tv)] <- 1; tv } else as.numeric(!dt$avail_only)  # played rows only (B69)
-    tog_vals[na_src] <- 0
+    tog_vals <- if (is_tog_adj) { tv <- as.numeric(dt$tog); tv[is.na(tv)] <- 1; tv } else .nontog_exposure(dt$avail_only)  # B69 switch
+    tog_vals[na_src & !dt$avail_only] <- 0  # NA on a played row: A198 (see estimate_player_stat_ratings())
 
     base_w <- exp(lam * dt$.d)
 
