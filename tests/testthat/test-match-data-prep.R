@@ -323,6 +323,35 @@ test_that(".build_team_mdl_df refuses a results table with a duplicated match_id
   )
 })
 
+test_that(".build_match_features fills a missing rating only from EARLIER matches, whatever order the fixtures arrive in", {
+  # Team 1 plays R1-R3. R1 and R2 have no rating row; R3 does. Chronologically
+  # R1 and R2 stay NA (there is nothing earlier to carry forward). With the rows
+  # arriving R3, R1, R2 the old row-order fill() copied R3's rating BACKWARDS.
+  fix_df <- data.frame(
+    match_id = paste0("M", 1:3), team_id = 1L, season = 2026L, round_number = 1:3,
+    team_type = "home", venue = "M.C.G.",
+    utc_dt = as.POSIXct("2026-03-01", tz = "UTC") + 7 * 86400 * (0:2),
+    stringsAsFactors = FALSE
+  )
+  rt_cols <- c(torp:::.torp_sum_cols("epr"), MATCH_POS_COLS)
+  team_rt_df <- data.frame(
+    match_id = "M3", team_id = 1L, season = 2026L, round_number = 3L, team_type = "home",
+    count = 22L, stringsAsFactors = FALSE
+  )
+  for (col in rt_cols) team_rt_df[[col]] <- 5
+  grounds <- data.frame(Ground = "M.C.G.", venue = "M.C.G.", Latitude = -37.82, Longitude = 144.98,
+                        stringsAsFactors = FALSE)
+
+  chrono <- suppressMessages(torp:::.build_match_features(fix_df, team_rt_df, grounds))
+  shuf_in <- fix_df[c(3, 1, 2), ]
+  shuf <- suppressMessages(torp:::.build_match_features(shuf_in, team_rt_df, grounds))
+
+  expect_identical(shuf$match_id, shuf_in$match_id)          # incoming row order kept
+  expect_true(all(is.na(chrono$epr[chrono$match_id %in% c("M1", "M2")])))
+  expect_true(all(is.na(shuf$epr[shuf$match_id %in% c("M1", "M2")])))
+  expect_equal(shuf$epr[shuf$match_id == "M3"], 5)
+})
+
 test_that(".torp_sum_cols is one definition: osr/dsr only with osr, xrapm only on request", {
   base <- c("epr", "epr_recv", "epr_disp", "epr_spoil", "epr_hitout", "psr")
   expect_identical(torp:::.torp_sum_cols(c("epr", "psr")), base)

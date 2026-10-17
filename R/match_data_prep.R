@@ -453,7 +453,16 @@
         dplyr::all_of(c(torp_sum_cols, MATCH_POS_COLS, "count"))
       ),
       by = c("match_id", "team_id", "season", "round_number")
-    ) |>
+    )
+
+  # fill() and lag() below walk each team's rows in frame order, and neither
+  # .build_fixtures_df() nor load_fixtures() sorts. Order by kickoff first so a
+  # missing rating is only ever filled from an EARLIER match (never a later
+  # one, which would be as-of leakage), then restore the incoming row order
+  # (order(ord) is the inverse permutation) so nothing downstream sees a
+  # reshuffled frame.
+  ord <- order(team_rt_fix_df$team_id, team_rt_fix_df$utc_dt)
+  team_rt_fix_df <- team_rt_fix_df[ord, ] |>
     dplyr::group_by(team_id) |>
     tidyr::fill(epr, epr_recv, epr_disp, epr_spoil, epr_hitout, psr,
                 dplyr::any_of(c("osr", "dsr"))) |>
@@ -466,6 +475,7 @@
     ) |>
     tidyr::fill(def, mid, fwd, int) |>
     dplyr::ungroup()
+  team_rt_fix_df <- team_rt_fix_df[order(ord), ]
 
   team_rt_fix_df
 }
