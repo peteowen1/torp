@@ -22,9 +22,9 @@ Creates data structure for plotting model calibration.
 
 A simplified wrapper around assess_model_calibration for creating calibration
 plot data. For more comprehensive calibration analysis, use assess_model_calibration
-directly followed by prepare_calibration_plot.
+directly.
 }
 \seealso{
-\code{\link{assess_model_calibration}}, \code{\link{prepare_calibration_plot}}
+\code{\link{assess_model_calibration}}
 }
 \keyword{internal}
