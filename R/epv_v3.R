@@ -243,6 +243,14 @@ build_aerial_contests <- function(chains, pbp_data) {
   }
 
   cst[, def_win := out_tid != kick_tid]
+  # The team that is NOT the kicking team, found from the teams chains logs in
+  # the match. On an attack win out_tid == kick_tid, so out_tid cannot name the
+  # beaten side; this does. NA when a match does not show exactly two teams.
+  .mt <- unique(ch[!is.na(team_id), .(match_id, team_id)])
+  .mt <- .mt[, if (.N == 2L) .(a = team_id[1L], b = team_id[2L]), by = match_id]
+  cst[.mt, on = "match_id", .opp := data.table::fifelse(kick_tid == i.a, i.b, i.a)]
+  if (!".opp" %in% names(cst)) cst[, .opp := NA_character_]
+  data.table::setnames(cst, ".opp", "opp_tid")
   # A Spoil logged to the KICKING team is a chain-logging artifact, not an
   # attacking win. v2 drops the same rows for the same reason (~16% of spoils).
   cst <- cst[!(grepl("^Spoil", out_desc) & def_win == FALSE)]
@@ -412,6 +420,8 @@ fit_contest_models <- function(cst, train_idx = rep(TRUE, nrow(cst))) {
 #' @keywords internal
 score_contests <- function(cst, models) {
   d <- data.table::copy(cst)
+  # opp_tid is the non-kicking team; hand-built contest tables may lack it.
+  if (!"opp_tid" %in% names(d)) d[, opp_tid := NA_character_]
   three <- !is.null(models$p_other)
   if (three) {
     pr <- function(m) as.numeric(stats::predict(m, newdata = d, type = "response"))
@@ -455,7 +465,7 @@ score_contests <- function(cst, models) {
       winner_pid    = out_pid,
       winner_tid    = out_tid,
       loser_pid     = data.table::fifelse(def_win, target_pid, NA_character_),
-      loser_tid     = data.table::fifelse(def_win, kick_tid, out_tid)
+      loser_tid     = data.table::fifelse(def_win, kick_tid, opp_tid)
     )]
     return(d)
   }
@@ -478,7 +488,7 @@ score_contests <- function(cst, models) {
     winner_pid    = out_pid,
     winner_tid    = out_tid,
     loser_pid     = data.table::fifelse(def_win, target_pid, NA_character_),
-    loser_tid     = data.table::fifelse(def_win, kick_tid, out_tid)
+    loser_tid     = data.table::fifelse(def_win, kick_tid, opp_tid)
   )]
   d
 }
@@ -665,7 +675,18 @@ allocate_contest_losses <- function(scored, chains, half,
              allow.cartesian = TRUE)
   a[, share := expo / sum(expo), by = .(match_id, team_id, zone)]
   a[, cont_alloc := debit * share]
-  a[, .(cont_alloc = sum(cont_alloc)), by = .(player_id, match_id)]
+  out <- a[, .(cont_alloc = sum(cont_alloc)), by = .(player_id, match_id)]
+  # The inner merge on zone drops any debit whose zone has no exposure rows;
+  # report it (warn, not abort: prorata is a non-default, reproduction-only rule).
+  owed <- sum(unnamed$debit)
+  allocated <- sum(out$cont_alloc)
+  if (abs(allocated - owed) > max(1e-6, 0.001 * abs(owed))) {
+    cli::cli_warn(c(
+      "Prorata allocation did not conserve: owed {round(owed, 2)}, allocated {round(allocated, 2)}.",
+      "i" = "Debit in (match, team, zone) cells with no aerial exposure rows is dropped."
+    ))
+  }
+  out
 }
 
 
@@ -731,6 +752,12 @@ compute_aerial_credit <- function(chains, pbp_data, leak_safe = TRUE,
       score_contests(cst[.season == s], fit_contest_models(cst, idx))
     }))
   } else {
+    if (isTRUE(leak_safe)) {
+      cli::cli_warn(c(
+        "leak_safe = TRUE but only one season is present; contest models are fitted and scored on the same rows.",
+        "x" = "These credits are in-sample and optimistic. Pass {.code leak_safe = FALSE} if that is intended."
+      ))
+    }
     scored <- score_contests(cst, fit_contest_models(cst))
   }
 
@@ -750,8 +777,11 @@ compute_aerial_credit <- function(chains, pbp_data, leak_safe = TRUE,
     pos_key <- unique(data.table::as.data.table(chains)[
       !is.na(player_id) & !is.na(player_position),
       .(match_id, player_id, pos = player_position)])
+    # One position per player-match (first logged), so both mirror functions
+    # see one definition of position and the counts are per player-match.
+    pos_key <- pos_key[!duplicated(pos_key, by = c("match_id", "player_id"))]
     wts <- build_mirror_weights(scored, pos_key)
-    al <- allocate_by_mirror(scored, chains, wts)
+    al <- allocate_by_mirror(scored, chains, wts, pos = pos_key)
     parts <- c(parts, list(al[, .(player_id, match_id, cont = cont_alloc,
                                   won = 0L, lost = 0L)]))
   } else if (alloc %in% c("team", "prorata", "ledger")) {

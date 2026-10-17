@@ -257,3 +257,27 @@ test_that("the lead shift does not reach across a match boundary", {
   # false here: mark is B, kick is A at display_order 2 -> nothing follows it).
   expect_equal(nrow(cst), 0L)
 })
+
+test_that("an attack-win contest debit lands on the defending team, not the winner", {
+  cst <- data.table::data.table(
+    def_win = c(TRUE, FALSE), exp_pts = c(0, 0),
+    out_pid = c("W1", "W2"), out_tid = c("T2", "T1"),
+    target_pid = c("L1", NA), kick_tid = c("T1", "T1"),
+    opp_tid = c("T2", "T2"))
+  mk <- list(p = epv3_stub_model(0.3), att = epv3_stub_model(3),
+             def = epv3_stub_model(1))
+  s <- score_contests(cst, mk)
+  expect_equal(s$loser_tid, c("T1", "T2"))
+  expect_true(all(s$loser_tid != s$winner_tid))
+})
+
+test_that("build_aerial_contests names the non-kicking team as opp_tid", {
+  cst <- build_aerial_contests(.mk_chains(), .mk_pbp())
+  expect_true("opp_tid" %in% names(cst))
+  expect_false(any(cst$opp_tid == cst$kick_tid, na.rm = TRUE))
+})
+
+test_that("epv3_aerial_out rejects non-character population", {
+  expect_error(epv3_aerial_out(1))
+  expect_error(epv3_aerial_out("bogus"))
+})
