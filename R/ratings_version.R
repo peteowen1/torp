@@ -255,7 +255,6 @@
 #'   is \code{"v2"}, and deriving one from the other mislabels the manifest.
 #' @param generated_utc Timestamp; defaults to now. Injectable for tests.
 #' @return A named list describing this vintage.
-#' @keywords internal
 #' @param defining_constants The constant values that produced this vintage.
 #'   Defaults to the CURRENTLY LOADED constants, which is correct only when the
 #'   running code is what generated the data. When preserving an OUTGOING
@@ -264,6 +263,7 @@
 #'   than stamping a definition the preserved data was not built under. A
 #'   missing entry is a gap; a wrong one is a lie, and this manifest exists to
 #'   be trusted.
+#' @keywords internal
 .build_rating_vintage_entry <- function(n_rows, version = RATING_VINTAGE,
                                         file = NULL, generated_utc = NULL,
                                         defining_constants = .rating_defining_constants()) {
@@ -346,7 +346,8 @@ publish_ratings_manifest <- function(n_rows, version = RATING_VINTAGE,
   if (isTRUE(set_canonical)) manifest$canonical <- version
 
   tf <- file.path(tempdir(), "ratings_manifest.json")
-  writeLines(jsonlite::toJSON(manifest, auto_unbox = TRUE, pretty = TRUE, null = "null"), tf)
+  writeLines(jsonlite::toJSON(manifest, auto_unbox = TRUE, pretty = TRUE, null = "null",
+                                  digits = NA), tf)
   repo <- get_torp_data_repo()
   # pb_upload(overwrite = TRUE) DELETES the old asset before uploading the new
   # one, and reports a failed upload as a warning. On 2026-09-17 that left the
@@ -592,7 +593,7 @@ read_ratings_manifest <- function() {
 #' @return The same structure after `toJSON()` then `fromJSON()`.
 #' @keywords internal
 .round_trip_constants <- function(x) {
-  raw <- jsonlite::toJSON(x, auto_unbox = TRUE, null = "null")
+  raw <- jsonlite::toJSON(x, auto_unbox = TRUE, null = "null", digits = NA)
   jsonlite::fromJSON(raw, simplifyVector = FALSE)
 }
 
@@ -600,7 +601,8 @@ read_ratings_manifest <- function() {
 #'
 #' Two leaves that already went through the SAME round-trip (see
 #' `.round_trip_constants()`) are equal iff their JSON text is equal --
-#' `digits = NA` keeps full numeric precision, and `NULL` is handled
+#' the round-trip itself must run at `digits = NA` (full precision) or a
+#' difference past the 4th decimal is lost before this step. `NULL` is handled
 #' explicitly because `toJSON(NULL)` renders `"{}"`, not `"null"`.
 #'
 #' @param v A leaf value.
