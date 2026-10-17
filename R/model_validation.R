@@ -177,10 +177,16 @@ evaluate_model_comprehensive <- function(actual, predicted, model_name = "Model"
   # gates a numeric value against calibration_slope/_intercept/_r2 from this
   # function (only ever displayed as "(ideal: 1.0)"), so there was no
   # OLS-scale threshold to translate.
+  # unique() because tied predictions make quantile breaks repeat, and cut() errors on those
+  decile_breaks <- unique(quantile(predicted, probs = 0:10/10))
   cal_data <- data.frame(
     actual = actual,
     predicted = predicted,
-    pred_decile = cut(predicted, breaks = quantile(predicted, probs = 0:10/10), include.lowest = TRUE)
+    pred_decile = if (length(decile_breaks) >= 2) {
+      cut(predicted, breaks = decile_breaks, include.lowest = TRUE)
+    } else {
+      factor(rep("all", length(predicted)))
+    }
   )
 
   cal_summary <- cal_data |>
@@ -208,15 +214,16 @@ evaluate_model_comprehensive <- function(actual, predicted, model_name = "Model"
     calibration_r2 <- NA
   }
 
-  # Simple confidence intervals using normal approximation
+  # Approximate confidence intervals (rough normal approximations, not
+  # DeLong/bootstrap): treat as indicative only
   if (compute_ci && n >= 100) {
     # AUC confidence interval using normal approximation
     auc_se <- sqrt(auc_value * (1 - auc_value) / n)  # Simplified SE estimate
     auc_lower <- max(0, auc_value - 1.96 * auc_se)
     auc_upper <- min(1, auc_value + 1.96 * auc_se)
     
-    # Brier Score confidence interval
-    brier_se <- sqrt(brier_score * (1 - brier_score) / n)
+    # Brier Score confidence interval: SE of the mean per-observation squared error
+    brier_se <- sd((actual - predicted)^2) / sqrt(n)
     brier_lower <- max(0, brier_score - 1.96 * brier_se)
     brier_upper <- min(1, brier_score + 1.96 * brier_se)
   } else {
@@ -275,8 +282,6 @@ compare_models_statistical <- function(model_results, test_type = "simple") {
   if (n_models < 2) {
     cli::cli_abort("Need at least 2 models for comparison")
   }
-
-  model_names <- sapply(model_results, function(x) x$model_name)
 
   # Create comparison matrix
   comparison_results <- data.frame()

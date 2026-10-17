@@ -183,6 +183,16 @@ validate_data_quality <- function(data, data_type = "unknown") {
   # Basic data structure checks
   if (nrow(data) == 0) {
     quality_issues$empty_data <- "Dataset is empty"
+    # Per-column rates are 0/0 on an empty frame, so skip the remaining checks
+    return(list(
+      data_type = data_type,
+      quality_score = calculate_quality_score(data, quality_issues),
+      issues = quality_issues,
+      missing_analysis = NULL,
+      duplicate_analysis = NULL,
+      n_rows = 0L,
+      n_cols = ncol(data)
+    ))
   }
   
   if (ncol(data) == 0) {
@@ -219,7 +229,7 @@ validate_data_quality <- function(data, data_type = "unknown") {
     outlier_analysis <- detect_outliers(data[, numeric_cols, drop = FALSE])
     if (outlier_analysis$extreme_outliers > 0) {
       quality_issues$outliers <- paste("Extreme outliers detected in", 
-                                      outlier_analysis$extreme_outliers, "columns")
+                                      outlier_analysis$n_columns_flagged, "columns")
     }
   }
   
@@ -253,19 +263,17 @@ validate_data_quality <- function(data, data_type = "unknown") {
 #' @importFrom dplyr group_by across everything summarise arrange desc n
 analyze_missing_data <- function(data) {
 
-  # Calculate missing percentages by column (vectorized, no full copy)
-  missing_pct <- vapply(data, function(x) sum(is.na(x)) / length(x), FUN.VALUE = numeric(1))
+  # Per-column NA counts (vectorized, no full-frame logical matrix)
+  na_counts <- vapply(data, function(x) sum(is.na(x)), FUN.VALUE = numeric(1))
+  missing_pct <- na_counts / nrow(data)
 
   # Identify columns with high missing rates
   high_missing_cols <- missing_pct > VALIDATION_HIGH_MISSING_THRESHOLD
 
   # Pattern analysis for combinations of missing values
   if (ncol(data) <= 20) {
-    # Use vapply to create missing indicator matrix (more efficient than mutate_all)
-    missing_matrix <- as.data.frame(
-      lapply(data, is.na)
-    )
-    missing_patterns <- missing_matrix |>
+    # Narrow frames only (<= 20 columns), so the logical copy is cheap
+    missing_patterns <- as.data.frame(lapply(data, is.na)) |>
       dplyr::group_by(dplyr::across(dplyr::everything())) |>
       dplyr::summarise(count = dplyr::n(), .groups = "drop") |>
       dplyr::arrange(dplyr::desc(count))
@@ -274,7 +282,7 @@ analyze_missing_data <- function(data) {
   }
 
   list(
-    overall_missing_rate = sum(is.na(data)) / (nrow(data) * ncol(data)),
+    overall_missing_rate = sum(na_counts) / (nrow(data) * ncol(data)),
     missing_by_column = missing_pct,
     high_missing_cols = sum(high_missing_cols),
     high_missing_col_names = names(missing_pct)[high_missing_cols],
@@ -334,6 +342,7 @@ detect_outliers <- function(data) {
     q1 <- quantile(col_data, 0.25)
     q3 <- quantile(col_data, 0.75)
     iqr <- q3 - q1
+    if (iqr == 0) next  # Zero-IQR column (e.g. mostly zeros): fences are degenerate and flag every other value
     
     mild_outliers <- sum(col_data < (q1 - 1.5 * iqr) | col_data > (q3 + 1.5 * iqr))
     extreme_outliers <- sum(col_data < (q1 - 3 * iqr) | col_data > (q3 + 3 * iqr))
@@ -356,6 +365,7 @@ detect_outliers <- function(data) {
   list(
     column_results = outlier_results,
     extreme_outliers = total_extreme,
+    n_columns_flagged = sum(vapply(outlier_results, function(x) x$extreme_outliers_iqr > 0, logical(1))),
     n_columns_analyzed = length(outlier_results)
   )
 }
@@ -511,6 +521,10 @@ calculate_quality_score <- function(data, issues) {
       "high_missing" = 0.3,         # Major issue
       "high_duplicates" = 0.2,      # Moderate issue
       "invalid_match_ids" = 0.2,    # Moderate issue
+      "invalid_periods" = 0.2,      # Moderate issue
+      "coordinates_out_of_bounds" = 0.2,  # Moderate issue
+      "invalid_wp_labels" = 0.2,    # Moderate issue
+      "constant_columns" = 0.1,     # Minor issue
       "temporal_inconsistency" = 0.3, # Major issue
       "extreme_score_differences" = 0.1,  # Minor issue
       "outliers" = 0.1,             # Minor issue
