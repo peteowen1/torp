@@ -319,3 +319,23 @@ test_that("loading without any published snapshot fails with an actionable messa
     "no snapshots published"
   )
 })
+
+test_that("an NA earlier value is not zeroed for a player present in both snapshots", {
+  earlier <- .mock_snapshot(c("A", "B"), games = c(3, 4), disposals = c(NA, 40), spoils = c(3, 8))
+  later <- .mock_snapshot(c("A", "B", "C"), games = c(4, 5, 1), disposals = c(42, 51, 9), spoils = c(5, 9, 1))
+
+  d <- diff_aflw_season_snapshots(earlier, later, recompute_averages = FALSE)
+
+  expect_true(is.na(d[player_id == "A"]$disposals))   # present, NA prior: stays NA
+  expect_equal(d[player_id == "C"]$disposals, 9)      # absent earlier: prior is 0
+})
+
+test_that("NA games_played is not silently dropped by drop_unplayed", {
+  earlier <- .mock_snapshot(c("A", "B"), games = c(3, 4), disposals = c(30, 40), spoils = c(3, 8))
+  later <- .mock_snapshot(c("A", "B"), games = c(NA, 4), disposals = c(42, 40), spoils = c(5, 8))
+
+  d <- diff_aflw_season_snapshots(earlier, later, drop_unplayed = TRUE, recompute_averages = FALSE)
+
+  expect_true("A" %in% d$player_id)
+  expect_false("B" %in% d$player_id)
+})
