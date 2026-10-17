@@ -231,3 +231,16 @@ test_that("predict_aflw_win_prob / predict_aflw_margin warn how many rows will p
   expect_true(is.na(preds_margin[2]))
   expect_false(anyNA(preds_margin[-2]))
 })
+
+test_that("fit_aflw_match_model excludes drawn matches from the win model only", {
+  set.seed(7)
+  n <- 40
+  train_df <- data.frame(
+    aflw_elo_diff = stats::rnorm(n, 0, 50), aflw_psr_diff = stats::rnorm(n, 0, 5),
+    aflw_psr_matched = TRUE, home_margin = stats::rnorm(n, 0, 20)
+  )
+  train_df$home_margin[1:3] <- 0
+  expect_message(model <- torp:::fit_aflw_match_model(train_df), "3 drawn")
+  expect_equal(nrow(model$win_model$model), n - 3)
+  expect_equal(nrow(model$margin_model$model), n)
+})
