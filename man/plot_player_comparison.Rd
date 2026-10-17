@@ -20,7 +20,8 @@ plot_player_comparison(
 
 \item{metric}{One of \code{"torp_value"} (default), \code{"epv"}, \code{"psv"}.}
 
-\item{rolling}{Rolling average window (number of games). Default 10.}
+\item{rolling}{Rolling average window (number of games, >= 1). Default 10.
+Each player is coloured by the club of his most recent game in the window.}
 
 \item{show_points}{Logical. If TRUE (default), show individual game points
 in addition to the rolling average line.}

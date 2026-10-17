@@ -25,7 +25,8 @@ theme_torp <- function(base_size = 12) {
 #' @export
 #' @importFrom ggplot2 scale_colour_manual
 team_color_scale <- function(...) {
-  ggplot2::scale_colour_manual(values = AFL_TEAM_COLORS, ...)
+  args <- utils::modifyList(list(values = AFL_TEAM_COLORS), list(...))
+  do.call(ggplot2::scale_colour_manual, args)
 }
 
 #' Team colour scale (fill aesthetic)
@@ -37,7 +38,8 @@ team_color_scale <- function(...) {
 #' @export
 #' @importFrom ggplot2 scale_fill_manual
 team_fill_scale <- function(...) {
-  ggplot2::scale_fill_manual(values = AFL_TEAM_COLORS, ...)
+  args <- utils::modifyList(list(values = AFL_TEAM_COLORS), list(...))
+  do.call(ggplot2::scale_fill_manual, args)
 }
 
 #' Look up a team colour with NA-safe fallback
@@ -49,7 +51,7 @@ team_fill_scale <- function(...) {
 #' @keywords internal
 team_color_lookup <- function(team, default = "#808080", colors = AFL_TEAM_COLORS) {
   col <- colors[team]
-  if (is.na(col) || is.null(col)) default else unname(col)
+  if (length(col) == 0L || is.na(col)) default else unname(col)
 }
 
 #' Default visual constants for torp plots
@@ -120,5 +122,6 @@ plot_defaults <- function() {
 #' @return Named numeric vector with quarter boundaries.
 #' @keywords internal
 quarter_breaks <- function() {
-  c(Q1 = 0, Q2 = 2000, Q3 = 4000, Q4 = 6000, End = 8000)
+  q <- AFL_QUARTER_DURATION
+  c(Q1 = 0, Q2 = q, Q3 = 2 * q, Q4 = 3 * q, End = AFL_TOTAL_GAME_SECONDS)
 }
