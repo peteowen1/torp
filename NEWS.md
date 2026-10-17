@@ -1,3 +1,8 @@
+# torp 1.10.1
+
+* `run_ratings_pipeline.R` no longer overwrites a season's `player_game_ratings` with an EPV-only file when PSV fails: stage 5 runs `.add_psv_to_game_ratings(strict = TRUE)` and names any season it skipped.
+* `strict = TRUE` now also aborts when PSV leaves any row NA, or returns no `psv` column. The blog's game-logs gate refuses both.
+
 # torp 1.10.0
 
 ## Codebase review fixes (2026-10-17, torp#259)
