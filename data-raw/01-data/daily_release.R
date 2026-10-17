@@ -30,17 +30,14 @@ Sys.setenv(piggyback_cache_duration = 1)
 
 # Configuration ----
 
-#' Get TORP data repository name
-get_torpdata_repo <- function() {
- "peteowen1/torpdata"
-}
-
 # Helper Functions ----
 
 #' Check if New Games Have Been Played
 #'
-#' Compares current fixtures against the last completed round data.
-#' Returns TRUE if there are new completed games since the last release.
+#' Checks whether any game in the current round has STARTED (scheduled start
+#' time is in the past). This does not test completion: a game in progress
+#' counts, so a run can trigger before its result is final.
+#' Returns TRUE if so; FALSE if none have started or the fixtures call fails.
 #'
 #' @return Logical indicating if new games are available
 has_new_games <- function() {
@@ -56,7 +53,7 @@ has_new_games <- function() {
       return(FALSE)
     }
 
-    # Check if any games have been completed in the current round
+    # Check if any games have started in the current round (not completion)
     # utc_start_time is character from the API — parse to POSIXct in UTC
     # then compare against current UTC time to avoid timezone mismatch
     utc_now <- Sys.time()
@@ -87,6 +84,16 @@ has_new_games <- function() {
 # Module-level cache to avoid double-fetching lineup data within a single run
 .release_cache <- new.env(parent = emptyenv())
 
+# Fetch wrappers below keep NULL-as-skip, but a skip caused by an ERROR must be
+# visible: log a warning and record it so run_daily_release() lists it in the
+# summary and on the result's "skips" attribute.
+.record_skip <- function(what, e) {
+  msg <- conditionMessage(e)
+  cli::cli_warn("Skipping {what} after fetch error: {msg}")
+  .release_cache$skips <- c(.release_cache$skips, paste0(what, " (", msg, ")"))
+  invisible(NULL)
+}
+
 #' Check if New Team/Lineup Data Exists
 #'
 #' Compares current lineup data from AFL API against the existing torpdata
@@ -109,15 +116,19 @@ has_new_team_data <- function() {
       return(FALSE)
     }
 
-    # Cache for reuse by update_teams()
+    # Cache for reuse by update_teams() (keyed by season)
     .release_cache$teams <- fresh_teams
+    .release_cache$teams_season <- current_season
 
     # Compare against existing torpdata release
+    # Only a confirmed-absent read counts as "new"; a transient error must not
+    # (it would trigger an overwrite of teams-data), so it falls to the outer
+    # handler and returns FALSE.
     existing_teams <- tryCatch({
       load_teams(current_season)
-    }, error = function(e) {
+    }, vb_error_absent = function(e) {
       cli::cli_inform("No existing teams data found — treating as new")
-      return(NULL)
+      NULL
     })
 
     if (is.null(existing_teams) || nrow(existing_teams) == 0) {
@@ -195,7 +206,7 @@ update_season_chains <- function(season, round) {
   new_chains <- tryCatch({
     get_match_chains(season, round)
   }, error = function(e) {
-    cli::cli_alert_danger("Failed to fetch chains for {season} R{round}: {conditionMessage(e)}")
+    .record_skip(glue::glue("chains {season} R{round}"), e)
     return(NULL)
   })
 
@@ -221,7 +232,7 @@ update_season_chains <- function(season, round) {
 
   if (is.null(existing)) {
     is_absent <- tryCatch(
-      confirm_fresh_start(get_torpdata_repo(), "chains-data", paste0(chains_all_name, ".parquet")),
+      confirm_fresh_start(get_torp_data_repo(), "chains-data", paste0(chains_all_name, ".parquet")),
       error = function(e) {
         cli::cli_abort("Could not verify {.val {chains_all_name}.parquet} is absent from chains-data before a fresh upload: {conditionMessage(e)}")
       }
@@ -306,7 +317,7 @@ update_season_score_events <- function(season, round) {
   read_existing <- function(name) {
     tryCatch(file_reader(name, "score_events-data"),
       vb_error_absent = function(e) {
-        if (!isTRUE(confirm_fresh_start(get_torpdata_repo(), "score_events-data", paste0(name, ".parquet")))) {
+        if (!isTRUE(confirm_fresh_start(get_torp_data_repo(), "score_events-data", paste0(name, ".parquet")))) {
           cli::cli_abort("Refusing fresh upload of {.val {name}}: not confirmed absent from score_events-data.")
         }
         NULL
@@ -355,7 +366,7 @@ update_season_pbp <- function(season, round) {
       clean_model_data_wp() |>
       add_wp_vars()
   }, error = function(e) {
-    cli::cli_alert_danger("Failed to process PBP for {season} R{round}: {conditionMessage(e)}")
+    .record_skip(glue::glue("pbp {season} R{round}"), e)
     return(NULL)
   })
 
@@ -379,7 +390,7 @@ update_season_pbp <- function(season, round) {
 
   if (is.null(existing)) {
     is_absent <- tryCatch(
-      confirm_fresh_start(get_torpdata_repo(), "pbp-data", paste0(pbp_all_name, ".parquet")),
+      confirm_fresh_start(get_torp_data_repo(), "pbp-data", paste0(pbp_all_name, ".parquet")),
       error = function(e) {
         cli::cli_abort("Could not verify {.val {pbp_all_name}.parquet} is absent from pbp-data before a fresh upload: {conditionMessage(e)}")
       }
@@ -428,7 +439,7 @@ update_xg_data <- function(season) {
   xg_df <- tryCatch({
     match_xgs(season, TRUE)
   }, error = function(e) {
-    cli::cli_alert_danger("Failed to generate xG data: {conditionMessage(e)}")
+    .record_skip(glue::glue("xg {season}"), e)
     return(NULL)
   })
 
@@ -453,7 +464,7 @@ update_fixtures <- function(season) {
   fixtures <- tryCatch({
     get_afl_fixtures(season)
   }, error = function(e) {
-    cli::cli_alert_danger("Failed to fetch fixtures: {conditionMessage(e)}")
+    .record_skip(glue::glue("fixtures {season}"), e)
     return(NULL)
   })
 
@@ -484,7 +495,7 @@ update_results <- function(season) {
   results <- tryCatch({
     get_afl_results(season)
   }, error = function(e) {
-    cli::cli_alert_danger("Failed to fetch results: {conditionMessage(e)}")
+    .record_skip(glue::glue("results {season}"), e)
     return(NULL)
   })
 
@@ -511,7 +522,7 @@ update_player_stats <- function(season) {
       dplyr::select(where(~ dplyr::n_distinct(.) > 1)) |>
       janitor::clean_names()
   }, error = function(e) {
-    cli::cli_alert_danger("Failed to fetch player stats: {conditionMessage(e)}")
+    .record_skip(glue::glue("player_stats {season}"), e)
     return(NULL)
   })
 
@@ -542,14 +553,15 @@ update_teams <- function(season) {
   cli::cli_progress_step("Updating teams/lineups for {season}")
 
   # Reuse cached data from has_new_team_data() if available
-  teams <- if (!is.null(.release_cache$teams)) {
+  teams <- if (!is.null(.release_cache$teams) &&
+               identical(.release_cache$teams_season, season)) {
     cli::cli_inform("Using cached lineup data")
     .release_cache$teams
   } else {
     tryCatch({
       get_afl_lineups(season)
     }, error = function(e) {
-      cli::cli_alert_danger("Failed to fetch teams: {conditionMessage(e)}")
+      .record_skip(glue::glue("teams {season}"), e)
       return(NULL)
     })
   }
@@ -559,7 +571,8 @@ update_teams <- function(season) {
   }
 
   file_name <- glue::glue("teams_{season}")
-  save_to_release(df = teams, file_name = file_name, release_tag = "teams-data")
+  save_to_release(df = teams, file_name = file_name, release_tag = "teams-data",
+                  prev_rows_floor = 0.9)
 
   cli::cli_inform("Saved teams: {file_name} ({nrow(teams)} rows)")
   invisible(NULL)
@@ -656,8 +669,9 @@ update_player_game_ratings <- function(season) {
     # ran again, and the blog's coverage gate stopped every AFL build meanwhile.
     .add_psv_to_game_ratings(pgr, load_player_stats(season), season)
   }, error = function(e) {
-    cli::cli_alert_danger("Failed to compute player game ratings: {conditionMessage(e)}")
-    return(NULL)
+    # Re-raise: the caller records it in derived_failures. Returning NULL here
+    # left a stale player_game_ratings file with no alert.
+    cli::cli_abort("Failed to compute player game ratings: {conditionMessage(e)}", parent = e)
   })
 
   if (is.null(ratings) || nrow(ratings) == 0) {
@@ -726,7 +740,10 @@ update_psr <- function(season) {
 
   psr_data <- tryCatch({
     stat_ratings <- load_player_stat_ratings(season)
-    if (nrow(stat_ratings) == 0) return(NULL)
+    if (nrow(stat_ratings) == 0) {
+      cli::cli_warn("No player stat ratings for {season} - skipping PSR update (psr-data stays as is)")
+      return(NULL)
+    }
 
     psr_coef_path <- file.path("data-raw", "cache-stat-ratings", "psr_coefficients.csv")
     if (!file.exists(psr_coef_path)) {
@@ -765,9 +782,6 @@ update_ep_wp_chart <- function(season) {
   cli::cli_progress_step("Updating EP/WP chart data for {season}")
 
   chart_data <- tryCatch({
-    pbp <- load_pbp(season, rounds = TRUE)
-    if (nrow(pbp) == 0) return(NULL)
-
     chart_cols <- c(
       "match_id", "season", "round_number", "period", "period_seconds",
       "total_seconds", "display_order",
@@ -778,6 +792,10 @@ update_ep_wp_chart <- function(season) {
       "description", "player_name", "play_type",
       "shot_row", "points_shot"
     )
+
+    # Read only the charting columns (about 25) rather than the whole PBP table
+    pbp <- load_pbp(season, rounds = TRUE, columns = chart_cols)
+    if (nrow(pbp) == 0) return(NULL)
 
     # Only keep columns that exist in the data
     available_cols <- intersect(chart_cols, names(pbp))
@@ -984,6 +1002,7 @@ run_daily_release <- function(force = FALSE) {
   # torp H3: stale skip markers from a previous run (or a shared torpdata/data/
   # checkout) must not suppress this run's re-check of previously-failed URLs.
   clear_skip_markers()
+  .release_cache$skips <- NULL
 
   # Ensure cache is cleaned up on exit (even on error)
   on.exit({
@@ -1109,6 +1128,11 @@ run_daily_release <- function(force = FALSE) {
   # -------------------------------------------------------------------------
   tictoc::toc(log = TRUE)
 
+  skips <- .release_cache$skips
+  if (length(skips) > 0) {
+    cli::cli_alert_warning("{length(skips)} fetch(es) skipped after errors: {paste(skips, collapse = '; ')}")
+  }
+
   all_failures <- c(seasonal_failures, derived_failures)
   if (length(all_failures) > 0) {
     cli::cli_alert_warning("Daily release ({release_mode}) complete with {length(all_failures)} failure{?s}: {paste(all_failures, collapse = ', ')}")
@@ -1126,6 +1150,7 @@ run_daily_release <- function(force = FALSE) {
 
   result <- release_mode
   attr(result, "failures") <- all_failures
+  attr(result, "skips") <- skips
   invisible(result)
 }
 

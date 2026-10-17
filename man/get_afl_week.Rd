@@ -7,7 +7,9 @@
 get_afl_week(type = "current")
 }
 \arguments{
-\item{type}{A character string: "current" returns the current week, "next" returns the upcoming week.}
+\item{type}{A character string: "current" returns the current week, "next" returns the upcoming week.
+After the Grand Final both return the last played round (the season is still the
+calendar year), not round 1 of the next season.}
 }
 \value{
 An integer representing the AFL week (round) number.

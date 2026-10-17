@@ -206,3 +206,22 @@ test_that("calculate_quality_score returns reasonable scores", {
   score_bounded <- calculate_quality_score(perfect_data, many_issues)
   expect_true(score_bounded >= 0 && score_bounded <= 1)
 })
+test_that("validate_data_quality reports an empty frame instead of erroring", {
+  res <- validate_data_quality(data.frame(a = numeric(0)))
+  expect_true("empty_data" %in% names(res$issues))
+  expect_equal(res$n_rows, 0)
+})
+
+test_that("detect_outliers skips zero-IQR columns and counts flagged columns", {
+  set.seed(1)
+  d <- data.frame(z = c(rep(0, 49), 5), x = c(rnorm(49), 1000))
+  res <- detect_outliers(d)
+  expect_false("z" %in% names(res$column_results))
+  expect_equal(res$n_columns_flagged, 1)
+})
+
+test_that("quality score weights every emitted issue name explicitly", {
+  d <- data.frame(a = 1)
+  expect_equal(calculate_quality_score(d, list(invalid_periods = "x")), 0.8)
+  expect_equal(calculate_quality_score(d, list(coordinates_out_of_bounds = "x")), 0.8)
+})

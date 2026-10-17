@@ -11,7 +11,10 @@ scrape_injuries(timeout = 30)
 }
 \value{
 A data.frame with columns: \code{player}, \code{team}, \code{injury},
-\code{estimated_return}, \code{updated}, \code{player_norm}.
+\code{estimated_return}, \code{updated}, \code{player_norm}. When the scrape fails (HTTP
+or parse error, unreadable page source, unresolved clubs) the empty
+data.frame carries \code{attr(, "scrape_status") = "failed"}, so a caller can
+tell a failed scrape from a genuinely empty week (no attribute).
 }
 \description{
 Scrapes the current injury list from afl.com.au. The page contains 18 tables

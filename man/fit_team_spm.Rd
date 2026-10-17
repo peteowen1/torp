@@ -9,9 +9,9 @@ defense-only sign constraints.}
 fit_team_spm(
   spm_features,
   rapm_ratings,
-  alpha = 0.5,
-  nfolds = 10,
-  seed = 20260825
+  alpha = TEAM_SPM_ALPHA,
+  nfolds = TEAM_SPM_NFOLDS,
+  seed = TEAM_SPM_SEED
 )
 }
 \arguments{

@@ -30,6 +30,27 @@ VALIDATION_MIN_CALIBRATION_BIN_SIZE <- 10
 #' @keywords internal
 LOCAL_HISTORICAL_MAX_AGE_DAYS <- 30
 
+#' How long a FAILED release-asset listing is remembered, in seconds
+#'
+#' Short so a transient outage clears quickly, long enough that one loader run
+#' making several `generate_urls()` calls pays for one failed request, not many.
+#' @keywords internal
+RELEASE_ASSET_FAILURE_CACHE_TTL_SECS <- 45
+
+#' How long a `.skip` negative-cache marker is honoured, in hours
+#'
+#' Safety net in case a "gone" historical asset reappears (re-release,
+#' corrected upload). See \code{is_download_skippable()}.
+#' @keywords internal
+LOCAL_SKIP_MARKER_HOURS <- 3
+
+#' Minimum file size (bytes) for a valid parquet file
+#'
+#' Files smaller than this are treated as invalid placeholders (e.g. empty
+#' GitHub release assets).
+#' @keywords internal
+MIN_PARQUET_BYTES <- 100
+
 #' Clock-skew tolerance (seconds) when comparing a GitHub release-asset
 #' listing's `updated_at` against our own upload start time
 #'
@@ -245,3 +266,10 @@ CONTEST_GROUND_BALL_DESCS <- c(
 #'
 #' @keywords internal
 TEAM_RAPM_ASOF_RELEASE_TAG <- "team_rapm_asof-data"
+
+#' Default in-memory cache time-to-live in seconds (1 hour)
+#'
+#' Default TTL for entries held in the package-level memory cache.
+#'
+#' @keywords internal
+MEM_CACHE_TTL_SECS <- 3600

@@ -71,8 +71,9 @@ default_epv_params <- function() {
 #' @return TRUE if \code{EPV3_POINTS_SCALE} should be applied per channel.
 #' @keywords internal
 .use_per_channel_scale <- function(engine_attr) {
-  (identical(engine_attr, "v3") || isTRUE(EPV_PER_CHANNEL_POINTS_SCALE)) &&
-    exists("EPV3_POINTS_SCALE")
+  # EPV3_POINTS_SCALE is always defined (constants_ratings.R: the 1s vector for
+  # non-v3 engines), so no exists() guard is needed -- it could never be FALSE.
+  identical(engine_attr, "v3") || isTRUE(EPV_PER_CHANNEL_POINTS_SCALE)
 }
 
 #' Read the engine a frame was priced with
@@ -219,9 +220,13 @@ centre_epv_by_position <- function(pgd, channels = EPV_LEVEL_CENTRE_CHANNELS) {
   # SECOND cell's mean (the shrinkage prior) that a by-group cannot see.
   shrink_on <- isTRUE(EPV_POSITION_SHRINK)
   .cell_stats <- function(cc) {
-    s <- dt[!is.na(.cpg) & is.finite(get(cc)) & is.finite(.ctog) & .ctog > 0,
-            .(sx = sum(get(cc) * .ctog), sw = sum(.ctog)),
+    # Bind the channel to a plain column once: get() inside the i-clause blocks
+    # data.table's optimised subsetting.
+    data.table::set(dt, j = ".cx", value = dt[[cc]])
+    s <- dt[!is.na(.cpg) & is.finite(.cx) & is.finite(.ctog) & .ctog > 0,
+            .(sx = sum(.cx * .ctog), sw = sum(.ctog)),
             by = .(season, round, .cpg)]
+    dt[, .cx := NULL]
     if (nrow(s) == 0) return(s)
     s[, m_round := sx / sw]
     data.table::setorder(s, .cpg, season, round)
@@ -329,19 +334,43 @@ centre_epv_by_position <- function(pgd, channels = EPV_LEVEL_CENTRE_CHANNELS) {
   # docstring in constants_ratings.R retracted on 2026-08-06 -- those are the v3
   # ship frame's RAW-layer scales, and v2's own raw-layer fit is recv 0.611,
   # disp 0.552, spoil -0.481. Numbers live in one place; read them there.
-  use_v3_scale <- .use_per_channel_scale(.frame_epv_engine(pgd, "player-game frame"))
+  frame_engine <- .frame_epv_engine(pgd, "player-game frame")
+  use_v3_scale <- .use_per_channel_scale(frame_engine)
   # Defined unconditionally so the residual-expectation block below can use it
   # without depending on which branch ran.
   lbl <- EPV_CHANNEL_SCALE_KEYS
   if (use_v3_scale) {
+    scaled <- character()
+    unscaled <- character()
     for (cc in cols) {
       stem <- sub("_(oadj|adj)$", "", cc)
-      k <- EPV3_POINTS_SCALE[[lbl[[stem]]]]
-      if (is.finite(k)) dt[, (cc) := get(cc) * k]
+      slot <- lbl[[stem]]
+      k <- EPV3_POINTS_SCALE[[slot]]
+      if (is.finite(k)) {
+        dt[, (cc) := get(cc) * k]
+        scaled <- c(scaled, paste0(slot, "=", round(k, 4)))
+      } else {
+        unscaled <- c(unscaled, cc)
+      }
     }
-    cli::cli_alert_info(
-      "Applied per-channel points scale: {paste(names(EPV3_POINTS_SCALE), round(EPV3_POINTS_SCALE, 4), sep = '=', collapse = ', ')}")
+    if (length(unscaled) > 0) {
+      cli::cli_warn(
+        "Per-channel points scale is not finite for {.field {unscaled}}; {?that channel is/those channels are} left UNSCALED.")
+    }
+    scaled_msg <- paste(scaled, collapse = ", ")
+    cli::cli_alert_info("Applied per-channel points scale: {scaled_msg}")
   } else if (is.finite(EPV_POINTS_SCALE) && !isTRUE(all.equal(EPV_POINTS_SCALE, 1))) {
+    if (identical(frame_engine, "v4")) {
+      # v4 is already in margin points (the ledger sums to the margin, and
+      # .epr_prior_points_scale() returns 1 for v4), yet this branch applies
+      # v2's global 0.919 to the data term while the shrinkage prior stays
+      # unscaled -- the mismatch the comment above warns about. NOT changed
+      # here: doing so moves every published v4 rating, and EPR_UNITS_SCALE_V4
+      # (2.40) was fitted with the 0.919 in. Flagged for an owner decision
+      # (review B56; same fall-through in analyze_match.R).
+      cli::cli_alert_warning(
+        "v4 frame is being scaled by v2's global EPV_POINTS_SCALE ({EPV_POINTS_SCALE}); v4 channels are already in margin points (review B56).")
+    }
     for (cc in cols) dt[, (cc) := get(cc) * EPV_POINTS_SCALE]
   }
 
@@ -566,6 +595,29 @@ centre_epv_by_position <- function(pgd, channels = EPV_LEVEL_CENTRE_CHANNELS) {
   centred / s * pooled_sd * tog
 }
 
+#' Zero-fill the contest / contextual-spoil columns after their left joins
+#'
+#' A player-match that took part in no priced contest or spoil has no row in
+#' those tables, so the join leaves NA; the honest value is zero. Shared by the
+#' v2, v3 and v4 arms of \code{create_player_game_data()}, which each carried
+#' their own copy of these seven lines.
+#'
+#' @param df Player-match frame carrying the joined contest columns.
+#' @return \code{df} with those columns zero-filled (counts as integer).
+#' @noRd
+.zero_fill_contest_cols <- function(df) {
+  dplyr::mutate(
+    df,
+    contest_epv = tidyr::replace_na(contest_epv, 0),
+    aerial_target_wins = as.integer(tidyr::replace_na(aerial_target_wins, 0)),
+    aerial_target_losses = as.integer(tidyr::replace_na(aerial_target_losses, 0)),
+    aerial_def_wins = as.integer(tidyr::replace_na(aerial_def_wins, 0)),
+    aerial_def_losses = as.integer(tidyr::replace_na(aerial_def_losses, 0)),
+    spoil_epv_ctx = tidyr::replace_na(spoil_epv_ctx, 0),
+    spoils_priced = as.integer(tidyr::replace_na(spoils_priced, 0))
+  )
+}
+
 #' Create Player Game Data
 #'
 #' Transforms raw play-by-play data and player stats into processed per-game
@@ -573,6 +625,15 @@ centre_epv_by_position <- function(pgd, channels = EPV_LEVEL_CENTRE_CHANNELS) {
 #'
 #' Computes disposal points, reception points, spoil/tackle points, and
 #' hitout points for each player-game combination.
+#'
+#' \strong{The position adjustment here is full-history, not as-of.} The
+#' \code{epv_*_adj} columns centre each channel against a reference computed
+#' over every row in the frame passed in (grouped by role, with no season or
+#' round in the key), so the reference for an early round includes games
+#' played later. That is fine for the descriptive per-game display they feed,
+#' and it means these columns must not be used as an as-of / predictive feature
+#' without recomputing the reference from strictly earlier rounds, which is
+#' what \code{centre_epv_by_position()} does for the rating layer.
 #'
 #' @param pbp_data Play-by-play data from \code{load_pbp()}. If NULL, loads all available.
 #' @param player_stats Raw player stats from \code{load_player_stats()}. If NULL, loads all available.
@@ -744,8 +805,7 @@ create_player_game_data <- function(pbp_data = NULL,
   # Exclude contested kicks from epv_recv: if contest_target_id is set on a row,
 
   # it's a 3-player contest handled by contest_epv instead
-  has_contest_col <- "contest_target_id" %in% names(dt)
-  dt[, is_contest_target_recv := has_contest_col & !is.na(contest_target_id)]
+  dt[, is_contest_target_recv :=has_contest_col & !is.na(contest_target_id)]
   dt[, is_intercept_mark := pos_team == -1L & grepl("ted Mark|Mark On", lead_desc_tot)]
   # v3 also drops aerial-kick rows here: the player who marks the ball is paid by
   # the contest channel, and paying him a reception share as well would be the
@@ -772,11 +832,16 @@ create_player_game_data <- function(pbp_data = NULL,
     all.x = TRUE, sort = FALSE)
 
   # --- Step 3b: WPA credit ---
+  # wp_failed is read at the zero-fill after the engine arms: a player-match
+  # missing from a run that SUCCEEDED is a real zero, but a failed run must
+  # leave the columns NA, never a plausible-looking all-zero channel.
+  wp_failed <- FALSE
   wp_dt <- tryCatch({
     wpc <- create_wp_credit(pbp_data)
     wpc[, .(player_id, match_id, wp_credit, wp_disp_credit, wp_recv_credit)]
   }, error = function(e) {
-    cli::cli_warn("WPA credit skipped: {conditionMessage(e)}")
+    wp_failed <<- TRUE
+    cli::cli_warn("WPA credit skipped, wp_credit columns will be NA: {conditionMessage(e)}")
     data.table::data.table(
       player_id = character(), match_id = character(),
       wp_credit = numeric(), wp_disp_credit = numeric(), wp_recv_credit = numeric()
@@ -935,11 +1000,20 @@ create_player_game_data <- function(pbp_data = NULL,
                                    "home_team_name", "away_team_name", "last_updated",
                                    "team_status")))
 
+  # A duplicated (player_id, match_id) in player_stats would multiply rows here
+  # and double every per-player sum downstream without erroring.
+  n_before_join <- nrow(plyr_gm_df)
   plyr_gm_df <- plyr_gm_df |>
     dplyr::left_join(
       spoil_hitout_df,
       by = c("player_id" = "player_id", "match_id" = "match_id")
     )
+  if (nrow(plyr_gm_df) != n_before_join) {
+    cli::cli_abort(c(
+      "Joining player_stats changed the row count ({n_before_join} -> {nrow(plyr_gm_df)}).",
+      "x" = "{nrow(plyr_gm_df) - n_before_join} extra row{?s}: {.field player_stats} has duplicated (player_id, match_id) keys, which would double-count those player-matches."
+    ))
+  }
 
   # Assert join produced matches (catches upstream schema changes)
   if (all(is.na(plyr_gm_df$epv_spoil))) {
@@ -987,16 +1061,17 @@ create_player_game_data <- function(pbp_data = NULL,
   if (v3) {
     aerial_dt <- aerial[, .(player_id, match_id, epv_cont_aerial,
                             epv_disp_aerial, contests_won, contests_lost)]
+    n_before_join <- nrow(plyr_gm_df)
     plyr_gm_df <- plyr_gm_df |>
-      dplyr::left_join(as.data.frame(aerial_dt), by = c("player_id", "match_id")) |>
+      dplyr::left_join(as.data.frame(aerial_dt), by = c("player_id", "match_id"))
+    if (nrow(plyr_gm_df) != n_before_join) {
+      cli::cli_abort(c(
+        "Joining aerial credit changed the row count ({n_before_join} -> {nrow(plyr_gm_df)}).",
+        "x" = "The aerial table has duplicated (player_id, match_id) keys, which would double-count those player-matches."
+      ))
+    }
+    plyr_gm_df <- .zero_fill_contest_cols(plyr_gm_df) |>
       dplyr::mutate(
-        contest_epv = tidyr::replace_na(contest_epv, 0),
-        aerial_target_wins = as.integer(tidyr::replace_na(aerial_target_wins, 0)),
-        aerial_target_losses = as.integer(tidyr::replace_na(aerial_target_losses, 0)),
-        aerial_def_wins = as.integer(tidyr::replace_na(aerial_def_wins, 0)),
-        aerial_def_losses = as.integer(tidyr::replace_na(aerial_def_losses, 0)),
-        spoil_epv_ctx = tidyr::replace_na(spoil_epv_ctx, 0),
-        spoils_priced = as.integer(tidyr::replace_na(spoils_priced, 0)),
         contests_won = as.integer(tidyr::replace_na(contests_won, 0)),
         contests_lost = as.integer(tidyr::replace_na(contests_lost, 0)),
         epv_recv = tidyr::replace_na(epv_recv, 0) +
@@ -1089,8 +1164,12 @@ create_player_game_data <- function(pbp_data = NULL,
         , .(v = sum(v)), by = .(match_id, team)]
       np_dt <- merge(np_dt, np[, .(player_id, match_id, team)], by = c("player_id", "match_id"))
       np_dt <- np_dt[!lost, on = .(player_id, match_id)]
-      tg <- data.table::as.data.table(player_stats)[, .(player_id, match_id,
-                                                        tog = pmax(time_on_ground_percentage, 1))]
+      # Built from the three columns it reads: as.data.table() on the whole
+      # player_stats deep-copies every column to keep two.
+      tg <- data.table::data.table(
+        player_id = player_stats$player_id,
+        match_id = player_stats$match_id,
+        tog = pmax(player_stats$time_on_ground_percentage, 1))
       np_dt[tg, on = .(player_id, match_id), tog := i.tog]
       np_dt[is.na(tog), tog := 75]
       np_dt[lost_team, on = .(match_id, team), v_lost := i.v]
@@ -1119,38 +1198,23 @@ create_player_game_data <- function(pbp_data = NULL,
       np_dt[, c("team", "tog", "v_lost", "share") := NULL]
     }
     plyr_gm_df <- plyr_gm_df |>
-      dplyr::left_join(as.data.frame(np_dt), by = c("player_id", "match_id")) |>
+      dplyr::left_join(as.data.frame(np_dt), by = c("player_id", "match_id"))
+    # (the WP columns are zero-filled once, after the engine arms, below)
+    plyr_gm_df <- .zero_fill_contest_cols(plyr_gm_df) |>
       dplyr::mutate(
-        contest_epv = tidyr::replace_na(contest_epv, 0),
-        aerial_target_wins = as.integer(tidyr::replace_na(aerial_target_wins, 0)),
-        aerial_target_losses = as.integer(tidyr::replace_na(aerial_target_losses, 0)),
-        aerial_def_wins = as.integer(tidyr::replace_na(aerial_def_wins, 0)),
-        aerial_def_losses = as.integer(tidyr::replace_na(aerial_def_losses, 0)),
-        spoil_epv_ctx = tidyr::replace_na(spoil_epv_ctx, 0),
-        spoils_priced = as.integer(tidyr::replace_na(spoils_priced, 0)),
         epv_recv = tidyr::replace_na(np_won, 0),
         epv_disp = tidyr::replace_na(np_own, 0),
         epv_spoil = tidyr::replace_na(np_pool, 0),
         epv_hitout = 0,
         epv = epv_recv + epv_disp + epv_spoil + epv_hitout,
-        net_points = tidyr::replace_na(net_points, 0),
-        wp_credit = tidyr::replace_na(wp_credit, 0),
-        wp_disp_credit = tidyr::replace_na(wp_disp_credit, 0),
-        wp_recv_credit = tidyr::replace_na(wp_recv_credit, 0)
+        net_points = tidyr::replace_na(net_points, 0)
       ) |>
       dplyr::select(-dplyr::any_of(c("np_own", "np_won", "np_pool")))
     gap <- max(abs(plyr_gm_df$epv - plyr_gm_df$net_points))
     if (gap > 1e-8) cli::cli_abort("v4 channels do not sum to net points (max gap {signif(gap, 3)}).")
   } else {
-  plyr_gm_df <- plyr_gm_df |>
+  plyr_gm_df <- .zero_fill_contest_cols(plyr_gm_df) |>
     dplyr::mutate(
-      contest_epv = tidyr::replace_na(contest_epv, 0),
-      aerial_target_wins = as.integer(tidyr::replace_na(aerial_target_wins, 0)),
-      aerial_target_losses = as.integer(tidyr::replace_na(aerial_target_losses, 0)),
-      aerial_def_wins = as.integer(tidyr::replace_na(aerial_def_wins, 0)),
-      aerial_def_losses = as.integer(tidyr::replace_na(aerial_def_losses, 0)),
-      spoil_epv_ctx = tidyr::replace_na(spoil_epv_ctx, 0),
-      spoils_priced = as.integer(tidyr::replace_na(spoils_priced, 0)),
       epv_recv = tidyr::replace_na(epv_recv, 0) +
                  tidyr::replace_na(epv_recv_diff, 0) + contest_epv +
                  contested_possessions * p$contested_poss_wt + contested_marks * p$contested_marks_wt +
@@ -1165,20 +1229,20 @@ create_player_game_data <- function(pbp_data = NULL,
                  goals * p$goals_wt + behinds * p$behinds_wt + shots_at_goal * p$shots_at_goal_wt,
       epv_spoil = tidyr::replace_na(epv_spoil, 0),
       epv_hitout = tidyr::replace_na(epv_hitout, 0),
-      epv = epv_recv + epv_disp + epv_spoil + epv_hitout,
-      wp_credit = tidyr::replace_na(wp_credit, 0),
-      wp_disp_credit = tidyr::replace_na(wp_disp_credit, 0),
-      wp_recv_credit = tidyr::replace_na(wp_recv_credit, 0)
+      epv = epv_recv + epv_disp + epv_spoil + epv_hitout
     )
   }
 
   # WPA is engine-independent -- it reads the WP model, not the EPV channels.
-  plyr_gm_df <- plyr_gm_df |>
-    dplyr::mutate(
-      wp_credit = tidyr::replace_na(wp_credit, 0),
-      wp_disp_credit = tidyr::replace_na(wp_disp_credit, 0),
-      wp_recv_credit = tidyr::replace_na(wp_recv_credit, 0)
-    )
+  # Skipped when create_wp_credit() failed: see wp_failed above.
+  if (!wp_failed) {
+    plyr_gm_df <- plyr_gm_df |>
+      dplyr::mutate(
+        wp_credit = tidyr::replace_na(wp_credit, 0),
+        wp_disp_credit = tidyr::replace_na(wp_disp_credit, 0),
+        wp_recv_credit = tidyr::replace_na(wp_recv_credit, 0)
+      )
+  }
 
   # --- Step 6: Join teams data for lineup_position (20-way AFL lineup role) ---
   teams_pos <- teams |>
@@ -1496,12 +1560,26 @@ compute_contest_credit <- function(chains, pbp_data, contest_share = 1 / 3) {
   }
 
   # Find the kicker's display_order (first Kick/Ground Kick within 5 rows back)
+  # The scan may only pass through in-flight annotation rows, exactly as
+  # compute_spoil_credit() does: a possession event (Handball, Mark, an earlier
+  # Spoil, ...) between the kick and the contest means the kick further back
+  # belongs to a different play, and crediting it would pay the contest with
+  # the swing of a kick it never touched.
+  inflight <- CHAINS_INFLIGHT_DESCS
+  contests[, `:=`(
+    .clear2 = .lag1_desc %chin% inflight,
+    .clear3 = .lag1_desc %chin% inflight & .lag2_desc %chin% inflight,
+    .clear4 = .lag1_desc %chin% inflight & .lag2_desc %chin% inflight &
+              .lag3_desc %chin% inflight,
+    .clear5 = .lag1_desc %chin% inflight & .lag2_desc %chin% inflight &
+              .lag3_desc %chin% inflight & .lag4_desc %chin% inflight
+  )]
   contests[, kick_display_order := data.table::fcase(
     .lag1_desc %chin% kick_descs, .lag1_do,
-    .lag2_desc %chin% kick_descs, .lag2_do,
-    .lag3_desc %chin% kick_descs, .lag3_do,
-    .lag4_desc %chin% kick_descs, .lag4_do,
-    .lag5_desc %chin% kick_descs, .lag5_do,
+    .clear2 & .lag2_desc %chin% kick_descs, .lag2_do,
+    .clear3 & .lag3_desc %chin% kick_descs, .lag3_do,
+    .clear4 & .lag4_desc %chin% kick_descs, .lag4_do,
+    .clear5 & .lag5_desc %chin% kick_descs, .lag5_do,
     default = NA_integer_
   )]
 
@@ -1529,7 +1607,12 @@ compute_contest_credit <- function(chains, pbp_data, contest_share = 1 / 3) {
     by.y = c("match_id", "display_order"),
     all.x = TRUE, sort = FALSE
   )
-  # Drop rows without delta_epv (shouldn't happen but safety)
+  # Drop rows without delta_epv (shouldn't happen but safety) -- and say so
+  n_no_epv <- sum(is.na(triples_dt$delta_epv))
+  if (n_no_epv > 0) {
+    cli::cli_alert_warning(
+      "Contest credit: dropped {n_no_epv} of {nrow(triples_dt)} contest{?s} whose kick has no {.field delta_epv} in the play-by-play.")
+  }
   triples_dt <- triples_dt[!is.na(delta_epv)]
   if (nrow(triples_dt) == 0) return(empty_dt)
 
@@ -1703,6 +1786,11 @@ compute_spoil_credit <- function(chains, pbp_data, contest_share = 1 / 3) {
     by.y = c("match_id", "display_order"),
     all.x = TRUE, sort = FALSE
   )
+  n_no_epv <- sum(is.na(spoils$delta_epv))
+  if (n_no_epv > 0) {
+    cli::cli_alert_warning(
+      "Spoil credit: dropped {n_no_epv} of {nrow(spoils)} spoil{?s} whose kick has no {.field delta_epv} in the play-by-play.")
+  }
   spoils <- spoils[!is.na(delta_epv)]
   if (nrow(spoils) == 0) return(empty_dt)
 
@@ -1714,10 +1802,3 @@ compute_spoil_credit <- function(chains, pbp_data, contest_share = 1 / 3) {
     spoils_priced = .N
   ), by = .(player_id, match_id)]
 }
-
-
-
-
-#' @rdname default_epv_params
-#' @keywords internal
-default_credit_params <- default_epv_params

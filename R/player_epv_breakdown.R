@@ -104,11 +104,15 @@ EPV_BOX_TERMS <- list(
 #'   [load_player_game_ratings()]. Supplies the published `epv` the breakdown is
 #'   verified against.
 #' @param player_stats Box-score frame, as from [load_player_stats()]. Supplies
-#'   the counts. Loaded for `seasons` when `NULL`.
+#'   the counts. When `NULL`, loaded for the seasons present in `player_game`
+#'   if it was supplied, otherwise for `seasons`.
 #' @param seasons Seasons to load when frames are not supplied.
 #' @param epv_params Weight list; defaults to [default_epv_params()].
 #' @param verify When `TRUE` (default), aborts unless the categories plus
-#'   residual reproduce the published `epv` for every player-game.
+#'   residual reproduce the published `epv` for every player-game. This check
+#'   closes by construction (the residual absorbs whatever the box terms miss),
+#'   so it catches fan-out and a stale `player_game`, not a wrong or missing
+#'   term in `EPV_BOX_TERMS`.
 #' @param tolerance Absolute tolerance for that check.
 #'
 #' @return A long `data.table`: `player_id`, `match_id`, `season`, `round`,
@@ -125,11 +129,21 @@ player_epv_breakdown <- function(player_game = NULL,
                                  verify = TRUE,
                                  tolerance = 1e-6) {
   p <- if (is.null(epv_params)) default_epv_params() else epv_params
-  if (is.null(player_game)) player_game <- load_player_game_ratings(seasons = seasons)
-  if (is.null(player_stats)) player_stats <- load_player_stats(seasons = seasons)
+  stats_seasons <- seasons
+  if (is.null(player_game)) {
+    player_game <- load_player_game_ratings(seasons = seasons)
+  } else if ("season" %in% names(player_game)) {
+    stats_seasons <- sort(unique(player_game$season[!is.na(player_game$season)]))
+  }
+  if (is.null(player_stats)) player_stats <- load_player_stats(seasons = stats_seasons)
 
-  pg <- data.table::as.data.table(player_game)
-  ps <- data.table::as.data.table(player_stats)
+  pg <- if (data.table::is.data.table(player_game)) player_game else data.table::as.data.table(player_game)
+  ps <- if (data.table::is.data.table(player_stats)) player_stats else data.table::as.data.table(player_stats)
+
+  meta_cols <- c("player_id", "match_id", "season", "round", "player_name",
+                 "position_group", "team", "tog")
+  channel_cols <- c("epv_recv", "epv_disp", "epv_spoil", "epv_hitout")
+  box_stats <- unlist(lapply(EPV_BOX_TERMS, names))
 
   need <- c("player_id", "match_id", "epv", "epv_recv", "epv_disp",
             "epv_spoil", "epv_hitout")
@@ -141,9 +155,8 @@ player_epv_breakdown <- function(player_game = NULL,
     ))
   }
 
-  keep <- intersect(c("player_id", "match_id", unlist(lapply(EPV_BOX_TERMS, names))),
-                    names(ps))
-  absent <- setdiff(unlist(lapply(EPV_BOX_TERMS, names)), names(ps))
+  keep <- intersect(c("player_id", "match_id", box_stats), names(ps))
+  absent <- setdiff(box_stats, names(ps))
   if (length(absent) > 0) {
     # Name them rather than letting the residual quietly swallow the value: a
     # missing stat column looks exactly like "this player did none of it".
@@ -154,11 +167,31 @@ player_epv_breakdown <- function(player_game = NULL,
   }
   ps <- ps[, ..keep]
 
-  d <- merge(pg[, .SD, .SDcols = intersect(
-                c("player_id", "match_id", "season", "round", "player_name",
-                  "position_group", "team", "tog", "epv", "epv_recv", "epv_disp",
-                  "epv_spoil", "epv_hitout"), names(pg))],
+  # A duplicated (player_id, match_id) in either frame fans the merge out and
+  # double-counts, which verification would only report as a wrong box term.
+  if (anyDuplicated(ps, by = c("player_id", "match_id")) > 0) {
+    cli::cli_abort("{.arg player_stats} has duplicate {.field player_id}/{.field match_id} rows.")
+  }
+  if (anyDuplicated(pg, by = c("player_id", "match_id")) > 0) {
+    cli::cli_abort("{.arg player_game} has duplicate {.field player_id}/{.field match_id} rows.")
+  }
+
+  d <- merge(pg[, .SD, .SDcols = intersect(c(meta_cols, "epv", channel_cols), names(pg))],
              ps, by = c("player_id", "match_id"), all.x = TRUE)
+
+  # Player-games with no box-score row get every count set to 0 below, which
+  # pushes their whole channel value into the chain residual.
+  if (length(keep) > 2) {
+    n_unmatched <- nrow(d) - nrow(merge(d[, .(player_id, match_id)],
+                                        ps[, .(player_id, match_id)],
+                                        by = c("player_id", "match_id")))
+    if (n_unmatched > 0) {
+      cli::cli_warn(c(
+        "{n_unmatched} of {nrow(d)} player-game{?s} ha{?s/ve} no matching {.arg player_stats} row.",
+        "!" = "Their box-score counts are treated as 0 and their value falls into the {.val chain} residual."
+      ))
+    }
+  }
 
   long <- data.table::rbindlist(lapply(names(EPV_BOX_TERMS), function(ch) {
     terms <- EPV_BOX_TERMS[[ch]]
@@ -195,9 +228,7 @@ player_epv_breakdown <- function(player_game = NULL,
     list(long, resid[, .(player_id, match_id, channel, category, stat, epv)]),
     use.names = TRUE)
 
-  meta <- d[, .SD, .SDcols = intersect(
-    c("player_id", "match_id", "season", "round", "player_name",
-      "position_group", "team", "tog"), names(d))]
+  meta <- d[, .SD, .SDcols = intersect(meta_cols, names(d))]
   out <- merge(out, meta, by = c("player_id", "match_id"), all.x = TRUE)
 
   # Share of the player-game's total ABSOLUTE epv. Signed shares over a signed
@@ -230,14 +261,21 @@ player_epv_breakdown <- function(player_game = NULL,
     cli::cli_abort("Verification found no overlapping player-games to compare.")
   }
   gap <- abs(cmp$epv - cmp$rebuilt)
+  n_na <- sum(is.na(gap))
+  if (n_na > 0) {
+    cli::cli_warn("{n_na} of {nrow(cmp)} player-game{?s} ha{?s/ve} an NA published or rebuilt {.field epv} and {?was/were} not verified.")
+  }
+  if (all(is.na(gap))) {
+    cli::cli_abort("Verification has no non-NA player-games to compare.")
+  }
   worst <- max(gap, na.rm = TRUE)
   if (!is.finite(worst) || worst > tolerance) {
     bad <- cmp[which.max(gap)]
     cli::cli_abort(c(
       "EPV breakdown does not reproduce published {.field epv}.",
-      "x" = "Worst gap {round(worst, 8)} over {nrow(cmp)} player-game{?s} (tolerance {tolerance}).",
+      "x" = "Worst gap {round(worst, 8)} over {sum(!is.na(gap))} checked player-game{?s} (tolerance {tolerance}).",
       "i" = "First offender: player {bad$player_id} in {bad$match_id} -- published {round(bad$epv, 6)}, rebuilt {round(bad$rebuilt, 6)}.",
-      "i" = "A term added to create_player_game_data()'s final mutate but not to {.field EPV_BOX_TERMS} is the usual cause."
+      "i" = "Duplicate player-game rows fan the merge out; failing that, a stale {.arg player_game}."
     ))
   }
   invisible(TRUE)

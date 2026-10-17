@@ -81,10 +81,7 @@ is_disk_cached <- function(url, max_age_days = DISK_CACHE_DEFAULT_AGE_DAYS) {
       max_age_days <- min(max_age_days, season_cap)
     }
 
-    file_info <- file.info(cache_path)
-    age_days <- as.numeric(difftime(Sys.time(), file_info$mtime, units = "days"))
-
-    if (age_days > max_age_days) {
+    if (disk_cache_age_days(cache_path) > max_age_days) {
       return(FALSE)
     }
   }
@@ -129,13 +126,47 @@ read_disk_cache <- function(url, columns = NULL) {
 write_disk_cache <- function(url, data) {
   cache_path <- get_disk_cache_path(url)
 
+  # Write to a temp file in the same directory, then rename into place, so a
+  # concurrent reader never sees a truncated parquet file. The ".tmp" suffix
+  # keeps it out of list_disk_cache_files().
+  tmp_path <- tempfile(pattern = "write_", tmpdir = dirname(cache_path), fileext = ".tmp")
+  on.exit(unlink(tmp_path), add = TRUE)
+
   tryCatch({
-    arrow::write_parquet(data, cache_path)
+    arrow::write_parquet(data, tmp_path)
+    if (!suppressWarnings(file.rename(tmp_path, cache_path))) {
+      # Windows can refuse to rename over an existing/locked file
+      if (!file.copy(tmp_path, cache_path, overwrite = TRUE)) {
+        stop("could not move temp file into place", call. = FALSE)
+      }
+    }
   }, error = function(e) {
     cli::cli_warn("Failed to write cache file {cache_path}: {conditionMessage(e)}")
   })
 
   invisible(NULL)
+}
+
+#' List Disk Cache Files
+#'
+#' @return Character vector of full paths to cached parquet files (empty if the
+#'   cache directory has none).
+#' @keywords internal
+list_disk_cache_files <- function() {
+  cache_dir <- get_disk_cache_dir()
+  if (!dir.exists(cache_dir)) {
+    return(character(0))
+  }
+  list.files(cache_dir, pattern = "\\.parquet$", full.names = TRUE)
+}
+
+#' Age of Disk Cache Files in Days
+#'
+#' @param paths Character vector of file paths.
+#' @return Numeric vector of ages in days (based on modification time).
+#' @keywords internal
+disk_cache_age_days <- function(paths) {
+  as.numeric(difftime(Sys.time(), file.info(paths)$mtime, units = "days"))
 }
 
 #' Clear Disk Cache
@@ -166,17 +197,7 @@ write_disk_cache <- function(url, data) {
 #' clear_disk_cache(verbose = TRUE)
 #' }
 clear_disk_cache <- function(pattern = NULL, older_than_days = NULL, verbose = FALSE) {
-  cache_dir <- get_disk_cache_dir()
-
-  if (!dir.exists(cache_dir)) {
-    if (verbose) {
-      cli::cli_inform("No cache directory exists")
-    }
-    return(invisible(0L))
-  }
-
-  # List cache files
-  cache_files <- list.files(cache_dir, pattern = "\\.parquet$", full.names = TRUE)
+  cache_files <- list_disk_cache_files()
 
   if (length(cache_files) == 0) {
     if (verbose) {
@@ -194,9 +215,7 @@ clear_disk_cache <- function(pattern = NULL, older_than_days = NULL, verbose = F
 
   # Filter by age if specified
   if (!is.null(older_than_days) && length(cache_files) > 0) {
-    file_info <- file.info(cache_files)
-    age_days <- as.numeric(difftime(Sys.time(), file_info$mtime, units = "days"))
-    cache_files <- cache_files[age_days > older_than_days]
+    cache_files <- cache_files[disk_cache_age_days(cache_files) > older_than_days]
   }
 
   if (length(cache_files) == 0) {
@@ -235,19 +254,7 @@ clear_disk_cache <- function(pattern = NULL, older_than_days = NULL, verbose = F
 #' get_disk_cache_info()
 #' }
 get_disk_cache_info <- function() {
-  cache_dir <- get_disk_cache_dir()
-
-  if (!dir.exists(cache_dir)) {
-    return(data.frame(
-      file = character(0),
-      size_mb = numeric(0),
-      age_days = numeric(0),
-      created = character(0),
-      stringsAsFactors = FALSE
-    ))
-  }
-
-  cache_files <- list.files(cache_dir, pattern = "\\.parquet$", full.names = TRUE)
+  cache_files <- list_disk_cache_files()
 
   if (length(cache_files) == 0) {
     return(data.frame(
@@ -264,7 +271,7 @@ get_disk_cache_info <- function() {
   data.frame(
     file = basename(cache_files),
     size_mb = round(file_info$size / 1024 / 1024, 2),
-    age_days = round(as.numeric(difftime(Sys.time(), file_info$mtime, units = "days")), 1),
+    age_days = round(disk_cache_age_days(cache_files), 1),
     created = format(file_info$mtime, "%Y-%m-%d %H:%M"),
     stringsAsFactors = FALSE
   )
@@ -283,20 +290,13 @@ get_disk_cache_info <- function() {
 #' get_disk_cache_size()
 #' }
 get_disk_cache_size <- function() {
-  cache_dir <- get_disk_cache_dir()
-
-  if (!dir.exists(cache_dir)) {
-    return(0)
-  }
-
-  cache_files <- list.files(cache_dir, pattern = "\\.parquet$", full.names = TRUE)
+  cache_files <- list_disk_cache_files()
 
   if (length(cache_files) == 0) {
     return(0)
   }
 
-  file_info <- file.info(cache_files)
-  round(sum(file_info$size) / 1024 / 1024, 2)
+  round(sum(file.info(cache_files)$size) / 1024 / 1024, 2)
 }
 
 #' Set Disk Cache Options
@@ -338,7 +338,7 @@ set_disk_cache_options <- function(enabled = TRUE, max_age_days = DISK_CACHE_DEF
 get_disk_cache_options <- function() {
   list(
     enabled = isTRUE(.torp_disk_cache_env$enabled %||% TRUE),
-    max_age_days = .torp_disk_cache_env$max_age_days %||% 7
+    max_age_days = .torp_disk_cache_env$max_age_days %||% DISK_CACHE_DEFAULT_AGE_DAYS
   )
 }
 

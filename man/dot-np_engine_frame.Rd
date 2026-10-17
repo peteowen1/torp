@@ -20,8 +20,10 @@
 \item{chains}{Raw chains for the same matches.}
 
 \item{difficulty_terms}{Precomputed terms (leak-safe from
-\code{np_difficulty_terms_for_season()}); fitted in-sample, with a warning,
-when \code{NULL}.}
+\code{np_difficulty_terms_for_season()}). When \code{NULL} they are fitted here with
+\code{leak_safe = TRUE}: multi-season \code{pbp_data} uses the rolling prior-season
+fit; a single season has no prior season, so it is fitted in-sample, with
+a warning.}
 
 \item{results}{Official results, or \code{NULL} to load them for the seasons in
 \code{pbp_data} (falling back to the running score when that fails).}

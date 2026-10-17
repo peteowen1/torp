@@ -90,3 +90,78 @@ test_that("join_elo_diff_to_team_mdl_df: a team with zero history anywhere gets 
   out <- join_elo_diff_to_team_mdl_df(team_mdl_df, res)
   expect_equal(out$elo_diff, 0)
 })
+
+test_that("join_elo_diff_to_team_mdl_df: a new-season fixture's elo_diff equals the training-time value (A274)", {
+  m <- .synthetic_matches()
+  hist <- m[m$match_id != "m4", ]          # m4 is A v B, first match of 2025
+  fx <- data.frame(match_id = "m4", season.x = 2025L,
+                   team_name.x = factor("A"), team_name.y = factor("B"))
+  for (cv in c(1, 0.75, 0.5)) {
+    full <- build_team_elo(m, k = 20, hga = 0, carryover = cv, mov_mult = FALSE)
+    pre <- function(team) full$by_match$elo_pre[full$by_match$match_id == "m4" & full$by_match$team_name == team]
+    train_diff <- pre("A") - pre("B")
+
+    res <- build_team_elo(hist, k = 20, hga = 0, carryover = cv, mov_mult = FALSE)
+    expect_equal(join_elo_diff_to_team_mdl_df(fx, res)$elo_diff, train_diff)
+
+    # Non-vacuous: with carryover < 1 the unregressed end-of-2024 gap (the
+    # pre-fix value) is a different number.
+    raw_gap <- res$current$elo_current[res$current$team_name == "A"] -
+      res$current$elo_current[res$current$team_name == "B"]
+    if (cv < 1) expect_gt(abs(raw_gap - train_diff), 1)
+  }
+})
+
+test_that("join_elo_diff_to_team_mdl_df: a same-season fixture keeps the unregressed current rating", {
+  m <- .synthetic_matches()
+  hist <- m[m$season == 2024, ]
+  res <- build_team_elo(hist, k = 20, hga = 0, carryover = 0.5, mov_mult = FALSE)
+  fx <- data.frame(match_id = "f", season.x = 2024L,
+                   team_name.x = factor("A"), team_name.y = factor("B"))
+  expect_equal(
+    join_elo_diff_to_team_mdl_df(fx, res)$elo_diff,
+    res$current$elo_current[res$current$team_name == "A"] -
+      res$current$elo_current[res$current$team_name == "B"]
+  )
+})
+
+test_that(".matches_from_team_mdl_df: a row with a win but NA score_diff is dropped, not scored as a draw", {
+  df <- data.frame(
+    match_id = c("a", "b"), team_type = "home", win = c(1, 1),
+    utc_start_time = c("2024-01-01T00:00:00Z", "2024-01-08T00:00:00Z"),
+    season.x = 2024L, round_number.x = 1:2,
+    team_name.x = c("A", "A"), team_name.y = c("B", "B"),
+    score_diff = c(10, NA), stringsAsFactors = FALSE
+  )
+  expect_equal(.matches_from_team_mdl_df(df)$match_id, "a")
+})
+
+test_that("build_team_elo: a team that sits out a whole season is regressed once per skipped boundary", {
+  # B plays in 2024 and 2026 only. Between its last 2024 match and its first
+  # 2026 match two season boundaries pass, so the rating should keep
+  # carryover^2, not carryover^1.
+  m <- data.frame(
+    match_id = c("m1", "m2", "m3", "m4"),
+    date = as.Date(c("2024-01-01", "2025-01-01", "2026-01-01", "2026-01-08")),
+    season = c(2024L, 2025L, 2026L, 2026L),
+    home_team = c("A", "A", "A", "B"), away_team = c("B", "C", "C", "C"),
+    home_margin = c(20, 20, 20, 20), stringsAsFactors = FALSE
+  )
+  cv <- 0.5
+  res <- build_team_elo(m, k = 20, hga = 0, carryover = cv, mov_mult = FALSE)
+  b_after_2024 <- 1500 - 10  # lost m1 as the away side at equal ratings: -k * 0.5
+  b_pre_2026 <- res$by_match$elo_pre[res$by_match$match_id == "m4" & res$by_match$team_name == "B"]
+  expect_equal(b_pre_2026, cv^2 * b_after_2024 + (1 - cv^2) * 1500)
+})
+
+test_that(".elo_mov_mult: stays positive and finite at and beyond the singular rating gap", {
+  # The unclamped denominator 0.001 * gap + 2.2 is zero at gap = -2200 and
+  # negative below it, which would flip the sign of the update.
+  gaps <- c(-5000, -2300, -2200, -2199, -1000, 0, 500)
+  mult <- .elo_mov_mult(30, gaps)
+  expect_true(all(is.finite(mult)))
+  expect_true(all(mult > 0))
+  # Unchanged inside the reachable range
+  expect_equal(.elo_mov_mult(30, 0), log(31))
+  expect_equal(.elo_mov_mult(30, 100), log(31) * 2.2 / 2.3)
+})

@@ -66,3 +66,20 @@ test_that("quarter_breaks returns correct positions", {
   expect_equal(qb[["Q1"]], 0)
   expect_equal(qb[["End"]], 8000)
 })
+
+test_that("team_color_lookup handles zero-length input", {
+  expect_equal(torp:::team_color_lookup(character(0)), "#808080")
+})
+
+test_that("team colour scales accept a caller-supplied values=", {
+  expect_s3_class(team_color_scale(values = c(A = "red")), "Scale")
+  expect_s3_class(team_fill_scale(values = c(A = "red")), "Scale")
+})
+
+test_that("team colour scales keep an explicit name = NULL (no legend title)", {
+  expect_null(team_color_scale(name = NULL)$name)
+  expect_null(team_fill_scale(name = NULL)$name)
+  # default stays the ggplot2 waiver (auto title)
+  expect_true(inherits(team_color_scale()$name, "waiver"))
+  expect_equal(team_color_scale(name = "Club")$name, "Club")
+})

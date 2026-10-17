@@ -2,12 +2,9 @@
 % Please edit documentation in R/team_profile.R
 \name{print.torp_team_stat_rating_profile}
 \alias{print.torp_team_stat_rating_profile}
-\alias{print.torp_team_skill_profile}
 \title{Print a team stat rating profile}
 \usage{
 \method{print}{torp_team_stat_rating_profile}(x, ...)
-
-\method{print}{torp_team_skill_profile}(x, ...)
 }
 \arguments{
 \item{x}{A \code{torp_team_stat_rating_profile} object.}

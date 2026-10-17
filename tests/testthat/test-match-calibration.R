@@ -90,11 +90,23 @@ test_that("fit_match_margin_calibration: 20 holdout matches (40 OOS rows) below 
   # (R/match_model.R ~L939-947) must refuse to upload despite slope_ok,
   # because cold_start is TRUE -- replicate that exact gate expression here.
   expect_equal(res$slope_raw, 1, tolerance = 1e-8)
-  gate <- MATCH_MARGIN_SLOPE_GATE
-  slope_ok <- is.na(res$slope_raw) || (res$slope_raw >= gate[1] && res$slope_raw <= gate[2])
+  slope_ok <- .margin_slope_ok(res$slope_raw)
   expect_true(slope_ok)
   should_upload <- !isTRUE(res$cold_start) && slope_ok
   expect_false(should_upload)
+})
+
+test_that(".margin_slope_ok: only a finite slope inside the gate passes; NA (a failed fit) fails", {
+  gate <- MATCH_MARGIN_SLOPE_GATE
+  expect_true(.margin_slope_ok(mean(gate)))
+  expect_true(.margin_slope_ok(gate[1]))
+  expect_true(.margin_slope_ok(gate[2]))
+  expect_false(.margin_slope_ok(gate[1] - 0.01))
+  expect_false(.margin_slope_ok(gate[2] + 0.01))
+  # The regression: an lm() failure gives NA, which used to pass the gate.
+  expect_false(.margin_slope_ok(NA_real_))
+  expect_false(.margin_slope_ok(NaN))
+  expect_false(.margin_slope_ok(Inf))
 })
 
 test_that("fit_match_margin_calibration: n_oos >= 2 threshold for slope_raw is also a MATCH count (1 match/2 rows -> NA slope, not a fitted one)", {
@@ -142,4 +154,20 @@ test_that("load_match_margin_calibration: torpmodels error degrades to NULL, not
   }
   expect_warning(res <- load_match_margin_calibration(), "unavailable")
   expect_null(res)
+})
+
+test_that("fit_match_margin_calibration: n_oos counts complete match pairs by match_id (an unpaired row is not a half match)", {
+  mocks <- .match_calib_mock_train(slope = 1)
+  testthat::local_mocked_bindings(
+    .train_match_gams = mocks$gams,
+    .train_match_xgb = mocks$xgb,
+    .package = "torp"
+  )
+  df <- .match_calib_mock_df(n_train_matches = 5, n_holdout_matches = 4)
+  df$match_id <- rep(seq_len(nrow(df) / 2), each = 2)
+  # Break one holdout row: its match loses its pair
+  df$score_diff[nrow(df)] <- NA_real_
+
+  res <- suppressWarnings(fit_match_margin_calibration(df))
+  expect_equal(res$n_oos, 3)
 })

@@ -86,7 +86,7 @@ get_cache_info <- function() {
 #' Check if cache entry is valid
 #'
 #' @param cache_entry Cache entry object
-#' @param cache_ttl Time-to-live in seconds
+#' @param cache_ttl Time-to-live in seconds (see `MEM_CACHE_TTL_SECS`)
 #' @return Logical indicating if cache is valid
 #' @keywords internal
 is_cache_valid <- function(cache_entry, cache_ttl) {
@@ -118,8 +118,12 @@ store_in_cache <- function(cache_key, data) {
 #'
 #' Returns cached data regardless of age. Use for session-scoped lookups
 #' (e.g. comp season IDs) where staleness is acceptable. For TTL-aware
-#' retrieval, use [get_from_cache_ttl()] or the full [.load_with_cache()]
-#' pipeline.
+#' retrieval, use the full [.load_with_cache()] pipeline.
+#'
+#' Cached objects are shared, not copied: treat the returned data as
+#' read-only. By-reference `data.table` operations (`:=`, `setkey()`,
+#' `setattr()`) on it would also change the cached copy, so call
+#' `data.table::copy()` first if you need to modify it.
 #'
 #' @param cache_key Character cache key
 #' @return Cached data or NULL if not found
@@ -130,25 +134,6 @@ get_from_cache <- function(cache_key) {
     return(cache_entry$data)
   }
   return(NULL)
-}
-
-#' Get data from cache with TTL enforcement
-#'
-#' Returns cached data only if it exists and is younger than \code{cache_ttl}
-#' seconds. Expired entries are removed from the cache.
-#'
-#' @param cache_key Character cache key
-#' @param cache_ttl Maximum age in seconds (default 3600 = 1 hour)
-#' @return Cached data or NULL if not found or expired
-#' @keywords internal
-get_from_cache_ttl <- function(cache_key, cache_ttl = 3600) {
-  if (!exists(cache_key, envir = .torp_cache)) return(NULL)
-  cache_entry <- get(cache_key, envir = .torp_cache)
-  if (is_cache_valid(cache_entry, cache_ttl)) {
-    return(cache_entry$data)
-  }
-  rm(list = cache_key, envir = .torp_cache)
-  NULL
 }
 
 

@@ -60,16 +60,36 @@ load_from_url <- function(url, ..., seasons = TRUE, rounds = TRUE, use_disk_cach
 
   # Drop auto-added filter columns that weren't originally requested
   if (!is.null(columns)) {
-    keep <- intersect(names(out), columns)
-    if (length(keep) == 0 && nrow(out) > 0) {
-      cli::cli_warn("None of the requested columns ({.val {columns}}) found in data. Available: {.val {head(names(out), 10)}}")
-    }
-    if (length(keep) > 0) out <- out[, ..keep]
+    out <- .select_present_columns(out, columns, url)
   }
 
   out <- tibble::as_tibble(out)
 
   return(out)
+}
+
+#' Select the requested columns that are present in a data.table
+#'
+#' Partial matches are returned silently. If none of the requested columns
+#' exist (and the data has rows) a warning is emitted and the data is returned
+#' unchanged.
+#'
+#' @param dt A data.table
+#' @param columns Character vector of requested column names
+#' @param url Source URL, used only in the warning
+#' @return A data.table
+#' @keywords internal
+#' @noRd
+.select_present_columns <- function(dt, columns, url = NULL) {
+  cols_present <- intersect(columns, names(dt))
+  if (length(cols_present) == 0L) {
+    if (nrow(dt) > 0L) {
+      src <- if (is.null(url)) "data" else basename(url)
+      cli::cli_warn("None of the requested columns ({.val {columns}}) found in {src}. Available: {.val {head(names(dt), 10)}}")
+    }
+    return(dt)
+  }
+  dt[, ..cols_present]
 }
 
 #' Download multiple parquet files in parallel using curl
@@ -88,7 +108,7 @@ load_from_url <- function(url, ..., seasons = TRUE, rounds = TRUE, use_disk_cach
 #' @keywords internal
 #' @importFrom curl multi_download
 #' @importFrom data.table rbindlist setDT
-parquet_from_urls_parallel <- function(urls, use_cache = FALSE, max_age_days = 7, columns = NULL) {
+parquet_from_urls_parallel <- function(urls, use_cache = FALSE, max_age_days = DISK_CACHE_DEFAULT_AGE_DAYS, columns = NULL) {
   n <- length(urls)
 
   # --- Phase 1: Resolve each URL to a local file path or mark for download ---
@@ -162,10 +182,11 @@ parquet_from_urls_parallel <- function(urls, use_cache = FALSE, max_age_days = 7
           d
         }, error = function(e) {
           cli::cli_warn("Failed to read local file {.path {basename(p)}}: {conditionMessage(e)}")
-          data.table::data.table()
+          NULL
         })
       })
-      n_failed <- sum(vapply(parts, function(p) nrow(p) == 0L, logical(1)))
+      # Only read errors (NULL) count as failures; valid empty files add zero rows silently
+      n_failed <- sum(vapply(parts, is.null, logical(1)))
       if (n_failed > 0) {
         cli::cli_warn("{n_failed} of {length(valid_paths)} local file{?s} failed to read. Results may be incomplete.")
       }
@@ -208,12 +229,7 @@ parquet_from_urls_parallel <- function(urls, use_cache = FALSE, max_age_days = 7
             if (nrow(dt) > 0) {
               # Apply column selection
               if (!is.null(columns)) {
-                cols_present <- intersect(columns, names(dt))
-                if (length(cols_present) > 0) {
-                  dl_parts[[length(dl_parts) + 1L]] <- dt[, ..cols_present]
-                } else {
-                  cli::cli_warn("None of the requested columns found in {.url {basename(urls[idx])}}. Available: {.val {head(names(dt), 10)}}")
-                }
+                dl_parts[[length(dl_parts) + 1L]] <- .select_present_columns(dt, columns, urls[idx])
               } else {
                 dl_parts[[length(dl_parts) + 1L]] <- dt
               }
@@ -300,7 +316,7 @@ parquet_from_urls_parallel <- function(urls, use_cache = FALSE, max_age_days = 7
 #' @keywords internal
 #' @importFrom cli cli_warn cli_abort
 #' @importFrom data.table data.table setDT
-parquet_from_url_cached <- function(url, use_cache = TRUE, max_age_days = 7, columns = NULL) {
+parquet_from_url_cached <- function(url, use_cache = TRUE, max_age_days = DISK_CACHE_DEFAULT_AGE_DAYS, columns = NULL) {
   # 0. Negative cache — skip known-bad URLs
   if (is_download_skippable(url)) {
     cli::cli_warn(c(
@@ -350,12 +366,7 @@ parquet_from_url_cached <- function(url, use_cache = TRUE, max_age_days = 7, col
 
   # Apply column selection on the downloaded data
   if (!is.null(columns)) {
-    cols_present <- intersect(columns, names(result))
-    if (length(cols_present) > 0) {
-      result <- result[, ..cols_present]
-    } else {
-      cli::cli_warn("None of the requested columns ({.val {columns}}) found in downloaded data. Available: {.val {head(names(result), 10)}}")
-    }
+    result <- .select_present_columns(result, columns, url)
   }
 
   return(result)

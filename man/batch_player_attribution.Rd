@@ -21,7 +21,10 @@ batch_player_attribution(
 \item{baseline_value}{Numeric. Ablation baseline. Default 0.}
 }
 \value{
-Data frame with per-feature average contributions across matches
+Data frame with per-feature average contributions across matches:
+\code{mean_contribution}, \code{sd_contribution} (\code{NA} for a feature seen in only one
+match), \code{n_matches} and \code{n_failed} (matches that errored and were dropped,
+repeated on every row).
 }
 \description{
 Runs zero-ablation attribution for multiple matches and aggregates

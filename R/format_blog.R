@@ -44,6 +44,10 @@ format_predictions_blog <- function(preds, xg = NULL) {
   }
 
   out <- tibble::as_tibble(preds)[, req_cols]
+  # Normalise here too so the join does not depend on callers having done it
+  # (idempotent on already-canonical names).
+  out$home_team <- torp_replace_teams(out$home_team)
+  out$away_team <- torp_replace_teams(out$away_team)
 
   if (!is.null(xg) && nrow(xg) > 0) {
     xg_req <- c("season", "round", "home_team", "away_team",
@@ -55,18 +59,32 @@ format_predictions_blog <- function(preds, xg = NULL) {
         "i" = "Build {.arg xg} with {.fn xg_to_blog_lookup}"
       ))
     }
-    out <- dplyr::left_join(
-      out, tibble::as_tibble(xg)[, xg_req],
-      by = c("season", "round", "home_team", "away_team")
-    )
+    join_keys <- c("season", "round", "home_team", "away_team")
+    xg_tbl <- tibble::as_tibble(xg)[, xg_req]
+    n_dup <- sum(duplicated(xg_tbl[, join_keys]))
+    if (n_dup > 0) {
+      cli::cli_abort(c(
+        "{.arg xg} has {n_dup} duplicated join key{?s} (season/round/home_team/away_team)",
+        "i" = "A join would duplicate prediction rows; dedupe {.arg xg} first"
+      ))
+    }
+    n_before <- nrow(out)
+    out <- dplyr::left_join(out, xg_tbl, by = join_keys)
+    if (nrow(out) != n_before) {
+      cli::cli_abort("xg join changed row count ({n_before} -> {nrow(out)})")
+    }
 
-    # If nothing joined, the user almost certainly has a team-name or
-    # season/round mismatch between preds and xg -- a silent cascade of
-    # NA xscores on the blog is the usual downstream symptom.
-    matched <- sum(!is.na(out$xscore_home))
-    if (matched == 0 && nrow(out) > 0) {
+    # Unmatched rows ship with NA xscores -- usually a team-name or
+    # season/round mismatch between preds and xg.
+    n_unmatched <- sum(is.na(out$xscore_home))
+    if (n_unmatched == nrow(out) && nrow(out) > 0) {
       cli::cli_warn(c(
         "Zero xg rows joined against {nrow(out)} predictions -- blog xscore columns will all be NA",
+        "i" = "Check season/round/home_team/away_team alignment between {.arg preds} and {.arg xg}"
+      ))
+    } else if (n_unmatched > 0) {
+      cli::cli_warn(c(
+        "{n_unmatched} of {nrow(out)} predictions had no matching xg row -- their xscores will be NA",
         "i" = "Check season/round/home_team/away_team alignment between {.arg preds} and {.arg xg}"
       ))
     }
@@ -111,7 +129,7 @@ xg_to_blog_lookup <- function(xg, season_val) {
     # Non-NULL but empty usually means upstream chain scraping partially
     # failed. Surface it so the cascade (NULL -> format_predictions_blog
     # NA-fill -> blank xscore column on the blog) has a log trail.
-    cli::cli_alert_info("{.arg xg} has 0 rows -- returning NULL lookup")
+    cli::cli_warn("{.arg xg} has 0 rows -- returning NULL lookup")
     return(NULL)
   }
   req <- c("match_id", "home_team", "away_team", "home_xscore", "away_xscore")
@@ -119,11 +137,19 @@ xg_to_blog_lookup <- function(xg, season_val) {
   if (length(missing) > 0) {
     cli::cli_abort("{.arg xg} missing column{?s}: {.val {missing}}")
   }
+  round_num <- suppressWarnings(as.integer(substr(xg$match_id, 12L, 13L)))
+  bad_round <- is.na(round_num) | round_num < 0L | round_num > 40L
+  if (any(bad_round)) {
+    cli::cli_warn(c(
+      "{sum(bad_round)} match_id{?s} gave an unparseable or out-of-range round -- these will not join",
+      "i" = "Offending id{?s}: {.val {utils::head(xg$match_id[bad_round], 5)}}"
+    ))
+  }
   xg |>
     dplyr::mutate(
       season = as.integer(season_val),
-      # match_id format is CD_MYYYYRRWMMM: positions 12-13 encode the round.
-      round_num = as.integer(substr(.data$match_id, 12L, 13L)),
+      # match_id format is CD_M{YYYY}{CCC}{RR}{XX}: positions 12-13 encode the round.
+      round_num = round_num,
       home_team = torp_replace_teams(.data$home_team),
       away_team = torp_replace_teams(.data$away_team),
       xscore_home = base::round(.data$home_xscore, 1),

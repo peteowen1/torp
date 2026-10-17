@@ -4,11 +4,15 @@
 \alias{.build_aflw_stat_ratings}
 \title{Build AFLW per-round stat ratings}
 \usage{
-.build_aflw_stat_ratings(seasons = TRUE)
+.build_aflw_stat_ratings(seasons = TRUE, allow_partial = FALSE)
 }
 \arguments{
 \item{seasons}{Numeric vector of seasons, or TRUE for all available AFLW
 seasons.}
+
+\item{allow_partial}{If \code{FALSE} (default), abort when any PLAYED
+round could not be estimated, rather than returning a table that silently
+omits it. Set \code{TRUE} only for interactive inspection.}
 }
 \value{
 A data.table of player-round stat ratings (one row per player per

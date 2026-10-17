@@ -44,7 +44,13 @@
 #' The shrinkage is on the cell's own WEIGHT, not its game count: a team whose
 #' prior games are all heavily decayed carries little evidence, and weight says
 #' that where a count does not. `prior_games = 0` reproduces the unshrunk
-#' weighted mean exactly.
+#' weighted mean exactly, PROVIDED `wt_sum > 0`.
+#'
+#' A cell with no weight and no prior (`wt_sum + prior_games == 0`), or one
+#' whose mean is itself `NaN` because it was built as `0 / 0`, has nothing to
+#' report. The raw formula would give `NaN` there; this returns `league_avg`,
+#' the only defensible value for "no evidence". Every finite result is left
+#' bit-identical (the guard only touches elements that would be `NaN`).
 #'
 #' Note the ordering with the cap that callers apply afterwards: shrinkage runs
 #' FIRST and does most of the work. On a two-team fixture with a 1-vs-10000
@@ -59,5 +65,26 @@
 #' @return The shrunk value.
 #' @keywords internal
 .shrink_to_league <- function(wt_sum, wt_mean, league_avg, prior_games) {
-  (wt_sum * wt_mean + prior_games * league_avg) / (wt_sum + prior_games)
+  out <- (wt_sum * wt_mean + prior_games * league_avg) / (wt_sum + prior_games)
+  empty <- rep_len(!is.na(wt_sum) & wt_sum == 0, length(out)) & is.nan(out)
+  if (any(empty)) out[empty] <- rep_len(league_avg, length(out))[empty]
+  out
+}
+
+#' Time-on-ground weight from a percentage
+#'
+#' `pmax(tog / 100, 0.1)` with a missing time-on-ground treated as a full game
+#' (100). The expression was written out by hand at five call sites
+#' (`player_ratings.R`, `psr.R`, `epv_opponent_adjustment.R`); this is its one
+#' definition. It changes no number: `NA` becomes 1, everything else is the
+#' fraction of the game on the ground, floored at 0.1 so a one-minute cameo
+#' cannot receive a near-zero (or negative) weight.
+#'
+#' @param tog Time on ground as a PERCENTAGE (0-100), as in the
+#'   `time_on_ground_percentage` column. Integer or double. Not a 0-1 fraction:
+#'   a fraction would be divided by 100 a second time and floor at 0.1.
+#' @return Numeric vector of weights in [0.1, Inf), 1 for a full game.
+#' @keywords internal
+.tog_weight <- function(tog) {
+  pmax(data.table::fifelse(is.na(tog), 100, as.numeric(tog)) / 100, 0.1)
 }

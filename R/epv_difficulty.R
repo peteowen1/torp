@@ -140,7 +140,7 @@ EPV_DIFFICULTY_SURPRISE_BY_TYPE <- FALSE
 #' @return A data.table, one row per resolvable disposal.
 #' @keywords internal
 build_disposal_events <- function(chains, pbp_data) {
-  ch <- data.table::as.data.table(chains)
+  ch <- if (data.table::is.data.table(chains)) chains else data.table::as.data.table(chains)
   detect_chains_columns(ch)
   # Narrow before shifting. The full chains frame is 60+ columns and shifting on
   # it with get() inside [ is the documented data.table trap -- it broke the
@@ -179,10 +179,14 @@ build_disposal_events <- function(chains, pbp_data) {
   d <- d[!is.na(out_tid) & !is.na(out_pid)]
   if (nrow(d) == 0) return(d[0])
 
-  pbp <- data.table::as.data.table(pbp_data)
+  pbp <- if (data.table::is.data.table(pbp_data)) pbp_data else data.table::as.data.table(pbp_data)
   d <- merge(d, pbp[, .(match_id, display_order, exp_pts, delta_epv)],
              by = c("match_id", "display_order"), all.x = TRUE, sort = FALSE)
+  n_before <- nrow(d)
   d <- d[is.finite(exp_pts) & is.finite(delta_epv)]
+  if (n_before > nrow(d)) {
+    cli::cli_inform("build_disposal_events: dropped {n_before - nrow(d)} of {n_before} disposal{?s} ({round(100 * (n_before - nrow(d)) / n_before, 2)}%) with no matching or non-finite PBP exp_pts/delta_epv.")
+  }
   if (nrow(d) == 0) return(d)
 
   d[, `:=`(
@@ -202,6 +206,9 @@ build_disposal_events <- function(chains, pbp_data) {
     i50f = factor(as.integer(x > half - 50), levels = c("0", "1"))
   )]
   data.table::setattr(d, "half", half)
+  # NB: this filter is outcome-dependent (kick_len/fwd_gain use the resolving
+  # row's out_x/out_y) even though they are not model features. Deliberate; it
+  # keeps the scored population stable.
   d[is.finite(kick_len) & is.finite(fwd_gain) & is.finite(goal_dist)]
 }
 

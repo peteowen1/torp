@@ -64,4 +64,13 @@ player performance data used by the TORP ratings pipeline.
 \details{
 Computes disposal points, reception points, spoil/tackle points, and
 hitout points for each player-game combination.
+
+\strong{The position adjustment here is full-history, not as-of.} The
+\code{epv_*_adj} columns centre each channel against a reference computed
+over every row in the frame passed in (grouped by role, with no season or
+round in the key), so the reference for an early round includes games
+played later. That is fine for the descriptive per-game display they feed,
+and it means these columns must not be used as an as-of / predictive feature
+without recomputing the reference from strictly earlier rounds, which is
+what \code{centre_epv_by_position()} does for the rating layer.
 }

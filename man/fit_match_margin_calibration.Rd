@@ -26,11 +26,20 @@ genuine slope-gate breach), \code{holdout_season}, and \code{fitted_at}
 or fewer than 2 seasons of history exist to hold one out.
 }
 \description{
-Trains the GAM+XGBoost chain on all seasons strictly before the most
-recently completed season in \code{team_mdl_df}, scores that held-out season
-with the resulting models (same 50/50 Input Blend used in production,
+Trains the GAM+XGBoost chain on all seasons strictly before the latest
+season with results in \code{team_mdl_df}, scores that held-out season
+with the resulting models (same Input Blend used in production,
+\code{MATCH_BLEND_WEIGHT}, currently 1.0 = pure GAM;
 \code{run_predictions_pipeline()}'s blend block), and fits
 \code{b = coef(lm(margin ~ pred_margin + 0))} on those honest OOS
 predictions (V1a's "slope_only" mode).
+}
+\details{
+The holdout is the latest season with ANY result, so in an in-progress
+season it is the partial current season: early in the year \code{n_oos}
+is often below \code{MATCH_RECAL_MIN_N} and the fit cold-starts to
+\code{b = 1}. \code{slope_raw} (what the gate tests) comes from
+\code{lm(margin ~ pred_margin)} WITH an intercept, whereas the shipped
+\code{b} is through the origin, so the two can differ slightly.
 }
 \keyword{internal}

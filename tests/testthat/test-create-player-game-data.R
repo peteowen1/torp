@@ -233,3 +233,31 @@ test_that("the v4 engine sums to the margin in every match and fills the three c
   expect_gt(nrow(chk), 0)
   expect_equal(chk$own, chk$want, tolerance = 1e-6)
 })
+
+test_that("a failed WP credit run leaves wp_credit NA, never a plausible zero", {
+  skip_if(is.null(.shared$pbp) || is.null(.shared$player_stats) || is.null(.shared$teams) ||
+            is.null(.shared$chains),
+          "Could not load required data")
+  run <- function() {
+    tryCatch(
+      suppressMessages(create_player_game_data(.shared$pbp, .shared$player_stats, .shared$teams,
+                                               chains = .shared$chains, epv_engine = "v2")),
+      error = function(e) NULL)
+  }
+  # v2 rather than v4: v4 cannot fit its difficulty models on the one-round
+  # shared slice. The WP zero-fill is engine independent.
+  ok <- suppressWarnings(run())
+  skip_if(is.null(ok), "Could not create player game data")
+  expect_false(anyNA(ok$wp_credit))
+
+  testthat::local_mocked_bindings(
+    create_wp_credit = function(...) stop("simulated WP failure")
+  )
+  expect_warning(bad <- run(), "WPA credit skipped")
+  skip_if(is.null(bad), "Could not create player game data under a WP failure")
+  # Failed run: NA throughout, not 0. The EPV channels are unaffected.
+  expect_true(all(is.na(bad$wp_credit)))
+  expect_true(all(is.na(bad$wp_disp_credit)))
+  expect_true(all(is.na(bad$wp_recv_credit)))
+  expect_equal(bad$epv, ok$epv)
+})

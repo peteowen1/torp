@@ -7,7 +7,7 @@
 parquet_from_url_cached(
   url,
   use_cache = TRUE,
-  max_age_days = 7,
+  max_age_days = DISK_CACHE_DEFAULT_AGE_DAYS,
   columns = NULL
 )
 }

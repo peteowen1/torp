@@ -70,7 +70,11 @@ get_player_game_ratings <- function(match = NULL,
 
   # --- Step 2: Fetch player stats and lineups from API ---
   cli::cli_inform("Fetching player stats and lineups from API...")
-  season <- as.numeric(substr(match_ids[1], 5, 8))
+  seasons <- unique(as.numeric(substr(match_ids, 5, 8)))
+  if (length(seasons) > 1) {
+    cli::cli_abort("{.arg match_ids} must all be from one season, got {seasons}.")
+  }
+  season <- seasons
 
   player_stats <- .fetch_match_player_stats(match_ids)
   teams <- .fetch_match_lineups(match_ids, season)
@@ -199,6 +203,12 @@ get_player_game_ratings <- function(match = NULL,
     }
   }
 
+  # Fixed schema even if psv_result lacked join keys
+  for (col in c("psv", "osv", "dsv", "torp_value")) {
+    if (!col %in% names(pgr)) pgr[, (col) := NA_real_]
+    if (!paste0(col, "_p80") %in% names(pgr)) pgr[, (paste0(col, "_p80")) := NA_real_]
+  }
+
   # Select totals or p80 columns based on per80 parameter
   if (per80) {
     val_cols <- c("epv_p80", "epv_recv_p80", "epv_disp_p80", "epv_spoil_p80", "epv_hitout_p80",
@@ -305,116 +315,4 @@ get_player_game_stats <- function(match_ids) {
   # Normalise column names
   result <- .normalise_teams_columns(result)
   result
-}
-
-
-#' Apply PSR coefficients to raw per-game stats
-#'
-#' Computes a game-level PSR by applying the glmnet coefficients directly
-#' to each player's box-score stats from a single game. Rate stats
-#' (efficiency percentages) are computed from the raw counts.
-#'
-#' @param player_epv A data.table from [create_player_game_data()].
-#' @return The input data.table with `game_psr`, `game_osr`, `game_dsr` added.
-#' @keywords internal
-.add_game_psr <- function(player_epv) {
-  dt <- data.table::as.data.table(player_epv)
-
-  # Load coefficient files
-  psr_coefs <- .load_psr_coefs("psr_coefficients.csv")
-  osr_coefs <- .load_psr_coefs("osr_coefficients.csv")
-  dsr_coefs <- .load_psr_coefs("dsr_coefficients.csv")
-
-  if (is.null(psr_coefs)) {
-    cli::cli_warn("PSR coefficient file not found -- skipping game PSR")
-    dt[, c("game_psr", "game_osr", "game_dsr") := NA_real_]
-    return(dt)
-  }
-
-  # Ensure efficiency columns exist (may be missing from some API responses)
-  for (col in c("effective_disposals", "effective_kicks")) {
-    if (!col %in% names(dt)) dt[, (col) := 0L]
-  }
-
-  # Compute rate stats from raw counts
-  dt[, `:=`(
-    disposal_efficiency = data.table::fifelse(disposals > 0, effective_disposals / disposals, 0),
-    goal_accuracy = data.table::fifelse(shots_at_goal > 0, goals / shots_at_goal, 0),
-    kick_efficiency = data.table::fifelse(kicks > 0, effective_kicks / kicks, 0),
-    contested_poss_rate = data.table::fifelse(
-      (contested_possessions + uncontested_possessions) > 0,
-      contested_possessions / (contested_possessions + uncontested_possessions),
-      0
-    ),
-    hitout_win_pct = data.table::fifelse(
-      hitouts > 0,
-      hitouts_to_advantage / hitouts,
-      0
-    )
-  )]
-
-  # Apply coefficients
-  dt[, game_psr := .apply_coefs(dt, psr_coefs)]
-  if (!is.null(osr_coefs) && !is.null(dsr_coefs)) {
-    raw_osr <- .apply_coefs(dt, osr_coefs)
-    raw_dsr <- .apply_coefs(dt, dsr_coefs)
-    # Reconcile so osr + dsr = psr
-    delta <- (dt$game_psr - raw_osr - raw_dsr) / 2
-    dt[, game_osr := raw_osr + delta]
-    dt[, game_dsr := raw_dsr + delta]
-  } else {
-    dt[, c("game_osr", "game_dsr") := NA_real_]
-  }
-
-  # Clean up temporary rate columns
-  dt[, c("disposal_efficiency", "goal_accuracy", "kick_efficiency",
-         "contested_poss_rate", "hitout_win_pct") := NULL]
-
-  dt
-}
-
-
-#' Apply PSR coefficients to a data.table of player stats
-#'
-#' @param dt A data.table with stat columns.
-#' @param coefs A data.frame with stat_name, beta, sd columns.
-#' @return A numeric vector of PSR values (one per row).
-#' @keywords internal
-.apply_coefs <- function(dt, coefs) {
-  # Filter to stats that exist in the data
-  available <- coefs$stat_name %in% names(dt)
-  if (sum(available) == 0) return(rep(0, nrow(dt)))
-
-  coefs <- coefs[available, , drop = FALSE]
-  stat_cols <- coefs$stat_name
-  betas <- coefs$beta
-  sds <- coefs$sd
-  sds[sds == 0 | is.na(sds)] <- 1
-
-  mat <- as.matrix(dt[, stat_cols, with = FALSE])
-  mat[is.na(mat)] <- 0
-
-  # Standardise then apply betas
-  mat <- sweep(mat, 2, sds, "/")
-  as.numeric(mat %*% betas)
-}
-
-
-#' Load PSR coefficient CSV
-#'
-#' @param filename The coefficient CSV filename.
-#' @return A data.frame with stat_name, beta, sd columns, or NULL if not found.
-#' @keywords internal
-.load_psr_coefs <- function(filename) {
-  path <- system.file("extdata", filename, package = "torp")
-  if (path == "") {
-    fallback <- file.path(
-      find.package("torp", quiet = TRUE)[1] %||% ".",
-      "data-raw", "cache-stat-ratings", filename
-    )
-    if (file.exists(fallback)) path <- fallback
-  }
-  if (path == "" || !file.exists(path)) return(NULL)
-  coefs <- utils::read.csv(path)
-  coefs[coefs$beta != 0, , drop = FALSE]
 }

@@ -19,14 +19,18 @@ player_epv_breakdown(
 verified against.}
 
 \item{player_stats}{Box-score frame, as from \code{\link[=load_player_stats]{load_player_stats()}}. Supplies
-the counts. Loaded for \code{seasons} when \code{NULL}.}
+the counts. When \code{NULL}, loaded for the seasons present in \code{player_game}
+if it was supplied, otherwise for \code{seasons}.}
 
 \item{seasons}{Seasons to load when frames are not supplied.}
 
 \item{epv_params}{Weight list; defaults to \code{\link[=default_epv_params]{default_epv_params()}}.}
 
 \item{verify}{When \code{TRUE} (default), aborts unless the categories plus
-residual reproduce the published \code{epv} for every player-game.}
+residual reproduce the published \code{epv} for every player-game. This check
+closes by construction (the residual absorbs whatever the box terms miss),
+so it catches fan-out and a stale \code{player_game}, not a wrong or missing
+term in \code{EPV_BOX_TERMS}.}
 
 \item{tolerance}{Absolute tolerance for that check.}
 }

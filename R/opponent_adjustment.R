@@ -139,6 +139,15 @@ adjust_stat_ratings_for_opponents <- function(stat_ratings,
 #' @param rolling Logical. If TRUE, computes causal rolling profiles (each game
 #'   uses only prior games for its opponent profile). If FALSE (default),
 #'   computes a single snapshot profile at the latest date.
+#'
+#'   The snapshot is IN-SAMPLE: each team's conceded profile is built from
+#'   every game in `player_stats`, including the match being adjusted and
+#'   every later one, so a game's factor partly reflects its own outcome and
+#'   the future. That is acceptable for descriptive per-game stats but it must
+#'   not feed anything fitted or evaluated out of sample. Use `rolling = TRUE`
+#'   for that. Note that `rolling = TRUE` only sees the games passed in, so a
+#'   single-season input has no history for its first matches (neutral factor
+#'   1.0 for the opening match, thin profiles for the opening rounds).
 #' @return The input data with additional `{stat}_oadj` columns for each rate stat.
 #' @export
 adjust_stats_for_opponents <- function(player_stats,
@@ -319,15 +328,21 @@ adjust_stats_for_opponents <- function(player_stats,
       team_conceding = unique_teams
     )
 
+    # Per-team row index, weights and weight total do not depend on the stat,
+    # so build them once per match rather than once per stat column.
+    team_idx <- lapply(unique_teams, function(tm) which(prior_teams == tm))
+    team_wts <- lapply(team_idx, function(ix) decay_wts[ix])
+    team_wt_sum <- vapply(team_wts, sum, numeric(1))
+
     for (j in seq_along(stat_cols)) {
       col <- stat_cols[j]
       stat_nm <- names(rate_sources)[rate_sources == col]
       factor_col <- paste0(stat_nm, "_adj_factor")
 
-      factors <- vapply(unique_teams, function(tm) {
-        tm_idx <- which(prior_teams == tm)
-        tm_wts <- decay_wts[tm_idx]
-        wt_sum <- sum(tm_wts)
+      factors <- vapply(seq_len(n_teams), function(k) {
+        tm_idx <- team_idx[[k]]
+        tm_wts <- team_wts[[k]]
+        wt_sum <- team_wt_sum[k]
         if (wt_sum == 0) return(1.0)
         wt_mean <- sum(prior_mat[tm_idx, j] * tm_wts) / wt_sum
         shrunk <- .shrink_to_league(wt_sum, wt_mean, league_avg[j], prior_games)
@@ -335,6 +350,7 @@ adjust_stats_for_opponents <- function(player_stats,
         raw_factor <- league_avg[j] / shrunk
         min(max(raw_factor, cap[1]), cap[2])
       }, numeric(1))
+      names(factors) <- unique_teams
 
       # Handle multiple stat_names mapping to same source_col
       for (fc in factor_col) {
@@ -410,10 +426,11 @@ adjust_stats_for_opponents <- function(player_stats,
   team_allowed <- allowed[, {
     w <- decay_wt
     n_games <- .N
+    wsum <- sum(w)
     result <- lapply(stat_cols, function(col) {
-      raw_wt_mean <- sum(w * get(col)) / sum(w)
+      raw_wt_mean <- sum(w * get(col)) / wsum
       # Shrink toward league average
-      shrunk <- .shrink_to_league(sum(w), raw_wt_mean, league_avg[[col]], prior_games)
+      shrunk <- .shrink_to_league(wsum, raw_wt_mean, league_avg[[col]], prior_games)
       shrunk
     })
     stats::setNames(result, stat_cols)

@@ -889,3 +889,109 @@ test_that("EPR_POSITION_SHRINK holds back thin cells and leaves fat ones alone",
   o_fat  <- suppressMessages(centre_epr_by_position(mk(20)))
   expect_equal(sd(o_thin$epr_recv[1:3]), sd(o_fat$epr_recv[1:3]), tolerance = 1e-8)
 })
+
+
+# -----------------------------------------------------------------------------
+# Review fixes (C02): batch path hygiene, posn by date, torp_movers overlap
+# -----------------------------------------------------------------------------
+
+.batch_fixture <- function() {
+  data.table::data.table(
+    player_id = rep(c("A", "B"), each = 3),
+    player_name = rep(c("A", "B"), each = 3),
+    # match ids deliberately NOT in date order for player A
+    match_id = rep(c("CD_M2024014103", "CD_M2024014101", "CD_M2024014102"), 2),
+    utc_start_time = rep(as.Date("2024-04-01") + c(14, 0, 7), 2),
+    epv_recv_adj = 1, epv_disp_adj = 1, epv_spoil_adj = 1, epv_hitout_adj = 1,
+    time_on_ground_percentage = c(80, 90, 70, 85, 85, 85),
+    position_group = c("DEF", "MID", "FWD", "RUC", "RUC", "RUC")
+  )
+}
+
+test_that("calculate_epr_stats_batch leaves the caller's data.table untouched", {
+  pgd <- .batch_fixture()
+  cols_before <- names(pgd)
+  key_before <- data.table::key(pgd)
+  ri <- data.table::data.table(round_val = 1L, match_ref = "CD_M2024014103",
+                               date_val = as.Date("2024-05-01"))
+  res <- torp:::calculate_epr_stats_batch(pgd, ri)
+  expect_equal(nrow(res), 2)
+  expect_identical(names(pgd), cols_before)
+  expect_identical(data.table::key(pgd), key_before)
+})
+
+test_that("posn is the position from the player's most recent game, not last row", {
+  pgd <- .batch_fixture()
+  res <- torp:::calculate_epr_stats(pgd, "CD_M2024014103", as.Date("2024-05-01"))
+  # Player A's latest game by date is match ...103 (day +14) = DEF
+  expect_equal(res$posn[res$player_id == "A"], "DEF")
+  ri <- data.table::data.table(round_val = 1L, match_ref = "CD_M2024014103",
+                               date_val = as.Date("2024-05-01"))
+  resb <- torp:::calculate_epr_stats_batch(pgd, ri)
+  expect_equal(resb$posn[resb$player_id == "A"], "DEF")
+})
+
+test_that("torp_movers never lists a player as both riser and faller", {
+  fake <- data.frame(
+    player_id = rep(as.character(1:5), 2),
+    player_name = rep(paste0("P", 1:5), 2),
+    team = "T",
+    season = 2024L,
+    round = rep(c(1L, 2L), each = 5),
+    torp = c(1, 2, 3, 4, 5, 2, 1, 5, 3, 9)
+  )
+  testthat::local_mocked_bindings(load_torp_ratings = function(...) fake)
+  utils::capture.output(suppressMessages(
+    res <- torp_movers(2024L, 2L, 1L, top_n = 4)
+  ))
+  # 5 players, top_n 4: 4 risers + only the 1 left over as faller
+  expect_equal(sum(res$direction == "up"), 4)
+  expect_equal(sum(res$direction == "down"), 1)
+  expect_false(any(duplicated(res$player_id)))
+})
+
+test_that("wt_tog ignores games with NA TOG in both numerator and denominator", {
+  pgd <- .batch_fixture()
+  # Player B: three games all on the same day-weight structure, one NA TOG.
+  pgd[player_id == "B", time_on_ground_percentage := c(80, NA, 80)]
+  res <- torp:::calculate_epr_stats(pgd, "CD_M2024014103", as.Date("2024-05-01"))
+  # Non-NA games all have TOG 80 -> the weighted mean must be exactly 80, not
+  # dragged toward 0 by the NA game's weight sitting in the denominator.
+  expect_equal(res$wt_tog[res$player_id == "B"], 80)
+  ri <- data.table::data.table(round_val = 1L, match_ref = "CD_M2024014103",
+                               date_val = as.Date("2024-05-01"))
+  resb <- torp:::calculate_epr_stats_batch(pgd, ri)
+  expect_equal(resb$wt_tog[resb$player_id == "B"], 80)
+})
+
+test_that("calculate_torp does not back-fill historical rows with a later PSR", {
+  # Player A is only rated from round 3. Their round-1 row is HISTORICAL (rounds
+  # 3 and 4 exist in the PSR history), so it must take the prior, not round 4's
+  # PSR. Round 5 is past the newest PSR round, so it falls back to the latest.
+  epr_df <- data.frame(
+    player_id = c("A", "A", "A", "B", "B"),
+    player_name = c("A", "A", "A", "B", "B"),
+    epr = c(2, 3, 4, 1, 1),
+    season = 2024L,
+    round = c(1L, 3L, 5L, 1L, 4L),
+    stringsAsFactors = FALSE
+  )
+  psr_df <- data.frame(
+    player_id = c("A", "A", "B", "B"),
+    season = 2024L,
+    round = c(3L, 4L, 1L, 4L),
+    psr = c(30, 40, 5, 15),
+    osr = c(18, 24, 3, 9),
+    dsr = c(12, 16, 2, 6),
+    stringsAsFactors = FALSE
+  )
+
+  res <- calculate_torp(epr_df, psr_df)
+  a1 <- res[res$player_id == "A" & res$round == 1L, ]
+  a3 <- res[res$player_id == "A" & res$round == 3L, ]
+  a5 <- res[res$player_id == "A" & res$round == 5L, ]
+  expect_equal(a1$psr, torp:::PSR_PRIOR_RATE)
+  expect_equal(a1$osr, torp:::PSR_PRIOR_RATE / 2)
+  expect_equal(a3$psr, 30)
+  expect_equal(a5$psr, 40)
+})

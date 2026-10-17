@@ -34,7 +34,12 @@
 get_all_injuries <- function(season, scrape = TRUE, drop_played_preseason = TRUE,
                               current_round = NULL) {
   if (is.null(current_round)) {
-    current_round <- tryCatch(get_afl_week("current"), error = function(e) NA_integer_)
+    current_round <- tryCatch(get_afl_week("current"), error = function(e) {
+      cli::cli_alert_warning(
+        "Current round unavailable - in-season checks skipped: {conditionMessage(e)}"
+      )
+      NA_integer_
+    })
   }
   current_round <- suppressWarnings(as.integer(current_round))
   in_season <- isTRUE(is.finite(current_round) && current_round >= 1)
@@ -233,6 +238,7 @@ parse_return_round <- function(estimated_return, season, current_round = 1L) {
   current_round <- as.integer(current_round)
   n <- length(estimated_return)
   result <- rep(NA_real_, n)
+  unrecognised <- character(0)
 
   for (i in seq_len(n)) {
     val <- estimated_return[i]
@@ -346,8 +352,13 @@ parse_return_round <- function(estimated_return, season, current_round = 1L) {
     }
 
     # Fallback: treat unrecognised strings as TBC
-    cli::cli_warn("Unrecognised estimated return: {.val {val}} -- treating as TBC (~{SIM_INJURY_TBC_BUFFER} rounds)")
+    unrecognised <- c(unrecognised, val)
     result[i] <- current_round + SIM_INJURY_TBC_BUFFER
+  }
+
+  if (length(unrecognised) > 0) {
+    unrecognised <- unique(unrecognised)
+    cli::cli_warn("Unrecognised estimated return: {.val {unrecognised}} -- treating as TBC (~{SIM_INJURY_TBC_BUFFER} rounds)")
   }
 
   as.numeric(result)

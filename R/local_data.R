@@ -4,10 +4,6 @@
 # torpdata/data/ directory, enabling fast offline access without
 # network downloads. Files in torpdata/data/ are gitignored.
 
-# Minimum file size for a valid parquet file. Files smaller than this
-# are treated as invalid placeholders (e.g. empty GitHub release assets).
-MIN_PARQUET_BYTES <- 100
-
 #' Get Local Data Directory
 #'
 #' Returns the path to the local torpdata/data/ directory for storing
@@ -268,7 +264,7 @@ save_locally <- function(df, file_name) {
 #'
 #' Markers are only ever written for historical (never-expiring-by-season)
 #' URLs -- see [mark_download_skippable()] -- so a fresh marker here is
-#' always historical too; a flat 3h expiry (torp H3) is the safety net in
+#' always historical too; a flat expiry of `LOCAL_SKIP_MARKER_HOURS` (3h, torp H3) is the safety net in
 #' case a "gone" historical asset reappears (re-release, corrected upload).
 #'
 #' @param url Character URL to check
@@ -283,7 +279,7 @@ is_download_skippable <- function(url) {
 
   file_age_hours <- as.numeric(difftime(Sys.time(), file.info(skip_path)$mtime, units = "hours"))
   if (is.na(file_age_hours)) return(FALSE)
-  file_age_hours <= 3
+  file_age_hours <= LOCAL_SKIP_MARKER_HOURS
 }
 
 #' Mark a URL as Skippable (Negative Cache)
@@ -295,8 +291,8 @@ is_download_skippable <- function(url) {
 #' H3/H1): those files are actively upserted by the same pipeline that reads
 #' them, so a 404 today (round not yet published) becomes a false negative
 #' cache tomorrow, silently dropping the newest data for up to a day. Only
-#' historical files get a marker at all, and it is capped at 3h in
-#' [is_download_skippable()].
+#' historical files get a marker at all, and it is capped at
+#' `LOCAL_SKIP_MARKER_HOURS` in [is_download_skippable()].
 #'
 #' Tests \code{.is_historical_url()} directly rather than
 #' \code{is.null(local_max_age_for_url(url))}. Those were the same test while
@@ -446,10 +442,15 @@ download_torp_data <- function(data_types = "all", seasons = TRUE, overwrite = F
   }
 
   # Skip existing files unless overwrite = TRUE
+  # (only files still inside their freshness window; stale ones are refreshed)
   if (!overwrite) {
-    exists_mask <- file.exists(dest_files)
+    exists_mask <- vapply(seq_along(urls), function(i) {
+      age <- local_max_age_for_url(urls[i])
+      file.exists(dest_files[i]) &&
+        is_locally_stored(urls[i], max_age_days = age)
+    }, logical(1))
     if (any(exists_mask)) {
-      cli::cli_inform("Skipping {sum(exists_mask)} file{?s} that already exist locally.")
+      cli::cli_inform("Skipping {sum(exists_mask)} file{?s} already fresh locally.")
       urls <- urls[!exists_mask]
       dest_files <- dest_files[!exists_mask]
     }
@@ -461,12 +462,16 @@ download_torp_data <- function(data_types = "all", seasons = TRUE, overwrite = F
   }
 
   cli::cli_inform("Downloading {length(urls)} file{?s} to {.path {local_dir}}...")
+  # Download to temp paths and move into place only once validated, so a failed
+  # refresh (overwrite = TRUE) can never delete a previously good local copy.
+  tmp_dir <- tempfile("torp_dl_")
+  dir.create(tmp_dir)
+  on.exit(unlink(tmp_dir, recursive = TRUE), add = TRUE)
+  tmp_files <- file.path(tmp_dir, paste0(seq_along(urls), "_", basename(dest_files)))
+
   dl <- tryCatch(
-    curl::multi_download(urls, destfiles = dest_files),
+    curl::multi_download(urls, destfiles = tmp_files),
     error = function(e) {
-      # Clean up any partially-written files
-      written <- dest_files[file.exists(dest_files)]
-      if (length(written) > 0) unlink(written)
       cli::cli_abort(c(
         "Download failed: {conditionMessage(e)}",
         "i" = "Check your internet connection and try again."
@@ -477,35 +482,45 @@ download_torp_data <- function(data_types = "all", seasons = TRUE, overwrite = F
   success <- !is.na(dl$success) & dl$success
   n_fail <- sum(!success)
 
-  # Remove invalid files (too small to be valid parquet, e.g. placeholder releases)
-  valid_mask <- success & file.exists(dest_files) & file.size(dest_files) >= MIN_PARQUET_BYTES
-  invalid_mask <- success & file.exists(dest_files) & file.size(dest_files) < MIN_PARQUET_BYTES
+  # Too small to be valid parquet (e.g. placeholder releases)
+  has_file <- success & file.exists(tmp_files)
+  big_enough <- has_file & file.size(tmp_files) >= MIN_PARQUET_BYTES
+  big_enough[is.na(big_enough)] <- FALSE
+  too_small <- has_file & !big_enough
 
-  if (any(invalid_mask)) {
-    cli::cli_warn("Removed {sum(invalid_mask)} file{?s} that {?is/are} too small to be valid parquet (likely placeholder{?s}).")
-    unlink(dest_files[invalid_mask])
+  if (any(too_small)) {
+    cli::cli_warn("Skipped {sum(too_small)} file{?s} that {?is/are} too small to be valid parquet (likely placeholder{?s}).")
   }
 
-  n_valid <- sum(valid_mask, na.rm = TRUE)
+  # Check every file's footer: a corrupt file that passes the size check must
+  # not be kept or counted as valid.
+  valid_mask <- big_enough
+  for (i in which(big_enough)) {
+    valid_mask[i] <- tryCatch({
+      arrow::read_parquet(tmp_files[i], col_select = 1)
+      TRUE
+    }, error = function(e) {
+      cli::cli_warn("Downloaded file {.file {basename(dest_files[i])}} is not valid parquet and was discarded: {conditionMessage(e)}")
+      FALSE
+    })
+  }
+
+  # Move validated files into place
+  for (i in which(valid_mask)) {
+    if (!file.copy(tmp_files[i], dest_files[i], overwrite = TRUE)) {
+      cli::cli_warn("Could not write {.path {dest_files[i]}}")
+      valid_mask[i] <- FALSE
+    }
+  }
+
+  n_valid <- sum(valid_mask)
   total_mb <- round(sum(file.size(dest_files[valid_mask]), na.rm = TRUE) / 1024 / 1024, 1)
-
-  # Spot-check: verify at least one downloaded file is valid parquet
-  if (n_valid > 0) {
-    test_file <- dest_files[valid_mask][1]
-    tryCatch(
-      arrow::read_parquet(test_file, col_select = 1),
-      error = function(e) {
-        cli::cli_warn("Downloaded files may not be valid parquet. First file read failed: {conditionMessage(e)}")
-      }
-    )
-  }
 
   cli::cli_inform("Downloaded {n_valid} file{?s} ({total_mb} MB total).")
 
   if (n_fail > 0) {
     failed_urls <- urls[!success]
     cli::cli_warn("{n_fail} file{?s} failed to download: {.url {failed_urls}}")
-    unlink(dest_files[!success])
   }
 
   invisible(NULL)

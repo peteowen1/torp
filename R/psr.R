@@ -75,8 +75,21 @@
   }
 
   # One listed position per player. Take the LAST non-missing value, matching
-  # how player_details resolves a mid-season relisting.
-  lp <- lp[!is.na(get(pcol)), .(.lp_raw = get(pcol)[.N]), by = player_id]
+  # how player_details resolves a mid-season relisting. "Last" is by season and
+  # round when the frame carries them -- not by row position, which would make
+  # the chosen position depend on how the caller happened to order the rows.
+  # (.load_listed_positions() already sorts and returns one row per player, so
+  # the production path is unchanged.) Without any ordering column the row
+  # order is the only information there is, and is kept.
+  ord_cols <- intersect(c("season", "round", "round_number"), names(lp))
+  ord_idx <- if (length(ord_cols) > 0) {
+    do.call(order, unname(as.list(lp[, ord_cols, with = FALSE])))
+  } else {
+    seq_len(nrow(lp))
+  }
+  lp <- data.table::data.table(player_id = lp$player_id[ord_idx],
+                               .lp_val = lp[[pcol]][ord_idx])
+  lp <- lp[!is.na(.lp_val), .(.lp_raw = .lp_val[.N]), by = player_id]
   lp[, .listed_bucket := .collapse_listed_position(.lp_raw)]
 
   out <- merge(dt, lp[, .(player_id, .listed_bucket)], by = "player_id",
@@ -526,9 +539,7 @@ calculate_psv <- function(player_stats, coef_df, tog_adjust = TRUE, center = TRU
 
   # TOG-adjust: divide counts by TOG to get per-full-game rates
   if (tog_adjust && "tog" %in% names(dt)) {
-    tog_vec <- as.numeric(dt$tog)
-    tog_vec[is.na(tog_vec) | tog_vec <= 0] <- 1
-    mat <- mat / tog_vec
+    mat <- mat / .psv_tog_rate(dt$tog)
   }
 
   # Standardize using SDs from coefficient file (same scale as PSR training)
@@ -610,7 +621,7 @@ calculate_psv <- function(player_stats, coef_df, tog_adjust = TRUE, center = TRU
   # the same scale as epv (per-game), keeping torp_value = 0.5*epv + 0.5*psv
   # apples-to-apples (issue #80).
   if (center && !is.null(pos_col) && "tog" %in% names(dt)) {
-    dt[, .tog_wt := pmax(as.numeric(tog), 0.1)]
+    dt[, .tog_wt := .psv_tog_mult(tog)]
     dt[!is.na(get(pos_col)), psv_p80 := psv_raw - weighted.mean(psv_raw, .tog_wt, na.rm = TRUE),
        by = c(.psv_role_by)]
     dt[is.na(get(pos_col)), psv_p80 := psv_raw - weighted.mean(psv_raw, .tog_wt, na.rm = TRUE)]
@@ -660,7 +671,7 @@ calculate_psv <- function(player_stats, coef_df, tog_adjust = TRUE, center = TRU
   if (center && isTRUE(PSV_LEVEL_CENTRE) && "position_group" %in% names(dt)) {
     data.table::setnames(dt, .psv_round_col, ".lc_round")
     dt[, .lc_bucket := .collapse_listed_position(position_group)]
-    dt[, .lc_w := if ("tog" %in% names(dt)) pmax(as.numeric(tog), 0.1) else 1]
+    dt[, .lc_w := if ("tog" %in% names(dt)) .psv_tog_mult(tog) else 1]
     .lc_wmean <- function(x, w) {
       ok <- is.finite(x) & is.finite(w) & w > 0
       if (!any(ok)) return(NA_real_)
@@ -693,7 +704,7 @@ calculate_psv <- function(player_stats, coef_df, tog_adjust = TRUE, center = TRU
   # Must stay AFTER the centring above, or psv keeps the uncentred level while
   # psv_p80 looks corrected.
   if ("tog" %in% names(dt)) {
-    dt[, psv := psv_p80 * pmax(as.numeric(tog), 0.1)]
+    dt[, psv := psv_p80 * .psv_tog_mult(tog)]
   } else {
     dt[, psv := psv_p80]
   }
@@ -744,7 +755,7 @@ calculate_psv_components <- function(player_stats, coef_df, osr_coef_df,
   psv_result[, dsv_p80 := raw_dsv + delta]
 
   if ("tog" %in% names(psv_result)) {
-    tog_mult <- pmax(as.numeric(psv_result$tog), 0.1)
+    tog_mult <- .psv_tog_mult(psv_result$tog)
     psv_result[, osv := osv_p80 * tog_mult]
     psv_result[, dsv := dsv_p80 * tog_mult]
   } else {
@@ -753,6 +764,47 @@ calculate_psv_components <- function(player_stats, coef_df, osr_coef_df,
   }
 
   psv_result
+}
+
+
+#' Sanitised time-on-ground for PSV
+#'
+#' One definition of TOG for every PSV step, so the rate, the centring weight
+#' and the per-game multiplier cannot disagree about a row.
+#' \itemize{
+#'   \item \code{.psv_tog_rate()}: the divisor that turns counts into per-full-game
+#'     rates. A missing or non-positive TOG counts as a full game (1); a small
+#'     positive TOG is used as it is.
+#'   \item \code{.psv_tog_mult()}: the centring weight and the per-game multiplier
+#'     (\code{psv = psv_p80 * tog}). A missing TOG counts as a full game (1), as
+#'     in the rate; everything else is floored at 0.1. Before this, an NA TOG
+#'     gave NA for \code{pmax(NA, 0.1)}, which made the whole role group's
+#'     weighted mean NA in centring and left that row's \code{psv} NA while its
+#'     rate had been computed as if TOG were 1. A TOG of 0 or below keeps the
+#'     0.1 floor (it is NOT mapped to 1 here): a player with no time on the
+#'     ground should not be credited a full game's value.
+#' }
+#'
+#' @param tog Numeric TOG fraction (0-1), may contain NA.
+#' @return Numeric vector, same length as \code{tog}.
+#' @keywords internal
+#' @name psv_tog
+NULL
+
+#' @rdname psv_tog
+#' @keywords internal
+.psv_tog_rate <- function(tog) {
+  v <- as.numeric(tog)
+  v[is.na(v) | v <= 0] <- 1
+  v
+}
+
+#' @rdname psv_tog
+#' @keywords internal
+.psv_tog_mult <- function(tog) {
+  v <- as.numeric(tog)
+  v[is.na(v)] <- 1
+  pmax(v, 0.1)
 }
 
 
@@ -813,13 +865,16 @@ calculate_psv_components <- function(player_stats, coef_df, osr_coef_df,
 #' @param season Season year (used if \code{player_stats} is NULL).
 #' @param per80 Logical. If TRUE, show per-80-minute contributions.
 #'   Default TRUE.
+#' @param comp Competition: "AFLM" (default) or "AFLW". Selects the coefficient
+#'   set the breakdown decomposes with, the same way production scoring does
+#'   (\code{.compute_psv()}).
 #'
 #' @return Invisibly returns a list with \code{epv} (EPV summary data.table)
 #'   and \code{psv} (PSV per-stat breakdown data.table).
 #'
 #' @export
 explain_player_game <- function(player_id, match_id, player_stats = NULL,
-                                 season = NULL, per80 = TRUE) {
+                                 season = NULL, per80 = TRUE, comp = "AFLM") {
 
   if (is.null(season)) season <- as.integer(substr(match_id, 5, 8))
   pid <- as.character(player_id)
@@ -837,13 +892,17 @@ explain_player_game <- function(player_id, match_id, player_stats = NULL,
   if (nrow(row) == 0) cli::cli_abort("No data found for player {player_id} in match {match_id}")
   if (nrow(row) > 1) row <- row[1]
 
-  # TOG
-  tog_val <- if ("tog" %in% names(row)) {
+  # TOG. The two uses are sanitised by the SAME helpers calculate_psv() uses
+  # (review B78): an earlier hand-rolled version mapped NA/<=0 to 1 and left
+  # 0 < tog < 0.1 unclamped for the per-game multiplier, so per-game figures
+  # printed here could disagree with the published ones.
+  tog_raw <- if ("tog" %in% names(row)) {
     as.numeric(row$tog)
   } else if ("time_on_ground_percentage" %in% names(row)) {
     pmax(as.numeric(row$time_on_ground_percentage) / 100, 0.1)
   } else 1
-  if (is.na(tog_val) || tog_val <= 0) tog_val <- 1
+  tog_rate <- .psv_tog_rate(tog_raw)   # divisor for per-80 rates
+  tog_val  <- .psv_tog_mult(tog_raw)   # per-game multiplier and display
 
   pname <- if ("player_name" %in% names(row)) row$player_name[1] else player_id
 
@@ -866,7 +925,12 @@ explain_player_game <- function(player_id, match_id, player_stats = NULL,
 
   suffix <- if (per80) " (per 80 min)" else " (total)"
   epv_summary <- NULL
-  pgr <- tryCatch(load_player_game_ratings(season), error = function(e) NULL)
+  pgr <- tryCatch(load_player_game_ratings(season), error = function(e) {
+    cli::cli_warn(c(
+      "Player game ratings for season {season} failed to load; the EPV section is skipped.",
+      "x" = conditionMessage(e)))
+    NULL
+  })
   if (!is.null(pgr)) {
     pgr_dt <- data.table::as.data.table(pgr)
     pgr_dt[, player_id := as.character(player_id)]
@@ -937,14 +1001,16 @@ explain_player_game <- function(player_id, match_id, player_stats = NULL,
   # =========================================================================
   cli::cli_h3("PSV{suffix} -- stat-by-stat breakdown")
 
-  # Load coefficients
-  psr_path <- .find_psr_coef_path()
+  # Load coefficients, resolved exactly as .compute_psv() does (review B77):
+  # comp-aware path and OSR/DSR filenames, so an AFLW explanation decomposes
+  # with the AFLW coefficients production scores with.
+  psr_path <- .find_psr_coef_path(comp = comp)
   if (!nzchar(psr_path)) cli::cli_abort("PSR coefficient file not found")
 
   coef_df <- utils::read.csv(psr_path)
   coef_dir <- dirname(psr_path)
-  osr_path <- file.path(coef_dir, "osr_coefficients.csv")
-  dsr_path <- file.path(coef_dir, "dsr_coefficients.csv")
+  osr_path <- file.path(coef_dir, .comp_coef_filename("osr_coefficients.csv", comp))
+  dsr_path <- file.path(coef_dir, .comp_coef_filename("dsr_coefficients.csv", comp))
   has_components <- file.exists(osr_path) && file.exists(dsr_path)
   if (has_components) {
     osr_coefs <- utils::read.csv(osr_path)
@@ -954,7 +1020,16 @@ explain_player_game <- function(player_id, match_id, player_stats = NULL,
   # PSV exclude list
   psv_exclude <- .PSV_EXCLUDE
 
-  # Build breakdown for a single coefficient set
+  # Build breakdown for a single coefficient set.
+  # KNOWN GAPS vs production (review B77/B78/B80, deliberately not closed here):
+  #  - the betas are NOT multiplied by PSV_POINTS_SCALE as calculate_psv() does,
+  #    so these contributions are on the pre-calibration scale;
+  #  - production centres by role/position and reads the opponent-adjusted
+  #    `_oadj` columns when present; this reads raw stats and does not centre;
+  #  - the per-stat arithmetic is a re-implementation of calculate_psv(); calling
+  #    that directly (as .compute_psv() does) would give one definition.
+  # Treat the numbers as an illustration of which stats drive PSV, not a
+  # reproduction of the published figure.
   .breakdown <- function(cdf, label) {
     cdf <- cdf[cdf$beta != 0 & !cdf$stat_name %in% psv_exclude, , drop = FALSE]
     available <- cdf$stat_name %in% names(row)
@@ -964,7 +1039,7 @@ explain_player_game <- function(player_id, match_id, player_stats = NULL,
       v <- as.numeric(row[[s]]); if (is.na(v)) 0 else v
     }, numeric(1))
 
-    rate_vals <- raw_vals / tog_val
+    rate_vals <- raw_vals / tog_rate
     sds <- if ("sd" %in% names(cdf)) { s <- cdf$sd; s[s == 0 | is.na(s)] <- 1; s } else rep(1, nrow(cdf))
     contributions <- (rate_vals / sds) * cdf$beta
 
@@ -986,7 +1061,7 @@ explain_player_game <- function(player_id, match_id, player_stats = NULL,
   psv_result[, raw_value := vapply(stat, function(s) {
     v <- as.numeric(row[[s]]); if (is.na(v)) 0 else v
   }, numeric(1))]
-  psv_result[, rate := round(raw_value / tog_val, 1)]
+  psv_result[, rate := round(raw_value / tog_rate, 1)]
 
   # Reorder and sort
   front_cols <- c("stat", "raw_value", "rate", "psv")
@@ -1048,14 +1123,33 @@ explain_player_plays <- function(player,
 
   # Load PBP
   if (is.null(pbp_data)) {
-    pbp_data <- load_pbp(season)
+    # Every column this function reads, and nothing else: the full PBP frame is
+    # ~190 columns. Older seasons may lack some of them, in which case fall
+    # back to the full load rather than fail.
+    pbp_cols <- c("match_id", "display_order", "period", "player_id",
+                  "player_name", "team", "description", "play_type",
+                  "phase_of_play", "x", "y", "pos_team", "delta_epv",
+                  "exp_pts", "lead_player", "lead_player_id", "lead_desc_tot",
+                  "round_week", "home_away", "away_team_name", "home_team_name")
+    pbp_data <- tryCatch(load_pbp(season, columns = pbp_cols),
+                         error = function(e) load_pbp(season))
   }
   dt <- data.table::as.data.table(pbp_data)
-  data.table::setorder(dt, match_id, display_order)
 
+  # Filter to the requested match(es) BEFORE sorting, so a one-match request
+  # does not sort the whole season.
   if (!is.null(match_id)) {
-    dt <- dt[dt$match_id %in% match_id]
+    # NOT `dt[dt$match_id %in% match_id]`: inside [, the bare `match_id` on the
+    # right resolves to the COLUMN, so that filter compared the column with
+    # itself and kept every row -- the match_id argument never filtered
+    # anything. Capture the argument under a name that is not a column.
+    wanted_matches <- match_id
+    dt <- dt[dt$match_id %in% wanted_matches]
+    if (nrow(dt) == 0) {
+      cli::cli_abort("No play-by-play rows for match_id {.val {wanted_matches}} in season {paste(season, collapse = ', ')}.")
+    }
   }
+  data.table::setorder(dt, match_id, display_order)
 
   # Columns to show in context view
   ctx_cols <- c("display_order", "period", "player_name", "team",
@@ -1080,6 +1174,14 @@ explain_player_plays <- function(player,
     out[, is_play := .row_idx %in% idx]
     out
   }
+
+  # NOTE (review B80, deliberately NOT refactored here): the receiving and
+  # disposal credit formulas below are a hand-copied replica of the per-event
+  # credit in create_player_game_data() (R/player_credit.R). A change to the
+  # production formula will not reach this trace. The right fix is a shared
+  # helper (e.g. .recv_credit(delta_epv, pos_team, p)) called from both places;
+  # it touches the production credit path, so it needs its own change and a
+  # before/after on published EPV.
 
   # --- Receiving plays (player is lead_player_id = next to touch the ball) ---
   recv_plays <- dt[dt$lead_player_id == pid]
@@ -1431,7 +1533,7 @@ explain_player_rating <- function(player,
   pr <- player_row[1, ]
 
   cli::cli_h1("{pname} | {pr$team} | TORP Rating Breakdown")
-  cli::cli_h2("Overall: TORP {pr$torp} = 0.5 * EPR ({pr$epr}) + 0.5 * PSR ({round(pr$psr, 2)})")
+  cli::cli_h2("Overall: TORP {pr$torp} = {TORP_EPR_WEIGHT} * EPR ({pr$epr}) + {1 - TORP_EPR_WEIGHT} * PSR ({round(pr$psr, 2)})")
 
   # --- 2. EPR decomposition ---
   cli::cli_h2("EPR Breakdown (recv + disp + spoil + hitout)")
@@ -1460,8 +1562,12 @@ explain_player_rating <- function(player,
               shrink_vals$gms %||% "?",
               shrink_vals$wt_gms %||% shrink_vals$wt_gms_recv %||% "?",
               shrink_vals$wt_tog %||% "?"))
-  cat(sprintf("  Prior games (shrinkage strength): 3.0 per component\n"))
-  cat(sprintf("  Bayesian formula: EPR_i = (loading * sum_i + 3 * prior_rate) / (wt_gms_i + 3)\n"))
+  # Per-channel prior games come from the constants, not a literal: under v3/v4
+  # they are 14.38 / 24.33 / 11.09, not the 3.0 this used to print.
+  cat(sprintf("  Prior games (shrinkage strength): recv %s | disp %s | spoil %s | hitout %s\n",
+              format(EPR_PRIOR_GAMES_RECV), format(EPR_PRIOR_GAMES_DISP),
+              format(EPR_PRIOR_GAMES_SPOIL), format(EPR_PRIOR_GAMES_HITOUT)))
+  cat("  Bayesian formula: EPR_i = (loading * sum_i + prior_games_i * prior_rate_i) / (wt_gms_i + prior_games_i)\n")
 
   # --- 3. PSR decomposition ---
   cli::cli_h2("PSR Breakdown (stat rating contributions to predicted margin)")
@@ -1474,12 +1580,25 @@ explain_player_rating <- function(player,
     coef_df <- coef_df[coef_df$beta != 0, , drop = FALSE]
 
     # Load player's stat ratings
-    skills <- tryCatch(load_player_stat_ratings(season_val), error = function(e) NULL)
+    skills <- tryCatch(load_player_stat_ratings(season_val), error = function(e) {
+      cli::cli_alert_warning(
+        "Stat ratings for season {season_val} failed to load ({conditionMessage(e)}); the PSR breakdown is skipped.")
+      NULL
+    })
     if (!is.null(skills)) {
-      skills_dt <- data.table::as.data.table(skills)
-      player_skills <- skills_dt[skills_dt$player_id == pid]
+      # Subset the player's rows by index: converting the whole season's frame
+      # to a data.table first copied every row to read a handful.
+      player_skills <- data.table::as.data.table(skills[which(skills$player_id == pid), ])
       if (nrow(player_skills) > 0) {
-        # Take latest round
+        # Take the latest round at or before the requested one, so the breakdown
+        # matches the TORP headline above (which uses round_val), not whatever
+        # the season's last round happens to be.
+        player_skills <- player_skills[round <= round_val]
+        if (nrow(player_skills) == 0) {
+          cli::cli_alert_warning(
+            "No stat ratings at or before round {round_val}; falling back to the latest round available.")
+          player_skills <- data.table::as.data.table(skills[which(skills$player_id == pid), ])
+        }
         player_skills <- player_skills[order(-round)][1]
 
         skill_cols <- paste0(coef_df$stat_name, "_rating")
@@ -1489,13 +1608,25 @@ explain_player_rating <- function(player,
           available <- skill_cols %in% names(player_skills)
         }
 
+        # Report coverage: a dropped coefficient or a zero-imputed NA rating
+        # makes the breakdown incomplete, and it must not look complete.
+        if (any(!available)) {
+          cli::cli_alert_warning(
+            "{sum(!available)} of {length(available)} PSR coefficient stat{?s} have no rating column and are left out of this breakdown: {paste(coef_df$stat_name[!available], collapse = ', ')}")
+        }
+
         coef_sub <- coef_df[available, , drop = FALSE]
         skill_cols_avail <- skill_cols[available]
 
         raw_ratings <- vapply(skill_cols_avail, function(col) {
-          v <- as.numeric(player_skills[[col]])
-          if (is.na(v)) 0 else v
+          as.numeric(player_skills[[col]])
         }, numeric(1))
+        n_na_ratings <- sum(is.na(raw_ratings))
+        if (n_na_ratings > 0) {
+          cli::cli_alert_warning(
+            "{n_na_ratings} of {length(raw_ratings)} stat rating{?s} {?is/are} NA for this player and counted as 0 in the breakdown.")
+        }
+        raw_ratings[is.na(raw_ratings)] <- 0
 
         # Apply SD normalisation if present
         if ("sd" %in% names(coef_sub)) {
@@ -1537,7 +1668,11 @@ explain_player_rating <- function(player,
   cli::cli_h2("Recent Game Log (EPV + PSV per game)")
   pgr <- tryCatch(
     load_player_game_ratings(season_val),
-    error = function(e) NULL
+    error = function(e) {
+      cli::cli_alert_warning(
+        "Player game ratings for season {season_val} failed to load ({conditionMessage(e)}); the game log is skipped.")
+      NULL
+    }
   )
   game_log <- NULL
   if (!is.null(pgr)) {
@@ -1670,7 +1805,7 @@ explain_player_rating <- function(player,
     # (PSR_CENTRE_ON_LISTED defaults FALSE, so this branch is dead today), but
     # it fires the moment that flag is flipped for AFLW.
     listed_pos <- .load_listed_positions(
-      unique(data.table::as.data.table(skills)$season), comp = comp)
+      unique(skills[["season"]]), comp = comp)
   }
 
   # Resolve margin coefficient path
@@ -1736,7 +1871,13 @@ explain_player_rating <- function(player,
     if (is.null(d) || nrow(d) == 0) return(NULL)
     pcol <- intersect(c("position_group", "position"), names(d))[1]
     if (is.na(pcol) || !"player_id" %in% names(d)) return(NULL)
-    d[!is.na(get(pcol)), .(player_id, position = as.character(get(pcol)), season = s)]
+    # Extract the column once instead of get() inside [, which defeats
+    # data.table's fast column access.
+    pos_vals <- d[[pcol]]
+    has_pos <- !is.na(pos_vals)
+    data.table::data.table(player_id = d$player_id[has_pos],
+                           position = as.character(pos_vals[has_pos]),
+                           season = s)
   })
   got <- got[!vapply(got, is.null, logical(1))]
   if (length(got) == 0) {

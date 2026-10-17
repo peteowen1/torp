@@ -36,7 +36,12 @@ NULL
                               epr_params = NULL) {
   plyr_tm_df <- load_player_details(year)
   if (nrow(plyr_tm_df) == 0 || !"season" %in% names(plyr_tm_df)) {
+    cli::cli_alert_warning(
+      "No player details for {year}; falling back to {year - 1} roster listing")
     plyr_tm_df <- load_player_details(year - 1)
+    if (nrow(plyr_tm_df) == 0) {
+      cli::cli_abort("No player details for {year} or {year - 1}; cannot attribute teams/positions.")
+    }
   }
 
   # Build round_info with dates from fixtures
@@ -111,7 +116,7 @@ NULL
       tot_tog <- sum(final_df$pred_tog)
       if (tot_tog > 0) {
         n_teams <- length(unique(final_df$team))
-        target_tog <- n_teams * 18L
+        target_tog <- n_teams * AFL_PLAYERS_ON_FIELD
         final_df$pred_tog <- final_df$pred_tog * (target_tog / tot_tog)
         comps <- c("epr_recv", "epr_disp", "epr_spoil", "epr_hitout")
         for (comp in comps) {
@@ -169,6 +174,8 @@ NULL
 #' @param psr_df PSR frame for \code{calculate_torp()}. Skipped when NULL.
 #' @param opponent_adjust Apply \code{adjust_epv_for_opponents()}. Leave TRUE
 #'   unless \code{pgd} already carries \code{_oadj} columns.
+#' @param allow_partial Accept a result missing seasons whose build failed.
+#'   FALSE (default) aborts, so two arms are never scored on different rows.
 #' @return A ratings data frame. Never written anywhere.
 #' @keywords internal
 build_ratings_history <- function(seasons,
@@ -178,12 +185,17 @@ build_ratings_history <- function(seasons,
                                   epv_level_centre = EPV_LEVEL_CENTRE,
                                   epr_position_centre = EPR_POSITION_CENTRE,
                                   psr_df = NULL,
-                                  opponent_adjust = TRUE) {
+                                  opponent_adjust = TRUE,
+                                  allow_partial = FALSE) {
   if (is.null(pgd)) pgd <- load_player_game_data(TRUE)
   if (is.null(fixtures)) fixtures <- load_fixtures(TRUE)
   if (is.null(stat_ratings)) {
     stat_ratings <- tryCatch(get_player_stat_ratings(current = FALSE),
-                             error = function(e) NULL)
+                             error = function(e) {
+                               cli::cli_alert_warning(
+                                 "Stat ratings failed to load ({conditionMessage(e)}); TOG decomposition disabled, so this build differs from production")
+                               NULL
+                             })
   }
 
   pgd <- data.table::as.data.table(pgd)
@@ -193,7 +205,7 @@ build_ratings_history <- function(seasons,
 
   out <- list()
   for (s in seasons) {
-    start_round <- if (s >= 2024) 0 else 1
+    start_round <- if (s >= AFL_FIRST_ROUND_ZERO_SEASON) 0 else 1
     max_round <- if (s == get_afl_season()) get_afl_week(type = "next") else .afl_last_round(s)
     out[[as.character(s)]] <- tryCatch(
       .build_epr_season(s, start_round:max_round, pgd, stat_ratings, fixtures),
@@ -201,6 +213,12 @@ build_ratings_history <- function(seasons,
         cli::cli_alert_danger("Ratings build failed for {s}: {conditionMessage(e)}")
         NULL
       })
+  }
+  failed <- setdiff(as.character(seasons), names(out))  # assigning NULL drops the element
+  if (length(failed) > 0 && !isTRUE(allow_partial)) {
+    cli::cli_abort(c(
+      "Ratings build failed for season{?s} {.val {failed}}.",
+      "i" = "Pass {.code allow_partial = TRUE} to accept a frame missing them."))
   }
   res <- dplyr::bind_rows(out)
   if (nrow(res) == 0) {

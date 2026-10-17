@@ -21,11 +21,11 @@ plot_simulation <- function(sim_results, type = c("ladder", "position", "finals"
   }
 
   summary <- summarise_simulations(sim_results)
+  all_teams <- summary$team
 
   if (!is.null(teams)) {
     summary <- summary[summary$team %in% teams, ]
     if (nrow(summary) == 0) {
-      all_teams <- summarise_simulations(sim_results)$team
       cli::cli_abort(c(
         "No matching teams found in simulation results.",
         "i" = "Available: {.val {all_teams}}"
@@ -74,7 +74,7 @@ plot_simulation <- function(sim_results, type = c("ladder", "position", "finals"
         labels = function(x) paste0(round(x * 100), "%"),
         name = "Probability"
       ) +
-      ggplot2::scale_x_continuous(breaks = seq(1, 18)) +
+      ggplot2::scale_x_continuous(breaks = seq_len(max(pos_probs$rank))) +
       ggplot2::labs(
         title = paste("AFL", sim_results$season, "Ladder Position Probabilities"),
         subtitle = paste0(sim_results$n_sims, " simulations"),
@@ -270,7 +270,7 @@ plot_match_simulation <- function(match_sim,
     qtrs <- match_sim$quarters
     qtrs_long <- data.table::data.table(
       score = c(qtrs$home_qtr_score, qtrs$away_qtr_score),
-      quarter = factor(rep(qtrs$quarter, 2), labels = paste0("Q", 1:4)),
+      quarter = factor(rep(qtrs$quarter, 2), levels = 1:4, labels = paste0("Q", 1:4)),
       team = factor(
         c(rep(home, nrow(qtrs)), rep(away, nrow(qtrs))),
         levels = c(home, away)

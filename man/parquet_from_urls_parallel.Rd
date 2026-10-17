@@ -7,7 +7,7 @@
 parquet_from_urls_parallel(
   urls,
   use_cache = FALSE,
-  max_age_days = 7,
+  max_age_days = DISK_CACHE_DEFAULT_AGE_DAYS,
   columns = NULL
 )
 }

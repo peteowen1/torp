@@ -156,8 +156,8 @@ join_aflw_features_to_matches <- function(matches, elo_result, team_psr, hga = A
     dplyr::left_join(psr_home, by = c("match_id", "home_team")) |>
     dplyr::left_join(psr_away, by = c("match_id", "away_team")) |>
     dplyr::mutate(
-      elo_pre_home = dplyr::coalesce(elo_pre_home, elo_current_home, 1500),
-      elo_pre_away = dplyr::coalesce(elo_pre_away, elo_current_away, 1500),
+      elo_pre_home = dplyr::coalesce(elo_pre_home, elo_current_home, AFLW_ELO_INIT),
+      elo_pre_away = dplyr::coalesce(elo_pre_away, elo_current_away, AFLW_ELO_INIT),
       aflw_elo_diff = (elo_pre_home + hga) - elo_pre_away,
       # A roster IS found (so team_psr isn't NA) but every listed player is
       # unrated -- e.g. that round's stat-ratings batch hasn't run yet, not
@@ -181,7 +181,7 @@ join_aflw_features_to_matches <- function(matches, elo_result, team_psr, hga = A
   n_unrated_elo <- sum(!(matches$home_team %in% current$team_name) |
                         !(matches$away_team %in% current$team_name))
   if (n_unrated_elo > 0) {
-    cli::cli_inform("join_aflw_features_to_matches: {n_unrated_elo} row{?s} have a team with no Elo history at all -- using neutral 1500 fallback")
+    cli::cli_inform("join_aflw_features_to_matches: {n_unrated_elo} row{?s} have a team with no Elo history at all -- using neutral {AFLW_ELO_INIT} fallback")
   }
   n_psr_unmatched <- sum(!out$aflw_psr_matched)
   if (n_psr_unmatched > 0) {
@@ -224,9 +224,18 @@ fit_aflw_match_model <- function(train_df) {
     cli::cli_inform("fit_aflw_match_model: dropping {n_dropped} training row{?s} with an unmatched/NA PSR reading")
   }
   train_df <- train_df[keep, ]
+  # A drawn match (home_margin == 0) is neither a home win nor a home loss, so
+  # coding it 0 would teach the win model that draws are losses. Drop draws from
+  # the win GLM only (with a count); the margin model keeps them -- a 0 margin is
+  # a legitimate observation there.
+  n_draw <- sum(train_df$home_margin == 0, na.rm = TRUE)
+  if (n_draw > 0) {
+    cli::cli_inform("fit_aflw_match_model: excluding {n_draw} drawn match{?es} from the win model (margin model keeps them)")
+  }
+  win_df <- train_df[!(train_df$home_margin == 0 & !is.na(train_df$home_margin)), ]
   win_model <- stats::glm(
     I(home_margin > 0) ~ aflw_elo_diff + aflw_psr_diff,
-    data = train_df, family = stats::binomial()
+    data = win_df, family = stats::binomial()
   )
   margin_model <- stats::lm(
     home_margin ~ aflw_elo_diff + aflw_psr_diff,

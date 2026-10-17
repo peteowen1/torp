@@ -61,7 +61,7 @@ test_that("format_predictions_blog joins xscore lookup correctly", {
     xscore_home = 91.5,
     xscore_away = 88.0
   )
-  out <- format_predictions_blog(.mock_preds(), xg = xg)
+  expect_warning(out <- format_predictions_blog(.mock_preds(), xg = xg), "no matching xg row")
   joined <- out[out$home_team == "Carlton Blues" &
                   out$away_team == "Essendon Bombers", ]
   expect_equal(joined$xscore_home, 91.5)
@@ -131,13 +131,13 @@ test_that("xg_to_blog_lookup returns NULL on NULL input", {
   expect_null(xg_to_blog_lookup(NULL, 2026))
 })
 
-test_that("xg_to_blog_lookup returns NULL on 0-row input (with info message)", {
+test_that("xg_to_blog_lookup returns NULL with a warning on 0-row input", {
   empty_xg <- tibble::tibble(
     match_id = character(), home_team = character(), away_team = character(),
     home_xscore = double(), away_xscore = double()
   )
-  # cli_alert_info is diagnostic, not a warning -- just check NULL return.
-  expect_null(xg_to_blog_lookup(empty_xg, 2026))
+  expect_warning(out <- xg_to_blog_lookup(empty_xg, 2026), "0 rows")
+  expect_null(out)
 })
 
 test_that("xg_to_blog_lookup aborts on missing column", {
@@ -163,7 +163,40 @@ test_that("xg_to_blog_lookup output joins cleanly against canonical preds", {
     away_xscore = 88.0
   )
   lookup <- xg_to_blog_lookup(xg, 2026)
-  out <- format_predictions_blog(.mock_preds(), xg = lookup)
+  expect_warning(out <- format_predictions_blog(.mock_preds(), xg = lookup), "no matching xg row")
   joined <- out[out$home_team == "Carlton Blues", ]
   expect_equal(joined$xscore_home, 91.5)
+})
+
+test_that("format_predictions_blog warns on a partial xg join", {
+  p <- .mock_preds()
+  xg <- tibble::tibble(
+    season = p$season[1], round = p$round[1],
+    home_team = torp_replace_teams(p$home_team[1]),
+    away_team = torp_replace_teams(p$away_team[1]),
+    xscore_home = 90, xscore_away = 80
+  )
+  if (nrow(p) > 1) {
+    expect_warning(out <- format_predictions_blog(p, xg = xg), "no matching xg row")
+    expect_equal(nrow(out), nrow(p))
+  }
+})
+
+test_that("format_predictions_blog aborts on duplicated xg keys", {
+  p <- .mock_preds()
+  xg <- tibble::tibble(
+    season = p$season[1], round = p$round[1],
+    home_team = torp_replace_teams(p$home_team[1]),
+    away_team = torp_replace_teams(p$away_team[1]),
+    xscore_home = c(90, 91), xscore_away = c(80, 81)
+  )
+  expect_error(format_predictions_blog(p, xg = xg), "duplicated")
+})
+
+test_that("xg_to_blog_lookup warns on unparseable match_id", {
+  xg <- tibble::tibble(
+    match_id = "bad", home_team = "Carlton", away_team = "Essendon",
+    home_xscore = 91.5, away_xscore = 88.0
+  )
+  expect_warning(xg_to_blog_lookup(xg, 2026), "round")
 })

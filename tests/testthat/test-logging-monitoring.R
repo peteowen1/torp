@@ -72,3 +72,9 @@ test_that("log_prediction_event logs correctly", {
   # Should handle missing optional parameters
   expect_silent(log_prediction_event("test_model", "def456", 50))
 })
+
+test_that("monitor_model_drift tolerates NA AUC and setup rejects bad levels", {
+  res <- suppressWarnings(monitor_model_drift("m", list(auc = NA_real_), list(auc = 0.7)))
+  expect_true(is.na(res$drift_detected))
+  expect_error(setup_torp_logging(level = "VERBOSE"))
+})

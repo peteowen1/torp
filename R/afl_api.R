@@ -141,6 +141,8 @@ NULL
   if (length(duped) > 0) {
     collision <- new_names != names(result) & duplicated(new_names, fromLast = FALSE)
     new_names[collision] <- names(result)[collision]
+    # Restoring originals can itself collide; never leave duplicate names.
+    new_names <- make.unique(new_names)
   }
   names(result) <- new_names
 
@@ -179,6 +181,23 @@ NULL
 }
 
 
+#' Calendar season from an AFL provider id (internal)
+#'
+#' Reads the 4 digits after the `CD_S` / `CD_M` prefix. The one known exception
+#' is AFLW 2022 "Season 7" (`CD_S2101264`), whose id starts 2101 although it
+#' was played in 2022.
+#' @param x Character vector of provider ids (season `CD_S...` or match `CD_M...`)
+#' @return Numeric vector of seasons; NA where the id does not parse
+#' @keywords internal
+.season_from_provider_id <- function(x) {
+  x <- as.character(x)
+  yr <- suppressWarnings(as.numeric(sub("^CD_[A-Z](\\d{4}).*$", "\\1", x)))
+  yr[!grepl("^CD_[A-Z]\\d{4}", x)] <- NA_real_
+  yr[yr %in% 2101] <- 2022
+  yr
+}
+
+
 .fetch_all_player_details <- function(seasons) {
   # Gather all (team_id, season_id, actual_season) tuples across seasons
   team_season_info <- list()
@@ -189,7 +208,7 @@ NULL
     actual_season <- if ("season" %in% names(fixtures)) {
       fixtures$season[1]
     } else if ("compSeason.providerId" %in% names(fixtures)) {
-      as.numeric(gsub("CD_S(\\d{4})\\d+", "\\1", fixtures$compSeason.providerId[1]))
+      .season_from_provider_id(fixtures$compSeason.providerId[1])
     } else {
       s
     }
@@ -221,6 +240,7 @@ NULL
   # No auth header — aflapi.afl.com.au/afl/v2 is a public endpoint (unlike CFS)
   pool <- curl::new_pool(total_con = 50L, host_con = 20L)
   details_list <- vector("list", length(urls))
+  failed_idx <- integer(0)
 
   for (i in seq_along(urls)) {
     h <- curl::new_handle()
@@ -234,18 +254,27 @@ NULL
             if (!is.null(out)) out$.actual_season <- team_season_info[[idx]]$actual_season
             details_list[[idx]] <<- out
           }, error = function(e) {
+            failed_idx <<- c(failed_idx, idx)
             cli::cli_alert_danger("Failed to parse player details for team-season {idx}: {conditionMessage(e)}")
           })
         } else {
+          failed_idx <<- c(failed_idx, idx)
           cli::cli_alert_danger("HTTP {resp$status_code} fetching player details for team-season {idx}")
         }
       }, fail = function(msg) {
+        failed_idx <<- c(failed_idx, idx)
         cli::cli_alert_danger("Connection failed for player details team-season {idx}: {msg}")
       }, handle = h, pool = pool)
     })
   }
 
   curl::multi_run(pool = pool)
+
+  if (length(failed_idx) > 0) {
+    cli::cli_warn(
+      "Player details incomplete: {length(failed_idx)} of {length(urls)} team-season{?s} failed (index{?es} {sort(failed_idx)})."
+    )
+  }
 
   result <- purrr::list_rbind(purrr::compact(details_list))
 
@@ -299,7 +328,8 @@ NULL
     # Extract from name (e.g. "2025 Toyota AFL Premiership")
     seasons_list$.year <- as.numeric(gsub("^(\\d{4}).*", "\\1", seasons_list$name))
   }
-  target <- seasons_list[seasons_list$.year == yr, ]
+  if (is.na(yr)) return(NULL)
+  target <- seasons_list[which(seasons_list$.year == yr), ]
   if (nrow(target) == 0) return(NULL)
 
   season_id <- target$id[1]
@@ -323,7 +353,7 @@ NULL
 
   # Step 1: Get the target competition's ID
   comp_resp <- tryCatch(
-    httr::GET(paste0(AFL_API_BASE_URL, "competitions")),
+    httr::GET(paste0(AFL_API_BASE_URL, "competitions"), httr::timeout(30)),
     error = function(e) NULL
   )
   if (is.null(comp_resp) || httr::http_error(comp_resp)) {
@@ -363,7 +393,8 @@ NULL
 
   # Step 2: Get all comp seasons for this competition
   cs_resp <- tryCatch(
-    httr::GET(paste0(AFL_API_BASE_URL, "competitions/", comp_id, "/compseasons")),
+    httr::GET(paste0(AFL_API_BASE_URL, "competitions/", comp_id, "/compseasons"),
+              httr::timeout(30)),
     error = function(e) NULL
   )
   if (is.null(cs_resp) || httr::http_error(cs_resp)) {
@@ -583,13 +614,16 @@ get_afl_fixtures <- function(season = NULL, comp = "AFLM") {
     }
     all_ids <- seasons_df$id
     cli::cli_inform("Fetching fixtures for {length(all_ids)} season{?s}...")
+    # Count thrown errors only: a valid-but-empty season also returns NULL
+    # (single-season fallback relies on that contract) and is not a failure.
+    n_failed <- 0L
     results <- purrr::map(all_ids, function(sid) {
       tryCatch(.fetch_fixtures_for_season_id(sid), error = function(e) {
+        n_failed <<- n_failed + 1L
         cli::cli_alert_danger("Failed to fetch fixtures for season ID {sid}: {conditionMessage(e)}")
         NULL
       })
     })
-    n_failed <- sum(vapply(results, is.null, logical(1)))
     if (n_failed > 0) {
       cli::cli_alert_danger("{n_failed} of {length(all_ids)} season{?s} failed to load")
     }
@@ -816,7 +850,7 @@ get_afl_lineups <- function(season = NULL, round = NULL, comp = "AFLM") {
   cli::cli_inform("Loaded lineups for {n_with_lineups} of {n_total} match{?es}.")
 
   # Add season and row_id to match existing schema
-  result$season <- as.numeric(substr(result$providerId, 5, 8))
+  result$season <- .season_from_provider_id(result$providerId)
   if ("player.playerId" %in% names(result)) {
     result$row_id <- paste0(result$providerId, result$teamId, result$player.playerId)
   }
@@ -852,7 +886,10 @@ get_afl_player_stats <- function(season = NULL, comp = "AFLM") {
   if (nrow(fixtures) == 0) return(tibble::tibble())
 
   # Only fetch stats for concluded matches
-  concluded <- fixtures[fixtures$status == "CONCLUDED", ]
+  if (!"status" %in% names(fixtures)) {
+    cli::cli_abort("Fixtures for season {season} have no {.field status} column -- cannot identify concluded matches.")
+  }
+  concluded <- fixtures[which(fixtures$status == "CONCLUDED"), ]
   if (nrow(concluded) == 0) return(tibble::tibble())
 
   match_ids <- concluded$match_id
@@ -874,7 +911,8 @@ get_afl_player_stats <- function(season = NULL, comp = "AFLM") {
     names(concluded)
   )
   match_info <- concluded[, join_cols, drop = FALSE]
-  result <- dplyr::left_join(result, match_info, by = c("providerId" = "match_id"))
+  result <- dplyr::left_join(result, match_info, by = c("providerId" = "match_id"),
+                             relationship = "many-to-one")
 
   # Rename providerId → match_id to match canonical naming
   if ("providerId" %in% names(result)) {
@@ -939,7 +977,7 @@ get_afl_player_season_stats <- function(season = NULL, comp = "AFLW") {
   seasons_list$.year <- if ("name" %in% names(seasons_list)) {
     as.numeric(gsub("^(\\d{4}).*", "\\1", seasons_list$name))
   } else {
-    as.numeric(gsub("CD_S(\\d{4})\\d+", "\\1", seasons_list$providerId))
+    .season_from_provider_id(seasons_list$providerId)
   }
   matches <- seasons_list[seasons_list$.year == yr, , drop = FALSE]
   if (nrow(matches) == 0) {
@@ -1016,7 +1054,7 @@ get_afl_player_details <- function(season = NULL, comp = "AFLM") {
   actual_season <- if ("season" %in% names(fixtures)) {
     fixtures$season[1]
   } else if ("compSeason.providerId" %in% names(fixtures)) {
-    as.numeric(gsub("CD_S(\\d{4})\\d+", "\\1", fixtures$compSeason.providerId[1]))
+    .season_from_provider_id(fixtures$compSeason.providerId[1])
   } else {
     season %||% get_afl_season()
   }
@@ -1040,6 +1078,7 @@ get_afl_player_details <- function(season = NULL, comp = "AFLM") {
   # <<- in callbacks is safe: multi_run() is synchronous (no concurrent mutation)
   pool <- curl::new_pool(total_con = 50L, host_con = 20L)
   details_list <- vector("list", length(team_ids))
+  failed_idx <- integer(0)
 
   for (i in seq_along(urls)) {
     h <- curl::new_handle()
@@ -1051,18 +1090,27 @@ get_afl_player_details <- function(season = NULL, comp = "AFLM") {
             json <- jsonlite::fromJSON(rawToChar(resp$content), flatten = TRUE)
             details_list[[idx]] <<- .parse_squad_json(json)
           }, error = function(e) {
+            failed_idx <<- c(failed_idx, idx)
             cli::cli_alert_danger("Failed to parse squad for team {team_ids[idx]}: {conditionMessage(e)}")
           })
         } else {
+          failed_idx <<- c(failed_idx, idx)
           cli::cli_alert_danger("HTTP {resp$status_code} fetching squad for team {team_ids[idx]}")
         }
       }, fail = function(msg) {
+        failed_idx <<- c(failed_idx, idx)
         cli::cli_alert_danger("Failed to fetch squad for team {team_ids[idx]}: {msg}")
       }, handle = h, pool = pool)
     })
   }
 
   curl::multi_run(pool = pool)
+
+  if (length(failed_idx) > 0) {
+    cli::cli_warn(
+      "Player details incomplete: {length(failed_idx)} of {length(team_ids)} team{?s} failed (index{?es} {sort(failed_idx)})."
+    )
+  }
 
   result <- purrr::list_rbind(purrr::compact(details_list))
 
@@ -1104,14 +1152,21 @@ torp_replace_teams <- function(team) {
 #' @examples
 #' torp_team_abbr("Adelaide Crows")
 #' torp_team_abbr(c("Narrm", "Western Bulldogs", "CARL"))
-torp_team_abbr <- function(team) {
+torp_team_abbr <- function(team) .torp_team_lookup(team, "abbr")
+
+
+#' Look up an AFL_TEAMS column for team-name variants (internal)
+#' @param team Character vector of team names (any recognised variant)
+#' @param col Column of `AFL_TEAMS` to return ("abbr" or "full")
+#' @keywords internal
+.torp_team_lookup <- function(team, col) {
   canonical <- torp_replace_teams(team)
   idx <- match(canonical, AFL_TEAMS$name)
   if (anyNA(idx)) {
     unmatched <- team[is.na(idx)]
     cli::cli_warn("{length(unmatched)} unrecognised team name{?s}: {.val {unmatched}}")
   }
-  AFL_TEAMS$abbr[idx]
+  AFL_TEAMS[[col]][idx]
 }
 
 
@@ -1126,15 +1181,7 @@ torp_team_abbr <- function(team) {
 #' @examples
 #' torp_team_full("Adelaide")
 #' torp_team_full(c("WB", "Narrm", "Cats"))
-torp_team_full <- function(team) {
-  canonical <- torp_replace_teams(team)
-  idx <- match(canonical, AFL_TEAMS$name)
-  if (anyNA(idx)) {
-    unmatched <- team[is.na(idx)]
-    cli::cli_warn("{length(unmatched)} unrecognised team name{?s}: {.val {unmatched}}")
-  }
-  AFL_TEAMS$full[idx]
-}
+torp_team_full <- function(team) .torp_team_lookup(team, "full")
 
 
 #' Standardise AFL Venue Names

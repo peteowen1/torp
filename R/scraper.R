@@ -60,7 +60,7 @@ get_match_chains <- function(season = get_afl_season(), round = NA, comp = "AFLM
 
   games <- if (is.na(round)) {
     cli::cli_inform("No round value supplied. Scraping all rounds in the season. This may take some time.")
-    get_season_games(season)
+    get_season_games(season, require_complete = TRUE)
   } else {
     get_round_games(season, round)
   }
@@ -75,6 +75,7 @@ get_match_chains <- function(season = get_afl_season(), round = NA, comp = "AFLM
   chains <- get_many_game_chains(games_vector)
 
   players <- get_players(season = season)
+  .assert_unique_player_keys(players)
   chains <- chains |>
     dplyr::inner_join(games, by = "matchId") |>
     dplyr::left_join(players, by = c("playerId", "season"))
@@ -115,6 +116,7 @@ get_match_chains <- function(season = get_afl_season(), round = NA, comp = "AFLM
   }
 
   players <- get_players(season = match_year)
+  .assert_unique_player_keys(players)
   chains <- chains |>
     dplyr::left_join(players, by = c("playerId", "season"))
 
@@ -318,7 +320,7 @@ get_round_games <- function(season, round, concluded_only = TRUE) {
 #' @keywords internal
 #'
 #' @importFrom curl new_pool new_handle curl_fetch_multi multi_run
-get_season_games <- function(season, rounds = NULL) {
+get_season_games <- function(season, rounds = NULL, require_complete = FALSE) {
   if (is.null(rounds)) rounds <- .afl_last_round(season)
   token <- get_token()
   urls <- vapply(seq_len(rounds), function(r) {
@@ -369,10 +371,32 @@ get_season_games <- function(season, rounds = NULL) {
   if (n_parse_errors > 0) {
     cli::cli_warn("{n_parse_errors} round{?s} returned unparseable data for season {season}")
   }
+  # A round that never answered (or answered garbage) is a hole in the season.
+  # Not compared to .afl_last_round(): that includes unplayed rounds, whose
+  # empty results are legitimate.
+  n_incomplete <- n_failed + n_parse_errors
+  if (require_complete && n_incomplete > 0) {
+    cli::cli_abort("{n_incomplete} round{?s} failed to fetch or parse for season {season}; refusing a partial season (require_complete = TRUE).")
+  }
 
   out <- dplyr::bind_rows(purrr::compact(results))
-  if (nrow(out) == 0) return(data.frame())
+  if (nrow(out) == 0) out <- data.frame()
+  attr(out, "n_failed_rounds") <- n_incomplete
   out
+}
+
+#' Abort if player details are not unique per (playerId, season)
+#'
+#' A duplicate key on the right of a left_join silently multiplies chain rows.
+#'
+#' @param players Output of [get_players()].
+#' @return `players`, invisibly.
+#' @keywords internal
+.assert_unique_player_keys <- function(players) {
+  if (anyDuplicated(as.data.frame(players)[, c("playerId", "season")]) > 0) {
+    cli::cli_abort("Player details are not unique per (playerId, season); joining would duplicate chain rows.")
+  }
+  invisible(players)
 }
 
 #' Get Players
@@ -393,6 +417,10 @@ get_players <- function(season = TRUE, use_api = FALSE) {
     players <- api_result[["players"]]
     if (is.null(players)) {
       cli::cli_abort("AFL API players response missing {.field players} key")
+    }
+    # The players endpoint only describes the current roster.
+    if (!isTRUE(season) && !identical(as.numeric(season), as.numeric(get_afl_season()))) {
+      cli::cli_abort("{.code use_api = TRUE} only supports the current season, not {.val {season}}.")
     }
     players <- players |>
       dplyr::mutate(season = get_afl_season())
@@ -457,8 +485,7 @@ get_game_chains <- function(match_id) {
   if (length(actions_col) == 1) {
     col_idx <- actions_col
   } else {
-    cli::cli_warn("AFL API chain response has ambiguous or missing actions/stats column for {.val {match_id}} -- possible schema drift, falling back to positional column 6")
-    col_idx <- 6
+    cli::cli_abort("AFL API chain response has ambiguous or missing actions/stats column for {.val {match_id}} -- possible schema drift.")
   }
   stats_col_name <- names(chain_list)[col_idx]
 

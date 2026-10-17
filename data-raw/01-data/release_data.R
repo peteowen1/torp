@@ -21,6 +21,14 @@ devtools::load_all()
 # Chains Data ----
 tictoc::tic('chains')
 
+# Round range for a season: round 0 exists from 2024; current season stops at the
+# current week, past seasons at their last round.
+.season_rounds <- function(season) {
+  start <- if (season >= 2024) 0 else 1
+  end <- if (season == get_afl_season()) get_afl_week() else .afl_last_round(season)
+  start:end
+}
+
 #' Build full season chains _all file
 #'
 #' Fetches all rounds for a season from AFL API and saves as _all file.
@@ -29,9 +37,7 @@ tictoc::tic('chains')
 #' @param rounds Rounds to include (default: all)
 release_chains_season <- function(season, rounds = NULL) {
   if (is.null(rounds)) {
-    start <- if (season >= 2024) 0 else 1
-    end <- if (season == get_afl_season()) get_afl_week() else .afl_last_round(season)
-    rounds <- start:end
+    rounds <- .season_rounds(season)
   }
 
   all_chains <- purrr::map(rounds, function(round) {
@@ -64,9 +70,7 @@ tictoc::tic('pbp')
 #'
 #' @param season Season year
 release_pbp_season <- function(season) {
-  start <- if (season >= 2024) 0 else 1
-  end <- if (season == get_afl_season()) get_afl_week() else .afl_last_round(season)
-  rounds <- start:end
+  rounds <- .season_rounds(season)
 
   all_chains <- purrr::map(rounds, function(round) {
     tryCatch(get_match_chains(season, round), error = function(e) NULL)
@@ -164,6 +168,8 @@ get_fixtures <- function(season) {
   save_to_release(df = fixtures, file_name = file_name, release_tag = "fixtures-data")
 }
 
+# Calendar year (not get_afl_season()) on purpose: next season's fixtures are
+# published before the season starts.
 purrr::walk(2025:lubridate::year(Sys.Date()), ~ get_fixtures(.))
 
 tictoc::toc(log= TRUE)

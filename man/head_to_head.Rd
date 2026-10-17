@@ -10,7 +10,8 @@ head_to_head(
   type = "all",
   seasons = TRUE,
   rounds = TRUE,
-  chains = NULL
+  chains = NULL,
+  population = EPV3_CONTEST_POPULATION
 )
 }
 \arguments{
@@ -26,6 +27,11 @@ or \code{"all"} (default).}
 \item{rounds}{Rounds to include. Numeric vector or \code{TRUE} for all.}
 
 \item{chains}{Optional pre-loaded chains data to avoid re-downloading.}
+
+\item{population}{Which aerial outcomes count as a contest; passed to
+\code{\link{extract_contests}}, which documents the options and why
+\code{"evidence"} falls back to \code{"all"}. Defaults to
+\code{EPV3_CONTEST_POPULATION}.}
 }
 \value{
 An S3 object of class \code{torp_head_to_head} with elements:

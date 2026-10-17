@@ -24,7 +24,7 @@ ascending (see \code{.matches_from_team_mdl_df()}).}
 rating before computing expected result. Default \code{ELO_HGA}.}
 
 \item{carryover}{Fraction of a team's rating retained across a season
-boundary (1 = no regression, 0 = full reset to 1500). Default
+boundary (1 = no regression, 0 = full reset to \code{ELO_INIT}). Default
 \code{ELO_CARRYOVER}.}
 
 \item{mov_mult}{Logical; apply the log-margin x anti-runaway multiplier
@@ -38,7 +38,12 @@ that match.}
 \item{current}{data.table(team_name, elo_current) -- each team's rating
 immediately AFTER its most recent match in \code{matches}. Used for
 upcoming/unplayed fixtures, where there is no historical elo_pre to
-look up (see \code{join_elo_diff_to_team_mdl_df()}).}
+look up (see \code{join_elo_diff_to_team_mdl_df()}). Not yet regressed
+for a new season; the join does that per fixture.}
+\item{last_season}{data.table(team_name, last_season) -- season of each
+team's most recent match in \code{matches}.}
+\item{carryover}{The \code{carryover} used, so the join can regress
+\code{current} the same way.}
 }
 \description{
 Standard Elo with home-ground advantage and a 538-style, winner-relative

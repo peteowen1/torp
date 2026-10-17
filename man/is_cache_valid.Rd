@@ -9,7 +9,7 @@ is_cache_valid(cache_entry, cache_ttl)
 \arguments{
 \item{cache_entry}{Cache entry object}
 
-\item{cache_ttl}{Time-to-live in seconds}
+\item{cache_ttl}{Time-to-live in seconds (see \code{MEM_CACHE_TTL_SECS})}
 }
 \value{
 Logical indicating if cache is valid

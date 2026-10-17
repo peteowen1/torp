@@ -85,7 +85,17 @@ if (!is.null(prior) && nrow(prior) > 0) {
   if (last_date == as_of) {
     cli::cli_inform("A snapshot for {as_of} already exists; it will be overwritten with this fresh capture.")
   }
-  prev <- tryCatch(load_aflw_season_stats_snapshot(season, as_of = last_date), error = function(e) NULL)
+  # A failed load is NOT "no prior snapshot": one is known to exist (the listing
+  # just returned it), so skipping the check here would publish unchecked.
+  prev_err <- NULL
+  prev <- tryCatch(load_aflw_season_stats_snapshot(season, as_of = last_date),
+                   error = function(e) { prev_err <<- conditionMessage(e); NULL })
+  if (is.null(prev)) {
+    cli::cli_abort(paste0(
+      "Season {season}: could not load the {last_date} snapshot to compare against (",
+      if (is.null(prev_err)) "returned NULL" else prev_err,
+      "). Publishing now would skip the monotonicity check. Not publishing -- re-run once the load succeeds."))
+  }
   if (!is.null(prev) && nrow(prev) > 0 && last_date != as_of) {
     # all.y: an INNER join here would only compare players present in BOTH
     # captures, so a player who vanished from this week's fetch -- the exact

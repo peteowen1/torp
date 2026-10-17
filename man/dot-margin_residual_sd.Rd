@@ -4,7 +4,7 @@
 \alias{.margin_residual_sd}
 \title{Residual SD of the margin model on completed matches}
 \usage{
-.margin_residual_sd(df)
+.margin_residual_sd(df, min_n = MARGIN_SIGMA_MIN_N)
 }
 \arguments{
 \item{df}{Team-level model frame with \code{pred_score_diff} and \code{score_diff}.}

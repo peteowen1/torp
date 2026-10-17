@@ -4,7 +4,7 @@
 \alias{.heldout_margin_sigma}
 \title{Held-out spread of the margin model, from the locked pre-game predictions}
 \usage{
-.heldout_margin_sigma(preds = NULL, min_n = 100L)
+.heldout_margin_sigma(preds = NULL, min_n = MARGIN_SIGMA_MIN_N)
 }
 \arguments{
 \item{preds}{Optional locked-predictions frame with \code{margin} and

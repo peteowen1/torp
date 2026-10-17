@@ -10,12 +10,13 @@
 A list with elements:
 \describe{
 \item{players}{data.table with \code{player_id} and \code{team} (canonical name)}
-\item{match_info}{data.table with \code{team} and \code{match_id} for each team's latest match}
+\item{match_info}{data.table with \code{team} and \code{last_match} (the match id) for each team's latest match}
 }
 Returns NULL if lineup data is unavailable.
 }
 \description{
 Loads lineup data for the current season and extracts each team's most
-recent match lineup. Maps abbreviation-style team names to canonical names.
+recent match lineup. Maps team names (full, short or abbreviation) to
+canonical names.
 }
 \keyword{internal}

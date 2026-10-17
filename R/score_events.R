@@ -27,19 +27,31 @@
 #' @export
 get_match_score_events <- function(season = get_afl_season(), round = NA, match_ids = NULL) {
   if (is.null(match_ids)) {
-    games <- if (is.na(round)) {
+    games <- if (is.null(round) || is.na(round)) {
       # get_season_games() walks rounds 1..last, so the Opening Round
       # (round 0, since 2024) has to be fetched on its own.
-      g0 <- tryCatch(get_round_games(season, 0), error = function(e) data.frame())
-      g <- get_season_games(season)
+      g0 <- if (season >= 2024) {
+        tryCatch(get_round_games(season, 0), error = function(e) {
+          cli::cli_warn("Could not fetch the Opening Round (round 0) for {season}: {conditionMessage(e)}")
+          data.frame()
+        })
+      } else {
+        data.frame()
+      }
+      g <- get_season_games(season, require_complete = TRUE)
       if (nrow(g0) > 0) g <- dplyr::bind_rows(g0[, intersect(names(g0), names(g)), drop = FALSE], g)
       g
     } else {
       get_round_games(season, round)
     }
     if (nrow(games) == 0) {
-      cli::cli_inform("No concluded matches for {season} round {round}")
-      return(data.table::data.table())
+      round_label <- if (is.null(round) || is.na(round)) "all rounds" else paste("round", round)
+      cli::cli_inform("No concluded matches for {season} {round_label}")
+      empty <- data.table::data.table()
+      data.table::setattr(empty, "match_items", data.table::data.table(
+        match_id = character(), fetched_at = character(), match_item_json = character()
+      ))
+      return(empty)
     }
     match_ids <- games$matchId
   }

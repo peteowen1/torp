@@ -9,6 +9,129 @@
 # Data prep is in player_skills_data.R; profiles in player_skills_profile.R.
 
 # ============================================================================
+# Shared helpers (used by both the single-date and the batch estimator)
+# ============================================================================
+
+#' An independent data.table copy of the input, copied exactly once
+#'
+#' \code{as.data.table()} on a table that is already a data.table still deep
+#' copies it, so \code{copy(as.data.table(x))} copied twice. A data.frame input
+#' is converted into a fresh table by \code{as.data.table()} itself.
+#' @param x A data.frame or data.table.
+#' @return A data.table that is safe to modify by reference.
+#' @keywords internal
+#' @noRd
+.fresh_data_table <- function(x) {
+  if (data.table::is.data.table(x)) data.table::copy(x) else data.table::as.data.table(x)
+}
+
+#' Resolve the decay rate and prior strength for a rate stat
+#'
+#' Precedence: \code{params$stat_params} > \code{params$category_params} >
+#' the global \code{lambda_rate} / \code{prior_games}.
+#' @param params Hyperparameter list from \code{default_stat_rating_params()}.
+#' @param stat_name,category Stat name and its category.
+#' @return list(lambda, prior).
+#' @keywords internal
+#' @noRd
+.stat_rate_params <- function(params, stat_name, category) {
+  stat_params <- params$stat_params
+  cat_params <- params$category_params
+  if (!is.null(stat_params) && stat_name %in% names(stat_params)) {
+    sp <- stat_params[[stat_name]]
+    return(list(lambda = sp$lambda, prior = sp$prior_strength))
+  }
+  if (!is.null(cat_params) && category %in% names(cat_params)) {
+    cp <- cat_params[[category]]
+    return(list(lambda = cp$lambda, prior = cp$prior_strength))
+  }
+  list(lambda = params$lambda_rate, prior = params$prior_games)
+}
+
+#' Resolve the decay rate and prior strength for an efficiency stat
+#' @inheritParams .stat_rate_params
+#' @return list(lambda, prior).
+#' @keywords internal
+#' @noRd
+.stat_eff_params <- function(params, stat_name) {
+  stat_params <- params$stat_params
+  if (!is.null(stat_params) && stat_name %in% names(stat_params)) {
+    sp <- stat_params[[stat_name]]
+    return(list(lambda = sp$lambda, prior = sp$prior_strength))
+  }
+  list(lambda = params$lambda_efficiency, prior = params$prior_attempts)
+}
+
+#' (id x ref_date) lookup skeleton for the rolling joins
+#'
+#' \code{join_d} is \code{ref_date - 1} so a rolling join on
+#' \code{match_date_rating} gives strict "before ref_date" semantics (Dates are
+#' integer days).
+#' @param ids Vector of group ids (player ids, position groups, ...).
+#' @param ref_dates_sorted Sorted Date vector of reference dates.
+#' @param id_col Name for the id column.
+#' @return data.table with \code{id_col}, \code{ref_idx}, \code{join_d}.
+#' @keywords internal
+#' @noRd
+.ref_lookup_skeleton <- function(ids, ref_dates_sorted, id_col = "grp") {
+  lookup <- data.table::CJ(ids, seq_along(ref_dates_sorted))
+  data.table::setnames(lookup, c(id_col, "ref_idx"))
+  lookup[, join_d := ref_dates_sorted[ref_idx] - 1L]
+  lookup
+}
+
+#' Exposure per row for a rate stat that is not TOG-adjusted
+#'
+#' dream_team_points and rating_points use one unit of exposure per row instead
+#' of TOG. Availability-only rows (rostered but not selected, \code{tog = 0})
+#' reach that path with no numerator. Finding B69
+#' (docs/reviews/CODEBASE-REVIEW-2026-10-17.md in the torpverse repo) is that
+#' counting each of those unplayed rounds as a full unit of exposure deflates
+#' the per-game rate. Whether to count them is set by
+#' \code{STAT_RATE_NONTOG_EXCLUDE_UNPLAYED}: \code{FALSE} (the published
+#' behaviour) counts every row, \code{TRUE} counts played rows only.
+#'
+#' @param avail_only Logical vector, \code{TRUE} on availability-only rows.
+#' @param exclude_unplayed Whether unplayed rows get zero exposure.
+#' @return Numeric vector of per-row exposure, same length as \code{avail_only}.
+#' @keywords internal
+#' @noRd
+.nontog_exposure <- function(avail_only,
+                             exclude_unplayed = STAT_RATE_NONTOG_EXCLUDE_UNPLAYED) {
+  if (isTRUE(exclude_unplayed)) as.numeric(!avail_only) else rep(1, length(avail_only))
+}
+
+#' Warn about rate-stat source values that were NA on played rows
+#'
+#' Such rows are excluded from both the numerator and the exposure (they are
+#' unrecorded, not zero), so say how many there were.
+#' @param na_src_rows Named integer vector: stat name -> played rows with an NA source.
+#' @keywords internal
+#' @noRd
+.warn_na_rate_source <- function(na_src_rows) {
+  if (length(na_src_rows) == 0) return(invisible(NULL))
+  cli::cli_warn(c(
+    "{length(na_src_rows)} rate stat(s) had NA source values on played rows ({sum(na_src_rows)} stat-rows in total); those rows were excluded from the numerator and the exposure.",
+    "i" = "Per stat: {paste(names(na_src_rows), na_src_rows, sep = ' = ', collapse = ', ')}"
+  ))
+}
+
+#' Warn about efficiency-stat successes that were NA on played rows
+#'
+#' Such rows are excluded from both successes and attempts (the outcome was not
+#' recorded; it is not a failure), so say how many there were.
+#' @param na_succ_rows Named integer vector: stat name -> played rows with NA successes.
+#' @keywords internal
+#' @noRd
+.warn_na_efficiency_success <- function(na_succ_rows) {
+  if (length(na_succ_rows) == 0) return(invisible(NULL))
+  cli::cli_warn(c(
+    "{length(na_succ_rows)} efficiency stat(s) had NA successes on played rows ({sum(na_succ_rows)} stat-rows in total); those rows were excluded from successes and attempts.",
+    "i" = "Per stat: {paste(names(na_succ_rows), na_succ_rows, sep = ' = ', collapse = ', ')}"
+  ))
+}
+
+# ============================================================================
 # Core stat rating estimation
 # ============================================================================
 
@@ -57,7 +180,7 @@ estimate_player_stat_ratings <- function(stat_rating_data, ref_date = NULL,
   if (is.null(params)) params <- default_stat_rating_params()
   if (is.null(stat_defs)) stat_defs <- stat_rating_definitions()
 
-  dt <- data.table::copy(data.table::as.data.table(stat_rating_data))
+  dt <- .fresh_data_table(stat_rating_data)
 
   # Ensure date column
   if (!inherits(dt$match_date_rating, "Date")) {
@@ -94,7 +217,10 @@ estimate_player_stat_ratings <- function(stat_rating_data, ref_date = NULL,
   has_lineup <- "lineup_position" %in% names(dt_played)
   player_meta <- dt_played[, {
     out <- list(
-      player_name = data.table::last(player_name),
+      # Name on his most recent row, by date rather than by row order: last()
+      # depended on the input being date-sorted (the batch estimator sorts
+      # first, this one did not), B71.
+      player_name = player_name[which.max(match_date_rating)],
       # Career/window-MODAL position. Stable by construction, which is why it
       # varies in only 0.6% of player-seasons and cannot track a mid-season
       # role change (FABLE-DEFENDER-VALUE-PLAN §7.14a).
@@ -116,7 +242,7 @@ estimate_player_stat_ratings <- function(stat_rating_data, ref_date = NULL,
     out
   }, by = player_id]
   if (has_lineup) {
-    player_meta[, lineup_pos_group := unname(LINEUP_POSITION_GROUP_MAP[lineup_position])]
+    player_meta <- .add_lineup_pos_group(player_meta)
     player_meta[, lineup_position := NULL]
   }
 
@@ -137,21 +263,11 @@ estimate_player_stat_ratings <- function(stat_rating_data, ref_date = NULL,
 
   skill_results <- list()
   skipped_stats <- character(0)
+  na_src_rows <- integer(0)  # rate stat -> played rows whose source value is NA
+  na_succ_rows <- integer(0) # efficiency stat -> played rows whose successes are NA
 
-  # Resolve per-stat lambda/prior: stat_params > category_params > global fallback
-  stat_params <- params$stat_params
-  cat_params <- params$category_params
-  .resolve_rate_params <- function(stat_name, category) {
-    if (!is.null(stat_params) && stat_name %in% names(stat_params)) {
-      sp <- stat_params[[stat_name]]
-      return(list(lambda = sp$lambda, prior = sp$prior_strength))
-    }
-    if (!is.null(cat_params) && category %in% names(cat_params)) {
-      cp <- cat_params[[category]]
-      return(list(lambda = cp$lambda, prior = cp$prior_strength))
-    }
-    list(lambda = params$lambda_rate, prior = params$prior_games)
-  }
+  # Per-stat lambda/prior: stat_params > category_params > global fallback
+  # (.stat_rate_params / .stat_eff_params, shared with the batch estimator)
 
   # --- Rate stats (Gamma-Poisson) ---
   for (i in seq_len(nrow(rate_defs))) {
@@ -169,21 +285,40 @@ estimate_player_stat_ratings <- function(stat_rating_data, ref_date = NULL,
     use_col <- if (oadj_col %in% names(dt)) oadj_col else src_col
 
     # Per-stat lambda and prior strength
-    rp <- .resolve_rate_params(stat_nm, stat_cat)
+    rp <- .stat_rate_params(params, stat_nm, stat_cat)
     stat_lambda <- rp$lambda
     prior_str <- rp$prior
 
     vals <- as.numeric(dt[[use_col]])
-    vals[is.na(vals)] <- 0
+    # An NA source value is "not recorded", not "zero events": the row leaves
+    # both the numerator and the exposure (A198). Availability-only rows are NA
+    # by construction and carry no TOG exposure anyway, so only played rows are
+    # counted and reported.
+    na_src <- is.na(vals)
+    vals[na_src] <- 0
+    n_na_played <- sum(na_src & !dt$avail_only)
+    if (n_na_played > 0) na_src_rows[stat_nm] <- n_na_played
 
     # Use TOG as exposure denominator unless stat is not TOG-adjusted
     is_tog_adj <- is.na(rate_defs$tog_adjusted[i]) || isTRUE(rate_defs$tog_adjusted[i])
     if (is_tog_adj) {
       tog_vals <- as.numeric(dt$tog)
+      # NA-TOG convention (B70): a row with unknown TOG is a full game of
+      # exposure HERE (an unknown time on ground should not zero out a real
+      # row's stats), but 0 in .tog_safe above, which feeds the n_80s / wt_80s
+      # game counts (an unknown TOG adds no known 80s). The two differ on
+      # purpose; this is a no-op on current data (0 NA tog on played rows,
+      # 2021-2026, n = 58,324), so unifying them would change no number today.
       tog_vals[is.na(tog_vals)] <- 1
     } else {
-      tog_vals <- rep(1, nrow(dt))
+      # Not TOG-adjusted: one unit of exposure per row (see
+      # .nontog_exposure() and the B69 switch).
+      tog_vals <- .nontog_exposure(dt$avail_only)
     }
+    # NA source on a PLAYED row: out of numerator and exposure (A198).
+    # Availability-only rows are NA by construction, so they are left to the
+    # exposure rules above (TOG is 0 on them; non-TOG is the B69 switch).
+    tog_vals[na_src & !dt$avail_only] <- 0
 
     w_vec <- exp(-stat_lambda * dt$days_since)
 
@@ -249,29 +384,25 @@ estimate_player_stat_ratings <- function(stat_rating_data, ref_date = NULL,
     skill_results[[stat_nm]] <- agg[, keep_cols, with = FALSE]
   }
 
-  # Resolve per-stat efficiency params
-  .resolve_eff_params <- function(stat_name) {
-    if (!is.null(stat_params) && stat_name %in% names(stat_params)) {
-      sp <- stat_params[[stat_name]]
-      return(list(lambda = sp$lambda, prior = sp$prior_strength))
-    }
-    list(lambda = params$lambda_efficiency, prior = params$prior_attempts)
-  }
-
   # --- Efficiency stats (Beta-Binomial) ---
   for (i in seq_len(nrow(eff_defs))) {
     stat_nm <- eff_defs$stat_name[i]
     success_spec <- eff_defs$success_col[i]
     attempts_spec <- eff_defs$attempts_col[i]
 
-    if (is.na(success_spec) || is.na(attempts_spec)) next
+    if (is.na(success_spec) || is.na(attempts_spec)) {
+      skipped_stats <- c(skipped_stats, stat_nm)
+      next
+    }
 
-    # Filter rows based on played_only flag
+    # Filter rows based on played_only flag. dt_played (avail_only == FALSE;
+    # avail_only has no NA left after the fix-up above) is the same subset, so
+    # reuse it rather than re-subsetting the wide table for every stat.
     use_played_only <- !is.na(eff_defs$played_only[i]) && isTRUE(eff_defs$played_only[i])
-    dt_eff <- if (use_played_only) dt[avail_only == FALSE] else dt
+    dt_eff <- if (use_played_only) dt_played else dt
 
     # Per-stat lambda and prior strength
-    ep <- .resolve_eff_params(stat_nm)
+    ep <- .stat_eff_params(params, stat_nm)
     stat_lambda <- ep$lambda
     prior_str <- ep$prior
 
@@ -281,10 +412,17 @@ estimate_player_stat_ratings <- function(stat_rating_data, ref_date = NULL,
     } else {
       successes <- .compute_stat_rating_denominator(dt_eff, success_spec)
     }
-    successes[is.na(successes)] <- 0
+    # NA successes mean the outcome was not recorded, which is not the same as
+    # "none succeeded": the row leaves successes AND attempts (A202). Counting it
+    # as 0 successes against a full attempt count pulled the rate down.
+    na_succ <- is.na(successes)
+    successes[na_succ] <- 0
 
     attempts <- .compute_stat_rating_denominator(dt_eff, attempts_spec)
     attempts[is.na(attempts)] <- 0
+    attempts[na_succ] <- 0
+    n_na_played <- sum(na_succ & !dt_eff$avail_only)
+    if (n_na_played > 0) na_succ_rows[stat_nm] <- n_na_played
 
     # Ensure successes <= attempts
     successes <- pmin(successes, attempts)
@@ -370,6 +508,8 @@ estimate_player_stat_ratings <- function(stat_rating_data, ref_date = NULL,
   if (length(skipped_stats) > 0) {
     cli::cli_warn("Skipped {length(skipped_stats)} stat(s) due to missing columns: {paste(skipped_stats, collapse = ', ')}")
   }
+  .warn_na_rate_source(na_src_rows)
+  .warn_na_efficiency_success(na_succ_rows)
 
   # Clean up temp columns
   tmp_cols <- intersect(c(".wnum", ".wden", ".w_rate", ".tog_safe", ".raw_vals", ".raw_tog",
@@ -596,7 +736,7 @@ estimate_player_stat_ratings <- function(stat_rating_data, ref_date = NULL,
 
   # === One-time setup ===
   t_batch_start <- proc.time()
-  dt <- data.table::copy(data.table::as.data.table(stat_rating_data))
+  dt <- .fresh_data_table(stat_rating_data)
   if (!inherits(dt$match_date_rating, "Date"))
     dt[, match_date_rating := as.Date(match_date_rating)]
   if (!"avail_only" %in% names(dt)) dt[, avail_only := FALSE]
@@ -629,12 +769,11 @@ estimate_player_stat_ratings <- function(stat_rating_data, ref_date = NULL,
     pos_track[, (pg) := as.integer(pos_group == pg)]
   data.table::setorder(pos_track, player_id, match_date_rating)
   for (pg in pos_groups_alpha)
-    pos_track[, (pg) := cumsum(get(pg)), by = player_id]
+    pos_track[, (pg) := cumsum(.SD[[1L]]), by = player_id, .SDcols = pg]
   pos_cum <- pos_track[, c("player_id", "match_date_rating", pos_groups_alpha), with = FALSE]
 
   # Rolling join to get cumulative position counts at each ref_date per player
-  pos_lookup <- data.table::CJ(player_id = all_pids, ref_idx = seq_len(n_dates))
-  pos_lookup[, join_d := ref_dates_sorted[ref_idx] - 1L]
+  pos_lookup <- .ref_lookup_skeleton(all_pids, ref_dates_sorted, id_col = "player_id")
   data.table::setkeyv(pos_cum, c("player_id", "match_date_rating"))
   pos_joined <- pos_cum[pos_lookup,
     on = .(player_id, match_date_rating = join_d), roll = TRUE]
@@ -647,36 +786,13 @@ estimate_player_stat_ratings <- function(stat_rating_data, ref_date = NULL,
   # pos_meta: (player_id, ref_idx, pos_group) — per-ref_date modal position
   pos_meta <- pos_joined[, .(player_id, ref_idx, pos_group)]
 
-  # Resolve per-stat params helpers
-  stat_params <- params$stat_params
-  cat_params <- params$category_params
-  .resolve_rate_params <- function(stat_name, category) {
-    if (!is.null(stat_params) && stat_name %in% names(stat_params)) {
-      sp <- stat_params[[stat_name]]
-      return(list(lambda = sp$lambda, prior = sp$prior_strength))
-    }
-    if (!is.null(cat_params) && category %in% names(cat_params)) {
-      cp <- cat_params[[category]]
-      return(list(lambda = cp$lambda, prior = cp$prior_strength))
-    }
-    list(lambda = params$lambda_rate, prior = params$prior_games)
-  }
-  .resolve_eff_params <- function(stat_name) {
-    if (!is.null(stat_params) && stat_name %in% names(stat_params)) {
-      sp <- stat_params[[stat_name]]
-      return(list(lambda = sp$lambda, prior = sp$prior_strength))
-    }
-    list(lambda = params$lambda_efficiency, prior = params$prior_attempts)
-  }
-
   # === Rolling-join lookup helper ===
   # Given a cumsum table (grp, match_date_rating, cum_num, cum_den) sorted
   # by (grp, match_date_rating), look up values at each ref_date per group.
   # Uses ref_date - 1 for strict < semantics (Date is integer days).
   # Returns data.table(grp, ref_idx, cum_num, cum_den).
   .lookup_cumsums <- function(cs, grps, grp_col = "grp") {
-    lookup <- data.table::CJ(grp = grps, ref_idx = seq_len(n_dates))
-    lookup[, join_d := ref_dates_sorted[ref_idx] - 1L]
+    lookup <- .ref_lookup_skeleton(grps, ref_dates_sorted)
     data.table::setnames(cs, grp_col, "grp", skip_absent = TRUE)
     data.table::setkeyv(cs, c("grp", "match_date_rating"))
     joined <- cs[lookup, .(grp = i.grp, ref_idx = i.ref_idx,
@@ -688,7 +804,7 @@ estimate_player_stat_ratings <- function(stat_rating_data, ref_date = NULL,
 
   # === Game counts via cumsum ===
   # Deduplicate to one row per (player, match), using lambda_rate decay
-  dt_match <- dt_played[!duplicated(paste(player_id, match_id))]
+  dt_match <- dt_played[!duplicated(dt_played, by = c("player_id", "match_id"))]
   dt_match[, .tog_safe := data.table::fifelse(is.na(tog), 0, as.numeric(tog))]
   lam_rate <- params$lambda_rate
   dt_match[, .base_w := exp(lam_rate * .d)]
@@ -739,6 +855,8 @@ estimate_player_stat_ratings <- function(stat_rating_data, ref_date = NULL,
   rate_defs <- stat_defs[stat_defs$type == "rate", ]
   eff_defs  <- stat_defs[stat_defs$type == "efficiency", ]
   skipped_stats <- character(0)
+  na_src_rows <- integer(0)  # rate stat -> played rows whose source value is NA
+  na_succ_rows <- integer(0) # efficiency stat -> played rows whose successes are NA
   t_stats <- proc.time()
 
   n_total_stats <- nrow(rate_defs) + nrow(eff_defs)
@@ -751,15 +869,26 @@ estimate_player_stat_ratings <- function(stat_rating_data, ref_date = NULL,
     src_col  <- rate_defs$source_col[i]
     stat_cat <- rate_defs$category[i]
 
-    if (!src_col %in% names(dt)) { skipped_stats <- c(skipped_stats, stat_nm); next }
+    if (!src_col %in% names(dt)) {
+      skipped_stats <- c(skipped_stats, stat_nm)
+      cli::cli_progress_update()
+      next
+    }
 
-    rp <- .resolve_rate_params(stat_nm, stat_cat)
+    rp <- .stat_rate_params(params, stat_nm, stat_cat)
     lam <- rp$lambda
     prior_str <- rp$prior
 
-    vals <- as.numeric(dt[[src_col]]); vals[is.na(vals)] <- 0
+    vals <- as.numeric(dt[[src_col]])
+    na_src <- is.na(vals)  # not recorded: out of numerator AND exposure (A198)
+    vals[na_src] <- 0
+    n_na_played <- sum(na_src & !dt$avail_only)
+    if (n_na_played > 0) na_src_rows[stat_nm] <- n_na_played
     is_tog_adj <- is.na(rate_defs$tog_adjusted[i]) || isTRUE(rate_defs$tog_adjusted[i])
-    tog_vals <- if (is_tog_adj) { tv <- as.numeric(dt$tog); tv[is.na(tv)] <- 1; tv } else rep(1, nrow(dt))
+    # NA tog -> 1 here but 0 in .tog_safe (80s counts): see the note in
+    # estimate_player_stat_ratings().
+    tog_vals <- if (is_tog_adj) { tv <- as.numeric(dt$tog); tv[is.na(tv)] <- 1; tv } else .nontog_exposure(dt$avail_only)  # B69 switch
+    tog_vals[na_src & !dt$avail_only] <- 0  # NA on a played row: A198 (see estimate_player_stat_ratings())
 
     base_w <- exp(lam * dt$.d)
 
@@ -847,8 +976,8 @@ estimate_player_stat_ratings <- function(stat_rating_data, ref_date = NULL,
 
     # Merge into result via keyed join
     data.table::setkeyv(p_look, c("grp", "ref_idx"))
-    for (mc in merge_cols)
-      res[p_look, (mc) := get(paste0("i.", mc)), on = .(player_id = grp, ref_idx)]
+    res[p_look, (merge_cols) := mget(paste0("i.", merge_cols)),
+        on = .(player_id = grp, ref_idx)]
     cli::cli_progress_update()
   }
 
@@ -857,12 +986,17 @@ estimate_player_stat_ratings <- function(stat_rating_data, ref_date = NULL,
     stat_nm       <- eff_defs$stat_name[i]
     success_spec  <- eff_defs$success_col[i]
     attempts_spec <- eff_defs$attempts_col[i]
-    if (is.na(success_spec) || is.na(attempts_spec)) next
+    if (is.na(success_spec) || is.na(attempts_spec)) {
+      skipped_stats <- c(skipped_stats, stat_nm)
+      cli::cli_progress_update()
+      next
+    }
 
+    # dt_played is dt[avail_only == FALSE], built once above the stat loops
     use_played_only <- !is.na(eff_defs$played_only[i]) && isTRUE(eff_defs$played_only[i])
-    dt_eff <- if (use_played_only) dt[avail_only == FALSE] else dt
+    dt_eff <- if (use_played_only) dt_played else dt
 
-    ep <- .resolve_eff_params(stat_nm)
+    ep <- .stat_eff_params(params, stat_nm)
     lam <- ep$lambda
     prior_str <- ep$prior
 
@@ -872,10 +1006,14 @@ estimate_player_stat_ratings <- function(stat_rating_data, ref_date = NULL,
     } else {
       .compute_stat_rating_denominator(dt_eff, success_spec)
     }
-    successes[is.na(successes)] <- 0
+    na_succ <- is.na(successes)  # unrecorded: out of successes AND attempts (A202)
+    successes[na_succ] <- 0
 
     attempts <- .compute_stat_rating_denominator(dt_eff, attempts_spec)
     attempts[is.na(attempts)] <- 0
+    attempts[na_succ] <- 0
+    n_na_played <- sum(na_succ & !dt_eff$avail_only)
+    if (n_na_played > 0) na_succ_rows[stat_nm] <- n_na_played
     successes <- pmin(successes, attempts)
 
     base_w <- exp(lam * dt_eff$.d)
@@ -979,8 +1117,8 @@ estimate_player_stat_ratings <- function(stat_rating_data, ref_date = NULL,
 
     # Merge into result via keyed join
     data.table::setkeyv(p_look, c("grp", "ref_idx"))
-    for (mc in merge_cols)
-      res[p_look, (mc) := get(paste0("i.", mc)), on = .(player_id = grp, ref_idx)]
+    res[p_look, (merge_cols) := mget(paste0("i.", merge_cols)),
+        on = .(player_id = grp, ref_idx)]
     cli::cli_progress_update()
   }
 
@@ -989,6 +1127,8 @@ estimate_player_stat_ratings <- function(stat_rating_data, ref_date = NULL,
 
   if (length(skipped_stats) > 0)
     cli::cli_warn("Skipped {length(skipped_stats)} stat(s) due to missing columns: {paste(skipped_stats, collapse = ', ')}")
+  .warn_na_rate_source(na_src_rows)
+  .warn_na_efficiency_success(na_succ_rows)
 
   # === Filter and split into per-ref_date results ===
   res <- res[wt_games >= params$min_games]
@@ -1005,7 +1145,7 @@ estimate_player_stat_ratings <- function(stat_rating_data, ref_date = NULL,
   setup_elapsed <- total_elapsed - stats_elapsed
   cli::cli_inform(paste0(
     "Batch estimation: {length(result_list)} ref_dates, ",
-    "{n_total_stats} stats in {round(total_elapsed, 1)}s ",
+    "{n_total_stats - length(skipped_stats)} of {n_total_stats} stats in {round(total_elapsed, 1)}s ",
     "(setup {round(setup_elapsed, 1)}s + stats {round(stats_elapsed, 1)}s)"
   ))
   result_list

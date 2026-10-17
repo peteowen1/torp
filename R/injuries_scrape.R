@@ -22,7 +22,10 @@ NULL
 #'
 #' @param timeout Numeric timeout in seconds for the HTTP request.
 #' @return A data.frame with columns: `player`, `team`, `injury`,
-#'   `estimated_return`, `updated`, `player_norm`.
+#'   `estimated_return`, `updated`, `player_norm`. When the scrape fails (HTTP
+#'   or parse error, unreadable page source, unresolved clubs) the empty
+#'   data.frame carries `attr(, "scrape_status") = "failed"`, so a caller can
+#'   tell a failed scrape from a genuinely empty week (no attribute).
 #' @export
 scrape_injuries <- function(timeout = 30) {
   empty_df <- data.frame(
@@ -30,6 +33,8 @@ scrape_injuries <- function(timeout = 30) {
     estimated_return = character(), updated = as.Date(character()),
     player_norm = character(), stringsAsFactors = FALSE
   )
+  failed_df <- empty_df
+  attr(failed_df, "scrape_status") <- "failed"
 
   tryCatch({
     if (!requireNamespace("rvest", quietly = TRUE)) {
@@ -63,14 +68,10 @@ scrape_injuries <- function(timeout = 30) {
       httr::content(session$response, as = "text", encoding = "UTF-8"),
       error = function(e) NA_character_
     )
-    if (is.na(raw_html) || !nzchar(raw_html)) {
-      cli::cli_warn(c("!" = "Could not read the injury page's raw HTML -- returning NO weekly injuries.",
-                      "i" = "Club identity is read from a badge URL in the page source; without it every label would be a guess."))
-      return(empty_df)
-    }
+    if (!.injury_raw_html_ok(raw_html)) return(failed_df)   # already warned
 
     team_names <- injury_table_clubs(raw_html, n_tables)
-    if (is.null(team_names)) return(empty_df)   # every failure already warned
+    if (is.null(team_names)) return(failed_df)   # every failure already warned
 
     all_rows <- vector("list", n_tables)
 
@@ -81,13 +82,14 @@ scrape_injuries <- function(timeout = 30) {
 
       # Last row contains "Updated: March 17, 2026" -- extract and remove it
       last_vals <- as.character(tbl[nrow(tbl), 1])
-      updated_date <- NA
+      updated_date <- as.Date(NA)
       if (grepl("^Updated:", last_vals, ignore.case = TRUE)) {
         date_str <- trimws(sub("^Updated:\\s*", "", last_vals, ignore.case = TRUE))
-        updated_date <- tryCatch(
-          as.Date(date_str, format = "%B %d, %Y"),
-          error = function(e) NA
-        )
+        # as.Date() returns NA on a non-matching format rather than erroring
+        updated_date <- as.Date(date_str, format = "%B %d, %Y")
+        if (is.na(updated_date)) {
+          cli::cli_warn("Could not parse injury list updated date {.val {date_str}} (expected e.g. 'March 17, 2026').")
+        }
         tbl <- tbl[-nrow(tbl), , drop = FALSE]
       }
 
@@ -113,7 +115,7 @@ scrape_injuries <- function(timeout = 30) {
     inj
   }, error = function(e) {
     cli::cli_warn("Failed to scrape injury list: {conditionMessage(e)}")
-    empty_df
+    failed_df
   })
 }
 
@@ -134,7 +136,7 @@ load_preseason_injuries <- function(season) {
   filename <- paste0("preseason_injuries_", season, ".csv")
   path <- system.file("extdata", filename, package = "torp")
 
-  empty_df <- data.frame(
+  empty_preseason <- data.frame(
     player = character(),
     team = character(),
     injury = character(),
@@ -145,29 +147,40 @@ load_preseason_injuries <- function(season) {
 
   if (path == "") {
     cli::cli_alert_info("No preseason injury file for {season}")
-    return(empty_df)
+    return(empty_preseason)
   }
 
   inj <- tryCatch(
     utils::read.csv(path, stringsAsFactors = FALSE),
     error = function(e) {
       cli::cli_warn("Failed to read preseason injuries: {conditionMessage(e)}")
-      return(empty_df)
+      return(empty_preseason)
     }
   )
 
-  if (nrow(inj) == 0) return(empty_df)
+  if (nrow(inj) == 0) return(empty_preseason)
 
   # Ensure expected columns exist
   expected <- c("player", "team", "injury", "estimated_return")
   missing <- setdiff(expected, names(inj))
   if (length(missing) > 0) {
     cli::cli_warn("Preseason injury file missing columns: {paste(missing, collapse = ', ')}")
-    return(empty_df)
+    return(empty_preseason)
   }
 
   inj$player_norm <- norm_name(inj$player)
   inj
+}
+
+
+# Shared guard: is the raw page text usable? Warns (fail closed) when not.
+.injury_raw_html_ok <- function(raw_html) {
+  if (length(raw_html) == 1L && !is.na(raw_html) && nzchar(raw_html)) return(TRUE)
+  cli::cli_warn(c(
+    "!" = "Could not read the injury page's raw HTML -- returning NO weekly injuries.",
+    "i" = "Club identity is read from a badge URL in the page source; without it every label would be a guess."
+  ))
+  FALSE
 }
 
 
@@ -192,15 +205,10 @@ load_preseason_injuries <- function(season) {
 #' @return A character vector of canonical club names, one per table, or `NULL`.
 #' @keywords internal
 injury_table_clubs <- function(raw_html, n_tables) {
-  if (length(raw_html) != 1L || is.na(raw_html) || !nzchar(raw_html)) {
-    cli::cli_warn(c(
-      "!" = "Could not read the injury page's raw HTML -- returning NO weekly injuries.",
-      "i" = "Club identity is read from a badge URL in the page source; without it every label would be a guess."
-    ))
-    return(NULL)
-  }
-  # One segment per table, each holding everything before it. A table's badge is
-  # the LAST one appearing in its segment.
+  if (!.injury_raw_html_ok(raw_html)) return(NULL)
+  # strsplit() gives one segment per table, each holding everything before it
+  # (segment 1 is the page head, before any table). A table's badge is the LAST
+  # one appearing in its segment.
   segments <- strsplit(raw_html, "<table", fixed = TRUE)[[1]]
   if (length(segments) - 1L != n_tables) {
     cli::cli_warn(c(

@@ -7,7 +7,8 @@
 calibrate_epv_channels(pgd, results = NULL, scale = EPV_RAW_CHANNEL_SCALE)
 }
 \arguments{
-\item{pgd}{Player-game frame.}
+\item{pgd}{Player-game frame. Partial NAs in a channel are treated as 0;
+a channel that is entirely NA is an error.}
 
 \item{results}{Match results, needed only when \code{scale} is \code{NULL}.}
 

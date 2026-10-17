@@ -16,6 +16,11 @@
 #' @keywords internal
 AFLW_ELO_K <- 20
 
+#' AFLW Elo starting (and neutral-fallback) rating
+#' Equals the rating build_team_elo() starts every team at (1500, team_elo.R).
+#' @keywords internal
+AFLW_ELO_INIT <- 1500
+
 #' AFLW Elo home-ground advantage, in Elo points
 #' Seeded from men's ELO_HGA -- not yet retuned. See AFLW_ELO_K.
 #' @keywords internal

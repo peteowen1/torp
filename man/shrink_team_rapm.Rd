@@ -6,7 +6,11 @@
 weighted empirical-Bayes blend. No separate point-in-time treatment needed
 beyond its inputs already being point-in-time (see file header).}
 \usage{
-shrink_team_rapm(rapm_ratings, spm_predictions, prior_games = 10)
+shrink_team_rapm(
+  rapm_ratings,
+  spm_predictions,
+  prior_games = TEAM_SPM_PRIOR_GAMES
+)
 }
 \arguments{
 \item{rapm_ratings}{Output of \code{extract_team_rapm_ratings()}.
@@ -15,7 +19,7 @@ shrink_team_rapm(rapm_ratings, spm_predictions, prior_games = 10)
 \item{spm_predictions}{Output of \code{predict_team_spm()}.}
 
 \item{prior_games}{Numeric, shrinkage strength in games-equivalent units.
-Must be positive. Default 10 (a documented placeholder, not swept for
+Must be positive. Default 10, \code{TEAM_SPM_PRIOR_GAMES} (a documented placeholder, not swept for
 either comp -- future tuning work).}
 }
 \value{

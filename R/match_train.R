@@ -411,7 +411,6 @@
 
   # Model 4: Score differential
   cli::cli_progress_step("Training score diff model")
-  gam_df$gam_pred_conv_diff <- team_mdl_df$gam_pred_conv_diff[train_mask]
   # V4b simplification (see model 2's comment) -- also drops model 4's
   # second-order stack tensors (ti(gam_pred_xscore_diff, gam_pred_conv_diff),
   # ti(gam_pred_tot_xscore, gam_pred_conv_diff)), keeping only the main-effect
@@ -521,12 +520,16 @@
   }
 
   # Scoring metrics
+  # Unplayed rows (win is NA) score NA so they drop out of means and sums
+  # rather than counting as misses.
   team_mdl_df$bits <- dplyr::case_when(
+    is.na(team_mdl_df$win) ~ NA_real_,
     team_mdl_df$win == 1   ~ 1 + log2(team_mdl_df$pred_win),
     team_mdl_df$win == 0   ~ 1 + log2(1 - team_mdl_df$pred_win),
     TRUE                   ~ 1 + 0.5 * log2(team_mdl_df$pred_win * (1 - team_mdl_df$pred_win))
   )
   team_mdl_df$tips <- dplyr::case_when(
+    is.na(team_mdl_df$win)                         ~ NA_real_,
     round(team_mdl_df$pred_win) == team_mdl_df$win ~ 1,
     team_mdl_df$win == 0.5                         ~ 1,
     TRUE                                           ~ 0

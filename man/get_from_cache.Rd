@@ -15,7 +15,12 @@ Cached data or NULL if not found
 \description{
 Returns cached data regardless of age. Use for session-scoped lookups
 (e.g. comp season IDs) where staleness is acceptable. For TTL-aware
-retrieval, use \code{\link[=get_from_cache_ttl]{get_from_cache_ttl()}} or the full \code{\link[=.load_with_cache]{.load_with_cache()}}
-pipeline.
+retrieval, use the full \code{\link[=.load_with_cache]{.load_with_cache()}} pipeline.
+}
+\details{
+Cached objects are shared, not copied: treat the returned data as
+read-only. By-reference \code{data.table} operations (\verb{:=}, \code{setkey()},
+\code{setattr()}) on it would also change the cached copy, so call
+\code{data.table::copy()} first if you need to modify it.
 }
 \keyword{internal}

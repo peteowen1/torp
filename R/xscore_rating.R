@@ -130,6 +130,13 @@ build_xscore_rating <- function(matches, k = XRATING_K, hga = XRATING_HGA,
   n <- nrow(matches)
   pre_home <- pre_away <- numeric(n)
 
+  # A match with no margin at all would make err NA and poison both teams'
+  # ratings for the rest of history; skip the update for it instead.
+  n_na_err <- sum(is.na(matches$home_xmargin))
+  if (n_na_err > 0) {
+    cli::cli_warn("xScore rating: {n_na_err} match{?es} with no margin; ratings left unchanged by {?it/them}.")
+  }
+
   for (i in seq_len(n)) {
     h <- matches$home_team[i]
     a <- matches$away_team[i]
@@ -144,8 +151,10 @@ build_xscore_rating <- function(matches, k = XRATING_K, hga = XRATING_HGA,
     pre_away[i] <- r[[a]]
 
     err <- matches$home_xmargin[i] - ((r[[h]] - r[[a]]) + hga)
-    r[[h]] <- r[[h]] + k * err
-    r[[a]] <- r[[a]] - k * err
+    if (!is.na(err)) {
+      r[[h]] <- r[[h]] + k * err
+      r[[a]] <- r[[a]] - k * err
+    }
 
     last_season[[h]] <- s
     last_season[[a]] <- s
@@ -183,9 +192,11 @@ build_xscore_rating <- function(matches, k = XRATING_K, hga = XRATING_HGA,
 join_xrating_diff_to_team_mdl_df <- function(team_mdl_df, rating_result) {
   # String keys rather than factor joins: factor level mismatches join silently
   # and wrongly, which is the failure mode elo_lib.R documents.
-  key <- stats::setNames(rating_result$by_match$rating_pre,
-                          paste(rating_result$by_match$match_id,
-                                rating_result$by_match$team_name))
+  key_names <- paste(rating_result$by_match$match_id, rating_result$by_match$team_name)
+  if (anyDuplicated(key_names) > 0) {
+    cli::cli_warn("join_xrating_diff_to_team_mdl_df: duplicate (match_id, team) ratings; the first is used.")
+  }
+  key <- stats::setNames(rating_result$by_match$rating_pre, key_names)
   cur <- stats::setNames(rating_result$current$rating_current,
                           rating_result$current$team_name)
 
@@ -199,6 +210,10 @@ join_xrating_diff_to_team_mdl_df <- function(team_mdl_df, rating_result) {
   rx[is.na(rx)] <- unname(cur[tx[is.na(rx)]])
   ry[is.na(ry)] <- unname(cur[ty[is.na(ry)]])
 
+  if (anyDuplicated(paste(team_mdl_df$match_id, tx, ty)) > 0) {
+    cli::cli_warn("join_xrating_diff_to_team_mdl_df: team_mdl_df has duplicate (match_id, team) rows.")
+  }
+
   n_unrated <- sum(is.na(rx) | is.na(ry))
   rx[is.na(rx)] <- 0
   ry[is.na(ry)] <- 0
@@ -209,7 +224,7 @@ join_xrating_diff_to_team_mdl_df <- function(team_mdl_df, rating_result) {
     cli::cli_inform("join_xrating_diff_to_team_mdl_df: {n_fallback} row{?s} used the current-rating fallback (upcoming fixtures)")
   }
   if (n_unrated > 0) {
-    cli::cli_inform("join_xrating_diff_to_team_mdl_df: {n_unrated} row{?s} ha{?s/ve} a team with no rating history at all -- using neutral 0")
+    cli::cli_inform("join_xrating_diff_to_team_mdl_df: {n_unrated} row{?s} ha{?s/ve} a team with no usable rating (no history, or never rated) -- using neutral 0")
   }
   team_mdl_df
 }

@@ -12,7 +12,8 @@ build_ratings_history(
   epv_level_centre = EPV_LEVEL_CENTRE,
   epr_position_centre = EPR_POSITION_CENTRE,
   psr_df = NULL,
-  opponent_adjust = TRUE
+  opponent_adjust = TRUE,
+  allow_partial = FALSE
 )
 }
 \arguments{
@@ -33,6 +34,9 @@ pre-loaded frame to compare arms without re-downloading.}
 
 \item{opponent_adjust}{Apply \code{adjust_epv_for_opponents()}. Leave TRUE
 unless \code{pgd} already carries \code{_oadj} columns.}
+
+\item{allow_partial}{Accept a result missing seasons whose build failed.
+FALSE (default) aborts, so two arms are never scored on different rows.}
 }
 \value{
 A ratings data frame. Never written anywhere.

@@ -31,6 +31,11 @@
 # SPM via build_team_spm_features_asof()) -- an un-bumped version here would
 # silently serve pre-change cached results under the same key shape.
 
+# Defaults shared by the two cached wrappers (same values as the uncached
+# fitting functions' own defaults -- keep them in step).
+.TEAM_RAPM_ASOF_SEED <- 20260825
+.TEAM_RAPM_ASOF_MIN_TRAIN_MATCHES <- 50L
+
 # .team_rapm_asof_cache_dir ----
 
 #' Local, gitignored cache directory for as-of RAPM/SPM snapshots.
@@ -61,6 +66,13 @@
 #' @keywords internal
 .team_rapm_asof_cache_key <- function(fn_name, comp, ...) {
   match_dates <- .team_rapm_match_dates(TRUE, comp = comp)
+  # The as-of fit only reads matches up to ref_date, so freshness is judged on
+  # those alone: a match played after ref_date must not invalidate an older
+  # snapshot. This only selects the cache entry; no later data enters a fit.
+  ref_date <- list(...)$ref_date
+  if (!is.null(ref_date) && nrow(match_dates) > 0) {
+    match_dates <- match_dates[match_dates$match_date <= as.Date(ref_date), ]
+  }
   freshness <- list(
     n_matches = nrow(match_dates),
     max_date = if (nrow(match_dates) > 0) as.character(max(match_dates$match_date)) else NA_character_
@@ -122,7 +134,9 @@
 #' @return Invisibly, \code{TRUE} on success, \code{FALSE} if the write failed.
 #' @keywords internal
 .team_rapm_asof_cache_write <- function(object, path) {
-  tmp <- paste0(path, ".tmp-", Sys.getpid(), "-", as.integer(stats::runif(1, 1, 1e9)))
+  # No RNG here: runif() would advance the caller's .Random.seed on a miss but
+  # not on a hit. tempfile() draws from the OS, not R's stream.
+  tmp <- tempfile(pattern = paste0(basename(path), ".tmp-"), tmpdir = dirname(path))
   ok <- tryCatch({
     saveRDS(object, tmp)
     if (!file.rename(tmp, path)) stop("rename failed")
@@ -159,7 +173,8 @@
 fit_team_rapm_asof_cached <- function(ref_date, comp = "AFLM", halflife_days = 365,
                                       seasons = TRUE, exposure = NULL, threshold = NULL,
                                       unit = NULL, game_minutes = NULL,
-                                      min_train_matches = 50L, nfolds = 10, seed = 20260825) {
+                                      min_train_matches = .TEAM_RAPM_ASOF_MIN_TRAIN_MATCHES, nfolds = 10,
+                                      seed = .TEAM_RAPM_ASOF_SEED) {
   ref_date <- as.Date(ref_date)
   key <- .team_rapm_asof_cache_key(
     "rapm_asof", comp,
@@ -208,7 +223,7 @@ fit_team_rapm_asof_cached <- function(ref_date, comp = "AFLM", halflife_days = 3
 #'   directly.
 #' @keywords internal
 fit_team_spm_asof_cached <- function(ref_date, rapm_asof_ratings, comp = "AFLM", halflife_days = 730,
-                                     seasons = TRUE, alpha = 0.5, nfolds = 10, seed = 20260825,
+                                     seasons = TRUE, alpha = 0.5, nfolds = 10, seed = .TEAM_RAPM_ASOF_SEED,
                                      prior_games = 10) {
   ref_date <- as.Date(ref_date)
   ratings_hash <- digest::digest(rapm_asof_ratings, algo = "md5")
@@ -248,7 +263,12 @@ fit_team_spm_asof_cached <- function(ref_date, rapm_asof_ratings, comp = "AFLM",
 #' @keywords internal
 clear_team_rapm_asof_cache <- function(comp = NULL) {
   dir <- .team_rapm_asof_cache_dir()
-  pattern <- if (is.null(comp)) "\\.rds$" else sprintf("_%s_.*\\.rds$", comp)
+  # "(\\.tmp-.*)?" also sweeps <key>.rds.tmp-<hex> left by a write killed mid-way.
+  pattern <- if (is.null(comp)) {
+    "\\.rds(\\.tmp-.*)?$"
+  } else {
+    sprintf("_%s_.*\\.rds(\\.tmp-.*)?$", comp)
+  }
   files <- list.files(dir, pattern = pattern, full.names = TRUE)
   unlink(files)
   cli::cli_inform("Cleared {length(files)} as-of cache file{?s} from {dir}.")

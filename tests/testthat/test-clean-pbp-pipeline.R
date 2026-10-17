@@ -225,27 +225,34 @@ test_that("filter_relevant_descriptions handles empty data", {
 # Mirror logic is tested via clean_model_data_epv_dt integration tests.
 
 # -----------------------------------------------------------------------------
-# determine_team_id_mdl() Tests
+# add_team_id_mdl_dt() Tests (production team_id_mdl path)
 # -----------------------------------------------------------------------------
 
-test_that("determine_team_id_mdl handles throw-ins", {
-  result <- torp:::determine_team_id_mdl(
-    throw_in = c(0, 0, 1, 0, 0),
-    team_id = c(1, 1, 1, 2, 2)
+test_that("add_team_id_mdl_dt handles throw-ins", {
+  dt <- data.table::data.table(
+    match_id = "m1", period = 1L,
+    throw_in = c(0L, 0L, 1L, 0L, 0L),
+    team_id = c("1", "1", "1", "2", "2"),
+    description = "Kick", home_team_id = "1"
   )
+  torp:::add_team_id_mdl_dt(dt)
 
-  expect_length(result, 5)
-  expect_true(all(!is.na(result)))
+  expect_length(dt$team_id_mdl, 5)
+  expect_true(all(!is.na(dt$team_id_mdl)))
+  # throw-in row takes the next row's team
+  expect_equal(dt$team_id_mdl[3], "2")
 })
 
-test_that("determine_team_id_mdl handles all non-throw-ins", {
-  result <- torp:::determine_team_id_mdl(
-    throw_in = rep(0, 5),
-    team_id = c(1, 1, 2, 2, 1)
+test_that("add_team_id_mdl_dt matches team_id when no throw-ins", {
+  dt <- data.table::data.table(
+    match_id = "m1", period = 1L,
+    throw_in = rep(0L, 5),
+    team_id = c("1", "1", "2", "2", "1"),
+    description = "Kick", home_team_id = "1"
   )
+  torp:::add_team_id_mdl_dt(dt)
 
-  # Should be same as team_id when no throw-ins
-  expect_equal(result, c(1, 1, 2, 2, 1))
+  expect_equal(dt$team_id_mdl, c("1", "1", "2", "2", "1"))
 })
 
 # -----------------------------------------------------------------------------
@@ -1162,4 +1169,33 @@ test_that("goal_x is recalculated after coordinate fixing", {
 
   # goal_x should equal venue_length/2 - x for each row
   expect_equal(result$goal_x, result$venue_length / 2 - result$x)
+})
+
+test_that("fix_chain_coordinates_dt leaves x/y unchanged where team_id_mdl is NA", {
+  # Rows whose team comparison is NA used to be blanked to NA x/y by fifelse;
+  # they must keep the coordinates they arrived with (B3).
+  dt <- data.table::data.table(
+    match_id = "CD_M1",
+    period = 1L,
+    team_id_mdl = c("1", NA, "2", NA),
+    coord_team_id = c("1", NA, "2", NA),
+    coord_home_team_id = "1",
+    throw_in = 0L,
+    shot_row = 0L,
+    venue_length = 160,
+    x = c(10L, 20L, -30L, 40L),
+    y = c(1L, 2L, -3L, 4L)
+  )
+  expect_warning(
+    fix_chain_coordinates_dt(dt),
+    "x/y are left unchanged"
+  )
+  # NA-team rows (2 and 4) keep their delivered coordinates
+  expect_equal(dt$x[c(2, 4)], c(20L, 40L))
+  expect_equal(dt$y[c(2, 4)], c(2L, 4L))
+  # Rows with a known team round-trip as before
+  expect_equal(dt$x[c(1, 3)], c(10L, -30L))
+  expect_false(anyNA(dt$x))
+  expect_false(anyNA(dt$y))
+  expect_equal(dt$goal_x, 80 - dt$x)
 })

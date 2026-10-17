@@ -55,76 +55,6 @@ predict_wp_score_only <- function(data, pred_data = NULL) {
   pmax(0.001, pmin(0.999, predictions))
 }
 
-#' Time-Aware Baseline Model for Win Probability
-#'
-#' Logistic regression using score difference and time remaining
-#'
-#' @param train_data Training data
-#' @param pred_data Data to make predictions on
-#' @return Vector of win probability predictions
-#' @keywords internal
-#' @importFrom dplyr mutate
-predict_wp_time_score <- function(train_data, pred_data) {
-  
-  # Create time remaining feature if not present
-  if (!"time_remaining_pct" %in% names(train_data)) {
-    train_data <- train_data |>
-      mutate(
-        time_remaining = (AFL_MAX_PERIODS - period) * AFL_QUARTER_DURATION +
-                         (AFL_QUARTER_DURATION - period_seconds),
-        time_remaining_pct = time_remaining / AFL_TOTAL_GAME_SECONDS
-      )
-  }
-
-  if (!"time_remaining_pct" %in% names(pred_data)) {
-    pred_data <- pred_data |>
-      mutate(
-        time_remaining = (AFL_MAX_PERIODS - period) * AFL_QUARTER_DURATION +
-                         (AFL_QUARTER_DURATION - period_seconds),
-        time_remaining_pct = time_remaining / AFL_TOTAL_GAME_SECONDS
-      )
-  }
-
-  # Fit logistic regression with interaction
-  model <- stats::glm(
-    label_wp ~ points_diff * time_remaining_pct + I(points_diff^2),
-    data = train_data,
-    family = binomial(link = "logit")
-  )
-  
-  predictions <- stats::predict(model, newdata = pred_data, type = "response")
-  pmax(0.001, pmin(0.999, predictions))
-}
-
-#' Expected Points Baseline Model
-#'
-#' Uses expected points differential as the primary predictor
-#'
-#' @param train_data Training data
-#' @param pred_data Data to make predictions on
-#' @return Vector of win probability predictions
-#' @keywords internal
-predict_wp_expected_points <- function(train_data, pred_data) {
-  
-  # Check for required columns
-  required_cols <- c("label_wp", "xpoints_diff", "time_remaining_pct")
-  missing_cols <- setdiff(required_cols, names(train_data))
-  
-  if (length(missing_cols) > 0) {
-    cli::cli_abort("Missing required columns in training data: {paste(missing_cols, collapse = ', ')}")
-  }
-  
-  # Fit model with expected points
-  model <- stats::glm(
-    label_wp ~ xpoints_diff + time_remaining_pct + xpoints_diff:time_remaining_pct,
-    data = train_data,
-    family = binomial(link = "logit")
-  )
-  
-  predictions <- stats::predict(model, newdata = pred_data, type = "response")
-  pmax(0.001, pmin(0.999, predictions))
-}
-
 #' GAM Baseline Model
 #'
 #' Generalized Additive Model baseline with smooth terms
@@ -145,9 +75,7 @@ predict_wp_gam_baseline <- function(data, pred_data = NULL) {
     }
     
     # Calculate time remaining
-    time_remaining <- (AFL_MAX_PERIODS - data$period) * AFL_QUARTER_DURATION +
-                      (AFL_QUARTER_DURATION - data$period_seconds)
-    time_remaining_pct <- pmax(0, pmin(1, time_remaining / AFL_TOTAL_GAME_SECONDS))
+    time_remaining_pct <- pmax(0, pmin(1, calculate_time_remaining_pct(data$period, data$period_seconds)))
 
     # Simple non-linear combination of score and time
     score_effect <- 1 / (1 + exp(-data$points_diff / WP_TIME_SCALING))
@@ -164,20 +92,12 @@ predict_wp_gam_baseline <- function(data, pred_data = NULL) {
   # Prepare time features if needed
   if (!"time_remaining_pct" %in% names(train_data)) {
     train_data <- train_data |>
-      mutate(
-        time_remaining = (AFL_MAX_PERIODS - period) * AFL_QUARTER_DURATION +
-                         (AFL_QUARTER_DURATION - period_seconds),
-        time_remaining_pct = time_remaining / AFL_TOTAL_GAME_SECONDS
-      )
+      mutate(time_remaining_pct = calculate_time_remaining_pct(period, period_seconds))
   }
 
   if (!"time_remaining_pct" %in% names(pred_data)) {
     pred_data <- pred_data |>
-      mutate(
-        time_remaining = (AFL_MAX_PERIODS - period) * AFL_QUARTER_DURATION +
-                         (AFL_QUARTER_DURATION - period_seconds),
-        time_remaining_pct = time_remaining / AFL_TOTAL_GAME_SECONDS
-      )
+      mutate(time_remaining_pct = calculate_time_remaining_pct(period, period_seconds))
   }
 
   # Fit GAM with smooth terms
@@ -193,112 +113,6 @@ predict_wp_gam_baseline <- function(data, pred_data = NULL) {
   
   predictions <- predict(model, newdata = pred_data, type = "response")
   pmax(0.001, pmin(0.999, predictions))
-}
-
-#' Comprehensive Baseline Model Comparison
-#'
-#' Compares multiple baseline models against the main model
-#'
-#' @param train_data Training dataset
-#' @param test_data Test dataset
-#' @param main_model_preds Predictions from the main model
-#' @param include_gam Logical, whether to include GAM baseline (can be slow)
-#' @return Dataframe with comparison results
-#' @keywords internal
-#' @importFrom dplyr mutate row_number group_by summarise filter bind_rows arrange
-compare_baseline_models <- function(train_data, test_data, main_model_preds, include_gam = FALSE) {
-
-  # Ensure we have the target variable
-  if (!"label_wp" %in% names(test_data)) {
-    cli::cli_abort("Test data must contain 'label_wp' column")
-  }
-
-  actual <- test_data$label_wp
-
-  # Pre-allocate list for results (more efficient than repeated rbind)
-  results_list <- list()
-
-  # Helper to create result row
-  make_result_row <- function(model_name, eval_result, n_params) {
-    data.frame(
-      model = model_name,
-      auc = eval_result$auc,
-      log_loss = eval_result$log_loss,
-      brier_score = eval_result$brier_score,
-      calibration_slope = eval_result$calibration_slope,
-      n_params = n_params,
-      stringsAsFactors = FALSE
-    )
-  }
-
-  # Main model performance
-  main_eval <- evaluate_model_comprehensive(actual, main_model_preds, "Main Model",
-                                           compute_ci = FALSE)
-  results_list[["main"]] <- make_result_row("Main Model", main_eval, NA)
-
-  # Naive baseline
-  naive_preds <- predict_wp_naive(test_data)
-  naive_eval <- evaluate_model_comprehensive(actual, naive_preds, "Naive (50%)",
-                                           compute_ci = FALSE)
-  results_list[["naive"]] <- make_result_row("Naive (50%)", naive_eval, 0)
-
-  # Score-only baseline
-  tryCatch({
-    score_preds <- predict_wp_score_only(train_data, test_data)
-    score_eval <- evaluate_model_comprehensive(actual, score_preds, "Score Only",
-                                             compute_ci = FALSE)
-    results_list[["score"]] <- make_result_row("Score Only", score_eval, 2)
-  }, error = function(e) {
-    cli::cli_warn("Score-only baseline failed: {conditionMessage(e)}")
-  })
-
-  # Time + Score baseline
-  tryCatch({
-    time_score_preds <- predict_wp_time_score(train_data, test_data)
-    time_score_eval <- evaluate_model_comprehensive(actual, time_score_preds, "Time + Score",
-                                                   compute_ci = FALSE)
-    results_list[["time_score"]] <- make_result_row("Time + Score", time_score_eval, 4)
-  }, error = function(e) {
-    cli::cli_warn("Time + Score baseline failed: {conditionMessage(e)}")
-  })
-
-  # Expected Points baseline (if available)
-  if ("xpoints_diff" %in% names(train_data) && "xpoints_diff" %in% names(test_data)) {
-    tryCatch({
-      exp_preds <- predict_wp_expected_points(train_data, test_data)
-      exp_eval <- evaluate_model_comprehensive(actual, exp_preds, "Expected Points",
-                                             compute_ci = FALSE)
-      results_list[["expected_pts"]] <- make_result_row("Expected Points", exp_eval, 3)
-    }, error = function(e) {
-      cli::cli_warn("Expected Points baseline failed: {conditionMessage(e)}")
-    })
-  }
-
-  # GAM baseline (optional, can be slow)
-  if (include_gam) {
-    tryCatch({
-      gam_preds <- predict_wp_gam_baseline(train_data, test_data)
-      gam_eval <- evaluate_model_comprehensive(actual, gam_preds, "GAM Baseline",
-                                             compute_ci = FALSE)
-      results_list[["gam"]] <- make_result_row("GAM Baseline", gam_eval, NA)
-    }, error = function(e) {
-      cli::cli_warn("GAM baseline failed: {conditionMessage(e)}")
-    })
-  }
-
-  # Combine results efficiently
-  results <- dplyr::bind_rows(results_list)
-
-  # Calculate improvements over naive baseline
-  naive_log_loss <- results[results$model == "Naive (50%)", "log_loss"]
-  results$log_loss_improvement <- (naive_log_loss - results$log_loss) / naive_log_loss * 100
-
-  # Rank models
-  results <- results |>
-    dplyr::arrange(log_loss) |>
-    dplyr::mutate(rank = dplyr::row_number())
-
-  return(results)
 }
 
 #' Model Calibration Assessment
@@ -440,104 +254,6 @@ assess_model_calibration <- function(actual, predicted, n_bins = 10) {
   ))
 }
 
-#' Generate Calibration Plot Data
-#'
-#' Prepares data for creating reliability/calibration plots
-#'
-#' @param calibration_results Results from assess_model_calibration
-#' @return ggplot2-ready dataframe for calibration plots
-#' @keywords internal
-#' @importFrom dplyr mutate
-prepare_calibration_plot <- function(calibration_results) {
-  
-  if (is.null(calibration_results$calibration_data)) {
-    cli::cli_abort("Calibration results must contain calibration_data")
-  }
-  
-  plot_data <- calibration_results$calibration_data |>
-    mutate(
-      # Add perfect calibration line
-      perfect_line = mean_predicted,
-      
-      # Add confidence intervals (approximate, based on observed proportion)
-      se = sqrt(mean_actual * (1 - mean_actual) / n),
-      ci_lower = pmax(0, mean_actual - 1.96 * se),
-      ci_upper = pmin(1, mean_actual + 1.96 * se),
-      
-      # Size for plotting (based on sample size)
-      point_size = pmax(1, pmin(5, n / 100))
-    )
-  
-  return(plot_data)
-}
-
-#' Create Model Comparison Report
-#'
-#' @description This function is intended for internal use and may be unexported in a future release.
-#' Generates a comprehensive report comparing models including baselines
-#'
-#' @param comparison_results Results from compare_baseline_models
-#' @param calibration_results Optional calibration assessment results
-#' @return Character string with formatted report
-#' @keywords internal
-create_model_comparison_report <- function(comparison_results, calibration_results = NULL) {
-  
-  report <- paste0(
-    "MODEL COMPARISON REPORT\n",
-    "=======================\n\n"
-  )
-  
-  # Model rankings
-  report <- paste0(report, "MODEL RANKINGS (by Log Loss):\n")
-  for (i in seq_len(nrow(comparison_results))) {
-    row <- comparison_results[i, ]
-    report <- paste0(report, sprintf(
-      "%d. %s: Log Loss = %.4f, AUC = %.4f, Improvement = +%.1f%%\n",
-      row$rank, row$model, row$log_loss, row$auc, row$log_loss_improvement
-    ))
-  }
-  
-  # Best model summary
-  best_model <- comparison_results[1, ]
-  report <- paste0(report, sprintf(
-    "\nBEST MODEL: %s\n",
-    best_model$model
-  ))
-  
-  # Performance gaps
-  if (nrow(comparison_results) > 1) {
-    main_model_row <- comparison_results[comparison_results$model == "Main Model", ]
-    if (nrow(main_model_row) > 0) {
-      naive_row <- comparison_results[comparison_results$model == "Naive (50%)", ]
-      
-      if (nrow(naive_row) > 0) {
-        improvement_vs_naive <- main_model_row$log_loss_improvement
-        report <- paste0(report, sprintf(
-          "Main Model improves %.1f%% over naive baseline\n",
-          improvement_vs_naive
-        ))
-      }
-    }
-  }
-  
-  # Calibration assessment
-  if (!is.null(calibration_results)) {
-    report <- paste0(report, sprintf(
-      paste0("\nCALIBRATION ASSESSMENT:\n",
-             "Calibration Quality: %s\n",
-             "Calibration Slope: %.4f (ideal: 1.0)\n",
-             "Calibration Intercept: %.4f (ideal: 0.0)\n",
-             "Hosmer-Lemeshow p-value: %.4f\n"),
-      calibration_results$calibration_quality,
-      calibration_results$calibration_slope %||% NA,
-      calibration_results$calibration_intercept %||% NA,
-      calibration_results$hosmer_lemeshow_p %||% NA
-    ))
-  }
-  
-  return(report)
-}
-
 #' Simple Time-Only Win Probability Prediction
 #'
 #' Predicts win probability based only on time remaining in the game
@@ -547,9 +263,7 @@ create_model_comparison_report <- function(comparison_results, calibration_resul
 #' @keywords internal
 predict_wp_time_only <- function(data) {
   # Calculate time remaining
-  time_remaining <- (AFL_MAX_PERIODS - data$period) * AFL_QUARTER_DURATION +
-                    (AFL_QUARTER_DURATION - data$period_seconds)
-  time_remaining_pct <- pmax(0, pmin(1, time_remaining / AFL_TOTAL_GAME_SECONDS))
+  time_remaining_pct <- pmax(0, pmin(1, calculate_time_remaining_pct(data$period, data$period_seconds)))
   
   # Simple logistic model based on time remaining
   # More time remaining = closer to 50% (more uncertain)
@@ -665,14 +379,14 @@ calculate_brier_score <- function(actual, predicted) {
 #'
 #' A simplified wrapper around assess_model_calibration for creating calibration
 #' plot data. For more comprehensive calibration analysis, use assess_model_calibration
-#' directly followed by prepare_calibration_plot.
+#' directly.
 #'
 #' @param actual Vector of actual binary outcomes
 #' @param predicted Vector of predicted probabilities
 #' @param n_bins Number of bins for calibration plot
 #' @return List with plot data and statistics
 #' @keywords internal
-#' @seealso \code{\link{assess_model_calibration}}, \code{\link{prepare_calibration_plot}}
+#' @seealso \code{\link{assess_model_calibration}}
 create_calibration_plot <- function(actual, predicted, n_bins = 10) {
   # Use the comprehensive assess_model_calibration internally
   calibration_results <- assess_model_calibration(actual, predicted, n_bins)

@@ -601,6 +601,7 @@ test_that("build_injury_schedule aggregates same-round returns", {
     round_number = c(1L, 2L, 3L, 3L),
     given_name = c("Dan", "Bob", "Alice", "Eve"),
     surname = c("Four", "Two", "One", "Five"),
+    team_name = c("Geelong Cats", "Sydney Swans", "Sydney Swans", "Hawthorn Hawks"),
     lineup_position = c("FF", "MID", "DEF", "MID")
   )
 
@@ -883,4 +884,32 @@ test_that("injury_table_clubs fails closed when badges FOLLOW their tables", {
   )
   expect_warning(res <- injury_table_clubs(html, 2L), "no badge within")
   expect_null(res)
+})
+
+test_that("build_injury_schedule warns on non-numeric return_round and duplicate ratings", {
+  inj <- data.frame(player = c("A Smith", "B Jones"), team = "Carlton",
+                    return_round = c("5", "soon"), stringsAsFactors = FALSE)
+  pr <- data.table::data.table(player_name = c("A Smith", "A Smith"),
+                               team = "Carlton", torp = c(2, 2), pred_tog = c(0.8, 0.8))
+  expect_warning(
+    expect_warning(res <- build_injury_schedule(inj, pr), "non-numeric"),
+    "Duplicate ratings"
+  )
+  expect_equal(nrow(res), 1L)
+  expect_true(is.finite(res$torp_boost))
+})
+
+test_that(".injury_raw_html_ok warns and returns FALSE on unusable HTML", {
+  expect_true(.injury_raw_html_ok("<html></html>"))
+  expect_warning(ok <- .injury_raw_html_ok(NA_character_), "raw HTML")
+  expect_false(ok)
+})
+
+test_that("scrape_injuries tags a failed scrape with scrape_status = 'failed'", {
+  skip_if_not_installed("rvest")
+  local_mocked_bindings(session = function(...) stop("boom"), .package = "rvest")
+  expect_warning(res <- scrape_injuries(), "Failed to scrape")
+  expect_equal(nrow(res), 0)
+  expect_equal(attr(res, "scrape_status"), "failed")
+  expect_s3_class(res$updated, "Date")
 })

@@ -487,6 +487,7 @@ test_that(".afl_last_round reads the season's last round from its fixtures", {
   testthat::local_mocked_bindings(load_fixtures = function(...) data.frame(round_number = c(0L, 14L, 29L)))
   expect_identical(.afl_last_round(2026), 29L)
   testthat::local_mocked_bindings(load_fixtures = function(...) stop("offline"))
-  expect_identical(.afl_last_round(2022), 27L)   # fallbacks: the old hand-set values
-  expect_identical(.afl_last_round(2025), 28L)
+  # fallbacks: the old hand-set values, now with a warning
+  expect_warning(expect_identical(.afl_last_round(2022), 27L), "Could not load fixtures")
+  expect_warning(expect_identical(.afl_last_round(2025), 28L), "Could not load fixtures")
 })

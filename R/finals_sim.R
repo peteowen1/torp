@@ -79,7 +79,7 @@ simulate_match <- function(home_torp, away_torp,
     if (allow_draw || result != 0L) break
   }
 
-  total <- pmax(stats::rnorm(1, SIM_AVG_TOTAL, SIM_TOTAL_SD), 40)
+  total <- pmax(stats::rnorm(1, SIM_AVG_TOTAL, SIM_TOTAL_SD), SIM_MIN_TOTAL)
   home_score <- as.integer(pmax(round((total + result) / 2), 0))
   away_score <- as.integer(pmax(round((total - result) / 2), 0))
 
@@ -168,12 +168,12 @@ simulate_finals <- function(ladder_dt, sim_teams_dt, gf_familiarity = NULL) {
   # WF1: 7th v 10th, hosted by 7th (Reg 2.7(b))
   wf1 <- play_final(top10[7], top10[10])
   finals_wins[wf1$winner] <- finals_wins[wf1$winner] + 1L
-  finals_finish[wf1$loser] <- 0L  # eliminated week 0 (Wildcard)
+  # WF1 loser: eliminated week 0 (Wildcard); finals_finish is already 0L
 
   # WF2: 8th v 9th, hosted by 8th (Reg 2.7(b))
   wf2 <- play_final(top10[8], top10[9])
   finals_wins[wf2$winner] <- finals_wins[wf2$winner] + 1L
-  finals_finish[wf2$loser] <- 0L  # eliminated week 0 (Wildcard)
+  # WF2 loser: eliminated week 0 (Wildcard); finals_finish is already 0L
 
   # Wildcard reseeding (Annexure 1 footnote): the higher-ranked winner (by
   # ORIGINAL H&A rank) takes the 7th Elimination-Final seed; the lower-ranked

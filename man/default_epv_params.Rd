@@ -2,12 +2,9 @@
 % Please edit documentation in R/player_credit.R
 \name{default_epv_params}
 \alias{default_epv_params}
-\alias{default_credit_params}
 \title{Default EPV assignment parameters}
 \usage{
 default_epv_params()
-
-default_credit_params()
 }
 \value{
 A named list of EPV assignment parameters.

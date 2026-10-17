@@ -25,7 +25,18 @@ resolve_player <- function(player_name, seasons = TRUE) {
   details$full_name_norm <- norm_name(paste(details[[fn_col]], details[[sn_col]]))
   search_norm <- norm_name(player_name)
 
-  matches <- details[grepl(search_norm, details$full_name_norm, fixed = TRUE), ]
+  if (!nzchar(search_norm)) {
+    cli::cli_abort("{.arg player_name} has no searchable characters after normalisation")
+  }
+
+  # Prefer an exact full-name match, then a prefix match, then any substring
+  matches <- details[details$full_name_norm == search_norm, ]
+  if (nrow(matches) == 0) {
+    matches <- details[startsWith(details$full_name_norm, search_norm), ]
+  }
+  if (nrow(matches) == 0) {
+    matches <- details[grepl(search_norm, details$full_name_norm, fixed = TRUE), ]
+  }
 
   if (nrow(matches) == 0) {
     cli::cli_abort("No player found matching {.val {player_name}}")
@@ -96,7 +107,10 @@ player_profile <- function(player_name, seasons = TRUE) {
   )
 
   # --- Yearly raw stats ---
-  raw <- tryCatch(load_player_stats(seasons), error = function(e) NULL)
+  raw <- tryCatch(load_player_stats(seasons), error = function(e) {
+    cli::cli_warn("Could not load player stats for the yearly stats section: {conditionMessage(e)}")
+    NULL
+  })
 
   if (!is.null(raw)) {
     dt <- data.table::as.data.table(raw)
@@ -147,22 +161,28 @@ player_profile <- function(player_name, seasons = TRUE) {
     yearly_stats <- data.frame()
   }
 
+  season_vec <- if (isTRUE(seasons)) seq(AFL_MIN_SEASON, get_afl_season()) else seasons
+
   # --- TORP season ratings ---
   torp_season <- tryCatch({
-    season_vec <- if (isTRUE(seasons)) 2021:get_afl_season() else seasons
     sr <- player_season_ratings(season_val = season_vec)
     sr[sr$player_id == pid, , drop = FALSE]
-  }, error = function(e) data.frame())
+  }, error = function(e) {
+    cli::cli_warn("Could not build TORP season ratings: {conditionMessage(e)}")
+    data.frame()
+  })
 
   # --- Current TORP rating ---
   current_torp <- tryCatch({
     cr <- calculate_epr()
     cr[cr$player_id == pid, , drop = FALSE]
-  }, error = function(e) data.frame())
+  }, error = function(e) {
+    cli::cli_warn("Could not compute the current TORP rating: {conditionMessage(e)}")
+    data.frame()
+  })
 
   # --- PSV per-game values (from player game ratings if available) ---
   psv_season <- tryCatch({
-    season_vec <- if (isTRUE(seasons)) 2021:get_afl_season() else seasons
     pgr <- load_player_game_ratings(season_vec)
     pgr_dt <- data.table::as.data.table(pgr)
     pgr_dt <- pgr_dt[player_id == pid]
@@ -175,7 +195,10 @@ player_profile <- function(player_name, seasons = TRUE) {
     } else {
       data.table::data.table()
     }
-  }, error = function(e) data.table::data.table())
+  }, error = function(e) {
+    cli::cli_warn("Could not load player game ratings for the PSV section: {conditionMessage(e)}")
+    data.table::data.table()
+  })
 
   out <- list(
     player_info = player_info,

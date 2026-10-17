@@ -205,7 +205,13 @@ diff_aflw_season_snapshots <- function(earlier, later,
   # seeing a column vanish should be able to tell "not differenceable this
   # window" from "deliberately excluded as a rate".
   schema_dropped <- setdiff(cls$cumulative, names(earlier))
-  stat_cols <- stat_cols[vapply(stat_cols, function(c) is.numeric(later[[c]]), logical(1))]
+  non_numeric <- stat_cols[!vapply(stat_cols, function(c) is.numeric(later[[c]]), logical(1))]
+  stat_cols <- setdiff(stat_cols, non_numeric)
+  if (length(non_numeric) > 0) {
+    cli::cli_warn(paste0(
+      "diff_aflw_season_snapshots: {length(non_numeric)} cumulative column{?s} in {.arg later} ",
+      "{?is/are} not numeric ({.val {non_numeric}}) and cannot be differenced -- omitted from this delta."))
+  }
   if (length(stat_cols) == 0) {
     cli::cli_abort("diff_aflw_season_snapshots: no cumulative numeric columns common to both snapshots.")
   }
@@ -252,10 +258,14 @@ diff_aflw_season_snapshots <- function(earlier, later,
   # the window, so the correct prior is 0, not NA (which would propagate and
   # silently drop her from the delta entirely).
   out <- merge(later[, keep_later, with = FALSE], prev, by = "player_id", all.x = TRUE)
-  n_new <- sum(is.na(out[[paste0(".prev_", stat_cols[1])]]))
+  # Zero the prior only for players the join found no earlier row for. A player
+  # present in both snapshots with an NA earlier cell stays NA (and so does her
+  # delta) rather than having her whole season-to-date total booked as one round.
+  absent_earlier <- !(out$player_id %in% earlier$player_id)
+  n_new <- sum(absent_earlier)
   for (c in stat_cols) {
     pc <- paste0(".prev_", c)
-    data.table::set(out, which(is.na(out[[pc]])), pc, 0)
+    data.table::set(out, which(absent_earlier & is.na(out[[pc]])), pc, 0)
     data.table::set(out, j = c, value = out[[c]] - out[[pc]])
     data.table::set(out, j = pc, value = NULL)
   }
@@ -276,7 +286,7 @@ diff_aflw_season_snapshots <- function(earlier, later,
 
   # A player who did not play still belongs in the output: her delta is a
   # genuine, informative zero. Only `drop_unplayed` removes her.
-  unplayed <- out$games_played == 0
+  unplayed <- !is.na(out$games_played) & out$games_played == 0
   if (isTRUE(drop_unplayed)) {
     out <- out[!unplayed]
   }

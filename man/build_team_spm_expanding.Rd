@@ -13,10 +13,10 @@ build_team_spm_expanding(
   rapm_expanding,
   seasons = TRUE,
   comp = "AFLM",
-  alpha = 0.5,
-  nfolds = 10,
-  seed = 20260825,
-  prior_games = 10
+  alpha = TEAM_SPM_ALPHA,
+  nfolds = TEAM_SPM_NFOLDS,
+  seed = TEAM_SPM_SEED,
+  prior_games = TEAM_SPM_PRIOR_GAMES
 )
 }
 \arguments{

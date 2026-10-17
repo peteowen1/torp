@@ -65,7 +65,8 @@ EPV3_CONTEST_POPULATION <- "evidence"
 #' contest was actually fought". The implementation is not, and that is the
 #' defect.
 #'
-#' Measured on 2026: the asymmetric version drops 1,483 of 17,078 contests (8.7
+#' Measured on 2026 (base: 17,078 contests, after the shot exclusion below): the
+#' asymmetric version drops 1,483 of them (8.7
 #' percent) and \strong{100 percent of them are attacking wins} --- 1,149
 #' \code{Mark Fumbled} and 339 \code{Free For}. It lifts the defensive win rate
 #' from 78.7 to 86 percent and the defence's share of contest credit from 48.3
@@ -77,7 +78,8 @@ EPV3_CONTEST_POPULATION <- "evidence"
 #' one, not the corrected one.
 #'
 #' \strong{ON since rating vintage v12} (2026-09-12). Contested rows go 16,081
-#' to 17,571; key forwards gain 0.399 a game and the gap moves 3.413 to 3.795.
+#' to 17,571 (before the shot exclusion; a different base from the 17,078 above, so
+#' the two counts do not subtract); key forwards gain 0.399 a game and the gap moves 3.413 to 3.795.
 #' @keywords internal
 NP_CONTEST_FILTER_SYMMETRIC <- TRUE
 
@@ -172,6 +174,8 @@ EPV3_DUEL_EVIDENCE_OUTS <- c("Contested Mark", "Pack Mark (P)", "Pack Mark (O)",
 #' can see it.
 #' @keywords internal
 epv3_aerial_out <- function(population = EPV3_CONTEST_POPULATION) {
+  # switch() on a number selects by index, which would bypass the abort below.
+  stopifnot(is.character(population), length(population) == 1L)
   switch(population,
     duel     = EPV3_DUEL_OUT,
     all      = EPV3_AERIAL_OUT,

@@ -421,3 +421,107 @@ test_that("calculate_psv excludes efficiency stats, bounces, and availability st
   # Only kicks (10/1.0 = 10) should contribute — all others excluded
   expect_equal(result$psv, 10 * PSV_POINTS_SCALE)
 })
+
+test_that("calculate_psv: a missing TOG is treated as a full game, not NA (review B74)", {
+  # P3 has NA tog. The rate path already treated that as 1; the centring weight
+  # and the per-game multiplier used pmax(NA, 0.1) = NA, which NA'd the whole
+  # role group's weighted mean and P3's own psv.
+  stats <- data.table::data.table(
+    player_id = c("P1", "P2", "P3"),
+    player_name = c("A", "B", "C"),
+    season = 2025L, round = 1L,
+    match_id = c("M1", "M1", "M1"),
+    tog = c(1.0, 0.5, NA_real_),
+    kicks = c(10, 4, 7)
+  )
+  coef_df <- data.frame(stat_name = "kicks", beta = 1, stringsAsFactors = FALSE)
+  res <- calculate_psv(.with_pos(stats), coef_df, center = TRUE)
+  expect_false(anyNA(res$psv_p80))
+  expect_false(anyNA(res$psv))
+  # NA tog behaves exactly like tog = 1 in rate, weight and multiplier.
+  stats1 <- data.table::copy(stats)[player_id == "P3", tog := 1.0]
+  res1 <- calculate_psv(.with_pos(stats1), coef_df, center = TRUE)
+  expect_equal(res$psv_p80, res1$psv_p80)
+  expect_equal(res$psv, res1$psv)
+})
+
+test_that(".psv_tog_rate / .psv_tog_mult keep the existing handling of valid and zero TOG", {
+  tog <- c(NA, -1, 0, 0.05, 0.5, 1)
+  expect_equal(.psv_tog_rate(tog), c(1, 1, 1, 0.05, 0.5, 1))
+  # 0 and below keep the 0.1 floor in the multiplier; only NA maps to 1.
+  expect_equal(.psv_tog_mult(tog), c(1, 0.1, 0.1, 0.1, 0.5, 1))
+})
+
+test_that(".attach_listed_pos takes the LATEST listing by season, whatever the row order (review B75)", {
+  dt <- data.table::data.table(player_id = c("P1", "P2"), season = 2026L)
+  # P1 was a ruck in 2024 and a midfielder in 2025; the 2025 row comes FIRST.
+  lp_shuffled <- data.frame(player_id = c("P1", "P1", "P2"), season = c(2025L, 2024L, 2025L),
+                            position_group = c("MIDFIELDER", "RUCK", "KEY_FORWARD"),
+                            stringsAsFactors = FALSE)
+  lp_sorted <- lp_shuffled[order(lp_shuffled$player_id, lp_shuffled$season), ]
+  a <- .attach_listed_pos(data.table::copy(dt), lp_shuffled, center = TRUE, centre_on_listed = TRUE)
+  b <- .attach_listed_pos(data.table::copy(dt), lp_sorted,   center = TRUE, centre_on_listed = TRUE)
+  expect_equal(a$.listed_bucket, b$.listed_bucket)
+  expect_equal(a$.listed_bucket[a$player_id == "P1"], .collapse_listed_position("MIDFIELDER"))
+})
+
+test_that("explain_player_plays: match_id actually filters the play-by-play (review B79)", {
+  # `dt[dt$match_id %in% match_id]` compared the column with itself and kept
+  # every row, so the match_id argument never filtered anything.
+  pbp <- data.table::data.table(
+    match_id = rep(c("M1", "M2"), each = 4),
+    display_order = rep(1:4, 2),
+    period = 1L,
+    round_week = rep(c("01", "02"), each = 4),
+    player_id = "OTHER", lead_player_id = "CD_I1",
+    pos_team = 1L, delta_epv = c(0.5, -0.2, 0.3, 0.1, 1, 1, 1, 1),
+    lead_desc_tot = "Kick"
+  )
+  out <- NULL
+  suppressMessages(utils::capture.output(
+    out <- explain_player_plays("CD_I1", season = 2026L, match_id = "M1",
+                                top_n = 1, pbp_data = pbp)
+  ))
+  expect_equal(unique(out$as_receiver$match_id), "M1")
+  expect_equal(nrow(out$as_receiver), 4L)
+  expect_error(
+    suppressMessages(utils::capture.output(
+      explain_player_plays("CD_I1", season = 2026L, match_id = "NOPE", pbp_data = pbp))),
+    "No play-by-play rows")
+})
+
+test_that("explain_player_game resolves coefficients by comp and warns when the EPV load fails (review B76/B77/B78)", {
+  td <- withr::local_tempdir()
+  utils::write.csv(data.frame(stat_name = "kicks", beta = 2, sd = 1), file.path(td, "psr_coefficients_aflw.csv"), row.names = FALSE)
+  utils::write.csv(data.frame(stat_name = "kicks", beta = 1, sd = 1), file.path(td, "osr_coefficients_aflw.csv"), row.names = FALSE)
+  utils::write.csv(data.frame(stat_name = "kicks", beta = 1, sd = 1), file.path(td, "dsr_coefficients_aflw.csv"), row.names = FALSE)
+  seen_comp <- NULL
+  local_mocked_bindings(
+    .find_psr_coef_path = function(coef_file = "psr_coefficients.csv", comp = "AFLM") {
+      seen_comp <<- comp
+      file.path(td, .comp_coef_filename(coef_file, comp))
+    },
+    load_player_game_ratings = function(...) stop("release down")
+  )
+  ps <- data.table::data.table(player_id = "P1", match_id = "CD_M20260140102",
+                               player_name = "A", tog = 0.5, kicks = 10)
+  warned <- NULL
+  out <- withCallingHandlers(
+    suppressMessages(utils::capture.output(
+      res <- explain_player_game("P1", "CD_M20260140102", player_stats = ps,
+                                 season = 2026L, comp = "AFLW"))),
+    warning = function(w) { warned <<- c(warned, conditionMessage(w)); invokeRestart("muffleWarning") }
+  )
+  expect_equal(seen_comp, "AFLW")
+  # B76: the swallowed load error is now reported.
+  expect_true(any(grepl("failed to load", warned)))
+  # AFLW coefficient set was used (beta 2), osv/dsv decomposition found via the
+  # comp-qualified filenames. rate = 10 / 0.5 = 20; psv = 20 * 2.
+  expect_equal(res$psv$psv, 40)
+  expect_true(all(c("osv", "dsv") %in% names(res$psv)))
+  # Per-game (not per80) multiplies by the production TOG multiplier (0.5).
+  out2 <- suppressWarnings(suppressMessages(utils::capture.output(
+    res2 <- explain_player_game("P1", "CD_M20260140102", player_stats = ps,
+                                season = 2026L, per80 = FALSE, comp = "AFLW"))))
+  expect_equal(res2$psv$psv, 20)
+})

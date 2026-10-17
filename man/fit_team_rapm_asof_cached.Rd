@@ -23,9 +23,9 @@ fit_team_rapm_asof_cached(
   threshold = NULL,
   unit = NULL,
   game_minutes = NULL,
-  min_train_matches = 50L,
+  min_train_matches = .TEAM_RAPM_ASOF_MIN_TRAIN_MATCHES,
   nfolds = 10,
-  seed = 20260825
+  seed = .TEAM_RAPM_ASOF_SEED
 )
 }
 \arguments{

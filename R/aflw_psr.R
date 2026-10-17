@@ -79,10 +79,13 @@
 #'
 #' @param seasons Numeric vector of seasons, or TRUE for all available AFLW
 #'   seasons.
+#' @param allow_partial If \code{FALSE} (default), abort when any PLAYED
+#'   round could not be estimated, rather than returning a table that silently
+#'   omits it. Set \code{TRUE} only for interactive inspection.
 #' @return A data.table of player-round stat ratings (one row per player per
 #'   played round), or NULL when no round could be estimated.
 #' @keywords internal
-.build_aflw_stat_ratings <- function(seasons = TRUE) {
+.build_aflw_stat_ratings <- function(seasons = TRUE, allow_partial = FALSE) {
   stat_rating_data <- .prepare_aflw_stat_rating_data(seasons)
   if (nrow(stat_rating_data) == 0) {
     cli::cli_warn(".build_aflw_stat_ratings: no AFLW stat-rating rows -- returning NULL.")
@@ -141,6 +144,13 @@
     n_missing <- nrow(ref_date_map) - counter
     cli::cli_alert_danger(
       ".build_aflw_stat_ratings: {n_missing} of {nrow(ref_date_map)} season-rounds could not be estimated.")
+    if (!isTRUE(allow_partial)) {
+      cli::cli_abort(c(
+        ".build_aflw_stat_ratings: {n_missing} of {nrow(ref_date_map)} played season-rounds could not be estimated.",
+        "x" = "Aborting rather than returning a partial stat-rating table that would publish as normal.",
+        "i" = "Pass {.code allow_partial = TRUE} to accept a partial table."
+      ))
+    }
     cli::cli_warn(".build_aflw_stat_ratings: {n_missing} of {nrow(ref_date_map)} season-rounds could not be estimated.")
   }
 

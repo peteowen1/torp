@@ -295,6 +295,21 @@ test_that(".get_latest_lineup_ids returns NULL for empty lineups", {
   expect_null(result)
 })
 
+test_that(".get_latest_lineup_ids maps full names and warns on unknown teams", {
+  local_mocked_bindings(
+    load_teams = function(...) data.frame(
+      team_name = c("Carlton Blues", "Carlton Blues", "Not A Team"),
+      match_id = c("M1", "M2", "M2"),
+      player_id = c("p1", "p2", "p3"),
+      stringsAsFactors = FALSE
+    )
+  )
+  expect_warning(res <- torp:::.get_latest_lineup_ids(), "unrecognised")
+  expect_false(is.null(res))
+  expect_equal(res$match_info$last_match, "M2")
+  expect_equal(res$players$player_id, "p2")
+})
+
 # -----------------------------------------------------------------------------
 # .resolve_lineup_info (internal helper)
 # -----------------------------------------------------------------------------

@@ -7,8 +7,9 @@
 #' @param pbp_data Play-by-play data with WPA already computed (via
 #'   \code{add_wp_vars()}). Must contain columns: \code{wpa}, \code{player_id},
 #'   \code{player_name}, \code{lead_player_id}, \code{pos_team},
-#'   \code{display_order}, \code{match_id}, \code{team}, \code{season},
-#'   \code{round_number}, \code{utc_start_time}. If NULL, loads and prepares
+#'   \code{display_order}, \code{match_id}, \code{team}, \code{round_number},
+#'   \code{utc_start_time} (the output \code{season} is derived from the year
+#'   of \code{utc_start_time}), \code{description}. If NULL, loads and prepares
 #'   data via \code{load_pbp()}.
 #' @param disp_share Fraction of WPA credited to the disposer (0-1). Default is
 #'   \code{WP_CREDIT_DISP_SHARE} (0.5). The receiver gets \code{1 - disp_share}.
@@ -61,6 +62,13 @@ create_wp_credit <- function(pbp_data = NULL,
   # No receiver when: lead_player_id is NA, equals player_id, or is a shot/OOB
   dt[, has_receiver := !is.na(lead_player_id) & lead_player_id != player_id]
 
+  # An NA pos_team on a receiver row makes recv_wpa NA, which the na.rm sums
+  # below would silently turn into zero credit; surface it instead.
+  n_na_pos <- sum(dt$has_receiver & is.na(dt$pos_team))
+  if (n_na_pos > 0) {
+    cli::cli_warn("{n_na_pos} reception row{?s} with NA {.field pos_team}; receiver credit for them is dropped.")
+  }
+
   # --- Disposal credit ---
   # Disposer gets disp_share * wpa, or 100% when no receiver
   dt[, disp_wpa := data.table::fifelse(has_receiver, disp_share * wpa, wpa)]
@@ -100,6 +108,16 @@ create_wp_credit <- function(pbp_data = NULL,
     by.y = c("lead_player_id", "match_id"),
     all.x = TRUE
   )
+
+  # Receiver-only player-games (no surviving disposal row) have no row in
+  # disp_agg, so all.x = TRUE drops their reception credit; log how many.
+  n_recv_only <- nrow(recv_agg) - nrow(merge(
+    recv_agg, disp_agg[, .(player_id, match_id)],
+    by.x = c("lead_player_id", "match_id"), by.y = c("player_id", "match_id")
+  ))
+  if (n_recv_only > 0) {
+    cli::cli_inform("{n_recv_only} receiver-only player-game{?s} dropped (no disposal row in that match).")
+  }
 
   # Fill NA receptions with 0
   result[, wp_recv_credit := data.table::fcoalesce(wp_recv_credit, 0)]
