@@ -198,11 +198,24 @@ test_that(".warn_stale_xrapm_snapshot is a no-op for NULL/empty input", {
   expect_silent(torp:::.warn_stale_xrapm_snapshot(.mk_snapshot()[0, ], 2026L, 5L))
 })
 
-test_that(".warn_stale_xrapm_snapshot reports loudly across a season boundary", {
-  # Last season's final round is not "one round behind" this season's round 1.
+test_that(".warn_stale_xrapm_snapshot reports loudly when the prior season stopped early", {
+  # A prior-season snapshot that ends at round 3 is not a final-round checkpoint.
   snap <- .mk_snapshot(seasons = 2025L, rounds = 1:3)
   expect_message(
     torp:::.warn_stale_xrapm_snapshot(snap, season = 2026L, round_number = 1L, comp = "AFLM"),
+    "STALE xRAPM snapshot"
+  )
+})
+
+test_that(".warn_stale_xrapm_snapshot treats the prior season's final round as fresh at round 1", {
+  snap <- .mk_snapshot(seasons = 2025L, rounds = 1:25)
+  expect_silent(
+    lag <- torp:::.warn_stale_xrapm_snapshot(snap, season = 2026L, round_number = 1L, comp = "AFLM")
+  )
+  expect_equal(lag, 1L)
+  # ...but round 3 of the new season with no new checkpoints is stale.
+  expect_message(
+    torp:::.warn_stale_xrapm_snapshot(snap, season = 2026L, round_number = 3L, comp = "AFLM"),
     "STALE xRAPM snapshot"
   )
 })

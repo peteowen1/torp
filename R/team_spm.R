@@ -172,8 +172,9 @@ build_team_spm_features <- function(seasons = TRUE, comp = "AFLM") {
 #'   (e.g. \code{fit_team_spm_asof()}) should catch this condition class and
 #'   degrade to a loud NULL rather than letting a raw glmnet error propagate.
 #' @keywords internal
-fit_team_spm <- function(spm_features, rapm_ratings, alpha = 0.5, nfolds = 10,
-                         seed = 20260825) {
+fit_team_spm <- function(spm_features, rapm_ratings, alpha = TEAM_SPM_ALPHA,
+                         nfolds = TEAM_SPM_NFOLDS,
+                         seed = TEAM_SPM_SEED) {
   if (!requireNamespace("glmnet", quietly = TRUE)) {
     cli::cli_abort("glmnet package required for team SPM.")
   }
@@ -290,13 +291,13 @@ predict_team_spm <- function(spm_fit, spm_features) {
 #'   \code{replacement_*} rows filtered out here explicitly.
 #' @param spm_predictions Output of \code{predict_team_spm()}.
 #' @param prior_games Numeric, shrinkage strength in games-equivalent units.
-#'   Must be positive. Default 10 (a documented placeholder, not swept for
+#'   Must be positive. Default 10, \code{TEAM_SPM_PRIOR_GAMES} (a documented placeholder, not swept for
 #'   either comp -- future tuning work).
 #' @return data.table(player_id, n_games, rapm_offense, rapm_defense,
 #'   spm_offense, spm_defense, shrinkage_weight, team_rapm_shrunk_offense,
 #'   team_rapm_shrunk_defense, team_rapm_shrunk).
 #' @keywords internal
-shrink_team_rapm <- function(rapm_ratings, spm_predictions, prior_games = 10) {
+shrink_team_rapm <- function(rapm_ratings, spm_predictions, prior_games = TEAM_SPM_PRIOR_GAMES) {
   if (prior_games <= 0) {
     cli::cli_abort("prior_games must be positive, got {prior_games}")
   }
@@ -342,8 +343,9 @@ shrink_team_rapm <- function(rapm_ratings, spm_predictions, prior_games = 10) {
 #'   \code{shrink_team_rapm()}'s columns plus \code{season}.
 #' @keywords internal
 build_team_spm_expanding <- function(rapm_expanding, seasons = TRUE, comp = "AFLM",
-                                     alpha = 0.5, nfolds = 10, seed = 20260825,
-                                     prior_games = 10) {
+                                     alpha = TEAM_SPM_ALPHA, nfolds = TEAM_SPM_NFOLDS,
+                                     seed = TEAM_SPM_SEED,
+                                     prior_games = TEAM_SPM_PRIOR_GAMES) {
   .validate_afl_comp(comp)
   cutoffs <- sort(unique(rapm_expanding$season))
   all_train_seasons <- sort(unique(load_results(seasons, comp = comp)$season))
@@ -363,7 +365,14 @@ build_team_spm_expanding <- function(rapm_expanding, seasons = TRUE, comp = "AFL
     )
     if (is.null(spm_features)) next
 
-    spm_fit <- fit_team_spm(spm_features, cutoff_rapm, alpha = alpha, nfolds = nfolds, seed = seed)
+    spm_fit <- tryCatch(
+      fit_team_spm(spm_features, cutoff_rapm, alpha = alpha, nfolds = nfolds, seed = seed),
+      torp_spm_too_few_rows = function(e) {
+        cli::cli_alert_danger("build_team_spm_expanding: cutoff {cutoff} skipped, too few training rows for SPM: {conditionMessage(e)}")
+        NULL
+      }
+    )
+    if (is.null(spm_fit)) next
     spm_pred <- predict_team_spm(spm_fit, spm_features)
     shrunk <- shrink_team_rapm(cutoff_rapm, spm_pred, prior_games = prior_games)
     shrunk[, season := cutoff]
