@@ -74,3 +74,42 @@ test_that("lambda_decay = 0 makes every weight exactly 1", {
   # silently become wrong rather than failing.
   expect_identical(.decay_weight(c(0, 5, 500, 1e6), 0), rep(1, 4))
 })
+
+test_that(".shrink_to_league() returns league_avg, not NaN, when there is no evidence at all", {
+  # wt_sum = 0 and prior_games = 0: the raw formula is 0/0.
+  expect_identical(.shrink_to_league(0, 40, 25, 0), 25)
+  # wt_mean arriving as NaN (a team's own 0/0 mean) must not poison the result.
+  expect_identical(.shrink_to_league(0, NaN, 25, 5), 25)
+  expect_identical(.shrink_to_league(0, NaN, 25, 0), 25)
+  # Vectorised: only the empty cells are replaced; the rest are untouched.
+  out <- .shrink_to_league(c(0, 4, 0), c(NaN, 10, 7), c(25, 25, 30), 0)
+  expect_identical(out, c(25, 10, 30))
+})
+
+test_that(".shrink_to_league() guard leaves every finite result bit-identical", {
+  set.seed(3)
+  wt_sum <- c(0, stats::runif(300, 0, 50))
+  wt_mean <- stats::rnorm(301, 20, 10)
+  league <- stats::rnorm(301, 20, 5)
+  for (prior_games in c(1e-3, 5, 10000)) {
+    expect_identical(
+      .shrink_to_league(wt_sum, wt_mean, league, prior_games),
+      (wt_sum * wt_mean + prior_games * league) / (wt_sum + prior_games)
+    )
+  }
+})
+
+test_that(".tog_weight() matches the expression it replaces", {
+  pct <- c(NA, 0, 5, 10, 50, 87.5, 100, 105)
+  expect_identical(
+    .tog_weight(pct),
+    pmax(data.table::fifelse(is.na(pct), 100, pct) / 100, 0.1)
+  )
+  # Missing time on ground counts as a full game; a cameo floors at 0.1.
+  expect_identical(.tog_weight(NA_real_), 1)
+  expect_identical(.tog_weight(0), 0.1)
+  expect_identical(.tog_weight(5), 0.1)
+  expect_identical(.tog_weight(50), 0.5)
+  # Integer input (as stored in some player-game frames) must not error in fifelse.
+  expect_identical(.tog_weight(c(NA_integer_, 80L)), c(1, 0.8))
+})
