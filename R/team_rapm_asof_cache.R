@@ -263,7 +263,12 @@ fit_team_spm_asof_cached <- function(ref_date, rapm_asof_ratings, comp = "AFLM",
 #' @keywords internal
 clear_team_rapm_asof_cache <- function(comp = NULL) {
   dir <- .team_rapm_asof_cache_dir()
-  pattern <- if (is.null(comp)) "\\.rds$" else sprintf("_%s_.*\\.rds$", comp)
+  # "(\\.tmp-.*)?" also sweeps <key>.rds.tmp-<hex> left by a write killed mid-way.
+  pattern <- if (is.null(comp)) {
+    "\\.rds(\\.tmp-.*)?$"
+  } else {
+    sprintf("_%s_.*\\.rds(\\.tmp-.*)?$", comp)
+  }
   files <- list.files(dir, pattern = pattern, full.names = TRUE)
   unlink(files)
   cli::cli_inform("Cleared {length(files)} as-of cache file{?s} from {dir}.")

@@ -195,3 +195,38 @@ test_that("fit_team_spm_asof_cached: different input ratings produce a cache mis
     expect_equal(n_calls, 2L)
   })
 })
+
+# -----------------------------------------------------------------------------
+# clear_team_rapm_asof_cache sweeps interrupted-write leftovers (<key>.rds.tmp-*)
+# and the write path does not touch the caller's RNG stream.
+# -----------------------------------------------------------------------------
+
+test_that("clear_team_rapm_asof_cache removes .rds.tmp- leftovers as well as .rds files", {
+  .with_temp_asof_cache({
+    dir <- torp:::.team_rapm_asof_cache_dir()
+    good <- file.path(dir, "rapm_asof_AFLM_abc.rds")
+    leftover <- file.path(dir, "rapm_asof_AFLM_abc.rds.tmp-1a2b3c")
+    other <- file.path(dir, "rapm_asof_AFLW_def.rds.tmp-9f9f")
+    file.create(c(good, leftover, other))
+    n <- suppressMessages(torp:::clear_team_rapm_asof_cache("AFLM"))
+    expect_equal(n, 2L)
+    expect_false(file.exists(good))
+    expect_false(file.exists(leftover))
+    expect_true(file.exists(other))  # other comp untouched
+    n_all <- suppressMessages(torp:::clear_team_rapm_asof_cache())
+    expect_equal(n_all, 1L)
+    expect_false(file.exists(other))
+  })
+})
+
+test_that(".team_rapm_asof_cache_write leaves .Random.seed unchanged and no temp file behind", {
+  .with_temp_asof_cache({
+    dir <- torp:::.team_rapm_asof_cache_dir()
+    set.seed(42)
+    before <- .Random.seed
+    ok <- torp:::.team_rapm_asof_cache_write(list(a = 1), file.path(dir, "k.rds"))
+    expect_true(ok)
+    expect_identical(.Random.seed, before)
+    expect_equal(list.files(dir), "k.rds")
+  })
+})
