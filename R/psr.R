@@ -526,9 +526,7 @@ calculate_psv <- function(player_stats, coef_df, tog_adjust = TRUE, center = TRU
 
   # TOG-adjust: divide counts by TOG to get per-full-game rates
   if (tog_adjust && "tog" %in% names(dt)) {
-    tog_vec <- as.numeric(dt$tog)
-    tog_vec[is.na(tog_vec) | tog_vec <= 0] <- 1
-    mat <- mat / tog_vec
+    mat <- mat / .psv_tog_rate(dt$tog)
   }
 
   # Standardize using SDs from coefficient file (same scale as PSR training)
@@ -610,7 +608,7 @@ calculate_psv <- function(player_stats, coef_df, tog_adjust = TRUE, center = TRU
   # the same scale as epv (per-game), keeping torp_value = 0.5*epv + 0.5*psv
   # apples-to-apples (issue #80).
   if (center && !is.null(pos_col) && "tog" %in% names(dt)) {
-    dt[, .tog_wt := pmax(as.numeric(tog), 0.1)]
+    dt[, .tog_wt := .psv_tog_mult(tog)]
     dt[!is.na(get(pos_col)), psv_p80 := psv_raw - weighted.mean(psv_raw, .tog_wt, na.rm = TRUE),
        by = c(.psv_role_by)]
     dt[is.na(get(pos_col)), psv_p80 := psv_raw - weighted.mean(psv_raw, .tog_wt, na.rm = TRUE)]
@@ -660,7 +658,7 @@ calculate_psv <- function(player_stats, coef_df, tog_adjust = TRUE, center = TRU
   if (center && isTRUE(PSV_LEVEL_CENTRE) && "position_group" %in% names(dt)) {
     data.table::setnames(dt, .psv_round_col, ".lc_round")
     dt[, .lc_bucket := .collapse_listed_position(position_group)]
-    dt[, .lc_w := if ("tog" %in% names(dt)) pmax(as.numeric(tog), 0.1) else 1]
+    dt[, .lc_w := if ("tog" %in% names(dt)) .psv_tog_mult(tog) else 1]
     .lc_wmean <- function(x, w) {
       ok <- is.finite(x) & is.finite(w) & w > 0
       if (!any(ok)) return(NA_real_)
@@ -693,7 +691,7 @@ calculate_psv <- function(player_stats, coef_df, tog_adjust = TRUE, center = TRU
   # Must stay AFTER the centring above, or psv keeps the uncentred level while
   # psv_p80 looks corrected.
   if ("tog" %in% names(dt)) {
-    dt[, psv := psv_p80 * pmax(as.numeric(tog), 0.1)]
+    dt[, psv := psv_p80 * .psv_tog_mult(tog)]
   } else {
     dt[, psv := psv_p80]
   }
@@ -744,7 +742,7 @@ calculate_psv_components <- function(player_stats, coef_df, osr_coef_df,
   psv_result[, dsv_p80 := raw_dsv + delta]
 
   if ("tog" %in% names(psv_result)) {
-    tog_mult <- pmax(as.numeric(psv_result$tog), 0.1)
+    tog_mult <- .psv_tog_mult(psv_result$tog)
     psv_result[, osv := osv_p80 * tog_mult]
     psv_result[, dsv := dsv_p80 * tog_mult]
   } else {
@@ -753,6 +751,47 @@ calculate_psv_components <- function(player_stats, coef_df, osr_coef_df,
   }
 
   psv_result
+}
+
+
+#' Sanitised time-on-ground for PSV
+#'
+#' One definition of TOG for every PSV step, so the rate, the centring weight
+#' and the per-game multiplier cannot disagree about a row.
+#' \itemize{
+#'   \item \code{.psv_tog_rate()}: the divisor that turns counts into per-full-game
+#'     rates. A missing or non-positive TOG counts as a full game (1); a small
+#'     positive TOG is used as it is.
+#'   \item \code{.psv_tog_mult()}: the centring weight and the per-game multiplier
+#'     (\code{psv = psv_p80 * tog}). A missing TOG counts as a full game (1), as
+#'     in the rate; everything else is floored at 0.1. Before this, an NA TOG
+#'     gave NA for \code{pmax(NA, 0.1)}, which made the whole role group's
+#'     weighted mean NA in centring and left that row's \code{psv} NA while its
+#'     rate had been computed as if TOG were 1. A TOG of 0 or below keeps the
+#'     0.1 floor (it is NOT mapped to 1 here): a player with no time on the
+#'     ground should not be credited a full game's value.
+#' }
+#'
+#' @param tog Numeric TOG fraction (0-1), may contain NA.
+#' @return Numeric vector, same length as \code{tog}.
+#' @keywords internal
+#' @name psv_tog
+NULL
+
+#' @rdname psv_tog
+#' @keywords internal
+.psv_tog_rate <- function(tog) {
+  v <- as.numeric(tog)
+  v[is.na(v) | v <= 0] <- 1
+  v
+}
+
+#' @rdname psv_tog
+#' @keywords internal
+.psv_tog_mult <- function(tog) {
+  v <- as.numeric(tog)
+  v[is.na(v)] <- 1
+  pmax(v, 0.1)
 }
 
 

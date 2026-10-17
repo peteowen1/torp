@@ -421,3 +421,33 @@ test_that("calculate_psv excludes efficiency stats, bounces, and availability st
   # Only kicks (10/1.0 = 10) should contribute — all others excluded
   expect_equal(result$psv, 10 * PSV_POINTS_SCALE)
 })
+
+test_that("calculate_psv: a missing TOG is treated as a full game, not NA (review B74)", {
+  # P3 has NA tog. The rate path already treated that as 1; the centring weight
+  # and the per-game multiplier used pmax(NA, 0.1) = NA, which NA'd the whole
+  # role group's weighted mean and P3's own psv.
+  stats <- data.table::data.table(
+    player_id = c("P1", "P2", "P3"),
+    player_name = c("A", "B", "C"),
+    season = 2025L, round = 1L,
+    match_id = c("M1", "M1", "M1"),
+    tog = c(1.0, 0.5, NA_real_),
+    kicks = c(10, 4, 7)
+  )
+  coef_df <- data.frame(stat_name = "kicks", beta = 1, stringsAsFactors = FALSE)
+  res <- calculate_psv(.with_pos(stats), coef_df, center = TRUE)
+  expect_false(anyNA(res$psv_p80))
+  expect_false(anyNA(res$psv))
+  # NA tog behaves exactly like tog = 1 in rate, weight and multiplier.
+  stats1 <- data.table::copy(stats)[player_id == "P3", tog := 1.0]
+  res1 <- calculate_psv(.with_pos(stats1), coef_df, center = TRUE)
+  expect_equal(res$psv_p80, res1$psv_p80)
+  expect_equal(res$psv, res1$psv)
+})
+
+test_that(".psv_tog_rate / .psv_tog_mult keep the existing handling of valid and zero TOG", {
+  tog <- c(NA, -1, 0, 0.05, 0.5, 1)
+  expect_equal(.psv_tog_rate(tog), c(1, 1, 1, 0.05, 0.5, 1))
+  # 0 and below keep the 0.1 floor in the multiplier; only NA maps to 1.
+  expect_equal(.psv_tog_mult(tog), c(1, 0.1, 0.1, 0.1, 0.5, 1))
+})
