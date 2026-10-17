@@ -52,6 +52,24 @@
   log(abs(margin) + 1) * (2.2 / pmax(0.001 * elo_diff_winner + 2.2, ELO_MOV_DENOM_MIN))
 }
 
+# .elo_regress ----
+
+#' Regress a rating toward \code{ELO_INIT} across season boundaries
+#'
+#' One boundary keeps \code{carryover} of the rating; \code{n_seasons}
+#' boundaries keep \code{carryover^n_seasons}, which is what applying the
+#' single-boundary step once per season would give.
+#'
+#' @param elo Rating(s) before regression.
+#' @param n_seasons Number of season boundaries crossed (>= 1). Vectorised.
+#' @param carryover Fraction retained per boundary.
+#' @return Regressed rating(s).
+#' @keywords internal
+.elo_regress <- function(elo, n_seasons, carryover = ELO_CARRYOVER) {
+  keep <- carryover^n_seasons
+  keep * elo + (1 - keep) * ELO_INIT
+}
+
 # build_team_elo ----
 
 #' Sequential team-Elo rating, pre-match ratings only
@@ -102,13 +120,14 @@ build_team_elo <- function(matches, k = ELO_K, hga = ELO_HGA, carryover = ELO_CA
     s <- matches$season[i]
 
     # Season-boundary regression-to-mean, applied lazily on first sight of
-    # each team in a new season (equivalent to applying it once per team at
-    # season start, since ratings are otherwise untouched between matches).
+    # each team in a new season. Ratings are otherwise untouched between
+    # matches, so this equals applying one step per team per season boundary
+    # -- including boundaries a team sat out entirely (carryover^gap).
     if (!is.na(last_season[[h]]) && last_season[[h]] < s) {
-      elo[[h]] <- carryover * elo[[h]] + (1 - carryover) * ELO_INIT
+      elo[[h]] <- .elo_regress(elo[[h]], s - last_season[[h]], carryover)
     }
     if (!is.na(last_season[[a]]) && last_season[[a]] < s) {
-      elo[[a]] <- carryover * elo[[a]] + (1 - carryover) * ELO_INIT
+      elo[[a]] <- .elo_regress(elo[[a]], s - last_season[[a]], carryover)
     }
 
     elo_h <- elo[[h]]

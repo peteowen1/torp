@@ -102,6 +102,24 @@ test_that(".matches_from_team_mdl_df: a row with a win but NA score_diff is drop
   expect_equal(.matches_from_team_mdl_df(df)$match_id, "a")
 })
 
+test_that("build_team_elo: a team that sits out a whole season is regressed once per skipped boundary", {
+  # B plays in 2024 and 2026 only. Between its last 2024 match and its first
+  # 2026 match two season boundaries pass, so the rating should keep
+  # carryover^2, not carryover^1.
+  m <- data.frame(
+    match_id = c("m1", "m2", "m3", "m4"),
+    date = as.Date(c("2024-01-01", "2025-01-01", "2026-01-01", "2026-01-08")),
+    season = c(2024L, 2025L, 2026L, 2026L),
+    home_team = c("A", "A", "A", "B"), away_team = c("B", "C", "C", "C"),
+    home_margin = c(20, 20, 20, 20), stringsAsFactors = FALSE
+  )
+  cv <- 0.5
+  res <- build_team_elo(m, k = 20, hga = 0, carryover = cv, mov_mult = FALSE)
+  b_after_2024 <- 1500 - 10  # lost m1 as the away side at equal ratings: -k * 0.5
+  b_pre_2026 <- res$by_match$elo_pre[res$by_match$match_id == "m4" & res$by_match$team_name == "B"]
+  expect_equal(b_pre_2026, cv^2 * b_after_2024 + (1 - cv^2) * 1500)
+})
+
 test_that(".elo_mov_mult: stays positive and finite at and beyond the singular rating gap", {
   # The unclamped denominator 0.001 * gap + 2.2 is zero at gap = -2200 and
   # negative below it, which would flip the sign of the update.
