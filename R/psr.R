@@ -1564,7 +1564,15 @@ explain_player_rating <- function(player,
       # to a data.table first copied every row to read a handful.
       player_skills <- data.table::as.data.table(skills[which(skills$player_id == pid), ])
       if (nrow(player_skills) > 0) {
-        # Take latest round
+        # Take the latest round at or before the requested one, so the breakdown
+        # matches the TORP headline above (which uses round_val), not whatever
+        # the season's last round happens to be.
+        player_skills <- player_skills[round <= round_val]
+        if (nrow(player_skills) == 0) {
+          cli::cli_alert_warning(
+            "No stat ratings at or before round {round_val}; falling back to the latest round available.")
+          player_skills <- data.table::as.data.table(skills[which(skills$player_id == pid), ])
+        }
         player_skills <- player_skills[order(-round)][1]
 
         skill_cols <- paste0(coef_df$stat_name, "_rating")
