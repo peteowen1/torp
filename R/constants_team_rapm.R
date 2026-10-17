@@ -22,3 +22,27 @@
 #' assumed to still be optimal.
 #' @keywords internal
 TEAM_RAPM_MIN_GAMES <- 10L
+
+#' Elastic-net mixing parameter for the team SPM fit (0 = ridge, 1 = lasso).
+#' Defaults of `fit_team_spm()` / `build_team_spm_expanding()`.
+#' @keywords internal
+TEAM_SPM_ALPHA <- 0.5
+
+#' Cross-validation folds for the team SPM fit (capped by training rows).
+#' @keywords internal
+TEAM_SPM_NFOLDS <- 10L
+
+#' RNG seed for the team SPM CV fold assignment.
+#' @keywords internal
+TEAM_SPM_SEED <- 20260825
+
+#' Shrinkage strength (games-equivalent) pulling team RAPM toward the SPM prior.
+#' A documented placeholder, not swept for either comp.
+#' @keywords internal
+TEAM_SPM_PRIOR_GAMES <- 10
+
+#' Earliest round that can be a season's FINAL xRAPM checkpoint, per comp. Used
+#' to tell a fresh prior-season-final snapshot at round 1 from a snapshot that
+#' stopped early in the prior season.
+#' @keywords internal
+TEAM_RAPM_MIN_FINAL_ROUND <- c(AFLM = 20L, AFLW = 10L)

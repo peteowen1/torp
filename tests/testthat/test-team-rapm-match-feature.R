@@ -214,14 +214,25 @@ test_that("duplicate snapshot keys are deduped rather than duplicating lineup ro
     player_id = c("p1", "p1"),
     season = c(2026L, 2026L),
     round_number = c(1L, 1L),
-    team_rapm_shrunk = c(3, 4),
+    team_rapm_shrunk = c(3, 3),
     stringsAsFactors = FALSE
   )
-  expect_warning(
+  expect_message(
     out <- .join_xrapm_to_lineups(.mk_lineups(), snap),
     "duplicate"
   )
   expect_equal(nrow(out), 4L)
+})
+
+test_that("conflicting duplicate snapshot keys abort rather than keep an arbitrary row", {
+  snap <- data.frame(
+    player_id = c("p1", "p1"),
+    season = c(2026L, 2026L),
+    round_number = c(1L, 1L),
+    team_rapm_shrunk = c(3, 4),
+    stringsAsFactors = FALSE
+  )
+  expect_error(.join_xrapm_to_lineups(.mk_lineups(), snap), "conflicting")
 })
 
 test_that("load_team_rapm_asof reports loudly and returns NULL when no snapshot exists", {

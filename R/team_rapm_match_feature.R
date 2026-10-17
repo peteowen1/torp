@@ -107,8 +107,15 @@
   latest_season <- latest_key %/% 100L
   latest_round <- latest_key %% 100L
 
+  # Across the season boundary: the prior season's FINAL checkpoint is the
+  # correct, fresh snapshot at round 1 (its "round 0"), so lag is round_number.
+  # Only when the prior season's latest checkpoint is plausibly its final round
+  # (otherwise the snapshot stopped early and is genuinely stale).
+  min_final_round <- TEAM_RAPM_MIN_FINAL_ROUND[[if (identical(comp, "AFLW")) "AFLW" else "AFLM"]]
   lag_rounds <- if (latest_season == as.integer(season)) {
     as.integer(round_number) - latest_round
+  } else if (latest_season == as.integer(season) - 1L && latest_round >= min_final_round) {
+    as.integer(round_number)
   } else {
     NA_integer_
   }
@@ -164,11 +171,21 @@
   # Dedup on (player, key): `closest()` defaults to multiple = "all", which
   # would duplicate lineup rows and silently inflate the per-team sum below.
   # Same failure mode the PSR join guards against.
+  # Duplicates that disagree would make the feature depend on row order, so
+  # abort on those; identical duplicates are harmless and just dropped.
+  n_conflict <- xrapm_for_join |>
+    dplyr::group_by(.data$player_id, .data$xrapm_key) |>
+    dplyr::summarise(n_vals = dplyr::n_distinct(.data$xrapm), .groups = "drop") |>
+    dplyr::filter(.data$n_vals > 1L) |>
+    nrow()
+  if (n_conflict > 0) {
+    cli::cli_abort("As-of xRAPM snapshot has {n_conflict} (player, season, round) key{?s} with conflicting team_rapm_shrunk values -- check the snapshot builder.")
+  }
   n_before <- nrow(xrapm_for_join)
   xrapm_for_join <- dplyr::distinct(xrapm_for_join, .data$player_id, .data$xrapm_key, .keep_all = TRUE)
   n_dropped <- n_before - nrow(xrapm_for_join)
   if (n_dropped > 0) {
-    cli::cli_warn("Dropped {n_dropped} duplicate (player, season, round) xRAPM row{?s} -- check the snapshot builder.")
+    cli::cli_alert_danger("Dropped {n_dropped} duplicate (player, season, round) xRAPM row{?s} -- check the snapshot builder.")
   }
 
   n_rows_before <- nrow(team_lineup_df)
@@ -201,7 +218,7 @@
     pct <- round(100 * n_missing / nrow(team_lineup_df), 1)
     cli::cli_inform("xRAPM: {n_missing} ({pct}%) lineup row{?s} unrated -- using the ridge prior (0).")
     if (pct > 50) {
-      cli::cli_warn("More than half of lineup rows ({pct}%) have no xRAPM rating -- the snapshot is probably stale or truncated.")
+      cli::cli_alert_danger("More than half of lineup rows ({pct}%) have no xRAPM rating -- the snapshot is probably stale or truncated.")
     }
   }
 
