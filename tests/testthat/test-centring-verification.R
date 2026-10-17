@@ -123,32 +123,30 @@ test_that("an explicitly NA recorded residual aborts", {
   expect_error(verify_epv_level_centring(d, cells = cells), "no recorded correction")
 })
 
-test_that("a cell MISSING from the recorded corrections is NOT detected (known gap)", {
-  # Documents actual behaviour, which is not what the guard's own comment
-  # claims ("A cell the centring never recorded is a cell it never
-  # corrected").
-  #
-  # `m[ce, expected := i.resid_expected, on = ...]` is a join-UPDATE: it only
-  # writes to rows of `m` that match `ce`. A cell absent from `ce` therefore
-  # keeps its `expected = 0` default and never becomes NA, so the anyNA()
-  # branch cannot see it. The guard cannot tell "recorded as 0" from "never
-  # recorded".
-  #
-  # Not currently harmful: EPV_POSITION_SHRINK is FALSE, so every true residual
-  # is 0 and `expected = 0` is right. With shrinkage ON an unrecorded cell
-  # would carry a non-zero residual against an expectation of 0 and would trip
-  # the tolerance check instead -- so it still fails, just with a misleading
-  # message pointing at centring rather than at the missing record.
-  #
-  # Left as-is deliberately: this PR moves the guard, it does not re-specify
-  # it. Tightening it could make production abort on cells that are currently
-  # tolerated, which is a ratings-pipeline decision, not a refactor.
+test_that("a cell MISSING from the recorded corrections aborts when shrinkage is ON", {
+  # `m[ce, expected := ...]` is a join-update, so an unrecorded cell used to
+  # keep expected = 0 and fail later as a misleading "did not take". With
+  # shrinkage ON the guard now names the missing record directly.
   d <- .pgd_fixture(centred = TRUE)
   cells <- data.frame(
     season = 2026L, round = 1L, pos_bucket = "key_def",
     channel = "epv_recv_adj", resid_expected = 0, stringsAsFactors = FALSE
   )
-  res <- verify_epv_level_centring(d, cells = cells)
+  expect_error(
+    verify_epv_level_centring(d, cells = cells, shrink_on = TRUE),
+    "no recorded correction"
+  )
+})
+
+test_that("a cell missing from the recorded corrections is tolerated when shrinkage is OFF", {
+  # Without shrinkage every true residual is 0, so expected = 0 is correct for
+  # an unrecorded cell. Only the shrink-on path is tightened.
+  d <- .pgd_fixture(centred = TRUE)
+  cells <- data.frame(
+    season = 2026L, round = 1L, pos_bucket = "key_def",
+    channel = "epv_recv_adj", resid_expected = 0, stringsAsFactors = FALSE
+  )
+  res <- verify_epv_level_centring(d, cells = cells, shrink_on = FALSE)
   expect_gt(res$cells, 0)
 })
 
@@ -215,4 +213,24 @@ test_that("grouping uses the collapsed 6-way bucket, not raw position_group", {
   expect_silent_res <- verify_epr_position_centring(d)
   expect_equal(expect_silent_res$cells, 1)   # one bucket, not two
   expect_lt(expect_silent_res$worst, 1e-6)
+})
+
+test_that("NA and zero pred_tog rows get the same weight centring gave them", {
+  # centre_epr_by_position(): NA / non-finite weight -> 0 (excluded), otherwise
+  # floored at 0.01. Centre on exactly that, with a large finite epr on the NA
+  # row. A check that floors NA to 0.01 (or leaves it NA) disagrees with the
+  # centring: it either includes the outlier or blanks the cell's mean.
+  d <- .epr_fixture(centred = FALSE)
+  d$pred_tog[1] <- NA_real_   # round 1, KEY_DEFENDER
+  d$pred_tog[2] <- 0          # round 1, MIDFIELDER
+  d$epr[1] <- 50
+  w <- ifelse(is.finite(d$pred_tog), pmax(d$pred_tog, 0.01), 0)
+  key <- paste(d$season, d$round, .collapse_listed_position(d$position_group))
+  for (k in unique(key)) {
+    i <- key == k
+    d$epr[i] <- d$epr[i] - sum(d$epr[i] * w[i]) / sum(w[i])
+  }
+  res <- verify_epr_position_centring(d)
+  expect_gt(res$cells, 0)
+  expect_lt(res$worst, 1e-6)
 })
