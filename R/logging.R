@@ -41,7 +41,7 @@
 #' @param console_output Logical, whether to output to console
 #' @export
 setup_torp_logging <- function(level = "INFO", log_file = NULL, console_output = FALSE) {
-  .torp_logging_env$log_level <- toupper(level)
+  .torp_logging_env$log_level <- match.arg(toupper(level), names(.LOG_LEVELS))
   .torp_logging_env$console_output <- console_output
 
   if (console_output) {
@@ -115,7 +115,7 @@ safe_log_debug <- function(message, ...) {
 #' @param model_version Version of the model
 #' @keywords internal
 log_model_performance <- function(model_name, metrics, data_info = NULL, model_version = NULL) {
-  if (isTRUE(.torp_logging_env$console_output)) {
+  if (.should_log("INFO")) {
     message(paste("INFO: Model performance logged - Model:", model_name,
                   "| AUC:", metrics$auc %||% NA,
                   "| Log Loss:", metrics$log_loss %||% NA,
@@ -160,7 +160,7 @@ log_data_quality <- function(data_source, issues, severity = "MEDIUM") {
 #' @param ... Additional parameters (ignored)
 #' @keywords internal
 log_prediction_event <- function(model_name, input_hash, n_predictions, summary = NULL, ...) {
-  if (isTRUE(.torp_logging_env$console_output) && interactive()) {
+  if (.should_log("DEBUG") && interactive()) {
     message(paste("DEBUG: Model prediction event - Model:", model_name,
                   "| Input Hash:", input_hash,
                   "| N Predictions:", n_predictions))
@@ -182,7 +182,8 @@ log_prediction_event <- function(model_name, input_hash, n_predictions, summary 
 #' @param drift_threshold Threshold for triggering drift alert (default: 0.05)
 #' @keywords internal
 monitor_model_drift <- function(model_name, current_metrics, baseline_metrics, drift_threshold = 0.05) {
-  if (is.null(current_metrics$auc) || is.null(baseline_metrics$auc)) {
+  if (is.null(current_metrics$auc) || is.null(baseline_metrics$auc) ||
+      is.na(current_metrics$auc) || is.na(baseline_metrics$auc)) {
     cli::cli_warn("Cannot compute drift for {model_name}: missing AUC in metrics")
     return(list(model_name = model_name, drift_detected = NA, auc_drift = NA,
                 threshold = drift_threshold, current_auc = current_metrics$auc,
@@ -191,14 +192,12 @@ monitor_model_drift <- function(model_name, current_metrics, baseline_metrics, d
   auc_drift <- abs(current_metrics$auc - baseline_metrics$auc)
   drift_detected <- auc_drift > drift_threshold
 
-  if (isTRUE(.torp_logging_env$console_output)) {
-    if (drift_detected) {
-      warning(paste("Model drift detected - Model:", model_name,
-                    "| AUC Drift:", round(auc_drift, 4),
-                    "| Threshold:", drift_threshold))
-    } else {
-      message(paste("INFO: Model performance stable - Model:", model_name))
-    }
+  if (isTRUE(drift_detected) && .should_log("WARN")) {
+    warning(paste("Model drift detected - Model:", model_name,
+                  "| AUC Drift:", round(auc_drift, 4),
+                  "| Threshold:", drift_threshold))
+  } else if (!isTRUE(drift_detected) && .should_log("INFO")) {
+    message(paste("INFO: Model performance stable - Model:", model_name))
   }
 
   list(
@@ -208,7 +207,7 @@ monitor_model_drift <- function(model_name, current_metrics, baseline_metrics, d
     threshold = drift_threshold,
     current_auc = current_metrics$auc,
     baseline_auc = baseline_metrics$auc,
-    drift_details = if (drift_detected) {
+    drift_details = if (isTRUE(drift_detected)) {
       list(
         metric = "auc",
         drift_magnitude = auc_drift,
