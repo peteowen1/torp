@@ -192,7 +192,9 @@ test_that("player with many games has stat rating close to empirical mean", {
   params <- default_stat_rating_params()
   params$min_games <- 1
 
-  result <- estimate_player_stat_ratings(dt, params = params)
+  # Hand-built frame with only some columns: the missing-column warnings
+  # (stats skipped, efficiency specs absent) are expected here.
+  result <- suppressWarnings(estimate_player_stat_ratings(dt, params = params))
 
   # With 50 games at exactly 2 goals, estimate should be close to 2
   expect_equal(result$goals_rating[1], 2, tolerance = 0.3)
@@ -241,7 +243,9 @@ test_that("raw averages are per-player, not league-wide", {
   )
   params <- default_stat_rating_params()
   params$min_games <- 1
-  result <- estimate_player_stat_ratings(dt, params = params)
+  # Hand-built frame with only some columns: the missing-column warnings
+  # (stats skipped, efficiency specs absent) are expected here.
+  result <- suppressWarnings(estimate_player_stat_ratings(dt, params = params))
 
   alice <- result[player_id == "A"]
   bob   <- result[player_id == "B"]
@@ -616,4 +620,76 @@ test_that(".assert_ref_date_coverage() warns, not aborts, when it cannot check",
     .assert_ref_date_coverage(map, data.frame(x = 1)),
     "Cannot verify checkpoint coverage"
   )
+})
+
+# .compute_stat_rating_denominator() -- absent columns must be visible ---------
+# A named column that is missing used to return rep(0, n) silently, which turned
+# the whole efficiency stat into its prior with nothing logged.
+
+test_that(".compute_stat_rating_denominator() sums specs and treats NA as 0", {
+  dt <- data.table::data.table(a = c(1, NA, 3), b = c(10, 20, NA))
+  expect_equal(.compute_stat_rating_denominator(dt, "a"), c(1, 0, 3))
+  expect_equal(.compute_stat_rating_denominator(dt, "a+b"), c(11, 20, 3))
+})
+
+test_that(".compute_stat_rating_denominator() warns when a named column is absent", {
+  dt <- data.table::data.table(a = c(1, 2, 3))
+  expect_warning(res <- .compute_stat_rating_denominator(dt, "nope"), "nope")
+  expect_equal(res, c(0, 0, 0))
+  # One present, one absent part of a "+" spec: sum what exists, still warn
+  expect_warning(res2 <- .compute_stat_rating_denominator(dt, "a+nope"), "nope")
+  expect_equal(res2, c(1, 2, 3))
+  expect_no_warning(.compute_stat_rating_denominator(dt, "a"))
+})
+
+# Skipped efficiency stats are recorded and the batch run reports what it did ---
+
+test_that("single-date and batch estimators both report an efficiency stat with no spec as skipped", {
+  dat <- create_mock_stat_rating_data()
+  defs <- stat_rating_definitions()
+  broken <- which(defs$stat_name == "goal_accuracy")
+  defs$success_col[broken] <- NA_character_
+
+  expect_warning(
+    res <- estimate_player_stat_ratings(dat, stat_defs = defs, compute_ci = FALSE),
+    "Skipped 1 stat"
+  )
+  expect_false("goal_accuracy_rating" %in% names(res))
+
+  refs <- as.Date("2024-04-01")
+  expect_warning(
+    suppressMessages(bres <- .estimate_stat_ratings_batch(dat, refs, stat_defs = defs)),
+    "Skipped 1 stat"
+  )
+  expect_false("goal_accuracy_rating" %in% names(bres[[1]]))
+  expect_true("disposal_efficiency_rating" %in% names(bres[[1]]))
+})
+
+test_that("batch estimator agrees with the single-date estimator", {
+  dat <- create_mock_stat_rating_data()
+  # The mock uses short group names (DEF/MID/...); the batch estimator only
+  # knows the real ones from stat_rating_position_map(), so use those here.
+  dat[, pos_group := c(DEF = "KEY_DEFENDER", MID = "MIDFIELDER",
+                       FWD = "KEY_FORWARD", RUCK = "RUCK")[pos_group]]
+  ref <- as.Date("2024-04-15")
+  single <- estimate_player_stat_ratings(dat, ref_date = ref, compute_ci = FALSE)
+  suppressMessages(batch <- .estimate_stat_ratings_batch(dat, ref, compute_ci = FALSE))
+  batch <- batch[[1]]
+  data.table::setkey(single, player_id)
+  data.table::setkey(batch, player_id)
+  expect_equal(batch$player_id, single$player_id)
+  rating_cols <- grep("_rating$", names(single), value = TRUE)
+  for (cn in rating_cols) {
+    expect_equal(batch[[cn]], single[[cn]], tolerance = 1e-8, info = cn)
+  }
+
+  # The single keyed join per stat must also carry the interval columns
+  suppressWarnings(suppressMessages(
+    batch_ci <- .estimate_stat_ratings_batch(dat, ref, compute_ci = TRUE)[[1]]
+  ))
+  expect_true(all(c("goals_rating_lower", "goals_rating_upper",
+                    "goal_accuracy_rating_lower", "goal_accuracy_rating_upper") %in% names(batch_ci)))
+  expect_false(anyNA(batch_ci$goals_rating_lower))
+  expect_true(all(batch_ci$goals_rating_lower <= batch_ci$goals_rating))
+  expect_true(all(batch_ci$goals_rating <= batch_ci$goals_rating_upper))
 })

@@ -358,29 +358,29 @@
 
 #' Compute denominator vector from a column spec string
 #'
-#' Supports "col1+col2" for summing multiple columns.
+#' Supports "col1+col2" for summing multiple columns. A row's NA counts as 0.
+#' A column named in the spec that is absent from \code{dt} contributes 0 and
+#' raises a warning: a valid-looking all-zero vector would otherwise silently
+#' turn the stat into its prior.
 #'
 #' @param dt A data.table.
 #' @param denom_spec A string like "col" or "col1+col2".
 #' @return Numeric vector of denominators.
 #' @keywords internal
 .compute_stat_rating_denominator <- function(dt, denom_spec) {
-  if (grepl("\\+", denom_spec)) {
-    parts <- strsplit(denom_spec, "\\+")[[1]]
-    result <- rep(0, nrow(dt))
-    for (p in parts) {
-      if (p %in% names(dt)) {
-        v <- as.numeric(dt[[p]])
-        v[is.na(v)] <- 0
-        result <- result + v
-      }
-    }
-    return(result)
+  parts <- strsplit(denom_spec, "\\+")[[1]]
+  absent <- setdiff(parts, names(dt))
+  if (length(absent) > 0) {
+    cli::cli_warn(c(
+      "Efficiency column spec {.val {denom_spec}}: column(s) {.val {absent}} not found in the stat-rating data.",
+      "i" = "Absent column(s) count as 0, so the stat will rest on its prior for every affected row."
+    ))
   }
-  if (denom_spec %in% names(dt)) {
-    v <- as.numeric(dt[[denom_spec]])
+  result <- rep(0, nrow(dt))
+  for (p in intersect(parts, names(dt))) {
+    v <- as.numeric(dt[[p]])
     v[is.na(v)] <- 0
-    return(v)
+    result <- result + v
   }
-  rep(0, nrow(dt))
+  result
 }
