@@ -210,3 +210,22 @@ test_that("load_from_url uses parallel processing correctly", {
   expect_equal(nrow(result_multiple), 6)  # 3 rows from each file
   expect_true(all(c("test_file1.parquet", "test_file2.parquet") %in% result_multiple$url_source))
 })
+
+test_that("update_player_stats warns, not aborts, when fixtures error has braces (H7 skip)", {
+  stats_df <- data.frame(
+    match_id = c("m1", "m2", "m3"),
+    player = c("a", "b", "c"),
+    stringsAsFactors = FALSE
+  )
+  saved <- FALSE
+  testthat::local_mocked_bindings(
+    get_afl_player_stats = function(...) stats_df,
+    get_afl_fixtures = function(...) stop('HTTP 500 {"error":"x"}'),
+    save_to_release = function(...) { saved <<- TRUE; invisible(NULL) }
+  )
+  expect_warning(
+    suppressMessages(update_player_stats(2099)),
+    "Completeness check skipped"
+  )
+  expect_true(saved)
+})
