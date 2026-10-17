@@ -489,3 +489,39 @@ test_that("explain_player_plays: match_id actually filters the play-by-play (rev
       explain_player_plays("CD_I1", season = 2026L, match_id = "NOPE", pbp_data = pbp))),
     "No play-by-play rows")
 })
+
+test_that("explain_player_game resolves coefficients by comp and warns when the EPV load fails (review B76/B77/B78)", {
+  td <- withr::local_tempdir()
+  utils::write.csv(data.frame(stat_name = "kicks", beta = 2, sd = 1), file.path(td, "psr_coefficients_aflw.csv"), row.names = FALSE)
+  utils::write.csv(data.frame(stat_name = "kicks", beta = 1, sd = 1), file.path(td, "osr_coefficients_aflw.csv"), row.names = FALSE)
+  utils::write.csv(data.frame(stat_name = "kicks", beta = 1, sd = 1), file.path(td, "dsr_coefficients_aflw.csv"), row.names = FALSE)
+  seen_comp <- NULL
+  local_mocked_bindings(
+    .find_psr_coef_path = function(coef_file = "psr_coefficients.csv", comp = "AFLM") {
+      seen_comp <<- comp
+      file.path(td, .comp_coef_filename(coef_file, comp))
+    },
+    load_player_game_ratings = function(...) stop("release down")
+  )
+  ps <- data.table::data.table(player_id = "P1", match_id = "CD_M20260140102",
+                               player_name = "A", tog = 0.5, kicks = 10)
+  warned <- NULL
+  out <- withCallingHandlers(
+    suppressMessages(utils::capture.output(
+      res <- explain_player_game("P1", "CD_M20260140102", player_stats = ps,
+                                 season = 2026L, comp = "AFLW"))),
+    warning = function(w) { warned <<- c(warned, conditionMessage(w)); invokeRestart("muffleWarning") }
+  )
+  expect_equal(seen_comp, "AFLW")
+  # B76: the swallowed load error is now reported.
+  expect_true(any(grepl("failed to load", warned)))
+  # AFLW coefficient set was used (beta 2), osv/dsv decomposition found via the
+  # comp-qualified filenames. rate = 10 / 0.5 = 20; psv = 20 * 2.
+  expect_equal(res$psv$psv, 40)
+  expect_true(all(c("osv", "dsv") %in% names(res$psv)))
+  # Per-game (not per80) multiplies by the production TOG multiplier (0.5).
+  out2 <- suppressWarnings(suppressMessages(utils::capture.output(
+    res2 <- explain_player_game("P1", "CD_M20260140102", player_stats = ps,
+                                season = 2026L, per80 = FALSE, comp = "AFLW"))))
+  expect_equal(res2$psv$psv, 20)
+})

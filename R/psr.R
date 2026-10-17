@@ -865,13 +865,16 @@ NULL
 #' @param season Season year (used if \code{player_stats} is NULL).
 #' @param per80 Logical. If TRUE, show per-80-minute contributions.
 #'   Default TRUE.
+#' @param comp Competition: "AFLM" (default) or "AFLW". Selects the coefficient
+#'   set the breakdown decomposes with, the same way production scoring does
+#'   (\code{.compute_psv()}).
 #'
 #' @return Invisibly returns a list with \code{epv} (EPV summary data.table)
 #'   and \code{psv} (PSV per-stat breakdown data.table).
 #'
 #' @export
 explain_player_game <- function(player_id, match_id, player_stats = NULL,
-                                 season = NULL, per80 = TRUE) {
+                                 season = NULL, per80 = TRUE, comp = "AFLM") {
 
   if (is.null(season)) season <- as.integer(substr(match_id, 5, 8))
   pid <- as.character(player_id)
@@ -889,13 +892,17 @@ explain_player_game <- function(player_id, match_id, player_stats = NULL,
   if (nrow(row) == 0) cli::cli_abort("No data found for player {player_id} in match {match_id}")
   if (nrow(row) > 1) row <- row[1]
 
-  # TOG
-  tog_val <- if ("tog" %in% names(row)) {
+  # TOG. The two uses are sanitised by the SAME helpers calculate_psv() uses
+  # (review B78): an earlier hand-rolled version mapped NA/<=0 to 1 and left
+  # 0 < tog < 0.1 unclamped for the per-game multiplier, so per-game figures
+  # printed here could disagree with the published ones.
+  tog_raw <- if ("tog" %in% names(row)) {
     as.numeric(row$tog)
   } else if ("time_on_ground_percentage" %in% names(row)) {
     pmax(as.numeric(row$time_on_ground_percentage) / 100, 0.1)
   } else 1
-  if (is.na(tog_val) || tog_val <= 0) tog_val <- 1
+  tog_rate <- .psv_tog_rate(tog_raw)   # divisor for per-80 rates
+  tog_val  <- .psv_tog_mult(tog_raw)   # per-game multiplier and display
 
   pname <- if ("player_name" %in% names(row)) row$player_name[1] else player_id
 
@@ -994,14 +1001,16 @@ explain_player_game <- function(player_id, match_id, player_stats = NULL,
   # =========================================================================
   cli::cli_h3("PSV{suffix} -- stat-by-stat breakdown")
 
-  # Load coefficients
-  psr_path <- .find_psr_coef_path()
+  # Load coefficients, resolved exactly as .compute_psv() does (review B77):
+  # comp-aware path and OSR/DSR filenames, so an AFLW explanation decomposes
+  # with the AFLW coefficients production scores with.
+  psr_path <- .find_psr_coef_path(comp = comp)
   if (!nzchar(psr_path)) cli::cli_abort("PSR coefficient file not found")
 
   coef_df <- utils::read.csv(psr_path)
   coef_dir <- dirname(psr_path)
-  osr_path <- file.path(coef_dir, "osr_coefficients.csv")
-  dsr_path <- file.path(coef_dir, "dsr_coefficients.csv")
+  osr_path <- file.path(coef_dir, .comp_coef_filename("osr_coefficients.csv", comp))
+  dsr_path <- file.path(coef_dir, .comp_coef_filename("dsr_coefficients.csv", comp))
   has_components <- file.exists(osr_path) && file.exists(dsr_path)
   if (has_components) {
     osr_coefs <- utils::read.csv(osr_path)
@@ -1011,7 +1020,16 @@ explain_player_game <- function(player_id, match_id, player_stats = NULL,
   # PSV exclude list
   psv_exclude <- .PSV_EXCLUDE
 
-  # Build breakdown for a single coefficient set
+  # Build breakdown for a single coefficient set.
+  # KNOWN GAPS vs production (review B77/B78/B80, deliberately not closed here):
+  #  - the betas are NOT multiplied by PSV_POINTS_SCALE as calculate_psv() does,
+  #    so these contributions are on the pre-calibration scale;
+  #  - production centres by role/position and reads the opponent-adjusted
+  #    `_oadj` columns when present; this reads raw stats and does not centre;
+  #  - the per-stat arithmetic is a re-implementation of calculate_psv(); calling
+  #    that directly (as .compute_psv() does) would give one definition.
+  # Treat the numbers as an illustration of which stats drive PSV, not a
+  # reproduction of the published figure.
   .breakdown <- function(cdf, label) {
     cdf <- cdf[cdf$beta != 0 & !cdf$stat_name %in% psv_exclude, , drop = FALSE]
     available <- cdf$stat_name %in% names(row)
@@ -1021,7 +1039,7 @@ explain_player_game <- function(player_id, match_id, player_stats = NULL,
       v <- as.numeric(row[[s]]); if (is.na(v)) 0 else v
     }, numeric(1))
 
-    rate_vals <- raw_vals / tog_val
+    rate_vals <- raw_vals / tog_rate
     sds <- if ("sd" %in% names(cdf)) { s <- cdf$sd; s[s == 0 | is.na(s)] <- 1; s } else rep(1, nrow(cdf))
     contributions <- (rate_vals / sds) * cdf$beta
 
@@ -1043,7 +1061,7 @@ explain_player_game <- function(player_id, match_id, player_stats = NULL,
   psv_result[, raw_value := vapply(stat, function(s) {
     v <- as.numeric(row[[s]]); if (is.na(v)) 0 else v
   }, numeric(1))]
-  psv_result[, rate := round(raw_value / tog_val, 1)]
+  psv_result[, rate := round(raw_value / tog_rate, 1)]
 
   # Reorder and sort
   front_cols <- c("stat", "raw_value", "rate", "psv")
