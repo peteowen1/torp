@@ -949,3 +949,17 @@ test_that("torp_movers never lists a player as both riser and faller", {
   expect_equal(sum(res$direction == "down"), 1)
   expect_false(any(duplicated(res$player_id)))
 })
+
+test_that("wt_tog ignores games with NA TOG in both numerator and denominator", {
+  pgd <- .batch_fixture()
+  # Player B: three games all on the same day-weight structure, one NA TOG.
+  pgd[player_id == "B", time_on_ground_percentage := c(80, NA, 80)]
+  res <- torp:::calculate_epr_stats(pgd, "CD_M2024014103", as.Date("2024-05-01"))
+  # Non-NA games all have TOG 80 -> the weighted mean must be exactly 80, not
+  # dragged toward 0 by the NA game's weight sitting in the denominator.
+  expect_equal(res$wt_tog[res$player_id == "B"], 80)
+  ri <- data.table::data.table(round_val = 1L, match_ref = "CD_M2024014103",
+                               date_val = as.Date("2024-05-01"))
+  resb <- torp:::calculate_epr_stats_batch(pgd, ri)
+  expect_equal(resb$wt_tog[resb$player_id == "B"], 80)
+})
