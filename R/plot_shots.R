@@ -1,3 +1,11 @@
+.shot_round_label <- function(rd, season) {
+  if (is.null(rd) || length(rd) == 0 || is.na(rd[1])) {
+    paste0("All rounds, ", season)
+  } else {
+    paste0("Round ", rd[1], ", ", season)
+  }
+}
+
 #' Plot shot map for a match or team
 #'
 #' Displays shot locations on a half-field layout with colour indicating
@@ -55,8 +63,11 @@ plot_shot_map <- function(season = get_afl_season(), round = NULL, match_id = NU
   if (!is.null(team)) {
     team_resolved <- torp_replace_teams(team)
     # Try matching against team column
-    if ("team" %in% names(shots)) {
-      team_match <- shots$team == team_resolved | shots$team == team
+    if (!"team" %in% names(shots)) {
+      cli::cli_abort("Cannot filter by {.arg team}: the data has no {.field team} column.")
+    }
+    {
+      team_match <- shots$team %in% c(team_resolved, team)
       if (sum(team_match) == 0) {
         available <- unique(shots$team)
         cli::cli_abort(c(
@@ -85,10 +96,10 @@ plot_shot_map <- function(season = get_afl_season(), round = NULL, match_id = NU
     away <- if ("away_team_name" %in% names(shots)) shots$away_team_name[1] else "Away"
     rd <- if ("round_number" %in% names(shots)) shots$round_number[1] else round
     title <- paste(home, "vs", away)
-    subtitle_parts <- paste0("Round ", rd, ", ", season)
+    subtitle_parts <- .shot_round_label(rd, season)
   } else {
     title <- if (!is.null(team)) paste(team, "Shot Map") else "Shot Map"
-    subtitle_parts <- paste0("Round ", round, ", ", season)
+    subtitle_parts <- .shot_round_label(round, season)
   }
 
   if (!is.null(team)) subtitle_parts <- paste0(subtitle_parts, " \u2014 ", team, " shots only")
