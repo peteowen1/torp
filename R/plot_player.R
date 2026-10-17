@@ -14,8 +14,8 @@
 #'
 #' @return A ggplot2 object.
 #' @export
-#' @importFrom ggplot2 ggplot aes geom_point geom_line geom_hline geom_segment
-#'   labs scale_colour_manual
+#' @importFrom ggplot2 ggplot aes geom_point geom_line geom_hline
+#'   labs
 #' @importFrom rlang .data
 plot_player_rating <- function(player_name, seasons = TRUE,
                                metric = c("torp_value", "epv", "psv"),
@@ -29,7 +29,7 @@ plot_player_rating <- function(player_name, seasons = TRUE,
   }
 
   # Resolve player
-  player <- resolve_player(player_name, seasons = if (isTRUE(seasons)) TRUE else seasons)
+  player <- resolve_player(player_name, seasons = seasons)
   pid <- player$player_id
 
   # Filter to player
@@ -127,7 +127,7 @@ plot_player_rating <- function(player_name, seasons = TRUE,
 #' @return A ggplot2 object.
 #' @export
 #' @importFrom ggplot2 ggplot aes geom_col geom_vline coord_flip coord_polar
-#'   scale_fill_gradient2 labs facet_wrap
+#'   scale_fill_gradient2 labs
 #' @importFrom rlang .data
 plot_stat_rating_profile <- function(x, type = c("bar", "radar"),
                                      categories = NULL, top_n = 15,
@@ -207,9 +207,6 @@ plot_stat_rating_profile <- function(x, type = c("bar", "radar"),
     )
     names(cat_avgs) <- c("category", "avg_pct")
     cat_avgs <- cat_avgs[order(cat_avgs$category), ]
-    # Close the polygon by repeating first row
-    cat_avgs_closed <- rbind(cat_avgs, cat_avgs[1, ])
-    cat_avgs_closed$idx <- seq_len(nrow(cat_avgs_closed))
 
     p <- ggplot2::ggplot(cat_avgs, ggplot2::aes(x = .data$category, y = .data$avg_pct)) +
       ggplot2::geom_col(fill = team_color_lookup(info$team, "#4292c6"), alpha = 0.6, width = 0.8) +

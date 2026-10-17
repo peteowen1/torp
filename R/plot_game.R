@@ -42,7 +42,7 @@ plot_ep_wp <- function(season = get_afl_season(), round = NULL, match_id = NULL,
   } else {
     matches <- unique(data$match_id)
     if (length(matches) == 0) {
-      cli::cli_abort("No matches found in the data for Round {round}")
+      cli::cli_abort("No matches found in the data for season {season}{if (!is.null(round)) paste0(' round ', round) else ''}")
     }
     if (length(matches) > 1) {
       match_labels <- vapply(matches, function(mid) {
