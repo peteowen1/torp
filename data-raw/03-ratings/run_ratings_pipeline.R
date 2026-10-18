@@ -655,6 +655,7 @@ if (!exists("all_pstats")) {
   all_pstats <- load_player_stats(seasons)
 }
 
+stage5_failed_seasons <- character()
 for (s in seasons) {
   tryCatch({
     start_round <- get_start_round(s)
@@ -668,8 +669,13 @@ for (s in seasons) {
 
     # PSV (box-score value) and per-game TORP value, shared with the daily
     # release so the two writers of player_game_ratings_<season> can't drift.
+    # strict: a season whose PSV failed, or left any row NA, is not written, so
+    # its existing release (if this vintage has one) stays in place rather than
+    # being overwritten EPV-only. The blog's game-logs gate refuses NA psv, so such
+    # a file blocks every AFL build; daily_release.R guards the same way. As
+    # published on 2026-10-18 every season 2021-2026 had PSV on all rows.
     pstats_season <- data.table::as.data.table(all_pstats[all_pstats$season == s, ])
-    pgr <- .add_psv_to_game_ratings(pgr, pstats_season, s)
+    pgr <- .add_psv_to_game_ratings(pgr, pstats_season, s, strict = TRUE)
 
     file_name <- paste0("player_game_ratings_", s)
     save_to_release(pgr, torp:::.vintage_asset_stem(file_name, RATINGS_VINTAGE), "player_game_ratings-data")
@@ -681,8 +687,12 @@ for (s in seasons) {
     save_to_release(psr, torp:::.vintage_asset_stem(file_name, RATINGS_VINTAGE), "player_season_ratings-data")
     cli::cli_alert_success("Released {file_name} ({nrow(psr)} rows)")
   }, error = function(e) {
+    stage5_failed_seasons <<- c(stage5_failed_seasons, as.character(s))
     cli::cli_alert_danger("Failed derived ratings for {s}: {conditionMessage(e)}")
   })
+}
+if (length(stage5_failed_seasons) > 0) {
+  cli::cli_alert_danger("Stage 5 failed for seasons: {paste(stage5_failed_seasons, collapse = ', ')} - their player game/season ratings were not written this run")
 }
 
 tictoc::toc(log = TRUE)
