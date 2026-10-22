@@ -51,6 +51,17 @@ LOCAL_SKIP_MARKER_HOURS <- 3
 #' @keywords internal
 MIN_PARQUET_BYTES <- 100
 
+#' Release asset stems written without R attributes in the parquet footer
+#'
+#' `save_to_release()` writes these stems with `tab$metadata$r` dropped. R's
+#' `dput()` dump under that key holds the whole `np_breakdown` / `match_items`
+#' table as text: about 9 MB on `player_game_2025`, 2.4 MB on `score_events`.
+#' Readers do not need it: every loader calls `data.table::setDT()`, and
+#' `epv_engine` is kept as a column. Matches with an optional season and an
+#' optional `_v<N>` vintage suffix (see `.drops_r_metadata()`). Issue #261.
+#' @keywords internal
+RELEASE_PARQUET_NO_R_METADATA_STEMS <- c("player_game", "score_events")
+
 #' Clock-skew tolerance (seconds) when comparing a GitHub release-asset
 #' listing's `updated_at` against our own upload start time
 #'

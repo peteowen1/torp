@@ -1,3 +1,21 @@
+# Issue #261: arrow stores R attributes in the parquet footer under key `r`, as
+# a dput() dump. For the stems in RELEASE_PARQUET_NO_R_METADATA_STEMS that dump
+# is megabytes of np_breakdown / match_items text, so the writer drops it.
+.drops_r_metadata <- function(file_name) {
+  pattern <- paste0(
+    "^(", paste(RELEASE_PARQUET_NO_R_METADATA_STEMS, collapse = "|"),
+    ")(_[0-9]{4})?(_v[0-9]+)?$"
+  )
+  grepl(pattern, as.character(file_name))
+}
+
+.write_release_parquet <- function(df, path, file_name) {
+  if (!.drops_r_metadata(file_name)) return(arrow::write_parquet(df, path))
+  tab <- arrow::arrow_table(df)
+  tab$metadata$r <- NULL
+  arrow::write_parquet(tab, path)
+}
+
 #' Save a Data Frame to a GitHub Release via Piggyback
 #'
 #' @description This function is intended for internal use and may be unexported in a future release.
@@ -63,7 +81,7 @@ save_to_release <- function(df, file_name, release_tag, also_csv = FALSE, prev_r
   }
 
   tryCatch(
-    arrow::write_parquet(df, tf),
+    .write_release_parquet(df, tf, file_name),
     error = function(e) {
       cli::cli_abort("Failed to write parquet file {.val {f_name}}: {conditionMessage(e)}")
     }
