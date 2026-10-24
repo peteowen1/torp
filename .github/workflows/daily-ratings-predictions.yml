@@ -59,7 +59,11 @@ concurrency:
 jobs:
   compute-ratings:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # 45 was too tight: in Oct 2026 about 1 run in 3 was cancelled at the cap
+    # (e.g. run 40115631541, 'Compute TORP ratings' still running at 45m), and
+    # passing runs finished at ~44m with almost no margin. Setup R alone varies
+    # 35s-2.5m between runs. 90 is headroom while the step itself is profiled.
+    timeout-minutes: 90
 
     permissions:
       contents: write
@@ -348,6 +352,59 @@ jobs:
                 repo: context.repo.repo,
                 title: title,
                 body: body,
+                labels: ['bug', 'automation']
+              });
+            }
+
+  # The 'Notify on failure' step above lives inside build-predictions, so it
+  # never runs when compute-ratings fails or is cancelled (build-predictions is
+  # skipped), and `if: failure()` does not match a timeout cancellation. This
+  # job covers those cases so a stalled ratings run opens or updates the issue.
+  notify-cancelled-or-upstream-failure:
+    needs: [compute-ratings, build-predictions]
+    if: >-
+      always() &&
+      (needs.compute-ratings.result == 'failure' ||
+       needs.compute-ratings.result == 'cancelled' ||
+       needs.build-predictions.result == 'cancelled')
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Open or update the failure issue
+        uses: actions/github-script@v9
+        env:
+          RATINGS_RESULT: ${{ needs.compute-ratings.result }}
+          PREDICTIONS_RESULT: ${{ needs.build-predictions.result }}
+        with:
+          script: |
+            const title = 'Daily Ratings/Predictions Failed';
+            const ratings = process.env.RATINGS_RESULT;
+            const preds = process.env.PREDICTIONS_RESULT;
+            const runUrl = `${context.payload.repository.html_url}/actions/runs/${context.runId}`;
+            const summary = `compute-ratings: **${ratings}**, build-predictions: **${preds}** (a cancelled job is usually a timeout).`;
+
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'automation,bug'
+            });
+            const existingIssue = issues.data.find(i => i.title === title);
+
+            if (existingIssue) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existingIssue.number,
+                body: `Workflow did not complete on ${new Date().toISOString()}.\n\n${summary}\n\n[View run](${runUrl})`
+              });
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: title,
+                body: `The daily ratings & predictions workflow did not complete on ${new Date().toISOString()}.\n\n${summary}\n\nTrigger: ${context.eventName}\n\n[View run](${runUrl})\n\nRatings and predictions may be stale until a run succeeds.`,
                 labels: ['bug', 'automation']
               });
             }
