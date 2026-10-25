@@ -220,3 +220,26 @@ test_that("calculate_psr refuses to centre when no listed position is reachable"
     regexp = "listed|empty join|No row matched"
   )
 })
+
+test_that("calculate_psr ref_before_season takes the rescaling SDs from earlier seasons only", {
+  # Walk-forward backtests (honest backfill): the scale applied to a season must
+  # not be set by later seasons. 2024 forwards are spread wide, 2025 tight.
+  skills <- data.frame(
+    player_id = as.character(1:12), season = rep(c(2024L, 2025L), each = 6), round = 1L,
+    wt_80s = 1,
+    disposals_rating = c(9, 10, 11, 4, 10, 16,   9, 10, 11, 9, 10, 11)
+  )
+  lp <- data.frame(player_id = as.character(1:12),
+                   position = rep(rep(c("KEY_DEFENDER", "KEY_FORWARD"), each = 3), 2))
+  coef <- data.frame(stat_name = "disposals", beta = 1)
+  full <- calculate_psr(skills, coef, listed_pos = lp, centre_on_listed = TRUE)
+  all_ref <- calculate_psr(skills, coef, listed_pos = lp, centre_on_listed = TRUE, ref_before_season = 3000L)
+  expect_equal(full$psr, all_ref$psr)                 # NULL == every row as reference
+  past <- calculate_psr(skills, coef, listed_pos = lp, centre_on_listed = TRUE, ref_before_season = 2025L)
+  # 2024 rows are the whole reference set, so they rescale exactly as a 2024-only run would
+  only24 <- calculate_psr(skills[skills$season == 2024L, ], coef, listed_pos = lp, centre_on_listed = TRUE)
+  expect_equal(past$psr[past$season == 2024L], only24$psr)
+  expect_false(isTRUE(all.equal(past$psr, full$psr)))  # and the 2025 rows no longer move the scale
+  expect_error(calculate_psr(skills, coef, listed_pos = lp, centre_on_listed = TRUE, ref_before_season = 2000L),
+               "no reference rows")
+})
