@@ -53,7 +53,7 @@ test_that("save_injury_data aborts loudly (never silently NULLs) on a transient 
 
   expect_error(
     save_injury_data(.new_injury_row(), 2026),
-    "aborting to avoid wiping season history"
+    "not a confirmed-absent"
   )
 })
 

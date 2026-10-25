@@ -43,6 +43,100 @@
 }
 
 
+# shared input checks + rating features ----
+
+#' Log and sanity-check the match model's loaded inputs
+#'
+#' Shared by [build_team_mdl_df()] and [build_prediction_state()], which load
+#' the same inputs in different orders (production refreshes results and has a
+#' compute-from-scratch ratings fallback).
+#'
+#' @param fixtures,results,teams,torp_df The loaded input frames.
+#' @return Invisible NULL; aborts when an input is implausibly small.
+#' @noRd
+.check_match_model_inputs <- function(fixtures, results, teams, torp_df) {
+  cli::cli_inform("Loaded: fixtures={nrow(fixtures)}, results={nrow(results)}, teams={nrow(teams)}, ratings={nrow(torp_df)}")
+  if (nrow(fixtures) < 100) cli::cli_abort("Fixtures too small ({nrow(fixtures)} rows)")
+  if (nrow(torp_df) < 100) cli::cli_abort("Ratings too small ({nrow(torp_df)} rows)")
+  if (nrow(teams) < 100) cli::cli_abort("Teams too small ({nrow(teams)} rows)")
+  invisible(NULL)
+}
+
+#' PSR + xRAPM + team ratings + match features, the one copy
+#'
+#' This block used to be written out in both [build_team_mdl_df()] and
+#' [build_prediction_state()]. xRAPM was once wired into the wrapper alone,
+#' which nothing in production calls, leaving xrapm_diff a flat 0 for every
+#' match ever served, silently: the NULL path in .join_xrapm_to_lineups() sets
+#' 0 and returns without a word. One copy means both callers get every
+#' feature and every warning.
+#'
+#' @param fix_df Output of .build_fixtures_df().
+#' @param teams,torp_df,all_grounds Loaded inputs.
+#' @param season Season being built.
+#' @param target_weeks Rounds being predicted, or NULL (no stale-snapshot check).
+#' @param psr_coef_path Optional PSR coefficient path override.
+#' @return team_rt_fix_df from .build_match_features().
+#' @noRd
+.build_rated_match_features <- function(fix_df, teams, torp_df, all_grounds,
+                                        season, target_weeks,
+                                        psr_coef_path = NULL,
+                                        psr_ref_before_season = NULL) {
+  cli::cli_h2("Loading PSR")
+  psr_df <- NULL
+
+  # Always computed here, career-centred, never read from the psr-data release:
+  # the release is the PUBLISHED PSR, which compares each player with his
+  # latest named slot (Thread G, 2026-10-11), while the match model keeps the
+  # career-modal key (weekly scored dMAE +0.199 as a model input, ws31).
+  tryCatch({
+    skills <- load_player_stat_ratings(TRUE)
+    psr_df <- .compute_psr_from_stat_ratings(skills, psr_coef_path, psr_centre = "career",
+                                             ref_before_season = psr_ref_before_season)
+    if (!is.null(psr_df)) {
+      cli::cli_inform("PSR computed from skills+coefficients (career key): {nrow(psr_df)} player-rounds")
+    }
+  }, error = function(e) {
+    cli::cli_warn("Failed to compute PSR: {e$message}")
+  })
+
+  if (is.null(psr_df)) {
+    cli::cli_warn("PSR unavailable - predictions will proceed without PSR features")
+  }
+
+  cli::cli_h2("Processing lineups")
+  # The xRAPM snapshot is published to torpdata (`team_rapm_asof-data`) and
+  # refreshed on the prediction pipeline's own cadence, but it is still an
+  # OPTIONAL feature: if it cannot be resolved, xrapm_diff stays a flat 0.
+  # Deliberately non-fatal -- a missing snapshot must degrade one feature, not
+  # break the prediction pipeline -- but said loudly.
+  xrapm_df <- tryCatch(
+    load_team_rapm_asof(comp = "AFLM"),
+    error = function(e) {
+      cli::cli_alert_danger("Failed to load as-of xRAPM snapshot ({conditionMessage(e)}) -- xrapm_diff falls back to neutral 0")
+      NULL
+    }
+  )
+  if (is.null(xrapm_df)) {
+    cli::cli_alert_danger("xRAPM snapshot unavailable -- xrapm_diff is a flat 0 for every match in this run.")
+  } else if (!is.null(target_weeks)) {
+    # A stale snapshot is the dangerous case: the rolling join keeps succeeding
+    # and silently serves a frozen rating. Check it against the round actually
+    # being predicted, and say so loudly if it is behind.
+    .warn_stale_xrapm_snapshot(
+      xrapm_df,
+      season = season,
+      round_number = max(target_weeks, na.rm = TRUE),
+      comp = "AFLM"
+    )
+  }
+  team_rt_df <- .build_team_ratings_df(teams, torp_df, psr_df, xrapm_df)
+
+  cli::cli_h2("Computing features")
+  .build_match_features(fix_df, team_rt_df, all_grounds)
+}
+
+
 # build_team_mdl_df (convenience wrapper) ----
 
 #' Build complete match model dataset end-to-end
@@ -71,62 +165,16 @@ build_team_mdl_df <- function(season = NULL, target_weeks = NULL,
   teams <- load_teams(TRUE)
   torp_df <- load_torp_ratings()
 
-  # Load PSR (Player Skill Ratings) with osr/dsr decomposition
-  psr_df <- NULL
-  tryCatch({
-    skills <- load_player_stat_ratings(TRUE)
-    # Career-centred on purpose: weekly centring as a match-model input
-    # scored dMAE +0.199 (ws31, 2026-10-11). Published ratings use weekly.
-    psr_df <- .compute_psr_from_stat_ratings(skills, psr_coef_path, psr_centre = "career",
-                                             ref_before_season = psr_ref_before_season)
-    if (!is.null(psr_df)) {
-      cli::cli_inform("PSR computed for {nrow(psr_df)} player-rounds")
-    }
-  }, error = function(e) {
-    cli::cli_warn("Failed to compute PSR: {e$message}")
-  })
-
-  cli::cli_inform(paste0(
-    "Loaded: fixtures=", nrow(fixtures), ", results=", nrow(results),
-    ", teams=", nrow(teams), ", ratings=", nrow(torp_df)
-  ))
-
-  # Input validation
-  if (nrow(fixtures) < 100) cli::cli_abort("Fixtures too small ({nrow(fixtures)} rows)")
-  if (nrow(torp_df) < 100) cli::cli_abort("Ratings too small ({nrow(torp_df)} rows)")
-  if (nrow(teams) < 100) cli::cli_abort("Teams too small ({nrow(teams)} rows)")
+  .check_match_model_inputs(fixtures, results, teams, torp_df)
 
   cli::cli_h2("Building fixture features")
   fix_df <- .build_fixtures_df(fixtures)
 
-  cli::cli_h2("Processing lineups")
-  # The xRAPM snapshot is published to torpdata (`team_rapm_asof-data`) and
-  # refreshed on this pipeline's own cadence, but it is still an OPTIONAL
-  # feature: if it cannot be resolved, load_team_rapm_asof() warns and returns
-  # NULL and xrapm_diff stays a flat 0. Deliberately non-fatal -- a missing
-  # snapshot must degrade one feature, not break the prediction pipeline.
-  xrapm_df <- tryCatch(
-    load_team_rapm_asof(comp = "AFLM"),
-    error = function(e) {
-      cli::cli_alert_danger("Failed to load as-of xRAPM snapshot ({conditionMessage(e)}) -- xrapm_diff falls back to neutral 0")
-      NULL
-    }
+  team_rt_fix_df <- .build_rated_match_features(
+    fix_df, teams, torp_df, all_grounds,
+    season = season, target_weeks = target_weeks, psr_coef_path = psr_coef_path,
+    psr_ref_before_season = psr_ref_before_season
   )
-  # A stale snapshot is the dangerous case: the rolling join keeps succeeding
-  # and silently serves a frozen rating. Check it against the round actually
-  # being predicted, and say so loudly if it is behind.
-  if (!is.null(target_weeks) && !is.null(season)) {
-    .warn_stale_xrapm_snapshot(
-      xrapm_df,
-      season = season,
-      round_number = max(target_weeks, na.rm = TRUE),
-      comp = "AFLM"
-    )
-  }
-  team_rt_df <- .build_team_ratings_df(teams, torp_df, psr_df, xrapm_df)
-
-  cli::cli_h2("Computing features")
-  team_rt_fix_df <- .build_match_features(fix_df, team_rt_df, all_grounds)
 
   cli::cli_h2("Loading weather")
   weather_df <- .load_match_weather(fixtures, all_grounds, target_weeks, season)
@@ -542,19 +590,14 @@ get_lineup_ratings <- function(season = NULL, round = NULL, match_id = NULL) {
   # team lists that is now beyond the point where a re-run could fix it.
   .warn_missing_lineups(week_gms)
 
-  pred_repo <- get_torp_data_repo()
-  existing <- tryCatch(
-    file_reader(pred_file_name, "predictions"),
-    vb_error_absent = function(e) NULL,
-    error = function(e) {
-      cli::cli_abort(c(
-        "Could not load existing locked predictions for {season} ({conditionMessage(e)}).",
-        "x" = "Refusing to upload -- this was not a confirmed-absent (404) error."
-      ), parent = e)
-    }
+  # NULL only when the asset is absent (or 0-row) AND confirm_fresh_start()
+  # agreed -- the mandatory guard before the "start fresh" branch below.
+  existing <- .read_accumulating_asset(
+    paste0(pred_file_name, ".parquet"), "predictions",
+    empty_is_absent = TRUE
   )
 
-  if (!is.null(existing) && nrow(existing) > 0) {
+  if (!is.null(existing)) {
     # Backward compat: existing predictions may use old providerId column
     if (!"match_id" %in% names(existing) && "providerId" %in% names(existing)) {
       data.table::setnames(existing, "providerId", "match_id")
@@ -613,22 +656,6 @@ get_lineup_ratings <- function(season = NULL, round = NULL, match_id = NULL) {
 
     vb_guard_accumulate(existing, combined, floor = 0.9)
   } else {
-    # existing is NULL only when file_reader() confirmed absence (404) above,
-    # or the file genuinely has 0 rows (loaded fine). Independently confirm
-    # the release asset really is absent before doing a fresh, non-accumulating
-    # upload -- this is the mandatory guard before any "start fresh" branch.
-    is_absent <- tryCatch(
-      confirm_fresh_start(pred_repo, "predictions", paste0(pred_file_name, ".parquet")),
-      error = function(e) {
-        cli::cli_abort("Could not verify {.val {pred_file_name}.parquet} is absent from the predictions release before a fresh upload: {conditionMessage(e)}")
-      }
-    )
-    if (!isTRUE(is_absent)) {
-      cli::cli_abort(c(
-        "Refusing fresh upload of {.val {pred_file_name}}: the file is present on the predictions release but was not readable as non-empty.",
-        "x" = "This should not happen without a prior error -- aborting rather than risk overwriting locked history."
-      ))
-    }
     combined <- week_gms
   }
 
@@ -773,11 +800,7 @@ build_prediction_state <- function(week = NULL, weeks = NULL, season = NULL,
     )
   }
 
-  cli::cli_inform("Loaded: fixtures={nrow(fixtures)}, results={nrow(results)}, teams={nrow(teams)}, ratings={nrow(torp_df_total)}")
-
-  if (nrow(fixtures) < 100) cli::cli_abort("Fixtures too small ({nrow(fixtures)} rows)")
-  if (nrow(torp_df_total) < 100) cli::cli_abort("Ratings too small ({nrow(torp_df_total)} rows)")
-  if (nrow(teams) < 100) cli::cli_abort("Teams too small ({nrow(teams)} rows)")
+  .check_match_model_inputs(fixtures, results, teams, torp_df_total)
 
   # Resolve target weeks
   is_backfill <- identical(weeks, "all")
@@ -806,57 +829,10 @@ build_prediction_state <- function(week = NULL, weeks = NULL, season = NULL,
   cli::cli_h2("Building fixture features")
   fix_df <- .build_fixtures_df(fixtures)
 
-  cli::cli_h2("Loading PSR")
-  psr_df <- NULL
-
-  # Always computed here, career-centred, never read from the psr-data release:
-  # the release is the PUBLISHED PSR, which compares each player with his
-  # latest named slot (Thread G, 2026-10-11), while the match model keeps the
-  # career-modal key (weekly scored dMAE +0.199 as a model input, ws31). This
-  # matches what build_team_mdl_df() trains on.
-  tryCatch({
-    skills <- load_player_stat_ratings(TRUE)
-    psr_df <- .compute_psr_from_stat_ratings(skills, psr_centre = "career")
-    if (!is.null(psr_df)) {
-      cli::cli_inform("PSR computed from skills+coefficients (career key): {nrow(psr_df)} player-rounds")
-    }
-  }, error = function(e) {
-    cli::cli_warn("Failed to compute PSR: {e$message}")
-  })
-
-  if (is.null(psr_df)) {
-    cli::cli_warn("PSR unavailable - predictions will proceed without PSR features")
-  }
-
-  cli::cli_h2("Processing lineups")
-  # xRAPM: same block as build_team_mdl_df()'s. It lives in BOTH because this is
-  # the function production actually runs -- run_predictions_pipeline() calls
-  # build_prediction_state(), never the build_team_mdl_df() wrapper (that one is
-  # used only by data-raw/debug/ scripts). Wiring it into the wrapper alone left
-  # xrapm_diff a flat 0 for every match ever served, silently: the NULL path in
-  # .join_xrapm_to_lineups() sets 0 and returns without a word, so nothing in the
-  # log distinguished "feature off" from "feature on and neutral".
-  xrapm_df <- tryCatch(
-    load_team_rapm_asof(comp = "AFLM"),
-    error = function(e) {
-      cli::cli_alert_danger("Failed to load as-of xRAPM snapshot ({conditionMessage(e)}) -- xrapm_diff falls back to neutral 0")
-      NULL
-    }
+  team_rt_fix_df <- .build_rated_match_features(
+    fix_df, teams, torp_df_total, all_grounds,
+    season = season, target_weeks = target_weeks
   )
-  if (is.null(xrapm_df)) {
-    cli::cli_alert_danger("xRAPM snapshot unavailable -- xrapm_diff is a flat 0 for every match in this run.")
-  } else {
-    .warn_stale_xrapm_snapshot(
-      xrapm_df,
-      season = season,
-      round_number = max(target_weeks, na.rm = TRUE),
-      comp = "AFLM"
-    )
-  }
-  team_rt_df <- .build_team_ratings_df(teams, torp_df_total, psr_df, xrapm_df)
-
-  cli::cli_h2("Computing features")
-  team_rt_fix_df <- .build_match_features(fix_df, team_rt_df, all_grounds)
 
   # Injuries ----
   cli::cli_h2("Loading injuries")

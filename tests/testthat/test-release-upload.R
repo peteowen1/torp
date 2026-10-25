@@ -30,6 +30,13 @@
     gh = function(endpoint, ...) {
       a <- list(...)
       if (startsWith(endpoint, "GET")) {
+        st$gets <- c(st$gets, endpoint)
+        st$gh_cache_seen <- c(st$gh_cache_seen, isFALSE(getOption("gh_cache")))
+        if (grepl("/releases/assets/", endpoint, fixed = TRUE)) {
+          hit <- Filter(function(x) x$id == as.numeric(a$id), st$assets)
+          if (!length(hit)) stop("Not Found (HTTP 404)")
+          return(hit[[1]])
+        }
         if ("list" %in% st$fail) stop("HTTP 500 listing")
         if ("tag404" %in% st$fail) {
           stop(structure(class = c("http_error_404", "error", "condition"),
@@ -61,7 +68,15 @@
       }
       st$add(name, as.numeric(file.size(file)),
              state = if ("stuck" %in% st$fail) "starter" else "uploaded")
-      invisible(NULL)
+      if (!isTRUE(st$respond)) return(invisible(NULL))
+      # What piggyback 0.1.5 really returns: list(<httr response>) per file,
+      # 201 with the asset JSON (size as GitHub saw it at POST time).
+      rec <- st$assets[[length(st$assets)]]
+      if ("short" %in% st$fail) st$assets[[length(st$assets)]]$size <- rec$size - 1
+      invisible(list(structure(list(
+        url = "https://uploads.github.com/x", status_code = 201L,
+        content = charToRaw(as.character(jsonlite::toJSON(rec, auto_unbox = TRUE)))),
+        class = "response")))
     },
     .package = "piggyback", .env = env
   )
@@ -235,4 +250,62 @@ test_that("safe_release_upload disables piggyback's listing cache DURING the upl
   safe_release_upload(.new_file(), "o/r", "t", name = "a.parquet")
   expect_identical(seen, "1")
   expect_identical(Sys.getenv("piggyback_cache_duration", unset = "UNSET"), "600")
+})
+
+# --- 2026-10-25: confirm by asset id, never through gh's HTTP cache ----------
+# gh caches GETs for GitHub's max-age=60, so a listing fetched before an upload
+# hid the new asset for ~60 s and every upload sat out the full poll schedule.
+
+test_that("safe_release_upload confirms by the id the upload returned, on the first poll", {
+  st <- .fake_release(a.parquet = 5)
+  st$respond <- TRUE
+  .mock_release(st)
+  sleeps <- 0
+  testthat::local_mocked_bindings(Sys.sleep = function(...) sleeps <<- sleeps + 1, .package = "base")
+  safe_release_upload(.new_file(20), "o/r", "t", name = "a.parquet")
+  expect_equal(st$names(), "a.parquet")
+  expect_equal(st$size_of("a.parquet"), 20)
+  expect_equal(sleeps, 0)
+  expect_true(any(grepl("/releases/assets/", st$gets, fixed = TRUE)))
+  # Every read inside the upload bypassed gh's cache ...
+  expect_true(all(st$gh_cache_seen))
+  # ... and the caller's setting is back afterwards.
+  expect_null(getOption("gh_cache"))
+})
+
+test_that("an id-confirmed upload still has to be 'uploaded' at the local size", {
+  st <- .fake_release(a.parquet = 5)
+  st$respond <- TRUE
+  st$fail <- "stuck"
+  .mock_release(st)
+  expect_error(safe_release_upload(.new_file(20), "o/r", "t", name = "a.parquet"),
+               class = "vb_error_transient")
+  expect_equal(st$size_of("a.parquet"), 5)
+
+  st2 <- .fake_release(a.parquet = 5)
+  st2$respond <- TRUE
+  st2$fail <- "short"
+  .mock_release(st2)
+  expect_error(safe_release_upload(.new_file(20), "o/r", "t", name = "a.parquet"),
+               "never reported as uploaded", class = "vb_error_transient")
+  expect_equal(st2$size_of("a.parquet"), 5)
+})
+
+test_that("a listing failure after an id-confirmed upload stops before any delete", {
+  st <- .fake_release(a.parquet = 5)
+  st$respond <- TRUE
+  st$fail <- "list"
+  .mock_release(st)
+  expect_error(safe_release_upload(.new_file(20), "o/r", "t", name = "a.parquet"),
+               "could not be listed for the swap", class = "vb_error_transient")
+  expect_true("a.parquet" %in% st$names())
+  expect_equal(st$size_of("a.parquet"), 5)
+})
+
+test_that(".vb_with_fresh_listing turns gh's HTTP cache off and restores it", {
+  withr::local_options(gh_cache = TRUE)
+  restore <- .vb_with_fresh_listing()
+  expect_false(getOption("gh_cache"))
+  restore()
+  expect_true(getOption("gh_cache"))
 })

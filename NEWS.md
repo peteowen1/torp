@@ -1,3 +1,8 @@
+# torp (development version)
+
+* `calculate_psr()` and `calculate_psr_components()` gain `ref_before_season` (default `NULL`, output unchanged). When set, the cross-round standardisation SDs and the centring mean for position-less rows come only from earlier seasons, for walk-forward backtests. `build_team_mdl_df()` passes it through as `psr_ref_before_season`.
+* New `data-raw/04-analysis/honest_backfill_predictions.R`: regenerates 2022-2025 match predictions round by round with no future data (torpverse `docs/plans/HONEST-BACKFILL-2021-2025.md`). `06_train_psr_model.R` takes `PSR_TRAIN_THROUGH` / `PSR_OUT_DIR` for historical refits and refuses a cutoff without an output folder.
+
 # torp 1.10.1
 
 * `run_ratings_pipeline.R` no longer overwrites a season's `player_game_ratings` with an EPV-only file when PSV fails: stage 5 runs `.add_psv_to_game_ratings(strict = TRUE)` and names any season it skipped.

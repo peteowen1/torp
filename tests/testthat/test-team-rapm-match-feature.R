@@ -107,9 +107,17 @@ test_that("the SERVED pipeline actually passes a snapshot to .build_team_ratings
   # Asserted against the function BODY rather than the source file: an installed
   # package has no R/*.R to grep, so a file-scanning check would pass vacuously
   # in exactly the environment that matters.
+  # Both callers now share one copy, .build_rated_match_features(); check they
+  # still go through it, then check the copy itself passes the snapshot.
+  for (nm in c("build_prediction_state", "build_team_mdl_df")) {
+    src <- paste(deparse(body(get(nm, envir = asNamespace("torp")))), collapse = "
+")
+    expect_true(grepl(".build_rated_match_features(", src, fixed = TRUE),
+                info = paste0(nm, " no longer builds its rating features through ",
+                              ".build_rated_match_features()"))
+  }
   fns <- list(
-    build_prediction_state = torp:::build_prediction_state,
-    build_team_mdl_df      = torp:::build_team_mdl_df
+    .build_rated_match_features = torp:::.build_rated_match_features
   )
   for (nm in names(fns)) {
     src <- paste(deparse(body(fns[[nm]])), collapse = "\n")
