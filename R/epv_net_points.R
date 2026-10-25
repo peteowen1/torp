@@ -581,7 +581,9 @@
 #'   `NULL` to estimate it from the data.
 #' @return A data.table of ledger rows with `hm` (home-margin-frame value) plus
 #'   the next row's team and player, used to detect turnovers, and the
-#'   resolution columns (`NA` without chains).
+#'   resolution columns (`NA` without chains). Under `"allocate"` the baseline
+#'   the stoppages were priced on rides as the `np_stoppage_baseline`
+#'   attribute.
 #' @keywords internal
 .np_build_ledger <- function(pbp_data, chains = NULL,
                              stoppages = c("exclude", "allocate"),
@@ -780,6 +782,11 @@
   data.table::setattr(out, "np_roster",
                       unique(seq[!is.na(team) & !is.na(player_id),
                                  .(match_id, team, player_id)]))
+  # The baseline the stoppages were priced on, fitted here or supplied, so the
+  # nightly can save its season fit for the live path to reuse (torp#250).
+  if (identical(stoppages, "allocate")) {
+    data.table::setattr(out, "np_stoppage_baseline", bl)
+  }
   out
 }
 
@@ -870,10 +877,27 @@
 #' @param pbp_data Play-by-play carrying `exp_pts` and `delta_epv`.
 #' @param chains Raw chains for the same matches.
 #' @param leak_safe Fit each season on strictly earlier seasons.
+#' @param models Already-fitted models, `list(disposal = , contest = )` as
+#'   `fit_disposal_models()` and `fit_contest_models()` return them. When
+#'   given, nothing is fitted: the disposals and contests are only scored. This
+#'   is the live path's route (torp#250), where one match is far too small a
+#'   training set and the nightly's season fit is reused instead.
+#' @param return_models Attach the models that scored the newest season as the
+#'   `np_models` attribute, so the caller can save them.
 #' @return `match_id`, `display_order`, `p_hat`, `decision`, `surprise`.
 #' @keywords internal
 .np_difficulty_terms <- function(pbp_data, chains, leak_safe = TRUE,
-                                 train_pbp = NULL, train_chains = NULL) {
+                                 train_pbp = NULL, train_chains = NULL,
+                                 models = NULL, return_models = FALSE) {
+  if (!is.null(models) && (!is.null(train_pbp) || !is.null(train_chains))) {
+    cli::cli_abort("Supply fitted {.arg models} or training data, not both.")
+  }
+  if (!is.null(models) && (is.null(models$disposal) || is.null(models$contest))) {
+    cli::cli_abort("{.arg models} needs both {.field disposal} and {.field contest} fits.")
+  }
+  # The fits that scored the newest season, kept for return_models.
+  disp_models <- NULL
+  cont_models <- NULL
   de <- build_disposal_events(chains, pbp_data)
   if (nrow(de) == 0) {
     cli::cli_abort("No disposal could be scored for difficulty -- check that {.arg chains} and {.arg pbp_data} overlap.")
@@ -890,14 +914,20 @@
   # An explicit training set (the previous season, loaded by the caller) wins
   # over the within-data season loop: the pipeline scores one season at a time.
   have_train <- !is.null(train_pbp) && !is.null(train_chains)
-  scored <- if (have_train) {
+  scored <- if (!is.null(models)) {
+    cli::cli_alert_info(
+      "Difficulty models supplied: scoring {format(nrow(de), big.mark = ',')} disposals, fitting nothing")
+    disp_models <- models$disposal
+    score_disposals(de, disp_models)
+  } else if (have_train) {
     de_tr <- build_disposal_events(train_chains, train_pbp)
     if (nrow(de_tr) < 20000) {
       cli::cli_abort("Training data has only {nrow(de_tr)} disposals; refusing to fit the difficulty models on it.")
     }
     cli::cli_alert_info(
       "Difficulty models fitted on {format(nrow(de_tr), big.mark = ',')} training disposals from {paste(sort(unique(substr(de_tr$match_id, 5, 8))), collapse = ', ')}, scoring {paste(seasons, collapse = ', ')}")
-    score_disposals(de, fit_disposal_models(de_tr))
+    disp_models <- fit_disposal_models(de_tr)
+    score_disposals(de, disp_models)
   } else if (isTRUE(leak_safe) && length(seasons) > 1) {
     data.table::rbindlist(lapply(seasons, function(s) {
       idx <- de$.season < s
@@ -906,14 +936,17 @@
         cli::cli_alert_warning(
           "Season {s}: difficulty models fitted IN-SAMPLE (no earlier season available).")
       }
-      score_disposals(de[.season == s], fit_disposal_models(de, idx))
+      m <- fit_disposal_models(de, idx)
+      if (s == max(seasons)) disp_models <<- m
+      score_disposals(de[.season == s], m)
     }))
   } else {
     if (isTRUE(leak_safe)) {
       cli::cli_alert_warning(
         "Difficulty models fitted IN-SAMPLE on {seasons}: only one season supplied. Fine for measurement, not for a published rating.")
     }
-    score_disposals(de, fit_disposal_models(de))
+    disp_models <- fit_disposal_models(de)
+    score_disposals(de, disp_models)
   }
   scored[, decision := V_pre - exp_pts]
   cli::cli_alert_info(
@@ -936,12 +969,16 @@
   if (nrow(cst) > 0) {
     cst[, .season := as.integer(substr(match_id, 5, 8))]
     cseasons <- sort(unique(cst$.season))
-    csc <- if (have_train) {
+    csc <- if (!is.null(models)) {
+      cont_models <- models$contest
+      score_contests(cst, cont_models)
+    } else if (have_train) {
       cst_tr <- build_aerial_contests(train_chains, train_pbp)
       if (nrow(cst_tr) < 5000) {
         cli::cli_abort("Training data has only {nrow(cst_tr)} aerial contests; refusing to fit the contest models on it.")
       }
-      score_contests(cst, fit_contest_models(cst_tr))
+      cont_models <- fit_contest_models(cst_tr)
+      score_contests(cst, cont_models)
     } else if (isTRUE(leak_safe) && length(cseasons) > 1) {
       data.table::rbindlist(lapply(cseasons, function(s) {
         idx <- cst$.season < s
@@ -950,10 +987,13 @@
           cli::cli_alert_warning(
             "Season {s}: contest models fitted IN-SAMPLE (no earlier season available).")
         }
-        score_contests(cst[.season == s], fit_contest_models(cst, idx))
+        m <- fit_contest_models(cst, idx)
+        if (s == max(cseasons)) cont_models <<- m
+        score_contests(cst[.season == s], m)
       }))
     } else {
-      score_contests(cst, fit_contest_models(cst))
+      cont_models <- fit_contest_models(cst)
+      score_contests(cst, cont_models)
     }
     # This second filter is ASYMMETRIC and only survives under the two-way
     # model. It keeps every defensive win unconditionally but an attacking win
@@ -1002,6 +1042,10 @@
       "Contest terms: {format(sum(hit), big.mark = ',')} kicks resolve at a fought contest ({format(n_new, big.mark = ',')} not scorable as plain disposals); defence won {round(100 * mean(out$def_win[hit]), 1)}%; mean |contest surprise| {round(mean(abs(out$cont_surprise[hit])), 3)}, mean |ground surprise| {round(mean(abs(out$ground_surprise[hit])), 3)}")
   }
   out[is.na(contested), contested := FALSE]
+  if (isTRUE(return_models)) {
+    data.table::setattr(out, "np_models",
+                        list(disposal = disp_models, contest = cont_models))
+  }
   out
 }
 
@@ -1889,6 +1933,13 @@
 #'   `NULL` to estimate it from the data.
 #' @param stoppage_loser_share Share of each stoppage swing worn by the losing
 #'   side. See `NP_STOPPAGE_LOSER_SHARE`.
+#' @param difficulty_models Already-fitted difficulty and contest models,
+#'   `list(disposal = , contest = )`, used to score `chains` without fitting
+#'   anything (the live path, torp#250). Ignored when `difficulty_terms` is
+#'   given.
+#' @param return_fit Attach what this call priced on -- the stoppage baseline
+#'   and the difficulty and contest models -- as attribute `np_fit`, so a season
+#'   run can save it for the live path.
 #' @param return_payments Attach the per-act payment table as attribute
 #'   `np_payments`: one row per (act, recipient) with `role` (actor, receiver,
 #'   contest_winner, ball_winner, attack_pool, defence_pool), the recipient's
@@ -1989,7 +2040,9 @@ build_net_points <- function(pbp_data = NULL,
                              return_payments = FALSE,
                              stoppages = c("exclude", "allocate"),
                              stoppage_baseline = NULL,
-                             stoppage_loser_share = NP_STOPPAGE_LOSER_SHARE) {
+                             stoppage_loser_share = NP_STOPPAGE_LOSER_SHARE,
+                             difficulty_models = NULL,
+                             return_fit = FALSE) {
   stoppages <- match.arg(stoppages)
   spread <- match.arg(spread)
   level <- match.arg(level)
@@ -2101,7 +2154,9 @@ build_net_points <- function(pbp_data = NULL,
         "i" = "Pass {.code chains = load_chains(...)} for the same matches."
       ))
     } else {
-      terms <- .np_difficulty_terms(pbp_data, chains, leak_safe)
+      terms <- .np_difficulty_terms(pbp_data, chains, leak_safe,
+                                    models = difficulty_models,
+                                    return_models = isTRUE(return_fit))
     }
   }
   l <- .np_credit_terms(led, credit, receiver_share, defensive_share,
@@ -2337,6 +2392,13 @@ build_net_points <- function(pbp_data = NULL,
                            offence_pool_share = offence_pool_share,
                            leak_safe = leak_safe, stoppages = stoppages,
                            stoppage_loser_share = stoppage_loser_share))
+  if (isTRUE(return_fit)) {
+    tm <- attr(terms, "np_models")
+    data.table::setattr(out, "np_fit",
+                        list(stoppage_baseline = attr(led, "np_stoppage_baseline"),
+                             disposal_models = tm$disposal,
+                             contest_models = tm$contest))
+  }
   out[]
 }
 
@@ -2450,19 +2512,31 @@ np_difficulty_terms_for_season <- function(season, pbp_data = NULL, chains = NUL
 #'   a warning.
 #' @param results Official results, or `NULL` to load them for the seasons in
 #'   `pbp_data` (falling back to the running score when that fails).
+#' @param np_fit A season fit bundle (`.np_fit_bundle()`): its stoppage
+#'   baseline and difficulty and contest models price these matches and nothing
+#'   is fitted. `NULL` fits them from `pbp_data`, as the nightly does.
+#' @param return_fit Attach what the matches were priced on as attribute
+#'   `np_fit` (see `build_net_points()`).
 #' @return `build_net_points()` output under the v4 rule set.
 #' @keywords internal
 .np_engine_frame <- function(pbp_data, player_stats, chains, difficulty_terms = NULL,
-                             results = NULL) {
+                             results = NULL, np_fit = NULL, return_fit = FALSE) {
   res <- .np_match_results(pbp_data, results)
   np <- build_net_points(pbp_data, player_stats, res, chains = chains,
                          credit = "difficulty", stoppages = "allocate",
                          difficulty_terms = difficulty_terms,
                          leak_safe = is.null(difficulty_terms),
-                         return_payments = isTRUE(NP_TEAM_MARGIN_CONVENTION))
+                         return_payments = isTRUE(NP_TEAM_MARGIN_CONVENTION),
+                         stoppage_baseline = np_fit$stoppage_baseline,
+                         difficulty_models = if (!is.null(np_fit))
+                           list(disposal = np_fit$disposal_models,
+                                contest = np_fit$contest_models),
+                         return_fit = return_fit)
+  fit <- attr(np, "np_fit")
   if (isTRUE(NP_TEAM_MARGIN_CONVENTION)) {
     np <- .np_team_margin(np, pbp_data, player_stats, res)
   }
+  if (isTRUE(return_fit)) data.table::setattr(np, "np_fit", fit)
   np
 }
 

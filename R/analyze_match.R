@@ -13,6 +13,14 @@
 #' @param round Numeric round number. Only used when `match` is `NULL`.
 #' @param per80 Logical. If `TRUE`, return per-80-minute rates instead of
 #'   totals for EPV and PSV columns. Default `FALSE` (totals).
+#' @param np_fit Under the v4 engine, the season fit the match is priced on:
+#'   the stoppage baseline and the disposal-difficulty and contest models the
+#'   nightly fitted for that season. `NULL` (default) downloads
+#'   `np_fit_<season>.rds` from the torpdata `player_game-data` release; a
+#'   string is read as a local path to such a file. Nothing is fitted on the
+#'   match itself, so its numbers are priced as the nightly prices them, and a
+#'   bundle from a different `RATING_VINTAGE` is refused. Ignored by other
+#'   engines.
 #'
 #' @return A data.table with EPV components, PSV/OSV/DSV, and TORP value.
 #'   If `per80 = TRUE`, values are divided by TOG (per full game).
@@ -38,7 +46,8 @@
 get_player_game_ratings <- function(match = NULL,
                                     season = get_afl_season(),
                                     round = NULL,
-                                    per80 = FALSE) {
+                                    per80 = FALSE,
+                                    np_fit = NULL) {
   # --- Resolve input: match ID, season+round, or pre-scraped chains ---
   if (is.null(match)) {
     if (is.null(round)) {
@@ -87,11 +96,17 @@ get_player_game_ratings <- function(match = NULL,
   }
 
   # --- Step 3: Player-game EPV credit ---
+  # The match's own chains go in, never load_chains(TRUE): without them the v4
+  # arm loaded the full history and refitted every model on this one match
+  # (torp#250). Under v4 the nightly's season fit prices it instead.
+  fit <- if (identical(EPV_ENGINE, "v4")) .resolve_np_fit(np_fit, season) else NULL
   cli::cli_inform("Computing player EPV credit...")
   player_epv <- create_player_game_data(
     pbp_data = pbp,
     player_stats = player_stats,
-    teams = teams
+    teams = teams,
+    chains = chains,
+    np_fit = fit
   )
 
   # Skip position adjustment for single-game analysis (too few players per

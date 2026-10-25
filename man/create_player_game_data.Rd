@@ -13,7 +13,9 @@ create_player_game_data(
   epv_params = NULL,
   epv_engine = EPV_ENGINE,
   difficulty_terms = NULL,
-  pre_match = NULL
+  pre_match = NULL,
+  np_fit = NULL,
+  keep_np_fit = FALSE
 )
 }
 \arguments{
@@ -45,6 +47,15 @@ warning, when \code{NULL}.}
 optional \code{source}) for the WPA ledger (\code{build_wpa_ledger()}); when
 \code{NULL}, locked forecasts filled by retrodictions for the seasons in
 \code{pbp_data}.}
+
+\item{np_fit}{v4 only: a season fit bundle (the nightly's stoppage baseline
+and difficulty and contest models, see \code{get_player_game_ratings()}). When
+given, these matches are scored on it and nothing is fitted, so a single
+live match gets the same pricing as the season build. Needs \code{chains} for
+the same matches.}
+
+\item{keep_np_fit}{v4 only: attach what this call priced on as attribute
+\code{np_fit}, for the nightly to save as a release asset.}
 }
 \value{
 A data.table with one row per player per match, containing:

@@ -656,6 +656,13 @@ centre_epv_by_position <- function(pgd, channels = EPV_LEVEL_CENTRE_CHANNELS) {
 #'   optional `source`) for the WPA ledger (`build_wpa_ledger()`); when
 #'   `NULL`, locked forecasts filled by retrodictions for the seasons in
 #'   `pbp_data`.
+#' @param np_fit v4 only: a season fit bundle (the nightly's stoppage baseline
+#'   and difficulty and contest models, see `get_player_game_ratings()`). When
+#'   given, these matches are scored on it and nothing is fitted, so a single
+#'   live match gets the same pricing as the season build. Needs `chains` for
+#'   the same matches.
+#' @param keep_np_fit v4 only: attach what this call priced on as attribute
+#'   `np_fit`, for the nightly to save as a release asset.
 #' @return A data.table with one row per player per match, containing:
 #'   identifiers (\code{player_id}, \code{match_id}, \code{season}, \code{round},
 #'   \code{player_name}, \code{team}, \code{opponent}, \code{position_group}, \code{lineup_position}, \code{team_id},
@@ -681,7 +688,9 @@ create_player_game_data <- function(pbp_data = NULL,
                                     epv_params = NULL,
                                     epv_engine = EPV_ENGINE,
                                     difficulty_terms = NULL,
-                                    pre_match = NULL) {
+                                    pre_match = NULL,
+                                    np_fit = NULL,
+                                    keep_np_fit = FALSE) {
 
   if (!epv_engine %in% c("v2", "v3", "v4")) {
     cli::cli_abort(c(
@@ -691,6 +700,19 @@ create_player_game_data <- function(pbp_data = NULL,
   }
   v3 <- identical(epv_engine, "v3")
   v4 <- identical(epv_engine, "v4")
+  if ((!is.null(np_fit) || isTRUE(keep_np_fit)) && !v4) {
+    cli::cli_abort("{.arg np_fit} and {.arg keep_np_fit} are v4 only; this call runs {.val {epv_engine}}.")
+  }
+  if (!is.null(np_fit)) {
+    if (!is.null(difficulty_terms)) {
+      cli::cli_abort("Supply {.arg np_fit} or {.arg difficulty_terms}, not both.")
+    }
+    # Without chains the v4 arm would load the full history and score one
+    # match against it -- the defect torp#250 is about.
+    if (is.null(chains)) {
+      cli::cli_abort("{.arg np_fit} needs {.arg chains} for the same matches as {.arg pbp_data}.")
+    }
+  }
   # v3 and v4 are both chain-native: neither takes the v2 box-score spoil terms
   chain_native <- v3 || v4
 
@@ -1145,7 +1167,9 @@ create_player_game_data <- function(pbp_data = NULL,
     # total exactly. The four column names are kept so EPR's plumbing reads
     # them unchanged: recv = won, disp = own, spoil = pools, hitout = 0.
     if (is.null(chains) && is.null(difficulty_terms)) chains <- load_chains(TRUE)
-    np <- .np_engine_frame(pbp_data, player_stats, chains, difficulty_terms)
+    np <- .np_engine_frame(pbp_data, player_stats, chains, difficulty_terms,
+                           np_fit = np_fit, return_fit = isTRUE(keep_np_fit))
+    np_fit_used <- attr(np, "np_fit")
     np_dt <- .np_v4_channels(np)
     # Where each player-match's net points came from, by play type (published
     # beside the game data; see .np_breakdown()). Only the team-margin
@@ -1495,6 +1519,9 @@ create_player_game_data <- function(pbp_data = NULL,
   if (!is.null(epv_engine) && nrow(plyr_gm_df) > 0) {
     plyr_gm_df[["epv_engine"]] <- as.character(epv_engine)
   }
+  # What these matches were priced on (torp#250). Attached last, and only on
+  # request, so the default frame is unchanged; strip it before a parquet write.
+  if (isTRUE(keep_np_fit)) attr(plyr_gm_df, "np_fit") <- np_fit_used
   return(plyr_gm_df)
 }
 

@@ -25,7 +25,9 @@ build_net_points(
   return_payments = FALSE,
   stoppages = c("exclude", "allocate"),
   stoppage_baseline = NULL,
-  stoppage_loser_share = NP_STOPPAGE_LOSER_SHARE
+  stoppage_loser_share = NP_STOPPAGE_LOSER_SHARE,
+  difficulty_models = NULL,
+  return_fit = FALSE
 )
 }
 \arguments{
@@ -123,6 +125,15 @@ against the side that lost it. See \code{NP_STOPPAGE_SPLIT}.}
 
 \item{stoppage_loser_share}{Share of each stoppage swing worn by the losing
 side. See \code{NP_STOPPAGE_LOSER_SHARE}.}
+
+\item{difficulty_models}{Already-fitted difficulty and contest models,
+\code{list(disposal = , contest = )}, used to score \code{chains} without fitting
+anything (the live path, torp#250). Ignored when \code{difficulty_terms} is
+given.}
+
+\item{return_fit}{Attach what this call priced on -- the stoppage baseline
+and the difficulty and contest models -- as attribute \code{np_fit}, so a season
+run can save it for the live path.}
 }
 \value{
 A data.table with one row per player-match \strong{that had at least one

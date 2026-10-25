@@ -8,7 +8,8 @@ get_player_game_ratings(
   match = NULL,
   season = get_afl_season(),
   round = NULL,
-  per80 = FALSE
+  per80 = FALSE,
+  np_fit = NULL
 )
 }
 \arguments{
@@ -23,6 +24,15 @@ If \code{NULL} (default), uses \code{season} and \code{round} to fetch chains.}
 
 \item{per80}{Logical. If \code{TRUE}, return per-80-minute rates instead of
 totals for EPV and PSV columns. Default \code{FALSE} (totals).}
+
+\item{np_fit}{Under the v4 engine, the season fit the match is priced on:
+the stoppage baseline and the disposal-difficulty and contest models the
+nightly fitted for that season. \code{NULL} (default) downloads
+\verb{np_fit_<season>.rds} from the torpdata \code{player_game-data} release; a
+string is read as a local path to such a file. Nothing is fitted on the
+match itself, so its numbers are priced as the nightly prices them, and a
+bundle from a different \code{RATING_VINTAGE} is refused. Ignored by other
+engines.}
 }
 \value{
 A data.table with EPV components, PSV/OSV/DSV, and TORP value.

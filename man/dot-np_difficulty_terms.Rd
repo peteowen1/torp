@@ -9,7 +9,9 @@
   chains,
   leak_safe = TRUE,
   train_pbp = NULL,
-  train_chains = NULL
+  train_chains = NULL,
+  models = NULL,
+  return_models = FALSE
 )
 }
 \arguments{
@@ -18,6 +20,15 @@
 \item{chains}{Raw chains for the same matches.}
 
 \item{leak_safe}{Fit each season on strictly earlier seasons.}
+
+\item{models}{Already-fitted models, \code{list(disposal = , contest = )} as
+\code{fit_disposal_models()} and \code{fit_contest_models()} return them. When
+given, nothing is fitted: the disposals and contests are only scored. This
+is the live path's route (torp#250), where one match is far too small a
+training set and the nightly's season fit is reused instead.}
+
+\item{return_models}{Attach the models that scored the newest season as the
+\code{np_models} attribute, so the caller can save them.}
 }
 \value{
 \code{match_id}, \code{display_order}, \code{p_hat}, \code{decision}, \code{surprise}.

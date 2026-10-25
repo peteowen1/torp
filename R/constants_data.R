@@ -267,6 +267,18 @@ CONTEST_GROUND_BALL_DESCS <- c(
 #' @keywords internal
 TEAM_RAPM_ASOF_RELEASE_TAG <- "team_rapm_asof-data"
 
+#' torpdata release tag for the v4 season fit bundle
+#'
+#' One `np_fit_<season>.rds` per season: the stoppage baseline and the
+#' disposal-difficulty and contest models the nightly fitted for that season's
+#' `player_game_<season>`. Written by `update_player_game_data()` in
+#' `data-raw/01-data/daily_release.R`; read by [get_player_game_ratings()] so
+#' a live match is priced on the season fit instead of refitting on itself
+#' (torp#250). It sits beside the frame it was fitted for.
+#'
+#' @keywords internal
+NP_FIT_RELEASE_TAG <- "player_game-data"
+
 #' Default in-memory cache time-to-live in seconds (1 hour)
 #'
 #' Default TTL for entries held in the package-level memory cache.
