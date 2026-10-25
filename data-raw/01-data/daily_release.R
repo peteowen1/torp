@@ -286,28 +286,9 @@ update_season_chains <- function(season, round) {
 
   # Load existing _all file. A transient read failure must never be treated
   # as "file doesn't exist" (torp P1) -- only a confirmed-absent (404) result
-  # is legitimate grounds for starting fresh.
+  # is legitimate grounds for starting fresh (.read_accumulating_asset()).
   chains_all_name <- glue::glue("chains_data_{season}_all")
-  existing <- tryCatch({
-    file_reader(chains_all_name, "chains-data")
-  }, vb_error_absent = function(e) {
-    cli::cli_inform("No existing _all file for {season} - creating fresh")
-    NULL
-  }, error = function(e) {
-    cli::cli_abort("Could not load existing chains_data_{season}_all ({conditionMessage(e)}) - aborting to avoid overwriting season history with round {round} alone", parent = e)
-  })
-
-  if (is.null(existing)) {
-    is_absent <- tryCatch(
-      confirm_fresh_start(get_torp_data_repo(), "chains-data", paste0(chains_all_name, ".parquet")),
-      error = function(e) {
-        cli::cli_abort("Could not verify {.val {chains_all_name}.parquet} is absent from chains-data before a fresh upload: {conditionMessage(e)}")
-      }
-    )
-    if (!isTRUE(is_absent)) {
-      cli::cli_abort("Refusing fresh upload of {.val {chains_all_name}}: not confirmed absent from the chains-data release.")
-    }
-  }
+  existing <- .read_accumulating_asset(paste0(chains_all_name, ".parquet"), "chains-data")
 
   n_existing_before <- if (!is.null(existing)) nrow(existing) else 0L
 
@@ -382,14 +363,7 @@ update_season_score_events <- function(season, round) {
   # Same 404-vs-transient discipline as update_season_chains(): only a
   # confirmed-absent file is grounds for starting fresh.
   read_existing <- function(name) {
-    tryCatch(file_reader(name, "score_events-data"),
-      vb_error_absent = function(e) {
-        if (!isTRUE(confirm_fresh_start(get_torp_data_repo(), "score_events-data", paste0(name, ".parquet")))) {
-          cli::cli_abort("Refusing fresh upload of {.val {name}}: not confirmed absent from score_events-data.")
-        }
-        NULL
-      },
-      error = function(e) cli::cli_abort("Could not load existing {name} ({conditionMessage(e)}) - aborting to avoid overwriting the season with one round", parent = e))
+    .read_accumulating_asset(paste0(name, ".parquet"), "score_events-data")
   }
   merge_in <- function(existing, new) {
     if (is.null(existing) || nrow(existing) == 0) return(data.table::as.data.table(new))
@@ -446,26 +420,7 @@ update_season_pbp <- function(season, round) {
 
   # Load existing _all file. Same 404-vs-transient discipline as chains above.
   pbp_all_name <- glue::glue("pbp_data_{season}_all")
-  existing <- tryCatch({
-    file_reader(pbp_all_name, "pbp-data")
-  }, vb_error_absent = function(e) {
-    cli::cli_inform("No existing _all file for {season} - creating fresh")
-    NULL
-  }, error = function(e) {
-    cli::cli_abort("Could not load existing pbp_data_{season}_all ({conditionMessage(e)}) - aborting to avoid overwriting season history with round {round} alone", parent = e)
-  })
-
-  if (is.null(existing)) {
-    is_absent <- tryCatch(
-      confirm_fresh_start(get_torp_data_repo(), "pbp-data", paste0(pbp_all_name, ".parquet")),
-      error = function(e) {
-        cli::cli_abort("Could not verify {.val {pbp_all_name}.parquet} is absent from pbp-data before a fresh upload: {conditionMessage(e)}")
-      }
-    )
-    if (!isTRUE(is_absent)) {
-      cli::cli_abort("Refusing fresh upload of {.val {pbp_all_name}}: not confirmed absent from the pbp-data release.")
-    }
-  }
+  existing <- .read_accumulating_asset(paste0(pbp_all_name, ".parquet"), "pbp-data")
 
   n_existing_before <- if (!is.null(existing)) nrow(existing) else 0L
 

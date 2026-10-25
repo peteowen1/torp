@@ -1,5 +1,5 @@
 # Tests for sim-helpers.R
-# Tests for simulate_season and process_games functions
+# Tests for simulate_season
 
 # -----------------------------------------------------------------------------
 # simulate_season Tests
@@ -12,10 +12,6 @@ test_that("simulate_season function exists and is exported", {
 
 test_that("sim_season deprecated alias has been removed", {
   expect_false("sim_season" %in% getNamespaceExports("torp"))
-})
-
-test_that("process_games_dt is available as internal function", {
-  expect_true(exists("process_games_dt", envir = asNamespace("torp")))
 })
 
 test_that("simulate_season has correct function signature", {
@@ -82,35 +78,6 @@ test_that("simulation uses SIM_WP_SCALING_FACTOR constant", {
   expect_equal(torp:::SIM_WP_SCALING_FACTOR, 50)
 })
 
-test_that("process_games_dt handles single round correctly", {
-  process_games_dt <- torp:::process_games_dt
-
-  # Create minimal mock data as data.tables
-  sim_teams <- data.table::data.table(
-    team = c("Team A", "Team B"),
-    torp = c(10, -5)
-  )
-
-  sim_games <- data.table::data.table(
-    roundnum = 1L,
-    home_team = "Team A",
-    away_team = "Team B",
-    result = NA_integer_,
-    torp_home_round = NA_real_,
-    torp_away_round = NA_real_
-  )
-
-  set.seed(123)
-  result <- process_games_dt(sim_teams, sim_games, round_num = 1)
-
-  expect_type(result, "list")
-  expect_true("sim_teams" %in% names(result))
-  expect_true("sim_games" %in% names(result))
-
-  # Check sim_games has result filled in
-  expect_true(!is.na(result$sim_games$result[1]))
-})
-
 # -----------------------------------------------------------------------------
 # Regression: rating-shift direction (over/under-performance)
 # -----------------------------------------------------------------------------
@@ -150,34 +117,6 @@ test_that("simulate_season raises an over-performing home team's rating", {
   }
 })
 
-test_that("process_games_dt raises an over-performing home team's rating", {
-  process_games_dt <- torp:::process_games_dt
-
-  for (seed in 1:5) {
-    sim_teams <- data.table::data.table(team = c("Team A", "Team B"), torp = c(0, 0))
-    sim_games <- data.table::data.table(
-      roundnum = 1L,
-      home_team = "Team A",
-      away_team = "Team B",
-      result = NA_integer_,
-      torp_home_round = NA_real_,
-      torp_away_round = NA_real_
-    )
-
-    set.seed(seed)
-    result <- process_games_dt(sim_teams, sim_games, round_num = 1)
-
-    shift_sign <- sign(result$sim_games$result[1] - result$sim_games$estimate[1])
-    if (shift_sign == 0) next  # exact tie, not informative
-
-    torp_a <- result$sim_teams[team == "Team A", torp]
-    torp_b <- result$sim_teams[team == "Team B", torp]
-
-    expect_equal(sign(torp_a - torp_b), shift_sign,
-                info = paste("seed =", seed))
-  }
-})
-
 test_that("simulation win probability follows expected pattern", {
   # Team with higher TORP should have higher win probability on average
   sim_teams <- data.table::data.table(
@@ -195,15 +134,14 @@ test_that("simulation win probability follows expected pattern", {
   )
 
   set.seed(42)
-  process_games_dt <- torp:::process_games_dt
-  result <- process_games_dt(sim_teams, sim_games, round_num = 1)
+  result <- simulate_season(sim_teams, sim_games)
 
   # Strong team should have high win probability
-  expect_gt(mean(result$sim_games$wp), 0.7)
+  expect_gt(mean(result$wp), 0.7)
 
   # More wins than losses for strong team
-  wins <- sum(result$sim_games$result > 0)
-  losses <- sum(result$sim_games$result < 0)
+  wins <- sum(result$result > 0)
+  losses <- sum(result$result < 0)
   expect_gt(wins, losses)
 })
 
@@ -300,10 +238,9 @@ test_that("simulation respects home ground advantage", {
   )
 
   set.seed(42)
-  process_games_dt <- torp:::process_games_dt
-  result <- process_games_dt(sim_teams, sim_games, round_num = 1)
+  result <- simulate_season(sim_teams, sim_games)
 
   # Home team should have > 50% win probability due to home advantage
-  avg_wp <- mean(result$sim_games$wp)
+  avg_wp <- mean(result$wp)
   expect_gt(avg_wp, 0.5)
 })

@@ -388,27 +388,6 @@ bound_probability <- function(p, lower = 0.001, upper = 0.999) {
   pmax(lower, pmin(upper, p))
 }
 
-#' Calculate time remaining in an AFL match (seconds)
-#'
-#' @param period Numeric vector of period numbers (1-4)
-#' @param period_seconds Numeric vector of seconds elapsed in the current period
-#' @return Numeric vector of seconds remaining in the match
-#' @keywords internal
-calculate_time_remaining <- function(period, period_seconds) {
-  (AFL_MAX_PERIODS - period) * AFL_QUARTER_DURATION +
-    (AFL_QUARTER_DURATION - period_seconds)
-}
-
-#' Calculate time remaining as a proportion of total game time
-#'
-#' @param period Numeric vector of period numbers (1-4)
-#' @param period_seconds Numeric vector of seconds elapsed in the current period
-#' @return Numeric vector of proportions (0 to 1)
-#' @keywords internal
-calculate_time_remaining_pct <- function(period, period_seconds) {
-  calculate_time_remaining(period, period_seconds) / AFL_TOTAL_GAME_SECONDS
-}
-
 #' Calculate game time remaining in an AFL match (playing seconds)
 #'
 #' Uses estimated playing time (excluding stoppages) rather than raw clock time.

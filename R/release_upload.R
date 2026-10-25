@@ -302,3 +302,56 @@ confirm_fresh_start <- function(repo, tag, name) {
   }
   TRUE
 }
+
+#' Read an accumulating asset back before appending to it
+#'
+#' The one definition of "never start fresh over season history". Reads the
+#' existing asset and returns it. Returns NULL only when the read failed as
+#' confirmed-absent (404) AND [confirm_fresh_start()] then returns TRUE. Any
+#' other read error, a confirm_fresh_start() error, or a FALSE from it aborts.
+#'
+#' @param name Asset name on the release, including extension.
+#' @param tag Release tag.
+#' @param read Zero-argument function that reads the asset. Defaults to
+#'   `file_reader(<name without extension>, tag)`.
+#' @param repo "owner/name".
+#' @param empty_is_absent When TRUE, a 0-row read is treated like a 404: it is
+#'   ambiguous, so it must pass confirm_fresh_start() too and comes back NULL.
+#' @param confirm When FALSE, an absent asset returns NULL without the
+#'   confirm_fresh_start() check -- only for callers that replace the whole
+#'   file anyway (the ratings full rebuild).
+#' @return The existing data frame, or NULL when confirmed safe to start fresh.
+#' @noRd
+.read_accumulating_asset <- function(name, tag, read = NULL,
+                                     repo = get_torp_data_repo(),
+                                     empty_is_absent = FALSE, confirm = TRUE) {
+  if (is.null(read)) {
+    stem <- tools::file_path_sans_ext(name)
+    read <- function() file_reader(stem, tag)
+  }
+
+  existing <- tryCatch(
+    read(),
+    error = function(e) {
+      if (vb_classify_error(e) == "absent") return(NULL)
+      cli::cli_abort(c(
+        "Could not load existing {.val {name}} from {tag} ({conditionMessage(e)}).",
+        "x" = "Refusing to continue -- this was not a confirmed-absent (404) error, and starting fresh would overwrite its history with this run's rows alone."
+      ), parent = e)
+    }
+  )
+  if (empty_is_absent && !is.null(existing) && nrow(existing) == 0) existing <- NULL
+  if (!is.null(existing) || !confirm) return(existing)
+
+  is_absent <- tryCatch(
+    confirm_fresh_start(repo, tag, name),
+    error = function(e) {
+      cli::cli_abort("Could not verify {.val {name}} is absent from {tag} before a fresh upload: {conditionMessage(e)}", parent = e)
+    }
+  )
+  if (!isTRUE(is_absent)) {
+    cli::cli_abort("Refusing fresh upload of {.val {name}}: not confirmed absent from the {tag} release (a 0-row or unreadable copy is ambiguous, not evidence of an empty history).")
+  }
+  cli::cli_inform("No existing {.val {name}} on {tag} (confirmed absent) - starting fresh")
+  NULL
+}

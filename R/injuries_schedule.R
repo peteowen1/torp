@@ -160,14 +160,11 @@ save_injury_data <- function(injuries_df, season) {
   # never "no history exists yet" -- treating it as the latter silently wipes
   # the season's accumulated injury state down to today's snapshot. Only a
   # positively-confirmed-absent release asset justifies starting fresh.
-  existing <- tryCatch(
-    load_injury_data(season),
-    error = function(e) {
-      if (vb_classify_error(e) == "absent") return(NULL)
-      cli::cli_abort("Could not load existing injury history for {season} ({conditionMessage(e)}) - aborting to avoid wiping season history", parent = e)
-    }
+  existing <- .read_accumulating_asset(
+    paste0("injury_list_", season, ".parquet"), "injury-data",
+    read = function() load_injury_data(season),
+    empty_is_absent = TRUE
   )
-  if (!is.null(existing) && nrow(existing) == 0) existing <- NULL
 
   if (!is.null(existing)) {
     # Backfill scraped_at on pre-upgrade rows that only have scraped_date
@@ -178,15 +175,7 @@ save_injury_data <- function(injuries_df, season) {
     }
     combined <- dplyr::bind_rows(existing, injuries_df)
   } else {
-    is_absent <- tryCatch(
-      confirm_fresh_start(get_torp_data_repo(), "injury-data", paste0("injury_list_", season, ".parquet")),
-      error = function(e) {
-        cli::cli_abort("Could not verify injury_list_{season}.parquet is absent before a fresh upload: {conditionMessage(e)}")
-      }
-    )
-    if (!isTRUE(is_absent)) {
-      cli::cli_abort("Refusing fresh injury upload for {season}: not confirmed absent from injury-data (a 0-row read is ambiguous, not evidence of an empty history).")
-    }
+    # Confirmed absent by .read_accumulating_asset() above.
     combined <- injuries_df
   }
 

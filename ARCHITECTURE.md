@@ -116,7 +116,7 @@ graph TD
 
 | Layer | Location | Scope | TTL |
 |-------|----------|-------|-----|
-| Local storage | `torpdata/data/` | Workspace | Never expires (historical); 1 day (current season) |
+| Local storage | `torpdata/data/` | Workspace | 30 days (historical; `LOCAL_HISTORICAL_MAX_AGE_DAYS`, override with option `torp.local_historical_max_age_days`); 1 day (current season). Historical files used to never expire, which let an April copy be served in July and corrupted two published rating seasons (2026-07-27) |
 | Disk cache | `~/.torp/cache/` | Machine | 7 days (URL-hashed parquet files) |
 | In-memory cache | `.torp_cache` env | Session | 1 hour (API-backed functions) |
 
@@ -178,9 +178,15 @@ Constants in `R/constants_data.R`: `COORD_JUMP_THRESHOLD` (100m) gates the step-
 
 **Entry Point**: `create_player_game_data(pbp_data, player_stats, teams, decay, epv_params, epv_engine)`
 
-**Two engines.** `EPV_ENGINE` selects which. `"v2"` is production and the
-default; `"v3"` is the chain-native rebuild, gated but not shipped. Full v3
-channel contents, formula by formula:
+**Engines.** `EPV_ENGINE` selects which. `"v4"` (Net Points) is the published
+engine and the default since 2026-09-07: it allocates the actual match margin
+through a ledger in `R/epv_net_points.R`, with the rules (D1-D18) and worked
+examples in
+[`../docs/plans/EPV-V4-CREDIT-RULES.md`](../docs/plans/EPV-V4-CREDIT-RULES.md).
+Under v4 `epv_hitout` is identically zero (stoppage value lives in `epv_recv`).
+`"v2"` and `"v3"` are still selectable but are NOT published; the two tables
+below describe them, so editing a v2 box weight does not change published
+ratings. Full v3 channel contents, formula by formula:
 [`../docs/reference/EPV-V3-CHANNELS.md`](../docs/reference/EPV-V3-CHANNELS.md).
 
 **v2 — Four-Component Credit System** (chain-derived part plus box-score weights):
@@ -215,7 +221,7 @@ reference doc §5.
 ```
 EPR_component = (loading * sum_val + prior_games * prior_rate) / (wt_games + prior_games)
 ```
-Default priors: `prior_games = 3.0` for all components; `prior_rate` = -0.4 (recv), -0.3 (disp), 0 (spoil/hitout).
+Default priors under v4 (see `R/constants_ratings.R` for current values): `prior_games` = 14.38 (recv), 24.33 (disp), 11.09 (spoil), 3.0 (hitout); `prior_rate` = -0.7 (recv), -0.7 (disp), -0.3 (spoil), 0 (hitout).
 
 **TOG Adjustment**: Output is adjusted to per-80-minute rates using position-based average TOG from `POSITION_AVG_TOG` (e.g., FB = 0.91, INT = 0.73, SUB = 0.33).
 
@@ -292,7 +298,7 @@ Default priors: `prior_games = 3.0` for all components; `prior_rate` = -0.4 (rec
 
 **Feature Engineering** (`build_team_mdl_df()`):
 1. `.build_fixtures_df()` -- Temporal features (year, month, day, hour, week progress)
-2. `.build_team_ratings_df()` -- Aggregates top 21 players by TORP per team; injury discount = 0.95; position phase groups (def/mid/fwd)
+2. `.build_team_ratings_df()` -- Aggregates the named team lineup (all players except `EMERG`, no top-N cut), weighting each player by `POSITION_AVG_TOG` for their lineup position; no injury discount; position phase groups (def/mid/fwd). For weeks without a named lineup, `.build_week_ratings()` aggregates the roster instead: injured players excluded, weighted by predicted TOG (`pred_tog * 18 / team_tog_sum`), with a horizon discount of `INJURY_KNOWN_DISCOUNT` (0.99) minus 0.01 per week ahead, floored at `INJURY_DISCOUNT_FLOOR` (0.90). (The top-21 / 0.95 rule belongs to the season simulator: `SIM_TOP_N_PLAYERS`, `SIM_INJURY_DISCOUNT`.)
 3. `.build_match_features()` -- Haversine venue distance, venue familiarity
 4. `.load_match_weather()` -- Temperature, wind, humidity, precipitation from Open-Meteo
 
@@ -303,10 +309,16 @@ Default priors: `prior_games = 3.0` for all components; `prior_rate` = -0.4 (rec
 - Weather: `temp_avg`, `wind_avg`, `humidity_avg`, `precipitation_total`
 - Recency weight: `weightz` (1000-day half-life)
 
-**Sequential GAM Pipeline** (via `mgcv::bam()`):
-1. **xPoints model** -- Predicts expected total points
-2. **Score Diff model** -- Predicts margin
-3. **Win Prob model** -- Predicts win probability
+**Sequential GAM Pipeline** (via `mgcv::bam()`, `R/match_train.R`), each model feeding its prediction to the next:
+1. **Total xPoints model** (`afl_total_xpoints_mdl`) -- expected total points (`total_xpoints_adj`)
+2. **xScore Diff model** (`afl_xscore_diff_mdl`) -- expected margin (`xscore_diff`); gets `elo_diff`
+3. **Conversion model** (`afl_conv_mdl`) -- shot conversion difference (`shot_conv_diff`)
+4. **Score Diff model** (`afl_score_mdl`) -- actual margin (`score_diff`); gets `elo_diff`
+5. **Win Prob model** (`afl_win_mdl`) -- win probability
+
+**XGBoost half**: an XGBoost model (`xgboost::xgb.train`) is trained alongside, and the two are combined by `.blend_gam_xgb(gam_pred, xgb_pred, weight = MATCH_BLEND_WEIGHT)` (`R/match_model.R`). `MATCH_BLEND_WEIGHT` is the GAM weight; see `R/constants_match.R` for its current value and the evidence behind it.
+
+**Margin calibration**: the final margin passes through a post-hoc recalibration sidecar (`R/match_calibration.R`) before serving; identity fallback when the sidecar is absent.
 
 **Output**: One row per match with `pred_xtotal`, `pred_xmargin`, `pred_margin`, `pred_win`, `bits` (log-loss).
 
@@ -473,9 +485,6 @@ Functions: `torp_replace_teams()`, `torp_team_abbr()`, `torp_team_full()`, `torp
 
 ---
 
-#### Baseline Models (`R/baseline_models.R`)
-Reference models for WP evaluation: Naive (always 0.5), Score-Only (logistic on margin), Time-Score (GLM interaction), EP-Based (expected points margin).
-
 #### Model Loading
 `load_model_with_fallback()` tries torpmodels package first, falls back to bundled data in `data/*.rda`. Models cached in `.torp_model_cache` environment for session lifetime.
 
@@ -504,8 +513,7 @@ Reference models for WP evaluation: Naive (always 0.5), Score-Only (logistic on 
 | Match Prediction | `R/match_model.R` | `run_predictions_pipeline()`, `build_team_mdl_df()` |
 | Match Data Prep | `R/match_data_prep.R` | `.build_fixtures_df()`, `.build_team_ratings_df()`, `.build_match_features()`, `.load_match_weather()` |
 | Match Training | `R/match_train.R` | GAM fitting functions |
-| Baseline Models | `R/baseline_models.R` | Score-only, time-score, EP-based baselines |
-| Simulation | `R/simulate.R` | `simulate_season()`, `process_games()`, `process_games_dt()` |
+| Simulation | `R/simulate.R` | `simulate_season()` |
 | Match Simulation | `R/simulate_match.R` | `simulate_match_mc()` |
 | Ladder | `R/ladder.R` | `calculate_ladder()`, `calculate_final_ladder()` |
 | Finals Simulation | `R/finals_sim.R` | `simulate_finals()`, `simulate_match()`, `finals_home_advantage()` |
@@ -530,9 +538,7 @@ Reference models for WP evaluation: Naive (always 0.5), Score-Only (logistic on 
 | Stat Rating Profiles | `R/player_skills_profile.R` | `player_stat_rating_profile()`, `get_player_stat_ratings()` |
 | WP Credit | `R/wp_credit.R` | `create_wp_credit()` (WPA credit allocation) |
 | Win Probability | `R/win_probability.R` | `fit_win_probability()` |
-| Logging | `R/logging.R` | `setup_torp_logging()`, `monitor_model_drift()` |
-| Model Validation | `R/model_validation.R` | `create_grouped_cv_folds()`, `evaluate_model_comprehensive()` |
-| Data Validation | `R/data_validation.R` | Input validation utilities |
+| Logging | `R/logging.R` | `setup_torp_logging()`, `log_prediction_event()` |
 | Utilities | `R/utils.R` | `torp_clean_names()`, `get_afl_season()`, `get_afl_week()`, `clear_all_cache()` |
 | Plot: Game Flow | `R/plot_game.R` | `plot_ep_wp()` |
 | Plot: Player | `R/plot_player.R` | `plot_player_rating()`, `plot_stat_rating_profile()` |
