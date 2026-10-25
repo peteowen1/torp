@@ -2,13 +2,13 @@
 % Please edit documentation in R/match_model.R
 \name{.heldout_margin_sigma}
 \alias{.heldout_margin_sigma}
-\title{Held-out spread of the margin model, from the locked pre-game predictions}
+\title{Held-out spread of the margin model, from out-of-sample predictions}
 \usage{
 .heldout_margin_sigma(preds = NULL, min_n = MARGIN_SIGMA_MIN_N)
 }
 \arguments{
-\item{preds}{Optional locked-predictions frame with \code{margin} and
-\code{pred_margin}; loaded with \code{load_predictions(TRUE)} when NULL.}
+\item{preds}{Optional frame with \code{margin} and \code{pred_margin}, used as is.
+When NULL, loaded as described above.}
 
 \item{min_n}{Fewest completed matches to size it from.}
 }
@@ -17,13 +17,20 @@ The SD, or \code{NA_real_} when the load fails or fewer than \code{min_n}
 completed matches are available.
 }
 \description{
-\code{sd(margin - pred_margin)} over every completed match in the \code{predictions}
-release, finals included. Those rows are locked before the match is played,
-so their errors are out of sample -- unlike \code{.margin_residual_sd()}, which
-measures the residuals of a model trained on the same matches. (Not
-perfectly: a few rows were computed after kickoff, which
-\code{.warn_post_hoc_predictions()} exists to flag; they would pull the spread
-down slightly.) Measured 2026-10-11: 32.4 over 1,062 completed matches
-2021-2026 (32.3 over the 1,006 home-and-away ones), against 30.9 in sample.
+\code{sd(margin - pred_margin)} over every completed match with an honest
+pre-game prediction, finals included: the rows locked live at kickoff
+(seasons from \code{LIVE_LOCK_FIRST_SEASON} on) plus the honest
+\verb{backfill_predictions_<season>} rows for earlier seasons, which were
+regenerated round by round with no future data. Unlike
+\code{.margin_residual_sd()}, which measures the residuals of a model trained on
+the same matches, these errors are out of sample.
+}
+\details{
+The 2021-2025 \verb{predictions_<season>} rows are NOT used: they were made on
+2026-04-12 by models trained on those seasons, so their errors are hindsight
+(32.4 over 1,062 matches 2021-2026, against 33.29 over the 828 honest
+2022-2025 rows; torpverse \code{docs/reference/FINALS-SIGMA-DERIVATION.md}). If
+the backfill files cannot be read, it warns and falls back to every
+\code{predictions} row, hindsight included.
 }
 \keyword{internal}

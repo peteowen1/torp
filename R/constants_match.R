@@ -379,3 +379,15 @@ MATCHUP_TABLE_CRON_SCHEDULE <- list(
 #' less confident probabilities. Pete chose it 2026-10-11.
 #' @keywords internal
 FINALS_MARGIN_SIGMA_FALLBACK <- 33
+
+#' First season whose `predictions` rows were locked live at kickoff
+#'
+#' The 2021-2025 `predictions_<season>` files were written on 2026-04-12 by
+#' models trained on those same seasons, so their errors are hindsight. For
+#' seasons before this one, the honest `backfill_predictions_<season>` files
+#' (regenerated round by round with no future data; torpverse
+#' `docs/plans/HONEST-BACKFILL-2021-2025.md`) are the out-of-sample record.
+#' Same cut-off as `LIVE_LOCK_FIRST_SEASON` in torpdata's
+#' `scripts/build_blog_data.R`.
+#' @keywords internal
+LIVE_LOCK_FIRST_SEASON <- 2026L
