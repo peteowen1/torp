@@ -45,6 +45,10 @@ psr_cutoff_set <- nzchar(psr_cutoff_env)
 psr_train_through <- if (psr_cutoff_set) as.integer(psr_cutoff_env) else 2024L
 if (is.na(psr_train_through)) stop("PSR_TRAIN_THROUGH must be a season, e.g. 2023")
 psr_out_dir <- Sys.getenv("PSR_OUT_DIR", unset = "")
+if (psr_cutoff_set && !nzchar(psr_out_dir)) {
+  stop("PSR_TRAIN_THROUGH is set but PSR_OUT_DIR is not: a historical refit would overwrite ",
+       "inst/extdata/*_coefficients.csv, which production reads. Set PSR_OUT_DIR.")
+}
 if (nzchar(psr_out_dir)) dir.create(psr_out_dir, recursive = TRUE, showWarnings = FALSE)
 message(sprintf("PSR training through %d (%s); output: %s", psr_train_through,
                 if (psr_cutoff_set) "PSR_TRAIN_THROUGH" else "default",

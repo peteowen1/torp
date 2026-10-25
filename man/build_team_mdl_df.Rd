@@ -4,12 +4,24 @@
 \alias{build_team_mdl_df}
 \title{Build complete match model dataset end-to-end}
 \usage{
-build_team_mdl_df(season = NULL, target_weeks = NULL, psr_coef_path = NULL)
+build_team_mdl_df(
+  season = NULL,
+  target_weeks = NULL,
+  psr_coef_path = NULL,
+  psr_ref_before_season = NULL
+)
 }
 \arguments{
 \item{season}{Season to build for (default: current via get_afl_season())}
 
 \item{target_weeks}{Numeric vector of target round numbers (used for weather forecasting)}
+
+\item{psr_coef_path}{Optional PSR coefficient CSV (osr/dsr read from the same folder).}
+
+\item{psr_ref_before_season}{Optional season passed to
+\code{.compute_psr_from_stat_ratings()} as \code{ref_before_season}: PSR's
+cross-round SDs and means then come from earlier seasons only. NULL in
+production; set by walk-forward backtests.}
 }
 \value{
 Complete team_mdl_df ready for GAM training

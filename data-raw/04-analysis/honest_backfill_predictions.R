@@ -206,11 +206,16 @@ hb_seed_local_inputs <- function(dir, last_season) {
 hb_frame_cache <- new.env()
 hb_get_frame <- function(opts, season) {
   coef_path <- hb_psr_coef_path(opts, season)
-  key <- coef_path %||% "shipped"
+  psr_label <- coef_path %||% "shipped"
+  # One frame per predicted season: PSR's standardisation SDs and the mean that
+  # centres position-less rows are pooled across rounds, so they are taken from
+  # seasons before `season` only (psr_ref_before_season). Pooled over the whole
+  # table, as production does, 2026 would set the scale of 2022's PSR.
+  key <- paste0(psr_label, "|ref<", season)
   if (!exists(key, envir = hb_frame_cache, inherits = FALSE)) {
     if (!is.null(opts$local_inputs)) hb_seed_local_inputs(opts$local_inputs, max(opts$seasons))
     t0 <- proc.time()[["elapsed"]]
-    df <- build_team_mdl_df(psr_coef_path = coef_path)
+    df <- build_team_mdl_df(psr_coef_path = coef_path, psr_ref_before_season = season)
     message(sprintf("[frame] built team_mdl_df (%s): %d rows, %d cols, seasons %s, %.0fs",
                     key, nrow(df), ncol(df), paste(range(df$season.x), collapse = "-"),
                     proc.time()[["elapsed"]] - t0))
@@ -219,33 +224,54 @@ hb_get_frame <- function(opts, season) {
     miss <- setdiff(needed, names(df))
     if (length(miss) > 0) cli::cli_abort("team_mdl_df lacks {.val {miss}}")
     hb_assert_frame_coverage(df, max(opts$seasons))
+    # Matches with no weather row get temp/wind/humidity medians taken over the
+    # whole frame (.build_team_mdl_df()). Flag them -- after imputation they
+    # sit exactly on all three medians -- so each round can re-impute them from
+    # its training rows. (Its "Weather joined: 100%" log line is computed after
+    # the imputation, so it cannot show how many there are.)
+    df$.wx_imputed <- df$temp_avg == stats::median(df$temp_avg) &
+      df$wind_avg == stats::median(df$wind_avg) &
+      df$humidity_avg == stats::median(df$humidity_avg)
+    message(sprintf("[frame] %d team-rows (%d matches) carry imputed weather",
+                    sum(df$.wx_imputed), length(unique(df$match_id[df$.wx_imputed]))))
     assign(key, df, envir = hb_frame_cache)
   }
-  list(df = get(key, envir = hb_frame_cache), psr_coef = key)
+  list(df = get(key, envir = hb_frame_cache), psr_coef = psr_label)
 }
 
 # Earlier honest predictions (for calibration and finals sigma) ----
 
 hb_season_file <- function(out, s) file.path(out, sprintf("backfill_predictions_%d.parquet", s))
-hb_partial_dir <- function(out, s) file.path(out, "_partial", s)
-hb_partial_file <- function(out, s, r) file.path(hb_partial_dir(out, s), sprintf("round_%02d.parquet", r))
+# A --rounds= (profiling) run writes under _profile/, a full run under
+# _partial/, so a profiling partial -- possibly made by older code or other
+# settings -- is never picked up and bound into a season file.
+hb_partial_dir <- function(out, s, root = "_partial") file.path(out, root, s)
+hb_partial_file <- function(out, s, r, root = "_partial") file.path(hb_partial_dir(out, s, root), sprintf("round_%02d.parquet", r))
 
-# Every honest row this output folder already holds from before (s, r).
-hb_prior_honest <- function(out, s, r) {
+# Every honest row this output folder already holds from before (s, r), and
+# kicked off before round_start (a postponed game from an earlier round that
+# was played after round r began is not "earlier" in time).
+hb_prior_honest <- function(out, s, r, round_start = NULL, root = "_partial") {
   files <- character(0)
   for (y in list.files(out, pattern = "^backfill_predictions_[0-9]{4}[.]parquet$")) {
     if (as.integer(gsub("\\D", "", y)) < s) files <- c(files, file.path(out, y))
   }
-  pd <- hb_partial_dir(out, s)
+  pd <- hb_partial_dir(out, s, root)
   if (dir.exists(pd)) {
     for (f in list.files(pd, pattern = "^round_[0-9]+[.]parquet$")) {
       if (as.integer(gsub("\\D", "", f)) < r) files <- c(files, file.path(pd, f))
     }
   }
   if (length(files) == 0) return(NULL)
-  rbindlist(lapply(files, function(f) {
-    as.data.table(arrow::read_parquet(f, col_select = c("match_id", "margin", "pred_margin", "pred_margin_raw")))
+  prior <- rbindlist(lapply(files, function(f) {
+    as.data.table(arrow::read_parquet(f, col_select = c("match_id", "utc_start_time", "margin", "pred_margin", "pred_margin_raw")))
   }), fill = TRUE)
+  if (!is.null(round_start)) {
+    started <- .parse_utc_start(prior$utc_start_time)
+    if (anyNA(started)) cli::cli_abort("{sum(is.na(started))} earlier honest row{?s} with an unparseable utc_start_time")
+    prior <- prior[started < round_start]
+  }
+  if (nrow(prior) == 0) NULL else prior
 }
 
 # Margin scale b from earlier honest raw margins: same fit and gate as
@@ -284,7 +310,7 @@ hb_reweight <- function(d, anchor_date, train_mask) {
 
 # One round ----
 
-hb_predict_round <- function(frame, s, r, opts, prior) {
+hb_predict_round <- function(frame, s, r, opts, prior = NULL, part_root = "_partial") {
   t_start <- proc.time()[["elapsed"]]
   df <- frame$df
   keep <- df$season.x < s | (df$season.x == s & df$round_number.x <= r)
@@ -292,6 +318,7 @@ hb_predict_round <- function(frame, s, r, opts, prior) {
   round_rows <- d$season.x == s & d$round_number.x == r
   if (!any(round_rows)) cli::cli_abort("No rows for {s} round {r}")
   round_start <- min(d$utc_dt[round_rows], na.rm = TRUE)
+  if (missing(prior)) prior <- hb_prior_honest(opts$out, s, r, round_start, part_root)
 
   train_filter <- (d$season.x < s | (d$season.x == s & d$round_number.x < r)) &
     d$utc_dt < round_start
@@ -306,6 +333,21 @@ hb_predict_round <- function(frame, s, r, opts, prior) {
   train_through <- sprintf("%d R%d", last_s, last_r)
 
   d <- hb_reweight(d, as.Date(round_start), train_filter)
+  # Model 1's target is total_xpoints_adj = total_xpoints * scale, and
+  # .build_team_mdl_df() sizes the scale over the whole frame -- later seasons
+  # included. Re-size it from the training rows, as production would live.
+  xp_scale <- mean(d$total_points[train_filter], na.rm = TRUE) /
+    mean(d$total_xpoints[train_filter], na.rm = TRUE)
+  if (!is.finite(xp_scale)) cli::cli_abort("Cannot size the xpoints scale for {s} R{r}")
+  d$total_xpoints_adj <- d$total_xpoints * xp_scale
+  # Re-impute missing weather from the training rows' medians.
+  if (any(d$.wx_imputed)) {
+    src <- train_filter & !d$.wx_imputed
+    for (v in c("temp_avg", "wind_avg", "humidity_avg")) {
+      d[[v]][d$.wx_imputed] <- stats::median(d[[v]][src], na.rm = TRUE)
+    }
+    d$log_wind <- log1p(d$wind_avg)
+  }
 
   t0 <- proc.time()[["elapsed"]]
   gam_result <- .train_match_gams(d, train_filter = train_filter)
@@ -409,14 +451,22 @@ hb_run <- function(opts) {
     done_rounds <- sort(unique(df$round_number.x[df$season.x == s & !is.na(df$win)]))
     rounds <- if (profile_only) intersect(done_rounds, opts$rounds) else done_rounds
     if (length(rounds) == 0) { message(sprintf("[%d] no completed rounds to predict", s)); next }
-    dir.create(hb_partial_dir(opts$out, s), recursive = TRUE, showWarnings = FALSE)
+    part_root <- if (profile_only) "_profile" else "_partial"
+    dir.create(hb_partial_dir(opts$out, s, part_root), recursive = TRUE, showWarnings = FALSE)
 
     failed <- character(0)
     for (r in rounds) {
-      pf <- hb_partial_file(opts$out, s, r)
-      if (file.exists(pf)) { message(sprintf("[%d R%d] partial exists -- skipping", s, r)); next }
-      prior <- hb_prior_honest(opts$out, s, r)
-      res <- tryCatch(hb_predict_round(frame, s, r, opts, prior), error = function(e) {
+      pf <- hb_partial_file(opts$out, s, r, part_root)
+      if (file.exists(pf)) {
+        # Reuse only a partial made with the same PSR source and model spec.
+        had <- unique(arrow::read_parquet(pf, col_select = c("psr_coef", "model_spec")))
+        want_spec <- if (switch(opts$xgb, yes = TRUE, no = FALSE, auto = MATCH_BLEND_WEIGHT < 1)) "gam+xgb" else "gam"
+        if (nrow(had) != 1 || had$psr_coef != frame$psr_coef || had$model_spec != want_spec) {
+          cli::cli_abort("{.path {pf}} was made with other settings ({had$psr_coef[1]}, {had$model_spec[1]}); delete it to redo the round.")
+        }
+        message(sprintf("[%d R%d] partial exists -- skipping", s, r)); next
+      }
+      res <- tryCatch(hb_predict_round(frame, s, r, opts, part_root = part_root), error = function(e) {
         message(sprintf("[%d R%d] FAILED: %s", s, r, conditionMessage(e)))
         NULL
       })
@@ -430,7 +480,7 @@ hb_run <- function(opts) {
 
     # Season file: bind the partials, then check coverage against the
     # completed matches the frame holds for this season.
-    parts <- list.files(hb_partial_dir(opts$out, s), pattern = "^round_[0-9]+[.]parquet$", full.names = TRUE)
+    parts <- list.files(hb_partial_dir(opts$out, s, part_root), pattern = "^round_[0-9]+[.]parquet$", full.names = TRUE)
     season_dt <- rbindlist(lapply(parts, function(f) as.data.table(arrow::read_parquet(f))), fill = TRUE)
     setorder(season_dt, week, match_id)
     expected <- length(unique(df$match_id[df$season.x == s & !is.na(df$win)]))
