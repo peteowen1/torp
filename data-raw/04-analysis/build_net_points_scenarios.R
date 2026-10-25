@@ -386,7 +386,9 @@ build_trace <- function(pg, show_phantoms = FALSE) {
                 by = c("match_id", "display_order"), all.x = TRUE)
   setorder(rows, display_order)
   stopifnot(nrow(rows) > 0)
-  rows[, ev_choice := ifelse(isTRUE(scored) & !is.na(dec_hm),
+  # %in% TRUE, not isTRUE(): isTRUE() of the whole column is FALSE, which
+  # blanked this column on every row
+  rows[, ev_choice := fifelse(scored %in% TRUE & !is.na(dec_hm),
                               exp_pts + dec_hm * fifelse(home_away == "Home", 1, -1),
                               NA_real_)]
   rows[, ep_after := exp_pts + delta_epv]
