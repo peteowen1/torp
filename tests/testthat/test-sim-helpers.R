@@ -66,7 +66,7 @@ test_that("simulate_season returns correct structure with mock data", {
 
 test_that("simulation uses SIM_NOISE_SD constant", {
   # Verify the constant exists and has expected value
-  expect_equal(torp:::SIM_NOISE_SD, 26)
+  expect_equal(torp:::SIM_NOISE_SD, 32)
 })
 
 test_that("simulation uses SIM_HOME_ADVANTAGE constant", {

@@ -222,7 +222,7 @@ simulate_match_mc <- function(home_team, away_team,
                                   n_sims) {
   # Step 1: Draw match totals (vectorized across all sims)
   margins <- as.integer(round(
-    stats::rnorm(n_sims, estimate, SIM_NOISE_SD + abs(estimate) / 3)
+    stats::rnorm(n_sims, estimate, SIM_NOISE_SD)
   ))
   totals <- pmax(stats::rnorm(n_sims, pred_total, SIM_TOTAL_SD), SIM_MIN_TOTAL)
   home_totals <- pmax(round((totals + margins) / 2), 0)

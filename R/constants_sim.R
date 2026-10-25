@@ -7,8 +7,16 @@
 # --------------------
 
 #' Noise standard deviation for match simulation
+#'
+#' Per-game margin noise (points) the season and finals sims draw on top of
+#' their team-residual and injury noise, chosen so the simulated margin's total
+#' spread matches the match model's honest out-of-sample error (33.05 over 940
+#' matches, `.heldout_margin_sigma()`). Flat, not growing with the predicted
+#' margin: the measured slope is 0.06 points per point (p = 0.15). Derived by
+#' `data-raw/05-validation/derive_sim_noise_sd.R` (32.30 on 2026-10-26); rerun
+#' it when the match model or `SIM_INJURY_SD` changes. Was 26 + |estimate|/3.
 #' @keywords internal
-SIM_NOISE_SD <- 26
+SIM_NOISE_SD <- 32
 
 #' Win probability scaling factor for simulations
 #' @keywords internal

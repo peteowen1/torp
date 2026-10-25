@@ -1,5 +1,7 @@
 # torp (development version)
 
+* Season and finals simulations draw each game's margin with a flat `SIM_NOISE_SD` of 32 instead of 26 + |estimate|/3. With the sims' team-residual and injury noise that gives a total spread of 33.05, the match model's honest out-of-sample error over 940 matches; the old rule was too tight for close games (27.9 against 31.6 actual) and too loose for mismatches of 24+ points (39.4 against 34.2). Win-probability log-loss on those matches 0.5749 -> 0.5723. Derivation: `data-raw/05-validation/derive_sim_noise_sd.R`.
+
 * AFLW player stats no longer zero-fill the ten extended stats the AFLW feed does not carry (spoils, pressure acts, defensive-half pressure acts, hitouts to advantage, ruck contests, ground ball gets and the four one-on-one contest counts): `load_player_stats(comp = "AFLW")` now sets them to NA, so the stat-rating estimators skip them as not recorded instead of rating real zeros (Pete's call, 2026-10-26). `.normalise_player_stats_columns()` gains `absent_fill`; AFLM keeps the zero-fill (output `identical()` on 2021-2026 player stats). AFLW PSR/OSR/DSR move by at most 3e-8 on four 2025 matches.
 
 # torp 1.10.2
