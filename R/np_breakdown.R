@@ -19,7 +19,7 @@
   if (length(bad) > 0L) {
     cli::cli_abort(c(
       "Unknown Net Points payment role{?s}: {.val {bad}}.",
-      "x" = "Add {?it/them} to {.fn .np_play_type} so the play type is not silently mislabelled."
+      "x" = "Add {cli::qty(length(bad))}{?it/them} to {.fn .np_play_type} so the play type is not silently mislabelled."
     ))
   }
   data.table::fcase(
@@ -48,6 +48,133 @@
     role == "stoppage_player" & d == "Ball Up Call",  "First possession: ball-up",
     role == "stoppage_player",                        "First possession: boundary throw-in",
     default = "Other own act")
+}
+
+#' Which game-logs column each Net Points play type adds into
+#'
+#' Every category the breakdown can carry, mapped to one of four columns of
+#' `player_game_data` / `player_game_ratings` (Pete's grouping, 2026-10-25,
+#' torp#263). The four sum, per player-match, to `net_points`, and each one is
+#' the exact sum of its categories in the published `np_breakdown_<season>`:
+#'
+#' * `np_disp`: what he did with the ball, including the blame passed back to
+#'   him for a turnover he set up.
+#' * `np_recv`: getting the ball (receiving, taking, gathering, marking), and
+#'   errors charged to him.
+#' * `np_contest`: contests, loose balls, balls won off a disposal, stoppages.
+#' * `np_team`: the team pool share, the anchor to the real margin, and the
+#'   re-spread from a team-mate with no act.
+#'
+#' Covers every label `.np_play_type()` can return plus the three pool rows
+#' (`.np_breakdown()` and the v4 branch of `create_player_game_data()`). A new
+#' label must be added here: `.np_family_sums()` aborts on any it does not map.
+#' @keywords internal
+.NP_PLAY_TYPE_FAMILY <- c(
+  "Kick"                                   = "np_disp",
+  "Handball"                               = "np_disp",
+  "Ground kick"                            = "np_disp",
+  "Bounce"                                 = "np_disp",
+  "Free kick (own)"                        = "np_disp",
+  "Blame passed back (turnover)"           = "np_disp",
+  "Other own act"                          = "np_disp",
+  "Receiving a kick"                       = "np_recv",
+  "Receiving a handball"                   = "np_recv",
+  "Taking a handball"                      = "np_recv",
+  "Gathering the ball"                     = "np_recv",
+  "Marking (uncontested)"                  = "np_recv",
+  "Marking (contested)"                    = "np_recv",
+  "Charged for an error"                   = "np_recv",
+  "Winning a contest (mark/spoil)"         = "np_contest",
+  "Winning a loose/ground ball"            = "np_contest",
+  "Winning the ball off a disposal"        = "np_contest",
+  "Ruck: centre bounce"                    = "np_contest",
+  "Ruck: ball-up"                          = "np_contest",
+  "Ruck: boundary throw-in"                = "np_contest",
+  "First possession: centre bounce"        = "np_contest",
+  "First possession: ball-up"              = "np_contest",
+  "First possession: boundary throw-in"    = "np_contest",
+  "Team pool share"                        = "np_team",
+  "Anchor to the real margin"              = "np_team",
+  "Re-spread from a team-mate with no act" = "np_team"
+)
+
+#' The four Net Points family columns, in publishing order
+#' @keywords internal
+.NP_FAMILY_COLS <- c("np_disp", "np_recv", "np_contest", "np_team")
+
+#' Sum a Net Points breakdown into its four families
+#'
+#' @param np_bd A breakdown: `match_id`, `player_id`, `category`, `value`
+#'   (`.np_breakdown()`, or the `np_breakdown` attribute of
+#'   `create_player_game_data()`).
+#' @return data.table, one row per player-match in `np_bd`: `match_id`,
+#'   `player_id` (both character) and the four `.NP_FAMILY_COLS`, 0 where he
+#'   has no category in that family. Aborts on a category
+#'   `.NP_PLAY_TYPE_FAMILY` does not map, rather than leaving its points out.
+#' @keywords internal
+.np_family_sums <- function(np_bd) {
+  fam <- unname(.NP_PLAY_TYPE_FAMILY[as.character(np_bd$category)])
+  bad <- unique(as.character(np_bd$category)[is.na(fam)])
+  if (length(bad) > 0L) {
+    cli::cli_abort(c(
+      "Net Points play type{?s} with no family: {.val {bad}}.",
+      "x" = "Add {cli::qty(length(bad))}{?it/them} to {.code .NP_PLAY_TYPE_FAMILY} (R/np_breakdown.R) so np_disp + np_recv + np_contest + np_team still add up to net_points."
+    ))
+  }
+  bd <- data.table::data.table(match_id = as.character(np_bd$match_id),
+                               player_id = as.character(np_bd$player_id),
+                               family = fam, value = np_bd$value)
+  bd[, .(np_disp    = sum(value[family == "np_disp"]),
+         np_recv    = sum(value[family == "np_recv"]),
+         np_contest = sum(value[family == "np_contest"]),
+         np_team    = sum(value[family == "np_team"])),
+     by = .(match_id, player_id)]
+}
+
+#' Gate: the four family columns on a frame equal the breakdown's family sums
+#'
+#' For every player-match on either side, each of `np_disp`, `np_recv`,
+#' `np_contest`, `np_team` must equal the sum of its categories in `np_bd`, and
+#' the four must add up to `net_points`. A player-match missing from one side
+#' counts as zeros there, so a dropped or duplicated row is caught even when
+#' its categories happen to net to zero.
+#'
+#' @param frame Data frame with `match_id`, `player_id`, `net_points` and the
+#'   four family columns.
+#' @param np_bd The breakdown the columns were built from.
+#' @param tol Largest allowed gap, in points.
+#' @return `frame`, invisibly. Aborts on any gap above `tol`.
+#' @keywords internal
+.np_family_gate <- function(frame, np_bd, tol = 1e-9) {
+  miss <- setdiff(c("match_id", "player_id", "net_points", .NP_FAMILY_COLS), names(frame))
+  if (length(miss) > 0L) {
+    cli::cli_abort("Net Points family gate: the frame has no {.field {miss}}.")
+  }
+  want <- .np_family_sums(np_bd)
+  got <- data.table::data.table(match_id = as.character(frame$match_id),
+                                player_id = as.character(frame$player_id))
+  for (v in c("net_points", .NP_FAMILY_COLS)) data.table::set(got, j = v, value = frame[[v]])
+  if (anyDuplicated(got, by = c("match_id", "player_id"))) {
+    cli::cli_abort("Net Points family gate: the frame has more than one row for a player-match.")
+  }
+  chk <- merge(got, want, by = c("match_id", "player_id"), all = TRUE, suffixes = c("", ".bd"))
+  for (v in names(chk)[-(1:2)]) data.table::set(chk, i = which(is.na(chk[[v]])), j = v, value = 0)
+  gaps <- vapply(.NP_FAMILY_COLS, function(v) max(abs(chk[[v]] - chk[[paste0(v, ".bd")]])), numeric(1))
+  sum_gap <- max(abs(chk$np_disp + chk$np_recv + chk$np_contest + chk$np_team - chk$net_points))
+  if (!all(is.finite(gaps)) || any(gaps > tol)) {
+    worst <- names(gaps)[which.max(gaps)]
+    cli::cli_abort(c(
+      "Net Points family columns do not match the play-type breakdown (worst: {.field {worst}}, {signif(max(gaps), 3)} points).",
+      "x" = "Each of np_disp / np_recv / np_contest / np_team must be the exact sum of its breakdown categories."
+    ))
+  }
+  if (!is.finite(sum_gap) || sum_gap > tol) {
+    cli::cli_abort(c(
+      "np_disp + np_recv + np_contest + np_team miss net_points by up to {signif(sum_gap, 3)} points.",
+      "x" = "They would sit beside net_points on the site and not sum to it."
+    ))
+  }
+  invisible(frame)
 }
 
 #' Split each player-match's Net Points by play type

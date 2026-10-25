@@ -363,7 +363,8 @@ test_that("net_points is NA, not raw epv, when the frame has no ledger column", 
     "No net_points column")
   expect_true("net_points" %in% names(r))
   expect_true(all(is.na(r$net_points)))
-  expect_true(all(c("np_own", "np_won", "np_team") %in% names(r)))
+  expect_true(all(c("np_disp", "np_recv", "np_contest", "np_team") %in% names(r)))
+  expect_false(any(c("np_own", "np_won") %in% names(r)))
 })
 
 test_that("net_points is NA but announced when the frame has no epv either", {
@@ -395,21 +396,48 @@ test_that("centring zeroes epv within a position group, and net_points is untouc
   expect_false(all(abs(np_by_pos$net_points) < 1e-9))
 })
 
-test_that(".np_raw_parts splits net_points into parts that add up to it", {
+test_that(".np_raw_parts falls back to the raw channels when there is no breakdown", {
   d <- data.frame(epv_disp = c(3, -1), epv_recv = c(1, 0.5), epv_spoil = c(-2, 0.5),
                   epv_hitout = c(0, 0), net_points = c(2, 0))
-  out <- torp:::.np_raw_parts(d)
-  expect_equal(out$np_own + out$np_won + out$np_team, out$net_points)
+  out <- suppressMessages(torp:::.np_raw_parts(d))
+  # the three values np_own / np_won / np_team carried before torp#263
+  expect_equal(out$np_disp, d$epv_disp)            # all own acts, receiving included
+  expect_true(all(is.na(out$np_recv)))             # cannot be split from disposing
+  expect_equal(out$np_contest, d$epv_recv)         # won back
   expect_equal(out$np_team, c(-2, 0.5))            # spoil + hitout (hitout is 0 under v4)
+  expect_equal(out$np_disp + out$np_contest + out$np_team, out$net_points)
+  expect_false(any(c("np_own", "np_won") %in% names(out)))
+  # and it says so
+  expect_message(torp:::.np_raw_parts(d), "No play-type breakdown for")
   # Taken from _raw columns when an older frame carries them
   d2 <- transform(d, epv_disp_raw = epv_disp + 1, epv_recv_raw = epv_recv, epv_spoil_raw = epv_spoil - 1)
   d2$net_points <- d2$epv_disp_raw + d2$epv_recv_raw + d2$epv_spoil_raw
-  expect_equal(torp:::.np_raw_parts(d2)$np_own, d2$epv_disp_raw)
+  expect_equal(suppressMessages(torp:::.np_raw_parts(d2))$np_disp, d2$epv_disp_raw)
   # Parts that don't add up are refused rather than published
-  expect_error(torp:::.np_raw_parts(transform(d, net_points = c(9, 0))), "do not add up")
-  # Existing parts are kept, never rebuilt from (possibly centred) channels
-  d3 <- transform(d, np_own = 1, np_won = 1, np_team = 0)
-  expect_identical(torp:::.np_raw_parts(d3)$np_own, c(1, 1))
+  expect_error(suppressMessages(torp:::.np_raw_parts(transform(d, net_points = c(9, 0)))),
+               "do not add up")
+})
+
+test_that(".np_raw_parts keeps breakdown-built columns and gates them on net_points", {
+  d <- data.frame(epv_disp = c(3, -1), epv_recv = c(1, 0.5), epv_spoil = c(-2, 0.5),
+                  epv_hitout = c(0, 0), net_points = c(2, 0),
+                  np_disp = c(1, -1), np_recv = c(2, 0), np_contest = c(1, 0.5), np_team = c(-2, 0.5))
+  out <- torp:::.np_raw_parts(d)
+  # never rebuilt from the (possibly centred) channels
+  expect_identical(out[, c("np_disp", "np_recv", "np_contest", "np_team")],
+                   d[, c("np_disp", "np_recv", "np_contest", "np_team")])
+  expect_error(torp:::.np_raw_parts(transform(d, np_recv = c(2.5, 0))), "do not add up")
+  # A multi-season frame: one season has the columns, the bound-on one has NA.
+  # Only the NA rows fall back; the breakdown rows are untouched.
+  d3 <- d
+  d3[2, c("np_disp", "np_recv", "np_contest", "np_team")] <- NA
+  out3 <- suppressMessages(torp:::.np_raw_parts(d3))
+  expect_equal(unlist(out3[1, c("np_disp", "np_recv", "np_contest", "np_team")], use.names = FALSE),
+               c(1, 2, 1, -2))
+  expect_equal(out3$np_disp[2], -1)
+  expect_true(is.na(out3$np_recv[2]))
+  expect_equal(out3$np_contest[2], 0.5)
+  expect_equal(out3$np_team[2], 0.5)
 })
 
 # ---- N11: tog floor, season denominators, PSV-missing signal ----------------

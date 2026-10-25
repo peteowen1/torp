@@ -159,6 +159,10 @@ build_wpa_ledger <- function(pbp_data, player_stats, pre_match,
     cli::cli_abort("WPA ledger: a team total is {signif(gap / scale, 3)} win probability off its result minus pre-match chance.")
   }
 
+  # The engine's own three channels (.np_v4_channels(): own acts, won back,
+  # pools), not the four play-type families game-logs carries for net points
+  # since torp#263 (np_disp / np_recv / np_contest / np_team). The WPA ledger
+  # has no play-type breakdown, so its parts keep the three-way split.
   ch <- .np_v4_channels(np)
   out <- ch[, .(player_id = as.character(player_id), match_id = as.character(match_id),
                 wpa_net = net_points / scale,

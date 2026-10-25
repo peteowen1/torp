@@ -614,7 +614,10 @@ update_player_game_data <- function(season) {
     chains <- load_chains(season, rounds = TRUE)
     pstats <- load_player_stats(season)
     teams_data <- load_teams(season)
-    create_player_game_data(pbp, pstats, teams_data, chains = chains)
+    # keep_np_fit: the season fit (stoppage baseline, difficulty and contest
+    # models) rides back on the frame so it can be published for the live path
+    create_player_game_data(pbp, pstats, teams_data, chains = chains,
+                            keep_np_fit = identical(EPV_ENGINE, "v4"))
   }, error = function(e) {
     cli::cli_alert_danger("Failed to create player game data: {conditionMessage(e)}")
     return(NULL)
@@ -628,6 +631,20 @@ update_player_game_data <- function(season) {
   # to this frame's net_points. Read before save_to_release() touches pgd.
   np_bd <- attr(pgd, "np_breakdown")
 
+  # The season fit this frame was priced on (torp#250). Taken off the frame
+  # before the parquet write -- it holds fitted models, and arrow would try to
+  # keep R attributes in the file's metadata.
+  # A failure here must not stop the frame itself being saved; it is raised
+  # after the saves below.
+  np_fit_err <- NULL
+  np_fit <- if (identical(EPV_ENGINE, "v4")) {
+    tryCatch(.np_fit_bundle(pgd, season), error = function(e) {
+      np_fit_err <<- e
+      NULL
+    })
+  }
+  attr(pgd, "np_fit") <- NULL
+
   file_name <- glue::glue("player_game_{season}")
   save_to_release(df = pgd, file_name = file_name, release_tag = "player_game-data")
 
@@ -639,6 +656,21 @@ update_player_game_data <- function(season) {
     cli::cli_inform("Saved Net Points breakdown: {bd_name} ({nrow(np_bd)} rows)")
   } else {
     cli::cli_alert_warning("No Net Points breakdown on the player game data (engine {EPV_ENGINE}); nothing saved.")
+  }
+
+  # get_player_game_ratings() prices live matches on this file and refuses to
+  # refit on one match, so a failed publish is raised (it lands in
+  # seasonal_failures as player_game_data) rather than warned past: the live
+  # job would otherwise keep scoring on last night's fit, or none.
+  if (!is.null(np_fit_err)) {
+    cli::cli_abort("Player game data saved, but the season fit bundle could not be built: {conditionMessage(np_fit_err)}",
+                   parent = np_fit_err)
+  }
+  if (!is.null(np_fit)) {
+    tryCatch(.publish_np_fit_bundle(np_fit), error = function(e) {
+      cli::cli_abort("Player game data saved, but the season fit bundle was not published: {conditionMessage(e)}",
+                     parent = e)
+    })
   }
   invisible(NULL)
 }

@@ -9,7 +9,9 @@
   player_stats,
   chains,
   difficulty_terms = NULL,
-  results = NULL
+  results = NULL,
+  np_fit = NULL,
+  return_fit = FALSE
 )
 }
 \arguments{
@@ -27,6 +29,13 @@ a warning.}
 
 \item{results}{Official results, or \code{NULL} to load them for the seasons in
 \code{pbp_data} (falling back to the running score when that fails).}
+
+\item{np_fit}{A season fit bundle (\code{.np_fit_bundle()}): its stoppage
+baseline and difficulty and contest models price these matches and nothing
+is fitted. \code{NULL} fits them from \code{pbp_data}, as the nightly does.}
+
+\item{return_fit}{Attach what the matches were priced on as attribute
+\code{np_fit} (see \code{build_net_points()}).}
 }
 \value{
 \code{build_net_points()} output under the v4 rule set.

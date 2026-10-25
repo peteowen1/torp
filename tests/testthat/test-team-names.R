@@ -46,6 +46,15 @@ test_that("abbreviations resolve correctly", {
   expect_equal(torp_replace_teams("PA"), "Port Adelaide Power")
 })
 
+test_that("Indigenous-round roster codes resolve (2025 rounds 10-11)", {
+  codes <- c(KUW = "Adelaide Crows", YAR = "Port Adelaide Power",
+             WAL = "Fremantle Dockers", NAR = "Melbourne Demons",
+             WAA = "West Coast Eagles", EUR = "St Kilda Saints")
+  expect_equal(torp_replace_teams(names(codes)), unname(codes))
+  expect_no_warning(abbr <- torp_team_abbr(names(codes)))
+  expect_equal(abbr, AFL_TEAMS$abbr[match(codes, AFL_TEAMS$name)])
+})
+
 test_that("full names resolve correctly", {
   expect_equal(torp_replace_teams("Adelaide Crows"), "Adelaide Crows")
   expect_equal(torp_replace_teams("GWS Giants"), "GWS Giants")
@@ -213,6 +222,18 @@ test_that(".normalise_team_values normalizes abbreviation columns", {
   df <- torp:::.normalise_team_values(df)
   expect_equal(df$home_team, c("Adelaide Crows", "Geelong Cats"))
   expect_equal(df$home_team_abbr, c("ADEL", "GEEL"))
+})
+
+test_that(".normalise_team_values fills an NA team_abbr from team_name without warning", {
+  # Shape of torpdata teams_2025 rounds 10-11: code in team_name, NA team_abbr
+  df <- data.frame(
+    team_name = c("KUW", "WAL", "Geelong Cats", NA_character_),
+    team_abbr = c(NA, NA, "GEEL", NA),
+    stringsAsFactors = FALSE
+  )
+  expect_no_warning(df <- torp:::.normalise_team_values(df))
+  expect_equal(df$team_name, c("Adelaide Crows", "Fremantle Dockers", "Geelong Cats", NA))
+  expect_equal(df$team_abbr, c("ADEL", "FRE", "GEEL", NA))
 })
 
 test_that(".normalise_team_values handles empty data frame", {

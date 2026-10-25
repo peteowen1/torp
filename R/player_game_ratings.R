@@ -244,10 +244,11 @@ player_game_ratings <- function(season_val = get_afl_season(),
       # forecast. Optional so frames built before the ledger still work.
       dplyr::any_of(c("wpa_net", "wpa_neutral", "wpa_own", "wpa_won", "wpa_team",
                       "wpa_neutral_own", "wpa_neutral_won", "wpa_neutral_team")),
-      # net_points split into the same three parts, uncentred (.np_raw_parts()):
-      # these add up to net_points, where the centred epv_* channels below add up
-      # to the rating `epv` instead.
-      dplyr::any_of(c("np_own", "np_won", "np_team")),
+      # net_points split into four parts, uncentred: sums of the play-type
+      # breakdown's families (.np_raw_parts(), .NP_PLAY_TYPE_FAMILY). These add
+      # up to net_points, where the centred epv_* channels below add up to the
+      # rating `epv` instead.
+      dplyr::any_of(.NP_FAMILY_COLS),
       epv = "epv_c", epv_recv = "epv_recv_c", epv_disp = "epv_disp_c",
       epv_spoil = "epv_spoil_c", epv_hitout = "epv_hitout_c",
       epv_p80 = "epv_p80", epv_recv_p80 = "epv_recv_p80", epv_disp_p80 = "epv_disp_p80",
@@ -263,22 +264,57 @@ player_game_ratings <- function(season_val = get_afl_season(),
 
 #' The net points parts, captured before any centring
 #'
-#' `create_player_game_data()` publishes the ledger's three parts as `epv_disp`
-#' (own acts), `epv_recv` (won back) and `epv_spoil` (team share; `epv_hitout`
-#' is always 0 under v4, so `np_team` is just the team pool), and asserts they
-#' sum to `net_points`. `player_game_ratings()` then centres those channels by
-#' (season, lineup_position) for the rating, so the published ones add up to
-#' `epv` and miss `net_points` by up to 10.7 points (2026). The site shows
-#' net_points as EPV beside the channels, so it needs parts that add up to it:
-#' `np_own`, `np_won`, `np_team`, named like the WPA ledger's `wpa_own/won/team`.
-#' Taken from the `_raw` columns when an older frame has them. Call it on the
+#' The site shows `net_points` as EPV beside four parts that must add up to it:
+#' `np_disp`, `np_recv`, `np_contest`, `np_team` (torp#263). Each is the sum of
+#' its play types in the published `np_breakdown_<season>`
+#' (`.NP_PLAY_TYPE_FAMILY`). `create_player_game_data()` builds them from the
+#' breakdown and gates them against it, so a player game data frame that
+#' carries all four is used as it is, after checking they still sum to
+#' `net_points`.
+#'
+#' A frame without them (player game data built before torp#263, or by an
+#' engine with no breakdown: every season before 2026 as released on
+#' 2026-10-25) falls back to the raw channels, which split the same value
+#' three ways, not four. `create_player_game_data()` publishes those as
+#' `epv_disp` (own acts, INCLUDING receiving and errors), `epv_recv` (won back:
+#' turnovers, contests, stoppages) and `epv_spoil` + `epv_hitout` (the pools).
+#' They map onto the four columns as: `np_disp` = own acts, `np_recv` = NA
+#' (the raw channels cannot separate receiving from disposing; it sits inside
+#' `np_disp`), `np_contest` = won back, `np_team` = the pools. These are the
+#' same three values the columns `np_own` / `np_won` / `np_team` carried
+#' before torp#263, and `np_disp + np_contest + np_team` still equals
+#' `net_points`. The fallback `np_team` is the whole pool (it includes the
+#' defensive pool), so it is NOT the breakdown's team family.
+#'
+#' The `_raw` columns are used when an older frame has them. Call it on the
 #' player game DATA (`.compute_player_game_ratings()`), never on the published
 #' ratings, whose channels are already centred.
 #' @keywords internal
 .np_raw_parts <- function(df) {
-  # Already split (a frame that came through here before): keep it. Rebuilding
-  # from centred channels would be exactly the mismatch this exists to avoid.
-  if (all(c("np_own", "np_won", "np_team") %in% names(df))) return(df)
+  sum_gate <- function(df, cols, rows) {
+    if (!"net_points" %in% names(df) || !any(rows)) return(invisible(NULL))
+    tot <- Reduce(`+`, lapply(cols, function(v) df[[v]][rows]))
+    gap <- suppressWarnings(max(abs(tot - df$net_points[rows]), na.rm = TRUE))
+    if (is.finite(gap) && gap > 1e-6) {
+      cli::cli_abort(c(
+        "The net points parts do not add up to {.field net_points} (max gap {signif(gap, 3)}).",
+        "x" = "{paste(cols, collapse = ' + ')} would sit beside net_points on the site and not sum to it."
+      ))
+    }
+    invisible(NULL)
+  }
+  # Rows built from the play-type breakdown (create_player_game_data() fills
+  # all four, never NA): keep them. Rebuilding from the channels would be
+  # exactly the mismatch torp#263 fixed. Checked per row, not per frame: a
+  # multi-season load binds a season that has the columns to ones that do
+  # not, and fills theirs with NA.
+  bd_row <- if (all(.NP_FAMILY_COLS %in% names(df))) {
+    Reduce(`&`, lapply(.NP_FAMILY_COLS, function(v) !is.na(df[[v]])))
+  } else {
+    rep(FALSE, nrow(df))
+  }
+  sum_gate(df, .NP_FAMILY_COLS, bd_row)
+  if (nrow(df) > 0 && all(bd_row)) return(df)
   raw <- function(n) {
     r <- paste0(n, "_raw")
     if (r %in% names(df)) df[[r]] else if (n %in% names(df)) df[[n]] else NULL
@@ -286,18 +322,22 @@ player_game_ratings <- function(season_val = get_afl_season(),
   own <- raw("epv_disp"); won <- raw("epv_recv"); spoil <- raw("epv_spoil")
   if (is.null(own) || is.null(won) || is.null(spoil)) return(df)
   hit <- raw("epv_hitout"); if (is.null(hit)) hit <- 0
-  df$np_own <- own
-  df$np_won <- won
-  df$np_team <- spoil + dplyr::coalesce(hit, 0)
-  if ("net_points" %in% names(df)) {
-    gap <- max(abs(df$np_own + df$np_won + df$np_team - df$net_points), na.rm = TRUE)
-    if (is.finite(gap) && gap > 1e-6) {
-      cli::cli_abort(c(
-        "The net points parts do not add up to {.field net_points} (max gap {signif(gap, 3)}).",
-        "x" = "np_own + np_won + np_team would sit beside net_points on the site and not sum to it."
-      ))
-    }
-  }
+  hit <- dplyr::coalesce(hit + 0 * own, 0)
+  fb <- !bd_row
+  if (any(fb)) cli::cli_alert_info(
+    "No play-type breakdown for {sum(fb)} player-match{?es} (of {nrow(df)}): {.field np_disp} holds all own acts (receiving included), {.field np_recv} is NA, {.field np_contest} is what he won back, {.field np_team} the whole pool.")
+  keep <- function(v) if (v %in% names(df)) df[[v]] else rep(NA_real_, nrow(df))
+  np_disp <- keep("np_disp"); np_recv <- keep("np_recv")
+  np_contest <- keep("np_contest"); np_team <- keep("np_team")
+  np_disp[fb] <- own[fb]
+  np_recv[fb] <- NA_real_
+  np_contest[fb] <- won[fb]
+  np_team[fb] <- spoil[fb] + hit[fb]
+  df$np_disp <- np_disp
+  df$np_recv <- np_recv
+  df$np_contest <- np_contest
+  df$np_team <- np_team
+  sum_gate(df, c("np_disp", "np_contest", "np_team"), fb)
   df
 }
 

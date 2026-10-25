@@ -849,6 +849,31 @@ test_that("stoppage rows are excluded by default and allocated on request", {
   expect_setequal(pay[display_order == 25L]$role, c("stoppage_ruck", "stoppage_player", "stoppage_pool"))
 })
 
+test_that("a supplied stoppage baseline is priced on, never refitted, and handed back (torp#250)", {
+  f <- np_stoppage_fixture()
+  bl <- data.table::data.table(description = "Ball Up Call", band = 0, baseline = 0.1, n = 1L)
+  testthat::local_mocked_bindings(
+    .np_stoppage_baseline = function(...) stop("refitted the stoppage baseline"),
+    .package = "torp")
+  led <- suppressMessages(torp:::.np_build_ledger(f$pbp, stoppages = "allocate",
+                                                  stoppage_baseline = bl))
+  expect_equal(attr(led, "np_stoppage_baseline"), bl)
+  terms <- data.table::copy(np_terms_fixture())
+  terms[, display_order := display_order * 10L]
+  args <- list(f$pbp, f$stats, f$results, credit = "difficulty", difficulty_terms = terms,
+               reconcile = FALSE, spread = "tog", stoppages = "allocate", stoppage_baseline = bl)
+  with_fit <- suppressMessages(do.call(build_net_points, c(args, return_fit = TRUE)))
+  plain <- suppressMessages(do.call(build_net_points, args))
+  fit <- attr(with_fit, "np_fit")
+  expect_equal(fit$stoppage_baseline, bl)
+  # precomputed terms fit nothing, so there are no models to hand back
+  expect_null(fit$disposal_models)
+  expect_null(attr(plain, "np_fit"))
+  # asking for the fit changes nothing else
+  attr(with_fit, "np_fit") <- NULL
+  expect_equal(with_fit, plain)
+})
+
 # ---- Pete's four rules, 2026-09-09 ---------------------------------------------
 test_that("R1: the conceding side gets a blame pool equal to what the row ceded, marked doubled", {
   f <- np_fixture()

@@ -488,7 +488,7 @@ utils::globalVariables(c(
 
 # Net Points play-type breakdown (R/np_breakdown.R).
 utils::globalVariables(c(
-  "paid", "description", "category", "value", "recon", "bd_gap"
+  "paid", "description", "category", "value", "recon", "bd_gap", "family"
 ))
 
 # Net Points ledger (R/epv_net_points.R) and the v4 engine branch: data.table

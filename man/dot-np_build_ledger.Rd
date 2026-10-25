@@ -30,7 +30,9 @@ the neutral baseline (D15), and reprices the row before each one.}
 \value{
 A data.table of ledger rows with \code{hm} (home-margin-frame value) plus
 the next row's team and player, used to detect turnovers, and the
-resolution columns (\code{NA} without chains).
+resolution columns (\code{NA} without chains). Under \code{"allocate"} the baseline
+the stoppages were priced on rides as the \code{np_stoppage_baseline}
+attribute.
 }
 \description{
 Build the per-act ledger in the home-margin frame
