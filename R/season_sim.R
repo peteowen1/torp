@@ -4,7 +4,6 @@
 #   prepare_sim_data()       — load fixtures + ratings + (optional) injuries
 #   .extract_team_residuals() — pull team-quality residuals from the match GAM
 #   simulate_afl_season()    — main Monte Carlo entry point
-#   process_games_dt()       — per-round scoring/rating update
 #   summarise_simulations()  — aggregate ladder + finals across runs
 #   print.torp_sim_results   — pretty print method
 #

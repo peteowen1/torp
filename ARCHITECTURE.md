@@ -485,9 +485,6 @@ Functions: `torp_replace_teams()`, `torp_team_abbr()`, `torp_team_full()`, `torp
 
 ---
 
-#### Baseline Models (`R/baseline_models.R`)
-Reference models for WP evaluation: Naive (always 0.5), Score-Only (logistic on margin), Time-Score (GLM interaction), EP-Based (expected points margin).
-
 #### Model Loading
 `load_model_with_fallback()` tries torpmodels package first, falls back to bundled data in `data/*.rda`. Models cached in `.torp_model_cache` environment for session lifetime.
 
@@ -516,8 +513,7 @@ Reference models for WP evaluation: Naive (always 0.5), Score-Only (logistic on 
 | Match Prediction | `R/match_model.R` | `run_predictions_pipeline()`, `build_team_mdl_df()` |
 | Match Data Prep | `R/match_data_prep.R` | `.build_fixtures_df()`, `.build_team_ratings_df()`, `.build_match_features()`, `.load_match_weather()` |
 | Match Training | `R/match_train.R` | GAM fitting functions |
-| Baseline Models | `R/baseline_models.R` | Score-only, time-score, EP-based baselines |
-| Simulation | `R/simulate.R` | `simulate_season()`, `process_games()`, `process_games_dt()` |
+| Simulation | `R/simulate.R` | `simulate_season()` |
 | Match Simulation | `R/simulate_match.R` | `simulate_match_mc()` |
 | Ladder | `R/ladder.R` | `calculate_ladder()`, `calculate_final_ladder()` |
 | Finals Simulation | `R/finals_sim.R` | `simulate_finals()`, `simulate_match()`, `finals_home_advantage()` |
@@ -542,9 +538,7 @@ Reference models for WP evaluation: Naive (always 0.5), Score-Only (logistic on 
 | Stat Rating Profiles | `R/player_skills_profile.R` | `player_stat_rating_profile()`, `get_player_stat_ratings()` |
 | WP Credit | `R/wp_credit.R` | `create_wp_credit()` (WPA credit allocation) |
 | Win Probability | `R/win_probability.R` | `fit_win_probability()` |
-| Logging | `R/logging.R` | `setup_torp_logging()`, `monitor_model_drift()` |
-| Model Validation | `R/model_validation.R` | `create_grouped_cv_folds()`, `evaluate_model_comprehensive()` |
-| Data Validation | `R/data_validation.R` | Input validation utilities |
+| Logging | `R/logging.R` | `setup_torp_logging()`, `log_prediction_event()` |
 | Utilities | `R/utils.R` | `torp_clean_names()`, `get_afl_season()`, `get_afl_week()`, `clear_all_cache()` |
 | Plot: Game Flow | `R/plot_game.R` | `plot_ep_wp()` |
 | Plot: Player | `R/plot_player.R` | `plot_player_rating()`, `plot_stat_rating_profile()` |
