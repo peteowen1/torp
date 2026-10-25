@@ -9,7 +9,9 @@
 #      read EPV_ENGINE, R sources a package file top to bottom, and their
 #      natural home is ABOVE where EPV_ENGINE is defined. Getting that wrong
 #      fails at BUILD time with "object 'EPV_ENGINE' not found" -- it happened
-#      on 2026-08-04 and this test is why it was caught before commit.
+#      on 2026-08-04. The build/load itself is now the guard for that (this
+#      test no longer re-sources the file, since the file is not on disk under
+#      R CMD check).
 
 test_that("v3 constants are inert while the engine is v2", {
   skip_if_not(identical(EPV_ENGINE, "v2"),
@@ -41,34 +43,18 @@ test_that("v3 constants are inert while the engine is v2", {
 })
 
 test_that("flipping the engine to v3 changes exactly the intended constants", {
-  # Re-source the constants with the flag flipped, rather than asserting on the
-  # live values -- this is the only way to check the v3 branch without shipping
-  # it, and it also proves the file still LOADS with the flag on, which is the
-  # ordering trap above.
-  f <- system.file("R", "constants_ratings.R", package = "torp")
-  if (!nzchar(f) || !file.exists(f)) {
-    f <- testthat::test_path("..", "..", "R", "constants_ratings.R")
-  }
-  skip_if_not(file.exists(f), "constants_ratings.R not locatable from the test tree")
+  # Ask the engine-conditioned constants' own functions what they return under
+  # v3, rather than asserting on the live values or re-reading the source file.
+  # That is the only way to check the v3 branch without shipping it, and it runs
+  # identically under devtools::load_all() and R CMD check (the R/ source tree
+  # does not exist beside the tests under check, which is why the earlier
+  # version of this test, which sourced the file, skipped on CI).
+  expect_equal(.epr_prior_games("recv",  "v3"), 14.38)
+  expect_equal(.epr_prior_games("disp",  "v3"), 24.33)
+  expect_equal(.epr_prior_games("spoil", "v3"), 11.09)
+  expect_equal(.epv_standardise_channels("v3"), c("recv", "disp"))
 
-  # whatever engine is pinned, rewrite the assignment to v3 and check v3's
-  # constants come out
-  txt <- sub('^EPV_ENGINE <- "v[0-9]"$', 'EPV_ENGINE <- "v3"', readLines(f))
-  expect_true(any(grepl('^EPV_ENGINE <- "v3"$', txt)),
-              info = "the EPV_ENGINE assignment no longer matches the pattern this test rewrites")
-
-  tf <- tempfile(fileext = ".R")
-  writeLines(txt, tf)
-  e <- new.env()
-  # If any engine-conditioned constant is defined ABOVE EPV_ENGINE this throws.
-  expect_no_error(sys.source(tf, envir = e))
-
-  expect_equal(get("EPR_PRIOR_GAMES_RECV", e), 14.38)
-  expect_equal(get("EPR_PRIOR_GAMES_DISP", e), 24.33)
-  expect_equal(get("EPR_PRIOR_GAMES_SPOIL", e), 11.09)
-  expect_equal(get("EPV_STANDARDISE_CHANNELS", e), c("recv", "disp"))
-
-  pts <- get("EPV3_POINTS_SCALE", e)
+  pts <- .epv3_points_scale("v3")
   # FOUR-channel constants, from ws30_epv3_4ch_gate.R -- the gate that scored
   # them. cont_stop is no longer 1: under 4 channels the ruck slot is live.
   # the four-channel constants the gate actually scored (torp abd70131,
@@ -77,15 +63,28 @@ test_that("flipping the engine to v3 changes exactly the intended constants", {
 
   # Each prior rate must carry its OWN channel's factor. This is the check that
   # would have caught the 0.919 fallback bug from the other direction.
-  expect_equal(unname(get("EPR_PRIOR_RATE_RECV", e)),  -0.7 * pts[["recv"]])
-  expect_equal(unname(get("EPR_PRIOR_RATE_DISP", e)),  -0.7 * pts[["disp"]])
-  expect_equal(unname(get("EPR_PRIOR_RATE_SPOIL", e)), -0.3 * pts[["cont_aerial"]])
+  expect_equal(-0.7 * .epr_prior_points_scale("recv",        "v3"), -0.7 * pts[["recv"]])
+  expect_equal(-0.7 * .epr_prior_points_scale("disp",        "v3"), -0.7 * pts[["disp"]])
+  expect_equal(-0.3 * .epr_prior_points_scale("cont_aerial", "v3"), -0.3 * pts[["cont_aerial"]])
   # The hitout slot holds nothing under 3 channels, so it must shrink toward
   # exactly zero rather than toward a prior for a channel that does not exist.
+  expect_equal(.epr_prior_rate_hitout("v3", channels = 3L), 0)
   # Under FOUR channels the ruck slot holds a real channel, so its prior must
   # carry its own factor. Zero was correct only while the 3-channel merge
   # emptied the slot; leaving it at zero now is the "blend of scaled and
   # unscaled parts" bug this file exists to catch.
-  expect_equal(unname(get("EPR_PRIOR_RATE_HITOUT", e)),
-               -0.3 * pts[["cont_stop"]] * get("EPV_RUCK_SWING_SCALE", e))
+  expect_equal(.epr_prior_rate_hitout("v3", channels = 4L),
+               -0.3 * pts[["cont_stop"]] * EPV_RUCK_SWING_SCALE)
+})
+
+test_that("the live constants are exactly what their functions return for the live engine", {
+  # The constants are defined as calls to these functions, so this pins that the
+  # wiring stays that way: a constant edited back to a literal would let the v3
+  # test above check a value production no longer reads.
+  expect_identical(EPV3_POINTS_SCALE, .epv3_points_scale(EPV_ENGINE))
+  expect_identical(EPR_PRIOR_GAMES_RECV,  .epr_prior_games("recv",  EPV_ENGINE))
+  expect_identical(EPR_PRIOR_GAMES_DISP,  .epr_prior_games("disp",  EPV_ENGINE))
+  expect_identical(EPR_PRIOR_GAMES_SPOIL, .epr_prior_games("spoil", EPV_ENGINE))
+  expect_identical(EPV_STANDARDISE_CHANNELS, .epv_standardise_channels(EPV_ENGINE))
+  expect_identical(EPR_PRIOR_RATE_HITOUT, .epr_prior_rate_hitout(EPV_ENGINE))
 })
