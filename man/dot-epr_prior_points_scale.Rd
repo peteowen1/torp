@@ -4,7 +4,12 @@
 \alias{.epr_prior_points_scale}
 \title{The points factor a channel's shrinkage prior has to carry}
 \usage{
-.epr_prior_points_scale(slot)
+.epr_prior_points_scale(slot, engine = EPV_ENGINE)
+}
+\arguments{
+\item{slot}{Channel slot name, a key of \code{EPV3_POINTS_SCALE}.}
+
+\item{engine}{One of the \code{EPV_ENGINE} values. Defaults to the live one.}
 }
 \description{
 \code{.bayesian_shrink()} adds \code{prior_games * prior_rate} AFTER the
