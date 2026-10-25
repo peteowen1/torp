@@ -498,3 +498,32 @@ extract_gam_random_effects <- function(model, variable) {
 }
 
 
+
+#' Completed matches in a round that are not yet in the released data
+#'
+#' The decision behind the daily release's "full" mode
+#' (`has_new_games()` in data-raw/01-data/daily_release.R). A match counts as
+#' new only when its fixture status is `CONCLUDED` -- the same filter
+#' [get_match_chains()] applies through `get_round_games()`, so the released
+#' play-by-play never holds a match that was in progress -- and its id is not
+#' among `released_ids`. Until 2026-10-25 the test was "any match in the round
+#' has started", which stayed TRUE for good once the Grand Final was played and
+#' turned every off-season run into a full release.
+#'
+#' @param fixtures Fixture frame with `match_id`, `round_number`, `status`.
+#' @param round Round number to check (the round the release would fetch).
+#' @param released_ids Match ids already in the released pbp for the season.
+#' @return Character vector of unreleased completed match ids (possibly empty).
+#' @keywords internal
+#' @noRd
+.unreleased_completed_matches <- function(fixtures, round, released_ids) {
+  if (is.null(fixtures) || nrow(fixtures) == 0L) return(character())
+  need <- c("match_id", "round_number", "status")
+  miss <- setdiff(need, names(fixtures))
+  if (length(miss) > 0L) {
+    cli::cli_abort("Fixtures lack {.field {miss}}; cannot tell completed matches from released ones")
+  }
+  done <- fixtures$round_number %in% round & fixtures$status %in% "CONCLUDED"
+  ids <- unique(as.character(fixtures$match_id[done]))
+  setdiff(ids[!is.na(ids)], as.character(released_ids))
+}

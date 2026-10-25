@@ -34,10 +34,24 @@ Sys.setenv(piggyback_cache_duration = 1)
 
 #' Check if New Games Have Been Played
 #'
-#' Checks whether any game in the current round has STARTED (scheduled start
-#' time is in the past). This does not test completion: a game in progress
-#' counts, so a run can trigger before its result is final.
-#' Returns TRUE if so; FALSE if none have started or the fixtures call fails.
+#' TRUE when a match in the current round has CONCLUDED and is not yet in the
+#' released play-by-play (`pbp_data_{season}_all` on `pbp-data`) -- i.e. there
+#' is a finished game the full release would actually add. Off-season the last
+#' round's matches are all released, so this is FALSE and the run goes to the
+#' lineup check instead (torpverse ARCHITECTURE.md, "Off-season behavior").
+#'
+#' Until 2026-10-25 it was TRUE whenever any game in the round had merely
+#' STARTED, which stayed TRUE for good after the Grand Final: every scheduled
+#' torpdata run did a full release and dispatched the ratings pipeline over
+#' unchanged data (run 40121361503, a month after the season, was one of them).
+#'
+#' pbp, not results, is the record of what was released: `update_results` also
+#' runs in team_only mode, while chains/pbp only update in full mode.
+#'
+#' A fixtures failure returns FALSE (do not release stale/partial data when the
+#' API is down). A pbp read failure with completed games present returns TRUE:
+#' the full release then hits the same read and aborts loudly rather than this
+#' check skipping a round silently.
 #'
 #' @return Logical indicating if new games are available
 has_new_games <- function() {
@@ -45,34 +59,39 @@ has_new_games <- function() {
     current_season <- get_afl_season()
     current_round <- get_afl_week()
 
-    # Get fixtures for current season
     fixtures <- get_afl_fixtures(current_season)
-
     if (nrow(fixtures) == 0) {
       cli::cli_inform("No fixtures found for season {current_season}")
       return(FALSE)
     }
 
-    # Check if any games have started in the current round (not completion)
-    # utc_start_time is character from the API — parse to POSIXct in UTC
-    # then compare against current UTC time to avoid timezone mismatch
-    utc_now <- Sys.time()
-    completed_games <- fixtures %>%
-      dplyr::mutate(
-        start_utc = as.POSIXct(.data$utc_start_time,
-                                format = "%Y-%m-%dT%H:%M", tz = "UTC")
-      ) %>%
-      dplyr::filter(
-        .data$round_number == current_round,
-        .data$start_utc < utc_now
-      )
+    concluded <- .unreleased_completed_matches(fixtures, current_round, character())
+    if (length(concluded) == 0) {
+      cli::cli_inform("No completed games in round {current_round}")
+      return(FALSE)
+    }
 
-    if (nrow(completed_games) > 0) {
-      cli::cli_inform("Found {nrow(completed_games)} completed game(s) in round {current_round}")
+    pbp_name <- glue::glue("pbp_data_{current_season}_all")
+    released <- tryCatch(
+      unique(as.character(file_reader(pbp_name, "pbp-data")$match_id)),
+      vb_error_absent = function(e) {
+        cli::cli_inform("No {pbp_name} released yet - every completed game is new")
+        character()
+      },
+      error = function(e) {
+        cli::cli_warn("Could not read {pbp_name} to see which games are released ({conditionMessage(e)}) - treating the {length(concluded)} completed game(s) in round {current_round} as new")
+        NULL
+      }
+    )
+    if (is.null(released)) return(TRUE)
+
+    new_ids <- .unreleased_completed_matches(fixtures, current_round, released)
+    if (length(new_ids) > 0) {
+      cli::cli_inform("Found {length(new_ids)} completed, unreleased game(s) in round {current_round}: {paste(new_ids, collapse = ', ')}")
       return(TRUE)
     }
 
-    cli::cli_inform("No completed games found in round {current_round}")
+    cli::cli_inform("All {length(concluded)} completed game(s) in round {current_round} are already released")
     return(FALSE)
   }, error = function(e) {
     cli::cli_alert_danger("Error checking for new games: {conditionMessage(e)}")
