@@ -32,12 +32,47 @@ Sys.setenv(piggyback_cache_duration = 1)
 
 # Helper Functions ----
 
+# Small, match-keyed outputs of the full release (all four together are under
+# 3 MB, against 87 MB for pbp_data_2026_all). xg_data is built from the
+# released pbp (calculate_match_xgs() -> load_pbp()), so a match missing from
+# pbp is missing from xg too; player_game_ratings sits downstream of
+# player_game_data. Steps not covered here: player_season_ratings, psr,
+# ep_wp_chart and weather, which carry no per-match key in a small file.
+HNG_RELEASED_FILES <- list(
+  xg = c("xg_data_{season}", "xg-data"),
+  player_stats = c("player_stats_{season}", "player_stats-data"),
+  score_events = c("score_events_{season}", "score_events-data"),
+  player_game_ratings = c("player_game_ratings_{season}", "player_game_ratings-data")
+)
+
 #' Check if New Games Have Been Played
 #'
-#' Checks whether any game in the current round has STARTED (scheduled start
-#' time is in the past). This does not test completion: a game in progress
-#' counts, so a run can trigger before its result is final.
-#' Returns TRUE if so; FALSE if none have started or the fixtures call fails.
+#' Decides full vs not-full for run_daily_release(); the rules live in
+#' `.release_decision()` (R/utils.R) so they are unit-tested:
+#' 1. A current-round match ended under RELEASE_REPAIR_WINDOW_HOURS (12) ago:
+#'    TRUE, even if every file lists it. The late-stats and 2 AM runs exist to
+#'    re-fetch stats that were partial first time, inside files that already
+#'    list the match.
+#' 2. A concluded match missing from any of `HNG_RELEASED_FILES`, ended under
+#'    RELEASE_GAP_RETRY_HOURS (48) ago: TRUE. The full release writes pbp first
+#'    and only warns when a later step fails, so this is how a failed step for
+#'    the last round gets repaired.
+#' 3. Past 48 h a match missing from some files but held by at least one
+#'    (so a full release did run for it) is reported loudly (message() plus a
+#'    GitHub ::warning:: annotation naming the match and file) and does NOT
+#'    trigger: some matches never get chains from the AFL API
+#'    (CD_M20240142309, 2024 R23: CONCLUDED, 0 pbp rows), and without a bound
+#'    the last round would re-release on every scheduled run forever.
+#'    A match in NO file never had a full release and keeps triggering.
+#'
+#' Off-season the Grand Final is long past both windows, so this is FALSE
+#' (torpverse ARCHITECTURE.md, "Off-season behavior"). Until 2026-10-25 the
+#' rule was "any game in the round has started", which stayed TRUE for good
+#' after the Grand Final (run 40121361503, a month after the season).
+#'
+#' A fixtures failure returns FALSE (do not release stale/partial data when the
+#' API is down). A failure to read a release file returns TRUE when the gap
+#' rule could still fire, so the release runs and fails loudly.
 #'
 #' @return Logical indicating if new games are available
 has_new_games <- function() {
@@ -45,34 +80,66 @@ has_new_games <- function() {
     current_season <- get_afl_season()
     current_round <- get_afl_week()
 
-    # Get fixtures for current season
     fixtures <- get_afl_fixtures(current_season)
-
     if (nrow(fixtures) == 0) {
       cli::cli_inform("No fixtures found for season {current_season}")
       return(FALSE)
     }
 
-    # Check if any games have started in the current round (not completion)
-    # utc_start_time is character from the API — parse to POSIXct in UTC
-    # then compare against current UTC time to avoid timezone mismatch
-    utc_now <- Sys.time()
-    completed_games <- fixtures %>%
-      dplyr::mutate(
-        start_utc = as.POSIXct(.data$utc_start_time,
-                                format = "%Y-%m-%dT%H:%M", tz = "UTC")
-      ) %>%
-      dplyr::filter(
-        .data$round_number == current_round,
-        .data$start_utc < utc_now
-      )
+    dec <- .release_decision(fixtures, current_round)
+    if (dec$trigger) {
+      cli::cli_inform("Repair window: {length(dec$recent)} game(s) in round {current_round} ended under {RELEASE_REPAIR_WINDOW_HOURS}h ago ({paste(dec$recent, collapse = ', ')}) - full release")
+      return(TRUE)
+    }
+    if (!dec$needs_files) {
+      cli::cli_inform("No completed games in round {current_round}")
+      return(FALSE)
+    }
 
-    if (nrow(completed_games) > 0) {
-      cli::cli_inform("Found {nrow(completed_games)} completed game(s) in round {current_round}")
+    age <- .concluded_match_age(fixtures, current_round)
+    gap_possible <- any(age < RELEASE_GAP_RETRY_HOURS)
+    released <- list()
+    for (nm in names(HNG_RELEASED_FILES)) {
+      spec <- HNG_RELEASED_FILES[[nm]]
+      file_name <- as.character(glue::glue(spec[1], season = current_season))
+      ids <- tryCatch({
+        d <- file_reader(file_name, spec[2])
+        if (!"match_id" %in% names(d)) cli::cli_abort("{file_name} has no match_id column")
+        unique(as.character(d$match_id))
+      },
+      vb_error_absent = function(e) {
+        cli::cli_inform("No {file_name} released yet - its completed games are all missing")
+        character()
+      },
+      error = function(e) {
+        cli::cli_warn("Could not read {file_name} to see which games are released ({conditionMessage(e)})")
+        NULL
+      })
+      if (is.null(ids)) {
+        if (gap_possible) return(TRUE)
+        next  # every match is past the retry window: nothing this file says could trigger
+      }
+      released[[file_name]] <- ids
+    }
+
+    dec <- .release_decision(fixtures, current_round, released)
+    if (nrow(dec$abandoned) > 0) {
+      for (i in seq_len(nrow(dec$abandoned))) {
+        a <- dec$abandoned[i, ]
+        msg <- sprintf("%s is CONCLUDED but missing from %s %.0fh after it ended - past the %dh retry window, so it no longer triggers a full release. Rebuild it by hand (run_daily_release(force = TRUE)) if the source now has it.",
+                       a$match_id, a$file, a$hours_since_end, RELEASE_GAP_RETRY_HOURS)
+        message("WARNING: ", msg)
+        # Workflow commands are read from stdout; GITHUB_OUTPUT is written by
+        # file in daily-data-release.yml, so this line cannot pollute it.
+        cat("::warning title=has_new_games - unreleased match::", msg, "\n", sep = "")
+      }
+    }
+    if (dec$trigger) {
+      cli::cli_inform("Found {length(dec$gaps)} completed game(s) in round {current_round} missing from a release file: {paste(dec$gaps, collapse = ', ')} - full release")
       return(TRUE)
     }
 
-    cli::cli_inform("No completed games found in round {current_round}")
+    cli::cli_inform("No completed game in round {current_round} needs a full release")
     return(FALSE)
   }, error = function(e) {
     cli::cli_alert_danger("Error checking for new games: {conditionMessage(e)}")

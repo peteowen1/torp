@@ -31,6 +31,12 @@ save_to_release <- function(df, file_name, release_tag, also_csv = FALSE, prev_r
   tf <- tempfile(fileext = ".parquet")
   on.exit(unlink(tf), add = TRUE)
 
+  # Every listing and manifest read below must come from GitHub, not from gh's
+  # 60 s HTTP cache: the post-upload verify and the manifest merge otherwise
+  # read a copy fetched before this upload (see .vb_with_fresh_listing()).
+  restore_listing <- .vb_with_fresh_listing()
+  on.exit(restore_listing(), add = TRUE)
+
   # Normalise team name values to canonical forms before saving
   if (nrow(df) > 0) df <- .normalise_team_values(df)
 
