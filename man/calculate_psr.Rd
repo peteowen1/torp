@@ -11,7 +11,8 @@ calculate_psr(
   centre_by_round = PSR_CENTRE_BY_ROUND,
   listed_pos = NULL,
   centre_on_listed = PSR_CENTRE_ON_LISTED,
-  psr_centre = c("career", "listed", "weekly")
+  psr_centre = c("career", "listed", "weekly"),
+  ref_before_season = NULL
 )
 }
 \arguments{
@@ -63,6 +64,15 @@ recently named in on a team sheet. Kept reachable for scoring only: read
 under the listing it roughly doubled the positional spread Thread G
 set out to remove (2026: 0.679 -> 1.328).
 }}
+
+\item{ref_before_season}{Optional season. When set, every statistic this
+function pools ACROSS rounds -- the pooled and per-position SDs used by
+\code{PSR_POSITION_STANDARDISE}, and the all-history mean that centres rows
+with no position -- is taken from rows with \code{season < ref_before_season}
+only, then applied to every row. NULL (default) pools over every row, which
+is the production behaviour. Exists for walk-forward backtests (the honest
+backfill, torpverse/docs/plans/HONEST-BACKFILL-2021-2025.md), where pooling
+over the whole table lets later seasons set the scale of earlier ones.}
 }
 \value{
 A data.table with columns: \code{player_id}, \code{player_name},

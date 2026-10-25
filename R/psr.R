@@ -208,6 +208,14 @@
 #'       under the listing it roughly doubled the positional spread Thread G
 #'       set out to remove (2026: 0.679 -> 1.328).
 #'   }
+#' @param ref_before_season Optional season. When set, every statistic this
+#'   function pools ACROSS rounds -- the pooled and per-position SDs used by
+#'   \code{PSR_POSITION_STANDARDISE}, and the all-history mean that centres rows
+#'   with no position -- is taken from rows with \code{season < ref_before_season}
+#'   only, then applied to every row. NULL (default) pools over every row, which
+#'   is the production behaviour. Exists for walk-forward backtests (the honest
+#'   backfill, torpverse/docs/plans/HONEST-BACKFILL-2021-2025.md), where pooling
+#'   over the whole table lets later seasons set the scale of earlier ones.
 #' @return A data.table with columns: \code{player_id}, \code{player_name},
 #'   \code{season}, \code{round}, \code{pos_group}, \code{psr_raw}, \code{psr}.
 #'
@@ -216,7 +224,8 @@ calculate_psr <- function(skills, coef_df, center = TRUE,
                           centre_by_round = PSR_CENTRE_BY_ROUND,
                           listed_pos = NULL,
                           centre_on_listed = PSR_CENTRE_ON_LISTED,
-                          psr_centre = c("career", "listed", "weekly")) {
+                          psr_centre = c("career", "listed", "weekly"),
+                          ref_before_season = NULL) {
   psr_centre <- match.arg(psr_centre)
   dt <- data.table::as.data.table(skills)
   key_needed <- switch(psr_centre, listed = "listed_pos_group",
@@ -340,12 +349,24 @@ calculate_psr <- function(skills, coef_df, center = TRUE,
   # games. Mirrors the (season, round) grouping EPR has always used.
   .psr_by <- c(if (isTRUE(centre_by_round)) intersect(c("season", "round"), names(dt)),
                psr_pos_col)
+  # Rows whose statistics may be pooled across rounds: all of them, unless a
+  # walk-forward caller restricts them to earlier seasons (ref_before_season).
+  .ref <- if (is.null(ref_before_season)) rep(TRUE, nrow(dt)) else {
+    if (!"season" %in% names(dt)) cli::cli_abort("{.arg ref_before_season} needs a {.field season} column.")
+    r <- !is.na(dt$season) & dt$season < ref_before_season
+    if (!any(r)) cli::cli_abort("{.arg ref_before_season} = {ref_before_season} leaves no reference rows.")
+    r
+  }
   if (center && !is.null(psr_pos_col) && "wt_80s" %in% names(dt)) {
     dt[!is.na(get(psr_pos_col)), psr := psr_raw - weighted.mean(psr_raw, wt_80s, na.rm = TRUE), by = c(.psr_by)]
-    dt[is.na(get(psr_pos_col)), psr := psr_raw - weighted.mean(psr_raw, wt_80s, na.rm = TRUE)]
+    .na_pos <- is.na(dt[[psr_pos_col]])
+    .na_mean <- stats::weighted.mean(dt$psr_raw[.na_pos & .ref], dt$wt_80s[.na_pos & .ref], na.rm = TRUE)
+    dt[.na_pos, psr := psr_raw - .na_mean]
   } else if (center && !is.null(psr_pos_col)) {
     dt[!is.na(get(psr_pos_col)), psr := psr_raw - mean(psr_raw, na.rm = TRUE), by = c(.psr_by)]
-    dt[is.na(get(psr_pos_col)), psr := psr_raw - mean(psr_raw, na.rm = TRUE)]
+    .na_pos <- is.na(dt[[psr_pos_col]])
+    .na_mean <- mean(dt$psr_raw[.na_pos & .ref], na.rm = TRUE)
+    dt[.na_pos, psr := psr_raw - .na_mean]
   } else if (center) {
     dt[, psr := psr_raw - mean(psr_raw, na.rm = TRUE)]
   } else {
@@ -358,10 +379,14 @@ calculate_psr <- function(skills, coef_df, center = TRUE,
   # PSR_POSITION_STANDARDISE for why this is separately flagged.
   if (center && isTRUE(PSR_POSITION_STANDARDISE) && !is.null(psr_pos_col)) {
     w <- if ("wt_80s" %in% names(dt)) dt$wt_80s else rep(1, nrow(dt))
-    pooled <- .wtd_sd(dt$psr, w)
+    pooled <- .wtd_sd(dt$psr[.ref], w[.ref])
     dt[, .psr_w := w]
-    dt[!is.na(get(psr_pos_col)), .psr_sd := .wtd_sd(psr, .psr_w), by = c(psr_pos_col)]
+    dt[, .psr_ref := .ref]
+    .pos_sd <- dt[.psr_ref & !is.na(get(psr_pos_col)), .(.psr_sd = .wtd_sd(psr, .psr_w)), by = c(psr_pos_col)]
+    dt[, .psr_sd := NA_real_]
+    dt[.pos_sd, .psr_sd := i..psr_sd, on = psr_pos_col]
     dt[is.na(get(psr_pos_col)), .psr_sd := NA_real_]
+    dt[, .psr_ref := NULL]
     # degenerate or missing within-group SD -> leave the row centred only,
     # never divide by ~zero (the failure mode that excluded hitout on the EPV side)
     dt[!is.na(.psr_sd) & .psr_sd > 1e-6 & !is.na(pooled),
@@ -418,24 +443,26 @@ calculate_psr <- function(skills, coef_df, center = TRUE,
 #' \deqn{osr = raw\_osr + \delta}
 #' \deqn{dsr = raw\_dsr + \delta}
 #'
+#' @param ref_before_season Passed to \code{calculate_psr()} for all three arms.
 #' @export
 calculate_psr_components <- function(skills, coef_df, osr_coef_df, dsr_coef_df,
                                      center = TRUE,
                                      centre_by_round = PSR_CENTRE_BY_ROUND,
                                      listed_pos = NULL,
                                      centre_on_listed = PSR_CENTRE_ON_LISTED,
-                                     psr_centre = c("career", "listed", "weekly")) {
+                                     psr_centre = c("career", "listed", "weekly"),
+                                     ref_before_season = NULL) {
   psr_centre <- match.arg(psr_centre)
   # All three arms MUST get the same listed_pos (and psr_centre). osr + dsr are
   # shifted to sum to psr below, so centring them on different keys would push
   # the discrepancy into that shift and silently distort the decomposition
   # rather than erroring.
   # Margin PSR (the authoritative total)
-  psr_result <- calculate_psr(skills, coef_df, center = center, centre_by_round = centre_by_round, listed_pos = listed_pos, centre_on_listed = centre_on_listed, psr_centre = psr_centre)
+  psr_result <- calculate_psr(skills, coef_df, center = center, centre_by_round = centre_by_round, listed_pos = listed_pos, centre_on_listed = centre_on_listed, psr_centre = psr_centre, ref_before_season = ref_before_season)
 
   # Raw offensive and defensive scores
-  osr_result <- calculate_psr(skills, osr_coef_df, center = center, centre_by_round = centre_by_round, listed_pos = listed_pos, centre_on_listed = centre_on_listed, psr_centre = psr_centre)
-  dsr_result <- calculate_psr(skills, dsr_coef_df, center = center, centre_by_round = centre_by_round, listed_pos = listed_pos, centre_on_listed = centre_on_listed, psr_centre = psr_centre)
+  osr_result <- calculate_psr(skills, osr_coef_df, center = center, centre_by_round = centre_by_round, listed_pos = listed_pos, centre_on_listed = centre_on_listed, psr_centre = psr_centre, ref_before_season = ref_before_season)
+  dsr_result <- calculate_psr(skills, dsr_coef_df, center = center, centre_by_round = centre_by_round, listed_pos = listed_pos, centre_on_listed = centre_on_listed, psr_centre = psr_centre, ref_before_season = ref_before_season)
 
   # Additive shift: distribute residual evenly so osr + dsr = psr
   raw_osr <- osr_result$psr
@@ -1774,6 +1801,8 @@ explain_player_rating <- function(player,
 #' @param season_listing Optional listing frame for \code{"listed"}:
 #'   \code{player_id}, \code{season}, \code{position}. Loaded from
 #'   \code{load_player_details()} when NULL.
+#' @param ref_before_season Passed to \code{calculate_psr()}; NULL in
+#'   production. See there.
 #' @return A data.table with \code{psr}, \code{osr}, \code{dsr} columns.
 #' @keywords internal
 .compute_psr_from_stat_ratings <- function(skills, psr_coef_path = NULL, center = TRUE,
@@ -1783,7 +1812,8 @@ explain_player_rating <- function(player,
                                           comp = "AFLM",
                                           psr_centre = c("career", "listed", "weekly"),
                                           lineup = NULL,
-                                          season_listing = NULL) {
+                                          season_listing = NULL,
+                                          ref_before_season = NULL) {
   # This is already the I/O boundary for the PSR path (it reads the coefficient
   # CSVs), so it is also the right place to source listed positions when the
   # caller has not. Doing it here rather than in calculate_psr() keeps that
@@ -1831,12 +1861,12 @@ explain_player_rating <- function(player,
     dsr_coef_df <- utils::read.csv(dsr_path)
     calculate_psr_components(skills, coef_df, osr_coef_df, dsr_coef_df, center = center,
                              centre_by_round = centre_by_round, listed_pos = listed_pos, centre_on_listed = centre_on_listed,
-                             psr_centre = psr_centre)
+                             psr_centre = psr_centre, ref_before_season = ref_before_season)
   } else {
     cli::cli_inform("OSR/DSR coefficient files not found -- computing PSR only (no osr/dsr decomposition)")
     calculate_psr(skills, coef_df, center = center, centre_by_round = centre_by_round,
                   listed_pos = listed_pos, centre_on_listed = centre_on_listed,
-                  psr_centre = psr_centre)
+                  psr_centre = psr_centre, ref_before_season = ref_before_season)
   }
 }
 

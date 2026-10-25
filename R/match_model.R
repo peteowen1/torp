@@ -80,7 +80,8 @@
 #' @noRd
 .build_rated_match_features <- function(fix_df, teams, torp_df, all_grounds,
                                         season, target_weeks,
-                                        psr_coef_path = NULL) {
+                                        psr_coef_path = NULL,
+                                        psr_ref_before_season = NULL) {
   cli::cli_h2("Loading PSR")
   psr_df <- NULL
 
@@ -90,7 +91,8 @@
   # career-modal key (weekly scored dMAE +0.199 as a model input, ws31).
   tryCatch({
     skills <- load_player_stat_ratings(TRUE)
-    psr_df <- .compute_psr_from_stat_ratings(skills, psr_coef_path, psr_centre = "career")
+    psr_df <- .compute_psr_from_stat_ratings(skills, psr_coef_path, psr_centre = "career",
+                                             ref_before_season = psr_ref_before_season)
     if (!is.null(psr_df)) {
       cli::cli_inform("PSR computed from skills+coefficients (career key): {nrow(psr_df)} player-rounds")
     }
@@ -144,10 +146,15 @@
 #'
 #' @param season Season to build for (default: current via get_afl_season())
 #' @param target_weeks Numeric vector of target round numbers (used for weather forecasting)
+#' @param psr_coef_path Optional PSR coefficient CSV (osr/dsr read from the same folder).
+#' @param psr_ref_before_season Optional season passed to
+#'   \code{.compute_psr_from_stat_ratings()} as \code{ref_before_season}: PSR's
+#'   cross-round SDs and means then come from earlier seasons only. NULL in
+#'   production; set by walk-forward backtests.
 #' @return Complete team_mdl_df ready for GAM training
 #' @keywords internal
 build_team_mdl_df <- function(season = NULL, target_weeks = NULL,
-                              psr_coef_path = NULL) {
+                              psr_coef_path = NULL, psr_ref_before_season = NULL) {
   if (is.null(season)) season <- get_afl_season()
 
   cli::cli_h2("Loading data")
@@ -165,7 +172,8 @@ build_team_mdl_df <- function(season = NULL, target_weeks = NULL,
 
   team_rt_fix_df <- .build_rated_match_features(
     fix_df, teams, torp_df, all_grounds,
-    season = season, target_weeks = target_weeks, psr_coef_path = psr_coef_path
+    season = season, target_weeks = target_weeks, psr_coef_path = psr_coef_path,
+    psr_ref_before_season = psr_ref_before_season
   )
 
   cli::cli_h2("Loading weather")
