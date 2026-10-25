@@ -117,7 +117,32 @@ test_that("no concluded matches: no trigger and nothing to read; NA kickoff is t
   d <- .release_decision(fx, 23, NULL, now = .now)
   expect_false(d$trigger); expect_false(d$needs_files)
   fx2 <- .fx_t(.now, 1); fx2$utc_start_time <- NA_character_
-  d2 <- .release_decision(fx2, 23, list(xg = character()), now = .now)
+  # In no file: still triggers, however old (round 4 rule).
+  expect_warning(d2 <- .release_decision(fx2, 23, list(xg = character()), now = .now), "CD_M1")
+  expect_true(d2$trigger)
+  # Held by one file, missing from another: expires and is reported.
+  d3 <- suppressWarnings(.release_decision(fx2, 23, list(xg = character(), ps = "CD_M1"), now = .now))
+  expect_false(d3$trigger)
+  expect_equal(nrow(d3$abandoned), 1)
+})
+
+test_that("past 48 h, a match in NO file keeps triggering; one held by some file expires", {
+  gf <- data.frame(match_id = "GF", round_number = 29L, status = "CONCLUDED",
+                   utc_start_time = "2026-09-26T04:35:00.000+0000", stringsAsFactors = FALSE)
+  now <- as.POSIXct("2026-09-30 00:00:00", tz = "UTC")
+  # No full release ever ran for it: still a gap.
+  d <- .release_decision(gf, 29, list(xg = character(), ps = character()), now = now)
+  expect_true(d$trigger)
+  expect_identical(d$gaps, "GF")
+  # The real Grand Final no-chains case: player_stats has it, xg never will.
+  d2 <- .release_decision(gf, 29, list(xg = character(), ps = "GF"), now = now)
   expect_false(d2$trigger)
-  expect_equal(nrow(d2$abandoned), 1)
+  expect_identical(d2$abandoned$match_id, "GF")
+  expect_identical(d2$abandoned$file, "xg")
+})
+
+test_that("an unparseable kickoff on a concluded match warns, naming it", {
+  fx <- data.frame(match_id = "CD_MX", round_number = 23L, status = "CONCLUDED",
+                   utc_start_time = "not a time", stringsAsFactors = FALSE)
+  expect_warning(.release_decision(fx, 23, NULL), "CD_MX")
 })

@@ -544,6 +544,10 @@ extract_gam_random_effects <- function(model, variable) {
   if (length(ids) == 0L) return(stats::setNames(numeric(), character()))
   ko <- .afl_kickoff_utc(fixtures$utc_start_time[match(ids, fixtures$match_id)])
   age <- as.numeric(difftime(now, ko, units = "hours")) - RELEASE_MATCH_DURATION_HOURS
+  if (anyNA(age)) {
+    bad <- ids[is.na(age)]
+    cli::cli_warn("Kickoff time could not be parsed for concluded match{?es} {.val {bad}}; treating {?it/them} as older than every release window. A fixture format change would stop repair releases here.")
+  }
   age[is.na(age)] <- Inf
   stats::setNames(age, ids)
 }
@@ -555,9 +559,10 @@ extract_gam_random_effects <- function(model, variable) {
 #'    even if every file lists it -- the late-stats runs re-fetch partial stats.
 #' 2. Any missing from a file in `released` and ended under
 #'    `RELEASE_GAP_RETRY_HOURS` ago: TRUE (`"gap"`).
-#' 3. Otherwise FALSE. Matches still missing past the retry window are
-#'    returned in `abandoned` (match_id, file) for the caller to report; they
-#'    never trigger a release.
+#' 3. Otherwise FALSE. Matches still missing past the retry window, but held
+#'    by at least one file (so a full release did run for them), are returned
+#'    in `abandoned` (match_id, file) for the caller to report; they never
+#'    trigger a release. A match in NO file keeps triggering however old.
 #'
 #' @param released Named list of released match-id vectors, one per file, or
 #'   NULL when not read (only rule 1 can then fire; `needs_files` says whether
@@ -586,7 +591,11 @@ extract_gam_random_effects <- function(model, variable) {
     data.frame(match_id = m, file = rep(f, length(m)), hours_since_end = unname(age[m]),
                stringsAsFactors = FALSE)
   })))
-  retry <- miss$hours_since_end < RELEASE_GAP_RETRY_HOURS
+  # Expire only a match some file already holds: that proves a full release
+  # ran for it and the source simply lacks the rest (no chains). A match in
+  # NO file never had a full release, so it keeps triggering however old.
+  in_any <- unique(unlist(lapply(released, as.character)))
+  retry <- miss$hours_since_end < RELEASE_GAP_RETRY_HOURS | !(miss$match_id %in% in_any)
   out$abandoned <- miss[!retry, , drop = FALSE]
   if (any(retry)) {
     out$trigger <- TRUE; out$reason <- "gap"; out$gaps <- unique(miss$match_id[retry])

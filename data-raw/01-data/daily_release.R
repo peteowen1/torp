@@ -57,11 +57,13 @@ HNG_RELEASED_FILES <- list(
 #'    RELEASE_GAP_RETRY_HOURS (48) ago: TRUE. The full release writes pbp first
 #'    and only warns when a later step fails, so this is how a failed step for
 #'    the last round gets repaired.
-#' 3. Past 48 h a still-missing match is reported loudly (message() plus a
+#' 3. Past 48 h a match missing from some files but held by at least one
+#'    (so a full release did run for it) is reported loudly (message() plus a
 #'    GitHub ::warning:: annotation naming the match and file) and does NOT
 #'    trigger: some matches never get chains from the AFL API
 #'    (CD_M20240142309, 2024 R23: CONCLUDED, 0 pbp rows), and without a bound
 #'    the last round would re-release on every scheduled run forever.
+#'    A match in NO file never had a full release and keeps triggering.
 #'
 #' Off-season the Grand Final is long past both windows, so this is FALSE
 #' (torpverse ARCHITECTURE.md, "Off-season behavior"). Until 2026-10-25 the
