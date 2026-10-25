@@ -4,10 +4,18 @@
 \alias{.normalise_player_stats_columns}
 \title{Normalise Player Stats Column Names}
 \usage{
-.normalise_player_stats_columns(dt)
+.normalise_player_stats_columns(dt, absent_fill = 0L)
 }
 \arguments{
 \item{dt}{A data.table or data.frame of player stats.}
+
+\item{absent_fill}{Value given to an expected extended-stat column that is
+absent from the feed altogether (step 8). \code{0L} (default) keeps the
+long-standing AFLM behaviour, which \code{player_credit.R} relies on.
+\code{NA_integer_} marks the stat as not recorded, so the stat-rating
+estimators' NA exclusion (A198) skips it instead of rating real zeros --
+what the AFLW loaders pass, because the AFLW feed's \code{extendedStats}
+block is empty (see \code{AFL-API-REFERENCE.md}).}
 }
 \value{
 The input coerced to a data.table (a data.frame input is copied, so
