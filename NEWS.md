@@ -1,3 +1,7 @@
+# torp 1.10.4
+
+* `save_to_release()` writes the `player_game_<season>` and `score_events_<season>` parquets without R's attribute metadata in the footer (#261), cutting the 2025 files from 11.5 MB to 2.2 MB and 2.65 MB to 0.14 MB. Column classes and values are unchanged; readers already rebuild the data.table and restore `epv_engine` from its column. Other assets are written as before (`RELEASE_PARQUET_NO_R_METADATA_STEMS`).
+
 # torp 1.10.3
 
 * Season and finals simulations draw each game's margin with a flat `SIM_NOISE_SD` of 32 instead of 26 + |estimate|/3. With the season sim's team-residual and injury noise that gives a total spread of about 32.8, against the match model's honest out-of-sample error of 33.05 over 940 matches (the finals and single-match sims spread 32); the old rule was too tight for close games (27.9 against 31.6 actual) and too loose for mismatches of 24+ points (39.4 against 34.2). Win-probability log-loss on those matches 0.5749 -> 0.5723. Derivation: `data-raw/05-validation/derive_sim_noise_sd.R`.
