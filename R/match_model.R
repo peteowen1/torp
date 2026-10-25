@@ -133,7 +133,11 @@
   team_rt_df <- .build_team_ratings_df(teams, torp_df, psr_df, xrapm_df)
 
   cli::cli_h2("Computing features")
-  .build_match_features(fix_df, team_rt_df, all_grounds)
+  out <- .build_match_features(fix_df, team_rt_df, all_grounds)
+  # build_prediction_state() also needs the player-level PSR for its injury-
+  # adjusted weekly summary; hand it back rather than recomputing it.
+  attr(out, "psr_df") <- psr_df
+  out
 }
 
 
@@ -833,6 +837,7 @@ build_prediction_state <- function(week = NULL, weeks = NULL, season = NULL,
     fix_df, teams, torp_df_total, all_grounds,
     season = season, target_weeks = target_weeks
   )
+  psr_df <- attr(team_rt_fix_df, "psr_df")
 
   # Injuries ----
   cli::cli_h2("Loading injuries")
