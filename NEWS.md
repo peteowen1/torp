@@ -1,4 +1,4 @@
-# torp (development version)
+# torp 1.10.3
 
 * Season and finals simulations draw each game's margin with a flat `SIM_NOISE_SD` of 32 instead of 26 + |estimate|/3. With the season sim's team-residual and injury noise that gives a total spread of about 32.8, against the match model's honest out-of-sample error of 33.05 over 940 matches (the finals and single-match sims spread 32); the old rule was too tight for close games (27.9 against 31.6 actual) and too loose for mismatches of 24+ points (39.4 against 34.2). Win-probability log-loss on those matches 0.5749 -> 0.5723. Derivation: `data-raw/05-validation/derive_sim_noise_sd.R`.
 
