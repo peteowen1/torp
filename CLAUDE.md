@@ -37,7 +37,7 @@ What `ls R/` does not give you is which files belong together. Grouped by domain
 | **Format** | `format_blog.R` | Blog parquet shapes consumed by torpdata `build_blog_data.R` |
 | **Logging** | `logging.R` | Internal cli wrappers |
 | **Team RAPM/SPM** | `team_rapm.R`, `team_rapm_asof.R`, `team_rapm_asof_cache.R`, `team_rapm_match_feature.R`, `team_spm.R`, `matchup_table.R`, `constants_team_rapm.R` | Team-level ridge-regularised APM (`build_team_rapm_net()`) shrunk toward an SPM prior (`fit_team_spm()` / `shrink_team_rapm()`); `matchup_table.R` builds the per-match feature table consumed by the match model |
-| **AFLW** | `aflw_elo.R`, `aflw_match_model.R`, `aflw_psr.R`, `aflw_season_snapshots.R`, `constants_aflw.R` | Separate AFLW Elo + PSR + match-win-prob pipeline (`fit_aflw_match_model()` / `predict_aflw_win_prob()`), independent constants. Elo/PSR season stats are refreshed by `aflw-season-stats-weekly.yml`; the match model (`aflw_match_model.R`) is experimental and NOT wired into any workflow (no production caller as of 2026-10) |
+| **AFLW** | `aflw_elo.R`, `aflw_match_model.R`, `aflw_psr.R`, `aflw_season_snapshots.R`, `constants_aflw.R` | Separate AFLW Elo + PSR + match-win-prob pipeline (`fit_aflw_match_model()` / `predict_aflw_win_prob()`), independent constants. `aflw-season-stats-weekly.yml` only takes a weekly dated snapshot of AFLW cumulative season stats (statspro), for differencing into per-round figures; AFLW Elo/PSR (`data-raw/06-stat-ratings/aflw_run_pipeline.R`) have no scheduled workflow; the match model (`aflw_match_model.R`) is experimental and NOT wired into any workflow (no production caller as of 2026-10) |
 
 ## Key Constants
 
@@ -231,9 +231,9 @@ Run a single file with `testthat::test_file("tests/testthat/test-NAME.R")`.
 | Workflow | Trigger | Purpose |
 |----------|---------|---------|
 | `daily-ratings-predictions.yml` | Repository dispatch (from torpdata), **pre-game schedule**, or manual | Compute ratings + match predictions, upload to `predictions` / `ratings-data` |
-| `aflw-season-stats-weekly.yml` | Scheduled, weekly | Refreshes AFLW Elo/PSR season stats |
+| `aflw-season-stats-weekly.yml` | Scheduled, weekly | Weekly dated snapshot of AFLW cumulative season stats (statspro), for differencing into per-round figures. Does NOT refresh AFLW Elo/PSR (`data-raw/06-stat-ratings/aflw_run_pipeline.R`), which has no scheduled workflow |
 | `publish-xrapm-snapshots.yml` | Scheduled or manual | Publishes team RAPM/SPM snapshots |
-| `train-stat-models.yml` | Scheduled or manual | Retrains per-stat Bayesian rating models |
+| `train-stat-models.yml` | Manual only | Retrains the per-stat GAMs (`wt_av_modelling.R`) and publishes to torpmodels `stat-models` |
 | `test-package.yml` | Push/PR | R CMD check + coverage |
 | `pkgdown.yml` | Push to main | Deploy docs to GitHub Pages |
 
