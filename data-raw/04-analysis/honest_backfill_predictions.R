@@ -164,7 +164,7 @@ hb_assert_frame_coverage <- function(df, last_season) {
   invisible(TRUE)
 }
 
-# --local-inputs=DIR: serve fixtures and lineups for MATCH_MIN_DATA_SEASON..
+# --local-inputs=DIR: serve fixtures, results and lineups for MATCH_MIN_DATA_SEASON..
 # last_season from a torpdata data folder (fixtures_<y>.parquet,
 # teams_<y>.parquet) through the in-memory cache that load_fixtures(TRUE) and
 # load_teams(TRUE) read, and drop later seasons from results. On 2026-10-25 the
@@ -187,10 +187,19 @@ hb_seed_local_inputs <- function(dir, last_season) {
   fx <- read_all("fixtures"); tm <- read_all("teams")
   store_in_cache(key("fixtures"), tibble::as_tibble(fx))
   store_in_cache(key("teams"), tibble::as_tibble(tm))
-  res <- load_results(TRUE)
-  store_in_cache(key("results"), res[res$season <= last_season, ])
-  message(sprintf("[inputs] local fixtures %d rows, lineups %d matches, API results %d rows (seasons %d-%d)",
-                  nrow(fx), length(unique(tm$match_id)), sum(res$season <= last_season), min(keep), last_season))
+  # Results too: on 2026-10-25 the API dropped 2021 from load_results() twice
+  # ("Could not fetch fixtures for season 2021"), which the coverage check then
+  # caught. results_<y>.parquet in the torpdata folder is the same concluded-
+  # fixture frame get_afl_results() returns.
+  res <- read_all("results")
+  need <- table(factor(fx$season, levels = keep))
+  got <- table(factor(res$season, levels = keep))
+  if (any(got < need)) {
+    cli::cli_abort("--local-inputs: results cover fewer matches than fixtures ({paste(names(got), got, '/', need, collapse = ', ')})")
+  }
+  store_in_cache(key("results"), tibble::as_tibble(res))
+  message(sprintf("[inputs] local fixtures %d rows, lineups %d matches, results %d rows (seasons %d-%d)",
+                  nrow(fx), length(unique(tm$match_id)), nrow(res), min(keep), last_season))
   invisible(TRUE)
 }
 
