@@ -819,7 +819,18 @@ XG_COL_MAP <- c(
   for (col in intersect(abbr_cols, nms)) {
     vals <- df[[col]]
     if (is.character(vals) || is.factor(vals)) {
-      new_vals <- torp_team_abbr(vals)
+      vals <- as.character(vals)
+      new_vals <- rep(NA_character_, length(vals))
+      has_val <- !is.na(vals)
+      # NA stays NA here (no "unrecognised team name: NA" warning)
+      if (any(has_val)) new_vals[has_val] <- torp_team_abbr(vals[has_val])
+      # A row whose abbreviation could not be read (e.g. the Indigenous-round
+      # codes written before they were aliased, stored as NA) takes it from the
+      # team name, which is canonical by now.
+      if (col == "team_abbr" && "team_name" %in% nms) {
+        fill <- is.na(new_vals) & !is.na(df[["team_name"]])
+        if (any(fill)) new_vals[fill] <- AFL_TEAMS$abbr[match(df[["team_name"]][fill], AFL_TEAMS$name)]
+      }
       if (is_dt) data.table::set(df, j = col, value = new_vals)
       else df[[col]] <- new_vals
     }

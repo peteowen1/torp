@@ -244,6 +244,19 @@ AFL_TEAM_ALIASES <- c(
   "SYD"   = "Sydney Swans",
   "WCE"   = "West Coast Eagles",
   "WB"    = "Western Bulldogs",
+  # Sir Doug Nicholls Round (2025 rounds 10-11) rosters carry the clubs'
+  # Indigenous-name codes in teamName instead of the usual abbreviation.
+  # Each code was derived from the data, not guessed: in torpdata teams_2025
+  # the team_id of these rows (CD_T10, CD_T110, CD_T60, CD_T90, CD_T150,
+  # CD_T130) is the same id results_2025 gives the club in that row's match.
+  # Those six are the only unresolved team values in any local torpdata team
+  # column (audited 2026-10-25).
+  "KUW"   = "Adelaide Crows",       # Kuwarna
+  "YAR"   = "Port Adelaide Power",  # Yartapuulti
+  "WAL"   = "Fremantle Dockers",    # Walyalup
+  "NAR"   = "Melbourne Demons",     # Narrm
+  "WAA"   = "West Coast Eagles",    # Waalitj Marawar
+  "EUR"   = "St Kilda Saints",      # Euro-Yroke
 
   # --- Full names (identity mappings) ---
   "Adelaide Crows"             = "Adelaide Crows",
