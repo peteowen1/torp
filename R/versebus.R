@@ -4,7 +4,7 @@
 # Pattern spec: C:\dev\ECOSYSTEM-FIX-PLAN.md S1. Repo-specific glue (repo/tag
 # resolution, cache invalidation) stays OUT of this file -- callers pass
 # repo/tag explicitly and register hooks via options() (see vb_publish).
-VERSEBUS_VERSION <- "1.1.0"
+VERSEBUS_VERSION <- "1.1.1"
 
 # Session state: one-time legacy warnings, manifest-seen memory (for the
 # retry-once-on-momentary-absence rule), manifest fetch rate limiting.

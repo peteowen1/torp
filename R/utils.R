@@ -512,11 +512,20 @@ extract_gam_random_effects <- function(model, variable) {
 #'
 #' @param fixtures Fixture frame with `match_id`, `round_number`, `status`.
 #' @param round Round number to check (the round the release would fetch).
-#' @param released_ids Match ids already in the released pbp for the season.
+#' @param released_ids Match ids already released for the season: a character
+#'   vector, or a list of them (one per release file), in which case a match
+#'   counts as released only when EVERY file has it. The full release writes
+#'   pbp first and wraps each later step in a tryCatch that only warns, so a
+#'   match can be in pbp while player_stats or xg never got it; counting it
+#'   released then would stop the late-stats and 2 AM runs from repairing it.
 #' @return Character vector of unreleased completed match ids (possibly empty).
 #' @keywords internal
 #' @noRd
 .unreleased_completed_matches <- function(fixtures, round, released_ids) {
+  if (is.list(released_ids)) {
+    released_ids <- if (length(released_ids) == 0L) character() else
+      Reduce(intersect, lapply(released_ids, as.character))
+  }
   if (is.null(fixtures) || nrow(fixtures) == 0L) return(character())
   need <- c("match_id", "round_number", "status")
   miss <- setdiff(need, names(fixtures))

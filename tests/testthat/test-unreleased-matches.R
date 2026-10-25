@@ -34,3 +34,17 @@ test_that("empty fixtures give nothing; fixtures without status abort rather tha
   expect_error(.unreleased_completed_matches(.fx()[, c("match_id", "round_number")], 29, character()),
                "status")
 })
+
+test_that("a match in pbp but missing from a later release file is still new", {
+  # The full release writes pbp first; player_stats failed (tryCatch only
+  # warns), so the next run must redo the full release to repair it.
+  released <- list(pbp = c("CD_M1", "CD_M2"), xg = c("CD_M1", "CD_M2"),
+                   player_stats = "CD_M2")
+  expect_identical(.unreleased_completed_matches(.fx(), 29, released), "CD_M1")
+  # Once every file has it, it is released.
+  released$player_stats <- c("CD_M1", "CD_M2")
+  expect_identical(.unreleased_completed_matches(.fx(), 29, released), character())
+  # A file never released at all leaves every completed match new.
+  expect_identical(.unreleased_completed_matches(.fx(), 29, list(xg = "CD_M1", ps = character())), "CD_M1")
+  expect_identical(.unreleased_completed_matches(.fx(), 29, list()), "CD_M1")
+})

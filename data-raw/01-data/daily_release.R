@@ -32,26 +32,42 @@ Sys.setenv(piggyback_cache_duration = 1)
 
 # Helper Functions ----
 
+# Small, match-keyed outputs of the full release (all four together are under
+# 3 MB, against 87 MB for pbp_data_2026_all). xg_data is built from the
+# released pbp (calculate_match_xgs() -> load_pbp()), so a match missing from
+# pbp is missing from xg too; player_game_ratings sits downstream of
+# player_game_data. Steps not covered here: player_season_ratings, psr,
+# ep_wp_chart and weather, which carry no per-match key in a small file.
+HNG_RELEASED_FILES <- list(
+  xg = c("xg_data_{season}", "xg-data"),
+  player_stats = c("player_stats_{season}", "player_stats-data"),
+  score_events = c("score_events_{season}", "score_events-data"),
+  player_game_ratings = c("player_game_ratings_{season}", "player_game_ratings-data")
+)
+
 #' Check if New Games Have Been Played
 #'
-#' TRUE when a match in the current round has CONCLUDED and is not yet in the
-#' released play-by-play (`pbp_data_{season}_all` on `pbp-data`) -- i.e. there
-#' is a finished game the full release would actually add. Off-season the last
-#' round's matches are all released, so this is FALSE and the run goes to the
-#' lineup check instead (torpverse ARCHITECTURE.md, "Off-season behavior").
+#' TRUE when a match in the current round has CONCLUDED and is not yet in
+#' every match-keyed file the full release writes (see `HNG_RELEASED_FILES`).
+#' Off-season the last round is fully released, so this is FALSE and the run
+#' goes to the lineup check instead (torpverse ARCHITECTURE.md, "Off-season
+#' behavior").
 #'
 #' Until 2026-10-25 it was TRUE whenever any game in the round had merely
 #' STARTED, which stayed TRUE for good after the Grand Final: every scheduled
 #' torpdata run did a full release and dispatched the ratings pipeline over
-#' unchanged data (run 40121361503, a month after the season, was one of them).
+#' unchanged data (run 40121361503, a month after the season, was one).
 #'
-#' pbp, not results, is the record of what was released: `update_results` also
-#' runs in team_only mode, while chains/pbp only update in full mode.
+#' Why several files, not just pbp: the full release writes pbp first and then
+#' runs every other step inside a tryCatch that only warns. Under the old rule
+#' the next run's full release repaired a step that failed -- that is what the
+#' late-stats and 2 AM runs are for. Requiring the match in all of them keeps
+#' that repair for exactly as long as something is missing.
 #'
 #' A fixtures failure returns FALSE (do not release stale/partial data when the
-#' API is down). A pbp read failure with completed games present returns TRUE:
-#' the full release then hits the same read and aborts loudly rather than this
-#' check skipping a round silently.
+#' API is down). A failure to read any of the files, with completed games
+#' present, returns TRUE: the full release then runs and fails loudly rather
+#' than this check skipping a round silently.
 #'
 #' @return Logical indicating if new games are available
 has_new_games <- function() {
@@ -71,23 +87,34 @@ has_new_games <- function() {
       return(FALSE)
     }
 
-    pbp_name <- glue::glue("pbp_data_{current_season}_all")
-    released <- tryCatch(
-      unique(as.character(file_reader(pbp_name, "pbp-data")$match_id)),
+    released <- list()
+    for (nm in names(HNG_RELEASED_FILES)) {
+      spec <- HNG_RELEASED_FILES[[nm]]
+      file_name <- glue::glue(spec[1], season = current_season)
+      ids <- tryCatch({
+        d <- file_reader(file_name, spec[2])
+        if (!"match_id" %in% names(d)) cli::cli_abort("{file_name} has no match_id column")
+        unique(as.character(d$match_id))
+      },
       vb_error_absent = function(e) {
-        cli::cli_inform("No {pbp_name} released yet - every completed game is new")
+        cli::cli_inform("No {file_name} released yet - its completed games are all new")
         character()
       },
       error = function(e) {
-        cli::cli_warn("Could not read {pbp_name} to see which games are released ({conditionMessage(e)}) - treating the {length(concluded)} completed game(s) in round {current_round} as new")
+        cli::cli_warn("Could not read {file_name} to see which games are released ({conditionMessage(e)}) - treating the {length(concluded)} completed game(s) in round {current_round} as new")
         NULL
+      })
+      if (is.null(ids)) return(TRUE)
+      released[[nm]] <- ids
+      missing <- setdiff(concluded, ids)
+      if (length(missing) > 0) {
+        cli::cli_inform("{file_name} lacks {length(missing)} completed game(s): {paste(missing, collapse = ', ')}")
       }
-    )
-    if (is.null(released)) return(TRUE)
+    }
 
     new_ids <- .unreleased_completed_matches(fixtures, current_round, released)
     if (length(new_ids) > 0) {
-      cli::cli_inform("Found {length(new_ids)} completed, unreleased game(s) in round {current_round}: {paste(new_ids, collapse = ', ')}")
+      cli::cli_inform("Found {length(new_ids)} completed game(s) in round {current_round} not yet in every release file: {paste(new_ids, collapse = ', ')}")
       return(TRUE)
     }
 
