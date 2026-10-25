@@ -133,63 +133,6 @@ test_that("match XG calculations work with loaded data", {
 })
 
 # -----------------------------------------------------------------------------
-# Data Validation Pipeline Tests
-# -----------------------------------------------------------------------------
-
-test_that("loaded data passes validation checks", {
-  skip_if(is.null(.shared$chains), "Could not load chains data")
-
-  validation_result <- validate_data_schema(.shared$chains, "chains_data", strict = FALSE)
-
-  expect_true(is.list(validation_result))
-  expect_true("valid" %in% names(validation_result))
-})
-
-test_that("data quality checks work on loaded data", {
-  skip_if(is.null(.shared$pbp), "Could not load PBP data")
-
-  pbp <- .shared$pbp
-  if (data.table::is.data.table(pbp)) {
-    pbp <- as.data.frame(pbp)
-  }
-
-  quality_result <- tryCatch(
-    validate_data_quality(pbp, "pbp"),
-    error = function(e) NULL
-  )
-
-  skip_if(is.null(quality_result), "Quality check failed")
-
-  expect_true(is.list(quality_result))
-  expect_true("quality_score" %in% names(quality_result))
-  expect_true(quality_result$quality_score >= 0)
-  expect_true(quality_result$quality_score <= 1)
-})
-
-# -----------------------------------------------------------------------------
-# Cross-Function Compatibility Tests
-# -----------------------------------------------------------------------------
-
-test_that("validation functions work with rating calculations", {
-  skip_if(is.null(.shared$player_stats), "Could not load player stats")
-
-  player_stats <- .shared$player_stats
-  if (data.table::is.data.table(player_stats)) {
-    player_stats <- as.data.frame(player_stats)
-  }
-
-  quality_result <- tryCatch(
-    validate_data_quality(player_stats, "player_stats"),
-    error = function(e) NULL
-  )
-
-  skip_if(is.null(quality_result), "Quality check failed")
-
-  expect_true(is.list(quality_result))
-  expect_true(quality_result$quality_score > 0)
-})
-
-# -----------------------------------------------------------------------------
 # Cache Functionality Tests
 # -----------------------------------------------------------------------------
 

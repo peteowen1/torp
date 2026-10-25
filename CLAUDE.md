@@ -29,15 +29,15 @@ What `ls R/` does not give you is which files belong together. Grouped by domain
 | **Match model** | `match_model.R`, `match_train.R`, `match_data_prep.R`, `team_elo.R`, `match_calibration.R` | 5-GAM + XGBoost sequential match prediction, 50/50 Input Blend (`run_predictions_pipeline()`). Features: player-rating diffs (EPR/PSR/TORP) + `elo_diff` (sequential team-Elo, `team_elo.R` — added 2026-07, FABLE-MATCH-MAE-PLAN.md). Final margin passes through a post-hoc recalibration sidecar (`match_calibration.R`, mirrors `wp_calibration`) before serving; identity fallback when the sidecar is absent. Rolling week-by-week OOS eval (not a fixed `HOLDOUT_SEASON`) lives in `torpmodels/data-raw/04-match-model/train_match_models.R` / `experiments/rolling_lib.R`. |
 | **Simulation** | `simulate.R`, `simulate_match.R`, `season_sim.R`, `finals_sim.R`, `ladder.R` | Monte Carlo ladder and finals |
 | **Opponent adj** | `opponent_adjustment.R`, `epv_opponent_adjustment.R` | EPV opponent strength adjustment in daily pipeline |
-| **Validation** | `data_validation.R`, `model_validation.R`, `injuries_validation.R` | Pre-release data integrity checks |
+| **Validation** | `column_schema.R`, `injuries_validation.R` | Column schema enforcement; injury-return accuracy checks. Release guards live in `save_to_release()` (`load_data.R`) |
 | **Caching** | `cache.R`, `disk_cache.R` | In-memory + disk caches for loaded data and models |
 | **Constants** | `constants_afl.R`, `constants_data.R`, `constants_match.R`, `constants_ratings.R`, `constants_sim.R` | All tunables live here — no magic numbers in functions |
 | **Plotting** | `plot_*.R` | ggplot2 visualizations (game, player, team, shots, simulation) |
 | **Profiles** | `player_profile.R`, `team_profile.R`, `player_skills_profile.R` | S3 print methods for `torp_*` objects |
 | **Format** | `format_blog.R` | Blog parquet shapes consumed by torpdata `build_blog_data.R` |
-| **Logging** | `logging.R` | Internal cli wrappers |
+| **Logging** | `logging.R` | `setup_torp_logging()` debug switch + `log_prediction_event()`; silent unless `console_output = TRUE` |
 | **Team RAPM/SPM** | `team_rapm.R`, `team_rapm_asof.R`, `team_rapm_asof_cache.R`, `team_rapm_match_feature.R`, `team_spm.R`, `matchup_table.R`, `constants_team_rapm.R` | Team-level ridge-regularised APM (`build_team_rapm_net()`) shrunk toward an SPM prior (`fit_team_spm()` / `shrink_team_rapm()`); `matchup_table.R` builds the per-match feature table consumed by the match model |
-| **AFLW** | `aflw_elo.R`, `aflw_match_model.R`, `aflw_psr.R`, `aflw_season_snapshots.R`, `constants_aflw.R` | Separate AFLW Elo + PSR + match-win-prob pipeline (`fit_aflw_match_model()` / `predict_aflw_win_prob()`), independent constants. Elo/PSR season stats are refreshed by `aflw-season-stats-weekly.yml`; the match model (`aflw_match_model.R`) is experimental and NOT wired into any workflow (no production caller as of 2026-10) |
+| **AFLW** | `aflw_elo.R`, `aflw_match_model.R`, `aflw_psr.R`, `aflw_season_snapshots.R`, `constants_aflw.R` | Separate AFLW Elo + PSR + match-win-prob pipeline (`fit_aflw_match_model()` / `predict_aflw_win_prob()`), independent constants. `aflw-season-stats-weekly.yml` only takes a weekly dated snapshot of AFLW cumulative season stats (statspro), for differencing into per-round figures; AFLW Elo/PSR (`data-raw/06-stat-ratings/aflw_run_pipeline.R`) have no scheduled workflow; the match model (`aflw_match_model.R`) is experimental and NOT wired into any workflow (no production caller as of 2026-10) |
 
 ## Key Constants
 
@@ -165,10 +165,10 @@ stat-models/    # Local cache of the trained per-stat .rds files (one per stat) 
 
 ## Validators
 
-Pre-release data integrity checks in `data_validation.R` and `model_validation.R`:
+What actually guards a release:
 - Column schema enforcement (`column_schema.R`) — every public dataset declares its expected columns
-- Row count / date range / unique-key guards before `save_to_release()`
-- Model-output validators check prediction ranges (e.g., EP within plausible bounds, WP in [0,1])
+- `save_to_release()` guards (`load_data.R`, e.g. the `prev_rows_floor` row-count floor), plus the inline nrow / unique-key asserts in the data-raw scripts before they call it
+- `data-raw/05-validation/` — standalone check scripts (prediction CSVs, lineups, ratings-build fidelity, WP model)
 
 When changing a column or release, update the schema declaration alongside the data so downstream consumers fail loud.
 
@@ -231,9 +231,9 @@ Run a single file with `testthat::test_file("tests/testthat/test-NAME.R")`.
 | Workflow | Trigger | Purpose |
 |----------|---------|---------|
 | `daily-ratings-predictions.yml` | Repository dispatch (from torpdata), **pre-game schedule**, or manual | Compute ratings + match predictions, upload to `predictions` / `ratings-data` |
-| `aflw-season-stats-weekly.yml` | Scheduled, weekly | Refreshes AFLW Elo/PSR season stats |
+| `aflw-season-stats-weekly.yml` | Scheduled, weekly | Weekly dated snapshot of AFLW cumulative season stats (statspro), for differencing into per-round figures. Does NOT refresh AFLW Elo/PSR (`data-raw/06-stat-ratings/aflw_run_pipeline.R`), which has no scheduled workflow |
 | `publish-xrapm-snapshots.yml` | Scheduled or manual | Publishes team RAPM/SPM snapshots |
-| `train-stat-models.yml` | Scheduled or manual | Retrains per-stat Bayesian rating models |
+| `train-stat-models.yml` | Manual only | Retrains the per-stat GAMs (`wt_av_modelling.R`) and publishes to torpmodels `stat-models` |
 | `test-package.yml` | Push/PR | R CMD check + coverage |
 | `pkgdown.yml` | Push to main | Deploy docs to GitHub Pages |
 

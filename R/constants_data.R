@@ -273,3 +273,24 @@ TEAM_RAPM_ASOF_RELEASE_TAG <- "team_rapm_asof-data"
 #'
 #' @keywords internal
 MEM_CACHE_TTL_SECS <- 3600
+
+#' Daily-release trigger windows (has_new_games() in daily_release.R)
+#'
+#' `RELEASE_REPAIR_WINDOW_HOURS`: for this long after a current-round match
+#' ends, every run does a full release even when all files already list the
+#' match -- the late-stats and 2 AM runs re-fetch stats that were partial the
+#' first time. `RELEASE_GAP_RETRY_HOURS`: a match still missing from a release
+#' file keeps triggering a full release for this long after it ends, then is
+#' reported loudly and left alone; some matches never get chains from the AFL
+#' API (CD_M20240142309, 2024 R23: CONCLUDED, 0 pbp rows), and without a bound
+#' the last round would re-release on every scheduled run forever.
+#' `RELEASE_MATCH_DURATION_HOURS` turns a kickoff time into an estimated end.
+#' @keywords internal
+#' @noRd
+RELEASE_REPAIR_WINDOW_HOURS <- 12
+#' @rdname RELEASE_REPAIR_WINDOW_HOURS
+#' @noRd
+RELEASE_GAP_RETRY_HOURS <- 48
+#' @rdname RELEASE_REPAIR_WINDOW_HOURS
+#' @noRd
+RELEASE_MATCH_DURATION_HOURS <- 3

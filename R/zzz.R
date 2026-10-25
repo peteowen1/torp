@@ -17,12 +17,6 @@
 }
 
 .onLoad <- function(libname, pkgname) {
-  # Initialize logging environment if not already done
-  if (exists(".torp_logging_env", envir = asNamespace(pkgname))) {
-    .torp_logging_env$log_level <- "INFO"
-    .torp_logging_env$console_output <- FALSE
-  }
-
   # Attach mgcv early so GAM/BAM predict() finds its internal Xbd C function.
   # mgcv requires its namespace to be ON THE SEARCH PATH (not just loaded) for
   # predict.bam/predict.gam to resolve internal helpers — `loadNamespace()`

@@ -388,27 +388,6 @@ bound_probability <- function(p, lower = 0.001, upper = 0.999) {
   pmax(lower, pmin(upper, p))
 }
 
-#' Calculate time remaining in an AFL match (seconds)
-#'
-#' @param period Numeric vector of period numbers (1-4)
-#' @param period_seconds Numeric vector of seconds elapsed in the current period
-#' @return Numeric vector of seconds remaining in the match
-#' @keywords internal
-calculate_time_remaining <- function(period, period_seconds) {
-  (AFL_MAX_PERIODS - period) * AFL_QUARTER_DURATION +
-    (AFL_QUARTER_DURATION - period_seconds)
-}
-
-#' Calculate time remaining as a proportion of total game time
-#'
-#' @param period Numeric vector of period numbers (1-4)
-#' @param period_seconds Numeric vector of seconds elapsed in the current period
-#' @return Numeric vector of proportions (0 to 1)
-#' @keywords internal
-calculate_time_remaining_pct <- function(period, period_seconds) {
-  calculate_time_remaining(period, period_seconds) / AFL_TOTAL_GAME_SECONDS
-}
-
 #' Calculate game time remaining in an AFL match (playing seconds)
 #'
 #' Uses estimated playing time (excluding stoppages) rather than raw clock time.
@@ -498,3 +477,107 @@ extract_gam_random_effects <- function(model, variable) {
 }
 
 
+
+#' Completed matches in a round that are not yet in the released data
+#'
+#' The decision behind the daily release's "full" mode
+#' (`has_new_games()` in data-raw/01-data/daily_release.R). A match counts as
+#' new only when its fixture status is `CONCLUDED` -- the same filter
+#' [get_match_chains()] applies through `get_round_games()`, so the released
+#' play-by-play never holds a match that was in progress -- and its id is not
+#' among `released_ids`. Until 2026-10-25 the test was "any match in the round
+#' has started", which stayed TRUE for good once the Grand Final was played and
+#' turned every off-season run into a full release.
+#'
+#' @param fixtures Fixture frame with `match_id`, `round_number`, `status`.
+#' @param round Round number to check (the round the release would fetch).
+#' @param released_ids Match ids already released for the season: a character
+#'   vector, or a list of them (one per release file), in which case a match
+#'   counts as released only when EVERY file has it. The full release writes
+#'   pbp first and wraps each later step in a tryCatch that only warns, so a
+#'   match can be in pbp while player_stats or xg never got it; counting it
+#'   released then would stop the late-stats and 2 AM runs from repairing it.
+#' @return Character vector of unreleased completed match ids (possibly empty).
+#' @keywords internal
+#' @noRd
+.unreleased_completed_matches <- function(fixtures, round, released_ids) {
+  if (is.list(released_ids)) {
+    released_ids <- if (length(released_ids) == 0L) character() else
+      Reduce(intersect, lapply(released_ids, as.character))
+  }
+  if (is.null(fixtures) || nrow(fixtures) == 0L) return(character())
+  need <- c("match_id", "round_number", "status")
+  miss <- setdiff(need, names(fixtures))
+  if (length(miss) > 0L) {
+    cli::cli_abort("Fixtures lack {.field {miss}}; cannot tell completed matches from released ones")
+  }
+  done <- fixtures$round_number %in% round & fixtures$status %in% "CONCLUDED"
+  ids <- unique(as.character(fixtures$match_id[done]))
+  setdiff(ids[!is.na(ids)], as.character(released_ids))
+}
+
+# Hours since each concluded current-round match ended (estimated as kickoff
+# + RELEASE_MATCH_DURATION_HOURS). NA kickoffs become Inf: too old to act on.
+.concluded_match_age <- function(fixtures, round, now = Sys.time()) {
+  ids <- .unreleased_completed_matches(fixtures, round, character())
+  if (length(ids) == 0L) return(stats::setNames(numeric(), character()))
+  ko <- .afl_kickoff_utc(fixtures$utc_start_time[match(ids, fixtures$match_id)])
+  age <- as.numeric(difftime(now, ko, units = "hours")) - RELEASE_MATCH_DURATION_HOURS
+  if (anyNA(age)) {
+    bad <- ids[is.na(age)]
+    cli::cli_warn("Kickoff time could not be parsed for concluded match{?es} {.val {bad}}; treating {?it/them} as older than every release window. A fixture format change would stop repair releases here.")
+  }
+  age[is.na(age)] <- Inf
+  stats::setNames(age, ids)
+}
+
+#' Decide whether the daily release should run in full mode
+#'
+#' Rules, in order, over the CONCLUDED matches of `round`:
+#' 1. Any ended under `RELEASE_REPAIR_WINDOW_HOURS` ago: TRUE (`"repair_window"`),
+#'    even if every file lists it -- the late-stats runs re-fetch partial stats.
+#' 2. Any missing from a file in `released` and ended under
+#'    `RELEASE_GAP_RETRY_HOURS` ago: TRUE (`"gap"`).
+#' 3. Otherwise FALSE. Matches still missing past the retry window, but held
+#'    by at least one file (so a full release did run for them), are returned
+#'    in `abandoned` (match_id, file) for the caller to report; they never
+#'    trigger a release. A match in NO file keeps triggering however old.
+#'
+#' @param released Named list of released match-id vectors, one per file, or
+#'   NULL when not read (only rule 1 can then fire; `needs_files` says whether
+#'   reading them is required to decide).
+#' @return list(trigger, reason, recent, gaps, abandoned, needs_files).
+#' @keywords internal
+#' @noRd
+.release_decision <- function(fixtures, round, released = NULL, now = Sys.time()) {
+  age <- .concluded_match_age(fixtures, round, now)
+  out <- list(trigger = FALSE, reason = "none", recent = character(), gaps = character(),
+              abandoned = data.frame(match_id = character(), file = character(),
+                                     hours_since_end = numeric(), stringsAsFactors = FALSE),
+              needs_files = FALSE)
+  if (length(age) == 0L) return(out)
+  recent <- names(age)[age < RELEASE_REPAIR_WINDOW_HOURS]
+  if (length(recent) > 0L) {
+    out$trigger <- TRUE; out$reason <- "repair_window"; out$recent <- recent
+    return(out)
+  }
+  if (is.null(released)) {
+    out$needs_files <- TRUE
+    return(out)
+  }
+  miss <- do.call(rbind, c(list(out$abandoned), lapply(names(released), function(f) {
+    m <- setdiff(names(age), as.character(released[[f]]))
+    data.frame(match_id = m, file = rep(f, length(m)), hours_since_end = unname(age[m]),
+               stringsAsFactors = FALSE)
+  })))
+  # Expire only a match some file already holds: that proves a full release
+  # ran for it and the source simply lacks the rest (no chains). A match in
+  # NO file never had a full release, so it keeps triggering however old.
+  in_any <- unique(unlist(lapply(released, as.character)))
+  retry <- miss$hours_since_end < RELEASE_GAP_RETRY_HOURS | !(miss$match_id %in% in_any)
+  out$abandoned <- miss[!retry, , drop = FALSE]
+  if (any(retry)) {
+    out$trigger <- TRUE; out$reason <- "gap"; out$gaps <- unique(miss$match_id[retry])
+  }
+  out
+}

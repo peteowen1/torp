@@ -373,14 +373,16 @@ if (nrow(torp_new) > 0) {
   # is set). A transient read failure must never be treated as "no existing
   # ratings" -- torp P1/P8: that collapses to overwriting full-history
   # ratings-data with just the seasons computed this run.
-  existing <- tryCatch(
-    load_torp_ratings(version = RATINGS_VINTAGE),
-    vb_error_absent = function(e) NULL,
-    error = function(e) {
-      cli::cli_abort("Could not load existing torp_ratings ({conditionMessage(e)}) - aborting to avoid overwriting full-history ratings-data", parent = e)
-    }
+  # The fresh-start check is per-VINTAGE, not per-tag: publishing a candidate
+  # must neither trip the guard protecting canonical nor bypass its own. A full
+  # rebuild replaces the whole file, so it skips that check (as it always has)
+  # and is floor-guarded below instead.
+  existing <- .read_accumulating_asset(
+    vintage_file, "ratings-data",
+    read = function() load_torp_ratings(version = RATINGS_VINTAGE),
+    empty_is_absent = TRUE,
+    confirm = !REBUILD_ALL_RATINGS
   )
-  if (!is.null(existing) && nrow(existing) == 0) existing <- NULL
 
   if (!REBUILD_ALL_RATINGS) {
     cli::cli_progress_step("Incremental update: upserting into existing ratings")
@@ -404,18 +406,8 @@ if (nrow(torp_new) > 0) {
       }
       cli::cli_inform("Upserted into existing: {nrow(torp_df_total)} total rows (was {nrow(existing)})")
     } else {
-      # Confirmed absent (first-ever publish) -- fresh build is legitimate.
-      is_absent <- tryCatch(
-        # Per-VINTAGE, not per-tag: publishing a candidate must neither trip
-        # the guard protecting canonical nor bypass its own.
-        confirm_fresh_start(get_torp_data_repo(), "ratings-data", vintage_file),
-        error = function(e) {
-          cli::cli_abort("Could not verify {vintage_file} is absent before a fresh upload: {conditionMessage(e)}")
-        }
-      )
-      if (!isTRUE(is_absent)) {
-        cli::cli_abort("Refusing fresh ratings upload: {vintage_file} was not confirmed absent from ratings-data.")
-      }
+      # Confirmed absent (first-ever publish) by .read_accumulating_asset()
+      # above -- fresh build is legitimate.
       torp_df_total <- torp_new
     }
   } else {
