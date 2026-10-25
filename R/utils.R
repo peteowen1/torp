@@ -536,3 +536,60 @@ extract_gam_random_effects <- function(model, variable) {
   ids <- unique(as.character(fixtures$match_id[done]))
   setdiff(ids[!is.na(ids)], as.character(released_ids))
 }
+
+# Hours since each concluded current-round match ended (estimated as kickoff
+# + RELEASE_MATCH_DURATION_HOURS). NA kickoffs become Inf: too old to act on.
+.concluded_match_age <- function(fixtures, round, now = Sys.time()) {
+  ids <- .unreleased_completed_matches(fixtures, round, character())
+  if (length(ids) == 0L) return(stats::setNames(numeric(), character()))
+  ko <- .afl_kickoff_utc(fixtures$utc_start_time[match(ids, fixtures$match_id)])
+  age <- as.numeric(difftime(now, ko, units = "hours")) - RELEASE_MATCH_DURATION_HOURS
+  age[is.na(age)] <- Inf
+  stats::setNames(age, ids)
+}
+
+#' Decide whether the daily release should run in full mode
+#'
+#' Rules, in order, over the CONCLUDED matches of `round`:
+#' 1. Any ended under `RELEASE_REPAIR_WINDOW_HOURS` ago: TRUE (`"repair_window"`),
+#'    even if every file lists it -- the late-stats runs re-fetch partial stats.
+#' 2. Any missing from a file in `released` and ended under
+#'    `RELEASE_GAP_RETRY_HOURS` ago: TRUE (`"gap"`).
+#' 3. Otherwise FALSE. Matches still missing past the retry window are
+#'    returned in `abandoned` (match_id, file) for the caller to report; they
+#'    never trigger a release.
+#'
+#' @param released Named list of released match-id vectors, one per file, or
+#'   NULL when not read (only rule 1 can then fire; `needs_files` says whether
+#'   reading them is required to decide).
+#' @return list(trigger, reason, recent, gaps, abandoned, needs_files).
+#' @keywords internal
+#' @noRd
+.release_decision <- function(fixtures, round, released = NULL, now = Sys.time()) {
+  age <- .concluded_match_age(fixtures, round, now)
+  out <- list(trigger = FALSE, reason = "none", recent = character(), gaps = character(),
+              abandoned = data.frame(match_id = character(), file = character(),
+                                     hours_since_end = numeric(), stringsAsFactors = FALSE),
+              needs_files = FALSE)
+  if (length(age) == 0L) return(out)
+  recent <- names(age)[age < RELEASE_REPAIR_WINDOW_HOURS]
+  if (length(recent) > 0L) {
+    out$trigger <- TRUE; out$reason <- "repair_window"; out$recent <- recent
+    return(out)
+  }
+  if (is.null(released)) {
+    out$needs_files <- TRUE
+    return(out)
+  }
+  miss <- do.call(rbind, c(list(out$abandoned), lapply(names(released), function(f) {
+    m <- setdiff(names(age), as.character(released[[f]]))
+    data.frame(match_id = m, file = rep(f, length(m)), hours_since_end = unname(age[m]),
+               stringsAsFactors = FALSE)
+  })))
+  retry <- miss$hours_since_end < RELEASE_GAP_RETRY_HOURS
+  out$abandoned <- miss[!retry, , drop = FALSE]
+  if (any(retry)) {
+    out$trigger <- TRUE; out$reason <- "gap"; out$gaps <- unique(miss$match_id[retry])
+  }
+  out
+}
