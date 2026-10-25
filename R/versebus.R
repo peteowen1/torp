@@ -212,12 +212,24 @@ vb_list_assets <- function(repo, tag) {
 # `restore <- .vb_with_fresh_listing(); on.exit(restore(), add = TRUE)` (call the
 # helper NOW; only the restore belongs in on.exit) so a publish never leaks
 # the setting to unrelated callers.
+#
+# It also turns off gh's own HTTP cache (`options(gh_cache = FALSE)`). gh >= 1.4
+# wraps every GET in httr2::req_cache(), and GitHub sends
+# `Cache-Control: private, max-age=60`, so a release listing fetched within the
+# last 60 s is served from disk WITHOUT asking GitHub -- piggyback's listings go
+# through gh too, so the cache-duration setting above never reached it.
+# Measured 2026-10-25 against a scratch tag on torpdata: with the listing
+# fetched once beforehand, a just-uploaded asset stayed absent from the
+# gh-cached listing for 56 s while an uncached listing showed it at once, and
+# safe_release_upload() took 70 s instead of ~4 s.
 .vb_with_fresh_listing <- function() {
   prev <- Sys.getenv("piggyback_cache_duration", unset = NA)
   Sys.setenv(piggyback_cache_duration = 1)
+  prev_gh <- options(gh_cache = FALSE)
   function() {
     if (is.na(prev)) Sys.unsetenv("piggyback_cache_duration")
     else Sys.setenv(piggyback_cache_duration = prev)
+    options(prev_gh)
   }
 }
 
