@@ -117,6 +117,28 @@ test_that("a missing release bundle aborts and says how to supply one", {
   expect_error(torp:::.load_np_fit_bundle(2031), "np_fit_2031.rds")
 })
 
+test_that("with no fit for the new season yet, the live path falls back to last season's", {
+  cache <- torp:::.np_fit_cache
+  rm(list = ls(cache, all.names = TRUE), envir = cache)
+  b <- torp:::.np_fit_bundle(fake_pgd(), 2026)
+  asked <- character()
+  testthat::local_mocked_bindings(
+    vb_download = function(repo, tag, name, dest, ...) {
+      asked <<- c(asked, name)
+      if (name != "np_fit_2026.rds") stop("HTTP 404")
+      dir.create(dirname(dest), recursive = TRUE, showWarnings = FALSE)
+      saveRDS(b, dest)
+      invisible(dest)
+    },
+    .package = "torp")
+  expect_message(got <- torp:::.resolve_np_fit(NULL, 2027), "falling back to the 2026 fit")
+  expect_equal(got, b)
+  expect_identical(asked, c("np_fit_2027.rds", "np_fit_2026.rds"))
+  rm(list = ls(cache, all.names = TRUE), envir = cache)
+  testthat::local_mocked_bindings(vb_download = function(...) stop("HTTP 404"), .package = "torp")
+  expect_error(suppressMessages(torp:::.resolve_np_fit(NULL, 2031)), "np_fit_2030.rds")
+})
+
 test_that("scoring a match from another season on a bundle says so", {
   b <- torp:::.np_fit_bundle(fake_pgd(), 2026)
   expect_identical(suppressMessages(torp:::.resolve_np_fit(b, 2026)), b)

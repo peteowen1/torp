@@ -210,7 +210,15 @@
 #' @keywords internal
 .resolve_np_fit <- function(np_fit, season) {
   b <- if (is.null(np_fit)) {
-    .load_np_fit_bundle(season)
+    # Early in a season the nightly has not yet published that season's fit
+    # (round 1, or while its first few matches are too few to fit on). Score on
+    # the previous season's fit until it has (Pete, 2026-10-26).
+    tryCatch(.load_np_fit_bundle(season), error = function(e) {
+      prev <- as.integer(season) - 1L
+      cli::cli_alert_warning(
+        "No {season} season fit yet ({conditionMessage(e)}); falling back to the {prev} fit.")
+      .load_np_fit_bundle(prev)
+    })
   } else if (is.character(np_fit) && length(np_fit) == 1L) {
     .load_np_fit_bundle(season, path = np_fit)
   } else {
