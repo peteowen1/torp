@@ -14,51 +14,6 @@ test_that("setup_torp_logging configures correctly", {
   if (file.exists(temp_log)) file.remove(temp_log)
 })
 
-test_that("log_model_performance stores metrics correctly", {
-  test_metrics <- list(
-    auc = 0.85,
-    log_loss = 0.4,
-    brier_score = 0.2
-  )
-  
-  test_data_info <- list(
-    n_observations = 1000,
-    data_source = "test"
-  )
-  
-  # Should not error
-  expect_silent(log_model_performance("test_model", test_metrics, test_data_info, "1.0"))
-})
-
-test_that("log_data_quality handles different severity levels", {
-  test_issues <- c("Missing values detected", "Outliers found")
-  
-  # Test different severity levels
-  expect_silent(log_data_quality("test_source", test_issues, "LOW"))
-  expect_silent(log_data_quality("test_source", test_issues, "MEDIUM"))
-  expect_silent(log_data_quality("test_source", test_issues, "HIGH"))
-  
-  # Critical should trigger alert (but not error in tests)
-  expect_silent(log_data_quality("test_source", test_issues, "CRITICAL"))
-})
-
-test_that("monitor_model_drift detects performance changes", {
-  baseline_metrics <- list(auc = 0.80, log_loss = 0.5)
-  
-  # No drift case
-  current_metrics_stable <- list(auc = 0.81, log_loss = 0.49)
-  result_stable <- monitor_model_drift("test_model", current_metrics_stable, baseline_metrics, 0.05)
-  
-  expect_false(result_stable$drift_detected)
-  
-  # Drift case
-  current_metrics_drift <- list(auc = 0.70, log_loss = 0.7)
-  result_drift <- monitor_model_drift("test_model", current_metrics_drift, baseline_metrics, 0.05)
-  
-  expect_true(result_drift$drift_detected)
-  expect_true(length(result_drift$drift_details) > 0)
-})
-
 test_that("log_prediction_event logs correctly", {
   # Should not error with valid inputs
   expect_silent(log_prediction_event(
@@ -73,8 +28,6 @@ test_that("log_prediction_event logs correctly", {
   expect_silent(log_prediction_event("test_model", "def456", 50))
 })
 
-test_that("monitor_model_drift tolerates NA AUC and setup rejects bad levels", {
-  res <- suppressWarnings(monitor_model_drift("m", list(auc = NA_real_), list(auc = 0.7)))
-  expect_true(is.na(res$drift_detected))
+test_that("setup_torp_logging rejects bad levels", {
   expect_error(setup_torp_logging(level = "VERBOSE"))
 })

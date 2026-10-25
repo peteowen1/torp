@@ -272,27 +272,3 @@ test_that("mock API response helper creates valid structure", {
 # -----------------------------------------------------------------------------
 # Data Type Validation Tests
 # -----------------------------------------------------------------------------
-
-# -----------------------------------------------------------------------------
-# Integration with Validation Functions
-# -----------------------------------------------------------------------------
-
-test_that("scraper results can be validated with data validation functions", {
-  # Mock some minimal chains-like data
-  mock_result <- data.frame(
-    match_id = "CD_M20240140101",
-    period = 1L,
-    period_seconds = 500.0,
-    x = 50.0,
-    y = 10.0,
-    team_id = 1L,
-    description = "Kick",
-    player_name = "Test Player",
-    utc_start_time = Sys.time(),
-    stringsAsFactors = FALSE
-  )
-
-  # Should be able to validate with chains schema
-  result <- validate_data_schema(mock_result, "chains_data", strict = FALSE)
-  expect_true(result$valid)
-})

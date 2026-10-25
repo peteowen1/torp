@@ -259,13 +259,17 @@ get_epv_preds <- function(df) {
     }
     colnames(preds) <- c("opp_goal", "opp_behind", "behind", "goal", "no_score")
 
-    # Log successful prediction
-    pred_summary <- list(
-      min = min(rowSums(preds)),
-      max = max(rowSums(preds)),
-      mean = mean(rowSums(preds))
-    )
-    log_prediction_event("ep_model", input_hash, nrow(df), pred_summary)
+    # Log successful prediction. The summary is only built when debug logging
+    # is on, so production runs skip the full-frame rowSums.
+    if (.should_log("DEBUG")) {
+      pred_totals <- rowSums(preds)
+      pred_summary <- list(
+        min = min(pred_totals),
+        max = max(pred_totals),
+        mean = mean(pred_totals)
+      )
+      log_prediction_event("ep_model", input_hash, nrow(df), pred_summary)
+    }
 
     return(preds)
 
