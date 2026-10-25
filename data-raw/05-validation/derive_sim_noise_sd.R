@@ -38,8 +38,8 @@ var_injury  <- 2 * SIM_INJURY_SD^2
 noise_sd <- sqrt(sigma^2 - var_ratings - var_injury)
 
 cat(sprintf("honest margin error SD   %.2f over %d matches\n", sigma, nrow(rows)))
-cat(sprintf("  minus team residuals   %.2f^2  (2 x mean residual_se^2)\n", sqrt(var_ratings)))
-cat(sprintf("  minus injury noise     %.2f^2  (2 x SIM_INJURY_SD^2)\n", sqrt(var_injury)))
+cat(sprintf("  minus team residuals   SD %.2f (sqrt of 2 x mean residual_se^2), squared\n", sqrt(var_ratings)))
+cat(sprintf("  minus injury noise     SD %.2f (sqrt of 2 x SIM_INJURY_SD^2), squared\n", sqrt(var_injury)))
 cat(sprintf("=> SIM_NOISE_SD          %.2f  (in use: %s)\n", noise_sd, SIM_NOISE_SD))
 
 # Check: is the error flat in |pred|? (the old formula assumed a 1/3 slope)

@@ -5,7 +5,7 @@
 \alias{AFL_TEAM_ALIASES}
 \title{Named vector mapping team name variants to canonical names}
 \format{
-An object of class \code{character} of length 111.
+An object of class \code{character} of length 117.
 }
 \usage{
 AFL_TEAM_ALIASES

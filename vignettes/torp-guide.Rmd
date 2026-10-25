@@ -225,6 +225,6 @@ all_sims_df <- data.table::rbindlist(all_sims)
 
 | Constant | Default | Description |
 |----------|---------|-------------|
-| `SIM_NOISE_SD` | 26 | Standard deviation of random margin noise |
+| `SIM_NOISE_SD` | 32 | Standard deviation of random margin noise (derived in `data-raw/05-validation/derive_sim_noise_sd.R`) |
 | `SIM_HOME_ADVANTAGE` | 6 | Points added to home team expected margin |
 | `SIM_WP_SCALING_FACTOR` | 50 | Scaling for TORP diff to win probability |
