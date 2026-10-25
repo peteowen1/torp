@@ -7,15 +7,30 @@
 .np_raw_parts(df)
 }
 \description{
-\code{create_player_game_data()} publishes the ledger's three parts as \code{epv_disp}
-(own acts), \code{epv_recv} (won back) and \code{epv_spoil} (team share; \code{epv_hitout}
-is always 0 under v4, so \code{np_team} is just the team pool), and asserts they
-sum to \code{net_points}. \code{player_game_ratings()} then centres those channels by
-(season, lineup_position) for the rating, so the published ones add up to
-\code{epv} and miss \code{net_points} by up to 10.7 points (2026). The site shows
-net_points as EPV beside the channels, so it needs parts that add up to it:
-\code{np_own}, \code{np_won}, \code{np_team}, named like the WPA ledger's \code{wpa_own/won/team}.
-Taken from the \verb{_raw} columns when an older frame has them. Call it on the
+The site shows \code{net_points} as EPV beside four parts that must add up to it:
+\code{np_disp}, \code{np_recv}, \code{np_contest}, \code{np_team} (torp#263). Each is the sum of
+its play types in the published \verb{np_breakdown_<season>}
+(\code{.NP_PLAY_TYPE_FAMILY}). \code{create_player_game_data()} builds them from the
+breakdown and gates them against it, so a player game data frame that
+carries all four is used as it is, after checking they still sum to
+\code{net_points}.
+}
+\details{
+A frame without them (player game data built before torp#263, or by an
+engine with no breakdown: every season before 2026 as released on
+2026-10-25) falls back to the raw channels, which split the same value
+three ways, not four. \code{create_player_game_data()} publishes those as
+\code{epv_disp} (own acts, INCLUDING receiving and errors), \code{epv_recv} (won back:
+turnovers, contests, stoppages) and \code{epv_spoil} + \code{epv_hitout} (the pools).
+They map onto the four columns as: \code{np_disp} = own acts, \code{np_recv} = NA
+(the raw channels cannot separate receiving from disposing; it sits inside
+\code{np_disp}), \code{np_contest} = won back, \code{np_team} = the pools. These are the
+same three values the columns \code{np_own} / \code{np_won} / \code{np_team} carried
+before torp#263, and \code{np_disp + np_contest + np_team} still equals
+\code{net_points}. The fallback \code{np_team} is the whole pool (it includes the
+defensive pool), so it is NOT the breakdown's team family.
+
+The \verb{_raw} columns are used when an older frame has them. Call it on the
 player game DATA (\code{.compute_player_game_ratings()}), never on the published
 ratings, whose channels are already centred.
 }

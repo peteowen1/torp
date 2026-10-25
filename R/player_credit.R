@@ -1470,6 +1470,20 @@ create_player_game_data <- function(pbp_data = NULL,
     if (!is.finite(bd_gap) || bd_gap > 1e-8) {
       cli::cli_abort("v4: the play-type breakdown misses published net_points by {signif(bd_gap, 3)} points.")
     }
+    # The same breakdown, summed into the four columns game-logs publishes
+    # (np_disp / np_recv / np_contest / np_team, .NP_PLAY_TYPE_FAMILY). Built
+    # here, on the frame the breakdown was checked against, so they travel
+    # with player_game_<season> as columns and cannot drift from it (torp#263).
+    fam <- .np_family_sums(np_bd)
+    key <- data.table::data.table(match_id = as.character(plyr_gm_df$match_id),
+                                  player_id = as.character(plyr_gm_df$player_id))
+    fam <- fam[key, on = c("match_id", "player_id")]
+    for (v in .NP_FAMILY_COLS) {
+      x <- fam[[v]]
+      x[is.na(x)] <- 0   # a player-match with no category: nothing to split
+      plyr_gm_df[[v]] <- x
+    }
+    .np_family_gate(plyr_gm_df, np_bd)
     attr(plyr_gm_df, "np_breakdown") <- np_bd
   }
 
