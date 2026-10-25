@@ -488,11 +488,21 @@ XG_COL_MAP <- c(
 #' }
 #'
 #' @param dt A data.table or data.frame of player stats.
+#' @param absent_fill Value given to an expected extended-stat column that is
+#'   absent from the feed altogether (step 8). \code{0L} (default) keeps the
+#'   long-standing AFLM behaviour, which \code{player_credit.R} relies on.
+#'   \code{NA_integer_} marks the stat as not recorded, so the stat-rating
+#'   estimators' NA exclusion (A198) skips it instead of rating real zeros --
+#'   what the AFLW loaders pass, because the AFLW feed's \code{extendedStats}
+#'   block is empty (see \code{AFL-API-REFERENCE.md}).
 #' @return The input coerced to a data.table (a data.frame input is copied, so
 #'   only a data.table input is modified by reference), returned invisibly.
 #'   Assign the result.
 #' @keywords internal
-.normalise_player_stats_columns <- function(dt) {
+.normalise_player_stats_columns <- function(dt, absent_fill = 0L) {
+  if (!(identical(absent_fill, 0L) || identical(absent_fill, NA_integer_))) {
+    cli::cli_abort("{.arg absent_fill} must be {.code 0L} or {.code NA_integer_}.")
+  }
   if (!data.table::is.data.table(dt)) {
     dt <- data.table::as.data.table(dt)
   }
@@ -567,10 +577,13 @@ XG_COL_MAP <- c(
     dt[, (drop_cols) := NULL]
   }
 
-  # --- 8. Last-resort zero-fill for any columns still missing after renaming ---
+  # --- 8. Last-resort fill for any columns still missing after renaming ---
   # Step 0 + the maps above should handle all known schemas. This catches any
   # columns the API genuinely drops (new seasons, provisional data, etc.).
-  # Zero is safe for counting stats: 0 = not recorded.
+  # AFLM (absent_fill = 0L): zero-filled, as player_credit.R expects.
+  # AFLW (absent_fill = NA_integer_, Pete 2026-10-26): the feed has no
+  # extendedStats at all, so these are "not recorded", not zero events, and
+  # NA lets the stat-rating NA exclusion (A198) skip them.
   expected_ext <- c(
     "spoils", "pressure_acts", "def_half_pressure_acts",
     "hitouts_to_advantage", "ruck_contests", "ground_ball_gets",
@@ -584,9 +597,10 @@ XG_COL_MAP <- c(
   if (length(missing_ext) > 0) {
     # Consumers (player_credit.R) rely on the zero-fill, so keep it, but say so
     # immediately: a missing feed is otherwise indistinguishable from real zeros.
-    message("Zero-filling missing API columns (absent from feed, not real zeros): ",
+    message(if (is.na(absent_fill)) "NA-filling" else "Zero-filling",
+            " missing API columns (absent from feed, not real zeros): ",
             paste(missing_ext, collapse = ", "))
-    dt[, (missing_ext) := 0L]
+    dt[, (missing_ext) := absent_fill]
   }
 
   invisible(dt)

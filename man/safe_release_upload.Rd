@@ -27,9 +27,13 @@ safe_release_upload(
 Invisible asset id.
 }
 \description{
-Uploads under a temporary asset name, waits until the listing shows it in
+Uploads under a temporary asset name, waits until GitHub reports it in
 state \code{uploaded} at the local byte size, and only then deletes the old
 asset (plus temp copies stranded by earlier runs) and renames the new one.
+The check reads the asset by the id the upload returned
+(\code{GET /releases/assets/{id}}), falling back to the release listing by name
+when the upload response carries no usable id. Every read bypasses gh's HTTP
+cache, which otherwise served a pre-upload listing for up to 60 s.
 A failure before the delete leaves the old asset untouched. A failure of
 the final rename leaves the data on the release under its temp name, which
 \code{\link[=confirm_fresh_start]{confirm_fresh_start()}} refuses to treat as absent.

@@ -79,7 +79,7 @@ test_that("EPR_PRIOR_GAMES_HITOUT is within reasonable bounds", {
 # -----------------------------------------------------------------------------
 
 test_that("SIM_NOISE_SD has expected value", {
-  expect_equal(torp:::SIM_NOISE_SD, 26)
+  expect_equal(torp:::SIM_NOISE_SD, 32)
   expect_true(torp:::SIM_NOISE_SD > 0)
   expect_true(torp:::SIM_NOISE_SD < 100)  # Reasonable bound for noise
 })
@@ -166,7 +166,7 @@ test_that("simulation constants produce valid probabilities", {
 })
 
 test_that("home advantage constant affects simulations appropriately", {
-  # Home advantage of 6 points with noise SD of 26
+  # Home advantage of 6 points with noise SD of 32
   # should give roughly 59% win rate for equal teams
   home_adv <- torp:::SIM_HOME_ADVANTAGE
   noise_sd <- torp:::SIM_NOISE_SD

@@ -967,7 +967,12 @@ load_player_stats <- function(seasons = get_afl_season(), use_disk_cache = TRUE,
   )
 
   # Normalise once after retrieval (handles both fresh API data and stale disk cache)
-  if (nrow(out) > 0) out <- tibble::as_tibble(.normalise_player_stats_columns(out))
+  # AFLW's feed has no extendedStats block, so its absent stats become NA (not
+  # recorded) rather than 0; AFLM keeps the zero-fill player_credit.R relies on.
+  absent_fill <- if (comp == "AFLW") NA_integer_ else 0L
+  if (nrow(out) > 0) {
+    out <- tibble::as_tibble(.normalise_player_stats_columns(out, absent_fill = absent_fill))
+  }
 
   out <- .normalise_team_values(out)
   out

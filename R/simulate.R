@@ -116,7 +116,7 @@ simulate_season <- function(sim_teams, sim_games, return_teams = FALSE,
       na_idx <- which(na_mask)
       new_result <- as.integer(round(
         stats::rnorm(length(na_idx), estimate[na_idx],
-                     SIM_NOISE_SD + abs(estimate[na_idx]) / 3)
+                     SIM_NOISE_SD)
       ))
       data.table::set(sim_games_r, i = na_idx, j = "result", value = new_result)
     }

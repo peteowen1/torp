@@ -74,7 +74,7 @@ simulate_match <- function(home_torp, away_torp,
 
   repeat {
     result <- as.integer(round(
-      stats::rnorm(1, estimate, SIM_NOISE_SD + abs(estimate) / 3)
+      stats::rnorm(1, estimate, SIM_NOISE_SD)
     ))
     if (allow_draw || result != 0L) break
   }
