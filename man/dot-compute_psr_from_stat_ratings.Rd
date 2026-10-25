@@ -14,7 +14,8 @@
   comp = "AFLM",
   psr_centre = c("career", "listed", "weekly"),
   lineup = NULL,
-  season_listing = NULL
+  season_listing = NULL,
+  ref_before_season = NULL
 )
 }
 \arguments{
@@ -59,6 +60,9 @@ See \code{\link{calculate_psr}}. The key column is attached here when
 \item{season_listing}{Optional listing frame for \code{"listed"}:
 \code{player_id}, \code{season}, \code{position}. Loaded from
 \code{load_player_details()} when NULL.}
+
+\item{ref_before_season}{Passed to \code{calculate_psr()}; NULL in
+production. See there.}
 }
 \value{
 A data.table with \code{psr}, \code{osr}, \code{dsr} columns.

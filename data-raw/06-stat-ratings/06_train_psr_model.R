@@ -11,14 +11,48 @@
 #   OSR = Σ β_own_off × rating/sd  (your ratings → your team scores more)
 #   DSR = -Σ β_opp_def × rating/sd (your ratings → opponent scores less)
 #
-# Train: 2021-2024, Test: 2025
+# Train: 2021-2024, Test: 2025 (the default; see the cutoff setting below)
+#
+# Training cutoff (added 2026-10-25 for the honest backfill,
+# torpverse/docs/plans/HONEST-BACKFILL-2021-2025.md). Two environment variables:
+#   PSR_TRAIN_THROUGH  last season in training (default 2024 = today's split,
+#                      season < 2025). Test season(s) are everything after it.
+#   PSR_OUT_DIR        where to write the three coefficient CSVs and
+#                      psr_model.rds. Default unset = today's behaviour
+#                      (data-raw/cache-stat-ratings/ AND inst/extdata/, which
+#                      is what production reads). When set, ONLY this folder is
+#                      written, so a historical refit can never replace the
+#                      shipped coefficients.
+# With PSR_TRAIN_THROUGH unset, every number this script produces is unchanged.
+# When it is set, three more things move with the cutoff so nothing after it
+# leaks in: the weight anchor (31 Dec of the cutoff season, as 2024-12-31 is
+# today), the position means used to impute missing ratings (training seasons
+# only), and -- when fewer than 3 training seasons exist, which cv.glmnet's
+# 3-fold minimum cannot season-block -- the CV folds become 5 chronological
+# blocks of matches instead of one fold per season.
 
 # Setup ----
-devtools::load_all()
+# Skip the reload when torp is already loaded, so a caller can seed caches
+# (e.g. local fixtures/lineups) before sourcing this script.
+if (!"torp" %in% loadedNamespaces()) devtools::load_all()
 library(glmnet)
 library(data.table)
 
 cache_dir <- file.path("data-raw", "cache-stat-ratings")
+
+psr_cutoff_env <- Sys.getenv("PSR_TRAIN_THROUGH", unset = "")
+psr_cutoff_set <- nzchar(psr_cutoff_env)
+psr_train_through <- if (psr_cutoff_set) as.integer(psr_cutoff_env) else 2024L
+if (is.na(psr_train_through)) stop("PSR_TRAIN_THROUGH must be a season, e.g. 2023")
+psr_out_dir <- Sys.getenv("PSR_OUT_DIR", unset = "")
+if (psr_cutoff_set && !nzchar(psr_out_dir)) {
+  stop("PSR_TRAIN_THROUGH is set but PSR_OUT_DIR is not: a historical refit would overwrite ",
+       "inst/extdata/*_coefficients.csv, which production reads. Set PSR_OUT_DIR.")
+}
+if (nzchar(psr_out_dir)) dir.create(psr_out_dir, recursive = TRUE, showWarnings = FALSE)
+message(sprintf("PSR training through %d (%s); output: %s", psr_train_through,
+                if (psr_cutoff_set) "PSR_TRAIN_THROUGH" else "default",
+                if (nzchar(psr_out_dir)) psr_out_dir else "cache-stat-ratings + inst/extdata (production)"))
 
 rmse <- function(a, p) sqrt(mean((a - p)^2))
 mae <- function(a, p) mean(abs(a - p))
@@ -77,10 +111,11 @@ cli::cli_inform("{length(rating_cols)} stat rating columns for PSR training")
 ratings_join <- stat_ratings[, c("player_id", "season", "round", "pos_group", rating_cols), with = FALSE]
 merged <- merge(teams, ratings_join, by = c("player_id", "season", "round"), all.x = TRUE)
 
-# Impute
-pos_means <- merged[!is.na(pos_group), lapply(.SD, mean, na.rm = TRUE),
-                    by = pos_group, .SDcols = rating_cols]
-global_means <- merged[, lapply(.SD, mean, na.rm = TRUE), .SDcols = rating_cols]
+# Impute. With a cutoff set, the means come from training seasons only.
+impute_src <- if (psr_cutoff_set) merged[season <= psr_train_through] else merged
+pos_means <- impute_src[!is.na(pos_group), lapply(.SD, mean, na.rm = TRUE),
+                        by = pos_group, .SDcols = rating_cols]
+global_means <- impute_src[, lapply(.SD, mean, na.rm = TRUE), .SDcols = rating_cols]
 for (sc in rating_cols) {
   na_idx <- which(is.na(merged[[sc]]))
   if (length(na_idx) > 0) {
@@ -133,13 +168,13 @@ match_df <- merge(match_df,
 cli::cli_inform("Match rows: {nrow(match_df)}, Features: {length(home_cols) + length(away_cols)} (52 home + 52 away)")
 
 # Weights
-anchor_date <- as.Date("2024-12-31")
+anchor_date <- as.Date(sprintf("%d-12-31", psr_train_through))
 match_df[, weightz := exp(as.numeric(-(anchor_date - match_date)) / MATCH_WEIGHT_DECAY_DAYS)]
 match_df[, weightz := weightz / mean(weightz, na.rm = TRUE)]
 
 # Train/test split
-train_idx <- which(match_df$season < 2025)
-test_idx <- which(match_df$season >= 2025)
+train_idx <- which(match_df$season <= psr_train_through)
+test_idx <- which(match_df$season > psr_train_through)
 
 # Standardize by training SD
 all_feat_cols <- c(home_cols, away_cols)
@@ -164,6 +199,12 @@ cli::cli_inform("Train: {length(train_idx)}, Test: {length(test_idx)}")
 # CV folds
 train_seasons <- match_df$season[train_idx]
 foldid <- as.integer(factor(train_seasons, levels = sort(unique(train_seasons))))
+if (length(unique(train_seasons)) < 3) {
+  # cv.glmnet needs >= 3 folds; with 1-2 training seasons, block by date.
+  ord_dates <- match_df$match_date[train_idx]
+  foldid <- as.integer(cut(rank(ord_dates, ties.method = "first"), 5, labels = FALSE))
+  cli::cli_alert_warning("Only {length(unique(train_seasons))} training season{?s}: CV uses 5 chronological blocks instead of season folds")
+}
 
 # 3. Fit models ----
 
@@ -381,12 +422,13 @@ if ("wt_80s" %in% names(latest)) {
 cli::cli_h1("Saving outputs")
 
 # Save to cache (development) and inst/extdata (production — used by calculate_psr())
-write.csv(osr_coef_df, file.path(cache_dir, "osr_coefficients.csv"), row.names = FALSE)
-write.csv(dsr_coef_df, file.path(cache_dir, "dsr_coefficients.csv"), row.names = FALSE)
-write.csv(psr_coef_df, file.path(cache_dir, "psr_coefficients.csv"), row.names = FALSE)
-write.csv(osr_coef_df, "inst/extdata/osr_coefficients.csv", row.names = FALSE)
-write.csv(dsr_coef_df, "inst/extdata/dsr_coefficients.csv", row.names = FALSE)
-write.csv(psr_coef_df, "inst/extdata/psr_coefficients.csv", row.names = FALSE)
+# With PSR_OUT_DIR set, that folder alone is written.
+coef_dirs <- if (nzchar(psr_out_dir)) psr_out_dir else c(cache_dir, "inst/extdata")
+for (d in coef_dirs) {
+  write.csv(osr_coef_df, file.path(d, "osr_coefficients.csv"), row.names = FALSE)
+  write.csv(dsr_coef_df, file.path(d, "dsr_coefficients.csv"), row.names = FALSE)
+  write.csv(psr_coef_df, file.path(d, "psr_coefficients.csv"), row.names = FALSE)
+}
 
 model_out <- list(
   margin_model = margin_fit$model, off_model = off_fit$model, def_model = def_fit$model,
@@ -399,7 +441,7 @@ model_out <- list(
   test_rmse_margin = margin_fit$test_rmse,
   test_rmse_psr = rmse(y_margin_test, pred_psr_combined)
 )
-saveRDS(model_out, file.path(cache_dir, "psr_model.rds"))
+saveRDS(model_out, file.path(if (nzchar(psr_out_dir)) psr_out_dir else cache_dir, "psr_model.rds"))
 
 cli::cli_alert_success("Saved outputs")
 cli::cli_alert_success("Done!")

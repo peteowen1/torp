@@ -13,7 +13,8 @@ calculate_psr_components(
   centre_by_round = PSR_CENTRE_BY_ROUND,
   listed_pos = NULL,
   centre_on_listed = PSR_CENTRE_ON_LISTED,
-  psr_centre = c("career", "listed", "weekly")
+  psr_centre = c("career", "listed", "weekly"),
+  ref_before_season = NULL
 )
 }
 \arguments{
@@ -66,6 +67,8 @@ recently named in on a team sheet. Kept reachable for scoring only: read
 under the listing it roughly doubled the positional spread Thread G
 set out to remove (2026: 0.679 -> 1.328).
 }}
+
+\item{ref_before_season}{Passed to \code{calculate_psr()} for all three arms.}
 }
 \value{
 A data.table with columns: \code{player_id}, \code{player_name},
