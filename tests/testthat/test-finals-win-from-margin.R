@@ -66,8 +66,62 @@ test_that(".heldout_margin_sigma sizes the spread from completed locked predicti
 })
 
 test_that(".heldout_margin_sigma returns NA, not an error, when the load fails", {
-  local_mocked_bindings(load_predictions = function(...) stop("offline"))
-  expect_true(is.na(suppressMessages(torp:::.heldout_margin_sigma())))
+  local_mocked_bindings(load_predictions = function(...) stop("offline"),
+                        .load_honest_backfill_predictions = function(...) stop("offline"))
+  expect_true(is.na(suppressWarnings(suppressMessages(torp:::.heldout_margin_sigma()))))
+})
+
+test_that(".heldout_margin_sigma uses live-locked rows plus the honest backfill, not the hindsight rows", {
+  set.seed(5)
+  honest <- data.frame(pred_margin = rnorm(120, 0, 20))
+  honest$margin <- honest$pred_margin + rnorm(120, 0, 33)
+  locked <- data.frame(pred_margin = rnorm(60, 0, 20))
+  locked$margin <- locked$pred_margin + rnorm(60, 0, 30)
+  locked$margin[1:5] <- NA                              # not played yet
+  asked <- NULL
+  local_mocked_bindings(
+    .load_honest_backfill_predictions = function(...) honest,
+    get_afl_season = function(...) 2027L,
+    load_predictions = function(seasons, ...) { asked <<- seasons; locked }
+  )
+  both <- rbind(locked, honest)
+  expect_equal(torp:::.heldout_margin_sigma(), torp:::.residual_sd(both$margin, both$pred_margin))
+  expect_identical(asked, LIVE_LOCK_FIRST_SEASON:2027L)   # no pre-live-lock season requested
+})
+
+test_that(".heldout_margin_sigma warns and falls back to every predictions row when the backfill cannot be read", {
+  set.seed(6)
+  p <- data.frame(pred_margin = rnorm(150, 0, 20))
+  p$margin <- p$pred_margin + rnorm(150, 0, 32)
+  asked <- NULL
+  local_mocked_bindings(
+    .load_honest_backfill_predictions = function(...) stop("404"),
+    load_predictions = function(seasons, ...) { asked <<- seasons; p }
+  )
+  expect_warning(s <- torp:::.heldout_margin_sigma(), "Honest backfill predictions could not be read")
+  expect_true(isTRUE(asked))
+  expect_equal(s, stats::sd(p$margin - p$pred_margin))
+})
+
+test_that(".load_honest_backfill_predictions reads only pre-live-lock backfill files, and errors without them", {
+  urls <- NULL
+  local_mocked_bindings(
+    get_release_assets = function(...) c("predictions_2024.parquet", "backfill_predictions_2023.parquet",
+                                         "backfill_predictions_2022.parquet", "backfill_predictions_2022.csv",
+                                         paste0("backfill_predictions_", LIVE_LOCK_FIRST_SEASON, ".parquet")),
+    load_from_url = function(url, ...) { urls <<- url; data.frame(margin = 1, pred_margin = 0) }
+  )
+  torp:::.load_honest_backfill_predictions()
+  expect_identical(basename(urls), c("backfill_predictions_2022.parquet", "backfill_predictions_2023.parquet"))
+  expect_true(all(grepl("/predictions/backfill_predictions_", urls, fixed = TRUE)))
+
+  local_mocked_bindings(get_release_assets = function(...) "predictions_2024.parquet")
+  expect_error(torp:::.load_honest_backfill_predictions(), "no")
+  local_mocked_bindings(get_release_assets = function(...) NULL)
+  expect_error(torp:::.load_honest_backfill_predictions(), "listing")
+  local_mocked_bindings(get_release_assets = function(...) "backfill_predictions_2022.parquet",
+                        load_from_url = function(...) data.frame())
+  expect_error(torp:::.load_honest_backfill_predictions(), "empty")
 })
 
 test_that(".margin_residual_sd sizes the spread from completed rows only", {

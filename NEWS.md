@@ -1,3 +1,7 @@
+# torp (development version)
+
+* The finals margin sigma (`.heldout_margin_sigma()`) is now sized only from honest out-of-sample rows: predictions locked live from 2026 (`LIVE_LOCK_FIRST_SEASON`) plus the round-by-round `backfill_predictions_<season>` files for 2022-2025. The 2021-2025 `predictions_<season>` rows were made by models trained on those seasons and pulled the spread down: 32.4 over 1,062 matches with them, 33.05 over 940 honest matches (828 backfill + 112 live 2026) without, measured 2026-10-25. If the backfill files cannot be read it warns and uses every predictions row, as before.
+
 # torp 1.10.1
 
 * `run_ratings_pipeline.R` no longer overwrites a season's `player_game_ratings` with an EPV-only file when PSV fails: stage 5 runs `.add_psv_to_game_ratings(strict = TRUE)` and names any season it skipped.

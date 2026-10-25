@@ -1854,31 +1854,87 @@ MARGIN_SIGMA_MIN_N <- 100L
 }
 
 
-#' Held-out spread of the margin model, from the locked pre-game predictions
+#' Held-out spread of the margin model, from out-of-sample predictions
 #'
-#' `sd(margin - pred_margin)` over every completed match in the `predictions`
-#' release, finals included. Those rows are locked before the match is played,
-#' so their errors are out of sample -- unlike `.margin_residual_sd()`, which
-#' measures the residuals of a model trained on the same matches. (Not
-#' perfectly: a few rows were computed after kickoff, which
-#' `.warn_post_hoc_predictions()` exists to flag; they would pull the spread
-#' down slightly.) Measured 2026-10-11: 32.4 over 1,062 completed matches
-#' 2021-2026 (32.3 over the 1,006 home-and-away ones), against 30.9 in sample.
+#' `sd(margin - pred_margin)` over every completed match with an honest
+#' pre-game prediction, finals included: the rows locked live at kickoff
+#' (seasons from `LIVE_LOCK_FIRST_SEASON` on) plus the honest
+#' `backfill_predictions_<season>` rows for earlier seasons, which were
+#' regenerated round by round with no future data. Unlike
+#' `.margin_residual_sd()`, which measures the residuals of a model trained on
+#' the same matches, these errors are out of sample.
 #'
-#' @param preds Optional locked-predictions frame with `margin` and
-#'   `pred_margin`; loaded with `load_predictions(TRUE)` when NULL.
+#' The 2021-2025 `predictions_<season>` rows are NOT used: they were made on
+#' 2026-04-12 by models trained on those seasons, so their errors are hindsight
+#' (32.4 over 1,062 matches 2021-2026, against 33.29 over the 828 honest
+#' 2022-2025 rows; torpverse `docs/reference/FINALS-SIGMA-DERIVATION.md`). If
+#' the backfill files cannot be read, it warns and falls back to every
+#' `predictions` row, hindsight included.
+#'
+#' @param preds Optional frame with `margin` and `pred_margin`, used as is.
+#'   When NULL, loaded as described above.
 #' @param min_n Fewest completed matches to size it from.
 #' @return The SD, or `NA_real_` when the load fails or fewer than `min_n`
 #'   completed matches are available.
 #' @keywords internal
 .heldout_margin_sigma <- function(preds = NULL, min_n = MARGIN_SIGMA_MIN_N) {
-  if (is.null(preds)) {
-    preds <- tryCatch(load_predictions(TRUE, columns = c("margin", "pred_margin")),
-                      error = function(e) {
-                        cli::cli_alert_warning("Locked predictions failed to load: {conditionMessage(e)}")
-                        NULL
-                      })
-  }
+  if (is.null(preds)) preds <- .load_heldout_margin_rows()
   if (is.null(preds) || !all(c("margin", "pred_margin") %in% names(preds))) return(NA_real_)
   .residual_sd(preds$margin, preds$pred_margin, min_n)
+}
+
+
+#' Load the out-of-sample margin rows behind `.heldout_margin_sigma()`
+#'
+#' Live-locked `predictions` rows from `LIVE_LOCK_FIRST_SEASON` on, plus the
+#' honest backfill rows for earlier seasons. When the backfill cannot be read,
+#' warns and returns every `predictions` row (the pre-backfill behaviour).
+#' @return A data frame with `margin` and `pred_margin`, or NULL when the
+#'   predictions themselves fail to load.
+#' @keywords internal
+#' @noRd
+.load_heldout_margin_rows <- function() {
+  cols <- c("margin", "pred_margin")
+  honest <- tryCatch(.load_honest_backfill_predictions(cols), error = function(e) {
+    cli::cli_warn(c(
+      "Honest backfill predictions could not be read: {conditionMessage(e)}",
+      "!" = "Sizing the finals margin sigma from every {.val predictions} row instead, including the hindsight 2021-{LIVE_LOCK_FIRST_SEASON - 1L} rows."
+    ))
+    NULL
+  })
+  live_seasons <- if (is.null(honest)) TRUE else seq(LIVE_LOCK_FIRST_SEASON, max(LIVE_LOCK_FIRST_SEASON, get_afl_season()))
+  locked <- tryCatch(load_predictions(live_seasons, rounds = TRUE, columns = cols),
+                     error = function(e) {
+                       cli::cli_alert_warning("Locked predictions failed to load: {conditionMessage(e)}")
+                       NULL
+                     })
+  if (is.null(locked)) return(NULL)
+  if (is.null(honest)) return(locked)
+  if (!all(cols %in% names(locked))) return(NULL)
+  rbind(as.data.frame(locked)[, cols], as.data.frame(honest)[, cols])
+}
+
+
+#' Read the honest `backfill_predictions_<season>` files
+#'
+#' One file per season before `LIVE_LOCK_FIRST_SEASON`, on the `predictions`
+#' release; which seasons exist is read from the release listing.
+#' @param columns Columns to read.
+#' @return A data frame of the backfill rows. Errors when the listing fails,
+#'   no backfill file is listed, or the files load empty or without `columns`.
+#' @keywords internal
+#' @noRd
+.load_honest_backfill_predictions <- function(columns = c("margin", "pred_margin")) {
+  assets <- get_release_assets("predictions")
+  if (is.null(assets)) cli::cli_abort("the {.val predictions} release listing could not be fetched")
+  files <- grep("^backfill_predictions_[0-9]{4}[.]parquet$", assets, value = TRUE)
+  file_season <- as.integer(gsub("[^0-9]", "", files))
+  files <- files[file_season < LIVE_LOCK_FIRST_SEASON]
+  if (length(files) == 0) cli::cli_abort("no {.file backfill_predictions_<season>.parquet} files on the {.val predictions} release")
+  urls <- paste0(.release_download_base(), "/predictions/", sort(files))
+  out <- load_from_url(urls, columns = columns)
+  if (nrow(out) == 0 || !all(columns %in% names(out))) {
+    cli::cli_abort("the backfill files loaded empty or without {.field {columns}}")
+  }
+  out
 }
