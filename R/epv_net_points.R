@@ -1087,7 +1087,9 @@
 #' @param beta Disposer's share of a lost surprise (difficulty).
 #' @param omega Offence team-pool share (difficulty).
 #' @param terms Output of `.np_difficulty_terms()`, or `NULL` under flat.
-#' @return `led` with `kind`, `scored`, `contested` and the six parts `own_hm`,
+#' @return `led` with `kind`, `row_role` (`"decision"` on a kick or handball,
+#'   `"reception"` on everything else, stoppages included), `scored`,
+#'   `contested` and the six parts `own_hm`,
 #'   `recv_hm`, `win_hm` (a same-team contest winner), `team_hm`, `cede_hm`
 #'   (ground-ball value ceded to the opposition) and `cede_c_hm` (contest
 #'   value ceded to the opposition, routed to the contest winner by
@@ -1104,6 +1106,11 @@
   l <- data.table::copy(led)
   if (!"is_stoppage" %in% names(l)) l[, is_stoppage := FALSE]
   l[, is_disp := description %in% NP_DISPOSAL_DESCS & !is_stoppage]
+  # Every row is either the disposer's choice (a kick or handball) or the ball
+  # arriving: a mark, a gather, a free, and stoppages too, which hand the ball
+  # to whoever wins it (Pete, 2026-10-26, scenarios review item 6b). A label
+  # only: nothing below reads it.
+  l[, row_role := data.table::fifelse(is_disp, "decision", "reception")]
   # A row where the NEXT act belongs to the opposition is a turnover, and until
   # 2026-09-07 that was only true of kicks and handballs: every other act fell
   # to "act", which pays 100% to the actor and credits nobody. So a player who

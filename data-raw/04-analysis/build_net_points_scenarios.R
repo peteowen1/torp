@@ -382,7 +382,7 @@ act_label <- function(desc, kind, points_shot, last_in_period, m, d) {
 build_trace <- function(pg, show_phantoms = FALSE) {
   rows <- PBP[match_id == pg$match_id & display_order %between% c(pg$lo, pg$hi)]
   setorder(rows, display_order)
-  rows <- merge(rows, l[, .(match_id, display_order, kind, scored, dec_hm, contested)],
+  rows <- merge(rows, l[, .(match_id, display_order, kind, row_role, scored, dec_hm, contested)],
                 by = c("match_id", "display_order"), all.x = TRUE)
   setorder(rows, display_order)
   stopifnot(nrow(rows) > 0)
@@ -415,7 +415,7 @@ render_trace_html <- function(pg, rows) {
       team   <- if (is.na(r$team)) "&mdash;" else esc(r$team)
       cls <- if (r$display_order == pg$hl) "phantom turn" else "phantom"
       return(sprintf(
-        '<tr class="%s"><td>%d</td><td class="desc">%s</td><td>%s</td><td>%s</td><td class="num-col" colspan="4">not its own play-by-play row &mdash; value already inside the surrounding rows</td></tr>',
+        '<tr class="%s"><td>%d</td><td class="desc">%s</td><td>%s</td><td>%s</td><td>&mdash;</td><td class="num-col" colspan="4">not its own play-by-play row &mdash; value already inside the surrounding rows</td></tr>',
         cls, r$display_order, esc(r$description), player, team
       ))
     }
@@ -427,10 +427,11 @@ render_trace_html <- function(pg, rows) {
     team   <- if (is.na(r$team)) "&mdash;" else esc(r$team)
     act <- act_label(r$description, r$kind, r$points_shot, r$last_in_period, r$match_id, r$display_order)
     delta_cls <- cls_sign(r$delta_epv)
+    role <- if (is.na(r$row_role)) "&mdash;" else r$row_role
     sprintf(
-      '<tr%s><td>%d</td><td class="desc">%s</td><td>%s</td><td>%s</td><td class="num-col">%s</td><td class="num-col">%s</td><td class="num-col">%s</td><td class="num-col delta %s">%s</td></tr>',
+      '<tr%s><td>%d</td><td class="desc">%s</td><td>%s</td><td>%s</td><td>%s</td><td class="num-col">%s</td><td class="num-col">%s</td><td class="num-col">%s</td><td class="num-col delta %s">%s</td></tr>',
       if (is_hl) ' class="turn"' else "",
-      r$display_order, act, player, team,
+      r$display_order, act, player, team, role,
       fmt_plain(r$exp_pts), fmt_plain(r$ev_choice), fmt_plain(r$ep_after),
       delta_cls, fmt_signed(r$delta_epv)
     )
@@ -441,8 +442,10 @@ render_trace_html <- function(pg, rows) {
   paste0(
     '<p class="ctx framenote">Expected points are shown from the acting player&rsquo;s own side on each row: ',
     'positive is good for the team listed on that row. At a turnover the &ldquo;after&rdquo; value is negative ',
-    'because the other side now has the ball.', phantom_note, '</p>',
-    '<table class="trace"><thead><tr><th>Row</th><th>Act</th><th>Player</th><th>Team</th>',
+    'because the other side now has the ball. Role is &ldquo;decision&rdquo; on a kick or handball, the ',
+    'player&rsquo;s choice, and &ldquo;reception&rdquo; on everything else, stoppages included: the ball ',
+    'arriving with whoever wins it. Only decision rows carry an EV of the choice.', phantom_note, '</p>',
+    '<table class="trace"><thead><tr><th>Row</th><th>Act</th><th>Player</th><th>Team</th><th>Role</th>',
     '<th class="num-col">EP before</th><th class="num-col">EV of the choice</th>',
     '<th class="num-col">EP after</th><th class="num-col">&Delta;EP</th></tr></thead><tbody>',
     paste(trs, collapse = "\n"),
