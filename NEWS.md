@@ -1,3 +1,7 @@
+# torp 1.10.5
+
+* The Net Points ledger labels each row `row_role`: `"decision"` on a kick or handball, `"reception"` on everything else, stoppages included (scenarios review 6b, Pete 2026-10-26). A label only; no rating changes. The Net Points scenarios page shows it as a Role column.
+
 # torp 1.10.4
 
 * `save_to_release()` writes the `player_game_<season>` and `score_events_<season>` parquets without R's attribute metadata in the footer (#261), cutting the 2025 files from 11.5 MB to 2.2 MB and 2.65 MB to 0.14 MB. Column classes and values are unchanged; readers already rebuild the data.table and restore `epv_engine` from its column. Other assets are written as before (`RELEASE_PARQUET_NO_R_METADATA_STEMS`).
