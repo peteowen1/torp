@@ -7,7 +7,20 @@
 # IDs agrees with round order across seasons, regular rounds and finals.
 # Format: CD_M{YYYY}{CCC}{RR}{GG} -- round and game are zero-padded to 2 digits
 # and finals continue the round count (2021: R24 = Finals Week 1, R27 = Grand
-# Final). Fixture below uses real 2021 IDs and start times.
+# Final).
+#
+# Fixture provenance: the IDs follow that real format (most of them exist in the
+# torpdata `results-data` release, results_2021/2022.parquet; CD_M20220140001 is
+# an invented round-00 sentinel and is not a real match). The start times are
+# ILLUSTRATIVE, written to be consistent with round order; they were not copied
+# from the release and several differ from the real kick-offs.
+#
+# Within a round, IDs are NOT in kick-off order. Checked on the release's 1,280
+# matches (2021-2026): order(match_id) differs from order(utc_start_time) for
+# 1,111 pairs, all inside a single round (e.g. 2021 R10 game 01 kicked off after
+# game 02). Across rounds there are no overlaps. The rating code only relies on
+# round-level order (match_ref is a round prefix), so that is what is asserted
+# here; do not read these tests as promising kick-off order within a round.
 # -----------------------------------------------------------------------------
 
 match_id_fixture <- function() {
