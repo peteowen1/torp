@@ -63,9 +63,9 @@ test_that("flipping the engine to v3 changes exactly the intended constants", {
 
   # Each prior rate must carry its OWN channel's factor. This is the check that
   # would have caught the 0.919 fallback bug from the other direction.
-  expect_equal(-0.7 * .epr_prior_points_scale("recv",        "v3"), -0.7 * pts[["recv"]])
-  expect_equal(-0.7 * .epr_prior_points_scale("disp",        "v3"), -0.7 * pts[["disp"]])
-  expect_equal(-0.3 * .epr_prior_points_scale("cont_aerial", "v3"), -0.3 * pts[["cont_aerial"]])
+  expect_equal(.epr_prior_rate("recv",  "v3"), -0.7 * pts[["recv"]])
+  expect_equal(.epr_prior_rate("disp",  "v3"), -0.7 * pts[["disp"]])
+  expect_equal(.epr_prior_rate("spoil", "v3"), -0.3 * pts[["cont_aerial"]])
   # The hitout slot holds nothing under 3 channels, so it must shrink toward
   # exactly zero rather than toward a prior for a channel that does not exist.
   expect_equal(.epr_prior_rate_hitout("v3", channels = 3L), 0)
@@ -86,5 +86,8 @@ test_that("the live constants are exactly what their functions return for the li
   expect_identical(EPR_PRIOR_GAMES_DISP,  .epr_prior_games("disp",  EPV_ENGINE))
   expect_identical(EPR_PRIOR_GAMES_SPOIL, .epr_prior_games("spoil", EPV_ENGINE))
   expect_identical(EPV_STANDARDISE_CHANNELS, .epv_standardise_channels(EPV_ENGINE))
+  expect_identical(EPR_PRIOR_RATE_RECV,  .epr_prior_rate("recv",  EPV_ENGINE))
+  expect_identical(EPR_PRIOR_RATE_DISP,  .epr_prior_rate("disp",  EPV_ENGINE))
+  expect_identical(EPR_PRIOR_RATE_SPOIL, .epr_prior_rate("spoil", EPV_ENGINE))
   expect_identical(EPR_PRIOR_RATE_HITOUT, .epr_prior_rate_hitout(EPV_ENGINE))
 })

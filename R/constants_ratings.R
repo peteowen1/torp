@@ -544,13 +544,30 @@ PSV_POINTS_SCALE <- 1.579
   }
 }
 
+#' Prior rate for one of the recv / disp / spoil slots, for a given engine
+#'
+#' The body of \code{EPR_PRIOR_RATE_RECV}, \code{EPR_PRIOR_RATE_DISP} and
+#' \code{EPR_PRIOR_RATE_SPOIL} as a function of the engine, so a test can read
+#' which points-scale channel each slot carries under another engine without
+#' re-sourcing this file. The slot-to-channel pairing lives here, in one place:
+#' recv carries \code{recv}, disp carries \code{disp}, and the spoil slot
+#' carries \code{cont_aerial}.
+#' @param slot One of \code{"recv"}, \code{"disp"}, \code{"spoil"}.
+#' @param engine One of the \code{EPV_ENGINE} values. Defaults to the live one.
+#' @keywords internal
+.epr_prior_rate <- function(slot, engine = EPV_ENGINE) {
+  base <- c(recv = -0.7000, disp = -0.7000, spoil = -0.3000)
+  channel <- c(recv = "recv", disp = "disp", spoil = "cont_aerial")
+  base[[slot]] * .epr_prior_points_scale(channel[[slot]], engine)
+}
+
 #' Prior rate for receiving component (shrinkage target per weighted game)
 #' @keywords internal
-EPR_PRIOR_RATE_RECV <- -0.7000 * .epr_prior_points_scale("recv")
+EPR_PRIOR_RATE_RECV <- .epr_prior_rate("recv")
 
 #' Prior rate for disposal component (shrinkage target per weighted game)
 #' @keywords internal
-EPR_PRIOR_RATE_DISP <- -0.7000 * .epr_prior_points_scale("disp")
+EPR_PRIOR_RATE_DISP <- .epr_prior_rate("disp")
 
 #' Prior rate for spoil component (shrinkage target per weighted game)
 #'
@@ -560,7 +577,7 @@ EPR_PRIOR_RATE_DISP <- -0.7000 * .epr_prior_points_scale("disp")
 #' is a real question, but it is a separate change with its own effect and
 #' bundling it here would make the calibration unattributable.
 #' @keywords internal
-EPR_PRIOR_RATE_SPOIL <- -0.3000 * .epr_prior_points_scale("cont_aerial")
+EPR_PRIOR_RATE_SPOIL <- .epr_prior_rate("spoil")
 
 #' Prior rate for the hitout slot, for a given engine
 #'
