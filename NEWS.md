@@ -1,3 +1,8 @@
+# torp 1.10.6
+
+* Published PSR is rebuilt from fresh stat ratings (torp#289), and the rating vintage moves to v17. The released `player_stat_ratings` had taken in no games since 2026 round 6 (last built 2026-04-18), so PSR, half of TORP, ignored rounds 7-29: across all players its correlation with a player's 2026 form fell from +0.59 in rounds 1-4 (361 players) to -0.09 over rounds 5-29 (659 players). Lachie Neale's PSR sat at -0.45 from round 5 although his last 23 games averaged +0.21 PSV. The rebuild also picks up the stat-rating code changes made since April, so 2025 and early-2026 PSR move a little. End-2026 TORP moves 0.55 on average (rank correlation 0.93, 724 players).
+* The ratings pipeline aborts when the stat ratings stop taking in games: `.assert_stat_ratings_fresh()` finds the last round the `n_games` total grew and fails when it trails the latest played round by more than one.
+
 # torp 1.10.5
 
 * The Net Points ledger labels each row `row_role`: `"decision"` on a kick or handball, `"reception"` on everything else, stoppages included (scenarios review 6b, Pete 2026-10-26). A label only; no rating changes. The Net Points scenarios page shows it as a Role column.
