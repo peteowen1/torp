@@ -112,6 +112,13 @@ stay_path <- file.path(out_dir, "stay_curve.csv")   # copied in from the tenure 
 a[, value_club := NA_real_]
 if (file.exists(stay_path)) {
   stay <- fread(stay_path)[k %in% 1:8]
+  # Cells with fewer than 15 players still in the league are noise (1.00 from
+  # 2 players, 0.50 from 2); carry the last share with 15+ forward instead.
+  # Only the 28-30 and 31+ mover bands are affected, at k >= 4 and k >= 3.
+  setorder(stay, group_type, group, k)
+  stay[n_in_league < 15, share_at_club := NA_real_]
+  stay[, share_at_club := nafill(share_at_club, type = "locf"), by = .(group_type, group)]
+  stopifnot(!anyNA(stay$share_at_club))
   # players: sum_k ev_k x disc^(k-1) x share(age band, k)
   age_band <- function(x) fifelse(x < 24, "under24", fifelse(x < 28, "24-27", fifelse(x < 31, "28-30", "31plus")))
   evl <- melt(proj[, c("player_id", grep("^ev_", names(proj), value = TRUE)), with = FALSE],
