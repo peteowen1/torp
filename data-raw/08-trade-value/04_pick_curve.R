@@ -77,7 +77,10 @@ cat("share of eight-season value already observed (seasons to 2026):",
 print(dv[, .(n = .N, mean_v5 = round(mean(v5), 1), mean_v8 = round(mean(v8), 1)), by = band][order(band)])
 
 # ---- 2. Long history: career games by pick, 1991-2015 ----
-h <- fw[draft_year %in% 1991:2015 & !is.na(games_since_drafted)]
+# Footywire flag "R" (tooltip "Rookie Promotion", 105 picks in 2009-2013) is a
+# late pick spent elevating a player already on the rookie list, not drafting
+# a new one; it lifts picks 46+ from 47.0 to 50.6 career games, so leave it out.
+h <- fw[draft_year %in% 1991:2015 & !is.na(games_since_drafted) & (is.na(flag) | flag != "R")]
 f_g <- lm(games_since_drafted ~ log(pick), data = h)
 cat("\nlong history: career games = ", round(coef(f_g)[1], 1), " + ", round(coef(f_g)[2], 1),
     " x log(pick)  (n ", nrow(h), ")\n", sep = "")
