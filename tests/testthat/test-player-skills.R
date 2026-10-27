@@ -576,6 +576,38 @@ test_that(".played_round_ref_dates() reports what it dropped as unplayed", {
   expect_silent(.played_round_ref_dates(make_fixture_set(), verbose = FALSE))
 })
 
+# --- .assert_stat_ratings_fresh() ------------------------------------------
+# torp#289: the 2026 stat ratings stopped at round 6 but kept emitting
+# decayed rows, so only the n_games total shows they went stale.
+
+make_sr <- function(rounds, games, season = 2026) {
+  data.frame(season = season, round = rounds, n_games = games)
+}
+
+test_that(".assert_stat_ratings_fresh() passes when games grow to the latest round", {
+  sr <- make_sr(1:5, c(10, 20, 30, 40, 50))
+  expect_silent(.assert_stat_ratings_fresh(sr, 2026, latest_round = 5))
+  # One round of lag is allowed by default (ratings built before the round).
+  expect_silent(.assert_stat_ratings_fresh(sr, 2026, latest_round = 6))
+})
+
+test_that(".assert_stat_ratings_fresh() aborts when games stop growing", {
+  sr <- make_sr(1:10, c(10, 20, 30, 40, 50, 60, 60, 60, 60, 60))
+  expect_error(.assert_stat_ratings_fresh(sr, 2026, latest_round = 10), "round 6")
+  expect_warning(.assert_stat_ratings_fresh(sr, 2026, latest_round = 10, strict = FALSE), "round 6")
+})
+
+test_that(".assert_stat_ratings_fresh() aborts when the season is missing", {
+  sr <- make_sr(1:3, c(10, 20, 30), season = 2025)
+  expect_error(.assert_stat_ratings_fresh(sr, 2026, latest_round = 2), "no rows for 2026")
+})
+
+test_that(".assert_stat_ratings_fresh() ignores other seasons' totals", {
+  sr <- rbind(make_sr(1:3, c(100, 100, 100), season = 2025),
+              make_sr(1:3, c(10, 20, 30)))
+  expect_silent(.assert_stat_ratings_fresh(sr, 2026, latest_round = 3))
+})
+
 # --- .assert_ref_date_coverage() -------------------------------------------
 # The cross-feed check: ref_date_map comes from FIXTURE scores, the rated rows
 # come from the player-stats feed, and a lag between the two silently drops the

@@ -452,6 +452,15 @@ if (nrow(torp_new) > 0) {
   # psr/torp: save_to_release() checks only row counts, so that release looked
   # fine.
   stat_ratings <- load_player_stat_ratings(TRUE)
+  # The stat ratings are rebuilt by hand (data-raw/06-stat-ratings), so check
+  # they have kept up with the games before blending them in (torp#289).
+  .pgd_round_col <- intersect(c("round", "round_number"), names(all_pgd))[1]
+  .latest_season <- max(all_pgd$season, na.rm = TRUE)
+  torp:::.assert_stat_ratings_fresh(
+    stat_ratings, .latest_season,
+    latest_round = max(as.integer(all_pgd[[.pgd_round_col]][all_pgd$season == .latest_season]),
+                       na.rm = TRUE)
+  )
   published_listing <- if (identical(PSR_PUBLISHED_CENTRE, "listed")) {
     .load_season_listing(unique(stat_ratings$season))
   }

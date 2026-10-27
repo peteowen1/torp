@@ -704,6 +704,60 @@ estimate_player_stat_ratings <- function(stat_rating_data, ref_date = NULL,
   invisible(ref_date_map)
 }
 
+#' Abort when released stat ratings have stopped taking in new games
+#'
+#' The stat ratings are built by a manual script, not the daily pipeline, so
+#' they can fall behind without anything failing. Once they do, every later
+#' round still gets a row (the checkpoint just decays), so row counts and
+#' round coverage look fine while PSR quietly stops responding to form. In
+#' 2026 the release stopped at round 6 and published PSR ignored rounds 7-29
+#' (torp#289).
+#'
+#' The tell is that total \code{n_games} stops growing. This finds the last
+#' round of \code{season} where it grew and compares it with the latest
+#' played round.
+#'
+#' @param stat_ratings Stat ratings with \code{season}, \code{round} and
+#'   \code{n_games}.
+#' @param season Season to check (normally the current one).
+#' @param latest_round Latest played round of \code{season}.
+#' @param max_lag Rounds the stat ratings may trail by before aborting.
+#' @param strict Logical. \code{TRUE} (default) aborts; \code{FALSE} warns.
+#'
+#' @return \code{stat_ratings}, invisibly, when fresh.
+#' @keywords internal
+.assert_stat_ratings_fresh <- function(stat_ratings, season, latest_round,
+                                       max_lag = 1L, strict = TRUE) {
+  sr <- data.table::as.data.table(stat_ratings)
+  if (!all(c("season", "round", "n_games") %in% names(sr))) {
+    cli::cli_warn("Cannot check stat-rating freshness: need season, round and n_games columns.")
+    return(invisible(stat_ratings))
+  }
+  szn <- season
+  totals <- sr[season == szn, .(games = sum(n_games, na.rm = TRUE)), by = round]
+  data.table::setorder(totals, round)
+
+  last_growth <- if (nrow(totals) == 0) NA_integer_ else {
+    grew <- c(TRUE, diff(totals$games) > 0)
+    as.integer(max(totals$round[grew]))
+  }
+  if (!is.na(last_growth) && latest_round - last_growth <= max_lag) {
+    return(invisible(stat_ratings))
+  }
+
+  msg <- c(
+    if (is.na(last_growth)) {
+      "Stat ratings have no rows for {szn}, but round {latest_round} has been played."
+    } else {
+      "Stat ratings stopped taking in games after {szn} round {last_growth}, but round {latest_round} has been played."
+    },
+    "i" = "Rebuild them: data-raw/06-stat-ratings/01_compute_match_stats.R, 03_estimate_stat_ratings.R, then 04_export_stat_ratings.R.",
+    "x" = "Publishing now would freeze PSR (half of TORP) at that round."
+  )
+  if (isTRUE(strict)) cli::cli_abort(msg) else cli::cli_warn(msg)
+  invisible(stat_ratings)
+}
+
 # ============================================================================
 # Batch stat rating estimation
 # ============================================================================
