@@ -15,7 +15,7 @@
 library(rvest)
 library(data.table)
 
-years   <- 1986:2025
+years   <- 1991:2025  # Footywire has no draft table for 1986-1990
 raw_dir <- "C:/dev/torpverse/torpdata/data/raw/footywire_drafts"
 out_csv <- "C:/dev/torpverse/torpdata/data/raw/footywire_drafts.csv"
 dir.create(raw_dir, recursive = TRUE, showWarnings = FALSE)
@@ -95,6 +95,7 @@ cat("\nflag letters:\n"); print(drafts[, .N, by = flag][order(-N)])
 cov <- drafts[, lapply(.SD, function(x) round(mean(!is.na(x) & x != ""), 3))]
 cat("\ncoverage per column (share non-empty):\n"); print(cov)
 stopifnot(all(unlist(cov[, .(pick, player, drafted_by, draft_year)]) > 0.99))
+stopifnot(setequal(unique(drafts$draft_year), years))  # a failed year drops silently otherwise
 dup <- drafts[, .N, by = .(draft_year, pick)][N > 1]
 if (nrow(dup)) { message("duplicate (year, pick) rows:"); print(dup) }
 

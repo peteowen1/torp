@@ -455,6 +455,8 @@ if (nrow(torp_new) > 0) {
   # The stat ratings are rebuilt by hand (data-raw/06-stat-ratings), so check
   # they have kept up with the games before blending them in (torp#289).
   .pgd_round_col <- intersect(c("round", "round_number"), names(all_pgd))[1]
+  # Without a round column the latest round is -Inf and the check passes silently.
+  stopifnot(!is.na(.pgd_round_col))
   .latest_season <- max(all_pgd$season, na.rm = TRUE)
   torp:::.assert_stat_ratings_fresh(
     stat_ratings, .latest_season,
