@@ -50,6 +50,29 @@ print(dv[, .(n = .N, mean_v5 = round(mean(v5), 1), sd = round(sd(v5), 1),
              share_negative = round(mean(v5 < 0), 2), share_no_games = round(mean(games5 == 0), 2)),
          by = band][order(band)])
 
+# ---- 1b. Eight seasons: observed through 2026, projected after ----
+# Seasons up to 2026 are what happened; later seasons are the expected value
+# from 03_project_value.R (0 for a draftee no longer rated at the end of 2026).
+proj <- fread(file.path(out_dir, "03_projected_value_2026.csv"))
+ev_long <- melt(proj[, c("player_id", grep("^ev_", names(proj), value = TRUE)), with = FALSE],
+                id.vars = "player_id", variable.name = "season", value.name = "ev")
+ev_long[, season := as.integer(sub("ev_", "", season))]
+g8 <- d5[, .(k = 1:8), by = .(draft_year, pick, player, player_id, flag)]
+g8[, season := draft_year + k]
+g8 <- merge(g8, seas, by = c("player_id", "season"), all.x = TRUE)
+g8 <- merge(g8, ev_long, by = c("player_id", "season"), all.x = TRUE)
+g8[, v := fifelse(season <= 2026,
+                  fifelse(is.na(games) | is.na(torp), 0, games * (torp - repl)),
+                  fifelse(is.na(ev), 0, ev)) * disc^(k - 1)]
+dv8 <- g8[, .(v8 = sum(v), v8_observed = sum(v[season <= 2026])), by = .(draft_year, pick, player)]
+dv <- merge(dv, dv8, by = c("draft_year", "pick", "player"))
+f_dir8 <- lm(v8 ~ log(pick), data = dv)
+cat("\neight seasons: v8 = ", round(coef(f_dir8)[1], 1), " + ", round(coef(f_dir8)[2], 1),
+    " x log(pick)  (R2 ", round(summary(f_dir8)$r.squared, 3), ", n ", nrow(dv), ")\n", sep = "")
+cat("share of eight-season value already observed (seasons to 2026):",
+    round(sum(dv$v8_observed) / sum(dv$v8), 2), "\n")
+print(dv[, .(n = .N, mean_v5 = round(mean(v5), 1), mean_v8 = round(mean(v8), 1)), by = band][order(band)])
+
 # ---- 2. Long history: career games by pick, 1991-2015 ----
 h <- fw[draft_year %in% 1991:2015 & !is.na(games_since_drafted)]
 f_g <- lm(games_since_drafted ~ log(pick), data = h)
@@ -62,18 +85,21 @@ print(h[, .(n = .N, mean_games = round(mean(games_since_drafted), 1),
             p_zero = round(mean(games_since_drafted == 0), 2)), by = band][order(band)])
 
 # ---- 3. Curves on the DVI scale ----
-picks <- c(1, 2, 3, 5, 6, 10, 15, 20, 25, 30, 40, 50, 60)
+show <- c(1, 2, 3, 5, 6, 10, 15, 20, 25, 30, 40, 50, 60)
 dvi_checked <- c(`1` = 3000, `2` = 2481, `5` = 1795, `6` = 1659, `25` = 590)
-pv <- data.table(pick = picks)
+# Floored at 0: a club can always pass or delist, so a pick cannot cost it value.
+pv <- data.table(pick = 1:110)
 pv[, v5_direct := pmax(predict(f_dir, newdata = .SD), 0)]
+pv[, v8_direct := pmax(predict(f_dir8, newdata = .SD), 0)]
 pv[, games_hist := pmax(predict(f_g, newdata = .SD), 0)]
-pv[, `:=`(direct_dvi_scale = round(3000 * v5_direct / v5_direct[1]),
+pv[, `:=`(v5_dvi_scale = round(3000 * v5_direct / v5_direct[1]),
+          v8_dvi_scale = round(3000 * v8_direct / v8_direct[1]),
           games_dvi_scale = round(3000 * games_hist / games_hist[1]),
           dvi = dvi_checked[as.character(pick)])]
-pv[, `:=`(v5_direct = round(v5_direct, 1), games_hist = round(games_hist, 1))]
+num <- c("v5_direct", "v8_direct", "games_hist"); pv[, (num) := lapply(.SD, round, 1), .SDcols = num]
 cat("\npick value curves, scaled so pick 1 = 3,000 (DVI = AFL Draft Value Index, checked points only):\n")
-print(pv)
+print(pv[pick %in% show])
 fwrite(pv, file.path(out_dir, "04_pick_curve.csv"))
 
-# Anchor (chosen before looking): value falls with pick in both views.
-stopifnot(coef(f_dir)[2] < 0, coef(f_g)[2] < 0)
+# Anchor (chosen before looking): value falls with pick in every view.
+stopifnot(coef(f_dir)[2] < 0, coef(f_dir8)[2] < 0, coef(f_g)[2] < 0)

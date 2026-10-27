@@ -65,6 +65,14 @@ out <- sim[, .(v5_mean = mean(v5), v5_p10 = quantile(v5, .1), v5_p90 = quantile(
                v3_mean = mean(v3), v8_mean = mean(v8),
                seasons_on_list_5 = mean(seasons5), torp_2027 = mean(torp27, na.rm = TRUE)),
            by = player_id]
+# Expected UNdiscounted value of each future season (2027 = k 1), so a caller
+# can discount from a different start year (04_pick_curve.R values draftees
+# whose first season was 2021 or 2022).
+ev <- as.data.table(val %*% diag(1 / disc^(seq_len(horizon) - 1)))
+setnames(ev, paste0("ev_", 2026 + seq_len(horizon)))
+ev[, player_id := sim$player_id]
+ev <- ev[, lapply(.SD, mean), by = player_id]
+out <- merge(out, ev, by = "player_id")
 out <- merge(start[, .(player_id, player_name, team, age = round(age, 1), torp_2026 = torp, games_2026 = games, draft_year, pick)],
              out, by = "player_id")
 num <- names(out)[sapply(out, is.double)]
