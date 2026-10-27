@@ -15,7 +15,7 @@
 
 suppressMessages({ library(data.table); library(splines) })
 invisible(capture.output(source("data-raw/08-trade-value/02_age_survival.R")))
-repl <- -1.38   # 03_project_value.R: mean first-season TORP of mature pickups
+repl <- as.numeric(readLines(file.path(out_dir, "03_replacement_level.txt")))  # written by 03_project_value.R
 disc <- 0.9
 
 fw <- fread("C:/dev/torpverse/torpdata/data/raw/footywire_drafts.csv")[is_pass == FALSE]

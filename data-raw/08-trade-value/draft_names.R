@@ -44,5 +44,14 @@ match_draft_names <- function(drafts, players) {
   out[, key := .name_key(player)]
   out <- merge(out, uniq, by = "key", all.x = TRUE, sort = FALSE)
   out[, key := NULL]
+  # Two different draft names landing on one player (Jackson Ross and Jack
+  # Ross share a key) means at most one of them is him: keep the one whose
+  # name matches exactly, ignoring case, and unmatch the rest.
+  clash <- out[!is.na(player_id), .(n = data.table::uniqueN(tolower(player))), by = player_id][n > 1, player_id]
+  if (length(clash)) {
+    exact <- pl[player_id %in% clash, .(player_id, nm = tolower(player_name))]
+    out[player_id %in% clash & !paste(player_id, tolower(player)) %in% paste(exact$player_id, exact$nm),
+        player_id := NA_character_]
+  }
   out
 }

@@ -67,7 +67,8 @@ a[type == "future_pick", `:=`(
   orig_club = sub("^.*round pick \\(([^)]+)\\).*$", "\\1", item))]
 cat("assets parsed:", nrow(a), " by type:", paste(names(table(a$type)), table(a$type), collapse = ", "), "\n")
 stopifnot(!anyNA(a[type == "pick_2026", pick]),
-          !anyNA(a[type == "future_pick", .(year, round, orig_club)]))
+          !anyNA(a[type == "future_pick", .(year, round, orig_club)]),
+          all(a[type == "future_pick", as.character(year)] %in% names(TAS_SHIFT)))
 # The five-club trade (7) gives only a future pick's original club, not who
 # handed it over. Every such pick there is a party's own, so the original
 # club is taken as the giver; anything else would stop here.
@@ -107,7 +108,7 @@ a[is.na(value_abc), value_abc := value]
 # for moved players by age at arrival; picks use the draftee curve by pick
 # band. The same weight applies on both sides of a trade, so trades stay
 # zero-sum; it prices what the asset is worth to whoever holds it.
-stay_path <- "C:/Users/peteo/AppData/Local/Temp/claude/C--dev-torpverse-torp/fd72fa3a-4884-46e7-9859-8c01702f8ead/scratchpad/tenure/stay_curve.csv"
+stay_path <- file.path(out_dir, "stay_curve.csv")   # copied in from the tenure research
 a[, value_club := NA_real_]
 if (file.exists(stay_path)) {
   stay <- fread(stay_path)[k %in% 1:8]
@@ -142,10 +143,19 @@ g_in  <- a[, .(v_in = sum(value, na.rm = TRUE), v_in_abc = sum(value_abc, na.rm 
 g_out <- a[, .(v_out = sum(value, na.rm = TRUE), v_out_abc = sum(value_abc, na.rm = TRUE),
                v_out_club = sum(value_club)), by = .(trade, club = from_club)]
 gr <- merge(g_in, g_out, by = c("trade", "club"), all = TRUE)
-for (v in c("v_in", "v_out", "v_in_abc", "v_out_abc", "v_in_club", "v_out_club")) gr[is.na(get(v)), (v) := 0]
+for (v in c("v_in", "v_out", "v_in_abc", "v_out_abc")) gr[is.na(get(v)), (v) := 0]
+# A club with no assets on one side gets 0 there, but only when the at-club
+# values exist at all: without a stay curve net_club must stay NA, not 0.
+if (a[, !anyNA(value_club)]) for (v in c("v_in_club", "v_out_club")) gr[is.na(get(v)), (v) := 0]
 gr[, `:=`(net = round(v_in - v_out, 1), net_abc = round(v_in_abc - v_out_abc, 1),
           net_club = round(v_in_club - v_out_club, 1))]
-stopifnot(gr[, abs(sum(net)), by = trade][, all(V1 < 1e-6 + 0.1 * .N)])  # each trade is zero-sum
+# Netting in minus out is zero-sum by construction, so check the attribution
+# instead: no asset goes to the club that gave it, and every club named on an
+# asset is a party to that trade (from the "Clubs involved" cell).
+stopifnot(a[, all(to_club != from_club)])
+parties <- data.table(trade = seq_len(nrow(trades)), cell = trades[[1]])
+chk <- merge(a[, .(trade, to_club, from_club)], parties, by = "trade")
+stopifnot(chk[, all(mapply(grepl, to_club, cell, fixed = TRUE) & mapply(grepl, from_club, cell, fixed = TRUE))])
 fwrite(a, file.path(out_dir, "05_trade_assets.csv"))
 fwrite(gr, file.path(out_dir, "05_trade_grades.csv"))
 

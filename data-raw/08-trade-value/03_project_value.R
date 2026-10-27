@@ -32,6 +32,8 @@ first <- end[!is.na(torp), .SD[which.min(season)], by = player_id]
 fw_names <- unique(fread("C:/dev/torpverse/torpdata/data/raw/footywire_drafts.csv")$player)
 pick_ups <- first[season >= 2022 & age >= 22 & !(player_name %in% fw_names)]
 repl <- mean(pick_ups$torp)
+# 04_pick_curve.R reads this, so the pick curve and the ev_ columns share one level.
+writeLines(format(repl, digits = 15), file.path(out_dir, "03_replacement_level.txt"))
 # Sensitivity: the 40th-best rating at each club at the end of 2026.
 cur_team <- r[season == 2026, .SD[.N], by = player_id][, .(player_id, team)]
 e26 <- merge(end[season == 2026 & !is.na(torp)], cur_team, by = "player_id")
