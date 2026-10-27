@@ -65,6 +65,9 @@ g8[, v := fifelse(season <= 2026,
                   fifelse(is.na(games) | is.na(torp), 0, games * (torp - repl)),
                   fifelse(is.na(ev), 0, ev)) * disc^(k - 1)]
 dv8 <- g8[, .(v8 = sum(v), v8_observed = sum(v[season <= 2026])), by = .(draft_year, pick, player)]
+# Per-season (discounted) value by pick, so 05 can weight each season by the
+# chance the draftee is still at the drafting club.
+fwrite(g8[, .(draft_year, pick, k, v)], file.path(out_dir, "04_pick_seasons.csv"))
 dv <- merge(dv, dv8, by = c("draft_year", "pick", "player"))
 f_dir8 <- lm(v8 ~ log(pick), data = dv)
 cat("\neight seasons: v8 = ", round(coef(f_dir8)[1], 1), " + ", round(coef(f_dir8)[2], 1),
