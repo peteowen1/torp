@@ -44,16 +44,16 @@ cat("end-of-season rows:", nrow(end), " seasons:", paste(range(end$season), coll
     " torp NA:", sum(is.na(end$torp)), "\n")
 print(end[, .(players = .N, torp_na = sum(is.na(torp)), mean_games = round(mean(games), 1)), by = season][order(season)])
 
-# Draft position from the Footywire harvest, joined by name. Names that are
-# not unique on either side are dropped rather than guessed.
+# Draft position from the Footywire harvest, joined by name (draft_names.R:
+# formal/familiar first-name pairs, ambiguous names dropped). A player drafted
+# twice keeps his latest draft, the one his early-career window counts from.
+source("data-raw/08-trade-value/draft_names.R")
 fw <- fread("C:/dev/torpverse/torpdata/data/raw/footywire_drafts.csv")[is_pass == FALSE]
-fw_ok <- fw[, .N, by = player][N == 1, player]
-tr_ok <- end[, uniqueN(player_id), by = player_name][V1 == 1, player_name]
-dk <- fw[player %in% fw_ok & player %in% tr_ok, .(player_name = player, draft_year, pick)]
-end <- merge(end, dk, by = "player_name", all.x = TRUE)
+fw_id <- match_draft_names(fw, end)
+dk <- fw_id[!is.na(player_id)][order(-draft_year)][, .SD[1], by = player_id][, .(player_id, draft_year, pick)]
+end <- merge(end, dk, by = "player_id", all.x = TRUE)
 cat("players with a national-draft pick joined:", end[!is.na(pick), uniqueN(player_id)],
-    " of", uniqueN(end$player_id), " (ambiguous names dropped:",
-    length(setdiff(intersect(fw$player, end$player_name), intersect(fw_ok, tr_ok))), ")\n")
+    " of", uniqueN(end$player_id), "\n")
 
 # ---- 2. Year pairs ----
 nxt <- end[, .(player_id, season = season - 1L, torp_next = torp, games_next = games)]
