@@ -82,3 +82,41 @@ parse_wiki_trades <- function(html_path, draft_year) {
   setattr(a, "n_trades", if (is.finite(cut_at)) cut_at - 1L else nrow(trades))
   a[]
 }
+
+# Parse the National Draft table of a Wikipedia "<year> AFL draft" page: one
+# row per selection, with the chain of clubs the pick passed through. Notes
+# read "←Sydney (draft)←Adelaide (2021)←Melbourne (2021)": Sydney gave the
+# pick to the drafting club on draft night, Adelaide gave it to Sydney in the
+# 2021 trade period, Melbourne (the last name, its original club) gave it to
+# Adelaide in 2021. No year means that year's trade period. Returns one row
+# per hop (giver, receiver, when) per selection; a pick nobody traded has no
+# hops. Used by 12_grade_turned_out.R.
+parse_wiki_draft <- function(html_path, draft_year) {
+  tb <- html_table(read_html(html_path), fill = TRUE)
+  is_nat <- vapply(tb, function(d) names(d)[1] %in% c("Round", "Rd") && identical(names(d)[2], "Pick") &&
+                     "Notes" %in% names(d), logical(1))
+  stopifnot(any(is_nat))
+  d <- as.data.table(tb[[which(is_nat)[1]]])
+  setnames(d, make.unique(names(d)))
+  d <- d[grepl("^[0-9]+$", Pick), .(round = as.integer(gsub("[^0-9]", "", get(names(d)[1]))), pick = as.integer(Pick),
+                                     player = trimws(gsub("\\s*\\[[a-z0-9]+\\]", "", Player)),
+                                     club = trimws(gsub(" ", " ", Club)),
+                                     notes = trimws(gsub(" ", " ", Notes)))]
+  stopifnot(!anyNA(d$pick), !anyDuplicated(d$pick))
+  hops <- rbindlist(lapply(seq_len(nrow(d)), function(i) {
+    m <- regmatches(d$notes[i], gregexpr("←[^←]+", d$notes[i]))[[1]]
+    if (!length(m)) return(NULL)
+    ent <- trimws(sub("^←", "", m))
+    when <- ifelse(grepl("\\((draft|[0-9]{4})\\)$", ent), sub("^.*\\((draft|[0-9]{4})\\)$", "\\1", ent),
+                   as.character(draft_year))
+    giver <- trimws(sub("\\s*\\((draft|[0-9]{4})\\)$", "", ent))
+    # "Port Adelaide free agency compensation pick (Amon)" and "Greater
+    # Western SydneyAcademy eligible for Sydney, ..." are the club alone.
+    giver <- sub(paste0("^(", CLUB_START, ")( Lions)?.*$"), "\\1\\2", giver)
+    data.table(pick = d$pick[i], hop = seq_along(giver), giver = giver,
+               receiver = c(d$club[i], giver[-length(giver)]), when = when)
+  }))
+  d[, orig_club := club]
+  if (nrow(hops)) d[hops[, .SD[.N], by = pick], on = "pick", orig_club := i.giver]
+  list(picks = d[, draft_year := draft_year][], hops = hops)
+}

@@ -1,6 +1,7 @@
 # Build the trade ledger page's data block from the grade files and fill the
 # page template: 2026 from 05_grade_trades.R, 2021-2025 from
-# 10_grade_past_trades.R (at the time).
+# 10_grade_past_trades.R (at the time) and 12_grade_turned_out.R (as it
+# turned out).
 #
 # Output: torpdata/data/raw/trade_value/trade_ledger.html (gitignored), from
 # templates/trade_ledger_template.html (its `const D = __DATA__;` line). Published as
@@ -24,7 +25,13 @@ asset_rows <- function(a, y) {
          pick = na_null(if (is_pick) as.integer(x$pick) else NA),
          pat = na_null(if (is_pick) as.integer(x$pick_at_trade) else NA),
          orig = na_null(if (is_pick) x$original_club else NA),
-         unmatched = if (x$type == "player" && is.na(x$value)) TRUE else NULL)
+         unmatched = if (x$type == "player" && is.na(x$value)) TRUE else NULL,
+         # As it turned out (12_grade_turned_out.R), 2021-2025 only.
+         vt = if ("v_turned" %in% names(x)) r1(x$v_turned) else NULL,
+         real = if ("realised" %in% names(x)) r1(x$realised) else NULL,
+         how = if ("how" %in% names(x)) x$how else NULL,
+         drafted = if ("draftee" %in% names(x)) na_null(x$draftee) else NULL,
+         fp = if ("final_pick" %in% names(x)) na_null(as.integer(x$final_pick)) else NULL)
   })
 }
 
@@ -36,7 +43,8 @@ year_block <- function(a, gr, y, n_trades) {
          g <- gr[i]
          list(trade = g$trade, club = g$club, net = r1(g$net),
               abc = na_null(if ("net_abc" %in% names(g)) r1(g$net_abc) else NA),
-              nclub = r1(g$net_club))
+              nclub = r1(g$net_club),
+              nt = if ("net_turned" %in% names(g)) r1(g$net_turned) else NULL)
        }))
 }
 
@@ -47,8 +55,14 @@ g26 <- fread(file.path(out_dir, "05_trade_grades.csv"))
 setnames(a26, "torp_2026", "torp_then")
 blocks[["2026"]] <- year_block(a26[order(trade)], g26[order(trade, club)], 2026L, uniqueN(g26$trade))
 for (y in 2025:2021) {
-  a <- fread(file.path(out_dir, sprintf("10_assets_%d.csv", y)))
+  # 12_assets is 10_assets row for row, plus the as-it-turned-out columns.
+  a <- fread(file.path(out_dir, sprintf("12_assets_%d.csv", y)))
+  a10 <- fread(file.path(out_dir, sprintf("10_assets_%d.csv", y)))
+  stopifnot(nrow(a) == nrow(a10), identical(a$item, a10$item), isTRUE(all.equal(a$value, a10$value)))
   gr <- fread(file.path(out_dir, sprintf("10_grades_%d.csv", y)))
+  gt <- fread(file.path(out_dir, sprintf("12_grades_%d.csv", y)))
+  gr <- merge(gr, gt[, .(trade, club, net_turned)], by = c("trade", "club"), all.x = TRUE)
+  stopifnot(!anyNA(gr$net_turned))
   a[, pick_at_trade := pick][, original_club := NA_character_]
   blocks[[as.character(y)]] <- year_block(a[order(trade)], gr[order(trade, club)], y, uniqueN(gr$trade))
 }

@@ -71,10 +71,15 @@ ul.notes{margin:0;padding-left:1.1em;display:flex;flex-direction:column;gap:8px;
   <h1 id="h1">2026 Trade Ledger</h1>
   <p class="lede" id="lede"></p>
   <p class="meta">Built 28 October 2026 on TORP ratings v17; ratings forecast from each player's last two seasons. First draft: salary is not counted, so clubs that took on players look better than they should.</p>
-  <p class="meta" id="pastnote" hidden>Earlier years are graded <b>at the time</b>: each player valued from his rating at the end of that season, each pick at the number quoted in the trade. A second grading, as each trade has turned out since, is still to come.</p>
+  <p class="meta" id="pastnote" hidden>Earlier years can be graded two ways. <b>At the time</b>: each player valued from his rating at the end of that season, each pick at the number quoted in the trade. <b>As it turned out</b>: what the receiving club actually got in the eight seasons after the trade: the seasons each player played for it, plus a forecast for the seasons still to come.</p>
+  <p class="meta" id="turnednote" hidden>The 2026 trades have not turned out yet, so they show the same numbers both ways.</p>
 </header>
 
-<div class="yearbar controls"><label for="yearsel">Trade period</label><select id="yearsel"></select></div>
+<div class="yearbar controls"><label for="yearsel">Trade period</label><select id="yearsel"></select>
+  <div class="seg" role="group" aria-label="Grade trades">
+    <button type="button" data-grade="then" aria-pressed="true">At the time</button>
+    <button type="button" data-grade="turned" aria-pressed="false">As it turned out</button>
+  </div></div>
 
 <section>
   <h2>Ranking the trades</h2>
@@ -142,6 +147,7 @@ ul.notes{margin:0;padding-left:1.1em;display:flex;flex-direction:column;gap:8px;
     <li><b>Injury years.</b> A short 2026 season lowers a player's expected games: Jack Viney played one game and projects to almost nothing.</li>
     <li><b>Pick numbers.</b> Every 2026 pick is valued at its slot in the AFL's final post-trade order (14 October). Trades made before 9-13 October quoted older numbers, before the free-agency compensation picks for Butters (now 5) and King (now 8) were inserted. Wikipedia's table also had trade 17 backwards and one wrong pick number in trade 16; both are corrected.</li>
     <li><b>Free agency.</b> The nine free-agency moves (Greene, Neale, Butters, King and others) are not trades and are not graded here.</li>
+    <li><b>As it turned out (2021&ndash;2025).</b> A player is worth the seasons he played for the club that got him (games &times; time on ground &times; end-of-season TORP above replacement) up to 2026. If he is still there, his 2026 forecast covers the rest of the eight seasons. If the club traded him on, it is credited with his value at the time of that trade, standing in for what it got back. If he left as a free agent, was delisted or retired, nothing more. A pick is traced through the draft's "came via" notes to the player it became, and that player is valued the same way from his first season. A pick traded on again is worth the pick it was finally used at. Picks the notes do not trace (161 of 368, mostly late picks spent matching academy or father-son bids, 15% of the pick value) and picks into the 2026 draft or later keep their at-the-time value. A 2024 or 2025 draftee yet to play is valued at his pick. For the 2024 and 2025 trades most of the eight seasons are still forecast, and draftees usually rate below replacement in their first two seasons, so a club that traded for young draftees looks worse there than it may end up. Value to club and ABC picks have no as-it-turned-out version.</li>
     <li><b>Earlier years (2021&ndash;2025).</b> Graded at the time, by the same rules as 2026. Picks are valued at the number quoted in the trade; no final post-trade order was collected for those years, so a pick later pushed back by compensation picks or bids is valued a few places early. Pick swaps made on draft night are left out. Four players had no rating in the season they were traded (Darcy Fort 2021, Junior Rioli 2022, Jacob Konstanty 2024, Patrick Retschko 2025) and count as 0. The forecasting model was fitted on all seasons to 2026, so an "at the time" forecast knows nothing about the player after that season but does use what later seasons showed about aging in general. The ABC column applies to 2026 only.</li>
   </ul>
   <p class="meta">Trades from Wikipedia's 2021&ndash;2026 AFL draft pages, saved 28 October 2026. Code: torp, data-raw/08-trade-value/.</p>
@@ -159,31 +165,39 @@ YEARS.forEach(y => { const o = document.createElement("option"); o.value = y; o.
 { const o = document.createElement("option"); o.value = ALL; o.textContent = "All years (2021–2026)"; yearSel.appendChild(o); }
 yearSel.value = String(YEARS[0]);
 const sel = document.getElementById("clubsel");
-let rankBy = "moved";
+let rankBy = "moved", grade = "then";
+// Asset value and club net under the chosen grading; 2026 has no as-it-turned-out numbers.
+const av = a => grade === "turned" && a.vt != null ? a.vt : a.v;
+const gn = g => grade === "turned" && g.nt != null ? g.nt : g.net;
 
-// One record per trade: its assets, its club grades, and the two ranking numbers.
+// One record per trade: its assets and its club grades.
 const TRADES = [];
 YEARS.forEach(y => {
   const B = D.years[y];
   Object.keys(B.trades).map(Number).sort((a, b) => a - b).forEach(t => {
-    const as = B.trades[t], gs = B.grades.filter(g => g.trade === t);
-    const best = gs.reduce((m, g) => g.net > m.net ? g : m, gs[0]);
-    TRADES.push({year: y, t, as, gs, moved: as.reduce((s, a) => s + a.v, 0), best});
+    TRADES.push({year: y, t, as: B.trades[t], gs: B.grades.filter(g => g.trade === t)});
   });
 });
+// The two ranking numbers, under the chosen grading.
+const moved = r => r.as.reduce((s, a) => s + av(a), 0);
+const best = r => r.gs.reduce((m, g) => gn(g) > gn(m) ? g : m, r.gs[0]);
 const chosen = () => yearSel.value === ALL ? TRADES : TRADES.filter(r => r.year === Number(yearSel.value));
 
 function header() {
   const all = yearSel.value === ALL, y = all ? null : Number(yearSel.value), n = chosen().length;
   document.getElementById("eyebrow").textContent = all ? "TORP · trade periods 2021–2026" : `TORP · trade period ${y}`;
   document.getElementById("h1").textContent = all ? "AFL Trade Ledger" : `${y} Trade Ledger`;
-  document.getElementById("lede").textContent = `${n} trades priced in one unit: the TORP value each player or pick was expected to produce over the next eight seasons, as at the trade. A club's grade is what it received minus what it gave up.`;
+  document.getElementById("lede").textContent = grade === "turned"
+    ? `${n} trades priced in one unit: the TORP value each player or pick actually gave the club that got it over the eight seasons after the trade, with a forecast for the seasons still to come. A club's grade is what it received minus what it gave up.`
+    : `${n} trades priced in one unit: the TORP value each player or pick was expected to produce over the next eight seasons, as at the trade. A club's grade is what it received minus what it gave up.`;
   document.getElementById("pastnote").hidden = !all && y === 2026;
+  document.getElementById("turnednote").hidden = !(grade === "turned" && (all || y === 2026));
 }
 
 function ranking() {
   const all = yearSel.value === ALL;
-  const rows = chosen().slice().sort((a, b) => rankBy === "moved" ? b.moved - a.moved : b.best.net - a.best.net);
+  const rows = chosen().map(r => ({...r, moved: moved(r), best: best(r)}))
+    .sort((a, b) => rankBy === "moved" ? b.moved - a.moved : gn(b.best) - gn(a.best));
   document.getElementById("rkcap").textContent = rankBy === "moved"
     ? "Value moved: the value of everything that changed clubs in the trade, counting each player and pick once. Bigger means more was at stake."
     : "Its net: what the trade's biggest winner received minus what it gave up. Bigger means a more one-sided trade; the clubs on the other side lost that much between them.";
@@ -191,7 +205,7 @@ function ranking() {
   const shown = all ? rows.slice(0, 30) : rows;
   document.getElementById("rkbody").innerHTML = shown.map((r, i) => {
     return `<tr><td class="num">${i + 1}</td>${all ? `<td>${r.year}</td>` : ""}<td>${r.gs.map(g => esc(g.club)).join(" &middot; ")}<div class="sub">trade ${r.t}</div></td>` +
-      `<td class="num">${r.moved.toFixed(1)}</td><td class="who2">${esc(r.best.club)}</td><td class="num ${cls(r.best.net)}">${fmt(r.best.net)}</td></tr>`;
+      `<td class="num">${r.moved.toFixed(1)}</td><td class="who2">${esc(r.best.club)}</td><td class="num ${cls(gn(r.best))}">${fmt(gn(r.best))}</td></tr>`;
   }).join("") + (all && rows.length > 30 ? `<tr><td colspan="6" class="sub">Top 30 of ${rows.length} trades shown. Pick one year to see them all.</td></tr>` : "");
 }
 
@@ -199,16 +213,16 @@ function clubTable() {
   const clubs = {};
   chosen().forEach(r => r.gs.forEach(g => {
     const c = clubs[g.club] || (clubs[g.club] = {club: g.club, trades: 0, net: 0, abc: 0, nclub: 0, hasAbc: false});
-    c.trades++; c.net += g.net; c.nclub += g.nclub;
+    c.trades++; c.net += gn(g); c.nclub += g.nclub;
     if (g.abc != null) { c.abc += g.abc; c.hasAbc = true; }
   }));
   const rows = Object.values(clubs).sort((a, b) => b.net - a.net);
   const maxAbs = Math.max(...rows.map(r => Math.abs(r.net)), 1e-9);
-  const abcOn = yearSel.value === "2026";
+  const abcOn = yearSel.value === "2026", clubOn = grade === "then";
   document.querySelector("#clubtbl tbody").innerHTML = rows.map(r => {
     const w = Math.abs(r.net) / maxAbs * 50, left = r.net >= 0 ? 50 : 50 - w;
     return `<tr><td>${esc(r.club)}</td><td class="num">${r.trades}</td><td class="num ${cls(r.net)}">${fmt(r.net)}</td>` +
-      `<td class="num ${cls(r.nclub)}">${fmt(r.nclub)}</td><td class="num ${abcOn ? cls(r.abc) : ""}">${abcOn ? fmt(r.abc) : "&ndash;"}</td>` +
+      `<td class="num ${clubOn ? cls(r.nclub) : ""}">${clubOn ? fmt(r.nclub) : "&ndash;"}</td><td class="num ${abcOn && clubOn ? cls(r.abc) : ""}">${abcOn && clubOn ? fmt(r.abc) : "&ndash;"}</td>` +
       `<td class="barcell"><div class="bar"><div class="axis"></div><div class="fill" style="left:${left}%;width:${w}%;background:var(${r.net >= 0 ? "--gain" : "--loss"})"></div></div></td></tr>`;
   }).join("");
   const keep = sel.value;
@@ -219,22 +233,38 @@ function clubTable() {
   sel.value = rows.some(r => r.club === keep) ? keep : "";
 }
 
+// What became of an asset, for the as-it-turned-out view.
+function turnedSub(a) {
+  const h = a.how || "", yr = (h.match(/traded on (\d{4})/) || [])[1];
+  const fate = h.endsWith("still there") ? `, still there: forecast for the rest`
+    : yr ? `, traded on in ${yr}: his value then`
+    : h.endsWith("left") ? ", then left" : "";
+  const became = a.drafted ? `became ${esc(a.drafted)} (pick ${a.fp}); ` : "";
+  if (h === "pick traded on") return `traded on; finally used at pick ${a.fp}`;
+  if (h === "not traced") return "not traced to a draftee; value at the time";
+  if (h === "draft not yet held") return "draft not held yet; value at the time";
+  if (h === "no player match") return "no rating found; counted as 0";
+  if (h === "drafted, never played") return `${became}never played`;
+  if (h === "drafted, not played yet") return `${became}not played yet; valued at the pick`;
+  return `${became}${a.real.toFixed(1)} from seasons played${fate}`;
+}
 function assetLine(a, y) {
-  const sub = a.type === "player"
+  const sub = grade === "turned" && a.vt != null ? turnedSub(a)
+    : a.type === "player"
       ? (a.unmatched ? `no rating in ${y}; counted as 0` : `age ${a.age}, TORP ${a.torp} in ${y}`)
     : a.type === "future_pick" ? `expected about pick ${Math.round(a.exp)}`
     : y === 2026 ? `2026 draft${a.orig ? ", originally " + esc(a.orig) + "'s" : ""}${a.pat !== a.pick ? " (quoted as " + a.pat + " at the trade)" : ""}`
     : `${y} draft, number as quoted at the trade`;
   const label = a.type === "pick" ? `Pick ${a.pick}` : esc(a.item);
-  return `<div class="asset"><div class="what">${label}<div class="sub">${sub}</div></div><div class="num">${a.v.toFixed(1)}</div></div>`;
+  return `<div class="asset"><div class="what">${label}<div class="sub">${sub}</div></div><div class="num">${av(a).toFixed(1)}</div></div>`;
 }
 function tradeList() {
   const f = sel.value, all = yearSel.value === ALL;
   document.getElementById("trades").innerHTML = chosen().map(r => {
     if (f && !r.gs.some(g => g.club === f)) return "";
-    const sides = r.gs.slice().sort((a, b) => b.net - a.net).map(g => {
+    const sides = r.gs.slice().sort((a, b) => gn(b) - gn(a)).map(g => {
       const got = r.as.filter(a => a.to === g.club);
-      return `<div class="side"><div class="who"><span>${esc(g.club)} received</span><span class="chip ${cls(g.net)}">${fmt(g.net)}</span></div>` +
+      return `<div class="side"><div class="who"><span>${esc(g.club)} received</span><span class="chip ${cls(gn(g))}">${fmt(gn(g))}</span></div>` +
         (got.length ? got.map(a => assetLine(a, r.year)).join("") : '<div class="asset sub">nothing</div>') + `</div>`;
     }).join("");
     return `<article class="trade"><header><h3>${r.gs.map(g => esc(g.club)).join(" &middot; ")}</h3><span class="tno">${all ? r.year + " &middot; " : ""}TRADE ${r.t}</span></header><div class="sides">${sides}</div></article>`;
@@ -243,10 +273,15 @@ function tradeList() {
 function renderAll() { header(); ranking(); clubTable(); tradeList(); }
 yearSel.addEventListener("change", renderAll);
 sel.addEventListener("change", tradeList);
-document.querySelectorAll(".seg button").forEach(b => b.addEventListener("click", () => {
+document.querySelectorAll("[data-rank]").forEach(b => b.addEventListener("click", () => {
   rankBy = b.dataset.rank;
-  document.querySelectorAll(".seg button").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+  document.querySelectorAll("[data-rank]").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
   ranking();
+}));
+document.querySelectorAll("[data-grade]").forEach(b => b.addEventListener("click", () => {
+  grade = b.dataset.grade;
+  document.querySelectorAll("[data-grade]").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+  renderAll();
 }));
 renderAll();
 document.querySelector("#curvetbl tbody").innerHTML = D.curve.map(c =>
