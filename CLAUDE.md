@@ -230,7 +230,7 @@ Run a single file with `testthat::test_file("tests/testthat/test-NAME.R")`.
 
 | Workflow | Trigger | Purpose |
 |----------|---------|---------|
-| `daily-ratings-predictions.yml` | Repository dispatch (from torpdata), **pre-game schedule**, or manual | Compute ratings + match predictions, upload to `predictions` / `ratings-data` |
+| `daily-ratings-predictions.yml` | Repository dispatch (from torpdata), **pre-game schedule**, or manual | Rebuild the stat ratings (`data-raw/06-stat-ratings/` 01, 03, 04; current season uploaded, all seasons when `seasons = TRUE`), then compute ratings + match predictions, upload to `player_stat_ratings-data` / `ratings-data` / `predictions`. The stat ratings were hand-built until 2026-10-28 and froze PSR from round 6 (#289) |
 | `aflw-season-stats-weekly.yml` | Scheduled, weekly | Weekly dated snapshot of AFLW cumulative season stats (statspro), for differencing into per-round figures. Does NOT refresh AFLW Elo/PSR (`data-raw/06-stat-ratings/aflw_run_pipeline.R`), which has no scheduled workflow |
 | `publish-xrapm-snapshots.yml` | Scheduled or manual | Publishes team RAPM/SPM snapshots |
 | `train-stat-models.yml` | Manual only | Retrains the per-stat GAMs (`wt_av_modelling.R`) and publishes to torpmodels `stat-models` |

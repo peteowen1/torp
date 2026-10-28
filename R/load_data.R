@@ -1164,8 +1164,7 @@ load_fixtures <- function(seasons = NULL, all = FALSE, use_disk_cache = FALSE,
   # Process parameters — `all = TRUE` is equivalent to `seasons = TRUE`
   if (all) seasons <- TRUE
   if (is.null(seasons)) seasons <- get_afl_season()
-  # comp-aware floor: AFLW history starts 2018, men's chain data at 2021.
-  seasons <- .validate_seasons_comp(seasons, comp)
+  seasons <- .validate_fixture_seasons(seasons, comp)
 
   cache_prefix <- if (comp == "AFLM") "fixtures" else paste0("fixtures_", comp)
 
@@ -1181,6 +1180,31 @@ load_fixtures <- function(seasons = NULL, all = FALSE, use_disk_cache = FALSE,
   )
   out <- .normalise_team_values(out)
   out
+}
+
+#' Validate seasons for fixtures, allowing next year when asked for by name
+#'
+#' The AFL publishes a season's fixture during the previous year's off-season
+#' (the 2027 opening round was out by October 2026), but every other loader
+#' caps seasons at the current calendar year, where data cannot yet exist.
+#' Fixtures alone accept next year, and only when it is named explicitly:
+#' `seasons = TRUE` still stops at the current year, because pipelines that
+#' read all fixtures (the stat-ratings rebuild among them) would otherwise
+#' start producing rows for an unplayed season.
+#'
+#' @param seasons Numeric seasons or `TRUE`.
+#' @param comp "AFLM" or "AFLW".
+#' @return The validated seasons.
+#' @keywords internal
+.validate_fixture_seasons <- function(seasons, comp = "AFLM") {
+  next_year <- as.integer(format(Sys.Date(), "%Y")) + 1L
+  if (isTRUE(seasons) || !is.numeric(seasons) || !any(seasons == next_year, na.rm = TRUE)) {
+    # comp-aware floor: AFLW history starts 2018, men's chain data at 2021.
+    return(.validate_seasons_comp(seasons, comp))
+  }
+  rest <- seasons[seasons != next_year]
+  if (length(rest)) rest <- .validate_seasons_comp(rest, comp)
+  sort(unique(c(rest, next_year)))
 }
 
 

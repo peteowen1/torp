@@ -69,6 +69,14 @@ cat("assets parsed:", nrow(a), " by type:", paste(names(table(a$type)), table(a$
 stopifnot(!anyNA(a[type == "pick_2026", pick]),
           !anyNA(a[type == "future_pick", .(year, round, orig_club)]),
           all(a[type == "future_pick", as.character(year)] %in% names(TAS_SHIFT)))
+# Corrections to Wikipedia's table, from AFL.com.au's trade articles and draft
+# order page (saved in trades_2026/official/, checked 2026-10-28):
+#   trade 17 is listed backwards: the Bulldogs received picks 42 and 53, and
+#   Brisbane received the Bulldogs' 2027 second-round pick.
+#   (Trade 16's "pick 58" is really 59; the pick map fixes that number.)
+a[trade == 17, c("to_club", "from_club") := .(from_club, to_club)]
+stopifnot(a[trade == 17 & item == "pick 42", to_club] == "Western Bulldogs")
+
 # The five-club trade (7) gives only a future pick's original club, not who
 # handed it over. Every such pick there is a party's own, so the original
 # club is taken as the giver; anything else would stop here.
@@ -89,6 +97,31 @@ a[type == "future_pick", slot := 19 - ladder]                    # 18th on the l
 a[type == "future_pick", slot := fifelse(year == 2027, 0.5 * slot + 0.5 * 9.5, 9.5)]
 a[type == "future_pick", exp_pick := (round - 1) * 18 + slot + TAS_SHIFT[as.character(year)]]
 a[type == "future_pick", exp_pick_abc := (round - 1) * 18 + slot + 18]
+# Pick numbers in the Wikipedia table are as at each trade, and they moved
+# during the period (the same "pick 6" appears in trades 7 and 11). When the
+# official map exists (trades_2026/official/pick_map.csv: each traded 2026
+# pick's original club and its slot in the final post-trade order), value
+# every 2026 pick at its final slot instead. Unmapped picks keep the number
+# quoted at the trade and are listed.
+a[, pick_at_trade := pick]
+map_path <- file.path(raw_dir, "official", "pick_map.csv")
+if (file.exists(map_path)) {
+  pm <- fread(map_path)[!is.na(final_pick)]
+  pm[, num := as.integer(sub("^pick (No\\. )?([0-9]+).*$", "\\2", wiki_label))]
+  a[pm, on = .(trade, to_club, from_club, pick = num), `:=`(pick = i.final_pick, original_club = i.original_club)]
+  moved <- a[type == "pick_2026" & pick != pick_at_trade]
+  cat("2026 picks re-keyed to their final slot:", a[type == "pick_2026" & !is.na(original_club), .N],
+      "of", a[type == "pick_2026", .N], "; numbers that changed:", nrow(moved), "\n")
+  if (nrow(moved)) print(moved[, .(trade, to_club, from_club, pick_at_trade, final_pick = pick, original_club)])
+  unm <- a[type == "pick_2026" & is.na(original_club)]
+  if (nrow(unm)) {
+    print(unm[, .(trade, to_club, from_club, pick_at_trade)])
+    stop(nrow(unm), " 2026 pick(s) not in the official pick map; a club-name or label mismatch would otherwise value them at a stale number")
+  }
+} else {
+  a[, original_club := NA_character_]
+  cat("no official pick map yet: 2026 picks valued at the number quoted at each trade\n")
+}
 a[type == "pick_2026", value := pick_value(pick)]
 a[type == "future_pick", `:=`(value = pick_value(exp_pick) * disc^(year - 2026),
                               value_abc = pick_value(exp_pick_abc) * disc^(year - 2026))]
@@ -143,19 +176,81 @@ if (file.exists(stay_path)) {
   cat("\nno stay curve yet; value_club not computed\n")
 }
 
+# ---- 2c. Net of salary (rough) -- EXPERIMENT, NOT THE DEFAULT GRADE ----
+# Pete, 2026-10-28: the published grades do not adjust for salary or
+# contracts, because individual contracts are unknown. These columns
+# (value_net, value_club_net, net_salary, net_club_salary) exist to see how
+# much a rough salary charge would move the grades. Do not show them as the
+# grade; label them as a what-if wherever they appear.
+# Individual contracts are not public. The AFL publishes how many primary
+# listed players fall in each pay band (2025, 663 players, average $505,961;
+# raw page in torpdata/data/raw/salary_2025/). Each rated player gets the band
+# at his TORP rank, valued at the band's midpoint, held flat while he is on a
+# list (contracts run for years). Salary above the bottom band's midpoint is
+# turned into value units at the league's own rate: total pay above that floor
+# divided by total expected 2027 value above replacement. So a player paid
+# exactly what the league pays for his value nets zero; stars on modest pay,
+# and draftees, net positive.
+# Contracts: every player is assumed to have three seasons left on his current
+# pay (CONTRACT_SEASONS), after which he is paid what he is worth, so seasons
+# 4-8 net to zero. Holding pay flat for all eight seasons (the first version)
+# charged declining players for years no contract runs.
+# Draftees: bottom-band pay for three seasons (net = full value), then a second
+# contract at SECOND_CONTRACT_DISCOUNT of market for seasons 4-6 (net = that
+# share of value), then market.
+CONTRACT_SEASONS <- 3L
+SECOND_CONTRACT_DISCOUNT <- 0.5
+band_n   <- c(107, 187, 163, 94, 54, 36, 16, 4, 2)          # 2025, lowest band first
+band_mid <- c(0.1, 0.3, 0.5, 0.7, 0.9, 1.1, 1.3, 1.5, 1.7)  # $m
+stopifnot(sum(band_n) == 663)
+sal <- proj[!is.na(torp_2026), .(player_id, torp_2026, ev_2027, age)]
+sal[, q := frank(torp_2026, ties.method = "first") / .N]      # 0 = lowest rated
+sal[, salary := band_mid[findInterval(q, c(0, cumsum(band_n) / sum(band_n)), left.open = TRUE, all.inside = TRUE)]]
+floor_sal <- band_mid[1]
+price <- sal[, sum(salary - floor_sal) / sum(pmax(ev_2027, 0))]  # $m per value unit
+cat(sprintf("\nsalary model: %d players, mean $%.0fk (AFL 2025: $506k); league rate $%.0fk per value unit above replacement\n",
+            nrow(sal), 1000 * mean(sal$salary), 1000 * price))
+onl <- melt(proj[, c("player_id", grep("^on_list_", names(proj), value = TRUE)), with = FALSE],
+            id.vars = "player_id", value.name = "on_list")[, k := as.integer(sub("on_list_", "", variable)) - 2026L]
+# Per season k: net_k = (ev_k - (salary - floor) / price x on_list_k) x disc^(k-1),
+# counted for k <= CONTRACT_SEASONS only. ev_k already allows for leaving a list.
+net <- merge(evl[, .(player_id, k, ev)], onl[, .(player_id, k, on_list)], by = c("player_id", "k"))
+net <- merge(net, sal[, .(player_id, salary, band = age_band(age + 1))], by = "player_id")
+net <- merge(net, stay[group_type == "moved", .(band = group, k, share_at_club)], by = c("band", "k"))
+net[, net_k := fifelse(k <= CONTRACT_SEASONS, (ev - (salary - floor_sal) / price * on_list) * disc^(k - 1), 0)]
+fwrite(net[order(player_id, k)], file.path(out_dir, "05_player_seasons_net.csv"))
+netp <- net[, .(value_net = sum(net_k), value_club_net = sum(net_k * share_at_club), salary = salary[1]), by = player_id]
+a[netp, on = "player_id", `:=`(salary_m = i.salary, value_net = i.value_net, value_club_net = i.value_club_net)]
+# picks: rookie-deal seasons count in full, second-contract seasons at the discount
+ps_raw <- fread(file.path(out_dir, "04_pick_seasons.csv"))[, band := pick_band(pick)]
+rk <- merge(ps_raw[, .(v = mean(v)), by = .(band, k)],
+            stay[group_type == "draftee", .(band = group, k, share_at_club)], by = c("band", "k"))
+rk[, w := fifelse(k <= 3, 1, fifelse(k <= 6, SECOND_CONTRACT_DISCOUNT, 0))]
+rk <- rk[, .(rookie_share = if (sum(v) > 0) min(max(sum(v * w) / sum(v), 0), 1) else 0,
+             rookie_share_club = if (sum(v * share_at_club) > 0)
+               min(max(sum(v * share_at_club * w) / sum(v * share_at_club), 0), 1) else 0), by = band]
+cat("draftee rookie-deal share of eight-season value by pick band:\n"); print(rk)
+a[rk, on = "band", `:=`(value_net = fifelse(type != "player", value * i.rookie_share, value_net),
+                        value_club_net = fifelse(type != "player", value_club * i.rookie_share_club, value_club_net))]
+stopifnot(a[, !anyNA(value_net) && !anyNA(value_club_net)])
+
 # ---- 3. Grade ----
 # value in for each club minus value out, per trade
 g_in  <- a[, .(v_in = sum(value, na.rm = TRUE), v_in_abc = sum(value_abc, na.rm = TRUE),
-               v_in_club = sum(value_club), got = paste(item, collapse = "; ")), by = .(trade, club = to_club)]
+               v_in_club = sum(value_club), v_in_net = sum(value_net), v_in_club_net = sum(value_club_net),
+               got = paste(item, collapse = "; ")), by = .(trade, club = to_club)]
 g_out <- a[, .(v_out = sum(value, na.rm = TRUE), v_out_abc = sum(value_abc, na.rm = TRUE),
-               v_out_club = sum(value_club)), by = .(trade, club = from_club)]
+               v_out_club = sum(value_club), v_out_net = sum(value_net), v_out_club_net = sum(value_club_net)),
+           by = .(trade, club = from_club)]
 gr <- merge(g_in, g_out, by = c("trade", "club"), all = TRUE)
-for (v in c("v_in", "v_out", "v_in_abc", "v_out_abc")) gr[is.na(get(v)), (v) := 0]
+for (v in c("v_in", "v_out", "v_in_abc", "v_out_abc", "v_in_net", "v_out_net", "v_in_club_net", "v_out_club_net"))
+  gr[is.na(get(v)), (v) := 0]
 # A club with no assets on one side gets 0 there, but only when the at-club
 # values exist at all: without a stay curve net_club must stay NA, not 0.
 if (a[, !anyNA(value_club)]) for (v in c("v_in_club", "v_out_club")) gr[is.na(get(v)), (v) := 0]
 gr[, `:=`(net = round(v_in - v_out, 1), net_abc = round(v_in_abc - v_out_abc, 1),
-          net_club = round(v_in_club - v_out_club, 1))]
+          net_club = round(v_in_club - v_out_club, 1),
+          net_salary = round(v_in_net - v_out_net, 1), net_club_salary = round(v_in_club_net - v_out_club_net, 1))]
 # Netting in minus out is zero-sum by construction, so check the attribution
 # instead: no asset goes to the club that gave it, and every club named on an
 # asset is a party to that trade (from the "Clubs involved" cell).
@@ -172,4 +267,11 @@ cat("\nnet value by trade and club (value in minus value out; positive = club wo
 print(gr[order(trade, -net), .(trade, club, v_in = round(v_in, 1), v_out = round(v_out, 1), net, net_abc, net_club)], nrows = 100)
 cat("\nnet over the whole trade period, by club:\n")
 print(gr[, .(trades = .N, net = round(sum(net), 1), net_abc = round(sum(net_abc), 1),
-             net_club = round(sum(net_club), 1)), by = club][order(-net)])
+             net_club = round(sum(net_club), 1), net_salary = round(sum(net_salary), 1),
+             net_club_salary = round(sum(net_club_salary), 1)), by = club][order(-net_club_salary)])
+cat("
+trade 11 (Blakey) by club:
+"); print(gr[trade == 11, .(club, net, net_club, net_salary, net_club_salary)])
+cat("
+player salary assumptions for traded players ($m):
+"); print(a[type == "player", .(item, torp_2026, salary_m, value = round(value, 1), value_net = round(value_net, 1))])

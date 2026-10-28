@@ -22,7 +22,9 @@
 \item{terms}{Output of \code{.np_difficulty_terms()}, or \code{NULL} under flat.}
 }
 \value{
-\code{led} with \code{kind}, \code{scored}, \code{contested} and the six parts \code{own_hm},
+\code{led} with \code{kind}, \code{row_role} (\code{"decision"} on a kick or handball,
+\code{"reception"} on everything else, stoppages included), \code{scored},
+\code{contested} and the six parts \code{own_hm},
 \code{recv_hm}, \code{win_hm} (a same-team contest winner), \code{team_hm}, \code{cede_hm}
 (ground-ball value ceded to the opposition) and \code{cede_c_hm} (contest
 value ceded to the opposition, routed to the contest winner by
