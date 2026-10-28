@@ -237,5 +237,16 @@ it computes its own career-centred PSR. Preserve v15 with
 \code{data-raw/03-ratings/promote_rating_vintage.R} (PROMOTE_FROM=v15,
 PROMOTE_TO=v16) and move the manifest to canonical v16 BEFORE this reaches
 main.
+
+v17 (2026-10-28): no constant changes. The released stat ratings had taken
+in no games since 2026 round 6 (torp#289), so published PSR ignored rounds
+7-29. They are rebuilt on the current code and data, which also moves
+2025 and early-2026 PSR a little (code changes since the April build; the
+2025 source stats are unchanged). End-2026 TORP moves 0.55 on average
+(rank correlation 0.93, 724 players); end-2026 PSR's correlation with the
+season's mean PSV rises from 0.70 to 0.92 (669 players). Preserve v16 with
+\code{data-raw/03-ratings/promote_rating_vintage.R} (PROMOTE_FROM=v16,
+PROMOTE_TO=v17) and move the manifest to canonical v17 BEFORE this reaches
+main.
 }
 \keyword{internal}
