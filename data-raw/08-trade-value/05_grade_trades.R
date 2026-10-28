@@ -69,6 +69,14 @@ cat("assets parsed:", nrow(a), " by type:", paste(names(table(a$type)), table(a$
 stopifnot(!anyNA(a[type == "pick_2026", pick]),
           !anyNA(a[type == "future_pick", .(year, round, orig_club)]),
           all(a[type == "future_pick", as.character(year)] %in% names(TAS_SHIFT)))
+# Corrections to Wikipedia's table, from AFL.com.au's trade articles and draft
+# order page (saved in trades_2026/official/, checked 2026-10-28):
+#   trade 17 is listed backwards: the Bulldogs received picks 42 and 53, and
+#   Brisbane received the Bulldogs' 2027 second-round pick.
+#   (Trade 16's "pick 58" is really 59; the pick map fixes that number.)
+a[trade == 17, c("to_club", "from_club") := .(from_club, to_club)]
+stopifnot(a[trade == 17 & item == "pick 42", to_club] == "Western Bulldogs")
+
 # The five-club trade (7) gives only a future pick's original club, not who
 # handed it over. Every such pick there is a party's own, so the original
 # club is taken as the giver; anything else would stop here.
@@ -89,6 +97,28 @@ a[type == "future_pick", slot := 19 - ladder]                    # 18th on the l
 a[type == "future_pick", slot := fifelse(year == 2027, 0.5 * slot + 0.5 * 9.5, 9.5)]
 a[type == "future_pick", exp_pick := (round - 1) * 18 + slot + TAS_SHIFT[as.character(year)]]
 a[type == "future_pick", exp_pick_abc := (round - 1) * 18 + slot + 18]
+# Pick numbers in the Wikipedia table are as at each trade, and they moved
+# during the period (the same "pick 6" appears in trades 7 and 11). When the
+# official map exists (trades_2026/official/pick_map.csv: each traded 2026
+# pick's original club and its slot in the final post-trade order), value
+# every 2026 pick at its final slot instead. Unmapped picks keep the number
+# quoted at the trade and are listed.
+a[, pick_at_trade := pick]
+map_path <- file.path(raw_dir, "official", "pick_map.csv")
+if (file.exists(map_path)) {
+  pm <- fread(map_path)[!is.na(final_pick)]
+  pm[, num := as.integer(sub("^pick (No\\. )?([0-9]+).*$", "\\2", wiki_label))]
+  a[pm, on = .(trade, to_club, from_club, pick = num), `:=`(pick = i.final_pick, original_club = i.original_club)]
+  moved <- a[type == "pick_2026" & pick != pick_at_trade]
+  cat("2026 picks re-keyed to their final slot:", a[type == "pick_2026" & !is.na(original_club), .N],
+      "of", a[type == "pick_2026", .N], "; numbers that changed:", nrow(moved), "\n")
+  if (nrow(moved)) print(moved[, .(trade, to_club, from_club, pick_at_trade, final_pick = pick, original_club)])
+  unm <- a[type == "pick_2026" & is.na(original_club)]
+  if (nrow(unm)) { cat("not in the official map (valued at the number quoted at the trade):\n"); print(unm[, .(trade, to_club, from_club, pick_at_trade)]) }
+} else {
+  a[, original_club := NA_character_]
+  cat("no official pick map yet: 2026 picks valued at the number quoted at each trade\n")
+}
 a[type == "pick_2026", value := pick_value(pick)]
 a[type == "future_pick", `:=`(value = pick_value(exp_pick) * disc^(year - 2026),
                               value_abc = pick_value(exp_pick_abc) * disc^(year - 2026))]
