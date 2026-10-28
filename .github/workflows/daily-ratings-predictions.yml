@@ -99,6 +99,22 @@ jobs:
           needs: |
             devtools
 
+      # The stat ratings that PSR (half of TORP) is built from used to be rebuilt
+      # by hand, and in 2026 they went untouched from round 6 to the Grand
+      # Final, freezing PSR (torp#289). Rebuild them every run instead: ~2.5
+      # minutes locally. Nightly runs upload only the current season's file;
+      # a full-history run (seasons = TRUE) uploads every season.
+      # run_ratings_pipeline.R's .assert_stat_ratings_fresh() still stops the
+      # run if this step ever leaves them behind.
+      - name: Rebuild stat ratings
+        if: github.event.client_payload.release_mode != 'team_only'
+        env:
+          STAT_RATINGS_EXPORT_SEASONS: ${{ github.event.inputs.seasons == 'TRUE' && 'all' || 'current' }}
+        run: |
+          Rscript data-raw/06-stat-ratings/01_compute_match_stats.R
+          Rscript data-raw/06-stat-ratings/03_estimate_stat_ratings.R
+          Rscript data-raw/06-stat-ratings/04_export_stat_ratings.R
+
       - name: Compute TORP ratings
         if: github.event.client_payload.release_mode != 'team_only'
         env:

@@ -26,6 +26,23 @@ cli::cli_h1("Exporting to torpdata")
 
 seasons <- sort(unique(all_stat_ratings$season))
 
+# STAT_RATINGS_EXPORT_SEASONS: "" or "all" exports every season (the manual
+# default); "current" exports only get_afl_season() (the nightly workflow,
+# torp#289: earlier seasons do not change between nights, so re-uploading
+# them every run is pointless); "2025,2026" exports a list.
+# STAT_RATINGS_DRY_RUN=1 reports what would be uploaded and uploads nothing.
+export_sel <- Sys.getenv("STAT_RATINGS_EXPORT_SEASONS", "")
+if (identical(export_sel, "current")) {
+  seasons <- intersect(seasons, get_afl_season())
+} else if (nzchar(export_sel) && !identical(export_sel, "all")) {
+  seasons <- intersect(seasons, as.integer(strsplit(export_sel, ",")[[1]]))
+}
+if (length(seasons) == 0) {
+  cli::cli_abort("STAT_RATINGS_EXPORT_SEASONS={.val {export_sel}} matches no season in the computed stat ratings.")
+}
+dry_run <- identical(Sys.getenv("STAT_RATINGS_DRY_RUN"), "1")
+cli::cli_inform("Exporting {length(seasons)} season{?s}: {paste(seasons, collapse = ', ')}{if (dry_run) ' (DRY RUN)' else ''}")
+
 n_success <- 0
 n_fail <- 0
 
@@ -35,8 +52,12 @@ for (szn in seasons) {
   file_name <- paste0("player_stat_ratings_", szn)
 
   tryCatch({
-    save_to_release(szn_data, file_name, release_tag)
-    cli::cli_alert_success("{szn}: {nrow(szn_data)} rows exported")
+    if (dry_run) {
+      cli::cli_inform("DRY RUN: would upload {file_name} ({nrow(szn_data)} rows, rounds {min(szn_data$round)}-{max(szn_data$round)})")
+    } else {
+      save_to_release(szn_data, file_name, release_tag)
+    }
+    if (!dry_run) cli::cli_alert_success("{szn}: {nrow(szn_data)} rows exported")
     n_success <- n_success + 1
   }, error = function(e) {
     cli::cli_warn("Failed to export {szn}: {conditionMessage(e)}")
