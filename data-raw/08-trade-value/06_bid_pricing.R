@@ -100,18 +100,20 @@ fwrite(res, file.path(out_dir, "06_bid_pricing.csv"))
 cat("bid pricing (points = Draft Value Index; TORP = eight-season value units; gain = player minus what was given, higher is better for the club):\n")
 print(res)
 
-# What-if grid for the dual-eligible prospects with no bid range yet: price a
-# bid at every pick 1-40 for each club that could match. Cooper Hodge:
-# Hawthorn father-son or Brisbane academy; Aidan McCartney: North Melbourne
-# father-son or Sydney academy (FINDINGS.md section 3). Finishes from the 2026
+# What-if grid for the two prospects with no bid range yet: price a bid at
+# every pick 1-40 for the club that can match. Both were dual eligible and
+# have nominated one club, so only that club can match on the night:
+# Cooper Hodge chose Hawthorn (father-son) over the Brisbane academy (SEN,
+# 2026-09-07); Aidan McCartney chose North Melbourne (father-son) over the
+# Sydney academy (Zero Hanger, 2026-08-28). Finishes from the 2026
 # home-and-away ladder. Read off the row at the bid once phantoms place him.
 dual <- data.table(
-  player = c("Cooper Hodge", "Cooper Hodge", "Aidan McCartney", "Aidan McCartney"),
-  club   = c("HAW", "BL", "NMFC", "SYD"),
-  link   = c("father-son", "academy", "father-son", "academy"),
-  finish = c(4, 3, 14, 2))
+  player = c("Cooper Hodge", "Aidan McCartney"),
+  club   = c("HAW", "NMFC"),
+  link   = c("father-son", "father-son"),
+  finish = c(4, 14))
 grid <- rbindlist(lapply(seq_len(nrow(dual)), function(i)
   rbindlist(lapply(1:40, function(b) do.call(price_bid, c(as.list(dual[i]), bid = b))))))
 fwrite(grid, file.path(out_dir, "06_bid_grid.csv"))
-cat("\nwhat-if grid written:", nrow(grid), "rows (4 club links x bids 1-40)\n")
+cat("\nwhat-if grid written:", nrow(grid), "rows (2 nominated clubs x bids 1-40)\n")
 print(dcast(grid, bid ~ paste(player, club), value.var = "can_match")[bid <= 25])

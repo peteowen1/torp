@@ -19,7 +19,7 @@ bids  <- fread(file.path(out_dir, "06_bid_pricing.csv"))
 grid  <- fread(file.path(out_dir, "06_bid_grid.csv"))
 cat("rows: curve", nrow(curve), "| order", nrow(order), "| bids", nrow(bids), "| grid", nrow(grid), "\n")
 stopifnot(nrow(order) == 60, identical(order$pick, 1:60), !anyNA(order$holder),
-          nrow(bids) == 6, nrow(grid) == 160, all(1:60 %in% curve$pick))
+          nrow(bids) == 6, nrow(grid) == 80, all(1:60 %in% curve$pick))
 
 # TORP value: expected eight-season value of a player taken at that pick
 # (games x time on ground x rating above replacement, 10% discount a year).
@@ -47,6 +47,6 @@ dest <- file.path(out_dir, "draft_2026.json")
 write_json(out, dest, auto_unbox = TRUE, pretty = TRUE, na = "null", dataframe = "rows")
 
 back <- fromJSON(dest)
-stopifnot(nrow(back$picks) == 60, nrow(back$bids) == 6, nrow(back$bid_grid) == 160)
+stopifnot(nrow(back$picks) == 60, nrow(back$bids) == 6, nrow(back$bid_grid) == 80)
 cat("wrote", dest, sprintf("(%.1f KB)", file.size(dest) / 1024), "\n")
 print(head(back$picks, 5))
