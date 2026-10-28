@@ -64,6 +64,13 @@ ul.notes{margin:0;padding-left:1.1em;display:flex;flex-direction:column;gap:8px;
 .seg button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
 .seg button:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
 .rk td.who2{min-width:180px}
+.rkbtn{font:inherit;color:inherit;background:none;border:0;padding:0;text-align:left;cursor:pointer;text-decoration:underline dotted var(--muted);text-underline-offset:3px}
+.rkbtn::before{content:"\25B8\00a0";color:var(--accent);display:inline-block;transition:transform .15s}
+.rkbtn[aria-expanded="true"]::before{transform:rotate(90deg)}
+.rkbtn:hover{text-decoration-color:var(--accent)}
+.rkbtn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.rk tr.rkopen td{border-bottom:0}
+.rk tr.rkdetail td{background:var(--surface);padding:10px 12px 14px}
 </style>
 <div class="wrap">
 <header style="display:flex;flex-direction:column;gap:12px">
@@ -200,15 +207,28 @@ function ranking() {
   const rows = chosen().map(r => ({...r, moved: moved(r), best: best(r)}))
     .sort((a, b) => rankBy === "moved" ? b.moved - a.moved : gn(b.best) - gn(a.best));
   document.getElementById("rkcap").textContent = rankBy === "moved"
-    ? "Value moved: the value of everything that changed clubs in the trade, counting each player and pick once. Bigger means more was at stake."
-    : "Its net: what the trade's biggest winner received minus what it gave up. Bigger means a more one-sided trade; the clubs on the other side lost that much between them.";
+    ? "Value moved: the value of everything that changed clubs in the trade, counting each player and pick once. Bigger means more was at stake. Click a trade to see what each club received."
+    : "Its net: what the trade's biggest winner received minus what it gave up. Bigger means a more one-sided trade; the clubs on the other side lost that much between them. Click a trade to see what each club received.";
   document.getElementById("rkyear").hidden = !all;
-  const shown = all ? rows.slice(0, 30) : rows;
+  const shown = all ? rows.slice(0, 30) : rows, ncol = all ? 6 : 5;
   document.getElementById("rkbody").innerHTML = shown.map((r, i) => {
-    return `<tr><td class="num">${i + 1}</td>${all ? `<td>${r.year}</td>` : ""}<td>${r.gs.map(g => esc(g.club)).join(" &middot; ")}<div class="sub">trade ${r.t}</div></td>` +
-      `<td class="num">${r.moved.toFixed(1)}</td><td class="who2">${esc(r.best.club)}</td><td class="num ${cls(gn(r.best))}">${fmt(gn(r.best))}</td></tr>`;
+    const key = r.year + "-" + r.t, open = OPEN.has(key);
+    return `<tr${open ? ' class="rkopen"' : ""}><td class="num">${i + 1}</td>${all ? `<td>${r.year}</td>` : ""}` +
+      `<td><button type="button" class="rkbtn" data-key="${key}" aria-expanded="${open}">${r.gs.map(g => esc(g.club)).join(" &middot; ")}</button><div class="sub">trade ${r.t}</div></td>` +
+      `<td class="num">${r.moved.toFixed(1)}</td><td class="who2">${esc(r.best.club)}</td><td class="num ${cls(gn(r.best))}">${fmt(gn(r.best))}</td></tr>` +
+      (open ? `<tr class="rkdetail"><td colspan="${ncol}">${sidesHtml(r)}</td></tr>` : "");
   }).join("") + (all && rows.length > 30 ? `<tr><td colspan="6" class="sub">Top 30 of ${rows.length} trades shown. Pick one year to see them all.</td></tr>` : "");
 }
+// Trades opened in the ranking, kept across re-renders ("year-trade").
+const OPEN = new Set();
+document.getElementById("rkbody").addEventListener("click", e => {
+  const b = e.target.closest(".rkbtn");
+  if (!b) return;
+  const k = b.dataset.key;
+  OPEN.has(k) ? OPEN.delete(k) : OPEN.add(k);
+  ranking();
+  document.querySelector(`.rkbtn[data-key="${k}"]`).focus();
+});
 
 function clubTable() {
   const clubs = {};
@@ -259,16 +279,19 @@ function assetLine(a, y) {
   const label = a.type === "pick" ? `Pick ${a.pick}` : esc(a.item);
   return `<div class="asset"><div class="what">${label}<div class="sub">${sub}</div></div><div class="num">${av(a).toFixed(1)}</div></div>`;
 }
+// What each club received in one trade, biggest winner first.
+function sidesHtml(r) {
+  return `<div class="sides">` + r.gs.slice().sort((a, b) => gn(b) - gn(a)).map(g => {
+    const got = r.as.filter(a => a.to === g.club);
+    return `<div class="side"><div class="who"><span>${esc(g.club)} received</span><span class="chip ${cls(gn(g))}">${fmt(gn(g))}</span></div>` +
+      (got.length ? got.map(a => assetLine(a, r.year)).join("") : '<div class="asset sub">nothing</div>') + `</div>`;
+  }).join("") + `</div>`;
+}
 function tradeList() {
   const f = sel.value, all = yearSel.value === ALL;
   document.getElementById("trades").innerHTML = chosen().map(r => {
     if (f && !r.gs.some(g => g.club === f)) return "";
-    const sides = r.gs.slice().sort((a, b) => gn(b) - gn(a)).map(g => {
-      const got = r.as.filter(a => a.to === g.club);
-      return `<div class="side"><div class="who"><span>${esc(g.club)} received</span><span class="chip ${cls(gn(g))}">${fmt(gn(g))}</span></div>` +
-        (got.length ? got.map(a => assetLine(a, r.year)).join("") : '<div class="asset sub">nothing</div>') + `</div>`;
-    }).join("");
-    return `<article class="trade"><header><h3>${r.gs.map(g => esc(g.club)).join(" &middot; ")}</h3><span class="tno">${all ? r.year + " &middot; " : ""}TRADE ${r.t}</span></header><div class="sides">${sides}</div></article>`;
+    return `<article class="trade"><header><h3>${r.gs.map(g => esc(g.club)).join(" &middot; ")}</h3><span class="tno">${all ? r.year + " &middot; " : ""}TRADE ${r.t}</span></header>${sidesHtml(r)}</article>`;
   }).join("");
 }
 function renderAll() { header(); ranking(); clubTable(); tradeList(); }
