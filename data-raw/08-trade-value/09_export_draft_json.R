@@ -1,8 +1,9 @@
 # Export the 2026 draft-night page data as one JSON file for inthegame-blog
 # (inthegame-blog#1059): the final draft order with each pick's points and
-# TORP value, the six priced bids, and the Hodge/McCartney what-if grid.
+# TORP value, the six priced bids, and the Hodge/McCartney what-if grid with the
+# press's bid ranges.
 #
-# Inputs: 04_pick_curve.csv and 06_bid_pricing.csv / 06_bid_grid.csv / 06_dvi.csv (run 04
+# Inputs: 04_pick_curve.csv and 06_bid_pricing.csv / 06_bid_grid.csv / 06_bid_ranges.csv / 06_dvi.csv (run 04
 # and 06 first), and trades_2026/official/final_order_1_60.csv.
 # Output: torpdata/data/raw/trade_value/draft_2026.json (gitignored); the blog
 # session copies it in as a static file.
@@ -17,9 +18,10 @@ curve <- fread(file.path(out_dir, "04_pick_curve.csv"))
 order <- fread(file.path(raw_dir, "trades_2026", "official", "final_order_1_60.csv"))
 bids  <- fread(file.path(out_dir, "06_bid_pricing.csv"))
 grid  <- fread(file.path(out_dir, "06_bid_grid.csv"))
+ranges <- fread(file.path(out_dir, "06_bid_ranges.csv"))
 cat("rows: curve", nrow(curve), "| order", nrow(order), "| bids", nrow(bids), "| grid", nrow(grid), "\n")
 stopifnot(nrow(order) == 60, identical(order$pick, 1:60), !anyNA(order$holder),
-          nrow(bids) == 6, nrow(grid) == 80, all(1:60 %in% curve$pick))
+          nrow(bids) == 6, nrow(grid) == 108, all(1:60 %in% curve$pick))
 
 # TORP value: expected eight-season value of a player taken at that pick
 # (games x time on ground x rating above replacement, 10% discount a year).
@@ -39,14 +41,16 @@ out <- list(
     torp_value = "Expected eight-season TORP value of a player taken at the pick, discounted 10% a year.",
     points = "Draft Value Index points (0 from pick 55).",
     bids = "Bid positions from one mock draft (Reading the Play, 2026-09-21); they will move.",
-    can_match = "The club can match if its shortfall is 412 points or less."),
+    can_match = "The club can match if its shortfall is 412 points or less.",
+    bid_grid = "A bid priced at every pick 1-54 for Hodge (Hawthorn) and McCartney (North Melbourne); bid_ranges says where the press places them."),
   picks = picks,
   bids = bids,
-  bid_grid = grid)
+  bid_grid = grid,
+  bid_ranges = ranges)
 dest <- file.path(out_dir, "draft_2026.json")
 write_json(out, dest, auto_unbox = TRUE, pretty = TRUE, na = "null", dataframe = "rows")
 
 back <- fromJSON(dest)
-stopifnot(nrow(back$picks) == 60, nrow(back$bids) == 6, nrow(back$bid_grid) == 80)
+stopifnot(nrow(back$picks) == 60, nrow(back$bids) == 6, nrow(back$bid_grid) == 108, nrow(back$bid_ranges) == 2)
 cat("wrote", dest, sprintf("(%.1f KB)", file.size(dest) / 1024), "\n")
 print(head(back$picks, 5))
