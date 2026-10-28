@@ -150,6 +150,7 @@ ul.notes{margin:0;padding-left:1.1em;display:flex;flex-direction:column;gap:8px;
 <script>
 const D = __DATA__;
 const fmt = v => v == null ? "&ndash;" : (v > 0 ? "+" : "") + (Math.round(v * 10) / 10).toString();
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const cls = v => v > 0.05 ? "pos" : v < -0.05 ? "neg" : "";
 const YEARS = Object.keys(D.years).map(Number).sort((a, b) => b - a);
 const ALL = "all";
@@ -189,8 +190,8 @@ function ranking() {
   document.getElementById("rkyear").hidden = !all;
   const shown = all ? rows.slice(0, 30) : rows;
   document.getElementById("rkbody").innerHTML = shown.map((r, i) => {
-    return `<tr><td class="num">${i + 1}</td>${all ? `<td>${r.year}</td>` : ""}<td>${r.gs.map(g => g.club).join(" &middot; ")}<div class="sub">trade ${r.t}</div></td>` +
-      `<td class="num">${r.moved.toFixed(1)}</td><td class="who2">${r.best.club}</td><td class="num ${cls(r.best.net)}">${fmt(r.best.net)}</td></tr>`;
+    return `<tr><td class="num">${i + 1}</td>${all ? `<td>${r.year}</td>` : ""}<td>${r.gs.map(g => esc(g.club)).join(" &middot; ")}<div class="sub">trade ${r.t}</div></td>` +
+      `<td class="num">${r.moved.toFixed(1)}</td><td class="who2">${esc(r.best.club)}</td><td class="num ${cls(r.best.net)}">${fmt(r.best.net)}</td></tr>`;
   }).join("") + (all && rows.length > 30 ? `<tr><td colspan="6" class="sub">Top 30 of ${rows.length} trades shown. Pick one year to see them all.</td></tr>` : "");
 }
 
@@ -206,7 +207,7 @@ function clubTable() {
   const abcOn = yearSel.value === "2026";
   document.querySelector("#clubtbl tbody").innerHTML = rows.map(r => {
     const w = Math.abs(r.net) / maxAbs * 50, left = r.net >= 0 ? 50 : 50 - w;
-    return `<tr><td>${r.club}</td><td class="num">${r.trades}</td><td class="num ${cls(r.net)}">${fmt(r.net)}</td>` +
+    return `<tr><td>${esc(r.club)}</td><td class="num">${r.trades}</td><td class="num ${cls(r.net)}">${fmt(r.net)}</td>` +
       `<td class="num ${cls(r.nclub)}">${fmt(r.nclub)}</td><td class="num ${abcOn ? cls(r.abc) : ""}">${abcOn ? fmt(r.abc) : "&ndash;"}</td>` +
       `<td class="barcell"><div class="bar"><div class="axis"></div><div class="fill" style="left:${left}%;width:${w}%;background:var(${r.net >= 0 ? "--gain" : "--loss"})"></div></div></td></tr>`;
   }).join("");
@@ -222,9 +223,9 @@ function assetLine(a, y) {
   const sub = a.type === "player"
       ? (a.unmatched ? `no rating in ${y}; counted as 0` : `age ${a.age}, TORP ${a.torp} in ${y}`)
     : a.type === "future_pick" ? `expected about pick ${Math.round(a.exp)}`
-    : y === 2026 ? `2026 draft${a.orig ? ", originally " + a.orig + "'s" : ""}${a.pat !== a.pick ? " (quoted as " + a.pat + " at the trade)" : ""}`
+    : y === 2026 ? `2026 draft${a.orig ? ", originally " + esc(a.orig) + "'s" : ""}${a.pat !== a.pick ? " (quoted as " + a.pat + " at the trade)" : ""}`
     : `${y} draft, number as quoted at the trade`;
-  const label = a.type === "pick" ? `Pick ${a.pick}` : a.item;
+  const label = a.type === "pick" ? `Pick ${a.pick}` : esc(a.item);
   return `<div class="asset"><div class="what">${label}<div class="sub">${sub}</div></div><div class="num">${a.v.toFixed(1)}</div></div>`;
 }
 function tradeList() {
@@ -233,10 +234,10 @@ function tradeList() {
     if (f && !r.gs.some(g => g.club === f)) return "";
     const sides = r.gs.slice().sort((a, b) => b.net - a.net).map(g => {
       const got = r.as.filter(a => a.to === g.club);
-      return `<div class="side"><div class="who"><span>${g.club} received</span><span class="chip ${cls(g.net)}">${fmt(g.net)}</span></div>` +
+      return `<div class="side"><div class="who"><span>${esc(g.club)} received</span><span class="chip ${cls(g.net)}">${fmt(g.net)}</span></div>` +
         (got.length ? got.map(a => assetLine(a, r.year)).join("") : '<div class="asset sub">nothing</div>') + `</div>`;
     }).join("");
-    return `<article class="trade"><header><h3>${r.gs.map(g => g.club).join(" &middot; ")}</h3><span class="tno">${all ? r.year + " &middot; " : ""}TRADE ${r.t}</span></header><div class="sides">${sides}</div></article>`;
+    return `<article class="trade"><header><h3>${r.gs.map(g => esc(g.club)).join(" &middot; ")}</h3><span class="tno">${all ? r.year + " &middot; " : ""}TRADE ${r.t}</span></header><div class="sides">${sides}</div></article>`;
   }).join("");
 }
 function renderAll() { header(); ranking(); clubTable(); tradeList(); }
