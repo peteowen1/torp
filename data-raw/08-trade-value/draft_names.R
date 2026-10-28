@@ -27,6 +27,9 @@
 }
 
 .name_key <- function(name) {
+  # Drop a quoted nickname (Wikipedia's "Eric 'Roy' Benning"); an apostrophe
+  # inside a surname (O'Driscoll) is not preceded by a space, so it stays.
+  name <- gsub("\\s[\"'\u2018\u201c][^\"' \u2019\u201d]+[\"'\u2019\u201d]", "", name)
   name <- tolower(trimws(name))
   first <- sub(" .*$", "", name)
   surname <- sub("^[^ ]+ +", "", name)

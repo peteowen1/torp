@@ -49,7 +49,8 @@ r <- as.data.table(arrow::read_parquet(file.path(td, "torp_ratings.parquet"),
                                        col_select = c("player_id", "player_name", "team", "season", "round", "torp")))
 setorder(r, player_id, season, round)
 end <- r[, .SD[.N], by = .(player_id, season)]
-stopifnot(end[player_name == "Lachie Neale" & season == 2026, torp] == -0.23)
+neale <- end[player_name == "Lachie Neale" & season == 2026, torp]
+stopifnot(length(neale) == 1, abs(neale - -0.23) < 0.005)
 pg <- rbindlist(lapply(2021:last_season, function(s) {
   system2("gh", c("release", "download", "player_game_ratings-data", "--repo", "peteowen1/torpdata",
                   "--pattern", sprintf("player_game_ratings_%d.parquet", s), "--dir", td))
@@ -145,10 +146,14 @@ grade_year <- function(y) {
         cand <- cand[orig %in% g$orig & round %in% g$rnd]
       }
       g <- g[order(ord)]; cand <- cand[order(pick)]
-      n <- min(nrow(g), nrow(cand))
-      if (n == 0) next
-      for (j in seq_len(n)) {
-        i <- g$row[j]; cj <- cand[j]
+      # A future pick takes the first unused hop with its own original club and
+      # round, so two same-round picks in one trade cannot swap draftees.
+      used <- logical(nrow(cand))
+      for (j in seq_len(nrow(g))) {
+        k <- which(!used & (is.na(g$orig[j]) | (cand$orig == g$orig[j] & cand$round == g$rnd[j])))[1]
+        if (is.na(k)) next
+        used[k] <- TRUE
+        i <- g$row[j]; cj <- cand[k]
         set(a, i, "final_pick", cj$pick)
         if (cj$user == a$to[i]) {
           set(a, i, "draftee", cj$player)
@@ -172,6 +177,8 @@ grade_year <- function(y) {
         set(a, i, c("realised", "after", "how"),
             list(0, pick_value(a$final_pick[i]) * disc^(a$draft[i] - y), "drafted, not played yet"))
       } else {
+        message(sprintf("  %d trade %s: draftee '%s' (%d draft) not matched to a player; valued 0",
+                        y, a$trade[i], a$draftee[i], a$draft[i]))
         set(a, i, c("realised", "after", "how"), list(0, 0, "drafted, never played"))
       }
     }

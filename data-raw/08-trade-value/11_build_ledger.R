@@ -80,6 +80,7 @@ tpl <- readLines("data-raw/08-trade-value/templates/trade_ledger_template.html",
 hit <- grep("const D = __DATA__;", tpl, fixed = TRUE)
 stopifnot(length(hit) == 1)
 js <- gsub("</", "<\\/", js, fixed = TRUE)  # a "</script>" in scraped text cannot close the script
+js <- gsub("<!--", "<\\u0021--", js, fixed = TRUE)  # nor can "<!--" change how the script is parsed
 tpl[hit] <- paste0("const D = ", js, ";")
 writeLines(tpl, file.path(out_dir, "trade_ledger.html"), useBytes = TRUE)
 cat("ledger written:", sprintf("%.0f KB", file.size(file.path(out_dir, "trade_ledger.html")) / 1024),
