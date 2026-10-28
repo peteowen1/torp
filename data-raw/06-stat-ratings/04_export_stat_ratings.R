@@ -68,8 +68,10 @@ for (szn in seasons) {
 if (n_success == 0) {
   cli::cli_abort("All {n_fail} exports failed. No data was published.")
 }
+# A partial failure is still a failure: the seasons that did not upload keep
+# their old file, and a warning here is deferred to the end of the log.
 if (n_fail > 0) {
-  cli::cli_warn("{n_fail}/{length(seasons)} season exports failed")
+  cli::cli_abort("{n_fail}/{length(seasons)} season exports failed; those files on the release are now older than the rest.")
 } else {
   cli::cli_alert_success("Export complete!")
 }

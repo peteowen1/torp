@@ -103,7 +103,9 @@ jobs:
       # by hand, and in 2026 they went untouched from round 6 to the Grand
       # Final, freezing PSR (torp#289). Rebuild them every run instead: ~2.5
       # minutes locally. Nightly runs upload only the current season's file;
-      # a full-history run (seasons = TRUE) uploads every season.
+      # a full-history run (seasons = TRUE) uploads every season. A partial
+      # range such as 2021:2025 still uploads only the current season, so
+      # republishing earlier seasons' stat ratings needs seasons = TRUE.
       # run_ratings_pipeline.R's .assert_stat_ratings_fresh() still stops the
       # run if this step ever leaves them behind.
       - name: Rebuild stat ratings
