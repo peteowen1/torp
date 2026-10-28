@@ -28,6 +28,7 @@ dvi <- c(3000, 2481, 2178, 1962, 1795, 1659, 1543, 1443, 1355, 1276, 1205, 1140,
          405, 382, 360, 338, 317, 297, 277, 257, 238, 220, 202, 184, 167, 150, 134, 118, 102,
          86, 71, 57, 42, 28, 14)
 stopifnot(length(dvi) == 54, dvi[1] == 3000, dvi[25] == 590, all(diff(dvi) < 0))
+fwrite(data.table(pick = 1:54, points = dvi), file.path(out_dir, "06_dvi.csv"))  # for 09_export_draft_json.R
 dvi_at <- function(p) ifelse(p <= 54, dvi[pmin(p, 54)], 0)
 # Where a part-used pick slides to: the first pick worth no more than the points
 # left on it, so a club can never come out with a pick worth more than it kept.
