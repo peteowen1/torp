@@ -8,7 +8,8 @@
 #     at picks 1-18; 11th-18th -10% on bids at picks 1-36; at most two picks
 #     to match a bid up to pick 36, a bid after 36 is matched with the next
 #     pick; deficit up to 412 points, taken off next year's first-round pick;
-#   - the draft order as at 2026-10-14 (SEN), picks 1-60;
+#   - the draft order at the end of the trade period, picks 1-60 (SEN 2026-10-14,
+#     identical pick by pick to the AFL page in trades_2026/official/final_order_1_60.csv);
 #   - bid positions from one mock (Reading the Play, 2026-09-21).
 # The TORP value of a pick is the eight-season curve from 04_pick_curve.R.
 #
@@ -35,7 +36,7 @@ slide_to <- function(pts) if (pts <= 0) NA_integer_ else if (pts > dvi[1]) 1L el
 curve <- fread(file.path(out_dir, "04_pick_curve.csv"))
 torp_at <- function(p) ifelse(is.na(p), 0, curve$v8_direct[match(pmin(p, max(curve$pick)), curve$pick)])
 
-# Draft order, picks 1-60, as at 2026-10-14 (FINDINGS.md section 4).
+# Draft order, picks 1-60, final after the trade period (FINDINGS.md section 4).
 order_tbl <- data.table(pick = 1:60, club = c(
   "ESS", "RICH", "WCE", "MELB", "RICH", "SYD", "PORT", "GC", "GWS", "STK", "COLL", "PORT", "CARL",
   "MELB", "ADEL", "STK", "ESS", "CARL", "FRE", "GWS", "BL", "PORT", "WCE", "PORT", "ESS", "GWS",
@@ -63,7 +64,10 @@ price_bid <- function(player, club, link, finish, bid) {
   cost <- round(dvi_at(bid) * f)
   own <- order_tbl$pick[order_tbl$club == club & order_tbl$pick > bid]  # plain vectors: `club` is also a column
   used <- integer(0); leftover_pick <- NA_integer_; remaining <- cost; deficit <- 0
-  if (bid > 36) {
+  if (order_tbl$club[bid] == club) {
+    # The club holds the bid pick itself: it just takes him there, no bid to match.
+    used <- bid; f <- 1; cost <- dvi_at(bid); remaining <- 0
+  } else if (bid > 36) {
     used <- if (length(own)) own[1] else 61L  # matched with the next pick, no points (61+ = past the listed order)
   } else {
     for (p in head(own, 2)) {
@@ -94,3 +98,19 @@ res <- rbindlist(lapply(seq_len(nrow(cands)), function(i) do.call(price_bid, as.
 fwrite(res, file.path(out_dir, "06_bid_pricing.csv"))
 cat("bid pricing (points = Draft Value Index; TORP = eight-season value units; gain = player minus what was given, higher is better for the club):\n")
 print(res)
+
+# What-if grid for the dual-eligible prospects with no bid range yet: price a
+# bid at every pick 1-40 for each club that could match. Cooper Hodge:
+# Hawthorn father-son or Brisbane academy; Aidan McCartney: North Melbourne
+# father-son or Sydney academy (FINDINGS.md section 3). Finishes from the 2026
+# home-and-away ladder. Read off the row at the bid once phantoms place him.
+dual <- data.table(
+  player = c("Cooper Hodge", "Cooper Hodge", "Aidan McCartney", "Aidan McCartney"),
+  club   = c("HAW", "BL", "NMFC", "SYD"),
+  link   = c("father-son", "academy", "father-son", "academy"),
+  finish = c(4, 3, 14, 2))
+grid <- rbindlist(lapply(seq_len(nrow(dual)), function(i)
+  rbindlist(lapply(1:40, function(b) do.call(price_bid, c(as.list(dual[i]), bid = b))))))
+fwrite(grid, file.path(out_dir, "06_bid_grid.csv"))
+cat("\nwhat-if grid written:", nrow(grid), "rows (4 club links x bids 1-40)\n")
+print(dcast(grid, bid ~ paste(player, club), value.var = "can_match")[bid <= 25])
