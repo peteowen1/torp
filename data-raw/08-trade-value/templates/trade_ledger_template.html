@@ -1,0 +1,253 @@
+<title>AFL Trade Ledger</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Public+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: one reading column; club ledger with a diverging bar, then one block per trade, then method tables. */
+:root{
+  --bg:#f3f5f4; --surface:#ffffff; --ink:#18201d; --muted:#5b6862; --rule:#d5dcd8;
+  --accent:#7a3b16; --gain:#1f7a4d; --loss:#b23a2e; --gain-bg:#e3f1e9; --loss-bg:#f7e4e1;
+  --display:"Barlow Condensed","Arial Narrow",Arial,sans-serif;
+  --body:"Public Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#121715; --surface:#1a211e; --ink:#e6ece9; --muted:#9aa8a1; --rule:#2e3833;
+  --accent:#e09a62; --gain:#5fca93; --loss:#f08476; --gain-bg:#173426; --loss-bg:#3a1f1b; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#121715; --surface:#1a211e; --ink:#e6ece9; --muted:#9aa8a1; --rule:#2e3833;
+  --accent:#e09a62; --gain:#5fca93; --loss:#f08476; --gain-bg:#173426; --loss-bg:#3a1f1b; color-scheme:dark}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.55}
+.wrap{max-width:860px;margin:0 auto;padding-block:28px 64px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:40px}
+h1,h2,h3{font-family:var(--display);font-weight:700;letter-spacing:.01em;text-wrap:balance;margin:0;line-height:1.05}
+h1{font-size:clamp(2.4rem,7vw,3.6rem);text-transform:uppercase}
+h2{font-size:1.7rem;text-transform:uppercase;border-bottom:2px solid var(--ink);padding-bottom:6px}
+h3{font-size:1.25rem}
+p{margin:0;max-width:68ch}
+.eyebrow{font-family:var(--display);font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);font-size:.95rem}
+.lede{font-size:1.08rem}
+.meta{color:var(--muted);font-size:.85rem}
+section{display:flex;flex-direction:column;gap:14px}
+.num{font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+.tblwrap{overflow-x:auto;background:var(--surface);border:1px solid var(--rule);border-radius:6px}
+table{border-collapse:collapse;width:100%;font-size:.92rem}
+th,td{padding:8px 10px;border-bottom:1px solid var(--rule);text-align:left;vertical-align:top}
+th{font-family:var(--display);font-weight:600;text-transform:uppercase;letter-spacing:.06em;font-size:.82rem;color:var(--muted)}
+th.num{text-align:right}
+tr:last-child td{border-bottom:0}
+.caption{color:var(--muted);font-size:.88rem}
+.pos{color:var(--gain);font-weight:600}.neg{color:var(--loss);font-weight:600}
+.barcell{width:36%;min-width:130px;vertical-align:middle}
+.bar{position:relative;height:14px}
+.bar .axis{position:absolute;left:50%;top:-3px;bottom:-3px;width:1px;background:var(--muted)}
+.bar .fill{position:absolute;top:0;bottom:0;border-radius:2px}
+.controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+select{font:inherit;padding:6px 8px;border:1px solid var(--rule);border-radius:4px;background:var(--surface);color:var(--ink)}
+select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.trades{display:flex;flex-direction:column;gap:14px}
+.trade{background:var(--surface);border:1px solid var(--rule);border-radius:6px;padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+.trade header{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:baseline;justify-content:space-between}
+.tno{font-family:var(--display);color:var(--muted);font-weight:600;letter-spacing:.08em}
+.sides{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+.side{min-width:0;display:flex;flex-direction:column;gap:6px}
+.side .who{display:flex;justify-content:space-between;gap:8px;font-weight:600;border-bottom:1px solid var(--rule);padding-bottom:4px}
+.chip{font-variant-numeric:tabular-nums;font-size:.82rem;padding:1px 8px;border-radius:999px;white-space:nowrap}
+.chip.pos{background:var(--gain-bg)}.chip.neg{background:var(--loss-bg)}
+.asset{display:flex;justify-content:space-between;gap:10px;font-size:.9rem}
+.asset .what{min-width:0}
+.sub{color:var(--muted);font-size:.8rem}
+ul.notes{margin:0;padding-left:1.1em;display:flex;flex-direction:column;gap:8px;max-width:72ch}
+@media (max-width:520px){.barcell{display:none}}
+.yearbar{position:sticky;top:0;z-index:2;background:var(--bg);padding:8px 0;border-bottom:1px solid var(--rule)}
+.seg{display:inline-flex;border:1px solid var(--rule);border-radius:6px;overflow:hidden;background:var(--surface)}
+.seg button{font:inherit;font-size:.9rem;padding:6px 12px;border:0;background:transparent;color:var(--ink);cursor:pointer}
+.seg button+button{border-left:1px solid var(--rule)}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+.seg button:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.rk td.who2{min-width:180px}
+</style>
+<div class="wrap">
+<header style="display:flex;flex-direction:column;gap:12px">
+  <div class="eyebrow" id="eyebrow">TORP · trade period 2026</div>
+  <h1 id="h1">2026 Trade Ledger</h1>
+  <p class="lede" id="lede"></p>
+  <p class="meta">Built 28 October 2026 on TORP ratings v17; ratings forecast from each player's last two seasons. First draft: salary is not counted, so clubs that took on players look better than they should.</p>
+  <p class="meta" id="pastnote" hidden>Earlier years are graded <b>at the time</b>: each player valued from his rating at the end of that season, each pick at the number quoted in the trade. A second grading, as each trade has turned out since, is still to come.</p>
+</header>
+
+<div class="yearbar controls"><label for="yearsel">Trade period</label><select id="yearsel"></select></div>
+
+<section>
+  <h2>Ranking the trades</h2>
+  <div class="controls"><div class="seg" role="group" aria-label="Rank trades by">
+    <button type="button" data-rank="moved" aria-pressed="true">Value changing hands</button>
+    <button type="button" data-rank="lopsided" aria-pressed="false">Biggest wins and losses</button>
+  </div></div>
+  <p class="caption" id="rkcap"></p>
+  <div class="tblwrap"><table class="rk"><thead><tr><th class="num">#</th><th id="rkyear">Year</th><th>Trade</th><th class="num">Value moved</th><th>Biggest winner</th><th class="num">Its net</th></tr></thead><tbody id="rkbody"></tbody></table></div>
+</section>
+
+<section>
+  <h2>How to read the numbers</h2>
+  <p><b>Value</b> is expected games &times; expected time on ground &times; (TORP &minus; replacement level), summed over 2027&ndash;2034, with each later season counting 10% less. TORP is a per-full-game rate, so a game at 78% time on ground counts 0.78 of it. Replacement level is &minus;1.38 TORP: what a club gets from a mature pickup off the scrap heap. 100 is about 20 games a season at 78% time on ground, 1.3 points above replacement, for five seasons.</p>
+  <p><b>Value to club</b> counts each season only as far as players like him are still at the club by then: movers stay a median three seasons, draftees longer. <b>ABC picks</b> treats every 2027 and 2028 pick as a full round weaker, the market view the ABC reported, instead of our Tasmania adjustment.</p>
+</section>
+
+<section>
+  <h2>Net by club</h2>
+  <p class="caption">Value received minus value given across the trade period. Positive is good for the club. Bars show the Net column, to scale.</p>
+  <div class="tblwrap"><table id="clubtbl"><thead><tr><th>Club</th><th class="num">Trades</th><th class="num">Net</th><th class="num">Value to club</th><th class="num">ABC picks</th><th class="barcell"></th></tr></thead><tbody></tbody></table></div>
+</section>
+
+<section>
+  <h2>Every trade</h2>
+  <div class="controls"><label for="clubsel">Show trades involving</label><select id="clubsel"><option value="">All clubs</option></select></div>
+  <p class="caption">Each side lists what that club received and each item's value. The chip is that club's net for the trade. Future picks show the pick we expect them to become.</p>
+  <div class="trades" id="trades"></div>
+</section>
+
+<section>
+  <h2>What a pick is worth</h2>
+  <p class="caption">Pick value scaled so pick 1 = 3,000, the scale of the AFL's Draft Value Index (DVI). DVI shown only where we checked the figure.</p>
+  <div class="tblwrap"><table id="curvetbl"><thead><tr><th class="num">Pick</th><th class="num">TORP, 8 seasons</th><th class="num">TORP, 5 seasons</th><th class="num">Career games</th><th class="num">AFL DVI</th></tr></thead><tbody></tbody></table></div>
+  <p class="caption">The TORP columns come from the 2020 and 2021 drafts (124 picks): seasons to 2026 as played, later seasons projected. Career games come from the 1991&ndash;2015 drafts (1,946 picks, rookie promotions left out). Picks after about 48 are floored at zero.</p>
+</section>
+
+<section>
+  <h2>How long players stay</h2>
+  <p class="caption">Players who changed clubs, arriving 2000&ndash;2020 (787 players). Stay in seasons at the new club; longer is better for the club that got him.</p>
+  <div class="tblwrap"><table><thead><tr><th>Age on arrival</th><th class="num">Players</th><th class="num">Median stay</th><th class="num">3+ seasons</th><th class="num">5+ seasons</th></tr></thead><tbody>
+  <tr><td>Under 24</td><td class="num">309</td><td class="num">3</td><td class="num">63%</td><td class="num">39%</td></tr>
+  <tr><td>24&ndash;27</td><td class="num">333</td><td class="num">3</td><td class="num">57%</td><td class="num">32%</td></tr>
+  <tr><td>28&ndash;30</td><td class="num">106</td><td class="num">2</td><td class="num">33%</td><td class="num">7%</td></tr>
+  <tr><td>31 and over</td><td class="num">39</td><td class="num">1</td><td class="num">10%</td><td class="num">0%</td></tr>
+  </tbody></table></div>
+  <p class="caption">Draftees who debuted for the club that picked them, drafted 1991&ndash;2020 (1,771 players). Stay in seasons at that club; longer is better.</p>
+  <div class="tblwrap"><table><thead><tr><th>Pick</th><th class="num">Players</th><th class="num">Median stay</th><th class="num">5+ seasons</th></tr></thead><tbody>
+  <tr><td>1&ndash;5</td><td class="num">146</td><td class="num">9</td><td class="num">74%</td></tr>
+  <tr><td>6&ndash;10</td><td class="num">141</td><td class="num">6</td><td class="num">65%</td></tr>
+  <tr><td>11&ndash;20</td><td class="num">276</td><td class="num">6</td><td class="num">63%</td></tr>
+  <tr><td>21&ndash;30</td><td class="num">260</td><td class="num">5</td><td class="num">51%</td></tr>
+  <tr><td>31&ndash;45</td><td class="num">356</td><td class="num">4</td><td class="num">49%</td></tr>
+  <tr><td>46 and later</td><td class="num">592</td><td class="num">3</td><td class="num">38%</td></tr>
+  </tbody></table></div>
+</section>
+
+<section>
+  <h2>What this leaves out</h2>
+  <ul class="notes">
+    <li><b>Salary.</b> Players cost cap space and picks are cheap, so taking on a player is over-rewarded. We found no public contract data.</li>
+    <li><b>Contract length.</b> Not in any data we hold; the stay figures above stand in for it.</li>
+    <li><b>Future pick positions.</b> 2027 picks use the club's 2026 ladder finish pulled halfway to the middle; 2028 picks assume a mid-round pick. Tasmania's pre-signed 17-year-olds push 2027 picks back 8 places and 2028 picks back 5 in talent terms, on our reading of the rules.</li>
+    <li><b>Draft pick in the rating.</b> For a player's first three seasons the projection also uses where he was drafted (pick 1 against pick 20 is worth about 0.8 TORP). It helped on held-out seasons, but the interval only just excluded no effect.</li>
+    <li><b>Injury years.</b> A short 2026 season lowers a player's expected games: Jack Viney played one game and projects to almost nothing.</li>
+    <li><b>Pick numbers.</b> Every 2026 pick is valued at its slot in the AFL's final post-trade order (14 October). Trades made before 9-13 October quoted older numbers, before the free-agency compensation picks for Butters (now 5) and King (now 8) were inserted. Wikipedia's table also had trade 17 backwards and one wrong pick number in trade 16; both are corrected.</li>
+    <li><b>Free agency.</b> The nine free-agency moves (Greene, Neale, Butters, King and others) are not trades and are not graded here.</li>
+    <li><b>Earlier years (2021&ndash;2025).</b> Graded at the time, by the same rules as 2026. Picks are valued at the number quoted in the trade; no final post-trade order was collected for those years, so a pick later pushed back by compensation picks or bids is valued a few places early. Pick swaps made on draft night are left out. Four players had no rating in the season they were traded (Darcy Fort 2021, Junior Rioli 2022, Jacob Konstanty 2024, Patrick Retschko 2025) and count as 0. The forecasting model was fitted on all seasons to 2026, so an "at the time" forecast knows nothing about the player after that season but does use what later seasons showed about aging in general. The ABC column applies to 2026 only.</li>
+  </ul>
+  <p class="meta">Trades from Wikipedia's 2021&ndash;2026 AFL draft pages, saved 28 October 2026. Code: torp, data-raw/08-trade-value/.</p>
+</section>
+</div>
+<script>
+const D = __DATA__;
+const fmt = v => v == null ? "&ndash;" : (v > 0 ? "+" : "") + (Math.round(v * 10) / 10).toString();
+const cls = v => v > 0.05 ? "pos" : v < -0.05 ? "neg" : "";
+const YEARS = Object.keys(D.years).map(Number).sort((a, b) => b - a);
+const ALL = "all";
+const yearSel = document.getElementById("yearsel");
+YEARS.forEach(y => { const o = document.createElement("option"); o.value = y; o.textContent = y; yearSel.appendChild(o); });
+{ const o = document.createElement("option"); o.value = ALL; o.textContent = "All years (2021–2026)"; yearSel.appendChild(o); }
+yearSel.value = String(YEARS[0]);
+const sel = document.getElementById("clubsel");
+let rankBy = "moved";
+
+// One record per trade: its assets, its club grades, and the two ranking numbers.
+const TRADES = [];
+YEARS.forEach(y => {
+  const B = D.years[y];
+  Object.keys(B.trades).map(Number).sort((a, b) => a - b).forEach(t => {
+    const as = B.trades[t], gs = B.grades.filter(g => g.trade === t);
+    const best = gs.reduce((m, g) => g.net > m.net ? g : m, gs[0]);
+    TRADES.push({year: y, t, as, gs, moved: as.reduce((s, a) => s + a.v, 0), best});
+  });
+});
+const chosen = () => yearSel.value === ALL ? TRADES : TRADES.filter(r => r.year === Number(yearSel.value));
+
+function header() {
+  const all = yearSel.value === ALL, y = all ? null : Number(yearSel.value), n = chosen().length;
+  document.getElementById("eyebrow").textContent = all ? "TORP · trade periods 2021–2026" : `TORP · trade period ${y}`;
+  document.getElementById("h1").textContent = all ? "AFL Trade Ledger" : `${y} Trade Ledger`;
+  document.getElementById("lede").textContent = `${n} trades priced in one unit: the TORP value each player or pick was expected to produce over the next eight seasons, as at the trade. A club's grade is what it received minus what it gave up.`;
+  document.getElementById("pastnote").hidden = !all && y === 2026;
+}
+
+function ranking() {
+  const all = yearSel.value === ALL;
+  const rows = chosen().slice().sort((a, b) => rankBy === "moved" ? b.moved - a.moved : b.best.net - a.best.net);
+  document.getElementById("rkcap").textContent = rankBy === "moved"
+    ? "Value moved: the value of everything that changed clubs in the trade, counting each player and pick once. Bigger means more was at stake."
+    : "Its net: what the trade's biggest winner received minus what it gave up. Bigger means a more one-sided trade; the clubs on the other side lost that much between them.";
+  document.getElementById("rkyear").hidden = !all;
+  const shown = all ? rows.slice(0, 30) : rows;
+  document.getElementById("rkbody").innerHTML = shown.map((r, i) => {
+    return `<tr><td class="num">${i + 1}</td>${all ? `<td>${r.year}</td>` : ""}<td>${r.gs.map(g => g.club).join(" &middot; ")}<div class="sub">trade ${r.t}</div></td>` +
+      `<td class="num">${r.moved.toFixed(1)}</td><td class="who2">${r.best.club}</td><td class="num ${cls(r.best.net)}">${fmt(r.best.net)}</td></tr>`;
+  }).join("") + (all && rows.length > 30 ? `<tr><td colspan="6" class="sub">Top 30 of ${rows.length} trades shown. Pick one year to see them all.</td></tr>` : "");
+}
+
+function clubTable() {
+  const clubs = {};
+  chosen().forEach(r => r.gs.forEach(g => {
+    const c = clubs[g.club] || (clubs[g.club] = {club: g.club, trades: 0, net: 0, abc: 0, nclub: 0, hasAbc: false});
+    c.trades++; c.net += g.net; c.nclub += g.nclub;
+    if (g.abc != null) { c.abc += g.abc; c.hasAbc = true; }
+  }));
+  const rows = Object.values(clubs).sort((a, b) => b.net - a.net);
+  const maxAbs = Math.max(...rows.map(r => Math.abs(r.net)), 1e-9);
+  const abcOn = yearSel.value === "2026";
+  document.querySelector("#clubtbl tbody").innerHTML = rows.map(r => {
+    const w = Math.abs(r.net) / maxAbs * 50, left = r.net >= 0 ? 50 : 50 - w;
+    return `<tr><td>${r.club}</td><td class="num">${r.trades}</td><td class="num ${cls(r.net)}">${fmt(r.net)}</td>` +
+      `<td class="num ${cls(r.nclub)}">${fmt(r.nclub)}</td><td class="num ${abcOn ? cls(r.abc) : ""}">${abcOn ? fmt(r.abc) : "&ndash;"}</td>` +
+      `<td class="barcell"><div class="bar"><div class="axis"></div><div class="fill" style="left:${left}%;width:${w}%;background:var(${r.net >= 0 ? "--gain" : "--loss"})"></div></div></td></tr>`;
+  }).join("");
+  const keep = sel.value;
+  sel.innerHTML = '<option value="">All clubs</option>';
+  rows.map(r => r.club).sort().forEach(c => {
+    const o = document.createElement("option"); o.value = c; o.textContent = c; sel.appendChild(o);
+  });
+  sel.value = rows.some(r => r.club === keep) ? keep : "";
+}
+
+function assetLine(a, y) {
+  const sub = a.type === "player"
+      ? (a.unmatched ? `no rating in ${y}; counted as 0` : `age ${a.age}, TORP ${a.torp} in ${y}`)
+    : a.type === "future_pick" ? `expected about pick ${Math.round(a.exp)}`
+    : y === 2026 ? `2026 draft${a.orig ? ", originally " + a.orig + "'s" : ""}${a.pat !== a.pick ? " (quoted as " + a.pat + " at the trade)" : ""}`
+    : `${y} draft, number as quoted at the trade`;
+  const label = a.type === "pick" ? `Pick ${a.pick}` : a.item;
+  return `<div class="asset"><div class="what">${label}<div class="sub">${sub}</div></div><div class="num">${a.v.toFixed(1)}</div></div>`;
+}
+function tradeList() {
+  const f = sel.value, all = yearSel.value === ALL;
+  document.getElementById("trades").innerHTML = chosen().map(r => {
+    if (f && !r.gs.some(g => g.club === f)) return "";
+    const sides = r.gs.slice().sort((a, b) => b.net - a.net).map(g => {
+      const got = r.as.filter(a => a.to === g.club);
+      return `<div class="side"><div class="who"><span>${g.club} received</span><span class="chip ${cls(g.net)}">${fmt(g.net)}</span></div>` +
+        (got.length ? got.map(a => assetLine(a, r.year)).join("") : '<div class="asset sub">nothing</div>') + `</div>`;
+    }).join("");
+    return `<article class="trade"><header><h3>${r.gs.map(g => g.club).join(" &middot; ")}</h3><span class="tno">${all ? r.year + " &middot; " : ""}TRADE ${r.t}</span></header><div class="sides">${sides}</div></article>`;
+  }).join("");
+}
+function renderAll() { header(); ranking(); clubTable(); tradeList(); }
+yearSel.addEventListener("change", renderAll);
+sel.addEventListener("change", tradeList);
+document.querySelectorAll(".seg button").forEach(b => b.addEventListener("click", () => {
+  rankBy = b.dataset.rank;
+  document.querySelectorAll(".seg button").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+  ranking();
+}));
+renderAll();
+document.querySelector("#curvetbl tbody").innerHTML = D.curve.map(c =>
+  `<tr><td class="num">${c.pick}</td><td class="num">${c.v8.toLocaleString()}</td><td class="num">${c.v5.toLocaleString()}</td><td class="num">${c.games.toLocaleString()}</td><td class="num">${c.dvi == null ? "&ndash;" : c.dvi.toLocaleString()}</td></tr>`).join("");
+</script>
