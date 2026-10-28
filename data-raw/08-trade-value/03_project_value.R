@@ -84,6 +84,13 @@ setnames(ev, paste0("ev_", 2026 + seq_len(horizon)))
 ev[, player_id := sim$player_id]
 ev <- ev[, lapply(.SD, mean), by = player_id]
 out <- merge(out, ev, by = "player_id")
+# Chance he is still on a list each season, so 05 can charge his salary only
+# for the seasons he is being paid.
+onl <- as.data.table(!is.na(torp_path) * 1)
+setnames(onl, paste0("on_list_", 2026 + seq_len(horizon)))
+onl[, player_id := sim$player_id]
+onl <- onl[, lapply(.SD, mean), by = player_id]
+out <- merge(out, onl, by = "player_id")
 out <- merge(start[, .(player_id, player_name, team, age = round(age, 1), torp_2026 = torp, games_2026 = games, draft_year, pick)],
              out, by = "player_id")
 num <- names(out)[sapply(out, is.double)]
