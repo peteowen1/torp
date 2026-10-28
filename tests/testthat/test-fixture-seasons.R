@@ -22,3 +22,7 @@ test_that(".validate_fixture_seasons() still rejects two years ahead and before 
 test_that(".validate_fixture_seasons() keeps AFLW's 2018 floor", {
   expect_equal(.validate_fixture_seasons(c(2018, this_year + 1L), comp = "AFLW"), c(2018, this_year + 1L))
 })
+
+test_that(".validate_fixture_seasons() gives the package's own error for NA, not an R error", {
+  expect_error(.validate_fixture_seasons(c(NA, this_year)), "Invalid season")
+})

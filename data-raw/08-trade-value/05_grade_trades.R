@@ -114,7 +114,10 @@ if (file.exists(map_path)) {
       "of", a[type == "pick_2026", .N], "; numbers that changed:", nrow(moved), "\n")
   if (nrow(moved)) print(moved[, .(trade, to_club, from_club, pick_at_trade, final_pick = pick, original_club)])
   unm <- a[type == "pick_2026" & is.na(original_club)]
-  if (nrow(unm)) { cat("not in the official map (valued at the number quoted at the trade):\n"); print(unm[, .(trade, to_club, from_club, pick_at_trade)]) }
+  if (nrow(unm)) {
+    print(unm[, .(trade, to_club, from_club, pick_at_trade)])
+    stop(nrow(unm), " 2026 pick(s) not in the official pick map; a club-name or label mismatch would otherwise value them at a stale number")
+  }
 } else {
   a[, original_club := NA_character_]
   cat("no official pick map yet: 2026 picks valued at the number quoted at each trade\n")

@@ -1198,7 +1198,7 @@ load_fixtures <- function(seasons = NULL, all = FALSE, use_disk_cache = FALSE,
 #' @keywords internal
 .validate_fixture_seasons <- function(seasons, comp = "AFLM") {
   next_year <- as.integer(format(Sys.Date(), "%Y")) + 1L
-  if (isTRUE(seasons) || !is.numeric(seasons) || !any(seasons == next_year)) {
+  if (isTRUE(seasons) || !is.numeric(seasons) || !any(seasons == next_year, na.rm = TRUE)) {
     # comp-aware floor: AFLW history starts 2018, men's chain data at 2021.
     return(.validate_seasons_comp(seasons, comp))
   }

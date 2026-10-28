@@ -1,3 +1,7 @@
+# torp 1.10.7
+
+* `load_fixtures()` accepts next season when it is named, e.g. `load_fixtures(2027)`: the AFL publishes a season's fixture in the previous off-season (2027's opening round was out in October 2026), and the call used to abort with "Seasons must be between 2021 and 2026". `seasons = TRUE` still stops at the current year, so pipelines that read every fixture do not start producing rows for an unplayed season. Other loaders are unchanged.
+
 # torp 1.10.6
 
 * Published PSR is rebuilt from fresh stat ratings (torp#289), and the rating vintage moves to v17. The released `player_stat_ratings` had taken in no games since 2026 round 6 (last built 2026-04-18), so PSR, half of TORP, ignored rounds 7-29: across all players its correlation with a player's 2026 form fell from +0.59 in rounds 1-4 (361 players) to -0.09 over rounds 5-29 (659 players). Lachie Neale's PSR sat at -0.45 from round 5 although his last 23 games averaged +0.21 PSV. The rebuild also picks up the stat-rating code changes made since April, so 2025 and early-2026 PSR move a little. End-2026 TORP moves 0.55 on average (rank correlation 0.93, 724 players).
