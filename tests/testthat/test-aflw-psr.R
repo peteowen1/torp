@@ -238,6 +238,17 @@ test_that("every comp-taking loader routes season validation through the comp di
     expect_true("comp" %in% names(formals(fn)),
                 info = paste0(nm, " is expected to take a comp argument"))
     body_src <- paste(deparse(body(fn)), collapse = "\n")
+    # load_fixtures() goes through .validate_fixture_seasons() (fixtures alone
+    # may name next season). Accept that wrapper only if it forwards `comp`
+    # to .validate_seasons_comp() itself, so the rule is as strict as before.
+    wrapper <- ".validate_fixture_seasons(seasons, comp)"
+    if (grepl(wrapper, body_src, fixed = TRUE)) {
+      body_src <- paste(body_src, paste(deparse(body(get(".validate_fixture_seasons",
+                                                        envir = asNamespace("torp")))), collapse = "\n"))
+      expect_true(grepl(".validate_seasons_comp(seasons, comp)", body_src, fixed = TRUE) ||
+                    grepl(".validate_seasons_comp(rest, comp)", body_src, fixed = TRUE),
+                  info = ".validate_fixture_seasons() must forward comp to .validate_seasons_comp()")
+    }
     expect_true(
       grepl(".validate_seasons_comp", body_src, fixed = TRUE),
       info = paste0(nm, "() takes `comp` but does not route season validation ",
