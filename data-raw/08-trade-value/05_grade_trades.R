@@ -143,7 +143,12 @@ if (file.exists(stay_path)) {
   cat("\nno stay curve yet; value_club not computed\n")
 }
 
-# ---- 2c. Net of salary (rough) ----
+# ---- 2c. Net of salary (rough) -- EXPERIMENT, NOT THE DEFAULT GRADE ----
+# Pete, 2026-10-28: the published grades do not adjust for salary or
+# contracts, because individual contracts are unknown. These columns
+# (value_net, value_club_net, net_salary, net_club_salary) exist to see how
+# much a rough salary charge would move the grades. Do not show them as the
+# grade; label them as a what-if wherever they appear.
 # Individual contracts are not public. The AFL publishes how many primary
 # listed players fall in each pay band (2025, 663 players, average $505,961;
 # raw page in torpdata/data/raw/salary_2025/). Each rated player gets the band
