@@ -34,11 +34,15 @@ pg <- rbindlist(lapply(2021:2026, function(s) {
   f <- file.path(td, paste0("player_game_ratings_", s, ".parquet"))
   system2("gh", c("release", "download", "player_game_ratings-data", "--repo", "peteowen1/torpdata",
                   "--pattern", basename(f), "--dir", td))
-  d <- as.data.table(arrow::read_parquet(f, col_select = c("player_id", "season")))
-  d[, .(games = .N), by = .(player_id, season)]
+  d <- as.data.table(arrow::read_parquet(f, col_select = c("player_id", "season", "tog")))
+  # TORP is a per-full-game rate (the match model multiplies it by time on
+  # ground), so a season's value needs its mean TOG as well as its games.
+  d[, .(games = .N, tog = mean(tog, na.rm = TRUE)), by = .(player_id, season)]
 }))
 end <- merge(end, pg, by = c("player_id", "season"), all.x = TRUE)
 end[is.na(games), games := 0L]
+end[games == 0 | is.nan(tog), tog := NA_real_]
+stopifnot(end[games > 0, mean(!is.na(tog))] > 0.99, end[!is.na(tog), all(tog > 0 & tog <= 1.01)])
 
 cat("end-of-season rows:", nrow(end), " seasons:", paste(range(end$season), collapse = "-"),
     " torp NA:", sum(is.na(end$torp)), "\n")
@@ -56,7 +60,7 @@ cat("players with a national-draft pick joined:", end[!is.na(pick), uniqueN(play
     " of", uniqueN(end$player_id), "\n")
 
 # ---- 2. Year pairs ----
-nxt <- end[, .(player_id, season = season - 1L, torp_next = torp, games_next = games)]
+nxt <- end[, .(player_id, season = season - 1L, torp_next = torp, games_next = games, tog_next = tog)]
 p <- merge(end[season <= 2025], nxt, by = c("player_id", "season"), all.x = TRUE)
 p[, survived := !is.na(torp_next)]
 p <- p[!is.na(torp) & !is.na(age)]

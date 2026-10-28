@@ -22,6 +22,13 @@ p[, lpick := fifelse(early, log(pick), 0)]
 age_fit <- lm(torp_next ~ torp * ns(age, 3) + early + lpick, data = p[survived == TRUE])
 res_sd <- sigma(age_fit)
 games_fit <- lm(games_next ~ ns(age, 3) + torp + games, data = p[survived == TRUE])
+# Mean time on ground next season, for players who play; this season's TOG is
+# set to the league median for anyone who did not play.
+tog_med <- median(p$tog, na.rm = TRUE)
+p[, tog_now := fifelse(is.na(tog), tog_med, tog)]
+tog_fit <- lm(tog_next ~ ns(age, 3) + torp + tog_now, data = p[survived == TRUE & games_next > 0])
+cat("TOG model residual sd:", round(sigma(tog_fit), 3), " median TOG:", round(tog_med, 3), "
+")
 cat("aging model residual sd:", round(res_sd, 3), " pick term:", round(coef(age_fit)[["lpick"]], 3), "\n")
 
 # ---- 2. Replacement level ----
@@ -43,7 +50,7 @@ cat("replacement TORP: mature pickups", round(repl, 2), "(n", nrow(pick_ups), ")
 
 # ---- 3. Simulate ----
 n_sims <- 2000L; horizon <- 8L; disc <- 0.9
-start <- e26[, .(player_id, player_name, team, age, torp, games, draft_year, pick)]
+start <- e26[, .(player_id, player_name, team, age, torp, games, tog_now = fifelse(is.na(tog), tog_med, tog), draft_year, pick)]
 sim <- start[rep(seq_len(.N), each = n_sims)][, sim := rep(seq_len(n_sims), nrow(start))]
 sim[, `:=`(alive = TRUE, season = 2026L)]
 val <- matrix(0, nrow(sim), horizon)
@@ -55,8 +62,10 @@ for (k in seq_len(horizon)) {
   sim[, lpick := fifelse(early, log(pick), 0)]
   mu <- predict(age_fit, newdata = sim)
   g  <- pmin(pmax(predict(games_fit, newdata = sim), 0), 25)
-  sim[, `:=`(torp = mu + rnorm(.N, 0, res_sd), games = g, age = age + 1, season = season + 1L)]
-  val[, k] <- fifelse(sim$alive, sim$games * (sim$torp - repl), 0) * disc^(k - 1)
+  tg <- pmin(pmax(predict(tog_fit, newdata = sim), 0.2), 1)
+  sim[, `:=`(torp = mu + rnorm(.N, 0, res_sd), games = g, tog_now = tg, age = age + 1, season = season + 1L)]
+  # value = games x TOG x (TORP - replacement): TORP and replacement are per full game
+  val[, k] <- fifelse(sim$alive, sim$games * sim$tog_now * (sim$torp - repl), 0) * disc^(k - 1)
   torp_path[, k] <- fifelse(sim$alive, sim$torp, NA_real_)
   if (k == 1) sim[, alive_1 := alive]
 }

@@ -30,14 +30,15 @@ miss <- d[is.na(player_id) & fw_games > 0]
 cat("unmatched draftees who HAVE played (name mismatches):", nrow(miss), "\n")
 if (nrow(miss)) print(miss[, .(draft_year, pick, player, fw_games)])
 
-seas <- end[, .(player_id, season, games, torp)]
+seas <- end[, .(player_id, season, games, tog, torp)]
 d5 <- d[!is.na(player_id) | fw_games == 0]       # drop only the mismatches
 d5[, k := 0L]
 grid <- d5[, .(k = 1:5), by = .(draft_year, pick, player, player_id, flag)]
 grid[, season := draft_year + k]
 grid <- merge(grid, seas, by = c("player_id", "season"), all.x = TRUE)
 grid[is.na(games) | is.na(torp), `:=`(games = 0L, torp = repl)]
-grid[, v := games * (torp - repl) * disc^(k - 1)]
+grid[is.na(tog), tog := 0]
+grid[, v := games * tog * (torp - repl) * disc^(k - 1)]
 dv <- grid[, .(v5 = sum(v), games5 = sum(games)), by = .(draft_year, pick, player, flag)]
 cat("picks scored:", nrow(dv), " with zero five-season games:", dv[games5 == 0, .N], "\n")
 
@@ -62,7 +63,7 @@ g8[, season := draft_year + k]
 g8 <- merge(g8, seas, by = c("player_id", "season"), all.x = TRUE)
 g8 <- merge(g8, ev_long, by = c("player_id", "season"), all.x = TRUE)
 g8[, v := fifelse(season <= 2026,
-                  fifelse(is.na(games) | is.na(torp), 0, games * (torp - repl)),
+                  fifelse(is.na(games) | is.na(torp) | is.na(tog), 0, games * tog * (torp - repl)),
                   fifelse(is.na(ev), 0, ev)) * disc^(k - 1)]
 dv8 <- g8[, .(v8 = sum(v), v8_observed = sum(v[season <= 2026])), by = .(draft_year, pick, player)]
 # Per-season (discounted) value by pick, so 05 can weight each season by the
