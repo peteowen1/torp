@@ -179,7 +179,8 @@ YEARS.forEach(y => {
   });
 });
 // The two ranking numbers, under the chosen grading.
-const moved = r => r.as.reduce((s, a) => s + av(a), 0);
+// Size, not direction: a player or draftee below replacement is negative but still at stake.
+const moved = r => r.as.reduce((s, a) => s + Math.abs(av(a)), 0);
 const best = r => r.gs.reduce((m, g) => gn(g) > gn(m) ? g : m, r.gs[0]);
 const chosen = () => yearSel.value === ALL ? TRADES : TRADES.filter(r => r.year === Number(yearSel.value));
 
