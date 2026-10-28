@@ -19,7 +19,15 @@ set.seed(2027)
 # ---- 1. Models ----
 p[, early := !is.na(pick) & (season - draft_year) <= 3]
 p[, lpick := fifelse(early, log(pick), 0)]
-age_fit <- lm(torp_next ~ torp * ns(age, 3) + early + lpick, data = p[survived == TRUE])
+# Last season's rating as well as this one's: one-step carry-over compounded
+# over eight seasons shrank steady players too fast (07_persistence_check.R:
+# 4-season carry-over 0.54 actual vs 0.45 compounded; top-100 players keep
+# 61% of their edge after 5 seasons vs 37%). A player with no rating the
+# season before uses this season's as both.
+prev <- end[!is.na(torp), .(player_id, season = season + 1L, torp_prev = torp)]
+p <- merge(p, prev, by = c("player_id", "season"), all.x = TRUE)
+p[is.na(torp_prev), torp_prev := torp]
+age_fit <- lm(torp_next ~ torp * ns(age, 3) + torp_prev + early + lpick, data = p[survived == TRUE])
 res_sd <- sigma(age_fit)
 games_fit <- lm(games_next ~ ns(age, 3) + torp + games, data = p[survived == TRUE])
 # Mean time on ground next season, for players who play; this season's TOG is
@@ -51,8 +59,10 @@ cat("replacement TORP: mature pickups", round(repl, 2), "(n", nrow(pick_ups), ")
 # ---- 3. Simulate ----
 n_sims <- 2000L; horizon <- 8L; disc <- 0.9
 start <- e26[, .(player_id, player_name, team, age, torp, games, tog_now = fifelse(is.na(tog), tog_med, tog), draft_year, pick)]
+start <- merge(start, end[season == 2025 & !is.na(torp), .(player_id, torp_prev = torp)], by = "player_id", all.x = TRUE)
+start[is.na(torp_prev), torp_prev := torp]
 sim <- start[rep(seq_len(.N), each = n_sims)][, sim := rep(seq_len(n_sims), nrow(start))]
-sim[, `:=`(alive = TRUE, season = 2026L)]
+sim[, `:=`(alive = TRUE, season = 2026L, torp_start = torp)]
 val <- matrix(0, nrow(sim), horizon)
 torp_path <- matrix(NA_real_, nrow(sim), horizon)
 for (k in seq_len(horizon)) {
@@ -63,7 +73,7 @@ for (k in seq_len(horizon)) {
   mu <- predict(age_fit, newdata = sim)
   g  <- pmin(pmax(predict(games_fit, newdata = sim), 0), 25)
   tg <- pmin(pmax(predict(tog_fit, newdata = sim), 0.2), 1)
-  sim[, `:=`(torp = mu + rnorm(.N, 0, res_sd), games = g, tog_now = tg, age = age + 1, season = season + 1L)]
+  sim[, `:=`(torp_prev = torp, torp = mu + rnorm(.N, 0, res_sd), games = g, tog_now = tg, age = age + 1, season = season + 1L)]
   # value = games x TOG x (TORP - replacement): TORP and replacement are per full game
   val[, k] <- fifelse(sim$alive, sim$games * sim$tog_now * (sim$torp - repl), 0) * disc^(k - 1)
   torp_path[, k] <- fifelse(sim$alive, sim$torp, NA_real_)
@@ -71,6 +81,16 @@ for (k in seq_len(horizon)) {
 }
 sim[, `:=`(v3 = rowSums(val[, 1:3]), v5 = rowSums(val[, 1:5]), v8 = rowSums(val[, 1:8]),
            seasons5 = rowSums(!is.na(torp_path[, 1:5])), torp27 = torp_path[, 1])]
+
+# Check: k-season carry-over in the simulation (survivors, rating in season k
+# on the 2026 rating) against what ratings actually did (07_persistence_check.R:
+# 0.82, 0.71, 0.61, 0.54, 0.46 for k = 1..5).
+carry <- sapply(1:5, function(k) {
+  ok <- !is.na(torp_path[, k])
+  coef(lm(torp_path[ok, k] ~ sim$torp_start[ok]))[2]
+})
+cat("simulated carry-over k = 1..5:", round(carry, 2), "(actual 0.82 0.71 0.61 0.54 0.46)
+")
 
 out <- sim[, .(v5_mean = mean(v5), v5_p10 = quantile(v5, .1), v5_p90 = quantile(v5, .9),
                v3_mean = mean(v3), v8_mean = mean(v8),
