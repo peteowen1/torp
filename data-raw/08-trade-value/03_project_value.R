@@ -10,11 +10,21 @@
 # probability; if he stays, his rating moves by the aging model plus a draw of
 # its residual, and he plays the games model's expected games.
 #
-# Output: torpdata/data/raw/trade_value/03_projected_value_2026.csv (gitignored)
+# Output: torpdata/data/raw/trade_value/03_projected_value_<as_of>.csv (gitignored)
+#
+# `Rscript 03_project_value.R 2023` projects from the end of 2023 instead of
+# 2026, for grading past trades as they looked at the time
+# (10_grade_past_trades.R). Only the players' starting point moves: the aging,
+# games, TOG and survival models are still fitted on every season, so an
+# as-at-2023 forecast uses what later seasons taught the model about aging in
+# general, but nothing about these players after 2023.
 
 suppressMessages({ library(data.table); library(splines) })
 invisible(capture.output(source("data-raw/08-trade-value/02_age_survival.R")))
-set.seed(2027)
+args <- commandArgs(trailingOnly = TRUE)
+as_of <- if (length(args)) as.integer(args[1]) else 2026L
+stopifnot(as_of %in% 2021:2026)
+set.seed(as_of + 1L)
 
 # ---- 1. Models ----
 p[, early := !is.na(pick) & (season - draft_year) <= 3]
@@ -49,9 +59,9 @@ pick_ups <- first[season >= 2022 & age >= 22 & !(player_name %in% fw_names)]
 repl <- mean(pick_ups$torp)
 # 04_pick_curve.R reads this, so the pick curve and the ev_ columns share one level.
 writeLines(format(repl, digits = 15), file.path(out_dir, "03_replacement_level.txt"))
-# Sensitivity: the 40th-best rating at each club at the end of 2026.
-cur_team <- r[season == 2026, .SD[.N], by = player_id][, .(player_id, team)]
-e26 <- merge(end[season == 2026 & !is.na(torp)], cur_team, by = "player_id")
+# Sensitivity: the 40th-best rating at each club at the end of the as-of season.
+cur_team <- r[season == as_of, .SD[.N], by = player_id][, .(player_id, team)]
+e26 <- merge(end[season == as_of & !is.na(torp)], cur_team, by = "player_id")
 repl_40 <- e26[order(-torp), .SD[40], by = team][, mean(torp, na.rm = TRUE)]
 cat("replacement TORP: mature pickups", round(repl, 2), "(n", nrow(pick_ups), ")",
     " | 40th at each club", round(repl_40, 2), "\n")
@@ -59,10 +69,10 @@ cat("replacement TORP: mature pickups", round(repl, 2), "(n", nrow(pick_ups), ")
 # ---- 3. Simulate ----
 n_sims <- 2000L; horizon <- 8L; disc <- 0.9
 start <- e26[, .(player_id, player_name, team, age, torp, games, tog_now = fifelse(is.na(tog), tog_med, tog), draft_year, pick)]
-start <- merge(start, end[season == 2025 & !is.na(torp), .(player_id, torp_prev = torp)], by = "player_id", all.x = TRUE)
+start <- merge(start, end[season == as_of - 1L & !is.na(torp), .(player_id, torp_prev = torp)], by = "player_id", all.x = TRUE)
 start[is.na(torp_prev), torp_prev := torp]
 sim <- start[rep(seq_len(.N), each = n_sims)][, sim := rep(seq_len(n_sims), nrow(start))]
-sim[, `:=`(alive = TRUE, season = 2026L, torp_start = torp)]
+sim[, `:=`(alive = TRUE, season = as_of, torp_start = torp)]
 val <- matrix(0, nrow(sim), horizon)
 torp_path <- matrix(NA_real_, nrow(sim), horizon)
 for (k in seq_len(horizon)) {
@@ -100,14 +110,14 @@ out <- sim[, .(v5_mean = mean(v5), v5_p10 = quantile(v5, .1), v5_p90 = quantile(
 # can discount from a different start year (04_pick_curve.R values draftees
 # whose first season was 2021 or 2022).
 ev <- as.data.table(val %*% diag(1 / disc^(seq_len(horizon) - 1)))
-setnames(ev, paste0("ev_", 2026 + seq_len(horizon)))
+setnames(ev, paste0("ev_", as_of + seq_len(horizon)))
 ev[, player_id := sim$player_id]
 ev <- ev[, lapply(.SD, mean), by = player_id]
 out <- merge(out, ev, by = "player_id")
 # Chance he is still on a list each season, so 05 can charge his salary only
 # for the seasons he is being paid.
 onl <- as.data.table(!is.na(torp_path) * 1)
-setnames(onl, paste0("on_list_", 2026 + seq_len(horizon)))
+setnames(onl, paste0("on_list_", as_of + seq_len(horizon)))
 onl[, player_id := sim$player_id]
 onl <- onl[, lapply(.SD, mean), by = player_id]
 out <- merge(out, onl, by = "player_id")
@@ -117,8 +127,15 @@ num <- names(out)[sapply(out, is.double)]
 out[, (num) := lapply(.SD, round, 2), .SDcols = num]
 setorder(out, -v5_mean)
 out[, rank_v5 := seq_len(.N)]
-fwrite(out, file.path(out_dir, "03_projected_value_2026.csv"))
+setnames(out, c("torp_2026", "games_2026", "torp_2027"), paste0(c("torp_", "games_", "torp_"), as_of + c(0L, 0L, 1L)))
+fwrite(out, file.path(out_dir, sprintf("03_projected_value_%d.csv", as_of)))
 cat("players projected:", nrow(out), " sims each:", n_sims, "\n")
+if (as_of != 2026L) {
+  # The anchors below name 2026 players; earlier seasons just print the top.
+  cat("\ntop 10 by projected 5-season value, as at", as_of, ":\n")
+  print(out[1:10, .SD, .SDcols = c("rank_v5", "player_name", "age", paste0("torp_", as_of), "v5_mean", "v8_mean")])
+  quit(save = "no")
+}
 
 # ---- 4. Anchors (chosen before looking) ----
 a <- function(nm) out[player_name == nm]
