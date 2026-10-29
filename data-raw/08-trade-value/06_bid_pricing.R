@@ -100,20 +100,34 @@ fwrite(res, file.path(out_dir, "06_bid_pricing.csv"))
 cat("bid pricing (points = Draft Value Index; TORP = eight-season value units; gain = player minus what was given, higher is better for the club):\n")
 print(res)
 
-# What-if grid for the two prospects with no bid range yet: price a bid at
-# every pick 1-40 for the club that can match. Both were dual eligible and
+# What-if grid for the two prospects with no firm bid position: price a bid at
+# every pick 1-54 (the last pick with Draft Value Index points) for the club
+# that can match. Both were dual eligible and
 # have nominated one club, so only that club can match on the night:
 # Cooper Hodge chose Hawthorn (father-son) over the Brisbane academy (SEN,
 # 2026-09-07); Aidan McCartney chose North Melbourne (father-son) over the
 # Sydney academy (Zero Hanger, 2026-08-28). Finishes from the 2026
 # home-and-away ladder. Read off the row at the bid once phantoms place him.
+# Where the press places them (neither is in Twomey's October top 30, AFL.com.au):
+# Hodge "looms as a late selection" (AFL.com.au Inside Trading, Josh Gabelich,
+# early October; no pick number given); McCartney "could attract a bid in the
+# 40s" (Zero Hanger, Jonty Ralphsmith, 2026-10-13).
+ranges <- data.table(
+  player = c("Cooper Hodge", "Aidan McCartney"),
+  club   = c("HAW", "NMFC"),
+  bid_from = c(NA_integer_, 40L), bid_to = c(NA_integer_, 49L),
+  said   = c("late selection; may not attract a bid", "could attract a bid in the 40s"),
+  source = c("AFL.com.au Inside Trading (Josh Gabelich), early October 2026",
+             "Zero Hanger (Jonty Ralphsmith), 13 October 2026"))
+fwrite(ranges, file.path(out_dir, "06_bid_ranges.csv"))
 dual <- data.table(
   player = c("Cooper Hodge", "Aidan McCartney"),
   club   = c("HAW", "NMFC"),
   link   = c("father-son", "father-son"),
   finish = c(4, 14))
 grid <- rbindlist(lapply(seq_len(nrow(dual)), function(i)
-  rbindlist(lapply(1:40, function(b) do.call(price_bid, c(as.list(dual[i]), bid = b))))))
+  rbindlist(lapply(1:54, function(b) do.call(price_bid, c(as.list(dual[i]), bid = b))))))
 fwrite(grid, file.path(out_dir, "06_bid_grid.csv"))
-cat("\nwhat-if grid written:", nrow(grid), "rows (2 nominated clubs x bids 1-40)\n")
-print(dcast(grid, bid ~ paste(player, club), value.var = "can_match")[bid <= 25])
+cat("\nwhat-if grid written:", nrow(grid), "rows (2 nominated clubs x bids 1-54)\n")
+stopifnot(nrow(grid) == 108)
+print(dcast(grid, bid ~ paste(player, club), value.var = "can_match")[bid >= 36])

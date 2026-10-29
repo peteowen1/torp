@@ -17,6 +17,8 @@
   c("jackson", "jack"), c("joseph", "joe"), c("leonardo", "leo")
 )
 
+.NAME_ALIASES <- c("junior rioli" = "willie rioli")  # Willie Rioli Jr., West Coast to Port 2022
+
 .first_key <- function(first) {
   first <- tolower(first)
   key <- first
@@ -31,6 +33,9 @@
   # inside a surname (O'Driscoll) is not preceded by a space, so it stays.
   name <- gsub("\\s[\"'\u2018\u201c][^\"' \u2019\u201d]+[\"'\u2019\u201d]", "", name)
   name <- tolower(trimws(name))
+  # Names the trade tables use that the AFL feed does not.
+  hit <- name %in% names(.NAME_ALIASES)
+  name[hit] <- .NAME_ALIASES[name[hit]]
   first <- sub(" .*$", "", name)
   surname <- sub("^[^ ]+ +", "", name)
   paste(.first_key(first), surname)

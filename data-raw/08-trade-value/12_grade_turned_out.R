@@ -76,8 +76,12 @@ proj <- rbindlist(lapply(2021:last_season, function(t) {
 setkey(proj, as_of, player_id, season)
 
 # ---- 2. Every player moved by trade, 2021-2026 ----
-assets <- lapply(setNames(years, years), function(y) fread(file.path(out_dir, sprintf("10_assets_%d.csv", y))))
-a26 <- fread(file.path(out_dir, "05_trade_assets.csv"))[, draft_year := last_season]
+# fread reads an empty player_id as "", which is.na() misses: make it NA so the
+# name match below fills it (Darcy Fort, Jacob Konstanty, Patrick Retschko had
+# no projection in their trade year and were credited 0 seasons).
+blank_na <- function(a) a[player_id == "", player_id := NA_character_][]
+assets <- lapply(setNames(years, years), function(y) blank_na(fread(file.path(out_dir, sprintf("10_assets_%d.csv", y)))))
+a26 <- blank_na(fread(file.path(out_dir, "05_trade_assets.csv")))[, draft_year := last_season]
 all_names <- unique(end[, .(player_id, player_name)], by = "player_id")
 moves <- rbindlist(c(lapply(assets, function(a) a[type == "player", .(year = draft_year, player_id, item, from_club)]),
                      list(a26[type == "player", .(year = draft_year, player_id, item, from_club)])))
@@ -214,7 +218,9 @@ anchors <- c(
   # bid or never used, so a count understates what is traced.
   picks_traced_80pct_of_value = pick_rows[, sum(value[how != "not traced"]) / sum(value)] >= 0.8,
   dawson_still_at_adelaide = all_a[yr == 2021 & item == "Jordan Dawson", how] == "still there",
-  grundy_traded_on_2023 = all_a[yr == 2022 & item == "Brodie Grundy" & to == abbr("Melbourne"), how] == "traded on 2023"
+  grundy_traded_on_2023 = all_a[yr == 2022 & item == "Brodie Grundy" & to == abbr("Melbourne"), how] == "traded on 2023",
+  # Added after Junior Rioli (Willie) and three others were found credited 0.
+  every_traded_player_matched = all_a[type == "player", !anyNA(player_id) & all(player_id != "")]
 )
 print(anchors)
 cat("picks traced:", pick_rows[how != "not traced", .N], "of", nrow(pick_rows),
