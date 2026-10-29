@@ -54,6 +54,7 @@ select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .chip.pos{background:var(--gain-bg)}.chip.neg{background:var(--loss-bg)}
 .asset{display:flex;justify-content:space-between;gap:10px;font-size:.9rem}
 .asset .what{min-width:0}
+.asset.total{font-weight:600;border-top:1px solid var(--rule);padding-top:4px;margin-top:auto}
 .sub{color:var(--muted);font-size:.8rem}
 ul.notes{margin:0;padding-left:1.1em;display:flex;flex-direction:column;gap:8px;max-width:72ch}
 @media (max-width:520px){.barcell{display:none}}
@@ -284,7 +285,8 @@ function sidesHtml(r) {
   return `<div class="sides">` + r.gs.slice().sort((a, b) => gn(b) - gn(a)).map(g => {
     const got = r.as.filter(a => a.to === g.club);
     return `<div class="side"><div class="who"><span>${esc(g.club)} received</span><span class="chip ${cls(gn(g))}">${fmt(gn(g))}</span></div>` +
-      (got.length ? got.map(a => assetLine(a, r.year)).join("") : '<div class="asset sub">nothing</div>') + `</div>`;
+      (got.length ? got.map(a => assetLine(a, r.year)).join("") : '<div class="asset sub">nothing</div>') +
+      `<div class="asset total"><div class="what">Total received</div><div class="num">${got.reduce((s, a) => s + av(a), 0).toFixed(1)}</div></div></div>`;
   }).join("") + `</div>`;
 }
 function tradeList() {
