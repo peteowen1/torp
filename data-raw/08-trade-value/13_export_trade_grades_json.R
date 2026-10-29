@@ -27,14 +27,16 @@ stopifnot(nrow(assets) > 0, nrow(grades) > 0, !anyNA(assets$v_turned), !anyNA(gr
 
 assets[, `:=`(draftee = blank_na(as.character(draftee)), how = blank_na(how))]
 stopifnot(!anyNA(assets$how))
-still <- grepl("still there", assets$how)
+# Rows valued partly by a forecast: still at the club (forecast to the window's
+# end) or traded on (the forecast for the rest of the window at that trade).
+still <- grepl("still there", assets$how) | (grepl("traded on", assets$how) & assets$how != "pick traded on")
 assets[, `:=`(played = round(fifelse(is.na(realised), 0, realised), 1),
               value = round(v_turned, 1))]
 # Forecast as the rounded difference, so played + forecast = value exactly in
 # the file (rounding each on its own missed by 0.1 on 24 rows).
 assets[, forecast := fifelse(still, round(value - played, 1), 0)]
 
-# Checks: a player still at the club is exactly played + forecast; each trade's
+# Checks: a forecast row is exactly played + forecast; each trade's
 # club nets cancel; Dawson's trade is the known anchor; only the public years.
 gap <- assets[still, abs(fifelse(is.na(realised), 0, realised) + after - v_turned)]
 stopifnot(length(gap) > 0, max(gap) < 0.01)
@@ -65,7 +67,7 @@ out <- list(
   as_of = 2026L,
   notes = list(
     value = "Value is games played x time on ground x how far the player's TORP rating was above a replacement-level player, summed over 8 seasons from the trade, with later seasons counting 10% less each year. Picks count as the player the club drafted with them.",
-    forecast = "Players still at the club are valued on seasons played so far plus a forecast of the seasons left in the 8-year window. For these years the forecast is 18% (2021) to 39% (2023) of the value. A forecast can be below zero when a player is expected to rate below a replacement-level player. It is a middle estimate: players taken with the first few draft picks have, on average, done better than it expects.",
+    forecast = "Players are valued on the seasons they played for the club plus a forecast of the rest of the 8-year window: from now if they are still there, or from the day the club traded them on. For these years the forecast is 20% (2021) to 40% (2022) of the value. A forecast can be below zero when a player is expected to rate below a replacement-level player. It is a middle estimate: players taken with the first few draft picks have, on average, done better than it expects.",
     untraced = "We follow each pick to the player drafted with it. Where we could not (mostly late picks used to match bids), the pick keeps its value on the day of the trade.",
     salary = "Grades do not count what clubs pay players. A club that takes on a big contract gets the player's full value here, so these grades lean towards clubs that took on players.",
     not_2026 = "This year's trades are not graded here yet."),

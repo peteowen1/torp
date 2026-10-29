@@ -58,7 +58,7 @@ add_pick_terms(p, 0, 0)
 lp0 <- median(p[dd == 1, lp]); yc0 <- median(p[dd == 1, yc])
 add_pick_terms(p, lp0, yc0)
 # Knots from drafted rows only, fixed in the formula so the placeholders cannot move them.
-kn <- function(x, q) paste(signif(quantile(x, q), 6), collapse = ", ")
+kn <- function(x, q) paste(format(quantile(x, q), digits = 17), collapse = ", ")  # full precision: a rounded boundary knot would sit inside the data
 b_lp <- sprintf("ns(lp, knots = %s, Boundary.knots = c(%s))", kn(p[dd == 1, lp], .5), kn(p[dd == 1, lp], c(0, 1)))
 b_yc <- sprintf("ns(yc, knots = c(%s), Boundary.knots = c(%s))", kn(p[dd == 1, yc], c(1, 2) / 3), kn(p[dd == 1, yc], c(0, 1)))
 PICK <- sprintf("dd + dd:%s + dd:%s + dd:%s:%s", b_lp, b_yc, b_lp, b_yc)
