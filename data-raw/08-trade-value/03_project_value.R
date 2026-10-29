@@ -3,12 +3,13 @@
 #   (a) value = games x (TORP - replacement), no floor
 #   (b) 5 seasons, 10% a year discount; 3- and 8-season sensitivity
 #   (c) list survival modelled explicitly
-# plus draft pick blended into the rating step for a player's first three
-# seasons (02_age_survival.R: pick 1 vs pick 20 ~ +0.8 TORP at equal rating).
+# plus draft pick as a smooth surface over pick number and career season, and
+# the club's listed position, in the rating and games steps.
 #
 # Simulation: each season a player stays on a list with the survival model's
 # probability; if he stays, his rating moves by the aging model plus a draw of
-# its residual, and he plays the games model's expected games.
+# its residual, and he plays the games and TOG the models expect for THAT new
+# rating (so a player who improves also plays more).
 #
 # Output: torpdata/data/raw/trade_value/03_projected_value_<as_of>.csv (gitignored)
 #
@@ -27,8 +28,16 @@ stopifnot(as_of %in% 2021:2026)
 set.seed(as_of + 1L)
 
 # ---- 1. Models ----
-p[, early := !is.na(pick) & (season - draft_year) <= 3]
-p[, lpick := fifelse(early, log(pick), 0)]
+# Calibration work 2026-10-29 (DECISIONS): the first version drew next season's
+# games and TOG from THIS season's rating, so a player who improved did not
+# also play more, and value was under-forecast by about 3 a season for nearly
+# everyone. Games and TOG now respond to the simulated next rating. Also added:
+# the club's listed position in every part, a bent (spline) rating curve, and
+# draft pick as a smooth surface over pick number and career season (it used
+# to switch off after three seasons).
+pos <- r[, .(position = position_group[.N]), by = .(player_id, season)]
+p <- merge(p, pos, by = c("player_id", "season"), all.x = TRUE)
+stopifnot(!anyNA(p$position))
 # Last season's rating as well as this one's: one-step carry-over compounded
 # over eight seasons shrank steady players too fast (07_persistence_check.R:
 # 4-season carry-over 0.54 actual vs 0.45 compounded; top-100 players keep
@@ -37,17 +46,37 @@ p[, lpick := fifelse(early, log(pick), 0)]
 prev <- end[!is.na(torp), .(player_id, season = season + 1L, torp_prev = torp)]
 p <- merge(p, prev, by = c("player_id", "season"), all.x = TRUE)
 p[is.na(torp_prev), torp_prev := torp]
-age_fit <- lm(torp_next ~ torp * ns(age, 3) + torp_prev + early + lpick, data = p[survived == TRUE])
-res_sd <- sigma(age_fit)
-games_fit <- lm(games_next ~ ns(age, 3) + torp + games, data = p[survived == TRUE])
-# Mean time on ground next season, for players who play; this season's TOG is
-# set to the league median for anyone who did not play.
+# Pick terms. dd = 1 for a national-draft pick; lp = log(pick); yc = career
+# season being forecast (1 = first after the draft), capped at 12. Undrafted
+# players get placeholder lp / yc, which dd zeroes. A player whose recorded
+# draft is after the season (redrafted veterans) counts as undrafted.
+add_pick_terms <- function(d, lp0, yc0) {
+  d[, dd := as.numeric(!is.na(pick) & !is.na(draft_year) & season + 1L - draft_year >= 2)]
+  d[, `:=`(lp = fifelse(dd == 1, log(pick), lp0), yc = fifelse(dd == 1, pmin(season + 1L - draft_year, 12), yc0))]
+}
+add_pick_terms(p, 0, 0)
+lp0 <- median(p[dd == 1, lp]); yc0 <- median(p[dd == 1, yc])
+add_pick_terms(p, lp0, yc0)
+# Knots from drafted rows only, fixed in the formula so the placeholders cannot move them.
+kn <- function(x, q) paste(signif(quantile(x, q), 6), collapse = ", ")
+b_lp <- sprintf("ns(lp, knots = %s, Boundary.knots = c(%s))", kn(p[dd == 1, lp], .5), kn(p[dd == 1, lp], c(0, 1)))
+b_yc <- sprintf("ns(yc, knots = c(%s), Boundary.knots = c(%s))", kn(p[dd == 1, yc], c(1, 2) / 3), kn(p[dd == 1, yc], c(0, 1)))
+PICK <- sprintf("dd + dd:%s + dd:%s + dd:%s:%s", b_lp, b_yc, b_lp, b_yc)
+cat("pick-weighted rows:", p[dd == 1, .N], "of", nrow(p), "\n")
 tog_med <- median(p$tog, na.rm = TRUE)
 p[, tog_now := fifelse(is.na(tog), tog_med, tog)]
-tog_fit <- lm(tog_next ~ ns(age, 3) + torp + tog_now, data = p[survived == TRUE & games_next > 0])
-cat("TOG model residual sd:", round(sigma(tog_fit), 3), " median TOG:", round(tog_med, 3), "
-")
-cat("aging model residual sd:", round(res_sd, 3), " pick term:", round(coef(age_fit)[["lpick"]], 3), "\n")
+age_fit <- lm(as.formula(paste("torp_next ~ ns(torp, 3) + torp:ns(age, 3) + ns(age, 3) + torp_prev + position +", PICK)),
+              data = p[survived == TRUE])
+res_sd <- sigma(age_fit)
+games_fit <- lm(as.formula(paste("games_next ~ ns(age, 3) + ns(torp_next, 3) + torp + games + position +", PICK)),
+                data = p[survived == TRUE])
+# Mean time on ground next season, for players who play; this season's TOG is
+# set to the league median for anyone who did not play.
+tog_fit <- lm(tog_next ~ ns(age, 3) + ns(torp_next, 3) + torp + tog_now + position,
+              data = p[survived == TRUE & games_next > 0])
+surv_fit <- glm(survived ~ ns(age, 3) + torp + log1p(games) + position, data = p, family = binomial)
+cat("TOG model residual sd:", round(sigma(tog_fit), 3), " median TOG:", round(tog_med, 3), "\n")
+cat("aging model residual sd:", round(res_sd, 3), "\n")
 
 # ---- 2. Replacement level ----
 # Players picked up as mature pickups (no National Draft pick on record, aged
@@ -68,7 +97,9 @@ cat("replacement TORP: mature pickups", round(repl, 2), "(n", nrow(pick_ups), ")
 
 # ---- 3. Simulate ----
 n_sims <- 2000L; horizon <- 8L; disc <- 0.9
-start <- e26[, .(player_id, player_name, team, age, torp, games, tog_now = fifelse(is.na(tog), tog_med, tog), draft_year, pick)]
+e26 <- merge(e26, pos[season == as_of, .(player_id, position)], by = "player_id")
+stopifnot(!anyNA(e26$position))
+start <- e26[, .(player_id, player_name, team, age, torp, games, tog_now = fifelse(is.na(tog), tog_med, tog), draft_year, pick, position)]
 start <- merge(start, end[season == as_of - 1L & !is.na(torp), .(player_id, torp_prev = torp)], by = "player_id", all.x = TRUE)
 start[is.na(torp_prev), torp_prev := torp]
 sim <- start[rep(seq_len(.N), each = n_sims)][, sim := rep(seq_len(n_sims), nrow(start))]
@@ -76,14 +107,15 @@ sim[, `:=`(alive = TRUE, season = as_of, torp_start = torp)]
 val <- matrix(0, nrow(sim), horizon)
 torp_path <- matrix(NA_real_, nrow(sim), horizon)
 for (k in seq_len(horizon)) {
-  ps <- predict(surv, newdata = sim, type = "response")
+  ps <- predict(surv_fit, newdata = sim, type = "response")
   sim[, alive := alive & (runif(.N) < ps)]
-  sim[, early := !is.na(pick) & (season - draft_year) <= 3]
-  sim[, lpick := fifelse(early, log(pick), 0)]
+  add_pick_terms(sim, lp0, yc0)
   mu <- predict(age_fit, newdata = sim)
+  sim[, torp_next := mu + rnorm(.N, 0, res_sd)]
+  # games and TOG follow the rating he actually has next season
   g  <- pmin(pmax(predict(games_fit, newdata = sim), 0), 25)
   tg <- pmin(pmax(predict(tog_fit, newdata = sim), 0.2), 1)
-  sim[, `:=`(torp_prev = torp, torp = mu + rnorm(.N, 0, res_sd), games = g, tog_now = tg, age = age + 1, season = season + 1L)]
+  sim[, `:=`(torp_prev = torp, torp = torp_next, games = g, tog_now = tg, age = age + 1, season = season + 1L)]
   # value = games x TOG x (TORP - replacement): TORP and replacement are per full game
   val[, k] <- fifelse(sim$alive, sim$games * sim$tog_now * (sim$torp - repl), 0) * disc^(k - 1)
   torp_path[, k] <- fifelse(sim$alive, sim$torp, NA_real_)
