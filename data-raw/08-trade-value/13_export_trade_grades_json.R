@@ -29,8 +29,10 @@ assets[, `:=`(draftee = blank_na(as.character(draftee)), how = blank_na(how))]
 stopifnot(!anyNA(assets$how))
 still <- grepl("still there", assets$how)
 assets[, `:=`(played = round(fifelse(is.na(realised), 0, realised), 1),
-              forecast = round(fifelse(still & !is.na(after), after, 0), 1),
               value = round(v_turned, 1))]
+# Forecast as the rounded difference, so played + forecast = value exactly in
+# the file (rounding each on its own missed by 0.1 on 24 rows).
+assets[, forecast := fifelse(still, round(value - played, 1), 0)]
 
 # Checks: a player still at the club is exactly played + forecast; each trade's
 # club nets cancel; Dawson's trade is the known anchor; only the public years.
@@ -51,6 +53,7 @@ trades <- lapply(split(grades, by = c("year", "trade"), sorted = TRUE), function
   }))
 })
 names(trades) <- NULL
+stopifnot(assets[still, all(abs(played + forecast - value) < 1e-9)])
 stopifnot(sum(vapply(trades, function(t) sum(vapply(t$clubs, function(c) nrow(c$assets), 0L)), 0L)) == nrow(assets))
 
 out <- list(
@@ -59,7 +62,7 @@ out <- list(
   as_of = 2026L,
   notes = list(
     value = "Value is games played x time on ground x how far the player's TORP rating was above a replacement-level player, summed over 8 seasons from the trade, with later seasons counting 10% less each year. Picks count as the player the club drafted with them.",
-    forecast = "Players still at the club are valued on seasons played so far plus a forecast of the seasons left in the 8-year window. For these years the forecast is 16% (2021) to 36% (2023) of the value. The forecast is harsh on young draftees, who usually improve faster than it expects.",
+    forecast = "Players still at the club are valued on seasons played so far plus a forecast of the seasons left in the 8-year window. For these years the forecast is 16% (2021) to 36% (2023) of the value. A forecast can be below zero when a player is expected to rate below a replacement-level player. The forecast is harsh on young draftees, who usually improve faster than it expects.",
     untraced = "We follow each pick to the player drafted with it. Where we could not (mostly late picks used to match bids), the pick keeps its value on the day of the trade.",
     salary = "Grades do not count what clubs pay players. A club that takes on a big contract gets the player's full value here, so these grades lean towards clubs that took on players.",
     not_2026 = "This year's trades are not graded here yet."),
