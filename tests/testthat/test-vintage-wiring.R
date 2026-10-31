@@ -155,19 +155,57 @@ KNOWN_NON_DEFINING <- c(
   # published number. (2026-09-09) The third, the minimum cell size the check
   # reads (torp#225), is the same kind: it decides which cells the check looks
   # at and nothing else; every row still goes into the ledger. (2026-09-23)
-  "NP_STOPPAGE_WIN_WARN", "NP_STOPPAGE_WIN_ABORT", "NP_STOPPAGE_WIN_MIN_N",
-  # -- Defined OUTSIDE R/constants_ratings.R (epv_difficulty.R, epv_v3.R,
-  # epv_net_points.R, ...). The scan used to read that one source file as text,
-  # which does not exist under R CMD check, so it skipped on CI. It now reads
-  # the loaded namespace, which sees these too. None is wired into the manifest
-  # today; registered as found, NOT as a claim they are safe to change.
-  # (2026-10-26, issue #264)
-  "EPV_BOX_TERMS", "EPV_DIFFICULTY_DESCS", "EPV_DIFFICULTY_SPLIT",
-  "EPV_DIFFICULTY_SURPRISE_BY_TYPE", "EPV_DIFFICULTY_SURPRISE_SHARE",
-  "EPV_DIFFICULTY_SURPRISE_TABLE", "EPV_MODEL_FEATURES", "EPV_OPP_LAMBDA_DECAY",
-  "EPV_OPP_PRIOR_GAMES", "EPV_RAW_CHANNEL_SCALE", "EPV_RELEVANT_DESCRIPTIONS",
-  "NP_FIT_RELEASE_TAG", "TORP_RATINGS_COL_MAP"
+  "NP_STOPPAGE_WIN_WARN", "NP_STOPPAGE_WIN_ABORT", "NP_STOPPAGE_WIN_MIN_N"
 )
+
+# ---------------------------------------------------------------------------
+# NOT AUDITED. Constants defined OUTSIDE R/constants_ratings.R (epv_difficulty.R,
+# epv_v3.R, epv_net_points.R, ...). The scan used to read that one source file
+# as text, which does not exist under R CMD check, so it skipped on CI; it now
+# reads the loaded namespace, which sees these too. Nobody has decided whether
+# they are rating-defining, and several look it (EPV_RAW_CHANNEL_SCALE,
+# EPV_MODEL_FEATURES, EPV_OPP_LAMBDA_DECAY). They are NOT in KNOWN_NON_DEFINING
+# because that list is a claim of safety. Wiring one is not free either: a new
+# leaf in .rating_defining_constants() reads as drift against the published
+# manifest, so check_vintage_alignment(strict = TRUE) refuses canonical writes
+# until the manifest records it. That is Pete's call per constant.
+#
+# Until then each one's VALUE is pinned below, so an edit fails this file
+# instead of silently moving published ratings. To change one: decide whether
+# it is rating-defining, then wire it (and update the manifest) or move it to
+# KNOWN_NON_DEFINING with a reason, and drop its pin. (2026-10-31, torp#287)
+# ---------------------------------------------------------------------------
+UNAUDITED_PINNED <- c(
+  EPV_BOX_TERMS                   = "a27f3997d02303d2a7f9296f42fcba42",
+  EPV_DIFFICULTY_DESCS            = "b75411abf5cd44608c78e7b3bb760bcf",
+  EPV_DIFFICULTY_SPLIT            = "68934a3e9455fa72420237eb05902327",
+  EPV_DIFFICULTY_SURPRISE_BY_TYPE = "68934a3e9455fa72420237eb05902327",
+  EPV_DIFFICULTY_SURPRISE_SHARE   = "d310cb367d993fb6fb584b198a2fd72c",
+  EPV_DIFFICULTY_SURPRISE_TABLE   = "90419aff4fda7f45265f4cc91d0bd63e",
+  EPV_MODEL_FEATURES              = "67a596debb4e2fe4fe64bb66cbc8e34e",
+  EPV_OPP_LAMBDA_DECAY            = "50a0f3f37dd7e3799f7ef18846ee1587",
+  EPV_OPP_PRIOR_GAMES             = "e4da3b7fbbce2345d7772b0674a318d5",
+  EPV_RAW_CHANNEL_SCALE           = "37a6259cc0c1dae299a7866489dff0bd",
+  EPV_RELEVANT_DESCRIPTIONS       = "a808db549b5cb69fd47ad65807238e89",
+  NP_FIT_RELEASE_TAG              = "543c433c4ae2a8d3cca25304839fdaea",
+  TORP_RATINGS_COL_MAP            = "5e31d30765fc891443ba4f982afcfdde"
+)
+
+#' A stable text fingerprint of a constant's value: deparsed for language
+#' objects (formulas), full-precision JSON otherwise, then md5. writeBin keeps
+#' Windows from turning "\n" into "\r\n", so the digest is the same everywhere.
+vintage_constant_fingerprint <- function(name) {
+  v <- get(name, envir = asNamespace("torp"))
+  txt <- if (is.language(v) || inherits(v, "formula")) {
+    paste(deparse(v), collapse = " ")
+  } else {
+    as.character(jsonlite::toJSON(v, auto_unbox = TRUE, null = "null", digits = NA))
+  }
+  f <- tempfile()
+  on.exit(unlink(f))
+  writeBin(charToRaw(enc2utf8(txt)), f)
+  unname(tools::md5sum(f))
+}
 
 # ---------------------------------------------------------------------------
 # Scanners
@@ -218,7 +256,7 @@ test_that("the constants scan and the defining-constants flatten find something 
   # A "count the violations, pass if zero" guard passes vacuously on an empty
   # scan -- exactly what a broken scanner or an accidentally-emptied
   # constants file would produce. Floors are set well below the current
-  # counts (86 family constants, 38 flattened leaves) so a real deletion
+  # counts (138 family constants, 38 flattened leaves on 2026-10-31) so a real deletion
   # trips them rather than every routine edit.
   scanned <- vintage_scan_family_constants()
   expect_gte(length(scanned), 15L)
@@ -236,18 +274,35 @@ test_that("every rating-defining-family constant is wired or registered", {
   # A register entry that has since been wired fails this too -- there is no
   # way to pass with an entry in KNOWN_NON_DEFINING that vintage_is_wired()
   # would now find, because the two sides must match EXACTLY.
+  registered <- c(KNOWN_NON_DEFINING, names(UNAUDITED_PINNED))
   expect_equal(
-    orphans, sort(KNOWN_NON_DEFINING),
+    orphans, sort(registered),
     info = paste0(
       "A rating-defining-family constant is neither referenced inside ",
       ".rating_defining_constants() nor registered in KNOWN_NON_DEFINING. ",
       "Changing it would silently change published ratings with no manifest ",
       "trace and no vintage bump. Wire it into .rating_defining_constants(), ",
       "or register it in KNOWN_NON_DEFINING with a reason and a date.\n",
-      "Newly unregistered: ", paste(setdiff(orphans, KNOWN_NON_DEFINING), collapse = ", "), "\n",
+      "Newly unregistered: ", paste(setdiff(orphans, registered), collapse = ", "), "\n",
       "Stale register entries (already wired, prune them): ",
-      paste(setdiff(KNOWN_NON_DEFINING, orphans), collapse = ", ")
+      paste(setdiff(registered, orphans), collapse = ", ")
     )
+  )
+})
+
+test_that("no constant is both known-safe and unaudited", {
+  expect_length(intersect(KNOWN_NON_DEFINING, names(UNAUDITED_PINNED)), 0L)
+})
+
+test_that("unaudited constants keep their pinned values", {
+  # A failure here means one of the UNAUDITED_PINNED constants changed. It may
+  # be rating-defining; see the block above UNAUDITED_PINNED before re-pinning.
+  live <- vapply(names(UNAUDITED_PINNED), vintage_constant_fingerprint, character(1))
+  changed <- names(live)[live != UNAUDITED_PINNED]
+  expect_identical(
+    changed, character(0),
+    info = paste0("Unaudited constant(s) changed: ", paste(changed, collapse = ", "),
+                  ". Decide whether each is rating-defining before re-pinning.")
   )
 })
 
