@@ -32,7 +32,9 @@ SHARED_VERSEBUS_FUNCTIONS <- c(
   # 2026-10-25: vb_publish() calls it, and it now also turns off gh's 60 s
   # HTTP cache. Left unguarded, torp's copy changed while torpmodels' did not
   # and this check stayed green.
-  ".vb_with_fresh_listing"
+  ".vb_with_fresh_listing",
+  # 2026-11-01 (versebus 1.2.0): vb_publish() writes every asset through it.
+  ".vb_safe_upload", ".vb_token", ".vb_refused_status"
 )
 
 # Parse a versebus.R file into name -> deparsed function-body text, for every

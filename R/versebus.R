@@ -4,7 +4,7 @@
 # Pattern spec: C:\dev\ECOSYSTEM-FIX-PLAN.md S1. Repo-specific glue (repo/tag
 # resolution, cache invalidation) stays OUT of this file -- callers pass
 # repo/tag explicitly and register hooks via options() (see vb_publish).
-VERSEBUS_VERSION <- "1.1.1"
+VERSEBUS_VERSION <- "1.2.0"
 
 # Session state: one-time legacy warnings, manifest-seen memory (for the
 # retry-once-on-momentary-absence rule), manifest fetch rate limiting.
@@ -231,6 +231,143 @@ vb_list_assets <- function(repo, tag) {
     else Sys.setenv(piggyback_cache_duration = prev)
     options(prev_gh)
   }
+}
+
+# Upload one file to a release WITHOUT deleting the old asset first.
+#
+# piggyback::pb_upload(overwrite = TRUE) deletes the existing asset and then
+# uploads; if the upload then fails the release is left without the file. That
+# emptied wheather's cache release for three weeks (2026-09-17), and until
+# versebus 1.2.0 it was how vb_publish() wrote every data asset and every
+# bus_manifest.json (vault plans/CLOBBER-AUDIT-2026-10-08.md). piggyback 0.1.5
+# also only warns when the upload POST is refused, so its return value never
+# meant "the file is on the release".
+#
+# Same scheme and temp prefix as torp's safe_release_upload() and pannadata's
+# versebus.sh, so a stranded copy reads the same way in every verse:
+#   1. upload under a fresh `vbnew-...--<name>` (nothing deleted yet);
+#   2. wait until GitHub's own listing says it is `uploaded` at the local size;
+#   3. only then delete the old asset and earlier stranded temp copies;
+#   4. rename the new asset into place (retried).
+# A failure before 3 leaves the old asset untouched. A failure of 4 leaves the
+# data on the release under its temp name, and the error says how to recover.
+# Concurrent publishes of the SAME asset are unsupported (step 3 deletes every
+# stranded temp copy of `name`). Call inside .vb_with_fresh_listing().
+VB_TMP_PREFIX <- "vbnew-"
+
+# The token piggyback will upload with. gh::gh_token() reads GITHUB_PAT /
+# GITHUB_TOKEN (or a git credential helper) and NOT GH_TOKEN, which is the
+# variable the gh CLI uses -- so a workflow that sets only GH_TOKEN uploads with
+# an empty token. Wrapped so tests can stand in for it. (From citius's copy,
+# citiusdata run 38487753749, 2026-10-14; canonical since 1.2.0.)
+.vb_token <- function() {
+  if (!requireNamespace("gh", quietly = TRUE)) return("")
+  tryCatch(as.character(gh::gh_token()), error = function(e) "")
+}
+
+# HTTP status codes >= 300 in whatever pb_upload() returned. piggyback 0.1.5's
+# pb_upload_file() POSTs the asset and returns the httr response WITHOUT
+# checking it (it only warns when show_progress is on), so a refused upload
+# comes back looking like success. (From citius's copy; canonical since 1.2.0.)
+.vb_refused_status <- function(res) {
+  res <- if (inherits(res, "response")) list(res) else res
+  if (!is.list(res)) return(integer(0))
+  codes <- vapply(Filter(function(r) inherits(r, "response"), res),
+                  function(r) as.integer(r$status_code), integer(1))
+  codes[!is.na(codes) & codes >= 300L]
+}
+
+.vb_safe_upload <- function(path, repo, tag, name = basename(path),
+                            poll_delays = c(2, 3, 5, 10, 15, 30)) {
+  size <- as.numeric(file.size(path))
+  if (is.na(size)) .vb_abort("{.path {path}} does not exist", "vb_error_integrity")
+  r <- .vb_split_repo(repo)
+  # pid + microsecond clock, not sample.int(): never move a seeded caller's RNG.
+  tmp <- sprintf("%s%s-%s-%d-%s--%s", VB_TMP_PREFIX,
+                 Sys.getenv("GITHUB_RUN_ID", "local"), Sys.getenv("GITHUB_RUN_ATTEMPT", "0"),
+                 Sys.getpid(), sprintf("%.0f", as.numeric(Sys.time()) * 1e6), name)
+  listing <- function() {
+    rel <- gh::gh("GET /repos/{owner}/{repo}/releases/tags/{tag}",
+                  owner = r$owner, repo = r$name, tag = tag)
+    a <- if (is.null(rel$assets)) list() else rel$assets
+    data.frame(
+      id = vapply(a, function(x) if (is.null(x$id)) NA_real_ else as.numeric(x$id), numeric(1)),
+      name = vapply(a, function(x) x$name, character(1)),
+      size = vapply(a, function(x) if (is.null(x$size)) NA_real_ else as.numeric(x$size), numeric(1)),
+      state = vapply(a, function(x) if (is.null(x$state)) NA_character_ else x$state, character(1)),
+      stringsAsFactors = FALSE)
+  }
+
+  # 1. A fresh name: nothing to delete, so nothing can be lost.
+  up <- tryCatch(
+    piggyback::pb_upload(path, repo = repo, tag = tag, name = tmp,
+                         overwrite = FALSE, show_progress = FALSE),
+    error = function(e) {
+      .vb_abort("Upload of {.val {name}} (as {.val {tmp}}) failed; the existing asset is untouched: {conditionMessage(e)}",
+                "vb_error_transient", parent = e)
+    })
+  # A refusal piggyback only warned about: fail now, not after the poll.
+  refused <- .vb_refused_status(up)
+  if (length(refused)) {
+    .vb_abort("GitHub refused the upload of {.val {name}} (HTTP {paste(refused, collapse = ', ')}); the existing asset is untouched",
+              "vb_error_transient")
+  }
+
+  # 2. GitHub's record decides whether it landed.
+  assets <- NULL
+  new_id <- NA_real_
+  last_err <- "none"
+  for (d in c(0, poll_delays)) {
+    if (d > 0) Sys.sleep(d)
+    assets <- tryCatch(listing(), error = function(e) {
+      last_err <<- conditionMessage(e)
+      NULL
+    })
+    if (is.null(assets)) next
+    hit <- assets[assets$name == tmp & assets$state %in% "uploaded" &
+                    !is.na(assets$size) & assets$size == size, , drop = FALSE]
+    if (nrow(hit) > 0L) {
+      new_id <- hit$id[1L]
+      break
+    }
+  }
+  if (is.na(new_id)) {
+    .vb_abort("{.val {tmp}} never reported as uploaded at {size} bytes (last read error: {last_err}); the existing {.val {name}} is untouched",
+              "vb_error_transient")
+  }
+
+  # 3. Only now delete the old asset and stranded temp copies of it. A failed
+  #    delete of the real name stops here: the rename would collide.
+  stale <- startsWith(assets$name, VB_TMP_PREFIX) &
+    endsWith(assets$name, paste0("--", name)) & assets$name != tmp
+  old <- assets[assets$name == name | stale, , drop = FALSE]
+  for (i in seq_len(nrow(old))) {
+    err <- tryCatch({
+      gh::gh("DELETE /repos/{owner}/{repo}/releases/assets/{id}",
+             owner = r$owner, repo = r$name, id = format(old$id[i], scientific = FALSE))
+      NULL
+    }, error = function(e) e)
+    if (!is.null(err)) {
+      if (identical(old$name[i], name)) {
+        .vb_abort("Could not delete the old {.val {name}} ({conditionMessage(err)}); the new copy stays on the release as {.val {tmp}}",
+                  "vb_error_transient", parent = err)
+      }
+      cli::cli_warn("Could not delete stale temp asset {.val {old$name[i]}}: {conditionMessage(err)}")
+    }
+  }
+
+  # 4. Rename into place.
+  tryCatch(
+    .vb_retry(function() {
+      gh::gh("PATCH /repos/{owner}/{repo}/releases/assets/{id}",
+             owner = r$owner, repo = r$name, id = format(new_id, scientific = FALSE), name = name)
+    }, times = 3L, delays = c(5, 10)),
+    error = function(e) {
+      .vb_abort(c("Rename of {.val {tmp}} to {.val {name}} failed after the old asset was deleted; the data is on the release as {.val {tmp}}: {conditionMessage(e)}",
+                  "i" = "Recover: gh api -X PATCH repos/{repo}/releases/assets/{format(new_id, scientific = FALSE)} -f name={name}"),
+                "vb_error_integrity", parent = e)
+    })
+  invisible(new_id)
 }
 
 #' Read an asset's true stored size, bypassing the release listing
@@ -688,13 +825,23 @@ vb_publish <- function(paths, repo, tag,
   restore_cache <- .vb_with_fresh_listing()
   on.exit(restore_cache(), add = TRUE)
 
+  # 3a. No token, no upload. Without this an empty token is only discovered
+  # later as a refused or missing upload, which reads as an API race.
+  if (!nzchar(.vb_token())) {
+    .vb_abort(c("vb_publish: no GitHub token visible to piggyback for {repo}@{tag} -- nothing uploaded.",
+                "i" = "gh::gh_token() reads GITHUB_PAT or GITHUB_TOKEN, not GH_TOKEN. In a workflow, set GITHUB_PAT: ${{{{ secrets.GITHUB_TOKEN }}}}."),
+              "vb_error_auth")
+  }
+
   # 3. Upload data assets with bounded exponential backoff; collect failures.
   failures <- character(0)
   for (p in paths) {
     ok <- FALSE
     for (attempt in seq_len(max_retries + 1L)) {
       ok <- tryCatch({
-        piggyback::pb_upload(p, repo = repo, tag = tag, overwrite = TRUE)
+        # Never delete before replacing (versebus 1.2.0): a failed attempt
+        # leaves the previous asset in place for consumers.
+        .vb_safe_upload(p, repo = repo, tag = tag)
         TRUE
       }, error = function(e) {
         cli::cli_alert_warning("upload attempt {attempt} failed for {basename(p)}: {conditionMessage(e)}")
@@ -782,7 +929,9 @@ vb_publish <- function(paths, repo, tag,
   on.exit(unlink(tmp_dir, recursive = TRUE), add = TRUE)
   tmp <- file.path(tmp_dir, "bus_manifest.json")
   manifest <- vb_write_manifest(merged, tag, tmp)
-  up <- function() piggyback::pb_upload(tmp, repo = repo, tag = tag, overwrite = TRUE)
+  # The manifest too: a delete-then-failed-upload here left a tag with NO
+  # bus_manifest.json, which readers treat as a never-published tag.
+  up <- function() .vb_safe_upload(tmp, repo = repo, tag = tag)
   tryCatch(up(), error = function(e) { Sys.sleep(5); up() })
 
   # 7. Own-write cache invalidation hook.
