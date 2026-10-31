@@ -71,7 +71,7 @@ test_that("an upload GitHub never confirms (piggyback only warned) deletes nothi
   local_fake_release(rel)
   f <- probe_file(40)
   expect_error(.vb_safe_upload(f, "o/r", "t", name = "x.parquet", poll_delays = numeric(0)),
-               "never reported as uploaded", class = "vb_error_transient")
+               "never reported as[[:space:]]+uploaded", class = "vb_error_transient")
   expect_true("x.parquet" %in% asset_names(rel))
   expect_equal(rel$assets[[1]]$size, 5)
 })
