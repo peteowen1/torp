@@ -858,7 +858,8 @@ vb_publish <- function(paths, repo, tag,
   if (length(failures) > 0L) {
     .vb_abort(c("vb_publish: {length(failures)} upload(s) failed for {repo}@{tag}:
                  {.val {failures}}",
-                "x" = "bus_manifest.json NOT updated -- consumers keep the last consistent snapshot."),
+                "x" = "bus_manifest.json NOT updated -- consumers keep the last consistent snapshot,",
+                "!" = "unless a warning above says a rename failed after the old asset was deleted: then rename that temp copy back first."),
               "vb_error_transient")
   }
 
