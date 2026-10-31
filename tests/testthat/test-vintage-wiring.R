@@ -20,9 +20,9 @@
 #     been bumped and was not. check_vintage_alignment() catches this at
 #     runtime; the round-trip tests below prove the comparison itself works.
 #
-# Entirely offline: every check here either scans R/constants_ratings.R as
-# text or calls check_vintage_alignment() with an injected `manifest =`, never
-# read_ratings_manifest()'s real network default.
+# Entirely offline: every check here either scans the loaded package namespace
+# for constant names or calls check_vintage_alignment() with an injected
+# `manifest =`, never read_ratings_manifest()'s real network default.
 
 # ---------------------------------------------------------------------------
 # THE REGISTER. Every entry needs a reason and a date. Prune it once wired.
@@ -159,54 +159,84 @@ KNOWN_NON_DEFINING <- c(
 )
 
 # ---------------------------------------------------------------------------
+# NOT AUDITED. Constants defined OUTSIDE R/constants_ratings.R (epv_difficulty.R,
+# epv_v3.R, epv_net_points.R, ...). The scan used to read that one source file
+# as text, which does not exist under R CMD check, so it skipped on CI; it now
+# reads the loaded namespace, which sees these too. Nobody has decided whether
+# they are rating-defining, and several look it (EPV_RAW_CHANNEL_SCALE,
+# EPV_MODEL_FEATURES, EPV_OPP_LAMBDA_DECAY). They are NOT in KNOWN_NON_DEFINING
+# because that list is a claim of safety. Wiring one is not free either: a new
+# leaf in .rating_defining_constants() reads as drift against the published
+# manifest, so check_vintage_alignment(strict = TRUE) refuses canonical writes
+# until the manifest records it. That is Pete's call per constant.
+#
+# Until then each one's VALUE is pinned below, so an edit fails this file
+# instead of silently moving published ratings. To change one: decide whether
+# it is rating-defining, then wire it (and update the manifest) or move it to
+# KNOWN_NON_DEFINING with a reason, and drop its pin. (2026-10-31, torp#287)
+# ---------------------------------------------------------------------------
+UNAUDITED_PINNED <- c(
+  EPV_BOX_TERMS                   = "ae0fdb3ee6c835dc36be20e66e065d46",
+  EPV_DIFFICULTY_DESCS            = "b75411abf5cd44608c78e7b3bb760bcf",
+  EPV_DIFFICULTY_SPLIT            = "68934a3e9455fa72420237eb05902327",
+  EPV_DIFFICULTY_SURPRISE_BY_TYPE = "68934a3e9455fa72420237eb05902327",
+  EPV_DIFFICULTY_SURPRISE_SHARE   = "d310cb367d993fb6fb584b198a2fd72c",
+  EPV_DIFFICULTY_SURPRISE_TABLE   = "8e17363a4a0bb049b3c57bfce0957112",
+  EPV_MODEL_FEATURES              = "67a596debb4e2fe4fe64bb66cbc8e34e",
+  EPV_OPP_LAMBDA_DECAY            = "50a0f3f37dd7e3799f7ef18846ee1587",
+  EPV_OPP_PRIOR_GAMES             = "e4da3b7fbbce2345d7772b0674a318d5",
+  EPV_RAW_CHANNEL_SCALE           = "37a6259cc0c1dae299a7866489dff0bd",
+  EPV_RELEVANT_DESCRIPTIONS       = "a808db549b5cb69fd47ad65807238e89",
+  NP_FIT_RELEASE_TAG              = "543c433c4ae2a8d3cca25304839fdaea",
+  TORP_RATINGS_COL_MAP            = "dc8117f9c608901b758230c20daff634"
+)
+
+#' A stable text fingerprint of a constant's value: deparsed for language
+#' objects (formulas), full-precision JSON otherwise, then md5. writeBin keeps
+#' Windows from turning "\n" into "\r\n", so the digest is the same everywhere.
+#' jsonlite writes a named atomic vector as a bare array, so names are carried
+#' explicitly (recursing into lists): re-keying EPV_DIFFICULTY_SURPRISE_TABLE
+#' or TORP_RATINGS_COL_MAP must change the digest.
+vintage_constant_fingerprint <- function(name) {
+  v <- get(name, envir = asNamespace("torp"))
+  keep_names <- function(x) {
+    if (is.list(x)) return(list(n = names(x), v = lapply(unname(x), keep_names)))
+    if (!is.null(names(x))) return(list(n = names(x), v = unname(x)))
+    x
+  }
+  txt <- if (is.language(v) || inherits(v, "formula")) {
+    paste(deparse(v), collapse = " ")
+  } else {
+    as.character(jsonlite::toJSON(keep_names(v), auto_unbox = TRUE, null = "null", digits = NA))
+  }
+  f <- tempfile()
+  on.exit(unlink(f))
+  writeBin(charToRaw(enc2utf8(txt)), f)
+  unname(tools::md5sum(f))
+}
+
+# ---------------------------------------------------------------------------
 # Scanners
 # ---------------------------------------------------------------------------
 
-#' Path to the source file the completeness scan parses, or NA if it is not
-#' reachable.
+#' Every top-level constant NAME in the loaded torp namespace matching the
+#' rating-defining families.
 #'
-#' An earlier version of this comment claimed `test_path()` reaches the package
-#' root "under both devtools::test() and R CMD check". It does not: `R CMD check`
-#' runs tests against a BUILT package from `<pkg>.Rcheck/tests/`, where no `R/`
-#' source tree exists, and the installed package stores code in a lazy-load
-#' database rather than as `.R` files. So `readLines()` threw
-#' `cannot open the connection` and both tests below ERRORed on every CI run.
-#'
-#' Returns NA rather than a non-existent path so callers skip explicitly,
-#' matching `test-versebus-sync.R`'s local-dev-only precedent. This is a
-#' source-text scan by design (see `vintage_scan_family_constants()`), so it
-#' cannot fall back to the loaded namespace without losing the property that
-#' makes it correct.
-vintage_constants_source_path <- function() {
-  candidates <- c(
-    testthat::test_path("..", "..", "R", "constants_ratings.R"),
-    testthat::test_path("..", "R", "constants_ratings.R"),
-    file.path("R", "constants_ratings.R")
-  )
-  hit <- candidates[file.exists(candidates)]
-  if (length(hit) == 0L) return(NA_character_)
-  normalizePath(hit[[1]], winslash = "/", mustWork = FALSE)
-}
-
-#' Skip helper: these scans need the package SOURCE, not the installed package.
-skip_if_no_constants_source <- function() {
-  testthat::skip_if(is.na(vintage_constants_source_path()),
-                    "R/constants_ratings.R not reachable (R CMD check runs against a built package)")
-}
-
-#' Every top-level constant NAME in R/constants_ratings.R matching the
-#' rating-defining families, scanned from source TEXT rather than from the
-#' loaded package -- a `#' @keywords internal` documentation line must never
-#' be mistaken for an assignment (mirrors citius's wiring_script_setters()
-#' comment-stripping).
-vintage_scan_family_constants <- function(path = vintage_constants_source_path()) {
-  lines <- readLines(path, warn = FALSE)
-  code_lines <- sub("#.*$", "", lines)
-  pat <- "^([A-Z][A-Z0-9_]*) *<-"
-  hit <- grepl(pat, code_lines)
-  nm <- sub(paste0(pat, ".*$"), "\\1", code_lines[hit])
-  families <- "^(TORP_|EPR_|EPV_|PSR_|LINEUP_POSITION_|NP_)"
-  sort(unique(nm[grepl(families, nm)]))
+#' Reads the namespace, not R/constants_ratings.R as text: `R CMD check` runs
+#' tests against a BUILT package from `<pkg>.Rcheck/tests/`, where no `R/` source
+#' tree exists and the code lives in a lazy-load database, so a file read threw
+#' (then skipped) on every CI run and the scan never ran there. The namespace is
+#' the same under `devtools::load_all()` and `R CMD check`. The match is on
+#' all-caps names whose value is not a function, so a `#' @keywords internal`
+#' doc line (the hazard the old text scan stripped comments to avoid) cannot
+#' appear here at all.
+vintage_scan_family_constants <- function() {
+  ns <- asNamespace("torp")
+  nm <- ls(ns, all.names = TRUE)
+  nm <- nm[grepl("^[A-Z][A-Z0-9_]*$", nm) &
+             grepl("^(TORP_|EPR_|EPV_|PSR_|LINEUP_POSITION_|NP_)", nm)]
+  is_fn <- vapply(nm, function(n) is.function(get(n, envir = ns)), logical(1))
+  sort(unique(nm[!is_fn]))
 }
 
 #' The deparsed source of .rating_defining_constants(), used for wiring-by-
@@ -234,9 +264,8 @@ test_that("the constants scan and the defining-constants flatten find something 
   # A "count the violations, pass if zero" guard passes vacuously on an empty
   # scan -- exactly what a broken scanner or an accidentally-emptied
   # constants file would produce. Floors are set well below the current
-  # counts (86 family constants, 38 flattened leaves) so a real deletion
+  # counts (138 family constants, 38 flattened leaves on 2026-10-31) so a real deletion
   # trips them rather than every routine edit.
-  skip_if_no_constants_source()
   scanned <- vintage_scan_family_constants()
   expect_gte(length(scanned), 15L)
 
@@ -245,7 +274,6 @@ test_that("the constants scan and the defining-constants flatten find something 
 })
 
 test_that("every rating-defining-family constant is wired or registered", {
-  skip_if_no_constants_source()
   scanned <- vintage_scan_family_constants()
   src <- vintage_defining_constants_source()
   wired <- vapply(scanned, vintage_is_wired, logical(1), source_text = src)
@@ -254,18 +282,35 @@ test_that("every rating-defining-family constant is wired or registered", {
   # A register entry that has since been wired fails this too -- there is no
   # way to pass with an entry in KNOWN_NON_DEFINING that vintage_is_wired()
   # would now find, because the two sides must match EXACTLY.
+  registered <- c(KNOWN_NON_DEFINING, names(UNAUDITED_PINNED))
   expect_equal(
-    orphans, sort(KNOWN_NON_DEFINING),
+    orphans, sort(registered),
     info = paste0(
       "A rating-defining-family constant is neither referenced inside ",
       ".rating_defining_constants() nor registered in KNOWN_NON_DEFINING. ",
       "Changing it would silently change published ratings with no manifest ",
       "trace and no vintage bump. Wire it into .rating_defining_constants(), ",
       "or register it in KNOWN_NON_DEFINING with a reason and a date.\n",
-      "Newly unregistered: ", paste(setdiff(orphans, KNOWN_NON_DEFINING), collapse = ", "), "\n",
+      "Newly unregistered: ", paste(setdiff(orphans, registered), collapse = ", "), "\n",
       "Stale register entries (already wired, prune them): ",
-      paste(setdiff(KNOWN_NON_DEFINING, orphans), collapse = ", ")
+      paste(setdiff(registered, orphans), collapse = ", ")
     )
+  )
+})
+
+test_that("no constant is both known-safe and unaudited", {
+  expect_length(intersect(KNOWN_NON_DEFINING, names(UNAUDITED_PINNED)), 0L)
+})
+
+test_that("unaudited constants keep their pinned values", {
+  # A failure here means one of the UNAUDITED_PINNED constants changed. It may
+  # be rating-defining; see the block above UNAUDITED_PINNED before re-pinning.
+  live <- vapply(names(UNAUDITED_PINNED), vintage_constant_fingerprint, character(1))
+  changed <- names(live)[live != UNAUDITED_PINNED]
+  expect_identical(
+    changed, character(0),
+    info = paste0("Unaudited constant(s) changed: ", paste(changed, collapse = ", "),
+                  ". Decide whether each is rating-defining before re-pinning.")
   )
 })
 

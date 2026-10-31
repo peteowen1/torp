@@ -254,6 +254,23 @@ EPV_CONT_LOSS_ALLOC <- "team"
 #' @keywords internal
 EPV3_CHANNELS <- 4L
 
+#' The per-channel points scale for a given engine
+#'
+#' The body of \code{EPV3_POINTS_SCALE}, as a function of the engine so a test
+#' can ask what the constant WOULD be under another engine without re-reading
+#' this file from disk (the source tree does not exist under R CMD check).
+#' \code{EPV3_POINTS_SCALE} is exactly \code{.epv3_points_scale()}; see that
+#' constant for what the values mean and where they came from.
+#' @param engine One of the \code{EPV_ENGINE} values. Defaults to the live one.
+#' @keywords internal
+.epv3_points_scale <- function(engine = EPV_ENGINE) {
+  if (identical(engine, "v3")) {
+    c(recv = 1.650438, disp = 1.421199, cont_aerial = 0.337485, cont_stop = 1.659480)
+  } else {
+    c(recv = 1, disp = 1, cont_aerial = 1, cont_stop = 1)
+  }
+}
+
 #' Per-channel points constants for v3 (1 unit = 1 point of margin)
 #'
 #' v3's channels are separately calibrated, replacing the single global
@@ -340,11 +357,7 @@ EPV3_CHANNELS <- 4L
 #' is written down now. cont_stop was 1 because the 3-channel merge left the
 #' ruck slot inert; under 4 channels it is a live channel and carries 1.8557.
 #' @keywords internal
-EPV3_POINTS_SCALE <- if (identical(EPV_ENGINE, "v3")) {
-  c(recv = 1.650438, disp = 1.421199, cont_aerial = 0.337485, cont_stop = 1.659480)
-} else {
-  c(recv = 1, disp = 1, cont_aerial = 1, cont_stop = 1)
-}
+EPV3_POINTS_SCALE <- .epv3_points_scale()
 
 #' Which EPV channel maps onto which entry of EPV3_POINTS_SCALE
 #'
@@ -362,6 +375,20 @@ EPV_CHANNEL_SCALE_KEYS <- c(epv_recv = "recv", epv_disp = "disp",
 # bottom, and EPV_ENGINE is defined further down the file than their natural
 # home -- putting them there gives "object 'EPV_ENGINE' not found" at BUILD
 # time. Same hazard the note above EPV_POINTS_SCALE warns about.
+#' Prior games for one channel slot, for a given engine
+#'
+#' The body of the \code{EPR_PRIOR_GAMES_*} constants as a function of the
+#' engine, so a test can read the value under another engine without
+#' re-sourcing this file. See \code{EPR_PRIOR_GAMES_RECV} for what the numbers
+#' mean.
+#' @param slot One of \code{"recv"}, \code{"disp"}, \code{"spoil"}.
+#' @param engine One of the \code{EPV_ENGINE} values. Defaults to the live one.
+#' @keywords internal
+.epr_prior_games <- function(slot, engine = EPV_ENGINE) {
+  v34 <- c(recv = 14.38, disp = 24.33, spoil = 11.09)
+  if (engine %in% c("v3", "v4")) v34[[slot]] else 3.0000
+}
+
 #' How much evidence a channel needs before it stops being shrunk
 #'
 #' \code{prior_games} is the number of weighted games at which a player's own
@@ -386,15 +413,15 @@ EPV_CHANNEL_SCALE_KEYS <- c(epv_recv = "recv", epv_disp = "disp",
 #' measurement on the 4-channel v3 build gave 14.38 / 24.35 / 11.37, so these
 #' are stable to the structure change.
 #' @keywords internal
-EPR_PRIOR_GAMES_RECV <- if (EPV_ENGINE %in% c("v3", "v4")) 14.38 else 3.0000
+EPR_PRIOR_GAMES_RECV <- .epr_prior_games("recv")
 
 #' Prior games constant for disposal ratings. See \code{EPR_PRIOR_GAMES_RECV}.
 #' @keywords internal
-EPR_PRIOR_GAMES_DISP <- if (EPV_ENGINE %in% c("v3", "v4")) 24.33 else 3.0000
+EPR_PRIOR_GAMES_DISP <- .epr_prior_games("disp")
 
 #' Prior games constant for the spoil/contest slot. See \code{EPR_PRIOR_GAMES_RECV}.
 #' @keywords internal
-EPR_PRIOR_GAMES_SPOIL <- if (EPV_ENGINE %in% c("v3", "v4")) 11.09 else 3.0000
+EPR_PRIOR_GAMES_SPOIL <- .epr_prior_games("spoil")
 
 #' Sub-component scales applied BEFORE the two contest channels merge
 #'
@@ -503,25 +530,44 @@ PSV_POINTS_SCALE <- 1.579
 #' \code{assignInNamespace()} the prior rates for their v3 arm. The alternative
 #' -- resolving the prior inside \code{.build_epr_season()} -- would make the
 #' constant no longer a constant.
+#' @param slot Channel slot name, a key of \code{EPV3_POINTS_SCALE}.
+#' @param engine One of the \code{EPV_ENGINE} values. Defaults to the live one.
 #' @keywords internal
-.epr_prior_points_scale <- function(slot) {
+.epr_prior_points_scale <- function(slot, engine = EPV_ENGINE) {
   # v4 is already in margin points -- the ledger sums to the margin -- so no
   # per-channel scale applies
-  if (identical(EPV_ENGINE, "v4")) return(1)
-  if (identical(EPV_ENGINE, "v3") && exists("EPV3_POINTS_SCALE")) {
-    EPV3_POINTS_SCALE[[slot]]
+  if (identical(engine, "v4")) return(1)
+  if (identical(engine, "v3")) {
+    .epv3_points_scale("v3")[[slot]]
   } else {
     EPV_POINTS_SCALE
   }
 }
 
+#' Prior rate for one of the recv / disp / spoil slots, for a given engine
+#'
+#' The body of \code{EPR_PRIOR_RATE_RECV}, \code{EPR_PRIOR_RATE_DISP} and
+#' \code{EPR_PRIOR_RATE_SPOIL} as a function of the engine, so a test can read
+#' which points-scale channel each slot carries under another engine without
+#' re-sourcing this file. The slot-to-channel pairing lives here, in one place:
+#' recv carries \code{recv}, disp carries \code{disp}, and the spoil slot
+#' carries \code{cont_aerial}.
+#' @param slot One of \code{"recv"}, \code{"disp"}, \code{"spoil"}.
+#' @param engine One of the \code{EPV_ENGINE} values. Defaults to the live one.
+#' @keywords internal
+.epr_prior_rate <- function(slot, engine = EPV_ENGINE) {
+  base <- c(recv = -0.7000, disp = -0.7000, spoil = -0.3000)
+  channel <- c(recv = "recv", disp = "disp", spoil = "cont_aerial")
+  base[[slot]] * .epr_prior_points_scale(channel[[slot]], engine)
+}
+
 #' Prior rate for receiving component (shrinkage target per weighted game)
 #' @keywords internal
-EPR_PRIOR_RATE_RECV <- -0.7000 * .epr_prior_points_scale("recv")
+EPR_PRIOR_RATE_RECV <- .epr_prior_rate("recv")
 
 #' Prior rate for disposal component (shrinkage target per weighted game)
 #' @keywords internal
-EPR_PRIOR_RATE_DISP <- -0.7000 * .epr_prior_points_scale("disp")
+EPR_PRIOR_RATE_DISP <- .epr_prior_rate("disp")
 
 #' Prior rate for spoil component (shrinkage target per weighted game)
 #'
@@ -531,7 +577,24 @@ EPR_PRIOR_RATE_DISP <- -0.7000 * .epr_prior_points_scale("disp")
 #' is a real question, but it is a separate change with its own effect and
 #' bundling it here would make the calibration unattributable.
 #' @keywords internal
-EPR_PRIOR_RATE_SPOIL <- -0.3000 * .epr_prior_points_scale("cont_aerial")
+EPR_PRIOR_RATE_SPOIL <- .epr_prior_rate("spoil")
+
+#' Prior rate for the hitout slot, for a given engine
+#'
+#' The body of \code{EPR_PRIOR_RATE_HITOUT} as a function of the engine, so a
+#' test can read the value under another engine without re-sourcing this file.
+#' See \code{EPR_PRIOR_RATE_HITOUT} for why it is zero under v4.
+#' @param engine One of the \code{EPV_ENGINE} values. Defaults to the live one.
+#' @param channels Number of v3 channels. Defaults to \code{EPV3_CHANNELS}.
+#' @keywords internal
+.epr_prior_rate_hitout <- function(engine = EPV_ENGINE, channels = EPV3_CHANNELS) {
+  if (identical(engine, "v4") ||
+      (identical(engine, "v3") && identical(channels, 3L))) {
+    0
+  } else {
+    -0.3000 * .epr_prior_points_scale("cont_stop", engine) * EPV_RUCK_SWING_SCALE
+  }
+}
 
 #' Prior rate for hitout component (shrinkage target per weighted game)
 #'
@@ -567,12 +630,7 @@ EPR_PRIOR_RATE_SPOIL <- -0.3000 * .epr_prior_points_scale("cont_aerial")
 #' explanation entirely and gained ~40 junk entries like `\keyword{Zeroed}`.
 #' Prose must precede the tag block.)
 #' @keywords internal
-EPR_PRIOR_RATE_HITOUT <- if (identical(EPV_ENGINE, "v4") ||
-                             (identical(EPV_ENGINE, "v3") && identical(EPV3_CHANNELS, 3L))) {
-  0
-} else {
-  -0.3000 * .epr_prior_points_scale("cont_stop") * EPV_RUCK_SWING_SCALE
-}
+EPR_PRIOR_RATE_HITOUT <- .epr_prior_rate_hitout()
 
 #' Weight of EPR in TORP blend (0.5 = equal blend of EPR + PSR)
 #' @keywords internal
@@ -1437,6 +1495,22 @@ LINEUP_GROUP_MAP <- c(
   unname(LINEUP_GROUP_MAP[xc])
 }
 
+#' Which channels the position adjustment standardises, for a given engine
+#'
+#' The body of \code{EPV_STANDARDISE_CHANNELS} as a function of the engine, so a
+#' test can read the value under another engine without re-sourcing this file.
+#' @param engine One of the \code{EPV_ENGINE} values. Defaults to the live one.
+#' @keywords internal
+.epv_standardise_channels <- function(engine = EPV_ENGINE) {
+  if (engine %in% c("v3", "v4")) {
+    # v4 was gated with exactly this list (the frames were built under a v3
+    # load), so it keeps it: what ships is what was measured
+    c("recv", "disp")
+  } else {
+    c("recv", "disp", "spoil")
+  }
+}
+
 #' EPV channels the position adjustment rescales (see EPV_POSITION_STANDARDISE)
 #'
 #' \code{hitout} is deliberately excluded. Standardising divides by the
@@ -1463,13 +1537,7 @@ LINEUP_GROUP_MAP <- c(
 #' \code{spoil} channel is a genuine all-position quantity (spoils, tackles,
 #' pressure acts) that should keep being standardised.
 #' @keywords internal
-EPV_STANDARDISE_CHANNELS <- if (EPV_ENGINE %in% c("v3", "v4")) {
-  # v4 was gated with exactly this list (the frames were built under a v3
-  # load), so it keeps it: what ships is what was measured
-  c("recv", "disp")
-} else {
-  c("recv", "disp", "spoil")
-}
+EPV_STANDARDISE_CHANNELS <- .epv_standardise_channels()
 
 #' PSR prior rate for replacement-level players
 #'
