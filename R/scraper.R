@@ -204,7 +204,7 @@ get_match_chains <- function(season = get_afl_season(), round = NA, comp = "AFLM
 #' @return A character string containing the API token.
 #' @keywords internal
 #'
-#' @importFrom httr POST content
+#' @importFrom httr POST content timeout
 get_token <- function() {
   now <- Sys.time()
   if (!is.null(.torp_token_cache$token) &&
@@ -212,7 +212,8 @@ get_token <- function() {
     return(.torp_token_cache$token)
   }
   fetch_token <- function() {
-    response <- httr::POST(paste0(AFL_CFS_API_BASE_URL, "WMCTok"))
+    response <- httr::POST(paste0(AFL_CFS_API_BASE_URL, "WMCTok"),
+                           httr::timeout(AFL_API_TIMEOUT_S))
     httr::stop_for_status(response, task = "authenticate with AFL API")
     body <- httr::content(response, as = "text", encoding = "UTF-8")
     if (.is_html_error_page(body)) {
@@ -246,14 +247,19 @@ get_token <- function() {
 #' @return The parsed JSON content of the API response.
 #' @keywords internal
 #'
-#' @importFrom httr GET add_headers content
+#' @importFrom httr GET add_headers content timeout
 #' @importFrom jsonlite fromJSON
 access_api <- function(url) {
   token <- get_token()
   fetch_and_parse <- function() {
+    # A request with no timeout can hang the job: one stalled call held the
+    # live chains run for 18 minutes (torpverse NEXT-STEPS, torp#250 notes).
+    # A timeout raises, so .vb_retry() below retries it like any transient
+    # failure.
     response <- httr::GET(
       url = url,
-      httr::add_headers("x-media-mis-token" = token)
+      httr::add_headers("x-media-mis-token" = token),
+      httr::timeout(AFL_API_TIMEOUT_S)
     )
     httr::stop_for_status(response, task = paste("fetch data from", url))
     body <- httr::content(response, as = "text", encoding = "UTF-8")

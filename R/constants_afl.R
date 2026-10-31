@@ -143,6 +143,16 @@ AFL_API_BASE_URL <- "https://aflapi.afl.com.au/afl/v2/"
 #' @keywords internal
 AFL_CFS_API_BASE_URL <- "https://api.afl.com.au/cfs/afl/"
 
+#' Seconds before an AFL API request in `access_api()` / `get_token()` gives up
+#'
+#' Whole-request limit (httr::timeout). 60 rather than the 30 used for the
+#' small competition listings in afl_api.R, because access_api() also fetches
+#' full-match play-by-play. A timed-out request is retried by .vb_retry()
+#' (3 attempts, 2 s and 5 s apart), so a dead endpoint costs about 3 minutes
+#' per call before it errors, instead of hanging.
+#' @keywords internal
+AFL_API_TIMEOUT_S <- 60
+
 #' AFL chain/play data API base URL
 #' @keywords internal
 AFL_SAPI_BASE_URL <- "https://sapi.afl.com.au/afl/"
