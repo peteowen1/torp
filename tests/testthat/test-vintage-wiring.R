@@ -176,30 +176,38 @@ KNOWN_NON_DEFINING <- c(
 # KNOWN_NON_DEFINING with a reason, and drop its pin. (2026-10-31, torp#287)
 # ---------------------------------------------------------------------------
 UNAUDITED_PINNED <- c(
-  EPV_BOX_TERMS                   = "a27f3997d02303d2a7f9296f42fcba42",
+  EPV_BOX_TERMS                   = "ae0fdb3ee6c835dc36be20e66e065d46",
   EPV_DIFFICULTY_DESCS            = "b75411abf5cd44608c78e7b3bb760bcf",
   EPV_DIFFICULTY_SPLIT            = "68934a3e9455fa72420237eb05902327",
   EPV_DIFFICULTY_SURPRISE_BY_TYPE = "68934a3e9455fa72420237eb05902327",
   EPV_DIFFICULTY_SURPRISE_SHARE   = "d310cb367d993fb6fb584b198a2fd72c",
-  EPV_DIFFICULTY_SURPRISE_TABLE   = "90419aff4fda7f45265f4cc91d0bd63e",
+  EPV_DIFFICULTY_SURPRISE_TABLE   = "8e17363a4a0bb049b3c57bfce0957112",
   EPV_MODEL_FEATURES              = "67a596debb4e2fe4fe64bb66cbc8e34e",
   EPV_OPP_LAMBDA_DECAY            = "50a0f3f37dd7e3799f7ef18846ee1587",
   EPV_OPP_PRIOR_GAMES             = "e4da3b7fbbce2345d7772b0674a318d5",
   EPV_RAW_CHANNEL_SCALE           = "37a6259cc0c1dae299a7866489dff0bd",
   EPV_RELEVANT_DESCRIPTIONS       = "a808db549b5cb69fd47ad65807238e89",
   NP_FIT_RELEASE_TAG              = "543c433c4ae2a8d3cca25304839fdaea",
-  TORP_RATINGS_COL_MAP            = "5e31d30765fc891443ba4f982afcfdde"
+  TORP_RATINGS_COL_MAP            = "dc8117f9c608901b758230c20daff634"
 )
 
 #' A stable text fingerprint of a constant's value: deparsed for language
 #' objects (formulas), full-precision JSON otherwise, then md5. writeBin keeps
 #' Windows from turning "\n" into "\r\n", so the digest is the same everywhere.
+#' jsonlite writes a named atomic vector as a bare array, so names are carried
+#' explicitly (recursing into lists): re-keying EPV_DIFFICULTY_SURPRISE_TABLE
+#' or TORP_RATINGS_COL_MAP must change the digest.
 vintage_constant_fingerprint <- function(name) {
   v <- get(name, envir = asNamespace("torp"))
+  keep_names <- function(x) {
+    if (is.list(x)) return(list(n = names(x), v = lapply(unname(x), keep_names)))
+    if (!is.null(names(x))) return(list(n = names(x), v = unname(x)))
+    x
+  }
   txt <- if (is.language(v) || inherits(v, "formula")) {
     paste(deparse(v), collapse = " ")
   } else {
-    as.character(jsonlite::toJSON(v, auto_unbox = TRUE, null = "null", digits = NA))
+    as.character(jsonlite::toJSON(keep_names(v), auto_unbox = TRUE, null = "null", digits = NA))
   }
   f <- tempfile()
   on.exit(unlink(f))
