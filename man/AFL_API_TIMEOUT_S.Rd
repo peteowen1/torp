@@ -13,6 +13,8 @@ AFL_API_TIMEOUT_S
 \description{
 Whole-request limit (httr::timeout). 60 rather than the 30 used for the
 small competition listings in afl_api.R, because access_api() also fetches
-full-match play-by-play. A timed-out request is retried by .vb_retry().
+full-match play-by-play. A timed-out request is retried by .vb_retry()
+(3 attempts, 2 s and 5 s apart), so a dead endpoint costs about 3 minutes
+per call before it errors, instead of hanging.
 }
 \keyword{internal}
