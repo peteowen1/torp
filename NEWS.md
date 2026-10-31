@@ -1,3 +1,7 @@
+# torp 1.10.8
+
+* The two constants tests that always skipped under `R CMD check` now run on CI (torp#264): the vintage-wiring scan reads the loaded namespace instead of `R/constants_ratings.R` as text. Reading the whole namespace found 13 rating-family constants defined in other files that nobody had audited. Nine are now recorded in the ratings manifest (`.rating_defining_constants()`): `EPV_DIFFICULTY_DESCS`, `EPV_RELEVANT_DESCRIPTIONS`, `EPV_OPP_LAMBDA_DECAY`, `EPV_OPP_PRIOR_GAMES` and `EPV_MODEL_FEATURES` reach v4 ratings, and `EPV_DIFFICULTY_SPLIT` with the three `EPV_DIFFICULTY_SURPRISE_*` constants reach the v2/v3 path. The other four (`EPV_RAW_CHANNEL_SCALE`, `EPV_BOX_TERMS`, `NP_FIT_RELEASE_TAG`, `TORP_RATINGS_COL_MAP`) never reach a published number and are registered as such. No rating changes. The manifest's constant set widens by 58 leaves, so v17 is re-recorded with `data-raw/05-validation/rerecord_vintage_manifest.R` once this is on `main`.
+
 # torp 1.10.7
 
 * `load_fixtures()` accepts next season when it is named, e.g. `load_fixtures(2027)`: the AFL publishes a season's fixture in the previous off-season (2027's opening round was out in October 2026), and the call used to abort with "Seasons must be between 2021 and 2026". `seasons = TRUE` still stops at the current year, so pipelines that read every fixture do not start producing rows for an unplayed season. Other loaders are unchanged.

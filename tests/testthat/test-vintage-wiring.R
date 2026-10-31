@@ -20,9 +20,9 @@
 #     been bumped and was not. check_vintage_alignment() catches this at
 #     runtime; the round-trip tests below prove the comparison itself works.
 #
-# Entirely offline: every check here either scans R/constants_ratings.R as
-# text or calls check_vintage_alignment() with an injected `manifest =`, never
-# read_ratings_manifest()'s real network default.
+# Entirely offline: every check here either scans the loaded package namespace
+# for constant names or calls check_vintage_alignment() with an injected
+# `manifest =`, never read_ratings_manifest()'s real network default.
 
 # ---------------------------------------------------------------------------
 # THE REGISTER. Every entry needs a reason and a date. Prune it once wired.
@@ -155,58 +155,39 @@ KNOWN_NON_DEFINING <- c(
   # published number. (2026-09-09) The third, the minimum cell size the check
   # reads (torp#225), is the same kind: it decides which cells the check looks
   # at and nothing else; every row still goes into the ledger. (2026-09-23)
-  "NP_STOPPAGE_WIN_WARN", "NP_STOPPAGE_WIN_ABORT", "NP_STOPPAGE_WIN_MIN_N"
+  "NP_STOPPAGE_WIN_WARN", "NP_STOPPAGE_WIN_ABORT", "NP_STOPPAGE_WIN_MIN_N",
+  # -- Audited 2026-10-31 (the four of torp#287's thirteen not wired). None
+  # reaches a published number: EPV_RAW_CHANNEL_SCALE is read only by
+  # calibrate_epv_channels(), which only analysis scripts and
+  # benchmark_suite.R call; EPV_BOX_TERMS shapes player_epv_breakdown()'s
+  # display; NP_FIT_RELEASE_TAG names the release the fit bundle lives on;
+  # TORP_RATINGS_COL_MAP renames columns at load (load_data.R).
+  "EPV_RAW_CHANNEL_SCALE", "EPV_BOX_TERMS", "NP_FIT_RELEASE_TAG",
+  "TORP_RATINGS_COL_MAP"
 )
 
 # ---------------------------------------------------------------------------
 # Scanners
 # ---------------------------------------------------------------------------
 
-#' Path to the source file the completeness scan parses, or NA if it is not
-#' reachable.
+#' Every top-level constant NAME in the loaded torp namespace matching the
+#' rating-defining families.
 #'
-#' An earlier version of this comment claimed `test_path()` reaches the package
-#' root "under both devtools::test() and R CMD check". It does not: `R CMD check`
-#' runs tests against a BUILT package from `<pkg>.Rcheck/tests/`, where no `R/`
-#' source tree exists, and the installed package stores code in a lazy-load
-#' database rather than as `.R` files. So `readLines()` threw
-#' `cannot open the connection` and both tests below ERRORed on every CI run.
-#'
-#' Returns NA rather than a non-existent path so callers skip explicitly,
-#' matching `test-versebus-sync.R`'s local-dev-only precedent. This is a
-#' source-text scan by design (see `vintage_scan_family_constants()`), so it
-#' cannot fall back to the loaded namespace without losing the property that
-#' makes it correct.
-vintage_constants_source_path <- function() {
-  candidates <- c(
-    testthat::test_path("..", "..", "R", "constants_ratings.R"),
-    testthat::test_path("..", "R", "constants_ratings.R"),
-    file.path("R", "constants_ratings.R")
-  )
-  hit <- candidates[file.exists(candidates)]
-  if (length(hit) == 0L) return(NA_character_)
-  normalizePath(hit[[1]], winslash = "/", mustWork = FALSE)
-}
-
-#' Skip helper: these scans need the package SOURCE, not the installed package.
-skip_if_no_constants_source <- function() {
-  testthat::skip_if(is.na(vintage_constants_source_path()),
-                    "R/constants_ratings.R not reachable (R CMD check runs against a built package)")
-}
-
-#' Every top-level constant NAME in R/constants_ratings.R matching the
-#' rating-defining families, scanned from source TEXT rather than from the
-#' loaded package -- a `#' @keywords internal` documentation line must never
-#' be mistaken for an assignment (mirrors citius's wiring_script_setters()
-#' comment-stripping).
-vintage_scan_family_constants <- function(path = vintage_constants_source_path()) {
-  lines <- readLines(path, warn = FALSE)
-  code_lines <- sub("#.*$", "", lines)
-  pat <- "^([A-Z][A-Z0-9_]*) *<-"
-  hit <- grepl(pat, code_lines)
-  nm <- sub(paste0(pat, ".*$"), "\\1", code_lines[hit])
-  families <- "^(TORP_|EPR_|EPV_|PSR_|LINEUP_POSITION_|NP_)"
-  sort(unique(nm[grepl(families, nm)]))
+#' Reads the namespace, not R/constants_ratings.R as text: `R CMD check` runs
+#' tests against a BUILT package from `<pkg>.Rcheck/tests/`, where no `R/` source
+#' tree exists and the code lives in a lazy-load database, so a file read threw
+#' (then skipped) on every CI run and the scan never ran there. The namespace is
+#' the same under `devtools::load_all()` and `R CMD check`. The match is on
+#' all-caps names whose value is not a function, so a `#' @keywords internal`
+#' doc line (the hazard the old text scan stripped comments to avoid) cannot
+#' appear here at all.
+vintage_scan_family_constants <- function() {
+  ns <- asNamespace("torp")
+  nm <- ls(ns, all.names = TRUE)
+  nm <- nm[grepl("^[A-Z][A-Z0-9_]*$", nm) &
+             grepl("^(TORP_|EPR_|EPV_|PSR_|LINEUP_POSITION_|NP_)", nm)]
+  is_fn <- vapply(nm, function(n) is.function(get(n, envir = ns)), logical(1))
+  sort(unique(nm[!is_fn]))
 }
 
 #' The deparsed source of .rating_defining_constants(), used for wiring-by-
@@ -234,9 +215,8 @@ test_that("the constants scan and the defining-constants flatten find something 
   # A "count the violations, pass if zero" guard passes vacuously on an empty
   # scan -- exactly what a broken scanner or an accidentally-emptied
   # constants file would produce. Floors are set well below the current
-  # counts (86 family constants, 38 flattened leaves) so a real deletion
+  # counts (138 family constants, 137 flattened leaves on 2026-10-31) so a real deletion
   # trips them rather than every routine edit.
-  skip_if_no_constants_source()
   scanned <- vintage_scan_family_constants()
   expect_gte(length(scanned), 15L)
 
@@ -245,7 +225,6 @@ test_that("the constants scan and the defining-constants flatten find something 
 })
 
 test_that("every rating-defining-family constant is wired or registered", {
-  skip_if_no_constants_source()
   scanned <- vintage_scan_family_constants()
   src <- vintage_defining_constants_source()
   wired <- vapply(scanned, vintage_is_wired, logical(1), source_text = src)
@@ -254,17 +233,18 @@ test_that("every rating-defining-family constant is wired or registered", {
   # A register entry that has since been wired fails this too -- there is no
   # way to pass with an entry in KNOWN_NON_DEFINING that vintage_is_wired()
   # would now find, because the two sides must match EXACTLY.
+  registered <- KNOWN_NON_DEFINING
   expect_equal(
-    orphans, sort(KNOWN_NON_DEFINING),
+    orphans, sort(registered),
     info = paste0(
       "A rating-defining-family constant is neither referenced inside ",
       ".rating_defining_constants() nor registered in KNOWN_NON_DEFINING. ",
       "Changing it would silently change published ratings with no manifest ",
       "trace and no vintage bump. Wire it into .rating_defining_constants(), ",
       "or register it in KNOWN_NON_DEFINING with a reason and a date.\n",
-      "Newly unregistered: ", paste(setdiff(orphans, KNOWN_NON_DEFINING), collapse = ", "), "\n",
+      "Newly unregistered: ", paste(setdiff(orphans, registered), collapse = ", "), "\n",
       "Stale register entries (already wired, prune them): ",
-      paste(setdiff(KNOWN_NON_DEFINING, orphans), collapse = ", ")
+      paste(setdiff(registered, orphans), collapse = ", ")
     )
   )
 })
