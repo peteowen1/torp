@@ -36,12 +36,12 @@ test_that("vb_publish aborts on a data-asset failure and never uploads the manif
 
   upload_log <- character(0)
   testthat::local_mocked_bindings(
-    pb_upload = function(file, repo, tag, overwrite = TRUE, ...) {
-      upload_log <<- c(upload_log, basename(file))
-      if (basename(file) == "b.rds") stop("boom: simulated network failure")
-      invisible(NULL)
-    },
-    .package = "piggyback"
+    .vb_token = function() "ghp_test",
+    .vb_safe_upload = function(path, repo, tag, ...) {
+      upload_log <<- c(upload_log, basename(path))
+      if (basename(path) == "b.rds") stop("boom: simulated network failure")
+      invisible(1)
+    }
   )
   # previous-manifest read: pretend the tag has no manifest yet
   testthat::local_mocked_bindings(
@@ -336,10 +336,8 @@ test_that("vb_publish's cache-invalidation hook failure is surfaced as a warning
   p <- write_fixture_file(dir, "hookfile.rds", content = "hook-test-content")
   sz <- file.size(p)
 
-  testthat::local_mocked_bindings(
-    pb_upload = function(file, repo, tag, overwrite = TRUE, ...) invisible(NULL),
-    .package = "piggyback"
-  )
+  testthat::local_mocked_bindings(.vb_token = function() "ghp_test",
+                                  .vb_safe_upload = function(...) invisible(1))
   testthat::local_mocked_bindings(
     gh = function(...) list(assets = list(
       list(name = "hookfile.rds", size = sz, updated_at = "2026-01-01T00:00:00Z", id = 1)
@@ -379,11 +377,11 @@ test_that("vb_publish disables piggyback's listing cache DURING the upload and r
   sz <- file.size(p)
   seen <- character(0)
   testthat::local_mocked_bindings(
-    pb_upload = function(file, repo, tag, overwrite = TRUE, ...) {
+    .vb_token = function() "ghp_test",
+    .vb_safe_upload = function(...) {
       seen <<- c(seen, Sys.getenv("piggyback_cache_duration", unset = "UNSET"))
-      invisible(NULL)
-    },
-    .package = "piggyback"
+      invisible(1)
+    }
   )
   testthat::local_mocked_bindings(
     gh = function(...) list(assets = list(
