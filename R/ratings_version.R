@@ -240,7 +240,30 @@
     EPR_PRIOR_GAMES = list(recv = EPR_PRIOR_GAMES_RECV, disp = EPR_PRIOR_GAMES_DISP,
                            spoil = EPR_PRIOR_GAMES_SPOIL, hitout = EPR_PRIOR_GAMES_HITOUT),
     EPR_PRIOR_RATE = list(recv = EPR_PRIOR_RATE_RECV, disp = EPR_PRIOR_RATE_DISP,
-                          spoil = EPR_PRIOR_RATE_SPOIL, hitout = EPR_PRIOR_RATE_HITOUT)
+                          spoil = EPR_PRIOR_RATE_SPOIL, hitout = EPR_PRIOR_RATE_HITOUT),
+    # Wired 2026-10-31 (torp#264 follow-up): constants defined outside
+    # constants_ratings.R that the namespace scan found once it could run on CI.
+    # A WIDENING change -- no value moved -- so it merges to `main` first and
+    # the manifest is re-recorded after (rerecord_vintage_manifest.R).
+    #
+    # The v4 difficulty terms: .np_difficulty_terms() builds its events from
+    # EPV_DIFFICULTY_DESCS (build_disposal_events()) and score_disposals() pays
+    # the receiver's half of each surprise from the share, or the measured
+    # table when BY_TYPE is on. The table is inert while BY_TYPE is FALSE, and
+    # the split flag gates only the v2/v3 path (player_credit.R); both are
+    # wired because a selectable path counts.
+    EPV_DIFFICULTY_DESCS = EPV_DIFFICULTY_DESCS,
+    EPV_DIFFICULTY_SURPRISE_SHARE = EPV_DIFFICULTY_SURPRISE_SHARE,
+    EPV_DIFFICULTY_SURPRISE_BY_TYPE = EPV_DIFFICULTY_SURPRISE_BY_TYPE,
+    EPV_DIFFICULTY_SURPRISE_TABLE = as.list(EPV_DIFFICULTY_SURPRISE_TABLE),
+    EPV_DIFFICULTY_SPLIT = EPV_DIFFICULTY_SPLIT,
+    # Which play types get EPV at all (clean_features.R), and the EP model's
+    # input columns (a change only moves numbers once the model is refitted).
+    EPV_RELEVANT_DESCRIPTIONS = EPV_RELEVANT_DESCRIPTIONS,
+    EPV_MODEL_FEATURES = EPV_MODEL_FEATURES,
+    # The EPV opponent adjustment, applied by default in build_ratings_history().
+    EPV_OPP_LAMBDA_DECAY = EPV_OPP_LAMBDA_DECAY,
+    EPV_OPP_PRIOR_GAMES = EPV_OPP_PRIOR_GAMES
   )
 }
 
