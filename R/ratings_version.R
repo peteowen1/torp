@@ -246,12 +246,14 @@
     # A WIDENING change -- no value moved -- so it merges to `main` first and
     # the manifest is re-recorded after (rerecord_vintage_manifest.R).
     #
-    # The v4 difficulty terms: .np_difficulty_terms() builds its events from
-    # EPV_DIFFICULTY_DESCS (build_disposal_events()) and score_disposals() pays
-    # the receiver's half of each surprise from the share, or the measured
-    # table when BY_TYPE is on. The table is inert while BY_TYPE is FALSE, and
-    # the split flag gates only the v2/v3 path (player_credit.R); both are
-    # wired because a selectable path counts.
+    # Difficulty terms. Under v4, .np_difficulty_terms() builds its events from
+    # EPV_DIFFICULTY_DESCS (build_disposal_events()), so that one moves v4
+    # ratings. The SURPRISE constants do NOT move v4: score_disposals() applies
+    # them to disp_credit/recv_credit, but the v4 path keeps only p_hat,
+    # decision and surprise (epv_net_points.R). They are read through
+    # compute_difficulty_credit(), behind EPV_DIFFICULTY_SPLIT on the v2/v3
+    # path (player_credit.R). Wired anyway because EPV_ENGINE is selectable and
+    # a selectable path counts (the EPV3_TARGET_FROM_I50 precedent above).
     EPV_DIFFICULTY_DESCS = EPV_DIFFICULTY_DESCS,
     EPV_DIFFICULTY_SURPRISE_SHARE = EPV_DIFFICULTY_SURPRISE_SHARE,
     EPV_DIFFICULTY_SURPRISE_BY_TYPE = EPV_DIFFICULTY_SURPRISE_BY_TYPE,
