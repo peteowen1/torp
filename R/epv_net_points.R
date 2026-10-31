@@ -2578,6 +2578,14 @@ np_difficulty_terms_for_season <- function(season, pbp_data = NULL, chains = NUL
       cli::cli_warn("Official results unavailable ({conditionMessage(e)}); using the running score.")
       NULL
     })
+    # load_results() can come back as an empty frame (no rows, or none of the
+    # score columns) rather than raising, and the subset below then crashed on
+    # the missing columns. Treat it the same as unavailable.
+    if (!is.null(results) &&
+        (nrow(results) == 0L || !all(c("match_id", "home_score", "away_score") %in% names(results)))) {
+      cli::cli_warn("Official results came back empty; using the running score.")
+      results <- NULL
+    }
   }
   if (!is.null(results)) {
     off <- (if (data.table::is.data.table(results)) results else data.table::as.data.table(results))[
