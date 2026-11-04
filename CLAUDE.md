@@ -47,8 +47,8 @@ All rating-blend weights and decay parameters (`TORP_EPR_WEIGHT`, `EPR_DECAY_REC
 
 **`EPV_ENGINE` and `RATING_VINTAGE` are two different things and they do NOT move
 together.** `EPV_ENGINE` names the METHOD and is `"v4"`. `RATING_VINTAGE` names the
-PUBLISHED BATCH — check `R/constants_ratings.R` for the current value (`"v14"` as
-of 2026-09-27; it advances often, so treat any value written here as illustrative,
+PUBLISHED BATCH — check `R/constants_ratings.R` for the current value (`"v17"` as
+of 2026-10-31; it advances often, so treat any value written here as illustrative,
 not authoritative) — it advances every time the numbers change, whether or
 not the method did. Reading the pair as one version cost a wrong explanation once, so
 quote which one you mean. What must stay aligned is `RATING_VINTAGE` against the
