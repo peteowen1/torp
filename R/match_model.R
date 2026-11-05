@@ -1267,10 +1267,16 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
     pred_file_name, season, week_gms, team_mdl_df, target_weeks, completed_margins
   )
 
+  # Stamp of this publish. It names the history file and is written into it as
+  # published_utc (issue #303), so both must be taken from the same instant.
+  publish_time <- Sys.time()
+  locked_ok <- FALSE
+
   tryCatch(
     {
       save_to_release(combined, pred_file_name, "predictions", also_csv = TRUE)
       cli::cli_alert_success("Uploaded locked predictions ({nrow(combined)} rows, week{?s} {paste(target_weeks, collapse = ', ')} updated)")
+      locked_ok <- TRUE
     },
     error = function(e) {
       # cli_alert_danger FIRST, and genuinely first -- these two lines used to
@@ -1331,6 +1337,24 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
       ))
     }
   )
+
+  # Dated history copy of this publish (issue #303). Only once the locked file
+  # is up. Its own tryCatch: a failure here must not be reported as a failed
+  # locked upload, which would send people down the rescue-copy path while the
+  # live predictions are already correct.
+  if (locked_ok) {
+    tryCatch(
+      .publish_prediction_history(combined, published_at = publish_time),
+      error = function(e) {
+        cli::cli_alert_danger(
+          "FAILED to record prediction history on {PREDICTION_HISTORY_RELEASE_TAG}: {conditionMessage(e)}")
+        cli::cli_warn(c(
+          "Prediction history not written for this publish: {conditionMessage(e)}",
+          "i" = "The locked predictions_{season} file was published normally."
+        ))
+      }
+    )
+  }
 
   # --- Retrodictions: current model on all matches, fully overwritten each run ---
   retro_all <- all_preds |>
