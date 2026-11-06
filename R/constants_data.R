@@ -290,6 +290,16 @@ TEAM_RAPM_ASOF_RELEASE_TAG <- "team_rapm_asof-data"
 #' @keywords internal
 NP_FIT_RELEASE_TAG <- "player_game-data"
 
+#' torpdata release tag for the dated prediction history (issue #303)
+#'
+#' Every publish of the locked match predictions adds one new file here,
+#' `predictions_<YYYYMMDDTHHMMSSZ>.parquet` (UTC, to the second). Published
+#' files are never rewritten; a correction is a new file with a new time. Written
+#' by `.publish_prediction_history()` in `R/match_model.R`.
+#'
+#' @keywords internal
+PREDICTION_HISTORY_RELEASE_TAG <- "predictions-history"
+
 #' Default in-memory cache time-to-live in seconds (1 hour)
 #'
 #' Default TTL for entries held in the package-level memory cache.

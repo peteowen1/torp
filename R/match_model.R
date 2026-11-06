@@ -677,6 +677,109 @@ get_lineup_ratings <- function(season = NULL, round = NULL, match_id = NULL) {
 }
 
 
+# --- Publish history (issue #303) ---------------------------------------------
+#
+# Each publish of the locked predictions is also written as a NEW dated file on
+# PREDICTION_HISTORY_RELEASE_TAG, so a superseded version is never lost. The live
+# predictions_<season> asset is still overwritten by design -- consumers read it.
+# The history is the record of what was published, and when.
+#
+# One history file is the full locked frame as published in that run, reshaped
+# to one row per team per match (match_winner market). It is a snapshot, not a
+# diff, so any single file answers "what did we publish at time T" alone.
+
+.build_prediction_history <- function(combined, published_at, model_version) {
+  published_utc <- format(published_at, "%Y-%m-%dT%H:%M:%SZ", tz = "UTC")
+  df <- as.data.frame(.normalise_team_values(as.data.frame(combined)))
+  n <- nrow(df)
+
+  # Fail loud: a history file missing its match identity or probability would
+  # be silently useless to every consumer reading it later.
+  required <- c("match_id", "home_team", "away_team", "pred_win")
+  missing_cols <- setdiff(required, names(df))
+  if (length(missing_cols) > 0) {
+    cli::cli_abort("Prediction history needs {.val {missing_cols}} but the published frame lacks {?it/them}.")
+  }
+
+  col_or_na <- function(nm) if (nm %in% names(df)) df[[nm]] else rep(NA, n)
+  per_match <- data.frame(
+    season = col_or_na("season"),
+    week = col_or_na("week"),
+    match_id = as.character(col_or_na("match_id")),
+    home_team = as.character(col_or_na("home_team")),
+    away_team = as.character(col_or_na("away_team")),
+    utc_start_time = as.character(col_or_na("utc_start_time")),
+    # Carried over from the locked frame: the time each row was COMPUTED,
+    # which is not the publish time. NA for rows that predate the stamp.
+    generated_utc = as.character(col_or_na("generated_utc")),
+    stringsAsFactors = FALSE
+  )
+
+  # pred_win is the HOME win probability (see .format_match_preds()).
+  pred_win <- as.numeric(col_or_na("pred_win"))
+
+  # Interleave home/away so each match's two rows sit together:
+  # rows are (home1, away1, home2, away2, ...).
+  out <- per_match[rep(seq_len(n), each = 2L), , drop = FALSE]
+  out$selection <- as.vector(rbind(per_match$home_team, per_match$away_team))
+  out$probability <- as.vector(rbind(pred_win, 1 - pred_win))
+  out$verse <- rep("afl", nrow(out))
+  out$event <- out$match_id
+  out$market <- rep("match_winner", nrow(out))
+  out$published_utc <- rep(published_utc, nrow(out))
+  out$model_version <- rep(model_version, nrow(out))
+
+  out <- out[, c("verse", "event", "market", "selection", "probability",
+                 "published_utc", "model_version", "season", "week",
+                 "match_id", "home_team", "away_team", "utc_start_time",
+                 "generated_utc")]
+  rownames(out) <- NULL
+  out
+}
+
+# TRUE when f_name is already a listed asset on the tag. An absent tag has no
+# assets to collide with. Anything else (transient, auth) is re-raised: without
+# a confirmed listing we cannot promise not to overwrite, so the caller must not
+# write.
+.prediction_history_name_taken <- function(repo, tag, f_name) {
+  restore_listing <- .vb_with_fresh_listing()
+  on.exit(restore_listing(), add = TRUE)
+  listed <- tryCatch(vb_list_assets(repo, tag), error = function(e) {
+    if (inherits(e, "vb_error_absent")) return(NULL)
+    stop(e)
+  })
+  !is.null(listed) && f_name %in% listed$name
+}
+
+# Writes one publish as a new dated file on PREDICTION_HISTORY_RELEASE_TAG. Refuses to
+# write over an existing name. The check and the upload are not atomic, but
+# names carry a one-second UTC stamp, so a collision needs two publishes in the
+# same second.
+.publish_prediction_history <- function(combined, published_at = Sys.time(),
+                                        model_version = paste0("epv-", EPV_ENGINE,
+                                                               "/rating-", RATING_VINTAGE),
+                                        repo = get_torp_data_repo()) {
+  stem <- paste0("predictions_", format(published_at, "%Y%m%dT%H%M%SZ", tz = "UTC"))
+  f_name <- paste0(stem, ".parquet")
+  hist <- .build_prediction_history(combined, published_at, model_version)
+
+  if (nrow(hist) == 0L) {
+    cli::cli_alert_warning("No prediction rows to record on {PREDICTION_HISTORY_RELEASE_TAG}; history skipped for this publish")
+    return(invisible(NULL))
+  }
+  if (.prediction_history_name_taken(repo, PREDICTION_HISTORY_RELEASE_TAG, f_name)) {
+    cli::cli_abort(c(
+      "{.val {f_name}} already exists on {PREDICTION_HISTORY_RELEASE_TAG}.",
+      "x" = "Published history files are never overwritten; history NOT written for this publish."
+    ))
+  }
+
+  save_to_release(hist, stem, PREDICTION_HISTORY_RELEASE_TAG, also_csv = FALSE)
+  cli::cli_alert_success("Recorded publish as {.val {f_name}} on {PREDICTION_HISTORY_RELEASE_TAG} ({nrow(hist)} rows)")
+  invisible(f_name)
+}
+
+
 #' Build everything a match prediction needs, and publish nothing
 #'
 #' The whole of `run_predictions_pipeline()` except the uploads: loads data,
@@ -1164,10 +1267,16 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
     pred_file_name, season, week_gms, team_mdl_df, target_weeks, completed_margins
   )
 
+  # Stamp of this publish. It names the history file and is written into it as
+  # published_utc (issue #303), so both must be taken from the same instant.
+  publish_time <- Sys.time()
+  locked_ok <- FALSE
+
   tryCatch(
     {
       save_to_release(combined, pred_file_name, "predictions", also_csv = TRUE)
       cli::cli_alert_success("Uploaded locked predictions ({nrow(combined)} rows, week{?s} {paste(target_weeks, collapse = ', ')} updated)")
+      locked_ok <- TRUE
     },
     error = function(e) {
       # cli_alert_danger FIRST, and genuinely first -- these two lines used to
@@ -1228,6 +1337,24 @@ run_predictions_pipeline <- function(week = NULL, weeks = NULL, season = NULL) {
       ))
     }
   )
+
+  # Dated history copy of this publish (issue #303). Only once the locked file
+  # is up. Its own tryCatch: a failure here must not be reported as a failed
+  # locked upload, which would send people down the rescue-copy path while the
+  # live predictions are already correct.
+  if (locked_ok) {
+    tryCatch(
+      .publish_prediction_history(combined, published_at = publish_time),
+      error = function(e) {
+        cli::cli_alert_danger(
+          "FAILED to record prediction history on {PREDICTION_HISTORY_RELEASE_TAG}: {conditionMessage(e)}")
+        cli::cli_warn(c(
+          "Prediction history not written for this publish: {conditionMessage(e)}",
+          "i" = "The locked predictions_{season} file was published normally."
+        ))
+      }
+    )
+  }
 
   # --- Retrodictions: current model on all matches, fully overwritten each run ---
   retro_all <- all_preds |>
