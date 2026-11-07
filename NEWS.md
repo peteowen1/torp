@@ -1,3 +1,7 @@
+# torp 1.10.10
+
+* Every predictions publish also records a dated copy: after the live `predictions_<season>` upload succeeds, one new `predictions_<UTC>.parquet` (a home and an away row per match, with `verse`, `event`, `market`, `selection`, `probability`, `published_utc` and `model_version`) goes to torpdata's `predictions-history` release and is never replaced, so past forecasts stay scoreable (#303). It runs in its own `tryCatch`: a history failure warns and never holds back the live file.
+
 # torp 1.10.9
 
 * Release uploads through `vb_publish()` no longer delete the published asset before its replacement lands (versebus 1.2.0, #300). Each data file and `bus_manifest.json` is uploaded under a temporary `vbnew-` name, confirmed on GitHub at the local size, and only then swapped in, so a failed upload leaves the previous copy for readers. `vb_publish()` also stops at once when no GitHub token is visible, and an upload GitHub refused fails straight away instead of after the listing checks. The same file is synced to torpmodels, panna, citius and bouncer.
