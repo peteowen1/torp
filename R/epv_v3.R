@@ -79,9 +79,13 @@ EPV3_AERIAL_EXPOSURE_WIDE <- c(EPV3_AERIAL_EXPOSURE_DESCS,
 #'
 #' @param chains Raw chains data.
 #' @param pbp_data Clean PBP carrying \code{exp_pts} and \code{delta_epv}.
-#' @return A data.table, one row per aerial contest.
+#' @param half Field half-length that feeds \code{goal_dist} and \code{i50f};
+#'   \code{NULL} estimates it from the rows given. See
+#'   \code{build_disposal_events()}.
+#' @return A data.table, one row per aerial contest. The \code{half} used rides
+#'   along as attribute \code{half}.
 #' @keywords internal
-build_aerial_contests <- function(chains, pbp_data) {
+build_aerial_contests <- function(chains, pbp_data, half = NULL) {
   ch <- data.table::as.data.table(chains)
   pbp <- data.table::as.data.table(pbp_data)
   detect_chains_columns(ch)
@@ -98,7 +102,9 @@ build_aerial_contests <- function(chains, pbp_data) {
       ))
     }
   }
-  half <- as.numeric(stats::quantile(abs(ch$x), 0.995, na.rm = TRUE))
+  if (is.null(half)) {
+    half <- as.numeric(stats::quantile(abs(ch$x), 0.995, na.rm = TRUE))
+  }
 
   data.table::setorder(ch, match_id, display_order)
   # Six grouped calls, not thirty, and no get(). `get(stem)` inside a grouped
@@ -424,12 +430,12 @@ score_contests <- function(cst, models) {
   if (!"opp_tid" %in% names(d)) d[, opp_tid := NA_character_]
   three <- !is.null(models$p_other)
   if (three) {
-    pr <- function(m) as.numeric(stats::predict(m, newdata = d, type = "response"))
+    pr <- function(m) as.numeric(stats::predict(m, newdata = d, type = "response", discrete = FALSE))
     d[, `:=`(
       p_other_hat = pr(models$p_other),
-      V_att_hat   = as.numeric(stats::predict(models$att, newdata = d)),
-      V_def_hat   = as.numeric(stats::predict(models$def, newdata = d)),
-      V_oth_hat   = as.numeric(stats::predict(models$oth, newdata = d))
+      V_att_hat   = as.numeric(stats::predict(models$att, newdata = d, discrete = FALSE)),
+      V_def_hat   = as.numeric(stats::predict(models$def, newdata = d, discrete = FALSE)),
+      V_oth_hat   = as.numeric(stats::predict(models$oth, newdata = d, discrete = FALSE))
     )]
     d[, .p_att_given := pr(models$p_att)]
     d[, `:=`(p_att_hat = (1 - p_other_hat) * .p_att_given,
@@ -470,9 +476,9 @@ score_contests <- function(cst, models) {
     return(d)
   }
   d[, `:=`(
-    p_hat     = as.numeric(stats::predict(models$p,   newdata = d, type = "response")),
-    V_att_hat = as.numeric(stats::predict(models$att, newdata = d)),
-    V_def_hat = as.numeric(stats::predict(models$def, newdata = d))
+    p_hat     = as.numeric(stats::predict(models$p,   newdata = d, type = "response", discrete = FALSE)),
+    V_att_hat = as.numeric(stats::predict(models$att, newdata = d, discrete = FALSE)),
+    V_def_hat = as.numeric(stats::predict(models$def, newdata = d, discrete = FALSE))
   )]
   d[, `:=`(V_pre = (1 - p_hat) * V_att_hat + p_hat * V_def_hat,
            Delta = V_att_hat - V_def_hat)]

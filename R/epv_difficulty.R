@@ -137,9 +137,16 @@ EPV_DIFFICULTY_SURPRISE_BY_TYPE <- FALSE
 #'
 #' @param chains Raw chains data.
 #' @param pbp_data Clean PBP carrying \code{exp_pts} and \code{delta_epv}.
-#' @return A data.table, one row per resolvable disposal.
+#' @param half Field half-length that feeds \code{goal_dist} and \code{i50f}.
+#'   \code{NULL} (the nightly) takes the 99.5th percentile of \code{abs(x)} over
+#'   the rows given, which makes it depend on the batch: one match alone reads
+#'   74-85 where its season reads 78. A live call passes the season's value
+#'   stored in the fit bundle so it prices on the length the models were fitted
+#'   on.
+#' @return A data.table, one row per resolvable disposal. The \code{half} used
+#'   rides along as attribute \code{half}.
 #' @keywords internal
-build_disposal_events <- function(chains, pbp_data) {
+build_disposal_events <- function(chains, pbp_data, half = NULL) {
   ch <- if (data.table::is.data.table(chains)) chains else data.table::as.data.table(chains)
   detect_chains_columns(ch)
   # Narrow before shifting. The full chains frame is 60+ columns and shifting on
@@ -158,7 +165,9 @@ build_disposal_events <- function(chains, pbp_data) {
           data.table::shift(get(s), k, type = "lead"), by = match_id]
     }
   }
-  half <- as.numeric(stats::quantile(abs(p$x), 0.995, na.rm = TRUE))
+  if (is.null(half)) {
+    half <- as.numeric(stats::quantile(abs(p$x), 0.995, na.rm = TRUE))
+  }
 
   d <- p[description %chin% EPV_DIFFICULTY_DESCS &
            !is.na(player_id) & !is.na(team_id)]
@@ -294,6 +303,13 @@ fit_disposal_models <- function(de, train_idx = rep(TRUE, nrow(de))) {
 
 #' Score disposals and split the credit by difficulty
 #'
+#' Predicts with \code{discrete = FALSE}. The models are fitted with
+#' \code{bam(discrete = TRUE)}, and \code{predict.bam()} then defaults to
+#' discretising the NEW data on bins chosen from the batch once it passes about
+#' 1,000 rows, so the same disposal would price differently in a season call and
+#' a one-match call (up to 0.02 on the logit scale, torp#308). The fit stays
+#' discrete; only the prediction is exact.
+#'
 #' @param de Disposal table.
 #' @param models From \code{fit_disposal_models()}.
 #' @return \code{de} with \code{p_hat}, \code{V_pre}, \code{disp_credit} and
@@ -302,9 +318,9 @@ fit_disposal_models <- function(de, train_idx = rep(TRUE, nrow(de))) {
 score_disposals <- function(de, models) {
   d <- data.table::copy(de)
   d[, `:=`(
-    p_hat     = as.numeric(stats::predict(models$p,   newdata = d, type = "response")),
-    V_ret_hat = as.numeric(stats::predict(models$ret, newdata = d)),
-    V_trn_hat = as.numeric(stats::predict(models$trn, newdata = d))
+    p_hat     = as.numeric(stats::predict(models$p,   newdata = d, type = "response", discrete = FALSE)),
+    V_ret_hat = as.numeric(stats::predict(models$ret, newdata = d, discrete = FALSE)),
+    V_trn_hat = as.numeric(stats::predict(models$trn, newdata = d, discrete = FALSE))
   )]
   d[, V_pre := (1 - p_hat) * V_ret_hat + p_hat * V_trn_hat]
 

@@ -34,7 +34,8 @@
 #' @param pgd Output of `create_player_game_data(..., keep_np_fit = TRUE)`.
 #' @param season The season the frame covers.
 #' @return A `torp_np_fit` list: `stoppage_baseline`, `disposal_models`,
-#'   `contest_models` and `meta` (`rating_vintage`, `torp_version`,
+#'   `contest_models`, `half` (the field half-length the season was scored
+#'   with; `NULL` on a bundle built before torp#308) and `meta` (`rating_vintage`, `torp_version`,
 #'   `epv_engine`, `contest_outcomes`, `season`, `n_matches`,
 #'   `last_match_id`, `built_at_utc`).
 #' @keywords internal
@@ -51,6 +52,10 @@
     stoppage_baseline = data.table::copy(data.table::as.data.table(fit$stoppage_baseline)),
     disposal_models = fit$disposal_models,
     contest_models = fit$contest_models,
+    # The field half-length the season's disposals and contests were scored on.
+    # A live call builds one match at a time and would otherwise estimate its
+    # own (74-85 across matches vs 78 for the season, torp#308).
+    half = fit$half,
     meta = list(
       rating_vintage = RATING_VINTAGE,
       torp_version = as.character(utils::packageVersion("torp")),
@@ -112,6 +117,10 @@
     if (length(miss)) {
       cli::cli_abort("The bundle's {.field {piece[[1]]}} lack fitted model{?s} {.val {miss}}.")
     }
+  }
+  if (!is.null(b$half) &&
+      !(is.numeric(b$half) && length(b$half) == 1 && is.finite(b$half) && b$half > 0)) {
+    cli::cli_abort("The bundle's {.field half} must be one positive number, not {.val {b$half}}.")
   }
   invisible(b)
 }
