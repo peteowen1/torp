@@ -1,3 +1,7 @@
+# torp 1.10.11
+
+* The daily release republishes a season's `np_fit_<season>.rds` when the published one is stamped with an older `RATING_VINTAGE` and there is no new game to trigger a full release (#307). `.stale_np_fit_season()` checks the newest published bundle (this season's, else last season's, the round-1 fallback); `.refit_stale_np_fit()` re-runs `update_player_game_data()` for it and records `np_fit_check` / `np_fit_refit` in the result's `failures` when the check or refit fails. `update_player_game_data()` now returns `TRUE` once the bundle is published.
+
 # torp 1.10.10
 
 * Every predictions publish also records a dated copy: after the live `predictions_<season>` upload succeeds, one new `predictions_<UTC>.parquet` (a home and an away row per match, with `verse`, `event`, `market`, `selection`, `probability`, `published_utc` and `model_version`) goes to torpdata's `predictions-history` release and is never replaced, so past forecasts stay scoreable (#303). It runs in its own `tryCatch`: a history failure warns and never holds back the live file.

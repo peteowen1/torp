@@ -211,6 +211,53 @@
   b
 }
 
+#' Which season's published fit bundle is behind the code, if any
+#'
+#' The nightly publishes a season's bundle only on a full release, and a full
+#' release needs a new game. So a `RATING_VINTAGE` bump in the off-season
+#' leaves the published bundle on the old vintage, and the loader refuses it:
+#' the live path cannot score, and round 1's fallback to last season's fit
+#' aborts too (torp#307). The daily release calls this when it has no new game
+#' and refits the season it names.
+#'
+#' Only the newest published bundle counts: `season`'s if there is one,
+#' otherwise `season - 1`'s, the one the live path falls back to before a
+#' season's first fit exists.
+#'
+#' @param season The current season.
+#' @param vintage The vintage the bundle must carry; the code's `RATING_VINTAGE`.
+#' @param assets Asset names on the release (looked up when `NULL`).
+#' @param read_meta Function `(season) -> meta list` of the published bundle
+#'   (downloads it when `NULL`).
+#' @return The season to refit, or `NA_integer_` when the newest bundle is
+#'   current or no bundle is published.
+#' @keywords internal
+.stale_np_fit_season <- function(season, vintage = RATING_VINTAGE,
+                                 assets = NULL, read_meta = NULL) {
+  if (is.null(assets)) {
+    assets <- vb_list_assets(get_torp_data_repo(), NP_FIT_RELEASE_TAG)$name
+  }
+  if (is.null(read_meta)) {
+    read_meta <- function(s) {
+      name <- .np_fit_asset_name(s)
+      dest <- file.path(tempfile("np_fit_chk_"), name)
+      on.exit(unlink(dirname(dest), recursive = TRUE), add = TRUE)
+      vb_download(get_torp_data_repo(), NP_FIT_RELEASE_TAG, name, dest)
+      readRDS(dest)$meta
+    }
+  }
+  for (s in as.integer(season) - 0:1) {
+    if (!.np_fit_asset_name(s) %in% assets) next
+    got <- read_meta(s)$rating_vintage
+    got <- if (is.null(got)) NA_character_ else as.character(got)
+    if (identical(got, vintage)) return(NA_integer_)
+    cli::cli_alert_warning(
+      "Published {.val {(.np_fit_asset_name(s))}} is vintage {.val {got}}; the code is {.val {vintage}}.")
+    return(s)
+  }
+  NA_integer_
+}
+
 #' Resolve the live path's `np_fit` argument to a checked bundle
 #'
 #' @param np_fit `NULL` (the release asset for `season`), a path to a local
