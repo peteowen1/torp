@@ -148,7 +148,7 @@ test_that("scoring a match from another season on a bundle says so", {
 test_that("supplied models are scored with and never refitted", {
   seen <- new.env()
   testthat::local_mocked_bindings(
-    build_disposal_events = function(chains, pbp_data) {
+    build_disposal_events = function(chains, pbp_data, half = NULL) {
       data.table::data.table(match_id = "CD_M20260142901", display_order = 1L, exp_pts = 0.2)
     },
     fit_disposal_models = function(...) stop("refitted the disposal models"),
@@ -159,7 +159,7 @@ test_that("supplied models are scored with and never refitted", {
       d[, `:=`(p_hat = 0.3, V_pre = 0.5, surprise = 0.5)]
       d
     },
-    build_aerial_contests = function(chains, pbp_data) {
+    build_aerial_contests = function(chains, pbp_data, half = NULL) {
       data.table::data.table(match_id = "CD_M20260142901", kick_do = 3L)
     },
     score_contests = function(cst, models) {
@@ -177,7 +177,7 @@ test_that("supplied models are scored with and never refitted", {
   expect_identical(seen$disposal, "the disposal fit")
   expect_identical(seen$contest, "the contest fit")
   expect_setequal(out$display_order, c(1L, 3L))
-  expect_identical(attr(out, "np_models"), mods)
+  expect_identical(attr(out, "np_models"), c(mods, list(half = NULL)))
   plain <- suppressMessages(torp:::.np_difficulty_terms(NULL, NULL, models = mods))
   expect_null(attr(plain, "np_models"))
   expect_error(torp:::.np_difficulty_terms(NULL, NULL, models = list(disposal = "x")), "contest")
@@ -187,7 +187,7 @@ test_that("supplied models are scored with and never refitted", {
 
 test_that("a season run hands back the models it fitted", {
   testthat::local_mocked_bindings(
-    build_disposal_events = function(chains, pbp_data) {
+    build_disposal_events = function(chains, pbp_data, half = NULL) {
       data.table::data.table(match_id = "CD_M20260142901", display_order = 1L, exp_pts = 0.2)
     },
     fit_disposal_models = function(de, ...) "fitted disposal",
@@ -197,7 +197,7 @@ test_that("a season run hands back the models it fitted", {
       d[, `:=`(p_hat = 0.3, V_pre = 0.5, surprise = 0.5)]
       d
     },
-    build_aerial_contests = function(chains, pbp_data) data.table::data.table(),
+    build_aerial_contests = function(chains, pbp_data, half = NULL) data.table::data.table(),
     .package = "torp")
   out <- suppressMessages(torp:::.np_difficulty_terms(NULL, NULL, return_models = TRUE))
   expect_identical(attr(out, "np_models")$disposal, "fitted disposal")
@@ -211,6 +211,129 @@ test_that("create_player_game_data refuses a fit it cannot use, before loading a
   expect_error(create_player_game_data(epv_engine = "v4", np_fit = list()), "needs .*chains")
   expect_error(create_player_game_data(epv_engine = "v4", np_fit = list(), chains = data.frame(),
                                        difficulty_terms = data.frame()), "not both")
+})
+
+# torp#308: a live call (one match) and the nightly (a season) must price the
+# same disposal identically. Two batch-dependent things used to differ.
+
+test_that("a pinned half-length overrides the batch's own, and rides along as an attribute", {
+  # 200 matches' worth of rows so the 99.5th percentile of |x| is not the max.
+  set.seed(1)
+  n <- 4000
+  ch <- data.table::data.table(
+    match_id = rep(sprintf("CD_M2026%05d", 1:40), each = n / 40),
+    display_order = rep(1:(n / 40), 40),
+    description = rep(c("Kick", "Handball", "Handball", "Kick"), length.out = n),
+    player_id = sample(paste0("p", 1:30), n, TRUE),
+    team_id = rep(c("A", "B"), length.out = n),
+    x = stats::runif(n, -80, 80), y = stats::runif(n, -40, 40))
+  pbp <- ch[, .(match_id, display_order, exp_pts = 1, delta_epv = 0.1)]
+  own <- suppressMessages(build_disposal_events(ch, pbp))
+  expect_gt(nrow(own), 0)
+  own_half <- attr(own, "half")
+  expect_equal(own_half, as.numeric(stats::quantile(abs(ch$x), 0.995)))
+  pinned <- suppressMessages(build_disposal_events(ch, pbp, half = 70))
+  expect_identical(attr(pinned, "half"), 70)
+  # goal_dist is computed from the pinned value, not the batch's.
+  expect_equal(pinned$goal_dist,
+               sqrt(pmax(0, 70 - pinned$x)^2 + abs(pinned$y)^2))
+  expect_false(isTRUE(all.equal(own$goal_dist[1:50], pinned$goal_dist[1:50])))
+})
+
+test_that("a season fit bundle stores the half-length it was scored with", {
+  fit <- fake_fit(); fit$half <- 78
+  b <- torp:::.np_fit_bundle(fake_pgd(fit), 2026)
+  expect_identical(b$half, 78)
+  # A bundle built before this existed still loads; the live path then falls
+  # back to estimating it from the batch, as it did.
+  old <- torp:::.np_fit_bundle(fake_pgd(), 2026)
+  expect_null(old$half)
+  bad <- b; bad$half <- -3
+  expect_error(torp:::.check_np_fit_bundle(bad), "half")
+  bad$half <- c(78, 80)
+  expect_error(torp:::.check_np_fit_bundle(bad), "half")
+})
+
+test_that("the bundle's half-length reaches the builders when a match is scored on it", {
+  seen <- new.env()
+  testthat::local_mocked_bindings(
+    build_disposal_events = function(chains, pbp_data, half = NULL) {
+      seen$d <- half
+      d <- data.table::data.table(match_id = "CD_M20260142901", display_order = 1L, exp_pts = 0.2)
+      data.table::setattr(d, "half", if (is.null(half)) 99 else half)
+      d
+    },
+    score_disposals = function(de, models) {
+      d <- data.table::copy(de)
+      d[, `:=`(p_hat = 0.3, V_pre = 0.5, surprise = 0.5)]
+      d
+    },
+    build_aerial_contests = function(chains, pbp_data, half = NULL) {
+      seen$c <- half
+      data.table::data.table()
+    },
+    .package = "torp")
+  mods <- list(disposal = "d", contest = "c")
+  out <- suppressMessages(torp:::.np_difficulty_terms(NULL, NULL, models = mods,
+                                                      return_models = TRUE, half = 78))
+  expect_identical(seen$d, 78)
+  expect_identical(seen$c, 78)
+  expect_identical(attr(out, "np_models")$half, 78)
+})
+
+test_that("scoring is exact: a season in one call equals the same rows match by match", {
+  skip_if_not_installed("mgcv")
+  set.seed(308)
+  n <- 6000  # past the ~1,000 rows where predict.bam(discrete = TRUE) starts binning
+  mk <- function(n) {
+    d <- data.table::data.table(
+      x = stats::runif(n, -80, 80), y = stats::runif(n, -40, 40),
+      exp_pts = stats::rnorm(n, 1, 1),
+      is_handball = factor(stats::rbinom(n, 1, 0.5), levels = c("0", "1")),
+      i50f = factor(stats::rbinom(n, 1, 0.2), levels = c("0", "1")))
+    d[, abs_y := abs(y)]
+    d[, goal_dist := sqrt(pmax(0, 78 - x)^2 + abs_y^2)]
+    d[, turnover := stats::rbinom(n, 1, stats::plogis(0.02 * goal_dist - 1.5)) == 1]
+    d[, V_after := exp_pts + 0.01 * x + stats::rnorm(n)]
+    d
+  }
+  de <- mk(n)
+  m <- fit_disposal_models(de)
+  season <- score_disposals(de, m)
+  # Chunks of 300 rows sit under the binning threshold, so the pre-fix default
+  # predicted these one by one and the season call binned them.
+  chunk <- rep(seq_len(n / 300), each = 300)
+  by_match <- data.table::rbindlist(lapply(split(seq_len(n), chunk),
+                                           function(i) score_disposals(de[i], m)))
+  expect_equal(by_match$p_hat, season$p_hat, tolerance = 1e-10)
+  expect_equal(by_match$V_ret_hat, season$V_ret_hat, tolerance = 1e-10)
+  expect_equal(by_match$V_trn_hat, season$V_trn_hat, tolerance = 1e-10)
+})
+
+test_that("contest scoring is exact: a season in one call equals the same rows match by match", {
+  skip_if_not_installed("mgcv")
+  skip_if_not(identical(EPV3_CONTEST_OUTCOMES, "three"))
+  set.seed(309)
+  n <- 6000
+  cst <- data.table::data.table(
+    att_x = stats::runif(n, -80, 80), abs_y = stats::runif(n, 0, 40),
+    exp_pts = stats::rnorm(n, 1, 1), out3 = sample(c("mark_att", "mark_def", "other"), n, TRUE),
+    kick_tid = "A", opp_tid = "B", out_tid = "A", out_pid = "p1", target_pid = "p2",
+    def_win = sample(c(TRUE, FALSE), n, TRUE))
+  cst[, `:=`(y1 = stats::rbinom(n, 1, stats::plogis(0.02 * att_x)), v = exp_pts + 0.01 * att_x + stats::rnorm(n))]
+  b <- function(f, ...) mgcv::bam(f, data = cst, discrete = TRUE, ...)
+  models <- list(
+    p_other = b(y1 ~ s(att_x) + s(exp_pts), family = stats::binomial()),
+    p_att   = b(y1 ~ s(att_x) + s(abs_y), family = stats::binomial()),
+    att = b(v ~ s(att_x) + s(exp_pts)), def = b(v ~ s(att_x) + s(abs_y)),
+    oth = b(v ~ s(att_x)))
+  season <- score_contests(cst, models)
+  chunk <- rep(seq_len(n / 300), each = 300)
+  by_match <- data.table::rbindlist(lapply(split(seq_len(n), chunk),
+                                           function(i) score_contests(cst[i], models)))
+  for (col in c("p_other_hat", "p_att_hat", "V_att_hat", "V_def_hat", "V_oth_hat")) {
+    expect_equal(by_match[[col]], season[[col]], tolerance = 1e-10, info = col)
+  }
 })
 
 test_that("the stale-bundle check names the newest published season only when it is behind (torp#307)", {

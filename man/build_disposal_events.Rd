@@ -4,15 +4,23 @@
 \alias{build_disposal_events}
 \title{Build the disposal-outcome table from chains}
 \usage{
-build_disposal_events(chains, pbp_data)
+build_disposal_events(chains, pbp_data, half = NULL)
 }
 \arguments{
 \item{chains}{Raw chains data.}
 
 \item{pbp_data}{Clean PBP carrying \code{exp_pts} and \code{delta_epv}.}
+
+\item{half}{Field half-length that feeds \code{goal_dist} and \code{i50f}.
+\code{NULL} (the nightly) takes the 99.5th percentile of \code{abs(x)} over
+the rows given, which makes it depend on the batch: one match alone reads
+74-85 where its season reads 78. A live call passes the season's value
+stored in the fit bundle so it prices on the length the models were fitted
+on.}
 }
 \value{
-A data.table, one row per resolvable disposal.
+A data.table, one row per resolvable disposal. The \code{half} used
+rides along as attribute \code{half}.
 }
 \description{
 One row per disposal, carrying what was knowable BEFORE it resolved plus the
