@@ -605,7 +605,8 @@ update_teams <- function(season) {
 #' Rebuilds processed player game data from PBP, player stats, and teams data.
 #'
 #' @param season Season year
-#' @return Invisible NULL
+#' @return Invisible TRUE once the season fit bundle is published, otherwise
+#'   invisible NULL
 update_player_game_data <- function(season) {
   cli::cli_progress_step("Updating player game data for {season}")
 
