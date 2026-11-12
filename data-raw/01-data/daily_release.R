@@ -671,6 +671,9 @@ update_player_game_data <- function(season) {
       cli::cli_abort("Player game data saved, but the season fit bundle was not published: {conditionMessage(e)}",
                      parent = e)
     })
+    # .refit_stale_np_fit() needs to know the bundle went out: the frame build
+    # above swallows its own errors and returns NULL.
+    return(invisible(TRUE))
   }
   invisible(NULL)
 }
@@ -693,8 +696,14 @@ update_player_game_data <- function(season) {
   if (is.na(stale)) return(character())
   cli::cli_alert_info("Refitting {stale} to republish its season fit bundle on {RATING_VINTAGE}")
   tryCatch({
-    update_player_game_data(stale)
-    character()
+    # update_player_game_data() returns TRUE only once the bundle is published;
+    # a failed or empty frame build is logged inside it and returns NULL.
+    if (isTRUE(update_player_game_data(stale))) {
+      character()
+    } else {
+      cli::cli_alert_danger("Failed: np_fit refit {stale}: no season fit bundle was published")
+      "np_fit_refit"
+    }
   }, error = function(e) {
     cli::cli_alert_danger("Failed: np_fit refit {stale}: {conditionMessage(e)}")
     "np_fit_refit"
