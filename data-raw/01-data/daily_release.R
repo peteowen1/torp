@@ -675,6 +675,32 @@ update_player_game_data <- function(season) {
   invisible(NULL)
 }
 
+#' Refit a season whose published fit bundle is behind the code
+#'
+#' Off-season counterpart of the full release's bundle publish (torp#307):
+#' rebuilds that season's player game data, which republishes its
+#' `np_fit_<season>.rds` on this code's vintage.
+#'
+#' @param current_season Season year
+#' @return Character vector of failed steps (empty on success or no-op)
+.refit_stale_np_fit <- function(current_season) {
+  if (!identical(EPV_ENGINE, "v4")) return(character())
+  stale <- tryCatch(.stale_np_fit_season(current_season), error = function(e) {
+    cli::cli_alert_danger("Could not check the published season fit bundle: {conditionMessage(e)}")
+    -1L
+  })
+  if (identical(stale, -1L)) return("np_fit_check")
+  if (is.na(stale)) return(character())
+  cli::cli_alert_info("Refitting {stale} to republish its season fit bundle on {RATING_VINTAGE}")
+  tryCatch({
+    update_player_game_data(stale)
+    character()
+  }, error = function(e) {
+    cli::cli_alert_danger("Failed: np_fit refit {stale}: {conditionMessage(e)}")
+    "np_fit_refit"
+  })
+}
+
 #' Update Player Details Data
 #'
 #' @param season Season year
@@ -1071,15 +1097,25 @@ run_daily_release <- function(force = FALSE) {
   cli::cli_inform("Season: {current_season}, Round: {current_round}")
 
   # Determine release mode
+  refit_failures <- character()
   if (force || has_new_games()) {
     release_mode <- "full"
-  } else if (has_new_team_data()) {
-    release_mode <- "team_only"
   } else {
-    cli::cli_alert_info("No new games or lineup changes detected - skipping release")
-    tictoc::toc(log = TRUE)
-    tictoc::tic.clearlog()
-    return(invisible("none"))
+    # A full release republishes the season fit bundle; without one, a vintage
+    # bump leaves the published bundle on the old vintage and the live path
+    # refuses it (torp#307). Refit just that season. Checked before the lineup
+    # check so a preseason of daily lineup changes cannot postpone it.
+    refit_failures <- .refit_stale_np_fit(current_season)
+    if (has_new_team_data()) {
+      release_mode <- "team_only"
+    } else {
+      cli::cli_alert_info("No new games or lineup changes detected - skipping release")
+      tictoc::toc(log = TRUE)
+      tictoc::tic.clearlog()
+      result <- "none"
+      attr(result, "failures") <- refit_failures
+      return(invisible(result))
+    }
   }
 
   cli::cli_alert_info("Release mode: {release_mode}")
@@ -1187,7 +1223,7 @@ run_daily_release <- function(force = FALSE) {
     cli::cli_alert_warning("{length(skips)} fetch(es) skipped after errors: {paste(skips, collapse = '; ')}")
   }
 
-  all_failures <- c(seasonal_failures, derived_failures)
+  all_failures <- c(refit_failures, seasonal_failures, derived_failures)
   if (length(all_failures) > 0) {
     cli::cli_alert_warning("Daily release ({release_mode}) complete with {length(all_failures)} failure{?s}: {paste(all_failures, collapse = ', ')}")
   } else {
