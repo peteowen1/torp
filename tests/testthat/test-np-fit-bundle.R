@@ -212,3 +212,28 @@ test_that("create_player_game_data refuses a fit it cannot use, before loading a
   expect_error(create_player_game_data(epv_engine = "v4", np_fit = list(), chains = data.frame(),
                                        difficulty_terms = data.frame()), "not both")
 })
+
+test_that("the stale-bundle check names the newest published season only when it is behind (torp#307)", {
+  meta <- function(v) function(s) list(rating_vintage = v, season = s)
+  stale <- torp:::.stale_np_fit_season
+  # current season's bundle is current: nothing to refit
+  expect_identical(stale(2026, "v17", assets = c("np_fit_2026.rds", "np_fit_2025.rds"),
+                         read_meta = meta("v17")), NA_integer_)
+  # current season's bundle is behind: refit it
+  expect_identical(suppressMessages(stale(2026, "v17", assets = "np_fit_2026.rds",
+                                          read_meta = meta("v16"))), 2026L)
+  # preseason: no bundle for the new season yet, last season's is the fallback and is behind
+  expect_identical(suppressMessages(stale(2027, "v17", assets = c("np_fit_2026.rds", "player_game_2026.parquet"),
+                                          read_meta = meta("v16"))), 2026L)
+  # an unstamped bundle counts as behind
+  expect_identical(suppressMessages(stale(2026, "v17", assets = "np_fit_2026.rds",
+                                          read_meta = function(s) list())), 2026L)
+  # only the newest bundle is read: a stale older one does not trigger
+  seen <- integer()
+  rm_spy <- function(s) { seen <<- c(seen, s); list(rating_vintage = "v17") }
+  expect_identical(stale(2026, "v17", assets = c("np_fit_2026.rds", "np_fit_2025.rds"),
+                         read_meta = rm_spy), NA_integer_)
+  expect_identical(seen, 2026L)
+  # nothing published: nothing to refit
+  expect_identical(stale(2026, "v17", assets = character(), read_meta = meta("v1")), NA_integer_)
+})
