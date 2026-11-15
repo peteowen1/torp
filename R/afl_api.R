@@ -1216,6 +1216,10 @@ torp_replace_venues <- function(venue) {
     venue == "MCG" ~ "M.C.G.",
     venue == "UNSW Canberra Oval" ~ "Manuka Oval",
     venue == "Canberra Oval" ~ "Manuka Oval",
+    # The AFL API now reports this sponsor name for every Canberra match back to
+    # 2021 (18 matches to 2026). Unmapped, it found no coordinates: no weather,
+    # and a default travel distance for both teams.
+    venue == "Corroboree Group Oval Manuka" ~ "Manuka Oval",
     venue == "TIO Stadium" ~ "Marrara Oval",
     venue == "Optus Stadium" ~ "Perth Stadium",
     venue == "Sydney Cricket Ground" ~ "S.C.G.",

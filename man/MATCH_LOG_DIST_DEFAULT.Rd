@@ -11,6 +11,11 @@ An object of class \code{numeric} of length 1.
 MATCH_LOG_DIST_DEFAULT
 }
 \description{
-Default log-distance value when venue coordinates are missing
+Note the size: \code{exp(16) - MATCH_LOG_DIST_OFFSET} is about 8,900 km,
+further than any real AFL trip (Perth to Brisbane is about 3,600 km, log
+15.1). It is a "far away" sentinel, not a neutral value, so a venue with no
+coordinates reads as both teams travelling a very long way.
+\code{.build_match_features()} therefore aborts when a COMPLETED match hits
+it; only unplayed fixtures at a new venue fall back to this.
 }
 \keyword{internal}
