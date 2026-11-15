@@ -1199,3 +1199,38 @@ test_that("fix_chain_coordinates_dt leaves x/y unchanged where team_id_mdl is NA
   expect_false(anyNA(dt$y))
   expect_equal(dt$goal_x, 80 - dt$x)
 })
+
+# Review of 2026-11-15, finding 1.7: a failed shooter-table load used to label
+# every shooter "Other" without a message.
+
+test_that("clean_shots_data aborts when the shooter table cannot be loaded", {
+  testthat::local_mocked_bindings(
+    load_model_with_fallback = function(model_name) stop("simulated load failure for ", model_name)
+  )
+  expect_error(clean_shots_data(create_mock_shot_data(10)), "simulated load failure for shot_player_df")
+})
+
+test_that("clean_shots_data aborts on an empty or malformed shooter table", {
+  testthat::local_mocked_bindings(
+    load_model_with_fallback = function(model_name) data.frame(player_id_shot = character())
+  )
+  expect_error(clean_shots_data(create_mock_shot_data(10)), "not a usable shooter table")
+})
+
+test_that("clean_shots_data joins a real shooter table and labels only unknown shooters Other", {
+  mock_shots <- create_mock_shot_data(10)
+  # Real player ids are character ("CD_I..."); the shared fixture builds integers,
+  # which the join and the "Other" fill both reject.
+  mock_shots$player_id <- as.character(mock_shots$player_id)
+  known <- mock_shots$player_id[1]
+  testthat::local_mocked_bindings(
+    load_model_with_fallback = function(model_name) {
+      data.frame(player_id_shot = known, player_name_shot = "Known Shooter", stringsAsFactors = FALSE)
+    }
+  )
+  out <- clean_shots_data(mock_shots)
+  expect_equal(nrow(out), nrow(mock_shots))
+  is_known <- mock_shots$player_id == known
+  expect_true(all(as.character(out$player_name_shot[is_known]) == "Known Shooter"))
+  expect_true(all(as.character(out$player_name_shot[!is_known]) == "Other"))
+})

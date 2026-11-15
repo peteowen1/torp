@@ -351,24 +351,27 @@ select_afl_model_vars <- function(df) {
 clean_shots_data <- function(df) {
   goal_width <- AFL_GOAL_WIDTH
   
-  # Load shot player lookup (maps player_id to lumped factor for shot model)
-  shot_player_df <- tryCatch(
-    load_model_with_fallback("shot_player_df"),
-    error = function(e) NULL
-  )
+  # Load shot player lookup (maps player_id to lumped factor for shot model).
+  # No fallback: this used to swallow a failed load and label EVERY shooter
+  # "Other" without a word, which strips the shot model's player term from a
+  # whole run's expected scores (and from the xScore team rating built on them).
+  # The table is published atomically with the shot model
+  # (torpmodels::publish_model_group()), so if the model loads, this must too.
+  shot_player_df <- load_model_with_fallback("shot_player_df")
+  if (!is.data.frame(shot_player_df) || nrow(shot_player_df) == 0L ||
+      !"player_id_shot" %in% names(shot_player_df)) {
+    cli::cli_abort(c(
+      "{.code shot_player_df} loaded but is not a usable shooter table.",
+      "i" = "Expected a non-empty data frame with a {.field player_id_shot} column; got {.cls {class(shot_player_df)[1]}} with {NROW(shot_player_df)} row{?s}.",
+      "x" = "Refusing to label every shooter \"Other\"."
+    ))
+  }
 
   df <- df |>
     add_shot_result_variables() |>
     add_shot_geometry_variables(goal_width) |>
-    add_shot_type_variables()
-
-  if (!is.null(shot_player_df)) {
-    df <- df |>
-      dplyr::left_join(shot_player_df, by = c("player_id" = "player_id_shot"), keep = TRUE)
-  } else {
-    df$player_id_shot <- NA_character_
-    df$player_name_shot <- NA_character_
-  }
+    add_shot_type_variables() |>
+    dplyr::left_join(shot_player_df, by = c("player_id" = "player_id_shot"), keep = TRUE)
 
   df |>
     dplyr::mutate(
