@@ -484,8 +484,13 @@
   # rating is centred on a league-average 0 in points space.
   xrating_matches <- .xscore_matches_from_team_mdl_df(state$team_mdl_df)
   xrating_result <- build_xscore_rating(xrating_matches)
-  elo_vec <- stats::setNames(xrating_result$current$rating_current,
-                              xrating_result$current$team_name)
+  # Regressed across the season boundary when the table is for a later season
+  # than a team's last completed match, as the model's training rows were.
+  elo_vec <- stats::setNames(
+    .xrating_carry_to_season(xrating_result$current$rating_current,
+                             xrating_result$current$team_name,
+                             season, xrating_result),
+    xrating_result$current$team_name)
   missing_elo <- setdiff(team_names, names(elo_vec))
   if (length(missing_elo) > 0) {
     cli::cli_warn("build_matchup_table: {length(missing_elo)} team(s) have no xScore-rating history, using neutral 0: {paste(missing_elo, collapse = ', ')}")

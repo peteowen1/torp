@@ -113,6 +113,75 @@ test_that("join_xrating_diff_to_team_mdl_df: played matches use history; unplaye
   expect_false(isTRUE(all.equal(fut_a_home, 0)))
 })
 
+test_that("an unplayed next-season fixture is served the rating training later records for it", {
+  # The defect: build_xscore_rating() regresses a rating by `carryover` on a
+  # team's first match of a new season, but only inside its loop over COMPLETED
+  # matches. An unplayed season opener took the un-regressed current rating, so
+  # it was served 1 / carryover (1.33x) the value its training row would carry.
+  full <- .synthetic_xmatches()                     # m4 = A v B, the 2025 opener
+  played <- build_xscore_rating(full, k = 0.1, hga = 0, carryover = 0.75)
+  pre <- played$by_match[played$by_match$match_id == "m4", ]
+  trained_diff <- pre$rating_pre[pre$team_name == "A"] - pre$rating_pre[pre$team_name == "B"]
+
+  before <- build_xscore_rating(full[full$match_id != "m4", ], k = 0.1, hga = 0, carryover = 0.75)
+  fixture <- data.frame(
+    match_id    = c("m4", "m4"),
+    season.x    = c(2025L, 2025L),
+    team_name.x = c("A", "B"),
+    team_name.y = c("B", "A"),
+    stringsAsFactors = FALSE
+  )
+  served <- join_xrating_diff_to_team_mdl_df(fixture, before)
+
+  expect_false(isTRUE(all.equal(trained_diff, 0)))
+  expect_equal(served$xelo_diff[served$team_name.x == "A"], trained_diff)
+  expect_equal(served$xelo_diff[served$team_name.x == "B"], -trained_diff)
+
+  # and it is the regression doing it: the un-regressed difference is 1/0.75 wider
+  cur <- stats::setNames(before$current$rating_current, before$current$team_name)
+  expect_equal(unname(cur[["A"]] - cur[["B"]]) * 0.75, trained_diff)
+})
+
+test_that("an unplayed fixture in the SAME season as a team's last match is not regressed", {
+  m <- .synthetic_xmatches()
+  res <- build_xscore_rating(m[m$season == 2024L, ], k = 0.1, hga = 0, carryover = 0.75)
+  cur <- stats::setNames(res$current$rating_current, res$current$team_name)
+  fixture <- data.frame(match_id = "next", season.x = 2024L, team_name.x = "A", team_name.y = "B",
+                        stringsAsFactors = FALSE)
+  out <- join_xrating_diff_to_team_mdl_df(fixture, res)
+  expect_equal(out$xelo_diff, unname(cur[["A"]] - cur[["B"]]))
+})
+
+test_that("carryover is applied once however many seasons a team sat out, as the rating loop does", {
+  m <- .synthetic_xmatches()
+  hist <- m[m$season == 2024L, ]
+  # C's only match is in 2024; its next is in 2027
+  later <- rbind(hist, data.frame(match_id = "m9", date = as.Date("2027-01-01"), season = 2027L,
+                                  round = 1L, home_team = "C", away_team = "A", home_xmargin = 0,
+                                  stringsAsFactors = FALSE))
+  played <- build_xscore_rating(later, k = 0.1, hga = 0, carryover = 0.75)
+  pre <- played$by_match[played$by_match$match_id == "m9", ]
+  trained_diff <- pre$rating_pre[pre$team_name == "C"] - pre$rating_pre[pre$team_name == "A"]
+
+  before <- build_xscore_rating(hist, k = 0.1, hga = 0, carryover = 0.75)
+  fixture <- data.frame(match_id = "m9", season.x = 2027L, team_name.x = "C", team_name.y = "A",
+                        stringsAsFactors = FALSE)
+  expect_equal(join_xrating_diff_to_team_mdl_df(fixture, before)$xelo_diff, trained_diff)
+})
+
+test_that(".xrating_carry_to_season leaves ratings alone without season information", {
+  m <- .synthetic_xmatches()
+  res <- build_xscore_rating(m, k = 0.1, hga = 0, carryover = 0.75)
+  r <- c(10, -10)
+  expect_equal(.xrating_carry_to_season(r, c("A", "B"), NULL, res), r)
+  expect_equal(.xrating_carry_to_season(r, c("A", "B"), c(NA, NA), res), r)
+  expect_equal(.xrating_carry_to_season(r, c("A", "B"), 2026L, list(current = res$current)), r)
+  # a scalar season (the matchup table's call shape) regresses every team last seen earlier
+  expect_equal(.xrating_carry_to_season(r, c("A", "B"), 2026L, res), 0.75 * r)
+  # a team with no history is left alone
+  expect_equal(.xrating_carry_to_season(5, "Z", 2026L, res), 5)
+})
+
 test_that("join_xrating_diff_to_team_mdl_df: a team with no history anywhere gets the neutral 0", {
   m <- .synthetic_xmatches()
   res <- build_xscore_rating(m, k = 0.1, hga = 0, carryover = 1)

@@ -1,3 +1,7 @@
+# torp 1.10.12
+
+* An unplayed fixture in a new season now gets the same season-boundary regression on its xScore team rating (`xelo_diff`) that the match model's training rows carry. `build_xscore_rating()` multiplies a rating by `XRATING_CARRYOVER` (0.75) on a team's first completed match of a season, but an upcoming fixture took the un-regressed rating after the team's last match, so every team's first match of a season was predicted on a team-strength difference 1.33 times too wide. The feature shipped 2026-07-28 and has not yet served a season opener, so no published prediction changes. `build_xscore_rating()` now also returns `last_season` and `carryover`; the new `.xrating_carry_to_season()` is used by `join_xrating_diff_to_team_mdl_df()` and `build_matchup_table()`. Same fix `team_elo.R` already had for `elo_diff`.
+
 # torp 1.10.11
 
 * The daily release republishes a season's `np_fit_<season>.rds` when the published one is stamped with an older `RATING_VINTAGE` and there is no new game to trigger a full release (#307). `.stale_np_fit_season()` checks the newest published bundle (this season's, else last season's, the round-1 fallback); `.refit_stale_np_fit()` re-runs `update_player_game_data()` for it and records `np_fit_check` / `np_fit_refit` in the result's `failures` when the check or refit fails. `update_player_game_data()` now returns `TRUE` once the bundle is published.
