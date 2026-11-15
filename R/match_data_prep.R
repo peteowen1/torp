@@ -1072,9 +1072,12 @@
   cli::cli_inform("team_mdl_df: {nrow(team_mdl_df)} rows, {ncol(team_mdl_df)} cols")
   cli::cli_inform("Weather joined: {n_weather} of {nrow(team_mdl_df)} rows ({round(weather_pct, 1)}%) before imputation")
   if (length(weather_missing_by_venue) > 0) {
+    # Venue names are data, and cli treats message text as a glue template, so
+    # a brace in a name would crash the message itself. Double them to escape.
+    venue_lines <- gsub("([{}])", "\\1\\1", weather_missing_by_venue)
     cli::cli_inform(c(
       "Rows with no weather (median-imputed), by venue:",
-      stats::setNames(weather_missing_by_venue, rep("*", length(weather_missing_by_venue)))
+      stats::setNames(venue_lines, rep("*", length(venue_lines)))
     ))
   }
   if (isTRUE(weather_pct < 80)) {
