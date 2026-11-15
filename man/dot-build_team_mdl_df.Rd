@@ -9,7 +9,8 @@
   results,
   xg_df,
   weather_df,
-  weight_anchor_date
+  weight_anchor_date,
+  allow_neutral_fallback = FALSE
 )
 }
 \arguments{
@@ -22,6 +23,10 @@
 \item{weather_df}{Weather data from .load_match_weather()}
 
 \item{weight_anchor_date}{Date for time-decay weight anchoring}
+
+\item{allow_neutral_fallback}{If \code{FALSE} (default), a failure to build
+the \code{xelo_diff} model feature aborts. \code{TRUE} restores the old
+behaviour (warn and set it to 0 on every row), for interactive use only.}
 }
 \value{
 Complete model dataset ready for GAM training

@@ -19,6 +19,8 @@ Same conventions as \code{join_elo_diff_to_team_mdl_df()}: this team's rating
 minus its opponent's, with no HGA baked in (\code{team_type_fac} already
 carries home advantage). Unplayed fixtures -- which is exactly what
 \code{run_predictions_pipeline()} needs the feature for -- fall back to each
-team's current rating; a team with no history at all falls back to 0.
+team's current rating, multiplied by \code{carryover} when the fixture's
+\code{season.x} is later than the season of that team's last completed match
+(as the training rows were); a team with no history at all falls back to 0.
 }
 \keyword{internal}

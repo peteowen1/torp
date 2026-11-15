@@ -745,6 +745,29 @@
 }
 
 
+# .weather_missing_by_venue ----
+
+#' Count matches with no joined weather, by venue
+#'
+#' @param team_mdl_df Model frame after the weather join, before imputation.
+#' @param missing Logical, one per row: \code{TRUE} where weather did not join.
+#' @return Character vector like \code{"Manuka Oval: 18 matches"}, largest
+#'   first; \code{character(0)} when nothing is missing or the frame has no
+#'   venue column.
+#' @keywords internal
+.weather_missing_by_venue <- function(team_mdl_df, missing) {
+  venue_col <- intersect(c("venue.x", "venue"), names(team_mdl_df))
+  if (!any(missing) || length(venue_col) == 0 || !"match_id" %in% names(team_mdl_df)) {
+    return(character(0))
+  }
+  venue <- as.character(team_mdl_df[[venue_col[1]]])[missing]
+  venue[is.na(venue)] <- "<no venue>"
+  # one row per match (the frame has a home and an away row for each)
+  keep <- !duplicated(team_mdl_df$match_id[missing])
+  n <- sort(table(venue[keep]), decreasing = TRUE)
+  paste0(names(n), ": ", as.integer(n), " match", ifelse(n == 1, "", "es"))
+}
+
 # .build_team_mdl_df ----
 
 #' Build the full match model dataset
@@ -757,10 +780,13 @@
 #' @param xg_df Expected goals data from load_xg()
 #' @param weather_df Weather data from .load_match_weather()
 #' @param weight_anchor_date Date for time-decay weight anchoring
+#' @param allow_neutral_fallback If \code{FALSE} (default), a failure to build
+#'   the \code{xelo_diff} model feature aborts. \code{TRUE} restores the old
+#'   behaviour (warn and set it to 0 on every row), for interactive use only.
 #' @return Complete model dataset ready for GAM training
 #' @keywords internal
 .build_team_mdl_df <- function(team_rt_fix_df, results, xg_df, weather_df,
-                               weight_anchor_date) {
+                               weight_anchor_date, allow_neutral_fallback = FALSE) {
   # Opponent columns for self-join
   opp_cols <- c(
     "match_id", "team_type",
@@ -1021,7 +1047,18 @@
     weather_df <- dplyr::distinct(weather_df, match_id, .keep_all = TRUE)
   }
   team_mdl_df <- team_mdl_df |>
-    dplyr::left_join(weather_df, by = "match_id", relationship = "many-to-one") |>
+    dplyr::left_join(weather_df, by = "match_id", relationship = "many-to-one")
+
+  # Coverage is measured HERE, before the fills below. It used to be measured
+  # after them, where temp_avg is never NA, so it read 100% whatever was missing
+  # and the low-coverage warning could not fire (it stayed silent while every
+  # Canberra match had no weather at all).
+  weather_missing <- is.na(team_mdl_df$temp_avg)
+  n_weather <- sum(!weather_missing)
+  weather_pct <- if (nrow(team_mdl_df) > 0) 100 * n_weather / nrow(team_mdl_df) else NA_real_
+  weather_missing_by_venue <- .weather_missing_by_venue(team_mdl_df, weather_missing)
+
+  team_mdl_df <- team_mdl_df |>
     dplyr::mutate(
       temp_avg = tidyr::replace_na(temp_avg, stats::median(temp_avg, na.rm = TRUE)),
       wind_avg = tidyr::replace_na(wind_avg, stats::median(wind_avg, na.rm = TRUE)),
@@ -1033,9 +1070,14 @@
     )
 
   cli::cli_inform("team_mdl_df: {nrow(team_mdl_df)} rows, {ncol(team_mdl_df)} cols")
-  weather_pct <- 100 * sum(!is.na(team_mdl_df$temp_avg)) / nrow(team_mdl_df)
-  cli::cli_inform("Weather joined: {sum(!is.na(team_mdl_df$temp_avg))} of {nrow(team_mdl_df)} rows ({round(weather_pct, 1)}%)")
-  if (weather_pct < 80) {
+  cli::cli_inform("Weather joined: {n_weather} of {nrow(team_mdl_df)} rows ({round(weather_pct, 1)}%) before imputation")
+  if (length(weather_missing_by_venue) > 0) {
+    cli::cli_inform(c(
+      "Rows with no weather (median-imputed), by venue:",
+      stats::setNames(weather_missing_by_venue, rep("*", length(weather_missing_by_venue)))
+    ))
+  }
+  if (isTRUE(weather_pct < 80)) {
     cli::cli_warn("Low weather coverage ({round(weather_pct, 1)}%) -- median imputation may affect predictions")
   }
 
@@ -1043,6 +1085,9 @@
   # dynamic, results-based team-strength signal the player-rating-derived
   # features above structurally lack. Leak-safe by construction (elo_pre is
   # a function only of strictly-prior matches); see team_elo.R.
+  #
+  # elo_diff is a published comparison column only -- no model formula reads it
+  # -- so a failed build keeps its neutral-0 warning in every mode.
   team_mdl_df <- tryCatch(
     build_elo_diff(team_mdl_df),
     error = function(e) {
@@ -1060,9 +1105,36 @@
   # above: it is no longer consumed by the GAM/XGB formulas, but is retained as
   # a published column for comparison and as a fallback if this feature fails.
   # See xscore_rating.R.
-  team_mdl_df <- tryCatch(
+  #
+  # xelo_diff IS a model feature, so by default a failed build stops here: the
+  # old behaviour set it to 0 on every row with one deferred warning, and the
+  # models then trained and published without their team-strength signal.
+  # `allow_neutral_fallback = TRUE` keeps that fallback for interactive work.
+  .add_xelo_diff(team_mdl_df, allow_neutral_fallback = allow_neutral_fallback)
+}
+
+# .add_xelo_diff ----
+
+#' Add the \code{xelo_diff} model feature, aborting if it cannot be built
+#'
+#' @param team_mdl_df Model frame from \code{.build_team_mdl_df()}.
+#' @param allow_neutral_fallback \code{FALSE} (default) aborts when
+#'   \code{build_xrating_diff()} errors. \code{TRUE} warns and sets
+#'   \code{xelo_diff} to 0 on every row (interactive use only).
+#' @return \code{team_mdl_df} with \code{xelo_diff}.
+#' @keywords internal
+.add_xelo_diff <- function(team_mdl_df, allow_neutral_fallback = FALSE) {
+  tryCatch(
     build_xrating_diff(team_mdl_df),
     error = function(e) {
+      if (!isTRUE(allow_neutral_fallback)) {
+        cli::cli_abort(c(
+          "Failed to build the {.field xelo_diff} team-strength feature.",
+          "x" = "{conditionMessage(e)}",
+          "i" = "The match models train on this feature; a constant 0 would publish predictions without it.",
+          "i" = "Pass {.code allow_neutral_fallback = TRUE} to {.fn .build_team_mdl_df} to continue with a neutral 0 (interactive use only)."
+        ))
+      }
       cli::cli_warn(c(
         "Failed to build xelo_diff feature ({conditionMessage(e)}) -- falling back to neutral xelo_diff=0",
         "i" = "Deliberately NOT falling back to elo_diff: the two live on scales ~100x apart (Elo points vs points of expected margin), so a model trained on xelo_diff would produce wild predictions, not merely degraded ones. Neutral 0 loses the signal but stays in-distribution."
@@ -1071,6 +1143,4 @@
       team_mdl_df
     }
   )
-
-  team_mdl_df
 }

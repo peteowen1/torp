@@ -659,7 +659,8 @@
   # dynamic team-strength signal absent from the player-rating diffs above, now
   # driven by expected rather than actual score. Included unconditionally (not
   # behind an availability check like osr_dsr_cols) because
-  # .build_team_mdl_df() always adds it, with a neutral 0 fallback on failure
+  # .build_team_mdl_df() always adds it, and aborts if it cannot be built
+  # (.add_xelo_diff(); a neutral 0 only with allow_neutral_fallback = TRUE)
   # -- see match_data_prep.R and xscore_rating.R.
   base_cols <- c(
     "team_type_fac",

@@ -405,3 +405,55 @@ test_that("add_weather_to_preds does not duplicate predictions when several seas
   expect_equal(out$match_id, c("A", "B"))
   expect_false(anyNA(out$weather))
 })
+
+# Review of 2026-11-15, findings 1.5 and 1.6: fallbacks and checks that hid a
+# missing model input instead of reporting it.
+
+test_that(".weather_missing_by_venue counts matches (not rows) with no weather, by venue", {
+  df <- data.frame(
+    match_id = rep(c("M1", "M2", "M3", "M4"), each = 2),
+    venue.x  = rep(c("Manuka Oval", "Manuka Oval", "Hands Oval", "M.C.G."), each = 2),
+    stringsAsFactors = FALSE
+  )
+  missing <- df$match_id %in% c("M1", "M2", "M3")
+  expect_equal(torp:::.weather_missing_by_venue(df, missing),
+               c("Manuka Oval: 2 matches", "Hands Oval: 1 match"))
+  expect_equal(torp:::.weather_missing_by_venue(df, rep(FALSE, nrow(df))), character(0))
+  # no venue column: nothing to group by, and no error
+  expect_equal(torp:::.weather_missing_by_venue(df["match_id"], missing), character(0))
+})
+
+test_that("weather coverage is measured before the median fill, so a gap is visible", {
+  # The old check ran after replace_na(), where temp_avg is never NA, so it read
+  # 100% whatever was missing. Pin the order in the source: the coverage count
+  # must come before the first weather replace_na().
+  src <- deparse(body(torp:::.build_team_mdl_df))
+  i_cov  <- grep("weather_missing <- is.na(team_mdl_df$temp_avg)", src, fixed = TRUE)
+  i_fill <- grep("replace_na(temp_avg", src, fixed = TRUE)
+  expect_length(i_cov, 1L)
+  expect_gte(length(i_fill), 1L)
+  expect_lt(i_cov, min(i_fill))
+  # and nothing recomputes coverage from the filled column afterwards
+  expect_length(grep("sum(!is.na(team_mdl_df$temp_avg))", src, fixed = TRUE), 0L)
+})
+
+test_that(".add_xelo_diff aborts when the team-strength feature cannot be built", {
+  # A frame with none of the columns build_xrating_diff() needs.
+  bad <- data.frame(match_id = c("M1", "M1"), stringsAsFactors = FALSE)
+  expect_error(torp:::.add_xelo_diff(bad), "xelo_diff")
+  # the underlying reason is carried through, not swallowed
+  expect_error(torp:::.add_xelo_diff(bad), "missing column")
+})
+
+test_that(".add_xelo_diff keeps the neutral-0 fallback only when asked", {
+  bad <- data.frame(match_id = c("M1", "M1"), stringsAsFactors = FALSE)
+  expect_warning(
+    out <- torp:::.add_xelo_diff(bad, allow_neutral_fallback = TRUE),
+    "falling back to neutral xelo_diff=0"
+  )
+  expect_equal(out$xelo_diff, c(0, 0))
+})
+
+test_that(".build_team_mdl_df defaults to aborting on a failed xelo_diff build", {
+  expect_identical(formals(torp:::.build_team_mdl_df)$allow_neutral_fallback, FALSE)
+})
