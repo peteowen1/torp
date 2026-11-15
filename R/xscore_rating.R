@@ -171,8 +171,52 @@ build_xscore_rating <- function(matches, k = XRATING_K, hga = XRATING_HGA,
       team_name      = names(r),
       rating_current = unname(r),
       stringsAsFactors = FALSE
-    )
+    ),
+    # Beside (not inside) `current`, which keeps its two-column shape. Needed by
+    # .xrating_carry_to_season() to regress a rating for a fixture in a later
+    # season than the team's last completed match.
+    last_season = data.frame(
+      team_name   = names(last_season),
+      last_season = unname(last_season),
+      stringsAsFactors = FALSE
+    ),
+    carryover = carryover
   )
+}
+
+# .xrating_carry_to_season ----
+
+#' Regress current xScore ratings across a season boundary before a fixture
+#'
+#' \code{rating_result$current} is a team's rating right after its last
+#' completed match. \code{build_xscore_rating()} multiplies a rating by
+#' \code{carryover} the first time it meets the team in a NEW season, so every
+#' season-opening row the match model trained on carries the regressed rating.
+#' An unplayed fixture in a later season than the team's last match needs the
+#' same step, or its \code{xelo_diff} is 1 / carryover (1.33x at 0.75) too wide.
+#' Mirrors \code{.elo_carry_to_season()} in team_elo.R.
+#'
+#' The loop applies \code{carryover} ONCE on first sight in a later season,
+#' however many seasons were skipped, so this does the same.
+#'
+#' @param rating Each row's team rating after its last completed match.
+#' @param team Team name for each row (character).
+#' @param season Season of the fixture each row belongs to (length 1 or one per
+#'   row).
+#' @param rating_result Output of \code{build_xscore_rating()}.
+#' @return \code{rating}, multiplied by \code{carryover} where the team's last
+#'   completed match was in an earlier season than \code{season}. Unchanged when
+#'   \code{rating_result} carries no season information or \code{season} is
+#'   unavailable.
+#' @keywords internal
+.xrating_carry_to_season <- function(rating, team, season, rating_result) {
+  ls <- rating_result$last_season
+  if (is.null(ls) || is.null(season) || is.null(rating_result$carryover)) return(rating)
+  last <- unname(stats::setNames(ls$last_season, ls$team_name)[team])
+  regress <- !is.na(last) & !is.na(season) & last < season
+  regress[is.na(rating)] <- FALSE
+  rating[regress] <- rating_result$carryover * rating[regress]
+  rating
 }
 
 # join_xrating_diff_to_team_mdl_df ----
@@ -183,7 +227,9 @@ build_xscore_rating <- function(matches, k = XRATING_K, hga = XRATING_HGA,
 #' minus its opponent's, with no HGA baked in (\code{team_type_fac} already
 #' carries home advantage). Unplayed fixtures -- which is exactly what
 #' \code{run_predictions_pipeline()} needs the feature for -- fall back to each
-#' team's current rating; a team with no history at all falls back to 0.
+#' team's current rating, multiplied by \code{carryover} when the fixture's
+#' \code{season.x} is later than the season of that team's last completed match
+#' (as the training rows were); a team with no history at all falls back to 0.
 #'
 #' @param team_mdl_df Complete model dataset
 #' @param rating_result Output of \code{build_xscore_rating()}
@@ -207,8 +253,14 @@ join_xrating_diff_to_team_mdl_df <- function(team_mdl_df, rating_result) {
   ry <- unname(key[paste(team_mdl_df$match_id, ty)])
 
   n_fallback <- sum(is.na(rx) | is.na(ry))
-  rx[is.na(rx)] <- unname(cur[tx[is.na(rx)]])
-  ry[is.na(ry)] <- unname(cur[ty[is.na(ry)]])
+  # A fixture in a later season than a team's last completed match gets the
+  # season-boundary regression its training rows received (season.x absent on
+  # a hand-built frame leaves the rating as is).
+  season_x <- team_mdl_df[["season.x"]]
+  fx <- is.na(rx)
+  fy <- is.na(ry)
+  rx[fx] <- .xrating_carry_to_season(unname(cur[tx[fx]]), tx[fx], season_x[fx], rating_result)
+  ry[fy] <- .xrating_carry_to_season(unname(cur[ty[fy]]), ty[fy], season_x[fy], rating_result)
 
   if (anyDuplicated(paste(team_mdl_df$match_id, tx, ty)) > 0) {
     cli::cli_warn("join_xrating_diff_to_team_mdl_df: team_mdl_df has duplicate (match_id, team) rows.")
