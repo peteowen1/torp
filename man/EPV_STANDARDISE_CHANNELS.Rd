@@ -32,8 +32,9 @@ at 0.023 points per unit, t 0.27, carrying \strong{0.0\%} of the rating's
 variance. It had been standardised out of existence. Excluding it takes the
 contest channel from t 1.83 to 2.24 and from 1.7\% of value to 2.6\%.
 
-Keyed on \code{EPV_ENGINE} rather than on \code{EPV3_CHANNELS} because v2's
-\code{spoil} channel is a genuine all-position quantity (spoils, tackles,
-pressure acts) that should keep being standardised.
+v4 was gated with exactly this list (its frames were built under a v3
+load), so it keeps it: what ships is what was measured. (v2 also
+standardised \code{spoil}; the engine switch that chose between the two
+lists was removed with v2 and v3 on 2026-11-16.)
 }
 \keyword{internal}

@@ -2,10 +2,10 @@
 #
 # THE DEFECT THIS ADDRESSES. `EPV3_AERIAL_OUT` -- the list that DEFINES which
 # kicks become contests -- includes `Uncontested Mark` and `Mark On Lead`.
-# `EPV3_AERIAL_EXPOSURE_DESCS`, which defines who was exposed to a contest,
-# excludes both and says why: "An uncontested mark means by definition that no
-# contest happened". Both cannot be right, and measurement says the exposure
-# list is the one telling the truth.
+# `EPV3_AERIAL_EXPOSURE_DESCS`, which defined who was exposed to a contest
+# (v3 only; removed with v3 on 2026-11-16), excluded both and said why: "An
+# uncontested mark means by definition that no contest happened". Both cannot
+# be right, and measurement says the exposure list was the one telling the truth.
 #
 # Measured over 291,908 scored contests (epv3_duel_population.R):
 #

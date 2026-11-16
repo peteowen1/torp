@@ -11,23 +11,18 @@ An object of class \code{numeric} of length 1.
 EPR_PRIOR_RATE_HITOUT
 }
 \description{
-Carries \code{EPV_RUCK_SWING_SCALE} for the same reason the others carry
-\code{EPV_POINTS_SCALE}: \code{.bayesian_shrink()} adds
-\code{prior_games * prior_rate} AFTER the value, so an unscaled prior would leave
-the hitout rating a blend of scaled and unscaled parts rather than a clean
-rescale. If you change one, change both.
+\strong{Zero, because the hitout slot is identically zero under v4.} A
+non-zero prior on an all-zero channel would shrink toward it and reintroduce
+a level for a channel that does not exist. Until 2026-11-16 it was chosen by
+a \code{.epr_prior_rate_hitout(engine, channels)} helper (v2 and 4-channel
+v3 used \code{-0.3} times the ruck channel's points factor); that helper
+went with those engines.
 }
 \details{
-Zeroed under the 3-channel v3 arm, where the hitout slot holds nothing. A
-non-zero prior on an all-zero channel would shrink toward it and reintroduce a
-level for a channel that does not exist. Conditioned on BOTH constants so v2
-is untouched whatever \code{EPV3_CHANNELS} says.
-
-\strong{Also zeroed under v4 (2026-09-09, torp#206) — the same all-zero
-condition this paragraph already describes, just not covered by the
-condition.} \code{epv_hitout} is identically zero under v4 for every row,
+\strong{History: zeroed for v4 on 2026-09-09 (torp#206).}
+\code{epv_hitout} is identically zero under v4 for every row,
 checked across all six published seasons after the vintage rebuild. The
-guard below only ever tested \code{EPV_ENGINE == "v3"}, so v4 fell through
+helper's guard had only ever tested \code{EPV_ENGINE == "v3"}, so v4 fell through
 to the leftover v2/v3-era rate and every player's \code{epr_hitout} shrank
 toward a non-zero, purely-legacy prior instead of the zero the channel
 actually holds. Measured before the fix: mean \code{|epr_hitout|} = 0.0998

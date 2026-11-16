@@ -7,7 +7,8 @@
 .use_per_channel_scale(engine_attr)
 }
 \arguments{
-\item{engine_attr}{The frame's \code{epv_engine} attribute, or NULL.}
+\item{engine_attr}{The frame's \code{epv_engine} attribute, or NULL. No
+longer changes the answer.}
 }
 \value{
 TRUE if \code{EPV3_POINTS_SCALE} should be applied per channel.
@@ -21,12 +22,9 @@ kept an \code{!all(scale == 1)} fall-through that had been removed here as a
 bug. All three made it disagree with the published pipeline silently.
 }
 \details{
-Keyed on the engine ACTUALLY IN USE (the attribute the frame carries), not
-the global default -- a caller passing \code{epv_engine = "v3"} while the
-constant still reads \code{"v2"} would otherwise get no per-channel scaling.
-
-Deliberately NOT also conditioned on the vector being non-trivial: under v3
-the per-channel vector is authoritative even when it is all 1s. All 1s means
-no scaling, not "fall back to v2's 0.919".
+Until 2026-11-16 a frame stamped \code{"v3"} also switched this on; that
+engine has been removed, so only \code{EPV_PER_CHANNEL_POINTS_SCALE} decides
+now. The argument is kept so the call sites still say which frame they are
+asking about.
 }
 \keyword{internal}

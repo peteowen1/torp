@@ -11,16 +11,14 @@ An object of class \code{character} of length 1.
 EPV_ENGINE
 }
 \description{
-\code{v2} is production and is the default: box-score weights plus a
-chain-derived part, four channels \code{recv / disp / spoil / hitout}.
+\strong{\code{"v4"} is the only engine.} \code{v2} (box-score weights plus
+a chain-derived part) and \code{v3} (the chain-native rebuild, see
+\code{../docs/plans/EPV-V3-CHAIN-NATIVE.md}) were removed on 2026-11-16,
+ten weeks after v4 was published; git history keeps them. The constant
+stays because it is the first entry of \code{.rating_defining_constants()}
+and is stamped on every player-game frame.
 }
 \details{
-\code{v3} is the chain-native rebuild -- \code{delta_epv} arithmetic only,
-with the ruck/hitout box terms as the single permitted carve-out because
-\code{Centre Bounce} and \code{Ball Up Call} rows carry a \code{player_id}
-0.0\% of the time. Four channels \code{recv / disp / cont_aerial / cont_stop}.
-See \code{../docs/plans/EPV-V3-CHAIN-NATIVE.md}.
-
 \code{v4} is the Net Points ledger (\code{build_net_points()} under
 \code{credit = "difficulty"} with stoppages allocated): every player-match
 sums, across a match, to the margin. Three channels to start -- own acts,
@@ -28,7 +26,6 @@ won back, pools -- carried in the \code{disp / recv / spoil} columns so EPR's
 plumbing is unchanged; \code{hitout} is zero. See
 \code{../docs/plans/EPV-V4-CREDIT-RULES.md}.
 
-\strong{Flipping this changes every published rating.} It is a flag, not a
-tunable: an engine has to clear the gates first (\code{docs/HOW-WE-WORK.md}).
+\code{create_player_game_data()} refuses any other value.
 }
 \keyword{internal}

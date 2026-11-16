@@ -11,10 +11,7 @@ An object of class \code{numeric} of length 1.
 EPR_PRIOR_RATE_SPOIL
 }
 \description{
-Under v3 this slot holds CONTEST value. The shape (-0.3 against recv/disp's
--0.7) is inherited unchanged and only the points factor is threaded, which is
-deliberate: whether a mostly zero-sum channel wants a negative prior at all
-is a real question, but it is a separate change with its own effect and
-bundling it here would make the calibration unattributable.
+Under v4 this slot holds the team-pool share (it held contest value under
+v3). The -0.3 shape against recv/disp's -0.7 is inherited unchanged.
 }
 \keyword{internal}
