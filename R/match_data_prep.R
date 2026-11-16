@@ -369,6 +369,7 @@
 #' @keywords internal
 #' @importFrom purrr pmap_dbl
 .build_match_features <- function(fix_df, team_rt_df, all_grounds) {
+  all_grounds <- .add_supplementary_grounds(all_grounds)
   # xrapm is NOT carried through here (include_xrapm = FALSE), so it never
   # reaches team_rt_fix_df and `xrapm_diff` is a constant 0 in the model frame.
   # Measured 2026-10-17 on 2024-2026: max |xrapm_diff| = 0 although the as-of
@@ -406,6 +407,13 @@
       familiarity = ifelse(cum_total_games > 0, cum_venue_games / cum_total_games, 0)
     ) |>
     dplyr::select(team_id, season, round_number, venue, familiarity)
+
+  # A COMPLETED match at a venue with no coordinates is a data gap, not an
+  # unknown: it would train the model on MATCH_LOG_DIST_DEFAULT (an ~8,900 km
+  # sentinel) for both teams, and the weather script drops the match too. That
+  # went unnoticed for every Canberra match from 2021 to 2026. Unplayed fixtures
+  # at a brand-new venue still fall back to the default below.
+  .abort_on_unmapped_completed_venues(fix_df, all_grounds)
 
   # Distance traveled (Haversine)
   team_dist_df <- fix_df |>
@@ -547,6 +555,7 @@
 #' @keywords internal
 .fetch_forecast_weather <- function(fixtures_upcoming, all_grounds) {
   if (nrow(fixtures_upcoming) == 0) return(tibble::tibble())
+  all_grounds <- .add_supplementary_grounds(all_grounds)
 
   fixtures_geo <- fixtures_upcoming |>
     dplyr::mutate(venue = torp_replace_venues(venue_name)) |>
@@ -744,6 +753,83 @@
   m
 }
 
+
+# .add_supplementary_grounds ----
+
+#' Append venues the stadium reference table lacks
+#'
+#' @param all_grounds Stadium reference data (needs \code{venue},
+#'   \code{Latitude}, \code{Longitude}).
+#' @param extra Rows to append, default \code{MATCH_SUPPLEMENTARY_GROUNDS}.
+#' @return \code{all_grounds} plus one row for each \code{extra} venue that has
+#'   no row with coordinates already. Other columns are \code{NA} on those rows.
+#'   A venue the reference table already locates is left alone, so the
+#'   reference table wins once it catches up.
+#' @keywords internal
+.add_supplementary_grounds <- function(all_grounds, extra = MATCH_SUPPLEMENTARY_GROUNDS) {
+  if (!all(c("venue", "Latitude", "Longitude") %in% names(all_grounds))) return(all_grounds)
+  located <- all_grounds$venue[!is.na(all_grounds$Latitude) & !is.na(all_grounds$Longitude)]
+  add <- extra[!extra$venue %in% located, , drop = FALSE]
+  if (nrow(add) == 0) return(all_grounds)
+  # drop any coordinate-less row for the same venue so the venue stays unique
+  all_grounds <- all_grounds[!all_grounds$venue %in% add$venue, , drop = FALSE]
+  dplyr::bind_rows(all_grounds, add)
+}
+
+# .abort_on_unmapped_completed_venues ----
+
+#' Abort when a completed match is at a venue with no coordinates
+#'
+#' @param fix_df Long fixture frame from \code{.build_fixtures_df()} (needs
+#'   \code{match_id}, \code{venue}, \code{result}).
+#' @param all_grounds Stadium reference data, after
+#'   \code{.add_supplementary_grounds()}.
+#' @return Invisible \code{NULL}; aborts naming the venues otherwise. Unplayed
+#'   fixtures (\code{result} is \code{NA}, or \code{utc_dt} is less than four
+#'   hours ago when that column is present) are only reported.
+#' @keywords internal
+.abort_on_unmapped_completed_venues <- function(fix_df, all_grounds) {
+  if (!all(c("match_id", "venue", "result") %in% names(fix_df))) return(invisible(NULL))
+  located <- all_grounds$venue[!is.na(all_grounds$Latitude) & !is.na(all_grounds$Longitude)]
+  unmapped <- !(fix_df$venue %in% located)
+  if (!any(unmapped)) return(invisible(NULL))
+
+  count_by_venue <- function(rows) {
+    m <- fix_df[rows & !duplicated(fix_df$match_id), , drop = FALSE]
+    v <- as.character(m$venue)
+    v[is.na(v)] <- "<no venue>"
+    n <- sort(table(v), decreasing = TRUE)
+    # venue names are data: escape braces so cli does not read them as glue
+    gsub("([{}])", "\\1\\1", paste0(names(n), ": ", as.integer(n), " match", ifelse(n == 1, "", "es")))
+  }
+
+  # `result` is home score minus away score with no status check, so a fixture
+  # that arrives pre-filled 0-0 would read as played. Where the kick-off time is
+  # known, a match only counts as completed once it started 4+ hours ago.
+  played <- !is.na(fix_df$result)
+  if ("utc_dt" %in% names(fix_df)) {
+    finished <- !is.na(fix_df$utc_dt) & fix_df$utc_dt < Sys.time() - 4 * 3600
+    played <- played & (finished | is.na(fix_df$utc_dt))
+  }
+  if (any(unmapped & !played)) {
+    lines <- count_by_venue(unmapped & !played)
+    cli::cli_warn(c(
+      "Unplayed fixtures at venues with no coordinates (default travel distance, no forecast weather):",
+      stats::setNames(lines, rep("*", length(lines))),
+      "i" = "Add the name to {.fn torp_replace_venues} or the venue to {.code MATCH_SUPPLEMENTARY_GROUNDS}."
+    ))
+  }
+  if (any(unmapped & played)) {
+    lines <- count_by_venue(unmapped & played)
+    cli::cli_abort(c(
+      "Completed matches at venues with no coordinates:",
+      stats::setNames(lines, rep("x", length(lines))),
+      "i" = "They would train on the {.code MATCH_LOG_DIST_DEFAULT} sentinel distance and have no weather.",
+      "i" = "Add the name to {.fn torp_replace_venues} or the venue to {.code MATCH_SUPPLEMENTARY_GROUNDS}."
+    ))
+  }
+  invisible(NULL)
+}
 
 # .weather_missing_by_venue ----
 

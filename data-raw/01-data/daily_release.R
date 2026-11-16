@@ -949,7 +949,8 @@ update_weather <- function() {
 
   all_grounds <- file_reader("stadium_data", "reference-data") |>
     dplyr::select(venue, Latitude, Longitude) |>
-    dplyr::distinct(venue, .keep_all = TRUE)
+    dplyr::distinct(venue, .keep_all = TRUE) |>
+    .add_supplementary_grounds()
 
   fixtures_geo <- fixtures |>
     dplyr::select(match_id, season, round_number,

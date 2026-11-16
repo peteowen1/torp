@@ -22,17 +22,24 @@ fixtures <- load_fixtures(all = TRUE) |>
          home_team_name, away_team_name)
 
 all_grounds <- file_reader("stadium_data", "reference-data") |>
+  .add_supplementary_grounds() |>     # venues the reference table lacks (Hands Oval)
   select(venue, Latitude, Longitude) |>
   distinct(venue, .keep_all = TRUE)
 
 fixtures_geo <- fixtures |>
   left_join(all_grounds, by = "venue")
 
-# Check for missing coordinates
+# Check for missing coordinates. A PAST match with none gets no weather row at
+# all, and the match model then median-imputes it without saying so -- every
+# Canberra match from 2021 to 2026 was lost this way. Stop instead.
 missing <- fixtures_geo |> filter(is.na(Latitude))
 if (nrow(missing) > 0) {
   cat("Venues missing coordinates:\n")
-  print(unique(missing$venue))
+  print(missing |> count(venue_name, venue, past = utc_start_time < Sys.time()))
+  if (any(missing$utc_start_time < Sys.time())) {
+    stop("Past matches at venues with no coordinates (above). Add the name to ",
+         "torp_replace_venues() or the venue to MATCH_SUPPLEMENTARY_GROUNDS, then re-run.")
+  }
 }
 
 # Open-Meteo API helper ----

@@ -192,8 +192,34 @@ MATCH_WEIGHT_DECAY_DAYS <- 1000
 MATCH_LOG_DIST_OFFSET <- 10000
 
 #' Default log-distance value when venue coordinates are missing
+#'
+#' Note the size: \code{exp(16) - MATCH_LOG_DIST_OFFSET} is about 8,900 km,
+#' further than any real AFL trip (Perth to Brisbane is about 3,600 km, log
+#' 15.1). It is a "far away" sentinel, not a neutral value, so a venue with no
+#' coordinates reads as both teams travelling a very long way.
+#' \code{.build_match_features()} therefore aborts when a COMPLETED match hits
+#' it; only unplayed fixtures at a new venue fall back to this.
 #' @keywords internal
 MATCH_LOG_DIST_DEFAULT <- 16
+
+#' Venues the \code{stadium_data} reference table has no row for
+#'
+#' Appended to the reference table by \code{.add_supplementary_grounds()}
+#' wherever venue coordinates are looked up. Keyed on the name
+#' \code{torp_replace_venues()} returns.
+#'
+#' Hands Oval (Bunbury, WA; AFL venue id CD_V2125) hosted North Melbourne home
+#' matches in 2025 and 2026. Coordinates from Wikipedia (33.34611 S,
+#' 115.64278 E) and australianfootball.com (-33.346205, 115.642993), which agree
+#' to about 20 m; checked 2026-11-15. Remove the row once the reference table
+#' carries the venue.
+#' @keywords internal
+MATCH_SUPPLEMENTARY_GROUNDS <- data.frame(
+  venue     = "Hands Oval",
+  Latitude  = -33.3461,
+  Longitude = 115.6428,
+  stringsAsFactors = FALSE
+)
 
 #' Earliest season with reliable TORP + xG data for match modelling
 #' @keywords internal
