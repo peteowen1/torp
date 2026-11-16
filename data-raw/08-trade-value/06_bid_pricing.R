@@ -8,9 +8,13 @@
 #     at picks 1-18; 11th-18th -10% on bids at picks 1-36; at most two picks
 #     to match a bid up to pick 36, a bid after 36 is matched with the next
 #     pick; deficit up to 412 points, taken off next year's first-round pick;
-#   - the draft order at the end of the trade period, picks 1-60 (SEN 2026-10-14,
-#     identical pick by pick to the AFL page in trades_2026/official/final_order_1_60.csv);
-#   - bid positions from one mock (Reading the Play, 2026-09-21).
+#   - the AFL's final draft order, picks 1-80, locked after list lodgement
+#     (AFL.com.au news 1640440, 2026-11-11; trades_2026/official/final_order_1_80.csv,
+#     raw page saved beside it). The October order (final_order_1_60.csv) differed
+#     at 9 of picks 51-60;
+#   - bid positions from Cal Twomey's November form guide (AFL.com.au news
+#     1640123, 2026-11-11), a ranking and not a mock: Matthews 6, El Souki 23 and
+#     Boi 30 are Pete's call (2026-11-16). Re-check against his Phantom Draft.
 # The TORP value of a pick is the eight-season curve from 04_pick_curve.R.
 #
 # Matching, simplified: the club hands over its next picks after the bid, in
@@ -37,21 +41,33 @@ slide_to <- function(pts) if (pts <= 0) NA_integer_ else if (pts > dvi[1]) 1L el
 curve <- fread(file.path(out_dir, "04_pick_curve.csv"))
 torp_at <- function(p) ifelse(is.na(p), 0, curve$v8_direct[match(pmin(p, max(curve$pick)), curve$pick)])
 
-# Draft order, picks 1-60, final after the trade period (FINDINGS.md section 4).
-order_tbl <- data.table(pick = 1:60, club = c(
-  "ESS", "RICH", "WCE", "MELB", "RICH", "SYD", "PORT", "GC", "GWS", "STK", "COLL", "PORT", "CARL",
-  "MELB", "ADEL", "STK", "ESS", "CARL", "FRE", "GWS", "BL", "PORT", "WCE", "PORT", "ESS", "GWS",
-  "BL", "BL", "HAW", "COLL", "CARL", "ADEL", "NMFC", "PORT", "ADEL", "GEEL", "HAW", "SYD", "SYD",
-  "FRE", "STK", "WB", "ADEL", "RICH", "BL", "PORT", "SYD", "MELB", "NMFC", "CARL", "STK", "MELB",
-  "WB", "SYD", "WB", "ADEL", "GEEL", "WCE", "GWS", "FRE"))
+# Draft order, picks 1-80: the AFL's final order (the file 09 also reads, so the
+# two scripts cannot disagree). Each club's picks are checked against the
+# club-by-club list in the same AFL article.
+order_file <- "C:/dev/torpverse/torpdata/data/raw/trades_2026/official/final_order_1_80.csv"
+order_tbl <- fread(order_file)[, .(pick, club)]
+club_picks <- list(
+  ADEL = c(15, 32, 35, 43, 54), BL = c(21, 27, 28, 45), CARL = c(13, 18, 31, 50, 59, 67, 73),
+  COLL = c(11, 30, 63, 64, 65), ESS = c(1, 17, 25, 69, 75, 78, 80), FRE = c(19, 40, 58, 61, 68),
+  GEEL = c(36, 55, 60), GC = c(8, 70, 72, 77), GWS = c(9, 20, 26, 57), HAW = c(29, 37, 66, 74),
+  MELB = c(4, 14, 48, 51, 79), NMFC = c(33, 49, 62), PORT = c(7, 12, 22, 24, 34, 46),
+  RICH = c(2, 5, 44, 76), STK = c(10, 16, 41), SYD = c(6, 38, 39, 47), WCE = c(3, 23, 56),
+  WB = c(42, 52, 53, 71))
+stopifnot(nrow(order_tbl) == 80, identical(order_tbl$pick, 1:80), !anyNA(order_tbl$club),
+          setequal(order_tbl$club, names(club_picks)),
+          all(vapply(names(club_picks), function(k)
+            identical(as.numeric(order_tbl$pick[order_tbl$club == k]), club_picks[[k]]), logical(1))))
+cat("draft order:", nrow(order_tbl), "picks,", uniqueN(order_tbl$club), "clubs (", order_file, ")
+")
 
 # Candidates and the matching club's 2026 home-and-away finish (FINDINGS.md section 3).
 cands <- data.table(
-  player = c("Dougie Cochrane", "Cody Walker", "Ethan Matthews", "Caylen Murray", "Khaled El Souki", "Blake Justice"),
-  club   = c("PORT", "CARL", "GWS", "BL", "WB", "ESS"),
-  link   = c("NGA", "father-son", "academy", "academy", "NGA", "NGA"),
-  finish = c(15, 10, 12, 3, 8, 18),
-  bid    = c(1, 2, 7, 14, 30, 37))
+  player = c("Dougie Cochrane", "Cody Walker", "Ethan Matthews", "Caylen Murray", "Khaled El Souki", "Keenan Boi", "Blake Justice"),
+  club   = c("PORT", "CARL", "GWS", "BL", "WB", "HAW", "ESS"),
+  link   = c("NGA", "father-son", "academy", "academy", "NGA", "NGA", "NGA"),
+  finish = c(15, 10, 12, 3, 8, 4, 18),
+  bid    = c(1, 2, 6, 14, 23, 30, 37))
+stopifnot(all(cands$club %in% order_tbl$club))
 
 factor_for <- function(finish, bid) {
   if (finish <= 2 && bid <= 18) return(1.2)
@@ -69,7 +85,7 @@ price_bid <- function(player, club, link, finish, bid) {
     # The club holds the bid pick itself: it just takes him there, no bid to match.
     used <- bid; f <- 1; cost <- dvi_at(bid); remaining <- 0
   } else if (bid > 36) {
-    used <- if (length(own)) own[1] else 61L  # matched with the next pick, no points (61+ = past the listed order)
+    used <- if (length(own)) own[1] else nrow(order_tbl) + 1L  # matched with the next pick, no points (past the listed order if the club has none left)
   } else {
     for (p in head(own, 2)) {
       used <- c(used, p)
