@@ -8,13 +8,18 @@
 #' @param columns Optional character vector of column names to read. If NULL (default),
 #'   reads all columns. Filter columns (season, round, round_number, week) are
 #'   auto-included when filtering is active.
+#' @param abort_on_transient Logical. If TRUE, a result with zero rows caused by
+#'   failed (non-404) downloads aborts with a `vb_error_transient` error instead
+#'   of returning an empty frame with a warning. A confirmed 404 (file not
+#'   published) still returns empty. Default FALSE.
 #' @param ... Additional arguments (currently unused).
 #'
 #' @return A tibble
 #' @keywords internal
 #' @importFrom data.table rbindlist setDT
 #' @importFrom tibble as_tibble
-load_from_url <- function(url, ..., seasons = TRUE, rounds = TRUE, use_disk_cache = FALSE, columns = NULL) {
+load_from_url <- function(url, ..., seasons = TRUE, rounds = TRUE, use_disk_cache = FALSE, columns = NULL,
+                          abort_on_transient = FALSE) {
   url <- as.character(url)
 
   cache_opts <- get_disk_cache_options()
@@ -32,6 +37,15 @@ load_from_url <- function(url, ..., seasons = TRUE, rounds = TRUE, use_disk_cach
     out <- parquet_from_url_cached(url, use_cache = use_cache, max_age_days = max_age, columns = read_cols)
   } else {
     out <- parquet_from_urls_parallel(url, use_cache = use_cache, max_age_days = max_age, columns = read_cols)
+  }
+
+  if (abort_on_transient && nrow(out) == 0 && identical(attr(out, "skip_reason"), "transient")) {
+    .vb_abort(
+      c("Nothing was loaded: every download failed (not a 404) for {length(url)} URL{?s}, e.g. {.url {basename(url[1])}}.",
+        "i" = "This is a network failure, not an empty dataset. Retry, or check GitHub release availability."),
+      "vb_error_transient",
+      .envir = environment()
+    )
   }
 
   if (nrow(out) == 0 && length(url) > 0) {
@@ -196,6 +210,7 @@ parquet_from_urls_parallel <- function(urls, use_cache = FALSE, max_age_days = D
 
   # --- Phase 3: Download missing files in parallel ---
   dl_dt <- data.table::data.table()
+  transient_failed <- character(0)
 
   if (length(download_indices) > 0) {
     urls_to_dl <- urls[download_indices]
@@ -216,7 +231,6 @@ parquet_from_urls_parallel <- function(urls, use_cache = FALSE, max_age_days = D
 
     if (!is.null(dl)) {
       dl_parts <- list()
-      transient_failed <- character(0)
 
       for (j in seq_along(download_indices)) {
         idx <- download_indices[j]
@@ -294,7 +308,13 @@ parquet_from_urls_parallel <- function(urls, use_cache = FALSE, max_age_days = D
   }
 
   # --- Phase 4: Combine local + downloaded ---
-  if (nrow(local_dt) == 0 && nrow(dl_dt) == 0) return(data.table::data.table())
+  if (nrow(local_dt) == 0 && nrow(dl_dt) == 0) {
+    empty <- data.table::data.table()
+    # Tag an empty result that came from failed (non-404) downloads so
+    # load_from_url() can tell it from "nothing published" (issue #314).
+    if (length(transient_failed) > 0) attr(empty, "skip_reason") <- "transient"
+    return(empty)
+  }
   if (nrow(dl_dt) == 0) return(local_dt)
   if (nrow(local_dt) == 0) return(dl_dt)
 

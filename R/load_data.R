@@ -894,7 +894,10 @@ load_pbp <- function(seasons = get_afl_season(), rounds = TRUE, use_disk_cache =
 
   urls <- generate_urls("pbp-data", "pbp_data", seasons, rounds)
 
-  out <- load_from_url(urls, seasons = seasons, rounds = rounds, use_disk_cache = use_disk_cache, columns = columns)
+  # A run of failed downloads must stop here, not come back as a 0-row frame
+  # that downstream code reads as "no play-by-play" (issue #314).
+  out <- load_from_url(urls, seasons = seasons, rounds = rounds, use_disk_cache = use_disk_cache,
+                       columns = columns, abort_on_transient = TRUE)
 
   out <- .normalise_team_values(out)
   return(out)
