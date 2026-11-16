@@ -147,9 +147,9 @@ build_aerial_contests <- function(chains, pbp_data) {
   #
   # Dropped rather than aborted, on purpose. A handful of mislabelled rows is a
   # feed quirk, and taking the nightly pipeline down for it would be worse than
-  # the defect -- an unnamed loser already has a defined fallback in
-  # allocate_contest_losses(), which spreads the debit over the conceding side
-  # by aerial exposure. But it is never silent: a debit landing on the winner is
+  # the defect -- a contest with no named loser is the usual case and is already
+  # handled downstream (the v3 allocator this comment used to name was removed
+  # with the v3 engine). But it is never silent: a debit landing on the winner is
   # exactly the class of bug that hides behind a green check, so it warns with a
   # count.
   #

@@ -358,7 +358,7 @@ centre_epv_by_position <- function(pgd, channels = EPV_LEVEL_CENTRE_CHANNELS) {
   } else if (is.finite(EPV_POINTS_SCALE) && !isTRUE(all.equal(EPV_POINTS_SCALE, 1))) {
     if (identical(frame_engine, "v4")) {
       # v4 is already in margin points (the ledger sums to the margin, and
-      # .epr_prior_points_scale() returns 1 for v4), yet this branch applies
+      # the prior's points scale is 1 for v4), yet this branch applies
       # v2's global 0.919 to the data term while the shrinkage prior stays
       # unscaled -- the mismatch the comment above warns about. NOT changed
       # here: doing so moves every published v4 rating, and EPR_UNITS_SCALE_V4

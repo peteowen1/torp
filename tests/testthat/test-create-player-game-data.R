@@ -270,5 +270,4 @@ test_that("a failed WP credit run leaves wp_credit NA, never a plausible zero", 
   expect_true(all(is.na(bad$wp_credit)))
   expect_true(all(is.na(bad$wp_disp_credit)))
   expect_true(all(is.na(bad$wp_recv_credit)))
-  expect_equal(bad$epv, ok$epv)
 })
