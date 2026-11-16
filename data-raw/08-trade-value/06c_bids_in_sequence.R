@@ -19,6 +19,11 @@
 #     back by a matched bid, gets one extra pick "at the start of the second round".
 #
 # ASSUMPTIONS, not confirmed anywhere:
+#   - picks are valued at their numbers at the moment of the bid, BEFORE the
+#     matched player goes in. The AFL's worked examples fit this and Zero
+#     Hanger's mock uses it ("CARL use Picks 12 and 17"), but neither states it.
+#     Valued one place later instead, only one answer flips: El Souki in
+#     scenario A goes from 391 short (can match) to 423 (cannot).
 #   - compensation picks go together at the start of round two, worst club
 #     first. Zero Hanger's mock (15 Nov) interleaves them with other picks.
 #   - a leftover pick lands at the live number its remaining points are worth.
@@ -44,15 +49,35 @@ bottom5_own <- start[start <= 6 & holder == original_club, .(club, start)]
 cat("bottom-five clubs holding their own first-round pick:", paste(bottom5_own$club, collapse = ", "), "\n")
 ROUND1_LAST_START <- 20L   # starting picks 1-20 are round one (two extra picks this year)
 
+# The pick a bid is made with: the named starting pick if it is still there and
+# unused, else the next unused pick, not held by the matching club, in the LIVE
+# order after where that pick stood (behind the last surviving pick that started
+# ahead of it; leftover and compensation picks have no starting number).
+find_bid_pick <- function(ord, bd) {
+  b <- which(ord$kind == "pick" & ord$start == bd$bid_start & !ord$taken)
+  if (!length(b)) {
+    ahead <- which(!is.na(ord$start) & ord$start < bd$bid_start)
+    after <- if (length(ahead)) max(ahead) else 0L
+    b <- which(!ord$taken & ord$club != bd$club & seq_len(nrow(ord)) > after)[1]
+  }
+  stopifnot(length(b) == 1, !is.na(b))
+  b
+}
+
 run_sequence <- function(bids, label) {
   ord <- copy(start)[, .(club, start, kind = "pick", taken = FALSE)]
   comp_done <- FALSE; n_matched <- 0L; n_used <- 0L; n_left <- 0L; n_comp <- 0L
   res <- vector("list", nrow(bids))
   for (i in seq_len(nrow(bids))) {
     bd <- bids[i]
+    b <- find_bid_pick(ord, bd)
     # Night two begins: hand out compensation picks once, before the first bid
-    # made with a round-two pick.
-    if (!comp_done && bd$bid_start > ROUND1_LAST_START) {
+    # made with a pick that sits at or behind the start of round two. Decided by
+    # where the pick SITS: a bid entered at a round-two starting pick that has
+    # gone can fall to a pick still inside round one, and that bid is a night-one
+    # bid (found 2026-11-16: it was priced with the compensation picks already in).
+    r2 <- which(ord$kind == "pick" & !is.na(ord$start) & ord$start > ROUND1_LAST_START)[1]
+    if (!comp_done && b >= r2) {
       pushed <- bottom5_own[vapply(seq_len(.N), function(k) {
         now <- which(ord$start == start[k] & ord$kind == "pick")
         length(now) == 1 && now > start[k]
@@ -65,18 +90,9 @@ run_sequence <- function(bids, label) {
         n_comp <- nrow(pushed)
       }
       comp_done <- TRUE
+      b <- find_bid_pick(ord, bd)
     }
-    # The pick the bid is made with: the named starting pick if it is still
-    # there and unused, else the next unused pick not held by the matching club.
-    b <- which(ord$kind == "pick" & ord$start == bd$bid_start & !ord$taken)
-    if (!length(b)) {
-      # "Next" means next in the LIVE order after where that pick stood: anything
-      # behind the last surviving pick that started ahead of it. (Leftover and
-      # compensation picks have no starting number, so they cannot be found by it.)
-      after <- max(which(!is.na(ord$start) & ord$start < bd$bid_start))
-      b <- which(!ord$taken & ord$club != bd$club & seq_len(nrow(ord)) > after)[1]
-    }
-    stopifnot(length(b) == 1, !is.na(b))
+    stopifnot(ord$club[b] != bd$club)   # a club does not bid on its own tied player
     # A bid can never be made with a pick ahead of one already used for an earlier bid.
     stopifnot(i == 1 || b > res[[i - 1]]$bid_live || !res[[i - 1]]$can_match)
     bidder <- ord$club[b]
@@ -102,8 +118,10 @@ run_sequence <- function(bids, label) {
       used_live = paste(used, collapse = "+"),
       used_start = paste(ifelse(is.na(ord$start[used]), ord$kind[used], ord$start[used]), collapse = "+"),
       leftover_live = left_pick, deficit_points = deficit, can_match = can,
-      player_torp = round(torp_at(b), 1), given_torp = round(given, 1),
-      gain_torp = round(torp_at(b) - given, 1))
+      player_torp = round(torp_at(b), 1),
+      # A club that cannot match gives nothing and gains nothing: the bidder takes him.
+      given_torp = if (can) round(given, 1) else NA_real_,
+      gain_torp = if (can) round(torp_at(b) - given, 1) else NA_real_)
     if (can) {
       # Player goes in at the bid pick; the picks used leave; the bidder and
       # everyone behind move back one.
@@ -145,6 +163,7 @@ B <- run_sequence(cB, "B: Essendon bids on Walker")
 # ---- Anchors, written before the first run ----
 # 1. The first bid has nothing ahead of it, so it must equal 06's row exactly.
 a1 <- A[player == "Dougie Cochrane"]; r1 <- e$res[player == "Dougie Cochrane"]
+stopifnot(nrow(a1) == 1, nrow(r1) == 1, nrow(A[player == "Cody Walker"]) == 1, nrow(B[player == "Cody Walker"]) == 1)
 stopifnot(a1$bid_live == 1, a1$cost_points == r1$cost_points, a1$deficit_points == r1$deficit_points,
           a1$gain_torp == r1$gain_torp)
 # 2. The example Pete confirmed: Richmond's bid is live pick 3, Carlton pays
