@@ -568,7 +568,6 @@ Old parquet files with legacy column names are normalised automatically at load 
 | 02 | `data-raw/02-models/` | `build_match_predictions.R` | Entry point for `run_predictions_pipeline()` |
 | 02 | `data-raw/02-models/` | `build_match_predictions_xgb.R` | XGBoost-based match predictions (experimental) |
 | 03 | `data-raw/03-ratings/` | `run_ratings_pipeline.R` | 6-stage ratings pipeline: EPR, team, game/season, PSR (main CI/CD script) |
-| 03 | `data-raw/03-ratings/` | `create_player_ratings_table.R` | Build pre-computed ratings table for torpdata |
 | 03 | `data-raw/03-ratings/` | `bayes_rapm.R` | Bayesian RAPM player rating estimation |
 | 04 | `data-raw/04-analysis/` | `simulate_seasons.R` | Season simulation analysis scripts |
 | 05 | `data-raw/05-validation/` | `validate_wp_model.R` | Win probability model validation |

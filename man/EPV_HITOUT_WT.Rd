@@ -20,7 +20,7 @@ positive.
 }
 \details{
 \strong{This weight is positive against the measurement, deliberately.} The
-fit (\code{data-raw/04-analysis/archive-2026-09-07/epv3_ruck_three_way.R}, 1,242 matches) puts an
+fit (\code{archive-2026-11:data-raw/04-analysis/archive-2026-09-07/epv3_ruck_three_way.R}, 1,242 matches) puts an
 undirected tap at \strong{-0.0209} per ruck (t -3.5), stable across halves at
 -0.0586 / -0.0299: winning a tap you do not direct is worth slightly less than
 nothing, because you have committed your ruck and the ball drops into a
