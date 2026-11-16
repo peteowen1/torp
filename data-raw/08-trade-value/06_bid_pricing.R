@@ -72,14 +72,23 @@ if (ORDER_IS_AFL_11NOV) {
 }
 cat("draft order:", n_order, "picks,", uniqueN(order_tbl$club), "clubs (", order_file, ")\n")
 
-# Candidates and the matching club's 2026 home-and-away finish (FINDINGS.md section 3).
+# Candidates and the matching club's 2026 FINISHING POSITION, which counts finals:
+# grand finalists are 1st-2nd (+20%), losing preliminary finalists 3rd-4th (+10%).
+# AFL.com.au news 1508308 (2026-04-29): "the flag-winning Swans (with the 20 per
+# cent loading for finishing first)" and "Made a preliminary final (third or
+# fourth)?". Brisbane was 3rd on the home-and-away ladder and won the flag, so it
+# is 1 here; until 2026-11-16 it was 3 and its bids were priced 10% too cheap.
+# The draft order agrees: Brisbane's own first-round pick is last (20), Fremantle
+# 19, Sydney 18, Hawthorn 17. For every other club here the ladder and the
+# finishing position fall in the same band.
 cands <- data.table(
   player = c("Dougie Cochrane", "Cody Walker", "Ethan Matthews", "Caylen Murray", "Khaled El Souki", "Keenan Boi", "Blake Justice"),
   club   = c("PORT", "CARL", "GWS", "BL", "WB", "HAW", "ESS"),
   link   = c("NGA", "father-son", "academy", "academy", "NGA", "NGA", "NGA"),
-  finish = c(15, 10, 12, 3, 8, 4, 18),
+  finish = c(15, 10, 12, 1, 8, 4, 18),
   bid    = c(1, 2, 6, 14, 23, 30, 37))
-stopifnot(all(cands$club %in% order_tbl$club))
+stopifnot(all(cands$club %in% order_tbl$club),
+          cands[club == "BL", all(finish == 1)])  # premiers: 20% loading, see above
 
 factor_for <- function(finish, bid) {
   if (finish <= 2 && bid <= 18) return(1.2)
