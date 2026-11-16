@@ -238,14 +238,25 @@ test_that("a failed WP credit run leaves wp_credit NA, never a plausible zero", 
   skip_if(is.null(.shared$pbp) || is.null(.shared$player_stats) || is.null(.shared$teams) ||
             is.null(.shared$chains),
           "Could not load required data")
+  # v4 cannot fit its difficulty models on the one-round shared slice, so the
+  # Net Points ledger is replaced by an all-zero one for the same player-matches
+  # (this test used epv_engine = "v2" until that engine was removed on
+  # 2026-11-16). The WP zero-fill under test does not read the EPV channels.
+  pbp_dt <- data.table::as.data.table(.shared$pbp)
+  zero_np <- unique(pbp_dt[!is.na(player_id), .(player_id, match_id)])
+  zero_np[, `:=`(team = NA_character_, np_direct = 0, np_ceded = 0, np_defensive_won = 0,
+                 np_contest_won = 0, np_stoppage = 0, np_defensive = 0, np_team = 0,
+                 np_residual = 0, net_points = 0)]
+  testthat::local_mocked_bindings(
+    .np_engine_frame = function(...) data.table::copy(zero_np),
+    .np_breakdown = function(...) NULL
+  )
   run <- function() {
     tryCatch(
       suppressMessages(create_player_game_data(.shared$pbp, .shared$player_stats, .shared$teams,
-                                               chains = .shared$chains, epv_engine = "v2")),
+                                               chains = .shared$chains)),
       error = function(e) NULL)
   }
-  # v2 rather than v4: v4 cannot fit its difficulty models on the one-round
-  # shared slice. The WP zero-fill is engine independent.
   ok <- suppressWarnings(run())
   skip_if(is.null(ok), "Could not create player game data")
   expect_false(anyNA(ok$wp_credit))
