@@ -13,7 +13,8 @@
 }
 \value{
 A \code{torp_np_fit} list: \code{stoppage_baseline}, \code{disposal_models},
-\code{contest_models} and \code{meta} (\code{rating_vintage}, \code{torp_version},
+\code{contest_models}, \code{half} (the field half-length the season was scored
+with; \code{NULL} on a bundle built before torp#308) and \code{meta} (\code{rating_vintage}, \code{torp_version},
 \code{epv_engine}, \code{contest_outcomes}, \code{season}, \code{n_matches},
 \code{last_match_id}, \code{built_at_utc}).
 }

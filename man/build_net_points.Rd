@@ -27,6 +27,7 @@ build_net_points(
   stoppage_baseline = NULL,
   stoppage_loser_share = NP_STOPPAGE_LOSER_SHARE,
   difficulty_models = NULL,
+  difficulty_half = NULL,
   return_fit = FALSE
 )
 }
@@ -131,9 +132,12 @@ side. See \code{NP_STOPPAGE_LOSER_SHARE}.}
 anything (the live path, torp#250). Ignored when \code{difficulty_terms} is
 given.}
 
-\item{return_fit}{Attach what this call priced on -- the stoppage baseline
-and the difficulty and contest models -- as attribute \code{np_fit}, so a season
-run can save it for the live path.}
+\item{difficulty_half}{Field half-length to price disposals and contests on.
+\code{NULL} estimates it from \code{chains}. See \code{.np_difficulty_terms()}.}
+
+\item{return_fit}{Attach what this call priced on -- the stoppage baseline,
+the difficulty and contest models and the field half-length -- as
+attribute \code{np_fit}, so a season run can save it for the live path.}
 }
 \value{
 A data.table with one row per player-match \strong{that had at least one
