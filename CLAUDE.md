@@ -71,9 +71,15 @@ Two things that trip people up on the published frame:
   points). The conservation identity holds on the raw ledger only. For a final
   score use `load_results()`.
 
-`"v2"` and `"v3"` remain selectable and their code paths are still present.
-The v3 material below is kept because those paths are reachable by flipping the
-constant, not because v3 is live.
+**`"v2"` and `"v3"` were removed on 2026-11-16** (review decision D2); git
+history keeps them. `create_player_game_data()` refuses any engine but `"v4"`.
+v4 still uses v3's aerial contest model (`build_aerial_contests()`,
+`fit_contest_models()`, `score_contests()` in `R/epv_v3.R`) and the disposal
+model in `R/epv_difficulty.R`, which is why the v3 material below still matters.
+Three constants are now read by nothing but stay because they are in
+`.rating_defining_constants()` (removing them would change the published
+manifest): `EPV3_CHANNELS`, `EPV_CONT_LOSS_ALLOC`, `EPV_DIFFICULTY_SPLIT`. They go
+in the next rating vintage.
 
 **Before touching anything EPV- or contest-related, read
 [`../docs/reference/EPV-V3-CHANNELS.md`](../docs/reference/EPV-V3-CHANNELS.md)**
@@ -90,12 +96,13 @@ year-over-year repeatability can move in *opposite* directions — quote which o
 you mean; the second is the one that separates ability from noise. Full
 incident (which two constants, the numbers): `../docs/reference/claude-md-detail.md`.
 
-- **The v3 channel names are ALIASES and they lie.** `epv_spoil` /
-  `epr_spoil` hold *aerial contest* value and contain no spoil weight;
-  `epv_hitout` / `epr_hitout` hold stoppage value. Same for
-  `EPR_DECAY_SPOIL`, `EPR_PRIOR_GAMES_SPOIL`, `EPR_PRIOR_RATE_SPOIL` and their
-  hitout twins. Renaming touches 18 R files and two released artifacts, so it
-  waits until v3 is chosen.
+- **The channel names are ALIASES and they lie.** Under v4 `epv_spoil` /
+  `epr_spoil` hold the team-pool share (under v3 they held aerial contest
+  value) and contain no spoil weight; `epv_hitout` / `epr_hitout` are zero
+  (under v3 they held stoppage value). Same for `EPR_DECAY_SPOIL`,
+  `EPR_PRIOR_GAMES_SPOIL`, `EPR_PRIOR_RATE_SPOIL` and their hitout twins.
+  Renaming touches 18 R files and two released artifacts, so it needs its own
+  rating vintage.
 - **Two different contest coefficients exist and both are valid.** At the EPV
   layer (value accrued *in* a match → that match's margin) v2 reads −0.41 and v3
   +0.27; at the EPR layer (historical rating → margin) v2 reads +3.2 to +4.05 and
