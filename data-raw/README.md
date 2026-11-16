@@ -11,7 +11,6 @@ data-raw/
 ├── 03-ratings/     # Player rating systems
 ├── 04-analysis/    # Analysis & simulation
 ├── 05-validation/  # Model validation & comparison
-├── archive/        # Deprecated/experimental scripts
 ├── outputs/        # Generated data files (gitignored)
 ├── stat-models/    # Pre-trained GAM models
 ├── rsconnect/      # Shiny deployment config
@@ -44,7 +43,6 @@ data-raw/
 |--------|---------|
 | `bayes_rapm.R` | Bayesian Regularized Adjusted Plus-Minus |
 | `build_player_ratings.R` | Calculate TORP player ratings |
-| `create_player_ratings_table.R` | Generate player ratings tables |
 
 ### 4. Analysis (`04-analysis/`)
 
@@ -104,11 +102,7 @@ Large generated files are stored in `outputs/` and gitignored:
 
 ## Archive
 
-The `archive/` folder contains deprecated scripts kept for reference:
-
-- `rapm_build.R` - Superseded by `bayes_rapm.R`
-- `off_def_bayes_rapm.R` - Superseded by `bayes_rapm.R`
-- `season_sim.R` - Empty placeholder
+One-off analysis and debug scripts were deleted on 2026-11-17 (torpverse review W11). They are kept at the git tag `archive-2026-11`: read one with `git show archive-2026-11:<path>`, restore one with `git checkout archive-2026-11 -- <path>`. Comments in `R/` that cite a script not in this folder (for example `epv3_calibrate_4ch.R`) mean the copy at that tag.
 
 ## Notes
 
