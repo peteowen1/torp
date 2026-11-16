@@ -26,6 +26,8 @@
 
 suppressMessages(library(data.table))
 out_dir <- "C:/dev/torpverse/torpdata/data/raw/trade_value"
+# Drop the last run's stamp first: if this run stops part-way, 09 must not export.
+unlink(file.path(out_dir, "06_run_stamp.csv"))
 
 dvi <- c(3000, 2481, 2178, 1962, 1795, 1659, 1543, 1443, 1355, 1276, 1205, 1140, 1080, 1024,
          973, 924, 879, 836, 796, 757, 721, 686, 653, 621, 590, 561, 533, 505, 479, 454, 429,
@@ -53,12 +55,22 @@ club_picks <- list(
   MELB = c(4, 14, 48, 51, 79), NMFC = c(33, 49, 62), PORT = c(7, 12, 22, 24, 34, 46),
   RICH = c(2, 5, 44, 76), STK = c(10, 16, 41), SYD = c(6, 38, 39, 47), WCE = c(3, 23, 56),
   WB = c(42, 52, 53, 71))
-stopifnot(nrow(order_tbl) == 80, identical(order_tbl$pick, 1:80), !anyNA(order_tbl$club),
-          setequal(order_tbl$club, names(club_picks)),
-          all(vapply(names(club_picks), function(k)
-            identical(as.numeric(order_tbl$pick[order_tbl$club == k]), club_picks[[k]]), logical(1))))
-cat("draft order:", nrow(order_tbl), "picks,", uniqueN(order_tbl$club), "clubs (", order_file, ")
-")
+# Set to FALSE once the order file is edited after night one (compensation picks,
+# matched bids pushing picks back): the 11 November list no longer applies then.
+ORDER_IS_AFL_11NOV <- TRUE
+n_order <- nrow(order_tbl)
+stopifnot(n_order >= 54, identical(order_tbl$pick, seq_len(n_order)), !anyNA(order_tbl$club),
+          all(order_tbl$club %in% names(club_picks)))
+if (ORDER_IS_AFL_11NOV) {
+  differs <- names(club_picks)[!vapply(names(club_picks), function(k)
+    identical(as.numeric(order_tbl$pick[order_tbl$club == k]), club_picks[[k]]), logical(1))]
+  if (n_order != 80 || length(differs))
+    stop("order file does not match the AFL's 11 November list (", n_order, " picks; clubs that differ: ",
+         paste(differs, collapse = ", "), "). If it was edited after night one, set ORDER_IS_AFL_11NOV <- FALSE.")
+} else {
+  message("NOTE: order file NOT checked against the AFL's 11 November club list (ORDER_IS_AFL_11NOV is FALSE).")
+}
+cat("draft order:", n_order, "picks,", uniqueN(order_tbl$club), "clubs (", order_file, ")\n")
 
 # Candidates and the matching club's 2026 home-and-away finish (FINDINGS.md section 3).
 cands <- data.table(
@@ -146,4 +158,10 @@ grid <- rbindlist(lapply(seq_len(nrow(dual)), function(i)
 fwrite(grid, file.path(out_dir, "06_bid_grid.csv"))
 cat("\nwhat-if grid written:", nrow(grid), "rows (2 nominated clubs x bids 1-54)\n")
 stopifnot(nrow(grid) == 108)
+# Stamp for 09_export_draft_json.R, written last: 09 refuses to export unless this
+# run finished on the order file as it is now, so it cannot pair a new order with
+# bids priced on an old one.
+fwrite(data.table(order_md5 = unname(tools::md5sum(order_file)), n_order = n_order,
+                  n_bids = nrow(res), n_grid = nrow(grid)),
+       file.path(out_dir, "06_run_stamp.csv"))
 print(dcast(grid, bid ~ paste(player, club), value.var = "can_match")[bid >= 36])

@@ -16,23 +16,33 @@ raw_dir <- "C:/dev/torpverse/torpdata/data/raw"
 out_dir <- file.path(raw_dir, "trade_value")
 
 curve <- fread(file.path(out_dir, "04_pick_curve.csv"))
-order <- fread(file.path(raw_dir, "trades_2026", "official", "final_order_1_80.csv"))
+order_file <- file.path(raw_dir, "trades_2026", "official", "final_order_1_80.csv")
+order <- fread(order_file)
 bids  <- fread(file.path(out_dir, "06_bid_pricing.csv"))
 grid  <- fread(file.path(out_dir, "06_bid_grid.csv"))
 ranges <- fread(file.path(out_dir, "06_bid_ranges.csv"))
-cat("rows: curve", nrow(curve), "| order", nrow(order), "| bids", nrow(bids), "| grid", nrow(grid), "\n")
-stopifnot(nrow(order) == 80, identical(order$pick, 1:80), !anyNA(order$holder), !anyNA(order$original_club),
-          nrow(bids) == 7, nrow(grid) == 108, all(1:80 %in% curve$pick))
+n_order <- nrow(order)
+cat("rows: curve", nrow(curve), "| order", n_order, "| bids", nrow(bids), "| grid", nrow(grid), "\n")
+
+# The bid files must come from a 06 run that finished on this exact order file.
+stamp_file <- file.path(out_dir, "06_run_stamp.csv")
+if (!file.exists(stamp_file)) stop("06_run_stamp.csv is missing: run 06_bid_pricing.R first.")
+stamp <- fread(stamp_file)
+if (!identical(stamp$order_md5, unname(tools::md5sum(order_file))))
+  stop("The order file changed since 06_bid_pricing.R last finished (or 06 stopped part-way). Re-run 06, then 09.")
+stopifnot(n_order >= 54, identical(order$pick, seq_len(n_order)), !anyNA(order$holder), !anyNA(order$original_club),
+          nrow(bids) >= 1, nrow(bids) == stamp$n_bids, nrow(grid) == 108, stamp$n_order == n_order)
 
 # TORP value: expected eight-season value of a player taken at that pick
 # (games x time on ground x rating above replacement, 10% discount a year).
-picks <- merge(order[, .(pick, holder, original_club)],
-               curve[, .(pick, torp_value = round(v8_direct, 1))], by = "pick")
+# A pick past the end of the curve takes the curve's last value (zero), as in 06.
+picks <- order[, .(pick, holder, original_club)]
+picks[, torp_value := round(curve$v8_direct[match(pmin(pick, max(curve$pick)), curve$pick)], 1)]
 # Points from the checked list in 06 (the curve's own dvi column is incomplete).
 dvi <- fread(file.path(out_dir, "06_dvi.csv"))
 picks <- merge(picks, dvi, by = "pick", all.x = TRUE)
 picks[is.na(points), points := 0]  # the Draft Value Index stops at pick 54
-stopifnot(nrow(picks) == 80, !anyNA(picks$torp_value), all(diff(picks$points) <= 0),
+stopifnot(nrow(picks) == n_order, identical(picks$pick, seq_len(n_order)), !anyNA(picks$torp_value), all(diff(picks$points) <= 0),
           all(diff(picks$torp_value) <= 0))
 
 out <- list(
@@ -53,6 +63,6 @@ dest <- file.path(out_dir, "draft_2026.json")
 write_json(out, dest, auto_unbox = TRUE, pretty = TRUE, na = "null", dataframe = "rows")
 
 back <- fromJSON(dest)
-stopifnot(nrow(back$picks) == 80, nrow(back$bids) == 7, nrow(back$bid_grid) == 108, nrow(back$bid_ranges) == 2)
+stopifnot(nrow(back$picks) == n_order, nrow(back$bids) == nrow(bids), nrow(back$bid_grid) == 108, nrow(back$bid_ranges) == 2)
 cat("wrote", dest, sprintf("(%.1f KB)", file.size(dest) / 1024), "\n")
 print(head(back$picks, 5))
