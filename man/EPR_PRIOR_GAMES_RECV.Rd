@@ -19,15 +19,9 @@ v3's chain-delta channels are far noisier than v2's box-score counts, so they
 need much more shrinkage.
 }
 \details{
-\strong{Keyed on \code{EPV_ENGINE}, and that is deliberate.} The v3 numbers
-were measured on v3's channels and are meaningless for v2's; applying them to
-v2 would change every published rating today for no reason. v2 keeps 3.0 so
-production is byte-for-byte untouched while the engine flag stays at
-\code{v2}.
-
-v2's own measured values are 7.75 / 9.12 / 12.19 / 4.18 -- also well above
-3.0, so production is under-shrinking too. That is a separate shippable
-change and it has not been gated; do not fold it in here.
+\strong{The v3 values, which v4 kept.} Until 2026-11-16 these were chosen
+by engine (v2 used 3.0 on every channel); v4 was gated with the v3 numbers,
+and the engine switch went with v2 and v3.
 
 Measured 2026-08-04 on the finished v3 structure over 1,032 players with 3+
 games at TOG > 50 (\code{epv3_finalise.R} stage 4). An independent earlier

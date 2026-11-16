@@ -33,11 +33,10 @@ available. Used to compute failed reception credit from aerial contests.}
 \item{epv_params}{Named list of EPV assignment parameters. If NULL,
 uses \code{default_epv_params()}.}
 
-\item{epv_engine}{Which EPV engine to run: \code{"v2"} (production) or
-\code{"v3"} (chain-native, held). Defaults to the \code{EPV_ENGINE}
-constant. Passed explicitly rather than read from the constant inside, so
-a caller can select an engine the global default does not name; the choice
-is recorded on the returned frame as its \code{epv_engine} attribute.}
+\item{epv_engine}{Which EPV engine to run. Only \code{"v4"} (Net Points)
+exists; anything else is an error (the v2 and v3 engines were removed on
+2026-11-16). Defaults to the \code{EPV_ENGINE} constant. Recorded on the
+returned frame as its \code{epv_engine} attribute and column.}
 
 \item{difficulty_terms}{v4 only: precomputed difficulty terms from
 \code{np_difficulty_terms_for_season()} (leak-safe). Fitted in-sample, with a
@@ -64,9 +63,10 @@ identifiers (\code{player_id}, \code{match_id}, \code{season}, \code{round},
 \code{utc_start_time}), position-adjusted EPV (\code{epv_adj},
 \code{epv_recv_adj}, \code{epv_disp_adj}, \code{epv_spoil_adj}, \code{epv_hitout_adj}),
 raw EPV (\code{epv}, \code{epv_recv}, \code{epv_disp}, \code{epv_spoil},
-\code{epv_hitout}), contextual spoil credit (\code{spoil_epv_ctx},
-\code{spoils_priced} — see \code{compute_spoil_credit()}; not folded into
-\code{epv_spoil}), and key box-score stats.
+\code{epv_hitout}), the retired v2 contest and contextual spoil columns
+(\code{contest_epv}, \code{aerial_*}, \code{spoil_epv_ctx},
+\code{spoils_priced}; always zero under v4, kept for the released schema),
+and key box-score stats.
 }
 \description{
 Transforms raw play-by-play data and player stats into processed per-game

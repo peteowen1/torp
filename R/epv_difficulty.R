@@ -47,8 +47,12 @@
 
 #' Apply the contest identity to every disposal, not just aerial contests
 #'
-#' \code{FALSE} keeps the flat \code{EPV_DISP_SCALE}/\code{EPV_RECV_SCALE} split
-#' on non-aerial disposals, which is production.
+#' \strong{No longer read by anything (2026-11-16).} It switched the v2/v3
+#' disposer/receiver split over to \code{compute_difficulty_credit()}, which was
+#' removed with those engines; v4 uses the same disposal model through
+#' \code{.np_difficulty_terms()} unconditionally. The constant stays only because
+#' it is in \code{.rating_defining_constants()}, so removing it would change the
+#' published manifest; it goes in the next rating vintage.
 #' @keywords internal
 EPV_DIFFICULTY_SPLIT <- FALSE
 
@@ -366,65 +370,4 @@ score_disposals <- function(de, models) {
     recv_credit = data.table::fifelse(turnover, -ss * surprise, ss * surprise)
   )]
   d
-}
-
-#' Per-player difficulty-weighted disposal credit
-#'
-#' @param chains Raw chains.
-#' @param pbp_data Clean PBP.
-#' @param leak_safe Fit each season on strictly earlier seasons.
-#' @param exclude_keys Optional \code{(match_id, display_order)} table of
-#'   disposals already paid by another channel -- under v3 the aerial contests,
-#'   which have their own surprise term. Leaving them in would pay the same
-#'   swing twice.
-#' @return A data.table of \code{player_id}, \code{match_id},
-#'   \code{epv_disp_diff}, \code{epv_recv_diff}, plus the keys of the disposals
-#'   consumed so the caller can exclude them from the flat split.
-#' @keywords internal
-compute_difficulty_credit <- function(chains, pbp_data, leak_safe = TRUE,
-                                      exclude_keys = NULL) {
-  de <- build_disposal_events(chains, pbp_data)
-  if (!is.null(exclude_keys) && nrow(exclude_keys) > 0 && nrow(de) > 0) {
-    n0 <- nrow(de)
-    de <- de[!exclude_keys, on = .(match_id, display_order)]
-    cli::cli_alert_info(
-      "Difficulty split: {format(n0 - nrow(de), big.mark = ',')} disposal{?s} left to the aerial-contest channel.")
-  }
-  if (nrow(de) == 0) {
-    return(data.table::data.table(player_id = character(), match_id = character(),
-                                  epv_disp_diff = numeric(), epv_recv_diff = numeric()))
-  }
-  de[, .season := as.integer(substr(match_id, 5, 8))]
-  n_bad <- sum(is.na(de$.season) | de$.season < 2000 | de$.season > 2100)
-  if (isTRUE(leak_safe) && n_bad > 0) {
-    cli::cli_abort(c(
-      "Could not parse a plausible season from {n_bad} of {nrow(de)} match_id{?s}.",
-      "x" = "Refusing to run leak-safe fitting on an unparsed season -- it would silently become an in-sample fit."
-    ))
-  }
-  scored <- if (isTRUE(leak_safe) && data.table::uniqueN(de$.season) > 1) {
-    seasons <- sort(unique(de$.season))
-    data.table::rbindlist(lapply(seasons, function(s) {
-      idx <- de$.season < s
-      if (sum(idx) < 20000) {
-        idx <- de$.season == s
-        cli::cli_alert_warning(
-          "Season {s} disposal models fitted IN-SAMPLE (no earlier season available).")
-      }
-      score_disposals(de[.season == s], fit_disposal_models(de, idx))
-    }))
-  } else {
-    score_disposals(de, fit_disposal_models(de))
-  }
-
-  dsp <- scored[, .(epv_disp_diff = sum(disp_credit)), by = .(player_id, match_id)]
-  rcv <- scored[, .(epv_recv_diff = sum(recv_credit)), by = .(player_id = out_pid, match_id)]
-  out <- merge(dsp, rcv, by = c("player_id", "match_id"), all = TRUE)
-  for (cc in c("epv_disp_diff", "epv_recv_diff")) {
-    data.table::set(out, which(is.na(out[[cc]])), cc, 0)
-  }
-  data.table::setattr(out, "disposal_keys",
-                      unique(scored[, .(match_id, display_order)]))
-  data.table::setattr(out, "scored", scored)
-  out
 }

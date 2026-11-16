@@ -11,7 +11,11 @@ An object of class \code{logical} of length 1.
 EPV_DIFFICULTY_SPLIT
 }
 \description{
-\code{FALSE} keeps the flat \code{EPV_DISP_SCALE}/\code{EPV_RECV_SCALE} split
-on non-aerial disposals, which is production.
+\strong{No longer read by anything (2026-11-16).} It switched the v2/v3
+disposer/receiver split over to \code{compute_difficulty_credit()}, which was
+removed with those engines; v4 uses the same disposal model through
+\code{.np_difficulty_terms()} unconditionally. The constant stays only because
+it is in \code{.rating_defining_constants()}, so removing it would change the
+published manifest; it goes in the next rating vintage.
 }
 \keyword{internal}

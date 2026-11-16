@@ -206,8 +206,9 @@ test_that("a season run hands back the models it fitted", {
 })
 
 test_that("create_player_game_data refuses a fit it cannot use, before loading anything", {
-  expect_error(create_player_game_data(epv_engine = "v2", np_fit = list()), "v4 only")
-  expect_error(create_player_game_data(epv_engine = "v3", keep_np_fit = TRUE), "v4 only")
+  # v2/v3 were removed on 2026-11-16, so asking for them fails on the engine
+  expect_error(create_player_game_data(epv_engine = "v2", np_fit = list()), "Unknown")
+  expect_error(create_player_game_data(epv_engine = "v3", keep_np_fit = TRUE), "Unknown")
   expect_error(create_player_game_data(epv_engine = "v4", np_fit = list()), "needs .*chains")
   expect_error(create_player_game_data(epv_engine = "v4", np_fit = list(), chains = data.frame(),
                                        difficulty_terms = data.frame()), "not both")

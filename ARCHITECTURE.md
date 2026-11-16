@@ -178,44 +178,24 @@ Constants in `R/constants_data.R`: `COORD_JUMP_THRESHOLD` (100m) gates the step-
 
 **Entry Point**: `create_player_game_data(pbp_data, player_stats, teams, decay, epv_params, epv_engine)`
 
-**Engines.** `EPV_ENGINE` selects which. `"v4"` (Net Points) is the published
-engine and the default since 2026-09-07: it allocates the actual match margin
-through a ledger in `R/epv_net_points.R`, with the rules (D1-D18) and worked
-examples in
+**Engine.** `"v4"` (Net Points) is the only engine, published since
+2026-09-07: it allocates the actual match margin through a ledger in
+`R/epv_net_points.R`, with the rules (D1-D18) and worked examples in
 [`../docs/plans/EPV-V4-CREDIT-RULES.md`](../docs/plans/EPV-V4-CREDIT-RULES.md).
 Under v4 `epv_hitout` is identically zero (stoppage value lives in `epv_recv`).
-`"v2"` and `"v3"` are still selectable but are NOT published; the two tables
-below describe them, so editing a v2 box weight does not change published
-ratings. Full v3 channel contents, formula by formula:
+The v2 (box-score weights) and v3 (chain-native contest) engines were removed on
+2026-11-16; git history keeps them, and their channel tables used to sit here.
+v4 still uses v3's aerial contest model (`build_aerial_contests()`,
+`fit_contest_models()`, `score_contests()`); for what v3's channels held, see
 [`../docs/reference/EPV-V3-CHANNELS.md`](../docs/reference/EPV-V3-CHANNELS.md).
 
-**v2 — Four-Component Credit System** (chain-derived part plus box-score weights):
+The box-score weights in `default_epv_params()` no longer reach any published
+rating (v4 overwrites the box-score `epv_spoil` / `epv_hitout`), but
+`player_epv_breakdown()` still prices with them.
 
-| Component | Weights (from `default_epv_params()`) | What It Measures |
-|-----------|---------------------------------------|------------------|
-| Disposal EPV | chain `delta_epv * 0.5`, plus goals (0.4262), behinds (1.0899), shots at goal (0.4419), inside 50s (0.2429), score involvements (0.2916), kicks (0.0680), handballs (0.0629), metres gained (0.0010), goal assists (0.2240), turnovers (-0.0856), clangers (-0.0094) | Value created by kicking/handballing |
-| Reception EPV | chain `delta_epv * 0.5`, plus `contest_epv`, contested possessions (0.1642), ground ball gets (0.2165), marks inside 50 (0.3464), uncontested possessions (0.0344), contested marks (0.0259), marks (0.0160), frees for (0.2331) | Value created by receiving the ball |
-| Spoil EPV | tackles (0.2980), one-percenters (0.1260), spoils (0.0737), frees against (0.0428), intercepts (0.0166), pressure acts (-0.0024), def-half pressure acts (-0.1882), rebound 50s (-0.1763) | Defensive value |
-| Hitout EPV | hitouts to advantage (0.1748), hitouts (0.0510), ruck contests (0.0232) | Ruck value |
-
-*(Corrected 2026-08-03: this table previously listed a `Clearances (0.11)` term
-that is not in the formula, and several weights had drifted from the constants.)*
-
-**v3 — Four-Component Chain-Native System**. Thirty box weights removed; only
-the ruck carve-out remains, because `Centre Bounce` / `Ball Up Call` rows carry a
-`player_id` 0.0% of the time.
-
-| Component | Source | Box stats |
-|-----------|--------|-----------|
-| `epv_recv` | `delta_epv * pos_team * 0.5` on non-aerial possession gains | none |
-| `epv_disp` | `delta_epv * 0.5` on non-aerial disposals, plus `V_pre - exp_pts` to the kicker on aerial kicks | none |
-| `epv_spoil` *(aliases `epv_cont_aerial`)* | surprise-weighted aerial contest, `±p*Delta` split zero-sum between contestants | none |
-| `epv_hitout` *(aliases `epv_cont_stop`)* | identical to v2's hitout formula | **all of it** |
-
-**The v3 column names are aliases and are misleading** — `epv_spoil` holds
-aerial contest value and contains no spoil weight. Kept only to avoid a rename
-across 18 R files and two released artifacts before v3 is chosen. See the
-reference doc §5.
+**The column names are aliases and are misleading** — under v4 `epv_spoil`
+holds the team-pool share and contains no spoil weight. Kept to avoid a rename
+across 18 R files and two released artifacts.
 
 **Bayesian Shrinkage**: Each component uses the formula:
 ```
@@ -588,7 +568,6 @@ Old parquet files with legacy column names are normalised automatically at load 
 | 02 | `data-raw/02-models/` | `build_match_predictions.R` | Entry point for `run_predictions_pipeline()` |
 | 02 | `data-raw/02-models/` | `build_match_predictions_xgb.R` | XGBoost-based match predictions (experimental) |
 | 03 | `data-raw/03-ratings/` | `run_ratings_pipeline.R` | 6-stage ratings pipeline: EPR, team, game/season, PSR (main CI/CD script) |
-| 03 | `data-raw/03-ratings/` | `optimize_epr_ratings.R` | Grid search for EPR decay/prior hyperparameters |
 | 03 | `data-raw/03-ratings/` | `create_player_ratings_table.R` | Build pre-computed ratings table for torpdata |
 | 03 | `data-raw/03-ratings/` | `bayes_rapm.R` | Bayesian RAPM player rating estimation |
 | 04 | `data-raw/04-analysis/` | `simulate_seasons.R` | Season simulation analysis scripts |

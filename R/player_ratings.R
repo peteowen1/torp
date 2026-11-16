@@ -340,10 +340,8 @@ calculate_epr_stats <- function(player_game_data = NULL, match_ref, date_val, de
   # Compute final epr
   # v4 units: see EPR_UNITS_SCALE_V4. Applied to the finished channels so the
   # shrink (which the gate chose) is untouched and only the scale moves.
-  if (identical(EPV_ENGINE, "v4")) {
-    for (.ch in c("epr_recv", "epr_disp", "epr_spoil", "epr_hitout")) {
-      data.table::set(result, j = .ch, value = result[[.ch]] * EPR_UNITS_SCALE_V4)
-    }
+  for (.ch in c("epr_recv", "epr_disp", "epr_spoil", "epr_hitout")) {
+    data.table::set(result, j = .ch, value = result[[.ch]] * EPR_UNITS_SCALE_V4)
   }
   result[, epr := round(epr_recv + epr_disp + epr_spoil + epr_hitout, 2)]
 
@@ -473,10 +471,8 @@ calculate_epr_stats_batch <- function(player_game_data = NULL,
 
   # v4 units: see EPR_UNITS_SCALE_V4. Applied to the finished channels so the
   # shrink (which the gate chose) is untouched and only the scale moves.
-  if (identical(EPV_ENGINE, "v4")) {
-    for (.ch in c("epr_recv", "epr_disp", "epr_spoil", "epr_hitout")) {
-      data.table::set(result, j = .ch, value = result[[.ch]] * EPR_UNITS_SCALE_V4)
-    }
+  for (.ch in c("epr_recv", "epr_disp", "epr_spoil", "epr_hitout")) {
+    data.table::set(result, j = .ch, value = result[[.ch]] * EPR_UNITS_SCALE_V4)
   }
   result[, epr := round(epr_recv + epr_disp + epr_spoil + epr_hitout, 2)]
   result[, c("tog_sum", "wt_gms_raw", "recv_sum", "disp_sum", "spoil_sum", "hitout_sum") := NULL]

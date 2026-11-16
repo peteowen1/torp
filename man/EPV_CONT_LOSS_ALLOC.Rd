@@ -11,13 +11,19 @@ An object of class \code{character} of length 1.
 EPV_CONT_LOSS_ALLOC
 }
 \description{
+\strong{No longer read by anything (2026-11-16).} Its only reader,
+\code{compute_aerial_credit()}, was removed with the v3 engine. It stays
+because it is in \code{.rating_defining_constants()}, so removing it would
+change the published manifest; it goes in the next rating vintage. The
+record below is kept.
+}
+\details{
 Chains names the beaten aerial opponent in only ~12\% of contests -- never
 when the attack retains, and only when a \code{Contest Target} row happened to
 be logged when the defence wins. So ~86\% of the contest credit mass carries a
 debit with no name on it, and it has to go somewhere or the channel becomes
 upside-only.
-}
-\details{
+
 Five rules were measured against each other (\code{epv3_compare_alloc.R},
 2026-08-03, 57,145 player-games). \code{team} wins and is the default.
 

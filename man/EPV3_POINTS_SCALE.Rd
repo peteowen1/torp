@@ -3,7 +3,7 @@
 \docType{data}
 \name{EPV3_POINTS_SCALE}
 \alias{EPV3_POINTS_SCALE}
-\title{Per-channel points constants for v3 (1 unit = 1 point of margin)}
+\title{Per-channel points constants (1 unit = 1 point of margin)}
 \format{
 An object of class \code{numeric} of length 4.
 }
@@ -11,10 +11,18 @@ An object of class \code{numeric} of length 4.
 EPV3_POINTS_SCALE
 }
 \description{
-v3's channels are separately calibrated, replacing the single global
-\code{EPV_POINTS_SCALE}.
+\strong{All 1 under v4, and only read when
+\code{EPV_PER_CHANNEL_POINTS_SCALE} is on.} v4 is already in margin points.
+The calibrated values below were v3's (\code{1.650438 / 1.421199 / 0.337485
+/ 1.659480}); they were chosen by a \code{.epv3_points_scale(engine)} helper
+that was removed with the v3 engine on 2026-11-16. The constant stays
+because it is in \code{.rating_defining_constants()}. The history below is
+kept as the record of how v3's scale was fitted.
 }
 \details{
+v3's channels are separately calibrated, replacing the single global
+\code{EPV_POINTS_SCALE}.
+
 \strong{Fitted 2026-08-03 but deliberately NOT applied yet:}
 \code{c(recv = 0.5969, disp = 0.6095, cont_aerial = 0.2656, cont_stop = 1.7680)}
 (\code{epv3_calibrate_points.R}; the refit returns 1.0000 on every channel, so
