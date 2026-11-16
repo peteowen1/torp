@@ -785,7 +785,8 @@
 #' @param all_grounds Stadium reference data, after
 #'   \code{.add_supplementary_grounds()}.
 #' @return Invisible \code{NULL}; aborts naming the venues otherwise. Unplayed
-#'   fixtures (\code{result} is \code{NA}) are only reported.
+#'   fixtures (\code{result} is \code{NA}, or \code{utc_dt} is less than four
+#'   hours ago when that column is present) are only reported.
 #' @keywords internal
 .abort_on_unmapped_completed_venues <- function(fix_df, all_grounds) {
   if (!all(c("match_id", "venue", "result") %in% names(fix_df))) return(invisible(NULL))
@@ -802,7 +803,14 @@
     gsub("([{}])", "\\1\\1", paste0(names(n), ": ", as.integer(n), " match", ifelse(n == 1, "", "es")))
   }
 
+  # `result` is home score minus away score with no status check, so a fixture
+  # that arrives pre-filled 0-0 would read as played. Where the kick-off time is
+  # known, a match only counts as completed once it started 4+ hours ago.
   played <- !is.na(fix_df$result)
+  if ("utc_dt" %in% names(fix_df)) {
+    finished <- !is.na(fix_df$utc_dt) & fix_df$utc_dt < Sys.time() - 4 * 3600
+    played <- played & (finished | is.na(fix_df$utc_dt))
+  }
   if (any(unmapped & !played)) {
     lines <- count_by_venue(unmapped & !played)
     cli::cli_warn(c(

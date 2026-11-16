@@ -494,6 +494,42 @@ test_that(".add_supplementary_grounds adds a missing venue once and defers to th
   expect_identical(torp:::.add_supplementary_grounds(data.frame(venue = "x")), data.frame(venue = "x"))
 })
 
+test_that(".build_match_features stops on a completed match with no coordinates and gives Canberra a real distance", {
+  # Team 1 is at home at the M.C.G. in R1 and R2, then plays R3 somewhere else.
+  mk_fix <- function(r3_venue) data.frame(
+    match_id = paste0("M", 1:3), team_id = 1L, season = 2025L, round_number = 1:3,
+    team_type = "home", venue = c("M.C.G.", "M.C.G.", r3_venue), result = c(10, -5, 20),
+    utc_dt = as.POSIXct("2025-03-01", tz = "UTC") + 7 * 86400 * (0:2),
+    stringsAsFactors = FALSE
+  )
+  rt_cols <- c(torp:::.torp_sum_cols("epr"), MATCH_POS_COLS)
+  team_rt_df <- data.frame(
+    match_id = paste0("M", 1:3), team_id = 1L, season = 2025L, round_number = 1:3,
+    team_type = "home", count = 22L, stringsAsFactors = FALSE
+  )
+  for (col in rt_cols) team_rt_df[[col]] <- 5
+  grounds <- data.frame(Ground = c("M.C.G.", "Manuka Oval"), venue = c("M.C.G.", "Manuka Oval"),
+                        Latitude = c(-37.82, -35.318), Longitude = c(144.98, 149.135),
+                        stringsAsFactors = FALSE)
+
+  # a completed match at a venue the grounds table does not know: the build stops
+  expect_error(
+    suppressMessages(torp:::.build_match_features(mk_fix("Nowhere Park"), team_rt_df, grounds)),
+    "Nowhere Park: 1 match"
+  )
+
+  # the AFL's name for Manuka maps to the grounds row, so the row gets a real distance
+  canberra <- torp_replace_venues("Corroboree Group Oval Manuka")
+  expect_identical(canberra, "Manuka Oval")
+  out <- suppressMessages(torp:::.build_match_features(mk_fix(canberra), team_rt_df, grounds))
+  d <- out$log_dist[out$match_id == "M3"]
+  expect_length(d, 1L)
+  expect_false(isTRUE(all.equal(d, MATCH_LOG_DIST_DEFAULT)))
+  # Melbourne to Canberra is about 470 km
+  expect_gt(d, log(300000))
+  expect_lt(d, log(700000))
+})
+
 test_that(".abort_on_unmapped_completed_venues stops on a completed match and only warns on a fixture", {
   g <- data.frame(venue = c("M.C.G.", "Nowhere Park"), Latitude = c(-37.82, NA), Longitude = c(144.98, NA),
                   stringsAsFactors = FALSE)
@@ -511,6 +547,13 @@ test_that(".abort_on_unmapped_completed_venues stops on a completed match and on
   # unplayed fixture only: a warning, and the run continues
   expect_warning(torp:::.abort_on_unmapped_completed_venues(fx(c("M.C.G.", "Nowhere Park"), c(10, NA)), g),
                  "Nowhere Park: 1 match")
+  # a fixture pre-filled 0-0 before kick-off is not a completed match: warn, do not stop
+  pre <- fx(c("M.C.G.", "Nowhere Park"), c(10, 0))
+  pre$utc_dt <- rep(c(Sys.time() - 30 * 86400, Sys.time() + 2 * 86400), each = 2)
+  expect_warning(torp:::.abort_on_unmapped_completed_venues(pre, g), "Nowhere Park: 1 match")
+  # the same 0-0 score on a match that started a month ago is a real draw: stop
+  pre$utc_dt <- rep(Sys.time() - 30 * 86400, 4)
+  expect_error(torp:::.abort_on_unmapped_completed_venues(pre, g), "Nowhere Park: 1 match")
   # a brace in a venue name does not crash the message
   expect_error(torp:::.abort_on_unmapped_completed_venues(fx(c("Odd{Name", "M.C.G."), c(10, NA)), g),
                "Odd{Name: 1 match", fixed = TRUE)

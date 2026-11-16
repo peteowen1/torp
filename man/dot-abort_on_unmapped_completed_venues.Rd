@@ -15,7 +15,8 @@
 }
 \value{
 Invisible \code{NULL}; aborts naming the venues otherwise. Unplayed
-fixtures (\code{result} is \code{NA}) are only reported.
+fixtures (\code{result} is \code{NA}, or \code{utc_dt} is less than four
+hours ago when that column is present) are only reported.
 }
 \description{
 Abort when a completed match is at a venue with no coordinates
