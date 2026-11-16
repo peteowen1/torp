@@ -27,9 +27,12 @@ cat("rows: curve", nrow(curve), "| order", n_order, "| bids", nrow(bids), "| gri
 # The bid files must come from a 06 run that finished on this exact order file.
 stamp_file <- file.path(out_dir, "06_run_stamp.csv")
 if (!file.exists(stamp_file)) stop("06_run_stamp.csv is missing: run 06_bid_pricing.R first.")
-stamp <- fread(stamp_file)
+stamp <- fread(stamp_file, colClasses = list(character = c("order_md5", "script_md5")))
 if (!identical(stamp$order_md5, unname(tools::md5sum(order_file))))
   stop("The order file changed since 06_bid_pricing.R last finished (or 06 stopped part-way). Re-run 06, then 09.")
+script_06 <- "C:/dev/torpverse/torp/data-raw/08-trade-value/06_bid_pricing.R"
+if (!identical(stamp$script_md5, unname(tools::md5sum(script_06))))
+  stop("06_bid_pricing.R was edited since it last finished (candidates, bid positions or ranges may have changed). Re-run 06, then 09.")
 stopifnot(n_order >= 54, identical(order$pick, seq_len(n_order)), !anyNA(order$holder), !anyNA(order$original_club),
           nrow(bids) >= 1, nrow(bids) == stamp$n_bids, nrow(grid) == 108, stamp$n_order == n_order)
 
@@ -49,7 +52,8 @@ out <- list(
   generated = format(Sys.time(), "%Y-%m-%d %H:%M %Z"),
   draft_dates = c("2026-11-19", "2026-11-20"),
   notes = list(
-    order = "AFL final order, 11 November 2026 (80 picks). Compensation picks are added after night one.",
+    # Reword after night one: the order is then no longer the 11 November one.
+    order = sprintf("AFL final order, 11 November 2026 (%d picks). Compensation picks are added after night one.", n_order),
     torp_value = "Expected eight-season TORP value of a player taken at the pick, discounted 10% a year.",
     points = "Draft Value Index points (0 from pick 55).",
     bids = "Bid positions from Cal Twomey's November form guide (AFL.com.au, 11 November 2026): a ranking, not a mock, so they will move. Boi at 30 is the first pick after Hawthorn's 29.",

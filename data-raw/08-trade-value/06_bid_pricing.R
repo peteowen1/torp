@@ -161,7 +161,12 @@ stopifnot(nrow(grid) == 108)
 # Stamp for 09_export_draft_json.R, written last: 09 refuses to export unless this
 # run finished on the order file as it is now, so it cannot pair a new order with
 # bids priced on an old one.
-fwrite(data.table(order_md5 = unname(tools::md5sum(order_file)), n_order = n_order,
+# The script's own md5 goes in too: `cands` and the bid ranges live in this file,
+# so an edit here that was never run also has to block the export.
+script_file <- "C:/dev/torpverse/torp/data-raw/08-trade-value/06_bid_pricing.R"
+stopifnot(file.exists(script_file))
+fwrite(data.table(order_md5 = unname(tools::md5sum(order_file)),
+                  script_md5 = unname(tools::md5sum(script_file)), n_order = n_order,
                   n_bids = nrow(res), n_grid = nrow(grid)),
        file.path(out_dir, "06_run_stamp.csv"))
 print(dcast(grid, bid ~ paste(player, club), value.var = "can_match")[bid >= 36])
